@@ -63,4 +63,20 @@ int ib_sa_mcmember_rec_query(struct ib_sa_client *client,
 int mcast_init(void);
 void mcast_cleanup(void);
 
+int ib_sa_informinfo_query(struct ib_sa_client *client,
+			   struct ib_device *device, u8 port_num,
+			   struct ib_sa_inform *rec,
+			   int timeout_ms, gfp_t gfp_mask,
+			   void (*callback)(int status,
+					    struct ib_sa_inform *resp,
+					    void *context),
+			   void *context,
+			   struct ib_sa_query **sa_query);
+
+int notice_dispatch(struct ib_device *device, u8 port_num,
+		    struct ib_sa_notice *notice);
+
+int notice_init(void);
+void notice_cleanup(void);
+
 #endif /* SA_H */
