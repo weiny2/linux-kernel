@@ -3,8 +3,10 @@
 #
 # Build out of tree with:
 #	make -C /lib/modules/`uname -r`/build M=`pwd`
+# Clean with:
+#	make -C /lib/modules/`uname -r`/build M=`pwd` clean
 #
 obj-m += hfi.o
 
-hfi-objs := hfi_init.o
+hfi-objs := hfi_init.o file_ops.o
 

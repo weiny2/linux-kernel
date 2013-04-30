@@ -37,6 +37,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/io.h>
+#include <linux/module.h>
 
 #include "hfi.h"
 
@@ -125,9 +126,9 @@ static struct hfi_devdata *allocate_devdata(void)
 	struct hfi_devdata *dd;
 
 	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
-	if (dd) {
+	if (dd)
 		dd->devnum = -1;	/* invalid device number */
-	}
+
 	return dd;
 }
 
@@ -153,11 +154,14 @@ static int hfi_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn),
 		(unsigned long)dd->kregbase);
 
-	return 0;
+	ret = hfi_device_create(dd);
+	if (ret)
+		goto device_failed;
 
-	/* uncomment when extra steps are added
+	return 0; /* success */
+
+device_failed:
 	pci_release(dd);
-	*/
 pci_failed:
 	release_devnum(dd);
 	pci_set_drvdata(pdev, NULL);
@@ -169,6 +173,7 @@ static void hfi_remove(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
+	hfi_device_remove(dd);
 	pci_release(dd);
 	pci_set_drvdata(pdev, NULL);
 	release_devnum(dd);
@@ -237,16 +242,28 @@ static int __init hfi_init(void)
 	pr_info("%s: loading Intel HFI driver, v%s\n",
 		HFI_DRIVER_NAME, HFI_DRIVER_VERSION);
 
+	/* devices must be initialized before pci probe */
+	ret = device_file_init(); /* error message printed on failure */
+	if (ret < 0)
+		goto fail_dev;
+
 	ret = pci_register_driver(&hfi_driver);
 	if (ret < 0) {
 		pr_err("%s: Unable to register driver: error %d\n",
 			HFI_DRIVER_NAME, -ret);
-		goto bail_unit;
+		goto fail_pci;
 	}
 
 	return 0; /* all OK */
 
-bail_unit:
+#if 0
+fail_xxx:
+	pci_unregister_driver(&hfi_driver);
+#endif
+
+fail_pci:
+	device_file_cleanup();
+fail_dev:
 	return ret;
 }
 module_init(hfi_init);
@@ -254,6 +271,7 @@ module_init(hfi_init);
 static void __exit hfi_exit(void)
 {
 	pci_unregister_driver(&hfi_driver);
+	device_file_cleanup();
 	pr_info("%s: unloading Intel HFI driver, v%s\n",
 		HFI_DRIVER_NAME, HFI_DRIVER_VERSION);
 }
