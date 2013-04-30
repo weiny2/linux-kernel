@@ -26,10 +26,15 @@ struct hfi_devdata {
 };
 
 
-/* hfi_file_ops.c */
+/* file_ops.c */
 int __init device_file_init(void);
 void device_file_cleanup(void);
 int hfi_device_create(struct hfi_devdata *dd);
 void hfi_device_remove(struct hfi_devdata *dd);
+
+
+/* firmware.c */
+int load_device_firmware(struct hfi_devdata *dd);
+void unload_device_firmware(struct hfi_devdata *dd);
 
 #endif /* HFI_H */

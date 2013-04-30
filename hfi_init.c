@@ -148,21 +148,30 @@ static int hfi_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	ret = pci_enable(dd);
 	if (ret)
-		goto pci_failed;
+		goto pci_enable_failed;
 
 	pr_info("%s: device %d:%d.%d mapped at 0x%lx\n", HFI_DRIVER_NAME,
 		pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn),
 		(unsigned long)dd->kregbase);
+
+	ret = load_device_firmware(dd);
+	if (ret)
+		goto load_firmware_failed;
 
 	ret = hfi_device_create(dd);
 	if (ret)
 		goto device_failed;
 
 	return 0; /* success */
-
+/*
+Uncomment this to undo a successful hfi_device_create().
+	hfi_device_remove(dd);
+*/
 device_failed:
+	unload_device_firmware(dd);
+load_firmware_failed:
 	pci_release(dd);
-pci_failed:
+pci_enable_failed:
 	release_devnum(dd);
 	pci_set_drvdata(pdev, NULL);
 	kfree(dd);
@@ -174,6 +183,7 @@ static void hfi_remove(struct pci_dev *pdev)
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
 	hfi_device_remove(dd);
+	unload_device_firmware(dd);
 	pci_release(dd);
 	pci_set_drvdata(pdev, NULL);
 	release_devnum(dd);
