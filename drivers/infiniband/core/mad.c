@@ -369,6 +369,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 			ret = ERR_PTR(ret2);
 			goto error4;
 		}
+		mad_agent_priv->agent.flags = mad_reg_req->flags;
 	}
 
 	/* Add mad agent into port's agent list */
