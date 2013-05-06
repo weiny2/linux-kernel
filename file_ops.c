@@ -2310,17 +2310,20 @@ static int create_char_device(int minor, const char *name,
 	device = NULL;
 	pr_err("Could not create device for minor %d, %s (err %d)\n",
 	       minor, name, -ret);
+	cdev_del(cdev);
 done:
 	*devp = device;
 	return ret;
 }
 
-static void remove_char_device(struct device **devp)
+static void remove_char_device(struct cdev *cdev, struct device **devp)
 {
 	if (*devp) {
 		device_unregister(*devp);
 		*devp = NULL;
 	}
+
+	cdev_del(cdev);
 }
 
 int __init device_file_init(void)
@@ -2397,12 +2400,12 @@ void hfi_device_remove(struct hfi_devdata *dd)
 {
 #ifdef GENERIC_DEVICE
 	if (atomic_dec_return(&user_count) == 0)
-		remove_char_device(&wildcard_device);
+		remove_char_device(&wildcard_cdev, &wildcard_device);
 #endif
 #if 0
-	remove_char_device(&dd->user_device);
+	remove_char_device(&dd->user_cdev, &dd->user_device);
 #endif
-	remove_char_device(&dd->ui_device);
+	remove_char_device(&dd->ui_cdev, &dd->ui_device);
 	/* TODO: incorporate diag here? */
 	/* TODO: incorporate snoop here? */
 }
