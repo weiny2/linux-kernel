@@ -8,5 +8,5 @@
 #
 obj-m += hfi.o
 
-hfi-objs := hfi_init.o file_ops.o firmware.o
+hfi-objs := init.o file_ops.o firmware.o
 
