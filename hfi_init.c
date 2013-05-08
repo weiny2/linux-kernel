@@ -38,6 +38,7 @@
 #include <linux/netdevice.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/aer.h>
 
 #include "hfi.h"
 
@@ -70,24 +71,116 @@ static void release_devnum(struct hfi_devdata *dd)
 {
 }
 
+/*
+ * In case we do not get enough MSI-X interrupts, we need to split
+ * them between the two HFIs.  The first HFI will aquire the mutex
+ * and acquire interrupts.  If it is not able to get all it wanted
+ * it will halve the number it is able to acuire and write that
+ * amount here.  The second HFI will see the count and acquire the
+ * the same amount.
+ *
+ * Issues:
+ * o This leads to asymmetric performance if the first is able to acquire
+ *   all it wanted but the second is not.
+ */
+static DEFINE_MUTEX(msix_mutex);
+#define MSIX_FIRST -1		/* no one has allocated MSI-X yet */
+#define MSIX_SECOND -2		/* first HFI was able to allocate all */
+static int msix_count = MSIX_FIRST;
+
+static int allocate_msix_interrupts(struct hfi_devdata *dd)
+{
+	int i;
+	int loop;
+	int ret;
+
+	/* 1-1 MSI-X entry assignment */
+	for (i = 0; i < WFR_NUM_MSIX; i++)
+		dd->msix[i].entry = i;
+
+	/* always ask for everything */
+	dd->nmsi = WFR_NUM_MSIX;
+
+	loop = 0;
+	mutex_lock(&msix_mutex);
+	while (1) {
+		/* returns 0 on success, < 0 on error, or N available */
+		ret = pci_enable_msix(dd->pdev, &dd->msix[0], dd->nmsi);
+		if (ret < 0) {
+			dd->nmsi = 0;
+			break;
+		}
+		if (ret == 0) {
+			if (msix_count == MSIX_FIRST)
+				msix_count = MSIX_SECOND;
+			break;
+		}
+		/*
+		 * Did not acquire the number of MSI-X interruptes we wanted.
+		 *
+		 * Explanation for each if below:
+		 * o If this is the first device, then half the number
+		 *   available and save it for the second device.
+		 * o If the first device already allocated the full amount,
+		 *   take as many as are available.
+		 * o If this is the first time through the loop for for the
+		 *   second device, request the same as the first device
+		 *   requested.
+		 * o Otherwise ask for as many as you can get.
+		 *
+		 * It is expected that we will loop at most twice.  If
+		 * for some reason this loops more than that, then we
+		 * will always be requesting the number returned, which
+		 * should succeed.
+		 *
+		 * TODO: if there is only one device then we should request
+		 * all available, rather than half.
+		 */
+		if (msix_count == MSIX_FIRST)
+			msix_count = dd->nmsi = ret/2;
+		else if (msix_count == MSIX_SECOND)
+			dd->nmsi = ret;
+		else if (loop == 0)
+			dd->nmsi = msix_count;
+		else
+			dd->nmsi = ret;
+
+		loop++;
+	}
+	mutex_unlock(&msix_mutex);
+
+	if (ret < 0) {
+		dev_err(&dd->pdev->dev,
+			"cannot allocate any MSI-X vectors, err %d\n", ret);
+	} else if (dd->nmsi != WFR_NUM_MSIX) {
+		dev_err(&dd->pdev->dev,
+			"allocated %d of %d MSI-X interrupts\n",
+			dd->nmsi, WFR_NUM_MSIX);
+	}
+
+	return ret;
+}
+
 /* returns 0 on success, -ERRNO on failure */
 static int pci_enable(struct hfi_devdata *dd)
 {
+	int consistent = 0;
+	int requested_region = 0;
 	int ret;
 
 	ret = pci_enable_device(dd->pdev);
 	if (ret) {
-		pr_err("%s: cannot enable device\n", HFI_DRIVER_NAME);
+		dev_err(&dd->pdev->dev, "cannot enable device, err %d\n", ret);
 		return ret;
 	}
 
 	/* map BAR0 */
-	ret = pci_request_region(dd->pdev, 0, "hfi_driver");
+	ret = pci_request_region(dd->pdev, 0, HFI_DRIVER_NAME);
 	if (ret) {
-		pr_err("%s: cannot request region\n", HFI_DRIVER_NAME);
-		pci_disable_device(dd->pdev);
-		return ret;
+		dev_err(&dd->pdev->dev, "cannot request region, err %d\n", ret);
+		goto request_region_fail;
 	}
+	requested_region = 1;
 
 	dd->bar0 = pci_resource_start(dd->pdev, 0);
 	dd->bar0len = pci_resource_len(dd->pdev, 0);
@@ -95,19 +188,59 @@ static int pci_enable(struct hfi_devdata *dd)
 	/* TODO: does this include the write combining space? */
 	dd->kregbase = ioremap_nocache(dd->bar0, dd->bar0len);
 	if (!dd->kregbase) {
-		pr_err("%s: cannot ioremap registers\n", HFI_DRIVER_NAME);
-		pci_disable_device(dd->pdev);
-		/* after pci_disable_device */
-		pci_release_region(dd->pdev, 0);
-		return -ENOMEM;
+		dev_err(&dd->pdev->dev, "cannot ioremap registers\n");
+		ret = -ENOMEM;
+		goto ioremap_fail;
 	}
 	dd->kregend = dd->kregbase + dd->bar0len;
 
+	ret = pci_set_dma_mask(dd->pdev, DMA_BIT_MASK(64));
+	if (!ret) {
+		consistent = 1;
+		ret = pci_set_consistent_dma_mask(dd->pdev, DMA_BIT_MASK(64));
+	}
+	if (ret) {
+		dev_err(&dd->pdev->dev, "cannot set up %sDMA mask, err %d\n",
+			consistent ? "consistent " : "", ret);
+		goto dma_mask_fail;
+	}
+
+	pci_set_master(dd->pdev);
+	ret = pci_enable_pcie_error_reporting(dd->pdev);
+	if (ret) {
+		dev_err(&dd->pdev->dev,
+			"cannot set up error reporting, err %d\n", ret);
+		goto error_reporting_fail;
+	}
+
+	ret = allocate_msix_interrupts(dd);
+	if (ret < 0)
+		goto msix_fail;
+
 	return 0;
+
+msix_fail:
+	if (dd->nmsi > 0)
+		pci_disable_msix(dd->pdev);
+error_reporting_fail:
+	;	/* nothing to clean up for dma mask */
+dma_mask_fail:
+	iounmap(dd->kregbase);
+	dd->kregbase = NULL;
+ioremap_fail:
+	; /* release region should happen after the device is disabled */
+request_region_fail:
+	pci_disable_device(dd->pdev);
+	if (requested_region)
+		pci_release_region(dd->pdev, 0);
+
+	return ret;
 }
 
 static void pci_release(struct hfi_devdata *dd)
 {
+	if (dd->nmsi > 0)
+		pci_disable_msix(dd->pdev);
 	/* before pci_disable_device */
 	if (dd->kregbase) {
 		iounmap(dd->kregbase);
@@ -150,9 +283,7 @@ static int hfi_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		goto pci_enable_failed;
 
-	pr_info("%s: device %d:%d.%d mapped at 0x%lx\n", HFI_DRIVER_NAME,
-		pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn),
-		(unsigned long)dd->kregbase);
+	dev_info(&pdev->dev, "mapped at 0x%p\n", dd->kregbase);
 
 	ret = load_device_firmware(dd);
 	if (ret)
@@ -182,51 +313,49 @@ static void hfi_remove(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
+	dev_info(&pdev->dev, "removed\n");
+
 	hfi_device_remove(dd);
 	unload_device_firmware(dd);
 	pci_release(dd);
 	pci_set_drvdata(pdev, NULL);
 	release_devnum(dd);
 	kfree(dd);
-
-	pr_info("%s: removed device %d:%d.%d\n", HFI_DRIVER_NAME,
-		pdev->bus->number, PCI_SLOT(pdev->devfn),
-		PCI_FUNC(pdev->devfn));
 }
 
 static pci_ers_result_t hfi_pci_error_detected(struct pci_dev *pdev,
 				pci_channel_state_t state)
 {
 	/* TODO: implement */
-	pr_err("%s: unimplemented\n", __func__);
+	dev_err(&pdev->dev, "%s unimplemented\n", __func__);
 	return PCI_ERS_RESULT_RECOVERED;
 }
 
 static pci_ers_result_t hfi_pci_mmio_enabled(struct pci_dev *pdev)
 {
 	/* TODO: implement */
-	pr_err("%s: unimplemented\n", __func__);
+	dev_err(&pdev->dev, "%s unimplemented\n", __func__);
 	return PCI_ERS_RESULT_RECOVERED;
 }
 
 static pci_ers_result_t hfi_pci_slot_reset(struct pci_dev *pdev)
 {
 	/* TODO: implement */
-	pr_err("%s: unimplemented\n", __func__);
+	dev_err(&pdev->dev, "%s unimplemented\n", __func__);
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
 static pci_ers_result_t hfi_pci_link_reset(struct pci_dev *pdev)
 {
 	/* TODO: implement */
-	pr_err("%s: unimplemented\n", __func__);
+	dev_err(&pdev->dev, "%s unimplemented\n", __func__);
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
 static void hfi_pci_resume(struct pci_dev *pdev)
 {
 	/* TODO: implement */
-	pr_err("%s: unimplemented\n", __func__);
+	dev_err(&pdev->dev, "%s unimplemented\n", __func__);
 }
 
 static struct pci_error_handlers hfi_pci_err_handler = {

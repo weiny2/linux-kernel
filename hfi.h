@@ -8,6 +8,8 @@
 #define HFI_DRIVER_NAME "hfi"
 #define HFI_DRIVER_VERSION "0.0.1"
 
+#define WFR_NUM_MSIX 256	/* # MSI-X interrupts supported */
+
 struct hfi_devdata {
 	struct pci_dev *pdev;
 	/* user space character device structures */
@@ -23,6 +25,9 @@ struct hfi_devdata {
 	/* device bar0 details */
 	u64 bar0;
 	u64 bar0len;
+	/* MSI-X interrupt vectors */
+	struct msix_entry msix[WFR_NUM_MSIX];
+	int nmsi;
 };
 
 
