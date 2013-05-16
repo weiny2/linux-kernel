@@ -38,7 +38,7 @@
 #include <linux/vmalloc.h>
 #include <linux/moduleparam.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 static unsigned qib_hol_timeout_ms = 3000;
 module_param_named(hol_timeout_ms, qib_hol_timeout_ms, uint, S_IRUGO);

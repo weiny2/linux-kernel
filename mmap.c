@@ -37,7 +37,7 @@
 #include <linux/errno.h>
 #include <asm/pgtable.h>
 
-#include "qib_verbs.h"
+#include "verbs.h"
 
 /**
  * qib_release_mmap_info - free mmap info structure

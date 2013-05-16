@@ -41,8 +41,8 @@
 #include <linux/mm.h>
 #include <linux/random.h>
 
-#include "qib.h"
-#include "qib_common.h"
+#include "hfi.h"
+#include "common.h"
 
 static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);

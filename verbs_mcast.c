@@ -33,7 +33,7 @@
 
 #include <linux/rculist.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 /**
  * qib_mcast_qp_alloc - alloc a struct to link a QP to mcast GID struct

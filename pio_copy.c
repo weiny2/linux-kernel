@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include "qib.h"
+#include "hfi.h"
 
 /**
  * qib_pio_copy - copy data to MMIO space, in multiples of 32-bits

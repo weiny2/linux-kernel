@@ -33,8 +33,8 @@
 
 #include <rdma/ib_smi.h>
 
-#include "qib.h"
-#include "qib_mad.h"
+#include "hfi.h"
+#include "mad.h"
 
 /**
  * qib_ud_loopback - handle send on loopback QPs

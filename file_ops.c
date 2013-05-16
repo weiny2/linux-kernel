@@ -45,9 +45,9 @@
 #include <linux/delay.h>
 #include <linux/export.h>
 
-#include "qib.h"
-#include "qib_common.h"
-#include "qib_user_sdma.h"
+#include "hfi.h"
+#include "common.h"
+#include "user_sdma.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) QIB_DRV_NAME ": " fmt

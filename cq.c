@@ -35,7 +35,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
-#include "qib_verbs.h"
+#include "verbs.h"
 
 /**
  * qib_cq_enter - add a new entry to the completion queue

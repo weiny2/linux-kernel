@@ -37,7 +37,7 @@
 
 #include <linux/delay.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 
 #define NUM_IB_PORTS 1

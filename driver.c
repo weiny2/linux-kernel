@@ -41,7 +41,7 @@
 #include <linux/module.h>
 #include <linux/prefetch.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 /*
  * The size has to be longer than this string, so we can append

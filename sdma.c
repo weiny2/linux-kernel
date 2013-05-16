@@ -35,8 +35,8 @@
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
 
-#include "qib.h"
-#include "qib_common.h"
+#include "hfi.h"
+#include "common.h"
 
 /* default pio off, sdma on */
 static ushort sdma_descq_cnt = 256;

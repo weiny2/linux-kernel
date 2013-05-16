@@ -36,7 +36,7 @@
 #include <linux/pci.h>
 #include <linux/vmalloc.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 /*
  * QLogic_IB "Two Wire Serial Interface" driver.

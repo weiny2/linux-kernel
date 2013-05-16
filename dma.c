@@ -32,7 +32,7 @@
 #include <linux/types.h>
 #include <linux/scatterlist.h>
 
-#include "qib_verbs.h"
+#include "verbs.h"
 
 #define BAD_DMA_ADDRESS ((u64) 0)
 

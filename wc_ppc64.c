@@ -35,7 +35,7 @@
  * versions of the functions exported from here are used.
  */
 
-#include "qib.h"
+#include "hfi.h"
 
 /**
  * qib_enable_wc - enable write combining for MMIO writes to the device

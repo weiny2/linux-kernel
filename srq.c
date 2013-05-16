@@ -35,7 +35,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
-#include "qib_verbs.h"
+#include "verbs.h"
 
 /**
  * qib_post_srq_receive - post a receive on a shared receive queue

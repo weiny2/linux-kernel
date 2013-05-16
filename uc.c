@@ -32,7 +32,7 @@
  * SOFTWARE.
  */
 
-#include "qib.h"
+#include "hfi.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_UC_##x

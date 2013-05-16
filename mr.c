@@ -34,7 +34,7 @@
 #include <rdma/ib_umem.h>
 #include <rdma/ib_smi.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 /* Fast memory region */
 struct qib_fmr {

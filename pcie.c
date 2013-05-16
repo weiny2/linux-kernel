@@ -37,7 +37,7 @@
 #include <linux/aer.h>
 #include <linux/module.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 /*
  * This file contains PCIe utility routines that are common to the

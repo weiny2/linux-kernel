@@ -35,8 +35,8 @@
 #include <linux/pci.h>
 #include <linux/vmalloc.h>
 
-#include "qib.h"
-#include "qib_qsfp.h"
+#include "hfi.h"
+#include "qsfp.h"
 
 /*
  * QSFP support for ib_qib driver, using "Two Wire Serial Interface" driver

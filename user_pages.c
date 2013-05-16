@@ -34,7 +34,7 @@
 #include <linux/mm.h>
 #include <linux/device.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 static void __qib_release_user_pages(struct page **p, size_t num_pages,
 				     int dirty)

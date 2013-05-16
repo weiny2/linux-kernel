@@ -35,8 +35,8 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 
-#include "qib.h"
-#include "qib_common.h"
+#include "hfi.h"
+#include "common.h"
 
 /**
  * qib_format_hwmsg - format a single hwerror message

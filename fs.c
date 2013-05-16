@@ -39,7 +39,7 @@
 #include <linux/init.h>
 #include <linux/namei.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 #define QIBFS_MAGIC 0x726a77
 

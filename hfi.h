@@ -53,8 +53,8 @@
 #include <linux/sched.h>
 #include <linux/cdev.h>
 
-#include "qib_common.h"
-#include "qib_verbs.h"
+#include "common.h"
+#include "verbs.h"
 
 /* only s/w major version of QLogic_IB we can handle */
 #define QIB_CHIP_VERS_MAJ 2U

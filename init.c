@@ -40,9 +40,9 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 
-#include "qib.h"
-#include "qib_common.h"
-#include "qib_mad.h"
+#include "hfi.h"
+#include "common.h"
+#include "mad.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) QIB_DRV_NAME ": " fmt

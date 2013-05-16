@@ -41,7 +41,7 @@
 #include <asm/mtrr.h>
 #include <asm/processor.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 /**
  * qib_enable_wc - enable write combining for MMIO writes to the device

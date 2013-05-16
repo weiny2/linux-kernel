@@ -33,8 +33,8 @@
 
 #include <linux/spinlock.h>
 
-#include "qib.h"
-#include "qib_mad.h"
+#include "hfi.h"
+#include "mad.h"
 
 /*
  * Convert the AETH RNR timeout code into the number of microseconds.

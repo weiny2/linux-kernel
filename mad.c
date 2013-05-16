@@ -34,8 +34,8 @@
 
 #include <rdma/ib_smi.h>
 
-#include "qib.h"
-#include "qib_mad.h"
+#include "hfi.h"
+#include "mad.h"
 
 static int reply(struct ib_smp *smp)
 {

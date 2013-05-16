@@ -31,7 +31,7 @@
  * SOFTWARE.
  */
 
-#include "qib.h"
+#include "hfi.h"
 
 /**
  * qib_alloc_lkey - allocate an lkey

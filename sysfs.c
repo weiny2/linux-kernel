@@ -33,8 +33,8 @@
  */
 #include <linux/ctype.h>
 
-#include "qib.h"
-#include "qib_mad.h"
+#include "hfi.h"
+#include "mad.h"
 
 /* start of per-port functions */
 /*

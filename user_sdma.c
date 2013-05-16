@@ -42,8 +42,8 @@
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 
-#include "qib.h"
-#include "qib_user_sdma.h"
+#include "hfi.h"
+#include "user_sdma.h"
 
 /* minimum size of header */
 #define QIB_USER_SDMA_MIN_HEADER_LENGTH 64

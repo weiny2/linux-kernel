@@ -50,8 +50,8 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 
-#include "qib.h"
-#include "qib_common.h"
+#include "hfi.h"
+#include "common.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) QIB_DRV_NAME ": " fmt

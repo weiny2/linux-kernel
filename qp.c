@@ -36,7 +36,7 @@
 #include <linux/vmalloc.h>
 #include <linux/jhash.h>
 
-#include "qib.h"
+#include "hfi.h"
 
 #define BITS_PER_PAGE           (PAGE_SIZE*BITS_PER_BYTE)
 #define BITS_PER_PAGE_MASK      (BITS_PER_PAGE-1)
