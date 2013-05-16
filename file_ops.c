@@ -92,6 +92,34 @@ static int ui_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
+{
+	struct hfi_devdata *dd = filp->private_data;
+
+	switch (whence) {
+	case SEEK_SET:
+		break;
+	case SEEK_CUR:
+		offset += filp->f_pos;
+		break;
+	case SEEK_END:
+		offset = dd->bar0len - offset;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (offset < 0)
+		return -EINVAL;
+
+	if (offset >= dd->bar0len)
+		return -EINVAL;
+
+	filp->f_pos = offset;
+
+	return filp->f_pos;
+}
+
 /* NOTE: assumes unsigned long is 8 bytes */
 static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			loff_t *f_pos)
@@ -156,6 +184,7 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 
 static const struct file_operations ui_file_ops = {
 	.owner = THIS_MODULE,
+	.llseek = ui_lseek,
 	.read = ui_read,
 	.write = ui_write,
 	.open = ui_open,
