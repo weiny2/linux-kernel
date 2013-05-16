@@ -101,18 +101,6 @@ extern struct pci_driver qib_driver;
 #define QIB_TRAFFIC_ACTIVE_THRESHOLD (2000)
 
 /*
- * Struct used to indicate which errors are logged in each of the
- * error-counters that are logged to EEPROM. A counter is incremented
- * _once_ (saturating at 255) for each event with any bits set in
- * the error or hwerror register masks below.
- */
-#define QIB_EEP_LOG_CNT (4)
-struct qib_eep_log_mask {
-	u64 errs_to_log;
-	u64 hwerrs_to_log;
-};
-
-/*
  * Below contains all data related to a single context (formerly called port).
  */
 struct qib_ctxtdata {
@@ -791,8 +779,6 @@ struct qib_devdata {
 	/* Read/modify/write of GPIO pins (potentially chip-specific */
 	int (*f_gpio_mod)(struct qib_devdata *dd, u32 out, u32 dir,
 		u32 mask);
-	/* Enable writes to config EEPROM (if supported) */
-	int (*f_eeprom_wen)(struct qib_devdata *dd, int wen);
 	/*
 	 * modify rcvctrl shadow[s] and write to appropriate chip-regs.
 	 * see above QIB_RCVCTRL_xxx_ENB/DIS for operations.
@@ -943,7 +929,7 @@ struct qib_devdata {
 	unsigned long pio_writing[3];
 	/* kr_revision shadow */
 	u64 revision;
-	/* Base GUID for device (from eeprom, network order) */
+	/* Base GUID for device (network order) */
 	__be64 base_guid;
 
 	/*
@@ -1045,30 +1031,15 @@ struct qib_devdata {
 	u16 rhf_offset; /* offset of RHF within receive header entry */
 
 	/*
-	 * GPIO pins for twsi-connected devices, and device code for eeprom
+	 * GPIO pins for twsi-connected devices
 	 */
 	u8 gpio_sda_num;
 	u8 gpio_scl_num;
-	u8 twsi_eeprom_dev;
 	u8 board_atten;
 
-	/* Support (including locks) for EEPROM logging of errors and time */
-	/* control access to actual counters, timer */
-	spinlock_t eep_st_lock;
-	/* control high-level access to EEPROM */
-	struct mutex eep_lock;
-	uint64_t traffic_wds;
-	/* active time is kept in seconds, but logged in hours */
-	atomic_t active_time;
-	/* Below are nominal shadow of EEPROM, new since last EEPROM update */
-	uint8_t eep_st_errs[QIB_EEP_LOG_CNT];
-	uint8_t eep_st_new_errs[QIB_EEP_LOG_CNT];
-	uint16_t eep_hrs;
-	/*
-	 * masks for which bits of errs, hwerrs that cause
-	 * each of the counters to increment.
-	 */
-	struct qib_eep_log_mask eep_st_masks[QIB_EEP_LOG_CNT];
+	/* control high-level access to qsfp */
+	struct mutex qsfp_lock;
+
 	struct qib_diag_client *diag_client;
 	spinlock_t qib_diag_trans_lock; /* protect diag observer ops */
 	struct diag_observer_list_elt *diag_observer_list;
@@ -1269,15 +1240,12 @@ void qib_free_devdata(struct qib_devdata *);
 struct qib_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 #define QIB_TWSI_NO_DEV 0xFF
-/* Below qib_twsi_ functions must be called with eep_lock held */
+/* Below qib_twsi_ functions must be called with qsfp_lock held */
 int qib_twsi_reset(struct qib_devdata *dd);
 int qib_twsi_blk_rd(struct qib_devdata *dd, int dev, int addr, void *buffer,
 		    int len);
 int qib_twsi_blk_wr(struct qib_devdata *dd, int dev, int addr,
 		    const void *buffer, int len);
-void qib_get_eeprom_info(struct qib_devdata *);
-int qib_update_eeprom_log(struct qib_devdata *dd);
-void qib_inc_eeprom_err(struct qib_devdata *dd, u32 eidx, u32 incr);
 void qib_dump_lookup_output_queue(struct qib_devdata *);
 void qib_force_pio_avail_update(struct qib_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
@@ -1342,8 +1310,6 @@ void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
 
 int qib_get_user_pages(unsigned long, size_t, struct page **);
 void qib_release_user_pages(struct page **, size_t);
-int qib_eeprom_read(struct qib_devdata *, u8, void *, int);
-int qib_eeprom_write(struct qib_devdata *, u8, const void *, int);
 u32 __iomem *qib_getsendbuf_range(struct qib_devdata *, u32 *, u32, u32);
 void qib_sendbuf_done(struct qib_devdata *, unsigned);
 

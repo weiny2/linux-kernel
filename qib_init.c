@@ -408,13 +408,10 @@ static int loadtime_init(struct qib_devdata *dd)
 	spin_lock_init(&dd->sendctrl_lock);
 	spin_lock_init(&dd->uctxt_lock);
 	spin_lock_init(&dd->qib_diag_trans_lock);
-	spin_lock_init(&dd->eep_st_lock);
-	mutex_init(&dd->eep_lock);
+	mutex_init(&dd->qsfp_lock);
 
 	ret = init_pioavailregs(dd);
 	init_shadow_tids(dd);
-
-	qib_get_eeprom_info(dd);
 
 	/* setup time (don't start yet) to verify we got interrupt */
 	init_timer(&dd->intrchk_timer);
@@ -881,8 +878,6 @@ static void qib_shutdown_device(struct qib_devdata *dd)
 			ppd->qib_wq = NULL;
 		}
 	}
-
-	qib_update_eeprom_log(dd);
 }
 
 /**

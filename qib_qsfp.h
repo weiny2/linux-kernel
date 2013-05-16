@@ -141,8 +141,7 @@ extern const char *const qib_qsfp_devtech[16];
  * differ (in the chip-specific section), we need a pointer to its head.
  *
  * Avoiding premature optimization, we will have one work_struct per port,
- * and let the (increasingly inaccurately named) eep_lock arbitrate
- * access to common resources.
+ * and let the qsfp_lock arbitrate access to common resources.
  *
  */
 

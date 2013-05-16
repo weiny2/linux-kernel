@@ -8,7 +8,7 @@ ifneq ($(KERNELRELEASE),)
 #
 obj-m += hfi.o
 
-hfi-y := qib_cq.o qib_diag.o qib_dma.o qib_driver.o qib_eeprom.o \
+hfi-y := qib_cq.o qib_diag.o qib_dma.o qib_driver.o \
 	qib_file_ops.o qib_fs.o qib_init.o qib_intr.o qib_keys.o \
 	qib_mad.o qib_mmap.o qib_mr.o qib_pcie.o qib_pio_copy.o \
 	qib_qp.o qib_qsfp.o qib_rc.o qib_ruc.o qib_sdma.o qib_srq.o \

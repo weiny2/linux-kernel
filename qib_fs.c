@@ -267,111 +267,6 @@ static const struct file_operations qsfp_ops[] = {
 	{ .read = qsfp_2_read, .llseek = generic_file_llseek, },
 };
 
-static ssize_t flash_read(struct file *file, char __user *buf,
-			  size_t count, loff_t *ppos)
-{
-	struct qib_devdata *dd;
-	ssize_t ret;
-	loff_t pos;
-	char *tmp;
-
-	pos = *ppos;
-
-	if (pos < 0) {
-		ret = -EINVAL;
-		goto bail;
-	}
-
-	if (pos >= sizeof(struct qib_flash)) {
-		ret = 0;
-		goto bail;
-	}
-
-	if (count > sizeof(struct qib_flash) - pos)
-		count = sizeof(struct qib_flash) - pos;
-
-	tmp = kmalloc(count, GFP_KERNEL);
-	if (!tmp) {
-		ret = -ENOMEM;
-		goto bail;
-	}
-
-	dd = private2dd(file);
-	if (qib_eeprom_read(dd, pos, tmp, count)) {
-		qib_dev_err(dd, "failed to read from flash\n");
-		ret = -ENXIO;
-		goto bail_tmp;
-	}
-
-	if (copy_to_user(buf, tmp, count)) {
-		ret = -EFAULT;
-		goto bail_tmp;
-	}
-
-	*ppos = pos + count;
-	ret = count;
-
-bail_tmp:
-	kfree(tmp);
-
-bail:
-	return ret;
-}
-
-static ssize_t flash_write(struct file *file, const char __user *buf,
-			   size_t count, loff_t *ppos)
-{
-	struct qib_devdata *dd;
-	ssize_t ret;
-	loff_t pos;
-	char *tmp;
-
-	pos = *ppos;
-
-	if (pos != 0) {
-		ret = -EINVAL;
-		goto bail;
-	}
-
-	if (count != sizeof(struct qib_flash)) {
-		ret = -EINVAL;
-		goto bail;
-	}
-
-	tmp = kmalloc(count, GFP_KERNEL);
-	if (!tmp) {
-		ret = -ENOMEM;
-		goto bail;
-	}
-
-	if (copy_from_user(tmp, buf, count)) {
-		ret = -EFAULT;
-		goto bail_tmp;
-	}
-
-	dd = private2dd(file);
-	if (qib_eeprom_write(dd, pos, tmp, count)) {
-		ret = -ENXIO;
-		qib_dev_err(dd, "failed to write to flash\n");
-		goto bail_tmp;
-	}
-
-	*ppos = pos + count;
-	ret = count;
-
-bail_tmp:
-	kfree(tmp);
-
-bail:
-	return ret;
-}
-
-static const struct file_operations flash_ops = {
-	.read = flash_read,
-	.write = flash_write,
-	.llseek = default_llseek,
-};
-
 static int add_cntr_files(struct super_block *sb, struct qib_devdata *dd)
 {
 	struct dentry *dir, *tmp;
@@ -433,11 +328,6 @@ static int add_cntr_files(struct super_block *sb, struct qib_devdata *dd)
 		}
 	}
 
-	ret = create_file("flash", S_IFREG|S_IWUSR|S_IRUGO, dir, &tmp,
-			  &flash_ops, dd);
-	if (ret)
-		pr_err("create_file(%s/flash) failed: %d\n",
-			unit, ret);
 bail:
 	return ret;
 }

@@ -52,14 +52,9 @@ static int qsfp_read(struct qib_pportdata *ppd, int addr, void *bp, int len)
 	int stuck = 0;
 	u8 *buff = bp;
 
-	ret = mutex_lock_interruptible(&dd->eep_lock);
+	ret = mutex_lock_interruptible(&dd->qsfp_lock);
 	if (ret)
 		goto no_unlock;
-
-	if (dd->twsi_eeprom_dev == QIB_TWSI_NO_DEV) {
-		ret = -ENXIO;
-		goto bail;
-	}
 
 	/*
 	 * We presume, if we are called at all, that this board has
@@ -141,8 +136,7 @@ deselect:
 
 	msleep(2);
 
-bail:
-	mutex_unlock(&dd->eep_lock);
+	mutex_unlock(&dd->qsfp_lock);
 
 no_unlock:
 	return ret;
@@ -161,14 +155,9 @@ static int qib_qsfp_write(struct qib_pportdata *ppd, int addr, void *bp,
 	int ret, cnt;
 	u8 *buff = bp;
 
-	ret = mutex_lock_interruptible(&dd->eep_lock);
+	ret = mutex_lock_interruptible(&dd->qsfp_lock);
 	if (ret)
 		goto no_unlock;
-
-	if (dd->twsi_eeprom_dev == QIB_TWSI_NO_DEV) {
-		ret = -ENXIO;
-		goto bail;
-	}
 
 	/*
 	 * We presume, if we are called at all, that this board has
@@ -236,8 +225,7 @@ deselect:
 	 */
 	msleep(2);
 
-bail:
-	mutex_unlock(&dd->eep_lock);
+	mutex_unlock(&dd->qsfp_lock);
 
 no_unlock:
 	return ret;

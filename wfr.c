@@ -224,11 +224,6 @@ static int gpio_7322_mod(struct qib_devdata *dd, u32 out, u32 dir, u32 mask)
 	return 1;
 }
 
-static int qib_7322_eeprom_wen(struct qib_devdata *dd, int wen)
-{
-	return 0;
-}
-
 static int qib_late_7322_initreg(struct qib_devdata *dd)
 {
 	return 0;
@@ -376,7 +371,6 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_get_msgheader     = qib_7322_get_msgheader;
 	dd->f_getsendbuf        = qib_7322_getsendbuf;
 	dd->f_gpio_mod          = gpio_7322_mod;
-	dd->f_eeprom_wen        = qib_7322_eeprom_wen;
 	dd->f_hdrqempty         = qib_7322_hdrqempty;
 	dd->f_ib_updown         = qib_7322_ib_updown;
 	dd->f_init_ctxt         = qib_7322_init_ctxt;
