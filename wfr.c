@@ -433,9 +433,6 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 
-	if (qib_mini_init || !dd->num_pports)
-		goto bail;
-
 	goto bail;
 
 bail_cleanup:

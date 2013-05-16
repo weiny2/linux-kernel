@@ -64,14 +64,6 @@ ushort qib_cfgctxts;
 module_param_named(cfgctxts, qib_cfgctxts, ushort, S_IRUGO);
 MODULE_PARM_DESC(cfgctxts, "Set max number of contexts to use");
 
-/*
- * If set, do not write to any regs if avoidable, hack to allow
- * check for deranged default register values.
- */
-ushort qib_mini_init;
-module_param_named(mini_init, qib_mini_init, ushort, S_IRUGO);
-MODULE_PARM_DESC(mini_init, "If set, do minimal diag init");
-
 unsigned qib_n_krcv_queues;
 module_param_named(krcvqs, qib_n_krcv_queues, uint, S_IRUGO);
 MODULE_PARM_DESC(krcvqs, "number of kernel receive queues per IB port");
@@ -419,9 +411,6 @@ static int loadtime_init(struct qib_devdata *dd)
 	spin_lock_init(&dd->eep_st_lock);
 	mutex_init(&dd->eep_lock);
 
-	if (qib_mini_init)
-		goto done;
-
 	ret = init_pioavailregs(dd);
 	init_shadow_tids(dd);
 
@@ -432,7 +421,9 @@ static int loadtime_init(struct qib_devdata *dd)
 	dd->intrchk_timer.function = verify_interrupt;
 	dd->intrchk_timer.data = (unsigned long) dd;
 
+#if 0
 done:
+#endif
 	return ret;
 }
 
@@ -646,10 +637,6 @@ int qib_init(struct qib_devdata *dd, int reinit)
 		ret = loadtime_init(dd);
 	if (ret)
 		goto done;
-
-	/* Bypass most chip-init, to get to device creation */
-	if (qib_mini_init)
-		return 0;
 
 	ret = dd->f_late_initreg(dd);
 	if (ret)
@@ -1382,7 +1369,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * we still create devices, so diags, etc. can be used
 	 * to determine cause of problem.
 	 */
-	if (!qib_mini_init && !initfail && !ret)
+	if (!initfail && !ret)
 		dd->flags |= QIB_INITTED;
 
 	j = qib_device_create(dd);
@@ -1393,13 +1380,11 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		qib_dev_err(dd, "Failed filesystem setup for counters: %d\n",
 			    -j);
 
-	if (qib_mini_init || initfail || ret) {
+	if (initfail || ret) {
 		qib_stop_timers(dd);
 		flush_workqueue(ib_wq);
 		for (pidx = 0; pidx < dd->num_pports; ++pidx)
 			dd->f_quiet_serdes(dd->pport + pidx);
-		if (qib_mini_init)
-			goto bail;
 		if (!j) {
 			(void) qibfs_remove(dd);
 			qib_device_remove(dd);
@@ -1439,8 +1424,7 @@ static void qib_remove_one(struct pci_dev *pdev)
 	 * Disable the IB link, disable interrupts on the device,
 	 * clear dma engines, etc.
 	 */
-	if (!qib_mini_init)
-		qib_shutdown_device(dd);
+	qib_shutdown_device(dd);
 
 	qib_stop_timers(dd);
 

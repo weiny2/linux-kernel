@@ -1438,7 +1438,6 @@ const char *qib_get_unit_name(int unit);
 extern unsigned qib_ibmtu;
 extern ushort qib_cfgctxts;
 extern ushort qib_num_cfg_vls;
-extern ushort qib_mini_init; /* If set, do few (ideally 0) writes to chip */
 extern unsigned qib_n_krcv_queues;
 extern unsigned qib_sdma_fetch_arb;
 extern unsigned qib_compat_ddr_negotiate;
