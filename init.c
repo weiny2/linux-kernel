@@ -34,7 +34,6 @@
  * SOFTWARE.
  */
 
-#include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -293,11 +292,15 @@ static int hfi_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		goto device_failed;
 
+	ret = register_ib_device(dd);
+	if (ret) goto register_ib_failed;
+
+
 	return 0; /* success */
-/*
-Uncomment this to undo a successful hfi_device_create().
+
+	/*unregister_ib_device(dd);*/
+register_ib_failed:
 	hfi_device_remove(dd);
-*/
 device_failed:
 	unload_device_firmware(dd);
 load_firmware_failed:
@@ -315,6 +318,7 @@ static void hfi_remove(struct pci_dev *pdev)
 
 	dev_info(&pdev->dev, "removed\n");
 
+	unregister_ib_device(dd);
 	hfi_device_remove(dd);
 	unload_device_firmware(dd);
 	pci_release(dd);

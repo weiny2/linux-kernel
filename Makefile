@@ -8,7 +8,7 @@ ifneq ($(KERNELRELEASE),)
 #
 obj-m += hfi.o
 
-hfi-objs := init.o file_ops.o firmware.o
+hfi-objs := init.o file_ops.o firmware.o qp.o verbs.o
 
 
 else
@@ -26,8 +26,8 @@ else
 KBUILD  ?= /lib/modules/$(shell uname -r)/build
 PWD     := $(shell pwd)
 
-HDRS= hfi.h
-SRCS= init.c file_ops.c firmware.c
+HDRS= common.h hfi.h verbs.h
+SRCS= init.c file_ops.c firmware.c qp.c verbs.c
 
 it:
 	$(MAKE) -C $(KBUILD) M=$(PWD)

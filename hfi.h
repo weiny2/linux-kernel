@@ -3,12 +3,16 @@
 /* TODO: Need copyright */
 /* ISSUE: expects the includer to #include stuff */
 
+#include <linux/pci.h>
 #include <linux/cdev.h>
+#include <linux/notifier.h>
 
 #define HFI_DRIVER_NAME "hfi"
 #define HFI_DRIVER_VERSION "0.0.1"
 
 #define WFR_NUM_MSIX 256	/* # MSI-X interrupts supported */
+
+struct hfi_ib_device;
 
 struct hfi_devdata {
 	struct pci_dev *pdev;
@@ -28,7 +32,16 @@ struct hfi_devdata {
 	/* MSI-X interrupt vectors */
 	struct msix_entry msix[WFR_NUM_MSIX];
 	int nmsi;
+
+	/* IB-specific things */
+	struct hfi_ib_device *vdev;	/* verbs device */
 };
+
+
+static inline struct hfi_ib_device *vdev_from_dd(struct hfi_devdata *dd)
+{
+	return dd->vdev;
+}
 
 
 /* file_ops.c */
@@ -41,5 +54,10 @@ void hfi_device_remove(struct hfi_devdata *dd);
 /* firmware.c */
 int load_device_firmware(struct hfi_devdata *dd);
 void unload_device_firmware(struct hfi_devdata *dd);
+
+/* verbs.c */
+int register_ib_device(struct hfi_devdata *dd);
+void unregister_ib_device(struct hfi_devdata *dd);
+
 
 #endif /* HFI_H */
