@@ -51,6 +51,7 @@
 #include <linux/completion.h>
 #include <linux/kref.h>
 #include <linux/sched.h>
+#include <linux/cdev.h>
 
 #include "qib_common.h"
 #include "qib_verbs.h"
@@ -710,10 +711,12 @@ struct qib_devdata {
 	/* pointers to related structs for this device */
 	/* pci access data structure */
 	struct pci_dev *pcidev;
-	struct cdev *user_cdev;
-	struct cdev *diag_cdev;
+	struct cdev user_cdev;
+	struct cdev diag_cdev;
+	struct cdev ui_cdev;
 	struct device *user_device;
 	struct device *diag_device;
+	struct device *ui_device;
 
 	/* mem-mapped pointer to base of chip regs */
 	u64 __iomem *kregbase;
@@ -1122,8 +1125,8 @@ int qib_count_active_units(void);
 
 int qib_cdev_init(int minor, const char *name,
 		  const struct file_operations *fops,
-		  struct cdev **cdevp, struct device **devp);
-void qib_cdev_cleanup(struct cdev **cdevp, struct device **devp);
+		  struct cdev *cdev, struct device **devp);
+void qib_cdev_cleanup(struct cdev *cdev, struct device **devp);
 int qib_dev_init(void);
 void qib_dev_cleanup(void);
 
