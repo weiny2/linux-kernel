@@ -143,6 +143,8 @@ static u8 flash_csum(struct qib_flash *ifp, int adjust)
  */
 void qib_get_eeprom_info(struct qib_devdata *dd)
 {
+/* FIXME: no EEPROM to read yet */
+#if 0
 	void *buf;
 	struct qib_flash *ifp;
 	__be64 guid;
@@ -280,6 +282,7 @@ done:
 	vfree(buf);
 
 bail:;
+#endif
 }
 
 /**

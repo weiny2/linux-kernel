@@ -1261,12 +1261,7 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 void qib_free_data(struct qib_ctxtdata *dd);
 void qib_chg_pioavailkernel(struct qib_devdata *, unsigned, unsigned,
 			    u32, struct qib_ctxtdata *);
-struct qib_devdata *qib_init_iba7322_funcs(struct pci_dev *,
-					   const struct pci_device_id *);
-struct qib_devdata *qib_init_iba7220_funcs(struct pci_dev *,
-					   const struct pci_device_id *);
-struct qib_devdata *qib_init_iba6120_funcs(struct pci_dev *,
-					   const struct pci_device_id *);
+struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *, const struct pci_device_id *);
 void qib_free_devdata(struct qib_devdata *);
 struct qib_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
@@ -1458,11 +1453,8 @@ extern struct mutex qib_mutex;
 #define QIB_DIAG_MINOR_BASE     129
 #define QIB_NMINORS             255
 
-#define PCI_VENDOR_ID_PATHSCALE 0x1fc1
-#define PCI_VENDOR_ID_QLOGIC 0x1077
-#define PCI_DEVICE_ID_QLOGIC_IB_6120 0x10
-#define PCI_DEVICE_ID_QLOGIC_IB_7220 0x7220
-#define PCI_DEVICE_ID_QLOGIC_IB_7322 0x7322
+#define PCI_VENDOR_ID_INTEL 0x8086
+#define PCI_DEVICE_ID_INTEL_WFR 0x7323
 
 /*
  * qib_early_err is used (only!) to print early errors before devdata is

@@ -393,6 +393,8 @@ static int loadtime_init(struct qib_devdata *dd)
 {
 	int ret = 0;
 
+/* FIXME: needed? */
+#if 0
 	if (((dd->revision >> QLOGIC_IB_R_SOFTWARE_SHIFT) &
 	     QLOGIC_IB_R_SOFTWARE_MASK) != QIB_CHIP_SWVERSION) {
 		qib_dev_err(dd,
@@ -405,6 +407,7 @@ static int loadtime_init(struct qib_devdata *dd)
 		ret = -ENOSYS;
 		goto done;
 	}
+#endif
 
 	if (dd->revision & QLOGIC_IB_R_EMULATOR_MASK)
 		qib_devinfo(dd->pcidev, "%s", dd->boardversion);
@@ -1142,9 +1145,7 @@ static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
 #define PFX QIB_DRV_NAME ": "
 
 static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_PATHSCALE, PCI_DEVICE_ID_QLOGIC_IB_6120) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_QLOGIC, PCI_DEVICE_ID_QLOGIC_IB_7220) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_QLOGIC, PCI_DEVICE_ID_QLOGIC_IB_7322) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR) },
 	{ 0, }
 };
 
@@ -1350,25 +1351,10 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * allocation, etc.
 	 */
 	switch (ent->device) {
-	case PCI_DEVICE_ID_QLOGIC_IB_6120:
-#ifdef CONFIG_PCI_MSI
-		dd = qib_init_iba6120_funcs(pdev, ent);
-#else
-		qib_early_err(&pdev->dev,
-			"Intel PCIE device 0x%x cannot work if CONFIG_PCI_MSI is not enabled\n",
-			ent->device);
-		dd = ERR_PTR(-ENODEV);
-#endif
-		break;
+	case PCI_DEVICE_ID_INTEL_WFR:
+		dd = qib_init_wfr_funcs(pdev, ent);
 
-	case PCI_DEVICE_ID_QLOGIC_IB_7220:
-		dd = qib_init_iba7220_funcs(pdev, ent);
 		break;
-
-	case PCI_DEVICE_ID_QLOGIC_IB_7322:
-		dd = qib_init_iba7322_funcs(pdev, ent);
-		break;
-
 	default:
 		qib_early_err(&pdev->dev,
 			"Failing on unknown Intel deviceid 0x%x\n",
