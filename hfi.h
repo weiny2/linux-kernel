@@ -506,7 +506,6 @@ struct qib_pportdata {
 	struct qib_ibport ibport_data;
 
 	struct qib_devdata *dd;
-	struct qib_chippport_specific *cpspec; /* chip-specific per-port */
 	struct kobject pport_kobj;
 	struct kobject pport_cc_kobj;
 	struct kobject sl2vl_kobj;
@@ -815,7 +814,6 @@ struct qib_devdata {
 	void (*f_init_ctxt)(struct qib_ctxtdata *);
 	void (*f_txchk_change)(struct qib_devdata *, u32, u32, u32,
 		struct qib_ctxtdata *);
-	void (*f_writescratch)(struct qib_devdata *, u32);
 	int (*f_tempsense_rd)(struct qib_devdata *, int regnum);
 
 	char *boardname; /* human readable board info */

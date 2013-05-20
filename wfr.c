@@ -44,9 +44,6 @@
 struct qib_chip_specific {
 	u64 dummy;
 };
-struct qib_chippport_specific {
-	u64 dummy;
-};
 
 static void qib_7322_sdma_sendctrl(struct qib_pportdata *ppd, unsigned op)
 {
@@ -229,54 +226,6 @@ static int qib_late_7322_initreg(struct qib_devdata *dd)
 	return 0;
 }
 
-static int qib_init_7322_variables(struct qib_devdata *dd)
-{
-	struct qib_pportdata *ppd;
-
-	/* pport structs are contiguous, allocated after devdata */
-	ppd = (struct qib_pportdata *)(dd + 1);
-	dd->pport = ppd;
-	ppd[0].dd = dd;
-	dd->cspec = (struct qib_chip_specific *)&ppd[NUM_IB_PORTS];
-	ppd[0].cpspec = (struct qib_chippport_specific *)
-						&dd->cspec[NUM_IB_PORTS];
-
-	/* arbitrary values */
-	dd->palign = 8;
-	dd->uregbase = 0;
-	dd->rcvtidcnt = 32;
-	dd->rcvtidbase = 0;
-	dd->rcvegrbase = 0;
-	dd->piobufbase = 0;
-	dd->pio2k_bufbase = 0;
-	dd->piobcnt2k = 32;
-	dd->piobcnt4k = 32;
-	dd->piosize2k = 32;
-	dd->piosize4k = 32;
-
-	dd->boardname = kmalloc(64, GFP_KERNEL);
-	sprintf(dd->boardname, "fake wfr");
-
-	dd->num_pports = 1;
-
-	/* setup the stats timer; the add_timer is done at end of init */
-	init_timer(&dd->stats_timer);
-	dd->stats_timer.function = qib_get_7322_faststats;
-	dd->stats_timer.data = (unsigned long) dd;
-
-	dd->ureg_align = 0x10000;  /* 64KB alignment */
-
-	dd->piosize2kmax_dwords = dd->piosize2k >> 2;
-
-	/* arbitrary values */
-	dd->ctxtcnt = 32;
-	dd->rcvhdrcnt = 32;
-
-	qib_set_ctxtcnt(dd);
-
-	return 0;
-}
-
 static u32 __iomem *qib_7322_getsendbuf(struct qib_pportdata *ppd, u64 pbc,
 					u32 *pbufnum)
 {
@@ -330,10 +279,6 @@ static void qib_7322_txchk_change(struct qib_devdata *dd, u32 start,
 {
 }
 
-static void writescratch(struct qib_devdata *dd, u32 val)
-{
-}
-
 static int qib_7322_tempsense_rd(struct qib_devdata *dd, int regnum)
 {
 	return -ENXIO;
@@ -354,14 +299,23 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 					   const struct pci_device_id *ent)
 {
 	struct qib_devdata *dd;
+	struct qib_pportdata *ppd;
+	int i;
 	int ret;
 
 	dd = qib_alloc_devdata(pdev,
 		NUM_IB_PORTS * sizeof(struct qib_pportdata) +
-		sizeof(struct qib_chip_specific) +
-		NUM_IB_PORTS * sizeof(struct qib_chippport_specific));
+		sizeof(struct qib_chip_specific));
 	if (IS_ERR(dd))
 		goto bail;
+
+	/* pport structs are contiguous, allocated after devdata */
+	ppd = (struct qib_pportdata *)(dd + 1);
+	dd->pport = ppd;
+	for (i = 0; i < NUM_IB_PORTS; i++)
+		ppd[i].dd = dd;
+	dd->cspec = (struct qib_chip_specific *)&ppd[NUM_IB_PORTS];
+
 
 	dd->f_bringup_serdes    = qib_7322_bringup_serdes;
 	dd->f_cleanup           = qib_setup_7322_cleanup;
@@ -410,7 +364,6 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_sdma_hw_clean_up  = qib_7322_sdma_hw_clean_up;
 	dd->f_sdma_hw_start_up  = qib_7322_sdma_hw_start_up;
 	dd->f_sdma_init_early   = qib_7322_sdma_init_early;
-	dd->f_writescratch      = writescratch;
 	dd->f_tempsense_rd	= qib_7322_tempsense_rd;
 	/*
 	 * Do remaining PCIe setup and save PCIe values in dd.
@@ -422,15 +375,45 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret < 0)
 		goto bail_free;
 
-	/* initialize chip-specific variables */
-	ret = qib_init_7322_variables(dd);
-	if (ret)
-		goto bail_cleanup;
+	/* arbitrary values */
+	dd->palign = 8;
+	dd->uregbase = 0;
+	dd->rcvtidcnt = 32;
+	dd->rcvtidbase = 0;
+	dd->rcvegrbase = 0;
+	dd->piobufbase = 0;
+	dd->pio2k_bufbase = 0;
+	dd->piobcnt2k = 32;
+	dd->piobcnt4k = 32;
+	dd->piosize2k = 32;
+	dd->piosize4k = 32;
+
+	dd->boardname = kmalloc(64, GFP_KERNEL);
+	sprintf(dd->boardname, "fake wfr");
+
+	dd->num_pports = 1;
+
+	/* set up the stats timer; the add_timer is done at end of init */
+	init_timer(&dd->stats_timer);
+	dd->stats_timer.function = qib_get_7322_faststats;
+	dd->stats_timer.data = (unsigned long) dd;
+
+	dd->ureg_align = 0x10000;  /* 64KB alignment */
+
+	dd->piosize2kmax_dwords = dd->piosize2k >> 2;
+
+	/* arbitrary values */
+	dd->ctxtcnt = 32;
+	dd->rcvhdrcnt = 32;
+
+	qib_set_ctxtcnt(dd);
 
 	goto bail;
 
+/*
 bail_cleanup:
 	qib_pcie_ddcleanup(dd);
+*/
 bail_free:
 	qib_free_devdata(dd);
 	dd = ERR_PTR(ret);
