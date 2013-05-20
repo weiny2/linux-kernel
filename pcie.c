@@ -83,7 +83,7 @@ int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto done;
 	}
 
-	ret = pci_request_regions(pdev, QIB_DRV_NAME);
+	ret = pci_request_regions(pdev, DRIVER_NAME);
 	if (ret) {
 		qib_devinfo(pdev, "pci_request_regions fails: err %d\n", -ret);
 		goto bail;

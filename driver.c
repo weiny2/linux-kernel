@@ -82,11 +82,11 @@ MODULE_VERSION(QIB_DRIVER_VERSION);
 
 struct qlogic_ib_stats qib_stats;
 
-const char *qib_get_unit_name(int unit)
+const char *get_unit_name(int unit)
 {
 	static char iname[16];
 
-	snprintf(iname, sizeof iname, "infinipath%u", unit);
+	snprintf(iname, sizeof iname, DRIVER_NAME"%u", unit);
 	return iname;
 }
 

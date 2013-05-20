@@ -45,7 +45,7 @@
 #include "mad.h"
 
 #undef pr_fmt
-#define pr_fmt(fmt) QIB_DRV_NAME ": " fmt
+#define pr_fmt(fmt) DRIVER_NAME ": " fmt
 
 /*
  * min buffers we want to have per context, after driver
@@ -1123,8 +1123,8 @@ void qib_disable_after_error(struct qib_devdata *dd)
 static void qib_remove_one(struct pci_dev *);
 static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
 
-#define DRIVER_LOAD_MSG "Intel " QIB_DRV_NAME " loaded: "
-#define PFX QIB_DRV_NAME ": "
+#define DRIVER_LOAD_MSG "Intel " DRIVER_NAME " loaded: "
+#define PFX DRIVER_NAME ": "
 
 static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR) },
@@ -1134,7 +1134,7 @@ static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
 MODULE_DEVICE_TABLE(pci, qib_pci_tbl);
 
 struct pci_driver qib_driver = {
-	.name = QIB_DRV_NAME,
+	.name = DRIVER_NAME,
 	.probe = qib_init_one,
 	.remove = qib_remove_one,
 	.id_table = qib_pci_tbl,

@@ -1377,7 +1377,7 @@ void qib_pcie_reenable(struct qib_devdata *, u16, u8, u8);
  */
 dma_addr_t qib_map_page(struct pci_dev *, struct page *, unsigned long,
 			  size_t, int);
-const char *qib_get_unit_name(int unit);
+const char *get_unit_name(int unit);
 
 /*
  * Flush write combining store buffers (if present) and perform a write
@@ -1403,7 +1403,7 @@ extern struct mutex qib_mutex;
 /* Number of seconds before our card status check...  */
 #define STATUS_TIMEOUT 60
 
-#define QIB_DRV_NAME            "ib_qib"
+#define DRIVER_NAME		"hfi"
 #define QIB_USER_MINOR_BASE     0
 #define QIB_TRACE_MINOR         127
 #define QIB_DIAGPKT_MINOR       128
@@ -1430,13 +1430,13 @@ extern struct mutex qib_mutex;
 #define qib_dev_err(dd, fmt, ...) \
 	do { \
 		dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
-			qib_get_unit_name((dd)->unit), ##__VA_ARGS__); \
+			get_unit_name((dd)->unit), ##__VA_ARGS__); \
 	} while (0)
 
 #define qib_dev_porterr(dd, port, fmt, ...) \
 	do { \
 		dev_err(&(dd)->pcidev->dev, "%s: IB%u:%u " fmt, \
-			qib_get_unit_name((dd)->unit), (dd)->unit, (port), \
+			get_unit_name((dd)->unit), (dd)->unit, (port), \
 			##__VA_ARGS__); \
 	} while (0)
 
