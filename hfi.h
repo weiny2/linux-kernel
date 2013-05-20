@@ -941,8 +941,6 @@ struct qib_devdata {
 
 	/* these are the "32 bit" regs */
 
-	/* number of GUIDs in the flash for this interface */
-	u32 nguid;
 	/*
 	 * the following two are 32-bit bitmasks, but {test,clear,set}_bit
 	 * all expect bit fields to be "unsigned long"
