@@ -1235,13 +1235,6 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *, const struct pci_device
 void qib_free_devdata(struct qib_devdata *);
 struct qib_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
-#define QIB_TWSI_NO_DEV 0xFF
-/* Below qib_twsi_ functions must be called with qsfp_lock held */
-int qib_twsi_reset(struct qib_devdata *dd);
-int qib_twsi_blk_rd(struct qib_devdata *dd, int dev, int addr, void *buffer,
-		    int len);
-int qib_twsi_blk_wr(struct qib_devdata *dd, int dev, int addr,
-		    const void *buffer, int len);
 void qib_dump_lookup_output_queue(struct qib_devdata *);
 void qib_force_pio_avail_update(struct qib_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);

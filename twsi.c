@@ -37,6 +37,7 @@
 #include <linux/vmalloc.h>
 
 #include "hfi.h"
+#include "twsi.h"
 
 /*
  * QLogic_IB "Two Wire Serial Interface" driver.
