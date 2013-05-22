@@ -49,6 +49,7 @@ enum {
 
 /* Management base version */
 #define IB_MGMT_BASE_VERSION			1
+#define JUMBO_MGMT_BASE_VERSION			0x80
 
 /* Management classes */
 #define IB_MGMT_CLASS_SUBN_LID_ROUTED		0x01
@@ -140,6 +141,11 @@ enum {
 	IB_MGMT_SA_DATA = 200,
 	IB_MGMT_DEVICE_HDR = 64,
 	IB_MGMT_DEVICE_DATA = 192,
+
+	JUMBO_MGMT_MAD_HDR = IB_MGMT_MAD_HDR,
+	JUMBO_MGMT_MAD_DATA = 2024,
+	JUMBO_MGMT_RMPP_HDR = IB_MGMT_RMPP_HDR,
+	JUMBO_MGMT_RMPP_DATA = 2012,
 };
 
 struct ib_mad_hdr {
@@ -186,10 +192,24 @@ struct ib_mad {
 	u8			data[IB_MGMT_MAD_DATA];
 };
 
-struct ib_rmpp_mad {
+struct jumbo_mad {
+	struct ib_mad_hdr	mad_hdr;
+	u8			data[JUMBO_MGMT_MAD_DATA];
+};
+
+struct ib_rmpp_base {
 	struct ib_mad_hdr	mad_hdr;
 	struct ib_rmpp_hdr	rmpp_hdr;
+} __attribute__ ((packed));
+
+struct ib_rmpp_mad {
+	struct ib_rmpp_base	base;
 	u8			data[IB_MGMT_RMPP_DATA];
+};
+
+struct jumbo_rmpp_mad {
+	struct ib_rmpp_base	base;
+	u8			data[JUMBO_MGMT_RMPP_DATA];
 };
 
 struct ib_sa_mad {
@@ -253,6 +273,9 @@ struct ib_class_port_info {
 struct ib_mad_send_buf {
 	struct ib_mad_send_buf	*next;
 	void			*mad;
+			/* can be ib_mad or jumbo_mad
+			 * Depending on base_version in header
+			 */
 	struct ib_mad_agent	*mad_agent;
 	struct ib_ah		*ah;
 	void			*context[2];
@@ -406,7 +429,8 @@ struct ib_mad_send_wc {
 struct ib_mad_recv_buf {
 	struct list_head	list;
 	struct ib_grh		*grh;
-	struct ib_mad		*mad;
+	struct ib_mad		*mad; /* Note can be a struct jumbo_mad
+					mad_len */
 };
 
 /**
@@ -418,6 +442,16 @@ struct ib_mad_recv_buf {
  *
  * For received response, the wr_id contains a pointer to the ib_mad_send_buf
  *   for the corresponding send request.
+ */
+/* FIXME WARNING for upstream.
+ * recv_buf is not a continugous buffer but rather a list of the buffers which
+ * came in for the rmpp response (or a single buffer for non-rmpp).  I _think_
+ * this is fine if these buffers are jumbo sized as the old clients should not
+ * use the extra memory but I want to verify this.
+ *
+ * Regardless mad_len == num_segments * seg_size
+ *      where seg_size == IB or Jumbo mad size
+ *      depending on base_version
  */
 struct ib_mad_recv_wc {
 	struct ib_wc		*wc;
