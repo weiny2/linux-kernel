@@ -1478,6 +1478,7 @@ const char *qib_get_unit_name(int unit);
 #endif
 
 /* global module parameter variables */
+extern unsigned wfr_vl15_ovl0;
 extern unsigned qib_ibmtu;
 extern ushort qib_cfgctxts;
 extern ushort qib_num_cfg_vls;
