@@ -989,13 +989,6 @@ struct qib_devdata {
 	u32 lbus_speed;
 	int unit; /* unit # of this chip */
 
-	/* start of CHIP_SPEC move to chipspec, but need code changes */
-	/* low and high portions of MSI capability/vector */
-	u32 msi_lo;
-	/* saved after PCIe init for restore after reset */
-	u32 msi_hi;
-	/* MSI data (vector) saved for restore */
-	u16 msi_data;
 	/* so we can rewrite it after a chip reset */
 	u32 pcibar0;
 	/* so we can rewrite it after a chip reset */
@@ -1365,9 +1358,7 @@ int qib_pcie_ddinit(struct qib_devdata *, struct pci_dev *,
 		    const struct pci_device_id *);
 void qib_pcie_ddcleanup(struct qib_devdata *);
 int qib_pcie_params(struct qib_devdata *, u32, u32 *, struct qib_msix_entry *);
-int qib_reinit_intr(struct qib_devdata *);
 void qib_enable_intx(struct pci_dev *);
-void qib_nomsi(struct qib_devdata *);
 void qib_nomsix(struct qib_devdata *);
 void qib_pcie_getcmd(struct qib_devdata *, u16 *, u8 *, u8 *);
 void qib_pcie_reenable(struct qib_devdata *, u16, u8, u8);

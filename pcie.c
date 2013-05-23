@@ -40,16 +40,11 @@
 #include "hfi.h"
 
 /*
- * This file contains PCIe utility routines that are common to the
- * various QLogic InfiniPath adapters
+ * This file contains PCIe utility routines.
  */
 
 /*
  * Code to adjust PCIe capabilities.
- * To minimize the change footprint, we call it
- * from qib_pcie_params, which every chip-specific
- * file calls, even though this violates some
- * expectations of harmlessness.
  */
 static int qib_tune_pcie_caps(struct qib_devdata *);
 static int qib_tune_pcie_coalesce(struct qib_devdata *);
@@ -153,13 +148,13 @@ int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
 
 	if (!dd->kregbase)
 		return -ENOMEM;
+	dd->flags |= QIB_PRESENT;	/* now register routines work */
 
 	dd->kregend = (u64 __iomem *)((void __iomem *) dd->kregbase + len);
 	dd->physaddr = addr;        /* used for io_remap, etc. */
 
 	/*
-	 * Save BARs to rewrite after device reset.  Save all 64 bits of
-	 * BAR, just in case.
+	 * Save BARs to rewrite after device reset.
 	 */
 	dd->pcibar0 = addr;
 	dd->pcibar1 = addr >> 32;
@@ -172,12 +167,13 @@ int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
 /*
  * Do PCIe cleanup, after chip-specific cleanup, etc.  Just prior
  * to releasing the dd memory.
- * void because none of the core pcie cleanup returns are void
+ * Void because all of the core pcie cleanup functions are void.
  */
 void qib_pcie_ddcleanup(struct qib_devdata *dd)
 {
 	u64 __iomem *base = (void __iomem *) dd->kregbase;
 
+	dd->flags &= ~QIB_PRESENT;
 	dd->kregbase = NULL;
 	iounmap(base);
 	if (dd->piobase)
@@ -239,83 +235,43 @@ do_intx:
 
 }
 
-/**
- * We save the msi lo and hi values, so we can restore them after
- * chip reset (the kernel PCI infrastructure doesn't yet handle that
- * correctly.
- */
-static int qib_msi_setup(struct qib_devdata *dd, int pos)
-{
-	struct pci_dev *pdev = dd->pcidev;
-	u16 control;
-	int ret;
-
-	ret = pci_enable_msi(pdev);
-	if (ret)
-		qib_dev_err(dd,
-			"pci_enable_msi failed: %d, interrupts may not work\n",
-			ret);
-	/* continue even if it fails, we may still be OK... */
-
-	pci_read_config_dword(pdev, pos + PCI_MSI_ADDRESS_LO,
-			      &dd->msi_lo);
-	pci_read_config_dword(pdev, pos + PCI_MSI_ADDRESS_HI,
-			      &dd->msi_hi);
-	pci_read_config_word(pdev, pos + PCI_MSI_FLAGS, &control);
-	/* now save the data (vector) info */
-	pci_read_config_word(pdev, pos + ((control & PCI_MSI_FLAGS_64BIT)
-				    ? 12 : 8),
-			     &dd->msi_data);
-	return ret;
-}
-
 int qib_pcie_params(struct qib_devdata *dd, u32 minw, u32 *nent,
 		    struct qib_msix_entry *entry)
 {
 	u16 linkstat, speed;
-	int pos = 0, ret = 1;
+	int pos, ret = 0;
 
 	if (!pci_is_pcie(dd->pcidev)) {
 		qib_dev_err(dd, "Can't find PCI Express capability!\n");
 		/* set up something... */
 		dd->lbus_width = 1;
 		dd->lbus_speed = 2500; /* Gen1, 2.5GHz */
+		ret = -EINVAL;
 		goto bail;
 	}
 
 	pos = pci_find_capability(dd->pcidev, PCI_CAP_ID_MSIX);
 	if (nent && *nent && pos) {
 		qib_msix_setup(dd, pos, nent, entry);
-		ret = 0; /* did it, either MSIx or INTx */
+		/* did it, either MSI-X or INTx */
 	} else {
-		pos = pci_find_capability(dd->pcidev, PCI_CAP_ID_MSI);
-		if (pos)
-			ret = qib_msi_setup(dd, pos);
-		else
-			qib_dev_err(dd, "No PCI MSI or MSIx capability!\n");
-	}
-	if (!pos)
 		qib_enable_intx(dd->pcidev);
+	}
 
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKSTA, &linkstat);
-	/*
-	 * speed is bits 0-3, linkwidth is bits 4-8
-	 * no defines for them in headers
-	 */
-	speed = linkstat & 0xf;
-	linkstat >>= 4;
-	linkstat &= 0x1f;
-	dd->lbus_width = linkstat;
+	speed = linkstat & PCI_EXP_LNKSTA_CLS;
+	dd->lbus_width = (linkstat & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
 
 	switch (speed) {
-	case 1:
-		dd->lbus_speed = 2500; /* Gen1, 2.5GHz */
+	default: /* not defined, assume Gen1 */
+	case PCI_EXP_LNKSTA_CLS_2_5GB:
+		dd->lbus_speed = 2500; /* Gen 1, 2.5GHz */
 		break;
-	case 2:
-		dd->lbus_speed = 5000; /* Gen1, 5GHz */
+	case PCI_EXP_LNKSTA_CLS_5_0GB:
+		dd->lbus_speed = 5000; /* Gen 2, 5GHz */
 		break;
-	default: /* not defined, assume gen1 */
-		dd->lbus_speed = 2500;
+	case 0x4: /* not defined in a kernel header */
+		dd->lbus_speed = 8000; /* Gen 3, 8GHz */
 		break;
 	}
 
@@ -340,108 +296,19 @@ bail:
 }
 
 /*
- * Setup pcie interrupt stuff again after a reset.  I'd like to just call
- * pci_enable_msi() again for msi, but when I do that,
- * the MSI enable bit doesn't get set in the command word, and
- * we switch to to a different interrupt vector, which is confusing,
- * so I instead just do it all inline.  Perhaps somehow can tie this
- * into the PCIe hotplug support at some point
- */
-int qib_reinit_intr(struct qib_devdata *dd)
-{
-	int pos;
-	u16 control;
-	int ret = 0;
-
-	/* If we aren't using MSI, don't restore it */
-	if (!dd->msi_lo)
-		goto bail;
-
-	pos = pci_find_capability(dd->pcidev, PCI_CAP_ID_MSI);
-	if (!pos) {
-		qib_dev_err(dd,
-			"Can't find MSI capability, can't restore MSI settings\n");
-		ret = 0;
-		/* nothing special for MSIx, just MSI */
-		goto bail;
-	}
-	pci_write_config_dword(dd->pcidev, pos + PCI_MSI_ADDRESS_LO,
-			       dd->msi_lo);
-	pci_write_config_dword(dd->pcidev, pos + PCI_MSI_ADDRESS_HI,
-			       dd->msi_hi);
-	pci_read_config_word(dd->pcidev, pos + PCI_MSI_FLAGS, &control);
-	if (!(control & PCI_MSI_FLAGS_ENABLE)) {
-		control |= PCI_MSI_FLAGS_ENABLE;
-		pci_write_config_word(dd->pcidev, pos + PCI_MSI_FLAGS,
-				      control);
-	}
-	/* now rewrite the data (vector) info */
-	pci_write_config_word(dd->pcidev, pos +
-			      ((control & PCI_MSI_FLAGS_64BIT) ? 12 : 8),
-			      dd->msi_data);
-	ret = 1;
-bail:
-	if (!ret && (dd->flags & QIB_HAS_INTX)) {
-		qib_enable_intx(dd->pcidev);
-		ret = 1;
-	}
-
-	/* and now set the pci master bit again */
-	pci_set_master(dd->pcidev);
-
-	return ret;
-}
-
-/*
- * Disable msi interrupt if enabled, and clear msi_lo.
- * This is used primarily for the fallback to INTx, but
- * is also used in reinit after reset, and during cleanup.
- */
-void qib_nomsi(struct qib_devdata *dd)
-{
-	dd->msi_lo = 0;
-	pci_disable_msi(dd->pcidev);
-}
-
-/*
- * Same as qib_nosmi, but for MSIx.
+ * Disable MSI-X.
  */
 void qib_nomsix(struct qib_devdata *dd)
 {
 	pci_disable_msix(dd->pcidev);
 }
 
-/*
- * Similar to pci_intx(pdev, 1), except that we make sure
- * msi(x) is off.
- */
 void qib_enable_intx(struct pci_dev *pdev)
 {
-	u16 cw, new;
-	int pos;
-
 	/* first, turn on INTx */
-	pci_read_config_word(pdev, PCI_COMMAND, &cw);
-	new = cw & ~PCI_COMMAND_INTX_DISABLE;
-	if (new != cw)
-		pci_write_config_word(pdev, PCI_COMMAND, new);
-
-	pos = pci_find_capability(pdev, PCI_CAP_ID_MSI);
-	if (pos) {
-		/* then turn off MSI */
-		pci_read_config_word(pdev, pos + PCI_MSI_FLAGS, &cw);
-		new = cw & ~PCI_MSI_FLAGS_ENABLE;
-		if (new != cw)
-			pci_write_config_word(pdev, pos + PCI_MSI_FLAGS, new);
-	}
-	pos = pci_find_capability(pdev, PCI_CAP_ID_MSIX);
-	if (pos) {
-		/* then turn off MSIx */
-		pci_read_config_word(pdev, pos + PCI_MSIX_FLAGS, &cw);
-		new = cw & ~PCI_MSIX_FLAGS_ENABLE;
-		if (new != cw)
-			pci_write_config_word(pdev, pos + PCI_MSIX_FLAGS, new);
-	}
+ 	pci_intx(pdev, 1);
+	/* then turn off MSI-X */
+	pci_disable_msix(pdev);
 }
 
 /*
