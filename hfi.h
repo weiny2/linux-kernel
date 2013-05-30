@@ -55,6 +55,7 @@
 
 #include "common.h"
 #include "verbs.h"
+#include "wfr.h"
 
 /* only s/w major version of QLogic_IB we can handle */
 #define QIB_CHIP_VERS_MAJ 2U
@@ -687,6 +688,15 @@ extern int qib_register_observer(struct qib_devdata *dd,
 /* Only declared here, not defined. Private to diags */
 struct diag_observer_list_elt;
 
+/*
+ * Data pertaining to each SDMA engine.
+ */
+struct sdma_engine {
+	struct qib_devdata *dd;
+	int which;
+	/* add sdma fields here... */
+};
+
 /* device data struct now contains only "general per-device" info.
  * fields related to a physical IB port are in a qib_pportdata struct,
  * described above) while fields only used by a particular chip-type are in
@@ -1038,6 +1048,17 @@ struct qib_devdata {
 	u16 psxmitwait_check_rate;
 	/* high volume overflow errors defered to tasklet */
 	struct tasklet_struct error_tasklet;
+
+	/* MSI-X information */
+	struct qib_msix_entry *msix_entries;
+	u32 num_msix_entries;
+
+	/* generic interrupt: mask of handled interrupts */
+	u64 gi_mask[WFR_CCE_NUM_INT_CSRS];
+
+	u32 chip_sdma_engines;	/* number from the chip */
+	u32 num_sdma;		/* number being used */
+	struct sdma_engine per_sdma[WFR_TXE_NUM_SDMA_ENGINES];
 };
 
 /* hol_state values */
@@ -1115,7 +1136,6 @@ void qib_cancel_sends(struct qib_pportdata *);
 
 int qib_create_rcvhdrq(struct qib_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
-void qib_set_ctxtcnt(struct qib_devdata *);
 int qib_create_ctxts(struct qib_devdata *dd);
 struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
 void qib_init_pportdata(struct qib_pportdata *, struct qib_devdata *, u8, u8);

@@ -89,23 +89,6 @@ static struct idr qib_unit_table;
 u32 qib_cpulist_count;
 unsigned long *qib_cpulist;
 
-/* set number of contexts we'll actually use */
-void qib_set_ctxtcnt(struct qib_devdata *dd)
-{
-	if (!qib_cfgctxts) {
-		dd->cfgctxts = dd->first_user_ctxt + num_online_cpus();
-		if (dd->cfgctxts > dd->ctxtcnt)
-			dd->cfgctxts = dd->ctxtcnt;
-	} else if (qib_cfgctxts < dd->num_pports)
-		dd->cfgctxts = dd->ctxtcnt;
-	else if (qib_cfgctxts <= dd->ctxtcnt)
-		dd->cfgctxts = qib_cfgctxts;
-	else
-		dd->cfgctxts = dd->ctxtcnt;
-	dd->freectxts = (dd->first_user_ctxt > dd->cfgctxts) ? 0 :
-		dd->cfgctxts - dd->first_user_ctxt;
-}
-
 /*
  * Common code for creating the receive context array.
  */
