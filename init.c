@@ -83,7 +83,7 @@ MODULE_PARM_DESC(wc_pat, "enable write-combining via PAT mechanism");
 
 struct workqueue_struct *qib_cq_wq;
 
-static void verify_interrupt(unsigned long);
+static void verify_interrupt(struct work_struct *work);
 
 static struct idr qib_unit_table;
 u32 qib_cpulist_count;
@@ -396,10 +396,10 @@ static int loadtime_init(struct qib_devdata *dd)
 	ret = init_pioavailregs(dd);
 	init_shadow_tids(dd);
 
-	/* setup time (don't start yet) to verify we got interrupt */
-	init_timer(&dd->intrchk_timer);
-	dd->intrchk_timer.function = verify_interrupt;
-	dd->intrchk_timer.data = (unsigned long) dd;
+	/* set up worker (don't start yet) to verify interrupts are working */
+	INIT_DELAYED_WORK(&dd->interrupt_check_worker, verify_interrupt);
+	/* set this flag so we know we can clean up */
+	dd->flags |= ICHECK_WORKER_INITED;
 
 #if 0
 done:
@@ -466,23 +466,21 @@ static void enable_chip(struct qib_devdata *dd)
 	}
 }
 
-static void verify_interrupt(unsigned long opaque)
+static void verify_interrupt(struct work_struct *work)
 {
-	struct qib_devdata *dd = (struct qib_devdata *) opaque;
-
-	if (!dd)
-		return; /* being torn down */
+        struct qib_devdata *dd = container_of(work, struct qib_devdata,
+						interrupt_check_worker.work);
 
 	/*
-	 * If we don't have a lid or any interrupts, let the user know and
-	 * don't bother checking again.
+	 * We should have interrupts by now.  If not, try falling back.
 	 */
 	if (dd->int_counter == 0) {
 		if (!dd->f_intr_fallback(dd))
 			dev_err(&dd->pcidev->dev,
 				"No interrupts detected, not usable.\n");
-		else /* re-arm the timer to see if fallback works */
-			mod_timer(&dd->intrchk_timer, jiffies + HZ/2);
+		else /* re-arm the worker to see if the fall back works */
+			mod_delayed_work(system_unbound_wq,
+					&dd->interrupt_check_worker, HZ/2);
 	}
 }
 
@@ -719,10 +717,11 @@ done:
 		dd->f_set_intr_state(dd, 1);
 
 		/*
-		 * Setup to verify we get an interrupt, and fallback
-		 * to an alternate if necessary and possible.
+		 * Verify that we get an interrupt, fall back to an alternate if
+		 * necessary and possible.
 		 */
-		mod_timer(&dd->intrchk_timer, jiffies + HZ/2);
+		mod_delayed_work(system_unbound_wq,
+					&dd->interrupt_check_worker, HZ/2);
 		/* start stats retrieval timer */
 		mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
 	}
@@ -776,10 +775,8 @@ static void qib_stop_timers(struct qib_devdata *dd)
 		del_timer_sync(&dd->stats_timer);
 		dd->stats_timer.data = 0;
 	}
-	if (dd->intrchk_timer.data) {
-		del_timer_sync(&dd->intrchk_timer);
-		dd->intrchk_timer.data = 0;
-	}
+	if (dd->flags & ICHECK_WORKER_INITED)
+		cancel_delayed_work_sync(&dd->interrupt_check_worker);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (ppd->hol_timer.data)

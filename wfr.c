@@ -340,29 +340,6 @@ static void get_faststats(unsigned long opaque)
 	mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
 }
 
-static int intr_fallback(struct qib_devdata *dd)
-{
-	/*
-	 * FIXME: This is called from verify_interrupt() and tries
-	 * to fall back to intx.  The 7322 just turned off
-	 * msix and tried to go with intx.  This won't currently
-	 * work on wfr for 2 reasons:
-	 *	1. it is not currently written to do that switch
-	 *	2. I changed qib_nomsix to call the real pci function
-	 *	   which _requires_ that all the interrupts be
-	 *	   unallocated first.  This is a more thorough
-	 *	   cleanup than the 7322 did and requires more
-	 *	   careful code.
-	 */
-	static int called;
-	if (!called) {
-		called = 1;
-		if (print_unimplemented)
-			printk("%s: not implemented\n", __func__);
-	}
-	return 1;
-}
-
 static void xgxs_reset(struct qib_pportdata *ppd)
 {
 	if (print_unimplemented)
@@ -620,7 +597,6 @@ static void remap_sdma_interrupts(struct qib_devdata *dd,
 	 *	SDMAIdleInt	- fast path
 	 *	SDMAProgressInt - fast path
 	 *	SDMACleanupDone	- slow path
-	 * 
 	 */
 	remap_intr(dd, sdma_base + (0 * WFR_TXE_NUM_SDMA_ENGINES), msix_intr);
 	remap_intr(dd, sdma_base + (1 * WFR_TXE_NUM_SDMA_ENGINES), msix_intr);
@@ -631,6 +607,181 @@ static void remap_receive_context_interrupt(struct qib_devdata *dd,
 						int rx, int msix_intr)
 {
 	remap_intr(dd, WFR_IS_RCVAVAILINT_START + rx, msix_intr);
+}
+
+static int request_intx_irq(struct qib_devdata *dd)
+{
+	int ret;
+
+	ret = request_irq(dd->pcidev->irq, generic_interrupt,
+				  IRQF_SHARED, DRIVER_NAME, dd);
+	if (ret)
+		qib_dev_err(dd, "unable to request INTx interrupt, err %d\n",
+				ret);
+	return ret;
+}
+
+static int request_msix_irqs(struct qib_devdata *dd)
+{
+	const struct cpumask *local_mask;
+	int first_cpu, restart_cpu = 0, curr_cpu = 0;
+	int local_node = pcibus_to_node(dd->pcidev->bus);
+	int first_generic, last_generic;
+	int first_sdma, last_sdma;
+	int first_rx, last_rx;
+	int i, ret;
+
+	/* calculate the ranges we are going to use */
+	first_generic = 0;
+	first_sdma = last_generic = first_generic + 1;
+	first_rx = last_sdma = first_sdma + dd->num_sdma;
+	last_rx = first_rx + dd->cfgctxts;
+
+	/*
+	 * Interrupt affinity.
+	 *
+	 * The "slow" interrupt can be shared with the rest of the
+	 * interupts clustered on the boot processor.  After
+	 * that, distribute the rest of the "fast" interrupts
+	 * on the remaining CPUs of the NUMA closest to the
+	 * device.
+	 *
+	 * If on NUMA 0:
+	 *	- place the slow interupt on the first CPU
+	 *	- distribute the rest, round robin, starting on
+	 *	  the second CPU, avoiding cpu 0
+	 *
+	 * If not on NUMA 0:
+	 *	- place the slow interrupt on the first CPU
+	 *	- distribute the rest, round robin, including
+	 *	  the first CPU
+	 *
+	 * Reasoning: If not on NUMA 0, then the first CPU
+	 * does not have "everything else" on it and can
+	 * be part of the interrupt distribution.
+	 */
+	local_mask = cpumask_of_pcibus(dd->pcidev->bus);
+	first_cpu = cpumask_first(local_mask);
+	/* TODO: What is the point of the cpumask_weight check? */
+	if (first_cpu >= nr_cpu_ids ||
+		cpumask_weight(local_mask) == num_online_cpus()) {
+		local_mask = topology_core_cpumask(0);
+		first_cpu = cpumask_first(local_mask);
+	}
+	if (first_cpu < nr_cpu_ids) {
+		restart_cpu = cpumask_next(first_cpu, local_mask);
+		if (restart_cpu >= nr_cpu_ids)
+			restart_cpu = first_cpu;
+	}
+	/* decide the restart point */
+	if (local_node > 0) {	/* not NUMA 0 */
+		/* restart is the first */
+		restart_cpu = first_cpu;
+	}
+	/*
+	 * Start at the first cpu - we *know* the first
+	 * interrupt is the slow interrupt.
+	 */
+	curr_cpu = first_cpu;
+
+	for (i = 0; i < dd->num_msix_entries; i++) {
+		struct qib_msix_entry *me = &dd->msix_entries[i];
+		const char *err_info;
+		irq_handler_t handler;
+		void *arg;
+		int idx;
+
+		/*
+		 * TODO:
+		 * o Why isn't IRQF_SHARED used for the slow interrupt
+		 *   here?
+		 * o Should we use IRQF_SHARED for non-NUMA 0?
+		 * o If we truly wrapped, don't we need IRQF_SHARED?
+		*/
+		/* obtain the arguments to request_irq */
+		if (first_generic <= i && i < last_generic) {
+			idx = i - first_generic;
+			handler = generic_interrupt;
+			arg = dd;
+			snprintf(me->name, sizeof(me->name),
+				DRIVER_NAME"%d", dd->unit);
+			err_info = "generic";
+		} else if (first_sdma <= i && i < last_sdma) {
+			idx = i - first_sdma;
+			handler = sdma_interrupt;
+			arg = &dd->per_sdma[idx];
+			snprintf(me->name, sizeof(me->name),
+				DRIVER_NAME"%d sdma%d", dd->unit, idx);
+			err_info = "sdma";
+			remap_sdma_interrupts(dd, idx, i);
+		} else if (first_rx <= i && i < last_rx) {
+			idx = i - first_rx;
+			/* no interrupt for user contexts */
+			if (idx >= dd->first_user_ctxt)
+				continue;
+			handler = receive_context_interrupt;
+			arg = dd->rcd[idx];
+			snprintf(me->name, sizeof(me->name),
+				DRIVER_NAME"%d kctxt%d", dd->unit, idx);
+			err_info = "receive context";
+			remap_receive_context_interrupt(dd, idx, i);
+		} else {
+			BUG();
+		}
+		/* no argument, no interrupt */
+		if (arg == NULL)
+			continue;
+		/* make sure the name is terminated */
+		me->name[sizeof(me->name)-1] = 0;
+
+		ret = request_irq(me->msix.vector, handler, 0,
+						me->name, arg);
+		if (ret) {
+			qib_dev_err(dd,
+				"unable to allocate %s interrupt, vector %d, index %d, err %d\n",
+				err_info, me->msix.vector, idx, ret);
+
+			return ret;
+		}
+		/*
+		 * assign arg after request_irq call, so it will be
+		 * cleaned up
+		 */
+		me->arg = arg;
+
+		/* set the affinity hint */
+		if (first_cpu < nr_cpu_ids &&
+			zalloc_cpumask_var(
+				&dd->msix_entries[i].mask,
+				GFP_KERNEL)) {
+			cpumask_set_cpu(curr_cpu,
+				dd->msix_entries[i].mask);
+			curr_cpu = cpumask_next(curr_cpu, local_mask);
+			if (curr_cpu >= nr_cpu_ids)
+				curr_cpu = restart_cpu;
+			irq_set_affinity_hint(
+				dd->msix_entries[i].msix.vector,
+				dd->msix_entries[i].mask);
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Set the general handler to accept all interupts, remap all
+ * chip interrupts back to MSI-X 0.
+ */
+static void reset_interrupts(struct qib_devdata *dd)
+{
+	int i;
+
+	/* all interrupts handled by the general handler */
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+		dd->gi_mask[i] = ~(u64)0;
+	/* all chip interrupts map to MSI-X 0 */
+	for (i = 0; i < WFR_CCE_NUM_INT_MAP_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MAP + (8*i), 0);
 }
 
 static int set_up_interrupts(struct qib_devdata *dd)
@@ -660,7 +811,7 @@ static int set_up_interrupts(struct qib_devdata *dd)
 	for (i = 0; i < total; i++)
 		entries[i].msix.entry = i;
 
-	/* expect a width of 16 */
+	/* ask for MSI-X interrupts; expect a PCIe width of 16 */
 	request = total;
 	ret = qib_pcie_params(dd, 16, &request, entries);
 	if (ret)
@@ -697,185 +848,59 @@ static int set_up_interrupts(struct qib_devdata *dd)
 	clear_all_interrupts(dd);
 	/* TODO: clear diagnostic reg? */
 
-	/*
-	 * By default, all interrupts go to the generic handler.
-	 * We will remap the fast interrupts on a 1 by 1 basis.
-	 */
-	/* all interrupts accepted */
-	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
-		dd->gi_mask[i] = ~(u64)0;
-	/* all interrupts map to MSI-X 0 */
-	for (i = 0; i < WFR_CCE_NUM_INT_MAP_CSRS; i++)
-		write_csr(dd, WFR_CCE_INT_MAP + (8*i), 0);
+	/* reset general handler mask, chip MSI-X mappings */
+	reset_interrupts(dd);
 
 	/*
 	 * Intialize per-SDMA data, so we have a unique pointer to hand to
-	 * the handler.
+	 * specialized handlers.
 	 */
 	for (i = 0; i < dd->num_sdma; i++) {
 		dd->per_sdma[i].dd = dd;
 		dd->per_sdma[i].which = i;
 	}
 
-	if (single_interrupt) {
-		ret = request_irq(dd->pcidev->irq, generic_interrupt,
-				  IRQF_SHARED, DRIVER_NAME, dd);
-		if (ret) {
-			qib_dev_err(dd,
-				"unable to request INTx interrupt, err %d\n",
-				ret);
-			goto fail;
-		}
-	} else {
-		const struct cpumask *local_mask;
-		int first_cpu, restart_cpu = 0, curr_cpu = 0;
-		int local_node = pcibus_to_node(dd->pcidev->bus);
-		int first_generic, last_generic;
-		int first_sdma, last_sdma;
-		int first_rx, last_rx;
-
-		/* calculate the ranges we are going to use */
-		first_generic = 0;
-		first_sdma = last_generic = first_generic + 1;
-		first_rx = last_sdma = first_sdma + dd->num_sdma;
-		last_rx = first_rx + dd->cfgctxts;
-
-		/*
-		 * Interrupt affinity.
-		 *
-		 * The "slow" interrupt can be shared with the rest of the
-		 * interupts clustered on the boot processor.  After
-		 * that, distribute the rest of the "fast" interrupts
-		 * on the remaining CPUs of the NUMA closest to the
-		 * device.
-		 *
-		 * If on NUMA 0:
-		 *	- place the slow interupt on the first CPU
-		 *	- distribute the rest, round robin, starting on
-		 *	  the second CPU, avoiding cpu 0
-		 *
-		 * If not on NUMA 0:
-		 *	- place the slow interrupt on the first CPU
-		 *	- distribute the rest, round robin, including
-		 *	  the first CPU
-		 *
-		 * Reasoning: If not on NUMA 0, then the first CPU
-		 * does not have "everything else" on it and can
-		 * be part of the interrupt distribution.
-		 */
-		local_mask = cpumask_of_pcibus(dd->pcidev->bus);
-		first_cpu = cpumask_first(local_mask);
-		/* TODO: What is the point of the cpumask_weight check? */
-		if (first_cpu >= nr_cpu_ids ||
-			cpumask_weight(local_mask) == num_online_cpus()) {
-			local_mask = topology_core_cpumask(0);
-			first_cpu = cpumask_first(local_mask);
-		}
-		if (first_cpu < nr_cpu_ids) {
-			restart_cpu = cpumask_next(first_cpu, local_mask);
-			if (restart_cpu >= nr_cpu_ids)
-				restart_cpu = first_cpu;
-		}
-		/* decide the restart point */
-		if (local_node > 0) {	/* not NUMA 0 */
-			/* restart is the first */
-			restart_cpu = first_cpu;
-		}
-		/*
-		 * Start at the first cpu - we *know* the first
-		 * interrupt is the slow interrupt.
-		 */
-		curr_cpu = first_cpu;
-
-		for (i = 0; i < dd->num_msix_entries; i++) {
-			struct qib_msix_entry *me = &dd->msix_entries[i];
-			const char *err_info;
-			irq_handler_t handler;
-			void *arg;
-			int idx;
-
-			/*
-			 * TODO:
-			 * o Why isn't IRQF_SHARED used for the slow interrupt
-			 *   here?
-			 * o Should we use IRQF_SHARED for non-NUMA 0?
-			 * o If we truly wrapped, don't we need IRQF_SHARED?
-			*/
-			/* obtain the arguments to request_irq */
-			if (first_generic <= i && i < last_generic) {
-				idx = i - first_generic;
-				handler = generic_interrupt;
-				arg = dd;
-				snprintf(me->name, sizeof(me->name),
-					DRIVER_NAME"%d", dd->unit);
-				err_info = "generic";
-			} else if (first_sdma <= i && i < last_sdma) {
-				idx = i - first_sdma;
-				handler = sdma_interrupt;
-				arg = &dd->per_sdma[idx];
-				snprintf(me->name, sizeof(me->name),
-					DRIVER_NAME"%d sdma%d", dd->unit, idx);
-				err_info = "sdma";
-				remap_sdma_interrupts(dd, idx, i);
-			} else if (first_rx <= i && i < last_rx) {
-				idx = i - first_rx;
-				/* no interrupt for user contexts */
-				if (idx >= dd->first_user_ctxt)
-					continue;
-				handler = receive_context_interrupt;
-				arg = dd->rcd[idx];
-				snprintf(me->name, sizeof(me->name),
-					DRIVER_NAME"%d kctxt%d", dd->unit, idx);
-				err_info = "receive context";
-				remap_receive_context_interrupt(dd, idx, i);
-			} else {
-				BUG();
-			}
-			/* no argument, no interrupt */
-			if (arg == NULL)
-				continue;
-			/* make sure the name is terminated */
-			me->name[sizeof(me->name)-1] = 0;
-
-			ret = request_irq(me->msix.vector, handler, 0,
-							me->name, arg);
-			if (ret) {
-				qib_dev_err(dd,
-					"unable to allocate %s interrupt, vector %d, index %d, err %d\n",
-					err_info, me->msix.vector, idx, ret);
-
-				goto fail;
-			}
-			/*
-			 * assign arg after request_irq call, so it will be
-			 * cleaned up
-			 */
-			me->arg = arg;
-
-			/* set the affinity hint */
-			if (first_cpu < nr_cpu_ids &&
-				zalloc_cpumask_var(
-					&dd->msix_entries[i].mask,
-					GFP_KERNEL)) {
-				cpumask_set_cpu(curr_cpu,
-					dd->msix_entries[i].mask);
-				curr_cpu = cpumask_next(curr_cpu, local_mask);
-				if (curr_cpu >= nr_cpu_ids)
-					curr_cpu = restart_cpu;
-				irq_set_affinity_hint(
-					dd->msix_entries[i].msix.vector,
-					dd->msix_entries[i].mask);
-			}
-		}
-
-	}
-
+	if (single_interrupt)
+		ret = request_intx_irq(dd);
+	else
+		ret = request_msix_irqs(dd);
+	if (ret)
+		goto fail;
 
 	return 0;
 
 fail:
 	clean_up_interrupts(dd);
 	return ret;
+}
+
+/*
+ * Called from verify_interupt() when it has detected that we have received
+ * no interupts.
+ *
+ * NOTE: The IRQ releases in clean_up_interrupts() require non-interrupt
+ * context.  This means we can't be called from inside a timer function.
+ */
+static int intr_fallback(struct qib_devdata *dd)
+{
+/* TODO: remove #if when the simulation supports interrupts */
+#if 1
+	if (dd->num_msix_entries == 0) {
+		/* already using INTx.  Return a failure */
+		 return 0;
+	}
+	/* clean our current set-up */
+	clean_up_interrupts(dd);
+	/* reset back to chip default */
+	reset_interrupts(dd);
+	/* set up INTx irq */
+	request_intx_irq(dd);
+	/* try again */
+	return 1;
+#else
+	dd->int_counter++; /* fake an interrupt so we stop getting called */
+	return 1;
+#endif
 }
 
 /*

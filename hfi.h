@@ -896,8 +896,8 @@ struct qib_devdata {
 	/* timer used to prevent stats overflow, error throttling, etc. */
 	struct timer_list stats_timer;
 
-	/* timer to verify interrupts work, and fallback if possible */
-	struct timer_list intrchk_timer;
+	/* timer to verify interrupts work, and fall back if possible */
+	struct delayed_work interrupt_check_worker;
 	unsigned long ureg_align; /* user register alignment */
 
 	/*
@@ -1212,6 +1212,7 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 #define QIB_BADINTR           0x8000 /* severe interrupt problems */
 #define QIB_DCA_ENABLED       0x10000 /* Direct Cache Access enabled */
 #define QIB_HAS_QSFP          0x20000 /* device (card instance) has QSFP */
+#define ICHECK_WORKER_INITED  0x40000 /* initialized interrupt_check_worker */
 
 /*
  * values for ppd->lflags (_ib_port_ related flags)
