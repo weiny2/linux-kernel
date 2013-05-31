@@ -49,6 +49,10 @@ static uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 
+/* TODO: temporary */
+static uint print_unimplemented = 0;
+module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
+MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
 
 static inline u64 read_csr(const struct qib_devdata *dd, u32 offset)
 {
@@ -131,58 +135,69 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 
 static void sdma_sendctrl(struct qib_pportdata *ppd, unsigned op)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void sdma_hw_clean_up(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void sdma_update_tail(struct qib_pportdata *ppd, u16 tail)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void sdma_hw_start_up(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void set_armlaunch(struct qib_devdata *dd, u32 enable)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static int bringup_serdes(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static void quiet_serdes(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void setextled(struct qib_pportdata *ppd, u32 on)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void stop_irq(struct qib_devdata *dd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void wantpiobuf_intr(struct qib_devdata *dd, u32 needint)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static int reset(struct qib_devdata *dd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
@@ -192,81 +207,94 @@ static void put_tid(struct qib_devdata *dd, u64 __iomem *tidptr,
 	static int called;
 	if (!called) {
 		called = 1;
-		printk("%s: not implemented\n", __func__);
+		if (print_unimplemented)
+			printk("%s: not implemented\n", __func__);
 	}
 }
 
 static void clear_tids(struct qib_devdata *dd,
 				struct qib_ctxtdata *rcd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static int get_base_info(struct qib_ctxtdata *rcd,
 				  struct qib_base_info *kinfo)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static struct qib_message_header *get_msgheader(
 				struct qib_devdata *dd, __le32 *rhf_addr)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return (struct qib_message_header *)rhf_addr;
 }
 
 static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static int get_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static int set_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 				    u32 updegr, u32 egrhd, u32 npkts)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static u32 hdrqempty(struct qib_ctxtdata *rcd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0; /* not empty */
 }
 
 static void rcvctrl(struct qib_pportdata *ppd, unsigned int op,
 			     int ctxt)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void sendctrl(struct qib_pportdata *ppd, u32 op)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
@@ -274,7 +302,8 @@ static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
 	static int called;
 	if (!called) {
 		called = 1;
-		printk("%s: not implemented\n", __func__);
+		if (print_unimplemented)
+			printk("%s: not implemented\n", __func__);
 	}
 	return 0;
 }
@@ -282,7 +311,8 @@ static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
 static u32 read_cntrs(struct qib_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0; /* final read after getting everything */
 }
 
@@ -292,7 +322,8 @@ static u32 read_portcntrs(struct qib_devdata *dd, loff_t pos, u32 port,
 	static int called;
 	if (!called) {
 		called = 1;
-		printk("%s: not implemented\n", __func__);
+		if (print_unimplemented)
+			printk("%s: not implemented\n", __func__);
 	}
 	return 0; /* final read after getting everything */
 }
@@ -303,7 +334,8 @@ static void get_faststats(unsigned long opaque)
 	struct qib_devdata *dd = (struct qib_devdata *) opaque;
 	if (!called) {
 		called = 1;
-		printk("%s: not implemented\n", __func__);
+		if (print_unimplemented)
+			printk("%s: not implemented\n", __func__);
 	}
 	mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
 }
@@ -325,51 +357,59 @@ static int intr_fallback(struct qib_devdata *dd)
 	static int called;
 	if (!called) {
 		called = 1;
-		printk("%s: not implemented\n", __func__);
+		if (print_unimplemented)
+			printk("%s: not implemented\n", __func__);
 	}
 	return 1;
 }
 
 static void xgxs_reset(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static u32 iblink_state(u64 ibcs)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return IB_PORT_DOWN;
 }
 
 static u8 ibphys_portstate(u64 ibcs)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static int ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 1; /* no other IB status change processing */
 }
 
 static int gpio_mod(struct qib_devdata *dd, u32 out, u32 dir, u32 mask)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	/* return non-zero to indicate positive progress */
 	return 1;
 }
 
 static int late_initreg(struct qib_devdata *dd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static u32 __iomem *getsendbuf(struct qib_pportdata *ppd, u64 pbc,
 					u32 *pbufnum)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return NULL;
 }
 
@@ -379,53 +419,62 @@ static void set_cntr_sample(struct qib_pportdata *ppd, u32 intv,
 	static int called;
 	if (!called) {
 		called = 1;
-		printk("%s: not implemented\n", __func__);
+		if (print_unimplemented)
+			printk("%s: not implemented\n", __func__);
 	}
 }
 
 static void sdma_set_desc_cnt(struct qib_pportdata *ppd, unsigned cnt)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void sdma_init_early(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static int init_sdma_regs(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static u16 sdma_gethead(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static int sdma_busy(struct qib_pportdata *ppd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static u32 setpbc_control(struct qib_pportdata *ppd, u32 plen,
 				   u8 srate, u8 vl)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
 static void initvl15_bufs(struct qib_devdata *dd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static void init_ctxt(struct qib_ctxtdata *rcd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	/* FIXME: must set these values, on 7322 the values depend
 	   on whether the context # was < than NUM_IB_PORTS */
 	rcd->rcvegrcnt = 1024;
@@ -435,13 +484,17 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 static void txchk_change(struct qib_devdata *dd, u32 start,
 				  u32 len, u32 which, struct qib_ctxtdata *rcd)
 {
-	printk("%s: not implemented\n", __func__);
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 }
 
 static int tempsense_rd(struct qib_devdata *dd, int regnum)
 {
+	if (print_unimplemented)
+		printk("%s: not implemented\n", __func__);
 	return -ENXIO;
 }
+
 /* ========================================================================= */
 
 /*
