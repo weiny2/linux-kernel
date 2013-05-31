@@ -129,236 +129,316 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 
 /* ========================================================================= */
 
-static void qib_7322_sdma_sendctrl(struct qib_pportdata *ppd, unsigned op)
+static void sdma_sendctrl(struct qib_pportdata *ppd, unsigned op)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_7322_sdma_hw_clean_up(struct qib_pportdata *ppd)
+static void sdma_hw_clean_up(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_sdma_update_7322_tail(struct qib_pportdata *ppd, u16 tail)
+static void sdma_update_tail(struct qib_pportdata *ppd, u16 tail)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_7322_sdma_hw_start_up(struct qib_pportdata *ppd)
+static void sdma_hw_start_up(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_set_7322_armlaunch(struct qib_devdata *dd, u32 enable)
+static void set_armlaunch(struct qib_devdata *dd, u32 enable)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static int qib_7322_bringup_serdes(struct qib_pportdata *ppd)
+static int bringup_serdes(struct qib_pportdata *ppd)
 {
-	/*printk("%s: called\n", __func__);*/
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static void qib_7322_mini_quiet_serdes(struct qib_pportdata *ppd)
+static void quiet_serdes(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_setup_7322_setextled(struct qib_pportdata *ppd, u32 on)
+static void setextled(struct qib_pportdata *ppd, u32 on)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_7322_free_irq(struct qib_devdata *dd)
+static void stop_irq(struct qib_devdata *dd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_wantpiobuf_7322_intr(struct qib_devdata *dd, u32 needint)
+static void wantpiobuf_intr(struct qib_devdata *dd, u32 needint)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static int qib_do_7322_reset(struct qib_devdata *dd)
+static int reset(struct qib_devdata *dd)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static void qib_7322_put_tid(struct qib_devdata *dd, u64 __iomem *tidptr,
+static void put_tid(struct qib_devdata *dd, u64 __iomem *tidptr,
 			     u32 type, unsigned long pa)
 {
+	static int called;
+	if (!called) {
+		called = 1;
+		printk("%s: not implemented\n", __func__);
+	}
 }
 
-static void qib_7322_clear_tids(struct qib_devdata *dd,
+static void clear_tids(struct qib_devdata *dd,
 				struct qib_ctxtdata *rcd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static int qib_7322_get_base_info(struct qib_ctxtdata *rcd,
+static int get_base_info(struct qib_ctxtdata *rcd,
 				  struct qib_base_info *kinfo)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static struct qib_message_header *qib_7322_get_msgheader(
+static struct qib_message_header *get_msgheader(
 				struct qib_devdata *dd, __le32 *rhf_addr)
 {
+	printk("%s: not implemented\n", __func__);
 	return (struct qib_message_header *)rhf_addr;
 }
 
-static int qib_7322_get_ib_cfg(struct qib_pportdata *ppd, int which)
+static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 {
-
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static int qib_7322_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
+static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static int qib_7322_set_loopback(struct qib_pportdata *ppd, const char *what)
+static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static int qib_7322_get_ib_table(struct qib_pportdata *ppd, int which, void *t)
+static int get_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static int qib_7322_set_ib_table(struct qib_pportdata *ppd, int which, void *t)
+static int set_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static void qib_update_7322_usrhead(struct qib_ctxtdata *rcd, u64 hd,
+static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 				    u32 updegr, u32 egrhd, u32 npkts)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static u32 qib_7322_hdrqempty(struct qib_ctxtdata *rcd)
+static u32 hdrqempty(struct qib_ctxtdata *rcd)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0; /* not empty */
 }
 
-static void rcvctrl_7322_mod(struct qib_pportdata *ppd, unsigned int op,
+static void rcvctrl(struct qib_pportdata *ppd, unsigned int op,
 			     int ctxt)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void sendctrl_7322_mod(struct qib_pportdata *ppd, u32 op)
+static void sendctrl(struct qib_pportdata *ppd, u32 op)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static u64 qib_portcntr_7322(struct qib_pportdata *ppd, u32 reg)
+static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
 {
+	static int called;
+	if (!called) {
+		called = 1;
+		printk("%s: not implemented\n", __func__);
+	}
 	return 0;
 }
 
-static u32 qib_read_7322cntrs(struct qib_devdata *dd, loff_t pos, char **namep,
+static u32 read_cntrs(struct qib_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0; /* final read after getting everything */
 }
 
-static u32 qib_read_7322portcntrs(struct qib_devdata *dd, loff_t pos, u32 port,
+static u32 read_portcntrs(struct qib_devdata *dd, loff_t pos, u32 port,
 				  char **namep, u64 **cntrp)
 {
+	static int called;
+	if (!called) {
+		called = 1;
+		printk("%s: not implemented\n", __func__);
+	}
 	return 0; /* final read after getting everything */
 }
 
-static void qib_get_7322_faststats(unsigned long opaque)
+static void get_faststats(unsigned long opaque)
 {
+	static int called;
 	struct qib_devdata *dd = (struct qib_devdata *) opaque;
+	if (!called) {
+		called = 1;
+		printk("%s: not implemented\n", __func__);
+	}
 	mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
 }
 
-static int qib_7322_intr_fallback(struct qib_devdata *dd)
+static int intr_fallback(struct qib_devdata *dd)
 {
+	/*
+	 * FIXME: This is called from verify_interrupt() and tries
+	 * to fall back to intx.  The 7322 just turned off
+	 * msix and tried to go with intx.  This won't currently
+	 * work on wfr for 2 reasons:
+	 *	1. it is not currently written to do that switch
+	 *	2. I changed qib_nomsix to call the real pci function
+	 *	   which _requires_ that all the interrupts be
+	 *	   unallocated first.  This is a more thorough
+	 *	   cleanup than the 7322 did and requires more
+	 *	   careful code.
+	 */
+	static int called;
+	if (!called) {
+		called = 1;
+		printk("%s: not implemented\n", __func__);
+	}
 	return 1;
 }
 
-static void qib_7322_mini_pcs_reset(struct qib_pportdata *ppd)
+static void xgxs_reset(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static u32 qib_7322_iblink_state(u64 ibcs)
+static u32 iblink_state(u64 ibcs)
 {
+	printk("%s: not implemented\n", __func__);
 	return IB_PORT_DOWN;
 }
 
-static u8 qib_7322_phys_portstate(u64 ibcs)
+static u8 ibphys_portstate(u64 ibcs)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static int qib_7322_ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
+static int ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 {
+	printk("%s: not implemented\n", __func__);
 	return 1; /* no other IB status change processing */
 }
 
-static int gpio_7322_mod(struct qib_devdata *dd, u32 out, u32 dir, u32 mask)
+static int gpio_mod(struct qib_devdata *dd, u32 out, u32 dir, u32 mask)
 {
+	printk("%s: not implemented\n", __func__);
 	/* return non-zero to indicate positive progress */
 	return 1;
 }
 
-static int qib_late_7322_initreg(struct qib_devdata *dd)
+static int late_initreg(struct qib_devdata *dd)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static u32 __iomem *qib_7322_getsendbuf(struct qib_pportdata *ppd, u64 pbc,
+static u32 __iomem *getsendbuf(struct qib_pportdata *ppd, u64 pbc,
 					u32 *pbufnum)
 {
+	printk("%s: not implemented\n", __func__);
 	return NULL;
 }
 
-static void qib_set_cntr_7322_sample(struct qib_pportdata *ppd, u32 intv,
+static void set_cntr_sample(struct qib_pportdata *ppd, u32 intv,
 				     u32 start)
 {
+	static int called;
+	if (!called) {
+		called = 1;
+		printk("%s: not implemented\n", __func__);
+	}
 }
 
-static void qib_sdma_set_7322_desc_cnt(struct qib_pportdata *ppd, unsigned cnt)
+static void sdma_set_desc_cnt(struct qib_pportdata *ppd, unsigned cnt)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_7322_sdma_init_early(struct qib_pportdata *ppd)
+static void sdma_init_early(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static int init_sdma_7322_regs(struct qib_pportdata *ppd)
+static int init_sdma_regs(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static u16 qib_sdma_7322_gethead(struct qib_pportdata *ppd)
+static u16 sdma_gethead(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static int qib_sdma_7322_busy(struct qib_pportdata *ppd)
+static int sdma_busy(struct qib_pportdata *ppd)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static u32 qib_7322_setpbc_control(struct qib_pportdata *ppd, u32 plen,
+static u32 setpbc_control(struct qib_pportdata *ppd, u32 plen,
 				   u8 srate, u8 vl)
 {
+	printk("%s: not implemented\n", __func__);
 	return 0;
 }
 
-static void qib_7322_initvl15_bufs(struct qib_devdata *dd)
+static void initvl15_bufs(struct qib_devdata *dd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static void qib_7322_init_ctxt(struct qib_ctxtdata *rcd)
+static void init_ctxt(struct qib_ctxtdata *rcd)
 {
+	printk("%s: not implemented\n", __func__);
 	/* FIXME: must set these values, on 7322 the values depend
 	   on whether the context # was < than NUM_IB_PORTS */
 	rcd->rcvegrcnt = 1024;
 	rcd->rcvegr_tid_base = 0; /* this value should be OK for now */
 }
 
-static void qib_7322_txchk_change(struct qib_devdata *dd, u32 start,
+static void txchk_change(struct qib_devdata *dd, u32 start,
 				  u32 len, u32 which, struct qib_ctxtdata *rcd)
 {
+	printk("%s: not implemented\n", __func__);
 }
 
-static int qib_7322_tempsense_rd(struct qib_devdata *dd, int regnum)
+static int tempsense_rd(struct qib_devdata *dd, int regnum)
 {
 	return -ENXIO;
 }
@@ -871,54 +951,54 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	for (i = 0; i < NUM_IB_PORTS; i++)
 		ppd[i].dd = dd;
 
-	dd->f_bringup_serdes    = qib_7322_bringup_serdes;
+	dd->f_bringup_serdes    = bringup_serdes;
 	dd->f_cleanup           = cleanup;
-	dd->f_clear_tids        = qib_7322_clear_tids;
-	dd->f_free_irq          = qib_7322_free_irq;
-	dd->f_get_base_info     = qib_7322_get_base_info;
-	dd->f_get_msgheader     = qib_7322_get_msgheader;
-	dd->f_getsendbuf        = qib_7322_getsendbuf;
-	dd->f_gpio_mod          = gpio_7322_mod;
-	dd->f_hdrqempty         = qib_7322_hdrqempty;
-	dd->f_ib_updown         = qib_7322_ib_updown;
-	dd->f_init_ctxt         = qib_7322_init_ctxt;
-	dd->f_initvl15_bufs     = qib_7322_initvl15_bufs;
-	dd->f_intr_fallback     = qib_7322_intr_fallback;
-	dd->f_late_initreg      = qib_late_7322_initreg;
-	dd->f_setpbc_control    = qib_7322_setpbc_control;
-	dd->f_portcntr          = qib_portcntr_7322;
-	dd->f_put_tid           = qib_7322_put_tid;
-	dd->f_quiet_serdes      = qib_7322_mini_quiet_serdes;
-	dd->f_rcvctrl           = rcvctrl_7322_mod;
-	dd->f_read_cntrs        = qib_read_7322cntrs;
-	dd->f_read_portcntrs    = qib_read_7322portcntrs;
-	dd->f_reset             = qib_do_7322_reset;
-	dd->f_init_sdma_regs    = init_sdma_7322_regs;
-	dd->f_sdma_busy         = qib_sdma_7322_busy;
-	dd->f_sdma_gethead      = qib_sdma_7322_gethead;
-	dd->f_sdma_sendctrl     = qib_7322_sdma_sendctrl;
-	dd->f_sdma_set_desc_cnt = qib_sdma_set_7322_desc_cnt;
-	dd->f_sdma_update_tail  = qib_sdma_update_7322_tail;
-	dd->f_sendctrl          = sendctrl_7322_mod;
-	dd->f_set_armlaunch     = qib_set_7322_armlaunch;
-	dd->f_set_cntr_sample   = qib_set_cntr_7322_sample;
-	dd->f_iblink_state      = qib_7322_iblink_state;
-	dd->f_ibphys_portstate  = qib_7322_phys_portstate;
-	dd->f_get_ib_cfg        = qib_7322_get_ib_cfg;
-	dd->f_set_ib_cfg        = qib_7322_set_ib_cfg;
-	dd->f_set_ib_loopback   = qib_7322_set_loopback;
-	dd->f_get_ib_table      = qib_7322_get_ib_table;
-	dd->f_set_ib_table      = qib_7322_set_ib_table;
+	dd->f_clear_tids        = clear_tids;
+	dd->f_free_irq          = stop_irq;
+	dd->f_get_base_info     = get_base_info;
+	dd->f_get_msgheader     = get_msgheader;
+	dd->f_getsendbuf        = getsendbuf;
+	dd->f_gpio_mod          = gpio_mod;
+	dd->f_hdrqempty         = hdrqempty;
+	dd->f_ib_updown         = ib_updown;
+	dd->f_init_ctxt         = init_ctxt;
+	dd->f_initvl15_bufs     = initvl15_bufs;
+	dd->f_intr_fallback     = intr_fallback;
+	dd->f_late_initreg      = late_initreg;
+	dd->f_setpbc_control    = setpbc_control;
+	dd->f_portcntr          = portcntr;
+	dd->f_put_tid           = put_tid;
+	dd->f_quiet_serdes      = quiet_serdes;
+	dd->f_rcvctrl           = rcvctrl;
+	dd->f_read_cntrs        = read_cntrs;
+	dd->f_read_portcntrs    = read_portcntrs;
+	dd->f_reset             = reset;
+	dd->f_init_sdma_regs    = init_sdma_regs;
+	dd->f_sdma_busy         = sdma_busy;
+	dd->f_sdma_gethead      = sdma_gethead;
+	dd->f_sdma_sendctrl     = sdma_sendctrl;
+	dd->f_sdma_set_desc_cnt = sdma_set_desc_cnt;
+	dd->f_sdma_update_tail  = sdma_update_tail;
+	dd->f_sendctrl          = sendctrl;
+	dd->f_set_armlaunch     = set_armlaunch;
+	dd->f_set_cntr_sample   = set_cntr_sample;
+	dd->f_iblink_state      = iblink_state;
+	dd->f_ibphys_portstate  = ibphys_portstate;
+	dd->f_get_ib_cfg        = get_ib_cfg;
+	dd->f_set_ib_cfg        = set_ib_cfg;
+	dd->f_set_ib_loopback   = set_ib_loopback;
+	dd->f_get_ib_table      = get_ib_table;
+	dd->f_set_ib_table      = set_ib_table;
 	dd->f_set_intr_state    = set_intr_state;
-	dd->f_setextled         = qib_setup_7322_setextled;
-	dd->f_txchk_change      = qib_7322_txchk_change;
-	dd->f_update_usrhead    = qib_update_7322_usrhead;
-	dd->f_wantpiobuf_intr   = qib_wantpiobuf_7322_intr;
-	dd->f_xgxs_reset        = qib_7322_mini_pcs_reset;
-	dd->f_sdma_hw_clean_up  = qib_7322_sdma_hw_clean_up;
-	dd->f_sdma_hw_start_up  = qib_7322_sdma_hw_start_up;
-	dd->f_sdma_init_early   = qib_7322_sdma_init_early;
-	dd->f_tempsense_rd	= qib_7322_tempsense_rd;
+	dd->f_setextled         = setextled;
+	dd->f_txchk_change      = txchk_change;
+	dd->f_update_usrhead    = update_usrhead;
+	dd->f_wantpiobuf_intr   = wantpiobuf_intr;
+	dd->f_xgxs_reset        = xgxs_reset;
+	dd->f_sdma_hw_clean_up  = sdma_hw_clean_up;
+	dd->f_sdma_hw_start_up  = sdma_hw_start_up;
+	dd->f_sdma_init_early   = sdma_init_early;
+	dd->f_tempsense_rd	= tempsense_rd;
 	/*
 	 * Do remaining PCIe setup and save PCIe values in dd.
 	 * Any error printing is already done by the init code.
@@ -978,7 +1058,7 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* set up the stats timer; the add_timer is done at end of init */
 	init_timer(&dd->stats_timer);
-	dd->stats_timer.function = qib_get_7322_faststats;
+	dd->stats_timer.function = get_faststats;
 	dd->stats_timer.data = (unsigned long) dd;
 
 	/* TODO: RcvHdrEntSize, RcvHdrCnt, and RcvHdrSize are now
