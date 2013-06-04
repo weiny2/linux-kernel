@@ -32,10 +32,17 @@
  * SOFTWARE.
  */
 
+#include <linux/module.h>
+#include <linux/printk.h>
 #include <rdma/ib_smi.h>
+#include <rdma/stl_smi.h>
 
 #include "wfrl.h"
 #include "wfrl_mad.h"
+
+ushort wfr_allow_ib_mads = 1;
+module_param_named(allow_ib_mads, wfr_allow_ib_mads, ushort, S_IRUGO);
+MODULE_PARM_DESC(allow_ib_mads, "If 1 driver will allow IB SMP's to be processed");
 
 static int reply(struct ib_smp *smp)
 {
@@ -302,9 +309,9 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	nip->revision = cpu_to_be32((majrev << 16) | minrev);
 	nip->local_port_num = port;
 	vendor = dd->vendorid;
-	nip->vendor_id[0] = QIB_SRC_OUI_1;
-	nip->vendor_id[1] = QIB_SRC_OUI_2;
-	nip->vendor_id[2] = QIB_SRC_OUI_3;
+	nip->vendor_id[0] = WFR_SRC_OUI_1;
+	nip->vendor_id[1] = WFR_SRC_OUI_2;
+	nip->vendor_id[2] = WFR_SRC_OUI_3;
 
 	return reply(smp);
 }
@@ -446,6 +453,13 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 	}
 
 	return ret;
+}
+
+static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	printk("got STL PortInfo\n");
+	return (0);
 }
 
 static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
@@ -1886,6 +1900,9 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_get_vl_arb(smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_PORT_INFO:
+			ret = subn_get_stl_portinfo((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		case IB_SMP_ATTR_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
 				ret = IB_MAD_RESULT_SUCCESS |
@@ -1981,6 +1998,7 @@ static int process_perf(struct ib_device *ibdev, u8 port,
 			struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
 {
+/* FIXME change to stl_pma_mad with new files */
 	struct ib_pma_mad *pmp = (struct ib_pma_mad *)out_mad;
 	int ret;
 
@@ -2352,8 +2370,18 @@ bail:
 	return ret;
 }
 
+
+int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+			  struct ib_wc *in_wc, struct ib_grh *in_grh,
+			  struct jumbo_mad *in_jumbo,
+			  struct jumbo_mad *out_jumbo)
+{
+	printk(KERN_WARNING PFX "Got jumbo mad!\n");
+	return (IB_MAD_RESULT_FAILURE);
+}
+
 /**
- * qib_process_mad - process an incoming MAD packet
+ * wfr_process_mad - process an incoming MAD packet
  * @ibdev: the infiniband device this packet came in on
  * @mad_flags: MAD flags
  * @port: the port number this packet came in on
@@ -2371,13 +2399,30 @@ bail:
  *
  * This is called by the ib_mad module.
  */
-int qib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+int wfr_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		    struct ib_wc *in_wc, struct ib_grh *in_grh,
+		    /* NOTE: for compatiblity with the core layer these are
+		     * declared as ib_mad
+		     * However, the true type is jumbo_mad for the response
+		     * (out mad) and "possibly" jumbo_mad for the in mad (based
+		     * off of base_version)
+		     */
 		    struct ib_mad *in_mad, struct ib_mad *out_mad)
 {
 	int ret;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+
+	if (!wfr_allow_ib_mads && in_mad->mad_hdr.base_version != JUMBO_MGMT_BASE_VERSION) {
+		printk(KERN_WARNING PFX "Invalid SMP sent : "
+				"WFR-Lite is set to only process STL SMP's\n");
+		return (IB_MAD_RESULT_FAILURE);
+	}
+
+	if (in_mad->mad_hdr.base_version == JUMBO_MGMT_BASE_VERSION)
+		return (wfr_process_jumbo_mad(ibdev, mad_flags, port, in_wc, in_grh,
+	                   (struct jumbo_mad *)in_mad,
+	                   (struct jumbo_mad *)out_mad));
 
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
