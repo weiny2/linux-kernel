@@ -1273,6 +1273,12 @@ clean: $(clean-dirs)
 		-o -name modules.builtin -o -name '.tmp_*.o.*' \
 		-o -name '*.gcno' \) -type f -print | xargs rm -f
 
+# For proping for image name
+# ---------------------------------------------------------------------------
+.PHONY += image_name
+image_name: FORCE
+	@echo $(KBUILD_IMAGE)
+
 # Generate tags for editors
 # ---------------------------------------------------------------------------
 quiet_cmd_tags = GEN     $@
