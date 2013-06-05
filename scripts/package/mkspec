@@ -59,6 +59,14 @@ echo "header files define structures and constants that are needed for"
 echo "building most standard programs and are also needed for rebuilding the"
 echo "glibc package."
 echo ""
+echo "%package devel"
+echo "Summary: Development package for building kernel modules to match the $__KERNELRELEASE kernel"
+echo "Group: System Environment/Kernel"
+echo "AutoReqProv: no"
+echo "%description -n kernel-devel"
+echo "This package provides kernel headers and makefiles sufficient to build modules"
+echo "against the $__KERNELRELEASE kernel package."
+echo ""
 
 if ! $PREBUILT; then
 echo "%prep"
@@ -74,7 +82,6 @@ echo ""
 fi
 
 echo "%install"
-echo 'INSTALL_FW_PATH=$RPM_BUILD_ROOT/lib/firmware/$KERNELRELEASE'
 echo 'KBUILD_IMAGE=$(make image_name)'
 echo "%ifarch ia64"
 echo 'mkdir -p $RPM_BUILD_ROOT/boot/efi $RPM_BUILD_ROOT/lib/modules'
@@ -84,6 +91,7 @@ echo "%endif"
 echo 'mkdir -p $RPM_BUILD_ROOT'"/lib/firmware/$KERNELRELEASE"
 
 echo 'INSTALL_MOD_PATH=$RPM_BUILD_ROOT INSTALL_FW_PATH=$INSTALL_FW_PATH make %{?_smp_mflags} KBUILD_SRC= mod-fw= modules_install'
+echo 'INSTALL_FW_PATH=$RPM_BUILD_ROOT/lib/firmware/$KERNELRELEASE'
 echo 'make INSTALL_FW_PATH=$INSTALL_FW_PATH' firmware_install
 echo "%ifarch ia64"
 echo 'cp $KBUILD_IMAGE $RPM_BUILD_ROOT'"/boot/efi/vmlinuz-$KERNELRELEASE"
@@ -109,6 +117,11 @@ echo 'mv vmlinux.bz2 $RPM_BUILD_ROOT'"/boot/vmlinux-$KERNELRELEASE.bz2"
 echo 'mv vmlinux.orig vmlinux'
 echo "%endif"
 
+echo 'rm -rf $RPM_BUILD_ROOT'"/lib/modules/$KERNELRELEASE/{build,source}"
+echo "mkdir -p "'$RPM_BUILD_ROOT'"/usr/src/kernels/$KERNELRELEASE"
+echo "EXCLUDES=\"--exclude-vcs --exclude .tmp_versions --exclude=*vmlinux* --exclude=*.o --exclude=*.ko --exclude=*.cmd --exclude=Documentation --exclude=firmware --exclude .config.old --exclude .missing-syscalls.d\""
+echo "tar "'$EXCLUDES'" -cf- . | (cd "'$RPM_BUILD_ROOT'"/usr/src/kernels/$KERNELRELEASE;tar xvf -)"
+
 echo ""
 echo "%clean"
 echo 'rm -rf $RPM_BUILD_ROOT'
@@ -122,6 +135,15 @@ echo "/sbin/installkernel $KERNELRELEASE /boot/vmlinuz-$KERNELRELEASE-rpm /boot/
 echo "rm -f /boot/vmlinuz-$KERNELRELEASE-rpm /boot/System.map-$KERNELRELEASE-rpm"
 echo "fi"
 echo ""
+echo "%post devel"
+echo "cd /lib/modules/$KERNELRELEASE"
+echo "ln -sf /usr/src/kernels/$KERNELRELEASE/build build" 
+echo "ln -sf /usr/src/kernels/$KERNELRELEASE/source source"
+echo ""
+echo "%postun devel"
+echo "cd /lib/modules/$KERNELRELEASE"
+echo "rm -f build source"
+echo ""
 echo "%files"
 echo '%defattr (-, root, root)'
 echo "%dir /lib/modules"
@@ -132,4 +154,8 @@ echo ""
 echo "%files headers"
 echo '%defattr (-, root, root)'
 echo "/usr/include"
+echo ""
+echo "%files devel"
+echo '%defattr (-, root, root)'
+echo "/usr/src/kernels/$KERNELRELEASE"
 echo ""
