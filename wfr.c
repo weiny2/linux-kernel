@@ -56,8 +56,12 @@ MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when c
 
 static inline u64 read_csr(const struct qib_devdata *dd, u32 offset)
 {
-	if (dd->flags & QIB_PRESENT)
-		return readq((void *)dd->kregbase + offset);
+	u64 val;
+
+	if (dd->flags & QIB_PRESENT) {
+		val = readq((void *)dd->kregbase + offset);
+		return le64_to_cpu(val);
+	}
 	return -1;
 }
 
@@ -65,18 +69,242 @@ static inline void write_csr(const struct qib_devdata *dd,
 				  u32 offset, u64 value)
 {
 	if (dd->flags & QIB_PRESENT)
-		writeq(value, (void *)dd->kregbase + offset);
+		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
+}
+
+/* chip interrupt source table */
+struct is_table {
+	/* start of the interrupt source range */
+	unsigned int start;
+	/* routine that returns the name of the interrupt source */
+	char *(*is_name)(char *name, size_t size, unsigned int source);
+	/* routine to call from when receiving an interrupt */
+	void (*is_int)(struct qib_devdata *dd, unsigned int source);
+};
+
+static char *is_general_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	const char *src;
+
+	switch (source) {
+	case 0: src = "CcePerHfiErrInt"; break;
+	case 1: src = "RcvPerHfiErrInt"; break;
+	case 4: src = "PioSendPerHfiErrInt"; break;
+	case 5: src = "SDmaPerHfiErrInt"; break;
+	case 6: src = "PacketEgressPerHfiErrInt"; break;
+	case 2:
+	case 3:
+	case 7: src = "Reserved%u"; break;
+	default: src = "invalid%u"; break;
+	}
+	snprintf(buf, bsize, src, source);
+	return buf;
+}
+
+static char *is_rcvctxt_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "RcvCtxtErrInt%u", source);
+	return buf;
+}
+
+static char *is_sendctxt_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SendCtxtErrInt%u", source);
+	return buf;
+}
+
+static char *is_sdma_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SDmaErrInt%u", source);
+	return buf;
+}
+
+static char *is_various_name(char *buf, size_t bsize, unsigned int source)
+{
+	/* TBD */
+	snprintf(buf, bsize, "Various%u", source);
+	return buf;
+}
+
+static char *is_rcvavailint_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "RcvAvailInt%u", source);
+	return buf;
+}
+
+static char *is_sendcredit_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SendCreditInt%u", source);
+	return buf;
+}
+
+static char *is_sdmaint_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SDmaInt%u", source);
+	return buf;
+}
+
+static char *is_sdmaprogress_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SDmaProgressInt%u", source);
+	return buf;
+}
+
+static char *is_sdmaidle_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SDmaIdleInt%u", source);
+	return buf;
+}
+
+static char *is_sdmacleanup_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SDmaCleanupDoneInt%u", source);
+	return buf;
+}
+
+static void handle_context_interrupt(struct qib_ctxtdata *rcd)
+{
+	/* TODO: actually do something */
+	printk("%s: ctxt %u\n", __func__ , rcd->ctxt);
+}
+
+static void handle_sdma_interrupt(struct sdma_engine *per_sdma)
+{
+	/* TODO: actually do something */
+	printk("%s: engine #%d\n", __func__, per_sdma->which);
+}
+
+static void is_general_err_int(struct qib_devdata *dd, unsigned int source)
+{
+	/* TODO: actually do something */
+	printk("%s: int%u\n", __func__ , source);
+}
+
+static void is_rcvctxt_err_int(struct qib_devdata *dd, unsigned int source)
+{
+	/* TODO: actually do something */
+	printk("%s: int%u\n", __func__ , source);
+}
+
+static void is_sendctxt_err_int(struct qib_devdata *dd, unsigned int source)
+{
+	/* TODO: actually do something */
+	printk("%s: int%u\n", __func__ , source);
+}
+
+static void is_sdma_err_int(struct qib_devdata *dd, unsigned int source)
+{
+	/* TODO: actually do something */
+	printk("%s: int%u\n", __func__ , source);
+}
+
+static void is_various_int(struct qib_devdata *dd, unsigned int source)
+{
+	/* TODO: actually do something */
+	printk("%s: int%u\n", __func__ , source);
+}
+
+static void is_rcvavailint_int(struct qib_devdata *dd, unsigned int source)
+{
+	/* TODO: actually do something */
+	printk("%s: int%u\n", __func__ , source);
+}
+
+static void is_sendcredit_int(struct qib_devdata *dd, unsigned int source)
+{
+	/* TODO: actually do something */
+	printk("%s: int%u\n", __func__ , source);
+}
+
+/* handles: sdmaint, sdmaprogressint, sdmaidleint */
+static void is_fast_sdma_int(struct qib_devdata *dd, unsigned int source)
+{
+	if (source < dd->num_sdma) {
+		handle_sdma_interrupt(&dd->per_sdma[source]);
+	} else {
+		/* TODO: Which fast SDMA interrupt is this? */
+		/* shouldn't happen */
+		qib_dev_err(dd, "invalid fast SDMA interrupt - sdma%u\n",
+			source);
+	}
+}
+
+static void is_sdmacleanup_int(struct qib_devdata *dd, unsigned int source)
+{
+	if (source < dd->num_sdma) {
+		/* TODO: handle this */
+		printk("%s: sdma%u - unimplemented\n", __func__, source);
+	} else {
+		/* shouldn't happen */
+		qib_dev_err(dd, "invalid slow SDMA interrupt - sdma%u\n",
+			source);
+	}
+}
+
+static struct is_table is_table[] = {
+{ WFR_IS_GENERAL_ERR_START,  is_general_err_name,  is_general_err_int  },
+{ WFR_IS_RCVCTXT_ERR_START,  is_rcvctxt_err_name,  is_rcvctxt_err_int  },
+{ WFR_IS_SENDCTXT_ERR_START, is_sendctxt_err_name, is_sendctxt_err_int },
+{ WFR_IS_SDMA_ERR_START,     is_sdma_err_name,     is_sdma_err_int     },
+{ WFR_IS_VAROUS_START,	     is_various_name,	   is_various_int      },
+{ WFR_IS_RCVAVAILINT_START,  is_rcvavailint_name,  is_rcvavailint_int  },
+{ WFR_IS_SENDCREDIT_START,   is_sendcredit_name,   is_sendcredit_int   },
+{ WFR_IS_SDMAINT_START,	     is_sdmaint_name,	   is_fast_sdma_int    },
+{ WFR_IS_SDMAPROGRESS_START, is_sdmaprogress_name, is_fast_sdma_int    },
+{ WFR_IS_SDMAIDLE_START,     is_sdmaidle_name,	   is_fast_sdma_int    },
+{ WFR_IS_SDMACLEANUP_START,  is_sdmacleanup_name,  is_sdmacleanup_int  },
+{ WFR_IS_MAX_SOURCES, 	     NULL,		   NULL		       }
+};
+
+/*
+ * Interrupt source name - return the buffer with the text name
+ * of the interrupt source.
+ */
+static char *is_name(char *buf, size_t bsize, unsigned int source)
+{
+	struct is_table *entry;
+
+	/* avoids a double compare by walking the table in-order */
+	for (entry = &is_table[0]; entry->is_name; entry++) {
+		if (source < entry[1].start)
+			return entry->is_name(buf, bsize, source-entry->start);
+	}
+	/* fell off the end */
+	snprintf(buf, bsize, "invalid interrupt source %u\n", source);
+	return buf;
 }
 
 /*
- * Generic interrupt handler.  This is able to correctly handle
+ * Interupt source interrupt - called when the given source has
+ * an interrupt.
+ */
+static void is_interrupt(struct qib_devdata *dd, unsigned int source)
+{
+	struct is_table *entry;
+
+	/* avoids a double compare by walking the table in-order */
+	for (entry = &is_table[0]; entry->is_name; entry++) {
+		if (source < entry[1].start) {
+			entry->is_int(dd, source-entry->start);
+			return;
+		}
+	}
+	/* fell off the end */
+	qib_dev_err(dd, "invalid interrupt source %u\n", source);
+}
+
+/*
+ * General interrupt handler.  This is able to correctly handle
  * all interrupts in case INTx is used.
  */
-static irqreturn_t generic_interrupt(int irq, void *data)
+static irqreturn_t general_interrupt(int irq, void *data)
 {
 	struct qib_devdata *dd = data;
 	u64 regs[WFR_CCE_NUM_INT_CSRS];
+	u32 bit;
 	int i;
+
+	dd->int_counter++;
 
 	/* phase 1: scan and clear all handled interrupts */
 	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
@@ -88,23 +316,20 @@ static irqreturn_t generic_interrupt(int irq, void *data)
 				dd->gi_mask[i];
 		/* only clear if anything is set */
 		if (regs[i])
-			write_csr(dd, WFR_CCE_INT_STATUS + (8 * i), regs[i]);
+			write_csr(dd, WFR_CCE_INT_CLEAR + (8 * i), regs[i]);
 	}
 
 	/* phase 2: call the apropriate handler */
 	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
-		u64 val;
-		int j, intr;
-
-		/* TODO: no 64-bit ffs? */
-		for (j = 0, val = regs[i]; val && j < 64; j++) {
-			if (__test_and_clear_bit(j,
-					(volatile unsigned long *)&val)) {
-				intr = (i*8) + j;
-				/* TODO: call the real handler */
-				printk("hfi: generic interrupt %d\n", intr);
-			}
+		for_each_set_bit(bit, (unsigned long *)&regs[0],
+						WFR_CCE_NUM_INT_CSRS*64) {
+			/* TODO: the print is temporary */
+			char buf[64];
+			printk(DRIVER_NAME"%d: interrupt: %s\n", dd->unit, 
+				is_name(buf, sizeof(buf), bit));
+			is_interrupt(dd, bit);
 		}
+
 	}
 
 	return IRQ_HANDLED;
@@ -114,8 +339,15 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 {
 	struct sdma_engine *per_sdma = data;
 
-	/* TODO: actually do something */
-	printk("hfi: sdma_interrupt, engine #%d\n", per_sdma->which);
+	per_sdma->dd->int_counter++;
+
+	/* clear the interrupt */
+	write_csr(per_sdma->dd,
+		WFR_CCE_INT_CLEAR + (8*(WFR_IS_SDMAINT_START/64)),
+		per_sdma->imask);
+
+	/* handle the interrupt */
+	handle_sdma_interrupt(per_sdma);
 
 	return IRQ_HANDLED;
 }
@@ -124,12 +356,16 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 {
 	struct qib_ctxtdata *rcd = data;
 
-	/* TODO: actually do something */
-	printk("hfi: receive_context_interrupt, ctxt %u\n", rcd->ctxt);
+	rcd->dd->int_counter++;
+
+	/* clear the interrupt */
+	write_csr(rcd->dd, WFR_CCE_INT_CLEAR + (8*rcd->ireg), rcd->imask);
+
+	/* handle the interrupt */
+	handle_context_interrupt(rcd);
 
 	return IRQ_HANDLED;
 }
-
 
 /* ========================================================================= */
 
@@ -482,7 +718,7 @@ static void set_intr_state(struct qib_devdata *dd, u32 enable)
 	int i;
 
 	/*
-	 * In WFR, the mask needs to be 1 to allow interupts.
+	 * In WFR, the mask needs to be 1 to allow interrupts.
 	 */
 	if (enable) {
 		/* TODO: QIB_BADINTR check needed? */
@@ -534,7 +770,7 @@ static void clean_up_interrupts(struct qib_devdata *dd)
 		/* MSI-X */
 		struct qib_msix_entry *me = dd->msix_entries;
 		for (i = 0; i < dd->num_msix_entries; i++, me++) {
-			if (me->arg == NULL) /* no irq, no affinity */
+			if (me->arg == NULL) /* => no irq, no affinity */
 				break;
 			irq_set_affinity_hint(dd->msix_entries[i].msix.vector,
 					NULL);
@@ -542,16 +778,19 @@ static void clean_up_interrupts(struct qib_devdata *dd)
 		}
 	} else {
 		/* INTx */
-		free_irq(dd->pcidev->irq, dd);
+		if (dd->requested_intx_irq) {
+			free_irq(dd->pcidev->irq, dd);
+			dd->requested_intx_irq = 0;
+		}
 	}
 
 	/* turn off interrupts */
-	if (dd->num_msix_entries == 0) {
-		/* INTx */
-		disable_intx(dd->pcidev);
-	} else {
+	if (dd->num_msix_entries) {
 		/* MSI-X */
 		qib_nomsix(dd);
+	} else {
+		/* INTx */
+		disable_intx(dd->pcidev);
 	}
 
 	/* clean structures */
@@ -563,7 +802,7 @@ static void clean_up_interrupts(struct qib_devdata *dd)
 }
 
 /*
- * Remap the interupt source from the generic handler to the given MSI-X
+ * Remap the interrupt source from the general handler to the given MSI-X
  * interrupt.
  */
 static void remap_intr(struct qib_devdata *dd, int isrc, int msix_intr)
@@ -571,7 +810,7 @@ static void remap_intr(struct qib_devdata *dd, int isrc, int msix_intr)
 	u64 reg;
 	int m, n;
 
-	/* clear from the handled mask of the generic interrupt */
+	/* clear from the handled mask of the general interrupt */
 	m = isrc / 64;
 	n = isrc % 64;
 	dd->gi_mask[m] &= ~((u64)1 << n);
@@ -591,7 +830,7 @@ static void remap_sdma_interrupts(struct qib_devdata *dd,
 
 	/*
 	 * SDMA engine interrupt sources grouped by type, rather than
-	 * engine.  Per-engine interupts are as follows, we want the
+	 * engine.  Per-engine interrupts are as follows, we want the
 	 * first 3:
 	 *	SDMAInt		- fast path
 	 *	SDMAIdleInt	- fast path
@@ -613,11 +852,15 @@ static int request_intx_irq(struct qib_devdata *dd)
 {
 	int ret;
 
-	ret = request_irq(dd->pcidev->irq, generic_interrupt,
-				  IRQF_SHARED, DRIVER_NAME, dd);
+	snprintf(dd->intx_name, sizeof(dd->intx_name), DRIVER_NAME"%d",
+		dd->unit);
+	ret = request_irq(dd->pcidev->irq, general_interrupt,
+				  IRQF_SHARED, dd->intx_name, dd);
 	if (ret)
 		qib_dev_err(dd, "unable to request INTx interrupt, err %d\n",
 				ret);
+	else
+		dd->requested_intx_irq = 1;
 	return ret;
 }
 
@@ -626,14 +869,14 @@ static int request_msix_irqs(struct qib_devdata *dd)
 	const struct cpumask *local_mask;
 	int first_cpu, restart_cpu = 0, curr_cpu = 0;
 	int local_node = pcibus_to_node(dd->pcidev->bus);
-	int first_generic, last_generic;
+	int first_general, last_general;
 	int first_sdma, last_sdma;
 	int first_rx, last_rx;
 	int i, ret;
 
 	/* calculate the ranges we are going to use */
-	first_generic = 0;
-	first_sdma = last_generic = first_generic + 1;
+	first_general = 0;
+	first_sdma = last_general = first_general + 1;
 	first_rx = last_sdma = first_sdma + dd->num_sdma;
 	last_rx = first_rx + dd->cfgctxts;
 
@@ -641,13 +884,13 @@ static int request_msix_irqs(struct qib_devdata *dd)
 	 * Interrupt affinity.
 	 *
 	 * The "slow" interrupt can be shared with the rest of the
-	 * interupts clustered on the boot processor.  After
+	 * interrupts clustered on the boot processor.  After
 	 * that, distribute the rest of the "fast" interrupts
 	 * on the remaining CPUs of the NUMA closest to the
 	 * device.
 	 *
 	 * If on NUMA 0:
-	 *	- place the slow interupt on the first CPU
+	 *	- place the slow interrupt on the first CPU
 	 *	- distribute the rest, round robin, starting on
 	 *	  the second CPU, avoiding cpu 0
 	 *
@@ -684,6 +927,16 @@ static int request_msix_irqs(struct qib_devdata *dd)
 	 */
 	curr_cpu = first_cpu;
 
+	/*
+	 * Sanity check - the code expects all fast SDMA chip source
+	 * interrupts to be in the same CSR.  Verify that this is true
+	 * by checking the boundaries of the fast SDMA source interrupts.
+	 */
+	if ((WFR_IS_SDMAINT_START / 64) != (WFR_IS_SDMAIDLE_END-1) / 64) {
+		qib_dev_err(dd, "SDMA interrupt sources not on same CSR");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < dd->num_msix_entries; i++) {
 		struct qib_msix_entry *me = &dd->msix_entries[i];
 		const char *err_info;
@@ -693,34 +946,57 @@ static int request_msix_irqs(struct qib_devdata *dd)
 
 		/*
 		 * TODO:
-		 * o Why isn't IRQF_SHARED used for the slow interrupt
+		 * o Why isn't IRQF_SHARED used for the general interrupt
 		 *   here?
 		 * o Should we use IRQF_SHARED for non-NUMA 0?
 		 * o If we truly wrapped, don't we need IRQF_SHARED?
 		*/
 		/* obtain the arguments to request_irq */
-		if (first_generic <= i && i < last_generic) {
-			idx = i - first_generic;
-			handler = generic_interrupt;
+		if (first_general <= i && i < last_general) {
+			idx = i - first_general;
+			handler = general_interrupt;
 			arg = dd;
 			snprintf(me->name, sizeof(me->name),
 				DRIVER_NAME"%d", dd->unit);
-			err_info = "generic";
+			err_info = "general";
 		} else if (first_sdma <= i && i < last_sdma) {
+			struct sdma_engine *per_sdma;
 			idx = i - first_sdma;
+			per_sdma = &dd->per_sdma[idx];
+			/*
+			 * Create a mask for all 3 chip interrupt sources
+			 * mapped here.  We have checked above that they
+			 * are all on the same CSR.
+			 */
+			per_sdma->imask = 
+				((WFR_IS_SDMAINT_START + idx) % 64)
+				| ((WFR_IS_SDMAPROGRESS_START + idx) % 64)
+				| ((WFR_IS_SDMAIDLE_START + idx) % 64);
 			handler = sdma_interrupt;
-			arg = &dd->per_sdma[idx];
+			arg = per_sdma;
 			snprintf(me->name, sizeof(me->name),
 				DRIVER_NAME"%d sdma%d", dd->unit, idx);
 			err_info = "sdma";
 			remap_sdma_interrupts(dd, idx, i);
 		} else if (first_rx <= i && i < last_rx) {
+			struct qib_ctxtdata *rcd;
 			idx = i - first_rx;
 			/* no interrupt for user contexts */
 			if (idx >= dd->first_user_ctxt)
 				continue;
+			rcd = dd->rcd[idx];
+			/* no interrupt if no rcd */
+			if (!rcd)
+				continue;
+			/*
+			 * Set the interrupt register and mask for this
+			 * context's interrupt.
+			 */
+			rcd->ireg = (WFR_IS_RCVAVAILINT_START+idx) / 64;
+			rcd->imask = ((u64)1) <<
+					((WFR_IS_RCVAVAILINT_START+idx) % 64);
 			handler = receive_context_interrupt;
-			arg = dd->rcd[idx];
+			arg = rcd;
 			snprintf(me->name, sizeof(me->name),
 				DRIVER_NAME"%d kctxt%d", dd->unit, idx);
 			err_info = "receive context";
@@ -769,7 +1045,7 @@ static int request_msix_irqs(struct qib_devdata *dd)
 }
 
 /*
- * Set the general handler to accept all interupts, remap all
+ * Set the general handler to accept all interrupts, remap all
  * chip interrupts back to MSI-X 0.
  */
 static void reset_interrupts(struct qib_devdata *dd)
@@ -792,11 +1068,12 @@ static int set_up_interrupts(struct qib_devdata *dd)
 	int single_interrupt = 0; /* we expect to have all the interrupts */
 
 	/*
-	 * General interrupt scheme:
-	 *	1 generic, "slow path" interupt (includes SDMA engine slow
-	 *		source, SDMACleanupDone)
-	 *	1 interrupt per used SDMA engine (handles the 3 fast sources)
-	 *	1 interupt per used rx context
+	 * Interrupt count:
+	 *	1 general, "slow path" interrupt (includes the SDMA engines
+	 *		slow source, SDMACleanupDone)
+	 *	N interrupts - one per used SDMA engine (handles the 3
+	 *		fast sources)
+	 *	M interrupt - one per used rx context
 	 *	TODO: pio (tx) contexts?
 	 */
 	total = 1 + dd->num_sdma + dd->cfgctxts;
@@ -823,14 +1100,12 @@ static int set_up_interrupts(struct qib_devdata *dd)
 		kfree(entries);
 		/* qib_pcie_params() will print if using INTx */
 		single_interrupt = 1;
-		/* FIXME: set something on chip to use INTx? */
 	} else if (request == total) {
 		/* using MSI-X */
 		dd->num_msix_entries = total;
 		dd->msix_entries = entries;
 		qib_devinfo(dd->pcidev, "%u MSI-X interrupts allocated\n",
 			total);
-		/* FIXME: set something on chip to use MSI-X? */
 	} else {
 		/* using MSI-X, with reduced interrupts */
 		/* TODO: handle reduced interrupt case?  Need scheme to
@@ -875,16 +1150,20 @@ fail:
 }
 
 /*
- * Called from verify_interupt() when it has detected that we have received
- * no interupts.
+ * Called from verify_interrupt() when it has detected that we have received
+ * no interrupts.
  *
  * NOTE: The IRQ releases in clean_up_interrupts() require non-interrupt
  * context.  This means we can't be called from inside a timer function.
  */
 static int intr_fallback(struct qib_devdata *dd)
 {
-/* TODO: remove #if when the simulation supports interrupts */
-#if 1
+/*
+ * TODO: remove #if when the simulation supports interrupts.
+ * NOTE: the simulated HW does not support INTx yet, so we may want to
+ *  keep the #if until then.
+ */
+#if 0
 	if (dd->num_msix_entries == 0) {
 		/* already using INTx.  Return a failure */
 		 return 0;

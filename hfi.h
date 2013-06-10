@@ -218,6 +218,9 @@ struct qib_ctxtdata {
 	u32 lookaside_qpn;
 	/* QPs waiting for context processing */
 	struct list_head qp_wait_list;
+	/* interrupt handling */
+	u64 imask;	/* clear interupt mask */
+	int ireg;	/* clear interrupt register */
 };
 
 struct qib_sge_state;
@@ -693,7 +696,8 @@ struct diag_observer_list_elt;
  */
 struct sdma_engine {
 	struct qib_devdata *dd;
-	int which;
+	int which;			/* which engine */
+	u64 imask;			/* clear interrupt mask */
 	/* add sdma fields here... */
 };
 
@@ -1052,6 +1056,10 @@ struct qib_devdata {
 	/* MSI-X information */
 	struct qib_msix_entry *msix_entries;
 	u32 num_msix_entries;
+
+	/* INTx information */
+	u32 requested_intx_irq;		/* did we request one? */
+	char intx_name[MAX_NAME_SIZE];	/* INTx name */
 
 	/* generic interrupt: mask of handled interrupts */
 	u64 gi_mask[WFR_CCE_NUM_INT_CSRS];
