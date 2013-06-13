@@ -165,55 +165,68 @@ static char *is_sdmacleanup_name(char *buf, size_t bsize, unsigned int source)
 static void handle_context_interrupt(struct qib_ctxtdata *rcd)
 {
 	/* TODO: actually do something */
-	printk("%s: ctxt %u\n", __func__ , rcd->ctxt);
+	printk("%s: ctxt %u - unimplemented\n", __func__ , rcd->ctxt);
 }
 
 static void handle_sdma_interrupt(struct sdma_engine *per_sdma)
 {
 	/* TODO: actually do something */
-	printk("%s: engine #%d\n", __func__, per_sdma->which);
+	printk("%s: engine #%d - unimplemented\n", __func__, per_sdma->which);
 }
 
 static void is_general_err_int(struct qib_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
-	printk("%s: int%u\n", __func__ , source);
+	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 static void is_rcvctxt_err_int(struct qib_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
-	printk("%s: int%u\n", __func__ , source);
+	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 static void is_sendctxt_err_int(struct qib_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
-	printk("%s: int%u\n", __func__ , source);
+	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 static void is_sdma_err_int(struct qib_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
-	printk("%s: int%u\n", __func__ , source);
+	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 static void is_various_int(struct qib_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
-	printk("%s: int%u\n", __func__ , source);
+	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 static void is_rcvavailint_int(struct qib_devdata *dd, unsigned int source)
 {
-	/* TODO: actually do something */
-	printk("%s: int%u\n", __func__ , source);
+	struct qib_ctxtdata *rcd;
+
+	/* only check what we're using */
+	if (source >= dd->ctxtcnt) {
+		qib_dev_err(dd,
+			"unexpected receive context interrupt %u\n", source);
+		return;
+	}
+
+	rcd = dd->rcd[source];
+	if (rcd)
+		handle_context_interrupt(rcd);
+	else
+		qib_dev_err(dd,
+			"receive context interrupt %u, but no rcd\n", source);
 }
 
 static void is_sendcredit_int(struct qib_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
-	printk("%s: int%u\n", __func__ , source);
+	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 /* handles: sdmaint, sdmaprogressint, sdmaidleint */
@@ -320,16 +333,13 @@ static irqreturn_t general_interrupt(int irq, void *data)
 	}
 
 	/* phase 2: call the apropriate handler */
-	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
-		for_each_set_bit(bit, (unsigned long *)&regs[0],
+	for_each_set_bit(bit, (unsigned long *)&regs[0],
 						WFR_CCE_NUM_INT_CSRS*64) {
-			/* TODO: the print is temporary */
-			char buf[64];
-			printk(DRIVER_NAME"%d: interrupt: %s\n", dd->unit, 
-				is_name(buf, sizeof(buf), bit));
-			is_interrupt(dd, bit);
-		}
-
+		/* TODO: the print is temporary */
+		char buf[64];
+		printk(DRIVER_NAME"%d: interrupt: %d, %s\n", dd->unit, bit,
+			is_name(buf, sizeof(buf), bit));
+		is_interrupt(dd, bit);
 	}
 
 	return IRQ_HANDLED;
@@ -819,27 +829,26 @@ static void remap_intr(struct qib_devdata *dd, int isrc, int msix_intr)
 	m = isrc / 8;
 	n = isrc % 8;
 	reg = read_csr(dd, WFR_CCE_INT_MAP + (8*m));
-	reg = (reg & ~((u64)0xff << n)) | (((u64)msix_intr & 0xff) << n);
+	reg &= ~((u64)0xff << (8*n));
+	reg |= ((u64)msix_intr & 0xff) << (8*n);
 	write_csr(dd, WFR_CCE_INT_MAP + (8*m), reg);
 }
 
 static void remap_sdma_interrupts(struct qib_devdata *dd,
 						int engine, int msix_intr)
 {
-	int sdma_base = WFR_IS_SDMAINT_START + engine;
-
 	/*
 	 * SDMA engine interrupt sources grouped by type, rather than
 	 * engine.  Per-engine interrupts are as follows, we want the
 	 * first 3:
 	 *	SDMAInt		- fast path
-	 *	SDMAIdleInt	- fast path
 	 *	SDMAProgressInt - fast path
+	 *	SDMAIdleInt	- fast path
 	 *	SDMACleanupDone	- slow path
 	 */
-	remap_intr(dd, sdma_base + (0 * WFR_TXE_NUM_SDMA_ENGINES), msix_intr);
-	remap_intr(dd, sdma_base + (1 * WFR_TXE_NUM_SDMA_ENGINES), msix_intr);
-	remap_intr(dd, sdma_base + (2 * WFR_TXE_NUM_SDMA_ENGINES), msix_intr);
+	remap_intr(dd, WFR_IS_SDMAINT_START      + engine, msix_intr);
+	remap_intr(dd, WFR_IS_SDMAPROGRESS_START + engine, msix_intr);
+	remap_intr(dd, WFR_IS_SDMAIDLE_START     + engine, msix_intr);
 }
 
 static void remap_receive_context_interrupt(struct qib_devdata *dd,
@@ -969,9 +978,9 @@ static int request_msix_irqs(struct qib_devdata *dd)
 			 * are all on the same CSR.
 			 */
 			per_sdma->imask = 
-				((WFR_IS_SDMAINT_START + idx) % 64)
-				| ((WFR_IS_SDMAPROGRESS_START + idx) % 64)
-				| ((WFR_IS_SDMAIDLE_START + idx) % 64);
+				(u64)1 << ((WFR_IS_SDMAINT_START+idx)%64)
+				| (u64)1 << ((WFR_IS_SDMAPROGRESS_START+idx)%64)
+				| (u64)1 << ((WFR_IS_SDMAIDLE_START+idx)%64);
 			handler = sdma_interrupt;
 			arg = per_sdma;
 			snprintf(me->name, sizeof(me->name),
@@ -1010,8 +1019,7 @@ static int request_msix_irqs(struct qib_devdata *dd)
 		/* make sure the name is terminated */
 		me->name[sizeof(me->name)-1] = 0;
 
-		ret = request_irq(me->msix.vector, handler, 0,
-						me->name, arg);
+		ret = request_irq(me->msix.vector, handler, 0, me->name, arg);
 		if (ret) {
 			qib_dev_err(dd,
 				"unable to allocate %s interrupt, vector %d, index %d, err %d\n",
