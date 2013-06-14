@@ -15,13 +15,6 @@ sources_to_copy="
 	include/rdma/ib_usa.h
 "
 
-target_kos_to_build="
-	drivers/infiniband/core/ib_sa.ko
-	drivers/infiniband/core/ib_usa.ko
-	drivers/infiniband/core/ib_mad.ko
-	drivers/infiniband/core/ib_umad.ko
-"
-
 # ridiculously long to encourage good names later
 rpmname="ifs-kernel-rmpp-usa-updates"
 rpmversion="1" # this is appended to later to make the complete version string
@@ -133,7 +126,6 @@ echo "Building tar file"
 	rpmbuild/SOURCES/$rpmname-$rpmversion-$rpmrelease.tgz
 
 # create the spec file
-# section 1 - header through mid build
 echo "Creating spec file"
 cat > rpmbuild/SPECS/$rpmname.spec <<EOF
 Name:           $rpmname
@@ -152,31 +144,28 @@ Updated kernel modules from wfr-3.9.y-3.9.2-rmpp-usa branch
 
 %build
 if [ -z "\$ksrc" ]; then
-	echo "for now, \\\$ksrc must be explicitly set to kernel build dir" >&2
-	exit 1
+	if [ -e "/usr/src/kernels/$full_kernel_rpmversion" ]; then
+		ksrc="/usr/src/kernels/$full_kernel_rpmversion"
+		echo "using default ksrc path \$ksrc"
+	else
+		echo "for now, \\\$ksrc must be explicitly set to kernel build dir" >&2
+		exit 1
+	fi
 fi
-EOF
 
-# section 2 - create make lines for each .ko
-for i in $target_kos_to_build; do
-	echo "make -C \$ksrc M=\$(pwd)/$(dirname $i) $(basename $i)" >> rpmbuild/SPECS/$rpmname.spec
-done
-
-# section 3 - install
-cat >> rpmbuild/SPECS/$rpmname.spec <<EOF
+make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_sa.ko
+make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_usa.ko
+make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_mad.ko
+make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_umad.ko
 
 %install
 rm -rf \$RPM_BUILD_ROOT
 mkdir -p \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
-EOF
 
-# sections 4 - create lines for each .ko to copy
-for i in $target_kos_to_build; do
-	echo "cp $i \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates" >> rpmbuild/SPECS/$rpmname.spec
-done
-
-# section 5 - finish
-cat >> rpmbuild/SPECS/$rpmname.spec <<EOF
+cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
+cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
+cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
+cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
 
 %clean
 rm -rf \${RPM_BUILD_ROOT}
