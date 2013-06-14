@@ -24,7 +24,7 @@ target_kos_to_build="
 
 # ridiculously long to encourage good names later
 rpmname="ifs-kernel-rmpp-usa-updates"
-rpmversion="1.2.3"
+rpmversion="1" # this is appended to later to make the complete version string
 rpmrelease="02134zoom"
 
 set -e
@@ -107,10 +107,12 @@ if [ "$gitfetch" != "false" ]; then
 	rm -rf ksrc
 	echo "Checking out source"
 	time git clone --branch $branch $url ksrc
+	rpmversion="$rpmversion".$(cd ksrc; git rev-list "v3.9.2^..$branch" | wc -l)
 else
 	rm -rf ksrc; mkdir -p ksrc
 	echo "Copying source from $srcdir"
 	(cd "$srcdir"; tar cf - ${sources_to_copy}) | (cd ksrc; tar xf -)
+	rpmversion="$rpmversion".$(cd "$srcdir"; git rev-list "v3.9.2^..$branch" | wc -l)
 fi
 
 echo "Setting up RPM build area"
