@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# TODO: find a way to get this programatically from the target and put
-# the method _in_ the spec file
-full_kernel_rpmversion="3.9.2_wfr+"
-
+DEFAULT_KERNEL_VERSION="3.9.2_wfr+"
 DEFAULT_USER=$USER
 DEFAULT_URL_PREFIX="ssh://"
 DEFAULT_URL_SUFFIX="@git-amr-2.devtools.intel.com:29418/wfr-linux-devel"
@@ -136,6 +133,17 @@ License:        GPL v2
 Source:         %{name}-%{version}-%{release}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root
 
+# find our target version
+%global kver %(
+[ -z "\$kbuild" ] && kbuild="/usr/src/kernels/$DEFAULT_KERNEL_VERSION/build"
+if [ -f "\$kbuild/include/config/kernel.release" ]; then
+	cat \$kbuild/include/config/kernel.release
+else
+	echo "fail"
+fi
+)
+
+
 %description
 Updated kernel modules from wfr-3.9.y-3.9.2-rmpp-usa branch
 
@@ -143,37 +151,38 @@ Updated kernel modules from wfr-3.9.y-3.9.2-rmpp-usa branch
 %setup -q
 
 %build
-if [ -z "\$ksrc" ]; then
-	if [ -e "/usr/src/kernels/$full_kernel_rpmversion" ]; then
-		ksrc="/usr/src/kernels/$full_kernel_rpmversion"
-		echo "using default ksrc path \$ksrc"
-	else
-		echo "for now, \\\$ksrc must be explicitly set to kernel build dir" >&2
-		exit 1
-	fi
+if [ "%kver" = "fail" ]; then
+        if [ -z "\$kbuild" ]; then
+                echo "The default target kernel, $DEFAULT_KERNEL_VERSION, is not installed" >&2
+                echo "To build, set \\\$kbuild to your target kernel build directory" >&2
+        else
+                echo "Cannot find kernel version in $kbuild" >&2
+        fi
+        exit 1
 fi
+echo "Kernel version is %kver"
 
-make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_sa.ko
-make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_usa.ko
-make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_mad.ko
-make -C \$ksrc M=\$(pwd)/drivers/infiniband/core ib_umad.ko
+make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
+make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
+make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
+make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
 
 %install
 rm -rf \$RPM_BUILD_ROOT
-mkdir -p \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
+mkdir -p \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
-cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
-cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
-cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
-cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/${full_kernel_rpmversion}/updates
+cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 %clean
 rm -rf \${RPM_BUILD_ROOT}
 
 %files
 %defattr(-, root, root)
-%dir /lib/modules/${full_kernel_rpmversion}/updates
-/lib/modules/${full_kernel_rpmversion}/updates/*
+%dir /lib/modules/%kver/updates
+/lib/modules/%kver/updates/*
 EOF
 
 # moment of truth, run rpmbuild
