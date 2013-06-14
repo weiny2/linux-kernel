@@ -107,13 +107,13 @@ if [ "$gitfetch" != "false" ]; then
 	rm -rf ksrc
 	echo "Checking out source"
 	time git clone --branch $branch $url ksrc
-	rpmversion="$rpmversion".$(cd ksrc; git rev-list "v3.9.2^..$branch" | wc -l)
+	srcdir="ksrc"
 else
 	rm -rf ksrc; mkdir -p ksrc
 	echo "Copying source from $srcdir"
 	(cd "$srcdir"; tar cf - ${sources_to_copy}) | (cd ksrc; tar xf -)
-	rpmversion="$rpmversion".$(cd "$srcdir"; git rev-list "v3.9.2^..$branch" | wc -l)
 fi
+rpmversion="$rpmversion".$(cd "$srcdir"; git rev-list "v3.9.2^..HEAD" | wc -l)
 
 echo "Setting up RPM build area"
 mkdir -p rpmbuild/{SOURCES,SPECS}
@@ -121,6 +121,11 @@ mkdir -p rpmbuild/{SOURCES,SPECS}
 # patch Makefile to use local include files first
 # kind of a hack, perfect thing to put in SOURCES as a real patch
 echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include' >> ksrc/drivers/infiniband/core/Makefile
+
+# make sure rpm component strings are clean, should be no-ops
+rpmname=$(echo "$rpmname" | sed -e 's/[.]/_/g')
+rpmversion=$(echo "$rpmversion" | sed -e 's/-/_/g')
+rpmrelease=$(echo "$rpmrelease" | sed -e 's/-/_/g')
 
 # build the tarball
 echo "Building tar file"
