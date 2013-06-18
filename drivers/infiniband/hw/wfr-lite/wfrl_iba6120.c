@@ -1725,7 +1725,7 @@ static void qib_setup_6120_interrupt(struct qib_devdata *dd)
 	else {
 		int ret;
 		ret = request_irq(dd->cspec->irq, qib_6120intr, 0,
-				  QIB_DRV_NAME, dd);
+				  WFR_DRV_NAME, dd);
 		if (ret)
 			qib_dev_err(dd,
 				"Couldn't setup interrupt (irq=%d): %d\n",

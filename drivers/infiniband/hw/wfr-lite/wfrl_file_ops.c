@@ -50,7 +50,7 @@
 #include "wfrl_user_sdma.h"
 
 #undef pr_fmt
-#define pr_fmt(fmt) QIB_DRV_NAME ": " fmt
+#define pr_fmt(fmt) WFR_DRV_NAME ": " fmt
 
 static int qib_open(struct inode *, struct file *);
 static int qib_close(struct inode *, struct file *);
@@ -2246,7 +2246,7 @@ int __init qib_dev_init(void)
 {
 	int ret;
 
-	ret = alloc_chrdev_region(&qib_dev, 0, QIB_NMINORS, QIB_DRV_NAME);
+	ret = alloc_chrdev_region(&qib_dev, 0, QIB_NMINORS, WFR_DRV_NAME);
 	if (ret < 0) {
 		pr_err("Could not allocate chrdev region (err %d)\n", -ret);
 		goto done;
