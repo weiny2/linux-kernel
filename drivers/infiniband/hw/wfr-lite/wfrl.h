@@ -1492,7 +1492,8 @@ extern struct mutex qib_mutex;
 /* Number of seconds before our card status check...  */
 #define STATUS_TIMEOUT 60
 
-#define QIB_DRV_NAME            "ib_qib"
+#define WFR_DRV_NAME            "ib_wfr_lite"
+#define PFX WFR_DRV_NAME ": "
 #define QIB_USER_MINOR_BASE     0
 #define QIB_TRACE_MINOR         127
 #define QIB_DIAGPKT_MINOR       128
