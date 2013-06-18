@@ -1,7 +1,8 @@
-config INFINIBAND_QIB
-	tristate "Intel PCIe HCA support"
+config INFINIBAND_WFR_LITE
+	tristate "Intel WFR Lite debug HCA support"
 	depends on 64BIT
 	---help---
 	This is a low-level driver for Intel PCIe QLE InfiniBand host
 	channel adapters.  This driver does not support the Intel
 	HyperTransport card (model QHT7140).
+	This driver has been modified to act like a WFR driver for testing.
