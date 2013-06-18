@@ -54,7 +54,7 @@
 #include "wfrl_common.h"
 
 #undef pr_fmt
-#define pr_fmt(fmt) QIB_DRV_NAME ": " fmt
+#define pr_fmt(fmt) WFR_DRV_NAME ": " fmt
 
 /*
  * Each client that opens the diag device must read then write

@@ -45,7 +45,7 @@
 #include "wfrl_mad.h"
 
 #undef pr_fmt
-#define pr_fmt(fmt) QIB_DRV_NAME ": " fmt
+#define pr_fmt(fmt) WFR_DRV_NAME ": " fmt
 
 unsigned int snoop_enable; /* By default (0) snooping is disabled */
 
@@ -1148,8 +1148,7 @@ void qib_disable_after_error(struct qib_devdata *dd)
 static void qib_remove_one(struct pci_dev *);
 static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
 
-#define DRIVER_LOAD_MSG "Intel " QIB_DRV_NAME " loaded: "
-#define PFX QIB_DRV_NAME ": "
+#define DRIVER_LOAD_MSG "Intel " WFR_DRV_NAME " loaded: "
 
 static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_PATHSCALE, PCI_DEVICE_ID_QLOGIC_IB_6120) },
@@ -1161,7 +1160,7 @@ static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
 MODULE_DEVICE_TABLE(pci, qib_pci_tbl);
 
 struct pci_driver qib_driver = {
-	.name = QIB_DRV_NAME,
+	.name = WFR_DRV_NAME,
 	.probe = qib_init_one,
 	.remove = qib_remove_one,
 	.id_table = qib_pci_tbl,
@@ -1176,11 +1175,13 @@ static int __init qlogic_ib_init(void)
 {
 	int ret;
 
+	pr_err("Loading WFR Lite driver...\n");
+
 	ret = qib_dev_init();
 	if (ret)
 		goto bail;
 
-	qib_cq_wq = create_singlethread_workqueue("qib_cq");
+	qib_cq_wq = create_singlethread_workqueue("wfr_lite_cq");
 	if (!qib_cq_wq) {
 		ret = -ENOMEM;
 		goto bail_dev;

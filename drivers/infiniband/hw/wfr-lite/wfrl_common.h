@@ -304,7 +304,7 @@ struct qib_base_info {
  * Define the driver version number.  This is something that refers only
  * to the driver itself, not the software interfaces it supports.
  */
-#define QIB_DRIVER_VERSION_BASE "1.11"
+#define QIB_DRIVER_VERSION_BASE "0.0"
 
 /* create the final driver version string */
 #ifdef QIB_IDSTR
