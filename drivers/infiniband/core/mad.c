@@ -2973,6 +2973,28 @@ static void destroy_mad_qp(struct ib_mad_qp_info *qp_info)
 	kfree(qp_info->snoop_table);
 }
 
+/**
+ * this is a hack right now.  There are a number of cleaner ways to tell if the
+ * device supports Jumbo MAD's but most of them involve the core layer.  To make
+ * sure we don't have to mess with that layer we simply check for the
+ * vendor/device ID and check for WFR.
+ *
+ * Further hackery is involved for the wfr-lite driver since we don't have an
+ * official vendor/device ID for WFR yet.
+ */
+
+#define INTEL_VENDOR_OUI 0x0002B3
+#define INTEL_WFR_HFI    0x574F4C46 /* WOLF */
+
+static int
+is_wfr_dev(struct ib_device *device)
+{
+	struct ib_device_attr attr;
+	if (!ib_query_device(device, &attr))
+		return (attr.vendor_id == INTEL_VENDOR_OUI && attr.vendor_part_id == INTEL_WFR_HFI);
+	return (0);
+}
+
 static int
 mad_device_supports_jumbo_mads(struct ib_device *device)
 {
@@ -2980,6 +3002,8 @@ mad_device_supports_jumbo_mads(struct ib_device *device)
 
 	if (mad_support_jumbo) {
 		/* place device checks here... */
+		if (is_wfr_dev(device))
+			rc = 1;
 	}
 
 	return (rc);
