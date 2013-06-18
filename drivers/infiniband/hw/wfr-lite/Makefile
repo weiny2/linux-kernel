@@ -1,15 +1,15 @@
-obj-$(CONFIG_INFINIBAND_QIB) += ib_qib.o
+obj-$(CONFIG_INFINIBAND_WFR_LITE) += ib_wfr_lite.o
 
-ib_qib-y := qib_cq.o qib_diag.o qib_dma.o qib_driver.o qib_eeprom.o \
-	qib_file_ops.o qib_fs.o qib_init.o qib_intr.o qib_keys.o \
-	qib_mad.o qib_mmap.o qib_mr.o qib_pcie.o qib_pio_copy.o \
-	qib_qp.o qib_qsfp.o qib_rc.o qib_ruc.o qib_sdma.o qib_srq.o \
-	qib_sysfs.o qib_twsi.o qib_tx.o qib_uc.o qib_ud.o \
-	qib_user_pages.o qib_user_sdma.o qib_verbs_mcast.o qib_iba7220.o \
-	qib_sd7220.o qib_iba7322.o qib_snoop.o qib_verbs.o
+ib_wfr_lite-y := wfrl_cq.o wfrl_diag.o wfrl_dma.o wfrl_driver.o wfrl_eeprom.o \
+	wfrl_file_ops.o wfrl_fs.o wfrl_init.o wfrl_intr.o wfrl_keys.o \
+	wfrl_mad.o wfrl_mmap.o wfrl_mr.o wfrl_pcie.o wfrl_pio_copy.o \
+	wfrl_qp.o wfrl_qsfp.o wfrl_rc.o wfrl_ruc.o wfrl_sdma.o wfrl_srq.o \
+	wfrl_sysfs.o wfrl_twsi.o wfrl_tx.o wfrl_uc.o wfrl_ud.o \
+	wfrl_user_pages.o wfrl_user_sdma.o wfrl_verbs_mcast.o wfrl_iba7220.o \
+	wfrl_sd7220.o wfrl_iba7322.o wfrl_snoop.o wfrl_verbs.o
 
 # 6120 has no fallback if no MSI interrupts, others can do INTx
-ib_qib-$(CONFIG_PCI_MSI) += qib_iba6120.o
+ib_wfr_lite-$(CONFIG_PCI_MSI) += wfrl_iba6120.o
 
-ib_qib-$(CONFIG_X86_64) += qib_wc_x86_64.o
-ib_qib-$(CONFIG_PPC64) += qib_wc_ppc64.o
+ib_wfr_lite-$(CONFIG_X86_64) += wfrl_wc_x86_64.o
+ib_wfr_lite-$(CONFIG_PPC64) += wfrl_wc_ppc64.o
