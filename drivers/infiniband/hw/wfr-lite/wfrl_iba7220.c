@@ -2032,7 +2032,7 @@ static void qib_setup_7220_interrupt(struct qib_devdata *dd)
 	else {
 		int ret = request_irq(dd->cspec->irq, qib_7220intr,
 			dd->msi_lo ? 0 : IRQF_SHARED,
-			QIB_DRV_NAME, dd);
+			WFR_DRV_NAME, dd);
 
 		if (ret)
 			qib_dev_err(dd,

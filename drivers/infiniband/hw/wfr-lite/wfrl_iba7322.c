@@ -53,7 +53,7 @@
 #include "wfrl_verbs.h"
 
 #undef pr_fmt
-#define pr_fmt(fmt) QIB_DRV_NAME " " fmt
+#define pr_fmt(fmt) WFR_DRV_NAME " " fmt
 
 static void qib_setup_7322_setextled(struct qib_pportdata *, u32);
 static void qib_7322_handle_hwerrors(struct qib_devdata *, char *, size_t);
@@ -3115,7 +3115,7 @@ try_intx:
 			goto bail;
 		}
 		ret = request_irq(dd->pcidev->irq, qib_7322intr,
-				  IRQF_SHARED, QIB_DRV_NAME, dd);
+				  IRQF_SHARED, WFR_DRV_NAME, dd);
 		if (ret) {
 			qib_dev_err(dd,
 				"Couldn't setup INTx interrupt (irq=%d): %d\n",
@@ -3166,7 +3166,7 @@ try_intx:
 			snprintf(dd->cspec->msix_entries[msixnum].name,
 				sizeof(dd->cspec->msix_entries[msixnum].name)
 				 - 1,
-				QIB_DRV_NAME "%d%s", dd->unit,
+				WFR_DRV_NAME "%d%s", dd->unit,
 				irq_table[i].name);
 		} else {
 			unsigned ctxt;
@@ -3183,7 +3183,7 @@ try_intx:
 			snprintf(dd->cspec->msix_entries[msixnum].name,
 				sizeof(dd->cspec->msix_entries[msixnum].name)
 				 - 1,
-				QIB_DRV_NAME "%d (kctx)", dd->unit);
+				WFR_DRV_NAME "%d (kctx)", dd->unit);
 		}
 		ret = request_irq(
 			dd->cspec->msix_entries[msixnum].msix.vector,

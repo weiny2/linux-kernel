@@ -65,7 +65,7 @@ MODULE_PARM_DESC(compat_ddr_negotiate,
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
-MODULE_DESCRIPTION("Intel IB driver");
+MODULE_DESCRIPTION("Intel WFR fake driver");
 MODULE_VERSION(QIB_DRIVER_VERSION);
 
 /*

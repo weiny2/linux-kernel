@@ -2244,7 +2244,8 @@ int qib_register_ib_device(struct qib_devdata *dd)
 	if (!ib_qib_sys_image_guid)
 		ib_qib_sys_image_guid = ppd->guid;
 
-	strlcpy(ibdev->name, "qib%d", IB_DEVICE_NAME_MAX);
+	//strlcpy(ibdev->name, "qib%d", IB_DEVICE_NAME_MAX);
+	strlcpy(ibdev->name, "wfr_lite%d", IB_DEVICE_NAME_MAX);
 	ibdev->owner = THIS_MODULE;
 	ibdev->node_guid = ppd->guid;
 	ibdev->uverbs_abi_ver = QIB_UVERBS_ABI_VERSION;
