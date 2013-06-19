@@ -106,7 +106,7 @@ fi
 rpmversion="$rpmversion".$(cd "$srcdir"; git rev-list "v3.9.2^..HEAD" | wc -l)
 
 echo "Setting up RPM build area"
-mkdir -p rpmbuild/{SOURCES,SPECS}
+mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 # patch Makefile to use local include files first
 # kind of a hack, perfect thing to put in SOURCES as a real patch
