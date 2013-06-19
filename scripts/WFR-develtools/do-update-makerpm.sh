@@ -126,6 +126,7 @@ echo "Building tar file"
 echo "Creating spec file"
 cat > rpmbuild/SPECS/$rpmname.spec <<EOF
 Name:           $rpmname
+Group:		System Environment/Kernel
 Summary:        Extra kernel modules for IFS
 Version:        $rpmversion
 Release:        $rpmrelease
