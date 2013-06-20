@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DEFAULT_KERNEL_VERSION="3.9.2_wfr+"
+DEFAULT_KERNEL_VERSION="3.9.2-wfr+"
 DEFAULT_USER=$USER
 DEFAULT_URL_PREFIX="ssh://"
 DEFAULT_URL_SUFFIX="@git-amr-2.devtools.intel.com:29418/wfr-linux-devel"
@@ -136,7 +136,7 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root
 
 # find our target version
 %global kver %(
-[ -z "\$kbuild" ] && kbuild="/usr/src/kernels/$DEFAULT_KERNEL_VERSION/build"
+[ -z "\$kbuild" ] && kbuild="/usr/src/kernels/$DEFAULT_KERNEL_VERSION"
 if [ -f "\$kbuild/include/config/kernel.release" ]; then
 	cat \$kbuild/include/config/kernel.release
 else
