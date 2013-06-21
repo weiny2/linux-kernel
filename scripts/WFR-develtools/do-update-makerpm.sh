@@ -133,6 +133,8 @@ Release:        $rpmrelease
 License:        GPL v2
 Source:         %{name}-%{version}-%{release}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root
+Requires:	kernel >= 3.9.2-wfr+
+Requires:	rdma
 
 # find our target version
 %global kver %(
