@@ -658,8 +658,7 @@ int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
 	dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LIDLMC,
 			 lid | (~((1U << lmc) - 1)) << 16);
 
-	qib_devinfo(dd->pcidev, "IB%u:%u got a lid: 0x%x\n",
-		    dd->unit, ppd->port, lid);
+	dd_dev_info(dd, "IB%u:%u got a lid: 0x%x\n", dd->unit, ppd->port, lid);
 
 	return 0;
 }
@@ -763,10 +762,10 @@ int qib_reset_device(int unit)
 		goto bail;
 	}
 
-	qib_devinfo(dd->pcidev, "Reset on unit %u requested\n", unit);
+	dd_dev_info(dd, "Reset on unit %u requested\n", unit);
 
 	if (!dd->kregbase || !(dd->flags & QIB_PRESENT)) {
-		qib_devinfo(dd->pcidev,
+		dd_dev_info(dd,
 			"Invalid unit number %u or not initialized or not present\n",
 			unit);
 		ret = -ENXIO;
@@ -809,8 +808,7 @@ int qib_reset_device(int unit)
 			"Reinitialize unit %u after reset failed with %d\n",
 			unit, ret);
 	else
-		qib_devinfo(dd->pcidev,
-			"Reinitialized unit %u after resetting\n",
+		dd_dev_info(dd, "Reinitialized unit %u after resetting\n",
 			unit);
 
 bail:

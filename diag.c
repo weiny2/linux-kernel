@@ -601,8 +601,7 @@ static ssize_t qib_diagpkt_write(struct file *fp,
 	}
 	tmpbuf = vmalloc(plen);
 	if (!tmpbuf) {
-		qib_devinfo(dd->pcidev,
-			"Unable to allocate tmp buffer, failing\n");
+		dd_dev_info(dd, "Unable to allocate tmp buffer, failing\n");
 		ret = -ENOMEM;
 		goto bail;
 	}

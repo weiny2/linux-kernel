@@ -753,7 +753,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 		goto bail_cc_entry_bin;
 	}
 
-	qib_devinfo(dd->pcidev,
+	dd_dev_info(dd,
 		"IB%u: Congestion Control Agent enabled for port %d\n",
 		dd->unit, port_num);
 

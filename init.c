@@ -385,7 +385,7 @@ static int loadtime_init(struct qib_devdata *dd)
 #endif
 
 	if (dd->revision & QLOGIC_IB_R_EMULATOR_MASK)
-		qib_devinfo(dd->pcidev, "%s", dd->boardversion);
+		dd_dev_info(dd, "%s", dd->boardversion);
 
 	spin_lock_init(&dd->pioavail_lock);
 	spin_lock_init(&dd->sendctrl_lock);
@@ -670,8 +670,8 @@ int qib_init(struct qib_devdata *dd, int reinit)
 
 		lastfail = dd->f_bringup_serdes(ppd);
 		if (lastfail) {
-			qib_devinfo(dd->pcidev,
-				 "Failed to bringup IB port %u\n", ppd->port);
+			dd_dev_info(dd, "Failed to bringup IB port %u\n",
+				ppd->port);
 			lastfail = -ENETDOWN;
 			continue;
 		}
@@ -934,7 +934,7 @@ static void qib_verify_pioperf(struct qib_devdata *dd)
 
 	piobuf = dd->f_getsendbuf(dd->pport, 0ULL, &pbnum);
 	if (!piobuf) {
-		qib_devinfo(dd->pcidev,
+		dd_dev_info(dd,
 			 "No PIObufs for checking perf, skipping\n");
 		return;
 	}
@@ -947,7 +947,7 @@ static void qib_verify_pioperf(struct qib_devdata *dd)
 
 	addr = vmalloc(cnt);
 	if (!addr) {
-		qib_devinfo(dd->pcidev,
+		dd_dev_info(dd,
 			 "Couldn't get memory for checking PIO perf,"
 			 " skipping\n");
 		goto done;

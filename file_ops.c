@@ -318,7 +318,7 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 	}
 	if (cnt > tidcnt) {
 		/* make sure it all fits in tid_pg_list */
-		qib_devinfo(dd->pcidev,
+		dd_dev_info(dd,
 			"Process tried to allocate %u TIDs, only trying max (%u)\n",
 			cnt, tidcnt);
 		cnt = tidcnt;
@@ -351,9 +351,8 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 		 * unless perhaps the user has mpin'ed the pages
 		 * themselves.
 		 */
-		qib_devinfo(dd->pcidev,
-			 "Failed to lock addr %p, %u pages: "
-			 "errno %d\n", (void *) vaddr, cnt, -ret);
+		dd_dev_info(dd, "Failed to lock addr %p, %u pages: errno %d\n",
+			 (void *) vaddr, cnt, -ret);
 		goto done;
 	}
 	for (i = 0; i < cnt; i++, vaddr += PAGE_SIZE) {
@@ -727,8 +726,7 @@ static int qib_mmap_mem(struct vm_area_struct *vma, struct qib_ctxtdata *rcd,
 	int ret;
 
 	if ((vma->vm_end - vma->vm_start) > len) {
-		qib_devinfo(dd->pcidev,
-			 "FAIL on %s: len %lx > %x\n", what,
+		dd_dev_info(dd, "FAIL on %s: len %lx > %x\n", what,
 			 vma->vm_end - vma->vm_start, len);
 		ret = -EFAULT;
 		goto bail;
@@ -740,8 +738,7 @@ static int qib_mmap_mem(struct vm_area_struct *vma, struct qib_ctxtdata *rcd,
 	 */
 	if (!write_ok) {
 		if (vma->vm_flags & VM_WRITE) {
-			qib_devinfo(dd->pcidev,
-				 "%s must be mapped readonly\n", what);
+			dd_dev_info(dd, "%s must be mapped readonly\n", what);
 			ret = -EPERM;
 			goto bail;
 		}
@@ -754,8 +751,7 @@ static int qib_mmap_mem(struct vm_area_struct *vma, struct qib_ctxtdata *rcd,
 	ret = remap_pfn_range(vma, vma->vm_start, pfn,
 			      len, vma->vm_page_prot);
 	if (ret)
-		qib_devinfo(dd->pcidev,
-			"%s ctxt%u mmap of %lx, %x bytes failed: %d\n",
+		dd_dev_info(dd, "%s ctxt%u mmap of %lx, %x bytes failed: %d\n",
 			what, rcd->ctxt, pfn, len, ret);
 bail:
 	return ret;
@@ -775,8 +771,7 @@ static int mmap_ureg(struct vm_area_struct *vma, struct qib_devdata *dd,
 	 */
 	sz = dd->flags & QIB_HAS_HDRSUPP ? 2 * PAGE_SIZE : PAGE_SIZE;
 	if ((vma->vm_end - vma->vm_start) > sz) {
-		qib_devinfo(dd->pcidev,
-			"FAIL mmap userreg: reqlen %lx > PAGE\n",
+		dd_dev_info(dd, "FAIL mmap userreg: reqlen %lx > PAGE\n",
 			vma->vm_end - vma->vm_start);
 		ret = -EFAULT;
 	} else {
@@ -807,8 +802,7 @@ static int mmap_piobufs(struct vm_area_struct *vma,
 	 * for it.
 	 */
 	if ((vma->vm_end - vma->vm_start) > (piocnt * dd->palign)) {
-		qib_devinfo(dd->pcidev,
-			"FAIL mmap piobufs: reqlen %lx > PAGE\n",
+		dd_dev_info(dd, "FAIL mmap piobufs: reqlen %lx > PAGE\n",
 			 vma->vm_end - vma->vm_start);
 		ret = -EINVAL;
 		goto bail;
@@ -852,8 +846,7 @@ static int mmap_rcvegrbufs(struct vm_area_struct *vma,
 	size = rcd->rcvegrbuf_size;
 	total_size = rcd->rcvegrbuf_chunks * size;
 	if ((vma->vm_end - vma->vm_start) > total_size) {
-		qib_devinfo(dd->pcidev,
-			"FAIL on egr bufs: reqlen %lx > actual %lx\n",
+		dd_dev_info(dd, "FAIL on egr bufs: reqlen %lx > actual %lx\n",
 			 vma->vm_end - vma->vm_start,
 			 (unsigned long) total_size);
 		ret = -EINVAL;
@@ -861,7 +854,7 @@ static int mmap_rcvegrbufs(struct vm_area_struct *vma,
 	}
 
 	if (vma->vm_flags & VM_WRITE) {
-		qib_devinfo(dd->pcidev,
+		dd_dev_info(dd,
 			"Can't map eager buffers as writable (flags=%lx)\n",
 			vma->vm_flags);
 		ret = -EPERM;
@@ -950,7 +943,7 @@ static int mmap_kvaddr(struct vm_area_struct *vma, u64 pgaddr,
 		addr = rcd->subctxt_rcvegrbuf + size * subctxt;
 		/* rcvegrbufs are read-only on the slave */
 		if (vma->vm_flags & VM_WRITE) {
-			qib_devinfo(dd->pcidev,
+			dd_dev_info(dd,
 				 "Can't map eager buffers as "
 				 "writable (flags=%lx)\n", vma->vm_flags);
 			ret = -EPERM;
@@ -1086,8 +1079,7 @@ static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
 	vma->vm_private_data = NULL;
 
 	if (ret < 0)
-		qib_devinfo(dd->pcidev,
-			 "mmap Failure %d: off %llx len %lx\n",
+		dd_dev_info(dd, "mmap Failure %d: off %llx len %lx\n",
 			 -ret, (unsigned long long)pgaddr,
 			 vma->vm_end - vma->vm_start);
 bail:
@@ -1203,7 +1195,7 @@ static int init_subctxts(struct qib_devdata *dd,
 	/* Check for subctxt compatibility */
 	if (!qib_compatible_subctxts(uinfo->spu_userversion >> 16,
 		uinfo->spu_userversion & 0xffff)) {
-		qib_devinfo(dd->pcidev,
+		dd_dev_info(dd,
 			 "Mismatched user version (%d.%d) and driver "
 			 "version (%d.%d) while context sharing. Ensure "
 			 "that driver and library are from the same "
@@ -1566,7 +1558,7 @@ done_chk_sdma:
 		} else if (weight == 1 &&
 			test_bit(cpumask_first(tsk_cpus_allowed(current)),
 				 qib_cpulist))
-			qib_devinfo(dd->pcidev,
+			dd_dev_info(dd,
 				"%s PID %u affinity set to cpu %d; already allocated\n",
 				current->comm, current->pid,
 				cpumask_first(tsk_cpus_allowed(current)));

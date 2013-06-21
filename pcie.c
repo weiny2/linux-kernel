@@ -80,7 +80,8 @@ int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	ret = pci_request_regions(pdev, DRIVER_NAME);
 	if (ret) {
-		qib_devinfo(pdev, "pci_request_regions fails: err %d\n", -ret);
+		qib_early_err(&pdev->dev,
+			"pci_request_regions fails: err %d\n", -ret);
 		goto bail;
 	}
 
@@ -93,7 +94,8 @@ int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		 */
 		ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
 		if (ret) {
-			qib_devinfo(pdev, "Unable to set DMA mask: %d\n", ret);
+			qib_early_err(&pdev->dev,
+				"Unable to set DMA mask: %d\n", ret);
 			goto bail;
 		}
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
@@ -391,7 +393,7 @@ static int qib_tune_pcie_coalesce(struct qib_devdata *dd)
 	/* Find out supported and configured values for parent (root) */
 	parent = dd->pcidev->bus->self;
 	if (parent->bus->parent) {
-		qib_devinfo(dd->pcidev, "Parent not root\n");
+		dd_dev_info(dd, "Parent not root\n");
 		return 1;
 	}
 	if (!pci_is_pcie(parent))
@@ -458,7 +460,7 @@ static int qib_tune_pcie_caps(struct qib_devdata *dd)
 	/* Find out supported and configured values for parent (root) */
 	parent = dd->pcidev->bus->self;
 	if (parent->bus->parent) {
-		qib_devinfo(dd->pcidev, "Parent not root\n");
+		dd_dev_info(dd, "Parent not root\n");
 		goto bail;
 	}
 
@@ -538,17 +540,17 @@ qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 
 	switch (state) {
 	case pci_channel_io_normal:
-		qib_devinfo(pdev, "State Normal, ignoring\n");
+		dd_dev_info(dd, "State Normal, ignoring\n");
 		break;
 
 	case pci_channel_io_frozen:
-		qib_devinfo(pdev, "State Frozen, requesting reset\n");
+		dd_dev_info(dd, "State Frozen, requesting reset\n");
 		pci_disable_device(pdev);
 		ret = PCI_ERS_RESULT_NEED_RESET;
 		break;
 
 	case pci_channel_io_perm_failure:
-		qib_devinfo(pdev, "State Permanent Failure, disabling\n");
+		dd_dev_info(dd, "State Permanent Failure, disabling\n");
 		if (dd) {
 			/* no more register accesses! */
 			dd->flags &= ~QIB_PRESENT;
@@ -559,7 +561,7 @@ qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 		break;
 
 	default: /* shouldn't happen */
-		qib_devinfo(pdev, "QIB PCI errors detected (state %d)\n",
+		dd_dev_info(dd, "QIB PCI errors detected (state %d)\n",
 			state);
 		break;
 	}
@@ -578,7 +580,7 @@ qib_pci_mmio_enabled(struct pci_dev *pdev)
 		if (words == ~0ULL)
 			ret = PCI_ERS_RESULT_NEED_RESET;
 	}
-	qib_devinfo(pdev,
+	dd_dev_info(dd,
 		"QIB mmio_enabled function called, read wordscntr %Lx, returning %d\n",
 		words, ret);
 	return  ret;
@@ -587,14 +589,16 @@ qib_pci_mmio_enabled(struct pci_dev *pdev)
 static pci_ers_result_t
 qib_pci_slot_reset(struct pci_dev *pdev)
 {
-	qib_devinfo(pdev, "QIB slot_reset function called, ignored\n");
+	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	dd_dev_info(dd, "QIB slot_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
 static pci_ers_result_t
 qib_pci_link_reset(struct pci_dev *pdev)
 {
-	qib_devinfo(pdev, "QIB link_reset function called, ignored\n");
+	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	dd_dev_info(dd, "QIB link_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
@@ -602,7 +606,7 @@ static void
 qib_pci_resume(struct pci_dev *pdev)
 {
 	struct qib_devdata *dd = pci_get_drvdata(pdev);
-	qib_devinfo(pdev, "QIB resume function called\n");
+	dd_dev_info(dd, "QIB resume function called\n");
 	pci_cleanup_aer_uncorrect_error_status(pdev);
 	/*
 	 * Running jobs will fail, since it's asynchronous
