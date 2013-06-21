@@ -137,10 +137,17 @@ Requires:	kernel >= 3.9.2-wfr+
 Requires:	rdma
 
 # find our target version
+%global kbuild %(
+if [ -z "\$kbuild" ]; then 
+	echo "/lib/modules/$DEFAULT_KERNEL_VERSION/build"
+else 
+	echo "\$kbuild"
+fi
+)
+
 %global kver %(
-[ -z "\$kbuild" ] && kbuild="/usr/src/kernels/$DEFAULT_KERNEL_VERSION"
-if [ -f "\$kbuild/include/config/kernel.release" ]; then
-	cat \$kbuild/include/config/kernel.release
+if [ -f "%{kbuild}/include/config/kernel.release" ]; then
+	cat %{kbuild}/include/config/kernel.release
 else
 	echo "fail"
 fi
@@ -155,20 +162,20 @@ Updated kernel modules from wfr-3.9.y-3.9.2-rmpp-usa branch
 
 %build
 if [ "%kver" = "fail" ]; then
-        if [ -z "\$kbuild" ]; then
+        if [ -z "%kbuild" ]; then
                 echo "The default target kernel, $DEFAULT_KERNEL_VERSION, is not installed" >&2
                 echo "To build, set \\\$kbuild to your target kernel build directory" >&2
         else
-                echo "Cannot find kernel version in $kbuild" >&2
+                echo "Cannot find kernel version in %kbuild" >&2
         fi
         exit 1
 fi
 echo "Kernel version is %kver"
-
-make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
-make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
-make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
-make -C \$kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
+echo "Kernel source directory is \"%kbuild\""
+make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
+make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
+make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
+make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
 
 %install
 rm -rf \$RPM_BUILD_ROOT
