@@ -54,7 +54,7 @@ static uint print_unimplemented = 0;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
 MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
 
-static inline u64 read_csr(const struct qib_devdata *dd, u32 offset)
+u64 read_csr(const struct qib_devdata *dd, u32 offset)
 {
 	u64 val;
 
@@ -65,8 +65,7 @@ static inline u64 read_csr(const struct qib_devdata *dd, u32 offset)
 	return -1;
 }
 
-static inline void write_csr(const struct qib_devdata *dd,
-				  u32 offset, u64 value)
+void write_csr(const struct qib_devdata *dd, u32 offset, u64 value)
 {
 	if (dd->flags & QIB_PRESENT)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
@@ -1442,6 +1441,10 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* use contexts created by qib_create_ctxts */
 	ret = set_up_interrupts(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	ret = load_firmware(dd);
 	if (ret)
 		goto bail_cleanup;
 

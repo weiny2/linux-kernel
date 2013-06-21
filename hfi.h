@@ -1453,6 +1453,10 @@ extern struct mutex qib_mutex;
 			get_unit_name((dd)->unit), ##__VA_ARGS__); \
 	} while (0)
 
+#define dd_dev_info(dd, fmt, ...) \
+	dev_info(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__);
+
 #define qib_dev_porterr(dd, port, fmt, ...) \
 	do { \
 		dev_err(&(dd)->pcidev->dev, "%s: IB%u:%u " fmt, \
