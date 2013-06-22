@@ -57,6 +57,16 @@ int ib_sa_pack_attr(void *dst, void *src, int attr_id);
 
 int ib_sa_unpack_attr(void *dst, void *src, int attr_id);
 
+int ib_sa_path_rec_query_cache(struct ib_sa_client *client,
+			 struct ib_device *device, u8 port_num,
+			 struct ib_sa_path_rec *rec,
+			 ib_sa_comp_mask comp_mask,
+			 int timeout_ms, gfp_t gfp_mask,
+			 void (*callback)(int status,
+					  struct ib_sa_path_rec *resp,
+					  void *context),
+			 void *context,
+			 struct ib_sa_query **sa_query);
 int ib_sa_path_rec_query(struct ib_sa_client *client,
 			 struct ib_device *device, u8 port_num,
 			 struct ib_sa_path_rec *rec,
