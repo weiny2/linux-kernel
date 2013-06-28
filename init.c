@@ -166,7 +166,7 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 		rcd->rcvegrbuf_size = 0x8000;
 		rcd->rcvegrbufs_perchunk =
 			rcd->rcvegrbuf_size / dd->rcvegrbufsize;
-		rcd->rcvegrbuf_chunks = (rcd->rcvegrcnt +
+		rcd->rcvegrbuf_chunks = (rcd->eager_count +
 			rcd->rcvegrbufs_perchunk - 1) /
 			rcd->rcvegrbufs_perchunk;
 		BUG_ON(!is_power_of_2(rcd->rcvegrbufs_perchunk));
@@ -320,14 +320,15 @@ done:
 	return ret;
 }
 
-/**
+/*
  * init_shadow_tids - allocate the shadow TID array
- * @dd: the qlogic_ib device
+ * @dd: device data
  *
- * allocate the shadow TID array, so we can qib_munlock previous
- * entries.  It may make more sense to move the pageshadow to the
- * ctxt data structure, so we only allocate memory for ctxts actually
- * in use, since we at 8k per ctxt, now.
+ * Allocate the shadow TID array, so we can qib_munlock previous
+ * entries.  Parts of the shadow array will be unused as it is
+ * combined with the eager array.  For now, live with it for
+ * simplicity.
+ *
  * We don't want failures here to prevent use of the driver/chip,
  * so no return value.
  */
@@ -336,14 +337,14 @@ static void init_shadow_tids(struct qib_devdata *dd)
 	struct page **pages;
 	dma_addr_t *addrs;
 
-	pages = vzalloc(dd->cfgctxts * dd->rcvtidcnt * sizeof(struct page *));
+	pages = vzalloc(WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES * sizeof(struct page *));
 	if (!pages) {
 		qib_dev_err(dd,
 			"failed to allocate shadow page * array, no expected sends!\n");
 		goto bail;
 	}
 
-	addrs = vzalloc(dd->cfgctxts * dd->rcvtidcnt * sizeof(dma_addr_t));
+	addrs = vzalloc(WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES * sizeof(dma_addr_t));
 	if (!addrs) {
 		qib_dev_err(dd,
 			"failed to allocate shadow dma handle array, no expected sends!\n");
@@ -649,7 +650,7 @@ int qib_init(struct qib_devdata *dd, int reinit)
 		ppd = dd->pport + pidx;
 		mtu = ib_mtu_enum_to_int(qib_ibmtu);
 		if (mtu == -1) {
-			mtu = QIB_DEFAULT_MTU;
+			mtu = HFI_DEFAULT_MTU;
 			qib_ibmtu = 0; /* don't leave invalid value */
 		}
 		/* set max we can ever have for this driver load */
@@ -1233,26 +1234,21 @@ static void cleanup_device_data(struct qib_devdata *dd)
 	if (dd->pageshadow) {
 		struct page **tmpp = dd->pageshadow;
 		dma_addr_t *tmpd = dd->physshadow;
-		int i, cnt = 0;
+		int i;
 
-		for (ctxt = 0; ctxt < dd->cfgctxts; ctxt++) {
-			int ctxt_tidbase = ctxt * dd->rcvtidcnt;
-			int maxtid = ctxt_tidbase + dd->rcvtidcnt;
-
-			for (i = ctxt_tidbase; i < maxtid; i++) {
-				if (!tmpp[i])
-					continue;
-				pci_unmap_page(dd->pcidev, tmpd[i],
-					       PAGE_SIZE, PCI_DMA_FROMDEVICE);
-				qib_release_user_pages(&tmpp[i], 1);
-				tmpp[i] = NULL;
-				cnt++;
-			}
+		for (i = 0;  i < WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES; i++) {
+			if (!tmpp[i])
+				continue;
+			pci_unmap_page(dd->pcidev, tmpd[i],
+				       PAGE_SIZE, PCI_DMA_FROMDEVICE);
+			qib_release_user_pages(&tmpp[i], 1);
+			tmpp[i] = NULL;
 		}
 
-		tmpp = dd->pageshadow;
 		dd->pageshadow = NULL;
 		vfree(tmpp);
+		dd->physshadow = NULL;
+		vfree(tmpd);
 	}
 
 	/*
@@ -1510,8 +1506,8 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	 */
 	gfp_flags = __GFP_WAIT | __GFP_IO | __GFP_COMP;
 
-	egrcnt = rcd->rcvegrcnt;
-	egroff = rcd->rcvegr_tid_base;
+	egrcnt = rcd->eager_count;
+	egroff = rcd->eager_base;
 	egrsize = dd->rcvegrbufsize;
 
 	chunk = rcd->rcvegrbuf_chunks;
@@ -1552,11 +1548,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 		memset(rcd->rcvegrbuf[chunk], 0, size);
 
 		for (i = 0; e < egrcnt && i < egrperchunk; e++, i++) {
-			dd->f_put_tid(dd, e + egroff +
-					  (u64 __iomem *)
-					  ((char __iomem *)
-					   dd->kregbase +
-					   dd->rcvegrbase),
+			dd->f_put_tid(dd, e + egroff,
 					  RCVHQ_RCV_TYPE_EAGER, pa);
 			pa += egrsize;
 		}

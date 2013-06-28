@@ -88,19 +88,21 @@
 #define QIB_STATUS_HWERROR     0x200
 
 /*
- * The list of usermode accessible registers.  Also see Reg_* later in file.
+ * The list of usermode accessible registers.
  */
-enum qib_ureg {
+enum hfi_ureg {
 	/* (RO)  DMA RcvHdr to be used next. */
-	ur_rcvhdrtail = 0,
+	ur_rcvhdrtail,
 	/* (RW)  RcvHdr entry to be processed next by host. */
-	ur_rcvhdrhead = 1,
+	ur_rcvhdrhead,
 	/* (RO)  Index of next Eager index to use. */
-	ur_rcvegrindextail = 2,
+	ur_rcvegrindextail,
 	/* (RW)  Eager TID to be processed next */
-	ur_rcvegrindexhead = 3,
+	ur_rcvegrindexhead,
+	/* (RW)  Receive TID flow table */
+	ur_rcvtidflowtable,
 	/* For internal use only; max register number. */
-	_QIB_UregMax
+	ur_maxreg
 };
 
 /* bit values for spi_runtime_flags */

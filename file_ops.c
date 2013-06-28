@@ -132,7 +132,7 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 
 	kinfo->spi_rcvhdr_cnt = dd->rcvhdrcnt;
 	kinfo->spi_rcvhdrent_size = dd->rcvhdrentsize;
-	kinfo->spi_tidegrcnt = rcd->rcvegrcnt;
+	kinfo->spi_tidegrcnt = rcd->eager_count;
 	kinfo->spi_rcv_egrbufsize = dd->rcvegrbufsize;
 	/*
 	 * have to mmap whole thing
@@ -142,9 +142,9 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	kinfo->spi_rcv_egrperchunk = rcd->rcvegrbufs_perchunk;
 	kinfo->spi_rcv_egrchunksize = kinfo->spi_rcv_egrbuftotlen /
 		rcd->rcvegrbuf_chunks;
-	kinfo->spi_tidcnt = dd->rcvtidcnt / subctxt_cnt;
+	kinfo->spi_tidcnt = rcd->expected_count / subctxt_cnt;
 	if (master)
-		kinfo->spi_tidcnt += dd->rcvtidcnt % subctxt_cnt;
+		kinfo->spi_tidcnt += rcd->expected_count % subctxt_cnt;
 	/*
 	 * for this use, may be cfgctxts summed over all chips that
 	 * are are configured and present
@@ -279,12 +279,11 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 			  const struct qib_tid_info *ti)
 {
 	int ret = 0, ntids;
-	u32 tid, ctxttid, cnt, i, tidcnt, tidoff;
+	u32 tid, ctxttid, cnt, i, tidcnt, tidoff, tidbase;
 	u16 *tidlist;
 	struct qib_devdata *dd = rcd->dd;
 	u64 physaddr;
 	unsigned long vaddr;
-	u64 __iomem *tidbase;
 	unsigned long tidmap[8];
 	struct page **pagep = NULL;
 	unsigned subctxt = subctxt_fp(fp);
@@ -299,19 +298,19 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 		ret = -EFAULT;
 		goto done;
 	}
-	ctxttid = rcd->ctxt * dd->rcvtidcnt;
+	ctxttid = rcd->expected_base;
 	if (!rcd->subctxt_cnt) {
-		tidcnt = dd->rcvtidcnt;
+		tidcnt = rcd->expected_count;
 		tid = rcd->tidcursor;
 		tidoff = 0;
 	} else if (!subctxt) {
-		tidcnt = (dd->rcvtidcnt / rcd->subctxt_cnt) +
-			 (dd->rcvtidcnt % rcd->subctxt_cnt);
-		tidoff = dd->rcvtidcnt - tidcnt;
+		tidcnt = (rcd->expected_count / rcd->subctxt_cnt) +
+			 (rcd->expected_count % rcd->subctxt_cnt);
+		tidoff = rcd->expected_count - tidcnt;
 		ctxttid += tidoff;
 		tid = tidcursor_fp(fp);
 	} else {
-		tidcnt = dd->rcvtidcnt / rcd->subctxt_cnt;
+		tidcnt = rcd->expected_count / rcd->subctxt_cnt;
 		tidoff = tidcnt * (subctxt - 1);
 		ctxttid += tidoff;
 		tid = tidcursor_fp(fp);
@@ -324,16 +323,14 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 		cnt = tidcnt;
 	}
 	pagep = (struct page **) rcd->tid_pg_list;
-	tidlist = (u16 *) &pagep[dd->rcvtidcnt];
+	tidlist = (u16 *) &pagep[rcd->expected_count];
 	pagep += tidoff;
 	tidlist += tidoff;
 
 	memset(tidmap, 0, sizeof(tidmap));
 	/* before decrement; chip actual # */
 	ntids = tidcnt;
-	tidbase = (u64 __iomem *) (((char __iomem *) dd->kregbase) +
-				   dd->rcvtidbase +
-				   ctxttid * sizeof(*tidbase));
+	tidbase = rcd->expected_base;
 
 	/* virtual address of first page in transfer */
 	vaddr = ti->tidvaddr;
@@ -384,7 +381,7 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 		__set_bit(tid, tidmap);
 		physaddr = dd->physshadow[ctxttid + tid];
 		/* PERFORMANCE: below should almost certainly be cached */
-		dd->f_put_tid(dd, &tidbase[tid],
+		dd->f_put_tid(dd, tidbase + tid,
 				  RCVHQ_RCV_TYPE_EXPECTED, physaddr);
 		/*
 		 * don't check this tid in qib_ctxtshadow, since we
@@ -414,7 +411,7 @@ cleanup:
 				/* PERFORMANCE: below should almost certainly
 				 * be cached
 				 */
-				dd->f_put_tid(dd, &tidbase[tid],
+				dd->f_put_tid(dd, tidbase + tid,
 					      RCVHQ_RCV_TYPE_EXPECTED,
 					      dd->tidinvalid);
 				pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
@@ -471,11 +468,10 @@ done:
 static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 			const struct qib_tid_info *ti)
 {
-	int ret = 0;
-	u32 tid, ctxttid, cnt, limit, tidcnt;
 	struct qib_devdata *dd = rcd->dd;
-	u64 __iomem *tidbase;
 	unsigned long tidmap[8];
+	u32 tid, ctxttid, cnt, limit, tidcnt, tidbase;
+	int ret = 0;
 
 	if (!dd->pageshadow) {
 		ret = -ENOMEM;
@@ -488,20 +484,18 @@ static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 		goto done;
 	}
 
-	ctxttid = rcd->ctxt * dd->rcvtidcnt;
+	ctxttid = rcd->expected_base;
 	if (!rcd->subctxt_cnt)
-		tidcnt = dd->rcvtidcnt;
+		tidcnt = rcd->expected_count;
 	else if (!subctxt) {
-		tidcnt = (dd->rcvtidcnt / rcd->subctxt_cnt) +
-			 (dd->rcvtidcnt % rcd->subctxt_cnt);
-		ctxttid += dd->rcvtidcnt - tidcnt;
+		tidcnt = (rcd->expected_count / rcd->subctxt_cnt) +
+			 (rcd->expected_count % rcd->subctxt_cnt);
+		ctxttid += rcd->expected_count - tidcnt;
 	} else {
-		tidcnt = dd->rcvtidcnt / rcd->subctxt_cnt;
+		tidcnt = rcd->expected_count / rcd->subctxt_cnt;
 		ctxttid += tidcnt * (subctxt - 1);
 	}
-	tidbase = (u64 __iomem *) ((char __iomem *)(dd->kregbase) +
-				   dd->rcvtidbase +
-				   ctxttid * sizeof(*tidbase));
+	tidbase = rcd->expected_base;
 
 	limit = sizeof(tidmap) * BITS_PER_BYTE;
 	if (limit > tidcnt)
@@ -530,7 +524,7 @@ static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 			/* PERFORMANCE: below should almost certainly be
 			 * cached
 			 */
-			dd->f_put_tid(dd, &tidbase[tid],
+			dd->f_put_tid(dd, tidbase + tid,
 				      RCVHQ_RCV_TYPE_EXPECTED, dd->tidinvalid);
 			pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
 				       PCI_DMA_FROMDEVICE);
@@ -1263,9 +1257,8 @@ static int setup_ctxt(struct qib_pportdata *ppd, int ctxt,
 	 * reduce cost of expected send setup per message segment
 	 */
 	if (rcd)
-		ptmp = kmalloc(dd->rcvtidcnt * sizeof(u16) +
-			       dd->rcvtidcnt * sizeof(struct page **),
-			       GFP_KERNEL);
+		ptmp = kmalloc(rcd->expected_count * sizeof(struct page **) +
+			       rcd->expected_count * sizeof(u16), GFP_KERNEL);
 
 	if (!rcd || !ptmp) {
 		qib_dev_err(dd,
@@ -1692,8 +1685,8 @@ bail:
 static void unlock_expected_tids(struct qib_ctxtdata *rcd)
 {
 	struct qib_devdata *dd = rcd->dd;
-	int ctxt_tidbase = rcd->ctxt * dd->rcvtidcnt;
-	int i, cnt = 0, maxtid = ctxt_tidbase + dd->rcvtidcnt;
+	int ctxt_tidbase = rcd->expected_base;
+	int i, cnt = 0, maxtid = ctxt_tidbase + rcd->expected_count;
 
 	for (i = ctxt_tidbase; i < maxtid; i++) {
 		struct page *p = dd->pageshadow[i];

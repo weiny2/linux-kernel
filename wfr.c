@@ -50,7 +50,7 @@ module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 
 /* TODO: temporary */
-static uint print_unimplemented = 0;
+static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
 MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
 
@@ -70,6 +70,35 @@ void write_csr(const struct qib_devdata *dd, u32 offset, u64 value)
 	if (dd->flags & QIB_PRESENT)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
+
+u64 read_kctxt_csr(const struct qib_devdata *dd, int ctxt, u32 offset0)
+{
+	/* kernel per-context CSRs are separated by 0x100 */
+	return read_csr(dd, offset0 + (0x100* ctxt));
+}
+
+static void write_kctxt_csr(struct qib_devdata *dd, int ctxt, u32 offset0,
+		u64 value)
+{
+	/* kernel per-context CSRs are separated by 0x100 */
+	write_csr(dd, offset0 + (0x100 * ctxt), value);
+} 
+
+#if 0
+u64 read_uctxt_csr(const struct qib_devdata *dd, int ctxt, u32 offset0)
+{
+	/* user per-context CSRs are separated by 0x1000 */
+	return read_csr(dd, offset0 + (0x100* ctxt));
+}
+
+static void write_uctxt_csr(struct qib_devdata *dd, int ctxt, u32 offset0,
+		u64 value)
+{
+	/* TODO: write to user mapping if available? */
+	/* user per-context CSRs are separated by 0x1000 */
+	write_csr(dd, offset0 + (0x1000 * ctxt), value);
+} 
+#endif
 
 /* chip interrupt source table */
 struct is_table {
@@ -446,14 +475,31 @@ static int reset(struct qib_devdata *dd)
 	return 0;
 }
 
-static void put_tid(struct qib_devdata *dd, u64 __iomem *tidptr,
+static const const char *receive_type_name(u32 type)
+{
+	switch (type) {
+	case RCVHQ_RCV_TYPE_EXPECTED: return "expected";
+	case RCVHQ_RCV_TYPE_EAGER:    return "eager";
+	case RCVHQ_RCV_TYPE_NON_KD:   return "non_kd";
+	case RCVHQ_RCV_TYPE_ERROR:    return "error" ;
+	}
+	return "unknown";
+}
+
+/*
+ * index is the index into the receive array
+ */
+static void put_tid(struct qib_devdata *dd, u32 index,
 			     u32 type, unsigned long pa)
 {
-	static int called;
-	if (!called) {
-		called = 1;
-		if (print_unimplemented)
-			dd_dev_info(dd, "%s: not implemented\n", __func__);
+	dd_dev_info(dd, "%s: index 0x%x, pa 0x%lx %s\n", __func__,
+			index, pa, receive_type_name(type));
+	if (type == RCVHQ_RCV_TYPE_EXPECTED || type == RCVHQ_RCV_TYPE_EAGER) {
+		write_csr(dd, WFR_RCV_ARRAY + (index * 8), pa);
+	} else {
+		qib_dev_err(dd,
+			"unexpeced TID type \"%s\" for index %u, not handled\n",
+			receive_type_name(type), index);
 	}
 }
 
@@ -490,7 +536,7 @@ static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
 	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+		dd_dev_info(ppd->dd, "%s: which %d, val 0x%x: not implemented\n", __func__, which, val);
 	return 0;
 }
 
@@ -529,11 +575,161 @@ static u32 hdrqempty(struct qib_ctxtdata *rcd)
 	return 0; /* not empty */
 }
 
-static void rcvctrl(struct qib_pportdata *ppd, unsigned int op,
-			     int ctxt)
+/*
+ * Context Control encoding for eager buffer size:
+ *	0x0 invalid
+ *	0x1   4 KB
+ *	0x2   8 KB
+ *	0x3  16 KB
+ *	0x4  32 KB
+ *	0x5  64 KB
+ *	0x6 128 KB
+ *	0x7 256 KB
+ *	0x8-0xF - reserved
+ *
+ * The above is just size/4096.
+ *
+ * This routine assumes that the value has already been sanity checked.
+ */
+static u32 eager_size_to_context_control_encoding(u32 size)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+#if 1
+	switch (size) {
+	case   4*1024: return 0x1;
+	case   8*1024: return 0x2;
+	case  16*1024: return 0x3;
+	case  32*1024: return 0x4;
+	case  64*1024: return 0x5;
+	case 128*1024: return 0x6;
+	case 256*1024: return 0x7;
+	}
+	return 0x1;	/* if invalid, go with the minimum size */
+#else
+	/* this should be the same, but untested and arguably slower */
+	if (size < 4*1024 || size > 256*1024)
+		return 0x1;	/* shouldn't happen, but.. */
+	return ilog2(size) - 11;
+#endif
+}
+
+/*
+ * TODO: What about these fields in WFR_RCV_CTXT_CTRL?
+ *	ThHdrQueueWrites
+ *	ThEagerPayloadWrites
+ *	ThTIDPayloadWrites
+ *	ThRcvHdrTailWrite
+ *	Redirect
+ *	DontDropRHQFull
+ *	DontDropEgrFull
+ */
+static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
+{
+	struct qib_devdata *dd = ppd->dd;
+	struct qib_ctxtdata *rcd;
+	u64 rcvctrl, reg;
+
+	rcd = dd->rcd[ctxt];
+	if (!rcd)
+		return;
+
+	dd_dev_info(dd, "%s: context %d, flags:\n", __func__, ctxt);
+	if (op & QIB_RCVCTRL_TAILUPD_ENB)
+		dd_dev_info(dd, "    QIB_RCVCTRL_TAILUPD_ENB\n");
+	if (op & QIB_RCVCTRL_TAILUPD_DIS)
+		dd_dev_info(dd, "    QIB_RCVCTRL_TAILUPD_DIS\n");
+	if (op & QIB_RCVCTRL_CTXT_ENB)
+		dd_dev_info(dd, "    QIB_RCVCTRL_CTXT_ENB\n");
+	if (op & QIB_RCVCTRL_CTXT_DIS)
+		dd_dev_info(dd, "    QIB_RCVCTRL_CTXT_DIS\n");
+	if (op & QIB_RCVCTRL_INTRAVAIL_ENB)
+		dd_dev_info(dd, "    QIB_RCVCTRL_INTRAVAIL_ENB\n");
+	if (op & QIB_RCVCTRL_INTRAVAIL_DIS)
+		dd_dev_info(dd, "    QIB_RCVCTRL_INTRAVAIL_DIS\n");
+	// FIXME: QIB_RCVCTRL_PKEY_ENB/DIS
+	if (op & QIB_RCVCTRL_PKEY_ENB)
+		dd_dev_info(dd, "    QIB_RCVCTRL_PKEY_ENB ** NOT IMPLEMENTED **\n");
+	if (op & QIB_RCVCTRL_PKEY_DIS)
+		dd_dev_info(dd, "    QIB_RCVCTRL_PKEY_DIS ** NOT IMPLEMENTED **\n");
+	// FIXME: QIB_RCVCTRL_BP_ENB/DIS
+	if (op & QIB_RCVCTRL_BP_ENB)
+		dd_dev_info(dd, "    QIB_RCVCTRL_BP_ENB ** NOT IMPLEMENTED **\n");
+	if (op & QIB_RCVCTRL_BP_DIS)
+		dd_dev_info(dd, "    QIB_RCVCTRL_BP_DIS ** NOT IMPLEMENTED **\n");
+	if (op & QIB_RCVCTRL_TIDFLOW_ENB)
+		dd_dev_info(dd, "    QIB_RCVCTRL_TIDFLOW_ENB\n");
+	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
+		dd_dev_info(dd, "    QIB_RCVCTRL_TIDFLOW_DIS\n");
+
+	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
+	if (op & QIB_RCVCTRL_CTXT_ENB) {
+		dd_dev_info(dd, "rcd->rcvhdrqtailaddr_phys 0x%lx\n", (unsigned long)rcd->rcvhdrqtailaddr_phys);
+		dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n", (unsigned long)rcd->rcvhdrq_phys);
+
+		/* reset the tail and hdr addresses, and sequence count */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR, rcd->rcvhdrqtailaddr_phys);
+		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR, rcd->rcvhdrq_phys);
+
+		rcd->seq_cnt = 1;
+		rcvctrl |= WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
+
+		/* set the control's eager buffer size */
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
+		rcvctrl |= (eager_size_to_context_control_encoding(
+					dd->rcvegrbufsize)
+				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
+					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
+
+		/* FIXME: for now, always set OnePacketPerEgrBuffer until
+		   we know the driver can handle packed eager buffers */
+		rcvctrl |= WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
+
+		/* set eager count and base index */
+		reg = ((rcd->eager_count & WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
+				<< WFR_RCV_EGR_CTRL_EGR_CNT_SHIFT) |
+		      ((rcd->eager_base & WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_MASK)
+				<< WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_SHIFT);
+		write_kctxt_csr(dd, ctxt, WFR_RCV_EGR_CTRL, reg);
+
+		/* set TID (expected) count and base index */
+		reg = ((rcd->expected_count & WFR_RCV_TID_CTRL_TID_CNT_MASK)
+				<< WFR_RCV_TID_CTRL_TID_CNT_SHIFT) |
+		      ((rcd->expected_base & WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
+				<< WFR_RCV_TID_CTRL_TID_BASE_INDEX_SHIFT);
+		write_kctxt_csr(dd, ctxt, WFR_RCV_TID_CTRL, reg);
+	}
+	if (op & QIB_RCVCTRL_CTXT_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
+	if (op & QIB_RCVCTRL_INTRAVAIL_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
+	if (op & QIB_RCVCTRL_INTRAVAIL_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
+	if (op & QIB_RCVCTRL_TAILUPD_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
+	if (op & QIB_RCVCTRL_TAILUPD_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
+	if (op & QIB_RCVCTRL_TIDFLOW_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
+	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
+	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcvctrl);
+}
+
+static void rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
+{
+	struct qib_devdata *dd = ppd->dd;
+	int i;
+
+// FIXME: it looks like a -1 means "all contexts for this port"
+// Since we only have one port, we can safely do all.  However
+// this begs the question: Do we remove the notion of multiple
+// ports?  There are several functions that take a ppd when
+// it is now no longer needed NOR applicable.
+	if (ctxt < 0) {
+		for (i = 0; i < dd->ctxtcnt; i++)
+			one_rcvctrl(ppd, op, i);
+	} else {
+		one_rcvctrl(ppd, op, ctxt);
+	}
 }
 
 static void sendctrl(struct qib_pportdata *ppd, u32 op)
@@ -693,14 +889,54 @@ static void initvl15_bufs(struct qib_devdata *dd)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
+/*
+ * QIB sets these rcd fields in this function:
+ *	rcvegrcnt	 (now eager_count)
+ *	rcvegr_tid_base  (now eager_base)
+ */
 static void init_ctxt(struct qib_ctxtdata *rcd)
 {
-	if (print_unimplemented)
-		dd_dev_info(rcd->dd, "%s: not implemented\n", __func__);
-	/* FIXME: must set these values, on 7322 the values depend
-	   on whether the context # was < than NUM_IB_PORTS */
-	rcd->rcvegrcnt = 1024;
-	rcd->rcvegr_tid_base = 0; /* this value should be OK for now */
+	struct qib_devdata *dd = rcd->dd;
+	u64 reg;
+
+	dd_dev_info(rcd->dd, "%s: setting up context %d\n", __func__, rcd->ctxt);
+	/*
+	 * Simple allocation: we have already pre-allocated the number
+	 * of entries per context in dd->rcv_entries.  Now, divide the
+	 * per context value by 2 and use half for eager and expected.
+	 * This requires that the count be divisible by 4 as the expected
+	 * array base and count must be divisible by 2.
+	 */
+	rcd->eager_count = dd->rcv_entries / 2;
+	rcd->expected_count = dd->rcv_entries / 2;
+	rcd->eager_base = (dd->rcv_entries * rcd->ctxt);
+	rcd->expected_base = rcd->eager_base + rcd->eager_count;
+	BUG_ON(rcd->expected_base % 2 == 1);	/* must be even */
+
+#if 0
+	if (rcd->ctxt < rcd->dd->first_user_ctxt) {
+		/* a kernel context */
+	} else {
+		/* a user context */
+	}
+#endif
+	/*
+	 * These values are per-context:
+	 *	RcvHdrCnt
+	 *	RcvHdrEntSize
+	 *	RcvHdrSize
+	 * For now, all contexts get the same values from dd.
+	 * TODO: optimize these on a per-context basis.
+	 */
+	reg = (dd->rcvhdrcnt & WFR_RCV_HDR_CNT_CNT_MASK)
+		<< WFR_RCV_HDR_CNT_CNT_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_CNT, reg);
+	reg = (dd->rcvhdrentsize & WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
+		<< WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_ENT_SIZE, reg);
+	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
+		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_SIZE, reg);
 }
 
 static void txchk_change(struct qib_devdata *dd, u32 start,
@@ -1201,6 +1437,7 @@ static int set_up_context_variables(struct qib_devdata *dd)
 	int num_user_contexts;
 	int total_contexts;
 	u32 chip_rx_contexts;
+	u32 per_context;
 
 	chip_rx_contexts = (u32)read_csr(dd, WFR_RXE_RCVCONTEXTS);
 
@@ -1264,7 +1501,42 @@ static int set_up_context_variables(struct qib_devdata *dd)
 		"chip contexts %d, used contexts %d, kernel contexts %d\n",
 		(int)dd->ctxtcnt, (int)dd->cfgctxts, (int)dd->n_krcv_queues);
 
+	/*
+	 * Simple recieve array allocation:  Evenly divide them
+	 * Requirements:
+	 *	- Expected TID indices must be even (they are pairs)
+	 *
+	 * Alogrithm.  Make the requirement always true by:
+	 *	- making the per-context count be divisible by 4
+	 *	- evenly divide between eager and TID count
+	 *
+	 * TODO: Make this more sophisticated
+	 */
+	per_context = WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES / dd->cfgctxts;
+	per_context -= (per_context % 4);
+	/* FIXME: no more than 8 each of eager and expected TIDs, for now! */
+	if (per_context > 16)
+		per_context = 16;
+	dd->rcv_entries = per_context;
+	dd_dev_info(dd, "rcv entries %u\n", dd->rcv_entries);
+
 	return 0;
+}
+
+/*
+ * The partition key values are undefined after reset.
+ * Set up the minimal partition keys:
+ *	- 0xffff in the first key
+ 	- 0 in all other keys
+ */
+static void init_partition_keys(struct qib_devdata *dd)
+{
+	write_csr(dd, WFR_RCV_PARTITION_KEY + (0 * 8), 
+		(0xffff & WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK)
+			<< WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_SHIFT);
+	write_csr(dd, WFR_RCV_PARTITION_KEY + (1 * 8),  0);
+	write_csr(dd, WFR_RCV_PARTITION_KEY + (2 * 8),  0);
+	write_csr(dd, WFR_RCV_PARTITION_KEY + (3 * 8),  0);
 }
 
 /*
@@ -1389,13 +1661,11 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (mod_num_sdma && mod_num_sdma < dd->chip_sdma_engines)
 		dd->num_sdma = mod_num_sdma;
 
+	init_partition_keys(dd);
+
+	dd->palign = 0x1000;	// TODO: is there a WFR value for this?
 
 	/* FIXME: fill in with real values */
-	dd->palign = 8;
-	dd->uregbase = 0;
-	dd->rcvtidcnt = 32;
-	dd->rcvtidbase = 0;
-	dd->rcvegrbase = 0;
 	dd->piobufbase = 0;
 	dd->pio2k_bufbase = 0;
 	dd->piobcnt2k = 32;
@@ -1403,14 +1673,22 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->piosize2k = 32;
 	dd->piosize2kmax_dwords = dd->piosize2k >> 2;
 	dd->piosize4k = 32;
-	dd->ureg_align = 0x10000;  /* 64KB alignment */
+
+	/* TODO these are set by the chip and don't change */
+	/* per-context kernel/user CSRs */
+	dd->uregbase = WFR_RXE_PER_CONTEXT_USER;
+	dd->ureg_align = WFR_RXE_PER_CONTEXT_SIZE;
 
 	/* rcvegrbufsize must be set before calling qib_create_ctxts() */
+	/* TODO: can ib_mtu_enum_to_int cover the full valid eager buffer
+	  size range?  if not, we should drop using it and the ib enum */
         mtu = ib_mtu_enum_to_int(qib_ibmtu);
         if (mtu == -1)
-                mtu = QIB_DEFAULT_MTU;
-	/* TODO: Validate this */
-        dd->rcvegrbufsize = max(mtu, 2048);
+                mtu = HFI_DEFAULT_MTU;
+	/* quietly adjust the size to a valid range */
+        dd->rcvegrbufsize = max(mtu,   4 * 1024); /* min size */
+        dd->rcvegrbufsize = min(mtu, 128 * 1024); /* max size */
+	dd->rcvegrbufsize &= ~(4096ul - 1);	  /* remove lower bits */
 
 	/* TODO: real board name */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
@@ -1428,7 +1706,16 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	   per context, rather than global. */
 	/* FIXME: arbitrary/old values */
 	dd->rcvhdrcnt = 32;
+#if 1
 	dd->rcvhdrentsize = QIB_RCVHDR_ENTSIZE;
+	dd->rcvhdrsize = QIB_DFLT_RCVHDRSIZE;
+#else
+	dd->rcvhdrentsize = qib_rcvhdrentsize ?
+		qib_rcvhdrentsize : QIB_RCVHDR_ENTSIZE;
+	dd->rcvhdrsize = qib_rcvhdrsize ?
+		qib_rcvhdrsize : QIB_DFLT_RCVHDRSIZE;
+#endif
+	dd->rhf_offset = dd->rcvhdrentsize - sizeof(u64) / sizeof(u32);
 
 	ret = set_up_context_variables(dd);
 	if (ret)

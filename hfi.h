@@ -149,9 +149,13 @@ struct qib_ctxtdata {
 	/* non-zero if ctxt is being shared. */
 	u16 subctxt_id;
 	/* number of eager TID entries. */
-	u16 rcvegrcnt;
+	u32 eager_count;
 	/* index of first eager TID entry. */
-	u16 rcvegr_tid_base;
+	u32 eager_base;
+	/* number of expected TID entries */
+	u32 expected_count;
+	/* index of first expected TID entry. */
+	u32 expected_base;
 	/* number of pio bufs for this ctxt (all procs, if shared) */
 	u32 piocnt;
 	/* first pio buffer for this ctxt */
@@ -323,7 +327,7 @@ struct qib_verbs_txreq {
 #define QIB_IB_DDR 2
 #define QIB_IB_QDR 4
 
-#define QIB_DEFAULT_MTU 4096
+#define HFI_DEFAULT_MTU 4096
 
 /* max number of IB ports supported per HCA */
 #define QIB_MAX_IB_PORTS 2
@@ -581,13 +585,6 @@ struct qib_pportdata {
 
 	/* these are the "32 bit" regs */
 
-	/*
-	 * the following two are 32-bit bitmasks, but {test,clear,set}_bit
-	 * all expect bit fields to be "unsigned long"
-	 */
-	unsigned long p_rcvctrl; /* shadow per-port rcvctrl */
-	unsigned long p_sendctrl; /* shadow per-port sendctrl */
-
 	u32 ibmtu; /* The MTU programmed for this unit */
 	/*
 	 * Current max size IB packet (in bytes) including IB headers, that
@@ -767,8 +764,7 @@ struct qib_devdata {
 	int (*f_bringup_serdes)(struct qib_pportdata *);
 	int (*f_early_init)(struct qib_devdata *);
 	void (*f_clear_tids)(struct qib_devdata *, struct qib_ctxtdata *);
-	void (*f_put_tid)(struct qib_devdata *, u64 __iomem*,
-				u32, unsigned long);
+	void (*f_put_tid)(struct qib_devdata *, u32, u32, unsigned long);
 	void (*f_cleanup)(struct qib_devdata *);
 	void (*f_setextled)(struct qib_pportdata *, u32);
 	/* fill out chip-specific fields */
@@ -953,13 +949,6 @@ struct qib_devdata {
 
 	/* these are the "32 bit" regs */
 
-	/*
-	 * the following two are 32-bit bitmasks, but {test,clear,set}_bit
-	 * all expect bit fields to be "unsigned long"
-	 */
-	unsigned long rcvctrl; /* shadow per device rcvctrl */
-	unsigned long sendctrl; /* shadow per device sendctrl */
-
 	/* value we put in kr_rcvhdrcnt */
 	u32 rcvhdrcnt;
 	/* value we put in kr_rcvhdrsize */
@@ -980,12 +969,6 @@ struct qib_devdata {
 	u32 piobcnt4k;
 	/* size in bytes of "4KB" PIO buffers */
 	u32 piosize4k;
-	/* kr_rcvegrbase value */
-	u32 rcvegrbase;
-	/* kr_rcvtidbase value */
-	u32 rcvtidbase;
-	/* kr_rcvtidcnt value */
-	u32 rcvtidcnt;
 	/* kr_userregbase */
 	u32 uregbase;
 	/* shadow the control register contents */
@@ -1067,6 +1050,11 @@ struct qib_devdata {
 	u32 chip_sdma_engines;	/* number from the chip */
 	u32 num_sdma;		/* number being used */
 	struct sdma_engine per_sdma[WFR_TXE_NUM_SDMA_ENGINES];
+	/*
+	 * Simple receive array allocation: the number per receive array entries
+	 * per context.
+	 */
+	u32 rcv_entries;
 };
 
 /* hol_state values */
