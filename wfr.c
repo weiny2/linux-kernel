@@ -691,9 +691,11 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 		write_kctxt_csr(dd, ctxt, WFR_RCV_EGR_CTRL, reg);
 
 		/* set TID (expected) count and base index */
-		reg = ((rcd->expected_count & WFR_RCV_TID_CTRL_TID_CNT_MASK)
-				<< WFR_RCV_TID_CTRL_TID_CNT_SHIFT) |
-		      ((rcd->expected_base & WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
+		reg = ((rcd->expected_count &
+					WFR_RCV_TID_CTRL_TID_PAIR_CNT_MASK)
+				<< WFR_RCV_TID_CTRL_TID_PAIR_CNT_SHIFT) |
+		      ((rcd->expected_base &
+		      			WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
 				<< WFR_RCV_TID_CTRL_TID_BASE_INDEX_SHIFT);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_TID_CTRL, reg);
 	}
@@ -1439,7 +1441,7 @@ static int set_up_context_variables(struct qib_devdata *dd)
 	u32 chip_rx_contexts;
 	u32 per_context;
 
-	chip_rx_contexts = (u32)read_csr(dd, WFR_RXE_RCVCONTEXTS);
+	chip_rx_contexts = (u32)read_csr(dd, WFR_RCV_CONTEXTS);
 
 	/*
 	 * Kernel contexts: (to be fixed later):
@@ -1650,13 +1652,13 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		goto bail_free;
 	}
 
-	dd->majrev = (dd->revision >> WFR_CCE_REVISION_MAJOR_SHIFT)
-			& WFR_CCE_REVISION_MAJOR_MASK;
-	dd->minrev = (dd->revision >> WFR_CCE_REVISION_MINOR_SHIFT)
-			& WFR_CCE_REVISION_MINOR_MASK;
+	dd->majrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MAJOR_SHIFT)
+			& WFR_CCE_REVISION_CHIP_REV_MAJOR_MASK;
+	dd->minrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT)
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
 
 	/* read chip values */
-	dd->chip_sdma_engines = read_csr(dd, WFR_TXE_SENDDMAENGINES);
+	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
 	dd->num_sdma = dd->chip_sdma_engines;
 	if (mod_num_sdma && mod_num_sdma < dd->chip_sdma_engines)
 		dd->num_sdma = mod_num_sdma;
