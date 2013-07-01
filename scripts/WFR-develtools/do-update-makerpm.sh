@@ -155,7 +155,7 @@ fi
 
 
 %description
-Updated kernel modules from wfr-3.9.y-3.9.2-rmpp-usa branch
+Updated kernel modules for STL IFS
 
 %prep
 %setup -q
