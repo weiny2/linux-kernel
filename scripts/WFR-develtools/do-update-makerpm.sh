@@ -15,7 +15,6 @@ sources_to_copy="
 # ridiculously long to encourage good names later
 rpmname="ifs-kernel-updates"
 rpmversion="1" # this is appended to later to make the complete version string
-rpmrelease="02134zoom"
 
 set -e
 
@@ -115,7 +114,7 @@ echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include' >> ksrc/drivers/infiniband/cor
 # make sure rpm component strings are clean, should be no-ops
 rpmname=$(echo "$rpmname" | sed -e 's/[.]/_/g')
 rpmversion=$(echo "$rpmversion" | sed -e 's/-/_/g')
-rpmrelease=$(echo "$rpmrelease" | sed -e 's/-/_/g')
+rpmrelease=$(echo "$DEFAULT_KERNEL_VERSION" | sed -e 's/-/_/g')
 
 # build the tarball
 echo "Building tar file"
@@ -133,8 +132,7 @@ Release:        $rpmrelease
 License:        GPL v2
 Source:         %{name}-%{version}-%{release}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root
-Requires:	kernel >= 3.9.2-wfr+
-Requires:	rdma
+Requires:	kernel >= $rpmrelease
 
 # find our target version
 %global kbuild %(
