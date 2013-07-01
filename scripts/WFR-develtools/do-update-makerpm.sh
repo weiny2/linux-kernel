@@ -4,7 +4,7 @@ DEFAULT_KERNEL_VERSION="3.9.2-wfr+"
 DEFAULT_USER=$USER
 DEFAULT_URL_PREFIX="ssh://"
 DEFAULT_URL_SUFFIX="@git-amr-2.devtools.intel.com:29418/wfr-linux-devel"
-DEFAULT_BRANCH="wfr-3.9.y-3.9.2-rmpp-usa"
+DEFAULT_BRANCH="wfr-for-ifs"
 
 sources_to_copy="
 	drivers/infiniband/core
