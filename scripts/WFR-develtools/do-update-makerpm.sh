@@ -13,7 +13,7 @@ sources_to_copy="
 "
 
 # ridiculously long to encourage good names later
-rpmname="ifs-kernel-rmpp-usa-updates"
+rpmname="ifs-kernel-updates"
 rpmversion="1" # this is appended to later to make the complete version string
 rpmrelease="02134zoom"
 
