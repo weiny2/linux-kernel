@@ -730,6 +730,7 @@ struct qib_message_header {
 #define RCVHQ_RCV_TYPE_EAGER     1
 #define RCVHQ_RCV_TYPE_NON_KD    2
 #define RCVHQ_RCV_TYPE_ERROR     3
+#define RCVHQ_RCV_TYPE_INVALID   4	/* only for f_put_tid */
 
 #define QIB_HEADER_QUEUE_WORDS 9
 

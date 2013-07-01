@@ -763,7 +763,7 @@ struct qib_devdata {
 	void (*f_quiet_serdes)(struct qib_pportdata *);
 	int (*f_bringup_serdes)(struct qib_pportdata *);
 	int (*f_early_init)(struct qib_devdata *);
-	void (*f_clear_tids)(struct qib_devdata *, struct qib_ctxtdata *);
+	void (*f_clear_tids)(struct qib_ctxtdata *);
 	void (*f_put_tid)(struct qib_devdata *, u32, u32, unsigned long);
 	void (*f_cleanup)(struct qib_devdata *);
 	void (*f_setextled)(struct qib_pportdata *, u32);
@@ -827,11 +827,6 @@ struct qib_devdata {
 	int (*f_tempsense_rd)(struct qib_devdata *, int regnum);
 
 	char *boardname; /* human readable board info */
-
-	/* template for writing TIDs  */
-	u64 tidtemplate;
-	/* value to write to free TIDs */
-	u64 tidinvalid;
 
 	/* number of registers used for pioavail */
 	u32 pioavregs;

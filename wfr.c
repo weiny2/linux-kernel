@@ -54,6 +54,9 @@ static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
 MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
 
+
+static u32 encoded_size(u32 size);
+
 u64 read_csr(const struct qib_devdata *dd, u32 offset)
 {
 	u64 val;
@@ -482,6 +485,7 @@ static const const char *receive_type_name(u32 type)
 	case RCVHQ_RCV_TYPE_EAGER:    return "eager";
 	case RCVHQ_RCV_TYPE_NON_KD:   return "non_kd";
 	case RCVHQ_RCV_TYPE_ERROR:    return "error" ;
+	case RCVHQ_RCV_TYPE_INVALID:  return "invalid" ;
 	}
 	return "unknown";
 }
@@ -492,22 +496,46 @@ static const const char *receive_type_name(u32 type)
 static void put_tid(struct qib_devdata *dd, u32 index,
 			     u32 type, unsigned long pa)
 {
+	u64 reg, bsize;
+
 	dd_dev_info(dd, "%s: index 0x%x, pa 0x%lx %s\n", __func__,
 			index, pa, receive_type_name(type));
-	if (type == RCVHQ_RCV_TYPE_EXPECTED || type == RCVHQ_RCV_TYPE_EAGER) {
-		write_csr(dd, WFR_RCV_ARRAY + (index * 8), pa);
+
+	if (type == RCVHQ_RCV_TYPE_EAGER) {
+		bsize = encoded_size(dd->rcvegrbufsize);
+	} else if (type == RCVHQ_RCV_TYPE_EXPECTED) {
+		/* FIXME: expected (TID) sizes appear to be hard-coded to
+		   PAGE_SIZE bytes */
+		bsize = encoded_size(PAGE_SIZE);
+	} else if (type == RCVHQ_RCV_TYPE_INVALID) {
+		bsize = 0;	/* invalid size, disables the entry */
+		pa = 0;
 	} else {
 		qib_dev_err(dd,
 			"unexpeced TID type \"%s\" for index %u, not handled\n",
 			receive_type_name(type), index);
+		return;
 	}
+
+	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
+		| bsize << WFR_RCV_ARRAY_RT_BUF_SIZE_SHIFT
+		| (pa & WFR_RCV_ARRAY_RT_ADDR_MASK)
+					<< WFR_RCV_ARRAY_RT_ADDR_SHIFT;
+	write_csr(dd, WFR_RCV_ARRAY + (index * 8), reg);
 }
 
-static void clear_tids(struct qib_devdata *dd,
-				struct qib_ctxtdata *rcd)
+static void clear_tids(struct qib_ctxtdata *rcd)
 {
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
+	struct qib_devdata *dd = rcd->dd;
+	u32 i;
+
+	/* TODO: this could be optimized */
+	for (i = rcd->eager_base; i < rcd->eager_base + rcd->eager_count; i++)
+		put_tid(dd, i, RCVHQ_RCV_TYPE_INVALID, 0);
+
+	for (i = rcd->expected_base;
+			i < rcd->expected_base + rcd->expected_count; i++)
+		put_tid(dd, i, RCVHQ_RCV_TYPE_INVALID, 0);
 }
 
 static int get_base_info(struct qib_ctxtdata *rcd,
@@ -576,7 +604,7 @@ static u32 hdrqempty(struct qib_ctxtdata *rcd)
 }
 
 /*
- * Context Control encoding for eager buffer size:
+ * Context Control and Receive Array encoding for buffer size:
  *	0x0 invalid
  *	0x1   4 KB
  *	0x2   8 KB
@@ -585,13 +613,17 @@ static u32 hdrqempty(struct qib_ctxtdata *rcd)
  *	0x5  64 KB
  *	0x6 128 KB
  *	0x7 256 KB
- *	0x8-0xF - reserved
+ *	0x8 512 KB (Receive Array only)
+ *	0x9   1 MB (Receive Array only)
+ *	0xa   2 MB (Receive Array only)
  *
- * The above is just size/4096.
+ *	0x8-0xF - reserved (Context Control)
+ *	0xB-0xF - reserved (Receive Array)
+ *	
  *
  * This routine assumes that the value has already been sanity checked.
  */
-static u32 eager_size_to_context_control_encoding(u32 size)
+static u32 encoded_size(u32 size)
 {
 #if 1
 	switch (size) {
@@ -602,11 +634,14 @@ static u32 eager_size_to_context_control_encoding(u32 size)
 	case  64*1024: return 0x5;
 	case 128*1024: return 0x6;
 	case 256*1024: return 0x7;
+	case 512*1024: return 0x8;
+	case   1*1024*1024: return 0x9;
+	case   2*1024*1024: return 0xa;
 	}
 	return 0x1;	/* if invalid, go with the minimum size */
 #else
 	/* this should be the same, but untested and arguably slower */
-	if (size < 4*1024 || size > 256*1024)
+	if (size < 4*1024)
 		return 0x1;	/* shouldn't happen, but.. */
 	return ilog2(size) - 11;
 #endif
@@ -674,8 +709,7 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 
 		/* set the control's eager buffer size */
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
-		rcvctrl |= (eager_size_to_context_control_encoding(
-					dd->rcvegrbufsize)
+		rcvctrl |= (encoded_size(dd->rcvegrbufsize)
 				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
 					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
 

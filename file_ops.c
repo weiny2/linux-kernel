@@ -407,13 +407,12 @@ cleanup:
 				dma_addr_t phys;
 
 				phys = dd->physshadow[ctxttid + tid];
-				dd->physshadow[ctxttid + tid] = dd->tidinvalid;
+				dd->physshadow[ctxttid + tid] = 0;
 				/* PERFORMANCE: below should almost certainly
 				 * be cached
 				 */
 				dd->f_put_tid(dd, tidbase + tid,
-					      RCVHQ_RCV_TYPE_EXPECTED,
-					      dd->tidinvalid);
+					      RCVHQ_RCV_TYPE_INVALID, 0);
 				pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
 					       PCI_DMA_FROMDEVICE);
 				dd->pageshadow[ctxttid + tid] = NULL;
@@ -520,12 +519,12 @@ static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 			p = dd->pageshadow[ctxttid + tid];
 			dd->pageshadow[ctxttid + tid] = NULL;
 			phys = dd->physshadow[ctxttid + tid];
-			dd->physshadow[ctxttid + tid] = dd->tidinvalid;
+			dd->physshadow[ctxttid + tid] = 0;
 			/* PERFORMANCE: below should almost certainly be
 			 * cached
 			 */
 			dd->f_put_tid(dd, tidbase + tid,
-				      RCVHQ_RCV_TYPE_EXPECTED, dd->tidinvalid);
+				      RCVHQ_RCV_TYPE_INVALID, 0);
 			pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
 				       PCI_DMA_FROMDEVICE);
 			qib_release_user_pages(&p, 1);
@@ -1696,7 +1695,7 @@ static void unlock_expected_tids(struct qib_ctxtdata *rcd)
 			continue;
 
 		phys = dd->physshadow[i];
-		dd->physshadow[i] = dd->tidinvalid;
+		dd->physshadow[i] = 0;
 		dd->pageshadow[i] = NULL;
 		pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
 			       PCI_DMA_FROMDEVICE);
@@ -1780,7 +1779,7 @@ static int qib_close(struct inode *in, struct file *fp)
 		qib_chg_pioavailkernel(dd, rcd->pio_base,
 				       rcd->piocnt, TXCHK_CHG_TYPE_KERN, NULL);
 
-		dd->f_clear_tids(dd, rcd);
+		dd->f_clear_tids(rcd);
 
 		if (dd->pageshadow)
 			unlock_expected_tids(rcd);
