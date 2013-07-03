@@ -717,9 +717,9 @@ struct qib_devdata {
 	struct device *ui_device;
 
 	/* mem-mapped pointer to base of chip regs */
-	u64 __iomem *kregbase;
+	u8 __iomem *kregbase;
 	/* end of mem-mapped chip space excluding sendbuf and user regs */
-	u64 __iomem *kregend;
+	u8 __iomem *kregend;
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
 	/* qib_cfgctxts pointers */

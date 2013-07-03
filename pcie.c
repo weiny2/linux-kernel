@@ -152,7 +152,7 @@ int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
 		return -ENOMEM;
 	dd->flags |= QIB_PRESENT;	/* now register routines work */
 
-	dd->kregend = (u64 __iomem *)((void __iomem *) dd->kregbase + len);
+	dd->kregend = dd->kregbase + len;
 	dd->physaddr = addr;        /* used for io_remap, etc. */
 
 	/*

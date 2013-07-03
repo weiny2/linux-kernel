@@ -93,6 +93,7 @@ u64 read_uctxt_csr(const struct qib_devdata *dd, int ctxt, u32 offset0)
 	/* user per-context CSRs are separated by 0x1000 */
 	return read_csr(dd, offset0 + (0x100* ctxt));
 }
+#endif
 
 static void write_uctxt_csr(struct qib_devdata *dd, int ctxt, u32 offset0,
 		u64 value)
@@ -101,7 +102,6 @@ static void write_uctxt_csr(struct qib_devdata *dd, int ctxt, u32 offset0,
 	/* user per-context CSRs are separated by 0x1000 */
 	write_csr(dd, offset0 + (0x1000 * ctxt), value);
 } 
-#endif
 
 /* chip interrupt source table */
 struct is_table {
@@ -442,8 +442,21 @@ static void set_armlaunch(struct qib_devdata *dd, u32 enable)
 
 static int bringup_serdes(struct qib_pportdata *ppd)
 {
+	struct qib_devdata *dd = ppd->dd;
+	u64 reg;
+
 	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+		dd_dev_info(dd, "%s: ppd 0x%p: not implemented (enabling port)\n", __func__, ppd);
+
+	/* enable the port */
+	/* NOTE: 7322: done within rcvmod_lock */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+	/* TODO: clear RcvCtrl.RcvPortEnable in quiet_serdes()? */
+
+	/* 7322: enable the serdes status change interrupt */
+
 	return 0;
 }
 
@@ -498,9 +511,6 @@ static void put_tid(struct qib_devdata *dd, u32 index,
 {
 	u64 reg, bsize;
 
-	dd_dev_info(dd, "%s: index 0x%x, pa 0x%lx %s\n", __func__,
-			index, pa, receive_type_name(type));
-
 	if (type == RCVHQ_RCV_TYPE_EAGER) {
 		bsize = encoded_size(dd->rcvegrbufsize);
 	} else if (type == RCVHQ_RCV_TYPE_EXPECTED) {
@@ -517,9 +527,14 @@ static void put_tid(struct qib_devdata *dd, u32 index,
 		return;
 	}
 
+	dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
+		__func__, receive_type_name(type), index, pa,
+		(unsigned long)bsize);
+
+#define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
 	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
 		| bsize << WFR_RCV_ARRAY_RT_BUF_SIZE_SHIFT
-		| (pa & WFR_RCV_ARRAY_RT_ADDR_MASK)
+		| ((pa >> RT_ADDR_SHIFT) & WFR_RCV_ARRAY_RT_ADDR_MASK)
 					<< WFR_RCV_ARRAY_RT_ADDR_SHIFT;
 	write_csr(dd, WFR_RCV_ARRAY + (index * 8), reg);
 }
@@ -554,17 +569,49 @@ static struct qib_message_header *get_msgheader(
 	return (struct qib_message_header *)rhf_addr;
 }
 
+static const char *ib_cfg_name_strings[] = {
+	"QIB_IB_CFG_LIDLMC",
+	"unused1",
+	"QIB_IB_CFG_LWID_ENB",
+	"QIB_IB_CFG_LWID",
+	"QIB_IB_CFG_SPD_ENB",
+	"QIB_IB_CFG_SPD",
+	"QIB_IB_CFG_RXPOL_ENB",
+	"QIB_IB_CFG_LREV_ENB",
+	"QIB_IB_CFG_LINKLATENCY",
+	"QIB_IB_CFG_HRTBT",
+	"QIB_IB_CFG_OP_VLS",
+	"QIB_IB_CFG_VL_HIGH_CAP",
+	"QIB_IB_CFG_VL_LOW_CAP",
+	"QIB_IB_CFG_OVERRUN_THRESH",
+	"QIB_IB_CFG_PHYERR_THRESH",
+	"QIB_IB_CFG_LINKDEFAULT",
+	"QIB_IB_CFG_PKEYS",
+	"QIB_IB_CFG_MTU",
+	"QIB_IB_CFG_LSTATE",
+	"QIB_IB_CFG_VL_HIGH_LIMIT",
+	"QIB_IB_CFG_PMA_TICKS",
+	"QIB_IB_CFG_PORT"
+};
+
+static const char *ib_cfg_name(int which)
+{
+	if (which < 0 || which >= ARRAY_SIZE(ib_cfg_name_strings))
+		return "invalid";
+	return ib_cfg_name_strings[which];
+}
+
 static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 {
 	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+		dd_dev_info(ppd->dd, "%s: which %s: not implemented\n", __func__, ib_cfg_name(which));
 	return 0;
 }
 
 static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
 	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: which %d, val 0x%x: not implemented\n", __func__, which, val);
+		dd_dev_info(ppd->dd, "%s: which %s, val 0x%x: not implemented\n", __func__, ib_cfg_name(which), val);
 	return 0;
 }
 
@@ -662,6 +709,7 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 	struct qib_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
+	u32 eager_header_counter = 0;	/* non-zero means do something */
 
 	rcd = dd->rcd[ctxt];
 	if (!rcd)
@@ -696,7 +744,9 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 		dd_dev_info(dd, "    QIB_RCVCTRL_TIDFLOW_DIS\n");
 
 	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
-	if (op & QIB_RCVCTRL_CTXT_ENB) {
+	/* if the context already enabled, don't do the extra steps */
+	if ((op & QIB_RCVCTRL_CTXT_ENB)
+			&& !(rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK)) {
 		dd_dev_info(dd, "rcd->rcvhdrqtailaddr_phys 0x%lx\n", (unsigned long)rcd->rcvhdrqtailaddr_phys);
 		dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n", (unsigned long)rcd->rcvhdrq_phys);
 
@@ -705,7 +755,19 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR, rcd->rcvhdrq_phys);
 
 		rcd->seq_cnt = 1;
+		/*
+		 * When the context enable goes from 0 to 1, RcvEgrIndexHead,
+		 * RcvEgrIndexTail, and RcvEgrOffsetTail are reset to 0.
+		 * However, once we activate the context, we need to add a
+		 * count of (at least) 1 to RcvEgrHdrHead.Counter so
+		 * interrupts are generated.
+		 * TODO: We don't always want interrupts.  Need a
+		 * mechanism for that. Also, we could make this
+		 * conditional on IntrAvail.  Not sure it we need to
+		 * worry about it, though.
+		 */
 		rcvctrl |= WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
+		eager_header_counter = 1; /* non-zero means do something */
 
 		/* set the control's eager buffer size */
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
@@ -748,6 +810,22 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
 	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcvctrl);
+
+	/*
+	 * This must be done after we transition a context to enabled
+	 * in RcvCtxtCtrl.
+	 */
+	if (eager_header_counter) {
+		/*
+		 * ASSUMPTION: we've just transitioned the context
+		 * to enabled with the write to RcvCtxtCtrl above.
+		 * This will zero out RcvHdrHead, so we only need to
+		 * update the Counter field.
+		 */
+		reg = (eager_header_counter & WFR_RCV_HDR_HEAD_COUNTER_MASK)
+			<< WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
+		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
+	}
 }
 
 static void rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
@@ -825,22 +903,20 @@ static void xgxs_reset(struct qib_pportdata *ppd)
 
 static u32 iblink_state(u64 ibcs)
 {
-	if (print_unimplemented)
-		printk("%s: not implemented\n", __func__);
-	return IB_PORT_DOWN;
+	printk("%s: ibcs 0x%lx: not implemented, reporting IB_PORT_ACTIVE\n", __func__, (unsigned long)ibcs);
+	return IB_PORT_ACTIVE;
 }
 
 static u8 ibphys_portstate(u64 ibcs)
 {
-	if (print_unimplemented)
-		printk("%s: not implemented\n", __func__);
-	return 0;
+	printk("%s: ibcs 0x%lx: not implemented, reporting IB_PHYSPORTSTATE_LINKUP\n", __func__, (unsigned long)ibcs);
+	return IB_PHYSPORTSTATE_LINKUP;
 }
 
 static int ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 {
 	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+		dd_dev_info(ppd->dd, "%s: ppd 0x%p, ibup 0x%x, ibcs 0x%lx: not implemented\n", __func__, ppd, ibup, (unsigned long)ibcs);
 	return 1; /* no other IB status change processing */
 }
 

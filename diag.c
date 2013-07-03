@@ -242,7 +242,7 @@ static u32 __iomem *qib_remap_ioaddr32(struct qib_devdata *dd, u32 offset,
 	u32 tot4k, offs4k;
 
 	/* First, simplest case, offset is within the first map. */
-	kreglen = (dd->kregend - dd->kregbase) * sizeof(u64);
+	kreglen = dd->kregend - dd->kregbase;
 	if (offset < kreglen) {
 		map = krb32 + (offset / sizeof(u32));
 		cnt = kreglen - offset;
@@ -837,15 +837,12 @@ static ssize_t qib_diag_write(struct file *fp, const char __user *data,
 {
 	struct qib_diag_client *dc = fp->private_data;
 	struct qib_devdata *dd = dc->dd;
-	void __iomem *kreg_base;
 	ssize_t ret;
 
 	if (dc->pid != current->pid) {
 		ret = -EPERM;
 		goto bail;
 	}
-
-	kreg_base = dd->kregbase;
 
 	if (count == 0)
 		ret = 0;

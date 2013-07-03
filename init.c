@@ -1570,6 +1570,8 @@ bail:
 	return -ENOMEM;
 }
 
+//FIXME: implement the equivalent for WFR
+#if 0
 /*
  * Note: Changes to this routine should be mirrored
  * for the diagnostics routine qib_remap_ioaddr32().
@@ -1661,3 +1663,4 @@ bail_kregbase:
 bail:
 	return -ENOMEM;
 }
+#endif
