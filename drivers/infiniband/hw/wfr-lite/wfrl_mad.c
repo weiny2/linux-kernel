@@ -55,6 +55,17 @@ static int reply(struct ib_smp *smp)
 		smp->status |= IB_SMP_DIRECTION;
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
 }
+static int reply_stl(struct stl_smp *smp)
+{
+	/*
+	 * The verbs framework will handle the directed/LID route
+	 * packet changes.
+	 */
+	smp->method = IB_MGMT_METHOD_GET_RESP;
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
+		smp->status |= IB_SMP_DIRECTION;
+	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
+}
 
 static int reply_failure(struct ib_smp *smp)
 {
@@ -458,8 +469,207 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
-	printk("got STL PortInfo\n");
-	return (0);
+	int i;
+	struct qib_devdata *dd;
+	struct qib_pportdata *ppd;
+	struct qib_ibport *ibp;
+	struct stl_port_info *pi;
+	u8 mtu;
+	int ret;
+	u32 state;
+	u32 port_num = be32_to_cpu(smp->attr_mod);
+
+	pi = (struct stl_port_info *)stl_get_smp_data(smp);
+
+	if (port_num == 0)
+		port_num = port;
+	else {
+		if (port_num > ibdev->phys_port_cnt) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			ret = reply_stl(smp);
+			goto bail;
+		}
+		if (port_num != port) {
+			ibp = to_iport(ibdev, port_num);
+			ret = check_mkey(ibp, (struct ib_smp*)smp, 0);
+			if (ret) {
+				ret = IB_MAD_RESULT_FAILURE;
+				goto bail;
+			}
+		}
+	}
+
+	dd = dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hdw from 0 */
+	ppd = dd->pport + (port_num - 1);
+	ibp = &ppd->ibport_data;
+
+	/* Clear all fields.  Only set the non-zero fields. */
+	memset(pi, 0, sizeof(*pi));
+
+	pi->lid = cpu_to_be32(ppd->lid);
+	pi->flow_control_mask = cpu_to_be32(0);
+
+	/* Only return the mkey if the protection field allows it. */
+	if (!(smp->method == IB_MGMT_METHOD_GET &&
+	      ibp->mkey != smp->mkey &&
+	      ibp->mkeyprot == 1))
+		pi->mkey = ibp->mkey;
+
+	pi->subnet_prefix = ibp->gid_prefix;
+	pi->sm_lid = cpu_to_be32(ibp->sm_lid);
+	pi->ib_cap_mask = cpu_to_be32(ibp->port_cap_flags);
+	/* pi->diag_code; */
+	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
+	pi->link_width.enabled = cpu_to_be16(ppd->link_width_enabled);
+	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
+	pi->link_width.active = cpu_to_be16(ppd->link_width_active);
+
+	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
+	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
+	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
+
+
+	/* FIXME make sure that this default state matches */
+	pi->port_states.offline_reason = 0;
+	pi->port_states.unsleepstate_downdefstate = (get_linkdowndefaultstate(ppd) ? 1 : 2);
+	state = dd->f_iblink_state(ppd->lastibcstat);
+	pi->port_states.portphysstate_portstate =
+		(dd->f_ibphys_portstate(ppd->lastibcstat) << 4) |
+		state;
+
+	pi->collectivemask_multicastmask = 0;
+
+	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
+
+	switch (ppd->ibmtu) {
+	default: /* something is wrong; fall through */
+	case 4096:
+		mtu = IB_MTU_4096;
+		break;
+	case 2048:
+		mtu = IB_MTU_2048;
+		break;
+	case 1024:
+		mtu = IB_MTU_1024;
+		break;
+	case 512:
+		mtu = IB_MTU_512;
+		break;
+	case 256:
+		mtu = IB_MTU_256;
+		break;
+	}
+
+	/* FIXME for actual WFR this will need to be per VL */
+	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
+	for (i = 0; i < ppd->vls_supported; i++)
+		if ((i % 2) == 0)
+			pi->neigh_mtu.pvlx_to_mtu[i/2] |= (mtu << 4);
+		else
+			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
+
+	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
+	pi->partenforce_filterraw = 0;
+	pi->operational_vls = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS);
+
+	pi->pkey_8b = cpu_to_be16(0);
+	pi->pkey_10b = cpu_to_be16(0);
+
+	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
+	/* P_KeyViolations are counted by hardware. */
+	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
+	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
+
+	pi->sm_trap_qp = cpu_to_be32(0);
+	pi->sa_qp = cpu_to_be32(0);
+
+	pi->vl.inittype = 0;
+	pi->vl.cap = ppd->vls_supported;
+	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
+	pi->vl.preempt_limit = cpu_to_be16(0);
+	pi->vl.arb_high_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
+	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
+
+	/* InitTypeReply = 0 */
+	pi->inittypereply_mtucap = qib_ibmtu ? qib_ibmtu : IB_MTU_4096;
+	/* HCAs ignore VLStallCount and HOQLife */
+	/* pip->vlstallcnt_hoqlife; */
+
+	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
+	pi->localphy_overrun_errors =
+		(get_phyerrthreshold(ppd) << 4) |
+		get_overrunthreshold(ppd);
+	/* pip->max_credit_hint; */
+	if (ibp->port_cap_flags & IB_PORT_LINK_LATENCY_SUP) {
+		u32 v;
+
+		v = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_LINKLATENCY);
+		pi->link_roundtrip_latency = cpu_to_be32(v);
+	}
+
+	/* FIXME New fields below TBD */
+	pi->ib_cap_mask2 = 0;
+	pi->stl_cap_mask = 0;
+
+	/* HCAs ignore VLStallCount and HOQLife */
+	//pi->xmit_q[x] = 0;
+
+	pi->neigh_node_guid = cpu_to_be64(0);
+
+	/* FIXME supported, enabled, active all == STL */
+	pi->port_link_mode  = STL_PORT_LINK_MODE_STL << 10;
+	pi->port_link_mode |= STL_PORT_LINK_MODE_STL << 5;
+	pi->port_link_mode |= STL_PORT_LINK_MODE_STL;
+	pi->port_link_mode = cpu_to_be16(pi->port_link_mode);
+
+	/* FIXME supported, enabled, active all == 16-bit */
+	pi->port_ltp_crc_mode  = STL_PORT_LTP_CRC_MODE_16 << 8;
+	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16 << 4;
+	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16;
+	pi->port_ltp_crc_mode = cpu_to_be16(pi->port_ltp_crc_mode);
+
+	pi->port_mode = cpu_to_be16(0);
+
+	pi->port_packet_format.supported = cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
+	pi->port_packet_format.enabled = cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
+
+	pi->link_down_reason = STL_LINKDOWN_REASON_NONE;
+
+	pi->link_width_downgrade.supported = 0;
+	pi->link_width_downgrade.enabled = 0;
+	pi->link_width_downgrade.active = 0;
+
+	pi->buffer_units = cpu_to_be32(0);
+
+	pi->port_neigh_mode = 0;
+
+#warning "FIXME this is for testing to make sure data is coming back!"
+	pi->replay_depth.buffer = 0xDE;
+	pi->replay_depth.wire = 0xAD;
+
+	pi->flit_control.interleave = cpu_to_be16(0);
+	pi->flit_control.preemption.min_initial = cpu_to_be16(0);
+	pi->flit_control.preemption.min_tail = cpu_to_be16(0);
+	pi->flit_control.preemption.large_pkt_limit = 0;
+	pi->flit_control.preemption.small_pkt_limit = 0;
+	pi->flit_control.preemption.max_small_pkt_limit = 0;
+	pi->flit_control.preemption.preemption_limit = 0;
+
+	pi->pass_through.egress_port = 0;
+	pi->pass_through.res_drctl = 0;
+
+	/* 32.768 usec. response time (guessing) */
+	pi->resptimevalue = 3;
+
+	pi->local_port_num = port;
+	pi->ganged_port_details = 0;
+	pi->guid_cap = 1;
+
+	ret = reply_stl(smp);
+
+bail:
+	return ret;
 }
 
 static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
@@ -1900,9 +2110,6 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_get_vl_arb(smp, ibdev, port);
 			goto bail;
-		case STL_ATTRIB_ID_PORT_INFO:
-			ret = subn_get_stl_portinfo((struct stl_smp *)smp, ibdev, port);
-			goto bail;
 		case IB_SMP_ATTR_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
 				ret = IB_MAD_RESULT_SUCCESS |
@@ -1998,7 +2205,6 @@ static int process_perf(struct ib_device *ibdev, u8 port,
 			struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
 {
-/* FIXME change to stl_pma_mad with new files */
 	struct ib_pma_mad *pmp = (struct ib_pma_mad *)out_mad;
 	int ret;
 
@@ -2371,13 +2577,147 @@ bail:
 }
 
 
+static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
+			u8 port, struct jumbo_mad *in_jumbo,
+			struct jumbo_mad *out_jumbo)
+{
+	struct stl_smp *smp = (struct stl_smp *)out_jumbo;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	int ret;
+
+	*out_jumbo = *in_jumbo;
+	if (smp->class_version != STL_SMI_CLASS_VERSION) {
+		smp->status |= IB_SMP_UNSUP_VERSION;
+		ret = reply_stl(smp);
+		goto bail;
+	}
+
+#if 0
+/* FIXME check STL SMP MKey */
+	ret = check_mkey(ibp, smp, mad_flags);
+	if (ret) {
+		u32 port_num = be32_to_cpu(smp->attr_mod);
+
+		/*
+		 * If this is a get/set portinfo, we already check the
+		 * M_Key if the MAD is for another port and the M_Key
+		 * is OK on the receiving port. This check is needed
+		 * to increment the error counters when the M_Key
+		 * fails to match on *both* ports.
+		 */
+		if (in_jumbo->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO &&
+		    (smp->method == IB_MGMT_METHOD_GET ||
+		     smp->method == IB_MGMT_METHOD_SET) &&
+		    port_num && port_num <= ibdev->phys_port_cnt &&
+		    port != port_num)
+			(void) check_mkey(to_iport(ibdev, port_num), smp, 0);
+		ret = IB_MAD_RESULT_FAILURE;
+		goto bail;
+	}
+#endif
+
+/* FIXME add other STL SMP's as we go */
+	switch (smp->method) {
+	case IB_MGMT_METHOD_GET:
+		switch (smp->attr_id) {
+		case STL_ATTRIB_ID_PORT_INFO:
+			ret = subn_get_stl_portinfo((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		default:
+			smp->status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply_stl(smp);
+			goto bail;
+		}
+	case IB_MGMT_METHOD_SET:
+		switch (smp->attr_id) {
+		default:
+			smp->status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply_stl(smp);
+			goto bail;
+		}
+
+	case IB_MGMT_METHOD_TRAP_REPRESS:
+		if (smp->attr_id == IB_SMP_ATTR_NOTICE)
+			ret = subn_trap_repress((struct ib_smp *)smp, ibdev, port);
+		else {
+			smp->status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply_stl(smp);
+		}
+		goto bail;
+
+	case IB_MGMT_METHOD_TRAP:
+	case IB_MGMT_METHOD_REPORT:
+	case IB_MGMT_METHOD_REPORT_RESP:
+	case IB_MGMT_METHOD_GET_RESP:
+		/*
+		 * The ib_mad module will call us to process responses
+		 * before checking for other consumers.
+		 * Just tell the caller to process it normally.
+		 */
+		ret = IB_MAD_RESULT_SUCCESS;
+		goto bail;
+
+	case IB_MGMT_METHOD_SEND:
+		if (stl_get_smp_direction(smp) &&
+		    smp->attr_id == QIB_VENDOR_IPG) {
+			u32 data;
+			if (in_jumbo->mad_hdr.mgmt_class ==
+			    IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
+				data = smp->route.dr.data[0];
+			else
+				data = smp->route.lid.data[0];
+			ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PORT, data);
+			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		} else
+			ret = IB_MAD_RESULT_SUCCESS;
+		goto bail;
+
+	default:
+		smp->status |= IB_SMP_UNSUP_METHOD;
+		ret = reply_stl(smp);
+	}
+bail:
+	return ret;
+}
+
 int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			  struct ib_wc *in_wc, struct ib_grh *in_grh,
 			  struct jumbo_mad *in_jumbo,
 			  struct jumbo_mad *out_jumbo)
 {
-	printk(KERN_WARNING PFX "Got jumbo mad!\n");
-	return (IB_MAD_RESULT_FAILURE);
+	int ret;
+
+	printk(KERN_WARNING PFX "Processing Jumbo mad!\n");
+
+	switch (in_jumbo->mad_hdr.mgmt_class) {
+	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
+	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		ret = process_subn_stl(ibdev, mad_flags, port, in_jumbo, out_jumbo);
+		goto bail;
+
+#if 0
+	/* Only process SMP's right now */
+	case IB_MGMT_CLASS_PERF_MGMT:
+		ret = process_perf(ibdev, port, in_jumbo, out_jumbo);
+		goto bail;
+
+	case IB_MGMT_CLASS_CONG_MGMT:
+		if (!ppd->congestion_entries_shadow ||
+			 !qib_cc_table_size) {
+			ret = IB_MAD_RESULT_SUCCESS;
+			goto bail;
+		}
+		ret = process_cc(ibdev, mad_flags, port, in_jumbo, out_jumbo);
+		goto bail;
+#endif
+
+	default:
+		ret = IB_MAD_RESULT_SUCCESS;
+	}
+
+bail:
+	return ret;
 }
 
 /**
