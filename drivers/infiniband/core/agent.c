@@ -80,16 +80,11 @@ ib_get_agent_port(struct ib_device *device, int port_num)
 	return entry;
 }
 
-void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
-			 struct ib_wc *wc, struct ib_device *device,
-			 int port_num, int qpn)
+static int get_agent_ah(struct ib_device *device, int port_num,
+			struct ib_grh *grh, struct ib_wc *wc, int qpn,
+			struct ib_mad_agent **agent, struct ib_ah **ah)
 {
 	struct ib_agent_port_private *port_priv;
-	struct ib_mad_agent *agent;
-	struct ib_mad_send_buf *send_buf;
-	struct ib_ah *ah;
-	struct ib_mad_send_wr_private *mad_send_wr;
-
 	if (device->node_type == RDMA_NODE_IB_SWITCH)
 		port_priv = ib_get_agent_port(device, 0);
 	else
@@ -97,16 +92,30 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 
 	if (!port_priv) {
 		pr_err("Unable to find port agent\n");
-		return;
+		return 1;
 	}
 
-	agent = port_priv->agent[qpn];
-	ah = ib_create_ah_from_wc(agent->qp->pd, wc, grh, port_num);
-	if (IS_ERR(ah)) {
+	*agent = port_priv->agent[qpn];
+	*ah = ib_create_ah_from_wc((*agent)->qp->pd, wc, grh, port_num);
+	if (IS_ERR(*ah)) {
 		pr_err("ib_create_ah_from_wc error %ld\n",
 			PTR_ERR(ah));
-		return;
+		return 1;
 	}
+	return 0;
+}
+
+void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
+			 struct ib_wc *wc, struct ib_device *device,
+			 int port_num, int qpn)
+{
+	struct ib_mad_agent *agent;
+	struct ib_mad_send_buf *send_buf;
+	struct ib_ah *ah;
+	struct ib_mad_send_wr_private *mad_send_wr;
+
+	if (get_agent_ah(device, port_num, grh, wc, qpn, &agent, &ah))
+		return;
 
 	send_buf = ib_create_send_mad(agent, wc->src_qp, wc->pkey_index, 0,
 				      IB_MGMT_MAD_HDR, IB_MGMT_MAD_DATA,
@@ -128,6 +137,62 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 
 	if (ib_post_send_mad(send_buf, NULL)) {
 		pr_err("ib_post_send_mad error\n");
+		goto err2;
+	}
+	return;
+err2:
+	ib_free_send_mad(send_buf);
+err1:
+	ib_destroy_ah(ah);
+}
+
+/* FIXME merge with agent_send_response */
+void agent_send_jumbo_response(struct jumbo_mad *mad, struct ib_grh *grh,
+			 struct ib_wc *wc, struct ib_device *device,
+			 int port_num, int qpn)
+{
+	struct ib_mad_agent *agent;
+	struct ib_mad_send_buf *send_buf;
+	struct ib_ah *ah;
+	//struct ib_mad_send_wr_private *mad_send_wr;
+	size_t data_len;
+	u8 base_version;
+
+	if (get_agent_ah(device, port_num, grh, wc, qpn, &agent, &ah))
+		return;
+
+	/* base version determines MAD size */
+	/* FIXME adjust size so Jumbos are not full 2048 packets */
+	base_version = mad->mad_hdr.base_version;
+	if (base_version == JUMBO_MGMT_BASE_VERSION)
+		data_len = JUMBO_MGMT_MAD_DATA;
+	else
+		data_len = IB_MGMT_MAD_DATA;
+
+	send_buf = ib_create_send_mad(agent, wc->src_qp | (base_version << 24),
+				      wc->pkey_index, 0,
+				      JUMBO_MGMT_MAD_HDR, data_len,
+				      GFP_KERNEL);
+	if (IS_ERR(send_buf)) {
+		printk(KERN_ERR SPFX "ib_create_send_mad error\n");
+		goto err1;
+	}
+
+	memcpy(send_buf->mad, mad, JUMBO_MGMT_MAD_HDR + data_len);
+	send_buf->ah = ah;
+
+/* FIXME for upstream
+ * embedded linux on a switch?
+	if (device->node_type == RDMA_NODE_IB_SWITCH) {
+		mad_send_wr = container_of(send_buf,
+					   struct ib_mad_send_wr_private,
+					   send_buf);
+		mad_send_wr->send_wr.wr.ud.port_num = port_num;
+	}
+*/
+
+	if (ib_post_send_mad(send_buf, NULL)) {
+		printk(KERN_ERR SPFX "ib_post_send_mad error\n");
 		goto err2;
 	}
 	return;
