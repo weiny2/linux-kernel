@@ -1,9 +1,5 @@
 /*
- * Copyright (c) 2004 Mellanox Technologies Ltd.  All rights reserved.
- * Copyright (c) 2004 Infinicon Corporation.  All rights reserved.
- * Copyright (c) 2004 Intel Corporation.  All rights reserved.
- * Copyright (c) 2004 Topspin Corporation.  All rights reserved.
- * Copyright (c) 2004 Voltaire Corporation.  All rights reserved.
+ * Copyright (c) 2013 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,24 +28,21 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
  */
 
-#ifndef __AGENT_H_
-#define __AGENT_H_
+#ifndef __JUMBO_MAD_H__
+#define __JUMBO_MAD_H__
 
-#include <linux/err.h>
-#include <rdma/ib_mad.h>
+#include "mad_priv.h"
 
-extern int ib_agent_port_open(struct ib_device *device, int port_num);
+int ib_mad_post_jumbo_rcv_mads(struct ib_mad_qp_info *qp_info,
+				    struct jumbo_mad_private *mad);
+void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
+				    struct ib_wc *wc,
+				    struct ib_mad_private_header *mad_priv_hdr,
+				    struct ib_mad_qp_info *qp_info);
 
-extern int ib_agent_port_close(struct ib_device *device, int port_num);
+void jumbo_free_recv_mad(struct ib_mad_recv_wc *mad_recv_wc);
 
-extern void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
-				struct ib_wc *wc, struct ib_device *device,
-				int port_num, int qpn);
-
-extern void agent_send_jumbo_response(struct jumbo_mad *mad, struct ib_grh *grh,
-				struct ib_wc *wc, struct ib_device *device,
-				int port_num, int qpn);
-
-#endif	/* __AGENT_H_ */
+#endif /* __JUMBO_MAD_H__ */
