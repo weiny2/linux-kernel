@@ -44,6 +44,11 @@ ushort wfr_allow_ib_mads = 1;
 module_param_named(allow_ib_mads, wfr_allow_ib_mads, ushort, S_IRUGO);
 MODULE_PARM_DESC(allow_ib_mads, "If 1 driver will allow IB SMP's to be processed");
 
+unsigned wfr_dump_sma_mads = 0;
+module_param_named(dump_sma_mads, wfr_dump_sma_mads, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
+
+
 static int reply(struct ib_smp *smp)
 {
 	/*
@@ -464,6 +469,18 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 	}
 
 	return ret;
+}
+
+static void dump_mad(uint8_t *mad, size_t size)
+{
+	int i = 0;
+	for (i=0; i<size; i++) {
+		if ((i%16) == 0)
+			printk("\n%04d:", i);
+		else if ((i%8) == 0)
+			printk("   %04d:", i);
+		printk(" %02x", mad[i]);
+	}
 }
 
 static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
@@ -2688,7 +2705,11 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 {
 	int ret;
 
-	printk(KERN_WARNING PFX "Processing Jumbo mad!\n");
+	if (wfr_dump_sma_mads) {
+		printk(KERN_WARNING PFX "Recv: %lu byte mad.\n",
+		       sizeof(*in_jumbo));
+		dump_mad((uint8_t *)in_jumbo, sizeof(*in_jumbo));
+	}
 
 	switch (in_jumbo->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
@@ -2717,6 +2738,11 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	}
 
 bail:
+	if (wfr_dump_sma_mads && (ret & IB_MAD_RESULT_REPLY)) {
+		printk(KERN_WARNING PFX "Reply: %lu byte mad.\n",
+		       sizeof(*out_jumbo));
+		dump_mad((uint8_t *)out_jumbo, sizeof(*out_jumbo));
+	}
 	return ret;
 }
 
