@@ -54,33 +54,6 @@
  */
 
 
-/*
- * ib_free_recv_mad - Returns data buffers used to receive
- *  a MAD to the access layer
- */
-void jumbo_free_recv_mad(struct ib_mad_recv_wc *mad_recv_wc)
-{
-	struct ib_mad_recv_buf *mad_recv_buf, *temp_recv_buf;
-	struct ib_mad_private_header *mad_priv_hdr;
-	struct jumbo_mad_private *priv;
-	struct list_head free_list;
-
-	INIT_LIST_HEAD(&free_list);
-	list_splice_init(&mad_recv_wc->rmpp_list, &free_list);
-
-	list_for_each_entry_safe(mad_recv_buf, temp_recv_buf,
-					&free_list, list) {
-		mad_recv_wc = container_of(mad_recv_buf, struct ib_mad_recv_wc,
-					   recv_buf);
-		mad_priv_hdr = container_of(mad_recv_wc,
-					    struct ib_mad_private_header,
-					    recv_wc);
-		priv = container_of(mad_priv_hdr, struct jumbo_mad_private,
-				    header);
-		BUG_ON(!(priv->header.flags & IB_MAD_PRIV_FLAG_JUMBO));
-		kmem_cache_free(jumbo_mad_cache, priv);
-	}
-}
 
 static enum smi_action
 handle_stl_smi(struct ib_mad_port_private *port_priv,
@@ -165,7 +138,7 @@ static void jumbo_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 
 	INIT_LIST_HEAD(&mad_recv_wc->rmpp_list);
 	list_add(&mad_recv_wc->recv_buf.list, &mad_recv_wc->rmpp_list);
-	if (kernel_rmpp_agent(&mad_agent_priv->agent)) {
+	if (ib_mad_kernel_rmpp_agent(&mad_agent_priv->agent)) {
 		mad_recv_wc = jumbo_process_rmpp_recv_wc(mad_agent_priv,
 						      mad_recv_wc);
 		if (!mad_recv_wc) {
@@ -180,9 +153,9 @@ static void jumbo_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 		mad_send_wr = ib_find_send_mad(mad_agent_priv, mad_recv_wc);
 		if (!mad_send_wr) {
 			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
-			if (mad_agent_priv->agent.flags & IB_MAD_USER_RMPP
+			if (!ib_mad_kernel_rmpp_agent(&mad_agent_priv->agent)
 			   && ib_is_mad_class_rmpp(mad_recv_wc->recv_buf.mad->mad_hdr.mgmt_class)
-			   && (ib_get_rmpp_flags(&((struct jumbo_rmpp_mad *)mad_recv_wc->recv_buf.mad)->rmpp_hdr)
+			   && (ib_get_rmpp_flags(&((struct jumbo_rmpp_mad *)mad_recv_wc->recv_buf.mad)->base.rmpp_hdr)
 					& IB_MGMT_RMPP_FLAG_ACTIVE)) {
 				// user rmpp is in effect
 				mad_recv_wc->wc->wr_id = 0;
