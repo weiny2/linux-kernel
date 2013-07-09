@@ -8,8 +8,9 @@ DEFAULT_BRANCH="wfr-for-ifs"
 
 sources_to_copy="
 	drivers/infiniband/core
-	include/rdma/ib_sa.h
-	include/rdma/ib_usa.h
+	drivers/infiniband/hw/wfr-lite
+	include/rdma
+	include/uapi/rdma
 "
 
 # ridiculously long to encourage good names later
@@ -110,7 +111,8 @@ mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 # patch Makefile to use local include files first
 # kind of a hack, perfect thing to put in SOURCES as a real patch
-echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include' >> ksrc/drivers/infiniband/core/Makefile
+echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include -I\$(M)/../../../include/uapi' >> ksrc/drivers/infiniband/core/Makefile
+echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/wfr-lite/Makefile
 
 # make sure rpm component strings are clean, should be no-ops
 rpmname=$(echo "$rpmname" | sed -e 's/[.]/_/g')
@@ -176,6 +178,7 @@ make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
 make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
 make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
 make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
+export CONFIG_INFINIBAND_WFR_LITE=m; make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/wfr-lite
 
 %install
 rm -rf \$RPM_BUILD_ROOT
@@ -185,6 +188,7 @@ cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/hw/wfr-lite/ib_wfr_lite.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 %clean
 rm -rf \${RPM_BUILD_ROOT}
