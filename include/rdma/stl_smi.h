@@ -77,8 +77,25 @@ struct stl_smp {
 
 /* Subnet management attributes */
 /* ... */
+#define STL_ATTRIB_ID_NODE_INFO			cpu_to_be16(0x8011)
 #define STL_ATTRIB_ID_PORT_INFO			cpu_to_be16(0x9015)
 /* ... */
+
+struct stl_node_info {
+	u8      base_version;
+	u8      class_version;
+	u8      node_type;
+	u8      num_ports;
+	__be32  reserved;
+	__be64  sys_guid;
+	__be64  node_guid;
+	__be64  port_guid;
+	__be16  partition_cap;
+	__be16  device_id;
+	__be32  revision;
+	u8      local_port_num;
+	u8      vendor_id[3];
+} __attribute__ ((packed));
 
 struct stl_port_info {
 	__be64 mkey;
