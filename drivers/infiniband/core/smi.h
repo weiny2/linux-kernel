@@ -62,9 +62,6 @@ extern enum smi_action smi_handle_dr_smp_send(struct ib_smp *smp,
  * Return IB_SMI_HANDLE if the SMP should be handled by the local SMA/SM
  * via process_mad
  */
-/* NOTE: This is called on stl_smp's don't check fields which are not common
- * between ib_smp and stl_smp
- */
 static inline enum smi_action smi_check_local_smp(struct ib_smp *smp,
 						  struct ib_device *device)
 {
@@ -79,9 +76,6 @@ static inline enum smi_action smi_check_local_smp(struct ib_smp *smp,
 /*
  * Return IB_SMI_HANDLE if the SMP should be handled by the local SMA/SM
  * via process_mad
- */
-/* NOTE: This is called on stl_smp's don't check fields which are not common
- * between ib_smp and stl_smp
  */
 static inline enum smi_action smi_check_local_returning_smp(struct ib_smp *smp,
 						   struct ib_device *device)
