@@ -1654,6 +1654,7 @@ full:
 	}
 }
 
+#define INTEL_WFR_HFI 0x574F4C46 /* WOLF */
 static int qib_query_device(struct ib_device *ibdev,
 			    struct ib_device_attr *props)
 {
@@ -1668,8 +1669,9 @@ static int qib_query_device(struct ib_device *ibdev,
 		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE;
 	props->page_size_cap = PAGE_SIZE;
 	props->vendor_id =
-		QIB_SRC_OUI_1 << 16 | QIB_SRC_OUI_2 << 8 | QIB_SRC_OUI_3;
-	props->vendor_part_id = dd->deviceid;
+		WFR_SRC_OUI_1 << 16 | WFR_SRC_OUI_2 << 8 | WFR_SRC_OUI_3;
+	//props->vendor_part_id = dd->deviceid;
+	props->vendor_part_id = INTEL_WFR_HFI;
 	props->hw_ver = dd->minrev;
 	props->sys_image_guid = ib_qib_sys_image_guid;
 	props->max_mr_size = ~0ULL;
@@ -1700,7 +1702,18 @@ static int qib_query_device(struct ib_device *ibdev,
 	return 0;
 }
 
-static int qib_query_port(struct ib_device *ibdev, u8 port,
+#if 0
+/* It would be nice to indicate the link layer is STL but this would involve
+ * changing the core layer.
+ */
+static enum rdma_link_layer
+wfr_port_link_layer(struct ib_device *device, u8 port_num)
+{
+	return IB_LINK_LAYER_INFINIBAND;
+}
+#endif
+
+static int wfr_query_port(struct ib_device *ibdev, u8 port,
 			  struct ib_port_attr *props)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
@@ -2286,7 +2299,8 @@ int qib_register_ib_device(struct qib_devdata *dd)
 	ibdev->dma_device = &dd->pcidev->dev;
 	ibdev->query_device = qib_query_device;
 	ibdev->modify_device = qib_modify_device;
-	ibdev->query_port = qib_query_port;
+	ibdev->query_port = wfr_query_port;
+	//ibdev->get_link_layer = wfr_port_link_layer;
 	ibdev->modify_port = qib_modify_port;
 	ibdev->query_pkey = qib_query_pkey;
 	ibdev->query_gid = qib_query_gid;

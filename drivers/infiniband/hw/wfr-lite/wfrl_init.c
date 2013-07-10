@@ -61,6 +61,7 @@ MODULE_PARM_DESC(snoop_enable, "snooping mode ");
 #define QLOGIC_IB_R_SOFTWARE_SHIFT 24
 #define QLOGIC_IB_R_EMULATOR_MASK (1ULL<<62)
 
+
 /*
  * Number of ctxts we are configured to use (to allow for more pio
  * buffers per ctxt, etc.)  Zero means use chip value.
