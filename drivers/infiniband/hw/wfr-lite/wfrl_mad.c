@@ -40,11 +40,11 @@
 #include "wfrl.h"
 #include "wfrl_mad.h"
 
-ushort wfr_allow_ib_mads = 1;
+static ushort wfr_allow_ib_mads = 1;
 module_param_named(allow_ib_mads, wfr_allow_ib_mads, ushort, S_IRUGO);
 MODULE_PARM_DESC(allow_ib_mads, "If 1 driver will allow IB SMP's to be processed");
 
-unsigned wfr_dump_sma_mads = 0;
+static unsigned wfr_dump_sma_mads = 0;
 module_param_named(dump_sma_mads, wfr_dump_sma_mads, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
 

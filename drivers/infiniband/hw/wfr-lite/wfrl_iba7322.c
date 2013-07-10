@@ -1113,12 +1113,12 @@ static inline u32 read_7322_creg32_port(const struct qib_pportdata *ppd,
 #define IBA7322_SENDCHK_MINSZ SYM_MASK(SendCheckControl_0, PacketTooSmall_En)
 
 #if CONFIG_X86_64
-unsigned long wfr_sendcheckcontrol = 0;
+static unsigned long wfr_sendcheckcontrol = 0;
 module_param_named(sendcheckcontrol, wfr_sendcheckcontrol, ulong, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(sendcheckcontrol,
 		"Send Check control bits (if != 0 then VL15 over VL0 will not work; default == 0)");
 #else /* 32 bit means ulong is not big enough */
-u64 wfr_sendcheckcontrol = IBA7322_SENDCHK_PKEY |
+static u64 wfr_sendcheckcontrol = IBA7322_SENDCHK_PKEY |
 			   IBA7322_SENDCHK_BTHQP | IBA7322_SENDCHK_SLID |
 			   IBA7322_SENDCHK_RAW_IPV6 | IBA7322_SENDCHK_MINSZ;
 #endif
