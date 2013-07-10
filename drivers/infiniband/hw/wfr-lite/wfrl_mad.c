@@ -32,10 +32,17 @@
  * SOFTWARE.
  */
 
+#include <linux/module.h>
+#include <linux/printk.h>
 #include <rdma/ib_smi.h>
+#include <rdma/stl_smi.h>
 
 #include "wfrl.h"
 #include "wfrl_mad.h"
+
+ushort wfr_allow_ib_mads = 1;
+module_param_named(allow_ib_mads, wfr_allow_ib_mads, ushort, S_IRUGO);
+MODULE_PARM_DESC(allow_ib_mads, "If 1 driver will allow IB SMP's to be processed");
 
 static int reply(struct ib_smp *smp)
 {
@@ -302,9 +309,9 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	nip->revision = cpu_to_be32((majrev << 16) | minrev);
 	nip->local_port_num = port;
 	vendor = dd->vendorid;
-	nip->vendor_id[0] = QIB_SRC_OUI_1;
-	nip->vendor_id[1] = QIB_SRC_OUI_2;
-	nip->vendor_id[2] = QIB_SRC_OUI_3;
+	nip->vendor_id[0] = WFR_SRC_OUI_1;
+	nip->vendor_id[1] = WFR_SRC_OUI_2;
+	nip->vendor_id[2] = WFR_SRC_OUI_3;
 
 	return reply(smp);
 }
