@@ -2341,7 +2341,7 @@ int qib_register_ib_device(struct qib_devdata *dd)
 	ibdev->dealloc_fmr = qib_dealloc_fmr;
 	ibdev->attach_mcast = qib_multicast_attach;
 	ibdev->detach_mcast = qib_multicast_detach;
-	ibdev->process_mad = qib_process_mad;
+	ibdev->process_mad = wfr_process_mad;
 	ibdev->mmap = qib_mmap;
 	ibdev->dma_ops = &qib_dma_mapping_ops;
 
