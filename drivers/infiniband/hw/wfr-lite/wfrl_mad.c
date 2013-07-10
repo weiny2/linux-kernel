@@ -483,6 +483,46 @@ static void dump_mad(uint8_t *mad, size_t size)
 	}
 }
 
+static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	struct stl_node_info *ni;
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	u32 vendor, majrev, minrev;
+	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
+
+	ni = (struct stl_node_info *)stl_get_smp_data(smp);
+
+	memset(ni, 0, sizeof(*ni));
+
+	/* GUID 0 is illegal */
+	if (smp->attr_mod || pidx >= dd->num_pports ||
+	    dd->pport[pidx].guid == 0)
+		smp->status |= IB_SMP_INVALID_FIELD;
+	else
+		ni->port_guid = dd->pport[pidx].guid;
+
+	ni->base_version = JUMBO_MGMT_BASE_VERSION;
+	ni->class_version = STL_SMI_CLASS_VERSION;
+	ni->node_type = 1;     /* channel adapter */
+	ni->num_ports = ibdev->phys_port_cnt;
+	/* This is already in network order */
+	ni->system_image_guid = ib_qib_sys_image_guid;
+	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
+	ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
+	ni->device_id = cpu_to_be16(dd->deviceid);
+	majrev = dd->majrev;
+	minrev = dd->minrev;
+	ni->revision = cpu_to_be32((majrev << 16) | minrev);
+	ni->local_port_num = port;
+	vendor = dd->vendorid;
+	ni->vendor_id[0] = WFR_SRC_OUI_1;
+	ni->vendor_id[1] = WFR_SRC_OUI_2;
+	ni->vendor_id[2] = WFR_SRC_OUI_3;
+
+	return reply_stl(smp);
+}
+
 static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -2638,6 +2678,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
 		switch (smp->attr_id) {
+		case STL_ATTRIB_ID_NODE_INFO:
+			ret = subn_get_stl_nodeinfo((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		case STL_ATTRIB_ID_PORT_INFO:
 			ret = subn_get_stl_portinfo((struct stl_smp *)smp, ibdev, port);
 			goto bail;
