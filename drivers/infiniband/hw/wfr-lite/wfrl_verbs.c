@@ -44,11 +44,6 @@
 #include "wfrl.h"
 #include "wfrl_common.h"
 
-/* When using VL0 for VL15 packets
- * Use an LRH reserved bit to tell the Recv side that the LID should be
- * restored to the Permissive LID */
-#define WFR_VL15_oVL0_PERMLID_FLAG cpu_to_be16(0x0004)
-
 static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
@@ -576,17 +571,6 @@ static void qib_qp_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_SMI:
-		if (wfr_vl15_ovl0) {
-			/* Check for the permissive LID flag and restore
-			 * permissive LID if necessary
-			 */
-			if (hdr->lrh[0] & WFR_VL15_oVL0_PERMLID_FLAG) {
-				hdr->lrh[1] = IB_LID_PERMISSIVE;
-			}
-			/* restore VL */
-			hdr->lrh[0] = cpu_to_be16(
-					be16_to_cpu(hdr->lrh[0]) | 0xF000);
-		}
 	case IB_QPT_GSI:
 		if (ib_qib_disable_sma)
 			break;

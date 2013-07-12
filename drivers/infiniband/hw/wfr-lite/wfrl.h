@@ -1477,6 +1477,11 @@ const char *qib_get_unit_name(int unit);
 #define qib_flush_wc() wmb() /* no reorder around wc flush */
 #endif
 
+/* When using VL0 for VL15 packets
+ * Use an LRH reserved bit to tell the Recv side that the LID should be
+ * restored to the Permissive LID */
+#define WFR_VL15_oVL0_PERMLID_FLAG cpu_to_be16(0x0004)
+
 /* global module parameter variables */
 extern unsigned wfr_vl15_ovl0;
 extern unsigned qib_ibmtu;
