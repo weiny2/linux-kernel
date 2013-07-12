@@ -36,13 +36,12 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
-#include <rdma/ib_mad.h>
 
 /*
  * Increment this value if any changes that break userspace ABI
  * compatibility are made.
  */
-#define IB_USER_MAD_ABI_VERSION	6
+#define IB_USER_MAD_ABI_VERSION	5
 
 /*
  * Make sure that all structs defined in this file remain laid out so
@@ -192,39 +191,6 @@ struct ib_user_mad_reg_req {
 	__u8	rmpp_version;
 };
 
-/**
- * ib_user_mad_reg_req2 - MAD registration request
- * @id - Set by the kernel; used to identify agent in future requests.
- * @qpn - Queue pair number; must be 0 or 1.
- * @mgmt_class - Indicates which management class is being registered.
- * @mgmt_class_version - Indicates which version of MADs for the given
- *   management class to receive.
- * @res - reserved field.  must be set to 0
- * @method_mask - The caller will receive unsolicited MADs for any method
- *   whose bit is set.
- * @oui - Indicates IEEE OUI when mgmt_class is a vendor class
- *   in the range from 0x30 to 0x4f. Otherwise not used.
- * @rmpp_version - If set, indicates the RMPP version used.
- * @flags - additional registration flags
- * @res2 - must be set to 0
- *
- */
-enum {
-	IB_USER_MAD_USER_RMPP = IB_MAD_USER_RMPP
-};
-struct ib_user_mad_reg_req2 {
-	__u32	id;
-	__u8	qpn;
-	__u8	mgmt_class;
-	__u8	mgmt_class_version;
-	__u8    res;
-	__u64   method_mask[2];
-	__u8    oui[3]; /* network order */
-	__u8	rmpp_version;
-	__u32   flags;
-	__u8    res2[64];
-};
-
 #define IB_IOCTL_MAGIC		0x1b
 
 #define IB_USER_MAD_REGISTER_AGENT	_IOWR(IB_IOCTL_MAGIC, 1, \
@@ -233,8 +199,5 @@ struct ib_user_mad_reg_req2 {
 #define IB_USER_MAD_UNREGISTER_AGENT	_IOW(IB_IOCTL_MAGIC, 2, __u32)
 
 #define IB_USER_MAD_ENABLE_PKEY		_IO(IB_IOCTL_MAGIC, 3)
-
-#define IB_USER_MAD_REGISTER_AGENT2     _IOWR(IB_IOCTL_MAGIC, 4, \
-					      struct ib_user_mad_reg_req2)
 
 #endif /* IB_USER_MAD_H */

@@ -554,7 +554,6 @@ static int srpt_refresh_port(struct srpt_port *sport)
 		memset(&reg_req, 0, sizeof reg_req);
 		reg_req.mgmt_class = IB_MGMT_CLASS_DEVICE_MGMT;
 		reg_req.mgmt_class_version = IB_MGMT_BASE_VERSION;
-		reg_req.flags = 0;
 		set_bit(IB_MGMT_METHOD_GET, reg_req.method_mask);
 		set_bit(IB_MGMT_METHOD_SET, reg_req.method_mask);
 

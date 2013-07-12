@@ -41,7 +41,6 @@
 #include <linux/workqueue.h>
 #include <rdma/ib_mad.h>
 #include <rdma/ib_smi.h>
-#include <rdma/stl_smi.h>
 
 
 #define PFX "ib_mad: "
@@ -60,31 +59,21 @@
 
 /* Registration table sizes */
 #define MAX_MGMT_CLASS		80
-#define MAX_MGMT_VERSION	0x83 /* FIXME
-					how big should this be for STL?
-					Also this makes the version table huge
-					for agent registrations */
+#define MAX_MGMT_VERSION	8
 #define MAX_MGMT_OUI		8
 #define MAX_MGMT_VENDOR_RANGE2	(IB_MGMT_CLASS_VENDOR_RANGE2_END - \
 				IB_MGMT_CLASS_VENDOR_RANGE2_START + 1)
-
-/* shared betwee mad.c and jumbo_mad.c */
-extern struct kmem_cache *jumbo_mad_cache;
 
 struct ib_mad_list_head {
 	struct list_head list;
 	struct ib_mad_queue *mad_queue;
 };
 
-enum ib_mad_private_flags {
-	IB_MAD_PRIV_FLAG_JUMBO = (1 << 0)
-};
 struct ib_mad_private_header {
 	struct ib_mad_list_head mad_list;
 	struct ib_mad_recv_wc recv_wc;
 	struct ib_wc wc;
 	u64 mapping;
-	u64 flags;
 } __attribute__ ((packed));
 
 struct ib_mad_private {
@@ -94,26 +83,6 @@ struct ib_mad_private {
 		struct ib_mad mad;
 		struct ib_rmpp_mad rmpp_mad;
 		struct ib_smp smp;
-	} mad;
-} __attribute__ ((packed));
-
-/**
- * It might be possible to define this as part of the ib_mad_private by simply
- * extending the union there.
- * The problem is I don't know what other RDMA hardware will do if you attempt
- * to post >256B Rcv WR on their managment QP's.
- * Therefore we are going to try and keep this structure separate and only use
- * it on jumbo_mad capable devices.
- * Furthermore, this allows us to use smaller kmem_cache's on non-jumbo capable
- * devices for less memory ussage.
- */
-struct jumbo_mad_private {
-	struct ib_mad_private_header header;
-	struct ib_grh grh;
-	union {
-		struct jumbo_mad mad;
-		struct jumbo_rmpp_mad rmpp_mad;
-		struct stl_smp smp;
 	} mad;
 } __attribute__ ((packed));
 
@@ -181,7 +150,7 @@ struct ib_mad_send_wr_private {
 
 struct ib_mad_local_private {
 	struct list_head completion_list;
-	struct ib_mad_private *mad_priv; /* can be jumbo_mad_private */
+	struct ib_mad_private *mad_priv;
 	struct ib_mad_agent_private *recv_mad_agent;
 	struct ib_mad_send_wr_private *mad_send_wr;
 };
@@ -226,7 +195,6 @@ struct ib_mad_qp_info {
 	struct ib_mad_snoop_private **snoop_table;
 	int snoop_table_size;
 	atomic_t snoop_count;
-	int supports_jumbo_mads;
 };
 
 struct ib_mad_port_private {
@@ -238,13 +206,11 @@ struct ib_mad_port_private {
 	struct ib_mr *mr;
 
 	spinlock_t reg_lock;
-	/* FIXME with increased version range this table is huge */
 	struct ib_mad_mgmt_version_table version[MAX_MGMT_VERSION];
 	struct list_head agent_list;
 	struct workqueue_struct *wq;
 	struct work_struct work;
 	struct ib_mad_qp_info qp_info[IB_MAD_QPS_CORE];
-	int    supports_jumbo_mads;
 };
 
 int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr);
@@ -260,29 +226,5 @@ void ib_mark_mad_done(struct ib_mad_send_wr_private *mad_send_wr);
 
 void ib_reset_mad_timeout(struct ib_mad_send_wr_private *mad_send_wr,
 			  int timeout_ms);
-
-static inline void deref_mad_agent(struct ib_mad_agent_private *mad_agent_priv)
-{
-	if (atomic_dec_and_test(&mad_agent_priv->refcount))
-		complete(&mad_agent_priv->comp);
-}
-
-
-void dequeue_mad(struct ib_mad_list_head *mad_list);
-struct ib_mad_agent_private * find_mad_agent(
-				struct ib_mad_port_private *port_priv,
-				struct ib_mad *mad);
-
-void snoop_recv(struct ib_mad_qp_info *qp_info,
-		struct ib_mad_recv_wc *mad_recv_wc,
-		int mad_snoop_flags);
-void wait_for_response(struct ib_mad_send_wr_private *mad_send_wr);
-void adjust_timeout(struct ib_mad_agent_private *mad_agent_priv);
-enum smi_action handle_ib_smi(struct ib_mad_port_private *port_priv,
-			      struct ib_mad_qp_info *qp_info,
-			      struct ib_wc *wc,
-			      int port_num,
-			      struct ib_mad_private *recv,
-			      struct ib_mad_private *response);
 
 #endif	/* __IB_MAD_PRIV_H__ */

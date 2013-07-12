@@ -257,27 +257,20 @@ static ssize_t copy_recv_mad(struct ib_umad_file *file, char __user *buf,
 {
 	struct ib_mad_recv_buf *recv_buf;
 	int left, seg_payload, offset, max_seg_payload;
-	int seg_size;
-
-	recv_buf = &packet->recv_wc->recv_buf;
-
-	if (recv_buf->mad->mad_hdr.base_version == JUMBO_MGMT_BASE_VERSION)
-		seg_size = sizeof(struct jumbo_mad);
-	else
-		seg_size = sizeof(struct ib_mad);
 
 	/* We need enough room to copy the first (or only) MAD segment. */
-	if ((packet->length <= seg_size &&
+	recv_buf = &packet->recv_wc->recv_buf;
+	if ((packet->length <= sizeof (*recv_buf->mad) &&
 	     count < hdr_size(file) + packet->length) ||
-	    (packet->length > seg_size &&
-	     count < hdr_size(file) + seg_size))
+	    (packet->length > sizeof (*recv_buf->mad) &&
+	     count < hdr_size(file) + sizeof (*recv_buf->mad)))
 		return -EINVAL;
 
 	if (copy_to_user(buf, &packet->mad, hdr_size(file)))
 		return -EFAULT;
 
 	buf += hdr_size(file);
-	seg_payload = min_t(int, packet->length, seg_size);
+	seg_payload = min_t(int, packet->length, sizeof (*recv_buf->mad));
 	if (copy_to_user(buf, recv_buf->mad, seg_payload))
 		return -EFAULT;
 
@@ -294,7 +287,7 @@ static ssize_t copy_recv_mad(struct ib_umad_file *file, char __user *buf,
 			return -ENOSPC;
 		}
 		offset = ib_get_mad_data_offset(recv_buf->mad->mad_hdr.mgmt_class);
-		max_seg_payload = seg_size - offset;
+		max_seg_payload = sizeof (struct ib_mad) - offset;
 
 		for (left = packet->length - seg_payload, buf += seg_payload;
 		     left; left -= seg_payload, buf += seg_payload) {
@@ -452,7 +445,6 @@ static ssize_t ib_umad_write(struct file *filp, const char __user *buf,
 	struct ib_rmpp_mad *rmpp_mad;
 	__be64 *tid;
 	int ret, data_len, hdr_len, copy_offset, rmpp_active;
-	u8 base_version;
 
 	if (count < hdr_size(file) + IB_MGMT_RMPP_HDR)
 		return -EINVAL;
@@ -507,23 +499,19 @@ static ssize_t ib_umad_write(struct file *filp, const char __user *buf,
 	}
 
 	rmpp_mad = (struct ib_rmpp_mad *) packet->mad.data;
-	hdr_len = ib_get_mad_data_offset(rmpp_mad->base.mad_hdr.mgmt_class);
-
-	copy_offset = IB_MGMT_MAD_HDR;
-	rmpp_active = 0;
-
-	if (ib_is_mad_class_rmpp(rmpp_mad->base.mad_hdr.mgmt_class)
-	    && ib_mad_kernel_rmpp_agent(agent)) {
+	hdr_len = ib_get_mad_data_offset(rmpp_mad->mad_hdr.mgmt_class);
+	if (!ib_is_mad_class_rmpp(rmpp_mad->mad_hdr.mgmt_class)) {
+		copy_offset = IB_MGMT_MAD_HDR;
+		rmpp_active = 0;
+	} else {
 		copy_offset = IB_MGMT_RMPP_HDR;
-		rmpp_active = ib_get_rmpp_flags(&rmpp_mad->base.rmpp_hdr) &
-						IB_MGMT_RMPP_FLAG_ACTIVE;
+		rmpp_active = ib_get_rmpp_flags(&rmpp_mad->rmpp_hdr) &
+			      IB_MGMT_RMPP_FLAG_ACTIVE;
 	}
 
-	base_version = ((struct ib_mad_hdr*)&packet->mad.data)->base_version;
 	data_len = count - hdr_size(file) - hdr_len;
 	packet->msg = ib_create_send_mad(agent,
-					 be32_to_cpu(packet->mad.hdr.qpn) |
-					 (base_version << 24),
+					 be32_to_cpu(packet->mad.hdr.qpn),
 					 packet->mad.hdr.pkey_index, rmpp_active,
 					 hdr_len, data_len, GFP_KERNEL);
 	if (IS_ERR(packet->msg)) {
@@ -561,25 +549,17 @@ static ssize_t ib_umad_write(struct file *filp, const char __user *buf,
 		tid = &((struct ib_mad_hdr *) packet->msg->mad)->tid;
 		*tid = cpu_to_be64(((u64) agent->hi_tid) << 32 |
 				   (be64_to_cpup(tid) & 0xffffffff));
-		rmpp_mad->base.mad_hdr.tid = *tid;
+		rmpp_mad->mad_hdr.tid = *tid;
 	}
 
-	if (!ib_mad_kernel_rmpp_agent(agent)
-	   && ib_is_mad_class_rmpp(rmpp_mad->base.mad_hdr.mgmt_class)
-	   && (ib_get_rmpp_flags(&rmpp_mad->base.rmpp_hdr) & IB_MGMT_RMPP_FLAG_ACTIVE)) {
-		spin_lock_irq(&file->send_lock);
+	spin_lock_irq(&file->send_lock);
+	ret = is_duplicate(file, packet);
+	if (!ret)
 		list_add_tail(&packet->list, &file->send_list);
-		spin_unlock_irq(&file->send_lock);
-	} else {
-		spin_lock_irq(&file->send_lock);
-		ret = is_duplicate(file, packet);
-		if (!ret)
-			list_add_tail(&packet->list, &file->send_list);
-		spin_unlock_irq(&file->send_lock);
-		if (ret) {
-			ret = -EINVAL;
-			goto err_msg;
-		}
+	spin_unlock_irq(&file->send_lock);
+	if (ret) {
+		ret = -EINVAL;
+		goto err_msg;
 	}
 
 	ret = ib_post_send_mad(packet->msg, NULL);
@@ -653,7 +633,6 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 
 found:
 	if (ureq.mgmt_class) {
-		memset(&req, 0, sizeof req);
 		req.mgmt_class         = ureq.mgmt_class;
 		req.mgmt_class_version = ureq.mgmt_class_version;
 		memcpy(req.oui, ureq.oui, sizeof req.oui);
@@ -711,95 +690,6 @@ out:
 	return ret;
 }
 
-static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
-{
-	static uint8_t zero_bytes[sizeof(struct ib_user_mad_reg_req2)] = {0};
-	struct ib_user_mad_reg_req2 ureq;
-	struct ib_mad_reg_req req;
-	struct ib_mad_agent *agent = NULL;
-	int agent_id;
-	int ret;
-
-	mutex_lock(&file->port->file_mutex);
-	mutex_lock(&file->mutex);
-
-	if (!file->port->ib_dev) {
-		ret = -EPIPE;
-		goto out;
-	}
-
-	if (copy_from_user(&ureq, arg, sizeof ureq)) {
-		ret = -EFAULT;
-		goto out;
-	}
-
-	if (ureq.qpn != 0 && ureq.qpn != 1) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (ureq.mgmt_class == 0) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (ureq.res != 0 ||
-	    memcmp(&ureq.res2, zero_bytes, sizeof(ureq.res2))) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-
-	for (agent_id = 0; agent_id < IB_UMAD_MAX_AGENTS; ++agent_id)
-		if (!__get_agent(file, agent_id))
-			goto found;
-
-	ret = -ENOMEM;
-	goto out;
-
-found:
-	req.mgmt_class         = ureq.mgmt_class;
-	req.mgmt_class_version = ureq.mgmt_class_version;
-	req.flags              = ureq.flags;
-	memcpy(req.oui, ureq.oui, sizeof req.oui);
-	memcpy(req.method_mask, ureq.method_mask, sizeof req.method_mask);
-
-	agent = ib_register_mad_agent(file->port->ib_dev, file->port->port_num,
-				      ureq.qpn ? IB_QPT_GSI : IB_QPT_SMI,
-				      &req, ureq.rmpp_version,
-				      send_handler, recv_handler, file);
-	if (IS_ERR(agent)) {
-		ret = PTR_ERR(agent);
-		agent = NULL;
-		goto out;
-	}
-
-	if (put_user(agent_id,
-		     (u32 __user *) (arg + offsetof(struct ib_user_mad_reg_req2, id)))) {
-		ret = -EFAULT;
-		goto out;
-	}
-
-	if (!file->already_used) {
-		file->already_used = 1;
-		file->use_pkey_index = 1;
-	}
-
-	file->agent[agent_id] = agent;
-	ret = 0;
-
-out:
-	mutex_unlock(&file->mutex);
-
-	if (ret && agent)
-		ib_unregister_mad_agent(agent);
-
-	mutex_unlock(&file->port->file_mutex);
-
-	return ret;
-}
-
-
 static int ib_umad_unreg_agent(struct ib_umad_file *file, u32 __user *arg)
 {
 	struct ib_mad_agent *agent = NULL;
@@ -855,8 +745,6 @@ static long ib_umad_ioctl(struct file *filp, unsigned int cmd,
 		return ib_umad_unreg_agent(filp->private_data, (__u32 __user *) arg);
 	case IB_USER_MAD_ENABLE_PKEY:
 		return ib_umad_enable_pkey(filp->private_data);
-	case IB_USER_MAD_REGISTER_AGENT2:
-		return ib_umad_reg_agent2(filp->private_data, (void __user *) arg);
 	default:
 		return -ENOIOCTLCMD;
 	}
@@ -873,8 +761,6 @@ static long ib_umad_compat_ioctl(struct file *filp, unsigned int cmd,
 		return ib_umad_unreg_agent(filp->private_data, compat_ptr(arg));
 	case IB_USER_MAD_ENABLE_PKEY:
 		return ib_umad_enable_pkey(filp->private_data);
-	case IB_USER_MAD_REGISTER_AGENT2:
-		return ib_umad_reg_agent2(filp->private_data, compat_ptr(arg));
 	default:
 		return -ENOIOCTLCMD;
 	}

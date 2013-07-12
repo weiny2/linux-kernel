@@ -48,8 +48,4 @@ extern void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 				struct ib_wc *wc, struct ib_device *device,
 				int port_num, int qpn);
 
-extern void agent_send_jumbo_response(struct jumbo_mad *mad, struct ib_grh *grh,
-				struct ib_wc *wc, struct ib_device *device,
-				int port_num, int qpn);
-
 #endif	/* __AGENT_H_ */
