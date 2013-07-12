@@ -1217,8 +1217,10 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		if (nomatch == 0) {
 			packet = kzalloc(sizeof(*packet)+QIB_GET_PKT_LEN(hdr),
 					GFP_ATOMIC);
-			if (packet)
+			if (packet) {
+				INIT_LIST_HEAD(&packet->list);
 				packet->total_len = QIB_GET_PKT_LEN(hdr);
+			}
 		}
 	}
 
