@@ -602,7 +602,29 @@ static ssize_t qib_pio_send_pkt(struct qib_pportdata *ppd,
 	u32 dwords = pkt_len >> 2;
 	unsigned long flags;
 	ssize_t ret = -EINVAL;
+	struct qib_ib_header *hdr = (struct qib_ib_header *)data;
 
+	/* Handle VL15_o_VL0 for Snoop packets */
+	if (((((u8 *)data)[0] >> 4) & 0xf) == 0xf) {
+		if (wfr_vl15_ovl0) {
+			/* Set the VL to 0 in the LRH */
+			hdr->lrh[0] = cpu_to_be16(be16_to_cpu(hdr->lrh[0])
+							& 0x0fff);
+			if (hdr->lrh[1] == IB_LID_PERMISSIVE) {
+				/* permissive lid specified
+				 * override with DLID and set flag for rcv to
+				 * reconstruct PermissiveLID in packet
+				 */
+				hdr->lrh[0] |= WFR_VL15_oVL0_PERMLID_FLAG;
+				hdr->lrh[1] = cpu_to_be16(wfr_vl15_ovl0);
+			}
+		} else if (pkt_len > 284) {
+			/* protect ourselves from writing large buffers into
+			 * the VL15 bufs */
+			ret = -EINVAL;
+			goto Err;
+		}
+	}
 	i = 0;
 	len = dwords + 1;
 	control = dd->f_setpbc_control(ppd, len, 0,
