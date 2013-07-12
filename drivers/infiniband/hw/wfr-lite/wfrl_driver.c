@@ -480,6 +480,19 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 		/* total length */
 		tlen = qib_hdrget_length_in_bytes(rhf_addr);
 		ebuf = NULL;
+
+		if (wfr_vl15_ovl0 && (be32_to_cpu(hdr->bth[1]) & 0xffffff) == 0) {
+			/* Check for the permissive LID flag and restore
+			 * permissive LID if necessary
+			 */
+			if (hdr->lrh[0] & WFR_VL15_oVL0_PERMLID_FLAG) {
+				hdr->lrh[1] = IB_LID_PERMISSIVE;
+			}
+			/* restore VL */
+			hdr->lrh[0] = cpu_to_be16(
+					be16_to_cpu(hdr->lrh[0]) | 0xF000);
+		}
+
 		/* applicable only for capture */
 		if (unlikely(ppd->mode_flag & QIB_PORT_CAPTURE_MODE)) {
 			int nomatch = 0;
