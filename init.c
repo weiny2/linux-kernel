@@ -1548,8 +1548,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 		memset(rcd->rcvegrbuf[chunk], 0, size);
 
 		for (i = 0; e < egrcnt && i < egrperchunk; e++, i++) {
-			dd->f_put_tid(dd, e + egroff,
-					  RCVHQ_RCV_TYPE_EAGER, pa);
+			dd->f_put_tid(dd, e + egroff, PT_EAGER, pa);
 			pa += egrsize;
 		}
 		cond_resched(); /* don't hog the cpu */

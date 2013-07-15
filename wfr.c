@@ -193,12 +193,6 @@ static char *is_sdmacleanup_name(char *buf, size_t bsize, unsigned int source)
 	return buf;
 }
 
-static void handle_context_interrupt(struct qib_ctxtdata *rcd)
-{
-	/* TODO: actually do something */
-	printk("%s: ctxt %u - unimplemented\n", __func__ , rcd->ctxt);
-}
-
 static void handle_sdma_interrupt(struct sdma_engine *per_sdma)
 {
 	/* TODO: actually do something */
@@ -248,7 +242,7 @@ static void is_rcvavailint_int(struct qib_devdata *dd, unsigned int source)
 
 	rcd = dd->rcd[source];
 	if (rcd)
-		handle_context_interrupt(rcd);
+		handle_receive_interrupt(rcd);
 	else
 		qib_dev_err(dd,
 			"receive context interrupt %u, but no rcd\n", source);
@@ -403,7 +397,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 	write_csr(rcd->dd, WFR_CCE_INT_CLEAR + (8*rcd->ireg), rcd->imask);
 
 	/* handle the interrupt */
-	handle_context_interrupt(rcd);
+	handle_receive_interrupt(rcd);
 
 	return IRQ_HANDLED;
 }
@@ -491,16 +485,15 @@ static int reset(struct qib_devdata *dd)
 	return 0;
 }
 
-static const const char *receive_type_name(u32 type)
+static const char *pt_names[] = {
+	"expected",
+	"eager",
+	"invalid"
+};
+
+static const char *pt_name(u32 type)
 {
-	switch (type) {
-	case RCVHQ_RCV_TYPE_EXPECTED: return "expected";
-	case RCVHQ_RCV_TYPE_EAGER:    return "eager";
-	case RCVHQ_RCV_TYPE_NON_KD:   return "non_kd";
-	case RCVHQ_RCV_TYPE_ERROR:    return "error" ;
-	case RCVHQ_RCV_TYPE_INVALID:  return "invalid" ;
-	}
-	return "unknown";
+	return type >= ARRAY_SIZE(pt_names) ? "unknown" : pt_names[type];
 }
 
 /*
@@ -511,25 +504,24 @@ static void put_tid(struct qib_devdata *dd, u32 index,
 {
 	u64 reg, bsize;
 
-	if (type == RCVHQ_RCV_TYPE_EAGER) {
+	if (type == PT_EAGER) {
 		bsize = encoded_size(dd->rcvegrbufsize);
-	} else if (type == RCVHQ_RCV_TYPE_EXPECTED) {
+	} else if (type == PT_EXPECTED) {
 		/* FIXME: expected (TID) sizes appear to be hard-coded to
 		   PAGE_SIZE bytes */
 		bsize = encoded_size(PAGE_SIZE);
-	} else if (type == RCVHQ_RCV_TYPE_INVALID) {
+	} else if (type == PT_INVALID) {
 		bsize = 0;	/* invalid size, disables the entry */
-		pa = 0;
+		pa = 0;		/* remove former data */
 	} else {
 		qib_dev_err(dd,
-			"unexpeced TID type \"%s\" for index %u, not handled\n",
-			receive_type_name(type), index);
+			"unexpeced receive array type %u for index %u, not handled\n",
+			type, index);
 		return;
 	}
 
 	dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
-		__func__, receive_type_name(type), index, pa,
-		(unsigned long)bsize);
+		__func__, pt_name(type), index, pa, (unsigned long)bsize);
 
 #define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
 	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
@@ -546,11 +538,11 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 
 	/* TODO: this could be optimized */
 	for (i = rcd->eager_base; i < rcd->eager_base + rcd->eager_count; i++)
-		put_tid(dd, i, RCVHQ_RCV_TYPE_INVALID, 0);
+		put_tid(dd, i, PT_INVALID, 0);
 
 	for (i = rcd->expected_base;
 			i < rcd->expected_base + rcd->expected_count; i++)
-		put_tid(dd, i, RCVHQ_RCV_TYPE_INVALID, 0);
+		put_tid(dd, i, PT_INVALID, 0);
 }
 
 static int get_base_info(struct qib_ctxtdata *rcd,
@@ -564,9 +556,10 @@ static int get_base_info(struct qib_ctxtdata *rcd,
 static struct qib_message_header *get_msgheader(
 				struct qib_devdata *dd, __le32 *rhf_addr)
 {
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-	return (struct qib_message_header *)rhf_addr;
+	u32 offset = rhf_hdrq_offset(rhf_addr);
+
+	return (struct qib_message_header *)
+		(rhf_addr - dd->rhf_offset + offset);
 }
 
 static const char *ib_cfg_name_strings[] = {
@@ -639,8 +632,34 @@ static int set_ib_table(struct qib_pportdata *ppd, int which, void *t)
 static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 				    u32 updegr, u32 egrhd, u32 npkts)
 {
-	if (print_unimplemented)
-		dd_dev_info(rcd->dd, "%s: not implemented\n", __func__);
+	struct qib_devdata *dd = rcd->dd;
+	u64 reg;
+	u32 ctxt = rcd->ctxt;
+
+//FIXME: no timeout adjustment code yet
+//	+ not that great that we mix in the update flag with hd
+#if 0
+        /*
+         * Need to write timeout register before updating rcvhdrhead to ensure
+         * that the timer is enabled on reception of a packet.
+         */
+        if (hd >> IBA7322_HDRHEAD_PKTINT_SHIFT)
+                adjust_rcv_timeout(rcd, npkts);
+#endif
+        if (updegr) {
+		reg = (egrhd & WFR_RCV_EGR_INDEX_HEAD_HEAD_MASK)
+			<< WFR_RCV_EGR_INDEX_HEAD_HEAD_SHIFT;
+		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, reg);
+	}
+        mmiowb();
+	// FIXME: We're hard-coding the counter to 1 here.  We need
+	// a scheme - likely integrated with a timeout.
+	reg = (1ull << WFR_RCV_HDR_HEAD_COUNTER_SHIFT) |
+		((hd & WFR_RCV_HDR_HEAD_HEAD_MASK)
+			<< WFR_RCV_HDR_HEAD_HEAD_SHIFT);
+	write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
+        mmiowb();
+
 }
 
 static u32 hdrqempty(struct qib_ctxtdata *rcd)
@@ -1775,6 +1794,10 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	init_partition_keys(dd);
 
+	/* FIXME: don't set NODMA_RTAIL until we know the sequence numbers
+	   are right */
+	//dd->flags = QIB_NODMA_RTAIL;
+
 	dd->palign = 0x1000;	// TODO: is there a WFR value for this?
 
 	/* FIXME: fill in with real values */
@@ -1817,15 +1840,15 @@ struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* TODO: RcvHdrEntSize, RcvHdrCnt, and RcvHdrSize are now
 	   per context, rather than global. */
 	/* FIXME: arbitrary/old values */
-	dd->rcvhdrcnt = 32;
+	dd->rcvhdrcnt = 64;
 #if 1
-	dd->rcvhdrentsize = QIB_RCVHDR_ENTSIZE;
-	dd->rcvhdrsize = QIB_DFLT_RCVHDRSIZE;
+	dd->rcvhdrentsize = DEFAULT_RCVHDR_ENTSIZE;
+	dd->rcvhdrsize = DEFAULT_RCVHDRSIZE;
 #else
 	dd->rcvhdrentsize = qib_rcvhdrentsize ?
-		qib_rcvhdrentsize : QIB_RCVHDR_ENTSIZE;
+		qib_rcvhdrentsize : DEFAULT_RCVHDR_ENTSIZE;
 	dd->rcvhdrsize = qib_rcvhdrsize ?
-		qib_rcvhdrsize : QIB_DFLT_RCVHDRSIZE;
+		qib_rcvhdrsize : DEFAULT_RCVHDRSIZE;
 #endif
 	dd->rhf_offset = dd->rcvhdrentsize - sizeof(u64) / sizeof(u32);
 

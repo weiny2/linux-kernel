@@ -1052,6 +1052,11 @@ struct qib_devdata {
 	u32 rcv_entries;
 };
 
+/* f_put_tid types */
+#define PT_EXPECTED 0
+#define PT_EAGER    1
+#define PT_INVALID  2
+
 /* hol_state values */
 #define QIB_HOL_UP       0
 #define QIB_HOL_INIT     1
@@ -1132,7 +1137,7 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
 void qib_init_pportdata(struct qib_pportdata *, struct qib_devdata *, u8, u8);
 void qib_free_ctxtdata(struct qib_devdata *, struct qib_ctxtdata *);
 
-u32 qib_kreceive(struct qib_ctxtdata *, u32 *, u32 *);
+void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 int qib_set_linkstate(struct qib_pportdata *, u8);
@@ -1285,22 +1290,42 @@ void __qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
 void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
 
 /*
- * number of words used for protocol header if not set by qib_userinit();
+ * The number of words for the KDETH protocol field.  If this is
+ * larger then the actual field used, then part of the payload
+ * will be in the header.
+ *
+ * Optimally, we want this sized so that a typical case will
+ * use full cache lines.  The typical local KDETH header would
+ * be:
+ *
+ *	Bytes	Field
+ *	  8	LHR
+ *	 12	BTH
+ *	 ??	KDETH
+ *	  8	RHF
+ *	---
+ *	 28 + KDETH
+ *
+ * For a 64-byte cache line, KETH would need to be 36 bytes or 9 DWORDS
  */
-#define QIB_DFLT_RCVHDRSIZE 9
+#define DEFAULT_RCVHDRSIZE 9
 
 /*
- * We need to be able to handle an IB header of at least 24 dwords.
- * We need the rcvhdrq large enough to handle largest IB header, but
- * still have room for a 2KB MTU standard IB packet.
- * Additionally, some processor/memory controller combinations
- * benefit quite strongly from having the DMA'ed data be cacheline
- * aligned and a cacheline multiple, so we set the size to 32 dwords
- * (2 64-byte primary cachelines for pretty much all processors of
- * interest).  The alignment hurts nothing, other than using somewhat
- * more memory.
+ * Maximal header byte count:
+ *
+ *	Bytes	Field
+ *	  8	LHR
+ *	 40	GHR (optional)
+ *	 12	BTH
+ *	 ??	KDETH
+ *	  8	RHF
+ *	---
+ *	 68 + KDETH
+ *
+ * We also want to maintain a cache line alignment to assist DMA'ing
+ * of the header bytes.  Round up to a good size.
  */
-#define QIB_RCVHDR_ENTSIZE 32
+#define DEFAULT_RCVHDR_ENTSIZE 32
 
 int qib_get_user_pages(unsigned long, size_t, struct page **);
 void qib_release_user_pages(struct page **, size_t);
@@ -1333,7 +1358,7 @@ static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
 
 		rhf_addr = (__le32 *) rcd->rcvhdrq +
 			rcd->head + dd->rhf_offset;
-		seq = qib_hdrget_seq(rhf_addr);
+		seq = rhf_rcv_seq(rhf_addr);
 		hdrqtail = rcd->head;
 		if (seq == rcd->seq_cnt)
 			hdrqtail++;

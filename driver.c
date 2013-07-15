@@ -76,9 +76,9 @@ MODULE_VERSION(QIB_DRIVER_VERSION);
 #define QIB_PIO_MAXIBHDR 128
 
 /*
- * QIB_MAX_PKT_RCV is the max # if packets processed per receive interrupt.
+ * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
  */
-#define QIB_MAX_PKT_RECV 64
+#define MAX_PKT_RECV 64
 
 struct qlogic_ib_stats qib_stats;
 
@@ -290,24 +290,31 @@ static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u32 etail)
 }
 
 /*
- * Returns 1 if error was a CRC, else 0.
- * Needed for some chip's synthesized error counters.
  */
-static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
+static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			  u32 ctxt, u32 eflags, u32 l, u32 etail,
 			  __le32 *rhf_addr, struct qib_message_header *rhdr)
 {
-	u32 ret = 0;
+	/*u32 rcv_type = rhf_rcv_type(rhf_addr);*/
 
-	if (eflags & (QLOGIC_IB_RHF_H_ICRCERR | QLOGIC_IB_RHF_H_VCRCERR))
-		ret = 1;
-	else if (eflags == QLOGIC_IB_RHF_H_TIDERR) {
+	if (eflags & (RHF1_VCRC_ERR | RHF1_ICRC_ERR))
+		return;
+
+	/*
+	 * TODO: In WFR, RHF.TIDErr can mean 2 things, depending on the
+	 * packet type.  Does this code apply to both?
+	 * For type 0 packets (expected receive), see section 8.5.6.2
+	 * Expected TIDErr.
+	 * For non-type 0 packets (not expected receive) see the section
+	 * 8.5.7.3 Eager TIDErr, in HAS snapshots on or later than 2013-07-12.
+	 */
+	if (eflags & RHF1_TID_ERR) {
 		/* For TIDERR and RC QPs premptively schedule a NAK */
 		struct qib_ib_header *hdr = (struct qib_ib_header *) rhdr;
 		struct qib_other_headers *ohdr = NULL;
 		struct qib_ibport *ibp = &ppd->ibport_data;
 		struct qib_qp *qp = NULL;
-		u32 tlen = qib_hdrget_length_in_bytes(rhf_addr);
+		u32 tlen = rhf_pkt_len(rhf_addr); /* in bytes */
 		u16 lid  = be16_to_cpu(hdr->lrh[1]);
 		int lnh = be16_to_cpu(hdr->lrh[0]) & 3;
 		u32 qp_num;
@@ -428,21 +435,16 @@ unlock:
 	} /* Valid packet with TIDErr */
 
 drop:
-	return ret;
+	return;
 }
 
 /*
- * qib_kreceive - receive a packet
- * @rcd: the qlogic_ib context
- * @llic: gets count of good packets needed to clear lli,
- *          (used with chips that need need to track crcs for lli)
+ * handle_receive_interrupt - receive a packet
+ * @rcd: the context
  *
- * called from interrupt handler for errors or receive interrupt
- * Returns number of CRC error packets, needed by some chips for
- * local link integrity tracking.   crcs are adjusted down by following
- * good packets, if any, and count of good packets is also tracked.
+ * Called from interrupt handler for errors or receive interrupt.
  */
-u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
+void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 {
 	struct qib_devdata *dd = rcd->dd;
 	struct qib_pportdata *ppd = rcd->ppd;
@@ -452,7 +454,7 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 	const u32 maxcnt = dd->rcvhdrcnt * rsize;   /* words */
 	u32 etail = -1, l, hdrqtail;
 	struct qib_message_header *hdr;
-	u32 eflags, etype, tlen, i = 0, updegr = 0, crcs = 0;
+	u32 eflags, etype, tlen, i = 0, updegr = 0;
 	int last;
 	u64 lval;
 	struct qib_qp *qp, *nqp;
@@ -460,7 +462,7 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 	l = rcd->head;
 	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
 	if (dd->flags & QIB_NODMA_RTAIL) {
-		u32 seq = qib_hdrget_seq(rhf_addr);
+		u32 seq = rhf_rcv_seq(rhf_addr);
 		if (seq != rcd->seq_cnt)
 			goto bail;
 		hdrqtail = 0;
@@ -473,61 +475,73 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 
 	for (last = 0, i = 1; !last; i += !last) {
 		hdr = dd->f_get_msgheader(dd, rhf_addr);
-		eflags = qib_hdrget_err_flags(rhf_addr);
-		etype = qib_hdrget_rcv_type(rhf_addr);
+		eflags = rhf_err_flags(rhf_addr);
+		etype = rhf_rcv_type(rhf_addr);
 		/* total length */
-		tlen = qib_hdrget_length_in_bytes(rhf_addr);
+		tlen = rhf_pkt_len(rhf_addr);	/* in bytes */
 		ebuf = NULL;
-		if ((dd->flags & QIB_NODMA_RTAIL) ?
-		    qib_hdrget_use_egr_buf(rhf_addr) :
-		    (etype != RCVHQ_RCV_TYPE_EXPECTED)) {
-			etail = qib_hdrget_index(rhf_addr);
+		/* retreive eager buffer details */
+		if (rhf_use_egr_bfr(rhf_addr)) {
+			etail = rhf_egr_index(rhf_addr);
 			updegr = 1;
-			if (tlen > sizeof(*hdr) ||
-			    etype >= RCVHQ_RCV_TYPE_NON_KD) {
-				ebuf = qib_get_egrbuf(rcd, etail);
-				prefetch_range(ebuf, tlen - sizeof(*hdr));
-			}
+			ebuf = qib_get_egrbuf(rcd, etail);
+			/* TODO: Keep the prefetch?  Why are we doing it? */
+			/*
+			 * Prefetch the contents of the eager buffer.  It is
+			 * OK to send a negative length to prefetch_range().
+			 * The +2 is the size of the RHF.
+			 */
+			prefetch_range(ebuf,
+				tlen - ((dd->rcvhdrentsize -
+					  (rhf_hdrq_offset(rhf_addr)+2)) * 4));
 		}
+		/*
+		 * TODO: This is a redundant check and should eventually
+		 * be removed - the HW is doing the checking for us.
+		 * Leave for now to double check the simulator.
+		 */
 		if (!eflags) {
 			u16 lrh_len = be16_to_cpu(hdr->lrh[2]) << 2;
 
 			if (lrh_len != tlen) {
 				qib_stats.sps_lenerrs++;
+				qib_dev_err(dd,
+					"%s: tlen %d != lrh_len %d, skipping\n",
+					__func__, tlen, (u32)lrh_len);
 				goto move_along;
 			}
 		}
-		if (etype == RCVHQ_RCV_TYPE_NON_KD && !eflags &&
+		/*
+		 * TODO: What is the purpose of this check?  It looks like
+		 * it is dropping an IB packet if didn't use an eager buffer
+		 * but its total length is larger than 1 DWORD more than
+		 * the header. (Why the +1?)
+		 * This looks redundant - and should be removed.
+		 */
+		if (etype == RHF_RCV_TYPE_IB && !eflags &&
 		    ebuf == NULL &&
 		    tlen > (dd->rcvhdrentsize - 2 + 1 -
-				qib_hdrget_offset(rhf_addr)) << 2) {
+				rhf_hdrq_offset(rhf_addr)) << 2) {
+			qib_dev_err(dd, "%s: IB, no errors, no eager, tlen > headerlen+1, skipping\n", __func__);
 			goto move_along;
 		}
 
-		/*
-		 * Both tiderr and qibhdrerr are set for all plain IB
-		 * packets; only qibhdrerr should be set.
-		 */
 		if (unlikely(eflags))
-			crcs += qib_rcv_hdrerr(rcd, ppd, rcd->ctxt, eflags, l,
+			rcv_hdrerr(rcd, ppd, rcd->ctxt, eflags, l,
 					       etail, rhf_addr, hdr);
-		else if (etype == RCVHQ_RCV_TYPE_NON_KD) {
+		else if (etype == RHF_RCV_TYPE_IB)
 			qib_ib_rcv(rcd, hdr, ebuf, tlen);
-			if (crcs)
-				crcs--;
-			else if (llic && *llic)
-				--*llic;
-		}
+		/* FIXME: Handle bypass packets */
 move_along:
 		l += rsize;
 		if (l >= maxcnt)
 			l = 0;
-		if (i == QIB_MAX_PKT_RECV)
+		if (i == MAX_PKT_RECV)
 			last = 1;
 
 		rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
 		if (dd->flags & QIB_NODMA_RTAIL) {
-			u32 seq = qib_hdrget_seq(rhf_addr);
+			u32 seq = rhf_rcv_seq(rhf_addr);
 
 			if (++rcd->seq_cnt > 13)
 				rcd->seq_cnt = 1;
@@ -585,17 +599,12 @@ move_along:
 	}
 
 bail:
-	/* Report number of packets consumed */
-	if (npkts)
-		*npkts = i;
-
 	/*
 	 * Always write head at end, and setup rcv interrupt, even
 	 * if no packets were processed.
 	 */
 	lval = (u64)rcd->head | dd->rhdrhead_intr_off;
 	dd->f_update_usrhead(rcd, lval, updegr, etail, i);
-	return crcs;
 }
 
 /**

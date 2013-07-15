@@ -381,8 +381,7 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 		__set_bit(tid, tidmap);
 		physaddr = dd->physshadow[ctxttid + tid];
 		/* PERFORMANCE: below should almost certainly be cached */
-		dd->f_put_tid(dd, tidbase + tid,
-				  RCVHQ_RCV_TYPE_EXPECTED, physaddr);
+		dd->f_put_tid(dd, tidbase + tid, PT_EXPECTED, physaddr);
 		/*
 		 * don't check this tid in qib_ctxtshadow, since we
 		 * just filled it in; start with the next one.
@@ -411,8 +410,7 @@ cleanup:
 				/* PERFORMANCE: below should almost certainly
 				 * be cached
 				 */
-				dd->f_put_tid(dd, tidbase + tid,
-					      RCVHQ_RCV_TYPE_INVALID, 0);
+				dd->f_put_tid(dd, tidbase + tid, PT_INVALID, 0);
 				pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
 					       PCI_DMA_FROMDEVICE);
 				dd->pageshadow[ctxttid + tid] = NULL;
@@ -523,8 +521,7 @@ static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 			/* PERFORMANCE: below should almost certainly be
 			 * cached
 			 */
-			dd->f_put_tid(dd, tidbase + tid,
-				      RCVHQ_RCV_TYPE_INVALID, 0);
+			dd->f_put_tid(dd, tidbase + tid, PT_INVALID, 0);
 			pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
 				       PCI_DMA_FROMDEVICE);
 			qib_release_user_pages(&p, 1);

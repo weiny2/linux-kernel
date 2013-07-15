@@ -32,8 +32,8 @@
  * SOFTWARE.
  */
 
-#ifndef _QIB_COMMON_H
-#define _QIB_COMMON_H
+#ifndef _COMMON_H
+#define _COMMON_H
 
 /*
  * This file contains defines, structures, etc. that are used
@@ -630,30 +630,85 @@ struct qlogic_ib_counters {
  * and memory bits that are visible to and/or used by user-mode software.
  */
 
-/* RcvHdrFlags bits */
-#define QLOGIC_IB_RHF_LENGTH_MASK 0x7FF
-#define QLOGIC_IB_RHF_LENGTH_SHIFT 0
-#define QLOGIC_IB_RHF_RCVTYPE_MASK 0x7
-#define QLOGIC_IB_RHF_RCVTYPE_SHIFT 11
-#define QLOGIC_IB_RHF_EGRINDEX_MASK 0xFFF
-#define QLOGIC_IB_RHF_EGRINDEX_SHIFT 16
-#define QLOGIC_IB_RHF_SEQ_MASK 0xF
-#define QLOGIC_IB_RHF_SEQ_SHIFT 0
-#define QLOGIC_IB_RHF_HDRQ_OFFSET_MASK 0x7FF
-#define QLOGIC_IB_RHF_HDRQ_OFFSET_SHIFT 4
-#define QLOGIC_IB_RHF_H_ICRCERR   0x80000000
-#define QLOGIC_IB_RHF_H_VCRCERR   0x40000000
-#define QLOGIC_IB_RHF_H_PARITYERR 0x20000000
-#define QLOGIC_IB_RHF_H_LENERR    0x10000000
-#define QLOGIC_IB_RHF_H_MTUERR    0x08000000
-#define QLOGIC_IB_RHF_H_IHDRERR   0x04000000
-#define QLOGIC_IB_RHF_H_TIDERR    0x02000000
-#define QLOGIC_IB_RHF_H_MKERR     0x01000000
-#define QLOGIC_IB_RHF_H_IBERR     0x00800000
-#define QLOGIC_IB_RHF_H_ERR_MASK  0xFF800000
-#define QLOGIC_IB_RHF_L_USE_EGR   0x80000000
-#define QLOGIC_IB_RHF_L_SWA       0x00008000
-#define QLOGIC_IB_RHF_L_SWB       0x00004000
+/*
+ * Receive Header Flags
+ * These bits are split into 2 4-byte quantities.
+ */
+/* first DWORD flags */
+#define RHF0_PKT_LEN_SHIFT 0
+#define RHF0_PKT_LEN_MASK 0xfff
+#define RHF0_PKT_LEN_SMASK (RHF0_PKT_LEN_MASK << RHF0_PKT_LEN_SHIFT)
+
+#define RHF0_RCV_TYPE_SHIFT 12
+#define RHF0_RCV_TYPE_MASK 0x7
+#define RHF0_RCV_TYPE_SMASK (RHF0_RCV_TYPE_MASK << RHF0_RCV_TYPE_SHIFT)
+
+#define RHF0_USE_EGR_BFR_SHIFT 15
+#define RHF0_USE_EGR_BFR_MASK 0x1
+#define RHF0_USE_EGR_BFR_SMASK (RHF0_USE_EGR_BFR_MASK << RHF0_USE_EGR_BFR_SHIFT)
+
+#define RHF0_EGR_INDEX_SHIFT 16
+#define RHF0_EGR_INDEX_MASK 0x7ff
+#define RHF0_EGR_INDEX_SMASK (RHF0_EGR_INDEX_MASK << RHF0_EGR_INDEX_SHIFT)
+
+#define RHF0_DC_INFO_SHIFT 27
+#define RHF0_DC_INFO_MASK 0x1
+#define RHF0_DC_INFO_SMASK (RHF0_DC_INFO_MASK << RHF0_DC_INFO_SHIFT)
+
+#define RHF0_RCV_SEQ_SHIFT 28
+#define RHF0_RCV_SEQ_MASK 0xf
+#define RHF0_RCV_SEQ_SMASK (RHF0_RCV_SEQ_MASK << RHF0_RCV_SEQ_SHIFT)
+
+/* second DWORD flags */
+#define RHF1_EGR_OFFSET_SHIFT           (32-32)
+#define RHF1_EGR_OFFSET_MASK 0xfff
+#define RHF1_EGR_OFFSET_SMASK (RHF1_EGR_OFFSET_MASK << RHF1_EGR_OFFSET_SHIFT)
+#define RHF1_HDRQ_OFFSET_SHIFT          (44-32)
+#define RHF1_HDRQ_OFFSET_MASK 0x1ff
+#define RHF1_HDRQ_OFFSET_SMASK (RHF1_HDRQ_OFFSET_MASK << RHF1_HDRQ_OFFSET_SHIFT)
+#define RHF1_K_HDR_LEN_ERR	(0x1 << (53-32))
+#define RHF1_DC_UNC_ERR		(0x1 << (54-32))
+#define RHF1_DC_ERR	        (0x1 << (55-32))
+#define RHF1_RCV_TYPE_ERR_SHIFT         (56-32)
+#define RHF1_RCV_TYPE_ERR_MASK  0x7
+#define RHF1_RCV_TYPE_ERR_SMASK (RHF1_RCV_TYPE_ERR_MASK << RHF1_RCV_TYPE_ERR_SHIFT)
+#define RHF1_TID_ERR		(0x1 << (59-32))
+#define RHF1_LEN_ERR		(0x1 << (60-32))
+#define RHF1_ECC_ERR		(0x1 << (61-32))
+#define RHF1_VCRC_ERR		(0x1 << (62-32))
+#define RHF1_ICRC_ERR		(0x1 << (63-32))
+
+#define RHF1_ERROR_SMASK 0xffe00000			/* bits 63:53 */
+
+/* RHF receive types */
+#define RHF_RCV_TYPE_EXPECTED 0
+#define RHF_RCV_TYPE_EAGER    1
+#define RHF_RCV_TYPE_IB       2 /* normal IB, IB Raw, or IPv6 */
+#define RHF_RCV_TYPE_ERROR    3
+#define RHF_RCV_TYPE_BYPASS   4
+
+/* RHF receive type error - expected packet errors */
+#define RHF_RTE_EXPECTED_FLOW_SEQ_ERR	0x2
+#define RHF_RTE_EXPECTED_FLOW_GEN_ERR	0x4
+
+/* RHF receive type error - eager packet errors */
+#define RHF_RTE_EAGER_NO_ERR		0x0
+
+/* RHF receive type error - IB packet errors */
+#define RHF_RTE_IB_NO_ERR		0x0
+
+/* RHF receive type error - error packet errors */
+#define RHF_RTE_ERROR_NO_ERR		0x0
+#define RHF_RTE_ERROR_OP_CODE_ERR	0x1
+#define RHF_RTE_ERROR_KHDR_MIN_LEN_ERR	0x2
+#define RHF_RTE_ERROR_KHDR_HCRC_ERR	0x3
+#define RHF_RTE_ERROR_KHDR_KVER_ERR	0x4
+#define RHF_RTE_ERROR_CONTEXT_ERR	0x5
+#define RHF_RTE_ERROR_KHDR_TID_ERR	0x6
+
+/* RHF receive type error - bypass packet errors */
+#define RHF_RTE_BYPASS_NO_ERR		0x0
+
 
 /* qlogic_ib header fields */
 #define QLOGIC_IB_I_VERS_MASK 0xF
@@ -725,61 +780,52 @@ struct qib_message_header {
 #define QIB_EAGER_TID_ID QLOGIC_IB_I_TID_MASK
 #define QIB_MULTICAST_QPN 0xFFFFFF
 
-/* Receive Header Queue: receive type (from qlogic_ib) */
-#define RCVHQ_RCV_TYPE_EXPECTED  0
-#define RCVHQ_RCV_TYPE_EAGER     1
-#define RCVHQ_RCV_TYPE_NON_KD    2
-#define RCVHQ_RCV_TYPE_ERROR     3
-#define RCVHQ_RCV_TYPE_INVALID   4	/* only for f_put_tid */
-
-#define QIB_HEADER_QUEUE_WORDS 9
-
-/* functions for extracting fields from rcvhdrq entries for the driver.
- */
-static inline __u32 qib_hdrget_err_flags(const __le32 *rbuf)
+static inline __u32 rhf_err_flags(const __le32 *rbuf)
 {
-	return __le32_to_cpu(rbuf[1]) & QLOGIC_IB_RHF_H_ERR_MASK;
+	return __le32_to_cpu(rbuf[1]) & RHF1_ERROR_SMASK;
 }
 
-static inline __u32 qib_hdrget_rcv_type(const __le32 *rbuf)
+static inline __u32 rhf_rcv_type(const __le32 *rbuf)
 {
-	return (__le32_to_cpu(rbuf[0]) >> QLOGIC_IB_RHF_RCVTYPE_SHIFT) &
-		QLOGIC_IB_RHF_RCVTYPE_MASK;
+	return (__le32_to_cpu(rbuf[0]) >> RHF0_RCV_TYPE_SHIFT) &
+		RHF0_RCV_TYPE_MASK;
 }
 
-static inline __u32 qib_hdrget_length_in_bytes(const __le32 *rbuf)
+static inline __u32 rhf_rcv_type_err(const __le32 *rbuf)
 {
-	return ((__le32_to_cpu(rbuf[0]) >> QLOGIC_IB_RHF_LENGTH_SHIFT) &
-		QLOGIC_IB_RHF_LENGTH_MASK) << 2;
+	return (__le32_to_cpu(rbuf[1]) >> RHF1_RCV_TYPE_ERR_SHIFT) &
+		RHF1_RCV_TYPE_ERR_MASK;
 }
 
-static inline __u32 qib_hdrget_index(const __le32 *rbuf)
+/* return size is in bytes, not DWORDs */
+static inline __u32 rhf_pkt_len(const __le32 *rbuf)
 {
-	return (__le32_to_cpu(rbuf[0]) >> QLOGIC_IB_RHF_EGRINDEX_SHIFT) &
-		QLOGIC_IB_RHF_EGRINDEX_MASK;
+	/* ordered so the shiftc can combine */
+	return ((__le32_to_cpu(rbuf[0]) & RHF0_PKT_LEN_SMASK) >>
+		RHF0_PKT_LEN_SHIFT) << 2;
 }
 
-static inline __u32 qib_hdrget_seq(const __le32 *rbuf)
+static inline __u32 rhf_egr_index(const __le32 *rbuf)
 {
-	return (__le32_to_cpu(rbuf[1]) >> QLOGIC_IB_RHF_SEQ_SHIFT) &
-		QLOGIC_IB_RHF_SEQ_MASK;
+	return (__le32_to_cpu(rbuf[0]) >> RHF0_EGR_INDEX_SHIFT) &
+		RHF0_EGR_INDEX_MASK;
 }
 
-static inline __u32 qib_hdrget_offset(const __le32 *rbuf)
+static inline __u32 rhf_rcv_seq(const __le32 *rbuf)
 {
-	return (__le32_to_cpu(rbuf[1]) >> QLOGIC_IB_RHF_HDRQ_OFFSET_SHIFT) &
-		QLOGIC_IB_RHF_HDRQ_OFFSET_MASK;
+	return (__le32_to_cpu(rbuf[0]) >> RHF0_RCV_SEQ_SHIFT) &
+		RHF0_RCV_SEQ_MASK;
 }
 
-static inline __u32 qib_hdrget_use_egr_buf(const __le32 *rbuf)
+static inline __u32 rhf_hdrq_offset(const __le32 *rbuf)
 {
-	return __le32_to_cpu(rbuf[0]) & QLOGIC_IB_RHF_L_USE_EGR;
+	return (__le32_to_cpu(rbuf[1]) >> RHF1_HDRQ_OFFSET_SHIFT) &
+		RHF1_HDRQ_OFFSET_MASK;
 }
 
-static inline __u32 qib_hdrget_qib_ver(__le32 hdrword)
+static inline __u32 rhf_use_egr_bfr(const __le32 *rbuf)
 {
-	return (__le32_to_cpu(hdrword) >> QLOGIC_IB_I_VERS_SHIFT) &
-		QLOGIC_IB_I_VERS_MASK;
+	return __le32_to_cpu(rbuf[0]) & RHF0_USE_EGR_BFR_SMASK;
 }
 
-#endif                          /* _QIB_COMMON_H */
+#endif /* _COMMON_H */
