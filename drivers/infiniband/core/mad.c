@@ -990,6 +990,9 @@ struct ib_mad_send_buf * ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	mad_send_wr->sg_list[0].length = hdr_len;
 	mad_send_wr->sg_list[0].lkey = mad_agent->mr->lkey;
 
+/* FIXME: jumbos don't have to be 2048 bytes
+ * base this off of data_len
+ */
 	mad_send_wr->sg_list[1].length = mad_size - hdr_len;
 	mad_send_wr->sg_list[1].lkey = mad_agent->mr->lkey;
 
@@ -1907,6 +1910,8 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 			return;
 		}
 	}
+
+/* FIXME when mad_recv_wc is jumbo it is not necessarily 2048 bytes */
 
 	/* Complete corresponding request */
 	if (ib_response_mad(mad_recv_wc->recv_buf.mad)) {
