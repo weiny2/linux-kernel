@@ -296,6 +296,20 @@ static int subn_get_nodedescription(struct ib_smp *smp,
 	return reply(smp);
 }
 
+static int subn_get_stl_nodedescription(struct stl_smp *smp, struct ib_device *ibdev)
+{
+	struct stl_node_description *nd;
+
+	if (smp->attr_mod)
+		smp->status |= IB_SMP_INVALID_FIELD;
+
+	nd = (struct stl_node_description *)stl_get_smp_data(smp);
+
+	memcpy(nd->data, ibdev->node_desc, sizeof(nd->data));
+
+	return reply_stl(smp);
+}
+
 static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -2678,6 +2692,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
 		switch (smp->attr_id) {
+		case STL_ATTRIB_ID_NODE_DESCRIPTION:
+			ret = subn_get_stl_nodedescription((struct stl_smp *)smp, ibdev);
+			goto bail;
 		case STL_ATTRIB_ID_NODE_INFO:
 			ret = subn_get_stl_nodeinfo((struct stl_smp *)smp, ibdev, port);
 			goto bail;
