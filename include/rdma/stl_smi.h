@@ -42,7 +42,7 @@
 
 #define STL_MAX_PVLS				32
 
-#define STL_SMI_CLASS_VERSION			0x81
+#define STL_SMI_CLASS_VERSION			0x80
 
 #define STL_LID_PERMISSIVE			cpu_to_be32(0xFFFFFFFF)
 
@@ -78,8 +78,8 @@ struct stl_smp {
 /* Subnet management attributes */
 /* ... */
 #define STL_ATTRIB_ID_NODE_DESCRIPTION		cpu_to_be16(0x0010)
-#define STL_ATTRIB_ID_NODE_INFO			cpu_to_be16(0x8011)
-#define STL_ATTRIB_ID_PORT_INFO			cpu_to_be16(0x9015)
+#define STL_ATTRIB_ID_NODE_INFO			cpu_to_be16(0x0011)
+#define STL_ATTRIB_ID_PORT_INFO			cpu_to_be16(0x0015)
 /* ... */
 
 struct stl_node_description {
