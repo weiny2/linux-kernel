@@ -190,6 +190,12 @@ cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/wfr-lite/ib_wfr_lite.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
+%post
+depmod -a
+
+%postun
+depmod -a
+
 %clean
 rm -rf \${RPM_BUILD_ROOT}
 
