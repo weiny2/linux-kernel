@@ -6,11 +6,19 @@ DEFAULT_URL_PREFIX="ssh://"
 DEFAULT_URL_SUFFIX="@git-amr-2.devtools.intel.com:29418/wfr-linux-devel"
 DEFAULT_BRANCH="wfr-for-ifs"
 
+# NOTE: qib, mlx4, mthca, and ib_cm are not needed for STL
+#       However, they have changes[*] within them we are actively trying to get
+#       upstream.  As soon as these changes are accepted we should be able to
+#       drop those modules.
+#       [*] new ioctl registration and URMPP flags
 sources_to_copy="
 	drivers/infiniband/core
 	drivers/infiniband/hw/wfr-lite
 	include/rdma
 	include/uapi/rdma
+	drivers/infiniband/hw/qib
+	drivers/infiniband/hw/mthca
+	drivers/infiniband/hw/mlx4
 "
 
 # ridiculously long to encourage good names later
@@ -114,6 +122,12 @@ mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include -I\$(M)/../../../include/uapi' >> ksrc/drivers/infiniband/core/Makefile
 echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/wfr-lite/Makefile
 
+# See NOTE above under sources to copy.
+echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/qib/Makefile
+echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/mlx4/Makefile
+echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/mthca/Makefile
+
+
 # make sure rpm component strings are clean, should be no-ops
 rpmname=$(echo "$rpmname" | sed -e 's/[.]/_/g')
 rpmversion=$(echo "$rpmversion" | sed -e 's/-/_/g')
@@ -181,9 +195,26 @@ make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
 make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
 make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
 
+# NOTE: the following not are required for STL but we are carrying patches for them
+#       which require a rebuild
+#       See NOTE in build script under sources to copy
+make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_cm.ko
+
+
 # Then build drivers...
 cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/wfr-lite
 export CONFIG_INFINIBAND_WFR_LITE=m; make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/wfr-lite
+
+# NOTE: the following not are required for STL but we are carrying patches for them
+#       which require a rebuild
+#       See NOTE in build script under sources to copy
+cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/qib
+make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/qib
+cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/mlx4
+make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mlx4
+cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/mthca
+make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mthca
+
 
 %install
 rm -rf \$RPM_BUILD_ROOT
@@ -194,6 +225,12 @@ cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/wfr-lite/ib_wfr_lite.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+
+# See NOTE above
+cp drivers/infiniband/core/ib_cm.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/hw/qib/ib_qib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/hw/mlx4/mlx4_ib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/hw/mthca/ib_mthca.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 %post
 depmod -a
