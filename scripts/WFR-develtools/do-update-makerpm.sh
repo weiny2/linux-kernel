@@ -12,6 +12,7 @@ DEFAULT_BRANCH="wfr-for-ifs"
 #       drop those modules.
 #       [*] new ioctl registration and URMPP flags
 sources_to_copy="
+	scripts/WFR-develtools/activate-wfrl-b2b.sh
 	drivers/infiniband/core
 	drivers/infiniband/hw/wfr-lite
 	include/rdma
@@ -219,7 +220,9 @@ make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mthca
 %install
 rm -rf \$RPM_BUILD_ROOT
 mkdir -p \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+mkdir -p \$RPM_BUILD_ROOT/sbin
 
+cp scripts/WFR-develtools/activate-wfrl-b2b.sh \$RPM_BUILD_ROOT/sbin
 cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
@@ -245,6 +248,8 @@ rm -rf \${RPM_BUILD_ROOT}
 %defattr(-, root, root)
 %dir /lib/modules/%kver/updates
 /lib/modules/%kver/updates/*
+%dir /sbin
+/sbin/*
 EOF
 
 # moment of truth, run rpmbuild
