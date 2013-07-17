@@ -174,20 +174,25 @@ if [ "%kver" = "fail" ]; then
 fi
 echo "Kernel version is %kver"
 echo "Kernel source directory is \"%kbuild\""
-make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
-make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
+
+# Build Core support first...
 make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
 make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
+make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
+make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
+
+# Then build drivers...
+cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/wfr-lite
 export CONFIG_INFINIBAND_WFR_LITE=m; make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/wfr-lite
 
 %install
 rm -rf \$RPM_BUILD_ROOT
 mkdir -p \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
-cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
-cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/wfr-lite/ib_wfr_lite.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 %post
