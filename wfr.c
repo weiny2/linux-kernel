@@ -865,10 +865,62 @@ static void rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 	}
 }
 
+static char *sendctrl_op_str(unsigned op, char *buf, int bufsize)
+{
+	char *p = buf;
+
+	if (op & QIB_SENDCTRL_DISARM) {
+		unsigned bn = op & 0xfff;
+		p += snprintf(p, bufsize - (p-buf), "DISARM %d,", bn);
+		op &= ~(QIB_SENDCTRL_DISARM | 0xfff);
+	}
+	if (op & QIB_SENDCTRL_AVAIL_DIS) {
+		p += snprintf(p, bufsize - (p-buf), "AVAIL_DIS,");
+		op &= ~QIB_SENDCTRL_AVAIL_DIS;
+	}
+	if (op & QIB_SENDCTRL_AVAIL_ENB) {
+		p += snprintf(p, bufsize - (p-buf), "AVAIL_ENB,");
+		op &= ~QIB_SENDCTRL_AVAIL_ENB;
+	}
+	if (op & QIB_SENDCTRL_AVAIL_BLIP) {
+		p += snprintf(p, bufsize - (p-buf), "AVAIL_BLIP,");
+		op &= ~QIB_SENDCTRL_AVAIL_BLIP;
+	}
+	if (op & QIB_SENDCTRL_SEND_DIS) {
+		p += snprintf(p, bufsize - (p-buf), "SEND_DIS,");
+		op &= ~QIB_SENDCTRL_SEND_DIS;
+	}
+	if (op & QIB_SENDCTRL_SEND_ENB) {
+		p += snprintf(p, bufsize - (p-buf), "SEND_ENB,");
+		op &= ~QIB_SENDCTRL_SEND_ENB;
+	}
+	if (op & QIB_SENDCTRL_FLUSH) {
+		p += snprintf(p, bufsize - (p-buf), "FLUSH,");
+		op &= ~QIB_SENDCTRL_FLUSH;
+	}
+	if (op & QIB_SENDCTRL_CLEAR) {
+		p += snprintf(p, bufsize - (p-buf), "CLEAR,");
+		op &= ~QIB_SENDCTRL_CLEAR;
+	}
+	if (op & QIB_SENDCTRL_DISARM_ALL) {
+		p += snprintf(p, bufsize - (p-buf), "DISARM_ALL,");
+		op &= ~QIB_SENDCTRL_DISARM_ALL;
+	}
+	/* any bits left? */
+	if (op) {
+		p += snprintf(p, bufsize - (p-buf), "0x%x,", op);
+	}
+
+	return buf;
+}
+
 static void sendctrl(struct qib_pportdata *ppd, u32 op)
 {
+	char buf[128];
+
 	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+		dd_dev_info(ppd->dd, "%s: op [%s] - not implemented\n",
+			__func__, sendctrl_op_str(op, buf, sizeof(buf)));
 }
 
 static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
