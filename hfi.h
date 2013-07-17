@@ -1021,7 +1021,7 @@ struct qib_devdata {
 	/* control high-level access to qsfp */
 	struct mutex qsfp_lock;
 
-	struct qib_diag_client *diag_client;
+	struct diag_client *diag_client;
 	spinlock_t qib_diag_trans_lock; /* protect diag observer ops */
 	struct diag_observer_list_elt *diag_observer_list;
 
