@@ -710,55 +710,18 @@ struct qlogic_ib_counters {
 #define RHF_RTE_BYPASS_NO_ERR		0x0
 
 
-/* qlogic_ib header fields */
-#define QLOGIC_IB_I_VERS_MASK 0xF
-#define QLOGIC_IB_I_VERS_SHIFT 28
-#define QLOGIC_IB_I_CTXT_MASK 0xF
-#define QLOGIC_IB_I_CTXT_SHIFT 24
-#define QLOGIC_IB_I_TID_MASK 0x7FF
-#define QLOGIC_IB_I_TID_SHIFT 13
-#define QLOGIC_IB_I_OFFSET_MASK 0x1FFF
-#define QLOGIC_IB_I_OFFSET_SHIFT 0
-
-/* K_PktFlags bits */
-#define QLOGIC_IB_KPF_INTR 0x1
-#define QLOGIC_IB_KPF_SUBCTXT_MASK 0x3
-#define QLOGIC_IB_KPF_SUBCTXT_SHIFT 1
-
 #define QLOGIC_IB_MAX_SUBCTXT   4
-
-/* SendPIO per-buffer control */
-#define QLOGIC_IB_SP_TEST    0x40
-#define QLOGIC_IB_SP_TESTEBP 0x20
-#define QLOGIC_IB_SP_TRIGGER_SHIFT  15
 
 /* SendPIOAvail bits */
 #define QLOGIC_IB_SENDPIOAVAIL_BUSY_SHIFT 1
 #define QLOGIC_IB_SENDPIOAVAIL_CHECK_SHIFT 0
 
-/* qlogic_ib header format */
-struct qib_header {
-	/*
-	 * Version - 4 bits, Context - 4 bits, TID - 10 bits and Offset -
-	 * 14 bits before ECO change ~28 Dec 03.  After that, Vers 4,
-	 * Context 4, TID 11, offset 13.
-	 */
-	__le32 ver_ctxt_tid_offset;
-	__le16 chksum;
-	__le16 pkt_flags;
-};
-
 /*
- * qlogic_ib user message header format.
- * This structure contains the first 4 fields common to all protocols
- * that employ qlogic_ib.
+ * This structure contains the first field common to all protocols
+ * that employ this chip.
  */
 struct qib_message_header {
 	__be16 lrh[4];
-	__be32 bth[3];
-	/* fields below this point are in host byte order */
-	struct qib_header iph;
-	__u8 sub_opcode;
 };
 
 /* IB - LRH header consts */
@@ -777,7 +740,6 @@ struct qib_message_header {
 #define QIB_MSN_MASK 0xFFFFFF
 #define QIB_QPN_MASK 0xFFFFFF
 #define QIB_MULTICAST_LID_BASE 0xC000
-#define QIB_EAGER_TID_ID QLOGIC_IB_I_TID_MASK
 #define QIB_MULTICAST_QPN 0xFFFFFF
 
 static inline __u32 rhf_err_flags(const __le32 *rbuf)
