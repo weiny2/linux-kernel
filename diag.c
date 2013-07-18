@@ -539,18 +539,7 @@ static ssize_t diagpkt_write(struct file *fp,
 	dd->f_txchk_change(dd, pbufn, 1, TXCHK_CHG_TYPE_DIS1, NULL);
 
 	writeq(dp.pbc_wd, piobuf);
-	/*
-	 * Copy all but the trigger word, then flush, so it's written
-	 * to chip before trigger word, then write trigger word, then
-	 * flush again, so packet is sent.
-	 */
-	if (dd->flags & QIB_PIO_FLUSH_WC) {
-		qib_flush_wc();
-		qib_pio_copy(piobuf + 2, tmpbuf, clen - 1);
-		qib_flush_wc();
-		__raw_writel(tmpbuf[clen - 1], piobuf + clen + 1);
-	} else
-		qib_pio_copy(piobuf + 2, tmpbuf, clen);
+	qib_pio_copy(piobuf + 2, tmpbuf, clen);
 
 	/*
 	 * Ensure buffer is written to the chip, then re-enable

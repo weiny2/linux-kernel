@@ -726,21 +726,10 @@ void qib_send_rc_ack(struct qib_qp *qp)
 	}
 
 	/*
-	 * Write the pbc.
-	 * We have to flush after the PBC for correctness
-	 * on some cpus or WC buffer can be written out of order.
+	 * Write the pbc and data
 	 */
 	writeq(pbc, piobuf);
-
-	if (dd->flags & QIB_PIO_FLUSH_WC) {
-		u32 *hdrp = (u32 *) &hdr;
-
-		qib_flush_wc();
-		qib_pio_copy(piobuf + 2, hdrp, hwords - 1);
-		qib_flush_wc();
-		__raw_writel(hdrp[hwords - 1], piobuf + hwords + 1);
-	} else
-		qib_pio_copy(piobuf + 2, (u32 *) &hdr, hwords);
+	qib_pio_copy(piobuf + 2, (u32 *) &hdr, hwords);
 
 	qib_flush_wc();
 	qib_sendbuf_done(dd, pbufn);

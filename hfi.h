@@ -1196,7 +1196,7 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 #define QIB_INITTED           0x2 /* chip and driver up and initted */
 #define QIB_DOING_RESET       0x4  /* in the middle of doing chip reset */
 #define QIB_PRESENT           0x8  /* chip accesses can be done */
-#define QIB_PIO_FLUSH_WC      0x10 /* Needs Write combining flush for PIO */
+/* unused		      0x10 */
 #define QIB_HAS_THRESH_UPDATE 0x40
 #define QIB_HAS_SDMA_TIMEOUT  0x80
 /* unused		      0x100 */
