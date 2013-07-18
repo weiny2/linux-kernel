@@ -742,13 +742,6 @@ void qib_send_rc_ack(struct qib_qp *qp)
 	} else
 		qib_pio_copy(piobuf + 2, (u32 *) &hdr, hwords);
 
-	if (dd->flags & QIB_USE_SPCL_TRIG) {
-		u32 spcl_off = (pbufn >= dd->piobcnt2k) ? 2047 : 1023;
-
-		qib_flush_wc();
-		__raw_writel(0xaebecede, piobuf + spcl_off);
-	}
-
 	qib_flush_wc();
 	qib_sendbuf_done(dd, pbufn);
 

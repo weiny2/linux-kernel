@@ -1199,7 +1199,7 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 #define QIB_PIO_FLUSH_WC      0x10 /* Needs Write combining flush for PIO */
 #define QIB_HAS_THRESH_UPDATE 0x40
 #define QIB_HAS_SDMA_TIMEOUT  0x80
-#define QIB_USE_SPCL_TRIG     0x100 /* SpecialTrigger launch enabled */
+/* unused		      0x100 */
 #define QIB_NODMA_RTAIL       0x200 /* rcvhdrtail register DMA enabled */
 #define QIB_HAS_INTX          0x800 /* Supports INTx interrupts */
 #define QIB_HAS_SEND_DMA      0x1000 /* Supports Send DMA */
@@ -1424,7 +1424,6 @@ extern ushort qib_num_cfg_vls;
 extern unsigned qib_n_krcv_queues;
 extern unsigned qib_sdma_fetch_arb;
 extern unsigned qib_compat_ddr_negotiate;
-extern int qib_special_trigger;
 
 extern struct mutex qib_mutex;
 

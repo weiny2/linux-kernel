@@ -552,13 +552,6 @@ static ssize_t diagpkt_write(struct file *fp,
 	} else
 		qib_pio_copy(piobuf + 2, tmpbuf, clen);
 
-	if (dd->flags & QIB_USE_SPCL_TRIG) {
-		u32 spcl_off = (pbufn >= dd->piobcnt2k) ? 2047 : 1023;
-
-		qib_flush_wc();
-		__raw_writel(0xaebecede, piobuf + spcl_off);
-	}
-
 	/*
 	 * Ensure buffer is written to the chip, then re-enable
 	 * header checks (if supported by chip).  The txchk
