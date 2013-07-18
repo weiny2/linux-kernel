@@ -786,8 +786,7 @@ static inline u32 clear_upper_bytes(u32 data, u32 n, u32 off)
 }
 #endif
 
-static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
-		    u32 length, unsigned flush_wc)
+static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss, u32 length)
 {
 	u32 extra = 0;
 	u32 data = 0;
@@ -912,14 +911,7 @@ static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
 	}
 	/* Update address before sending packet. */
 	update_sge(ss, length);
-	if (flush_wc) {
-		/* must flush early everything before trigger word */
-		qib_flush_wc();
-		__raw_writel(last, piobuf);
-		/* be sure trigger word is written */
-		qib_flush_wc();
-	} else
-		__raw_writel(last, piobuf);
+	__raw_writel(last, piobuf);
 }
 
 static noinline struct qib_verbs_txreq *__get_txreq(struct qib_ibdev *dev,
@@ -1275,7 +1267,6 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	u32 __iomem *piobuf;
 	u64 pbc;
 	unsigned long flags;
-	unsigned flush_wc;
 	u32 control;
 	u32 pbufn;
 
@@ -1295,26 +1286,11 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	piobuf_orig = piobuf;
 	piobuf += 2;
 
-	flush_wc = dd->flags & QIB_PIO_FLUSH_WC;
 	if (len == 0) {
-		/*
-		 * If there is just the header portion, must flush before
-		 * writing last word of header for correctness, and after
-		 * the last header word (trigger word).
-		 */
-		if (flush_wc) {
-			qib_flush_wc();
-			qib_pio_copy(piobuf, hdr, hdrwords - 1);
-			qib_flush_wc();
-			__raw_writel(hdr[hdrwords - 1], piobuf + hdrwords - 1);
-			qib_flush_wc();
-		} else
-			qib_pio_copy(piobuf, hdr, hdrwords);
+		qib_pio_copy(piobuf, hdr, hdrwords);
 		goto done;
 	}
 
-	if (flush_wc)
-		qib_flush_wc();
 	qib_pio_copy(piobuf, hdr, hdrwords);
 	piobuf += hdrwords;
 
@@ -1325,24 +1301,11 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 
 		/* Update address before sending packet. */
 		update_sge(ss, len);
-		if (flush_wc) {
-			qib_pio_copy(piobuf, addr, dwords - 1);
-			/* must flush early everything before trigger word */
-			qib_flush_wc();
-			__raw_writel(addr[dwords - 1], piobuf + dwords - 1);
-			/* be sure trigger word is written */
-			qib_flush_wc();
-		} else
-			qib_pio_copy(piobuf, addr, dwords);
+		qib_pio_copy(piobuf, addr, dwords);
 		goto done;
 	}
-	copy_io(piobuf, ss, len, flush_wc);
+	copy_io(piobuf, ss, len);
 done:
-	if (dd->flags & QIB_USE_SPCL_TRIG) {
-		u32 spcl_off = (pbufn >= dd->piobcnt2k) ? 2047 : 1023;
-		qib_flush_wc();
-		__raw_writel(0xaebecede, piobuf_orig + spcl_off);
-	}
 	qib_sendbuf_done(dd, pbufn);
 	if (qp->s_rdma_mr) {
 		qib_put_mr(qp->s_rdma_mr);
