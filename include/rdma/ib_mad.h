@@ -43,7 +43,6 @@
 
 /* Management base version */
 #define IB_MGMT_BASE_VERSION			1
-#define JUMBO_MGMT_BASE_VERSION			0x80
 
 /* Management classes */
 #define IB_MGMT_CLASS_SUBN_LID_ROUTED		0x01
@@ -135,11 +134,6 @@ enum {
 	IB_MGMT_SA_DATA = 200,
 	IB_MGMT_DEVICE_HDR = 64,
 	IB_MGMT_DEVICE_DATA = 192,
-
-	JUMBO_MGMT_MAD_HDR = IB_MGMT_MAD_HDR,
-	JUMBO_MGMT_MAD_DATA = 2024,
-	JUMBO_MGMT_RMPP_HDR = IB_MGMT_RMPP_HDR,
-	JUMBO_MGMT_RMPP_DATA = 2012,
 };
 
 struct ib_mad_hdr {
@@ -186,24 +180,10 @@ struct ib_mad {
 	u8			data[IB_MGMT_MAD_DATA];
 };
 
-struct jumbo_mad {
-	struct ib_mad_hdr	mad_hdr;
-	u8			data[JUMBO_MGMT_MAD_DATA];
-};
-
-struct ib_rmpp_base {
+struct ib_rmpp_mad {
 	struct ib_mad_hdr	mad_hdr;
 	struct ib_rmpp_hdr	rmpp_hdr;
-};
-
-struct ib_rmpp_mad {
-	struct ib_rmpp_base	base;
 	u8			data[IB_MGMT_RMPP_DATA];
-};
-
-struct jumbo_rmpp_mad {
-	struct ib_rmpp_base	base;
-	u8			data[JUMBO_MGMT_RMPP_DATA];
 };
 
 struct ib_sa_mad {
@@ -267,9 +247,6 @@ struct ib_class_port_info {
 struct ib_mad_send_buf {
 	struct ib_mad_send_buf	*next;
 	void			*mad;
-			/* can be ib_mad or jumbo_mad
-			 * Depending on base_version in header
-			 */
 	struct ib_mad_agent	*mad_agent;
 	struct ib_ah		*ah;
 	void			*context[2];
@@ -380,11 +357,7 @@ typedef void (*ib_mad_recv_handler)(struct ib_mad_agent *mad_agent,
  *   of their TID set to this value.
  * @port_num: Port number on which QP is registered
  * @rmpp_version: If set, indicates the RMPP version used by this agent.
- * @flags: registration flags
  */
-enum {
-	IB_MAD_USER_RMPP = (1 << 0),
-};
 struct ib_mad_agent {
 	struct ib_device	*device;
 	struct ib_qp		*qp;
@@ -394,7 +367,6 @@ struct ib_mad_agent {
 	ib_mad_snoop_handler	snoop_handler;
 	void			*context;
 	u32			hi_tid;
-	u32			flags;
 	u8			port_num;
 	u8			rmpp_version;
 };
@@ -423,8 +395,7 @@ struct ib_mad_send_wc {
 struct ib_mad_recv_buf {
 	struct list_head	list;
 	struct ib_grh		*grh;
-	struct ib_mad		*mad; /* Note can be a struct jumbo_mad
-					mad_len */
+	struct ib_mad		*mad;
 };
 
 /**
@@ -437,17 +408,6 @@ struct ib_mad_recv_buf {
  * For received response, the wr_id contains a pointer to the ib_mad_send_buf
  *   for the corresponding send request.
  */
-/* FIXME WARNING for upstream.
- * recv_buf is not a continugous buffer but rather a list of the buffers which
- * came in for the rmpp response (or a single buffer for non-rmpp).  I _think_
- * this is fine if these buffers are jumbo sized as the old clients should not
- * use the extra memory but I want to verify this.
- *
- * Regardless mad_len == num_segments * seg_size
- *      where seg_size == IB or Jumbo mad size
- *      depending on base_version
- */
-/* FIXME when mad_recv_wc is jumbo it is not necessarily 2048 bytes */
 struct ib_mad_recv_wc {
 	struct ib_wc		*wc;
 	struct ib_mad_recv_buf	recv_buf;
@@ -466,15 +426,12 @@ struct ib_mad_recv_wc {
  *   in the range from 0x30 to 0x4f. Otherwise not used.
  * @method_mask: The caller will receive unsolicited MADs for any method
  *   where @method_mask = 1.
- * @flags: registration flags
- *
  */
 struct ib_mad_reg_req {
 	u8	mgmt_class;
 	u8	mgmt_class_version;
 	u8	oui[3];
 	DECLARE_BITMAP(method_mask, IB_MGMT_MAX_METHODS);
-	u32     flags;
 };
 
 /**
@@ -703,12 +660,5 @@ void *ib_get_rmpp_segment(struct ib_mad_send_buf *send_buf, int seg_num);
  * @send_buf: Previously allocated send data buffer.
  */
 void ib_free_send_mad(struct ib_mad_send_buf *send_buf);
-
-/**
- * kernel_rmpp_agent - Returns if the agent is performing RMPP.
- * @agent: the agent in question
- * @return: true if agent is performing rmpp, false otherwise.
- */
-int ib_mad_kernel_rmpp_agent(struct ib_mad_agent *agent);
 
 #endif /* IB_MAD_H */
