@@ -965,11 +965,8 @@ static void qib_verify_pioperf(struct qib_devdata *dd)
 
 	dd->f_set_armlaunch(dd, 0);
 
-	/*
-	 * length 0, no dwords actually sent
-	 */
-	writeq(0, piobuf);
-	qib_flush_wc();
+	/* FIXME: The loop below is likely not valid for WFR  - we must
+	   write a valid packet that we expect to send. */
 
 	/*
 	 * This is only roughly accurate, since even with preempt we
@@ -978,7 +975,8 @@ static void qib_verify_pioperf(struct qib_devdata *dd)
 	 */
 	msecs = jiffies_to_msecs(jiffies);
 	for (emsecs = lcnt = 0; emsecs <= 5UL; lcnt++) {
-		qib_pio_copy(piobuf + 64, addr, cnt >> 2);
+		/* FIXME: we can not write a pbc with 0 length */
+		pio_copy(piobuf, 0, addr, cnt >> 2);
 		emsecs = jiffies_to_msecs(jiffies) - msecs;
 	}
 
@@ -1568,98 +1566,3 @@ bail_rcvegrbuf:
 bail:
 	return -ENOMEM;
 }
-
-//FIXME: implement the equivalent for WFR
-#if 0
-/*
- * Note: Changes to this routine should be mirrored
- * for the diagnostics routine qib_remap_ioaddr32().
- * There is also related code for VL15 buffers in qib_init_7322_variables().
- * The teardown code that unmaps is in qib_pcie_ddcleanup()
- */
-int init_chip_wc_pat(struct qib_devdata *dd, u32 vl15buflen)
-{
-	u64 __iomem *qib_kregbase = NULL;
-	void __iomem *qib_piobase = NULL;
-	u64 __iomem *qib_userbase = NULL;
-	u64 qib_kreglen;
-	u64 qib_pio2koffset = dd->piobufbase & 0xffffffff;
-	u64 qib_pio4koffset = dd->piobufbase >> 32;
-	u64 qib_pio2klen = dd->piobcnt2k * dd->palign;
-	u64 qib_pio4klen = dd->piobcnt4k * dd->align4k;
-	u64 qib_physaddr = dd->physaddr;
-	u64 qib_piolen;
-	u64 qib_userlen = 0;
-
-	/*
-	 * Free the old mapping because the kernel will try to reuse the
-	 * old mapping and not create a new mapping with the
-	 * write combining attribute.
-	 */
-	iounmap(dd->kregbase);
-	dd->kregbase = NULL;
-
-	/*
-	 * Assumes chip address space looks like:
-	 *	- kregs + sregs + cregs + uregs (in any order)
-	 *	- piobufs (2K and 4K bufs in either order)
-	 * or:
-	 *	- kregs + sregs + cregs (in any order)
-	 *	- piobufs (2K and 4K bufs in either order)
-	 *	- uregs
-	 */
-	if (dd->piobcnt4k == 0) {
-		qib_kreglen = qib_pio2koffset;
-		qib_piolen = qib_pio2klen;
-	} else if (qib_pio2koffset < qib_pio4koffset) {
-		qib_kreglen = qib_pio2koffset;
-		qib_piolen = qib_pio4koffset + qib_pio4klen - qib_kreglen;
-	} else {
-		qib_kreglen = qib_pio4koffset;
-		qib_piolen = qib_pio2koffset + qib_pio2klen - qib_kreglen;
-	}
-	qib_piolen += vl15buflen;
-	/* Map just the configured ports (not all hw ports) */
-	if (dd->uregbase > qib_kreglen)
-		qib_userlen = dd->ureg_align * dd->cfgctxts;
-
-	/* Sanity checks passed, now create the new mappings */
-	qib_kregbase = ioremap_nocache(qib_physaddr, qib_kreglen);
-	if (!qib_kregbase)
-		goto bail;
-
-	qib_piobase = ioremap_wc(qib_physaddr + qib_kreglen, qib_piolen);
-	if (!qib_piobase)
-		goto bail_kregbase;
-
-	if (qib_userlen) {
-		qib_userbase = ioremap_nocache(qib_physaddr + dd->uregbase,
-					       qib_userlen);
-		if (!qib_userbase)
-			goto bail_piobase;
-	}
-
-	dd->kregbase = qib_kregbase;
-	dd->kregend = (u64 __iomem *)
-		((char __iomem *) qib_kregbase + qib_kreglen);
-	dd->piobase = qib_piobase;
-	dd->pio2kbase = (void __iomem *)
-		(((char __iomem *) dd->piobase) +
-		 qib_pio2koffset - qib_kreglen);
-	if (dd->piobcnt4k)
-		dd->pio4kbase = (void __iomem *)
-			(((char __iomem *) dd->piobase) +
-			 qib_pio4koffset - qib_kreglen);
-	if (qib_userlen)
-		/* ureg will now be accessed relative to dd->userbase */
-		dd->userbase = qib_userbase;
-	return 0;
-
-bail_piobase:
-	iounmap(qib_piobase);
-bail_kregbase:
-	iounmap(qib_kregbase);
-bail:
-	return -ENOMEM;
-}
-#endif

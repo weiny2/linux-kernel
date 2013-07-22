@@ -507,21 +507,20 @@ struct __qib_sendpkt {
 };
 
 /*
- * Diagnostics can send a packet by "writing" the following
- * structs to the diag data special file.
- * This allows a custom
- * pbc (+ static rate) qword, so that special modes and deliberate
- * changes to CRCs can be used. The elements were also re-ordered
- * for better alignment and to avoid padding issues.
+ * Diagnostics can send a packet by writing the following
+ * struct to the diag packet special file.
+ *
+ * This allows a custom PBC qword, so that special modes and deliberate
+ * changes to CRCs can be used.
  */
-#define _DIAG_XPKT_VERS 3
-struct qib_diag_xpkt {
-	__u16 version;
-	__u16 unit;
-	__u16 port;
-	__u16 len;
-	__u64 data;
-	__u64 pbc_wd;
+#define _DIAG_PKT_VERS 0
+struct diag_pkt {
+	__u16 version;		/* structure version */
+	__u16 unit;		/* which device */
+	__u16 context;		/* send context to use */
+	__u16 len;		/* data length, in bytes */
+	__u64 data;		/* user data pointer */
+	__u64 pbc_wd;		/* PBC for the packet */
 };
 
 /*

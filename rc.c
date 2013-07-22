@@ -671,15 +671,16 @@ void qib_send_rc_ack(struct qib_qp *qp)
 		goto queue_ack;
 
 	/* Construct the header with s_lock held so APM doesn't change it. */
-	ohdr = &hdr.u.oth;
-	lrh0 = QIB_LRH_BTH;
-	/* header size in 32-bit words LRH+BTH+AETH = (8+12+4)/4. */
+	/* header size in 32-bit words LRH+BTH+AETH = (8+12+4)/4 */
 	hwords = 6;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
 		hwords += qib_make_grh(ibp, &hdr.u.l.grh,
 				       &qp->remote_ah_attr.grh, hwords, 0);
 		ohdr = &hdr.u.l.oth;
 		lrh0 = QIB_LRH_GRH;
+	} else {
+		ohdr = &hdr.u.oth;
+		lrh0 = QIB_LRH_BTH;
 	}
 	/* read pkey_index w/o lock (its atomic) */
 	bth0 = qib_get_pkey(ibp, qp->s_pkey_index) | (OP(ACKNOWLEDGE) << 24);
@@ -725,11 +726,8 @@ void qib_send_rc_ack(struct qib_qp *qp)
 		goto queue_ack;
 	}
 
-	/*
-	 * Write the pbc and data
-	 */
-	writeq(pbc, piobuf);
-	qib_pio_copy(piobuf + 2, (u32 *) &hdr, hwords);
+	/* write the pbc and data */
+	pio_copy(piobuf, pbc, &hdr, hwords);
 
 	qib_flush_wc();
 	qib_sendbuf_done(dd, pbufn);

@@ -206,119 +206,41 @@ void qib_diag_remove(struct qib_devdata *dd)
 	unregister_observers(dd);
 }
 
-/* qib_remap_ioaddr32 - remap an offset into chip address space to __iomem *
+/*
+ * get_ioaddr - find the IO address given the chip offset
  *
- * @dd: the qlogic_ib device
- * @offs: the offset in chip-space
- * @cntp: Pointer to max (byte) count for transfer starting at offset
- * This returns a u32 __iomem * so it can be used for both 64 and 32-bit
- * mapping. It is needed because with the use of PAT for control of
- * write-combining, the logically contiguous address-space of the chip
- * may be split into virtually non-contiguous spaces, with different
- * attributes, which are them mapped to contiguous physical space
- * based from the first BAR.
+ * @dd: the device data
+ * @offset: the offset in chip-space
+ * @cntp: pointer to max byte count for transfer starting at offset
  *
- * The code below makes the same assumptions as were made in
- * init_chip_wc_pat() (init.c), copied here:
- * Assumes chip address space looks like:
- *		- kregs + sregs + cregs + uregs (in any order)
- *		- piobufs (2K and 4K bufs in either order)
- *	or:
- *		- kregs + sregs + cregs (in any order)
- *		- piobufs (2K and 4K bufs in either order)
- *		- uregs
+ * This routine is needed because the logically contiguous address-space
+ * of the chip may be split into virtually non-contiguous spaces.
+ * See pcie_ddinit() for details.
  *
- * If cntp is non-NULL, returns how many bytes from offset can be accessed
  * Returns 0 if the offset is not mapped.
  */
-static u32 __iomem *qib_remap_ioaddr32(struct qib_devdata *dd, u32 offset,
-				       u32 *cntp)
+static u64 __iomem *get_ioaddr(struct qib_devdata *dd, u32 offset, u32 *cntp)
 {
-	u32 kreglen;
-	u32 snd_bottom, snd_lim = 0;
-	u32 __iomem *krb32 = (u32 __iomem *)dd->kregbase;
-	u32 __iomem *map = NULL;
-	u32 cnt = 0;
-	u32 tot4k, offs4k;
+	u8 __iomem *map;
+	u32 cnt;
 
-	/* First, simplest case, offset is within the first map. */
-	kreglen = dd->kregend - dd->kregbase;
-	if (offset < kreglen) {
-		map = krb32 + (offset / sizeof(u32));
-		cnt = kreglen - offset;
-		goto mapped;
-	}
-
-	/*
-	 * Next check for user regs, the next most common case,
-	 * and a cheap check because if they are not in the first map
-	 * they are last in chip.
-	 */
-	if (dd->userbase) {
-		/* If user regs mapped, they are after send, so set limit. */
-		u32 ulim = (dd->cfgctxts * dd->ureg_align) + dd->uregbase;
-		if (!dd->piovl15base)
-			snd_lim = dd->uregbase;
-		krb32 = (u32 __iomem *)dd->userbase;
-		if (offset >= dd->uregbase && offset < ulim) {
-			map = krb32 + (offset - dd->uregbase) / sizeof(u32);
-			cnt = ulim - offset;
-			goto mapped;
-		}
+	if (offset < WFR_TXE_PIO_SEND) {
+		/* offset is within the CSR map */
+		map = dd->kregbase + offset;
+		cnt = WFR_TXE_PIO_SEND - offset;
+	} else if (offset < (WFR_TXE_PIO_SEND + WFR_TXE_PIO_SIZE)) {
+		/* offset is within the PIO map */
+		offset -= WFR_TXE_PIO_SEND;
+		map = dd->piobase + offset;
+		cnt = WFR_TXE_PIO_SIZE - offset;
+	} else {
+		/* offset is outside anything */
+		map = NULL;
+		cnt = 0;
 	}
 
-	/*
-	 * Lastly, check for offset within Send Buffers.
-	 * This is gnarly because struct devdata is deliberately vague
-	 * about things like 7322 VL15 buffers, and we are not in
-	 * chip-specific code here, so should not make many assumptions.
-	 * The one we _do_ make is that the only chip that has more sndbufs
-	 * than we admit is the 7322, and it has userregs above that, so
-	 * we know the snd_lim.
-	 */
-	/* Assume 2K buffers are first. */
-	snd_bottom = dd->pio2k_bufbase;
-	if (snd_lim == 0) {
-		u32 tot2k = dd->piobcnt2k * ALIGN(dd->piosize2k, dd->palign);
-		snd_lim = snd_bottom + tot2k;
-	}
-	/* If 4k buffers exist, account for them by bumping
-	 * appropriate limit.
-	 */
-	tot4k = dd->piobcnt4k * dd->align4k;
-	offs4k = dd->piobufbase >> 32;
-	if (dd->piobcnt4k) {
-		if (snd_bottom > offs4k)
-			snd_bottom = offs4k;
-		else {
-			/* 4k above 2k. Bump snd_lim, if needed*/
-			if (!dd->userbase || dd->piovl15base)
-				snd_lim = offs4k + tot4k;
-		}
-	}
-	/*
-	 * Judgement call: can we ignore the space between SendBuffs and
-	 * UserRegs, where we would like to see vl15 buffs, but not more?
-	 */
-	if (offset >= snd_bottom && offset < snd_lim) {
-		offset -= snd_bottom;
-		map = (u32 __iomem *)dd->piobase + (offset / sizeof(u32));
-		cnt = snd_lim - offset;
-	}
-
-	if (!map && offs4k && dd->piovl15base) {
-		snd_lim = offs4k + tot4k + 2 * dd->align4k;
-		if (offset >= (offs4k + tot4k) && offset < snd_lim) {
-			map = (u32 __iomem *)dd->piovl15base +
-				((offset - (offs4k + tot4k)) / sizeof(u32));
-			cnt = snd_lim - offset;
-		}
-	}
-
-mapped:
-	if (cntp)
-		*cntp = cnt;
-	return map;
+	*cntp = cnt;
+	return (u64 __iomem *)map;
 }
 
 /*
@@ -342,7 +264,7 @@ static int read_umem64(struct qib_devdata *dd, void __user *uaddr,
 	u32 limit;
 	int ret;
 
-	reg_addr = (const u64 __iomem *)qib_remap_ioaddr32(dd, regoffs, &limit);
+	reg_addr = get_ioaddr(dd, regoffs, &limit);
 	if (reg_addr == NULL || limit == 0 || !(dd->flags & QIB_PRESENT)) {
 		ret = -EINVAL;
 		goto bail;
@@ -381,11 +303,11 @@ static int write_umem64(struct qib_devdata *dd, u32 regoffs,
 			    const void __user *uaddr, size_t count)
 {
 	u64 __iomem *reg_addr;
-	const u64 __iomem *reg_end;
+	u64 __iomem *reg_end;
 	u32 limit;
 	int ret;
 
-	reg_addr = (u64 __iomem *)qib_remap_ioaddr32(dd, regoffs, &limit);
+	reg_addr = get_ioaddr(dd, regoffs, &limit);
 	if (reg_addr == NULL || limit == 0 || !(dd->flags & QIB_PRESENT)) {
 		ret = -EINVAL;
 		goto bail;
@@ -446,7 +368,7 @@ bail:
 /**
  * diagpkt_write - write an IB packet
  * @fp: the diag data device file pointer
- * @data: qib_diag_xpkt structure saying where to get the packet
+ * @data: diag_pkt structure saying where to get the packet
  * @count: size of data to write
  * @off: unused by this code
  */
@@ -456,7 +378,7 @@ static ssize_t diagpkt_write(struct file *fp,
 {
 	u32 __iomem *piobuf;
 	u32 plen, clen, pbufn;
-	struct qib_diag_xpkt dp;
+	struct diag_pkt dp;
 	u32 *tmpbuf = NULL;
 	struct qib_devdata *dd;
 	struct qib_pportdata *ppd;
@@ -482,7 +404,7 @@ static ssize_t diagpkt_write(struct file *fp,
 		goto bail;
 	}
 
-	if (dp.version != _DIAG_XPKT_VERS) {
+	if (dp.version != _DIAG_PKT_VERS) {
 		qib_dev_err(dd, "Invalid version %u for diagpkt_write\n",
 			    dp.version);
 		ret = -EINVAL;
@@ -493,17 +415,17 @@ static ssize_t diagpkt_write(struct file *fp,
 		ret = -EINVAL;
 		goto bail;
 	}
-	if (!dp.port || dp.port > dd->num_pports) {
-		ret = -EINVAL;
-		goto bail;
-	}
-	ppd = &dd->pport[dp.port - 1];
+	// FIXME: use the context field to obtain a send context
+	// will need to verify that the context is avialable, etc.
+	ppd = NULL;
 
 	/* need total length before first word written */
 	/* +1 word is for the qword padding */
 	plen = sizeof(u32) + dp.len;
 	clen = dp.len >> 2;
 
+	/* TODO: check against the real send size, not ibmaxlen */
+	/* TODO: look into ibmaxlen - what is it really? */
 	if ((plen + 4) > ppd->ibmaxlen) {
 		ret = -EINVAL;
 		goto bail;      /* before writing pbc */
@@ -522,10 +444,10 @@ static ssize_t diagpkt_write(struct file *fp,
 		goto bail;
 	}
 
-	plen >>= 2;             /* in dwords */
-
+	/* if 0, fill in a default */
+	/* FIXME: the default needs a lot more work */
 	if (dp.pbc_wd == 0)
-		dp.pbc_wd = plen;
+		dp.pbc_wd = plen >> 2;             /* in dwords */
 
 	piobuf = dd->f_getsendbuf(ppd, dp.pbc_wd, &pbufn);
 	if (!piobuf) {
@@ -538,9 +460,9 @@ static ssize_t diagpkt_write(struct file *fp,
 	/* disable header check on pbufn for this packet */
 	dd->f_txchk_change(dd, pbufn, 1, TXCHK_CHG_TYPE_DIS1, NULL);
 
-	writeq(dp.pbc_wd, piobuf);
-	qib_pio_copy(piobuf + 2, tmpbuf, clen);
+	pio_copy(piobuf, dp.pbc_wd, tmpbuf, clen);
 
+	/* TODO: I don't think we need the flush anymore */
 	/*
 	 * Ensure buffer is written to the chip, then re-enable
 	 * header checks (if supported by chip).  The txchk

@@ -1123,7 +1123,12 @@ void qib_chip_done(void);
 
 /* check to see if we have to force ordering for write combining */
 int qib_unordered_wc(void);
-void qib_pio_copy(void __iomem *to, const void *from, size_t count);
+void pio_copy(void __iomem *to, u64 pbc, const void *from, size_t count);
+u32 seg_pio_copy_start(void __iomem *to, u32 *carry, u64 pbc,
+				const void *from, size_t count);
+u32 seg_pio_copy_mid(void __iomem *to, u32 off, u32 *carry,
+				const void *from, size_t count);
+void seg_pio_copy_end(void __iomem *to, u32 off, u32 carry);
 
 void qib_disarm_piobufs(struct qib_devdata *, unsigned, unsigned);
 int qib_disarm_piobufs_ifneeded(struct qib_ctxtdata *);

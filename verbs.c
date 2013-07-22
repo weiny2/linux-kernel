@@ -750,170 +750,6 @@ static void update_sge(struct qib_sge_state *ss, u32 length)
 	}
 }
 
-#ifdef __LITTLE_ENDIAN
-static inline u32 get_upper_bits(u32 data, u32 shift)
-{
-	return data >> shift;
-}
-
-static inline u32 set_upper_bits(u32 data, u32 shift)
-{
-	return data << shift;
-}
-
-static inline u32 clear_upper_bytes(u32 data, u32 n, u32 off)
-{
-	data <<= ((sizeof(u32) - n) * BITS_PER_BYTE);
-	data >>= ((sizeof(u32) - n - off) * BITS_PER_BYTE);
-	return data;
-}
-#else
-static inline u32 get_upper_bits(u32 data, u32 shift)
-{
-	return data << shift;
-}
-
-static inline u32 set_upper_bits(u32 data, u32 shift)
-{
-	return data >> shift;
-}
-
-static inline u32 clear_upper_bytes(u32 data, u32 n, u32 off)
-{
-	data >>= ((sizeof(u32) - n) * BITS_PER_BYTE);
-	data <<= ((sizeof(u32) - n - off) * BITS_PER_BYTE);
-	return data;
-}
-#endif
-
-static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss, u32 length)
-{
-	u32 extra = 0;
-	u32 data = 0;
-	u32 last;
-
-	while (1) {
-		u32 len = ss->sge.length;
-		u32 off;
-
-		if (len > length)
-			len = length;
-		if (len > ss->sge.sge_length)
-			len = ss->sge.sge_length;
-		BUG_ON(len == 0);
-		/* If the source address is not aligned, try to align it. */
-		off = (unsigned long)ss->sge.vaddr & (sizeof(u32) - 1);
-		if (off) {
-			u32 *addr = (u32 *)((unsigned long)ss->sge.vaddr &
-					    ~(sizeof(u32) - 1));
-			u32 v = get_upper_bits(*addr, off * BITS_PER_BYTE);
-			u32 y;
-
-			y = sizeof(u32) - off;
-			if (len > y)
-				len = y;
-			if (len + extra >= sizeof(u32)) {
-				data |= set_upper_bits(v, extra *
-						       BITS_PER_BYTE);
-				len = sizeof(u32) - extra;
-				if (len == length) {
-					last = data;
-					break;
-				}
-				__raw_writel(data, piobuf);
-				piobuf++;
-				extra = 0;
-				data = 0;
-			} else {
-				/* Clear unused upper bytes */
-				data |= clear_upper_bytes(v, len, extra);
-				if (len == length) {
-					last = data;
-					break;
-				}
-				extra += len;
-			}
-		} else if (extra) {
-			/* Source address is aligned. */
-			u32 *addr = (u32 *) ss->sge.vaddr;
-			int shift = extra * BITS_PER_BYTE;
-			int ushift = 32 - shift;
-			u32 l = len;
-
-			while (l >= sizeof(u32)) {
-				u32 v = *addr;
-
-				data |= set_upper_bits(v, shift);
-				__raw_writel(data, piobuf);
-				data = get_upper_bits(v, ushift);
-				piobuf++;
-				addr++;
-				l -= sizeof(u32);
-			}
-			/*
-			 * We still have 'extra' number of bytes leftover.
-			 */
-			if (l) {
-				u32 v = *addr;
-
-				if (l + extra >= sizeof(u32)) {
-					data |= set_upper_bits(v, shift);
-					len -= l + extra - sizeof(u32);
-					if (len == length) {
-						last = data;
-						break;
-					}
-					__raw_writel(data, piobuf);
-					piobuf++;
-					extra = 0;
-					data = 0;
-				} else {
-					/* Clear unused upper bytes */
-					data |= clear_upper_bytes(v, l, extra);
-					if (len == length) {
-						last = data;
-						break;
-					}
-					extra += l;
-				}
-			} else if (len == length) {
-				last = data;
-				break;
-			}
-		} else if (len == length) {
-			u32 w;
-
-			/*
-			 * Need to round up for the last dword in the
-			 * packet.
-			 */
-			w = (len + 3) >> 2;
-			qib_pio_copy(piobuf, ss->sge.vaddr, w - 1);
-			piobuf += w - 1;
-			last = ((u32 *) ss->sge.vaddr)[w - 1];
-			break;
-		} else {
-			u32 w = len >> 2;
-
-			qib_pio_copy(piobuf, ss->sge.vaddr, w);
-			piobuf += w;
-
-			extra = len & (sizeof(u32) - 1);
-			if (extra) {
-				u32 v = ((u32 *) ss->sge.vaddr)[w];
-
-				/* Clear unused upper bytes */
-				data = clear_upper_bytes(v, extra, 0);
-			}
-		}
-		update_sge(ss, len);
-		length -= len;
-	}
-	/* Update address before sending packet. */
-	update_sge(ss, length);
-	__raw_writel(last, piobuf);
-}
-
 static noinline struct qib_verbs_txreq *__get_txreq(struct qib_ibdev *dev,
 					   struct qib_qp *qp)
 {
@@ -1263,7 +1099,6 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	struct qib_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct qib_pportdata *ppd = dd->pport + qp->port_num - 1;
 	u32 *hdr = (u32 *) ibhdr;
-	u32 __iomem *piobuf_orig;
 	u32 __iomem *piobuf;
 	u64 pbc;
 	unsigned long flags;
@@ -1277,35 +1112,29 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	if (unlikely(piobuf == NULL))
 		return no_bufs_available(qp);
 
-	/*
-	 * Write the pbc.
-	 * We have to flush after the PBC for correctness on some cpus
-	 * or WC buffer can be written out of order.
-	 */
-	writeq(pbc, piobuf);
-	piobuf_orig = piobuf;
-	piobuf += 2;
-
 	if (len == 0) {
-		qib_pio_copy(piobuf, hdr, hdrwords);
-		goto done;
+		pio_copy(piobuf, pbc, hdr, hdrwords);
+	} else {
+		u32 off, carry;
+
+		off = seg_pio_copy_start(piobuf, &carry, pbc, &hdr, hdrwords);
+		while (len) {
+			void *addr = ss->sge.vaddr;
+			u32 slen = ss->sge.length;
+
+			if (slen > len)
+				slen = len;
+			//FIXME: do we need to handle non DWORD addresses
+			// and lengths?
+			BUG_ON(slen & 0x3);
+			BUG_ON((unsigned long)addr & 0x3);
+			update_sge(ss, slen);
+			off = seg_pio_copy_mid(piobuf, off, &carry, addr, slen >> 2);
+			len -= slen;
+		}
+		seg_pio_copy_end(piobuf, off, carry);
 	}
 
-	qib_pio_copy(piobuf, hdr, hdrwords);
-	piobuf += hdrwords;
-
-	/* The common case is aligned and contained in one segment. */
-	if (likely(ss->num_sge == 1 && len <= ss->sge.length &&
-		   !((unsigned long)ss->sge.vaddr & (sizeof(u32) - 1)))) {
-		u32 *addr = (u32 *) ss->sge.vaddr;
-
-		/* Update address before sending packet. */
-		update_sge(ss, len);
-		qib_pio_copy(piobuf, addr, dwords);
-		goto done;
-	}
-	copy_io(piobuf, ss, len);
-done:
 	qib_sendbuf_done(dd, pbufn);
 	if (qp->s_rdma_mr) {
 		qib_put_mr(qp->s_rdma_mr);

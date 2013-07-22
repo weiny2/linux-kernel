@@ -141,18 +141,37 @@ int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
 	addr = pci_resource_start(pdev, 0);
 	len = pci_resource_len(pdev, 0);
 
+	/*
+	 * The TXE PIO buffers are at the tail end of the chip space.
+	 * Cut them off and map them separately.
+	 */
+
+	/* sanity check vs expectations */
+	if (len != WFR_TXE_PIO_SEND + WFR_TXE_PIO_SIZE) {
+		qib_dev_err(dd, "chip PIO range does not match\n");
+		return -EINVAL;
+	}
+
 #if defined(__powerpc__)
 	/* There isn't a generic way to specify writethrough mappings */
-	dd->kregbase = __ioremap(addr, len, _PAGE_NO_CACHE | _PAGE_WRITETHRU);
+	dd->kregbase = __ioremap(addr, WFR_TXE_PIO_SEND,
+					_PAGE_NO_CACHE | _PAGE_WRITETHRU);
 #else
-	dd->kregbase = ioremap_nocache(addr, len);
+	dd->kregbase = ioremap_nocache(addr, WFR_TXE_PIO_SEND);
 #endif
 
 	if (!dd->kregbase)
 		return -ENOMEM;
+
+	dd->piobase = ioremap_wc(addr + WFR_TXE_PIO_SEND, WFR_TXE_PIO_SIZE);
+	if (!dd->piobase) {
+		iounmap(dd->kregbase);
+		return -ENOMEM;
+	}
+
 	dd->flags |= QIB_PRESENT;	/* now register routines work */
 
-	dd->kregend = dd->kregbase + len;
+	dd->kregend = dd->kregbase + WFR_TXE_PIO_SEND;
 	dd->physaddr = addr;        /* used for io_remap, etc. */
 
 	/*
