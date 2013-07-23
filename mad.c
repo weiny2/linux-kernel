@@ -277,7 +277,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
 	struct ib_node_info *nip = (struct ib_node_info *)&smp->data;
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	u32 vendor, majrev, minrev;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 
@@ -312,7 +312,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 static int subn_get_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	u32 startgx = 8 * be32_to_cpu(smp->attr_mod);
 	__be64 *p = (__be64 *) smp->data;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
@@ -451,7 +451,7 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	struct qib_ibport *ibp;
 	struct ib_port_info *pip = (struct ib_port_info *)smp->data;
@@ -575,7 +575,7 @@ bail:
  * @port: the IB port number
  * @pkeys: the pkey table is placed here
  */
-static int get_pkeys(struct qib_devdata *dd, u8 port, u16 *pkeys)
+static int get_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 {
 	struct qib_pportdata *ppd = dd->pport + port - 1;
 	/*
@@ -601,7 +601,7 @@ static int subn_get_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 
 	memset(smp->data, 0, sizeof(smp->data));
 	if (startpx == 0) {
-		struct qib_devdata *dd = dd_from_ibdev(ibdev);
+		struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 		unsigned i, n = qib_get_npkeys(dd);
 
 		get_pkeys(dd, port, p);
@@ -617,7 +617,7 @@ static int subn_get_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	u32 startgx = 8 * be32_to_cpu(smp->attr_mod);
 	__be64 *p = (__be64 *) smp->data;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
@@ -652,7 +652,7 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 {
 	struct ib_port_info *pip = (struct ib_port_info *)smp->data;
 	struct ib_event event;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	struct qib_ibport *ibp;
 	u8 clientrereg = (pip->clientrereg_resv_subnetto & 0x80);
@@ -983,7 +983,7 @@ bail:
  * @port: the IB port number
  * @pkeys: the PKEY table
  */
-static int set_pkeys(struct qib_devdata *dd, u8 port, u16 *pkeys)
+static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 {
 	struct qib_pportdata *ppd;
 	struct qib_ctxtdata *rcd;
@@ -1040,7 +1040,7 @@ static int subn_set_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 	u32 startpx = 32 * (be32_to_cpu(smp->attr_mod) & 0xffff);
 	__be16 *p = (__be16 *) smp->data;
 	u16 *q = (u16 *) smp->data;
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	unsigned i, n = qib_get_npkeys(dd);
 
 	for (i = 0; i < n; i++)
@@ -1151,7 +1151,7 @@ static int pma_get_classportinfo(struct ib_pma_mad *pmp,
 {
 	struct ib_class_port_info *p =
 		(struct ib_class_port_info *)pmp->data;
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 
 	memset(pmp->data, 0, sizeof(pmp->data));
 
@@ -1181,7 +1181,7 @@ static int pma_get_portsamplescontrol(struct ib_pma_mad *pmp,
 	struct ib_pma_portsamplescontrol *p =
 		(struct ib_pma_portsamplescontrol *)pmp->data;
 	struct qib_ibdev *dev = to_idev(ibdev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	unsigned long flags;
@@ -1219,7 +1219,7 @@ static int pma_set_portsamplescontrol(struct ib_pma_mad *pmp,
 	struct ib_pma_portsamplescontrol *p =
 		(struct ib_pma_portsamplescontrol *)pmp->data;
 	struct qib_ibdev *dev = to_idev(ibdev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	unsigned long flags;
@@ -1348,7 +1348,7 @@ static int pma_get_portsamplesresult(struct ib_pma_mad *pmp,
 	struct ib_pma_portsamplesresult *p =
 		(struct ib_pma_portsamplesresult *)pmp->data;
 	struct qib_ibdev *dev = to_idev(ibdev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	unsigned long flags;
@@ -1387,7 +1387,7 @@ static int pma_get_portsamplesresult_ext(struct ib_pma_mad *pmp,
 	struct ib_pma_portsamplesresult_ext *p =
 		(struct ib_pma_portsamplesresult_ext *)pmp->data;
 	struct qib_ibdev *dev = to_idev(ibdev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	unsigned long flags;
@@ -1530,7 +1530,7 @@ static int pma_get_portcounters_cong(struct ib_pma_mad *pmp,
 	struct qib_verbs_counters cntrs;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_devdata *dd = dd_from_ppd(ppd);
+	struct hfi_devdata *dd = dd_from_ppd(ppd);
 	u32 port_select = be32_to_cpu(pmp->mad_hdr.attr_mod) & 0xFF;
 	u64 xmit_wait_counter;
 	unsigned long flags;
@@ -1741,7 +1741,7 @@ static int pma_set_portcounters_cong(struct ib_pma_mad *pmp,
 {
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_devdata *dd = dd_from_ppd(ppd);
+	struct hfi_devdata *dd = dd_from_ppd(ppd);
 	struct qib_verbs_counters cntrs;
 	u32 counter_select = (be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24) & 0xFF;
 	int ret = 0;
@@ -2415,7 +2415,7 @@ static void send_handler(struct ib_mad_agent *agent,
 static void xmit_wait_timer_func(unsigned long opaque)
 {
 	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
-	struct qib_devdata *dd = dd_from_ppd(ppd);
+	struct hfi_devdata *dd = dd_from_ppd(ppd);
 	unsigned long flags;
 	u8 status;
 
@@ -2438,7 +2438,7 @@ done:
 
 int qib_create_agents(struct qib_ibdev *dev)
 {
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct ib_mad_agent *agent;
 	struct qib_ibport *ibp;
 	int p;
@@ -2483,7 +2483,7 @@ err:
 
 void qib_free_agents(struct qib_ibdev *dev)
 {
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct ib_mad_agent *agent;
 	struct qib_ibport *ibp;
 	int p;

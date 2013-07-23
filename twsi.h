@@ -34,13 +34,13 @@
 
 #define QIB_TWSI_NO_DEV 0xFF
 
-struct qib_devdata;
+struct hfi_devdata;
 
 /* these functions must be called with qsfp_lock held */
-int qib_twsi_reset(struct qib_devdata *dd);
-int qib_twsi_blk_rd(struct qib_devdata *dd, int dev, int addr, void *buffer,
+int qib_twsi_reset(struct hfi_devdata *dd);
+int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr, void *buffer,
 		    int len);
-int qib_twsi_blk_wr(struct qib_devdata *dd, int dev, int addr,
+int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
 		    const void *buffer, int len);
 
 

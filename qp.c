@@ -117,7 +117,7 @@ static void get_map_page(struct qib_qpn_table *qpt, struct qpn_map *map)
  * Allocate the next available QPN or
  * zero/one for QP type IB_QPT_SMI/IB_QPT_GSI.
  */
-static int alloc_qpn(struct qib_devdata *dd, struct qib_qpn_table *qpt,
+static int alloc_qpn(struct hfi_devdata *dd, struct qib_qpn_table *qpt,
 		     enum ib_qp_type type, u8 port)
 {
 	u32 i, offset, max_scan, qpn;
@@ -286,7 +286,7 @@ static void remove_qp(struct qib_ibdev *dev, struct qib_qp *qp)
  * There should not be any QPs still in use.
  * Free memory for table.
  */
-unsigned qib_free_all_qps(struct qib_devdata *dd)
+unsigned qib_free_all_qps(struct hfi_devdata *dd)
 {
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	unsigned long flags;
@@ -636,7 +636,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	 * Note that the QP port has to be set in INIT and MTU in RTR.
 	 */
 	if (attr_mask & IB_QP_PATH_MTU) {
-		struct qib_devdata *dd = dd_from_dev(dev);
+		struct hfi_devdata *dd = dd_from_dev(dev);
 		int mtu, pidx = qp->port_num - 1;
 
 		mtu = ib_mtu_enum_to_int(attr->path_mtu);
@@ -975,7 +975,7 @@ struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
 	int err;
 	struct qib_swqe *swq = NULL;
 	struct qib_ibdev *dev;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	size_t sz;
 	size_t sg_list_sz;
 	struct ib_qp *ret;
@@ -1229,7 +1229,7 @@ int qib_destroy_qp(struct ib_qp *ibqp)
  * qib_init_qpn_table - initialize the QP number table for a device
  * @qpt: the QPN table
  */
-void qib_init_qpn_table(struct qib_devdata *dd, struct qib_qpn_table *qpt)
+void qib_init_qpn_table(struct hfi_devdata *dd, struct qib_qpn_table *qpt)
 {
 	spin_lock_init(&qpt->lock);
 	qpt->last = 1;          /* start with QPN 2 */

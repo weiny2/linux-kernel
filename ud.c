@@ -388,7 +388,7 @@ unlock:
 static unsigned qib_lookup_pkey(struct qib_ibport *ibp, u16 pkey)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	unsigned ctxt = ppd->hw_pidx;
 	unsigned i;
 

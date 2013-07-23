@@ -396,10 +396,10 @@
 
 
 /* read and write hardware registers */
-u64 read_csr(const struct qib_devdata *dd, u32 offset);
-void write_csr(const struct qib_devdata *dd, u32 offset, u64 value);
+u64 read_csr(const struct hfi_devdata *dd, u32 offset);
+void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);
 
-int load_firmware(struct qib_devdata *dd);
+int load_firmware(struct hfi_devdata *dd);
 
 #endif /* _WFR_H */
 

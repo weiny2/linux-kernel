@@ -196,7 +196,7 @@ struct qib_ctxtdata {
 	/* pkeys set by this use of this ctxt */
 	u16 pkeys[4];
 	/* so file ops can get at unit */
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	/* so funcs that need physical port can get it easily */
 	struct qib_pportdata *ppd;
 	/* A page of memory for rcvhdrhead, rcvegrhead, rcvegrtail * N */
@@ -513,7 +513,7 @@ struct xmit_wait {
 struct qib_pportdata {
 	struct qib_ibport ibport_data;
 
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	struct kobject pport_kobj;
 	struct kobject pport_cc_kobj;
 	struct kobject sl2vl_kobj;
@@ -672,7 +672,7 @@ struct qib_pportdata {
  */
 struct diag_observer;
 
-typedef int (*diag_hook) (struct qib_devdata *dd,
+typedef int (*diag_hook) (struct hfi_devdata *dd,
 	const struct diag_observer *op,
 	u32 offs, u64 *data, u64 mask, int only_32);
 
@@ -682,7 +682,7 @@ struct diag_observer {
 	u32 top;
 };
 
-extern int qib_register_observer(struct qib_devdata *dd,
+extern int qib_register_observer(struct hfi_devdata *dd,
 	const struct diag_observer *op);
 
 /* Only declared here, not defined. Private to diags */
@@ -692,7 +692,7 @@ struct diag_observer_list_elt;
  * Data pertaining to each SDMA engine.
  */
 struct sdma_engine {
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	int which;			/* which engine */
 	u64 imask;			/* clear interrupt mask */
 	/* add sdma fields here... */
@@ -703,7 +703,7 @@ struct sdma_engine {
  * described above) while fields only used by a particular chip-type are in
  * a qib_chipdata struct, whose contents are opaque to this file.
  */
-struct qib_devdata {
+struct hfi_devdata {
 	struct qib_ibdev verbs_dev;     /* must be first */
 	struct list_head list;
 	/* pointers to related structs for this device */
@@ -757,23 +757,23 @@ struct qib_devdata {
 	 * may need to "bend", e.g. *_f_put_tid
 	 */
 	/* fallback to alternate interrupt type if possible */
-	int (*f_intr_fallback)(struct qib_devdata *);
+	int (*f_intr_fallback)(struct hfi_devdata *);
 	/* hard reset chip */
-	int (*f_reset)(struct qib_devdata *);
+	int (*f_reset)(struct hfi_devdata *);
 	void (*f_quiet_serdes)(struct qib_pportdata *);
 	int (*f_bringup_serdes)(struct qib_pportdata *);
-	int (*f_early_init)(struct qib_devdata *);
+	int (*f_early_init)(struct hfi_devdata *);
 	void (*f_clear_tids)(struct qib_ctxtdata *);
-	void (*f_put_tid)(struct qib_devdata *, u32, u32, unsigned long);
-	void (*f_cleanup)(struct qib_devdata *);
+	void (*f_put_tid)(struct hfi_devdata *, u32, u32, unsigned long);
+	void (*f_cleanup)(struct hfi_devdata *);
 	void (*f_setextled)(struct qib_pportdata *, u32);
 	/* fill out chip-specific fields */
 	int (*f_get_base_info)(struct qib_ctxtdata *, struct qib_base_info *);
 	/* free irq */
-	void (*f_free_irq)(struct qib_devdata *);
+	void (*f_free_irq)(struct hfi_devdata *);
 	struct qib_message_header *(*f_get_msgheader)
-					(struct qib_devdata *, __le32 *);
-	void (*f_config_ctxts)(struct qib_devdata *);
+					(struct hfi_devdata *, __le32 *);
+	void (*f_config_ctxts)(struct hfi_devdata *);
 	int (*f_get_ib_cfg)(struct qib_pportdata *, int);
 	int (*f_set_ib_cfg)(struct qib_pportdata *, int, u32);
 	int (*f_set_ib_loopback)(struct qib_pportdata *, const char *);
@@ -786,7 +786,7 @@ struct qib_devdata {
 	int (*f_ib_updown)(struct qib_pportdata *, int, u64);
 	u32 __iomem *(*f_getsendbuf)(struct qib_pportdata *, u64, u32 *);
 	/* Read/modify/write of GPIO pins (potentially chip-specific */
-	int (*f_gpio_mod)(struct qib_devdata *dd, u32 out, u32 dir,
+	int (*f_gpio_mod)(struct hfi_devdata *dd, u32 out, u32 dir,
 		u32 mask);
 	/*
 	 * modify rcvctrl shadow[s] and write to appropriate chip-regs.
@@ -798,10 +798,10 @@ struct qib_devdata {
 		int ctxt);
 	/* Read/modify/write sendctrl appropriately for op and port. */
 	void (*f_sendctrl)(struct qib_pportdata *, u32 op);
-	void (*f_set_intr_state)(struct qib_devdata *, u32);
-	void (*f_set_armlaunch)(struct qib_devdata *, u32);
-	void (*f_wantpiobuf_intr)(struct qib_devdata *, u32);
-	int (*f_late_initreg)(struct qib_devdata *);
+	void (*f_set_intr_state)(struct hfi_devdata *, u32);
+	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
+	void (*f_wantpiobuf_intr)(struct hfi_devdata *, u32);
+	int (*f_late_initreg)(struct hfi_devdata *);
 	int (*f_init_sdma_regs)(struct qib_pportdata *);
 	u16 (*f_sdma_gethead)(struct qib_pportdata *);
 	int (*f_sdma_busy)(struct qib_pportdata *);
@@ -815,16 +815,16 @@ struct qib_devdata {
 	void (*f_update_usrhead)(struct qib_ctxtdata *, u64, u32, u32, u32);
 	u32 (*f_hdrqempty)(struct qib_ctxtdata *);
 	u64 (*f_portcntr)(struct qib_pportdata *, u32);
-	u32 (*f_read_cntrs)(struct qib_devdata *, loff_t, char **,
+	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
 		u64 **);
-	u32 (*f_read_portcntrs)(struct qib_devdata *, loff_t, u32,
+	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
 		char **, u64 **);
 	u32 (*f_setpbc_control)(struct qib_pportdata *, u32, u8, u8);
-	void (*f_initvl15_bufs)(struct qib_devdata *);
+	void (*f_initvl15_bufs)(struct hfi_devdata *);
 	void (*f_init_ctxt)(struct qib_ctxtdata *);
-	void (*f_txchk_change)(struct qib_devdata *, u32, u32, u32,
+	void (*f_txchk_change)(struct hfi_devdata *, u32, u32, u32,
 		struct qib_ctxtdata *);
-	int (*f_tempsense_rd)(struct qib_devdata *, int regnum);
+	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
 
 	char *boardname; /* human readable board info */
 
@@ -1084,16 +1084,16 @@ struct qib_filedata {
 
 extern struct list_head qib_dev_list;
 extern spinlock_t qib_devs_lock;
-extern struct qib_devdata *qib_lookup(int unit);
+extern struct hfi_devdata *qib_lookup(int unit);
 extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
 
 extern unsigned qib_wc_pat;
 extern unsigned qib_cc_table_size;
-int qib_init(struct qib_devdata *, int);
-int init_chip_wc_pat(struct qib_devdata *dd, u32);
-int qib_enable_wc(struct qib_devdata *dd);
-void qib_disable_wc(struct qib_devdata *dd);
+int qib_init(struct hfi_devdata *, int);
+int init_chip_wc_pat(struct hfi_devdata *dd, u32);
+int qib_enable_wc(struct hfi_devdata *dd);
+void qib_disable_wc(struct hfi_devdata *dd);
 int qib_count_units(int *npresentp, int *nupp);
 int qib_count_active_units(void);
 
@@ -1104,17 +1104,17 @@ void qib_cdev_cleanup(struct cdev *cdev, struct device **devp);
 int qib_dev_init(void);
 void qib_dev_cleanup(void);
 
-int qib_diag_add(struct qib_devdata *);
-void qib_diag_remove(struct qib_devdata *);
+int qib_diag_add(struct hfi_devdata *);
+void qib_diag_remove(struct hfi_devdata *);
 void qib_handle_e_ibstatuschanged(struct qib_pportdata *, u64);
 void qib_sdma_update_tail(struct qib_pportdata *, u16); /* hold sdma_lock */
 
-int qib_decode_err(struct qib_devdata *dd, char *buf, size_t blen, u64 err);
-void qib_bad_intrstatus(struct qib_devdata *);
-void qib_handle_urcv(struct qib_devdata *, u64);
+int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
+void qib_bad_intrstatus(struct hfi_devdata *);
+void qib_handle_urcv(struct hfi_devdata *, u64);
 
 /* clean up any per-chip chip-specific stuff */
-void qib_chip_cleanup(struct qib_devdata *);
+void qib_chip_cleanup(struct hfi_devdata *);
 /* clean up any chip type-specific stuff */
 void qib_chip_done(void);
 
@@ -1127,17 +1127,17 @@ u32 seg_pio_copy_mid(void __iomem *to, u32 off, u32 *carry,
 				const void *from, size_t count);
 void seg_pio_copy_end(void __iomem *to, u32 off, u32 carry);
 
-void qib_disarm_piobufs(struct qib_devdata *, unsigned, unsigned);
+void qib_disarm_piobufs(struct hfi_devdata *, unsigned, unsigned);
 int qib_disarm_piobufs_ifneeded(struct qib_ctxtdata *);
-void qib_disarm_piobufs_set(struct qib_devdata *, unsigned long *, unsigned);
+void qib_disarm_piobufs_set(struct hfi_devdata *, unsigned long *, unsigned);
 void qib_cancel_sends(struct qib_pportdata *);
 
-int qib_create_rcvhdrq(struct qib_devdata *, struct qib_ctxtdata *);
+int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
-int qib_create_ctxts(struct qib_devdata *dd);
+int qib_create_ctxts(struct hfi_devdata *dd);
 struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
-void qib_init_pportdata(struct qib_pportdata *, struct qib_devdata *, u8, u8);
-void qib_free_ctxtdata(struct qib_devdata *, struct qib_ctxtdata *);
+void qib_init_pportdata(struct qib_pportdata *, struct hfi_devdata *, u8, u8);
+void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
 
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
@@ -1149,7 +1149,7 @@ void qib_hol_down(struct qib_pportdata *);
 void qib_hol_init(struct qib_pportdata *);
 void qib_hol_up(struct qib_pportdata *);
 void qib_hol_event(unsigned long);
-void qib_disable_after_error(struct qib_devdata *);
+void qib_disable_after_error(struct hfi_devdata *);
 int qib_set_uevent_bits(struct qib_pportdata *, const int);
 
 /* for use in system calls, where we want to know device type, etc. */
@@ -1162,17 +1162,17 @@ int qib_set_uevent_bits(struct qib_pportdata *, const int);
 #define user_sdma_queue_fp(fp) \
 	(((struct qib_filedata *)(fp)->private_data)->pq)
 
-static inline struct qib_devdata *dd_from_ppd(struct qib_pportdata *ppd)
+static inline struct hfi_devdata *dd_from_ppd(struct qib_pportdata *ppd)
 {
 	return ppd->dd;
 }
 
-static inline struct qib_devdata *dd_from_dev(struct qib_ibdev *dev)
+static inline struct hfi_devdata *dd_from_dev(struct qib_ibdev *dev)
 {
-	return container_of(dev, struct qib_devdata, verbs_dev);
+	return container_of(dev, struct hfi_devdata, verbs_dev);
 }
 
-static inline struct qib_devdata *dd_from_ibdev(struct ib_device *ibdev)
+static inline struct hfi_devdata *dd_from_ibdev(struct ib_device *ibdev)
 {
 	return dd_from_dev(to_idev(ibdev));
 }
@@ -1184,7 +1184,7 @@ static inline struct qib_pportdata *ppd_from_ibp(struct qib_ibport *ibp)
 
 static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 {
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 
 	WARN_ON(pidx >= dd->num_pports);
@@ -1241,14 +1241,14 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 
 /* free up any allocated data at closes */
 void qib_free_data(struct qib_ctxtdata *dd);
-void qib_chg_pioavailkernel(struct qib_devdata *, unsigned, unsigned,
+void qib_chg_pioavailkernel(struct hfi_devdata *, unsigned, unsigned,
 			    u32, struct qib_ctxtdata *);
-struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *, const struct pci_device_id *);
-void qib_free_devdata(struct qib_devdata *);
-struct qib_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
+struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *, const struct pci_device_id *);
+void qib_free_devdata(struct hfi_devdata *);
+struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
-void qib_dump_lookup_output_queue(struct qib_devdata *);
-void qib_force_pio_avail_update(struct qib_devdata *);
+void qib_dump_lookup_output_queue(struct hfi_devdata *);
+void qib_force_pio_avail_update(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
 
 /*
@@ -1331,8 +1331,8 @@ void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
 
 int qib_get_user_pages(unsigned long, size_t, struct page **);
 void qib_release_user_pages(struct page **, size_t);
-u32 __iomem *qib_getsendbuf_range(struct qib_devdata *, u32 *, u32, u32);
-void qib_sendbuf_done(struct qib_devdata *, unsigned);
+u32 __iomem *qib_getsendbuf_range(struct hfi_devdata *, u32 *, u32, u32);
+void qib_sendbuf_done(struct hfi_devdata *, unsigned);
 
 static inline void qib_clear_rcvhdrtail(const struct qib_ctxtdata *rcd)
 {
@@ -1351,7 +1351,7 @@ static inline u32 qib_get_rcvhdrtail(const struct qib_ctxtdata *rcd)
 
 static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
 {
-	const struct qib_devdata *dd = rcd->dd;
+	const struct hfi_devdata *dd = rcd->dd;
 	u32 hdrqtail;
 
 	if (dd->flags & QIB_NODMA_RTAIL) {
@@ -1376,31 +1376,31 @@ static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
 
 extern const char ib_qib_version[];
 
-int qib_device_create(struct qib_devdata *);
-void qib_device_remove(struct qib_devdata *);
+int qib_device_create(struct hfi_devdata *);
+void qib_device_remove(struct hfi_devdata *);
 
 int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 			  struct kobject *kobj);
-int qib_verbs_register_sysfs(struct qib_devdata *);
-void qib_verbs_unregister_sysfs(struct qib_devdata *);
+int qib_verbs_register_sysfs(struct hfi_devdata *);
+void qib_verbs_unregister_sysfs(struct hfi_devdata *);
 /* Hook for sysfs read of QSFP */
 extern int qib_qsfp_dump(struct qib_pportdata *ppd, char *buf, int len);
 
 int __init qib_init_qibfs(void);
 int __exit qib_exit_qibfs(void);
 
-int qibfs_add(struct qib_devdata *);
-int qibfs_remove(struct qib_devdata *);
+int qibfs_add(struct hfi_devdata *);
+int qibfs_remove(struct hfi_devdata *);
 
 int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
-int qib_pcie_ddinit(struct qib_devdata *, struct pci_dev *,
+int qib_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
 		    const struct pci_device_id *);
-void qib_pcie_ddcleanup(struct qib_devdata *);
-int qib_pcie_params(struct qib_devdata *, u32, u32 *, struct qib_msix_entry *);
+void qib_pcie_ddcleanup(struct hfi_devdata *);
+int qib_pcie_params(struct hfi_devdata *, u32, u32 *, struct qib_msix_entry *);
 void qib_enable_intx(struct pci_dev *);
-void qib_nomsix(struct qib_devdata *);
-void qib_pcie_getcmd(struct qib_devdata *, u16 *, u8 *, u8 *);
-void qib_pcie_reenable(struct qib_devdata *, u16, u8, u8);
+void qib_nomsix(struct hfi_devdata *);
+void qib_pcie_getcmd(struct hfi_devdata *, u16 *, u8 *, u8 *);
+void qib_pcie_reenable(struct hfi_devdata *, u16, u8, u8);
 
 /*
  * dma_addr wrappers - all 0's invalid for hw

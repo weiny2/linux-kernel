@@ -50,7 +50,7 @@
  * This routine is x86_64-specific; it twiddles the CPU's MTRRs to enable
  * write combining.
  */
-int qib_enable_wc(struct qib_devdata *dd)
+int qib_enable_wc(struct hfi_devdata *dd)
 {
 	int ret = 0;
 	u64 pioaddr, piolen;
@@ -137,7 +137,7 @@ int qib_enable_wc(struct qib_devdata *dd)
  * qib_disable_wc - disable write combining for MMIO writes to the device
  * @dd: qlogic_ib device
  */
-void qib_disable_wc(struct qib_devdata *dd)
+void qib_disable_wc(struct hfi_devdata *dd)
 {
 	if (dd->wc_cookie) {
 		int r;

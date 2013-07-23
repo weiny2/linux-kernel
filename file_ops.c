@@ -95,7 +95,7 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	struct qib_ctxtdata *rcd = ctxt_fp(fp);
 	int ret = 0;
 	struct qib_base_info *kinfo = NULL;
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	struct qib_pportdata *ppd = rcd->ppd;
 	unsigned subctxt_cnt;
 	int shared, master;
@@ -277,7 +277,7 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 	int ret = 0, ntids;
 	u32 tid, ctxttid, cnt, i, tidcnt, tidoff, tidbase;
 	u16 *tidlist;
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	u64 physaddr;
 	unsigned long vaddr;
 	unsigned long tidmap[8];
@@ -461,7 +461,7 @@ done:
 static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 			const struct qib_tid_info *ti)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned long tidmap[8];
 	u32 tid, ctxttid, cnt, limit, tidcnt, tidbase;
 	int ret = 0;
@@ -644,7 +644,7 @@ bail:
 static int qib_manage_rcvq(struct qib_ctxtdata *rcd, unsigned subctxt,
 			   int start_stop)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned int rcvctrl_op;
 
 	if (subctxt)
@@ -671,7 +671,7 @@ bail:
 }
 
 static void qib_clean_part_key(struct qib_ctxtdata *rcd,
-			       struct qib_devdata *dd)
+			       struct hfi_devdata *dd)
 {
 	int i, j, pchanged = 0;
 	u64 oldpkey;
@@ -707,7 +707,7 @@ static void qib_clean_part_key(struct qib_ctxtdata *rcd,
 static int qib_mmap_mem(struct vm_area_struct *vma, struct qib_ctxtdata *rcd,
 			unsigned len, void *kvaddr, u32 write_ok, char *what)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned long pfn;
 	int ret;
 
@@ -743,7 +743,7 @@ bail:
 	return ret;
 }
 
-static int mmap_ureg(struct vm_area_struct *vma, struct qib_devdata *dd,
+static int mmap_ureg(struct vm_area_struct *vma, struct hfi_devdata *dd,
 		     u64 ureg)
 {
 	unsigned long phys;
@@ -774,7 +774,7 @@ static int mmap_ureg(struct vm_area_struct *vma, struct qib_devdata *dd,
 }
 
 static int mmap_piobufs(struct vm_area_struct *vma,
-			struct qib_devdata *dd,
+			struct hfi_devdata *dd,
 			struct qib_ctxtdata *rcd,
 			unsigned piobufs, unsigned piocnt)
 {
@@ -823,7 +823,7 @@ bail:
 static int mmap_rcvegrbufs(struct vm_area_struct *vma,
 			   struct qib_ctxtdata *rcd)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned long start, size;
 	size_t total_size, i;
 	unsigned long pfn;
@@ -888,7 +888,7 @@ static struct vm_operations_struct qib_file_vm_ops = {
 static int mmap_kvaddr(struct vm_area_struct *vma, u64 pgaddr,
 		       struct qib_ctxtdata *rcd, unsigned subctxt)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned subctxt_cnt;
 	unsigned long len;
 	void *addr;
@@ -970,7 +970,7 @@ bail:
 static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
 {
 	struct qib_ctxtdata *rcd;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	u64 pgaddr, ureg;
 	unsigned piobufs, piocnt;
 	int ret, match = 1;
@@ -1076,7 +1076,7 @@ static unsigned int qib_poll_urgent(struct qib_ctxtdata *rcd,
 				    struct file *fp,
 				    struct poll_table_struct *pt)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned pollflag;
 
 	poll_wait(fp, &rcd->wait, pt);
@@ -1098,7 +1098,7 @@ static unsigned int qib_poll_next(struct qib_ctxtdata *rcd,
 				  struct file *fp,
 				  struct poll_table_struct *pt)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned pollflag;
 
 	poll_wait(fp, &rcd->wait, pt);
@@ -1162,7 +1162,7 @@ static int qib_compatible_subctxts(int user_swmajor, int user_swminor)
 	return 0;
 }
 
-static int init_subctxts(struct qib_devdata *dd,
+static int init_subctxts(struct hfi_devdata *dd,
 			 struct qib_ctxtdata *rcd,
 			 const struct qib_user_info *uinfo)
 {
@@ -1237,7 +1237,7 @@ bail:
 static int setup_ctxt(struct qib_pportdata *ppd, int ctxt,
 		      struct file *fp, const struct qib_user_info *uinfo)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
 	void *ptmp = NULL;
 	int ret;
@@ -1282,7 +1282,7 @@ bail:
 
 static inline int usable(struct qib_pportdata *ppd)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 
 	return dd && (dd->flags & QIB_PRESENT) && dd->kregbase && ppd->lid &&
 		(ppd->lflags & QIBL_LINKACTIVE);
@@ -1292,7 +1292,7 @@ static inline int usable(struct qib_pportdata *ppd)
  * Select a context on the given device, either using a requested port
  * or the port based on the context number.
  */
-static int choose_port_ctxt(struct file *fp, struct qib_devdata *dd, u32 port,
+static int choose_port_ctxt(struct file *fp, struct hfi_devdata *dd, u32 port,
 			    const struct qib_user_info *uinfo)
 {
 	struct qib_pportdata *ppd = NULL;
@@ -1331,7 +1331,7 @@ done:
 static int find_free_ctxt(int unit, struct file *fp,
 			  const struct qib_user_info *uinfo)
 {
-	struct qib_devdata *dd = qib_lookup(unit);
+	struct hfi_devdata *dd = qib_lookup(unit);
 	int ret;
 
 	if (!dd || (uinfo->spu_port && uinfo->spu_port > dd->num_pports))
@@ -1345,7 +1345,7 @@ static int find_free_ctxt(int unit, struct file *fp,
 static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 		      unsigned alg)
 {
-	struct qib_devdata *udd = NULL;
+	struct hfi_devdata *udd = NULL;
 	int ret = 0, devmax, npresent, nup, ndev, dusable = 0, i;
 	u32 port = uinfo->spu_port, ctxt;
 
@@ -1363,7 +1363,7 @@ static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 		unsigned inuse = ~0U;
 		/* find device (with ACTIVE ports) with fewest ctxts in use */
 		for (ndev = 0; ndev < devmax; ndev++) {
-			struct qib_devdata *dd = qib_lookup(ndev);
+			struct hfi_devdata *dd = qib_lookup(ndev);
 			unsigned cused = 0, cfree = 0, pusable = 0;
 			if (!dd)
 				continue;
@@ -1393,7 +1393,7 @@ static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 		}
 	} else {
 		for (ndev = 0; ndev < devmax; ndev++) {
-			struct qib_devdata *dd = qib_lookup(ndev);
+			struct hfi_devdata *dd = qib_lookup(ndev);
 			if (dd) {
 				ret = choose_port_ctxt(fp, dd, port, uinfo);
 				if (!ret)
@@ -1418,7 +1418,7 @@ static int find_shared_ctxt(struct file *fp,
 	devmax = qib_count_units(NULL, NULL);
 
 	for (ndev = 0; ndev < devmax; ndev++) {
-		struct qib_devdata *dd = qib_lookup(ndev);
+		struct hfi_devdata *dd = qib_lookup(ndev);
 
 		/* device portion of usable() */
 		if (!(dd && (dd->flags & QIB_PRESENT) && dd->kregbase))
@@ -1511,7 +1511,7 @@ done_chk_sdma:
 	if (!ret) {
 		struct qib_filedata *fd = fp->private_data;
 		const struct qib_ctxtdata *rcd = fd->rcd;
-		const struct qib_devdata *dd = rcd->dd;
+		const struct hfi_devdata *dd = rcd->dd;
 		unsigned int weight;
 
 		if (dd->flags & QIB_HAS_SEND_DMA) {
@@ -1561,7 +1561,7 @@ static int qib_do_user_init(struct file *fp,
 {
 	int ret;
 	struct qib_ctxtdata *rcd = ctxt_fp(fp);
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	unsigned uctxt;
 
 	/* Subctxts don't need to initialize anything since master did it. */
@@ -1676,7 +1676,7 @@ bail:
  */
 static void unlock_expected_tids(struct qib_ctxtdata *rcd)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	int ctxt_tidbase = rcd->expected_base;
 	int i, cnt = 0, maxtid = ctxt_tidbase + rcd->expected_count;
 
@@ -1702,7 +1702,7 @@ static int qib_close(struct inode *in, struct file *fp)
 	int ret = 0;
 	struct qib_filedata *fd;
 	struct qib_ctxtdata *rcd;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	unsigned long flags;
 	unsigned ctxt;
 	pid_t pid;
@@ -2156,9 +2156,9 @@ static ssize_t qib_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 static int ui_open(struct inode *inode, struct file *filp)
 {
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 
-	dd = container_of(inode->i_cdev, struct qib_devdata, ui_cdev);
+	dd = container_of(inode->i_cdev, struct hfi_devdata, ui_cdev);
 	filp->private_data = dd; /* for other methods */
 	return 0;
 }
@@ -2171,7 +2171,7 @@ static int ui_release(struct inode *inode, struct file *filp)
 
 static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 {
-	struct qib_devdata *dd = filp->private_data;
+	struct hfi_devdata *dd = filp->private_data;
 
 	switch (whence) {
 	case SEEK_SET:
@@ -2201,7 +2201,7 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			loff_t *f_pos)
 {
-	struct qib_devdata *dd = filp->private_data;
+	struct hfi_devdata *dd = filp->private_data;
 	void *base;
 	unsigned long total, data;
 
@@ -2232,7 +2232,7 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 static ssize_t ui_write(struct file *filp, const char __user *buf,
 			size_t count, loff_t *f_pos)
 {
-	struct qib_devdata *dd = filp->private_data;
+	struct hfi_devdata *dd = filp->private_data;
 	void *base;
 	unsigned long total, data;
 
@@ -2353,7 +2353,7 @@ void qib_dev_cleanup(void)
 
 static atomic_t user_count = ATOMIC_INIT(0);
 
-static void qib_user_remove(struct qib_devdata *dd)
+static void qib_user_remove(struct hfi_devdata *dd)
 {
 	if (atomic_dec_return(&user_count) == 0)
 		qib_cdev_cleanup(&wildcard_cdev, &wildcard_device);
@@ -2362,7 +2362,7 @@ static void qib_user_remove(struct qib_devdata *dd)
 	qib_cdev_cleanup(&dd->ui_cdev, &dd->ui_device);
 }
 
-static int qib_user_add(struct qib_devdata *dd)
+static int qib_user_add(struct hfi_devdata *dd)
 {
 	char name[10];
 	int ret;
@@ -2397,7 +2397,7 @@ done:
 /*
  * Create per-unit files in /dev
  */
-int qib_device_create(struct qib_devdata *dd)
+int qib_device_create(struct hfi_devdata *dd)
 {
 	int r, ret;
 
@@ -2412,7 +2412,7 @@ int qib_device_create(struct qib_devdata *dd)
  * Remove per-unit files in /dev
  * void, core kernel returns no errors for this stuff
  */
-void qib_device_remove(struct qib_devdata *dd)
+void qib_device_remove(struct hfi_devdata *dd)
 {
 	qib_user_remove(dd);
 	qib_diag_remove(dd);

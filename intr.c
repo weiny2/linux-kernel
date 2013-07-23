@@ -72,7 +72,7 @@ void qib_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
 static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
 {
 	struct ib_event event;
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 
 	event.device = &dd->verbs_dev.ibdev;
 	event.element.port_num = ppd->port;
@@ -82,7 +82,7 @@ static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
 
 void qib_handle_e_ibstatuschanged(struct qib_pportdata *ppd, u64 ibcs)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	unsigned long flags;
 	u32 lstate;
 	u8 ltstate;
@@ -187,7 +187,7 @@ void qib_clear_symerror_on_linkup(unsigned long opaque)
  * process was waiting for a packet to arrive, and didn't want
  * to poll.
  */
-void qib_handle_urcv(struct qib_devdata *dd, u64 ctxtr)
+void qib_handle_urcv(struct hfi_devdata *dd, u64 ctxtr)
 {
 	struct qib_ctxtdata *rcd;
 	unsigned long flags;
@@ -214,7 +214,7 @@ void qib_handle_urcv(struct qib_devdata *dd, u64 ctxtr)
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 }
 
-void qib_bad_intrstatus(struct qib_devdata *dd)
+void qib_bad_intrstatus(struct hfi_devdata *dd)
 {
 	static int allbits;
 

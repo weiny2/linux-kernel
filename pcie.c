@@ -46,8 +46,8 @@
 /*
  * Code to adjust PCIe capabilities.
  */
-static int qib_tune_pcie_caps(struct qib_devdata *);
-static int qib_tune_pcie_coalesce(struct qib_devdata *);
+static int qib_tune_pcie_caps(struct hfi_devdata *);
+static int qib_tune_pcie_coalesce(struct hfi_devdata *);
 
 /*
  * Do all the common PCIe setup and initialization.
@@ -129,7 +129,7 @@ done:
  * fields required to re-initialize after a chip reset, or for
  * various other purposes
  */
-int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
+int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 		    const struct pci_device_id *ent)
 {
 	unsigned long len;
@@ -190,7 +190,7 @@ int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
  * to releasing the dd memory.
  * Void because all of the core pcie cleanup functions are void.
  */
-void qib_pcie_ddcleanup(struct qib_devdata *dd)
+void qib_pcie_ddcleanup(struct hfi_devdata *dd)
 {
 	u64 __iomem *base = (void __iomem *) dd->kregbase;
 
@@ -210,7 +210,7 @@ void qib_pcie_ddcleanup(struct qib_devdata *dd)
 	pci_set_drvdata(dd->pcidev, NULL);
 }
 
-static void qib_msix_setup(struct qib_devdata *dd, int pos, u32 *msixcnt,
+static void qib_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
 			   struct qib_msix_entry *qib_msix_entry)
 {
 	int ret;
@@ -256,7 +256,7 @@ do_intx:
 
 }
 
-int qib_pcie_params(struct qib_devdata *dd, u32 minw, u32 *nent,
+int qib_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 		    struct qib_msix_entry *entry)
 {
 	u16 linkstat, speed;
@@ -319,7 +319,7 @@ bail:
 /*
  * Disable MSI-X.
  */
-void qib_nomsix(struct qib_devdata *dd)
+void qib_nomsix(struct hfi_devdata *dd)
 {
 	pci_disable_msix(dd->pcidev);
 }
@@ -336,14 +336,14 @@ void qib_enable_intx(struct pci_dev *pdev)
  * These two routines are helper routines for the device reset code
  * to move all the pcie code out of the chip-specific driver code.
  */
-void qib_pcie_getcmd(struct qib_devdata *dd, u16 *cmd, u8 *iline, u8 *cline)
+void qib_pcie_getcmd(struct hfi_devdata *dd, u16 *cmd, u8 *iline, u8 *cline)
 {
 	pci_read_config_word(dd->pcidev, PCI_COMMAND, cmd);
 	pci_read_config_byte(dd->pcidev, PCI_INTERRUPT_LINE, iline);
 	pci_read_config_byte(dd->pcidev, PCI_CACHE_LINE_SIZE, cline);
 }
 
-void qib_pcie_reenable(struct qib_devdata *dd, u16 cmd, u8 iline, u8 cline)
+void qib_pcie_reenable(struct hfi_devdata *dd, u16 cmd, u8 iline, u8 cline)
 {
 	int r;
 	r = pci_write_config_dword(dd->pcidev, PCI_BASE_ADDRESS_0,
@@ -399,7 +399,7 @@ MODULE_PARM_DESC(pcie_coalesce, "tune PCIe colescing on some Intel chipsets");
  * of these chipsets, with some BIOS settings, and enabling it on those
  * systems may result in the system crashing, and/or data corruption.
  */
-static int qib_tune_pcie_coalesce(struct qib_devdata *dd)
+static int qib_tune_pcie_coalesce(struct hfi_devdata *dd)
 {
 	int r;
 	struct pci_dev *parent;
@@ -468,7 +468,7 @@ static int qib_pcie_caps;
 module_param_named(pcie_caps, qib_pcie_caps, int, S_IRUGO);
 MODULE_PARM_DESC(pcie_caps, "Max PCIe tuning: Payload (0..3), ReadReq (4..7)");
 
-static int qib_tune_pcie_caps(struct qib_devdata *dd)
+static int qib_tune_pcie_caps(struct hfi_devdata *dd)
 {
 	int ret = 1; /* Assume the worst */
 	struct pci_dev *parent;
@@ -554,7 +554,7 @@ bail:
 static pci_ers_result_t
 qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 {
-	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 	pci_ers_result_t ret = PCI_ERS_RESULT_RECOVERED;
 
 	switch (state) {
@@ -591,7 +591,7 @@ static pci_ers_result_t
 qib_pci_mmio_enabled(struct pci_dev *pdev)
 {
 	u64 words = 0U;
-	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 	pci_ers_result_t ret = PCI_ERS_RESULT_RECOVERED;
 
 	if (dd && dd->pport) {
@@ -608,7 +608,7 @@ qib_pci_mmio_enabled(struct pci_dev *pdev)
 static pci_ers_result_t
 qib_pci_slot_reset(struct pci_dev *pdev)
 {
-	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 	dd_dev_info(dd, "QIB slot_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
@@ -616,7 +616,7 @@ qib_pci_slot_reset(struct pci_dev *pdev)
 static pci_ers_result_t
 qib_pci_link_reset(struct pci_dev *pdev)
 {
-	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 	dd_dev_info(dd, "QIB link_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
@@ -624,7 +624,7 @@ qib_pci_link_reset(struct pci_dev *pdev)
 static void
 qib_pci_resume(struct pci_dev *pdev)
 {
-	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 	dd_dev_info(dd, "QIB resume function called\n");
 	pci_cleanup_aer_uncorrect_error_status(pdev);
 	/*

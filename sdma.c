@@ -306,7 +306,7 @@ bail:
 
 static void free_sdma(struct qib_pportdata *ppd)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 
 	if (ppd->sdma_head_dma) {
 		dma_free_coherent(&dd->pcidev->dev, PAGE_SIZE,
@@ -349,7 +349,7 @@ int qib_sdma_make_progress(struct qib_pportdata *ppd)
 {
 	struct list_head *lp = NULL;
 	struct qib_sdma_txreq *txp = NULL;
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int progress = 0;
 	u16 hwhead;
 	u16 idx = 0;
@@ -429,7 +429,7 @@ void __qib_sdma_intr(struct qib_pportdata *ppd)
 
 int qib_setup_sdma(struct qib_pportdata *ppd)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	unsigned long flags;
 	int ret = 0;
 

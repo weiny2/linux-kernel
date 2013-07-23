@@ -171,7 +171,7 @@ static void qib_user_sdma_init_header(struct qib_user_sdma_pkt *pkt,
 }
 
 /* we've too many pages in the iovec, coalesce to a single page */
-static int qib_user_sdma_coalesce(const struct qib_devdata *dd,
+static int qib_user_sdma_coalesce(const struct hfi_devdata *dd,
 				  struct qib_user_sdma_pkt *pkt,
 				  const struct iovec *iov,
 				  unsigned long niov)
@@ -276,7 +276,7 @@ static void qib_user_sdma_free_pkt_frag(struct device *dev,
 }
 
 /* return number of pages pinned... */
-static int qib_user_sdma_pin_pages(const struct qib_devdata *dd,
+static int qib_user_sdma_pin_pages(const struct hfi_devdata *dd,
 				   struct qib_user_sdma_pkt *pkt,
 				   unsigned long addr, int tlen, int npages)
 {
@@ -322,7 +322,7 @@ done:
 	return ret;
 }
 
-static int qib_user_sdma_pin_pkt(const struct qib_devdata *dd,
+static int qib_user_sdma_pin_pkt(const struct hfi_devdata *dd,
 				 struct qib_user_sdma_queue *pq,
 				 struct qib_user_sdma_pkt *pkt,
 				 const struct iovec *iov,
@@ -351,7 +351,7 @@ done:
 	return ret;
 }
 
-static int qib_user_sdma_init_payload(const struct qib_devdata *dd,
+static int qib_user_sdma_init_payload(const struct hfi_devdata *dd,
 				      struct qib_user_sdma_queue *pq,
 				      struct qib_user_sdma_pkt *pkt,
 				      const struct iovec *iov,
@@ -392,7 +392,7 @@ static void qib_user_sdma_free_pkt_list(struct device *dev,
  * number of bytes total.  list must be empty initially,
  * as, if there is an error we clean it...
  */
-static int qib_user_sdma_queue_pkts(const struct qib_devdata *dd,
+static int qib_user_sdma_queue_pkts(const struct hfi_devdata *dd,
 				    struct qib_user_sdma_queue *pq,
 				    struct list_head *list,
 				    const struct iovec *iov,
@@ -565,7 +565,7 @@ static void qib_user_sdma_set_complete_counter(struct qib_user_sdma_queue *pq,
 static int qib_user_sdma_queue_clean(struct qib_pportdata *ppd,
 				     struct qib_user_sdma_queue *pq)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	struct list_head free_list;
 	struct qib_user_sdma_pkt *pkt;
 	struct qib_user_sdma_pkt *pkt_prev;
@@ -626,7 +626,7 @@ static int qib_user_sdma_hwqueue_clean(struct qib_pportdata *ppd)
 void qib_user_sdma_queue_drain(struct qib_pportdata *ppd,
 			       struct qib_user_sdma_queue *pq)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int i;
 
 	if (!pq)
@@ -717,7 +717,7 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 				   struct qib_user_sdma_queue *pq,
 				   struct list_head *pktlist)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int ret = 0;
 	unsigned long flags;
 	u16 tail;
@@ -808,7 +808,7 @@ int qib_user_sdma_writev(struct qib_ctxtdata *rcd,
 			 const struct iovec *iov,
 			 unsigned long dim)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	struct qib_pportdata *ppd = rcd->ppd;
 	int ret = 0;
 	struct list_head list;

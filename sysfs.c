@@ -42,7 +42,7 @@
  */
 static ssize_t show_hrtbt_enb(struct qib_pportdata *ppd, char *buf)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int ret;
 
 	ret = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_HRTBT);
@@ -53,7 +53,7 @@ static ssize_t show_hrtbt_enb(struct qib_pportdata *ppd, char *buf)
 static ssize_t store_hrtbt_enb(struct qib_pportdata *ppd, const char *buf,
 			       size_t count)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int ret;
 	u16 val;
 
@@ -77,7 +77,7 @@ static ssize_t store_hrtbt_enb(struct qib_pportdata *ppd, const char *buf,
 static ssize_t store_loopback(struct qib_pportdata *ppd, const char *buf,
 			      size_t count)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int ret = count, r;
 
 	r = dd->f_set_ib_loopback(ppd, buf);
@@ -90,7 +90,7 @@ static ssize_t store_loopback(struct qib_pportdata *ppd, const char *buf,
 static ssize_t store_led_override(struct qib_pportdata *ppd, const char *buf,
 				  size_t count)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int ret;
 	u16 val;
 
@@ -512,7 +512,7 @@ static ssize_t show_hca(struct device *device, struct device_attribute *attr,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	int ret;
 
 	if (!dd->boardname)
@@ -534,7 +534,7 @@ static ssize_t show_boardversion(struct device *device,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	/* The string printed here is already newline-terminated. */
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->boardversion);
@@ -546,7 +546,7 @@ static ssize_t show_localbus_info(struct device *device,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	/* The string printed here is already newline-terminated. */
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->lbus_info);
@@ -558,7 +558,7 @@ static ssize_t show_nctxts(struct device *device,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	/* Return the number of user ports (contexts) available. */
 	return scnprintf(buf, PAGE_SIZE, "%u\n",
@@ -570,7 +570,7 @@ static ssize_t show_nfreectxts(struct device *device,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	/* Return the number of free user ports (contexts) available. */
 	return scnprintf(buf, PAGE_SIZE, "%u\n", dd->freectxts);
@@ -581,7 +581,7 @@ static ssize_t show_serial(struct device *device,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	buf[sizeof dd->serial] = '\0';
 	memcpy(buf, dd->serial, sizeof dd->serial);
@@ -595,7 +595,7 @@ static ssize_t store_chip_reset(struct device *device,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	int ret;
 
 	if (count < 5 || memcmp(buf, "reset", 5) || !dd->diag_client) {
@@ -616,7 +616,7 @@ static ssize_t show_tempsense(struct device *device,
 {
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	int ret;
 	int idx;
 	u8 regvals[8];
@@ -676,7 +676,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 			  struct kobject *kobj)
 {
 	struct qib_pportdata *ppd;
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	int ret;
 
 	if (!port_num || port_num > dd->num_pports) {
@@ -773,7 +773,7 @@ bail:
 /*
  * Register and create our files in /sys/class/infiniband.
  */
-int qib_verbs_register_sysfs(struct qib_devdata *dd)
+int qib_verbs_register_sysfs(struct hfi_devdata *dd)
 {
 	struct ib_device *dev = &dd->verbs_dev.ibdev;
 	int i, ret;
@@ -790,7 +790,7 @@ int qib_verbs_register_sysfs(struct qib_devdata *dd)
 /*
  * Unregister and remove our files in /sys/class/infiniband.
  */
-void qib_verbs_unregister_sysfs(struct qib_devdata *dd)
+void qib_verbs_unregister_sysfs(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd;
 	int i;

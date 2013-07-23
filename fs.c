@@ -147,7 +147,7 @@ static ssize_t dev_counters_read(struct file *file, char __user *buf,
 {
 	u64 *counters;
 	size_t avail;
-	struct qib_devdata *dd = private2dd(file);
+	struct hfi_devdata *dd = private2dd(file);
 
 	avail = dd->f_read_cntrs(dd, *ppos, NULL, &counters);
 	return simple_read_from_buffer(buf, count, ppos, counters, avail);
@@ -159,7 +159,7 @@ static ssize_t dev_names_read(struct file *file, char __user *buf,
 {
 	char *names;
 	size_t avail;
-	struct qib_devdata *dd = private2dd(file);
+	struct hfi_devdata *dd = private2dd(file);
 
 	avail = dd->f_read_cntrs(dd, *ppos, &names, NULL);
 	return simple_read_from_buffer(buf, count, ppos, names, avail);
@@ -181,7 +181,7 @@ static ssize_t portnames_read(struct file *file, char __user *buf,
 {
 	char *names;
 	size_t avail;
-	struct qib_devdata *dd = private2dd(file);
+	struct hfi_devdata *dd = private2dd(file);
 
 	avail = dd->f_read_portcntrs(dd, *ppos, 0, &names, NULL);
 	return simple_read_from_buffer(buf, count, ppos, names, avail);
@@ -193,7 +193,7 @@ static ssize_t portcntrs_1_read(struct file *file, char __user *buf,
 {
 	u64 *counters;
 	size_t avail;
-	struct qib_devdata *dd = private2dd(file);
+	struct hfi_devdata *dd = private2dd(file);
 
 	avail = dd->f_read_portcntrs(dd, *ppos, 0, NULL, &counters);
 	return simple_read_from_buffer(buf, count, ppos, counters, avail);
@@ -205,7 +205,7 @@ static ssize_t portcntrs_2_read(struct file *file, char __user *buf,
 {
 	u64 *counters;
 	size_t avail;
-	struct qib_devdata *dd = private2dd(file);
+	struct hfi_devdata *dd = private2dd(file);
 
 	avail = dd->f_read_portcntrs(dd, *ppos, 1, NULL, &counters);
 	return simple_read_from_buffer(buf, count, ppos, counters, avail);
@@ -223,7 +223,7 @@ static const struct file_operations portcntr_ops[] = {
 static ssize_t qsfp_1_read(struct file *file, char __user *buf,
 			   size_t count, loff_t *ppos)
 {
-	struct qib_devdata *dd = private2dd(file);
+	struct hfi_devdata *dd = private2dd(file);
 	char *tmp;
 	int ret;
 
@@ -244,7 +244,7 @@ static ssize_t qsfp_1_read(struct file *file, char __user *buf,
 static ssize_t qsfp_2_read(struct file *file, char __user *buf,
 			   size_t count, loff_t *ppos)
 {
-	struct qib_devdata *dd = private2dd(file);
+	struct hfi_devdata *dd = private2dd(file);
 	char *tmp;
 	int ret;
 
@@ -267,7 +267,7 @@ static const struct file_operations qsfp_ops[] = {
 	{ .read = qsfp_2_read, .llseek = generic_file_llseek, },
 };
 
-static int add_cntr_files(struct super_block *sb, struct qib_devdata *dd)
+static int add_cntr_files(struct super_block *sb, struct hfi_devdata *dd)
 {
 	struct dentry *dir, *tmp;
 	char unit[10];
@@ -364,7 +364,7 @@ bail:
 }
 
 static int remove_device_files(struct super_block *sb,
-			       struct qib_devdata *dd)
+			       struct hfi_devdata *dd)
 {
 	struct dentry *dir, *root;
 	char unit[10];
@@ -411,7 +411,7 @@ bail:
  */
 static int qibfs_fill_super(struct super_block *sb, void *data, int silent)
 {
-	struct qib_devdata *dd, *tmp;
+	struct hfi_devdata *dd, *tmp;
 	unsigned long flags;
 	int ret;
 
@@ -459,7 +459,7 @@ static void qibfs_kill_super(struct super_block *s)
 	qib_super = NULL;
 }
 
-int qibfs_add(struct qib_devdata *dd)
+int qibfs_add(struct hfi_devdata *dd)
 {
 	int ret;
 
@@ -478,7 +478,7 @@ int qibfs_add(struct qib_devdata *dd)
 	return ret;
 }
 
-int qibfs_remove(struct qib_devdata *dd)
+int qibfs_remove(struct hfi_devdata *dd)
 {
 	int ret = 0;
 

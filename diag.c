@@ -66,7 +66,7 @@ enum diag_state { UNUSED = 0, OPENED, INIT, READY };
 /* State for an individual client. PID so children cannot abuse handshake */
 static struct diag_client {
 	struct diag_client *next;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	pid_t pid;
 	enum diag_state state;
 } *client_pool;
@@ -75,7 +75,7 @@ static struct diag_client {
  * Get a client struct. Recycled if possible, else kmalloc.
  * Must be called with qib_mutex held
  */
-static struct diag_client *get_client(struct qib_devdata *dd)
+static struct diag_client *get_client(struct hfi_devdata *dd)
 {
 	struct diag_client *dc;
 
@@ -101,7 +101,7 @@ static struct diag_client *get_client(struct qib_devdata *dd)
  */
 static void return_client(struct diag_client *dc)
 {
-	struct qib_devdata *dd = dc->dd;
+	struct hfi_devdata *dd = dc->dd;
 	struct diag_client *tdc, *rdc;
 
 	rdc = NULL;
@@ -157,7 +157,7 @@ static const struct file_operations diagpkt_file_ops = {
 	.llseek = noop_llseek,
 };
 
-int qib_diag_add(struct qib_devdata *dd)
+int qib_diag_add(struct hfi_devdata *dd)
 {
 	char name[16];
 	int ret = 0;
@@ -178,9 +178,9 @@ done:
 	return ret;
 }
 
-static void unregister_observers(struct qib_devdata *dd);
+static void unregister_observers(struct hfi_devdata *dd);
 
-void qib_diag_remove(struct qib_devdata *dd)
+void qib_diag_remove(struct hfi_devdata *dd)
 {
 	struct diag_client *dc;
 
@@ -219,7 +219,7 @@ void qib_diag_remove(struct qib_devdata *dd)
  *
  * Returns 0 if the offset is not mapped.
  */
-static u64 __iomem *get_ioaddr(struct qib_devdata *dd, u32 offset, u32 *cntp)
+static u64 __iomem *get_ioaddr(struct hfi_devdata *dd, u32 offset, u32 *cntp)
 {
 	u8 __iomem *map;
 	u32 cnt;
@@ -256,7 +256,7 @@ static u64 __iomem *get_ioaddr(struct qib_devdata *dd, u32 offset, u32 *cntp)
  *
  * NOTE:  This assumes the chip address is 64-bit aligned.
  */
-static int read_umem64(struct qib_devdata *dd, void __user *uaddr,
+static int read_umem64(struct hfi_devdata *dd, void __user *uaddr,
 			   u32 regoffs, size_t count)
 {
 	const u64 __iomem *reg_addr;
@@ -299,7 +299,7 @@ bail:
  * This is usually used for a single qword
  * NOTE:  This assumes the chip address is 64-bit aligned.
  */
-static int write_umem64(struct qib_devdata *dd, u32 regoffs,
+static int write_umem64(struct hfi_devdata *dd, u32 regoffs,
 			    const void __user *uaddr, size_t count)
 {
 	u64 __iomem *reg_addr;
@@ -336,7 +336,7 @@ bail:
 static int diag_open(struct inode *in, struct file *fp)
 {
 	int unit = iminor(in) - QIB_DIAG_MINOR_BASE;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	struct diag_client *dc;
 	int ret;
 
@@ -380,7 +380,7 @@ static ssize_t diagpkt_write(struct file *fp,
 	u32 plen, clen, pbufn;
 	struct diag_pkt dp;
 	u32 *tmpbuf = NULL;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	ssize_t ret = 0;
 
@@ -497,7 +497,7 @@ struct diag_observer_list_elt {
 	const struct diag_observer *op;
 };
 
-int qib_register_observer(struct qib_devdata *dd,
+int qib_register_observer(struct hfi_devdata *dd,
 			  const struct diag_observer *op)
 {
 	struct diag_observer_list_elt *olp;
@@ -526,7 +526,7 @@ bail:
 }
 
 /* Remove all registered observers when device is closed */
-static void unregister_observers(struct qib_devdata *dd)
+static void unregister_observers(struct hfi_devdata *dd)
 {
 	struct diag_observer_list_elt *olp;
 	unsigned long flags;
@@ -550,7 +550,7 @@ static void unregister_observers(struct qib_devdata *dd)
  * is simple stack of observers. This must be called with diag transaction
  * lock held.
  */
-static const struct diag_observer *diag_get_observer(struct qib_devdata *dd,
+static const struct diag_observer *diag_get_observer(struct hfi_devdata *dd,
 						     u32 addr)
 {
 	struct diag_observer_list_elt *olp;
@@ -573,7 +573,7 @@ static ssize_t diag_read(struct file *fp, char __user *data,
 			     size_t count, loff_t *off)
 {
 	struct diag_client *dc = fp->private_data;
-	struct qib_devdata *dd = dc->dd;
+	struct hfi_devdata *dd = dc->dd;
 	void __iomem *kreg_base;
 	ssize_t ret;
 
@@ -637,7 +637,7 @@ static ssize_t diag_write(struct file *fp, const char __user *data,
 			      size_t count, loff_t *off)
 {
 	struct diag_client *dc = fp->private_data;
-	struct qib_devdata *dd = dc->dd;
+	struct hfi_devdata *dd = dc->dd;
 	ssize_t ret;
 
 	if (dc->pid != current->pid) {

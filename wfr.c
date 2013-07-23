@@ -57,7 +57,7 @@ MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when c
 
 static u32 encoded_size(u32 size);
 
-u64 read_csr(const struct qib_devdata *dd, u32 offset)
+u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
 
@@ -68,19 +68,19 @@ u64 read_csr(const struct qib_devdata *dd, u32 offset)
 	return -1;
 }
 
-void write_csr(const struct qib_devdata *dd, u32 offset, u64 value)
+void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
 	if (dd->flags & QIB_PRESENT)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
 
-u64 read_kctxt_csr(const struct qib_devdata *dd, int ctxt, u32 offset0)
+u64 read_kctxt_csr(const struct hfi_devdata *dd, int ctxt, u32 offset0)
 {
 	/* kernel per-context CSRs are separated by 0x100 */
 	return read_csr(dd, offset0 + (0x100* ctxt));
 }
 
-static void write_kctxt_csr(struct qib_devdata *dd, int ctxt, u32 offset0,
+static void write_kctxt_csr(struct hfi_devdata *dd, int ctxt, u32 offset0,
 		u64 value)
 {
 	/* kernel per-context CSRs are separated by 0x100 */
@@ -88,14 +88,14 @@ static void write_kctxt_csr(struct qib_devdata *dd, int ctxt, u32 offset0,
 } 
 
 #if 0
-u64 read_uctxt_csr(const struct qib_devdata *dd, int ctxt, u32 offset0)
+u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt, u32 offset0)
 {
 	/* user per-context CSRs are separated by 0x1000 */
 	return read_csr(dd, offset0 + (0x100* ctxt));
 }
 #endif
 
-static void write_uctxt_csr(struct qib_devdata *dd, int ctxt, u32 offset0,
+static void write_uctxt_csr(struct hfi_devdata *dd, int ctxt, u32 offset0,
 		u64 value)
 {
 	/* TODO: write to user mapping if available? */
@@ -110,7 +110,7 @@ struct is_table {
 	/* routine that returns the name of the interrupt source */
 	char *(*is_name)(char *name, size_t size, unsigned int source);
 	/* routine to call from when receiving an interrupt */
-	void (*is_int)(struct qib_devdata *dd, unsigned int source);
+	void (*is_int)(struct hfi_devdata *dd, unsigned int source);
 };
 
 static char *is_general_err_name(char *buf, size_t bsize, unsigned int source)
@@ -199,37 +199,37 @@ static void handle_sdma_interrupt(struct sdma_engine *per_sdma)
 	printk("%s: engine #%d - unimplemented\n", __func__, per_sdma->which);
 }
 
-static void is_general_err_int(struct qib_devdata *dd, unsigned int source)
+static void is_general_err_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
-static void is_rcvctxt_err_int(struct qib_devdata *dd, unsigned int source)
+static void is_rcvctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
-static void is_sendctxt_err_int(struct qib_devdata *dd, unsigned int source)
+static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
-static void is_sdma_err_int(struct qib_devdata *dd, unsigned int source)
+static void is_sdma_err_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
-static void is_various_int(struct qib_devdata *dd, unsigned int source)
+static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
-static void is_rcvavailint_int(struct qib_devdata *dd, unsigned int source)
+static void is_rcvavailint_int(struct hfi_devdata *dd, unsigned int source)
 {
 	struct qib_ctxtdata *rcd;
 
@@ -248,14 +248,14 @@ static void is_rcvavailint_int(struct qib_devdata *dd, unsigned int source)
 			"receive context interrupt %u, but no rcd\n", source);
 }
 
-static void is_sendcredit_int(struct qib_devdata *dd, unsigned int source)
+static void is_sendcredit_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 /* handles: sdmaint, sdmaprogressint, sdmaidleint */
-static void is_fast_sdma_int(struct qib_devdata *dd, unsigned int source)
+static void is_fast_sdma_int(struct hfi_devdata *dd, unsigned int source)
 {
 	if (source < dd->num_sdma) {
 		handle_sdma_interrupt(&dd->per_sdma[source]);
@@ -267,7 +267,7 @@ static void is_fast_sdma_int(struct qib_devdata *dd, unsigned int source)
 	}
 }
 
-static void is_sdmacleanup_int(struct qib_devdata *dd, unsigned int source)
+static void is_sdmacleanup_int(struct hfi_devdata *dd, unsigned int source)
 {
 	if (source < dd->num_sdma) {
 		/* TODO: handle this */
@@ -316,7 +316,7 @@ static char *is_name(char *buf, size_t bsize, unsigned int source)
  * Interupt source interrupt - called when the given source has
  * an interrupt.
  */
-static void is_interrupt(struct qib_devdata *dd, unsigned int source)
+static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
 {
 	struct is_table *entry;
 
@@ -337,7 +337,7 @@ static void is_interrupt(struct qib_devdata *dd, unsigned int source)
  */
 static irqreturn_t general_interrupt(int irq, void *data)
 {
-	struct qib_devdata *dd = data;
+	struct hfi_devdata *dd = data;
 	u64 regs[WFR_CCE_NUM_INT_CSRS];
 	u32 bit;
 	int i;
@@ -428,7 +428,7 @@ static void sdma_hw_start_up(struct qib_pportdata *ppd)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
-static void set_armlaunch(struct qib_devdata *dd, u32 enable)
+static void set_armlaunch(struct hfi_devdata *dd, u32 enable)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
@@ -436,7 +436,7 @@ static void set_armlaunch(struct qib_devdata *dd, u32 enable)
 
 static int bringup_serdes(struct qib_pportdata *ppd)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
 
 	if (print_unimplemented)
@@ -466,19 +466,19 @@ static void setextled(struct qib_pportdata *ppd, u32 on)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
-static void stop_irq(struct qib_devdata *dd)
+static void stop_irq(struct hfi_devdata *dd)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
-static void wantpiobuf_intr(struct qib_devdata *dd, u32 needint)
+static void wantpiobuf_intr(struct hfi_devdata *dd, u32 needint)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
-static int reset(struct qib_devdata *dd)
+static int reset(struct hfi_devdata *dd)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
@@ -499,7 +499,7 @@ static const char *pt_name(u32 type)
 /*
  * index is the index into the receive array
  */
-static void put_tid(struct qib_devdata *dd, u32 index,
+static void put_tid(struct hfi_devdata *dd, u32 index,
 			     u32 type, unsigned long pa)
 {
 	u64 reg, bsize;
@@ -533,7 +533,7 @@ static void put_tid(struct qib_devdata *dd, u32 index,
 
 static void clear_tids(struct qib_ctxtdata *rcd)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	u32 i;
 
 	/* TODO: this could be optimized */
@@ -554,7 +554,7 @@ static int get_base_info(struct qib_ctxtdata *rcd,
 }
 
 static struct qib_message_header *get_msgheader(
-				struct qib_devdata *dd, __le32 *rhf_addr)
+				struct hfi_devdata *dd, __le32 *rhf_addr)
 {
 	u32 offset = rhf_hdrq_offset(rhf_addr);
 
@@ -632,7 +632,7 @@ static int set_ib_table(struct qib_pportdata *ppd, int which, void *t)
 static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 				    u32 updegr, u32 egrhd, u32 npkts)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	u64 reg;
 	u32 ctxt = rcd->ctxt;
 
@@ -725,7 +725,7 @@ static u32 encoded_size(u32 size)
  */
 static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
 	u32 eager_header_counter = 0;	/* non-zero means do something */
@@ -849,7 +849,7 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 
 static void rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int i;
 
 // FIXME: it looks like a -1 means "all contexts for this port"
@@ -934,7 +934,7 @@ static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
 	return 0;
 }
 
-static u32 read_cntrs(struct qib_devdata *dd, loff_t pos, char **namep,
+static u32 read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp)
 {
 	if (print_unimplemented)
@@ -942,7 +942,7 @@ static u32 read_cntrs(struct qib_devdata *dd, loff_t pos, char **namep,
 	return 0; /* final read after getting everything */
 }
 
-static u32 read_portcntrs(struct qib_devdata *dd, loff_t pos, u32 port,
+static u32 read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 				  char **namep, u64 **cntrp)
 {
 	static int called;
@@ -957,7 +957,7 @@ static u32 read_portcntrs(struct qib_devdata *dd, loff_t pos, u32 port,
 static void get_faststats(unsigned long opaque)
 {
 	static int called;
-	struct qib_devdata *dd = (struct qib_devdata *) opaque;
+	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
 	if (!called) {
 		called = 1;
 		if (print_unimplemented)
@@ -991,7 +991,7 @@ static int ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 	return 1; /* no other IB status change processing */
 }
 
-static int gpio_mod(struct qib_devdata *dd, u32 out, u32 dir, u32 mask)
+static int gpio_mod(struct hfi_devdata *dd, u32 out, u32 dir, u32 mask)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
@@ -999,7 +999,7 @@ static int gpio_mod(struct qib_devdata *dd, u32 out, u32 dir, u32 mask)
 	return 1;
 }
 
-static int late_initreg(struct qib_devdata *dd)
+static int late_initreg(struct hfi_devdata *dd)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
@@ -1066,7 +1066,7 @@ static u32 setpbc_control(struct qib_pportdata *ppd, u32 plen,
 	return 0;
 }
 
-static void initvl15_bufs(struct qib_devdata *dd)
+static void initvl15_bufs(struct hfi_devdata *dd)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
@@ -1079,7 +1079,7 @@ static void initvl15_bufs(struct qib_devdata *dd)
  */
 static void init_ctxt(struct qib_ctxtdata *rcd)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	u64 reg;
 
 	dd_dev_info(rcd->dd, "%s: setting up context %d\n", __func__, rcd->ctxt);
@@ -1122,14 +1122,14 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_SIZE, reg);
 }
 
-static void txchk_change(struct qib_devdata *dd, u32 start,
+static void txchk_change(struct hfi_devdata *dd, u32 start,
 				  u32 len, u32 which, struct qib_ctxtdata *rcd)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
-static int tempsense_rd(struct qib_devdata *dd, int regnum)
+static int tempsense_rd(struct hfi_devdata *dd, int regnum)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
@@ -1141,7 +1141,7 @@ static int tempsense_rd(struct qib_devdata *dd, int regnum)
 /*
  * Enable/disable chip from delivering interrupts.
  */
-static void set_intr_state(struct qib_devdata *dd, u32 enable)
+static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 {
 	int i;
 
@@ -1176,7 +1176,7 @@ static void set_intr_state(struct qib_devdata *dd, u32 enable)
 /*
  * Clear all interrupt sources on the chip.
  */
-static void clear_all_interrupts(struct qib_devdata *dd)
+static void clear_all_interrupts(struct hfi_devdata *dd)
 {
 	int i;
 	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
@@ -1189,7 +1189,7 @@ static void disable_intx(struct pci_dev *pdev)
 	pci_intx(pdev, 0);
 }
 
-static void clean_up_interrupts(struct qib_devdata *dd)
+static void clean_up_interrupts(struct hfi_devdata *dd)
 {
 	int i;
 
@@ -1233,7 +1233,7 @@ static void clean_up_interrupts(struct qib_devdata *dd)
  * Remap the interrupt source from the general handler to the given MSI-X
  * interrupt.
  */
-static void remap_intr(struct qib_devdata *dd, int isrc, int msix_intr)
+static void remap_intr(struct hfi_devdata *dd, int isrc, int msix_intr)
 {
 	u64 reg;
 	int m, n;
@@ -1252,7 +1252,7 @@ static void remap_intr(struct qib_devdata *dd, int isrc, int msix_intr)
 	write_csr(dd, WFR_CCE_INT_MAP + (8*m), reg);
 }
 
-static void remap_sdma_interrupts(struct qib_devdata *dd,
+static void remap_sdma_interrupts(struct hfi_devdata *dd,
 						int engine, int msix_intr)
 {
 	/*
@@ -1269,13 +1269,13 @@ static void remap_sdma_interrupts(struct qib_devdata *dd,
 	remap_intr(dd, WFR_IS_SDMAIDLE_START     + engine, msix_intr);
 }
 
-static void remap_receive_context_interrupt(struct qib_devdata *dd,
+static void remap_receive_context_interrupt(struct hfi_devdata *dd,
 						int rx, int msix_intr)
 {
 	remap_intr(dd, WFR_IS_RCVAVAILINT_START + rx, msix_intr);
 }
 
-static int request_intx_irq(struct qib_devdata *dd)
+static int request_intx_irq(struct hfi_devdata *dd)
 {
 	int ret;
 
@@ -1291,7 +1291,7 @@ static int request_intx_irq(struct qib_devdata *dd)
 	return ret;
 }
 
-static int request_msix_irqs(struct qib_devdata *dd)
+static int request_msix_irqs(struct hfi_devdata *dd)
 {
 	const struct cpumask *local_mask;
 	int first_cpu, restart_cpu = 0, curr_cpu = 0;
@@ -1474,7 +1474,7 @@ static int request_msix_irqs(struct qib_devdata *dd)
  * Set the general handler to accept all interrupts, remap all
  * chip interrupts back to MSI-X 0.
  */
-static void reset_interrupts(struct qib_devdata *dd)
+static void reset_interrupts(struct hfi_devdata *dd)
 {
 	int i;
 
@@ -1486,7 +1486,7 @@ static void reset_interrupts(struct qib_devdata *dd)
 		write_csr(dd, WFR_CCE_INT_MAP + (8*i), 0);
 }
 
-static int set_up_interrupts(struct qib_devdata *dd)
+static int set_up_interrupts(struct hfi_devdata *dd)
 {
 	struct qib_msix_entry *entries;
 	u32 total, request;
@@ -1581,7 +1581,7 @@ fail:
  * NOTE: The IRQ releases in clean_up_interrupts() require non-interrupt
  * context.  This means we can't be called from inside a timer function.
  */
-static int intr_fallback(struct qib_devdata *dd)
+static int intr_fallback(struct hfi_devdata *dd)
 {
 /*
  * TODO: remove #if when the simulation supports interrupts.
@@ -1615,7 +1615,7 @@ static int intr_fallback(struct qib_devdata *dd)
  *	n_krcv_queues - number of kernel contexts
  *	first_user_ctxt - first non-kernel context in array of contexts
  */
-static int set_up_context_variables(struct qib_devdata *dd)
+static int set_up_context_variables(struct hfi_devdata *dd)
 {
 	int num_kernel_contexts;
 	int num_user_contexts;
@@ -1713,7 +1713,7 @@ static int set_up_context_variables(struct qib_devdata *dd)
  *	- 0xffff in the first key
  	- 0 in all other keys
  */
-static void init_partition_keys(struct qib_devdata *dd)
+static void init_partition_keys(struct hfi_devdata *dd)
 {
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (0 * 8), 
 		(0xffff & WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK)
@@ -1736,7 +1736,7 @@ static void init_partition_keys(struct qib_devdata *dd)
  *
  * called from qib_postinit_cleanup()
  */
-static void cleanup(struct qib_devdata *dd)
+static void cleanup(struct hfi_devdata *dd)
 {
 	clean_up_interrupts(dd);
 }
@@ -1752,10 +1752,10 @@ static void cleanup(struct qib_devdata *dd)
  * This is global, and is called directly at init to set up the
  * chip-specific function pointers for later use.
  */
-struct qib_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
+struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 					   const struct pci_device_id *ent)
 {
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	int i, mtu, ret;
 

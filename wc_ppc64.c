@@ -43,7 +43,7 @@
  *
  * Nothing to do on PowerPC, so just return without error.
  */
-int qib_enable_wc(struct qib_devdata *dd)
+int qib_enable_wc(struct hfi_devdata *dd)
 {
 	return 0;
 }

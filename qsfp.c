@@ -47,7 +47,7 @@
 
 static int qsfp_read(struct qib_pportdata *ppd, int addr, void *bp, int len)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	u32 out, mask;
 	int ret, cnt, pass = 0;
 	int stuck = 0;
@@ -151,7 +151,7 @@ no_unlock:
 static int qib_qsfp_write(struct qib_pportdata *ppd, int addr, void *bp,
 			  int len)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	u32 out, mask;
 	int ret, cnt;
 	u8 *buff = bp;
@@ -449,7 +449,7 @@ void qib_qsfp_init(struct qib_qsfp_data *qd,
 {
 	u32 mask, highs;
 
-	struct qib_devdata *dd = qd->ppd->dd;
+	struct hfi_devdata *dd = qd->ppd->dd;
 
 	/* Initialize work struct for later QSFP events */
 	INIT_WORK(&qd->work, fevent);

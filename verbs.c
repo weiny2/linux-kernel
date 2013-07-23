@@ -962,7 +962,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 			      u32 plen, u32 dwords)
 {
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
-	struct qib_devdata *dd = dd_from_dev(dev);
+	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_txreq *tx;
@@ -1064,7 +1064,7 @@ bail_tx:
 static int no_bufs_available(struct qib_qp *qp)
 {
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	unsigned long flags;
 	int ret = 0;
 
@@ -1096,7 +1096,7 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords)
 {
-	struct qib_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct qib_pportdata *ppd = dd->pport + qp->port_num - 1;
 	u32 *hdr = (u32 *) ibhdr;
 	u32 __iomem *piobuf;
@@ -1166,7 +1166,7 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len)
 {
-	struct qib_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	u32 plen;
 	int ret;
 	u32 dwords = (len + 3) >> 2;
@@ -1198,7 +1198,7 @@ int qib_snapshot_counters(struct qib_pportdata *ppd, u64 *swords,
 			  u64 *xmit_wait)
 {
 	int ret;
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 
 	if (!(dd->flags & QIB_PRESENT)) {
 		/* no hardware, freeze, etc. */
@@ -1292,7 +1292,7 @@ bail:
  * available after qib_verbs_send() returned an error that no buffers were
  * available. Disable the interrupt if there are no more QPs waiting.
  */
-void qib_ib_piobufavail(struct qib_devdata *dd)
+void qib_ib_piobufavail(struct hfi_devdata *dd)
 {
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct list_head *list;
@@ -1342,7 +1342,7 @@ full:
 static int qib_query_device(struct ib_device *ibdev,
 			    struct ib_device_attr *props)
 {
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibdev *dev = to_idev(ibdev);
 
 	memset(props, 0, sizeof(*props));
@@ -1388,7 +1388,7 @@ static int qib_query_device(struct ib_device *ibdev,
 static int qib_query_port(struct ib_device *ibdev, u8 port,
 			  struct ib_port_attr *props)
 {
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	enum ib_mtu mtu;
@@ -1443,7 +1443,7 @@ static int qib_modify_device(struct ib_device *device,
 			     int device_modify_mask,
 			     struct ib_device_modify *device_modify)
 {
-	struct qib_devdata *dd = dd_from_ibdev(device);
+	struct hfi_devdata *dd = dd_from_ibdev(device);
 	unsigned i;
 	int ret;
 
@@ -1498,7 +1498,7 @@ static int qib_modify_port(struct ib_device *ibdev, u8 port,
 static int qib_query_gid(struct ib_device *ibdev, u8 port,
 			 int index, union ib_gid *gid)
 {
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	int ret = 0;
 
 	if (!port || port > dd->num_pports)
@@ -1712,7 +1712,7 @@ static int qib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
  * qib_get_npkeys - return the size of the PKEY table for context 0
  * @dd: the qlogic_ib device
  */
-unsigned qib_get_npkeys(struct qib_devdata *dd)
+unsigned qib_get_npkeys(struct hfi_devdata *dd)
 {
 	return ARRAY_SIZE(dd->rcd[0]->pkeys);
 }
@@ -1724,7 +1724,7 @@ unsigned qib_get_npkeys(struct qib_devdata *dd)
 unsigned qib_get_pkey(struct qib_ibport *ibp, unsigned index)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	unsigned ctxt = ppd->hw_pidx;
 	unsigned ret;
 
@@ -1740,7 +1740,7 @@ unsigned qib_get_pkey(struct qib_ibport *ibp, unsigned index)
 static int qib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 			  u16 *pkey)
 {
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	int ret;
 
 	if (index >= qib_get_npkeys(dd)) {
@@ -1834,7 +1834,7 @@ static void init_ibport(struct qib_pportdata *ppd)
  * @dd: the device data structure
  * Return the allocated qib_ibdev pointer or NULL on error.
  */
-int qib_register_ib_device(struct qib_devdata *dd)
+int qib_register_ib_device(struct hfi_devdata *dd)
 {
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;
@@ -2060,7 +2060,7 @@ bail:
 	return ret;
 }
 
-void qib_unregister_ib_device(struct qib_devdata *dd)
+void qib_unregister_ib_device(struct hfi_devdata *dd)
 {
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;

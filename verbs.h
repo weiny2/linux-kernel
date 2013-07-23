@@ -47,7 +47,7 @@
 
 struct qib_ctxtdata;
 struct qib_pportdata;
-struct qib_devdata;
+struct hfi_devdata;
 struct qib_verbs_txreq;
 
 #define QIB_MAX_RDMA_ATOMIC     16
@@ -904,9 +904,9 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 int qib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		 int attr_mask, struct ib_qp_init_attr *init_attr);
 
-unsigned qib_free_all_qps(struct qib_devdata *dd);
+unsigned qib_free_all_qps(struct hfi_devdata *dd);
 
-void qib_init_qpn_table(struct qib_devdata *dd, struct qib_qpn_table *qpt);
+void qib_init_qpn_table(struct hfi_devdata *dd, struct qib_qpn_table *qpt);
 
 void qib_free_qpn_table(struct qib_qpn_table *qpt);
 
@@ -1077,15 +1077,15 @@ int qib_make_uc_req(struct qib_qp *qp);
 
 int qib_make_ud_req(struct qib_qp *qp);
 
-int qib_register_ib_device(struct qib_devdata *);
+int qib_register_ib_device(struct hfi_devdata *);
 
-void qib_unregister_ib_device(struct qib_devdata *);
+void qib_unregister_ib_device(struct hfi_devdata *);
 
 void qib_ib_rcv(struct qib_ctxtdata *, void *, void *, u32);
 
-void qib_ib_piobufavail(struct qib_devdata *);
+void qib_ib_piobufavail(struct hfi_devdata *);
 
-unsigned qib_get_npkeys(struct qib_devdata *);
+unsigned qib_get_npkeys(struct hfi_devdata *);
 
 unsigned qib_get_pkey(struct qib_ibport *, unsigned);
 

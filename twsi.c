@@ -65,7 +65,7 @@
  * to the chip.  Since we are delaying anyway, the cost doesn't
  * hurt, and makes the bit twiddling more regular
  */
-static void i2c_wait_for_writes(struct qib_devdata *dd)
+static void i2c_wait_for_writes(struct hfi_devdata *dd)
 {
 	/*
 	 * implicit read of EXTStatus is as good as explicit
@@ -87,7 +87,7 @@ static void i2c_wait_for_writes(struct qib_devdata *dd)
  */
 #define TWSI_BUF_WAIT_USEC 60
 
-static void scl_out(struct qib_devdata *dd, u8 bit)
+static void scl_out(struct hfi_devdata *dd, u8 bit)
 {
 	u32 mask;
 
@@ -118,7 +118,7 @@ static void scl_out(struct qib_devdata *dd, u8 bit)
 	i2c_wait_for_writes(dd);
 }
 
-static void sda_out(struct qib_devdata *dd, u8 bit)
+static void sda_out(struct hfi_devdata *dd, u8 bit)
 {
 	u32 mask;
 
@@ -131,7 +131,7 @@ static void sda_out(struct qib_devdata *dd, u8 bit)
 	udelay(2);
 }
 
-static u8 sda_in(struct qib_devdata *dd, int wait)
+static u8 sda_in(struct hfi_devdata *dd, int wait)
 {
 	int bnum;
 	u32 read_val, mask;
@@ -150,7 +150,7 @@ static u8 sda_in(struct qib_devdata *dd, int wait)
  * i2c_ackrcv - see if ack following write is true
  * @dd: the qlogic_ib device
  */
-static int i2c_ackrcv(struct qib_devdata *dd)
+static int i2c_ackrcv(struct hfi_devdata *dd)
 {
 	u8 ack_received;
 
@@ -163,7 +163,7 @@ static int i2c_ackrcv(struct qib_devdata *dd)
 	return ack_received;
 }
 
-static void stop_cmd(struct qib_devdata *dd);
+static void stop_cmd(struct hfi_devdata *dd);
 
 /**
  * rd_byte - read a byte, sending STOP on last, else ACK
@@ -171,7 +171,7 @@ static void stop_cmd(struct qib_devdata *dd);
  *
  * Returns byte shifted out of device
  */
-static int rd_byte(struct qib_devdata *dd, int last)
+static int rd_byte(struct hfi_devdata *dd, int last)
 {
 	int bit_cntr, data;
 
@@ -202,7 +202,7 @@ static int rd_byte(struct qib_devdata *dd, int last)
  *
  * Returns 0 if we got the following ack, otherwise 1
  */
-static int wr_byte(struct qib_devdata *dd, u8 data)
+static int wr_byte(struct hfi_devdata *dd, u8 data)
 {
 	int bit_cntr;
 	u8 bit;
@@ -220,7 +220,7 @@ static int wr_byte(struct qib_devdata *dd, u8 data)
  * issue TWSI start sequence:
  * (both clock/data high, clock high, data low while clock is high)
  */
-static void start_seq(struct qib_devdata *dd)
+static void start_seq(struct hfi_devdata *dd)
 {
 	sda_out(dd, 1);
 	scl_out(dd, 1);
@@ -235,7 +235,7 @@ static void start_seq(struct qib_devdata *dd)
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
-static void stop_seq(struct qib_devdata *dd)
+static void stop_seq(struct hfi_devdata *dd)
 {
 	scl_out(dd, 0);
 	sda_out(dd, 0);
@@ -249,7 +249,7 @@ static void stop_seq(struct qib_devdata *dd)
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
-static void stop_cmd(struct qib_devdata *dd)
+static void stop_cmd(struct hfi_devdata *dd)
 {
 	stop_seq(dd);
 	udelay(TWSI_BUF_WAIT_USEC);
@@ -260,7 +260,7 @@ static void stop_cmd(struct qib_devdata *dd)
  * @dd: the qlogic_ib device
  */
 
-int qib_twsi_reset(struct qib_devdata *dd)
+int qib_twsi_reset(struct hfi_devdata *dd)
 {
 	int clock_cycles_left = 9;
 	int was_high = 0;
@@ -324,7 +324,7 @@ int qib_twsi_reset(struct qib_devdata *dd)
  * STOP.
  * returns 0 if OK (ACK received), else != 0
  */
-static int qib_twsi_wr(struct qib_devdata *dd, int data, int flags)
+static int qib_twsi_wr(struct hfi_devdata *dd, int data, int flags)
 {
 	int ret = 1;
 	if (flags & QIB_TWSI_START)
@@ -352,7 +352,7 @@ static int qib_twsi_wr(struct qib_devdata *dd, int data, int flags)
  * the "register" or "offset" within the device from which data should
  * be read.
  */
-int qib_twsi_blk_rd(struct qib_devdata *dd, int dev, int addr,
+int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr,
 		    void *buffer, int len)
 {
 	int ret;
@@ -430,7 +430,7 @@ bail:
  * the "register" or "offset" within the device to which data should
  * be written.
  */
-int qib_twsi_blk_wr(struct qib_devdata *dd, int dev, int addr,
+int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
 		    const void *buffer, int len)
 {
 	int sub_len;

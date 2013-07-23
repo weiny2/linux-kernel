@@ -92,7 +92,7 @@ unsigned long *qib_cpulist;
 /*
  * Common code for creating the receive context array.
  */
-int qib_create_ctxts(struct qib_devdata *dd)
+int qib_create_ctxts(struct hfi_devdata *dd)
 {
 	unsigned i;
 	int ret;
@@ -134,7 +134,7 @@ done:
  */
 struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
 
 	rcd = kzalloc(sizeof(*rcd), GFP_KERNEL);
@@ -175,7 +175,7 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 /*
  * Common code for initializing the physical port structure.
  */
-void qib_init_pportdata(struct qib_pportdata *ppd, struct qib_devdata *dd,
+void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 			u8 hw_pidx, u8 port)
 {
 	int size;
@@ -269,7 +269,7 @@ bail:
 	return;
 }
 
-static int init_pioavailregs(struct qib_devdata *dd)
+static int init_pioavailregs(struct hfi_devdata *dd)
 {
 	int ret, pidx;
 	u64 *status_page;
@@ -328,7 +328,7 @@ done:
  * We don't want failures here to prevent use of the driver/chip,
  * so no return value.
  */
-static void init_shadow_tids(struct qib_devdata *dd)
+static void init_shadow_tids(struct hfi_devdata *dd)
 {
 	struct page **pages;
 	dma_addr_t *addrs;
@@ -361,7 +361,7 @@ bail:
  * Do initialization for device that is only needed on
  * first detect, not on resets.
  */
-static int loadtime_init(struct qib_devdata *dd)
+static int loadtime_init(struct hfi_devdata *dd)
 {
 	int ret = 0;
 
@@ -412,7 +412,7 @@ done:
  * ensure no receive or transmit (explicitly, in case reset
  * failed
  */
-static int init_after_reset(struct qib_devdata *dd)
+static int init_after_reset(struct hfi_devdata *dd)
 {
 	int i;
 
@@ -437,7 +437,7 @@ static int init_after_reset(struct qib_devdata *dd)
 	return 0;
 }
 
-static void enable_chip(struct qib_devdata *dd)
+static void enable_chip(struct hfi_devdata *dd)
 {
 	u64 rcvmask;
 	int i;
@@ -465,7 +465,7 @@ static void enable_chip(struct qib_devdata *dd)
 
 static void verify_interrupt(struct work_struct *work)
 {
-        struct qib_devdata *dd = container_of(work, struct qib_devdata,
+        struct hfi_devdata *dd = container_of(work, struct hfi_devdata,
 						interrupt_check_worker.work);
 
 	/*
@@ -481,7 +481,7 @@ static void verify_interrupt(struct work_struct *work)
 	}
 }
 
-static void init_piobuf_state(struct qib_devdata *dd)
+static void init_piobuf_state(struct hfi_devdata *dd)
 {
 	int i, pidx;
 	u32 uctxts;
@@ -541,7 +541,7 @@ static void init_piobuf_state(struct qib_devdata *dd)
  * qib_create_workqueues - create per port workqueues
  * @dd: the qlogic_ib device
  */
-static int qib_create_workqueues(struct qib_devdata *dd)
+static int qib_create_workqueues(struct hfi_devdata *dd)
 {
 	int pidx;
 	struct qib_pportdata *ppd;
@@ -587,7 +587,7 @@ wq_error:
  * without memory allocation, we need to re-write all the chip registers
  * TIDs, etc. after the reset or enable has completed.
  */
-int qib_init(struct qib_devdata *dd, int reinit)
+int qib_init(struct hfi_devdata *dd, int reinit)
 {
 	int ret = 0, pidx, lastfail = 0;
 	u32 portok = 0;
@@ -733,23 +733,23 @@ done:
  * combining is not available, performance will probably be awful.
  */
 
-int __attribute__((weak)) qib_enable_wc(struct qib_devdata *dd)
+int __attribute__((weak)) qib_enable_wc(struct hfi_devdata *dd)
 {
 	return -EOPNOTSUPP;
 }
 
-void __attribute__((weak)) qib_disable_wc(struct qib_devdata *dd)
+void __attribute__((weak)) qib_disable_wc(struct hfi_devdata *dd)
 {
 }
 
-static inline struct qib_devdata *__qib_lookup(int unit)
+static inline struct hfi_devdata *__qib_lookup(int unit)
 {
 	return idr_find(&qib_unit_table, unit);
 }
 
-struct qib_devdata *qib_lookup(int unit)
+struct hfi_devdata *qib_lookup(int unit)
 {
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qib_devs_lock, flags);
@@ -763,7 +763,7 @@ struct qib_devdata *qib_lookup(int unit)
  * Stop the timers during unit shutdown, or after an error late
  * in initialization.
  */
-static void qib_stop_timers(struct qib_devdata *dd)
+static void qib_stop_timers(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd;
 	int pidx;
@@ -796,7 +796,7 @@ static void qib_stop_timers(struct qib_devdata *dd)
  * disabled.   It does not free any data structures.
  * Everything it does has to be setup again by qib_init(dd, 1)
  */
-static void qib_shutdown_device(struct qib_devdata *dd)
+static void qib_shutdown_device(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd;
 	unsigned pidx;
@@ -868,7 +868,7 @@ static void qib_shutdown_device(struct qib_devdata *dd)
  * is released (and can be called from reinit as well).
  * It should never change any chip state, or global driver state.
  */
-void qib_free_ctxtdata(struct qib_devdata *dd, struct qib_ctxtdata *rcd)
+void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 {
 	if (!rcd)
 		return;
@@ -922,7 +922,7 @@ void qib_free_ctxtdata(struct qib_devdata *dd, struct qib_ctxtdata *rcd)
  * use a count to trigger, we want to make sure that the packet doesn't
  * go out on the wire, or trigger flow control checks.
  */
-static void qib_verify_pioperf(struct qib_devdata *dd)
+static void qib_verify_pioperf(struct hfi_devdata *dd)
 {
 	u32 pbnum, cnt, lcnt;
 	u32 __iomem *piobuf;
@@ -994,7 +994,7 @@ done:
 }
 
 
-void qib_free_devdata(struct qib_devdata *dd)
+void qib_free_devdata(struct hfi_devdata *dd)
 {
 	unsigned long flags;
 
@@ -1014,13 +1014,13 @@ void qib_free_devdata(struct qib_devdata *dd)
  *
  * Use the idr mechanism to get a unit number for this unit.
  */
-struct qib_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
+struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 {
 	unsigned long flags;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	int ret;
 
-	dd = (struct qib_devdata *) ib_alloc_device(sizeof(*dd) + extra);
+	dd = (struct hfi_devdata *) ib_alloc_device(sizeof(*dd) + extra);
 	if (!dd) {
 		dd = ERR_PTR(-ENOMEM);
 		goto bail;
@@ -1066,7 +1066,7 @@ bail:
  * reporting code.  Should be paranoid about state of
  * system and data structures.
  */
-void qib_disable_after_error(struct qib_devdata *dd)
+void qib_disable_after_error(struct hfi_devdata *dd)
 {
 	if (dd->flags & QIB_INITTED) {
 		u32 pidx;
@@ -1189,7 +1189,7 @@ static void __exit qlogic_ib_cleanup(void)
 module_exit(qlogic_ib_cleanup);
 
 /* this can only be called after a successful initialization */
-static void cleanup_device_data(struct qib_devdata *dd)
+static void cleanup_device_data(struct hfi_devdata *dd)
 {
 	int ctxt;
 	int pidx;
@@ -1270,7 +1270,7 @@ static void cleanup_device_data(struct qib_devdata *dd)
  * Clean up on unit shutdown, or error during unit load after
  * successful initialization.
  */
-static void qib_postinit_cleanup(struct qib_devdata *dd)
+static void qib_postinit_cleanup(struct hfi_devdata *dd)
 {
 	/*
 	 * Clean up chip-specific stuff.
@@ -1292,7 +1292,7 @@ static void qib_postinit_cleanup(struct qib_devdata *dd)
 static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int ret, j, pidx, initfail;
-	struct qib_devdata *dd = NULL;
+	struct hfi_devdata *dd = NULL;
 
 	ret = qib_pcie_init(pdev, ent);
 	if (ret)
@@ -1379,7 +1379,7 @@ bail:
 
 static void qib_remove_one(struct pci_dev *pdev)
 {
-	struct qib_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 	int ret;
 
 	/* unregister from IB core */
@@ -1415,7 +1415,7 @@ static void qib_remove_one(struct pci_dev *pdev)
  * DMA'able (which means for some systems, it will go through an IOMMU,
  * or be forced into a low address range).
  */
-int qib_create_rcvhdrq(struct qib_devdata *dd, struct qib_ctxtdata *rcd)
+int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 {
 	unsigned amt;
 
@@ -1487,7 +1487,7 @@ bail:
  */
 int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned e, egrcnt, egrperchunk, chunk, egrsize, egroff;
 	size_t size;
 	gfp_t gfp_flags;

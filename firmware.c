@@ -101,7 +101,7 @@ int skip_firmware_load = 1;	/* TODO: temporary */
 /*
  * Write data or code to the 8051 code or data RAM.
  */
-static int write_8051(struct qib_devdata *dd, int code, u32 start, const u8 *data, u32 len, struct wstats *wstat)
+static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *data, u32 len, struct wstats *wstat)
 {
 	u64 reg;
 	u32 offset;
@@ -178,7 +178,7 @@ done:
 }
 
 /* return 0 if values match, non-zero and complain otherwise */
-static int invalid_header(struct qib_devdata *dd, const char *what,
+static int invalid_header(struct hfi_devdata *dd, const char *what,
 		u32 actual, u32 expected)
 {
 	if (actual == expected)
@@ -193,7 +193,7 @@ static int invalid_header(struct qib_devdata *dd, const char *what,
  * fdet.  If succsessful, the caller will need to call dispose_firmware().
  * Returns 0 on success, -ERRNO on error.
  */
-static int obtain_firmware(struct qib_devdata *dd, const char *name,
+static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 			struct firmware_details *fdet)
 {
 	struct css_header *css;
@@ -307,7 +307,7 @@ static void dispose_firmware(struct firmware_details *fdet)
  * The "what" determines whether we need to stall or not.
  * Returns 0 on success, -ERRNO on failure.
  */
-static int write_rsa_data(struct qib_devdata *dd, int what, const char *name, const u8 *data)
+static int write_rsa_data(struct hfi_devdata *dd, int what, const char *name, const u8 *data)
 {
 	u64 *ptr = (u64 *)data;
 	u64 reg;
@@ -346,7 +346,7 @@ static int write_rsa_data(struct qib_devdata *dd, int what, const char *name, co
  * Load the 8051 firmware.
  * TODO: fabric SerDes, PCIe serDes
  */
-int load_firmware(struct qib_devdata *dd)
+int load_firmware(struct hfi_devdata *dd)
 {
 	u64 reg, firmware;
 	struct firmware_details fdet;

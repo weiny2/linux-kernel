@@ -95,7 +95,7 @@ const char *get_unit_name(int unit)
  */
 int qib_count_active_units(void)
 {
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	unsigned long flags;
 	int pidx, nunits_active = 0;
@@ -125,7 +125,7 @@ int qib_count_active_units(void)
 int qib_count_units(int *npresentp, int *nupp)
 {
 	int nunits = 0, npresent = 0, nup = 0;
-	struct qib_devdata *dd;
+	struct hfi_devdata *dd;
 	unsigned long flags;
 	int pidx;
 	struct qib_pportdata *ppd;
@@ -198,7 +198,7 @@ int qib_set_linkstate(struct qib_pportdata *ppd, u8 newstate)
 {
 	u32 lstate;
 	int ret;
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	unsigned long flags;
 
 	switch (newstate) {
@@ -446,7 +446,7 @@ drop:
  */
 void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	struct qib_pportdata *ppd = rcd->ppd;
 	__le32 *rhf_addr;
 	void *ebuf;
@@ -660,7 +660,7 @@ bail:
 
 int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	ppd->lid = lid;
 	ppd->lmc = lmc;
 
@@ -687,7 +687,7 @@ int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
 static void qib_run_led_override(unsigned long opaque)
 {
 	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int timeoff;
 	int ph_idx;
 
@@ -709,7 +709,7 @@ static void qib_run_led_override(unsigned long opaque)
 
 void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	int timeoff, freq;
 
 	if (!(dd->flags & QIB_INITTED))
@@ -761,7 +761,7 @@ void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
 int qib_reset_device(int unit)
 {
 	int ret, i;
-	struct qib_devdata *dd = qib_lookup(unit);
+	struct hfi_devdata *dd = qib_lookup(unit);
 	struct qib_pportdata *ppd;
 	unsigned long flags;
 	int pidx;

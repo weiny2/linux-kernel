@@ -58,7 +58,7 @@ MODULE_PARM_DESC(fetch_arb, "IBA7220: change SDMA descriptor arbitration");
  * Cancel a range of PIO buffers. Used at user process close,
  * in case it died while writing to a PIO buffer.
  */
-void qib_disarm_piobufs(struct qib_devdata *dd, unsigned first, unsigned cnt)
+void qib_disarm_piobufs(struct hfi_devdata *dd, unsigned first, unsigned cnt)
 {
 	unsigned long flags;
 	unsigned i;
@@ -79,7 +79,7 @@ void qib_disarm_piobufs(struct qib_devdata *dd, unsigned first, unsigned cnt)
  */
 int qib_disarm_piobufs_ifneeded(struct qib_ctxtdata *rcd)
 {
-	struct qib_devdata *dd = rcd->dd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned i;
 	unsigned last;
 	unsigned n = 0;
@@ -111,7 +111,7 @@ int qib_disarm_piobufs_ifneeded(struct qib_ctxtdata *rcd)
 	return 0;
 }
 
-static struct qib_pportdata *is_sdma_buf(struct qib_devdata *dd, unsigned i)
+static struct qib_pportdata *is_sdma_buf(struct hfi_devdata *dd, unsigned i)
 {
 	struct qib_pportdata *ppd;
 	unsigned pidx;
@@ -129,7 +129,7 @@ static struct qib_pportdata *is_sdma_buf(struct qib_devdata *dd, unsigned i)
  * Return true if send buffer is being used by a user context.
  * Sets  _QIB_EVENT_DISARM_BUFS_BIT in user_event_mask as a side effect
  */
-static int find_ctxt(struct qib_devdata *dd, unsigned bufn)
+static int find_ctxt(struct hfi_devdata *dd, unsigned bufn)
 {
 	struct qib_ctxtdata *rcd;
 	unsigned ctxt;
@@ -168,7 +168,7 @@ static int find_ctxt(struct qib_devdata *dd, unsigned bufn)
  *
  * This should only be called from the IRQ error handler.
  */
-void qib_disarm_piobufs_set(struct qib_devdata *dd, unsigned long *mask,
+void qib_disarm_piobufs_set(struct hfi_devdata *dd, unsigned long *mask,
 			    unsigned cnt)
 {
 	struct qib_pportdata *ppd, *pppd[QIB_MAX_IB_PORTS];
@@ -220,7 +220,7 @@ void qib_disarm_piobufs_set(struct qib_devdata *dd, unsigned long *mask,
  *
  * called whenever our local copy indicates we have run out of send buffers
  */
-static void update_send_bufs(struct qib_devdata *dd)
+static void update_send_bufs(struct hfi_devdata *dd)
 {
 	unsigned long flags;
 	unsigned i;
@@ -266,7 +266,7 @@ static void update_send_bufs(struct qib_devdata *dd)
 /*
  * Debugging code and stats updates if no pio buffers available.
  */
-static noinline void no_send_bufs(struct qib_devdata *dd)
+static noinline void no_send_bufs(struct hfi_devdata *dd)
 {
 	dd->upd_pio_shadow = 1;
 
@@ -281,7 +281,7 @@ static noinline void no_send_bufs(struct qib_devdata *dd)
  * Do appropriate marking as busy, etc.
  * Returns buffer pointer if one is found, otherwise NULL.
  */
-u32 __iomem *qib_getsendbuf_range(struct qib_devdata *dd, u32 *pbufnum,
+u32 __iomem *qib_getsendbuf_range(struct hfi_devdata *dd, u32 *pbufnum,
 				  u32 first, u32 last)
 {
 	unsigned i, j, updated = 0;
@@ -363,7 +363,7 @@ update_shadow:
  * Record that the caller is finished writing to the buffer so we don't
  * disarm it while it is being written and disarm it now if needed.
  */
-void qib_sendbuf_done(struct qib_devdata *dd, unsigned n)
+void qib_sendbuf_done(struct hfi_devdata *dd, unsigned n)
 {
 	unsigned long flags;
 
@@ -381,7 +381,7 @@ void qib_sendbuf_done(struct qib_devdata *dd, unsigned n)
  * @len: the number of send buffers
  * @avail: true if the buffers are available for kernel use, false otherwise
  */
-void qib_chg_pioavailkernel(struct qib_devdata *dd, unsigned start,
+void qib_chg_pioavailkernel(struct hfi_devdata *dd, unsigned start,
 	unsigned len, u32 avail, struct qib_ctxtdata *rcd)
 {
 	unsigned long flags;
@@ -455,7 +455,7 @@ void qib_chg_pioavailkernel(struct qib_devdata *dd, unsigned start,
  */
 void qib_cancel_sends(struct qib_pportdata *ppd)
 {
-	struct qib_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
 	unsigned long flags;
 	unsigned ctxt;
@@ -509,7 +509,7 @@ void qib_cancel_sends(struct qib_pportdata *ppd)
  * caller (or set of callers) will "do the right thing".
  * This is a per-device operation, so just the first port.
  */
-void qib_force_pio_avail_update(struct qib_devdata *dd)
+void qib_force_pio_avail_update(struct hfi_devdata *dd)
 {
 	dd->f_sendctrl(dd->pport, QIB_SENDCTRL_AVAIL_BLIP);
 }

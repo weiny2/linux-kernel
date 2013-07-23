@@ -647,7 +647,7 @@ unlock:
  */
 void qib_send_rc_ack(struct qib_qp *qp)
 {
-	struct qib_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 pbc;
