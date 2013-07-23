@@ -57,12 +57,12 @@
 #define QLOGIC_IB_R_EMULATOR_MASK (1ULL<<62)
 
 /*
- * Number of ctxts we are configured to use (to allow for more pio
+ * Number of receive contexts we are configured to use (to allow for more pio
  * buffers per ctxt, etc.)  Zero means use chip value.
  */
-ushort qib_cfgctxts;
-module_param_named(cfgctxts, qib_cfgctxts, ushort, S_IRUGO);
-MODULE_PARM_DESC(cfgctxts, "Set max number of contexts to use");
+uint num_rcv_contexts;
+module_param_named(num_rcv_contexts, num_rcv_contexts, uint, S_IRUGO);
+MODULE_PARM_DESC(num_rcv_contexts, "Set max number of receive contexts to use");
 
 unsigned qib_n_krcv_queues;
 module_param_named(krcvqs, qib_n_krcv_queues, uint, S_IRUGO);
@@ -97,11 +97,7 @@ int qib_create_ctxts(struct qib_devdata *dd)
 	unsigned i;
 	int ret;
 
-	/*
-	 * Allocate full ctxtcnt array, rather than just cfgctxts, because
-	 * cleanup iterates across all possible ctxts.
-	 */
-	dd->rcd = kzalloc(sizeof(*dd->rcd) * dd->ctxtcnt, GFP_KERNEL);
+	dd->rcd = kzalloc(sizeof(*dd->rcd) * dd->num_rcv_contexts, GFP_KERNEL);
 	if (!dd->rcd) {
 		qib_dev_err(dd,
 			"Unable to allocate ctxtdata array, failing\n");
@@ -508,7 +504,7 @@ static void init_piobuf_state(struct qib_devdata *dd)
 	 * calculated in chip-specific code because it may cause some
 	 * chip-specific adjustments to be made.
 	 */
-	uctxts = dd->cfgctxts - dd->first_user_ctxt;
+	uctxts = dd->num_rcv_contexts - dd->first_user_ctxt;
 	dd->ctxts_extrabuf = dd->pbufsctxt ?
 		dd->lastctxt_piobuf - (dd->pbufsctxt * uctxts) : 0;
 
@@ -1260,7 +1256,7 @@ static void cleanup_device_data(struct qib_devdata *dd)
 	tmp = dd->rcd;
 	dd->rcd = NULL;
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
-	for (ctxt = 0; tmp && ctxt < dd->ctxtcnt; ctxt++) {
+	for (ctxt = 0; tmp && ctxt < dd->num_rcv_contexts; ctxt++) {
 		struct qib_ctxtdata *rcd = tmp[ctxt];
 
 		tmp[ctxt] = NULL; /* debugging paranoia */

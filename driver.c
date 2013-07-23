@@ -783,7 +783,7 @@ int qib_reset_device(int unit)
 
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
 	if (dd->rcd)
-		for (i = dd->first_user_ctxt; i < dd->cfgctxts; i++) {
+		for (i = dd->first_user_ctxt; i < dd->num_rcv_contexts; i++) {
 			if (!dd->rcd[i] || !dd->rcd[i]->cnt)
 				continue;
 			spin_unlock_irqrestore(&dd->uctxt_lock, flags);

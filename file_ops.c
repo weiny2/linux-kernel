@@ -145,11 +145,7 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	kinfo->spi_tidcnt = rcd->expected_count / subctxt_cnt;
 	if (master)
 		kinfo->spi_tidcnt += rcd->expected_count % subctxt_cnt;
-	/*
-	 * for this use, may be cfgctxts summed over all chips that
-	 * are are configured and present
-	 */
-	kinfo->spi_nctxts = dd->cfgctxts;
+	kinfo->spi_nctxts = dd->num_rcv_contexts;
 	/* unit (chip/board) our context is on */
 	kinfo->spi_unit = dd->unit;
 	kinfo->spi_port = ppd->port;
@@ -1309,10 +1305,10 @@ static int choose_port_ctxt(struct file *fp, struct qib_devdata *dd, u32 port,
 		} else
 			ppd = dd->pport + port - 1;
 	}
-	for (ctxt = dd->first_user_ctxt; ctxt < dd->cfgctxts && dd->rcd[ctxt];
-	     ctxt++)
+	for (ctxt = dd->first_user_ctxt;
+			ctxt < dd->num_rcv_contexts && dd->rcd[ctxt]; ctxt++)
 		;
-	if (ctxt == dd->cfgctxts) {
+	if (ctxt == dd->num_rcv_contexts) {
 		ret = -EBUSY;
 		goto done;
 	}
@@ -1380,8 +1376,8 @@ static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 						pusable++;
 			if (!pusable)
 				continue;
-			for (ctxt = dd->first_user_ctxt; ctxt < dd->cfgctxts;
-			     ctxt++)
+			for (ctxt = dd->first_user_ctxt;
+					ctxt < dd->num_rcv_contexts; ctxt++)
 				if (dd->rcd[ctxt])
 					cused++;
 				else
@@ -1427,7 +1423,7 @@ static int find_shared_ctxt(struct file *fp,
 		/* device portion of usable() */
 		if (!(dd && (dd->flags & QIB_PRESENT) && dd->kregbase))
 			continue;
-		for (i = dd->first_user_ctxt; i < dd->cfgctxts; i++) {
+		for (i = dd->first_user_ctxt; i < dd->num_rcv_contexts; i++) {
 			struct qib_ctxtdata *rcd = dd->rcd[i];
 
 			/* Skip ctxts which are not yet open */
@@ -1808,7 +1804,7 @@ static int qib_ctxt_info(struct file *fp, struct qib_ctxt_info __user *uinfo)
 	info.ctxt = rcd->ctxt;
 	info.subctxt =  subctxt_fp(fp);
 	/* Number of user ctxts available for this device. */
-	info.num_ctxts = rcd->dd->cfgctxts - rcd->dd->first_user_ctxt;
+	info.num_ctxts = rcd->dd->num_rcv_contexts - rcd->dd->first_user_ctxt;
 	info.num_subctxts = rcd->subctxt_cnt;
 	info.rec_cpu = fd->rec_cpu_num;
 	sz = sizeof(info);
@@ -1898,7 +1894,7 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ppd->dd->uctxt_lock, flags);
-	for (ctxt = ppd->dd->first_user_ctxt; ctxt < ppd->dd->cfgctxts;
+	for (ctxt = ppd->dd->first_user_ctxt; ctxt < ppd->dd->num_rcv_contexts;
 	     ctxt++) {
 		rcd = ppd->dd->rcd[ctxt];
 		if (!rcd)

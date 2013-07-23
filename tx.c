@@ -136,7 +136,7 @@ static int find_ctxt(struct qib_devdata *dd, unsigned bufn)
 	int ret = 0;
 
 	spin_lock(&dd->uctxt_lock);
-	for (ctxt = dd->first_user_ctxt; ctxt < dd->cfgctxts; ctxt++) {
+	for (ctxt = dd->first_user_ctxt; ctxt < dd->num_rcv_contexts; ctxt++) {
 		rcd = dd->rcd[ctxt];
 		if (!rcd || bufn < rcd->pio_base ||
 		    bufn >= rcd->pio_base + rcd->piocnt)
@@ -470,7 +470,7 @@ void qib_cancel_sends(struct qib_pportdata *ppd)
 	 * context is closed after we release the uctxt_lock, but that's
 	 * fairly benign, and safer than nesting the locks.
 	 */
-	for (ctxt = dd->first_user_ctxt; ctxt < dd->cfgctxts; ctxt++) {
+	for (ctxt = dd->first_user_ctxt; ctxt < dd->num_rcv_contexts; ctxt++) {
 		spin_lock_irqsave(&dd->uctxt_lock, flags);
 		rcd = dd->rcd[ctxt];
 		if (rcd && rcd->ppd == ppd) {

@@ -194,7 +194,7 @@ void qib_handle_urcv(struct qib_devdata *dd, u64 ctxtr)
 	int i;
 
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
-	for (i = dd->first_user_ctxt; dd->rcd && i < dd->cfgctxts; i++) {
+	for (i = dd->first_user_ctxt; dd->rcd && i < dd->num_rcv_contexts; i++) {
 		if (!(ctxtr & (1ULL << i)))
 			continue;
 		rcd = dd->rcd[i];

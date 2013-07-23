@@ -234,7 +234,7 @@ static void is_rcvavailint_int(struct qib_devdata *dd, unsigned int source)
 	struct qib_ctxtdata *rcd;
 
 	/* only check what we're using */
-	if (source >= dd->ctxtcnt) {
+	if (source >= dd->num_rcv_contexts) {
 		qib_dev_err(dd,
 			"unexpected receive context interrupt %u\n", source);
 		return;
@@ -858,7 +858,7 @@ static void rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 // ports?  There are several functions that take a ppd when
 // it is now no longer needed NOR applicable.
 	if (ctxt < 0) {
-		for (i = 0; i < dd->ctxtcnt; i++)
+		for (i = 0; i < dd->num_rcv_contexts; i++)
 			one_rcvctrl(ppd, op, i);
 	} else {
 		one_rcvctrl(ppd, op, ctxt);
@@ -1305,7 +1305,7 @@ static int request_msix_irqs(struct qib_devdata *dd)
 	first_general = 0;
 	first_sdma = last_general = first_general + 1;
 	first_rx = last_sdma = first_sdma + dd->num_sdma;
-	last_rx = first_rx + dd->cfgctxts;
+	last_rx = first_rx + dd->num_rcv_contexts;
 
 	/*
 	 * Interrupt affinity.
@@ -1502,7 +1502,7 @@ static int set_up_interrupts(struct qib_devdata *dd)
 	 *	M interrupt - one per used rx context
 	 *	TODO: pio (tx) contexts?
 	 */
-	total = 1 + dd->num_sdma + dd->cfgctxts;
+	total = 1 + dd->num_sdma + dd->num_rcv_contexts;
 
 	entries = kzalloc(sizeof(*entries) * total, GFP_KERNEL);
 	if (!entries) {
@@ -1610,7 +1610,8 @@ static int intr_fallback(struct qib_devdata *dd)
 /*
  * Set up context values in dd.  Sets:
  *
- *	ctxtcnt - total number of contexts being used
+ *	chip_rcv_contexts - total number of contexts supported by the chip
+ *	num_rcv_contexts - number of contexts being used
  *	n_krcv_queues - number of kernel contexts
  *	first_user_ctxt - first non-kernel context in array of contexts
  */
@@ -1647,18 +1648,20 @@ static int set_up_context_variables(struct qib_devdata *dd)
 	 *	- always cut out user contexts before kernel contexts
 	 *	- only extend user contexts
 	 */
-	if (qib_cfgctxts) {
-		if (qib_cfgctxts < total_contexts) {
+	if (num_rcv_contexts) {
+		if (num_rcv_contexts < total_contexts) {
 			/* cut back, user first */
-			if (qib_cfgctxts < num_kernel_contexts) {
-				num_kernel_contexts = qib_cfgctxts;
+			if (num_rcv_contexts < num_kernel_contexts) {
+				num_kernel_contexts = num_rcv_contexts;
 				num_user_contexts = 0;
 			} else {
-				num_user_contexts = qib_cfgctxts - num_kernel_contexts;
+				num_user_contexts = num_rcv_contexts
+							- num_kernel_contexts;
 			}
 		} else {
 			/* extend the user context count */
-			num_user_contexts = qib_cfgctxts - num_kernel_contexts;
+			num_user_contexts = num_rcv_contexts
+							- num_kernel_contexts;
 		}
 		/* recalculate */
 		total_contexts = num_kernel_contexts + num_user_contexts;
@@ -1673,16 +1676,14 @@ static int set_up_context_variables(struct qib_devdata *dd)
 	}
 
 	/* the first N are kernel contexts, the rest are user contexts */
-	/* TODO: Why is ctxtcnt being used to allocate rcd if we are only
-	   going to be using cfgctxts? */
-	dd->ctxtcnt = chip_rx_contexts;
-	dd->cfgctxts = total_contexts;
+	dd->chip_rcv_contexts = chip_rx_contexts;
+	dd->num_rcv_contexts = total_contexts;
 	dd->n_krcv_queues = num_kernel_contexts;
 	dd->first_user_ctxt = num_kernel_contexts;
 	dd->freectxts = num_user_contexts;
 	dd_dev_info(dd,
-		"chip contexts %d, used contexts %d, kernel contexts %d\n",
-		(int)dd->ctxtcnt, (int)dd->cfgctxts, (int)dd->n_krcv_queues);
+		"rcv: chip contexts %d, num contexts %d, kernel contexts %d\n",
+		(int)dd->chip_rcv_contexts, (int)dd->num_rcv_contexts, (int)dd->n_krcv_queues);
 
 	/*
 	 * Simple recieve array allocation:  Evenly divide them
@@ -1695,7 +1696,7 @@ static int set_up_context_variables(struct qib_devdata *dd)
 	 *
 	 * TODO: Make this more sophisticated
 	 */
-	per_context = WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES / dd->cfgctxts;
+	per_context = WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES / dd->num_rcv_contexts;
 	per_context -= (per_context % 4);
 	/* FIXME: no more than 8 each of eager and expected TIDs, for now! */
 	if (per_context > 16)

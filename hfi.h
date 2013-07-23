@@ -842,11 +842,8 @@ struct qib_devdata {
 	u32 pbufsctxt;
 	/* if remainder on bufs/ctxt, ctxts < extrabuf get 1 extra */
 	u32 ctxts_extrabuf;
-	/*
-	 * number of ctxts configured as max; zero is set to number chip
-	 * supports, less gives more pio bufs/ctxt, etc.
-	 */
-	u32 cfgctxts;
+	/* number of receive contexts in use by the driver */
+	u32 num_rcv_contexts;
 	/*
 	 * number of ctxts available for PSM open
 	 */
@@ -950,8 +947,8 @@ struct qib_devdata {
 	u32 rcvhdrsize;
 	/* value we put in kr_rcvhdrentsize */
 	u32 rcvhdrentsize;
-	/* kr_ctxtcnt value */
-	u32 ctxtcnt;
+	/* number of receive contexts the chip supports */
+	u32 chip_rcv_contexts;
 	/* kr_pagealign value */
 	u32 palign;
 	/* number of "2KB" PIO buffers */
@@ -1424,7 +1421,7 @@ const char *get_unit_name(int unit);
 
 /* global module parameter variables */
 extern unsigned qib_ibmtu;
-extern ushort qib_cfgctxts;
+extern uint num_rcv_contexts;
 extern ushort qib_num_cfg_vls;
 extern unsigned qib_n_krcv_queues;
 extern unsigned qib_sdma_fetch_arb;
