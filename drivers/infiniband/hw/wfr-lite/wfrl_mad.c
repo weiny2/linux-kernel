@@ -2702,6 +2702,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_get_stl_portinfo((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
+			printk(KERN_WARNING PFX
+				"WARN: SubnGet(%x) not supported yet...\n",
+				smp->attr_id);
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply_stl(smp);
 			goto bail;
@@ -2709,6 +2712,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 	case IB_MGMT_METHOD_SET:
 		switch (smp->attr_id) {
 		default:
+			printk(KERN_WARNING PFX
+				"WARN: SubnSet(%x) not supported yet...\n",
+				smp->attr_id);
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply_stl(smp);
 			goto bail;
@@ -2751,6 +2757,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		goto bail;
 
 	default:
+		printk(KERN_WARNING PFX
+			"WARN: Subn method %x not supported yet...\n",
+			smp->method);
 		smp->status |= IB_SMP_UNSUP_METHOD;
 		ret = reply_stl(smp);
 	}
@@ -2794,6 +2803,9 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 #endif
 
 	default:
+		printk(KERN_WARNING PFX
+			"WARN: mgmt_class %x not supported yet...\n",
+			in_jumbo->mad_hdr.mgmt_class);
 		ret = IB_MAD_RESULT_SUCCESS;
 	}
 
