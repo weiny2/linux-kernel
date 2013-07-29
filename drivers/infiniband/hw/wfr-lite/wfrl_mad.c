@@ -743,6 +743,322 @@ bail:
 	return ret;
 }
 
+/**
+ * subn_set_portinfo - set port information
+ * @smp: the incoming SM packet
+ * @ibdev: the infiniband device
+ * @port: the port on the device
+ *
+ * Set Portinfo (see ch. 14.2.5.6).
+ */
+static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	struct stl_port_info *pi;
+	struct ib_event event;
+	struct qib_devdata *dd;
+	struct qib_pportdata *ppd;
+	struct qib_ibport *ibp;
+	u8 clientrereg;
+	unsigned long flags;
+	u32 stl_lid; /* Temp to hold STL LID values */
+	u16 lid, smlid;
+	u16 lwe;
+	u16 lse;
+	u8 state;
+	u8 vls;
+	u8 msl;
+	u16 lstate;
+	int ret, ore, mtu;
+	u32 port_num = be32_to_cpu(smp->attr_mod);
+
+	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
+
+	if (port_num == 0)
+		port_num = port;
+	else {
+		if (port_num > ibdev->phys_port_cnt)
+			goto err;
+		/* Port attributes can only be set on the receiving port */
+		if (port_num != port)
+			goto get_only;
+	}
+
+	pi = (struct stl_port_info *)stl_get_smp_data(smp);
+
+	stl_lid = be32_to_cpu(pi->lid);
+	if (stl_lid & 0xFFFF0000) {
+		printk(KERN_WARNING PFX "STL_PortInfo lid out of range: %X\n",
+			stl_lid);
+		goto err;
+	}
+	lid = (u16)(stl_lid & 0x0000FFFF);
+
+	stl_lid = be32_to_cpu(pi->sm_lid);
+	if (stl_lid & 0xFFFF0000) {
+		printk(KERN_WARNING PFX "STL_PortInfo SM lid out of range: %X\n",
+			stl_lid);
+		goto err;
+	}
+	smlid = (u16)(stl_lid & 0x0000FFFF);
+
+	clientrereg = (pi->clientrereg_subnettimeout &
+			STL_PI_MASK_CLIENT_REREGISTER);
+
+	dd = dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hdw from 0 */
+	ppd = dd->pport + (port_num - 1);
+	ibp = &ppd->ibport_data;
+	event.device = ibdev;
+	event.element.port_num = port;
+
+	ibp->mkey = pi->mkey;
+	ibp->gid_prefix = pi->subnet_prefix;
+	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
+
+	/* Must be a valid unicast LID address. */
+	if (lid == 0 || lid >= QIB_MULTICAST_LID_BASE) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) lid invalid 0x%x\n",
+			lid);
+	} else if (ppd->lid != lid ||
+		 ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC)) {
+		if (ppd->lid != lid)
+			qib_set_uevent_bits(ppd, _QIB_EVENT_LID_CHANGE_BIT);
+		if (ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC))
+			qib_set_uevent_bits(ppd, _QIB_EVENT_LMC_CHANGE_BIT);
+		qib_set_lid(ppd, lid, pi->mkeyprotect_lmc & STL_PI_MASK_LMC);
+		event.event = IB_EVENT_LID_CHANGE;
+		ib_dispatch_event(&event);
+	}
+
+	msl = pi->smsl & STL_PI_MASK_SMSL;
+	/* Must be a valid unicast LID address. */
+	if (smlid == 0 || smlid >= QIB_MULTICAST_LID_BASE) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) smlid invalid 0x%x\n",
+			smlid);
+	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
+		spin_lock_irqsave(&ibp->lock, flags);
+		if (ibp->sm_ah) {
+			if (smlid != ibp->sm_lid)
+				ibp->sm_ah->attr.dlid = smlid;
+			if (msl != ibp->sm_sl)
+				ibp->sm_ah->attr.sl = msl;
+		}
+		spin_unlock_irqrestore(&ibp->lock, flags);
+		if (smlid != ibp->sm_lid)
+			ibp->sm_lid = smlid;
+		if (msl != ibp->sm_sl)
+			ibp->sm_sl = msl;
+		event.event = IB_EVENT_SM_CHANGE;
+		ib_dispatch_event(&event);
+	}
+
+#if 0
+	/* Ignore STL Link Width and Link Speed we can't support them anyway. */
+	/* Allow 1x or 4x to be set (see 14.2.6.6). */
+	lwe = be16_to_cpu(pi->link_width.enabled);
+	if (lwe) {
+		if (lwe == STL_LINK_WIDTH_ALL_SUPPORTED)
+			set_link_width_enabled(ppd, ppd->link_width_supported);
+		else if (lwe >= 16 || (lwe & ~ppd->link_width_supported))
+			smp->status |= IB_SMP_INVALID_FIELD;
+		else if (lwe != ppd->link_width_enabled)
+			/* FIXME can't support non-IB link widths */
+			set_link_width_enabled(ppd, (lwe & 0x000F));
+	}
+
+	lse = pip->linkspeedactive_enabled & 0xF;
+	if (lse) {
+		/*
+		 * The IB 1.2 spec. only allows link speed values
+		 * 1, 3, 5, 7, 15.  1.2.1 extended to allow specific
+		 * speeds.
+		 */
+		if (lse == 15)
+			set_link_speed_enabled(ppd,
+					       ppd->link_speed_supported);
+		else if (lse >= 8 || (lse & ~ppd->link_speed_supported))
+			smp->status |= IB_SMP_INVALID_FIELD;
+		else if (lse != ppd->link_speed_enabled)
+			set_link_speed_enabled(ppd, lse);
+	}
+#else
+	lwe = be16_to_cpu(pi->link_width.enabled);
+	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) link width enable ignored 0x%x\n", lwe);
+	lse = be16_to_cpu(pi->link_speed.enabled);
+	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) link speed enable ignored 0x%x\n", lse);
+#endif
+
+	/* Set link down default state. */
+	switch (pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE) {
+	case 0: /* NOP */
+		break;
+	case 1: /* SLEEP */
+		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
+					IB_LINKINITCMD_SLEEP);
+		break;
+	case 2: /* POLL */
+		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
+					IB_LINKINITCMD_POLL);
+		break;
+	default:
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) Default state invalid 0x%x\n",
+			pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	ibp->mkeyprot = (pi->mkeyprotect_lmc & STL_PI_MASK_MKEY_PROT_BIT) >> 6;
+	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
+	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
+				    ibp->vl_high_limit);
+
+#if 0
+	mtu = ib_mtu_enum_to_int((pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+	if (mtu == -1) {
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n", mtu,
+			(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	} else {
+		printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) Neigh MTU ignored %d\n", mtu);
+		//qib_set_mtu(ppd, mtu);
+	}
+#else
+	mtu = ib_mtu_enum_to_int((pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+	printk(KERN_WARNING PFX
+		"SubnSet(STL_PortInfo) Neigh MTU ignored; VL0 mtu %d (0x%x)\n",
+		mtu, (pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+#endif
+
+	/* Set operational VLs */
+	vls = pi->operational_vls & STL_PI_MASK_OPERATIONAL_VL;
+	if (vls) {
+		if (vls > ppd->vls_supported) {
+			printk(KERN_WARNING PFX
+				"SubnSet(STL_PortInfo) VL's supported invalid %d\n",
+				pi->operational_vls);
+			smp->status |= IB_SMP_INVALID_FIELD;
+		} else
+			(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS, vls);
+	}
+
+	if (pi->mkey_violations == 0)
+		ibp->mkey_violations = 0;
+
+	if (pi->pkey_violations == 0)
+		ibp->pkey_violations = 0;
+
+	if (pi->qkey_violations == 0)
+		ibp->qkey_violations = 0;
+
+	ore = pi->localphy_overrun_errors;
+	if (set_phyerrthreshold(ppd, (ore >> 4) & 0xF)) {
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) phyerrthreshold invalid 0x%x\n",
+			(ore >> 4) & 0xF);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	if (set_overrunthreshold(ppd, (ore & 0xF))) {
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) overrunthreshold invalid 0x%x\n",
+			ore & 0xF);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	ibp->subnet_timeout = pi->clientrereg_subnettimeout & STL_PI_MASK_SUBNET_TIMEOUT;
+
+	/*
+	 * Do the port state change now that the other link parameters
+	 * have been set.
+	 * Changing the port physical state only makes sense if the link
+	 * is down or is being set to down.
+	 */
+	state = pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_STATE;
+	lstate = (pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
+	if (lstate && !(state == IB_PORT_DOWN || state == IB_PORT_NOP)) {
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
+			state, lstate);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+#if 0
+	/*
+	 * Only state changes of DOWN, ARM, and ACTIVE are valid
+	 * and must be in the correct state to take effect (see 7.2.6).
+	 */
+	switch (state) {
+	case IB_PORT_NOP:
+		if (lstate == 0)
+			break;
+		/* FALLTHROUGH */
+	case IB_PORT_DOWN:
+		if (lstate == 0)
+			lstate = QIB_IB_LINKDOWN_ONLY;
+		else if (lstate == 1)
+			lstate = QIB_IB_LINKDOWN_SLEEP;
+		else if (lstate == 2)
+			lstate = QIB_IB_LINKDOWN;
+		else if (lstate == 3)
+			lstate = QIB_IB_LINKDOWN_DISABLE;
+		else {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			break;
+		}
+		spin_lock_irqsave(&ppd->lflags_lock, flags);
+		ppd->lflags &= ~QIBL_LINKV;
+		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
+		qib_set_linkstate(ppd, lstate);
+		/*
+		 * Don't send a reply if the response would be sent
+		 * through the disabled port.
+		 */
+		if (lstate == QIB_IB_LINKDOWN_DISABLE && smp->hop_cnt) {
+			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+			goto done;
+		}
+		qib_wait_linkstate(ppd, QIBL_LINKV, 10);
+		break;
+	case IB_PORT_ARMED:
+		qib_set_linkstate(ppd, QIB_IB_LINKARM);
+		break;
+	case IB_PORT_ACTIVE:
+		qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+		break;
+	default:
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+#else
+	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) Port PhyState 0x%x; State 0x%x ignored\n", lstate, state);
+#endif
+
+	if (clientrereg) {
+		event.event = IB_EVENT_CLIENT_REREGISTER;
+		ib_dispatch_event(&event);
+	}
+
+	ret = subn_get_stl_portinfo(smp, ibdev, port);
+
+	/* restore re-reg bit per o14-12.2.1 */
+	pi->clientrereg_subnettimeout |= clientrereg;
+
+	goto get_only;
+
+err:
+	smp->status |= IB_SMP_INVALID_FIELD;
+get_only:
+	ret = subn_get_stl_portinfo(smp, ibdev, port);
+//done:
+	return ret;
+}
+
+
 static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -2647,7 +2963,6 @@ bail:
 	return ret;
 }
 
-
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			u8 port, struct jumbo_mad *in_jumbo,
 			struct jumbo_mad *out_jumbo)
@@ -2711,6 +3026,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		}
 	case IB_MGMT_METHOD_SET:
 		switch (smp->attr_id) {
+		case STL_ATTRIB_ID_PORT_INFO:
+			ret = subn_set_stl_portinfo((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: SubnSet(%x) not supported yet...\n",
