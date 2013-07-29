@@ -83,6 +83,25 @@
 #define STL_LINKDOWN_REASON_BAD_CONTROL_FLIT			20
 #define STL_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN		21
 
+/*  STL Link speed, continued from IB_LINK_SPEED and indicated as follows:
+ * values are additive for Supported and Enabled fields
+ */
+#define STL_LINK_SPEED_RESERVED         0x80    /*  Reserved (1-5 Gbps) */
+#define STL_LINK_SPEED_RESERVED2        0x100   /*  Reserved (12-15 Gbps) */
+#define STL_LINK_SPEED_25G              0x200   /*  25.78125?  Gbps (EDR) */
+#define STL_LINK_SPEED_RESERVED3        0x400   /*  Reserved (>25G) */
+#define STL_LINK_SPEED_ALL_SUPPORTED    0x03FF  /*  valid only for STL LinkSpeedEnabled */
+
+/*  STL Link width, continued from IB_LINK_WIDTH and indicated as follows:
+ * values are additive for Supported and Enabled fields
+ */
+#define STL_LINK_WIDTH_2X   0x0010
+#define STL_LINK_WIDTH_3X   0x0020
+#define STL_LINK_WIDTH_6X   0x0040
+#define STL_LINK_WIDTH_9X   0x0080
+#define STL_LINK_WIDTH_16X  0x0100
+#define STL_LINK_WIDTH_ALL_SUPPORTED 0x0FFF /*  valid only for LinkWidthEnabled */
+
 
 enum port_info_field_masks {
 	/* vl.inittype */
@@ -110,7 +129,7 @@ enum port_info_field_masks {
 	STL_PI_MASK_PARTITION_ENFORCE_OUT         = 0x04,
 	STL_PI_MASK_FILTER_RAW_IN                 = 0x02,
 	STL_PI_MASK_FILTER_RAW_OUT                = 0x01,
-	/* operational_vl */
+	/* operational_vls */
 	STL_PI_MASK_OPERATIONAL_VL                = 0x1F,
 	/* sa_qp */
 	STL_PI_MASK_SA_QP                         = 0x00FFFFFF,
