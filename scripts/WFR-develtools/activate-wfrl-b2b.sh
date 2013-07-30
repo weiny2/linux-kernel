@@ -28,11 +28,9 @@ Options:
 -n node    - remote node to operate on
 EOL
 }
+
 while getopts "hr:p:n:i" opt; do
 	case "$opt" in
-	h)	usage
-		exit 0
-		;;
 	r)	remote_port="$OPTARG"
 		;;
 	p)	local_port="$OPTARG"
@@ -41,7 +39,12 @@ while getopts "hr:p:n:i" opt; do
 		;;
 	i)	ibmode="true"
 		;;
-
+	h)	usage
+		exit 0
+		;;
+	*)	usage
+		exit 1
+		;;
 	esac
 done
 
@@ -63,14 +66,8 @@ ssh root@$remote_node "modprobe ib_wfr_lite"
 ssh root@$remote_node "modprobe ib_umad"
 ssh root@$remote_node "modprobe ib_uverbs"
 ssh root@$remote_node "modprobe ib_usa"
-
-echo "Waiting for port to Initialize..."
-state=""
-while [ "$state" != "State: Initializing" ]; do
-	sleep 1
-	state=`ssh root@$remote_node "ibstat wfr_lite0 $remote_port | grep State:"`
-	echo $state
-done
+sleep 5
+ssh root@$remote_node "iba_portenable -w2 -s4 -p $remote_port"
 
 echo "Reloading ib_wfr_lite on \"localhost\""
 rmmod ib_qib
@@ -85,24 +82,80 @@ modprobe ib_umad
 modprobe ib_uverbs
 modprobe ib_usa
 
-echo "Waiting for ports to Initialize..."
+iba_portenable -w2 -s4 -p $local_port
+
+if [ "$ibmode" == "true" ]; then
+	exit 0
+fi
+
+# continue with STL coonfiguration below
+
+echo "Waiting for remote port to Initialize..."
 state=""
-while [ "$state" != "State: Initializing" ]; do
+while [ "$state" != "2: INIT" ]; do
 	sleep 1
-	state=`ibstat wfr_lite0 $local_port | grep State:`
+	state=`ssh root@$remote_node "cat /sys/class/infiniband/wfr_lite0/ports/${remote_port}/state"`
 	echo $state
 done
 
-if [ "$ibmode" == "false" ]; then
-	echo "Bringing up ports: local $local_port <==> remote $remote_port"
-	ibportstate -D 0 $local_port lid $local_lid arm > /dev/null
-	ibportstate -D 0,$local_port $remote_port lid $remote_lid arm > /dev/null
-	ibportstate -D 0 $local_port active > /dev/null
-	ibportstate -D 0,$local_port $remote_port active > /dev/null
+state=""
+while [ "$state" != "2: INIT" ]; do
+	echo "Waiting for local port to Initialize..."
+	sleep 1
+	state=$(cat /sys/class/infiniband/wfr_lite0/ports/${local_port}/state)
+	echo $state
+done
 
-	echo "configuring wfr_lite for VL15 over VL0"
-	ssh root@$remote_node "echo $local_lid > /sys/module/ib_wfr_lite/parameters/vl15_ovl0"
-	echo $remote_lid > /sys/module/ib_wfr_lite/parameters/vl15_ovl0
-fi
+sleep 1
+
+echo "Arming local port."
+iba_portconfig -L ${local_lid} -S3 -p $local_port
+state=""
+while [ "$state" != "3: ARMED" ]; do
+	echo "Waiting for local port to arm..."
+	sleep 1
+	state=$(cat /sys/class/infiniband/wfr_lite0/ports/${local_port}/state)
+	echo $state
+done
+
+sleep 1
+
+echo "Arming Remote port."
+ssh root@$remote_node "iba_portconfig -L ${remote_lid} -S3 -p $remote_port"
+state=""
+while [ "$state" != "3: ARMED" ]; do
+	echo "Waiting for remote port to arm..."
+	sleep 1
+	state=`ssh root@$remote_node "cat /sys/class/infiniband/wfr_lite0/ports/${remote_port}/state"`
+	echo $state
+done
+
+sleep 1
+
+echo "Activating local port."
+iba_portconfig -S4 -p $local_port
+state=""
+while [ "$state" != "4: ACTIVE" ]; do
+	echo "Waiting for local port to go active..."
+	sleep 1
+	state=$(cat /sys/class/infiniband/wfr_lite0/ports/${local_port}/state)
+	echo $state
+done
+
+sleep 1
+
+echo "Activating Remote port."
+ssh root@$remote_node "iba_portconfig -S4 -p $remote_port"
+state=""
+while [ "$state" != "4: ACTIVE" ]; do
+	echo "Waiting for remote port to go active..."
+	sleep 1
+	state=`ssh root@$remote_node "cat /sys/class/infiniband/wfr_lite0/ports/${remote_port}/state"`
+	echo $state
+done
+
+echo "Configuring wfr_lite for VL15 over VL0"
+ssh root@${remote_node} "echo $local_lid > /sys/module/ib_wfr_lite/parameters/vl15_ovl0"
+echo $remote_lid > /sys/module/ib_wfr_lite/parameters/vl15_ovl0
 
 exit 0
