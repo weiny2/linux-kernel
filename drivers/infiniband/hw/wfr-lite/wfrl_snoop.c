@@ -189,8 +189,8 @@ int qib_snoop_add(struct qib_devdata *dd)
 			if (ret)
 				goto bail;
 		}
-		printk(KERN_INFO "qib%d: snoop device for hca %02d enabled for Port %02d\n"
-				"qib%d: capture device for hca %02d enabled for port %02d\n",
+		printk(KERN_INFO "ib_wfr_lite%d: snoop device for hca %02d enabled for Port %02d\n"
+				"ib_wfr_lite%d: capture device for hca %02d enabled for port %02d\n",
 			dd->unit, dd->unit, i+1, dd->unit, dd->unit, i+1);
 		dd->pport[i].mode_flag = 0;
 	}
