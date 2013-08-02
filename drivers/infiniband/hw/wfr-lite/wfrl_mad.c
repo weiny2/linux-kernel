@@ -49,6 +49,12 @@ module_param_named(dump_sma_mads, wfr_dump_sma_mads, uint, S_IRUGO | S_IWUSR | S
 MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
 
 
+/** =========================================================================
+ * For STL simulation environment we fake much of STL Port Info
+ */
+static struct stl_port_info virtual_stl_port_info;
+static int virtual_stl_PI_init = 0;
+
 static int reply(struct ib_smp *smp)
 {
 	/*
@@ -547,11 +553,15 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	struct stl_port_info *pi;
 	u8 mtu;
 	int ret;
-	u32 state;
+	//u32 state;
 	u32 port_num = be32_to_cpu(smp->attr_mod);
 
-	pi = (struct stl_port_info *)stl_get_smp_data(smp);
-
+	/* Where the IB hardware has values they are filled in here
+	 * Other values are simply stored in virtual_stl_port_info and echoed
+	 * back.
+	 * The exception to this is the Port State and Physical state.  This is
+	 * to support simulated environment.
+	 */
 	if (port_num == 0)
 		port_num = port;
 	else {
@@ -575,11 +585,19 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	ppd = dd->pport + (port_num - 1);
 	ibp = &ppd->ibport_data;
 
+	pi = (struct stl_port_info *)stl_get_smp_data(smp);
 	/* Clear all fields.  Only set the non-zero fields. */
 	memset(pi, 0, sizeof(*pi));
 
+	/* Get virtual values first */
+	memcpy(pi, &virtual_stl_port_info, sizeof(*pi));
+
+	/* Then set some real values to make sure that LID MAD's are processed and
+	 * local software has valid data to pull from ie for SA queries and
+	 * what not
+	 */
 	pi->lid = cpu_to_be32(ppd->lid);
-	pi->flow_control_mask = cpu_to_be32(0);
+	//pi->flow_control_mask = cpu_to_be32(0);
 
 	/* Only return the mkey if the protection field allows it. */
 	if (!(smp->method == IB_MGMT_METHOD_GET &&
@@ -604,12 +622,25 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* FIXME make sure that this default state matches */
 	pi->port_states.offline_reason = 0;
 	pi->port_states.unsleepstate_downdefstate = (get_linkdowndefaultstate(ppd) ? 1 : 2);
+
+	/*
+	 * Return virtual Port States in STL mode
 	state = dd->f_iblink_state(ppd->lastibcstat);
 	pi->port_states.portphysstate_portstate =
 		(dd->f_ibphys_portstate(ppd->lastibcstat) << 4) |
 		state;
+	*/
+	if (!virtual_stl_PI_init) {
+		/* We have not been called yet
+		 * Fake LinkUp / Initialize
+		 */
+		virtual_stl_port_info.port_states.portphysstate_portstate = 5 << 4;
+		virtual_stl_port_info.port_states.portphysstate_portstate |= 2;
+		virtual_stl_PI_init = 1;
+	}
+	pi->port_states.portphysstate_portstate = virtual_stl_port_info.port_states.portphysstate_portstate;
 
-	pi->collectivemask_multicastmask = 0;
+	//pi->collectivemask_multicastmask = 0;
 
 	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 
@@ -641,24 +672,24 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
 
 	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
-	pi->partenforce_filterraw = 0;
+	//pi->partenforce_filterraw = 0;
 	pi->operational_vls = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS);
 
-	pi->pkey_8b = cpu_to_be16(0);
-	pi->pkey_10b = cpu_to_be16(0);
+	//pi->pkey_8b = cpu_to_be16(0);
+	//pi->pkey_10b = cpu_to_be16(0);
 
 	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
 	/* P_KeyViolations are counted by hardware. */
 	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
 	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
 
-	pi->sm_trap_qp = cpu_to_be32(0);
-	pi->sa_qp = cpu_to_be32(0);
+	//pi->sm_trap_qp = cpu_to_be32(0);
+	//pi->sa_qp = cpu_to_be32(0);
 
-	pi->vl.inittype = 0;
+	//pi->vl.inittype = 0;
 	pi->vl.cap = ppd->vls_supported;
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
-	pi->vl.preempt_limit = cpu_to_be16(0);
+	//pi->vl.preempt_limit = cpu_to_be16(0);
 	pi->vl.arb_high_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
 	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
 
@@ -679,9 +710,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		pi->link_roundtrip_latency = cpu_to_be32(v);
 	}
 
-	/* FIXME New fields below TBD */
-	pi->ib_cap_mask2 = 0;
-	pi->stl_cap_mask = 0;
+	//pi->ib_cap_mask2 = 0;
+	//pi->stl_cap_mask = 0;
 
 	/* HCAs ignore VLStallCount and HOQLife */
 	//pi->xmit_q[x] = 0;
@@ -700,7 +730,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16;
 	pi->port_ltp_crc_mode = cpu_to_be16(pi->port_ltp_crc_mode);
 
-	pi->port_mode = cpu_to_be16(0);
+	//pi->port_mode = cpu_to_be16(0);
+	//pi->port_neigh_mode = 0;
 
 	pi->port_packet_format.supported = cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
 	pi->port_packet_format.enabled = cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
@@ -713,28 +744,25 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->buffer_units = cpu_to_be32(0);
 
-	pi->port_neigh_mode = 0;
+	//pi->replay_depth.buffer = 0;
+	//pi->replay_depth.wire = 0;
 
-#warning "FIXME this is for testing to make sure data is coming back!"
-	pi->replay_depth.buffer = 0xDE;
-	pi->replay_depth.wire = 0xAD;
+	//pi->flit_control.interleave = cpu_to_be16(0);
+	//pi->flit_control.preemption.min_initial = cpu_to_be16(0);
+	//pi->flit_control.preemption.min_tail = cpu_to_be16(0);
+	//pi->flit_control.preemption.large_pkt_limit = 0;
+	//pi->flit_control.preemption.small_pkt_limit = 0;
+	//pi->flit_control.preemption.max_small_pkt_limit = 0;
+	//pi->flit_control.preemption.preemption_limit = 0;
 
-	pi->flit_control.interleave = cpu_to_be16(0);
-	pi->flit_control.preemption.min_initial = cpu_to_be16(0);
-	pi->flit_control.preemption.min_tail = cpu_to_be16(0);
-	pi->flit_control.preemption.large_pkt_limit = 0;
-	pi->flit_control.preemption.small_pkt_limit = 0;
-	pi->flit_control.preemption.max_small_pkt_limit = 0;
-	pi->flit_control.preemption.preemption_limit = 0;
-
-	pi->pass_through.egress_port = 0;
-	pi->pass_through.res_drctl = 0;
+	//pi->pass_through.egress_port = 0;
+	//pi->pass_through.res_drctl = 0;
 
 	/* 32.768 usec. response time (guessing) */
 	pi->resptimevalue = 3;
 
 	pi->local_port_num = port;
-	pi->ganged_port_details = 0;
+	//pi->ganged_port_details = 0;
 	pi->guid_cap = 1;
 
 	ret = reply_stl(smp);
@@ -771,6 +799,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u16 lstate;
 	int ret, ore, mtu;
 	u32 port_num = be32_to_cpu(smp->attr_mod);
+	u8 saved_virtual_portstate = 0;
 
 	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
 
@@ -857,6 +886,9 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		ib_dispatch_event(&event);
 	}
 
+	saved_virtual_portstate = virtual_stl_port_info.port_states.portphysstate_portstate;
+	memcpy(&virtual_stl_port_info, pi, sizeof(virtual_stl_port_info));
+	virtual_stl_port_info.port_states.portphysstate_portstate = saved_virtual_portstate;
 #if 0
 	/* Ignore STL Link Width and Link Speed we can't support them anyway. */
 	/* Allow 1x or 4x to be set (see 14.2.6.6). */
@@ -894,16 +926,22 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 #endif
 
 	/* Set link down default state. */
+	/* Again make this virtual.  Only IB PortInfo controls the actual port
+	 * states */
 	switch (pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE) {
 	case 0: /* NOP */
 		break;
 	case 1: /* SLEEP */
+	/*
 		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
 					IB_LINKINITCMD_SLEEP);
+					*/
 		break;
 	case 2: /* POLL */
+	/*
 		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
 					IB_LINKINITCMD_POLL);
+					*/
 		break;
 	default:
 		printk(KERN_WARNING PFX
@@ -988,7 +1026,6 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
-#if 0
 	/*
 	 * Only state changes of DOWN, ARM, and ACTIVE are valid
 	 * and must be in the correct state to take effect (see 7.2.6).
@@ -999,18 +1036,26 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			break;
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
+#if 0
 		if (lstate == 0)
-			lstate = QIB_IB_LINKDOWN_ONLY;
+			//lstate = QIB_IB_LINKDOWN_ONLY;
 		else if (lstate == 1)
-			lstate = QIB_IB_LINKDOWN_SLEEP;
+			//lstate = QIB_IB_LINKDOWN_SLEEP;
 		else if (lstate == 2)
-			lstate = QIB_IB_LINKDOWN;
+			//lstate = QIB_IB_LINKDOWN;
 		else if (lstate == 3)
-			lstate = QIB_IB_LINKDOWN_DISABLE;
+			//lstate = QIB_IB_LINKDOWN_DISABLE;
 		else {
+#endif
+		/* FIXME allow other STL states */
+		if (lstate > 3) {
+			printk(KERN_WARNING PFX
+				"SubnSet(STL_PortInfo) invalid Physical state 0x%x\n",
+				lstate);
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
 		}
+#if 0
 		spin_lock_irqsave(&ppd->lflags_lock, flags);
 		ppd->lflags &= ~QIBL_LINKV;
 		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
@@ -1024,19 +1069,38 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			goto done;
 		}
 		qib_wait_linkstate(ppd, QIBL_LINKV, 10);
+#endif
 		break;
 	case IB_PORT_ARMED:
-		qib_set_linkstate(ppd, QIB_IB_LINKARM);
+		//qib_set_linkstate(ppd, QIB_IB_LINKARM);
 		break;
 	case IB_PORT_ACTIVE:
-		qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+		//qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
 		break;
 	default:
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) invalid state 0x%x\n", state);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
-#else
-	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) Port PhyState 0x%x; State 0x%x ignored\n", lstate, state);
-#endif
+
+	if (state) {
+		uint8_t tmp = virtual_stl_port_info.port_states.portphysstate_portstate;
+		virtual_stl_port_info.port_states.portphysstate_portstate =
+			(tmp & STL_PI_MASK_PORT_PHYSICAL_STATE) |
+			(state & STL_PI_MASK_PORT_STATE);
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) Port State 0x%x virtualized\n",
+			state);
+	}
+	if (lstate) {
+		uint8_t tmp = virtual_stl_port_info.port_states.portphysstate_portstate;
+		virtual_stl_port_info.port_states.portphysstate_portstate =
+			((lstate << 4) & STL_PI_MASK_PORT_PHYSICAL_STATE) |
+			(tmp & STL_PI_MASK_PORT_STATE);
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) Port PhyState 0x%x virtualized\n",
+			lstate);
+	}
 
 	if (clientrereg) {
 		event.event = IB_EVENT_CLIENT_REREGISTER;
@@ -1048,13 +1112,13 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* restore re-reg bit per o14-12.2.1 */
 	pi->clientrereg_subnettimeout |= clientrereg;
 
-	goto get_only;
+	goto done;
 
 err:
 	smp->status |= IB_SMP_INVALID_FIELD;
 get_only:
 	ret = subn_get_stl_portinfo(smp, ibdev, port);
-//done:
+done:
 	return ret;
 }
 
