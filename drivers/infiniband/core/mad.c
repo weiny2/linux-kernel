@@ -952,6 +952,7 @@ struct ib_mad_send_buf * ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	void *buf;
 	size_t mad_size;
 	u8 base_version = remote_qpn >> 24;
+	remote_qpn &= 0x00FFFFFF;
 
 	mad_agent_priv = container_of(mad_agent, struct ib_mad_agent_private,
 				      agent);
