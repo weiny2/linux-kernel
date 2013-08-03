@@ -60,11 +60,15 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 
 	qp = qib_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
 	if (!qp) {
+printk(KERN_ERR PFX "ERROR: packet drop: failed to find QP\n");
 		ibp->n_pkt_drops++;
 		return;
 	}
 	if (qp->ibqp.qp_type != sqp->ibqp.qp_type ||
 	    !(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK)) {
+printk(KERN_ERR PFX
+	"ERROR: packet drop: qp type mismatch %d != %d || invalid QP state %d\n",
+	qp->ibqp.qp_type, sqp->ibqp.qp_type, qp->state);
 		ibp->n_pkt_drops++;
 		goto drop;
 	}
@@ -87,6 +91,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 				      sqp->ibqp.qp_num, qp->ibqp.qp_num,
 				      cpu_to_be16(lid),
 				      cpu_to_be16(ah_attr->dlid));
+printk(KERN_ERR PFX "ERROR: packet drop: invalid pkey\n");
 			goto drop;
 		}
 	}
@@ -111,6 +116,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 				      sqp->ibqp.qp_num, qp->ibqp.qp_num,
 				      cpu_to_be16(lid),
 				      cpu_to_be16(ah_attr->dlid));
+printk(KERN_ERR PFX "ERROR: packet drop: invalid qkey\n");
 			goto drop;
 		}
 	}
@@ -141,16 +147,20 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 		ret = qib_get_rwqe(qp, 0);
 		if (ret < 0) {
 			qib_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
+printk(KERN_ERR PFX "ERROR: packet drop: invalid local qp op\n");
 			goto bail_unlock;
 		}
 		if (!ret) {
 			if (qp->ibqp.qp_num == 0)
 				ibp->n_vl15_dropped++;
+printk(KERN_ERR PFX "ERROR: packet drop: failed to find rwqe\n");
 			goto bail_unlock;
 		}
 	}
 	/* Silently drop packets which are too big. */
 	if (unlikely(wc.byte_len > qp->r_len)) {
+printk(KERN_ERR PFX "ERROR: packet drop: Loopback byte_len %d > qp->r_len %d\n",
+	wc.byte_len, qp->r_len);
 		qp->r_flags |= QIB_R_REUSE_SGE;
 		ibp->n_pkt_drops++;
 		goto bail_unlock;
@@ -195,8 +205,10 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 		length -= len;
 	}
 	qib_put_ss(&qp->r_sge);
-	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags))
+	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags)) {
+printk(KERN_ERR PFX "ERROR: packet drop: wrid invalid\n");
 		goto bail_unlock;
+	}
 	wc.wr_id = qp->r_wr_id;
 	wc.status = IB_WC_SUCCESS;
 	wc.opcode = IB_WC_RECV;
