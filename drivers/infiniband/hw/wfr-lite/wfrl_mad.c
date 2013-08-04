@@ -41,8 +41,12 @@
 #include "wfrl_mad.h"
 
 static ushort wfr_allow_ib_mads = 1;
-module_param_named(allow_ib_mads, wfr_allow_ib_mads, ushort, S_IRUGO);
-MODULE_PARM_DESC(allow_ib_mads, "If 1 driver will allow IB SMP's to be processed");
+module_param_named(allow_ib_mads, wfr_allow_ib_mads, ushort, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(allow_ib_mads, "If 1 driver will allow IB MAD's to be processed (default == 1)");
+
+static ushort wfr_warn_ib_mads = 0;
+module_param_named(warn_ib_mads, wfr_warn_ib_mads, ushort, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(warn_ib_mads, "If 1 driver will print a warning for all IB MAD's processed (default == 0)");
 
 static unsigned wfr_dump_sma_mads = 0;
 module_param_named(dump_sma_mads, wfr_dump_sma_mads, uint, S_IRUGO | S_IWUSR | S_IWGRP);
@@ -3246,10 +3250,20 @@ int wfr_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 
-	if (!wfr_allow_ib_mads && in_mad->mad_hdr.base_version != JUMBO_MGMT_BASE_VERSION) {
-		printk(KERN_WARNING PFX "Invalid SMP sent : "
+	if (in_mad->mad_hdr.base_version == IB_MGMT_BASE_VERSION &&
+	    ((in_mad->mad_hdr.mgmt_class != IB_MGMT_CLASS_SUBN_LID_ROUTED &&
+	     in_mad->mad_hdr.mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) ||
+	     in_mad->mad_hdr.attr_id != IB_SMP_ATTR_NODE_INFO)) {
+		if (!wfr_allow_ib_mads) {
+			printk(KERN_WARNING PFX "Invalid SMP sent : "
 				"WFR-Lite is set to only process STL SMP's\n");
-		return (IB_MAD_RESULT_FAILURE);
+			return (IB_MAD_RESULT_FAILURE);
+		} else if (wfr_warn_ib_mads) {
+			printk(KERN_WARNING PFX "WARNING: "
+				"Processing IB MAD: class 0x%x attr 0x%x\n",
+				in_mad->mad_hdr.mgmt_class,
+				in_mad->mad_hdr.attr_id);
+		}
 	}
 
 	if (in_mad->mad_hdr.base_version == JUMBO_MGMT_BASE_VERSION)
