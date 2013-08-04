@@ -54,6 +54,14 @@ MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
  */
 static struct stl_port_info virtual_stl_port_info;
 static int virtual_stl_PI_init = 0;
+uint8_t wfrl_get_stl_virtual_port_state(void) {
+	return (virtual_stl_port_info.port_states.portphysstate_portstate);
+}
+EXPORT_SYMBOL(wfrl_get_stl_virtual_port_state);
+void wfrl_set_stl_virtual_port_state(uint8_t value) {
+	virtual_stl_port_info.port_states.portphysstate_portstate = value;
+}
+EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
 
 static int reply(struct ib_smp *smp)
 {
