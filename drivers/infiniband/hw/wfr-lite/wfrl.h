@@ -1559,4 +1559,9 @@ struct qib_hwerror_msgs {
 void qib_format_hwerrors(u64 hwerrs,
 			 const struct qib_hwerror_msgs *hwerrmsgs,
 			 size_t nhwerrmsgs, char *msg, size_t lmsg);
+
+/* allow other c files access to the stl virtual state */
+uint8_t wfrl_get_stl_virtual_port_state(void);
+void wfrl_set_stl_virtual_port_state(uint8_t value);
+
 #endif                          /* _QIB_KERNEL_H */

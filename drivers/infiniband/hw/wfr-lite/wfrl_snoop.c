@@ -456,6 +456,11 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			physState = (value >> 4) & 0xF;
 			linkState = value & 0xF;
 
+			/* use virtual state */
+			if (wfr_vl15_ovl0) {
+				wfrl_set_stl_virtual_port_state((uint8_t)value & 0xff);
+			}
+
 			switch (linkState) {
 			case IB_PORT_NOP:
 				if (physState == 0)
@@ -487,7 +492,10 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 					goto done;
 					break;
 				}
-				ret = qib_set_linkstate(ppd, devState);
+				/* protect vl15_ovl0 mode, virtual state set
+				 * above */
+				if (!wfr_vl15_ovl0)
+					ret = qib_set_linkstate(ppd, devState);
 				break;
 			case IB_PORT_ARMED:
 				if (!(dd->flags &
@@ -495,14 +503,20 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 						ret = -EINVAL;
 						break;
 					}
-				ret = qib_set_linkstate(ppd, QIB_IB_LINKARM);
+				/* protect vl15_ovl0 mode, virtual state set
+				 * above */
+				if (!wfr_vl15_ovl0)
+					ret = qib_set_linkstate(ppd, QIB_IB_LINKARM);
 				break;
 			case IB_PORT_ACTIVE:
 				if (!(dd->flags & QIB_IB_LINKARM)) {
 					ret = -EINVAL;
 					break;
 				}
-				ret = qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+				/* protect vl15_ovl0 mode, virtual state set
+				 * above */
+				if (!wfr_vl15_ovl0)
+					ret = qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
 				break;
 			default:
 				ret = -EINVAL;
@@ -514,9 +528,14 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			/* fall through */
 
 		case QIB_SNOOP_IOCGETLINKSTATE:
-			value = dd->f_ibphys_portstate(ppd->lastibcstat);
-			value <<= 4;
-			value |= dd->f_iblink_state(ppd->lastibcstat);
+			if (wfr_vl15_ovl0) {
+				/* return the virtual state */
+				value = (int)wfrl_get_stl_virtual_port_state();
+			} else {
+				value = dd->f_ibphys_portstate(ppd->lastibcstat);
+				value <<= 4;
+				value |= dd->f_iblink_state(ppd->lastibcstat);
+			}
 			ret = __put_user(value, (int __user *)arg);
 			break;
 
