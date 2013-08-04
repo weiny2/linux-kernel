@@ -339,8 +339,13 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	else
 		nip->port_guid = dd->pport[pidx].guid;
 
-	nip->base_version = 1;
-	nip->class_version = 1;
+	if (wfr_vl15_ovl0) {
+		nip->base_version = JUMBO_MGMT_BASE_VERSION;
+		nip->class_version = STL_SMI_CLASS_VERSION;
+	} else {
+		nip->base_version = 1;
+		nip->class_version = 1;
+	}
 	nip->node_type = 1;     /* channel adapter */
 	nip->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
