@@ -60,7 +60,8 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 
 	qp = qib_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
 	if (!qp) {
-printk(KERN_ERR PFX "ERROR: packet drop: failed to find QP\n");
+printk(KERN_ERR PFX "ERROR: packet drop: failed to find QP: 0x%x\n",
+	swqe->wr.wr.ud.remote_qpn);
 		ibp->n_pkt_drops++;
 		return;
 	}
@@ -91,7 +92,8 @@ printk(KERN_ERR PFX
 				      sqp->ibqp.qp_num, qp->ibqp.qp_num,
 				      cpu_to_be16(lid),
 				      cpu_to_be16(ah_attr->dlid));
-printk(KERN_ERR PFX "ERROR: packet drop: invalid pkey\n");
+printk(KERN_ERR PFX "ERROR: packet drop: invalid pkey; pk1 0x%x: pk2 0x%x\n",
+	pkey1, pkey2);
 			goto drop;
 		}
 	}
@@ -116,7 +118,7 @@ printk(KERN_ERR PFX "ERROR: packet drop: invalid pkey\n");
 				      sqp->ibqp.qp_num, qp->ibqp.qp_num,
 				      cpu_to_be16(lid),
 				      cpu_to_be16(ah_attr->dlid));
-printk(KERN_ERR PFX "ERROR: packet drop: invalid qkey\n");
+printk(KERN_ERR PFX "ERROR: packet drop: invalid qkey; 0x%x\n", qkey);
 			goto drop;
 		}
 	}
