@@ -3199,12 +3199,16 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		}
 		ret = process_cc(ibdev, mad_flags, port, in_jumbo, out_jumbo);
 		goto bail;
-#endif
-
-	default:
+#else
+	case IB_MGMT_CLASS_PERF_MGMT:
+	case IB_MGMT_CLASS_CONG_MGMT:
 		printk(KERN_WARNING PFX
 			"WARN: mgmt_class %x not supported yet...\n",
 			in_jumbo->mad_hdr.mgmt_class);
+		/* fall through */
+#endif
+
+	default:
 		ret = IB_MAD_RESULT_SUCCESS;
 	}
 
