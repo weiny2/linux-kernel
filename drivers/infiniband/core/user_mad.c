@@ -630,6 +630,7 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 	mutex_lock(&file->mutex);
 
 	if (!file->port->ib_dev) {
+		printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: invalid device\n");
 		ret = -EPIPE;
 		goto out;
 	}
@@ -640,6 +641,7 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 	}
 
 	if (ureq.qpn != 0 && ureq.qpn != 1) {
+		printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: invalid QPN specified\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -648,6 +650,7 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 		if (!__get_agent(file, agent_id))
 			goto found;
 
+	printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: Max Agents reached\n");
 	ret = -ENOMEM;
 	goto out;
 
@@ -724,6 +727,7 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 	mutex_lock(&file->mutex);
 
 	if (!file->port->ib_dev) {
+		printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: invalid device\n");
 		ret = -EPIPE;
 		goto out;
 	}
@@ -734,6 +738,7 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 	}
 
 	if (ureq.qpn != 0 && ureq.qpn != 1) {
+		printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: invalid QPN specified\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -745,6 +750,7 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 
 	if (ureq.res != 0 ||
 	    memcmp(&ureq.res2, zero_bytes, sizeof(ureq.res2))) {
+		printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: reserved fields != 0\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -754,6 +760,7 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 		if (!__get_agent(file, agent_id))
 			goto found;
 
+	printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: Max Agents reached\n");
 	ret = -ENOMEM;
 	goto out;
 
