@@ -13,6 +13,7 @@ DEFAULT_BRANCH="wfr-for-ifs"
 #       [*] new ioctl registration and URMPP flags
 sources_to_copy="
 	scripts/WFR-develtools/activate-wfrl-b2b.sh
+	scripts/WFR-develtools/umad-trace.stp
 	drivers/infiniband/core
 	drivers/infiniband/hw/wfr-lite
 	include/rdma
