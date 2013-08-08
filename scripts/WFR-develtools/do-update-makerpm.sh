@@ -152,6 +152,16 @@ Source:         %{name}-%{version}-%{release}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root
 Requires:	kernel >= $rpmrelease
 
+# find the number of cpus on this system
+%global num_cpus %(
+which nproc > /dev/null
+if [ "$?" == "0" ]; then
+	nproc
+else
+	echo "1"
+fi
+)
+
 # find our target version
 %global kbuild %(
 if [ -z "\$kbuild" ]; then 
@@ -190,30 +200,30 @@ echo "Kernel version is %kver"
 echo "Kernel source directory is \"%kbuild\""
 
 # Build Core support first...
-make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
-make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
-make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
-make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
 
 # NOTE: the following not are required for STL but we are carrying patches for them
 #       which require a rebuild
 #       See NOTE in build script under sources to copy
-make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_cm.ko
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_cm.ko
 
 
 # Then build drivers...
 cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/wfr-lite
-export CONFIG_INFINIBAND_WFR_LITE=m; make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/wfr-lite
+export CONFIG_INFINIBAND_WFR_LITE=m; make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/hw/wfr-lite
 
 # NOTE: the following not are required for STL but we are carrying patches for them
 #       which require a rebuild
 #       See NOTE in build script under sources to copy
 cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/qib
-make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/qib
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/hw/qib
 cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/mlx4
-make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mlx4
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mlx4
 cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/mthca
-make -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mthca
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mthca
 
 
 %install
