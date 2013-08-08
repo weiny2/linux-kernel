@@ -1500,34 +1500,35 @@ int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (qp->ibqp.qp_type == IB_QPT_SMI ||
 	    !(dd->flags & QIB_HAS_SEND_DMA)) {
 		if (qp->ibqp.qp_type == IB_QPT_SMI) {
-			if (wfr_vl15_ovl0) {
-				/* Set the VL to 0 in the LRH */
-				hdr->lrh[0] = cpu_to_be16(be16_to_cpu(hdr->lrh[0])
-								& 0x0fff);
-				if (hdr->lrh[1] == IB_LID_PERMISSIVE) {
-					/* permissive lid specified
-					 * override with DLID and set flag for rcv to
-					 * reconstruct PermissiveLID in packet
+			/* Handle VL15_o_VL0 */
+			if (len > 256) {
+				if (wfr_vl15_ovl0) {
+					/* Set the VL to 0 in the LRH */
+					hdr->lrh[0] = cpu_to_be16(be16_to_cpu(hdr->lrh[0])
+									& 0x0fff);
+					if (hdr->lrh[1] == IB_LID_PERMISSIVE) {
+						/* permissive lid specified
+						 * override with DLID and set flag for rcv to
+						 * reconstruct PermissiveLID in packet
+						 */
+						hdr->lrh[0] |= WFR_VL15_oVL0_PERMLID_FLAG;
+						hdr->lrh[1] = cpu_to_be16(wfr_vl15_ovl0);
+					}
+				} else {
+					unsigned long flags;
+					/* Protect against large posts in the
+					 * VL15 buffers.
 					 */
-					hdr->lrh[0] |= WFR_VL15_oVL0_PERMLID_FLAG;
-					hdr->lrh[1] = cpu_to_be16(wfr_vl15_ovl0);
+					printk(KERN_ERR PFX
+						"ERROR Failing SMI MAD send: len > 256 (%d) && vl15_ovl0 == %d\n",
+						len, wfr_vl15_ovl0);
+					BUG_ON(!qp->s_wqe);
+					spin_lock_irqsave(&qp->s_lock, flags);
+					qib_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
+					spin_unlock_irqrestore(&qp->s_lock, flags);
+					ret = 0;
+					goto bail;
 				}
-			} else if (len > 256) {
-				unsigned long flags;
-				/* While the wfr-lite driver supports 2K MAD's
-				 * it has to be brought up in IB mode and we
-				 * can't allow large posts to the VL15 buffers.
-				 * Protect against this.
-				 */
-				printk(KERN_ERR PFX
-					"ERROR Failing SMI MAD send: len > 256 (%d) && vl15_ovl0 == %d\n",
-					len, wfr_vl15_ovl0);
-				BUG_ON(!qp->s_wqe);
-				spin_lock_irqsave(&qp->s_lock, flags);
-				qib_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
-				spin_unlock_irqrestore(&qp->s_lock, flags);
-				ret = 0;
-				goto bail;
 			}
 		}
 		ret = qib_verbs_send_pio(qp, hdr, hdrwords, ss, len,
