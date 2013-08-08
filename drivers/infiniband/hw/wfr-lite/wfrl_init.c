@@ -62,11 +62,11 @@ MODULE_PARM_DESC(snoop_enable, "snooping mode ");
 #define QLOGIC_IB_R_EMULATOR_MASK (1ULL<<62)
 
 /* Hack to send VL15 packets over VL0 */
-unsigned wfr_vl15_ovl0 = 0;
+unsigned wfr_vl15_ovl0 = 1;
 module_param_named(vl15_ovl0, wfr_vl15_ovl0, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(vl15_ovl0, "Send VL15 packets over VL0 "
 			"(value is used as DLID in place of Permissive LID) "
-			"(Default 0 == off)");
+			"(Default 1 == on)");
 
 /*
  * Number of ctxts we are configured to use (to allow for more pio

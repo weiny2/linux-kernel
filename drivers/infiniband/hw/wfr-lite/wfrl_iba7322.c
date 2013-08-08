@@ -6627,11 +6627,7 @@ static u32 qib_7322_setpbc_control(struct qib_pportdata *ppd, u32 plen,
 
 	/* Indicate VL15, else set the VL in the control word */
 	if (vl == 15) {
-		/* hack to send VL15 packets over VL0 */
-		if (wfr_vl15_ovl0)
-			ret |= 0 << PBC_VL_NUM_LSB;
-		else
-			ret |= PBC_7322_VL15_SEND_CTRL;
+		ret |= PBC_7322_VL15_SEND_CTRL;
 	} else
 		ret |= vl << PBC_VL_NUM_LSB;
 	ret |= ((u32)(ppd->hw_pidx)) << PBC_PORT_SEL_LSB;
