@@ -72,9 +72,6 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe ib_uverbs"
 	ssh root@$remote_node "modprobe ib_usa"
 	sleep 5
-else
-	echo "Disabling remote VL15 over VL0 mode"
-	ssh root@${remote_node} "echo 0 > /sys/module/ib_wfr_lite/parameters/vl15_ovl0"
 fi
 ssh root@$remote_node "iba_portenable -w2 -s4 -p $remote_port"
 
@@ -91,9 +88,6 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe ib_umad
 	modprobe ib_uverbs
 	modprobe ib_usa
-else
-	echo "Disabling local VL15 over VL0 mode"
-	echo 0 > /sys/module/ib_wfr_lite/parameters/vl15_ovl0
 fi
 
 iba_portenable -w2 -s4 -p $local_port
@@ -167,9 +161,5 @@ while [ "$state" != "4: ACTIVE" ]; do
 	state=`ssh root@$remote_node "cat /sys/class/infiniband/wfr_lite0/ports/${remote_port}/state"`
 	echo $state
 done
-
-echo "Configuring wfr_lite for VL15 over VL0"
-ssh root@${remote_node} "echo $local_lid > /sys/module/ib_wfr_lite/parameters/vl15_ovl0"
-echo $remote_lid > /sys/module/ib_wfr_lite/parameters/vl15_ovl0
 
 exit 0
