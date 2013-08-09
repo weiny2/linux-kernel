@@ -56,6 +56,7 @@ MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
 /** =========================================================================
  * For STL simulation environment we fake much of STL Port Info
  */
+#define IB_SMP_ATTR_PORT_INFO_STL_RESET		cpu_to_be16(0xFF15)
 static struct stl_port_info virtual_stl_port_info;
 static int virtual_stl_PI_init = 0;
 uint8_t wfrl_get_stl_virtual_port_state(void) {
@@ -66,6 +67,13 @@ void wfrl_set_stl_virtual_port_state(uint8_t value) {
 	virtual_stl_port_info.port_states.portphysstate_portstate = value;
 }
 EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
+void wfrl_set_stl_virtual_port_state_init(void) {
+	virtual_stl_port_info.port_states.portphysstate_portstate = 5 << 4;
+	virtual_stl_port_info.port_states.portphysstate_portstate |= 2;
+	printk(KERN_WARNING PFX
+		"STL Port Virtual State reset : 0x%x\n",
+		virtual_stl_port_info.port_states.portphysstate_portstate);
+}
 
 static int reply(struct ib_smp *smp)
 {
@@ -651,8 +659,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		/* We have not been called yet
 		 * Fake LinkUp / Initialize
 		 */
-		virtual_stl_port_info.port_states.portphysstate_portstate = 5 << 4;
-		virtual_stl_port_info.port_states.portphysstate_portstate |= 2;
+		wfrl_set_stl_virtual_port_state_init();
 		virtual_stl_PI_init = 1;
 	}
 	pi->port_states.portphysstate_portstate = virtual_stl_port_info.port_states.portphysstate_portstate;
@@ -2600,6 +2607,10 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_GUID_INFO:
 			ret = subn_set_guidinfo(smp, ibdev, port);
 			goto bail;
+		case IB_SMP_ATTR_PORT_INFO_STL_RESET:
+			/* FAKE STL_PORT_INFO data */
+			wfrl_set_stl_virtual_port_state_init();
+			/* FALL through */
 		case IB_SMP_ATTR_PORT_INFO:
 			ret = subn_set_portinfo(smp, ibdev, port);
 			goto bail;
