@@ -5729,7 +5729,7 @@ static void qsfp_7322_event(struct work_struct *work)
 		    (ppd->lflags & (QIBL_LINKV | QIBL_IB_LINK_DISABLED))) {
 			ppd->cpspec->qsfp_data.modpresent = 1;
 			qib_set_ib_7322_lstate(ppd, 0,
-				QLOGIC_IB_IBCC_LINKINITCMD_SLEEP);
+				QLOGIC_IB_IBCC_LINKINITCMD_POLL);
 			spin_lock_irqsave(&ppd->lflags_lock, flags);
 			ppd->lflags |= QIBL_LINKV;
 			spin_unlock_irqrestore(&ppd->lflags_lock, flags);
