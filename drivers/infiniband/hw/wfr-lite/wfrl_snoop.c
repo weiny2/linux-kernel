@@ -458,7 +458,7 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 			/* use virtual state */
 			if (wfr_vl15_ovl0) {
-				wfrl_set_stl_virtual_port_state((uint8_t)value & 0xff);
+				wfrl_set_stl_virtual_port_state(ppd->port, (uint8_t)value & 0xff);
 			}
 
 			switch (linkState) {
@@ -530,7 +530,7 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		case QIB_SNOOP_IOCGETLINKSTATE:
 			if (wfr_vl15_ovl0) {
 				/* return the virtual state */
-				value = (int)wfrl_get_stl_virtual_port_state();
+				value = (int)wfrl_get_stl_virtual_port_state(ppd->port);
 			} else {
 				value = dd->f_ibphys_portstate(ppd->lastibcstat);
 				value <<= 4;

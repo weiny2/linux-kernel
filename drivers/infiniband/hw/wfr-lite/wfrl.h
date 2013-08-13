@@ -1561,7 +1561,7 @@ void qib_format_hwerrors(u64 hwerrs,
 			 size_t nhwerrmsgs, char *msg, size_t lmsg);
 
 /* allow other c files access to the stl virtual state */
-uint8_t wfrl_get_stl_virtual_port_state(void);
-void wfrl_set_stl_virtual_port_state(uint8_t value);
+uint8_t wfrl_get_stl_virtual_port_state(u8 port);
+void wfrl_set_stl_virtual_port_state(u8 port, uint8_t value);
 
 #endif                          /* _QIB_KERNEL_H */
