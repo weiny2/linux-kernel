@@ -54,26 +54,44 @@ MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
 
 
 /** =========================================================================
- * For STL simulation environment we fake much of STL Port Info
+ * For STL simulation environment we fake some STL values
  */
+#define NUM_VIRT_PORTS 2
 #define IB_SMP_ATTR_PORT_INFO_STL_RESET		cpu_to_be16(0xFF15)
-static struct stl_port_info virtual_stl_port_info;
-static int virtual_stl_PI_init = 0;
-uint8_t wfrl_get_stl_virtual_port_state(void) {
-	return (virtual_stl_port_info.port_states.portphysstate_portstate);
-}
-EXPORT_SYMBOL(wfrl_get_stl_virtual_port_state);
-void wfrl_set_stl_virtual_port_state(uint8_t value) {
-	virtual_stl_port_info.port_states.portphysstate_portstate = value;
-}
-EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
-void wfrl_set_stl_virtual_port_state_init(void) {
-	virtual_stl_port_info.port_states.portphysstate_portstate = 5 << 4;
-	virtual_stl_port_info.port_states.portphysstate_portstate |= 2;
+static struct {
+	struct stl_port_info port_info;
+} virtual_stl[NUM_VIRT_PORTS];
+
+int virtual_stl_init = 0;
+
+void wfrl_set_stl_virtual_port_state_init(u8 port) {
+	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = 5 << 4;
+	virtual_stl[port-1].port_info.port_states.portphysstate_portstate |= 2;
 	printk(KERN_WARNING PFX
 		"STL Port Virtual State reset : 0x%x\n",
-		virtual_stl_port_info.port_states.portphysstate_portstate);
+		virtual_stl[port-1].port_info.port_states.portphysstate_portstate);
 }
+
+static void init_virtual_stl(void)
+{
+	u8 i;
+	/* We have not been called yet
+	 * Fake Initial STL data
+	 */
+	for (i = 0; i < NUM_VIRT_PORTS; i++) {
+		wfrl_set_stl_virtual_port_state_init(i+1);
+	}
+	virtual_stl_init = 1;
+}
+
+uint8_t wfrl_get_stl_virtual_port_state(u8 port) {
+	return (virtual_stl[port-1].port_info.port_states.portphysstate_portstate);
+}
+EXPORT_SYMBOL(wfrl_get_stl_virtual_port_state);
+void wfrl_set_stl_virtual_port_state(u8 port, uint8_t value) {
+	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = value;
+}
+EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
 
 static int reply(struct ib_smp *smp)
 {
@@ -582,7 +600,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 port_num = be32_to_cpu(smp->attr_mod);
 
 	/* Where the IB hardware has values they are filled in here
-	 * Other values are simply stored in virtual_stl_port_info and echoed
+	 * Other values are simply stored in virtual_stl and echoed
 	 * back.
 	 * The exception to this is the Port State and Physical state.  This is
 	 * to support simulated environment.
@@ -615,7 +633,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	memset(pi, 0, sizeof(*pi));
 
 	/* Get virtual values first */
-	memcpy(pi, &virtual_stl_port_info, sizeof(*pi));
+	memcpy(pi, &virtual_stl[port-1].port_info, sizeof(*pi));
 
 	/* Then set some real values to make sure that LID MAD's are processed and
 	 * local software has valid data to pull from ie for SA queries and
@@ -655,14 +673,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		(dd->f_ibphys_portstate(ppd->lastibcstat) << 4) |
 		state;
 	*/
-	if (!virtual_stl_PI_init) {
-		/* We have not been called yet
-		 * Fake LinkUp / Initialize
-		 */
-		wfrl_set_stl_virtual_port_state_init();
-		virtual_stl_PI_init = 1;
-	}
-	pi->port_states.portphysstate_portstate = virtual_stl_port_info.port_states.portphysstate_portstate;
+	pi->port_states.portphysstate_portstate = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
 
 	//pi->collectivemask_multicastmask = 0;
 
@@ -910,9 +921,9 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		ib_dispatch_event(&event);
 	}
 
-	saved_virtual_portstate = virtual_stl_port_info.port_states.portphysstate_portstate;
-	memcpy(&virtual_stl_port_info, pi, sizeof(virtual_stl_port_info));
-	virtual_stl_port_info.port_states.portphysstate_portstate = saved_virtual_portstate;
+	saved_virtual_portstate = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
+	memcpy(&virtual_stl[port-1].port_info, pi, sizeof(virtual_stl[port-1].port_info));
+	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = saved_virtual_portstate;
 #if 0
 	/* Ignore STL Link Width and Link Speed we can't support them anyway. */
 	/* Allow 1x or 4x to be set (see 14.2.6.6). */
@@ -1108,8 +1119,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 	if (state) {
-		uint8_t tmp = virtual_stl_port_info.port_states.portphysstate_portstate;
-		virtual_stl_port_info.port_states.portphysstate_portstate =
+		uint8_t tmp = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
+		virtual_stl[port-1].port_info.port_states.portphysstate_portstate =
 			(tmp & STL_PI_MASK_PORT_PHYSICAL_STATE) |
 			(state & STL_PI_MASK_PORT_STATE);
 		printk(KERN_WARNING PFX
@@ -1117,8 +1128,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			state);
 	}
 	if (lstate) {
-		uint8_t tmp = virtual_stl_port_info.port_states.portphysstate_portstate;
-		virtual_stl_port_info.port_states.portphysstate_portstate =
+		uint8_t tmp = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
+		virtual_stl[port-1].port_info.port_states.portphysstate_portstate =
 			((lstate << 4) & STL_PI_MASK_PORT_PHYSICAL_STATE) |
 			(tmp & STL_PI_MASK_PORT_STATE);
 		printk(KERN_WARNING PFX
@@ -2609,7 +2620,7 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case IB_SMP_ATTR_PORT_INFO_STL_RESET:
 			/* FAKE STL_PORT_INFO data */
-			wfrl_set_stl_virtual_port_state_init();
+			wfrl_set_stl_virtual_port_state_init(port);
 			/* FALL through */
 		case IB_SMP_ATTR_PORT_INFO:
 			ret = subn_set_portinfo(smp, ibdev, port);
@@ -3264,6 +3275,10 @@ int wfr_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	int ret;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+
+	if (!virtual_stl_init) {
+		init_virtual_stl();
+	}
 
 	if (in_mad->mad_hdr.base_version == IB_MGMT_BASE_VERSION &&
 	    ((in_mad->mad_hdr.mgmt_class != IB_MGMT_CLASS_SUBN_LID_ROUTED &&
