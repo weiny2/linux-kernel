@@ -80,6 +80,7 @@ struct stl_smp {
 #define STL_ATTRIB_ID_NODE_DESCRIPTION		cpu_to_be16(0x0010)
 #define STL_ATTRIB_ID_NODE_INFO			cpu_to_be16(0x0011)
 #define STL_ATTRIB_ID_PORT_INFO			cpu_to_be16(0x0015)
+#define STL_ATTRIB_ID_PARTITION_TABLE		cpu_to_be16(0x0016)
 /* ... */
 
 struct stl_node_description {
@@ -104,6 +105,8 @@ struct stl_node_info {
 
 #include <rdma/stl_port_info.h>
 
+#define STL_PARTITION_TABLE_BLK_SIZE 32
+
 static inline u8
 stl_get_smp_direction(struct stl_smp *smp)
 {
@@ -116,6 +119,14 @@ static inline uint8_t *stl_get_smp_data(struct stl_smp *smp)
 		return smp->route.dr.data;
 	else
 		return smp->route.lid.data;
+}
+
+static inline size_t stl_get_smp_data_size(struct stl_smp *smp)
+{
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
+		return sizeof(smp->route.dr.data);
+	else
+		return sizeof(smp->route.lid.data);
 }
 
 #endif /* STL_SMI_H */
