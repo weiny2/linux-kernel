@@ -3250,8 +3250,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
-				"WARN: SubnGet(%x) not supported yet...\n",
-				smp->attr_id);
+				"WARN: STL SubnGet(%x) not supported yet...\n",
+				be16_to_cpu(smp->attr_id));
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply_stl(smp);
 			goto bail;
@@ -3266,8 +3266,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
-				"WARN: SubnSet(%x) not supported yet...\n",
-				smp->attr_id);
+				"WARN: STL SubnSet(%x) not supported yet...\n",
+				be16_to_cpu(smp->attr_id));
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply_stl(smp);
 			goto bail;
