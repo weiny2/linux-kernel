@@ -1016,6 +1016,10 @@ struct ib_mad_send_buf * ib_create_send_mad(struct ib_mad_agent *mad_agent,
 
 /* FIXME: jumbos don't have to be 2048 bytes
  * base this off of data_len
+ * Actually we have to be careful here...
+ * MAD's destined for the local device expect a "full" MAD for their response.
+ * Failure to allocate full length MAD's above would result in issues within drivers.
+ * We _MAY_ be able to adjust this length down for actual sends on the wire...
  */
 	mad_send_wr->sg_list[1].length = mad_size - hdr_len;
 	mad_send_wr->sg_list[1].lkey = mad_agent->mr->lkey;
