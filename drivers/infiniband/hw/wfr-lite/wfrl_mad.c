@@ -56,10 +56,20 @@ MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
 /** =========================================================================
  * For STL simulation environment we fake some STL values
  */
+#define MAX_SIM_STL_PKEY_BLOCKS ((u16)40)
+static unsigned wfr_sim_pkey_tbl_block_size = 0;
+module_param_named(sim_pkey_tbl_block_size, wfr_sim_pkey_tbl_block_size, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(sim_pkey_tbl_block_size, "When != 0 simulate a large pkey table up to 40 blocks big\n"
+			"WARNING: it is possible but unadvisable to change this while running management software");
+
 #define NUM_VIRT_PORTS 2
 #define IB_SMP_ATTR_PORT_INFO_STL_RESET		cpu_to_be16(0xFF15)
+#define STL_NUM_PKEYS (MAX_SIM_STL_PKEY_BLOCKS * STL_PARTITION_TABLE_BLK_SIZE)
+#define STL_NUM_PKEY_BLOCKS_PER_SMP (STL_SMP_DR_DATA_SIZE \
+					/ (STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16)))
 static struct {
 	struct stl_port_info port_info;
+	u16 pkeys[STL_NUM_PKEYS];
 } virtual_stl[NUM_VIRT_PORTS];
 
 int virtual_stl_init = 0;
@@ -81,6 +91,8 @@ static void init_virtual_stl(void)
 	for (i = 0; i < NUM_VIRT_PORTS; i++) {
 		wfrl_set_stl_virtual_port_state_init(i+1);
 	}
+	virtual_stl[0].pkeys[STL_NUM_PKEYS-1] = 0xDEAD;
+	virtual_stl[1].pkeys[STL_NUM_PKEYS-1] = 0xBEEF;
 	virtual_stl_init = 1;
 }
 
@@ -92,6 +104,15 @@ void wfrl_set_stl_virtual_port_state(u8 port, uint8_t value) {
 	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = value;
 }
 EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
+
+u16 wfrl_get_num_sim_pkey_blocks(void)
+{
+	return min((u16)wfr_sim_pkey_tbl_block_size, (u16)MAX_SIM_STL_PKEY_BLOCKS);
+}
+
+/**
+ * End STL simulation values
+ * ========================================================================= */
 
 static int reply(struct ib_smp *smp)
 {
@@ -572,7 +593,12 @@ static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* This is already in network order */
 	ni->system_image_guid = ib_qib_sys_image_guid;
 	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
-	ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
+	if (wfr_sim_pkey_tbl_block_size) {
+		u16 n_blocks = wfrl_get_num_sim_pkey_blocks();
+		ni->partition_cap = cpu_to_be16(n_blocks *
+					STL_PARTITION_TABLE_BLK_SIZE);
+	} else
+		ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
 	ni->device_id = cpu_to_be16(dd->deviceid);
 	majrev = dd->majrev;
 	minrev = dd->minrev;
@@ -1322,6 +1348,57 @@ static int subn_get_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 		smp->status |= IB_SMP_INVALID_FIELD;
 
 	return reply(smp);
+}
+
+static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
+				  u8 port)
+{
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	u32 start_block = be32_to_cpu(smp->attr_mod) & 0xffff;
+	u32 n_blocks_req = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	__be16 *p;
+	u8 *from;
+	int i;
+	size_t size;
+	u16 n_blocks_avail;
+
+	if (wfr_sim_pkey_tbl_block_size) {
+		n_blocks_avail = wfrl_get_num_sim_pkey_blocks();
+	} else {
+		n_blocks_avail = (u16)(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) +1;
+	}
+
+	memset(stl_get_smp_data(smp), 0, stl_get_smp_data_size(smp));
+
+	/* special case to make this Attribute more compatible with IB queries */
+	if (n_blocks_req == 0)
+		n_blocks_req = 1;
+
+	if (start_block + n_blocks_req > n_blocks_avail ||
+	    n_blocks_req > STL_NUM_PKEY_BLOCKS_PER_SMP) {
+		printk(KERN_WARNING PFX
+			"STL Get PKey AM Invalid : s 0x%x; req 0x%x; avail 0x%x; blk/smp 0x%lx\n",
+			start_block, n_blocks_req, n_blocks_avail,
+			STL_NUM_PKEY_BLOCKS_PER_SMP);
+		smp->status |= IB_SMP_INVALID_FIELD;
+		goto error;
+	}
+
+	// get the real pkeys if we are requesting the first block
+	if (start_block == 0) {
+		get_pkeys(dd, port, virtual_stl[port-1].pkeys);
+	}
+
+	from = (u8 *)virtual_stl[port-1].pkeys + (start_block * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+	size = n_blocks_req * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16);
+	p = (__be16 *) stl_get_smp_data(smp);
+	memcpy((void *)p, from, size);
+
+	for (i = 0; i < n_blocks_req * STL_PARTITION_TABLE_BLK_SIZE; i++)
+		p[i] = cpu_to_be16(p[i]);
+
+error:
+	return reply_stl(smp);
 }
 
 static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
@@ -3118,6 +3195,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_PORT_INFO:
 			ret = subn_get_stl_portinfo((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_PARTITION_TABLE:
+			ret = subn_get_stl_pkeytable((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
