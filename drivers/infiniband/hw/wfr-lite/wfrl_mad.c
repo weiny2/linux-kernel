@@ -1839,6 +1839,55 @@ static int subn_set_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 	return subn_get_pkeytable(smp, ibdev, port);
 }
 
+static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
+			      u8 port)
+{
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	u32 start_block = be32_to_cpu(smp->attr_mod) & 0xffff;
+	u32 n_blocks_sent = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u16 *p = (u16 *) stl_get_smp_data(smp);
+	u8 *to;
+	int i;
+	size_t size;
+	u16 n_blocks_avail;
+
+	if (wfr_sim_pkey_tbl_block_size) {
+		n_blocks_avail = wfrl_get_num_sim_pkey_blocks();
+	} else {
+		n_blocks_avail = (u16)(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) +1;
+	}
+
+	/* special case to make this Attribute more compatible with IB queries */
+	if (n_blocks_sent == 0)
+		n_blocks_sent = 1;
+
+	if (start_block + n_blocks_sent > n_blocks_avail ||
+	    n_blocks_sent > STL_NUM_PKEY_BLOCKS_PER_SMP) {
+		printk(KERN_WARNING PFX
+			"STL Set PKey AM Invalid : s 0x%x; req 0x%x; avail 0x%x; blk/smp 0x%lx\n",
+			start_block, n_blocks_sent, n_blocks_avail,
+			STL_NUM_PKEY_BLOCKS_PER_SMP);
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
+	}
+
+	p = (u16 *) stl_get_smp_data(smp);
+	for (i = 0; i < n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE; i++)
+		p[i] = be16_to_cpu(p[i]);
+
+	if (start_block == 0 && set_pkeys(dd, port, p) != 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
+	}
+
+	// Set virtual pkeys for this port
+	to = (u8 *)virtual_stl[port-1].pkeys + (start_block * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+	size = n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16);
+	memcpy(to, (void *)p, size);
+
+	return subn_get_stl_pkeytable(smp, ibdev, port);
+}
+
 static int subn_get_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -3211,6 +3260,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		switch (smp->attr_id) {
 		case STL_ATTRIB_ID_PORT_INFO:
 			ret = subn_set_stl_portinfo((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_PARTITION_TABLE:
+			ret = subn_set_stl_pkeytable((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
