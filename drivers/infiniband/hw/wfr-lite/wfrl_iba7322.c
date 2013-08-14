@@ -4217,6 +4217,10 @@ static void rcvctrl_7322_mod(struct qib_pportdata *ppd, unsigned int op,
 		dd->rcvctrl &= ~SYM_MASK(RcvCtrl, TailUpd);
 	if (op & QIB_RCVCTRL_PKEY_ENB)
 		ppd->p_rcvctrl &= ~SYM_MASK(RcvCtrl_0, RcvPartitionKeyDisable);
+/**
+ * FIXME: at some point we may want to disable this partition key check for
+ * ease of simulation
+ */
 	if (op & QIB_RCVCTRL_PKEY_DIS)
 		ppd->p_rcvctrl |= SYM_MASK(RcvCtrl_0, RcvPartitionKeyDisable);
 	if (ctxt < 0) {
