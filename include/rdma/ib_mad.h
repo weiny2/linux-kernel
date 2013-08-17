@@ -194,7 +194,7 @@ struct jumbo_mad {
 struct ib_rmpp_base {
 	struct ib_mad_hdr	mad_hdr;
 	struct ib_rmpp_hdr	rmpp_hdr;
-};
+} __attribute__ ((packed));
 
 struct ib_rmpp_mad {
 	struct ib_rmpp_base	base;
