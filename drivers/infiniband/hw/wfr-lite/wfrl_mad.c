@@ -107,7 +107,7 @@ EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
 
 u16 wfrl_get_num_sim_pkey_blocks(void)
 {
-	return min((u16)wfr_sim_pkey_tbl_block_size, (u16)MAX_SIM_STL_PKEY_BLOCKS);
+	return min_t(u16, wfr_sim_pkey_tbl_block_size, MAX_SIM_STL_PKEY_BLOCKS);
 }
 
 /**
