@@ -931,6 +931,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			"SubnSet(STL_PortInfo) smlid invalid 0x%x\n",
 			smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
+		printk(KERN_WARNING PFX
+			"SubnSet(STL_PortInfo) smlid 0x%x\n", smlid);
 		spin_lock_irqsave(&ibp->lock, flags);
 		if (ibp->sm_ah) {
 			if (smlid != ibp->sm_lid)
