@@ -128,14 +128,14 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 	}
 
 	/* write set-up */
-	reg = (code ? DC8051_CFG_RAM_ACCESS_SETUP_RAM_SEL : 0ull)
-		| DC8051_CFG_RAM_ACCESS_SETUP_AUTO_INCR_ADDR;
-	write_csr(dd, DC8051_CFG_RAM_ACCESS_SETUP, reg);
+	reg = (code ? DC_DC8051_CFG_RAM_ACCESS_SETUP_RAM_SEL_SMASK : 0ull)
+		| DC_DC8051_CFG_RAM_ACCESS_SETUP_AUTO_INCR_ADDR_SMASK;
+	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_SETUP, reg);
 
-	reg = ((start & DC8051_CFG_RAM_ACCESS_CTRL_ADDRESS_MASK)
-			<< DC8051_CFG_RAM_ACCESS_CTRL_ADDRESS_SHIFT)
-		| DC8051_CFG_RAM_ACCESS_CTRL_WRITE_ENA_SMASK;
-	write_csr(dd, DC8051_CFG_RAM_ACCESS_CTRL, reg);
+	reg = ((start & DC_DC8051_CFG_RAM_ACCESS_CTRL_ADDRESS_MASK)
+			<< DC_DC8051_CFG_RAM_ACCESS_CTRL_ADDRESS_SHIFT)
+		| DC_DC8051_CFG_RAM_ACCESS_CTRL_WRITE_ENA_SMASK;
+	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, reg);
 
 	/* write */
 	/* FIXME: need to add a security block settle */
@@ -147,7 +147,7 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 		} else {
 			reg = *(u64 *)&data[offset];
 		}
-		write_csr(dd, DC8051_CFG_RAM_ACCESS_WR_DATA, reg);
+		write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_WR_DATA, reg);
 		/* wait for completion, timeout at 1/10 second */
 		timeout = jiffies + (HZ/10 == 0 ? 1 : HZ/10);
 		nreads = 0;
@@ -159,9 +159,9 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 				goto done;
 			}
 			nreads++;
-			reg = read_csr(dd, DC8051_CFG_RAM_ACCESS_STATUS);
+			reg = read_csr(dd, DC_DC8051_CFG_RAM_ACCESS_STATUS);
 			/* done when ACCESS_COMPLETED goes to non-zero */
-		} while ((reg & DC8051_CFG_RAM_ACCESS_STATUS_ACCESS_COMPLETED_SMASK) == 0);
+		} while ((reg & DC_DC8051_CFG_RAM_ACCESS_STATUS_ACCESS_COMPLETED_SMASK) == 0);
 		wstat->nchecks += nreads;
 		if (wstat->min_checks > nreads)
 			wstat->min_checks = nreads;
@@ -171,8 +171,8 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 
 done:
 	/* turn off write access, auto increment (also sets to data) */
-	write_csr(dd, DC8051_CFG_RAM_ACCESS_CTRL, 0);
-	write_csr(dd, DC8051_CFG_RAM_ACCESS_SETUP, 0);
+	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, 0);
+	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_SETUP, 0);
 
 	return err;
 }
@@ -369,7 +369,7 @@ int load_firmware(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	/* TODO: Do I need to clear the bits in DC8051_ERR_EN? */
+	/* TODO: Do I need to clear the bits in DC_DC8051_ERR_EN? */
 	/* TODO: What are the error interrupt hookups from DC to WFR
 	   sources?  (Mark Debbage has a sticky note on this in the
 	   DC HAS).  ISSUE: Why is it "ERR_EN" but you need to _clear_
@@ -379,19 +379,19 @@ int load_firmware(struct hfi_devdata *dd)
 	/*
 	 * 1. Reset all
 	 */
-	reg = DC8051_CFG_RST_M8051W
-		| DC8051_CFG_RST_CRAM
-		| DC8051_CFG_RST_DRAM
-		| DC8051_CFG_RST_IRAM
-		| DC8051_CFG_RST_SFR;
-	write_csr(dd, DC8051_CFG_RST, reg);
+	reg = DC_DC8051_CFG_RST_M8051W_SMASK
+		| DC_DC8051_CFG_RST_CRAM_SMASK
+		| DC_DC8051_CFG_RST_DRAM_SMASK
+		| DC_DC8051_CFG_RST_IRAM_SMASK
+		| DC_DC8051_CFG_RST_SFR_SMASK;
+	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
 	/*
 	 * 2. Load firmware
 	 */
 	/* release all but the core reset */
-	reg = DC8051_CFG_RST_M8051W;
-	write_csr(dd, DC8051_CFG_RST, reg);
+	reg = DC_DC8051_CFG_RST_M8051W_SMASK;
+	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
 	/* TODO: firmware start of 0? */
 	ret = write_8051(dd, 1/*code*/, 0, fdet.payload,
@@ -416,7 +416,7 @@ int load_firmware(struct hfi_devdata *dd)
 	 */
 #ifdef CRYPTO_INACTIVE
 	/* clear all reset bits, releasing the 8051 */
-	write_csr(dd, DC8051_CFG_RST, 0ull);
+	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
 #else
 	ret = write_rsa_data(dd, RSA_SIG, "signature", fdet.rsa_signature);
 	if (ret)
@@ -442,9 +442,9 @@ int load_firmware(struct hfi_devdata *dd)
 			ret = -ETIMEDOUT;
 			goto done;
 		}
-		reg = read_csr(dd, DC8051_STS_CUR_STATE);
-		firmware = (reg >> DC8051_STS_CUR_STATE_FIRMWARE_SHIFT)
-				& DC8051_STS_CUR_STATE_FIRMWARE_MASK;
+		reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
+		firmware = (reg >> DC_DC8051_STS_CUR_STATE_FIRMWARE_SHIFT)
+				& DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK;
 	} while (firmware != 0xa0);	/* ready for HOST request */
 
 
