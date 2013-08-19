@@ -428,14 +428,18 @@ static int is_duplicate(struct ib_umad_file *file,
 		 * restrictive than required by the spec.
 		 */
 		if (!ib_response_mad((struct ib_mad *) hdr)) {
-			if (!ib_response_mad((struct ib_mad *) sent_hdr))
+			if (!ib_response_mad((struct ib_mad *) sent_hdr)) {
+				printk(KERN_ERR "user_mad: duplicate packet: both response\n");
 				return 1;
+			}
 			continue;
 		} else if (!ib_response_mad((struct ib_mad *) sent_hdr))
 			continue;
 
-		if (same_destination(&packet->mad.hdr, &sent_packet->mad.hdr))
+		if (same_destination(&packet->mad.hdr, &sent_packet->mad.hdr)) {
+			printk(KERN_ERR "user_mad: duplicate packet: same distination\n");
 			return 1;
+		}
 	}
 
 	return 0;

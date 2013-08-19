@@ -2469,6 +2469,12 @@ static void cancel_mads(struct ib_mad_agent_private *mad_agent_priv)
 			mad_send_wr->status = IB_WC_WR_FLUSH_ERR;
 			mad_send_wr->refcount -= (mad_send_wr->timeout > 0);
 		}
+#if 0
+		list_del(&mad_send_wr->agent_list);
+		mad_agent_priv->agent.send_handler(&mad_agent_priv->agent,
+						   &mad_send_wc);
+		deref_mad_agent(mad_agent_priv);
+#endif
 	}
 
 	/* Empty wait list to prevent receives from finding a request */
