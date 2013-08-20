@@ -70,6 +70,7 @@ MODULE_PARM_DESC(sim_pkey_tbl_block_size, "When != 0 simulate a large pkey table
 static struct {
 	struct stl_port_info port_info;
 	u16 pkeys[STL_NUM_PKEYS];
+	u8 sl_to_sc[STL_MAX_SLS];
 } virtual_stl[NUM_VIRT_PORTS];
 
 int virtual_stl_init = 0;
@@ -93,6 +94,10 @@ static void init_virtual_stl(void)
 	}
 	virtual_stl[0].pkeys[STL_NUM_PKEYS-1] = 0xDEAD;
 	virtual_stl[1].pkeys[STL_NUM_PKEYS-1] = 0xBEEF;
+	for (i = 0; i < STL_MAX_SLS; i++) {
+		virtual_stl[0].sl_to_sc[i] = i;
+		virtual_stl[1].sl_to_sc[i] = i;
+	}
 	virtual_stl_init = 1;
 }
 
@@ -1402,6 +1407,36 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 error:
 	return reply_stl(smp);
 }
+
+static int subn_get_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
+				  u8 port)
+{
+	u8 *p = stl_get_smp_data(smp);
+	unsigned i;
+
+	memset(p, 0, stl_get_smp_data_size(smp));
+
+	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sl_to_sc); i++)
+		*p++ = virtual_stl[port-1].sl_to_sc[i];
+
+	return reply_stl(smp);
+}
+
+static int subn_set_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	u8 *p = stl_get_smp_data(smp);
+	unsigned i;
+
+	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sl_to_sc); i ++, p++)
+		virtual_stl[port-1].sl_to_sc[i] = *p & 0x1f;
+
+	qib_set_uevent_bits(ppd_from_ibp(to_iport(ibdev, port)),
+			    _QIB_EVENT_SL2VL_CHANGE_BIT);
+
+	return subn_get_stl_sl_to_sc(smp, ibdev, port);
+}
+
 
 static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
@@ -3250,6 +3285,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case STL_ATTRIB_ID_PARTITION_TABLE:
 			ret = subn_get_stl_pkeytable((struct stl_smp *)smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_SL_TO_SC_MAP:
+			ret = subn_get_stl_sl_to_sc((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: STL SubnGet(%x) not supported yet...\n",
@@ -3265,6 +3303,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_PARTITION_TABLE:
 			ret = subn_set_stl_pkeytable((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_SL_TO_SC_MAP:
+			ret = subn_set_stl_sl_to_sc((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
