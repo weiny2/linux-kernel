@@ -71,6 +71,7 @@ static struct {
 	struct stl_port_info port_info;
 	u16 pkeys[STL_NUM_PKEYS];
 	u8 sl_to_sc[STL_MAX_SLS];
+	u8 sc_to_sl[STL_MAX_SCS];
 } virtual_stl[NUM_VIRT_PORTS];
 
 int virtual_stl_init = 0;
@@ -97,6 +98,10 @@ static void init_virtual_stl(void)
 	for (i = 0; i < STL_MAX_SLS; i++) {
 		virtual_stl[0].sl_to_sc[i] = i;
 		virtual_stl[1].sl_to_sc[i] = i;
+	}
+	for (i = 0; i < STL_MAX_SCS; i++) {
+		virtual_stl[0].sc_to_sl[i] = i;
+		virtual_stl[1].sc_to_sl[i] = i;
 	}
 	virtual_stl_init = 1;
 }
@@ -1435,6 +1440,32 @@ static int subn_set_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 			    _QIB_EVENT_SL2VL_CHANGE_BIT);
 
 	return subn_get_stl_sl_to_sc(smp, ibdev, port);
+}
+
+static int subn_get_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
+				  u8 port)
+{
+	u8 *p = stl_get_smp_data(smp);
+	unsigned i;
+
+	memset(p, 0, stl_get_smp_data_size(smp));
+
+	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_sl); i++)
+		*p++ = virtual_stl[port-1].sc_to_sl[i];
+
+	return reply_stl(smp);
+}
+
+static int subn_set_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	u8 *p = stl_get_smp_data(smp);
+	unsigned i;
+
+	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_sl); i ++, p++)
+		virtual_stl[port-1].sc_to_sl[i] = *p & 0x1f;
+
+	return subn_get_stl_sc_to_sl(smp, ibdev, port);
 }
 
 
@@ -3288,6 +3319,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case STL_ATTRIB_ID_SL_TO_SC_MAP:
 			ret = subn_get_stl_sl_to_sc((struct stl_smp *)smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_SC_TO_SL_MAP:
+			ret = subn_get_stl_sc_to_sl((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: STL SubnGet(%x) not supported yet...\n",
@@ -3306,6 +3340,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_SL_TO_SC_MAP:
 			ret = subn_set_stl_sl_to_sc((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_SC_TO_SL_MAP:
+			ret = subn_set_stl_sc_to_sl((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
