@@ -113,7 +113,7 @@ stl_get_smp_direction(struct stl_smp *smp)
 	return ib_get_smp_direction((struct ib_smp *)smp);
 }
 
-static inline uint8_t *stl_get_smp_data(struct stl_smp *smp)
+static inline u8 *stl_get_smp_data(struct stl_smp *smp)
 {
 	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 		return smp->route.dr.data;
