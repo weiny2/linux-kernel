@@ -41,6 +41,7 @@
 #define STL_SMP_MAX_PATH_HOPS			64
 
 #define STL_MAX_PVLS				32
+#define STL_MAX_SLS				32
 
 #define STL_SMI_CLASS_VERSION			0x80
 
@@ -81,6 +82,7 @@ struct stl_smp {
 #define STL_ATTRIB_ID_NODE_INFO			cpu_to_be16(0x0011)
 #define STL_ATTRIB_ID_PORT_INFO			cpu_to_be16(0x0015)
 #define STL_ATTRIB_ID_PARTITION_TABLE		cpu_to_be16(0x0016)
+#define STL_ATTRIB_ID_SL_TO_SC_MAP		cpu_to_be16(0x0017)
 /* ... */
 
 struct stl_node_description {
