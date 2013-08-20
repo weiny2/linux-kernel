@@ -315,12 +315,12 @@ struct stl_port_info {
 	__be64 subnet_prefix;
 
 	struct {
-		u8 pvlx_to_mtu[STL_MAX_PVLS/2]; /* 4 bits, 4 bits */
+		u8 pvlx_to_mtu[STL_MAX_VLS/2]; /* 4 bits, 4 bits */
 	} neigh_mtu;
 
 	struct {
 		u8 vlstall_hoqlife;             /* 3 bits, 5 bits */
-	} xmit_q[STL_MAX_PVLS];
+	} xmit_q[STL_MAX_VLS];
 
 
 	union ib_gid ip_addr_primary;
