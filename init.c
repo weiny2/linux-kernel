@@ -426,7 +426,7 @@ static int init_after_reset(struct hfi_devdata *dd)
 		 * ctxt == -1 means "all contexts". Only really safe for
 		 * _dis_abling things, as here.
 		 */
-		dd->f_rcvctrl(dd->pport + i, QIB_RCVCTRL_CTXT_DIS |
+		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
 				  QIB_RCVCTRL_INTRAVAIL_DIS |
 				  QIB_RCVCTRL_TAILUPD_DIS, -1);
 		/* Redundant across ports for some, but no big deal.  */
@@ -459,7 +459,7 @@ static void enable_chip(struct hfi_devdata *dd)
 		struct qib_ctxtdata *rcd = dd->rcd[i];
 
 		if (rcd)
-			dd->f_rcvctrl(rcd->ppd, rcvmask, i);
+			dd->f_rcvctrl(dd, rcvmask, i);
 	}
 }
 
@@ -818,7 +818,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		dd->f_rcvctrl(ppd, QIB_RCVCTRL_TAILUPD_DIS |
+		dd->f_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
 				   QIB_RCVCTRL_CTXT_DIS |
 				   QIB_RCVCTRL_INTRAVAIL_DIS |
 				   QIB_RCVCTRL_PKEY_ENB, -1);

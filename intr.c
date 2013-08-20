@@ -203,8 +203,7 @@ void qib_handle_urcv(struct hfi_devdata *dd, u64 ctxtr)
 
 		if (test_and_clear_bit(QIB_CTXT_WAITING_RCV, &rcd->flag)) {
 			wake_up_interruptible(&rcd->wait);
-			dd->f_rcvctrl(rcd->ppd, QIB_RCVCTRL_INTRAVAIL_DIS,
-				      rcd->ctxt);
+			dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_DIS, rcd->ctxt);
 		} else if (test_and_clear_bit(QIB_CTXT_WAITING_URG,
 					      &rcd->flag)) {
 			rcd->urgent++;

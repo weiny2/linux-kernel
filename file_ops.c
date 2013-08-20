@@ -664,7 +664,7 @@ static int qib_manage_rcvq(struct qib_ctxtdata *rcd, unsigned subctxt,
 		rcvctrl_op = QIB_RCVCTRL_CTXT_ENB;
 	} else
 		rcvctrl_op = QIB_RCVCTRL_CTXT_DIS;
-	dd->f_rcvctrl(rcd->ppd, rcvctrl_op, rcd->ctxt);
+	dd->f_rcvctrl(dd, rcvctrl_op, rcd->ctxt);
 	/* always; new head should be equal to new tail; see above */
 bail:
 	return 0;
@@ -1106,7 +1106,7 @@ static unsigned int qib_poll_next(struct qib_ctxtdata *rcd,
 	spin_lock_irq(&dd->uctxt_lock);
 	if (dd->f_hdrqempty(rcd)) {
 		set_bit(QIB_CTXT_WAITING_RCV, &rcd->flag);
-		dd->f_rcvctrl(rcd->ppd, QIB_RCVCTRL_INTRAVAIL_ENB, rcd->ctxt);
+		dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_ENB, rcd->ctxt);
 		pollflag = 0;
 	} else
 		pollflag = POLLIN | POLLRDNORM;
@@ -1650,7 +1650,7 @@ static int qib_do_user_init(struct file *fp,
 	if (rcd->rcvhdrtail_kvaddr)
 		qib_clear_rcvhdrtail(rcd);
 
-	dd->f_rcvctrl(rcd->ppd, QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_TIDFLOW_ENB,
+	dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_TIDFLOW_ENB,
 		      rcd->ctxt);
 
 	/* Notify any waiting slaves */
@@ -1763,7 +1763,7 @@ static int qib_close(struct inode *in, struct file *fp)
 
 	if (dd->kregbase) {
 		/* atomically clear receive enable ctxt and intr avail. */
-		dd->f_rcvctrl(rcd->ppd, QIB_RCVCTRL_CTXT_DIS |
+		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
 				  QIB_RCVCTRL_INTRAVAIL_DIS, ctxt);
 
 		/* clean up the pkeys for this ctxt user */

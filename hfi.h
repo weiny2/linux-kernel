@@ -788,14 +788,8 @@ struct hfi_devdata {
 	/* Read/modify/write of GPIO pins (potentially chip-specific */
 	int (*f_gpio_mod)(struct hfi_devdata *dd, u32 out, u32 dir,
 		u32 mask);
-	/*
-	 * modify rcvctrl shadow[s] and write to appropriate chip-regs.
-	 * see above QIB_RCVCTRL_xxx_ENB/DIS for operations.
-	 * (ctxt == -1) means "all contexts", only meaningful for
-	 * clearing. Could remove if chip_spec shutdown properly done.
-	 */
-	void (*f_rcvctrl)(struct qib_pportdata *, unsigned int op,
-		int ctxt);
+	/* modify receive context registers, see RCVCTRL_* for operations */
+	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int ctxt);
 	/* Read/modify/write sendctrl appropriately for op and port. */
 	void (*f_sendctrl)(struct qib_pportdata *, u32 op);
 	void (*f_set_intr_state)(struct hfi_devdata *, u32);

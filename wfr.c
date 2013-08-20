@@ -723,9 +723,8 @@ static u32 encoded_size(u32 size)
  *	DontDropRHQFull
  *	DontDropEgrFull
  */
-static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
+static void one_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
-	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
 	u32 eager_header_counter = 0;	/* non-zero means do something */
@@ -847,9 +846,8 @@ static void one_rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 	}
 }
 
-static void rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
+static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
-	struct hfi_devdata *dd = ppd->dd;
 	int i;
 
 // FIXME: it looks like a -1 means "all contexts for this port"
@@ -859,9 +857,9 @@ static void rcvctrl(struct qib_pportdata *ppd, unsigned int op, int ctxt)
 // it is now no longer needed NOR applicable.
 	if (ctxt < 0) {
 		for (i = 0; i < dd->num_rcv_contexts; i++)
-			one_rcvctrl(ppd, op, i);
+			one_rcvctrl(dd, op, i);
 	} else {
-		one_rcvctrl(ppd, op, ctxt);
+		one_rcvctrl(dd, op, ctxt);
 	}
 }
 
