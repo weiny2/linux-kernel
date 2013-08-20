@@ -40,7 +40,7 @@
 #define STL_SMP_DR_DATA_SIZE			1872
 #define STL_SMP_MAX_PATH_HOPS			64
 
-#define STL_MAX_PVLS				32
+#define STL_MAX_VLS				32
 #define STL_MAX_SLS				32
 
 #define STL_SMI_CLASS_VERSION			0x80
