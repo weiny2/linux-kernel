@@ -102,6 +102,17 @@
 #define STL_LINK_WIDTH_16X  0x0100
 #define STL_LINK_WIDTH_ALL_SUPPORTED 0x0FFF /*  valid only for LinkWidthEnabled */
 
+/**
+ * STL Cap Mask 3 values
+ */
+#define STL_CAP_MASK3_IsSnoopSupported            (1 << 7)
+#define STL_CAP_MASK3_IsAsyncSC2VLSupported       (1 << 6)
+#define STL_CAP_MASK3_IsAddrRangeConfigSupported  (1 << 5)
+#define STL_CAP_MASK3_IsPassThroughSupported      (1 << 4)
+#define STL_CAP_MASK3_IsSharedSpaceSupported      (1 << 3)
+#define STL_CAP_MASK3_IsVL15MulticastSupported    (1 << 2)
+#define STL_CAP_MASK3_IsVLMarkerSupported         (1 << 1)
+#define STL_CAP_MASK3_IsVLrSupported              (1 << 0)
 
 enum port_info_field_masks {
 	/* vl.inittype */
