@@ -109,6 +109,10 @@ static void init_virtual_stl(void)
 		virtual_stl[0].sc_to_vlt[i] = i;
 		virtual_stl[1].sc_to_vlt[i] = i;
 	}
+	for (i = 0; i < ARRAY_SIZE(virtual_stl[0].sc_to_vlnt); i++) {
+		virtual_stl[0].sc_to_vlnt[i] = i;
+		virtual_stl[1].sc_to_vlnt[i] = i;
+	}
 	virtual_stl_init = 1;
 }
 
@@ -1516,6 +1520,42 @@ static int subn_set_stl_sc_to_vlt(struct stl_smp *smp, struct ib_device *ibdev,
 
 error:
 	return subn_get_stl_sc_to_vlt(smp, ibdev, port);
+}
+
+static int subn_get_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
+				  u8 port)
+{
+	u8 *p = stl_get_smp_data(smp);
+	unsigned i;
+
+	memset(p, 0, stl_get_smp_data_size(smp));
+
+	/* FIXME We need to resolve getting the real sl to vl values set here */
+	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_vlnt); i++)
+		*p++ = virtual_stl[port-1].sc_to_vlnt[i] & 0x1f;
+
+	return reply_stl(smp);
+}
+
+static int subn_set_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	u8 *p = stl_get_smp_data(smp);
+	unsigned i;
+	u8 port_state = wfrl_get_stl_virtual_port_state(port) & 0x0f;
+
+	/* check the AM and port state for proper settings */
+	if (port_state == IB_PORT_ARMED || port_state == IB_PORT_ACTIVE) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		goto error;
+	}
+
+	/* FIXME We need to resolve getting the real sl to vl values set here */
+	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_vlnt); i ++, p++)
+		virtual_stl[port-1].sc_to_vlnt[i] = *p & 0x1f;
+
+error:
+	return subn_get_stl_sc_to_vlnt(smp, ibdev, port);
 }
 
 
@@ -3375,6 +3415,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
 			ret = subn_get_stl_sc_to_vlt((struct stl_smp *)smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
+			ret = subn_get_stl_sc_to_vlnt((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: STL SubnGet(%x) not supported yet...\n",
@@ -3399,6 +3442,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
 			ret = subn_set_stl_sc_to_vlt((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
+			ret = subn_set_stl_sc_to_vlnt((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
