@@ -87,7 +87,7 @@
  * values are additive for Supported and Enabled fields
  */
 #define STL_LINK_SPEED_RESERVED         0x80    /*  Reserved (1-5 Gbps) */
-#define STL_LINK_SPEED_RESERVED2        0x100   /*  Reserved (12-15 Gbps) */
+#define STL_LINK_SPEED_12_5G            0x100   /*  12.5 Gbps */
 #define STL_LINK_SPEED_25G              0x200   /*  25.78125?  Gbps (EDR) */
 #define STL_LINK_SPEED_RESERVED3        0x400   /*  Reserved (>25G) */
 #define STL_LINK_SPEED_ALL_SUPPORTED    0x03FF  /*  valid only for STL LinkSpeedEnabled */
