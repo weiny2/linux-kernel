@@ -92,13 +92,15 @@ static void init_virtual_port_info(u8 port)
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	reset_virtual_port_state(port);
-	vpi->link_speed.supported = cpu_to_be16(STL_LINK_SPEED_25G | IB_SPEED_SDR);
+	vpi->link_speed.supported = cpu_to_be16(IB_SPEED_SDR |
+						STL_LINK_SPEED_12_5G |
+						STL_LINK_SPEED_25G);
 	vpi->link_speed.active = cpu_to_be16(IB_SPEED_SDR);
 	vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
 
 	vpi->link_width.supported = cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X);
 	vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
-	vpi->link_width.enabled = cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X);
+	vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
 
 	for (i=0; i< ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu); i++) {
 		vpi->neigh_mtu.pvlx_to_mtu[i] = (IB_MTU_2048 << 4) | IB_MTU_2048;
@@ -132,8 +134,16 @@ static void arm_virtual_port(u8 port)
 static void activate_virtual_port(u8 port)
 {
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	u16 speed_enabled = vpi->link_speed.enabled;
 
-	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
+	/* go to the fastest speed enabled. */
+	if (STL_LINK_SPEED_25G & speed_enabled)
+		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
+	else if (STL_LINK_SPEED_12_5G & speed_enabled)
+		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
+	else
+		vpi->link_speed.active = cpu_to_be16(IB_SPEED_SDR);
+
 	set_virtual_port_state(port, IB_PORT_ACTIVE);
 	printk(KERN_WARNING PFX "Virtual Port %d Activated\n", port);
 }
