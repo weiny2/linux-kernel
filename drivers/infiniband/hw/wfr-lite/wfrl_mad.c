@@ -78,12 +78,72 @@ static struct {
 
 int virtual_stl_init = 0;
 
-void wfrl_set_stl_virtual_port_state_init(u8 port) {
+void reset_virtual_port_state(u8 port) {
 	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = 5 << 4;
 	virtual_stl[port-1].port_info.port_states.portphysstate_portstate |= 2;
 	printk(KERN_WARNING PFX
 		"STL Port Virtual State reset : 0x%x\n",
 		virtual_stl[port-1].port_info.port_states.portphysstate_portstate);
+}
+
+static void init_virtual_port_info(u8 port)
+{
+	unsigned i;
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	reset_virtual_port_state(port);
+	vpi->link_speed.supported = cpu_to_be16(STL_LINK_SPEED_25G | IB_SPEED_SDR);
+	vpi->link_speed.active = cpu_to_be16(IB_SPEED_SDR);
+	vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
+
+	vpi->link_width.supported = cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X);
+	vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
+	vpi->link_width.enabled = cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X);
+
+	for (i=0; i< ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu); i++) {
+		vpi->neigh_mtu.pvlx_to_mtu[i] = (IB_MTU_2048 << 4) | IB_MTU_2048;
+	}
+}
+
+static void reset_virtual_port(u8 port)
+{
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	reset_virtual_port_state(port);
+	vpi->link_speed.active = cpu_to_be16(IB_SPEED_SDR);
+}
+
+static inline void set_virtual_port_state(u8 port, u8 state)
+{
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	uint8_t tmp = vpi->port_states.portphysstate_portstate;
+
+	vpi->port_states.portphysstate_portstate =
+			(tmp & STL_PI_MASK_PORT_PHYSICAL_STATE) |
+			(state & STL_PI_MASK_PORT_STATE);
+}
+
+static void arm_virtual_port(u8 port)
+{
+	set_virtual_port_state(port, IB_PORT_ARMED);
+	printk(KERN_WARNING PFX "Virtual Port %d Armed\n", port);
+}
+
+static void activate_virtual_port(u8 port)
+{
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
+	set_virtual_port_state(port, IB_PORT_ACTIVE);
+	printk(KERN_WARNING PFX "Virtual Port %d Activated\n", port);
+}
+
+static void set_virtual_mtu(u8 port, struct stl_port_info *pi)
+{
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	memcpy(vpi->neigh_mtu.pvlx_to_mtu, pi->neigh_mtu.pvlx_to_mtu,
+		ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu));
 }
 
 static void init_virtual_stl(void)
@@ -93,7 +153,7 @@ static void init_virtual_stl(void)
 	 * Fake Initial STL data
 	 */
 	for (i = 0; i < NUM_VIRT_PORTS; i++) {
-		wfrl_set_stl_virtual_port_state_init(i+1);
+		init_virtual_port_info(i+1);
 	}
 	virtual_stl[0].pkeys[STL_NUM_PKEYS-1] = 0xDEAD;
 	virtual_stl[1].pkeys[STL_NUM_PKEYS-1] = 0xBEEF;
@@ -635,12 +695,12 @@ static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
 static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
-	int i;
+	//int i;
 	struct qib_devdata *dd;
 	struct qib_pportdata *ppd;
 	struct qib_ibport *ibp;
 	struct stl_port_info *pi;
-	u8 mtu;
+	//u8 mtu;
 	int ret;
 	//u32 state;
 	u32 port_num = be32_to_cpu(smp->attr_mod);
@@ -703,10 +763,12 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
 	pi->link_width.active = cpu_to_be16(ppd->link_width_active);
 
+/*
+ * These are now picked up from the simulated port info
 	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
-
+*/
 
 	/* FIXME make sure that this default state matches */
 	pi->port_states.offline_reason = 0;
@@ -725,6 +787,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 
+#if 0
+	/* return simulated mtu data */
 	switch (ppd->ibmtu) {
 	default: /* something is wrong; fall through */
 	case 4096:
@@ -744,13 +808,13 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		break;
 	}
 
-	/* FIXME for actual WFR this will need to be per VL */
 	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
 	for (i = 0; i < ppd->vls_supported; i++)
 		if ((i % 2) == 0)
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= (mtu << 4);
 		else
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
+#endif
 
 	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
 	//pi->partenforce_filterraw = 0;
@@ -878,9 +942,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u8 vls;
 	u8 msl;
 	u16 lstate;
-	int ret, ore, mtu;
+	int ret, ore;
 	u32 port_num = be32_to_cpu(smp->attr_mod);
-	u8 saved_virtual_portstate = 0;
 
 	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
 
@@ -969,9 +1032,6 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		ib_dispatch_event(&event);
 	}
 
-	saved_virtual_portstate = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
-	memcpy(&virtual_stl[port-1].port_info, pi, sizeof(virtual_stl[port-1].port_info));
-	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = saved_virtual_portstate;
 #if 0
 	/* Ignore STL Link Width and Link Speed we can't support them anyway. */
 	/* Allow 1x or 4x to be set (see 14.2.6.6). */
@@ -1050,10 +1110,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		//qib_set_mtu(ppd, mtu);
 	}
 #else
-	mtu = ib_mtu_enum_to_int((pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
-	printk(KERN_WARNING PFX
-		"SubnSet(STL_PortInfo) Neigh MTU ignored; VL0 mtu %d (0x%x)\n",
-		mtu, (pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+	set_virtual_mtu(port, pi);
 #endif
 
 	/* Set operational VLs */
@@ -1119,6 +1176,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			break;
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
+		reset_virtual_port(port);
 #if 0
 		if (lstate == 0)
 			//lstate = QIB_IB_LINKDOWN_ONLY;
@@ -1156,9 +1214,11 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		break;
 	case IB_PORT_ARMED:
 		//qib_set_linkstate(ppd, QIB_IB_LINKARM);
+		arm_virtual_port(port);
 		break;
 	case IB_PORT_ACTIVE:
 		//qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+		activate_virtual_port(port);
 		break;
 	default:
 		printk(KERN_WARNING PFX
@@ -1166,15 +1226,6 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
-	if (state) {
-		uint8_t tmp = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
-		virtual_stl[port-1].port_info.port_states.portphysstate_portstate =
-			(tmp & STL_PI_MASK_PORT_PHYSICAL_STATE) |
-			(state & STL_PI_MASK_PORT_STATE);
-		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) Port State 0x%x virtualized\n",
-			state);
-	}
 	if (lstate) {
 		uint8_t tmp = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
 		virtual_stl[port-1].port_info.port_states.portphysstate_portstate =
@@ -2904,7 +2955,7 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case IB_SMP_ATTR_PORT_INFO_STL_RESET:
 			/* FAKE STL_PORT_INFO data */
-			wfrl_set_stl_virtual_port_state_init(port);
+			reset_virtual_port(port);
 			/* FALL through */
 		case IB_SMP_ATTR_PORT_INFO:
 			ret = subn_set_portinfo(smp, ibdev, port);
