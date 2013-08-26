@@ -42,7 +42,7 @@
  * Increment this value if any changes that break userspace ABI
  * compatibility are made.
  */
-#define IB_USER_MAD_ABI_VERSION	6
+#define IB_USER_MAD_ABI_VERSION	5
 
 /*
  * Make sure that all structs defined in this file remain laid out so

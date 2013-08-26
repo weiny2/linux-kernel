@@ -720,7 +720,6 @@ out:
 
 static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 {
-	static uint8_t zero_bytes[sizeof(struct ib_user_mad_reg_req2)] = {0};
 	struct ib_user_mad_reg_req2 ureq;
 	struct ib_mad_reg_req req;
 	struct ib_mad_agent *agent = NULL;
@@ -751,14 +750,6 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 		ret = -EINVAL;
 		goto out;
 	}
-
-	if (ureq.res != 0 ||
-	    memcmp(&ureq.res2, zero_bytes, sizeof(ureq.res2))) {
-		printk(KERN_ERR "user_mad: ib_umad_reg_agent failed: reserved fields != 0\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
 
 	for (agent_id = 0; agent_id < IB_UMAD_MAX_AGENTS; ++agent_id)
 		if (!__get_agent(file, agent_id))
