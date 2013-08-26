@@ -103,7 +103,7 @@ static const unsigned sdma_idle_cnt = 64;
  * Number of VLs we are configured to use (to allow for more
  * credits per vl, etc.)
  */
-ushort qib_num_cfg_vls = 2;
+ushort qib_num_cfg_vls = 8;
 module_param_named(num_vls, qib_num_cfg_vls, ushort, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 

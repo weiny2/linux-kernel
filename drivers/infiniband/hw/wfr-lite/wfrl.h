@@ -330,7 +330,7 @@ struct qib_verbs_txreq {
 #define QIB_IB_DDR 2
 #define QIB_IB_QDR 4
 
-#define QIB_DEFAULT_MTU 4096
+#define QIB_DEFAULT_MTU 2048
 
 /* max number of IB ports supported per HCA */
 #define QIB_MAX_IB_PORTS 2
