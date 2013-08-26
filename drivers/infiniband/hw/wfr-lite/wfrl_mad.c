@@ -67,6 +67,26 @@ MODULE_PARM_DESC(sim_pkey_tbl_block_size, "When != 0 simulate a large pkey table
 #define STL_NUM_PKEYS (MAX_SIM_STL_PKEY_BLOCKS * STL_PARTITION_TABLE_BLK_SIZE)
 #define STL_NUM_PKEY_BLOCKS_PER_SMP (STL_SMP_DR_DATA_SIZE \
 					/ (STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16)))
+
+struct stl_vlarb_entry
+{
+	u8 vl; /* 3bits reserved, 5 bits VL */
+	u8 weight;
+};
+
+#define STL_MAX_PREEMPT_CAP         32
+#define STL_VLARB_LOW_ELEMENTS       0
+#define STL_VLARB_HIGH_ELEMENTS      1
+#define STL_VLARB_PREEMPT_ELEMENTS   2
+#define STL_VLARB_PREEMPT_MATRIX     3
+struct stl_vlarb_data
+{
+	struct stl_vlarb_entry low_pri_table[128];
+	struct stl_vlarb_entry high_pri_table[128];
+	struct stl_vlarb_entry preempting_table[STL_MAX_PREEMPT_CAP];
+	__be32 preemption_matrix[STL_MAX_VLS];
+};
+
 static struct {
 	struct stl_port_info port_info;
 	u16 pkeys[STL_NUM_PKEYS];
@@ -74,6 +94,7 @@ static struct {
 	u8 sc_to_sl[STL_MAX_SCS];
 	u8 sc_to_vlt[STL_MAX_SCS];
 	u8 sc_to_vlnt[STL_MAX_SCS];
+	struct stl_vlarb_data vlarb_data;
 } virtual_stl[NUM_VIRT_PORTS];
 
 int virtual_stl_init = 0;
@@ -90,6 +111,7 @@ static void init_virtual_port_info(u8 port)
 {
 	unsigned i;
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct stl_vlarb_data *vlarb_data = &virtual_stl[port-1].vlarb_data;
 
 	reset_virtual_port_state(port);
 	vpi->link_speed.supported = cpu_to_be16(IB_SPEED_SDR |
@@ -105,6 +127,22 @@ static void init_virtual_port_info(u8 port)
 	for (i=0; i< ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu); i++) {
 		vpi->neigh_mtu.pvlx_to_mtu[i] = (IB_MTU_2048 << 4) | IB_MTU_2048;
 	}
+
+	/* VLARB */
+	for (i = 0; i < qib_num_cfg_vls; i++) {
+		vlarb_data->low_pri_table[i].vl = i & 0x1f;
+		vlarb_data->low_pri_table[i].weight = 1;
+	}
+	for (i = 0; i < ARRAY_SIZE(vlarb_data->high_pri_table); i++) {
+		vlarb_data->high_pri_table[i].vl = 15;
+		vlarb_data->high_pri_table[i].weight = 0;
+	}
+	for (i = 0; i < ARRAY_SIZE(vlarb_data->preempting_table); i++) {
+		vlarb_data->preempting_table[i].vl = 15;
+		vlarb_data->preempting_table[i].weight = 0;
+	}
+	memset(vlarb_data->preemption_matrix, 0,
+	       sizeof(vlarb_data->preemption_matrix));
 }
 
 static void reset_virtual_port(u8 port)
@@ -1619,6 +1657,74 @@ error:
 	return subn_get_stl_sc_to_vlnt(smp, ibdev, port);
 }
 
+static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	struct stl_vlarb_data *virt_data = &virtual_stl[port-1].vlarb_data;
+	u8 section = (be32_to_cpu(smp->attr_mod) >> 16) & 0xff;
+	u8 *p = stl_get_smp_data(smp);
+
+	switch (section) {
+		case STL_VLARB_LOW_ELEMENTS:
+			memcpy(p, virt_data->low_pri_table,
+				sizeof(virt_data->low_pri_table));
+			break;
+		case STL_VLARB_HIGH_ELEMENTS:
+			memcpy(p, virt_data->high_pri_table,
+				sizeof(virt_data->high_pri_table));
+			break;
+		case STL_VLARB_PREEMPT_ELEMENTS:
+			memcpy(p, virt_data->preempting_table,
+				sizeof(virt_data->preempting_table));
+			break;
+		case STL_VLARB_PREEMPT_MATRIX:
+			memcpy(p, virt_data->preemption_matrix,
+				sizeof(virt_data->preemption_matrix));
+			break;
+		default:
+			printk(KERN_WARNING PFX
+				"STL SubnGet(VL Arb) AM Invalid : 0x%x\n",
+				be32_to_cpu(smp->attr_mod));
+			smp->status |= IB_SMP_INVALID_FIELD;
+			break;
+	}
+
+	return reply_stl(smp);
+}
+static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	struct stl_vlarb_data *virt_data = &virtual_stl[port-1].vlarb_data;
+	u8 section = (be32_to_cpu(smp->attr_mod) >> 16) & 0xff;
+	u8 *p = stl_get_smp_data(smp);
+
+	switch (section) {
+		case STL_VLARB_LOW_ELEMENTS:
+			memcpy(virt_data->low_pri_table, p,
+				sizeof(virt_data->low_pri_table));
+			break;
+		case STL_VLARB_HIGH_ELEMENTS:
+			memcpy(virt_data->high_pri_table, p,
+				sizeof(virt_data->high_pri_table));
+			break;
+		case STL_VLARB_PREEMPT_ELEMENTS:
+			memcpy(virt_data->preempting_table, p,
+				sizeof(virt_data->preempting_table));
+			break;
+		case STL_VLARB_PREEMPT_MATRIX:
+			memcpy(virt_data->preemption_matrix, p,
+				sizeof(virt_data->preemption_matrix));
+			break;
+		default:
+			printk(KERN_WARNING PFX
+				"STL SubnSet(VL Arb) AM Invalid : 0x%x\n",
+				be32_to_cpu(smp->attr_mod));
+			smp->status |= IB_SMP_INVALID_FIELD;
+			break;
+	}
+
+	return subn_get_stl_vlarb(smp, ibdev, port);
+}
 
 static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
@@ -3479,6 +3585,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
 			ret = subn_get_stl_sc_to_vlnt((struct stl_smp *)smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_VL_ARBITRATION:
+			ret = subn_get_stl_vlarb((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: STL SubnGet(%x) not supported yet...\n",
@@ -3506,6 +3615,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
 			ret = subn_set_stl_sc_to_vlnt((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_VL_ARBITRATION:
+			ret = subn_set_stl_vlarb((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
