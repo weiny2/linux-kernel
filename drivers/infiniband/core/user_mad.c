@@ -746,11 +746,6 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 		goto out;
 	}
 
-	if (ureq.mgmt_class == 0) {
-		ret = -EINVAL;
-		goto out;
-	}
-
 	for (agent_id = 0; agent_id < IB_UMAD_MAX_AGENTS; ++agent_id)
 		if (!__get_agent(file, agent_id))
 			goto found;

@@ -36,7 +36,6 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
-#include <rdma/ib_mad.h>
 
 /*
  * Increment this value if any changes that break userspace ABI
@@ -200,12 +199,12 @@ struct ib_user_mad_reg_req {
  * @mgmt_class_version - Indicates which version of MADs for the given
  *   management class to receive.
  * @res - reserved field.  must be set to 0
+ * @flags - additional registration flags
  * @method_mask - The caller will receive unsolicited MADs for any method
  *   whose bit is set.
  * @oui - Indicates IEEE OUI when mgmt_class is a vendor class
  *   in the range from 0x30 to 0x4f. Otherwise not used.
  * @rmpp_version - If set, indicates the RMPP version used.
- * @flags - additional registration flags
  * @res2 - must be set to 0
  *
  */
@@ -214,15 +213,15 @@ enum {
 };
 struct ib_user_mad_reg_req2 {
 	__u32	id;
-	__u8	qpn;
+	__u32	qpn;
 	__u8	mgmt_class;
 	__u8	mgmt_class_version;
-	__u8    res;
+	__u16   res;
+	__u32   flags;
 	__u64   method_mask[2];
 	__u8    oui[3]; /* network order */
 	__u8	rmpp_version;
-	__u32   flags;
-	__u8    res2[64];
+	__u8    res2[68];
 };
 
 #define IB_IOCTL_MAGIC		0x1b

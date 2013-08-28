@@ -378,9 +378,9 @@ typedef void (*ib_mad_recv_handler)(struct ib_mad_agent *mad_agent,
  * @hi_tid: Access layer assigned transaction ID for this client.
  *   Unsolicited MADs sent by this client will have the upper 32-bits
  *   of their TID set to this value.
+ * @flags: registration flags
  * @port_num: Port number on which QP is registered
  * @rmpp_version: If set, indicates the RMPP version used by this agent.
- * @flags: registration flags
  */
 enum {
 	IB_MAD_USER_RMPP = (1 << 0),
