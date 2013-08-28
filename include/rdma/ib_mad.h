@@ -40,6 +40,7 @@
 #include <linux/list.h>
 
 #include <rdma/ib_verbs.h>
+#include <uapi/rdma/ib_user_mad.h>
 
 /* Management base version */
 #define IB_MGMT_BASE_VERSION			1
@@ -383,7 +384,7 @@ typedef void (*ib_mad_recv_handler)(struct ib_mad_agent *mad_agent,
  * @rmpp_version: If set, indicates the RMPP version used by this agent.
  */
 enum {
-	IB_MAD_USER_RMPP = (1 << 0),
+	IB_MAD_USER_RMPP = IB_USER_MAD_USER_RMPP,
 };
 struct ib_mad_agent {
 	struct ib_device	*device;

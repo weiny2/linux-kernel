@@ -209,7 +209,7 @@ struct ib_user_mad_reg_req {
  *
  */
 enum {
-	IB_USER_MAD_USER_RMPP = IB_MAD_USER_RMPP
+	IB_USER_MAD_USER_RMPP = (1 << 0),
 };
 struct ib_user_mad_reg_req2 {
 	__u32	id;
