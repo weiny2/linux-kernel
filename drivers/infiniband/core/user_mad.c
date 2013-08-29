@@ -755,15 +755,19 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 	goto out;
 
 found:
-	req.mgmt_class         = ureq.mgmt_class;
-	req.mgmt_class_version = ureq.mgmt_class_version;
-	req.flags              = ureq.flags;
-	memcpy(req.oui, ureq.oui, sizeof req.oui);
-	memcpy(req.method_mask, ureq.method_mask, sizeof req.method_mask);
+	if (ureq.mgmt_class) {
+		memset(&req, 0, sizeof req);
+		req.mgmt_class         = ureq.mgmt_class;
+		req.mgmt_class_version = ureq.mgmt_class_version;
+		req.flags              = ureq.flags;
+		memcpy(req.oui, ureq.oui, sizeof req.oui);
+		memcpy(req.method_mask, ureq.method_mask, sizeof req.method_mask);
+	}
 
 	agent = ib_register_mad_agent(file->port->ib_dev, file->port->port_num,
 				      ureq.qpn ? IB_QPT_GSI : IB_QPT_SMI,
-				      &req, ureq.rmpp_version,
+				      ureq.mgmt_class ? &req : NULL,
+				      ureq.rmpp_version,
 				      send_handler, recv_handler, file);
 	if (IS_ERR(agent)) {
 		ret = PTR_ERR(agent);
