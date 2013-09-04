@@ -51,6 +51,7 @@
 #include <linux/uaccess.h>
 
 #include "hfi.h"
+#include "hfi_device.h"
 #include "common.h"
 
 #undef pr_fmt
@@ -163,15 +164,16 @@ int qib_diag_add(struct hfi_devdata *dd)
 	int ret = 0;
 
 	if (atomic_inc_return(&diagpkt_count) == 1) {
-		ret = qib_cdev_init(QIB_DIAGPKT_MINOR, "hfi_diagpkt",
+		snprintf(name, sizeof(name), "%s_diagpkt", class_name());
+		ret = hfi_cdev_init(HFI_DIAGPKT_MINOR, name,
 				    &diagpkt_file_ops, &diagpkt_cdev,
 				    &diagpkt_device);
 		if (ret)
 			goto done;
 	}
 
-	snprintf(name, sizeof(name), "hfi_diag%d", dd->unit);
-	ret = qib_cdev_init(QIB_DIAG_MINOR_BASE + dd->unit, name,
+	snprintf(name, sizeof(name), "%s_diag%d", class_name(), dd->unit);
+	ret = hfi_cdev_init(HFI_DIAG_MINOR_BASE + dd->unit, name,
 			    &diag_file_ops, &dd->diag_cdev,
 			    &dd->diag_device);
 done:
@@ -185,9 +187,9 @@ void qib_diag_remove(struct hfi_devdata *dd)
 	struct diag_client *dc;
 
 	if (atomic_dec_and_test(&diagpkt_count))
-		qib_cdev_cleanup(&diagpkt_cdev, &diagpkt_device);
+		hfi_cdev_cleanup(&diagpkt_cdev, &diagpkt_device);
 
-	qib_cdev_cleanup(&dd->diag_cdev, &dd->diag_device);
+	hfi_cdev_cleanup(&dd->diag_cdev, &dd->diag_device);
 
 	/*
 	 * Return all diag_clients of this device. There should be none,
@@ -335,7 +337,7 @@ bail:
 
 static int diag_open(struct inode *in, struct file *fp)
 {
-	int unit = iminor(in) - QIB_DIAG_MINOR_BASE;
+	int unit = iminor(in) - HFI_DIAG_MINOR_BASE;
 	struct hfi_devdata *dd;
 	struct diag_client *dc;
 	int ret;

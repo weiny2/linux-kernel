@@ -992,13 +992,6 @@ void qib_disable_wc(struct hfi_devdata *dd);
 int qib_count_units(int *npresentp, int *nupp);
 int qib_count_active_units(void);
 
-int qib_cdev_init(int minor, const char *name,
-		  const struct file_operations *fops,
-		  struct cdev *cdev, struct device **devp);
-void qib_cdev_cleanup(struct cdev *cdev, struct device **devp);
-int qib_dev_init(void);
-void qib_dev_cleanup(void);
-
 int qib_diag_add(struct hfi_devdata *);
 void qib_diag_remove(struct hfi_devdata *);
 void qib_handle_e_ibstatuschanged(struct qib_pportdata *, u64);
@@ -1308,11 +1301,11 @@ extern struct mutex qib_mutex;
 #define STATUS_TIMEOUT 60
 
 #define DRIVER_NAME		"hfi"
-#define QIB_USER_MINOR_BASE     0
-#define QIB_TRACE_MINOR         127
-#define QIB_DIAGPKT_MINOR       128
-#define QIB_DIAG_MINOR_BASE     129
-#define QIB_NMINORS             255
+#define HFI_USER_MINOR_BASE     0
+#define HFI_TRACE_MINOR         127
+#define HFI_DIAGPKT_MINOR       128
+#define HFI_DIAG_MINOR_BASE     129
+#define HFI_NMINORS             255
 
 #define PCI_VENDOR_ID_INTEL 0x8086
 #define PCI_DEVICE_ID_INTEL_WFR0 0x24f0

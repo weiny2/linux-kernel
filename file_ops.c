@@ -46,6 +46,7 @@
 #include <linux/export.h>
 
 #include "hfi.h"
+#include "hfi_device.h"
 #include "common.h"
 #include "user_sdma.h"
 
@@ -1503,7 +1504,7 @@ static int qib_assign_ctxt(struct file *fp, const struct qib_user_info *uinfo)
 		}
 	}
 
-	i_minor = iminor(file_inode(fp)) - QIB_USER_MINOR_BASE;
+	i_minor = iminor(file_inode(fp)) - HFI_USER_MINOR_BASE;
 	if (i_minor)
 		ret = find_free_ctxt(i_minor - 1, fp, uinfo);
 	else
@@ -2238,96 +2239,18 @@ static const struct file_operations ui_file_ops = {
 #define UI_OFFSET 192	/* device minor offset for UI devices */
 int create_ui = 1;
 
-static struct class *qib_class;
-static dev_t qib_dev;
-
-int qib_cdev_init(int minor, const char *name,
-		  const struct file_operations *fops,
-		  struct cdev *cdev, struct device **devp)
-{
-	const dev_t dev = MKDEV(MAJOR(qib_dev), minor);
-	struct device *device = NULL;
-	int ret;
-
-	cdev_init(cdev, fops);
-	cdev->owner = THIS_MODULE;
-	kobject_set_name(&cdev->kobj, name);
-
-	ret = cdev_add(cdev, dev, 1);
-	if (ret < 0) {
-		pr_err("Could not add cdev for minor %d, %s (err %d)\n",
-		       minor, name, -ret);
-		goto done;
-	}
-
-	device = device_create(qib_class, NULL, dev, NULL, name);
-	if (!IS_ERR(device))
-		goto done;
-	ret = PTR_ERR(device);
-	device = NULL;
-	pr_err("Could not create device for minor %d, %s (err %d)\n",
-	       minor, name, -ret);
-	cdev_del(cdev);
-done:
-	*devp = device;
-	return ret;
-}
-
-void qib_cdev_cleanup(struct cdev *cdev, struct device **devp)
-{
-	struct device *device = *devp;
-
-	if (device) {
-		device_unregister(device);
-		*devp = NULL;
-
-		cdev_del(cdev);
-	}
-}
-
 static struct cdev wildcard_cdev;
 static struct device *wildcard_device;
-
-int __init qib_dev_init(void)
-{
-	int ret;
-
-	ret = alloc_chrdev_region(&qib_dev, 0, QIB_NMINORS, DRIVER_NAME);
-	if (ret < 0) {
-		pr_err("Could not allocate chrdev region (err %d)\n", -ret);
-		goto done;
-	}
-
-	qib_class = class_create(THIS_MODULE, "ipath");
-	if (IS_ERR(qib_class)) {
-		ret = PTR_ERR(qib_class);
-		pr_err("Could not create device class (err %d)\n", -ret);
-		unregister_chrdev_region(qib_dev, QIB_NMINORS);
-	}
-
-done:
-	return ret;
-}
-
-void qib_dev_cleanup(void)
-{
-	if (qib_class) {
-		class_destroy(qib_class);
-		qib_class = NULL;
-	}
-
-	unregister_chrdev_region(qib_dev, QIB_NMINORS);
-}
 
 static atomic_t user_count = ATOMIC_INIT(0);
 
 static void qib_user_remove(struct hfi_devdata *dd)
 {
 	if (atomic_dec_return(&user_count) == 0)
-		qib_cdev_cleanup(&wildcard_cdev, &wildcard_device);
+		hfi_cdev_cleanup(&wildcard_cdev, &wildcard_device);
 
-	qib_cdev_cleanup(&dd->user_cdev, &dd->user_device);
-	qib_cdev_cleanup(&dd->ui_cdev, &dd->ui_device);
+	hfi_cdev_cleanup(&dd->user_cdev, &dd->user_device);
+	hfi_cdev_cleanup(&dd->ui_cdev, &dd->ui_device);
 }
 
 static int qib_user_add(struct hfi_devdata *dd)
@@ -2336,21 +2259,21 @@ static int qib_user_add(struct hfi_devdata *dd)
 	int ret;
 
 	if (atomic_inc_return(&user_count) == 1) {
-		ret = qib_cdev_init(0, "ipath", &qib_file_ops,
+		ret = hfi_cdev_init(0, class_name(), &qib_file_ops,
 				    &wildcard_cdev, &wildcard_device);
 		if (ret)
 			goto done;
 	}
 
-	snprintf(name, sizeof(name), "ipath%d", dd->unit);
-	ret = qib_cdev_init(dd->unit + 1, name, &qib_file_ops,
+	snprintf(name, sizeof(name), "%s%d", class_name(), dd->unit);
+	ret = hfi_cdev_init(dd->unit + 1, name, &qib_file_ops,
 			    &dd->user_cdev, &dd->user_device);
 	if (ret)
 		goto done;
 
 	if (create_ui) {
 		snprintf(name, sizeof(name), "hfi%d_ui", dd->unit);
-		ret = qib_cdev_init(dd->unit + UI_OFFSET, name, &ui_file_ops,
+		ret = hfi_cdev_init(dd->unit + UI_OFFSET, name, &ui_file_ops,
 				    &dd->ui_cdev, &dd->ui_device);
 		if (ret)
 			goto done;

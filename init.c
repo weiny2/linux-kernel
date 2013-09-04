@@ -41,6 +41,7 @@
 #include <linux/printk.h>
 
 #include "hfi.h"
+#include "hfi_device.h"
 #include "common.h"
 #include "mad.h"
 
@@ -1027,7 +1028,7 @@ static int __init qlogic_ib_init(void)
 {
 	int ret;
 
-	ret = qib_dev_init();
+	ret = dev_init();
 	if (ret)
 		goto bail;
 
@@ -1058,7 +1059,7 @@ bail_unit:
 	idr_destroy(&qib_unit_table);
 	destroy_workqueue(qib_cq_wq);
 bail_dev:
-	qib_dev_cleanup();
+	dev_cleanup();
 bail:
 	return ret;
 }
@@ -1086,7 +1087,7 @@ static void __exit qlogic_ib_cleanup(void)
 	kfree(qib_cpulist);
 
 	idr_destroy(&qib_unit_table);
-	qib_dev_cleanup();
+	dev_cleanup();
 }
 
 module_exit(qlogic_ib_cleanup);
