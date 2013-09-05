@@ -3203,6 +3203,7 @@ static void ib_mad_init_device(struct ib_device *device)
 {
 	int start, end, i;
 
+#warning "FIXME for upstream: allow STL transport here as well"
 	if (rdma_node_get_transport(device->node_type) != RDMA_TRANSPORT_IB)
 		return;
 
