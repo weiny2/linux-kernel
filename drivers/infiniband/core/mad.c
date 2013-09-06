@@ -740,14 +740,14 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 		     stl_smi_handle_dr_smp_send(stl_smp, device->node_type,
 						port_num) == IB_SMI_DISCARD) {
 			ret = -EINVAL;
-			printk(KERN_ERR PFX "Invalid directed route\n");
+			printk(KERN_ERR PFX "STL Invalid directed route\n");
 			goto out;
 		}
 		stl_drslid = be32_to_cpu(stl_smp->route.dr.dr_slid);
 		if (stl_drslid != STL_LID_PERMISSIVE &&
 		    stl_drslid & 0xffff0000) {
 			ret = -EINVAL;
-			printk(KERN_ERR PFX "Invalid dr_slid 0x%x\n",
+			printk(KERN_ERR PFX "STL Invalid dr_slid 0x%x\n",
 			       stl_drslid);
 			goto out;
 		}
