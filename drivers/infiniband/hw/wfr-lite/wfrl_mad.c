@@ -87,6 +87,15 @@ struct stl_vlarb_data
 	__be32 preemption_matrix[STL_MAX_VLS];
 };
 
+/* simulate link init data exchange */
+#define IB_SMP_ATTR_WFR_LITE_LINK_INIT		cpu_to_be16(0xFFFF)
+struct wfr_lite_link_init_data
+{
+	__be64 sender_guid;
+	u8 sender_port_mode;
+};
+static int reply(struct ib_smp *smp); /* fwd declare */
+
 static struct {
 	struct stl_port_info port_info;
 	u16 pkeys[STL_NUM_PKEYS];
@@ -235,6 +244,92 @@ EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
 u16 wfrl_get_num_sim_pkey_blocks(void)
 {
 	return min_t(u16, wfr_sim_pkey_tbl_block_size, MAX_SIM_STL_PKEY_BLOCKS);
+}
+
+
+static int subn_set_wfr_lite_link_init(struct ib_smp *smp, struct ib_device *ibdev,
+			   u8 port)
+{
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct wfr_lite_link_init_data *init_data =
+					(struct wfr_lite_link_init_data *)smp->data;
+
+	printk(KERN_WARNING PFX "STL link_init Recv'ed: remote guid 0x%llx; mode 0x%02x\n",
+		be64_to_cpu(init_data->sender_guid),
+		init_data->sender_port_mode);
+
+	virtual_stl[port-1].port_info.neigh_node_guid = init_data->sender_guid;
+	virtual_stl[port-1].port_info.port_neigh_mode = init_data->sender_port_mode;
+
+	init_data->sender_guid = dd->pport->guid; /* Use first-port GUID as node */
+	init_data->sender_port_mode = 0x08; /* Mgmt allowed, FW auth, NodeType WFR */
+
+	return reply(smp);
+}
+static void wfr_send_link_init(struct ib_device *ibdev, u8 port)
+{
+	struct ib_mad_send_buf *send_buf;
+	struct ib_mad_agent *agent;
+	struct ib_smp *smp;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct wfr_lite_link_init_data *init_data;
+	struct ib_ah *ah;
+	unsigned long flags;
+
+	agent = ibp->send_agent;
+	if (!agent)
+		return;
+
+	/* o14-3.2.1 */
+	if (!(ppd_from_ibp(ibp)->lflags & QIBL_LINKACTIVE))
+		return;
+
+	spin_lock_irqsave(&ibp->lock, flags);
+	if (!ibp->dr_ah) {
+		ibp->dr_ah = qib_create_qp0_ah(ibp, IB_LID_PERMISSIVE);
+		if (IS_ERR(ibp->dr_ah)) {
+			ibp->dr_ah = NULL;
+			return;
+		}
+	}
+	ah = ibp->dr_ah;
+	spin_unlock_irqrestore(&ibp->lock, flags);
+
+	send_buf = ib_create_send_mad(agent, 0, 0, 0, IB_MGMT_MAD_HDR,
+				      IB_MGMT_MAD_DATA, GFP_ATOMIC);
+	if (IS_ERR(send_buf))
+		return;
+
+	send_buf->ah = ah;
+
+	smp = send_buf->mad;
+	smp->base_version = IB_MGMT_BASE_VERSION;
+	smp->mgmt_class = IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE;
+	smp->class_version = 1;
+	smp->method = IB_MGMT_METHOD_SET;
+	smp->hop_ptr = 0;
+	smp->hop_cnt = 1;
+	ibp->tid++;
+	smp->tid = cpu_to_be64(ibp->tid);
+	smp->attr_id = IB_SMP_ATTR_WFR_LITE_LINK_INIT;
+	smp->attr_mod = 0;
+	smp->mkey = 0;
+	smp->dr_slid = IB_LID_PERMISSIVE;
+	smp->dr_dlid = IB_LID_PERMISSIVE;
+	smp->initial_path[0] = 0;
+	smp->initial_path[1] = port;
+
+	init_data = (struct wfr_lite_link_init_data *)smp->data;
+	init_data->sender_guid = dd->pport->guid; /* Use first-port GUID as node */
+	init_data->sender_port_mode = 0x08; /* Mgmt allowed, FW auth, NodeType WFR */
+
+	printk(KERN_WARNING PFX "STL link_init send: local guid 0x%llx; mode 0x%02x\n",
+		be64_to_cpu(init_data->sender_guid),
+		init_data->sender_port_mode);
+
+	if (ib_post_send_mad(send_buf, NULL))
+		ib_free_send_mad(send_buf);
 }
 
 /**
@@ -908,7 +1003,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* HCAs ignore VLStallCount and HOQLife */
 	//pi->xmit_q[x] = 0;
 
-	pi->neigh_node_guid = cpu_to_be64(0);
+	//pi->neigh_node_guid = cpu_to_be64(0);
 
 	/* FIXME supported, enabled, active all == STL */
 	pi->port_link_mode  = STL_PORT_LINK_MODE_STL << 10;
@@ -3074,6 +3169,8 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 			/* FALL through */
 		case IB_SMP_ATTR_PORT_INFO:
 			ret = subn_set_portinfo(smp, ibdev, port);
+			if (ret & IB_MAD_RESULT_SUCCESS)
+				wfr_send_link_init(ibdev, port);
 			goto bail;
 		case IB_SMP_ATTR_PKEY_TABLE:
 			ret = subn_set_pkeytable(smp, ibdev, port);
@@ -3094,6 +3191,9 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 				ret = IB_MAD_RESULT_SUCCESS;
 				goto bail;
 			}
+		case IB_SMP_ATTR_WFR_LITE_LINK_INIT:
+			ret = subn_set_wfr_lite_link_init(smp, ibdev, port);
+			goto bail;
 			/* FALLTHROUGH */
 		default:
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
@@ -3906,6 +4006,10 @@ void qib_free_agents(struct qib_ibdev *dev)
 		if (ibp->sm_ah) {
 			ib_destroy_ah(&ibp->sm_ah->ibah);
 			ibp->sm_ah = NULL;
+		}
+		if (ibp->dr_ah) {
+			ib_destroy_ah(ibp->dr_ah);
+			ibp->dr_ah = NULL;
 		}
 		if (dd->pport[p].cong_stats.timer.data)
 			del_timer_sync(&dd->pport[p].cong_stats.timer);

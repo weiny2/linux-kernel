@@ -664,6 +664,7 @@ struct qib_ibport {
 	struct ib_mad_agent *send_agent;	/* agent for SMI (traps) */
 	struct qib_ah *sm_ah;
 	struct qib_ah *smi_ah;
+	struct ib_ah *dr_ah;
 	struct rb_root mcast_tree;
 	spinlock_t lock;		/* protect changes in this struct */
 
