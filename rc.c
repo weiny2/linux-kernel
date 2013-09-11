@@ -647,18 +647,17 @@ unlock:
  */
 void qib_send_rc_ack(struct qib_qp *qp)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 pbc;
 	u16 lrh0;
 	u32 bth0;
 	u32 hwords;
-	u32 pbufn;
-	u32 __iomem *piobuf;
+	u32 plen;
+	struct send_context *sc;
+	struct pio_buf *pbuf;
 	struct qib_ib_header hdr;
 	struct qib_other_headers *ohdr;
-	u32 control;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
@@ -708,29 +707,25 @@ void qib_send_rc_ack(struct qib_qp *qp)
 	if (!(ppd->lflags & QIBL_LINKACTIVE))
 		goto done;
 
-	control = dd->f_setpbc_control(ppd, hwords + SIZE_OF_CRC,
-				       qp->s_srate, lrh0 >> 12);
-	/* length is + 1 for the control dword */
-	pbc = ((u64) control << 32) | (hwords + 1);
+	sc = qp_to_send_context(qp);
+	// FIXME: "lhr0 >> 12" is a poor way to get the vl
+	plen = 2 /* PBC */ + hwords + SIZE_OF_CRC;
+	pbc = create_pbc(sc, plen, lrh0 >> 12, qp->s_srate, 0);
 
-	piobuf = dd->f_getsendbuf(ppd, pbc, &pbufn);
-	if (!piobuf) {
+	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
+	if (!pbuf) {
 		/*
-		 * We are out of PIO buffers at the moment.
-		 * Pass responsibility for sending the ACK to the
-		 * send tasklet so that when a PIO buffer becomes
-		 * available, the ACK is sent ahead of other outgoing
-		 * packets.
+		 * We have no room to send at the moment.  Pass
+		 * responsibility for sending the ACK to the send tasklet
+		 * so that when enough buffer space becomes available,
+		 * the ACK is sent ahead of other outgoing packets.
 		 */
 		spin_lock_irqsave(&qp->s_lock, flags);
 		goto queue_ack;
 	}
 
 	/* write the pbc and data */
-	pio_copy(piobuf, pbc, &hdr, hwords);
-
-	qib_flush_wc();
-	qib_sendbuf_done(dd, pbufn);
+	pio_copy(pbuf, pbc, &hdr, hwords);
 
 	ibp->n_unicast_xmit++;
 	goto done;

@@ -850,6 +850,8 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
 	int i;
 
+	if (!dd->rcd)
+		return;
 // FIXME: it looks like a -1 means "all contexts for this port"
 // Since we only have one port, we can safely do all.  However
 // this begs the question: Do we remove the notion of multiple
@@ -863,62 +865,681 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	}
 }
 
-static char *sendctrl_op_str(unsigned op, char *buf, int bufsize)
+/*
+ * Send Context functions
+ */
+
+/* global control of PIO send */
+void pio_send_control(struct hfi_devdata *dd, int op)
 {
-	char *p = buf;
+	u64 reg;
 
-	if (op & QIB_SENDCTRL_DISARM) {
-		unsigned bn = op & 0xfff;
-		p += snprintf(p, bufsize - (p-buf), "DISARM %d,", bn);
-		op &= ~(QIB_SENDCTRL_DISARM | 0xfff);
+	reg = read_csr(dd, WFR_SEND_CTRL);
+	switch (op) {
+	case PSC_GLOBAL_ENABLE:
+		reg |= WFR_SEND_CTRL_SEND_ENABLE_SMASK;
+		break;
+	case PSC_GLOBAL_DISABLE:
+		reg &= ~WFR_SEND_CTRL_SEND_ENABLE_SMASK;
+		break;
+	default:
+		qib_dev_err(dd, "%s: invalid control %d\n", __func__, op);
+		return;
 	}
-	if (op & QIB_SENDCTRL_AVAIL_DIS) {
-		p += snprintf(p, bufsize - (p-buf), "AVAIL_DIS,");
-		op &= ~QIB_SENDCTRL_AVAIL_DIS;
-	}
-	if (op & QIB_SENDCTRL_AVAIL_ENB) {
-		p += snprintf(p, bufsize - (p-buf), "AVAIL_ENB,");
-		op &= ~QIB_SENDCTRL_AVAIL_ENB;
-	}
-	if (op & QIB_SENDCTRL_AVAIL_BLIP) {
-		p += snprintf(p, bufsize - (p-buf), "AVAIL_BLIP,");
-		op &= ~QIB_SENDCTRL_AVAIL_BLIP;
-	}
-	if (op & QIB_SENDCTRL_SEND_DIS) {
-		p += snprintf(p, bufsize - (p-buf), "SEND_DIS,");
-		op &= ~QIB_SENDCTRL_SEND_DIS;
-	}
-	if (op & QIB_SENDCTRL_SEND_ENB) {
-		p += snprintf(p, bufsize - (p-buf), "SEND_ENB,");
-		op &= ~QIB_SENDCTRL_SEND_ENB;
-	}
-	if (op & QIB_SENDCTRL_FLUSH) {
-		p += snprintf(p, bufsize - (p-buf), "FLUSH,");
-		op &= ~QIB_SENDCTRL_FLUSH;
-	}
-	if (op & QIB_SENDCTRL_CLEAR) {
-		p += snprintf(p, bufsize - (p-buf), "CLEAR,");
-		op &= ~QIB_SENDCTRL_CLEAR;
-	}
-	if (op & QIB_SENDCTRL_DISARM_ALL) {
-		p += snprintf(p, bufsize - (p-buf), "DISARM_ALL,");
-		op &= ~QIB_SENDCTRL_DISARM_ALL;
-	}
-	/* any bits left? */
-	if (op) {
-		p += snprintf(p, bufsize - (p-buf), "0x%x,", op);
-	}
-
-	return buf;
+	write_csr(dd, WFR_SEND_CTRL, reg);
 }
 
-static void sendctrl(struct qib_pportdata *ppd, u32 op)
+/* number of send context memory pools */
+#define NUM_SC_POOLS 2
+
+/* Send Context Size (SCS) wildcards */
+#define SCS_POOL_0 -1
+#define SCS_POOL_1 -2
+/* Send Context Count (SCC) wildcards */
+#define SCC_PER_NUMA -1
+#define SCC_PER_CPU  -2
+
+
+/* default send context sizes */
+static struct sc_config_sizes sc_config_sizes[SC_MAX] = {
+	[SC_KERNEL] = { .size  = SCS_POOL_0,	/* even divide, pool 0 */
+			.count = SCC_PER_NUMA },/* one per NUMA */
+	/* TODO: decide on size and counts */
+	[SC_ACK   ] = { .size  = 0,
+			.count = 0 },
+	[SC_USER  ] = { .size  = SCS_POOL_0,	/* even divide, pool 0 */
+			.count = SCC_PER_CPU },	/* one per CPU */
+
+};
+
+/* send context memory pool configuration */
+struct mem_pool_config {
+	int hectopercent;
+	int absolute_blocks;
+};
+
+/* default memory pool configuration: 100% in pool 0 */
+static struct mem_pool_config sc_mem_pool_config[NUM_SC_POOLS] = {
+	/* hecto%, abs blocks */
+	{  10000,     -1 },		/* pool 0 */
+	{      0,     -1 },		/* pool 1 */
+};
+
+/* memory pool information, used when calculating final sizes */
+struct mem_pool_info {
+	int hectopercent;	/* 100x 100% of memory to use, -1 if blocks
+				   already set */
+	int count;		/* count of contexts in the pool */
+	int blocks;		/* block size of the pool */
+	int size;		/* context size, in blocks */
+};
+
+/*
+ * Convert a pool wildcard to a valid pool index.  The wildcards
+ * start at -1 and increase negatively.  Map them as:
+ *	-1 => 0
+ *	-2 => 1
+ *	etc.
+ *
+ * Return -1 on non-wildcard input, otherwise convert to a pool number.
+ */
+static int wildcard_to_pool(int wc)
 {
-	char buf[128];
+	if (wc >= 0)
+		return -1;	/* non-wildcard */
+	return -wc - 1;
+}
+
+static const char *sc_type_names[SC_MAX] = {
+	"kernel",
+	"ack",
+	"user"
+};
+
+static const char *sc_type_name(int index)
+{
+	if (index < 0 || index >= SC_MAX)
+		return "unknown";
+	return sc_type_names[index];
+}
+
+/*
+ * Read the send context memory pool configuration and send context
+ * size configuration.  Replace any wildcards and come up with final
+ * counts and sizes for the send context types.
+ *
+ * TODO: this needs to be much more sophisticated for group allocations.
+ */
+static int init_sc_pools_and_sizes(struct hfi_devdata *dd)
+{
+	struct mem_pool_info mem_pool_info[NUM_SC_POOLS] = { { 0 } };
+	int total_blocks = dd->chip_pio_mem_size;
+	int total_contexts = 0;
+	int fixed_blocks;
+	int pool_blocks;
+	int used_blocks;
+	int hp_total;		/* hectopercent total */
+	int ab_total;		/* absolute block total */
+	int extra;
+	int i;
+
+	/*
+	 * Step 0:
+	 *	- copy the hectopercents/absolute sizes from the pool config
+	 *	- sanity check these values
+	 *	- add up hectopercents, then later check for full value
+	 *	- add up absolute blocks, then later check for overcommit
+	 */
+	hp_total = 0;
+	ab_total = 0;
+	for (i = 0; i < NUM_SC_POOLS; i++) {
+		int hp = sc_mem_pool_config[i].hectopercent;
+		int ab = sc_mem_pool_config[i].absolute_blocks;
+
+		/*
+		 * A negative value is "unused" or "invalid".  Both *can*
+		 * be valid, but hectopercent wins, so check that first
+		 */
+		if (hp >= 0) {			/* hectopercent valid */
+			hp_total += hp;
+		} else if (ab >= 0) {		/* absolute blocks valid */
+			ab_total += ab;
+		} else {			/* neither valid */
+			qib_dev_err(dd, "Send context memory pool %d: both the block count and hectopercent are invalid\n", i);
+			return -EINVAL;
+		}
+
+		mem_pool_info[i].hectopercent = hp;
+		mem_pool_info[i].blocks = ab;
+	}
+
+	/* if any percentages are present, they must add up to 100% x 100 */
+	if (hp_total != 0 && hp_total != 10000) {
+		qib_dev_err(dd, "Send context memory pool hectopercent is %d, expecting 10000\n", hp_total);
+		return -EINVAL;
+	}
+
+	/* the absolute pool total cannot be more than the mem total */
+	if (ab_total > total_blocks) {
+		qib_dev_err(dd, "Send context memory pool absolute block count %d is larger than the memory size %d\n", ab_total, total_blocks);
+		return -EINVAL;
+	}
+
+	/*
+	 * Step 2:
+	 *	- copy from the context size config
+	 *	- replace context type wildcard counts with real values
+	 *	- add up non-memory pool block sizes
+	 *	- add up memory pool user counts
+	 */
+	fixed_blocks = 0;
+	for (i = 0; i < SC_MAX; i++) {
+		int count = sc_config_sizes[i].count;
+		int size = sc_config_sizes[i].size;
+		int pool;
+
+		/*
+		 * Sanity check count: Either a positive value or
+		 * one of the expected wildcards is valid.  The positive
+		 * value is checked later when we compare against total
+		 * memory available.
+		 */
+		if (count == SCC_PER_NUMA) {
+			count = num_online_nodes();
+		} else if (count == SCC_PER_CPU) {
+			count = num_online_cpus();
+		} else if (count < 0) {
+			qib_dev_err(dd, "%s send context invalid count wildcard %d\n", sc_type_name(i), count);
+			return -EINVAL;
+		}
+		total_contexts += count;
+
+		/*
+		 * Sanity check pool: The conversion will return a pool
+		 * number or -1 if a fixed (non-negative) value.  The fixed
+		 * value is is checked later when we compare against
+		 * total memory available.
+		 */
+		pool = wildcard_to_pool(size);
+		if (pool == -1) {			/* non-wildcard */
+			fixed_blocks += size * count;
+		} else if (pool < NUM_SC_POOLS) {	/* valid wildcard */
+			mem_pool_info[pool].count += count;
+		} else {				/* invalid wildcard */
+			qib_dev_err(dd, "%s send context invalid pool wildcard %d\n", sc_type_name(i), size);
+			return -EINVAL;
+		}
+
+		dd->sc_sizes[i].count = count;
+		dd->sc_sizes[i].size = size;
+	}
+	if (fixed_blocks > total_blocks) {
+		qib_dev_err(dd, "Send context fixed block count, %u, larger than total block count %u\n", fixed_blocks, total_blocks);
+		return -EINVAL;
+	}
+
+	/* step 3: calculate the blocks in the pools, and pool context sizes */
+	pool_blocks = total_blocks - fixed_blocks;
+	if (ab_total > pool_blocks) {
+		qib_dev_err(dd, "Send context fixed pool sizes, %u, larger than pool block count %u\n", ab_total, pool_blocks);
+		return -EINVAL;
+	}
+	/* subtract off the fixed pool blocks */
+	pool_blocks -= ab_total;
+
+	for (i = 0; i < NUM_SC_POOLS; i++) {
+		struct mem_pool_info *pi = &mem_pool_info[i];
+
+		/* % beats absolute blocks */
+		if (pi->hectopercent >= 0)
+			pi->blocks = (pool_blocks * pi->hectopercent) / 10000;
+
+		if (pi->blocks == 0 && pi->count != 0) {
+			qib_dev_err(dd, "Send context memory pool %d has %u contexts, but no blocks\n", i, pi->count);
+			return -EINVAL;
+		}
+		if (pi->count == 0) {
+			/* warn about wasted blocks */
+			if (pi->blocks != 0)
+				qib_dev_err(dd, "Send context memory pool %d has %u blocks, but zero contexts\n", i, pi->blocks);
+			pi->size = 0;
+		} else {
+			pi->size = pi->blocks / pi->count;
+		}
+	}
+
+	/* step 4: fill in the context type sizes from the pool sizes */
+	used_blocks = 0;
+	for (i = 0; i < SC_MAX; i++) {
+		if (dd->sc_sizes[i].size < 0) {
+			int pool = wildcard_to_pool(dd->sc_sizes[i].size);
+			dd->sc_sizes[i].size = mem_pool_info[pool].size;
+		}
+		/* make sure we are not larger than what is allowed by the HW */
+#define WFR_PIO_MAX_BLOCKS 1024
+		if (dd->sc_sizes[i].size > WFR_PIO_MAX_BLOCKS)
+			dd->sc_sizes[i].size = WFR_PIO_MAX_BLOCKS;
+
+		/* calculate our total usage */
+		used_blocks += dd->sc_sizes[i].size * dd->sc_sizes[i].count;
+	}
+	extra = total_blocks - used_blocks;
+	if (extra != 0)
+		dd_dev_info(dd, "unused send context blocks: %d\n", extra);
+
+	return total_contexts;
+}
+
+int init_send_contexts(struct hfi_devdata *dd)
+{
+	u64 reg;
+	u16 base;
+	int ret, i, j, context;
+
+	/* TODO: move elsewhere? E.g. up a level? */
+	ret = init_credit_return(dd);
+	if (ret)
+		return ret;
+
+	dd->send_contexts = kzalloc(sizeof(struct send_context_info) * dd->num_send_contexts, GFP_KERNEL);
+	if (!dd->send_contexts) {
+		qib_dev_err(dd, "Unable to allocate send context array\n");
+		return -ENOMEM;
+	}
+
+	/*
+	 * For now, all are group 0, so ordering and grouping does not
+	 * matter - just allocate them one after another.  If we start
+	 * to use grouping, we will want to be more sophisticated.
+	 * E.g. If there are extra HW contexts, arrange them in per-NUMA
+	 * groups, perhaps per type.
+	 */
+	context = 0;
+	base = 0;
+	for (i = 0; i < SC_MAX; i++) {
+		struct sc_config_sizes *scs = &dd->sc_sizes[i];
+		for (j = 0; j < scs->count; j++) {
+			struct send_context_info *sci =
+						&dd->send_contexts[context];
+			sci->type = i;
+			sci->base = base;
+			sci->credits = scs->size;
+
+			reg = ((sci->credits & WFR_SEND_CTXT_CTRL_CTXT_DEPTH_MASK) << WFR_SEND_CTXT_CTRL_CTXT_DEPTH_SHIFT)
+				| ((sci->base & WFR_SEND_CTXT_CTRL_CTXT_BASE_MASK) << WFR_SEND_CTXT_CTRL_CTXT_BASE_SHIFT);
+			write_kctxt_csr(dd, context, WFR_SEND_CTXT_CTRL, reg);
+
+
+			context++;
+			base += scs->size;
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Use compare and exchange to locklessly allocate an release HW
+ * context entries.
+ */
+#define reserve_hw_context(ap) (cmpxchg(ap, 0, 1) == 0)
+#define release_hw_context(ap) (cmpxchg(ap, 1, 0) == 1)
+
+/* allocate a hardware context of the given type */
+int sc_hw_alloc(struct hfi_devdata *dd, int type, u32 *contextp)
+{
+	struct send_context_info *sci;
+	u32 context;
+
+	for (context = 0, sci = &dd->send_contexts[0];
+			context < dd->num_send_contexts; context++, sci++) {
+		if (sci->type == type && reserve_hw_context(&sci->allocated)) {
+			/* allocated */
+			*contextp = context;
+			return 0; /* success */
+		}
+	}
+
+	return -ENOSPC;
+}
+
+/* free the given hardware context */
+void sc_hw_free(struct hfi_devdata *dd, u32 context)
+{
+	struct send_context_info *sci = &dd->send_contexts[context];
+
+	if (release_hw_context(&sci->allocated))
+		return;	/* success */
+
+	qib_dev_err(dd, "%s: context %u not allocated?\n", __func__, context);
+}
+
+/* return the base context of a context in a group */
+static inline u32 group_context(u32 context, u32 group)
+{
+	return (context >> group) << group;
+}
+
+/* return the size of a group */
+static inline u32 group_size(u32 group)
+{
+	return 1 << group;
+}
+
+/* obtain the credit return addresses, kernel virtual and physical */
+static void cr_group_addresses(struct hfi_devdata *dd, int numa, u32 context,
+			u32 group, volatile __le64 **va, unsigned long *pa)
+{
+	u32 gc = group_context(context, group);
+
+	*va = &dd->cr_base[numa].va[gc].cr[context & 0x7];
+	*pa = (unsigned long)&((struct credit_return *)dd->cr_base[numa].pa)[gc].cr[context & 0x7];
+}
+
+/*
+ * Allocate a per-NUMA send context structure of the given type along
+ * with a HW context.
+ */
+struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
+{
+	struct send_context_info *sci;
+	struct send_context *sc;
+	unsigned long pa;
+	u64 reg;
+	u32 context;
+	int ret;
+
+	sc = kzalloc(sizeof(struct send_context), GFP_KERNEL);
+	if (!sc)
+		return NULL;
+
+	ret = sc_hw_alloc(dd, type, &context);
+	if (ret)
+		goto no_context;
+
+	sci = &dd->send_contexts[context];
+
+	sc->dd = dd;
+	spin_lock_init(&sc->alloc_lock);
+	spin_lock_init(&sc->release_lock);
+
+	/* TBD: group set-up.  Make it always 0 for now. */
+	sc->group = 0;
+
+	cr_group_addresses(dd, numa, context, sc->group, &sc->hw_free, &pa);
+	sc->context = context;
+	sc->credits = sci->credits;
+
+/* PIO Send Memory Address details */
+#define WFR_PIO_ADDR_CONTEXT_MASK 0xfful
+#define WFR_PIO_ADDR_CONTEXT_SHIFT 16
+	sc->base_addr = dd->piobase + ((context & WFR_PIO_ADDR_CONTEXT_MASK)
+					<< WFR_PIO_ADDR_CONTEXT_SHIFT);
+
+	if (type != SC_USER) {
+		/*
+		 * User contexts do not get a shadow ring.  All is
+		 * handled in user space.  Size the shadow ring 1
+		 * larger so head == tail can mean empty.
+		 */
+		sc->sr_size = sci->credits + 1;
+		sc->sr = kzalloc(sizeof(union pio_shadow_ring) * sc->sr_size,
+				GFP_KERNEL);
+		if (!sc->sr)
+			goto no_shadow;
+	}
+
+	/* set up credit return */
+	reg = pa & WFR_SEND_CTXT_CREDIT_RETURN_ADDR_ADDRESS_SMASK;
+	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, reg);
+
+	return sc;
+
+no_shadow:
+	sc_hw_free(dd, context);
+no_context:
+	kfree(sc);
+	return NULL;
+}
+
+/* free a per-NUMA send context structure */
+void sc_free(struct send_context *sc)
+{
+	struct hfi_devdata *dd;
+	u32 context;
+
+	if (!sc)
+		return;
+
+	dd = sc->dd;
+	context = sc->context;
+	sc_disable(sc);	/* make sure the HW is disabled */
+	dd->send_contexts[context].sc = NULL;
+	sc_hw_free(dd, context);
+
+	kfree(sc->sr);
+	kfree(sc);
+}
+
+/* disable the context */
+void sc_disable(struct send_context *sc)
+{
+	u64 reg;
+
+	if (!sc)
+		return;
+
+	reg = read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL);
+	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK)) {
+		reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+	}
+}
+
+/* enable the context */
+void sc_enable(struct send_context *sc)
+{
+	u64 reg;
+
+	if (!sc)
+		return;
+
+	reg = read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL);
+	/* IMPORTANT: only clear free and fill if transitioning 0 -> 1 */
+	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK) == 0) {
+		// FIXME: obtain the locks?
+		// FIXME: need a flag that indicates enabled so the
+		// 		allocator and releaser will not run?
+		*sc->hw_free = 0;
+		sc->free = 0;
+		sc->alloc_free = 0;
+		sc->fill = 0;
+		sc->sr_head = 0;
+		sc->sr_tail = 0;
+		reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+	}
+}
+
+/* force a credit return on the context */
+void sc_return_credits(struct send_context *sc)
+{
+	if (!sc)
+		return;
+
+	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE,
+		WFR_SEND_CTXT_CREDIT_FORCE_FORCE_RETURN_SMASK);
+}
+
+/* allow all in-flight packets to drain on the context */
+void sc_flush(struct send_context *sc)
+{
+	if (!sc)
+		return;
 
 	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: op [%s] - not implemented\n",
-			__func__, sendctrl_op_str(op, buf, sizeof(buf)));
+		dd_dev_info(sc->dd, "%s: context %d - not implemented\n",
+			__func__, sc->context);
+}
+
+/* drop all packets on the context, no waiting until they are sent */
+void sc_drop(struct send_context *sc)
+{
+	if (!sc)
+		return;
+
+	if (print_unimplemented)
+		dd_dev_info(sc->dd, "%s: context %d - not implemented\n",
+			__func__, sc->context);
+}
+
+#define BLOCK_DWORDS (WFR_PIO_BLOCK_SIZE/sizeof(u32))
+//FIXME: there is a kernel #define that does this, DIV something?
+#define dwords_to_blocks(x) (((x) + (BLOCK_DWORDS-1))/BLOCK_DWORDS)
+
+/*
+ * The send context buffer "allocator".
+ *
+ * @sc: the PIO send context we are allocating from
+ * @len: length of whole packet - including PBC - in dwords
+ * @cb: optional callback to call when the buffer is finished sending
+ * @arg: argument for cb
+ *
+ * Return a pointer to a PIO buffer  if successful, NULL if not enough room.
+ */
+struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
+				pio_release_cb cb, void *arg)
+{
+	struct pio_buf *pbuf;
+	unsigned long flags;
+	unsigned long avail;
+	unsigned long blocks = dwords_to_blocks(dw_len);
+	unsigned long start_fill;
+	int trycount = 0;
+	u32 head, next;
+
+retry:
+	spin_lock_irqsave(&sc->alloc_lock, flags);
+
+	avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
+	if (blocks > avail) {
+		/* not enough room */
+		if (unlikely(trycount))	/* already tried to get more room */
+			return NULL;
+		/* copy from receiver cache line and recalculate */
+		sc->alloc_free = sc->free;
+		avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
+		if (blocks > avail) {
+			/* still no room, actively update */
+			spin_unlock_irqrestore(&sc->alloc_lock, flags);
+			sc_release_update(sc);
+			sc->alloc_free = sc->free;
+			trycount++;
+			spin_lock_irqsave(&sc->alloc_lock, flags);
+			goto retry;
+		}
+	}
+
+	/* there is enough room */
+
+	/* read this volatile once */
+	head = sc->sr_head;
+
+	/* "allocate" the buffer */
+	start_fill = sc->fill;
+	sc->fill += blocks;
+
+	/*
+	 * Fill the parts that the releaser looks at before moving the head.
+	 * The only necessary piece is the sent_at field.  The credits
+	 * we have just allocated cannot have been returned yet, so the
+	 * cb and arg will not be looked at for a "while".  Put them
+	 * on this side of the memory barrier anyway.
+	 */
+//FIXME: I have gotten myself confused again.  Why do I need the mb?
+// If this is a cache coherent system these writes should be visible
+// once I write them. The only issue is to prevent the compiler from
+// moving the writes later than the head update.
+	pbuf = &sc->sr[head].pbuf;
+	pbuf->sent_at = sc->fill;
+	pbuf->cb = cb;
+	pbuf->arg = arg;
+	/* make sure this is in memory before updating the head */
+	//FIXME: is this the right barrier call?
+	mb();
+
+	/* calculate next head index, do not store */
+	next = sc->sr_head + 1;
+	if (next >= sc->sr_size)
+		next = 0;
+	/* update the head - must be last! - the releaser can look at fields
+	   in pbuf once we move the head */
+	sc->sr_head = next;
+	spin_unlock_irqrestore(&sc->alloc_lock, flags);
+
+	/* finish filling in the buffer outside the lock */
+	pbuf->start = sc->base_addr + ((start_fill % sc->credits)
+							* WFR_PIO_BLOCK_SIZE);
+	pbuf->size = sc->credits * WFR_PIO_BLOCK_SIZE;
+	pbuf->end = sc->base_addr + pbuf->size;
+	pbuf->block_count = blocks;
+	pbuf->qw_written = 0;
+	pbuf->carry_valid = 0;
+	pbuf->carry = 0;
+
+	return pbuf;
+}
+
+/* use the jiffies compare to get the wrap right */
+#define sent_before(a, b) time_before(a, b)	/* a < b */
+
+/*
+ * The send context buffer "releaser".
+ */
+void sc_release_update(struct send_context *sc)
+{
+	struct pio_buf *pbuf;
+	u32 head, tail;
+
+	if (!sc)
+		return;
+
+	head = sc->sr_head;	/* snapshot the head */
+	tail = sc->sr_tail;
+	while (head != tail) {
+		pbuf = &sc->sr[tail].pbuf;
+
+		if (sent_before(sc->free, pbuf->sent_at)) {
+			/* not sent yet */
+			break;
+		}
+		if (pbuf->cb)
+			(*pbuf->cb)(pbuf->arg);
+
+		tail++;
+		if (tail >= sc->sr_size)
+			tail = 0;
+	}
+	/* update tail, in case we moved it */
+	sc->sr_tail = tail;
+}
+
+/*
+ * Send context group releaser.  This is only to be called from
+ * the interrupt routine as we only receive one interrupt for the
+ * group.  Call release on all contexts in the group.
+ */
+void sc_group_release_update(struct send_context *sc)
+{
+	u32 gc, gc_end;
+
+	if (!sc)
+		return;
+
+	gc = group_context(sc->context, sc->group);
+	gc_end = gc + group_size(sc->group);
+	for (; gc < gc_end; gc++)
+		sc_release_update(sc->dd->send_contexts[gc].sc);
 }
 
 static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
@@ -1004,14 +1625,6 @@ static int late_initreg(struct hfi_devdata *dd)
 	return 0;
 }
 
-static u32 __iomem *getsendbuf(struct qib_pportdata *ppd, u64 pbc,
-					u32 *pbufnum)
-{
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-	return NULL;
-}
-
 static void set_cntr_sample(struct qib_pportdata *ppd, u32 intv,
 				     u32 start)
 {
@@ -1056,12 +1669,21 @@ static int sdma_busy(struct qib_pportdata *ppd)
 	return 0;
 }
 
-static u32 setpbc_control(struct qib_pportdata *ppd, u32 plen,
-				   u8 srate, u8 vl)
+u64 create_pbc(struct send_context *sc, u64 flags, u32 srate,
+							u32 vl, u32 dw_len)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-	return 0;
+	u64 pbc;
+	// FIXME: calculate rate
+	u32 rate = 0;
+
+	pbc = flags
+		| (vl & WFR_PBC_VL_MASK) << WFR_PBC_VL_SHIFT
+		| (rate & WFR_PBC_STATIC_RATE_CONTROL_COUNT_MASK)
+			<< WFR_PBC_STATIC_RATE_CONTROL_COUNT_SHIFT
+		| (dw_len & WFR_PBC_LENGTH_DWS_MASK)
+			<< WFR_PBC_LENGTH_DWS_SHIFT;
+
+	return pbc;
 }
 
 static void initvl15_bufs(struct hfi_devdata *dd)
@@ -1079,8 +1701,9 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u64 reg;
+	u32 context = rcd->ctxt;
 
-	dd_dev_info(rcd->dd, "%s: setting up context %d\n", __func__, rcd->ctxt);
+	dd_dev_info(rcd->dd, "%s: setting up context %d\n", __func__, context);
 	/*
 	 * Simple allocation: we have already pre-allocated the number
 	 * of entries per context in dd->rcv_entries.  Now, divide the
@@ -1090,17 +1713,10 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	 */
 	rcd->eager_count = dd->rcv_entries / 2;
 	rcd->expected_count = dd->rcv_entries / 2;
-	rcd->eager_base = (dd->rcv_entries * rcd->ctxt);
+	rcd->eager_base = (dd->rcv_entries * context);
 	rcd->expected_base = rcd->eager_base + rcd->eager_count;
 	BUG_ON(rcd->expected_base % 2 == 1);	/* must be even */
 
-#if 0
-	if (rcd->ctxt < rcd->dd->first_user_ctxt) {
-		/* a kernel context */
-	} else {
-		/* a user context */
-	}
-#endif
 	/*
 	 * These values are per-context:
 	 *	RcvHdrCnt
@@ -1111,13 +1727,13 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	 */
 	reg = (dd->rcvhdrcnt & WFR_RCV_HDR_CNT_CNT_MASK)
 		<< WFR_RCV_HDR_CNT_CNT_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_CNT, reg);
+	write_kctxt_csr(dd, context, WFR_RCV_HDR_CNT, reg);
 	reg = (dd->rcvhdrentsize & WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
 		<< WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_ENT_SIZE, reg);
+	write_kctxt_csr(dd, context, WFR_RCV_HDR_ENT_SIZE, reg);
 	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
 		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_SIZE, reg);
+	write_kctxt_csr(dd, context, WFR_RCV_HDR_SIZE, reg);
 }
 
 static void txchk_change(struct hfi_devdata *dd, u32 start,
@@ -1608,20 +2224,19 @@ static int intr_fallback(struct hfi_devdata *dd)
 /*
  * Set up context values in dd.  Sets:
  *
- *	chip_rcv_contexts - total number of contexts supported by the chip
  *	num_rcv_contexts - number of contexts being used
  *	n_krcv_queues - number of kernel contexts
  *	first_user_ctxt - first non-kernel context in array of contexts
+ *	freectxts  - nuber of free user contexts
+ *	num_send_contexts - number of PIO send contexts being used
  */
 static int set_up_context_variables(struct hfi_devdata *dd)
 {
 	int num_kernel_contexts;
 	int num_user_contexts;
 	int total_contexts;
-	u32 chip_rx_contexts;
+	int ret;
 	u32 per_context;
-
-	chip_rx_contexts = (u32)read_csr(dd, WFR_RCV_CONTEXTS);
 
 	/*
 	 * Kernel contexts: (to be fixed later):
@@ -1665,23 +2280,25 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 		total_contexts = num_kernel_contexts + num_user_contexts;
 	}
 
-	if (total_contexts > chip_rx_contexts) {
+	if (total_contexts > dd->chip_rcv_contexts) {
 		/* don't silently adjust, complain and fail */
 		qib_dev_err(dd,
 			"not enough physical contexts: want %d, have %d\n",
-			(int)total_contexts, (int)chip_rx_contexts);
+			(int)total_contexts, (int)dd->chip_rcv_contexts);
 		return -ENOSPC;
 	}
 
 	/* the first N are kernel contexts, the rest are user contexts */
-	dd->chip_rcv_contexts = chip_rx_contexts;
 	dd->num_rcv_contexts = total_contexts;
 	dd->n_krcv_queues = num_kernel_contexts;
 	dd->first_user_ctxt = num_kernel_contexts;
 	dd->freectxts = num_user_contexts;
 	dd_dev_info(dd,
-		"rcv: chip contexts %d, num contexts %d, kernel contexts %d\n",
-		(int)dd->chip_rcv_contexts, (int)dd->num_rcv_contexts, (int)dd->n_krcv_queues);
+		"rcv contexts: chip %d, used %d (kernel %d, user %d)\n",
+		(int)dd->chip_rcv_contexts,
+		(int)dd->num_rcv_contexts,
+		(int)dd->n_krcv_queues,
+		(int)dd->num_rcv_contexts - dd->n_krcv_queues);
 
 	/*
 	 * Simple recieve array allocation:  Evenly divide them
@@ -1702,7 +2319,23 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 	dd->rcv_entries = per_context;
 	dd_dev_info(dd, "rcv entries %u\n", dd->rcv_entries);
 
-	return 0;
+	/*
+	 * PIO send contexts
+	 */
+	ret = init_sc_pools_and_sizes(dd);
+	if (ret >= 0) {	/* success */
+		dd->num_send_contexts = ret;
+		dd_dev_info(dd, "send contexts: chip %d, used %d "
+			"(kernel %d, ack %d, user %d)\n",
+			dd->chip_send_contexts,
+			dd->num_send_contexts,
+			dd->sc_sizes[SC_KERNEL].count,
+			dd->sc_sizes[SC_ACK].count,
+			dd->sc_sizes[SC_USER].count);
+		ret = 0;	/* success */
+	}
+
+	return ret;
 }
 
 /*
@@ -1719,6 +2352,35 @@ static void init_partition_keys(struct hfi_devdata *dd)
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (1 * 8),  0);
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (2 * 8),  0);
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (3 * 8),  0);
+}
+
+/*
+ * Read chip sizes and then reset parts to sane, disabled,values.  We cannot
+ * depend on the chip just being reset - a driver may be loaded and
+ * unloaded many times.
+ *
+ * Sets:
+ * dd->chip_rcv_contexts  - number of receive contexts supported by the chip
+ * dd->chip_send_contexts - number PIO send contexts supported by the chip
+ * dd->chip_pio_mem_size  - size of PIO send memory, in blocks
+ * dd->chip_sdma_engines  - number of SDMA engines supported by the chip
+ */
+static void init_chip(struct hfi_devdata *dd)
+{
+	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
+	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
+	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
+	dd->chip_pio_mem_size = read_csr(dd, WFR_PIO_MEM_SIZE);
+
+	// FIXME:
+	// o make sure all rcv contexts are disabled
+	// o make sure all send contexts are disabled
+	// o make sure all of SDMA engines are disabled
+	// o make sure all interrupts are disabled
+	// o reset all interrupt mappings back to default
+	// o other...
+
+	init_partition_keys(dd);
 }
 
 /*
@@ -1774,7 +2436,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_free_irq          = stop_irq;
 	dd->f_get_base_info     = get_base_info;
 	dd->f_get_msgheader     = get_msgheader;
-	dd->f_getsendbuf        = getsendbuf;
 	dd->f_gpio_mod          = gpio_mod;
 	dd->f_hdrqempty         = hdrqempty;
 	dd->f_ib_updown         = ib_updown;
@@ -1782,7 +2443,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_initvl15_bufs     = initvl15_bufs;
 	dd->f_intr_fallback     = intr_fallback;
 	dd->f_late_initreg      = late_initreg;
-	dd->f_setpbc_control    = setpbc_control;
 	dd->f_portcntr          = portcntr;
 	dd->f_put_tid           = put_tid;
 	dd->f_quiet_serdes      = quiet_serdes;
@@ -1796,7 +2456,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_sdma_sendctrl     = sdma_sendctrl;
 	dd->f_sdma_set_desc_cnt = sdma_set_desc_cnt;
 	dd->f_sdma_update_tail  = sdma_update_tail;
-	dd->f_sendctrl          = sendctrl;
 	dd->f_set_armlaunch     = set_armlaunch;
 	dd->f_set_cntr_sample   = set_cntr_sample;
 	dd->f_iblink_state      = iblink_state;
@@ -1831,19 +2490,18 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		qib_dev_err(dd, "cannot read chip CSRs\n");
 		goto bail_free;
 	}
-
 	dd->majrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MAJOR_SHIFT)
 			& WFR_CCE_REVISION_CHIP_REV_MAJOR_MASK;
 	dd->minrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT)
 			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
 
-	/* read chip values */
-	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
+	/* obtain chip sizes, reset chip CSRs */
+	init_chip(dd);
+
+	/* sdma init */
 	dd->num_sdma = dd->chip_sdma_engines;
 	if (mod_num_sdma && mod_num_sdma < dd->chip_sdma_engines)
 		dd->num_sdma = mod_num_sdma;
-
-	init_partition_keys(dd);
 
 	/* FIXME: don't set NODMA_RTAIL until we know the sequence numbers
 	   are right */
@@ -1851,14 +2509,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	dd->palign = 0x1000;	// TODO: is there a WFR value for this?
 
-	/* FIXME: fill in with real values */
-	dd->piobufbase = 0;
-	dd->pio2k_bufbase = 0;
-	dd->piobcnt2k = 32;
-	dd->piobcnt4k = 32;
-	dd->piosize2k = 32;
-	dd->piosize2kmax_dwords = dd->piosize2k >> 2;
-	dd->piosize4k = 32;
 
 	/* TODO these are set by the chip and don't change */
 	/* per-context kernel/user CSRs */
@@ -1871,10 +2521,11 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
         mtu = ib_mtu_enum_to_int(qib_ibmtu);
         if (mtu == -1)
                 mtu = HFI_DEFAULT_MTU;
-	/* quietly adjust the size to a valid range */
-        dd->rcvegrbufsize = max(mtu,   4 * 1024); /* min size */
-        dd->rcvegrbufsize = min(mtu, 128 * 1024); /* max size */
+	/* quietly adjust the size to a valid range supported by the chip */
+	dd->rcvegrbufsize = max(mtu,		          4 * 1024);
+	dd->rcvegrbufsize = min(dd->rcvegrbufsize, (u32)128 * 1024);
 	dd->rcvegrbufsize &= ~(4096ul - 1);	  /* remove lower bits */
+	dd->rcvegrbufsize_shift = ilog2(dd->rcvegrbufsize);
 
 	/* TODO: real board name */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
@@ -1904,6 +2555,11 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->rhf_offset = dd->rcvhdrentsize - sizeof(u64) / sizeof(u32);
 
 	ret = set_up_context_variables(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* send contexts must be set up before receive contexts */
+	ret = init_send_contexts(dd);
 	if (ret)
 		goto bail_cleanup;
 

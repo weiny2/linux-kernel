@@ -175,11 +175,12 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	kinfo->spi_rcvhdr_tailaddr = (u64) rcd->rcvhdrqtailaddr_phys;
 	kinfo->spi_rhf_offset = dd->rhf_offset;
 	kinfo->spi_rcv_egrbufs = (u64) rcd->rcvegr_phys;
-	kinfo->spi_pioavailaddr = (u64) dd->pioavailregs_phys;
+	// TODO: need to fix the name of "pioavailaddr"
+	kinfo->spi_pioavailaddr = (u64) rcd->sc->free;
+	// FIXME: are we doing to have a user "status" area?  If so, then
+	// make statusp be its own page
 	/* setup per-unit (not port) status area for user programs */
-	kinfo->spi_status = (u64) kinfo->spi_pioavailaddr +
-		(char *) ppd->statusp -
-		(char *) dd->pioavailregs_dma;
+	kinfo->spi_status = 0;
 	kinfo->spi_uregbase = (u64) dd->uregbase + dd->ureg_align * rcd->ctxt;
 	if (!shared) {
 		kinfo->spi_piocnt = rcd->piocnt;
@@ -218,16 +219,18 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	 * work.  Can't use piobufbase directly, because it has
 	 * both 2K and 4K buffer base values.
 	 */
-	kinfo->spi_pioindex = (kinfo->spi_piobufbase - dd->pio2k_bufbase) /
-		dd->palign;
-	kinfo->spi_pioalign = dd->palign;
+	//FIXME: does this make sense for WFR?
+	kinfo->spi_pioindex = 0;
+	//FIXME: does this make sense for WFR?
+	kinfo->spi_pioalign = 0;
 	kinfo->spi_qpair = QIB_KD_QP;
 	/*
 	 * user mode PIO buffers are always 2KB, even when 4KB can
 	 * be received, and sent via the kernel; this is ibmaxlen
 	 * for 2K MTU.
 	 */
-	kinfo->spi_piosize = dd->piosize2k - 2 * sizeof(u32);
+	//FIXME: drop in the context max size?
+	kinfo->spi_piosize = 0;
 	kinfo->spi_mtu = ppd->ibmaxlen; /* maxlen, not ibmtu */
 	kinfo->spi_ctxt = rcd->ctxt;
 	kinfo->spi_subctxt = subctxt_fp(fp);
@@ -1037,11 +1040,11 @@ static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
 		ret = mmap_ureg(vma, dd, ureg);
 	else if (pgaddr == piobufs)
 		ret = mmap_piobufs(vma, dd, rcd, piobufs, piocnt);
-	else if (pgaddr == dd->pioavailregs_phys)
-		/* in-memory copy of pioavail registers */
+	else if (pgaddr == (u64)rcd->sc->free)
+		/* in-memory copy of the send context fill counter */
 		ret = qib_mmap_mem(vma, rcd, PAGE_SIZE,
-				   (void *) dd->pioavailregs_dma, 0,
-				   "pioavail registers");
+				   (void *)rcd->sc->free, 0,
+				   "send context fill counter");
 	else if (pgaddr == rcd->rcvegr_phys)
 		ret = mmap_rcvegrbufs(vma, rcd);
 	else if (pgaddr == (u64) rcd->rcvhdrq_phys)
@@ -1562,7 +1565,6 @@ static int qib_do_user_init(struct file *fp,
 	int ret;
 	struct qib_ctxtdata *rcd = ctxt_fp(fp);
 	struct hfi_devdata *dd;
-	unsigned uctxt;
 
 	/* Subctxts don't need to initialize anything since master did it. */
 	if (subctxt_fp(fp)) {
@@ -1573,50 +1575,16 @@ static int qib_do_user_init(struct file *fp,
 
 	dd = rcd->dd;
 
-	/* some ctxts may get extra buffers, calculate that here */
-	uctxt = rcd->ctxt - dd->first_user_ctxt;
-	if (uctxt < dd->ctxts_extrabuf) {
-		rcd->piocnt = dd->pbufsctxt + 1;
-		rcd->pio_base = rcd->piocnt * uctxt;
-	} else {
-		rcd->piocnt = dd->pbufsctxt;
-		rcd->pio_base = rcd->piocnt * uctxt +
-			dd->ctxts_extrabuf;
-	}
-
 	/*
-	 * All user buffers are 2KB buffers.  If we ever support
-	 * giving 4KB buffers to user processes, this will need some
-	 * work.  Can't use piobufbase directly, because it has
-	 * both 2K and 4K buffer base values.  So check and handle.
+	 * Allocate and enable a PIO send context.
 	 */
-	if ((rcd->pio_base + rcd->piocnt) > dd->piobcnt2k) {
-		if (rcd->pio_base >= dd->piobcnt2k) {
-			qib_dev_err(dd,
-				    "%u:ctxt%u: no 2KB buffers available\n",
-				    dd->unit, rcd->ctxt);
-			ret = -ENOBUFS;
-			goto bail;
-		}
-		rcd->piocnt = dd->piobcnt2k - rcd->pio_base;
-		qib_dev_err(dd, "Ctxt%u: would use 4KB bufs, using %u\n",
-			    rcd->ctxt, rcd->piocnt);
+	//FIXME: Add the numa the sc_alloc call
+	rcd->sc = sc_alloc(dd, SC_USER, 0 /*numa*/);
+	if (!rcd->sc) {
+		ret = -ENOMEM;
+		goto bail;
 	}
-
-	rcd->piobufs = dd->pio2k_bufbase + rcd->pio_base * dd->palign;
-	qib_chg_pioavailkernel(dd, rcd->pio_base, rcd->piocnt,
-			       TXCHK_CHG_TYPE_USER, rcd);
-	/*
-	 * try to ensure that processes start up with consistent avail update
-	 * for their own range, at least.   If system very quiet, it might
-	 * have the in-memory copy out of date at startup for this range of
-	 * buffers, when a context gets re-used.  Do after the chg_pioavail
-	 * and before the rest of setup, so it's "almost certain" the dma
-	 * will have occurred (can't 100% guarantee, but should be many
-	 * decimals of 9s, with this ordering), given how much else happens
-	 * after this.
-	 */
-	dd->f_sendctrl(dd->pport, QIB_SENDCTRL_AVAIL_BLIP);
+	sc_enable(rcd->sc);
 
 	/*
 	 * Now allocate the rcvhdr Q and eager TIDs; skip the TID
@@ -1661,8 +1629,7 @@ static int qib_do_user_init(struct file *fp,
 	return 0;
 
 bail_pio:
-	qib_chg_pioavailkernel(dd, rcd->pio_base, rcd->piocnt,
-			       TXCHK_CHG_TYPE_KERN, rcd);
+	sc_disable(rcd->sc);
 bail:
 	return ret;
 }
@@ -1768,9 +1735,8 @@ static int qib_close(struct inode *in, struct file *fp)
 
 		/* clean up the pkeys for this ctxt user */
 		qib_clean_part_key(rcd, dd);
-		qib_disarm_piobufs(dd, rcd->pio_base, rcd->piocnt);
-		qib_chg_pioavailkernel(dd, rcd->pio_base,
-				       rcd->piocnt, TXCHK_CHG_TYPE_KERN, NULL);
+		/* disable PIO */
+		sc_disable(rcd->sc);
 
 		dd->f_clear_tids(rcd);
 
@@ -1935,7 +1901,8 @@ static int qib_user_event_ack(struct qib_ctxtdata *rcd, int subctxt,
 		if (!test_bit(i, &events))
 			continue;
 		if (i == _QIB_EVENT_DISARM_BUFS_BIT) {
-			(void)qib_disarm_piobufs_ifneeded(rcd);
+			//FIXME: not needed
+			//(void)qib_disarm_piobufs_ifneeded(rcd);
 			ret = disarm_req_delay(rcd);
 		} else
 			clear_bit(i, &rcd->user_event_mask[subctxt]);
@@ -2099,12 +2066,14 @@ static ssize_t qib_write(struct file *fp, const char __user *data,
 		break;
 
 	case QIB_CMD_DISARM_BUFS:
-		(void)qib_disarm_piobufs_ifneeded(rcd);
+		//FIXME: not needed
+		//(void)qib_disarm_piobufs_ifneeded(rcd);
 		ret = disarm_req_delay(rcd);
 		break;
 
+	/* TODO: fix name? */
 	case QIB_CMD_PIOAVAILUPD:
-		qib_force_pio_avail_update(rcd->dd);
+		sc_return_credits(rcd->sc);
 		break;
 
 	case QIB_CMD_POLL_TYPE:

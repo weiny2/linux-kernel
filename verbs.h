@@ -197,7 +197,7 @@ struct qib_ib_header {
 } __attribute__ ((packed));
 
 struct qib_pio_header {
-	__le32 pbc[2];
+	__le64 pbc;
 	struct qib_ib_header hdr;
 } __attribute__ ((packed));
 

@@ -199,10 +199,6 @@ void qib_pcie_ddcleanup(struct hfi_devdata *dd)
 	iounmap(base);
 	if (dd->piobase)
 		iounmap(dd->piobase);
-	if (dd->userbase)
-		iounmap(dd->userbase);
-	if (dd->piovl15base)
-		iounmap(dd->piovl15base);
 
 	pci_disable_device(dd->pcidev);
 	pci_release_regions(dd->pcidev);

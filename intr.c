@@ -118,7 +118,8 @@ void qib_handle_e_ibstatuschanged(struct qib_pportdata *ppd, u64 ibcs)
 	if (lstate != IB_PORT_DOWN) {
 		/* lstate is INIT, ARMED, or ACTIVE */
 		if (lstate != IB_PORT_ACTIVE) {
-			*ppd->statusp &= ~QIB_STATUS_IB_READY;
+			if (ppd->statusp)
+				*ppd->statusp &= ~QIB_STATUS_IB_READY;
 			if (ppd->lflags & QIBL_LINKACTIVE)
 				ev = IB_EVENT_PORT_ERR;
 			spin_lock_irqsave(&ppd->lflags_lock, flags);
@@ -139,7 +140,8 @@ void qib_handle_e_ibstatuschanged(struct qib_pportdata *ppd, u64 ibcs)
 			   !(ppd->lflags & QIBL_LINKACTIVE)) {
 			/* active, but not active defered */
 			qib_hol_up(ppd); /* useful only for 6120 now */
-			*ppd->statusp |=
+			if (ppd->statusp)
+				*ppd->statusp |=
 				QIB_STATUS_IB_READY | QIB_STATUS_IB_CONF;
 			qib_clear_symerror_on_linkup((unsigned long)ppd);
 			spin_lock_irqsave(&ppd->lflags_lock, flags);
@@ -161,7 +163,8 @@ void qib_handle_e_ibstatuschanged(struct qib_pportdata *ppd, u64 ibcs)
 		ppd->lflags &= ~(QIBL_LINKINIT |
 				 QIBL_LINKACTIVE | QIBL_LINKARMED);
 		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-		*ppd->statusp &= ~QIB_STATUS_IB_READY;
+		if (ppd->statusp)
+			*ppd->statusp &= ~QIB_STATUS_IB_READY;
 	}
 
 skip_ibchange:

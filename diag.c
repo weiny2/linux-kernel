@@ -372,17 +372,16 @@ bail:
  * @count: size of data to write
  * @off: unused by this code
  */
-static ssize_t diagpkt_write(struct file *fp,
-				 const char __user *data,
+static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 				 size_t count, loff_t *off)
 {
-	u32 __iomem *piobuf;
-	u32 plen, clen, pbufn;
+	struct hfi_devdata *dd;
+	struct send_context *sc;
+	struct pio_buf *pbuf;
 	struct diag_pkt dp;
 	u32 *tmpbuf = NULL;
-	struct hfi_devdata *dd;
-	struct qib_pportdata *ppd;
 	ssize_t ret = 0;
+	u32 pkt_len, total_len;
 
 	if (count != sizeof(dp)) {
 		ret = -EINVAL;
@@ -410,27 +409,34 @@ static ssize_t diagpkt_write(struct file *fp,
 		ret = -EINVAL;
 		goto bail;
 	}
+
 	/* send count must be an exact number of dwords */
 	if (dp.len & 3) {
 		ret = -EINVAL;
 		goto bail;
 	}
-	// FIXME: use the context field to obtain a send context
-	// will need to verify that the context is avialable, etc.
-	ppd = NULL;
 
-	/* need total length before first word written */
-	/* +1 word is for the qword padding */
-	plen = sizeof(u32) + dp.len;
-	clen = dp.len >> 2;
-
-	/* TODO: check against the real send size, not ibmaxlen */
-	/* TODO: look into ibmaxlen - what is it really? */
-	if ((plen + 4) > ppd->ibmaxlen) {
+	/* need a valid context */
+	if (dp.context >= dd->num_send_contexts) {
 		ret = -EINVAL;
-		goto bail;      /* before writing pbc */
+		goto bail;
 	}
-	tmpbuf = vmalloc(plen);
+	/* can only use kernel contexts */
+	if (dd->send_contexts[dp.context].type != SC_KERNEL) {
+		ret = -EINVAL;
+		goto bail;
+	}
+	/* must be allocated */
+	sc = dd->send_contexts[dp.context].sc;
+	if (!sc) {
+		ret = -EINVAL;
+		goto bail;
+	}
+	/* TODO: check for enabled?  Or should that be in the buffer
+	   allocator? */
+
+	/* allocate a buffer and copy the data in */
+	tmpbuf = vmalloc(dp.len);
 	if (!tmpbuf) {
 		dd_dev_info(dd, "Unable to allocate tmp buffer, failing\n");
 		ret = -ENOMEM;
@@ -444,33 +450,22 @@ static ssize_t diagpkt_write(struct file *fp,
 		goto bail;
 	}
 
-	/* if 0, fill in a default */
-	/* FIXME: the default needs a lot more work */
-	if (dp.pbc_wd == 0)
-		dp.pbc_wd = plen >> 2;             /* in dwords */
+	/* calculate the packet and total lengths, in dwords */
+	pkt_len = dp.len >> 2;
+	total_len = pkt_len + 2;	/* PCB + packet */
 
-	piobuf = dd->f_getsendbuf(ppd, dp.pbc_wd, &pbufn);
-	if (!piobuf) {
-		ret = -EBUSY;
+	/* if 0, fill in a default */
+	if (dp.pbc_wd == 0)
+		dp.pbc_wd = create_pbc(sc, 0, 0, 0, total_len);
+
+	pbuf = sc_buffer_alloc(sc, total_len, NULL, 0);
+	if (!pbuf) {
+		ret = -ENOSPC;
 		goto bail;
 	}
-	/* disarm it just to be extra sure */
-	dd->f_sendctrl(dd->pport, QIB_SENDCTRL_DISARM_BUF(pbufn));
 
-	/* disable header check on pbufn for this packet */
-	dd->f_txchk_change(dd, pbufn, 1, TXCHK_CHG_TYPE_DIS1, NULL);
-
-	pio_copy(piobuf, dp.pbc_wd, tmpbuf, clen);
-
-	/* TODO: I don't think we need the flush anymore */
-	/*
-	 * Ensure buffer is written to the chip, then re-enable
-	 * header checks (if supported by chip).  The txchk
-	 * code will ensure seen by chip before returning.
-	 */
-	qib_flush_wc();
-	qib_sendbuf_done(dd, pbufn);
-	dd->f_txchk_change(dd, pbufn, 1, TXCHK_CHG_TYPE_ENAB1, NULL);
+	pio_copy(pbuf, dp.pbc_wd, tmpbuf, pkt_len);
+	/* no flush needed as the HW knows the packet size */
 
 	ret = sizeof(dp);
 

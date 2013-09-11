@@ -967,7 +967,8 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_txreq *tx;
 	struct qib_pio_header *phdr;
-	u32 control;
+	struct send_context *sc;
+	u64 pbc;
 	u32 ndesc;
 	int ret;
 
@@ -983,8 +984,12 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
-	control = dd->f_setpbc_control(ppd, plen, qp->s_srate,
-				       be16_to_cpu(hdr->lrh[0]) >> 12);
+	//FIXME: does plen include the pbc?
+	//FIXME: lrh[0]>>12 is a poor way to obtian the vl
+	sc = qp_to_send_context(qp);
+	pbc = create_pbc(sc, 0, qp->s_srate,
+				       be16_to_cpu(hdr->lrh[0]) >> 12, plen);
+
 	tx->qp = qp;
 	atomic_inc(&qp->refcount);
 	tx->wqe = qp->s_wqe;
@@ -1011,8 +1016,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		ndesc = 1;
 	if (ndesc) {
 		phdr = &dev->pio_hdrs[tx->hdr_inx];
-		phdr->pbc[0] = cpu_to_le32(plen);
-		phdr->pbc[1] = cpu_to_le32(control);
+		phdr->pbc = pbc;
 		memcpy(&phdr->hdr, hdr, hdrwords << 2);
 		tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEDESC;
 		tx->txreq.sg_count = ndesc;
@@ -1028,8 +1032,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	phdr = kmalloc(tx->hdr_dwords << 2, GFP_ATOMIC);
 	if (!phdr)
 		goto err_tx;
-	phdr->pbc[0] = cpu_to_le32(plen);
-	phdr->pbc[1] = cpu_to_le32(control);
+	phdr->pbc = pbc;
 	memcpy(&phdr->hdr, hdr, hdrwords << 2);
 	qib_copy_from_sge((u32 *) &phdr->hdr + hdrwords, ss, len);
 
@@ -1092,32 +1095,37 @@ static int no_bufs_available(struct qib_qp *qp)
 	return ret;
 }
 
+// FIXME: implement this
+struct send_context *qp_to_send_context(struct qib_qp *qp)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+
+	return dd->send_contexts[0].sc;
+}
+
 static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
-	struct qib_pportdata *ppd = dd->pport + qp->port_num - 1;
 	u32 *hdr = (u32 *) ibhdr;
-	u32 __iomem *piobuf;
 	u64 pbc;
 	unsigned long flags;
-	u32 control;
-	u32 pbufn;
+	struct send_context *sc;
+	struct pio_buf *pbuf;
 
-	control = dd->f_setpbc_control(ppd, plen, qp->s_srate,
-		be16_to_cpu(ibhdr->lrh[0]) >> 12);
-	pbc = ((u64) control << 32) | plen;
-	piobuf = dd->f_getsendbuf(ppd, pbc, &pbufn);
-	if (unlikely(piobuf == NULL))
+	sc = qp_to_send_context(qp);
+
+	// FIXME: does plen include the pbc?
+	pbc = create_pbc(sc, 0, qp->s_srate,
+				be16_to_cpu(ibhdr->lrh[0]) >> 12, plen);
+	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
+	if (unlikely(pbuf == NULL))
 		return no_bufs_available(qp);
 
 	if (len == 0) {
-		pio_copy(piobuf, pbc, hdr, hdrwords);
+		pio_copy(pbuf, pbc, hdr, hdrwords);
 	} else {
-		u32 off, carry;
-
-		off = seg_pio_copy_start(piobuf, &carry, pbc, &hdr, hdrwords);
+		seg_pio_copy_start(pbuf, pbc, &hdr, hdrwords);
 		while (len) {
 			void *addr = ss->sge.vaddr;
 			u32 slen = ss->sge.length;
@@ -1129,13 +1137,12 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			BUG_ON(slen & 0x3);
 			BUG_ON((unsigned long)addr & 0x3);
 			update_sge(ss, slen);
-			off = seg_pio_copy_mid(piobuf, off, &carry, addr, slen >> 2);
+			seg_pio_copy_mid(pbuf, addr, slen >> 2);
 			len -= slen;
 		}
-		seg_pio_copy_end(piobuf, off, carry);
+		seg_pio_copy_end(pbuf);
 	}
 
-	qib_sendbuf_done(dd, pbufn);
 	if (qp->s_rdma_mr) {
 		qib_put_mr(qp->s_rdma_mr);
 		qp->s_rdma_mr = NULL;
@@ -1173,9 +1180,9 @@ int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 
 	/*
 	 * Calculate the send buffer trigger address.
-	 * The +1 counts for the pbc control dword following the pbc length.
+	 * The +2 counts for the pbc control qword
 	 */
-	plen = hdrwords + dwords + 1;
+	plen = hdrwords + dwords + 2;
 
 	/*
 	 * VL15 packets (IB_QPT_SMI) will always use PIO, so we

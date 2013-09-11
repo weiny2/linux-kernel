@@ -99,30 +99,36 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 
 	dd->rcd = kzalloc(sizeof(*dd->rcd) * dd->num_rcv_contexts, GFP_KERNEL);
 	if (!dd->rcd) {
-		qib_dev_err(dd,
-			"Unable to allocate ctxtdata array, failing\n");
+		qib_dev_err(dd, 
+			"Unable to allocate receive context array, failing\n");
 		ret = -ENOMEM;
 		goto done;
 	}
 
-	/* create (one or more) kctxt */
+	/* create one or more kernel contexts */
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
 		struct qib_pportdata *ppd;
 		struct qib_ctxtdata *rcd;
-
-		if (dd->skip_kctxt_mask & (1 << i))
-			continue;
 
 		ppd = dd->pport + (i % dd->num_pports);
 		rcd = qib_create_ctxtdata(ppd, i);
 		if (!rcd) {
 			qib_dev_err(dd,
-				"Unable to allocate ctxtdata for Kernel ctxt, failing\n");
+				"Unable to allocate kernel receive context, failing\n");
 			ret = -ENOMEM;
 			goto done;
 		}
 		rcd->pkeys[0] = QIB_DEFAULT_P_KEY;
 		rcd->seq_cnt = 1;
+
+		// TODO: add NUMA information
+		rcd->sc = sc_alloc(dd, SC_KERNEL, 0 /*numa*/);
+		if (!rcd->sc) {
+			qib_dev_err(dd,
+				"Unable to allocate kernel send context, failing\n");
+			ret = -ENOMEM;
+			goto done;
+		}
 	}
 	ret = 0;
 done:
@@ -269,51 +275,75 @@ bail:
 	return;
 }
 
-static int init_pioavailregs(struct hfi_devdata *dd)
+int init_credit_return(struct hfi_devdata *dd)
 {
-	int ret, pidx;
-	u64 *status_page;
+	int ret;
+	int num_numa;
+	int i;
+	int original_node_id;
 
-	dd->pioavailregs_dma = dma_alloc_coherent(
-		&dd->pcidev->dev, PAGE_SIZE, &dd->pioavailregs_phys,
-		GFP_KERNEL);
-	if (!dd->pioavailregs_dma) {
-		qib_dev_err(dd,
-			"failed to allocate PIOavail reg area in memory\n");
+	num_numa = num_online_nodes();
+	/* enforce the expectation that the numas are compact */
+	for (i = 0; i < num_numa; i++) {
+		if (!node_online(i)) {
+			qib_dev_err(dd, "NUMA nodes are not compact\n");
+			ret = -EINVAL;
+			goto done;
+		}
+	}
+
+	dd->cr_base = kzalloc(sizeof(struct credit_return_base) * num_numa, GFP_KERNEL);
+	if (!dd->cr_base) {
+		qib_dev_err(dd, "Unable to allocate credit return base\n");
 		ret = -ENOMEM;
-		goto done;
 	}
+	original_node_id = dev_to_node(&dd->pcidev->dev);
+	for (i = 0; i < num_numa; i++) {
+		int bytes = dd->num_send_contexts*sizeof(struct credit_return);
 
-	/*
-	 * We really want L2 cache aligned, but for current CPUs of
-	 * interest, they are the same.
-	 */
-	status_page = (u64 *)
-		((char *) dd->pioavailregs_dma +
-		 ((2 * L1_CACHE_BYTES +
-		   dd->pioavregs * sizeof(u64)) & ~L1_CACHE_BYTES));
-	/* device status comes first, for backwards compatibility */
-	dd->devstatusp = status_page;
-	*status_page++ = 0;
-	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
-		dd->pport[pidx].statusp = status_page;
-		*status_page++ = 0;
+		set_dev_node(&dd->pcidev->dev, i);
+		dd->cr_base[i].va = dma_alloc_coherent(
+					&dd->pcidev->dev,
+					bytes,
+					&dd->cr_base[i].pa,
+					GFP_KERNEL);
+		if (dd->cr_base[i].va == NULL) {
+			set_dev_node(&dd->pcidev->dev, original_node_id);
+			qib_dev_err(dd, "Unable to allocate credit return "
+				"DMA range for NUMA %d\n", i);
+			ret = -ENOMEM;
+			goto done;
+		}
+		memset(dd->cr_base[i].va, 0, bytes);
 	}
-
-	/*
-	 * Setup buffer to hold freeze and other messages, accessible to
-	 * apps, following statusp.  This is per-unit, not per port.
-	 */
-	dd->freezemsg = (char *) status_page;
-	*dd->freezemsg = 0;
-	/* length of msg buffer is "whatever is left" */
-	ret = (char *) status_page - (char *) dd->pioavailregs_dma;
-	dd->freezelen = PAGE_SIZE - ret;
+	set_dev_node(&dd->pcidev->dev, original_node_id);
 
 	ret = 0;
-
 done:
 	return ret;
+}
+
+void free_credit_return(struct hfi_devdata *dd)
+{
+	int num_numa;
+	int i;
+
+	if (!dd->cr_base)
+		return;
+
+	/* TODO: save this value on allocate in case the number changes? */
+	num_numa = num_online_nodes();
+	for (i = 0; i < num_numa; i++) {
+		if (dd->cr_base[i].va) {
+			dma_free_coherent(&dd->pcidev->dev,
+				dd->num_send_contexts
+					* sizeof(struct credit_return),
+				dd->cr_base[i].va,
+				dd->cr_base[i].pa);
+		}
+	}
+	kfree(dd->cr_base);
+	dd->cr_base = NULL;
 }
 
 /*
@@ -384,13 +414,11 @@ static int loadtime_init(struct hfi_devdata *dd)
 	if (dd->revision & QLOGIC_IB_R_EMULATOR_MASK)
 		dd_dev_info(dd, "%s", dd->boardversion);
 
-	spin_lock_init(&dd->pioavail_lock);
 	spin_lock_init(&dd->sendctrl_lock);
 	spin_lock_init(&dd->uctxt_lock);
 	spin_lock_init(&dd->qib_diag_trans_lock);
 	mutex_init(&dd->qsfp_lock);
 
-	ret = init_pioavailregs(dd);
 	init_shadow_tids(dd);
 
 	/* set up worker (don't start yet) to verify interrupts are working */
@@ -421,33 +449,28 @@ static int init_after_reset(struct hfi_devdata *dd)
 	 * pioavail updates while we re-initialize.  This is mostly
 	 * for the driver data structures, not chip registers.
 	 */
-	for (i = 0; i < dd->num_pports; ++i) {
-		/*
-		 * ctxt == -1 means "all contexts". Only really safe for
-		 * _dis_abling things, as here.
-		 */
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
-				  QIB_RCVCTRL_INTRAVAIL_DIS |
-				  QIB_RCVCTRL_TAILUPD_DIS, -1);
-		/* Redundant across ports for some, but no big deal.  */
-		dd->f_sendctrl(dd->pport + i, QIB_SENDCTRL_SEND_DIS |
-			QIB_SENDCTRL_AVAIL_DIS);
-	}
+	/*
+	 * ctxt == -1 means "all contexts". Only really safe for
+	 * _dis_abling things, as here.
+	 */
+	dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
+			  QIB_RCVCTRL_INTRAVAIL_DIS |
+			  QIB_RCVCTRL_TAILUPD_DIS, -1);
+	pio_send_control(dd, PSC_GLOBAL_DISABLE);
+	for (i = 0; i < dd->num_send_contexts; i++)
+		sc_disable(dd->send_contexts[i].sc);
 
 	return 0;
 }
 
 static void enable_chip(struct hfi_devdata *dd)
 {
-	u64 rcvmask;
-	int i;
+	u32 rcvmask;
+	u32 i;
 
-	/*
-	 * Enable PIO send, and update of PIOavail regs to memory.
-	 */
-	for (i = 0; i < dd->num_pports; ++i)
-		dd->f_sendctrl(dd->pport + i, QIB_SENDCTRL_SEND_ENB |
-			QIB_SENDCTRL_AVAIL_ENB);
+	/* enable PIO send */
+	pio_send_control(dd, PSC_GLOBAL_ENABLE);
+
 	/*
 	 * Enable kernel ctxts' receive and receive interrupt.
 	 * Other ctxts done as user opens and inits them.
@@ -455,12 +478,10 @@ static void enable_chip(struct hfi_devdata *dd)
 	rcvmask = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_INTRAVAIL_ENB;
 	rcvmask |= (dd->flags & QIB_NODMA_RTAIL) ?
 		  QIB_RCVCTRL_TAILUPD_DIS : QIB_RCVCTRL_TAILUPD_ENB;
-	for (i = 0; dd->rcd && i < dd->first_user_ctxt; ++i) {
-		struct qib_ctxtdata *rcd = dd->rcd[i];
-
-		if (rcd)
-			dd->f_rcvctrl(dd, rcvmask, i);
-	}
+	for (i = 0; i < dd->first_user_ctxt; ++i)
+		dd->f_rcvctrl(dd, rcvmask, i);
+	for (i = 0; i < dd->num_send_contexts; i++)
+		sc_enable(dd->send_contexts[i].sc);
 }
 
 static void verify_interrupt(struct work_struct *work)
@@ -481,59 +502,9 @@ static void verify_interrupt(struct work_struct *work)
 	}
 }
 
+// FIXME: what to do here?
 static void init_piobuf_state(struct hfi_devdata *dd)
 {
-	int i, pidx;
-	u32 uctxts;
-
-	/*
-	 * Ensure all buffers are free, and fifos empty.  Buffers
-	 * are common, so only do once for port 0.
-	 *
-	 * After enable and qib_chg_pioavailkernel so we can safely
-	 * enable pioavail updates and PIOENABLE.  After this, packets
-	 * are ready and able to go out.
-	 */
-	dd->f_sendctrl(dd->pport, QIB_SENDCTRL_DISARM_ALL);
-	for (pidx = 0; pidx < dd->num_pports; ++pidx)
-		dd->f_sendctrl(dd->pport + pidx, QIB_SENDCTRL_FLUSH);
-
-	/*
-	 * If not all sendbufs are used, add the one to each of the lower
-	 * numbered contexts.  pbufsctxt and lastctxt_piobuf are
-	 * calculated in chip-specific code because it may cause some
-	 * chip-specific adjustments to be made.
-	 */
-	uctxts = dd->num_rcv_contexts - dd->first_user_ctxt;
-	dd->ctxts_extrabuf = dd->pbufsctxt ?
-		dd->lastctxt_piobuf - (dd->pbufsctxt * uctxts) : 0;
-
-	/*
-	 * Set up the shadow copies of the piobufavail registers,
-	 * which we compare against the chip registers for now, and
-	 * the in memory DMA'ed copies of the registers.
-	 * By now pioavail updates to memory should have occurred, so
-	 * copy them into our working/shadow registers; this is in
-	 * case something went wrong with abort, but mostly to get the
-	 * initial values of the generation bit correct.
-	 */
-	for (i = 0; i < dd->pioavregs; i++) {
-		__le64 tmp;
-
-		tmp = dd->pioavailregs_dma[i];
-		/*
-		 * Don't need to worry about pioavailkernel here
-		 * because we will call qib_chg_pioavailkernel() later
-		 * in initialization, to busy out buffers as needed.
-		 */
-		dd->pioavailshadow[i] = le64_to_cpu(tmp);
-	}
-	while (i < ARRAY_SIZE(dd->pioavailshadow))
-		dd->pioavailshadow[i++] = 0; /* for debugging sanity */
-
-	/* after pioavailshadow is setup */
-	qib_chg_pioavailkernel(dd, 0, dd->piobcnt2k + dd->piobcnt4k,
-			       TXCHK_CHG_TYPE_KERN, NULL);
 	dd->f_initvl15_bufs(dd);
 }
 
@@ -650,8 +621,8 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 			qib_ibmtu = 0; /* don't leave invalid value */
 		}
 		/* set max we can ever have for this driver load */
-		ppd->init_ibmaxlen = min(mtu > 2048 ?
-					 dd->piosize4k : dd->piosize2k,
+		//FIXME: what to do here?
+		ppd->init_ibmaxlen = min((u32)mtu,
 					 dd->rcvegrbufsize +
 					 (dd->rcvhdrentsize << 2));
 		/*
@@ -698,8 +669,9 @@ done:
 			 * Set status even if port serdes is not initialized
 			 * so that diags will work.
 			 */
-			*ppd->statusp |= QIB_STATUS_CHIP_PRESENT |
-				QIB_STATUS_INITTED;
+			if (ppd->statusp)
+				*ppd->statusp |= QIB_STATUS_CHIP_PRESENT |
+							QIB_STATUS_INITTED;
 			if (!ppd->link_speed_enabled)
 				continue;
 			if (dd->flags & QIB_HAS_SEND_DMA)
@@ -800,6 +772,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd;
 	unsigned pidx;
+	int i;
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
@@ -809,7 +782,8 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 				 QIBL_LINKARMED | QIBL_LINKACTIVE |
 				 QIBL_LINKV);
 		spin_unlock_irq(&ppd->lflags_lock);
-		*ppd->statusp &= ~(QIB_STATUS_IB_CONF | QIB_STATUS_IB_READY);
+		if (ppd->statusp)
+			*ppd->statusp &= ~(QIB_STATUS_IB_CONF | QIB_STATUS_IB_READY);
 	}
 	dd->flags &= ~QIB_INITTED;
 
@@ -826,7 +800,8 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 		 * Gracefully stop all sends allowing any in progress to
 		 * trickle out first.
 		 */
-		dd->f_sendctrl(ppd, QIB_SENDCTRL_CLEAR);
+		for (i = 0; i < dd->num_send_contexts; i++)
+			sc_flush(dd->send_contexts[i].sc);
 	}
 
 	/*
@@ -842,8 +817,12 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 		if (dd->flags & QIB_HAS_SEND_DMA)
 			qib_teardown_sdma(ppd);
 
-		dd->f_sendctrl(ppd, QIB_SENDCTRL_AVAIL_DIS |
-				    QIB_SENDCTRL_SEND_DIS);
+		/* disable all contexts */
+		for (i = 0; i < dd->num_send_contexts; i++)
+			sc_disable(dd->send_contexts[i].sc);
+		/* disable the send device */
+		pio_send_control(dd, PSC_GLOBAL_DISABLE);
+
 		/*
 		 * Clear SerdesEnable.
 		 * We can't count on interrupts since we are stopping.
@@ -901,6 +880,10 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 		rcd->rcvegrbuf_chunks = 0;
 	}
 
+	if (rcd->sc) {
+		sc_free(rcd->sc);
+		rcd->sc = NULL;
+	}
 	kfree(rcd->tid_pg_list);
 	vfree(rcd->user_event_mask);
 	vfree(rcd->subctxt_uregbase);
@@ -915,42 +898,57 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
  * BIOS or other issues can prevent write combining from working, or
  * can cause other bandwidth problems to the chip.
  *
- * This test simply writes the same buffer over and over again, and
+ * This test simply writes a buffer over and over again, and
  * measures close to the peak bandwidth to the chip (not testing
- * data bandwidth to the wire).   On chips that use an address-based
- * trigger to send packets to the wire, this is easy.  On chips that
- * use a count to trigger, we want to make sure that the packet doesn't
- * go out on the wire, or trigger flow control checks.
+ * data bandwidth to the wire).  The header of the buffer is
+ * invalid and will generate an error, but we ignore it.
  */
+int fake_early_return;	//FIXME: always zero so we return early
 static void qib_verify_pioperf(struct hfi_devdata *dd)
 {
-	u32 pbnum, cnt, lcnt;
-	u32 __iomem *piobuf;
+	struct send_context *sc;
+	struct pio_buf *pbuf;
+	u64 pbc, msecs, emsecs;
+	u32 cnt, lcnt, dw;
 	u32 *addr;
-	u64 msecs, emsecs;
 
-	piobuf = dd->f_getsendbuf(dd->pport, 0ULL, &pbnum);
-	if (!piobuf) {
-		dd_dev_info(dd,
-			 "No PIObufs for checking perf, skipping\n");
+	if (dd->num_send_contexts == 0) {
+		dd_dev_info(dd, "Performance check: "
+			"No contexts for checking perf, skipping\n");
 		return;
 	}
+
+	/* FIXME: not ready yet */
+	if (fake_early_return == 0)
+		return;
 
 	/*
 	 * Enough to give us a reasonable test, less than piobuf size, and
 	 * likely multiple of store buffer length.
 	 */
 	cnt = 1024;
+	/* dword count - includes PBC */
+	dw = (cnt + sizeof(u64)) / sizeof(u32);
 
-	addr = vmalloc(cnt);
+	/* use the first context */
+	sc = dd->send_contexts[0].sc;
+
+	addr = kzalloc(cnt, GFP_KERNEL);
 	if (!addr) {
 		dd_dev_info(dd,
-			 "Couldn't get memory for checking PIO perf,"
-			 " skipping\n");
-		goto done;
+			 "Performance check: Could not get memory for "
+			 "checking PIO perf, skipping\n");
+		return;
 	}
 
+	/* zero'ed lrh/bth above will generate an error, disable it */
+	dd->f_set_armlaunch(dd, 0);
+
+	/* minimal PBC - just the length in DW */
+	pbc = create_pbc(sc, 0, 0, 0, cnt/sizeof(u32));
+
 	preempt_disable();  /* we want reasonably accurate elapsed time */
+
 	msecs = 1 + jiffies_to_msecs(jiffies);
 	for (lcnt = 0; lcnt < 10000U; lcnt++) {
 		/* wait until we cross msec boundary */
@@ -959,11 +957,6 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 		udelay(1);
 	}
 
-	dd->f_set_armlaunch(dd, 0);
-
-	/* FIXME: The loop below is likely not valid for WFR  - we must
-	   write a valid packet that we expect to send. */
-
 	/*
 	 * This is only roughly accurate, since even with preempt we
 	 * still take interrupts that could take a while.   Running for
@@ -971,10 +964,18 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	 */
 	msecs = jiffies_to_msecs(jiffies);
 	for (emsecs = lcnt = 0; emsecs <= 5UL; lcnt++) {
-		/* FIXME: we can not write a pbc with 0 length */
-		pio_copy(piobuf, 0, addr, cnt >> 2);
+		pbuf = sc_buffer_alloc(sc, dw, NULL, 0);
+		if (!pbuf) {
+			preempt_enable();
+			dd_dev_info(dd, "Performance check: PIO buffer "
+				"allocation failure at count %u,"
+				" skipping\n", lcnt);
+			goto done;
+		}
+		pio_copy(pbuf, pbc, addr, cnt >> 2);
 		emsecs = jiffies_to_msecs(jiffies) - msecs;
 	}
+	preempt_enable();
 
 	/* 1 GiB/sec, slightly over IB SDR line rate */
 	if (lcnt < (emsecs * 1024U))
@@ -982,14 +983,8 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 			    "Performance problem: bandwidth to PIO buffers is only %u MiB/sec\n",
 			    lcnt / (u32) emsecs);
 
-	preempt_enable();
-
-	vfree(addr);
-
 done:
-	/* disarm piobuf, so it's available again */
-	dd->f_sendctrl(dd->pport, QIB_SENDCTRL_DISARM_BUF(pbnum));
-	qib_sendbuf_done(dd, pbnum);
+	kfree(addr);
 	dd->f_set_armlaunch(dd, 1);
 }
 
@@ -1082,7 +1077,8 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 						QIB_IB_LINKDOWN_DISABLE);
 					dd->f_setextled(ppd, 0);
 				}
-				*ppd->statusp &= ~QIB_STATUS_IB_READY;
+				if (ppd->statusp)
+					*ppd->statusp &= ~QIB_STATUS_IB_READY;
 			}
 	}
 
@@ -1218,12 +1214,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	if (!qib_wc_pat)
 		qib_disable_wc(dd);
 
-	if (dd->pioavailregs_dma) {
-		dma_free_coherent(&dd->pcidev->dev, PAGE_SIZE,
-				  (void *) dd->pioavailregs_dma,
-				  dd->pioavailregs_phys);
-		dd->pioavailregs_dma = NULL;
-	}
+	free_credit_return(dd);
 
 	if (dd->pageshadow) {
 		struct page **tmpp = dd->pageshadow;
@@ -1263,6 +1254,11 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 		qib_free_ctxtdata(dd, rcd);
 	}
 	kfree(tmp);
+	/* must follow rcv context free - need to remove rcv's hooks */
+	for (ctxt = 0; ctxt < dd->num_send_contexts; ctxt++)
+		sc_free(dd->send_contexts[ctxt].sc);
+	kfree(dd->send_contexts);
+	dd->send_contexts = NULL;
 	kfree(dd->boardname);
 }
 

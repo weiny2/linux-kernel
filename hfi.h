@@ -132,6 +132,8 @@ struct qib_ctxtdata {
 	/* mmap of hdrq, must fit in 44 bits */
 	dma_addr_t rcvhdrq_phys;
 	dma_addr_t rcvhdrqtailaddr_phys;
+	/* this receive context's assigned PIO send context */
+	struct send_context *sc;
 
 	/*
 	 * number of opens (including slave sub-contexts) on this instance
@@ -226,6 +228,70 @@ struct qib_ctxtdata {
 	u64 imask;	/* clear interupt mask */
 	int ireg;	/* clear interrupt register */
 };
+
+/* per-NUMA send context */
+struct send_context {
+	/* read-only after init */
+	struct hfi_devdata *dd;		/* device */
+	void __iomem *base_addr;	/* start of PIO memory */
+	union pio_shadow_ring *sr;	/* shadow ring */
+	volatile __le64 *hw_free;	/* HW free counter */
+	u32 context;			/* context number */
+	u32 credits;			/* number of blocks in context */
+	u32 sr_size;			/* size of the shadow ring */
+	u32 group;			/* credit return group */
+	/* allocator fields */
+	spinlock_t alloc_lock ____cacheline_aligned_in_smp;
+	unsigned long fill;		/* official alloc count */
+	unsigned long alloc_free;	/* copy of free (less cache thrash) */
+	volatile u32 sr_head;		/* shadow ring head */
+	/* releaser fields */
+	spinlock_t release_lock ____cacheline_aligned_in_smp;
+	/* FIXME: keep volatile? Use ACCESS_ONCE()? */
+	volatile unsigned long free;	/* official free count */
+	u32 sr_tail;			/* shadow ring tail */
+};
+
+struct send_context_info {
+	struct send_context *sc;	/* allocated working context */
+	int allocated;			/* compare and exchange interlock */
+	u16 type;			/* context type */
+	u16 base;			/* base in PIO array */
+	u16 credits;			/* size in PIO array */
+};
+
+/* DMA credit return, index is always (context & 0x7) */
+struct credit_return {
+	volatile __le64 cr[8];
+};
+
+/* NUMA indexed credit return array */
+struct credit_return_base {
+	struct credit_return *va;
+	dma_addr_t pa;
+};
+
+/* PIO buffer release callback function */
+typedef void (*pio_release_cb)(void *arg);
+
+/* an allocated PIO buffer */
+struct pio_buf {
+	pio_release_cb cb;	/* called when the buffer is released */
+	void *arg;		/* argument for cb */
+	void __iomem *start;	/* buffer start address */
+	void __iomem *end;	/* context end address */
+	unsigned long size;	/* context size, in bytes */
+	unsigned long sent_at;	/* buffer is sent when <= free */
+	u32 block_count;	/* size of buffer, in blocks */
+	u32 qw_written;		/* QW written so far */
+	u32 carry_valid;	/* the carry field contains valid data */
+	u32 carry;		/* pending unwritten DW */
+};
+
+union pio_shadow_ring {
+	struct pio_buf pbuf;
+	u64 unused[8];		/* cache line spacer */
+} ____cacheline_aligned;
 
 struct qib_sge_state;
 
@@ -356,24 +422,37 @@ struct qib_verbs_txreq {
 #define QIB_RCVCTRL_TIDFLOW_ENB 0x0400
 #define QIB_RCVCTRL_TIDFLOW_DIS 0x0800
 
-/*
- * Possible "operations" for f_sendctrl(ppd, op, var)
- * these are bits so they can be combined, e.g.
- * QIB_SENDCTRL_BUFAVAIL_ENB | QIB_SENDCTRL_ENB
- * Some operations (e.g. DISARM, ABORT) are known to
- * be "one-shot", so do not modify shadow.
- */
-#define QIB_SENDCTRL_DISARM       (0x1000)
-#define QIB_SENDCTRL_DISARM_BUF(bufn) ((bufn) | QIB_SENDCTRL_DISARM)
-	/* available (0x2000) */
-#define QIB_SENDCTRL_AVAIL_DIS    (0x4000)
-#define QIB_SENDCTRL_AVAIL_ENB    (0x8000)
-#define QIB_SENDCTRL_AVAIL_BLIP  (0x10000)
-#define QIB_SENDCTRL_SEND_DIS    (0x20000)
-#define QIB_SENDCTRL_SEND_ENB    (0x40000)
-#define QIB_SENDCTRL_FLUSH       (0x80000)
-#define QIB_SENDCTRL_CLEAR      (0x100000)
-#define QIB_SENDCTRL_DISARM_ALL (0x200000)
+/* send context types */
+#define SC_KERNEL 0
+#define SC_ACK    1
+#define SC_USER   2
+#define SC_MAX    3
+
+/* send context configuration sizes (one per type) */
+struct sc_config_sizes {
+	short int size;
+	short int count;
+};
+
+/* send context functions */
+int init_credit_return(struct hfi_devdata *dd);
+struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa);
+void sc_free(struct send_context *sc);
+void sc_enable(struct send_context *sc);
+void sc_disable(struct send_context *sc);
+void sc_return_credits(struct send_context *sc);
+void sc_flush(struct send_context *sc);
+void sc_drop(struct send_context *sc);
+struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
+			pio_release_cb cb, void *arg);
+void sc_release_update(struct send_context *sc);
+void sc_group_release_update(struct send_context *sc);
+
+/* global PIO send control operations */
+#define PSC_GLOBAL_ENABLE 0
+#define PSC_GLOBAL_DISABLE 1
+
+void pio_send_control(struct hfi_devdata *dd, int op);
 
 /*
  * These are the generic indices for requesting per-port
@@ -722,34 +801,26 @@ struct hfi_devdata {
 	u8 __iomem *kregend;
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
-	/* qib_cfgctxts pointers */
-	struct qib_ctxtdata **rcd; /* Receive Context Data */
+	/* recevie context data */
+	struct qib_ctxtdata **rcd;
+	/* send context data */
+	struct send_context_info *send_contexts;
 
 	/* qib_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
 	 */
 	struct qib_pportdata *pport;
-	struct qib_chip_specific *cspec; /* chip-specific */
 
-	/* kvirt address of 1st 2k pio buffer */
-	void __iomem *pio2kbase;
-	/* kvirt address of 1st 4k pio buffer */
-	void __iomem *pio4kbase;
-	/* mem-mapped pointer to base of PIO buffers (if using WC PAT) */
+	/* mem-mapped pointer to base of PIO buffers */
 	void __iomem *piobase;
-	/* mem-mapped pointer to base of user chip regs (if using WC PAT) */
-	u64 __iomem *userbase;
-	void __iomem *piovl15base; /* base of VL15 buffers, if not WC */
 	/*
-	 * points to area where PIOavail registers will be DMA'ed.
-	 * Has to be on a page of it's own, because the page will be
-	 * mapped into user program space.  This copy is *ONLY* ever
-	 * written by DMA, not by the driver!  Need a copy per device
-	 * when we get to multiple devices
+	 * credit return base - a per-NUMA range of DMA address that
+	 * the chip will use to update the per-context free counter
 	 */
-	volatile __le64 *pioavailregs_dma; /* DMA'ed by chip */
-	/* physical address where updates occur */
-	dma_addr_t pioavailregs_phys;
+	struct credit_return_base *cr_base;
+
+	/* send context numbers and sizes for each type */
+	struct sc_config_sizes sc_sizes[SC_MAX];
 
 	/* device-specific implementations of functions needed by
 	 * common code. Contrary to previous consensus, we can't
@@ -784,14 +855,11 @@ struct hfi_devdata {
 	void (*f_xgxs_reset)(struct qib_pportdata *);
 	/* per chip actions needed for IB Link up/down changes */
 	int (*f_ib_updown)(struct qib_pportdata *, int, u64);
-	u32 __iomem *(*f_getsendbuf)(struct qib_pportdata *, u64, u32 *);
 	/* Read/modify/write of GPIO pins (potentially chip-specific */
 	int (*f_gpio_mod)(struct hfi_devdata *dd, u32 out, u32 dir,
 		u32 mask);
 	/* modify receive context registers, see RCVCTRL_* for operations */
-	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int ctxt);
-	/* Read/modify/write sendctrl appropriately for op and port. */
-	void (*f_sendctrl)(struct qib_pportdata *, u32 op);
+	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int context);
 	void (*f_set_intr_state)(struct hfi_devdata *, u32);
 	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
 	void (*f_wantpiobuf_intr)(struct hfi_devdata *, u32);
@@ -813,7 +881,6 @@ struct hfi_devdata {
 		u64 **);
 	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
 		char **, u64 **);
-	u32 (*f_setpbc_control)(struct qib_pportdata *, u32, u8, u8);
 	void (*f_initvl15_bufs)(struct hfi_devdata *);
 	void (*f_init_ctxt)(struct qib_ctxtdata *);
 	void (*f_txchk_change)(struct hfi_devdata *, u32, u32, u32,
@@ -826,18 +893,14 @@ struct hfi_devdata {
 	u32 pioavregs;
 	/* device (not port) flags, basically device capabilities */
 	u32 flags;
-	/* last buffer for user use */
-	u32 lastctxt_piobuf;
 
 	/* saturating counter of (non-port-specific) device interrupts */
 	u32 int_counter;
 
-	/* pio bufs allocated per ctxt */
-	u32 pbufsctxt;
-	/* if remainder on bufs/ctxt, ctxts < extrabuf get 1 extra */
-	u32 ctxts_extrabuf;
 	/* number of receive contexts in use by the driver */
 	u32 num_rcv_contexts;
+	/* number of pio send contexts in use by the driver */
+	u32 num_send_contexts;
 	/*
 	 * number of ctxts available for PSM open
 	 */
@@ -886,52 +949,10 @@ struct hfi_devdata {
 	struct delayed_work interrupt_check_worker;
 	unsigned long ureg_align; /* user register alignment */
 
-	/*
-	 * Protects pioavailshadow, pioavailkernel, pio_need_disarm, and
-	 * pio_writing.
-	 */
-	spinlock_t pioavail_lock;
-	/*
-	 * index of last buffer to optimize search for next
-	 */
-	u32 last_pio;
-	/*
-	 * min kernel pio buffer to optimize search
-	 */
-	u32 min_kernel_pio;
-	/*
-	 * Shadow copies of registers; size indicates read access size.
-	 * Most of them are readonly, but some are write-only register,
-	 * where we manipulate the bits in the shadow copy, and then write
-	 * the shadow copy to qlogic_ib.
-	 *
-	 * We deliberately make most of these 32 bits, since they have
-	 * restricted range.  For any that we read, we won't to generate 32
-	 * bit accesses, since Opteron will generate 2 separate 32 bit HT
-	 * transactions for a 64 bit read, and we want to avoid unnecessary
-	 * bus transactions.
-	 */
-
-	/* This is the 64 bit group */
-
-	unsigned long pioavailshadow[6];
-	/* bitmap of send buffers available for the kernel to use with PIO. */
-	unsigned long pioavailkernel[6];
-	/* bitmap of send buffers which need to be disarmed. */
-	unsigned long pio_need_disarm[3];
-	/* bitmap of send buffers which are being written to. */
-	unsigned long pio_writing[3];
-	/* kr_revision shadow */
+	/* revision register shadow */
 	u64 revision;
 	/* Base GUID for device (network order) */
 	__be64 base_guid;
-
-	/*
-	 * kr_sendpiobufbase value (chip offset of pio buffers), and the
-	 * base of the 2KB buffer s(user processes only use 2K)
-	 */
-	u64 piobufbase;
-	u32 pio2k_bufbase;
 
 	/* these are the "32 bit" regs */
 
@@ -943,27 +964,21 @@ struct hfi_devdata {
 	u32 rcvhdrentsize;
 	/* number of receive contexts the chip supports */
 	u32 chip_rcv_contexts;
+	/* number of PIO send contexts the chip supports */
+	u32 chip_send_contexts;
+	/* number of bytes in the PIO memory buffer */
+	u32 chip_pio_mem_size;
 	/* kr_pagealign value */
 	u32 palign;
-	/* number of "2KB" PIO buffers */
-	u32 piobcnt2k;
-	/* size in bytes of "2KB" PIO buffers */
-	u32 piosize2k;
 	/* max usable size in dwords of a "2KB" PIO buffer before going "4KB" */
 	u32 piosize2kmax_dwords;
-	/* number of "4KB" PIO buffers */
-	u32 piobcnt4k;
-	/* size in bytes of "4KB" PIO buffers */
-	u32 piosize4k;
 	/* kr_userregbase */
 	u32 uregbase;
 	/* shadow the control register contents */
 	u32 control;
 
-	/* chip address space used by 4k pio buffers */
-	u32 align4k;
 	/* size of each rcvegrbuffer */
-	u16 rcvegrbufsize;
+	u32 rcvegrbufsize;
 	/* log2 of above */
 	u16 rcvegrbufsize_shift;
 	/* localbus width (1, 2,4,8,16,32) from config space  */
@@ -998,7 +1013,6 @@ struct hfi_devdata {
 	u8 first_user_ctxt;
 	u8 n_krcv_queues;
 	u8 qpn_mask;
-	u8 skip_kctxt_mask;
 
 	u16 rhf_offset; /* offset of RHF within receive header entry */
 
@@ -1114,17 +1128,14 @@ void qib_chip_done(void);
 
 /* check to see if we have to force ordering for write combining */
 int qib_unordered_wc(void);
-void pio_copy(void __iomem *to, u64 pbc, const void *from, size_t count);
-u32 seg_pio_copy_start(void __iomem *to, u32 *carry, u64 pbc,
-				const void *from, size_t count);
-u32 seg_pio_copy_mid(void __iomem *to, u32 off, u32 *carry,
-				const void *from, size_t count);
-void seg_pio_copy_end(void __iomem *to, u32 off, u32 carry);
+u64 create_pbc(struct send_context *, u64, u32, u32, u32);
+void pio_copy(struct pio_buf *pbuf, u64 pbc, const void *from, size_t count);
+void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
+					const void *from, size_t count);
+void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t count);
+void seg_pio_copy_end(struct pio_buf *pbuf);
 
-void qib_disarm_piobufs(struct hfi_devdata *, unsigned, unsigned);
-int qib_disarm_piobufs_ifneeded(struct qib_ctxtdata *);
-void qib_disarm_piobufs_set(struct hfi_devdata *, unsigned long *, unsigned);
-void qib_cancel_sends(struct qib_pportdata *);
+struct send_context *qp_to_send_context(struct qib_qp *qp);
 
 int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
@@ -1235,14 +1246,11 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 
 /* free up any allocated data at closes */
 void qib_free_data(struct qib_ctxtdata *dd);
-void qib_chg_pioavailkernel(struct hfi_devdata *, unsigned, unsigned,
-			    u32, struct qib_ctxtdata *);
 struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *, const struct pci_device_id *);
 void qib_free_devdata(struct hfi_devdata *);
 struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 void qib_dump_lookup_output_queue(struct hfi_devdata *);
-void qib_force_pio_avail_update(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
 
 /*
@@ -1325,8 +1333,6 @@ void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
 
 int qib_get_user_pages(unsigned long, size_t, struct page **);
 void qib_release_user_pages(struct page **, size_t);
-u32 __iomem *qib_getsendbuf_range(struct hfi_devdata *, u32 *, u32, u32);
-void qib_sendbuf_done(struct hfi_devdata *, unsigned);
 
 static inline void qib_clear_rcvhdrtail(const struct qib_ctxtdata *rcd)
 {

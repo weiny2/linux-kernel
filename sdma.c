@@ -192,11 +192,14 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
  */
 static void sdma_hw_start_up(struct qib_pportdata *ppd)
 {
+/* FIXME: in WFR, PIO and SDMA do not share buffers */
+#if 0
 	struct qib_sdma_state *ss = &ppd->sdma_state;
 	unsigned bufno;
 
 	for (bufno = ss->first_sendbuf; bufno < ss->last_sendbuf; ++bufno)
 		ppd->dd->f_sendctrl(ppd, QIB_SENDCTRL_DISARM_BUF(bufno));
+#endif
 
 	ppd->dd->f_sdma_hw_start_up(ppd);
 }
