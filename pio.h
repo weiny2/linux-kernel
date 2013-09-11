@@ -112,6 +112,10 @@ struct sc_config_sizes {
 
 /* send context functions */
 int init_credit_return(struct hfi_devdata *dd);
+void free_credit_return(struct hfi_devdata *dd);
+int init_sc_pools_and_sizes(struct hfi_devdata *dd);
+int init_send_contexts(struct hfi_devdata *dd);
+int init_credit_return(struct hfi_devdata *dd);
 struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa);
 void sc_free(struct send_context *sc);
 void sc_enable(struct send_context *sc);
