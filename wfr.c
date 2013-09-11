@@ -74,19 +74,6 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
 
-u64 read_kctxt_csr(const struct hfi_devdata *dd, int ctxt, u32 offset0)
-{
-	/* kernel per-context CSRs are separated by 0x100 */
-	return read_csr(dd, offset0 + (0x100* ctxt));
-}
-
-static void write_kctxt_csr(struct hfi_devdata *dd, int ctxt, u32 offset0,
-		u64 value)
-{
-	/* kernel per-context CSRs are separated by 0x100 */
-	write_csr(dd, offset0 + (0x100 * ctxt), value);
-} 
-
 #if 0
 u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt, u32 offset0)
 {
