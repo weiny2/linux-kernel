@@ -360,7 +360,7 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t count)
 		pbuf->carry = val.val32[0];
 		/* pbuf->carry_valid was 1 */
 	}
-	pbuf->qw_written += count>>1;
+	pbuf->qw_written += (count + 1) >> 1; /* the +1 is the carry */
 }
 
 /*
