@@ -1027,7 +1027,9 @@ static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
 #define PFX DRIVER_NAME ": "
 
 static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR0) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR1) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR2) },
 	{ 0, }
 };
 
@@ -1228,7 +1230,9 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * allocation, etc.
 	 */
 	switch (ent->device) {
-	case PCI_DEVICE_ID_INTEL_WFR:
+	case PCI_DEVICE_ID_INTEL_WFR0:
+	case PCI_DEVICE_ID_INTEL_WFR1:
+	case PCI_DEVICE_ID_INTEL_WFR2:
 		dd = qib_init_wfr_funcs(pdev, ent);
 
 		break;

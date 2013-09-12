@@ -1339,7 +1339,9 @@ extern struct mutex qib_mutex;
 #define QIB_NMINORS             255
 
 #define PCI_VENDOR_ID_INTEL 0x8086
-#define PCI_DEVICE_ID_INTEL_WFR 0x7323
+#define PCI_DEVICE_ID_INTEL_WFR0 0x24f0
+#define PCI_DEVICE_ID_INTEL_WFR1 0x24f1
+#define PCI_DEVICE_ID_INTEL_WFR2 0x24f2
 
 /*
  * qib_early_err is used (only!) to print early errors before devdata is
