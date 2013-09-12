@@ -1663,7 +1663,7 @@ static void init_chip(struct hfi_devdata *dd)
 	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
 	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
 	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
-	dd->chip_pio_mem_size = read_csr(dd, WFR_PIO_MEM_SIZE);
+	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
 
 	// FIXME:
 	// o make sure all rcv contexts are disabled
