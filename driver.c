@@ -57,12 +57,6 @@ unsigned qib_ibmtu;
 module_param_named(ibmtu, qib_ibmtu, uint, S_IRUGO);
 MODULE_PARM_DESC(ibmtu, "Set max IB MTU (0=2KB, 1=256, 2=512, ... 5=4096");
 
-unsigned qib_compat_ddr_negotiate = 1;
-module_param_named(compat_ddr_negotiate, qib_compat_ddr_negotiate, uint,
-		   S_IWUSR | S_IRUGO);
-MODULE_PARM_DESC(compat_ddr_negotiate,
-		 "Attempt pre-IBTA 1.2 DDR speed negotiation");
-
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");

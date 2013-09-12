@@ -1304,10 +1304,7 @@ const char *get_unit_name(int unit);
 /* global module parameter variables */
 extern unsigned qib_ibmtu;
 extern uint num_rcv_contexts;
-extern ushort qib_num_cfg_vls;
 extern unsigned qib_n_krcv_queues;
-extern unsigned qib_sdma_fetch_arb;
-extern unsigned qib_compat_ddr_negotiate;
 
 extern struct mutex qib_mutex;
 
