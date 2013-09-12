@@ -71,15 +71,6 @@ MODULE_PARM_DESC(krcvqs, "number of kernel receive queues per IB port");
 unsigned qib_cc_table_size;
 module_param_named(cc_table_size, qib_cc_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(cc_table_size, "Congestion control table entries 0 (CCA disabled - default), min = 128, max = 1984");
-/*
- * qib_wc_pat parameter:
- *      0 is WC via MTRR
- *      1 is WC via PAT
- *      If PAT initialization fails, code reverts back to MTRR
- */
-unsigned qib_wc_pat = 1; /* default (1) is to use PAT, not MTRR */
-module_param_named(wc_pat, qib_wc_pat, uint, S_IRUGO);
-MODULE_PARM_DESC(wc_pat, "enable write-combining via PAT mechanism");
 
 struct workqueue_struct *qib_cq_wq;
 
@@ -628,21 +619,6 @@ done:
 	return ret;
 }
 
-/*
- * These next two routines are placeholders in case we don't have per-arch
- * code for controlling write combining.  If explicit control of write
- * combining is not available, performance will probably be awful.
- */
-
-int __attribute__((weak)) qib_enable_wc(struct hfi_devdata *dd)
-{
-	return -EOPNOTSUPP;
-}
-
-void __attribute__((weak)) qib_disable_wc(struct hfi_devdata *dd)
-{
-}
-
 static inline struct hfi_devdata *__qib_lookup(int unit)
 {
 	return idr_find(&qib_unit_table, unit);
@@ -1142,9 +1118,6 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 		spin_unlock(&dd->pport[pidx].cc_shadow_lock);
 	}
 
-	if (!qib_wc_pat)
-		qib_disable_wc(dd);
-
 	free_credit_return(dd);
 
 	if (dd->pageshadow) {
@@ -1289,16 +1262,6 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		if (initfail)
 			ret = initfail;
 		goto bail;
-	}
-
-	if (!qib_wc_pat) {
-		ret = qib_enable_wc(dd);
-		if (ret) {
-			dd_dev_err(dd,
-				"Write combining not enabled (err %d): performance may be poor\n",
-				-ret);
-			ret = 0;
-		}
 	}
 
 	qib_verify_pioperf(dd);

@@ -13,10 +13,6 @@ hfi-y := cq.o diag.o dma.o driver.o file_ops.o firmware.o fs.o init.o intr.o \
 	ruc.o sdma.o srq.o sysfs.o twsi.o tx.o  uc.o ud.o user_pages.o \
 	user_sdma.o verbs_mcast.o verbs.o wfr.o
 
-hfi-$(CONFIG_X86_64) += wc_x86_64.o
-hfi-$(CONFIG_PPC64) += wc_ppc64.o
-
-
 else
 #
 # A regular "make".

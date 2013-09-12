@@ -984,7 +984,6 @@ extern struct hfi_devdata *qib_lookup(int unit);
 extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
 
-extern unsigned qib_wc_pat;
 extern unsigned qib_cc_table_size;
 int qib_init(struct hfi_devdata *, int);
 int init_chip_wc_pat(struct hfi_devdata *dd, u32);
@@ -1013,9 +1012,6 @@ void qib_handle_urcv(struct hfi_devdata *, u64);
 void qib_chip_cleanup(struct hfi_devdata *);
 /* clean up any chip type-specific stuff */
 void qib_chip_done(void);
-
-/* check to see if we have to force ordering for write combining */
-int qib_unordered_wc(void);
 
 struct send_context *qp_to_send_context(struct qib_qp *qp);
 
