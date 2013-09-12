@@ -1256,7 +1256,7 @@ static int setup_ctxt(struct qib_pportdata *ppd, int ctxt,
 			       rcd->expected_count * sizeof(u16), GFP_KERNEL);
 
 	if (!rcd || !ptmp) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"Unable to allocate ctxtdata memory, failing open\n");
 		ret = -ENOMEM;
 		goto bailerr;

@@ -280,7 +280,7 @@ static int alloc_sdma(struct qib_pportdata *ppd)
 		GFP_KERNEL);
 
 	if (!ppd->sdma_descq) {
-		qib_dev_err(ppd->dd,
+		dd_dev_err(ppd->dd,
 			"failed to allocate SendDMA descriptor FIFO memory\n");
 		goto bail;
 	}
@@ -289,7 +289,7 @@ static int alloc_sdma(struct qib_pportdata *ppd)
 	ppd->sdma_head_dma = dma_alloc_coherent(&ppd->dd->pcidev->dev,
 		PAGE_SIZE, &ppd->sdma_head_phys, GFP_KERNEL);
 	if (!ppd->sdma_head_dma) {
-		qib_dev_err(ppd->dd,
+		dd_dev_err(ppd->dd,
 			"failed to allocate SendDMA head memory\n");
 		goto cleanup_descq;
 	}

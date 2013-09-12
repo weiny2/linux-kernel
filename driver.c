@@ -505,7 +505,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 
 			if (lrh_len != tlen) {
 				qib_stats.sps_lenerrs++;
-				qib_dev_err(dd,
+				dd_dev_err(dd,
 					"%s: tlen %d != lrh_len %d, skipping\n",
 					__func__, tlen, (u32)lrh_len);
 				goto move_along;
@@ -522,7 +522,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		    ebuf == NULL &&
 		    tlen > (dd->rcvhdrentsize - 2 + 1 -
 				rhf_hdrq_offset(rhf_addr)) << 2) {
-			qib_dev_err(dd, "%s: IB, no errors, no eager, tlen > headerlen+1, skipping\n", __func__);
+			dd_dev_err(dd, "%s: IB, no errors, no eager, tlen > headerlen+1, skipping\n", __func__);
 			goto move_along;
 		}
 
@@ -813,7 +813,7 @@ int qib_reset_device(int unit)
 	else
 		ret = -EAGAIN;
 	if (ret)
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"Reinitialize unit %u after reset failed with %d\n",
 			unit, ret);
 	else

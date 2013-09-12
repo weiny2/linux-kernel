@@ -99,7 +99,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 
 	dd->rcd = kzalloc(sizeof(*dd->rcd) * dd->num_rcv_contexts, GFP_KERNEL);
 	if (!dd->rcd) {
-		qib_dev_err(dd, 
+		dd_dev_err(dd, 
 			"Unable to allocate receive context array, failing\n");
 		ret = -ENOMEM;
 		goto done;
@@ -113,7 +113,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		ppd = dd->pport + (i % dd->num_pports);
 		rcd = qib_create_ctxtdata(ppd, i);
 		if (!rcd) {
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				"Unable to allocate kernel receive context, failing\n");
 			ret = -ENOMEM;
 			goto done;
@@ -124,7 +124,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		// TODO: add NUMA information
 		rcd->sc = sc_alloc(dd, SC_KERNEL, 0 /*numa*/);
 		if (!rcd->sc) {
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				"Unable to allocate kernel send context, failing\n");
 			ret = -ENOMEM;
 			goto done;
@@ -214,7 +214,7 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 		* IB_CCT_ENTRIES;
 	ppd->ccti_entries = kzalloc(size, GFP_KERNEL);
 	if (!ppd->ccti_entries) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		  "failed to allocate congestion control table for port %d!\n",
 		  port);
 		goto bail;
@@ -223,7 +223,7 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	size = IB_CC_CCS_ENTRIES * sizeof(struct ib_cc_congestion_entry);
 	ppd->congestion_entries = kzalloc(size, GFP_KERNEL);
 	if (!ppd->congestion_entries) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		 "failed to allocate congestion setting list for port %d!\n",
 		 port);
 		goto bail_1;
@@ -232,7 +232,7 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	size = sizeof(struct cc_table_shadow);
 	ppd->ccti_entries_shadow = kzalloc(size, GFP_KERNEL);
 	if (!ppd->ccti_entries_shadow) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		 "failed to allocate shadow ccti list for port %d!\n",
 		 port);
 		goto bail_2;
@@ -241,7 +241,7 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	size = sizeof(struct ib_cc_congestion_setting_attr);
 	ppd->congestion_entries_shadow = kzalloc(size, GFP_KERNEL);
 	if (!ppd->congestion_entries_shadow) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		 "failed to allocate shadow congestion setting list for port %d!\n",
 		 port);
 		goto bail_3;
@@ -265,12 +265,12 @@ bail:
 
 	if (qib_cc_table_size < IB_CCT_MIN_ENTRIES) {
 		qib_cc_table_size = 0;
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		 "Congestion Control table size %d less than minimum %d for port %d\n",
 		 qib_cc_table_size, IB_CCT_MIN_ENTRIES, port);
 	}
 
-	qib_dev_err(dd, "Congestion Control Agent disabled for port %d\n",
+	dd_dev_err(dd, "Congestion Control Agent disabled for port %d\n",
 		port);
 	return;
 }
@@ -294,14 +294,14 @@ static void init_shadow_tids(struct hfi_devdata *dd)
 
 	pages = vzalloc(WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES * sizeof(struct page *));
 	if (!pages) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"failed to allocate shadow page * array, no expected sends!\n");
 		goto bail;
 	}
 
 	addrs = vzalloc(WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES * sizeof(dma_addr_t));
 	if (!addrs) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"failed to allocate shadow dma handle array, no expected sends!\n");
 		goto bail_free;
 	}
@@ -328,7 +328,7 @@ static int loadtime_init(struct hfi_devdata *dd)
 #if 0
 	if (((dd->revision >> QLOGIC_IB_R_SOFTWARE_SHIFT) &
 	     QLOGIC_IB_R_SOFTWARE_MASK) != QIB_CHIP_SWVERSION) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"Driver only handles version %d, chip swversion is %d (%llx), failng\n",
 			QIB_CHIP_SWVERSION,
 			(int)(dd->revision >>
@@ -533,7 +533,7 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		if (!lastfail)
 			lastfail = qib_setup_eagerbufs(rcd);
 		if (lastfail) {
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				"failed to allocate kernel ctxt's rcvhdrq and/or egr bufs\n");
 			continue;
 		}
@@ -908,7 +908,7 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 
 	/* 1 GiB/sec, slightly over IB SDR line rate */
 	if (lcnt < (emsecs * 1024U))
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			    "Performance problem: bandwidth to PIO buffers is only %u MiB/sec\n",
 			    lcnt / (u32) emsecs);
 
@@ -1268,10 +1268,10 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	j = qib_device_create(dd);
 	if (j)
-		qib_dev_err(dd, "Failed to create /dev devices: %d\n", -j);
+		dd_dev_err(dd, "Failed to create /dev devices: %d\n", -j);
 	j = qibfs_add(dd);
 	if (j)
-		qib_dev_err(dd, "Failed filesystem setup for counters: %d\n",
+		dd_dev_err(dd, "Failed filesystem setup for counters: %d\n",
 			    -j);
 
 	if (initfail || ret) {
@@ -1294,7 +1294,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (!qib_wc_pat) {
 		ret = qib_enable_wc(dd);
 		if (ret) {
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				"Write combining not enabled (err %d): performance may be poor\n",
 				-ret);
 			ret = 0;
@@ -1327,7 +1327,7 @@ static void qib_remove_one(struct pci_dev *pdev)
 
 	ret = qibfs_remove(dd);
 	if (ret)
-		qib_dev_err(dd, "Failed counters filesystem cleanup: %d\n",
+		dd_dev_err(dd, "Failed counters filesystem cleanup: %d\n",
 			    -ret);
 
 	qib_device_remove(dd);
@@ -1361,7 +1361,7 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 			gfp_flags | __GFP_COMP);
 
 		if (!rcd->rcvhdrq) {
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				"attempt to allocate %d bytes for ctxt %u rcvhdrq failed\n",
 				amt, rcd->ctxt);
 			goto bail;
@@ -1392,7 +1392,7 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 	return 0;
 
 bail_free:
-	qib_dev_err(dd,
+	dd_dev_err(dd,
 		"attempt to allocate 1 page for ctxt %u rcvhdrqtailaddr failed\n",
 		rcd->ctxt);
 	vfree(rcd->user_event_mask);

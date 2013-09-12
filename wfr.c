@@ -222,7 +222,7 @@ static void is_rcvavailint_int(struct hfi_devdata *dd, unsigned int source)
 
 	/* only check what we're using */
 	if (source >= dd->num_rcv_contexts) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"unexpected receive context interrupt %u\n", source);
 		return;
 	}
@@ -231,7 +231,7 @@ static void is_rcvavailint_int(struct hfi_devdata *dd, unsigned int source)
 	if (rcd)
 		handle_receive_interrupt(rcd);
 	else
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"receive context interrupt %u, but no rcd\n", source);
 }
 
@@ -249,7 +249,7 @@ static void is_fast_sdma_int(struct hfi_devdata *dd, unsigned int source)
 	} else {
 		/* TODO: Which fast SDMA interrupt is this? */
 		/* shouldn't happen */
-		qib_dev_err(dd, "invalid fast SDMA interrupt - sdma%u\n",
+		dd_dev_err(dd, "invalid fast SDMA interrupt - sdma%u\n",
 			source);
 	}
 }
@@ -261,7 +261,7 @@ static void is_sdmacleanup_int(struct hfi_devdata *dd, unsigned int source)
 		printk("%s: sdma%u - unimplemented\n", __func__, source);
 	} else {
 		/* shouldn't happen */
-		qib_dev_err(dd, "invalid slow SDMA interrupt - sdma%u\n",
+		dd_dev_err(dd, "invalid slow SDMA interrupt - sdma%u\n",
 			source);
 	}
 }
@@ -315,7 +315,7 @@ static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
 		}
 	}
 	/* fell off the end */
-	qib_dev_err(dd, "invalid interrupt source %u\n", source);
+	dd_dev_err(dd, "invalid interrupt source %u\n", source);
 }
 
 /*
@@ -501,7 +501,7 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 		bsize = 0;	/* invalid size, disables the entry */
 		pa = 0;		/* remove former data */
 	} else {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"unexpeced receive array type %u for index %u, not handled\n",
 			type, index);
 		return;
@@ -1191,7 +1191,7 @@ static int request_intx_irq(struct hfi_devdata *dd)
 	ret = request_irq(dd->pcidev->irq, general_interrupt,
 				  IRQF_SHARED, dd->intx_name, dd);
 	if (ret)
-		qib_dev_err(dd, "unable to request INTx interrupt, err %d\n",
+		dd_dev_err(dd, "unable to request INTx interrupt, err %d\n",
 				ret);
 	else
 		dd->requested_intx_irq = 1;
@@ -1267,7 +1267,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 	 * by checking the boundaries of the fast SDMA source interrupts.
 	 */
 	if ((WFR_IS_SDMAINT_START / 64) != (WFR_IS_SDMAIDLE_END-1) / 64) {
-		qib_dev_err(dd, "SDMA interrupt sources not on same CSR");
+		dd_dev_err(dd, "SDMA interrupt sources not on same CSR");
 		return -EINVAL;
 	}
 
@@ -1346,7 +1346,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 
 		ret = request_irq(me->msix.vector, handler, 0, me->name, arg);
 		if (ret) {
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				"unable to allocate %s interrupt, vector %d, index %d, err %d\n",
 				err_info, me->msix.vector, idx, ret);
 
@@ -1413,7 +1413,7 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 
 	entries = kzalloc(sizeof(*entries) * total, GFP_KERNEL);
 	if (!entries) {
-		qib_dev_err(dd, "cannot allocate msix table\n");
+		dd_dev_err(dd, "cannot allocate msix table\n");
 		ret = -ENOMEM;
 		goto fail;
 	}
@@ -1442,7 +1442,7 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 		/* using MSI-X, with reduced interrupts */
 		/* TODO: handle reduced interrupt case?  Need scheme to
 		   decide who shares. */
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"cannot handle reduced interrupt case, want %u, got %u\n",
 			total, request);
 		ret = -EINVAL;
@@ -1575,7 +1575,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 
 	if (total_contexts > dd->chip_rcv_contexts) {
 		/* don't silently adjust, complain and fail */
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"not enough physical contexts: want %d, have %d\n",
 			(int)total_contexts, (int)dd->chip_rcv_contexts);
 		return -ENOSPC;
@@ -1780,7 +1780,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* verify that reads actually work, save revision for reset check  */
 	dd->revision = read_csr(dd, WFR_CCE_REVISION);
 	if (dd->revision == ~(u64)0) {
-		qib_dev_err(dd, "cannot read chip CSRs\n");
+		dd_dev_err(dd, "cannot read chip CSRs\n");
 		goto bail_free;
 	}
 	dd->majrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MAJOR_SHIFT)

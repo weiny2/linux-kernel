@@ -50,7 +50,7 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 		reg &= ~WFR_SEND_CTRL_SEND_ENABLE_SMASK;
 		break;
 	default:
-		qib_dev_err(dd, "%s: invalid control %d\n", __func__, op);
+		dd_dev_err(dd, "%s: invalid control %d\n", __func__, op);
 		return;
 	}
 	write_csr(dd, WFR_SEND_CTRL, reg);
@@ -172,7 +172,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		} else if (ab >= 0) {		/* absolute blocks valid */
 			ab_total += ab;
 		} else {			/* neither valid */
-			qib_dev_err(dd, "Send context memory pool %d: both the block count and hectopercent are invalid\n", i);
+			dd_dev_err(dd, "Send context memory pool %d: both the block count and hectopercent are invalid\n", i);
 			return -EINVAL;
 		}
 
@@ -182,13 +182,13 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 
 	/* if any percentages are present, they must add up to 100% x 100 */
 	if (hp_total != 0 && hp_total != 10000) {
-		qib_dev_err(dd, "Send context memory pool hectopercent is %d, expecting 10000\n", hp_total);
+		dd_dev_err(dd, "Send context memory pool hectopercent is %d, expecting 10000\n", hp_total);
 		return -EINVAL;
 	}
 
 	/* the absolute pool total cannot be more than the mem total */
 	if (ab_total > total_blocks) {
-		qib_dev_err(dd, "Send context memory pool absolute block count %d is larger than the memory size %d\n", ab_total, total_blocks);
+		dd_dev_err(dd, "Send context memory pool absolute block count %d is larger than the memory size %d\n", ab_total, total_blocks);
 		return -EINVAL;
 	}
 
@@ -216,7 +216,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		} else if (count == SCC_PER_CPU) {
 			count = num_online_cpus();
 		} else if (count < 0) {
-			qib_dev_err(dd, "%s send context invalid count wildcard %d\n", sc_type_name(i), count);
+			dd_dev_err(dd, "%s send context invalid count wildcard %d\n", sc_type_name(i), count);
 			return -EINVAL;
 		}
 		total_contexts += count;
@@ -233,7 +233,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		} else if (pool < NUM_SC_POOLS) {	/* valid wildcard */
 			mem_pool_info[pool].count += count;
 		} else {				/* invalid wildcard */
-			qib_dev_err(dd, "%s send context invalid pool wildcard %d\n", sc_type_name(i), size);
+			dd_dev_err(dd, "%s send context invalid pool wildcard %d\n", sc_type_name(i), size);
 			return -EINVAL;
 		}
 
@@ -241,14 +241,14 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		dd->sc_sizes[i].size = size;
 	}
 	if (fixed_blocks > total_blocks) {
-		qib_dev_err(dd, "Send context fixed block count, %u, larger than total block count %u\n", fixed_blocks, total_blocks);
+		dd_dev_err(dd, "Send context fixed block count, %u, larger than total block count %u\n", fixed_blocks, total_blocks);
 		return -EINVAL;
 	}
 
 	/* step 3: calculate the blocks in the pools, and pool context sizes */
 	pool_blocks = total_blocks - fixed_blocks;
 	if (ab_total > pool_blocks) {
-		qib_dev_err(dd, "Send context fixed pool sizes, %u, larger than pool block count %u\n", ab_total, pool_blocks);
+		dd_dev_err(dd, "Send context fixed pool sizes, %u, larger than pool block count %u\n", ab_total, pool_blocks);
 		return -EINVAL;
 	}
 	/* subtract off the fixed pool blocks */
@@ -262,13 +262,13 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 			pi->blocks = (pool_blocks * pi->hectopercent) / 10000;
 
 		if (pi->blocks == 0 && pi->count != 0) {
-			qib_dev_err(dd, "Send context memory pool %d has %u contexts, but no blocks\n", i, pi->count);
+			dd_dev_err(dd, "Send context memory pool %d has %u contexts, but no blocks\n", i, pi->count);
 			return -EINVAL;
 		}
 		if (pi->count == 0) {
 			/* warn about wasted blocks */
 			if (pi->blocks != 0)
-				qib_dev_err(dd, "Send context memory pool %d has %u blocks, but zero contexts\n", i, pi->blocks);
+				dd_dev_err(dd, "Send context memory pool %d has %u blocks, but zero contexts\n", i, pi->blocks);
 			pi->size = 0;
 		} else {
 			pi->size = pi->blocks / pi->count;
@@ -310,7 +310,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 
 	dd->send_contexts = kzalloc(sizeof(struct send_context_info) * dd->num_send_contexts, GFP_KERNEL);
 	if (!dd->send_contexts) {
-		qib_dev_err(dd, "Unable to allocate send context array\n");
+		dd_dev_err(dd, "Unable to allocate send context array\n");
 		return -ENOMEM;
 	}
 
@@ -378,7 +378,7 @@ void sc_hw_free(struct hfi_devdata *dd, u32 context)
 	if (release_hw_context(&sci->allocated))
 		return;	/* success */
 
-	qib_dev_err(dd, "%s: context %u not allocated?\n", __func__, context);
+	dd_dev_err(dd, "%s: context %u not allocated?\n", __func__, context);
 }
 
 /* return the base context of a context in a group */
@@ -735,7 +735,7 @@ int init_credit_return(struct hfi_devdata *dd)
 	/* enforce the expectation that the numas are compact */
 	for (i = 0; i < num_numa; i++) {
 		if (!node_online(i)) {
-			qib_dev_err(dd, "NUMA nodes are not compact\n");
+			dd_dev_err(dd, "NUMA nodes are not compact\n");
 			ret = -EINVAL;
 			goto done;
 		}
@@ -743,7 +743,7 @@ int init_credit_return(struct hfi_devdata *dd)
 
 	dd->cr_base = kzalloc(sizeof(struct credit_return_base) * num_numa, GFP_KERNEL);
 	if (!dd->cr_base) {
-		qib_dev_err(dd, "Unable to allocate credit return base\n");
+		dd_dev_err(dd, "Unable to allocate credit return base\n");
 		ret = -ENOMEM;
 	}
 	original_node_id = dev_to_node(&dd->pcidev->dev);
@@ -758,7 +758,7 @@ int init_credit_return(struct hfi_devdata *dd)
 					GFP_KERNEL);
 		if (dd->cr_base[i].va == NULL) {
 			set_dev_node(&dd->pcidev->dev, original_node_id);
-			qib_dev_err(dd, "Unable to allocate credit return "
+			dd_dev_err(dd, "Unable to allocate credit return "
 				"DMA range for NUMA %d\n", i);
 			ret = -ENOMEM;
 			goto done;

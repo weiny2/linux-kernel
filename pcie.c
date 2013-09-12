@@ -52,7 +52,7 @@ static int qib_tune_pcie_coalesce(struct hfi_devdata *);
 /*
  * Do all the common PCIe setup and initialization.
  * devdata is not yet allocated, and is not allocated until after this
- * routine returns success.  Therefore qib_dev_err() can't be used for error
+ * routine returns success.  Therefore dd_dev_err() can't be used for error
  * printing.
  */
 int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -148,7 +148,7 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 
 	/* sanity check vs expectations */
 	if (len != WFR_TXE_PIO_SEND + WFR_TXE_PIO_SIZE) {
-		qib_dev_err(dd, "chip PIO range does not match\n");
+		dd_dev_err(dd, "chip PIO range does not match\n");
 		return -EINVAL;
 	}
 
@@ -237,7 +237,7 @@ static void qib_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
 	}
 do_intx:
 	if (ret) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"pci_enable_msix %d vectors failed: %d, falling back to INTx\n",
 			tabsize, ret);
 		tabsize = 0;
@@ -259,7 +259,7 @@ int qib_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 	int pos, ret = 0;
 
 	if (!pci_is_pcie(dd->pcidev)) {
-		qib_dev_err(dd, "Can't find PCI Express capability!\n");
+		dd_dev_err(dd, "Can't find PCI Express capability!\n");
 		/* set up something... */
 		dd->lbus_width = 1;
 		dd->lbus_speed = 2500; /* Gen1, 2.5GHz */
@@ -297,7 +297,7 @@ int qib_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 	 * on first initialization, not afterwards (i.e., reset).
 	 */
 	if (minw && linkstat < minw)
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			    "PCIe width %u (x%u HCA), performance reduced\n",
 			    linkstat, minw);
 
@@ -345,18 +345,18 @@ void qib_pcie_reenable(struct hfi_devdata *dd, u16 cmd, u8 iline, u8 cline)
 	r = pci_write_config_dword(dd->pcidev, PCI_BASE_ADDRESS_0,
 				   dd->pcibar0);
 	if (r)
-		qib_dev_err(dd, "rewrite of BAR0 failed: %d\n", r);
+		dd_dev_err(dd, "rewrite of BAR0 failed: %d\n", r);
 	r = pci_write_config_dword(dd->pcidev, PCI_BASE_ADDRESS_1,
 				   dd->pcibar1);
 	if (r)
-		qib_dev_err(dd, "rewrite of BAR1 failed: %d\n", r);
+		dd_dev_err(dd, "rewrite of BAR1 failed: %d\n", r);
 	/* now re-enable memory access, and restore cosmetic settings */
 	pci_write_config_word(dd->pcidev, PCI_COMMAND, cmd);
 	pci_write_config_byte(dd->pcidev, PCI_INTERRUPT_LINE, iline);
 	pci_write_config_byte(dd->pcidev, PCI_CACHE_LINE_SIZE, cline);
 	r = pci_enable_device(dd->pcidev);
 	if (r)
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"pci_enable_device failed after reset: %d\n", r);
 }
 

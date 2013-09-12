@@ -2062,7 +2062,7 @@ err_hdrs:
 err_lk:
 	kfree(dev->qp_table);
 err_qpt:
-	qib_dev_err(dd, "cannot register verbs: %d!\n", -ret);
+	dd_dev_err(dd, "cannot register verbs: %d!\n", -ret);
 bail:
 	return ret;
 }
@@ -2081,19 +2081,19 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 	ib_unregister_device(ibdev);
 
 	if (!list_empty(&dev->piowait))
-		qib_dev_err(dd, "piowait list not empty!\n");
+		dd_dev_err(dd, "piowait list not empty!\n");
 	if (!list_empty(&dev->dmawait))
-		qib_dev_err(dd, "dmawait list not empty!\n");
+		dd_dev_err(dd, "dmawait list not empty!\n");
 	if (!list_empty(&dev->txwait))
-		qib_dev_err(dd, "txwait list not empty!\n");
+		dd_dev_err(dd, "txwait list not empty!\n");
 	if (!list_empty(&dev->memwait))
-		qib_dev_err(dd, "memwait list not empty!\n");
+		dd_dev_err(dd, "memwait list not empty!\n");
 	if (dev->dma_mr)
-		qib_dev_err(dd, "DMA MR not NULL!\n");
+		dd_dev_err(dd, "DMA MR not NULL!\n");
 
 	qps_inuse = qib_free_all_qps(dd);
 	if (qps_inuse)
-		qib_dev_err(dd, "QP memory leak! %u still in use\n",
+		dd_dev_err(dd, "QP memory leak! %u still in use\n",
 			    qps_inuse);
 
 	del_timer_sync(&dev->mem_timer);

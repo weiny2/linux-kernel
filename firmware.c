@@ -118,11 +118,11 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 
 	/* we expect 8-byte aligned, length data */
 	if (((unsigned long)data % 8) != 0) {
-		qib_dev_err(dd, "8501 write: data is not 8-byte aligned\n");
+		dd_dev_err(dd, "8501 write: data is not 8-byte aligned\n");
 		return -EINVAL;
 	}
 	if ((len % 8) != 0) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"8501 write: data lengh is not a multiple of 8\n");
 		return -EINVAL;
 	}
@@ -153,7 +153,7 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 		nreads = 0;
 		do {
 			if (time_after(jiffies, timeout)) {
-				qib_dev_err(dd, "8501 write: write fails to complete at address 0x%x, giving up\n",
+				dd_dev_err(dd, "8501 write: write fails to complete at address 0x%x, giving up\n",
 					start + offset);
 				err = -ETIMEDOUT;
 				goto done;
@@ -184,7 +184,7 @@ static int invalid_header(struct hfi_devdata *dd, const char *what,
 	if (actual == expected)
 		return 0;
 
-	qib_dev_err(dd, "invalid firmware header field %s: expected 0x%x, actual 0x%x\n", what, expected, actual);
+	dd_dev_err(dd, "invalid firmware header field %s: expected 0x%x, actual 0x%x\n", what, expected, actual);
 	return 1;
 }
 
@@ -205,14 +205,14 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 
 	ret = request_firmware(&fdet->fw, name, &dd->pcidev->dev);
 	if (ret) {
-		qib_dev_err(dd, "cannot load firmware \"%s\", err %d\n",
+		dd_dev_err(dd, "cannot load firmware \"%s\", err %d\n",
 			name, ret);
 		return ret;
 	}
 
 	/* verify the firmware */
 	if (fdet->fw->size < sizeof(struct css_header)) {
-		qib_dev_err(dd, "firmware \"%s\" is too small\n", name);
+		dd_dev_err(dd, "firmware \"%s\" is too small\n", name);
 		ret = -EINVAL;
 		goto done;
 	}
@@ -273,7 +273,7 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 			+ FW_EXPONENT_DWORDS *4
 			+ FW_SIGNATURE_DWORDS;
 	if (prefix_total >= fdet->fw->size) {
-		qib_dev_err(dd, "firmware \"%s\", size %ld, must be larger than %ld bytes\n", name, fdet->fw->size, prefix_total);
+		dd_dev_err(dd, "firmware \"%s\", size %ld, must be larger than %ld bytes\n", name, fdet->fw->size, prefix_total);
 		ret = -EINVAL;
 		goto done;
 	}
@@ -331,7 +331,7 @@ static int write_rsa_data(struct hfi_devdata *dd, int what, const char *name, co
 			/* TODO: add a timeout */
 			do {
 				if (time_after(jiffies, timeout)) {
-					qib_dev_err(dd, "security block stall timeout while writing %s\n", name);
+					dd_dev_err(dd, "security block stall timeout while writing %s\n", name);
 					return -ETIMEDOUT;
 				}
 				reg = read_csr(dd, WFR_FW_CTRL);
@@ -438,7 +438,7 @@ int load_firmware(struct hfi_devdata *dd)
 	firmware = 0;
 	do {
 		if (time_after(jiffies, timeout)) {
-			qib_dev_err(dd, "8051 start timeout, current state 0x%llx\n", firmware);
+			dd_dev_err(dd, "8051 start timeout, current state 0x%llx\n", firmware);
 			ret = -ETIMEDOUT;
 			goto done;
 		}

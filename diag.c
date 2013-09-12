@@ -404,7 +404,7 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 	}
 
 	if (dp.version != _DIAG_PKT_VERS) {
-		qib_dev_err(dd, "Invalid version %u for diagpkt_write\n",
+		dd_dev_err(dd, "Invalid version %u for diagpkt_write\n",
 			    dp.version);
 		ret = -EINVAL;
 		goto bail;

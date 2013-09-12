@@ -1347,7 +1347,7 @@ extern struct mutex qib_mutex;
  * qib_early_err is used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
  * cleanup when devdata may have been freed, etc.  qib_dev_porterr is
- * the same as qib_dev_err, but is used when the message really needs
+ * the same as dd_dev_err, but is used when the message really needs
  * the IB port# to be definitive as to what's happening..
  * All of these go to the trace log, and the trace log entry is done
  * first to avoid possible serial port delays from printk.
@@ -1357,7 +1357,7 @@ extern struct mutex qib_mutex;
 		dev_err(dev, fmt, ##__VA_ARGS__); \
 	} while (0)
 
-#define qib_dev_err(dd, fmt, ...) \
+#define dd_dev_err(dd, fmt, ...) \
 	do { \
 		dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
 			get_unit_name((dd)->unit), ##__VA_ARGS__); \

@@ -647,7 +647,7 @@ void qib_user_sdma_queue_drain(struct qib_pportdata *ppd,
 	if (!list_empty(&pq->sent)) {
 		struct list_head free_list;
 
-		qib_dev_err(dd, "user sdma lists not empty: forcing!\n");
+		dd_dev_err(dd, "user sdma lists not empty: forcing!\n");
 		INIT_LIST_HEAD(&free_list);
 		mutex_lock(&pq->lock);
 		list_splice_init(&pq->sent, &free_list);

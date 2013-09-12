@@ -59,7 +59,7 @@ static ssize_t store_hrtbt_enb(struct qib_pportdata *ppd, const char *buf,
 
 	ret = kstrtou16(buf, 0, &val);
 	if (ret) {
-		qib_dev_err(dd, "attempt to set invalid Heartbeat enable\n");
+		dd_dev_err(dd, "attempt to set invalid Heartbeat enable\n");
 		return ret;
 	}
 
@@ -96,7 +96,7 @@ static ssize_t store_led_override(struct qib_pportdata *ppd, const char *buf,
 
 	ret = kstrtou16(buf, 0, &val);
 	if (ret) {
-		qib_dev_err(dd, "attempt to set invalid LED override\n");
+		dd_dev_err(dd, "attempt to set invalid LED override\n");
 		return ret;
 	}
 
@@ -680,7 +680,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	int ret;
 
 	if (!port_num || port_num > dd->num_pports) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"Skipping infiniband class with invalid port %u\n",
 			port_num);
 		ret = -ENODEV;
@@ -691,7 +691,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	ret = kobject_init_and_add(&ppd->pport_kobj, &qib_port_ktype, kobj,
 				   "linkcontrol");
 	if (ret) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"Skipping linkcontrol sysfs info, (err %d) port %u\n",
 			ret, port_num);
 		goto bail;
@@ -701,7 +701,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	ret = kobject_init_and_add(&ppd->sl2vl_kobj, &qib_sl2vl_ktype, kobj,
 				   "sl2vl");
 	if (ret) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"Skipping sl2vl sysfs info, (err %d) port %u\n",
 			ret, port_num);
 		goto bail_link;
@@ -711,7 +711,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	ret = kobject_init_and_add(&ppd->diagc_kobj, &qib_diagc_ktype, kobj,
 				   "diag_counters");
 	if (ret) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			"Skipping diag_counters sysfs info, (err %d) port %u\n",
 			ret, port_num);
 		goto bail_sl;
@@ -724,7 +724,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	ret = kobject_init_and_add(&ppd->pport_cc_kobj, &qib_port_cc_ktype,
 				kobj, "CCMgtA");
 	if (ret) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		 "Skipping Congestion Control sysfs info, (err %d) port %u\n",
 		 ret, port_num);
 		goto bail_diagc;
@@ -735,7 +735,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	ret = sysfs_create_bin_file(&ppd->pport_cc_kobj,
 				&cc_setting_bin_attr);
 	if (ret) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		 "Skipping Congestion Control setting sysfs info, (err %d) port %u\n",
 		 ret, port_num);
 		goto bail_cc;
@@ -744,7 +744,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	ret = sysfs_create_bin_file(&ppd->pport_cc_kobj,
 				&cc_table_bin_attr);
 	if (ret) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 		 "Skipping Congestion Control table sysfs info, (err %d) port %u\n",
 		 ret, port_num);
 		goto bail_cc_entry_bin;

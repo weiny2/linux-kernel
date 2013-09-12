@@ -68,7 +68,7 @@ int qib_enable_wc(struct hfi_devdata *dd)
 
 	cookie = mtrr_add(pioaddr, piolen, MTRR_TYPE_WRCOMB, 0);
 	if (cookie < 0) {
-		qib_dev_err(dd,
+		dd_dev_err(dd,
 			 "mtrr_add()  WC for PIO bufs failed (%d)\n",
 			 cookie);
 		ret = -EINVAL;
@@ -93,7 +93,7 @@ void qib_disable_wc(struct hfi_devdata *dd)
 		r = mtrr_del(dd->wc_cookie, dd->wc_base,
 			     dd->wc_len);
 		if (r < 0)
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				 "mtrr_del(%lx, %lx, %lx) failed: %d\n",
 				 dd->wc_cookie, dd->wc_base, dd->wc_len, r);
 		dd->wc_cookie = 0; /* even on failure */

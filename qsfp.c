@@ -128,7 +128,7 @@ deselect:
 	 * so we must wait.
 	 */
 	if (stuck)
-		qib_dev_err(dd, "QSFP interface bus stuck non-idle\n");
+		dd_dev_err(dd, "QSFP interface bus stuck non-idle\n");
 
 	if (pass >= QSFP_MAX_RETRY && ret)
 		qib_dev_porterr(dd, ppd->port, "QSFP failed even retrying\n");

@@ -112,7 +112,7 @@ static void scl_out(struct hfi_devdata *dd, u8 bit)
 			udelay(2);
 		}
 		if (rise_usec <= 0)
-			qib_dev_err(dd, "SCL interface stuck low > %d uSec\n",
+			dd_dev_err(dd, "SCL interface stuck low > %d uSec\n",
 				    SCL_WAIT_USEC);
 	}
 	i2c_wait_for_writes(dd);
@@ -303,7 +303,7 @@ int qib_twsi_reset(struct hfi_devdata *dd)
 
 		pins = dd->f_gpio_mod(dd, 0, 0, 0);
 		if ((pins & mask) != mask)
-			qib_dev_err(dd, "GPIO pins not at rest: %d\n",
+			dd_dev_err(dd, "GPIO pins not at rest: %d\n",
 				    pins & mask);
 		/* Drop SDA to issue START */
 		udelay(1); /* Guarantee .6 uSec setup */
@@ -383,7 +383,7 @@ int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr,
 		udelay(TWSI_BUF_WAIT_USEC);
 
 		if (ret) {
-			qib_dev_err(dd,
+			dd_dev_err(dd,
 				"Failed to write interface read addr %02X\n",
 				addr);
 			ret = 1;
@@ -451,7 +451,7 @@ int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
 				goto failed_write;
 			ret = qib_twsi_wr(dd, addr, 0);
 			if (ret) {
-				qib_dev_err(dd,
+				dd_dev_err(dd,
 					"Failed to write interface write addr %02X\n",
 					addr);
 				goto failed_write;
