@@ -332,9 +332,6 @@ struct qib_verbs_txreq {
 
 #define HFI_DEFAULT_MTU 4096
 
-/* max number of IB ports supported per HCA */
-#define QIB_MAX_IB_PORTS 2
-
 /*
  * Possible IB config parameters for f_get/set_ib_table()
  */
@@ -415,14 +412,6 @@ struct qib_msix_entry {
 	char name[MAX_NAME_SIZE];
 	cpumask_var_t mask;
 };
-
-/* Below is an opaque struct. Each chip (device) can maintain
- * private data needed for its operation, but not germane to the
- * rest of the driver.  For convenience, we define another that
- * is chip-specific, per-port
- */
-struct qib_chip_specific;
-struct qib_chipport_specific;
 
 enum qib_sdma_states {
 	qib_sdma_state_s00_hw_down,
@@ -977,12 +966,6 @@ struct hfi_devdata {
 #define QIB_SDMA_SENDCTRL_OP_CLEANUP   (1U << 3)
 #define QIB_SDMA_SENDCTRL_OP_DRAIN     (1U << 4)
 
-/* operation types for f_txchk_change() */
-#define TXCHK_CHG_TYPE_DIS1  3
-#define TXCHK_CHG_TYPE_ENAB1 2
-#define TXCHK_CHG_TYPE_KERN  1
-#define TXCHK_CHG_TYPE_USER  0
-
 #define QIB_CHASE_TIME msecs_to_jiffies(145)
 #define QIB_CHASE_DIS_TIME msecs_to_jiffies(160)
 
@@ -1202,8 +1185,8 @@ void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
  * be:
  *
  *	Bytes	Field
- *	  8	LHR
- *	 12	BTH
+ *	  8	LRH
+ *	 12	BHT
  *	 ??	KDETH
  *	  8	RHF
  *	---
@@ -1217,8 +1200,8 @@ void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
  * Maximal header byte count:
  *
  *	Bytes	Field
- *	  8	LHR
- *	 40	GHR (optional)
+ *	  8	LRH
+ *	 40	GRH (optional)
  *	 12	BTH
  *	 ??	KDETH
  *	  8	RHF
