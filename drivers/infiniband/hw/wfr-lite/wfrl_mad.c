@@ -158,7 +158,7 @@ static void reset_virtual_port(u8 port)
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	reset_virtual_port_state(port);
-	vpi->link_speed.active = cpu_to_be16(IB_SPEED_SDR);
+	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
 }
 
 static inline void set_virtual_port_state(u8 port, u8 state)
@@ -185,10 +185,8 @@ static void activate_virtual_port(u8 port)
 	/* go to the fastest speed enabled. */
 	if (STL_LINK_SPEED_25G & speed_enabled)
 		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
-	else if (STL_LINK_SPEED_12_5G & speed_enabled)
-		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
 	else
-		vpi->link_speed.active = cpu_to_be16(IB_SPEED_SDR);
+		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
 
 	set_virtual_port_state(port, IB_PORT_ACTIVE);
 	printk(KERN_WARNING PFX "Virtual Port %d Activated\n", port);
