@@ -52,7 +52,7 @@
 #define WFR_PIO_CMASK 0x7ff	/* counter mask for free and fill counters */
 
 
-//#define USE_GENERATED_WFR_HEADERS 1
+#define USE_GENERATED_WFR_HEADERS 1
 #ifdef USE_GENERATED_WFR_HEADERS
 
 #include "include/wfr/wfr_core.h"
