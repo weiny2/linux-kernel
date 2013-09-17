@@ -55,13 +55,12 @@
 //#define USE_GENERATED_WFR_HEADERS 1
 #ifdef USE_GENERATED_WFR_HEADERS
 
-
-#include "wfr/wfr_core.h"
-#include "wfr/wfr_cce.h"
-#include "wfr/wfr_rxe.h"
-#include "wfr/wfr_txe.h"
-#include "wfr/dc_top_csrs.h"
-#include "wfr/dc_8051_csrs.h"
+#include "include/wfr/wfr_core.h"
+#include "include/wfr/wfr_cce.h"
+#include "include/wfr/wfr_rxe.h"
+#include "include/wfr/wfr_txe.h"
+#include "include/wfr/dc_top_csrs.h"
+#include "include/wfr/dc_8051_csrs.h"
 
 /* not defined in wfr_core.h */
 #define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000
