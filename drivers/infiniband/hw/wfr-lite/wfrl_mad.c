@@ -125,7 +125,7 @@ static void init_virtual_port_info(u8 port)
 	reset_virtual_port_state(port);
 	vpi->link_speed.supported = cpu_to_be16(STL_LINK_SPEED_12_5G |
 						STL_LINK_SPEED_25G);
-	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
+	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
 	vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
 
 	vpi->link_width.supported = cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X);
@@ -158,7 +158,7 @@ static void reset_virtual_port(u8 port)
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	reset_virtual_port_state(port);
-	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
+	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
 }
 
 static inline void set_virtual_port_state(u8 port, u8 state)
