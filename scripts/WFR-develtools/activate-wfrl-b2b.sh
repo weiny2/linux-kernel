@@ -73,7 +73,7 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe ib_usa"
 	sleep 5
 fi
-ssh root@$remote_node "iba_portenable -w2 -s4 -p $remote_port"
+ssh root@$remote_node "iba_portconfig -w2 -s4 -p $remote_port enable" || exit 1
 
 if [ "$reload_drivers" == "true" ]; then
 	echo "Reloading ib_wfr_lite on \"localhost\""
@@ -90,7 +90,7 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe ib_usa
 fi
 
-iba_portenable -w2 -s4 -p $local_port
+iba_portconfig -w2 -s4 -p $local_port enable || exit 1
 
 if [ "$ibmode" == "true" ]; then
 	exit 0
