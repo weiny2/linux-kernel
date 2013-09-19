@@ -51,7 +51,7 @@
 #include <linux/uaccess.h>
 
 #include "hfi.h"
-#include "hfi_device.h"
+#include "device.h"
 #include "common.h"
 
 #undef pr_fmt

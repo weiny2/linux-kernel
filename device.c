@@ -36,7 +36,7 @@
 #include <linux/fs.h>
 
 #include "hfi.h"
-#include "hfi_device.h"
+#include "device.h"
 
 static struct class *class;
 static dev_t hfi_dev;

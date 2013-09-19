@@ -41,7 +41,7 @@
 #include <linux/printk.h>
 
 #include "hfi.h"
-#include "hfi_device.h"
+#include "device.h"
 #include "common.h"
 #include "mad.h"
 
