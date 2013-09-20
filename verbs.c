@@ -43,6 +43,7 @@
 
 #include "hfi.h"
 #include "common.h"
+#include "device.h"
 
 static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
@@ -1848,6 +1849,7 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	struct qib_pportdata *ppd = dd->pport;
 	unsigned i, lk_tab_size;
 	int ret;
+	size_t lcpysz = IB_DEVICE_NAME_MAX;
 
 	dev->qp_table_size = ib_qib_qp_table_size;
 	get_random_bytes(&dev->qp_rnd, sizeof(dev->qp_rnd));
@@ -1936,7 +1938,8 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	if (!ib_qib_sys_image_guid)
 		ib_qib_sys_image_guid = ppd->guid;
 
-	strlcpy(ibdev->name, "qib%d", IB_DEVICE_NAME_MAX);
+	lcpysz = strlcpy(ibdev->name, class_name(), lcpysz);
+	strlcpy(ibdev->name + lcpysz, "%d", lcpysz);
 	ibdev->owner = THIS_MODULE;
 	ibdev->node_guid = ppd->guid;
 	ibdev->uverbs_abi_ver = QIB_UVERBS_ABI_VERSION;
