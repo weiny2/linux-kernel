@@ -54,6 +54,113 @@ static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
 MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
 
+struct flag_table {
+	u64 flag;	/* the flag */
+	char *str;	/* description string */
+	u16 extra;	/* extra information */
+	u16 unused0;
+	u32 unused1;
+};
+
+/* str must be a string constant */
+#define FLAG_ENTRY(str, extra, flag) {flag, str, extra}
+
+/* Send Error Consequences */
+#define SEC_WRITE_DROPPED	0x1
+#define SEC_SC_HALTED		0x2	/* per-context only */
+#define SEC_HFI_FREEZE		0x4	/* per-HFI only */
+
+/*
+ * TXE PIO Error flags and consequences
+ */
+static struct flag_table pio_err_status_flags[] = {
+	FLAG_ENTRY("PioWriteBadCtxt",
+		SEC_WRITE_DROPPED,
+		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_BAD_CTXT_ERR_SMASK),
+
+	FLAG_ENTRY("PioWriteAddrParity",
+		SEC_HFI_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_ADDR_PARITY_ERR_SMASK),
+
+	FLAG_ENTRY("PioCsrParity",
+		SEC_HFI_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_CSR_PARITY_ERR_SMASK),
+
+	FLAG_ENTRY("PioReadCtrlParity",
+		SEC_HFI_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_READ_CTRL_PARITY_ERR_SMASK),
+
+	FLAG_ENTRY("PioBlockQwCountUnc",
+		SEC_HFI_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_UNC_ERR_SMASK),
+
+	FLAG_ENTRY("PioBlockQwCountCor",
+		0,
+		WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_COR_ERR_SMASK)
+};
+
+/*
+ * TXE Send Context Error flags and consequences
+ */
+static struct flag_table sc_err_status_flags[] = {
+	FLAG_ENTRY("Sop",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_SOP_ERR_SMASK),
+	FLAG_ENTRY("DisallowedPacket",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK),
+	FLAG_ENTRY("WriteCrossesBoundary",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_CROSSES_BOUNDARY_ERR_SMASK),
+	FLAG_ENTRY("WriteOverflow",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_OVERFLOW_ERR_SMASK),
+	FLAG_ENTRY("WriteToLaunched",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_TO_LAUNCHED_ERR_SMASK),
+	FLAG_ENTRY("WriteCreditExceeded",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_CREDIT_EXCEEDED_ERR_SMASK),
+	FLAG_ENTRY("WriteOutOfBounds",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_OUT_OF_BOUNDS_ERR_SMASK),
+	FLAG_ENTRY("WriteDataParity",
+		SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK),
+	FLAG_ENTRY("VLLengthUnc",
+		SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_VLLENGTH_UNC_ERR_SMASK),
+	FLAG_ENTRY("PacketEvictedFifoUnc",
+		SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_PACKET_EVICTED_FIFO_UNC_ERR_SMASK),
+	FLAG_ENTRY("VLLengthCor",
+		0,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_VLLENGTH_COR_ERR_SMASK),
+	FLAG_ENTRY("PacketEvictedFifoCor",
+		0,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_PACKET_EVICTED_FIFO_COR_ERR_SMASK),
+	FLAG_ENTRY("StateMachine",
+		SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK),
+	FLAG_ENTRY("WriteQWValidParity",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK)
+};
+
+/*
+ * Credit Return flags
+ */
+static struct flag_table credit_return_flags[] = {
+	FLAG_ENTRY("Status ", 0, WFR_CR_STATUS_SMASK),
+	FLAG_ENTRY("CreditReturnDueToPBC", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK),
+	FLAG_ENTRY("CreditReturnDueToThreshold ", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK),
+	FLAG_ENTRY("CreditReturnDueToErr ", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SMASK),
+	FLAG_ENTRY("CreditReturnDueToForce ", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
+};
 
 static u32 encoded_size(u32 size);
 
@@ -89,6 +196,62 @@ static void write_uctxt_csr(struct hfi_devdata *dd, int ctxt, u32 offset0,
 	/* user per-context CSRs are separated by 0x1000 */
 	write_csr(dd, offset0 + (0x1000 * ctxt), value);
 } 
+
+/* ======================================================================== */
+
+/*
+ * Using the given flag table, print a comma separated string into
+ * the buffer.  End in '*' if the buffer is too short.
+ */
+static char *flag_string(char *buf, int buf_len, u64 flags,
+				struct flag_table *table, int table_size)
+{
+	const char *s;
+	char *p = buf;
+	int len = buf_len;
+	int no_room = 0;
+	int i;
+	char c;
+
+	/* make sure there is at least 2 so we can form "*" */
+	if (len < 2)
+		return "";
+
+	len--;	/* leave room for a nul */
+	for (i = 0; i < table_size; i++) {
+		if (flags & table[i].flag) {
+			/* add a comma, if not the first */
+			if (p != buf) {
+				if (len == 0) {
+					no_room = 1;
+					break;
+				}
+				*p++ = ',';
+				len--;
+			}
+			/* copy the string */
+			s = table[i].str;
+			while ((c = *s++) != 0 && len > 0) {
+				*p++ = c;
+				len--;
+			}
+			if (c != 0) {
+				no_room = 1;
+				break;
+			}
+		}
+	}
+	/* add * if ran out of room */
+	if (no_room) {
+		/* may need to back up to add space for a '*' */
+		if (len == 0)
+			--p;
+		*p++ = '*';
+	}
+	/* add final nul - space already allocated above */
+	*p = 0;
+	return buf;
+}
 
 /* chip interrupt source table */
 struct is_table {
@@ -186,10 +349,43 @@ static void handle_sdma_interrupt(struct sdma_engine *per_sdma)
 	printk("%s: engine #%d - unimplemented\n", __func__, per_sdma->which);
 }
 
+static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			pio_err_status_flags, ARRAY_SIZE(pio_err_status_flags));
+}
+
 static void is_general_err_int(struct hfi_devdata *dd, unsigned int source)
 {
-	/* TODO: actually do something */
-	printk("%s: int%u - unimplemented\n", __func__ , source);
+	char buf[96];
+	u64 reg;
+
+	switch (source) {
+	case 4: /* PioSendPerHfiErr */
+		/* TODO: do more here.. most of these put the hfi in
+		   freeze more.  We need to recognize that and unfreeze */
+		/* clear the error(s) */
+		reg = read_csr(dd, WFR_SEND_PIO_ERR_STATUS);
+		write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, reg);
+		dd_dev_info(dd, "PIO Send Error: %s\n",
+			pio_err_status_string(buf, sizeof(buf), reg));
+		break;
+
+	/* TODO: do something for the unhandled cases */
+	case 0: /* CcePerHfiErr */
+	case 1: /* RcvPerHfiErr */
+	case 5: /* SDmaPerHfiErr */
+	case 6: /* PacketEgressPerHfiErr */
+		printk("%s: int%u - unimplemented\n", __func__ , source);
+		break;
+
+	default:
+		/* these are all reserved interrupts */
+		dd_dev_err(dd, "Unexpected general error interrupt %u\n",
+			source);
+		break;
+	}
+
 }
 
 static void is_rcvctxt_err_int(struct hfi_devdata *dd, unsigned int source)
@@ -198,10 +394,106 @@ static void is_rcvctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
+static char *send_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			sc_err_status_flags, ARRAY_SIZE(sc_err_status_flags));
+}
+
+static char *credit_return_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			credit_return_flags, ARRAY_SIZE(credit_return_flags));
+}
+
+/*
+ * Send Context Error Interrupt on a given send context.
+ */
+static void handle_send_context_err(struct hfi_devdata *dd,
+		unsigned int context, u64 err_status)
+{
+	struct send_context_info *sci;
+	struct send_context *sc;
+	u64 hw_free;
+	char flags[96];
+	int write_dropped = 0;
+	int sc_halted = 0;
+	int i;
+
+	if (context >= dd->num_send_contexts) {
+		dd_dev_err(dd, "unexpected out of range send contexter interrupt %u\n", context);
+		return;
+	}
+
+	sci = &dd->send_contexts[context];
+	sc = sci->sc;
+
+	/* by the time we are called, the credit return should have been
+	   updated */
+	hw_free = *sc->hw_free;
+
+	dd_dev_info(dd, "%s: sc%d:\n", __func__, sc->context);
+	dd_dev_info(dd, "%s:   hw_free: counter 0x%lx, flags: %s\n", __func__,
+		(unsigned long)(hw_free & WFR_CR_COUNTER_SMASK)
+			>> WFR_CR_COUNTER_SHIFT,
+		credit_return_string(flags, sizeof(flags), hw_free));
+	dd_dev_info(dd, "%s:   fill 0x%lx, free 0x%lx\n", __func__,
+		sc->fill, sc->free);
+	dd_dev_info(dd, "%s:   ErrStatus: %s", __func__,
+		send_err_status_string(flags, sizeof(flags), err_status));
+
+	/* find out what effect has been had on this context */
+	for (i = 0; i < ARRAY_SIZE(sc_err_status_flags); i++) {
+		if (err_status & sc_err_status_flags[i].flag) {
+			if (sc_err_status_flags[i].extra & SEC_WRITE_DROPPED)
+				write_dropped = 1;
+			if (sc_err_status_flags[i].extra & SEC_SC_HALTED)
+				sc_halted = 1;
+		}
+	}
+
+	if (write_dropped) {
+		// TODO: do something?
+	}
+
+	if (sc_halted) {
+		// TODO: do something  -
+		// user context: given an extra indication to user space?
+		// 	They can see an error via credit return - maybe?
+		//	Question: is the Status bit set for any error or if
+		//	the context is halted?
+		//	When the user calls in, then restart
+		// kernel context: try to restart
+		// ack context: same as kernel
+	} else {
+		// TODO: set a counter?
+	}
+
+	// TODO: call sc_release_update()? 
+}
+
+/*
+ * One of the combined send context error interrupts have been raised.  Look
+ * at the 8 corresponding send contexts for an error.
+ */
 static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 {
-	/* TODO: actually do something */
-	printk("%s: int%u - unimplemented\n", __func__ , source);
+	unsigned int context;
+	unsigned int c_end;
+	u64 err_status;
+
+	context = 8*source;
+	c_end = context + 8;
+	for (; context < c_end; context++) {
+		/* read and clear the error status */
+		err_status = read_kctxt_csr(dd, context,
+					WFR_SEND_CTXT_ERR_STATUS);
+		if (err_status) {
+			write_kctxt_csr(dd, context,
+					WFR_SEND_CTXT_ERR_CLEAR, err_status);
+			handle_send_context_err(dd, context, err_status);
+		}
+	}
 }
 
 static void is_sdma_err_int(struct hfi_devdata *dd, unsigned int source)
@@ -222,8 +514,7 @@ static void is_rcvavailint_int(struct hfi_devdata *dd, unsigned int source)
 
 	/* only check what we're using */
 	if (source >= dd->num_rcv_contexts) {
-		dd_dev_err(dd,
-			"unexpected receive context interrupt %u\n", source);
+		dd_dev_err(dd, "unexpected out of range receive context interrupt %u\n", source);
 		return;
 	}
 
@@ -349,7 +640,7 @@ static irqreturn_t general_interrupt(int irq, void *data)
 						WFR_CCE_NUM_INT_CSRS*64) {
 		/* TODO: the print is temporary */
 		char buf[64];
-		printk(DRIVER_NAME"%d: interrupt: %d, %s\n", dd->unit, bit,
+		printk(DRIVER_NAME"%d: interrupt %d: %s\n", dd->unit, bit,
 			is_name(buf, sizeof(buf), bit));
 		is_interrupt(dd, bit);
 	}
@@ -1647,6 +1938,59 @@ static void init_partition_keys(struct hfi_devdata *dd)
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (3 * 8),  0);
 }
 
+/* set TXE CSRs to chip reset defaults */
+static void reset_txe(struct hfi_devdata *dd)
+{
+	int i;
+
+	write_csr(dd, WFR_SEND_CTRL, 0);
+	write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIMIT, 0);
+	write_csr(dd, WFR_SEND_PIO_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, -1);
+	write_csr(dd, WFR_SEND_DMA_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, -1);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, -1);
+	write_csr(dd, WFR_SEND_BTH_QP, 0);
+	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, 0);
+	write_csr(dd, WFR_SEND_SC2VLT0, 0);
+	write_csr(dd, WFR_SEND_SC2VLT1, 0);
+	write_csr(dd, WFR_SEND_SC2VLT2, 0);
+	write_csr(dd, WFR_SEND_SC2VLT3, 0);
+	for (i = 0; i < WFR_TXE_NUM_PRIORITIES; i++) {
+		write_csr(dd, WFR_SEND_LOW_PRIORITY_LIST + (8*i), 0);
+		write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIST + (8*i), 0);
+	}
+	for (i = 0; i < WFR_TXE_NUM_CONTEXT_SET; i++)
+		write_csr(dd, WFR_SEND_CONTEXT_SET_CTRL + (8*i), 0);
+	for (i = 0; i < WFR_TXE_NUM_32_BIT_COUNTER; i++)
+		write_csr(dd, WFR_SEND_COUNTER_ARRAY32 + (8*i), 0);
+	for (i = 0; i < WFR_TXE_NUM_64_BIT_COUNTER; i++)
+		write_csr(dd, WFR_SEND_COUNTER_ARRAY64 + (8*i), 0);
+	write_csr(dd, WFR_SEND_CM_CTRL, 0);
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, 0);
+	write_csr(dd, WFR_SEND_CM_TIMER_CTRL, 0);
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8*i), 0);
+	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, 0);
+
+	for (i = 0; i < dd->chip_send_contexts; i++) {
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, -1);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_VL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_JOB_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_PARTITION_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_SLID, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_OPCODE, 0);
+	}
+
+	//FIXME: Add SDMA registers
+}
+
 /*
  * Read chip sizes and then reset parts to sane, disabled,values.  We cannot
  * depend on the chip just being reset - a driver may be loaded and
@@ -1667,13 +2011,65 @@ static void init_chip(struct hfi_devdata *dd)
 
 	// FIXME:
 	// o make sure all rcv contexts are disabled
-	// o make sure all send contexts are disabled
 	// o make sure all of SDMA engines are disabled
 	// o make sure all interrupts are disabled
 	// o reset all interrupt mappings back to default
 	// o other...
+	reset_txe(dd);
+
 
 	init_partition_keys(dd);
+}
+
+void init_txe(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* enable all general PIO, SDMA, and Egress errors */
+	//FIXME: WFR simulator v14 has masks reversed, uncomment when
+	// moving to v15 and beyond
+	//write_csr(dd, WFR_SEND_PIO_ERR_MASK, -1);
+	//write_csr(dd, WFR_SEND_DMA_ERR_MASK, -1);
+	//write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, -1);
+
+	/*
+	 * Set up receive link credits.  For STL, credits are controlled
+	 * on the send side, so just set the receive side to the maximum
+	 * so it will not interfere.
+	 * TODO: Move to RXE init?
+	 */
+	for (i = 0; i < WFR_RXE_NUM_DATA_VL; i++) {
+		write_csr(dd, WFR_RCV_CREDIT_VL + (8 * i),
+				WFR_RCV_CREDIT_VL_RX_MAX_CREDIT_VL_SMASK);
+	}
+	write_csr(dd, WFR_RCV_CREDIT_VL15,
+				WFR_RCV_CREDIT_VL15_RX_MAX_CREDIT_VL_SMASK);
+
+	/*
+	 * FIXME: Set up initial send link credits.  We need an amount
+	 * in vl15 so we can talk to the FM to set up the rest.  The
+	 * value used here is completely arbitrary.  Find the right
+	 * value.  IN ADDITION: set up credits on the other VLs as
+	 * we do not have a FM to talk to in the current simulation
+	 * environment.  These values are also completely arbitrary.
+	 * Plus there is no explanation for the fields.  Should the
+	 * global limit be the sum of the other limits?
+	 */
+#define WFR_NUM_VL_PRE_CREDITS 200 /* arbitrary */
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++) {
+		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8 * i),
+			(WFR_NUM_VL_PRE_CREDITS
+				& WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK)
+			<< WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT);
+	}
+	write_csr(dd, WFR_SEND_CM_CREDIT_VL15,
+			(WFR_NUM_VL_PRE_CREDITS
+			    & WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_MASK)
+			<< WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
+			((WFR_NUM_VL_PRE_CREDITS * (WFR_TXE_NUM_DATA_VL+1))
+				& WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_MASK)
+			<< WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT);
 }
 
 /*
@@ -1850,6 +2246,9 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	ret = set_up_context_variables(dd);
 	if (ret)
 		goto bail_cleanup;
+
+	/* set initial TXE CSRs */
+	init_txe(dd);
 
 	/* send contexts must be set up before receive contexts */
 	ret = init_send_contexts(dd);

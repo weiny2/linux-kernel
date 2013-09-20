@@ -299,11 +299,10 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 
 int init_send_contexts(struct hfi_devdata *dd)
 {
-	u64 reg;
+	u64 reg, all;
 	u16 base;
 	int ret, i, j, context;
 
-	/* TODO: move elsewhere? E.g. up a level? */
 	ret = init_credit_return(dd);
 	if (ret)
 		return ret;
@@ -311,6 +310,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	dd->send_contexts = kzalloc(sizeof(struct send_context_info) * dd->num_send_contexts, GFP_KERNEL);
 	if (!dd->send_contexts) {
 		dd_dev_err(dd, "Unable to allocate send context array\n");
+		free_credit_return(dd);
 		return -ENOMEM;
 	}
 
@@ -340,6 +340,45 @@ int init_send_contexts(struct hfi_devdata *dd)
 			context++;
 			base += scs->size;
 		}
+	}
+
+	/* set up packet checking */
+
+	/* checks/disallow to set on all context types */
+	all = WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_BAD_PKT_LEN_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_LONG_BYPASS_PACKETS_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_LONG_IBPACKETS_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BAD_PKT_LEN_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_TEST_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_SMALL_BYPASS_PACKETS_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_SMALL_IBPACKETS_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_GRH_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_RAW_IPV6_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_RAW_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_BYPASS_VLMAPPING_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_VLMAPPING_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_OPCODE_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_SLID_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_VL_SMASK
+		| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_ENABLE_SMASK;
+
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		/* per context type checks */
+		if (dd->send_contexts[i].type == SC_USER) {
+			reg =  all | WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_NON_KDETHPACKETS_SMASK;
+		} else {
+			reg = all | WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETHPACKETS_SMASK;
+		}
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+		/* unmask all errors */
+		//FIXME: WFR simulator v14 has the mask reversed.
+		//  Correct: Need a 1 to unmask
+		//  Incorrect: Need a 0 to unmask
+		//write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
 	}
 
 	return 0;
@@ -416,7 +455,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	u32 context;
 	int ret;
 
-	sc = kzalloc(sizeof(struct send_context), GFP_KERNEL);
+	sc = kzalloc_node(sizeof(struct send_context), GFP_KERNEL, numa);
 	if (!sc)
 		return NULL;
 
@@ -425,6 +464,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 		goto no_context;
 
 	sci = &dd->send_contexts[context];
+	sci->sc = sc;
 
 	sc->dd = dd;
 	spin_lock_init(&sc->alloc_lock);
@@ -443,15 +483,18 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	sc->base_addr = dd->piobase + ((context & WFR_PIO_ADDR_CONTEXT_MASK)
 					<< WFR_PIO_ADDR_CONTEXT_SHIFT);
 
+	/*
+	 * User contexts do not get a shadow ring.  All is
+	 * handled in user space.
+	 */
 	if (type != SC_USER) {
 		/*
-		 * User contexts do not get a shadow ring.  All is
-		 * handled in user space.  Size the shadow ring 1
-		 * larger so head == tail can mean empty.
+		 * Size the shadow ring 1 larger so head == tail can mean
+		 * empty.
 		 */
 		sc->sr_size = sci->credits + 1;
-		sc->sr = kzalloc(sizeof(union pio_shadow_ring) * sc->sr_size,
-				GFP_KERNEL);
+		sc->sr = kzalloc_node(sizeof(union pio_shadow_ring) *
+				sc->sr_size, GFP_KERNEL, numa);
 		if (!sc->sr)
 			goto no_shadow;
 	}
@@ -463,6 +506,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	return sc;
 
 no_shadow:
+	sci->sc = NULL;
 	sc_hw_free(dd, context);
 no_context:
 	kfree(sc);
@@ -606,9 +650,12 @@ retry:
 	avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
 	if (blocks > avail) {
 		/* not enough room */
-		if (unlikely(trycount))	/* already tried to get more room */
+		if (unlikely(trycount))	{ /* already tried to get more room */
+			spin_unlock_irqrestore(&sc->alloc_lock, flags);
 			return NULL;
+		}
 		/* copy from receiver cache line and recalculate */
+		//TODO: use ALLOC_ONCE on sc->free?
 		sc->alloc_free = sc->free;
 		avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
 		if (blocks > avail) {
@@ -617,7 +664,6 @@ retry:
 			sc_release_update(sc);
 			sc->alloc_free = sc->free;
 			trycount++;
-			spin_lock_irqsave(&sc->alloc_lock, flags);
 			goto retry;
 		}
 	}
@@ -681,11 +727,25 @@ retry:
 void sc_release_update(struct send_context *sc)
 {
 	struct pio_buf *pbuf;
+	u64 hw_free;
 	u32 head, tail;
+	unsigned long old_free;
+	unsigned long extra;
+	unsigned long flags;
 
 	if (!sc)
 		return;
 
+	spin_lock_irqsave(&sc->release_lock, flags);
+	/* update free */
+	hw_free = *sc->hw_free;				/* volatile read */
+	old_free = sc->free;				/* volatile read */
+	extra = (((hw_free & WFR_CR_COUNTER_SMASK) >> WFR_CR_COUNTER_SHIFT)
+			- (old_free & WFR_CR_COUNTER_MASK))
+				& WFR_CR_COUNTER_MASK;
+	sc->free = old_free + extra; 			/* volatile write */
+
+	/* call sent buffer callbacks */
 	head = sc->sr_head;	/* snapshot the head */
 	tail = sc->sr_tail;
 	while (head != tail) {
@@ -704,6 +764,7 @@ void sc_release_update(struct send_context *sc)
 	}
 	/* update tail, in case we moved it */
 	sc->sr_tail = tail;
+	spin_unlock_irqrestore(&sc->release_lock, flags);
 }
 
 /*

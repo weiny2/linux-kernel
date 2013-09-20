@@ -809,7 +809,7 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
  * data bandwidth to the wire).  The header of the buffer is
  * invalid and will generate an error, but we ignore it.
  */
-int fake_early_return;	//FIXME: always zero so we return early
+int fake_early_return = 0;	//FIXME: always zero so we return early
 static void qib_verify_pioperf(struct hfi_devdata *dd)
 {
 	struct send_context *sc;
@@ -828,6 +828,13 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	if (fake_early_return == 0)
 		return;
 
+	/* only run this on unit 0 */
+	if (dd->unit != 0)
+		return;
+
+	// TEMPORARY: force a non-context PIO error and see what happens...
+	//write_csr(dd, WFR_SEND_PIO_ERR_FORCE, WFR_SEND_PIO_ERR_FORCE_PIO_WRITE_BAD_CTXT_ERR_SMASK);
+
 	/*
 	 * Enough to give us a reasonable test, less than piobuf size, and
 	 * likely multiple of store buffer length.
@@ -837,7 +844,11 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	dw = (cnt + sizeof(u64)) / sizeof(u32);
 
 	/* use the first context */
-	sc = dd->send_contexts[0].sc;
+	sc = dd->rcd[0]->sc;
+	if (!sc) {
+		dd_dev_info(dd, "Performance check: No send context\n");
+		return;
+	}
 
 	addr = kzalloc(cnt, GFP_KERNEL);
 	if (!addr) {
@@ -851,7 +862,7 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	dd->f_set_armlaunch(dd, 0);
 
 	/* minimal PBC - just the length in DW */
-	pbc = create_pbc(sc, 0, 0, 0, cnt/sizeof(u32));
+	pbc = create_pbc(sc, 0, 0, 0, dw);
 
 	preempt_disable();  /* we want reasonably accurate elapsed time */
 
@@ -869,7 +880,7 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	 * >= 5 msec seems to get us "close enough" to accurate values.
 	 */
 	msecs = jiffies_to_msecs(jiffies);
-	for (emsecs = lcnt = 0; emsecs <= 5UL; lcnt++) {
+	for (emsecs = lcnt = 0; emsecs <= 5UL && lcnt < 1; lcnt++) {
 		pbuf = sc_buffer_alloc(sc, dw, NULL, 0);
 		if (!pbuf) {
 			preempt_enable();
