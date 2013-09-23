@@ -1564,8 +1564,22 @@ void qib_format_hwerrors(u64 hwerrs,
 			 const struct qib_hwerror_msgs *hwerrmsgs,
 			 size_t nhwerrmsgs, char *msg, size_t lmsg);
 
+/* Reserve a range of Attributes for WFR-Lite "Control" MADs */
+#define IB_SMP_ATTR_WFR_LITE_MIN cpu_to_be16(0xFFF0)
+
 /* allow other c files access to the stl virtual state */
-uint8_t wfrl_get_stl_virtual_port_state(u8 port);
-void wfrl_set_stl_virtual_port_state(u8 port, uint8_t value);
+/* NOTE: This structure needs to be in sync with the simulator */
+struct wfr_link_info {
+	__be64 node_guid;
+	u8 port_mode;
+	u8 port_state;
+	__be16 link_speed_active;
+	__be16 link_width_active;
+	u8 res[50]; /* This makes this a full IB SMP payload */
+};
+void wfrl_get_stl_virtual_link_info(u8 port, struct wfr_link_info *link_info);
+void wfrl_set_stl_virtual_link_info(struct ib_device *ibdev, u8 port,
+				uint8_t state, __be64 local_node_guid,
+				u8 local_port_mode);
 
 #endif                          /* _QIB_KERNEL_H */

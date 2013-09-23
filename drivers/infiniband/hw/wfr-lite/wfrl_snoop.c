@@ -72,6 +72,13 @@
 #define QIB_SNOOP_IOCSETFILTER \
 	_IO(QIB_SNOOP_IOC_MAGIC, QIB_SNOOP_IOC_BASE_SEQ+4)
 
+#define QIB_SNOOP_IOCGETLINKSTATE_WFR \
+	_IOWR(QIB_SNOOP_IOC_MAGIC, QIB_SNOOP_IOC_BASE_SEQ+5, \
+		struct wfr_link_info)
+#define QIB_SNOOP_IOCSETLINKSTATE_WFR \
+	_IOWR(QIB_SNOOP_IOC_MAGIC, QIB_SNOOP_IOC_BASE_SEQ+6, \
+		struct wfr_link_info)
+
 /* local prototypes */
 static int qib_snoop_open(struct inode *in, struct file *fp);
 static unsigned int qib_snoop_poll(struct file *fp,
@@ -427,6 +434,8 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	unsigned long flags = 0;
 	unsigned long *argp = NULL;
 	struct qib_packet_filter_command filter_cmd = {0};
+	__be64 local_node_guid = 0;
+	u8 local_port_mode = 0;
 
 	if (((_IOC_DIR(cmd) & _IOC_READ)
 	&& !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd)))
@@ -449,17 +458,36 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	} else {
 		switch (cmd) {
 		case QIB_SNOOP_IOCSETLINKSTATE:
-			ret = __get_user(value, (int __user *) arg);
-			if (ret !=  0)
-				break;
+		case QIB_SNOOP_IOCSETLINKSTATE_WFR:
+		{
+			struct wfr_link_info cur_link_info;
+			u8 curLinkState;
+
+			if (cmd == QIB_SNOOP_IOCSETLINKSTATE) {
+				ret = __get_user(value, (int __user *) arg);
+				if (ret !=  0)
+					break;
+			} else {
+				struct wfr_link_info link_info;
+				if (!wfr_vl15_ovl0) {
+					ret = -EINVAL;
+					break;
+				}
+				ret = copy_from_user(&link_info,
+					(struct wfr_link_info __user *)arg,
+					sizeof(link_info));
+				if (ret !=  0)
+					break;
+				value = link_info.port_state;
+				local_node_guid = cpu_to_be64(link_info.node_guid);
+				local_port_mode = link_info.port_mode;
+			}
 
 			physState = (value >> 4) & 0xF;
 			linkState = value & 0xF;
 
-			/* use virtual state */
-			if (wfr_vl15_ovl0) {
-				wfrl_set_stl_virtual_port_state(ppd->port, (uint8_t)value & 0xff);
-			}
+			wfrl_get_stl_virtual_link_info(ppd->port, &cur_link_info);
+			curLinkState = cur_link_info.port_state & 0xf;
 
 			switch (linkState) {
 			case IB_PORT_NOP:
@@ -467,56 +495,86 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 					break;
 					/* fall through */
 			case IB_PORT_DOWN:
-				switch (physState) {
-				case 0:
-					if (dd->f_ibphys_portstate &&
-				(dd->f_ibphys_portstate(ppd->lastibcstat)
-					& 0xF & IB_PHYSPORTSTATE_SLEEP))
-						devState =
-						QIB_IB_LINKDOWN_SLEEP;
-					else
-						devState =
-						QIB_IB_LINKDOWN;
+				/* use virtual state */
+				if (wfr_vl15_ovl0) {
+					wfrl_set_stl_virtual_link_info(&ppd->dd->verbs_dev.ibdev,
+									ppd->port,
+									(uint8_t)value & 0xff,
+									local_node_guid,
+									local_port_mode);
+				} else {
+					/* preserve IB mode */
+					switch (physState) {
+					case 0:
+						if (dd->f_ibphys_portstate &&
+					(dd->f_ibphys_portstate(ppd->lastibcstat)
+						& 0xF & IB_PHYSPORTSTATE_SLEEP))
+							devState =
+							QIB_IB_LINKDOWN_SLEEP;
+						else
+							devState =
+							QIB_IB_LINKDOWN;
+							break;
+					case 1:
+						devState = QIB_IB_LINKDOWN_SLEEP;
 						break;
-				case 1:
-					devState = QIB_IB_LINKDOWN_SLEEP;
-					break;
-				case 2:
-					devState = QIB_IB_LINKDOWN;
-					break;
-				case 3:
-					devState = QIB_IB_LINKDOWN_DISABLE;
-					break;
-				default:
-					ret = -EINVAL;
-					goto done;
-					break;
-				}
-				/* protect vl15_ovl0 mode, virtual state set
-				 * above */
-				if (!wfr_vl15_ovl0)
+					case 2:
+						devState = QIB_IB_LINKDOWN;
+						break;
+					case 3:
+						devState = QIB_IB_LINKDOWN_DISABLE;
+						break;
+					default:
+						ret = -EINVAL;
+						goto done;
+						break;
+					}
 					ret = qib_set_linkstate(ppd, devState);
+				}
 				break;
 			case IB_PORT_ARMED:
-				if (!(dd->flags &
-				(QIB_IB_LINKARM | QIB_IB_LINKACTIVE))) {
+				if (wfr_vl15_ovl0) {
+					if (curLinkState == IB_PORT_INIT || curLinkState == IB_PORT_ACTIVE) {
+						wfrl_set_stl_virtual_link_info(&ppd->dd->verbs_dev.ibdev,
+									ppd->port,
+									(uint8_t)value & 0xff,
+									local_node_guid,
+									local_port_mode);
+					} else {
+						/* Can't transition to armed
+						 * if not init | active */
 						ret = -EINVAL;
 						break;
 					}
-				/* protect vl15_ovl0 mode, virtual state set
-				 * above */
-				if (!wfr_vl15_ovl0)
+				} else {
+					if (!(dd->flags &
+					(QIB_IB_LINKARM | QIB_IB_LINKACTIVE))) {
+							ret = -EINVAL;
+							break;
+						}
 					ret = qib_set_linkstate(ppd, QIB_IB_LINKARM);
+				}
 				break;
 			case IB_PORT_ACTIVE:
-				if (!(dd->flags & QIB_IB_LINKARM)) {
-					ret = -EINVAL;
-					break;
-				}
-				/* protect vl15_ovl0 mode, virtual state set
-				 * above */
-				if (!wfr_vl15_ovl0)
+				if (wfr_vl15_ovl0) {
+					if (curLinkState != IB_PORT_ARMED) {
+						/* Can't transition to active
+						 * if not armed */
+						ret = -EINVAL;
+						break;
+					}
+					wfrl_set_stl_virtual_link_info(&ppd->dd->verbs_dev.ibdev,
+									ppd->port,
+									(uint8_t)value & 0xff,
+									local_node_guid,
+									local_port_mode);
+				} else {
+					if (!(dd->flags & QIB_IB_LINKARM)) {
+						ret = -EINVAL;
+						break;
+					}
 					ret = qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+				}
 				break;
 			default:
 				ret = -EINVAL;
@@ -525,20 +583,35 @@ static long qib_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 			if (ret)
 				break;
-			/* fall through */
 
+			/* if not error -- fall through */
+		}
 		case QIB_SNOOP_IOCGETLINKSTATE:
-			if (wfr_vl15_ovl0) {
-				/* return the virtual state */
-				value = (int)wfrl_get_stl_virtual_port_state(ppd->port);
-			} else {
-				value = dd->f_ibphys_portstate(ppd->lastibcstat);
-				value <<= 4;
-				value |= dd->f_iblink_state(ppd->lastibcstat);
-			}
-			ret = __put_user(value, (int __user *)arg);
-			break;
+		case QIB_SNOOP_IOCGETLINKSTATE_WFR:
+		{
+			struct wfr_link_info link_info;
+			memset(&link_info, 0, sizeof(link_info));
 
+			if (wfr_vl15_ovl0) {
+				wfrl_get_stl_virtual_link_info(ppd->port, &link_info);
+			} else {
+				link_info.port_state = dd->f_ibphys_portstate(ppd->lastibcstat) << 4;
+				link_info.port_state |= dd->f_iblink_state(ppd->lastibcstat);
+				/* FIXME for real WFR
+				 * link_info.node_guid =
+				 * link_info.port_mode =
+				 */
+			}
+			if (cmd == QIB_SNOOP_IOCGETLINKSTATE
+			    || cmd == QIB_SNOOP_IOCSETLINKSTATE) {
+				ret = __put_user(link_info.port_state, (int __user *)arg);
+			} else {
+				ret = copy_to_user((struct wfr_link_info __user *)arg,
+					&link_info,
+					sizeof(link_info));
+			}
+			break;
+		}
 		case QIB_SNOOP_IOCCLEARQUEUE:
 			spin_lock_irqsave(&sc_device->snoop_lock, flags);
 			drain_snoop_list(sc_device);
@@ -845,6 +918,43 @@ void qib_snoop_send_queue_packet(struct qib_pportdata *ppd,
 		qib_snoop_list_add_tail(packet, ppd, QIB_SNOOP_DEV_INDEX);
 }
 
+/**
+ * Check for WFR_LITE control MAD packets
+ *
+ * WFR_LITE control MADs are IB DR SMP's with attribute_id > IB_SMP_ATTR_WFR_LITE_MIN
+ *
+ * Returns,
+ * 1 if this packet is to be processed by the driver
+ * 0 if this packet is to be sent to the snoop interface
+ */
+static int is_wfr_lite_ctrl_pkt(struct qib_pportdata *port, struct qib_ib_header *hdr,
+				void *data, u32 tlen)
+{
+	u8 vl;
+	u32 qp;
+	struct ib_smp *smp = (struct ib_smp *)data;
+
+	/* Verify LRH */
+	vl = (be16_to_cpu(hdr->lrh[0]) & 0xf000) >> 12;
+	if (vl != 15)
+		return 0;
+
+	/* Verify BTH */
+	qp = be32_to_cpu(hdr->u.oth.bth[1]) & 0x0fff;
+	if (qp != 0)
+		return 0;
+
+	/* Check SMP */
+	if (smp->base_version == IB_MGMT_BASE_VERSION
+	    && smp->class_version == 1
+	    && smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
+	    && be16_to_cpu(smp->attr_id) > be16_to_cpu(IB_SMP_ATTR_WFR_LITE_MIN)) {
+		return 1;
+	}
+
+	return 0;
+}
+
 /*
  * qib_snoop_rcv_queue_packet - receive a packet for snoop interface
  * @port - Hca port on which this packet is received.
@@ -876,6 +986,9 @@ int qib_snoop_rcv_queue_packet(struct qib_pportdata *port, void *rhdr,
 	 * so just return from here.
 	 */
 	if (port->mode_flag == (QIB_PORT_SNOOP_MODE | QIB_PORT_CAPTURE_MODE))
+		return 0;
+
+	if (is_wfr_lite_ctrl_pkt(port, hdr, data, tlen))
 		return 0;
 
 	packet = kmalloc(sizeof(struct snoop_packet) + tlen,

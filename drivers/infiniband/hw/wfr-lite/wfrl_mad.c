@@ -56,6 +56,13 @@ MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
 /** =========================================================================
  * For STL simulation environment we fake some STL values
  */
+
+/**
+ * FAKE attribute ID's to comunicate various things across the link
+ */
+#define IB_SMP_ATTR_WFR_LITE_VIRT_LINK_INFO	cpu_to_be16(0xFFFF)
+
+
 #define MAX_SIM_STL_PKEY_BLOCKS ((u16)40)
 static unsigned wfr_sim_pkey_tbl_block_size = 0;
 module_param_named(sim_pkey_tbl_block_size, wfr_sim_pkey_tbl_block_size, uint, S_IRUGO | S_IWUSR | S_IWGRP);
@@ -88,7 +95,6 @@ struct stl_vlarb_data
 };
 
 /* simulate link init data exchange */
-#define IB_SMP_ATTR_WFR_LITE_LINK_INIT		cpu_to_be16(0xFFFF)
 struct wfr_lite_link_init_data
 {
 	__be64 sender_guid;
@@ -108,13 +114,41 @@ static struct {
 
 int virtual_stl_init = 0;
 
-void reset_virtual_port_state(u8 port) {
-	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = 5 << 4;
-	virtual_stl[port-1].port_info.port_states.portphysstate_portstate |= 2;
+void virtual_port_linkup_init(u8 port) {
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	u16 speed_enabled = be16_to_cpu(vpi->link_speed.enabled);
+	u16 width_enabled = be16_to_cpu(vpi->link_width.enabled);
+
+	vpi->port_states.portphysstate_portstate = 5 << 4;
+	vpi->port_states.portphysstate_portstate |= 2;
+
+	/* go to the fastest speed enabled. */
+	if (STL_LINK_SPEED_25G & speed_enabled)
+		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
+	else
+		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
+
+	/* go to the widest width enabled. */
+	if (IB_WIDTH_4X & width_enabled)
+		vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
+	else
+		vpi->link_width.active = cpu_to_be16(IB_WIDTH_1X);
+
 	printk(KERN_WARNING PFX
-		"STL Port Virtual State reset : 0x%x\n",
-		virtual_stl[port-1].port_info.port_states.portphysstate_portstate);
+		"STL Port '%d' Virtual Link Up state : 0x%x\n"
+		"              speed en 0x%x; sup 0x%x; act 0x%x\n"
+		"              width en 0x%x; sup 0x%x; act 0x%x\n",
+		port,
+		vpi->port_states.portphysstate_portstate,
+		speed_enabled, be16_to_cpu(vpi->link_speed.supported),
+		be16_to_cpu(vpi->link_speed.active),
+		width_enabled, be16_to_cpu(vpi->link_width.supported),
+		be16_to_cpu(vpi->link_width.active));
 }
+
+#define WFR_LITE_LINK_SPEED_ALL_SUP (cpu_to_be16(STL_LINK_SPEED_12_5G | \
+						STL_LINK_SPEED_25G))
+#define WFR_LITE_LINK_WIDTH_ALL_SUP (cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X))
 
 static void init_virtual_port_info(u8 port)
 {
@@ -122,13 +156,12 @@ static void init_virtual_port_info(u8 port)
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 	struct stl_vlarb_data *vlarb_data = &virtual_stl[port-1].vlarb_data;
 
-	reset_virtual_port_state(port);
-	vpi->link_speed.supported = cpu_to_be16(STL_LINK_SPEED_12_5G |
-						STL_LINK_SPEED_25G);
+	virtual_port_linkup_init(port);
+	vpi->link_speed.supported = WFR_LITE_LINK_SPEED_ALL_SUP;
 	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
 	vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
 
-	vpi->link_width.supported = cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X);
+	vpi->link_width.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
 	vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
 	vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
 
@@ -157,8 +190,13 @@ static void reset_virtual_port(u8 port)
 {
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 
-	reset_virtual_port_state(port);
+	virtual_port_linkup_init(port);
 	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
+
+	printk(KERN_WARNING PFX
+		"STL Port '%d' Virtual State reset : 0x%x\n",
+		port,
+		virtual_stl[port-1].port_info.port_states.portphysstate_portstate);
 }
 
 static inline void set_virtual_port_state(u8 port, u8 state)
@@ -179,15 +217,6 @@ static void arm_virtual_port(u8 port)
 
 static void activate_virtual_port(u8 port)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
-	u16 speed_enabled = vpi->link_speed.enabled;
-
-	/* go to the fastest speed enabled. */
-	if (STL_LINK_SPEED_25G & speed_enabled)
-		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
-	else
-		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
-
 	set_virtual_port_state(port, IB_PORT_ACTIVE);
 	printk(KERN_WARNING PFX "Virtual Port %d Activated\n", port);
 }
@@ -230,65 +259,29 @@ static void init_virtual_stl(void)
 	virtual_stl_init = 1;
 }
 
-uint8_t wfrl_get_stl_virtual_port_state(u8 port) {
-	return (virtual_stl[port-1].port_info.port_states.portphysstate_portstate);
-}
-EXPORT_SYMBOL(wfrl_get_stl_virtual_port_state);
-void wfrl_set_stl_virtual_port_state(u8 port, uint8_t value) {
-	virtual_stl[port-1].port_info.port_states.portphysstate_portstate = value;
-}
-EXPORT_SYMBOL(wfrl_set_stl_virtual_port_state);
-
-u16 wfrl_get_num_sim_pkey_blocks(void)
-{
-	return min_t(u16, wfr_sim_pkey_tbl_block_size, MAX_SIM_STL_PKEY_BLOCKS);
-}
-
-
-static int subn_set_wfr_lite_link_init(struct ib_smp *smp, struct ib_device *ibdev,
-			   u8 port)
-{
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
-	struct wfr_lite_link_init_data *init_data =
-					(struct wfr_lite_link_init_data *)smp->data;
-
-	printk(KERN_WARNING PFX "STL link_init Recv'ed: remote guid 0x%llx; mode 0x%02x\n",
-		be64_to_cpu(init_data->sender_guid),
-		init_data->sender_port_mode);
-
-	virtual_stl[port-1].port_info.neigh_node_guid = init_data->sender_guid;
-	virtual_stl[port-1].port_info.port_neigh_mode = init_data->sender_port_mode;
-
-	init_data->sender_guid = dd->pport->guid; /* Use first-port GUID as node */
-	init_data->sender_port_mode = 0x08; /* Mgmt allowed, FW auth, NodeType WFR */
-
-	return reply(smp);
-}
-static void wfr_send_link_init(struct ib_device *ibdev, u8 port)
+/* allocate an IB DR send mad for control messages */
+static struct ib_mad_send_buf *wfr_create_ib_dr_send_mad(struct ib_device *ibdev, u8 port)
 {
 	struct ib_mad_send_buf *send_buf;
-	struct ib_mad_agent *agent;
-	struct ib_smp *smp;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
-	struct wfr_lite_link_init_data *init_data;
+	struct ib_mad_agent *agent;
 	struct ib_ah *ah;
 	unsigned long flags;
 
 	agent = ibp->send_agent;
 	if (!agent)
-		return;
+		return ERR_PTR(-EINVAL);
 
 	/* o14-3.2.1 */
 	if (!(ppd_from_ibp(ibp)->lflags & QIBL_LINKACTIVE))
-		return;
+		return ERR_PTR(-EINVAL);
 
 	spin_lock_irqsave(&ibp->lock, flags);
 	if (!ibp->dr_ah) {
 		ibp->dr_ah = qib_create_qp0_ah(ibp, IB_LID_PERMISSIVE);
 		if (IS_ERR(ibp->dr_ah)) {
 			ibp->dr_ah = NULL;
-			return;
+			return ERR_PTR(-ENOMEM);
 		}
 	}
 	ah = ibp->dr_ah;
@@ -297,9 +290,107 @@ static void wfr_send_link_init(struct ib_device *ibdev, u8 port)
 	send_buf = ib_create_send_mad(agent, 0, 0, 0, IB_MGMT_MAD_HDR,
 				      IB_MGMT_MAD_DATA, GFP_ATOMIC);
 	if (IS_ERR(send_buf))
-		return;
+		goto err;
 
 	send_buf->ah = ah;
+
+err:
+	return send_buf;
+}
+
+
+/* simulate link changes/negotiation */
+static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibdev,
+			   u8 port, int send_GetResp)
+{
+	u8 rem_phys_state, rem_link_state;
+	u8 loc_phys_state, loc_link_state;
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct wfr_link_info *link_info =
+					(struct wfr_link_info *)smp->data;
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	rem_phys_state = (link_info->port_state >> 4) & 0xF;
+	rem_link_state = link_info->port_state & 0xF;
+
+	loc_phys_state = (vpi->port_states.portphysstate_portstate >> 4) & 0xF;
+	loc_link_state =  vpi->port_states.portphysstate_portstate & 0xF;
+
+	printk(KERN_WARNING PFX "STL Link State p%d: remote state 0x%02x; local state 0x%02x\n",
+		port,
+		link_info->port_state,
+		vpi->port_states.portphysstate_portstate);
+
+	if (loc_phys_state == 0x02 /* Polling */
+	    && (rem_phys_state == 0x02 /* Polling */
+	       || rem_phys_state == 0x05 /* LinkUp */)) {
+		virtual_port_linkup_init(port);
+	}
+
+	if (rem_link_state == IB_PORT_DOWN) {
+		/* Set local port to Down... */
+		vpi->port_states.portphysstate_portstate = 1;
+		if (loc_phys_state == 0x3) {
+			/* were disabled stay there */
+			vpi->port_states.portphysstate_portstate |= 0x3 << 4;
+		} else {
+			if (rem_phys_state == 0x03 /* remote Down/Disabled */
+			    || rem_phys_state == 0x01) { /* remote Down/Sleep */
+				/* ... Polling */
+				vpi->port_states.portphysstate_portstate |= 2 << 4;
+				printk(KERN_WARNING PFX
+					"STL local Virt Port '%d' : down/polling\n", port);
+			} else {
+				virtual_port_linkup_init(port);
+			}
+		}
+		vpi->neigh_node_guid = 0;
+		vpi->port_neigh_mode = 0;
+	} else {
+		vpi->neigh_node_guid = link_info->node_guid;
+		vpi->port_neigh_mode = link_info->port_mode;
+	}
+
+// FIXME at some point we should tell users about the state change
+//int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
+//qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
+//ev = IB_EVENT_PORT_ACTIVE;
+//if (ev)
+//signal_ib_event(ppd, ev);
+
+	loc_phys_state = (vpi->port_states.portphysstate_portstate >> 4) & 0xF;
+	if (loc_phys_state == 0x5) { /* LinkUp */
+		vpi->link_width.active = link_info->link_width_active;
+		vpi->link_speed.active = link_info->link_speed_active;
+	}
+
+	if (send_GetResp) {
+		/* send our response back */
+		link_info->node_guid = dd->pport->guid;
+		link_info->port_mode = 0x08;
+		link_info->port_state = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
+
+		return reply(smp);
+	}
+
+	return IB_MAD_RESULT_CONSUMED;
+}
+
+static void wfr_send_stl_virt_link_info(struct ib_device *ibdev, u8 port, uint8_t state,
+					__be64 local_node_guid, u8 local_port_mode,
+					__be16 link_speed_active,
+					__be16 link_width_active)
+{
+	struct ib_mad_send_buf *send_buf;
+	struct ib_smp *smp;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct wfr_link_info *link_info;
+
+	send_buf = wfr_create_ib_dr_send_mad(ibdev, port);
+	if (IS_ERR(send_buf)) {
+		printk(KERN_WARNING PFX "STL link state send FAILED: DR AH\n");
+		return;
+	}
 
 	smp = send_buf->mad;
 	smp->base_version = IB_MGMT_BASE_VERSION;
@@ -310,7 +401,7 @@ static void wfr_send_link_init(struct ib_device *ibdev, u8 port)
 	smp->hop_cnt = 1;
 	ibp->tid++;
 	smp->tid = cpu_to_be64(ibp->tid);
-	smp->attr_id = IB_SMP_ATTR_WFR_LITE_LINK_INIT;
+	smp->attr_id = IB_SMP_ATTR_WFR_LITE_VIRT_LINK_INFO;
 	smp->attr_mod = 0;
 	smp->mkey = 0;
 	smp->dr_slid = IB_LID_PERMISSIVE;
@@ -318,16 +409,69 @@ static void wfr_send_link_init(struct ib_device *ibdev, u8 port)
 	smp->initial_path[0] = 0;
 	smp->initial_path[1] = port;
 
-	init_data = (struct wfr_lite_link_init_data *)smp->data;
-	init_data->sender_guid = dd->pport->guid; /* Use first-port GUID as node */
-	init_data->sender_port_mode = 0x08; /* Mgmt allowed, FW auth, NodeType WFR */
+	link_info = (struct wfr_link_info *)smp->data;
+	link_info->node_guid = local_node_guid;
+	link_info->port_mode = local_port_mode;
+	link_info->port_state = state;
+	link_info->link_speed_active = link_speed_active;
+	link_info->link_width_active = link_width_active;
 
-	printk(KERN_WARNING PFX "STL link_init send: local guid 0x%llx; mode 0x%02x\n",
-		be64_to_cpu(init_data->sender_guid),
-		init_data->sender_port_mode);
-
-	if (ib_post_send_mad(send_buf, NULL))
+	if (ib_post_send_mad(send_buf, NULL)) {
+		printk(KERN_WARNING PFX "STL link state send FAILED: ib_post_send_mad\n");
 		ib_free_send_mad(send_buf);
+	}
+
+	printk(KERN_WARNING PFX "STL port '%d' state send: state 0x%02x\n",
+		port,
+		link_info->port_state);
+}
+
+/* This is called when the IB port goes active to send the initial link_info
+ *
+ * Effectively the virtual STL link is "negotiated" when the IB port is made
+ * active.  This allows the STL Link to "pass traffic"
+ */
+static void wfr_send_stl_link_info(struct ib_device *ibdev, u8 port)
+{
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	u8 state = vpi->port_states.portphysstate_portstate;
+	__be64 local_node_guid = dd->pport->guid;
+
+	wfr_send_stl_virt_link_info(ibdev, port, state, local_node_guid, 0x08,
+					vpi->link_speed.active,
+					vpi->link_width.active);
+}
+
+static u8 wfrl_get_stl_virtual_port_state(u8 port)
+{
+	return (virtual_stl[port-1].port_info.port_states.portphysstate_portstate);
+}
+
+/* These communicate to/from the snoop port (AKA simulator) */
+void wfrl_get_stl_virtual_link_info(u8 port, struct wfr_link_info *link_info)
+{
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	link_info->port_state = vpi->port_states.portphysstate_portstate;
+	link_info->node_guid = be64_to_cpu(vpi->neigh_node_guid);
+	link_info->port_mode = vpi->port_neigh_mode;
+	link_info->link_speed_active = be16_to_cpu(vpi->link_speed.active);
+	link_info->link_width_active = be16_to_cpu(vpi->link_width.active);
+}
+void wfrl_set_stl_virtual_link_info(struct ib_device *ibdev, u8 port, uint8_t state,
+					__be64 local_node_guid, u8 local_port_mode)
+{
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	vpi->port_states.portphysstate_portstate = state;
+	wfr_send_stl_virt_link_info(ibdev, port, state, local_node_guid, local_port_mode,
+					vpi->link_speed.active,
+					vpi->link_width.active);
+}
+
+u16 wfrl_get_num_sim_pkey_blocks(void)
+{
+	return min_t(u16, wfr_sim_pkey_tbl_block_size, MAX_SIM_STL_PKEY_BLOCKS);
 }
 
 /**
@@ -899,16 +1043,29 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->ib_cap_mask = cpu_to_be32(ibp->port_cap_flags);
 	/* pi->diag_code; */
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
+
+/*
+ * These are picked up from the simulated port info
 	pi->link_width.enabled = cpu_to_be16(ppd->link_width_enabled);
 	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
 	pi->link_width.active = cpu_to_be16(ppd->link_width_active);
 
-/*
- * These are now picked up from the simulated port info
 	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
 */
+	printk(KERN_WARNING PFX
+		"STL Get Port '%d' speed en 0x%x; sup 0x%x; act 0x%x\n",
+		port,
+		be16_to_cpu(pi->link_speed.enabled),
+		be16_to_cpu(pi->link_speed.supported),
+		be16_to_cpu(pi->link_speed.active));
+	printk(KERN_WARNING PFX
+		"STL Get Port '%d' width en 0x%x; sup 0x%x; act 0x%x\n",
+		port,
+		be16_to_cpu(pi->link_width.enabled),
+		be16_to_cpu(pi->link_width.supported),
+		be16_to_cpu(pi->link_width.active));
 
 	/* FIXME make sure that this default state matches */
 	pi->port_states.offline_reason = 0;
@@ -1076,14 +1233,14 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	unsigned long flags;
 	u32 stl_lid; /* Temp to hold STL LID values */
 	u16 lid, smlid;
-	u16 lwe;
-	u16 lse;
 	u8 state;
 	u8 vls;
 	u8 msl;
+	u16 lse, lwe;
 	u16 lstate;
 	int ret, ore;
 	u32 port_num = be32_to_cpu(smp->attr_mod);
+	struct stl_port_info *vpi = &virtual_stl[port_num-1].port_info;
 
 	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
 
@@ -1172,41 +1329,24 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		ib_dispatch_event(&event);
 	}
 
-#if 0
-	/* Ignore STL Link Width and Link Speed we can't support them anyway. */
-	/* Allow 1x or 4x to be set (see 14.2.6.6). */
 	lwe = be16_to_cpu(pi->link_width.enabled);
 	if (lwe) {
-		if (lwe == STL_LINK_WIDTH_ALL_SUPPORTED)
-			set_link_width_enabled(ppd, ppd->link_width_supported);
-		else if (lwe >= 16 || (lwe & ~ppd->link_width_supported))
+		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED) == STL_LINK_WIDTH_ALL_SUPPORTED) {
+			vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
+		} else if (lwe & be16_to_cpu(vpi->link_width.supported)) {
+			vpi->link_width.enabled = pi->link_width.enabled;
+		} else
 			smp->status |= IB_SMP_INVALID_FIELD;
-		else if (lwe != ppd->link_width_enabled)
-			/* FIXME can't support non-IB link widths */
-			set_link_width_enabled(ppd, (lwe & 0x000F));
 	}
-
-	lse = pip->linkspeedactive_enabled & 0xF;
-	if (lse) {
-		/*
-		 * The IB 1.2 spec. only allows link speed values
-		 * 1, 3, 5, 7, 15.  1.2.1 extended to allow specific
-		 * speeds.
-		 */
-		if (lse == 15)
-			set_link_speed_enabled(ppd,
-					       ppd->link_speed_supported);
-		else if (lse >= 8 || (lse & ~ppd->link_speed_supported))
-			smp->status |= IB_SMP_INVALID_FIELD;
-		else if (lse != ppd->link_speed_enabled)
-			set_link_speed_enabled(ppd, lse);
-	}
-#else
-	lwe = be16_to_cpu(pi->link_width.enabled);
-	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) link width enable ignored 0x%x\n", lwe);
 	lse = be16_to_cpu(pi->link_speed.enabled);
-	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) link speed enable ignored 0x%x\n", lse);
-#endif
+	if (lse) {
+		if ((lse & STL_LINK_SPEED_ALL_SUPPORTED) == STL_LINK_SPEED_ALL_SUPPORTED) {
+			vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
+		} else if (lse & be16_to_cpu(vpi->link_speed.supported)) {
+			vpi->link_speed.enabled = pi->link_speed.enabled;
+		} else
+			smp->status |= IB_SMP_INVALID_FIELD;
+	}
 
 	/* Set link down default state. */
 	/* Again make this virtual.  Only IB PortInfo controls the actual port
@@ -1316,7 +1456,6 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			break;
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
-		reset_virtual_port(port);
 #if 0
 		if (lstate == 0)
 			//lstate = QIB_IB_LINKDOWN_ONLY;
@@ -1367,7 +1506,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 	if (lstate) {
-		uint8_t tmp = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
+		u8 tmp;
+		tmp = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
 		virtual_stl[port-1].port_info.port_states.portphysstate_portstate =
 			((lstate << 4) & STL_PI_MASK_PORT_PHYSICAL_STATE) |
 			(tmp & STL_PI_MASK_PORT_STATE);
@@ -1378,9 +1518,15 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			virtual_stl[port-1].port_info.port_states.portphysstate_portstate = 3 << 4;
 			virtual_stl[port-1].port_info.port_states.portphysstate_portstate |= 1;
 		} else if (lstate == 2) {
-			reset_virtual_port(port);
+			virtual_port_linkup_init(port);
 		}
 	}
+
+	wfr_send_stl_virt_link_info(ibdev, port, vpi->port_states.portphysstate_portstate,
+				dd->pport->guid,
+				0x08,
+				vpi->link_speed.active,
+				vpi->link_width.active);
 
 	if (clientrereg) {
 		event.event = IB_EVENT_CLIENT_REREGISTER;
@@ -2067,6 +2213,7 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		break;
 	case IB_PORT_ACTIVE:
 		qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+		wfr_send_stl_link_info(ibdev, port);
 		break;
 	default:
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -3173,8 +3320,6 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 			/* FALL through */
 		case IB_SMP_ATTR_PORT_INFO:
 			ret = subn_set_portinfo(smp, ibdev, port);
-			if (ret & IB_MAD_RESULT_SUCCESS)
-				wfr_send_link_init(ibdev, port);
 			goto bail;
 		case IB_SMP_ATTR_PKEY_TABLE:
 			ret = subn_set_pkeytable(smp, ibdev, port);
@@ -3184,6 +3329,9 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_set_vl_arb(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_WFR_LITE_VIRT_LINK_INFO:
+			ret = subn_set_stl_virt_link_info(smp, ibdev, port, 1);
 			goto bail;
 		case IB_SMP_ATTR_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
@@ -3195,9 +3343,6 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 				ret = IB_MAD_RESULT_SUCCESS;
 				goto bail;
 			}
-		case IB_SMP_ATTR_WFR_LITE_LINK_INIT:
-			ret = subn_set_wfr_lite_link_init(smp, ibdev, port);
-			goto bail;
 			/* FALLTHROUGH */
 		default:
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
@@ -3214,10 +3359,16 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		}
 		goto bail;
 
+	case IB_MGMT_METHOD_GET_RESP:
+		switch (smp->attr_id) {
+			case IB_SMP_ATTR_WFR_LITE_VIRT_LINK_INFO:
+				ret = subn_set_stl_virt_link_info(smp, ibdev, port, 0);
+				goto bail;
+		}
+		/* FALLTHROUGH */
 	case IB_MGMT_METHOD_TRAP:
 	case IB_MGMT_METHOD_REPORT:
 	case IB_MGMT_METHOD_REPORT_RESP:
-	case IB_MGMT_METHOD_GET_RESP:
 		/*
 		 * The ib_mad module will call us to process responses
 		 * before checking for other consumers.
