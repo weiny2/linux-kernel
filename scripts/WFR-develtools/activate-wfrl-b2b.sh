@@ -73,7 +73,7 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe ib_usa"
 	sleep 5
 fi
-ssh root@$remote_node "iba_portconfig -w2 -s4 -p $remote_port enable" || exit 1
+ssh root@$remote_node "iba_portconfig --ib -w2 -s4 -p $remote_port enable" || exit 1
 
 if [ "$reload_drivers" == "true" ]; then
 	echo "Reloading ib_wfr_lite on \"localhost\""
@@ -90,7 +90,7 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe ib_usa
 fi
 
-iba_portconfig -w2 -s4 -p $local_port enable || exit 1
+iba_portconfig --ib -w2 -s4 -p $local_port enable || exit 1
 
 if [ "$ibmode" == "true" ]; then
 	exit 0
@@ -117,7 +117,7 @@ done
 sleep 1
 
 echo "Arming local port."
-iba_portconfig -L ${local_lid} -S3 -p $local_port
+iba_portconfig --ib -L ${local_lid} -S3 -p $local_port
 state=""
 while [ "$state" != "3: ARMED" ]; do
 	echo "Waiting for local port to arm..."
@@ -129,7 +129,7 @@ done
 sleep 1
 
 echo "Arming Remote port."
-ssh root@$remote_node "iba_portconfig -L ${remote_lid} -S3 -p $remote_port"
+ssh root@$remote_node "iba_portconfig --ib -L ${remote_lid} -S3 -p $remote_port"
 state=""
 while [ "$state" != "3: ARMED" ]; do
 	echo "Waiting for remote port to arm..."
@@ -141,7 +141,7 @@ done
 sleep 1
 
 echo "Activating local port."
-iba_portconfig -S4 -p $local_port
+iba_portconfig --ib -S4 -p $local_port
 state=""
 while [ "$state" != "4: ACTIVE" ]; do
 	echo "Waiting for local port to go active..."
@@ -153,7 +153,7 @@ done
 sleep 1
 
 echo "Activating Remote port."
-ssh root@$remote_node "iba_portconfig -S4 -p $remote_port"
+ssh root@$remote_node "iba_portconfig --ib -S4 -p $remote_port"
 state=""
 while [ "$state" != "4: ACTIVE" ]; do
 	echo "Waiting for remote port to go active..."
