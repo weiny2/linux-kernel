@@ -1374,6 +1374,12 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		printk(KERN_WARNING PFX
 			"SubnSet(STL_PortInfo) Port PhyState 0x%x virtualized\n",
 			lstate);
+		if (lstate == 3) {
+			virtual_stl[port-1].port_info.port_states.portphysstate_portstate = 3 << 4;
+			virtual_stl[port-1].port_info.port_states.portphysstate_portstate |= 1;
+		} else if (lstate == 2) {
+			reset_virtual_port(port);
+		}
 	}
 
 	if (clientrereg) {
