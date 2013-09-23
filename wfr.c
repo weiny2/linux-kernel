@@ -129,13 +129,13 @@ static struct flag_table sc_err_status_flags[] = {
 		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK),
 	FLAG_ENTRY("VLLengthUnc",
 		SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_VLLENGTH_UNC_ERR_SMASK),
+		WFR_SEND_CTXT_ERR_STATUS_PIO_VL_LENGTH_UNC_ERR_SMASK),
 	FLAG_ENTRY("PacketEvictedFifoUnc",
 		SEC_SC_HALTED,
 		WFR_SEND_CTXT_ERR_STATUS_PIO_PACKET_EVICTED_FIFO_UNC_ERR_SMASK),
 	FLAG_ENTRY("VLLengthCor",
 		0,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_VLLENGTH_COR_ERR_SMASK),
+		WFR_SEND_CTXT_ERR_STATUS_PIO_VL_LENGTH_COR_ERR_SMASK),
 	FLAG_ENTRY("PacketEvictedFifoCor",
 		0,
 		WFR_SEND_CTXT_ERR_STATUS_PIO_PACKET_EVICTED_FIFO_COR_ERR_SMASK),
@@ -2026,11 +2026,9 @@ void init_txe(struct hfi_devdata *dd)
 	int i;
 
 	/* enable all general PIO, SDMA, and Egress errors */
-	//FIXME: WFR simulator v14 has masks reversed, uncomment when
-	// moving to v15 and beyond
-	//write_csr(dd, WFR_SEND_PIO_ERR_MASK, -1);
-	//write_csr(dd, WFR_SEND_DMA_ERR_MASK, -1);
-	//write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, -1);
+	write_csr(dd, WFR_SEND_PIO_ERR_MASK, -1);
+	write_csr(dd, WFR_SEND_DMA_ERR_MASK, -1);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, -1);
 
 	/*
 	 * Set up receive link credits.  For STL, credits are controlled
