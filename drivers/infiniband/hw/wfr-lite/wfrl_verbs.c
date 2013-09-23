@@ -1950,8 +1950,11 @@ int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	if (ah_attr->port_num < 1 ||
 	    ah_attr->port_num > ibdev->phys_port_cnt)
 		goto bail;
+	// FIXME: EEKAHN - Static rate is currently checked againts
+	// WFR-lite's max. Used to check with ib_rate_to_mult, but that
+	// function did not support EDR/FDR rates.
 	if (ah_attr->static_rate != IB_RATE_PORT_CURRENT &&
-	    ib_rate_to_mult(ah_attr->static_rate) < 0)
+	    ah_attr->static_rate > IB_RATE_100_GBPS)
 		goto bail;
 	if (ah_attr->sl > 15)
 		goto bail;
