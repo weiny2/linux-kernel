@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # load ib_wfr_lite driver
 # Use infiniband-diags tools to activate back to back ports with assigned lids
@@ -13,6 +13,10 @@ remote_lid=2
 
 ibmode="false"
 reload_drivers="false"
+
+BOLD='\033[1;31m'
+DBG='\033[1;35m'
+NORMAL='\033[0m'
 
 function usage
 {
@@ -59,35 +63,46 @@ if [ "$remote_node" == "" ]; then
 fi
 
 if [ "$reload_drivers" == "true" ]; then
-	echo "Reloading ib_wfr_lite on \"$remote_node\""
-	ssh root@$remote_node "rmmod ib_qib"
-	ssh root@$remote_node "rmmod ib_wfr_lite"
-	ssh root@$remote_node "rmmod ib_umad"
-	ssh root@$remote_node "rmmod ib_usa"
-	ssh root@$remote_node "rmmod ib_sa"
-	ssh root@$remote_node "rmmod ib_mad"
-	ssh root@$remote_node "rmmod ib_uverbs"
+	printf "${BOLD}Reloading ib_wfr_lite on \"$remote_node\"\n"
+	printf "${NORMAL}"
+
+	echo "   removing modules ..."
+	ssh root@$remote_node "modprobe -r rdma_ucm"
+	ssh root@$remote_node "modprobe -r ib_umad"
+	ssh root@$remote_node "modprobe -r ib_usa"
+	ssh root@$remote_node "modprobe -r ib_ucm"
+	ssh root@$remote_node "modprobe -r ib_uverbs"
+	ssh root@$remote_node "modprobe -r ib_qib"
+	ssh root@$remote_node "modprobe -r ib_wfr_lite"
+
+	echo "   loading modules ..."
 	ssh root@$remote_node "modprobe ib_wfr_lite"
 	ssh root@$remote_node "modprobe ib_umad"
 	ssh root@$remote_node "modprobe ib_uverbs"
 	ssh root@$remote_node "modprobe ib_usa"
+	ssh root@$remote_node "modprobe rdma_ucm"
 	sleep 5
 fi
 ssh root@$remote_node "iba_portconfig --ib -w2 -s4 -p $remote_port enable" || exit 1
 
 if [ "$reload_drivers" == "true" ]; then
-	echo "Reloading ib_wfr_lite on \"localhost\""
-	rmmod ib_qib
-	rmmod ib_wfr_lite
-	rmmod ib_umad
-	rmmod ib_usa
-	rmmod ib_sa
-	rmmod ib_mad
-	rmmod ib_uverbs
+	printf "${BOLD}Reloading ib_wfr_lite on \"localhost\"\n"
+	printf "${NORMAL}"
+	echo "   removing modules ..."
+	modprobe -r rdma_ucm
+	modprobe -r ib_umad
+	modprobe -r ib_usa
+	modprobe -r ib_ucm
+	modprobe -r ib_uverbs
+	modprobe -r ib_qib
+	modprobe -r ib_wfr_lite
+
+	echo "   loading modules ..."
 	modprobe ib_wfr_lite
 	modprobe ib_umad
 	modprobe ib_uverbs
 	modprobe ib_usa
+	modprobe rdma_ucm
 fi
 
 iba_portconfig --ib -w2 -s4 -p $local_port enable || exit 1
@@ -98,7 +113,8 @@ fi
 
 # continue with STL coonfiguration below
 
-echo "Waiting for remote port to Initialize..."
+printf "${BOLD}Waiting for remote port to Initialize...\n"
+printf "${NORMAL}"
 state=""
 while [ "$state" != "2: INIT" ]; do
 	sleep 1
@@ -106,9 +122,10 @@ while [ "$state" != "2: INIT" ]; do
 	echo $state
 done
 
+printf "${BOLD}Waiting for local port to Initialize...\n"
+printf "${NORMAL}"
 state=""
 while [ "$state" != "2: INIT" ]; do
-	echo "Waiting for local port to Initialize..."
 	sleep 1
 	state=$(cat /sys/class/infiniband/wfr_lite0/ports/${local_port}/state)
 	echo $state
@@ -116,7 +133,8 @@ done
 
 sleep 1
 
-echo "Arming local port."
+printf "${BOLD}Arming local port.\n"
+printf "${NORMAL}"
 iba_portconfig --ib -L ${local_lid} -S3 -p $local_port
 state=""
 while [ "$state" != "3: ARMED" ]; do
@@ -128,7 +146,8 @@ done
 
 sleep 1
 
-echo "Arming Remote port."
+printf "${BOLD}Arming Remote port.\n"
+printf "${NORMAL}"
 ssh root@$remote_node "iba_portconfig --ib -L ${remote_lid} -S3 -p $remote_port"
 state=""
 while [ "$state" != "3: ARMED" ]; do
@@ -140,7 +159,8 @@ done
 
 sleep 1
 
-echo "Activating local port."
+printf "${BOLD}Activating local port.\n"
+printf "${NORMAL}"
 iba_portconfig --ib -S4 -p $local_port
 state=""
 while [ "$state" != "4: ACTIVE" ]; do
@@ -152,7 +172,8 @@ done
 
 sleep 1
 
-echo "Activating Remote port."
+printf "${BOLD}Activating Remote port.\n"
+printf "${NORMAL}"
 ssh root@$remote_node "iba_portconfig --ib -S4 -p $remote_port"
 state=""
 while [ "$state" != "4: ACTIVE" ]; do
