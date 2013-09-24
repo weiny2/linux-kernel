@@ -34,7 +34,12 @@
 
 #include "hfi.h"
 
+//FIXME: It is not clear if this is needed.  The DC HAS says that writes need
+//to be verified, but the WFR says they are not.
+//#define RAM_ACCESS_STATUS_NEEDED 1
 
+
+#ifdef RAM_ACCESS_STATUS_NEEDED
 /*
  * Write stats: Count the number of times we had to check to see if the
  * write completed.
@@ -45,6 +50,7 @@ struct wstats {
 	unsigned long min_checks;	/* min_checks per op */
 	unsigned long max_checks;	/* max checks per op */
 };
+#endif /* RAM_SCCESS_STATUS_NEEDED */
 
 /*
  * Firmware security header.
@@ -73,7 +79,7 @@ struct firmware_details {
 	const struct firmware *fw;
 
 	/* security pieces */
-	const u8 *rsa_n;		/* modulus */
+	const u8 *rsa_modulus;
 	const u8 *rsa_exponent;
 	const u8 *rsa_signature;
 	const u8 *rsa_r2;		/* R^2 */
@@ -88,44 +94,55 @@ struct firmware_details {
 #define FW_SIGNATURE_DWORDS 64	/* size in DWORDS = 2048 bits */
 #define FW_EXPONENT_DWORDS   1	/* size in DWORDS =   32 bits */
 
+/* sizes in bytes */
 #define FW_SIGNATURE_SIZE (FW_SIGNATURE_DWORDS*4)
+#define FW_MU_SIZE 8
 
-/* these are the selector values of RSA_VAR_SEL */
-#define RSA_SIG 0
-#define RSA_N   1
+/* security block commands */
+#define RSA_CMD_INIT  0x1
+#define RSA_CMD_START 0x2
 
+/* security block status */
+#define RSA_STATUS_IDLE   0x0
+#define RSA_STATUS_ACTIVE 0x1
+#define RSA_STATUS_DONE   0x2
+#define RSA_STATUS_FAILED 0x3
 
 int print_css_header = 1;	/* TODO: hook to verbosity level */
-int skip_firmware_load = 1;	/* TODO: temporary */
+int skip_firmware_load = 0;	/* TODO: temporary */
+int security_enabled = 0;	/* TODO make settable */
+/* TODO: maybe "security_present" to skip writing to any security block CSR? */
+   
+
 
 /*
  * Write data or code to the 8051 code or data RAM.
  */
-static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *data, u32 len, struct wstats *wstat)
+static int write_8051(struct hfi_devdata *dd, int code, u32 start,
+					const u8 *data, u32 len
+#ifdef RAM_ACCESS_STATUS_NEEDED
+					, struct wstats *wstat
+#endif /* RAM_SCCESS_STATUS_NEEDED */
+					)
 {
 	u64 reg;
 	u32 offset;
+	int err = 0;
+	int aligned;
+#ifdef RAM_ACCESS_STATUS_NEEDED
 	unsigned long timeout;
 	unsigned long nreads;
 	struct wstats local_wstat;
-	int err = 0;
 
 	/* init stats */
 	if (!wstat)
 		wstat = &local_wstat;
 	memset(wstat, 0, sizeof(*wstat));
 	wstat->min_checks = -1;
+#endif
 
-	/* we expect 8-byte aligned, length data */
-	if (((unsigned long)data % 8) != 0) {
-		dd_dev_err(dd, "8501 write: data is not 8-byte aligned\n");
-		return -EINVAL;
-	}
-	if ((len % 8) != 0) {
-		dd_dev_err(dd,
-			"8501 write: data lengh is not a multiple of 8\n");
-		return -EINVAL;
-	}
+	/* check alignment */
+	aligned = ((unsigned long)data & 0x7) == 0;
 
 	/* write set-up */
 	reg = (code ? DC_DC8051_CFG_RAM_ACCESS_SETUP_RAM_SEL_SMASK : 0ull)
@@ -138,16 +155,18 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, reg);
 
 	/* write */
-	/* FIXME: need to add a security block settle */
 	for (offset = 0; offset < len; offset += 8) {
-		if (unlikely(len - offset < 8)) {
-			/* handle the non-8-byte aligned case */
+		int bytes = len-offset >= 8 ? 8: len-offset;
+		if (bytes < 8) {
 			reg = 0;
-			memcpy(&reg, &data[offset], len - offset);
-		} else {
+			memcpy(&reg, &data[offset], bytes);
+		} else if (aligned) {
 			reg = *(u64 *)&data[offset];
+		} else {
+			memcpy(&reg, &data[offset], 8);
 		}
 		write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_WR_DATA, reg);
+#ifdef RAM_ACCESS_STATUS_NEEDED
 		/* wait for completion, timeout at 1/10 second */
 		timeout = jiffies + (HZ/10 == 0 ? 1 : HZ/10);
 		nreads = 0;
@@ -167,10 +186,13 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start, const u8 *dat
 			wstat->min_checks = nreads;
 		if (wstat->max_checks < nreads)
 			wstat->max_checks = nreads;
+#endif /* RAM_SCCESS_STATUS_NEEDED */
 	}
 
+#ifdef RAM_ACCESS_STATUS_NEEDED
 done:
-	/* turn off write access, auto increment (also sets to data) */
+#endif /* RAM_SCCESS_STATUS_NEEDED */
+	/* turn off write access, auto increment (also sets to data access) */
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, 0);
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_SETUP, 0);
 
@@ -192,6 +214,8 @@ static int invalid_header(struct hfi_devdata *dd, const char *what,
  * Request the firmware from the system.  Extract the pieces and fill in
  * fdet.  If succsessful, the caller will need to call dispose_firmware().
  * Returns 0 on success, -ERRNO on error.
+ * TODO: This only needs to be called once for the driver, then let
+ * both HFIs use it.
  */
 static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 			struct firmware_details *fdet)
@@ -261,7 +285,7 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 	 * What				Size (bytes)
 	 * ---------------------------	----------------------
 	 * CSS header			sizeof(struct css_header)
-	 * public key modulues (rsa_n)	FW_SIGNATURE_DWORDS*4
+	 * public key modulus		FW_SIGNATURE_DWORDS*4
 	 * public key exponent		FW_EXPONENT_DWORDS*4
 	 * signature			FW_SIGNATURE_DWORDS*4
 	 * payload			N
@@ -280,7 +304,7 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 
 	/* extract the fields */
 	base = fdet->fw->data + sizeof(struct css_header);
-	fdet->rsa_n = base;
+	fdet->rsa_modulus = base;
 	base += FW_SIGNATURE_DWORDS * 4;
 	fdet->rsa_exponent = base;
 	base += FW_EXPONENT_DWORDS * 4;
@@ -289,7 +313,9 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 	fdet->payload = base;
 	fdet->payload_len = fdet->fw->size - (base - fdet->fw->data);
 
-	/* TODO: need r2 and mu signatures */
+	/* FIXME: need r2 signature and mu; use rsa_modulus for now */
+	fdet->rsa_r2 = fdet->rsa_modulus;
+	fdet->rsa_mu = fdet->rsa_modulus;
 
 done:
 	/* if returning an error, clean up after ourselves */
@@ -304,42 +330,28 @@ static void dispose_firmware(struct firmware_details *fdet)
 }
 
 /*
- * The "what" determines whether we need to stall or not.
- * Returns 0 on success, -ERRNO on failure.
+ * Write a block of data to a given array CSR.
  */
-static int write_rsa_data(struct hfi_devdata *dd, int what, const char *name, const u8 *data)
+static void write_rsa_data(struct hfi_devdata *dd, int what,
+				const u8 *data, int nbytes)
 {
-	u64 *ptr = (u64 *)data;
-	u64 reg;
-	unsigned long timeout;
-	int i, do_stall;
+	int qw_size = nbytes/64;
+	int i;
 
-	/* TODO: stall may not be needed, check back later */
-	do_stall = (what == RSA_N);
+	if (((unsigned long)data & 0x7) == 0) {
+		/* aligned */
+		u64 *ptr = (u64 *)data;
 
-	/* set the selector, leave everything else at 0 */
-	reg = (what & WFR_FW_CTRL_RSA_VAR_SEL_MASK)
-				<< WFR_FW_CTRL_RSA_VAR_SEL_SHIFT;
-	write_csr(dd, WFR_FW_CTRL, reg);
-
-	/* timeout at 1/10 second */
-	timeout = jiffies + (HZ/10 == 0 ? 1 : HZ/10);
-	for (ptr = (u64 *)data, i = 0; i < FW_SIGNATURE_SIZE/64; i++, ptr++) {
-		write_csr(dd, WFR_RSA_VAR_DATA, *ptr);
-		if (do_stall && (i % 8 == 7)) {
-			/* wait for the stall to clear */
-			/* TODO: add a timeout */
-			do {
-				if (time_after(jiffies, timeout)) {
-					dd_dev_err(dd, "security block stall timeout while writing %s\n", name);
-					return -ETIMEDOUT;
-				}
-				reg = read_csr(dd, WFR_FW_CTRL);
-			} while (reg & WFR_FW_CTRL_SHA_STALL_SMASK);
+		for (i = 0; i < qw_size; i++, ptr++)
+			write_csr(dd, what + (8*i), *ptr);
+	} else {
+		/* not aligned */
+		for (i = 0; i < qw_size; i++, data+=8) {
+			u64 value;
+			memcpy(&value, data, 8);
+			write_csr(dd, what + (8*i), value);
 		}
 	}
-
-	return 0;
 }
 
 /*
@@ -348,9 +360,11 @@ static int write_rsa_data(struct hfi_devdata *dd, int what, const char *name, co
  */
 int load_firmware(struct hfi_devdata *dd)
 {
-	u64 reg, firmware;
+	u64 reg, firmware, status;
 	struct firmware_details fdet;
+#ifdef RAM_ACCESS_STATUS_NEEDED
 	struct wstats wstats;
+#endif /* RAM_SCCESS_STATUS_NEEDED */
 	unsigned long timeout;
 	int ret;
 
@@ -376,10 +390,14 @@ int load_firmware(struct hfi_devdata *dd)
 	   sources?  (Mark Debbage has a sticky note on this in the
 	   DC HAS).  ISSUE: Why is it "ERR_EN" but you need to _clear_
 	   the bits to enable it?  It seems backward. */
-	/* TODO: How can I tell if it is in STL or IB mode? */
 
 	/*
-	 * 1. Reset all
+	 * Reset sequence as described in the DC HAS.  This is the firmware
+	 * load, steps 1-6.  Link bringup, steps 7-10, are in the link
+	 * bringup function.
+	 */
+	/*
+	 * DC reset step 1: Reset all
 	 */
 	reg = DC_DC8051_CFG_RST_M8051W_SMASK
 		| DC_DC8051_CFG_RST_CRAM_SMASK
@@ -389,51 +407,133 @@ int load_firmware(struct hfi_devdata *dd)
 	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
 	/*
-	 * 2. Load firmware
+	 * DC reset step 2: Load firmware
 	 */
 	/* release all but the core reset */
 	reg = DC_DC8051_CFG_RST_M8051W_SMASK;
 	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
+	if (security_enabled) {
+		/* Security step 1a.  Write the modulus, 2048 bits - 32 QW */
+		write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS,
+				fdet.rsa_modulus, FW_SIGNATURE_SIZE);
+		/* Security step 1b.  Write the r2, 2048 bits - 32 QW */
+		write_rsa_data(dd, WFR_MISC_CFG_RSA_R2,
+				fdet.rsa_r2, FW_SIGNATURE_SIZE);
+		/* Security step 1c.  Write the mu, 64 bits */
+		write_rsa_data(dd, WFR_MISC_CFG_RSA_MU,
+				fdet.rsa_mu, FW_MU_SIZE);
+
+		/*
+		 * Security step 2a.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
+		 * OK to clear MISC_CFG_FW_CTRL.DISABLE_VALIDATION - we're
+		 * in the validation path
+		 */
+		write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
+	} else {
+		/*
+		 * Turn security checking off.  Only works if EFUSE
+		 * settings allow it.
+		 */
+		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+				WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
+		
+	}
+
+	/* Security steps 2b-2d.  Load firmware */
 	/* TODO: firmware start of 0? */
-	ret = write_8051(dd, 1/*code*/, 0, fdet.payload,
-						fdet.payload_len, &wstats);
+#ifdef RAM_ACCESS_STATUS_NEEDED
+	ret = write_8051(dd, 1/*code*/, 0, fdet.payload, fdet.payload_len,
+								&wstats);
+#else
+	ret = write_8051(dd, 1/*code*/, 0, fdet.payload, fdet.payload_len);
+#endif /* RAM_SCCESS_STATUS_NEEDED */
 	if (ret)
 		goto done;
 
 	/* TODO: guard with verbosity level */
 	dd_dev_info(dd, "8051 firmware download stats:");
-	dd_dev_info(dd, "  writes:         %u\n", fdet.payload_len/8);
+	dd_dev_info(dd, "  writes:         %u\n",  (fdet.payload_len+7)/8);
+#ifdef RAM_ACCESS_STATUS_NEEDED
 	dd_dev_info(dd, "  checks:         %ld\n", wstats.nchecks);
 	dd_dev_info(dd, "  min check loop: %ld\n", wstats.min_checks);
 	dd_dev_info(dd, "  max check loop: %ld\n", wstats.max_checks);
+#endif /* RAM_SCCESS_STATUS_NEEDED */
 
 	/*
-	 * 3. Load link configuration (optional)
+	 * DC reset step 3. Load link configuration (optional)
 	 */
 	/* TODO TBD - where do we get these values? */
 
 	/*
-	 * 4. Start 8051
+	 * DC reset step 4. Start the 8051
 	 */
-#ifdef CRYPTO_INACTIVE
 	/* clear all reset bits, releasing the 8051 */
 	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
-#else
-	ret = write_rsa_data(dd, RSA_SIG, "signature", fdet.rsa_signature);
-	if (ret)
-		goto done;
-	ret = write_rsa_data(dd, RSA_N, "n (modulus)", fdet.rsa_n);
-	if (ret)
-		goto done;
-	/* TODO: rsa_r2? */
-	/* TODO: rsa_mu? */
-	/* no need to write rsa_exponent - it is hard-coded */
-	/* TODO: ask security block to release the 8051 */
-#endif
+
+	if (security_enabled) {
+		/*
+		 * Security step 2e.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
+		 * OK to clear DISABLE_VALIDATION - we're in the validation
+		 * path
+		 */
+		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+				WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
+
+		/* Security step 2f.  Write the signature, 2048 bits - 32 QW */
+		write_rsa_data(dd, WFR_MISC_CFG_RSA_SIGNATURE,
+				fdet.rsa_signature, FW_SIGNATURE_SIZE);
+
+		/* Security step 2g.  Write MISC_CFG_RSA_CMD = 1 (INIT) */
+		write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_INIT);
+
+		/* Security step 2h.  Write MISC_CFG_RSA_CMD = 2 (START) */
+		write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_START);
+
+		/*
+		 * Security step 2i.  Poll MISC_CFG_FW_CTRL.RSA_STATUS
+		 *	- If ACTIVE: continue polling
+		 *	- If DONE: validation successful, 8051 reset deasserted
+		 *	  by hardware
+		 *	- If FAILED: validation failed, 8051 reset remains
+		 *	  held by hardware, (TBD - CCE error flag) set
+		 */
+		/* timeout at 1/10 second */
+		timeout = jiffies + (HZ/10 == 0 ? 1 : HZ/10);
+		status = 0;
+		do {
+			if (time_after(jiffies, timeout)) {
+				dd_dev_err(dd, "8051 firmware security timeout, current status 0x%llx\n", status);
+				ret = -ETIMEDOUT;
+				goto done;
+			}
+			reg = read_csr(dd, WFR_MISC_CFG_FW_CTRL);
+			status = (reg >> WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT)
+					& WFR_MISC_CFG_FW_CTRL_RSA_STATUS_MASK;
+			if (status == RSA_STATUS_FAILED) {
+				dd_dev_err(dd, "8051 firmware security failure\n");
+				ret = -EINVAL;
+				goto done;
+			}
+		} while (status != RSA_STATUS_DONE);
+	}
+	/*
+	 * FIXME: Workaround for v15 simulator bug.  Remove this block
+	 * when fixed.
+	 *
+	 * The v15 simulator always requires MISC_CFG_FW_CTRL.FW_8051_LOADED
+	 * to be set to bring the 8051 out of rest.  Instead, it should
+	 * depend on whether WFR_MISC_CFG_FW_CTRL.DISABLE_VALIDATION is
+	 * set.
+	 */
+	else {
+		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+				WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
+	}
 
 	/*
-	 * 5. Wait for firmware
+	 * DC reset step 5. Wait for firmware to be ready to accept host
+	 * requests.
 	 */
 	/* timeout at 1/10 second */
 	timeout = jiffies + (HZ/10 == 0 ? 1 : HZ/10);
@@ -449,36 +549,39 @@ int load_firmware(struct hfi_devdata *dd)
 				& DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK;
 	} while (firmware != 0xa0);	/* ready for HOST request */
 
-
-	/* FIXME: if nothing is plugged in, then the SerDes are not
-	   going to make it to polling.  Handle this case.  We should
-	   be able to sucessfully finish loading the driver even with
-	   the SerDes offline.  The driver should know if the SerDes
-	   are active or not.  The rest of these steps would need to
-	   happen out of the normal flow of driver start-up. */
-
-	/*
-	 * 6. Load link configuration interactively (optional - do this if
-	 * not step 3)
-	 */
-	/* TODO TBD - need information on values, how to react.
-	   If this is out-of-band, we need to be notified that the 8051
-	   wants us to do something. */
-
-
-	/* 7. Host request port state from OFFLINE -> POLLING */
-	/* TODO: Do we need to do this both IB and STL modes? */
-
-	/* 8. STL Mode: */
-	/* TODO */
-
-	/* 9. STL Mode: */
-	/* TODO */
-
-	/* 10. STL mode: */
-	/* TODO */
-
 done:
 	dispose_firmware(&fdet);
 	return ret;
 }
+
+
+//TODO: placeholder
+void link_up(struct hfi_devdata *dd)
+{
+	/*
+	 * Reset sequence as described in the DC HAS.  This is the link
+	 * bringup, steps 6-10.  Firmware load, steps 1-5, are in the
+	 * firmware load function.
+	 */
+
+	/*
+	 * DC Reset step 6. Load link configuration interactively (optional
+	 * - do this if not step 3)
+	 */
+
+	/* TODO TBD - need information on values, how to react.
+	   If this is out-of-band, we need to be notified that the 8051
+	   wants us to do something. */
+	/* DC reset step 7. Host request port state from OFFLINE -> POLLING */
+	/* TODO: Do we need to do this both IB and STL modes? */
+
+	/* DC reset step 8. STL Mode: */
+	/* TODO */
+
+	/* DC reset step 9. STL Mode: */
+	/* TODO */
+
+	/* DC reset step 10. STL mode: */
+	/* TODO */
+}
+

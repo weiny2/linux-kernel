@@ -64,6 +64,7 @@
 #include "include/wfr/wfr_cce.h"
 #include "include/wfr/wfr_rxe.h"
 #include "include/wfr/wfr_txe.h"
+#include "include/wfr/wfr_misc.h"
 #include "include/wfr/dc_top_csrs.h"
 #include "include/wfr/dc_8051_csrs.h"
 
@@ -379,28 +380,6 @@
 #define DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK  0xffull
 
 #endif /* USE_GENERATED_WFR_HEADERS */
-
-/* Security block */
-#define WFR_FW_CTRL	 0x20	/* FIXME: this is a CCE scratch register */
-#define WFR_RSA_VAR_DATA 0x28	/* FIXME: this is a CCE scratch register */
-
-/* VALIDATE_DISABLE 0 */
-#define WFR_FW_CTRL_SHA_STALL_SHIFT 1
-#define WFR_FW_CTRL_SHA_STALL_MASK  0x1ull
-#define WFR_FW_CTRL_SHA_STALL_SMASK (WFR_FW_CTRL_SHA_STALL_MASK  << WFR_FW_CTRL_SHA_STALL_SHIFT)
-#define WFR_FW_CTRL_8051_LOADED_SHIFT 2
-#define WFR_FW_CTRL_8051_LOADED_MASK  0x1ull
-#define WFR_FW_CTRL_8051_LOADED_SMASK (WFR_FW_CTRL_8051_LOADED_MASK << WFR_FW_CTRL_8051_LOADED_SHIFT)
-#define WFR_FW_CTRL_RSA_VAR_SEL_SHIFT 3
-#define WFR_FW_CTRL_RSA_VAR_SEL_MASK 0x3ull
-#define WFR_FW_CTRL_RSA_VAR_SEL_SMASK (WFR_FW_CTRL_RSA_VAR_SEL_MASK << WFR_FW_CTRL_RSA_VAR_SEL_SHIFT)
-#define WFR_FW_CTRL_RSA_VAR_ADDR_SHIFT 5
-#define WFR_FW_CTRL_RSA_VAR_ADDR_MASK 0x1full
-#define WFR_FW_CTRL_RSA_VAR_ADDR_SMASK (WFR_FW_CTRL_RSA_VAR_ADDR_MASK << WFR_FW_CTRL_RSA_VAR_ADDR_SHIFT)
-#define WFR_FW_CTRL_RSA_GO_SHIFT 10
-#define WFR_FW_CTRL_RSA_GO_MASK 0x1ull
-#define WFR_FW_CTRL_RSA_GO_SMASK (WFR_FW_CTRL_RSA_GO_MASK << WFR_FW_CTRL_RSA_GO_SHIFT)
-
 
 /* PBC flags */
 #define WFR_PBC_INTR		(1ull << 31)

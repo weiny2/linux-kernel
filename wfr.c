@@ -2264,7 +2264,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	ret = load_firmware(dd);
 	if (ret)
-		goto bail_cleanup;
+		goto bail_clear_intr;
 
 	/*
 	 * TODO: RX init, TX init
@@ -2275,6 +2275,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	goto bail;
 
+bail_clear_intr:
+	clean_up_interrupts(dd);
 bail_cleanup:
 	qib_pcie_ddcleanup(dd);
 bail_free:
