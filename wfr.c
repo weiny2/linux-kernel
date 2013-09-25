@@ -2262,6 +2262,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 
+	read_guid(dd);
 	ret = load_firmware(dd);
 	if (ret)
 		goto bail_clear_intr;
