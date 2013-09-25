@@ -68,6 +68,7 @@ if [ "$reload_drivers" == "true" ]; then
 
 	echo "   removing modules ..."
 	ssh root@$remote_node "modprobe -r rdma_ucm"
+	ssh root@$remote_node "modprobe -r ib_ipoib"
 	ssh root@$remote_node "modprobe -r ib_umad"
 	ssh root@$remote_node "modprobe -r ib_usa"
 	ssh root@$remote_node "modprobe -r ib_ucm"
@@ -80,6 +81,7 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe ib_umad"
 	ssh root@$remote_node "modprobe ib_uverbs"
 	ssh root@$remote_node "modprobe ib_usa"
+	ssh root@$remote_node "modprobe ib_ipoib"
 	ssh root@$remote_node "modprobe rdma_ucm"
 	sleep 5
 fi
@@ -90,6 +92,7 @@ if [ "$reload_drivers" == "true" ]; then
 	printf "${NORMAL}"
 	echo "   removing modules ..."
 	modprobe -r rdma_ucm
+	modprobe -r ib_ipoib
 	modprobe -r ib_umad
 	modprobe -r ib_usa
 	modprobe -r ib_ucm
@@ -102,6 +105,7 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe ib_umad
 	modprobe ib_uverbs
 	modprobe ib_usa
+	modprobe ib_ipoib
 	modprobe rdma_ucm
 fi
 
