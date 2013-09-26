@@ -52,6 +52,10 @@ static unsigned wfr_dump_sma_mads = 0;
 module_param_named(dump_sma_mads, wfr_dump_sma_mads, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(dump_sma_mads, "Dump all SMA MAD's to the console");
 
+static unsigned wfr_sma_debug = 0;
+module_param_named(sma_debug, wfr_sma_debug, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(sma_debug, "Print SMA debug to the console");
+
 
 /** =========================================================================
  * For STL simulation environment we fake some STL values
@@ -1054,18 +1058,21 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
 */
-	printk(KERN_WARNING PFX
-		"STL Get Port '%d' speed en 0x%x; sup 0x%x; act 0x%x\n",
-		port,
-		be16_to_cpu(pi->link_speed.enabled),
-		be16_to_cpu(pi->link_speed.supported),
-		be16_to_cpu(pi->link_speed.active));
-	printk(KERN_WARNING PFX
-		"STL Get Port '%d' width en 0x%x; sup 0x%x; act 0x%x\n",
-		port,
-		be16_to_cpu(pi->link_width.enabled),
-		be16_to_cpu(pi->link_width.supported),
-		be16_to_cpu(pi->link_width.active));
+	if (wfr_sma_debug)
+	{
+		printk(KERN_WARNING PFX
+			"STL Get Port '%d' speed en 0x%x; sup 0x%x; act 0x%x\n",
+			port,
+			be16_to_cpu(pi->link_speed.enabled),
+			be16_to_cpu(pi->link_speed.supported),
+			be16_to_cpu(pi->link_speed.active));
+		printk(KERN_WARNING PFX
+			"STL Get Port '%d' width en 0x%x; sup 0x%x; act 0x%x\n",
+			port,
+			be16_to_cpu(pi->link_width.enabled),
+			be16_to_cpu(pi->link_width.supported),
+			be16_to_cpu(pi->link_width.active));
+	}
 
 	/* FIXME make sure that this default state matches */
 	pi->port_states.offline_reason = 0;
