@@ -368,8 +368,6 @@ int load_firmware(struct hfi_devdata *dd)
 	unsigned long timeout;
 	int ret;
 
-	dd->base_guid = read_csr(dd, DC_DC8051_CFG_LOCAL_GUID);
-	dd_dev_info(dd, "GUID %llx", (unsigned long long)dd->base_guid);
 	/* we cannot do anything if we don't have any firmware */
 	ret = obtain_firmware(dd, FW_NAME, &fdet);
 	/* TODO: TEMPORARY start */
@@ -585,3 +583,11 @@ void link_up(struct hfi_devdata *dd)
 	/* TODO */
 }
 
+/*
+ * Read the GUID from the hardware, store it in dd.
+ */
+void read_guid(struct hfi_devdata *dd)
+{
+	dd->base_guid = read_csr(dd, DC_DC8051_CFG_LOCAL_GUID);
+	dd_dev_info(dd, "GUID %llx", (unsigned long long)dd->base_guid);
+}

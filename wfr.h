@@ -480,6 +480,7 @@ static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
 } 
 
 int load_firmware(struct hfi_devdata *dd);
+void read_guid(struct hfi_devdata *dd);
 
 #endif /* _WFR_H */
 
