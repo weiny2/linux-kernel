@@ -109,7 +109,7 @@ struct firmware_details {
 #define RSA_STATUS_FAILED 0x3
 
 int print_css_header = 1;	/* TODO: hook to verbosity level */
-int skip_firmware_load = 0;	/* TODO: temporary */
+int skip_firmware_load = 1;	/* TODO: temporary */
 int security_enabled = 0;	/* TODO make settable */
 /* TODO: maybe "security_present" to skip writing to any security block CSR? */
    
