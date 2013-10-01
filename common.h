@@ -63,13 +63,11 @@
  */
 
 /*
- * The value in the BTH QP field that QLogic_IB uses to differentiate
- * an qlogic_ib protocol IB packet vs standard IB transport
- * This it needs to be even (0x656b78), because the LSB is sometimes
- * used for the MSB of context. The change may cause a problem
- * interoperating with older software.
+ * If a packet's QP[23:16] bits match this value, then it is
+ * a PSM packet and the hardware will expect a KDETH header
+ * following the BTH.
  */
-#define QIB_KD_QP 0x656b78
+#define DEFAULT_KDETH_QP 0x80
 
 /*
  * These are the status bits readable (in ascii form, 64bit value)

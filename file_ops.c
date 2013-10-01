@@ -224,7 +224,8 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	kinfo->spi_pioindex = 0;
 	//FIXME: does this make sense for WFR?
 	kinfo->spi_pioalign = 0;
-	kinfo->spi_qpair = QIB_KD_QP;
+	//FIXME: the name is poor - this is only bits QP[23:16]
+	kinfo->spi_qpair = kdeth_qp;
 	/*
 	 * user mode PIO buffers are always 2KB, even when 4KB can
 	 * be received, and sent via the kernel; this is ibmaxlen

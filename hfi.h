@@ -1294,6 +1294,7 @@ const char *get_unit_name(int unit);
 extern unsigned qib_ibmtu;
 extern uint num_rcv_contexts;
 extern unsigned qib_n_krcv_queues;
+extern uint kdeth_qp;
 
 extern struct mutex qib_mutex;
 

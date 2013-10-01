@@ -49,6 +49,10 @@ static uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 
+uint kdeth_qp;
+module_param_named(kdeth_qp, kdeth_qp, uint, S_IRUGO);
+MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
+
 /* TODO: temporary */
 static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
@@ -2021,6 +2025,26 @@ static void init_chip(struct hfi_devdata *dd)
 	init_partition_keys(dd);
 }
 
+static void init_kdeth_qp(struct hfi_devdata *dd)
+{
+	/* user changed the KDETH_QP */
+	if (kdeth_qp != 0 && kdeth_qp >= 0xff) {
+		/* out of range or illegal value */
+		dd_dev_err(dd, "Invalid KDETH queue pair prefix, ignoring");
+		kdeth_qp = 0;
+	}
+	if (kdeth_qp == 0)	/* not set, or failed range check */
+		kdeth_qp = DEFAULT_KDETH_QP;
+
+	write_csr(dd, WFR_SEND_BTH_QP,
+			(kdeth_qp & WFR_SEND_BTH_QP_KDETH_QP_MASK)
+				<< WFR_SEND_BTH_QP_KDETH_QP_SHIFT);
+
+	write_csr(dd, WFR_RCV_BTH_QP,
+			(kdeth_qp & WFR_RCV_BTH_QP_KDETH_QP_MASK)
+				<< WFR_RCV_BTH_QP_KDETH_QP_SHIFT);
+}
+
 void init_txe(struct hfi_devdata *dd)
 {
 	int i;
@@ -2247,6 +2271,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* set initial TXE CSRs */
 	init_txe(dd);
+	/* set up KDETH QP prefix in both RX and TX CSRs */
+	init_kdeth_qp(dd);
 
 	/* send contexts must be set up before receive contexts */
 	ret = init_send_contexts(dd);
