@@ -518,7 +518,7 @@ struct diag_pkt {
 	__u16 context;		/* send context to use */
 	__u16 len;		/* data length, in bytes */
 	__u64 data;		/* user data pointer */
-	__u64 pbc_wd;		/* PBC for the packet */
+	__u64 pbc;		/* PBC for the packet */
 };
 
 /*

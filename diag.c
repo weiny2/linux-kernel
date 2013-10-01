@@ -457,8 +457,8 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 	total_len = pkt_len + 2;	/* PCB + packet */
 
 	/* if 0, fill in a default */
-	if (dp.pbc_wd == 0)
-		dp.pbc_wd = create_pbc(sc, 0, 0, 0, total_len);
+	if (dp.pbc == 0)
+		dp.pbc = create_pbc(sc, 0, 0, 0, total_len);
 
 	pbuf = sc_buffer_alloc(sc, total_len, NULL, 0);
 	if (!pbuf) {
@@ -466,7 +466,7 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 		goto bail;
 	}
 
-	pio_copy(pbuf, dp.pbc_wd, tmpbuf, pkt_len);
+	pio_copy(pbuf, dp.pbc, tmpbuf, pkt_len);
 	/* no flush needed as the HW knows the packet size */
 
 	ret = sizeof(dp);
