@@ -180,6 +180,12 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		mem_pool_info[i].blocks = ab;
 	}
 
+	/* do not use both % and absolute blocks for different pools */
+	if (hp_total != 0 && ab_total != 0) {
+		dd_dev_err(dd, "All send context memory pools must be described as either hectopercent or blocks, no mixing between pools\n");
+		return -EINVAL;
+	}
+
 	/* if any percentages are present, they must add up to 100% x 100 */
 	if (hp_total != 0 && hp_total != 10000) {
 		dd_dev_err(dd, "Send context memory pool hectopercent is %d, expecting 10000\n", hp_total);
