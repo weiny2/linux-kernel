@@ -892,9 +892,53 @@ static void qib_snoop_list_add_tail(struct snoop_packet *packet,
 	wake_up_interruptible(&sc_device->snoop_waitq);
 }
 
+/**
+ * Check for WFR_LITE control MAD packets
+ *
+ * WFR_LITE control MADs are IB DR SMP's with attribute_id > IB_SMP_ATTR_WFR_LITE_MIN
+ *
+ * Returns,
+ * 1 if this packet is to be processed by the driver
+ * 0 if this packet is to be sent to the snoop interface
+ */
+static int is_wfr_lite_ctrl_pkt(struct qib_ib_header *hdr, void *data)
+{
+	u8 vl;
+	u32 qp;
+	struct ib_smp *smp = (struct ib_smp *)data;
+
+	/* Verify LRH */
+	vl = (be16_to_cpu(hdr->lrh[0]) & 0xf000) >> 12;
+	if (vl != 15)
+		return 0;
+
+	/* Verify BTH */
+	qp = be32_to_cpu(hdr->u.oth.bth[1]) & 0x0fff;
+	if (qp != 0)
+		return 0;
+
+	/* Check SMP */
+	if (smp->base_version == IB_MGMT_BASE_VERSION
+	    && smp->class_version == 1
+	    && smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
+	    && be16_to_cpu(smp->attr_id) > IB_SMP_ATTR_WFR_LITE_MIN) {
+		printk(KERN_INFO "ib_wfr_lite: caught WFR CTRL attr id 0x%x\n", smp->attr_id);
+		return 1;
+	}
+
+	return 0;
+}
+
 void qib_snoop_send_queue_packet(struct qib_pportdata *ppd,
 				struct snoop_packet *packet)
 {
+	struct qib_ib_header *hdr = (struct qib_ib_header *)packet->data;
+	int hdr_size = snoop_get_header_size(ppd->dd, hdr, NULL, 0);
+	void *data = (void *)&packet->data[hdr_size];
+
+	if (is_wfr_lite_ctrl_pkt(hdr, data))
+		return;
+
 	/* If we are dealing with mix mode then we need to make another copy
 	 * of same packet and queue it in snoop device as well.
 	 * However if we do not get sufficient memory here then we just
@@ -916,43 +960,6 @@ void qib_snoop_send_queue_packet(struct qib_pportdata *ppd,
 		qib_snoop_list_add_tail(packet, ppd, QIB_CAPTURE_DEV_INDEX);
 	else if (ppd->mode_flag == QIB_PORT_SNOOP_MODE)
 		qib_snoop_list_add_tail(packet, ppd, QIB_SNOOP_DEV_INDEX);
-}
-
-/**
- * Check for WFR_LITE control MAD packets
- *
- * WFR_LITE control MADs are IB DR SMP's with attribute_id > IB_SMP_ATTR_WFR_LITE_MIN
- *
- * Returns,
- * 1 if this packet is to be processed by the driver
- * 0 if this packet is to be sent to the snoop interface
- */
-static int is_wfr_lite_ctrl_pkt(struct qib_pportdata *port, struct qib_ib_header *hdr,
-				void *data, u32 tlen)
-{
-	u8 vl;
-	u32 qp;
-	struct ib_smp *smp = (struct ib_smp *)data;
-
-	/* Verify LRH */
-	vl = (be16_to_cpu(hdr->lrh[0]) & 0xf000) >> 12;
-	if (vl != 15)
-		return 0;
-
-	/* Verify BTH */
-	qp = be32_to_cpu(hdr->u.oth.bth[1]) & 0x0fff;
-	if (qp != 0)
-		return 0;
-
-	/* Check SMP */
-	if (smp->base_version == IB_MGMT_BASE_VERSION
-	    && smp->class_version == 1
-	    && smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
-	    && be16_to_cpu(smp->attr_id) > be16_to_cpu(IB_SMP_ATTR_WFR_LITE_MIN)) {
-		return 1;
-	}
-
-	return 0;
 }
 
 /*
@@ -988,7 +995,7 @@ int qib_snoop_rcv_queue_packet(struct qib_pportdata *port, void *rhdr,
 	if (port->mode_flag == (QIB_PORT_SNOOP_MODE | QIB_PORT_CAPTURE_MODE))
 		return 0;
 
-	if (is_wfr_lite_ctrl_pkt(port, hdr, data, tlen))
+	if (is_wfr_lite_ctrl_pkt(hdr, data))
 		return 0;
 
 	packet = kmalloc(sizeof(struct snoop_packet) + tlen,
