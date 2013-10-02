@@ -155,14 +155,14 @@ static struct flag_table sc_err_status_flags[] = {
  * Credit Return flags
  */
 static struct flag_table credit_return_flags[] = {
-	FLAG_ENTRY("Status ", 0, WFR_CR_STATUS_SMASK),
+	FLAG_ENTRY("Status", 0, WFR_CR_STATUS_SMASK),
 	FLAG_ENTRY("CreditReturnDueToPBC", 0,
 		WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK),
-	FLAG_ENTRY("CreditReturnDueToThreshold ", 0,
+	FLAG_ENTRY("CreditReturnDueToThreshold", 0,
 		WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK),
-	FLAG_ENTRY("CreditReturnDueToErr ", 0,
+	FLAG_ENTRY("CreditReturnDueToErr", 0,
 		WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SMASK),
-	FLAG_ENTRY("CreditReturnDueToForce ", 0,
+	FLAG_ENTRY("CreditReturnDueToForce", 0,
 		WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
 };
 
@@ -517,7 +517,7 @@ static void is_rcvavailint_int(struct hfi_devdata *dd, unsigned int source)
 	struct qib_ctxtdata *rcd;
 
 	/* only check what we're using */
-	if (source >= dd->num_rcv_contexts) {
+	if (unlikely(source >= dd->num_rcv_contexts)) {
 		dd_dev_err(dd, "unexpected out of range receive context interrupt %u\n", source);
 		return;
 	}
@@ -532,8 +532,11 @@ static void is_rcvavailint_int(struct hfi_devdata *dd, unsigned int source)
 
 static void is_sendcredit_int(struct hfi_devdata *dd, unsigned int source)
 {
-	/* TODO: actually do something */
-	printk("%s: int%u - unimplemented\n", __func__ , source);
+	if (unlikely(source >= dd->num_send_contexts)) {
+		dd_dev_err(dd, "unexpected out of range send context credit return interrupt %u\n", source);
+		return;
+	}
+	sc_release_update(dd->send_contexts[source].sc);
 }
 
 /* handles: sdmaint, sdmaprogressint, sdmaidleint */
@@ -673,6 +676,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 {
 	struct qib_ctxtdata *rcd = data;
 
+printk("%s: context %d\n", __func__, rcd->ctxt);
 	rcd->dd->int_counter++;
 
 	/* clear the interrupt */
@@ -1322,6 +1326,9 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
 		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
 	write_kctxt_csr(dd, context, WFR_RCV_HDR_SIZE, reg);
+
+	/* enable all errors */
+	write_kctxt_csr(dd, context, WFR_RCV_CTXT_ERR_MASK, ~0ull);
 }
 
 static void txchk_change(struct hfi_devdata *dd, u32 start,
@@ -1935,7 +1942,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 static void init_partition_keys(struct hfi_devdata *dd)
 {
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (0 * 8), 
-		(0xffff & WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK)
+		(DEFAULT_PKEY & WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK)
 			<< WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_SHIFT);
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (1 * 8),  0);
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (2 * 8),  0);
@@ -1950,11 +1957,11 @@ static void reset_txe(struct hfi_devdata *dd)
 	write_csr(dd, WFR_SEND_CTRL, 0);
 	write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIMIT, 0);
 	write_csr(dd, WFR_SEND_PIO_ERR_MASK, 0);
-	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, -1);
+	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, ~0ull);
 	write_csr(dd, WFR_SEND_DMA_ERR_MASK, 0);
-	write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, -1);
+	write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, ~0ull);
 	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, 0);
-	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, -1);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, ~0ull);
 	write_csr(dd, WFR_SEND_BTH_QP, 0);
 	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, 0);
 	write_csr(dd, WFR_SEND_SC2VLT0, 0);
@@ -1983,7 +1990,7 @@ static void reset_txe(struct hfi_devdata *dd)
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, 0);
-		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, -1);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, ~0ull);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_VL, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_JOB_KEY, 0);
@@ -2045,20 +2052,17 @@ static void init_kdeth_qp(struct hfi_devdata *dd)
 				<< WFR_RCV_BTH_QP_KDETH_QP_SHIFT);
 }
 
-void init_txe(struct hfi_devdata *dd)
+void init_rxe(struct hfi_devdata *dd)
 {
 	int i;
 
-	/* enable all general PIO, SDMA, and Egress errors */
-	write_csr(dd, WFR_SEND_PIO_ERR_MASK, -1);
-	write_csr(dd, WFR_SEND_DMA_ERR_MASK, -1);
-	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, -1);
+	/* enable all receive errors */
+	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
 
 	/*
 	 * Set up receive link credits.  For STL, credits are controlled
 	 * on the send side, so just set the receive side to the maximum
 	 * so it will not interfere.
-	 * TODO: Move to RXE init?
 	 */
 	for (i = 0; i < WFR_RXE_NUM_DATA_VL; i++) {
 		write_csr(dd, WFR_RCV_CREDIT_VL + (8 * i),
@@ -2066,6 +2070,18 @@ void init_txe(struct hfi_devdata *dd)
 	}
 	write_csr(dd, WFR_RCV_CREDIT_VL15,
 				WFR_RCV_CREDIT_VL15_RX_MAX_CREDIT_VL_SMASK);
+
+	/* TODO: others...? */
+}
+
+void init_txe(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* enable all general PIO, SDMA, and Egress errors */
+	write_csr(dd, WFR_SEND_PIO_ERR_MASK, ~0ull);
+	write_csr(dd, WFR_SEND_DMA_ERR_MASK, ~0ull);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, ~0ull);
 
 	/*
 	 * FIXME: Set up initial send link credits.  We need an amount
@@ -2209,6 +2225,18 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
 
+	//FIXME: This is a workaround to always set the DC in STL mode.
+	// Little/no testing has been done in the WFR simulator since
+	// it became clear that only STL mode will be supported.  The
+	// CSR still comes up in IB mode by default.  The mode needs to
+	// be set before the link is brought up.  With the WFR simlator's
+	// "easy link mode" it appears it just needs to be set before the
+	// first packet is sent.
+	// This workaround is needed as of v17 and earlier.
+	write_csr(dd, DCC_DCC_CFG_PORT_CONFIG,
+			read_csr(dd, DCC_DCC_CFG_PORT_CONFIG)
+				| DCC_DCC_CFG_PORT_CONFIG_STL_MODE_SMASK);
+
 	/* sdma init */
 	dd->num_sdma = dd->chip_sdma_engines;
 	if (mod_num_sdma && mod_num_sdma < dd->chip_sdma_engines)
@@ -2269,6 +2297,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 
+	/* set initial RXE CSRs */
+	init_rxe(dd);
 	/* set initial TXE CSRs */
 	init_txe(dd);
 	/* set up KDETH QP prefix in both RX and TX CSRs */

@@ -382,6 +382,17 @@ int init_send_contexts(struct hfi_devdata *dd)
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
 		/* unmask all errors */
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
+		/* turn on credit interrupt if kernel thread */
+		if (dd->send_contexts[i].type == SC_KERNEL) {
+			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 
+				WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK);
+		}
+		/* set the default partition key */
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_PARTITION_KEY,
+			(DEFAULT_PKEY &
+				WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_MASK)
+			    << WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_SHIFT);
+
 	}
 
 	return 0;

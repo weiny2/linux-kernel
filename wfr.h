@@ -67,6 +67,7 @@
 #include "include/wfr/wfr_misc.h"
 #include "include/wfr/dc_top_csrs.h"
 #include "include/wfr/dc_8051_csrs.h"
+#include "include/wfr/dcc_csrs.h"
 
 /* not defined in wfr_core.h */
 #define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000

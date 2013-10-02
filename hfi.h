@@ -331,6 +331,8 @@ struct qib_verbs_txreq {
 #define QIB_IB_QDR 4
 
 #define HFI_DEFAULT_MTU 4096
+/* default parition key */
+#define DEFAULT_PKEY 0xffff
 
 /*
  * Possible IB config parameters for f_get/set_ib_table()
