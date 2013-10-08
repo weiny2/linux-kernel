@@ -1015,14 +1015,14 @@ struct ib_mad_send_buf * ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	mad_send_wr->sg_list[0].length = hdr_len;
 	mad_send_wr->sg_list[0].lkey = mad_agent->mr->lkey;
 
-/* FIXME: jumbos don't have to be 2048 bytes
- * base this off of data_len
- * Actually we have to be careful here...
- * MAD's destined for the local device expect a "full" MAD for their response.
- * Failure to allocate full length MAD's above would result in issues within drivers.
- * We _MAY_ be able to adjust this length down for actual sends on the wire...
- */
-	mad_send_wr->sg_list[1].length = mad_size - hdr_len;
+	/* individual jumbo MADs don't have to be 2048 bytes */
+	if (mad_agent_priv->qp_info->supports_jumbo_mads
+	    && base_version == JUMBO_MGMT_BASE_VERSION
+	    && data_len < mad_size - hdr_len)
+		mad_send_wr->sg_list[1].length = data_len;
+	else
+		mad_send_wr->sg_list[1].length = mad_size - hdr_len;
+
 	mad_send_wr->sg_list[1].lkey = mad_agent->mr->lkey;
 
 	mad_send_wr->send_wr.wr_id = (unsigned long) mad_send_wr;
