@@ -42,6 +42,11 @@
 #include <rdma/ib_verbs.h>
 #include <uapi/rdma/ib_user_mad.h>
 
+/* FIXME for upstream add to ib_verbs.h ASAP */
+enum {
+	IB_DEVICE_JUMBO_MAD_SUPPORT = (1<<31)
+};
+
 /* Management base version */
 #define IB_MGMT_BASE_VERSION			1
 
