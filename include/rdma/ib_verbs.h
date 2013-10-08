@@ -135,6 +135,10 @@ enum ib_device_cap_flags {
 	IB_DEVICE_ON_DEMAND_PAGING	= (1<<31),
 };
 
+enum ib_device_cap_flags2 {
+	IB_DEVICE_OPA_MAD_SUPPORT	= 1
+};
+
 enum ib_signature_prot_cap {
 	IB_PROT_T10DIF_TYPE_1 = 1,
 	IB_PROT_T10DIF_TYPE_2 = 1 << 1,
@@ -217,6 +221,7 @@ struct ib_device_attr {
 	int			sig_prot_cap;
 	int			sig_guard_cap;
 	struct ib_odp_caps	odp_caps;
+	u64			device_cap_flags2;
 	u32			max_mad_size;
 };
 
@@ -1790,6 +1795,25 @@ static inline int rdma_ib_or_iboe(struct ib_device *device, u8 port_num)
 static inline int cap_ib_mad(struct ib_device *device, u8 port_num)
 {
 	return rdma_ib_or_iboe(device, port_num);
+}
+
+/**
+ * cap_opa_mad - Check if the port of device supports OPA defined
+ * Management Datagrams.
+ *
+ * @device: Device to be checked
+ * @port_num: Port number of the device
+ *
+ * Return 0 when port of the device does not support OPA
+ * Management Datagrams.
+ */
+static inline int cap_opa_mad(struct ib_device *device, u8 port_num)
+{
+	struct ib_device_attr attr;
+
+	device->query_device(device, &attr);
+
+	return (attr.device_cap_flags2 & IB_DEVICE_OPA_MAD_SUPPORT);
 }
 
 /**
