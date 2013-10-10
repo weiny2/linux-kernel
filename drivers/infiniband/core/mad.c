@@ -950,7 +950,7 @@ static int alloc_send_rmpp_list(struct ib_mad_send_wr_private *send_wr,
 
 int ib_mad_kernel_rmpp_agent(struct ib_mad_agent *agent)
 {
-	return (agent->rmpp_version && !(agent->flags & IB_MAD_USER_RMPP));
+	return agent->rmpp_version && !(agent->flags & IB_MAD_USER_RMPP);
 }
 EXPORT_SYMBOL(ib_mad_kernel_rmpp_agent);
 
@@ -1952,14 +1952,16 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 			   && ib_is_mad_class_rmpp(mad_recv_wc->recv_buf.mad->mad_hdr.mgmt_class)
 			   && (ib_get_rmpp_flags(&((struct ib_rmpp_base *)mad_recv_wc->recv_buf.mad)->rmpp_hdr)
 					& IB_MGMT_RMPP_FLAG_ACTIVE)) {
-				// user rmpp is in effect
-				// and this is an active RMPP MAD
+				/* user rmpp is in effect
+				 * and this is an active RMPP MAD
+				 */
 				mad_recv_wc->wc->wr_id = 0;
 				mad_agent_priv->agent.recv_handler(&mad_agent_priv->agent,
 								   mad_recv_wc);
 				atomic_dec(&mad_agent_priv->refcount);
 			} else {
-				// not user rmpp, revert to normal behavior and drop the mad
+				/* not user rmpp, revert to normal behavior and
+				 * drop the mad */
 				ib_free_recv_mad(mad_recv_wc);
 				deref_mad_agent(mad_agent_priv);
 				return;
