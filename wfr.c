@@ -1331,13 +1331,6 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	write_kctxt_csr(dd, context, WFR_RCV_CTXT_ERR_MASK, ~0ull);
 }
 
-static void txchk_change(struct hfi_devdata *dd, u32 start,
-				  u32 len, u32 which, struct qib_ctxtdata *rcd)
-{
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-}
-
 static int tempsense_rd(struct hfi_devdata *dd, int regnum)
 {
 	if (print_unimplemented)
@@ -2194,7 +2187,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_set_ib_table      = set_ib_table;
 	dd->f_set_intr_state    = set_intr_state;
 	dd->f_setextled         = setextled;
-	dd->f_txchk_change      = txchk_change;
 	dd->f_update_usrhead    = update_usrhead;
 	dd->f_wantpiobuf_intr   = wantpiobuf_intr;
 	dd->f_xgxs_reset        = xgxs_reset;

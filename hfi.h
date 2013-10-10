@@ -779,8 +779,6 @@ struct hfi_devdata {
 		char **, u64 **);
 	void (*f_initvl15_bufs)(struct hfi_devdata *);
 	void (*f_init_ctxt)(struct qib_ctxtdata *);
-	void (*f_txchk_change)(struct hfi_devdata *, u32, u32, u32,
-		struct qib_ctxtdata *);
 	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
 
 	char *boardname; /* human readable board info */
