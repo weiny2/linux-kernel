@@ -200,6 +200,7 @@ struct ib_user_mad_reg_req {
  *   management class to receive.
  * @res - reserved field.  must be set to 0
  * @flags - additional registration flags
+ *          Must be in the set of flags defined by IB_USER_MAD_REG_FLAGS_CAP
  * @method_mask - The caller will receive unsolicited MADs for any method
  *   whose bit is set.
  * @oui - Indicates IEEE OUI when mgmt_class is a vendor class
@@ -211,6 +212,7 @@ struct ib_user_mad_reg_req {
 enum {
 	IB_USER_MAD_USER_RMPP = (1 << 0),
 };
+#define IB_USER_MAD_REG_FLAGS_CAP (IB_USER_MAD_USER_RMPP)
 struct ib_user_mad_reg_req2 {
 	__u32	id;
 	__u32	qpn;
