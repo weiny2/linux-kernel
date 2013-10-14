@@ -1714,38 +1714,31 @@ static int qib_close(struct inode *in, struct file *fp)
 	/* early; no interrupt users after this */
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
 	ctxt = rcd->ctxt;
+	/* disable receive context and interrupt available */
+	dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
+			  QIB_RCVCTRL_INTRAVAIL_DIS, ctxt);
+
+	/* disable PIO */
+	sc_disable(rcd->sc);
 	dd->rcd[ctxt] = NULL;
 	pid = rcd->pid;
 	rcd->pid = 0;
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 
-	if (rcd->rcvwait_to || rcd->piowait_to ||
-	    rcd->rcvnowait || rcd->pionowait) {
-		rcd->rcvwait_to = 0;
-		rcd->piowait_to = 0;
-		rcd->rcvnowait = 0;
-		rcd->pionowait = 0;
-	}
-	if (rcd->flag)
-		rcd->flag = 0;
+	rcd->rcvwait_to = 0;
+	rcd->piowait_to = 0;
+	rcd->rcvnowait = 0;
+	rcd->pionowait = 0;
+	rcd->flag = 0;
 
-	if (dd->kregbase) {
-		/* atomically clear receive enable ctxt and intr avail. */
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
-				  QIB_RCVCTRL_INTRAVAIL_DIS, ctxt);
+	/* clean up the pkeys for this ctxt user */
+	qib_clean_part_key(rcd, dd);
+	dd->f_clear_tids(rcd);
 
-		/* clean up the pkeys for this ctxt user */
-		qib_clean_part_key(rcd, dd);
-		/* disable PIO */
-		sc_disable(rcd->sc);
-
-		dd->f_clear_tids(rcd);
-
-		if (dd->pageshadow)
-			unlock_expected_tids(rcd);
-		qib_stats.sps_ctxts--;
-		dd->freectxts++;
-	}
+	if (dd->pageshadow)
+		unlock_expected_tids(rcd);
+	qib_stats.sps_ctxts--;
+	dd->freectxts++;
 
 	mutex_unlock(&qib_mutex);
 	qib_free_ctxtdata(dd, rcd); /* after releasing the mutex */
