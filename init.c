@@ -370,13 +370,10 @@ static int init_after_reset(struct hfi_devdata *dd)
 	 * pioavail updates while we re-initialize.  This is mostly
 	 * for the driver data structures, not chip registers.
 	 */
-	/*
-	 * ctxt == -1 means "all contexts". Only really safe for
-	 * _dis_abling things, as here.
-	 */
-	dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
-			  QIB_RCVCTRL_INTRAVAIL_DIS |
-			  QIB_RCVCTRL_TAILUPD_DIS, -1);
+	for (i = 0; i < dd-> num_rcv_contexts; i++)
+		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
+				  QIB_RCVCTRL_INTRAVAIL_DIS |
+				  QIB_RCVCTRL_TAILUPD_DIS, i);
 	pio_send_control(dd, PSC_GLOBAL_DISABLE);
 	for (i = 0; i < dd->num_send_contexts; i++)
 		sc_disable(dd->send_contexts[i].sc);
@@ -698,10 +695,11 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
-				   QIB_RCVCTRL_CTXT_DIS |
-				   QIB_RCVCTRL_INTRAVAIL_DIS |
-				   QIB_RCVCTRL_PKEY_ENB, -1);
+		for (i = 0; i < dd-> num_rcv_contexts; i++)
+			dd->f_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
+					  QIB_RCVCTRL_CTXT_DIS |
+					  QIB_RCVCTRL_INTRAVAIL_DIS |
+					  QIB_RCVCTRL_PKEY_ENB, i);
 		/*
 		 * Gracefully stop all sends allowing any in progress to
 		 * trickle out first.

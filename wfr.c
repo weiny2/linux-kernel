@@ -1009,7 +1009,7 @@ static u32 encoded_size(u32 size)
  *	DontDropRHQFull
  *	DontDropEgrFull
  */
-static void one_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
+static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
@@ -1129,25 +1129,6 @@ static void one_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		reg = (eager_header_counter & WFR_RCV_HDR_HEAD_COUNTER_MASK)
 			<< WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
 		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
-	}
-}
-
-static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
-{
-	int i;
-
-	if (!dd->rcd)
-		return;
-// FIXME: it looks like a -1 means "all contexts for this port"
-// Since we only have one port, we can safely do all.  However
-// this begs the question: Do we remove the notion of multiple
-// ports?  There are several functions that take a ppd when
-// it is now no longer needed NOR applicable.
-	if (ctxt < 0) {
-		for (i = 0; i < dd->num_rcv_contexts; i++)
-			one_rcvctrl(dd, op, i);
-	} else {
-		one_rcvctrl(dd, op, ctxt);
 	}
 }
 
