@@ -56,6 +56,8 @@
 #define WFR_TXE_PIO_SIZE (32 * 0x100000)	/* 32 MB */
 #define WFR_PIO_BLOCK_SIZE 64			/* bytes */
 #define WFR_PIO_CMASK 0x7ff	/* counter mask for free and fill counters */
+#define WFR_MAX_EAGER_ENTRIES    2048	/* max receive eager entries */
+#define WFR_MAX_TID_PAIR_ENTRIES 1024	/* max receive expected pairs */
 
 #define USE_GENERATED_WFR_HEADERS 1
 #ifdef USE_GENERATED_WFR_HEADERS

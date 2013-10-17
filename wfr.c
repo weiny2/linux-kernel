@@ -1285,10 +1285,15 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	 * array base and count must be divisible by 2.
 	 */
 	rcd->eager_count = dd->rcv_entries / 2;
+	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES)
+		rcd->eager_count = WFR_MAX_EAGER_ENTRIES;
 	rcd->expected_count = dd->rcv_entries / 2;
+	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
+		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
 	rcd->eager_base = (dd->rcv_entries * context);
 	rcd->expected_base = rcd->eager_base + rcd->eager_count;
 	BUG_ON(rcd->expected_base % 2 == 1);	/* must be even */
+	BUG_ON(rcd->expected_count % 2 == 1);	/* must be even */
 
 	/*
 	 * These values are per-context:
@@ -1882,9 +1887,10 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 	 */
 	per_context = WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES / dd->num_rcv_contexts;
 	per_context -= (per_context % 4);
-	/* FIXME: no more than 8 each of eager and expected TIDs, for now! */
-	if (per_context > 16)
-		per_context = 16;
+	/* FIXME: no more than 24 each of eager and expected TIDs, for now! */
+#define TEMP_MAX_ENTRIES 48
+	if (per_context > TEMP_MAX_ENTRIES)
+		per_context = TEMP_MAX_ENTRIES;
 	dd->rcv_entries = per_context;
 	dd_dev_info(dd, "rcv entries %u\n", dd->rcv_entries);
 
