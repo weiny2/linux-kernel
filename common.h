@@ -776,6 +776,7 @@ static inline __u32 rhf_rcv_seq(const __le32 *rbuf)
 		RHF0_RCV_SEQ_MASK;
 }
 
+/* returned offset is in DWORDS */
 static inline __u32 rhf_hdrq_offset(const __le32 *rbuf)
 {
 	return (__le32_to_cpu(rbuf[1]) >> RHF1_HDRQ_OFFSET_SHIFT) &
