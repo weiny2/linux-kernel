@@ -1275,6 +1275,12 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	qib_verify_pioperf(dd);
+#if 0
+	{
+	void force_all_interrupts(void);
+	force_all_interrupts();
+	}
+#endif
 bail:
 	return ret;
 }

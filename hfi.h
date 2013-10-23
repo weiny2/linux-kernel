@@ -938,8 +938,8 @@ struct hfi_devdata {
 	u32 requested_intx_irq;		/* did we request one? */
 	char intx_name[MAX_NAME_SIZE];	/* INTx name */
 
-	/* generic interrupt: mask of handled interrupts */
-	u64 gi_mask[WFR_CCE_NUM_INT_CSRS];
+	/* general interrupt: mask of handled interrupts */
+	u64 gi_mask[WFR_NUM_IMASK_SOURCES];
 
 	u32 chip_sdma_engines;	/* number from the chip */
 	u32 num_sdma;		/* number being used */

@@ -71,84 +71,140 @@ struct flag_table {
 
 /* Send Error Consequences */
 #define SEC_WRITE_DROPPED	0x1
-#define SEC_SC_HALTED		0x2	/* per-context only */
-#define SEC_HFI_FREEZE		0x4	/* per-HFI only */
+#define SEC_PACKET_DROPPED	0x2
+#define SEC_SC_HALTED		0x4	/* per-context only */
+#define SEC_SPC_FREEZE		0x8	/* per-HFI only */
 
 /*
  * TXE PIO Error flags and consequences
  */
 static struct flag_table pio_err_status_flags[] = {
-	FLAG_ENTRY("PioWriteBadCtxt",
+/* 0*/	FLAG_ENTRY("PioWriteBadCtxt",
 		SEC_WRITE_DROPPED,
 		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_BAD_CTXT_ERR_SMASK),
-
-	FLAG_ENTRY("PioWriteAddrParity",
-		SEC_HFI_FREEZE,
+/* 1*/	FLAG_ENTRY("PioWriteAddrParity",
+		SEC_SPC_FREEZE,
 		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_ADDR_PARITY_ERR_SMASK),
-
-	FLAG_ENTRY("PioCsrParity",
-		SEC_HFI_FREEZE,
+/* 2*/	FLAG_ENTRY("PioCsrParity",
+		SEC_SPC_FREEZE,
 		WFR_SEND_PIO_ERR_STATUS_PIO_CSR_PARITY_ERR_SMASK),
-
-	FLAG_ENTRY("PioReadCtrlParity",
-		SEC_HFI_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_READ_CTRL_PARITY_ERR_SMASK),
-
-	FLAG_ENTRY("PioBlockQwCountUnc",
-		SEC_HFI_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_UNC_ERR_SMASK),
-
-	FLAG_ENTRY("PioBlockQwCountCor",
+/* 3*/	FLAG_ENTRY("PioSbMemFifo0",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO0_ERR_SMASK),
+/* 4*/	FLAG_ENTRY("PioSbMemFifo1",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO1_ERR_SMASK),
+/* 5*/	FLAG_ENTRY("PioPccFifoParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PCC_FIFO_PARITY_ERR_SMASK),
+/* 6*/	FLAG_ENTRY("PioPecFifoParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PEC_FIFO_PARITY_ERR_SMASK),
+/* 7*/	FLAG_ENTRY("PioSbrdctlCrrelParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTL_CRREL_PARITY_ERR_SMASK),
+/* 8*/	FLAG_ENTRY("PioSbrdctrlCrrelFifoParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTRL_CRREL_FIFO_PARITY_ERR_SMASK),
+/* 9*/	FLAG_ENTRY("PioPktEvictFifoParityErr",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_FIFO_PARITY_ERR_SMASK),
+/*10*/	FLAG_ENTRY("PioSmPktResetParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_SM_PKT_RESET_PARITY_ERR_SMASK),
+/*11*/	FLAG_ENTRY("PioVlLenMemBank0Unc",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_UNC_ERR_SMASK),
+/*12*/	FLAG_ENTRY("PioVlLenMemBank1Unc",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_UNC_ERR_SMASK),
+/*13*/	FLAG_ENTRY("PioVlLenMemBank0Cor",
 		0,
-		WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_COR_ERR_SMASK)
+		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_COR_ERR_SMASK),
+/*14*/	FLAG_ENTRY("PioVlLenMemBank1Cor",
+		0,
+		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_COR_ERR_SMASK),
+/*15*/	FLAG_ENTRY("PioCreditRetFifoParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_CREDIT_RET_FIFO_PARITY_ERR_SMASK),
+/*16*/	FLAG_ENTRY("PioPpmcPblFifo",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_PBL_FIFO_ERR_SMASK),
+/*17*/	FLAG_ENTRY("PioInitSmIn",
+		0,
+		WFR_SEND_PIO_ERR_STATUS_PIO_INIT_SM_IN_ERR_SMASK),
+/*18*/	FLAG_ENTRY("PioPktEvictSmOrArbSm",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_SM_OR_ARB_SM_ERR_SMASK),
+/*19*/	FLAG_ENTRY("PioHostAddrMemUnc",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_UNC_ERR_SMASK),
+/*20*/	FLAG_ENTRY("PioHostAddrMemCor",
+		0,
+		WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_COR_ERR_SMASK),
+/*21*/	FLAG_ENTRY("PioWriteDataParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK),
+/*22*/	FLAG_ENTRY("PioStateMachine",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK),
+/*23*/	FLAG_ENTRY("PioWriteQwValidParity",
+		SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK),
+/*24*/	FLAG_ENTRY("PioBlockQwCountParity",
+		SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_PARITY_ERR_SMASK),
+/*25*/	FLAG_ENTRY("PioVlfVlLenParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_VLF_VL_LEN_PARITY_ERR_SMASK),
+/*26*/	FLAG_ENTRY("PioVlfSopParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_VLF_SOP_PARITY_ERR_SMASK),
+/*27*/	FLAG_ENTRY("PioVlFifoParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_VL_FIFO_PARITY_ERR_SMASK),
+/*28*/	FLAG_ENTRY("PioPpmcBqcMemParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_BQC_MEM_PARITY_ERR_SMASK),
+/*29*/	FLAG_ENTRY("PioPpmcSopLen",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_SOP_LEN_ERR_SMASK),
+/*30-31 reserved*/
+/*32*/	FLAG_ENTRY("PioCurrentFreeCntParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_CURRENT_FREE_CNT_PARITY_ERR_SMASK),
+/*33*/	FLAG_ENTRY("PioLastReturnedCntParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_LAST_RETURNED_CNT_PARITY_ERR_SMASK),
+/*34*/	FLAG_ENTRY("PioPccSopHeadParity",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PCC_SOP_HEAD_PARITY_ERR_SMASK),
+/*35*/	FLAG_ENTRY("PioPecSopHeadParityErr",
+		SEC_SPC_FREEZE,
+		WFR_SEND_PIO_ERR_STATUS_PIO_PEC_SOP_HEAD_PARITY_ERR_SMASK),
+/*36-63 reserved*/
 };
 
 /*
  * TXE Send Context Error flags and consequences
  */
 static struct flag_table sc_err_status_flags[] = {
-	FLAG_ENTRY("Sop",
-		SEC_WRITE_DROPPED | SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_SOP_ERR_SMASK),
-	FLAG_ENTRY("DisallowedPacket",
-		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+/* 0*/	FLAG_ENTRY("InconsistentSop",
+		SEC_PACKET_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_INCONSISTENT_SOP_ERR_SMASK),
+/* 1*/	FLAG_ENTRY("DisallowedPacket",
+		SEC_PACKET_DROPPED | SEC_SC_HALTED,
 		WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK),
-	FLAG_ENTRY("WriteCrossesBoundary",
+/* 2*/	FLAG_ENTRY("WriteCrossesBoundary",
 		SEC_WRITE_DROPPED | SEC_SC_HALTED,
 		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_CROSSES_BOUNDARY_ERR_SMASK),
-	FLAG_ENTRY("WriteOverflow",
+/* 3*/	FLAG_ENTRY("WriteOverflow",
 		SEC_WRITE_DROPPED | SEC_SC_HALTED,
 		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_OVERFLOW_ERR_SMASK),
-	FLAG_ENTRY("WriteToLaunched",
-		SEC_WRITE_DROPPED | SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_TO_LAUNCHED_ERR_SMASK),
-	FLAG_ENTRY("WriteCreditExceeded",
-		SEC_WRITE_DROPPED | SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_CREDIT_EXCEEDED_ERR_SMASK),
-	FLAG_ENTRY("WriteOutOfBounds",
+/* 4*/	FLAG_ENTRY("WriteOutOfBounds",
 		SEC_WRITE_DROPPED | SEC_SC_HALTED,
 		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_OUT_OF_BOUNDS_ERR_SMASK),
-	FLAG_ENTRY("WriteDataParity",
-		SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK),
-	FLAG_ENTRY("VLLengthUnc",
-		SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_VL_LENGTH_UNC_ERR_SMASK),
-	FLAG_ENTRY("PacketEvictedFifoUnc",
-		SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_PACKET_EVICTED_FIFO_UNC_ERR_SMASK),
-	FLAG_ENTRY("VLLengthCor",
-		0,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_VL_LENGTH_COR_ERR_SMASK),
-	FLAG_ENTRY("PacketEvictedFifoCor",
-		0,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_PACKET_EVICTED_FIFO_COR_ERR_SMASK),
-	FLAG_ENTRY("StateMachine",
-		SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK),
-	FLAG_ENTRY("WriteQWValidParity",
-		SEC_WRITE_DROPPED | SEC_SC_HALTED,
-		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK)
+/* 5-63 reserved*/
 };
 
 /*
@@ -156,7 +212,7 @@ static struct flag_table sc_err_status_flags[] = {
  */
 static struct flag_table credit_return_flags[] = {
 	FLAG_ENTRY("Status", 0, WFR_CR_STATUS_SMASK),
-	FLAG_ENTRY("CreditReturnDueToPBC", 0,
+	FLAG_ENTRY("CreditReturnDueToPbc", 0,
 		WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK),
 	FLAG_ENTRY("CreditReturnDueToThreshold", 0,
 		WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK),
@@ -257,100 +313,96 @@ static char *flag_string(char *buf, int buf_len, u64 flags,
 	return buf;
 }
 
-/* chip interrupt source table */
-struct is_table {
-	/* start of the interrupt source range */
-	unsigned int start;
-	/* routine that returns the name of the interrupt source */
-	char *(*is_name)(char *name, size_t size, unsigned int source);
-	/* routine to call from when receiving an interrupt */
-	void (*is_int)(struct hfi_devdata *dd, unsigned int source);
+/* first 8 CCE error interrupt source names */
+static const char *cce_misc_names[] = {
+	"CceErrInt",		/* 0 */
+	"RxeErrInt",		/* 1 */
+	"MiscErrInt",		/* 2 */
+	"Reserved3",		/* 3 */
+	"PioErrInt",		/* 4 */
+	"SDmaErrInt",		/* 5 */
+	"EgressErrInt",		/* 6 */
+	"TxeErrInt"		/* 7 */
 };
 
-static char *is_general_err_name(char *buf, size_t bsize, unsigned int source)
+/*
+ * Return the CCE error interupt name.  Source will be < 64.
+ *
+ * This is called with an interrupt mask bit offset, but we can use
+ * interrupt source numbers here because this is before the first
+ * gap in the mask, so the values are the same.
+ */
+static char *is_cce_name(char *buf, size_t bsize, unsigned int source)
 {
-	const char *src;
+	if (source < WFR_IS_GENERAL_ERR_END)
+		strncpy(buf, cce_misc_names[source], bsize);
+	else if (source < WFR_IS_SENDCTXT_ERR_END)
+		snprintf(buf, bsize, "SendCtxtErrInt%u",
+					source-WFR_IS_SENDCTXT_ERR_START);
+	else if (source < WFR_IS_SDMA_ERR_END)
+		snprintf(buf, bsize, "SDmaEngErrInt%u",
+					source-WFR_IS_SDMA_ERR_START);
+	else if (source < WFR_IS_VAROUS_END)
+		snprintf(buf, bsize, "Various%u", source-WFR_IS_VAROUS_START);
+	else
+		snprintf(buf, bsize, "DCInt%u", source-WFR_IS_DC_START);
 
-	switch (source) {
-	case 0: src = "CcePerHfiErrInt"; break;
-	case 1: src = "RcvPerHfiErrInt"; break;
-	case 4: src = "PioSendPerHfiErrInt"; break;
-	case 5: src = "SDmaPerHfiErrInt"; break;
-	case 6: src = "PacketEgressPerHfiErrInt"; break;
-	case 2:
-	case 3:
-	case 7: src = "Reserved%u"; break;
-	default: src = "invalid%u"; break;
-	}
-	snprintf(buf, bsize, src, source);
 	return buf;
 }
 
-static char *is_rcvctxt_err_name(char *buf, size_t bsize, unsigned int source)
+static const char *sdma_int_names[] = {
+	"SDmaInt",
+	"SdmaIdleInt",
+	"SdmaProgressInt",
+	"SdmaInvalidInt"
+};
+
+/*
+ * Return the SDMA engine interrupt name.  Source will be < 64.
+ */
+static char *is_sdma_eng_name(char *buf, size_t bsize, unsigned int source)
 {
-	snprintf(buf, bsize, "RcvCtxtErrInt%u", source);
+	snprintf(buf, bsize, "%s%u", sdma_int_names[source/16], source%16);
 	return buf;
 }
 
-static char *is_sendctxt_err_name(char *buf, size_t bsize, unsigned int source)
-{
-	snprintf(buf, bsize, "SendCtxtErrInt%u", source);
-	return buf;
-}
-
-static char *is_sdma_err_name(char *buf, size_t bsize, unsigned int source)
-{
-	snprintf(buf, bsize, "SDmaErrInt%u", source);
-	return buf;
-}
-
-static char *is_various_name(char *buf, size_t bsize, unsigned int source)
-{
-	/* TBD */
-	snprintf(buf, bsize, "Various%u", source);
-	return buf;
-}
-
-static char *is_rcvavailint_name(char *buf, size_t bsize, unsigned int source)
+/*
+ * Return the receive available interrupt name.  Source will be < 192.
+ */
+static char *is_rcv_avail_name(char *buf, size_t bsize, unsigned int source)
 {
 	snprintf(buf, bsize, "RcvAvailInt%u", source);
 	return buf;
 }
 
-static char *is_sendcredit_name(char *buf, size_t bsize, unsigned int source)
+/*
+ * Return the receive urgent interrupt name.  Source will be < 192.
+ */
+static char *is_rcv_urgent_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "RcvUrgentInt%u", source);
+	return buf;
+}
+
+/*
+ * Return the send credit interrupt name.  Source will be < 192.
+ */
+static char *is_send_credit_name(char *buf, size_t bsize, unsigned int source)
 {
 	snprintf(buf, bsize, "SendCreditInt%u", source);
 	return buf;
 }
 
-static char *is_sdmaint_name(char *buf, size_t bsize, unsigned int source)
-{
-	snprintf(buf, bsize, "SDmaInt%u", source);
-	return buf;
-}
-
-static char *is_sdmaprogress_name(char *buf, size_t bsize, unsigned int source)
-{
-	snprintf(buf, bsize, "SDmaProgressInt%u", source);
-	return buf;
-}
-
-static char *is_sdmaidle_name(char *buf, size_t bsize, unsigned int source)
-{
-	snprintf(buf, bsize, "SDmaIdleInt%u", source);
-	return buf;
-}
-
-static char *is_sdmacleanup_name(char *buf, size_t bsize, unsigned int source)
-{
-	snprintf(buf, bsize, "SDmaCleanupDoneInt%u", source);
-	return buf;
-}
-
-static void handle_sdma_interrupt(struct sdma_engine *per_sdma)
+/*
+ * Status is a mask of of the 3 possible interrupts for this engine.  It will
+ * contain bits _only_ for this SDMA engine.  It will contain at least one
+ * bit, it may contain more.
+ */
+static void handle_sdma_interrupt(struct sdma_engine *per_sdma, u64 status)
 {
 	/* TODO: actually do something */
-	printk("%s: engine #%d - unimplemented\n", __func__, per_sdma->which);
+	printk("%s: engine #%d, status 0x%llx - unimplemented\n", __func__,
+		per_sdma->which, status);
 }
 
 static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
@@ -359,43 +411,38 @@ static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
 			pio_err_status_flags, ARRAY_SIZE(pio_err_status_flags));
 }
 
-static void is_general_err_int(struct hfi_devdata *dd, unsigned int source)
+/*
+ * CCE block "misc" interrupt.  Source is < 8.
+ */
+static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
 {
 	char buf[96];
 	u64 reg;
 
 	switch (source) {
-	case 4: /* PioSendPerHfiErr */
+	case 4: /* PioErr */
 		/* TODO: do more here.. most of these put the hfi in
 		   freeze more.  We need to recognize that and unfreeze */
 		/* clear the error(s) */
 		reg = read_csr(dd, WFR_SEND_PIO_ERR_STATUS);
 		write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, reg);
-		dd_dev_info(dd, "PIO Send Error: %s\n",
+		dd_dev_info(dd, "PIO Error: %s\n",
 			pio_err_status_string(buf, sizeof(buf), reg));
 		break;
 
 	/* TODO: do something for the unhandled cases */
-	case 0: /* CcePerHfiErr */
-	case 1: /* RcvPerHfiErr */
-	case 5: /* SDmaPerHfiErr */
-	case 6: /* PacketEgressPerHfiErr */
+	case 0: /* CceErr */
+	case 1: /* RxeErr */
+	case 2: /* MiscErr */
+	case 5: /* SDmaErr */
+	case 6: /* EgressErr */
+	case 7: /* TxeErr */
 		printk("%s: int%u - unimplemented\n", __func__ , source);
 		break;
-
-	default:
-		/* these are all reserved interrupts */
-		dd_dev_err(dd, "Unexpected general error interrupt %u\n",
-			source);
+	case 3: /* Reserved */
+		dd_dev_err(dd, "Unexpected misc interrupt (3) - reserved\n");
 		break;
 	}
-
-}
-
-static void is_rcvctxt_err_int(struct hfi_devdata *dd, unsigned int source)
-{
-	/* TODO: actually do something */
-	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
 static char *send_err_status_string(char *buf, int buf_len, u64 flags)
@@ -411,7 +458,7 @@ static char *credit_return_string(char *buf, int buf_len, u64 flags)
 }
 
 /*
- * Send Context Error Interrupt on a given send context.
+ * Handle a send context error interrupt on the given send context.
  */
 static void handle_send_context_err(struct hfi_devdata *dd,
 		unsigned int context, u64 err_status)
@@ -421,6 +468,7 @@ static void handle_send_context_err(struct hfi_devdata *dd,
 	u64 hw_free;
 	char flags[96];
 	int write_dropped = 0;
+	int packet_dropped = 0;
 	int sc_halted = 0;
 	int i;
 
@@ -451,12 +499,18 @@ static void handle_send_context_err(struct hfi_devdata *dd,
 		if (err_status & sc_err_status_flags[i].flag) {
 			if (sc_err_status_flags[i].extra & SEC_WRITE_DROPPED)
 				write_dropped = 1;
+			if (sc_err_status_flags[i].extra & SEC_PACKET_DROPPED)
+				packet_dropped = 1;
 			if (sc_err_status_flags[i].extra & SEC_SC_HALTED)
 				sc_halted = 1;
 		}
 	}
 
 	if (write_dropped) {
+		// TODO: do something?
+	}
+
+	if (packet_dropped) {
 		// TODO: do something?
 	}
 
@@ -477,6 +531,8 @@ static void handle_send_context_err(struct hfi_devdata *dd,
 }
 
 /*
+ * CCE block send context error interrupt.  Source is < 20.
+ *
  * One of the combined send context error interrupts have been raised.  Look
  * at the 8 corresponding send contexts for an error.
  */
@@ -500,37 +556,56 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 	}
 }
 
+/*
+ * CCE block SDMA error interrupt.  Source is < 16.
+ */
 static void is_sdma_err_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
+/*
+ * CCE block "various" interrupt.  Source is < 12.
+ */
 static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
-static void is_rcvavailint_int(struct hfi_devdata *dd, unsigned int source)
+/*
+ * CCE block DC interrupt.  Source is < 8.
+ */
+static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 {
-	struct qib_ctxtdata *rcd;
-
-	/* only check what we're using */
-	if (unlikely(source >= dd->num_rcv_contexts)) {
-		dd_dev_err(dd, "unexpected out of range receive context interrupt %u\n", source);
-		return;
-	}
-
-	rcd = dd->rcd[source];
-	if (rcd)
-		handle_receive_interrupt(rcd);
-	else
-		dd_dev_err(dd,
-			"receive context interrupt %u, but no rcd\n", source);
+	/* TODO: actually do something */
+	printk("%s: int%u - unimplemented\n", __func__ , source);
 }
 
-static void is_sendcredit_int(struct hfi_devdata *dd, unsigned int source)
+/*
+ * CCE block interrupt.  Source is < 64.
+ *
+ * Subdivide and call more specialized handlers.
+ */
+static void is_cce_int(struct hfi_devdata *dd, unsigned int source)
+{
+	if (source < WFR_IS_GENERAL_ERR_END)
+		is_misc_err_int(dd, source);
+	else if (source < WFR_IS_SENDCTXT_ERR_END)
+		is_sendctxt_err_int(dd, source - WFR_IS_SENDCTXT_ERR_START);
+	else if (source < WFR_IS_SDMA_ERR_END)
+		is_sdma_err_int(dd, source - WFR_IS_SDMA_ERR_START);
+	else if (source < WFR_IS_VAROUS_END)
+		is_various_int(dd, source - WFR_IS_VAROUS_START);
+	else
+		is_dc_int(dd, source - WFR_IS_DC_START);
+}
+
+/*
+ * TX block send credit interrupt.  Source is < 192, should be < 160.
+ */
+static void is_send_credit_int(struct hfi_devdata *dd, unsigned int source)
 {
 	if (unlikely(source >= dd->num_send_contexts)) {
 		dd_dev_err(dd, "unexpected out of range send context credit return interrupt %u\n", source);
@@ -539,81 +614,201 @@ static void is_sendcredit_int(struct hfi_devdata *dd, unsigned int source)
 	sc_release_update(dd->send_contexts[source].sc);
 }
 
-/* handles: sdmaint, sdmaprogressint, sdmaidleint */
-static void is_fast_sdma_int(struct hfi_devdata *dd, unsigned int source)
+/*
+ * TX block SDMA interrupt.  Source is < 64, should be < 48.
+ *
+ * SDMA interrupts are grouped by type:
+ *
+ *	00-15 = SDmaIdleStatus
+ *	16-31 = SDmaIdleIntStatus
+ *	32-47 = SDmaProgressIntStatus
+ *
+ * TODO: I'm using a raw 16 - it is not clear if I should use
+ * WFR_TXE_NUM_SDMA_ENGINES.  It is concievable that even if the count
+ * is reduced, this bit pattern will remain.
+ */
+static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
 {
-	if (source < dd->num_sdma) {
-		handle_sdma_interrupt(&dd->per_sdma[source]);
+	unsigned int what  = source / 16;	/* what interrupt */
+	unsigned int which = source % 16;	/* which engine */
+	
+	if (likely(what < 3 && which < dd->num_sdma)) {
+		handle_sdma_interrupt(&dd->per_sdma[which], 1ull << source);
 	} else {
-		/* TODO: Which fast SDMA interrupt is this? */
-		/* shouldn't happen */
-		dd_dev_err(dd, "invalid fast SDMA interrupt - sdma%u\n",
-			source);
+		/* should not happen */
+		dd_dev_err(dd, "Invalid SDMA interrupt 0x%x\n", source);
 	}
 }
 
-static void is_sdmacleanup_int(struct hfi_devdata *dd, unsigned int source)
+/*
+ * RX block receive available interrupt.  Source is < 192, should be < 160.
+ */
+static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
 {
-	if (source < dd->num_sdma) {
-		/* TODO: handle this */
-		printk("%s: sdma%u - unimplemented\n", __func__, source);
+	struct qib_ctxtdata *rcd;
+	char *err_detail;
+
+	if (likely(source < dd->num_rcv_contexts)) {
+		rcd = dd->rcd[source];
+		if (rcd) {
+			handle_receive_interrupt(rcd);
+			return;	/* OK */
+		}
+		/* received an interrupt, but no rcd */
+		err_detail = "dataless";
 	} else {
-		/* shouldn't happen */
-		dd_dev_err(dd, "invalid slow SDMA interrupt - sdma%u\n",
-			source);
+		/* received an interrupt, but are not using that context */
+		err_detail = "out of range";
 	}
+	dd_dev_err(dd, "unexpected %s receive available context interrupt %u\n", err_detail, source);
 }
 
-static struct is_table is_table[] = {
-{ WFR_IS_GENERAL_ERR_START,  is_general_err_name,  is_general_err_int  },
-{ WFR_IS_RCVCTXT_ERR_START,  is_rcvctxt_err_name,  is_rcvctxt_err_int  },
-{ WFR_IS_SENDCTXT_ERR_START, is_sendctxt_err_name, is_sendctxt_err_int },
-{ WFR_IS_SDMA_ERR_START,     is_sdma_err_name,     is_sdma_err_int     },
-{ WFR_IS_VAROUS_START,	     is_various_name,	   is_various_int      },
-{ WFR_IS_RCVAVAILINT_START,  is_rcvavailint_name,  is_rcvavailint_int  },
-{ WFR_IS_SENDCREDIT_START,   is_sendcredit_name,   is_sendcredit_int   },
-{ WFR_IS_SDMAINT_START,	     is_sdmaint_name,	   is_fast_sdma_int    },
-{ WFR_IS_SDMAPROGRESS_START, is_sdmaprogress_name, is_fast_sdma_int    },
-{ WFR_IS_SDMAIDLE_START,     is_sdmaidle_name,	   is_fast_sdma_int    },
-{ WFR_IS_SDMACLEANUP_START,  is_sdmacleanup_name,  is_sdmacleanup_int  },
-{ WFR_IS_MAX_SOURCES, 	     NULL,		   NULL		       }
+/*
+ * RX block receive urgent interrupt.  Source is < 192, should be < 160.
+ */
+static void is_rcv_urgent_int(struct hfi_devdata *dd, unsigned int source)
+{
+	struct qib_ctxtdata *rcd;
+	char *err_detail;
+
+	if (likely(source < dd->num_rcv_contexts)) {
+		rcd = dd->rcd[source];
+		if (rcd) {
+			/* TODO: implement a handler */
+			dd_dev_err(dd, "%s: urgent context %u interrupt - unimplemented\n", __func__, rcd->ctxt);
+			return;	/* OK */
+		}
+		/* received an interrupt, but no rcd */
+		err_detail = "dataless";
+	} else {
+		/* received an interrupt, but are not using that context */
+		err_detail = "out of range";
+	}
+	dd_dev_err(dd, "unexpected %s receive urgent context interrupt %u\n", err_detail, source);
+}
+
+/*
+ * Interrupt source and interrupt mask tables.
+ *
+ * These two tables are related.  The interrupt source table tracks the ASIC
+ * interrupt source numbers.  The interrupt mask tracks the individual
+ * interrupt CSR blocks that are implemented on the chip to handle the
+ * interrupt sources.  The two are closely related and each table can be
+ * used to convert to a bit offset for the other.
+ * 
+ * Interrupt sources are "compressed" - the numbers of each type follow
+ * another without a gap.  Interrupt CSRs are 64-entry chunks, with holes.
+ * I.e. There are 3 receive array interrupt blocks, with room for 192
+ * interrupts.  However, only 160 of them are valid/used.  This creates a
+ * numbering different between the interrupt source number and interrupt
+ * mask nunber.
+ */
+
+/*
+ * Interrupt CSR Offsets
+ *
+ * CSR interrupts are implemented in blocks of 5 sequential CSRs.  These are
+ * the offsets for the individual CSRs within the block.
+ */
+#define ICOFF_STATUS   0
+#define ICOFF_MASK     8
+#define ICOFF_CLEAR   16 
+#define ICOFF_FORCE   24
+#define ICOFF_BLOCKED 32
+
+/*
+ * Interrupt mask table.
+ *
+ * This table gathers all of the interrupt source CSR blocks into an
+ * array.  The general interrupt mask (gi_mask) array tracks this table.
+ *
+ * The order of the entries is important - it should match the order of the
+ * interrupt source numbers.  The bit indices in here will not match the
+ * interrupt source number after the RCV_AVAIL registers as they will be
+ * the first to have have a gap.
+ *
+ * The interrupt mask table is information needed to use the ASIC CSRs
+ * to obtain interrupt status and to be able to clear interrupts.
+ * of the major ASIC blocks (CCE, TXE, RXE, etc).  The general interrupt
+ * handler uses the imask table to clear interrupts it handles and activate
+ * a handler.  The general interrupt handle also has a mask array that
+ * matches this table.
+ */
+struct imask_table {
+	/* starting CSR offset of the interrupt block */
+	u32 start;
+	/* routine that returns the name of the interrupt source */
+	char *(*is_name)(char *name, size_t size, unsigned int source);
+	/* routine to call when receiving an interrupt */
+	void (*is_int)(struct hfi_devdata *dd, unsigned int source);
+	/* add this to make a interrupt source type index */
+	u32 addend;
+};
+
+static const struct imask_table imask_table[WFR_NUM_IMASK_SOURCES] = {
+{ WFR_CCE_INT_STATUS,	       is_cce_name,	    is_cce_int,		  0 },
+{ WFR_RCV_AVAIL_INT_STATUS0,   is_rcv_avail_name,   is_rcv_avail_int,     0 },
+{ WFR_RCV_AVAIL_INT_STATUS1,   is_rcv_avail_name,   is_rcv_avail_int,    64 },
+{ WFR_RCV_AVAIL_INT_STATUS2,   is_rcv_avail_name,   is_rcv_avail_int,   128 }, 
+{ WFR_RCV_URGENT_INT_STATUS0,  is_rcv_urgent_name,  is_rcv_urgent_int,    0 },
+{ WFR_RCV_URGENT_INT_STATUS1,  is_rcv_urgent_name,  is_rcv_urgent_int,   64 },
+{ WFR_RCV_URGENT_INT_STATUS2,  is_rcv_urgent_name,  is_rcv_urgent_int,  128 },
+{ WFR_SEND_CREDIT_INT_STATUS0, is_send_credit_name, is_send_credit_int,   0 },
+{ WFR_SEND_CREDIT_INT_STATUS1, is_send_credit_name, is_send_credit_int,  64 },
+{ WFR_SEND_CREDIT_INT_STATUS2, is_send_credit_name, is_send_credit_int, 128 },
+{ WFR_SDMA_ENG_INT_STATUS,     is_sdma_eng_name,    is_sdma_eng_int,	  0 },
 };
 
 /*
- * Interrupt source name - return the buffer with the text name
- * of the interrupt source.
+ * Interrupt source table.
+ *
+ * Each entry is an interrupt source "type".  It is ordered by
+ * increasing number.
+ */
+struct isource_table {
+	int start;	 /* interrupt source type start */
+	int end;	 /* interrupt source type end */
+	int imask_index; /* index into the imask table */
+	int bit_offset;	 /* bit offset within an imask table entry */
+};
+
+static const struct isource_table isource_table[] = {
+/* start		     end		    imask index  bit offset */
+{ WFR_IS_GENERAL_ERR_START,  WFR_IS_GENERAL_ERR_END,	 0,	 0 },
+{ WFR_IS_SENDCTXT_ERR_START, WFR_IS_SENDCTXT_ERR_END,	 0,	 8 },
+{ WFR_IS_SDMA_ERR_START,     WFR_IS_SDMA_ERR_END,	 0,	28 },
+{ WFR_IS_VAROUS_START,	     WFR_IS_VAROUS_END,		 0,	44 },
+{ WFR_IS_DC_START,	     WFR_IS_DC_END,		 0,	56 },
+{ WFR_IS_RCVAVAILINT_START,  WFR_IS_RCVAVAILINT_END,	 1,	 0 },
+{ WFR_IS_RCVURGENTINT_START, WFR_IS_RCVURGENTINT_END,	 4,	 0 },
+{ WFR_IS_SENDCREDIT_START,   WFR_IS_SENDCREDIT_END,	 7,	 0 },
+{ WFR_IS_SDMAINT_START,	     WFR_IS_SDMAINT_END,	10,	 0 },
+{ WFR_IS_SDMAPROGRESS_START, WFR_IS_SDMAPROGRESS_END,	10,	16 },
+{ WFR_IS_SDMAIDLE_START,     WFR_IS_SDMAIDLE_END,	10,	32 },
+};
+
+/*
+ * Interrupt source name - return the buffer with the text name of the
+ * interrupt source.  Source is a bit index into an array of 64-bit integers.
  */
 static char *is_name(char *buf, size_t bsize, unsigned int source)
 {
-	struct is_table *entry;
+	const struct imask_table *imt;
 
-	/* avoids a double compare by walking the table in-order */
-	for (entry = &is_table[0]; entry->is_name; entry++) {
-		if (source < entry[1].start)
-			return entry->is_name(buf, bsize, source-entry->start);
-	}
-	/* fell off the end */
-	snprintf(buf, bsize, "invalid interrupt source %u\n", source);
-	return buf;
+	imt = &imask_table[source / 64];
+	return imt->is_name(buf, bsize, (source % 64) + imt->addend);
 }
 
 /*
- * Interupt source interrupt - called when the given source has
- * an interrupt.
+ * Interupt source interrupt - called when the given source has an interrupt.
+ * Source is a bit index into an array of 64-bit integers.
  */
 static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
 {
-	struct is_table *entry;
+	const struct imask_table *imt;
 
-	/* avoids a double compare by walking the table in-order */
-	for (entry = &is_table[0]; entry->is_name; entry++) {
-		if (source < entry[1].start) {
-			entry->is_int(dd, source-entry->start);
-			return;
-		}
-	}
-	/* fell off the end */
-	dd_dev_err(dd, "invalid interrupt source %u\n", source);
+	imt = &imask_table[source / 64];
+	imt->is_int(dd, (source % 64) + imt->addend);
 }
 
 /*
@@ -623,28 +818,28 @@ static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
 static irqreturn_t general_interrupt(int irq, void *data)
 {
 	struct hfi_devdata *dd = data;
-	u64 regs[WFR_CCE_NUM_INT_CSRS];
-	u32 bit;
+	u64 regs[WFR_NUM_IMASK_SOURCES];
+	u32 bit, start;
 	int i;
 
 	dd->int_counter++;
 
 	/* phase 1: scan and clear all handled interrupts */
-	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
+	for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++) {
 		if (dd->gi_mask[i] == 0) {
 			regs[i] = 0;	/* used later */
 			continue;
 		}
-		regs[i] = read_csr(dd, WFR_CCE_INT_STATUS + (8 * i)) &
-				dd->gi_mask[i];
+		start = imask_table[i].start;
+		regs[i] = read_csr(dd, start + ICOFF_STATUS) & dd->gi_mask[i];
 		/* only clear if anything is set */
 		if (regs[i])
-			write_csr(dd, WFR_CCE_INT_CLEAR + (8 * i), regs[i]);
+			write_csr(dd, start + ICOFF_CLEAR, regs[i]);
 	}
 
 	/* phase 2: call the apropriate handler */
 	for_each_set_bit(bit, (unsigned long *)&regs[0],
-						WFR_CCE_NUM_INT_CSRS*64) {
+						WFR_NUM_IMASK_SOURCES*64) {
 		/* TODO: the print is temporary */
 		char buf[64];
 		printk(DRIVER_NAME"%d: interrupt %d: %s\n", dd->unit, bit,
@@ -658,29 +853,40 @@ static irqreturn_t general_interrupt(int irq, void *data)
 static irqreturn_t sdma_interrupt(int irq, void *data)
 {
 	struct sdma_engine *per_sdma = data;
+	struct hfi_devdata *dd = per_sdma->dd;
+	u64 status;
 
-	per_sdma->dd->int_counter++;
+	dd->int_counter++;
 
-	/* clear the interrupt */
-	write_csr(per_sdma->dd,
-		WFR_CCE_INT_CLEAR + (8*(WFR_IS_SDMAINT_START/64)),
-		per_sdma->imask);
+	status = read_csr(dd, WFR_SDMA_ENG_INT_STATUS) & per_sdma->imask;
+	if (likely(status)) {
+		/* clear the interrupt(s) */
+		write_csr(dd, WFR_SDMA_ENG_INT_CLEAR, status);
 
-	/* handle the interrupt */
-	handle_sdma_interrupt(per_sdma);
+		/* handle the interrupt(s) */
+		handle_sdma_interrupt(per_sdma, status);
+	} else {
+		dd_dev_err(dd, "SDMA engine %d interrupt, but no status bits set\n", per_sdma->which);
+	}
 
 	return IRQ_HANDLED;
 }
 
+/*
+ * NOTE: this routine expects to be on its own MSI-X interrupt.  If
+ * multiple receive contexts share the same MSI-X interupt, then this
+ * routine must check for who received it.
+ */
 static irqreturn_t receive_context_interrupt(int irq, void *data)
 {
 	struct qib_ctxtdata *rcd = data;
+	struct hfi_devdata *dd = rcd->dd;
 
 printk("%s: context %d\n", __func__, rcd->ctxt);
-	rcd->dd->int_counter++;
+	dd->int_counter++;
 
 	/* clear the interrupt */
-	write_csr(rcd->dd, WFR_CCE_INT_CLEAR + (8*rcd->ireg), rcd->imask);
+	write_csr(dd, rcd->ireg, rcd->imask);
 
 	/* handle the interrupt */
 	handle_receive_interrupt(rcd);
@@ -1312,9 +1518,6 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
 		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
 	write_kctxt_csr(dd, context, WFR_RCV_HDR_SIZE, reg);
-
-	/* enable all errors */
-	write_kctxt_csr(dd, context, WFR_RCV_CTXT_ERR_MASK, ~0ull);
 }
 
 static int tempsense_rd(struct hfi_devdata *dd, int regnum)
@@ -1341,8 +1544,8 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 		if (dd->flags & QIB_BADINTR)
 			return;
 		/* enable all interrupts */
-		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
-			write_csr(dd, WFR_CCE_INT_MASK + (8*i), ~(u64)0);
+		for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
+			write_csr(dd, imask_table[i].start + ICOFF_MASK, ~0ull);
 		/*
 		 * TODO: the 7322 wrote to INTCLEAR to "cause any
 		 * pending interrupts to be redelivered".  The
@@ -1356,8 +1559,8 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 		 */
 
 	} else {
-		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
-			write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
+		for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
+			write_csr(dd, imask_table[i].start + ICOFF_MASK, 0ull);
 	}
 }
 
@@ -1367,8 +1570,9 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 static void clear_all_interrupts(struct hfi_devdata *dd)
 {
 	int i;
-	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
-		write_csr(dd, WFR_CCE_INT_CLEAR + (8*i), ~(u64)0);
+
+	for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
+		write_csr(dd, imask_table[i].start + ICOFF_CLEAR, ~0ull);
 }
 
 /* TODO: Move to pcie.c? */
@@ -1417,6 +1621,34 @@ static void clean_up_interrupts(struct hfi_devdata *dd)
 	dd->num_msix_entries = 0;
 }
 
+/* convert an interrupt source number to an interrupt mask number */
+static int isource_to_imask(int isource, int *im_index, int *im_bit)
+{
+	int i;
+
+	for (i = 1; i < ARRAY_SIZE(isource_table); i++) {
+		if (isource < isource_table[i].end) {
+			/* obtain the index into this type */
+			isource -= isource_table[i].start;
+			/*
+			 * isource is now an index into an interrupt
+			 * source type (e.g. rcv avail 0-159).  The isource
+			 * table has the base imask index, but the rcv
+			 * avail, rcv urgent, and send credit can span
+			 * multiple indices - at 64 entries per index.
+			 */
+			*im_index = isource_table[i].imask_index
+					+ (isource / 64);
+			*im_bit = isource_table[i].bit_offset + (isource % 64);
+			return 0;
+		}
+	}
+	/* oops - fill in with the last (invalid) bit of RCV_AVAIL */
+	*im_index = 3;
+	*im_bit = 191;
+	return -EINVAL;
+}
+
 /*
  * Remap the interrupt source from the general handler to the given MSI-X
  * interrupt.
@@ -1427,8 +1659,7 @@ static void remap_intr(struct hfi_devdata *dd, int isrc, int msix_intr)
 	int m, n;
 
 	/* clear from the handled mask of the general interrupt */
-	m = isrc / 64;
-	n = isrc % 64;
+	isource_to_imask(isrc, &m, &n);
 	dd->gi_mask[m] &= ~((u64)1 << n);
 
 	/* direct the chip source to the given MSI-X interrupt */
@@ -1450,14 +1681,13 @@ static void remap_sdma_interrupts(struct hfi_devdata *dd,
 	 *	SDMAInt		- fast path
 	 *	SDMAProgressInt - fast path
 	 *	SDMAIdleInt	- fast path
-	 *	SDMACleanupDone	- slow path
 	 */
 	remap_intr(dd, WFR_IS_SDMAINT_START      + engine, msix_intr);
 	remap_intr(dd, WFR_IS_SDMAPROGRESS_START + engine, msix_intr);
 	remap_intr(dd, WFR_IS_SDMAIDLE_START     + engine, msix_intr);
 }
 
-static void remap_receive_context_interrupt(struct hfi_devdata *dd,
+static void remap_receive_available_interrupt(struct hfi_devdata *dd,
 						int rx, int msix_intr)
 {
 	remap_intr(dd, WFR_IS_RCVAVAILINT_START + rx, msix_intr);
@@ -1542,16 +1772,6 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 	 */
 	curr_cpu = first_cpu;
 
-	/*
-	 * Sanity check - the code expects all fast SDMA chip source
-	 * interrupts to be in the same CSR.  Verify that this is true
-	 * by checking the boundaries of the fast SDMA source interrupts.
-	 */
-	if ((WFR_IS_SDMAINT_START / 64) != (WFR_IS_SDMAIDLE_END-1) / 64) {
-		dd_dev_err(dd, "SDMA interrupt sources not on same CSR");
-		return -EINVAL;
-	}
-
 	for (i = 0; i < dd->num_msix_entries; i++) {
 		struct qib_msix_entry *me = &dd->msix_entries[i];
 		const char *err_info;
@@ -1580,13 +1800,11 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			per_sdma = &dd->per_sdma[idx];
 			/*
 			 * Create a mask for all 3 chip interrupt sources
-			 * mapped here.  We have checked above that they
-			 * are all on the same CSR.
+			 * mapped here.
 			 */
-			per_sdma->imask = 
-				(u64)1 << ((WFR_IS_SDMAINT_START+idx)%64)
-				| (u64)1 << ((WFR_IS_SDMAPROGRESS_START+idx)%64)
-				| (u64)1 << ((WFR_IS_SDMAIDLE_START+idx)%64);
+			per_sdma->imask = (u64)1 << ( 0 + idx)
+					| (u64)1 << (16 + idx)
+					| (u64)1 << (32 + idx);
 			handler = sdma_interrupt;
 			arg = per_sdma;
 			snprintf(me->name, sizeof(me->name),
@@ -1607,15 +1825,27 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			 * Set the interrupt register and mask for this
 			 * context's interrupt.
 			 */
-			rcd->ireg = (WFR_IS_RCVAVAILINT_START+idx) / 64;
-			rcd->imask = ((u64)1) <<
-					((WFR_IS_RCVAVAILINT_START+idx) % 64);
+			switch (idx / 64) {
+			case 0:
+				rcd->ireg = WFR_RCV_AVAIL_INT_STATUS0;
+				break;
+			case 1:
+				rcd->ireg = WFR_RCV_AVAIL_INT_STATUS1;
+				break;
+			case 2:
+				rcd->ireg = WFR_RCV_AVAIL_INT_STATUS2;
+				break;
+			default:
+				BUG();
+				break;
+			}
+			rcd->imask = ((u64)1) << (idx % 64);
 			handler = receive_context_interrupt;
 			arg = rcd;
 			snprintf(me->name, sizeof(me->name),
 				DRIVER_NAME"%d kctxt%d", dd->unit, idx);
 			err_info = "receive context";
-			remap_receive_context_interrupt(dd, idx, i);
+			remap_receive_available_interrupt(dd, idx, i);
 		} else {
 			BUG();
 		}
@@ -1667,8 +1897,9 @@ static void reset_interrupts(struct hfi_devdata *dd)
 	int i;
 
 	/* all interrupts handled by the general handler */
-	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+	for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
 		dd->gi_mask[i] = ~(u64)0;
+
 	/* all chip interrupts map to MSI-X 0 */
 	for (i = 0; i < WFR_CCE_NUM_INT_MAP_CSRS; i++)
 		write_csr(dd, WFR_CCE_INT_MAP + (8*i), 0);
@@ -1685,8 +1916,7 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 	 * Interrupt count:
 	 *	1 general, "slow path" interrupt (includes the SDMA engines
 	 *		slow source, SDMACleanupDone)
-	 *	N interrupts - one per used SDMA engine (handles the 3
-	 *		fast sources)
+	 *	N interrupts - one per used SDMA engine
 	 *	M interrupt - one per used rx context
 	 *	TODO: pio (tx) contexts?
 	 */
@@ -2034,22 +2264,8 @@ static void init_kdeth_qp(struct hfi_devdata *dd)
 
 void init_rxe(struct hfi_devdata *dd)
 {
-	int i;
-
 	/* enable all receive errors */
 	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
-
-	/*
-	 * Set up receive link credits.  For STL, credits are controlled
-	 * on the send side, so just set the receive side to the maximum
-	 * so it will not interfere.
-	 */
-	for (i = 0; i < WFR_RXE_NUM_DATA_VL; i++) {
-		write_csr(dd, WFR_RCV_CREDIT_VL + (8 * i),
-				WFR_RCV_CREDIT_VL_RX_MAX_CREDIT_VL_SMASK);
-	}
-	write_csr(dd, WFR_RCV_CREDIT_VL15,
-				WFR_RCV_CREDIT_VL15_RX_MAX_CREDIT_VL_SMASK);
 
 	/* TODO: others...? */
 }
@@ -2204,17 +2420,17 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
 
-	//FIXME: This is a workaround to always set the DC in STL mode.
-	// Little/no testing has been done in the WFR simulator since
-	// it became clear that only STL mode will be supported.  The
-	// CSR still comes up in IB mode by default.  The mode needs to
-	// be set before the link is brought up.  With the WFR simlator's
-	// "easy link mode" it appears it just needs to be set before the
-	// first packet is sent.
-	// This workaround is needed as of v17 and earlier.
+#if 0
+	//TODO: What should be done, if anything, about this?
+	// SL Select: - only used for 9B packets
+	// Values:
+	//	0 = SC (service channel)
+	//	1 = SL (service level) - SC lookup based on the SL of
+	//				 the packet header
 	write_csr(dd, DCC_DCC_CFG_PORT_CONFIG,
 			read_csr(dd, DCC_DCC_CFG_PORT_CONFIG)
-				| DCC_DCC_CFG_PORT_CONFIG_STL_MODE_SMASK);
+				| DCC_DCC_CFG_PORT_CONFIG_SL_SELECT_MODE_SMASK);
+#endif
 
 	/* sdma init */
 	dd->num_sdma = dd->chip_sdma_engines;
@@ -2321,3 +2537,26 @@ bail_free:
 bail:
 	return dd;
 }
+
+#if 0
+void force_all_interrupts(struct hfi_devdata *dd)
+{
+	int i, j;
+	char buf[64];
+
+	/* only do this once per load */
+	if (dd->unit != 0)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(imask_table); i++) {
+		for (j = 0; j < 64; j++) {
+			pr_info("** Forced interrupt: csr #%2d, bit %2d; \"%s\"\n",
+				i, j, is_name(buf, sizeof(buf), (i*64)+j));
+			write_csr(dd, imask_table[i].start + ICOFF_FORCE,
+								1ull << j);
+			//ssleep(1);
+			msleep(100);
+		}
+	}
+}
+#endif
