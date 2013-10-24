@@ -1084,18 +1084,16 @@ static void __exit qlogic_ib_cleanup(void)
 
 	ret = qib_exit_qibfs();
 	if (ret)
-		pr_err(
-			"Unable to cleanup counter filesystem: error %d\n",
-			-ret);
+		pr_err("Unable to cleanup counter filesystem: error %d\n", ret);
 
 	pci_unregister_driver(&qib_driver);
-
-	destroy_workqueue(qib_cq_wq);
 
 	qib_cpulist_count = 0;
 	kfree(qib_cpulist);
 
 	idr_destroy(&qib_unit_table);
+	dispose_firmware();	/* asymmetric with obtain_firmware() */
+	destroy_workqueue(qib_cq_wq);
 	dev_cleanup();
 }
 

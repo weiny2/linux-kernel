@@ -31,8 +31,27 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/mutex.h>
+#include <linux/module.h>
 
 #include "hfi.h"
+
+static uint load_8051_fw   = 0;
+module_param_named(load_8051_fw, load_8051_fw, uint, S_IRUGO);
+MODULE_PARM_DESC(load_8051_fw, "Load the 8051 firmware");
+
+static int load_fabric_fw = 0;
+module_param_named(load_fabric_fw, load_fabric_fw, uint, S_IRUGO);
+MODULE_PARM_DESC(load_fabric_fw, "Load the fabric SerDes firmware");
+
+static int load_pcie_fw   = 0;
+module_param_named(load_pcie_fw, load_pcie_fw, uint, S_IRUGO);
+MODULE_PARM_DESC(load_pcie_fw, "Load the PCIe SerDes firmware");
+
+static int load_sbus_fw   = 0;
+module_param_named(load_sbus_fw, load_sbus_fw, uint, S_IRUGO);
+MODULE_PARM_DESC(load_sbus_fw, "Load the SBUS firmware");
+
 
 //FIXME: It is not clear if this is needed.  The DC HAS says that writes need
 //to be verified, but the WFR says they are not.
@@ -90,7 +109,29 @@ struct firmware_details {
 	u32 payload_len;		/* length in bytes */
 };
 
-#define FW_NAME "testcss_dbg.bin"
+/*
+ * The mutex protects fw_state, fw_err, and all of the firmware_details
+ * variables.
+ */
+static DEFINE_MUTEX(fw_mutex);
+enum fw_state {
+	FW_EMPTY,
+	FW_ACQUIRED,
+	FW_ERR
+};
+static enum fw_state fw_state = FW_EMPTY;
+static int fw_err;
+static struct firmware_details fw_8051;
+static struct firmware_details fw_fabric;
+static struct firmware_details fw_pcie;
+static struct firmware_details fw_sbus;
+
+#define FW_8051_NAME "testcss_dbg.bin"
+#define FW_FABRIC_NAME "testcss_dbg.bin"
+#define FW_SBUS_NAME "testcss_dbg.bin"
+#define FW_PCIE_NAME "testcss_dbg.bin"
+
+
 #define FW_SIGNATURE_DWORDS 64	/* size in DWORDS = 2048 bits */
 #define FW_EXPONENT_DWORDS   1	/* size in DWORDS =   32 bits */
 
@@ -108,12 +149,9 @@ struct firmware_details {
 #define RSA_STATUS_DONE   0x2
 #define RSA_STATUS_FAILED 0x3
 
-int print_css_header = 1;	/* TODO: hook to verbosity level */
-int skip_firmware_load = 1;	/* TODO: temporary */
-int security_enabled = 0;	/* TODO make settable */
+static int print_css_header = 1;	/* TODO: hook to verbosity level */
+static int security_enabled = 0;	/* TODO make settable */
 /* TODO: maybe "security_present" to skip writing to any security block CSR? */
-   
-
 
 /*
  * Write data or code to the 8051 code or data RAM.
@@ -201,7 +239,7 @@ done:
 
 /* return 0 if values match, non-zero and complain otherwise */
 static int invalid_header(struct hfi_devdata *dd, const char *what,
-		u32 actual, u32 expected)
+				u32 actual, u32 expected)
 {
 	if (actual == expected)
 		return 0;
@@ -212,17 +250,15 @@ static int invalid_header(struct hfi_devdata *dd, const char *what,
 
 /*
  * Request the firmware from the system.  Extract the pieces and fill in
- * fdet.  If succsessful, the caller will need to call dispose_firmware().
+ * fdet.  If succsessful, the caller will need to call dispose_one_firmware().
  * Returns 0 on success, -ERRNO on error.
- * TODO: This only needs to be called once for the driver, then let
- * both HFIs use it.
  */
-static int obtain_firmware(struct hfi_devdata *dd, const char *name,
-			struct firmware_details *fdet)
+static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
+				struct firmware_details *fdet)
 {
 	struct css_header *css;
 	const u8 *base;
-	long prefix_total;
+	u32 prefix_dw;
 	int ret;
 
 	memset(fdet, 0, sizeof(*fdet));
@@ -243,10 +279,11 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 	css = (struct css_header *)fdet->fw->data;
 	if (print_css_header) {
 		dd_dev_info(dd, "Firmware %s details:\n", name);
-		dd_dev_info(dd, "size: %ld bytes\n", fdet->fw->size);
+		dd_dev_info(dd, "size: 0x%lx bytes\n", fdet->fw->size);
 		dd_dev_info(dd, "CSS structure:\n");
 		dd_dev_info(dd, "  module_type    0x%x\n", css->module_type);
-		dd_dev_info(dd, "  header_len     0x%x\n", css->header_len);
+		dd_dev_info(dd, "  header_len     0x%03x (0x%03x bytes)",
+			css->header_len, 4*css->header_len);
 		dd_dev_info(dd, "  header_version 0x%x\n", css->header_version);
 		dd_dev_info(dd, "  module_id      0x%x\n", css->module_id);
 		dd_dev_info(dd, "  module_vendor  0x%x\n", css->module_vendor);
@@ -261,14 +298,32 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 			css->exponent_size, 4*css->exponent_size);
 	}
 
+	/*
+	 * Expected firmware file format:
+	 *
+	 * What				Size (bytes)
+	 * ---------------------------	----------------------
+	 * CSS header			sizeof(struct css_header)
+	 * public key modulus		FW_SIGNATURE_DWORDS*4
+	 * public key exponent		FW_EXPONENT_DWORDS*4
+	 * signature			FW_SIGNATURE_DWORDS*4
+	 * payload			N
+	 */
+	prefix_dw = sizeof(struct css_header)/4		/* CSS header */
+			+ FW_SIGNATURE_DWORDS		/* pub key modulus */
+			+ FW_EXPONENT_DWORDS		/* pub key exponent */
+			+ FW_SIGNATURE_DWORDS;		/* signature */
+
 	/* verify CSS header fields */
 	if (invalid_header(dd, "module_type", css->module_type, CSS_MODULE_TYPE)
 			|| invalid_header(dd, "header_len",
-					css->header_len, CSS_HEADER_LEN)
+					css->header_len, prefix_dw)
 			|| invalid_header(dd, "header_version",
 					css->header_version, CSS_HEADER_VERSION)
 			|| invalid_header(dd, "module_vendor",
 					css->module_vendor, CSS_MODULE_VENDOR)
+			|| invalid_header(dd, "size",
+					css->size*4, (u32)fdet->fw->size)
 			|| invalid_header(dd, "key_size",
 					css->key_size, FW_SIGNATURE_DWORDS)
 			|| invalid_header(dd, "modulus_size",
@@ -279,25 +334,9 @@ static int obtain_firmware(struct hfi_devdata *dd, const char *name,
 		goto done;
 	}
 
-	/*
-	 * Firmware file format:
-	 *
-	 * What				Size (bytes)
-	 * ---------------------------	----------------------
-	 * CSS header			sizeof(struct css_header)
-	 * public key modulus		FW_SIGNATURE_DWORDS*4
-	 * public key exponent		FW_EXPONENT_DWORDS*4
-	 * signature			FW_SIGNATURE_DWORDS*4
-	 * payload			N
-	 */
-
-	/* now that we know more, recheck the file size */
-	prefix_total = sizeof(struct css_header)
-			+ FW_SIGNATURE_DWORDS*4
-			+ FW_EXPONENT_DWORDS *4
-			+ FW_SIGNATURE_DWORDS;
-	if (prefix_total >= fdet->fw->size) {
-		dd_dev_err(dd, "firmware \"%s\", size %ld, must be larger than %ld bytes\n", name, fdet->fw->size, prefix_total);
+	/* make sure we have some payload */
+	if (prefix_dw * 4 >= fdet->fw->size) {
+		dd_dev_err(dd, "firmware \"%s\", size %ld, must be larger than %d bytes\n", name, fdet->fw->size, prefix_dw*4);
 		ret = -EINVAL;
 		goto done;
 	}
@@ -324,9 +363,93 @@ done:
 	return ret;
 }
 
-static void dispose_firmware(struct firmware_details *fdet)
+static void dispose_one_firmware(struct firmware_details *fdet)
 {
-	release_firmware(fdet->fw);
+	if (fdet->fw) {
+		release_firmware(fdet->fw);
+		fdet->fw = NULL;
+	}
+}
+
+/*
+ * Called by all HFIs when loading their firmware - i.e. device probe time.
+ * The first one will do the actual firmware load.  Use a mutex to resolve
+ * any possible race condition.
+ * 
+ * The call to this routine cannot be moved to driver load because the kernel
+ * call request_firmware() requires a device which is only available after
+ * the first device probe.
+ */
+static int obtain_firmware(struct hfi_devdata *dd)
+{
+	int err = 0;
+
+	mutex_lock(&fw_mutex);
+	if (fw_state == FW_ACQUIRED) {
+		goto done;	/* already acquired */
+	} else if (fw_state == FW_ERR) {
+		err = fw_err;
+		goto done;	/* already tried and failed */	
+	}
+
+	if (load_8051_fw) {
+		err = obtain_one_firmware(dd, FW_8051_NAME, &fw_8051);
+		if (err)
+			goto done;
+	}
+
+	if (load_fabric_fw) {
+		err = obtain_one_firmware(dd, FW_FABRIC_NAME, &fw_fabric);
+		if (err)
+			goto done;
+	}
+
+	if (load_sbus_fw) {
+		err = obtain_one_firmware(dd, FW_SBUS_NAME, &fw_sbus);
+		if (err)
+			goto done;
+	}
+
+	if (load_pcie_fw) {
+		err = obtain_one_firmware(dd, FW_PCIE_NAME, &fw_pcie);
+		if (err)
+			goto done;
+	}
+
+	/* success */
+	fw_state = FW_ACQUIRED;
+
+done:
+	if (err) {
+		fw_err = err;
+		fw_state = FW_ERR;
+	}
+	mutex_unlock(&fw_mutex);
+
+	return err;
+}
+
+/*
+ * Called when the driver unloads.  The timing is asymmetric with its
+ * counterpart, obtain_firmware().  If called at device remove time,
+ * then it is concievable that another device could probe while the
+ * firmware is being disposed.  The mutexes can be moved to do that
+ * safely, but then the firmware would be requested from the OS multiple
+ * times.
+ *
+ * No mutex is needed as the driver is unloading and there cannot be any
+ * other callers.
+ */
+void dispose_firmware(void)
+{
+	dispose_one_firmware(&fw_8051);
+	dispose_one_firmware(&fw_fabric);
+	dispose_one_firmware(&fw_pcie);
+	dispose_one_firmware(&fw_sbus);
+	/* TODO: Should we even bother witht his here? */
+	/* retain the error state, otherwise revert to empty */
+	if (fw_state != FW_ERR)
+		fw_state = FW_EMPTY;
 }
 
 /*
@@ -356,32 +479,16 @@ static void write_rsa_data(struct hfi_devdata *dd, int what,
 
 /*
  * Load the 8051 firmware.
- * TODO: fabric SerDes, PCIe serDes
  */
-int load_firmware(struct hfi_devdata *dd)
+static int load_8051_firmware(struct hfi_devdata *dd,
+				struct firmware_details *fdet)
 {
 	u64 reg, firmware, status;
-	struct firmware_details fdet;
 #ifdef RAM_ACCESS_STATUS_NEEDED
 	struct wstats wstats;
 #endif /* RAM_SCCESS_STATUS_NEEDED */
 	unsigned long timeout;
 	int ret;
-
-	/* we cannot do anything if we don't have any firmware */
-	ret = obtain_firmware(dd, FW_NAME, &fdet);
-	/* TODO: TEMPORARY start */
-	if (skip_firmware_load) {
-		if (!ret) {
-			dd_dev_info(dd, "skipping firmware load");
-			goto done;
-		}
-		dd_dev_info(dd, "ignoring missing firmware");
-		return 0;
-	}
-	/* TODO: TEMPORARY end */
-	if (ret)
-		return ret;
 
 	/* TODO: Do I need to clear the bits in DC_DC8051_ERR_EN? */
 	/* TODO: What are the error interrupt hookups from DC to WFR
@@ -414,13 +521,13 @@ int load_firmware(struct hfi_devdata *dd)
 	if (security_enabled) {
 		/* Security step 1a.  Write the modulus, 2048 bits - 32 QW */
 		write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS,
-				fdet.rsa_modulus, FW_SIGNATURE_SIZE);
+				fdet->rsa_modulus, FW_SIGNATURE_SIZE);
 		/* Security step 1b.  Write the r2, 2048 bits - 32 QW */
 		write_rsa_data(dd, WFR_MISC_CFG_RSA_R2,
-				fdet.rsa_r2, FW_SIGNATURE_SIZE);
+				fdet->rsa_r2, FW_SIGNATURE_SIZE);
 		/* Security step 1c.  Write the mu, 64 bits */
 		write_rsa_data(dd, WFR_MISC_CFG_RSA_MU,
-				fdet.rsa_mu, FW_MU_SIZE);
+				fdet->rsa_mu, FW_MU_SIZE);
 
 		/*
 		 * Security step 2a.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
@@ -441,17 +548,18 @@ int load_firmware(struct hfi_devdata *dd)
 	/* Security steps 2b-2d.  Load firmware */
 	/* TODO: firmware start of 0? */
 #ifdef RAM_ACCESS_STATUS_NEEDED
-	ret = write_8051(dd, 1/*code*/, 0, fdet.payload, fdet.payload_len,
+	ret = write_8051(dd, 1/*code*/, 0, fdet->payload, fdet->payload_len,
 								&wstats);
 #else
-	ret = write_8051(dd, 1/*code*/, 0, fdet.payload, fdet.payload_len);
+	ret = write_8051(dd, 1/*code*/, 0, fdet->payload, fdet->payload_len);
 #endif /* RAM_SCCESS_STATUS_NEEDED */
 	if (ret)
-		goto done;
+		return ret;
+		
 
 	/* TODO: guard with verbosity level */
 	dd_dev_info(dd, "8051 firmware download stats:");
-	dd_dev_info(dd, "  writes:         %u\n",  (fdet.payload_len+7)/8);
+	dd_dev_info(dd, "  writes:         %u\n",  (fdet->payload_len+7)/8);
 #ifdef RAM_ACCESS_STATUS_NEEDED
 	dd_dev_info(dd, "  checks:         %ld\n", wstats.nchecks);
 	dd_dev_info(dd, "  min check loop: %ld\n", wstats.min_checks);
@@ -480,7 +588,7 @@ int load_firmware(struct hfi_devdata *dd)
 
 		/* Security step 2f.  Write the signature, 2048 bits - 32 QW */
 		write_rsa_data(dd, WFR_MISC_CFG_RSA_SIGNATURE,
-				fdet.rsa_signature, FW_SIGNATURE_SIZE);
+				fdet->rsa_signature, FW_SIGNATURE_SIZE);
 
 		/* Security step 2g.  Write MISC_CFG_RSA_CMD = 1 (INIT) */
 		write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_INIT);
@@ -502,16 +610,14 @@ int load_firmware(struct hfi_devdata *dd)
 		do {
 			if (time_after(jiffies, timeout)) {
 				dd_dev_err(dd, "8051 firmware security timeout, current status 0x%llx\n", status);
-				ret = -ETIMEDOUT;
-				goto done;
+				return -ETIMEDOUT;
 			}
 			reg = read_csr(dd, WFR_MISC_CFG_FW_CTRL);
 			status = (reg >> WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT)
 					& WFR_MISC_CFG_FW_CTRL_RSA_STATUS_MASK;
 			if (status == RSA_STATUS_FAILED) {
 				dd_dev_err(dd, "8051 firmware security failure\n");
-				ret = -EINVAL;
-				goto done;
+				return -EINVAL;
 			}
 		} while (status != RSA_STATUS_DONE);
 	}
@@ -539,19 +645,73 @@ int load_firmware(struct hfi_devdata *dd)
 	do {
 		if (time_after(jiffies, timeout)) {
 			dd_dev_err(dd, "8051 start timeout, current state 0x%llx\n", firmware);
-			ret = -ETIMEDOUT;
-			goto done;
+			return -ETIMEDOUT;
 		}
 		reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
 		firmware = (reg >> DC_DC8051_STS_CUR_STATE_FIRMWARE_SHIFT)
 				& DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK;
 	} while (firmware != 0xa0);	/* ready for HOST request */
 
-done:
-	dispose_firmware(&fdet);
 	return ret;
 }
 
+static int load_serdes_firmware(struct hfi_devdata *dd,
+					struct firmware_details *fdet)
+{
+	//FIXME: implement
+	return 0;
+}
+
+static int load_sbus_firmware(struct hfi_devdata *dd,
+				struct firmware_details *fdet)
+{
+	//FIXME: implement
+	return 0;
+}
+
+int load_firmware(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = obtain_firmware(dd);
+	if (ret)
+		return ret;
+
+	if (load_8051_fw) {
+		ret = load_8051_firmware(dd, &fw_8051);
+		if (ret)
+			return ret;
+	}
+
+	if (load_fabric_fw) {
+		ret = load_serdes_firmware(dd, &fw_fabric);
+		if (ret)
+			return ret;
+	}
+
+	/*
+	 * TODO: It has been suggested that if the SBUS FW is what enables
+	 * PCIE 3.0.  So does this mean that if the SBUS FW is told
+	 * not to load, should we reject the load of the PCIe FW?
+	 *
+	 * TODO: If we're already at Gen3, do we need to do any of this?
+	 */
+	if (load_sbus_fw) {
+		ret = load_sbus_firmware(dd, &fw_sbus);
+		if (ret)
+			return ret;
+	}
+
+	if (load_pcie_fw) {
+		ret = load_serdes_firmware(dd, &fw_pcie);
+		if (ret)
+			return ret;
+	}
+
+	dispose_firmware();	/* finished with firmware */
+
+	return 0;
+}
 
 //TODO: placeholder
 void link_up(struct hfi_devdata *dd)
