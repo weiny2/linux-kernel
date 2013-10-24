@@ -1827,13 +1827,13 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			 */
 			switch (idx / 64) {
 			case 0:
-				rcd->ireg = WFR_RCV_AVAIL_INT_STATUS0;
+				rcd->ireg = WFR_RCV_AVAIL_INT_CLEAR0;
 				break;
 			case 1:
-				rcd->ireg = WFR_RCV_AVAIL_INT_STATUS1;
+				rcd->ireg = WFR_RCV_AVAIL_INT_CLEAR1;
 				break;
 			case 2:
-				rcd->ireg = WFR_RCV_AVAIL_INT_STATUS2;
+				rcd->ireg = WFR_RCV_AVAIL_INT_CLEAR2;
 				break;
 			default:
 				BUG();
