@@ -56,6 +56,10 @@ static unsigned wfr_sma_debug = 0;
 module_param_named(sma_debug, wfr_sma_debug, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(sma_debug, "Print SMA debug to the console");
 
+static unsigned wfr_fake_mtu = 0;
+module_param_named(fake_mtu, wfr_fake_mtu, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(fake_mtu, "Set a fake MTU value to show in STLPortInfo");
+
 
 /** =========================================================================
  * For STL simulation environment we fake some STL values
@@ -118,7 +122,41 @@ static struct {
 
 int virtual_stl_init = 0;
 
-void virtual_port_linkup_init(u8 port) {
+static void linkup_default_mtu(u8 port)
+{
+	unsigned i;
+	//uint8_t mtu_set;
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	vpi->inittypereply_mtucap = IB_MTU_2048;
+	if (wfr_fake_mtu > 2048) {
+		vpi->inittypereply_mtucap = IB_MTU_4096;
+	}
+	if (wfr_fake_mtu > 4096) {
+		vpi->inittypereply_mtucap = STL_MTU_8192;
+	}
+	if (wfr_fake_mtu > 8192) {
+		vpi->inittypereply_mtucap = STL_MTU_10240;
+	}
+
+	for (i=0; i< ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu); i++) {
+		vpi->neigh_mtu.pvlx_to_mtu[i] = (IB_MTU_2048 << 4) | IB_MTU_2048;
+#if 0
+		if (i == 7) { /* VL15 is always 2048 */
+			vpi->neigh_mtu.pvlx_to_mtu[i] = (mtu_set << 4) | IB_MTU_2048;
+		} else {
+			vpi->neigh_mtu.pvlx_to_mtu[i] = (mtu_set << 4) | mtu_set;
+		}
+#endif
+	}
+}
+
+/*
+ * This function is called when the virtual port is going into Init/LinkUp
+ * Link Up Defaults should be set here.
+ */
+void virtual_port_linkup_init(u8 port)
+{
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 	u16 speed_enabled = be16_to_cpu(vpi->link_speed.enabled);
 	u16 width_enabled = be16_to_cpu(vpi->link_width.enabled);
@@ -148,6 +186,8 @@ void virtual_port_linkup_init(u8 port) {
 		be16_to_cpu(vpi->link_speed.active),
 		width_enabled, be16_to_cpu(vpi->link_width.supported),
 		be16_to_cpu(vpi->link_width.active));
+
+	linkup_default_mtu(port);
 }
 
 #define WFR_LITE_LINK_SPEED_ALL_SUP (cpu_to_be16(STL_LINK_SPEED_12_5G | \
@@ -169,9 +209,7 @@ static void init_virtual_port_info(u8 port)
 	vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
 	vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
 
-	for (i=0; i< ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu); i++) {
-		vpi->neigh_mtu.pvlx_to_mtu[i] = (IB_MTU_2048 << 4) | IB_MTU_2048;
-	}
+	linkup_default_mtu(port);
 
 	/* VLARB */
 	for (i = 0; i < qib_num_cfg_vls; i++) {
@@ -992,6 +1030,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	int ret;
 	//u32 state;
 	u32 port_num = be32_to_cpu(smp->attr_mod);
+	struct stl_port_info *vpi;
 
 	/* Where the IB hardware has values they are filled in here
 	 * Other values are simply stored in virtual_stl and echoed
@@ -1016,6 +1055,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			}
 		}
 	}
+	vpi = &virtual_stl[port_num-1].port_info;
 
 	dd = dd_from_ibdev(ibdev);
 	/* IB numbers ports from 1, hdw from 0 */
@@ -1143,7 +1183,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
 
 	/* InitTypeReply = 0 */
-	pi->inittypereply_mtucap = qib_ibmtu ? qib_ibmtu : IB_MTU_2048;
+	//pi->inittypereply_mtucap = qib_ibmtu ? qib_ibmtu : IB_MTU_2048;
+	pi->inittypereply_mtucap = vpi->inittypereply_mtucap;
 	/* HCAs ignore VLStallCount and HOQLife */
 	/* pip->vlstallcnt_hoqlife; */
 
