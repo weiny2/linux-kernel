@@ -114,6 +114,14 @@
 #define STL_CAP_MASK3_IsVLMarkerSupported         (1 << 1)
 #define STL_CAP_MASK3_IsVLrSupported              (1 << 0)
 
+/**
+ * new MTU values
+ */
+enum {
+	STL_MTU_8192  = 8,
+	STL_MTU_10240 = 9,
+};
+
 enum port_info_field_masks {
 	/* vl.inittype */
 	STL_PI_MASK_INITTYPE                      = 0x0F,
