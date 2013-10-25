@@ -18,6 +18,7 @@ BOLD='\033[1;31m'
 DBG='\033[1;35m'
 NORMAL='\033[0m'
 
+fake_mtu=0
 function usage
 {
 	cat <<EOL
@@ -32,10 +33,11 @@ Options:
 -i         - i)gnore VL15 over VL0 set up (run in default (i)B mode)
 -n node    - n)ode remote node to configure
 -d         - d)o reload drivers
+-m mtu     - m)tu change the default MTU of the wfr-lite driver
 EOL
 }
 
-while getopts "hr:p:n:id" opt; do
+while getopts "hr:p:n:idm:" opt; do
 	case "$opt" in
 	r)	remote_port="$OPTARG"
 		;;
@@ -46,6 +48,8 @@ while getopts "hr:p:n:id" opt; do
 	i)	ibmode="true"
 		;;
 	d)	reload_drivers="true"
+		;;
+	m)	fake_mtu="$OPTARG"
 		;;
 	h)	usage
 		exit 0
@@ -77,7 +81,7 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe -r ib_wfr_lite"
 
 	echo "   loading modules ..."
-	ssh root@$remote_node "modprobe ib_wfr_lite"
+	ssh root@$remote_node "modprobe ib_wfr_lite fake_mtu=$fake_mtu"
 	ssh root@$remote_node "modprobe ib_umad"
 	ssh root@$remote_node "modprobe ib_uverbs"
 	ssh root@$remote_node "modprobe ib_usa"
@@ -101,7 +105,7 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe -r ib_wfr_lite
 
 	echo "   loading modules ..."
-	modprobe ib_wfr_lite
+	modprobe ib_wfr_lite fake_mtu=$fake_mtu
 	modprobe ib_umad
 	modprobe ib_uverbs
 	modprobe ib_usa
