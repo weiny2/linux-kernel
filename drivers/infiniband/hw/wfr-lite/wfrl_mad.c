@@ -60,6 +60,11 @@ static unsigned wfr_fake_mtu = 0;
 module_param_named(fake_mtu, wfr_fake_mtu, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(fake_mtu, "Set a fake MTU value to show in STLPortInfo");
 
+static unsigned wfr_strict_am_processing = 1;
+module_param_named(strict_am_processing, wfr_strict_am_processing, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(strict_am_processing, "Default == on ; enables Attribute Modifier checking "
+					"according to the STL spec; "
+					"off == less restrictive 'IB' like processing");
 
 /** =========================================================================
  * For STL simulation environment we fake some STL values
@@ -1037,25 +1042,51 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
 	struct stl_port_info *vpi;
 
-	if (num_ports > 1) {
-		smp->status |= IB_SMP_INVALID_FIELD;
-		ret = reply_stl(smp);
-		goto bail;
-	}
-	if (port_num == 0)
-		port_num = port;
-	else {
-		if (port_num > ibdev->phys_port_cnt) {
+	/* NOTE: the following checks could be optimized.
+	 *       but for testing and clarity I wanted to keep them separate. */
+	if (wfr_strict_am_processing) {
+		if (num_ports != 1) {
+			printk(KERN_WARNING PFX "STL Get(STLPortInfo) invalid AM.N\n");
 			smp->status |= IB_SMP_INVALID_FIELD;
 			ret = reply_stl(smp);
 			goto bail;
 		}
+
+		/* PortInfo is only valid on receiving port
+		 * or 0 for wildcard
+		 */
+		if (port_num == 0)
+			port_num = port;
+
 		if (port_num != port) {
-			ibp = to_iport(ibdev, port_num);
-			ret = check_mkey(ibp, (struct ib_smp*)smp, 0);
-			if (ret) {
-				ret = IB_MAD_RESULT_FAILURE;
+			printk(KERN_WARNING PFX
+				"STL Get(STLPortInfo) invalid AM.P %d; inbound %d\n",
+				port_num, port);
+			smp->status |= IB_SMP_INVALID_FIELD;
+			ret = reply_stl(smp);
+			goto bail;
+		}
+	} else {
+		if (num_ports > 1) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			ret = reply_stl(smp);
+			goto bail;
+		}
+		if (port_num == 0)
+			port_num = port;
+		else {
+			if (port_num > ibdev->phys_port_cnt) {
+				smp->status |= IB_SMP_INVALID_FIELD;
+				ret = reply_stl(smp);
 				goto bail;
+			}
+			if (port_num != port) {
+				ibp = to_iport(ibdev, port_num);
+				ret = check_mkey(ibp, (struct ib_smp*)smp, 0);
+				if (ret) {
+					ret = IB_MAD_RESULT_FAILURE;
+					goto bail;
+				}
 			}
 		}
 	}
@@ -1297,17 +1328,39 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
 
-	if (num_ports > 1) {
-		goto err;
-	}
-	if (port_num == 0)
-		port_num = port;
-	else {
-		if (port_num > ibdev->phys_port_cnt)
+	/* NOTE: the following checks could be optimized.
+	 *       but for testing and clarity I wanted to keep them separate. */
+	if (wfr_strict_am_processing) {
+		if (num_ports != 1) {
+			printk(KERN_WARNING PFX "STL Set(STLPortInfo) invalid AM.N\n");
 			goto err;
-		/* Port attributes can only be set on the receiving port */
-		if (port_num != port)
-			goto get_only;
+		}
+
+		/* PortInfo is only valid on receiving port
+		 * or 0 for wildcard
+		 */
+		if (port_num == 0)
+			port_num = port;
+
+		if (port_num != port) {
+			printk(KERN_WARNING PFX
+				"STL Set(STLPortInfo) invalid AM.P %d; inbound %d\n",
+				port_num, port);
+			goto err;
+		}
+	} else {
+		if (num_ports > 1) {
+			goto err;
+		}
+		if (port_num == 0)
+			port_num = port;
+		else {
+			if (port_num > ibdev->phys_port_cnt)
+				goto err;
+			/* Port attributes can only be set on the receiving port */
+			if (port_num != port)
+				goto get_only;
+		}
 	}
 
 	vpi = &virtual_stl[port_num-1].port_info;
@@ -1777,13 +1830,31 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 				  u8 port)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
-	u32 start_block = be32_to_cpu(smp->attr_mod) & 0xffff;
 	u32 n_blocks_req = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
 	__be16 *p;
 	u8 *from;
 	int i;
 	size_t size;
 	u16 n_blocks_avail;
+
+	if (wfr_strict_am_processing) {
+		if (am_port == 0)
+			am_port = port;
+
+		if (am_port != port || n_blocks_req == 0) {
+			printk(KERN_WARNING PFX
+				"STL Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
+				am_port, start_block, n_blocks_req);
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	} else {
+		/* special case to make this Attribute more compatible with IB queries */
+		if (n_blocks_req == 0)
+			n_blocks_req = 1;
+	}
 
 	if (wfr_sim_pkey_tbl_block_size) {
 		n_blocks_avail = wfrl_get_num_sim_pkey_blocks();
@@ -1792,10 +1863,6 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 	memset(stl_get_smp_data(smp), 0, stl_get_smp_data_size(smp));
-
-	/* special case to make this Attribute more compatible with IB queries */
-	if (n_blocks_req == 0)
-		n_blocks_req = 1;
 
 	if (start_block + n_blocks_req > n_blocks_avail ||
 	    n_blocks_req > STL_NUM_PKEY_BLOCKS_PER_SMP) {
@@ -1830,6 +1897,11 @@ static int subn_get_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
 
+	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
+	}
+
 	memset(p, 0, stl_get_smp_data_size(smp));
 
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sl_to_sc); i++)
@@ -1843,6 +1915,11 @@ static int subn_set_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 {
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
+
+	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sl_to_sc); i ++, p++)
 		virtual_stl[port-1].sl_to_sc[i] = *p & 0x1f;
@@ -1859,6 +1936,11 @@ static int subn_get_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
 
+	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
+	}
+
 	memset(p, 0, stl_get_smp_data_size(smp));
 
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_sl); i++)
@@ -1873,6 +1955,11 @@ static int subn_set_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
 
+	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
+	}
+
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_sl); i ++, p++)
 		virtual_stl[port-1].sc_to_sl[i] = *p & 0x1f;
 
@@ -1884,6 +1971,18 @@ static int subn_get_stl_sc_to_vlt(struct stl_smp *smp, struct ib_device *ibdev,
 {
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+
+	if (wfr_strict_am_processing) {
+		if (port_num == 0)
+			port_num = port;
+		if (num_ports != 1 ||
+		    port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
 
 	memset(p, 0, stl_get_smp_data_size(smp));
 
@@ -1900,14 +1999,26 @@ static int subn_set_stl_sc_to_vlt(struct stl_smp *smp, struct ib_device *ibdev,
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
 	u8 port_state = wfrl_get_stl_virtual_port_state(port) & 0x0f;
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 async_update = be32_to_cpu(smp->attr_mod) & 0x1000;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+
+	if (wfr_strict_am_processing) {
+		if (port_num == 0)
+			port_num = port;
+		if (num_ports != 1 ||
+		    port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
 
 	/* check the AM and port state for proper settings */
 #if 0
 	if (async_update && port_state == IB_PORT_INIT) {
 #endif
 	if (async_update) {
-		/* for now we don't set IsAsyncSC2VLSupported */
+		/* for now we don't support IsAsyncSC2VLSupported */
 		smp->status |= IB_SMP_INVALID_FIELD;
 		goto error;
 	} else if (port_state == IB_PORT_ARMED || port_state == IB_PORT_ACTIVE) {
@@ -1928,6 +2039,19 @@ static int subn_get_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
 {
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+
+	if (wfr_strict_am_processing) {
+		if (port_num == 0)
+			port_num = port;
+		if (num_ports != 1 ||
+		    port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
+
 
 	memset(p, 0, stl_get_smp_data_size(smp));
 
@@ -1944,6 +2068,20 @@ static int subn_set_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
 	u8 port_state = wfrl_get_stl_virtual_port_state(port) & 0x0f;
+
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+
+	if (wfr_strict_am_processing) {
+		if (port_num == 0)
+			port_num = port;
+		if (num_ports != 1 ||
+		    port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
+
 
 	/* check the AM and port state for proper settings */
 	if (port_state == IB_PORT_ARMED || port_state == IB_PORT_ACTIVE) {
@@ -1963,8 +2101,18 @@ static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
 	struct stl_vlarb_data *virt_data = &virtual_stl[port-1].vlarb_data;
-	u8 section = (be32_to_cpu(smp->attr_mod) >> 16) & 0xff;
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
 	u8 *p = stl_get_smp_data(smp);
+
+	if (wfr_strict_am_processing) {
+		if (num_ports != 1 ||
+		    port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
 
 	switch (section) {
 		case STL_VLARB_LOW_ELEMENTS:
@@ -1997,8 +2145,18 @@ static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
 	struct stl_vlarb_data *virt_data = &virtual_stl[port-1].vlarb_data;
-	u8 section = (be32_to_cpu(smp->attr_mod) >> 16) & 0xff;
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
 	u8 *p = stl_get_smp_data(smp);
+
+	if (wfr_strict_am_processing) {
+		if (num_ports != 1 ||
+		    port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
 
 	switch (section) {
 		case STL_VLARB_LOW_ELEMENTS:
@@ -2471,23 +2629,37 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 			      u8 port)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
-	u32 start_block = be32_to_cpu(smp->attr_mod) & 0xffff;
 	u32 n_blocks_sent = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
 	u16 *p = (u16 *) stl_get_smp_data(smp);
 	u8 *to;
 	int i;
 	size_t size;
 	u16 n_blocks_avail;
 
+	if (wfr_strict_am_processing) {
+		if (am_port == 0)
+			am_port = port;
+
+		if (am_port != port || n_blocks_sent == 0) {
+			printk(KERN_WARNING PFX
+				"STL Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
+				am_port, start_block, n_blocks_sent);
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	} else {
+		/* special case to make this Attribute more compatible with IB queries */
+		if (n_blocks_sent == 0)
+			n_blocks_sent = 1;
+	}
+
 	if (wfr_sim_pkey_tbl_block_size) {
 		n_blocks_avail = wfrl_get_num_sim_pkey_blocks();
 	} else {
 		n_blocks_avail = (u16)(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) +1;
 	}
-
-	/* special case to make this Attribute more compatible with IB queries */
-	if (n_blocks_sent == 0)
-		n_blocks_sent = 1;
 
 	if (start_block + n_blocks_sent > n_blocks_avail ||
 	    n_blocks_sent > STL_NUM_PKEY_BLOCKS_PER_SMP) {
