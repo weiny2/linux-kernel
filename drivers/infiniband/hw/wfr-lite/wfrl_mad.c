@@ -1018,6 +1018,10 @@ static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
+/* Where the IB hardware has values they are filled in here
+ * Other values are simply stored in virtual_stl and echoed
+ * back.
+ */
 static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -1029,15 +1033,15 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	//u8 mtu;
 	int ret;
 	//u32 state;
-	u32 port_num = be32_to_cpu(smp->attr_mod);
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
+	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
 	struct stl_port_info *vpi;
 
-	/* Where the IB hardware has values they are filled in here
-	 * Other values are simply stored in virtual_stl and echoed
-	 * back.
-	 * The exception to this is the Port State and Physical state.  This is
-	 * to support simulated environment.
-	 */
+	if (num_ports > 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		ret = reply_stl(smp);
+		goto bail;
+	}
 	if (port_num == 0)
 		port_num = port;
 	else {
@@ -1287,11 +1291,15 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u16 lse, lwe;
 	u16 lstate;
 	int ret, ore;
-	u32 port_num = be32_to_cpu(smp->attr_mod);
-	struct stl_port_info *vpi = &virtual_stl[port_num-1].port_info;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
+	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
+	struct stl_port_info *vpi;
 
 	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
 
+	if (num_ports > 1) {
+		goto err;
+	}
 	if (port_num == 0)
 		port_num = port;
 	else {
@@ -1301,6 +1309,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		if (port_num != port)
 			goto get_only;
 	}
+
+	vpi = &virtual_stl[port_num-1].port_info;
 
 	pi = (struct stl_port_info *)stl_get_smp_data(smp);
 
