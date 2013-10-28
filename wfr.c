@@ -929,7 +929,7 @@ static void set_armlaunch(struct hfi_devdata *dd, u32 enable)
 static int bringup_serdes(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u64 reg;
+	u64 guid, reg;
 
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: ppd 0x%p: not implemented (enabling port)\n", __func__, ppd);
@@ -942,6 +942,13 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	/* TODO: clear RcvCtrl.RcvPortEnable in quiet_serdes()? */
 
 	/* 7322: enable the serdes status change interrupt */
+
+	guid = be64_to_cpu(ppd->guid);
+	if (!guid) {
+		if (dd->base_guid)
+			guid = be64_to_cpu(dd->base_guid) + ppd->port - 1;
+		ppd->guid = cpu_to_be64(guid);
+	}
 
 	return 0;
 }
