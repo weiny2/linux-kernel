@@ -2474,6 +2474,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* only 1 physical port */
 	dd->num_pports = 1;
+	qib_init_pportdata(&ppd[0], dd, 0, 1);
 
 	/* set up the stats timer; the add_timer is done at end of init */
 	init_timer(&dd->stats_timer);
