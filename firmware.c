@@ -749,5 +749,6 @@ void link_up(struct hfi_devdata *dd)
 void read_guid(struct hfi_devdata *dd)
 {
 	dd->base_guid = cpu_to_be64(read_csr(dd, DC_DC8051_CFG_LOCAL_GUID));
-	dd_dev_info(dd, "GUID %llx", (unsigned long long)dd->base_guid);
+	dd_dev_info(dd, "GUID %llx",
+		(unsigned long long)be64_to_cpu(dd->base_guid));
 }
