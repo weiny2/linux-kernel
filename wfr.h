@@ -66,6 +66,7 @@
 #include "include/wfr/wfr_rxe.h"
 #include "include/wfr/wfr_txe.h"
 #include "include/wfr/wfr_misc.h"
+#include "include/wfr/wfr_asic.h"
 #include "include/wfr/dc_top_csrs.h"
 #include "include/wfr/dc_8051_csrs.h"
 #include "include/wfr/dcc_csrs.h"

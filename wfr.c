@@ -2424,6 +2424,12 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->minrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT)
 			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
 
+	/* obtain the hardware ID - NOT related to unit, which is a
+	   software enumeration */
+	dd->hfi_id = (read_csr(dd, WFR_CCE_REVISION2) &
+				WFR_CCE_REVISION2_HFI_ID_SMASK)
+					>> WFR_CCE_REVISION2_HFI_ID_SHIFT;
+
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
 

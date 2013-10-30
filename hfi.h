@@ -899,6 +899,8 @@ struct hfi_devdata {
 	u8 majrev;
 	/* chip minor rev, from qib_revision */
 	u8 minrev;
+	/* hardware ID */
+	u8 hfi_id;
 
 	/* Misc small ints */
 	/* Number of physical ports available */
