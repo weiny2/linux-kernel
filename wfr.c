@@ -2311,6 +2311,38 @@ void init_txe(struct hfi_devdata *dd)
 			((WFR_NUM_VL_PRE_CREDITS * (WFR_TXE_NUM_DATA_VL+1))
 				& WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_MASK)
 			<< WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT);
+
+	/*
+	 * Set the inital max length for VL15.  The largest is
+	 *
+	 * 	  64	max IB global packet (LRH+GRH+BTH+ICRC)
+	 *	   8	UD header (DETH)
+	 *	2048	2K MAD packet
+	 *	----
+	 *      2120 bytes
+	 *
+	 * Note, we're just writing the CSR instead of a read-modify-write
+	 * because we "know" that at startup nothing else should be set.
+	 */
+#define MAX_MAD_PACKET_DW ((64 + 8 + 2048) / 4)
+//FIXME: For now, allow all sizes for all non-VL15 VLs.  Initial testing
+//does not have a FM to set the sizes.
+#if 0
+	write_csr(dd, WFR_SEND_LEN_CHECK1,
+		(u64)MAX_MAD_PACKET_DW << WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT);
+#else
+	write_csr(dd, WFR_SEND_LEN_CHECK0,
+		WFR_SEND_LEN_CHECK0_LEN_VL3_SMASK
+		| WFR_SEND_LEN_CHECK0_LEN_VL2_SMASK
+		| WFR_SEND_LEN_CHECK0_LEN_VL1_SMASK
+		| WFR_SEND_LEN_CHECK0_LEN_VL0_SMASK);
+	write_csr(dd, WFR_SEND_LEN_CHECK1,
+		((u64)MAX_MAD_PACKET_DW  << WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT)
+		| WFR_SEND_LEN_CHECK1_LEN_VL7_SMASK
+		| WFR_SEND_LEN_CHECK1_LEN_VL6_SMASK
+		| WFR_SEND_LEN_CHECK1_LEN_VL5_SMASK
+		| WFR_SEND_LEN_CHECK1_LEN_VL4_SMASK);
+#endif
 }
 
 /*
