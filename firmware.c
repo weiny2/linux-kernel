@@ -167,6 +167,30 @@ static struct firmware_details fw_sbus;
 
 static int print_css_header = 1;	/* TODO: hook to verbosity level */
 
+/* the number of SerDes on the SBUS */
+#define NUM_FABRIC_SERDES 4
+#define NUM_PCIE_SERDES 16
+
+/* SBUS fabric SerDes addresses, one set per HFI */
+static const u8 fabric_serdes_addrs[2][NUM_FABRIC_SERDES] = {
+	{ 0x01, 0x02, 0x03, 0x04 },
+	{ 0x28, 0x29, 0x2a, 0x2b }
+};
+
+/* SBUS PCIe SerDes addresses, one set per HFI */
+static const u8 pcie_serdes_addrs[2][NUM_PCIE_SERDES] = {
+	{ 0x08, 0x0a, 0x0c, 0x0e, 0x10, 0x12, 0x14, 0x16,
+	  0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22, 0x24, 0x26 },
+	{ 0x2f, 0x31, 0x33, 0x35, 0x37, 0x39, 0x3b, 0x3d,
+	  0x3f, 0x41, 0x43, 0x45, 0x47, 0x49, 0x4b, 0x4d }
+};
+
+/* SBUS fabric SerDes broadcast addresses, one per HFI */
+static const u8 fabric_serdes_broadcast[2] = { 0xe4, 0xe5 };
+
+/* SBUS PCIe SerDes broadcast addresses, one per HFI */
+static const u8 pcie_serdes_broadcast[2] = { 0xe2, 0xe3 };
+
 /*
  * Write data or code to the 8051 code or data RAM.
  */
@@ -688,10 +712,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 /* SBUS Master broadcast address */
 #define SBUS_MASTER_BROADCAST 0xfd
 
-/* Fabric SerDes broadcast addresses */
-#define HFI0_FABRIC_BROADCAST 0xe4
-#define HFI1_FABRIC_BROADCAST 0xe5
-
 /* SBUS commands */
 #define WRITE_SBUS_RECEIVER 0x1
 
@@ -717,7 +737,7 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	int i, err;
 	u8 ra;				/* receiver address */
 
-	ra = dd->hfi_id == 0 ? HFI0_FABRIC_BROADCAST : HFI1_FABRIC_BROADCAST;
+	ra = fabric_serdes_broadcast[dd->hfi_id];
 			    
 	/* a. place SerDes in reset and disable SPICO */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000011);
@@ -859,13 +879,34 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	return 0;
 }
 
+/*
+ * Set the given broadcast value on the given list of devices.
+ */
+static void set_serdes_broadcast(struct hfi_devdata *dd, u8 broadcast, const u8 *addrs, int count)
+{
+	while (--count >= 0) {
+		/*
+		 * Set BROADCAST_GROUP_1, leave defaults for everything
+		 * else.  Do not read-modify-write, per instruction
+		 * from manufacturer.
+		 *
+		 * Register 0xfd:
+		 *	bits    what
+		 *	-----	---------------------------------
+		 *	  0	IGNORE_BROADCAST  (default 0)
+		 *	11:4	BROADCAST_GROUP_1 (default 0xff)
+		 *	23:16	BROADCAST_GROUP_2 (default 0xff)
+		 */
+		sbus_request(dd, addrs[count], 0xfd, WRITE_SBUS_RECEIVER,
+				(u32)broadcast << 4 | (u32)0xff << 16);
+	}
+}
+
 static int acquire_hw_mutex(struct hfi_devdata *dd)
 {
 	unsigned long timeout;
 	u8 mask = 1 << dd->hfi_id;
 	u8 user;
-
-	BUG_ON(dd->hfi_id >= 2);
 
 	timeout = msecs_to_jiffies(HM_TIMEOUT) + jiffies;
 	while (1) {
@@ -905,6 +946,9 @@ int load_firmware(struct hfi_devdata *dd)
 {
 	int ret;
 
+	/* we do not expect more than 2 HFIs */
+	BUG_ON(dd->hfi_id >= 2);
+
 	ret = obtain_firmware(dd);
 	if (ret)
 		return ret;
@@ -922,6 +966,9 @@ int load_firmware(struct hfi_devdata *dd)
 	set_sbus_fast_mode(dd);
 
 	if (load_fabric_fw) {
+		set_serdes_broadcast(dd, fabric_serdes_broadcast[dd->hfi_id],
+					fabric_serdes_addrs[dd->hfi_id],
+					NUM_FABRIC_SERDES);
 		ret = load_fabric_serdes_firmware(dd, &fw_fabric);
 		if (ret)
 			goto done;
@@ -941,6 +988,9 @@ int load_firmware(struct hfi_devdata *dd)
 	}
 
 	if (load_pcie_fw) {
+		set_serdes_broadcast(dd, pcie_serdes_broadcast[dd->hfi_id],
+					pcie_serdes_addrs[dd->hfi_id],
+					NUM_PCIE_SERDES);
 		ret = load_pcie_serdes_firmware(dd, &fw_pcie);
 		if (ret)
 			goto done;
