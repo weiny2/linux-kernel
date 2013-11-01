@@ -937,11 +937,6 @@ static void set_sbus_fast_mode(struct hfi_devdata *dd)
 				WFR_ASIC_CFG_SBUS_EXECUTE_FAST_MODE_SMASK);
 }
 
-static void clear_sbus_fast_mode(struct hfi_devdata *dd)
-{
-	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
-}
-
 int load_firmware(struct hfi_devdata *dd)
 {
 	int ret;
@@ -963,6 +958,7 @@ int load_firmware(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
+	/* set the SBUS master to fast mode, we do not need to set it back */
 	set_sbus_fast_mode(dd);
 
 	if (load_fabric_fw) {
@@ -997,7 +993,6 @@ int load_firmware(struct hfi_devdata *dd)
 	}
 
 done:
-	clear_sbus_fast_mode(dd);
 	release_hw_mutex(dd);
 
 	return ret;
