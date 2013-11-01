@@ -643,9 +643,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	/*
 	 * DC reset step 4. Start the 8051
 	 */
-	/* clear all reset bits, releasing the 8051 */
-	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
-
 	if (validate_fw) {
 		/*
 		 * Security step 2e.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
@@ -663,19 +660,9 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 		if (ret)
 			return ret;
 	}
-	/*
-	 * FIXME: Workaround for v15 simulator bug.  Remove this block
-	 * when fixed.
-	 *
-	 * The v15 simulator always requires MISC_CFG_FW_CTRL.FW_8051_LOADED
-	 * to be set to bring the 8051 out of rest.  Instead, it should
-	 * depend on whether WFR_MISC_CFG_FW_CTRL.DISABLE_VALIDATION is
-	 * set.
-	 */
-	else {
-		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
-				WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
-	}
+
+	/* clear all reset bits, releasing the 8051 */
+	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
 
 	/*
 	 * DC reset step 5. Wait for firmware to be ready to accept host
