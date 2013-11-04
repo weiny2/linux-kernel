@@ -1126,7 +1126,7 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	if (len == 0) {
 		pio_copy(pbuf, pbc, hdr, hdrwords);
 	} else {
-		seg_pio_copy_start(pbuf, pbc, &hdr, hdrwords);
+		seg_pio_copy_start(pbuf, pbc, hdr, hdrwords);
 		while (len) {
 			void *addr = ss->sge.vaddr;
 			u32 slen = ss->sge.length;
