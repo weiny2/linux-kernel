@@ -57,24 +57,6 @@ static uint validate_fw = 0;
 module_param_named(validate_fw, validate_fw, uint, S_IRUGO);
 MODULE_PARM_DESC(validate_fw, "Perform firmware validation");
 
-//FIXME: It is not clear if this is needed.  The DC HAS says that writes need
-//to be verified, but the WFR says they are not.
-//#define RAM_ACCESS_STATUS_NEEDED 1
-
-
-#ifdef RAM_ACCESS_STATUS_NEEDED
-/*
- * Write stats: Count the number of times we had to check to see if the
- * write completed.
- * - we know the number of writes by len/8, so we don't need to count it
- */
-struct wstats {
-	unsigned long nchecks;		/* total checks performed */
-	unsigned long min_checks;	/* min_checks per op */
-	unsigned long max_checks;	/* max checks per op */
-};
-#endif /* RAM_SCCESS_STATUS_NEEDED */
-
 /*
  * Firmware security header.
  */
@@ -195,27 +177,12 @@ static const u8 pcie_serdes_broadcast[2] = { 0xe2, 0xe3 };
  * Write data or code to the 8051 code or data RAM.
  */
 static int write_8051(struct hfi_devdata *dd, int code, u32 start,
-					const u8 *data, u32 len
-#ifdef RAM_ACCESS_STATUS_NEEDED
-					, struct wstats *wstat
-#endif /* RAM_SCCESS_STATUS_NEEDED */
-					)
+					const u8 *data, u32 len)
 {
 	u64 reg;
 	u32 offset;
 	int err = 0;
 	int aligned;
-#ifdef RAM_ACCESS_STATUS_NEEDED
-	unsigned long timeout;
-	unsigned long nreads;
-	struct wstats local_wstat;
-
-	/* init stats */
-	if (!wstat)
-		wstat = &local_wstat;
-	memset(wstat, 0, sizeof(*wstat));
-	wstat->min_checks = -1;
-#endif
 
 	/* check alignment */
 	aligned = ((unsigned long)data & 0x7) == 0;
@@ -242,32 +209,8 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start,
 			memcpy(&reg, &data[offset], 8);
 		}
 		write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_WR_DATA, reg);
-#ifdef RAM_ACCESS_STATUS_NEEDED
-		/* wait for completion, timeout at 1/10 second */
-		timeout = jiffies + (HZ/10 == 0 ? 1 : HZ/10);
-		nreads = 0;
-		do {
-			if (time_after(jiffies, timeout)) {
-				dd_dev_err(dd, "8501 write: write fails to complete at address 0x%x, giving up\n",
-					start + offset);
-				err = -ETIMEDOUT;
-				goto done;
-			}
-			nreads++;
-			reg = read_csr(dd, DC_DC8051_CFG_RAM_ACCESS_STATUS);
-			/* done when ACCESS_COMPLETED goes to non-zero */
-		} while ((reg & DC_DC8051_CFG_RAM_ACCESS_STATUS_ACCESS_COMPLETED_SMASK) == 0);
-		wstat->nchecks += nreads;
-		if (wstat->min_checks > nreads)
-			wstat->min_checks = nreads;
-		if (wstat->max_checks < nreads)
-			wstat->max_checks = nreads;
-#endif /* RAM_SCCESS_STATUS_NEEDED */
 	}
 
-#ifdef RAM_ACCESS_STATUS_NEEDED
-done:
-#endif /* RAM_SCCESS_STATUS_NEEDED */
 	/* turn off write access, auto increment (also sets to data access) */
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, 0);
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_SETUP, 0);
@@ -577,9 +520,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 				struct firmware_details *fdet)
 {
 	u64 reg, firmware;
-#ifdef RAM_ACCESS_STATUS_NEEDED
-	struct wstats wstats;
-#endif /* RAM_SCCESS_STATUS_NEEDED */
 	unsigned long timeout;
 	int ret;
 
@@ -640,24 +580,13 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 
 	/* Security steps 2b-2d.  Load firmware */
 	/* TODO: firmware start of 0? */
-#ifdef RAM_ACCESS_STATUS_NEEDED
-	ret = write_8051(dd, 1/*code*/, 0, fdet->payload, fdet->payload_len,
-								&wstats);
-#else
 	ret = write_8051(dd, 1/*code*/, 0, fdet->payload, fdet->payload_len);
-#endif /* RAM_SCCESS_STATUS_NEEDED */
 	if (ret)
 		return ret;
-		
 
 	/* TODO: guard with verbosity level */
 	dd_dev_info(dd, "8051 firmware download stats:");
 	dd_dev_info(dd, "  writes:         %u\n",  (fdet->payload_len+7)/8);
-#ifdef RAM_ACCESS_STATUS_NEEDED
-	dd_dev_info(dd, "  checks:         %ld\n", wstats.nchecks);
-	dd_dev_info(dd, "  min check loop: %ld\n", wstats.min_checks);
-	dd_dev_info(dd, "  max check loop: %ld\n", wstats.max_checks);
-#endif /* RAM_SCCESS_STATUS_NEEDED */
 
 	/*
 	 * DC reset step 3. Load link configuration (optional)
