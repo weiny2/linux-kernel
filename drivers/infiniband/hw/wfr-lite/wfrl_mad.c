@@ -39,6 +39,7 @@
 
 #include "wfrl.h"
 #include "wfrl_mad.h"
+#include "wfrl_pma.h"
 
 static ushort wfr_allow_ib_mads = 1;
 module_param_named(allow_ib_mads, wfr_allow_ib_mads, ushort, S_IRUGO | S_IWUSR | S_IWGRP);
@@ -4181,12 +4182,11 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		ret = process_subn_stl(ibdev, mad_flags, port, in_jumbo, out_jumbo);
 		goto bail;
 
-#if 0
 	/* Only process SMP's right now */
 	case IB_MGMT_CLASS_PERF_MGMT:
-		ret = process_perf(ibdev, port, in_jumbo, out_jumbo);
+		ret = process_stl_perf(ibdev, port, in_jumbo, out_jumbo);
 		goto bail;
-
+#if 0
 	case IB_MGMT_CLASS_CONG_MGMT:
 		if (!ppd->congestion_entries_shadow ||
 			 !qib_cc_table_size) {
@@ -4196,7 +4196,6 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		ret = process_cc(ibdev, mad_flags, port, in_jumbo, out_jumbo);
 		goto bail;
 #else
-	case IB_MGMT_CLASS_PERF_MGMT:
 	case IB_MGMT_CLASS_CONG_MGMT:
 		printk(KERN_WARNING PFX
 			"WARN: mgmt_class %x not supported yet...\n",
