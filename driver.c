@@ -42,6 +42,7 @@
 #include <linux/prefetch.h>
 
 #include "hfi.h"
+#include "trace.h"
 
 /*
  * The size has to be longer than this string, so we can append
@@ -489,6 +490,13 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 				tlen - ((dd->rcvhdrentsize -
 					  (rhf_hdrq_offset(rhf_addr)+2)) * 4));
 		}
+		trace_hfi_rcvhdr(dd,
+				 rcd->ctxt,
+				 eflags,
+				 etype,
+				 tlen,
+				 updegr,
+				 etail);
 		/*
 		 * TODO: This is a redundant check and should eventually
 		 * be removed - the HW is doing the checking for us.
