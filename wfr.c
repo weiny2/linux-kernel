@@ -887,7 +887,6 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 	struct qib_ctxtdata *rcd = data;
 	struct hfi_devdata *dd = rcd->dd;
 
-printk("%s: context %d\n", __func__, rcd->ctxt);
 	trace_hfi_receive_interrupt(rcd->dd, rcd->ctxt);
 	rcd->dd->int_counter++;
 
