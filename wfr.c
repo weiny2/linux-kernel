@@ -41,6 +41,7 @@
 #include <linux/module.h>
 
 #include "hfi.h"
+#include "trace.h"
 
 #define NUM_IB_PORTS 1
 
@@ -887,7 +888,8 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 	struct hfi_devdata *dd = rcd->dd;
 
 printk("%s: context %d\n", __func__, rcd->ctxt);
-	dd->int_counter++;
+	trace_hfi_receive_interrupt(rcd->dd, rcd->ctxt);
+	rcd->dd->int_counter++;
 
 	/* clear the interrupt */
 	write_csr(dd, rcd->ireg, rcd->imask);

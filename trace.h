@@ -60,6 +60,24 @@ TRACE_EVENT(hfi_rcvhdr,
 	)
 );
 
+TRACE_EVENT(hfi_receive_interrupt,
+	TP_PROTO(struct hfi_devdata *dd, u32 ctxt),
+	TP_ARGS(dd, ctxt),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY
+		__field(u32, ctxt)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN;
+		__entry->ctxt = ctxt;
+	),
+	TP_printk(
+		"[%s] ctxt %d",
+		__get_str(dev),
+		__entry->ctxt
+	)
+);
+
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi_ibhdrs
 
