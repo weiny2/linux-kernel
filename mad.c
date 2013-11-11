@@ -501,11 +501,11 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	pip->link_width_enabled = ppd->link_width_enabled;
 	pip->link_width_supported = ppd->link_width_supported;
 	pip->link_width_active = ppd->link_width_active;
-	state = dd->f_iblink_state(ppd->lastibcstat);
+	state = dd->f_iblink_state(ppd);
 	pip->linkspeed_portstate = ppd->link_speed_supported << 4 | state;
 
 	pip->portphysstate_linkdown =
-		(dd->f_ibphys_portstate(ppd->lastibcstat) << 4) |
+		(dd->f_ibphys_portstate(ppd) << 4) |
 		(get_linkdowndefaultstate(ppd) ? 1 : 2);
 	pip->mkeyprot_resv_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 	pip->linkspeedactive_enabled = (ppd->link_speed_active << 4) |

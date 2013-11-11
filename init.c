@@ -113,7 +113,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		rcd->pkeys[0] = QIB_DEFAULT_P_KEY;
 		rcd->seq_cnt = 1;
 
-		// TODO: add NUMA information
+		/* TODO: add NUMA information */
 		rcd->sc = sc_alloc(dd, SC_KERNEL, 0 /*numa*/);
 		if (!rcd->sc) {
 			dd_dev_err(dd,

@@ -88,8 +88,8 @@ void qib_handle_e_ibstatuschanged(struct qib_pportdata *ppd, u64 ibcs)
 	u8 ltstate;
 	enum ib_event_type ev = 0;
 
-	lstate = dd->f_iblink_state(ibcs); /* linkstate */
-	ltstate = dd->f_ibphys_portstate(ibcs);
+	lstate = dd->f_iblink_state(ppd); /* linkstate */
+	ltstate = dd->f_ibphys_portstate(ppd);
 
 	/*
 	 * If linkstate transitions into INIT from any of the various down

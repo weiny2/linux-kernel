@@ -58,6 +58,10 @@ static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
 MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
 
+uint default_link_state = IB_PORT_ACTIVE;
+module_param(default_link_state, uint, S_IRUGO);
+MODULE_PARM_DESC(default_link_state, "Set to IB_PORT_INIT to allow external setting of lid, state");
+
 struct flag_table {
 	u64 flag;	/* the flag */
 	char *str;	/* description string */
@@ -950,6 +954,16 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 		ppd->guid = cpu_to_be64(guid);
 	}
 
+	/* stub lstate stuff */
+	ppd->lstate = default_link_state;
+	switch (default_link_state) {
+	case IB_PORT_INIT:
+		ppd->lflags |= (QIBL_LINKV|QIBL_LINKINIT);
+		break;
+	case IB_PORT_ACTIVE:
+		ppd->lflags |= (QIBL_LINKV|QIBL_LINKACTIVE);
+		break;
+	}
 	return 0;
 }
 
@@ -1102,8 +1116,26 @@ static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 
 static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: which %s, val 0x%x: not implemented\n", __func__, ib_cfg_name(which), val);
+	switch (which) {
+	case QIB_IB_CFG_LSTATE:
+		switch (val & 0xffff0000) {
+		case IB_LINKCMD_ARMED:
+			ppd->lflags |= (QIBL_LINKV|QIBL_LINKARMED);
+			ppd->lstate = IB_PORT_ARMED;
+			break;
+		case IB_LINKCMD_ACTIVE:
+			ppd->lflags |= (QIBL_LINKV|QIBL_LINKACTIVE);
+			ppd->lstate = IB_PORT_ACTIVE;
+			break;
+		}
+		break;
+	default:
+		if (print_unimplemented)
+			dd_dev_info(ppd->dd,
+			  "%s: which %s, val 0x%x: not implemented\n",
+			  __func__, ib_cfg_name(which), val);
+		break;
+	}
 	return 0;
 }
 
@@ -1394,15 +1426,21 @@ static void xgxs_reset(struct qib_pportdata *ppd)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
-static u32 iblink_state(u64 ibcs)
+static u32 iblink_state(struct qib_pportdata *ppd)
 {
-	printk("%s: ibcs 0x%lx: not implemented, reporting IB_PORT_ACTIVE\n", __func__, (unsigned long)ibcs);
-	return IB_PORT_ACTIVE;
+	if (print_unimplemented)
+		dd_dev_info(ppd->dd,
+			"%s: DC interface not implemented, reporting %lld\n",
+			__func__, (unsigned long long)default_link_state);
+	return ppd->lstate;
 }
 
-static u8 ibphys_portstate(u64 ibcs)
+static u8 ibphys_portstate(struct qib_pportdata *ppd)
 {
-	printk("%s: ibcs 0x%lx: not implemented, reporting IB_PHYSPORTSTATE_LINKUP\n", __func__, (unsigned long)ibcs);
+	if (print_unimplemented)
+		dd_dev_info(ppd->dd,
+			"%s: DC interface not implemented, reporting %lld\n",
+		__func__, (unsigned long long)IB_PHYSPORTSTATE_LINKUP);
 	return IB_PHYSPORTSTATE_LINKUP;
 }
 
@@ -2385,12 +2423,27 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		NUM_IB_PORTS * sizeof(struct qib_pportdata));
 	if (IS_ERR(dd))
 		goto bail;
+	dd->num_pports = NUM_IB_PORTS;
 
 	/* pport structs are contiguous, allocated after devdata */
 	ppd = (struct qib_pportdata *)(dd + 1);
 	dd->pport = ppd;
-	for (i = 0; i < NUM_IB_PORTS; i++)
-		ppd[i].dd = dd;
+	for (i = 0; i < dd->num_pports; i++) {
+		/* init common fields */
+		qib_init_pportdata(&ppd[i], dd, 0, 1);
+		/* chip specific */
+		/* TODO: correct for STL */
+		ppd[i].link_speed_supported = IB_SPEED_EDR;
+		ppd[i].link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
+		ppd[i].link_width_enabled = IB_WIDTH_4X;
+		ppd[i].link_speed_enabled = ppd->link_speed_supported;
+		/*
+		 * Set the initial values to reasonable default, will be set
+		 * for real when link is up.
+		 */
+		ppd[i].link_width_active = IB_WIDTH_4X;
+		ppd[i].link_speed_active = IB_SPEED_EDR;
+	}
 
 	dd->f_bringup_serdes    = bringup_serdes;
 	dd->f_cleanup           = cleanup;
@@ -2509,10 +2562,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* TODO: real board name */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
 	sprintf(dd->boardname, "fake wfr");
-
-	/* only 1 physical port */
-	dd->num_pports = 1;
-	qib_init_pportdata(&ppd[0], dd, 0, 1);
 
 	/* set up the stats timer; the add_timer is done at end of init */
 	init_timer(&dd->stats_timer);

@@ -319,17 +319,6 @@ struct qib_verbs_txreq {
 #define QIB_IB_LINKDOWN_SLEEP   4
 #define QIB_IB_LINKDOWN_DISABLE 5
 
-/*
- * These 7 values (SDR, DDR, and QDR may be ORed for auto-speed
- * negotiation) are used for the 3rd argument to path_f_set_ib_cfg
- * with cmd QIB_IB_CFG_SPD_ENB, by direct calls or via sysfs.  They
- * are also the the possible values for qib_link_speed_enabled and active
- * The values were chosen to match values used within the IB spec.
- */
-#define QIB_IB_SDR 1
-#define QIB_IB_DDR 2
-#define QIB_IB_QDR 4
-
 #define HFI_DEFAULT_MTU 4096
 /* default parition key */
 #define DEFAULT_PKEY 0xffff
@@ -558,6 +547,8 @@ struct qib_pportdata {
 	/* last ibcstatus.  opaque outside chip-specific code */
 	u64 lastibcstat;
 
+	u32 lstate;
+
 	/* these are the "32 bit" regs */
 
 	u32 ibmtu; /* The MTU programmed for this unit */
@@ -746,8 +737,8 @@ struct hfi_devdata {
 	int (*f_set_ib_loopback)(struct qib_pportdata *, const char *);
 	int (*f_get_ib_table)(struct qib_pportdata *, int, void *);
 	int (*f_set_ib_table)(struct qib_pportdata *, int, void *);
-	u32 (*f_iblink_state)(u64);
-	u8 (*f_ibphys_portstate)(u64);
+	u32 (*f_iblink_state)(struct qib_pportdata *);
+	u8 (*f_ibphys_portstate)(struct qib_pportdata *);
 	void (*f_xgxs_reset)(struct qib_pportdata *);
 	/* per chip actions needed for IB Link up/down changes */
 	int (*f_ib_updown)(struct qib_pportdata *, int, u64);

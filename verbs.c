@@ -1407,8 +1407,8 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->lmc = ppd->lmc;
 	props->sm_lid = ibp->sm_lid;
 	props->sm_sl = ibp->sm_sl;
-	props->state = dd->f_iblink_state(ppd->lastibcstat);
-	props->phys_state = dd->f_ibphys_portstate(ppd->lastibcstat);
+	props->state = dd->f_iblink_state(ppd);
+	props->phys_state = dd->f_ibphys_portstate(ppd);
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = QIB_GUIDS_PER_PORT;
 	props->max_msg_sz = 0x80000000;
