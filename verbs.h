@@ -158,25 +158,27 @@ struct ib_atomic_eth {
 	__be64 compare_data;
 } __packed;
 
+union ib_ehdrs {
+	struct {
+		__be32 deth[2];
+		__be32 imm_data;
+	} ud;
+	struct {
+		struct ib_reth reth;
+		__be32 imm_data;
+	} rc;
+	struct {
+		__be32 aeth;
+		__be32 atomic_ack_eth[2];
+	} at;
+	__be32 imm_data;
+	__be32 aeth;
+	struct ib_atomic_eth atomic_eth;
+}  __packed;
+
 struct qib_other_headers {
 	__be32 bth[3];
-	union {
-		struct {
-			__be32 deth[2];
-			__be32 imm_data;
-		} ud;
-		struct {
-			struct ib_reth reth;
-			__be32 imm_data;
-		} rc;
-		struct {
-			__be32 aeth;
-			__be32 atomic_ack_eth[2];
-		} at;
-		__be32 imm_data;
-		__be32 aeth;
-		struct ib_atomic_eth atomic_eth;
-	} u;
+	union ib_ehdrs u;
 } __packed;
 
 /*
@@ -1090,6 +1092,8 @@ unsigned qib_get_npkeys(struct hfi_devdata *);
 unsigned qib_get_pkey(struct qib_ibport *, unsigned);
 
 extern const enum ib_wc_opcode ib_qib_wc_opcode[];
+
+extern const u8 hdr_len_by_opcode[];
 
 /*
  * Below  HCA-independent IB PhysPortState values, returned

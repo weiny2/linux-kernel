@@ -44,6 +44,7 @@
 #include "hfi.h"
 #include "common.h"
 #include "device.h"
+#include "trace.h"
 
 static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
@@ -156,9 +157,54 @@ const enum ib_wc_opcode ib_qib_wc_opcode[] = {
 };
 
 /*
+ * Length of header by opcode, 0 --> not supported
+ */
+const u8 hdr_len_by_opcode[256] = {
+	/* RC */
+	[IB_OPCODE_RC_SEND_FIRST]                     = 12 + 8,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = 12 + 8,
+	[IB_OPCODE_RC_SEND_LAST]                      = 12 + 8,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = 12 + 8 + 4,
+	[IB_OPCODE_RC_SEND_ONLY]                      = 12 + 8,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = 12 + 8 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = 12 + 8,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = 12 + 8,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = 12 + 8 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 12 + 8 + 20,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = 12 + 8 + 16,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = 12 + 8,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 12 + 8 + 4,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = 12 + 8 + 4,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = 12 + 8 + 4,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = 12 + 8 + 28,
+	[IB_OPCODE_RC_FETCH_ADD]                      = 12 + 8 + 28,
+	/* UC */
+	[IB_OPCODE_UC_SEND_FIRST]                     = 12 + 8,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = 12 + 8,
+	[IB_OPCODE_UC_SEND_LAST]                      = 12 + 8,
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = 12 + 8 + 4,
+	[IB_OPCODE_UC_SEND_ONLY]                      = 12 + 8,
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 8 + 4,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = 12 + 8 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = 12 + 8,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = 12 + 8,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 12 + 8 + 4,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = 12 + 8 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 12 + 8 + 20,
+	/* UD */
+	[IB_OPCODE_UD_SEND_ONLY]                      = 12 + 8 + 8,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 8 + 12
+};
+
+/*
  * System image GUID.
  */
 __be64 ib_qib_sys_image_guid;
+
 
 /**
  * qib_copy_sge - copy data to SGE memory
@@ -645,6 +691,8 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 			goto drop;
 	} else
 		goto drop;
+
+	trace_input_ibhdr(rcd->dd, hdr);
 
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	ibp->opstats[opcode & 0x7f].n_bytes += tlen;
@@ -1143,6 +1191,8 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		}
 		seg_pio_copy_end(pbuf);
 	}
+
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), ibhdr);
 
 	if (qp->s_rdma_mr) {
 		qib_put_mr(qp->s_rdma_mr);
