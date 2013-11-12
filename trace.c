@@ -19,7 +19,7 @@ u8 ibhdr_exhdr_len(struct qib_ib_header *hdr)
 #define IMM_PRN  "imm %d"
 #define RETH_PRN "reth vaddr 0x%.16llx rkey 0x%.8x dlen 0x%.8x"
 #define AETH_PRN "aeth syn 0x%.2x msn 0x%.8x"
-#define DETH_PRN "deth qkey 0x%.8x sqpn 0x%.8x"
+#define DETH_PRN "deth qkey 0x%.8x sqpn 0x%.6x"
 #define ATOMICACKETH_PRN "origdata %lld"
 #define ATOMICETH_PRN "vaddr 0x%llx rkey 0x%.8x sdata %lld cdata %lld"
 
