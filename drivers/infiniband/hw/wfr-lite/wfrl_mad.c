@@ -67,6 +67,15 @@ MODULE_PARM_DESC(strict_am_processing, "Default == on ; enables Attribute Modifi
 					"according to the STL spec; "
 					"off == less restrictive 'IB' like processing");
 
+static unsigned wfr_replay_depth_buffer = 128;
+module_param_named(replay_depth_buffer, wfr_replay_depth_buffer, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(replay_depth_buffer, "Set a fake ReplayDepth.BufferDepth (256 max) value to show in STLPortInfo");
+
+static unsigned wfr_replay_depth_wire = 64;
+module_param_named(replay_depth_wire, wfr_replay_depth_wire, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(replay_depth_wire, "Set a fake ReplayDepth.WireDepth (256 max) value to show in STLPortInfo");
+
+
 /** =========================================================================
  * For STL simulation environment we fake some STL values
  */
@@ -168,6 +177,16 @@ static void linkup_default_mtu(u8 port)
 	}
 }
 
+static void linkup_default(u8 port)
+{
+	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+
+	linkup_default_mtu(port);
+
+	vpi->replay_depth.buffer = (u8)(wfr_replay_depth_buffer);
+	vpi->replay_depth.wire = (u8)(wfr_replay_depth_wire);
+}
+
 /*
  * This function is called when the virtual port is going into Init/LinkUp
  * Link Up Defaults should be set here.
@@ -204,7 +223,7 @@ void virtual_port_linkup_init(u8 port)
 		width_enabled, be16_to_cpu(vpi->link_width.supported),
 		be16_to_cpu(vpi->link_width.active));
 
-	linkup_default_mtu(port);
+	linkup_default(port);
 }
 
 #define WFR_LITE_LINK_SPEED_ALL_SUP (cpu_to_be16(STL_LINK_SPEED_12_5G | \
@@ -226,7 +245,7 @@ static void init_virtual_port_info(u8 port)
 	vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
 	vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
 
-	linkup_default_mtu(port);
+	linkup_default(port);
 
 	/* VLARB */
 	for (i = 0; i < qib_num_cfg_vls; i++) {
@@ -1282,6 +1301,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->buffer_units = cpu_to_be32(0);
 
+	// these are RO and only set at linkup time
 	//pi->replay_depth.buffer = 0;
 	//pi->replay_depth.wire = 0;
 
