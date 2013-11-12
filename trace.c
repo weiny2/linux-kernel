@@ -7,7 +7,7 @@ u8 ibhdr_exhdr_len(struct qib_ib_header *hdr)
 	u8 opcode;
 	u8 lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 
-	if (lnh == QIB_LRH_GRH)
+	if (lnh == QIB_LRH_BTH)
 		ohdr = &hdr->u.oth;
 	else
 		ohdr = &hdr->u.l.oth;
