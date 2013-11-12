@@ -887,8 +887,8 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 	struct qib_ctxtdata *rcd = data;
 	struct hfi_devdata *dd = rcd->dd;
 
-	trace_hfi_receive_interrupt(rcd->dd, rcd->ctxt);
-	rcd->dd->int_counter++;
+	trace_hfi_receive_interrupt(dd, rcd->ctxt);
+	dd->int_counter++;
 
 	/* clear the interrupt */
 	write_csr(dd, rcd->ireg, rcd->imask);
