@@ -634,8 +634,7 @@ u64 create_pbc(struct send_context *sc, u64 flags, u32 srate,
 }
 
 #define BLOCK_DWORDS (WFR_PIO_BLOCK_SIZE/sizeof(u32))
-//FIXME: there is a kernel #define that does this, DIV something?
-#define dwords_to_blocks(x) (((x) + (BLOCK_DWORDS-1))/BLOCK_DWORDS)
+#define dwords_to_blocks(x) DIV_ROUND_UP(x,BLOCK_DWORDS)
 
 /*
  * The send context buffer "allocator".
@@ -726,8 +725,8 @@ retry:
 	pbuf->end = sc->base_addr + pbuf->size;
 	pbuf->block_count = blocks;
 	pbuf->qw_written = 0;
-	pbuf->carry_valid = 0;
-	pbuf->carry = 0;
+	pbuf->carry_bytes = 0;
+	pbuf->carry.val64 = 0;
 
 	return pbuf;
 }

@@ -36,11 +36,8 @@
 /* additive distance between non-SOP and SOP space */
 #define WFR_SOP_DISTANCE (WFR_TXE_PIO_SIZE / 2)
 #define WFR_PIO_BLOCK_MASK (WFR_PIO_BLOCK_SIZE-1)
-
-union mix {
-	u64 val64;
-	u32 val32[2];
-};
+/* number of QUADWORDs in a block */
+#define WFR_PIO_BLOCK_QWS (WFR_PIO_BLOCK_SIZE/sizeof(u64))
 
 /**
  * pio_copy - copy data block to MMIO space
@@ -146,6 +143,263 @@ void pio_copy(struct pio_buf *pbuf, u64 pbc, const void *from, size_t count)
 	/* TODO: update qw_written? */
 }
 
+/* USE_SHIFTS is faster in user-space tests on a Xeon X5570 @ 2.93GHz */
+#define USE_SHIFTS 1
+#ifdef USE_SHIFTS
+/*
+ * Handle carry bytes using shifts and masks.
+ *
+ * NOTE: the value the unused portion of carry is expected to always be zero.
+ */
+
+/*
+ * "zero" shift - bit shift used to zero out upper bytes.  Input is
+ * the count of LSB bytes to preserve.
+ */
+#define zshift(x) (8 * (8-(x)))
+
+/*
+ * "merge" shift - bit shift used to merge with carry bytes.  Input is
+ * the LSB byte count to move beyond.
+ */
+#define mshift(x) (8 * (x))
+
+/*
+ * Read nbytes bytes from "from" and return them in the LSB bytes
+ * of pbuf->carry.  Other bytes are zeroed.  Any previous value
+ * pbuf->carry is lost.
+ *
+ * NOTES:
+ * o do not read from from if nbytes is zero
+ * o from may _not_ be u64 aligned
+ * o nbytes must not span a QW boundary
+ */
+static inline void read_low_bytes(struct pio_buf *pbuf, const void *from,
+							unsigned int nbytes)
+{
+	unsigned long off;
+
+	if (nbytes == 0) {
+		pbuf->carry.val64 = 0;
+	} else {
+		/* align our pointer */
+		off = (unsigned long)from & 0x7;
+		BUG_ON(nbytes+off > 8);
+		from = (void *)((unsigned long)from & ~0x7l);
+		pbuf->carry.val64 = (le64_to_cpu(*(u64 *)from)
+				<< zshift(nbytes + off))/* zero upper bytes */
+				>> zshift(nbytes);	/* place at bottom */
+	}
+	pbuf->carry_bytes = nbytes;
+}
+
+/*
+ * Read nbytes bytes from "from" and put them at the next signifiant bytes
+ * of pbuf->carry.  Unused bytes are zeroed.  It is expected that the extra
+ * read does not overfill carry.
+ *
+ * NOTES:
+ * o from may _not_ be u64 aligned
+ * o nbytes may span a QW boundary
+ */
+static inline void read_extra_bytes(struct pio_buf *pbuf,
+					const void *from, unsigned int nbytes)
+{
+	unsigned long off = (unsigned long)from & 0x7;
+	unsigned int room, xbytes;
+
+	BUG_ON(pbuf->carry_bytes + nbytes > 8);
+
+	/* align our pointer */
+	from = (void *)((unsigned long)from & ~0x7l);
+
+	/* check count first - don't read anything if count is zero */
+	while (nbytes) {
+		/* find the number of bytes in this u64 */
+		room = 8 - off;	/* this u64 has room for this many bytes */
+		xbytes = nbytes > room ? room : nbytes;
+
+		/*
+		 * shift down to zero lower bytes, shift up to zero upper
+		 * bytes, shift back down to move into place
+		 */
+		pbuf->carry.val64 |= ((le64_to_cpu(*(u64 *)from)
+					>> mshift(off))
+					<< zshift(xbytes))
+					>> zshift(xbytes+pbuf->carry_bytes);
+		off = 0;
+		pbuf->carry_bytes += xbytes;
+		nbytes -= xbytes;
+		from += sizeof(u64);
+	}
+}
+
+/*
+ * Zero extra bytes from the end of pbuf->carry.
+ *
+ * NOTES:
+ * o zbytes <= old_bytes
+ */
+static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
+{
+	unsigned int remaining;
+
+	BUG_ON(pbuf->carry_bytes < zbytes);
+
+	if (zbytes == 0)	/* nothing to do */
+		return;
+
+	remaining = pbuf->carry_bytes - zbytes;	/* remaining bytes */
+
+	/* NOTE: zshift only guaranteed to work if remaining != 0 */
+	if (remaining)
+		pbuf->carry.val64 = (pbuf->carry.val64 << zshift(remaining))
+					>> zshift(remaining);
+	else
+		pbuf->carry.val64 = 0;
+	pbuf->carry_bytes = remaining;
+}
+
+/*
+ * Write a quadword using parts of pbuf->carry and the next 8 bytes of src.
+ * Put the unused part of the next 8 bytes of src into the LSB bytes of
+ * pbuf->carry with the upper bytes zeroed..
+ *
+ * NOTES:
+ * o result must keep unused bytes zeroed
+ * o src must be u64 aligned
+ */
+static inline void merge_write8(struct pio_buf *pbuf, void *dest, const void *src)
+{
+	u64 new, temp;
+
+	new = le64_to_cpu(*(u64 *)src);
+	temp = pbuf->carry.val64 | (new << mshift(pbuf->carry_bytes));
+	writeq(cpu_to_le64(temp), dest);
+	pbuf->carry.val64 = new >> zshift(pbuf->carry_bytes);
+}
+
+/*
+ * Write a quadword using all bytes of carry.
+ */
+static inline void carry8_write8(union mix carry, void *dest)
+{
+	writeq(cpu_to_le64(carry.val64), dest);
+}
+
+/*
+ * Write a quadword using 4 LSB valid bytes of carry.
+ */
+static inline void carry4_write8(union mix carry, void *dest)
+{
+	/* unused bytes are always kept zeroed, so just write */
+	writeq(cpu_to_le64(carry.val64), dest);
+}
+
+#else /* USE_SHIFTS */
+/*
+ * Handle carry bytes using byte copies.
+ *
+ * NOTE: the value the unused portion of carry is left uninitialized.
+ */
+
+/*
+ * Jump copy - no-loop copy for < 8 bytes.
+ */
+static inline void jcopy(u8 *dest, const u8 *src, u32 n)
+{
+	switch (n) {
+	case 7: *dest++ = *src++;
+	case 6: *dest++ = *src++;
+	case 5: *dest++ = *src++;
+	case 4: *dest++ = *src++;
+	case 3: *dest++ = *src++;
+	case 2: *dest++ = *src++;
+	case 1: *dest++ = *src++;
+	};
+}
+
+/*
+ * Read nbytes from "from" and and place them in the low bytes
+ * of pbuf->carry.  Other bytes are left as-is.  Any previous
+ * value in pbuf->carry is lost.
+ *
+ * NOTES:
+ * o do not read from from if nbytes is zero
+ * o from may _not_ be u64 aligned.
+ */
+static inline void read_low_bytes(struct pio_buf *pbuf, const void *from,
+							unsigned int nbytes)
+{
+	BUG_ON(nbytes >= 8);
+
+	jcopy(&pbuf->carry.val8[0], from, nbytes);
+	pbuf->carry_bytes = nbytes;
+}
+
+/*
+ * Read nbytes bytes from "from" and put them at the end of pbuf->carry.
+ * It is expected that the extra read does not overfill carry.
+ *
+ * NOTES:
+ * o from may _not_ be u64 aligned
+ * o nbytes may span a QW boundary
+ */
+static inline void read_extra_bytes(struct pio_buf *pbuf,
+					const void *from, unsigned int nbytes)
+{
+	BUG_ON(pbuf->carry_bytes + nbytes > 8);
+	jcopy(&pbuf->carry.val8[pbuf->carry_bytes], from, nbytes);
+	pbuf->carry_bytes += nbytes;
+}
+
+/*
+ * Zero extra bytes from the end of pbuf->carry.
+ *
+ * We do not care about the value of unused bytes in carry, so just
+ * reduce the byte count.
+ *
+ * NOTES:
+ * o zbytes <= old_bytes
+ */
+static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
+{
+	BUG_ON(pbuf->carry_bytes < zbytes);
+	pbuf->carry_bytes -= zbytes;
+}
+
+/*
+ * Write a quadword using parts of pbuf->carry and the next 8 bytes of src.
+ * Put the unused part of the next 8 bytes of src into the low bytes of
+ * pbuf->carry.
+ */
+static inline void merge_write8(struct pio_buf *pbuf, void *dest, const void *src)
+{
+	u32 remainder = 8 - pbuf->carry_bytes;
+
+	jcopy(&pbuf->carry.val8[pbuf->carry_bytes], src, remainder);
+	writeq(pbuf->carry.val64, dest);
+	jcopy(&pbuf->carry.val8[0], src+remainder, pbuf->carry_bytes);
+}
+
+/*
+ * Write a quadword using all bytes of carry.
+ */
+static inline void carry8_write8(union mix carry, void *dest)
+{
+	writeq(carry.val64, dest);
+}
+
+/*
+ * Write a quadword using 4 lowest bytes of carry.
+ */
+static inline void carry4_write8(union mix carry, void *dest)
+{
+	carry.val32[1] = 0;		/* zero upper bytes */
+	writeq(carry.val64, dest);
+}
+#endif /* USE_SHIFTS */
+
 /*
  * Segmented PIO Copy - start
  *
@@ -154,10 +408,10 @@ void pio_copy(struct pio_buf *pbuf, u64 pbc, const void *from, size_t count)
  * @pbuf: destination buffer
  * @pbc: the PBC for the PIO buffer
  * @from: data source, QWORD aligned
- * @count: DWORDs to copy
+ * @nbytes: bytes to copy
  */
 void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
-				const void *from, size_t count)
+				const void *from, size_t nbytes)
 {
 	void __iomem *dest = pbuf->start + WFR_SOP_DISTANCE;
 	void __iomem *send = dest + WFR_PIO_BLOCK_SIZE;
@@ -167,7 +421,7 @@ void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
 	dest += sizeof(u64);
 
 	/* calculate where the QWORD data ends - in SOP=1 space */
-	dend = dest + ((count>>1) * sizeof(u64));
+	dend = dest + ((nbytes>>3) * sizeof(u64));
 
 	if (dend < send) {
 		/* all QWORD data is within the SOP block, does *not*
@@ -229,54 +483,35 @@ void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
 
 	/* ...but it doesn't matter as we're done writing */
 
-	/* save dangling u32, if any */
-	if (count & 1) {
-		pbuf->carry_valid = 1;
-		pbuf->carry = *(u32 *)from;
-	}
-	/* no need for else here: the initialized buffer will already
-	   have carry_valid and carry set to 0 */
+	/* save dangling bytes, if any */
+	read_low_bytes(pbuf, from, nbytes & 0x7);
 
-	pbuf->qw_written = 1 /*PBC*/ + (count >> 1);
+	pbuf->qw_written = 1 /*PBC*/ + (nbytes >> 3);
 }
 
 /*
- * Mid copy helper, "mixed case" - source is u64 aligned, dest is u32 aligned.
- * In particular, pbuf->carry_valid == 1.
+ * Mid copy helper, "mixed case" - source is 64-bit aligned but carry
+ * bytes are non-zero.
  *
- * We must write whole u64s to the chip, so we must combine u32s.
+ * Whole u64s must be written to the chip, so bytes must be manually merged.
  *
  * @pbuf: destination buffer
  * @from: data source, is QWORD aligned.
- * @count: DWORDs to copy
+ * @nbytes: bytes to copy
  *
- * Return value: number of DWORDS accepted so far. If even, all DWORDS have
- * been written, if odd the final DWORD is in carry, not written.
- *
- * Must handle count == 0.
- *
- * NOTE: If count is odd, this routine will read 4 bytes *beyond*
- * from+(count*sizeof(u32)).  It will not use that value, nor will
- * that value extend to possible illegal page as it will be part of
- * an aligned u64 read.
+ * Must handle nbytes < 8.
  */
-static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t count)
+static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t nbytes)
 {
 	void __iomem *dest = pbuf->start + (pbuf->qw_written * sizeof(u64));
 	void __iomem *dend;			/* 8-byte data end */
-	union mix val, temp;
+	unsigned long qw_to_write = (pbuf->carry_bytes + nbytes) >> 3;
+	unsigned long bytes_left = (pbuf->carry_bytes + nbytes) & 0x7;
 
-	/*
-	 * Calculate 8-byte data end - if count is odd, the last
-	 * QWORD will contain only a DWORD of valid data.  See NOTE
-	 * above.
-	 */
-	dend = dest + (((count+1)>>1) * sizeof(u64));
+	/* calculate 8-byte data end */
+	dend = dest + (qw_to_write * sizeof(u64));
 
-	/* stage overlap */
-	val.val32[0] = pbuf->carry;
-
-	if (pbuf->qw_written < WFR_PIO_BLOCK_SIZE/sizeof(u64)) {
+	if (pbuf->qw_written < WFR_PIO_BLOCK_QWS) {
 		/*
 		 * Still within SOP block.  We don't need to check for
 		 * wrap because we are still in the first block and
@@ -296,10 +531,7 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t count)
 
 		/* write 8-byte chunk data */
 		while (dest < xend) {
-			temp.val64 = *(u64 *)from;
-			val.val32[1] = temp.val32[0];
-			writeq(val.val64, dest);
-			val.val32[0] = temp.val32[1];
+			merge_write8(pbuf, dest, from);
 			from += sizeof(u64);
 			dest += sizeof(u64);
 		}
@@ -322,15 +554,11 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t count)
 	 *
 	 * If the data ends at the end of the SOP above and
 	 * the buffer wraps, then pbuf->end == dend == dest
-	 * and nothing will get written, but we will wrap in
-	 * case there is a dangling DWORD.
+	 * and nothing will get written.
 	 */
 	if (pbuf->end <= dend) {
 		while (dest < pbuf->end) {
-			temp.val64 = *(u64 *)from;
-			val.val32[1] = temp.val32[0];
-			writeq(val.val64, dest);
-			val.val32[0] = temp.val32[1];
+			merge_write8(pbuf, dest, from);
 			from += sizeof(u64);
 			dest += sizeof(u64);
 		}
@@ -341,48 +569,43 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t count)
 
 	/* write 8-byte non-SOP, non-wrap chunk data */
 	while (dest < dend) {
-		temp.val64 = *(u64 *)from;
-		val.val32[1] = temp.val32[0];
-		writeq(val.val64, dest);
-		val.val32[0] = temp.val32[1];
+		merge_write8(pbuf, dest, from);
 		from += sizeof(u64);
 		dest += sizeof(u64);
 	}
 
-	if (count & 1) {
-		/* count is odd - we had a carry in, so nothing will
-		   carry out */
-		pbuf->carry = 0;
-		pbuf->carry_valid = 0;
+	/* adjust carry */
+	if (pbuf->carry_bytes < bytes_left) {
+		/* need to read more */
+		read_extra_bytes(pbuf, from, bytes_left - pbuf->carry_bytes);
 	} else {
-		/* count is even - we had a carry in, so we will have a
-		   carry out */
-		pbuf->carry = val.val32[0];
-		/* pbuf->carry_valid was 1 */
+		/* remove invalid bytes */
+		zero_extra_bytes(pbuf, pbuf->carry_bytes - bytes_left);
 	}
-	pbuf->qw_written += (count + 1) >> 1; /* the +1 is the carry */
+
+	pbuf->qw_written += qw_to_write;
 }
 
 /*
- * Mid copy helper, "straight case" - source and dest are u64 aligned.
- * In particular, pbuf->carry_valid == 0.
+ * Mid copy helper, "straight case" - source pointer is 64-bit aligned
+ * with no carry bytes.
  *
  * @pbuf: destination buffer
  * @from: data source, is QWORD aligned
- * @count: DWORDs to copy
+ * @nbytes: bytes to copy
  *
- * Must handle count == 0.
+ * Must handle nbytes < 8.
  */
 static void mid_copy_straight(struct pio_buf *pbuf, 
-						const void *from, size_t count)
+						const void *from, size_t nbytes)
 {
 	void __iomem *dest = pbuf->start + (pbuf->qw_written * sizeof(u64));
 	void __iomem *dend;			/* 8-byte data end */
 
 	/* calculate 8-byte data end */
-	dend = dest + ((count>>1) * sizeof(u64));
+	dend = dest + ((nbytes>>3) * sizeof(u64));
 
-	if (pbuf->qw_written < WFR_PIO_BLOCK_SIZE/sizeof(u64)) {
+	if (pbuf->qw_written < WFR_PIO_BLOCK_QWS) {
 		/*
 		 * Still within SOP block.  We don't need to check for
 		 * wrap because we are still in the first block and
@@ -425,8 +648,7 @@ static void mid_copy_straight(struct pio_buf *pbuf,
 	 *
 	 * If the data ends at the end of the SOP above and
 	 * the buffer wraps, then pbuf->end == dend == dest
-	 * and nothing will get written, but we will wrap in
-	 * case there is a dangling DWORD.
+	 * and nothing will get written.
 	 */
 	if (pbuf->end <= dend) {
 		while (dest < pbuf->end) {
@@ -446,38 +668,62 @@ static void mid_copy_straight(struct pio_buf *pbuf,
 		dest += sizeof(u64);
 	}
 
-	if (count & 1) {
-		pbuf->carry_valid = 1;
-		pbuf->carry = *(u32 *)from;
-	}
-	/* else we know, coming in, that carry_valid is 0 */
+	/* we know carry_bytes was zero on entry to this routine */
+	read_low_bytes(pbuf, from, nbytes & 0x7);
 
-	pbuf->qw_written += count>>1;
+	pbuf->qw_written += nbytes>>3;
 }
 
 /*
  * Segmented PIO Copy - middle
  *
- * Must handle DWORD aligned tail (pbuf->carry_valid) and DWORD aligned source
- * (from).
+ * Must handle any aligned tail and any aligned source with any byte count.
  *
  * @pbuf: a number of blocks allocated within a PIO send context
  * @from: data source
- * @count: DWORDs to copy
+ * @nbytes: number of bytes to copy
  */
-void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t count)
+void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t nbytes)
 {
-	if ((unsigned long)from & 0x2) {	/* DWORD aligned source */
-		if (pbuf->carry_valid) {	/* DWORD aligned tail */
-			/*
-			 * Case 0: u32 aligned source, u32 aligned dest
-			 *
-			 * Do one combined write, so source and dest are
-			 * both u64 aligned, then do "straight" copy.
-			 */
-			void __iomem *dest;
-			union mix val;
+	unsigned long from_align = (unsigned long)from & 0x7;
 
+	if (pbuf->carry_bytes + nbytes < 8) {
+		/* not enough bytes to fill a QW */
+		read_extra_bytes(pbuf, from, nbytes);
+		return;
+	}
+
+	if (from_align) {
+		/* misaligned source pointer - align it */
+		unsigned long to_align;
+
+		/* bytes to read to align "from" */
+		to_align = 8 - from_align;
+
+		/*
+		 * In the advance-to-alignment logic below, we do not need
+		 * to check if we are using more than nbytes.  This is because
+		 * if we are here, we already know that carry+nbytes will
+		 * fill at least one QW.
+		 */
+		if (pbuf->carry_bytes + to_align < 8) {
+			/* not enough align bytes to fill a QW */
+			read_extra_bytes(pbuf, from, to_align);
+			from += to_align;
+			nbytes -= to_align;
+		} else {
+			/* bytes to fill carry */
+			unsigned long to_fill = 8 - pbuf->carry_bytes;
+			/* bytes left over to be read */
+			unsigned long extra = to_align - to_fill;
+			void __iomem *dest;
+
+			/* fill carry... */
+			read_extra_bytes(pbuf, from, to_fill);
+			from += to_fill;
+			nbytes -= to_fill;
+
+			/* ...now write carry */
 			dest = pbuf->start + (pbuf->qw_written * sizeof(u64));
 
 			/*
@@ -492,45 +738,26 @@ void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t count)
 			if (dest >= pbuf->end)
 				dest -= pbuf->size;
 			/* jump to SOP range if within the first block */
-			else if (pbuf->qw_written < WFR_PIO_BLOCK_SIZE/sizeof(u64))
+			else if (pbuf->qw_written < WFR_PIO_BLOCK_QWS)
 				dest += WFR_SOP_DISTANCE;
 
-			val.val32[0] = pbuf->carry;
-			val.val32[1] = *(u32 *)from;
-			writeq(val.val64, dest);
-			pbuf->carry_valid = 0;
-			pbuf->carry = 0;	/* TODO: needed? */
+			carry8_write8(pbuf->carry, dest);
 			pbuf->qw_written++;
 
-			mid_copy_straight(pbuf, from+sizeof(u32), count-1);
-		} else {			/* QWORD aligned tail */
-			/*
-			 * Case 1: u32 aligned source, u64 aligned dest
-			 *
-			 * Read the first u32 of source so it is u64 aligned,
-			 * then do a "mixed" copy.
-			 */
-			pbuf->carry = *(u32 *)from;
-			pbuf->carry_valid = 1;
-			mid_copy_mix(pbuf, from+sizeof(u32), count-1);
+			/* read any extra bytes to do final alignment */
+			/* this will overwrite anytyhing in pbuf->carry */
+			read_low_bytes(pbuf, from, extra);
+			from += extra;
+			nbytes -= extra;
 		}
-	} else {				/* QWORD aligned source */
-		if (pbuf->carry_valid) {	/* DWORD aligned tail */
-			/*
-			 * Case 2: u64 aligned source, u32 aligned dest
-			 *
-			 * Do a "mixed" copy.
-			 */
-			mid_copy_mix(pbuf, from, count);
-		} else {			/* QWORD aligned tail */
-			/*
-			 * Case 3: u64 aligned source, u64 aligned dest
-			 *
-			 * Everything aligns, do a "straight" copy.
-			 */
-			mid_copy_straight(pbuf, from, count);
-		}
+
+		/* at this point, from is QW aligned */
 	}
+
+	if (pbuf->carry_bytes)
+		mid_copy_mix(pbuf, from, nbytes);
+	else
+		mid_copy_straight(pbuf, from, nbytes);
 }
 
 /*
@@ -555,17 +782,12 @@ void seg_pio_copy_end(struct pio_buf *pbuf)
 	if (dest >= pbuf->end)
 		dest -= pbuf->size;
 	/* jump to the SOP range if within the first block */
-	else if (pbuf->qw_written < (WFR_PIO_BLOCK_SIZE/sizeof(u64)))
+	else if (pbuf->qw_written < WFR_PIO_BLOCK_QWS)
 		dest += WFR_SOP_DISTANCE;
 
 	/* write the final u32, if present */
-	if (pbuf->carry_valid) {
-		union mix val;
-
-		val.val64 = 0;
-		val.val32[0] = pbuf->carry;
-
-		writeq(val.val64, dest);
+	if (pbuf->carry_bytes == 4) {
+		carry4_write8(pbuf->carry, dest);
 		dest += sizeof(u64);
 		/*
 		 * NOTE: We do not need to recalculate whether dest needs
@@ -583,6 +805,9 @@ void seg_pio_copy_end(struct pio_buf *pbuf)
 		 * If we are past the first block, then WFR_SOP_DISTANCE
 		 * was never added, so there is nothing to do.
 		 */
+	} else {
+		/* we expect multiples of DWORD bytes */
+		BUG_ON(pbuf->carry_bytes != 0);
 	}
 
 	/* fill in rest of block */
