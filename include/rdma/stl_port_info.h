@@ -213,8 +213,8 @@ enum port_info_field_masks {
 	/* buffer_units */
 	STL_PI_MASK_BUF_UNIT_VL15_INIT            = (0x00000FFF  << 11),
 	STL_PI_MASK_BUF_UNIT_VL15_CREDIT_RATE     = (0x0000001F  <<  6),
-	STL_PI_MASK_BUF_UNIT_VL15_CREDIT_ACK      = (0x00000003  <<  3),
-	STL_PI_MASK_BUF_UNIT_VL15_BUF_ALLOC       = (0x00000003  <<  0),
+	STL_PI_MASK_BUF_UNIT_CREDIT_ACK           = (0x00000003  <<  3),
+	STL_PI_MASK_BUF_UNIT_BUF_ALLOC            = (0x00000003  <<  0),
 
 	/* neigh_mtu.pvlx_to_mtu */
 	STL_PI_MASK_NEIGH_MTU_PVL0                = 0xF0,
