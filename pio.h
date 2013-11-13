@@ -42,6 +42,13 @@
 /* PIO buffer release callback function */
 typedef void (*pio_release_cb)(void *arg);
 
+/* byte helper */
+union mix {
+	u64 val64;
+	u32 val32[2];
+	u8  val8[8];
+};
+
 /* an allocated PIO buffer */
 struct pio_buf {
 	pio_release_cb cb;	/* called when the buffer is released */
@@ -52,8 +59,8 @@ struct pio_buf {
 	unsigned long sent_at;	/* buffer is sent when <= free */
 	u32 block_count;	/* size of buffer, in blocks */
 	u32 qw_written;		/* QW written so far */
-	u32 carry_valid;	/* the carry field contains valid data */
-	u32 carry;		/* pending unwritten DW */
+	u32 carry_bytes;	/* number of valid bytes in carry */
+	union mix carry;	/* pending unwritten bytes */
 };
 
 /* cache line aligned pio buffer array */
@@ -139,8 +146,8 @@ void pio_send_control(struct hfi_devdata *dd, int op);
 /* PIO copy routines */
 void pio_copy(struct pio_buf *pbuf, u64 pbc, const void *from, size_t count);
 void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
-					const void *from, size_t count);
-void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t count);
+					const void *from, size_t nbytes);
+void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t nbytes);
 void seg_pio_copy_end(struct pio_buf *pbuf);
 
 #endif /* _PIO_H */
