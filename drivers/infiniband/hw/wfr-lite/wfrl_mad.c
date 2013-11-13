@@ -108,6 +108,16 @@ struct stl_vlarb_data
 	__be32 preemption_matrix[STL_MAX_VLS];
 };
 
+/* stored in network order to be able to pass right back to the user. */
+struct stl_buffer_control_table
+{
+	__be16 tx_overall_shared_limit;
+	struct {
+		__be16 tx_dedicated_limit;
+		__be16 tx_shared_limit;
+	} vl[STL_MAX_VLS];
+};
+
 /* simulate link init data exchange */
 struct wfr_lite_link_init_data
 {
@@ -124,6 +134,7 @@ static struct {
 	u8 sc_to_vlt[STL_MAX_SCS];
 	u8 sc_to_vlnt[STL_MAX_SCS];
 	struct stl_vlarb_data vlarb_data;
+	struct stl_buffer_control_table buffer_control_table;
 } virtual_stl[NUM_VIRT_PORTS];
 
 int virtual_stl_init = 0;
