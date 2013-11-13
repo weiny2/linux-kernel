@@ -1575,7 +1575,8 @@ struct wfr_link_info {
 	u8 port_state;
 	__be16 link_speed_active;
 	__be16 link_width_active;
-	u8 res[50]; /* This makes this a full IB SMP payload */
+	__be16 vl15_init;
+	u8 res[48]; /* This makes this a full IB SMP payload */
 };
 void wfrl_get_stl_virtual_link_info(u8 port, struct wfr_link_info *link_info);
 void wfrl_set_stl_virtual_link_info(struct ib_device *ibdev, u8 port,

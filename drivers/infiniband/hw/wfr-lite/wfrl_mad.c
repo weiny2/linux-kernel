@@ -75,6 +75,14 @@ static unsigned wfr_replay_depth_wire = 64;
 module_param_named(replay_depth_wire, wfr_replay_depth_wire, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(replay_depth_wire, "Set a fake ReplayDepth.WireDepth (256 max) value to show in STLPortInfo");
 
+static unsigned wfr_buffer_unit_buf_alloc = 3;
+module_param_named(buffer_unit_buf_alloc, wfr_buffer_unit_buf_alloc, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(buffer_unit_buf_alloc, "Set a fake BufferUnit.BufferAlloc (8 max) value to show in STLPortInfo");
+
+static unsigned wfr_buffer_unit_credit_ack = 0;
+module_param_named(buffer_unit_credit_ack, wfr_buffer_unit_credit_ack, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(buffer_unit_credit_ack, "Set a fake BufferUnit.CreditAck (8 max) value to show in STLPortInfo");
+
 
 /** =========================================================================
  * For STL simulation environment we fake some STL values
@@ -177,14 +185,30 @@ static void linkup_default_mtu(u8 port)
 	}
 }
 
+/**
+ * We give VL15 2 * 2048 bufferspace
+ * @return vl15_init value in "AU" units
+ */
+static u16 get_vl15_init(void)
+{
+	return ((2048 * 2) / (8 * (1 << wfr_buffer_unit_buf_alloc)));
+}
+
 static void linkup_default(u8 port)
 {
+	u32 buffer_units;
+	u16 vl15_init = get_vl15_init();
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	linkup_default_mtu(port);
 
 	vpi->replay_depth.buffer = (u8)(wfr_replay_depth_buffer);
 	vpi->replay_depth.wire = (u8)(wfr_replay_depth_wire);
+
+	buffer_units  = (wfr_buffer_unit_buf_alloc) & STL_PI_MASK_BUF_UNIT_BUF_ALLOC;
+	buffer_units |= (wfr_buffer_unit_credit_ack << 3) & STL_PI_MASK_BUF_UNIT_CREDIT_ACK;
+	buffer_units |= (vl15_init << 11) & STL_PI_MASK_BUF_UNIT_VL15_INIT;
+	vpi->buffer_units = cpu_to_be32(buffer_units);
 }
 
 /*
@@ -387,6 +411,7 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 	struct wfr_link_info *link_info =
 					(struct wfr_link_info *)smp->data;
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
 
 	rem_phys_state = (link_info->port_state >> 4) & 0xF;
 	rem_link_state = link_info->port_state & 0xF;
@@ -442,11 +467,14 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 		vpi->link_speed.active = link_info->link_speed_active;
 	}
 
+	vbct->vl[15].tx_dedicated_limit = link_info->vl15_init;
+
 	if (send_GetResp) {
 		/* send our response back */
 		link_info->node_guid = dd->pport->guid;
 		link_info->port_mode = 0x08;
 		link_info->port_state = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
+		link_info->vl15_init = cpu_to_be16(get_vl15_init());
 
 		return reply(smp);
 	}
@@ -493,6 +521,7 @@ static void wfr_send_stl_virt_link_info(struct ib_device *ibdev, u8 port, uint8_
 	link_info->port_state = state;
 	link_info->link_speed_active = link_speed_active;
 	link_info->link_width_active = link_width_active;
+	link_info->vl15_init = cpu_to_be16(get_vl15_init());
 
 	if (ib_post_send_mad(send_buf, NULL)) {
 		printk(KERN_WARNING PFX "STL link state send FAILED: ib_post_send_mad\n");
@@ -1299,7 +1328,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->link_width_downgrade.enabled = 0;
 	pi->link_width_downgrade.active = 0;
 
-	pi->buffer_units = cpu_to_be32(0);
+	// these are RO and only set at linkup time
+	//pi->buffer_units = cpu_to_be32(0);
 
 	// these are RO and only set at linkup time
 	//pi->replay_depth.buffer = 0;
