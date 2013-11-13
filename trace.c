@@ -111,6 +111,5 @@ const char *parse_everbs_hdrs(
 		trace_seq_putc(p, 0);
 		break;
 	}
-	trace_seq_putc(p, 0);
 	return ret;
 }
