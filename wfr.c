@@ -1990,20 +1990,22 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 		kfree(entries);
 		/* qib_pcie_params() will print if using INTx */
 		single_interrupt = 1;
-	} else if (request == total) {
-		/* using MSI-X */
-		dd->num_msix_entries = total;
-		dd->msix_entries = entries;
-		dd_dev_info(dd, "%u MSI-X interrupts allocated\n", total);
 	} else {
-		/* using MSI-X, with reduced interrupts */
-		/* TODO: handle reduced interrupt case?  Need scheme to
-		   decide who shares. */
-		dd_dev_err(dd,
-			"cannot handle reduced interrupt case, want %u, got %u\n",
-			total, request);
-		ret = -EINVAL;
-		goto fail;
+		/* using MSI-X */
+		dd->num_msix_entries = request;
+		dd->msix_entries = entries;
+
+		if (request != total) {
+			/* using MSI-X, with reduced interrupts */
+			/* TODO: Handle reduced interrupt case.  Need scheme to
+			   decide who shares. */
+			dd_dev_err(dd, "cannot handle reduced interrupt case"
+				", want %u, got %u\n",
+				total, request);
+			ret = -EINVAL;
+			goto fail;
+		}
+		dd_dev_info(dd, "%u MSI-X interrupts allocated\n", total);
 	}
 
 	/* mask all interrupts */
