@@ -2092,12 +2092,12 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 
 	/*
 	 * Kernel contexts: (to be fixed later):
-	 * 	- default to 1 kernel context per CPU
+	 * 	- default to 1 kernel context per NUMA
 	 */
 	if (qib_n_krcv_queues) {
 		num_kernel_contexts = qib_n_krcv_queues;
 	} else {
-		num_kernel_contexts = num_online_cpus();
+		num_kernel_contexts = num_online_nodes();
 	}
 
 	/*
