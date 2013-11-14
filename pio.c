@@ -399,7 +399,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 }
 
 /*
- * Use compare and exchange to locklessly allocate an release HW
+ * Use compare and exchange to locklessly allocate and release HW
  * context entries.
  */
 #define reserve_hw_context(ap) (cmpxchg(ap, 0, 1) == 0)
@@ -419,6 +419,7 @@ int sc_hw_alloc(struct hfi_devdata *dd, int type, u32 *contextp)
 			return 0; /* success */
 		}
 	}
+	dd_dev_err(dd, "Unable to locate a free HW send context\n");
 
 	return -ENOSPC;
 }
@@ -470,8 +471,10 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	int ret;
 
 	sc = kzalloc_node(sizeof(struct send_context), GFP_KERNEL, numa);
-	if (!sc)
+	if (!sc) {
+		dd_dev_err(dd, "Cannot allocate send context structure\n");
 		return NULL;
+	}
 
 	ret = sc_hw_alloc(dd, type, &context);
 	if (ret)
@@ -509,8 +512,10 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 		sc->sr_size = sci->credits + 1;
 		sc->sr = kzalloc_node(sizeof(union pio_shadow_ring) *
 				sc->sr_size, GFP_KERNEL, numa);
-		if (!sc->sr)
+		if (!sc->sr) {
+			dd_dev_err(dd, "Cannot allocate send context shadow ring structure\n");
 			goto no_shadow;
+		}
 	}
 
 	/* set up credit return */
