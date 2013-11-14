@@ -81,20 +81,20 @@ static struct sc_config_sizes sc_config_sizes[SC_MAX] = {
 
 /* send context memory pool configuration */
 struct mem_pool_config {
-	int hectopercent;
-	int absolute_blocks;
+	int centipercent;	/* % of memory, in 100ths of 1% */
+	int absolute_blocks;	/* absolut block count */
 };
 
 /* default memory pool configuration: 100% in pool 0 */
 static struct mem_pool_config sc_mem_pool_config[NUM_SC_POOLS] = {
-	/* hecto%, abs blocks */
+	/* centi%, abs blocks */
 	{  10000,     -1 },		/* pool 0 */
 	{      0,     -1 },		/* pool 1 */
 };
 
 /* memory pool information, used when calculating final sizes */
 struct mem_pool_info {
-	int hectopercent;	/* 100x 100% of memory to use, -1 if blocks
+	int centipercent;	/* 100th of 1% of memory to use, -1 if blocks
 				   already set */
 	int count;		/* count of contexts in the pool */
 	int blocks;		/* block size of the pool */
@@ -145,50 +145,50 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 	int fixed_blocks;
 	int pool_blocks;
 	int used_blocks;
-	int hp_total;		/* hectopercent total */
+	int cp_total;		/* centipercent total */
 	int ab_total;		/* absolute block total */
 	int extra;
 	int i;
 
 	/*
 	 * Step 0:
-	 *	- copy the hectopercents/absolute sizes from the pool config
+	 *	- copy the centipercents/absolute sizes from the pool config
 	 *	- sanity check these values
-	 *	- add up hectopercents, then later check for full value
+	 *	- add up centipercents, then later check for full value
 	 *	- add up absolute blocks, then later check for overcommit
 	 */
-	hp_total = 0;
+	cp_total = 0;
 	ab_total = 0;
 	for (i = 0; i < NUM_SC_POOLS; i++) {
-		int hp = sc_mem_pool_config[i].hectopercent;
+		int cp = sc_mem_pool_config[i].centipercent;
 		int ab = sc_mem_pool_config[i].absolute_blocks;
 
 		/*
 		 * A negative value is "unused" or "invalid".  Both *can*
-		 * be valid, but hectopercent wins, so check that first
+		 * be valid, but centipercent wins, so check that first
 		 */
-		if (hp >= 0) {			/* hectopercent valid */
-			hp_total += hp;
+		if (cp >= 0) {			/* centipercent valid */
+			cp_total += cp;
 		} else if (ab >= 0) {		/* absolute blocks valid */
 			ab_total += ab;
 		} else {			/* neither valid */
-			dd_dev_err(dd, "Send context memory pool %d: both the block count and hectopercent are invalid\n", i);
+			dd_dev_err(dd, "Send context memory pool %d: both the block count and centipercent are invalid\n", i);
 			return -EINVAL;
 		}
 
-		mem_pool_info[i].hectopercent = hp;
+		mem_pool_info[i].centipercent = cp;
 		mem_pool_info[i].blocks = ab;
 	}
 
 	/* do not use both % and absolute blocks for different pools */
-	if (hp_total != 0 && ab_total != 0) {
-		dd_dev_err(dd, "All send context memory pools must be described as either hectopercent or blocks, no mixing between pools\n");
+	if (cp_total != 0 && ab_total != 0) {
+		dd_dev_err(dd, "All send context memory pools must be described as either centipercent or blocks, no mixing between pools\n");
 		return -EINVAL;
 	}
 
 	/* if any percentages are present, they must add up to 100% x 100 */
-	if (hp_total != 0 && hp_total != 10000) {
-		dd_dev_err(dd, "Send context memory pool hectopercent is %d, expecting 10000\n", hp_total);
+	if (cp_total != 0 && cp_total != 10000) {
+		dd_dev_err(dd, "Send context memory pool centipercent is %d, expecting 10000\n", cp_total);
 		return -EINVAL;
 	}
 
@@ -264,8 +264,8 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		struct mem_pool_info *pi = &mem_pool_info[i];
 
 		/* % beats absolute blocks */
-		if (pi->hectopercent >= 0)
-			pi->blocks = (pool_blocks * pi->hectopercent) / 10000;
+		if (pi->centipercent >= 0)
+			pi->blocks = (pool_blocks * pi->centipercent) / 10000;
 
 		if (pi->blocks == 0 && pi->count != 0) {
 			dd_dev_err(dd, "Send context memory pool %d has %u contexts, but no blocks\n", i, pi->count);
