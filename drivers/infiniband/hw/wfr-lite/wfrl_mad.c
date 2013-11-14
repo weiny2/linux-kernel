@@ -2251,6 +2251,45 @@ static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 	return subn_get_stl_vlarb(smp, ibdev, port);
 }
 
+static int subn_get_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
+			u8 port)
+{
+	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *p = stl_get_smp_data(smp);
+
+	if (wfr_strict_am_processing) {
+		if (num_ports != 1 || port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
+
+	memcpy(p, vbct, sizeof(*vbct));
+	return reply_stl(smp);
+}
+
+static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
+			u8 port)
+{
+	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *p = stl_get_smp_data(smp);
+
+	if (wfr_strict_am_processing) {
+		if (num_ports != 1 || port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
+
+	memcpy(vbct, p, sizeof(*vbct));
+	return reply_stl(smp);
+}
+
+
 static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -4137,6 +4176,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case STL_ATTRIB_ID_VL_ARBITRATION:
 			ret = subn_get_stl_vlarb((struct stl_smp *)smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+			ret = subn_get_stl_bct((struct stl_smp *)smp, ibdev, port);
+			goto bail;
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: STL SubnGet(%x) not supported yet...\n",
@@ -4167,6 +4209,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_VL_ARBITRATION:
 			ret = subn_set_stl_vlarb((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+			ret = subn_set_stl_bct((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
