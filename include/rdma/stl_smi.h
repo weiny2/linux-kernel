@@ -90,6 +90,8 @@ struct stl_smp {
 #define STL_ATTRIB_ID_SC_TO_VLT_MAP		cpu_to_be16(0x0084)
 #define STL_ATTRIB_ID_SC_TO_VLNT_MAP		cpu_to_be16(0x0085)
 /* ... */
+#define STL_ATTRIB_ID_PORT_STATE_INFO		cpu_to_be16(0x0087)
+/* ... */
 #define STL_ATTRIB_ID_BUFFER_CONTROL_TABLE	cpu_to_be16(0x008A)
 /* ... */
 
