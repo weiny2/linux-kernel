@@ -83,3 +83,5 @@ processor-$(CONFIG_PROCESSOR_EXTERNAL_CONTROL) += processor_perflib.o processor_
 obj-$(CONFIG_ACPI_PROCESSOR_AGGREGATOR) += acpi_pad.o
 
 obj-$(CONFIG_ACPI_APEI)		+= apei/
+
+obj-$(CONFIG_ACPI_EXTLOG)	+= acpi_extlog.o
