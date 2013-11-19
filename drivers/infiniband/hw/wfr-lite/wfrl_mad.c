@@ -61,6 +61,10 @@ static unsigned wfr_fake_mtu = 0;
 module_param_named(fake_mtu, wfr_fake_mtu, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(fake_mtu, "Set a fake MTU value to show in STLPortInfo");
 
+static unsigned wfr_initial_vlflow_disable_mask = 0x00008000; // Default to VL15 disabled (bit 15)
+module_param_named(initial_vlflow_disable_mask, wfr_initial_vlflow_disable_mask, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(initial_vlflow_disable_mask, "Set initial wfr_initial_vlflow_disable_mask for port initialization");
+
 static unsigned wfr_strict_am_processing = 1;
 module_param_named(strict_am_processing, wfr_strict_am_processing, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(strict_am_processing, "Default == on ; enables Attribute Modifier checking "
@@ -209,6 +213,8 @@ static void linkup_default(u8 port)
 	buffer_units |= (wfr_buffer_unit_credit_ack << 3) & STL_PI_MASK_BUF_UNIT_CREDIT_ACK;
 	buffer_units |= (vl15_init << 11) & STL_PI_MASK_BUF_UNIT_VL15_INIT;
 	vpi->buffer_units = cpu_to_be32(buffer_units);
+
+	vpi->flow_control_mask = cpu_to_be32(wfr_initial_vlflow_disable_mask);
 }
 
 /*
@@ -1170,7 +1176,6 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	 * what not
 	 */
 	pi->lid = cpu_to_be32(ppd->lid);
-	//pi->flow_control_mask = cpu_to_be32(0);
 
 	/* Only return the mkey if the protection field allows it. */
 	if (!(smp->method == IB_MGMT_METHOD_GET &&
@@ -1695,6 +1700,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			virtual_port_linkup_init(port);
 		}
 	}
+
+	virtual_stl[port-1].port_info.flow_control_mask = pi->flow_control_mask;
 
 	wfr_send_stl_virt_link_info(ibdev, port, vpi->port_states.portphysstate_portstate,
 				dd->pport->guid,
