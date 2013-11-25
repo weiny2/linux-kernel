@@ -54,6 +54,10 @@ uint kdeth_qp;
 module_param_named(kdeth_qp, kdeth_qp, uint, S_IRUGO);
 MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
 
+static uint num_vls = 4;
+module_param(num_vls, uint, S_IRUGO);
+MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
+
 /* TODO: temporary */
 static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
@@ -2404,6 +2408,29 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd[i].link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
 		ppd[i].link_width_enabled = IB_WIDTH_4X;
 		ppd[i].link_speed_enabled = ppd->link_speed_supported;
+
+		switch (num_vls) {
+		case 1:
+			ppd->vls_supported = IB_VL_VL0;
+			break;
+		case 2:
+			ppd->vls_supported = IB_VL_VL0_1;
+			break;
+		default:
+			dd_dev_info(dd,
+				    "Invalid num_vls %u, using 4 VLs\n",
+				    num_vls);
+			num_vls = 4;
+			/* fall through */
+		case 4:
+			ppd->vls_supported = IB_VL_VL0_3;
+			break;
+		case 8:
+			ppd->vls_supported = IB_VL_VL0_7;
+			break;
+		}
+		ppd->vls_operational = ppd->vls_supported;
+
 		/*
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
