@@ -2411,10 +2411,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 		switch (num_vls) {
 		case 1:
-			ppd->vls_supported = IB_VL_VL0;
+			ppd[i].vls_supported = IB_VL_VL0;
 			break;
 		case 2:
-			ppd->vls_supported = IB_VL_VL0_1;
+			ppd[i].vls_supported = IB_VL_VL0_1;
 			break;
 		default:
 			dd_dev_info(dd,
@@ -2423,13 +2423,13 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			num_vls = 4;
 			/* fall through */
 		case 4:
-			ppd->vls_supported = IB_VL_VL0_3;
+			ppd[i].vls_supported = IB_VL_VL0_3;
 			break;
 		case 8:
-			ppd->vls_supported = IB_VL_VL0_7;
+			ppd[i].vls_supported = IB_VL_VL0_7;
 			break;
 		}
-		ppd->vls_operational = ppd->vls_supported;
+		ppd[i].vls_operational = ppd->vls_supported;
 
 		/*
 		 * Set the initial values to reasonable default, will be set
