@@ -87,6 +87,9 @@ static unsigned wfr_buffer_unit_credit_ack = 0;
 module_param_named(buffer_unit_credit_ack, wfr_buffer_unit_credit_ack, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(buffer_unit_credit_ack, "Set a fake BufferUnit.CreditAck (8 max) value to show in STLPortInfo");
 
+static unsigned wfr_overall_buffer_space = 144 * 1024; /* 144K */
+module_param_named(overall_buffer_space, wfr_overall_buffer_space, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(overall_buffer_space, "Set a fake PortInfo.OverallBufferSpace (IN BYTES); actual value in PortInfo _will_ be adjusted based on buffer_unit_buf_alloc");
 
 /** =========================================================================
  * For STL simulation environment we fake some STL values
@@ -189,13 +192,18 @@ static void linkup_default_mtu(u8 port)
 	}
 }
 
+static u16 get_bytes_per_AU(void)
+{
+	return (8 * (1 << wfr_buffer_unit_buf_alloc));
+}
+
 /**
  * We give VL15 2 * 2048 bufferspace
  * @return vl15_init value in "AU" units
  */
 static u16 get_vl15_init(void)
 {
-	return ((2048 * 2) / (8 * (1 << wfr_buffer_unit_buf_alloc)));
+	return ((2048 * 2) / get_bytes_per_AU());
 }
 
 static void linkup_default(u8 port)
@@ -215,6 +223,8 @@ static void linkup_default(u8 port)
 	vpi->buffer_units = cpu_to_be32(buffer_units);
 
 	vpi->flow_control_mask = cpu_to_be32(wfr_initial_vlflow_disable_mask);
+
+	vpi->overall_buffer_space = cpu_to_be16(wfr_overall_buffer_space / get_bytes_per_AU());
 }
 
 /*
