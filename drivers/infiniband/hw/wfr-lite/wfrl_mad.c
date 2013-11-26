@@ -91,6 +91,10 @@ static unsigned wfr_overall_buffer_space = 144 * 1024; /* 144K */
 module_param_named(overall_buffer_space, wfr_overall_buffer_space, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(overall_buffer_space, "Set a fake PortInfo.OverallBufferSpace (IN BYTES); actual value in PortInfo _will_ be adjusted based on buffer_unit_buf_alloc");
 
+static unsigned wfr_shared_space_sup = 1;
+module_param_named(shared_space_sup, wfr_shared_space_sup, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(shared_space_sup, "Set if shared space is supported");
+
 /** =========================================================================
  * For STL simulation environment we fake some STL values
  */
@@ -225,6 +229,12 @@ static void linkup_default(u8 port)
 	vpi->flow_control_mask = cpu_to_be32(wfr_initial_vlflow_disable_mask);
 
 	vpi->overall_buffer_space = cpu_to_be16(wfr_overall_buffer_space / get_bytes_per_AU());
+
+	if (wfr_shared_space_sup) {
+		vpi->stl_cap_mask |= cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
+	} else {
+		vpi->stl_cap_mask &= ~cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
+	}
 }
 
 /*
