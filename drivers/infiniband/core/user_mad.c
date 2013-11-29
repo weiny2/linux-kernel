@@ -718,6 +718,7 @@ out:
 	return ret;
 }
 
+static struct ib_user_mad_reg_req2 zero_ureq = { 0 };
 static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 {
 	struct ib_user_mad_reg_req2 ureq;
@@ -737,6 +738,14 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 
 	if (copy_from_user(&ureq, arg, sizeof(ureq))) {
 		ret = -EFAULT;
+		goto out;
+	}
+
+	if (ureq.res != 0
+	    || memcmp(ureq.res2, zero_ureq.res2, sizeof(ureq.res2))) {
+		printk(KERN_WARNING "user_mad: ib_umad_reg_agent2 failed: "
+			"reserved fields set\n");
+		ret = -EINVAL;
 		goto out;
 	}
 
