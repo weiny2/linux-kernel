@@ -513,14 +513,14 @@ static ssize_t ib_umad_write(struct file *filp, const char __user *buf,
 	rmpp_mad = (struct ib_rmpp_mad *) packet->mad.data;
 	hdr_len = ib_get_mad_data_offset(rmpp_mad->base.mad_hdr.mgmt_class);
 
-	copy_offset = IB_MGMT_MAD_HDR;
-	rmpp_active = 0;
-
 	if (ib_is_mad_class_rmpp(rmpp_mad->base.mad_hdr.mgmt_class)
 	    && ib_mad_kernel_rmpp_agent(agent)) {
 		copy_offset = IB_MGMT_RMPP_HDR;
 		rmpp_active = ib_get_rmpp_flags(&rmpp_mad->base.rmpp_hdr) &
 						IB_MGMT_RMPP_FLAG_ACTIVE;
+	} else {
+		copy_offset = IB_MGMT_MAD_HDR;
+		rmpp_active = 0;
 	}
 
 	base_version = ((struct ib_mad_hdr*)&packet->mad.data)->base_version;
