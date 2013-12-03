@@ -1060,7 +1060,7 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 }
 
 static int get_base_info(struct qib_ctxtdata *rcd,
-				  struct qib_base_info *kinfo)
+				  struct hfi_base_info *kinfo)
 {
 	if (print_unimplemented)
 		dd_dev_info(rcd->dd, "%s: not implemented\n", __func__);
@@ -1293,6 +1293,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
 		dd_dev_info(dd, "    QIB_RCVCTRL_TIDFLOW_DIS\n");
 
+	/* XXX (Mitko): Do we want to use the shadow value here? */
 	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
 	/* if the context already enabled, don't do the extra steps */
 	if ((op & QIB_RCVCTRL_CTXT_ENB)
@@ -1359,7 +1360,8 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
 	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
-	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcvctrl);
+	rcd->rcvctrl = rcvctrl;
+	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);
 
 	/*
 	 * This must be done after we transition a context to enabled
@@ -1522,11 +1524,11 @@ static void initvl15_bufs(struct hfi_devdata *dd)
  *	rcvegrcnt	 (now eager_count)
  *	rcvegr_tid_base  (now eager_base)
  */
-static void init_ctxt(struct qib_ctxtdata *rcd)
+static int init_ctxt(struct qib_ctxtdata *rcd, u16 egrcnt)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	u64 reg;
 	u32 context = rcd->ctxt;
+	int ret = 0;
 
 	dd_dev_info(rcd->dd, "%s: setting up context %d\n", __func__, context);
 	/*
@@ -1536,34 +1538,20 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	 * This requires that the count be divisible by 4 as the expected
 	 * array base and count must be divisible by 2.
 	 */
-	rcd->eager_count = dd->rcv_entries / 2;
+	//rcd->eager_count = dd->rcv_entries / 2;
+	rcd->eager_count = egrcnt;
 	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES)
 		rcd->eager_count = WFR_MAX_EAGER_ENTRIES;
-	rcd->expected_count = dd->rcv_entries / 2;
+	rcd->expected_count = dd->rcv_entries - rcd->eager_count;
 	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
 		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
 	rcd->eager_base = (dd->rcv_entries * context);
 	rcd->expected_base = rcd->eager_base + rcd->eager_count;
-	BUG_ON(rcd->expected_base % 2 == 1);	/* must be even */
-	BUG_ON(rcd->expected_count % 2 == 1);	/* must be even */
+	if ((rcd->expected_base % 2 == 1) ||
+	    (rcd->expected_count % 2 == 1))	/* must be even */
+		ret = -EINVAL;
 
-	/*
-	 * These values are per-context:
-	 *	RcvHdrCnt
-	 *	RcvHdrEntSize
-	 *	RcvHdrSize
-	 * For now, all contexts get the same values from dd.
-	 * TODO: optimize these on a per-context basis.
-	 */
-	reg = (dd->rcvhdrcnt & WFR_RCV_HDR_CNT_CNT_MASK)
-		<< WFR_RCV_HDR_CNT_CNT_SHIFT;
-	write_kctxt_csr(dd, context, WFR_RCV_HDR_CNT, reg);
-	reg = (dd->rcvhdrentsize & WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
-		<< WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
-	write_kctxt_csr(dd, context, WFR_RCV_HDR_ENT_SIZE, reg);
-	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
-		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
-	write_kctxt_csr(dd, context, WFR_RCV_HDR_SIZE, reg);
+	return ret;
 }
 
 static int tempsense_rd(struct hfi_devdata *dd, int regnum)

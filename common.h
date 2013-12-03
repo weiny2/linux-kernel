@@ -104,19 +104,10 @@ enum hfi_ureg {
 };
 
 /* bit values for spi_runtime_flags */
-#define QIB_RUNTIME_PCIE                0x0002
-#define QIB_RUNTIME_FORCE_WC_ORDER      0x0004
-#define QIB_RUNTIME_RCVHDR_COPY         0x0008
-#define QIB_RUNTIME_MASTER              0x0010
-#define QIB_RUNTIME_RCHK                0x0020
-#define QIB_RUNTIME_NODMA_RTAIL         0x0080
-#define QIB_RUNTIME_SPECIAL_TRIGGER     0x0100
-#define QIB_RUNTIME_SDMA                0x0200
-#define QIB_RUNTIME_FORCE_PIOAVAIL      0x0400
-#define QIB_RUNTIME_PIO_REGSWAPPED      0x0800
-#define QIB_RUNTIME_CTXT_MSB_IN_QP      0x1000
-#define QIB_RUNTIME_CTXT_REDIRECT       0x2000
-#define QIB_RUNTIME_HDRSUPP             0x4000
+#define HFI_RUNTIME_NODMA_RTAIL         0x01
+#define HFI_RUNTIME_SDMA                0x02
+#define HFI_RUNTIME_FORCE_PIOAVAIL      0x04
+#define HFI_RUNTIME_HDRSUPP             0x08
 
 /*
  * This structure is returned by qib_userinit() immediately after
@@ -128,140 +119,67 @@ enum hfi_ureg {
  * programs, since the 64 bit * bit kernel requires the user code
  * to have matching offsets
  */
-struct qib_base_info {
+struct hfi_base_info {
+	/* per-chip and other runtime features bitmap (HFI_RUNTIME_*) */
+	__u32 runtime_flags;
 	/* version of hardware, for feature checking. */
-	__u32 spi_hw_version;
+	__u32 hw_version;
 	/* version of software, for feature checking. */
-	__u32 spi_sw_version;
-	/* QLogic_IB context assigned, goes into sent packets */
-	__u16 spi_ctxt;
-	__u16 spi_subctxt;
+	__u32 sw_version;
+	/* context and subcontext assigned */
+	__u16 context;
+	__u16 subcontext;
 	/*
 	 * IB MTU, packets IB data must be less than this.
 	 * The MTU is in bytes, and will be a multiple of 4 bytes.
 	 */
-	__u32 spi_mtu;
+	__u32 mtu;
 	/*
-	 * Size of a PIO buffer.  Any given packet's total size must be less
-	 * than this (in words).  Included is the starting control word, so
-	 * if 513 is returned, then total pkt size is 512 words or less.
+	 * The special QP (queue pair) value that identifies PSM
+	 * protocol packet from standard IB packets.
 	 */
-	__u32 spi_piosize;
-	/* size of the TID cache in qlogic_ib, in entries */
-	__u32 spi_tidcnt;
-	/* size of the TID Eager list in qlogic_ib, in entries */
-	__u32 spi_tidegrcnt;
-	/* size of a single receive header queue entry in words. */
-	__u32 spi_rcvhdrent_size;
-	/*
-	 * Count of receive header queue entries allocated.
-	 * This may be less than the spu_rcvhdrcnt passed in!.
-	 */
-	__u32 spi_rcvhdr_cnt;
-
-	/* per-chip and other runtime features bitmap (QIB_RUNTIME_*) */
-	__u32 spi_runtime_flags;
-
-	/* address where hardware receive header queue is mapped */
-	__u64 spi_rcvhdr_base;
-
-	/* user program. */
-
-	/* base address of eager TID receive buffers used by hardware. */
-	__u64 spi_rcv_egrbufs;
-
-	/* Allocated by initialization code, not by protocol. */
-
-	/*
-	 * Size of each TID buffer in host memory, starting at
-	 * spi_rcv_egrbufs.  The buffers are virtually contiguous.
-	 */
-	__u32 spi_rcv_egrbufsize;
-	/*
-	 * The special QP (queue pair) value that identifies an qlogic_ib
-	 * protocol packet from standard IB packets.  More, probably much
-	 * more, to be added.
-	 */
-	__u32 spi_qpair;
-
-	/*
-	 * User register base for init code, not to be used directly by
-	 * protocol or applications.  Always points to chip registers,
-	 * for normal or shared context.
-	 */
-	__u64 spi_uregbase;
-	/*
-	 * Maximum buffer size in bytes that can be used in a single TID
-	 * entry (assuming the buffer is aligned to this boundary).  This is
-	 * the minimum of what the hardware and software support Guaranteed
-	 * to be a power of 2.
-	 */
-	__u32 spi_tid_maxsize;
-	/*
-	 * alignment of each pio send buffer (byte count
-	 * to add to spi_piobufbase to get to second buffer)
-	 */
-	__u32 spi_pioalign;
-	/*
-	 * The index of the first pio buffer available to this process;
-	 * needed to do lookup in spi_pioavailaddr; not added to
-	 * spi_piobufbase.
-	 */
-	__u32 spi_pioindex;
-	 /* number of buffers mapped for this process */
-	__u32 spi_piocnt;
-
+	__u16 bthqp;
+	/* PIO credit return address, */
+	__u64 sc_credits_addr;
 	/*
 	 * Base address of writeonly pio buffers for this process.
-	 * Each buffer has spi_piosize words, and is aligned on spi_pioalign
-	 * boundaries.  spi_piocnt buffers are mapped from this address
+	 * Each buffer has sendpio_credits*64 bytes.
 	 */
-	__u64 spi_piobufbase;
-
+	__u64 pio_bufbase_sop;
 	/*
-	 * Base address of readonly memory copy of the pioavail registers.
-	 * There are 2 bits for each buffer.
+	 * Base address of writeonly pio buffers for this process.
+	 * Each buffer has sendpio_credits*64 bytes.
 	 */
-	__u64 spi_pioavailaddr;
-
+	__u64 pio_bufbase;
+	/* address where receive buffer queue is mapped into */
+	__u64 rcvhdr_bufbase;
+	/* base address of Eager receive buffers. */
+	__u64 rcvegr_bufbase;
+	/* base address of SDMA completion ring */
+	__u64 sdma_comp_bufbase;
 	/*
-	 * Address where driver updates a copy of the interface and driver
-	 * status (QIB_STATUS_*) as a 64 bit value.  It's followed by a
-	 * link status qword (formerly combined with driver status), then a
-	 * string indicating hardware error, if there was one.
+	 * User register base for init code, not to be used directly by
+	 * protocol or applications.  Always maps real chip register space.
+	 * the register addresses are:
+	 * ur_rcvhdrhead, ur_rcvhdrtail, ur_rcvegrhead, ur_rcvegrtail,
+	 * ur_rcvtidflow
 	 */
-	__u64 spi_status;
-
-	/* number of chip ctxts available to user processes */
-	__u32 spi_nctxts;
-	__u16 spi_unit; /* unit number of chip we are using */
-	__u16 spi_port; /* IB port number we are using */
-	/* num bufs in each contiguous set */
-	__u32 spi_rcv_egrperchunk;
-	/* size in bytes of each contiguous set */
-	__u32 spi_rcv_egrchunksize;
-	/* total size of mmap to cover full rcvegrbuffers */
-	__u32 spi_rcv_egrbuftotlen;
-	__u32 spi_rhf_offset; /* dword offset in hdrqent for rcvhdr flags */
-	/* address of readonly memory copy of the rcvhdrq tail register. */
-	__u64 spi_rcvhdr_tailaddr;
-
-	/*
+        __u64 user_regbase;
+	/* status page */
+	__u64 status_bufbase;
+        /*
 	 * shared memory pages for subctxts if ctxt is shared; these cover
 	 * all the processes in the group sharing a single context.
 	 * all have enough space for the num_subcontexts value on this job.
 	 */
-	__u64 spi_subctxt_uregbase;
-	__u64 spi_subctxt_rcvegrbuf;
-	__u64 spi_subctxt_rcvhdr_base;
-
-	/* shared memory page for send buffer disarm status */
-	__u64 spi_sendbuf_status;
-} __attribute__ ((aligned(8)));
+	__u64 subctxt_uregbase;
+	__u64 subctxt_rcvegrbuf;
+	__u64 subctxt_rcvhdrbuf;
+};
 
 /*
  * This version number is given to the driver by the user code during
- * initialization in the spu_userversion field of qib_user_info, so
+ * initialization in the spu_userversion field of hfi_user_info, so
  * the driver can check for compatibility with user code.
  *
  * The major version changes when data structures
@@ -295,7 +213,7 @@ struct qib_base_info {
  * The high bit is 0 for non-QLogic and 1 for QLogic-built/supplied.
  *
  * It's returned by the driver to the user code during initialization in the
- * spi_sw_version field of qib_base_info, so the user code can in turn
+ * spi_sw_version field of hfi_base_info, so the user code can in turn
  * check for compatibility with the kernel.
 */
 #define QIB_KERN_SWVERSION ((QIB_KERN_TYPE << 31) | QIB_USER_SWVERSION)
@@ -319,11 +237,11 @@ struct qib_base_info {
  * across ports and HCAs, using different algorithims.  WITHIN is
  * the old default, prior to this mechanism.
  */
-#define QIB_PORT_ALG_ACROSS 0 /* round robin contexts across HCAs, then
-			       * ports; this is the default */
-#define QIB_PORT_ALG_WITHIN 1 /* use all contexts on an HCA (round robin
-			       * active ports within), then next HCA */
-#define QIB_PORT_ALG_COUNT 2 /* number of algorithm choices */
+#define HFI_ALG_ACROSS 0 /* round robin contexts across HCAs, then
+			  * ports; this is the default */
+#define HFI_ALG_WITHIN 1 /* use all contexts on an HCA (round robin
+			  * active ports within), then next HCA */
+#define HFI_ALG_COUNT  2 /* number of algorithm choices */
 
 /*
  * This structure is passed to qib_userinit() to tell the driver where
@@ -331,65 +249,54 @@ struct qib_base_info {
  * fields must remain unchanged, for binary compatibility.  It can
  * be extended, if userversion is changed so user code can tell, if needed
  */
-struct qib_user_info {
+struct hfi_user_info {
 	/*
 	 * version of user software, to detect compatibility issues.
-	 * Should be set to QIB_USER_SWVERSION.
+	 * Should be set to HFI_USER_SWVERSION.
 	 */
-	__u32 spu_userversion;
-
-	__u32 _spu_unused2;
-
-	/* size of struct base_info to write to */
-	__u32 spu_base_info_size;
-
-	__u32 spu_port_alg; /* which QIB_PORT_ALG_*; unused user minor < 11 */
-
+	__u32 userversion;
+	/* job key to program the send context and receive context. */
+	__u16 job_key;
+	/*
+	 * context group recommendation, driver decides how to use it.
+	 * 0: 8 groups (no grouping); 1: 4 groups; 2: 2 groups;
+	 * 3: 1 group (max grouping);
+	 */
+	__u16 context_group;
+	/*
+	 * If multi-packets per eager entry, driver should program
+	 * accordingly.
+	 */
+	__u16 rcvegr_multipackets;
+	/* HFI selection algorithm, if unit has not selected */
+	__u16 hfi_alg;
 	/*
 	 * If two or more processes wish to share a context, each process
-	 * must set the spu_subctxt_cnt and spu_subctxt_id to the same
-	 * values.  The only restriction on the spu_subctxt_id is that
+	 * must set the subcontext_cnt and subcontext_id to the same
+	 * values.  The only restriction on the subcontext_id is that
 	 * it be unique for a given node.
 	 */
-	__u16 spu_subctxt_cnt;
-	__u16 spu_subctxt_id;
-
-	__u32 spu_port; /* IB port requested by user if > 0 */
-
-	/*
-	 * address of struct base_info to write to
-	 */
-	__u64 spu_base_info;
-
-} __attribute__ ((aligned(8)));
+	__u16 subcontext_cnt;
+	__u16 subcontext_id;
+};
 
 /* User commands. */
+#define HFI_CMD_ASSIGN_CTXT     1	/* allocate HCA and context */
+#define HFI_CMD_CTXT_INFO	2	/* find out what resources we got */
+#define HFI_CMD_CTXT_SETUP      3
+#define HFI_CMD_USER_INFO 	4	/* set up userspace */
+#define HFI_CMD_TID_UPDATE	5	/* update expected TID entries */
+#define HFI_CMD_TID_FREE	6	/* free expected TID entries */
+#define HFI_CMD_CREDIT_UPD	7	/* force an update of PIO credit */
+#define HFI_CMD_SDMA_STATUS_UPD 8       /* force update of SDMA status ring */
 
-/* 16 available, was: old set up userspace (for old user code) */
-#define QIB_CMD_CTXT_INFO       17      /* find out what resources we got */
-#define QIB_CMD_RECV_CTRL       18      /* control receipt of packets */
-#define QIB_CMD_TID_UPDATE      19      /* update expected TID entries */
-#define QIB_CMD_TID_FREE        20      /* free expected TID entries */
-#define QIB_CMD_SET_PART_KEY    21      /* add partition key */
-/* 22 available, was: return info on slave processes (for old user code) */
-#define QIB_CMD_ASSIGN_CTXT     23      /* allocate HCA and ctxt */
-#define QIB_CMD_USER_INIT       24      /* set up userspace */
-#define QIB_CMD_UNUSED_1        25
-#define QIB_CMD_UNUSED_2        26
-#define QIB_CMD_PIOAVAILUPD     27      /* force an update of PIOAvail reg */
-#define QIB_CMD_POLL_TYPE       28      /* set the kind of polling we want */
-#define QIB_CMD_ARMLAUNCH_CTRL  29      /* armlaunch detection control */
-/* 30 is unused */
-#define QIB_CMD_SDMA_INFLIGHT   31      /* sdma inflight counter request */
-#define QIB_CMD_SDMA_COMPLETE   32      /* sdma completion counter request */
-/* 33 available, was a testing feature  */
-#define QIB_CMD_DISARM_BUFS     34      /* disarm send buffers w/ errors */
-#define QIB_CMD_ACK_EVENT       35      /* ack & clear bits */
-#define QIB_CMD_CPUS_LIST       36      /* list of cpus allocated, for pinned
-					 * processes: qib_cpus_list */
+#define HFI_CMD_RECV_CTRL	9	/* control receipt of packets */
+#define HFI_CMD_POLL_TYPE	10	/* set the kind of polling we want */
+#define HFI_CMD_SET_PART_KEY	11	/* add partition key */
+#define HFI_CMD_ACK_EVENT       12	/* ack & clear bits *spi_sendbuf_status */
 
 /*
- * QIB_CMD_ACK_EVENT obsoletes QIB_CMD_DISARM_BUFS, but we keep it for
+ * HFI_CMD_ACK_EVENT obsoletes HFI_CMD_DISARM_BUFS, but we keep it for
  * compatibility with libraries from previous release.   The ACK_EVENT
  * will take appropriate driver action (if any, just DISARM for now),
  * then clear the bits passed in as part of the mask.  These bits are
@@ -416,73 +323,78 @@ struct qib_user_info {
 #define QIB_POLL_TYPE_ANYRCV     0x0
 #define QIB_POLL_TYPE_URGENT     0x1
 
-struct qib_ctxt_info {
+struct hfi_ctxt_info {
 	__u16 num_active;       /* number of active units */
 	__u16 unit;             /* unit (chip) assigned to caller */
-	__u16 port;             /* IB port assigned to caller (1-based) */
 	__u16 ctxt;             /* ctxt on unit assigned to caller */
 	__u16 subctxt;          /* subctxt on unit assigned to caller */
-	__u16 num_ctxts;        /* number of ctxts available on unit */
-	__u16 num_subctxts;     /* number of subctxts opened on ctxt */
+	__u16 rcvtids;          /* number of Rcv TIDs for this context */
+	__u16 credits;          /* number of PIO credits for this context */
+	__u16 numa_node;        /* NUMA node of the assigned device */
 	__u16 rec_cpu;          /* cpu # for affinity (ffff if none) */
 };
 
-struct qib_tid_info {
-	__u32 tidcnt;
-	/* make structure same size in 32 and 64 bit */
-	__u32 tid__unused;
-	/* virtual address of first page in transfer */
-	__u64 tidvaddr;
-	/* pointer (same size 32/64 bit) to __u16 tid array */
-	__u64 tidlist;
+struct hfi_ctxt_setup {
+	__u16 egrtids;          /* number of RcvArray entries for Eager Rcvs */
+	__u16 rcvegr_size;      /* size of Eager buffers */
+	__u16 rcvhdrq_cnt;      /* number of RcvHdrQ entries */
+	__u16 rcvhdrq_entsize;  /* size (in bytes) for each RcvHdrQ entry */
+	__u16 sdma_ring_size;   /* number of entries in SDMA request ring */
+};
 
+struct hfi_tid_info {
+	/* virtual address of first page in transfer */
+	/* in free tids, this is casted to count */
+	__u64 tidvaddr;
+	/* pointer to __u16 tid array */
+	/* this array is bigger enough */
+	__u64 tidlist;
 	/*
-	 * pointer (same size 32/64 bit) to bitmap of TIDs used
-	 * for this call; checked for being large enough at open
+	 * pointer to __u32 length array
+	 * this array is bigger enough so driver should
+	 * write tidlength[ntids] with total programmed bytes.
+	 */
+	__u64 tidlength;
+	/*
+	 * pointer to bitmap of TIDs used for this call;
+	 * checked for being large enough at open
 	 */
 	__u64 tidmap;
 };
 
-struct qib_cmd {
-	__u32 type;                     /* command type */
-	union {
-		struct qib_tid_info tid_info;
-		struct qib_user_info user_info;
+struct hfi_cmd {
+	__u32 type;        /* command type */
+	__u32 len;         /* length of struct pointed to by add */
+	__u64 addr;        /* pointer to user structure */
+};
 
-		/*
-		 * address in userspace where we should put the sdma
-		 * inflight counter
-		 */
-		__u64 sdma_inflight;
-		/*
-		 * address in userspace where we should put the sdma
-		 * completion counter
-		 */
-		__u64 sdma_complete;
-		/* address in userspace of struct qib_ctxt_info to
-		   write result to */
-		__u64 ctxt_info;
-		/* enable/disable receipt of packets */
-		__u32 recv_ctrl;
-		/* enable/disable armlaunch errors (non-zero to enable) */
-		__u32 armlaunch_ctrl;
-		/* partition key to set */
-		__u16 part_key;
-		/* user address of __u32 bitmask of active slaves */
-		__u64 slave_mask_addr;
-		/* type of polling we want */
-		__u16 poll_type;
-		/* back pressure enable bit for one particular context */
-		__u8 ctxt_bp;
-		/* qib_user_event_ack(), IPATH_EVENT_* bits */
-		__u64 event_mask;
-	} cmd;
+enum hfi_sdma_comp_state {
+	FAILED = 0,
+	DONE,
+	QUEUED
+};
+
+/*
+ * SDMA completion ring entry
+ */
+struct hfi_sdma_comp_entry {
+	enum hfi_sdma_comp_state status;
+	int errno;
+};
+
+/*
+ * Device status and notifications from driver to user-space.
+ */
+struct hfi_status {
+	__u64 events;      /* signal user space of driver/chip events */
+	__u64 devstatus;   /* device/hw status bits */
+	__u64 pstatus;     /* port state and status bits */
+	char *freezemsg;
 };
 
 struct qib_iovec {
 	/* Pointer to data, but same size 32 and 64 bit */
 	__u64 iov_base;
-
 	/*
 	 * Length of data; don't need 64 bits, but want
 	 * qib_sendpkt to remain same size as before 32 bit changes, so...

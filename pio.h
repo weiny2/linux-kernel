@@ -134,6 +134,7 @@ u64 create_pbc(struct send_context *, u64, u32, u32, u32);
 struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 			pio_release_cb cb, void *arg);
 void sc_release_update(struct send_context *sc);
+void sc_return_credits(struct send_context *sc);
 void sc_group_release_update(struct send_context *sc);
 
 /* global PIO send control operations */

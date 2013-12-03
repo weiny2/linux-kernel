@@ -232,6 +232,69 @@ DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
 	TP_PROTO(struct hfi_devdata *dd, struct qib_ib_header *hdr),
 	TP_ARGS(dd, hdr));
 
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi_ctxts
+
+#define UCTXT_DATA(ptr) ((struct qib_ctxtdata *)ptr)
+#define UCTXT_FMT \
+	"cred:%u, credaddr:%p, piobase:%p, rcvhdr_cnt:%u, " \
+	"rcvbase:0x%llx, rcvegrc:%u, rcvegrb:0x%llx"
+TRACE_EVENT(hfi_uctxtdata,
+	    TP_PROTO(struct hfi_devdata *dd, struct qib_ctxtdata *uctxt),
+	    TP_ARGS(dd, uctxt),
+	    TP_STRUCT__entry(
+		    DD_DEV_ENTRY
+		    __field(u64, uctxt)
+		    ),
+	    TP_fast_assign(
+		    DD_DEV_ASSIGN;
+		    __entry->uctxt = (u64)uctxt;
+		    ),
+	    TP_printk(
+		    "[%s] ctxt %u " UCTXT_FMT,
+		    __get_str(dev),
+		    UCTXT_DATA(__entry->uctxt)->ctxt,
+		    UCTXT_DATA(__entry->uctxt)->sc->credits,
+		    UCTXT_DATA(__entry->uctxt)->sc->hw_free,
+		    UCTXT_DATA(__entry->uctxt)->sc->base_addr,
+		    UCTXT_DATA(__entry->uctxt)->dd->rcvhdrcnt,
+		    (u64)UCTXT_DATA(__entry->uctxt)->rcvhdrq_phys,
+		    UCTXT_DATA(__entry->uctxt)->eager_count,
+		    (u64)UCTXT_DATA(__entry->uctxt)->rcvegrbuf_phys
+		    )
+	);
+
+#define CINFO_DATA(ptr) ((struct hfi_ctxt_setup *)ptr)
+#define CINFO_FMT \
+	"egrtids:%u, egr_size:%u, hdrq_cnt:%u, hdrq_size:%u, sdma_ring_size:%u"
+TRACE_EVENT(hfi_ctxt_setup,
+	    TP_PROTO(struct hfi_devdata *dd, unsigned ctxt, unsigned subctxt,
+		     struct hfi_ctxt_setup *cinfo),
+	    TP_ARGS(dd, ctxt, subctxt, cinfo),
+	    TP_STRUCT__entry(
+		    DD_DEV_ENTRY
+		    __field(unsigned, ctxt)
+		    __field(unsigned, subctxt)
+		    __field(u64, cinfo)
+		    ),
+	    TP_fast_assign(
+		    DD_DEV_ASSIGN;
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->cinfo = (u64)cinfo;
+		    ),
+	    TP_printk(
+		    "[%s] ctxt %u:%u " CINFO_FMT,
+		    __get_str(dev),
+		    __entry->ctxt,
+		    __entry->subctxt,
+		    CINFO_DATA(__entry->cinfo)->egrtids,
+		    CINFO_DATA(__entry->cinfo)->rcvegr_size,
+		    CINFO_DATA(__entry->cinfo)->rcvhdrq_cnt,
+		    CINFO_DATA(__entry->cinfo)->rcvhdrq_entsize,
+		    CINFO_DATA(__entry->cinfo)->sdma_ring_size
+		    )
+	);
 #endif /* __HFI_TRACE_H */
 
 #undef TRACE_INCLUDE_PATH

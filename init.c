@@ -110,6 +110,20 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			ret = -ENOMEM;
 			goto done;
 		}
+		/*
+		 * We can setup the kernel contexts here and now because they use
+		 * default values for all receive side memories. User contexts will
+		 * be handled differently.
+		 */
+		ret = hfi_setup_ctxt(rcd, dd->rcv_entries / 2, 0x8000,
+				     dd->rcvhdrcnt, dd->rcvhdrentsize);
+		if (ret < 0) {
+			dd_dev_err(dd,
+				   "Failed to setup kernel receive context, failing\n");
+			qib_free_ctxtdata(dd, rcd);
+			ret = -EFAULT;
+			goto done;
+		}
 		rcd->pkeys[0] = QIB_DEFAULT_P_KEY;
 		rcd->seq_cnt = 1;
 
@@ -143,32 +157,47 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 		rcd->cnt = 1;
 		rcd->ctxt = ctxt;
 		dd->rcd[ctxt] = rcd;
-
-		dd->f_init_ctxt(rcd);
-
-		/*
-		 * To avoid wasting a lot of memory, we allocate 32KB chunks
-		 * of physically contiguous memory, advance through it until
-		 * used up and then allocate more.  Of course, we need
-		 * memory to store those extra pointers, now.  32KB seems to
-		 * be the most that is "safe" under memory pressure
-		 * (creating large files and then copying them over
-		 * NFS while doing lots of MPI jobs).  The OOM killer can
-		 * get invoked, even though we say we can sleep and this can
-		 * cause significant system problems....
-		 */
-		rcd->rcvegrbuf_size = 0x8000;
-		rcd->rcvegrbufs_perchunk =
-			rcd->rcvegrbuf_size / dd->rcvegrbufsize;
-		rcd->rcvegrbuf_chunks = (rcd->eager_count +
-			rcd->rcvegrbufs_perchunk - 1) /
-			rcd->rcvegrbufs_perchunk;
-		BUG_ON(!is_power_of_2(rcd->rcvegrbufs_perchunk));
-		rcd->rcvegrbufs_perchunk_shift =
-			ilog2(rcd->rcvegrbufs_perchunk);
 	}
 	return rcd;
 }
+
+int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
+		   u16 hdrqcnt, u16 hdrqsize)
+{
+	struct hfi_devdata *dd = uctxt->dd;
+	int ret = 0;
+
+	ret = dd->f_init_ctxt(uctxt, egrtids);
+	if (ret)
+		goto done;
+
+	/*
+	 * To avoid wasting a lot of memory, we allocate 32KB chunks
+	 * of physically contiguous memory, advance through it until
+	 * used up and then allocate more.  Of course, we need
+	 * memory to store those extra pointers, now.  32KB seems to
+	 * be the most that is "safe" under memory pressure
+	 * (creating large files and then copying them over
+	 * NFS while doing lots of MPI jobs).  The OOM killer can
+	 * get invoked, even though we say we can sleep and this can
+	 * cause significant system problems....
+	 */
+	uctxt->rcvegrbuf_size = egrsize;
+	uctxt->rcvegrbufs_perchunk =
+		uctxt->rcvegrbuf_size / dd->rcvegrbufsize;
+	uctxt->rcvegrbuf_chunks = (uctxt->eager_count +
+				   uctxt->rcvegrbufs_perchunk - 1) /
+		uctxt->rcvegrbufs_perchunk;
+	if (!is_power_of_2(uctxt->rcvegrbufs_perchunk)) {
+		ret = -EFAULT;
+		goto done;
+	}
+	uctxt->rcvegrbufs_perchunk_shift =
+		ilog2(uctxt->rcvegrbufs_perchunk);
+done:
+	return ret;
+}
+
 
 /*
  * Common code for initializing the physical port structure.
@@ -518,6 +547,9 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		if (!rcd)
 			continue;
 
+		/* kernel contexts use the device defaults */
+		rcd->rcvhdrq_cnt = dd->rcvhdrcnt;
+		rcd->rcvhdrqentsize = dd->rcvhdrentsize;
 		lastfail = qib_create_rcvhdrq(dd, rcd);
 		if (!lastfail)
 			lastfail = qib_setup_eagerbufs(rcd);
@@ -1247,7 +1279,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (!initfail && !ret)
 		dd->flags |= QIB_INITTED;
 
-	j = qib_device_create(dd);
+	j = hfi_device_create(dd);
 	if (j)
 		dd_dev_err(dd, "Failed to create /dev devices: %d\n", -j);
 	j = qibfs_add(dd);
@@ -1262,7 +1294,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 			dd->f_quiet_serdes(dd->pport + pidx);
 		if (!j) {
 			(void) qibfs_remove(dd);
-			qib_device_remove(dd);
+			hfi_device_remove(dd);
 		}
 		if (!ret)
 			qib_unregister_ib_device(dd);
@@ -1307,7 +1339,7 @@ static void qib_remove_one(struct pci_dev *pdev)
 		dd_dev_err(dd, "Failed counters filesystem cleanup: %d\n",
 			    -ret);
 
-	qib_device_remove(dd);
+	hfi_device_remove(dd);
 
 	qib_postinit_cleanup(dd);
 }
@@ -1324,13 +1356,15 @@ static void qib_remove_one(struct pci_dev *pdev)
 int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 {
 	unsigned amt;
+	u64 reg;
 
 	if (!rcd->rcvhdrq) {
 		dma_addr_t phys_hdrqtail;
 		gfp_t gfp_flags;
 
-		amt = ALIGN(dd->rcvhdrcnt * dd->rcvhdrentsize *
+		amt = ALIGN(rcd->rcvhdrq_cnt * rcd->rcvhdrqentsize *
 			    sizeof(u32), PAGE_SIZE);
+
 		gfp_flags = (rcd->ctxt >= dd->first_user_ctxt) ?
 			GFP_USER : GFP_KERNEL;
 		rcd->rcvhdrq = dma_alloc_coherent(
@@ -1366,6 +1400,22 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 	memset(rcd->rcvhdrq, 0, rcd->rcvhdrq_size);
 	if (rcd->rcvhdrtail_kvaddr)
 		memset(rcd->rcvhdrtail_kvaddr, 0, PAGE_SIZE);
+
+	/*
+	 * These values are per-context:
+	 *	RcvHdrCnt
+	 *	RcvHdrEntSize
+	 *	RcvHdrSize
+	 */
+	reg = (rcd->rcvhdrq_cnt & WFR_RCV_HDR_CNT_CNT_MASK)
+		<< WFR_RCV_HDR_CNT_CNT_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_CNT, reg);
+	reg = (rcd->rcvhdrqentsize & WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
+		<< WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_ENT_SIZE, reg);
+	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
+		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_SIZE, reg);
 	return 0;
 
 bail_free:
@@ -1440,6 +1490,14 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 
 	rcd->rcvegr_phys = rcd->rcvegrbuf_phys[0];
 
+	/*
+	 * If multiple packets per RcvArray buffer is enabled in
+	 * the context's RcvCtrl register, use one RcvArray TID
+	 * per chunk.
+	 */
+	if (rcd->rcvctrl & WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK)
+		egrperchunk = 1;
+			
 	for (e = chunk = 0; chunk < rcd->rcvegrbuf_chunks; chunk++) {
 		dma_addr_t pa = rcd->rcvegrbuf_phys[chunk];
 		unsigned i;

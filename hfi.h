@@ -106,6 +106,8 @@ extern struct pci_driver qib_driver;
  * Below contains all data related to a single context (formerly called port).
  */
 struct qib_ctxtdata {
+	/* shadow the ctxt's RcvCtrl register */
+	u64 rcvctrl;
 	void **rcvegrbuf;
 	dma_addr_t *rcvegrbuf_phys;
 	/* rcvhdrq base, needs mmap before useful */
@@ -173,12 +175,14 @@ struct qib_ctxtdata {
 	u16 rcvegrbufs_perchunk_shift;
 	/* order for rcvegrbuf_pages */
 	size_t rcvegrbuf_size;
+	/* number of rcvhdrq entries */
+	u16 rcvhdrq_cnt;
+	/* size of each of the rcvhdrq entries */
+	u16 rcvhdrqentsize;
 	/* rcvhdrq size (for freeing) */
 	size_t rcvhdrq_size;
 	/* per-context flags for fileops/intr communication */
 	unsigned long flag;
-	/* next expected TID to check when looking for free */
-	u32 tidcursor;
 	/* WAIT_RCV that timed out, no interrupt */
 	u32 rcvwait_to;
 	/* WAIT_PIO that timed out, no interrupt */
@@ -726,7 +730,7 @@ struct hfi_devdata {
 	void (*f_cleanup)(struct hfi_devdata *);
 	void (*f_setextled)(struct qib_pportdata *, u32);
 	/* fill out chip-specific fields */
-	int (*f_get_base_info)(struct qib_ctxtdata *, struct qib_base_info *);
+	int (*f_get_base_info)(struct qib_ctxtdata *, struct hfi_base_info *);
 	/* free irq */
 	void (*f_free_irq)(struct hfi_devdata *);
 	struct qib_message_header *(*f_get_msgheader)
@@ -769,7 +773,7 @@ struct hfi_devdata {
 	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
 		char **, u64 **);
 	void (*f_initvl15_bufs)(struct hfi_devdata *);
-	void (*f_init_ctxt)(struct qib_ctxtdata *);
+	int (*f_init_ctxt)(struct qib_ctxtdata *, u16);
 	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
 
 	char *boardname; /* human readable board info */
@@ -963,12 +967,12 @@ struct hfi_devdata {
 #define QIB_CHASE_DIS_TIME msecs_to_jiffies(160)
 
 /* Private data for file operations */
-struct qib_filedata {
-	struct qib_ctxtdata *rcd;
+struct hfi_filedata {
+	struct qib_ctxtdata *uctxt;
 	unsigned subctxt;
 	unsigned tidcursor;
 	struct qib_user_sdma_queue *pq;
-	int rec_cpu_num; /* for cpu affinity; -1 if none */
+	int rec_cpu_num; // for cpu affinity; -1 if none
 };
 
 extern struct list_head qib_dev_list;
@@ -1007,6 +1011,7 @@ int qib_create_ctxts(struct hfi_devdata *dd);
 struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
 void qib_init_pportdata(struct qib_pportdata *, struct hfi_devdata *, u8, u8);
 void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
+int hfi_setup_ctxt(struct qib_ctxtdata *, u16, u16, u16, u16);
 
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
@@ -1023,13 +1028,13 @@ int qib_set_uevent_bits(struct qib_pportdata *, const int);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \
-	(((struct qib_filedata *)(fp)->private_data)->rcd)
+	(((struct hfi_filedata *)(fp)->private_data)->uctxt)
 #define subctxt_fp(fp) \
-	(((struct qib_filedata *)(fp)->private_data)->subctxt)
+	(((struct hfi_filedata *)(fp)->private_data)->subctxt)
 #define tidcursor_fp(fp) \
-	(((struct qib_filedata *)(fp)->private_data)->tidcursor)
+	(((struct hfi_filedata *)(fp)->private_data)->tidcursor)
 #define user_sdma_queue_fp(fp) \
-	(((struct qib_filedata *)(fp)->private_data)->pq)
+	(((struct hfi_filedata *)(fp)->private_data)->pq)
 
 static inline struct hfi_devdata *dd_from_ppd(struct qib_pportdata *ppd)
 {
@@ -1101,6 +1106,8 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 
 
 /* ctxt_flag bit offsets */
+                /* context has been setup */
+#define QIB_CTXT_SETUP_DONE 1
 		/* waiting for a packet to arrive */
 #define QIB_CTXT_WAITING_RCV   2
 		/* master has not finished initializing */
@@ -1240,8 +1247,8 @@ static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
 
 extern const char ib_qib_version[];
 
-int qib_device_create(struct hfi_devdata *);
-void qib_device_remove(struct hfi_devdata *);
+int hfi_device_create(struct hfi_devdata *);
+void hfi_device_remove(struct hfi_devdata *);
 
 int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 			  struct kobject *kobj);
