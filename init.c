@@ -73,6 +73,10 @@ unsigned qib_cc_table_size;
 module_param_named(cc_table_size, qib_cc_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(cc_table_size, "Congestion control table entries 0 (CCA disabled - default), min = 128, max = 1984");
 
+/* interrupt testing */
+unsigned int test_interrupts;
+module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
+
 struct workqueue_struct *qib_cq_wq;
 
 static void verify_interrupt(struct work_struct *work);
@@ -1305,12 +1309,15 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	qib_verify_pioperf(dd);
-#if 0
-	{
-	void force_all_interrupts(void);
-	force_all_interrupts();
+
+	/* interrupt testing */
+	if (test_interrupts) {
+		void force_all_interrupts(struct hfi_devdata *dd);
+		static atomic_t tested;
+
+		if (atomic_inc_return(&tested) <= test_interrupts)
+			force_all_interrupts(dd);
 	}
-#endif
 bail:
 	return ret;
 }

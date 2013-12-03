@@ -54,6 +54,10 @@ uint kdeth_qp;
 module_param_named(kdeth_qp, kdeth_qp, uint, S_IRUGO);
 MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
 
+static uint num_vls = 4;
+module_param(num_vls, uint, S_IRUGO);
+MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
+
 /* TODO: temporary */
 static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
@@ -331,27 +335,61 @@ static const char *cce_misc_names[] = {
 };
 
 /*
- * Return the CCE error interupt name.  Source will be < 64.
- *
- * This is called with an interrupt mask bit offset, but we can use
- * interrupt source numbers here because this is before the first
- * gap in the mask, so the values are the same.
+ * Return the miscellaneous error interrupt name.
  */
-static char *is_cce_name(char *buf, size_t bsize, unsigned int source)
+static char *is_misc_err_name(char *buf, size_t bsize, unsigned int source)
 {
-	if (source < WFR_IS_GENERAL_ERR_END)
+	if (source < ARRAY_SIZE(cce_misc_names))
 		strncpy(buf, cce_misc_names[source], bsize);
-	else if (source < WFR_IS_SENDCTXT_ERR_END)
-		snprintf(buf, bsize, "SendCtxtErrInt%u",
-					source-WFR_IS_SENDCTXT_ERR_START);
-	else if (source < WFR_IS_SDMA_ERR_END)
-		snprintf(buf, bsize, "SDmaEngErrInt%u",
-					source-WFR_IS_SDMA_ERR_START);
-	else if (source < WFR_IS_VAROUS_END)
-		snprintf(buf, bsize, "Various%u", source-WFR_IS_VAROUS_START);
 	else
-		snprintf(buf, bsize, "DCInt%u", source-WFR_IS_DC_START);
+		snprintf(buf, bsize, "Reserved%u", source + WFR_IS_GENERAL_ERR_START);
 
+	return buf;
+}
+
+/*
+ * Return the SDMA engine error interrupt name.
+ */
+static char *is_sdma_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SDmaEngErrInt%u", source);
+	return buf;
+}
+
+/*
+ * Return the send context error interrupt name.
+ */
+static char *is_sendctxt_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SendCtxtErrInt%u", source);
+	return buf;
+}
+
+static const char *various_names[] = {
+	"PcbInt",
+	"GpioAssertInt",
+	"Qsfp1Int",
+	"Qsfp2Int",
+};
+
+/*
+ * Return the various interrupt name.
+ */
+static char *is_various_name(char *buf, size_t bsize, unsigned int source)
+{
+	if (source < ARRAY_SIZE(various_names))
+		strncpy(buf, various_names[source], bsize);
+	else
+		snprintf(buf, bsize, "Reserved%u", source+WFR_IS_VARIOUS_START);
+	return buf;
+}
+
+/*
+ * Return the DC interrupt name.
+ */
+static char *is_dc_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "DCInt%u", source);
 	return buf;
 }
 
@@ -359,20 +397,27 @@ static const char *sdma_int_names[] = {
 	"SDmaInt",
 	"SdmaIdleInt",
 	"SdmaProgressInt",
-	"SdmaInvalidInt"
 };
 
 /*
- * Return the SDMA engine interrupt name.  Source will be < 64.
+ * Return the SDMA engine interrupt name.
  */
 static char *is_sdma_eng_name(char *buf, size_t bsize, unsigned int source)
 {
-	snprintf(buf, bsize, "%s%u", sdma_int_names[source/16], source%16);
+	/* what interrupt */
+	unsigned int what  = source / WFR_TXE_NUM_SDMA_ENGINES;
+	/* which engine */
+	unsigned int which = source % WFR_TXE_NUM_SDMA_ENGINES;
+
+	if (likely(what < 3))
+		snprintf(buf, bsize, "%s%u", sdma_int_names[what], which);
+	else
+		snprintf(buf, bsize, "Invalid SDMA interrupt %u", source);
 	return buf;
 }
 
 /*
- * Return the receive available interrupt name.  Source will be < 192.
+ * Return the receive available interrupt name.
  */
 static char *is_rcv_avail_name(char *buf, size_t bsize, unsigned int source)
 {
@@ -381,7 +426,7 @@ static char *is_rcv_avail_name(char *buf, size_t bsize, unsigned int source)
 }
 
 /*
- * Return the receive urgent interrupt name.  Source will be < 192.
+ * Return the receive urgent interrupt name.
  */
 static char *is_rcv_urgent_name(char *buf, size_t bsize, unsigned int source)
 {
@@ -390,7 +435,7 @@ static char *is_rcv_urgent_name(char *buf, size_t bsize, unsigned int source)
 }
 
 /*
- * Return the send credit interrupt name.  Source will be < 192.
+ * Return the send credit interrupt name.
  */
 static char *is_send_credit_name(char *buf, size_t bsize, unsigned int source)
 {
@@ -399,7 +444,16 @@ static char *is_send_credit_name(char *buf, size_t bsize, unsigned int source)
 }
 
 /*
- * Status is a mask of of the 3 possible interrupts for this engine.  It will
+ * Return the reserved interrupt name.
+ */
+static char *is_reserved_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "Reserved%u", source + WFR_IS_RESERVED_START);
+	return buf;
+}
+
+/*
+ * Status is a mask of the 3 possible interrupts for this engine.  It will
  * contain bits _only_ for this SDMA engine.  It will contain at least one
  * bit, it may contain more.
  */
@@ -417,7 +471,7 @@ static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
 }
 
 /*
- * CCE block "misc" interrupt.  Source is < 8.
+ * CCE block "misc" interrupt.  Source is < 16.
  */
 static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
 {
@@ -444,8 +498,9 @@ static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
 	case 7: /* TxeErr */
 		printk("%s: int%u - unimplemented\n", __func__ , source);
 		break;
-	case 3: /* Reserved */
-		dd_dev_err(dd, "Unexpected misc interrupt (3) - reserved\n");
+	default: /* Reserved */
+		dd_dev_err(dd, "Unexpected misc interrupt (%u) - reserved\n",
+			source);
 		break;
 	}
 }
@@ -536,28 +591,20 @@ static void handle_send_context_err(struct hfi_devdata *dd,
 }
 
 /*
- * CCE block send context error interrupt.  Source is < 20.
+ * Send context error interrupt.  Source (context) is < 160.
  *
- * One of the combined send context error interrupts have been raised.  Look
- * at the 8 corresponding send contexts for an error.
+ * Check and clear the context error status register.
  */
 static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 {
-	unsigned int context;
-	unsigned int c_end;
 	u64 err_status;
 
-	context = 8*source;
-	c_end = context + 8;
-	for (; context < c_end; context++) {
-		/* read and clear the error status */
-		err_status = read_kctxt_csr(dd, context,
-					WFR_SEND_CTXT_ERR_STATUS);
-		if (err_status) {
-			write_kctxt_csr(dd, context,
-					WFR_SEND_CTXT_ERR_CLEAR, err_status);
-			handle_send_context_err(dd, context, err_status);
-		}
+	/* read and clear the error status */
+	err_status = read_kctxt_csr(dd, source, WFR_SEND_CTXT_ERR_STATUS);
+	if (err_status) {
+		write_kctxt_csr(dd, source,
+				WFR_SEND_CTXT_ERR_CLEAR, err_status);
+		handle_send_context_err(dd, source, err_status);
 	}
 }
 
@@ -589,26 +636,7 @@ static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 }
 
 /*
- * CCE block interrupt.  Source is < 64.
- *
- * Subdivide and call more specialized handlers.
- */
-static void is_cce_int(struct hfi_devdata *dd, unsigned int source)
-{
-	if (source < WFR_IS_GENERAL_ERR_END)
-		is_misc_err_int(dd, source);
-	else if (source < WFR_IS_SENDCTXT_ERR_END)
-		is_sendctxt_err_int(dd, source - WFR_IS_SENDCTXT_ERR_START);
-	else if (source < WFR_IS_SDMA_ERR_END)
-		is_sdma_err_int(dd, source - WFR_IS_SDMA_ERR_START);
-	else if (source < WFR_IS_VAROUS_END)
-		is_various_int(dd, source - WFR_IS_VAROUS_START);
-	else
-		is_dc_int(dd, source - WFR_IS_DC_START);
-}
-
-/*
- * TX block send credit interrupt.  Source is < 192, should be < 160.
+ * TX block send credit interrupt.  Source is < 160.
  */
 static void is_send_credit_int(struct hfi_devdata *dd, unsigned int source)
 {
@@ -620,23 +648,21 @@ static void is_send_credit_int(struct hfi_devdata *dd, unsigned int source)
 }
 
 /*
- * TX block SDMA interrupt.  Source is < 64, should be < 48.
+ * TX block SDMA interrupt.  Source is < 48.
  *
  * SDMA interrupts are grouped by type:
  *
- *	00-15 = SDmaIdleStatus
- *	16-31 = SDmaIdleIntStatus
- *	32-47 = SDmaProgressIntStatus
- *
- * TODO: I'm using a raw 16 - it is not clear if I should use
- * WFR_TXE_NUM_SDMA_ENGINES.  It is concievable that even if the count
- * is reduced, this bit pattern will remain.
+ *	 0 -  N-1 = SDma
+ *	 N - 2N-1 = SDmaProgress
+ *	2N - 3N-1 = SDmaIdle
  */
 static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
 {
-	unsigned int what  = source / 16;	/* what interrupt */
-	unsigned int which = source % 16;	/* which engine */
-	
+	/* what interrupt */
+	unsigned int what  = source / WFR_TXE_NUM_SDMA_ENGINES;
+	/* which engine */
+	unsigned int which = source % WFR_TXE_NUM_SDMA_ENGINES;
+
 	if (likely(what < 3 && which < dd->num_sdma)) {
 		handle_sdma_interrupt(&dd->per_sdma[which], 1ull << source);
 	} else {
@@ -646,7 +672,7 @@ static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
 }
 
 /*
- * RX block receive available interrupt.  Source is < 192, should be < 160.
+ * RX block receive available interrupt.  Source is < 160.
  */
 static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
 {
@@ -669,7 +695,7 @@ static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
 }
 
 /*
- * RX block receive urgent interrupt.  Source is < 192, should be < 160.
+ * RX block receive urgent interrupt.  Source is < 160.
  */
 static void is_rcv_urgent_int(struct hfi_devdata *dd, unsigned int source)
 {
@@ -693,103 +719,54 @@ static void is_rcv_urgent_int(struct hfi_devdata *dd, unsigned int source)
 }
 
 /*
- * Interrupt source and interrupt mask tables.
- *
- * These two tables are related.  The interrupt source table tracks the ASIC
- * interrupt source numbers.  The interrupt mask tracks the individual
- * interrupt CSR blocks that are implemented on the chip to handle the
- * interrupt sources.  The two are closely related and each table can be
- * used to convert to a bit offset for the other.
- * 
- * Interrupt sources are "compressed" - the numbers of each type follow
- * another without a gap.  Interrupt CSRs are 64-entry chunks, with holes.
- * I.e. There are 3 receive array interrupt blocks, with room for 192
- * interrupts.  However, only 160 of them are valid/used.  This creates a
- * numbering different between the interrupt source number and interrupt
- * mask nunber.
+ * Reserved range interrupt.  Should not be called in normal operation.
  */
+static void is_reserved_int(struct hfi_devdata *dd, unsigned int source)
+{
+	char name[64];
 
-/*
- * Interrupt CSR Offsets
- *
- * CSR interrupts are implemented in blocks of 5 sequential CSRs.  These are
- * the offsets for the individual CSRs within the block.
- */
-#define ICOFF_STATUS   0
-#define ICOFF_MASK     8
-#define ICOFF_CLEAR   16 
-#define ICOFF_FORCE   24
-#define ICOFF_BLOCKED 32
-
-/*
- * Interrupt mask table.
- *
- * This table gathers all of the interrupt source CSR blocks into an
- * array.  The general interrupt mask (gi_mask) array tracks this table.
- *
- * The order of the entries is important - it should match the order of the
- * interrupt source numbers.  The bit indices in here will not match the
- * interrupt source number after the RCV_AVAIL registers as they will be
- * the first to have have a gap.
- *
- * The interrupt mask table is information needed to use the ASIC CSRs
- * to obtain interrupt status and to be able to clear interrupts.
- * of the major ASIC blocks (CCE, TXE, RXE, etc).  The general interrupt
- * handler uses the imask table to clear interrupts it handles and activate
- * a handler.  The general interrupt handle also has a mask array that
- * matches this table.
- */
-struct imask_table {
-	/* starting CSR offset of the interrupt block */
-	u32 start;
-	/* routine that returns the name of the interrupt source */
-	char *(*is_name)(char *name, size_t size, unsigned int source);
-	/* routine to call when receiving an interrupt */
-	void (*is_int)(struct hfi_devdata *dd, unsigned int source);
-	/* add this to make a interrupt source type index */
-	u32 addend;
-};
-
-static const struct imask_table imask_table[WFR_NUM_IMASK_SOURCES] = {
-{ WFR_CCE_INT_STATUS,	       is_cce_name,	    is_cce_int,		  0 },
-{ WFR_RCV_AVAIL_INT_STATUS0,   is_rcv_avail_name,   is_rcv_avail_int,     0 },
-{ WFR_RCV_AVAIL_INT_STATUS1,   is_rcv_avail_name,   is_rcv_avail_int,    64 },
-{ WFR_RCV_AVAIL_INT_STATUS2,   is_rcv_avail_name,   is_rcv_avail_int,   128 }, 
-{ WFR_RCV_URGENT_INT_STATUS0,  is_rcv_urgent_name,  is_rcv_urgent_int,    0 },
-{ WFR_RCV_URGENT_INT_STATUS1,  is_rcv_urgent_name,  is_rcv_urgent_int,   64 },
-{ WFR_RCV_URGENT_INT_STATUS2,  is_rcv_urgent_name,  is_rcv_urgent_int,  128 },
-{ WFR_SEND_CREDIT_INT_STATUS0, is_send_credit_name, is_send_credit_int,   0 },
-{ WFR_SEND_CREDIT_INT_STATUS1, is_send_credit_name, is_send_credit_int,  64 },
-{ WFR_SEND_CREDIT_INT_STATUS2, is_send_credit_name, is_send_credit_int, 128 },
-{ WFR_SDMA_ENG_INT_STATUS,     is_sdma_eng_name,    is_sdma_eng_int,	  0 },
-};
+	dd_dev_err(dd, "unexpected %s interrupt\n",
+				is_reserved_name(name, sizeof(name), source));
+}
 
 /*
  * Interrupt source table.
  *
- * Each entry is an interrupt source "type".  It is ordered by
- * increasing number.
+ * Each entry is an interrupt source "type".  It is ordered by increasing
+ * number.
  */
-struct isource_table {
+struct is_table {
 	int start;	 /* interrupt source type start */
 	int end;	 /* interrupt source type end */
-	int imask_index; /* index into the imask table */
-	int bit_offset;	 /* bit offset within an imask table entry */
+	/* routine that returns the name of the interrupt source */
+	char *(*is_name)(char *name, size_t size, unsigned int source);
+	/* routine to call when receiving an interrupt */
+	void (*is_int)(struct hfi_devdata *dd, unsigned int source);
 };
 
-static const struct isource_table isource_table[] = {
-/* start		     end		    imask index  bit offset */
-{ WFR_IS_GENERAL_ERR_START,  WFR_IS_GENERAL_ERR_END,	 0,	 0 },
-{ WFR_IS_SENDCTXT_ERR_START, WFR_IS_SENDCTXT_ERR_END,	 0,	 8 },
-{ WFR_IS_SDMA_ERR_START,     WFR_IS_SDMA_ERR_END,	 0,	28 },
-{ WFR_IS_VAROUS_START,	     WFR_IS_VAROUS_END,		 0,	44 },
-{ WFR_IS_DC_START,	     WFR_IS_DC_END,		 0,	56 },
-{ WFR_IS_RCVAVAILINT_START,  WFR_IS_RCVAVAILINT_END,	 1,	 0 },
-{ WFR_IS_RCVURGENTINT_START, WFR_IS_RCVURGENTINT_END,	 4,	 0 },
-{ WFR_IS_SENDCREDIT_START,   WFR_IS_SENDCREDIT_END,	 7,	 0 },
-{ WFR_IS_SDMAINT_START,	     WFR_IS_SDMAINT_END,	10,	 0 },
-{ WFR_IS_SDMAPROGRESS_START, WFR_IS_SDMAPROGRESS_END,	10,	16 },
-{ WFR_IS_SDMAIDLE_START,     WFR_IS_SDMAIDLE_END,	10,	32 },
+static const struct is_table is_table[] = {
+/* start		     end
+				name func		interrupt func */
+{ WFR_IS_GENERAL_ERR_START,  WFR_IS_GENERAL_ERR_END,
+				is_misc_err_name,	is_misc_err_int },
+{ WFR_IS_SDMAENG_ERR_START,  WFR_IS_SDMAENG_ERR_END,
+				is_sdma_err_name,	is_sdma_err_int },
+{ WFR_IS_SENDCTXT_ERR_START, WFR_IS_SENDCTXT_ERR_END,
+				is_sendctxt_err_name,	is_sendctxt_err_int },
+{ WFR_IS_SDMA_START,	     WFR_IS_SDMA_END,
+				is_sdma_eng_name,	is_sdma_eng_int },
+{ WFR_IS_VARIOUS_START,	     WFR_IS_VARIOUS_END,
+				is_various_name,	is_various_int },
+{ WFR_IS_DC_START,	     WFR_IS_DC_END,
+				is_dc_name,		is_dc_int },
+{ WFR_IS_RCVAVAIL_START,     WFR_IS_RCVAVAIL_END,
+				is_rcv_avail_name,	is_rcv_avail_int },
+{ WFR_IS_RCVURGENT_START,    WFR_IS_RCVURGENT_END,
+				is_rcv_urgent_name,	is_rcv_urgent_int },
+{ WFR_IS_SENDCREDIT_START,   WFR_IS_SENDCREDIT_END,
+				is_send_credit_name,	is_send_credit_int},
+{ WFR_IS_RESERVED_START,     WFR_IS_RESERVED_END,
+				is_reserved_name,	is_reserved_int},
 };
 
 /*
@@ -798,10 +775,16 @@ static const struct isource_table isource_table[] = {
  */
 static char *is_name(char *buf, size_t bsize, unsigned int source)
 {
-	const struct imask_table *imt;
+	const struct is_table *entry;
 
-	imt = &imask_table[source / 64];
-	return imt->is_name(buf, bsize, (source % 64) + imt->addend);
+	/* avoids a double compare by walking the table in-order */
+	for (entry = &is_table[0]; entry->is_name; entry++) {
+		if (source < entry->end)
+			return entry->is_name(buf, bsize, source-entry->start);
+	}
+	/* fell off the end */
+	snprintf(buf, bsize, "invalid interrupt source %u\n", source);
+	return buf;
 }
 
 /*
@@ -810,10 +793,17 @@ static char *is_name(char *buf, size_t bsize, unsigned int source)
  */
 static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
 {
-	const struct imask_table *imt;
+	const struct is_table *entry;
 
-	imt = &imask_table[source / 64];
-	imt->is_int(dd, (source % 64) + imt->addend);
+	/* avoids a double compare by walking the table in-order */
+	for (entry = &is_table[0]; entry->is_name; entry++) {
+		if (source < entry->end) {
+			entry->is_int(dd, source-entry->start);
+			return;
+		}
+	}
+	/* fell off the end */
+	dd_dev_err(dd, "invalid interrupt source %u\n", source);
 }
 
 /*
@@ -823,28 +813,28 @@ static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
 static irqreturn_t general_interrupt(int irq, void *data)
 {
 	struct hfi_devdata *dd = data;
-	u64 regs[WFR_NUM_IMASK_SOURCES];
-	u32 bit, start;
+	u64 regs[WFR_CCE_NUM_INT_CSRS];
+	u32 bit;
 	int i;
 
 	dd->int_counter++;
 
 	/* phase 1: scan and clear all handled interrupts */
-	for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++) {
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
 		if (dd->gi_mask[i] == 0) {
 			regs[i] = 0;	/* used later */
 			continue;
 		}
-		start = imask_table[i].start;
-		regs[i] = read_csr(dd, start + ICOFF_STATUS) & dd->gi_mask[i];
+		regs[i] = read_csr(dd, WFR_CCE_INT_STATUS + (8 * i)) &
+				dd->gi_mask[i];
 		/* only clear if anything is set */
 		if (regs[i])
-			write_csr(dd, start + ICOFF_CLEAR, regs[i]);
+			write_csr(dd, WFR_CCE_INT_CLEAR + (8 * i), regs[i]);
 	}
 
 	/* phase 2: call the apropriate handler */
 	for_each_set_bit(bit, (unsigned long *)&regs[0],
-						WFR_NUM_IMASK_SOURCES*64) {
+						WFR_CCE_NUM_INT_CSRS*64) {
 		/* TODO: the print is temporary */
 		char buf[64];
 		printk(DRIVER_NAME"%d: interrupt %d: %s\n", dd->unit, bit,
@@ -863,10 +853,14 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 
 	dd->int_counter++;
 
-	status = read_csr(dd, WFR_SDMA_ENG_INT_STATUS) & per_sdma->imask;
+	status = read_csr(dd,
+			WFR_CCE_INT_STATUS + (8*(WFR_IS_SDMA_START/64)))
+			& per_sdma->imask;
 	if (likely(status)) {
 		/* clear the interrupt(s) */
-		write_csr(dd, WFR_SDMA_ENG_INT_CLEAR, status);
+		write_csr(dd,
+			WFR_CCE_INT_CLEAR + (8*(WFR_IS_SDMA_START/64)),
+			per_sdma->imask);
 
 		/* handle the interrupt(s) */
 		handle_sdma_interrupt(per_sdma, status);
@@ -891,7 +885,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 	dd->int_counter++;
 
 	/* clear the interrupt */
-	write_csr(dd, rcd->ireg, rcd->imask);
+	write_csr(rcd->dd, WFR_CCE_INT_CLEAR + (8*rcd->ireg), rcd->imask);
 
 	/* handle the interrupt */
 	handle_receive_interrupt(rcd);
@@ -1171,26 +1165,26 @@ static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 //FIXME: no timeout adjustment code yet
 //	+ not that great that we mix in the update flag with hd
 #if 0
-        /*
-         * Need to write timeout register before updating rcvhdrhead to ensure
-         * that the timer is enabled on reception of a packet.
-         */
-        if (hd >> IBA7322_HDRHEAD_PKTINT_SHIFT)
-                adjust_rcv_timeout(rcd, npkts);
+	/*
+	 * Need to write timeout register before updating rcvhdrhead to ensure
+	 * that the timer is enabled on reception of a packet.
+	 */
+	if (hd >> IBA7322_HDRHEAD_PKTINT_SHIFT)
+		adjust_rcv_timeout(rcd, npkts);
 #endif
-        if (updegr) {
+	if (updegr) {
 		reg = (egrhd & WFR_RCV_EGR_INDEX_HEAD_HEAD_MASK)
 			<< WFR_RCV_EGR_INDEX_HEAD_HEAD_SHIFT;
 		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, reg);
 	}
-        mmiowb();
+	mmiowb();
 	// FIXME: We're hard-coding the counter to 1 here.  We need
 	// a scheme - likely integrated with a timeout.
 	reg = (1ull << WFR_RCV_HDR_HEAD_COUNTER_SHIFT) |
 		((hd & WFR_RCV_HDR_HEAD_HEAD_MASK)
 			<< WFR_RCV_HDR_HEAD_HEAD_SHIFT);
 	write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
-        mmiowb();
+	mmiowb();
 
 }
 
@@ -1342,7 +1336,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 					WFR_RCV_TID_CTRL_TID_PAIR_CNT_MASK)
 				<< WFR_RCV_TID_CTRL_TID_PAIR_CNT_SHIFT) |
 		      ((rcd->expected_base &
-		      			WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
+					WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
 				<< WFR_RCV_TID_CTRL_TID_BASE_INDEX_SHIFT);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_TID_CTRL, reg);
 	}
@@ -1578,8 +1572,8 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 		if (dd->flags & QIB_BADINTR)
 			return;
 		/* enable all interrupts */
-		for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
-			write_csr(dd, imask_table[i].start + ICOFF_MASK, ~0ull);
+		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+			write_csr(dd, WFR_CCE_INT_MASK + (8*i), ~(u64)0);
 		/*
 		 * TODO: the 7322 wrote to INTCLEAR to "cause any
 		 * pending interrupts to be redelivered".  The
@@ -1593,8 +1587,8 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 		 */
 
 	} else {
-		for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
-			write_csr(dd, imask_table[i].start + ICOFF_MASK, 0ull);
+		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+			write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
 	}
 }
 
@@ -1605,8 +1599,8 @@ static void clear_all_interrupts(struct hfi_devdata *dd)
 {
 	int i;
 
-	for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
-		write_csr(dd, imask_table[i].start + ICOFF_CLEAR, ~0ull);
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_CLEAR + (8*i), ~(u64)0);
 }
 
 /* TODO: Move to pcie.c? */
@@ -1655,34 +1649,6 @@ static void clean_up_interrupts(struct hfi_devdata *dd)
 	dd->num_msix_entries = 0;
 }
 
-/* convert an interrupt source number to an interrupt mask number */
-static int isource_to_imask(int isource, int *im_index, int *im_bit)
-{
-	int i;
-
-	for (i = 1; i < ARRAY_SIZE(isource_table); i++) {
-		if (isource < isource_table[i].end) {
-			/* obtain the index into this type */
-			isource -= isource_table[i].start;
-			/*
-			 * isource is now an index into an interrupt
-			 * source type (e.g. rcv avail 0-159).  The isource
-			 * table has the base imask index, but the rcv
-			 * avail, rcv urgent, and send credit can span
-			 * multiple indices - at 64 entries per index.
-			 */
-			*im_index = isource_table[i].imask_index
-					+ (isource / 64);
-			*im_bit = isource_table[i].bit_offset + (isource % 64);
-			return 0;
-		}
-	}
-	/* oops - fill in with the last (invalid) bit of RCV_AVAIL */
-	*im_index = 3;
-	*im_bit = 191;
-	return -EINVAL;
-}
-
 /*
  * Remap the interrupt source from the general handler to the given MSI-X
  * interrupt.
@@ -1693,7 +1659,8 @@ static void remap_intr(struct hfi_devdata *dd, int isrc, int msix_intr)
 	int m, n;
 
 	/* clear from the handled mask of the general interrupt */
-	isource_to_imask(isrc, &m, &n);
+	m = isrc / 64;
+	n = isrc % 64;
 	dd->gi_mask[m] &= ~((u64)1 << n);
 
 	/* direct the chip source to the given MSI-X interrupt */
@@ -1710,21 +1677,23 @@ static void remap_sdma_interrupts(struct hfi_devdata *dd,
 {
 	/*
 	 * SDMA engine interrupt sources grouped by type, rather than
-	 * engine.  Per-engine interrupts are as follows, we want the
-	 * first 3:
-	 *	SDMAInt		- fast path
-	 *	SDMAProgressInt - fast path
-	 *	SDMAIdleInt	- fast path
+	 * engine.  Per-engine interrupts are as follows:
+	 *	SDMA
+	 *	SDMAProgress
+	 *	SDMAIdle
 	 */
-	remap_intr(dd, WFR_IS_SDMAINT_START      + engine, msix_intr);
-	remap_intr(dd, WFR_IS_SDMAPROGRESS_START + engine, msix_intr);
-	remap_intr(dd, WFR_IS_SDMAIDLE_START     + engine, msix_intr);
+	remap_intr(dd, WFR_IS_SDMA_START + 0*WFR_TXE_NUM_SDMA_ENGINES + engine,
+		msix_intr);
+	remap_intr(dd, WFR_IS_SDMA_START + 1*WFR_TXE_NUM_SDMA_ENGINES + engine,
+		msix_intr);
+	remap_intr(dd, WFR_IS_SDMA_START + 2*WFR_TXE_NUM_SDMA_ENGINES + engine,
+		msix_intr);
 }
 
 static void remap_receive_available_interrupt(struct hfi_devdata *dd,
 						int rx, int msix_intr)
 {
-	remap_intr(dd, WFR_IS_RCVAVAILINT_START + rx, msix_intr);
+	remap_intr(dd, WFR_IS_RCVAVAIL_START + rx, msix_intr);
 }
 
 static int request_intx_irq(struct hfi_devdata *dd)
@@ -1806,6 +1775,16 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 	 */
 	curr_cpu = first_cpu;
 
+	/*
+	 * Sanity check - the code expects all SDMA chip source
+	 * interrupts to be in the same CSR, starting at bit 0.  Verify
+	 * that this is true by checking the bit location of the start.
+	 */
+	if ((WFR_IS_SDMA_START % 64) != 0) {
+		dd_dev_err(dd, "SDMA interrupt sources not CSR aligned");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < dd->num_msix_entries; i++) {
 		struct qib_msix_entry *me = &dd->msix_entries[i];
 		const char *err_info;
@@ -1836,9 +1815,10 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			 * Create a mask for all 3 chip interrupt sources
 			 * mapped here.
 			 */
-			per_sdma->imask = (u64)1 << ( 0 + idx)
-					| (u64)1 << (16 + idx)
-					| (u64)1 << (32 + idx);
+			per_sdma->imask =
+				  (u64)1 << (0*WFR_TXE_NUM_SDMA_ENGINES + idx)
+				| (u64)1 << (1*WFR_TXE_NUM_SDMA_ENGINES + idx)
+				| (u64)1 << (2*WFR_TXE_NUM_SDMA_ENGINES + idx);
 			handler = sdma_interrupt;
 			arg = per_sdma;
 			snprintf(me->name, sizeof(me->name),
@@ -1859,21 +1839,9 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			 * Set the interrupt register and mask for this
 			 * context's interrupt.
 			 */
-			switch (idx / 64) {
-			case 0:
-				rcd->ireg = WFR_RCV_AVAIL_INT_CLEAR0;
-				break;
-			case 1:
-				rcd->ireg = WFR_RCV_AVAIL_INT_CLEAR1;
-				break;
-			case 2:
-				rcd->ireg = WFR_RCV_AVAIL_INT_CLEAR2;
-				break;
-			default:
-				BUG();
-				break;
-			}
-			rcd->imask = ((u64)1) << (idx % 64);
+			rcd->ireg = (WFR_IS_RCVAVAIL_START+idx) / 64;
+			rcd->imask = ((u64)1) <<
+					((WFR_IS_RCVAVAIL_START+idx) % 64);
 			handler = receive_context_interrupt;
 			arg = rcd;
 			snprintf(me->name, sizeof(me->name),
@@ -1931,7 +1899,7 @@ static void reset_interrupts(struct hfi_devdata *dd)
 	int i;
 
 	/* all interrupts handled by the general handler */
-	for (i = 0; i < WFR_NUM_IMASK_SOURCES; i++)
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
 		dd->gi_mask[i] = ~(u64)0;
 
 	/* all chip interrupts map to MSI-X 0 */
@@ -2183,7 +2151,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
  * The partition key values are undefined after reset.
  * Set up the minimal partition keys:
  *	- 0xffff in the first key
- 	- 0 in all other keys
+	- 0 in all other keys
  */
 static void init_partition_keys(struct hfi_devdata *dd)
 {
@@ -2428,6 +2396,29 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd[i].link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
 		ppd[i].link_width_enabled = IB_WIDTH_4X;
 		ppd[i].link_speed_enabled = ppd->link_speed_supported;
+
+		switch (num_vls) {
+		case 1:
+			ppd[i].vls_supported = IB_VL_VL0;
+			break;
+		case 2:
+			ppd[i].vls_supported = IB_VL_VL0_1;
+			break;
+		default:
+			dd_dev_info(dd,
+				    "Invalid num_vls %u, using 4 VLs\n",
+				    num_vls);
+			num_vls = 4;
+			/* fall through */
+		case 4:
+			ppd[i].vls_supported = IB_VL_VL0_3;
+			break;
+		case 8:
+			ppd[i].vls_supported = IB_VL_VL0_7;
+			break;
+		}
+		ppd[i].vls_operational = ppd->vls_supported;
+
 		/*
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
@@ -2541,9 +2532,9 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* rcvegrbufsize must be set before calling qib_create_ctxts() */
 	/* TODO: can ib_mtu_enum_to_int cover the full valid eager buffer
 	  size range?  if not, we should drop using it and the ib enum */
-        mtu = ib_mtu_enum_to_int(qib_ibmtu);
-        if (mtu == -1)
-                mtu = HFI_DEFAULT_MTU;
+	mtu = ib_mtu_enum_to_int(qib_ibmtu);
+	if (mtu == -1)
+		mtu = HFI_DEFAULT_MTU;
 	/* quietly adjust the size to a valid range supported by the chip */
 	dd->rcvegrbufsize = max(mtu,		          4 * 1024);
 	dd->rcvegrbufsize = min(dd->rcvegrbufsize, (u32)128 * 1024);
@@ -2624,25 +2615,25 @@ bail:
 	return dd;
 }
 
-#if 0
+/* interrupt testing */
 void force_all_interrupts(struct hfi_devdata *dd)
 {
 	int i, j;
 	char buf[64];
 
-	/* only do this once per load */
-	if (dd->unit != 0)
-		return;
-
-	for (i = 0; i < ARRAY_SIZE(imask_table); i++) {
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
 		for (j = 0; j < 64; j++) {
-			pr_info("** Forced interrupt: csr #%2d, bit %2d; \"%s\"\n",
+			dd_dev_info(dd, "** Forced interrupt: "
+				"csr #%2d, bit %2d; \"%s\"\n",
 				i, j, is_name(buf, sizeof(buf), (i*64)+j));
-			write_csr(dd, imask_table[i].start + ICOFF_FORCE,
-								1ull << j);
-			//ssleep(1);
+			write_csr(dd, WFR_CCE_INT_FORCE + (8*i), 1ull << j);
+			/*
+			 * We want this delay so it is long enough that
+			 * the interrupt prints match the print above
+			 * but no so long that it takes forever to run.
+			 */
+			/*ssleep(1);*/
 			msleep(100);
 		}
 	}
 }
-#endif
