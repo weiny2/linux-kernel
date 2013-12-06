@@ -424,6 +424,41 @@ TRACE_EVENT(sched_pi_setprio,
 			__entry->oldprio, __entry->newprio)
 );
 
+/*
+ * Tracks migration of tasks from one runqueue to another. Can be used to
+ * detect if automatic NUMA balancing is bouncing between nodes
+ */
+TRACE_EVENT(sched_move_task,
+
+	TP_PROTO(struct task_struct *tsk, int src_cpu, int dst_cpu),
+
+	TP_ARGS(tsk, src_cpu, dst_cpu),
+
+	TP_STRUCT__entry(
+		__field( pid_t,	pid			)
+		__field( pid_t,	tgid			)
+		__field( pid_t,	ngid			)
+		__field( int,	src_cpu			)
+		__field( int,	src_nid			)
+		__field( int,	dst_cpu			)
+		__field( int,	dst_nid			)
+	),
+
+	TP_fast_assign(
+		__entry->pid		= task_pid_nr(tsk);
+		__entry->tgid		= task_tgid_nr(tsk);
+		__entry->ngid		= task_numa_group_id(tsk);
+		__entry->src_cpu	= src_cpu;
+		__entry->src_nid	= cpu_to_node(src_cpu);
+		__entry->dst_cpu	= dst_cpu;
+		__entry->dst_nid	= cpu_to_node(dst_cpu);
+	),
+
+	TP_printk("pid=%d tgid=%d ngid=%d src_cpu=%d src_nid=%d dst_cpu=%d dst_nid=%d",
+			__entry->pid, __entry->tgid, __entry->ngid,
+			__entry->src_cpu, __entry->src_nid,
+			__entry->dst_cpu, __entry->dst_nid)
+);
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */

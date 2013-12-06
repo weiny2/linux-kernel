@@ -4757,6 +4757,8 @@ static void move_task(struct task_struct *p, struct lb_env *env)
 	set_task_cpu(p, env->dst_cpu);
 	activate_task(env->dst_rq, p, 0);
 	check_preempt_curr(env->dst_rq, p, 0);
+
+	trace_sched_move_task(p, env->src_cpu, env->dst_cpu);
 }
 
 /*
