@@ -434,6 +434,9 @@ struct mm_struct {
 
 	/* numa_scan_seq prevents two threads setting pte_numa */
 	int numa_scan_seq;
+
+	/* task_numa_work is unmapping pages, with deferred TLB flush */
+	bool numa_tlb_lazy;
 #endif
 	struct uprobes_state uprobes_state;
 };

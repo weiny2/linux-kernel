@@ -1738,6 +1738,9 @@ void task_numa_work(struct callback_head *work)
 		start = 0;
 		vma = mm->mmap;
 	}
+
+	wmb(); /* with do_huge_pmd_numa_page */
+	mm->numa_tlb_lazy = true;
 	for (; vma; vma = vma->vm_next) {
 		if (!vma_migratable(vma) || !vma_policy_mof(p, vma))
 			continue;
@@ -1780,6 +1783,9 @@ void task_numa_work(struct callback_head *work)
 	}
 
 out:
+	wmb(); /* with do_huge_pmd_numa_page */
+	mm->numa_tlb_lazy = false;
+
 	/*
 	 * It is possible to reach the end of the VMA list but the last few
 	 * VMAs are not guaranteed to the vma_migratable. If they are not, we
