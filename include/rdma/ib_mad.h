@@ -453,6 +453,7 @@ struct ib_mad_recv_buf {
  *      where seg_size == IB or Jumbo mad size
  *      depending on base_version
  */
+/* FIXME when mad_recv_wc is jumbo it is not necessarily 2048 bytes */
 struct ib_mad_recv_wc {
 	struct ib_wc		*wc;
 	struct ib_mad_recv_buf	recv_buf;
