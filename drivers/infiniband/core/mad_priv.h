@@ -60,9 +60,9 @@
 
 /* Registration table sizes */
 #define MAX_MGMT_CLASS		80
-#define MAX_MGMT_VERSION	0x83 /* FIXME
+#define MAX_MGMT_VERSION	0x83 /* FIXME -- STL specific
 					how big should this be for STL?
-					Also this makes the version table huge
+					This makes the version table huge
 					for agent registrations */
 #define MAX_MGMT_OUI		8
 #define MAX_MGMT_VENDOR_RANGE2	(IB_MGMT_CLASS_VENDOR_RANGE2_END - \
