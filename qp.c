@@ -147,7 +147,7 @@ static int alloc_qpn(struct hfi_devdata *dd, struct hfi_qpn_table *qpt,
 
 	qpn = qpt->last + 2;
 	if (qpn >= QPN_MAX)
-		qpn = 2;
+		qpn = 2 | ((qpt->last & 1) ^ 1);
 	if (qpt->mask && ((qpn & qpt->mask) >> 1) >= dd->n_krcv_queues)
 		qpn = (qpn | qpt->mask) + 2;
 	offset = qpn & BITS_PER_PAGE_MASK;
@@ -1241,11 +1241,41 @@ int qib_destroy_qp(struct ib_qp *ibqp)
  */
 static int init_qpn_table(struct hfi_devdata *dd, struct hfi_qpn_table *qpt)
 {
+	u32 offset, qpn, i;
+	struct qpn_map *map;
+	int ret = 0;
+
 	spin_lock_init(&qpt->lock);
-	qpt->last = 1;          /* start with QPN 2 */
-	qpt->nmaps = 1;
+	/* start with QPN 2 - qpt->last + 2 in alloc_qpn() */
+	qpt->last = 0;
 	qpt->mask = dd->qpn_mask;
-	return 0;
+
+	/* insure we don't assign QPs from KDETH 64K window */
+	qpn = kdeth_qp << 16;
+	qpt->nmaps = qpn / BITS_PER_PAGE;
+	/* XXX - this should always be zero */
+	offset = qpn & BITS_PER_PAGE_MASK;
+	map = &qpt->map[qpt->nmaps];
+	dd_dev_info(dd, "Reserving QPNs for KDETH window from 0x%x to 0x%x\n",
+		qpn, qpn + 65535);
+	for (i = 0; i < 65536; i++) {
+		if (!map->page) {
+			get_map_page(qpt, map);
+			if (!map->page) {
+				ret = -ENOMEM;
+				break;
+			}
+		}
+		set_bit(offset, map->page);
+		offset++;
+		if (offset == BITS_PER_PAGE) {
+			/* next page */
+			qpt->nmaps++;
+			map++;
+			offset = 0;
+		}
+	}
+	return ret;
 }
 
 /**
