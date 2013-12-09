@@ -45,10 +45,7 @@
 #include "common.h"
 #include "device.h"
 #include "trace.h"
-
-static unsigned int ib_qib_qp_table_size = 256;
-module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
-MODULE_PARM_DESC(qp_table_size, "QP table size");
+#include "qp.h"
 
 unsigned int ib_qib_lkey_table_size = 16;
 module_param_named(lkey_table_size, ib_qib_lkey_table_size, uint,
@@ -1897,22 +1894,15 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	int ret;
 	size_t lcpysz = IB_DEVICE_NAME_MAX;
 
-	dev->qp_table_size = ib_qib_qp_table_size;
-	get_random_bytes(&dev->qp_rnd, sizeof(dev->qp_rnd));
-	dev->qp_table = kmalloc(dev->qp_table_size * sizeof *dev->qp_table,
-				GFP_KERNEL);
-	if (!dev->qp_table) {
-		ret = -ENOMEM;
-		goto err_qpt;
-	}
-	for (i = 0; i < dev->qp_table_size; i++)
-		RCU_INIT_POINTER(dev->qp_table[i], NULL);
+	ret = qib_qp_init(dev);
+	if (ret)
+		goto err_qp_init;
+
 
 	for (i = 0; i < dd->num_pports; i++)
 		init_ibport(ppd + i);
 
 	/* Only need to initialize non-zero fields. */
-	spin_lock_init(&dev->qpt_lock);
 	spin_lock_init(&dev->n_pds_lock);
 	spin_lock_init(&dev->n_ahs_lock);
 	spin_lock_init(&dev->n_cqs_lock);
@@ -1922,8 +1912,6 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	init_timer(&dev->mem_timer);
 	dev->mem_timer.function = mem_timer;
 	dev->mem_timer.data = (unsigned long) dev;
-
-	qib_init_qpn_table(dd, &dev->qpn_table);
 
 	/*
 	 * The top ib_qib_lkey_table_size bits are used to index the
@@ -2109,8 +2097,8 @@ err_tx:
 err_hdrs:
 	free_pages((unsigned long) dev->lk_table.table, get_order(lk_tab_size));
 err_lk:
-	kfree(dev->qp_table);
-err_qpt:
+	qib_qp_exit(dev);
+err_qp_init:
 	dd_dev_err(dd, "cannot register verbs: %d!\n", -ret);
 bail:
 	return ret;
@@ -2120,7 +2108,6 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 {
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;
-	u32 qps_inuse;
 	unsigned lk_tab_size;
 
 	qib_verbs_unregister_sysfs(dd);
@@ -2140,13 +2127,8 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 	if (dev->dma_mr)
 		dd_dev_err(dd, "DMA MR not NULL!\n");
 
-	qps_inuse = qib_free_all_qps(dd);
-	if (qps_inuse)
-		dd_dev_err(dd, "QP memory leak! %u still in use\n",
-			    qps_inuse);
-
+	qib_qp_exit(dev);
 	del_timer_sync(&dev->mem_timer);
-	qib_free_qpn_table(&dev->qpn_table);
 	while (!list_empty(&dev->txreq_free)) {
 		struct list_head *l = dev->txreq_free.next;
 		struct qib_verbs_txreq *tx;
@@ -2163,7 +2145,6 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	free_pages((unsigned long) dev->lk_table.table,
 		   get_order(lk_tab_size));
-	kfree(dev->qp_table);
 }
 
 /*

@@ -35,6 +35,7 @@
 
 #include "hfi.h"
 #include "mad.h"
+#include "qp.h"
 
 /**
  * qib_ud_loopback - handle send on loopback QPs

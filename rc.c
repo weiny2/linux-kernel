@@ -34,6 +34,7 @@
 #include <linux/io.h>
 
 #include "hfi.h"
+#include "qp.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_RC_##x

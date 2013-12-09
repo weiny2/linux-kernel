@@ -43,6 +43,7 @@
 
 #include "hfi.h"
 #include "trace.h"
+#include "qp.h"
 
 /*
  * The size has to be longer than this string, so we can append

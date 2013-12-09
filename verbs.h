@@ -53,9 +53,6 @@ struct qib_verbs_txreq;
 #define QIB_MAX_RDMA_ATOMIC     16
 #define QIB_GUIDS_PER_PORT	5
 
-#define QPN_MAX                 (1 << 24)
-#define QPNMAP_ENTRIES          (QPN_MAX / PAGE_SIZE / BITS_PER_BYTE)
-
 /*
  * Increment this value if any changes that break userspace ABI
  * compatibility are made.
@@ -627,26 +624,6 @@ static inline struct qib_rwqe *get_rwqe_ptr(struct qib_rq *rq, unsigned n)
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
 
-/*
- * QPN-map pages start out as NULL, they get allocated upon
- * first use and are never deallocated. This way,
- * large bitmaps are not allocated unless large numbers of QPs are used.
- */
-struct qpn_map {
-	void *page;
-};
-
-struct qib_qpn_table {
-	spinlock_t lock; /* protect changes in this struct */
-	unsigned flags;         /* flags for QP0/1 allocated for each port */
-	u32 last;               /* last QP number allocated */
-	u32 nmaps;              /* size of the map table */
-	u16 limit;
-	u16 mask;
-	/* bit map of free QP numbers other than 0/1 */
-	struct qpn_map map[QPNMAP_ENTRIES];
-};
-
 struct qib_lkey_table {
 	spinlock_t lock; /* protect changes in this struct */
 	u32 next;               /* next unused index (speeds search) */
@@ -730,6 +707,7 @@ struct qib_ibport {
 };
 
 
+struct hfi_qp_ibdev;
 struct qib_ibdev {
 	struct ib_device ibdev;
 	struct list_head pending_mmaps;
@@ -737,8 +715,9 @@ struct qib_ibdev {
 	u32 mmap_offset;
 	struct qib_mregion __rcu *dma_mr;
 
+	struct hfi_qp_ibdev *qp_dev;
+
 	/* QP numbers are shared by all IB ports */
-	struct qib_qpn_table qpn_table;
 	struct qib_lkey_table lk_table;
 	struct list_head piowait;       /* list for wait PIO buf */
 	struct list_head dmawait;	/* list for wait DMA */
@@ -746,14 +725,10 @@ struct qib_ibdev {
 	struct list_head memwait;       /* list for wait kernel memory */
 	struct list_head txreq_free;
 	struct timer_list mem_timer;
-	struct qib_qp __rcu **qp_table;
 	struct qib_pio_header *pio_hdrs;
 	dma_addr_t pio_hdrs_phys;
 	/* list of QPs waiting for RNR timer */
 	spinlock_t pending_lock; /* protect wait lists, PMA counters, etc. */
-	u32 qp_table_size; /* size of the hash table */
-	u32 qp_rnd; /* random bytes for hash */
-	spinlock_t qpt_lock;
 
 	u32 n_piowait;
 	u32 n_txwait;
@@ -887,32 +862,6 @@ int qib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 int qib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
 int qib_mcast_tree_empty(struct qib_ibport *ibp);
-
-__be32 qib_compute_aeth(struct qib_qp *qp);
-
-struct qib_qp *qib_lookup_qpn(struct qib_ibport *ibp, u32 qpn);
-
-struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
-			    struct ib_qp_init_attr *init_attr,
-			    struct ib_udata *udata);
-
-int qib_destroy_qp(struct ib_qp *ibqp);
-
-int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err);
-
-int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		  int attr_mask, struct ib_udata *udata);
-
-int qib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		 int attr_mask, struct ib_qp_init_attr *init_attr);
-
-unsigned qib_free_all_qps(struct hfi_devdata *dd);
-
-void qib_init_qpn_table(struct hfi_devdata *dd, struct qib_qpn_table *qpt);
-
-void qib_free_qpn_table(struct qib_qpn_table *qpt);
-
-void qib_get_credit(struct qib_qp *qp, u32 aeth);
 
 unsigned qib_pkt_delay(u32 plen, u8 snd_mult, u8 rcv_mult);
 
