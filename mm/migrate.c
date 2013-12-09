@@ -1624,11 +1624,9 @@ static bool numamigrate_update_ratelimit(pg_data_t *pgdat,
 	return false;
 }
 
-int numamigrate_isolate_page(pg_data_t *pgdat, struct vm_area_struct *vma,
-				struct page *page, unsigned long addr)
+int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 {
 	int page_lru;
-	unsigned long nr_pages;
 
 	VM_BUG_ON(compound_order(page) && !PageTransHuge(page));
 
@@ -1652,25 +1650,8 @@ int numamigrate_isolate_page(pg_data_t *pgdat, struct vm_area_struct *vma,
 	}
 
 	page_lru = page_is_file_cache(page);
-	nr_pages = hpage_nr_pages(page);
 	mod_zone_page_state(page_zone(page), NR_ISOLATED_ANON + page_lru,
-				nr_pages);
-
-	/*
-	 * At the time this is called, another CPU is potentially turning ptes
-	 * of this process into NUMA ptes. That permission change batches the
-	 * TLB flush, so other CPUs may still have valid TLB entries pointing
-	 * to the address. These need to be flushed before migration.
-	 */
-	rmb();
-	if (vma->vm_mm->numa_tlb_lazy) {
-		if (nr_pages == 1) {
-			flush_tlb_page(vma, addr);
-		} else {
-			flush_tlb_range(vma, addr, addr +
-					(nr_pages << PAGE_SHIFT));
-		}
-	}
+				hpage_nr_pages(page));
 
 	/*
 	 * Isolating the page has taken another reference, so the
@@ -1703,8 +1684,8 @@ void wait_migrate_huge_page(struct anon_vma *anon_vma, pmd_t *pmd)
  * node. Caller is expected to have an elevated reference count on
  * the page that will be dropped by this function before returning.
  */
-int migrate_misplaced_page(struct vm_area_struct *vma, struct page *page,
-			   unsigned long addr, int node)
+int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
+			   int node)
 {
 	pg_data_t *pgdat = NODE_DATA(node);
 	int isolated;
@@ -1727,7 +1708,7 @@ int migrate_misplaced_page(struct vm_area_struct *vma, struct page *page,
 	if (numamigrate_update_ratelimit(pgdat, 1))
 		goto out;
 
-	isolated = numamigrate_isolate_page(pgdat, vma, page, addr);
+	isolated = numamigrate_isolate_page(pgdat, page);
 	if (!isolated)
 		goto out;
 
@@ -1784,11 +1765,17 @@ int migrate_misplaced_transhuge_page(struct mm_struct *mm,
 
 	page_cpupid_xchg_last(new_page, page_cpupid_last(page));
 
-	isolated = numamigrate_isolate_page(pgdat, vma, page, mmun_start);
+	isolated = numamigrate_isolate_page(pgdat, page);
 	if (!isolated) {
 		put_page(new_page);
 		goto out_fail;
 	}
+
+	/* PTL provides a memory barrier with change_protection_range */
+	ptl = pmd_lock(mm, pmd);
+	if (tlb_flush_pending(mm))
+		flush_tlb_range(vma, mmun_start, mmun_end);
+	spin_unlock(ptl);
 
 	/* Prepare a page as a migration target */
 	__set_page_locked(new_page);
