@@ -1662,7 +1662,8 @@ int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 	return 1;
 }
 
-bool pmd_trans_migrating(pmd_t pmd) {
+bool pmd_trans_migrating(pmd_t pmd)
+{
 	struct page *page = pmd_page(pmd);
 	return PageLocked(page);
 }
@@ -1670,13 +1671,7 @@ bool pmd_trans_migrating(pmd_t pmd) {
 void wait_migrate_huge_page(struct anon_vma *anon_vma, pmd_t *pmd)
 {
 	struct page *page = pmd_page(*pmd);
-	if (get_page_unless_zero(page)) {
-		wait_on_page_locked(page);
-		put_page(page);
-	}
-
-	/* Guarantee that the newly migrated PTE is visible */
-	smp_rmb();
+	wait_on_page_locked(page);
 }
 
 /*
