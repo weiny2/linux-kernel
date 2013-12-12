@@ -67,6 +67,10 @@ uint default_link_state = IB_PORT_ACTIVE;
 module_param(default_link_state, uint, S_IRUGO);
 MODULE_PARM_DESC(default_link_state, "Set to IB_PORT_INIT to allow external setting of lid, state");
 
+static uint extended_psn = 0;
+module_param(extended_psn, uint, S_IRUGO);
+MODULE_PARM_DESC(extended_psn, "Use 24 or 31 bit PSN");
+
 struct flag_table {
 	u64 flag;	/* the flag */
 	char *str;	/* description string */
@@ -937,6 +941,9 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	/* NOTE: 7322: done within rcvmod_lock */
 	reg = read_csr(dd, WFR_RCV_CTRL);
 	reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	/* XXX (Mitko): This should have a better place than here! */
+	if (extended_psn)
+		reg |= WFR_RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK;
 	write_csr(dd, WFR_RCV_CTRL, reg);
 	/* TODO: clear RcvCtrl.RcvPortEnable in quiet_serdes()? */
 
@@ -1055,6 +1062,8 @@ static int get_base_info(struct qib_ctxtdata *rcd,
 {
 	kinfo->runtime_flags |= HFI_RUNTIME_HDRSUPP |
 		HFI_RUNTIME_NODMA_RTAIL;
+	if (extended_psn)
+		kinfo->runtime_flags |= HFI_RUNTIME_EXTENDED_PSN;
 	return 0;
 }
 
