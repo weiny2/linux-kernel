@@ -235,36 +235,48 @@ DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi_ctxts
 
-#define UCTXT_DATA(ptr) ((struct qib_ctxtdata *)ptr)
 #define UCTXT_FMT \
-	"cred:%u, credaddr:%p, piobase:%p, rcvhdr_cnt:%u, " \
+	"cred:%u, credaddr:0x%llx, piobase:0x%llx, rcvhdr_cnt:%u, "	\
 	"rcvbase:0x%llx, rcvegrc:%u, rcvegrb:0x%llx"
 TRACE_EVENT(hfi_uctxtdata,
 	    TP_PROTO(struct hfi_devdata *dd, struct qib_ctxtdata *uctxt),
 	    TP_ARGS(dd, uctxt),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY
-		    __field(u64, uctxt)
+		    __field(unsigned, ctxt)
+		    __field(u32, credits)
+		    __field(u64, hw_free)
+		    __field(u64, piobase)
+		    __field(u16, rcvhdrq_cnt)
+		    __field(u64, rcvhdrq_phys)
+		    __field(u32, eager_cnt)
+		    __field(u64, rcvegr_phys)
 		    ),
 	    TP_fast_assign(
 		    DD_DEV_ASSIGN;
-		    __entry->uctxt = (u64)uctxt;
+		    __entry->ctxt = uctxt->ctxt;
+		    __entry->credits = uctxt->sc->credits;
+		    __entry->hw_free = (u64)uctxt->sc->hw_free;
+		    __entry->piobase = (u64)uctxt->sc->base_addr;
+		    __entry->rcvhdrq_cnt = uctxt->rcvhdrq_cnt;
+		    __entry->rcvhdrq_phys = uctxt->rcvhdrq_phys;
+		    __entry->eager_cnt = uctxt->eager_count;
+		    __entry->rcvegr_phys = uctxt->rcvegr_phys;
 		    ),
 	    TP_printk(
 		    "[%s] ctxt %u " UCTXT_FMT,
 		    __get_str(dev),
-		    UCTXT_DATA(__entry->uctxt)->ctxt,
-		    UCTXT_DATA(__entry->uctxt)->sc->credits,
-		    UCTXT_DATA(__entry->uctxt)->sc->hw_free,
-		    UCTXT_DATA(__entry->uctxt)->sc->base_addr,
-		    UCTXT_DATA(__entry->uctxt)->dd->rcvhdrcnt,
-		    (u64)UCTXT_DATA(__entry->uctxt)->rcvhdrq_phys,
-		    UCTXT_DATA(__entry->uctxt)->eager_count,
-		    (u64)UCTXT_DATA(__entry->uctxt)->rcvegrbuf_phys
+		    __entry->ctxt,
+		    __entry->credits,
+		    __entry->hw_free,
+		    __entry->piobase,
+		    __entry->rcvhdrq_cnt,
+		    __entry->rcvhdrq_phys,
+		    __entry->eager_cnt,
+		    __entry->rcvegr_phys
 		    )
 	);
 
-#define CINFO_DATA(ptr) ((struct hfi_ctxt_setup *)ptr)
 #define CINFO_FMT \
 	"egrtids:%u, egr_size:%u, hdrq_cnt:%u, hdrq_size:%u, sdma_ring_size:%u"
 TRACE_EVENT(hfi_ctxt_setup,
@@ -275,24 +287,32 @@ TRACE_EVENT(hfi_ctxt_setup,
 		    DD_DEV_ENTRY
 		    __field(unsigned, ctxt)
 		    __field(unsigned, subctxt)
-		    __field(u64, cinfo)
+		    __field(u16, egrtids)
+		    __field(u16, rcvhdrq_cnt)
+		    __field(u16, rcvhdrq_size)
+		    __field(u16, sdma_ring_size)
+		    __field(u32, rcvegr_size)
 		    ),
 	    TP_fast_assign(
 		    DD_DEV_ASSIGN;
 		    __entry->ctxt = ctxt;
 		    __entry->subctxt = subctxt;
-		    __entry->cinfo = (u64)cinfo;
+		    __entry->egrtids = cinfo->egrtids;
+		    __entry->rcvhdrq_cnt = cinfo->rcvhdrq_cnt;
+		    __entry->rcvhdrq_size = cinfo->rcvhdrq_entsize;
+		    __entry->sdma_ring_size = cinfo->sdma_ring_size;
+		    __entry->rcvegr_size = cinfo->rcvegr_size;
 		    ),
 	    TP_printk(
 		    "[%s] ctxt %u:%u " CINFO_FMT,
 		    __get_str(dev),
 		    __entry->ctxt,
 		    __entry->subctxt,
-		    CINFO_DATA(__entry->cinfo)->egrtids,
-		    CINFO_DATA(__entry->cinfo)->rcvegr_size,
-		    CINFO_DATA(__entry->cinfo)->rcvhdrq_cnt,
-		    CINFO_DATA(__entry->cinfo)->rcvhdrq_entsize,
-		    CINFO_DATA(__entry->cinfo)->sdma_ring_size
+		    __entry->egrtids,
+		    __entry->rcvegr_size,
+		    __entry->rcvhdrq_cnt,
+		    __entry->rcvhdrq_size,
+		    __entry->sdma_ring_size
 		    )
 	);
 #endif /* __HFI_TRACE_H */
