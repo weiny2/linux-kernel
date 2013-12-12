@@ -285,6 +285,29 @@ static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u32 etail)
 }
 
 /*
+ * Validate and encode the a given RcvArray Buffer size.
+ * The fuction will check whether the given size falls within
+ * allowed size ranges for the respective type and, optionally,
+ * return the proper encoding.
+ */
+#define HFI_MIN_BUF_SIZE (PAGE_SIZE << 0)
+#define HFI_MAX_EGR_SIZE (PAGE_SIZE << 6)
+#define HFI_MAX_EXP_SIZE (PAGE_SIZE << 9)
+inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded) {
+	if (unlikely(!IS_ALIGNED(size, PAGE_SIZE)))
+		return 0;
+	if (unlikely(size < HFI_MIN_BUF_SIZE))
+		size = PAGE_SIZE;
+	else
+		if (size > (type == PT_EAGER ?
+			    HFI_MAX_EGR_SIZE : HFI_MAX_EXP_SIZE))
+			return 0;
+	if (encoded)
+		*encoded = ilog2(size / PAGE_SIZE) + 1;
+	return 1;
+}
+
+/*
  */
 static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			  u32 ctxt, u32 eflags, u32 l, u32 etail,

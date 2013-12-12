@@ -75,8 +75,6 @@ static int allocate_ctxt(struct file *, struct hfi_devdata *,
 static unsigned int poll_urgent(struct file *, struct poll_table_struct *);
 static unsigned int poll_next(struct file *, struct poll_table_struct *);
 static int user_event_ack(struct qib_ctxtdata *, int, unsigned long);
-static int mmap_piobufs(struct file *, struct vm_area_struct *);
-static int mmap_piocredits(struct file *, struct vm_area_struct *);
 
 static const struct file_operations qib_file_ops = {
 	.owner = THIS_MODULE,
@@ -93,14 +91,15 @@ static const struct file_operations qib_file_ops = {
  * Types of memories mapped into user processes' space
  */
 enum mmap_types {
-	RCV_REGS = 1,
-	PIO_BUFS,
+	PIO_BUFS = 1,
 	PIO_BUFS_SOP,
 	PIO_CRED,
 	RCV_HDRQ,
 	RCV_EGRBUF,
 	UREGS,
+	EVENTS,
 	STATUS,
+	RTAIL,
 	SUBCTXT_UREGS,
 	SUBCTXT_RCV_HDRQ,
 	SDMA_COMP
@@ -126,12 +125,12 @@ enum mmap_types {
 	(((val) & HFI_MMAP_##field##_MASK) << HFI_MMAP_##field##_SHIFT)
 #define HFI_MMAP_TOKEN_GET(field, token) \
 	(((token) >> HFI_MMAP_##field##_SHIFT) & HFI_MMAP_##field##_MASK)
-#define HFI_MMAP_TOKEN(type, ctxt, subctxt, addr) \
-	HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & PAGE_MASK)) |	\
-	HFI_MMAP_TOKEN_SET(SUBCTXT, subctxt) |			\
-	HFI_MMAP_TOKEN_SET(CTXT, ctxt) |            \
-	HFI_MMAP_TOKEN_SET(TYPE, type) |            \
-	HFI_MMAP_TOKEN_SET(MAGIC, HFI_MMAP_MAGIC)
+#define HFI_MMAP_TOKEN(type, ctxt, subctxt, addr)   \
+	HFI_MMAP_TOKEN_SET(MAGIC, HFI_MMAP_MAGIC) | \
+	HFI_MMAP_TOKEN_SET(TYPE, type) | \
+	HFI_MMAP_TOKEN_SET(CTXT, ctxt) | \
+	HFI_MMAP_TOKEN_SET(SUBCTXT, subctxt) | \
+	HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & ~PAGE_MASK))
 
 static inline int is_valid_mmap(u64 token)
 {
@@ -156,7 +155,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_user_info uinfo;
 	struct hfi_tid_info tinfo;
 	struct hfi_ctxt_setup setup;
-	const void __user *src = NULL;
 	ssize_t consumed = 0, copy = 0, ret = 0;
 	void *dest = NULL;
 	__u64 user_val = 0;
@@ -167,7 +165,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	}
 
 	ucmd = (const struct hfi_cmd __user *)data;
-	if (copy_from_user(&cmd, &ucmd, sizeof(cmd))) {
+	if (copy_from_user(&cmd, ucmd, sizeof(cmd))) {
 		ret = -EFAULT;
 		goto bail;
 	}
@@ -206,14 +204,20 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		goto bail;
 	}
 
-	src = &ucmd->addr;
 	if (copy) {
-		if (copy_from_user(dest, src, copy)) {
+		printk(KERN_WARNING " user copy: %u 0x%llx 0x%llx\n", copy,
+		       ucmd->addr, dest);
+		if (copy_from_user(dest, (void __user *)ucmd->addr, copy)) {
 			ret = -EFAULT;
 			goto bail;
 		}
+		consumed += copy;
 	}
 
+	/*
+	 * There is only one case where it is OK not to have
+	 * a qib_ctxtdata structure yet.
+	 */
 	if (!uctxt && cmd.type != HFI_CMD_ASSIGN_CTXT) {
 		ret = -EINVAL;
 		goto bail;
@@ -250,7 +254,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_RECV_CTRL:
 		break;
 	case HFI_CMD_POLL_TYPE:
-		uctxt->poll_type = (u16)user_val;
+		uctxt->poll_type = (typeof(uctxt->poll_type))user_val;
 		break;
 	case HFI_CMD_SET_PART_KEY:
 		break;
@@ -279,38 +283,147 @@ static ssize_t hfi_aio_write(struct kiocb *kiocb, const struct iovec *iovec,
 static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 {
 	struct qib_ctxtdata *uctxt;
-	u64 token = vma->vm_pgoff;
-	u16 ctxt;
-	u8 subctxt;
-	int (*mmap_func)(struct file *, struct vm_area_struct *) = NULL;
+	struct hfi_devdata *dd;
+	unsigned long flags, pfn, memaddr = 0;
+	u64 token = vma->vm_pgoff << PAGE_SHIFT;
+	u8 subctxt, mapio = 0, type;
+	ssize_t memlen = 0;
 	int ret = 0;
+	u16 ctxt, numa;
 
 	uctxt = ctxt_fp(fp);
-	if (!is_valid_mmap(token) || !uctxt || !(vma->vm_flags & VM_SHARED)) {
+	if (!is_valid_mmap(token) || !uctxt ||
+	    !(vma->vm_flags & VM_SHARED)) {
 		ret = -EINVAL;
 		goto done;
 	}
+	dd = uctxt->dd;
 	ctxt = HFI_MMAP_TOKEN_GET(CTXT, token);
 	subctxt = HFI_MMAP_TOKEN_GET(SUBCTXT, token);
-
+	type = HFI_MMAP_TOKEN_GET(TYPE, token);
 	if (ctxt != uctxt->ctxt || subctxt != subctxt_fp(fp)) {
 		ret = -EINVAL;
 		goto done;
 	}
 
-	switch(HFI_MMAP_TOKEN_GET(TYPE, token)) {
+	flags = vma->vm_flags;
+
+	printk(KERN_INFO " ctxt:%u, subctxt:%u, type:%u\n",
+	       ctxt, subctxt, type);
+	switch(type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
-		mmap_func = mmap_piobufs;
+		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) +
+			   (uctxt->ctxt * (1 << 16))) +
+			(type == PIO_BUFS_SOP ? (WFR_TXE_PIO_SIZE / 2) : 0);
+		/*
+		 * Map only the amount allocated to the context, not the
+		 * entire available context's PIO space.
+		 */
+		memlen = ALIGN(uctxt->sc->credits * WFR_PIO_BLOCK_SIZE,
+			       PAGE_SIZE);
+		mapio = 1;
+		flags &= ~VM_MAYREAD;
+		flags |= VM_DONTCOPY | VM_DONTEXPAND;
+		// XXX (Mitko): how do we deal with write-combining?
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 		break;
 	case PIO_CRED:
-		mmap_func = mmap_piocredits;
+		numa = numa_node_id();
+		/*
+		 * The credit return location for this context could be on the
+		 * second of two pages allocated for credit returns (if number
+		 * of enabled contexts > 128).
+		 */
+		memaddr = dd->cr_base[numa].pa +
+			((uctxt->ctxt * sizeof(*dd->cr_base[numa].va)) > PAGE_SIZE ?
+			 PAGE_SIZE : 0);
+		memlen = PAGE_SIZE;
+		mapio = 1;
+		if (flags & VM_WRITE) {
+			ret = -EINVAL;
+			goto done;
+		}
+		flags &= ~VM_MAYWRITE;
+		flags |= VM_DONTCOPY | VM_DONTEXPAND;
+		/*
+		 * The driver has already allocated memory for credit
+		 * returns and programmed it into the chip. Has that
+		 * memory been flaged as non-cached?
+		 */
+		//vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 		break;
-	case RCV_REGS:
 	case RCV_HDRQ:
-	case RCV_EGRBUF:
+		memaddr = uctxt->rcvhdrq_phys;
+		memlen = uctxt->rcvhdrq_size;
+		break;
+	case RCV_EGRBUF: {
+		ssize_t size;
+		unsigned long addr;
+		int i;
+		/*
+		 * The RcvEgr buffer need to be handled differently
+		 * as multiple non-contiguous pages need to be mapped
+		 * into the user process.
+		 */
+		size = uctxt->rcvegrbuf_size;
+		memlen = uctxt->rcvegrbuf_chunks * size;
+		if (((vma->vm_end - vma->vm_start) < memlen) ||
+		    vma->vm_flags & VM_WRITE) {
+			ret = -EINVAL;
+			goto done;
+		}
+		vma->vm_flags &= ~VM_MAYWRITE;
+		addr = vma->vm_start;
+		for (i=0 ; i < uctxt->rcvegrbuf_chunks; i++, addr += size) {
+			ret = remap_pfn_range(vma, addr,
+					 uctxt->rcvegrbuf_phys[i] >> PAGE_SHIFT,
+					 size, vma->vm_page_prot);
+			if (ret < 0)
+				goto done;
+		}
+		ret = 0;
+		goto done;
+	}
 	case UREGS:
+		/*
+		 * Map only the page that contains this context's user
+		 * registers.
+		 */
+		memaddr = (unsigned long)(dd->physaddr + dd->uregbase) +
+			(uctxt->ctxt * dd->ureg_align);
+		memlen = PAGE_SIZE;
+		mapio = 1;
+		flags |= VM_DONTCOPY | VM_DONTEXPAND;
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		break;
+	case EVENTS:
+		/*
+		 * One page containing events for all ctxts. User level
+		 * knows where it's own bitmap is.
+		 */
+		memaddr = kvirt_to_phys(dd->events);
+		memlen = PAGE_SIZE;
+		/*
+		 * v3.7 removes VM_RESERVED but the effect is kept by
+		 * using VM_IO.
+		 */
+		flags |= VM_IO | VM_DONTEXPAND;
+		break;
 	case STATUS:
+		memaddr = kvirt_to_phys((void *)dd->devstatusp);
+		memlen = PAGE_SIZE;
+		flags |= VM_IO | VM_DONTEXPAND;
+		break;
+	case RTAIL:
+		memaddr = uctxt->rcvhdrqtailaddr_phys;
+		memlen = PAGE_SIZE;
+		if (flags & VM_WRITE) {
+			ret = -EINVAL;
+			goto done;
+		}
+		flags &= ~VM_MAYWRITE;
+		break;
 	case SUBCTXT_UREGS:
 	case SUBCTXT_RCV_HDRQ:
 	case SDMA_COMP:
@@ -319,10 +432,24 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		break;
 	}
 
-	if (mmap_func)
-		ret = mmap_func(fp, vma);
-	else
+	if ((vma->vm_end - vma->vm_start) < memlen) {
+		printk(KERN_INFO " invalid map area %lu/%u\n",
+		       vma->vm_end - vma->vm_start, memlen);
 		ret = -EINVAL;
+		goto done;
+	}
+
+	vma->vm_flags = flags;
+	dd_dev_info(dd, "%s: io:%d, addr:0x%lx, len:%lu, flags:0x%lx\n",
+		    __func__, mapio, memaddr, memlen, vma->vm_flags);
+	pfn = memaddr >> PAGE_SHIFT;
+	if (mapio) {
+		ret = io_remap_pfn_range(vma, vma->vm_start, pfn, memlen,
+					 vma->vm_page_prot);
+	} else {
+		ret = remap_pfn_range(vma, vma->vm_start, pfn, memlen,
+				      vma->vm_page_prot);
+	}
 done:
 	return ret;
 }
@@ -345,13 +472,23 @@ static unsigned int hfi_poll(struct file *fp, struct poll_table_struct *pt)
 	return pollflag;
 }
 
+#include <linux/stddef.h>
+
 static int hfi_close(struct inode *inode, struct file *fp)
 {
 	struct hfi_filedata *fdata = fp->private_data;
 	struct qib_ctxtdata *uctxt = fdata->uctxt;
-	struct hfi_devdata *dd = uctxt->dd;
+	struct hfi_devdata *dd;
+	unsigned long flags;
 
 	fp->private_data = NULL;
+
+	if (!uctxt)
+		goto done;
+
+	printk(KERN_INFO " freeing ctxt %u\n", uctxt->ctxt);
+	dd = uctxt->dd;
+	mutex_lock(&qib_mutex);
 
 	qib_flush_wc();
 	/* drain user sdma queue */
@@ -360,9 +497,30 @@ static int hfi_close(struct inode *inode, struct file *fp)
 		qib_user_sdma_queue_destroy(fdata->pq);
 		}*/
 
+	spin_lock_irqsave(&dd->uctxt_lock, flags);
+	/* disable receive context and interrupt available */
+	dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS | QIB_RCVCTRL_TIDFLOW_DIS |
+		      QIB_RCVCTRL_INTRAVAIL_DIS, uctxt->ctxt);
 	sc_disable(uctxt->sc);
-	qib_free_ctxtdata(uctxt->dd, uctxt);
+	uctxt->pid = 0;
+	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 
+	dd->rcd[uctxt->ctxt] = NULL;
+	uctxt->rcvwait_to = 0;
+        uctxt->piowait_to = 0;
+        uctxt->rcvnowait = 0;
+        uctxt->pionowait = 0;
+        uctxt->flag = 0;
+
+        /* clean up the pkeys for this ctxt user */
+        //qib_clean_part_key(uctxt, dd);
+        dd->f_clear_tids(uctxt);
+
+	qib_stats.sps_ctxts--;
+	dd->freectxts++;
+	mutex_unlock(&qib_mutex);
+	qib_free_ctxtdata(dd, uctxt);
+done:
 	kfree(fdata);
 	return 0;
 }
@@ -400,12 +558,14 @@ static int assign_ctxt(struct file *fp, struct hfi_user_info *uinfo)
 
 	if (uinfo->hfi_alg < HFI_ALG_COUNT)
 		alg = uinfo->hfi_alg;
-	
+
+	mutex_lock(&qib_mutex);
 	i_minor = iminor(file_inode(fp)) - HFI_USER_MINOR_BASE;
 	if (i_minor)
 		ret = find_free_ctxt(i_minor - 1, fp, uinfo);
 	else
 		ret = get_a_ctxt(fp, uinfo, alg);
+	mutex_unlock(&qib_mutex);
 done:
 	return ret;
 }
@@ -413,7 +573,13 @@ done:
 static int find_free_ctxt(unsigned devno, struct file *fp,
 			  struct hfi_user_info *uinfo)
 {
-	return -EINVAL;
+	struct hfi_devdata *dd = qib_lookup(devno);
+	int ret = 0;
+	if (!dd)
+		ret = -ENODEV;
+	if (!ret && !dd->freectxts)
+		ret = -EBUSY;
+	return ret ? ret : allocate_ctxt(fp, dd, uinfo);
 }
 
 static int get_a_ctxt(struct file *fp, struct hfi_user_info *uinfo,
@@ -444,10 +610,12 @@ static int get_a_ctxt(struct file *fp, struct hfi_user_info *uinfo,
 				free = dd->freectxts;
 			}
 		}
-		if (udd) {
+		if (udd)
 			ret = allocate_ctxt(fp, udd, uinfo);
-			goto done;
-		}
+		else
+			ret = -EBUSY;
+		goto done;
+
 	} else {
 		for (dev = 0; dev < devmax; dev++) {
 			udd = qib_lookup(dev);
@@ -472,12 +640,12 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 
 	for (ctxt = dd->first_user_ctxt;
 	     ctxt < dd->num_rcv_contexts && dd->rcd[ctxt]; ctxt++)
-		;
 	if (ctxt == dd->num_rcv_contexts) {
 		ret = -EBUSY;
 		goto done;
 	}
-	uctxt = qib_create_ctxtdata(&dd->pport[0], ctxt);
+	printk(KERN_INFO " context %u free on hfi%u\n", ctxt, dd->unit);
+	uctxt = qib_create_ctxtdata(dd->pport, ctxt);
 	if (uctxt)
 		ptmp = kmalloc(uctxt->expected_count * sizeof(struct page **) +
 			       uctxt->expected_count * sizeof(u16), GFP_KERNEL);
@@ -522,6 +690,7 @@ done:
 static int user_init(struct file *fp)
 {
 	int ret;
+	unsigned int rcvctrl_ops = 0;
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd;
 
@@ -560,9 +729,10 @@ static int user_init(struct file *fp)
 	if (uctxt->rcvhdrtail_kvaddr)
 		qib_clear_rcvhdrtail(uctxt);
 
-	uctxt->dd->f_rcvctrl(uctxt->dd,
-			     QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_TIDFLOW_ENB,
-			     uctxt->ctxt);
+	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_TIDFLOW_ENB;
+	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
+		rcvctrl_ops |= QIB_RCVCTRL_TAILUPD_ENB;
+	uctxt->dd->f_rcvctrl(uctxt->dd, rcvctrl_ops, uctxt->ctxt);
 
 	/* Notify any waiting slaves */
 	if (uctxt->subctxt_cnt) {
@@ -600,7 +770,6 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 {
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
-	struct hfi_devdata *dd = uctxt->dd;
 	int ret = 0;
 
 	trace_hfi_ctxt_setup(uctxt->dd, uctxt->ctxt, subctxt_fp(fp),
@@ -623,12 +792,6 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 			     cinfo->rcvhdrq_cnt, cinfo->rcvhdrq_entsize);
 	if (ret)
 		goto done;
-	/*
-	 * RcvHdrQ will be created later during USER_INFO. Just record
-	 * for now.
-	 */
-	uctxt->rcvhdrq_cnt = cinfo->rcvhdrq_cnt;
-	uctxt->rcvhdrqentsize = cinfo->rcvhdrq_entsize;
 
 	// rcv eager array is eagrcnt * rcvegrentsize (rcvegr_entsize)
 	// the rcvhdrq array is rcvhdr_entries * rcvhdr_entsize (64)
@@ -664,6 +827,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	ssize_t sz;
+	unsigned offset, numa;
 	int ret = 0;
 
 	trace_hfi_uctxtdata(uctxt->dd, uctxt);
@@ -676,9 +840,19 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	binfo.context = uctxt->ctxt;
 	binfo.bthqp = kdeth_qp;
 
+	numa = numa_node_id();
+	printk(KERN_INFO " cred va: 0x%p, cred hw_free: 0x%p\n",
+	       dd->cr_base[numa].va, uctxt->sc->hw_free);
+	/*
+	 * If more than 128 contexts are enabled the allocated credit
+	 * return will span two contiguous pages. Since we only map
+	 * the page containing the context's credit return address,
+	 * we need to calculate the offset in the proper page.
+	 */
+	offset = (u64)uctxt->sc->hw_free - (u64)dd->cr_base[numa].va;
+	offset -= (offset > PAGE_SIZE) ? PAGE_SIZE : 0;
 	binfo.sc_credits_addr = HFI_MMAP_TOKEN(PIO_CRED, uctxt->ctxt,
-						subctxt_fp(fp),
-						uctxt->sc->hw_free);
+					       subctxt_fp(fp), offset);
 	binfo.pio_bufbase = HFI_MMAP_TOKEN(PIO_BUFS, uctxt->ctxt,
 					    subctxt_fp(fp),
 					    uctxt->sc->base_addr);
@@ -691,7 +865,26 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 					       uctxt->rcvhdrq);
 	binfo.rcvegr_bufbase = HFI_MMAP_TOKEN(RCV_EGRBUF, uctxt->ctxt,
 					       subctxt_fp(fp),
-					       uctxt->rcvegrbuf);
+					       uctxt->rcvegr_phys);
+	binfo.sdma_comp_bufbase = HFI_MMAP_TOKEN(SDMA_COMP, uctxt->ctxt,
+						 subctxt_fp(fp), 0);
+	// user regs are at
+	//   (WFR_RXE_PER_CONTEXT_USER + (ctxt * WFR_RXE_PER_CONTEXT_SIZE))
+	// or
+	//   ((char *)dd->uregbase + (ctxt * dd->ureg_align))
+	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
+					    subctxt_fp(fp), 0);
+	offset = ((uctxt->ctxt * QLOGIC_IB_MAX_SUBCTXT) +
+		  subctxt_fp(fp)) * sizeof(*dd->events);
+	binfo.events_bufbase = HFI_MMAP_TOKEN(EVENTS, uctxt->ctxt,
+					      subctxt_fp(fp),
+					      offset);
+	binfo.status_bufbase = HFI_MMAP_TOKEN(STATUS, uctxt->ctxt,
+					      subctxt_fp(fp),
+					      dd->devstatusp);
+	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
+		binfo.rcvhdrtail_base = HFI_MMAP_TOKEN(RTAIL, uctxt->ctxt,
+						       subctxt_fp(fp), 0);
 
 	sz = (len < sizeof(binfo)) ? len : sizeof(binfo);
 	if (copy_to_user(ubase, &binfo, sz))
@@ -794,18 +987,6 @@ static int user_event_ack(struct qib_ctxtdata *uctxt, int subctxt,
 			continue;
 		clear_bit(i, &uctxt->user_event_mask[subctxt]);
 	}
-	return ret;
-}
-
-static int mmap_piobufs(struct file *fp, struct vm_area_struct *vma)
-{
-	int ret = -EINVAL;
-	return ret;
-}
-
-static int mmap_piocredits(struct file *fp, struct vm_area_struct *vma)
-{
-	int ret = -EINVAL;
 	return ret;
 }
 

@@ -999,37 +999,32 @@ static const char *pt_names[] = {
 	"invalid"
 };
 
-static const char *pt_name(u32 type)
-{
-	return type >= ARRAY_SIZE(pt_names) ? "unknown" : pt_names[type];
-}
-
 /*
  * index is the index into the receive array
  */
 static void put_tid(struct hfi_devdata *dd, u32 index,
 			     u32 type, unsigned long pa)
 {
-	u64 reg, bsize;
+	u64 reg, bsize = 0;
 
-	if (type == PT_EAGER) {
-		bsize = encoded_size(dd->rcvegrbufsize);
-	} else if (type == PT_EXPECTED) {
-		/* FIXME: expected (TID) sizes appear to be hard-coded to
-		   PAGE_SIZE bytes */
-		bsize = encoded_size(PAGE_SIZE);
-	} else if (type == PT_INVALID) {
-		bsize = 0;	/* invalid size, disables the entry */
-		pa = 0;		/* remove former data */
+	if (type == PT_INVALID) {
+		pa = 0;
+	} else if (type < PT_INVALID) {
+		if (!hfi_rcvbuf_validate(dd->rcvegrbufsize, type,
+					 (u16 *)&bsize)) {
+			dd_dev_err(dd, "invalid RcvArray buffer size %u\n",
+				   dd->rcvegrbufsize);
+			goto done;
+		}
 	} else {
 		dd_dev_err(dd,
 			"unexpeced receive array type %u for index %u, not handled\n",
 			type, index);
-		return;
+		goto done;
 	}
 
 	dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
-		__func__, pt_name(type), index, pa, (unsigned long)bsize);
+		__func__, pt_names[type], index, pa, (unsigned long)bsize);
 
 #define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
 	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
@@ -1037,6 +1032,8 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 		| ((pa >> RT_ADDR_SHIFT) & WFR_RCV_ARRAY_RT_ADDR_MASK)
 					<< WFR_RCV_ARRAY_RT_ADDR_SHIFT;
 	write_csr(dd, WFR_RCV_ARRAY + (index * 8), reg);
+done:
+	return;
 }
 
 static void clear_tids(struct qib_ctxtdata *rcd)
@@ -1056,8 +1053,8 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 static int get_base_info(struct qib_ctxtdata *rcd,
 				  struct hfi_base_info *kinfo)
 {
-	if (print_unimplemented)
-		dd_dev_info(rcd->dd, "%s: not implemented\n", __func__);
+	kinfo->runtime_flags |= HFI_RUNTIME_HDRSUPP |
+		HFI_RUNTIME_NODMA_RTAIL;
 	return 0;
 }
 
@@ -1292,12 +1289,18 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	/* if the context already enabled, don't do the extra steps */
 	if ((op & QIB_RCVCTRL_CTXT_ENB)
 			&& !(rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK)) {
-		dd_dev_info(dd, "rcd->rcvhdrqtailaddr_phys 0x%lx\n", (unsigned long)rcd->rcvhdrqtailaddr_phys);
-		dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n", (unsigned long)rcd->rcvhdrq_phys);
+		if (!(dd->flags & QIB_NODMA_RTAIL)) {
+			dd_dev_info(dd, "rcd->rcvhdrqtailaddr_phys 0x%lx\n",
+				    (unsigned long)rcd->rcvhdrqtailaddr_phys);
+			dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n",
+				    (unsigned long)rcd->rcvhdrq_phys);
 
-		/* reset the tail and hdr addresses, and sequence count */
-		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR, rcd->rcvhdrqtailaddr_phys);
-		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR, rcd->rcvhdrq_phys);
+			/* reset the tail and hdr addresses, and sequence count */
+			write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR,
+					rcd->rcvhdrqtailaddr_phys);
+			write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR,
+					rcd->rcvhdrq_phys);
+		}
 
 		rcd->seq_cnt = 1;
 		/*
@@ -1524,7 +1527,7 @@ static int init_ctxt(struct qib_ctxtdata *rcd, u16 egrcnt)
 	u32 context = rcd->ctxt;
 	int ret = 0;
 
-	dd_dev_info(rcd->dd, "%s: setting up context %d\n", __func__, context);
+	dd_dev_info(dd, "%s: setting up context %d\n", __func__, context);
 	/*
 	 * Simple allocation: we have already pre-allocated the number
 	 * of entries per context in dd->rcv_entries.  Now, divide the
@@ -1532,7 +1535,13 @@ static int init_ctxt(struct qib_ctxtdata *rcd, u16 egrcnt)
 	 * This requires that the count be divisible by 4 as the expected
 	 * array base and count must be divisible by 2.
 	 */
-	//rcd->eager_count = dd->rcv_entries / 2;
+	if (egrcnt > dd->rcv_entries) {
+		dd_dev_err(dd,
+			   "%s: requesting too many egrtids %u (limit: %u)\n",
+			   __func__, egrcnt, dd->rcv_entries);
+		ret = -EINVAL;
+		goto done;
+	}
 	rcd->eager_count = egrcnt;
 	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES)
 		rcd->eager_count = WFR_MAX_EAGER_ENTRIES;
@@ -1544,7 +1553,7 @@ static int init_ctxt(struct qib_ctxtdata *rcd, u16 egrcnt)
 	if ((rcd->expected_base % 2 == 1) ||
 	    (rcd->expected_count % 2 == 1))	/* must be even */
 		ret = -EINVAL;
-
+done:
 	return ret;
 }
 

@@ -119,11 +119,15 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		 * default values for all receive side memories. User contexts will
 		 * be handled differently.
 		 */
+		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry size
+		 * as DWords. However, hfi_setup_ctxt takes bytes from PSM and
+		 * converts to DWords. Should we just use bytes in hfi_devdata? */
 		ret = hfi_setup_ctxt(rcd, dd->rcv_entries / 2, 0x8000,
-				     dd->rcvhdrcnt, dd->rcvhdrentsize);
+				     dd->rcvhdrcnt, dd->rcvhdrentsize << 2);
 		if (ret < 0) {
 			dd_dev_err(dd,
 				   "Failed to setup kernel receive context, failing\n");
+			dd->rcd[rcd->ctxt] = NULL;
 			qib_free_ctxtdata(dd, rcd);
 			ret = -EFAULT;
 			goto done;
@@ -166,7 +170,7 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 }
 
 int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
-		   u16 hdrqcnt, u16 hdrqsize)
+		   u16 hdrqcnt, u16 hdrqentsize)
 {
 	struct hfi_devdata *dd = uctxt->dd;
 	int ret = 0;
@@ -186,6 +190,10 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 	 * get invoked, even though we say we can sleep and this can
 	 * cause significant system problems....
 	 */
+	if (!hfi_rcvbuf_validate(egrsize, PT_EAGER, NULL)) {
+		ret = -EINVAL;
+		goto done;
+	}
 	uctxt->rcvegrbuf_size = egrsize;
 	uctxt->rcvegrbufs_perchunk =
 		uctxt->rcvegrbuf_size / dd->rcvegrbufsize;
@@ -198,6 +206,10 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 	}
 	uctxt->rcvegrbufs_perchunk_shift =
 		ilog2(uctxt->rcvegrbufs_perchunk);
+
+	uctxt->rcvhdrq_cnt = hdrqcnt;
+	/* RcvHdrQ Entry Size is in DWords */
+	uctxt->rcvhdrqentsize = hdrqentsize >> 2;
 done:
 	return ret;
 }
@@ -551,9 +563,6 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		if (!rcd)
 			continue;
 
-		/* kernel contexts use the device defaults */
-		rcd->rcvhdrq_cnt = dd->rcvhdrcnt;
-		rcd->rcvhdrqentsize = dd->rcvhdrentsize;
 		lastfail = qib_create_rcvhdrq(dd, rcd);
 		if (!lastfail)
 			lastfail = qib_setup_eagerbufs(rcd);
@@ -564,11 +573,26 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		}
 	}
 
+	/* Allocate a page for event notifiction. */
+	dd->events = vmalloc_user(PAGE_SIZE);
+	if (!dd->events)
+		dd_dev_err(dd, "Failed to allocate user events page\n");
+	/*
+	 * Allocate a page for device and port status.
+	 * Page will be shared amongst all user proceses.
+	 */
+	dd->devstatusp = vmalloc_user(PAGE_SIZE);
+	if (!dd->devstatusp)
+		dd_dev_err(dd, "Failed to allocate dev status page\n");
+
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		int mtu;
 		if (lastfail)
 			ret = lastfail;
 		ppd = dd->pport + pidx;
+		if (dd->devstatusp)
+			/* Currently, we only have one port */
+			ppd->statusp = &dd->devstatusp->pstatus;
 		mtu = ib_mtu_enum_to_int(qib_ibmtu);
 		if (mtu == -1) {
 			mtu = HFI_DEFAULT_MTU;
@@ -1039,7 +1063,7 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 	 * This marks unit as not usable, until reset.
 	 */
 	if (dd->devstatusp)
-		*dd->devstatusp |= QIB_STATUS_HWERROR;
+		dd->devstatusp->devstatus |= QIB_STATUS_HWERROR;
 }
 
 static void qib_remove_one(struct pci_dev *);
@@ -1385,11 +1409,12 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 			goto bail;
 		}
 
-		if (rcd->ctxt >= dd->first_user_ctxt) {
+		/* Event mask is per device now and is in hfi_devdata */
+		/*if (rcd->ctxt >= dd->first_user_ctxt) {
 			rcd->user_event_mask = vmalloc_user(PAGE_SIZE);
 			if (!rcd->user_event_mask)
 				goto bail_free_hdrq;
-		}
+				}*/
 
 		if (!(dd->flags & QIB_NODMA_RTAIL)) {
 			rcd->rcvhdrtail_kvaddr = dma_alloc_coherent(
@@ -1431,7 +1456,6 @@ bail_free:
 		rcd->ctxt);
 	vfree(rcd->user_event_mask);
 	rcd->user_event_mask = NULL;
-bail_free_hdrq:
 	dma_free_coherent(&dd->pcidev->dev, amt, rcd->rcvhdrq,
 			  rcd->rcvhdrq_phys);
 	rcd->rcvhdrq = NULL;

@@ -108,6 +108,7 @@ enum hfi_ureg {
 #define HFI_RUNTIME_SDMA                0x02
 #define HFI_RUNTIME_FORCE_PIOAVAIL      0x04
 #define HFI_RUNTIME_HDRSUPP             0x08
+#define HFI_RUNTIME_EXTENDED_PSN        0x10
 
 /*
  * This structure is returned by qib_userinit() immediately after
@@ -138,7 +139,7 @@ struct hfi_base_info {
 	 * The special QP (queue pair) value that identifies PSM
 	 * protocol packet from standard IB packets.
 	 */
-	__u16 bthqp;
+	__u32 bthqp;
 	/* PIO credit return address, */
 	__u64 sc_credits_addr;
 	/*
@@ -165,8 +166,12 @@ struct hfi_base_info {
 	 * ur_rcvtidflow
 	 */
         __u64 user_regbase;
+	/* notification events */
+	__u64 events_bufbase;
 	/* status page */
 	__u64 status_bufbase;
+	/* rcvhdrtail updata */
+	__u64 rcvhdrtail_base;
         /*
 	 * shared memory pages for subctxts if ctxt is shared; these cover
 	 * all the processes in the group sharing a single context.
@@ -188,7 +193,7 @@ struct hfi_base_info {
  * driver will not interoperate with older software, and initialization
  * will return an error.
  */
-#define QIB_USER_SWMAJOR 1
+#define QIB_USER_SWMAJOR 2
 
 /*
  * Minor version differences are always compatible
@@ -336,10 +341,10 @@ struct hfi_ctxt_info {
 
 struct hfi_ctxt_setup {
 	__u16 egrtids;          /* number of RcvArray entries for Eager Rcvs */
-	__u16 rcvegr_size;      /* size of Eager buffers */
 	__u16 rcvhdrq_cnt;      /* number of RcvHdrQ entries */
 	__u16 rcvhdrq_entsize;  /* size (in bytes) for each RcvHdrQ entry */
 	__u16 sdma_ring_size;   /* number of entries in SDMA request ring */
+	__u32 rcvegr_size;      /* size of Eager buffers */
 };
 
 struct hfi_tid_info {
@@ -369,9 +374,10 @@ struct hfi_cmd {
 };
 
 enum hfi_sdma_comp_state {
-	FAILED = 0,
-	DONE,
-	QUEUED
+	FREE = 0,
+	QUEUED,
+	COMPLETE,
+	ERROR
 };
 
 /*
@@ -386,7 +392,6 @@ struct hfi_sdma_comp_entry {
  * Device status and notifications from driver to user-space.
  */
 struct hfi_status {
-	__u64 events;      /* signal user space of driver/chip events */
 	__u64 devstatus;   /* device/hw status bits */
 	__u64 pstatus;     /* port state and status bits */
 	char *freezemsg;

@@ -824,12 +824,16 @@ struct hfi_devdata {
 	/* around rcd and (user ctxts) ctxt_cnt use (intr vs free) */
 	spinlock_t uctxt_lock; /* rcd and user context changes */
 	/*
+	 * A page that will hold event notification bitmaps for all
+	 * contexts. This page will be mapped into all processes.
+	 */
+	u64 *events;
+	/*
 	 * per unit status, see also portdata statusp
 	 * mapped readonly into user processes so they can get unit and
 	 * IB link status cheaply
 	 */
-	u64 *devstatusp;
-	char *freezemsg; /* freeze msg if hw error put chip in freeze */
+	struct hfi_status *devstatusp;
 	u32 freezelen; /* max length of freezemsg */
 	/* timer used to prevent stats overflow, error throttling, etc. */
 	struct timer_list stats_timer;
@@ -1025,6 +1029,7 @@ void qib_hol_up(struct qib_pportdata *);
 void qib_hol_event(unsigned long);
 void qib_disable_after_error(struct hfi_devdata *);
 int qib_set_uevent_bits(struct qib_pportdata *, const int);
+int hfi_rcvbuf_validate(u32, u8, u16 *);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \
