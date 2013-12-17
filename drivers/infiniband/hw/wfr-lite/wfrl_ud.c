@@ -57,6 +57,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	struct qib_sge *sge;
 	struct ib_wc wc;
 	u32 length;
+	enum ib_qp_type sqptype, dqptype;
 
 	qp = qib_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
 	if (!qp) {
@@ -65,11 +66,15 @@ printk(KERN_ERR PFX "ERROR: packet drop: failed to find QP: 0x%x\n",
 		ibp->n_pkt_drops++;
 		return;
 	}
-	if (qp->ibqp.qp_type != sqp->ibqp.qp_type ||
+
+	sqptype = sqp->ibqp.qp_type == IB_QPT_GSI ? IB_QPT_UD : sqp->ibqp.qp_type;
+	dqptype = qp->ibqp.qp_type == IB_QPT_GSI ? IB_QPT_UD : qp->ibqp.qp_type;
+
+	if (dqptype != sqptype ||
 	    !(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK)) {
 printk(KERN_ERR PFX
-	"ERROR: packet drop: qp type mismatch %d != %d || invalid QP state %d\n",
-	qp->ibqp.qp_type, sqp->ibqp.qp_type, qp->state);
+	"ERROR: packet drop: QP %d: qp type mismatch %d != %d || invalid QP state %d\n",
+	qp->ibqp.qp_num, dqptype, sqptype, qp->state);
 		ibp->n_pkt_drops++;
 		goto drop;
 	}
