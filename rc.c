@@ -711,8 +711,8 @@ void qib_send_rc_ack(struct qib_qp *qp)
 
 	sc = qp_to_send_context(qp);
 	// FIXME: "lhr0 >> 12" is a poor way to get the vl
-	plen = 2 /* PBC */ + hwords + SIZE_OF_CRC;
-	pbc = create_pbc(sc, plen, lrh0 >> 12, qp->s_srate, 0);
+	plen = 2 /* PBC */ + hwords;
+	pbc = create_pbc(sc, 0, qp->s_srate, lrh0 >> 12, plen);
 
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (!pbuf) {
