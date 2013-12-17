@@ -35,6 +35,7 @@
 
 #include "hfi.h"
 #include "qp.h"
+#include "trace.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_RC_##x
@@ -724,6 +725,8 @@ void qib_send_rc_ack(struct qib_qp *qp)
 		spin_lock_irqsave(&qp->s_lock, flags);
 		goto queue_ack;
 	}
+
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &hdr);
 
 	/* write the pbc and data */
 	pio_copy(pbuf, pbc, &hdr, hwords);
