@@ -744,6 +744,7 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 					struct firmware_details *fdet)
 {
+	u64 reg;
 	int i, err;
 	const u8 ra = SBUS_MASTER_BROADCAST; /* receiver address */
 
@@ -775,8 +776,10 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	}
 
 	/* j. trigger the gasket block */
-	//FIXME: the CSR needs to include the SerDes target address bits (TBD)
-	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, 1ull);
+	reg = ((u64)1 << WFR_ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
+		| ((u64)pcie_serdes_broadcast[dd->hfi_id]
+			<< WFR_ASIC_PCIE_SD_HOST_CMD_SBUS_RCVR_ADDR_SHIFT);
+	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
 
 
 //FIXME: Once we swap the PCIe firmware, does that immediately
@@ -799,8 +802,8 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	if (reg == ~0ull) {	/* PCIe read failed/timeout */
 		do some thing drastic here
 	}
-	status = (reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_SHIFT)
-					& WFR_ASIC_PCIE_SD_HOST_STATUS_MASK;
+	status = (reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_SHIFT)
+				& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
 	if (status != WFR_PCIE_FW_STATUS_SUCCESS)
 		return -EFAIL;
 #endif
