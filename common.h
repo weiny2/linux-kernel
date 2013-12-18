@@ -297,8 +297,7 @@ struct hfi_user_info {
 
 #define HFI_CMD_RECV_CTRL	9	/* control receipt of packets */
 #define HFI_CMD_POLL_TYPE	10	/* set the kind of polling we want */
-#define HFI_CMD_SET_PART_KEY	11	/* add partition key */
-#define HFI_CMD_ACK_EVENT       12	/* ack & clear bits *spi_sendbuf_status */
+#define HFI_CMD_ACK_EVENT       11	/* ack & clear bits *spi_sendbuf_status */
 
 /*
  * HFI_CMD_ACK_EVENT obsoletes HFI_CMD_DISARM_BUFS, but we keep it for

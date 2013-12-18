@@ -75,6 +75,7 @@ static int allocate_ctxt(struct file *, struct hfi_devdata *,
 static unsigned int poll_urgent(struct file *, struct poll_table_struct *);
 static unsigned int poll_next(struct file *, struct poll_table_struct *);
 static int user_event_ack(struct qib_ctxtdata *, int, unsigned long);
+static int manage_rcvq(struct qib_ctxtdata *, unsigned, int);
 
 static const struct file_operations qib_file_ops = {
 	.owner = THIS_MODULE,
@@ -193,7 +194,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_USER_INFO:
 	case HFI_CMD_RECV_CTRL:
 	case HFI_CMD_POLL_TYPE:
-	case HFI_CMD_SET_PART_KEY:
 	case HFI_CMD_ACK_EVENT:
 	case HFI_CMD_CTXT_INFO:
 		copy = 0;
@@ -205,8 +205,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	}
 
 	if (copy) {
-		printk(KERN_WARNING " user copy: %u 0x%llx 0x%llx\n", copy,
-		       ucmd->addr, dest);
 		if (copy_from_user(dest, (void __user *)ucmd->addr, copy)) {
 			ret = -EFAULT;
 			goto bail;
@@ -251,12 +249,14 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_TID_UPDATE:
 	case HFI_CMD_TID_FREE:
+		printk(KERN_WARNING " %s: TID update/free unimplemented\n",
+		       __func__);
+		break;
 	case HFI_CMD_RECV_CTRL:
+		ret = manage_rcvq(uctxt, subctxt_fp(fp), (int)user_val);
 		break;
 	case HFI_CMD_POLL_TYPE:
 		uctxt->poll_type = (typeof(uctxt->poll_type))user_val;
-		break;
-	case HFI_CMD_SET_PART_KEY:
 		break;
 	case HFI_CMD_ACK_EVENT:
 		ret = user_event_ack(uctxt, subctxt_fp(fp), user_val);
@@ -308,8 +308,6 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 
 	flags = vma->vm_flags;
 
-	printk(KERN_INFO " ctxt:%u, subctxt:%u, type:%u\n",
-	       ctxt, subctxt, type);
 	switch(type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
@@ -433,15 +431,13 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	if ((vma->vm_end - vma->vm_start) < memlen) {
-		printk(KERN_INFO " invalid map area %lu/%u\n",
-		       vma->vm_end - vma->vm_start, memlen);
 		ret = -EINVAL;
 		goto done;
 	}
 
 	vma->vm_flags = flags;
-	dd_dev_info(dd, "%s: io:%d, addr:0x%lx, len:%lu, flags:0x%lx\n",
-		    __func__, mapio, memaddr, memlen, vma->vm_flags);
+	dd_dev_info(dd, "%s: type:%u io:%d, addr:0x%lx, len:%lu, flags:0x%lx\n",
+		    __func__, type, mapio, memaddr, memlen, vma->vm_flags);
 	pfn = memaddr >> PAGE_SHIFT;
 	if (mapio) {
 		ret = io_remap_pfn_range(vma, vma->vm_start, pfn, memlen,
@@ -471,8 +467,6 @@ static unsigned int hfi_poll(struct file *fp, struct poll_table_struct *pt)
 
 	return pollflag;
 }
-
-#include <linux/stddef.h>
 
 static int hfi_close(struct inode *inode, struct file *fp)
 {
@@ -512,8 +506,6 @@ static int hfi_close(struct inode *inode, struct file *fp)
         uctxt->pionowait = 0;
         uctxt->flag = 0;
 
-        /* clean up the pkeys for this ctxt user */
-        //qib_clean_part_key(uctxt, dd);
         dd->f_clear_tids(uctxt);
 
 	qib_stats.sps_ctxts--;
@@ -644,7 +636,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 		ret = -EBUSY;
 		goto done;
 	}
-	printk(KERN_INFO " context %u free on hfi%u\n", ctxt, dd->unit);
+
 	uctxt = qib_create_ctxtdata(dd->pport, ctxt);
 	if (uctxt)
 		ptmp = kmalloc(uctxt->expected_count * sizeof(struct page **) +
@@ -692,7 +684,7 @@ static int user_init(struct file *fp)
 	int ret;
 	unsigned int rcvctrl_ops = 0;
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
-	struct hfi_devdata *dd;
+	//struct hfi_devdata *dd;
 
 	/* make sure that the context has already been setup */
 	if (!test_bit(QIB_CTXT_SETUP_DONE, &uctxt->flag)) {
@@ -832,6 +824,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 
 	trace_hfi_uctxtdata(uctxt->dd, uctxt);
 
+	memset(&binfo, 0, sizeof(binfo));
 	ret = dd->f_get_base_info(uctxt, &binfo);
 	if (ret < 0)
 		goto done;
@@ -839,10 +832,12 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	binfo.sw_version = QIB_KERN_SWVERSION;
 	binfo.context = uctxt->ctxt;
 	binfo.bthqp = kdeth_qp;
+	/* XXX (Mitko): We are hard-coding the pport index since WFR
+	 * has only one port and the expectation is that ppd will go
+	 * away. */
+	binfo.mtu = dd->pport[0].ibmtu;
 
 	numa = numa_node_id();
-	printk(KERN_INFO " cred va: 0x%p, cred hw_free: 0x%p\n",
-	       dd->cr_base[numa].va, uctxt->sc->hw_free);
 	/*
 	 * If more than 128 contexts are enabled the allocated credit
 	 * return will span two contiguous pages. Since we only map
@@ -970,6 +965,45 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 	spin_unlock_irqrestore(&ppd->dd->uctxt_lock, flags);
 
 	return ret;
+}
+
+/**
+ * qib_manage_rcvq - manage a context's receive queue
+ * @rcd: the context
+ * @subctxt: the subcontext
+ * @start_stop: action to carry out
+ *
+ * start_stop == 0 disables receive on the context, for use in queue
+ * overflow conditions.  start_stop==1 re-enables, to be used to
+ * re-init the software copy of the head register
+ */
+static int manage_rcvq(struct qib_ctxtdata *uctxt, unsigned subctxt,
+			   int start_stop)
+{
+	struct hfi_devdata *dd = uctxt->dd;
+	unsigned int rcvctrl_op;
+
+	if (subctxt)
+		goto bail;
+	/* atomically clear receive enable ctxt. */
+	if (start_stop) {
+		/*
+		 * On enable, force in-memory copy of the tail register to
+		 * 0, so that protocol code doesn't have to worry about
+		 * whether or not the chip has yet updated the in-memory
+		 * copy or not on return from the system call. The chip
+		 * always resets it's tail register back to 0 on a
+		 * transition from disabled to enabled.
+		 */
+		if (uctxt->rcvhdrtail_kvaddr)
+			qib_clear_rcvhdrtail(uctxt);
+		rcvctrl_op = QIB_RCVCTRL_CTXT_ENB;
+	} else
+		rcvctrl_op = QIB_RCVCTRL_CTXT_DIS;
+	dd->f_rcvctrl(dd, rcvctrl_op, uctxt->ctxt);
+	/* always; new head should be equal to new tail; see above */
+bail:
+	return 0;
 }
 
 /*
