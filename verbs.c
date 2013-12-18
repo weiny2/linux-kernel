@@ -1030,8 +1030,6 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
-	//FIXME: does plen include the pbc?
-	//FIXME: lrh[0]>>12 is a poor way to obtian the vl
 	sc = qp_to_send_context(qp);
 	pbc = create_pbc(sc, 0, qp->s_srate,
 				       be16_to_cpu(hdr->lrh[0]) >> 12, plen);
@@ -1141,12 +1139,17 @@ static int no_bufs_available(struct qib_qp *qp)
 	return ret;
 }
 
-// FIXME: implement this
 struct send_context *qp_to_send_context(struct qib_qp *qp)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 
-	return dd->send_contexts[0].sc;
+	/*
+	 * Expect that the 0th receive context is always a kernel context.
+	 *
+	 * TODO: The mapping may want to take into account NUMA and possible
+	 * additional kernel contexts.
+	 */
+	return dd->rcd[0]->sc;
 }
 
 static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
@@ -1161,7 +1164,6 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 
 	sc = qp_to_send_context(qp);
 
-	// FIXME: does plen include the pbc?
 	pbc = create_pbc(sc, 0, qp->s_srate,
 				be16_to_cpu(ibhdr->lrh[0]) >> 12, plen);
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
