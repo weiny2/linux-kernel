@@ -1505,12 +1505,6 @@ static int sdma_busy(struct qib_pportdata *ppd)
 	return 0;
 }
 
-static void initvl15_bufs(struct hfi_devdata *dd)
-{
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-}
-
 /*
  * QIB sets these rcd fields in this function:
  *	rcvegrcnt	 (now eager_count)
@@ -2449,7 +2443,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_hdrqempty         = hdrqempty;
 	dd->f_ib_updown         = ib_updown;
 	dd->f_init_ctxt         = init_ctxt;
-	dd->f_initvl15_bufs     = initvl15_bufs;
 	dd->f_intr_fallback     = intr_fallback;
 	dd->f_late_initreg      = late_initreg;
 	dd->f_portcntr          = portcntr;

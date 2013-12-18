@@ -768,7 +768,6 @@ struct hfi_devdata {
 		u64 **);
 	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
 		char **, u64 **);
-	void (*f_initvl15_bufs)(struct hfi_devdata *);
 	void (*f_init_ctxt)(struct qib_ctxtdata *);
 	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
 
