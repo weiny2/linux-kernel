@@ -1855,7 +1855,11 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			err_info = "receive context";
 			remap_receive_available_interrupt(dd, idx, i);
 		} else {
-			BUG();
+			/* not in our expected range - complain, then
+			   ignore it */
+			dd_dev_err(dd,
+				"Unexpected extra MSI-X interrupt %d\n", i);
+			continue;
 		}
 		/* no argument, no interrupt */
 		if (arg == NULL)
