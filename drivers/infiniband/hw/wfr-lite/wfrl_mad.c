@@ -246,6 +246,7 @@ void virtual_port_linkup_init(u8 port)
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 	u16 speed_enabled = be16_to_cpu(vpi->link_speed.enabled);
 	u16 width_enabled = be16_to_cpu(vpi->link_width.enabled);
+	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
 
 	vpi->port_states.portphysstate_portstate = 5 << 4;
 	vpi->port_states.portphysstate_portstate |= 2;
@@ -261,6 +262,8 @@ void virtual_port_linkup_init(u8 port)
 		vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
 	else
 		vpi->link_width.active = cpu_to_be16(IB_WIDTH_1X);
+
+	vbct->vl[15].tx_dedicated_limit = cpu_to_be16(get_vl15_init());
 
 	printk(KERN_WARNING PFX
 		"STL Port '%d' Virtual Link Up state : 0x%x\n"
@@ -432,7 +435,7 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 			   u8 port, int send_GetResp)
 {
 	u8 rem_phys_state, rem_link_state;
-	u8 loc_phys_state, loc_link_state;
+	u8 loc_phys_state, loc_link_state, new_loc_phys_state;
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
 	struct wfr_link_info *link_info =
 					(struct wfr_link_info *)smp->data;
@@ -487,13 +490,13 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 //if (ev)
 //signal_ib_event(ppd, ev);
 
-	loc_phys_state = (vpi->port_states.portphysstate_portstate >> 4) & 0xF;
-	if (loc_phys_state == 0x5) { /* LinkUp */
+	new_loc_phys_state = (vpi->port_states.portphysstate_portstate >> 4) & 0xF;
+	if (new_loc_phys_state == 0x5) { /* LinkUp */
 		vpi->link_width.active = link_info->link_width_active;
 		vpi->link_speed.active = link_info->link_speed_active;
+		if (loc_phys_state < 0x5)
+			vbct->vl[15].tx_dedicated_limit = link_info->vl15_init;
 	}
-
-	vbct->vl[15].tx_dedicated_limit = link_info->vl15_init;
 
 	if (send_GetResp) {
 		/* send our response back */
