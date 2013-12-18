@@ -993,6 +993,7 @@ static int reset(struct hfi_devdata *dd)
 	return 0;
 }
 
+int trace_tid;	/* TODO: hook this up with tracing */
 static const char *pt_names[] = {
 	"expected",
 	"eager",
@@ -1028,8 +1029,10 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 		return;
 	}
 
-	dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
-		__func__, pt_name(type), index, pa, (unsigned long)bsize);
+	if (trace_tid)
+		dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
+			__func__, pt_name(type), index, pa,
+			(unsigned long)bsize);
 
 #define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
 	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
