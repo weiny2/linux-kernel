@@ -1060,8 +1060,9 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 static int get_base_info(struct qib_ctxtdata *rcd,
 				  struct hfi_base_info *kinfo)
 {
-	kinfo->runtime_flags |= HFI_RUNTIME_HDRSUPP |
-		HFI_RUNTIME_NODMA_RTAIL;
+	kinfo->runtime_flags |= HFI_RUNTIME_HDRSUPP;
+	if (rcd->dd->flags & QIB_NODMA_RTAIL)
+		kinfo->runtime_flags |= HFI_RUNTIME_NODMA_RTAIL;
 	if (extended_psn)
 		kinfo->runtime_flags |= HFI_RUNTIME_EXTENDED_PSN;
 	return 0;
