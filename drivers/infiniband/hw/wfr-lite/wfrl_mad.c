@@ -790,6 +790,45 @@ static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_smp *smp)
 }
 
 /*
+ * Send a bad M_Key trap (ch. 14.3.9).
+ */
+static void wfr_bad_mkey(struct qib_ibport *ibp, struct stl_smp *smp)
+{
+	struct ib_mad_notice_attr data;
+
+	/* Send violation trap */
+	data.generic_type = IB_NOTICE_TYPE_SECURITY;
+	data.prod_type_msb = 0;
+	data.prod_type_lsb = IB_NOTICE_PROD_CA;
+	data.trap_num = IB_NOTICE_TRAP_BAD_MKEY;
+	data.issuer_lid = cpu_to_be16(ppd_from_ibp(ibp)->lid);
+	data.toggle_count = 0;
+	memset(&data.details, 0, sizeof data.details);
+	data.details.ntc_256.lid = data.issuer_lid;
+	data.details.ntc_256.method = smp->method;
+	data.details.ntc_256.attr_id = smp->attr_id;
+	data.details.ntc_256.attr_mod = smp->attr_mod;
+	data.details.ntc_256.mkey = smp->mkey;
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
+		u8 hop_cnt;
+
+		data.details.ntc_256.dr_slid = smp->route.dr.dr_slid;
+		data.details.ntc_256.dr_trunc_hop = IB_NOTICE_TRAP_DR_NOTICE;
+		hop_cnt = smp->hop_cnt;
+		if (hop_cnt > ARRAY_SIZE(data.details.ntc_256.dr_rtn_path)) {
+			data.details.ntc_256.dr_trunc_hop |=
+				IB_NOTICE_TRAP_DR_TRUNC;
+			hop_cnt = ARRAY_SIZE(data.details.ntc_256.dr_rtn_path);
+		}
+		data.details.ntc_256.dr_trunc_hop |= hop_cnt;
+		memcpy(data.details.ntc_256.dr_rtn_path, smp->route.dr.return_path,
+		       hop_cnt);
+	}
+
+	qib_send_trap(ibp, &data, sizeof data);
+}
+
+/*
  * Send a Port Capability Mask Changed trap (ch. 14.3.11).
  */
 void qib_cap_mask_chg(struct qib_ibport *ibp)
@@ -1048,6 +1087,52 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 					ibp->mkey_lease_period * HZ;
 			/* Generate a trap notice. */
 			qib_bad_mkey(ibp, smp);
+			ret = 1;
+		}
+	}
+
+	return ret;
+}
+
+static int check_stl_mkey(struct qib_ibport *ibp, struct stl_smp *smp, int mad_flags)
+{
+	int valid_mkey = 0;
+	int ret = 0;
+
+	/* Is the mkey in the process of expiring? */
+	if (ibp->mkey_lease_timeout &&
+	    time_after_eq(jiffies, ibp->mkey_lease_timeout)) {
+		/* Clear timeout and mkey protection field. */
+		ibp->mkey_lease_timeout = 0;
+		ibp->mkeyprot = 0;
+	}
+
+	if ((mad_flags & IB_MAD_IGNORE_MKEY) ||  ibp->mkey == 0 ||
+	    ibp->mkey == smp->mkey)
+		valid_mkey = 1;
+
+	/* Unset lease timeout on any valid Get/Set/TrapRepress */
+	if (valid_mkey && ibp->mkey_lease_timeout &&
+	    (smp->method == IB_MGMT_METHOD_GET ||
+	     smp->method == IB_MGMT_METHOD_SET ||
+	     smp->method == IB_MGMT_METHOD_TRAP_REPRESS))
+		ibp->mkey_lease_timeout = 0;
+
+	if (!valid_mkey) {
+		switch (smp->method) {
+		case IB_MGMT_METHOD_GET:
+			/* Bad mkey not a violation below level 2 */
+			if (ibp->mkeyprot < 2)
+				break;
+		case IB_MGMT_METHOD_SET:
+		case IB_MGMT_METHOD_TRAP_REPRESS:
+			if (ibp->mkey_violations != 0xFFFF)
+				++ibp->mkey_violations;
+			if (!ibp->mkey_lease_timeout && ibp->mkey_lease_period)
+				ibp->mkey_lease_timeout = jiffies +
+					ibp->mkey_lease_period * HZ;
+			/* Generate a trap notice. */
+			wfr_bad_mkey(ibp, smp);
 			ret = 1;
 		}
 	}
@@ -4171,10 +4256,10 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		goto bail;
 	}
 
-#if 0
-/* FIXME check STL SMP MKey */
-	ret = check_mkey(ibp, smp, mad_flags);
+	ret = check_stl_mkey(ibp, smp, mad_flags);
 	if (ret) {
+#if 0
+	/* For WFR we do _not_ support "cross" queries like this */
 		u32 port_num = be32_to_cpu(smp->attr_mod);
 
 		/*
@@ -4190,10 +4275,10 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		    port_num && port_num <= ibdev->phys_port_cnt &&
 		    port != port_num)
 			(void) check_mkey(to_iport(ibdev, port_num), smp, 0);
+#endif
 		ret = IB_MAD_RESULT_FAILURE;
 		goto bail;
 	}
-#endif
 
 /* FIXME add other STL SMP's as we go */
 	switch (smp->method) {
