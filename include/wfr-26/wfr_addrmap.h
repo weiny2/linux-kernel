@@ -1,0 +1,5 @@
+#define WFR_CCE 0x0
+#define WFR_ASIC 0x400000
+#define WFR_MISC 0x500000
+#define WFR_RXE 0x1000000
+#define WFR_TXE 0x1800000
