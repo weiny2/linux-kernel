@@ -1112,9 +1112,24 @@ static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 	return 0;
 }
 
+static void set_lidlmc(struct qib_pportdata *ppd)
+{
+	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
+	c1 &= ~(DCC_CFG_PORT_CONFIG1_LID_SMASK|
+	       DCC_CFG_PORT_CONFIG1_LMC_SMASK);
+	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_LID_MASK)
+			<< DCC_CFG_PORT_CONFIG1_LID_SHIFT)|
+	      ((ppd->lmc & DCC_CFG_PORT_CONFIG1_LMC_MASK)
+			<< DCC_CFG_PORT_CONFIG1_LMC_SHIFT);
+	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
+}
+
 static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
 	switch (which) {
+	case QIB_IB_CFG_LIDLMC:
+		set_lidlmc(ppd);
+		break;
 	case QIB_IB_CFG_LSTATE:
 		switch (val & 0xffff0000) {
 		case IB_LINKCMD_ARMED:

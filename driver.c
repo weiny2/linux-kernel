@@ -664,11 +664,10 @@ bail:
 int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
 {
 	struct hfi_devdata *dd = ppd->dd;
+
 	ppd->lid = lid;
 	ppd->lmc = lmc;
-
-	dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LIDLMC,
-			 lid | (~((1U << lmc) - 1)) << 16);
+	dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LIDLMC, 0);
 
 	dd_dev_info(dd, "IB%u:%u got a lid: 0x%x\n", dd->unit, ppd->port, lid);
 
