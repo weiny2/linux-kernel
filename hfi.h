@@ -833,7 +833,7 @@ struct hfi_devdata {
 	 * mapped readonly into user processes so they can get unit and
 	 * IB link status cheaply
 	 */
-	struct hfi_status *devstatusp;
+	struct hfi_status *status;
 	u32 freezelen; /* max length of freezemsg */
 	/* timer used to prevent stats overflow, error throttling, etc. */
 	struct timer_list stats_timer;

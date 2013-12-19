@@ -577,22 +577,28 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	dd->events = vmalloc_user(PAGE_SIZE);
 	if (!dd->events)
 		dd_dev_err(dd, "Failed to allocate user events page\n");
+	else
+		memset(dd->events, 0, PAGE_SIZE);
 	/*
 	 * Allocate a page for device and port status.
 	 * Page will be shared amongst all user proceses.
 	 */
-	dd->devstatusp = vmalloc_user(PAGE_SIZE);
-	if (!dd->devstatusp)
+	dd->status = vmalloc_user(PAGE_SIZE);
+	if (!dd->status)
 		dd_dev_err(dd, "Failed to allocate dev status page\n");
-
+	else {
+		memset(dd->status, 0, PAGE_SIZE);
+		dd->freezelen = PAGE_SIZE - (sizeof(*dd->status) -
+					     sizeof(dd->status->freezemsg));
+	}
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		int mtu;
 		if (lastfail)
 			ret = lastfail;
 		ppd = dd->pport + pidx;
-		if (dd->devstatusp)
+		if (dd->status)
 			/* Currently, we only have one port */
-			ppd->statusp = &dd->devstatusp->pstatus;
+			ppd->statusp = &dd->status->port;
 		mtu = ib_mtu_enum_to_int(qib_ibmtu);
 		if (mtu == -1) {
 			mtu = HFI_DEFAULT_MTU;
@@ -639,17 +645,17 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	init_piobuf_state(dd);
 
 done:
+	/*
+	 * Set status even if port serdes is not initialized
+	 * so that diags will work.
+	 */
+	if (dd->status)
+		dd->status->dev |= QIB_STATUS_CHIP_PRESENT |
+			QIB_STATUS_INITTED;
 	if (!ret) {
 		/* chip is OK for user apps; mark it as initialized */
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
-			/*
-			 * Set status even if port serdes is not initialized
-			 * so that diags will work.
-			 */
-			if (ppd->statusp)
-				*ppd->statusp |= QIB_STATUS_CHIP_PRESENT |
-							QIB_STATUS_INITTED;
 			if (!ppd->link_speed_enabled)
 				continue;
 			if (dd->flags & QIB_HAS_SEND_DMA)
@@ -1062,8 +1068,8 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 	 * for /sys and status word mapped to user programs.
 	 * This marks unit as not usable, until reset.
 	 */
-	if (dd->devstatusp)
-		dd->devstatusp->devstatus |= QIB_STATUS_HWERROR;
+	if (dd->status)
+		dd->status->dev |= QIB_STATUS_HWERROR;
 }
 
 static void qib_remove_one(struct pci_dev *);

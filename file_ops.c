@@ -409,7 +409,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		flags |= VM_IO | VM_DONTEXPAND;
 		break;
 	case STATUS:
-		memaddr = kvirt_to_phys((void *)dd->devstatusp);
+		memaddr = kvirt_to_phys((void *)dd->status);
 		memlen = PAGE_SIZE;
 		flags |= VM_IO | VM_DONTEXPAND;
 		break;
@@ -667,9 +667,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	*/
 	uctxt->tid_pg_list = ptmp;
 	uctxt->pid = current->pid;
-	/* subctxts not supported yet
-	   init_waitqueue_head(&dd->uctxt[ctxt]->wait);
-	*/
+	init_waitqueue_head(&uctxt->wait);
 	strlcpy(uctxt->comm, current->comm, sizeof(uctxt->comm));
 	qib_stats.sps_ctxts++;
 	dd->freectxts--;
@@ -876,7 +874,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 					      offset);
 	binfo.status_bufbase = HFI_MMAP_TOKEN(STATUS, uctxt->ctxt,
 					      subctxt_fp(fp),
-					      dd->devstatusp);
+					      dd->status);
 	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
 		binfo.rcvhdrtail_base = HFI_MMAP_TOKEN(RTAIL, uctxt->ctxt,
 						       subctxt_fp(fp), 0);
