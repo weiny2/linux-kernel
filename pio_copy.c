@@ -288,12 +288,19 @@ static inline void carry8_write8(union mix carry, void *dest)
 }
 
 /*
- * Write a quadword using 4 LSB valid bytes of carry.
+ * Write a quadword using all the valid bytes of carry.  If carry
+ * has zero valid bytes, nothing is written.
+ * Returns 0 on nothing written, non-zero on quadword written.
  */
-static inline void carry4_write8(union mix carry, void *dest)
+static inline int carry_write8(struct pio_buf *pbuf, void *dest)
 {
-	/* unused bytes are always kept zeroed, so just write */
-	writeq(cpu_to_le64(carry.val64), dest);
+	if (pbuf->carry_bytes) {
+		/* unused bytes are always kept zeroed, so just write */
+		writeq(cpu_to_le64(pbuf->carry.val64), dest);
+		return 1;
+	}
+
+	return 0;
 }
 
 #else /* USE_SHIFTS */
@@ -391,12 +398,22 @@ static inline void carry8_write8(union mix carry, void *dest)
 }
 
 /*
- * Write a quadword using 4 lowest bytes of carry.
+ * Write a quadword using all the valid bytes of carry.  If carry
+ * has zero valid bytes, nothing is written.
+ * Returns 0 on nothing written, non-zero on quadword written.
  */
-static inline void carry4_write8(union mix carry, void *dest)
+static inline int carry_write8(struct pio_buf *pbuf, void *dest)
 {
-	carry.val32[1] = 0;		/* zero upper bytes */
-	writeq(carry.val64, dest);
+	if (pbuf->carry_bytes) {
+		u64 zero = 0;
+
+		jcopy(&pbuf->carry.val8[pbuf->carry_bytes], (u8 *)&zero,
+						8 - pbuf->carry_bytes);
+		writeq(pbuf->carry.val64, dest);
+		return 1;
+	}
+
+	return 0;
 }
 #endif /* USE_SHIFTS */
 
@@ -785,9 +802,8 @@ void seg_pio_copy_end(struct pio_buf *pbuf)
 	else if (pbuf->qw_written < WFR_PIO_BLOCK_QWS)
 		dest += WFR_SOP_DISTANCE;
 
-	/* write the final u32, if present */
-	if (pbuf->carry_bytes == 4) {
-		carry4_write8(pbuf->carry, dest);
+	/* write final bytes, if any */
+	if (carry_write8(pbuf, dest)) {
 		dest += sizeof(u64);
 		/*
 		 * NOTE: We do not need to recalculate whether dest needs
@@ -805,9 +821,6 @@ void seg_pio_copy_end(struct pio_buf *pbuf)
 		 * If we are past the first block, then WFR_SOP_DISTANCE
 		 * was never added, so there is nothing to do.
 		 */
-	} else {
-		/* we expect multiples of DWORD bytes */
-		BUG_ON(pbuf->carry_bytes != 0);
 	}
 
 	/* fill in rest of block */

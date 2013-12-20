@@ -1000,11 +1000,17 @@ static int reset(struct hfi_devdata *dd)
 	return 0;
 }
 
+int trace_tid;	/* TODO: hook this up with tracing */
 static const char *pt_names[] = {
 	"expected",
 	"eager",
 	"invalid"
 };
+
+static const char *pt_name(u32 type)
+{
+	return type >= ARRAY_SIZE(pt_names) ? "unknown" : pt_names[type];
+}
 
 /*
  * index is the index into the receive array
@@ -1030,8 +1036,10 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 		goto done;
 	}
 
-	dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
-		__func__, pt_names[type], index, pa, (unsigned long)bsize);
+	if (trace_tid)
+		dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
+			__func__, pt_name(type), index, pa,
+			(unsigned long)bsize);
 
 #define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
 	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
@@ -1116,9 +1124,24 @@ static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 	return 0;
 }
 
+static void set_lidlmc(struct qib_pportdata *ppd)
+{
+	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
+	c1 &= ~(DCC_CFG_PORT_CONFIG1_LID_SMASK|
+	       DCC_CFG_PORT_CONFIG1_LMC_SMASK);
+	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_LID_MASK)
+			<< DCC_CFG_PORT_CONFIG1_LID_SHIFT)|
+	      ((ppd->lmc & DCC_CFG_PORT_CONFIG1_LMC_MASK)
+			<< DCC_CFG_PORT_CONFIG1_LMC_SHIFT);
+	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
+}
+
 static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
 	switch (which) {
+	case QIB_IB_CFG_LIDLMC:
+		set_lidlmc(ppd);
+		break;
 	case QIB_IB_CFG_LSTATE:
 		switch (val & 0xffff0000) {
 		case IB_LINKCMD_ARMED:
@@ -1520,12 +1543,6 @@ static int sdma_busy(struct qib_pportdata *ppd)
 	return 0;
 }
 
-static void initvl15_bufs(struct hfi_devdata *dd)
-{
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-}
-
 /*
  * QIB sets these rcd fields in this function:
  *	rcvegrcnt	 (now eager_count)
@@ -1868,7 +1885,11 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			err_info = "receive context";
 			remap_receive_available_interrupt(dd, idx, i);
 		} else {
-			BUG();
+			/* not in our expected range - complain, then
+			   ignore it */
+			dd_dev_err(dd,
+				"Unexpected extra MSI-X interrupt %d\n", i);
+			continue;
 		}
 		/* no argument, no interrupt */
 		if (arg == NULL)
@@ -2456,7 +2477,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_hdrqempty         = hdrqempty;
 	dd->f_ib_updown         = ib_updown;
 	dd->f_init_ctxt         = init_ctxt;
-	dd->f_initvl15_bufs     = initvl15_bufs;
 	dd->f_intr_fallback     = intr_fallback;
 	dd->f_late_initreg      = late_initreg;
 	dd->f_portcntr          = portcntr;

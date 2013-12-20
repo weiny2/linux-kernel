@@ -34,6 +34,8 @@
 #include <linux/io.h>
 
 #include "hfi.h"
+#include "qp.h"
+#include "trace.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_RC_##x
@@ -651,6 +653,7 @@ void qib_send_rc_ack(struct qib_qp *qp)
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 pbc;
 	u16 lrh0;
+	u16 vl;
 	u32 bth0;
 	u32 hwords;
 	u32 plen;
@@ -691,8 +694,8 @@ void qib_send_rc_ack(struct qib_qp *qp)
 					     QIB_AETH_CREDIT_SHIFT));
 	else
 		ohdr->u.aeth = qib_compute_aeth(qp);
-	lrh0 |= ibp->sl_to_vl[qp->remote_ah_attr.sl] << 12 |
-		qp->remote_ah_attr.sl << 4;
+	vl = ibp->sl_to_vl[qp->remote_ah_attr.sl];
+	lrh0 |= vl << 12 | qp->remote_ah_attr.sl << 4;
 	hdr.lrh[0] = cpu_to_be16(lrh0);
 	hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
@@ -708,9 +711,8 @@ void qib_send_rc_ack(struct qib_qp *qp)
 		goto done;
 
 	sc = qp_to_send_context(qp);
-	// FIXME: "lhr0 >> 12" is a poor way to get the vl
-	plen = 2 /* PBC */ + hwords + SIZE_OF_CRC;
-	pbc = create_pbc(sc, plen, lrh0 >> 12, qp->s_srate, 0);
+	plen = 2 /* PBC */ + hwords;
+	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
 
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (!pbuf) {
@@ -723,6 +725,8 @@ void qib_send_rc_ack(struct qib_qp *qp)
 		spin_lock_irqsave(&qp->s_lock, flags);
 		goto queue_ack;
 	}
+
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &hdr);
 
 	/* write the pbc and data */
 	pio_copy(pbuf, pbc, &hdr, hwords);

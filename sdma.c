@@ -37,6 +37,7 @@
 
 #include "hfi.h"
 #include "common.h"
+#include "qp.h"
 
 /* default pio off, sdma on */
 static ushort sdma_descq_cnt = 256;

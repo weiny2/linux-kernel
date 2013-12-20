@@ -465,12 +465,6 @@ static void verify_interrupt(struct work_struct *work)
 	}
 }
 
-// FIXME: what to do here?
-static void init_piobuf_state(struct hfi_devdata *dd)
-{
-	dd->f_initvl15_bufs(dd);
-}
-
 /**
  * qib_create_workqueues - create per port workqueues
  * @dd: the qlogic_ib device
@@ -641,8 +635,6 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	}
 
 	enable_chip(dd);
-
-	init_piobuf_state(dd);
 
 done:
 	/*

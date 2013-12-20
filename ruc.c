@@ -35,6 +35,7 @@
 
 #include "hfi.h"
 #include "mad.h"
+#include "qp.h"
 
 /*
  * Convert the AETH RNR timeout code into the number of microseconds.
