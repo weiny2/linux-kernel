@@ -1272,13 +1272,11 @@ static int task_numa_migrate(struct task_struct *p)
 	p->numa_scan_period = task_scan_min(p);
 
 	if (env.best_task == NULL) {
-		if ((ret = migrate_task_to(p, env.best_cpu)) != 0)
-			trace_sched_stick_numa(p, env.src_cpu, env.best_cpu);
+		int ret = migrate_task_to(p, env.best_cpu);
 		return ret;
 	}
 
-	if ((ret = migrate_swap(p, env.best_task)) != 0);
-		trace_sched_stick_numa(p, env.src_cpu, task_cpu(env.best_task));
+	ret = migrate_swap(p, env.best_task);
 	put_task_struct(env.best_task);
 	return ret;
 }
@@ -1752,13 +1750,6 @@ void task_numa_work(struct callback_head *work)
 		 */
 		if (!vma->vm_mm ||
 		    (vma->vm_file && (vma->vm_flags & (VM_READ|VM_WRITE)) == (VM_READ)))
-			continue;
-
-		/*
-		 * Skip inaccessible VMAs to avoid any confusion between
-		 * PROT_NONE and NUMA hinting ptes
-		 */
-		if (!(vma->vm_flags & (VM_READ | VM_EXEC | VM_WRITE)))
 			continue;
 
 		do {
@@ -4753,8 +4744,6 @@ static void move_task(struct task_struct *p, struct lb_env *env)
 	set_task_cpu(p, env->dst_cpu);
 	activate_task(env->dst_rq, p, 0);
 	check_preempt_curr(env->dst_rq, p, 0);
-
-	trace_sched_move_task(p, env->src_cpu, env->dst_cpu);
 }
 
 /*
