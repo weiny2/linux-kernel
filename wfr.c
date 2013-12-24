@@ -1548,28 +1548,19 @@ static int sdma_busy(struct qib_pportdata *ppd)
  *	rcvegrcnt	 (now eager_count)
  *	rcvegr_tid_base  (now eager_base)
  */
-static int init_ctxt(struct qib_ctxtdata *rcd, u16 egrcnt)
+static int init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u32 context = rcd->ctxt;
 	int ret = 0;
 
-	dd_dev_info(dd, "%s: setting up context %d\n", __func__, context);
 	/*
 	 * Simple allocation: we have already pre-allocated the number
-	 * of entries per context in dd->rcv_entries.  Now, divide the
-	 * per context value by 2 and use half for eager and expected.
-	 * This requires that the count be divisible by 4 as the expected
-	 * array base and count must be divisible by 2.
+	 * of entries per context in dd->rcv_entries. Expected entry
+	 * count is whatis left after assigning Eager. This requires that
+	 * the count be divisible by 4 as the expected array base and count
+	 * must be divisible by 2.
 	 */
-	if (egrcnt > dd->rcv_entries) {
-		dd_dev_err(dd,
-			   "%s: requesting too many egrtids %u (limit: %u)\n",
-			   __func__, egrcnt, dd->rcv_entries);
-		ret = -EINVAL;
-		goto done;
-	}
-	rcd->eager_count = egrcnt;
 	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES)
 		rcd->eager_count = WFR_MAX_EAGER_ENTRIES;
 	rcd->expected_count = dd->rcv_entries - rcd->eager_count;
@@ -1580,7 +1571,6 @@ static int init_ctxt(struct qib_ctxtdata *rcd, u16 egrcnt)
 	if ((rcd->expected_base % 2 == 1) ||
 	    (rcd->expected_count % 2 == 1))	/* must be even */
 		ret = -EINVAL;
-done:
 	return ret;
 }
 

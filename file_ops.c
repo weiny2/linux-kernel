@@ -364,7 +364,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * as multiple non-contiguous pages need to be mapped
 		 * into the user process.
 		 */
-		size = uctxt->rcvegrbuf_size;
+		size = uctxt->rcvegrbuf_chunksize;
 		memlen = uctxt->rcvegrbuf_chunks * size;
 		if (((vma->vm_end - vma->vm_start) < memlen) ||
 		    vma->vm_flags & VM_WRITE) {

@@ -169,6 +169,7 @@ struct qib_ctxtdata {
 	u32 piobufs;
 	/* how many alloc_pages() chunks in rcvegrbuf_pages */
 	u32 rcvegrbuf_chunks;
+	u32 rcvegrbuf_chunksize;
 	/* how many egrbufs per chunk */
 	u16 rcvegrbufs_perchunk;
 	/* ilog2 of above */
@@ -772,7 +773,7 @@ struct hfi_devdata {
 		u64 **);
 	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
 		char **, u64 **);
-	int (*f_init_ctxt)(struct qib_ctxtdata *, u16);
+	int (*f_init_ctxt)(struct qib_ctxtdata *);
 	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
 
 	char *boardname; /* human readable board info */

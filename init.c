@@ -73,6 +73,10 @@ unsigned qib_cc_table_size;
 module_param_named(cc_table_size, qib_cc_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(cc_table_size, "Congestion control table entries 0 (CCA disabled - default), min = 128, max = 1984");
 
+unsigned hfi_egrbuf_alloc_size = 0x8000;
+module_param_named(egrbuf_alloc_size, hfi_egrbuf_alloc_size, uint, S_IRUGO);
+MODULE_PARM_DESC(egrbuf_alloc_size, "Chunk size for Eager buffer allocation");
+
 /* interrupt testing */
 unsigned int test_interrupts;
 module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
@@ -122,7 +126,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry size
 		 * as DWords. However, hfi_setup_ctxt takes bytes from PSM and
 		 * converts to DWords. Should we just use bytes in hfi_devdata? */
-		ret = hfi_setup_ctxt(rcd, dd->rcv_entries / 2, 0x8000,
+		ret = hfi_setup_ctxt(rcd, dd->rcv_entries / 2, dd->rcvegrbufsize,
 				     dd->rcvhdrcnt, dd->rcvhdrentsize << 2);
 		if (ret < 0) {
 			dd_dev_err(dd,
@@ -175,10 +179,26 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 	struct hfi_devdata *dd = uctxt->dd;
 	int ret = 0;
 
-	ret = dd->f_init_ctxt(uctxt, egrtids);
+	dd_dev_info(dd, "%s: setting up context %d\n", __func__,
+		    uctxt->ctxt);
+
+	if (egrtids > dd->rcv_entries) {
+		dd_dev_err(dd,
+			   "%s: requesting too many egrtids %u (limit: %u)\n",
+			   __func__, egrtids, dd->rcv_entries);
+		ret = -EINVAL;
+		goto done;
+	}
+	uctxt->eager_count = egrtids;
+
+	ret = dd->f_init_ctxt(uctxt);
 	if (ret)
 		goto done;
 
+	if (!hfi_rcvbuf_validate(egrsize, PT_EAGER, NULL)) {
+		ret = -EINVAL;
+		goto done;
+	}
 	/*
 	 * To avoid wasting a lot of memory, we allocate 32KB chunks
 	 * of physically contiguous memory, advance through it until
@@ -190,23 +210,19 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 	 * get invoked, even though we say we can sleep and this can
 	 * cause significant system problems....
 	 */
-	if (!hfi_rcvbuf_validate(egrsize, PT_EAGER, NULL)) {
-		ret = -EINVAL;
-		goto done;
-	}
+	uctxt->rcvegrbuf_chunksize = hfi_egrbuf_alloc_size;
 	uctxt->rcvegrbuf_size = egrsize;
 	uctxt->rcvegrbufs_perchunk =
-		uctxt->rcvegrbuf_size / dd->rcvegrbufsize;
-	uctxt->rcvegrbuf_chunks = (uctxt->eager_count +
-				   uctxt->rcvegrbufs_perchunk - 1) /
-		uctxt->rcvegrbufs_perchunk;
+		uctxt->rcvegrbuf_chunksize / uctxt->rcvegrbuf_size;
 	if (!is_power_of_2(uctxt->rcvegrbufs_perchunk)) {
 		ret = -EFAULT;
 		goto done;
 	}
+	uctxt->rcvegrbuf_chunks = (uctxt->rcvegrbuf_size *
+				   uctxt->eager_count) /
+		uctxt->rcvegrbuf_chunksize;
 	uctxt->rcvegrbufs_perchunk_shift =
 		ilog2(uctxt->rcvegrbufs_perchunk);
-
 	uctxt->rcvhdrq_cnt = hdrqcnt;
 	/* RcvHdrQ Entry Size is in DWords */
 	uctxt->rcvhdrqentsize = hdrqentsize >> 2;
@@ -1487,11 +1503,11 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 
 	egrcnt = rcd->eager_count;
 	egroff = rcd->eager_base;
-	egrsize = dd->rcvegrbufsize;
+	egrsize = rcd->rcvegrbuf_size;
 
 	chunk = rcd->rcvegrbuf_chunks;
 	egrperchunk = rcd->rcvegrbufs_perchunk;
-	size = rcd->rcvegrbuf_size;
+	size = rcd->rcvegrbuf_chunksize;
 	if (!rcd->rcvegrbuf) {
 		rcd->rcvegrbuf =
 			kzalloc(chunk * sizeof(rcd->rcvegrbuf[0]),
