@@ -950,9 +950,6 @@ struct hfi_devdata {
 #define QIB_SDMA_SENDCTRL_OP_CLEANUP   (1U << 3)
 #define QIB_SDMA_SENDCTRL_OP_DRAIN     (1U << 4)
 
-#define QIB_CHASE_TIME msecs_to_jiffies(145)
-#define QIB_CHASE_DIS_TIME msecs_to_jiffies(160)
-
 /* Private data for file operations */
 struct qib_filedata {
 	struct qib_ctxtdata *rcd;
@@ -970,9 +967,6 @@ extern unsigned long *qib_cpulist;
 
 extern unsigned qib_cc_table_size;
 int qib_init(struct hfi_devdata *, int);
-int init_chip_wc_pat(struct hfi_devdata *dd, u32);
-int qib_enable_wc(struct hfi_devdata *dd);
-void qib_disable_wc(struct hfi_devdata *dd);
 int qib_count_units(int *npresentp, int *nupp);
 int qib_count_active_units(void);
 
