@@ -80,6 +80,7 @@ struct send_context {
 	u32 credits;			/* number of blocks in context */
 	u32 sr_size;			/* size of the shadow ring */
 	u32 group;			/* credit return group */
+	u16 enabled;                    /* is the send ctxt enabled */
 	/* allocator fields */
 	spinlock_t alloc_lock ____cacheline_aligned_in_smp;
 	unsigned long fill;		/* official alloc count */
@@ -125,7 +126,7 @@ int init_send_contexts(struct hfi_devdata *dd);
 int init_credit_return(struct hfi_devdata *dd);
 struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa);
 void sc_free(struct send_context *sc);
-void sc_enable(struct send_context *sc);
+int sc_enable(struct send_context *sc);
 void sc_disable(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
 void sc_flush(struct send_context *sc);

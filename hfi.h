@@ -692,6 +692,8 @@ struct hfi_devdata {
 	struct qib_ctxtdata **rcd;
 	/* send context data */
 	struct send_context_info *send_contexts;
+	/* Send Context initialization lock. */
+	spinlock_t sc_init_lock;
 
 	/* qib_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)

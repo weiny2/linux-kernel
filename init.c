@@ -400,10 +400,12 @@ static void enable_chip(struct hfi_devdata *dd)
 	rcvmask = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_INTRAVAIL_ENB;
 	rcvmask |= (dd->flags & QIB_NODMA_RTAIL) ?
 		  QIB_RCVCTRL_TAILUPD_DIS : QIB_RCVCTRL_TAILUPD_ENB;
-	for (i = 0; i < dd->first_user_ctxt; ++i)
+	for (i = 0; i < dd->first_user_ctxt; ++i) {
 		dd->f_rcvctrl(dd, rcvmask, i);
-	for (i = 0; i < dd->num_send_contexts; i++)
-		sc_enable(dd->send_contexts[i].sc);
+		/* XXX (Mitko): Do we care about the result of this?
+		 * sc_enable() will display an error message. */
+		sc_enable(dd->rcd[i]->sc);
+	}
 }
 
 static void verify_interrupt(struct work_struct *work)
