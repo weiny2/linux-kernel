@@ -457,10 +457,12 @@ static void enable_chip(struct hfi_devdata *dd)
 	rcvmask = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_INTRAVAIL_ENB;
 	rcvmask |= (dd->flags & QIB_NODMA_RTAIL) ?
 		  QIB_RCVCTRL_TAILUPD_DIS : QIB_RCVCTRL_TAILUPD_ENB;
-	for (i = 0; i < dd->first_user_ctxt; ++i)
+	for (i = 0; i < dd->first_user_ctxt; ++i) {
 		dd->f_rcvctrl(dd, rcvmask, i);
-	for (i = 0; i < dd->num_send_contexts; i++)
-		sc_enable(dd->send_contexts[i].sc);
+		/* XXX (Mitko): Do we care about the result of this?
+		 * sc_enable() will display an error message. */
+		sc_enable(dd->rcd[i]->sc);
+	}
 }
 
 static void verify_interrupt(struct work_struct *work)
@@ -668,10 +670,6 @@ done:
 				continue;
 			if (dd->flags & QIB_HAS_SEND_DMA)
 				ret = qib_setup_sdma(ppd);
-			init_timer(&ppd->hol_timer);
-			ppd->hol_timer.function = qib_hol_event;
-			ppd->hol_timer.data = (unsigned long)ppd;
-			ppd->hol_state = QIB_HOL_UP;
 		}
 
 		/* now we can enable all interrupts from the chip */
@@ -725,8 +723,6 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 		cancel_delayed_work_sync(&dd->interrupt_check_worker);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		if (ppd->hol_timer.data)
-			del_timer_sync(&ppd->hol_timer);
 		if (ppd->led_override_timer.data) {
 			del_timer_sync(&ppd->led_override_timer);
 			atomic_set(&ppd->led_override_timer_active, 0);

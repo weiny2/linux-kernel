@@ -531,10 +531,6 @@ struct qib_pportdata {
 
 	wait_queue_head_t state_wait; /* for state_wanted */
 
-	/* HoL blocking for SMP replies */
-	unsigned          hol_state;
-	struct timer_list hol_timer;
-
 	/*
 	 * Shadow copies of registers; size indicates read access size.
 	 * Most of them are readonly, but some are write-only register,
@@ -697,6 +693,8 @@ struct hfi_devdata {
 	struct qib_ctxtdata **rcd;
 	/* send context data */
 	struct send_context_info *send_contexts;
+	/* Send Context initialization lock. */
+	spinlock_t sc_init_lock;
 
 	/* qib_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
@@ -957,18 +955,11 @@ struct hfi_devdata {
 #define PT_EAGER    1
 #define PT_INVALID  2
 
-/* hol_state values */
-#define QIB_HOL_UP       0
-#define QIB_HOL_INIT     1
-
 #define QIB_SDMA_SENDCTRL_OP_ENABLE    (1U << 0)
 #define QIB_SDMA_SENDCTRL_OP_INTENABLE (1U << 1)
 #define QIB_SDMA_SENDCTRL_OP_HALT      (1U << 2)
 #define QIB_SDMA_SENDCTRL_OP_CLEANUP   (1U << 3)
 #define QIB_SDMA_SENDCTRL_OP_DRAIN     (1U << 4)
-
-#define QIB_CHASE_TIME msecs_to_jiffies(145)
-#define QIB_CHASE_DIS_TIME msecs_to_jiffies(160)
 
 /* Private data for file operations */
 struct hfi_filedata {
@@ -987,9 +978,6 @@ extern unsigned long *qib_cpulist;
 
 extern unsigned qib_cc_table_size;
 int qib_init(struct hfi_devdata *, int);
-int init_chip_wc_pat(struct hfi_devdata *dd, u32);
-int qib_enable_wc(struct hfi_devdata *dd);
-void qib_disable_wc(struct hfi_devdata *dd);
 int qib_count_units(int *npresentp, int *nupp);
 int qib_count_active_units(void);
 
@@ -1023,10 +1011,6 @@ int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 int qib_set_linkstate(struct qib_pportdata *, u8);
 int qib_set_mtu(struct qib_pportdata *, u16);
 int qib_set_lid(struct qib_pportdata *, u32, u8);
-void qib_hol_down(struct qib_pportdata *);
-void qib_hol_init(struct qib_pportdata *);
-void qib_hol_up(struct qib_pportdata *);
-void qib_hol_event(unsigned long);
 void qib_disable_after_error(struct hfi_devdata *);
 int qib_set_uevent_bits(struct qib_pportdata *, const int);
 int hfi_rcvbuf_validate(u32, u8, u16 *);

@@ -67,13 +67,6 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 #define SCC_PER_NUMA -1
 #define SCC_PER_CPU  -2
 
-/*
- * Send Context initialization lock. If Send Contexts are going
- * to be initialized somewhere else, as well, this lock will
- * have to be moved to the hfi_devdata structure.
- */
-spinlock_t sc_init_lock;
-
 /* default send context sizes */
 static struct sc_config_sizes sc_config_sizes[SC_MAX] = {
 	[SC_KERNEL] = { .size  = SCS_POOL_0,	/* even divide, pool 0 */
@@ -316,7 +309,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	u16 base;
 	int ret, i, j, context;
 
-	spin_lock_init(&sc_init_lock);
+	spin_lock_init(&dd->sc_init_lock);
 
 	ret = init_credit_return(dd);
 	if (ret)
@@ -563,6 +556,7 @@ void sc_free(struct send_context *sc)
 void sc_disable(struct send_context *sc)
 {
 	u64 reg;
+	unsigned long flags;
 
 	if (!sc)
 		return;
@@ -570,26 +564,32 @@ void sc_disable(struct send_context *sc)
 	reg = read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL);
 	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK)) {
 		reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+		spin_lock_irqsave(&sc->alloc_lock, flags);
 		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+		sc->enabled = 0;
+		spin_unlock_irqrestore(&sc->alloc_lock, flags);
 	}
 }
 
 /* enable the context */
-void sc_enable(struct send_context *sc)
+int sc_enable(struct send_context *sc)
 {
 	u64 reg;
+	int ret = 0;
 
-	if (!sc)
-		return;
+	if (!sc) {
+		ret = -EINVAL;
+		goto done;
+	}
 
 	reg = read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL);
 	/* IMPORTANT: only clear free and fill if transitioning 0 -> 1 */
 	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK) == 0) {
 		u64 pio;
 		unsigned long flags;
+		struct hfi_devdata *dd = sc->dd;
+
 		// FIXME: obtain the locks?
-		// FIXME: need a flag that indicates enabled so the
-		// 		allocator and releaser will not run?
 		*sc->hw_free = 0;
 		sc->free = 0;
 		sc->alloc_free = 0;
@@ -598,17 +598,15 @@ void sc_enable(struct send_context *sc)
 		sc->sr_tail = 0;
 
 		/*
-		 * Multiple processes may be allocating and enabling
-		 * contexts. However, the PIO initialization engine
-		 * can handle only one context at a time.
-		 * Globally lock this block so we don't have multiple
-		 * processes trying to initialize their context.
+		 * The HW PIO initialization engine can handle only one
+		 * init request at a time. Serialize access to each device's
+		 * engine.
 		 */
-		spin_lock_irqsave(&sc_init_lock, flags);
+		spin_lock_irqsave(&dd->sc_init_lock, flags);
 		/*
-		 * Since this block is globally locked per process and
-		 * each process waits for the initialization to complete
-		 * before releasing the lock, the initialization engine
+		 * Since access to this code block is serialized and
+		 * each access waits for the initialization to complete
+		 * before releasing the lock, the PIO initialization engine
 		 * should not be in use, so we don't have to wait for the
 		 * InProgress bit to go down.
 		 */
@@ -618,26 +616,43 @@ void sc_enable(struct send_context *sc)
 		write_csr(sc->dd, WFR_SEND_PIO_INIT_CTXT, pio);
 		/*
 		 * Wait until the engine is done.
-		 * Give the chip some time so, hopefully, we read the register
-		 * just once.
+		 * Give the chip the required time so, hopefully, we read the
+		 * register just once.
 		 */
-		msleep(20);
+		udelay(2);
 		pio = read_csr(sc->dd, WFR_SEND_PIO_INIT_CTXT);
-		while((pio & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_MASK) >>
-		      WFR_SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SHIFT) {
+		while(pio & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SMASK) {
 			msleep(20);
 			pio = read_csr(sc->dd, WFR_SEND_PIO_INIT_CTXT);
 		}
+		spin_unlock_irqrestore(&dd->sc_init_lock, flags);
 		/*
-		 * If there are any initialization errors, the chip will
-		 * indicate that in the SendPioErrStatus register and
-		 * raise an interrupt. Therefore, we don't have to check here.
+		 * Initialization is done. The register holds a valid error
+		 * status.
 		 */
-		spin_unlock_irqrestore(&sc_init_lock, flags);
-
-		reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
-		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+		if (pio & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_ERR_SMASK) {
+                        dd_dev_err(sc->dd,
+				   "ctxt%u: Ctxt not enabled due to init failure\n",
+				   sc->context);
+			ret = -EFAULT;
+		} else {
+			/*
+			 * All is well. Enable the context.
+			 * We get the allocator lock to guards against any allocation
+			 * attempts (which should not happen prior to context being
+			 * enabled). On the release/disable side we don't need to
+			 * worry about locking since the releaser will not do anything
+			 * if the context accounting values have not changed.
+			 */
+			reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+			spin_lock_irqsave(&sc->alloc_lock, flags);
+			write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+			sc->enabled = 1;
+			spin_unlock_irqrestore(&sc->alloc_lock, flags);
+		}
 	}
+done:
+	return ret;
 }
 
 /* force a credit return on the context */
@@ -703,7 +718,7 @@ u64 create_pbc(struct send_context *sc, u64 flags, u32 srate,
 struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 				pio_release_cb cb, void *arg)
 {
-	struct pio_buf *pbuf;
+	struct pio_buf *pbuf = NULL;
 	unsigned long flags;
 	unsigned long avail;
 	unsigned long blocks = dwords_to_blocks(dw_len);
@@ -713,13 +728,17 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 
 retry:
 	spin_lock_irqsave(&sc->alloc_lock, flags);
+	if (!sc->enabled) {
+		spin_unlock_irqrestore(&sc->alloc_lock, flags);
+		goto done;
+	}
 
 	avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
 	if (blocks > avail) {
 		/* not enough room */
 		if (unlikely(trycount))	{ /* already tried to get more room */
 			spin_unlock_irqrestore(&sc->alloc_lock, flags);
-			return NULL;
+			goto done;
 		}
 		/* copy from receiver cache line and recalculate */
 		//TODO: use ALLOC_ONCE on sc->free?
@@ -781,7 +800,7 @@ retry:
 	pbuf->qw_written = 0;
 	pbuf->carry_bytes = 0;
 	pbuf->carry.val64 = 0;
-
+done:
 	return pbuf;
 }
 

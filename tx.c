@@ -30,21 +30,10 @@
  * SOFTWARE.
  */
 
-#include <linux/spinlock.h>
-#include <linux/pci.h>
-#include <linux/io.h>
-#include <linux/delay.h>
-#include <linux/netdevice.h>
-#include <linux/vmalloc.h>
-#include <linux/moduleparam.h>
-
 #include "hfi.h"
 
-static unsigned qib_hol_timeout_ms = 3000;
-module_param_named(hol_timeout_ms, qib_hol_timeout_ms, uint, S_IRUGO);
-MODULE_PARM_DESC(hol_timeout_ms,
-		 "duration of user app suspension after link failure");
 
+//FIXME: not currently called
 /*
  * Flush all sends that might be in the ready to send state, as well as any
  * that are in the process of being sent.  Used whenever we need to be
@@ -54,7 +43,7 @@ MODULE_PARM_DESC(hol_timeout_ms,
  * it's safer to always do it.
  * PIOAvail bits are updated by the chip as if a normal send had happened.
  */
-static void qib_cancel_sends(struct qib_pportdata *ppd)
+void qib_cancel_sends(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
@@ -77,61 +66,5 @@ static void qib_cancel_sends(struct qib_pportdata *ppd)
 		spin_lock_irqsave(&dd->uctxt_lock, flags);
 		sc_drop(rcd->sc);
 		spin_unlock_irqrestore(&dd->uctxt_lock, flags);
-	}
-}
-
-void qib_hol_down(struct qib_pportdata *ppd)
-{
-	/*
-	 * Cancel sends when the link goes DOWN so that we aren't doing it
-	 * at INIT when we might be trying to send SMI packets.
-	 */
-	if (!(ppd->lflags & QIBL_IB_AUTONEG_INPROG))
-		qib_cancel_sends(ppd);
-}
-
-/*
- * Link is at INIT.
- * We start the HoL timer so we can detect stuck packets blocking SMP replies.
- * Timer may already be running, so use mod_timer, not add_timer.
- */
-void qib_hol_init(struct qib_pportdata *ppd)
-{
-	if (ppd->hol_state != QIB_HOL_INIT) {
-		ppd->hol_state = QIB_HOL_INIT;
-		mod_timer(&ppd->hol_timer,
-			  jiffies + msecs_to_jiffies(qib_hol_timeout_ms));
-	}
-}
-
-/*
- * Link is up, continue any user processes, and ensure timer
- * is a nop, if running.  Let timer keep running, if set; it
- * will nop when it sees the link is up.
- */
-void qib_hol_up(struct qib_pportdata *ppd)
-{
-	ppd->hol_state = QIB_HOL_UP;
-}
-
-/*
- * This is only called via the timer.
- */
-void qib_hol_event(unsigned long opaque)
-{
-	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
-
-	/* If hardware error, etc, skip. */
-	if (!(ppd->dd->flags & QIB_INITTED))
-		return;
-
-	if (ppd->hol_state != QIB_HOL_UP) {
-		/*
-		 * Try to flush sends in case a stuck packet is blocking
-		 * SMP replies.
-		 */
-		qib_hol_down(ppd);
-		mod_timer(&ppd->hol_timer,
-			  jiffies + msecs_to_jiffies(qib_hol_timeout_ms));
 	}
 }
