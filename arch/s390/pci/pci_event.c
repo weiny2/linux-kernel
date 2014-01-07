@@ -79,6 +79,7 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 		if (!zdev || zdev->state == ZPCI_FN_STATE_CONFIGURED)
 			break;
 		zdev->state = ZPCI_FN_STATE_CONFIGURED;
+		zdev->fh = ccdf->fh;
 		ret = zpci_enable_device(zdev);
 		if (ret)
 			break;
@@ -109,6 +110,7 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 			pci_stop_and_remove_bus_device(pdev);
 		}
 
+		zdev->fh = ccdf->fh;
 		zpci_disable_device(zdev);
 		zdev->state = ZPCI_FN_STATE_STANDBY;
 		break;
