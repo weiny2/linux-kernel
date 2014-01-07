@@ -526,10 +526,6 @@ struct qib_pportdata {
 
 	wait_queue_head_t state_wait; /* for state_wanted */
 
-	/* HoL blocking for SMP replies */
-	unsigned          hol_state;
-	struct timer_list hol_timer;
-
 	/*
 	 * Shadow copies of registers; size indicates read access size.
 	 * Most of them are readonly, but some are write-only register,
@@ -948,10 +944,6 @@ struct hfi_devdata {
 #define PT_EAGER    1
 #define PT_INVALID  2
 
-/* hol_state values */
-#define QIB_HOL_UP       0
-#define QIB_HOL_INIT     1
-
 #define QIB_SDMA_SENDCTRL_OP_ENABLE    (1U << 0)
 #define QIB_SDMA_SENDCTRL_OP_INTENABLE (1U << 1)
 #define QIB_SDMA_SENDCTRL_OP_HALT      (1U << 2)
@@ -1013,10 +1005,6 @@ int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 int qib_set_linkstate(struct qib_pportdata *, u8);
 int qib_set_mtu(struct qib_pportdata *, u16);
 int qib_set_lid(struct qib_pportdata *, u32, u8);
-void qib_hol_down(struct qib_pportdata *);
-void qib_hol_init(struct qib_pportdata *);
-void qib_hol_up(struct qib_pportdata *);
-void qib_hol_event(unsigned long);
 void qib_disable_after_error(struct hfi_devdata *);
 int qib_set_uevent_bits(struct qib_pportdata *, const int);
 

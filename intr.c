@@ -139,7 +139,6 @@ void qib_handle_e_ibstatuschanged(struct qib_pportdata *ppd, u64 ibcs)
 		} else if (ltstate == IB_PHYSPORTSTATE_LINKUP &&
 			   !(ppd->lflags & QIBL_LINKACTIVE)) {
 			/* active, but not active defered */
-			qib_hol_up(ppd); /* useful only for 6120 now */
 			if (ppd->statusp)
 				*ppd->statusp |=
 				QIB_STATUS_IB_READY | QIB_STATUS_IB_CONF;
