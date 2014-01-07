@@ -592,10 +592,6 @@ done:
 				continue;
 			if (dd->flags & QIB_HAS_SEND_DMA)
 				ret = qib_setup_sdma(ppd);
-			init_timer(&ppd->hol_timer);
-			ppd->hol_timer.function = qib_hol_event;
-			ppd->hol_timer.data = (unsigned long)ppd;
-			ppd->hol_state = QIB_HOL_UP;
 		}
 
 		/* now we can enable all interrupts from the chip */
@@ -649,8 +645,6 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 		cancel_delayed_work_sync(&dd->interrupt_check_worker);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		if (ppd->hol_timer.data)
-			del_timer_sync(&ppd->hol_timer);
 		if (ppd->led_override_timer.data) {
 			del_timer_sync(&ppd->led_override_timer);
 			atomic_set(&ppd->led_override_timer_active, 0);
