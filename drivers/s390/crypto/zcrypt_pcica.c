@@ -199,6 +199,10 @@ static int convert_type84(struct zcrypt_device *zdev,
 	if (t84h->len < sizeof(*t84h) + outputdatalength) {
 		/* The result is too short, the PCICA card may not do that.. */
 		zdev->online = 0;
+		pr_err("zcrypt device %x disabled based on failures.\n",
+		       zdev->ap_dev->qid);
+		ZCRYPT_DBF_DEV(DBF_ERR, zdev, "dev%04xo%drc%d",
+			       zdev->ap_dev->qid, zdev->online, t84h->code);
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
 	BUG_ON(t84h->len > PCICA_MAX_RESPONSE_SIZE);
@@ -223,6 +227,10 @@ static int convert_response(struct zcrypt_device *zdev,
 				      outputdata, outputdatalength);
 	default: /* Unknown response type, this should NEVER EVER happen */
 		zdev->online = 0;
+		pr_err("zcrypt device %x disabled based on failures.\n",
+		       zdev->ap_dev->qid);
+		ZCRYPT_DBF_DEV(DBF_ERR, zdev, "dev%04xo%dfail",
+			       zdev->ap_dev->qid, zdev->online);
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
 }
