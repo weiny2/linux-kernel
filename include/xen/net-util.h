@@ -55,12 +55,10 @@ static inline int skb_checksum_setup(struct sk_buff *skb,
 		goto out;
 	}
 
-	if (csum) {
+	if (csum)
 		*csum = ~csum_tcpudp_magic(iph->saddr, iph->daddr,
 					   skb->len - iph->ihl*4,
-					   IPPROTO_TCP, 0);
-		skb->ip_summed = CHECKSUM_PARTIAL;
-	}
+					   iph->protocol, 0);
 
 	skb_probe_transport_header(skb, 0);
 

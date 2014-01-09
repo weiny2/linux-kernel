@@ -537,6 +537,6 @@ static inline void load_current_idt(void)
 	else
 		load_idt((const struct desc_ptr *)&idt_descr);
 }
-#endif
+#endif /* !CONFIG_X86_NO_IDT */
 
 #endif /* _ASM_X86_DESC_H */

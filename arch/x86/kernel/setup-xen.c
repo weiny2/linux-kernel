@@ -1171,6 +1171,7 @@ void __init setup_arch(char **cmdline_p)
 
 	if (is_initial_xendomain()) {
 		dmi_scan_machine();
+		dmi_memdev_walk();
 		dmi_set_dump_stack_arch_desc();
 	} else {
 		int ver = HYPERVISOR_xen_version(XENVER_version, NULL);

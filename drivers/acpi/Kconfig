@@ -373,19 +373,9 @@ config ACPI_BGRT
 
 source "drivers/acpi/apei/Kconfig"
 
-config ACPI_PV_SLEEP
-	bool
-	depends on X86 && XEN && ACPI_SLEEP
-	default y
-
-config PROCESSOR_EXTERNAL_CONTROL
-	bool
-	depends on (X86 || IA64) && XEN
-	default y
-
 config ACPI_EXTLOG
 	tristate "Extended Error Log support"
-	depends on X86_MCE && X86_LOCAL_APIC
+	depends on X86_MCE && X86_LOCAL_APIC && !XEN
 	select EFI
 	select UEFI_CPER
 	default n
@@ -404,4 +394,13 @@ config ACPI_EXTLOG
 	  information to system software, synchronous with MCE or CMCI. This
 	  driver adds support for that functionality.
 
+config ACPI_PV_SLEEP
+	bool
+	depends on X86 && XEN && ACPI_SLEEP
+	default y
+
+config PROCESSOR_EXTERNAL_CONTROL
+	bool
+	depends on (X86 || IA64) && XEN
+	default y
 endif	# ACPI

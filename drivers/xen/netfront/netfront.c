@@ -741,12 +741,13 @@ static void network_alloc_rx_buffers(struct net_device *dev)
 		if (!page) {
 			kfree_skb(skb);
 no_skb:
+			/* Could not allocate enough skbuffs. Try again later. */
+			mod_timer(&np->rx_refill_timer,
+				  jiffies + (HZ/10));
+
 			/* Any skbuffs queued for refill? Force them out. */
 			if (i != 0)
 				goto refill;
-			/* Could not allocate any skbuffs. Try again later. */
-			mod_timer(&np->rx_refill_timer,
-				  jiffies + (HZ/10));
 			break;
 		}
 
@@ -1441,11 +1442,6 @@ err:
 		else
 			skb->ip_summed = CHECKSUM_NONE;
 
-		u64_stats_update_begin(&stats->syncp);
-		stats->rx_packets++;
-		stats->rx_bytes += skb->len;
-		u64_stats_update_end(&stats->syncp);
-
 		__skb_queue_tail(&rxq, skb);
 
 		np->rx.rsp_cons = ++i;
@@ -1481,8 +1477,15 @@ err:
 
 		if (skb_checksum_setup(skb, &np->rx_gso_csum_fixups)) {
 			kfree_skb(skb);
+			dev->stats.rx_errors++;
+			--work_done;
 			continue;
 		}
+
+		u64_stats_update_begin(&stats->syncp);
+		stats->rx_packets++;
+		stats->rx_bytes += skb->len;
+		u64_stats_update_end(&stats->syncp);
 
 		/* Pass it up. */
 		netif_receive_skb(skb);

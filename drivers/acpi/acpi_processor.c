@@ -459,6 +459,10 @@ static int acpi_processor_add(struct acpi_device *device,
 	per_cpu(processors, pr->id) = pr;
 
 	dev = get_cpu_device(pr->id);
+#ifdef CONFIG_XEN
+	} else
+		dev = get_pcpu_device(pr->acpi_id);
+#endif
 	if (!dev) {
 		result = -ENODEV;
 		goto err;
@@ -477,9 +481,6 @@ static int acpi_processor_add(struct acpi_device *device,
 
 	dev_err(dev, "Processor driver could not be attached\n");
 	acpi_unbind_one(dev);
-#ifdef CONFIG_XEN
-	}
-#endif
 
  err:
 	free_cpumask_var(pr->throttling.shared_cpu_map);
