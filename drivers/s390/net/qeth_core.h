@@ -743,6 +743,12 @@ struct qeth_switch_info {
         __u32 settings;
 };
 
+struct carrier_info {
+	__u8  card_type;
+	__u16 port_mode;
+	__u32 port_speed;
+};
+
 #define QETH_NAPI_WEIGHT NAPI_POLL_WEIGHT
 
 struct qeth_card {
@@ -921,6 +927,8 @@ int qeth_snmp_command(struct qeth_card *, char __user *);
 int qeth_query_oat_command(struct qeth_card *, char __user *);
 int qeth_core_ethtool_get_switch_port_attrs(struct net_device *,
 						struct ethtool_swport_attrs *);
+int qeth_query_card_info(struct qeth_card *card,
+	struct carrier_info *carrier_info);
 int qeth_send_control_data(struct qeth_card *, int, struct qeth_cmd_buffer *,
 	int (*reply_cb)(struct qeth_card *, struct qeth_reply*, unsigned long),
 	void *reply_param);
