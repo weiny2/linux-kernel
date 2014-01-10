@@ -603,7 +603,6 @@ static int __bio_add_page(struct request_queue *q, struct bio *bio, struct page
 			  *page, unsigned int len, unsigned int offset,
 			  unsigned short max_sectors)
 {
-	int retried_segments = 0;
 	struct bio_vec *bvec;
 
 	/*
@@ -654,18 +653,12 @@ static int __bio_add_page(struct request_queue *q, struct bio *bio, struct page
 		return 0;
 
 	/*
-	 * we might lose a segment or two here, but rather that than
-	 * make this too complex.
+	 * The first part of the segment count check,
+	 * reduce segment count if possible
 	 */
-
-	while (bio->bi_phys_segments >= queue_max_segments(q)) {
-
-		if (retried_segments)
-			return 0;
-
-		retried_segments = 1;
+	if (bio->bi_phys_segments >= queue_max_segments(q))
 		blk_recount_segments(q, bio);
-	}
+
 
 	/*
 	 * setup the new entry, we might clear it again later if we
@@ -675,6 +668,21 @@ static int __bio_add_page(struct request_queue *q, struct bio *bio, struct page
 	bvec->bv_page = page;
 	bvec->bv_len = len;
 	bvec->bv_offset = offset;
+
+	/*
+	 * the other part of the segment count check, allow mergeable pages.
+	 * BIO_SEG_VALID flag is cleared below
+	 */
+	if ((bio->bi_phys_segments > queue_max_segments(q)) ||
+	    ((bio->bi_phys_segments == queue_max_segments(q)) &&
+	     !bvec_mergeable(q, __BVEC_END(bio), bvec,
+			     bio->bi_seg_back_size))) {
+			bvec->bv_page = NULL;
+			bvec->bv_len = 0;
+			bvec->bv_offset = 0;
+			return 0;
+	}
+
 
 	/*
 	 * if queue has other restrictions (eg varying max sector size
