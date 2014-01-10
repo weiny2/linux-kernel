@@ -9,11 +9,39 @@
 
 #include "blk.h"
 
+bool bvec_mergeable(struct request_queue *q, struct bio_vec *lastbv,
+		    struct bio_vec *newbv, unsigned int seg_size)
+{
+	unsigned long limit = queue_bounce_pfn(q);
+
+	if (!blk_queue_cluster(q))
+		return false;
+
+	/*
+	 * the trick here is to make sure that a high page is
+	 * never considered part of another segment, since that
+	 * might change with the bounce page.
+	 */
+	if ((page_to_pfn(lastbv->bv_page) > limit)
+	    || (page_to_pfn(newbv->bv_page) > limit))
+		return false;
+
+	if (seg_size + newbv->bv_len > queue_max_segment_size(q))
+		return false;
+
+	if (!BIOVEC_PHYS_MERGEABLE(lastbv, newbv))
+		return false;
+	if (!BIOVEC_SEG_BOUNDARY(q, lastbv, newbv))
+		return false;
+	return true;
+}
+
+
 static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 					     struct bio *bio)
 {
 	struct bio_vec *bv, *bvprv = NULL;
-	int cluster, i, high, highprv = 1;
+	int i;
 	unsigned int seg_size, nr_phys_segs;
 	struct bio *fbio, *bbio;
 
@@ -21,33 +49,16 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 		return 0;
 
 	fbio = bio;
-	cluster = blk_queue_cluster(q);
 	seg_size = 0;
 	nr_phys_segs = 0;
 	for_each_bio(bio) {
 		bio_for_each_segment(bv, bio, i) {
-			/*
-			 * the trick here is making sure that a high page is
-			 * never considered part of another segment, since that
-			 * might change with the bounce page.
-			 */
-			high = page_to_pfn(bv->bv_page) > queue_bounce_pfn(q);
-			if (high || highprv)
-				goto new_segment;
-			if (cluster) {
-				if (seg_size + bv->bv_len
-				    > queue_max_segment_size(q))
-					goto new_segment;
-				if (!BIOVEC_PHYS_MERGEABLE(bvprv, bv))
-					goto new_segment;
-				if (!BIOVEC_SEG_BOUNDARY(q, bvprv, bv))
-					goto new_segment;
-
+			if (bvprv && bvec_mergeable(q, bvprv, bv, seg_size)) {
 				seg_size += bv->bv_len;
 				bvprv = bv;
 				continue;
 			}
-new_segment:
+			/* new segment */
 			if (nr_phys_segs == 1 && seg_size >
 			    fbio->bi_seg_front_size)
 				fbio->bi_seg_front_size = seg_size;
@@ -55,7 +66,6 @@ new_segment:
 			nr_phys_segs++;
 			bvprv = bv;
 			seg_size = bv->bv_len;
-			highprv = high;
 		}
 		bbio = bio;
 	}
