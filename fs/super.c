@@ -723,10 +723,16 @@ rescan:
 	return NULL;
 }
 
-#define REMOUNT_FORCE		1
-#define REMOUNT_SHRINK_DCACHE	2
-
-static int __do_remount_sb(struct super_block *sb, int flags, void *data, int rflags)
+/**
+ *	do_remount_sb - asks filesystem to change mount options.
+ *	@sb:	superblock in question
+ *	@flags:	numeric part of options
+ *	@data:	the rest of options
+ *      @force: whether or not to force the change
+ *
+ *	Alters the mount options of a mounted file system.
+ */
+int do_remount_sb(struct super_block *sb, int flags, void *data, int force)
 {
 	int retval;
 	int remount_ro;
@@ -741,8 +747,7 @@ static int __do_remount_sb(struct super_block *sb, int flags, void *data, int rf
 
 	if (flags & MS_RDONLY)
 		acct_auto_close(sb);
-	if (rflags & REMOUNT_SHRINK_DCACHE)
-		shrink_dcache_sb(sb);
+	shrink_dcache_sb(sb);
 	sync_filesystem(sb);
 
 	remount_ro = (flags & MS_RDONLY) && !(sb->s_flags & MS_RDONLY);
@@ -750,7 +755,7 @@ static int __do_remount_sb(struct super_block *sb, int flags, void *data, int rf
 	/* If we are remounting RDONLY and current sb is read/write,
 	   make sure there are no rw files opened */
 	if (remount_ro) {
-		if (rflags & REMOUNT_FORCE) {
+		if (force) {
 			mark_files_ro(sb);
 		} else {
 			retval = sb_prepare_remount_readonly(sb);
@@ -762,7 +767,7 @@ static int __do_remount_sb(struct super_block *sb, int flags, void *data, int rf
 	if (sb->s_op->remount_fs) {
 		retval = sb->s_op->remount_fs(sb, &flags, data);
 		if (retval) {
-			if (!(rflags & REMOUNT_FORCE))
+			if (!force)
 				goto cancel_readonly;
 			/* If forced remount, go ahead despite any errors */
 			WARN(1, "forced remount of a %s fs returned %i\n",
@@ -789,21 +794,6 @@ static int __do_remount_sb(struct super_block *sb, int flags, void *data, int rf
 cancel_readonly:
 	sb->s_readonly_remount = 0;
 	return retval;
-}
-
-/**
- *	do_remount_sb - asks filesystem to change mount options.
- *	@sb:	superblock in question
- *	@flags:	numeric part of options
- *	@data:	the rest of options
- *      @force: whether or not to force the change
- *
- *	Alters the mount options of a mounted file system.
- */
-int do_remount_sb(struct super_block *sb, int flags, void *data, int force)
-{
-	return __do_remount_sb(sb, flags, data,
-			REMOUNT_SHRINK_DCACHE|(force? REMOUNT_FORCE : 0));
 }
 
 static void do_emergency_remount(struct work_struct *work)
@@ -1118,7 +1108,7 @@ struct dentry *mount_single(struct file_system_type *fs_type,
 		}
 		s->s_flags |= MS_ACTIVE;
 	} else {
-		__do_remount_sb(s, flags, data, 0);
+		do_remount_sb(s, flags, data, 0);
 	}
 	return dget(s->s_root);
 }
