@@ -755,6 +755,17 @@ int shmem_unuse(swp_entry_t swap, struct page *page)
 		goto out;
 	/* No radix_tree_preload: swap entry keeps a place for page in tree */
 
+	/* 
+	 * try to shrink the page cache proactively even though
+	 * we might already have the page in so the shrinking is
+	 * not necessary but this is much easier than dropping 
+	 * the lock in shmem_unuse_inode before add_to_page_cache_lru.
+	 * GFP_NOWAIT makes sure that we do not shrink when adding
+	 * to page cache
+	 */
+	if (unlikely(vm_pagecache_limit_mb) && pagecache_over_limit() > 0)
+		shrink_page_cache(GFP_KERNEL, NULL);
+
 	mutex_lock(&shmem_swaplist_mutex);
 	list_for_each_safe(this, next, &shmem_swaplist) {
 		info = list_entry(this, struct shmem_inode_info, swaplist);
@@ -770,6 +781,10 @@ int shmem_unuse(swp_entry_t swap, struct page *page)
 
 	if (found < 0)
 		error = found;
+	else if (found > 0) {
+		if (unlikely(vm_pagecache_limit_mb) && pagecache_over_limit() > 0)
+			shrink_page_cache(GFP_KERNEL, page);
+	}
 out:
 	unlock_page(page);
 	page_cache_release(page);
