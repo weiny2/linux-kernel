@@ -45,11 +45,11 @@ static DEFINE_SPINLOCK(catas_lock);
 static LIST_HEAD(catas_list);
 static struct work_struct catas_work;
 
-static int internal_err_reset = 1;
+static int internal_err_reset = 0;
 module_param(internal_err_reset, int, 0644);
 MODULE_PARM_DESC(internal_err_reset,
 		 "Reset device on internal errors if non-zero"
-		 " (default 1, in SRIOV mode default is 0)");
+		 " (default 0, in SRIOV mode default is 0)");
 
 static void dump_err_buf(struct mlx4_dev *dev)
 {
