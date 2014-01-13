@@ -511,6 +511,9 @@ extern void qla2300_fw_dump(scsi_qla_host_t *, int);
 extern void qla24xx_fw_dump(scsi_qla_host_t *, int);
 extern void qla25xx_fw_dump(scsi_qla_host_t *, int);
 extern void qla81xx_fw_dump(scsi_qla_host_t *, int);
+extern void qla82xx_fw_dump(scsi_qla_host_t *, int);
+extern void qla8044_fw_dump(scsi_qla_host_t *, int);
+
 extern void qla2x00_dump_regs(scsi_qla_host_t *);
 extern void qla2x00_dump_buffer(uint8_t *, uint32_t);
 extern void qla2x00_dump_buffer_zipped(uint8_t *, uint32_t);

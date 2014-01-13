@@ -3284,6 +3284,7 @@ struct qla_hw_data {
 	struct mr_data_fx00 mr;
 
 	struct qlt_hw_data tgt;
+	int	allow_cna_fw_dump;
 };
 
 /*
