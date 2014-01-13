@@ -2877,6 +2877,15 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 
 	sched_debug	[KNL] Enables verbose scheduler debug messages.
 
+	rtsched_debug   [KNL] Disallows borrowing of excess rt_runtime from neighboring runqueues.
+			  /proc/sys/kernel/sched_rt_runtime_us becomes a hard limit per runqueue.
+
+	nortsched       [KNL] Disables realtime task bandwidth control.
+
+	rtkthreads=	[KNL] kernel threads run as SCHED_FIFO at the provided priority (1..99).
+
+	rtworkqueues=	[KNL] kworker threads run as SCHED_FIFO at the provided priority (1..99).
+
 	skew_tick=	[KNL] Offset the periodic timer tick per cpu to mitigate
 			xtime_lock contention on larger systems, and/or RCU lock
 			contention on all systems with CONFIG_MAXSMP set.

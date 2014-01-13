@@ -63,15 +63,15 @@ enum sched_tunable_scaling sysctl_sched_tunable_scaling
 
 /*
  * Minimal preemption granularity for CPU-bound tasks:
- * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 2 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
-unsigned int sysctl_sched_min_granularity = 750000ULL;
-unsigned int normalized_sysctl_sched_min_granularity = 750000ULL;
+unsigned int sysctl_sched_min_granularity = 2000000ULL;
+unsigned int normalized_sysctl_sched_min_granularity = 2000000ULL;
 
 /*
  * is kept at sysctl_sched_latency / sysctl_sched_min_granularity
  */
-static unsigned int sched_nr_latency = 8;
+static unsigned int sched_nr_latency = 3;
 
 /*
  * After fork, child runs first. If set to 0 (default) then
@@ -80,15 +80,23 @@ static unsigned int sched_nr_latency = 8;
 unsigned int sysctl_sched_child_runs_first __read_mostly;
 
 /*
+ * sys_sched_yield() compat mode
+ *
+ * This option switches the agressive yield implementation of the
+ * old scheduler back on.
+ */
+unsigned int sysctl_sched_compat_yield __read_mostly;
+
+/*
  * SCHED_OTHER wake-up granularity.
- * (default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 2.5 msec * (1 + ilog(ncpus)), units: nanoseconds)
  *
  * This option delays the preemption effects of decoupled workloads
  * and reduces their over-scheduling. Synchronous workloads will still
  * have immediate wakeup/sleep latencies.
  */
-unsigned int sysctl_sched_wakeup_granularity = 1000000UL;
-unsigned int normalized_sysctl_sched_wakeup_granularity = 1000000UL;
+unsigned int sysctl_sched_wakeup_granularity = 2500000UL;
+unsigned int normalized_sysctl_sched_wakeup_granularity = 2500000UL;
 
 const_debug unsigned int sysctl_sched_migration_cost = 500000UL;
 
@@ -570,7 +578,6 @@ static struct sched_entity *__pick_next_entity(struct sched_entity *se)
 	return rb_entry(next, struct sched_entity, run_node);
 }
 
-#ifdef CONFIG_SCHED_DEBUG
 struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
 {
 	struct rb_node *last = rb_last(&cfs_rq->tasks_timeline);
@@ -581,6 +588,7 @@ struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
 	return rb_entry(last, struct sched_entity, run_node);
 }
 
+#ifdef CONFIG_SCHED_DEBUG
 /**************************************************************
  * Scheduling class statistics methods:
  */
@@ -2547,7 +2555,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 		vruntime += sched_vslice(cfs_rq, se);
 
 	/* sleeps up to a single latency don't count. */
-	if (!initial) {
+	if (!initial && sched_feat(FAIR_SLEEPERS)) {
 		unsigned long thresh = sysctl_sched_latency;
 
 		/*
@@ -4568,7 +4576,7 @@ static void yield_task_fair(struct rq *rq)
 {
 	struct task_struct *curr = rq->curr;
 	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
-	struct sched_entity *se = &curr->se;
+	struct sched_entity *se = &curr->se, *rightmost;
 
 	/*
 	 * Are we the only task in the tree?
@@ -4593,6 +4601,27 @@ static void yield_task_fair(struct rq *rq)
 	}
 
 	set_skip_buddy(se);
+
+	if (likely(!sysctl_sched_compat_yield))
+		return;
+
+	/*
+	 * Find the rightmost entry in the rbtree:
+	 */
+	rightmost = __pick_last_entity(cfs_rq);
+
+	/*
+	 * Already in the rightmost position?
+	 */
+	if (unlikely(!rightmost || entity_before(rightmost, se)))
+		return;
+
+	/*
+	 * Minimally necessary key value to be last in the tree:
+	 * Upon rescheduling, sched_class::put_prev_task() will place
+	 * 'current' within the tree based on its new key value.
+	 */
+	se->vruntime = rightmost->vruntime + 1;
 }
 
 static bool yield_to_task_fair(struct rq *rq, struct task_struct *p, bool preempt)

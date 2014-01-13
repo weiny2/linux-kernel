@@ -1685,6 +1685,25 @@ static struct worker *alloc_worker(void)
 	return worker;
 }
 
+static struct sched_param fifo_param, normal_param;
+
+static inline void kworker_set_sched_params(struct task_struct *worker)
+{
+	int prio = fifo_param.sched_priority;
+	if (!prio)
+		return;
+	if (worker->policy == SCHED_FIFO && worker->rt_priority == prio)
+		return;
+	sched_setscheduler_nocheck(worker, SCHED_FIFO, &fifo_param);
+}
+
+static inline void kworker_clr_sched_params(struct task_struct *worker)
+{
+	if (!fifo_param.sched_priority || worker->policy != SCHED_FIFO)
+		return;
+	sched_setscheduler_nocheck(worker, SCHED_NORMAL, &normal_param);
+}
+
 /**
  * create_worker - create a new workqueue worker
  * @pool: pool the new worker will belong to
@@ -1745,6 +1764,7 @@ static struct worker *create_worker(struct worker_pool *pool)
 	 */
 	set_user_nice(worker->task, pool->attrs->nice);
 	set_cpus_allowed_ptr(worker->task, pool->attrs->cpumask);
+	kworker_set_sched_params(worker->task);
 
 	/* prevent userland from meddling with cpumask of workqueue workers */
 	worker->task->flags |= PF_NO_SETAFFINITY;
@@ -1850,6 +1870,7 @@ static void destroy_worker(struct worker *worker)
 
 	spin_unlock_irq(&pool->lock);
 
+	kworker_clr_sched_params(worker->task);
 	kthread_stop(worker->task);
 	kfree(worker);
 
@@ -4226,6 +4247,7 @@ struct workqueue_struct *__alloc_workqueue_key(const char *fmt,
 
 		wq->rescuer = rescuer;
 		rescuer->task->flags |= PF_NO_SETAFFINITY;
+		kworker_set_sched_params(rescuer->task);
 		wake_up_process(rescuer->task);
 	}
 
@@ -4306,6 +4328,7 @@ void destroy_workqueue(struct workqueue_struct *wq)
 	workqueue_sysfs_unregister(wq);
 
 	if (wq->rescuer) {
+		kworker_clr_sched_params(wq->rescuer->task);
 		kthread_stop(wq->rescuer->task);
 		kfree(wq->rescuer);
 		wq->rescuer = NULL;
@@ -5099,3 +5122,17 @@ static int __init init_workqueues(void)
 	return 0;
 }
 early_initcall(init_workqueues);
+
+static int __init setup_rtworkqueues(char *str)
+{
+	int prio;
+
+	if (kstrtoint(str, 0, &prio) || prio < 1 || prio > 99) {
+		prio = 0;
+		pr_warn("Unable to set kworker default priority\n");
+	}
+	fifo_param.sched_priority = prio;
+
+        return 1;
+}
+__setup("rtworkqueues=", setup_rtworkqueues);

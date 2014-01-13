@@ -698,18 +698,45 @@ static void __enable_runtime(struct rq *rq)
 	}
 }
 
+int __read_mostly sysctl_sched_rtsched_debug;
+
 static int balance_runtime(struct rt_rq *rt_rq)
 {
 	int more = 0;
 
+	if (likely(rt_rq->rt_time <= rt_rq->rt_runtime))
+		return more;
+
+	if (unlikely(sysctl_sched_rtsched_debug)) {
+		struct rq *rq;
+		struct task_struct *p;
+		u64 period;
+
+		if (!printk_ratelimit())
+			return more;
+
+		rq = rq_of_rt_rq(rt_rq);
+		printk(KERN_WARNING "RT: throttling CPU%d\n", rq->cpu);
+
+		if (!rt_task(rq->curr))
+			return more;
+
+		period = sched_rt_period(rt_rq);
+		p = rq->curr;
+
+		if (rt_rq->rt_time > period - (period >> 3))
+			printk(KERN_WARNING "RT: Danger!  (%s) is potential runaway.\n", p->comm);
+
+		return more;
+
+	}
+
 	if (!sched_feat(RT_RUNTIME_SHARE))
 		return more;
 
-	if (rt_rq->rt_time > rt_rq->rt_runtime) {
-		raw_spin_unlock(&rt_rq->rt_runtime_lock);
-		more = do_balance_runtime(rt_rq);
-		raw_spin_lock(&rt_rq->rt_runtime_lock);
-	}
+	raw_spin_unlock(&rt_rq->rt_runtime_lock);
+	more = do_balance_runtime(rt_rq);
+	raw_spin_lock(&rt_rq->rt_runtime_lock);
 
 	return more;
 }
@@ -2021,3 +2048,10 @@ void print_rt_stats(struct seq_file *m, int cpu)
 	rcu_read_unlock();
 }
 #endif /* CONFIG_SCHED_DEBUG */
+
+static int __init parse_rtsched_debug(char *arg)
+{
+	sysctl_sched_rtsched_debug = 1;
+	return 0;
+}
+early_param("rtsched_debug", parse_rtsched_debug);

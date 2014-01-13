@@ -296,7 +296,16 @@ __read_mostly int scheduler_running;
  */
 int sysctl_sched_rt_runtime = 950000;
 
-
+/*
+ * Bootline option to disable sched_rt_runtime.  Otherwise very large
+ * systems may livelock during boot.
+ */
+static int __init parse_nortsched(char *arg)
+{
+	sysctl_sched_rt_runtime = -1;
+	return 0;
+}
+early_param("nortsched", parse_nortsched);
 
 /*
  * __task_rq_lock - lock the rq @p resides on.
@@ -648,6 +657,11 @@ static inline bool got_nohz_idle_kick(void)
 	 */
 	clear_bit(NOHZ_BALANCE_KICK, nohz_flags(cpu));
 	return false;
+}
+
+int sched_needs_cpu(int cpu)
+{
+	return  cpu_rq(cpu)->avg_idle < sysctl_sched_migration_cost;
 }
 
 #else /* CONFIG_NO_HZ_COMMON */
@@ -4665,6 +4679,32 @@ static struct ctl_table sd_ctl_root[] = {
 	{}
 };
 
+int domain_flags_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp,
+		loff_t *ppos)
+{
+	int ret, cpu;
+	struct sched_domain *sd;
+	static DEFINE_MUTEX(mutex);
+
+	mutex_lock(&mutex);
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+
+	if (!ret && write) {
+		get_online_cpus();
+		rcu_read_lock();
+		for_each_cpu(cpu, cpu_online_mask) {
+			sd = highest_flag_domain(cpu, SD_SHARE_PKG_RESOURCES);
+			rcu_assign_pointer(per_cpu(sd_llc, cpu), sd);
+		}
+		rcu_read_unlock();
+		put_online_cpus();
+	}
+	mutex_unlock(&mutex);
+
+	return ret;
+}
+
 static struct ctl_table *sd_alloc_ctl_entry(int n)
 {
 	struct ctl_table *entry =
@@ -4745,7 +4785,7 @@ sd_alloc_ctl_domain_table(struct sched_domain *sd)
 		&sd->cache_nice_tries,
 		sizeof(int), 0644, proc_dointvec_minmax, false);
 	set_table_entry(&table[10], "flags", &sd->flags,
-		sizeof(int), 0644, proc_dointvec_minmax, false);
+		sizeof(int), 0644, domain_flags_handler, false);
 	set_table_entry(&table[11], "name", sd->name,
 		CORENAME_MAX_SIZE, 0444, proc_dostring, false);
 	/* &table[12] is terminator */
