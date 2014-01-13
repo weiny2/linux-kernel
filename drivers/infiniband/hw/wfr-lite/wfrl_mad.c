@@ -95,6 +95,12 @@ static unsigned wfr_shared_space_sup = 1;
 module_param_named(shared_space_sup, wfr_shared_space_sup, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(shared_space_sup, "Set if shared space is supported");
 
+static unsigned wfr_mgmt_allowed = 1;
+module_param_named(mgmt_allowed, wfr_mgmt_allowed, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(mgmt_allowed, "Set MgmtAllowed bit in simulated LNI negotiations (default 1): "
+			"NOTE this results in _REMOTE_ nodes PortInfo.MgmtAllowed bit being set");
+
+
 /** =========================================================================
  * For STL simulation environment we fake some STL values
  */
@@ -501,7 +507,12 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 	if (send_GetResp) {
 		/* send our response back */
 		link_info->node_guid = dd->pport->guid;
-		link_info->port_mode = 0x08;
+
+		if (wfr_mgmt_allowed)
+			link_info->port_mode = STL_PI_MASK_NEIGH_MGMT_ALLOWED;
+		else
+			link_info->port_mode = 0;
+
 		link_info->port_state = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
 		link_info->vl15_init = cpu_to_be16(get_vl15_init());
 
@@ -574,7 +585,9 @@ static void wfr_send_stl_link_info(struct ib_device *ibdev, u8 port)
 	u8 state = vpi->port_states.portphysstate_portstate;
 	__be64 local_node_guid = dd->pport->guid;
 
-	wfr_send_stl_virt_link_info(ibdev, port, state, local_node_guid, 0x08,
+	wfr_send_stl_virt_link_info(ibdev, port, state, local_node_guid,
+					wfr_mgmt_allowed ?
+						STL_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
 					vpi->link_speed.active,
 					vpi->link_width.active);
 }
@@ -1813,7 +1826,8 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	wfr_send_stl_virt_link_info(ibdev, port, vpi->port_states.portphysstate_portstate,
 				dd->pport->guid,
-				0x08,
+				wfr_mgmt_allowed ?
+					STL_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
 				vpi->link_speed.active,
 				vpi->link_width.active);
 
