@@ -2379,6 +2379,14 @@ int open_ctree(struct super_block *sb,
 	if (btrfs_super_flags(disk_super) & BTRFS_SUPER_FLAG_ERROR)
 		set_bit(BTRFS_FS_STATE_ERROR, &fs_info->fs_state);
 
+	if (btrfs_super_flags(disk_super) & BTRFS_SUPER_FLAG_SEEDING) {
+		if (!allow_unsupported) {
+			printk(KERN_WARNING "btrfs: seeding mode is not supported, load module with allow_unsupported=1\n");
+			ret = -EOPNOTSUPP;
+			goto fail_alloc;
+		}
+	}
+
 	/*
 	 * run through our array of backup supers and setup
 	 * our ring pointer to the oldest one
@@ -2441,6 +2449,13 @@ int open_ctree(struct super_block *sb,
 		if (!(features & BTRFS_FEATURE_INCOMPAT_BIG_METADATA))
 			printk(KERN_INFO "btrfs flagging fs with big metadata feature\n");
 		features |= BTRFS_FEATURE_INCOMPAT_BIG_METADATA;
+	}
+
+	if (features & BTRFS_FEATURE_INCOMPAT_BIG_METADATA) {
+		if (!allow_unsupported) {
+			printk(KERN_WARNING "btrfs: big metadata feature supported read-only, load module with allow_unsupported=1\n");
+			sb->s_flags |= MS_RDONLY;
+		}
 	}
 
 	nodesize = btrfs_super_nodesize(disk_super);

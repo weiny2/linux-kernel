@@ -2267,8 +2267,14 @@ static long btrfs_fallocate(struct file *file, int mode,
 	if (mode & ~(FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE))
 		return -EOPNOTSUPP;
 
-	if (mode & FALLOC_FL_PUNCH_HOLE)
+	if (mode & FALLOC_FL_PUNCH_HOLE) {
+		if (!allow_unsupported) {
+			printk_once(KERN_WARNING
+		"btrfs: fallocate/PUNCH_HOLE is not supported, load module with allow_unsupported=1\n");
+			return -EOPNOTSUPP;
+		}
 		return btrfs_punch_hole(inode, offset, len);
+	}
 
 	/*
 	 * Make sure we have enough space before we do the

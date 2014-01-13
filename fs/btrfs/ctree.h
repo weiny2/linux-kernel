@@ -4045,5 +4045,9 @@ static inline int btrfs_defrag_cancelled(struct btrfs_fs_info *fs_info)
 	return signal_pending(current);
 }
 
+/*
+ * Module parameter
+ */
+extern bool allow_unsupported;
 
 #endif
