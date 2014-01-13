@@ -103,6 +103,7 @@ extern int ql2xextended_error_logging;
 extern int ql2xiidmaenable;
 extern int ql2xmaxqueues;
 extern int ql2xmultique_tag;
+extern int ql2xenablemsix;
 extern int ql2xfwloadbin;
 extern int ql2xetsenable;
 extern int ql2xshiftctondsd;

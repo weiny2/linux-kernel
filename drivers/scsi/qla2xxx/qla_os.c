@@ -153,6 +153,14 @@ MODULE_PARM_DESC(ql2xmultique_tag,
 		"Default is 0 for no affinity of request and response IO. "
 		"Set it to 1 to turn on the cpu affinity.");
 
+int ql2xenablemsix = 1;
+module_param(ql2xenablemsix, int, S_IRUGO);
+MODULE_PARM_DESC(ql2xenablemsix,
+		"Set to enable MSI or MSI-X interrupt mechanism."
+		" Default is 1, enable MSI-X interrupt mechanism."
+		" 0 -- enable traditional pin-based mechanism."
+		" 1 -- enable MSI-X interrupt mechanism."
+		" 2 -- enable MSI interrupt mechanism.");
 int ql2xfwloadbin;
 module_param(ql2xfwloadbin, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(ql2xfwloadbin,
