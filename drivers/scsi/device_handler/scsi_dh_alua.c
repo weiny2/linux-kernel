@@ -1067,8 +1067,8 @@ static int alua_initialize(struct scsi_device *sdev, struct alua_dh_data *h)
 	if (pg) {
 		pg->expiry = 0;
 		alua_rtpg_queue(pg, sdev, NULL);
+		kref_put(&pg->kref, release_port_group);
 	}
-	kref_put(&pg->kref, release_port_group);
 	return h->error;
 }
 
