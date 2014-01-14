@@ -661,8 +661,11 @@ void sc_return_credits(struct send_context *sc)
 	if (!sc)
 		return;
 
+	/* a 0->1 transition schedules a credit return */
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE,
 		WFR_SEND_CTXT_CREDIT_FORCE_FORCE_RETURN_SMASK);
+	/* set back to 0 for next time */
+	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE, 0);
 }
 
 /* allow all in-flight packets to drain on the context */
