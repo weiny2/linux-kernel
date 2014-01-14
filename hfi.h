@@ -748,7 +748,6 @@ struct hfi_devdata {
 	void (*f_set_intr_state)(struct hfi_devdata *, u32);
 	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
 	void (*f_wantpiobuf_intr)(struct hfi_devdata *, u32);
-	int (*f_late_initreg)(struct hfi_devdata *);
 	int (*f_init_sdma_regs)(struct qib_pportdata *);
 	u16 (*f_sdma_gethead)(struct qib_pportdata *);
 	int (*f_sdma_busy)(struct qib_pportdata *);

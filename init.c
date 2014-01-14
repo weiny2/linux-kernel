@@ -502,10 +502,6 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	if (ret)
 		goto done;
 
-	ret = dd->f_late_initreg(dd);
-	if (ret)
-		goto done;
-
 	/* dd->rcd can be NULL if early init failed */
 	for (i = 0; dd->rcd && i < dd->first_user_ctxt; ++i) {
 		/*

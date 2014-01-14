@@ -1472,13 +1472,6 @@ static int gpio_mod(struct hfi_devdata *dd, u32 out, u32 dir, u32 mask)
 	return 1;
 }
 
-static int late_initreg(struct hfi_devdata *dd)
-{
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-	return 0;
-}
-
 static void set_cntr_sample(struct qib_pportdata *ppd, u32 intv,
 				     u32 start)
 {
@@ -2466,7 +2459,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_ib_updown         = ib_updown;
 	dd->f_init_ctxt         = init_ctxt;
 	dd->f_intr_fallback     = intr_fallback;
-	dd->f_late_initreg      = late_initreg;
 	dd->f_portcntr          = portcntr;
 	dd->f_put_tid           = put_tid;
 	dd->f_quiet_serdes      = quiet_serdes;
