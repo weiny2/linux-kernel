@@ -88,6 +88,7 @@ enum {
 	Opt_acl, Opt_noacl,
 	Opt_rdirplus, Opt_nordirplus,
 	Opt_sharecache, Opt_nosharecache,
+	Opt_sharetransport, Opt_nosharetransport,
 	Opt_resvport, Opt_noresvport,
 	Opt_fscache, Opt_nofscache,
 	Opt_migration, Opt_nomigration,
@@ -146,6 +147,8 @@ static const match_table_t nfs_mount_option_tokens = {
 	{ Opt_nordirplus, "nordirplus" },
 	{ Opt_sharecache, "sharecache" },
 	{ Opt_nosharecache, "nosharecache" },
+	{ Opt_sharetransport, "sharetransport"},
+	{ Opt_nosharetransport, "nosharetransport"},
 	{ Opt_resvport, "resvport" },
 	{ Opt_noresvport, "noresvport" },
 	{ Opt_fscache, "fsc" },
@@ -636,6 +639,7 @@ static void nfs_show_mount_options(struct seq_file *m, struct nfs_server *nfss,
 		{ NFS_MOUNT_NOACL, ",noacl", "" },
 		{ NFS_MOUNT_NORDIRPLUS, ",nordirplus", "" },
 		{ NFS_MOUNT_UNSHARED, ",nosharecache", "" },
+		{ NFS_MOUNT_NOSHARE_XPRT, ",nosharetransport", ""},
 		{ NFS_MOUNT_NORESVPORT, ",noresvport", "" },
 		{ 0, NULL, NULL }
 	};
@@ -1253,6 +1257,12 @@ static int nfs_parse_mount_options(char *raw,
 			break;
 		case Opt_nosharecache:
 			mnt->flags |= NFS_MOUNT_UNSHARED;
+			break;
+		case Opt_sharetransport:
+			mnt->flags &= ~NFS_MOUNT_NOSHARE_XPRT;
+			break;
+		case Opt_nosharetransport:
+			mnt->flags |= NFS_MOUNT_NOSHARE_XPRT;
 			break;
 		case Opt_resvport:
 			mnt->flags &= ~NFS_MOUNT_NORESVPORT;
@@ -2204,6 +2214,8 @@ nfs_remount(struct super_block *sb, int *flags, char *raw_data)
 	error = nfs_parse_mount_options((char *)options, data);
 	if (error < 0)
 		goto out;
+	if (always_nosharetransport)
+		data->flags |= NFS_MOUNT_NOSHARE_XPRT;
 
 	/*
 	 * noac is a special case. It implies -o sync, but that's not

@@ -403,8 +403,13 @@ static struct nfs_client *nfs_match_client(const struct nfs_client_initdata *dat
 	const struct sockaddr *sap = data->addr;
 	struct nfs_net *nn = net_generic(data->net, nfs_net_id);
 
+	if (test_bit(NFS_CS_NO_SHARE, &data->init_flags))
+		return NULL;
+
 	list_for_each_entry(clp, &nn->nfs_client_list, cl_share_link) {
 	        const struct sockaddr *clap = (struct sockaddr *)&clp->cl_addr;
+		if (test_bit(NFS_CS_NO_SHARE,&clp->cl_flags))
+			continue;
 		/* Don't match clients that failed to initialise properly */
 		if (clp->cl_cons_state < 0)
 			continue;
@@ -752,6 +757,8 @@ static int nfs_init_server(struct nfs_server *server,
 	if (data->flags & NFS_MOUNT_NORESVPORT)
 		set_bit(NFS_CS_NORESVPORT, &cl_init.init_flags);
 
+	if (data->flags & NFS_MOUNT_NOSHARE_XPRT)
+		set_bit(NFS_CS_NO_SHARE, &cl_init.init_flags);
 	/* Allocate or find a client reference we can use */
 	clp = nfs_get_client(&cl_init, &timeparms, NULL, RPC_AUTH_UNIX);
 	if (IS_ERR(clp)) {
