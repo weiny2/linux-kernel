@@ -1150,6 +1150,7 @@ static void shrink_dcache_for_umount_subtree(struct dentry *dentry)
 			if (!parent)
 				return;
 			dentry = parent;
+			cond_resched();
 		} while (list_empty(&dentry->d_subdirs));
 
 		dentry = list_entry(dentry->d_subdirs.next,
