@@ -381,7 +381,7 @@ EXPORT_SYMBOL_GPL(scsi_unregister_device_handler);
  */
 int scsi_dh_activate(struct request_queue *q, activate_complete fn, void *data)
 {
-	int err = 0;
+	int err = SCSI_DH_OK;
 	unsigned long flags;
 	struct scsi_device *sdev;
 	struct scsi_device_handler *scsi_dh = NULL;
@@ -400,15 +400,18 @@ int scsi_dh_activate(struct request_queue *q, activate_complete fn, void *data)
 	if (sdev->scsi_dh_data)
 		scsi_dh = sdev->scsi_dh_data->scsi_dh;
 	dev = get_device(&sdev->sdev_gendev);
-	if (!scsi_dh || !dev ||
-	    sdev->sdev_state == SDEV_CANCEL ||
-	    sdev->sdev_state == SDEV_DEL)
+	if (!scsi_dh)
 		err = SCSI_DH_NOSYS;
-	if (sdev->sdev_state == SDEV_OFFLINE)
+	else if (!dev)
+		err = SCSI_DH_DEV_OFFLINED;
+	else if (sdev->sdev_state == SDEV_CANCEL ||
+		 sdev->sdev_state == SDEV_DEL)
+		err = SCSI_DH_NOTCONN;
+	else if (sdev->sdev_state == SDEV_OFFLINE)
 		err = SCSI_DH_DEV_OFFLINED;
 	spin_unlock_irqrestore(q->queue_lock, flags);
 
-	if (err) {
+	if (err != SCSI_DH_OK || !scsi_dh->activate) {
 		if (fn)
 			fn(data, err);
 		goto out;
@@ -417,7 +420,8 @@ int scsi_dh_activate(struct request_queue *q, activate_complete fn, void *data)
 	if (scsi_dh->activate)
 		err = scsi_dh->activate(sdev, fn, data);
 out:
-	put_device(dev);
+	if (dev)
+		put_device(dev);
 	return err;
 }
 EXPORT_SYMBOL_GPL(scsi_dh_activate);
