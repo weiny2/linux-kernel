@@ -1045,22 +1045,23 @@ extern const enum ib_wc_opcode ib_qib_wc_opcode[];
 extern const u8 hdr_len_by_opcode[];
 
 /*
- * Below  HCA-independent IB PhysPortState values, returned
- * by the f_ibphys_portstate() routine.
+ * IB Volume 1, Table 146 PortInfo/IB Volume 2 Section 5.4.2(1) PortPhysState
+ * values.
+ *
+ * When writing, only values 0-3 are valid, other values are ignored.
+ * When reading, 0 is reserved.
+ *
+ * Returned by the ibphys_portstate() routine.
  */
-#define IB_PHYSPORTSTATE_SLEEP 1
-#define IB_PHYSPORTSTATE_POLL 2
-#define IB_PHYSPORTSTATE_DISABLED 3
-#define IB_PHYSPORTSTATE_CFG_TRAIN 4
-#define IB_PHYSPORTSTATE_LINKUP 5
-#define IB_PHYSPORTSTATE_LINK_ERR_RECOVER 6
-#define IB_PHYSPORTSTATE_CFG_DEBOUNCE 8
-#define IB_PHYSPORTSTATE_CFG_IDLE 0xB
-#define IB_PHYSPORTSTATE_RECOVERY_RETRAIN 0xC
-#define IB_PHYSPORTSTATE_RECOVERY_WAITRMT 0xE
-#define IB_PHYSPORTSTATE_RECOVERY_IDLE 0xF
-#define IB_PHYSPORTSTATE_CFG_ENH 0x10
-#define IB_PHYSPORTSTATE_CFG_WAIT_ENH 0x13
+#define IB_PORTPHYSSTATE_NO_CHANGE	  0
+#define IB_PORTPHYSSTATE_SLEEP		  1
+#define IB_PORTPHYSSTATE_POLL		  2
+#define IB_PORTPHYSSTATE_DISABLED	  3
+#define IB_PORTPHYSSTATE_CFG_TRAIN	  4
+#define IB_PORTPHYSSTATE_LINKUP		  5
+#define IB_PORTPHYSSTATE_LINK_ERR_RECOVER 6
+#define IB_PORTPHYSSTATE_PHY_TEST	  7
+/* values 8-15 are reserved */
 
 extern const int ib_qib_state_ops[];
 

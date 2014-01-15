@@ -186,8 +186,6 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	ppd->port = port; /* IB port number, not index */
 
 	spin_lock_init(&ppd->sdma_lock);
-	spin_lock_init(&ppd->lflags_lock);
-	init_waitqueue_head(&ppd->state_wait);
 
 	init_timer(&ppd->symerr_clear_timer);
 	ppd->symerr_clear_timer.function = qib_clear_symerror_on_linkup;
@@ -341,6 +339,7 @@ static int loadtime_init(struct hfi_devdata *dd)
 
 	spin_lock_init(&dd->sendctrl_lock);
 	spin_lock_init(&dd->uctxt_lock);
+	spin_lock_init(&dd->dc8051_lock);
 	spin_lock_init(&dd->qib_diag_trans_lock);
 	mutex_init(&dd->qsfp_lock);
 
@@ -479,20 +478,14 @@ wq_error:
 int qib_init(struct hfi_devdata *dd, int reinit)
 {
 	int ret = 0, pidx, lastfail = 0;
-	u32 portok = 0;
 	unsigned i;
 	struct qib_ctxtdata *rcd;
 	struct qib_pportdata *ppd;
-	unsigned long flags;
 
-	/* Set linkstate to unknown, so we can watch for a transition. */
+	/* make sure the link is not "up" */
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		spin_lock_irqsave(&ppd->lflags_lock, flags);
-		ppd->lflags &= ~(QIBL_LINKACTIVE | QIBL_LINKARMED |
-				 QIBL_LINKDOWN | QIBL_LINKINIT |
-				 QIBL_LINKV);
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
+		ppd->linkup = 0;
 	}
 
 	if (reinit)
@@ -523,11 +516,12 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 			continue;
 		}
 	}
+	if (lastfail)
+		ret = lastfail;
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		int mtu;
-		if (lastfail)
-			ret = lastfail;
+
 		ppd = dd->pport + pidx;
 		mtu = ib_mtu_enum_to_int(qib_ibmtu);
 		if (mtu == -1) {
@@ -545,38 +539,28 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		 */
 		ppd->ibmaxlen = ppd->init_ibmaxlen;
 		qib_set_mtu(ppd, mtu);
-
-		spin_lock_irqsave(&ppd->lflags_lock, flags);
-		ppd->lflags |= QIBL_IB_LINK_DISABLED;
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-
-		lastfail = dd->f_bringup_serdes(ppd);
-		if (lastfail) {
-			dd_dev_info(dd, "Failed to bringup IB port %u\n",
-				ppd->port);
-			lastfail = -ENETDOWN;
-			continue;
-		}
-
-		portok++;
 	}
 
-	if (!portok) {
-		/* none of the ports initialized */
-		if (!ret && lastfail)
-			ret = lastfail;
-		else if (!ret)
-			ret = -ENETDOWN;
-		/* but continue on, so we can debug cause */
-	}
-
+	/* enable chip even if we have an error, so we can debug cause */
 	enable_chip(dd);
 
 done:
 	if (!ret) {
+		/* enable all interrupts from the chip */
+		dd->f_set_intr_state(dd, 1);
+
 		/* chip is OK for user apps; mark it as initialized */
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
+
+			/* start the serdes - must be after interrupts are
+			   enabled so we are notified when the link goes up */
+			lastfail = dd->f_bringup_serdes(ppd);
+			if (lastfail) {
+				dd_dev_info(dd,
+					"Failed to bringup IB port %u\n",
+					ppd->port);
+			}
 			/*
 			 * Set status even if port serdes is not initialized
 			 * so that diags will work.
@@ -589,9 +573,6 @@ done:
 			if (dd->flags & QIB_HAS_SEND_DMA)
 				ret = qib_setup_sdma(ppd);
 		}
-
-		/* now we can enable all interrupts from the chip */
-		dd->f_set_intr_state(dd, 1);
 
 		/*
 		 * Verify that we get an interrupt, fall back to an alternate if
@@ -668,11 +649,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 
-		spin_lock_irq(&ppd->lflags_lock);
-		ppd->lflags &= ~(QIBL_LINKDOWN | QIBL_LINKINIT |
-				 QIBL_LINKARMED | QIBL_LINKACTIVE |
-				 QIBL_LINKV);
-		spin_unlock_irq(&ppd->lflags_lock);
+		ppd->linkup = 0;
 		if (ppd->statusp)
 			*ppd->statusp &= ~(QIB_STATUS_IB_CONF | QIB_STATUS_IB_READY);
 	}

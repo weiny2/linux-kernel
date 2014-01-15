@@ -486,11 +486,8 @@ struct qib_pportdata {
 	/* GUID for this interface, in network order */
 	__be64 guid;
 
-	/* QIB_POLL, etc. link-state specific flags, per port */
-	u32 lflags;
-	/* qib_lflags driver is waiting for */
-	u32 state_wanted;
-	spinlock_t lflags_lock;
+	/* up or down physical link state */
+	u32 linkup;
 
 	/* ref count for each pkey */
 	atomic_t pkeyrefs[4];
@@ -524,26 +521,7 @@ struct qib_pportdata {
 	struct tasklet_struct sdma_sw_clean_up_task
 		____cacheline_aligned_in_smp;
 
-	wait_queue_head_t state_wait; /* for state_wanted */
-
-	/*
-	 * Shadow copies of registers; size indicates read access size.
-	 * Most of them are readonly, but some are write-only register,
-	 * where we manipulate the bits in the shadow copy, and then write
-	 * the shadow copy to qlogic_ib.
-	 *
-	 * We deliberately make most of these 32 bits, since they have
-	 * restricted range.  For any that we read, we won't to generate 32
-	 * bit accesses, since Opteron will generate 2 separate 32 bit HT
-	 * transactions for a 64 bit read, and we want to avoid unnecessary
-	 * bus transactions.
-	 */
-
-	/* This is the 64 bit group */
-	/* last ibcstatus.  opaque outside chip-specific code */
-	u64 lastibcstat;
-
-	u32 lstate;
+	u32 lstate;	/* logical link state */
 
 	/* these are the "32 bit" regs */
 
@@ -738,8 +716,6 @@ struct hfi_devdata {
 	u32 (*f_iblink_state)(struct qib_pportdata *);
 	u8 (*f_ibphys_portstate)(struct qib_pportdata *);
 	void (*f_xgxs_reset)(struct qib_pportdata *);
-	/* per chip actions needed for IB Link up/down changes */
-	int (*f_ib_updown)(struct qib_pportdata *, int, u64);
 	/* Read/modify/write of GPIO pins (potentially chip-specific */
 	int (*f_gpio_mod)(struct hfi_devdata *dd, u32 out, u32 dir,
 		u32 mask);
@@ -815,6 +791,8 @@ struct hfi_devdata {
 	spinlock_t sendctrl_lock; /* protect changes to sendctrl shadow */
 	/* around rcd and (user ctxts) ctxt_cnt use (intr vs free) */
 	spinlock_t uctxt_lock; /* rcd and user context changes */
+	/* exclusive access to 8051 */
+	spinlock_t dc8051_lock;
 	/*
 	 * per unit status, see also portdata statusp
 	 * mapped readonly into user processes so they can get unit and
@@ -888,6 +866,8 @@ struct hfi_devdata {
 	u8 minrev;
 	/* hardware ID */
 	u8 hfi_id;
+	/* default link down value (poll/sleep) */
+	u8 link_default;
 
 	/* Misc small ints */
 	/* Number of physical ports available */
@@ -973,7 +953,7 @@ int qib_count_active_units(void);
 
 int qib_diag_add(struct hfi_devdata *);
 void qib_diag_remove(struct hfi_devdata *);
-void qib_handle_e_ibstatuschanged(struct qib_pportdata *, u64);
+void handle_linkup_change(struct hfi_devdata *dd, u32 linkup);
 void qib_sdma_update_tail(struct qib_pportdata *, u16); /* hold sdma_lock */
 
 int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
@@ -1062,21 +1042,6 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 #define QIB_DCA_ENABLED       0x10000 /* Direct Cache Access enabled */
 #define QIB_HAS_QSFP          0x20000 /* device (card instance) has QSFP */
 #define ICHECK_WORKER_INITED  0x40000 /* initialized interrupt_check_worker */
-
-/*
- * values for ppd->lflags (_ib_port_ related flags)
- */
-#define QIBL_LINKV             0x1 /* IB link state valid */
-#define QIBL_LINKDOWN          0x8 /* IB link is down */
-#define QIBL_LINKINIT          0x10 /* IB link level is up */
-#define QIBL_LINKARMED         0x20 /* IB link is ARMED */
-#define QIBL_LINKACTIVE        0x40 /* IB link is ACTIVE */
-/* leave a gap for more IB-link state */
-#define QIBL_IB_AUTONEG_INPROG 0x1000 /* non-IBTA DDR/QDR neg active */
-#define QIBL_IB_AUTONEG_FAILED 0x2000 /* non-IBTA DDR/QDR neg failed */
-#define QIBL_IB_LINK_DISABLED  0x4000 /* Linkdown-disable forced,
-				       * Do not try to bring up */
-#define QIBL_IB_FORCE_NOTIFY   0x8000 /* force notify on next ib change */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
 #define QIB_PBC_LENGTH_MASK                     ((1 << 11) - 1)

@@ -71,6 +71,7 @@
 #include "include/wfr/dc_top_csrs_defs.h"
 #include "include/wfr/dc_8051_csrs_defs.h"
 #include "include/wfr/dcc_csrs_defs.h"
+#include "include/wfr/dc_lcb_csrs_defs.h"
 
 /* not defined in wfr_core.h */
 #define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000
@@ -461,6 +462,67 @@
 #define WFR_IS_RCVURGENT_END		WFR_IS_SENDCREDIT_START
 #define WFR_IS_SENDCREDIT_END		WFR_IS_RESERVED_START
 #define WFR_IS_RESERVED_END		WFR_IS_MAX_SOURCES
+
+/* DCC_CFG_PORT_CONFIG logical link states */
+#define WFR_LSTATE_DOWN    0x1
+#define WFR_LSTATE_INIT    0x2
+#define WFR_LSTATE_ARMED   0x3
+#define WFR_LSTATE_ACTIVE  0x4
+
+/* DC8051_STS_CUR_STATE port values (physical link states) */
+#define WFR_PLS_DISABLED			   0x30
+#define WFR_PLS_OFFLINE				   0x90
+#define WFR_PLS_OFFLINE_QUIET			   0x90
+#define WFR_PLS_OFFLINE_PLANNED_DOWN_INFORM	   0x91
+#define WFR_PLS_OFFLINE_READY_TO_QUIET_LT	   0x92
+#define WFR_PLS_OFFLINE_REPORT_FAILURE		   0x93
+#define WFR_PLS_OFFLINE_READY_TO_QUIET_BCC	   0x94
+#define WFR_PLS_POLLING				   0x20
+#define WFR_PLS_POLLING_QUIET			   0x20
+#define WFR_PLS_POLLING_ACTIVE			   0x21
+#define WFR_PLS_CONFIGPHY			   0x40
+#define WFR_PLS_CONFIGPHY_DEBOUCE		   0x40
+#define WFR_PLS_CONFIGPHY_ESTCOMM		   0x41
+#define WFR_PLS_CONFIGPHY_ESTCOMM_TXRX_HUNT	   0x42
+#define WFR_PLS_CONFIGPHY_ESTcOMM_LOCAL_COMPLETE   0x43
+#define WFR_PLS_CONFIGPHY_OPTEQ			   0x44
+#define WFR_PLS_CONFIGPHY_OPTEQ_OPTIMIZING	   0x44
+#define WFR_PLS_CONFIGPHY_OPTEQ_LOCAL_COMPLETE	   0x45
+#define WFR_PLS_CONFIGPHY_VERIFYCAP		   0x46
+#define WFR_PLS_CONFIGPHY_VERIFYCAP_EXCHANGE	   0x46
+#define WFR_PLS_CONFIGPHY_VERIFYCAP_LOCAL_COMPLETE 0x47
+#define WFR_PLS_CONFIGLT			   0x48
+#define WFR_PLS_CONFIGLT_CONFIGURE		   0x48
+#define WFR_PLS_CONFIGLT_LINK_TRANSFER_ACTIVE	   0x49
+#define WFR_PLS_LINKUP				   0x50
+#define WFR_PLS_PHYTEST				   0xB0
+
+/* DC_DC8051_CFG_HOST_CMD_0.REQ_TYPE - 8051 host commands */
+#define WFR_HCMD_LOAD_CONFIG_DATA 0x01
+#define WFR_HCMD_READ_CONFIG_DATA 0x02
+#define WFR_HCMD_CHANGE_PHY_STATE 0x03
+#define WFR_HCMD_SEND_BCC_MSG	  0x04
+#define WFR_HCMD_MISC		  0x05
+#define WFR_HCMD_INTERFACE_TEST	  0xff
+
+/* DC_DC8051_CFG_HOST_CMD_1.RETURN_CODE - 8051 host command return */
+#define WFR_HCMD_SUCCESS 2
+
+/* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.ERROR - error flags */
+#define WFR_SPICO_ROM_FAIL 0x01
+#define WFR_UNKOWN_FRAME   0x02
+#define WFR_BER_NOT_MET	   0x04
+#define WFR_LOOPBACK_FAIL  0x08
+
+/* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG - host message flags */
+#define WFR_HOST_REQ_DONE	   0x01
+#define WFR_BC_LCB_IDLE_FRAME_MSG  0x02
+#define WFR_BC_BCC_FRAME_MSG	   0x04
+#define WFR_BC_LCB_IDLE_UNKOWN_MSG 0x08
+#define WFR_BC_BCC_UNKNOWN_MSG	   0x10
+#define WFR_EXT_DEVICE_CFG_REQ	   0x20
+#define WFR_VERIFY_CAP_FRAME	   0x40
+#define WFR_LINKUP_ACHIEVED	   0x80
 
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);

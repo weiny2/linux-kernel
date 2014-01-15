@@ -74,110 +74,79 @@ static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
 	struct ib_event event;
 	struct hfi_devdata *dd = ppd->dd;
 
+	/*
+	 * Only call ib_dispatch_event() if the IB device has been
+	 * registered.  Right now, QIB_INITED is set iff the driver
+	 * has successfully registered with IB core.
+	 * TODO: Make a separate flag for registering with IB?
+	 */
+	if (!(dd->flags & QIB_INITTED))
+		return;
 	event.device = &dd->verbs_dev.ibdev;
 	event.element.port_num = ppd->port;
 	event.event = ev;
 	ib_dispatch_event(&event);
 }
 
-void qib_handle_e_ibstatuschanged(struct qib_pportdata *ppd, u64 ibcs)
+/*
+ * Handle a linkup or link down notification.  This is called both inside
+ * and outside an interrupt.
+ */
+void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 {
-	struct hfi_devdata *dd = ppd->dd;
-	unsigned long flags;
-	u32 lstate;
-	u8 ltstate;
-	enum ib_event_type ev = 0;
+	struct qib_pportdata *ppd = &dd->pport[0];
+	enum ib_event_type ev;
+	/*u32 expected_state; see TODO below */
 
-	lstate = dd->f_iblink_state(ppd); /* linkstate */
-	ltstate = dd->f_ibphys_portstate(ppd);
+	if (!(ppd->linkup ^ !!linkup))
+		return;	/* no change, nothing to do */
 
-	/*
-	 * If linkstate transitions into INIT from any of the various down
-	 * states, or if it transitions from any of the up (INIT or better)
-	 * states into any of the down states (except link recovery), then
-	 * call the chip-specific code to take appropriate actions.
-	 *
-	 * ppd->lflags could be 0 if this is the first time the interrupt
-	 * handlers has been called but the link is already up.
-	 */
-	if (lstate >= IB_PORT_INIT &&
-	    (!ppd->lflags || (ppd->lflags & QIBL_LINKDOWN)) &&
-	    ltstate == IB_PHYSPORTSTATE_LINKUP) {
-		/* transitioned to UP */
-		if (dd->f_ib_updown(ppd, 1, ibcs))
-			goto skip_ibchange; /* chip-code handled */
-	} else if (ppd->lflags & (QIBL_LINKINIT | QIBL_LINKARMED |
-		   QIBL_LINKACTIVE | QIBL_IB_FORCE_NOTIFY)) {
-		if (ltstate != IB_PHYSPORTSTATE_LINKUP &&
-		    ltstate <= IB_PHYSPORTSTATE_CFG_TRAIN &&
-		    dd->f_ib_updown(ppd, 0, ibcs))
-			goto skip_ibchange; /* chip-code handled */
+	if (linkup) {
+		/* physical link went up */
+		ppd->linkup = 1;
+
+		if (ppd->statusp)
+			*ppd->statusp |=
+				QIB_STATUS_IB_READY | QIB_STATUS_IB_CONF;
+
+		/*expected_state = IB_PORT_INIT; see TODO below */
+		ev = IB_EVENT_PORT_ACTIVE;
+
+		/* start a 75msec timer to clear symbol errors */
+		mod_timer(&ppd->symerr_clear_timer, msecs_to_jiffies(75));
+	} else {
+		/* physical link went down */
+		ppd->linkup = 0;
+
+		if (ppd->statusp)
+			*ppd->statusp &= ~QIB_STATUS_IB_READY;
+
+		/*expected_state = IB_PORT_DOWN; see TODO below */
+		ev = IB_EVENT_PORT_ERR;
+
 		qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
 	}
 
-	if (lstate != IB_PORT_DOWN) {
-		/* lstate is INIT, ARMED, or ACTIVE */
-		if (lstate != IB_PORT_ACTIVE) {
-			if (ppd->statusp)
-				*ppd->statusp &= ~QIB_STATUS_IB_READY;
-			if (ppd->lflags & QIBL_LINKACTIVE)
-				ev = IB_EVENT_PORT_ERR;
-			spin_lock_irqsave(&ppd->lflags_lock, flags);
-			if (lstate == IB_PORT_ARMED) {
-				ppd->lflags |= QIBL_LINKARMED | QIBL_LINKV;
-				ppd->lflags &= ~(QIBL_LINKINIT |
-					QIBL_LINKDOWN | QIBL_LINKACTIVE);
-			} else {
-				ppd->lflags |= QIBL_LINKINIT | QIBL_LINKV;
-				ppd->lflags &= ~(QIBL_LINKARMED |
-					QIBL_LINKDOWN | QIBL_LINKACTIVE);
-			}
-			spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-			/* start a 75msec timer to clear symbol errors */
-			mod_timer(&ppd->symerr_clear_timer,
-				  msecs_to_jiffies(75));
-		} else if (ltstate == IB_PHYSPORTSTATE_LINKUP &&
-			   !(ppd->lflags & QIBL_LINKACTIVE)) {
-			/* active, but not active defered */
-			if (ppd->statusp)
-				*ppd->statusp |=
-				QIB_STATUS_IB_READY | QIB_STATUS_IB_CONF;
-			qib_clear_symerror_on_linkup((unsigned long)ppd);
-			spin_lock_irqsave(&ppd->lflags_lock, flags);
-			ppd->lflags |= QIBL_LINKACTIVE | QIBL_LINKV;
-			ppd->lflags &= ~(QIBL_LINKINIT |
-				QIBL_LINKDOWN | QIBL_LINKARMED);
-			spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-			if (dd->flags & QIB_HAS_SEND_DMA)
-				qib_sdma_process_event(ppd,
-					qib_sdma_event_e30_go_running);
-			ev = IB_EVENT_PORT_ACTIVE;
-			dd->f_setextled(ppd, 1);
-		}
-	} else { /* down */
-		if (ppd->lflags & QIBL_LINKACTIVE)
-			ev = IB_EVENT_PORT_ERR;
-		spin_lock_irqsave(&ppd->lflags_lock, flags);
-		ppd->lflags |= QIBL_LINKDOWN | QIBL_LINKV;
-		ppd->lflags &= ~(QIBL_LINKINIT |
-				 QIBL_LINKACTIVE | QIBL_LINKARMED);
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-		if (ppd->statusp)
-			*ppd->statusp &= ~QIB_STATUS_IB_READY;
-	}
+	/*
+	 * If the physical link changes, the HW will change logical link
+	 * state shortly after.  Re-read the logical state to update
+	 * ppd->lstate.
+	 * TODO: Wait until the link state goes to expected_state?
+	 * This function may be called in an interrupt, so we would
+	 * need to be careful about calling
+	 * qib_wait_linkstate(ppd, expected_state, ??)
+	 */
+	dd->f_iblink_state(ppd);
 
-skip_ibchange:
-	ppd->lastibcstat = ibcs;
-	if (ev)
-		signal_ib_event(ppd, ev);
-	return;
+	/* notify IB of the link change */
+	signal_ib_event(ppd, ev);
 }
 
 void qib_clear_symerror_on_linkup(unsigned long opaque)
 {
 	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
 
-	if (ppd->lflags & QIBL_LINKACTIVE)
+	if (ppd->lstate == IB_PORT_ACTIVE)
 		return;
 
 	ppd->ibport_data.z_symbol_error_counter =

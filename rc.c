@@ -707,7 +707,7 @@ void qib_send_rc_ack(struct qib_qp *qp)
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */
-	if (!(ppd->lflags & QIBL_LINKACTIVE))
+	if (ppd->lstate != IB_PORT_ACTIVE)
 		goto done;
 
 	sc = qp_to_send_context(qp);

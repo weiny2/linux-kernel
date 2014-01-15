@@ -102,8 +102,7 @@ int qib_count_active_units(void)
 			continue;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
-			if (ppd->lid && (ppd->lflags & (QIBL_LINKINIT |
-					 QIBL_LINKARMED | QIBL_LINKACTIVE))) {
+			if (ppd->lid && ppd->linkup) {
 				nunits_active++;
 				break;
 			}
@@ -134,8 +133,7 @@ int qib_count_units(int *npresentp, int *nupp)
 			npresent++;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
-			if (ppd->lid && (ppd->lflags & (QIBL_LINKINIT |
-					 QIBL_LINKARMED | QIBL_LINKACTIVE)))
+			if (ppd->lid && ppd->linkup)
 				nup++;
 		}
 	}
@@ -152,122 +150,106 @@ int qib_count_units(int *npresentp, int *nupp)
 
 /**
  * qib_wait_linkstate - wait for an IB link state change to occur
- * @dd: the qlogic_ib device
+ * @ppd: port device
  * @state: the state to wait for
  * @msecs: the number of milliseconds to wait
  *
- * wait up to msecs milliseconds for IB link state change to occur for
- * now, take the easy polling route.  Currently used only by
- * qib_set_linkstate.  Returns 0 if state reached, otherwise
- * -ETIMEDOUT state can have multiple states set, for any of several
- * transitions.
+ * Wait up to msecs milliseconds for IB link state change to occur.
+ * For now, take the easy polling route.
+ * Returns 0 if state reached, otherwise -ETIMEDOUT.
  */
 int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
 {
-	int ret;
-	unsigned long flags;
+	unsigned long timeout;
 
-	spin_lock_irqsave(&ppd->lflags_lock, flags);
-	if (ppd->state_wanted) {
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-		ret = -EBUSY;
-		goto bail;
+	timeout = jiffies + msecs_to_jiffies(msecs);
+	while (1) {
+		if (ppd->dd->f_iblink_state(ppd) == state)
+			return 0;
+		if (time_after(jiffies, timeout))
+			break;
+		msleep(2);
 	}
-	ppd->state_wanted = state;
-	spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-	wait_event_interruptible_timeout(ppd->state_wait,
-					 (ppd->lflags & state),
-					 msecs_to_jiffies(msecs));
-	spin_lock_irqsave(&ppd->lflags_lock, flags);
-	ppd->state_wanted = 0;
-	spin_unlock_irqrestore(&ppd->lflags_lock, flags);
+	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x\n", state);
 
-	if (!(ppd->lflags & state))
-		ret = -ETIMEDOUT;
-	else
-		ret = 0;
-bail:
-	return ret;
+	return -ETIMEDOUT;
 }
 
 int qib_set_linkstate(struct qib_pportdata *ppd, u8 newstate)
 {
+	struct hfi_devdata *dd = ppd->dd;
+	int set_ib_ready = 0;
+	u32 phys_command;
 	u32 lstate;
 	int ret;
-	struct hfi_devdata *dd = ppd->dd;
-	unsigned long flags;
+
+	/* update cached value */
+	dd->f_iblink_state(ppd);
 
 	switch (newstate) {
 	case QIB_IB_LINKDOWN_ONLY:
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_NOP);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+		phys_command = IB_LINKINITCMD_NOP;
+		goto down_common;
 
 	case QIB_IB_LINKDOWN:
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_POLL);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+		phys_command = IB_LINKINITCMD_POLL;
+		goto down_common;
 
 	case QIB_IB_LINKDOWN_SLEEP:
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_SLEEP);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+		phys_command = IB_LINKINITCMD_SLEEP;
+		goto down_common;
 
 	case QIB_IB_LINKDOWN_DISABLE:
+		phys_command = IB_LINKINITCMD_DISABLE;
+		/* fall through */
+down_common:
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_DISABLE);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+				 IB_LINKCMD_DOWN | phys_command);
+		if (ppd->statusp)
+			*ppd->statusp &= ~QIB_STATUS_IB_READY;
+		lstate = IB_PORT_DOWN;
+		break;
 
 	case QIB_IB_LINKARM:
-		if (ppd->lflags & QIBL_LINKARMED) {
+		if (ppd->lstate == IB_PORT_ARMED) {
 			ret = 0;
 			goto bail;
 		}
-		if (!(ppd->lflags & (QIBL_LINKINIT | QIBL_LINKACTIVE))) {
+		if (ppd->lstate != IB_PORT_INIT) {
 			ret = -EINVAL;
 			goto bail;
 		}
-		/*
-		 * Since the port can be ACTIVE when we ask for ARMED,
-		 * clear QIBL_LINKV so we can wait for a transition.
-		 * If the link isn't ARMED, then something else happened
-		 * and there is no point waiting for ARMED.
-		 */
-		spin_lock_irqsave(&ppd->lflags_lock, flags);
-		ppd->lflags &= ~QIBL_LINKV;
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 				 IB_LINKCMD_ARMED | IB_LINKINITCMD_NOP);
-		lstate = QIBL_LINKV;
+		lstate = IB_PORT_ARMED;
 		break;
 
 	case QIB_IB_LINKACTIVE:
-		if (ppd->lflags & QIBL_LINKACTIVE) {
+		if (ppd->lstate == IB_PORT_ACTIVE) {
 			ret = 0;
 			goto bail;
 		}
-		if (!(ppd->lflags & QIBL_LINKARMED)) {
+		if (ppd->lstate != IB_PORT_ARMED) {
 			ret = -EINVAL;
 			goto bail;
 		}
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 				 IB_LINKCMD_ACTIVE | IB_LINKINITCMD_NOP);
-		lstate = QIBL_LINKACTIVE;
+		lstate = IB_PORT_ACTIVE;
+		set_ib_ready = 1;
 		break;
 
 	default:
 		ret = -EINVAL;
 		goto bail;
 	}
+
 	ret = qib_wait_linkstate(ppd, lstate, 10);
+	if (ret == 0 && set_ib_ready) {
+		/* only set if the state really moved */
+		if (ppd->statusp)
+			*ppd->statusp |= QIB_STATUS_IB_READY;
+	}
 
 bail:
 	return ret;
