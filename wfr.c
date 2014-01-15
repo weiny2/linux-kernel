@@ -1257,6 +1257,16 @@ static u32 encoded_size(u32 size)
 #endif
 }
 
+/* TODO: This should go away once everythig is implemented */
+static void rcvctrl_unimplemented(struct hfi_devdata *dd, const char *func, int ctxt, unsigned int op, int *header_printed, const char *what)
+{
+	if (*header_printed == 0) {
+		*header_printed = 1;
+		dd_dev_info(dd, "%s: context %d, op 0x%x\n", func, ctxt, op);
+	}
+	dd_dev_info(dd, "    %s ** NOT IMPLEMENTED **\n", what);
+}
+
 /*
  * TODO: What about these fields in WFR_RCV_CTXT_CTRL?
  *	ThHdrQueueWrites
@@ -1272,46 +1282,27 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
 	u32 eager_header_counter = 0;	/* non-zero means do something */
+	int hp = 0;			/* header printed? */
 
 	rcd = dd->rcd[ctxt];
 	if (!rcd)
 		return;
 
-	dd_dev_info(dd, "%s: context %d, flags:\n", __func__, ctxt);
-	if (op & QIB_RCVCTRL_TAILUPD_ENB)
-		dd_dev_info(dd, "    QIB_RCVCTRL_TAILUPD_ENB\n");
-	if (op & QIB_RCVCTRL_TAILUPD_DIS)
-		dd_dev_info(dd, "    QIB_RCVCTRL_TAILUPD_DIS\n");
-	if (op & QIB_RCVCTRL_CTXT_ENB)
-		dd_dev_info(dd, "    QIB_RCVCTRL_CTXT_ENB\n");
-	if (op & QIB_RCVCTRL_CTXT_DIS)
-		dd_dev_info(dd, "    QIB_RCVCTRL_CTXT_DIS\n");
-	if (op & QIB_RCVCTRL_INTRAVAIL_ENB)
-		dd_dev_info(dd, "    QIB_RCVCTRL_INTRAVAIL_ENB\n");
-	if (op & QIB_RCVCTRL_INTRAVAIL_DIS)
-		dd_dev_info(dd, "    QIB_RCVCTRL_INTRAVAIL_DIS\n");
 	// FIXME: QIB_RCVCTRL_PKEY_ENB/DIS
 	if (op & QIB_RCVCTRL_PKEY_ENB)
-		dd_dev_info(dd, "    QIB_RCVCTRL_PKEY_ENB ** NOT IMPLEMENTED **\n");
+		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_PKEY_ENB");
 	if (op & QIB_RCVCTRL_PKEY_DIS)
-		dd_dev_info(dd, "    QIB_RCVCTRL_PKEY_DIS ** NOT IMPLEMENTED **\n");
+		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_PKEY_DIS");
 	// FIXME: QIB_RCVCTRL_BP_ENB/DIS
 	if (op & QIB_RCVCTRL_BP_ENB)
-		dd_dev_info(dd, "    QIB_RCVCTRL_BP_ENB ** NOT IMPLEMENTED **\n");
+		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_BP_ENB");
 	if (op & QIB_RCVCTRL_BP_DIS)
-		dd_dev_info(dd, "    QIB_RCVCTRL_BP_DIS ** NOT IMPLEMENTED **\n");
-	if (op & QIB_RCVCTRL_TIDFLOW_ENB)
-		dd_dev_info(dd, "    QIB_RCVCTRL_TIDFLOW_ENB\n");
-	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
-		dd_dev_info(dd, "    QIB_RCVCTRL_TIDFLOW_DIS\n");
+		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_BP_DIS");
 
 	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
 	/* if the context already enabled, don't do the extra steps */
 	if ((op & QIB_RCVCTRL_CTXT_ENB)
 			&& !(rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK)) {
-		dd_dev_info(dd, "rcd->rcvhdrqtailaddr_phys 0x%lx\n", (unsigned long)rcd->rcvhdrqtailaddr_phys);
-		dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n", (unsigned long)rcd->rcvhdrq_phys);
-
 		/* reset the tail and hdr addresses, and sequence count */
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR, rcd->rcvhdrqtailaddr_phys);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR, rcd->rcvhdrq_phys);
@@ -1527,7 +1518,6 @@ static void init_ctxt(struct qib_ctxtdata *rcd)
 	u64 reg;
 	u32 context = rcd->ctxt;
 
-	dd_dev_info(rcd->dd, "%s: setting up context %d\n", __func__, context);
 	/*
 	 * Simple allocation: we have already pre-allocated the number
 	 * of entries per context in dd->rcv_entries.  Now, divide the
