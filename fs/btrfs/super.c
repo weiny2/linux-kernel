@@ -1863,7 +1863,7 @@ static int __init init_btrfs_fs(void)
 
 	btrfs_print_info();
 
-#ifdef CONFIG_ENTERPRISE_SUPPORT
+#ifdef CONFIG_SUSE_KERNEL_SUPPORTED
 	if (allow_unsupported) {
 		add_taint(TAINT_NO_SUPPORT, LOCKDEP_STILL_OK);
 		printk(KERN_INFO "btrfs: allow_unsupported=1 taints kernel\n");
@@ -1921,7 +1921,7 @@ static void __exit exit_btrfs_fs(void)
 	btrfs_exit_compress();
 }
 
-#ifdef CONFIG_ENTERPRISE_SUPPORT
+#ifdef CONFIG_SUSE_KERNEL_SUPPORTED
 bool allow_unsupported = false;
 #else
 bool allow_unsupported = true;
