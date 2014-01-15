@@ -75,7 +75,7 @@ module_param(cciss_simple_mode, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(cciss_simple_mode,
 	"Use 'simple mode' rather than 'performant mode'");
 
-static int cciss_allow_hpsa;
+static int cciss_allow_hpsa = 1;
 module_param(cciss_allow_hpsa, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(cciss_allow_hpsa,
 	"Prevent cciss driver from accessing hardware known to be "
