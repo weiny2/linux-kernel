@@ -4421,6 +4421,10 @@ static int hpsa_lookup_board_id(struct pci_dev *pdev, u32 *board_id)
 			"0x%08x, ignoring.\n", *board_id);
 			return -ENODEV;
 	}
+#ifdef CONFIG_SUSE_KERNEL_SUPPORTED
+	add_taint(TAINT_NO_SUPPORT, LOCKDEP_STILL_OK);
+#endif
+	dev_warn(&pdev->dev, "unsupported board ID: 0x%08x\n", *board_id);
 	return ARRAY_SIZE(products) - 1; /* generic unknown smart array */
 }
 
