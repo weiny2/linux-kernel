@@ -42,6 +42,8 @@
 
 #include "hfi.h"
 #include "trace.h"
+#include "mad.h"
+#include "pio.h"
 
 #define NUM_IB_PORTS 1
 
@@ -1424,6 +1426,7 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
 	struct hfi_devdata *dd = ppd->dd;
+	u64 reg;
 	int wanted_down = 0;
 	int logical_down = 0;
 	int ret1, ret = 0;
@@ -1431,6 +1434,16 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 	switch (which) {
 	case QIB_IB_CFG_LIDLMC:
 		set_lidlmc(ppd);
+		break;
+	case QIB_IB_CFG_VL_HIGH_LIMIT:
+		/*
+		 * The VL Arbitrator high limit is sent in units of 4k
+		 * bytes, while WFR stores it in units of 64 bytes.
+		 */
+		val *= 4096/64;
+		reg = ((u64)val & WFR_SEND_HIGH_PRIORITY_LIMIT_LIMIT_MASK)
+			<< WFR_SEND_HIGH_PRIORITY_LIMIT_LIMIT_SHIFT;
+		write_csr(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIMIT, reg);
 		break;
 	case QIB_IB_CFG_LSTATE:
 		logical_down = 0;
@@ -1547,17 +1560,75 @@ static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
 	return 0;
 }
 
+static void get_vl_weights(struct hfi_devdata *dd, u32 target,
+			   struct ib_vl_weight_elem *vl)
+{
+	u64 reg;
+	unsigned int i;
+
+	for (i = 0; i < 16; i++, vl++) {
+		reg = read_csr(dd, target + (i * 8));
+
+		/*
+		 * NOTE: We use the low pririty shift and mask here, but
+		 * they are the same for both the low and high registers.
+		 */
+		vl->vl = (reg >> WFR_SEND_LOW_PRIORITY_LIST_VL_SHIFT)
+				& WFR_SEND_LOW_PRIORITY_LIST_VL_MASK;
+		vl->weight = (reg >> WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT)
+				& WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_MASK;
+	}
+}
+
+static void set_vl_weights(struct hfi_devdata *dd, u32 target,
+			   struct ib_vl_weight_elem *vl)
+{
+	u64 reg;
+	unsigned int i;
+
+	for (i = 0; i < 16; i++, vl++) {
+		/*
+		 * NOTE: The low priority shift and mask are used here, but
+		 * they are the same for both the low and high registers.
+		 */
+		reg = (((u64)vl->vl & WFR_SEND_LOW_PRIORITY_LIST_VL_MASK)
+				<< WFR_SEND_LOW_PRIORITY_LIST_VL_SHIFT)
+		      | (((u64)vl->weight
+				& WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_MASK)
+				<< WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT);
+		write_csr(dd, target + (i * 8), reg);
+	}
+//FIXME: Setting the weights atomatically turns this on?
+	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
+}
+
 static int get_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+	switch (which) {
+	case QIB_IB_TBL_VL_HIGH_ARB:
+		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST, t);
+		break;
+	case QIB_IB_TBL_VL_LOW_ARB:
+		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST, t);
+		break;
+	default:
+		return -EINVAL;
+	}
 	return 0;
 }
 
 static int set_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+	switch (which) {
+	case QIB_IB_TBL_VL_HIGH_ARB:
+		set_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST, t);
+		break;
+	case QIB_IB_TBL_VL_LOW_ARB:
+		set_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST, t);
+		break;
+	default:
+		return -EINVAL;
+	}
 	return 0;
 }
 

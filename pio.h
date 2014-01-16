@@ -140,6 +140,8 @@ void sc_group_release_update(struct send_context *sc);
 /* global PIO send control operations */
 #define PSC_GLOBAL_ENABLE 0
 #define PSC_GLOBAL_DISABLE 1
+#define PSC_GLOBAL_VLARB_ENABLE 2
+#define PSC_GLOBAL_VLARB_DISABLE 3
 
 void pio_send_control(struct hfi_devdata *dd, int op);
 
