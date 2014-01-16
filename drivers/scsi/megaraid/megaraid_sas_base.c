@@ -1590,7 +1590,7 @@ static struct megasas_instance *megasas_lookup_instance(u16 host_no)
 
 static int megasas_slave_configure(struct scsi_device *sdev)
 {
-	u16             pd_index = 0;
+	u16 pd_index = 0, ld_index = 0;
 	struct  megasas_instance *instance ;
 
 	instance = megasas_lookup_instance(sdev->host->host_no);
