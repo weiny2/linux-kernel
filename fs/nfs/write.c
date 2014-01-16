@@ -862,11 +862,21 @@ int nfs_flush_incompatible(struct file *file, struct page *page)
 		if (req == NULL)
 			return 0;
 		l_ctx = req->wb_lock_context;
-		do_flush = req->wb_page != page || req->wb_context != ctx;
+		do_flush = req->wb_page != page;
 		if (l_ctx && ctx->dentry->d_inode->i_flock != NULL) {
 			do_flush |= l_ctx->lockowner.l_owner != current->files
 				|| l_ctx->lockowner.l_pid != current->tgid;
 		}
+		if (req->wb_context != ctx) {
+			do_flush |=
+				(req->wb_context->dentry != ctx->dentry ||
+				 req->wb_context->cred != ctx->cred );
+			if (req->wb_context->state || ctx->state)
+				do_flush |=
+					(req->wb_lock_context->lockowner.l_owner != current->files ||
+					 req->wb_lock_context->lockowner.l_pid != current->tgid);
+		}
+
 		nfs_release_request(req);
 		if (!do_flush)
 			return 0;
