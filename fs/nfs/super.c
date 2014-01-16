@@ -2169,6 +2169,9 @@ nfs_compare_remount_data(struct nfs_server *nfss,
 	return 0;
 }
 
+static bool always_nosharetransport = 0;
+module_param(always_nosharetransport, bool, 0644);
+
 int
 nfs_remount(struct super_block *sb, int *flags, char *raw_data)
 {
@@ -2603,6 +2606,8 @@ struct dentry *nfs_fs_mount(struct file_system_type *fs_type,
 		mntroot = ERR_PTR(error);
 		goto out;
 	}
+	if (always_nosharetransport)
+		mount_info.parsed->flags |= NFS_MOUNT_NOSHARE_XPRT;
 
 	nfs_mod = get_nfs_version(mount_info.parsed->version);
 	if (IS_ERR(nfs_mod)) {
