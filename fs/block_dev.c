@@ -164,15 +164,25 @@ blkdev_get_block(struct inode *inode, sector_t iblock,
 	return 0;
 }
 
+static void submit_failfast_bio(int rw, struct bio *bio, struct inode *inode,
+				loff_t offset)
+{
+	bio->bi_rw |= REQ_FAILFAST_DEV;
+	submit_bio(rw, bio);
+}
+
 static ssize_t
 blkdev_direct_IO(int rw, struct kiocb *iocb, const struct iovec *iov,
 			loff_t offset, unsigned long nr_segs)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
+	dio_submit_t *submit_io = NULL;
 
+	if (file->f_flags & O_NONBLOCK)
+		submit_io = submit_failfast_bio;
 	return __blockdev_direct_IO(rw, iocb, inode, I_BDEV(inode), iov, offset,
-				    nr_segs, blkdev_get_block, NULL, NULL, 0);
+				    nr_segs, blkdev_get_block, NULL, submit_io, 0);
 }
 
 int __sync_blockdev(struct block_device *bdev, int wait)
