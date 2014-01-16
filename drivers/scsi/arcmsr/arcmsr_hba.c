@@ -1036,6 +1036,7 @@ static void arcmsr_remove(struct pci_dev *pdev)
 	pci_release_regions(pdev);
 	scsi_host_put(host);
 	pci_disable_device(pdev);
+	pci_set_drvdata(pdev, NULL);
 }
 
 static void arcmsr_shutdown(struct pci_dev *pdev)

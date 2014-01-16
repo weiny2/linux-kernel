@@ -132,6 +132,7 @@ static void ufshcd_pci_remove(struct pci_dev *pdev)
 	pm_runtime_forbid(&pdev->dev);
 	pm_runtime_get_noresume(&pdev->dev);
 	ufshcd_remove(hba);
+	pci_set_drvdata(pdev, NULL);
 }
 
 /**
