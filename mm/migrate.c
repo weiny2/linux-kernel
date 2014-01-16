@@ -1866,13 +1866,13 @@ fail_putback:
 out_fail:
 	count_vm_events(PGMIGRATE_FAIL, HPAGE_PMD_NR);
 out_dropref:
-	spin_lock(&mm->page_table_lock);
+	ptl = pmd_lock(mm, pmd);
 	if (pmd_same(*pmd, entry)) {
 		entry = pmd_mknonnuma(entry);
 		set_pmd_at(mm, mmun_start, pmd, entry);
 		update_mmu_cache_pmd(vma, address, &entry);
 	}
-	spin_unlock(&mm->page_table_lock);
+	spin_unlock(ptl);
 
 out_unlock:
 	unlock_page(page);
