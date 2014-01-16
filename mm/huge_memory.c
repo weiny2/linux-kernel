@@ -1305,7 +1305,7 @@ int do_huge_pmd_numa_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	 * check_same as the page may no longer be mapped.
 	 */
 	if (unlikely(pmd_trans_migrating(*pmdp))) {
-		spin_unlock(&mm->page_table_lock);
+		spin_unlock(ptl);
 		wait_migrate_huge_page(vma->anon_vma, pmdp);
 		goto out;
 	}
