@@ -1430,7 +1430,6 @@ static void ib_sa_add_one(struct ib_device *device)
 	struct ib_mad_reg_req reg_req = {
 		.mgmt_class = IB_MGMT_CLASS_SUBN_ADM,
 		.mgmt_class_version = 2,
-		.flags = 0
 	};
 	int s, e, i;
 
@@ -1473,7 +1472,8 @@ static void ib_sa_add_one(struct ib_device *device)
 		sa_dev->port[i].notice_agent =
 			ib_register_mad_agent(device, i + s, IB_QPT_GSI,
 					      &reg_req, 0, notice_resp_handler,
-					      notice_handler, &sa_dev->port[i]);
+					      notice_handler,
+					      &sa_dev->port[i], 0);
 
 		if (IS_ERR(sa_dev->port[i].notice_agent))
 			goto err;
