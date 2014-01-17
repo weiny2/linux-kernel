@@ -407,18 +407,14 @@ static int upgrade_mode(struct dm_dev_internal *dd, fmode_t new_mode,
 
 	dd_new = dd_old = *dd;
 
-	dd_new.dm_dev.mode = new_mode;
+	dd_new.dm_dev.mode |= new_mode;
 	dd_new.dm_dev.bdev = NULL;
 
 	r = open_dev(&dd_new, dd->dm_dev.bdev->bd_dev, md);
-	if (r == -EROFS) {
-		dd_new.dm_dev.mode &= ~FMODE_WRITE;
-		r = open_dev(&dd_new, dd->dm_dev.bdev->bd_dev, md);
-	}
-	if (!r)
+	if (r)
 		return r;
 
-	dd->dm_dev.mode = new_mode;
+	dd->dm_dev.mode |= new_mode;
 	close_dev(&dd_old, md);
 
 	return 0;
@@ -482,7 +478,7 @@ int dm_get_device(struct dm_target *ti, const char *path, fmode_t mode,
 		atomic_set(&dd->count, 0);
 		list_add(&dd->list, &t->devices);
 
-	} else if (dd->dm_dev.mode != mode) {
+	} else if (dd->dm_dev.mode != (mode | dd->dm_dev.mode)) {
 		r = upgrade_mode(dd, mode, t->md);
 		if (r)
 			return r;
@@ -535,9 +531,12 @@ EXPORT_SYMBOL_GPL(dm_set_device_limits);
  */
 void dm_put_device(struct dm_target *ti, struct dm_dev *d)
 {
-	struct dm_dev_internal *dd = container_of(d, struct dm_dev_internal,
-						  dm_dev);
+	struct dm_dev_internal *dd;
 
+	if (!d)
+		return;
+
+	dd = container_of(d, struct dm_dev_internal, dm_dev);
 	if (atomic_dec_and_test(&dd->count)) {
 		close_dev(dd, ti->table->md);
 		list_del(&dd->list);
