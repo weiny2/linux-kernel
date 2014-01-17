@@ -414,7 +414,7 @@ static int aac_biosparm(struct scsi_device *sdev, struct block_device *bdev,
 static int aac_slave_configure(struct scsi_device *sdev)
 {
 	struct aac_dev *aac = (struct aac_dev *)sdev->host->hostdata;
-	if (aac->jbod && (sdev->type == TYPE_DISK))
+	if (!aac_export_fixed && aac->jbod && (sdev->type == TYPE_DISK))
 		sdev->removable = 1;
 	if ((sdev->type == TYPE_DISK) &&
 			(sdev_channel(sdev) != CONTAINER_CHANNEL) &&

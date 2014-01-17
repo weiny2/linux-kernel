@@ -238,6 +238,11 @@ MODULE_PARM_DESC(wwn, "Select a WWN type for the arrays:\n"
 	"\t1 - Array Meta Data Signature (default)\n"
 	"\t2 - Adapter Serial Number");
 
+int aac_export_fixed;
+module_param_named(export_fixed, aac_export_fixed, int, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(export_fixed, "Export disks as 'fixed' instead of"
+		 " removable.");
+
 
 static inline int aac_valid_context(struct scsi_cmnd *scsicmd,
 		struct fib *fibptr) {
@@ -2345,8 +2350,9 @@ int aac_scsi_cmd(struct scsi_cmnd * scsicmd)
 			scsi_set_resid(scsicmd,
 				       scsi_bufflen(scsicmd) - alloc_len);
 
-		/* Do not cache partition table for arrays */
-		scsicmd->device->removable = 1;
+		if (!aac_export_fixed)
+			/* Do not cache partition table for arrays */
+			scsicmd->device->removable = 1;
 
 		scsicmd->result = DID_OK << 16 | COMMAND_COMPLETE << 8 | SAM_STAT_GOOD;
 		scsicmd->scsi_done(scsicmd);
@@ -2374,8 +2380,9 @@ int aac_scsi_cmd(struct scsi_cmnd * scsicmd)
 		cp[6] = 2;
 		cp[7] = 0;
 		scsi_sg_copy_from_buffer(scsicmd, cp, sizeof(cp));
-		/* Do not cache partition table for arrays */
-		scsicmd->device->removable = 1;
+		if (!aac_export_fixed)
+			/* Do not cache partition table for arrays */
+			scsicmd->device->removable = 1;
 		scsicmd->result = DID_OK << 16 | COMMAND_COMPLETE << 8 |
 		  SAM_STAT_GOOD;
 		scsicmd->scsi_done(scsicmd);
