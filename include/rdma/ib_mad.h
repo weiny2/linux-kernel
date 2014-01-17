@@ -711,7 +711,7 @@ void *ib_get_rmpp_segment(struct ib_mad_send_buf *send_buf, int seg_num);
 void ib_free_send_mad(struct ib_mad_send_buf *send_buf);
 
 /**
- * kernel_rmpp_agent - Returns if the agent is performing RMPP.
+ * ib_mad_kernel_rmpp_agent - Returns if the agent is performing RMPP.
  * @agent: the agent in question
  * @return: true if agent is performing rmpp, false otherwise.
  */
