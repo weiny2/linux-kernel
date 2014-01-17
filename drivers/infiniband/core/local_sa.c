@@ -1158,7 +1158,7 @@ static int init_port(struct sa_db_device *dev, int port_num)
 
 	port->agent = ib_register_mad_agent(dev->device, port_num, IB_QPT_GSI,
 					    NULL, IB_MGMT_RMPP_VERSION,
-					    send_handler, recv_handler, port);
+					    send_handler, recv_handler, port, 0);
 	if (IS_ERR(port->agent))
 		ret = PTR_ERR(port->agent);
 
