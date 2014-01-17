@@ -1255,7 +1255,7 @@ static void pg_init_done(void *data, int errors)
 		}
 		DMERR("Could not failover device %s: Handler scsi_dh_%s "
 		      "not attached.", pgpath->path.pdev,
-		      m->hw_handler_name, errors);
+		      m->hw_handler_name);
 		/*
 		 * Fail path for now, so we do not ping pong
 		 */
