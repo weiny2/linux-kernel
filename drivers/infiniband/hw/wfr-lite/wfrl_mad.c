@@ -404,6 +404,7 @@ static struct ib_mad_send_buf *wfr_create_ib_dr_send_mad(struct ib_device *ibdev
 	struct ib_mad_agent *agent;
 	struct ib_ah *ah;
 	unsigned long flags;
+	int pkey_idx;
 
 	agent = ibp->send_agent;
 	if (!agent)
@@ -424,6 +425,13 @@ static struct ib_mad_send_buf *wfr_create_ib_dr_send_mad(struct ib_device *ibdev
 	ah = ibp->dr_ah;
 	spin_unlock_irqrestore(&ibp->lock, flags);
 
+	pkey_idx = wfr_lookup_pkey_idx(ibp, 0x7fff);
+	if (pkey_idx < 0) {
+		printk(KERN_ERR PFX
+			"ERROR: WFR create IB ctrl msg failed to find 0x7fff "
+			"pkey index\n");
+		pkey_idx = 1;
+	}
 	send_buf = ib_create_send_mad(agent, 0, 0, 0, IB_MGMT_MAD_HDR,
 				      IB_MGMT_MAD_DATA, GFP_ATOMIC);
 	if (IS_ERR(send_buf))
@@ -675,6 +683,7 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 	int ret;
 	unsigned long flags;
 	unsigned long timeout;
+	int pkey_idx;
 
 	agent = ibp->send_agent;
 	if (!agent)
@@ -688,7 +697,13 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 	if (ibp->trap_timeout && time_before(jiffies, ibp->trap_timeout))
 		return;
 
-	send_buf = ib_create_send_mad(agent, 0, 0, 0, IB_MGMT_MAD_HDR,
+	pkey_idx = wfr_lookup_pkey_idx(ibp, 0x7fff);
+	if (pkey_idx < 0) {
+		printk(KERN_ERR PFX
+			"ERROR: Trap failed to find 0x7fff pkey index\n");
+		pkey_idx = 1;
+	}
+	send_buf = ib_create_send_mad(agent, 0, pkey_idx, 0, IB_MGMT_MAD_HDR,
 				      IB_MGMT_MAD_DATA, GFP_ATOMIC);
 	if (IS_ERR(send_buf))
 		return;

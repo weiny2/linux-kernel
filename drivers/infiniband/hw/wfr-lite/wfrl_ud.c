@@ -31,10 +31,23 @@
  * SOFTWARE.
  */
 
+#include <linux/module.h>
 #include <rdma/ib_smi.h>
 
 #include "wfrl.h"
 #include "wfrl_mad.h"
+
+static unsigned wfr_enforce_mgmt_pkey = 0;
+#if 0
+/* turns out this can lock up the kernel
+ * I think because dropping MAD's from the local node can lock up the MAD stack...
+ */
+module_param_named(enforce_mgmt_pkey, wfr_enforce_mgmt_pkey, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(enforce_mgmt_pkey, "Enforce Management Pkey checks "
+			"(default 0); if 1 then P_Key violation traps are also sent "
+			"DO NOT turn this ON; it will break the low level MAD's required "
+			"for wfr-lite");
+#endif
 
 /**
  * qib_ud_loopback - handle send on loopback QPs
@@ -221,8 +234,11 @@ printk(KERN_ERR PFX "ERROR: packet drop: wrid invalid\n");
 	wc.opcode = IB_WC_RECV;
 	wc.qp = &qp->ibqp;
 	wc.src_qp = sqp->ibqp.qp_num;
-	wc.pkey_index = qp->ibqp.qp_type == IB_QPT_GSI ?
-		swqe->wr.wr.ud.pkey_index : 0;
+	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI) {
+		wc.pkey_index = swqe->wr.wr.ud.pkey_index;
+	} else {
+		wc.pkey_index = 0;
+	}
 	wc.slid = ppd->lid | (ah_attr->src_path_bits & ((1 << ppd->lmc) - 1));
 	wc.sl = ah_attr->sl;
 	wc.dlid_path_bits = ah_attr->dlid & ((1 << ppd->lmc) - 1);
@@ -373,9 +389,11 @@ int qib_make_ud_req(struct qib_qp *qp)
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
-	bth0 |= qp->ibqp.qp_type == IB_QPT_SMI ? QIB_DEFAULT_P_KEY :
-		qib_get_pkey(ibp, qp->ibqp.qp_type == IB_QPT_GSI ?
-			     wqe->wr.wr.ud.pkey_index : qp->s_pkey_index);
+	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI) {
+		bth0 |= qib_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+	} else {
+		bth0 |= qib_get_pkey(ibp, qp->s_pkey_index);
+	}
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	/*
 	 * Use the multicast QP if the destination LID is a multicast LID.
@@ -404,12 +422,36 @@ unlock:
 	return ret;
 }
 
-static unsigned qib_lookup_pkey(struct qib_ibport *ibp, u16 pkey)
+/*
+ * Hardware can't check this so we do it here.
+ * @returns the index found or -1 if not found
+ */
+int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_devdata *dd = ppd->dd;
 	unsigned ctxt = ppd->hw_pidx;
 	unsigned i;
+
+	if (pkey == 0xffff || pkey == 0x7fff) {
+		unsigned lim_idx = -1;
+
+		for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i) {
+			/* here we look for an exact match */
+			if (dd->rcd[ctxt]->pkeys[i] == pkey)
+				return i;
+			if (dd->rcd[ctxt]->pkeys[i] == 0x7fff)
+				lim_idx = i;
+		}
+
+		/* did not find 0xffff return 0x7fff idx if found */
+		if (pkey == 0xffff) {
+			return (lim_idx);
+		}
+
+		/* no match...  */
+		return -1;
+	}
 
 	pkey &= 0x7fff;	/* remove limited/full membership bit */
 
@@ -419,9 +461,8 @@ static unsigned qib_lookup_pkey(struct qib_ibport *ibp, u16 pkey)
 
 	/*
 	 * Should not get here, this means hardware failed to validate pkeys.
-	 * Punt and return index 0.
 	 */
-	return 0;
+	return -1;
 }
 
 /**
@@ -448,6 +489,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	u32 qkey;
 	u32 src_qp;
 	u16 dlid;
+	int mgmt_pkey_idx = 0;
 
 	/* Check for GRH */
 	if (!has_grh) {
@@ -492,6 +534,27 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 					      hdr->lrh[3], hdr->lrh[1]);
 				return;
 			}
+		} else {
+			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+			/* GSI */
+			mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
+			if (mgmt_pkey_idx < 0) {
+				printk(KERN_ERR PFX
+					"ERROR: GSI PKey check failed : "
+					" pkey == 0x%x\n",
+					(u16)be32_to_cpu(ohdr->bth[0]));
+				if  (wfr_enforce_mgmt_pkey) {
+					printk(KERN_ERR PFX "... dropping GSI pkt\n");
+					qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+						      pkey,
+						      (be16_to_cpu(hdr->lrh[0]) >> 4) &
+							0xF,
+						      src_qp, qp->ibqp.qp_num,
+						      hdr->lrh[3], hdr->lrh[1]);
+					goto drop;
+				} else
+					mgmt_pkey_idx = 0;
+			}
 		}
 		if (unlikely(qkey != qp->qkey)) {
 			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
@@ -507,6 +570,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			goto drop;
 	} else {
 		struct ib_smp *smp;
+		u16 pkey;
 
 		/* Drop invalid MAD packets (see 13.5.3.1). */
 		if (tlen > 2048 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
@@ -516,6 +580,27 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		     hdr->lrh[3] == IB_LID_PERMISSIVE) &&
 		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 			goto drop;
+
+		/* SMI pkey check */
+		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
+		if (mgmt_pkey_idx < 0) {
+			printk(KERN_ERR PFX
+				"ERROR: SMI PKey check failed : "
+				" pkey == 0x%x\n",
+				(u16)be32_to_cpu(ohdr->bth[0]));
+			if  (wfr_enforce_mgmt_pkey) {
+				printk(KERN_ERR PFX "... dropping SMI pkt\n");
+				qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+					      pkey,
+					      (be16_to_cpu(hdr->lrh[0]) >> 4) &
+						0xF,
+					      src_qp, qp->ibqp.qp_num,
+					      hdr->lrh[3], hdr->lrh[1]);
+				goto drop;
+			} else
+				mgmt_pkey_idx = 0;
+		}
 	}
 
 	/*
@@ -580,8 +665,18 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	wc.vendor_err = 0;
 	wc.qp = &qp->ibqp;
 	wc.src_qp = src_qp;
-	wc.pkey_index = qp->ibqp.qp_type == IB_QPT_GSI ?
-		qib_lookup_pkey(ibp, be32_to_cpu(ohdr->bth[0])) : 0;
+	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI) {
+		if (mgmt_pkey_idx < 0) {
+			printk(KERN_ERR PFX
+				"ERROR: mgmt_pkey_idx < 0"
+				" and packet not dropped???\n");
+			mgmt_pkey_idx = 0;
+		}
+		wc.pkey_index = (unsigned)mgmt_pkey_idx;
+	} else {
+		wc.pkey_index = 0;
+	}
+
 	wc.slid = be16_to_cpu(hdr->lrh[3]);
 	wc.sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF;
 	dlid = be16_to_cpu(hdr->lrh[1]);

@@ -948,6 +948,8 @@ int qib_post_ud_send(struct qib_qp *qp, struct ib_send_wr *wr);
 void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		int has_grh, void *data, u32 tlen, struct qib_qp *qp);
 
+int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey);
+
 int qib_alloc_lkey(struct qib_mregion *mr, int dma_region);
 
 void qib_free_lkey(struct qib_mregion *mr);
