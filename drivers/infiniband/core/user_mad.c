@@ -692,7 +692,7 @@ found:
 				      ureq.qpn ? IB_QPT_GSI : IB_QPT_SMI,
 				      ureq.mgmt_class ? &req : NULL,
 				      ureq.rmpp_version,
-				      send_handler, recv_handler, file);
+				      send_handler, recv_handler, file, 0);
 	if (IS_ERR(agent)) {
 		ret = PTR_ERR(agent);
 		agent = NULL;
@@ -767,6 +767,20 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 		goto out;
 	}
 
+	if (ureq.flags & ~IB_USER_MAD_REG_FLAGS_CAP) {
+		printk(KERN_WARNING "user_mad: ib_umad_reg_agent2 failed: invalid "
+			"registration flags specified 0x%x; supported 0x%x\n",
+			ureq.flags, IB_USER_MAD_REG_FLAGS_CAP);
+		ret = -EINVAL;
+
+		if (put_user((u32)IB_USER_MAD_REG_FLAGS_CAP,
+				(u32 __user *) (arg + offsetof(struct
+				ib_user_mad_reg_req2, flags))))
+			ret = -EFAULT;
+
+		goto out;
+	}
+
 	for (agent_id = 0; agent_id < IB_UMAD_MAX_AGENTS; ++agent_id)
 		if (!__get_agent(file, agent_id))
 			goto found;
@@ -777,23 +791,9 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 
 found:
 	if (ureq.mgmt_class) {
-		if (ureq.flags & ~IB_USER_MAD_REG_FLAGS_CAP) {
-			printk(KERN_WARNING "user_mad: ib_umad_reg_agent2 failed: invalid "
-				"registration flags specified 0x%x; supported 0x%x\n",
-				ureq.flags, IB_USER_MAD_REG_FLAGS_CAP);
-			ret = -EINVAL;
-
-			if (put_user((u32)IB_USER_MAD_REG_FLAGS_CAP,
-					(u32 __user *) (arg + offsetof(struct
-					ib_user_mad_reg_req2, flags))))
-				ret = -EFAULT;
-
-			goto out;
-		}
 		memset(&req, 0, sizeof(req));
 		req.mgmt_class         = ureq.mgmt_class;
 		req.mgmt_class_version = ureq.mgmt_class_version;
-		req.flags              = ureq.flags;
 		memcpy(req.oui, ureq.oui, sizeof(req.oui));
 		memcpy(req.method_mask, ureq.method_mask, sizeof(req.method_mask));
 	}
@@ -802,7 +802,8 @@ found:
 				      ureq.qpn ? IB_QPT_GSI : IB_QPT_SMI,
 				      ureq.mgmt_class ? &req : NULL,
 				      ureq.rmpp_version,
-				      send_handler, recv_handler, file);
+				      send_handler, recv_handler, file,
+				      ureq.flags);
 	if (IS_ERR(agent)) {
 		ret = PTR_ERR(agent);
 		agent = NULL;

@@ -472,7 +472,6 @@ struct ib_mad_recv_wc {
  *   in the range from 0x30 to 0x4f. Otherwise not used.
  * @method_mask: The caller will receive unsolicited MADs for any method
  *   where @method_mask = 1.
- * @flags: registration flags
  *
  */
 struct ib_mad_reg_req {
@@ -480,7 +479,6 @@ struct ib_mad_reg_req {
 	u8	mgmt_class_version;
 	u8	oui[3];
 	DECLARE_BITMAP(method_mask, IB_MGMT_MAX_METHODS);
-	u32     flags;
 };
 
 /**
@@ -500,6 +498,7 @@ struct ib_mad_reg_req {
  * @recv_handler: The completion callback routine invoked for a received
  *   MAD.
  * @context: User specified context associated with the registration.
+ * @registration_flags: Registration flags to set for this agent
  */
 struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 					   u8 port_num,
@@ -508,7 +507,8 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 					   u8 rmpp_version,
 					   ib_mad_send_handler send_handler,
 					   ib_mad_recv_handler recv_handler,
-					   void *context);
+					   void *context,
+					   u32 registration_flags);
 
 enum ib_mad_snoop_flags {
 	/*IB_MAD_SNOOP_POSTED_SENDS	   = 1,*/
