@@ -601,8 +601,6 @@ bail:
  * need to restrict our outgoing size.   For now, we don't do any
  * sanity checking on this, and we don't deal with what happens to
  * programs that are already running when the size changes.
- * NOTE: changing the MTU will usually cause the IBC to go back to
- * link INIT state...
  */
 int qib_set_mtu(struct qib_pportdata *ppd, u16 arg)
 {
@@ -635,7 +633,7 @@ int qib_set_mtu(struct qib_pportdata *ppd, u16 arg)
 		ppd->ibmaxlen = piosize;
 	}
 
-	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
+	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, arg);
 
 	ret = 0;
 

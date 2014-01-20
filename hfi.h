@@ -557,6 +557,9 @@ struct qib_pportdata {
 	u8 port;        /* IB port number and index into dd->pports - 1 */
 
 	u8 delay_mult;
+	/* placeholders for IB MAD packet settings */
+	u8 overrun_threshold;
+	u8 phy_error_threshold;
 
 	/* used to override LED behavior */
 	u8 led_override;  /* Substituted for normal value, if non-zero */

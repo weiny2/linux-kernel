@@ -523,6 +523,10 @@
 #define WFR_VERIFY_CAP_FRAME	   0x40
 #define WFR_LINKUP_ACHIEVED	   0x80
 
+/* sizes of the High and Low VL Arbitration tables */
+#define WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE 16
+#define WFR_VL_ARB_LOW_PRIO_TABLE_SIZE 16
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);

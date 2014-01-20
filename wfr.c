@@ -1396,19 +1396,113 @@ static const char *ib_cfg_name(int which)
 
 static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 {
+	struct hfi_devdata *dd = ppd->dd;
 	int val = 0;
 
 	switch (which) {
-	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
-		val = ppd->dd->link_default;
+	case QIB_IB_CFG_LWID_ENB: /* allowed Link-width */
+		val = ppd->link_width_enabled;
 		break;
+	case QIB_IB_CFG_LWID: /* currently active Link-width */
+		val = ppd->link_width_active;
+		break;
+	case QIB_IB_CFG_SPD_ENB: /* allowed Link speeds */
+		val = ppd->link_speed_enabled;
+		break;
+	case QIB_IB_CFG_SPD: /* current Link speed */
+		val = ppd->link_speed_active;
+		break;
+
+	case QIB_IB_CFG_RXPOL_ENB: /* Auto-RX-polarity enable */
+	case QIB_IB_CFG_LREV_ENB: /* Auto-Lane-reversal enable */
+	case QIB_IB_CFG_LINKLATENCY:
+		goto unimplemented;
+
+	case QIB_IB_CFG_OP_VLS:
+		val = ppd->vls_operational;
+		break;
+	case QIB_IB_CFG_VL_HIGH_CAP: /* VL arb high priority table size */
+		val = WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE;
+		break;
+	case QIB_IB_CFG_VL_LOW_CAP: /* VL arb low priority table size */
+		val = WFR_VL_ARB_LOW_PRIO_TABLE_SIZE;
+		break;
+	case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
+		val = ppd->overrun_threshold;
+		break;
+	case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
+		val = ppd->phy_error_threshold;
+		break;
+	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
+		val = dd->link_default;
+		break;
+
+	case QIB_IB_CFG_HRTBT: /* Heartbeat off/enable/auto */
+	case QIB_IB_CFG_PMA_TICKS:
 	default:
-		//if (print_unimplemented)
-		if (0)
-			dd_dev_info(ppd->dd, "%s: which %s: not implemented\n", __func__, ib_cfg_name(which));
+unimplemented:
+		if (print_unimplemented)
+			dd_dev_info(dd, "%s: which %s: not implemented\n", __func__, ib_cfg_name(which));
+		break;
 	}
 
 	return val;
+}
+
+/*
+ * The largest MAD packet size.
+ */
+#define MAX_MAD_PACKET 2048
+
+/*
+ * Return the maximum header bytes for this device.  This
+ * is dependent on the device's receive header entry size.
+ * WFR allows this to be set per-receive context, but the
+ * driver presently enforces a global value.
+ */
+static inline u32 lrh_max_header_bytes(struct hfi_devdata *dd)
+{
+	/*
+	 * The maximum non-payload (MTU) bytes in LRH.PktLen are
+	 * the Receive Header Entry Size minus the PBC (or RHF) size.
+	 * 
+	 * dd->rcvhdrentsize is in DW.
+	 */
+	return (dd->rcvhdrentsize - 2/*PBC/RHF*/) << 2;
+}
+
+/*
+ * Set Send Length
+ * @dd - device data
+ * @mtu_bytes - mtu size, in bytes
+ *
+ * Set the MTU by limiting how many DWs may be sent.  The SendLenCheck*
+ * registers compare against LRH.PktLen, so use the max bytes included
+ * in the LRH.
+ *
+ * This routine changes all VL values except VL15, which it maintains at
+ * the same value.
+ */
+static void set_send_length(struct hfi_devdata *dd, u32 mtu_bytes)
+{
+	u32 max_hb = lrh_max_header_bytes(dd);
+	u64 len = ((mtu_bytes + max_hb) >> 2)
+				& WFR_SEND_LEN_CHECK0_LEN_VL0_MASK;
+	u64 vl15_len = ((MAX_MAD_PACKET  + max_hb) >> 2)
+				& WFR_SEND_LEN_CHECK0_LEN_VL0_MASK;
+
+	write_csr(dd, WFR_SEND_LEN_CHECK0,
+		len << WFR_SEND_LEN_CHECK0_LEN_VL3_SHIFT
+		| len << WFR_SEND_LEN_CHECK0_LEN_VL2_SHIFT
+		| len << WFR_SEND_LEN_CHECK0_LEN_VL1_SHIFT
+		| len << WFR_SEND_LEN_CHECK0_LEN_VL0_SHIFT);
+
+	write_csr(dd, WFR_SEND_LEN_CHECK1,
+		vl15_len << WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT
+		| len << WFR_SEND_LEN_CHECK1_LEN_VL7_SHIFT
+		| len << WFR_SEND_LEN_CHECK1_LEN_VL6_SHIFT
+		| len << WFR_SEND_LEN_CHECK1_LEN_VL5_SHIFT
+		| len << WFR_SEND_LEN_CHECK1_LEN_VL4_SHIFT);
 }
 
 static void set_lidlmc(struct qib_pportdata *ppd)
@@ -1427,8 +1521,7 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
-	int wanted_down = 0;
-	int logical_down = 0;
+	u32 phys_request;
 	int ret1, ret = 0;
 
 	switch (which) {
@@ -1446,7 +1539,7 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		write_csr(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIMIT, reg);
 		break;
 	case QIB_IB_CFG_LSTATE:
-		logical_down = 0;
+		phys_request = val & 0xffff;
 		switch (val & 0xffff0000) {
 		case IB_LINKCMD_ARMED:
 			set_logical_state(dd, WFR_LSTATE_ARMED);
@@ -1456,10 +1549,11 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 			break;
 		case IB_LINKCMD_DOWN:
 			/*
-			 * This is only valid if the physical state
-			 * is going down.  Verify that later.
+			 * If no physical state change is given,
+			 * use the default down state.
 			 */
-			wanted_down = 1;
+			if (phys_request == IB_LINKINITCMD_NOP)
+				phys_request = dd->link_default;
 			break;
 		default:
 			dd_dev_info(dd,
@@ -1467,11 +1561,10 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 			  __func__, ib_cfg_name(which), val & 0xffff0000);
 		}
 
-		switch (val & 0xffff) {
+		switch (phys_request) {
 		case IB_LINKINITCMD_NOP:	/* nothing */
 			break;
 		case IB_LINKINITCMD_POLL:
-			logical_down = 1;	/* lstate will go down */
 			/* must transistion to offline first */
 			ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
 			if (ret1 != WFR_HCMD_SUCCESS) {
@@ -1501,7 +1594,6 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 			ret = -EINVAL;
 			break;
 		case IB_LINKINITCMD_DISABLE:
-			logical_down = 1;	/* lstate will go down */
 			/* must transistion to offline first */
 			ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
 			if (ret1 != WFR_HCMD_SUCCESS) {
@@ -1526,25 +1618,44 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 			  "%s: which %s, val 0x%x: not implemented\n",
 			  __func__, ib_cfg_name(which), val & 0xffff);
 		}
-
-		if (wanted_down && !logical_down) {
-			/*
-			 * We were requested to go to a logical down state,
-			 * but didn't change to physical state that forces
-			 * a logical down state.
-			 */
-			dd_dev_err(ppd->dd, "%s: physical link state change did not move logical to down\n", __func__);
-		}
-
 		break;
 	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
 		/* WFR only supports POLL as the default link down state */
 		if (val != IB_LINKINITCMD_POLL)
 			ret = -EINVAL;
 		break;
+	case QIB_IB_CFG_OP_VLS:
+		if (ppd->vls_operational != val) {
+			ppd->vls_operational = val;
+			//FIXME: implement this
+			//set_vls(ppd);
+		}
+		break;
+	case QIB_IB_CFG_LWID_ENB: /* set allowed Link-width */
+		ppd->link_width_enabled = val;
+		//FIXME: actually set the value
+		break;
+        case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
+		/*
+		 * WFR does not follow IB specs, save this value
+		 * so we can report it, if asked.
+		 */
+		ppd->overrun_threshold = val;
+		break;
+        case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
+		/*
+		 * WFR does not follow IB specs, save this value
+		 * so we can report it, if asked.
+		 */
+		ppd->phy_error_threshold = val;
+		break;
+
+	case QIB_IB_CFG_MTU:
+		set_send_length(dd, val);
+		break;
+
 	default:
-		//if (print_unimplemented)
-		if (0)
+		if (print_unimplemented)
 			dd_dev_info(ppd->dd,
 			  "%s: which %s, val 0x%x: not implemented\n",
 			  __func__, ib_cfg_name(which), val);
@@ -1561,12 +1672,12 @@ static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
 }
 
 static void get_vl_weights(struct hfi_devdata *dd, u32 target,
-			   struct ib_vl_weight_elem *vl)
+			   u32 size, struct ib_vl_weight_elem *vl)
 {
 	u64 reg;
 	unsigned int i;
 
-	for (i = 0; i < 16; i++, vl++) {
+	for (i = 0; i < size; i++, vl++) {
 		reg = read_csr(dd, target + (i * 8));
 
 		/*
@@ -1581,12 +1692,12 @@ static void get_vl_weights(struct hfi_devdata *dd, u32 target,
 }
 
 static void set_vl_weights(struct hfi_devdata *dd, u32 target,
-			   struct ib_vl_weight_elem *vl)
+			   u32 size, struct ib_vl_weight_elem *vl)
 {
 	u64 reg;
 	unsigned int i;
 
-	for (i = 0; i < 16; i++, vl++) {
+	for (i = 0; i < size; i++, vl++) {
 		/*
 		 * NOTE: The low priority shift and mask are used here, but
 		 * they are the same for both the low and high registers.
@@ -1606,10 +1717,12 @@ static int get_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
 	switch (which) {
 	case QIB_IB_TBL_VL_HIGH_ARB:
-		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST, t);
+		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
+			WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
 	case QIB_IB_TBL_VL_LOW_ARB:
-		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST, t);
+		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
+			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	default:
 		return -EINVAL;
@@ -1621,10 +1734,12 @@ static int set_ib_table(struct qib_pportdata *ppd, int which, void *t)
 {
 	switch (which) {
 	case QIB_IB_TBL_VL_HIGH_ARB:
-		set_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST, t);
+		set_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
+			WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
 	case QIB_IB_TBL_VL_LOW_ARB:
-		set_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST, t);
+		set_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
+			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	default:
 		return -EINVAL;
@@ -2950,37 +3065,8 @@ void init_txe(struct hfi_devdata *dd)
 			| (WFR_CM_VL_SHARED_CREDITS
 			    << WFR_SEND_CM_CREDIT_VL15_SHARED_LIMIT_VL_SHIFT));
 
-	/*
-	 * Set the inital max length for VL15.  The largest is
-	 *
-	 * 	  64	max IB global packet (LRH+GRH+BTH+ICRC)
-	 *	   8	UD header (DETH)
-	 *	2048	2K MAD packet
-	 *	----
-	 *      2120 bytes
-	 *
-	 * Note, we're just writing the CSR instead of a read-modify-write
-	 * because we "know" that at startup nothing else should be set.
-	 */
-#define MAX_MAD_PACKET_DW ((64 + 8 + 2048) / 4)
-//FIXME: For now, allow all sizes for all non-VL15 VLs.  Initial testing
-//does not have a FM to set the sizes.
-#if 0
-	write_csr(dd, WFR_SEND_LEN_CHECK1,
-		(u64)MAX_MAD_PACKET_DW << WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT);
-#else
-	write_csr(dd, WFR_SEND_LEN_CHECK0,
-		WFR_SEND_LEN_CHECK0_LEN_VL3_SMASK
-		| WFR_SEND_LEN_CHECK0_LEN_VL2_SMASK
-		| WFR_SEND_LEN_CHECK0_LEN_VL1_SMASK
-		| WFR_SEND_LEN_CHECK0_LEN_VL0_SMASK);
-	write_csr(dd, WFR_SEND_LEN_CHECK1,
-		((u64)MAX_MAD_PACKET_DW  << WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT)
-		| WFR_SEND_LEN_CHECK1_LEN_VL7_SMASK
-		| WFR_SEND_LEN_CHECK1_LEN_VL6_SMASK
-		| WFR_SEND_LEN_CHECK1_LEN_VL5_SMASK
-		| WFR_SEND_LEN_CHECK1_LEN_VL4_SMASK);
-#endif
+	write_csr(dd, WFR_SEND_LEN_CHECK0, 0);
+	write_csr(dd, WFR_SEND_LEN_CHECK1, 0);
 }
 
 /*
@@ -3036,7 +3122,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd[i].link_speed_supported = IB_SPEED_EDR;
 		ppd[i].link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
 		ppd[i].link_width_enabled = IB_WIDTH_4X;
-		ppd[i].link_speed_enabled = ppd->link_speed_supported;
+		ppd[i].link_speed_enabled = ppd[i].link_speed_supported;
 
 		switch (num_vls) {
 		case 1:
@@ -3058,7 +3144,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			ppd[i].vls_supported = IB_VL_VL0_7;
 			break;
 		}
-		ppd[i].vls_operational = ppd->vls_supported;
+		ppd[i].vls_operational = ppd[i].vls_supported;
 
 		/*
 		 * Set the initial values to reasonable default, will be set
@@ -3067,6 +3153,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd[i].link_width_active = IB_WIDTH_4X;
 		ppd[i].link_speed_active = IB_SPEED_EDR;
 		ppd[i].lstate = IB_PORT_DOWN;
+		ppd[i].overrun_threshold = 0x4;
+		ppd[i].phy_error_threshold = 0xf;
 	}
 
 	dd->f_bringup_serdes    = bringup_serdes;
