@@ -768,7 +768,8 @@ struct netdev_phys_port_id {
  *        (can also return NETDEV_TX_LOCKED iff NETIF_F_LLTX)
  *	Required can not be NULL.
  *
- * u16 (*ndo_select_queue)(struct net_device *dev, struct sk_buff *skb);
+ * u16 (*ndo_select_queue)(struct net_device *dev, struct sk_buff *skb,
+ *                         void *accel_priv);
  *	Called to decide which queue to when device supports multiple
  *	transmit queues.
  *
@@ -989,7 +990,8 @@ struct net_device_ops {
 	netdev_tx_t		(*ndo_start_xmit) (struct sk_buff *skb,
 						   struct net_device *dev);
 	u16			(*ndo_select_queue)(struct net_device *dev,
-						    struct sk_buff *skb);
+						    struct sk_buff *skb,
+						    void *accel_priv);
 	void			(*ndo_change_rx_flags)(struct net_device *dev,
 						       int flags);
 	void			(*ndo_set_rx_mode)(struct net_device *dev);
@@ -1527,7 +1529,8 @@ static inline void netdev_for_each_tx_queue(struct net_device *dev,
 }
 
 extern struct netdev_queue *netdev_pick_tx(struct net_device *dev,
-					   struct sk_buff *skb);
+					   struct sk_buff *skb,
+					   void *accel_priv);
 extern u16 __netdev_pick_tx(struct net_device *dev, struct sk_buff *skb);
 
 /*
@@ -1817,6 +1820,7 @@ extern int		dev_close(struct net_device *dev);
 extern void		dev_disable_lro(struct net_device *dev);
 extern int		dev_loopback_xmit(struct sk_buff *newskb);
 extern int		dev_queue_xmit(struct sk_buff *skb);
+int dev_queue_xmit_accel(struct sk_buff *skb, void *accel_priv);
 extern int		register_netdevice(struct net_device *dev);
 extern void		unregister_netdevice_queue(struct net_device *dev,
 						   struct list_head *head);
@@ -2432,8 +2436,7 @@ extern int		dev_get_phys_port_id(struct net_device *dev,
 					     struct netdev_phys_port_id *ppid);
 extern int		dev_hard_start_xmit(struct sk_buff *skb,
 					    struct net_device *dev,
-					    struct netdev_queue *txq,
-					    void *accel_priv);
+					    struct netdev_queue *txq);
 extern int		dev_forward_skb(struct net_device *dev,
 					struct sk_buff *skb);
 
