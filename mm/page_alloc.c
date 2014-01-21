@@ -6345,6 +6345,56 @@ void zone_pcp_reset(struct zone *zone)
 	local_irq_restore(flags);
 }
 
+/* Returns a number that's positive if the pagecache is above
+ * the set limit. Note that we allow the pagecache to grow
+ * larger if there's plenty of free pages.
+ */
+unsigned long pagecache_over_limit()
+{
+	/* We only want to limit unmapped and non-shmem page cache pages;
+	 * normally all shmem pages are mapped as well, but that does
+	 * not seem to be guaranteed. (Maybe this was just an oprofile
+	 * bug?).
+	 * (FIXME: Do we need to subtract NR_FILE_DIRTY here as well?) */
+	unsigned long pgcache_pages = global_page_state(NR_FILE_PAGES)
+				    - max_t(unsigned long,
+					    global_page_state(NR_FILE_MAPPED),
+					    global_page_state(NR_SHMEM));
+	/* We certainly can't free more than what's on the LRU lists
+	 * minus the dirty ones. (FIXME: pages accounted for in NR_WRITEBACK
+	 * are not on the LRU lists  any more, right?) */
+	unsigned long pgcache_lru_pages = global_page_state(NR_ACTIVE_FILE)
+				        + global_page_state(NR_INACTIVE_FILE);
+	unsigned long free_pages = global_page_state(NR_FREE_PAGES);
+	unsigned long swap_pages = total_swap_pages - atomic_long_read(&nr_swap_pages);
+	unsigned long limit;
+
+	if (vm_pagecache_ignore_dirty != 0)
+		pgcache_lru_pages -= global_page_state(NR_FILE_DIRTY)
+				     /vm_pagecache_ignore_dirty;
+	/* Paranoia */
+	if (unlikely(pgcache_lru_pages > LONG_MAX))
+		return 0;
+	/* We give a bonus for free pages above 6% of total (minus half swap used) */
+	free_pages -= totalram_pages/16;
+	if (likely(swap_pages <= LONG_MAX))
+		free_pages -= swap_pages/2;
+	if (free_pages > LONG_MAX)
+		free_pages = 0;
+
+	/* Limit it to 94% of LRU (not all there might be unmapped) */
+	pgcache_lru_pages -= pgcache_lru_pages/16;
+	pgcache_pages = min_t(unsigned long, pgcache_pages, pgcache_lru_pages);
+
+	/* Effective limit is corrected by effective free pages */
+	limit = vm_pagecache_limit_mb * ((1024*1024UL)/PAGE_SIZE) +
+		FREE_TO_PAGECACHE_RATIO * free_pages;
+
+	if (pgcache_pages > limit)
+		return pgcache_pages - limit;
+	return 0;
+}
+
 #ifdef CONFIG_MEMORY_HOTREMOVE
 /*
  * All pages in the range must be isolated before calling this.
