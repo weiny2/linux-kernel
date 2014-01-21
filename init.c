@@ -286,14 +286,14 @@ static void init_shadow_tids(struct hfi_devdata *dd)
 	struct page **pages;
 	dma_addr_t *addrs;
 
-	pages = vzalloc(WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES * sizeof(struct page *));
+	pages = vzalloc(dd->chip_rcv_array_count * sizeof(struct page *));
 	if (!pages) {
 		dd_dev_err(dd,
 			"failed to allocate shadow page * array, no expected sends!\n");
 		goto bail;
 	}
 
-	addrs = vzalloc(WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES * sizeof(dma_addr_t));
+	addrs = vzalloc(dd->chip_rcv_array_count * sizeof(dma_addr_t));
 	if (!addrs) {
 		dd_dev_err(dd,
 			"failed to allocate shadow dma handle array, no expected sends!\n");
@@ -1098,7 +1098,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 		dma_addr_t *tmpd = dd->physshadow;
 		int i;
 
-		for (i = 0;  i < WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES; i++) {
+		for (i = 0;  i < dd->chip_rcv_array_count; i++) {
 			if (!tmpp[i])
 				continue;
 			pci_unmap_page(dd->pcidev, tmpd[i],

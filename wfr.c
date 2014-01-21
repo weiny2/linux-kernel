@@ -257,7 +257,7 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt, u32 offset0)
 {
 	/* user per-context CSRs are separated by 0x1000 */
-	return read_csr(dd, offset0 + (0x100* ctxt));
+	return read_csr(dd, offset0 + (0x1000 * ctxt));
 }
 #endif
 
@@ -2795,7 +2795,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 	 *
 	 * TODO: Make this more sophisticated
 	 */
-	per_context = WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES / dd->num_rcv_contexts;
+	per_context = dd->chip_rcv_array_count / dd->num_rcv_contexts;
 	per_context -= (per_context % 4);
 	/* FIXME: no more than 24 each of eager and expected TIDs, for now! */
 #define TEMP_MAX_ENTRIES 48
@@ -2839,6 +2839,47 @@ static void init_partition_keys(struct hfi_devdata *dd)
 	write_csr(dd, WFR_RCV_PARTITION_KEY + (3 * 8),  0);
 }
 
+/*
+ * These CSRs and memories are uninitialized on reset and must be
+ * written before reading to set the ECC/parity bits.
+ *
+ * NOTE: All user context CSRs that are not mmaped write-only
+ * (e.g. the TID flows) must be initialized even if the driver never
+ * reads them.
+ */
+static void write_uninitialized_csrs_and_memories(struct hfi_devdata *dd)
+{
+	int i, j;
+
+	/* CceIntMap */
+	for (i = 0; i < WFR_CCE_NUM_INT_MAP_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MAP+(8*i), 0);
+
+	/* SendCtxtCreditReturnAddr */
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
+
+	/* PIO Send buffers */
+	/* SDMA Send buffers */
+	/* These are not normally read, and (presently) have no method
+	   to be read, so are not pre-initialized */
+
+	/* RcvHdrAddr */
+	/* RcvHdrTailAddr */
+	/* RcvTidFlowTable */
+	for (i = 0; i < dd->chip_rcv_contexts; i++) {
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_TAIL_ADDR, 0);
+		for (j = 0; j < WFR_RXE_NUM_TID_FLOWS; j++)
+			write_uctxt_csr(dd, i, WFR_RCV_TID_FLOW_TABLE+(8*j), 0);
+	}
+
+	/* RcvArray */
+	for (i = 0; i < dd->chip_rcv_array_count; i++)
+		write_csr(dd, WFR_RCV_ARRAY + (8*i),
+					WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK);
+}
+
 /* set TXE CSRs to chip reset defaults */
 static void reset_txe(struct hfi_devdata *dd)
 {
@@ -2846,6 +2887,7 @@ static void reset_txe(struct hfi_devdata *dd)
 
 	write_csr(dd, WFR_SEND_CTRL, 0);
 	write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIMIT, 0);
+	/* TODO: wait for SendPioInitCtxt.PioInitInProgress to be clear? */
 	write_csr(dd, WFR_SEND_PIO_ERR_MASK, 0);
 	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, ~0ull);
 	write_csr(dd, WFR_SEND_DMA_ERR_MASK, 0);
@@ -2858,27 +2900,37 @@ static void reset_txe(struct hfi_devdata *dd)
 	write_csr(dd, WFR_SEND_SC2VLT1, 0);
 	write_csr(dd, WFR_SEND_SC2VLT2, 0);
 	write_csr(dd, WFR_SEND_SC2VLT3, 0);
-	for (i = 0; i < WFR_TXE_NUM_PRIORITIES; i++) {
+	write_csr(dd, WFR_SEND_LEN_CHECK0, 0);
+	write_csr(dd, WFR_SEND_LEN_CHECK1, 0);
+	write_csr(dd, WFR_SEND_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_ERR_CLEAR, ~0ull);
+	for (i = 0; i < WFR_VL_ARB_LOW_PRIO_TABLE_SIZE; i++)
 		write_csr(dd, WFR_SEND_LOW_PRIORITY_LIST + (8*i), 0);
+	for (i = 0; i < WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE; i++)
 		write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIST + (8*i), 0);
-	}
 	for (i = 0; i < WFR_TXE_NUM_CONTEXT_SET; i++)
 		write_csr(dd, WFR_SEND_CONTEXT_SET_CTRL + (8*i), 0);
 	for (i = 0; i < WFR_TXE_NUM_32_BIT_COUNTER; i++)
 		write_csr(dd, WFR_SEND_COUNTER_ARRAY32 + (8*i), 0);
 	for (i = 0; i < WFR_TXE_NUM_64_BIT_COUNTER; i++)
 		write_csr(dd, WFR_SEND_COUNTER_ARRAY64 + (8*i), 0);
-	write_csr(dd, WFR_SEND_CM_CTRL, 0);
+	write_csr(dd, WFR_SEND_CM_CTRL, 0x2 << 4);
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, 0);
 	write_csr(dd, WFR_SEND_CM_TIMER_CTRL, 0);
+	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE0_TO3, 0);
+	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE4_TO7, 0);
+	write_csr(dd, WFR_SEND_CM_REMOTE_AU_TABLE0_TO3, 0);
+	write_csr(dd, WFR_SEND_CM_REMOTE_AU_TABLE4_TO7, 0);
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
 		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8*i), 0);
 	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, 0);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_INFO, ~0ull);
 
 	for (i = 0; i < dd->chip_send_contexts; i++) {
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 0);
-		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
+		/* WFR_SEND_CTXT_CREDIT_RETURN_ADDR initialized elsewhere */
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_FORCE, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, ~0ull);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, 0);
@@ -2906,6 +2958,7 @@ static void reset_txe(struct hfi_devdata *dd)
 static void init_chip(struct hfi_devdata *dd)
 {
 	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
+	dd->chip_rcv_array_count = read_csr(dd, WFR_RCV_ARRAY_CNT);
 	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
 	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
 	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
@@ -2918,6 +2971,7 @@ static void init_chip(struct hfi_devdata *dd)
 	// o other...
 	reset_txe(dd);
 
+	write_uninitialized_csrs_and_memories(dd);
 
 	init_partition_keys(dd);
 
@@ -2991,9 +3045,10 @@ void init_txe(struct hfi_devdata *dd)
 {
 	int i;
 
-	/* enable all general PIO, SDMA, and Egress errors */
+	/* enable all PIO, SDMA, general, and Egress errors */
 	write_csr(dd, WFR_SEND_PIO_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_DMA_ERR_MASK, ~0ull);
+	write_csr(dd, WFR_SEND_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, ~0ull);
 
 	/*
@@ -3064,9 +3119,6 @@ void init_txe(struct hfi_devdata *dd)
 			    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT)
 			| (WFR_CM_VL_SHARED_CREDITS
 			    << WFR_SEND_CM_CREDIT_VL15_SHARED_LIMIT_VL_SHIFT));
-
-	write_csr(dd, WFR_SEND_LEN_CHECK0, 0);
-	write_csr(dd, WFR_SEND_LEN_CHECK1, 0);
 }
 
 /*

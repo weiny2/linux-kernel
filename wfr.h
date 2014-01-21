@@ -43,13 +43,13 @@
 #define WFR_NUM_INTERRUPT_SOURCES 768
 #define WFR_RXE_NUM_CONTEXTS 160
 #define WFR_RXE_PER_CONTEXT_SIZE 0x1000	/* 4k */
-#define WFR_RXE_NUM_RECEIVE_ARRAY_ENTRIES (64 * 1024)
 #define WFR_RXE_NUM_TID_FLOWS 32
 #define WFR_RXE_NUM_DATA_VL 8
 #define WFR_TXE_NUM_CONTEXTS 160
 #define WFR_TXE_NUM_SDMA_ENGINES 16
 #define WFR_TXE_NUM_CONTEXT_SET (WFR_TXE_NUM_CONTEXTS/8)
-#define WFR_TXE_NUM_PRIORITIES 16
+#define WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE 16
+#define WFR_VL_ARB_LOW_PRIO_TABLE_SIZE 16
 #define WFR_TXE_NUM_32_BIT_COUNTER 7
 #define WFR_TXE_NUM_64_BIT_COUNTER 30
 #define WFR_TXE_NUM_DATA_VL 8
@@ -522,10 +522,6 @@
 #define WFR_EXT_DEVICE_CFG_REQ	   0x20
 #define WFR_VERIFY_CAP_FRAME	   0x40
 #define WFR_LINKUP_ACHIEVED	   0x80
-
-/* sizes of the High and Low VL Arbitration tables */
-#define WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE 16
-#define WFR_VL_ARB_LOW_PRIO_TABLE_SIZE 16
 
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);

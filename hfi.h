@@ -826,6 +826,8 @@ struct hfi_devdata {
 	u32 rcvhdrentsize;
 	/* number of receive contexts the chip supports */
 	u32 chip_rcv_contexts;
+	/* number of receive array entries */
+	u32 chip_rcv_array_count;
 	/* number of PIO send contexts the chip supports */
 	u32 chip_send_contexts;
 	/* number of bytes in the PIO memory buffer */
