@@ -45,11 +45,11 @@
 
 #define STL_PM_CLASS_VERSION				0x80
 
-#define STL_PM_ATTRIB_ID_PORT_COUNTERS			cpu_to_be16(0x0012)
 #define STL_PM_ATTRIB_ID_PORT_STATUS			cpu_to_be16(0x0040)
-#define STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS		cpu_to_be16(0x0041)
-#define STL_PM_ATTRIB_ID_ERROR_PORT_COUNTERS		cpu_to_be16(0x0042)
-#define STL_PM_ATTRIB_ID_ERROR_INFO			cpu_to_be16(0x0043)
+#define STL_PM_ATTRIB_ID_CLEAR_PORT_STATUS			cpu_to_be16(0x0041)
+#define STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS		cpu_to_be16(0x0042)
+#define STL_PM_ATTRIB_ID_ERROR_PORT_COUNTERS		cpu_to_be16(0x0043)
+#define STL_PM_ATTRIB_ID_ERROR_INFO			cpu_to_be16(0x0044)
 
 struct stl_pma_mad {
 	struct ib_mad_hdr mad_hdr;
@@ -57,9 +57,9 @@ struct stl_pma_mad {
 };
 
 struct stl_port_status_req {
-	__be32 port_num;
-	__be32 reserved;
-	__be64 vl_select_mask;
+	__u8   port_num;
+	__u8   reserved[3];
+	__be32 vl_select_mask;
 };
 
 enum counter_selects {
@@ -69,26 +69,26 @@ enum counter_selects {
 	PM_CS_PortRcvPkts                  = (1 << 3),
 	PM_CS_PortMulticastXmitPkts        = (1 << 4),
 	PM_CS_PortMulticastRcvPkts         = (1 << 5),
-	PM_CS_LocalLinkIntegrityErrors     = (1 << 6),
-	PM_CS_FMConfigErrors               = (1 << 7),
-	PM_CS_PortRcvErrors                = (1 << 8),
-	PM_CS_ExcessiveBufferOverruns      = (1 << 9),
-	PM_CS_PortRcvConstraintErrors      = (1 << 10),
-	PM_CS_VL15Dropped                  = (1 << 11),
-	PM_CS_PortRcvSwitchRelayErrors     = (1 << 12),
-	PM_CS_PortXmitDiscards             = (1 << 13),
-	PM_CS_PortXmitConstraintErrors     = (1 << 14),
-	PM_CS_PortRcvRemotePhysicalErrors  = (1 << 15),
-	PM_CS_SymbolErrors                 = (1 << 16),
-	PM_CS_SwPortCongestion             = (1 << 17),
-	PM_CS_PortXmitWait                 = (1 << 18),
-	PM_CS_PortRcvFECN                  = (1 << 19),
-	PM_CS_PortRcvBECN                  = (1 << 20),
-	PM_CS_PortXmitTimeCong             = (1 << 21),
-	PM_CS_PortXmitWastedBW             = (1 << 22),
-	PM_CS_PortXmitWaitData             = (1 << 23),
-	PM_CS_PortRcvBubble                = (1 << 24),
-	PM_CS_PortMarkFECN                 = (1 << 25),
+	PM_CS_PortXmitWait                 = (1 << 6),
+	PM_CS_SwPortCongestion             = (1 << 7),
+	PM_CS_PortRcvFECN                  = (1 << 8),
+	PM_CS_PortRcvBECN                  = (1 << 9),
+	PM_CS_PortXmitTimeCong             = (1 << 10),
+	PM_CS_PortXmitWastedBW             = (1 << 11),
+	PM_CS_PortXmitWaitData             = (1 << 12),
+	PM_CS_PortRcvBubble                = (1 << 13),
+	PM_CS_PortMarkFECN                 = (1 << 14),
+	PM_CS_PortRcvConstraintErrors      = (1 << 15),
+	PM_CS_VL15Dropped                  = (1 << 16),
+	PM_CS_PortRcvSwitchRelayErrors     = (1 << 17),
+	PM_CS_PortXmitDiscards             = (1 << 18),
+	PM_CS_PortXmitConstraintErrors     = (1 << 19),
+	PM_CS_PortRcvRemotePhysicalErrors  = (1 << 20),
+	PM_CS_LocalLinkIntegrityErrors     = (1 << 21),
+	PM_CS_PortRcvErrors                = (1 << 22),
+	PM_CS_ExcessiveBufferOverruns      = (1 << 23),
+	PM_CS_FMConfigErrors               = (1 << 24),
+	PM_CS_SymbolErrors                 = (1 << 25),
 	PM_CS_LinkErrorRecovery            = (1 << 26),
 	PM_CS_LinkDowned                   = (1 << 27),
 	PM_CS_UncorrectableErrors          = (1 << 28),
@@ -99,42 +99,37 @@ enum vl_counter_selects {
 	PM_CS_PortVLRcvData      = (1 << 1),
 	PM_CS_PortVLXmitPkts     = (1 << 2),
 	PM_CS_PortVLRcvPkts      = (1 << 3),
-	PM_CS_PortVLXmitDiscards = (1 << 4),
+	PM_CS_PortVLXmitWait     = (1 << 4),
 	PM_CS_SwPortVLCongestion = (1 << 5),
-	PM_CS_PortVLXmitWait     = (1 << 6),
-	PM_CS_PortVLRcvFECN      = (1 << 7),
-	PM_CS_PortVLRcvBECN      = (1 << 8),
-	PM_CS_PortVLXmitTimeCong = (1 << 9),
-	PM_CS_PortVLXmitWastedBW = (1 << 10),
-	PM_CS_PortVLXmitWaitData = (1 << 11),
-	PM_CS_PortVLRcvBubble    = (1 << 12),
-	PM_CS_PortVLMarkFECN     = (1 << 13),
+	PM_CS_PortVLRcvFECN      = (1 << 6),
+	PM_CS_PortVLRcvBECN      = (1 << 7),
+	PM_CS_PortVLXmitTimeCong = (1 << 8),
+	PM_CS_PortVLXmitWastedBW = (1 << 9),
+	PM_CS_PortVLXmitWaitData = (1 << 10),
+	PM_CS_PortVLRcvBubble    = (1 << 11),
+	PM_CS_PortVLMarkFECN     = (1 << 12),
+	PM_CS_PortVLXmitDiscards = (1 << 13),
 };
 
-struct stl_port_status_set {
-	__be64 port_select_mask;
+struct stl_clear_port_status {
+	__be64 port_select_mask[4];
 	__be32 counter_select_mask;
-	__be32 res1;
-	__be64 vl_select_mask;
+};
+
+struct stl_port_status_rsp {
+	__u8   port_num;
+	__u8   res1[3];
+	__be32 vl_select_mask;
+
+	// Data counters
 	__be64 port_xmit_data;
 	__be64 port_rcv_data;
 	__be64 port_xmit_pkts;
 	__be64 port_rcv_pkts;
 	__be64 port_multicast_xmit_pkts;
 	__be64 port_multicast_rcv_pkts;
-	__be64 local_link_integrity_errors;
-	__be64 fm_config_errors;
-	__be64 port_rcv_errors;
-	__be64 excessive_buffer_overruns;
-	__be64 port_rcv_constraint_errors;
-	__be64 vl15_dropped;
-	__be64 port_rcv_switch_relay_errors;
-	__be64 port_xmit_discsrds;
-	__be64 port_xmit_constraint_errors;
-	__be64 port_rcv_emote_physical_errors;
-	__be64 symbol_errors;
-	__be64 sw_port_congestion;
 	__be64 port_xmit_wait;
+	__be64 sw_port_congestion;
 	__be64 port_rcv_fecn;
 	__be64 port_rcv_becn;
 	__be64 port_xmit_time_cong;
@@ -142,244 +137,127 @@ struct stl_port_status_set {
 	__be64 port_xmit_wait_data;
 	__be64 port_rcv_bubble;
 	__be64 port_mark_fecn;
-	__be32 link_error_recovery;
-	__be32 link_downed;
-	u8 uncorrectabe_errors;
-	u8 link_quality_indicator; /* 4res, 4bit */
-	u8 res2[6];
-	struct {
-		__be32 vl_counter_select_mask; /* enum vl_counter_selects */
-		__be32 res1;
-		__be64 port_vl_xmit_data;
-		__be64 port_vl_rcv_data;
-		__be64 port_vl_xmit_pkts;
-		__be64 port_vl_rcv_pkts;
-		__be64 port_vl_xmit_discards;
-		__be64 sw_port_vl_congestion;
-		__be64 port_vl_xmit_wait;
-		__be64 port_vl_rcv_fecn;
-		__be64 port_vl_rcv_becn;
-		__be64 port_xmit_time_cong;
-		__be64 port_vl_xmit_wasted_bw;
-		__be64 port_vl_xmit_wasted_data;
-		__be64 port_vl_rcv_bubble;
-		__be64 port_vl_mark_fecn;
-	} vls[1]; /* n defined by number of bits in vl_select_mask */
-};
 
-struct stl_port_status_rsp {
-	__be32 port_num;
-	__be32 res1;
-	__be64 vl_select_mask;
-	__be64 port_xmit_data;
-	__be64 port_rcv_data;
-	__be64 port_xmit_pkts;
-	__be64 port_rcv_pkts;
-	__be64 port_multicast_xmit_pkts;
-	__be64 port_multicast_rcv_pkts;
-	__be64 local_link_integrity_errors;
-	__be64 fm_config_errors;
-	__be64 port_rcv_errors;
-	__be64 excessive_buffer_overruns;
+	// Error counters
 	__be64 port_rcv_constraint_errors;
 	__be64 vl15_dropped;
 	__be64 port_rcv_switch_relay_errors;
 	__be64 port_xmit_discards;
 	__be64 port_xmit_constraint_errors;
-	__be64 port_rcv_emote_physical_errors;
+	__be64 port_rcv_remote_physical_errors;
+	__be64 local_link_integrity_errors;
+	__be64 port_rcv_errors;
+	__be64 excessive_buffer_overruns;
+	__be64 fm_config_errors;
 	__be64 symbol_errors;
-	__be64 sw_port_congestion;
-	__be64 port_xmit_wait;
-	__be64 port_rcv_fecn;
-	__be64 port_rcv_becn;
-	__be64 port_xmit_time_cong;
-	__be64 port_xmit_wasted_bw;
-	__be64 port_xmit_wait_data;
-	__be64 port_rcv_bubble;
-	__be64 port_mark_fecn;
 	__be32 link_error_recovery;
 	__be32 link_downed;
 	u8 uncorrectabe_errors;
+
 	u8 link_quality_indicator; /* 4res, 4bit */
 	u8 res2[6];
 	struct _vls_pctrs {
+		// per-VL Data counters
 		__be64 port_vl_xmit_data;
 		__be64 port_vl_rcv_data;
 		__be64 port_vl_xmit_pkts;
 		__be64 port_vl_rcv_pkts;
-		__be64 port_vl_xmit_discards;
-		__be64 sw_port_vl_congestion;
 		__be64 port_vl_xmit_wait;
+		__be64 sw_port_vl_congestion;
 		__be64 port_vl_rcv_fecn;
 		__be64 port_vl_rcv_becn;
 		__be64 port_xmit_time_cong;
 		__be64 port_vl_xmit_wasted_bw;
-		__be64 port_vl_xmit_wasted_data;
+		__be64 port_vl_xmit_wait_data;
 		__be64 port_vl_rcv_bubble;
 		__be64 port_vl_mark_fecn;
+
+		__be64 port_vl_xmit_discards;
 	} vls[1];		/* actual array size defined by number of bits in VLSelectmask */
 };
 
-#if 0
-/* STL Data Port Counters - small request, bigger response */
+// Request contains first two fields, response contains those plus the rest
+struct stl_port_data_counters_msg {
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
 
-struct stl_data_port_counters_req {
-	__be64 port_select_mask;					/* signifies for which ports the PMA is to respond */
-	__be64 vl_select_mask;					/* signifies for which VLs the PMA is to respond */
+	// Response fields follow
+	__be32 reserved1;
+	struct _port_dctrs {
+		u8 port_number;
+		u8 reserved2[3];
+		__be32 link_quality_indicator; /* 4res, 4bit */
+
+		// Data counters
+		__be64 port_xmit_data;
+		__be64 port_rcv_data;
+		__be64 port_xmit_pkts;
+		__be64 port_rcv_pkts;
+		__be64 port_multicast_xmit_pkts;
+		__be64 port_multicast_rcv_pkts;
+		__be64 port_xmit_wait;
+		__be64 sw_port_congestion;
+		__be64 port_rcv_fecn;
+		__be64 port_rcv_becn;
+		__be64 port_xmit_time_cong;
+		__be64 port_xmit_wasted_bw;
+		__be64 port_xmit_wait_data;
+		__be64 port_rcv_bubble;
+		__be64 port_mark_fecn;
+
+		__be64 port_error_counter_summary; /* Sum of all error counters for port */
+
+		struct _vls_dctrs {
+			// per-VL Data counters
+			__be64 port_vl_xmit_data;
+			__be64 port_vl_rcv_data;
+			__be64 port_vl_xmit_pkts;
+			__be64 port_vl_rcv_pkts;
+			__be64 port_vl_xmit_wait;
+			__be64 sw_port_vl_congestion;
+			__be64 port_vl_rcv_fecn;
+			__be64 port_vl_rcv_becn;
+			__be64 port_xmit_time_cong;
+			__be64 port_vl_xmit_wasted_bw;
+			__be64 port_vl_xmit_wait_data;
+			__be64 port_vl_rcv_bubble;
+			__be64 port_vl_mark_fecn;
+
+			__be64 port_vl_xmit_discards;
+		} vls[1];		/* actual array size defined by number of bits in VLSelectmask */
+	} port[1]; 	/* actual array size defined by number of ports in attribute modifier */
 };
 
-struct stl_data_port_counters_rsp {
-	__be64 port_select_mask;
-	__be64 vl_select_mask;
-	struct _port_dpctrs {
-		uint32 PortNumber;
-		union {
-			uint32 AsReg32;
-			struct { IB_BITFIELD2(uint32,
-				Reserved : 28,
-				LinkQualityIndicator : 4)
-			} PACK_SUFFIX s;
-		} lq;
-		uint64 PortXmitData;
-		uint64 PortRcvData;
-		uint64 PortXmitPkts;
-		uint64 PortRcvPkts;
-		uint64 PortMulticastXmitPkts;
-		uint64 PortMulticastRcvPkts;
-		uint64 PortErrorCounterSummary;		/* sum of all error counters for port */
-		struct _vls_dpctrs {
-			uint64 PortVLXmitData;
-			uint64 PortVLRcvData;
-			uint64 PortVLXmitPkts;
-			uint64 PortVLRcvPkts;
-		} VLs[1];							/* actual array size defined by number of bits in VLSelectmask */
-	} Port[1];								/* actual array size defined by number of ports in attribute modifier */
-} PACK_SUFFIX STLDataPortCountersRsp, STL_DATA_PORT_COUNTERS_RSP;
+// Request contains first two fields, response contains those plus the rest
+struct stl_port_error_counters_msg {
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
 
-/* STL Error Port Counters - small request, bigger response */
-
-typedef struct _STL_Error_Port_Counters_Req {
-	uint64 PortSelectMask;					/* signifies for which ports the PMA is to respond */
-	uint64 VLSelectMask;					/* signifies for which VLs the PMA is to respond */
-	uint32 LargeCounterCount;				/* number of 64-bit error counters, rest are 32-bit */
-	uint32 LargeVLCounterCount;				/* number of 64-bit VL error counters, rest are 32-bit */
-} PACK_SUFFIX STLErrorPortCountersReq, STL_ERROR_PORT_COUNTERS_REQ;
-
-typedef struct _STL_Error_Port_Counters_Rsp {
-	uint64 PortSelectMask;					/* echo from request */
-	uint64 VLSelectMask;					/* echo from request */
-	uint32 LargeCounterCount;				/* echo from request */
-	uint32 LargeVLCounterCount;				/* echo from request */
-	struct _port_epctrs {
-		uint32 PortNumber;
-		uint32 Reserved;
-		uint64 LocalLinkIntegrityErrors;	/* all counters are shown as 64-bit */
-		uint64 FMConfigErrors;
-		uint64 PortRcvErrors;
-		uint64 ExcessiveBufferOverruns;
-		uint64 PortRcvConstraintErrors;
-		uint64 VL15Dropped;
-		uint64 PortRcvSwitchRelayErrors;
-		uint64 PortXmitDiscards;
-		uint64 PortXmitConstraintErrors;
-		uint64 PortRcvRemotePhysicalErrors;
-		uint64 SymbolErrors;
-		uint64 SwPortCongestion;
-		uint64 PortXmitWait;
-		uint64 PortRcvFECN;
-		uint64 PortRcvBECN;
-		uint64 PortXmitTimeCong;
-		uint64 PortXmitWastedBW;
-		uint64 PortXmitWaitData;
-		uint64 PortRcvBubble;
-		uint64 PortMarkFECN;
-		uint32 LinkErrorRecovery;			/* always 32-bit */
-		uint32 LinkDowned;					/* always 32-bit */
-		uint8 UncorrectableErrors;			/* always 8-bit */
-		uint8 Reserved2[7];					/* may only need 3 reserve bytes if number of 32-bit ctrs is odd */
-		struct _vls_epctrs {
-			uint64 SwPortVLCongestion;		/* all per-VL counters are shown as 64-bit */
-			uint64 PortVLXmitWait;
-			uint64 PortVLRcvFECN;
-			uint64 PortVLRcvBECN;
-			uint64 PortVLXmitTimeCong;
-			uint64 PortVLXmitWastedBW;
-			uint64 PortVLXmitWaitData;
-			uint64 PortVLRcvBubble;
-			uint64 PortVLMarkFECN;
-		} VLs[1];							/* actual array size defined by number of bits in VLSelectmask */
-	} Port[1];								/* actual array size defined by number of ports in attribute modifier */
-} PACK_SUFFIX STLErrorPortCountersRsp, STL_ERROR_PORT_COUNTERS_RSP;
-
-typedef struct _STL_Error_Info_Req {
-	uint64 PortSelectMask; /* signifies for which ports the PMA is to respond */
-	struct _port {
-		uint32 PortNumber;
-		union {
-			uint32 AsReg32;
-			struct { IB_BITFIELD8(uint32,
-				PortRcvErrorInfo : 1,
-				ExcessiveBufferOverrunInfo : 1,
-				PortXmitConstraintErrorInfo : 1,
-				PortRcvConstraintErrorInfo : 1,
-				PortRcvSwitchRelayErrorInfo : 1,
-				UncorrectableErrorInfo : 1,
-				FMConfigErrorInfo : 1,
-				Reserved : 25)
-			} PACK_SUFFIX s;
-		} ErrorInfoSelectMask;
-		struct {
-			uint16 P_Key;
-			uint16 Reserved1;
-			IB_BITFIELD3(uint32,
-				Status : 1,
-				Reserved2 : 7,
-				SLID : 24)
-		} PACK_SUFFIX PortXmitConstraintErrorInfo;
-		struct {
-			uint16 P_Key;
-			uint16 Reserved1;
-			IB_BITFIELD3(uint32,
-				Status : 1,
-				Reserved2 : 7,
-				SLID : 24)
-		} PACK_SUFFIX PortRcvConstraintErrorInfo;
-		struct { IB_BITFIELD3(uint32,
-				Status : 1,
-				Reserved : 3,
-				Info : 28)
-		} PACK_SUFFIX PortRcvSwitchRelayErrorInfo;
-		struct {
-			IB_BITFIELD3(uint8,
-				Status : 1,
-				SC : 5,
-				Reserved : 1)
-		} PACK_SUFFIX ExcessiveBufferOverrunErrorInfo;
-		struct {
-			IB_BITFIELD3(uint8,
-				Status : 1,
-				Reserved : 3,
-				ErrorCode : 4)
-		} PACK_SUFFIX UncorrectableErrorInfo;
-		struct {
-			IB_BITFIELD2(uint8,
-				Status : 1,
-				Reserved : 7);
-				uint8 ErrorCode;
-		} PACK_SUFFIX FMConfigErrorInfo;
-		uint8 Reserved;
-		struct {
-			IB_BITFIELD2(uint8,
-				Status : 1,
-				Reserved1 : 7)
-			uint8 ErrorInfo[17]; /* Two flits plus status code */
-			uint8 Reserved2[6];
-		} PortRcvErrorInfo;
-	} Port[1]; /* x defined by number of ports in attribute modifier */
-} PACK_SUFFIX STLErrorInfoReq, STL_ERROR_INFO_REQ;
-
-#endif
-
+	// Response fields follow
+	__be32 reserved1;
+	struct _port_ectrs {
+		u8 portNumber;
+		u8 reserved2[7];
+		__be64 port_rcv_constraint_errors;
+		__be64 vl15_dropped;
+		__be64 port_rcv_switch_relay_errors;
+		__be64 port_xmit_discards;
+		__be64 port_xmit_constraint_errors;
+		__be64 port_rcv_remote_physical_errors;
+		__be64 local_link_integrity_errors;
+		__be64 port_rcv_errors;
+		__be64 excessive_buffer_overruns;
+		__be64 fm_config_errors;
+		__be64 symbol_errors;
+		__be32 link_error_recovery;
+		__be32 link_downed;
+		u8 uncorrectabe_errors;
+		u8 reserved3[7];
+		struct _vls_ectrs {
+			__be64 port_vl_xmit_discards;
+		} vls[1];	/* actual array size defined by number of bits in VLSelectmask */
+	} port[1]; 	/* actual array size defined by number of ports in attribute modifier */
+};
 
 /**
  * BEGIN Functions
@@ -394,6 +272,29 @@ static int reply_stl_pma(struct stl_pma_mad *pmp)
 	if (pmp->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 		pmp->mad_hdr.status |= IB_SMP_DIRECTION;
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
+}
+
+// With the real WFR, the counters can be cleared so this will not be needed
+static void	pma_adjust_counters_for_reset_done(	struct qib_verbs_counters *cntrs, 
+												struct qib_ibport *ibp)
+{
+	cntrs->symbol_error_counter -= ibp->z_symbol_error_counter;
+	cntrs->link_error_recovery_counter -=
+		ibp->z_link_error_recovery_counter;
+	cntrs->link_downed_counter -= ibp->z_link_downed_counter;
+	cntrs->port_rcv_errors -= ibp->z_port_rcv_errors;
+	cntrs->port_rcv_remphys_errors -= ibp->z_port_rcv_remphys_errors;
+	cntrs->port_xmit_discards -= ibp->z_port_xmit_discards;
+	cntrs->port_xmit_data -= ibp->z_port_xmit_data;
+	cntrs->port_rcv_data -= ibp->z_port_rcv_data;
+	cntrs->port_xmit_packets -= ibp->z_port_xmit_packets;
+	cntrs->port_rcv_packets -= ibp->z_port_rcv_packets;
+	cntrs->local_link_integrity_errors -=
+		ibp->z_local_link_integrity_errors;
+	cntrs->excessive_buffer_overrun_errors -=
+		ibp->z_excessive_buffer_overrun_errors;
+	cntrs->vl15_dropped -= ibp->z_vl15_dropped;
+	cntrs->vl15_dropped += ibp->n_vl15_dropped;
 }
 
 static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
@@ -425,230 +326,58 @@ static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
 	return reply_stl_pma(pmp);
 }
 
-
-static int pma_get_stl_portcounters(struct ib_pma_mad *pmp,
-				struct ib_device *ibdev, u8 port)
-{
-	struct ib_pma_portcounters *p = (struct ib_pma_portcounters *)
-		pmp->data;
-	struct qib_ibport *ibp = to_iport(ibdev, port);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_verbs_counters cntrs;
-	u8 port_select = p->port_select;
-
-	if (pmp->mad_hdr.attr_mod != 0 || port_select != port) {
-		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply_stl_pma((struct stl_pma_mad *)pmp);
-	}
-
-	qib_get_counters(ppd, &cntrs);
-
-	/* Adjust counters for any resets done. */
-	cntrs.symbol_error_counter -= ibp->z_symbol_error_counter;
-	cntrs.link_error_recovery_counter -=
-		ibp->z_link_error_recovery_counter;
-	cntrs.link_downed_counter -= ibp->z_link_downed_counter;
-	cntrs.port_rcv_errors -= ibp->z_port_rcv_errors;
-	cntrs.port_rcv_remphys_errors -= ibp->z_port_rcv_remphys_errors;
-	cntrs.port_xmit_discards -= ibp->z_port_xmit_discards;
-	cntrs.port_xmit_data -= ibp->z_port_xmit_data;
-	cntrs.port_rcv_data -= ibp->z_port_rcv_data;
-	cntrs.port_xmit_packets -= ibp->z_port_xmit_packets;
-	cntrs.port_rcv_packets -= ibp->z_port_rcv_packets;
-	cntrs.local_link_integrity_errors -=
-		ibp->z_local_link_integrity_errors;
-	cntrs.excessive_buffer_overrun_errors -=
-		ibp->z_excessive_buffer_overrun_errors;
-	cntrs.vl15_dropped -= ibp->z_vl15_dropped;
-	cntrs.vl15_dropped += ibp->n_vl15_dropped;
-
-	memset(pmp->data, 0, sizeof(pmp->data));
-
-	p->port_select = port_select;
-	if (cntrs.symbol_error_counter > 0xFFFFUL)
-		p->symbol_error_counter = cpu_to_be16(0xFFFF);
-	else
-		p->symbol_error_counter =
-			cpu_to_be16((u16)cntrs.symbol_error_counter);
-	if (cntrs.link_error_recovery_counter > 0xFFUL)
-		p->link_error_recovery_counter = 0xFF;
-	else
-		p->link_error_recovery_counter =
-			(u8)cntrs.link_error_recovery_counter;
-	if (cntrs.link_downed_counter > 0xFFUL)
-		p->link_downed_counter = 0xFF;
-	else
-		p->link_downed_counter = (u8)cntrs.link_downed_counter;
-	if (cntrs.port_rcv_errors > 0xFFFFUL)
-		p->port_rcv_errors = cpu_to_be16(0xFFFF);
-	else
-		p->port_rcv_errors =
-			cpu_to_be16((u16) cntrs.port_rcv_errors);
-	if (cntrs.port_rcv_remphys_errors > 0xFFFFUL)
-		p->port_rcv_remphys_errors = cpu_to_be16(0xFFFF);
-	else
-		p->port_rcv_remphys_errors =
-			cpu_to_be16((u16)cntrs.port_rcv_remphys_errors);
-	if (cntrs.port_xmit_discards > 0xFFFFUL)
-		p->port_xmit_discards = cpu_to_be16(0xFFFF);
-	else
-		p->port_xmit_discards =
-			cpu_to_be16((u16)cntrs.port_xmit_discards);
-	if (cntrs.local_link_integrity_errors > 0xFUL)
-		cntrs.local_link_integrity_errors = 0xFUL;
-	if (cntrs.excessive_buffer_overrun_errors > 0xFUL)
-		cntrs.excessive_buffer_overrun_errors = 0xFUL;
-	p->link_overrun_errors = (cntrs.local_link_integrity_errors << 4) |
-		cntrs.excessive_buffer_overrun_errors;
-	if (cntrs.vl15_dropped > 0xFFFFUL)
-		p->vl15_dropped = cpu_to_be16(0xFFFF);
-	else
-		p->vl15_dropped = cpu_to_be16((u16)cntrs.vl15_dropped);
-	if (cntrs.port_xmit_data > 0xFFFFFFFFUL)
-		p->port_xmit_data = cpu_to_be32(0xFFFFFFFF);
-	else
-		p->port_xmit_data = cpu_to_be32((u32)cntrs.port_xmit_data);
-	if (cntrs.port_rcv_data > 0xFFFFFFFFUL)
-		p->port_rcv_data = cpu_to_be32(0xFFFFFFFF);
-	else
-		p->port_rcv_data = cpu_to_be32((u32)cntrs.port_rcv_data);
-	if (cntrs.port_xmit_packets > 0xFFFFFFFFUL)
-		p->port_xmit_packets = cpu_to_be32(0xFFFFFFFF);
-	else
-		p->port_xmit_packets =
-			cpu_to_be32((u32)cntrs.port_xmit_packets);
-	if (cntrs.port_rcv_packets > 0xFFFFFFFFUL)
-		p->port_rcv_packets = cpu_to_be32(0xFFFFFFFF);
-	else
-		p->port_rcv_packets =
-			cpu_to_be32((u32) cntrs.port_rcv_packets);
-
-	return reply_stl_pma((struct stl_pma_mad *)pmp);
-}
-static int pma_set_stl_portcounters(struct ib_pma_mad *pmp,
-				struct ib_device *ibdev, u8 port)
-{
-	struct ib_pma_portcounters *p = (struct ib_pma_portcounters *)
-		pmp->data;
-	struct qib_ibport *ibp = to_iport(ibdev, port);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_verbs_counters cntrs;
-
-	if (pmp->mad_hdr.attr_mod != 0 || p->port_select != port) {
-		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply_stl_pma((struct stl_pma_mad *)pmp);
-	}
-
-	/*
-	 * Since the HW doesn't support clearing counters, we save the
-	 * current count and subtract it from future responses.
-	 */
-	qib_get_counters(ppd, &cntrs);
-
-	if (p->counter_select & IB_PMA_SEL_SYMBOL_ERROR)
-		ibp->z_symbol_error_counter = cntrs.symbol_error_counter;
-
-	if (p->counter_select & IB_PMA_SEL_LINK_ERROR_RECOVERY)
-		ibp->z_link_error_recovery_counter =
-			cntrs.link_error_recovery_counter;
-
-	if (p->counter_select & IB_PMA_SEL_LINK_DOWNED)
-		ibp->z_link_downed_counter = cntrs.link_downed_counter;
-
-	if (p->counter_select & IB_PMA_SEL_PORT_RCV_ERRORS)
-		ibp->z_port_rcv_errors = cntrs.port_rcv_errors;
-
-	if (p->counter_select & IB_PMA_SEL_PORT_RCV_REMPHYS_ERRORS)
-		ibp->z_port_rcv_remphys_errors =
-			cntrs.port_rcv_remphys_errors;
-
-	if (p->counter_select & IB_PMA_SEL_PORT_XMIT_DISCARDS)
-		ibp->z_port_xmit_discards = cntrs.port_xmit_discards;
-
-	if (p->counter_select & IB_PMA_SEL_LOCAL_LINK_INTEGRITY_ERRORS)
-		ibp->z_local_link_integrity_errors =
-			cntrs.local_link_integrity_errors;
-
-	if (p->counter_select & IB_PMA_SEL_EXCESSIVE_BUFFER_OVERRUNS)
-		ibp->z_excessive_buffer_overrun_errors =
-			cntrs.excessive_buffer_overrun_errors;
-
-	if (p->counter_select & IB_PMA_SEL_PORT_VL15_DROPPED) {
-		ibp->n_vl15_dropped = 0;
-		ibp->z_vl15_dropped = cntrs.vl15_dropped;
-	}
-
-	if (p->counter_select & IB_PMA_SEL_PORT_XMIT_DATA)
-		ibp->z_port_xmit_data = cntrs.port_xmit_data;
-
-	if (p->counter_select & IB_PMA_SEL_PORT_RCV_DATA)
-		ibp->z_port_rcv_data = cntrs.port_rcv_data;
-
-	if (p->counter_select & IB_PMA_SEL_PORT_XMIT_PACKETS)
-		ibp->z_port_xmit_packets = cntrs.port_xmit_packets;
-
-	if (p->counter_select & IB_PMA_SEL_PORT_RCV_PACKETS)
-		ibp->z_port_rcv_packets = cntrs.port_rcv_packets;
-
-	return pma_get_stl_portcounters(pmp, ibdev, port);
-}
-
-
 /** =========================================================================
- * Get/Set PortStatus
+ * Get PortStatus
  */
 static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 				struct ib_device *ibdev, u8 port)
 {
 	struct stl_port_status_req *req = (struct stl_port_status_req *)pmp->data;
 	struct stl_port_status_rsp *rsp;
+	u8 vl_index;
+	unsigned long vl;
 
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_counters cntrs;
-	u8 num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	u32 num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	u8 num_vls = hweight64(be64_to_cpu(req->vl_select_mask));
+
+	// Sanity check
+	u32 response_data_size = sizeof(struct stl_port_status_rsp) -
+		sizeof(struct _vls_pctrs) + num_vls * sizeof(struct _vls_pctrs);
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL PMA Requested Status Response too big for reply!"
+			   " 0x%x vs 0x%x, num_ports %d, num_vls %d\n",
+			   response_data_size, (unsigned int)sizeof(pmp->data),
+			   (unsigned int)num_ports, (unsigned int)num_vls);
+		return reply_stl_pma(pmp);
+	}
 
 	memset(pmp->data, 0, sizeof(pmp->data));
 	if (num_ports != 1 || (req->port_num && req->port_num != port)
 	    || num_vls > STL_MAX_VLS) {
-		printk(KERN_WARNING PFX "STL Set PMA 0x%x ; Invalid AM; %d; %d; %d\n",
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL get stl portstatus PMA 0x%x ; Invalid AM; %d; %d; %d\n",
 			be16_to_cpu(pmp->mad_hdr.attr_id),
 			num_ports, req->port_num, num_vls);
-		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		return (reply_stl_pma(pmp));
 	}
 
 	rsp = (struct stl_port_status_rsp *)pmp->data;
 
 	qib_get_counters(ppd, &cntrs);
+	pma_adjust_counters_for_reset_done(&cntrs, ibp);
 
-	/* Adjust counters for any resets done. */
-	cntrs.symbol_error_counter -= ibp->z_symbol_error_counter;
-	cntrs.link_error_recovery_counter -=
-		ibp->z_link_error_recovery_counter;
-	cntrs.link_downed_counter -= ibp->z_link_downed_counter;
-	cntrs.port_rcv_errors -= ibp->z_port_rcv_errors;
-	cntrs.port_rcv_remphys_errors -= ibp->z_port_rcv_remphys_errors;
-	cntrs.port_xmit_discards -= ibp->z_port_xmit_discards;
-	cntrs.port_xmit_data -= ibp->z_port_xmit_data;
-	cntrs.port_rcv_data -= ibp->z_port_rcv_data;
-	cntrs.port_xmit_packets -= ibp->z_port_xmit_packets;
-	cntrs.port_rcv_packets -= ibp->z_port_rcv_packets;
-	cntrs.local_link_integrity_errors -=
-		ibp->z_local_link_integrity_errors;
-	cntrs.excessive_buffer_overrun_errors -=
-		ibp->z_excessive_buffer_overrun_errors;
-	cntrs.vl15_dropped -= ibp->z_vl15_dropped;
-	cntrs.vl15_dropped += ibp->n_vl15_dropped;
-
+	// The real WFR will have more than this. This is just Suzie-Q info we have
 	rsp->symbol_errors = cpu_to_be64(cntrs.symbol_error_counter);
 	rsp->link_error_recovery = cpu_to_be64(cntrs.link_error_recovery_counter);
 	rsp->link_downed = cpu_to_be64(cntrs.link_downed_counter);
 	rsp->port_rcv_errors = cpu_to_be64(cntrs.port_rcv_errors);
 
 	rsp->port_xmit_discards = cpu_to_be64(cntrs.port_xmit_discards);
-
+	rsp->port_rcv_remote_physical_errors = cpu_to_be64(cntrs.port_rcv_remphys_errors);
 	rsp->local_link_integrity_errors = cpu_to_be64(cntrs.local_link_integrity_errors);
 	rsp->excessive_buffer_overruns = cpu_to_be64(cntrs.excessive_buffer_overrun_errors);
 	rsp->vl15_dropped = cpu_to_be64(cntrs.vl15_dropped);
@@ -659,101 +388,293 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 
 	rsp->link_quality_indicator = 3;
 
-#if 0
-/* nothing to be done here since the HW does not have per VL counters... */
-	for_each_set_bit(bit, (u64 *)&req->vl_select_mask,
+	// SuzieQ does not have per-VL counters, but put in some data for debug
+	vl_index = 0;
+	for_each_set_bit(vl, (unsigned long *)&(req->vl_select_mask),
 			sizeof(req->vl_select_mask)) {
+		rsp->vls[vl_index].port_vl_xmit_pkts = cpu_to_be64(cntrs.port_xmit_packets);
+		rsp->vls[vl_index].port_vl_rcv_pkts = cpu_to_be64(cntrs.port_rcv_packets);
+		vl_index++;
 	}
-#endif
 
-	return reply_stl_pma((struct stl_pma_mad *)pmp);
+	// TODO - FIXME May need to change the size of the reply, as it will not match request
+	return reply_stl_pma(pmp);
 }
+
+// Set is used to clear the status
 static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 				struct ib_device *ibdev, u8 port)
 {
-	struct stl_port_status_set *set = (struct stl_port_status_set *)pmp->data;
+	struct stl_clear_port_status *clear = (struct stl_clear_port_status *)pmp->data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_counters cntrs;
-	u8 num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	u32 num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 
 	if (num_ports != 1 ||
-	    (set->port_select_mask &&
-	    be64_to_cpu(set->port_select_mask) != (1 << (port-1)))) {
+	    (clear->port_select_mask[3] && // note: per spec, the [3] is where user port 1 (software port 0) is defined
+			be64_to_cpu(clear->port_select_mask[3]) != (1 << (port-1)))) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX "STL Set PMA 0x%x ; Invalid AM; %d; 0x%llx\n",
 			be16_to_cpu(pmp->mad_hdr.attr_id),
-			num_ports, be64_to_cpu(set->port_select_mask));
-		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+			num_ports, be64_to_cpu(clear->port_select_mask[3]));
 		return (reply_stl_pma(pmp));
 	}
 
 	/*
-	 * Since the HW doesn't support clearing counters, we save the
+	 * Since the IB HW that wfr-lite uses doesn't support clearing counters, we save the
 	 * current count and subtract it from future responses.
 	 */
+
 	qib_get_counters(ppd, &cntrs);
 
-	if (set->counter_select_mask & PM_CS_SymbolErrors)
+	// TODO FIXME 1/15/2014 Additionally, per Russ, the per VL counters are to get cleared
+	// when main counters get cleared
+	if (clear->counter_select_mask & PM_CS_SymbolErrors)
 		ibp->z_symbol_error_counter = cntrs.symbol_error_counter;
 
-	if (set->counter_select_mask & PM_CS_LinkErrorRecovery)
+	if (clear->counter_select_mask & PM_CS_LinkErrorRecovery)
 		ibp->z_link_error_recovery_counter =
 			cntrs.link_error_recovery_counter;
 
-	if (set->counter_select_mask & PM_CS_LinkDowned)
+	if (clear->counter_select_mask & PM_CS_LinkDowned)
 		ibp->z_link_downed_counter = cntrs.link_downed_counter;
 
-	if (set->counter_select_mask & PM_CS_PortRcvErrors)
+	if (clear->counter_select_mask & PM_CS_PortRcvErrors)
 		ibp->z_port_rcv_errors = cntrs.port_rcv_errors;
 
-	if (set->counter_select_mask & PM_CS_PortRcvRemotePhysicalErrors)
-		ibp->z_port_rcv_remphys_errors =
-			cntrs.port_rcv_remphys_errors;
+	if (clear->counter_select_mask & PM_CS_PortRcvRemotePhysicalErrors)
+		ibp->z_port_rcv_remphys_errors = cntrs.port_rcv_remphys_errors;
 
-	if (set->counter_select_mask & PM_CS_PortXmitDiscards)
+	if (clear->counter_select_mask & PM_CS_PortXmitDiscards)
 		ibp->z_port_xmit_discards = cntrs.port_xmit_discards;
 
-	if (set->counter_select_mask & PM_CS_LocalLinkIntegrityErrors)
-		ibp->z_local_link_integrity_errors =
-			cntrs.local_link_integrity_errors;
+	if (clear->counter_select_mask & PM_CS_LocalLinkIntegrityErrors)
+		ibp->z_local_link_integrity_errors = cntrs.local_link_integrity_errors;
 
-	if (set->counter_select_mask & PM_CS_ExcessiveBufferOverruns)
-		ibp->z_excessive_buffer_overrun_errors =
+	if (clear->counter_select_mask & PM_CS_ExcessiveBufferOverruns)
+		ibp->z_excessive_buffer_overrun_errors = 
 			cntrs.excessive_buffer_overrun_errors;
 
-	if (set->counter_select_mask & PM_CS_VL15Dropped) {
+	if (clear->counter_select_mask & PM_CS_VL15Dropped) {
 		ibp->n_vl15_dropped = 0;
 		ibp->z_vl15_dropped = cntrs.vl15_dropped;
 	}
 
-	if (set->counter_select_mask & PM_CS_PortXmitData)
+	if (clear->counter_select_mask & PM_CS_PortXmitData)
 		ibp->z_port_xmit_data = cntrs.port_xmit_data;
 
-	if (set->counter_select_mask & PM_CS_PortRcvData)
+	if (clear->counter_select_mask & PM_CS_PortRcvData)
 		ibp->z_port_rcv_data = cntrs.port_rcv_data;
 
-	if (set->counter_select_mask & PM_CS_PortXmitPkts)
+	if (clear->counter_select_mask & PM_CS_PortXmitPkts)
 		ibp->z_port_xmit_packets = cntrs.port_xmit_packets;
 
-	if (set->counter_select_mask & PM_CS_PortRcvPkts)
+	if (clear->counter_select_mask & PM_CS_PortRcvPkts)
 		ibp->z_port_rcv_packets = cntrs.port_rcv_packets;
 
+	return reply_stl_pma(pmp);
+}
+
+static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
+				struct ib_device *ibdev, u8 port)
+{
+	struct stl_port_data_counters_msg *req;
+	u32 num_ports;
+	u8 num_pslm;
+	u8 num_vls;
+	u32 response_data_size;
+	struct _port_dctrs *rsp;
+	unsigned long port_num;
+
+	req = (struct stl_port_data_counters_msg *)pmp->data;
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
+
+	if (pmp->mad_hdr.attr_mod != 0 || num_ports != num_pslm) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL Get STL Data Counters PMA 0x%x ; Invalid Req\n",
+			be16_to_cpu(pmp->mad_hdr.attr_id));
+		return reply_stl_pma(pmp);
+	}
+
+	// Sanity check
+	response_data_size = sizeof(struct stl_port_data_counters_msg) -
+		sizeof(struct _port_dctrs) + num_ports * ( sizeof(struct _port_dctrs) -
+		sizeof(struct _vls_dctrs) + num_vls * sizeof(struct _vls_dctrs));
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL PMA Requested Response too big for reply!"
+			   " 0x%x vs 0x%x, num_ports %d, num_vls %d\n",
+			   response_data_size, (unsigned int)sizeof(pmp->data),
+			   (unsigned int)num_ports, (unsigned int)num_vls);
+		return reply_stl_pma(pmp);
+	}
+
+	rsp = (struct _port_dctrs *)&(req->port[0]);
+	for_each_set_bit(port_num, (unsigned long *)&(req->port_select_mask[3]),
+					 sizeof(req->port_select_mask[3]))
+	{
+		struct _vls_dctrs * vlinfo;
+		u8 vl_index;
+		unsigned long vl;
+		struct qib_ibport *ibp;
+		struct qib_pportdata *ppd ;
+		struct qib_verbs_counters cntrs;
+
+		// SuzieQ only has a port 0 and 1 - the real WFR will have only port 0
+		if (port > 1) {
+			pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+			printk(KERN_WARNING PFX "STL PMA Data Requested Port number %d too big for HFI\n",
+				  (unsigned int)port_num);
+			return reply_stl_pma(pmp);
+		}
+		ibp = to_iport(ibdev, port_num+1); // function assumes 1-based port number
+		ppd = ppd_from_ibp(ibp);
+
+		qib_get_counters(ppd, &cntrs);
+		pma_adjust_counters_for_reset_done(&cntrs, ibp);
+
+		rsp->port_number = (u8)port;
+		rsp->link_quality_indicator = 3; // just a test value (no equiv in SuzieQ)
+
+		// The real WFR will have more than this. This is just Suzie-Q info we have
+		rsp->port_xmit_data = cpu_to_be64(cntrs.port_xmit_data);
+		rsp->port_rcv_data = cpu_to_be64(cntrs.port_rcv_data);
+		rsp->port_xmit_pkts = cpu_to_be64(cntrs.port_xmit_packets);
+		rsp->port_rcv_pkts = cpu_to_be64(cntrs.port_rcv_packets);
+
+		rsp->port_error_counter_summary = 
+			cpu_to_be64(cntrs.symbol_error_counter) +
+			cpu_to_be64(cntrs.link_error_recovery_counter) +
+			cpu_to_be64(cntrs.link_downed_counter) +
+			cpu_to_be64(cntrs.port_rcv_errors) +
+			cpu_to_be64(cntrs.port_xmit_discards) + 
+			cpu_to_be64(cntrs.port_rcv_remphys_errors) +
+			cpu_to_be64(cntrs.local_link_integrity_errors) +
+			cpu_to_be64(cntrs.excessive_buffer_overrun_errors) +
+			cpu_to_be64(cntrs.vl15_dropped);
+
+		vlinfo = (struct _vls_dctrs *)&(rsp->vls[0]);
+		vl_index = 0;
+		for_each_set_bit(vl, (unsigned long *)&(req->vl_select_mask),
+						 sizeof(req->vl_select_mask))
+		{
+			// There is no "per VL" data from SuzieQ, but for debug, copy some data in.
+			memset(vlinfo, 0, sizeof(*vlinfo));
+			vlinfo->port_vl_rcv_pkts  = cpu_to_be64(cntrs.port_rcv_packets);
+			vlinfo->port_vl_xmit_pkts = cpu_to_be64(cntrs.port_xmit_packets);
+			vlinfo += 1;
+		}
+		rsp = (struct _port_dctrs *)vlinfo;
+
+	}
+
+	// TODO - FIXME May need to change the size of the reply, as it will not match request
+	return reply_stl_pma(pmp);
+}
+
+static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
+				struct ib_device *ibdev, u8 port)
+{
+	u32 response_data_size;
+	struct _port_ectrs *rsp;
+	unsigned long port_num;
+	struct stl_port_error_counters_msg *req;
+	u32 num_ports;
+	u32 counter_size_mode;
+	u8 num_pslm;
+	u8 num_vls;
+
+	req = (struct stl_port_error_counters_msg *)pmp->data;
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	counter_size_mode = (be32_to_cpu(pmp->mad_hdr.attr_mod) >> 22) & 0x3;
+
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
+
+	if ((pmp->mad_hdr.attr_mod != 0) || (num_ports != num_pslm) || 
+			(counter_size_mode != 0) /* TODO only ALL64 presently supported */) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL Get STL Error Counters PMA 0x%x ; Invalid Req\n",
+			be16_to_cpu(pmp->mad_hdr.attr_id));
+		return reply_stl_pma(pmp);
+	}
+
+	// Sanity check
+	response_data_size = sizeof(struct stl_port_error_counters_msg) 
+		- sizeof(struct _port_ectrs) + num_ports * (sizeof(struct _port_ectrs) 
+				- sizeof(struct _vls_ectrs) + num_vls * sizeof(struct _vls_ectrs));
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL PMA Requested Error Response too big for reply!" 
+			   " 0x%x vs 0x%x, num_ports %d, num_vls %d\n",
+			   response_data_size, (unsigned int)sizeof(pmp->data),
+			   (unsigned int)num_ports, (unsigned int)num_vls);
+		return reply_stl_pma(pmp);
+	}
+
+	rsp = (struct _port_ectrs *)&(req->port[0]);
+	for_each_set_bit(port_num, (unsigned long *)&(req->port_select_mask[3]),sizeof(req->port_select_mask[3]))
+	{
+		struct qib_ibport *ibp;
+		struct qib_pportdata *ppd;
+		struct qib_verbs_counters cntrs;
+		struct _vls_ectrs * vlinfo;
+		unsigned long vl;
+
+		// SuzieQ only has a port 0 and 1
+		if ((u8)port_num != port) {
+			pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+			printk(KERN_WARNING PFX "STL PMA Error Requested Port number %d not match port %d of this HFI\n",
+				   (unsigned int)port_num, (unsigned int)port);
+			return reply_stl_pma(pmp);
+		}
+		ibp = to_iport(ibdev, port_num+1); // function assumes 1-based port number
+		ppd = ppd_from_ibp(ibp);
+
+		qib_get_counters(ppd, &cntrs);
+		pma_adjust_counters_for_reset_done(&cntrs, ibp);
+
+		memset(rsp, 0, sizeof(*rsp) - sizeof(struct _vls_dctrs));
+		rsp->portNumber = (u8)port_num;
+
+		// The real WFR will have more than this. This is just Suzie-Q info we have
+		rsp->symbol_errors = cpu_to_be64(cntrs.symbol_error_counter);
+		rsp->link_error_recovery = cpu_to_be64(cntrs.link_error_recovery_counter);
+		rsp->link_downed = cpu_to_be64(cntrs.link_downed_counter);
+		rsp->port_rcv_errors = cpu_to_be64(cntrs.port_rcv_errors);
+		rsp->port_xmit_discards = cpu_to_be64(cntrs.port_xmit_discards);
+		rsp->port_rcv_remote_physical_errors = cpu_to_be64(cntrs.port_rcv_remphys_errors);
+		rsp->local_link_integrity_errors = cpu_to_be64(cntrs.local_link_integrity_errors);
+		rsp->excessive_buffer_overruns = cpu_to_be64(cntrs.excessive_buffer_overrun_errors);
+		rsp->vl15_dropped = cpu_to_be64(cntrs.vl15_dropped);
+
+		vlinfo = (struct _vls_ectrs *)&(rsp->vls[0]);
+		for_each_set_bit(vl, (unsigned long *)&(req->vl_select_mask),sizeof(req->vl_select_mask))
+		{
+			// There is no "per VL" data from SuzieQ, but for debug, copy some data in.
+			memset(vlinfo, 0, sizeof(*vlinfo));
+			vlinfo->port_vl_xmit_discards = cpu_to_be64(cntrs.port_xmit_discards);
+			vlinfo += 1;
+		}
+		rsp = (struct _port_ectrs *)vlinfo;
+
+	}
+
+	// TODO - FIXME May need to change the size of the reply, as it will not match request
 	return reply_stl_pma((struct stl_pma_mad *)pmp);
 }
 
 /* Return 0's */
 static int pma_get_stl_stub(struct stl_pma_mad *pmp, struct ib_device *ibdev, u8 port)
 {
+	pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
 	printk(KERN_WARNING PFX "STL Get PMA Attribute 0x%x stubbed out; returning 0's\n",
 			be16_to_cpu(pmp->mad_hdr.attr_id));
-	memset(pmp->data, 0, sizeof(pmp->data));
-	return reply_stl_pma(pmp);
-}
-static int pma_set_stl_stub(struct stl_pma_mad *pmp, struct ib_device *ibdev, u8 port)
-{
-	printk(KERN_WARNING PFX "STL Set PMA Attribute 0x%x stubbed out; returning 0's\n",
-			be16_to_cpu(pmp->mad_hdr.attr_id));
-	memset(pmp->data, 0, sizeof(pmp->data));
 	return reply_stl_pma(pmp);
 }
 
@@ -766,9 +687,15 @@ int process_stl_perf(struct ib_device *ibdev, u8 port,
 
 	*out_mad = *in_mad;
 	if (pmp->mad_hdr.class_version != STL_PM_CLASS_VERSION) {
-		pmp->mad_hdr.status |= IB_SMP_UNSUP_VERSION;
-		ret = reply_stl_pma(pmp);
-		goto bail;
+		if (pmp->mad_hdr.attr_id != IB_PMA_CLASS_PORT_INFO) {
+			pmp->mad_hdr.status |= IB_SMP_UNSUP_VERSION;
+			printk(KERN_WARNING PFX "STL Perf bad request received: class_ver 0x%x, attr 0x%x, status 0x%x\n",
+				   (unsigned int)pmp->mad_hdr.class_version,
+				   (unsigned int)be16_to_cpu(pmp->mad_hdr.attr_id),
+				   (unsigned int)be16_to_cpu(pmp->mad_hdr.status));
+			ret = reply_stl_pma(pmp);
+			goto bail;
+		}
 	}
 
 	switch (pmp->mad_hdr.method) {
@@ -777,44 +704,34 @@ int process_stl_perf(struct ib_device *ibdev, u8 port,
 		case IB_PMA_CLASS_PORT_INFO:
 			ret = pma_get_stl_classportinfo(pmp, ibdev);
 			goto bail;
-		case STL_PM_ATTRIB_ID_PORT_COUNTERS:
-			ret = pma_get_stl_portcounters((struct ib_pma_mad *)pmp, ibdev, port);
-			goto bail;
 		case STL_PM_ATTRIB_ID_PORT_STATUS:
 			ret = pma_get_stl_portstatus(pmp, ibdev, port);
 			goto bail;
 		case STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS:
-			ret = pma_get_stl_stub(pmp, ibdev, port);
+			ret = pma_get_stl_datacounters(pmp, ibdev, port);
 			goto bail;
 		case STL_PM_ATTRIB_ID_ERROR_PORT_COUNTERS:
-			ret = pma_get_stl_stub(pmp, ibdev, port);
+			ret = pma_get_stl_errorcounters(pmp, ibdev, port);
 			goto bail;
 		case STL_PM_ATTRIB_ID_ERROR_INFO:
+			// TODO - FIXME not yet supported
 			ret = pma_get_stl_stub(pmp, ibdev, port);
 			goto bail;
 		default:
-			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply_stl_pma(pmp);
+			ret = pma_get_stl_stub(pmp, ibdev, port);
 			goto bail;
 		}
 
 	case IB_MGMT_METHOD_SET:
 		switch (pmp->mad_hdr.attr_id) {
-		case STL_PM_ATTRIB_ID_PORT_COUNTERS:
-			ret = pma_set_stl_portcounters((struct ib_pma_mad *)pmp, ibdev, port);
-			goto bail;
-		case STL_PM_ATTRIB_ID_PORT_STATUS:
+		case STL_PM_ATTRIB_ID_CLEAR_PORT_STATUS:
 			ret = pma_set_stl_portstatus(pmp, ibdev, port);
 			goto bail;
+		case IB_PMA_CLASS_PORT_INFO:
+		case STL_PM_ATTRIB_ID_PORT_STATUS:
 		case STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS:
-			ret = pma_set_stl_stub(pmp, ibdev, port);
-			goto bail;
 		case STL_PM_ATTRIB_ID_ERROR_PORT_COUNTERS:
-			ret = pma_set_stl_stub(pmp, ibdev, port);
-			goto bail;
 		case STL_PM_ATTRIB_ID_ERROR_INFO:
-			ret = pma_set_stl_stub(pmp, ibdev, port);
-			goto bail;
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply_stl_pma(pmp);
@@ -833,6 +750,11 @@ int process_stl_perf(struct ib_device *ibdev, u8 port,
 
 	default:
 		pmp->mad_hdr.status |= IB_SMP_UNSUP_METHOD;
+		printk(KERN_WARNING PFX "STL Perf unsupported Method 0x%x received: class_ver 0x%x, attr 0x%x, status 0x%x\n",
+			   (unsigned int)pmp->mad_hdr.method,
+			   (unsigned int)pmp->mad_hdr.class_version,
+			   (unsigned int)be16_to_cpu(pmp->mad_hdr.attr_id),
+			   (unsigned int)be16_to_cpu(pmp->mad_hdr.status));
 		ret = reply_stl_pma(pmp);
 	}
 
