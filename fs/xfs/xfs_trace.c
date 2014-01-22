@@ -53,3 +53,8 @@
  */
 #define CREATE_TRACE_POINTS
 #include "xfs_trace.h"
+
+#ifdef CONFIG_TRACEPOINTS
+/* Needed for DMAPI */
+EXPORT_SYMBOL(__tracepoint_xfs_irele);
+#endif

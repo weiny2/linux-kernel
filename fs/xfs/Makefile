@@ -34,6 +34,7 @@ xfs-y				+= xfs_aops.o \
 				   xfs_buf.o \
 				   xfs_dir2_readdir.o \
 				   xfs_discard.o \
+				   xfs_dmops.o \
 				   xfs_error.o \
 				   xfs_export.o \
 				   xfs_extent_busy.o \
@@ -46,6 +47,7 @@ xfs-y				+= xfs_aops.o \
 				   xfs_iomap.o \
 				   xfs_iops.o \
 				   xfs_itable.o \
+				   xfs_ksyms.o \
 				   xfs_message.o \
 				   xfs_mount.o \
 				   xfs_mru_cache.o \
@@ -103,6 +105,7 @@ xfs-$(CONFIG_XFS_QUOTA)		+= xfs_dquot.o \
 				   xfs_qm_bhv.o \
 				   xfs_qm.o \
 				   xfs_quotaops.o
+obj-$(CONFIG_XFS_DMAPI)		+= dmapi/
 xfs-$(CONFIG_XFS_RT)		+= xfs_rtalloc.o
 xfs-$(CONFIG_XFS_POSIX_ACL)	+= xfs_acl.o
 xfs-$(CONFIG_PROC_FS)		+= xfs_stats.o

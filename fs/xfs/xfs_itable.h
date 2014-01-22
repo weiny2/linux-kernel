@@ -27,6 +27,7 @@ typedef int (*bulkstat_one_pf)(struct xfs_mount	*mp,
 			       xfs_ino_t	ino,
 			       void		__user *buffer,
 			       int		ubsize,
+			       void		*private_data,
 			       int		*ubused,
 			       int		*stat);
 
@@ -46,6 +47,7 @@ xfs_bulkstat(
 	xfs_ino_t	*lastino,	/* last inode returned */
 	int		*count,		/* size of buffer/count returned */
 	bulkstat_one_pf formatter,	/* func that'd fill a single buf */
+	void		*private_data,	/* private data for formatter */
 	size_t		statstruct_size,/* sizeof struct that we're filling */
 	char		__user *ubuffer,/* buffer with inode stats */
 	int		*done);		/* 1 if there are more stats to get */
@@ -79,8 +81,14 @@ xfs_bulkstat_one(
 	xfs_ino_t		ino,
 	void			__user *buffer,
 	int			ubsize,
+	void			*private_data,
 	int			*ubused,
 	int			*stat);
+
+int
+xfs_internal_inum(
+       xfs_mount_t             *mp,
+       xfs_ino_t               ino);
 
 typedef int (*inumbers_fmt_pf)(
 	void			__user *ubuffer, /* buffer to write to */

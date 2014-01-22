@@ -36,7 +36,7 @@
 #include "xfs_trace.h"
 #include "xfs_icache.h"
 
-STATIC int
+int
 xfs_internal_inum(
 	xfs_mount_t	*mp,
 	xfs_ino_t	ino)
@@ -169,6 +169,7 @@ xfs_bulkstat_one(
 	xfs_ino_t	ino,		/* inode number to get data for */
 	void		__user *buffer,	/* buffer to place output in */
 	int		ubsize,		/* size of buffer */
+	void		*private_data,	/* my private data */
 	int		*ubused,	/* bytes used by me */
 	int		*stat)		/* BULKSTAT_RV_... */
 {
@@ -187,6 +188,7 @@ xfs_bulkstat(
 	xfs_ino_t		*lastinop, /* last inode returned */
 	int			*ubcountp, /* size of buffer/count returned */
 	bulkstat_one_pf		formatter, /* func that'd fill a single buf */
+	void			*private_data,/* private data for formatter */
 	size_t			statstruct_size, /* sizeof struct filling */
 	char			__user *ubuffer, /* buffer with inode stats */
 	int			*done)	/* 1 if there are more stats to get */
@@ -453,7 +455,7 @@ xfs_bulkstat(
 				 * Get the inode and fill in a single buffer.
 				 */
 				ubused = statstruct_size;
-				error = formatter(mp, ino, ubufp, ubleft,
+				error = formatter(mp, ino, ubufp, ubleft, private_data,
 						  &ubused, &fmterror);
 				if (fmterror == BULKSTAT_RV_NOTHING) {
 					if (error && error != ENOENT &&
@@ -541,9 +543,9 @@ xfs_bulkstat_single(
 	 * at the expense of the error case.
 	 */
 
-	ino = *lastinop;
-	error = xfs_bulkstat_one(mp, ino, buffer, sizeof(xfs_bstat_t),
-				 NULL, &res);
+	ino = (xfs_ino_t)*lastinop;
+	error = xfs_bulkstat_one(mp, ino, buffer, sizeof(xfs_bstat_t), NULL, 0,
+				 &res);
 	if (error) {
 		/*
 		 * Special case way failed, do it the "long" way
@@ -551,7 +553,7 @@ xfs_bulkstat_single(
 		 */
 		(*lastinop)--;
 		count = 1;
-		if (xfs_bulkstat(mp, lastinop, &count, xfs_bulkstat_one,
+		if (xfs_bulkstat(mp, lastinop, &count, xfs_bulkstat_one, NULL,
 				sizeof(xfs_bstat_t), buffer, done))
 			return error;
 		if (count == 0 || (xfs_ino_t)*lastinop != ino)
