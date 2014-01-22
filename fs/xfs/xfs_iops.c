@@ -919,9 +919,14 @@ xfs_vn_setattr(
 	struct dentry	*dentry,
 	struct iattr	*iattr)
 {
+	int		flags = 0;
+#ifdef ATTR_NO_BLOCK
+	if (iattr->ia_valid & ATTR_NO_BLOCK)
+		flags |= XFS_ATTR_NONBLOCK;
+#endif
 	if (iattr->ia_valid & ATTR_SIZE)
-		return -xfs_setattr_size(XFS_I(dentry->d_inode), iattr, 0);
-	return -xfs_setattr_nonsize(XFS_I(dentry->d_inode), iattr, 0);
+		return -xfs_setattr_size(XFS_I(dentry->d_inode), iattr, flags);
+	return -xfs_setattr_nonsize(XFS_I(dentry->d_inode), iattr, flags);
 }
 
 STATIC int
