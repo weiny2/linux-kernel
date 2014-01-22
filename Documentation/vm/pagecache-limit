@@ -1,0 +1,60 @@
+Functionality:
+-------------
+The patch introduces two new tunables in the proc filesystem:
+
+/proc/sys/vm/pagecache_limit_mb
+
+This tunable sets a limit to the unmapped pages in the pagecache in megabytes.
+If non-zero, it should not be set below 4 (4MB), or the system might behave erratically. In real-life, much larger limits (a few percent of system RAM / a hundred MBs) will be useful.
+
+Examples:
+echo 512 >/proc/sys/vm/pagecache_limit_mb
+
+This sets a baseline limits for the page cache (not the buffer cache!) of 0.5GiB.
+As we only consider pagecache pages that are unmapped, currently mapped pages (files that are mmap'ed such as e.g. binaries and libraries as well as SysV shared memory) are not limited by this.
+NOTE: The real limit depends on the amount of free memory. Every existing free page allows the page cache to grow 8x the amount of free memory above the set baseline. As soon as the free memory is needed, we free up page cache.
+
+
+/proc/sys/vm/pagecache_limit_ignore_dirty
+
+The default for this setting is 1; this means that we don't consider dirty memory to be part of the limited pagecache, as we can not easily free up dirty memory (we'd need to do writes for this). By setting this to 0, we actually consider dirty (unampped) memory to be freeable and do a third pass in shrink_page_cache() where we schedule the pages for writeout. Values larger than 1 are also possible and result in a fraction of the dirty pages to be considered non-freeable.
+
+
+
+
+How it works:
+------------
+The heart of this patch is a new function called shrink_page_cache(). It is called from balance_pgdat (which is the worker for kswapd) if the pagecache is above the limit.
+The function is also called in __alloc_pages_slowpath.
+
+shrink_page_cache() calculates the nr of pages the cache is over its limit. It reduces this number by a factor (so you have to call it several times to get down to the target) then shrinks the pagecache (using the Kernel LRUs).
+
+shrink_page_cache does several passes:
+- Just reclaiming from inactive pagecache memory.
+  This is fast -- but it might not find enough free pages; if that happens,
+  the second pass will happen
+- In the second pass, pages from active list will also be considered.
+- The third pass will only happen if pagecacahe_limig_ignore-dirty is not 1.
+  In that case, the third pass is a repetition of the second pass, but this
+  time we allow pages to be written out.
+
+In all passes, only unmapped pages will be considered.
+
+
+How it changes memory management:
+--------------------------------
+If the pagecache_limit_mb is set to zero (default), nothing changes.
+
+If set to a positive value, there will be three different operating modes:
+(1) If we still have plenty of free pages, the pagecache limit will NOT be enforced. Memory management decisions are taken as normally.
+(2) However, as soon someone consumes those free pages, we'll start freeing pagecache -- as those are returned to the free page pool, freeing a few pages from pagecache will return us to state (1) -- if however someone consumes these free pages quickly, we'll continue freeing up pages from the pagecache until we reach pagecache_limit_mb.
+(3) Once we are at or below the low watermark, pagecache_limit_mb, the pages in the page cache will be governed by normal paging memory management decisions; if it starts growing above the limit (corrected by the free pages), we'll free some up again.
+
+This feature is useful for machines that have large workloads, carefully sized to eat most of the memory. Depending on the applications page access pattern, the kernel may too easily swap the application memory out in favor of pagecache. This can happen even for low values of swappiness. With this feature, the admin can tell the kernel that only a certain amount of pagecache is really considered useful and that it otherwise should favor the applications memory.
+
+
+Foreground vs. background shrinking:
+-----------------------------------
+
+Usually, the Linux kernel reclaims its memory using the kernel thread kswapd. It reclaims memory in the background. If it can't reclaim memory fast enough, it retries with higher priority and if this still doesn't succeed it uses a direct reclaim path.
+
