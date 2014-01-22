@@ -213,6 +213,7 @@ typedef void (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 #define ATTR_KILL_PRIV	(1 << 14)
 #define ATTR_OPEN	(1 << 15) /* Truncating from open(O_TRUNC) */
 #define ATTR_TIMES_SET	(1 << 16)
+#define ATTR_NO_BLOCK	(1 << 17)
 
 /*
  * This is the Inode Attributes structure, used for notify_change().  It

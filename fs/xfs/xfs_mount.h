@@ -154,6 +154,9 @@ typedef struct xfs_mount {
 	xfs_dablk_t		m_dirleafblk;	/* blockno of dir non-data v2 */
 	xfs_dablk_t		m_dirfreeblk;	/* blockno of dirfreeindex v2 */
 	uint			m_chsize;	/* size of next field */
+
+	struct xfs_dmops	*m_dm_ops;	/* vector of DMI ops */
+	struct xfs_qmops	*m_qm_ops;	/* vector of XQM ops */
 	atomic_t		m_active_trans;	/* number trans frozen */
 #ifdef HAVE_PERCPU_SB
 	xfs_icsb_cnts_t __percpu *m_sb_cnts;	/* per-cpu superblock counters */
@@ -176,6 +179,7 @@ typedef struct xfs_mount {
 	struct workqueue_struct	*m_reclaim_workqueue;
 	struct workqueue_struct	*m_log_workqueue;
 	struct workqueue_struct *m_eofblocks_workqueue;
+	const char		*m_mtpt;
 } xfs_mount_t;
 
 /*
@@ -184,6 +188,7 @@ typedef struct xfs_mount {
 #define XFS_MOUNT_WSYNC		(1ULL << 0)	/* for nfs - all metadata ops
 						   must be synchronous except
 						   for space allocations */
+#define XFS_MOUNT_DMAPI		(1ULL << 2)	/* dmapi is enabled */
 #define XFS_MOUNT_WAS_CLEAN	(1ULL << 3)
 #define XFS_MOUNT_FS_SHUTDOWN	(1ULL << 4)	/* atomic stop of all filesystem
 						   operations, typically for
@@ -392,6 +397,11 @@ extern int	xfs_sb_validate_fsb_count(struct xfs_sb *, __uint64_t);
 extern int	xfs_dev_is_read_only(struct xfs_mount *, char *);
 
 extern void	xfs_set_low_space_thresholds(struct xfs_mount *);
+
+extern int	xfs_dmops_get(struct xfs_mount *);
+extern void	xfs_dmops_put(struct xfs_mount *);
+
+extern struct xfs_dmops xfs_dmcore_xfs;
 
 #endif	/* __KERNEL__ */
 

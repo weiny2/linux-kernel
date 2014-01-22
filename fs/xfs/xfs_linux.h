@@ -221,6 +221,10 @@ static inline kgid_t xfs_gid_to_kgid(__uint32_t gid)
 #define xfs_sort(a,n,s,fn)	sort(a,n,s,fn,NULL)
 #define xfs_stack_trace()	dump_stack()
 
+#undef HAVE_DMAPI
+#if defined(CONFIG_XFS_DMAPI) || defined(CONFIG_XFS_DMAPI_MODULE)
+#define HAVE_DMAPI
+#endif
 
 /* Move the kernel do_div definition off to one side */
 

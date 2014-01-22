@@ -34,6 +34,7 @@
 #include "xfs_dinode.h"
 #include "xfs_inode.h"
 #include "xfs_btree.h"
+#include "xfs_dmapi.h"
 #include "xfs_mount.h"
 #include "xfs_itable.h"
 #include "xfs_inode_item.h"

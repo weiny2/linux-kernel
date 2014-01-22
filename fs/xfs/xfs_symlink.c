@@ -42,6 +42,7 @@
 #include "xfs_trace.h"
 #include "xfs_symlink.h"
 #include "xfs_buf_item.h"
+#include "xfs_dmapi.h"
 
 /* ----- Kernel only functions below ----- */
 STATIC int
@@ -206,6 +207,17 @@ xfs_symlink(
 	pathlen = strlen(target_path);
 	if (pathlen >= MAXPATHLEN)      /* total string too long */
 		return XFS_ERROR(ENAMETOOLONG);
+
+	if (DM_EVENT_ENABLED(dp, DM_EVENT_SYMLINK)) {
+		error = XFS_SEND_NAMESP(mp, DM_EVENT_SYMLINK, dp,
+					DM_RIGHT_NULL, NULL, DM_RIGHT_NULL,
+					link_name->name,
+					(unsigned char *)target_path, 0, 0, 0);
+		if (error)
+			return error;
+	}
+
+	/* Return through std_return after this point. */
 
 	udqp = gdqp = NULL;
 	if (dp->i_d.di_flags & XFS_DIFLAG_PROJINHERIT)
@@ -399,8 +411,21 @@ xfs_symlink(
 	xfs_qm_dqrele(gdqp);
 	xfs_qm_dqrele(pdqp);
 
-	*ipp = ip;
-	return 0;
+	/* Fall through to std_return with error = 0 or errno from
+	 * xfs_trans_commit	*/
+ std_return:
+	if (DM_EVENT_ENABLED(dp, DM_EVENT_POSTSYMLINK)) {
+		(void) XFS_SEND_NAMESP(mp, DM_EVENT_POSTSYMLINK,
+					dp, DM_RIGHT_NULL,
+					error ? NULL : ip,
+					DM_RIGHT_NULL, link_name->name,
+					(unsigned char *)target_path,
+					0, error, 0);
+	}
+
+	if (!error)
+		*ipp = ip;
+	return error;
 
  error2:
 	IRELE(ip);
@@ -415,8 +440,8 @@ xfs_symlink(
 
 	if (unlock_dp_on_error)
 		xfs_iunlock(dp, XFS_ILOCK_EXCL);
- std_return:
-	return error;
+
+	goto std_return;
 }
 
 /*

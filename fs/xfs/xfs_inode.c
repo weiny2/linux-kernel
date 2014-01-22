@@ -52,6 +52,7 @@
 #include "xfs_trace.h"
 #include "xfs_icache.h"
 #include "xfs_symlink.h"
+#include "xfs_dmapi.h"
 
 kmem_zone_t *xfs_inode_zone;
 
@@ -1170,6 +1171,16 @@ xfs_create(
 	if (XFS_FORCED_SHUTDOWN(mp))
 		return XFS_ERROR(EIO);
 
+	if (DM_EVENT_ENABLED(dp, DM_EVENT_CREATE)) {
+		error = XFS_SEND_NAMESP(mp, DM_EVENT_CREATE,
+				dp, DM_RIGHT_NULL, NULL,
+				DM_RIGHT_NULL, name->name, NULL,
+				mode, 0, 0);
+
+		if (error)
+			return error;
+	}
+
 	if (dp->i_d.di_flags & XFS_DIFLAG_PROJINHERIT)
 		prid = xfs_get_projid(dp);
 	else
@@ -1313,6 +1324,16 @@ xfs_create(
 	*ipp = ip;
 	return 0;
 
+	/* Fallthrough to std_return with error = 0  */
+ std_return:
+	if (DM_EVENT_ENABLED(dp, DM_EVENT_POSTCREATE)) {
+		XFS_SEND_NAMESP(mp, DM_EVENT_POSTCREATE, dp, DM_RIGHT_NULL,
+				ip, DM_RIGHT_NULL, name->name, NULL, mode,
+				error, 0);
+	}
+
+	return error;
+
  out_bmap_cancel:
 	xfs_bmap_cancel(&free_list);
  out_trans_abort:
@@ -1334,7 +1355,8 @@ xfs_create(
 
 	if (unlock_dp_on_error)
 		xfs_iunlock(dp, XFS_ILOCK_EXCL);
-	return error;
+
+	goto std_return;
 }
 
 int
@@ -1358,6 +1380,17 @@ xfs_link(
 
 	if (XFS_FORCED_SHUTDOWN(mp))
 		return XFS_ERROR(EIO);
+
+	if (DM_EVENT_ENABLED(tdp, DM_EVENT_LINK)) {
+		error = XFS_SEND_NAMESP(mp, DM_EVENT_LINK,
+					tdp, DM_RIGHT_NULL,
+					sip, DM_RIGHT_NULL,
+					target_name->name, NULL, 0, 0, 0);
+		if (error)
+			return error;
+	}
+
+	/* Return through std_return after this point. */
 
 	error = xfs_qm_dqattach(sip, 0);
 	if (error)
@@ -1428,14 +1461,26 @@ xfs_link(
 		goto abort_return;
 	}
 
-	return xfs_trans_commit(tp, XFS_TRANS_RELEASE_LOG_RES);
+	error = xfs_trans_commit(tp, XFS_TRANS_RELEASE_LOG_RES);
+	if (error)
+		goto std_return;
+
+	/* Fall through to std_return with error = 0. */
+ std_return:
+	if (DM_EVENT_ENABLED(sip, DM_EVENT_POSTLINK)) {
+		(void) XFS_SEND_NAMESP(mp, DM_EVENT_POSTLINK,
+				tdp, DM_RIGHT_NULL,
+				sip, DM_RIGHT_NULL,
+				target_name->name, NULL, 0, error, 0);
+	}
+	return error;
 
  abort_return:
 	cancel_flags |= XFS_TRANS_ABORT;
+	/* FALLTHROUGH */
  error_return:
 	xfs_trans_cancel(tp, cancel_flags);
- std_return:
-	return error;
+	goto std_return;
 }
 
 /*
@@ -1694,6 +1739,9 @@ xfs_inactive(
 	}
 
 	mp = ip->i_mount;
+
+	if (ip->i_d.di_nlink == 0 && DM_EVENT_ENABLED(ip, DM_EVENT_DESTROY))
+		XFS_SEND_DESTROY(mp, ip, DM_RIGHT_NULL);
 
 	error = 0;
 
@@ -2393,6 +2441,14 @@ xfs_remove(
 	if (XFS_FORCED_SHUTDOWN(mp))
 		return XFS_ERROR(EIO);
 
+	if (DM_EVENT_ENABLED(dp, DM_EVENT_REMOVE)) {
+		error = XFS_SEND_NAMESP(mp, DM_EVENT_REMOVE, dp, DM_RIGHT_NULL,
+					NULL, DM_RIGHT_NULL, name->name, NULL,
+					ip->i_d.di_mode, 0, 0);
+		if (error)
+			return error;
+	}
+
 	error = xfs_qm_dqattach(dp, 0);
 	if (error)
 		goto std_return;
@@ -2521,15 +2577,21 @@ xfs_remove(
 	if (!is_dir && link_zero && xfs_inode_is_filestream(ip))
 		xfs_filestream_deassociate(ip);
 
-	return 0;
+ std_return:
+	if (DM_EVENT_ENABLED(dp, DM_EVENT_POSTREMOVE)) {
+		XFS_SEND_NAMESP(mp, DM_EVENT_POSTREMOVE, dp, DM_RIGHT_NULL,
+				NULL, DM_RIGHT_NULL, name->name, NULL,
+				ip->i_d.di_mode, error, 0);
+	}
+
+	return error;
 
  out_bmap_cancel:
 	xfs_bmap_cancel(&free_list);
 	cancel_flags |= XFS_TRANS_ABORT;
  out_trans_cancel:
 	xfs_trans_cancel(tp, cancel_flags);
- std_return:
-	return error;
+	goto std_return;
 }
 
 /*
@@ -2607,6 +2669,18 @@ xfs_rename(
 	int		num_inodes;
 
 	trace_xfs_rename(src_dp, target_dp, src_name, target_name);
+
+	if (DM_EVENT_ENABLED(src_dp, DM_EVENT_RENAME) ||
+	    DM_EVENT_ENABLED(target_dp, DM_EVENT_RENAME)) {
+		error = XFS_SEND_NAMESP(mp, DM_EVENT_RENAME,
+					src_dp, DM_RIGHT_NULL,
+					target_dp, DM_RIGHT_NULL,
+					src_name->name, target_name->name,
+					0, 0, 0);
+		if (error)
+			return error;
+	}
+	/* Return through std_return after this point. */
 
 	new_parent = (src_dp != target_dp);
 	src_is_directory = S_ISDIR(src_ip->i_d.di_mode);
@@ -2826,15 +2900,28 @@ xfs_rename(
 	 * trans_commit will unlock src_ip, target_ip & decrement
 	 * the vnode references.
 	 */
-	return xfs_trans_commit(tp, XFS_TRANS_RELEASE_LOG_RES);
+	error = xfs_trans_commit(tp, XFS_TRANS_RELEASE_LOG_RES);
+
+	/* Fall through to std_return with error = 0 or errno from
+	 * xfs_trans_commit	 */
+ std_return:
+	if (DM_EVENT_ENABLED(src_dp, DM_EVENT_POSTRENAME) ||
+	    DM_EVENT_ENABLED(target_dp, DM_EVENT_POSTRENAME)) {
+		(void) XFS_SEND_NAMESP (mp, DM_EVENT_POSTRENAME,
+					src_dp, DM_RIGHT_NULL,
+					target_dp, DM_RIGHT_NULL,
+					src_name->name, target_name->name,
+					0, error, 0);
+	}
+	return error;
 
  abort_return:
 	cancel_flags |= XFS_TRANS_ABORT;
+	/* FALLTHROUGH */
  error_return:
 	xfs_bmap_cancel(&free_list);
 	xfs_trans_cancel(tp, cancel_flags);
- std_return:
-	return error;
+	goto std_return;
 }
 
 STATIC int

@@ -43,6 +43,7 @@
 #include "xfs_da_btree.h"
 #include "xfs_dir2_format.h"
 #include "xfs_dir2_priv.h"
+#include "xfs_dmapi.h"
 
 #include <linux/capability.h>
 #include <linux/xattr.h>
@@ -692,6 +693,13 @@ xfs_setattr_nonsize(
 			return XFS_ERROR(error);
 	}
 
+	if (DM_EVENT_ENABLED(ip, DM_EVENT_ATTRIBUTE) &&
+	    !(flags & XFS_ATTR_DMI)) {
+		(void) XFS_SEND_NAMESP(mp, DM_EVENT_ATTRIBUTE, ip, DM_RIGHT_NULL,
+					NULL, DM_RIGHT_NULL, NULL, NULL,
+					0, 0, AT_DELAY_FLAG(flags));
+	}
+
 	return 0;
 
 out_trans_cancel:
@@ -736,6 +744,17 @@ xfs_setattr_size(
 	ASSERT(S_ISREG(ip->i_d.di_mode));
 	ASSERT((mask & (ATTR_UID|ATTR_GID|ATTR_ATIME|ATTR_ATIME_SET|
 			ATTR_MTIME_SET|ATTR_KILL_PRIV|ATTR_TIMES_SET)) == 0);
+
+	if (DM_EVENT_ENABLED(ip, DM_EVENT_TRUNCATE) &&
+	    !(flags & XFS_ATTR_DMI)) {
+		int dmflags = AT_DELAY_FLAG(flags) | DM_SEM_FLAG_WR;
+		error = XFS_SEND_DATA(mp, DM_EVENT_TRUNCATE, ip,
+			iattr->ia_size, 0, dmflags, NULL);
+		if (error) {
+			lock_flags = 0;
+			goto out_unlock;
+		}
+	}
 
 	if (!(flags & XFS_ATTR_NOLOCK)) {
 		lock_flags |= XFS_IOLOCK_EXCL;
@@ -902,9 +921,19 @@ xfs_setattr_size(
 		xfs_trans_set_sync(tp);
 
 	error = xfs_trans_commit(tp, XFS_TRANS_RELEASE_LOG_RES);
+
 out_unlock:
 	if (lock_flags)
 		xfs_iunlock(ip, lock_flags);
+
+	if (!error &&
+	    DM_EVENT_ENABLED(ip, DM_EVENT_ATTRIBUTE) &&
+	    !(flags & XFS_ATTR_DMI)) {
+		(void) XFS_SEND_NAMESP(mp, DM_EVENT_ATTRIBUTE, ip, DM_RIGHT_NULL,
+					NULL, DM_RIGHT_NULL, NULL, NULL,
+					0, 0, AT_DELAY_FLAG(flags));
+	}
+
 	return error;
 
 out_trans_abort:
@@ -919,9 +948,14 @@ xfs_vn_setattr(
 	struct dentry	*dentry,
 	struct iattr	*iattr)
 {
+	int		flags = 0;
+#ifdef ATTR_NO_BLOCK
+	if (iattr->ia_valid & ATTR_NO_BLOCK)
+		flags |= XFS_ATTR_NONBLOCK;
+#endif
 	if (iattr->ia_valid & ATTR_SIZE)
-		return -xfs_setattr_size(XFS_I(dentry->d_inode), iattr, 0);
-	return -xfs_setattr_nonsize(XFS_I(dentry->d_inode), iattr, 0);
+		return -xfs_setattr_size(XFS_I(dentry->d_inode), iattr, flags);
+	return -xfs_setattr_nonsize(XFS_I(dentry->d_inode), iattr, flags);
 }
 
 STATIC int

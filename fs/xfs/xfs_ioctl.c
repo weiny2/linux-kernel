@@ -23,6 +23,7 @@
 #include "xfs_sb.h"
 #include "xfs_ag.h"
 #include "xfs_alloc.h"
+#include "xfs_dmapi.h"
 #include "xfs_mount.h"
 #include "xfs_bmap_btree.h"
 #include "xfs_dinode.h"
@@ -720,8 +721,8 @@ xfs_ioc_bulkstat(
 						bulkreq.ubuffer, &done);
 	else	/* XFS_IOC_FSBULKSTAT */
 		error = xfs_bulkstat(mp, &inlast, &count, xfs_bulkstat_one,
-				     sizeof(xfs_bstat_t), bulkreq.ubuffer,
-				     &done);
+				     NULL, sizeof(xfs_bstat_t),
+				     bulkreq.ubuffer, &done);
 
 	if (error)
 		return -error;
@@ -1192,7 +1193,16 @@ xfs_ioctl_setattr(
 	xfs_qm_dqrele(udqp);
 	xfs_qm_dqrele(pdqp);
 
-	return code;
+	if (code)
+		return code;
+
+	if (DM_EVENT_ENABLED(ip, DM_EVENT_ATTRIBUTE)) {
+		XFS_SEND_NAMESP(mp, DM_EVENT_ATTRIBUTE, ip, DM_RIGHT_NULL,
+				NULL, DM_RIGHT_NULL, NULL, NULL, 0, 0,
+				(mask & FSX_NONBLOCK) ? DM_FLAGS_NDELAY : 0);
+	}
+
+	return 0;
 
  error_return:
 	xfs_qm_dqrele(udqp);

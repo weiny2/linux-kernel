@@ -329,6 +329,7 @@ int		xfs_rename(struct xfs_inode *src_dp, struct xfs_name *src_name,
 			   struct xfs_inode *src_ip, struct xfs_inode *target_dp,
 			   struct xfs_name *target_name,
 			   struct xfs_inode *target_ip);
+int		xfs_fsync(struct xfs_inode *ip, int datasync);
 
 void		xfs_ilock(xfs_inode_t *, uint);
 int		xfs_ilock_nowait(xfs_inode_t *, uint);
