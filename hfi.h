@@ -1264,30 +1264,22 @@ extern struct mutex qib_mutex;
  * cleanup when devdata may have been freed, etc.  qib_dev_porterr is
  * the same as dd_dev_err, but is used when the message really needs
  * the IB port# to be definitive as to what's happening..
- * All of these go to the trace log, and the trace log entry is done
- * first to avoid possible serial port delays from printk.
  */
 #define qib_early_err(dev, fmt, ...) \
-	do { \
-		dev_err(dev, fmt, ##__VA_ARGS__); \
-	} while (0)
+	dev_err(dev, fmt, ##__VA_ARGS__)
 
 #define dd_dev_err(dd, fmt, ...) \
-	do { \
-		dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
-			get_unit_name((dd)->unit), ##__VA_ARGS__); \
-	} while (0)
+	dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
 
 #define dd_dev_info(dd, fmt, ...) \
 	dev_info(&(dd)->pcidev->dev, "%s: " fmt, \
-			get_unit_name((dd)->unit), ##__VA_ARGS__);
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
 
 #define qib_dev_porterr(dd, port, fmt, ...) \
-	do { \
-		dev_err(&(dd)->pcidev->dev, "%s: IB%u:%u " fmt, \
+	dev_err(&(dd)->pcidev->dev, "%s: IB%u:%u " fmt, \
 			get_unit_name((dd)->unit), (dd)->unit, (port), \
-			##__VA_ARGS__); \
-	} while (0)
+			##__VA_ARGS__)
 
 /*
  * this is used for formatting hw error messages...
