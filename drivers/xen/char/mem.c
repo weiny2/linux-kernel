@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/capability.h>
 #include <linux/ptrace.h>
+#include <linux/module.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/hypervisor.h>
@@ -112,6 +113,9 @@ static ssize_t write_mem(struct file *file, const char __user *buf,
 	phys_addr_t p = *ppos;
 	ssize_t written = 0, sz, ignored;
 	void __iomem *v;
+
+	if (secure_modules())
+		return -EPERM;
 
 	while (count > 0) {
 		sz = size_inside_page(p, count);

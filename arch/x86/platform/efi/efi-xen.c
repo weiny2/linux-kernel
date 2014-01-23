@@ -402,6 +402,10 @@ void __init efi_probe(void)
 	};
 
 	if (HYPERVISOR_platform_op(&op) == 0) {
+		u8 sb, setup;
+		unsigned long datasize = sizeof(sb);
+		efi_guid_t var_guid = EFI_GLOBAL_VARIABLE_GUID;
+
 		__set_bit(EFI_BOOT, &efi_facility);
 #ifdef CONFIG_64BIT
 		__set_bit(EFI_64BIT, &efi_facility);
@@ -409,6 +413,15 @@ void __init efi_probe(void)
 		__set_bit(EFI_SYSTEM_TABLES, &efi_facility);
 		__set_bit(EFI_RUNTIME_SERVICES, &efi_facility);
 		__set_bit(EFI_MEMMAP, &efi_facility);
+
+		if (xen_efi_get_variable(L"SecureBoot", &var_guid, NULL,
+					 &datasize, &sb) == EFI_SUCCESS
+		    && sb
+		    && (datasize = sizeof(setup),
+			xen_efi_get_variable(L"SetupMode", &var_guid, NULL,
+					     &datasize, &setup) == EFI_SUCCESS)
+		    && !setup)
+			__set_bit(EFI_SECURE_BOOT, &efi_facility);
 	}
 }
 

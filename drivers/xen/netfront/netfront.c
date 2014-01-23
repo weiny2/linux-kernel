@@ -37,6 +37,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/stringify.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
@@ -100,7 +101,7 @@ MODULE_PARM_DESC(rx_flip, "Flip packets from network card (rather than copy)");
 #if defined(NETIF_F_GSO)
 #define HAVE_GSO			1
 #define HAVE_TSO			1 /* TSO is a subset of GSO */
-#define HAVE_CSUM_OFFLOAD		1
+#define NO_CSUM_OFFLOAD			0
 static inline void dev_disable_gso_features(struct net_device *dev)
 {
 	/* Turn off all GSO bits except ROBUST. */
@@ -116,7 +117,7 @@ static inline void dev_disable_gso_features(struct net_device *dev)
  * with the presence of NETIF_F_TSO but it appears to be a good first
  * approximiation.
  */
-#define HAVE_CSUM_OFFLOAD              0
+#define NO_CSUM_OFFLOAD			1
 
 #define gso_size tso_size
 #define gso_segs tso_segs
@@ -144,7 +145,7 @@ static inline int netif_needs_gso(struct sk_buff *skb, int features)
 #else
 #define HAVE_GSO			0
 #define HAVE_TSO			0
-#define HAVE_CSUM_OFFLOAD		0
+#define NO_CSUM_OFFLOAD			1
 #define netif_needs_gso(skb, feat)	0
 #define dev_disable_gso_features(dev)	((void)0)
 #define ethtool_op_set_tso(dev, data)	(-ENOSYS)
@@ -281,6 +282,7 @@ static bool netfront_nic_unplugged(struct xenbus_device *dev)
 #endif
 	return ret;
 }
+
 /**
  * Entry point to this code when a new device is created.  Allocate the basic
  * structures and the ring buffers for communication with the backend, and
@@ -472,27 +474,27 @@ again:
 		goto abort_transaction;
 	}
 
-	err = xenbus_printf(xbt, dev->nodename, "feature-rx-notify", "%d", 1);
+	err = xenbus_write(xbt, dev->nodename, "feature-rx-notify", "1");
 	if (err) {
 		message = "writing feature-rx-notify";
 		goto abort_transaction;
 	}
 
-	err = xenbus_printf(xbt, dev->nodename, "feature-no-csum-offload",
-			    "%d", !HAVE_CSUM_OFFLOAD);
+	err = xenbus_write(xbt, dev->nodename, "feature-no-csum-offload",
+			   __stringify(NO_CSUM_OFFLOAD));
 	if (err) {
 		message = "writing feature-no-csum-offload";
 		goto abort_transaction;
 	}
 
-	err = xenbus_printf(xbt, dev->nodename, "feature-sg", "%d", 1);
+	err = xenbus_write(xbt, dev->nodename, "feature-sg", "1");
 	if (err) {
 		message = "writing feature-sg";
 		goto abort_transaction;
 	}
 
-	err = xenbus_printf(xbt, dev->nodename, "feature-gso-tcpv4", "%d",
-			    HAVE_TSO);
+	err = xenbus_write(xbt, dev->nodename, "feature-gso-tcpv4",
+			   __stringify(HAVE_TSO));
 	if (err) {
 		message = "writing feature-gso-tcpv4";
 		goto abort_transaction;
@@ -2180,6 +2182,8 @@ static struct net_device *create_netdev(struct xenbus_device *dev)
 	np->stats = alloc_percpu(struct netfront_stats);
 	if (np->stats == NULL)
 		goto exit;
+	for_each_possible_cpu(i)
+		u64_stats_init(&per_cpu_ptr(np->stats, i)->syncp);
 
 	/* Initialise {tx,rx}_skbs as a free chain containing every entry. */
 	for (i = 0; i <= NET_TX_RING_SIZE; i++) {
