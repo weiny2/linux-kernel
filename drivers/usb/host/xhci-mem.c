@@ -519,13 +519,13 @@ static void xhci_free_stream_ctx(struct xhci_hcd *xhci,
 		unsigned int num_stream_ctxs,
 		struct xhci_stream_ctx *stream_ctx, dma_addr_t dma)
 {
-	struct device *dev = xhci_to_hcd(xhci)->self.controller;
+	struct pci_dev *pdev = to_pci_dev(xhci_to_hcd(xhci)->self.controller);
+	size_t size = sizeof(struct xhci_stream_ctx) * num_stream_ctxs;
 
-	if (num_stream_ctxs > MEDIUM_STREAM_ARRAY_SIZE)
-		dma_free_coherent(dev,
-				sizeof(struct xhci_stream_ctx)*num_stream_ctxs,
+	if (size > MEDIUM_STREAM_ARRAY_SIZE)
+		dma_free_coherent(&pdev->dev, size,
 				stream_ctx, dma);
-	else if (num_stream_ctxs <= SMALL_STREAM_ARRAY_SIZE)
+	else if (size <= SMALL_STREAM_ARRAY_SIZE)
 		return dma_pool_free(xhci->small_streams_pool,
 				stream_ctx, dma);
 	else
@@ -547,13 +547,13 @@ static struct xhci_stream_ctx *xhci_alloc_stream_ctx(struct xhci_hcd *xhci,
 		unsigned int num_stream_ctxs, dma_addr_t *dma,
 		gfp_t mem_flags)
 {
-	struct device *dev = xhci_to_hcd(xhci)->self.controller;
+	struct pci_dev *pdev = to_pci_dev(xhci_to_hcd(xhci)->self.controller);
+	size_t size = sizeof(struct xhci_stream_ctx) * num_stream_ctxs;
 
-	if (num_stream_ctxs > MEDIUM_STREAM_ARRAY_SIZE)
-		return dma_alloc_coherent(dev,
-				sizeof(struct xhci_stream_ctx)*num_stream_ctxs,
+	if (size > MEDIUM_STREAM_ARRAY_SIZE)
+		return dma_alloc_coherent(&pdev->dev, size,
 				dma, mem_flags);
-	else if (num_stream_ctxs <= SMALL_STREAM_ARRAY_SIZE)
+	else if (size <= SMALL_STREAM_ARRAY_SIZE)
 		return dma_pool_alloc(xhci->small_streams_pool,
 				mem_flags, dma);
 	else
