@@ -150,25 +150,15 @@ static void free_port_rcu(struct rcu_head *rcu)
 	ovs_vport_free(vport_from_priv(netdev_vport));
 }
 
-void ovs_netdev_detach_dev(struct vport *vport)
-{
-	struct netdev_vport *netdev_vport = netdev_vport_priv(vport);
-
-	ASSERT_RTNL();
-	netdev_vport->dev->priv_flags &= ~IFF_OVS_DATAPATH;
-	netdev_rx_handler_unregister(netdev_vport->dev);
-	netdev_upper_dev_unlink(netdev_vport->dev,
-				netdev_master_upper_dev_get(netdev_vport->dev));
-	dev_set_promiscuity(netdev_vport->dev, -1);
-}
-
 static void netdev_destroy(struct vport *vport)
 {
 	struct netdev_vport *netdev_vport = netdev_vport_priv(vport);
 
 	rtnl_lock();
-	if (netdev_vport->dev->priv_flags & IFF_OVS_DATAPATH)
-		ovs_netdev_detach_dev(vport);
+	netdev_vport->dev->priv_flags &= ~IFF_OVS_DATAPATH;
+	netdev_rx_handler_unregister(netdev_vport->dev);
+	netdev_upper_dev_unlink(netdev_vport->dev, get_dpdev(vport->dp));
+	dev_set_promiscuity(netdev_vport->dev, -1);
 	rtnl_unlock();
 
 	call_rcu(&netdev_vport->rcu, free_port_rcu);
