@@ -777,6 +777,8 @@ out:
 
 void free_fit_table(struct fit_header *fit_head)
 {
+	if (!fit_head)
+		return;
 	free_intereleave_tbls(fit_head);
 	free_flush_hint_tbls(fit_head);
 	kfree(fit_head->memdev_spa_rng_tbls);
