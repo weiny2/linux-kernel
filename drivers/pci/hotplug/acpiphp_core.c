@@ -39,7 +39,6 @@
 #include <linux/pci.h>
 #include <linux/pci-acpi.h>
 #include <linux/pci_hotplug.h>
-#include <linux/dmi.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include "acpiphp.h"
@@ -351,17 +350,6 @@ void acpiphp_unregister_hotplug_slot(struct acpiphp_slot *acpiphp_slot)
 		err("pci_hp_deregister failed with error %d\n", retval);
 }
 
-static struct dmi_system_id __initdata bochs_dmi_table[] = {
-	{
-		.ident = "Bochs",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Bochs"),
-		},
-	},
-	{}
-};
-
-MODULE_DEVICE_TABLE(dmi, bochs_dmi_table);
 
 void __init acpiphp_init(void)
 {
