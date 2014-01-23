@@ -623,6 +623,10 @@ extern int efi_set_rtc_mmss(const struct timespec *now);
 extern void efi_reserve_boot_services(void);
 extern struct efi_memory_map memmap;
 
+struct key;
+extern int __init parse_efi_signature_list(const void *data, size_t size,
+					   struct key *keyring);
+
 /**
  * efi_range_is_wc - check the WC bit on an address range
  * @start: starting kvirt address
