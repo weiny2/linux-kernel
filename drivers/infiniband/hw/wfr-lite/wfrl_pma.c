@@ -545,7 +545,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX "PMA Data Requested for Port %u not valid for HFI\n",
-			   port_num);
+			   (u8)port_num);
 		return reply_stl_pma(pmp);
 	}
 
@@ -657,7 +657,7 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX "PMA Data Requested for Port %u not valid for HFI\n",
-			   port_num);
+			   (u8)port_num);
 		return reply_stl_pma(pmp);
 	}
 
