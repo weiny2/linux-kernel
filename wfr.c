@@ -60,6 +60,10 @@ static uint num_vls = 4;
 module_param(num_vls, uint, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 
+static uint eager_buffer_size;
+module_param(eager_buffer_size, uint, S_IRUGO);
+MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`");
+
 /* TODO: temporary */
 static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
@@ -1460,7 +1464,7 @@ unimplemented:
  * WFR allows this to be set per-receive context, but the
  * driver presently enforces a global value.
  */
-static inline u32 lrh_max_header_bytes(struct hfi_devdata *dd)
+u32 lrh_max_header_bytes(struct hfi_devdata *dd)
 {
 	/*
 	 * The maximum non-payload (MTU) bytes in LRH.PktLen are
@@ -3155,7 +3159,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 {
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
-	int i, mtu, ret;
+	int i, ret;
 
 	dd = qib_alloc_devdata(pdev,
 		NUM_IB_PORTS * sizeof(struct qib_pportdata));
@@ -3314,16 +3318,22 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->uregbase = WFR_RXE_PER_CONTEXT_USER;
 	dd->ureg_align = WFR_RXE_PER_CONTEXT_SIZE;
 
-	/* rcvegrbufsize must be set before calling qib_create_ctxts() */
-	/* TODO: can ib_mtu_enum_to_int cover the full valid eager buffer
-	  size range?  if not, we should drop using it and the ib enum */
-	mtu = ib_mtu_enum_to_int(qib_ibmtu);
-	if (mtu == -1)
-		mtu = HFI_DEFAULT_MTU;
-	/* quietly adjust the size to a valid range supported by the chip */
-	dd->rcvegrbufsize = max(mtu,		          4 * 1024);
-	dd->rcvegrbufsize = min(dd->rcvegrbufsize, (u32)128 * 1024);
-	dd->rcvegrbufsize &= ~(4096ul - 1);	  /* remove lower bits */
+	/*
+	 * The receive eager buffer size must be set before the receive
+	 * contexts are created.
+	 *
+	 * Set the eager bufer size.  Validate that it falls in a range
+	 * allowed by the hardware - all powers of 2 between the min and
+	 * max.  The maximum valid MTU is within the eager buffer range
+	 * so we do not need to cap the max_mtu by an eager buffer size
+	 * setting.
+	 */
+	dd->rcvegrbufsize = eager_buffer_size ? eager_buffer_size : max_mtu;
+	if (dd->rcvegrbufsize < WFR_MIN_EAGER_BUFFER)
+		dd->rcvegrbufsize = WFR_MIN_EAGER_BUFFER;
+	if (dd->rcvegrbufsize > WFR_MAX_EAGER_BUFFER)
+		dd->rcvegrbufsize = WFR_MAX_EAGER_BUFFER;
+	dd->rcvegrbufsize = __roundup_pow_of_two(dd->rcvegrbufsize);
 	dd->rcvegrbufsize_shift = ilog2(dd->rcvegrbufsize);
 
 	/* TODO: real board name */

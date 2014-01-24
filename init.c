@@ -520,25 +520,9 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		ret = lastfail;
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
-		int mtu;
-
 		ppd = dd->pport + pidx;
-		mtu = ib_mtu_enum_to_int(qib_ibmtu);
-		if (mtu == -1) {
-			mtu = HFI_DEFAULT_MTU;
-			qib_ibmtu = 0; /* don't leave invalid value */
-		}
-		/* set max we can ever have for this driver load */
-		//FIXME: what to do here?
-		ppd->init_ibmaxlen = min((u32)mtu,
-					 dd->rcvegrbufsize +
-					 (dd->rcvhdrentsize << 2));
-		/*
-		 * Have to initialize ibmaxlen, but this will normally
-		 * change immediately in qib_set_mtu().
-		 */
-		ppd->ibmaxlen = ppd->init_ibmaxlen;
-		qib_set_mtu(ppd, mtu);
+
+		set_mtu(ppd, default_mtu);
 	}
 
 	/* enable chip even if we have an error, so we can debug cause */
@@ -1005,6 +989,12 @@ static int __init qlogic_ib_init(void)
 	ret = dev_init();
 	if (ret)
 		goto bail;
+
+	/* validate max and default MTUs before any devices start */
+	if (!valid_mtu(default_mtu))
+		default_mtu = HFI_DEFAULT_ACTIVE_MTU;
+	if (!valid_mtu(max_mtu))
+		max_mtu = HFI_DEFAULT_MAX_MTU;
 
 	qib_cq_wq = create_singlethread_workqueue("qib_cq");
 	if (!qib_cq_wq) {

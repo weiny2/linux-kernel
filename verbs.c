@@ -1444,7 +1444,6 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	enum ib_mtu mtu;
 	u16 lid = ppd->lid;
 
 	memset(props, 0, sizeof(*props));
@@ -1466,27 +1465,8 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->max_vl_num = qib_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
-	props->max_mtu = qib_ibmtu ? qib_ibmtu : IB_MTU_4096;
-	switch (ppd->ibmtu) {
-	case 4096:
-		mtu = IB_MTU_4096;
-		break;
-	case 2048:
-		mtu = IB_MTU_2048;
-		break;
-	case 1024:
-		mtu = IB_MTU_1024;
-		break;
-	case 512:
-		mtu = IB_MTU_512;
-		break;
-	case 256:
-		mtu = IB_MTU_256;
-		break;
-	default:
-		mtu = IB_MTU_2048;
-	}
-	props->active_mtu = mtu;
+	props->max_mtu = mtu_to_enum(max_mtu, IB_MTU_4096);
+	props->active_mtu = mtu_to_enum(ppd->ibmtu, IB_MTU_2048);
 	props->subnet_timeout = ibp->subnet_timeout;
 
 	return 0;

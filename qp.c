@@ -653,25 +653,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		if (mtu == -1)
 			goto inval;
 		if (mtu > dd->pport[pidx].ibmtu) {
-			switch (dd->pport[pidx].ibmtu) {
-			case 4096:
-				pmtu = IB_MTU_4096;
-				break;
-			case 2048:
-				pmtu = IB_MTU_2048;
-				break;
-			case 1024:
-				pmtu = IB_MTU_1024;
-				break;
-			case 512:
-				pmtu = IB_MTU_512;
-				break;
-			case 256:
-				pmtu = IB_MTU_256;
-				break;
-			default:
-				pmtu = IB_MTU_2048;
-			}
+			pmtu = mtu_to_enum(dd->pport[pidx].ibmtu, IB_MTU_2048);
 		} else
 			pmtu = attr->path_mtu;
 	}

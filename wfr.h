@@ -523,6 +523,13 @@
 #define WFR_VERIFY_CAP_FRAME	   0x40
 #define WFR_LINKUP_ACHIEVED	   0x80
 
+/*
+ * Eager buffer minimum and maximum sizes supported by the hardware.
+ * All power-of-two sizes in between are supported as well.
+ */
+#define WFR_MIN_EAGER_BUFFER (  4 * 1024)
+#define WFR_MAX_EAGER_BUFFER (256 * 1024)
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);

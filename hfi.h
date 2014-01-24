@@ -319,7 +319,13 @@ struct qib_verbs_txreq {
 #define QIB_IB_LINKDOWN_SLEEP   4
 #define QIB_IB_LINKDOWN_DISABLE 5
 
-#define HFI_DEFAULT_MTU 4096
+/* use this MTU size if none other is given */
+#define HFI_DEFAULT_ACTIVE_MTU 4096
+/* use this MTU size as the default maximum */
+/* TODO: more work is needed for the 8K and 10K STL sizes */
+/* TODO: bad things may happen if 8K and 10K STL sizes used with an IB FM,
+   e.g. opensm */
+#define HFI_DEFAULT_MAX_MTU 4096
 /* default parition key */
 #define DEFAULT_PKEY 0xffff
 
@@ -531,11 +537,6 @@ struct qib_pportdata {
 	 * we can send. Changes when ibmtu changes.
 	 */
 	u32 ibmaxlen;
-	/*
-	 * ibmaxlen at init time, limited by chip and by receive buffer
-	 * size.  Not changed after init.
-	 */
-	u32 init_ibmaxlen;
 	/* LID programmed for this instance */
 	u16 lid;
 	/* list of pkeys programmed; 0 if not set */
@@ -983,7 +984,29 @@ void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 int qib_set_linkstate(struct qib_pportdata *, u8);
-int qib_set_mtu(struct qib_pportdata *, u16);
+
+/* MTU handling */
+
+/* MTU enumeration, 256-4k match IB */
+#define STL_MTU_256   1
+#define STL_MTU_512   2
+#define STL_MTU_1024  3
+#define STL_MTU_2048  4
+#define STL_MTU_4096  5
+#define STL_MTU_8192  8
+#define STL_MTU_10240 9
+
+u32 lrh_max_header_bytes(struct hfi_devdata *dd);
+int mtu_to_enum(u32 mtu, int default_if_bad);
+static inline int valid_mtu(unsigned int mtu)
+{
+	return mtu == 256|| mtu == 512
+		|| mtu == 1024 || mtu == 2048
+		|| mtu == 4096 || mtu == 8192
+		|| mtu == 10240;
+}
+int set_mtu(struct qib_pportdata *, u16);
+
 int qib_set_lid(struct qib_pportdata *, u32, u8);
 void qib_disable_after_error(struct hfi_devdata *);
 int qib_set_uevent_bits(struct qib_pportdata *, const int);
@@ -1236,7 +1259,8 @@ const char *get_unit_name(int unit);
 #endif
 
 /* global module parameter variables */
-extern unsigned qib_ibmtu;
+extern unsigned int max_mtu;
+extern unsigned int default_mtu;
 extern uint num_rcv_contexts;
 extern unsigned qib_n_krcv_queues;
 extern uint kdeth_qp;

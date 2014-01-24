@@ -55,21 +55,18 @@ DEFINE_SPINLOCK(qib_devs_lock);
 LIST_HEAD(qib_dev_list);
 DEFINE_MUTEX(qib_mutex);	/* general driver use */
 
-unsigned qib_ibmtu;
-module_param_named(ibmtu, qib_ibmtu, uint, S_IRUGO);
-MODULE_PARM_DESC(ibmtu, "Set max IB MTU (0=2KB, 1=256, 2=512, ... 5=4096");
+unsigned int max_mtu;
+module_param_named(max_mtu, max_mtu, uint, S_IRUGO);
+MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 10240");
+
+unsigned int default_mtu;
+module_param_named(default_mtu, default_mtu, uint, S_IRUGO);
+MODULE_PARM_DESC(max_mtu, "Set default MTU bytes, default is 4096");
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
 MODULE_VERSION(QIB_DRIVER_VERSION);
-
-/*
- * QIB_PIO_MAXIBHDR is the max IB header size allowed for in our
- * PIO send buffers.  This is well beyond anything currently
- * defined in the InfiniBand spec.
- */
-#define QIB_PIO_MAXIBHDR 128
 
 /*
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
@@ -592,53 +589,44 @@ bail:
 	dd->f_update_usrhead(rcd, lval, updegr, etail, i);
 }
 
-/**
- * qib_set_mtu - set the MTU
+/*
+ * Convert a given MTU size to the on-wire MAD packet enumeration.
+ * Return -1 if the size is invalid.
+ */
+int mtu_to_enum(u32 mtu, int default_if_bad)
+{
+	switch (mtu) {
+	case   256: return STL_MTU_256;
+	case  1024: return STL_MTU_1024;
+	case  2048: return STL_MTU_2048;
+	case  4096: return STL_MTU_4096;
+	case  8192: return STL_MTU_8192;
+	case 10240: return STL_MTU_10240;
+	}
+	return default_if_bad;
+}
+
+/*
+ * set_mtu - set the MTU
  * @ppd: the perport data
  * @arg: the new MTU
  *
  * We can handle "any" incoming size, the issue here is whether we
- * need to restrict our outgoing size.   For now, we don't do any
- * sanity checking on this, and we don't deal with what happens to
- * programs that are already running when the size changes.
+ * need to restrict our outgoing size.  We do not deal with what happens
+ * to programs that are already running when the size changes.
  */
-int qib_set_mtu(struct qib_pportdata *ppd, u16 arg)
+int set_mtu(struct qib_pportdata *ppd, u16 arg)
 {
-	u32 piosize;
-	int ret, chk;
+	if (!valid_mtu(arg))
+		return -EINVAL;
+	if (arg > max_mtu)
+		return -EINVAL;
 
-	if (arg != 256 && arg != 512 && arg != 1024 && arg != 2048 &&
-	    arg != 4096) {
-		ret = -EINVAL;
-		goto bail;
-	}
-	chk = ib_mtu_enum_to_int(qib_ibmtu);
-	if (chk > 0 && arg > chk) {
-		ret = -EINVAL;
-		goto bail;
-	}
-
-	piosize = ppd->ibmaxlen;
 	ppd->ibmtu = arg;
-
-	if (arg >= (piosize - QIB_PIO_MAXIBHDR)) {
-		/* Only if it's not the initial value (or reset to it) */
-		if (piosize != ppd->init_ibmaxlen) {
-			if (arg > piosize && arg <= ppd->init_ibmaxlen)
-				piosize = ppd->init_ibmaxlen - 2 * sizeof(u32);
-			ppd->ibmaxlen = piosize;
-		}
-	} else if ((arg + QIB_PIO_MAXIBHDR) != ppd->ibmaxlen) {
-		piosize = arg + QIB_PIO_MAXIBHDR - 2 * sizeof(u32);
-		ppd->ibmaxlen = piosize;
-	}
-
+	ppd->ibmaxlen = arg + lrh_max_header_bytes(ppd->dd);
 	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, arg);
 
-	ret = 0;
-
-bail:
-	return ret;
+	return 0;
 }
 
 int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
