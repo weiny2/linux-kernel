@@ -1,9 +1,44 @@
 #ifndef NVDIMM_CORE_H_
 #define NVDIMM_CORE_H_
 
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
+#include <linux/kref.h>
+#include <linux/miscdevice.h>
+#include <linux/bio.h>
+#include <linux/blkdev.h>
+#include <linux/io.h>
+
 #include <linux/nvdimm.h>
-#include <os_adapter.h>
 #include <linux/nvdimm_acpi.h>
+
+
+/************************************************
+ *  NVDIMM DEFINES
+ ***********************************************/
+#define NVDIMM_INFO(fmt, ...)   \
+	pr_info("%s: " fmt "\n", LEVEL, ## __VA_ARGS__)
+
+#define NVDIMM_CRIT(fmt, ...)   \
+	pr_crit("%s :%s:%d: " fmt "\n", LEVEL, __FILE__, \
+		__LINE__, ## __VA_ARGS__)
+
+#define NVDIMM_WARN(fmt, ...)   \
+	pr_warn("%s :%s:%d: " fmt "\n", LEVEL, __FILE__, \
+		__LINE__, ## __VA_ARGS__)
+
+#define NVDIMM_ERR(fmt, ...)    \
+	pr_err("%s :%s:%d: " fmt "\n", LEVEL, __FILE__, \
+		__LINE__, ## __VA_ARGS__)
+
+#define NVDIMM_DBG(fmt, ...)    \
+	pr_debug(fmt "\n", ## __VA_ARGS__)
+
+#define NVDIMM_VDBG(fmt, ...)   \
+	pr_debug(fmt "\n", ## __VA_ARGS__)
+
 
 /************************************************
  *  NVDIMM STRUCTS
@@ -198,9 +233,6 @@ struct nvm_volume {
 	struct list_head extent_set_list;
 };
 
-#ifdef __KERNEL__
-#include <linux/miscdevice.h>
-#endif
 
 struct pmem_dev {
 	spinlock_t volume_lock;
@@ -212,10 +244,8 @@ struct pmem_dev {
 	struct list_head nvm_pools;
 
 	struct fit_header *fit_head;
-#ifdef __KERNEL__
 	struct miscdevice miscdev;
 	struct kref kref;
-#endif
 };
 
 struct nvdimm_ops {
@@ -254,18 +284,30 @@ struct nvdimm_driver {
 	const struct nvdimm_ioctl_ops *ioctl_ops;
 };
 
-#ifdef __KERNEL__
 void __iomem *cr_get_virt(phys_addr_t spa_addr,
 		struct memdev_spa_rng_tbl *ctrl_tbl);
 int get_dmi_memdev(struct nvdimm *dimm);
-#endif
 int gen_nvdimm_init(struct pmem_dev *dev);
 void gen_nvdimm_exit(struct pmem_dev *dev);
-
-#ifndef __linux__
 int get_dmi_memdev(struct nvdimm *dimm);
-#endif
 struct nvdimm_driver *find_nvdimm_driver(const struct nvdimm_ids *ids);
 int match_nvdimm_ids(const struct nvdimm_ids *first_ids,
 		const struct nvdimm_ids *second_ids);
+
+/*******************************************************************
+ * TODO:  DELETE Below
+ * 
+ *******************************************************************/
+
+#define cr_write_barrier() __builtin_ia32_sfence()
+static inline void __builtin_ia32_sfence(void)
+{
+    return;
+}
+
+static inline void __builtin_ia32_pcommit(void)
+{
+    return;
+}
+
 #endif

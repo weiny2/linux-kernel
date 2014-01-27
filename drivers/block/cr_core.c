@@ -14,8 +14,6 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>
  */
 
-#include <os_adapter.h>
-
 #include <linux/crbd_dimm.h>
 #include <linux/cr_ioctl.h>
 #include <linux/gen_nvdimm.h>

@@ -28,7 +28,6 @@
  * @endinternal
  */
 
-#include <os_adapter.h>
 #include <linux/gen_nvm_volumes.h>
 #include <linux/nvdimm_acpi.h>
 #include <linux/crbd_pool.h>

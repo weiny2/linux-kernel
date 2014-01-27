@@ -28,9 +28,7 @@
  * @endinternal
  */
 
-#include <os_adapter.h>
 #include <linux/nvdimm_core.h>
-#include <linux/cr_ioctl.h>
 #include <linux/nvdimm_core.h>
 #include <linux/nvdimm_ioctl.h>
 #include <linux/gen_nvdimm.h>

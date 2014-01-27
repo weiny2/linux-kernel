@@ -28,7 +28,6 @@
  * @endinternal
  */
 
-#include <os_adapter.h>
 #include <linux/nvdimm_core.h>
 #include <linux/crbd_dimm.h>
 #include <linux/cr_ioctl.h>

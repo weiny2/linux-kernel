@@ -28,7 +28,8 @@
  * @endinternal
  */
 
-#include <os_adapter.h>
+#include <linux/sort.h>
+#include <linux/nvdimm_core.h>
 #include <linux/nvdimm_acpi.h>
 
 /* TODO: Change all sizeof(struct type) to sizeof(*variable)*/

@@ -31,7 +31,6 @@
 #ifndef GEN_NVM_VOLUMES_H_
 #define GEN_NVM_VOLUMES_H_
 
-#include <os_adapter.h>
 #include <linux/nvdimm_core.h>
 
 /* TODO: these need to move*/
@@ -195,8 +194,6 @@ __u64 nvm_get_capacity(struct nvm_volume *volume);
  */
 int nvm_write_labels(struct nvm_volume *volume);
 
-#ifdef __KERNEL__
-
 int nvm_volume_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 	unsigned long arg);
 
@@ -213,7 +210,6 @@ int nvm_volume_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
  * Returns:
  */
 void nvm_make_request(struct request_queue *q, struct bio *bio);
-#endif
 
 struct nvm_volume *nvm_create_single_volume(struct pmem_dev *dev);
 
