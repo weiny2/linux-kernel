@@ -31,7 +31,6 @@
 #ifndef CRBD_VOLUMES_H_
 #define CRBD_VOLUMES_H_
 
-#include <os_adapter.h>
 #include <linux/nvdimm_core.h>
 #include <linux/gen_nvm_volumes.h>
 

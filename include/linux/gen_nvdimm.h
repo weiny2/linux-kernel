@@ -31,7 +31,6 @@
 #ifndef GEN_NVDIMM_H_
 #define GEN_NVDIMM_H_
 
-#include <os_adapter.h>
 #include <linux/nvdimm_core.h>
 #include <linux/nvdimm_ioctl.h>
 #include <linux/nvdimm_acpi.h>

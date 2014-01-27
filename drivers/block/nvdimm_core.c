@@ -14,7 +14,6 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>
  */
 
-#ifdef __KERNEL__
 #include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/dmi.h>
@@ -25,7 +24,6 @@
 #include <linux/slab.h>
 #include <linux/kref.h>
 #include <linux/miscdevice.h>
-#endif
 
 #include <linux/errno.h>
 #include <linux/fs.h>
@@ -33,16 +31,11 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
-#include <os_adapter.h>
 #include <linux/nvdimm_core.h>
-
 #include <linux/nvdimm_ioctl.h>
 #include <linux/nvdimm_acpi.h>
 #include <linux/gen_nvdimm.h>
 #include <linux/gen_nvm_volumes.h>
-#include <linux/crbd_dimm.h>
-#include <linux/crbd_pool.h>
-#include <linux/crbd_volumes.h>
 
 static int pmem_major;
 static struct pmem_dev *dev;
@@ -304,7 +297,6 @@ static void nvdimm_dmidecode(const struct dmi_header *dh, void *arg)
 	}
 }
 
-#ifdef __KERNEL__
 int get_dmi_memdev(struct nvdimm *dimm)
 {
 	dmi_walk(nvdimm_dmidecode, dimm);
@@ -334,7 +326,7 @@ static int nvdimm_user_dimm_init(struct pmem_dev *dev)
 
 	return ret;
 }
-#endif
+
 static int nvdimm_get_dimm_topology(struct pmem_dev *dev,
 		struct nvdimm_req *nvdr)
 {
@@ -416,7 +408,6 @@ static int nvdimm_pass_through(struct nvdimm_req *nvdr,
 	return ops->passthrough_cmd(dimm, useraddr);
 }
 
-#ifdef __KERNEL__
 static long pmem_dev_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
 	struct pmem_dev *dev = f->private_data;
@@ -761,4 +752,3 @@ module_exit(nvdimm_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Generic NVDIMM Block Driver");
 MODULE_AUTHOR("Intel Corporation");
-#endif

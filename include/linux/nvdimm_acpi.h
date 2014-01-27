@@ -31,7 +31,7 @@
 #ifndef NVDIMM_ACPI_H_
 #define NVDIMM_ACPI_H_
 
-#include <os_adapter.h>
+#include <linux/types.h>
 
 #define NVDIMM_PM_RNG_TYPE 1
 #define NVDIMM_CRTL_RNG_TYPE 2

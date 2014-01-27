@@ -31,7 +31,6 @@
 #ifndef CRBD_CRDIMM_H_
 #define CRBD_CRDIMM_H_
 
-#include <os_adapter.h>
 #include <linux/nvdimm_acpi.h>
 #include <linux/nvdimm_core.h>
 #include <linux/cr_ioctl.h>
