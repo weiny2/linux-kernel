@@ -510,6 +510,16 @@ static int scsi_check_sense(struct scsi_cmnd *scmd)
 		if (sshdr.asc == 0x10) /* DIF */
 			return SUCCESS;
 
+		if (!strncmp(scmd->device->vendor, "EMC", 3) &&
+		    !strncmp(scmd->device->model, "SYMMETRIX", 9) &&
+		    (sshdr.asc == 0x44) && (sshdr.ascq == 0x0)) {
+			/*
+			 * EMC Symmetrix returns 'Internal target failure'
+			 * for a variety of internal issues, all of which
+			 * can be recovered by retry.
+			 */
+			return ADD_TO_MLQUEUE;
+		}
 		return NEEDS_RETRY;
 	case NOT_READY:
 	case UNIT_ATTENTION:
@@ -591,6 +601,7 @@ static int scsi_check_sense(struct scsi_cmnd *scmd)
 	case ILLEGAL_REQUEST:
 		if (sshdr.asc == 0x20 || /* Invalid command operation code */
 		    sshdr.asc == 0x21 || /* Logical block address out of range */
+		    sshdr.asc == 0x22 || /* Invalid function */
 		    sshdr.asc == 0x24 || /* Invalid field in cdb */
 		    sshdr.asc == 0x26) { /* Parameter value invalid */
 			set_host_byte(scmd, DID_TARGET_FAILURE);
@@ -685,6 +696,9 @@ static int scsi_eh_completed_normally(struct scsi_cmnd *scmd)
 		 */
 		return scsi_check_sense(scmd);
 	}
+	if ((host_byte(scmd->result) == DID_TRANSPORT_DISRUPTED) ||
+	    (host_byte(scmd->result) == DID_TRANSPORT_FAILFAST))
+		return NEEDS_RETRY;
 	if (host_byte(scmd->result) != DID_OK)
 		return FAILED;
 
@@ -1885,6 +1899,9 @@ int scsi_decide_disposition(struct scsi_cmnd *scmd)
 		rtn = scsi_check_sense(scmd);
 		if (rtn == NEEDS_RETRY)
 			goto maybe_retry;
+		else if (rtn == ADD_TO_MLQUEUE)
+			/* Always enforce a retry for ADD_TO_MLQUEUE */
+			rtn = NEEDS_RETRY;
 		/* if rtn == FAILED, we have no sense information;
 		 * returning FAILED will wake the error handler thread
 		 * to collect the sense and redo the decide
@@ -2062,6 +2079,7 @@ void scsi_eh_flush_done_q(struct list_head *done_q)
 
 	list_for_each_entry_safe(scmd, next, done_q, eh_entry) {
 		list_del_init(&scmd->eh_entry);
+		scmd->host_scribble = NULL;
 		if (scsi_device_online(scmd->device) &&
 		    !scsi_noretry_cmd(scmd) &&
 		    (++scmd->retries <= scmd->allowed)) {

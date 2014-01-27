@@ -356,6 +356,8 @@ void scsi_put_command(struct scsi_cmnd *cmd)
 
 	cancel_delayed_work(&cmd->abort_work);
 
+	WARN_ON(cmd->host_scribble);
+
 	__scsi_put_command(cmd->device->host, cmd, &sdev->sdev_gendev);
 }
 EXPORT_SYMBOL(scsi_put_command);
@@ -757,6 +759,7 @@ int scsi_dispatch_cmd(struct scsi_cmnd *cmd)
  */
 static void scsi_done(struct scsi_cmnd *cmd)
 {
+	cmd->host_scribble = NULL;
 	trace_scsi_dispatch_cmd_done(cmd);
 	blk_complete_request(cmd->request);
 }
