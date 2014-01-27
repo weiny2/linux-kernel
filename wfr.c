@@ -239,6 +239,7 @@ static struct flag_table credit_return_flags[] = {
 
 static u32 encoded_size(u32 size);
 static u32 chip_to_ib_lstate(struct hfi_devdata *dd, u32 chip_lstate);
+static int set_physical_link_state(struct hfi_devdata *dd, u64 state);
 
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -644,11 +645,155 @@ static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 }
 
 /*
+ * Write a response back to a 8051 request.
+ */
+static void hreq_response(struct hfi_devdata *dd, u8 return_code, u16 rsp_data)
+{
+	write_csr(dd, DC_DC8051_CFG_EXT_DEV_0,
+		DC_DC8051_CFG_EXT_DEV_0_COMPLETED_SMASK
+		| (u64)return_code << DC_DC8051_CFG_EXT_DEV_0_RETURN_CODE_SHIFT
+		| (u64)rsp_data << DC_DC8051_CFG_EXT_DEV_0_RSP_DATA_SHIFT);
+}
+
+/*
+ * Handle requests from the 8051.
+ */
+static void handle_8051_request(struct hfi_devdata *dd)
+{
+	u64 reg;
+	u16 data;
+	u8 type;
+	
+	reg = read_csr(dd, DC_DC8051_CFG_EXT_DEV_1);
+	if ((reg & DC_DC8051_CFG_EXT_DEV_1_REQ_NEW_SMASK) == 0)
+		return;	/* no request */
+
+	/* zero out COMPLETED so the response is seen */
+	write_csr(dd, DC_DC8051_CFG_EXT_DEV_0, 0);
+
+	/* extract request details */
+	type = (reg >> DC_DC8051_CFG_EXT_DEV_1_REQ_TYPE_SHIFT)
+			& DC_DC8051_CFG_EXT_DEV_1_REQ_TYPE_MASK;
+	data = (reg >> DC_DC8051_CFG_EXT_DEV_1_REQ_DATA_SHIFT)
+			& DC_DC8051_CFG_EXT_DEV_1_REQ_DATA_MASK;
+
+	switch (type) {
+	case WFR_HREQ_LOAD_CONFIG:
+	case WFR_HREQ_SAVE_CONFIG:
+	case WFR_HREQ_READ_CONFIG:
+	case WFR_HREQ_SET_TX_EQ_ABS:
+	case WFR_HREQ_SET_TX_EQ_REL:
+	case WFR_HREQ_ENABLE:
+		dd_dev_info(dd, "8051 request: request 0x%x not supported\n",
+			type);
+		hreq_response(dd, WFR_HREQ_NOT_SUPPORTED, 0);
+		break;
+
+	case WFR_HREQ_CONFIG_DONE:
+		hreq_response(dd, WFR_HREQ_SUCCESS, 0);
+		break;
+
+	case WFR_HREQ_INTERFACE_TEST:
+		hreq_response(dd, WFR_HREQ_SUCCESS, data);
+		break;
+
+	default:
+		dd_dev_err(dd, "8051 request: unknown request 0x%x\n", type);
+		hreq_response(dd, WFR_HREQ_NOT_SUPPORTED, 0);
+		break;
+	};
+}
+
+static void handle_8051_interrupt(struct hfi_devdata *dd, u64 reg)
+{
+	u64 info, err, host_msg;
+
+	/* now look at the flags */
+	if (reg & DC_DC8051_ERR_FLG_SET_BY_8051_SMASK) {
+		/* 8051 information set by firmware */
+		/* read DC8051_DBG_ERR_INFO_SET_BY_8051 for details */
+		info = read_csr(dd, DC_DC8051_DBG_ERR_INFO_SET_BY_8051);
+		err = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_SHIFT) & DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_MASK;
+		host_msg = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SHIFT) & DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_MASK;
+
+		/*
+		 * Handle error flags.
+		 */
+		if (err) {
+			/* TODO: implement 8051 error handling */
+			dd_dev_info(dd, "8051 info: error flags 0x%llx (unhandled)\n", err);
+		}
+
+		/*
+		 * Handle host message flags.
+		 */
+		if (host_msg & WFR_HOST_REQ_DONE) {
+			/*
+			 * Presently, the driver does a busy wait for
+			 * host requests to complete.  This is only an
+			 * informational message that should be
+			 * moved to a trace level.
+			 * NOTE: The 8051 clears the host message
+			 * information _on the next 8051 command_.
+			 * Therefore, when linkup is achieved,
+			 * this flag will still be set.
+			 */
+			dd_dev_info(dd, "8051: host request done\n");
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_HOST_REQ_DONE;
+		}
+		if (host_msg & WFR_LINKUP_ACHIEVED) {
+			dd_dev_info(dd, "8051: LinkUp achieved\n");
+			handle_linkup_change(dd, 1);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
+		}
+		if (host_msg & WFR_EXT_DEVICE_CFG_REQ) {
+			handle_8051_request(dd);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_EXT_DEVICE_CFG_REQ;
+		}
+		if (host_msg & WFR_VERIFY_CAP_FRAME) {
+			/*
+			 * TODO: check VerifyCap details
+			 *
+			 * These are now valid:
+			 *	VerifyCap fields in the generic LNI config
+			 *	CSR DC8051_STS_REMOTE_GUID
+			 *	CSR DC8051_STS_REMOTE_NODE_TYPE
+			 *	CSR DC8051_STS_REMOTE_FM_SECURITY
+			 */
+			/* tell the 8051 to go to LinkUp */
+			set_physical_link_state(dd, WFR_PLS_LINKUP);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
+		}
+		/* look for unhandled flags */
+		if (host_msg) {
+			/* TODO: implement all other valid flags here */
+			dd_dev_info(dd, "8051: host message flags 0x%llx (unhandled)\n", host_msg);
+		}
+
+		/* clear flag so "unhandled" message below does not
+		   include this */
+		reg &= ~DC_DC8051_ERR_FLG_SET_BY_8051_SMASK;
+	}
+	if (reg) {
+		/* TODO: implement all other flags here */
+		dd_dev_info(dd, "%s: 8051 Error: 0x%llx (unhandled)\n", __func__ , reg);
+	}
+}
+
+/*
  * CCE block DC interrupt.  Source is < 8.
  */
 static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 {
-	u64 reg, info, err, host_msg;
+	u64 reg;
 
 	switch (source) {
 	case 0: /* dc_common_int */
@@ -670,64 +815,9 @@ static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 	case 2: /* dc_8051_int */
 		/* read and clear the 8051 error register */
 		reg = read_csr(dd, DC_DC8051_ERR_FLG);
-		if (reg)
-			write_csr(dd, DC_DC8051_ERR_CLR, reg);
-
-		/* now look at the flags */
-		if (reg & DC_DC8051_ERR_FLG_SET_BY_8051_SMASK) {
-			/* 8051 information set by firmware */
-			/* read DC8051_DBG_ERR_INFO_SET_BY_8051 for details */
-			info = read_csr(dd, DC_DC8051_DBG_ERR_INFO_SET_BY_8051);
-			err = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_SHIFT) & DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_MASK;
-			host_msg = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SHIFT) & DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_MASK;
-
-			/*
-			 * Handle error flags.
-			 */
-			if (err) {
-				/* TODO: implement 8051 error handling */
-				dd_dev_info(dd, "8051 info: error flags 0x%llx (unhandled)\n", err);
-			}
-
-			/*
-			 * Handle host message flags.
-			 */
-			if (host_msg & WFR_HOST_REQ_DONE) {
-				/*
-				 * Presently, the driver does a busy wait for
-				 * host requests to complete.  This is only an
-				 * informational message that should be
-				 * moved to a trace level.
-				 * NOTE: The 8051 clears the host message
-				 * information _on the next 8051 command_.
-				 * Therefore, when linkup is achieved,
-				 * this flag will still be set.
-				 */
-				dd_dev_info(dd, "8051: host request done\n");
-				/* clear flag so "uhnandled" message below
-				   does not include this */
-				host_msg &= ~(u64)WFR_HOST_REQ_DONE;
-			}
-			if (host_msg & WFR_LINKUP_ACHIEVED) {
-				dd_dev_info(dd, "8051: LinkUp achieved\n");
-				handle_linkup_change(dd, 1);
-				/* clear flag so "uhnandled" message below
-				   does not include this */
-				host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
-			}
-			/* look for unhandled flags */
-			if (host_msg) {
-				/* TODO: implement all other valid flags here */
-				dd_dev_info(dd, "8051: host message flags 0x%llx (unhandled)\n", host_msg);
-			}
-
-			/* clear flag so "unhandled" message below does not
-			   include this */
-			reg &= ~DC_DC8051_ERR_FLG_SET_BY_8051_SMASK;
-		}
 		if (reg) {
-			/* TODO: implement all other flags here */
-			dd_dev_info(dd, "%s: 8051 Error (dc%u): 0x%llx (unhandled)\n", __func__ , source, reg);
+			write_csr(dd, DC_DC8051_ERR_CLR, reg);
+			handle_8051_interrupt(dd, reg);
 		}
 		break;
 	case 3: /* dc_lbm_int */
@@ -1118,8 +1208,6 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 	 * TODO: Do we want to hold the lock for this long?
 	 * Alternatives:
 	 * - keep busy wait - have other users bounce off
-	 * - make sure all callers are not in interrupt and add
-	 *   a sleep
 	 */
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
 
@@ -1224,6 +1312,9 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 			guid = be64_to_cpu(dd->base_guid) + ppd->port - 1;
 		ppd->guid = cpu_to_be64(guid);
 	}
+
+	/* TODO: only start Polling if we have verified that media is
+	   present */
 
 	ret = set_physical_link_state(dd, WFR_PLS_POLLING);
 	if (ret != WFR_HCMD_SUCCESS) {

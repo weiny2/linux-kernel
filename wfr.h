@@ -523,6 +523,24 @@
 #define WFR_VERIFY_CAP_FRAME	   0x40
 #define WFR_LINKUP_ACHIEVED	   0x80
 
+/* DC_DC8051_CFG_EXT_DEV_1.REQ_TYPE - 8051 host requests */
+#define WFR_HREQ_LOAD_CONFIG	0x01
+#define WFR_HREQ_SAVE_CONFIG	0x02
+#define WFR_HREQ_READ_CONFIG	0x03
+#define WFR_HREQ_SET_TX_EQ_ABS	0x04
+#define WFR_HREQ_SET_TX_EQ_REL	0x05
+#define WFR_HREQ_ENABLE		0x06
+#define WFR_HREQ_CONFIG_DONE	0xfe
+#define WFR_HREQ_INTERFACE_TEST	0xff
+
+/* DC_DC8051_CFG_EXT_DEV_0.RETURN_CODE - 8051 host request return codes */
+#define WFR_HREQ_INVALID		0x01
+#define WFR_HREQ_SUCCESS		0x02
+#define WFR_HREQ_NOT_SUPPORTED		0x03
+#define WFR_HREQ_FEATURE_NOT_SUPPORTED	0x04 /* request specific feature */
+#define WFR_HREQ_REQUEST_REJECTED	0xfe
+#define WFR_HREQ_EXECUTION_ONGOING	0xff
+
 /*
  * Eager buffer minimum and maximum sizes supported by the hardware.
  * All power-of-two sizes in between are supported as well.
