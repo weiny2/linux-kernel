@@ -1,0 +1,308 @@
+#ifndef NVDIMM_IOCTL_H_
+#define NVDIMM_IOCTL_H_
+
+#include <linux/nvdimm.h>
+
+#ifdef __linux__
+#include <linux/ioctl.h>
+#endif
+
+/*
+ * ****************************************************************************
+ * ENUMS
+ * ****************************************************************************
+ */
+
+/*!
+ * Defines the complete set of IOCTLs that are supported by the Generic NVDIMM
+ * Driver
+ * @remarks
+ *	Enumeration ranges are used to group IOCTLs by functionality
+ */
+enum nvdimm_ioctl_type {
+	IOCTL_GET_PLATFORM_CAPABILITIES = 1, /*!< TODO*/
+	/*! Get the number of dimms in the system's memory topology*/
+	IOCTL_GET_TOPOLOGY_COUNT = 11,
+	IOCTL_GET_TOPOLOGY = 12, /*!< Get the system's memory topology*/
+	/*!TODO Get the details for one specific Vendor DIMM*/
+	IOCTL_GET_DIMM_DETAILS = 13,
+
+	IOCTL_GET_POOL_COUNT = 21, /*!< Get the number of pools allocated*/
+	IOCTL_GET_POOLS = 22, /*!<Get the details for a given number of pools*/
+	IOCTL_GET_POOL_DETAILS = 23, /*!< Get the details for a specific pool*/
+
+	IOCTL_GET_VOLUME_COUNT = 31, /*!< Get the number of existing volumes*/
+	/*! Get the details for a given number of pools*/
+	IOCTL_GET_VOLUMES = 32,
+	/*! Get the details for a specific volume*/
+	IOCTL_GET_VOLUME_DETAILS = 33,
+
+	IOCTL_CREATE_VOLUME = 131, /*!< Create a new volume */
+	IOCTL_DELETE_VOLUME = 132, /*!< Delete a given volume */
+	IOCTL_MODIFY_VOLUME = 133, /*!< Modify a given volume */
+
+	IOCTL_PASSTHROUGH_CMD = 255 /*!< Execute a passthrough IOCTL*/
+};
+
+/*
+ * ****************************************************************************
+ * STRUCTURES
+ * ****************************************************************************
+ */
+
+/*!
+ * Describes the system-level view of a memory module's properties,
+ * based upon its physical location and access patterns within the system
+ */
+
+struct nvdimm_topology {
+	unsigned short id; /*!< The physical ID of the memory module */
+	unsigned short vendor_id; /*!< The vendor identifier */
+	unsigned short device_id; /*!< The device identifier */
+	unsigned short revision_id; /*!< The revision identifier */
+	unsigned char type; /*!< Type of memory used by this device*/
+	/*! The current health of the NVDIMM
+	 *  0 - Uninitialized - NVDIMM present in system but a driver has
+	 *  not initialized the nvdimm
+	 *  1 - Initialized - NVDIMM is ready to be used and is attached to
+	 *  a vendor driver
+	 *  2 - Error? - ???
+	 */
+	unsigned char health;
+	unsigned short fmt_interface_code; /*!< The device type */
+	/*! The numa node. Equates to the ID of the socket*/
+	unsigned short proximity_domain;
+	/*! The ID of the associated memory controller*/
+	unsigned short memory_controller_id;
+};
+
+/*!
+ * A lightweight description of a pool.
+ */
+struct nvdimm_pool_discovery {
+	unsigned short id; /*!< The unique system ID of the pool*/
+};
+
+/*!
+ * Describes the features pertaining to the unique construction and usage of a
+ * pool of memory.
+ */
+struct nvdimm_pool_details {
+	/*! The pool discovery information */
+	struct nvdimm_pool_discovery discovery;
+
+	/*!
+	 * Number of NVDIMMs present in the memory interleave
+	 * for this pool. Also equal to the number of NVDIMMs
+	 * present in the pool
+	 */
+	unsigned char interleave_way;
+	unsigned int interleave_size;
+	unsigned short proximity_domain;
+
+	/*!
+	 * Bitwise QoS attributes for the pool
+	 */
+	unsigned int pool_attributes;
+	unsigned long long capacity; /*!< The capacity of the pool, in MB*/
+
+	/*!
+	 * A list of the DIMMs used to implement the pool,
+	 * allocating for max DIMMs possible
+	 */
+	unsigned short dimm_id[NVDIMM_MAX_TOPO_SIZE];
+};
+
+/*!
+ * A lightweight description of a volume.
+ */
+struct nvdimm_volume_discovery {
+	/*! The unique ID of the volume*/
+	unsigned char uuid[NVDIMM_UUID_LEN];
+	/*! Human assigned name of the volume*/
+	char friendly_name[NVDIMM_VOL_FRIENDLY_NAME_LEN];
+};
+
+/*!
+ * Describes the features that detail a volume's construction.
+ */
+struct nvdimm_volume_details {
+	 /*! The volume discovery information */
+	struct nvdimm_volume_discovery discovery;
+
+	char purpose[NVDIMM_VOL_PURPOSE_LEN];
+	unsigned long long creation_date; /*!< Seconds since epoch.*/
+
+	unsigned long long block_size; /*!< The size of a block in bytes */
+	unsigned long long block_count; /*!<The number of blocks in the volume*/
+	 /*! The number of pools this volume is constructed from*/
+	unsigned int pool_count;
+	/*!
+	 * Bitwise QoS attributes for the volume
+	 */
+	unsigned int volume_attributes;
+	/*! the rolled-up health of the underlying pools/dimms */
+	unsigned char health;
+
+	/*!
+	 * The pools that the volume is comprised of
+	 */
+	unsigned short pool_ids[NVDIMM_MAX_TOPO_SIZE];
+};
+
+/*!
+ * Describes the capabilities of the host system's platform
+ */
+struct nvdimm_platform_capabilites {
+	/* TODO: likely dont need this first block*/
+	unsigned int signature; /*!< 'PCAP' is Signature for this table*/
+	unsigned int length; /*!< Length in bytes for entire table*/
+	unsigned char revision;
+	unsigned char checksum; /*!< Must sum to zero*/
+	unsigned char oemid[6]; /*!< OEM ID 6 Bytes*/
+	unsigned long long oem_tbl_id; /*!< Manufacturer model ID*/
+	unsigned int oem_revision; /*!< Revision of table for supplied ID*/
+	/*! Vendor ID of utility that created the table*/
+	unsigned int creator_id;
+	/*! Revision of utility that created the table*/
+	unsigned int creator_revision;
+
+	/*!
+	 * Bit0: 1LM Supported @n
+	 * Bit1: 2LM supported @n
+	 * Bit2: Block supported @n
+	 * Bit3: PM supported @n
+	 * Bit4: PMV supported @n
+	 * Bit5: PM$ supported
+	 */
+	unsigned short mem_mode_capabilities;
+
+	/*!
+	 * Bit0: 1LM Supported @n
+	 * Bit1: 2LM supported @n
+	 * Bit2: Block supported @n
+	 * Bit3: PM supported @n
+	 * Bit4: PMV supported @n
+	 * Bit5: PM$ supported
+	 */
+	unsigned short current_mem_modes;
+
+	unsigned int reserved;
+	/*! Pointer to the NVDIMM Firmware Interface Table*/
+	unsigned long long fit_ptr;
+	unsigned long long mem_alignment;
+	unsigned long long max_1lm_cap; /*!< memory size aligned*/
+	unsigned long long max_2lm_cap; /*!< memory size aligned*/
+	unsigned long long max_pm_cap; /*!< memory size aligned*/
+	unsigned long long max_block_cap; /*!< memory size aligned*/
+
+	/*!
+	 * Bit0: Channel Spare @n
+	 * Bit1: Memory Controller spare in socket @n
+	 * Bit2: Memory Controller spare across socket
+	 */
+	unsigned char mem_spare_cap;
+
+	/*!
+	 * Bit0: Memory mirror in memory controller @n
+	 * Bit1: Memory Mirror across mem controller, within socket @n
+	 * Bit2: Memory mirror across sockets
+	 */
+	unsigned char memory_mirror_cap;
+
+	/*!
+	 * Bit0: DIMM Hot Plug @n
+	 * Bit1: Memory Board Hot Plug
+	 */
+	unsigned char mem_hot_plug_cap;
+
+	/*!
+	 * Bit0: Socket Hot Plug @n
+	 * Bit1: Node Hot Plug
+	 */
+	unsigned char processor_socket_cap;
+};
+
+struct nvdimm_req {
+	union {
+		/*!
+		 * Data size for IOCTLs that use *data to represent an array
+		 * of elements
+		 * example: IOCTL_GET_TOPOLOGY
+		 */
+		unsigned int data_size;
+		/*! UUIDs for IOCTLs that require a specific volume
+		 * example: IOCTL_GET_VOLUME_DETAILS
+		 */
+		unsigned char volume_uuid[NVDIMM_UUID_LEN];
+		/*! Pool ID for IOCTLs that require a specific pool
+		 * example: IOCTL_GET_POOL_DETAILS
+		 */
+		unsigned short pool_id;
+		/*! DIMM ID for IOCTLs that require a specific nvdimm
+		 * example: IOCTL_PASSTHROUGH_CMD
+		 */
+		unsigned short dimm_id;
+	} nvdr_arg1;
+
+	union {
+		/*! buffer for any structure that is vendor specific or
+		 * for IOCTLs that transfer a variable array of structures
+		 */
+		void *data;
+		struct nvdimm_pool_details pool_details;
+		struct nvdimm_volume_details volume_details;
+		struct nvdimm_platform_capabilites platform_capabilities;
+	} nvdr_arg2;
+};
+
+#define nvdr_data_size		nvdr_arg1.data_size
+#define nvdr_uuid		nvdr_arg1.uuid
+#define nvdr_pool_id		nvdr_arg1.pool_id
+#define nvdr_dimm_id		nvdr_arg1.dimm_id
+
+#define nvdr_data		nvdr_arg2.data
+#define nvdr_pool_details	nvdr_arg2.pool_details
+#define nvdr_volume_details	nvdr_arg2.volume_details
+#define nvdr_platform_capabilities	nvdr_arg2.platform_capabilities
+
+#ifdef __linux__
+#define NVDIMM_MAGIC (0xDA)
+
+/*Debug IOCTLS*/
+#define NVDIMM_LOAD_ACPI_FIT	\
+	_IOR(NVDIMM_MAGIC, 0x04, void *)
+#define NVDIMM_INIT _IO(NVDIMM_MAGIC, 0x03)
+
+
+#define NVDIMM_GET_PLATFORM_CAPABILITIES \
+	_IOWR(NVDIMM_MAGIC, IOCTL_GET_PLATFORM_CAPABILITIES, struct nvdimm_req)
+#define NVDIMM_GET_TOPOLOGY_COUNT	\
+	_IO(NVDIMM_MAGIC, IOCTL_GET_TOPOLOGY_COUNT)
+#define NVDIMM_GET_DIMM_TOPOLOGY	\
+	_IOWR(NVDIMM_MAGIC, IOCTL_GET_TOPOLOGY, struct nvdimm_req)
+#define NVDIMM_GET_DIMM_DETAILS		\
+	_IOWR(NVDIMM_MAGIC, IOCTL_GET_DIMM_DETAILS, struct nvdimm_req)
+#define NVDIMM_GET_POOL_COUNT		\
+	_IO(NVDIMM_MAGIC, IOCTL_GET_POOL_COUNT)
+#define NVDIMM_GET_POOLS		\
+	_IOWR(NVDIMM_MAGIC, IOCTL_GET_POOLS, struct nvdimm_req)
+#define NVDIMM_GET_POOL_DETAILS		\
+	_IOWR(NVDIMM_MAGIC, IOCTL_GET_POOL_DETAILS, struct nvdimm_req)
+#define NVDIMM_GET_VOLUME_COUNT	\
+	_IO(NVDIMM_MAGIC, IOCTL_GET_VOLUME_COUNT)
+#define NVDIMM_GET_VOLUMES	\
+	_IOWR(NVDIMM_MAGIC, IOCTL_GET_VOLUMES, struct nvdimm_req)
+#define NVDIMM_GET_VOLUME_DETAILS	\
+	_IOWR(NVDIMM_MAGIC, IOCTL_GET_VOLUME_DETAILS, struct nvdimm_req)
+#define NVDIMM_CREATE_VOLUME		\
+	_IOWR(NVDIMM_MAGIC, IOCTL_CREATE_VOLUME, struct nvdimm_req)
+#define NVDIMM_DELETE_VOLUME		\
+	_IOWR(NVDIMM_MAGIC, IOCTL_DELETE_VOLUME, struct nvdimm_req)
+#define NVDIMM_MODIFY_VOLUME		\
+	_IOWR(NVDIMM_MAGIC, IOCTL_MODIFY_VOLUME, struct nvdimm_req)
+#define NVDIMM_PASSTHROUGH_CMD	\
+	_IOWR(NVDIMM_MAGIC, IOCTL_PASSTHROUGH_CMD, struct nvdimm_req)
+#endif
+
+#endif /* NVDIMM_IOCTL_H_ */
