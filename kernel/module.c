@@ -1760,7 +1760,7 @@ static int mod_sysfs_setup(struct module *mod,
 #ifdef CONFIG_SUSE_KERNEL_SUPPORTED
 	if (mod->taints & (1 << TAINT_EXTERNAL_SUPPORT))
 		add_taint(TAINT_EXTERNAL_SUPPORT, LOCKDEP_STILL_OK);
-	else if (mod->taints == (1 << TAINT_NO_SUPPORT)) {
+	else if (mod->taints & (1 << TAINT_NO_SUPPORT)) {
 		if (unsupported == 0) {
 			printk(KERN_WARNING "%s: module not supported by "
 			       "SUSE, refusing to load. To override, echo "
