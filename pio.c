@@ -30,9 +30,8 @@
  * SOFTWARE.
  */
 
-#include "hfi.h"
 #include <linux/delay.h>
-
+#include "hfi.h"
 #include "qp.h"
 #include "trace.h"
 
@@ -540,22 +539,26 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	 *
 	 * TODO: We may want a "credit return MTU factor" to change
 	 * the threshold in terms of 10ths of an MTU.  E.g.
-	release_credits = (dd->pport[0].ibmtu * cr_mtu_factor) /
-				(10 * WFR_PIO_BLOCK_SIZE);
+	release_credits = DIV_ROUND_UP((dd->pport[0].ibmtu * cr_mtu_factor)
+				+ (dd->rcvhdrentsize<<2),
+				10 * WFR_PIO_BLOCK_SIZE);
+	 * PROBLEM: ibmtu is not yet set up when the kernel send
+	 * contexts are created.
 	 */
-	release_credits = (default_mtu + 128) / WFR_PIO_BLOCK_SIZE;
+	release_credits = DIV_ROUND_UP(default_mtu + (dd->rcvhdrentsize<<2),
+							WFR_PIO_BLOCK_SIZE);
 	if (sc->credits <= release_credits)
 		thresh = 1;
 	else
 		thresh = sc->credits - release_credits;
 	reg = thresh << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT;
-	/* setup write-through credit_ctrl */
+	/* set up write-through credit_ctrl */
 	sc->credit_ctrl = reg;
 	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_CTRL, reg);
 
 	dd_dev_info(dd,
 		"Send context %u group %u credits %u credit_ctrl 0x%llx threshold %u\n",
-		sc->group, context, sc->credits, sc->credit_ctrl, thresh);
+		context, sc->group, sc->credits, sc->credit_ctrl, thresh);
 
 	return sc;
 
