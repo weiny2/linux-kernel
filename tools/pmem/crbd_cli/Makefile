@@ -11,7 +11,7 @@ RM=rm -f
 CC=gcc
 CFLAGS=-m64 -Wall -Werror -Wfatal-errors
 
-LIBS= ./CUnit/libcunit.a
+LIBS= ./CUnit/libcunit.la
 INCS=-I./CUnit/Headers \
 		-I./include/
 
