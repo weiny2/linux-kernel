@@ -20,7 +20,7 @@ static void mga_user_framebuffer_destroy(struct drm_framebuffer *fb)
 	if (mga_fb->obj)
 		drm_gem_object_unreference_unlocked(mga_fb->obj);
 	drm_framebuffer_cleanup(fb);
-	kfree(fb);
+	kfree(mga_fb);
 }
 
 static const struct drm_framebuffer_funcs mga_fb_funcs = {
@@ -316,7 +316,7 @@ int mgag200_gem_init_object(struct drm_gem_object *obj)
 	return 0;
 }
 
-void mgag200_bo_unref(struct mgag200_bo **bo)
+static void mgag200_bo_unref(struct mgag200_bo **bo)
 {
 	struct ttm_buffer_object *tbo;
 

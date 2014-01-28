@@ -1488,6 +1488,7 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 	struct mga_fbdev *mfbdev = mdev->mfbdev;
 	struct drm_fb_helper *fb_helper = &mfbdev->helper;
 	struct drm_fb_helper_connector *fb_helper_conn = NULL;
+	int lace = 1 + ((mode->flags & DRM_MODE_FLAG_INTERLACE) ? 1 : 0);
 	int bpp = 32;
 	int i = 0;
 
@@ -1530,11 +1531,15 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 			bpp) > (55000 * 1024))) {
 		return MODE_BANDWIDTH;
 	}
+	if (mode->hdisplay % 8)
+		return MODE_H_ILLEGAL;
 
 	if (mode->crtc_hdisplay > 2048 || mode->crtc_hsync_start > 4096 ||
 	    mode->crtc_hsync_end > 4096 || mode->crtc_htotal > 4096 ||
-	    mode->crtc_vdisplay > 2048 || mode->crtc_vsync_start > 4096 ||
-	    mode->crtc_vsync_end > 4096 || mode->crtc_vtotal > 4096) {
+	    mode->crtc_vdisplay > 2048 * lace ||
+	    mode->crtc_vsync_start > 4096 * lace ||
+	    mode->crtc_vsync_end > 4096 * lace ||
+	    mode->crtc_vtotal > 4096 * lace) {
 		return MODE_BAD;
 	}
 
@@ -1611,12 +1616,16 @@ static struct drm_connector *mga_vga_init(struct drm_device *dev)
 {
 	struct drm_connector *connector;
 	struct mga_connector *mga_connector;
+	struct mga_device *mdev = dev->dev_private;
 
 	mga_connector = kzalloc(sizeof(struct mga_connector), GFP_KERNEL);
 	if (!mga_connector)
 		return NULL;
 
 	connector = &mga_connector->base;
+
+	connector->interlace_allowed = true;
+	connector->doublescan_allowed = (mdev->type == G200_WB) ? false : true;
 
 	drm_connector_init(dev, connector,
 			   &mga_vga_connector_funcs, DRM_MODE_CONNECTOR_VGA);

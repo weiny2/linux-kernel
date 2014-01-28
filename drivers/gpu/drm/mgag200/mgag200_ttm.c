@@ -318,10 +318,8 @@ int mgag200_bo_create(struct drm_device *dev, int size, int align,
 		return -ENOMEM;
 
 	ret = drm_gem_object_init(dev, &mgabo->gem, size);
-	if (ret) {
-		kfree(mgabo);
-		return ret;
-	}
+	if (ret)
+		goto err;
 
 	mgabo->bo.bdev = &mdev->ttm.bdev;
 	mgabo->bo.bdev->dev_mapping = dev->dev_mapping;
@@ -336,10 +334,13 @@ int mgag200_bo_create(struct drm_device *dev, int size, int align,
 			  align >> PAGE_SHIFT, false, NULL, acc_size,
 			  NULL, mgag200_bo_ttm_destroy);
 	if (ret)
-		return ret;
+		goto err;
 
 	*pmgabo = mgabo;
 	return 0;
+err:
+	kfree(mgabo);
+	return ret;
 }
 
 static inline u64 mgag200_bo_gpu_offset(struct mgag200_bo *bo)
@@ -373,7 +374,7 @@ int mgag200_bo_pin(struct mgag200_bo *bo, u32 pl_flag, u64 *gpu_addr)
 
 int mgag200_bo_unpin(struct mgag200_bo *bo)
 {
-	int i, ret;
+	int i;
 	if (!bo->pin_count) {
 		DRM_ERROR("unpin bad %p\n", bo);
 		return 0;
@@ -384,11 +385,7 @@ int mgag200_bo_unpin(struct mgag200_bo *bo)
 
 	for (i = 0; i < bo->placement.num_placement ; i++)
 		bo->placements[i] &= ~TTM_PL_FLAG_NO_EVICT;
-	ret = ttm_bo_validate(&bo->bo, &bo->placement, false, false);
-	if (ret)
-		return ret;
-
-	return 0;
+	return ttm_bo_validate(&bo->bo, &bo->placement, false, false);
 }
 
 int mgag200_bo_push_sysram(struct mgag200_bo *bo)
