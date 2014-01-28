@@ -90,6 +90,9 @@ struct send_context {
 	spinlock_t release_lock ____cacheline_aligned_in_smp;
 	unsigned long free;		/* official free count */
 	u32 sr_tail;			/* shadow ring tail */
+	spinlock_t wait_lock  ____cacheline_aligned_in_smp;
+	struct list_head piowait;       /* list for PIO waiters */
+	u64 credit_ctrl;		/* cache for credit control */
 };
 
 struct send_context_info {
@@ -135,6 +138,7 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 			pio_release_cb cb, void *arg);
 void sc_release_update(struct send_context *sc);
 void sc_group_release_update(struct send_context *sc);
+void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
 
 /* global PIO send control operations */
 #define PSC_GLOBAL_ENABLE 0

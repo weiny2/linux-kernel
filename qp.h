@@ -155,4 +155,10 @@ int qib_qp_init(struct qib_ibdev *dev);
  */
 void qib_qp_exit(struct qib_ibdev *dev);
 
+/**
+ * qib_qp_waitup - wakeup on the indicated event
+ * @qp: the QP
+ */
+void qib_qp_wakeup(struct qib_qp *qp, u32 flag);
+
 #endif /* _PIO_H */

@@ -719,7 +719,6 @@ struct qib_ibdev {
 
 	/* QP numbers are shared by all IB ports */
 	struct qib_lkey_table lk_table;
-	struct list_head piowait;       /* list for wait PIO buf */
 	struct list_head dmawait;	/* list for wait DMA */
 	struct list_head txwait;        /* list for wait qib_verbs_txreq */
 	struct list_head memwait;       /* list for wait kernel memory */
@@ -1033,8 +1032,6 @@ int qib_register_ib_device(struct hfi_devdata *);
 void qib_unregister_ib_device(struct hfi_devdata *);
 
 void qib_ib_rcv(struct qib_ctxtdata *, void *, void *, u32);
-
-void qib_ib_piobufavail(struct hfi_devdata *);
 
 unsigned qib_get_npkeys(struct hfi_devdata *);
 

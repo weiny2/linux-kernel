@@ -33,6 +33,9 @@
 #include "hfi.h"
 #include <linux/delay.h>
 
+#include "qp.h"
+#include "trace.h"
+
 /*
  * Send Context functions
  */
@@ -313,7 +316,6 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 int init_send_contexts(struct hfi_devdata *dd)
 {
 	u64 reg, all;
-	u32 release_credits, thresh;
 	u16 base;
 	int ret, i, j, context;
 
@@ -390,27 +392,8 @@ int init_send_contexts(struct hfi_devdata *dd)
 		}
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
 		/* unmask all errors */
+
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
-		/*
-		 * Set up a threshold credit return when one MTU of space
-		 * remains.  At the moment all VLs have the same MTU.
-		 * That will change.
-		 *
-		 * TODO: We may want a "credit return MTU factor" to change
-		 * the threshold in terms of 10ths of an MTU.  E.g.
-		release_credits = (dd->pport[0].ibmtu * cr_mtu_factor) /
-					(10 * WFR_PIO_BLOCK_SIZE);
-		 */
-		release_credits = dd->pport[0].ibmtu / WFR_PIO_BLOCK_SIZE;
-		if (dd->send_contexts[i].credits <= release_credits)
-			thresh = 1;
-		else
-			thresh = dd->send_contexts[i].credits - release_credits;
-		reg = thresh << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT;
-		/* turn on credit interrupt if kernel thread */
-		if (dd->send_contexts[i].type == SC_KERNEL)
-			reg |= WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
-		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, reg);
 
 		/* set the default partition key */
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_PARTITION_KEY,
@@ -492,6 +475,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	struct send_context *sc;
 	unsigned long pa;
 	u64 reg;
+	u32 release_credits, thresh;
 	u32 context;
 	int ret;
 
@@ -511,6 +495,8 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	sc->dd = dd;
 	spin_lock_init(&sc->alloc_lock);
 	spin_lock_init(&sc->release_lock);
+	spin_lock_init(&sc->wait_lock);
+	INIT_LIST_HEAD(&sc->piowait);
 
 	/* TBD: group set-up.  Make it always 0 for now. */
 	sc->group = 0;
@@ -547,6 +533,30 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	reg = pa & WFR_SEND_CTXT_CREDIT_RETURN_ADDR_ADDRESS_SMASK;
 	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, reg);
 
+	/*
+	 * Set up a threshold credit return when one MTU of space
+	 * remains.  At the moment all VLs have the same MTU.
+	 * That will change.
+	 *
+	 * TODO: We may want a "credit return MTU factor" to change
+	 * the threshold in terms of 10ths of an MTU.  E.g.
+	release_credits = (dd->pport[0].ibmtu * cr_mtu_factor) /
+				(10 * WFR_PIO_BLOCK_SIZE);
+	 */
+	release_credits = (default_mtu + 128) / WFR_PIO_BLOCK_SIZE;
+	if (sc->credits <= release_credits)
+		thresh = 1;
+	else
+		thresh = sc->credits - release_credits;
+	reg = thresh << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT;
+	/* setup write-through credit_ctrl */
+	sc->credit_ctrl = reg;
+	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_CTRL, reg);
+
+	dd_dev_info(dd,
+		"Send context %u group %u credits %u credit_ctrl 0x%llx threshold %u\n",
+		sc->group, context, sc->credits, sc->credit_ctrl, thresh);
+
 	return sc;
 
 no_shadow:
@@ -567,6 +577,8 @@ void sc_free(struct send_context *sc)
 		return;
 
 	dd = sc->dd;
+	if (!list_empty(&sc->piowait))
+		dd_dev_err(dd, "piowait list not empty!\n");
 	context = sc->context;
 	sc_disable(sc);	/* make sure the HW is disabled */
 	dd->send_contexts[context].sc = NULL;
@@ -832,6 +844,67 @@ done:
 	return pbuf;
 }
 
+void sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
+{
+	struct hfi_devdata *dd = sc->dd;
+
+	if (needint)
+		sc->credit_ctrl |= WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+	else
+		sc->credit_ctrl &= ~WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+	trace_hfi_wantpiointr(sc, needint, sc->credit_ctrl);
+	write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CREDIT_CTRL,
+		sc->credit_ctrl);
+	if (needint) {
+		mmiowb();
+		write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE,
+			WFR_SEND_CTXT_CREDIT_FORCE_FORCE_RETURN_SMASK);
+	}
+}
+
+/**
+ * sc_piobufavail - callback when a PIO buffer is available
+ * @sc: the send context
+ *
+ * This is called from the interrupt handler when a PIO buffer is
+ * available after qib_verbs_send() returned an error that no buffers were
+ * available. Disable the interrupt if there are no more QPs waiting.
+ */
+static void sc_piobufavail(struct send_context *sc)
+{
+	struct hfi_devdata *dd = sc->dd;
+	struct list_head *list;
+	struct qib_qp *qps[5];
+	struct qib_qp *qp;
+	unsigned long flags;
+	unsigned i, n = 0;
+
+	if (dd->send_contexts[sc->context].type != SC_KERNEL)
+		return;
+	list = &sc->piowait;
+	/*
+	 * Note: checking that the piowait list is empty and clearing
+	 * the buffer available interrupt needs to be atomic or we
+	 * could end up with QPs on the wait list with the interrupt
+	 * disabled.
+	 */
+	spin_lock_irqsave(&sc->wait_lock, flags);
+	while (!list_empty(list)) {
+		if (n == ARRAY_SIZE(qps))
+			goto full;
+		qp = list_entry(list->next, struct qib_qp, iowait);
+		list_del_init(&qp->iowait);
+		atomic_inc(&qp->refcount);
+		qps[n++] = qp;
+	}
+	dd->f_wantpiobuf_intr(sc, 0);
+full:
+	spin_unlock_irqrestore(&sc->wait_lock, flags);
+
+	for (i = 0; i < n; i++)
+		qib_qp_wakeup(qps[i], QIB_S_WAIT_PIO);
+}
+
 /* use the jiffies compare to get the wrap right */
 #define sent_before(a, b) time_before(a, b)	/* a < b */
 
@@ -858,6 +931,7 @@ void sc_release_update(struct send_context *sc)
 			- (old_free & WFR_CR_COUNTER_MASK))
 				& WFR_CR_COUNTER_MASK;
 	sc->free = old_free + extra;
+	trace_hfi_piofree(sc, extra);
 
 	/* call sent buffer callbacks */
 	head = ACCESS_ONCE(sc->sr_head);	/* snapshot the head */
@@ -879,6 +953,7 @@ void sc_release_update(struct send_context *sc)
 	/* update tail, in case we moved it */
 	sc->sr_tail = tail;
 	spin_unlock_irqrestore(&sc->release_lock, flags);
+	sc_piobufavail(sc);
 }
 
 /*

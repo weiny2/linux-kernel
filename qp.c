@@ -40,6 +40,7 @@
 
 #include "hfi.h"
 #include "qp.h"
+#include "trace.h"
 
 #define BITS_PER_PAGE           (PAGE_SIZE*BITS_PER_BYTE)
 #define BITS_PER_PAGE_MASK      (BITS_PER_PAGE-1)
@@ -1307,6 +1308,22 @@ void qib_get_credit(struct qib_qp *qp, u32 aeth)
 			}
 		}
 	}
+}
+
+void qib_qp_wakeup(struct qib_qp *qp, u32 flag)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&qp->s_lock, flags);
+	if (qp->s_flags & flag) {
+		qp->s_flags &= ~flag;
+		trace_hfi_qpwakeup(qp, flag);
+		qib_schedule_send(qp);
+	}
+	spin_unlock_irqrestore(&qp->s_lock, flags);
+	/* Notify qib_destroy_qp() if it is waiting. */
+	if (atomic_dec_and_test(&qp->refcount))
+		wake_up(&qp->wait);
 }
 
 int qib_qp_init(struct qib_ibdev *dev)

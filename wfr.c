@@ -1364,12 +1364,6 @@ static void stop_irq(struct hfi_devdata *dd)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
-static void wantpiobuf_intr(struct hfi_devdata *dd, u32 needint)
-{
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-}
-
 static int reset(struct hfi_devdata *dd)
 {
 	if (print_unimplemented)
@@ -3339,7 +3333,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_set_intr_state    = set_intr_state;
 	dd->f_setextled         = setextled;
 	dd->f_update_usrhead    = update_usrhead;
-	dd->f_wantpiobuf_intr   = wantpiobuf_intr;
+	dd->f_wantpiobuf_intr   = sc_wantpiobuf_intr;
 	dd->f_xgxs_reset        = xgxs_reset;
 	dd->f_sdma_hw_clean_up  = sdma_hw_clean_up;
 	dd->f_sdma_hw_start_up  = sdma_hw_start_up;
