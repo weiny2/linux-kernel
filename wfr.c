@@ -1038,10 +1038,13 @@ static irqreturn_t general_interrupt(int irq, void *data)
 	/* phase 2: call the apropriate handler */
 	for_each_set_bit(bit, (unsigned long *)&regs[0],
 						WFR_CCE_NUM_INT_CSRS*64) {
+#if 0
 		/* TODO: the print is temporary */
 		char buf[64];
 		printk(DRIVER_NAME"%d: interrupt %d: %s\n", dd->unit, bit,
 			is_name(buf, sizeof(buf), bit));
+		/* TODO implement trace down in is_interrupt() */
+#endif
 		is_interrupt(dd, bit);
 	}
 
