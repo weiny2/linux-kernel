@@ -860,8 +860,7 @@ void sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 		sc->credit_ctrl);
 	if (needint) {
 		mmiowb();
-		write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE,
-			WFR_SEND_CTXT_CREDIT_FORCE_FORCE_RETURN_SMASK);
+		sc_return_credits(sc);
 	}
 }
 
