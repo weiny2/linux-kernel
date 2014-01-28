@@ -313,6 +313,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 int init_send_contexts(struct hfi_devdata *dd)
 {
 	u64 reg, all;
+	u32 release_credits, thresh;
 	u16 base;
 	int ret, i, j, context;
 
@@ -390,11 +391,27 @@ int init_send_contexts(struct hfi_devdata *dd)
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
 		/* unmask all errors */
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
+		/*
+		 * Set up a threshold credit return when one MTU of space
+		 * remains.  At the moment all VLs have the same MTU.
+		 * That will change.
+		 *
+		 * TODO: We may want a "credit return MTU factor" to change
+		 * the threshold in terms of 10ths of an MTU.  E.g.
+		release_credits = (dd->pport[0].ibmtu * cr_mtu_factor) /
+					(10 * WFR_PIO_BLOCK_SIZE);
+		 */
+		release_credits = dd->pport[0].ibmtu / WFR_PIO_BLOCK_SIZE;
+		if (dd->send_contexts[i].credits <= release_credits)
+			thresh = 1;
+		else
+			thresh = dd->send_contexts[i].credits - release_credits;
+		reg = thresh << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT;
 		/* turn on credit interrupt if kernel thread */
-		if (dd->send_contexts[i].type == SC_KERNEL) {
-			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 
-				WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK);
-		}
+		if (dd->send_contexts[i].type == SC_KERNEL)
+			reg |= WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, reg);
+
 		/* set the default partition key */
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_PARTITION_KEY,
 			(DEFAULT_PKEY &
@@ -645,11 +662,12 @@ int sc_enable(struct send_context *sc)
 		} else {
 			/*
 			 * All is well. Enable the context.
-			 * We get the allocator lock to guards against any allocation
-			 * attempts (which should not happen prior to context being
-			 * enabled). On the release/disable side we don't need to
-			 * worry about locking since the releaser will not do anything
-			 * if the context accounting values have not changed.
+			 * We get the allocator lock to guards against any
+			 * allocation attempts (which should not happen prior
+			 * to context being enabled). On the release/disable
+			 * side we don't need to worry about locking since the
+			 * releaser will not do anything if the context
+			 * accounting values have not changed.
 			 */
 			reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
 			spin_lock_irqsave(&sc->alloc_lock, flags);
@@ -736,13 +754,13 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 	int trycount = 0;
 	u32 head, next;
 
-retry:
 	spin_lock_irqsave(&sc->alloc_lock, flags);
 	if (!sc->enabled) {
 		spin_unlock_irqrestore(&sc->alloc_lock, flags);
 		goto done;
 	}
 
+retry:
 	avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
 	if (blocks > avail) {
 		/* not enough room */
@@ -751,14 +769,14 @@ retry:
 			goto done;
 		}
 		/* copy from receiver cache line and recalculate */
-		//TODO: use ALLOC_ONCE on sc->free?
-		sc->alloc_free = sc->free;
+		sc->alloc_free = ACCESS_ONCE(sc->free);
 		avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
 		if (blocks > avail) {
 			/* still no room, actively update */
 			spin_unlock_irqrestore(&sc->alloc_lock, flags);
 			sc_release_update(sc);
-			sc->alloc_free = sc->free;
+			spin_lock_irqsave(&sc->alloc_lock, flags);
+			sc->alloc_free = ACCESS_ONCE(sc->free);
 			trycount++;
 			goto retry;
 		}
@@ -766,7 +784,7 @@ retry:
 
 	/* there is enough room */
 
-	/* read this volatile once */
+	/* read this once */
 	head = sc->sr_head;
 
 	/* "allocate" the buffer */
@@ -793,7 +811,7 @@ retry:
 	mb();
 
 	/* calculate next head index, do not store */
-	next = sc->sr_head + 1;
+	next = head + 1;
 	if (next >= sc->sr_size)
 		next = 0;
 	/* update the head - must be last! - the releaser can look at fields
@@ -835,14 +853,14 @@ void sc_release_update(struct send_context *sc)
 	spin_lock_irqsave(&sc->release_lock, flags);
 	/* update free */
 	hw_free = *sc->hw_free;				/* volatile read */
-	old_free = sc->free;				/* volatile read */
+	old_free = sc->free;
 	extra = (((hw_free & WFR_CR_COUNTER_SMASK) >> WFR_CR_COUNTER_SHIFT)
 			- (old_free & WFR_CR_COUNTER_MASK))
 				& WFR_CR_COUNTER_MASK;
-	sc->free = old_free + extra; 			/* volatile write */
+	sc->free = old_free + extra;
 
 	/* call sent buffer callbacks */
-	head = sc->sr_head;	/* snapshot the head */
+	head = ACCESS_ONCE(sc->sr_head);	/* snapshot the head */
 	tail = sc->sr_tail;
 	while (head != tail) {
 		pbuf = &sc->sr[tail].pbuf;

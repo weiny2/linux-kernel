@@ -85,11 +85,10 @@ struct send_context {
 	spinlock_t alloc_lock ____cacheline_aligned_in_smp;
 	unsigned long fill;		/* official alloc count */
 	unsigned long alloc_free;	/* copy of free (less cache thrash) */
-	volatile u32 sr_head;		/* shadow ring head */
+	u32 sr_head;			/* shadow ring head */
 	/* releaser fields */
 	spinlock_t release_lock ____cacheline_aligned_in_smp;
-	/* FIXME: keep volatile? Use ACCESS_ONCE()? */
-	volatile unsigned long free;	/* official free count */
+	unsigned long free;		/* official free count */
 	u32 sr_tail;			/* shadow ring tail */
 };
 
