@@ -122,6 +122,14 @@ enum {
 	STL_MTU_10240 = 9,
 };
 
+enum {
+	STL_PORT_PHYS_CONF_DISCONNECTED = 0,
+	STL_PORT_PHYS_CONF_STANDARD     = 1,
+	STL_PORT_PHYS_CONF_FIXED        = 2,
+	STL_PORT_PHYS_CONF_VARIABLE     = 3,
+	STL_PORT_PHYS_CONF_SI_PHOTO     = 4
+};
+
 enum port_info_field_masks {
 	/* vl.inittype */
 	STL_PI_MASK_INITTYPE                      = 0x0F,
@@ -135,6 +143,8 @@ enum port_info_field_masks {
 	/* port_states.portphysstate_portstate */
 	STL_PI_MASK_PORT_PHYSICAL_STATE           = 0xF0,
 	STL_PI_MASK_PORT_STATE                    = 0x0F,
+	/* port_phys_conf */
+	STL_PI_MASK_PORT_PHYSICAL_CONF            = 0x0F,
 	/* collectivemask_multicastmask */
 	STL_PI_MASK_COLLECT_MASK                  = 0x38,
 	STL_PI_MASK_MULTICAST_MASK                = 0x07,
@@ -259,7 +269,7 @@ struct stl_port_info {
 		u8     unsleepstate_downdefstate; /* 4 bits, 4 bits */
 		u8     portphysstate_portstate;   /* 4 bits, 4 bits */
 	} port_states;
-	u8     reserved;
+	u8     port_phys_conf;                    /* 4 res, 4 bits */
 	u8     collectivemask_multicastmask;      /* 2 res, 3, 3 */
 	u8     mkeyprotect_lmc;                   /* 2 bits, 2 res, 4 bits */
 	u8     smsl;                              /* 3 res, 5 bits */
