@@ -2594,6 +2594,9 @@ out_put:
 static int kern_spec_to_ib_spec(struct ib_uverbs_flow_spec *kern_spec,
 				union ib_flow_spec *ib_spec)
 {
+	if (kern_spec->reserved)
+		return -EINVAL;
+
 	ib_spec->type = kern_spec->type;
 
 	switch (ib_spec->type) {
@@ -2670,6 +2673,10 @@ int ib_uverbs_ex_create_flow(struct ib_uverbs_file *file,
 	if (cmd.flow_attr.size > ucore->inlen ||
 	    cmd.flow_attr.size >
 	    (cmd.flow_attr.num_of_specs * sizeof(struct ib_uverbs_flow_spec)))
+		return -EINVAL;
+
+	if (cmd.flow_attr.reserved[0] ||
+	    cmd.flow_attr.reserved[1])
 		return -EINVAL;
 
 	if (cmd.flow_attr.num_of_specs) {
