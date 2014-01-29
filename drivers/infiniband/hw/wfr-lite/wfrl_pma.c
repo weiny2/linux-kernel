@@ -336,6 +336,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	struct stl_port_status_rsp *rsp;
 	u8 vl_index;
 	unsigned long vl;
+	u32 vl_select_mask;
 
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
@@ -390,7 +391,8 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 
 	/* SuzieQ does not have per-VL counters, but put in some data for debug */
 	vl_index = 0;
-	for_each_set_bit(vl, (unsigned long *)&(req->vl_select_mask),
+	vl_select_mask = cpu_to_be32(req->vl_select_mask);
+	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			sizeof(req->vl_select_mask)) {
 		rsp->vls[vl_index].port_vl_xmit_pkts = cpu_to_be64(cntrs.port_xmit_packets);
 		rsp->vls[vl_index].port_vl_rcv_pkts = cpu_to_be64(cntrs.port_rcv_packets);
@@ -507,6 +509,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	struct qib_ibport *ibp;
 	struct qib_pportdata *ppd ;
 	struct qib_verbs_counters cntrs;
+	u64 port_mask;
+	u32 vl_select_mask;
 
 	req = (struct stl_port_data_counters_msg *)pmp->data;
 
@@ -539,7 +543,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	 * in the mask needs to be consistent with the port the request 
 	 * came in on. 
 	 */
-	port_num = find_first_bit((unsigned long *)&(req->port_select_mask[3]),
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
 					 sizeof(req->port_select_mask[3]));
 
 	if ((u8)port_num != port) {
@@ -558,7 +563,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	pma_adjust_counters_for_reset_done(&cntrs, ibp);
 
 	rsp->port_number = (u8)port;
-	rsp->link_quality_indicator = 3; // just a test value (no equiv in SuzieQ)
+	rsp->link_quality_indicator = cpu_to_be32(3); // just a test value (no equiv in SuzieQ)
 
 	// The real WFR will have more than this. This is just Suzie-Q info we have
 	rsp->port_xmit_data = cpu_to_be64(cntrs.port_xmit_data);
@@ -579,7 +584,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 
 	vlinfo = (struct _vls_dctrs *)&(rsp->vls[0]);
 	vl_index = 0;
-	for_each_set_bit(vl, (unsigned long *)&(req->vl_select_mask),
+	vl_select_mask = cpu_to_be32(req->vl_select_mask);
+	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 					 sizeof(req->vl_select_mask))
 	{
 		/* There is no "per VL" data from SuzieQ, but for
@@ -615,6 +621,8 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 	struct qib_verbs_counters cntrs;
 	struct _vls_ectrs * vlinfo;
 	unsigned long vl;
+	u64 port_mask;
+	u32 vl_select_mask;
 
 	req = (struct stl_port_error_counters_msg *)pmp->data;
 
@@ -651,7 +659,8 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 	 * in the mask needs to be consistent with the port the request 
 	 * came in on. 
 	 */
-	port_num = find_first_bit((unsigned long *)&(req->port_select_mask[3]),
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
 					 sizeof(req->port_select_mask[3]));
 
 	if ((u8)port_num != port) {
@@ -685,7 +694,9 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 	rsp->vl15_dropped = cpu_to_be64(cntrs.vl15_dropped);
 
 	vlinfo = (struct _vls_ectrs *)&(rsp->vls[0]);
-	for_each_set_bit(vl, (unsigned long *)&(req->vl_select_mask),sizeof(req->vl_select_mask))
+	vl_select_mask = cpu_to_be32(req->vl_select_mask);
+	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+					 sizeof(req->vl_select_mask))
 	{
 		/* There is no "per VL" data from SuzieQ, but for
 		 * debug, copy some data in. */
