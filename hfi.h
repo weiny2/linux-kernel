@@ -1235,6 +1235,7 @@ int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
 int qib_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
 		    const struct pci_device_id *);
 void qib_pcie_ddcleanup(struct hfi_devdata *);
+void hfi_pcie_flr(struct hfi_devdata *);
 int qib_pcie_params(struct hfi_devdata *, u32, u32 *, struct qib_msix_entry *);
 void qib_enable_intx(struct pci_dev *);
 void qib_nomsix(struct hfi_devdata *);

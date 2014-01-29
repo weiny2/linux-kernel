@@ -65,6 +65,11 @@ module_param(eager_buffer_size, uint, S_IRUGO);
 MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`");
 
 /* TODO: temporary */
+static uint use_flr;
+module_param_named(use_flr, use_flr, uint, S_IRUGO);
+MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
+
+/* TODO: temporary */
 static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
 MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
@@ -3037,31 +3042,85 @@ static void reset_txe(struct hfi_devdata *dd)
 }
 
 /*
- * Read chip sizes and then reset parts to sane, disabled,values.  We cannot
+ * Read chip sizes and then reset parts to sane, disabled, values.  We cannot
  * depend on the chip just being reset - a driver may be loaded and
  * unloaded many times.
  *
  * Sets:
  * dd->chip_rcv_contexts  - number of receive contexts supported by the chip
+ * dd->chip_rcv_array_count - number of entries in the Receive Array
  * dd->chip_send_contexts - number PIO send contexts supported by the chip
  * dd->chip_pio_mem_size  - size of PIO send memory, in blocks
  * dd->chip_sdma_engines  - number of SDMA engines supported by the chip
  */
 static void init_chip(struct hfi_devdata *dd)
 {
+	u64 reg, mask;
+	int i;
+
 	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
 	dd->chip_rcv_array_count = read_csr(dd, WFR_RCV_ARRAY_CNT);
 	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
 	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
 	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
 
-	// FIXME:
-	// o make sure all rcv contexts are disabled
-	// o make sure all of SDMA engines are disabled
-	// o make sure all interrupts are disabled
-	// o reset all interrupt mappings back to default
-	// o other...
-	reset_txe(dd);
+	/*
+	 * If we are holding the ASIC mutex, clear it.
+	 */
+	reg = read_csr(dd, WFR_ASIC_CFG_MUTEX);
+	mask = 1ull << dd->hfi_id;
+	if (reg & mask)
+		write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);
+
+	if (use_flr) {
+		dd_dev_info(dd, "Using FLR+DC reset to clear CSRs\n");
+		/*
+		 * Reset the device to put the CSRs in a known state.
+		 * A FLR will reset the SPC core without resetting the
+		 * PCIe.  Combine this with a DC reset.
+		 *
+		 * Stop the device from doing anything while we do a
+		 * reset.  We know there are no other active users of
+		 * the device since we are now in charge.  Next, turn
+		 * off all outbound and inbound traffic and make sure
+		 * the device does not generate any interrupts.
+		 */
+
+		/* disable send contexts and SDMA engines */
+		for (i = 0; i < dd->chip_send_contexts; i++)
+			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
+		for (i = 0; i < dd->chip_sdma_engines; i++)
+			write_kctxt_csr(dd, i, WFR_SEND_DMA_CTRL, 0);
+		/* disable port (turn off RXE inbound traffic) */
+		write_csr(dd, WFR_RCV_CTRL, 0);
+		/* mask all interrupt sources */
+		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+			write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
+
+		/*
+		 * DC Reset: do a full DC reset before the FLR.  A
+		 * recommended length of time to hold is one CSR read,
+		 * so reread the CceDcCtrl.  Then, hold the DC in reset
+		 * across the FLR.
+		 */
+		write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
+		(void) read_csr(dd, WFR_CCE_DC_CTRL);
+
+		/* do the FLR, the DC reset will remain */
+		hfi_pcie_flr(dd);
+
+		/* now clear the DC reset */
+		write_csr(dd, WFR_CCE_DC_CTRL, 0);
+	} else {
+		dd_dev_info(dd, "Clearing CSRs with writes\n");
+		// FIXME:
+		// o make sure all rcv contexts are disabled
+		// o make sure all of SDMA engines are disabled
+		// o make sure all interrupts are disabled
+		// o reset all interrupt mappings back to default
+		// o other...
+		reset_txe(dd);
+	}
 
 	write_uninitialized_csrs_and_memories(dd);
 
@@ -3247,7 +3306,16 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 {
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
+	u64 rev2;
 	int i, ret;
+	u16 revision;
+	u8 code;
+	static const char *inames[] = { /* implementation names */
+		"RTL silicon",
+		"RTL VCS simulation",
+		"RTL FPGA emulation",
+		"Functional simulator"
+	};
 
 	dd = qib_alloc_devdata(pdev,
 		NUM_IB_PORTS * sizeof(struct qib_pportdata));
@@ -3357,7 +3425,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret < 0)
 		goto bail_free;
 
-	/* verify that reads actually work, save revision for reset check  */
+	/* verify that reads actually work, save revision for reset check */
 	dd->revision = read_csr(dd, WFR_CCE_REVISION);
 	if (dd->revision == ~(u64)0) {
 		dd_dev_err(dd, "cannot read chip CSRs\n");
@@ -3370,9 +3438,15 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* obtain the hardware ID - NOT related to unit, which is a
 	   software enumeration */
-	dd->hfi_id = (read_csr(dd, WFR_CCE_REVISION2) &
-				WFR_CCE_REVISION2_HFI_ID_SMASK)
-					>> WFR_CCE_REVISION2_HFI_ID_SHIFT;
+	rev2 = read_csr(dd, WFR_CCE_REVISION2);
+	dd->hfi_id = (rev2 >> WFR_CCE_REVISION2_HFI_ID_SHIFT)
+					& WFR_CCE_REVISION2_HFI_ID_MASK;
+	/* the variable size will remove unwanted bits */
+	code = rev2 >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
+	revision = rev2 >> WFR_CCE_REVISION2_IMPL_REVISION_SHIFT;
+	dd_dev_info(dd, "Implementation: %s, revision 0x%x\n",
+		code < ARRAY_SIZE(inames) ? inames[code] : "unknown",
+		(int)revision);
 
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
