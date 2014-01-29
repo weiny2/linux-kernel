@@ -1178,11 +1178,6 @@ static struct dentry *btrfs_mount(struct file_system_type *fs_type, int flags,
 	if (error)
 		return ERR_PTR(error);
 
-	if (!allow_unsupported && fs_devices->total_devices > 1) {
-		printk(KERN_WARNING "btrfs: multiple devices not supported, load module with allow_unsupported=1\n");
-		return ERR_PTR(-EOPNOTSUPP);
-	}
-
 	/*
 	 * Setup a dummy root and fs_info for test/set super.  This is because
 	 * we don't actually fill this stuff out until open_ctree, but we need

@@ -4694,18 +4694,8 @@ long btrfs_ioctl(struct file *file, unsigned int
 	case BTRFS_IOC_RESIZE:
 		return btrfs_ioctl_resize(file, argp);
 	case BTRFS_IOC_ADD_DEV:
-		if (!allow_unsupported) {
-			printk(KERN_WARNING "btrfs: IOC_ADD_DEV is not supported, load module with allow_unsupported=1\n");
-			ret = -EOPNOTSUPP;
-			break;
-		}
 		return btrfs_ioctl_add_dev(root, argp);
 	case BTRFS_IOC_RM_DEV:
-		if (!allow_unsupported) {
-			printk(KERN_WARNING "btrfs: IOC_RM_DEV is not supported, load module with allow_unsupported=1\n");
-			ret = -EOPNOTSUPP;
-			break;
-		}
 		return btrfs_ioctl_rm_dev(file, argp);
 	case BTRFS_IOC_FS_INFO:
 		return btrfs_ioctl_fs_info(root, argp);

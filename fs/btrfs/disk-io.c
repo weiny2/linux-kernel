@@ -2442,13 +2442,6 @@ int open_ctree(struct super_block *sb,
 		features |= BTRFS_FEATURE_INCOMPAT_BIG_METADATA;
 	}
 
-	if (features & BTRFS_FEATURE_INCOMPAT_BIG_METADATA) {
-		if (!allow_unsupported) {
-			printk(KERN_WARNING "btrfs: big metadata feature supported read-only, load module with allow_unsupported=1\n");
-			sb->s_flags |= MS_RDONLY;
-		}
-	}
-
 	nodesize = btrfs_super_nodesize(disk_super);
 	leafsize = btrfs_super_leafsize(disk_super);
 	sectorsize = btrfs_super_sectorsize(disk_super);
