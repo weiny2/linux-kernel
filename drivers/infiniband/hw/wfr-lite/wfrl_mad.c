@@ -241,6 +241,7 @@ static void linkup_default(u8 port)
 	vpi->flow_control_mask = cpu_to_be32(wfr_initial_vlflow_disable_mask);
 
 	vpi->overall_buffer_space = cpu_to_be16(wfr_overall_buffer_space / get_bytes_per_AU());
+	vpi->port_phys_conf = STL_PORT_PHYS_CONF_STANDARD;
 
 	if (wfr_shared_space_sup) {
 		vpi->stl_cap_mask |= cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
