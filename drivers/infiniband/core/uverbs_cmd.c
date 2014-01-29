@@ -2052,52 +2052,6 @@ ssize_t ib_uverbs_destroy_qp(struct ib_uverbs_file *file,
 	return in_len;
 }
 
-#ifdef __s390x__
-ssize_t ib_uverbs_kwrite_mmio(struct ib_uverbs_file *file,
-			const char __user *buf,
-			int in_len,
-			int out_len)
-{
-	struct ib_uverbs_kwrite_mmio	cmd_hdr;
-	ssize_t				ret = -EINVAL;
-	struct ib_uverbs_kwrite_mmio	*cmd = NULL;
-	ssize_t				cmd_length = 0;
-
-	if (file->device->ib_dev->kwrite_mmio == NULL) {
-		dev_alert(file->device->dev,
-			"The verb %s is not supported by the driver.\n",
-			"IB_USER_VERBS_CMD_KWRITE_MMIO");
-		ret = -ENOSYS;
-		goto cleanup;
-	}
-	if (in_len <= sizeof(cmd_hdr))
-		return -EINVAL;
-
-	if (copy_from_user(&cmd_hdr, buf, sizeof(cmd_hdr)))
-		return -EFAULT;
-
-	if ((int)cmd_hdr.length <= 0)
-		return -EINVAL;
-
-	cmd_length = sizeof(cmd_hdr) + cmd_hdr.length;
-
-	cmd = kmalloc(cmd_length, GFP_KERNEL);
-	if (!cmd)
-		return -ENOMEM;
-
-	if (copy_from_user(cmd, buf, cmd_length)) {
-		ret = -EFAULT;
-		goto cleanup;
-	}
-	mutex_lock(&file->mutex);
-	ret = file->device->ib_dev->kwrite_mmio(file->ucontext, cmd);
-	mutex_unlock(&file->mutex);
-
-cleanup:
-	kfree(cmd);
-	return ret;
-}
-#endif
 ssize_t ib_uverbs_post_send(struct ib_uverbs_file *file,
 			    const char __user *buf, int in_len,
 			    int out_len)

@@ -73,10 +73,6 @@ struct mlx4_ib_ucontext {
 	struct mlx4_uar		uar;
 	struct list_head	db_page_list;
 	struct mutex		db_page_mutex;
-#ifdef __s390x__
-	void __iomem		*uar_mmap;
-	void __iomem		*bf_page_mmap;
-#endif
 };
 
 struct mlx4_ib_pd {
@@ -757,8 +753,4 @@ void mlx4_ib_device_unregister_sysfs(struct mlx4_ib_dev *device);
 __be64 mlx4_ib_gen_node_guid(void);
 
 
-#ifdef __s390x__
-int mlx4_ib_kwrite_mmio(struct ib_ucontext  *ibcontext,
-			struct ib_uverbs_kwrite_mmio *cmd);
-#endif
 #endif /* MLX4_IB_H */

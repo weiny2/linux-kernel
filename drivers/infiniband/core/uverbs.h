@@ -221,8 +221,5 @@ IB_UVERBS_DECLARE_CMD(close_xrcd);
 IB_UVERBS_DECLARE_CMD(create_flow);
 IB_UVERBS_DECLARE_CMD(destroy_flow);
 #endif /* CONFIG_INFINIBAND_EXPERIMENTAL_UVERBS_FLOW_STEERING */
-#ifdef __s390x__
-IB_UVERBS_DECLARE_CMD(kwrite_mmio);
-#endif
 
 #endif /* UVERBS_H */
