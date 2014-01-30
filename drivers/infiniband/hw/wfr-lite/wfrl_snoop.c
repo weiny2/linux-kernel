@@ -726,6 +726,8 @@ static ssize_t qib_pio_send_pkt(struct qib_pportdata *ppd,
 	pbc = ((u64) control << 32) | len;
 	while (!(piobuf = dd->f_getsendbuf(ppd, pbc, &pnum))) {
 		if (i > 15) {
+			printk(KERN_ERR PFX
+				"ERROR: snoop failed to get sendbuf\n");
 			ret = -ENOMEM;
 			goto Err;
 		}
@@ -810,6 +812,8 @@ static ssize_t qib_snoop_write(struct file *fp, const char __user *data,
 
 	buffer = vmalloc(plen);
 	if (!buffer) {
+		printk(KERN_ERR PFX
+			"ERROR: snoop failed vmalloc error\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
