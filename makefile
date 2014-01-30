@@ -71,8 +71,8 @@ dist: distclean specfile
 	rm -rf /tmp/hfi-$(VERSION)
 
 install:
-	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KERNVER)/updates
-	install hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KERNVER)/updates
+	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 
 test:
 	echo $(NAME) $(RELEASE)
