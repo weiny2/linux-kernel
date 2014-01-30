@@ -13,5 +13,8 @@ hfi-y := cq.o device.o diag.o dma.o driver.o file_ops.o firmware.o fs.o \
 	uc.o ud.o user_pages.o user_sdma.o verbs_mcast.o verbs.o wfr.o
 
 CFLAGS_trace.o = -I$(src)
+ifdef MVERSION
+CFLAGS_driver.o = -DHFI_DRIVER_VERSION_BASE=\"$(MVERSION)\"
+endif
 
 

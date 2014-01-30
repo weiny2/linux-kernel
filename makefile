@@ -49,8 +49,7 @@ KBUILD  ?= /lib/modules/$(KVER)/build
 PWD:=$(shell pwd)
 
 driver:
-	make RELEASE=$(VERSION)-$(RELEASE)$(KVER) -C $(KBUILD) M=$(PWD)
-
+	make RELEASE=$(VERSION)-$(RELEASE)$(KVER) -C $(KBUILD) M=$(PWD) MVERSION=$(VERSION)-$(RELEASE)
 clean:
 	make -C $(KBUILD) M=$(PWD) clean
 

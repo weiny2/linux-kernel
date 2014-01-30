@@ -49,7 +49,7 @@
  * The size has to be longer than this string, so we can append
  * board/chip information to it in the init code.
  */
-const char ib_qib_version[] = QIB_DRIVER_VERSION "\n";
+const char ib_qib_version[] = HFI_DRIVER_VERSION "\n";
 
 DEFINE_SPINLOCK(qib_devs_lock);
 LIST_HEAD(qib_dev_list);
@@ -66,7 +66,7 @@ MODULE_PARM_DESC(max_mtu, "Set default MTU bytes, default is 4096");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
-MODULE_VERSION(QIB_DRIVER_VERSION);
+MODULE_VERSION(HFI_DRIVER_VERSION);
 
 /*
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
