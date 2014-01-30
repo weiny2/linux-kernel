@@ -163,11 +163,11 @@ static ssize_t write_mem(struct file *file, const char __user *buf,
 	unsigned long copied;
 	void *ptr;
 
-	if (p != *ppos)
-		return -EFBIG;
-
 	if (secure_modules())
 		return -EPERM;
+
+	if (p != *ppos)
+		return -EFBIG;
 
 	if (!valid_phys_addr_range(p, count))
 		return -EFAULT;
