@@ -672,7 +672,7 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 
 	rsp = (struct _port_ectrs *)&(req->port[0]);
 
-	ibp = to_iport(ibdev, port_num+1); // function assumes 1-based port number
+	ibp = to_iport(ibdev, port_num);
 	ppd = ppd_from_ibp(ibp);
 
 	qib_get_counters(ppd, &cntrs);
