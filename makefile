@@ -35,6 +35,7 @@
 # product whatsoever.
 #
 # The desired version number comes from the most recent tag starting with "v"
+BASEVERSION=0.2
 VERSION = $(shell if [ -d .git ] ; then  git describe --tags --abbrev=0 --match='v*' | sed -e 's/^v//' -e 's/-/_/'; else echo "version" ; fi)
 # The desired release number comes the git describe following the version which
 # is the number of commits since the version tag was planted suffixed by the g<commitid>
@@ -54,6 +55,7 @@ clean:
 	make -C $(KBUILD) M=$(PWD) clean
 
 distclean: clean
+	rm -f hfi.spec
 	rm -f *.tgz
 
 specfile: hfi.spec.in
@@ -61,7 +63,14 @@ specfile: hfi.spec.in
 		-e 's/@VERSION@/'${VERSION}'/g' \
 		-e 's/@RELEASE@/'${RELEASE}'/g' \
 		-e 's/@NAME@/'${NAME}'/g' hfi.spec.in > hfi.spec
-		
+	if [ -d .git ]; then \
+		echo '%changelog' >> hfi.spec; \
+		git log --no-merges v$(BASEVERSION)..HEAD --format="* %cd <%ae>%n- %s%n" \
+		| sed 's/-[0-9][0-9][0-9][0-9] //' \
+		| sed 's/ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]//' \
+		>> hfi.spec; \
+	fi
+
 dist: distclean specfile
 	rm -rf /tmp/hfi-$(VERSION)
 	mkdir -p /tmp/hfi-$(VERSION)
