@@ -487,6 +487,11 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 	} else {
 		vpi->neigh_node_guid = link_info->node_guid;
 		vpi->port_neigh_mode = link_info->port_mode;
+		if (vpi->port_neigh_mode & STL_PI_MASK_NEIGH_MGMT_ALLOWED) {
+			struct qib_pportdata *ppd = dd->pport + port - 1;
+			struct qib_ctxtdata *rcd = dd->rcd[ppd->hw_pidx];
+			rcd->pkeys[2] = 0xffff;
+		}
 	}
 
 // FIXME at some point we should tell users about the state change

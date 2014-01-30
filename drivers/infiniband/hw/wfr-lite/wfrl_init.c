@@ -162,7 +162,9 @@ int qib_create_ctxts(struct qib_devdata *dd)
 			ret = -ENOMEM;
 			goto done;
 		}
-		rcd->pkeys[0] = QIB_DEFAULT_P_KEY;
+		rcd->pkeys[0] = WFR_DEFAULT_APP_P_KEY;
+		rcd->pkeys[1] = WFR_DEFAULT_MGMT_P_KEY;
+		rcd->pkeys[2] = 0;
 		rcd->seq_cnt = 1;
 	}
 	ret = 0;
