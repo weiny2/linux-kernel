@@ -1264,6 +1264,7 @@ const char *get_unit_name(int unit);
 /* global module parameter variables */
 extern unsigned int max_mtu;
 extern unsigned int default_mtu;
+extern unsigned int hfi_cu;
 extern uint num_rcv_contexts;
 extern unsigned qib_n_krcv_queues;
 extern uint kdeth_qp;

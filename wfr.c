@@ -3253,6 +3253,9 @@ void init_txe(struct hfi_devdata *dd)
 	write_csr(dd, WFR_SEND_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, ~0ull);
 
+	/* set the local CU to AU mapping */
+	assign_local_cm_au_table(dd, hfi_cu);
+
 	/*
 	 * FIXME: Set up initial send link credits.  We need an amount
 	 * in vl15 so we can talk to the FM to set up the rest.  The
@@ -3285,7 +3288,6 @@ void init_txe(struct hfi_devdata *dd)
 			    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT)
 			| (WFR_CM_VL_SHARED_CREDITS
 			    << WFR_SEND_CM_CREDIT_VL15_SHARED_LIMIT_VL_SHIFT));
-	assign_local_cm_au_table(dd, 1);	/* 1 CU = 1 AU */
 	assign_remote_cm_au_table(dd, 1);	/* 1 CU = 1 AU */
 }
 
