@@ -3326,7 +3326,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	u64 rev2;
 	int i, ret;
 	u16 revision;
-	u8 code;
 	static const char *inames[] = { /* implementation names */
 		"RTL silicon",
 		"RTL VCS simulation",
@@ -3459,10 +3458,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->hfi_id = (rev2 >> WFR_CCE_REVISION2_HFI_ID_SHIFT)
 					& WFR_CCE_REVISION2_HFI_ID_MASK;
 	/* the variable size will remove unwanted bits */
-	code = rev2 >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
+	dd->icode = rev2 >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
 	revision = rev2 >> WFR_CCE_REVISION2_IMPL_REVISION_SHIFT;
 	dd_dev_info(dd, "Implementation: %s, revision 0x%x\n",
-		code < ARRAY_SIZE(inames) ? inames[code] : "unknown",
+		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)revision);
 
 	/* obtain chip sizes, reset chip CSRs */

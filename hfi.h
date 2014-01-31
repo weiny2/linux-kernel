@@ -872,6 +872,8 @@ struct hfi_devdata {
 	u8 minrev;
 	/* hardware ID */
 	u8 hfi_id;
+	/* implementation code */
+	u8 icode;
 	/* default link down value (poll/sleep) */
 	u8 link_default;
 
