@@ -743,8 +743,8 @@ struct qib_tid_session_member {
 
 #define QIB_DEFAULT_P_KEY 0xFFFF
 
-#define WFR_DEFAULT_APP_P_KEY    0x8001
-#define WFR_DEFAULT_MGMT_P_KEY 0x7FFF
+#define WFR_DEFAULT_APP_P_KEY    0x0000
+#define WFR_DEFAULT_MGMT_P_KEY   0x7FFF
 
 #define QIB_PERMISSIVE_LID 0xFFFF
 #define QIB_AETH_CREDIT_SHIFT 24
