@@ -206,6 +206,36 @@ void qib_pcie_ddcleanup(struct hfi_devdata *dd)
 	pci_set_drvdata(dd->pcidev, NULL);
 }
 
+/*
+ * Do a Function Level Reset (FLR) on the device.
+ * Based on static function drivers/pci/pci.c:pcie_flr().
+ */
+void hfi_pcie_flr(struct hfi_devdata *dd)
+{
+	int i;
+	u16 status;
+
+	/* no need to check for the capability - we know the device has it */
+
+	/* wait for Transaction Pending bit to clear, at most a few ms */
+	for (i = 0; i < 4; i++) {
+		if (i)
+			msleep((1 << (i - 1)) * 100);
+
+		pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVSTA, &status);
+		if (!(status & PCI_EXP_DEVSTA_TRPND))
+			goto clear;
+	}
+
+	dd_dev_err(dd, "Transaction Pending bit is not clearing, proceedingreset anyway\n");
+
+clear:
+	pcie_capability_set_word(dd->pcidev, PCI_EXP_DEVCTL,
+						PCI_EXP_DEVCTL_BCR_FLR);
+	/* PCIe spec requires the function to be back within 100ms */
+	msleep(100);
+}
+
 static void qib_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
 			   struct qib_msix_entry *qib_msix_entry)
 {

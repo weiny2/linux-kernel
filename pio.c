@@ -30,8 +30,10 @@
  * SOFTWARE.
  */
 
-#include "hfi.h"
 #include <linux/delay.h>
+#include "hfi.h"
+#include "qp.h"
+#include "trace.h"
 
 /*
  * Send Context functions
@@ -42,6 +44,7 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 {
 	u64 reg;
 
+//FIXME: QIB held sendctrl_lock when changing the global ctrl
 	reg = read_csr(dd, WFR_SEND_CTRL);
 	switch (op) {
 	case PSC_GLOBAL_ENABLE:
@@ -49,6 +52,12 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 		break;
 	case PSC_GLOBAL_DISABLE:
 		reg &= ~WFR_SEND_CTRL_SEND_ENABLE_SMASK;
+		break;
+	case PSC_GLOBAL_VLARB_ENABLE:
+		reg |= WFR_SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
+		break;
+	case PSC_GLOBAL_VLARB_DISABLE:
+		reg &= ~WFR_SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
 		break;
 	default:
 		dd_dev_err(dd, "%s: invalid control %d\n", __func__, op);
@@ -382,12 +391,9 @@ int init_send_contexts(struct hfi_devdata *dd)
 		}
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
 		/* unmask all errors */
+
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
-		/* turn on credit interrupt if kernel thread */
-		if (dd->send_contexts[i].type == SC_KERNEL) {
-			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 
-				WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK);
-		}
+
 		/* set the default partition key */
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_PARTITION_KEY,
 			(DEFAULT_PKEY &
@@ -468,6 +474,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	struct send_context *sc;
 	unsigned long pa;
 	u64 reg;
+	u32 release_credits, thresh;
 	u32 context;
 	int ret;
 
@@ -487,6 +494,8 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	sc->dd = dd;
 	spin_lock_init(&sc->alloc_lock);
 	spin_lock_init(&sc->release_lock);
+	spin_lock_init(&sc->wait_lock);
+	INIT_LIST_HEAD(&sc->piowait);
 
 	/* TBD: group set-up.  Make it always 0 for now. */
 	sc->group = 0;
@@ -523,6 +532,34 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	reg = pa & WFR_SEND_CTXT_CREDIT_RETURN_ADDR_ADDRESS_SMASK;
 	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, reg);
 
+	/*
+	 * Set up a threshold credit return when one MTU of space
+	 * remains.  At the moment all VLs have the same MTU.
+	 * That will change.
+	 *
+	 * TODO: We may want a "credit return MTU factor" to change
+	 * the threshold in terms of 10ths of an MTU.  E.g.
+	release_credits = DIV_ROUND_UP((dd->pport[0].ibmtu * cr_mtu_factor)
+				+ (dd->rcvhdrentsize<<2),
+				10 * WFR_PIO_BLOCK_SIZE);
+	 * PROBLEM: ibmtu is not yet set up when the kernel send
+	 * contexts are created.
+	 */
+	release_credits = DIV_ROUND_UP(default_mtu + (dd->rcvhdrentsize<<2),
+							WFR_PIO_BLOCK_SIZE);
+	if (sc->credits <= release_credits)
+		thresh = 1;
+	else
+		thresh = sc->credits - release_credits;
+	reg = thresh << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT;
+	/* set up write-through credit_ctrl */
+	sc->credit_ctrl = reg;
+	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_CTRL, reg);
+
+	dd_dev_info(dd,
+		"Send context %u group %u credits %u credit_ctrl 0x%llx threshold %u\n",
+		context, sc->group, sc->credits, sc->credit_ctrl, thresh);
+
 	return sc;
 
 no_shadow:
@@ -543,6 +580,8 @@ void sc_free(struct send_context *sc)
 		return;
 
 	dd = sc->dd;
+	if (!list_empty(&sc->piowait))
+		dd_dev_err(dd, "piowait list not empty!\n");
 	context = sc->context;
 	sc_disable(sc);	/* make sure the HW is disabled */
 	dd->send_contexts[context].sc = NULL;
@@ -638,11 +677,12 @@ int sc_enable(struct send_context *sc)
 		} else {
 			/*
 			 * All is well. Enable the context.
-			 * We get the allocator lock to guards against any allocation
-			 * attempts (which should not happen prior to context being
-			 * enabled). On the release/disable side we don't need to
-			 * worry about locking since the releaser will not do anything
-			 * if the context accounting values have not changed.
+			 * We get the allocator lock to guards against any
+			 * allocation attempts (which should not happen prior
+			 * to context being enabled). On the release/disable
+			 * side we don't need to worry about locking since the
+			 * releaser will not do anything if the context
+			 * accounting values have not changed.
 			 */
 			reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
 			spin_lock_irqsave(&sc->alloc_lock, flags);
@@ -661,8 +701,11 @@ void sc_return_credits(struct send_context *sc)
 	if (!sc)
 		return;
 
+	/* a 0->1 transition schedules a credit return */
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE,
 		WFR_SEND_CTXT_CREDIT_FORCE_FORCE_RETURN_SMASK);
+	/* set back to 0 for next time */
+	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE, 0);
 }
 
 /* allow all in-flight packets to drain on the context */
@@ -726,13 +769,13 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 	int trycount = 0;
 	u32 head, next;
 
-retry:
 	spin_lock_irqsave(&sc->alloc_lock, flags);
 	if (!sc->enabled) {
 		spin_unlock_irqrestore(&sc->alloc_lock, flags);
 		goto done;
 	}
 
+retry:
 	avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
 	if (blocks > avail) {
 		/* not enough room */
@@ -741,14 +784,14 @@ retry:
 			goto done;
 		}
 		/* copy from receiver cache line and recalculate */
-		//TODO: use ALLOC_ONCE on sc->free?
-		sc->alloc_free = sc->free;
+		sc->alloc_free = ACCESS_ONCE(sc->free);
 		avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
 		if (blocks > avail) {
 			/* still no room, actively update */
 			spin_unlock_irqrestore(&sc->alloc_lock, flags);
 			sc_release_update(sc);
-			sc->alloc_free = sc->free;
+			spin_lock_irqsave(&sc->alloc_lock, flags);
+			sc->alloc_free = ACCESS_ONCE(sc->free);
 			trycount++;
 			goto retry;
 		}
@@ -756,7 +799,7 @@ retry:
 
 	/* there is enough room */
 
-	/* read this volatile once */
+	/* read this once */
 	head = sc->sr_head;
 
 	/* "allocate" the buffer */
@@ -783,7 +826,7 @@ retry:
 	mb();
 
 	/* calculate next head index, do not store */
-	next = sc->sr_head + 1;
+	next = head + 1;
 	if (next >= sc->sr_size)
 		next = 0;
 	/* update the head - must be last! - the releaser can look at fields
@@ -802,6 +845,66 @@ retry:
 	pbuf->carry.val64 = 0;
 done:
 	return pbuf;
+}
+
+void sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
+{
+	struct hfi_devdata *dd = sc->dd;
+
+	if (needint)
+		sc->credit_ctrl |= WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+	else
+		sc->credit_ctrl &= ~WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+	trace_hfi_wantpiointr(sc, needint, sc->credit_ctrl);
+	write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CREDIT_CTRL,
+		sc->credit_ctrl);
+	if (needint) {
+		mmiowb();
+		sc_return_credits(sc);
+	}
+}
+
+/**
+ * sc_piobufavail - callback when a PIO buffer is available
+ * @sc: the send context
+ *
+ * This is called from the interrupt handler when a PIO buffer is
+ * available after qib_verbs_send() returned an error that no buffers were
+ * available. Disable the interrupt if there are no more QPs waiting.
+ */
+static void sc_piobufavail(struct send_context *sc)
+{
+	struct hfi_devdata *dd = sc->dd;
+	struct list_head *list;
+	struct qib_qp *qps[5];
+	struct qib_qp *qp;
+	unsigned long flags;
+	unsigned i, n = 0;
+
+	if (dd->send_contexts[sc->context].type != SC_KERNEL)
+		return;
+	list = &sc->piowait;
+	/*
+	 * Note: checking that the piowait list is empty and clearing
+	 * the buffer available interrupt needs to be atomic or we
+	 * could end up with QPs on the wait list with the interrupt
+	 * disabled.
+	 */
+	spin_lock_irqsave(&sc->wait_lock, flags);
+	while (!list_empty(list)) {
+		if (n == ARRAY_SIZE(qps))
+			goto full;
+		qp = list_entry(list->next, struct qib_qp, iowait);
+		list_del_init(&qp->iowait);
+		atomic_inc(&qp->refcount);
+		qps[n++] = qp;
+	}
+	dd->f_wantpiobuf_intr(sc, 0);
+full:
+	spin_unlock_irqrestore(&sc->wait_lock, flags);
+
+	for (i = 0; i < n; i++)
+		qib_qp_wakeup(qps[i], QIB_S_WAIT_PIO);
 }
 
 /* use the jiffies compare to get the wrap right */
@@ -825,14 +928,15 @@ void sc_release_update(struct send_context *sc)
 	spin_lock_irqsave(&sc->release_lock, flags);
 	/* update free */
 	hw_free = *sc->hw_free;				/* volatile read */
-	old_free = sc->free;				/* volatile read */
+	old_free = sc->free;
 	extra = (((hw_free & WFR_CR_COUNTER_SMASK) >> WFR_CR_COUNTER_SHIFT)
 			- (old_free & WFR_CR_COUNTER_MASK))
 				& WFR_CR_COUNTER_MASK;
-	sc->free = old_free + extra; 			/* volatile write */
+	sc->free = old_free + extra;
+	trace_hfi_piofree(sc, extra);
 
 	/* call sent buffer callbacks */
-	head = sc->sr_head;	/* snapshot the head */
+	head = ACCESS_ONCE(sc->sr_head);	/* snapshot the head */
 	tail = sc->sr_tail;
 	while (head != tail) {
 		pbuf = &sc->sr[tail].pbuf;
@@ -851,6 +955,7 @@ void sc_release_update(struct send_context *sc)
 	/* update tail, in case we moved it */
 	sc->sr_tail = tail;
 	spin_unlock_irqrestore(&sc->release_lock, flags);
+	sc_piobufavail(sc);
 }
 
 /*

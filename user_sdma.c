@@ -727,7 +727,7 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 	if (list_empty(pktlist))
 		return 0;
 
-	if (unlikely(!(ppd->lflags & QIBL_LINKACTIVE)))
+	if (unlikely(ppd->lstate != IB_PORT_ACTIVE))
 		return -ECOMM;
 
 	spin_lock_irqsave(&ppd->sdma_lock, flags);

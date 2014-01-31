@@ -227,13 +227,15 @@ struct hfi_base_info {
  * Define the driver version number.  This is something that refers only
  * to the driver itself, not the software interfaces it supports.
  */
-#define QIB_DRIVER_VERSION_BASE "1.11"
+#ifndef HFI_DRIVER_VERSION_BASE
+#define HFI_DRIVER_VERSION_BASE "1.11"
+#endif
 
 /* create the final driver version string */
-#ifdef QIB_IDSTR
-#define QIB_DRIVER_VERSION QIB_DRIVER_VERSION_BASE " " QIB_IDSTR
+#ifdef HFI_IDSTR
+#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE " " HFI_IDSTR
 #else
-#define QIB_DRIVER_VERSION QIB_DRIVER_VERSION_BASE
+#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
 #endif
 
 /*

@@ -6,8 +6,8 @@
 
 #include "hfi.h"
 
-#define DD_DEV_ENTRY       __string(dev, dev_name(&dd->pcidev->dev))
-#define DD_DEV_ASSIGN      __assign_str(dev, dev_name(&dd->pcidev->dev))
+#define DD_DEV_ENTRY(dd)       __string(dev, dev_name(&(dd)->pcidev->dev))
+#define DD_DEV_ASSIGN(dd)      __assign_str(dev, dev_name(&(dd)->pcidev->dev))
 
 #define packettype_name(etype) { RHF_RCV_TYPE_##etype, #etype }
 #define show_packettype(etype)                  \
@@ -31,7 +31,7 @@ TRACE_EVENT(hfi_rcvhdr,
 		 u32 etail),
 	TP_ARGS(dd, ctxt, eflags, etype, tlen, updegr, etail),
 	TP_STRUCT__entry(
-		DD_DEV_ENTRY
+		DD_DEV_ENTRY(dd)
 		__field(u32, ctxt)
 		__field(u32, eflags)
 		__field(u32, etype)
@@ -40,7 +40,7 @@ TRACE_EVENT(hfi_rcvhdr,
 		__field(u32, etail)
 	),
 	TP_fast_assign(
-		DD_DEV_ASSIGN;
+		DD_DEV_ASSIGN(dd);
 		__entry->ctxt = ctxt;
 		__entry->eflags = eflags;
 		__entry->etype = etype;
@@ -64,11 +64,11 @@ TRACE_EVENT(hfi_receive_interrupt,
 	TP_PROTO(struct hfi_devdata *dd, u32 ctxt),
 	TP_ARGS(dd, ctxt),
 	TP_STRUCT__entry(
-		DD_DEV_ENTRY
+		DD_DEV_ENTRY(dd)
 		__field(u32, ctxt)
 	),
 	TP_fast_assign(
-		DD_DEV_ASSIGN;
+		DD_DEV_ASSIGN(dd);
 		__entry->ctxt = ctxt;
 	),
 	TP_printk(
@@ -77,6 +77,83 @@ TRACE_EVENT(hfi_receive_interrupt,
 		__entry->ctxt
 	)
 );
+
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi_tx
+
+TRACE_EVENT(hfi_piofree,
+	TP_PROTO(struct send_context *sc, int extra),
+	TP_ARGS(sc, extra),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sc->dd)
+		__field(u32, ctxt)
+		__field(int, extra)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sc->dd);
+		__entry->ctxt = sc->context;
+		__entry->extra = extra;
+	),
+	TP_printk(
+		"[%s] ctxt %d extra %d",
+		__get_str(dev),
+		__entry->ctxt,
+		__entry->extra
+	)
+);
+
+TRACE_EVENT(hfi_wantpiointr,
+	TP_PROTO(struct send_context *sc, u32 needint, u64 credit_ctrl),
+	TP_ARGS(sc, needint, credit_ctrl),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sc->dd)
+		__field(u32, ctxt)
+		__field(u32, needint)
+		__field(u64, credit_ctrl)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sc->dd);
+		__entry->ctxt = sc->context;
+		__entry->needint = needint;
+		__entry->credit_ctrl = credit_ctrl;
+	),
+	TP_printk(
+		"[%s] ctxt %d on %d credit_ctrl 0x%llx",
+		__get_str(dev),
+		__entry->ctxt,
+		__entry->needint,
+		(unsigned long long)__entry->credit_ctrl
+	)
+);
+
+DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
+	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_ARGS(qp, flags),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
+		__field(u32, qpn)
+		__field(u32, flags)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
+		__entry->flags = flags;
+		__entry->qpn = qp->ibqp.qp_num;
+	),
+	TP_printk(
+		"[%s] qpn 0x%x flags 0x%x",
+		__get_str(dev),
+		__entry->qpn,
+		__entry->flags
+	)
+);
+
+DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpwakeup,
+	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_ARGS(qp, flags));
+
+DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpsleep,
+	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_ARGS(qp, flags));
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi_ibhdrs
@@ -145,7 +222,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		 struct qib_ib_header *hdr),
 	TP_ARGS(dd, hdr),
 	TP_STRUCT__entry(
-		DD_DEV_ENTRY
+		DD_DEV_ENTRY(dd)
 		/* LRH */
 		__field(u8, vl)
 		__field(u8, lver)
@@ -168,7 +245,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 	),
 	TP_fast_assign(
 		struct qib_other_headers *ohdr;
-		DD_DEV_ASSIGN;
+		DD_DEV_ASSIGN(dd);
 		/* LRH */
 		__entry->vl =
 			(u8)(be16_to_cpu(hdr->lrh[0]) >> 12);
@@ -257,7 +334,7 @@ TRACE_EVENT(hfi_uctxtdata,
 	    TP_PROTO(struct hfi_devdata *dd, struct qib_ctxtdata *uctxt),
 	    TP_ARGS(dd, uctxt),
 	    TP_STRUCT__entry(
-		    DD_DEV_ENTRY
+		    DD_DEV_ENTRY(dd)
 		    __field(unsigned, ctxt)
 		    __field(u32, credits)
 		    __field(u64, hw_free)
@@ -268,7 +345,7 @@ TRACE_EVENT(hfi_uctxtdata,
 		    __field(u64, rcvegr_phys)
 		    ),
 	    TP_fast_assign(
-		    DD_DEV_ASSIGN;
+		    DD_DEV_ASSIGN(dd);
 		    __entry->ctxt = uctxt->ctxt;
 		    __entry->credits = uctxt->sc->credits;
 		    __entry->hw_free = (u64)uctxt->sc->hw_free;
@@ -299,7 +376,7 @@ TRACE_EVENT(hfi_ctxt_setup,
 		     struct hfi_ctxt_setup *cinfo),
 	    TP_ARGS(dd, ctxt, subctxt, cinfo),
 	    TP_STRUCT__entry(
-		    DD_DEV_ENTRY
+		    DD_DEV_ENTRY(dd)
 		    __field(unsigned, ctxt)
 		    __field(unsigned, subctxt)
 		    __field(u16, egrtids)
@@ -309,7 +386,7 @@ TRACE_EVENT(hfi_ctxt_setup,
 		    __field(u32, rcvegr_size)
 		    ),
 	    TP_fast_assign(
-		    DD_DEV_ASSIGN;
+		    DD_DEV_ASSIGN(dd);
 		    __entry->ctxt = ctxt;
 		    __entry->subctxt = subctxt;
 		    __entry->egrtids = cinfo->egrtids;

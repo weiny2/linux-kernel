@@ -37,25 +37,46 @@
 
 #include "hfi.h"
 
-static uint load_8051_fw = 0;
+static uint load_8051_fw;
 module_param_named(load_8051_fw, load_8051_fw, uint, S_IRUGO);
 MODULE_PARM_DESC(load_8051_fw, "Load the 8051 firmware");
 
-static uint load_fabric_fw = 0;
+static uint load_fabric_fw;
 module_param_named(load_fabric_fw, load_fabric_fw, uint, S_IRUGO);
 MODULE_PARM_DESC(load_fabric_fw, "Load the fabric SerDes firmware");
 
-static uint load_pcie_fw = 0;
+static uint load_pcie_fw;
 module_param_named(load_pcie_fw, load_pcie_fw, uint, S_IRUGO);
 MODULE_PARM_DESC(load_pcie_fw, "Load the PCIe SerDes firmware");
 
-static uint load_sbus_fw = 0;
+static uint load_sbus_fw;
 module_param_named(load_sbus_fw, load_sbus_fw, uint, S_IRUGO);
 MODULE_PARM_DESC(load_sbus_fw, "Load the SBUS firmware");
 
-static uint validate_fw = 0;
+static uint validate_fw;
 module_param_named(validate_fw, validate_fw, uint, S_IRUGO);
 MODULE_PARM_DESC(validate_fw, "Perform firmware validation");
+
+#define DEFAULT_FW_8051_NAME "hfi_dc8051.bin"
+#define DEFAULT_FW_FABRIC_NAME "hfi_fabric_serdes.bin"
+#define DEFAULT_FW_SBUS_NAME "hfi_sbus_master.bin"
+#define DEFAULT_FW_PCIE_NAME "hfi_pcie_serdes.bin"
+
+static char *fw_8051_name = DEFAULT_FW_8051_NAME;
+module_param_named(8051_name, fw_8051_name, charp, S_IRUGO);
+MODULE_PARM_DESC(8051_name, "8051 firmware name");
+
+static char *fw_fabric_serdes_name = DEFAULT_FW_FABRIC_NAME;
+module_param_named(fabric_serdes_name, fw_fabric_serdes_name, charp, S_IRUGO);
+MODULE_PARM_DESC(fabric_8051_name, "Fabric serdes firmware name");
+
+static char *fw_sbus_name = DEFAULT_FW_SBUS_NAME;
+module_param_named(sbus_name, fw_sbus_name, charp, S_IRUGO);
+MODULE_PARM_DESC(sbus_name, "SBUS firmware name");
+
+static char *fw_pcie_serdes_name = DEFAULT_FW_PCIE_NAME;
+module_param_named(pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
+MODULE_PARM_DESC(pcie_serdes_name, "PCIe serdes firmware name");
 
 /*
  * Firmware security header.
@@ -79,20 +100,27 @@ struct css_header {
 #define CSS_HEADER_VERSION 0x00010000
 #define CSS_MODULE_VENDOR  0x00008086
 
+#define KEY_SIZE      256
+#define MU_SIZE		8
+#define EXPONENT_SIZE	4
+
+/* the file itself */
+struct firmware_file {
+	struct css_header css_header;
+	u8 modulus[KEY_SIZE];
+	u8 exponent[EXPONENT_SIZE];
+	u8 signature[KEY_SIZE];
+	u8 r2[KEY_SIZE];
+	u8 mu[MU_SIZE];
+	u8 firmware[];
+};
+
 struct firmware_details {
 	/* linux core piece */
 	const struct firmware *fw;
 
-	/* security pieces */
-	const u8 *rsa_modulus;
-	const u8 *rsa_exponent;
-	const u8 *rsa_signature;
-	const u8 *rsa_r2;		/* R^2 */
-	const u8 *rsa_mu;
-
-	/* payload pieces */
-	const u8 *payload;		/* the data */
-	u32 payload_len;		/* length in bytes */
+	struct firmware_file *firmware;
+	u32 firmware_len;		/* length in bytes */
 };
 
 /*
@@ -111,19 +139,6 @@ static struct firmware_details fw_8051;
 static struct firmware_details fw_fabric;
 static struct firmware_details fw_pcie;
 static struct firmware_details fw_sbus;
-
-#define FW_8051_NAME "testcss_dbg.bin"
-#define FW_FABRIC_NAME "testcss_dbg.bin"
-#define FW_SBUS_NAME "testcss_dbg.bin"
-#define FW_PCIE_NAME "testcss_dbg.bin"
-
-
-#define FW_SIGNATURE_DWORDS 64	/* size in DWORDS = 2048 bits */
-#define FW_EXPONENT_DWORDS   1	/* size in DWORDS =   32 bits */
-
-/* sizes in bytes */
-#define FW_SIGNATURE_SIZE (FW_SIGNATURE_DWORDS*4)
-#define FW_MU_SIZE 8
 
 /* security block commands */
 #define RSA_CMD_INIT  0x1
@@ -173,6 +188,9 @@ static const u8 fabric_serdes_broadcast[2] = { 0xe4, 0xe5 };
 /* SBUS PCIe SerDes broadcast addresses, one per HFI */
 static const u8 pcie_serdes_broadcast[2] = { 0xe2, 0xe3 };
 
+/* forwards */
+static void dispose_one_firmware(struct firmware_details *fdet);
+
 /*
  * Write data or code to the 8051 code or data RAM.
  */
@@ -199,7 +217,7 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start,
 
 	/* write */
 	for (offset = 0; offset < len; offset += 8) {
-		int bytes = len-offset >= 8 ? 8: len-offset;
+		int bytes = len-offset >= 8 ? 8 : len-offset;
 		if (bytes < 8) {
 			reg = 0;
 			memcpy(&reg, &data[offset], bytes);
@@ -225,7 +243,9 @@ static int invalid_header(struct hfi_devdata *dd, const char *what,
 	if (actual == expected)
 		return 0;
 
-	dd_dev_err(dd, "invalid firmware header field %s: expected 0x%x, actual 0x%x\n", what, expected, actual);
+	dd_dev_err(dd,
+		"invalid firmware header field %s: expected 0x%x, actual 0x%x\n",
+		what, expected, actual);
 	return 1;
 }
 
@@ -238,8 +258,7 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 				struct firmware_details *fdet)
 {
 	struct css_header *css;
-	const u8 *base;
-	u32 prefix_dw;
+	u32 inserted;
 	int ret;
 
 	memset(fdet, 0, sizeof(*fdet));
@@ -260,7 +279,7 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 	css = (struct css_header *)fdet->fw->data;
 	if (print_css_header) {
 		dd_dev_info(dd, "Firmware %s details:\n", name);
-		dd_dev_info(dd, "size: 0x%lx bytes\n", fdet->fw->size);
+		dd_dev_info(dd, "file size: 0x%lx bytes\n", fdet->fw->size);
 		dd_dev_info(dd, "CSS structure:\n");
 		dd_dev_info(dd, "  module_type    0x%x\n", css->module_type);
 		dd_dev_info(dd, "  header_len     0x%03x (0x%03x bytes)",
@@ -277,70 +296,58 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 			css->modulus_size, 4*css->modulus_size);
 		dd_dev_info(dd, "  exponent_size  0x%03x (0x%03x bytes)\n",
 			css->exponent_size, 4*css->exponent_size);
+		if (fdet->fw->size >= sizeof(struct firmware_file))
+			dd_dev_info(dd, "firmware size: 0x%lx bytes\n",
+				fdet->fw->size - sizeof(struct firmware_file));
+		else
+			dd_dev_info(dd, "firmware size: ? header too long\n");
 	}
 
-	/*
-	 * Expected firmware file format:
-	 *
-	 * What				Size (bytes)
-	 * ---------------------------	----------------------
-	 * CSS header			sizeof(struct css_header)
-	 * public key modulus		FW_SIGNATURE_DWORDS*4
-	 * public key exponent		FW_EXPONENT_DWORDS*4
-	 * signature			FW_SIGNATURE_DWORDS*4
-	 * payload			N
-	 */
-	prefix_dw = sizeof(struct css_header)/4		/* CSS header */
-			+ FW_SIGNATURE_DWORDS		/* pub key modulus */
-			+ FW_EXPONENT_DWORDS		/* pub key exponent */
-			+ FW_SIGNATURE_DWORDS;		/* signature */
+	fdet->firmware = (struct firmware_file *)fdet->fw->data;
 
-	/* verify CSS header fields */
+	/*
+	 * The r2 and mu fields were inserted after the CSS header was
+	 * generated - it does not know about them.  When checking
+	 * header lengths, adjust some sizes by the bytes inserted.
+	 */
+	inserted = sizeof(fdet->firmware->r2) + sizeof(fdet->firmware->mu);
+
+	/* verify CSS header fields (most sizes are in DW, so add /4) */
 	if (invalid_header(dd, "module_type", css->module_type, CSS_MODULE_TYPE)
-			|| invalid_header(dd, "header_len",
-					css->header_len, prefix_dw)
+			|| invalid_header(dd, "header_len", css->header_len,
+					(sizeof(struct firmware_file)
+						- inserted)/4)
 			|| invalid_header(dd, "header_version",
 					css->header_version, CSS_HEADER_VERSION)
 			|| invalid_header(dd, "module_vendor",
 					css->module_vendor, CSS_MODULE_VENDOR)
-			|| invalid_header(dd, "size",
-					css->size*4, (u32)fdet->fw->size)
+			|| invalid_header(dd, "size", css->size,
+					((u32)fdet->fw->size-inserted)/4)
 			|| invalid_header(dd, "key_size",
-					css->key_size, FW_SIGNATURE_DWORDS)
+					css->key_size, KEY_SIZE/4)
 			|| invalid_header(dd, "modulus_size",
-					css->modulus_size, FW_SIGNATURE_DWORDS)
+					css->modulus_size, KEY_SIZE/4)
 			|| invalid_header(dd, "exponent_size",
-					css->exponent_size, FW_EXPONENT_DWORDS)) {
+					css->exponent_size, EXPONENT_SIZE/4)) {
 		ret = -EINVAL;
 		goto done;
 	}
 
 	/* make sure we have some payload */
-	if (prefix_dw * 4 >= fdet->fw->size) {
-		dd_dev_err(dd, "firmware \"%s\", size %ld, must be larger than %d bytes\n", name, fdet->fw->size, prefix_dw*4);
+	if (sizeof(struct firmware_file) >= fdet->fw->size) {
+		dd_dev_err(dd,
+			"firmware \"%s\", size %ld, must be larger than %ld bytes\n",
+			name, fdet->fw->size, sizeof(struct firmware_file));
 		ret = -EINVAL;
 		goto done;
 	}
 
-	/* extract the fields */
-	base = fdet->fw->data + sizeof(struct css_header);
-	fdet->rsa_modulus = base;
-	base += FW_SIGNATURE_DWORDS * 4;
-	fdet->rsa_exponent = base;
-	base += FW_EXPONENT_DWORDS * 4;
-	fdet->rsa_signature = base;
-	base += FW_SIGNATURE_DWORDS * 4;
-	fdet->payload = base;
-	fdet->payload_len = fdet->fw->size - (base - fdet->fw->data);
-
-	/* FIXME: need r2 signature and mu; use rsa_modulus for now */
-	fdet->rsa_r2 = fdet->rsa_modulus;
-	fdet->rsa_mu = fdet->rsa_modulus;
+	fdet->firmware_len = fdet->fw->size - sizeof(struct firmware_file);
 
 done:
 	/* if returning an error, clean up after ourselves */
 	if (ret)
-		release_firmware(fdet->fw);
+		dispose_one_firmware(fdet);
 	return ret;
 }
 
@@ -356,7 +363,7 @@ static void dispose_one_firmware(struct firmware_details *fdet)
  * Called by all HFIs when loading their firmware - i.e. device probe time.
  * The first one will do the actual firmware load.  Use a mutex to resolve
  * any possible race condition.
- * 
+ *
  * The call to this routine cannot be moved to driver load because the kernel
  * call request_firmware() requires a device which is only available after
  * the first device probe.
@@ -370,29 +377,30 @@ static int obtain_firmware(struct hfi_devdata *dd)
 		goto done;	/* already acquired */
 	} else if (fw_state == FW_ERR) {
 		err = fw_err;
-		goto done;	/* already tried and failed */	
+		goto done;	/* already tried and failed */
 	}
 
 	if (load_8051_fw) {
-		err = obtain_one_firmware(dd, FW_8051_NAME, &fw_8051);
+		err = obtain_one_firmware(dd, fw_8051_name, &fw_8051);
 		if (err)
 			goto done;
 	}
 
 	if (load_fabric_fw) {
-		err = obtain_one_firmware(dd, FW_FABRIC_NAME, &fw_fabric);
+		err = obtain_one_firmware(dd, fw_fabric_serdes_name,
+			&fw_fabric);
 		if (err)
 			goto done;
 	}
 
 	if (load_sbus_fw) {
-		err = obtain_one_firmware(dd, FW_SBUS_NAME, &fw_sbus);
+		err = obtain_one_firmware(dd, fw_sbus_name, &fw_sbus);
 		if (err)
 			goto done;
 	}
 
 	if (load_pcie_fw) {
-		err = obtain_one_firmware(dd, FW_PCIE_NAME, &fw_pcie);
+		err = obtain_one_firmware(dd, fw_pcie_serdes_name, &fw_pcie);
 		if (err)
 			goto done;
 	}
@@ -427,7 +435,6 @@ void dispose_firmware(void)
 	dispose_one_firmware(&fw_fabric);
 	dispose_one_firmware(&fw_pcie);
 	dispose_one_firmware(&fw_sbus);
-	/* TODO: Should we even bother with his here? */
 	/* retain the error state, otherwise revert to empty */
 	if (fw_state != FW_ERR)
 		fw_state = FW_EMPTY;
@@ -450,7 +457,7 @@ static void write_rsa_data(struct hfi_devdata *dd, int what,
 			write_csr(dd, what + (8*i), *ptr);
 	} else {
 		/* not aligned */
-		for (i = 0; i < qw_size; i++, data+=8) {
+		for (i = 0; i < qw_size; i++, data += 8) {
 			u64 value;
 			memcpy(&value, data, 8);
 			write_csr(dd, what + (8*i), value);
@@ -458,18 +465,18 @@ static void write_rsa_data(struct hfi_devdata *dd, int what,
 	}
 }
 
-/* 
+/*
  * Download the signature and start the RSA mechanism.  Wait for ms_timeout
  * before giving up.
  */
-static int run_rsa(struct hfi_devdata *dd, unsigned long ms_timeout, const char *who, const u8 *signature)
+static int run_rsa(struct hfi_devdata *dd, unsigned long ms_timeout,
+			const char *who, const u8 *signature)
 {
 	unsigned long timeout;
 	u32 status;
 
 	/* write the signature */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_SIGNATURE, signature,
-							FW_SIGNATURE_SIZE);
+	write_rsa_data(dd, WFR_MISC_CFG_RSA_SIGNATURE, signature, KEY_SIZE);
 
 	/* init RSA */
 	write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_INIT);
@@ -523,12 +530,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	unsigned long timeout;
 	int ret;
 
-	/* TODO: Do I need to clear the bits in DC_DC8051_ERR_EN? */
-	/* TODO: What are the error interrupt hookups from DC to WFR
-	   sources?  (Mark Debbage has a sticky note on this in the
-	   DC HAS).  ISSUE: Why is it "ERR_EN" but you need to _clear_
-	   the bits to enable it?  It seems backward. */
-
 	/*
 	 * Reset sequence as described in the DC HAS.  This is the firmware
 	 * load, steps 1-6.  Link bringup, steps 7-10, are in the link
@@ -552,19 +553,19 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
 	if (validate_fw) {
-		/* Security step 1a.  Write the modulus, 2048 bits - 32 QW */
+		/* Security step 1a.  Write the modulus */
 		write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS,
-				fdet->rsa_modulus, FW_SIGNATURE_SIZE);
-		/* Security step 1b.  Write the r2, 2048 bits - 32 QW */
+				fdet->firmware->modulus, KEY_SIZE);
+		/* Security step 1b.  Write the r2 */
 		write_rsa_data(dd, WFR_MISC_CFG_RSA_R2,
-				fdet->rsa_r2, FW_SIGNATURE_SIZE);
-		/* Security step 1c.  Write the mu, 64 bits */
+				fdet->firmware->r2, KEY_SIZE);
+		/* Security step 1c.  Write the mu */
 		write_rsa_data(dd, WFR_MISC_CFG_RSA_MU,
-				fdet->rsa_mu, FW_MU_SIZE);
+				fdet->firmware->mu, MU_SIZE);
 
 		/*
 		 * Security step 2a.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
-		 * OK to clear MISC_CFG_FW_CTRL.DISABLE_VALIDATION - we're
+		 * OK to clear MISC_CFG_FW_CTRL.DISABLE_VALIDATION - we are
 		 * in the validation path
 		 */
 		write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
@@ -575,18 +576,17 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 		 */
 		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
 				WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
-		
 	}
 
 	/* Security steps 2b-2d.  Load firmware */
-	/* TODO: firmware start of 0? */
-	ret = write_8051(dd, 1/*code*/, 0, fdet->payload, fdet->payload_len);
+	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware->firmware,
+							fdet->firmware_len);
 	if (ret)
 		return ret;
 
 	/* TODO: guard with verbosity level */
-	dd_dev_info(dd, "8051 firmware download stats:");
-	dd_dev_info(dd, "  writes:         %u\n",  (fdet->payload_len+7)/8);
+	dd_dev_info(dd, "8051 firmware download stats: %u writes",
+		(fdet->firmware_len+7)/8);
 
 	/*
 	 * DC reset step 3. Load link configuration (optional)
@@ -609,7 +609,8 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 		/* Security step 2g.  Write MISC_CFG_RSA_CMD = 1 (INIT) */
 		/* Security step 2h.  Write MISC_CFG_RSA_CMD = 2 (START) */
 		/* Security step 2i.  Poll MISC_CFG_FW_CTRL.RSA_STATUS */
-		ret = run_rsa(dd, FW_TIMEOUT_8051, "8051", fdet->rsa_signature);
+		ret = run_rsa(dd, FW_TIMEOUT_8051, "8051",
+						fdet->firmware->signature);
 		if (ret)
 			return ret;
 	}
@@ -626,7 +627,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 		reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
 		firmware = (reg >> DC_DC8051_STS_CUR_STATE_FIRMWARE_SHIFT)
 				& DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK;
-		if (firmware == 0xa0);	/* ready for HOST request */
+		if (firmware == 0xa0)	/* ready for HOST request */
 			return 0; /* success */
 		if (time_after(jiffies, timeout))
 			break; /* timed out */
@@ -667,7 +668,7 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	u8 ra;				/* receiver address */
 
 	ra = fabric_serdes_broadcast[dd->hfi_id];
-			    
+
 	/* a. place SerDes in reset and disable SPICO */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000011);
 	/* b. remove SerDes reset */
@@ -675,9 +676,9 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	/* c. assert IMEM override */
 	sbus_request(dd, ra, 0x00, WRITE_SBUS_RECEIVER, 0xc0000000);
 	/* d. download SerDes machine code */
-	for (i = 0; i < fdet->payload_len; i+=4) {
+	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x0a, WRITE_SBUS_RECEIVER,
-						*(u32*)&fdet->payload[4]);
+					*(u32 *)&fdet->firmware->firmware[i]);
 	}
 	/* e. IMEM override off */
 	sbus_request(dd, ra, 0x00, WRITE_SBUS_RECEIVER, 0x00000000);
@@ -690,7 +691,7 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 		/* i. start RSA */
 		/* j. look for result */
 		err = run_rsa(dd, FW_TIMEOUT_FABRIC_SERDES, "fabric serdes",
-							fdet->rsa_signature);
+						fdet->firmware->signature);
 		if (err)
 			return err;
 	}
@@ -716,9 +717,9 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	/* c. set starting IMEM address for burst download */
 	sbus_request(dd, ra, 0x03, WRITE_SBUS_RECEIVER, 0x80000000);
 	/* d. download the SBUS Master machine code */
-	for (i = 0; i < fdet->payload_len; i+=4) {
+	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x14, WRITE_SBUS_RECEIVER,
-						*(u32*)&fdet->payload[i]);
+					*(u32 *)&fdet->firmware->firmware[i]);
 	}
 	/* e. set IMEM_CNTL_EN off */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000040);
@@ -730,7 +731,8 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 		/* h. init RSA */
 		/* i. start RSA */
 		/* j. look for result */
-		err = run_rsa(dd, FW_TIMEOUT_SBUS, "SBUS", fdet->rsa_signature);
+		err = run_rsa(dd, FW_TIMEOUT_SBUS, "SBUS",
+						fdet->firmware->signature);
 		if (err)
 			return err;
 	}
@@ -755,9 +757,9 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	/* c. load firmware into sbus master extended memory */
 	/* NOTE: the dmem address, write_en, and wdata are all pre-packed,
 	   we only need to pick up the bytes and write them */
-	for (i = 0; i < fdet->payload_len; i+=4) {
+	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x04, WRITE_SBUS_RECEIVER,
-						*(u32*)&fdet->payload[i]);
+					*(u32 *)&fdet->firmware->firmware[i]);
 	}
 	/* d. disable XDMEM access */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000140);
@@ -770,7 +772,7 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 		/* h. start RSA */
 		/* i. look for result */
 		err = run_rsa(dd, FW_TIMEOUT_PCIE_SERDES, "PCIe serdes",
-							fdet->rsa_signature);
+						fdet->firmware->signature);
 		if (err)
 			return err;
 	}
@@ -782,13 +784,15 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
 
 
-//FIXME: Once we swap the PCIe firmware, does that immediately
-// start gen3 negotiations and/or interrupt the link?
-//
-// If so, we can't touch the chip until the parent says it has renegotiated
-// the link. (code below)
-//
-// If not, then we'll need to manually trigger it.
+/*
+FIXME: Once we swap the PCIe firmware, does that immediately
+start gen3 negotiations and/or interrupt the link?
+
+If so, we can't touch the chip until the parent says it has renegotiated
+the link. (code below)
+
+If not, then we'll need to manually trigger it.
+*/
 #if 0
 	err = wait_for_parent_link_up(dd);
 	if (err)
@@ -814,7 +818,8 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 /*
  * Set the given broadcast value on the given list of devices.
  */
-static void set_serdes_broadcast(struct hfi_devdata *dd, u8 broadcast, const u8 *addrs, int count)
+static void set_serdes_broadcast(struct hfi_devdata *dd, u8 broadcast,
+					const u8 *addrs, int count)
 {
 	while (--count >= 0) {
 		/*
@@ -853,7 +858,9 @@ static int acquire_hw_mutex(struct hfi_devdata *dd)
 
 	/* timed out */
 	/* alternate: break the mutex and continue */
-	dd_dev_err(dd, "Unable to acquire hardware mutex, mutex mask %u, my mask %u\n", (u32)user, (u32)mask);
+	dd_dev_err(dd,
+		"Unable to acquire hardware mutex, mutex mask %u, my mask %u\n",
+		(u32)user, (u32)mask);
 
 	return -EBUSY;
 }
@@ -930,34 +937,36 @@ done:
 	return ret;
 }
 
-//TODO: placeholder
+/*
+ * DC to LinkUp sequence as described in the DC HAS.
+ * TODO: this is a placeholder.  Most linkup code is in bringup_serdes()
+ */
 void link_up(struct hfi_devdata *dd)
 {
+
 	/*
-	 * Reset sequence as described in the DC HAS.  This is the link
-	 * bringup, steps 6-10.  Firmware load, steps 1-5, are in the
-	 * firmware load function.
+	 * DC to LinkUp step 1. Load link configuration interactively
+	 * (optional - do this if not done in reset step 3)
+	 * TODO
 	 */
 
 	/*
-	 * DC Reset step 6. Load link configuration interactively (optional
-	 * - do this if not step 3)
+	 * DC to LinkUp step 2. Request Pysical Port State to go from
+	 * Offline to Polling.
+	 * TODO: this is done in bringup_serdes()
 	 */
 
-	/* TODO TBD - need information on values, how to react.
-	   If this is out-of-band, we need to be notified that the 8051
-	   wants us to do something. */
-	/* DC reset step 7. Host request port state from OFFLINE -> POLLING */
-	/* TODO: Do we need to do this both IB and STL modes? */
+	/*
+	 * DC to LinkUp step 3. Acknowledge 8051 FW interrupts.
+	 * Perform requested configurations.
+	 * TODO
+	 */
 
-	/* DC reset step 8. STL Mode: */
-	/* TODO */
+	/*
+	 * DC to LinkUp step 4. Request change to LinkUp
+	 * FIXME: This doesn't match - LinkUp happens automatically
+	 */
 
-	/* DC reset step 9. STL Mode: */
-	/* TODO */
-
-	/* DC reset step 10. STL mode: */
-	/* TODO */
 }
 
 /*

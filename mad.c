@@ -75,7 +75,7 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 		return;
 
 	/* o14-3.2.1 */
-	if (!(ppd_from_ibp(ibp)->lflags & QIBL_LINKACTIVE))
+	if (ppd_from_ibp(ibp)->lstate != IB_PORT_ACTIVE)
 		return;
 
 	/* o14-2 */
@@ -510,24 +510,7 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	pip->mkeyprot_resv_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 	pip->linkspeedactive_enabled = (ppd->link_speed_active << 4) |
 		ppd->link_speed_enabled;
-	switch (ppd->ibmtu) {
-	default: /* something is wrong; fall through */
-	case 4096:
-		mtu = IB_MTU_4096;
-		break;
-	case 2048:
-		mtu = IB_MTU_2048;
-		break;
-	case 1024:
-		mtu = IB_MTU_1024;
-		break;
-	case 512:
-		mtu = IB_MTU_512;
-		break;
-	case 256:
-		mtu = IB_MTU_256;
-		break;
-	}
+	mtu = mtu_to_enum(ppd->ibmtu, IB_MTU_4096);
 	pip->neighbormtu_mastersmsl = (mtu << 4) | ibp->sm_sl;
 	pip->vlcap_inittype = ppd->vls_supported << 4;  /* InitType = 0 */
 	pip->vl_high_limit = ibp->vl_high_limit;
@@ -536,7 +519,7 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	pip->vl_arb_low_cap =
 		dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
 	/* InitTypeReply = 0 */
-	pip->inittypereply_mtucap = qib_ibmtu ? qib_ibmtu : IB_MTU_4096;
+	pip->inittypereply_mtucap = mtu_to_enum(max_mtu, IB_MTU_4096);
 	/* HCAs ignore VLStallCount and HOQLife */
 	/* pip->vlstallcnt_hoqlife; */
 	pip->operationalvl_pei_peo_fpi_fpo =
@@ -756,12 +739,14 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	case 0: /* NOP */
 		break;
 	case 1: /* SLEEP */
-		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					IB_LINKINITCMD_SLEEP);
+		if (dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
+					IB_LINKINITCMD_SLEEP) < 0)
+			smp->status |= IB_SMP_INVALID_FIELD;
 		break;
 	case 2: /* POLL */
-		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					IB_LINKINITCMD_POLL);
+		if (dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
+					IB_LINKINITCMD_POLL) < 0)
+			smp->status |= IB_SMP_INVALID_FIELD;
 		break;
 	default:
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -776,7 +761,7 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	if (mtu == -1)
 		smp->status |= IB_SMP_INVALID_FIELD;
 	else
-		qib_set_mtu(ppd, mtu);
+		set_mtu(ppd, mtu);
 
 	/* Set operational VLs */
 	vls = (pip->operationalvl_pei_peo_fpi_fpo >> 4) & 0xF;
@@ -822,25 +807,23 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	 */
 	switch (state) {
 	case IB_PORT_NOP:
-		if (lstate == 0)
+		if (lstate == IB_PORTPHYSSTATE_NO_CHANGE)
 			break;
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
-		if (lstate == 0)
+		if (lstate == IB_PORTPHYSSTATE_NO_CHANGE)
 			lstate = QIB_IB_LINKDOWN_ONLY;
-		else if (lstate == 1)
+		else if (lstate == IB_PORTPHYSSTATE_SLEEP)
 			lstate = QIB_IB_LINKDOWN_SLEEP;
-		else if (lstate == 2)
+		else if (lstate == IB_PORTPHYSSTATE_POLL)
 			lstate = QIB_IB_LINKDOWN;
-		else if (lstate == 3)
+		else if (lstate == IB_PORTPHYSSTATE_DISABLED)
 			lstate = QIB_IB_LINKDOWN_DISABLE;
 		else {
+			/* TODO: The spec say other values are ignored... */
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
 		}
-		spin_lock_irqsave(&ppd->lflags_lock, flags);
-		ppd->lflags &= ~QIBL_LINKV;
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
 		qib_set_linkstate(ppd, lstate);
 		/*
 		 * Don't send a reply if the response would be sent
@@ -850,7 +833,6 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 			goto done;
 		}
-		qib_wait_linkstate(ppd, QIBL_LINKV, 10);
 		break;
 	case IB_PORT_ARMED:
 		qib_set_linkstate(ppd, QIB_IB_LINKARM);

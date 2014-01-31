@@ -49,27 +49,24 @@
  * The size has to be longer than this string, so we can append
  * board/chip information to it in the init code.
  */
-const char ib_qib_version[] = QIB_DRIVER_VERSION "\n";
+const char ib_qib_version[] = HFI_DRIVER_VERSION "\n";
 
 DEFINE_SPINLOCK(qib_devs_lock);
 LIST_HEAD(qib_dev_list);
 DEFINE_MUTEX(qib_mutex);	/* general driver use */
 
-unsigned qib_ibmtu;
-module_param_named(ibmtu, qib_ibmtu, uint, S_IRUGO);
-MODULE_PARM_DESC(ibmtu, "Set max IB MTU (0=2KB, 1=256, 2=512, ... 5=4096");
+unsigned int max_mtu;
+module_param_named(max_mtu, max_mtu, uint, S_IRUGO);
+MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 10240");
+
+unsigned int default_mtu;
+module_param_named(default_mtu, default_mtu, uint, S_IRUGO);
+MODULE_PARM_DESC(max_mtu, "Set default MTU bytes, default is 4096");
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
-MODULE_VERSION(QIB_DRIVER_VERSION);
-
-/*
- * QIB_PIO_MAXIBHDR is the max IB header size allowed for in our
- * PIO send buffers.  This is well beyond anything currently
- * defined in the InfiniBand spec.
- */
-#define QIB_PIO_MAXIBHDR 128
+MODULE_VERSION(HFI_DRIVER_VERSION);
 
 /*
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
@@ -102,8 +99,7 @@ int qib_count_active_units(void)
 			continue;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
-			if (ppd->lid && (ppd->lflags & (QIBL_LINKINIT |
-					 QIBL_LINKARMED | QIBL_LINKACTIVE))) {
+			if (ppd->lid && ppd->linkup) {
 				nunits_active++;
 				break;
 			}
@@ -134,8 +130,7 @@ int qib_count_units(int *npresentp, int *nupp)
 			npresent++;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
-			if (ppd->lid && (ppd->lflags & (QIBL_LINKINIT |
-					 QIBL_LINKARMED | QIBL_LINKACTIVE)))
+			if (ppd->lid && ppd->linkup)
 				nup++;
 		}
 	}
@@ -152,122 +147,106 @@ int qib_count_units(int *npresentp, int *nupp)
 
 /**
  * qib_wait_linkstate - wait for an IB link state change to occur
- * @dd: the qlogic_ib device
+ * @ppd: port device
  * @state: the state to wait for
  * @msecs: the number of milliseconds to wait
  *
- * wait up to msecs milliseconds for IB link state change to occur for
- * now, take the easy polling route.  Currently used only by
- * qib_set_linkstate.  Returns 0 if state reached, otherwise
- * -ETIMEDOUT state can have multiple states set, for any of several
- * transitions.
+ * Wait up to msecs milliseconds for IB link state change to occur.
+ * For now, take the easy polling route.
+ * Returns 0 if state reached, otherwise -ETIMEDOUT.
  */
 int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
 {
-	int ret;
-	unsigned long flags;
+	unsigned long timeout;
 
-	spin_lock_irqsave(&ppd->lflags_lock, flags);
-	if (ppd->state_wanted) {
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-		ret = -EBUSY;
-		goto bail;
+	timeout = jiffies + msecs_to_jiffies(msecs);
+	while (1) {
+		if (ppd->dd->f_iblink_state(ppd) == state)
+			return 0;
+		if (time_after(jiffies, timeout))
+			break;
+		msleep(2);
 	}
-	ppd->state_wanted = state;
-	spin_unlock_irqrestore(&ppd->lflags_lock, flags);
-	wait_event_interruptible_timeout(ppd->state_wait,
-					 (ppd->lflags & state),
-					 msecs_to_jiffies(msecs));
-	spin_lock_irqsave(&ppd->lflags_lock, flags);
-	ppd->state_wanted = 0;
-	spin_unlock_irqrestore(&ppd->lflags_lock, flags);
+	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x\n", state);
 
-	if (!(ppd->lflags & state))
-		ret = -ETIMEDOUT;
-	else
-		ret = 0;
-bail:
-	return ret;
+	return -ETIMEDOUT;
 }
 
 int qib_set_linkstate(struct qib_pportdata *ppd, u8 newstate)
 {
+	struct hfi_devdata *dd = ppd->dd;
+	int set_ib_ready = 0;
+	u32 phys_command;
 	u32 lstate;
 	int ret;
-	struct hfi_devdata *dd = ppd->dd;
-	unsigned long flags;
+
+	/* update cached value */
+	dd->f_iblink_state(ppd);
 
 	switch (newstate) {
 	case QIB_IB_LINKDOWN_ONLY:
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_NOP);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+		phys_command = IB_LINKINITCMD_NOP;
+		goto down_common;
 
 	case QIB_IB_LINKDOWN:
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_POLL);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+		phys_command = IB_LINKINITCMD_POLL;
+		goto down_common;
 
 	case QIB_IB_LINKDOWN_SLEEP:
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_SLEEP);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+		phys_command = IB_LINKINITCMD_SLEEP;
+		goto down_common;
 
 	case QIB_IB_LINKDOWN_DISABLE:
+		phys_command = IB_LINKINITCMD_DISABLE;
+		/* fall through */
+down_common:
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_DOWN | IB_LINKINITCMD_DISABLE);
-		/* don't wait */
-		ret = 0;
-		goto bail;
+				 IB_LINKCMD_DOWN | phys_command);
+		if (ppd->statusp)
+			*ppd->statusp &= ~QIB_STATUS_IB_READY;
+		lstate = IB_PORT_DOWN;
+		break;
 
 	case QIB_IB_LINKARM:
-		if (ppd->lflags & QIBL_LINKARMED) {
+		if (ppd->lstate == IB_PORT_ARMED) {
 			ret = 0;
 			goto bail;
 		}
-		if (!(ppd->lflags & (QIBL_LINKINIT | QIBL_LINKACTIVE))) {
+		if (ppd->lstate != IB_PORT_INIT) {
 			ret = -EINVAL;
 			goto bail;
 		}
-		/*
-		 * Since the port can be ACTIVE when we ask for ARMED,
-		 * clear QIBL_LINKV so we can wait for a transition.
-		 * If the link isn't ARMED, then something else happened
-		 * and there is no point waiting for ARMED.
-		 */
-		spin_lock_irqsave(&ppd->lflags_lock, flags);
-		ppd->lflags &= ~QIBL_LINKV;
-		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 				 IB_LINKCMD_ARMED | IB_LINKINITCMD_NOP);
-		lstate = QIBL_LINKV;
+		lstate = IB_PORT_ARMED;
 		break;
 
 	case QIB_IB_LINKACTIVE:
-		if (ppd->lflags & QIBL_LINKACTIVE) {
+		if (ppd->lstate == IB_PORT_ACTIVE) {
 			ret = 0;
 			goto bail;
 		}
-		if (!(ppd->lflags & QIBL_LINKARMED)) {
+		if (ppd->lstate != IB_PORT_ARMED) {
 			ret = -EINVAL;
 			goto bail;
 		}
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 				 IB_LINKCMD_ACTIVE | IB_LINKINITCMD_NOP);
-		lstate = QIBL_LINKACTIVE;
+		lstate = IB_PORT_ACTIVE;
+		set_ib_ready = 1;
 		break;
 
 	default:
 		ret = -EINVAL;
 		goto bail;
 	}
+
 	ret = qib_wait_linkstate(ppd, lstate, 10);
+	if (ret == 0 && set_ib_ready) {
+		/* only set if the state really moved */
+		if (ppd->statusp)
+			*ppd->statusp |= QIB_STATUS_IB_READY;
+	}
 
 bail:
 	return ret;
@@ -633,55 +612,44 @@ bail:
 	dd->f_update_usrhead(rcd, lval, updegr, etail, i);
 }
 
-/**
- * qib_set_mtu - set the MTU
+/*
+ * Convert a given MTU size to the on-wire MAD packet enumeration.
+ * Return -1 if the size is invalid.
+ */
+int mtu_to_enum(u32 mtu, int default_if_bad)
+{
+	switch (mtu) {
+	case   256: return STL_MTU_256;
+	case  1024: return STL_MTU_1024;
+	case  2048: return STL_MTU_2048;
+	case  4096: return STL_MTU_4096;
+	case  8192: return STL_MTU_8192;
+	case 10240: return STL_MTU_10240;
+	}
+	return default_if_bad;
+}
+
+/*
+ * set_mtu - set the MTU
  * @ppd: the perport data
  * @arg: the new MTU
  *
  * We can handle "any" incoming size, the issue here is whether we
- * need to restrict our outgoing size.   For now, we don't do any
- * sanity checking on this, and we don't deal with what happens to
- * programs that are already running when the size changes.
- * NOTE: changing the MTU will usually cause the IBC to go back to
- * link INIT state...
+ * need to restrict our outgoing size.  We do not deal with what happens
+ * to programs that are already running when the size changes.
  */
-int qib_set_mtu(struct qib_pportdata *ppd, u16 arg)
+int set_mtu(struct qib_pportdata *ppd, u16 arg)
 {
-	u32 piosize;
-	int ret, chk;
+	if (!valid_mtu(arg))
+		return -EINVAL;
+	if (arg > max_mtu)
+		return -EINVAL;
 
-	if (arg != 256 && arg != 512 && arg != 1024 && arg != 2048 &&
-	    arg != 4096) {
-		ret = -EINVAL;
-		goto bail;
-	}
-	chk = ib_mtu_enum_to_int(qib_ibmtu);
-	if (chk > 0 && arg > chk) {
-		ret = -EINVAL;
-		goto bail;
-	}
-
-	piosize = ppd->ibmaxlen;
 	ppd->ibmtu = arg;
+	ppd->ibmaxlen = arg + lrh_max_header_bytes(ppd->dd);
+	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, arg);
 
-	if (arg >= (piosize - QIB_PIO_MAXIBHDR)) {
-		/* Only if it's not the initial value (or reset to it) */
-		if (piosize != ppd->init_ibmaxlen) {
-			if (arg > piosize && arg <= ppd->init_ibmaxlen)
-				piosize = ppd->init_ibmaxlen - 2 * sizeof(u32);
-			ppd->ibmaxlen = piosize;
-		}
-	} else if ((arg + QIB_PIO_MAXIBHDR) != ppd->ibmaxlen) {
-		piosize = arg + QIB_PIO_MAXIBHDR - 2 * sizeof(u32);
-		ppd->ibmaxlen = piosize;
-	}
-
-	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
-
-	ret = 0;
-
-bail:
-	return ret;
+	return 0;
 }
 
 int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)

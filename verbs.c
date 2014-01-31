@@ -1108,30 +1108,30 @@ bail_tx:
  * If we are now in the error state, return zero to flush the
  * send work request.
  */
-static int no_bufs_available(struct qib_qp *qp)
+static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 {
-	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
-	struct hfi_devdata *dd;
+	struct hfi_devdata *dd = sc->dd;
 	unsigned long flags;
 	int ret = 0;
 
 	/*
 	 * Note that as soon as want_buffer() is called and
-	 * possibly before it returns, qib_ib_piobufavail()
+	 * possibly before it returns, sc_piobufavail()
 	 * could be called. Therefore, put QP on the I/O wait list before
 	 * enabling the PIO avail interrupt.
 	 */
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) {
-		spin_lock(&dev->pending_lock);
+		spin_lock(&sc->wait_lock);
 		if (list_empty(&qp->iowait)) {
+			struct qib_ibdev *dev = &dd->verbs_dev;
 			dev->n_piowait++;
 			qp->s_flags |= QIB_S_WAIT_PIO;
-			list_add_tail(&qp->iowait, &dev->piowait);
-			dd = dd_from_dev(dev);
-			dd->f_wantpiobuf_intr(dd, 1);
+			list_add_tail(&qp->iowait, &sc->piowait);
+			trace_hfi_qpsleep(qp, QIB_S_WAIT_PIO);
+			dd->f_wantpiobuf_intr(sc, 1);
 		}
-		spin_unlock(&dev->pending_lock);
+		spin_unlock(&sc->wait_lock);
 		qp->s_flags &= ~QIB_S_BUSY;
 		ret = -EBUSY;
 	}
@@ -1168,7 +1168,7 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 				be16_to_cpu(ibhdr->lrh[0]) >> 12, plen);
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (unlikely(pbuf == NULL))
-		return no_bufs_available(qp);
+		return no_bufs_available(qp, sc);
 
 	if (len == 0) {
 		pio_copy(pbuf, pbc, hdr, hdrwords);
@@ -1337,61 +1337,6 @@ bail:
 	return ret;
 }
 
-/**
- * qib_ib_piobufavail - callback when a PIO buffer is available
- * @dd: the device pointer
- *
- * This is called from qib_intr() at interrupt level when a PIO buffer is
- * available after qib_verbs_send() returned an error that no buffers were
- * available. Disable the interrupt if there are no more QPs waiting.
- */
-void qib_ib_piobufavail(struct hfi_devdata *dd)
-{
-	struct qib_ibdev *dev = &dd->verbs_dev;
-	struct list_head *list;
-	struct qib_qp *qps[5];
-	struct qib_qp *qp;
-	unsigned long flags;
-	unsigned i, n;
-
-	list = &dev->piowait;
-	n = 0;
-
-	/*
-	 * Note: checking that the piowait list is empty and clearing
-	 * the buffer available interrupt needs to be atomic or we
-	 * could end up with QPs on the wait list with the interrupt
-	 * disabled.
-	 */
-	spin_lock_irqsave(&dev->pending_lock, flags);
-	while (!list_empty(list)) {
-		if (n == ARRAY_SIZE(qps))
-			goto full;
-		qp = list_entry(list->next, struct qib_qp, iowait);
-		list_del_init(&qp->iowait);
-		atomic_inc(&qp->refcount);
-		qps[n++] = qp;
-	}
-	dd->f_wantpiobuf_intr(dd, 0);
-full:
-	spin_unlock_irqrestore(&dev->pending_lock, flags);
-
-	for (i = 0; i < n; i++) {
-		qp = qps[i];
-
-		spin_lock_irqsave(&qp->s_lock, flags);
-		if (qp->s_flags & QIB_S_WAIT_PIO) {
-			qp->s_flags &= ~QIB_S_WAIT_PIO;
-			qib_schedule_send(qp);
-		}
-		spin_unlock_irqrestore(&qp->s_lock, flags);
-
-		/* Notify qib_destroy_qp() if it is waiting. */
-		if (atomic_dec_and_test(&qp->refcount))
-			wake_up(&qp->wait);
-	}
-}
-
 static int qib_query_device(struct ib_device *ibdev,
 			    struct ib_device_attr *props)
 {
@@ -1444,7 +1389,6 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	enum ib_mtu mtu;
 	u16 lid = ppd->lid;
 
 	memset(props, 0, sizeof(*props));
@@ -1466,27 +1410,8 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->max_vl_num = qib_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
-	props->max_mtu = qib_ibmtu ? qib_ibmtu : IB_MTU_4096;
-	switch (ppd->ibmtu) {
-	case 4096:
-		mtu = IB_MTU_4096;
-		break;
-	case 2048:
-		mtu = IB_MTU_2048;
-		break;
-	case 1024:
-		mtu = IB_MTU_1024;
-		break;
-	case 512:
-		mtu = IB_MTU_512;
-		break;
-	case 256:
-		mtu = IB_MTU_256;
-		break;
-	default:
-		mtu = IB_MTU_2048;
-	}
-	props->active_mtu = mtu;
+	props->max_mtu = mtu_to_enum(max_mtu, IB_MTU_4096);
+	props->active_mtu = mtu_to_enum(ppd->ibmtu, IB_MTU_2048);
 	props->subnet_timeout = ibp->subnet_timeout;
 
 	return 0;
@@ -1936,7 +1861,6 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	spin_lock_init(&dev->pending_lock);
 	dev->mmap_offset = PAGE_SIZE;
 	spin_lock_init(&dev->mmap_offset_lock);
-	INIT_LIST_HEAD(&dev->piowait);
 	INIT_LIST_HEAD(&dev->dmawait);
 	INIT_LIST_HEAD(&dev->txwait);
 	INIT_LIST_HEAD(&dev->memwait);
@@ -2118,8 +2042,6 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 
 	ib_unregister_device(ibdev);
 
-	if (!list_empty(&dev->piowait))
-		dd_dev_err(dd, "piowait list not empty!\n");
 	if (!list_empty(&dev->dmawait))
 		dd_dev_err(dd, "dmawait list not empty!\n");
 	if (!list_empty(&dev->txwait))

@@ -85,12 +85,14 @@ struct send_context {
 	spinlock_t alloc_lock ____cacheline_aligned_in_smp;
 	unsigned long fill;		/* official alloc count */
 	unsigned long alloc_free;	/* copy of free (less cache thrash) */
-	volatile u32 sr_head;		/* shadow ring head */
+	u32 sr_head;			/* shadow ring head */
 	/* releaser fields */
 	spinlock_t release_lock ____cacheline_aligned_in_smp;
-	/* FIXME: keep volatile? Use ACCESS_ONCE()? */
-	volatile unsigned long free;	/* official free count */
+	unsigned long free;		/* official free count */
 	u32 sr_tail;			/* shadow ring tail */
+	spinlock_t wait_lock  ____cacheline_aligned_in_smp;
+	struct list_head piowait;       /* list for PIO waiters */
+	u64 credit_ctrl;		/* cache for credit control */
 };
 
 struct send_context_info {
@@ -137,10 +139,13 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 void sc_release_update(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
 void sc_group_release_update(struct send_context *sc);
+void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
 
 /* global PIO send control operations */
 #define PSC_GLOBAL_ENABLE 0
 #define PSC_GLOBAL_DISABLE 1
+#define PSC_GLOBAL_VLARB_ENABLE 2
+#define PSC_GLOBAL_VLARB_DISABLE 3
 
 void pio_send_control(struct hfi_devdata *dd, int op);
 
