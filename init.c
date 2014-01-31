@@ -1080,6 +1080,9 @@ static int __init qlogic_ib_init(void)
 		default_mtu = HFI_DEFAULT_ACTIVE_MTU;
 	if (!valid_mtu(max_mtu))
 		max_mtu = HFI_DEFAULT_MAX_MTU;
+	/* valid CUs run from 1-128 in powers of 2 */
+	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
+		hfi_cu = 1;
 
 	qib_cq_wq = create_singlethread_workqueue("qib_cq");
 	if (!qib_cq_wq) {

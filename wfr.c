@@ -3198,6 +3198,57 @@ void init_rxe(struct hfi_devdata *dd)
 	/* TODO: others...? */
 }
 
+/*
+ * Fill out the given AU table using the given CU.  A CU is defined in terms
+ * AUs.  The table is a an encoding: given the index, how many AUs does that
+ * represent?
+ *
+ * NOTE: Assumes that the register layout is the same for the
+ * local and remote tables.
+ */
+static void assign_cm_au_table(struct hfi_devdata *dd, u32 cu,
+						u32 csr0to3, u32 csr4to7)
+{
+	write_csr(dd, csr0to3,
+		   0ull <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE0_SHIFT
+/* TODO: In HAS 0.76 this changes to 1 AU, not 1 CU */
+/* NOTE: The has may not matter so much as the sim version */
+#if 0
+		|  1ull <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE1_SHIFT
+#else
+		|  1ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE1_SHIFT
+#endif
+		|  2ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE2_SHIFT
+		|  4ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE3_SHIFT);
+	write_csr(dd, csr4to7,
+		   8ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE4_SHIFT
+		| 16ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE5_SHIFT
+		| 32ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE6_SHIFT
+		| 64ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE7_SHIFT);
+
+}
+
+static void assign_local_cm_au_table(struct hfi_devdata *dd, u32 cu)
+{
+	assign_cm_au_table(dd, cu, WFR_SEND_CM_LOCAL_AU_TABLE0_TO3,
+					WFR_SEND_CM_LOCAL_AU_TABLE4_TO7);
+}
+
+static void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu)
+{
+	assign_cm_au_table(dd, cu, WFR_SEND_CM_REMOTE_AU_TABLE0_TO3,
+					WFR_SEND_CM_REMOTE_AU_TABLE4_TO7);
+}
+
 void init_txe(struct hfi_devdata *dd)
 {
 	int i;
@@ -3207,6 +3258,9 @@ void init_txe(struct hfi_devdata *dd)
 	write_csr(dd, WFR_SEND_DMA_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, ~0ull);
+
+	/* set the local CU to AU mapping */
+	assign_local_cm_au_table(dd, hfi_cu);
 
 	/*
 	 * FIXME: Set up initial send link credits.  We need an amount
@@ -3228,42 +3282,6 @@ void init_txe(struct hfi_devdata *dd)
 			    << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
 			| (WFR_CM_AU
 			    << WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT));
-	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE0_TO3,
-		   0ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE0_SHIFT
-		|  1ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE1_SHIFT
-		|  2ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE2_SHIFT
-		|  4ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE3_SHIFT);
-	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE4_TO7,
-		   8ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE4_SHIFT
-		| 16ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE5_SHIFT
-		| 32ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE6_SHIFT
-		| 64ull <<
-			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE7_SHIFT);
-	write_csr(dd, WFR_SEND_CM_REMOTE_AU_TABLE0_TO3,
-		   0ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE0_TO3_REMOTE_AU_TABLE0_SHIFT
-		|  1ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE0_TO3_REMOTE_AU_TABLE1_SHIFT
-		|  2ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE0_TO3_REMOTE_AU_TABLE2_SHIFT
-		|  4ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE0_TO3_REMOTE_AU_TABLE3_SHIFT);
-	write_csr(dd, WFR_SEND_CM_REMOTE_AU_TABLE4_TO7,
-		   8ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE4_TO7_REMOTE_AU_TABLE4_SHIFT
-		| 16ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE4_TO7_REMOTE_AU_TABLE5_SHIFT
-		| 32ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE4_TO7_REMOTE_AU_TABLE6_SHIFT
-		| 64ull <<
-			WFR_SEND_CM_REMOTE_AU_TABLE4_TO7_REMOTE_AU_TABLE7_SHIFT);
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++) {
 		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8 * i),
 			(WFR_CM_VL_DEDICATED_CREDITS
@@ -3276,6 +3294,7 @@ void init_txe(struct hfi_devdata *dd)
 			    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT)
 			| (WFR_CM_VL_SHARED_CREDITS
 			    << WFR_SEND_CM_CREDIT_VL15_SHARED_LIMIT_VL_SHIFT));
+	assign_remote_cm_au_table(dd, 1);	/* 1 CU = 1 AU */
 }
 
 /*
@@ -3315,7 +3334,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	u64 rev2;
 	int i, ret;
 	u16 revision;
-	u8 code;
 	static const char *inames[] = { /* implementation names */
 		"RTL silicon",
 		"RTL VCS simulation",
@@ -3448,10 +3466,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->hfi_id = (rev2 >> WFR_CCE_REVISION2_HFI_ID_SHIFT)
 					& WFR_CCE_REVISION2_HFI_ID_MASK;
 	/* the variable size will remove unwanted bits */
-	code = rev2 >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
+	dd->icode = rev2 >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
 	revision = rev2 >> WFR_CCE_REVISION2_IMPL_REVISION_SHIFT;
 	dd_dev_info(dd, "Implementation: %s, revision 0x%x\n",
-		code < ARRAY_SIZE(inames) ? inames[code] : "unknown",
+		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)revision);
 
 	/* obtain chip sizes, reset chip CSRs */

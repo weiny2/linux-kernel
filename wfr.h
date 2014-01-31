@@ -548,6 +548,14 @@
 #define WFR_MIN_EAGER_BUFFER (  4 * 1024)
 #define WFR_MAX_EAGER_BUFFER (256 * 1024)
 
+/*
+ * Chip implementation codes.
+ */
+#define WFR_ICODE_RTL_SILICON		0x00
+#define WFR_ICODE_RTL_VCS_SIMULATION	0x01
+#define WFR_ICODE_FPGA_EMULATION	0x02
+#define WFR_ICODE_FUNCTIONAL_SIMULATOR	0x03
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);

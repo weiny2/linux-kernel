@@ -881,6 +881,8 @@ struct hfi_devdata {
 	u8 minrev;
 	/* hardware ID */
 	u8 hfi_id;
+	/* implementation code */
+	u8 icode;
 	/* default link down value (poll/sleep) */
 	u8 link_default;
 
@@ -1275,6 +1277,7 @@ const char *get_unit_name(int unit);
 /* global module parameter variables */
 extern unsigned int max_mtu;
 extern unsigned int default_mtu;
+extern unsigned int hfi_cu;
 extern uint num_rcv_contexts;
 extern unsigned qib_n_krcv_queues;
 extern uint kdeth_qp;

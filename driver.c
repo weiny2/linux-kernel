@@ -63,6 +63,10 @@ unsigned int default_mtu;
 module_param_named(default_mtu, default_mtu, uint, S_IRUGO);
 MODULE_PARM_DESC(max_mtu, "Set default MTU bytes, default is 4096");
 
+unsigned int hfi_cu = 1;
+module_param_named(cu, hfi_cu, uint, S_IRUGO);
+MODULE_PARM_DESC(cu, "Credit return units");
+
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
