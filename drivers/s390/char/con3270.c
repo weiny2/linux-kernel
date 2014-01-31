@@ -564,7 +564,7 @@ static struct notifier_block on_reboot_nb = {
  *  The console structure for the 3270 console
  */
 static struct console con3270 = {
-	.name	 = "tty3270",
+	.name	 = "3270/tty",
 	.write	 = con3270_write,
 	.device	 = con3270_device,
 	.flags	 = CON_PRINTBUFFER,
