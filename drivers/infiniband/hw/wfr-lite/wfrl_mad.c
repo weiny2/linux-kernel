@@ -4447,6 +4447,16 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			  struct jumbo_mad *out_jumbo)
 {
 	int ret;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	int pkey_idx = wfr_lookup_pkey_idx(ibp, 0x7fff);
+
+	if (pkey_idx < 0) {
+		printk(KERN_WARNING PFX "failed to find a valid pkey_index "
+			"to return\n");
+		/* Error this MAD out */
+		return (IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED);
+	}
+	in_wc->pkey_index = (u16)pkey_idx;
 
 	if (wfr_dump_sma_mads) {
 		printk(KERN_WARNING PFX "Recv: %lu byte mad.\n",
