@@ -4451,10 +4451,18 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	int pkey_idx = wfr_lookup_pkey_idx(ibp, 0x7fff);
 
 	if (pkey_idx < 0) {
+		/* FIXME do we really want to do this
+		 * We may need to allow local access here.  Checking inbound DR
+		 * paths and/or LID's may be required before rejecting this
+		 * MAD.
+		 *
+		 */
+		/*  Error this MAD out */
+		/* return (IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED); */
 		printk(KERN_WARNING PFX "failed to find a valid pkey_index "
-			"to return\n");
-		/* Error this MAD out */
-		return (IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED);
+			"to return defaulting to 1: 0x%x\n",
+			qib_get_pkey(ibp, 1));
+		pkey_idx = 1;
 	}
 	in_wc->pkey_index = (u16)pkey_idx;
 
