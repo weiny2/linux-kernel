@@ -95,7 +95,7 @@ static unsigned wfr_shared_space_sup = 1;
 module_param_named(shared_space_sup, wfr_shared_space_sup, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(shared_space_sup, "Set if shared space is supported");
 
-static unsigned wfr_mgmt_allowed = 1;
+static unsigned wfr_mgmt_allowed = 0;
 module_param_named(mgmt_allowed, wfr_mgmt_allowed, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(mgmt_allowed, "Set MgmtAllowed bit in simulated LNI negotiations (default 1): "
 			"NOTE this results in _REMOTE_ nodes PortInfo.MgmtAllowed bit being set");
