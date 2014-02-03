@@ -2908,8 +2908,9 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
 	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
 	u16 *p = (u16 *) stl_get_smp_data(smp);
-	u8 *to;
-	int i;
+	u16 *cur_keys;
+	int i, b;
+	int found_lim;
 	size_t size;
 	u16 n_blocks_avail;
 
@@ -2950,15 +2951,37 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 	for (i = 0; i < n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE; i++)
 		p[i] = be16_to_cpu(p[i]);
 
+	/* before writing this block ensure the limited management pkey is somewhere in the table. */
+	found_lim = 0;
+	for (b = 0; b < n_blocks_avail; b++) {
+		if (start_block <= b && b < (start_block + n_blocks_sent)) {
+			cur_keys = p + ((b - start_block) * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+		} else {
+			cur_keys = virtual_stl[port-1].pkeys + (b * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+		}
+		for (i = 0; i < STL_PARTITION_TABLE_BLK_SIZE; i++) {
+			if (cur_keys[i] == WFR_LIM_MGMT_P_KEY)
+				found_lim++;
+		}
+	}
+
+	if (!found_lim) {
+		printk(KERN_ERR PFX
+			"STL Set(PKeyTable) would result in the removal of 0x%x; rejecting\n",
+			WFR_LIM_MGMT_P_KEY);
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
+	}
+
 	if (start_block == 0 && set_pkeys(dd, port, p) != 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply_stl(smp);
 	}
 
-	// Set virtual pkeys for this port
-	to = (u8 *)virtual_stl[port-1].pkeys + (start_block * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+	// Set virtual pkeys for this block/port
+	cur_keys = virtual_stl[port-1].pkeys + (start_block * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
 	size = n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16);
-	memcpy(to, (void *)p, size);
+	memcpy(cur_keys, (void *)p, size);
 
 	return subn_get_stl_pkeytable(smp, ibdev, port);
 }
