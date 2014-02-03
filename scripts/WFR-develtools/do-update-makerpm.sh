@@ -19,6 +19,7 @@ sources_to_copy="
 	scripts/WFR-develtools/activate-wfrl-b2b.sh
 	scripts/WFR-develtools/umad-trace.stp
 	drivers/infiniband/core
+	drivers/infiniband/ulp/ipoib
 	drivers/infiniband/hw/wfr-lite
 	$headers_to_copy
 	drivers/infiniband/hw/qib
@@ -240,6 +241,8 @@ cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/
 make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mlx4
 cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/mthca
 make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/hw/mthca
+cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/ulp/ipoib
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/ulp/ipoib
 
 
 %install
@@ -260,6 +263,7 @@ cp drivers/infiniband/core/ib_cm.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/qib/ib_qib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/mlx4/mlx4_ib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/mthca/ib_mthca.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/ulp/ipoib/ib_ipoib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 mkdir -p \$RPM_BUILD_ROOT/usr/src/kernels/%kver/include-ifs-kernel
 cp -r include/* \$RPM_BUILD_ROOT/usr/src/kernels/%kver/include-ifs-kernel; \
