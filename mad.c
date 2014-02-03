@@ -1085,11 +1085,9 @@ static int subn_get_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 	if (ppd->vls_supported == IB_VL_VL0)
 		smp->status |= IB_SMP_UNSUP_METHOD;
 	else if (which == IB_VLARB_LOWPRI_0_31)
-		(void) ppd->dd->f_get_ib_table(ppd, QIB_IB_TBL_VL_LOW_ARB,
-						   smp->data);
+		(void) fm_get_table(ppd, FM_TBL_VL_LOW_ARB, smp->data);
 	else if (which == IB_VLARB_HIGHPRI_0_31)
-		(void) ppd->dd->f_get_ib_table(ppd, QIB_IB_TBL_VL_HIGH_ARB,
-						   smp->data);
+		(void) fm_get_table(ppd, FM_TBL_VL_HIGH_ARB, smp->data);
 	else
 		smp->status |= IB_SMP_INVALID_FIELD;
 
@@ -1105,11 +1103,9 @@ static int subn_set_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 	if (ppd->vls_supported == IB_VL_VL0)
 		smp->status |= IB_SMP_UNSUP_METHOD;
 	else if (which == IB_VLARB_LOWPRI_0_31)
-		(void) ppd->dd->f_set_ib_table(ppd, QIB_IB_TBL_VL_LOW_ARB,
-						   smp->data);
+		(void) fm_set_table(ppd, FM_TBL_VL_LOW_ARB, smp->data);
 	else if (which == IB_VLARB_HIGHPRI_0_31)
-		(void) ppd->dd->f_set_ib_table(ppd, QIB_IB_TBL_VL_HIGH_ARB,
-						   smp->data);
+		(void) fm_set_table(ppd, FM_TBL_VL_HIGH_ARB, smp->data);
 	else
 		smp->status |= IB_SMP_INVALID_FIELD;
 
