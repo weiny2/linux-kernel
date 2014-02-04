@@ -494,26 +494,46 @@ static int check_mad_pkey(struct qib_ibport *ibp,
 	int mgmt_pkey_idx;
 
 	mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
-	if (mgmt_pkey_idx < 0 ||
-	    (pkey == WFR_LIM_MGMT_P_KEY && !full_mgmt_key_exists(ibp))) {
-		printk(KERN_ERR PFX
-			"ERROR: MAD PKey check failed : "
-			" pkey == 0x%x; MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
+	if (mad->base_version != JUMBO_MGMT_BASE_VERSION &&
+	    (mad->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE ||
+	     mad->mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED)) {
+		/* WFR-lite needs to pass IB SMP's without harassment */
+		printk(KERN_WARNING PFX
+			"MAD PKey check IB OK : "
+			"pkey == 0x%x; BaseVer 0x%x; MgmtClassVer 0x%x "
+			"MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
 			pkey,
+			mad->base_version,
+			mad->class_version,
 			mad->mgmt_class,
 			be16_to_cpu(mad->attr_id),
 			mad->method);
-		if  (!wfr_enforce_ud_mgmt_pkey) {
-			mgmt_pkey_idx = mgmt_pkey_idx < 0 ? 0 : mgmt_pkey_idx;
-		} else {
-			printk(KERN_ERR PFX "... dropping MAD pkt\n");
-			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
-				      pkey,
-				      (be16_to_cpu(hdr->lrh[0]) >> 4) &
-					0xF,
-				      src_qp, qp->ibqp.qp_num,
-				      hdr->lrh[3], hdr->lrh[1]);
-			mgmt_pkey_idx = -1;
+		mgmt_pkey_idx = mgmt_pkey_idx < 0 ? 0 : mgmt_pkey_idx;
+	} else {
+		if (mgmt_pkey_idx < 0 ||
+		    (pkey == WFR_LIM_MGMT_P_KEY && !full_mgmt_key_exists(ibp))) {
+			printk(KERN_ERR PFX
+				"ERROR: MAD PKey check failed : "
+				"pkey == 0x%x; BaseVer 0x%x; MgmtClassVer 0x%x "
+				"MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
+				pkey,
+				mad->base_version,
+				mad->class_version,
+				mad->mgmt_class,
+				be16_to_cpu(mad->attr_id),
+				mad->method);
+			if  (!wfr_enforce_ud_mgmt_pkey) {
+				mgmt_pkey_idx = mgmt_pkey_idx < 0 ? 0 : mgmt_pkey_idx;
+			} else {
+				printk(KERN_ERR PFX "... dropping MAD pkt\n");
+				qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+					      pkey,
+					      (be16_to_cpu(hdr->lrh[0]) >> 4) &
+						0xF,
+					      src_qp, qp->ibqp.qp_num,
+					      hdr->lrh[3], hdr->lrh[1]);
+				mgmt_pkey_idx = -1;
+			}
 		}
 	}
 
