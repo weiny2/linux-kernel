@@ -37,17 +37,10 @@
 #include "wfrl.h"
 #include "wfrl_mad.h"
 
-static unsigned wfr_enforce_mgmt_pkey = 0;
-#if 0
-/* turns out this can lock up the kernel
- * I think because dropping MAD's from the local node can lock up the MAD stack...
- */
-module_param_named(enforce_mgmt_pkey, wfr_enforce_mgmt_pkey, uint, S_IRUGO | S_IWUSR | S_IWGRP);
-MODULE_PARM_DESC(enforce_mgmt_pkey, "Enforce Management Pkey checks "
-			"(default 0); if 1 then P_Key violation traps are also sent "
-			"DO NOT turn this ON; it will break the low level MAD's required "
-			"for wfr-lite");
-#endif
+static unsigned wfr_enforce_ud_mgmt_pkey = 1;
+module_param_named(enforce_ud_mgmt_pkey, wfr_enforce_ud_mgmt_pkey, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(enforce_ud_mgmt_pkey, "Enforce Management Pkey checks on inbound UD QP processing"
+		"(default 0); if 1 then P_Key violation traps are also sent");
 
 /**
  * qib_ud_loopback - handle send on loopback QPs
@@ -422,8 +415,33 @@ unlock:
 	return ret;
 }
 
+int full_mgmt_key_exists(struct qib_ibport *ibp)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct qib_devdata *dd = ppd->dd;
+	unsigned ctxt = ppd->hw_pidx;
+	unsigned i;
+
+	/* by convention check index 2 first */
+	if (dd->rcd[ctxt]->pkeys[2] == WFR_FULL_MGMT_P_KEY) {
+		return 1;
+	}
+
+	/* Then look through whole table if needed */
+	for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i) {
+		if (dd->rcd[ctxt]->pkeys[i] == WFR_FULL_MGMT_P_KEY)
+			return 1;
+	}
+	return 0;
+}
+
 /*
  * Hardware can't check this so we do it here.
+ *
+ * This is a slightly different algorithm than the standard pkey check.  It
+ * special cases the management keys and allows for 0x7fff and 0xffff to be in
+ * the table at the same time.
+ *
  * @returns the index found or -1 if not found
  */
 int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
@@ -433,19 +451,19 @@ int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 	unsigned ctxt = ppd->hw_pidx;
 	unsigned i;
 
-	if (pkey == 0xffff || pkey == 0x7fff) {
+	if (pkey == WFR_FULL_MGMT_P_KEY || pkey == WFR_LIM_MGMT_P_KEY) {
 		unsigned lim_idx = -1;
 
 		for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i) {
 			/* here we look for an exact match */
 			if (dd->rcd[ctxt]->pkeys[i] == pkey)
 				return i;
-			if (dd->rcd[ctxt]->pkeys[i] == 0x7fff)
+			if (dd->rcd[ctxt]->pkeys[i] == WFR_LIM_MGMT_P_KEY)
 				lim_idx = i;
 		}
 
 		/* did not find 0xffff return 0x7fff idx if found */
-		if (pkey == 0xffff) {
+		if (pkey == WFR_FULL_MGMT_P_KEY) {
 			return (lim_idx);
 		}
 
@@ -463,6 +481,43 @@ int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 	 * Should not get here, this means hardware failed to validate pkeys.
 	 */
 	return -1;
+}
+
+static int check_mad_pkey(struct qib_ibport *ibp,
+			  struct qib_ib_header *hdr,
+			  struct qib_other_headers *ohdr,
+			  struct qib_qp *qp,
+			  struct ib_mad_hdr *mad)
+{
+	u32 src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & QIB_QPN_MASK;
+	u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+	int mgmt_pkey_idx;
+
+	mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
+	if (mgmt_pkey_idx < 0 ||
+	    (pkey == WFR_LIM_MGMT_P_KEY && !full_mgmt_key_exists(ibp))) {
+		printk(KERN_ERR PFX
+			"ERROR: MAD PKey check failed : "
+			" pkey == 0x%x; MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
+			pkey,
+			mad->mgmt_class,
+			be16_to_cpu(mad->attr_id),
+			mad->method);
+		if  (!wfr_enforce_ud_mgmt_pkey) {
+			mgmt_pkey_idx = mgmt_pkey_idx < 0 ? 0 : mgmt_pkey_idx;
+		} else {
+			printk(KERN_ERR PFX "... dropping MAD pkt\n");
+			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+				      pkey,
+				      (be16_to_cpu(hdr->lrh[0]) >> 4) &
+					0xF,
+				      src_qp, qp->ibqp.qp_num,
+				      hdr->lrh[3], hdr->lrh[1]);
+			mgmt_pkey_idx = -1;
+		}
+	}
+
+	return (mgmt_pkey_idx);
 }
 
 /**
@@ -535,26 +590,11 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 				return;
 			}
 		} else {
-			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-			/* GSI */
-			mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
-			if (mgmt_pkey_idx < 0) {
-				printk(KERN_ERR PFX
-					"ERROR: GSI PKey check failed : "
-					" pkey == 0x%x\n",
-					(u16)be32_to_cpu(ohdr->bth[0]));
-				if  (wfr_enforce_mgmt_pkey) {
-					printk(KERN_ERR PFX "... dropping GSI pkt\n");
-					qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
-						      pkey,
-						      (be16_to_cpu(hdr->lrh[0]) >> 4) &
-							0xF,
-						      src_qp, qp->ibqp.qp_num,
-						      hdr->lrh[3], hdr->lrh[1]);
-					goto drop;
-				} else
-					mgmt_pkey_idx = 0;
-			}
+			/* GSI pkey check */
+			mgmt_pkey_idx = check_mad_pkey(ibp, hdr, ohdr, qp,
+						(struct ib_mad_hdr *)data);
+			if (mgmt_pkey_idx < 0)
+				goto drop;
 		}
 		if (unlikely(qkey != qp->qkey)) {
 			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
@@ -570,7 +610,6 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			goto drop;
 	} else {
 		struct ib_smp *smp;
-		u16 pkey;
 
 		/* Drop invalid MAD packets (see 13.5.3.1). */
 		if (tlen > 2048 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
@@ -582,25 +621,10 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			goto drop;
 
 		/* SMI pkey check */
-		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-		mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
-		if (mgmt_pkey_idx < 0) {
-			printk(KERN_ERR PFX
-				"ERROR: SMI PKey check failed : "
-				" pkey == 0x%x\n",
-				(u16)be32_to_cpu(ohdr->bth[0]));
-			if  (wfr_enforce_mgmt_pkey) {
-				printk(KERN_ERR PFX "... dropping SMI pkt\n");
-				qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
-					      pkey,
-					      (be16_to_cpu(hdr->lrh[0]) >> 4) &
-						0xF,
-					      src_qp, qp->ibqp.qp_num,
-					      hdr->lrh[3], hdr->lrh[1]);
-				goto drop;
-			} else
-				mgmt_pkey_idx = 0;
-		}
+		mgmt_pkey_idx = check_mad_pkey(ibp, hdr, ohdr, qp,
+						(struct ib_mad_hdr *)data);
+		if (mgmt_pkey_idx < 0)
+			goto drop;
 	}
 
 	/*
