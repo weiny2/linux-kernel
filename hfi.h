@@ -707,7 +707,7 @@ struct hfi_devdata {
 	int (*f_bringup_serdes)(struct qib_pportdata *);
 	int (*f_early_init)(struct hfi_devdata *);
 	void (*f_clear_tids)(struct qib_ctxtdata *);
-	void (*f_put_tid)(struct hfi_devdata *, u32, u32, unsigned long);
+	void (*f_put_tid)(struct hfi_devdata *, u32, u32, unsigned long, u16);
 	void (*f_cleanup)(struct hfi_devdata *);
 	void (*f_setextled)(struct qib_pportdata *, u32);
 	/* fill out chip-specific fields */

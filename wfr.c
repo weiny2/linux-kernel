@@ -1402,20 +1402,13 @@ static const char *pt_name(u32 type)
  * index is the index into the receive array
  */
 static void put_tid(struct hfi_devdata *dd, u32 index,
-			     u32 type, unsigned long pa)
+		    u32 type, unsigned long pa, u16 order)
 {
-	u64 reg, bsize = 0;
+	u64 reg;
 
 	if (type == PT_INVALID) {
 		pa = 0;
-	} else if (type < PT_INVALID) {
-		if (!hfi_rcvbuf_validate(dd->rcvegrbufsize, type,
-					 (u16 *)&bsize)) {
-			dd_dev_err(dd, "invalid RcvArray buffer size %u\n",
-				   dd->rcvegrbufsize);
-			goto done;
-		}
-	} else {
+	} else if (type > PT_INVALID) {
 		dd_dev_err(dd,
 			"unexpeced receive array type %u for index %u, not handled\n",
 			type, index);
@@ -1425,11 +1418,11 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 	if (trace_tid)
 		dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
 			__func__, pt_name(type), index, pa,
-			(unsigned long)bsize);
+			(unsigned long)order);
 
 #define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
 	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
-		| bsize << WFR_RCV_ARRAY_RT_BUF_SIZE_SHIFT
+		| (u64)order << WFR_RCV_ARRAY_RT_BUF_SIZE_SHIFT
 		| ((pa >> RT_ADDR_SHIFT) & WFR_RCV_ARRAY_RT_ADDR_MASK)
 					<< WFR_RCV_ARRAY_RT_ADDR_SHIFT;
 	write_csr(dd, WFR_RCV_ARRAY + (index * 8), reg);
@@ -1444,11 +1437,11 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 
 	/* TODO: this could be optimized */
 	for (i = rcd->eager_base; i < rcd->eager_base + rcd->eager_count; i++)
-		put_tid(dd, i, PT_INVALID, 0);
+		put_tid(dd, i, PT_INVALID, 0, 0);
 
 	for (i = rcd->expected_base;
 			i < rcd->expected_base + rcd->expected_count; i++)
-		put_tid(dd, i, PT_INVALID, 0);
+		put_tid(dd, i, PT_INVALID, 0, 0);
 }
 
 static int get_base_info(struct qib_ctxtdata *rcd,

@@ -195,10 +195,6 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 	if (ret)
 		goto done;
 
-	if (!hfi_rcvbuf_validate(egrsize, PT_EAGER, NULL)) {
-		ret = -EINVAL;
-		goto done;
-	}
 	/*
 	 * To avoid wasting a lot of memory, we allocate 32KB chunks
 	 * of physically contiguous memory, advance through it until
@@ -1461,6 +1457,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	unsigned e, egrcnt, egrperchunk, chunk, egrsize, egroff;
 	size_t size;
 	gfp_t gfp_flags;
+	u16 order;
 
 	/*
 	 * GFP_USER, but without GFP_FS, so buffer cache can be
@@ -1473,6 +1470,9 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	egrcnt = rcd->eager_count;
 	egroff = rcd->eager_base;
 	egrsize = rcd->rcvegrbuf_size;
+
+	if (!hfi_rcvbuf_validate(egrsize, PT_EAGER, &order))
+		return -EINVAL;
 
 	chunk = rcd->rcvegrbuf_chunks;
 	egrperchunk = rcd->rcvegrbufs_perchunk;
@@ -1520,7 +1520,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 		memset(rcd->rcvegrbuf[chunk], 0, size);
 
 		for (i = 0; e < egrcnt && i < egrperchunk; e++, i++) {
-			dd->f_put_tid(dd, e + egroff, PT_EAGER, pa);
+			dd->f_put_tid(dd, e + egroff, PT_EAGER, pa, order);
 			pa += egrsize;
 		}
 		cond_resched(); /* don't hog the cpu */

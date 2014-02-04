@@ -793,18 +793,10 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 	 * through ctxt 0, someday
 	 */
 	ret = qib_create_rcvhdrq(uctxt->dd, uctxt);
-	if (!ret) {
+	if (!ret)
 		ret = qib_setup_eagerbufs(uctxt);
-		printk(KERN_INFO " ctxt%u: rcvhdrq @ %p\n", uctxt->ctxt,
-		       uctxt->rcvhdrq);
-		printk(KERN_INFO " ctxt%u: egr cnt: %u\n", uctxt->ctxt,
-		       uctxt->eager_count);
-		printk(KERN_INFO " ctxt%u: rcvegrbuf phys: 0x%lx\n",
-		       uctxt->ctxt, (unsigned long)uctxt->rcvegrbuf_phys);
-	}
 	if (ret)
 		goto done;
-
 
 	set_bit(QIB_CTXT_SETUP_DONE, &uctxt->flag);
 done:
