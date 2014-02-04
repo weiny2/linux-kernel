@@ -1815,14 +1815,17 @@ static void set_vl_weights(struct hfi_devdata *dd, u32 target,
 	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
 }
 
-static int get_ib_table(struct qib_pportdata *ppd, int which, void *t)
+/*
+ * Read the given fabric manager table.
+ */
+int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 {
 	switch (which) {
-	case QIB_IB_TBL_VL_HIGH_ARB:
+	case FM_TBL_VL_HIGH_ARB:
 		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
 			WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
-	case QIB_IB_TBL_VL_LOW_ARB:
+	case FM_TBL_VL_LOW_ARB:
 		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
 			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
@@ -1832,14 +1835,17 @@ static int get_ib_table(struct qib_pportdata *ppd, int which, void *t)
 	return 0;
 }
 
-static int set_ib_table(struct qib_pportdata *ppd, int which, void *t)
+/*
+ * Write the given fabric manager table.
+ */
+int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 {
 	switch (which) {
-	case QIB_IB_TBL_VL_HIGH_ARB:
+	case FM_TBL_VL_HIGH_ARB:
 		set_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
 			WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
-	case QIB_IB_TBL_VL_LOW_ARB:
+	case FM_TBL_VL_LOW_ARB:
 		set_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
 			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
@@ -3416,8 +3422,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_get_ib_cfg        = get_ib_cfg;
 	dd->f_set_ib_cfg        = set_ib_cfg;
 	dd->f_set_ib_loopback   = set_ib_loopback;
-	dd->f_get_ib_table      = get_ib_table;
-	dd->f_set_ib_table      = set_ib_table;
 	dd->f_set_intr_state    = set_intr_state;
 	dd->f_setextled         = setextled;
 	dd->f_update_usrhead    = update_usrhead;

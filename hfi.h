@@ -335,10 +335,10 @@ struct qib_verbs_txreq {
 #define DEFAULT_PKEY 0xffff
 
 /*
- * Possible IB config parameters for f_get/set_ib_table()
+ * Possible fabric manager config parameters for fm_{get,set}_table()
  */
-#define QIB_IB_TBL_VL_HIGH_ARB 1 /* Get/set VL high priority weights */
-#define QIB_IB_TBL_VL_LOW_ARB 2 /* Get/set VL low priority weights */
+#define FM_TBL_VL_HIGH_ARB	1 /* Get/set VL high priority weights */
+#define FM_TBL_VL_LOW_ARB	2 /* Get/set VL low priority weights */
 
 /*
  * Possible "operations" for f_rcvctrl(ppd, op, ctxt)
@@ -720,8 +720,6 @@ struct hfi_devdata {
 	int (*f_get_ib_cfg)(struct qib_pportdata *, int);
 	int (*f_set_ib_cfg)(struct qib_pportdata *, int, u32);
 	int (*f_set_ib_loopback)(struct qib_pportdata *, const char *);
-	int (*f_get_ib_table)(struct qib_pportdata *, int, void *);
-	int (*f_set_ib_table)(struct qib_pportdata *, int, void *);
 	u32 (*f_iblink_state)(struct qib_pportdata *);
 	u8 (*f_ibphys_portstate)(struct qib_pportdata *);
 	void (*f_xgxs_reset)(struct qib_pportdata *);
@@ -1023,6 +1021,9 @@ int qib_set_lid(struct qib_pportdata *, u32, u8);
 void qib_disable_after_error(struct hfi_devdata *);
 int qib_set_uevent_bits(struct qib_pportdata *, const int);
 int hfi_rcvbuf_validate(u32, u8, u16 *);
+
+int fm_get_table(struct qib_pportdata *, int, void *);
+int fm_set_table(struct qib_pportdata *, int, void *);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \
