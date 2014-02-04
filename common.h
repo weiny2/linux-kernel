@@ -127,9 +127,6 @@ struct hfi_base_info {
 	__u32 hw_version;
 	/* version of software, for feature checking. */
 	__u32 sw_version;
-	/* context and subcontext assigned */
-	__u16 context;
-	__u16 subcontext;
 	/*
 	 * IB MTU, packets IB data must be less than this.
 	 * The MTU is in bytes, and will be a multiple of 4 bytes.
@@ -283,8 +280,8 @@ struct hfi_user_info {
 	 * values.  The only restriction on the subcontext_id is that
 	 * it be unique for a given node.
 	 */
-	__u16 subcontext_cnt;
-	__u16 subcontext_id;
+	__u16 subctxt_cnt;
+	__u16 subctxt_id;
 };
 
 /* User commands. */

@@ -64,18 +64,22 @@ static int hfi_mmap(struct file *, struct vm_area_struct *);
 
 static u64 kvirt_to_phys(void *);
 static int assign_ctxt(struct file *, struct hfi_user_info *);
+static int init_subctxts(struct qib_ctxtdata *, const struct hfi_user_info *);
 static int user_init(struct file *);
 static int get_ctxt_info(struct file *, void __user *, __u32);
 static int get_base_info(struct file *, void __user *, __u32);
 static int setup_ctxt(struct file *, struct hfi_ctxt_setup *);
-static int find_free_ctxt(unsigned, struct file *, struct hfi_user_info *);
-static int get_a_ctxt(struct file *, struct hfi_user_info *, unsigned);
+static int setup_subctxt(struct qib_ctxtdata *);
+static int get_user_context(struct file *, struct hfi_user_info *,
+			    int, unsigned);
+static int find_shared_ctxt(struct file *, const struct hfi_user_info *);
 static int allocate_ctxt(struct file *, struct hfi_devdata *,
 			 struct hfi_user_info *);
 static unsigned int poll_urgent(struct file *, struct poll_table_struct *);
 static unsigned int poll_next(struct file *, struct poll_table_struct *);
 static int user_event_ack(struct qib_ctxtdata *, int, unsigned long);
 static int manage_rcvq(struct qib_ctxtdata *, unsigned, int);
+static int vma_fault(struct vm_area_struct *, struct vm_fault *);
 
 static const struct file_operations qib_file_ops = {
 	.owner = THIS_MODULE,
@@ -86,6 +90,10 @@ static const struct file_operations qib_file_ops = {
 	.poll = hfi_poll,
 	.mmap = hfi_mmap,
 	.llseek = noop_llseek,
+};
+
+static struct vm_operations_struct vm_ops = {
+	.fault = vma_fault,
 };
 
 /*
@@ -103,6 +111,7 @@ enum mmap_types {
 	RTAIL,
 	SUBCTXT_UREGS,
 	SUBCTXT_RCV_HDRQ,
+	SUBCTXT_EGRBUF,
 	SDMA_COMP
 };
 
@@ -204,6 +213,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		goto bail;
 	}
 
+	/* If the command comes with user data, copy it. */
 	if (copy) {
 		if (copy_from_user(dest, (void __user *)ucmd->addr, copy)) {
 			ret = -EFAULT;
@@ -284,9 +294,10 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 {
 	struct qib_ctxtdata *uctxt;
 	struct hfi_devdata *dd;
-	unsigned long flags, pfn, memaddr = 0;
-	u64 token = vma->vm_pgoff << PAGE_SHIFT;
-	u8 subctxt, mapio = 0, type;
+	unsigned long flags, pfn;
+	u64 token = vma->vm_pgoff << PAGE_SHIFT,
+		memaddr = 0;
+	u8 subctxt, mapio = 0, vmf = 0, type;
 	ssize_t memlen = 0;
 	int ret = 0;
 	u16 ctxt, numa;
@@ -320,13 +331,17 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 */
 		memlen = ALIGN(uctxt->sc->credits * WFR_PIO_BLOCK_SIZE,
 			       PAGE_SIZE);
-		mapio = 1;
 		flags &= ~VM_MAYREAD;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
 		// XXX (Mitko): how do we deal with write-combining?
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+		mapio = 1;
 		break;
 	case PIO_CRED:
+		if (flags & VM_WRITE) {
+			ret = -EPERM;
+			goto done;
+		}
 		numa = numa_node_id();
 		/*
 		 * The credit return location for this context could be on the
@@ -337,11 +352,6 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 			((uctxt->ctxt * sizeof(*dd->cr_base[numa].va)) > PAGE_SIZE ?
 			 PAGE_SIZE : 0);
 		memlen = PAGE_SIZE;
-		mapio = 1;
-		if (flags & VM_WRITE) {
-			ret = -EINVAL;
-			goto done;
-		}
 		flags &= ~VM_MAYWRITE;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
 		/*
@@ -350,6 +360,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * memory been flaged as non-cached?
 		 */
 		//vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		mapio = 1;
 		break;
 	case RCV_HDRQ:
 		memaddr = uctxt->rcvhdrq_phys;
@@ -366,9 +377,12 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 */
 		size = uctxt->rcvegrbuf_chunksize;
 		memlen = uctxt->rcvegrbuf_chunks * size;
-		if (((vma->vm_end - vma->vm_start) < memlen) ||
-		    vma->vm_flags & VM_WRITE) {
+		if ((vma->vm_end - vma->vm_start) < memlen) {
 			ret = -EINVAL;
+			goto done;
+		}
+		if (vma->vm_flags & VM_WRITE) {
+			ret = -EPERM;
 			goto done;
 		}
 		vma->vm_flags &= ~VM_MAYWRITE;
@@ -391,22 +405,23 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		memaddr = (unsigned long)(dd->physaddr + dd->uregbase) +
 			(uctxt->ctxt * dd->ureg_align);
 		memlen = PAGE_SIZE;
-		mapio = 1;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		mapio = 1;
 		break;
 	case EVENTS:
 		/*
 		 * One page containing events for all ctxts. User level
 		 * knows where it's own bitmap is.
 		 */
-		memaddr = kvirt_to_phys(dd->events);
+		memaddr = (u64)dd->events;
 		memlen = PAGE_SIZE;
 		/*
 		 * v3.7 removes VM_RESERVED but the effect is kept by
 		 * using VM_IO.
 		 */
 		flags |= VM_IO | VM_DONTEXPAND;
+		vmf = 1;
 		break;
 	case STATUS:
 		memaddr = kvirt_to_phys((void *)dd->status);
@@ -414,16 +429,33 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		flags |= VM_IO | VM_DONTEXPAND;
 		break;
 	case RTAIL:
-		memaddr = uctxt->rcvhdrqtailaddr_phys;
-		memlen = PAGE_SIZE;
 		if (flags & VM_WRITE) {
-			ret = -EINVAL;
+			ret = -EPERM;
 			goto done;
 		}
+		memaddr = uctxt->rcvhdrqtailaddr_phys;
+		memlen = PAGE_SIZE;
 		flags &= ~VM_MAYWRITE;
 		break;
 	case SUBCTXT_UREGS:
+		memaddr = (u64)uctxt->subctxt_uregbase;
+		memlen = PAGE_SIZE;
+		flags |= VM_IO | VM_DONTEXPAND;
+		vmf = 1;
+		break;
 	case SUBCTXT_RCV_HDRQ:
+		memaddr = (u64)uctxt->subctxt_rcvhdr_base;
+		memlen = uctxt->rcvhdrq_size;
+		flags |= VM_IO | VM_DONTEXPAND;
+		vmf = 1;
+		break;
+	case SUBCTXT_EGRBUF:
+		memaddr = (u64)uctxt->subctxt_rcvegrbuf;
+		memlen = uctxt->rcvegrbuf_chunks * uctxt->rcvegrbuf_chunksize;
+		flags |= VM_IO | VM_DONTEXPAND;
+		flags &= ~VM_MAYWRITE;
+		vmf = 1;
+		break;
 	case SDMA_COMP:
 	default:
 		ret = -EINVAL;
@@ -436,10 +468,16 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	vma->vm_flags = flags;
-	dd_dev_info(dd, "%s: type:%u io:%d, addr:0x%lx, len:%lu, flags:0x%lx\n",
-		    __func__, type, mapio, memaddr, memlen, vma->vm_flags);
-	pfn = memaddr >> PAGE_SHIFT;
-	if (mapio) {
+	dd_dev_info(dd,
+		"%s: %u:%u type:%u io/vf:%d/%d, addr:0x%llx, len:%lu, flags:0x%lx\n",
+		    __func__, ctxt, subctxt, type, mapio, vmf, memaddr, memlen,
+		    vma->vm_flags);
+	pfn = (unsigned long)(memaddr >> PAGE_SHIFT);
+	if (vmf) {
+		vma->vm_pgoff = pfn;
+		vma->vm_ops = &vm_ops;
+		ret = 0;
+	} else if (mapio) {
 		ret = io_remap_pfn_range(vma, vma->vm_start, pfn, memlen,
 					 vma->vm_page_prot);
 	} else {
@@ -448,6 +486,24 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 done:
 	return ret;
+}
+
+/*
+ * Local (non-chip) user memory is not mapped right away but as it is
+ * accessed by the user-level code.
+ */
+static int vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct page *page;
+
+	page = vmalloc_to_page((void *)(vmf->pgoff << PAGE_SHIFT));
+	if (!page)
+		return VM_FAULT_SIGBUS;
+
+	get_page(page);
+	vmf->page = page;
+
+	return 0;
 }
 
 static unsigned int hfi_poll(struct file *fp, struct poll_table_struct *pt)
@@ -480,7 +536,8 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	if (!uctxt)
 		goto done;
 
-	printk(KERN_INFO " freeing ctxt %u\n", uctxt->ctxt);
+	printk(KERN_INFO " freeing ctxt %u:%u\n", uctxt->ctxt,
+	       fdata->subctxt);
 	dd = uctxt->dd;
 	mutex_lock(&qib_mutex);
 
@@ -490,6 +547,18 @@ static int hfi_close(struct inode *inode, struct file *fp)
 		qib_user_sdma_queue_drain(uctxt->ppd, fdata->pq);
 		qib_user_sdma_queue_destroy(fdata->pq);
 		}*/
+
+	if (--uctxt->cnt) {
+		/*
+		 * XXX If the master closes the context before the slave(s),
+		 * revoke the mmap for the eager receive queue so
+		 * the slave(s) don't wait for receive data forever.
+		 */
+		uctxt->active_slaves &= ~(1 << fdata->subctxt);
+		uctxt->subpid[fdata->subctxt] = 0;
+		mutex_unlock(&qib_mutex);
+		goto done;
+	}
 
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
 	/* disable receive context and interrupt available */
@@ -518,10 +587,8 @@ done:
 }
 
 /*
- * Convert kernel virtual addresses to physical addresses so they don't
- * potentially conflict with the chip addresses used as mmap offsets.
- * It doesn't really matter what mmap offset we use as long as we can
- * interpret it correctly.
+ * Convert kernel *virtual* addresses to physical addresses.
+ * This is used to vmalloc'ed addresses.
  */
 static u64 kvirt_to_phys(void *addr)
 {
@@ -537,7 +604,7 @@ static u64 kvirt_to_phys(void *addr)
 
 static int assign_ctxt(struct file *fp, struct hfi_user_info *uinfo)
 {
-	int i_minor, ret;
+	int i_minor, ret = 0;
 	unsigned swmajor, swminor, alg = HFI_ALG_ACROSS;
 
 	swmajor = uinfo->userversion >> 16;
@@ -552,32 +619,27 @@ static int assign_ctxt(struct file *fp, struct hfi_user_info *uinfo)
 		alg = uinfo->hfi_alg;
 
 	mutex_lock(&qib_mutex);
-	i_minor = iminor(file_inode(fp)) - HFI_USER_MINOR_BASE;
-	if (i_minor)
-		ret = find_free_ctxt(i_minor - 1, fp, uinfo);
-	else
-		ret = get_a_ctxt(fp, uinfo, alg);
+	/* First, lets check if we need to setup a shared context? */
+	if (uinfo->subctxt_cnt)
+		ret = find_shared_ctxt(fp, uinfo);
+
+	/*
+	 * We execute the following block if we couldn't find a
+	 * shared context or if context sharing is not required.
+	 */
+	if (!ret) {
+		i_minor = iminor(file_inode(fp)) - HFI_USER_MINOR_BASE;
+		ret = get_user_context(fp, uinfo, i_minor - 1, alg);
+	}
 	mutex_unlock(&qib_mutex);
 done:
 	return ret;
 }
 
-static int find_free_ctxt(unsigned devno, struct file *fp,
-			  struct hfi_user_info *uinfo)
+static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
+			    int devno, unsigned alg)
 {
-	struct hfi_devdata *dd = qib_lookup(devno);
-	int ret = 0;
-	if (!dd)
-		ret = -ENODEV;
-	if (!ret && !dd->freectxts)
-		ret = -EBUSY;
-	return ret ? ret : allocate_ctxt(fp, dd, uinfo);
-}
-
-static int get_a_ctxt(struct file *fp, struct hfi_user_info *uinfo,
-		      unsigned alg)
-{
-	struct hfi_devdata *udd = NULL;
+	struct hfi_devdata *dd = NULL;
 	int ret = 0, devmax, npresent, nup, dev;
 
 	devmax = qib_count_units(&npresent, &nup);
@@ -589,35 +651,78 @@ static int get_a_ctxt(struct file *fp, struct hfi_user_info *uinfo,
 		ret = -ENETDOWN;
 		goto done;
 	}
-	if (alg == HFI_ALG_ACROSS) {
-		unsigned free = 0U;
-		for (dev = 0; dev < devmax; dev++) {
-			struct hfi_devdata *dd = qib_lookup(dev);
-			if (!dd)
-				continue;
-			if (!dd->freectxts)
-				continue;
-			if (dd->freectxts > free) {
-				udd = dd;
-				free = dd->freectxts;
+	if (devno >= 0) {
+		dd = qib_lookup(devno);
+		if (!dd)
+			ret = -ENODEV;
+		else if (!dd->freectxts)
+			ret = -EBUSY;
+	} else {
+		struct hfi_devdata *pdd;
+		if (alg == HFI_ALG_ACROSS) {
+			unsigned free = 0U;
+			for (dev = 0; dev < devmax; dev++) {
+				pdd = qib_lookup(dev);
+				if (pdd && pdd->freectxts &&
+				    pdd->freectxts > free) {
+					dd = pdd;
+					free = pdd->freectxts;
+				}
+			}
+		} else {
+			for (dev = 0; dev < devmax; dev++) {
+				pdd = qib_lookup(dev);
+				if (pdd && pdd->freectxts)
+					dd = pdd;
 			}
 		}
-		if (udd)
-			ret = allocate_ctxt(fp, udd, uinfo);
-		else
+		if (!dd)
 			ret = -EBUSY;
-		goto done;
+	}
+done:
+	return ret ? ret : allocate_ctxt(fp, dd, uinfo);
+}
 
-	} else {
-		for (dev = 0; dev < devmax; dev++) {
-			udd = qib_lookup(dev);
-			if (udd) {
-				ret = allocate_ctxt(fp, udd, uinfo);
-				if (!ret)
-					goto done;
+static int find_shared_ctxt(struct file *fp,
+			    const struct hfi_user_info *uinfo)
+{
+	int devmax, ndev, i;
+	int ret = 0;
+
+	devmax = qib_count_units(NULL, NULL);
+
+	for (ndev = 0; ndev < devmax; ndev++) {
+		struct hfi_devdata *dd = qib_lookup(ndev);
+
+		/* device portion of usable() */
+		if (!(dd && (dd->flags & QIB_PRESENT) && dd->kregbase))
+			continue;
+		for (i = dd->first_user_ctxt; i < dd->num_rcv_contexts; i++) {
+			struct qib_ctxtdata *uctxt = dd->rcd[i];
+
+			/* Skip ctxts which are not yet open */
+			if (!uctxt || !uctxt->cnt)
+				continue;
+			/* Skip ctxt if it doesn't match the requested one */
+			if (uctxt->subctxt_id != uinfo->subctxt_id)
+				continue;
+			/* Verify the sharing process matches the master */
+			if (uctxt->subctxt_cnt != uinfo->subctxt_cnt ||
+			    uctxt->userversion != uinfo->userversion ||
+			    uctxt->cnt >= uctxt->subctxt_cnt) {
+				ret = -EINVAL;
+				goto done;
 			}
+			ctxt_fp(fp) = uctxt;
+			subctxt_fp(fp) = uctxt->cnt++;
+			uctxt->subpid[subctxt_fp(fp)] = current->pid;
+			tidcursor_fp(fp) = 0;
+			uctxt->active_slaves |= 1 << subctxt_fp(fp);
+			ret = 1;
+			goto done;
 		}
 	}
+
 done:
 	return ret;
 }
@@ -631,7 +736,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	int ret = 0;
 
 	for (ctxt = dd->first_user_ctxt;
-	     ctxt < dd->num_rcv_contexts && dd->rcd[ctxt]; ctxt++)
+	     ctxt < dd->num_rcv_contexts && dd->rcd[ctxt]; ctxt++);
 	if (ctxt == dd->num_rcv_contexts) {
 		ret = -EBUSY;
 		goto done;
@@ -657,14 +762,25 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 		goto done;
 	}
 	printk(KERN_INFO " allocated send context %d\n", uctxt->sc->context);
-	sc_enable(uctxt->sc);
-
-	uctxt->userversion = uinfo->userversion;
-	/* subctxts not supported yet
-	ret = init_subctxts(dd, uctxt, uinfo);
+	ret = sc_enable(uctxt->sc);
 	if (ret)
-	goto bail;
-	*/
+		goto done;
+	/*
+	 * Setup shared context resources if the user-level has requested
+	 * shared contexts and this is the 'master' process.
+	 * This has to be done here so the rest of the subcontexts find the
+	 * proper master.
+	 */
+	if (uinfo->subctxt_cnt && !subctxt_fp(fp)) {
+		ret = init_subctxts(uctxt, uinfo);
+		/*
+		 * On error, we don't need to disable and de-allocate the
+		 * send context because it will be done during file close
+		 */
+		if (ret)
+			goto done;
+	}
+	uctxt->userversion = uinfo->userversion;
 	uctxt->tid_pg_list = ptmp;
 	uctxt->pid = current->pid;
 	init_waitqueue_head(&uctxt->wait);
@@ -677,12 +793,67 @@ done:
 	return ret;
 }
 
+static int init_subctxts(struct qib_ctxtdata *uctxt,
+			 const struct hfi_user_info *uinfo)
+{
+	int ret = 0;
+	unsigned num_subctxts;
+
+	num_subctxts = uinfo->subctxt_cnt;
+	if (num_subctxts > QLOGIC_IB_MAX_SUBCTXT) {
+		ret = -EINVAL;
+		goto bail;
+	}
+
+	uctxt->subctxt_cnt = uinfo->subctxt_cnt;
+	uctxt->subctxt_id = uinfo->subctxt_id;
+	uctxt->active_slaves = 1;
+	uctxt->redirect_seq_cnt = 1;
+	set_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->flag);
+bail:
+	return ret;
+}
+
+static int setup_subctxt(struct qib_ctxtdata *uctxt)
+{
+	int ret = 0;
+	unsigned num_subctxts = uctxt->subctxt_cnt;
+
+	uctxt->subctxt_uregbase = vmalloc_user(PAGE_SIZE);
+	if (!uctxt->subctxt_uregbase) {
+		ret = -ENOMEM;
+		goto bail;
+	}
+	/* We can take the size of the RcvHdr Queue from the master */
+	uctxt->subctxt_rcvhdr_base = vmalloc_user(uctxt->rcvhdrq_size *
+						  num_subctxts);
+	if (!uctxt->subctxt_rcvhdr_base) {
+		ret = -ENOMEM;
+		goto bail_ureg;
+	}
+
+	uctxt->subctxt_rcvegrbuf = vmalloc_user(uctxt->rcvegrbuf_chunks *
+						uctxt->rcvegrbuf_chunksize *
+						num_subctxts);
+	if (!uctxt->subctxt_rcvegrbuf) {
+		ret = -ENOMEM;
+		goto bail_rhdr;
+	}
+	goto bail;
+bail_rhdr:
+	vfree(uctxt->subctxt_rcvhdr_base);
+bail_ureg:
+	vfree(uctxt->subctxt_uregbase);
+	uctxt->subctxt_uregbase = NULL;
+bail:
+	return ret;
+}
+
 static int user_init(struct file *fp)
 {
 	int ret;
 	unsigned int rcvctrl_ops = 0;
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
-	//struct hfi_devdata *dd;
 
 	/* make sure that the context has already been setup */
 	if (!test_bit(QIB_CTXT_SETUP_DONE, &uctxt->flag)) {
@@ -690,14 +861,15 @@ static int user_init(struct file *fp)
 		goto done;
 	}
 
-	/* Subctxts don't need to initialize anything since master did it.
-	   Subctxt are not supported yet
+	/*
+	 * Subctxts don't need to initialize anything since master
+	 * has done it.
+	 */
 	if (subctxt_fp(fp)) {
 		ret = wait_event_interruptible(uctxt->wait,
 			!test_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->flag));
-		goto bail;
+		goto done;
 	}
-	*/
 
 	tidcursor_fp(fp) = 0; /* start at beginning after open */
 
@@ -729,7 +901,7 @@ static int user_init(struct file *fp)
 		clear_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->flag);
 		wake_up(&uctxt->wait);
 	}
-	return 0;
+	ret = 0;
 
 done:
 	return ret;
@@ -766,35 +938,37 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 			     cinfo);
 
 	/*
-	 * Even though we have the safeguard in f_init_ctxt, we
-	 * error out if the Eager buffer count is too high so
-	 * user level can clean up.
+	 * Context should be set up only once (including allocation and
+	 * programming of eager buffers. This is done if context sharing
+	 * is not requested or by the master process.
 	 */
-	if (cinfo->egrtids > WFR_MAX_EAGER_ENTRIES) {
-		ret = -EINVAL;
-		goto done;
-	}
-	/*
-	 * Setup partitioning of RcvArray between Eager and Expected
-	 * receives.
-	 */
-	ret = hfi_setup_ctxt(uctxt, cinfo->egrtids, cinfo->rcvegr_size,
-			     cinfo->rcvhdrq_cnt, cinfo->rcvhdrq_entsize);
-	if (ret)
-		goto done;
+	if (!uctxt->subctxt_cnt || !subctxt_fp(fp)) {
+		/*
+		 * Even though we have the safeguard in f_init_ctxt, we
+		 * error out if the Eager buffer count is too high so
+		 * user level can clean up.
+		 */
+		if (cinfo->egrtids > WFR_MAX_EAGER_ENTRIES) {
+			ret = -EINVAL;
+			goto done;
+		}
+		/*
+		 * Setup partitioning of RcvArray between Eager and Expected
+		 * receives.
+		 */
+		ret = hfi_setup_ctxt(uctxt, cinfo->egrtids, cinfo->rcvegr_size,
+				     cinfo->rcvhdrq_cnt, cinfo->rcvhdrq_entsize);
+		if (ret)
+			goto done;
 
-	// rcv eager array is eagrcnt * rcvegrentsize (rcvegr_entsize)
-	// the rcvhdrq array is rcvhdr_entries * rcvhdr_entsize (64)
-	
-	/*
-	 * Now allocate the rcvhdr Q and eager TIDs; skip the TID
-	 * array for time being.  If uctxt->ctxt > chip-supported,
-	 * we need to do extra stuff here to handle by handling overflow
-	 * through ctxt 0, someday
-	 */
-	ret = qib_create_rcvhdrq(uctxt->dd, uctxt);
-	if (!ret)
-		ret = qib_setup_eagerbufs(uctxt);
+		/* Now allocate the RcvHdr queue and eager buffers. */
+		if ((ret = qib_create_rcvhdrq(uctxt->dd, uctxt)))
+			goto done;
+		if ((ret = qib_setup_eagerbufs(uctxt)))
+			goto done;
+		if (uctxt->subctxt_cnt && !subctxt_fp(fp))
+			ret = setup_subctxt(uctxt);
+	}
 	if (ret)
 		goto done;
 
@@ -820,7 +994,6 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 		goto done;
 	binfo.hw_version = dd->revision;
 	binfo.sw_version = QIB_KERN_SWVERSION;
-	binfo.context = uctxt->ctxt;
 	binfo.bthqp = kdeth_qp;
 	/* XXX (Mitko): We are hard-coding the pport index since WFR
 	 * has only one port and the expectation is that ppd will go
@@ -870,7 +1043,17 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
 		binfo.rcvhdrtail_base = HFI_MMAP_TOKEN(RTAIL, uctxt->ctxt,
 						       subctxt_fp(fp), 0);
-
+	if (uctxt->subctxt_cnt) {
+		binfo.subctxt_uregbase = HFI_MMAP_TOKEN(SUBCTXT_UREGS,
+							uctxt->ctxt,
+							subctxt_fp(fp), 0);
+		binfo.subctxt_rcvhdrbuf = HFI_MMAP_TOKEN(SUBCTXT_RCV_HDRQ,
+							 uctxt->ctxt,
+							 subctxt_fp(fp), 0);
+		binfo.subctxt_rcvegrbuf = HFI_MMAP_TOKEN(SUBCTXT_EGRBUF,
+							 uctxt->ctxt,
+							 subctxt_fp(fp), 0);
+	}
 	sz = (len < sizeof(binfo)) ? len : sizeof(binfo);
 	if (copy_to_user(ubase, &binfo, sz))
 		ret = -EFAULT;
@@ -959,7 +1142,7 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 
 /**
  * qib_manage_rcvq - manage a context's receive queue
- * @rcd: the context
+ * @uctxt: the context
  * @subctxt: the subcontext
  * @start_stop: action to carry out
  *

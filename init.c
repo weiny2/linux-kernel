@@ -179,7 +179,7 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 	struct hfi_devdata *dd = uctxt->dd;
 	int ret = 0;
 
-	dd_dev_info(dd, "%s: setting up context %d\n", __func__,
+	dd_dev_info(dd, "%s: setting up context %u\n", __func__,
 		    uctxt->ctxt);
 
 	if (egrtids > dd->rcv_entries) {
@@ -1372,6 +1372,10 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 		dma_addr_t phys_hdrqtail;
 		gfp_t gfp_flags;
 
+		/*
+		 * rcvhdrqentsize is in DWs, so we have to convert to bytes
+		 * (* sizeof(u32)).
+		 */
 		amt = ALIGN(rcd->rcvhdrq_cnt * rcd->rcvhdrqentsize *
 			    sizeof(u32), PAGE_SIZE);
 
