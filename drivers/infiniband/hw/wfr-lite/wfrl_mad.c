@@ -1536,6 +1536,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
 	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
 	struct stl_port_info *vpi;
+	u8 orig_portphysstate_portstate;
 
 	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
 
@@ -1575,6 +1576,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 	vpi = &virtual_stl[port_num-1].port_info;
+	orig_portphysstate_portstate = vpi->port_states.portphysstate_portstate;
 
 	pi = (struct stl_port_info *)stl_get_smp_data(smp);
 
@@ -1846,12 +1848,14 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	virtual_stl[port-1].port_info.flow_control_mask = pi->flow_control_mask;
 
-	wfr_send_stl_virt_link_info(ibdev, port, vpi->port_states.portphysstate_portstate,
-				dd->pport->guid,
-				wfr_mgmt_allowed ?
-					STL_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
-				vpi->link_speed.active,
-				vpi->link_width.active);
+	if (vpi->port_states.portphysstate_portstate != orig_portphysstate_portstate) {
+		wfr_send_stl_virt_link_info(ibdev, port, vpi->port_states.portphysstate_portstate,
+					dd->pport->guid,
+					wfr_mgmt_allowed ?
+						STL_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
+					vpi->link_speed.active,
+					vpi->link_width.active);
+	}
 
 	if (clientrereg) {
 		event.event = IB_EVENT_CLIENT_REREGISTER;
