@@ -37,7 +37,7 @@
 #include "wfrl.h"
 #include "wfrl_mad.h"
 
-static unsigned wfr_enforce_ud_mgmt_pkey = 1;
+static unsigned wfr_enforce_ud_mgmt_pkey = 0;
 module_param_named(enforce_ud_mgmt_pkey, wfr_enforce_ud_mgmt_pkey, uint, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(enforce_ud_mgmt_pkey, "Enforce Management Pkey checks on inbound UD QP processing"
 		"(default 0); if 1 then P_Key violation traps are also sent");
