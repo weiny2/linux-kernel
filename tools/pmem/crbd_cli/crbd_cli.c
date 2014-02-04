@@ -123,8 +123,8 @@ int main(int argc, char *argv[])
 			if (strcmp(optarg, "default"))
 				strncpy(nvdimm_fit_file, optarg, PATH_MAX);
 
-			/*if (!run_unit_tests())
-				return EXIT_FAILURE;*/
+			if (!run_unit_tests())
+				return EXIT_FAILURE;
 
 			return EXIT_SUCCESS;
 			break;
