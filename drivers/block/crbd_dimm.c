@@ -1163,7 +1163,7 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 
 	c_dimm->host_mailbox = cr_create_mailbox(c_dimm, mb_i_tbl);
 
-	if (IS_ERR(c_dimm->host_mailbox)) {
+	if (IS_ERR_OR_NULL(c_dimm->host_mailbox)) {
 		ret = PTR_ERR(c_dimm->host_mailbox);
 		goto after_cr_dimm;
 	}
