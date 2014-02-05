@@ -261,7 +261,8 @@ static ssize_t iwl_dbgfs_power_down_allow_write(struct file *file,
 	if (!mvm->ucode_loaded)
 		return -EIO;
 
-	if (copy_from_user(buf, user_buf, sizeof(buf)))
+	count = min_t(size_t, count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
 
 	if (sscanf(buf, "%d", &allow) != 1)
@@ -285,7 +286,8 @@ static ssize_t iwl_dbgfs_power_down_d3_allow_write(struct file *file,
 	char buf[8] = {};
 	int allow;
 
-	if (copy_from_user(buf, user_buf, sizeof(buf)))
+	count = min_t(size_t, count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
 
 	if (sscanf(buf, "%d", &allow) != 1)
@@ -375,7 +377,8 @@ static ssize_t iwl_dbgfs_pm_params_write(struct file *file,
 	int val;
 	int ret;
 
-	if (copy_from_user(buf, user_buf, sizeof(buf)))
+	count = min_t(size_t, count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
 
 	if (!strncmp("keep_alive=", buf, 11)) {
@@ -1025,7 +1028,8 @@ static ssize_t iwl_dbgfs_d3_sram_write(struct file *file,
 	char buf[8] = {};
 	int store;
 
-	if (copy_from_user(buf, user_buf, sizeof(buf)))
+	count = min_t(size_t, count, sizeof(buf) - 1);
+	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
 
 	if (sscanf(buf, "%d", &store) != 1)
