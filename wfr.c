@@ -3264,35 +3264,52 @@ void init_txe(struct hfi_devdata *dd)
 	/*
 	 * FIXME: Set up initial send link credits.  We need an amount
 	 * in vl15 so we can talk to the FM to set up the rest.  The
-	 * value used here is completely arbitrary.  Find the right
-	 * value.  IN ADDITION: set up credits on the other VLs as
+	 * CM Global Credit value is fixed in the simulator and ASIC, but
+	 * the division is here is arbitrary.
+	 *
+	 * IN ADDITION: set up credits on the other VLs as
 	 * we do not have a FM to talk to in the current simulation
 	 * environment.  These values are also completely arbitrary.
 	 * Plus there is no explanation for the fields.  Should the
 	 * global limit be the sum of the other limits?
 	 */
-#define WFR_CM_AU ((u64)3) /* allocation unit - 64b */
-			   /*   this is the only valid value for WFR, PRR */
-#define WFR_CM_GLOBAL_SHARED_LIMIT	((u64)0x1000) /* arbitrary */
-#define WFR_CM_VL_DEDICATED_CREDITS	((u64)0x0100) /* arbitrary */
-#define WFR_CM_VL_SHARED_CREDITS	(WFR_CM_GLOBAL_SHARED_LIMIT/2)
+/* allocation unit, 64 bytes, fixed for WFR, PRR, encoded */
+#define WFR_CM_AU ((u64)3)
+/* WFR link credit count, both ASIC and sim */
+#define WFR_CM_GLOBAL_CREDITS 0x940
+/* enough room for 2 full-sized MAD packets plus max headers */
+#define VL15_CREDITS (((MAX_MAD_PACKET + 128) * 2)/64)
+	/*
+	 * Easy split:
+	 * o divide half of the credits into the per-VL slots
+	 * o total dedicated = sum of per-VL and VL15
+	 * o total shared = global - total dedicated
+	 * All normal VLs will use the global shared value
+	 */
+#define PER_VL_DEDICATED_CREDITS \
+	(WFR_CM_GLOBAL_CREDITS / (2 * WFR_TXE_NUM_DATA_VL))
+#define TOTAL_DEDICATED_CREDITS \
+	((PER_VL_DEDICATED_CREDITS * WFR_TXE_NUM_DATA_VL) + VL15_CREDITS)
+#define TOTAL_SHARED_CREDITS (WFR_CM_GLOBAL_CREDITS - TOTAL_DEDICATED_CREDITS)
+#define PER_VL_SHARED_CREDITS TOTAL_SHARED_CREDITS
+
+	BUG_ON(WFR_CM_GLOBAL_CREDITS < TOTAL_DEDICATED_CREDITS);
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
-			(WFR_CM_GLOBAL_SHARED_LIMIT
+			(WFR_CM_GLOBAL_CREDITS
 			    << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
 			| (WFR_CM_AU
 			    << WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT));
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++) {
 		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8 * i),
-			(WFR_CM_VL_DEDICATED_CREDITS
+			(PER_VL_DEDICATED_CREDITS
 			    << WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT)
-			| (WFR_CM_VL_SHARED_CREDITS
+			| (PER_VL_SHARED_CREDITS
 			    << WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT));
 	}
+	/* VL15 does not share any credits (although it can) */
 	write_csr(dd, WFR_SEND_CM_CREDIT_VL15,
-			(WFR_CM_VL_DEDICATED_CREDITS
-			    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT)
-			| (WFR_CM_VL_SHARED_CREDITS
-			    << WFR_SEND_CM_CREDIT_VL15_SHARED_LIMIT_VL_SHIFT));
+		(VL15_CREDITS
+		    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT));
 	assign_remote_cm_au_table(dd, 1);	/* 1 CU = 1 AU */
 }
 
