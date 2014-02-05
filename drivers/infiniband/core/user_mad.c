@@ -429,7 +429,18 @@ static int is_duplicate(struct ib_umad_file *file,
 		 */
 		if (!ib_response_mad((struct ib_mad *) hdr)) {
 			if (!ib_response_mad((struct ib_mad *) sent_hdr)) {
-				printk(KERN_ERR "user_mad: duplicate packet: both response\n");
+				printk(KERN_ERR "user_mad: duplicate packet: "
+					"both not response; "
+					"TID 0x%016llx; "
+					"base_ver 0x%x; mgmt_class 0x%x; "
+					"class_ver 0x%x; "
+					"method 0x%x; attr 0x%x\n",
+					be64_to_cpu(hdr->tid),
+					hdr->base_version,
+					hdr->mgmt_class,
+					hdr->class_version,
+					hdr->method,
+					be16_to_cpu(hdr->attr_id));
 				return 1;
 			}
 			continue;
