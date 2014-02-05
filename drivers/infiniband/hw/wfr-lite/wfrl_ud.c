@@ -514,14 +514,13 @@ static int check_mad_pkey(struct qib_ibport *ibp,
 		    (pkey == WFR_LIM_MGMT_P_KEY && !full_mgmt_key_exists(ibp))) {
 			printk(KERN_ERR PFX
 				"ERROR: MAD PKey check failed : "
-				"pkey == 0x%x; BaseVer 0x%x; MgmtClassVer 0x%x "
+				"pkey == 0x%x; slid %d; dlid %d; BaseVer 0x%x; MgmtClassVer 0x%x "
 				"MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
 				pkey,
-				mad->base_version,
-				mad->class_version,
-				mad->mgmt_class,
-				be16_to_cpu(mad->attr_id),
-				mad->method);
+				be16_to_cpu(hdr->lrh[3]),
+				be16_to_cpu(hdr->lrh[1]),
+				mad->base_version, mad->class_version, mad->mgmt_class,
+				be16_to_cpu(mad->attr_id), mad->method);
 			if  (!wfr_enforce_ud_mgmt_pkey) {
 				mgmt_pkey_idx = mgmt_pkey_idx < 0 ? 0 : mgmt_pkey_idx;
 			} else {
