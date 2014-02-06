@@ -100,6 +100,11 @@ module_param_named(mgmt_allowed, wfr_mgmt_allowed, uint, S_IRUGO | S_IWUSR | S_I
 MODULE_PARM_DESC(mgmt_allowed, "Set MgmtAllowed bit in simulated LNI negotiations (default 1): "
 			"NOTE this results in _REMOTE_ nodes PortInfo.MgmtAllowed bit being set");
 
+static unsigned wfr_enforce_mgmt_pkey = 0;
+module_param_named(enforce_mgmt_pkey, wfr_enforce_mgmt_pkey, uint, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(enforce_mgmt_pkey, "Enforce Management Pkey checks on inbound UD QP processing"
+		"(default 0); if 1 then P_Key violation traps are also sent");
+
 
 /** =========================================================================
  * For STL simulation environment we fake some STL values
@@ -169,6 +174,7 @@ static struct {
 	u8 sc_to_vlnt[STL_MAX_SCS];
 	struct stl_vlarb_data vlarb_data;
 	struct stl_buffer_control_table buffer_control_table;
+	int member_full_mgmt; /* flag if this port is a member of the full management partition */
 } virtual_stl[NUM_VIRT_PORTS];
 
 int virtual_stl_init = 0;
@@ -380,13 +386,17 @@ static void set_virtual_mtu(u8 port, struct stl_port_info *pi)
 		ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu));
 }
 
-static void init_virtual_stl(void)
+static int get_pkeys(struct qib_devdata *dd, u8 port, u16 *pkeys);
+static void init_virtual_stl(struct ib_device *ibdev, u8 port)
 {
+	struct qib_devdata *dd = dd_from_ibdev(ibdev);
 	u8 i;
 	/* We have not been called yet
 	 * Fake Initial STL data
 	 */
 	for (i = 0; i < NUM_VIRT_PORTS; i++) {
+		memset(&virtual_stl[i], 0, sizeof(virtual_stl[i]));
+		get_pkeys(dd, port, virtual_stl[port-1].pkeys);
 		init_virtual_port_info(i+1);
 	}
 	virtual_stl[0].pkeys[STL_NUM_PKEYS-1] = 0xDEAD;
@@ -2971,6 +2981,7 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 		p[i] = be16_to_cpu(p[i]);
 
 	/* before writing this block ensure the limited management pkey is somewhere in the table. */
+	virtual_stl[port-1].member_full_mgmt = 0;
 	found_lim = 0;
 	for (b = 0; b < n_blocks_avail; b++) {
 		if (start_block <= b && b < (start_block + n_blocks_sent)) {
@@ -2981,6 +2992,8 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 		for (i = 0; i < STL_PARTITION_TABLE_BLK_SIZE; i++) {
 			if (cur_keys[i] == WFR_LIM_MGMT_P_KEY)
 				found_lim++;
+			if (cur_keys[i] == WFR_FULL_MGMT_P_KEY)
+				virtual_stl[port-1].member_full_mgmt = 1;
 		}
 	}
 
@@ -4485,6 +4498,135 @@ bail:
 	return ret;
 }
 
+static int is_sma_mad(struct jumbo_mad *mad)
+{
+	struct stl_smp *smp = (struct stl_smp *)mad;
+
+	switch (mad->mad_hdr.method) {
+	case IB_MGMT_METHOD_GET:
+	case IB_MGMT_METHOD_SET:
+	case IB_MGMT_METHOD_TRAP_REPRESS:
+		return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+	case IB_MGMT_METHOD_TRAP:
+	case IB_MGMT_METHOD_REPORT:
+	case IB_MGMT_METHOD_REPORT_RESP:
+	case IB_MGMT_METHOD_GET_RESP:
+		/*
+		 * The ib_mad module will call us to process responses
+		 * before checking for other consumers.
+		 * Just tell the caller to process it normally.
+		 */
+		return IB_MAD_RESULT_SUCCESS;
+
+	case IB_MGMT_METHOD_SEND:
+		if (stl_get_smp_direction(smp) &&
+		    smp->attr_id == QIB_VENDOR_IPG) {
+			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		} else
+			return IB_MAD_RESULT_SUCCESS;
+	}
+
+	return 0;
+}
+
+static int is_pma_mad(struct jumbo_mad *mad)
+{
+	switch (mad->mad_hdr.method) {
+	case IB_MGMT_METHOD_GET:
+	case IB_MGMT_METHOD_SET:
+		return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+
+	case IB_MGMT_METHOD_TRAP:
+	case IB_MGMT_METHOD_GET_RESP:
+		/*
+		 * The ib_mad module will call us to process responses
+		 * before checking for other consumers.
+		 * Just tell the caller to process it normally.
+		 */
+		return IB_MAD_RESULT_SUCCESS;
+	}
+
+	return 0;
+}
+
+static int is_sma_pma_mad(struct jumbo_mad *mad)
+{
+	switch (mad->mad_hdr.mgmt_class) {
+	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
+	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		return (is_sma_mad(mad));
+	case IB_MGMT_CLASS_PERF_MGMT:
+		return (is_pma_mad(mad));
+	}
+	return (0);
+}
+
+/*
+ * This check is designed to control access to our local SMA.
+ *
+ * Full member pkey always works.
+ *
+ * Limited member access is only ok if we we don't have a full member pkey in
+ * our table.  Full member pkey availability is cached within the pkey table
+ * set function to make this check faster.
+ */
+static int invalid_mad_pkey(struct qib_ibport *ibp, u8 port, struct jumbo_mad *mad,
+			  struct ib_wc *in_wc)
+{
+	int ret;
+	u16 pkey = virtual_stl[port-1].pkeys[in_wc->pkey_index];
+
+	/* WFR-lite needs to pass IB SMP's without harassment */
+	if (mad->mad_hdr.base_version != JUMBO_MGMT_BASE_VERSION &&
+	    (mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE ||
+	     mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED)) {
+		printk(KERN_WARNING PFX
+			"MAD PKey check IB OK : "
+			"pkey == 0x%x; BaseVer 0x%x; MgmtClassVer 0x%x "
+			"MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
+			pkey,
+			mad->mad_hdr.base_version,
+			mad->mad_hdr.class_version,
+			mad->mad_hdr.mgmt_class,
+			be16_to_cpu(mad->mad_hdr.attr_id),
+			mad->mad_hdr.method);
+		return 0;
+	}
+
+	if (pkey == WFR_FULL_MGMT_P_KEY ||
+	   (pkey == WFR_LIM_MGMT_P_KEY && !virtual_stl[port-1].member_full_mgmt))
+		return 0;
+
+	/* Because the MAD stack passes all MADs through the driver for
+	 * processing we have to make sure this MAD is destined for us before
+	 * rejecting it.  Otherwise we might reject MAD's destined for user
+	 * space.
+	 */
+	ret = is_sma_pma_mad(mad);
+	if (ret & IB_MAD_RESULT_CONSUMED) {
+		printk(KERN_ERR PFX
+			"ERROR: MAD PKey check failed limited sent to full member! "
+			"pkey == 0x%x; slid %d; dlid %d; BaseVer 0x%x; MgmtClassVer 0x%x "
+			"MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
+			pkey,
+			in_wc->slid,
+			cpu_to_be16(ppd_from_ibp(ibp)->lid),
+			mad->mad_hdr.base_version, mad->mad_hdr.class_version,
+			mad->mad_hdr.mgmt_class,
+			be16_to_cpu(mad->mad_hdr.attr_id), mad->mad_hdr.method);
+		if  (wfr_enforce_mgmt_pkey) {
+			printk(KERN_ERR PFX "... dropping MAD pkt\n");
+			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+				      pkey, in_wc->sl,
+				      in_wc->src_qp, in_wc->qp->qp_num,
+				      in_wc->slid,
+				      cpu_to_be16(ppd_from_ibp(ibp)->lid));
+			return ret;
+		}
+	}
+	return 0;
+}
+
 int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			  struct ib_wc *in_wc, struct ib_grh *in_grh,
 			  struct jumbo_mad *in_jumbo,
@@ -4492,17 +4634,15 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 {
 	int ret;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
-	int pkey_idx = wfr_lookup_pkey_idx(ibp, 0x7fff);
+	int pkey_idx;
 
+	if ((ret = invalid_mad_pkey(ibp, port, in_jumbo, in_wc)) != 0) {
+		return ret;
+	}
+
+	/* always respond with limited PKey */
+	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
-		/* FIXME do we really want to do this
-		 * We may need to allow local access here.  Checking inbound DR
-		 * paths and/or LID's may be required before rejecting this
-		 * MAD.
-		 *
-		 */
-		/*  Error this MAD out */
-		/* return (IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED); */
 		printk(KERN_WARNING PFX "failed to find a valid pkey_index "
 			"to return defaulting to 1: 0x%x\n",
 			qib_get_pkey(ibp, 1));
@@ -4590,7 +4730,7 @@ int wfr_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 
 	if (!virtual_stl_init) {
-		init_virtual_stl();
+		init_virtual_stl(ibdev, port);
 	}
 
 	if (in_mad->mad_hdr.base_version == IB_MGMT_BASE_VERSION &&
