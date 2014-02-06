@@ -87,6 +87,9 @@ enum {
 	IB_USER_VERBS_CMD_CLOSE_XRCD,
 	IB_USER_VERBS_CMD_CREATE_XSRQ,
 	IB_USER_VERBS_CMD_OPEN_QP,
+#ifdef __s390x__
+	IB_USER_VERBS_CMD_KWRITE_MMIO = 52,
+#endif
 };
 
 enum {
@@ -860,5 +863,20 @@ struct ib_uverbs_destroy_srq {
 struct ib_uverbs_destroy_srq_resp {
 	__u32 events_reported;
 };
+
+#ifdef __s390x__
+enum ib_uverbs_kwrite_mmio_location {
+	IB_UVERBS_KWRITE_MMIO_UAR,
+	IB_UVERBS_KWRITE_MMIO_BF_PAGE
+};
+
+struct ib_uverbs_kwrite_mmio {
+	__u16	offset;
+	__u16	length;
+	__u8	location;
+	__u8	reserved[3];
+	__u8	value[0];
+};
+#endif
 
 #endif /* IB_USER_VERBS_H */

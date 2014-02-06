@@ -588,6 +588,7 @@ extern struct efi {
 	efi_reset_system_t *reset_system;
 	efi_set_virtual_address_map_t *set_virtual_address_map;
 #endif
+	struct efi_memory_map *memmap;
 } efi;
 
 static inline int

@@ -115,6 +115,9 @@ static ssize_t (*uverbs_cmd_table[])(struct ib_uverbs_file *file,
 	[IB_USER_VERBS_CMD_CLOSE_XRCD]		= ib_uverbs_close_xrcd,
 	[IB_USER_VERBS_CMD_CREATE_XSRQ]		= ib_uverbs_create_xsrq,
 	[IB_USER_VERBS_CMD_OPEN_QP]		= ib_uverbs_open_qp,
+#ifdef __s390x__
+	[IB_USER_VERBS_CMD_KWRITE_MMIO]		= ib_uverbs_kwrite_mmio,
+#endif
 };
 
 static int (*uverbs_ex_cmd_table[])(struct ib_uverbs_file *file,

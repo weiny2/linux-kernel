@@ -619,6 +619,21 @@ static struct ib_ucontext *mlx4_ib_alloc_ucontext(struct ib_device *ibdev,
 		kfree(context);
 		return ERR_PTR(err);
 	}
+#ifdef __s390x__
+	context->uar_mmap = ioremap((phys_addr_t)context->uar.pfn << PAGE_SHIFT, PAGE_SIZE);
+	if (!context->uar_mmap) {
+		mlx4_uar_free(to_mdev(ibdev)->dev, &context->uar);
+		kfree(context);
+		return ERR_PTR(-ENOMEM);
+	}
+	context->bf_page_mmap = ioremap((phys_addr_t)(context->uar.pfn + dev->dev->caps.num_uars) << PAGE_SHIFT, PAGE_SIZE);
+	if (!context->bf_page_mmap) {
+		iounmap(context->uar_mmap);
+		mlx4_uar_free(to_mdev(ibdev)->dev, &context->uar);
+		kfree(context);
+		return ERR_PTR(-ENOMEM);
+	}
+#endif
 
 	INIT_LIST_HEAD(&context->db_page_list);
 	mutex_init(&context->db_page_mutex);
@@ -629,6 +644,10 @@ static struct ib_ucontext *mlx4_ib_alloc_ucontext(struct ib_device *ibdev,
 		err = ib_copy_to_udata(udata, &resp, sizeof(resp));
 
 	if (err) {
+#ifdef __s390x__
+		iounmap(context->bf_page_mmap);
+		iounmap(context->uar_mmap);
+#endif
 		mlx4_uar_free(to_mdev(ibdev)->dev, &context->uar);
 		kfree(context);
 		return ERR_PTR(-EFAULT);
@@ -641,6 +660,10 @@ static int mlx4_ib_dealloc_ucontext(struct ib_ucontext *ibcontext)
 {
 	struct mlx4_ib_ucontext *context = to_mucontext(ibcontext);
 
+#ifdef __s390x__
+	iounmap(context->bf_page_mmap);
+	iounmap(context->uar_mmap);
+#endif
 	mlx4_uar_free(to_mdev(ibcontext->device)->dev, &context->uar);
 	kfree(context);
 
@@ -649,6 +672,7 @@ static int mlx4_ib_dealloc_ucontext(struct ib_ucontext *ibcontext)
 
 static int mlx4_ib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 {
+#ifndef __s390x__
 	struct mlx4_ib_dev *dev = to_mdev(context->device);
 
 	if (vma->vm_end - vma->vm_start != PAGE_SIZE)
@@ -673,8 +697,43 @@ static int mlx4_ib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	return 0;
+#else
+	dev_alert(&context->device->dev,
+		"Memory mapping creation is not supported on this platform.\n");
+	return -EINVAL;
+#endif
 }
 
+#ifdef __s390x__
+int mlx4_ib_kwrite_mmio(struct ib_ucontext *ibcontext,
+			struct ib_uverbs_kwrite_mmio *cmd)
+{
+	struct mlx4_ib_ucontext *ctx = to_mucontext(ibcontext);
+	void __iomem *location = NULL;
+
+	if ((cmd->offset + cmd->length) > PAGE_SIZE)
+		return -EINVAL;
+	switch (cmd->location) {
+	case IB_UVERBS_KWRITE_MMIO_UAR:		/* UAR page */
+		location = ctx->uar_mmap;
+		break;
+	case IB_UVERBS_KWRITE_MMIO_BF_PAGE:	/* BF page */
+		location = ctx->bf_page_mmap;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (!location)
+		return -ENOMEM;
+
+	wmb();
+	memcpy_toio(location + cmd->offset, cmd->value, cmd->length);
+	mmiowb();
+
+	return 0;
+}
+#endif
 static struct ib_pd *mlx4_ib_alloc_pd(struct ib_device *ibdev,
 				      struct ib_ucontext *context,
 				      struct ib_udata *udata)
@@ -1611,7 +1670,12 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 		(1ull << IB_USER_VERBS_CMD_QUERY_SRQ)		|
 		(1ull << IB_USER_VERBS_CMD_DESTROY_SRQ)		|
 		(1ull << IB_USER_VERBS_CMD_CREATE_XSRQ)		|
+#ifndef __s390x__
 		(1ull << IB_USER_VERBS_CMD_OPEN_QP);
+#else
+		(1ull << IB_USER_VERBS_CMD_OPEN_QP)		|
+		(1ull << IB_USER_VERBS_CMD_KWRITE_MMIO);
+#endif
 
 	ibdev->ib_dev.query_device	= mlx4_ib_query_device;
 	ibdev->ib_dev.query_port	= mlx4_ib_query_port;
@@ -1654,6 +1718,9 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	ibdev->ib_dev.attach_mcast	= mlx4_ib_mcg_attach;
 	ibdev->ib_dev.detach_mcast	= mlx4_ib_mcg_detach;
 	ibdev->ib_dev.process_mad	= mlx4_ib_process_mad;
+#ifdef __s390x__
+	ibdev->ib_dev.kwrite_mmio	= mlx4_ib_kwrite_mmio;
+#endif
 
 	if (!mlx4_is_slave(ibdev->dev)) {
 		ibdev->ib_dev.alloc_fmr		= mlx4_ib_fmr_alloc;
