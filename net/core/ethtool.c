@@ -1444,25 +1444,6 @@ static int ethtool_get_module_eeprom(struct net_device *dev,
 				      modinfo.eeprom_len);
 }
 
-static int ethtool_get_switch_port_attrs(struct net_device *dev,
-							void __user *useraddr)
-{
-	struct ethtool_swport_attrs attrs = { ETHTOOL_GPORT };
-	int rc;
-
-	if (!dev->ethtool_ops->get_switch_port_attrs)
-		return -EOPNOTSUPP;
-
-	rc = dev->ethtool_ops->get_switch_port_attrs(dev, &attrs);
-	if (rc)
-		return rc;
-
-	if (copy_to_user(useraddr, &attrs, sizeof(attrs)))
-		return -EFAULT;
-
-	return 0;
-}
-
 /* The main entry point in this file.  Called from net/core/dev_ioctl.c */
 
 int dev_ethtool(struct net *net, struct ifreq *ifr)
@@ -1691,9 +1672,6 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 		break;
 	case ETHTOOL_GMODULEEEPROM:
 		rc = ethtool_get_module_eeprom(dev, useraddr);
-		break;
-	case ETHTOOL_GPORT:
-		rc = ethtool_get_switch_port_attrs(dev, useraddr);
 		break;
 	default:
 		rc = -EOPNOTSUPP;
