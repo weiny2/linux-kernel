@@ -29,6 +29,21 @@ installed-mod-fw := $(addprefix $(INSTALL_FW_PATH)/,$(mod-fw))
 installed-fw := $(addprefix $(INSTALL_FW_PATH)/,$(fw-shipped-all))
 installed-fw-dirs := $(sort $(dir $(installed-fw))) $(INSTALL_FW_PATH)/./
 
+installed-fw-sig :=
+installed-mod-fw-sig :=
+ifdef CONFIG_MODULE_SIG_ALL
+ifdef CONFIG_FIRMWARE_SIG
+installed-fw-sig := $(patsubst %,%.sig, $(installed-fw))
+installed-mod-fw-sig := $(patsubst %,%.sig, $(installed-mod-fw))
+endif
+endif
+
+quiet_cmd_fwsig = FWSIG $@
+      cmd_fwsig = $(fw_sign_cmd) $(patsubst %.sig,%,$@) $@
+
+%.sig: %
+	$(call cmd,fwsig)
+
 # Workaround for make < 3.81, where .SECONDEXPANSION doesn't work.
 PHONY += $(INSTALL_FW_PATH)/$$(%) install-all-dirs
 $(INSTALL_FW_PATH)/$$(%): install-all-dirs
@@ -49,9 +64,9 @@ PHONY +=  __fw_install __fw_modinst FORCE
 
 .PHONY: $(PHONY)
 
-__fw_install: $(installed-fw)
+__fw_install: $(installed-fw) $(installed-fw-sig)
 
-__fw_modinst: $(installed-mod-fw)
+__fw_modinst: $(installed-mod-fw) $(installed-mod-fw-sig)
 	@:
 
 __fw_modbuild: $(addprefix $(obj)/,$(mod-fw))

@@ -11,6 +11,7 @@
 
 #include <linux/kernel.h>
 #include <linux/err.h>
+#include <linux/module.h>
 #include <crypto/public_key.h>
 #include <crypto/hash.h>
 #include <keys/asymmetric-type.h>
@@ -260,3 +261,65 @@ error_put_key:
 	pr_devel("<==%s() = %d\n", __func__, ret);
 	return ret;	
 }
+
+#ifdef CONFIG_FIRMWARE_SIG
+/*
+ * Verify the firmware signature, similar like module signature check
+ * but it's stored in a separate file
+ */
+int fw_verify_sig(const void *fw_data, size_t fw_size,
+		  const void *sig_data, size_t sig_size)
+{
+	struct public_key_signature *pks;
+	struct module_signature ms;
+	struct key *key;
+	size_t sig_len;
+	int ret;
+
+	if (sig_size <= sizeof(ms))
+		return -EBADMSG;
+
+	memcpy(&ms, sig_data, sizeof(ms));
+	sig_data += sizeof(ms);
+	sig_size -= sizeof(ms);
+
+	sig_len = be32_to_cpu(ms.sig_len);
+	if (sig_size < sig_len + (size_t)ms.signer_len + ms.key_id_len)
+		return -EBADMSG;
+
+	/* For the moment, only support RSA and X.509 identifiers */
+	if (ms.algo != PKEY_ALGO_RSA ||
+	    ms.id_type != PKEY_ID_X509)
+		return -ENOPKG;
+
+	if (ms.hash >= PKEY_HASH__LAST ||
+	    !pkey_hash_algo_name[ms.hash])
+		return -ENOPKG;
+
+	key = request_asymmetric_key(sig_data, ms.signer_len,
+				     sig_data + ms.signer_len, ms.key_id_len);
+	if (IS_ERR(key))
+		return PTR_ERR(key);
+
+	pks = mod_make_digest(ms.hash, fw_data, fw_size);
+	if (IS_ERR(pks)) {
+		ret = PTR_ERR(pks);
+		goto error_put_key;
+	}
+
+	sig_data += ms.signer_len + ms.key_id_len;
+	ret = mod_extract_mpi_array(pks, sig_data, sig_len);
+	if (ret < 0)
+		goto error_free_pks;
+
+	ret = verify_signature(key, pks);
+
+error_free_pks:
+	mpi_free(pks->rsa.s);
+	kfree(pks);
+error_put_key:
+	key_put(key);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(fw_verify_sig);
+#endif /* CONFIG_FIRMWARE_SIG */
