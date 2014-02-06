@@ -266,8 +266,18 @@ void virtual_port_linkup_init(u8 port)
 	/* go to the widest width enabled. */
 	if (IB_WIDTH_4X & width_enabled)
 		vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
-	else
+	else {
+		if (!(IB_WIDTH_1X & vpi->link_width_downgrade.enabled)) {
+			printk(KERN_WARNING PFX
+				"STL Port link width going to 1X but "
+				"LinkWidthDowgrade.Enable != 1X "
+				"port should drop link but SusieQ does "
+				"not support this; letting link go to 1X\n");
+		}
 		vpi->link_width.active = cpu_to_be16(IB_WIDTH_1X);
+	}
+
+	vpi->link_width_downgrade.active = cpu_to_be16(IB_WIDTH_4X);
 
 	vbct->vl[15].tx_dedicated_limit = cpu_to_be16(get_vl15_init());
 
@@ -303,6 +313,10 @@ static void init_virtual_port_info(u8 port)
 	vpi->link_width.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
 	vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
 	vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
+
+	vpi->link_width_downgrade.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
+	vpi->link_width_downgrade.active = cpu_to_be16(IB_WIDTH_4X);
+	vpi->link_width_downgrade.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
 
 	linkup_default(port);
 
@@ -1472,9 +1486,10 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->link_down_reason = STL_LINKDOWN_REASON_NONE;
 
-	pi->link_width_downgrade.supported = 0;
-	pi->link_width_downgrade.enabled = 0;
-	pi->link_width_downgrade.active = 0;
+	// now picked up from the simulated port info
+	//pi->link_width_downgrade.supported = 0;
+	//pi->link_width_downgrade.active = 0;
+	//pi->link_width_downgrade.enabled = 0;
 
 	// these are RO and only set at linkup time
 	//pi->buffer_units = cpu_to_be32(0);
