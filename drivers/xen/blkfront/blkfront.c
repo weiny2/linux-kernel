@@ -315,7 +315,7 @@ again:
 		break;
 	}
 
-	pr_info("blkfront: %s: ring-pages=%u nr_ents=%u\n",
+	pr_info("blkfront: %s: ring-pages=%u nr-ents=%u\n",
 		dev->nodename, info->ring_size, ring_size);
 
 	return 0;
@@ -356,8 +356,7 @@ static int setup_blkring(struct xenbus_device *dev,
 		return -ENOMEM;
 	}
 	SHARED_RING_INIT(sring);
-	FRONT_RING_INIT(&info->ring, sring,
-			(unsigned long)info->ring_size << PAGE_SHIFT);
+	FRONT_RING_INIT(&info->ring, sring, nr * PAGE_SIZE);
 
 	sg_init_table(info->sg, BLKIF_MAX_SEGMENTS_PER_REQUEST);
 

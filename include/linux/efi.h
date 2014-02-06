@@ -587,8 +587,8 @@ extern struct efi {
 #ifndef CONFIG_XEN
 	efi_reset_system_t *reset_system;
 	efi_set_virtual_address_map_t *set_virtual_address_map;
-#endif
 	struct efi_memory_map *memmap;
+#endif
 } efi;
 
 static inline int
@@ -624,7 +624,11 @@ static inline efi_status_t efi_query_variable_store(u32 attributes, unsigned lon
 }
 #endif
 extern void __iomem *efi_lookup_mapped_addr(u64 phys_addr);
-extern int efi_config_init(efi_config_table_type_t *arch_tables);
+extern int efi_config_init(
+#ifdef CONFIG_XEN
+			   u64 tables, unsigned int nr_tables,
+#endif
+			   efi_config_table_type_t *arch_tables);
 extern u64 efi_get_iobase (void);
 extern u32 efi_mem_type (unsigned long phys_addr);
 extern u64 efi_mem_attributes (unsigned long phys_addr);

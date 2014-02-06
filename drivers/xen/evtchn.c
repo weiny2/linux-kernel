@@ -426,7 +426,7 @@ static long evtchn_ioctl(struct file *file,
 			break;
 
 		rc = -EINVAL;
-		if (unbind.port >= NR_EVENT_CHANNELS)
+		if (unbind.port >= EVTCHN_2L_NR_CHANNELS)
 			break;
 
 		rc = -ENOTCONN;

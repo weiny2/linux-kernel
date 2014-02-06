@@ -2698,6 +2698,9 @@ asmlinkage void __sched notrace preempt_schedule(void)
 }
 EXPORT_SYMBOL(preempt_schedule);
 
+#endif
+#if defined(CONFIG_PREEMPT) || defined(CONFIG_XEN)
+
 /*
  * this is the entry point to schedule() from kernel preemption
  * off of irq context.

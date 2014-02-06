@@ -124,7 +124,7 @@ void gnttab_reset_grant_page(struct page *page);
 int gnttab_resume(void);
 #endif
 
-void *arch_gnttab_alloc_shared(unsigned long *frames);
+void *arch_gnttab_alloc_shared(xen_pfn_t *frames);
 
 static inline void
 gnttab_set_map_op(struct gnttab_map_grant_ref *map, maddr_t addr,

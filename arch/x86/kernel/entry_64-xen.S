@@ -93,7 +93,7 @@ END(function_hook)
 	MCOUNT_SAVE_FRAME \skip
 
 	/* Load the ftrace_ops into the 3rd parameter */
-	leaq function_trace_op, %rdx
+	movq function_trace_op(%rip), %rdx
 
 	/* Load ip into the first parameter */
 	movq RIP(%rsp), %rdi
@@ -1091,6 +1091,20 @@ ENTRY(do_hypervisor_callback)   # do_hypervisor_callback(struct *pt_regs)
 	popq %rsp
 	CFI_DEF_CFA_REGISTER rsp
 	decl PER_CPU_VAR(irq_count)
+#ifndef CONFIG_PREEMPT
+	test %al,%al
+	jz   error_exit
+	GET_THREAD_INFO(%rdx)
+	cmpl $0,TI_preempt_count(%rdx)
+	jnz  error_exit
+	bt   $TIF_NEED_RESCHED,TI_flags(%rdx)
+	jnc  error_exit
+	bt   $9,EFLAGS-ARGOFFSET(%rsp)
+	jnc  error_exit
+	movb $0,PER_CPU_VAR(privcmd_hcall)
+	call preempt_schedule_irq
+	movb $1,PER_CPU_VAR(privcmd_hcall)
+#endif
 	jmp  error_exit
 	CFI_ENDPROC
 END(do_hypervisor_callback)
