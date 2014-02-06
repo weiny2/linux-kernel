@@ -3036,42 +3036,6 @@ int qeth_query_ipassists(struct qeth_card *card, enum qeth_prot_versions prot)
 }
 EXPORT_SYMBOL_GPL(qeth_query_ipassists);
 
-static int qeth_query_switch_port_attributes_cb(struct qeth_card *card,
-				struct qeth_reply *reply, unsigned long data)
-{
-	struct qeth_ipa_cmd *cmd;
-	struct qeth_switch_info *sw_info;
-	struct qeth_query_switch_attributes *attrs;
-
-	QETH_CARD_TEXT(card, 2, "qsqiatcb");
-	cmd = (struct qeth_ipa_cmd *) data;
-	sw_info = (struct qeth_switch_info *)reply->param;
-	if (cmd->data.setadapterparms.hdr.return_code == 0) {
-		attrs = &cmd->data.setadapterparms.data.query_switch_attributes;
-		sw_info->capabilities = attrs->capabilities;
-		sw_info->settings = attrs->settings;
-	}
-	qeth_default_setadapterparms_cb(card, reply, (unsigned long) cmd);
-
-	return 0;
-}
-
-static int qeth_query_switch_port_attributes(struct qeth_card *card,
-					struct qeth_switch_info *sw_info)
-{
-	struct qeth_cmd_buffer *iob;
-
-	QETH_CARD_TEXT(card, 2, "qswiattr");
-	if (!qeth_adp_supported(card, IPA_SETADP_QUERY_SWITCH_ATTRIBUTES))
-		return -EOPNOTSUPP;
-	if (!netif_carrier_ok(card->dev))
-		return -ENOMEDIUM;
-	iob = qeth_get_adapter_cmd(card, IPA_SETADP_QUERY_SWITCH_ATTRIBUTES,
-				sizeof(struct qeth_ipacmd_setadpparms_hdr));
-	return qeth_send_ipa_cmd(card, iob,
-				qeth_query_switch_port_attributes_cb, sw_info);
-}
-
 static int qeth_query_setdiagass_cb(struct qeth_card *card,
 		struct qeth_reply *reply, unsigned long data)
 {
@@ -5833,49 +5797,6 @@ int qeth_core_ethtool_get_settings(struct net_device *netdev,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qeth_core_ethtool_get_settings);
-
-int qeth_core_ethtool_get_switch_port_attrs(struct net_device *netdev,
-					struct ethtool_swport_attrs *attrs)
-{
-	int rc, i;
-	struct qeth_card *card = netdev->ml_priv;
-	struct qeth_switch_info sw_info;
-	static const struct {
-		int qeth_cap;
-		int etht_cap_sup;
-		int etht_cap_enbl;
-	} qattrs[] = {
-		{ QETH_SWITCH_FORW_802_1, SUPPORTED_SP_FWD_802_1,
-		  ENABLED_SP_FWD_802_1 },
-		{ QETH_SWITCH_FORW_REFL_RELAY, SUPPORTED_SP_FWD_RR,
-		  ENABLED_SP_FWD_RR },
-		{ QETH_SWITCH_CAP_RTE, SUPPORTED_SP_CAP_RTE,
-		  ENABLED_SP_CAP_RTE },
-		{ QETH_SWITCH_CAP_ECP, SUPPORTED_SP_CAP_ECP,
-		  ENABLED_SP_CAP_ECP },
-		{ QETH_SWITCH_CAP_VDP, SUPPORTED_SP_CAP_VDP,
-		  ENABLED_SP_CAP_VDP }
-	};
-
-	rc = qeth_query_switch_port_attributes(card, &sw_info);
-	if (rc)
-		return rc;
-
-	if (!sw_info.capabilities) {
-		attrs->port_rc = GPORT_RC_LLDP_UNSUP;
-		return 0;
-	}
-	for (i = 0; i < ARRAY_SIZE(qattrs); i++) {
-		if (sw_info.capabilities & qattrs[i].qeth_cap) {
-			attrs->supported |= qattrs[i].etht_cap_sup;
-			if (sw_info.settings & qattrs[i].qeth_cap)
-				attrs->enabled |= qattrs[i].etht_cap_enbl;
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(qeth_core_ethtool_get_switch_port_attrs);
 
 static int __init qeth_core_init(void)
 {

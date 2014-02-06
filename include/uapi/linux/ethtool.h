@@ -136,22 +136,6 @@ struct ethtool_eeprom {
 };
 
 /**
- * struct ethtool_swport_attrs - query adjacent switch port attributes
- * @cmd: ETHTOOL_GPORT
- * @port_rc: Use GPORT_RC_* as appropriate.
- * @supported: Forwarding modes and capabilities supported by the switch port,
- *	see SUPPORTED_SP_* flags.
- * @enabled: Forwarding modes and capabilities currently activated at the
- *	adjacent switch port, see ENABLED_SP_* flags.
- */
-struct ethtool_swport_attrs {
-	__u32	cmd;
-	__u32	port_rc;
-	__u32	supported;
-	__u32	enabled;
-};
-
-/**
  * struct ethtool_eee - Energy Efficient Ethernet information
  * @cmd: ETHTOOL_{G,S}EEE
  * @supported: Mask of %SUPPORTED_* flags for the speed/duplex combinations
@@ -916,7 +900,6 @@ enum ethtool_sfeatures_retval_bits {
 #define ETHTOOL_GMODULEEEPROM	0x00000043 /* Get plug-in module eeprom */
 #define ETHTOOL_GEEE		0x00000044 /* Get EEE settings */
 #define ETHTOOL_SEEE		0x00000045 /* Set EEE settings */
-#define ETHTOOL_GPORT		0x00000046 /* Get switch port attributes */
 
 /* compatibility with older code */
 #define SPARC_ETH_GSET		ETHTOOL_GSET
@@ -1083,24 +1066,6 @@ enum ethtool_sfeatures_retval_bits {
 #define ETH_MODULE_SFF_8079_LEN		256
 #define ETH_MODULE_SFF_8472		0x2
 #define ETH_MODULE_SFF_8472_LEN		512
-
-/* Bad return codes for switch ports */
-#define GPORT_RC_LLDP_UNSUP	1	/* switch port doesn't support */
-					/* required LLDP EVB TLV       */
-
-/* Indicates what features the adjacent switch port supports. */
-#define SUPPORTED_SP_FWD_802_1	(1 << 0)
-#define SUPPORTED_SP_FWD_RR	(1 << 1)
-#define SUPPORTED_SP_CAP_RTE	(1 << 9)
-#define SUPPORTED_SP_CAP_ECP	(1 << 10)
-#define SUPPORTED_SP_CAP_VDP	(1 << 11)
-
-/* Indicates what features the adjacent switch port has enabled. */
-#define ENABLED_SP_FWD_802_1	(1 << 0)
-#define ENABLED_SP_FWD_RR	(1 << 1)
-#define ENABLED_SP_CAP_RTE	(1 << 9)
-#define ENABLED_SP_CAP_ECP	(1 << 10)
-#define ENABLED_SP_CAP_VDP	(1 << 11)
 
 /* Reset flags */
 /* The reset() operation must clear the flags for the components which
