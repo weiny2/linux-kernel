@@ -497,7 +497,7 @@ void xprt_wait_for_buffer_space(struct rpc_task *task, rpc_action action)
 	struct rpc_rqst *req = task->tk_rqstp;
 	struct rpc_xprt *xprt = req->rq_xprt;
 
-	task->tk_timeout = RPC_IS_SOFT(task) ? req->rq_timeout : 0;
+	task->tk_timeout = req->rq_timeout;
 	rpc_sleep_on(&xprt->pending, task, action);
 }
 EXPORT_SYMBOL_GPL(xprt_wait_for_buffer_space);
