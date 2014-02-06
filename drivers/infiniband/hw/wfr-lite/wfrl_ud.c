@@ -37,11 +37,6 @@
 #include "wfrl.h"
 #include "wfrl_mad.h"
 
-static unsigned wfr_enforce_ud_mgmt_pkey = 0;
-module_param_named(enforce_ud_mgmt_pkey, wfr_enforce_ud_mgmt_pkey, uint, S_IRUGO | S_IWUSR | S_IWGRP);
-MODULE_PARM_DESC(enforce_ud_mgmt_pkey, "Enforce Management Pkey checks on inbound UD QP processing"
-		"(default 0); if 1 then P_Key violation traps are also sent");
-
 /**
  * qib_ud_loopback - handle send on loopback QPs
  * @sqp: the sending QP
@@ -415,26 +410,6 @@ unlock:
 	return ret;
 }
 
-int full_mgmt_key_exists(struct qib_ibport *ibp)
-{
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_devdata *dd = ppd->dd;
-	unsigned ctxt = ppd->hw_pidx;
-	unsigned i;
-
-	/* by convention check index 2 first */
-	if (dd->rcd[ctxt]->pkeys[2] == WFR_FULL_MGMT_P_KEY) {
-		return 1;
-	}
-
-	/* Then look through whole table if needed */
-	for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i) {
-		if (dd->rcd[ctxt]->pkeys[i] == WFR_FULL_MGMT_P_KEY)
-			return 1;
-	}
-	return 0;
-}
-
 /*
  * Hardware can't check this so we do it here.
  *
@@ -481,62 +456,6 @@ int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 	 * Should not get here, this means hardware failed to validate pkeys.
 	 */
 	return -1;
-}
-
-static int check_mad_pkey(struct qib_ibport *ibp,
-			  struct qib_ib_header *hdr,
-			  struct qib_other_headers *ohdr,
-			  struct qib_qp *qp,
-			  struct ib_mad_hdr *mad)
-{
-	u32 src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & QIB_QPN_MASK;
-	u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-	int mgmt_pkey_idx;
-
-	mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
-	if (mad->base_version != JUMBO_MGMT_BASE_VERSION &&
-	    (mad->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE ||
-	     mad->mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED)) {
-		/* WFR-lite needs to pass IB SMP's without harassment */
-		printk(KERN_WARNING PFX
-			"MAD PKey check IB OK : "
-			"pkey == 0x%x; BaseVer 0x%x; MgmtClassVer 0x%x "
-			"MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
-			pkey,
-			mad->base_version,
-			mad->class_version,
-			mad->mgmt_class,
-			be16_to_cpu(mad->attr_id),
-			mad->method);
-		mgmt_pkey_idx = mgmt_pkey_idx < 0 ? 0 : mgmt_pkey_idx;
-	} else {
-		if (mgmt_pkey_idx < 0 ||
-		    (pkey == WFR_LIM_MGMT_P_KEY && !full_mgmt_key_exists(ibp))) {
-			printk(KERN_ERR PFX
-				"ERROR: MAD PKey check failed : "
-				"pkey == 0x%x; slid %d; dlid %d; BaseVer 0x%x; MgmtClassVer 0x%x "
-				"MgmtClass 0x%x; AttrID 0x%x; Method 0x%x\n",
-				pkey,
-				be16_to_cpu(hdr->lrh[3]),
-				be16_to_cpu(hdr->lrh[1]),
-				mad->base_version, mad->class_version, mad->mgmt_class,
-				be16_to_cpu(mad->attr_id), mad->method);
-			if  (!wfr_enforce_ud_mgmt_pkey) {
-				mgmt_pkey_idx = mgmt_pkey_idx < 0 ? 0 : mgmt_pkey_idx;
-			} else {
-				printk(KERN_ERR PFX "... dropping MAD pkt\n");
-				qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
-					      pkey,
-					      (be16_to_cpu(hdr->lrh[0]) >> 4) &
-						0xF,
-					      src_qp, qp->ibqp.qp_num,
-					      hdr->lrh[3], hdr->lrh[1]);
-				mgmt_pkey_idx = -1;
-			}
-		}
-	}
-
-	return (mgmt_pkey_idx);
 }
 
 /**
@@ -609,9 +528,9 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 				return;
 			}
 		} else {
-			/* GSI pkey check */
-			mgmt_pkey_idx = check_mad_pkey(ibp, hdr, ohdr, qp,
-						(struct ib_mad_hdr *)data);
+			/* lookup GSI pkey */
+			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+			mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
 			if (mgmt_pkey_idx < 0)
 				goto drop;
 		}
@@ -629,6 +548,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			goto drop;
 	} else {
 		struct ib_smp *smp;
+		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 
 		/* Drop invalid MAD packets (see 13.5.3.1). */
 		if (tlen > 2048 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
@@ -639,9 +559,8 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 			goto drop;
 
-		/* SMI pkey check */
-		mgmt_pkey_idx = check_mad_pkey(ibp, hdr, ohdr, qp,
-						(struct ib_mad_hdr *)data);
+		/* lookup SMI pkey */
+		mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
 		if (mgmt_pkey_idx < 0)
 			goto drop;
 	}
