@@ -3816,6 +3816,31 @@ void __ref build_all_zonelists(pg_data_t *pgdat, struct zone *zone)
 #ifdef CONFIG_NUMA
 	printk("Policy zone: %s\n", zone_names[policy_zone]);
 #endif
+
+	/* Check normal :movable ratio when memory node hot-remove is enabled */
+	if (movable_node_is_enabled()) {
+		unsigned long nr_movable = 0;
+
+		for_each_zone(zone) {
+			if (!populated_zone(zone) || zone_idx(zone) != ZONE_MOVABLE)
+				continue;
+
+			nr_movable += zone->managed_pages;
+		}
+
+		/* Warn if lowmem:movable is worse than 1:3 */
+		if ((vm_total_pages >> 2) < nr_movable) {
+			pr_warn("Memory node hot-remove is enabled but the "
+				"ratio of lowmem:movable memory is very high. "
+				"There may be OOM problems if the kernel "
+				"cannot allocate memory as it is all marked "
+				"for hot-remove. If these problems are "
+				"experienced then boot with a limited amount "
+				"of memory and manually hot-add nodes as "
+				"normal or movable memory\n");
+			WARN_ON_ONCE(1);
+		}
+	}
 }
 
 /*
