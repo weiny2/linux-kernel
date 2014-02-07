@@ -91,6 +91,7 @@ struct usb_port_location {
  * @status_lock: synchronize port_event() vs usb_port_{suspend|resume}
  * @portnum: port index num based one
  * @power_is_on: port's power state
+ * @resume_child: set at resume to sync khubd with child recovery
  * @did_runtime_put: port has done pm_runtime_put().
  */
 struct usb_port {
@@ -103,6 +104,7 @@ struct usb_port {
 	struct mutex status_lock;
 	u8 portnum;
 	unsigned power_is_on:1;
+	unsigned resume_child:1;
 	unsigned did_runtime_put:1;
 };
 

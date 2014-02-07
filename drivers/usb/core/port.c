@@ -106,6 +106,14 @@ static int usb_port_runtime_resume(struct device *dev)
 		if (retval < 0)
 			dev_dbg(&port_dev->dev, "can't get reconnection after setting port  power on, status %d\n",
 					retval);
+
+		/*
+		 * Keep this port awake until we have had a chance to recover
+		 * the child
+		 */
+		pm_runtime_get_noresume(&port_dev->dev);
+		port_dev->resume_child = 1;
+		usb_kick_khubd(hdev);
 		retval = 0;
 	}
 

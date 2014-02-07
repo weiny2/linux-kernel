@@ -4758,6 +4758,24 @@ static void port_event(struct usb_hub *hub, int port1)
 	pm_runtime_barrier(&port_dev->dev);
 	usb_lock_port(port_dev);
 	do if (pm_runtime_active(&port_dev->dev)) {
+
+		/*
+		 * Service child resume requests on behalf of
+		 * usb_port_runtime_resume()
+		 */
+		if (port_dev->resume_child && udev) {
+			usb_unlock_port(port_dev);
+
+			usb_lock_device(udev);
+			usb_autoresume_device(udev);
+			usb_autosuspend_device(udev);
+			usb_unlock_device(udev);
+
+			pm_runtime_put(&port_dev->dev);
+			usb_lock_port(port_dev);
+		}
+		port_dev->resume_child = 0;
+
 		/*
 		 * Re-read portstatus now that we are in-sync with
 		 * usb_port_{suspend|resume}
