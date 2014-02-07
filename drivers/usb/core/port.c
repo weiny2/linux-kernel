@@ -150,7 +150,9 @@ struct device_type usb_port_device_type = {
 static struct usb_port *find_peer_port(struct usb_hub *hub, int port1)
 {
 	struct usb_device *hdev = hub->hdev;
+	struct usb_device *peer_hdev;
 	struct usb_port *peer = NULL;
+	struct usb_hub *peer_hub;
 
 	/*
 	 * Set the default peer port for root hubs.  Platform firmware
@@ -158,8 +160,6 @@ static struct usb_port *find_peer_port(struct usb_hub *hub, int port1)
 	 * the primary_hcd is usb2.0 and registered first
 	 */
 	if (!hdev->parent) {
-		struct usb_hub *peer_hub;
-		struct usb_device *peer_hdev;
 		struct usb_hcd *hcd = bus_to_hcd(hdev->bus);
 		struct usb_hcd *peer_hcd = hcd->primary_hcd;
 
@@ -171,6 +171,24 @@ static struct usb_port *find_peer_port(struct usb_hub *hub, int port1)
 		peer_hub = usb_hub_to_struct_hub(peer_hdev);
 		if (peer_hub && port1 <= peer_hdev->maxchild)
 			peer = peer_hub->ports[port1 - 1];
+	} else {
+		struct usb_port *upstream;
+		struct usb_device *parent = hdev->parent;
+		struct usb_hub *parent_hub = usb_hub_to_struct_hub(parent);
+
+		if (!parent_hub)
+			return NULL;
+
+		upstream = parent_hub->ports[hdev->portnum - 1];
+		if (!upstream->peer)
+			return NULL;
+
+		peer_hdev = upstream->peer->child;
+		peer_hub = usb_hub_to_struct_hub(peer_hdev);
+		if (!peer_hub || port1 > peer_hdev->maxchild)
+			return NULL;
+
+		peer = peer_hub->ports[port1 - 1];
 	}
 
 	return peer;
@@ -203,6 +221,7 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 		spin_lock(&peer_lock);
 		get_device(&peer->dev);
 		port_dev->peer = peer;
+		WARN_ON(peer->peer);
 		get_device(&port_dev->dev);
 		peer->peer = port_dev;
 		spin_unlock(&peer_lock);
