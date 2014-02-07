@@ -51,6 +51,8 @@ struct usb_hub {
 							device present */
 	unsigned long		wakeup_bits[1];	/* ports that have signaled
 							remote wakeup */
+	unsigned long		warm_reset_bits[1]; /* ports that want warm
+						       reset recovery */
 #if USB_MAXCHILDREN > 31 /* 8*sizeof(unsigned long) - 1 */
 #error event_bits[] is too short!
 #endif

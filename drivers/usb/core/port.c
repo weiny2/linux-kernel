@@ -96,20 +96,32 @@ static int usb_port_runtime_resume(struct device *dev)
 
 	retval = usb_hub_set_port_power(hdev, hub, port1, true);
 	if (port_dev->child && !retval) {
+		u16 portstatus;
 		/*
-		 * Attempt to wait for usb hub port to be reconnected in order
-		 * to make the resume procedure successful.  The device may have
-		 * disconnected while the port was powered off, so ignore the
-		 * return status.
+		 * Our preference is to simply wait for the port to reconnect.
+		 * However, there are cases where toggling port power results in
+		 * the host port being stuck in SS.Polling.  This is likely the
+		 * caused by the hub failing to trigger warm reset on exiting
+		 * the logical poweroff state.  We detect it here and flag the
+		 * port as needing warm reset recovery (to be performed later
+		 * by usb_port_resume())
 		 */
-		retval = hub_port_debounce_be_connected(hub, port1);
-		if (retval < 0)
-			dev_dbg(&port_dev->dev, "can't get reconnection after setting port  power on, status %d\n",
-					retval);
+		portstatus = hub_port_debounce_be_connected(hub, port1);
+		if (!(portstatus & USB_PORT_STAT_CONNECTION)
+				&& hub_is_superspeed(hdev)
+				&& (portstatus & USB_SS_PORT_LS_POLLING)) {
+			dev_dbg(&hdev->dev, "port%d %s requires warm reset\n",
+					port1, __func__);
+			set_bit(port1, hub->warm_reset_bits);
+		} else if (!(portstatus & USB_PORT_STAT_CONNECTION)) {
+			dev_dbg(&hdev->dev, "port%d %s failed reconnect\n",
+					port1, __func__);
+		}
 
 		/*
 		 * Keep this port awake until we have had a chance to recover
-		 * the child
+		 * the child.  If warm reset was flagged above it will be
++		 * carried out by the child resume reset
 		 */
 		pm_runtime_get_noresume(&port_dev->dev);
 		port_dev->resume_child = 1;
