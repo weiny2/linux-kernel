@@ -21,7 +21,7 @@
 
 #include "hub.h"
 
-DEFINE_SPINLOCK(peer_lock);
+DEFINE_MUTEX(peer_lock);
 static const struct attribute_group *port_dev_group[];
 
 static ssize_t connect_type_show(struct device *dev,
@@ -203,16 +203,20 @@ static void reset_peer(struct usb_port *port_dev, struct usb_port *peer)
 	if (!peer)
 		return;
 
-	spin_lock(&peer_lock);
-	if (port_dev->peer)
+	mutex_lock(&peer_lock);
+	if (port_dev->peer) {
 		put_device(&port_dev->peer->dev);
-	if (peer->peer)
+		sysfs_remove_link(&port_dev->dev.kobj, "peer");
+	}
+	if (peer->peer) {
 		put_device(&peer->peer->dev);
+		sysfs_remove_link(&peer->dev.kobj, "peer");
+	}
 	port_dev->peer = peer;
 	peer->peer = port_dev;
 	get_device(&peer->dev);
 	get_device(&port_dev->dev);
-	spin_unlock(&peer_lock);
+	mutex_unlock(&peer_lock);
 }
 
 /*
@@ -315,18 +319,32 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 	dev_dbg(&hub->hdev->dev, "port%d peer = %s\n", port1,
 			peer ? dev_name(peer->dev.parent->parent) : "[none]");
 	if (peer) {
-		spin_lock(&peer_lock);
+		mutex_lock(&peer_lock);
 		get_device(&peer->dev);
 		port_dev->peer = peer;
 		WARN_ON(peer->peer);
 		get_device(&port_dev->dev);
 		peer->peer = port_dev;
-		spin_unlock(&peer_lock);
+		mutex_unlock(&peer_lock);
 	}
 
 	retval = device_add(&port_dev->dev);
 	if (retval)
 		goto error_register;
+
+	mutex_lock(&peer_lock);
+	peer = port_dev->peer;
+	do if (peer) {
+		retval = sysfs_create_link(&port_dev->dev.kobj,
+				&peer->dev.kobj, "peer");
+		if (retval)
+			break;
+		retval = sysfs_create_link(&peer->dev.kobj,
+				&port_dev->dev.kobj, "peer");
+	} while (0);
+	mutex_unlock(&peer_lock);
+	if (retval)
+		goto error_links;
 
 	pm_runtime_set_active(&port_dev->dev);
 
@@ -343,6 +361,8 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 
 error_register:
 	put_device(&port_dev->dev);
+error_links:
+	device_unregister(&port_dev->dev);
 exit:
 	return retval;
 }
@@ -352,14 +372,14 @@ void usb_hub_remove_port_device(struct usb_hub *hub, int port1)
 	struct usb_port *port_dev = hub->ports[port1 - 1];
 	struct usb_port *peer = port_dev->peer;
 
-	spin_lock(&peer_lock);
+	mutex_lock(&peer_lock);
 	if (peer) {
 		peer->peer = NULL;
 		port_dev->peer = NULL;
 		put_device(&port_dev->dev);
 		put_device(&peer->dev);
 	}
-	spin_unlock(&peer_lock);
+	mutex_unlock(&peer_lock);
  
 	device_unregister(&port_dev->dev);
 }
