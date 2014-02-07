@@ -21,6 +21,7 @@
 
 #include "hub.h"
 
+DEFINE_SPINLOCK(peer_lock);
 static const struct attribute_group *port_dev_group[];
 
 static ssize_t connect_type_show(struct device *dev,
@@ -146,9 +147,38 @@ struct device_type usb_port_device_type = {
 	.pm =		&usb_port_pm_ops,
 };
 
+static struct usb_port *find_peer_port(struct usb_hub *hub, int port1)
+{
+	struct usb_device *hdev = hub->hdev;
+	struct usb_port *peer = NULL;
+
+	/*
+	 * Set the default peer port for root hubs.  Platform firmware
+	 * can later fix this up if tier-mismatch is present.  Assumes
+	 * the primary_hcd is usb2.0 and registered first
+	 */
+	if (!hdev->parent) {
+		struct usb_hub *peer_hub;
+		struct usb_device *peer_hdev;
+		struct usb_hcd *hcd = bus_to_hcd(hdev->bus);
+		struct usb_hcd *peer_hcd = hcd->primary_hcd;
+
+		if (!hub_is_superspeed(hdev)
+			|| WARN_ON_ONCE(!peer_hcd || hcd == peer_hcd))
+			return NULL;
+
+		peer_hdev = peer_hcd->self.root_hub;
+		peer_hub = usb_hub_to_struct_hub(peer_hdev);
+		if (peer_hub && port1 <= peer_hdev->maxchild)
+			peer = peer_hub->ports[port1 - 1];
+	}
+
+	return peer;
+}
+
 int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 {
-	struct usb_port *port_dev = NULL;
+	struct usb_port *port_dev, *peer;
 	int retval;
 
 	port_dev = kzalloc(sizeof(*port_dev), GFP_KERNEL);
@@ -164,8 +194,21 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 	port_dev->dev.groups = port_dev_group;
 	port_dev->dev.type = &usb_port_device_type;
 	dev_set_name(&port_dev->dev, "port%d", port1);
+	device_initialize(&port_dev->dev);
 
-	retval = device_register(&port_dev->dev);
+	peer = find_peer_port(hub, port1);
+	dev_dbg(&hub->hdev->dev, "port%d peer = %s\n", port1,
+			peer ? dev_name(peer->dev.parent->parent) : "[none]");
+	if (peer) {
+		spin_lock(&peer_lock);
+		get_device(&peer->dev);
+		port_dev->peer = peer;
+		get_device(&port_dev->dev);
+		peer->peer = port_dev;
+		spin_unlock(&peer_lock);
+	}
+
+	retval = device_add(&port_dev->dev);
 	if (retval)
 		goto error_register;
 
@@ -188,9 +231,20 @@ exit:
 	return retval;
 }
 
-void usb_hub_remove_port_device(struct usb_hub *hub,
-				       int port1)
+void usb_hub_remove_port_device(struct usb_hub *hub, int port1)
 {
-	device_unregister(&hub->ports[port1 - 1]->dev);
+	struct usb_port *port_dev = hub->ports[port1 - 1];
+	struct usb_port *peer = port_dev->peer;
+
+	spin_lock(&peer_lock);
+	if (peer) {
+		peer->peer = NULL;
+		port_dev->peer = NULL;
+		put_device(&port_dev->dev);
+		put_device(&peer->dev);
+	}
+	spin_unlock(&peer_lock);
+ 
+	device_unregister(&port_dev->dev);
 }
 
