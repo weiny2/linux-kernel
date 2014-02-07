@@ -76,6 +76,10 @@ struct usb_hub {
 	struct usb_port		**ports;
 };
 
+struct usb_port_location {
+	u32 cookie;
+};
+
 /**
  * struct usb port - kernel's representation of a usb port
  * @child: usb device attatched to the port
@@ -83,6 +87,7 @@ struct usb_hub {
  * @port_owner: port's owner
  * @peer: related usb2 and usb3 ports (share the same connector)
  * @connect_type: port's connect type
+ * @location: opaque representation of platform connector location
  * @portnum: port index num based one
  * @power_is_on: port's power state
  * @did_runtime_put: port has done pm_runtime_put().
@@ -93,6 +98,7 @@ struct usb_port {
 	struct dev_state *port_owner;
 	struct usb_port *peer;
 	enum usb_port_connect_type connect_type;
+	struct usb_port_location location;
 	u8 portnum;
 	unsigned power_is_on:1;
 	unsigned did_runtime_put:1;

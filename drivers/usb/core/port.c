@@ -149,10 +149,14 @@ struct device_type usb_port_device_type = {
 
 static struct usb_port *find_peer_port(struct usb_hub *hub, int port1)
 {
-	struct usb_device *hdev = hub->hdev;
+	struct usb_device *hdev = hub ? hub->hdev : NULL;
 	struct usb_device *peer_hdev;
 	struct usb_port *peer = NULL;
 	struct usb_hub *peer_hub;
+
+	
+	if (!hub)
+		return NULL;
 
 	/*
 	 * Set the default peer port for root hubs.  Platform firmware
@@ -192,6 +196,99 @@ static struct usb_port *find_peer_port(struct usb_hub *hub, int port1)
 	}
 
 	return peer;
+}
+
+static void reset_peer(struct usb_port *port_dev, struct usb_port *peer)
+{
+	if (!peer)
+		return;
+
+	spin_lock(&peer_lock);
+	if (port_dev->peer)
+		put_device(&port_dev->peer->dev);
+	if (peer->peer)
+		put_device(&peer->peer->dev);
+	port_dev->peer = peer;
+	peer->peer = port_dev;
+	get_device(&peer->dev);
+	get_device(&port_dev->dev);
+	spin_unlock(&peer_lock);
+}
+
+/*
+ * Assumes that location data is only set for external connectors and that
+ * external hubs never have tier mismatch
+ */
+static int redo_find_peer_port(struct device *dev, void *data)
+{
+	struct usb_port *port_dev = to_usb_port(dev);
+
+	if (is_usb_port(dev)) {
+		struct usb_device *hdev = to_usb_device(dev->parent->parent);
+		struct usb_hub *hub = usb_hub_to_struct_hub(hdev);
+		int port1 = port_dev->portnum;
+		struct usb_port *peer;
+
+		peer = find_peer_port(hub, port1);
+		reset_peer(port_dev, peer);
+	}
+
+	return device_for_each_child(dev, NULL, redo_find_peer_port);
+}
+
+static int pair_port(struct device *dev, void *data)
+{
+	struct usb_port *peer = data;
+	struct usb_port *port_dev = to_usb_port(dev);
+
+	if (!is_usb_port(dev)
+		|| port_dev->location.cookie != peer->location.cookie)
+		return device_for_each_child(dev, peer, pair_port);
+
+	dev_dbg(dev->parent->parent, "port%d peer = %s port%d (by location)\n",
+		port_dev->portnum, dev_name(peer->dev.parent->parent),
+		peer->portnum);
+	if (port_dev->peer != peer) {
+		/*
+		 * Sigh, tier mismatch has invalidated our ancestry.
+		 * This should not be too onerous even in deep hub
+		 * topologies as we will discover tier mismatch early
+		 * (after platform internal hubs have been enumerated),
+		 * before external hubs are probed.
+		 */
+		reset_peer(port_dev, peer);
+		device_for_each_child(dev, NULL, redo_find_peer_port);
+	}
+
+	return true;
+}
+
+void usb_set_hub_port_location(struct usb_device *hdev, int port1,
+		u32 cookie)
+{
+	struct usb_hub *hub = usb_hub_to_struct_hub(hdev);
+	struct usb_hcd *hcd = bus_to_hcd(hdev->bus);
+	struct usb_hcd *peer_hcd = hcd->shared_hcd;
+	struct usb_device *peer_hdev;
+	struct usb_port *port_dev;
+
+	if (cookie == 0)
+		return;
+
+	if (!hub)
+		return;
+
+	port_dev = hub->ports[port1 - 1];
+	port_dev->location.cookie = cookie;
+
+	/* see if a port with the same location data exists in a peer
+	 * usb domain
+	 */
+	if (!peer_hcd)
+		return;
+
+	peer_hdev = peer_hcd->self.root_hub;
+	device_for_each_child(&peer_hdev->dev, port_dev, pair_port);
 }
 
 int usb_hub_create_port_device(struct usb_hub *hub, int port1)
