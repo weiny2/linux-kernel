@@ -154,7 +154,8 @@ static int usb_port_runtime_suspend(struct device *dev)
 	set_bit(port1, hub->busy_bits);
 	retval = usb_hub_set_port_power(hdev, hub, port1, false);
 	usb_clear_port_feature(hdev, port1, USB_PORT_FEAT_C_CONNECTION);
-	usb_clear_port_feature(hdev, port1,	USB_PORT_FEAT_C_ENABLE);
+	if (!hub_is_superspeed(hdev))
+		usb_clear_port_feature(hdev, port1, USB_PORT_FEAT_C_ENABLE);
 	clear_bit(port1, hub->busy_bits);
 	usb_autopm_put_interface(intf);
 
