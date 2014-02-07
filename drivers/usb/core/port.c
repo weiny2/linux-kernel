@@ -77,11 +77,19 @@ static int usb_port_runtime_resume(struct device *dev)
 	struct usb_device *hdev = to_usb_device(dev->parent->parent);
 	struct usb_interface *intf = to_usb_interface(dev->parent);
 	struct usb_hub *hub = usb_hub_to_struct_hub(hdev);
+	struct usb_port *peer = port_dev->peer;
 	int port1 = port_dev->portnum;
 	int retval;
 
 	if (!hub)
 		return -EINVAL;
+
+	/*
+	 * Power on our usb3 peer before this usb2 port to prevent a usb3
+	 * device from degrading to its usb2 connection
+	 */
+	if (!hub_is_superspeed(hdev) && peer)
+		pm_runtime_get_sync(&peer->dev);
 
 	usb_autopm_get_interface(intf);
 	set_bit(port1, hub->busy_bits);
@@ -104,6 +112,14 @@ static int usb_port_runtime_resume(struct device *dev)
 
 	clear_bit(port1, hub->busy_bits);
 	usb_autopm_put_interface(intf);
+
+	/*
+	 * USB3 peer is marked active so we can drop the reference we took to
+	 * ensure ordering above
+	 */
+	if (!hub_is_superspeed(hdev) && peer)
+		pm_runtime_put(&peer->dev);
+
 	return retval;
 }
 
@@ -113,6 +129,7 @@ static int usb_port_runtime_suspend(struct device *dev)
 	struct usb_device *hdev = to_usb_device(dev->parent->parent);
 	struct usb_interface *intf = to_usb_interface(dev->parent);
 	struct usb_hub *hub = usb_hub_to_struct_hub(hdev);
+	struct usb_port *peer = port_dev->peer;
 	int port1 = port_dev->portnum;
 	int retval;
 
@@ -123,6 +140,17 @@ static int usb_port_runtime_suspend(struct device *dev)
 			== PM_QOS_FLAGS_ALL)
 		return -EAGAIN;
 
+	/* Block poweroff of superspeed ports while highspeed peer is on */
+	dev_WARN_ONCE(&hdev->dev, hub_is_superspeed(hdev) && !peer,
+			"port%d missing peer info\n", port1);
+
+	/*
+	 * Prevent a usb3 port from powering off while its usb2 peer is
+	 * powered on
+	 */
+	if (hub_is_superspeed(hdev) && (!peer || peer->power_is_on))
+		return -EBUSY;
+
 	usb_autopm_get_interface(intf);
 	set_bit(port1, hub->busy_bits);
 	retval = usb_hub_set_port_power(hdev, hub, port1, false);
@@ -130,6 +158,18 @@ static int usb_port_runtime_suspend(struct device *dev)
 	usb_clear_port_feature(hdev, port1,	USB_PORT_FEAT_C_ENABLE);
 	clear_bit(port1, hub->busy_bits);
 	usb_autopm_put_interface(intf);
+
+	/*
+	 * Our peer usb3 port may now be able to suspend, asynchronously
+	 * queue a suspend request to observe that this usb2 peer port
+	 * is now off.  There is a small race since there is no way to
+	 * flush this suspend, userspace is advised to order suspends.
+	 */
+	if (!hub_is_superspeed(hdev) && peer) {
+		pm_runtime_get(&peer->dev);
+		pm_runtime_put(&peer->dev);
+	}
+
 	return retval;
 }
 #endif
