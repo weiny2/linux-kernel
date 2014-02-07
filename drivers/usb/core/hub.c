@@ -2921,6 +2921,16 @@ static unsigned wakeup_enabled_descendants(struct usb_device *udev)
 			(hub ? hub->wakeup_enabled_descendants : 0);
 }
 
+static void usb_lock_port(struct usb_port *port_dev)
+{
+	mutex_lock(&port_dev->status_lock);
+}
+
+static void usb_unlock_port(struct usb_port *port_dev)
+{
+	mutex_unlock(&port_dev->status_lock);
+}
+
 /*
  * usb_port_suspend - suspend a usb device's upstream port
  * @udev: device that's no longer in active use, not a root hub
@@ -2976,6 +2986,8 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 	int		port1 = udev->portnum;
 	int		status;
 	bool		really_suspend = true;
+
+	usb_lock_port(port_dev);
 
 	/* enable remote wakeup when appropriate; this lets the device
 	 * wake up the upstream hub (including maybe the root hub).
@@ -3072,6 +3084,8 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 	}
 
 	usb_mark_last_busy(hub->hdev);
+
+	usb_unlock_port(port_dev);
 	return status;
 }
 
@@ -3211,6 +3225,8 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 		}
 	}
 
+	usb_lock_port(port_dev);
+
 	/* Skip the initial Clear-Suspend step for a remote wakeup */
 	status = hub_port_status(hub, port1, &portstatus, &portchange);
 	if (status == 0 && !port_is_suspended(hub, portstatus))
@@ -3277,6 +3293,8 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 		usb_enable_ltm(udev);
 		usb_unlocked_enable_lpm(udev);
 	}
+
+	usb_unlock_port(port_dev);
 
 	return status;
 }
@@ -4361,17 +4379,21 @@ hub_power_remaining (struct usb_hub *hub)
  *	usb_reset_and_verify_device() encounters changed descriptors (as from
  *		a firmware download)
  * caller already locked the hub
+ *
+ * It assumes the port is locked on entry and arranges for it to be
+ * always unlocked on exit
  */
-static void hub_port_connect_change(struct usb_hub *hub, int port1,
-					u16 portstatus, u16 portchange)
+static void hub_port_connect_change_unlock(struct usb_hub *hub, int port1,
+		u16 portstatus, u16 portchange)
 {
 	struct usb_device *hdev = hub->hdev;
 	struct device *hub_dev = hub->intfdev;
 	struct usb_hcd *hcd = bus_to_hcd(hdev->bus);
 	unsigned wHubCharacteristics =
 			le16_to_cpu(hub->descriptor->wHubCharacteristics);
+	struct usb_port *port_dev = hub->ports[port1 - 1];
 	struct usb_device *udev;
-	int status, i;
+	int status = -ENODEV, i;
 	unsigned unit_load;
 
 	dev_dbg (hub_dev,
@@ -4391,10 +4413,10 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 #endif
 
 	/* Try to resuscitate an existing device */
-	udev = hub->ports[port1 - 1]->child;
+	udev = port_dev->child;
+
 	if ((portstatus & USB_PORT_STAT_CONNECTION) && udev &&
 			udev->state != USB_STATE_NOTATTACHED) {
-		usb_lock_device(udev);
 		if (portstatus & USB_PORT_STAT_ENABLE) {
 			status = 0;		/* Nothing to do */
 
@@ -4402,30 +4424,40 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 		} else if (udev->state == USB_STATE_SUSPENDED &&
 				udev->persist_enabled) {
 			/* For a suspended device, treat this as a
-			 * remote wakeup event.
+			 * remote wakeup event.  Promote to the device
+			 * lock since we have already evaluated the
+			 * portstatus at this point and now want to take
+			 * action on the child device.
 			 */
+			usb_unlock_port(port_dev);
+			usb_lock_device(udev);
 			status = usb_remote_wakeup(udev);
+			usb_unlock_device(udev);
+			usb_lock_port(port_dev);
 #endif
-
 		} else {
-			status = -ENODEV;	/* Don't resuscitate */
-		}
-		usb_unlock_device(udev);
-
-		if (status == 0) {
-			clear_bit(port1, hub->change_bits);
-			return;
+			/* Don't resuscitate */;
 		}
 	}
+
+	/*
+	 * From this point forward we no longer need synchronization
+	 * with usb_port_{suspend|resume} because we are about to
+	 * disconnect / reconnect
+	 */
+	usb_unlock_port(port_dev);
+
+	clear_bit(port1, hub->change_bits);
+	if (status == 0)
+		return;
 
 	/* Disconnect any existing devices under this port */
 	if (udev) {
 		if (hcd->phy && !hdev->parent &&
 				!(portstatus & USB_PORT_STAT_CONNECTION))
 			usb_phy_notify_disconnect(hcd->phy, udev->speed);
-		usb_disconnect(&hub->ports[port1 - 1]->child);
+		usb_disconnect(&port_dev->child);
 	}
-	clear_bit(port1, hub->change_bits);
 
 	/* We can forget about a "removed" device when there's a physical
 	 * disconnect or the connect status changes.
@@ -4557,7 +4589,7 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 		if (hdev->state == USB_STATE_NOTATTACHED)
 			status = -ENOTCONN;
 		else
-			hub->ports[port1 - 1]->child = udev;
+			port_dev->child = udev;
 		spin_unlock_irq(&device_state_lock);
 
 		/* Run it through the hoops (find a driver, etc) */
@@ -4565,7 +4597,7 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 			status = usb_new_device(udev);
 			if (status) {
 				spin_lock_irq(&device_state_lock);
-				hub->ports[port1 - 1]->child = NULL;
+				port_dev->child = NULL;
 				spin_unlock_irq(&device_state_lock);
 			}
 		}
@@ -4607,13 +4639,14 @@ done:
 static int hub_handle_remote_wakeup(struct usb_hub *hub, unsigned int port,
 		u16 portstatus, u16 portchange)
 {
+	struct usb_port *port_dev = hub->ports[port - 1];
 	struct usb_device *hdev;
 	struct usb_device *udev;
 	int connect_change = 0;
 	int ret;
 
 	hdev = hub->hdev;
-	udev = hub->ports[port - 1]->child;
+	udev = port_dev->child;
 	if (!hub_is_superspeed(hdev)) {
 		if (!(portchange & USB_PORT_STAT_C_SUSPEND))
 			return 0;
@@ -4629,9 +4662,11 @@ static int hub_handle_remote_wakeup(struct usb_hub *hub, unsigned int port,
 		/* TRSMRCY = 10 msec */
 		msleep(10);
 
+		usb_unlock_port(port_dev);
 		usb_lock_device(udev);
 		ret = usb_remote_wakeup(udev);
 		usb_unlock_device(udev);
+		usb_lock_port(port_dev);
 		if (ret < 0)
 			connect_change = 1;
 	} else {
@@ -4721,7 +4756,14 @@ static void port_event(struct usb_hub *hub, int port1)
 	/* take port actions that require the port to be powered on */
 	pm_runtime_get_noresume(&port_dev->dev);
 	pm_runtime_barrier(&port_dev->dev);
-	if (pm_runtime_active(&port_dev->dev)) {
+	usb_lock_port(port_dev);
+	do if (pm_runtime_active(&port_dev->dev)) {
+		/*
+		 * Re-read portstatus now that we are in-sync with
+		 * usb_port_{suspend|resume}
+		 */
+		if (hub_port_status(hub, port1, &portstatus, &portchange) < 0)
+			break;
 		if (hub_handle_remote_wakeup(hub, port1,
 				portstatus, portchange))
 			connect_change = 1;
@@ -4742,17 +4784,22 @@ static void port_event(struct usb_hub *hub, int port1)
 				if (status < 0)
 					hub_port_disable(hub, port1, 1);
 			} else {
+				usb_unlock_port(port_dev);
 				usb_lock_device(udev);
 				status = usb_reset_device(udev);
 				usb_unlock_device(udev);
+				usb_lock_port(port_dev);
 				connect_change = 0;
 			}
 		}
 
-		if (connect_change)
-			hub_port_connect_change(hub, port1,
+		if (connect_change) {
+			hub_port_connect_change_unlock(hub, port1,
 					portstatus, portchange);
-	}
+			usb_lock_port(port_dev);
+		}
+	} while (0);
+	usb_unlock_port(port_dev);
 	pm_runtime_put_sync(&port_dev->dev);
 }
 

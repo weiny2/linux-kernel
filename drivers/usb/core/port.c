@@ -354,6 +354,7 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 	port_dev->dev.type = &usb_port_device_type;
 	dev_set_name(&port_dev->dev, "port%d", port1);
 	device_initialize(&port_dev->dev);
+	mutex_init(&port_dev->status_lock);
 
 	peer = find_peer_port(hub, port1);
 	dev_dbg(&hub->hdev->dev, "port%d peer = %s\n", port1,
