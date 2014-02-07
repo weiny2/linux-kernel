@@ -1003,9 +1003,16 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			xhci_disable_port(hcd, xhci, wIndex,
 					port_array[wIndex], temp);
 			break;
-		case USB_PORT_FEAT_POWER:
-			writel(temp & ~PORT_POWER, port_array[wIndex]);
+		case USB_PORT_FEAT_POWER: {
+			struct xhci_bus_state *bus_state;
 
+			bus_state = &xhci->bus_state[hcd_index(hcd)];
+			writel(temp & ~PORT_POWER, port_array[wIndex]);
+			if (test_and_clear_bit(wIndex, &bus_state->resuming_ports)) {
+				bus_state->resume_done[wIndex] = 0;
+				xhci_dbg(xhci, "port%d: resume cancelled\n",
+					 wIndex);
+			}
 			spin_unlock_irqrestore(&xhci->lock, flags);
 			temp = usb_acpi_power_manageable(hcd->self.root_hub,
 					wIndex);
@@ -1014,6 +1021,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 						wIndex, false);
 			spin_lock_irqsave(&xhci->lock, flags);
 			break;
+		}
 		default:
 			goto error;
 		}
