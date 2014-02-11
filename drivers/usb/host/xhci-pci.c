@@ -223,6 +223,9 @@ static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (xhci->quirks & XHCI_LPM_SUPPORT)
 		hcd_to_bus(xhci->shared_hcd)->root_hub->lpm_capable = 1;
 
+	if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
+		hcd->can_do_streams = 1;
+
 	return 0;
 
 put_usb3_hcd:
