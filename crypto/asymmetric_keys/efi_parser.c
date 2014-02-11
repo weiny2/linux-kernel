@@ -18,13 +18,38 @@
 
 static __initdata efi_guid_t efi_cert_x509_guid = EFI_CERT_X509_GUID;
 
-/**
- * parse_efi_signature_list - Parse an EFI signature list for certificates
- * @data: The data blob to parse
- * @size: The size of the data blob
- * @keyring: The keyring to add extracted keys to
- */
-int __init parse_efi_signature_list(const void *data, size_t size, struct key *keyring)
+static int __init signature_certificates_func(efi_guid_t efi_cert_guid,
+		const efi_signature_data_t *elem, size_t esize,
+		struct key *keyring)
+{
+	key_ref_t key;
+
+	key = key_create_or_update(
+		make_key_ref(keyring, 1),
+		"asymmetric",
+		NULL,
+		&elem->signature_data,
+		esize - sizeof(*elem),
+		(KEY_POS_ALL & ~KEY_POS_SETATTR) |
+		KEY_USR_VIEW,
+		KEY_ALLOC_NOT_IN_QUOTA |
+		KEY_ALLOC_TRUSTED);
+
+	if (IS_ERR(key))
+		pr_err("Problem loading in-kernel X.509 certificate (%ld)\n",
+		       PTR_ERR(key));
+	else
+		pr_notice("Loaded cert '%s' linked to '%s'\n",
+			  key_ref_to_ptr(key)->description,
+			  keyring->description);
+
+	return 0;
+}
+
+int parse_efi_signature_db(const void *data, size_t size, struct key *keyring,
+		efi_guid_t efi_cert_guid,
+		int (*func)(efi_guid_t, const efi_signature_data_t *,
+			size_t esize, struct key *keyring))
 {
 	unsigned offs = 0;
 	size_t lsize, esize, hsize, elsize;
@@ -34,7 +59,6 @@ int __init parse_efi_signature_list(const void *data, size_t size, struct key *k
 	while (size > 0) {
 		efi_signature_list_t list;
 		const efi_signature_data_t *elem;
-		key_ref_t key;
 
 		if (size < sizeof(list))
 			return -EBADMSG;
@@ -64,7 +88,7 @@ int __init parse_efi_signature_list(const void *data, size_t size, struct key *k
 			return -EBADMSG;
 		}
 
-		if (efi_guidcmp(list.signature_type, efi_cert_x509_guid) != 0) {
+		if (efi_guidcmp(list.signature_type, efi_cert_guid) != 0) {
 			data += lsize;
 			size -= lsize;
 			offs += lsize;
@@ -76,28 +100,13 @@ int __init parse_efi_signature_list(const void *data, size_t size, struct key *k
 		offs += sizeof(list) + hsize;
 
 		for (; elsize > 0; elsize -= esize) {
+			int ret = 0;
 			elem = data;
 
 			pr_devel("ELEM[%04x]\n", offs);
-
-			key = key_create_or_update(
-				make_key_ref(keyring, 1),
-				"asymmetric",
-				NULL,
-				&elem->signature_data,
-				esize - sizeof(*elem),
-				(KEY_POS_ALL & ~KEY_POS_SETATTR) |
-				KEY_USR_VIEW,
-				KEY_ALLOC_NOT_IN_QUOTA |
-				KEY_ALLOC_TRUSTED);
-
-			if (IS_ERR(key))
-				pr_err("Problem loading in-kernel X.509 certificate (%ld)\n",
-				       PTR_ERR(key));
-			else
-				pr_notice("Loaded cert '%s' linked to '%s'\n",
-					  key_ref_to_ptr(key)->description,
-					  keyring->description);
+			ret = func(efi_cert_guid, elem, esize, keyring);
+			if (ret && ret != -ENOTSUPP)
+				return ret;
 
 			data += esize;
 			size -= esize;
@@ -105,5 +114,20 @@ int __init parse_efi_signature_list(const void *data, size_t size, struct key *k
 		}
 	}
 
+	return 0;
+}
+
+/**
+ * parse_efi_signature_list - Parse an EFI signature list for certificates or hashs
+ * @data: The data blob to parse
+ * @size: The size of the data blob
+ * @keyring: The keyring to add extracted keys to
+ */
+int __init parse_efi_signature_list(const void *data, size_t size,
+		struct key *keyring)
+{
+
+	parse_efi_signature_db(data, size, keyring, efi_cert_x509_guid,
+			signature_certificates_func);
 	return 0;
 }
