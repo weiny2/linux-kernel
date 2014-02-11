@@ -27,6 +27,7 @@
 #include <linux/hyperv.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
+#include <linux/miscdevice.h>
 
 #define WIN8_SRV_MAJOR		1
 #define WIN8_SRV_MINOR		1
@@ -62,9 +63,7 @@ static struct {
 	struct semaphore read_sema;
 } fcopy_transaction;
 
-static dev_t fcopy_dev;
 static bool opened; /* currently device opened */
-static struct task_struct *dtp; /* daemon task ptr */
 
 /*
  * Before we can accept copy messages from the host, we need
@@ -255,9 +254,6 @@ void hv_fcopy_onchannelcallback(void *context)
  * Create a char device that can support read/write for passing
  * the payload.
  */
-static struct cdev fcopy_cdev;
-static struct class *cl;
-static struct device *sysfs_dev;
 
 static ssize_t fcopy_read(struct file *file, char __user *buf,
 		size_t count, loff_t *ppos)
@@ -271,6 +267,8 @@ static ssize_t fcopy_read(struct file *file, char __user *buf,
 	 */
 	if (down_interruptible(&fcopy_transaction.read_sema))
 		return -EINTR;
+	if (!opened)
+		return -ENODEV;
 
 	operation = fcopy_transaction.fcopy_msg->operation;
 
@@ -324,7 +322,6 @@ int fcopy_open(struct inode *inode, struct file *f)
 	 * The daemon is alive; setup the state.
 	 */
 	opened = true;
-	dtp = current;
 	return 0;
 }
 
@@ -334,7 +331,6 @@ int fcopy_release(struct inode *inode, struct file *f)
 	 * The daemon has exited; reset the state.
 	 */
 	in_hand_shake = true;
-	dtp = NULL;
 	opened = false;
 	return 0;
 }
@@ -347,62 +343,26 @@ static const struct file_operations fcopy_fops = {
 	.open		= fcopy_open,
 };
 
+static struct miscdevice fcopy_misc = {
+	.minor          = MISC_DYNAMIC_MINOR,
+	.name           = "vmbus/hv_fcopy",
+	.fops           = &fcopy_fops,
+};
+
 static int fcopy_dev_init(void)
 {
-	int result;
-
-	result = alloc_chrdev_region(&fcopy_dev, 1, 1, "hv_fcopy");
-	if (result < 0) {
-		pr_err("Cannot get major number\n");
-		return result;
-	}
-
-	cl = class_create(THIS_MODULE, "chardev");
-	if (IS_ERR(cl)) {
-		pr_err("Error creating fcopy class.\n");
-		result = PTR_ERR(cl);
-		goto err_unregister;
-	}
-
-	sysfs_dev = device_create(cl, NULL, fcopy_dev, "%s", "hv_fcopy");
-	if (IS_ERR(sysfs_dev)) {
-		pr_err("Device creation failed\n");
-		result = PTR_ERR(cl);
-		goto err_destroy_class;
-	}
-
-	cdev_init(&fcopy_cdev, &fcopy_fops);
-	fcopy_cdev.owner = THIS_MODULE;
-	fcopy_cdev.ops = &fcopy_fops;
-
-	result = cdev_add(&fcopy_cdev, fcopy_dev, 1);
-	if (result) {
-		pr_err("Cannot cdev_add\n");
-		goto err_destroy_device;
-	}
-	return result;
-
-err_destroy_device:
-	device_destroy(cl, fcopy_dev);
-err_destroy_class:
-	class_destroy(cl);
-err_unregister:
-	unregister_chrdev_region(fcopy_dev, 1);
-	return result;
+	return misc_register(&fcopy_misc);
 }
 
 static void fcopy_dev_deinit(void)
 {
-	/*
-	 * first kill the daemon.
-	 */
-	if (dtp != NULL)
-		send_sig(SIGKILL, dtp, 0);
 	opened = false;
-	device_destroy(cl, fcopy_dev);
-	class_destroy(cl);
-	cdev_del(&fcopy_cdev);
-	unregister_chrdev_region(fcopy_dev, 1);
+	/*
+	 * Signal the semaphore as the device is
+	 * going away.
+	 */
+	up(&fcopy_transaction.read_sema);
+	misc_deregister(&fcopy_misc);
 }
 
 int hv_fcopy_init(struct hv_util_service *srv)

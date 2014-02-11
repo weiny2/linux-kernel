@@ -126,7 +126,7 @@ static int hv_copy_cancel(void)
 int main(void)
 {
 	int fd, fcopy_fd, len;
-	int error = 0;
+	int error;
 	int version = FCOPY_CURRENT_VERSION;
 	char *buffer[4096 * 2];
 	struct hv_fcopy_hdr *in_msg;
@@ -139,7 +139,7 @@ int main(void)
 	openlog("HV_FCOPY", 0, LOG_USER);
 	syslog(LOG_INFO, "HV_FCOPY starting; pid is:%d", getpid());
 
-	fcopy_fd = open("/dev/hv_fcopy", O_RDWR);
+	fcopy_fd = open("/dev/vmbus/hv_fcopy", O_RDWR);
 
 	if (fcopy_fd < 0) {
 		syslog(LOG_ERR, "open /dev/hv_fcopy failed; error: %d %s",
@@ -160,15 +160,10 @@ int main(void)
 		 * In this loop we process fcopy messages after the
 		 * handshake is complete.
 		 */
-
 		len = pread(fcopy_fd, buffer, (4096 * 2), 0);
-		if (len <= 0) {
-			if (!error) {
-				syslog(LOG_ERR, "Read error: %s",
-					 strerror(errno));
-				error = HV_E_FAIL;
-			}
-			continue;
+		if (len < 0) {
+			syslog(LOG_ERR, "pread failed: %s", strerror(errno));
+			exit(EXIT_FAILURE);
 		}
 		in_msg = (struct hv_fcopy_hdr *)buffer;
 
