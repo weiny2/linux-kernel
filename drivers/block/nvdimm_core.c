@@ -47,11 +47,11 @@ static struct list_head nvdimm_driver_list =
 int match_nvdimm_ids(const struct nvdimm_ids *first_ids,
 		const struct nvdimm_ids *second_ids)
 {
-	return (first_ids->device_id == second_ids->device_id &&
+	return first_ids->device_id == second_ids->device_id &&
 		first_ids->vendor_id == second_ids->vendor_id &&
 		first_ids->rid == second_ids->rid &&
 		first_ids->fmt_interface_code
-					== second_ids->fmt_interface_code);
+					== second_ids->fmt_interface_code;
 }
 
 /**
