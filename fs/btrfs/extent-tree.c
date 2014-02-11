@@ -2799,6 +2799,7 @@ static noinline int __btrfs_run_delayed_refs(struct btrfs_trans_handle *trans,
 			spin_unlock(&delayed_refs->lock);
 			locked_ref = NULL;
 			cond_resched();
+			count++;
 			continue;
 		}
 
