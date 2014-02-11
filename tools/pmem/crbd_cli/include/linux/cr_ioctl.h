@@ -50,7 +50,7 @@ extern "C"
 #define	CR_SECURITY_NONCE_LEN	8 /* Length of a security nonce */
 #define	CR_BCD_DATE_LEN	4 /* Length of a BDC Formatted Date */
 #define	CR_BCD_TIME_LEN	3 /* Length of a BDC Formatted Time */
-#define	CR_BCD_PCT_COMPLETE	3 /* Length of a BDC Formated Percent Complete */
+#define	CR_BCD_PCT_COMPLETE 3 /* Length of a BDC Formated Percent Complete */
 #define	CR_FW_REV_LEN 5	/* Length of the formatted Firmware Revision string */
 #define	CR_MFR_LEN	19 /* Length of manufacturer name buffer */
 #define	CR_MODELNUM_LEN	19 /* Length of DIMM Model Number buffer */
@@ -263,7 +263,7 @@ enum cr_mem_mode_bits {
  */
 enum cr_interleave_bits {
 	CR_INTERLEAVE_64_CH = 1, /* 64 Bytes channel interleave */
-	CR_INTERLEAVE_256_CH= 1 << 1, /* 256 Bytes channel interleave */
+	CR_INTERLEAVE_256_CH = 1 << 1, /* 256 Bytes channel interleave */
 	CR_INTERLEAVE_4K_CH = 1 << 2, /* 4K Bytes channel interleave */
 	CR_INTERLEAVE_1M_CH = 1 << 3, /* 1M Bytes channel interleave */
 	CR_INTERLEAVE_64_IMC = 1 << 4, /* 64 Bytes iMC interleave */
@@ -279,7 +279,7 @@ enum cr_interleave_bits {
  */
 
 /*
- * Passthrough struct that describes the capabilities of the host system's platform
+ * Describes the capabilities of the host system's platform
  */
 struct cr_platform_capabilites {
 	/* header */
@@ -292,7 +292,8 @@ struct cr_platform_capabilites {
 
 	/* body */
 	/*
-	 * Bit0 Clear: BIOS does not allow config change request from CR mgmt software @n
+	 * Bit0 Clear: BIOS does not allow config change
+	 *				request from CR mgmt software @n
 	 * Bit0 Set: BIOS allows config change request from CR mgmt software
 	 */
 	unsigned short cr_mgmt_sw_config_request_support;
@@ -1017,38 +1018,41 @@ struct cr_pt_payload_fw_debug_log {
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x08h (Get Log Page)
- * 		Sub-Opcode:	0x05h (Get Error Log)
- * 	Small Input Payload
+ *		Opcode:		0x08h (Get Log Page)
+ *		Sub-Opcode:	0x05h (Get Error Log)
+ *	Small Input Payload
  */
 struct cr_pt_input_payload_fw_error_log {
 	/*
 	 * Configure what is returned
 	 *
 	 * Bit 0 - Access Type: Specifies if request is for new entries vs the
-	 * 							entire log
-	 *						0x0 = Return only new entries in Log FIFI
-	 *						0x1 = Return all entries in log FIFO
+	 *							entire log
+	 *			0x0 = Return only new entries in Log FIFI
+	 *			0x1 = Return all entries in log FIFO
 	 * Bit 1 - Log Level: Specifies which error log to retrieve
-	 * 							(High vs Low Priority)
+	 *						(High vs Low Priority)
 	 *						0x00 = Low
 	 *						0x01 = High
-	 * Bit 2 - Clear on read: 	Flag to indicate that entries read will
-	 * 							no longer be reported as new. This causes the
-	 * 							head of the log FIFO to progress by number of
-	 * 							entries retrieved. Should only be used
-	 * 							with Offset = 0
-	 * Bit 7:3 - Unrefreshed Enable (1 = enables XOR scrub on unrefreshed lines)
+	 * Bit 2 - Clear on read: Flag to indicate that entries read will
+	 *			no longer be reported as new. This causes the
+	 *			head of the log FIFO to progress by number of
+	 *			entries retrieved. Should only be used
+	 *			with Offset = 0
+	 * Bit 7:3 - Unrefreshed Enable
+	 *		(1 = enables XOR scrub on unrefreshed lines)
 	 */
 	unsigned char params;
 	/*
-	 * Offset in into log to retrieve. Reads log from specified entry offset.
+	 * Offset in into log to retrieve.
+	 * Reads log from specified entry offset.
 	 * Should use 0 when Clear on Read is enabled.
 	 */
 	unsigned char offset;
 	/*
-	 *  Request Count: Max number of log entries requested for this access. ‘0’
-	 *  can be used to request the count fields without reading the log entries.
+	 *  Request Count: Max number of log entries requested for this access.
+	 *  ‘0’ can be used to request the count fields without reading the
+	 *  log entries.
 	 */
 	unsigned char request_count;
 	unsigned char reserved[125];
@@ -1057,8 +1061,8 @@ struct cr_pt_input_payload_fw_error_log {
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x08h (Get Log Page)
- * 		Sub-Opcode:	0x05h (Get Error Log)
+ *		Opcode:		0x08h (Get Log Page)
+ *		Sub-Opcode:	0x05h (Get Error Log)
  * Represents the Log Entries returned in the Small Output Payload
  */
 struct cr_pt_fw_log_entry {
@@ -1089,35 +1093,35 @@ struct cr_pt_fw_log_entry {
 	 * Indicates what kind of error was logged. Entry includes
 	 * error type and Flags.
 	 * Bit 2:0 - Error Type Encoded Value
-	 * 				0h = Uncorrectable
-	 * 				1h = DPA Mismatch
-	 * 				2h = AIT Error
+	 *				0h = Uncorrectable
+	 *				1h = DPA Mismatch
+	 *				2h = AIT Error
 	 * Bit 7:3 - Error Flags (Bitfields)
-	 * 				(7) – VIRAL: Indicates Viral was signaled for this error
-	 * 				(6) – INJECT: Bit to indicate this was an injected
-	 * 						 error entry
-	 * 				(5) – INTERRUPT: Bit to indicate this error generated
-	 * 						an interrupt packet
-	 * 				(4) – DPA VALID: Indicates the DPA address is valid.
-	 * 				(3) – PDA VALID: Indicates the PDA address is valid.
+	 *	(7) – VIRAL: Indicates Viral was signaled for this error
+	 *	(6) – INJECT: Bit to indicate this was an injected
+	 *			 error entry
+	 *	(5) – INTERRUPT: Bit to indicate this error generated
+	 *			an interrupt packet
+	 *	(4) – DPA VALID: Indicates the DPA address is valid.
+	 *	(3) – PDA VALID: Indicates the PDA address is valid.
 	 */
 	unsigned char error_id;
 	/*
 	 * Indicates what transaction caused the error
-	 * 		0h=2LM READ
-	 * 		1h=2LM WRITE (Uncorrectable on a partial write)
-	 * 		2h=PM READ
-	 * 		3h=PM WRITE
-	 * 		4h=BW READ
+	 *		0h=2LM READ
+	 *		1h=2LM WRITE (Uncorrectable on a partial write)
+	 *		2h=PM READ
+	 *		3h=PM WRITE
+	 *		4h=BW READ
 	 */
 	unsigned char transaction_type;
 };
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x08h (Get Log Page)
- * 		Sub-Opcode:	0x05h (Get Error Log)
- * 	Small Output Payload
+ *		Opcode:		0x08h (Get Log Page)
+ *		Sub-Opcode:	0x05h (Get Error Log)
+ *	Small Output Payload
  */
 struct cr_pt_output_payload_fw_error_log {
 	/*
@@ -1126,7 +1130,8 @@ struct cr_pt_output_payload_fw_error_log {
 	 */
 	unsigned char number_total_entries;
 	/*
-	 * Number New Entries: Specifies the total number of New entries in the Log
+	 * Number New Entries: Specifies the total number of
+	 * New entries in the Log
 	 */
 	unsigned char number_new_entries;
 	/*
