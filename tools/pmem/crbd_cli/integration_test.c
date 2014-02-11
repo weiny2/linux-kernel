@@ -122,6 +122,26 @@ void test_pass_thru(void)
 	MY_ASSERT_EQUAL(
 			strcmp(large_testpayload,
 				(char * )fw_cmd.large_output_payload), 0);
+	free(fw_cmd.input_payload);
+	free(fw_cmd.large_input_payload);
+	
+	fw_cmd.input_payload_size = 0;
+	fw_cmd.large_input_payload_size = 0;
+	
+	ret = crbd_ioctl_pass_thru(&fw_cmd);
+
+	MY_ASSERT_EQUAL(ret, 0);
+
+	free(fw_cmd.output_payload);
+	free(fw_cmd.large_output_payload);
+
+	fw_cmd.output_payload_size = 0;
+	fw_cmd.large_output_payload_size = 0;
+
+	ret = crbd_ioctl_pass_thru(&fw_cmd);
+
+	MY_ASSERT_EQUAL(ret, 0);
+
 }
 
 void test_get_dimm_topology()

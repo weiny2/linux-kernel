@@ -167,12 +167,16 @@ static int cr_get_fw_cmd(struct fv_fw_cmd *u_fw_cmd, void __user *useraddr,
 
 	if (k_fw_cmd->input_payload_size > 0)
 		ret = cr_get_fw_cmd_input_buff(u_fw_cmd, k_fw_cmd);
+	else
+		k_fw_cmd->input_payload = NULL;
 
 	if (ret)
 		return ret;
 
 	if (k_fw_cmd->large_input_payload_size > 0)
 		ret = cr_get_fw_cmd_large_input_buff(u_fw_cmd, k_fw_cmd);
+	else
+		k_fw_cmd->large_input_payload = NULL;
 
 	if (ret)
 		goto after_input_payload;
@@ -186,7 +190,8 @@ static int cr_get_fw_cmd(struct fv_fw_cmd *u_fw_cmd, void __user *useraddr,
 			ret =  -ENOMEM;
 			goto after_large_input;
 		}
-	}
+	} else
+		k_fw_cmd->output_payload = NULL;
 
 	if (k_fw_cmd->large_output_payload_size > 0) {
 		k_fw_cmd->large_output_payload = kzalloc(
@@ -197,7 +202,8 @@ static int cr_get_fw_cmd(struct fv_fw_cmd *u_fw_cmd, void __user *useraddr,
 			ret =  -ENOMEM;
 			goto after_output;
 		}
-	}
+	} else
+		k_fw_cmd->large_output_payload = NULL;
 
 	return ret;
 
@@ -235,12 +241,15 @@ static int cr_passthrough_cmd(struct nvdimm *dimm, void __user *useraddr)
 	if (ret)
 		goto out;
 
+#ifndef CONFIG_BLK_DEV_CR_BACKEND
 	/*This is just garbage for testing*/
-	memcpy(k_fw_cmd.output_payload, k_fw_cmd.input_payload,
-		k_fw_cmd.output_payload_size);
-	memcpy(k_fw_cmd.large_output_payload, k_fw_cmd.large_input_payload,
-		k_fw_cmd.large_output_payload_size);
-
+	if(k_fw_cmd.input_payload_size >= k_fw_cmd.output_payload_size)
+		memcpy(k_fw_cmd.output_payload, k_fw_cmd.input_payload,
+			k_fw_cmd.output_payload_size);
+	if(k_fw_cmd.large_input_payload_size >= k_fw_cmd.large_output_payload_size)
+		memcpy(k_fw_cmd.large_output_payload, k_fw_cmd.large_input_payload,
+			k_fw_cmd.large_output_payload_size);
+#endif
 	ret = cr_put_fw_cmd(&u_fw_cmd, &k_fw_cmd);
 out:
 	cr_free_fw_cmd(&k_fw_cmd);
