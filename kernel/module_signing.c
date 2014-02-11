@@ -18,6 +18,8 @@
 #include <keys/system_keyring.h>
 #include "module-internal.h"
 
+LIST_HEAD(module_hash_blacklist);
+
 /*
  * Module signature information block.
  *
@@ -194,6 +196,82 @@ static struct key *request_asymmetric_key(const char *signer, size_t signer_len,
 	return key_ref_to_ptr(key);
 }
 
+static int check_blacklist(const char *hash_algo_name, const void *hash)
+{
+	struct module_hash *module_hash;
+	int ret = 0;
+
+	list_for_each_entry(module_hash, &module_hash_blacklist, list) {
+		if (strcmp(hash_algo_name, module_hash->hash_name))
+			continue;
+
+		if (!memcmp(hash, module_hash->hash_data, module_hash->size)) {
+			ret = -EKEYREJECTED;
+			pr_info("Module hash is in the module hash blacklist: "
+				"%*phN\n", (int)module_hash->size,
+				module_hash->hash_data);
+			break;
+		}
+	}
+
+	return ret;
+}
+
+static int mod_verify_hash(const void *mod, unsigned long modlen,
+		struct public_key_signature *pks)
+{
+	const char *pks_hash_algo = pkey_hash_algo_name[pks->pkey_hash_algo];
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	size_t digest_size, desc_size;
+	u8 *digest;
+	int ret = 0;
+
+	if (list_empty(&module_hash_blacklist))
+		return 0;
+
+	/* check digest of module is not in hash blacklist */
+	ret = check_blacklist(pks_hash_algo, pks->digest);
+	if (ret)
+		goto error_return;
+
+	/* check hash of whole module file */
+	tfm = crypto_alloc_shash(pks_hash_algo, 0, 0);
+	if (IS_ERR(tfm))
+		goto error_return;
+
+	desc_size = crypto_shash_descsize(tfm) + sizeof(*desc);
+	digest_size = crypto_shash_digestsize(tfm);
+	digest = kzalloc(digest_size + desc_size, GFP_KERNEL);
+	if (!digest) {
+		pr_err("digest memory buffer allocate fail\n");
+		ret = -ENOMEM;
+		goto error_digest;
+	}
+	desc = (void *)digest + digest_size;
+	desc->tfm = tfm;
+	desc->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
+	ret = crypto_shash_init(desc);
+	if (ret < 0)
+		goto error_shash;
+
+	ret = crypto_shash_finup(desc, mod, modlen, digest);
+	if (ret < 0)
+		goto error_shash;
+
+	pr_debug("%ld digest: %*phN\n", modlen, (int) digest_size, digest);
+
+	/* check the hash of whole module file including signature */
+	ret = check_blacklist(pks_hash_algo, digest);
+
+error_shash:
+	kfree(digest);
+error_digest:
+	crypto_free_shash(tfm);
+error_return:
+	return ret;
+}
+
 /*
  * Verify the signature on a module.
  */
@@ -203,7 +281,7 @@ int mod_verify_sig(const void *mod, unsigned long *_modlen)
 	struct module_signature ms;
 	struct key *key;
 	const void *sig;
-	size_t modlen = *_modlen, sig_len;
+	size_t modlen = *_modlen, sig_len, wholelen;
 	int ret;
 
 	pr_devel("==>%s(,%zu)\n", __func__, modlen);
@@ -211,6 +289,7 @@ int mod_verify_sig(const void *mod, unsigned long *_modlen)
 	if (modlen <= sizeof(ms))
 		return -EBADMSG;
 
+	wholelen = modlen + sizeof(MODULE_SIG_STRING) - 1;
 	memcpy(&ms, mod + (modlen - sizeof(ms)), sizeof(ms));
 	modlen -= sizeof(ms);
 
@@ -252,6 +331,10 @@ int mod_verify_sig(const void *mod, unsigned long *_modlen)
 
 	ret = verify_signature(key, pks);
 	pr_devel("verify_signature() = %d\n", ret);
+
+	/* check hash of module not in blacklist */
+	if (!ret)
+		ret = mod_verify_hash(mod, wholelen, pks);
 
 error_free_pks:
 	mpi_free(pks->rsa.s);
