@@ -1424,6 +1424,9 @@ void vmbus_driver_unregister(struct hv_driver *hv_driver);
 #define ICMSGHDRFLAG_RESPONSE		4
 
 
+extern u64 hyperv_mmio_start;
+extern u64 hyperv_mmio_size;
+
 /*
  * While we want to handle util services as regular devices,
  * there is only one instance of each of these services; so
