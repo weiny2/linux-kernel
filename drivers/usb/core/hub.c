@@ -2736,6 +2736,16 @@ static int port_is_power_on(struct usb_hub *hub, unsigned portstatus)
 	return ret;
 }
 
+static void usb_lock_port(struct usb_port *port_dev)
+{
+	mutex_lock(&port_dev->status_lock);
+}
+
+static void usb_unlock_port(struct usb_port *port_dev)
+{
+	mutex_unlock(&port_dev->status_lock);
+}
+
 #ifdef	CONFIG_PM
 
 /* Check if a port is suspended(USB2.0 port) or in U3 state(USB3.0 port) */
@@ -2904,16 +2914,6 @@ static unsigned wakeup_enabled_descendants(struct usb_device *udev)
 
 	return udev->do_remote_wakeup +
 			(hub ? hub->wakeup_enabled_descendants : 0);
-}
-
-static void usb_lock_port(struct usb_port *port_dev)
-{
-	mutex_lock(&port_dev->status_lock);
-}
-
-static void usb_unlock_port(struct usb_port *port_dev)
-{
-	mutex_unlock(&port_dev->status_lock);
 }
 
 /*
