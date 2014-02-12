@@ -751,8 +751,13 @@ export mod_strip_cmd
 
 
 ifdef CONFIG_MODULE_SIG_ALL
+ifeq ($(KBUILD_EXTMOD),)
 MODSECKEY = ./signing_key.priv
 MODPUBKEY = ./signing_key.x509
+else
+MODSECKEY = $(firstword $(wildcard $(KBUILD_EXTMOD)/signing_key.priv) ./signing_key.priv)
+MODPUBKEY = $(firstword $(wildcard $(KBUILD_EXTMOD)/signing_key.x509) ./signing_key.x509)
+endif
 export MODPUBKEY
 mod_sign_cmd = perl $(srctree)/scripts/sign-file $(CONFIG_MODULE_SIG_HASH) $(MODSECKEY) $(MODPUBKEY)
 else
