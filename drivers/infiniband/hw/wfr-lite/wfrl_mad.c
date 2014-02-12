@@ -185,15 +185,15 @@ static void linkup_default_mtu(u8 port)
 	//uint8_t mtu_set;
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 
-	vpi->inittypereply_mtucap = IB_MTU_2048;
+	vpi->mtucap = IB_MTU_2048;
 	if (wfr_fake_mtu > 2048) {
-		vpi->inittypereply_mtucap = IB_MTU_4096;
+		vpi->mtucap = IB_MTU_4096;
 	}
 	if (wfr_fake_mtu > 4096) {
-		vpi->inittypereply_mtucap = STL_MTU_8192;
+		vpi->mtucap = STL_MTU_8192;
 	}
 	if (wfr_fake_mtu > 8192) {
-		vpi->inittypereply_mtucap = STL_MTU_10240;
+		vpi->mtucap = STL_MTU_10240;
 	}
 
 	for (i=0; i< ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu); i++) {
@@ -1357,8 +1357,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* pi->diag_code; */
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
 
-/*
- * These are picked up from the simulated port info
+	/*
+	 * These are picked up from the simulated port info
 	pi->link_width.enabled = cpu_to_be16(ppd->link_width_enabled);
 	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
 	pi->link_width.active = cpu_to_be16(ppd->link_width_active);
@@ -1366,7 +1366,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
-*/
+	*/
 	if (wfr_sma_debug)
 	{
 		printk(KERN_WARNING PFX
@@ -1451,9 +1451,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->vl.arb_high_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
 	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
 
-	/* InitTypeReply = 0 */
-	//pi->inittypereply_mtucap = qib_ibmtu ? qib_ibmtu : IB_MTU_2048;
-	pi->inittypereply_mtucap = vpi->inittypereply_mtucap;
+	pi->mtucap = vpi->mtucap;
 	/* HCAs ignore VLStallCount and HOQLife */
 	/* pip->vlstallcnt_hoqlife; */
 
@@ -1462,12 +1460,15 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		(get_phyerrthreshold(ppd) << 4) |
 		get_overrunthreshold(ppd);
 	/* pip->max_credit_hint; */
+#if 0
+	/* no longer used in STL */
 	if (ibp->port_cap_flags & IB_PORT_LINK_LATENCY_SUP) {
 		u32 v;
 
 		v = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_LINKLATENCY);
 		pi->link_roundtrip_latency = cpu_to_be32(v);
 	}
+#endif
 
 	//pi->ib_cap_mask2 = 0;
 	//pi->stl_cap_mask = 0;
@@ -1525,7 +1526,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->local_port_num = port;
 	//pi->ganged_port_details = 0;
-	pi->guid_cap = 1;
+	// No longer used in STL
+	//pi->guid_cap = 1;
 
 	ret = reply_stl(smp);
 
@@ -1991,7 +1993,6 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
 	pip->vl_arb_low_cap =
 		dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
-	/* InitTypeReply = 0 */
 	pip->inittypereply_mtucap = qib_ibmtu ? qib_ibmtu : IB_MTU_2048;
 	/* HCAs ignore VLStallCount and HOQLife */
 	/* pip->vlstallcnt_hoqlife; */
