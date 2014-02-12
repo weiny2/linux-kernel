@@ -426,7 +426,7 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	if (num_ports != 1 ||
 	    /* note: per spec, the [3] is where user port 1 (software port 0) is defined */
 	    (clear->port_select_mask[3] &&
-			be64_to_cpu(clear->port_select_mask[3]) != (1 << (port-1)))) {
+			be64_to_cpu(clear->port_select_mask[3]) != (1 << port))) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX "STL Set PMA 0x%x ; Invalid AM; %d; 0x%llx\n",
 			be16_to_cpu(pmp->mad_hdr.attr_id),
@@ -522,7 +522,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX "STL Get STL Data Counters PMA 0x%x ;"
 			   " Invalid Req. np=%u, mask=0x%llx\n",
-			be16_to_cpu(pmp->mad_hdr.attr_id), num_ports, be64_to_cpu(req->port_select_mask[3]));
+			be16_to_cpu(pmp->mad_hdr.attr_id), num_ports,
+			be64_to_cpu(req->port_select_mask[3]));
 		return reply_stl_pma(pmp);
 	}
 
@@ -545,7 +546,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	 */
 	port_mask = be64_to_cpu(req->port_select_mask[3]);
 	port_num = find_first_bit((unsigned long *)&port_mask,
-					 sizeof(req->port_select_mask[3]));
+					 sizeof(port_mask));
 
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
@@ -661,7 +662,7 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 	 */
 	port_mask = be64_to_cpu(req->port_select_mask[3]);
 	port_num = find_first_bit((unsigned long *)&port_mask,
-					 sizeof(req->port_select_mask[3]));
+					 sizeof(port_mask));
 
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
