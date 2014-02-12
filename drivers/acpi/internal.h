@@ -78,6 +78,8 @@ void acpi_lpss_init(void);
 static inline void acpi_lpss_init(void) {}
 #endif
 
+bool acpi_queue_hotplug_work(struct work_struct *work);
+
 /* --------------------------------------------------------------------------
                      Device Node Initialization / Removal
    -------------------------------------------------------------------------- */
