@@ -227,9 +227,14 @@ extern int runqueue_is_locked(int cpu);
 extern void nohz_balance_enter_idle(int cpu);
 extern void set_cpu_sd_state_idle(void);
 extern int get_nohz_timer_target(void);
+extern int sched_needs_cpu(int cpu);
 #else
 static inline void nohz_balance_enter_idle(int cpu) { }
 static inline void set_cpu_sd_state_idle(void) { }
+static inline int sched_needs_cpu(int cpu)
+{
+	return 0;
+}
 #endif
 
 /*
