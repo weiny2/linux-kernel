@@ -556,4 +556,7 @@ ib_sa_register_inform_info(struct ib_sa_client *client,
  */
 void ib_sa_unregister_inform_info(struct ib_inform_info *info);
 
+int ib_sa_pack_attr(void *dst, void *src, int attr_id);
+int ib_sa_unpack_attr(void *dst, void *src, int attr_id);
+
 #endif /* IB_SA_H */

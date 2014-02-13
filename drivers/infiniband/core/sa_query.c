@@ -493,11 +493,22 @@ int ib_sa_pack_attr(void *dst, void *src, int attr_id)
 	case IB_SA_ATTR_PATH_REC:
 		ib_pack(path_rec_table, ARRAY_SIZE(path_rec_table), src, dst);
 		break;
+	case IB_SA_ATTR_MC_MEMBER_REC:
+		ib_pack(mcmember_rec_table, ARRAY_SIZE(mcmember_rec_table),
+			src, dst);
+		break;
+	case IB_SA_ATTR_INFORM_INFO:
+		ib_pack(inform_table, ARRAY_SIZE(inform_table), src, dst);
+		break;
+	case IB_SA_ATTR_NOTICE:
+		ib_pack(notice_table, ARRAY_SIZE(notice_table), src, dst);
+		break;
 	default:
 		return -EINVAL;
 	}
 	return 0;
 }
+EXPORT_SYMBOL(ib_sa_pack_attr);
 
 int ib_sa_unpack_attr(void *dst, void *src, int attr_id)
 {
@@ -505,11 +516,22 @@ int ib_sa_unpack_attr(void *dst, void *src, int attr_id)
 	case IB_SA_ATTR_PATH_REC:
 		ib_unpack(path_rec_table, ARRAY_SIZE(path_rec_table), src, dst);
 		break;
+	case IB_SA_ATTR_MC_MEMBER_REC:
+		ib_unpack(mcmember_rec_table, ARRAY_SIZE(mcmember_rec_table),
+			src, dst);
+		break;
+	case IB_SA_ATTR_INFORM_INFO:
+		ib_unpack(inform_table, ARRAY_SIZE(inform_table), src, dst);
+		break;
+	case IB_SA_ATTR_NOTICE:
+		ib_unpack(notice_table, ARRAY_SIZE(notice_table), src, dst);
+		break;
 	default:
 		return -EINVAL;
 	}
 	return 0;
 }
+EXPORT_SYMBOL(ib_sa_unpack_attr);
 
 static void free_sm_ah(struct kref *kref)
 {
