@@ -1259,7 +1259,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 {
 	struct bonding *bond = netdev_priv(bond_dev);
 	const struct net_device_ops *slave_ops = slave_dev->netdev_ops;
-	struct slave *new_slave = NULL;
+	struct slave *new_slave = NULL, *prev_slave;
 	struct sockaddr addr;
 	int link_reporting;
 	int res = 0, i;
@@ -1476,6 +1476,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 
 	write_lock_bh(&bond->lock);
 
+	prev_slave = bond_last_slave(bond);
 	bond_attach_slave(bond, new_slave);
 
 	new_slave->delay = 0;
@@ -1563,16 +1564,13 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 		 */
 		bond_set_slave_inactive_flags(new_slave);
 		/* if this is the first slave */
-		if (bond_first_slave(bond) == new_slave) {
+		if (!prev_slave) {
 			SLAVE_AD_INFO(new_slave).id = 1;
 			/* Initialize AD with the number of times that the AD timer is called in 1 second
 			 * can be called only after the mac address of the bond is set
 			 */
 			bond_3ad_initialize(bond, 1000/AD_TIMER_INTERVAL);
 		} else {
-			struct slave *prev_slave;
-
-			prev_slave = bond_prev_slave(bond, new_slave);
 			SLAVE_AD_INFO(new_slave).id =
 				SLAVE_AD_INFO(prev_slave).id + 1;
 		}
