@@ -659,11 +659,6 @@ static inline bool got_nohz_idle_kick(void)
 	return false;
 }
 
-int sched_needs_cpu(int cpu)
-{
-	return  cpu_rq(cpu)->avg_idle < sysctl_sched_migration_cost;
-}
-
 #else /* CONFIG_NO_HZ_COMMON */
 
 static inline bool got_nohz_idle_kick(void)
