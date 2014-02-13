@@ -459,6 +459,58 @@ static const struct ib_field notice_table[] = {
 	  .size_bits    = 128 },
 };
 
+int ib_sa_check_selector(ib_sa_comp_mask comp_mask,
+			 ib_sa_comp_mask selector_mask,
+			 ib_sa_comp_mask value_mask,
+			 u8 selector, u8 src_value, u8 dst_value)
+{
+	int err;
+
+	if (!(comp_mask & selector_mask) || !(comp_mask & value_mask))
+		return 0;
+
+	switch (selector) {
+	case IB_SA_GT:
+		err = (src_value <= dst_value);
+		break;
+	case IB_SA_LT:
+		err = (src_value >= dst_value);
+		break;
+	case IB_SA_EQ:
+		err = (src_value != dst_value);
+		break;
+	default:
+		err = 0;
+		break;
+	}
+
+	return err;
+}
+
+int ib_sa_pack_attr(void *dst, void *src, int attr_id)
+{
+	switch (attr_id) {
+	case IB_SA_ATTR_PATH_REC:
+		ib_pack(path_rec_table, ARRAY_SIZE(path_rec_table), src, dst);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int ib_sa_unpack_attr(void *dst, void *src, int attr_id)
+{
+	switch (attr_id) {
+	case IB_SA_ATTR_PATH_REC:
+		ib_unpack(path_rec_table, ARRAY_SIZE(path_rec_table), src, dst);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static void free_sm_ah(struct kref *kref)
 {
 	struct ib_sa_sm_ah *sm_ah = container_of(kref, struct ib_sa_sm_ah, ref);
@@ -750,41 +802,16 @@ static void ib_sa_path_rec_release(struct ib_sa_query *sa_query)
 	kfree(container_of(sa_query, struct ib_sa_path_query, sa_query));
 }
 
-/**
- * ib_sa_path_rec_get - Start a Path get query
- * @client:SA client
- * @device:device to send query on
- * @port_num: port number to send query on
- * @rec:Path Record to send in query
- * @comp_mask:component mask to send in query
- * @timeout_ms:time to wait for response
- * @gfp_mask:GFP mask to use for internal allocations
- * @callback:function called when query completes, times out or is
- * canceled
- * @context:opaque user context passed to callback
- * @sa_query:query context, used to cancel query
- *
- * Send a Path Record Get query to the SA to look up a path.  The
- * callback function will be called when the query completes (or
- * fails); status is 0 for a successful response, -EINTR if the query
- * is canceled, -ETIMEDOUT is the query timed out, or -EIO if an error
- * occurred sending the query.  The resp parameter of the callback is
- * only valid if status is 0.
- *
- * If the return value of ib_sa_path_rec_get() is negative, it is an
- * error code.  Otherwise it is a query ID that can be used to cancel
- * the query.
- */
-int ib_sa_path_rec_get(struct ib_sa_client *client,
-		       struct ib_device *device, u8 port_num,
-		       struct ib_sa_path_rec *rec,
-		       ib_sa_comp_mask comp_mask,
-		       int timeout_ms, gfp_t gfp_mask,
-		       void (*callback)(int status,
-					struct ib_sa_path_rec *resp,
-					void *context),
-		       void *context,
-		       struct ib_sa_query **sa_query)
+int ib_sa_path_rec_query(struct ib_sa_client *client,
+			 struct ib_device *device, u8 port_num,
+			 struct ib_sa_path_rec *rec,
+			 ib_sa_comp_mask comp_mask,
+			 int timeout_ms, gfp_t gfp_mask,
+			 void (*callback)(int status,
+					  struct ib_sa_path_rec *resp,
+					  void *context),
+			 void *context,
+			 struct ib_sa_query **sa_query)
 {
 	struct ib_sa_path_query *query;
 	struct ib_sa_device *sa_dev = ib_get_client_data(device, &sa_client);
@@ -841,7 +868,6 @@ err1:
 	kfree(query);
 	return ret;
 }
-EXPORT_SYMBOL(ib_sa_path_rec_get);
 
 static void ib_sa_service_rec_callback(struct ib_sa_query *sa_query,
 				    int status,
@@ -1424,7 +1450,15 @@ static int __init ib_sa_init(void)
 		goto err3;
 	}
 
+	ret = sa_db_init();
+	if (ret) {
+		pr_err("Couldn't initialize local SA\n");
+		goto err4;
+	}
+
 	return 0;
+err4:
+	notice_cleanup();
 err3:
 	mcast_cleanup();
 err2:
@@ -1435,6 +1469,7 @@ err1:
 
 static void __exit ib_sa_cleanup(void)
 {
+	sa_db_cleanup();
 	mcast_cleanup();
 	notice_cleanup();
 	ib_unregister_client(&sa_client);
