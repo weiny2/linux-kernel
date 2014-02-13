@@ -339,6 +339,7 @@ struct qib_verbs_txreq {
  */
 #define FM_TBL_VL_HIGH_ARB	1 /* Get/set VL high priority weights */
 #define FM_TBL_VL_LOW_ARB	2 /* Get/set VL low priority weights */
+#define FM_TBL_BUFFER_CONTROL	3 /* Get/set Buffer Control */
 
 /*
  * Possible "operations" for f_rcvctrl(ppd, op, ctxt)
@@ -883,6 +884,12 @@ struct hfi_devdata {
 	u8 icode;
 	/* default link down value (poll/sleep) */
 	u8 link_default;
+	/* vAU of this device */
+	u8 vau;
+	/* vAU of remote (peer) device */
+	u8 remote_vau;
+	/* link crediits of this device */
+	u16 link_credits;
 
 	/* Misc small ints */
 	/* Number of physical ports available */
@@ -1024,6 +1031,10 @@ int hfi_rcvbuf_validate(u32, u8, u16 *);
 
 int fm_get_table(struct qib_pportdata *, int, void *);
 int fm_set_table(struct qib_pportdata *, int, void *);
+
+void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf);
+void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu);
+void assign_link_credits(struct hfi_devdata *dd);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \
@@ -1279,6 +1290,7 @@ const char *get_unit_name(int unit);
 extern unsigned int max_mtu;
 extern unsigned int default_mtu;
 extern unsigned int hfi_cu;
+extern unsigned int set_link_credits;
 extern uint num_rcv_contexts;
 extern unsigned qib_n_krcv_queues;
 extern uint kdeth_qp;

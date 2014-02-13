@@ -102,6 +102,26 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		return;	/* no change, nothing to do */
 
 	if (linkup) {
+		/*
+		 * The simulator does not implement:
+		 *	- VerifyCap interupt
+		 *	- VerifyCap frames
+		 * But rather moves directly to LinkUp.
+		 *
+		 * Do the work of the VerifyCap interrupt handler,
+		 * handle_verify_cap(), but do not try moving the state to
+		 * LinkUp as we are already there.
+		 *
+		 * NOTE: This uses this device's vAU and CU for the remote
+		 * values.  Both sides must be using the values.
+		 */
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+			dd->remote_vau = WFR_CM_VAU;
+			/* enough credits for 16 * (2K MAD + max header) */
+			set_up_vl15(dd, dd->remote_vau, 16 * (32 + 2));
+			assign_remote_cm_au_table(dd, hfi_cu);
+		}
+
 		/* physical link went up */
 		ppd->linkup = 1;
 
@@ -114,6 +134,13 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		/* start a 75msec timer to clear symbol errors */
 		mod_timer(&ppd->symerr_clear_timer, msecs_to_jiffies(75));
+
+		/*
+		 * The STL FM is not yet available.  Fake a BufferControlTable
+		 * MAD packet so that all VLs have credits.
+		 */
+		if (set_link_credits)
+			assign_link_credits(dd);
 	} else {
 		/* physical link went down */
 		ppd->linkup = 0;

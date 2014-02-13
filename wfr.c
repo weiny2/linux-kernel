@@ -69,6 +69,11 @@ static uint use_flr;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
 
+/* TODO: temporary until the STL fabric manager is available to do this */
+uint set_link_credits = 1;
+module_param_named(set_link_credits, set_link_credits, uint, S_IRUGO);
+MODULE_PARM_DESC(set_link_credits, "Set per-VL link credits so traffic will flow");
+
 /* TODO: temporary */
 static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
@@ -249,6 +254,10 @@ static struct flag_table credit_return_flags[] = {
 static u32 encoded_size(u32 size);
 static u32 chip_to_ib_lstate(struct hfi_devdata *dd, u32 chip_lstate);
 static int set_physical_link_state(struct hfi_devdata *dd, u64 state);
+static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
+				u8 *continous);
+static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
+				u16 *vl15buf, u8 *crc_sizes);
 
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -713,17 +722,101 @@ static void handle_8051_request(struct hfi_devdata *dd)
 	};
 }
 
+void write_global_credit(struct hfi_devdata *dd, u8 vau, u16 total, u16 shared)
+{
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
+/* TODO: HAS 0.76 changed names and adds a field */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+		((u64)total
+			<< WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
+		| ((u64)shared
+			<< WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT)
+#else
+		((u64)total
+			<< WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
+#endif
+		| ((u64)vau << WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT));
+}
+
+/*
+ * Set up initial VL15 credits of the remote.  Assumes the rest of
+ * the CM credit registers are zero from the init reset.
+ */
+void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf)
+{
+	/* leave shared count at zero for both global and VL15 */
+	write_global_credit(dd, vau, vl15buf, 0);
+	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, (u64)vl15buf
+		    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+}
+
+/* convert a vCU to a CU */
+static u32 vcu_to_cu(u8 vcu)
+{
+	return 1 << vcu;
+}
+
+/* convert a CU to a vCU */
+static u8 cu_to_vcu(u32 cu)
+{
+	return ilog2(cu);
+}
+
+/* convert a vAU to an AU */
+static u32 vau_to_au(u8 vau)
+{
+	return 8 * (1 << vau);
+}
+
+/*
+ * Handle a verify capabilities interrupt from the 8051
+ */
+static void handle_verify_cap(struct hfi_devdata *dd)
+{
+	u8 power_management;
+	u8 continious;
+	u8 vcu;
+	u16 vl15buf;
+	u8 crc_sizes;
+
+	/*
+	 * These are now valid:
+	 *	remote VerifyCap fields in the general LNI config
+	 *	CSR DC8051_STS_REMOTE_GUID
+	 *	CSR DC8051_STS_REMOTE_NODE_TYPE
+	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
+	 */
+	read_vc_remote_phy(dd, &power_management, &continious);
+	read_vc_remote_fabric(dd, &dd->remote_vau, &vcu, &vl15buf, &crc_sizes);
+	dd_dev_info(dd,
+		"Peer PHY: power management 0x%x, continous updates 0x%x\n",
+		(int)power_management, (int)continious);
+	dd_dev_info(dd,
+		"Peer Fabric: vAU %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
+		(int)dd->remote_vau, (int)vcu, (int)vl15buf, (int)crc_sizes);
+	set_up_vl15(dd, dd->remote_vau, vl15buf);
+
+	/* set up the remote credit return table */
+	assign_remote_cm_au_table(dd, vcu_to_cu(vcu));
+
+	/* tell the 8051 to go to LinkUp */
+	set_physical_link_state(dd, WFR_PLS_LINKUP);
+}
+
 static void handle_8051_interrupt(struct hfi_devdata *dd, u64 reg)
 {
 	u64 info, err, host_msg;
 
-	/* now look at the flags */
+	/* look at the flags */
 	if (reg & DC_DC8051_ERR_FLG_SET_BY_8051_SMASK) {
 		/* 8051 information set by firmware */
 		/* read DC8051_DBG_ERR_INFO_SET_BY_8051 for details */
 		info = read_csr(dd, DC_DC8051_DBG_ERR_INFO_SET_BY_8051);
-		err = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_SHIFT) & DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_MASK;
-		host_msg = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SHIFT) & DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_MASK;
+		err = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_SHIFT)
+			& DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_MASK;
+		host_msg = (info >>
+			DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SHIFT)
+			& DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_MASK;
 
 		/*
 		 * Handle error flags.
@@ -766,17 +859,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u64 reg)
 			host_msg &= ~(u64)WFR_EXT_DEVICE_CFG_REQ;
 		}
 		if (host_msg & WFR_VERIFY_CAP_FRAME) {
-			/*
-			 * TODO: check VerifyCap details
-			 *
-			 * These are now valid:
-			 *	VerifyCap fields in the generic LNI config
-			 *	CSR DC8051_STS_REMOTE_GUID
-			 *	CSR DC8051_STS_REMOTE_NODE_TYPE
-			 *	CSR DC8051_STS_REMOTE_FM_SECURITY
-			 */
-			/* tell the 8051 to go to LinkUp */
-			set_physical_link_state(dd, WFR_PLS_LINKUP);
+			handle_verify_cap(dd);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
@@ -1306,11 +1389,112 @@ static int set_physical_link_state(struct hfi_devdata *dd, u64 state)
 	return do_8051_command(dd, WFR_HCMD_CHANGE_PHY_STATE, state, NULL);
 }
 
+static void load_8051_config(struct hfi_devdata *dd, u8 field_id,
+				u8 lane_id, u32 config_data)
+{
+	u64 data;
+	int ret;
+
+	data = (u64)field_id << LOAD_DATA_FIELD_ID_SHIFT
+		| (u64)lane_id << LOAD_DATA_LANE_ID_SHIFT
+		| (u64)config_data << LOAD_DATA_DATA_SHIFT;
+	ret = do_8051_command(dd, WFR_HCMD_LOAD_CONFIG_DATA, data, NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd,
+			"load 8051 config: field id %d, lane %d, err %d\n",
+			(int)field_id, (int)lane_id, ret);
+	}
+
+}
+
+static void read_8051_config(struct hfi_devdata *dd, u8 field_id,
+				u8 lane_id, u32 *config_data)
+{
+	u64 in_data;
+	u64 out_data;
+	int ret;
+
+	in_data = (u64)field_id << READ_DATA_FIELD_ID_SHIFT
+			| (u64)lane_id << READ_DATA_LANE_ID_SHIFT;
+	ret = do_8051_command(dd, WFR_HCMD_READ_CONFIG_DATA, in_data,
+				&out_data);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd,
+			"read 8051 config: field id %d, lane %d, err %d\n",
+			(int)field_id, (int)lane_id, ret);
+		out_data = 0;
+	}
+	*config_data = (out_data >> READ_DATA_DATA_SHIFT) & READ_DATA_DATA_MASK;
+}
+
+static void write_vc_local_phy(struct hfi_devdata *dd, u8 power_management,
+				u8 continous)
+{
+	u32 frame;
+
+	frame = continous << CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT
+		| power_management << POWER_MANAGEMENT_SHIFT;
+	load_8051_config(dd, VERIFY_CAP_LOCAL_PHY, GENERAL_CONFIG, frame);
+}
+
+static void write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
+					u16 vl15buf, u8 crc_sizes)
+{
+	u32 frame;
+
+	frame = (u32)vau << VAU_SHIFT
+		| (u32)vcu << VCU_SHIFT
+		| (u32)vl15buf << VL15BUF_SHIFT
+		| (u32)crc_sizes << CRC_SIZES_SHIFT;
+	load_8051_config(dd, VERIFY_CAP_LOCAL_FABRIC, GENERAL_CONFIG, frame);
+}
+
+static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
+					u8 *continous)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_REMOTE_PHY, GENERAL_CONFIG, &frame);
+	*power_management = (frame >> POWER_MANAGEMENT_SHIFT)
+					& POWER_MANAGEMENT_MASK;
+	*continous = (frame >> CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT)
+					& CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK;
+}
+
+static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
+					u16 *vl15buf, u8 *crc_sizes)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_REMOTE_FABRIC, GENERAL_CONFIG, &frame);
+	*vau = (frame >> VAU_SHIFT) & VAU_MASK;
+	*vcu = (frame >> VCU_SHIFT) & VCU_MASK;
+	*vl15buf = (frame >> VL15BUF_SHIFT) & VL15BUF_MASK;
+	*crc_sizes = (frame >> CRC_SIZES_SHIFT) & CRC_SIZES_MASK;
+}
+
 static int bringup_serdes(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 guid, reg;
 	int ret;
+	u16 vl15_cred;
+
+	/*
+	 * Write link verify capability frames before moving the
+	 * link to polling for the first time.
+	 */
+	/* TODO: Does WFR support Bandwidth control? */
+	/* TODO: Does WFR support continuous update? */
+	write_vc_local_phy(dd, PWRM_BER_CONTROL, 0);
+
+	/* TODO: Make initial VL15 credit size a parameter? */
+	/* enough room for 8 MAD packets plus header - 17K */
+	vl15_cred = (8 * (2048 + 128)) / vau_to_au(dd->vau);
+	if (vl15_cred > dd->link_credits)
+		vl15_cred = dd->link_credits;
+	write_vc_local_fabric(dd, dd->vau, cu_to_vcu(hfi_cu), vl15_cred,
+		WFR_SUPPORTED_CRCS);
 
 	/* enable the port */
 	/* TODO: 7322: done within rcvmod_lock */
@@ -1815,6 +1999,358 @@ static void set_vl_weights(struct hfi_devdata *dd, u32 target,
 	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
 }
 
+/* 
+ * Read one credit merge VL register.
+ */
+static void read_one_cm_vl(struct hfi_devdata *dd, u32 csr,
+							struct vl_limit *vll)
+{
+	u64 reg = read_csr(dd, csr);
+	vll->dedicated = (reg >> WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT)
+				& WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK;
+	vll->shared = (reg >> WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT)
+				& WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_MASK;
+}
+
+/*
+ * Read the current credit merge limits.
+ */
+static void get_buffer_control(struct hfi_devdata *dd,
+				struct buffer_control *bc, u16 *overall_limit)
+{
+	u64 reg;
+	int i;
+
+	/* not all entries are filled in */
+	memset(bc, 0, sizeof(struct buffer_control));
+
+	/* STL and WFR have a 1-1 mapping */
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		read_one_cm_vl(dd, WFR_SEND_CM_CREDIT_VL + (8*i), &bc->vl[i]);
+
+	/* NOTE: assumes that VL* and VL15 CSRs are bit-wise identical */
+	read_one_cm_vl(dd, WFR_SEND_CM_CREDIT_VL15, &bc->vl[15]);
+
+	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
+/* TODO: defined in future HAS 0.76 */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+	bc->overall_shared_limit =
+		(reg >> WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT)
+		& WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_MASK;
+	if (overall_limit)
+		*overall_limit = (reg
+			>> WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
+			& WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_MASK;
+#else
+	{
+	u16 ded_total = 0;
+	u16 global_limit;
+
+	global_limit = (reg >> WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
+			& WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_MASK;
+	if (overall_limit)
+		*overall_limit = global_limit;
+
+	/* calculate the shared total by subtracting the summed
+	   dedicated limit from the overall limit */
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		ded_total += bc->vl[i].dedicated;
+	ded_total += bc->vl[15].dedicated;
+
+	bc->overall_shared_limit = global_limit - ded_total;
+	}
+#endif
+}
+
+#if 0
+static void print_bc(struct hfi_devdata *dd, const char *func, struct buffer_control *bc, const char *what)
+{
+	dd_dev_info(dd, "%s: buffer control \"%s\" (hex values)\n", func, what);
+	dd_dev_info(dd, "%s:   overall_shared_limit %x\n", func,
+		bc->overall_shared_limit);
+	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
+		(int)bc->vl[0].dedicated, (int)bc->vl[0].shared, 
+		(int)bc->vl[1].dedicated, (int)bc->vl[1].shared, 
+		(int)bc->vl[2].dedicated, (int)bc->vl[2].shared, 
+		(int)bc->vl[3].dedicated, (int)bc->vl[3].shared);
+	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
+		(int)bc->vl[4].dedicated, (int)bc->vl[4].shared, 
+		(int)bc->vl[5].dedicated, (int)bc->vl[5].shared, 
+		(int)bc->vl[6].dedicated, (int)bc->vl[6].shared, 
+		(int)bc->vl[7].dedicated, (int)bc->vl[7].shared);
+	dd_dev_info(dd, "%s:   vls [%x,%x]\n", func,
+		(int)bc->vl[15].dedicated, (int)bc->vl[15].shared);
+}
+#endif
+
+static void nonzero_msg(struct hfi_devdata *dd, int idx, const char *what,
+				u16 limit)
+{
+	if (limit != 0)
+		dd_dev_info(dd, "Invalid %s limit %d on VL %d, ignoring\n",
+			what, (int)limit, idx);
+}
+
+/* change only the shared limit portion of SendCmGLobalCredit */
+static void set_global_shared(struct hfi_devdata *dd, u16 limit)
+{
+/* TODO: defined in future HAS 0.76 */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+	u64 reg;
+
+	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
+	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SMASK;
+	reg |= limit << WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT;
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
+#endif
+}
+
+/* change only the total credit limit portion of SendCmGLobalCredit */
+static void set_global_limit(struct hfi_devdata *dd, u16 limit)
+{
+	u64 reg;
+
+	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
+/* TODO: name changed in HAS 0.76 */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SMASK;
+	reg |= limit << WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT;
+#else
+	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SMASK;
+	reg |= limit << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT;
+#endif
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
+}
+
+/* set the given per-VL shared limit */
+static void set_vl_shared(struct hfi_devdata *dd, int vl, u16 limit)
+{
+	u64 reg;
+	u32 addr;
+
+	if (vl < WFR_TXE_NUM_DATA_VL)
+		addr = WFR_SEND_CM_CREDIT_VL + (8 * vl);
+	else
+		addr = WFR_SEND_CM_CREDIT_VL15;
+
+	reg = read_csr(dd, addr);
+	reg &= ~WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SMASK;
+	reg |= (u64)limit << WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT;
+	write_csr(dd, addr, reg);
+}
+
+/* set the given per-VL dedicated limit */
+static void set_vl_dedicated(struct hfi_devdata *dd, int vl, u16 limit)
+{
+	u64 reg;
+	u32 addr;
+
+	if (vl < WFR_TXE_NUM_DATA_VL)
+		addr = WFR_SEND_CM_CREDIT_VL + (8 * vl);
+	else
+		addr = WFR_SEND_CM_CREDIT_VL15;
+
+	reg = read_csr(dd, addr);
+	reg &= ~WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SMASK;
+	reg |= (u64)limit << WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT;
+	write_csr(dd, addr, reg);
+}
+
+/* spin until the given per-VL status mask bits clear */
+static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask)
+{
+	u64 reg;
+
+	/* TODO: time out if too long? */
+	while (1) {
+		reg = read_csr(dd, WFR_SEND_CM_CREDIT_USED_STATUS) & mask;
+		if (reg == 0)
+			break;
+		/* TODO: how long to delay before checking again? */
+		udelay(1);
+	}
+}
+
+/*
+ * The number of credits on the VLs may be changed while everything
+ * is "live", but the following algorithm must be followed due to
+ * how the hardware is actually implemented.  In particular, 
+ * Return_Credit_Status[] is the only correct status check.
+ * 
+ * if (reducing Global_Shared_Credit_Limit)
+ *     set Global_Shared_Credit_Limit = 0
+ *     use_all_vl = 1
+ * mask0 = all VLs that are changing either dedicated or shared limits
+ * set Shared_Limit[mask0] = 0
+ * spin until Return_Credit_Status[use_all_vl ? all VL : mask0] == 0
+ * if (changing any dedicated limit)
+ *     mask1 = all VLs that are lowering dedicated limits
+ *     lower Dedicated_Limit[mask1]
+ *     spin until Return_Credit_Status[mask1] == 0
+ *     raise Dedicated_Limits
+ * raise Shared_Limits
+ * raise Global_Shared_Credit_Limit
+ * 
+ * lower = if the new limit is lower, set the limit to the new value
+ * raise = if the new limit is higher than the current value (may be changed
+ * 	earlier in the algorithm), set the new limit to the new value
+ */
+static void set_buffer_control(struct hfi_devdata *dd,
+						struct buffer_control *new_bc)
+{
+	u64 changing_mask, ld_mask, stat_mask;
+	int change_count;
+	int i, use_all_mask;
+	struct buffer_control cur_bc;
+	u8 changing[STL_NUM_VLS];
+	u8 lowering_dedicated[STL_NUM_VLS];
+	u16 cur_total, new_total;
+	const u64 all_mask =
+		WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL1_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL2_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL3_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL4_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL5_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL6_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL7_RETURN_CREDIT_STATUS_SMASK
+		| WFR_SEND_CM_CREDIT_USED_STATUS_VL15_RETURN_CREDIT_STATUS_SMASK;
+
+#define valid_vl(idx) ((idx) < WFR_TXE_NUM_DATA_VL || (idx) == 15)
+#define NUM_USABLE_VLS 16	/* look at VL15 and less */
+
+
+	/* find the new total credits, do sanity check on unused VLs */
+	new_total = 0;
+	for (i = 0; i < STL_NUM_VLS; i++) {
+		if (valid_vl(i)) {
+			new_total += new_bc->vl[i].dedicated;
+			continue;
+		}
+		nonzero_msg(dd, i, "dedicated", new_bc->vl[i].dedicated);
+		nonzero_msg(dd, i, "shared", new_bc->vl[i].shared);
+		new_bc->vl[i].dedicated = 0;
+		new_bc->vl[i].shared = 0;
+	}
+	new_total += new_bc->overall_shared_limit;
+
+	/* fetch the curent values */
+	get_buffer_control(dd, &cur_bc, &cur_total);
+
+	/*
+	 * Create the masks we will use.
+	 */
+	memset(changing, 0, sizeof(changing));
+	memset(lowering_dedicated, 0, sizeof(changing));
+	/* NOTE: Assumes that the individual VL bits are adjacent and in
+	   increasing order */
+	stat_mask = WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK;
+	changing_mask = 0;
+	ld_mask = 0;
+	change_count = 0;
+	for (i = 0; i < NUM_USABLE_VLS; i++, stat_mask <<= 1) {
+		if (!valid_vl(i))
+			continue;
+		if (
+/* TODO: real code for HAS 0.76, workaround for before */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+		    new_bc->vl[i].dedicated
+					!= cur_bc.vl[i].dedicated
+				|| new_bc->vl[i].shared
+					!= cur_bc.vl[i].shared
+#else
+/*
+ * Hack: if the sim does not have a shared limit, we can't easily reduce it
+ * to zero to force "using shared credits bits" to go to zero, so do the
+ * next best thing: say all the VLs are changing, which will zero the
+ * shared credit limit on all VLs, removing all use of shared space
+ * and allowing the wait so succeed.
+ */  
+		    1
+#endif
+					) {
+			changing[i] = 1;
+			changing_mask |= stat_mask;
+			change_count++;
+		}
+		if (new_bc->vl[i].dedicated <
+						cur_bc.vl[i].dedicated) {
+			lowering_dedicated[i] = 1;
+			ld_mask |= stat_mask;
+		}
+	}
+
+	/* bracket the credit change with a total adjustment */
+	if (new_total > cur_total)
+		set_global_limit(dd, new_total);
+
+	/*
+	 * Start the credit change algorithm.
+	 */
+	use_all_mask = 0;
+	if (new_bc->overall_shared_limit < cur_bc.overall_shared_limit) {
+		set_global_shared(dd, 0);
+		cur_bc.overall_shared_limit = 0;
+		use_all_mask = 1;
+	}
+
+	for (i = 0; i < NUM_USABLE_VLS; i++) {
+		if (!valid_vl(i))
+			continue;
+
+		if (changing[i]) {
+			set_vl_shared(dd, i, 0);
+			cur_bc.vl[i].shared = 0;
+		}
+	}
+
+	wait_for_vl_status_clear(dd, use_all_mask ? all_mask : changing_mask);
+
+	if (change_count > 0) {
+		for (i = 0; i < NUM_USABLE_VLS; i++) {
+			if (!valid_vl(i))
+				continue;
+
+			if (lowering_dedicated[i]) {
+				set_vl_dedicated(dd, i, 
+						new_bc->vl[i].dedicated);
+				cur_bc.vl[i].dedicated =
+						new_bc->vl[i].dedicated;
+			}
+		}
+
+		wait_for_vl_status_clear(dd, ld_mask);
+
+		/* now raise all dedicated that are going up */
+		for (i = 0; i < NUM_USABLE_VLS; i++) {
+			if (!valid_vl(i))
+				continue;
+
+			if (new_bc->vl[i].dedicated >
+						cur_bc.vl[i].dedicated)
+				set_vl_dedicated(dd, i, 
+						new_bc->vl[i].dedicated);
+		}
+	}
+
+	/* next raise all shared that are going up */
+	for (i = 0; i < NUM_USABLE_VLS; i++) {
+		if (!valid_vl(i))
+			continue;
+
+		if (new_bc->vl[i].shared > cur_bc.vl[i].shared)
+			set_vl_shared(dd, i, new_bc->vl[i].shared);
+	}
+
+	/* finally raise the global shared */
+	if (new_bc->overall_shared_limit > cur_bc.overall_shared_limit)
+		set_global_shared(dd, new_bc->overall_shared_limit);
+
+	/* bracket the credit change with a total adjustment */
+	if (new_total < cur_total)
+		set_global_limit(dd, new_total);
+}
+
 /*
  * Read the given fabric manager table.
  */
@@ -1828,6 +2364,9 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 	case FM_TBL_VL_LOW_ARB:
 		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
 			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		break;
+	case FM_TBL_BUFFER_CONTROL:
+		get_buffer_control(ppd->dd, t, NULL);
 		break;
 	default:
 		return -EINVAL;
@@ -1848,6 +2387,9 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 	case FM_TBL_VL_LOW_ARB:
 		set_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
 			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		break;
+	case FM_TBL_BUFFER_CONTROL:
+		set_buffer_control(ppd->dd, t);
 		break;
 	default:
 		return -EINVAL;
@@ -3057,6 +3599,8 @@ static void reset_txe(struct hfi_devdata *dd)
  * dd->chip_send_contexts - number PIO send contexts supported by the chip
  * dd->chip_pio_mem_size  - size of PIO send memory, in blocks
  * dd->chip_sdma_engines  - number of SDMA engines supported by the chip
+ * dd->vau		  - encoding of AU as AU = 8 * 2^vAU
+ * dd->link_credits	  - number of link credits available
  */
 static void init_chip(struct hfi_devdata *dd)
 {
@@ -3116,6 +3660,20 @@ static void init_chip(struct hfi_devdata *dd)
 
 		/* now clear the DC reset */
 		write_csr(dd, WFR_CCE_DC_CTRL, 0);
+
+		/*
+		 * After FLR, SendCmGlobalCredit contains this
+		 * hardware's vAU and total link credits.
+		 */
+/* TODO: these values are only set in HAS 0.76 */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+		reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
+		dd->vau = (reg >> WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT)
+				& WFR_SEND_CM_GLOBAL_CREDIT_AU_MASK;
+		dd->link_credits = (reg >>
+			WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
+			& WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_MASK;
+#endif
 	} else {
 		dd_dev_info(dd, "Clearing CSRs with writes\n");
 		// FIXME:
@@ -3126,6 +3684,20 @@ static void init_chip(struct hfi_devdata *dd)
 		// o other...
 		reset_txe(dd);
 	}
+
+	/*
+	 * TODO:  Remove manual setting of vAU and link credits when
+	 * (1) the sim reports the correct values
+	 * (2) only the FLR is used
+	 */
+	if (dd->vau == 0) {
+		dd_dev_info(dd,
+			"Fixup: manuallly setting vAU and link credits\n");
+		dd->vau = WFR_CM_VAU;
+		dd->link_credits = WFR_CM_GLOBAL_CREDITS;
+	}
+	dd_dev_info(dd, "AU %d, CU %d, link credits 0x%x\n",
+		8 * (1 << dd->vau), (int)hfi_cu, (int)dd->link_credits);
 
 	write_uninitialized_csrs_and_memories(dd);
 
@@ -3211,15 +3783,8 @@ static void assign_cm_au_table(struct hfi_devdata *dd, u32 cu,
 	write_csr(dd, csr0to3,
 		   0ull <<
 			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE0_SHIFT
-/* TODO: In HAS 0.76 this changes to 1 AU, not 1 CU */
-/* NOTE: The has may not matter so much as the sim version */
-#if 0
 		|  1ull <<
 			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE1_SHIFT
-#else
-		|  1ull * cu <<
-			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE1_SHIFT
-#endif
 		|  2ull * cu <<
 			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE2_SHIFT
 		|  4ull * cu <<
@@ -3242,7 +3807,7 @@ static void assign_local_cm_au_table(struct hfi_devdata *dd, u32 cu)
 					WFR_SEND_CM_LOCAL_AU_TABLE4_TO7);
 }
 
-static void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu)
+void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu)
 {
 	assign_cm_au_table(dd, cu, WFR_SEND_CM_REMOTE_AU_TABLE0_TO3,
 					WFR_SEND_CM_REMOTE_AU_TABLE4_TO7);
@@ -3250,8 +3815,6 @@ static void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu)
 
 void init_txe(struct hfi_devdata *dd)
 {
-	int i;
-
 	/* enable all PIO, SDMA, general, and Egress errors */
 	write_csr(dd, WFR_SEND_PIO_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_DMA_ERR_MASK, ~0ull);
@@ -3260,32 +3823,35 @@ void init_txe(struct hfi_devdata *dd)
 
 	/* set the local CU to AU mapping */
 	assign_local_cm_au_table(dd, hfi_cu);
+}
 
-	/*
-	 * FIXME: Set up initial send link credits.  We need an amount
-	 * in vl15 so we can talk to the FM to set up the rest.  The
-	 * CM Global Credit value is fixed in the simulator and ASIC, but
-	 * the division is here is arbitrary.
-	 *
-	 * IN ADDITION: set up credits on the other VLs as
-	 * we do not have a FM to talk to in the current simulation
-	 * environment.  These values are also completely arbitrary.
-	 * Plus there is no explanation for the fields.  Should the
-	 * global limit be the sum of the other limits?
-	 */
-/* allocation unit, 64 bytes, fixed for WFR, PRR, encoded */
-#define WFR_CM_AU ((u64)3)
-/* WFR link credit count, both ASIC and sim */
-#define WFR_CM_GLOBAL_CREDITS 0x940
+/*
+ * Assign link credits.
+ *
+ * This routine is called to assign per-VL link credits.  This is done
+ * when requested via module parameter, generally because there is not
+ * an STL compliant FM running.
+ *
+ * Assumptions:
+ * 	- the link partner has same credits as WFR 
+ *
+ * The assignment methodology is arbitrary.  Details:
+ * o place half of the credits into the per-VL dedicated limit slots
+ * o total dedicated = sum of per-VL and VL15
+ * o total shared = global - total dedicated
+ * All normal VLs will use the global shared values.  VL15 will not
+ * use any share credits.
+ */
+void assign_link_credits(struct hfi_devdata *dd)
+{
+	struct buffer_control t;
+	int i;
+
+	memset(&t, 0, sizeof(struct buffer_control));
+
 /* enough room for 2 full-sized MAD packets plus max headers */
 #define VL15_CREDITS (((MAX_MAD_PACKET + 128) * 2)/64)
-	/*
-	 * Easy split:
-	 * o divide half of the credits into the per-VL slots
-	 * o total dedicated = sum of per-VL and VL15
-	 * o total shared = global - total dedicated
-	 * All normal VLs will use the global shared value
-	 */
+
 #define PER_VL_DEDICATED_CREDITS \
 	(WFR_CM_GLOBAL_CREDITS / (2 * WFR_TXE_NUM_DATA_VL))
 #define TOTAL_DEDICATED_CREDITS \
@@ -3294,23 +3860,14 @@ void init_txe(struct hfi_devdata *dd)
 #define PER_VL_SHARED_CREDITS TOTAL_SHARED_CREDITS
 
 	BUG_ON(WFR_CM_GLOBAL_CREDITS < TOTAL_DEDICATED_CREDITS);
-	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
-			(WFR_CM_GLOBAL_CREDITS
-			    << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
-			| (WFR_CM_AU
-			    << WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT));
+	t.overall_shared_limit = TOTAL_SHARED_CREDITS;
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++) {
-		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8 * i),
-			(PER_VL_DEDICATED_CREDITS
-			    << WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT)
-			| (PER_VL_SHARED_CREDITS
-			    << WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT));
+		t.vl[i].dedicated = PER_VL_DEDICATED_CREDITS;
+		t.vl[i].shared = PER_VL_SHARED_CREDITS;
 	}
-	/* VL15 does not share any credits (although it can) */
-	write_csr(dd, WFR_SEND_CM_CREDIT_VL15,
-		(VL15_CREDITS
-		    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT));
-	assign_remote_cm_au_table(dd, 1);	/* 1 CU = 1 AU */
+	t.vl[15].dedicated = VL15_CREDITS;
+
+	set_buffer_control(dd, &t);
 }
 
 /*

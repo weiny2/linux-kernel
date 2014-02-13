@@ -58,6 +58,11 @@
 #define WFR_PIO_CMASK 0x7ff	/* counter mask for free and fill counters */
 #define WFR_MAX_EAGER_ENTRIES    2048	/* max receive eager entries */
 #define WFR_MAX_TID_PAIR_ENTRIES 1024	/* max receive expected pairs */
+/* Virtual? Allocation Unit, defined as AU = 8*2^vAU, 64 bytes, AU is fixed
+   at 64 bytes for all generation one devices */
+#define WFR_CM_VAU 3
+/* WFR link credit count, AKA receive buffer depth (RBUF_DEPTH) */
+#define WFR_CM_GLOBAL_CREDITS 0x940
 
 #define USE_GENERATED_WFR_HEADERS 1
 #ifdef USE_GENERATED_WFR_HEADERS
@@ -555,6 +560,60 @@
 #define WFR_ICODE_RTL_VCS_SIMULATION	0x01
 #define WFR_ICODE_FPGA_EMULATION	0x02
 #define WFR_ICODE_FUNCTIONAL_SIMULATOR	0x03
+
+/* 8051 general register Field IDs */
+#define VERIFY_CAP_LOCAL_PHY	 0xc
+#define VERIFY_CAP_LOCAL_FABRIC	 0xd
+#define VERIFY_CAP_REMOTE_PHY	 0xe
+#define VERIFY_CAP_REMOTE_FABRIC 0xf
+
+/* Lane ID for general configuration registers */
+#define GENERAL_CONFIG 4
+
+/* LOAD_DATA 8051 command shifts and fields */
+#define LOAD_DATA_FIELD_ID_SHIFT 40
+#define LOAD_DATA_FIELD_ID_MASK 0xfull
+#define LOAD_DATA_LANE_ID_SHIFT 32
+#define LOAD_DATA_LANE_ID_MASK 0xfull
+#define LOAD_DATA_DATA_SHIFT   0x0
+#define LOAD_DATA_DATA_MASK   0xffffffffull
+
+/* READ_DATA 8051 command shifts and fields */
+#define READ_DATA_FIELD_ID_SHIFT 40
+#define READ_DATA_FIELD_ID_MASK 0xfull
+#define READ_DATA_LANE_ID_SHIFT 32
+#define READ_DATA_LANE_ID_MASK 0xfull
+#define READ_DATA_DATA_SHIFT   0x0
+#define READ_DATA_DATA_MASK   0xffffffffull
+
+/* verify capibility PHY fields */
+#define CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT	0x4
+#define CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK	0x1
+#define POWER_MANAGEMENT_SHIFT			0x0
+#define POWER_MANAGEMENT_MASK			0xf
+
+/* verify capibility fabric fields */
+#define VAU_SHIFT 0x0
+#define VAU_MASK 0xf
+#define VCU_SHIFT 0x4
+#define VCU_MASK 0xf
+#define VL15BUF_SHIFT 8
+#define VL15BUF_MASK 0xfff
+#define CRC_SIZES_SHIFT 20
+#define CRC_SIZES_MASK 0x7
+
+/* verify capability PHY power management bits */
+#define PWRM_BER_CONTROL	0x1
+#define PWRM_BANDWIDTH_CONTROL	0x2
+#define PWRM_SHALLOW_SLEEP	0x4
+#define PWRM_DEEP_SLEEP		0x8
+
+/* verify capability fabirc CRC size bits */
+#define CRC_16BIT	   0x1
+#define CRC_48BIT	   0x2
+#define CRC_12BIT_PER_LANE 0x4
+
+#define WFR_SUPPORTED_CRCS (CRC_16BIT | CRC_48BIT | CRC_12BIT_PER_LANE)
 
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);

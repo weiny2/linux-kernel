@@ -415,6 +415,19 @@ struct cc_table_shadow {
 	struct ib_cc_table_entry_shadow entries[CC_TABLE_SHADOW_MAX];
 } __packed;
 
+/*
+ * STL BufferControl MAD
+ */
+#define STL_NUM_VLS 32	/* STL defines 32 VLs */
+struct vl_limit {
+	u16 dedicated;
+	u16 shared;
+};
+
+struct buffer_control {
+	u16 overall_shared_limit;
+	struct vl_limit vl[STL_NUM_VLS];
+};
 #endif				/* _QIB_MAD_H */
 /*
  * The PortSamplesControl.CounterMasks field is an array of 3 bit fields
