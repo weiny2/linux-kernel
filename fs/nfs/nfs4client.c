@@ -510,6 +510,9 @@ int nfs40_walk_client_list(struct nfs_client *new,
 		if (pos->cl_clientid != new->cl_clientid)
 			continue;
 
+		if (pos->cl_xprt_id != new->cl_xprt_id)
+			continue;
+
 		atomic_inc(&pos->cl_count);
 		spin_unlock(&nn->nfs_client_lock);
 
@@ -645,6 +648,9 @@ int nfs41_walk_client_list(struct nfs_client *new,
 		if (pos->cl_minorversion != new->cl_minorversion)
 			continue;
 
+		if (pos->cl_xprt_id != new->cl_xprt_id)
+			continue;
+
 		if (!nfs4_match_clientids(pos, new))
 			continue;
 
@@ -775,7 +781,7 @@ static int nfs4_set_client(struct nfs_server *server,
 		const char *ip_addr,
 		rpc_authflavor_t authflavour,
 		int proto, const struct rpc_timeout *timeparms,
-		u32 minorversion, struct net *net)
+		u32 minorversion, struct net *net, unsigned int xprt_id)
 {
 	struct nfs_client_initdata cl_init = {
 		.hostname = hostname,
@@ -785,6 +791,7 @@ static int nfs4_set_client(struct nfs_server *server,
 		.proto = proto,
 		.minorversion = minorversion,
 		.net = net,
+		.xprt_id = xprt_id,
 	};
 	struct nfs_client *clp;
 	int error;
@@ -841,6 +848,7 @@ struct nfs_client *nfs4_set_ds_client(struct nfs_client* mds_clp,
 		.proto = ds_proto,
 		.minorversion = mds_clp->cl_minorversion,
 		.net = mds_clp->cl_net,
+		.xprt_id = mds_clp->cl_xprt_id,
 	};
 	struct rpc_timeout ds_timeout;
 	struct nfs_client *clp;
@@ -975,7 +983,8 @@ static int nfs4_init_server(struct nfs_server *server,
 			data->nfs_server.protocol,
 			&timeparms,
 			data->minorversion,
-			data->net);
+			data->net,
+			data->xprt_id);
 	if (error < 0)
 		goto error;
 
@@ -1070,7 +1079,8 @@ struct nfs_server *nfs4_create_referral_server(struct nfs_clone_mount *data,
 				rpc_protocol(parent_server->client),
 				parent_server->client->cl_timeout,
 				parent_client->cl_mvops->minor_version,
-				parent_client->cl_net);
+				parent_client->cl_net,
+				parent_client->cl_xprt_id);
 	if (error < 0)
 		goto error;
 
