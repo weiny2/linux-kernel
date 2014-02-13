@@ -992,41 +992,16 @@ static void report_path(struct work_struct *work)
 	kfree(req);
 }
 
-/**
- * ib_sa_path_rec_get - Start a Path get query
- * @client:SA client
- * @device:device to send query on
- * @port_num: port number to send query on
- * @rec:Path Record to send in query
- * @comp_mask:component mask to send in query
- * @timeout_ms:time to wait for response
- * @gfp_mask:GFP mask to use for internal allocations
- * @callback:function called when query completes, times out or is
- * canceled
- * @context:opaque user context passed to callback
- * @sa_query:query context, used to cancel query
- *
- * Send a Path Record Get query to the SA to look up a path.  The
- * callback function will be called when the query completes (or
- * fails); status is 0 for a successful response, -EINTR if the query
- * is canceled, -ETIMEDOUT is the query timed out, or -EIO if an error
- * occurred sending the query.  The resp parameter of the callback is
- * only valid if status is 0.
- *
- * If the return value of ib_sa_path_rec_get() is negative, it is an
- * error code.  Otherwise it is a query ID that can be used to cancel
- * the query.
- */
-int ib_sa_path_rec_get(struct ib_sa_client *client,
-		       struct ib_device *device, u8 port_num,
-		       struct ib_sa_path_rec *rec,
-		       ib_sa_comp_mask comp_mask,
-		       int timeout_ms, gfp_t gfp_mask,
-		       void (*callback)(int status,
-					struct ib_sa_path_rec *resp,
-					void *context),
-		       void *context,
-		       struct ib_sa_query **sa_query)
+int ib_sa_path_rec_query_cache(struct ib_sa_client *client,
+			 struct ib_device *device, u8 port_num,
+			 struct ib_sa_path_rec *rec,
+			 ib_sa_comp_mask comp_mask,
+			 int timeout_ms, gfp_t gfp_mask,
+			 void (*callback)(int status,
+					  struct ib_sa_path_rec *resp,
+					  void *context),
+			 void *context,
+			 struct ib_sa_query **sa_query)
 {
 	struct sa_path_request *req;
 	struct ib_sa_attr_iter iter;
@@ -1078,7 +1053,6 @@ query_sa:
 				    timeout_ms, gfp_mask, callback, context,
 				    sa_query);
 }
-EXPORT_SYMBOL(ib_sa_path_rec_get);
 
 static void recv_handler(struct ib_mad_agent *mad_agent,
 			 struct ib_mad_recv_wc *mad_recv_wc)
