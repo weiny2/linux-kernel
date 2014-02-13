@@ -535,6 +535,11 @@ struct xmit_wait {
  * clarifies things a bit. Note that to conform to IB conventions,
  * port-numbers are one-based. The first or only port is port1.
  */
+#define QIB_CHAR_DEVICES_PER_PORT	2
+/* Extract packet length from LRH header */
+#define QIB_GET_PKT_LEN(x)	(((be16_to_cpu((x)->lrh[2]) & 0x7FF)) << 2)
+#define QIB_SNOOP_DEV_INDEX	0
+#define QIB_CAPTURE_DEV_INDEX	1
 struct qib_pportdata {
 	struct qib_ibport ibport_data;
 
@@ -697,6 +702,22 @@ struct qib_pportdata {
 
 	/* CA's max number of 64 entry units in the congestion control table */
 	u8 cc_max_table_entries;
+
+	/* snoop/capture related fields */
+	unsigned int mode_flag;
+	void *filter_value;
+	int (*filter_callback)(void *hdr, void *data, void *value);
+	/* lock while sending packet out */
+	spinlock_t snoop_write_lock;
+	struct qib_aux_device {
+		struct cdev *snoop_cdev;
+		struct device *snoop_class_dev;
+		/* snooping lock */
+		spinlock_t snoop_lock;
+		struct list_head snoop_queue;
+		wait_queue_head_t snoop_waitq;
+		struct qib_pportdata *pport;
+	} sc_device[QIB_CHAR_DEVICES_PER_PORT];
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */
@@ -1253,6 +1274,7 @@ extern unsigned long *qib_cpulist;
 
 extern unsigned qib_wc_pat;
 extern unsigned qib_cc_table_size;
+extern unsigned int snoop_enable;
 int qib_init(struct qib_devdata *, int);
 int init_chip_wc_pat(struct qib_devdata *dd, u32);
 int qib_enable_wc(struct qib_devdata *dd);
@@ -1310,6 +1332,24 @@ void qib_hol_up(struct qib_pportdata *);
 void qib_hol_event(unsigned long);
 void qib_disable_after_error(struct qib_devdata *);
 int qib_set_uevent_bits(struct qib_pportdata *, const int);
+
+#define QIB_PORT_SNOOP_MODE	1U
+#define QIB_PORT_CAPTURE_MODE	2U
+
+struct snoop_packet {
+	struct list_head list;
+	u32 total_len;
+	u8 data[];
+};
+
+int qib_snoop_add(struct qib_devdata *);
+void qib_snoop_remove(struct qib_devdata *);
+int qib_snoop_rcv_queue_packet(struct qib_pportdata *, void *,
+				void *, u32);
+void qib_snoop_send_queue_packet(struct qib_pportdata *,
+				struct snoop_packet *);
+int snoop_get_header_size(struct qib_devdata *, struct qib_ib_header *,
+				void *, u32);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \
@@ -1441,7 +1481,7 @@ void qib_sdma_intr(struct qib_pportdata *);
 void qib_user_sdma_send_desc(struct qib_pportdata *dd,
 			struct list_head *pktlist);
 int qib_sdma_verbs_send(struct qib_pportdata *, struct qib_sge_state *,
-			u32, struct qib_verbs_txreq *);
+			u32, struct qib_verbs_txreq *, struct snoop_packet *);
 /* ppd->sdma_lock should be locked before calling this. */
 int qib_sdma_make_progress(struct qib_pportdata *dd);
 

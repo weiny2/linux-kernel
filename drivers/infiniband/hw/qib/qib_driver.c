@@ -641,6 +641,8 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 	int last;
 	u64 lval;
 	struct qib_qp *qp, *nqp;
+	struct snoop_packet *packet = NULL;
+	u32 hdr_len = 0;
 
 	l = rcd->head;
 	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
@@ -663,6 +665,25 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 		/* total length */
 		tlen = qib_hdrget_length_in_bytes(rhf_addr);
 		ebuf = NULL;
+		/* applicable only for capture */
+		if (unlikely(ppd->mode_flag & QIB_PORT_CAPTURE_MODE)) {
+			int nomatch = 0;
+			/* We want to filter packet before copying it */
+			if (ppd->filter_callback)
+				nomatch = ppd->filter_callback(hdr, ebuf,
+					ppd->filter_value);
+			if (nomatch == 0) {
+				packet = kzalloc(sizeof(*packet) + tlen,
+						GFP_ATOMIC);
+				if (packet) {
+					/* copy header first */
+					packet->total_len = tlen;
+					INIT_LIST_HEAD(&packet->list);
+					hdr_len = (u8 *)rhf_addr - (u8 *)hdr;
+					memcpy(packet->data, hdr, hdr_len);
+				}
+			}
+		}
 		if ((dd->flags & QIB_NODMA_RTAIL) ?
 		    qib_hdrget_use_egr_buf(rhf_addr) :
 		    (etype != RCVHQ_RCV_TYPE_EXPECTED)) {
@@ -697,6 +718,10 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 			crcs += qib_rcv_hdrerr(rcd, ppd, rcd->ctxt, eflags, l,
 					       etail, rhf_addr, hdr);
 		else if (etype == RCVHQ_RCV_TYPE_NON_KD) {
+			/* copy packet data */
+			if (ebuf && packet)
+				memcpy((packet->data + hdr_len), ebuf,
+					(tlen - hdr_len));
 			qib_ib_rcv(rcd, hdr, ebuf, tlen);
 			if (crcs)
 				crcs--;
@@ -704,6 +729,10 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 				--*llic;
 		}
 move_along:
+		if (packet) {
+			qib_snoop_send_queue_packet(ppd, packet);
+			packet = NULL;
+		}
 		l += rsize;
 		if (l >= maxcnt)
 			l = 0;

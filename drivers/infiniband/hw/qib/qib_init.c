@@ -54,6 +54,11 @@
 #undef pr_fmt
 #define pr_fmt(fmt) QIB_DRV_NAME ": " fmt
 
+unsigned int snoop_enable; /* By default (0) snooping is disabled */
+
+module_param_named(snoop_enable, snoop_enable , int, 0644);
+MODULE_PARM_DESC(snoop_enable, "snooping mode ");
+
 /*
  * min buffers we want to have per context, after driver
  */
@@ -748,6 +753,11 @@ int qib_init(struct qib_devdata *dd, int reinit)
 				 "Failed to bringup IB port %u\n", ppd->port);
 			lastfail = -ENETDOWN;
 			continue;
+		}
+		if (snoop_enable) {
+			ppd->filter_callback = NULL;
+			ppd->filter_value = NULL;
+			ppd->mode_flag = 0;
 		}
 
 		portok++;
@@ -1538,6 +1548,8 @@ static int __devinit qib_init_one(struct pci_dev *pdev,
 	}
 
 	qib_verify_pioperf(dd);
+	if (snoop_enable)
+		qib_snoop_add(dd);
 bail:
 	return ret;
 }
