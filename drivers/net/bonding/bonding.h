@@ -184,6 +184,7 @@ struct bond_params {
 	int all_slaves_active;
 	int resend_igmp;
 	int lp_interval;
+	int packets_per_slave;
 };
 
 struct bond_parm_tbl {
@@ -253,7 +254,7 @@ struct bonding {
 #endif /* CONFIG_PROC_FS */
 	struct   list_head bond_list;
 	int      (*xmit_hash_policy)(struct sk_buff *, int);
-	u16      rr_tx_counter;
+	u32      rr_tx_counter;
 	struct   ad_bond_info ad_info;
 	struct   alb_bond_info alb_info;
 	struct   bond_params params;
