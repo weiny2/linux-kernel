@@ -2056,7 +2056,9 @@ void bond_3ad_unbind_slave(struct slave *slave)
 				pr_info("%s: Removing an active aggregator\n",
 					slave->bond->dev->name);
 				// select new active aggregator
-				ad_agg_selection_logic(__get_first_agg(port));
+				temp_aggregator = __get_first_agg(port);
+				if (temp_aggregator)
+					ad_agg_selection_logic(temp_aggregator);
 			}
 		}
 	}
@@ -2117,7 +2119,7 @@ void bond_3ad_state_machine_handler(struct work_struct *work)
 	read_lock(&bond->lock);
 
 	//check if there are any slaves
-	if (list_empty(&bond->slave_list))
+	if (!bond_has_slaves(bond))
 		goto re_arm;
 
 	// check if agg_select_timer timer after initialize is timed out
