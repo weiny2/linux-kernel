@@ -519,3 +519,21 @@ out:
 
 	return err;
 }
+
+int bond_option_primary_reselect_set(struct bonding *bond, int primary_reselect)
+{
+	bond->params.primary_reselect = primary_reselect;
+	pr_info("%s: setting primary_reselect to %s (%d).\n",
+		bond->dev->name, pri_reselect_tbl[primary_reselect].modename,
+		primary_reselect);
+
+	block_netpoll_tx();
+	read_lock(&bond->lock);
+	write_lock_bh(&bond->curr_slave_lock);
+	bond_select_active_slave(bond);
+	write_unlock_bh(&bond->curr_slave_lock);
+	read_unlock(&bond->lock);
+	unblock_netpoll_tx();
+
+	return 0;
+}
