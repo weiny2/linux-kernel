@@ -332,6 +332,18 @@ static inline void bond_set_backup_slave(struct slave *slave)
 	}
 }
 
+static inline void bond_slave_state_change(struct bonding *bond)
+{
+	struct slave *tmp;
+
+	bond_for_each_slave(bond, tmp) {
+		if (tmp->link == BOND_LINK_UP)
+			bond_set_active_slave(tmp);
+		else if (tmp->link == BOND_LINK_DOWN)
+			bond_set_backup_slave(tmp);
+	}
+}
+
 static inline int bond_slave_state(struct slave *slave)
 {
 	return slave->backup;

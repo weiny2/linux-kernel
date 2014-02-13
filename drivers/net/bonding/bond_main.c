@@ -2491,12 +2491,14 @@ void bond_loadbalance_arp_mon(struct work_struct *work)
 	struct bonding *bond = container_of(work, struct bonding,
 					    arp_work.work);
 	struct slave *slave, *oldcurrent;
-	int do_failover = 0;
+	int do_failover = 0, slave_state_changed = 0;
 
 	read_lock(&bond->lock);
 
-	if (!bond_has_slaves(bond))
+	if (!bond_has_slaves(bond)) {
+		read_unlock(&bond->lock);
 		goto re_arm;
+	}
 
 	oldcurrent = bond->curr_active_slave;
 	/* see if any of the previous devices are up now (i.e. they have
@@ -2515,7 +2517,7 @@ void bond_loadbalance_arp_mon(struct work_struct *work)
 			    bond_time_in_interval(bond, slave->dev->last_rx, 1)) {
 
 				slave->link  = BOND_LINK_UP;
-				bond_set_active_slave(slave);
+				slave_state_changed = 1;
 
 				/* primary_slave has no meaning in round-robin
 				 * mode. the window of a slave being up and
@@ -2544,7 +2546,7 @@ void bond_loadbalance_arp_mon(struct work_struct *work)
 			    !bond_time_in_interval(bond, slave->dev->last_rx, 2)) {
 
 				slave->link  = BOND_LINK_DOWN;
-				bond_set_backup_slave(slave);
+				slave_state_changed = 1;
 
 				if (slave->link_failure_count < UINT_MAX)
 					slave->link_failure_count++;
@@ -2569,22 +2571,37 @@ void bond_loadbalance_arp_mon(struct work_struct *work)
 			bond_arp_send_all(bond, slave);
 	}
 
-	if (do_failover) {
-		block_netpoll_tx();
-		write_lock_bh(&bond->curr_slave_lock);
+	read_unlock(&bond->lock);
 
-		bond_select_active_slave(bond);
+	if (do_failover || slave_state_changed) {
+		if (!rtnl_trylock())
+			goto re_arm;
 
-		write_unlock_bh(&bond->curr_slave_lock);
-		unblock_netpoll_tx();
+		if (slave_state_changed) {
+			read_lock(&bond->lock);
+			bond_slave_state_change(bond);
+			read_unlock(&bond->lock);
+		} else if (do_failover) {
+			/* the bond_select_active_slave must hold RTNL
+			 * and curr_slave_lock for write.
+			 */
+			block_netpoll_tx();
+			read_lock(&bond->lock);
+			write_lock_bh(&bond->curr_slave_lock);
+
+			bond_select_active_slave(bond);
+
+			write_unlock_bh(&bond->curr_slave_lock);
+			read_unlock(&bond->lock);
+			unblock_netpoll_tx();
+		}
+		rtnl_unlock();
 	}
 
 re_arm:
 	if (bond->params.arp_interval)
 		queue_delayed_work(bond->wq, &bond->arp_work,
 				   msecs_to_jiffies(bond->params.arp_interval));
-
-	read_unlock(&bond->lock);
 }
 
 /*
