@@ -1237,7 +1237,7 @@ static int __init qlogic_ib_init(void)
 	ret = pci_register_driver(&qib_driver);
 	if (ret < 0) {
 		pr_err("Unable to register driver: error %d\n", -ret);
-		goto bail_unit;
+		goto bail_dev;
 	}
 
 	/* not fatal if it doesn't work */
@@ -1245,13 +1245,12 @@ static int __init qlogic_ib_init(void)
 		pr_err("Unable to register ipathfs\n");
 	goto bail; /* all OK */
 
-bail_unit:
+bail_dev:
 #ifdef CONFIG_INFINIBAND_QIB_DCA
 	dca_unregister_notify(&dca_notifier);
 #endif
 	idr_destroy(&qib_unit_table);
 bail_cq_wq:
-	destroy_workqueue(qib_cq_wq);
 bail_dev:
 	qib_dev_cleanup();
 bail:
