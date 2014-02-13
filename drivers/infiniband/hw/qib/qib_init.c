@@ -46,6 +46,10 @@
 #include "qib.h"
 #include "qib_common.h"
 #include "qib_mad.h"
+#ifdef CONFIG_DEBUG_FS
+#include "qib_debugfs.h"
+#include "qib_verbs.h"
+#endif
 
 #undef pr_fmt
 #define pr_fmt(fmt) QIB_DRV_NAME ": " fmt
@@ -187,7 +191,18 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt,
 		rcd->cnt = 1;
 		rcd->ctxt = ctxt;
 		dd->rcd[ctxt] = rcd;
-
+#ifdef CONFIG_DEBUG_FS
+		if (ctxt < dd->first_user_ctxt) { /* N/A for PSM contexts */
+			rcd->opstats = kzalloc_node(sizeof(*rcd->opstats),
+				GFP_KERNEL, node_id);
+			if (!rcd->opstats) {
+				kfree(rcd);
+				qib_dev_err(dd,
+					"Unable to allocate per ctxt stats buffer\n");
+				return NULL;
+			}
+		}
+#endif
 		dd->f_init_ctxt(rcd);
 
 		/*
@@ -958,6 +973,10 @@ void qib_free_ctxtdata(struct qib_devdata *dd, struct qib_ctxtdata *rcd)
 	vfree(rcd->subctxt_uregbase);
 	vfree(rcd->subctxt_rcvegrbuf);
 	vfree(rcd->subctxt_rcvhdr_base);
+#ifdef CONFIG_DEBUG_FS
+	kfree(rcd->opstats);
+	rcd->opstats = NULL;
+#endif
 	kfree(rcd);
 }
 
@@ -1047,7 +1066,6 @@ done:
 	dd->f_set_armlaunch(dd, 1);
 }
 
-
 void qib_free_devdata(struct qib_devdata *dd)
 {
 	unsigned long flags;
@@ -1057,6 +1075,9 @@ void qib_free_devdata(struct qib_devdata *dd)
 	list_del(&dd->list);
 	spin_unlock_irqrestore(&qib_devs_lock, flags);
 
+#ifdef CONFIG_DEBUG_FS
+	qib_dbg_ibdev_exit(&dd->verbs_dev);
+#endif
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
 }
 
@@ -1085,6 +1106,10 @@ struct qib_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 		goto bail;
 	}
 
+#ifdef CONFIG_DEBUG_FS
+	qib_dbg_ibdev_init(&dd->verbs_dev);
+#endif
+
 	spin_lock_irqsave(&qib_devs_lock, flags);
 	ret = idr_get_new(&qib_unit_table, dd, &dd->unit);
 	if (ret >= 0)
@@ -1094,6 +1119,9 @@ struct qib_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	if (ret < 0) {
 		qib_early_err(&pdev->dev,
 			      "Could not allocate unit ID: error %d\n", -ret);
+#ifdef CONFIG_DEBUG_FS
+		qib_dbg_ibdev_exit(&dd->verbs_dev);
+#endif
 		ib_dealloc_device(&dd->verbs_dev.ibdev);
 		dd = ERR_PTR(ret);
 		goto bail;
@@ -1227,6 +1255,9 @@ static int __init qlogic_ib_init(void)
 #ifdef CONFIG_INFINIBAND_QIB_DCA
 	dca_register_notify(&dca_notifier);
 #endif
+#ifdef CONFIG_DEBUG_FS
+	qib_dbg_init();
+#endif
 	ret = pci_register_driver(&qib_driver);
 	if (ret < 0) {
 		pr_err("Unable to register driver: error %d\n", -ret);
@@ -1241,6 +1272,9 @@ static int __init qlogic_ib_init(void)
 bail_dev:
 #ifdef CONFIG_INFINIBAND_QIB_DCA
 	dca_unregister_notify(&dca_notifier);
+#endif
+#ifdef CONFIG_DEBUG_FS
+	qib_dbg_exit();
 #endif
 	idr_destroy(&qib_unit_table);
 bail_unit:
@@ -1268,6 +1302,9 @@ static void __exit qlogic_ib_cleanup(void)
 	dca_unregister_notify(&dca_notifier);
 #endif
 	pci_unregister_driver(&qib_driver);
+#ifdef CONFIG_DEBUG_FS
+	qib_dbg_exit();
+#endif
 
 	qib_cpulist_count = 0;
 	kfree(qib_cpulist);
