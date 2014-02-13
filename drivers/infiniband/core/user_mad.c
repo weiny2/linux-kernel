@@ -500,7 +500,8 @@ static ssize_t ib_umad_write(struct file *filp, const char __user *buf,
 
 	rmpp_mad = (struct ib_rmpp_mad *) packet->mad.data;
 	hdr_len = ib_get_mad_data_offset(rmpp_mad->mad_hdr.mgmt_class);
-	if (!ib_is_mad_class_rmpp(rmpp_mad->mad_hdr.mgmt_class)) {
+	if (!agent->rmpp_version ||
+		!ib_is_mad_class_rmpp(rmpp_mad->mad_hdr.mgmt_class)) {
 		copy_offset = IB_MGMT_MAD_HDR;
 		rmpp_active = 0;
 	} else {
@@ -552,14 +553,23 @@ static ssize_t ib_umad_write(struct file *filp, const char __user *buf,
 		rmpp_mad->mad_hdr.tid = *tid;
 	}
 
-	spin_lock_irq(&file->send_lock);
-	ret = is_duplicate(file, packet);
-	if (!ret)
+	if (!agent->rmpp_version
+	   && ib_is_mad_class_rmpp(rmpp_mad->mad_hdr.mgmt_class)
+	   && (ib_get_rmpp_flags(&rmpp_mad->rmpp_hdr) &
+		IB_MGMT_RMPP_FLAG_ACTIVE)) {
+		spin_lock_irq(&file->send_lock);
 		list_add_tail(&packet->list, &file->send_list);
-	spin_unlock_irq(&file->send_lock);
-	if (ret) {
-		ret = -EINVAL;
-		goto err_msg;
+		spin_unlock_irq(&file->send_lock);
+	} else {
+		spin_lock_irq(&file->send_lock);
+		ret = is_duplicate(file, packet);
+		if (!ret)
+			list_add_tail(&packet->list, &file->send_list);
+		spin_unlock_irq(&file->send_lock);
+		if (ret) {
+			ret = -EINVAL;
+			goto err_msg;
+		}
 	}
 
 	ret = ib_post_send_mad(packet->msg, NULL);
