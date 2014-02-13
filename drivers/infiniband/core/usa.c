@@ -968,9 +968,11 @@ static const struct file_operations usa_fops = {
 };
 
 static struct miscdevice usa_misc = {
-	.minor	= MISC_DYNAMIC_MINOR,
-	.name	= "ib_usa",
-	.fops	= &usa_fops,
+	.minor		= MISC_DYNAMIC_MINOR,
+	.name		= "ib_usa",
+	.nodename	= "infiniband/ib_usa",
+	.mode		= 0666,
+	.fops		= &usa_fops,
 };
 
 static struct class *usa_class;
