@@ -1334,39 +1334,22 @@ static ssize_t bonding_store_slaves_active(struct device *d,
 					   const char *buf, size_t count)
 {
 	struct bonding *bond = to_bond(d);
-	int new_value, ret = count;
-	struct slave *slave;
+	int new_value, ret;
 
 	if (sscanf(buf, "%d", &new_value) != 1) {
 		pr_err("%s: no all_slaves_active value specified.\n",
 		       bond->dev->name);
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
-	if (new_value == bond->params.all_slaves_active)
-		goto out;
+	if (!rtnl_trylock())
+		return restart_syscall();
 
-	if ((new_value == 0) || (new_value == 1)) {
-		bond->params.all_slaves_active = new_value;
-	} else {
-		pr_info("%s: Ignoring invalid all_slaves_active value %d.\n",
-			bond->dev->name, new_value);
-		ret = -EINVAL;
-		goto out;
-	}
+	ret = bond_option_all_slaves_active_set(bond, new_value);
+	if (!ret)
+		ret = count;
 
-	read_lock(&bond->lock);
-	bond_for_each_slave(bond, slave) {
-		if (!bond_is_active_slave(slave)) {
-			if (new_value)
-				slave->inactive = 0;
-			else
-				slave->inactive = 1;
-		}
-	}
-	read_unlock(&bond->lock);
-out:
+	rtnl_unlock();
 	return ret;
 }
 static DEVICE_ATTR(all_slaves_active, S_IRUGO | S_IWUSR,
