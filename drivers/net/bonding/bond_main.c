@@ -4194,7 +4194,7 @@ static int bond_check_params(struct bond_params *params)
 		if (!miimon) {
 			pr_warning("Warning: miimon must be specified, otherwise bonding will not detect link failure, speed and duplex which are essential for 802.3ad operation\n");
 			pr_warning("Forcing miimon to 100msec\n");
-			miimon = 100;
+			miimon = BOND_DEFAULT_MIIMON;
 		}
 	}
 
@@ -4231,7 +4231,7 @@ static int bond_check_params(struct bond_params *params)
 		if (!miimon) {
 			pr_warning("Warning: miimon must be specified, otherwise bonding will not detect link failure and link speed which are essential for TLB/ALB load balancing\n");
 			pr_warning("Forcing miimon to 100msec\n");
-			miimon = 100;
+			miimon = BOND_DEFAULT_MIIMON;
 		}
 	}
 
