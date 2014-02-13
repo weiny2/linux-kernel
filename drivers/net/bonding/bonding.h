@@ -473,7 +473,6 @@ void bond_mii_monitor(struct work_struct *);
 void bond_loadbalance_arp_mon(struct work_struct *);
 void bond_activebackup_arp_mon(struct work_struct *);
 void bond_set_mode_ops(struct bonding *bond, int mode);
-int bond_get_slave(struct net_device *slave_dev, struct sk_buff *skb);
 int bond_parse_parm(const char *mode_arg, const struct bond_parm_tbl *tbl);
 int bond_parm_tbl_lookup(int mode, const struct bond_parm_tbl *tbl);
 void bond_select_active_slave(struct bonding *bond);
