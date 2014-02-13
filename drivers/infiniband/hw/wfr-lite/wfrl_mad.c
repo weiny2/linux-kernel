@@ -157,6 +157,14 @@ struct stl_buffer_control_table
 	} vl[STL_MAX_VLS];
 };
 
+struct stl_aggregate {
+	__be16 attr_id;
+	__be16 err_reqlength;   /* 1 bit, 8 res, 7 bit */
+	__be32 attr_mod;
+	u8 data[0];
+};
+
+
 /* simulate link init data exchange */
 struct wfr_lite_link_init_data
 {
@@ -971,16 +979,23 @@ static int subn_get_nodedescription(struct ib_smp *smp,
 	return reply(smp);
 }
 
-static int subn_get_stl_nodedescription(struct stl_smp *smp, struct ib_device *ibdev)
+static __be16 __get_stl_nodedescription(struct stl_node_description *nd, u32 am,
+				     struct ib_device *ibdev)
 {
-	struct stl_node_description *nd;
-
-	if (smp->attr_mod)
-		smp->status |= IB_SMP_INVALID_FIELD;
-
-	nd = (struct stl_node_description *)stl_get_smp_data(smp);
+	if (am)
+		return IB_SMP_INVALID_FIELD;
 
 	memcpy(nd->data, ibdev->node_desc, sizeof(nd->data));
+	return 0;
+}
+
+static int subn_get_stl_nodedescription(struct stl_smp *smp, struct ib_device *ibdev)
+{
+	struct stl_node_description *nd = (struct stl_node_description *)stl_get_smp_data(smp);
+	__be16 status = __get_stl_nodedescription(nd, smp->attr_mod, ibdev);
+
+	if (status)
+		smp->status |= status;
 
 	return reply_stl(smp);
 }
@@ -1223,22 +1238,19 @@ static void dump_mad(uint8_t *mad, size_t size)
 	}
 }
 
-static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
-			     u8 port)
+static __be16 __get_stl_nodeinfo(struct stl_node_info *ni, u32 am,
+		struct ib_device *ibdev, u8 port)
 {
-	struct stl_node_info *ni;
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
 	u32 vendor, majrev, minrev;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 
-	ni = (struct stl_node_info *)stl_get_smp_data(smp);
-
 	memset(ni, 0, sizeof(*ni));
 
 	/* GUID 0 is illegal */
-	if (smp->attr_mod || pidx >= dd->num_pports ||
+	if (am || pidx >= dd->num_pports ||
 	    dd->pport[pidx].guid == 0)
-		smp->status |= IB_SMP_INVALID_FIELD;
+		return IB_SMP_INVALID_FIELD;
 	else
 		ni->port_guid = dd->pport[pidx].guid;
 
@@ -1264,6 +1276,18 @@ static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	ni->vendor_id[0] = WFR_SRC_OUI_1;
 	ni->vendor_id[1] = WFR_SRC_OUI_2;
 	ni->vendor_id[2] = WFR_SRC_OUI_3;
+
+	return 0;
+}
+
+static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	struct stl_node_info *ni = (struct stl_node_info *)stl_get_smp_data(smp);
+	__be16 status = __get_stl_nodeinfo(ni, be32_to_cpu(smp->attr_mod), ibdev, port);
+
+	if (status)
+		smp->status |= status;
 
 	return reply_stl(smp);
 }
@@ -2502,29 +2526,110 @@ static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
+static __be16 __get_stl_cable_info(u8 *ci, u32 am, struct ib_device *ibdev, u8 port)
+{
+	u8 *cable_info = virtual_stl[port-1].cable_info;
+	u32 length   = (am & 0x0007e000) >> 13;
+	u32 addr     = (am & 0x7ff80000) >> 19;
+	u32 port_num =  am & 0x000000ff;
+
+	if (wfr_strict_am_processing) {
+		if (port_num != port)
+			return IB_SMP_INVALID_FIELD;
+
+		/* Cable Info queries can't cross the cable info page boundry */
+		if (((addr & CABLE_INFO_PAGE_MASK) + length)
+		    & ~CABLE_INFO_PAGE_MASK)
+			return IB_SMP_INVALID_FIELD;
+	}
+
+	memcpy(ci, &cable_info[addr], length+1);
+	return 0;
+}
+
 static int subn_get_stl_cable_info(struct stl_smp *smp, struct ib_device *ibdev,
 			u8 port)
 {
-	u8 *cable_info = virtual_stl[port-1].cable_info;
-	u32 length   = (be32_to_cpu(smp->attr_mod) & 0x0007e000) >> 13;
-	u32 addr     = (be32_to_cpu(smp->attr_mod) & 0x7ff80000) >> 19;
-	u32 port_num =  be32_to_cpu(smp->attr_mod) & 0x000000ff;
 	u8 *p = stl_get_smp_data(smp);
+	__be16 status = __get_stl_cable_info(p, be32_to_cpu(smp->attr_mod), ibdev, port);
 
-	if (wfr_strict_am_processing) {
-		if (port_num != port) {
-			smp->status |= IB_SMP_INVALID_FIELD;
-			return reply_stl(smp);
-		}
-		/* Cable Info queries can't cross the cable info page boundry */
-		if (((addr & CABLE_INFO_PAGE_MASK) + length)
-		    & ~CABLE_INFO_PAGE_MASK) {
-			smp->status |= IB_SMP_INVALID_FIELD;
-			return reply_stl(smp);
-		}
+	if (status)
+		smp->status |= status;
+
+	return reply_stl(smp);
+}
+
+static void set_aggr_error(struct stl_aggregate *ag)
+{
+	ag->err_reqlength  = be16_to_cpu(ag->err_reqlength);
+	ag->err_reqlength |= 0x8000;
+	ag->err_reqlength  = cpu_to_be16(ag->err_reqlength);
+}
+
+static int subn_get_stl_aggregate(struct stl_smp *smp, struct ib_device *ibdev,
+			u8 port)
+{
+	int i;
+	u32 num_attr = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *next_smp = stl_get_smp_data(smp);
+	struct stl_aggregate *ag;
+
+	if (num_attr > 117) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_stl(smp);
 	}
 
-	memcpy(p, &cable_info[addr], length+1);
+	for (i = 0; i < num_attr; i++) {
+		__be16 status;
+		size_t ag_size;
+
+		ag = (struct stl_aggregate *)next_smp;
+		ag_size = sizeof(*ag) + ((be16_to_cpu(ag->err_reqlength) & 0x007f) * 8);
+
+		if (next_smp + ag_size > ((u8 *)smp) + sizeof(*smp)) {
+			printk(KERN_WARNING PFX
+				"WARN: STL Aggregate no space left in MAD "
+				"(total found : %ld)...\n",
+				(next_smp + ag_size) - (u8 *)smp);
+			smp->status |= IB_SMP_INVALID_FIELD;
+			goto bail;
+		}
+
+		switch (ag->attr_id) {
+			case STL_ATTRIB_ID_NODE_INFO:
+			{
+				struct stl_node_info *ni = (struct stl_node_info *)ag->data;
+				status = __get_stl_nodeinfo(ni, be32_to_cpu(ag->attr_mod), ibdev, port);
+				break;
+			}
+			case STL_ATTRIB_ID_NODE_DESCRIPTION:
+			{
+				struct stl_node_description *nd = (struct stl_node_description *)ag->data;
+				status = __get_stl_nodedescription(nd, be32_to_cpu(ag->attr_mod), ibdev);
+				break;
+			}
+			case STL_ATTRIB_ID_CABLE_INFO:
+			{
+				status = __get_stl_cable_info(ag->data, be32_to_cpu(ag->attr_mod), ibdev, port);
+				break;
+			}
+			default:
+				printk(KERN_WARNING PFX
+					"WARN: STL Aggregate (0x%x) not supported yet...\n",
+					be16_to_cpu(ag->attr_id));
+				set_aggr_error(ag);
+				smp->status |= IB_SMP_UNSUP_METH_ATTR;
+				goto bail;
+		}
+		if (status) {
+			set_aggr_error(ag);
+			smp->status |= status;
+			goto bail;
+		}
+		next_smp += ag_size;
+	}
+
+bail:
 	return reply_stl(smp);
 }
 
@@ -4449,6 +4554,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_CABLE_INFO:
 			ret = subn_get_stl_cable_info((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_AGGREGATE:
+			ret = subn_get_stl_aggregate((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
