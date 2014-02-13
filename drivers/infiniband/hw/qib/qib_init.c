@@ -67,9 +67,8 @@
  * Number of ctxts we are configured to use (to allow for more pio
  * buffers per ctxt, etc.)  Zero means use chip value.
  */
-ushort qib_cfgctxts;
-module_param_named(cfgctxts, qib_cfgctxts, ushort, S_IRUGO);
-MODULE_PARM_DESC(cfgctxts, "Set max number of contexts to use");
+QIB_MODPARAM_UNIT(cfgctxts, NULL, 0, S_IRUGO,
+		  "Set max number of contexts to use");
 
 unsigned qib_numa_aware;
 module_param_named(numa_aware, qib_numa_aware, uint, S_IRUGO);
@@ -84,9 +83,8 @@ ushort qib_mini_init;
 module_param_named(mini_init, qib_mini_init, ushort, S_IRUGO);
 MODULE_PARM_DESC(mini_init, "If set, do minimal diag init");
 
-unsigned qib_n_krcv_queues;
-module_param_named(krcvqs, qib_n_krcv_queues, uint, S_IRUGO);
-MODULE_PARM_DESC(krcvqs, "number of kernel receive queues per IB port");
+QIB_MODPARAM_PORT(krcvqs, NULL, 0, S_IRUGO,
+		  "number of kernel receive queues per IB port");
 
 unsigned qib_cc_table_size;
 module_param_named(cc_table_size, qib_cc_table_size, uint, S_IRUGO);
@@ -110,14 +108,15 @@ unsigned long *qib_cpulist;
 /* set number of contexts we'll actually use */
 void qib_set_ctxtcnt(struct qib_devdata *dd)
 {
-	if (!qib_cfgctxts) {
+	u64 val = QIB_MODPARAM_GET(cfgctxts, dd->unit, 0);
+	if (!val) {
 		dd->cfgctxts = dd->first_user_ctxt + num_online_cpus();
 		if (dd->cfgctxts > dd->ctxtcnt)
 			dd->cfgctxts = dd->ctxtcnt;
-	} else if (qib_cfgctxts < dd->num_pports)
+	} else if (val < dd->num_pports)
 		dd->cfgctxts = dd->ctxtcnt;
-	else if (qib_cfgctxts <= dd->ctxtcnt)
-		dd->cfgctxts = qib_cfgctxts;
+	else if (val <= dd->ctxtcnt)
+		dd->cfgctxts = val;
 	else
 		dd->cfgctxts = dd->ctxtcnt;
 	dd->freectxts = (dd->first_user_ctxt > dd->cfgctxts) ? 0 :
@@ -708,10 +707,10 @@ int qib_init(struct qib_devdata *dd, int reinit)
 		if (lastfail)
 			ret = lastfail;
 		ppd = dd->pport + pidx;
-		mtu = ib_mtu_enum_to_int(qib_ibmtu);
+		mtu = ib_mtu_enum_to_int(
+			QIB_MODPARAM_GET(ibmtu, dd->unit, ppd->port));
 		if (mtu == -1) {
 			mtu = QIB_DEFAULT_MTU;
-			qib_ibmtu = 0; /* don't leave invalid value */
 		}
 		/* set max we can ever have for this driver load */
 		ppd->init_ibmaxlen = min(mtu > 2048 ?
@@ -1311,6 +1310,7 @@ static void __exit qlogic_ib_cleanup(void)
 
 	idr_destroy(&qib_unit_table);
 	qib_dev_cleanup();
+	qib_clean_mod_param();
 }
 
 module_exit(qlogic_ib_cleanup);

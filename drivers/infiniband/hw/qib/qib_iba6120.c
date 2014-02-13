@@ -2070,9 +2070,10 @@ qib_6120_get_msgheader(struct qib_devdata *dd, __le32 *rhf_addr)
 
 static void qib_6120_config_ctxts(struct qib_devdata *dd)
 {
+	u32 nkrcvqs = QIB_MODPARAM_GET(krcvqs, dd->unit, 0);
 	dd->ctxtcnt = qib_read_kreg32(dd, kr_portcnt);
-	if (qib_n_krcv_queues > 1) {
-		dd->first_user_ctxt = qib_n_krcv_queues * dd->num_pports;
+	if (nkrcvqs > 1) {
+		dd->first_user_ctxt = nkrcvqs * dd->num_pports;
 		if (dd->first_user_ctxt > dd->ctxtcnt)
 			dd->first_user_ctxt = dd->ctxtcnt;
 		dd->qpn_mask = dd->first_user_ctxt <= 2 ? 2 : 6;
@@ -3133,7 +3134,7 @@ static void get_6120_chip_params(struct qib_devdata *dd)
 	dd->piosize2k = val & ~0U;
 	dd->piosize4k = val >> 32;
 
-	mtu = ib_mtu_enum_to_int(qib_ibmtu);
+	mtu = ib_mtu_enum_to_int(QIB_MODPARAM_GET(ibmtu, dd->unit, 1));
 	if (mtu == -1)
 		mtu = QIB_DEFAULT_MTU;
 	dd->pport->ibmtu = (u32)mtu;
@@ -3282,7 +3283,7 @@ static int init_6120_variables(struct qib_devdata *dd)
 	dd->rhf_offset = 0;
 
 	/* we always allocate at least 2048 bytes for eager buffers */
-	ret = ib_mtu_enum_to_int(qib_ibmtu);
+	ret = ib_mtu_enum_to_int(QIB_MODPARAM_GET(ibmtu, dd->unit, 1));
 	dd->rcvegrbufsize = ret != -1 ? max(ret, 2048) : QIB_DEFAULT_MTU;
 	BUG_ON(!is_power_of_2(dd->rcvegrbufsize));
 	dd->rcvegrbufsize_shift = ilog2(dd->rcvegrbufsize);
@@ -3322,7 +3323,6 @@ static int init_6120_variables(struct qib_devdata *dd)
 	if (qib_mini_init)
 		goto bail;
 
-	qib_num_cfg_vls = 1; /* if any 6120's, only one VL */
 
 	ret = qib_create_ctxts(dd);
 	init_6120_cntrnames(dd);

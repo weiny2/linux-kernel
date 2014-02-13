@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
- * All rights reserved.
+ * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -2299,19 +2299,21 @@ static void qib_7220_config_ctxts(struct qib_devdata *dd)
 {
 	unsigned long flags;
 	u32 nchipctxts;
+	u32 cfgctxts = QIB_MODPARAM_GET(cfgctxts, dd->unit, 0);
+	u32 nkrcvqs = QIB_MODPARAM_GET(krcvqs, dd->unit, 0);
 
 	nchipctxts = qib_read_kreg32(dd, kr_portcnt);
 	dd->cspec->numctxts = nchipctxts;
-	if (qib_n_krcv_queues > 1) {
+	if (nkrcvqs > 1) {
 		dd->qpn_mask = 0x3e;
-		dd->first_user_ctxt = qib_n_krcv_queues * dd->num_pports;
+		dd->first_user_ctxt = nkrcvqs * dd->num_pports;
 		if (dd->first_user_ctxt > nchipctxts)
 			dd->first_user_ctxt = nchipctxts;
 	} else
 		dd->first_user_ctxt = dd->num_pports;
 	dd->n_krcv_queues = dd->first_user_ctxt;
 
-	if (!qib_cfgctxts) {
+	if (!cfgctxts) {
 		int nctxts = dd->first_user_ctxt + num_online_cpus();
 
 		if (nctxts <= 5)
@@ -2320,8 +2322,8 @@ static void qib_7220_config_ctxts(struct qib_devdata *dd)
 			dd->ctxtcnt = 9;
 		else if (nctxts <= nchipctxts)
 			dd->ctxtcnt = nchipctxts;
-	} else if (qib_cfgctxts <= nchipctxts)
-		dd->ctxtcnt = qib_cfgctxts;
+	} else if (cfgctxts <= nchipctxts)
+		dd->ctxtcnt = cfgctxts;
 	if (!dd->ctxtcnt) /* none of the above, set to max */
 		dd->ctxtcnt = nchipctxts;
 
@@ -3846,7 +3848,7 @@ static void get_7220_chip_params(struct qib_devdata *dd)
 	dd->piosize2k = val & ~0U;
 	dd->piosize4k = val >> 32;
 
-	mtu = ib_mtu_enum_to_int(qib_ibmtu);
+	mtu = ib_mtu_enum_to_int(QIB_MODPARAM_GET(ibmtu, dd->unit, 1));
 	if (mtu == -1)
 		mtu = QIB_DEFAULT_MTU;
 	dd->pport->ibmtu = (u32)mtu;
@@ -4084,15 +4086,13 @@ static int qib_init_7220_variables(struct qib_devdata *dd)
 	ppd->cpspec->chase_timer.function = reenable_7220_chase;
 	ppd->cpspec->chase_timer.data = (unsigned long)ppd;
 
-	qib_num_cfg_vls = 1; /* if any 7220's, only one VL */
-
 	dd->rcvhdrentsize = QIB_RCVHDR_ENTSIZE;
 	dd->rcvhdrsize = QIB_DFLT_RCVHDRSIZE;
 	dd->rhf_offset =
 		dd->rcvhdrentsize - sizeof(u64) / sizeof(u32);
 
 	/* we always allocate at least 2048 bytes for eager buffers */
-	ret = ib_mtu_enum_to_int(qib_ibmtu);
+	ret = ib_mtu_enum_to_int(QIB_MODPARAM_GET(ibmtu, dd->unit, 1));
 	dd->rcvegrbufsize = ret != -1 ? max(ret, 2048) : QIB_DEFAULT_MTU;
 	BUG_ON(!is_power_of_2(dd->rcvegrbufsize));
 	dd->rcvegrbufsize_shift = ilog2(dd->rcvegrbufsize);

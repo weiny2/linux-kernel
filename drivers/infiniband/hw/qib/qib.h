@@ -52,6 +52,7 @@
 #include <linux/kref.h>
 #include <linux/sched.h>
 #include <linux/kthread.h>
+#include <linux/moduleparam.h>
 
 #include "qib_common.h"
 #include "qib_verbs.h"
@@ -744,7 +745,7 @@ struct qib_devdata {
 	u64 __iomem *kregend;
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
-	/* qib_cfgctxts pointers */
+	/* cfgctxts pointers */
 	struct qib_ctxtdata **rcd; /* Receive Context Data */
 
 	/* qib_pportdata, points to array of (physical) port-specific
@@ -1107,6 +1108,114 @@ struct qib_devdata {
 	int assigned_node_id; /* NUMA node closest to HCA */
 };
 
+enum qib_mod_param_t {
+	qib_mod_param_drv,
+	qib_mod_param_unit,
+	qib_mod_param_port
+};
+
+typedef int (*param_set_func_t)(struct qib_devdata *, u8, u64);
+
+struct qib_mod_param {
+	const char *name;
+	enum qib_mod_param_t type;
+	param_set_func_t func;
+	ulong dflt;
+	struct list_head list;
+	struct list_head pport;
+};
+
+extern int qib_set_mod_param(const char *, struct kernel_param *);
+extern int qib_get_mod_param(char *, struct kernel_param *);
+extern u64 qib_read_mod_param(struct qib_mod_param *, u16, u8);
+extern void qib_clean_mod_param(void);
+
+#define MAX_QIB_PARAM_LEN 128
+/**
+ * QIB_MODPARAM_GLOBAL - define a global module parameter
+ * @N: name of the module parameter
+ *
+ * Define a global module parameter for use in multiple files.
+ */
+#define QIB_MODPARAM_GLOBAL(N) \
+extern struct qib_mod_param qmp_##N
+/**
+ * QIB_MODPARAM_DRV - define a driver-scope module parameter
+ * @N: name of the module parameter
+ * @D: default value
+ * @P: visibility in sysfs
+ * @S: description
+ *
+ * Define a driver-scope (global to the driver instance) module
+ * parameter.
+ */
+#define QIB_MODPARAM_DRV(N, D, P, S)				  \
+	struct qib_mod_param qmp_##N = {			  \
+		.name = __stringify(N),				  \
+		.type = qib_mod_param_drv,			  \
+		.dflt = (ulong)D,				  \
+		.pport = { NULL, NULL }				  \
+	};							  \
+	module_param_named(N, qmp_##N.dflt, ulong, P);		  \
+	MODULE_PARM_DESC(N, S " (dflt: " __stringify(D) ")")
+/**
+ * QIB_MODPARAM_UNIT - define a unit-scope module parameter
+ * @N: name of the module parameter
+ * @F: callback function for dynamic value settings
+ * @D: default value
+ * @P: visibility in sysfs
+ * @D: description
+ *
+ * Define a unit-scope module parameter. Unit-scope module
+ * parameters allows specifying individual values for each of the
+ * QIB units.
+ */
+#define QIB_MODPARAM_UNIT(N, F, D, P, S)			   \
+	struct qib_mod_param qmp_##N = {			   \
+		.name = __stringify(N),				   \
+		.func = ((P) & S_IWUGO ? F : NULL),		   \
+		.type = qib_mod_param_unit,			   \
+		.dflt = (ulong)D,				   \
+		.pport = { NULL, NULL }				   \
+	};							   \
+	module_param_call(N, qib_set_mod_param, qib_get_mod_param, \
+			  &qmp_##N, (P));			   \
+	MODULE_PARM_DESC(N, S " (dflt: " __stringify(D) ")")
+/**
+ * QIB_MODPARAM_PORT - define a port-scope module parameter
+ * @N: name of the module parameter
+ * @F: callback function for dynamic value settings
+ * @D: default value
+ * @P: visibility in sysfs
+ * @D: description
+ *
+ * Define a port-scope module parameter. Port-scope module
+ * parameters allow specifying individual values foe each of the
+ * ports on any of the QIB units.
+ */
+#define QIB_MODPARAM_PORT(N, F, D, P, S)			   \
+	struct qib_mod_param qmp_##N = {			   \
+		.name = __stringify(N),				   \
+		.func = ((P) & S_IWUGO ? F : NULL),		   \
+		.type = qib_mod_param_port,			   \
+		.dflt = (ulong)D,				   \
+		.pport = { NULL, NULL }				   \
+	};							   \
+	module_param_call(N, qib_set_mod_param, qib_get_mod_param, \
+			  &qmp_##N, (P));			   \
+	MODULE_PARM_DESC(N, S " (dflt: " __stringify(D) ")")
+/**
+ * QIB_MODPARAM_GET - retrieve a module parameter value
+ * @N: name of the module parameter
+ * @U: unit number
+ * @P: port number
+ *
+ * Get the value for the specific unit/port. The macro will return
+ * the correct value regardless of a specific value for the
+ * specified unit/port is present or the default should be used.
+ */
+#define QIB_MODPARAM_GET(N, U, P) qib_read_mod_param(&qmp_##N, U, P)
+
 /* hol_state values */
 #define QIB_HOL_UP       0
 #define QIB_HOL_INIT     1
@@ -1136,6 +1245,7 @@ struct qib_filedata {
 };
 
 extern struct list_head qib_dev_list;
+extern struct list_head qib_mod_param_list;
 extern spinlock_t qib_devs_lock;
 extern struct qib_devdata *qib_lookup(int unit);
 extern u32 qib_cpulist_count;
@@ -1469,11 +1579,10 @@ const char *qib_get_unit_name(int unit);
 #endif
 
 /* global module parameter variables */
-extern unsigned qib_ibmtu;
-extern ushort qib_cfgctxts;
-extern ushort qib_num_cfg_vls;
+QIB_MODPARAM_GLOBAL(ibmtu);
+QIB_MODPARAM_GLOBAL(cfgctxts);
+QIB_MODPARAM_GLOBAL(krcvqs);
 extern ushort qib_mini_init; /* If set, do few (ideally 0) writes to chip */
-extern unsigned qib_n_krcv_queues;
 extern unsigned qib_sdma_fetch_arb;
 extern unsigned qib_compat_ddr_negotiate;
 extern int qib_special_trigger;
