@@ -97,8 +97,6 @@ unsigned qib_wc_pat = 1; /* default (1) is to use PAT, not MTRR */
 module_param_named(wc_pat, qib_wc_pat, uint, S_IRUGO);
 MODULE_PARM_DESC(wc_pat, "enable write-combining via PAT mechanism");
 
-struct workqueue_struct *qib_cq_wq;
-
 static void verify_interrupt(unsigned long);
 
 static struct idr qib_unit_table;
@@ -444,6 +442,7 @@ static int loadtime_init(struct qib_devdata *dd)
 	dd->intrchk_timer.function = verify_interrupt;
 	dd->intrchk_timer.data = (unsigned long) dd;
 
+	ret = qib_cq_init(dd);
 done:
 	return ret;
 }
@@ -1214,12 +1213,6 @@ static int __init qlogic_ib_init(void)
 	if (ret)
 		goto bail;
 
-	qib_cq_wq = create_singlethread_workqueue("qib_cq");
-	if (!qib_cq_wq) {
-		ret = -ENOMEM;
-		goto bail_dev;
-	}
-
 	/*
 	 * These must be called before the driver is registered with
 	 * the PCI subsystem.
@@ -1228,7 +1221,7 @@ static int __init qlogic_ib_init(void)
 	if (!idr_pre_get(&qib_unit_table, GFP_KERNEL)) {
 		pr_err("idr_pre_get() failed\n");
 		ret = -ENOMEM;
-		goto bail_cq_wq;
+		goto bail_unit;
 	}
 
 #ifdef CONFIG_INFINIBAND_QIB_DCA
@@ -1250,8 +1243,7 @@ bail_dev:
 	dca_unregister_notify(&dca_notifier);
 #endif
 	idr_destroy(&qib_unit_table);
-bail_cq_wq:
-bail_dev:
+bail_unit:
 	qib_dev_cleanup();
 bail:
 	return ret;
@@ -1276,8 +1268,6 @@ static void __exit qlogic_ib_cleanup(void)
 	dca_unregister_notify(&dca_notifier);
 #endif
 	pci_unregister_driver(&qib_driver);
-
-	destroy_workqueue(qib_cq_wq);
 
 	qib_cpulist_count = 0;
 	kfree(qib_cpulist);
@@ -1369,6 +1359,7 @@ static void cleanup_device_data(struct qib_devdata *dd)
 	}
 	kfree(tmp);
 	kfree(dd->boardname);
+	qib_cq_exit(dd);
 }
 
 /*
