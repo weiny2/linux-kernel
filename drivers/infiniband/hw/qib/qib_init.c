@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012, 2013 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -1152,7 +1152,7 @@ static void __devexit qib_remove_one(struct pci_dev *);
 static int __devinit qib_init_one(struct pci_dev *,
 				  const struct pci_device_id *);
 
-#define DRIVER_LOAD_MSG "QLogic " QIB_DRV_NAME " loaded: "
+#define DRIVER_LOAD_MSG "Intel " QIB_DRV_NAME " loaded: "
 #define PFX QIB_DRV_NAME ": "
 
 static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
@@ -1405,7 +1405,7 @@ static int __devinit qib_init_one(struct pci_dev *pdev,
 		dd = qib_init_iba6120_funcs(pdev, ent);
 #else
 		qib_early_err(&pdev->dev,
-			"QLogic PCIE device 0x%x cannot work if CONFIG_PCI_MSI is not enabled\n",
+			"Intel PCIE device 0x%x cannot work if CONFIG_PCI_MSI is not enabled\n",
 			ent->device);
 		dd = ERR_PTR(-ENODEV);
 #endif
@@ -1421,7 +1421,7 @@ static int __devinit qib_init_one(struct pci_dev *pdev,
 
 	default:
 		qib_early_err(&pdev->dev,
-			"Failing on unknown QLogic deviceid 0x%x\n",
+			"Failing on unknown Intel deviceid 0x%x\n",
 			ent->device);
 		ret = -ENODEV;
 	}
