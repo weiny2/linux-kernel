@@ -74,6 +74,7 @@ struct nfs_client_initdata {
 	int proto;
 	u32 minorversion;
 	struct net *net;
+	unsigned int xprt_id;
 };
 
 /*
@@ -95,6 +96,7 @@ struct nfs_parsed_mount_data {
 	unsigned int		minorversion;
 	char			*fscache_uniq;
 	bool			need_mount;
+	unsigned int		xprt_id;
 
 	struct {
 		struct sockaddr_storage	address;

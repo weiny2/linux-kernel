@@ -89,6 +89,7 @@ enum {
 	Opt_rdirplus, Opt_nordirplus,
 	Opt_sharecache, Opt_nosharecache,
 	Opt_sharetransport, Opt_nosharetransport,
+	Opt_sharetransportid,
 	Opt_resvport, Opt_noresvport,
 	Opt_fscache, Opt_nofscache,
 	Opt_migration, Opt_nomigration,
@@ -149,6 +150,7 @@ static const match_table_t nfs_mount_option_tokens = {
 	{ Opt_nosharecache, "nosharecache" },
 	{ Opt_sharetransport, "sharetransport"},
 	{ Opt_nosharetransport, "nosharetransport"},
+	{ Opt_sharetransportid, "sharetransport=%s"},
 	{ Opt_resvport, "resvport" },
 	{ Opt_noresvport, "noresvport" },
 	{ Opt_fscache, "fsc" },
@@ -668,6 +670,8 @@ static void nfs_show_mount_options(struct seq_file *m, struct nfs_server *nfss,
 		else
 			seq_puts(m, nfs_infop->nostr);
 	}
+	if (clp->cl_xprt_id)
+		seq_printf(m, ",sharetransport=%u", clp->cl_xprt_id);
 	rcu_read_lock();
 	seq_printf(m, ",proto=%s",
 		   rpc_peeraddr2str(nfss->client, RPC_DISPLAY_NETID));
@@ -1372,6 +1376,12 @@ static int nfs_parse_mount_options(char *raw,
 				goto out_invalid_value;
 			mnt->minorversion = option;
 			break;
+		case Opt_sharetransportid:
+			if (nfs_get_option_ul(args, &option) ||
+			    option <= 0)
+				goto out_invalid_value;
+			mnt->xprt_id = option;
+			break;
 
 		/*
 		 * options that take text values
@@ -1582,6 +1592,10 @@ static int nfs_parse_mount_options(char *raw,
 	    mnt->version != 4 && mnt->minorversion != 0)
 		goto out_migration_misuse;
 
+	if (mnt->flags & NFS_MOUNT_NOSHARE_XPRT &&
+	    mnt->version == 4)
+		goto out_noshare_misuse;
+
 	/*
 	 * verify that any proto=/mountproto= options match the address
 	 * families in the addr=/mountaddr= options.
@@ -1602,6 +1616,10 @@ static int nfs_parse_mount_options(char *raw,
 
 	return 1;
 
+out_noshare_misuse:
+	printk(KERN_INFO "NFS: nosharetransport is not compatible with vers=4\n");
+	printk(KERN_INFO "NFS: use sharetransport=N for some unique N\n");
+	return 0;
 out_mountproto_mismatch:
 	printk(KERN_INFO "NFS: mount server address does not match mountproto= "
 			 "option\n");
@@ -2379,6 +2397,10 @@ static int nfs_compare_super_address(struct nfs_server *server1,
 				     struct nfs_server *server2)
 {
 	struct sockaddr *sap1, *sap2;
+
+	if (server1->nfs_client->cl_xprt_id !=
+	    server2->nfs_client->cl_xprt_id)
+		return 0;
 
 	sap1 = (struct sockaddr *)&server1->nfs_client->cl_addr;
 	sap2 = (struct sockaddr *)&server2->nfs_client->cl_addr;

@@ -650,7 +650,7 @@ swp_entry_t get_swap_page(void)
 		goto noswap;
 	atomic_long_dec(&nr_swap_pages);
 
-	for (type = swap_list.next; type >= 0 && wrapped < 2; type = next) {
+	for (type = swap_list.head; type >= 0 && wrapped < 2; type = next) {
 		hp_index = atomic_xchg(&highest_priority_index, -1);
 		/*
 		 * highest_priority_index records current highest priority swap
