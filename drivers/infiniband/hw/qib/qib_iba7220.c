@@ -2311,7 +2311,7 @@ static void qib_7220_config_ctxts(struct qib_devdata *dd)
 			dd->first_user_ctxt = nchipctxts;
 	} else
 		dd->first_user_ctxt = dd->num_pports;
-	dd->n_krcv_queues = dd->first_user_ctxt;
+	dd->pport[0].n_krcv_queues = dd->first_user_ctxt;
 
 	if (!cfgctxts) {
 		int nctxts = dd->first_user_ctxt + num_online_cpus();

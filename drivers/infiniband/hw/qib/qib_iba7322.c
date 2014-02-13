@@ -3513,7 +3513,8 @@ try_intx:
 			snprintf(dd->cspec->msix_entries[msixnum].name,
 				sizeof(dd->cspec->msix_entries[msixnum].name)
 				 - 1,
-				QIB_DRV_NAME "%d (kctx)", dd->unit);
+				 QIB_DRV_NAME "%d:%d (kctx)", dd->unit,
+				 ((struct qib_ctxtdata *)arg)->ppd->port);
 		}
 		ret = request_irq(
 			dd->cspec->msix_entries[msixnum].msix.vector,
@@ -3940,21 +3941,27 @@ qib_7322_get_msgheader(struct qib_devdata *dd, __le32 *rhf_addr)
 static void qib_7322_config_ctxts(struct qib_devdata *dd)
 {
 	unsigned long flags;
-	u32 nchipctxts;
+	u32 nchipctxts, nkrcvqs;
 	u32 cfgctxts = QIB_MODPARAM_GET(cfgctxts, dd->unit, 0);
-	u32 nkrcvqs = QIB_MODPARAM_GET(krcvqs, dd->unit, 0);
+	u8 pidx;
 
 	nchipctxts = qib_read_kreg32(dd, kr_contextcnt);
 	dd->cspec->numctxts = nchipctxts;
-	if (nkrcvqs > 1 && dd->num_pports) {
-		dd->first_user_ctxt = NUM_IB_PORTS +
-			(nkrcvqs - 1) * dd->num_pports;
-		if (dd->first_user_ctxt > nchipctxts)
-			dd->first_user_ctxt = nchipctxts;
-		dd->n_krcv_queues = dd->first_user_ctxt / dd->num_pports;
-	} else {
-		dd->first_user_ctxt = NUM_IB_PORTS;
-		dd->n_krcv_queues = 1;
+	dd->first_user_ctxt = NUM_IB_PORTS;
+
+	for (pidx = 0; pidx < dd->num_pports; pidx++) {
+		nkrcvqs = QIB_MODPARAM_GET(krcvqs, dd->unit, pidx+1);
+		if (nkrcvqs > 1) {
+			if (nkrcvqs - 1 > nchipctxts - dd->first_user_ctxt)
+				dd->pport[pidx].n_krcv_queues =
+					(nchipctxts - dd->first_user_ctxt) + 1;
+			else
+				dd->pport[pidx].n_krcv_queues = nkrcvqs;
+			dd->first_user_ctxt +=
+				dd->pport[pidx].n_krcv_queues - 1;
+		} else
+			/* Account for the HW ctxt */
+			dd->pport[pidx].n_krcv_queues = 1;
 	}
 
 	if (!cfgctxts) {
@@ -6340,11 +6347,11 @@ static void write_7322_initregs(struct qib_devdata *dd)
 	qib_write_kreg(dd, KREG_IDX(RcvQPMulticastContext_1), 1);
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
-		unsigned n, regno;
+		unsigned i, n, regno, ctxts[18];
 		unsigned long flags;
 
-		if (dd->n_krcv_queues < 2 ||
-			!dd->pport[pidx].link_speed_supported)
+		if (dd->pport[pidx].n_krcv_queues == 1 ||
+		    !dd->pport[pidx].link_speed_supported)
 			continue;
 
 		ppd = &dd->pport[pidx];
@@ -6357,19 +6364,18 @@ static void write_7322_initregs(struct qib_devdata *dd)
 		/* Initialize QP to context mapping */
 		regno = krp_rcvqpmaptable;
 		val = 0;
-		if (dd->num_pports > 1)
-			n = dd->first_user_ctxt / dd->num_pports;
-		else
-			n = dd->first_user_ctxt - 1;
+		for (i = 0, n = 0; n < dd->first_user_ctxt; n++) {
+			if (dd->skip_kctxt_mask & (1 << n))
+				continue;
+			if (dd->rcd[n]->ppd->port == pidx+1)
+				ctxts[i++] = n;
+			if (i == ppd->n_krcv_queues)
+				break;
+		}
 		for (i = 0; i < 32; ) {
 			unsigned ctxt;
 
-			if (dd->num_pports > 1)
-				ctxt = (i % n) * dd->num_pports + pidx;
-			else if (i % n)
-				ctxt = (i % n) + 1;
-			else
-				ctxt = ppd->hw_pidx;
+			ctxt = ctxts[i % ppd->n_krcv_queues];
 			val |= ctxt << (5 * (i % 6));
 			i++;
 			if (i % 6 == 0) {
@@ -6695,8 +6701,8 @@ static int qib_init_7322_variables(struct qib_devdata *dd)
 		goto bail; /* no error, so can still figure out why err */
 	}
 
-	write_7322_initregs(dd);
 	ret = qib_create_ctxts(dd);
+	write_7322_initregs(dd);
 	init_7322_cntrnames(dd);
 
 	updthresh = 8U; /* update threshold */

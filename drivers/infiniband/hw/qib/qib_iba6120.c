@@ -2079,7 +2079,7 @@ static void qib_6120_config_ctxts(struct qib_devdata *dd)
 		dd->qpn_mask = dd->first_user_ctxt <= 2 ? 2 : 6;
 	} else
 		dd->first_user_ctxt = dd->num_pports;
-	dd->n_krcv_queues = dd->first_user_ctxt;
+	dd->pport[0].n_krcv_queues = dd->first_user_ctxt;
 }
 
 static void qib_update_6120_usrhead(struct qib_ctxtdata *rcd, u64 hd,

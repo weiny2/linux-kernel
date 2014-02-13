@@ -645,6 +645,7 @@ struct qib_pportdata {
 	u8 link_speed_active;
 	u8 vls_supported;
 	u8 vls_operational;
+	u8 n_krcv_queues;
 	/* Rx Polarity inversion (compensate for ~tx on partner) */
 	u8 rx_pol_inv;
 
@@ -1062,7 +1063,6 @@ struct qib_devdata {
 	u8 num_pports;
 	/* Lowest context number which can be used by user processes */
 	u8 first_user_ctxt;
-	u8 n_krcv_queues;
 	u8 qpn_mask;
 	u8 skip_kctxt_mask;
 
