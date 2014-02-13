@@ -165,6 +165,8 @@ struct wfr_lite_link_init_data
 };
 static int reply(struct ib_smp *smp); /* fwd declare */
 
+#define CABLE_INFO_SIZE       4096
+#define CABLE_INFO_PAGE_MASK  0x0000007f /* 128 byte page size */
 static struct {
 	struct stl_port_info port_info;
 	u16 pkeys[STL_NUM_PKEYS];
@@ -175,6 +177,7 @@ static struct {
 	struct stl_vlarb_data vlarb_data;
 	struct stl_buffer_control_table buffer_control_table;
 	int member_full_mgmt; /* flag if this port is a member of the full management partition */
+	u8 cable_info[CABLE_INFO_SIZE];
 } virtual_stl[NUM_VIRT_PORTS];
 
 int virtual_stl_init = 0;
@@ -396,9 +399,17 @@ static void init_virtual_stl(struct ib_device *ibdev, u8 port)
 	 * Fake Initial STL data
 	 */
 	for (i = 0; i < NUM_VIRT_PORTS; i++) {
+		u32 j;
 		memset(&virtual_stl[i], 0, sizeof(virtual_stl[i]));
 		get_pkeys(dd, port, virtual_stl[port-1].pkeys);
 		init_virtual_port_info(i+1);
+		memset(&virtual_stl[i].cable_info, 0,
+			sizeof(virtual_stl[i].cable_info));
+		for (j = 0; j < CABLE_INFO_SIZE; j += 64)
+		{
+			/* mark the first byte of every page */
+			virtual_stl[i].cable_info[j] = 0xAB;
+		}
 	}
 	virtual_stl[0].pkeys[STL_NUM_PKEYS-1] = 0xDEAD;
 	virtual_stl[1].pkeys[STL_NUM_PKEYS-1] = 0xBEEF;
@@ -2491,6 +2502,32 @@ static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
+static int subn_get_stl_cable_info(struct stl_smp *smp, struct ib_device *ibdev,
+			u8 port)
+{
+	u8 *cable_info = virtual_stl[port-1].cable_info;
+	u32 length   = (be32_to_cpu(smp->attr_mod) & 0x0007e000) >> 13;
+	u32 addr     = (be32_to_cpu(smp->attr_mod) & 0x7ff80000) >> 19;
+	u32 port_num =  be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *p = stl_get_smp_data(smp);
+
+	if (wfr_strict_am_processing) {
+		if (port_num != port) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+		/* Cable Info queries can't cross the cable info page boundry */
+		if (((addr & CABLE_INFO_PAGE_MASK) + length)
+		    & ~CABLE_INFO_PAGE_MASK) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply_stl(smp);
+		}
+	}
+
+	memcpy(p, &cable_info[addr], length+1);
+	return reply_stl(smp);
+}
+
 
 static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
@@ -4409,6 +4446,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
 			ret = subn_get_stl_bct((struct stl_smp *)smp, ibdev, port);
+			goto bail;
+		case STL_ATTRIB_ID_CABLE_INFO:
+			ret = subn_get_stl_cable_info((struct stl_smp *)smp, ibdev, port);
 			goto bail;
 		default:
 			printk(KERN_WARNING PFX
