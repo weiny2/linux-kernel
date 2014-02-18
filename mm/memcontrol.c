@@ -48,7 +48,6 @@
 #include <linux/sort.h>
 #include <linux/fs.h>
 #include <linux/seq_file.h>
-#include <linux/vmalloc.h>
 #include <linux/vmpressure.h>
 #include <linux/mm_inline.h>
 #include <linux/page_cgroup.h>
@@ -59,6 +58,7 @@
 #include <net/sock.h>
 #include <net/ip.h>
 #include <net/tcp_memcontrol.h>
+#include "slab.h"
 
 #include <asm/uaccess.h>
 
@@ -147,7 +147,7 @@ struct mem_cgroup_reclaim_iter {
 	 * matches memcg->dead_count of the hierarchy root group.
 	 */
 	struct mem_cgroup *last_visited;
-	unsigned long last_dead_count;
+	int last_dead_count;
 
 	/* scan generation, increased every round-trip */
 	unsigned int generation;
@@ -334,22 +334,11 @@ struct mem_cgroup {
 	/* WARNING: nodeinfo must be the last member here */
 };
 
-static size_t memcg_size(void)
-{
-	return sizeof(struct mem_cgroup) +
-		nr_node_ids * sizeof(struct mem_cgroup_per_node *);
-}
-
 /* internal only representation about the status of kmem accounting. */
 enum {
-	KMEM_ACCOUNTED_ACTIVE = 0, /* accounted by this cgroup itself */
-	KMEM_ACCOUNTED_ACTIVATED, /* static key enabled. */
+	KMEM_ACCOUNTED_ACTIVE, /* accounted by this cgroup itself */
 	KMEM_ACCOUNTED_DEAD, /* dead memcg with pending kmem charges */
 };
-
-/* We account when limit is on, but only after call sites are patched */
-#define KMEM_ACCOUNTED_MASK \
-		((1 << KMEM_ACCOUNTED_ACTIVE) | (1 << KMEM_ACCOUNTED_ACTIVATED))
 
 #ifdef CONFIG_MEMCG_KMEM
 static inline void memcg_kmem_set_active(struct mem_cgroup *memcg)
@@ -360,16 +349,6 @@ static inline void memcg_kmem_set_active(struct mem_cgroup *memcg)
 static bool memcg_kmem_is_active(struct mem_cgroup *memcg)
 {
 	return test_bit(KMEM_ACCOUNTED_ACTIVE, &memcg->kmem_account_flags);
-}
-
-static void memcg_kmem_set_activated(struct mem_cgroup *memcg)
-{
-	set_bit(KMEM_ACCOUNTED_ACTIVATED, &memcg->kmem_account_flags);
-}
-
-static void memcg_kmem_clear_activated(struct mem_cgroup *memcg)
-{
-	clear_bit(KMEM_ACCOUNTED_ACTIVATED, &memcg->kmem_account_flags);
 }
 
 static void memcg_kmem_mark_dead(struct mem_cgroup *memcg)
@@ -499,6 +478,29 @@ static inline bool mem_cgroup_is_root(struct mem_cgroup *memcg)
 	return (memcg == root_mem_cgroup);
 }
 
+/*
+ * We restrict the id in the range of [1, 65535], so it can fit into
+ * an unsigned short.
+ */
+#define MEM_CGROUP_ID_MAX	USHRT_MAX
+
+static inline unsigned short mem_cgroup_id(struct mem_cgroup *memcg)
+{
+	/*
+	 * The ID of the root cgroup is 0, but memcg treat 0 as an
+	 * invalid ID, so we return (cgroup_id + 1).
+	 */
+	return memcg->css.cgroup->id + 1;
+}
+
+static inline struct mem_cgroup *mem_cgroup_from_id(unsigned short id)
+{
+	struct cgroup_subsys_state *css;
+
+	css = css_from_id(id - 1, &mem_cgroup_subsys);
+	return mem_cgroup_from_css(css);
+}
+
 /* Writing them here to avoid exposing memcg's inner layout */
 #if defined(CONFIG_INET) && defined(CONFIG_MEMCG_KMEM)
 
@@ -570,16 +572,11 @@ static void disarm_sock_keys(struct mem_cgroup *memcg)
 #ifdef CONFIG_MEMCG_KMEM
 /*
  * This will be the memcg's index in each cache's ->memcg_params->memcg_caches.
- * There are two main reasons for not using the css_id for this:
- *  1) this works better in sparse environments, where we have a lot of memcgs,
- *     but only a few kmem-limited. Or also, if we have, for instance, 200
- *     memcgs, and none but the 200th is kmem-limited, we'd have to have a
- *     200 entry array for that.
- *
- *  2) In order not to violate the cgroup API, we would like to do all memory
- *     allocation in ->create(). At that point, we haven't yet allocated the
- *     css_id. Having a separate index prevents us from messing with the cgroup
- *     core for this
+ * The main reason for not using cgroup id for this:
+ *  this works better in sparse environments, where we have a lot of memcgs,
+ *  but only a few kmem-limited. Or also, if we have, for instance, 200
+ *  memcgs, and none but the 200th is kmem-limited, we'd have to have a
+ *  200 entry array for that.
  *
  * The current size of the caches array is stored in
  * memcg_limited_groups_array_size.  It will double each time we have to
@@ -594,14 +591,14 @@ int memcg_limited_groups_array_size;
  * cgroups is a reasonable guess. In the future, it could be a parameter or
  * tunable, but that is strictly not necessary.
  *
- * MAX_SIZE should be as large as the number of css_ids. Ideally, we could get
+ * MAX_SIZE should be as large as the number of cgrp_ids. Ideally, we could get
  * this constant directly from cgroup, but it is understandable that this is
  * better kept as an internal representation in cgroup.c. In any case, the
- * css_id space is not getting any smaller, and we don't have to necessarily
+ * cgrp_id space is not getting any smaller, and we don't have to necessarily
  * increase ours as well if it increases.
  */
 #define MEMCG_CACHES_MIN_SIZE 4
-#define MEMCG_CACHES_MAX_SIZE 65535
+#define MEMCG_CACHES_MAX_SIZE MEM_CGROUP_ID_MAX
 
 /*
  * A lot of the calls to the cache allocation functions are expected to be
@@ -1079,16 +1076,22 @@ skip_node:
 	 * skipped and we should continue the tree walk.
 	 * last_visited css is safe to use because it is
 	 * protected by css_get and the tree walk is rcu safe.
+	 *
+	 * We do not take a reference on the root of the tree walk
+	 * because we might race with the root removal when it would
+	 * be the only node in the iterated hierarchy and mem_cgroup_iter
+	 * would end up in an endless loop because it expects that at
+	 * least one valid node will be returned. Root cannot disappear
+	 * because caller of the iterator should hold it already so
+	 * skipping css reference should be safe.
 	 */
 	if (next_css) {
-		struct mem_cgroup *mem = mem_cgroup_from_css(next_css);
+		if ((next_css == &root->css) ||
+		    ((next_css->flags & CSS_ONLINE) && css_tryget(next_css)))
+			return mem_cgroup_from_css(next_css);
 
-		if (css_tryget(&mem->css))
-			return mem;
-		else {
-			prev_css = next_css;
-			goto skip_node;
-		}
+		prev_css = next_css;
+		goto skip_node;
 	}
 
 	return NULL;
@@ -1122,7 +1125,15 @@ mem_cgroup_iter_load(struct mem_cgroup_reclaim_iter *iter,
 	if (iter->last_dead_count == *sequence) {
 		smp_rmb();
 		position = iter->last_visited;
-		if (position && !css_tryget(&position->css))
+
+		/*
+		 * We cannot take a reference to root because we might race
+		 * with root removal and returning NULL would end up in
+		 * an endless loop on the iterator user level when root
+		 * would be returned all the time.
+		 */
+		if (position && position != root &&
+				!css_tryget(&position->css))
 			position = NULL;
 	}
 	return position;
@@ -1131,9 +1142,11 @@ mem_cgroup_iter_load(struct mem_cgroup_reclaim_iter *iter,
 static void mem_cgroup_iter_update(struct mem_cgroup_reclaim_iter *iter,
 				   struct mem_cgroup *last_visited,
 				   struct mem_cgroup *new_position,
+				   struct mem_cgroup *root,
 				   int sequence)
 {
-	if (last_visited)
+	/* root reference counting symmetric to mem_cgroup_iter_load */
+	if (last_visited && last_visited != root)
 		css_put(&last_visited->css);
 	/*
 	 * We store the sequence count from the time @last_visited was
@@ -1208,7 +1221,8 @@ struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *root,
 		memcg = __mem_cgroup_iter_next(root, last_visited);
 
 		if (reclaim) {
-			mem_cgroup_iter_update(iter, last_visited, memcg, seq);
+			mem_cgroup_iter_update(iter, last_visited, memcg, root,
+					seq);
 
 			if (!memcg)
 				iter->generation++;
@@ -1408,7 +1422,7 @@ bool __mem_cgroup_same_or_subtree(const struct mem_cgroup *root_memcg,
 		return true;
 	if (!root_memcg->use_hierarchy || !memcg)
 		return false;
-	return css_is_ancestor(&memcg->css, &root_memcg->css);
+	return cgroup_is_descendant(memcg->css.cgroup, root_memcg->css.cgroup);
 }
 
 static bool mem_cgroup_same_or_subtree(const struct mem_cgroup *root_memcg,
@@ -1628,13 +1642,13 @@ static void move_unlock_mem_cgroup(struct mem_cgroup *memcg,
  */
 void mem_cgroup_print_oom_info(struct mem_cgroup *memcg, struct task_struct *p)
 {
+	/*
+	 * protects memcg_name and makes sure that parallel ooms do not
+	 * interleave
+	 */
+	static DEFINE_MUTEX(oom_info_lock);
 	struct cgroup *task_cgrp;
 	struct cgroup *mem_cgrp;
-	/*
-	 * Need a buffer in BSS, can't rely on allocations. The code relies
-	 * on the assumption that OOM is serialized for memory controller.
-	 * If this assumption is broken, revisit this code.
-	 */
 	static char memcg_name[PATH_MAX];
 	int ret;
 	struct mem_cgroup *iter;
@@ -1643,6 +1657,7 @@ void mem_cgroup_print_oom_info(struct mem_cgroup *memcg, struct task_struct *p)
 	if (!p)
 		return;
 
+	mutex_lock(&oom_info_lock);
 	rcu_read_lock();
 
 	mem_cgrp = memcg->css.cgroup;
@@ -1711,6 +1726,7 @@ done:
 
 		pr_cont("\n");
 	}
+	mutex_unlock(&oom_info_lock);
 }
 
 /*
@@ -1803,13 +1819,18 @@ static void mem_cgroup_out_of_memory(struct mem_cgroup *memcg, gfp_t gfp_mask,
 				break;
 			};
 			points = oom_badness(task, memcg, NULL, totalpages);
-			if (points > chosen_points) {
-				if (chosen)
-					put_task_struct(chosen);
-				chosen = task;
-				chosen_points = points;
-				get_task_struct(chosen);
-			}
+			if (!points || points < chosen_points)
+				continue;
+			/* Prefer thread group leaders for display purposes */
+			if (points == chosen_points &&
+			    thread_group_leader(chosen))
+				continue;
+
+			if (chosen)
+				put_task_struct(chosen);
+			chosen = task;
+			chosen_points = points;
+			get_task_struct(chosen);
 		}
 		css_task_iter_end(&it);
 	}
@@ -2829,15 +2850,10 @@ static void __mem_cgroup_cancel_local_charge(struct mem_cgroup *memcg,
  */
 static struct mem_cgroup *mem_cgroup_lookup(unsigned short id)
 {
-	struct cgroup_subsys_state *css;
-
 	/* ID 0 is unused ID */
 	if (!id)
 		return NULL;
-	css = css_lookup(&mem_cgroup_subsys, id);
-	if (!css)
-		return NULL;
-	return mem_cgroup_from_css(css);
+	return mem_cgroup_from_id(id);
 }
 
 struct mem_cgroup *try_get_mem_cgroup_from_page(struct page *page)
@@ -2942,10 +2958,12 @@ static void __mem_cgroup_commit_charge(struct mem_cgroup *memcg,
 static DEFINE_MUTEX(set_limit_mutex);
 
 #ifdef CONFIG_MEMCG_KMEM
+static DEFINE_MUTEX(activate_kmem_mutex);
+
 static inline bool memcg_can_account_kmem(struct mem_cgroup *memcg)
 {
 	return !mem_cgroup_disabled() && !mem_cgroup_is_root(memcg) &&
-		(memcg->kmem_account_flags & KMEM_ACCOUNTED_MASK);
+		memcg_kmem_is_active(memcg);
 }
 
 /*
@@ -2958,7 +2976,7 @@ static struct kmem_cache *memcg_params_to_cache(struct memcg_cache_params *p)
 
 	VM_BUG_ON(p->is_root_cache);
 	cachep = p->root_cache;
-	return cachep->memcg_params->memcg_caches[memcg_cache_id(p->memcg)];
+	return cache_from_memcg_idx(cachep, memcg_cache_id(p->memcg));
 }
 
 #ifdef CONFIG_SLABINFO
@@ -3072,43 +3090,6 @@ int memcg_cache_id(struct mem_cgroup *memcg)
 	return memcg ? memcg->kmemcg_id : -1;
 }
 
-/*
- * This ends up being protected by the set_limit mutex, during normal
- * operation, because that is its main call site.
- *
- * But when we create a new cache, we can call this as well if its parent
- * is kmem-limited. That will have to hold set_limit_mutex as well.
- */
-int memcg_update_cache_sizes(struct mem_cgroup *memcg)
-{
-	int num, ret;
-
-	num = ida_simple_get(&kmem_limited_groups,
-				0, MEMCG_CACHES_MAX_SIZE, GFP_KERNEL);
-	if (num < 0)
-		return num;
-	/*
-	 * After this point, kmem_accounted (that we test atomically in
-	 * the beginning of this conditional), is no longer 0. This
-	 * guarantees only one process will set the following boolean
-	 * to true. We don't need test_and_set because we're protected
-	 * by the set_limit_mutex anyway.
-	 */
-	memcg_kmem_set_activated(memcg);
-
-	ret = memcg_update_all_caches(num+1);
-	if (ret) {
-		ida_simple_remove(&kmem_limited_groups, num);
-		memcg_kmem_clear_activated(memcg);
-		return ret;
-	}
-
-	memcg->kmemcg_id = num;
-	INIT_LIST_HEAD(&memcg->memcg_slab_caches);
-	mutex_init(&memcg->slab_caches_mutex);
-	return 0;
-}
-
 static size_t memcg_caches_array_size(int num_groups)
 {
 	ssize_t size;
@@ -3141,7 +3122,7 @@ int memcg_update_cache_size(struct kmem_cache *s, int num_groups)
 {
 	struct memcg_cache_params *cur_params = s->memcg_params;
 
-	VM_BUG_ON(s->memcg_params && !s->memcg_params->is_root_cache);
+	VM_BUG_ON(!is_root_cache(s));
 
 	if (num_groups > memcg_limited_groups_array_size) {
 		int i;
@@ -3304,11 +3285,9 @@ static void kmem_cache_destroy_work_func(struct work_struct *w)
 	 * So if we aren't down to zero, we'll just schedule a worker and try
 	 * again
 	 */
-	if (atomic_read(&cachep->memcg_params->nr_pages) != 0) {
+	if (atomic_read(&cachep->memcg_params->nr_pages) != 0)
 		kmem_cache_shrink(cachep);
-		if (atomic_read(&cachep->memcg_params->nr_pages) == 0)
-			return;
-	} else
+	else
 		kmem_cache_destroy(cachep);
 }
 
@@ -3402,7 +3381,7 @@ static struct kmem_cache *memcg_create_kmem_cache(struct mem_cgroup *memcg,
 	idx = memcg_cache_id(memcg);
 
 	mutex_lock(&memcg_cache_mutex);
-	new_cachep = cachep->memcg_params->memcg_caches[idx];
+	new_cachep = cache_from_memcg_idx(cachep, idx);
 	if (new_cachep) {
 		css_put(&memcg->css);
 		goto out;
@@ -3445,11 +3424,12 @@ void kmem_cache_destroy_memcg_children(struct kmem_cache *s)
 	 *
 	 * Still, we don't want anyone else freeing memcg_caches under our
 	 * noses, which can happen if a new memcg comes to life. As usual,
-	 * we'll take the set_limit_mutex to protect ourselves against this.
+	 * we'll take the activate_kmem_mutex to protect ourselves against
+	 * this.
 	 */
-	mutex_lock(&set_limit_mutex);
-	for (i = 0; i < memcg_limited_groups_array_size; i++) {
-		c = s->memcg_params->memcg_caches[i];
+	mutex_lock(&activate_kmem_mutex);
+	for_each_memcg_cache_index(i) {
+		c = cache_from_memcg_idx(s, i);
 		if (!c)
 			continue;
 
@@ -3470,7 +3450,7 @@ void kmem_cache_destroy_memcg_children(struct kmem_cache *s)
 		cancel_work_sync(&c->memcg_params->destroy);
 		kmem_cache_destroy(c);
 	}
-	mutex_unlock(&set_limit_mutex);
+	mutex_unlock(&activate_kmem_mutex);
 }
 
 struct create_work {
@@ -3582,8 +3562,8 @@ struct kmem_cache *__memcg_kmem_get_cache(struct kmem_cache *cachep,
 	 * code updating memcg_caches will issue a write barrier to match this.
 	 */
 	read_barrier_depends();
-	if (likely(cachep->memcg_params->memcg_caches[idx])) {
-		cachep = cachep->memcg_params->memcg_caches[idx];
+	if (likely(cache_from_memcg_idx(cachep, idx))) {
+		cachep = cache_from_memcg_idx(cachep, idx);
 		goto out;
 	}
 
@@ -4353,7 +4333,7 @@ mem_cgroup_uncharge_swapcache(struct page *page, swp_entry_t ent, bool swapout)
 	 * css_get() was called in uncharge().
 	 */
 	if (do_swap_account && swapout && memcg)
-		swap_cgroup_record(ent, css_id(&memcg->css));
+		swap_cgroup_record(ent, mem_cgroup_id(memcg));
 }
 #endif
 
@@ -4405,8 +4385,8 @@ static int mem_cgroup_move_swap_account(swp_entry_t entry,
 {
 	unsigned short old_id, new_id;
 
-	old_id = css_id(&from->css);
-	new_id = css_id(&to->css);
+	old_id = mem_cgroup_id(from);
+	new_id = mem_cgroup_id(to);
 
 	if (swap_cgroup_cmpxchg(entry, old_id, new_id) == old_id) {
 		mem_cgroup_swap_statistics(from, false);
@@ -5142,11 +5122,23 @@ static ssize_t mem_cgroup_read(struct cgroup_subsys_state *css,
 	return simple_read_from_buffer(buf, nbytes, ppos, str, len);
 }
 
-static int memcg_update_kmem_limit(struct cgroup_subsys_state *css, u64 val)
-{
-	int ret = -EINVAL;
 #ifdef CONFIG_MEMCG_KMEM
-	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+/* should be called with activate_kmem_mutex held */
+static int __memcg_activate_kmem(struct mem_cgroup *memcg,
+				 unsigned long long limit)
+{
+	int err = 0;
+	int memcg_id;
+
+	if (memcg_kmem_is_active(memcg))
+		return 0;
+
+	/*
+	 * We are going to allocate memory for data shared by all memory
+	 * cgroups so let's stop accounting here.
+	 */
+	memcg_stop_kmem_account();
+
 	/*
 	 * For simplicity, we won't allow this to be disabled.  It also can't
 	 * be changed if the cgroup has children already, or if tasks had
@@ -5160,71 +5152,100 @@ static int memcg_update_kmem_limit(struct cgroup_subsys_state *css, u64 val)
 	 * of course permitted.
 	 */
 	mutex_lock(&memcg_create_mutex);
-	mutex_lock(&set_limit_mutex);
-	if (!memcg->kmem_account_flags && val != RES_COUNTER_MAX) {
-		if (cgroup_task_count(css->cgroup) || memcg_has_children(memcg)) {
-			ret = -EBUSY;
-			goto out;
-		}
-		ret = res_counter_set_limit(&memcg->kmem, val);
-		VM_BUG_ON(ret);
-
-		ret = memcg_update_cache_sizes(memcg);
-		if (ret) {
-			res_counter_set_limit(&memcg->kmem, RES_COUNTER_MAX);
-			goto out;
-		}
-		static_key_slow_inc(&memcg_kmem_enabled_key);
-		/*
-		 * setting the active bit after the inc will guarantee no one
-		 * starts accounting before all call sites are patched
-		 */
-		memcg_kmem_set_active(memcg);
-	} else
-		ret = res_counter_set_limit(&memcg->kmem, val);
-out:
-	mutex_unlock(&set_limit_mutex);
+	if (cgroup_task_count(memcg->css.cgroup) || memcg_has_children(memcg))
+		err = -EBUSY;
 	mutex_unlock(&memcg_create_mutex);
-#endif
+	if (err)
+		goto out;
+
+	memcg_id = ida_simple_get(&kmem_limited_groups,
+				  0, MEMCG_CACHES_MAX_SIZE, GFP_KERNEL);
+	if (memcg_id < 0) {
+		err = memcg_id;
+		goto out;
+	}
+
+	/*
+	 * Make sure we have enough space for this cgroup in each root cache's
+	 * memcg_params.
+	 */
+	err = memcg_update_all_caches(memcg_id + 1);
+	if (err)
+		goto out_rmid;
+
+	memcg->kmemcg_id = memcg_id;
+	INIT_LIST_HEAD(&memcg->memcg_slab_caches);
+	mutex_init(&memcg->slab_caches_mutex);
+
+	/*
+	 * We couldn't have accounted to this cgroup, because it hasn't got the
+	 * active bit set yet, so this should succeed.
+	 */
+	err = res_counter_set_limit(&memcg->kmem, limit);
+	VM_BUG_ON(err);
+
+	static_key_slow_inc(&memcg_kmem_enabled_key);
+	/*
+	 * Setting the active bit after enabling static branching will
+	 * guarantee no one starts accounting before all call sites are
+	 * patched.
+	 */
+	memcg_kmem_set_active(memcg);
+out:
+	memcg_resume_kmem_account();
+	return err;
+
+out_rmid:
+	ida_simple_remove(&kmem_limited_groups, memcg_id);
+	goto out;
+}
+
+static int memcg_activate_kmem(struct mem_cgroup *memcg,
+			       unsigned long long limit)
+{
+	int ret;
+
+	mutex_lock(&activate_kmem_mutex);
+	ret = __memcg_activate_kmem(memcg, limit);
+	mutex_unlock(&activate_kmem_mutex);
 	return ret;
 }
 
-#ifdef CONFIG_MEMCG_KMEM
+static int memcg_update_kmem_limit(struct mem_cgroup *memcg,
+				   unsigned long long val)
+{
+	int ret;
+
+	if (!memcg_kmem_is_active(memcg))
+		ret = memcg_activate_kmem(memcg, val);
+	else
+		ret = res_counter_set_limit(&memcg->kmem, val);
+	return ret;
+}
+
 static int memcg_propagate_kmem(struct mem_cgroup *memcg)
 {
 	int ret = 0;
 	struct mem_cgroup *parent = parent_mem_cgroup(memcg);
+
 	if (!parent)
-		goto out;
+		return 0;
 
-	memcg->kmem_account_flags = parent->kmem_account_flags;
+	mutex_lock(&activate_kmem_mutex);
 	/*
-	 * When that happen, we need to disable the static branch only on those
-	 * memcgs that enabled it. To achieve this, we would be forced to
-	 * complicate the code by keeping track of which memcgs were the ones
-	 * that actually enabled limits, and which ones got it from its
-	 * parents.
-	 *
-	 * It is a lot simpler just to do static_key_slow_inc() on every child
-	 * that is accounted.
+	 * If the parent cgroup is not kmem-active now, it cannot be activated
+	 * after this point, because it has at least one child already.
 	 */
-	if (!memcg_kmem_is_active(memcg))
-		goto out;
-
-	/*
-	 * __mem_cgroup_free() will issue static_key_slow_dec() because this
-	 * memcg is active already. If the later initialization fails then the
-	 * cgroup core triggers the cleanup so we do not have to do it here.
-	 */
-	static_key_slow_inc(&memcg_kmem_enabled_key);
-
-	mutex_lock(&set_limit_mutex);
-	memcg_stop_kmem_account();
-	ret = memcg_update_cache_sizes(memcg);
-	memcg_resume_kmem_account();
-	mutex_unlock(&set_limit_mutex);
-out:
+	if (memcg_kmem_is_active(parent))
+		ret = __memcg_activate_kmem(memcg, RES_COUNTER_MAX);
+	mutex_unlock(&activate_kmem_mutex);
 	return ret;
+}
+#else
+static int memcg_update_kmem_limit(struct mem_cgroup *memcg,
+				   unsigned long long val)
+{
+	return -EINVAL;
 }
 #endif /* CONFIG_MEMCG_KMEM */
 
@@ -5259,7 +5280,7 @@ static int mem_cgroup_write(struct cgroup_subsys_state *css, struct cftype *cft,
 		else if (type == _MEMSWAP)
 			ret = mem_cgroup_resize_memsw_limit(memcg, val);
 		else if (type == _KMEM)
-			ret = memcg_update_kmem_limit(css, val);
+			ret = memcg_update_kmem_limit(memcg, val);
 		else
 			return -EINVAL;
 		break;
@@ -5379,45 +5400,50 @@ static int mem_cgroup_move_charge_write(struct cgroup_subsys_state *css,
 static int memcg_numa_stat_show(struct cgroup_subsys_state *css,
 				struct cftype *cft, struct seq_file *m)
 {
+	struct numa_stat {
+		const char *name;
+		unsigned int lru_mask;
+	};
+
+	static const struct numa_stat stats[] = {
+		{ "total", LRU_ALL },
+		{ "file", LRU_ALL_FILE },
+		{ "anon", LRU_ALL_ANON },
+		{ "unevictable", BIT(LRU_UNEVICTABLE) },
+	};
+	const struct numa_stat *stat;
 	int nid;
-	unsigned long total_nr, file_nr, anon_nr, unevictable_nr;
-	unsigned long node_nr;
+	unsigned long nr;
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	total_nr = mem_cgroup_nr_lru_pages(memcg, LRU_ALL);
-	seq_printf(m, "total=%lu", total_nr);
-	for_each_node_state(nid, N_MEMORY) {
-		node_nr = mem_cgroup_node_nr_lru_pages(memcg, nid, LRU_ALL);
-		seq_printf(m, " N%d=%lu", nid, node_nr);
+	for (stat = stats; stat < stats + ARRAY_SIZE(stats); stat++) {
+		nr = mem_cgroup_nr_lru_pages(memcg, stat->lru_mask);
+		seq_printf(m, "%s=%lu", stat->name, nr);
+		for_each_node_state(nid, N_MEMORY) {
+			nr = mem_cgroup_node_nr_lru_pages(memcg, nid,
+							  stat->lru_mask);
+			seq_printf(m, " N%d=%lu", nid, nr);
+		}
+		seq_putc(m, '\n');
 	}
-	seq_putc(m, '\n');
 
-	file_nr = mem_cgroup_nr_lru_pages(memcg, LRU_ALL_FILE);
-	seq_printf(m, "file=%lu", file_nr);
-	for_each_node_state(nid, N_MEMORY) {
-		node_nr = mem_cgroup_node_nr_lru_pages(memcg, nid,
-				LRU_ALL_FILE);
-		seq_printf(m, " N%d=%lu", nid, node_nr);
-	}
-	seq_putc(m, '\n');
+	for (stat = stats; stat < stats + ARRAY_SIZE(stats); stat++) {
+		struct mem_cgroup *iter;
 
-	anon_nr = mem_cgroup_nr_lru_pages(memcg, LRU_ALL_ANON);
-	seq_printf(m, "anon=%lu", anon_nr);
-	for_each_node_state(nid, N_MEMORY) {
-		node_nr = mem_cgroup_node_nr_lru_pages(memcg, nid,
-				LRU_ALL_ANON);
-		seq_printf(m, " N%d=%lu", nid, node_nr);
+		nr = 0;
+		for_each_mem_cgroup_tree(iter, memcg)
+			nr += mem_cgroup_nr_lru_pages(iter, stat->lru_mask);
+		seq_printf(m, "hierarchical_%s=%lu", stat->name, nr);
+		for_each_node_state(nid, N_MEMORY) {
+			nr = 0;
+			for_each_mem_cgroup_tree(iter, memcg)
+				nr += mem_cgroup_node_nr_lru_pages(
+					iter, nid, stat->lru_mask);
+			seq_printf(m, " N%d=%lu", nid, nr);
+		}
+		seq_putc(m, '\n');
 	}
-	seq_putc(m, '\n');
 
-	unevictable_nr = mem_cgroup_nr_lru_pages(memcg, BIT(LRU_UNEVICTABLE));
-	seq_printf(m, "unevictable=%lu", unevictable_nr);
-	for_each_node_state(nid, N_MEMORY) {
-		node_nr = mem_cgroup_node_nr_lru_pages(memcg, nid,
-				BIT(LRU_UNEVICTABLE));
-		seq_printf(m, " N%d=%lu", nid, node_nr);
-	}
-	seq_putc(m, '\n');
 	return 0;
 }
 #endif /* CONFIG_NUMA */
@@ -6127,14 +6153,12 @@ static void free_mem_cgroup_per_zone_info(struct mem_cgroup *memcg, int node)
 static struct mem_cgroup *mem_cgroup_alloc(void)
 {
 	struct mem_cgroup *memcg;
-	size_t size = memcg_size();
+	size_t size;
 
-	/* Can be very big if nr_node_ids is very big */
-	if (size < PAGE_SIZE)
-		memcg = kzalloc(size, GFP_KERNEL);
-	else
-		memcg = vzalloc(size);
+	size = sizeof(struct mem_cgroup);
+	size += nr_node_ids * sizeof(struct mem_cgroup_per_node *);
 
+	memcg = kzalloc(size, GFP_KERNEL);
 	if (!memcg)
 		return NULL;
 
@@ -6145,10 +6169,7 @@ static struct mem_cgroup *mem_cgroup_alloc(void)
 	return memcg;
 
 out_free:
-	if (size < PAGE_SIZE)
-		kfree(memcg);
-	else
-		vfree(memcg);
+	kfree(memcg);
 	return NULL;
 }
 
@@ -6166,10 +6187,8 @@ out_free:
 static void __mem_cgroup_free(struct mem_cgroup *memcg)
 {
 	int node;
-	size_t size = memcg_size();
 
 	mem_cgroup_remove_from_trees(memcg);
-	free_css_id(&mem_cgroup_subsys, &memcg->css);
 
 	for_each_node(node)
 		free_mem_cgroup_per_zone_info(memcg, node);
@@ -6188,10 +6207,7 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 	 * the cgroup_lock.
 	 */
 	disarm_static_keys(memcg);
-	if (size < PAGE_SIZE)
-		kfree(memcg);
-	else
-		vfree(memcg);
+	kfree(memcg);
 }
 
 /*
@@ -6270,7 +6286,9 @@ mem_cgroup_css_online(struct cgroup_subsys_state *css)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 	struct mem_cgroup *parent = mem_cgroup_from_css(css_parent(css));
-	int error = 0;
+
+	if (css->cgroup->id > MEM_CGROUP_ID_MAX)
+		return -ENOSPC;
 
 	if (!parent)
 		return 0;
@@ -6302,10 +6320,9 @@ mem_cgroup_css_online(struct cgroup_subsys_state *css)
 		if (parent != root_mem_cgroup)
 			mem_cgroup_subsys.broken_hierarchy = true;
 	}
-
-	error = memcg_init_kmem(memcg, &mem_cgroup_subsys);
 	mutex_unlock(&memcg_create_mutex);
-	return error;
+
+	return memcg_init_kmem(memcg, &mem_cgroup_subsys);
 }
 
 /*
@@ -6329,11 +6346,19 @@ static void mem_cgroup_invalidate_reclaim_iterators(struct mem_cgroup *memcg)
 static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+	struct cgroup_subsys_state *iter;
 
 	kmem_cgroup_css_offline(memcg);
 
 	mem_cgroup_invalidate_reclaim_iterators(memcg);
-	mem_cgroup_reparent_charges(memcg);
+
+	/*
+	 * This requires that offlining is serialized.  Right now that is
+	 * guaranteed because css_killed_work_fn() holds the cgroup_mutex.
+	 */
+	css_for_each_descendant_post(iter, css)
+		mem_cgroup_reparent_charges(mem_cgroup_from_css(iter));
+
 	mem_cgroup_destroy_all_caches(memcg);
 	vmpressure_cleanup(&memcg->vmpressure);
 }
@@ -6579,7 +6604,7 @@ static enum mc_target_type get_mctgt_type(struct vm_area_struct *vma,
 	}
 	/* There is a swap entry and a page doesn't exist or isn't charged */
 	if (ent.val && !ret &&
-			css_id(&mc.from->css) == lookup_swap_cgroup_id(ent)) {
+	    mem_cgroup_id(mc.from) == lookup_swap_cgroup_id(ent)) {
 		ret = MC_TARGET_SWAP;
 		if (target)
 			target->ent = ent;
@@ -6999,7 +7024,6 @@ struct cgroup_subsys mem_cgroup_subsys = {
 	.bind = mem_cgroup_bind,
 	.base_cftypes = mem_cgroup_files,
 	.early_init = 0,
-	.use_id = 1,
 };
 
 #ifdef CONFIG_MEMCG_SWAP
