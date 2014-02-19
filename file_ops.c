@@ -1365,9 +1365,10 @@ done:
  */
 int hfi_device_create(struct hfi_devdata *dd)
 {
-	int r = 0, ret;
+	int r, ret;
 
-	ret = qib_user_add(dd);
+	r = qib_user_add(dd);
+	ret = qib_diag_add(dd);
 	if (r && !ret)
 		ret = r;
 	return ret;
@@ -1380,4 +1381,5 @@ int hfi_device_create(struct hfi_devdata *dd)
 void hfi_device_remove(struct hfi_devdata *dd)
 {
 	qib_user_remove(dd);
+	qib_diag_remove(dd);
 }
