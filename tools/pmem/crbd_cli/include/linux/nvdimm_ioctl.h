@@ -50,7 +50,8 @@
  *	Enumeration ranges are used to group IOCTLs by functionality
  */
 enum nvdimm_ioctl_type {
-	IOCTL_GET_PLATFORM_CAPABILITIES = 1, /* TODO */
+	/* Get the platform capabilities from the NFIT */
+	IOCTL_GET_PLATFORM_CAPABILITIES = 1,
 	/* Get the number of dimms in the system's memory topology */
 	IOCTL_GET_TOPOLOGY_COUNT = 11,
 	IOCTL_GET_TOPOLOGY = 12, /* Get the system's memory topology */

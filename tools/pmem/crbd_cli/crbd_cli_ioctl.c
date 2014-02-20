@@ -1,4 +1,5 @@
 #include <sys/ioctl.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -119,6 +120,74 @@ int crbd_ioctl_load_fit(char *nvdimm_fit_file)
 	close(fd);
 
 	return 0;
+}
+
+int crbd_identify_dimm(int dimm_handle)
+{
+	struct fv_fw_cmd fw_cmd;
+	struct cr_pt_payload_identify_dimm dimm_id_payload;
+	int ret = 0;
+	__u64 raw_capacity_gb;
+
+	memset(&fw_cmd, 0, sizeof(fw_cmd));
+
+	fw_cmd.id = dimm_handle;
+	fw_cmd.opcode = CR_PT_IDENTIFY_DIMM;
+	fw_cmd.sub_opcode = 0;
+	fw_cmd.input_payload_size = 0;
+	fw_cmd.large_input_payload_size = 0;
+	fw_cmd.output_payload_size = 128;
+	fw_cmd.large_output_payload_size = 0;
+
+	fw_cmd.output_payload = calloc(1, fw_cmd.output_payload_size);
+
+	if(!fw_cmd.output_payload)
+		return -ENOMEM;
+
+	ret = crbd_ioctl_pass_thru(&fw_cmd);
+
+	if (ret)
+		return ret;
+
+	dimm_id_payload = *(struct cr_pt_payload_identify_dimm *)fw_cmd.output_payload;
+
+	raw_capacity_gb = dimm_id_payload.rc >> 18;
+
+	fprintf(stdout, "Identify DIMM\n"
+			"VendorID: %#hx\n"
+			"DeviceID: %#hx\n"
+			"RevisionID: %#hx\n"
+			"InterfaceCode: %#hx\n"
+			"FirmwareRevision(BCD): %c%c%c%c%c\n"
+			"API Version(BCD): %#hhx\n"
+			"Feature SW Mask: %#hhx\n"
+			"NumberBlockWindows: %#hx\n"
+			"NumberWFAs: %#hhx\n"
+			"BlockCTRL_Offset: %#x\n"
+			"RawCapacity: %llu GB\n"
+			"Manufacturer: %s\n"
+			"Serial Number: %s\n"
+			"Model Number: %s\n",
+			dimm_id_payload.vendor_id,
+			dimm_id_payload.device_id,
+			dimm_id_payload.revision_id,
+			dimm_id_payload.ifc,
+			dimm_id_payload.fwr[0],
+			dimm_id_payload.fwr[1],
+			dimm_id_payload.fwr[2],
+			dimm_id_payload.fwr[3],
+			dimm_id_payload.fwr[4],
+			dimm_id_payload.api_ver,
+			dimm_id_payload.fswr,
+			dimm_id_payload.nbw,
+			dimm_id_payload.nwfa,
+			dimm_id_payload.obmcr,
+			raw_capacity_gb,
+			(char *)dimm_id_payload.mf,
+			(char *)dimm_id_payload.sn,
+			(char *)dimm_id_payload.mn);
+
+	return ret;
 }
 
 int crbd_ioctl_pass_thru(struct fv_fw_cmd *fw_cmd)

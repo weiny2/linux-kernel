@@ -35,8 +35,13 @@
 #include <linux/nvdimm_core.h>
 #include <linux/cr_ioctl.h>
 
+#ifdef CONFIG_SIMICS_BACKEND
+#define CR_OS_MB_OFFSET 0x400 /*Offset from the start of the CTRL
+				region to the start of the OS mailbox*/
+#else
 #define CR_OS_MB_OFFSET 0 /*Offset from the start of the CTRL
 				region to the start of the OS mailbox*/
+#endif
 #define CR_OS_MB_IN_OFFSET (2 << 20)
 /*Offset from the start of the CTRL region
 			to the start of the OS mailbox large input payload*/
@@ -54,6 +59,47 @@
 #define DB_SHIFT 16
 #define SUB_OP_SHIFT 8
 
+#ifdef CONFIG_SIMICS_BACKEND
+/* Offset from the start of the OS mailbox*/
+enum {
+	CR_MB_COMMAND_OFFSET = 0,
+	CR_MB_NONCE0_OFFSET = 0x08,
+	CR_MB_NONCE1_OFFSET = 0x10,
+	CR_MB_IN_PAYLOAD0_OFFSET = 0x18,
+	CR_MB_IN_PAYLOAD1_OFFSET = 0x20,
+	CR_MB_IN_PAYLOAD2_OFFSET = 0x28,
+	CR_MB_IN_PAYLOAD3_OFFSET = 0x30,
+	CR_MB_IN_PAYLOAD4_OFFSET = 0x38,
+	CR_MB_IN_PAYLOAD5_OFFSET = 0x40,
+	CR_MB_IN_PAYLOAD6_OFFSET = 0x48,
+	CR_MB_IN_PAYLOAD7_OFFSET = 0x50,
+	CR_MB_IN_PAYLOAD8_OFFSET = 0x58,
+	CR_MB_IN_PAYLOAD9_OFFSET = 0x60,
+	CR_MB_IN_PAYLOAD10_OFFSET = 0x68,
+	CR_MB_IN_PAYLOAD11_OFFSET = 0x70,
+	CR_MB_IN_PAYLOAD12_OFFSET = 0x78,
+	CR_MB_IN_PAYLOAD13_OFFSET = 0x80,
+	CR_MB_IN_PAYLOAD14_OFFSET = 0x88,
+	CR_MB_IN_PAYLOAD15_OFFSET = 0x90,
+	CR_MB_STATUS_OFFSET = 0x98,
+	CR_MB_OUT_PAYLOAD0_OFFSET = 0xA0,
+	CR_MB_OUT_PAYLOAD1_OFFSET = 0xA8,
+	CR_MB_OUT_PAYLOAD2_OFFSET = 0xB0,
+	CR_MB_OUT_PAYLOAD3_OFFSET = 0xB8,
+	CR_MB_OUT_PAYLOAD4_OFFSET = 0xC0,
+	CR_MB_OUT_PAYLOAD5_OFFSET = 0xC8,
+	CR_MB_OUT_PAYLOAD6_OFFSET = 0xD0,
+	CR_MB_OUT_PAYLOAD7_OFFSET = 0xD8,
+	CR_MB_OUT_PAYLOAD8_OFFSET = 0xE0,
+	CR_MB_OUT_PAYLOAD9_OFFSET = 0xE8,
+	CR_MB_OUT_PAYLOAD10_OFFSET = 0xF0,
+	CR_MB_OUT_PAYLOAD11_OFFSET = 0xF8,
+	CR_MB_OUT_PAYLOAD12_OFFSET = 0x100,
+	CR_MB_OUT_PAYLOAD13_OFFSET = 0x108,
+	CR_MB_OUT_PAYLOAD14_OFFSET = 0x110,
+	CR_MB_OUT_PAYLOAD15_OFFSET = 0x118,
+};
+#else
 /* Offset from the start of the OS mailbox*/
 enum {
 	CR_MB_COMMAND_OFFSET = 0,
@@ -93,7 +139,7 @@ enum {
 	CR_MB_OUT_PAYLOAD14_OFFSET = 0x880,
 	CR_MB_OUT_PAYLOAD15_OFFSET = 0x8C0,
 };
-
+#endif
 /*Mailbox Status Codes*/
 enum {
 	MB_SUCCESS = 0x00, /*Command Complete*/

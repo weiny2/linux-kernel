@@ -12,6 +12,7 @@ int crbd_ioctl_translate_addr(__u64 *spa, __u64 *rdpa, __u16 pid,
 int crbd_ioctl_load_fit(char *nvdimm_fit_file);
 int crbd_ioctl_dimm_init();
 int crbd_ioctl_get_topology(__u8 count, struct nvdimm_topology *dimm_topo);
+int crbd_identify_dimm(int dimm_handle);
 int crbd_ioctl_pass_thru(struct fv_fw_cmd *fw_cmd);
 int crbd_ioctl_topology_count(void);
 #endif /* CRBD_IOCTL_H_ */

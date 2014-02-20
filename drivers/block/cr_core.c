@@ -32,10 +32,7 @@
 #include <linux/cr_ioctl.h>
 #include <linux/gen_nvdimm.h>
 #include <linux/nvdimm_core.h>
-
-#ifdef __KERNEL__
 #include <linux/module.h>
-#endif
 
 static DEFINE_SPINLOCK(cr_spa_list_lock);
 static struct list_head cr_spa_list = LIST_HEAD_INIT(cr_spa_list);
@@ -63,7 +60,6 @@ static struct cr_spa_rng_tbl *get_cr_spa_rng_tbl(__u16 spa_index)
 	return target_tbl;
 }
 
-#ifdef __KERNEL__
 void __iomem *cr_get_virt(phys_addr_t spa_addr,
 	struct memdev_spa_rng_tbl *ctrl_tbl)
 {
@@ -82,7 +78,6 @@ void __iomem *cr_get_virt(phys_addr_t spa_addr,
 
 	return s_tbl->mapped_va + spa_offset;
 }
-#endif
 
 static void cr_free_fw_cmd(struct fv_fw_cmd *fw_cmd)
 {
@@ -273,7 +268,7 @@ static int cr_register_ctrl_ranges(struct fit_header *fit_head)
 			&& spa_tbls[memdev_tbls[i].spa_index].addr_rng_type
 				== NVDIMM_CRTL_RNG_TYPE
 			&& !registered_spa_tbls[memdev_tbls[i].spa_index]) {
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
+#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
 			struct resource *ctrl_mem_region =
 			request_mem_region_exclusive((phys_addr_t)
 			spa_tbls[memdev_tbls[i].spa_index].start_addr,
@@ -289,7 +284,7 @@ static int cr_register_ctrl_ranges(struct fit_header *fit_head)
 	kfree(registered_spa_tbls);
 
 	return 0;
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
+#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
 fail:
 	for (i = i - 1; i >= 0; i--) {
 		if (registered_spa_tbls[memdev_tbls[i].spa_index])
@@ -307,7 +302,7 @@ static void cr_unmap_ctrl_ranges(void)
 
 	spin_lock(&cr_spa_list_lock);
 	list_for_each_entry_safe(cur_tbl, tmp_tbl, &cr_spa_list, node) {
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
+#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
 		iounmap(cur_tbl->mapped_va);
 #endif
 		list_del(&cur_tbl->node);
@@ -343,7 +338,7 @@ static int cr_map_ctrl_ranges(struct fit_header *fit_head)
 				ret = -ENOMEM;
 				goto fail;
 			}
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
+#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
 			s_tbl->mapped_va = ioremap_nocache((phys_addr_t)
 				spa_tbls[memdev_tbls[i].spa_index].start_addr,
 			spa_tbls[memdev_tbls[i].spa_index].length);
@@ -395,7 +390,7 @@ static void cr_unregister_ctrl_ranges(struct fit_header *fit_head)
 			&& spa_tbls[memdev_tbls[i].spa_index].addr_rng_type
 				== NVDIMM_CRTL_RNG_TYPE
 			&& !unregistered_spa_tbls[memdev_tbls[i].spa_index]) {
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
+#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
 			release_mem_region((phys_addr_t) spa_tbls[i].start_addr,
 							spa_tbls[i].length);
 #endif
@@ -447,7 +442,7 @@ static struct nvdimm_ioctl_ops crbd_ioctl_ops = {
 	.passthrough_cmd = cr_passthrough_cmd,
 };
 
-#define CR_VENDOR_ID 32896
+#define CR_VENDOR_ID 32902
 #define CR_DEVICE_ID 1234
 #define CR_REVISION_ID 0
 

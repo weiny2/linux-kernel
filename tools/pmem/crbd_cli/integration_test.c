@@ -163,7 +163,7 @@ void test_get_dimm_topology()
 	MY_ASSERT_EQUAL(ret,0);
 
 	MY_ASSERT_EQUAL(dimm_topo[0].id, 1);
-	MY_ASSERT_EQUAL(dimm_topo[0].vendor_id, 32896);
+	MY_ASSERT_EQUAL(dimm_topo[0].vendor_id, 32902);
 	MY_ASSERT_EQUAL(dimm_topo[0].device_id, 1234);
 	MY_ASSERT_EQUAL(dimm_topo[0].revision_id, 0);
 	MY_ASSERT_EQUAL(dimm_topo[0].fmt_interface_code, AEP_DIMM);
@@ -171,7 +171,7 @@ void test_get_dimm_topology()
 	MY_ASSERT_EQUAL(dimm_topo[0].memory_controller_id, 0);
 
 	MY_ASSERT_EQUAL(dimm_topo[5].id, 6);
-	MY_ASSERT_EQUAL(dimm_topo[5].vendor_id, 32896);
+	MY_ASSERT_EQUAL(dimm_topo[5].vendor_id, 32902);
 	MY_ASSERT_EQUAL(dimm_topo[5].device_id, 1234);
 	MY_ASSERT_EQUAL(dimm_topo[5].revision_id, 0);
 	MY_ASSERT_EQUAL(dimm_topo[5].fmt_interface_code, AEP_DIMM);

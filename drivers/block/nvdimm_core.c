@@ -231,8 +231,7 @@ int nvm_register_nvdimm_driver(struct nvdimm_driver *driver)
 	if (dimm_ids_exist(dev, driver->ids)) {
 		ret = driver->probe(dev);
 		if (ret) {
-			NVDIMM_DBG("Module %s probe failed",
-				driver->owner->name);
+			NVDIMM_DBG("Module probe failed");
 			goto after_list_add;
 		}
 
@@ -402,9 +401,10 @@ static int nvdimm_pass_through(struct nvdimm_req *nvdr,
 	void __user *useraddr = (void __user *)nvdr->nvdr_data;
 	const struct nvdimm_ioctl_ops *ops = dimm->ioctl_ops;
 
-	if (!ops->passthrough_cmd)
+	if (!ops->passthrough_cmd) {
+		NVDIMM_DBG("Passthrough not supported");
 		return -EOPNOTSUPP;
-
+	}
 	return ops->passthrough_cmd(dimm, useraddr);
 }
 
@@ -455,9 +455,10 @@ static long pmem_dev_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	if (!dimm)
 		return -ENODEV;
 
-	if (!dimm->ioctl_ops)
+	if (!dimm->ioctl_ops) {
+		NVDIMM_DBG("IOCTL OPS not registered for DIMM");
 		return -EOPNOTSUPP;
-
+	}
 	switch (cmd) {
 	case NVDIMM_PASSTHROUGH_CMD:
 		return nvdimm_pass_through(&nvdr, dimm);

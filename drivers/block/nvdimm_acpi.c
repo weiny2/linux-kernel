@@ -97,8 +97,12 @@ __u64 spa_to_rdpa(phys_addr_t spa, struct memdev_spa_rng_tbl *mdsparng_tbl,
 			+ (rotation_number * rotation_size)
 			+ (spa % i_tbl->line_size);
 	} else {
-		/*TODO: Not Interleaved*/
-		return 0;
+		if (mdsparng_tbl->start_spa > spa) {
+			NVDIMM_DBG("Invalid SPA for conversion\n");
+			*err = -ERANGE;
+			return 0;
+		} else
+			return spa - mdsparng_tbl->start_spa;
 	}
 }
 EXPORT_SYMBOL(spa_to_rdpa);
@@ -144,8 +148,7 @@ phys_addr_t rdpa_to_spa(__u64 rdpa, struct memdev_spa_rng_tbl *mdsparng_tbl,
 				* mdsparng_tbl->interleave_ways
 			+ i_tbl->offsets[line_num] + rdpa % i_tbl->line_size;
 	} else {
-		/*TODO: Not Interleaved*/
-		return 0;
+		return mdsparng_tbl->start_spa + rdpa;
 	}
 }
 EXPORT_SYMBOL(rdpa_to_spa);
