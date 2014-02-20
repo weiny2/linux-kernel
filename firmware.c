@@ -184,9 +184,11 @@ static const u8 pcie_serdes_addrs[2][NUM_PCIE_SERDES] = {
 
 /* SBUS fabric SerDes broadcast addresses, one per HFI */
 static const u8 fabric_serdes_broadcast[2] = { 0xe4, 0xe5 };
+static const u8 all_fabric_serdes_broadcast = 0xe1;
 
 /* SBUS PCIe SerDes broadcast addresses, one per HFI */
 static const u8 pcie_serdes_broadcast[2] = { 0xe2, 0xe3 };
+static const u8 all_pcie_serdes_broadcast = 0xe0;
 
 /* forwards */
 static void dispose_one_firmware(struct firmware_details *fdet);
@@ -217,7 +219,7 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start,
 
 	/* write */
 	for (offset = 0; offset < len; offset += 8) {
-		int bytes = len-offset >= 8 ? 8 : len-offset;
+		int bytes = len - offset;
 		if (bytes < 8) {
 			reg = 0;
 			memcpy(&reg, &data[offset], bytes);
@@ -229,6 +231,7 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start,
 		write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_WR_DATA, reg);
 	}
 
+	/* TODO: Needed?  Not in recepe any more */
 	/* turn off write access, auto increment (also sets to data access) */
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, 0);
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_SETUP, 0);
@@ -520,6 +523,25 @@ static int run_rsa(struct hfi_devdata *dd, unsigned long ms_timeout,
 	return -ETIMEDOUT;
 }
 
+static void load_security_variables(struct hfi_devdata *dd,
+					struct firmware_details *fdet)
+{
+	/* Security variables a.  Write the modulus */
+	write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS,
+			fdet->firmware->modulus, KEY_SIZE);
+	/* Security variables b.  Write the r2 */
+	write_rsa_data(dd, WFR_MISC_CFG_RSA_R2, fdet->firmware->r2, KEY_SIZE);
+	/* Security variables c.  Write the mu */
+	write_rsa_data(dd, WFR_MISC_CFG_RSA_MU, fdet->firmware->mu, MU_SIZE);
+/* TODO: HAS 0.76 */
+#ifdef WFR_MISC_CFG_SHA_PRELOAD
+	/* Security variables d.  Write the header */
+	write_rsa_data(dd, WFR_MISC_CFG_SHA_PRELOAD,
+			(u8) &fdet->firmware->css_header,
+			sizeof(struct css_header));
+#endif
+}
+
 /*
  * Load the 8051 firmware.
  */
@@ -531,12 +553,11 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	int ret;
 
 	/*
-	 * Reset sequence as described in the DC HAS.  This is the firmware
-	 * load, steps 1-6.  Link bringup, steps 7-10, are in the link
-	 * bringup function.
+	 * DC Reset sequence as described in the DC HAS, steps 1-5.
+	 * Load DC 8051 firmware as described in the WFR HAS, steps 1-10.
 	 */
 	/*
-	 * DC reset step 1: Reset all
+	 * DC reset step 1: Reset DC8051
 	 */
 	reg = DC_DC8051_CFG_RST_M8051W_SMASK
 		| DC_DC8051_CFG_RST_CRAM_SMASK
@@ -546,25 +567,23 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
 	/*
-	 * DC reset step 2: Load firmware
+	 * DC reset step 2 (optional): Load 8051 data memory with link
+	 * configuration
+	 */
+
+	/*
+	 * DC reset step 3: Load DC8051 firmware
 	 */
 	/* release all but the core reset */
 	reg = DC_DC8051_CFG_RST_M8051W_SMASK;
 	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
 	if (validate_fw) {
-		/* Security step 1a.  Write the modulus */
-		write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS,
-				fdet->firmware->modulus, KEY_SIZE);
-		/* Security step 1b.  Write the r2 */
-		write_rsa_data(dd, WFR_MISC_CFG_RSA_R2,
-				fdet->firmware->r2, KEY_SIZE);
-		/* Security step 1c.  Write the mu */
-		write_rsa_data(dd, WFR_MISC_CFG_RSA_MU,
-				fdet->firmware->mu, MU_SIZE);
+		/* Firmware load step 1 */
+		load_security_variables(dd, fdet);
 
 		/*
-		 * Security step 2a.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
+		 * Firmware load step 2.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
 		 * OK to clear MISC_CFG_FW_CTRL.DISABLE_VALIDATION - we are
 		 * in the validation path
 		 */
@@ -578,7 +597,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 				WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
 	}
 
-	/* Security steps 2b-2d.  Load firmware */
+	/* Firmware load steps 3-5 */
 	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware->firmware,
 							fdet->firmware_len);
 	if (ret)
@@ -589,26 +608,18 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 		(fdet->firmware_len+7)/8);
 
 	/*
-	 * DC reset step 3. Load link configuration (optional)
-	 */
-	/* TODO TBD - where do we get these values? */
-
-	/*
-	 * DC reset step 4. Start the 8051
+	 * DC reset step 4. Host starts the DC8051 firmware
 	 */
 	if (validate_fw) {
 		/*
-		 * Security step 2e.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
+		 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
 		 * OK to clear DISABLE_VALIDATION - we're in the validation
 		 * path
 		 */
 		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
 				WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
 
-		/* Security step 2f.  Write the signature, 2048 bits - 32 QW */
-		/* Security step 2g.  Write MISC_CFG_RSA_CMD = 1 (INIT) */
-		/* Security step 2h.  Write MISC_CFG_RSA_CMD = 2 (START) */
-		/* Security step 2i.  Poll MISC_CFG_FW_CTRL.RSA_STATUS */
+		/* Firmware load steps 7-10 */
 		ret = run_rsa(dd, FW_TIMEOUT_8051, "8051",
 						fdet->firmware->signature);
 		if (ret)
@@ -816,16 +827,16 @@ If not, then we'll need to manually trigger it.
 }
 
 /*
- * Set the given broadcast value on the given list of devices.
+ * Set the given broadcast values on the given list of devices.
  */
-static void set_serdes_broadcast(struct hfi_devdata *dd, u8 broadcast,
+static void set_serdes_broadcast(struct hfi_devdata *dd, u8 bg1, u8 bg2,
 					const u8 *addrs, int count)
 {
 	while (--count >= 0) {
 		/*
-		 * Set BROADCAST_GROUP_1, leave defaults for everything
-		 * else.  Do not read-modify-write, per instruction
-		 * from manufacturer.
+		 * Set BROADCAST_GROUP_1 and BROADCAST_GROUP_2, leave
+		 * defaults for everything else.  Do not read-modify-write,
+		 * per instruction from the manufacturer.
 		 *
 		 * Register 0xfd:
 		 *	bits    what
@@ -835,7 +846,7 @@ static void set_serdes_broadcast(struct hfi_devdata *dd, u8 broadcast,
 		 *	23:16	BROADCAST_GROUP_2 (default 0xff)
 		 */
 		sbus_request(dd, addrs[count], 0xfd, WRITE_SBUS_RECEIVER,
-				(u32)broadcast << 4 | (u32)0xff << 16);
+				(u32)bg1 << 4 | (u32)bg2 << 16);
 	}
 }
 
@@ -901,7 +912,8 @@ int load_firmware(struct hfi_devdata *dd)
 	set_sbus_fast_mode(dd);
 
 	if (load_fabric_fw) {
-		set_serdes_broadcast(dd, fabric_serdes_broadcast[dd->hfi_id],
+		set_serdes_broadcast(dd, all_fabric_serdes_broadcast,
+					fabric_serdes_broadcast[dd->hfi_id],
 					fabric_serdes_addrs[dd->hfi_id],
 					NUM_FABRIC_SERDES);
 		ret = load_fabric_serdes_firmware(dd, &fw_fabric);
@@ -923,7 +935,8 @@ int load_firmware(struct hfi_devdata *dd)
 	}
 
 	if (load_pcie_fw) {
-		set_serdes_broadcast(dd, pcie_serdes_broadcast[dd->hfi_id],
+		set_serdes_broadcast(dd, all_pcie_serdes_broadcast,
+					pcie_serdes_broadcast[dd->hfi_id],
 					pcie_serdes_addrs[dd->hfi_id],
 					NUM_PCIE_SERDES);
 		ret = load_pcie_serdes_firmware(dd, &fw_pcie);
@@ -935,38 +948,6 @@ done:
 	release_hw_mutex(dd);
 
 	return ret;
-}
-
-/*
- * DC to LinkUp sequence as described in the DC HAS.
- * TODO: this is a placeholder.  Most linkup code is in bringup_serdes()
- */
-void link_up(struct hfi_devdata *dd)
-{
-
-	/*
-	 * DC to LinkUp step 1. Load link configuration interactively
-	 * (optional - do this if not done in reset step 3)
-	 * TODO
-	 */
-
-	/*
-	 * DC to LinkUp step 2. Request Pysical Port State to go from
-	 * Offline to Polling.
-	 * TODO: this is done in bringup_serdes()
-	 */
-
-	/*
-	 * DC to LinkUp step 3. Acknowledge 8051 FW interrupts.
-	 * Perform requested configurations.
-	 * TODO
-	 */
-
-	/*
-	 * DC to LinkUp step 4. Request change to LinkUp
-	 * FIXME: This doesn't match - LinkUp happens automatically
-	 */
-
 }
 
 /*
