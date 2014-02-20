@@ -585,6 +585,8 @@ struct qlcnic_host_tx_ring {
 	dma_addr_t phys_addr;
 	dma_addr_t hw_cons_phys_addr;
 	struct netdev_queue *txq;
+	/* Lock to protect Tx descriptors cleanup */
+	spinlock_t tx_clean_lock;
 } ____cacheline_internodealigned_in_smp;
 
 /*
@@ -1102,7 +1104,6 @@ struct qlcnic_adapter {
 	struct qlcnic_filter_hash rx_fhash;
 	struct list_head vf_mc_list;
 
-	spinlock_t tx_clean_lock;
 	spinlock_t mac_learn_lock;
 	/* spinlock for catching rcv filters for eswitch traffic */
 	spinlock_t rx_mac_learn_lock;
