@@ -150,7 +150,8 @@ static inline unsigned long zone_page_state_snapshot(struct zone *zone,
 	return x;
 }
 
-extern unsigned long global_reclaimable_pages(void);
+/* Do not call this, really! This is only for backward compatibility. */
+extern __deprecated unsigned long global_reclaimable_pages(void);
 
 #ifdef CONFIG_NUMA
 /*
