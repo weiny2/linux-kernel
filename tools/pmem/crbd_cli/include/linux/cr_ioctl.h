@@ -55,6 +55,9 @@ extern "C"
 #define	CR_MFR_LEN	19 /* Length of manufacturer name buffer */
 #define	CR_MODELNUM_LEN	19 /* Length of DIMM Model Number buffer */
 #define CR_FW_LOG_ENTRY_COUNT 5 /* max number of log entries returned by FW */
+#define	CR_OS_PARTITION	2 /* get platform config OS partition number */
+#define	CR_CONFIG_GET_SIZE	1 /* get platform config get size command */
+#define	CR_CONFIG_GET_DATA	2 /* get platform config get data command */
 
 /*
  * ****************************************************************************
@@ -132,12 +135,12 @@ extern "C"
 enum cr_passthrough_opcode {
 	/* NULL command, sub-op 00h always generates err */
 	CR_PT_NULL_COMMAND = 0x00,
+	/* Retrieve physical inventory data for an AEP DIMM */
+	CR_PT_IDENTIFY_DIMM = 0x01,
 	/* Retrieve security information from an AEP DIMM */
-	CR_PT_GET_SEC_INFO = 0x01,
+	CR_PT_GET_SEC_INFO = 0x02,
 	/* Send a security related command to an AEP DIMM */
-	CR_PT_SET_SEC_INFO = 0x02,
-	/* Allows BIOS to lock down the SMM mailbox */
-	CR_PT_SET_SMM_NONC = 0x03,
+	CR_PT_SET_SEC_INFO = 0x03,
 	/* Retrieve modifiable settings for AEP DIMM */
 	CR_PT_GET_FEATURES = 0x04,
 	CR_PT_SET_FEATURES = 0x05, /* Modify settings for AEP DIMM */
@@ -146,8 +149,6 @@ enum cr_passthrough_opcode {
 	/* Retrieve administrative data, error info, other FW data */
 	CR_PT_GET_LOG = 0x08,
 	CR_PT_UPDATE_FW = 0x09, /* Move an image to the AEP DIMM */
-	/* Retrieve physical inventory data for an AEP DIMM */
-	CR_PT_IDENTIFY_DIMM = 0x0A,
 	/* Validation only CMD to trigger error conditions */
 	CR_PT_INJECT_ERROR = 0x0B,
 	CR_PT_RESERVED_1 = 0x0C,
@@ -167,6 +168,8 @@ enum cr_get_sec_info_subop {
  * Defines the Sub-Opcodes for CR_PT_SET_SEC_INFO
  */
 enum cr_set_sec_info_subop {
+	/* Set BIOS Security Nonce */
+	SUBOP_SET_NONCE = 0x00,
 	/* Changes the security administrator passphrase */
 	SUBOP_SET_PASS = 0xF1,
 	/* Disables the current password on a drive*/
@@ -283,7 +286,6 @@ enum cr_interleave_bits {
  */
 struct cr_platform_capabilites {
 	/* header */
-	/* TODO: likely dont need this first block*/
 	unsigned char signature[4]; /* 'PCAP' is Signature for this table */
 	unsigned int length; /* Length in bytes for entire table */
 	unsigned char revision;
@@ -303,15 +305,13 @@ struct cr_platform_capabilites {
 	 * Bit1: 2LM supported @n
 	 * Bit2: Block supported @n
 	 * Bit3: PM supported @n
-	 * Bit4: PMV supported @n
-	 * Bit5: PM$ supported
 	 */
 	unsigned short mem_mode_capabilities;
 
 	/*
 	 * Interleave size supported by BIOS for 1LM @n
-	 * Bit0: 64 bit channel interleave @n
-	 * Bit1: 256 bit channel interleave @n
+	 * Bit0: 64 Bytes channel interleave @n
+	 * Bit1: 256 Bytes channel interleave @n
 	 * Bit2: 4KB channel interleave @n
 	 * Bit3: 1MB channel interleave @n
 	 * Bit4: 64 Bytes iMC interleave @n
@@ -323,8 +323,8 @@ struct cr_platform_capabilites {
 
 	/*
 	 * Interleave size supported by BIOS for 2LM @n
-	 * Bit0: 64 bit channel interleave @n
-	 * Bit1: 256 bit channel interleave @n
+	 * Bit0: 64 Bytes channel interleave @n
+	 * Bit1: 256 Bytes channel interleave @n
 	 * Bit2: 4KB channel interleave @n
 	 * Bit3: 1MB channel interleave @n
 	 * Bit4: 64 Bytes iMC interleave @n
@@ -336,8 +336,8 @@ struct cr_platform_capabilites {
 
 	/*
 	 * Interleave size supported by BIOS for Persistent Memory @n
-	 * Bit0: 64 bit channel interleave @n
-	 * Bit1: 256 bit channel interleave @n
+	 * Bit0: 64 Bytes channel interleave @n
+	 * Bit1: 256 Bytes channel interleave @n
 	 * Bit2: 4KB channel interleave @n
 	 * Bit3: 1MB channel interleave @n
 	 * Bit4: 64 Bytes iMC interleave @n
@@ -421,11 +421,11 @@ struct cr_pt_payload_identify_dimm {
 	__le16 nbw; /* Number of block windows */
 	__le16 nwfa; /* Number write flush addresses */
 	__le32 obmcr; /* Offset of block mode control region */
-	__le64 rc; /* raw capacity */
+	__le32 rc; /* raw capacity (volatile+persistent in 4KB multiples*/
 	char mf[CR_MFR_LEN]; /* ASCII Manufacturer */
 	char sn[CR_SN_LEN]; /* ASCII Serial Number */
 	char mn[CR_MODELNUM_LEN]; /* ASCII Model Number */
-	__u8 resrvd[39]; /* Reserved */
+	__u8 resrvd[43]; /* Reserved */
 };
 
 /*
@@ -670,47 +670,31 @@ struct cr_pt_payload_platform_set_size {
  */
 struct cr_pt_payload_get_dimm_partion_info {
 	/*
-	 * AEP DIMM volatile memory capacity (bytes). Special Values:
-	 * 0x0000000000000000 - No volatile capacity
-	 * 0xFFFFFFFFFFFFFFFF - All capacity as volatile
-	 */
-	__le64 volatile_capacity;
-
-	__le64 start_2lm; /*The DPA start address of the 2LM region */
-
-	/*
-	 * AEP DIMM capacity (bytes) to reserve for use as PM.
-	 *
-	 * Special Values:
-	 * 0x0000000000000000 - No persistent capacity
-	 * 0xFFFFFFFFFFFFFFFF - All capacity as persistent
-	 */
-	__le64 pm_capacity;
-
-	__le64 start_pm; /* The DPA start address of the PM region */
-
-	/* The raw usable size of the DIMM(Volatile + Persistent)(In Bytes) */
-	__le64 raw_capacity;
-
-	/*
-	 * AEP DIMM volatile memory capacity(bytes), which will take effect
-	 * on the next boot.
+	 * AEP DIMM volatile memory capacity (in 4KB multiples of bytes).
 	 * Special Values:
 	 * 0x0000000000000000 - No volatile capacity
-	 * 0xFFFFFFFFFFFFFFFF - All capacity as volatile
 	 */
-	__le64 pending_volatile_capacity;
+	__le32 volatile_capacity;
+	unsigned char rsvd1[4];
+
+	/* The DPA start address of the 2LM region */
+	__le64 start_2lm;
 
 	/*
-	 * AEP DIMM persistent memory capacity(bytes), which will take effect
-	 * on the next boot.
+	 * AEP DIMM PM capacity (in 4KB multiples of bytes).
 	 * Special Values:
 	 * 0x0000000000000000 - No persistent capacity
-	 * 0xFFFFFFFFFFFFFFFF - All capacity as persistent
 	 */
-	__le64 pending_pm_capacity;
+	__le32 pm_capacity;
+	unsigned char rsvd2[4];
 
-	unsigned char rsvd[87];
+	/* The DPA start address of the PM region */
+	__le64 start_pm;
+
+	/* The raw usable size of the DIMM (Volatile + Persistent)
+	 * (in 4KB multiples of bytes) */
+	__le32 raw_capacity;
+	unsigned char rsvd3[102];
 };
 
 /*
@@ -721,22 +705,21 @@ struct cr_pt_payload_get_dimm_partion_info {
  */
 struct cr_pt_payload_set_dimm_partion_info {
 	/*
-	 * AEP DIMM volatile memory capacity (bytes). Special Values:
+	 * AEP DIMM volatile memory capacity (in 4KB multiples of bytes).
+	 * Special Values:
 	 * 0x0000000000000000 - No volatile capacity
-	 * 0xFFFFFFFFFFFFFFFF - All capacity as volatile
 	 */
-	__le64 volatile_capacity;
+	__le32 volatile_capacity;
 
 	/*
-	 * AEP DIMM capacity (bytes) to reserve for use as PM.
+	 * AEP DIMM PM capacity (in 4KB multiples of bytes).
 	 *
 	 * Special Values:
 	 * 0x0000000000000000 - No persistent capacity
-	 * 0xFFFFFFFFFFFFFFFF - All capacity as persistent
 	 */
-	__le64 pm_capacity;
+	__le32 pm_capacity;
 
-	unsigned char rsvd[112];
+	unsigned char rsvd[120];
 };
 
 /*

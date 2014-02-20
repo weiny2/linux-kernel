@@ -18,6 +18,7 @@ static const char usage_cmds[] =
 "  --unit_tests [NVDIMM FIT file]\n"
 "  --topo_count\n"
 "  --get_topology\n"
+"  --id_dimm dimm_handle\n"
 "  --help \n"
 ;
 
@@ -26,7 +27,8 @@ enum {
 	UNIT_TESTS,
 	INIT_DIMMS,
 	TOPO_COUNT,
-	GET_TOPOLOGY
+	GET_TOPOLOGY,
+	ID_DIMM,
 };
 
 static struct option long_options[] = {
@@ -35,6 +37,7 @@ static struct option long_options[] = {
 	{"init_dimms",  no_argument,		0,	INIT_DIMMS},
 	{"topo_count",	no_argument,		0,	TOPO_COUNT},
 	{"get_topology", no_argument,		0,	GET_TOPOLOGY},
+	{"id_dimm", required_argument,		0,	ID_DIMM},
 	{0, 0, 0, 0}
 };
 
@@ -107,6 +110,7 @@ int main(int argc, char *argv[])
 	while (1) {
 		int option_index;
 		int dimm_count;
+		int ret;
 		switch (getopt_long(argc, argv, "h", long_options,
 			&option_index)) {
 		case LOAD_FIT:
@@ -148,6 +152,14 @@ int main(int argc, char *argv[])
 			if (get_topology())
 				return EXIT_FAILURE;
 			return EXIT_SUCCESS;
+			break;
+		case ID_DIMM:
+			if ((ret = crbd_identify_dimm(strtol(optarg, NULL, 0)))) {
+				fprintf(stderr, "Identify DIMM failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
 		default:
 			usage(argv[0]);
 			exit(EXIT_FAILURE);

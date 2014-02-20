@@ -245,16 +245,10 @@ void cr_memcopy_outpayload(struct cr_mailbox *mb,
  */
 int cr_verify_fw_cmd(struct fv_fw_cmd *fw_cmd)
 {
-	if (fw_cmd->input_payload_size > CR_IN_PAYLOAD_SIZE)
-		return -EINVAL;
-
-	if (fw_cmd->output_payload_size > CR_OUT_PAYLOAD_SIZE)
-		return -EINVAL;
-
-	if (fw_cmd->large_input_payload_size > CR_IN_MB_SIZE)
-		return -EINVAL;
-
-	if (fw_cmd->large_output_payload_size > CR_OUT_MB_SIZE)
+	if (fw_cmd->input_payload_size > CR_IN_PAYLOAD_SIZE ||
+		fw_cmd->output_payload_size > CR_OUT_PAYLOAD_SIZE ||
+		fw_cmd->large_input_payload_size > CR_IN_MB_SIZE ||
+		fw_cmd->large_output_payload_size > CR_OUT_MB_SIZE)
 		return -EINVAL;
 
 	return 0;
@@ -290,6 +284,51 @@ static void cr_put_mb(struct cr_mailbox *mb)
 	mutex_unlock(&mb->mb_lock);
 }
 
+int cr_simics_null_cmd(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
+{
+	return cr_send_command(fw_cmd, mb);
+}
+
+int cr_simics_id_dimm(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
+{
+	return cr_send_command(fw_cmd, mb);
+}
+
+int cr_simics_get_security(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
+{
+	return cr_send_command(fw_cmd, mb);
+}
+
+int cr_send_simics_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
+{
+	if (cr_verify_fw_cmd(fw_cmd))
+		return -EINVAL;
+
+	if (fw_cmd->large_output_payload_size > 0 ||
+			fw_cmd->large_input_payload_size > 0) {
+		NVDIMM_DBG("Large Mailboxes not supported in Simics yet");
+		return -EINVAL;
+	}
+
+	switch (fw_cmd->opcode) {
+	case CR_PT_NULL_COMMAND:
+		return cr_simics_null_cmd(fw_cmd, mb);
+		break;
+	case CR_PT_IDENTIFY_DIMM:
+		return cr_simics_id_dimm(fw_cmd, mb);
+		break;
+	case CR_PT_GET_SEC_INFO:
+		return cr_simics_get_security(fw_cmd, mb);
+		break;
+	default:
+		NVDIMM_DBG("Opcode: %#hhx Not Supported in Simics yet", fw_cmd->opcode);
+		return -EOPNOTSUPP;
+	}
+
+
+	return 0;
+}
+
 /**
  * cr_send_command() - Pass thru command to FW
  * @fw_cmd: A firmware command structure
@@ -308,8 +347,10 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 	if (cr_verify_fw_cmd(fw_cmd))
 		return -EINVAL;
 
-	cr_memcopy_inpayload(mb, fw_cmd);
-	cr_memcopy_large_inpayload(mb, fw_cmd);
+	if (fw_cmd->input_payload_size > 0)
+		cr_memcopy_inpayload(mb, fw_cmd);
+	if (fw_cmd->large_input_payload_size > 0)
+		cr_memcopy_large_inpayload(mb, fw_cmd);
 
 	cr_write_cmd_op(mb, fw_cmd);
 
@@ -325,8 +366,10 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 	if (status)
 		return -EIO;
 
-	cr_memcopy_outpayload(mb, fw_cmd);
-	cr_memcopy_large_outpayload(mb, fw_cmd);
+	if (fw_cmd->output_payload_size > 0)
+		cr_memcopy_outpayload(mb, fw_cmd);
+	if (fw_cmd->large_output_payload_size > 0)
+		cr_memcopy_large_outpayload(mb, fw_cmd);
 
 	return 0;
 }
@@ -352,6 +395,9 @@ int fw_cmd_pass_thru(struct cr_dimm *c_dimm, struct fv_fw_cmd *cmd)
 
 #ifdef CONFIG_BLK_DEV_CR_BACKEND
 	ret = cr_send_command(cmd, mb);
+#endif
+#ifdef CONFIG_SIMICS_BACKEND
+	ret = cr_send_simics_command(cmd, mb);
 #endif
 	cr_put_mb(mb);
 
@@ -465,7 +511,7 @@ int fw_cmd_id_dimm(struct cr_dimm *c_dimm,
 		memcpy(payload, fw_cmd->output_payload, sizeof(*payload));
 
 #else
-	payload->vendor_id = cpu_to_le16(0x8080);
+	payload->vendor_id = cpu_to_le16(0x8086);
 	payload->device_id = cpu_to_le16(1234);
 	payload->revision_id = 0;
 	payload->ifc = cpu_to_le16(AEP_DIMM);
@@ -1151,7 +1197,7 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 		dimm->physical_id, NVDIMM_CRTL_RNG_TYPE);
 
 	if (!c_dimm->ctrl_tbl) {
-		NVDIMM_DBG("No CTRL Region found unable to create Mailbox");
+		NVDIMM_INFO("No CTRL Region found unable to create Mailbox");
 		ret = -ENODEV;
 		goto after_cr_dimm;
 	}
@@ -1160,7 +1206,6 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 		mb_i_tbl =
 		&fit_head->interleave_tbls[c_dimm->ctrl_tbl->interleave_idx
 				- 1];
-
 	c_dimm->host_mailbox = cr_create_mailbox(c_dimm, mb_i_tbl);
 
 	if (IS_ERR_OR_NULL(c_dimm->host_mailbox)) {
@@ -1178,12 +1223,12 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 	ret = fw_cmd_id_dimm(c_dimm, id_payload, dimm->physical_id);
 
 	if (ret) {
-		NVDIMM_DBG("FW CMD Error: %d", ret);
+		NVDIMM_INFO("FW CMD Error: %d", ret);
 		goto after_id_dimm;
 	}
 
 	if (le16_to_cpu(id_payload->ifc) != dimm->ids.fmt_interface_code) {
-		NVDIMM_DBG("FIT and FW Interface Code mismatch");
+		NVDIMM_INFO("FIT and FW Interface Code mismatch");
 		ret = -EINVAL;
 		goto after_id_dimm;
 	}
@@ -1208,7 +1253,7 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 		dimm->physical_id);
 
 	if (ret) {
-		NVDIMM_DBG("FW CMD Error: %d", ret);
+		NVDIMM_INFO("FW CMD Error: %d", ret);
 		ret = -EIO;
 		goto after_sec_check;
 	}
@@ -1218,12 +1263,12 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 	c_dimm->data_tbl = get_memdev_spa_tbl(fit_head,
 		dimm->physical_id, NVDIMM_DATA_RNG_TYPE);
 
-	if (!c_dimm->data_tbl) {
+/*	if (!c_dimm->data_tbl) {
 		NVDIMM_WARN(
 			"No DATA Region found unable to create Block Windows");
 		ret = -ENODEV;
 		goto after_sec_check;
-	}
+	}*/
 
 	/*TODO: cr_create_bws()*/
 	kfree(id_payload);
