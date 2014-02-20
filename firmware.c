@@ -37,25 +37,25 @@
 
 #include "hfi.h"
 
-static uint load_8051_fw;
-module_param_named(load_8051_fw, load_8051_fw, uint, S_IRUGO);
-MODULE_PARM_DESC(load_8051_fw, "Load the 8051 firmware");
+static uint fw_8051_load;
+module_param_named(fw_8051_load, fw_8051_load, uint, S_IRUGO);
+MODULE_PARM_DESC(fw_8051_load, "Load the 8051 firmware");
 
-static uint load_fabric_fw;
-module_param_named(load_fabric_fw, load_fabric_fw, uint, S_IRUGO);
-MODULE_PARM_DESC(load_fabric_fw, "Load the fabric SerDes firmware");
+static uint fw_fabric_serdes_load;
+module_param_named(fw_fabric_serdes_load, fw_fabric_serdes_load, uint, S_IRUGO);
+MODULE_PARM_DESC(fw_fabric_serdes_load, "Load the fabric SerDes firmware");
 
-static uint load_pcie_fw;
-module_param_named(load_pcie_fw, load_pcie_fw, uint, S_IRUGO);
-MODULE_PARM_DESC(load_pcie_fw, "Load the PCIe SerDes firmware");
+static uint fw_pcie_serdes_load;
+module_param_named(fw_pcie_serdes_load, fw_pcie_serdes_load, uint, S_IRUGO);
+MODULE_PARM_DESC(fw_pcie_serdes_load, "Load the PCIe SerDes firmware");
 
-static uint load_sbus_fw;
-module_param_named(load_sbus_fw, load_sbus_fw, uint, S_IRUGO);
-MODULE_PARM_DESC(load_sbus_fw, "Load the SBUS firmware");
+static uint fw_sbus_load;
+module_param_named(fw_sbus_load, fw_sbus_load, uint, S_IRUGO);
+MODULE_PARM_DESC(fw_sbus_load, "Load the SBUS firmware");
 
-static uint validate_fw;
-module_param_named(validate_fw, validate_fw, uint, S_IRUGO);
-MODULE_PARM_DESC(validate_fw, "Perform firmware validation");
+static uint fw_validate;
+module_param_named(fw_validate, fw_validate, uint, S_IRUGO);
+MODULE_PARM_DESC(fw_validate, "Perform firmware validation");
 
 #define DEFAULT_FW_8051_NAME "hfi_dc8051.bin"
 #define DEFAULT_FW_FABRIC_NAME "hfi_fabric_serdes.bin"
@@ -63,20 +63,20 @@ MODULE_PARM_DESC(validate_fw, "Perform firmware validation");
 #define DEFAULT_FW_PCIE_NAME "hfi_pcie_serdes.bin"
 
 static char *fw_8051_name = DEFAULT_FW_8051_NAME;
-module_param_named(8051_name, fw_8051_name, charp, S_IRUGO);
-MODULE_PARM_DESC(8051_name, "8051 firmware name");
+module_param_named(fw_8051_name, fw_8051_name, charp, S_IRUGO);
+MODULE_PARM_DESC(fw_8051_name, "8051 firmware name");
 
 static char *fw_fabric_serdes_name = DEFAULT_FW_FABRIC_NAME;
-module_param_named(fabric_serdes_name, fw_fabric_serdes_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fabric_8051_name, "Fabric serdes firmware name");
+module_param_named(fw_fabric_serdes_name, fw_fabric_serdes_name, charp, S_IRUGO);
+MODULE_PARM_DESC(fw_fabric_serdes_name, "Fabric SerDes firmware name");
 
 static char *fw_sbus_name = DEFAULT_FW_SBUS_NAME;
-module_param_named(sbus_name, fw_sbus_name, charp, S_IRUGO);
-MODULE_PARM_DESC(sbus_name, "SBUS firmware name");
+module_param_named(fw_sbus_name, fw_sbus_name, charp, S_IRUGO);
+MODULE_PARM_DESC(fw_sbus_name, "SBUS firmware name");
 
 static char *fw_pcie_serdes_name = DEFAULT_FW_PCIE_NAME;
-module_param_named(pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
-MODULE_PARM_DESC(pcie_serdes_name, "PCIe serdes firmware name");
+module_param_named(fw_pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
+MODULE_PARM_DESC(fw_pcie_serdes_name, "PCIe SerDes firmware name");
 
 /*
  * Firmware security header.
@@ -383,26 +383,26 @@ static int obtain_firmware(struct hfi_devdata *dd)
 		goto done;	/* already tried and failed */
 	}
 
-	if (load_8051_fw) {
+	if (fw_8051_load) {
 		err = obtain_one_firmware(dd, fw_8051_name, &fw_8051);
 		if (err)
 			goto done;
 	}
 
-	if (load_fabric_fw) {
+	if (fw_fabric_serdes_load) {
 		err = obtain_one_firmware(dd, fw_fabric_serdes_name,
 			&fw_fabric);
 		if (err)
 			goto done;
 	}
 
-	if (load_sbus_fw) {
+	if (fw_sbus_load) {
 		err = obtain_one_firmware(dd, fw_sbus_name, &fw_sbus);
 		if (err)
 			goto done;
 	}
 
-	if (load_pcie_fw) {
+	if (fw_pcie_serdes_load) {
 		err = obtain_one_firmware(dd, fw_pcie_serdes_name, &fw_pcie);
 		if (err)
 			goto done;
@@ -578,7 +578,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	reg = DC_DC8051_CFG_RST_M8051W_SMASK;
 	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
-	if (validate_fw) {
+	if (fw_validate) {
 		/* Firmware load step 1 */
 		load_security_variables(dd, fdet);
 
@@ -610,7 +610,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	/*
 	 * DC reset step 4. Host starts the DC8051 firmware
 	 */
-	if (validate_fw) {
+	if (fw_validate) {
 		/*
 		 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
 		 * OK to clear DISABLE_VALIDATION - we're in the validation
@@ -696,7 +696,7 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	/* f. turn ECC on */
 	sbus_request(dd, ra, 0x0b, WRITE_SBUS_RECEIVER, 0x000c0000);
 
-	if (validate_fw) {
+	if (fw_validate) {
 		/* g. write the RSA signature */
 		/* h. init RSA */
 		/* i. start RSA */
@@ -737,7 +737,7 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	/* f. turn ECC on */
 	sbus_request(dd, ra, 0x16, WRITE_SBUS_RECEIVER, 0x000c0000);
 
-	if (validate_fw) {
+	if (fw_validate) {
 		/* g. write the RSA signature */
 		/* h. init RSA */
 		/* i. start RSA */
@@ -777,7 +777,7 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	/* e. allow processor to run */
 	sbus_request(dd, ra, 0x05, WRITE_SBUS_RECEIVER, 0x00000000);
 
-	if (validate_fw) {
+	if (fw_validate) {
 		/* f. write the RSA signature */
 		/* g. init RSA */
 		/* h. start RSA */
@@ -898,7 +898,7 @@ int load_firmware(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	if (load_8051_fw) {
+	if (fw_8051_load) {
 		ret = load_8051_firmware(dd, &fw_8051);
 		if (ret)
 			return ret;
@@ -911,7 +911,7 @@ int load_firmware(struct hfi_devdata *dd)
 	/* set the SBUS master to fast mode, we do not need to set it back */
 	set_sbus_fast_mode(dd);
 
-	if (load_fabric_fw) {
+	if (fw_fabric_serdes_load) {
 		set_serdes_broadcast(dd, all_fabric_serdes_broadcast,
 					fabric_serdes_broadcast[dd->hfi_id],
 					fabric_serdes_addrs[dd->hfi_id],
@@ -928,13 +928,13 @@ int load_firmware(struct hfi_devdata *dd)
 	 *
 	 * TODO: If we're already at Gen3, do we need to do any of this?
 	 */
-	if (load_sbus_fw) {
+	if (fw_sbus_load) {
 		ret = load_sbus_firmware(dd, &fw_sbus);
 		if (ret)
 			goto done;
 	}
 
-	if (load_pcie_fw) {
+	if (fw_pcie_serdes_load) {
 		set_serdes_broadcast(dd, all_pcie_serdes_broadcast,
 					pcie_serdes_broadcast[dd->hfi_id],
 					pcie_serdes_addrs[dd->hfi_id],
