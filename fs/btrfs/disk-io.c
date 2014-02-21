@@ -2472,6 +2472,12 @@ int open_ctree(struct super_block *sb,
 				sb->s_id);
 		goto fail_alloc;
 	}
+	if (features & BTRFS_FEATURE_INCOMPAT_RAID56) {
+		if (!allow_unsupported) {
+			printk(KERN_WARNING "btrfs: RAID56 is supported read-only, load module with allow_unsupported=1\n");
+			sb->s_flags |= MS_RDONLY;
+		}
+	}
 
 	/*
 	 * Needn't use the lock because there is no other task which will

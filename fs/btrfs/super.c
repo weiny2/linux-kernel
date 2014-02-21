@@ -1452,6 +1452,13 @@ static int btrfs_remount(struct super_block *sb, int *flags, char *data)
 			ret = -EACCES;
 			goto restore;
 		}
+		if ((btrfs_super_incompat_flags(fs_info->super_copy)
+					& BTRFS_FEATURE_INCOMPAT_RAID56)
+				&& !allow_unsupported) {
+			printk(KERN_WARNING "btrfs: cannot remount RW, RAID56 is supported read-only, load module with allow_unsupported=1\n");
+			ret = -EINVAL;
+			goto restore;
+		}
 
 		if (btrfs_super_log_root(fs_info->super_copy) != 0) {
 			ret = -EINVAL;
