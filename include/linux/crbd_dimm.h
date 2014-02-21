@@ -35,13 +35,12 @@
 #include <linux/nvdimm_core.h>
 #include <linux/cr_ioctl.h>
 
-#ifdef CONFIG_SIMICS_BACKEND
+/*Simics Offset*/
 #define CR_OS_MB_OFFSET 0x400 /*Offset from the start of the CTRL
 				region to the start of the OS mailbox*/
-#else
-#define CR_OS_MB_OFFSET 0 /*Offset from the start of the CTRL
+/* REAL HW Offset*/
+/*#define CR_OS_MB_OFFSET 0 Offset from the start of the CTRL
 				region to the start of the OS mailbox*/
-#endif
 #define CR_OS_MB_IN_OFFSET (2 << 20)
 /*Offset from the start of the CTRL region
 			to the start of the OS mailbox large input payload*/
@@ -59,7 +58,7 @@
 #define DB_SHIFT 16
 #define SUB_OP_SHIFT 8
 
-#ifdef CONFIG_SIMICS_BACKEND
+/*Simics Offset*/
 /* Offset from the start of the OS mailbox*/
 enum {
 	CR_MB_COMMAND_OFFSET = 0,
@@ -99,9 +98,10 @@ enum {
 	CR_MB_OUT_PAYLOAD14_OFFSET = 0x110,
 	CR_MB_OUT_PAYLOAD15_OFFSET = 0x118,
 };
-#else
+
+/*Real HW Offsets*/
 /* Offset from the start of the OS mailbox*/
-enum {
+/*enum {
 	CR_MB_COMMAND_OFFSET = 0,
 	CR_MB_NONCE0_OFFSET = 0x40,
 	CR_MB_NONCE1_OFFSET = 0x80,
@@ -138,8 +138,8 @@ enum {
 	CR_MB_OUT_PAYLOAD13_OFFSET = 0x840,
 	CR_MB_OUT_PAYLOAD14_OFFSET = 0x880,
 	CR_MB_OUT_PAYLOAD15_OFFSET = 0x8C0,
-};
-#endif
+};*/
+
 /*Mailbox Status Codes*/
 enum {
 	MB_SUCCESS = 0x00, /*Command Complete*/
@@ -216,25 +216,6 @@ struct cr_dimm {
 
 #define CR_BCD_TO_TWO_DEC(BUFF) (((BUFF>>4) * 10) + (BUFF & 0xF))
 
-struct id_dimm_payload {
-	__le16 vendor_id;
-	__le16 device_id;
-	__le16 revision_id;
-	__le16 ifc; /*Interface format code*/
-	__u8 fwr[5]; /* BCD formated firmware revision*/
-	__u8 api_ver; /* BCD formated api version*/
-	__u8 fswr; /*Feature SW Required Mask*/
-	__u8 reserved;
-	__le16 nbw; /*Number of block windows*/
-	__le16 nwfa; /*Number write flush addresses*/
-	__le32 obmcr; /*Offset of block mode control region*/
-	__le64 rc; /*raw capacity*/
-	char mf[19]; /*ASCII Manufacturer*/
-	char sn[19]; /*ASCII Serial Number*/
-	char mn[19]; /*ASCII Model Number*/
-	__u8 resrvd[39]; /*Reserved*/
-} __packed;
-
 /*CR Security Status*/
 enum {
 	CR_SEC_RSVD		= 1 << 0,
@@ -243,11 +224,6 @@ enum {
 	CR_SEC_FROZEN		= 1 << 3,
 	CR_SEC_COUNT_EXP	= 1 << 4,
 };
-
-struct get_security_payload {
-	__u8 security_status;
-	__u8 resrvd[39]; /*Reserved*/
-} __packed;
 
 /******************************************************************************
  * CR DIMM FUNCTIONS
@@ -308,8 +284,5 @@ void cr_memcopy_large_inpayload(struct cr_mailbox *mb,
 void cr_memcopy_large_outpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd);
 int fw_cmd_pass_thru(struct cr_dimm *c_dimm, struct fv_fw_cmd *cmd);
-
-int fw_cmd_id_dimm(struct cr_dimm *c_dimm,
-	struct id_dimm_payload *payload, __u16 dimm_id);
 
 #endif

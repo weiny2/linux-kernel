@@ -48,6 +48,8 @@
 #include <linux/cr_ioctl.h>
 #include <linux/nvdimm_acpi.h>
 
+#include <linux/byteorder/little_endian.h>
+
 #include "acpi_config.h"
 #include "crbd_cli_ioctl.h"
 
@@ -83,65 +85,47 @@ int integration_test_teardown()
 	return 0;
 }
 
-void test_pass_thru(void)
+void test_id_dimm(void)
 {
-	char testpayload[] = "AppleCandy";
-	char large_testpayload[] = "CherryCandy";
 	int test_dimm = 1;
 	int ret = 0;
 	struct fv_fw_cmd fw_cmd;
+	struct cr_pt_payload_identify_dimm id_dimm_payload;
 
 	fw_cmd.id = test_dimm;
 	fw_cmd.opcode = CR_PT_IDENTIFY_DIMM;
-	fw_cmd.sub_opcode = 0xFF;
-	fw_cmd.input_payload_size = 128;
-	fw_cmd.large_input_payload_size = (1 << 20);
+	fw_cmd.sub_opcode = 0x00;
+	fw_cmd.input_payload_size = 0;
+	fw_cmd.large_input_payload_size = 0;
 	fw_cmd.output_payload_size = 128;
-	fw_cmd.large_output_payload_size = (1 << 20);
-
-	fw_cmd.input_payload = calloc(1, fw_cmd.input_payload_size);
-	CU_ASSERT_FATAL(!fw_cmd.input_payload == 0);
-
-	fw_cmd.large_input_payload = calloc(1, fw_cmd.large_input_payload_size);
-	CU_ASSERT_FATAL(!fw_cmd.large_input_payload == 0);
+	fw_cmd.large_output_payload_size = 0;
 
 	fw_cmd.output_payload = calloc(1, fw_cmd.output_payload_size);
 	CU_ASSERT_FATAL(!fw_cmd.output_payload == 0);
 
-	fw_cmd.large_output_payload = calloc(1, fw_cmd.large_output_payload_size);
-	CU_ASSERT_FATAL(!fw_cmd.large_output_payload == 0);
-
-	memcpy(fw_cmd.input_payload, testpayload, sizeof(testpayload));
-	memcpy(fw_cmd.large_input_payload, large_testpayload, sizeof(large_testpayload));
-
 	ret = crbd_ioctl_pass_thru(&fw_cmd);
 
 	MY_ASSERT_EQUAL(ret, 0);
 
-	MY_ASSERT_EQUAL(strcmp(testpayload, (char * )fw_cmd.output_payload), 0);
-	MY_ASSERT_EQUAL(
-			strcmp(large_testpayload,
-				(char * )fw_cmd.large_output_payload), 0);
-	free(fw_cmd.input_payload);
-	free(fw_cmd.large_input_payload);
-	
-	fw_cmd.input_payload_size = 0;
-	fw_cmd.large_input_payload_size = 0;
 	
 	ret = crbd_ioctl_pass_thru(&fw_cmd);
 
 	MY_ASSERT_EQUAL(ret, 0);
+
+	id_dimm_payload = *(struct cr_pt_payload_identify_dimm *)fw_cmd.output_payload;
 
 	free(fw_cmd.output_payload);
-	free(fw_cmd.large_output_payload);
 
-	fw_cmd.output_payload_size = 0;
-	fw_cmd.large_output_payload_size = 0;
-
-	ret = crbd_ioctl_pass_thru(&fw_cmd);
-
-	MY_ASSERT_EQUAL(ret, 0);
-
+	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.vendor_id), 0x8086);
+	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.device_id), 0x2017);
+	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.revision_id), 0x00);
+	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.ifc), AEP_DIMM);
+	MY_ASSERT_EQUAL(id_dimm_payload.api_ver, 0x12);
+	MY_ASSERT_EQUAL(id_dimm_payload.fswr, 0x00);
+	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.nbw), 0x00);
+	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.nwfa), 0x00);
+	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.obmcr), 0x00);
+	MY_ASSERT_EQUAL(__le32_to_cpu(id_dimm_payload.rc), 0x400000);
 }
 
 void test_get_dimm_topology()
@@ -152,7 +136,7 @@ void test_get_dimm_topology()
 
 	num_dimms = crbd_ioctl_topology_count();
 
-	MY_ASSERT_EQUAL(num_dimms, 6);
+	MY_ASSERT_EQUAL(num_dimms, 1);
 
 	dimm_topo = calloc(num_dimms,sizeof(*dimm_topo));
 
@@ -163,20 +147,12 @@ void test_get_dimm_topology()
 	MY_ASSERT_EQUAL(ret,0);
 
 	MY_ASSERT_EQUAL(dimm_topo[0].id, 1);
-	MY_ASSERT_EQUAL(dimm_topo[0].vendor_id, 32902);
-	MY_ASSERT_EQUAL(dimm_topo[0].device_id, 1234);
+	MY_ASSERT_EQUAL(dimm_topo[0].vendor_id, 0x8086);
+	MY_ASSERT_EQUAL(dimm_topo[0].device_id, 0x2017);
 	MY_ASSERT_EQUAL(dimm_topo[0].revision_id, 0);
 	MY_ASSERT_EQUAL(dimm_topo[0].fmt_interface_code, AEP_DIMM);
 	MY_ASSERT_EQUAL(dimm_topo[0].proximity_domain, 1);
 	MY_ASSERT_EQUAL(dimm_topo[0].memory_controller_id, 0);
-
-	MY_ASSERT_EQUAL(dimm_topo[5].id, 6);
-	MY_ASSERT_EQUAL(dimm_topo[5].vendor_id, 32902);
-	MY_ASSERT_EQUAL(dimm_topo[5].device_id, 1234);
-	MY_ASSERT_EQUAL(dimm_topo[5].revision_id, 0);
-	MY_ASSERT_EQUAL(dimm_topo[5].fmt_interface_code, AEP_DIMM);
-	MY_ASSERT_EQUAL(dimm_topo[5].proximity_domain, 1);
-	MY_ASSERT_EQUAL(dimm_topo[5].memory_controller_id, 1);
 
 	ret = crbd_ioctl_get_topology(num_dimms - 1, dimm_topo);
 
@@ -191,7 +167,7 @@ void test_topology_count(void)
 
 	count = crbd_ioctl_topology_count();
 
-	MY_ASSERT_EQUAL(count,6);
+	MY_ASSERT_EQUAL(count,1);
 }
 
 int load_integration_tests(CU_pSuite suite)
@@ -200,7 +176,7 @@ int load_integration_tests(CU_pSuite suite)
 
 	assert(CU_add_test(suite, "cr_get_dimm_topology", test_get_dimm_topology) != NULL);
 	test_count++;
-	assert(CU_add_test(suite, "cr_pass_thru", test_pass_thru) != NULL);
+	assert(CU_add_test(suite, "cr_id_dimm", test_id_dimm) != NULL);
 	test_count++;
 	assert(CU_add_test(suite, "cr_topology_count", test_topology_count) != NULL);
 	test_count++;
