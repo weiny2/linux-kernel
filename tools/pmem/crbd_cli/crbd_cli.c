@@ -20,6 +20,7 @@ static const char usage_cmds[] =
 "  --get_topology\n"
 "  --id_dimm dimm_handle\n"
 "  --get_security dimm_handle\n"
+"  --set_nonce dimm_handle\n"
 "  --help \n"
 ;
 
@@ -31,6 +32,7 @@ enum {
 	GET_TOPOLOGY,
 	ID_DIMM,
 	GET_SECURITY,
+	SET_NONCE,
 };
 
 static struct option long_options[] = {
@@ -41,6 +43,7 @@ static struct option long_options[] = {
 	{"get_topology", no_argument,		0,	GET_TOPOLOGY},
 	{"id_dimm", required_argument,		0,	ID_DIMM},
 	{"get_security", required_argument,	0,	GET_SECURITY},
+	{"set_nonce", required_argument,	0,	SET_NONCE},
 	{0, 0, 0, 0}
 };
 
@@ -166,6 +169,13 @@ int main(int argc, char *argv[])
 		case GET_SECURITY:
 			if ((ret = crbd_get_security(strtol(optarg, NULL, 0)))) {
 				fprintf(stderr, "Get Security failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case SET_NONCE:
+			if ((ret = crbd_set_nonce(strtol(optarg, NULL, 0)))) {
+				fprintf(stderr, "Set Nonce failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;

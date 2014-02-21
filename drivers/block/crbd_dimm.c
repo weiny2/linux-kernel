@@ -406,6 +406,9 @@ int cr_sniff_fw_command(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 	case CR_PT_GET_SEC_INFO:
 		return cr_fw_get_security(c_dimm, fw_cmd, mb);
 		break;
+	case CR_PT_SET_SEC_INFO:
+		return cr_fw_set_security(c_dimm, fw_cmd, mb);
+		break;
 	default:
 		NVDIMM_DBG("Opcode: %#hhx Not Supported in yet", fw_cmd->opcode);
 		return -EOPNOTSUPP;
