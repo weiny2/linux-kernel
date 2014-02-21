@@ -14,6 +14,7 @@ int crbd_ioctl_dimm_init();
 int crbd_ioctl_get_topology(__u8 count, struct nvdimm_topology *dimm_topo);
 int crbd_identify_dimm(int dimm_handle);
 int crbd_get_security(int dimm_handle);
+int crbd_set_nonce(int dimm_handle);
 int crbd_ioctl_pass_thru(struct fv_fw_cmd *fw_cmd);
 int crbd_ioctl_topology_count(void);
 #endif /* CRBD_IOCTL_H_ */

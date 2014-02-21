@@ -203,7 +203,7 @@ int crbd_get_security(int dimm_handle)
 
 	fw_cmd.id = dimm_handle;
 	fw_cmd.opcode = CR_PT_GET_SEC_INFO;
-	fw_cmd.sub_opcode = 0;
+	fw_cmd.sub_opcode = SUBOP_GET_SEC_STATE;
 	fw_cmd.input_payload_size = 0;
 	fw_cmd.large_input_payload_size = 0;
 	fw_cmd.output_payload_size = 128;
@@ -226,6 +226,31 @@ int crbd_get_security(int dimm_handle)
 	free(fw_cmd.output_payload);
 
 	fprintf(stdout, "Security State: %#hhx\n",security_payload.security_status);
+
+	return ret;
+}
+
+int crbd_set_nonce(int dimm_handle)
+{
+	struct fv_fw_cmd fw_cmd;
+	struct cr_pt_payload_smm_security_nonce security_nonce;
+	int ret = 0;
+	unsigned long long sample_nonce = 0x123456789ABCEF01;
+	memset(&fw_cmd, 0, sizeof(fw_cmd));
+
+	fw_cmd.id = dimm_handle;
+	fw_cmd.opcode = CR_PT_SET_SEC_INFO;
+	fw_cmd.sub_opcode = SUBOP_SET_NONCE;
+	fw_cmd.input_payload_size = 8;
+	fw_cmd.large_input_payload_size = 0;
+	fw_cmd.output_payload_size = 0;
+	fw_cmd.large_output_payload_size = 0;
+
+	memcpy(security_nonce.sec_nonce, &sample_nonce, sizeof(unsigned long long));
+
+	fw_cmd.input_payload = &security_nonce;
+
+	ret = crbd_ioctl_pass_thru(&fw_cmd);
 
 	return ret;
 }
