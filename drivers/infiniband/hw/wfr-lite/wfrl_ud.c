@@ -84,11 +84,18 @@ printk(KERN_ERR PFX
 	ppd = ppd_from_ibp(ibp);
 
 	if (qp->ibqp.qp_num > 1) {
+		unsigned src_pkey_index = sqp->s_pkey_index;
 		u16 pkey1;
 		u16 pkey2;
 		u16 lid;
 
-		pkey1 = qib_get_pkey(ibp, sqp->s_pkey_index);
+		/* If sending _from_ (sqp) a special QP (0/1)
+		 * PKey is specified in the WQE rather than the QP itself */
+		if (sqp->ibqp.qp_type == IB_QPT_GSI ||
+		    sqp->ibqp.qp_type == IB_QPT_SMI)
+			src_pkey_index = swqe->wr.wr.ud.pkey_index;
+
+		pkey1 = qib_get_pkey(ibp, src_pkey_index);
 		pkey2 = qib_get_pkey(ibp, qp->s_pkey_index);
 		if (unlikely(!qib_pkey_ok(pkey1, pkey2))) {
 			lid = ppd->lid | (ah_attr->src_path_bits &
@@ -223,7 +230,10 @@ printk(KERN_ERR PFX "ERROR: packet drop: wrid invalid\n");
 	wc.qp = &qp->ibqp;
 	wc.src_qp = sqp->ibqp.qp_num;
 	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI) {
-		wc.pkey_index = swqe->wr.wr.ud.pkey_index;
+		if (sqp->ibqp.qp_type == IB_QPT_GSI || sqp->ibqp.qp_type == IB_QPT_SMI)
+			wc.pkey_index = swqe->wr.wr.ud.pkey_index;
+		else
+			wc.pkey_index = sqp->s_pkey_index;
 	} else {
 		wc.pkey_index = 0;
 	}
