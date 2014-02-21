@@ -19,6 +19,7 @@ static const char usage_cmds[] =
 "  --topo_count\n"
 "  --get_topology\n"
 "  --id_dimm dimm_handle\n"
+"  --get_security dimm_handle\n"
 "  --help \n"
 ;
 
@@ -29,6 +30,7 @@ enum {
 	TOPO_COUNT,
 	GET_TOPOLOGY,
 	ID_DIMM,
+	GET_SECURITY,
 };
 
 static struct option long_options[] = {
@@ -38,6 +40,7 @@ static struct option long_options[] = {
 	{"topo_count",	no_argument,		0,	TOPO_COUNT},
 	{"get_topology", no_argument,		0,	GET_TOPOLOGY},
 	{"id_dimm", required_argument,		0,	ID_DIMM},
+	{"get_security", required_argument,	0,	GET_SECURITY},
 	{0, 0, 0, 0}
 };
 
@@ -156,6 +159,13 @@ int main(int argc, char *argv[])
 		case ID_DIMM:
 			if ((ret = crbd_identify_dimm(strtol(optarg, NULL, 0)))) {
 				fprintf(stderr, "Identify DIMM failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case GET_SECURITY:
+			if ((ret = crbd_get_security(strtol(optarg, NULL, 0)))) {
+				fprintf(stderr, "Get Security failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;

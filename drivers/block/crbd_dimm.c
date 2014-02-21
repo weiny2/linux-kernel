@@ -284,51 +284,6 @@ static void cr_put_mb(struct cr_mailbox *mb)
 	mutex_unlock(&mb->mb_lock);
 }
 
-int cr_simics_null_cmd(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
-{
-	return cr_send_command(fw_cmd, mb);
-}
-
-int cr_simics_id_dimm(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
-{
-	return cr_send_command(fw_cmd, mb);
-}
-
-int cr_simics_get_security(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
-{
-	return cr_send_command(fw_cmd, mb);
-}
-
-int cr_send_simics_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
-{
-	if (cr_verify_fw_cmd(fw_cmd))
-		return -EINVAL;
-
-	if (fw_cmd->large_output_payload_size > 0 ||
-			fw_cmd->large_input_payload_size > 0) {
-		NVDIMM_DBG("Large Mailboxes not supported in Simics yet");
-		return -EINVAL;
-	}
-
-	switch (fw_cmd->opcode) {
-	case CR_PT_NULL_COMMAND:
-		return cr_simics_null_cmd(fw_cmd, mb);
-		break;
-	case CR_PT_IDENTIFY_DIMM:
-		return cr_simics_id_dimm(fw_cmd, mb);
-		break;
-	case CR_PT_GET_SEC_INFO:
-		return cr_simics_get_security(fw_cmd, mb);
-		break;
-	default:
-		NVDIMM_DBG("Opcode: %#hhx Not Supported in Simics yet", fw_cmd->opcode);
-		return -EOPNOTSUPP;
-	}
-
-
-	return 0;
-}
-
 /**
  * cr_send_command() - Pass thru command to FW
  * @fw_cmd: A firmware command structure
@@ -374,6 +329,91 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 	return 0;
 }
 
+int cr_fw_null_cmd(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
+		struct cr_mailbox *mb)
+{
+	return cr_send_command(fw_cmd, mb);
+}
+
+int cr_fw_id_dimm(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
+		struct cr_mailbox *mb)
+{
+	return cr_send_command(fw_cmd, mb);
+}
+
+int cr_fw_get_security(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
+		struct cr_mailbox *mb)
+{
+	return cr_send_command(fw_cmd, mb);
+}
+
+/*TODO: CR_DIMM security state needs to be updated by some
+ * of these commands
+ */
+int cr_fw_set_security(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
+		struct cr_mailbox *mb)
+{
+	switch (fw_cmd->sub_opcode) {
+	case SUBOP_SET_NONCE:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	case SUBOP_SET_PASS:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	case SUBOP_DISABLE_PASS:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	case SUBOP_UNLOCK_UNIT:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	case SUBOP_SEC_ERASE_PREP:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	case SUBOP_SEC_ERASE_UNIT:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	case SUBOP_SEC_FREEZE_LOCK:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	default:
+		NVDIMM_DBG("Unknown Get Security Sub-Op received");
+		return -EOPNOTSUPP;
+	}
+}
+/*TODO: In the future only sniff out the commands we care about
+ * for now though sniff all commands and leave stubs incase we need to take
+ * action on any command to stay in sync with simics
+ */
+int cr_sniff_fw_command(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
+		struct cr_mailbox *mb)
+{
+	if (cr_verify_fw_cmd(fw_cmd))
+		return -EINVAL;
+
+	if (fw_cmd->large_output_payload_size > 0 ||
+			fw_cmd->large_input_payload_size > 0) {
+		NVDIMM_DBG("Large Mailboxes not supported in yet");
+		return -EINVAL;
+	}
+
+	switch (fw_cmd->opcode) {
+	case CR_PT_NULL_COMMAND:
+		return cr_fw_null_cmd(c_dimm, fw_cmd, mb);
+		break;
+	case CR_PT_IDENTIFY_DIMM:
+		return cr_fw_id_dimm(c_dimm, fw_cmd, mb);
+		break;
+	case CR_PT_GET_SEC_INFO:
+		return cr_fw_get_security(c_dimm, fw_cmd, mb);
+		break;
+	default:
+		NVDIMM_DBG("Opcode: %#hhx Not Supported in yet", fw_cmd->opcode);
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 /**
  * fw_cmd_pass_thru() - Firmware Command Pass Thru
  * @c_dimm: CR_DIMM to execute a FW command on
@@ -393,12 +433,8 @@ int fw_cmd_pass_thru(struct cr_dimm *c_dimm, struct fv_fw_cmd *cmd)
 
 	mb = cr_get_mb(c_dimm);
 
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
-	ret = cr_send_command(cmd, mb);
-#endif
-#ifdef CONFIG_SIMICS_BACKEND
-	ret = cr_send_simics_command(cmd, mb);
-#endif
+	ret = cr_sniff_fw_command(c_dimm, cmd, mb);
+
 	cr_put_mb(mb);
 
 	return ret;
@@ -418,11 +454,13 @@ int fw_cmd_pass_thru(struct cr_dimm *c_dimm, struct fv_fw_cmd *cmd)
  * Various errors from FW are still TBD
  */
 
-/*TODO: When CONFIG_BLK_DEV_CR_BACKEND is no longer needed it may be possible
- * to roll up all internal fw commands into one function
+/*TODO: It may be possible to roll up all internal fw commands
+ * into one function
  */
-static int fw_cmd_get_security_info(struct cr_dimm *c_dimm,
-	struct get_security_payload *payload, __u16 dimm_id)
+static
+int fw_cmd_get_security_info(struct cr_dimm *c_dimm,
+		struct cr_pt_payload_get_security_state *payload,
+		__u16 dimm_id)
 {
 	struct fv_fw_cmd *fw_cmd;
 	struct cr_mailbox *mb;
@@ -447,15 +485,11 @@ static int fw_cmd_get_security_info(struct cr_dimm *c_dimm,
 
 	mb = cr_get_mb(c_dimm);
 
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
-	ret = cr_send_command(fw_cmd, mb);
+	ret = cr_fw_get_security(c_dimm, fw_cmd, mb);
 
 	if (!ret)
 		memcpy(payload, fw_cmd->output_payload, sizeof(*payload));
-#else
-	payload->security_status = CR_SEC_ENABLED | CR_SEC_FROZEN;
-	ret = 0;
-#endif
+
 	cr_put_mb(mb);
 	kfree(fw_cmd->output_payload);
 after_fw_alloc:
@@ -479,7 +513,8 @@ after_fw_alloc:
  */
 
 int fw_cmd_id_dimm(struct cr_dimm *c_dimm,
-	struct id_dimm_payload *payload, __u16 dimm_id)
+	struct cr_pt_payload_identify_dimm *payload,
+	__u16 dimm_id)
 {
 	struct fv_fw_cmd *fw_cmd;
 	struct cr_mailbox *mb;
@@ -504,33 +539,10 @@ int fw_cmd_id_dimm(struct cr_dimm *c_dimm,
 
 	mb = cr_get_mb(c_dimm);
 
-#ifdef CONFIG_BLK_DEV_CR_BACKEND
-	ret = cr_send_command(fw_cmd, mb);
+	ret = cr_fw_id_dimm(c_dimm, fw_cmd, mb);
 
 	if (!ret)
 		memcpy(payload, fw_cmd->output_payload, sizeof(*payload));
-
-#else
-	payload->vendor_id = cpu_to_le16(0x8086);
-	payload->device_id = cpu_to_le16(1234);
-	payload->revision_id = 0;
-	payload->ifc = cpu_to_le16(AEP_DIMM);
-	payload->fwr[0] = 0x89;
-	payload->fwr[1] = 0x67;
-	payload->fwr[2] = 0x45;
-	payload->fwr[3] = 0x23;
-	payload->fwr[4] = 0x11;
-	payload->api_ver = 0x12;
-	payload->fswr = 0;
-	payload->nbw = cpu_to_le16(128);
-	payload->nwfa = cpu_to_le16(3);
-	payload->obmcr = cpu_to_le32(0);
-	payload->rc = cpu_to_le64(1073741824);
-	strcpy(payload->sn, "fake serial no");
-	strcpy(payload->mn, "fake model no");
-	strcpy(payload->mf, "fake manufacturer");
-	ret = 0;
-#endif
 
 	cr_put_mb(mb);
 	kfree(fw_cmd->output_payload);
@@ -1136,7 +1148,7 @@ static __u8 cr_parse_fw_major(__u8 fw_major)
  * FW Payload has the FW version encoded in a binary coded decimal format
   */
 static void cr_parse_fw_version(struct cr_dimm *c_dimm,
-	struct id_dimm_payload *id_payload)
+	struct cr_pt_payload_identify_dimm *id_payload)
 {
 	c_dimm->fw_major = cr_parse_fw_major(id_payload->fwr[4]);
 	c_dimm->fw_minor = cr_parse_fw_minor(id_payload->fwr[3]);
@@ -1149,7 +1161,7 @@ static void cr_parse_fw_version(struct cr_dimm *c_dimm,
  * parse the BCD formatted FW API version into major and minor
  */
 static void cr_parse_fw_api_version(struct cr_dimm *c_dimm,
-	struct id_dimm_payload *id_payload)
+	struct cr_pt_payload_identify_dimm *id_payload)
 {
 	c_dimm->fw_api_major = (id_payload->api_ver >> 4) & 0xF;
 	c_dimm->fw_api_minor = id_payload->api_ver & 0xF;
@@ -1181,8 +1193,8 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 {
 	struct cr_dimm *c_dimm;
 	struct interleave_tbl *mb_i_tbl = NULL;
-	struct id_dimm_payload *id_payload;
-	struct get_security_payload *security_payload;
+	struct cr_pt_payload_identify_dimm *id_payload;
+	struct cr_pt_payload_get_security_state *security_payload;
 	int ret = 0;
 
 	c_dimm = kzalloc(sizeof(*c_dimm), GFP_KERNEL);
@@ -1235,7 +1247,7 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 
 	c_dimm->num_block_windows = le16_to_cpu(id_payload->nbw);
 	c_dimm->num_write_flush_addrs = le16_to_cpu(id_payload->nwfa);
-	c_dimm->raw_capacity = le64_to_cpu(id_payload->rc);
+	c_dimm->raw_capacity = (le64_to_cpu(id_payload->rc) << 12);
 
 	cr_parse_fw_version(c_dimm, id_payload);
 	cr_parse_fw_api_version(c_dimm, id_payload);

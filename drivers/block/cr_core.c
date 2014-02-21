@@ -236,15 +236,6 @@ static int cr_passthrough_cmd(struct nvdimm *dimm, void __user *useraddr)
 	if (ret)
 		goto out;
 
-#ifndef CONFIG_BLK_DEV_CR_BACKEND
-	/*This is just garbage for testing*/
-	if(k_fw_cmd.input_payload_size >= k_fw_cmd.output_payload_size)
-		memcpy(k_fw_cmd.output_payload, k_fw_cmd.input_payload,
-			k_fw_cmd.output_payload_size);
-	if(k_fw_cmd.large_input_payload_size >= k_fw_cmd.large_output_payload_size)
-		memcpy(k_fw_cmd.large_output_payload, k_fw_cmd.large_input_payload,
-			k_fw_cmd.large_output_payload_size);
-#endif
 	ret = cr_put_fw_cmd(&u_fw_cmd, &k_fw_cmd);
 out:
 	cr_free_fw_cmd(&k_fw_cmd);
@@ -268,7 +259,7 @@ static int cr_register_ctrl_ranges(struct fit_header *fit_head)
 			&& spa_tbls[memdev_tbls[i].spa_index].addr_rng_type
 				== NVDIMM_CRTL_RNG_TYPE
 			&& !registered_spa_tbls[memdev_tbls[i].spa_index]) {
-#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
+
 			struct resource *ctrl_mem_region =
 			request_mem_region_exclusive((phys_addr_t)
 			spa_tbls[memdev_tbls[i].spa_index].start_addr,
@@ -276,7 +267,7 @@ static int cr_register_ctrl_ranges(struct fit_header *fit_head)
 
 			if (!ctrl_mem_region)
 				goto fail;
-#endif
+
 			registered_spa_tbls[memdev_tbls[i].spa_index] = 1;
 		}
 	}
@@ -284,7 +275,7 @@ static int cr_register_ctrl_ranges(struct fit_header *fit_head)
 	kfree(registered_spa_tbls);
 
 	return 0;
-#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
+
 fail:
 	for (i = i - 1; i >= 0; i--) {
 		if (registered_spa_tbls[memdev_tbls[i].spa_index])
@@ -293,7 +284,6 @@ fail:
 	}
 	kfree(registered_spa_tbls);
 	return -EFAULT;
-#endif
 }
 
 static void cr_unmap_ctrl_ranges(void)
@@ -302,9 +292,7 @@ static void cr_unmap_ctrl_ranges(void)
 
 	spin_lock(&cr_spa_list_lock);
 	list_for_each_entry_safe(cur_tbl, tmp_tbl, &cr_spa_list, node) {
-#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
 		iounmap(cur_tbl->mapped_va);
-#endif
 		list_del(&cur_tbl->node);
 		kfree(cur_tbl);
 	}
@@ -338,7 +326,7 @@ static int cr_map_ctrl_ranges(struct fit_header *fit_head)
 				ret = -ENOMEM;
 				goto fail;
 			}
-#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
+
 			s_tbl->mapped_va = ioremap_nocache((phys_addr_t)
 				spa_tbls[memdev_tbls[i].spa_index].start_addr,
 			spa_tbls[memdev_tbls[i].spa_index].length);
@@ -349,10 +337,7 @@ static int cr_map_ctrl_ranges(struct fit_header *fit_head)
 				ret = -EFAULT;
 				goto fail;
 			}
-#else
-			/*Garbage offset*/
-			s_tbl->mapped_va = (void __iomem *)0x1000;
-#endif
+
 			s_tbl->spa_tbl = &spa_tbls[memdev_tbls[i].spa_index];
 
 			spin_lock(&cr_spa_list_lock);
@@ -390,10 +375,10 @@ static void cr_unregister_ctrl_ranges(struct fit_header *fit_head)
 			&& spa_tbls[memdev_tbls[i].spa_index].addr_rng_type
 				== NVDIMM_CRTL_RNG_TYPE
 			&& !unregistered_spa_tbls[memdev_tbls[i].spa_index]) {
-#if defined(CONFIG_BLK_DEV_CR_BACKEND) || defined(CONFIG_SIMICS_BACKEND)
+
 			release_mem_region((phys_addr_t) spa_tbls[i].start_addr,
 							spa_tbls[i].length);
-#endif
+
 			unregistered_spa_tbls[memdev_tbls[i].spa_index] = 1;
 		}
 	}
@@ -443,7 +428,7 @@ static struct nvdimm_ioctl_ops crbd_ioctl_ops = {
 };
 
 #define CR_VENDOR_ID 32902
-#define CR_DEVICE_ID 1234
+#define CR_DEVICE_ID 8215
 #define CR_REVISION_ID 0
 
 static const struct nvdimm_ids cr_ids = { CR_VENDOR_ID, CR_DEVICE_ID,

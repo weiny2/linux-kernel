@@ -146,10 +146,13 @@ int crbd_identify_dimm(int dimm_handle)
 
 	ret = crbd_ioctl_pass_thru(&fw_cmd);
 
-	if (ret)
+	if (ret) {
+		free(fw_cmd.output_payload);
 		return ret;
-
+	}
 	dimm_id_payload = *(struct cr_pt_payload_identify_dimm *)fw_cmd.output_payload;
+
+	free(fw_cmd.output_payload);
 
 	raw_capacity_gb = dimm_id_payload.rc >> 18;
 
@@ -186,6 +189,43 @@ int crbd_identify_dimm(int dimm_handle)
 			(char *)dimm_id_payload.mf,
 			(char *)dimm_id_payload.sn,
 			(char *)dimm_id_payload.mn);
+
+	return ret;
+}
+
+int crbd_get_security(int dimm_handle)
+{
+	struct fv_fw_cmd fw_cmd;
+	struct cr_pt_payload_get_security_state security_payload;
+	int ret = 0;
+
+	memset(&fw_cmd, 0, sizeof(fw_cmd));
+
+	fw_cmd.id = dimm_handle;
+	fw_cmd.opcode = CR_PT_GET_SEC_INFO;
+	fw_cmd.sub_opcode = 0;
+	fw_cmd.input_payload_size = 0;
+	fw_cmd.large_input_payload_size = 0;
+	fw_cmd.output_payload_size = 128;
+	fw_cmd.large_output_payload_size = 0;
+
+	fw_cmd.output_payload = calloc(1, fw_cmd.output_payload_size);
+
+	if(!fw_cmd.output_payload)
+		return -ENOMEM;
+
+	ret = crbd_ioctl_pass_thru(&fw_cmd);
+
+	if (ret) {
+		free(fw_cmd.output_payload);
+		return ret;
+	}
+
+	security_payload = *(struct cr_pt_payload_get_security_state *)fw_cmd.output_payload;
+
+	free(fw_cmd.output_payload);
+
+	fprintf(stdout, "Security State: %#hhx\n",security_payload.security_status);
 
 	return ret;
 }

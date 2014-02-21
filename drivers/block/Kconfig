@@ -382,13 +382,7 @@ config BLK_DEV_CR_BACKEND
 	default n
 	---help---
 	  Support CR with backend storage
-	  
-config SIMICS_BACKEND
-	bool "CR is backed by SIMICS"
-	depends on BLK_DEV_CR
-	default n
-	---help---
-	  Support CR with SIMICS backend
+  
 
 config BLK_DEV_SX8
 	tristate "Promise SATA SX8 support"
