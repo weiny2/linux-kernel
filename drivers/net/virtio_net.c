@@ -1266,7 +1266,8 @@ static int virtnet_change_mtu(struct net_device *dev, int new_mtu)
 /* To avoid contending a lock hold by a vcpu who would exit to host, select the
  * txq based on the processor id.
  */
-static u16 virtnet_select_queue(struct net_device *dev, struct sk_buff *skb)
+static u16 virtnet_select_queue(struct net_device *dev, struct sk_buff *skb,
+				void *accel_priv)
 {
 	int txq;
 	struct virtnet_info *vi = netdev_priv(dev);
