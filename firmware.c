@@ -478,6 +478,9 @@ static int run_rsa(struct hfi_devdata *dd, unsigned long ms_timeout,
 	unsigned long timeout;
 	u32 status;
 
+	if (!fw_validate)
+		return 0;	/* done with no error if not validating */
+
 	/* write the signature */
 	write_rsa_data(dd, WFR_MISC_CFG_RSA_SIGNATURE, signature, KEY_SIZE);
 
@@ -526,6 +529,9 @@ static int run_rsa(struct hfi_devdata *dd, unsigned long ms_timeout,
 static void load_security_variables(struct hfi_devdata *dd,
 					struct firmware_details *fdet)
 {
+	if (!fw_validate)
+		return;	/* nothing to do */
+
 	/* Security variables a.  Write the modulus */
 	write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS,
 			fdet->firmware->modulus, KEY_SIZE);
@@ -578,24 +584,15 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	reg = DC_DC8051_CFG_RST_M8051W_SMASK;
 	write_csr(dd, DC_DC8051_CFG_RST, reg);
 
-	if (fw_validate) {
-		/* Firmware load step 1 */
-		load_security_variables(dd, fdet);
+	/* Firmware load step 1 */
+	load_security_variables(dd, fdet);
 
-		/*
-		 * Firmware load step 2.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
-		 * OK to clear MISC_CFG_FW_CTRL.DISABLE_VALIDATION - we are
-		 * in the validation path
-		 */
-		write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
-	} else {
-		/*
-		 * Turn security checking off.  Only works if EFUSE
-		 * settings allow it.
-		 */
-		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
-				WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
-	}
+	/*
+	 * Firmware load step 2.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
+	 * Assumes we are entering this routine with MISC_CFG_FW_CTRL
+	 * reset.  This means that MISC_CFG_FW_CTRL.FW_8051_LOADED is
+	 * alreay clear and we have nothing to do.
+	 */
 
 	/* Firmware load steps 3-5 */
 	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware->firmware,
@@ -610,21 +607,19 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	/*
 	 * DC reset step 4. Host starts the DC8051 firmware
 	 */
-	if (fw_validate) {
-		/*
-		 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
-		 * OK to clear DISABLE_VALIDATION - we're in the validation
-		 * path
-		 */
-		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
-				WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
+	/*
+	 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
+	 * Clear or set DISABLE_VALIDATION dependig on if we are validating.
+	 */
+	write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+			WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK |
+			fw_validate ? 0 :
+			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
 
-		/* Firmware load steps 7-10 */
-		ret = run_rsa(dd, FW_TIMEOUT_8051, "8051",
-						fdet->firmware->signature);
-		if (ret)
-			return ret;
-	}
+	/* Firmware load steps 7-10 */
+	ret = run_rsa(dd, FW_TIMEOUT_8051, "8051", fdet->firmware->signature);
+	if (ret)
+		return ret;
 
 	/* clear all reset bits, releasing the 8051 */
 	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
@@ -680,36 +675,33 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 
 	ra = fabric_serdes_broadcast[dd->hfi_id];
 
-	/* a. place SerDes in reset and disable SPICO */
+	/* step 1: load security variables */
+	load_security_variables(dd, fdet);
+	/* step 2: place SerDes in reset and disable SPICO */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000011);
-	/* b. remove SerDes reset */
+	/* step 3:  remove SerDes reset */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000010);
-	/* c. assert IMEM override */
+	/* step 4: assert IMEM override */
 	sbus_request(dd, ra, 0x00, WRITE_SBUS_RECEIVER, 0xc0000000);
-	/* d. download SerDes machine code */
+	/* step 5: download SerDes machine code */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x0a, WRITE_SBUS_RECEIVER,
 					*(u32 *)&fdet->firmware->firmware[i]);
 	}
-	/* e. IMEM override off */
+	/* step 6: IMEM override off */
 	sbus_request(dd, ra, 0x00, WRITE_SBUS_RECEIVER, 0x00000000);
-	/* f. turn ECC on */
+	/* step 7: turn ECC on */
 	sbus_request(dd, ra, 0x0b, WRITE_SBUS_RECEIVER, 0x000c0000);
 
-	if (fw_validate) {
-		/* g. write the RSA signature */
-		/* h. init RSA */
-		/* i. start RSA */
-		/* j. look for result */
-		err = run_rsa(dd, FW_TIMEOUT_FABRIC_SERDES, "fabric serdes",
+	/* steps 8-11: run the RSA engine */
+	err = run_rsa(dd, FW_TIMEOUT_FABRIC_SERDES, "fabric serdes",
 						fdet->firmware->signature);
-		if (err)
-			return err;
-	}
+	if (err)
+		return err;
 
-	/* k. turn SPICO enable on */
+	/* step 12: turn SPICO enable on */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000002);
-	/* l. enable core hardware interrupts */
+	/* step 13: enable core hardware interrupts */
 	sbus_request(dd, ra, 0x08, WRITE_SBUS_RECEIVER, 0x00000000);
 
 	return 0;
@@ -721,34 +713,30 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	int i, err;
 	const u8 ra = SBUS_MASTER_BROADCAST; /* receiver address */
 
-	/* a. place SPICO into reset and enable off */
+	/* step 1: load security variables */
+	load_security_variables(dd, fdet);
+	/* step 2: place SPICO into reset and enable off */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x000000c0);
-	/* b. remove reset, enable off, IMEM_CNTRL_EN on */
+	/* step 3: remove reset, enable off, IMEM_CNTRL_EN on */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000240);
-	/* c. set starting IMEM address for burst download */
+	/* step 4: set starting IMEM address for burst download */
 	sbus_request(dd, ra, 0x03, WRITE_SBUS_RECEIVER, 0x80000000);
-	/* d. download the SBUS Master machine code */
+	/* step 5: download the SBUS Master machine code */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x14, WRITE_SBUS_RECEIVER,
 					*(u32 *)&fdet->firmware->firmware[i]);
 	}
-	/* e. set IMEM_CNTL_EN off */
+	/* step 6: set IMEM_CNTL_EN off */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000040);
-	/* f. turn ECC on */
+	/* step 7: turn ECC on */
 	sbus_request(dd, ra, 0x16, WRITE_SBUS_RECEIVER, 0x000c0000);
 
-	if (fw_validate) {
-		/* g. write the RSA signature */
-		/* h. init RSA */
-		/* i. start RSA */
-		/* j. look for result */
-		err = run_rsa(dd, FW_TIMEOUT_SBUS, "SBUS",
-						fdet->firmware->signature);
-		if (err)
-			return err;
-	}
+	/* steps 8-11: run the RSA engine */
+	err = run_rsa(dd, FW_TIMEOUT_SBUS, "SBUS", fdet->firmware->signature);
+	if (err)
+		return err;
 
-	/* k. set SPICO_ENABLE on */
+	/* step 12: set SPICO_ENABLE on */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000140);
 
 	return 0;
@@ -761,35 +749,33 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	int i, err;
 	const u8 ra = SBUS_MASTER_BROADCAST; /* receiver address */
 
-	/* a. assert single step (halts processor) */
+	/* step 1: load security variables */
+	load_security_variables(dd, fdet);
+	/* step 2: assert single step (halts the SBus Master spico) */
 	sbus_request(dd, ra, 0x05, WRITE_SBUS_RECEIVER, 0x00000001);
-	/* b. enable XDMEM access */
+	/* step 3: enable XDMEM access */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000d40);
-	/* c. load firmware into sbus master extended memory */
+	/* step 4: load firmware into SBus Master XDMEM */
 	/* NOTE: the dmem address, write_en, and wdata are all pre-packed,
 	   we only need to pick up the bytes and write them */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x04, WRITE_SBUS_RECEIVER,
 					*(u32 *)&fdet->firmware->firmware[i]);
 	}
-	/* d. disable XDMEM access */
+	/* step 5: disable XDMEM access */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000140);
-	/* e. allow processor to run */
+	/* step 6: allow SBus Spico to run */
 	sbus_request(dd, ra, 0x05, WRITE_SBUS_RECEIVER, 0x00000000);
 
-	if (fw_validate) {
-		/* f. write the RSA signature */
-		/* g. init RSA */
-		/* h. start RSA */
-		/* i. look for result */
-		err = run_rsa(dd, FW_TIMEOUT_PCIE_SERDES, "PCIe serdes",
+	/* steps 7-10: run RSA */
+	err = run_rsa(dd, FW_TIMEOUT_PCIE_SERDES, "PCIe serdes",
 						fdet->firmware->signature);
-		if (err)
-			return err;
-	}
+	if (err)
+		return err;
 
-	/* j. trigger the gasket block */
-	reg = ((u64)1 << WFR_ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
+	/* step 11: trigger the gasket block */
+	reg = (((u64)1 << dd->hfi_id)
+			<< WFR_ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
 		| ((u64)pcie_serdes_broadcast[dd->hfi_id]
 			<< WFR_ASIC_PCIE_SD_HOST_CMD_SBUS_RCVR_ADDR_SHIFT);
 	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
@@ -821,6 +807,8 @@ If not, then we'll need to manually trigger it.
 				& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
 	if (status != WFR_PCIE_FW_STATUS_SUCCESS)
 		return -EFAIL;
+	err = ((reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_SHIFT)
+		& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_MASK)
 #endif
 
 	return 0;
@@ -898,12 +886,6 @@ int load_firmware(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	if (fw_8051_load) {
-		ret = load_8051_firmware(dd, &fw_8051);
-		if (ret)
-			return ret;
-	}
-
 	ret = acquire_hw_mutex(dd);
 	if (ret)
 		return ret;
@@ -911,23 +893,16 @@ int load_firmware(struct hfi_devdata *dd)
 	/* set the SBUS master to fast mode, we do not need to set it back */
 	set_sbus_fast_mode(dd);
 
-	if (fw_fabric_serdes_load) {
-		set_serdes_broadcast(dd, all_fabric_serdes_broadcast,
-					fabric_serdes_broadcast[dd->hfi_id],
-					fabric_serdes_addrs[dd->hfi_id],
-					NUM_FABRIC_SERDES);
-		ret = load_fabric_serdes_firmware(dd, &fw_fabric);
-		if (ret)
-			goto done;
-	}
-
 	/*
-	 * TODO: It has been suggested that if the SBUS FW is what enables
-	 * PCIE 3.0.  So does this mean that if the SBUS FW is told
-	 * not to load, should we reject the load of the PCIe FW?
-	 *
-	 * TODO: If we're already at Gen3, do we need to do any of this?
+	 * Expect that we enter this routine with MISC_CFG_FW_CTRL reset:
+	 *	- FW_8051_LOADED clear
+	 *	- DISABLE_VALIDATION clear
+	 * Possibly set DISABLE_VALIDATION - EFUSE may override the disable.
 	 */
+	if (!fw_validate)
+		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
+
 	if (fw_sbus_load) {
 		ret = load_sbus_firmware(dd, &fw_sbus);
 		if (ret)
@@ -940,6 +915,22 @@ int load_firmware(struct hfi_devdata *dd)
 					pcie_serdes_addrs[dd->hfi_id],
 					NUM_PCIE_SERDES);
 		ret = load_pcie_serdes_firmware(dd, &fw_pcie);
+		if (ret)
+			goto done;
+	}
+
+	if (fw_fabric_serdes_load) {
+		set_serdes_broadcast(dd, all_fabric_serdes_broadcast,
+					fabric_serdes_broadcast[dd->hfi_id],
+					fabric_serdes_addrs[dd->hfi_id],
+					NUM_FABRIC_SERDES);
+		ret = load_fabric_serdes_firmware(dd, &fw_fabric);
+		if (ret)
+			goto done;
+	}
+
+	if (fw_8051_load) {
+		ret = load_8051_firmware(dd, &fw_8051);
 		if (ret)
 			goto done;
 	}
