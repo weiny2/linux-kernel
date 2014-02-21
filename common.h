@@ -45,6 +45,11 @@
 #define QIB_SRC_OUI_2 0x11
 #define QIB_SRC_OUI_3 0x75
 
+/* This is the IEEE-assigned OUI for Intel...  At least one of them. */
+#define WFR_SRC_OUI_1 0x00
+#define WFR_SRC_OUI_2 0x02
+#define WFR_SRC_OUI_3 0xB3
+
 /* version of protocol header (known to chip also). In the long run,
  * we should be able to generate and accept a range of version numbers;
  * for now we only accept one, and it's compiled in.

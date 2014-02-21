@@ -491,14 +491,14 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		}
 		/* Drop invalid MAD packets (see 13.5.3.1). */
 		if (unlikely(qp->ibqp.qp_num == 1 &&
-			     (tlen != 256 ||
+			     (tlen > 2048 ||
 			      (be16_to_cpu(hdr->lrh[0]) >> 12) == 15)))
 			goto drop;
 	} else {
 		struct ib_smp *smp;
 
 		/* Drop invalid MAD packets (see 13.5.3.1). */
-		if (tlen != 256 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
+		if (tlen > 2048 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
 			goto drop;
 		smp = (struct ib_smp *) data;
 		if ((hdr->lrh[1] == IB_LID_PERMISSIVE ||
