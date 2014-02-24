@@ -185,7 +185,7 @@ class TestInfo:
                           default="viper0,viper1")
 
         parser.add_option("--hfisrc", dest="hfisrc",
-                          help="Path to hfi driver source. Defaut: " + git_root,
+                          help="Path to hfi driver source. Default: " + git_root,
                           metavar="PATH",
                           default=git_root)
 
