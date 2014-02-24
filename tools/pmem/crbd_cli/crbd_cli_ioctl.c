@@ -276,8 +276,9 @@ int crbd_ioctl_pass_thru(struct fv_fw_cmd *fw_cmd)
 	nvdr.nvdr_dimm_id = fw_cmd->id;
 	nvdr.nvdr_data = fw_cmd;
 
-	if (ioctl(fd, NVDIMM_PASSTHROUGH_CMD, &nvdr)) {
-		ret = -errno;
+	if ((ret = ioctl(fd, NVDIMM_PASSTHROUGH_CMD, &nvdr))) {
+		if (ret < 0)
+			ret = -errno;
 		fprintf(stderr, "Pass_thru IOCTL failed: %d\n", ret);
 	}
 
