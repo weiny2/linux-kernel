@@ -106,20 +106,23 @@ struct nvdimm_topology {
 	unsigned short proximity_domain;
 	/* The ID of the associated memory controller */
 	unsigned short memory_controller_id;
-	char driver_rev[NVDIMM_DRIVER_REV_LEN]; /* ASCII revision of the driver */
+	/* ASCII revision of the driver */
+	char driver_rev[NVDIMM_DRIVER_REV_LEN];
 };
 
 /*
- * Detailed information about a specific DIMM including information from the SMBIOS tables
+ * Detailed information about a specific DIMM including information from the
+ *  SMBIOS tables
  */
 struct nvdimm_details {
 	/* SMBIOS Type 17 Table Info */
 	unsigned short form_factor; /* DIMM Form Factor */
-	unsigned long long data_width; /* Width in bits used to store user data */
+	/* Width in bits used to store user data */
+	unsigned long long data_width;
 	unsigned long long total_width; /* Width in bits for data and ECC */
 	unsigned long long speed; /* Speed in MHz */
 	char part_number[NVDIMM_PART_NUMBER_LEN]; /* DIMM part number */
-	char device_locator[NVDIMM_DEVICE_LOCATOR_LEN]; /* Socket or board pos */
+	char device_locator[NVDIMM_DEVICE_LOCATOR_LEN]; /*Socket or board pos*/
 };
 
 /*

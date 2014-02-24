@@ -327,18 +327,17 @@ int match_nvdimm_ids(const struct nvdimm_ids *first_ids,
 
 /*******************************************************************
  * TODO:  DELETE Below
- * 
  *******************************************************************/
 
 #define cr_write_barrier() __builtin_ia32_sfence()
 static inline void __builtin_ia32_sfence(void)
 {
-    return;
+	return;
 }
 
 static inline void __builtin_ia32_pcommit(void)
 {
-    return;
+	return;
 }
 
 #endif

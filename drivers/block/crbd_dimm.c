@@ -410,7 +410,8 @@ int cr_sniff_fw_command(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 		return cr_fw_set_security(c_dimm, fw_cmd, mb);
 		break;
 	default:
-		NVDIMM_DBG("Opcode: %#hhx Not Supported in yet", fw_cmd->opcode);
+		NVDIMM_DBG("Opcode: %#hhx Not Supported in yet",
+				fw_cmd->opcode);
 		return -EOPNOTSUPP;
 	}
 
