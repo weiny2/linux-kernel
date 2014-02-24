@@ -315,11 +315,11 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 
 	cr_poll_fw_cmd_completion(mb);
 
-	status = (readq(mb->status) & STATUS_MASK) >> 16;
+	status = (readq(mb->status) & STATUS_MASK) >> STATUS_SHIFT;
 
 	/*TODO: MB Error handling logic needs to be defined*/
 	if (status)
-		return -EIO;
+		return status;
 
 	if (fw_cmd->output_payload_size > 0)
 		cr_memcopy_outpayload(mb, fw_cmd);

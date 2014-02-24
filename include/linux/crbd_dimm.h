@@ -53,7 +53,8 @@
 #define CR_IN_PAYLOAD_SIZE (128) /*Total size of the input payload registers*/
 #define CR_OUT_PAYLOAD_SIZE (128) /*Total size of the output payload registers*/
 
-#define STATUS_MASK 0x00FF0000
+#define STATUS_MASK 0xFF00
+#define STATUS_SHIFT 8
 
 #define DB_SHIFT 16
 #define SUB_OP_SHIFT 8
