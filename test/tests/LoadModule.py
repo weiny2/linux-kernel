@@ -55,6 +55,11 @@ def restart_opensm(host):
     out = do_ssh(host, cmd)
     return
 
+def stop_opensm(host):
+    cmd = "/sbin/service opensm stop"
+    out = do_ssh(host, cmd)
+    return
+
 def wait_for_active(host, timeout, attempts):
     for iter in range(attempts):
         RegLib.test_log(0, "Checking for active")
@@ -166,24 +171,36 @@ def main():
 
         # Driver loaded and opensm ready now wait till links are active on both
         # nodes.
-        for i in range(5):
-            for host in host1,host2:
-                err = wait_for_active(host, 10, 2)
-                if err:
-                    RegLib.test_log(0, "Could not reach active state")
-                    RegLib.test_log(0, "Attempting to restart opensm")
-                    restart_opensm(opensmhost)
-                    if is_opensm_active(opensmhost) == True:
-                        RegLib.test_log(0, "Open SM reloaded")
-                    else:
-                        RegLib.test_fail("Could not reload opensm")
+        num_loaded = 0
+        for host in host1,host2:
+            err = wait_for_active(host, 10, 2)
+            if err:
+                RegLib.test_log(0, "Could not reach active state")
+                RegLib.test_log(0, "Attempting to restart opensm")
+                restart_opensm(opensmhost)
+                if is_opensm_active(opensmhost) == True:
+                    RegLib.test_log(0, "Open SM reloaded")
                 else:
-                    RegLib.test_pass("Test completed successfully")
+                    RegLib.test_fail("Could not reload opensm")
+            else:
+                RegLib.test_log(0, "Adapter is up and running")
+                num_loaded = num_loaded + 1
 
-        RegLib.test_fail("Unable to get active state")
+        if num_loaded != 2:
+            RegLib.test_fail("Unable to get active state on at least 1 node")
+
+        # Now that open sm has been started we need to stop till things are working
+        # better.
+        stop_opensm(opensmhost)
+        if is_opensm_active(opensmhost) == True:
+                    RegLib.test_fail("Unable to stop OpenSM")
+        else:
+            RegLib.test_pass("Driver loaded, adapters up, openSM stopped")
 
     else:
         RegLib.test_fail("Only simics supported right now")
+
+    
 
 if __name__ == "__main__":
     main()
