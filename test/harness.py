@@ -71,17 +71,23 @@ test_list = [
     # IB Send BW tests
     { "test_name" : "IbSendBwUD.py",
       "args" : "--nodelist %HOST[2]% --simics",
-      "type" : "default,quick",
+      "type" : "default,quick,verbs",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using UD.",
     },
 
     { "test_name" : "IbSendBwRC.py",
       "args" : "--nodelist %HOST[2]% --simics",
-      "type" : "default,quick",
+      "type" : "default,quick,verbs",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using RC.",
     },
 
-    # OSU MPI tests
+     { "test_name" : "IbSendBwRC-a.py",
+      "args" : "--nodelist %HOST[2]% --simics",
+      "type" : "default,verbs",
+      "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
+    },
+
+   # OSU MPI tests
     { "test_name" : "OsuMpi.py",
       "args" : "--nodelist %HOST[2]% --simics",
       "type" : "mpi,default",
