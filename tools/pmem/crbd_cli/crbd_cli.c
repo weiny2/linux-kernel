@@ -5,6 +5,7 @@
 #include <getopt.h>
 
 #include <linux/nvdimm_ioctl.h>
+#include <linux/cr_ioctl.h>
 
 #include "crbd_cli_ioctl.h"
 
@@ -21,6 +22,7 @@ static const char usage_cmds[] =
 "  --id_dimm dimm_handle\n"
 "  --get_security dimm_handle\n"
 "  --set_nonce dimm_handle\n"
+"  --set_passphrase dimm_handle\n"
 "  --help \n"
 ;
 
@@ -33,6 +35,7 @@ enum {
 	ID_DIMM,
 	GET_SECURITY,
 	SET_NONCE,
+	SET_PASSPHRASE,
 };
 
 static struct option long_options[] = {
@@ -44,6 +47,7 @@ static struct option long_options[] = {
 	{"id_dimm", required_argument,		0,	ID_DIMM},
 	{"get_security", required_argument,	0,	GET_SECURITY},
 	{"set_nonce", required_argument,	0,	SET_NONCE},
+	{"set_passphrase", required_argument,	0,	SET_PASSPHRASE},
 	{0, 0, 0, 0}
 };
 
@@ -117,6 +121,10 @@ int main(int argc, char *argv[])
 		int option_index;
 		int dimm_count;
 		int ret;
+		char curr_ph[CR_PASSPHRASE_LEN + 1];
+		char new_ph[CR_PASSPHRASE_LEN + 1];
+		char *newline;
+
 		switch (getopt_long(argc, argv, "h", long_options,
 			&option_index)) {
 		case LOAD_FIT:
@@ -176,6 +184,37 @@ int main(int argc, char *argv[])
 		case SET_NONCE:
 			if ((ret = crbd_set_nonce(strtol(optarg, NULL, 0)))) {
 				fprintf(stderr, "Set Nonce failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case SET_PASSPHRASE:
+
+			memset(curr_ph, 0, sizeof(curr_ph));
+			memset(new_ph, 0, sizeof(new_ph));
+
+			printf("Enter the current passphrase:\n");
+
+			if (!fgets(curr_ph, sizeof(curr_ph), stdin))
+				return EXIT_FAILURE;
+
+			newline = strchr(curr_ph, '\n');
+
+			if (newline)
+				*newline = 0;
+
+			printf("Enter the new passphrase:\n");
+
+			if (!fgets(new_ph, sizeof(new_ph), stdin))
+				return EXIT_FAILURE;
+
+			newline = strchr(new_ph, '\n');
+
+			if (newline)
+				*newline = 0;
+
+			if ((ret = crbd_set_passphrase(strtol(optarg, NULL, 0), curr_ph, new_ph))) {
+				fprintf(stderr, "Set Passphrase failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;
