@@ -311,6 +311,9 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 
 	cr_write_barrier();
 
+	/*BUG: Simics MB bug never resests status code*/
+	memset_io(mb->status, 0, CR_REG_SIZE);
+
 	cr_set_mb_door_bell(mb);
 
 	cr_poll_fw_cmd_completion(mb);
