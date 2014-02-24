@@ -7,7 +7,14 @@
 # Feed in two arg, the path to the kernel build dir and your WFR sourece dir.
 
 kernel_build=$1
+if [ -z $1 ]; then
+	kernel_build="/lib/modules/3.9.2-wfr+/build"
+fi
+
 wfr_src=$2
+if [ -z $2 ]; then
+	wfr_src=$(git rev-parse --show-toplevel)
+fi
 
 if [ ! -d $kernel_build ]; then
 	echo "Could not find dir: $kernel_build for kernel build"
