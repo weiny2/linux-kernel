@@ -11,13 +11,16 @@ DEFAULT_BRANCH="wfr-for-ifs"
 #       upstream.  As soon as these changes are accepted we should be able to
 #       drop those modules.
 #       [*] new ioctl registration and URMPP flags
+headers_to_copy="
+	include/rdma
+	include/uapi/rdma
+"
 sources_to_copy="
 	scripts/WFR-develtools/activate-wfrl-b2b.sh
 	scripts/WFR-develtools/umad-trace.stp
 	drivers/infiniband/core
 	drivers/infiniband/hw/wfr-lite
-	include/rdma
-	include/uapi/rdma
+	$headers_to_copy
 	drivers/infiniband/hw/qib
 	drivers/infiniband/hw/mthca
 	drivers/infiniband/hw/mlx4
@@ -175,6 +178,19 @@ fi
 %description
 Updated kernel modules for STL IFS
 
+%package devel
+Summary:        Development headers to properly build against $rpmname
+Group:		System Environment/Kernel
+Summary:        Extra kernel modules for IFS
+Version:        $rpmversion
+Release:        $rpmrelease
+License:        GPL v2
+Requires:	kernel >= $rpmrelease $rpmname = $rpmversion-$rpmrelease
+
+%description devel
+Development headers to properly build against $rpmname
+
+
 %prep
 %setup -q
 
@@ -237,6 +253,10 @@ cp drivers/infiniband/hw/qib/ib_qib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/update
 cp drivers/infiniband/hw/mlx4/mlx4_ib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/mthca/ib_mthca.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
+mkdir -p \$RPM_BUILD_ROOT/usr/src/kernels/%kver/include-ifs-kernel
+cp -r include/* \$RPM_BUILD_ROOT/usr/src/kernels/%kver/include-ifs-kernel; \
+cp drivers/infiniband/core/Module.symvers \$RPM_BUILD_ROOT/usr/src/kernels/%kver/include-ifs-kernel; \
+
 %post
 depmod -a
 
@@ -252,6 +272,11 @@ rm -rf \${RPM_BUILD_ROOT}
 /lib/modules/%kver/updates/*
 %dir /sbin
 /sbin/*
+
+%files devel
+%defattr(-, root, root)
+/usr/src/kernels/%kver/include-ifs-kernel
+
 EOF
 
 # moment of truth, run rpmbuild
