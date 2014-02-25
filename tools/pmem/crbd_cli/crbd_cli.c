@@ -151,6 +151,7 @@ int main(int argc, char *argv[])
 		int option_index;
 		int dimm_count;
 		int ret;
+		char security_status;
 		char curr_ph[CR_PASSPHRASE_LEN + 1];
 		char new_ph[CR_PASSPHRASE_LEN + 1];
 
@@ -204,7 +205,7 @@ int main(int argc, char *argv[])
 			return EXIT_SUCCESS;
 			break;
 		case GET_SECURITY:
-			if ((ret = crbd_get_security(strtol(optarg, NULL, 0)))) {
+			if ((ret = crbd_get_security(strtol(optarg, NULL, 0), &security_status))) {
 				fprintf(stderr, "Get Security failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}

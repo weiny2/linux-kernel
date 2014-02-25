@@ -13,7 +13,7 @@ int crbd_ioctl_load_fit(char *nvdimm_fit_file);
 int crbd_ioctl_dimm_init();
 int crbd_ioctl_get_topology(__u8 count, struct nvdimm_topology *dimm_topo);
 int crbd_identify_dimm(int dimm_handle);
-int crbd_get_security(int dimm_handle);
+int crbd_get_security(int dimm_handle, char *security_status);
 int crbd_set_nonce(int dimm_handle);
 int crbd_set_passphrase(int dimm_handle, char *curr_ph, char *new_ph);
 int crbd_disable_passphrase(int dimm_handle, char *curr_ph);

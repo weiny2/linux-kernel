@@ -193,7 +193,7 @@ int crbd_identify_dimm(int dimm_handle)
 	return ret;
 }
 
-int crbd_get_security(int dimm_handle)
+int crbd_get_security(int dimm_handle, char *security_status)
 {
 	struct fv_fw_cmd fw_cmd;
 	struct cr_pt_payload_get_security_state security_payload;
@@ -226,7 +226,7 @@ int crbd_get_security(int dimm_handle)
 	free(fw_cmd.output_payload);
 
 	fprintf(stdout, "Security State: %#hhx\n",security_payload.security_status);
-
+	*security_status = security_payload.security_status;
 	return ret;
 }
 
