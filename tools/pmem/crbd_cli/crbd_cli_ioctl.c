@@ -376,6 +376,26 @@ int crbd_erase_unit(int dimm_handle, char *curr_ph)
 	return ret;
 }
 
+int crbd_freeze_lock(int dimm_handle)
+{
+	struct fv_fw_cmd fw_cmd;
+	int ret = 0;
+
+	memset(&fw_cmd, 0, sizeof(fw_cmd));
+
+	fw_cmd.id = dimm_handle;
+	fw_cmd.opcode = CR_PT_SET_SEC_INFO;
+	fw_cmd.sub_opcode = SUBOP_SEC_FREEZE_LOCK;
+	fw_cmd.input_payload_size = 0;
+	fw_cmd.large_input_payload_size = 0;
+	fw_cmd.output_payload_size = 0;
+	fw_cmd.large_output_payload_size = 0;
+
+	ret = crbd_ioctl_pass_thru(&fw_cmd);
+
+	return ret;
+}
+
 int crbd_ioctl_pass_thru(struct fv_fw_cmd *fw_cmd)
 {
 	int ret = 0;
