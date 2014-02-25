@@ -57,6 +57,7 @@
 #define QLOGIC_IB_R_SOFTWARE_SHIFT 24
 #define QLOGIC_IB_R_EMULATOR_MASK (1ULL<<62)
 
+#define HFI_MIN_HDRQ_EGRBUF_CNT 2
 /*
  * Number of receive contexts we are configured to use (to allow for more pio
  * buffers per ctxt, etc.)  Zero means use chip value.
@@ -181,6 +182,13 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 
 	dd_dev_info(dd, "%s: setting up context %u\n", __func__,
 		    uctxt->ctxt);
+
+	if (hdrqcnt <= HFI_MIN_HDRQ_EGRBUF_CNT ||
+	    egrtids <= HFI_MIN_HDRQ_EGRBUF_CNT) {
+		dd_dev_err(dd, "hdrq or eager buffer count too small\n");
+		ret = -EINVAL;
+		goto done;
+	}
 
 	if (egrtids > dd->rcv_entries) {
 		dd_dev_err(dd,
