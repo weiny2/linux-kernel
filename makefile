@@ -47,10 +47,21 @@ NAME = hfi
 
 KVER=$(shell uname -r)
 KBUILD  ?= /lib/modules/$(KVER)/build
+
+STL_MGMT := $(shell test -d $(KBUILD)/include-ifs-kernel && echo 1)
+ifeq (1, $(STL_MGMT))
+NOSTDINC_FLAGS += -I$(KBUILD)/include-ifs-kernel -DCONFIG_STL_MGMT
+KBUILD_EXTRA_SYMBOLS := $(KBUILD)/include-ifs-kernel/Module.symvers
+endif
+
 PWD:=$(shell pwd)
 
 driver:
-	make RELEASE=$(VERSION)-$(RELEASE)$(KVER) -C $(KBUILD) M=$(PWD) MVERSION=$(VERSION)-$(RELEASE)
+ifeq (1, $(STL_MGMT))
+	cp $(KBUILD)/include-ifs-kernel/Module.symvers .
+endif
+	make RELEASE=$(VERSION)-$(RELEASE)$(KVER) -C $(KBUILD) M=$(PWD) MVERSION=$(VERSION)-$(RELEASE) \
+		NOSTDINC_FLAGS="$(NOSTDINC_FLAGS)" KBUILD_EXTRA_SYMBOLS="$(KBUILD_EXTRA_SYMBOLS)"
 clean:
 	make -C $(KBUILD) M=$(PWD) clean
 
