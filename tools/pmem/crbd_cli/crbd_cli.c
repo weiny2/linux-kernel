@@ -23,6 +23,7 @@ static const char usage_cmds[] =
 "  --get_security dimm_handle\n"
 "  --set_nonce dimm_handle\n"
 "  --set_passphrase dimm_handle\n"
+"  --disable_passphrase dimm_handle\n"
 "  --help \n"
 ;
 
@@ -36,6 +37,7 @@ enum {
 	GET_SECURITY,
 	SET_NONCE,
 	SET_PASSPHRASE,
+	DISABLE_PASSPHRASE,
 };
 
 static struct option long_options[] = {
@@ -48,6 +50,7 @@ static struct option long_options[] = {
 	{"get_security", required_argument,	0,	GET_SECURITY},
 	{"set_nonce", required_argument,	0,	SET_NONCE},
 	{"set_passphrase", required_argument,	0,	SET_PASSPHRASE},
+	{"disable_passphrase", required_argument, 0,    DISABLE_PASSPHRASE},
 	{0, 0, 0, 0}
 };
 
@@ -113,6 +116,21 @@ static int get_topology(void)
 	return EXIT_SUCCESS;
 }
 
+static int get_passphrase(char *buffer)
+{
+	char *newline;
+
+	if (!fgets(buffer, sizeof(buffer), stdin))
+		return 1;
+
+	newline = strchr(buffer, '\n');
+
+	if (newline)
+		*newline = 0;
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	nvdimm_fit_file[0] = '\0';
@@ -123,7 +141,6 @@ int main(int argc, char *argv[])
 		int ret;
 		char curr_ph[CR_PASSPHRASE_LEN + 1];
 		char new_ph[CR_PASSPHRASE_LEN + 1];
-		char *newline;
 
 		switch (getopt_long(argc, argv, "h", long_options,
 			&option_index)) {
@@ -195,26 +212,31 @@ int main(int argc, char *argv[])
 
 			printf("Enter the current passphrase:\n");
 
-			if (!fgets(curr_ph, sizeof(curr_ph), stdin))
+			if (get_passphrase(curr_ph))
 				return EXIT_FAILURE;
-
-			newline = strchr(curr_ph, '\n');
-
-			if (newline)
-				*newline = 0;
 
 			printf("Enter the new passphrase:\n");
 
-			if (!fgets(new_ph, sizeof(new_ph), stdin))
+			if (get_passphrase(new_ph))
 				return EXIT_FAILURE;
-
-			newline = strchr(new_ph, '\n');
-
-			if (newline)
-				*newline = 0;
 
 			if ((ret = crbd_set_passphrase(strtol(optarg, NULL, 0), curr_ph, new_ph))) {
 				fprintf(stderr, "Set Passphrase failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case DISABLE_PASSPHRASE:
+
+			memset(curr_ph, 0, sizeof(curr_ph));
+
+			printf("Enter the current passphrase:\n");
+
+			if (get_passphrase(curr_ph))
+				return EXIT_FAILURE;
+
+			if ((ret = crbd_disable_passphrase(strtol(optarg, NULL, 0), curr_ph))) {
+				fprintf(stderr, "Disable Passphrase failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;

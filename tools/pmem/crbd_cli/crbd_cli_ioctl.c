@@ -281,6 +281,31 @@ int crbd_set_passphrase(int dimm_handle, char *curr_ph, char *new_ph)
 	return ret;
 }
 
+int crbd_disable_passphrase(int dimm_handle, char *curr_ph)
+{
+	struct fv_fw_cmd fw_cmd;
+	struct cr_pt_payload_passphrase payload_ph;
+	int ret = 0;
+
+	memset(&fw_cmd, 0, sizeof(fw_cmd));
+
+	fw_cmd.id = dimm_handle;
+	fw_cmd.opcode = CR_PT_SET_SEC_INFO;
+	fw_cmd.sub_opcode = SUBOP_DISABLE_PASS;
+	fw_cmd.input_payload_size = 32;
+	fw_cmd.large_input_payload_size = 0;
+	fw_cmd.output_payload_size = 0;
+	fw_cmd.large_output_payload_size = 0;
+
+	memcpy(payload_ph.passphrase_current, curr_ph, CR_PASSPHRASE_LEN);
+
+	fw_cmd.input_payload = &payload_ph;
+
+	ret = crbd_ioctl_pass_thru(&fw_cmd);
+
+	return ret;
+}
+
 int crbd_ioctl_pass_thru(struct fv_fw_cmd *fw_cmd)
 {
 	int ret = 0;
