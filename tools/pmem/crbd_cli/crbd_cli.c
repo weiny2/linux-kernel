@@ -25,6 +25,8 @@ static const char usage_cmds[] =
 "  --set_passphrase dimm_handle\n"
 "  --disable_passphrase dimm_handle\n"
 "  --unlock_unit dimm_handle\n"
+"  --erase_prepare dimm_handle\n"
+"  --erase_unit dimm_handle\n"
 "  --help \n"
 ;
 
@@ -40,6 +42,8 @@ enum {
 	SET_PASSPHRASE,
 	DISABLE_PASSPHRASE,
 	UNLOCK_UNIT,
+	ERASE_PREPARE,
+	ERASE_UNIT,
 };
 
 static struct option long_options[] = {
@@ -54,6 +58,8 @@ static struct option long_options[] = {
 	{"set_passphrase", required_argument,	0,	SET_PASSPHRASE},
 	{"disable_passphrase", required_argument, 0,    DISABLE_PASSPHRASE},
 	{"unlock_unit", required_argument, 	0,	UNLOCK_UNIT},
+	{"erase_prepare", required_argument,	0,	ERASE_PREPARE},
+	{"erase_unit", required_argument,	0,	ERASE_UNIT},
 	{0, 0, 0, 0}
 };
 
@@ -254,6 +260,29 @@ int main(int argc, char *argv[])
 				return EXIT_FAILURE;
 
 			if ((ret = crbd_unlock_unit(strtol(optarg, NULL, 0), curr_ph))) {
+				fprintf(stderr, "Unlock Unit failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case ERASE_PREPARE:
+
+			if ((ret = crbd_erase_prepare(strtol(optarg, NULL, 0)))) {
+				fprintf(stderr, "Erase Prepare failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case ERASE_UNIT:
+
+			memset(curr_ph, 0, sizeof(curr_ph));
+
+			printf("Enter the current passphrase:\n");
+
+			if (get_passphrase(curr_ph))
+				return EXIT_FAILURE;
+
+			if ((ret = crbd_erase_unit(strtol(optarg, NULL, 0), curr_ph))) {
 				fprintf(stderr, "Unlock Unit failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}
