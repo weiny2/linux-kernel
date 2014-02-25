@@ -24,6 +24,7 @@ static const char usage_cmds[] =
 "  --set_nonce dimm_handle\n"
 "  --set_passphrase dimm_handle\n"
 "  --disable_passphrase dimm_handle\n"
+"  --unlock_unit dimm_handle\n"
 "  --help \n"
 ;
 
@@ -38,6 +39,7 @@ enum {
 	SET_NONCE,
 	SET_PASSPHRASE,
 	DISABLE_PASSPHRASE,
+	UNLOCK_UNIT,
 };
 
 static struct option long_options[] = {
@@ -51,6 +53,7 @@ static struct option long_options[] = {
 	{"set_nonce", required_argument,	0,	SET_NONCE},
 	{"set_passphrase", required_argument,	0,	SET_PASSPHRASE},
 	{"disable_passphrase", required_argument, 0,    DISABLE_PASSPHRASE},
+	{"unlock_unit", required_argument, 	0,	UNLOCK_UNIT},
 	{0, 0, 0, 0}
 };
 
@@ -237,6 +240,21 @@ int main(int argc, char *argv[])
 
 			if ((ret = crbd_disable_passphrase(strtol(optarg, NULL, 0), curr_ph))) {
 				fprintf(stderr, "Disable Passphrase failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case UNLOCK_UNIT:
+
+			memset(curr_ph, 0, sizeof(curr_ph));
+
+			printf("Enter the current passphrase:\n");
+
+			if (get_passphrase(curr_ph))
+				return EXIT_FAILURE;
+
+			if ((ret = crbd_unlock_unit(strtol(optarg, NULL, 0), curr_ph))) {
+				fprintf(stderr, "Unlock Unit failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;
