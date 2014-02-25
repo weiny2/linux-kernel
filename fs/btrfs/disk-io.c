@@ -300,7 +300,7 @@ static int csum_tree_block(struct btrfs_root *root, struct extent_buffer *buf,
 			memcpy(&found, result, csum_size);
 
 			read_extent_buffer(buf, &val, 0, csum_size);
-			printk_ratelimited(KERN_INFO
+			printk_ratelimited(KERN_WARNING
 				"BTRFS: %s checksum verify failed on %llu wanted %X found %X "
 				"level %d\n",
 				root->fs_info->sb->s_id, buf->start,
@@ -343,7 +343,8 @@ static int verify_parent_transid(struct extent_io_tree *io_tree,
 		ret = 0;
 		goto out;
 	}
-	printk_ratelimited("parent transid verify failed on %llu wanted %llu "
+	printk_ratelimited(KERN_WARNING
+			"parent transid verify failed on %llu wanted %llu "
 		       "found %llu\n",
 		       eb->start, parent_transid, btrfs_header_generation(eb));
 	ret = 1;
@@ -602,14 +603,14 @@ static int btree_readpage_end_io_hook(struct btrfs_io_bio *io_bio,
 
 	found_start = btrfs_header_bytenr(eb);
 	if (found_start != eb->start) {
-		printk_ratelimited(KERN_INFO "BTRFS: bad tree block start "
+		printk_ratelimited(KERN_WARNING "BTRFS: bad tree block start "
 			       "%llu %llu\n",
 			       found_start, eb->start);
 		ret = -EIO;
 		goto err;
 	}
 	if (check_tree_block_fsid(root, eb)) {
-		printk_ratelimited(KERN_INFO "BTRFS: bad fsid on block %llu\n",
+		printk_ratelimited(KERN_WARNING "BTRFS: bad fsid on block %llu\n",
 			       eb->start);
 		ret = -EIO;
 		goto err;
@@ -3850,7 +3851,7 @@ static int btrfs_destroy_delayed_refs(struct btrfs_transaction *trans,
 	spin_lock(&delayed_refs->lock);
 	if (atomic_read(&delayed_refs->num_entries) == 0) {
 		spin_unlock(&delayed_refs->lock);
-		btrfs_info(root->fs_info, "delayed_refs has NO entry");
+		btrfs_debug(root->fs_info, "delayed_refs has NO entry");
 		return ret;
 	}
 

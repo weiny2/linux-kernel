@@ -2835,7 +2835,7 @@ good:
 
 zeroit:
 	if (__ratelimit(&_rs))
-		btrfs_info(root->fs_info, "csum failed ino %llu off %llu csum %u expected csum %u",
+		btrfs_err(root->fs_info, "csum failed ino %llu off %llu csum %u expected csum %u",
 			btrfs_ino(page->mapping->host), start, csum, csum_expected);
 	memset(kaddr + offset, 1, end - start + 1);
 	flush_dcache_page(page);
@@ -3260,7 +3260,7 @@ int btrfs_orphan_cleanup(struct btrfs_root *root)
 
 out:
 	if (ret)
-		btrfs_crit(root->fs_info,
+		btrfs_err(root->fs_info,
 			"could not do orphan cleanup %d", ret);
 	btrfs_free_path(path);
 	return ret;
@@ -4707,7 +4707,7 @@ void btrfs_evict_inode(struct inode *inode)
 			ret = btrfs_block_rsv_migrate(global_rsv, rsv, min_size);
 
 		if (ret) {
-			btrfs_warn(root->fs_info,
+			btrfs_info(root->fs_info,
 				"Could not get space for a delete, will truncate on mount %d",
 				ret);
 			btrfs_orphan_del(NULL, inode);
