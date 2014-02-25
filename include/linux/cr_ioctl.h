@@ -59,6 +59,32 @@ extern "C"
 #define	CR_CONFIG_GET_SIZE	1 /* get platform config get size command */
 #define	CR_CONFIG_GET_DATA	2 /* get platform config get data command */
 
+/*Mailbox Status Codes*/
+enum {
+	MB_SUCCESS = 0x00, /*Command Complete*/
+	MB_INVALID_PARAM = 0x01, /*Input parameter invalid*/
+	MB_DATA_TRANS_ERR = 0x02, /*Error in the data transfer*/
+	MB_INTERNAL_ERR = 0x03, /*Internal device error*/
+	MB_UNSUPPORTED_CMD = 0x04, /*Opcode or Sub opcode not supported*/
+	MB_BUSY = 0x05, /*Device is busy processing a long operation*/
+	MB_PASSPHRASE_ERR = 0x06, /*Incorrect Passphrase*/
+	MB_SECURITY_ERR = 0x07, /*Security check on the image has failed*/
+	MB_INVALID_STATE = 0x08, /*Op not permitted in current security state*/
+	MB_SYS_TIME_ERR = 0x09, /*System time has not been set yet*/
+	MB_DATA_NOT_SET = 0x0A /*Get data called without ever calling set data*/
+};
+
+#define MB_COMPLETE 0x1
+
+/*CR Security Status*/
+enum {
+	CR_SEC_RSVD		= 1 << 0,
+	CR_SEC_ENABLED		= 1 << 1,
+	CR_SEC_LOCKED		= 1 << 2,
+	CR_SEC_FROZEN		= 1 << 3,
+	CR_SEC_COUNT_EXP	= 1 << 4,
+};
+
 /*
  * ****************************************************************************
  * ENUMS

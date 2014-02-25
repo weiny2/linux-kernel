@@ -105,14 +105,9 @@ void test_id_dimm(void)
 
 	ret = crbd_ioctl_pass_thru(&fw_cmd);
 
-	MY_ASSERT_EQUAL(ret, 0);
+	MY_ASSERT_EQUAL(ret, MB_SUCCESS);
 
-	
-	ret = crbd_ioctl_pass_thru(&fw_cmd);
-
-	MY_ASSERT_EQUAL(ret, 0);
-
-	id_dimm_payload = *(struct cr_pt_payload_identify_dimm *)fw_cmd.output_payload;
+	id_dimm_payload = *(struct cr_pt_payload_identify_dimm *) fw_cmd.output_payload;
 
 	free(fw_cmd.output_payload);
 
@@ -126,6 +121,92 @@ void test_id_dimm(void)
 	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.nwfa), 0x00);
 	MY_ASSERT_EQUAL(__le16_to_cpu(id_dimm_payload.obmcr), 0x00);
 	MY_ASSERT_EQUAL(__le32_to_cpu(id_dimm_payload.rc), 0x400000);
+}
+
+void test_get_security(void)
+{
+	int test_dimm = 1;
+	char security_status;
+
+	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
+			, MB_SUCCESS);
+	MY_ASSERT_EQUAL(security_status, 0);
+}
+
+void test_set_nonce(void)
+{
+	int test_dimm = 1;
+	MY_ASSERT_EQUAL(crbd_set_nonce(test_dimm), MB_UNSUPPORTED_CMD);
+}
+
+void test_passphrase(void)
+{
+	int test_dimm = 1;
+	char pphrase[CR_PASSPHRASE_LEN + 1];
+	char empty_pphrase[CR_PASSPHRASE_LEN + 1];
+	char security_status;
+
+	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
+			, MB_SUCCESS);
+	MY_ASSERT_EQUAL(security_status, 0);
+
+	strncpy(pphrase, "monkey", sizeof(pphrase));
+	memset(empty_pphrase, 0, sizeof(empty_pphrase));
+
+	/*Set Passphrase*/
+	MY_ASSERT_EQUAL(crbd_set_passphrase(test_dimm, empty_pphrase, pphrase),
+			MB_SUCCESS);
+
+	/*Verify Security State*/
+	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
+			, MB_SUCCESS);
+	MY_ASSERT_EQUAL(security_status, CR_SEC_ENABLED);
+
+	/*Disable Passphrase*/
+	MY_ASSERT_EQUAL(crbd_disable_passphrase(test_dimm, pphrase)
+			, MB_SUCCESS);
+
+	/*Check Security State*/
+	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
+			, MB_SUCCESS);
+	MY_ASSERT_EQUAL(security_status, 0);
+}
+
+void test_secure_erase(void)
+{
+	int test_dimm = 1;
+	char pphrase[CR_PASSPHRASE_LEN + 1];
+	char empty_pphrase[CR_PASSPHRASE_LEN + 1];
+	char security_status;
+
+	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
+			, MB_SUCCESS);
+	MY_ASSERT_EQUAL(security_status, 0);
+
+	strncpy(pphrase, "monkey", sizeof(pphrase));
+	memset(empty_pphrase, 0, sizeof(empty_pphrase));
+
+	/*Set Passphrase*/
+	MY_ASSERT_EQUAL(crbd_set_passphrase(test_dimm, empty_pphrase, pphrase),
+			MB_SUCCESS);
+
+	/*Verify Security State*/
+	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
+			, MB_SUCCESS);
+	MY_ASSERT_EQUAL(security_status, CR_SEC_ENABLED);
+
+	/*Erase Prepare*/
+	MY_ASSERT_EQUAL(crbd_erase_prepare(test_dimm)
+				, MB_SUCCESS);
+
+	/*Secure Erase*/
+	MY_ASSERT_EQUAL(crbd_erase_unit(test_dimm, pphrase)
+			, MB_SUCCESS);
+
+	/*Check Security State*/
+	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
+			, MB_SUCCESS);
+	MY_ASSERT_EQUAL(security_status, 0);
 }
 
 void test_get_dimm_topology()
@@ -177,6 +258,14 @@ int load_integration_tests(CU_pSuite suite)
 	assert(CU_add_test(suite, "cr_get_dimm_topology", test_get_dimm_topology) != NULL);
 	test_count++;
 	assert(CU_add_test(suite, "cr_id_dimm", test_id_dimm) != NULL);
+	test_count++;
+	assert(CU_add_test(suite, "cr_get_security", test_get_security) != NULL);
+	test_count++;
+	assert(CU_add_test(suite, "cr_set_nonce", test_set_nonce) != NULL);
+	test_count++;
+	assert(CU_add_test(suite, "cr_test_passphrase", test_passphrase) != NULL);
+	test_count++;
+	assert(CU_add_test(suite, "cr_test_secure_erase", test_secure_erase) != NULL);
 	test_count++;
 	assert(CU_add_test(suite, "cr_topology_count", test_topology_count) != NULL);
 	test_count++;
