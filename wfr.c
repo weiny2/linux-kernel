@@ -104,6 +104,28 @@ struct flag_table {
 #define SEC_SC_HALTED		0x4	/* per-context only */
 #define SEC_SPC_FREEZE		0x8	/* per-HFI only */
 
+/* defines to build power on SC2VL table */
+#define SC2VL_VAL( \
+	num, \
+	sc0, sc0val, \
+	sc1, sc1val, \
+	sc2, sc2val, \
+	sc3, sc3val, \
+	sc4, sc4val, \
+	sc5, sc5val, \
+	sc6, sc6val, \
+	sc7, sc7val) \
+( \
+	((u64)(sc0val) << WFR_SEND_SC2VLT##num##_SC##sc0##_SHIFT) | \
+	((u64)(sc1val) << WFR_SEND_SC2VLT##num##_SC##sc1##_SHIFT) | \
+	((u64)(sc2val) << WFR_SEND_SC2VLT##num##_SC##sc2##_SHIFT) | \
+	((u64)(sc3val) << WFR_SEND_SC2VLT##num##_SC##sc3##_SHIFT) | \
+	((u64)(sc4val) << WFR_SEND_SC2VLT##num##_SC##sc4##_SHIFT) | \
+	((u64)(sc5val) << WFR_SEND_SC2VLT##num##_SC##sc5##_SHIFT) | \
+	((u64)(sc6val) << WFR_SEND_SC2VLT##num##_SC##sc6##_SHIFT) | \
+	((u64)(sc7val) << WFR_SEND_SC2VLT##num##_SC##sc7##_SHIFT)   \
+)
+
 /*
  * TXE PIO Error flags and consequences
  */
@@ -3540,10 +3562,7 @@ static void reset_txe(struct hfi_devdata *dd)
 	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, ~0ull);
 	write_csr(dd, WFR_SEND_BTH_QP, 0);
 	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, 0);
-	write_csr(dd, WFR_SEND_SC2VLT0, 0);
-	write_csr(dd, WFR_SEND_SC2VLT1, 0);
-	write_csr(dd, WFR_SEND_SC2VLT2, 0);
-	write_csr(dd, WFR_SEND_SC2VLT3, 0);
+	/* SL2VL init now moved to init_chip() */
 	write_csr(dd, WFR_SEND_LEN_CHECK0, 0);
 	write_csr(dd, WFR_SEND_LEN_CHECK1, 0);
 	write_csr(dd, WFR_SEND_ERR_MASK, 0);
@@ -3586,6 +3605,46 @@ static void reset_txe(struct hfi_devdata *dd)
 	}
 
 	//FIXME: Add SDMA registers
+}
+
+/*
+ * Set sc2vl tables.
+ *
+ * They power on to zeros, so to avoid send context errors
+ * they need to be set:
+ *
+ * SC 0-7 -> VL 0-7 (respectively)
+ * SC 15  -> VL 15
+ * otherwize
+ *        -> VL 0
+ */
+void init_sc2vl_tables(struct hfi_devdata *dd)
+{
+	/* init per architecture spec, contrained by hardware capability */
+	write_csr(dd, WFR_SEND_SC2VLT0, SC2VL_VAL(
+		0,
+		0, 0, 1, 1,
+		2, 2, 3, 3,
+		4, 4, 5, 5,
+		6, 6, 7, 7));
+	write_csr(dd, WFR_SEND_SC2VLT1, SC2VL_VAL(
+		1,
+		8, 0, 9, 0,
+		10, 0, 11, 0,
+		12, 0, 13, 0,
+		14, 0, 15, 15));
+	write_csr(dd, WFR_SEND_SC2VLT2, SC2VL_VAL(
+		2,
+		16, 0, 17, 0,
+		18, 0, 19, 0,
+		20, 0, 21, 0,
+		22, 0, 23, 0));
+	write_csr(dd, WFR_SEND_SC2VLT3, SC2VL_VAL(
+		3,
+		24, 0, 25, 0,
+		26, 0, 27, 0,
+		28, 0, 29, 0,
+		30, 0, 31, 0));
 }
 
 /*
@@ -3702,6 +3761,7 @@ static void init_chip(struct hfi_devdata *dd)
 	write_uninitialized_csrs_and_memories(dd);
 
 	init_partition_keys(dd);
+	init_sc2vl_tables(dd);
 
 	/*
 	 * TODO: The following block is strictly for the simulator.
