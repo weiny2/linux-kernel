@@ -27,6 +27,7 @@ static const char usage_cmds[] =
 "  --unlock_unit dimm_handle\n"
 "  --erase_prepare dimm_handle\n"
 "  --erase_unit dimm_handle\n"
+"  --freeze_lock dimm_handle\n"
 "  --help \n"
 ;
 
@@ -44,6 +45,7 @@ enum {
 	UNLOCK_UNIT,
 	ERASE_PREPARE,
 	ERASE_UNIT,
+	FREEZE_LOCK,
 };
 
 static struct option long_options[] = {
@@ -60,6 +62,7 @@ static struct option long_options[] = {
 	{"unlock_unit", required_argument, 	0,	UNLOCK_UNIT},
 	{"erase_prepare", required_argument,	0,	ERASE_PREPARE},
 	{"erase_unit", required_argument,	0,	ERASE_UNIT},
+	{"freeze_lock", required_argument,	0,	FREEZE_LOCK},
 	{0, 0, 0, 0}
 };
 
@@ -284,6 +287,14 @@ int main(int argc, char *argv[])
 
 			if ((ret = crbd_erase_unit(strtol(optarg, NULL, 0), curr_ph))) {
 				fprintf(stderr, "Unlock Unit failed: Error %d\n", ret);
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+			break;
+		case FREEZE_LOCK:
+
+			if ((ret = crbd_freeze_lock(strtol(optarg, NULL, 0)))) {
+				fprintf(stderr, "Freeze Lock failed: Error %d\n", ret);
 				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;

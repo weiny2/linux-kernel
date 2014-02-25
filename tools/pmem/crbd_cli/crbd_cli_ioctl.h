@@ -20,6 +20,7 @@ int crbd_disable_passphrase(int dimm_handle, char *curr_ph);
 int crbd_unlock_unit(int dimm_handle, char *curr_ph);
 int crbd_erase_prepare(int dimm_handle);
 int crbd_erase_unit(int dimm_handle, char *curr_ph);
+int crbd_freeze_lock(int dimm_handle);
 int crbd_ioctl_pass_thru(struct fv_fw_cmd *fw_cmd);
 int crbd_ioctl_topology_count(void);
 #endif /* CRBD_IOCTL_H_ */
