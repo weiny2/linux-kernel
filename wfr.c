@@ -126,6 +126,43 @@ struct flag_table {
 	((u64)(sc7val) << WFR_SEND_SC2VLT##num##_SC##sc7##_SHIFT)   \
 )
 
+#define DC_SC_VL_VAL( \
+	range, \
+	e0, e0val, \
+	e1, e1val, \
+	e2, e2val, \
+	e3, e3val, \
+	e4, e4val, \
+	e5, e5val, \
+	e6, e6val, \
+	e7, e7val, \
+	e8, e8val, \
+	e9, e9val, \
+	e10, e10val, \
+	e11, e11val, \
+	e12, e12val, \
+	e13, e13val, \
+	e14, e14val, \
+	e15, e15val) \
+( \
+	((u64)(e0val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e0##_SHIFT) | \
+	((u64)(e1val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e1##_SHIFT) | \
+	((u64)(e2val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e2##_SHIFT) | \
+	((u64)(e3val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e3##_SHIFT) | \
+	((u64)(e4val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e4##_SHIFT) | \
+	((u64)(e5val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e5##_SHIFT) | \
+	((u64)(e6val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e6##_SHIFT) | \
+	((u64)(e7val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e7##_SHIFT) | \
+	((u64)(e8val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e8##_SHIFT) | \
+	((u64)(e9val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e9##_SHIFT) | \
+	((u64)(e10val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e10##_SHIFT) | \
+	((u64)(e11val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e11##_SHIFT) | \
+	((u64)(e12val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e12##_SHIFT) | \
+	((u64)(e13val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e13##_SHIFT) | \
+	((u64)(e14val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e14##_SHIFT) | \
+	((u64)(e15val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e15##_SHIFT) \
+)
+
 /*
  * TXE PIO Error flags and consequences
  */
@@ -3621,6 +3658,8 @@ static void reset_txe(struct hfi_devdata *dd)
 void init_sc2vl_tables(struct hfi_devdata *dd)
 {
 	/* init per architecture spec, contrained by hardware capability */
+
+	/* WFR maps sent packets */
 	write_csr(dd, WFR_SEND_SC2VLT0, SC2VL_VAL(
 		0,
 		0, 0, 1, 1,
@@ -3645,6 +3684,16 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
 		26, 0, 27, 0,
 		28, 0, 29, 0,
 		30, 0, 31, 0));
+
+	/* DC maps received packets */
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_15_0, DC_SC_VL_VAL(
+		15_0,
+		0, 0, 1, 1,  2, 2,  3, 3,  4, 4,  5, 5,  6, 6,  7,  7,
+		8, 0, 9, 0, 10, 0, 11, 0, 12, 0, 13, 0, 14, 0, 15, 15));
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_31_16, DC_SC_VL_VAL(
+		31_16,
+		16, 0, 17, 0, 18, 0, 19, 0, 20, 0, 21, 0, 22, 0, 23, 0,
+		24, 0, 25, 0, 26, 0, 27, 0, 28, 0, 29, 0, 30, 0, 31, 0));
 }
 
 /*
