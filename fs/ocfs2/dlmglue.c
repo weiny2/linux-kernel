@@ -3142,6 +3142,9 @@ out:
 	return 0;
 }
 
+static void ocfs2_process_blocked_lock(struct ocfs2_super *osb,
+				       struct ocfs2_lock_res *lockres);
+
 /* Mark the lockres as being dropped. It will no longer be
  * queued if blocking, but we still may have to wait on it
  * being dequeued from the downconvert thread before we can consider
@@ -3205,7 +3208,6 @@ void ocfs2_mark_lockres_freeing(struct ocfs2_super *osb,
 
 		spin_lock_irqsave(&lockres->l_lock, flags);
 	}
-out_unlock:
 	spin_unlock_irqrestore(&lockres->l_lock, flags);
 }
 
