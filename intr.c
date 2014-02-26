@@ -145,6 +145,9 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* physical link went down */
 		ppd->linkup = 0;
 
+		/* clear HW details of the prevoius connection */
+		reset_link_credits(dd);
+
 		if (ppd->statusp)
 			*ppd->statusp &= ~QIB_STATUS_IB_READY;
 

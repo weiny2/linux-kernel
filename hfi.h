@@ -1033,6 +1033,7 @@ int fm_get_table(struct qib_pportdata *, int, void *);
 int fm_set_table(struct qib_pportdata *, int, void *);
 
 void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf);
+void reset_link_credits(struct hfi_devdata *dd);
 void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu);
 void assign_link_credits(struct hfi_devdata *dd);
 

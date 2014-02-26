@@ -804,7 +804,7 @@ void write_global_credit(struct hfi_devdata *dd, u8 vau, u16 total, u16 shared)
 
 /*
  * Set up initial VL15 credits of the remote.  Assumes the rest of
- * the CM credit registers are zero from the init reset.
+ * the CM credit registers are zero from a previous global or credit reset .
  */
 void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf)
 {
@@ -812,6 +812,24 @@ void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf)
 	write_global_credit(dd, vau, vl15buf, 0);
 	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, (u64)vl15buf
 		    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+}
+
+/*
+ * Zero all credit details from the previous connection and
+ * reset the CM manager's internal counters.
+ */
+void reset_link_credits(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* remove all previous VL credit limits */
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8*i), 0);
+	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, 0);
+	write_global_credit(dd, 0, 0, 0);
+	/* reset the CM block */
+	pio_send_control(dd, PSC_CM_RESET_ENABLE);
+	pio_send_control(dd, PSC_CM_RESET_DISABLE);
 }
 
 /* convert a vCU to a CU */

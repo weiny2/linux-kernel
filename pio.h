@@ -146,6 +146,8 @@ void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
 #define PSC_GLOBAL_DISABLE 1
 #define PSC_GLOBAL_VLARB_ENABLE 2
 #define PSC_GLOBAL_VLARB_DISABLE 3
+#define PSC_CM_RESET_ENABLE 4
+#define PSC_CM_RESET_DISABLE 5
 
 void pio_send_control(struct hfi_devdata *dd, int op);
 

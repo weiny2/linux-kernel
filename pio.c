@@ -59,6 +59,18 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 	case PSC_GLOBAL_VLARB_DISABLE:
 		reg &= ~WFR_SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
 		break;
+	case PSC_CM_RESET_ENABLE:
+#ifdef WFR_SEND_CTRL_CM_RESET_SMASK
+/* TODO: defined in HAS 0.77 */
+		reg |= WFR_SEND_CTRL_CM_RESET_SMASK;
+#endif
+		break;
+	case PSC_CM_RESET_DISABLE:
+#ifdef WFR_SEND_CTRL_CM_RESET_SMASK
+/* TODO: defined HAS 0.77 */
+		reg &= ~WFR_SEND_CTRL_CM_RESET_SMASK;
+#endif
+		break;
 	default:
 		dd_dev_err(dd, "%s: invalid control %d\n", __func__, op);
 		return;
