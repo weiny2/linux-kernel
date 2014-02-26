@@ -128,31 +128,34 @@ def main():
 
         # Go ahead and get the driver loaded or reloaded on both hosts
         for host in host1,host2:
+            name = host.get_name()
             loaded = is_driver_loaded(host, driver_name)
             if loaded == True:
-                RegLib.test_log(0, "Need to remove driver first")
+                RegLib.test_log(0, name + " Need to remove driver first")
                 removed = unload_driver(host, driver_name)
                 if removed == False:
-                    RegLib.test_fail("Could not remove HFI driver")
-            RegLib.test_log(0, "Loading Driver")
+                    RegLib.test_fail(name + " Could not remove HFI driver")
+            RegLib.test_log(0, name + " Loading Driver")
             loaded = load_driver(host, driver_name, driver_path)
             if loaded == True:
-                RegLib.test_log(0, "Driver loaded successfully")
+                RegLib.test_log(0, name + " Driver loaded successfully")
             else:
-                RegLib.test_fail("Could not load driver")
+                RegLib.test_fail(name + " Could not load driver")
 
         # Now that the driver is loaded make sure one of the hosts is running
         # opensm if none are then start it on host1.
         opensmhost = None
         for host in host1,host2:
+            name = host.get_name()
             opensm = is_opensm_active(host)
             if opensm == True:
                 if opensmhost:
-                    RegLib.test_fail("OpenSM detected on both nodes!")
+                    RegLib.test_fail(name + " OpenSM detected on both nodes!")
                 else:
                     opensmhost = host
 
         if opensmhost == None:
+            opensmhost = host1
             start_opensm(host1)
             if is_opensm_active(host1) == True:
                 RegLib.test_log(0, "Driver loaded and opensm started")
@@ -173,21 +176,22 @@ def main():
         # nodes.
         num_loaded = 0
         for host in host1,host2:
+            name = host.get_name()
             err = wait_for_active(host, 10, 2)
             if err:
-                RegLib.test_log(0, "Could not reach active state")
-                RegLib.test_log(0, "Attempting to restart opensm")
+                RegLib.test_log(0, name + " Could not reach active state")
+                RegLib.test_log(0, name + " Attempting to restart opensm")
                 restart_opensm(opensmhost)
                 if is_opensm_active(opensmhost) == True:
-                    RegLib.test_log(0, "Open SM reloaded")
+                    RegLib.test_log(0, name + " Open SM reloaded")
                 else:
-                    RegLib.test_fail("Could not reload opensm")
+                    RegLib.test_fail(name + " Could not reload opensm")
             else:
-                RegLib.test_log(0, "Adapter is up and running")
+                RegLib.test_log(0, name + " Adapter is up and running")
                 num_loaded = num_loaded + 1
 
         if num_loaded != 2:
-            RegLib.test_fail("Unable to get active state on at least 1 node")
+            RegLib.test_fail(name + " Unable to get active state on at least 1 node")
 
         # Now that open sm has been started we need to stop till things are working
         # better.
