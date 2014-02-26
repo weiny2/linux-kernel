@@ -543,7 +543,7 @@ static void load_security_variables(struct hfi_devdata *dd,
 #ifdef WFR_MISC_CFG_SHA_PRELOAD
 	/* Security variables d.  Write the header */
 	write_rsa_data(dd, WFR_MISC_CFG_SHA_PRELOAD,
-			(u8) &fdet->firmware->css_header,
+			(u8 *)&fdet->firmware->css_header,
 			sizeof(struct css_header));
 #endif
 }

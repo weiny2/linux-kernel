@@ -65,7 +65,12 @@ module_param(eager_buffer_size, uint, S_IRUGO);
 MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`");
 
 /* TODO: temporary */
-static uint use_flr;
+static uint use_flr
+/* TODO: HAS 0.76 - we should use FLR when using v33 and higer */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+	= 1
+#endif
+	;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
 
@@ -1853,12 +1858,22 @@ static void set_send_length(struct hfi_devdata *dd, u32 mtu_bytes)
 static void set_lidlmc(struct qib_pportdata *ppd)
 {
 	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
+#ifdef DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK
+/* TODO HAS 0.76 - field names changed, same meaning */
+	c1 &= ~(DCC_CFG_PORT_CONFIG1_TARGET_DLID_SMASK
+		| DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK);
+	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_TARGET_DLID_MASK)
+			<< DCC_CFG_PORT_CONFIG1_TARGET_DLID_SHIFT)|
+	      ((ppd->lmc & DCC_CFG_PORT_CONFIG1_DLID_MASK_MASK)
+			<< DCC_CFG_PORT_CONFIG1_DLID_MASK_SHIFT);
+#else
 	c1 &= ~(DCC_CFG_PORT_CONFIG1_LID_SMASK|
 	       DCC_CFG_PORT_CONFIG1_LMC_SMASK);
 	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_LID_MASK)
 			<< DCC_CFG_PORT_CONFIG1_LID_SHIFT)|
 	      ((ppd->lmc & DCC_CFG_PORT_CONFIG1_LMC_MASK)
 			<< DCC_CFG_PORT_CONFIG1_LMC_SHIFT);
+#endif
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
 }
 
@@ -2159,7 +2174,7 @@ static void set_global_shared(struct hfi_devdata *dd, u16 limit)
 
 	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
 	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SMASK;
-	reg |= limit << WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT;
+	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT;
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
 #endif
 }
@@ -2173,10 +2188,10 @@ static void set_global_limit(struct hfi_devdata *dd, u16 limit)
 /* TODO: name changed in HAS 0.76 */
 #ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
 	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SMASK;
-	reg |= limit << WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT;
+	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT;
 #else
 	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SMASK;
-	reg |= limit << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT;
+	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT;
 #endif
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
 }
@@ -3784,6 +3799,8 @@ static void init_chip(struct hfi_devdata *dd)
 #endif
 	} else {
 		dd_dev_info(dd, "Clearing CSRs with writes\n");
+		/* clear the DC reset */
+		write_csr(dd, WFR_CCE_DC_CTRL, 0);
 		// FIXME:
 		// o make sure all rcv contexts are disabled
 		// o make sure all of SDMA engines are disabled
