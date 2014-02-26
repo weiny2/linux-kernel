@@ -3718,6 +3718,9 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
 		28, 0, 29, 0,
 		30, 0, 31, 0));
 
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+/* TODO: only do this with WFR HAS 0.76 (sim v33) and later, the sim changed
+   what it does with these CSRs at that time */
 	/* DC maps received packets */
 	write_csr(dd, DCC_CFG_SC_VL_TABLE_15_0, DC_SC_VL_VAL(
 		15_0,
@@ -3727,6 +3730,7 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
 		31_16,
 		16, 0, 17, 0, 18, 0, 19, 0, 20, 0, 21, 0, 22, 0, 23, 0,
 		24, 0, 25, 0, 26, 0, 27, 0, 28, 0, 29, 0, 30, 0, 31, 0));
+#endif
 }
 
 /*
