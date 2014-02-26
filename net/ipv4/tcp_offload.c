@@ -58,6 +58,7 @@ struct sk_buff *tcp_tso_segment(struct sk_buff *skb,
 			       SKB_GSO_TCPV6 |
 			       SKB_GSO_GRE |
 			       SKB_GSO_IPIP |
+			       SKB_GSO_SIT |
 			       SKB_GSO_MPLS |
 			       SKB_GSO_UDP_TUNNEL |
 			       0) ||
