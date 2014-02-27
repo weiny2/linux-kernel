@@ -15,9 +15,9 @@ struct pci_sysdata {
 	int		domain;		/* PCI domain */
 	int		node;		/* NUMA node */
 #ifdef CONFIG_ACPI
-	struct acpi_device *companion;  /* ACPI companion device */
+	struct acpi_device *companion;	/* ACPI companion device */
 #endif
-#ifdef CONFIG_X86_64
+#if defined(CONFIG_X86_64) && !defined(CONFIG_XEN)
 	void		*iommu;		/* IOMMU private data */
 #endif
 #ifdef CONFIG_XEN_PCIDEV_FRONTEND

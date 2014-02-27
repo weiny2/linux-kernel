@@ -1195,10 +1195,6 @@ next:
 		if (test_bit(vector, used_vectors))
 			goto next;
 
-#ifdef CONFIG_KDB
-		if (vector == KDBENTER_VECTOR)
-			goto next;
-#endif	/* CONFIG_KDB */
 		for_each_cpu_and(new_cpu, tmp_mask, cpu_online_mask)
 			if (per_cpu(vector_irq, new_cpu)[vector] != -1)
 				goto next;

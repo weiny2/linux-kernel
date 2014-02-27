@@ -10,7 +10,7 @@
 static inline int skb_checksum_setup(struct sk_buff *skb,
 				     unsigned long *fixup_counter)
 {
- 	struct iphdr *iph = (void *)skb->data;
+	struct iphdr *iph = (void *)skb->data;
 	__be16 *csum = NULL;
 	int err = -EPROTO;
 

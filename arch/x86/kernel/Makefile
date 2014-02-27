@@ -30,9 +30,7 @@ obj-y			+= syscall_$(BITS).o
 obj-$(CONFIG_X86_64)	+= vsyscall_64.o
 obj-$(CONFIG_X86_64)	+= vsyscall_emu_64.o
 
-ifndef CONFIG_XEN
 obj-$(CONFIG_SYSFS)	+= ksysfs.o
-endif
 
 obj-y			+= bootflag.o e820.o
 obj-y			+= pci-dma.o quirks.o topology.o kdebugfs.o
@@ -130,6 +128,6 @@ ifeq ($(CONFIG_X86_64),y)
 endif
 
 disabled-obj-$(CONFIG_XEN) := crash.o early-quirks.o i8237.o i8253.o i8259.o \
-	irqinit.o pci-swiotlb.o reboot.o smpboot.o tracepoint.o trampoline%.o \
-	tsc%.o vsmp%.o
+	irqinit.o ksysfs.o pci-swiotlb.o reboot.o smpboot.o tracepoint.o \
+	trampoline%.o tsc%.o vsmp%.o
 disabled-obj-$(CONFIG_XEN_UNPRIVILEGED_GUEST) += probe_roms.o
