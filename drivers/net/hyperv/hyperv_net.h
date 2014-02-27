@@ -507,6 +507,8 @@ struct netvsc_device {
 
 	/* Holds rndis device info */
 	void *extension;
+	/* The recive buffer for this device */
+	unsigned char cb_buffer[NETVSC_PACKET_SIZE];
 };
 
 /* NdisInitialize message */
