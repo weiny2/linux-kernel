@@ -16,6 +16,7 @@
 #include <xen/events.h>
 #include <xen/grant_table.h>
 #include <xen/page.h>
+#include <xen/platform_pci.h>
 #else
 #include <xen/evtchn.h>
 #define bind_evtchn_to_irqhandler bind_caller_port_to_irqhandler
@@ -24,7 +25,6 @@
 #endif
 #include <xen/xenbus.h>
 #include "tpm.h"
-#include <xen/platform_pci.h>
 
 struct tpm_private {
 	struct tpm_chip *chip;

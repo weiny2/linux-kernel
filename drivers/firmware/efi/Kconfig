@@ -41,7 +41,7 @@ config UEFI_CPER
 
 config EFI_RUNTIME_MAP
 	bool "Export efi runtime maps to sysfs"
-	depends on X86 && EFI && KEXEC
+	depends on X86 && EFI && KEXEC && !XEN
 	default y
 	help
 	  Export efi runtime memory maps to /sys/firmware/efi/runtime-map.

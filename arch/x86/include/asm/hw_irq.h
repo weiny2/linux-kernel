@@ -195,8 +195,8 @@ extern void smp_reboot_interrupt(struct pt_regs *);
 #endif
 
 #ifndef CONFIG_XEN
+
 extern void (*__initconst interrupt[NR_VECTORS-FIRST_EXTERNAL_VECTOR])(void);
-#endif
 
 typedef int vector_irq_t[NR_VECTORS];
 DECLARE_PER_CPU(vector_irq_t, vector_irq);
@@ -211,6 +211,8 @@ static inline void lock_vector_lock(void) {}
 static inline void unlock_vector_lock(void) {}
 static inline void __setup_vector_irq(int cpu) {}
 #endif
+
+#endif /* !CONFIG_XEN */
 
 #endif /* !ASSEMBLY_ */
 

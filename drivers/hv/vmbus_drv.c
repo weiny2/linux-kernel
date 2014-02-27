@@ -45,10 +45,12 @@ static struct acpi_device  *hv_acpi_dev;
 static struct tasklet_struct msg_dpc;
 static struct completion probe_event;
 static int irq;
-u64 hyperv_mmio_start;
-EXPORT_SYMBOL_GPL(hyperv_mmio_start);
-u64 hyperv_mmio_size;
-EXPORT_SYMBOL_GPL(hyperv_mmio_size);
+
+struct resource hyperv_mmio = {
+	.name  = "hyperv mmio",
+	.flags = IORESOURCE_MEM,
+};
+EXPORT_SYMBOL_GPL(hyperv_mmio);
 
 static int vmbus_exists(void)
 {
@@ -901,10 +903,12 @@ static acpi_status vmbus_walk_resources(struct acpi_resource *res, void *ctx)
 	switch (res->type) {
 	case ACPI_RESOURCE_TYPE_IRQ:
 		irq = res->data.irq.interrupts[0];
+		break;
 
 	case ACPI_RESOURCE_TYPE_ADDRESS64:
-		hyperv_mmio_start = res->data.address64.minimum;
-		hyperv_mmio_size = res->data.address64.address_length;
+		hyperv_mmio.start = res->data.address64.minimum;
+		hyperv_mmio.end = res->data.address64.maximum;
+		break;
 	}
 
 	return AE_OK;
@@ -933,6 +937,8 @@ static int vmbus_acpi_add(struct acpi_device *device)
 
 		if (ACPI_FAILURE(result))
 			goto acpi_walk_err;
+		if (hyperv_mmio.start && hyperv_mmio.end)
+			request_resource(&iomem_resource, &hyperv_mmio);
 	}
 	ret_val = 0;
 
