@@ -3318,7 +3318,7 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
  * - mapped pages, which may require several travels to be reclaimed
  * - dirty pages, which is not "instantly" reclaimable
  */
-unsigned long global_reclaimable_pages(void)
+static unsigned long global_reclaimable_pages(void)
 {
 	int nr;
 
