@@ -952,6 +952,7 @@ void pci_update_resource(struct pci_dev *dev, int resno);
 int __must_check pci_assign_resource(struct pci_dev *dev, int i);
 int __must_check pci_reassign_resource(struct pci_dev *dev, int i, resource_size_t add_size, resource_size_t align);
 int pci_select_bars(struct pci_dev *dev, unsigned long flags);
+bool pci_device_is_present(struct pci_dev *pdev);
 #ifdef CONFIG_XEN
 void pci_restore_bars(struct pci_dev *);
 #endif

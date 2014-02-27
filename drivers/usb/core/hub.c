@@ -4005,6 +4005,7 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	enum usb_device_speed	oldspeed = udev->speed;
 	const char		*speed;
 	int			devnum = udev->devnum;
+	bool			second_reset = false;
 
 	/* root hub ports have a slightly longer reset period
 	 * (from USB 2.0 spec, section 7.1.7.5)
@@ -4125,6 +4126,20 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 					USB_DT_DEVICE << 8, 0,
 					buf, GET_DESCRIPTOR_BUFSIZE,
 					initial_descriptor_timeout);
+
+				/*
+				 * Some devices time out if they are powered on
+				 * when already connected. They need a second
+				 * reset.
+				 */
+				if (r == -ETIMEDOUT && !second_reset) {
+					retval = hub_port_reset(hub, port1, udev, delay, false);
+					second_reset = true;
+					if (retval < 0)
+						dev_err(&udev->dev,
+							"recovery from timeout failed, error %d\n",
+							retval);
+				}
 				switch (buf->bMaxPacketSize0) {
 				case 8: case 16: case 32: case 64: case 255:
 					if (buf->bDescriptorType ==
