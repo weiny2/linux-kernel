@@ -150,9 +150,6 @@ static inline unsigned long zone_page_state_snapshot(struct zone *zone,
 	return x;
 }
 
-/* Do not call this, really! This is only for backward compatibility. */
-extern __deprecated unsigned long global_reclaimable_pages(void);
-
 #ifdef CONFIG_NUMA
 /*
  * Determine the per node value of a stat item. This function
