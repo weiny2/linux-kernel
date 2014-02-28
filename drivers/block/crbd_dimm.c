@@ -383,6 +383,41 @@ int cr_fw_set_security(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 		return -EOPNOTSUPP;
 	}
 }
+
+int cr_fw_get_admin_features(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
+		struct cr_mailbox *mb)
+{
+	switch (fw_cmd->sub_opcode) {
+	case SUBOP_SYSTEM_TIME:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	case SUBOP_DIMM_PARTITION_INFO:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	default:
+		NVDIMM_DBG("Unknown Get Admin Feature Sub-Op received");
+		return -EOPNOTSUPP;
+	}
+}
+
+/*TODO: Internal information may need to be updated on some of these FW commands*/
+
+int cr_fw_set_admin_features(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
+		struct cr_mailbox *mb)
+{
+	switch (fw_cmd->sub_opcode) {
+	case SUBOP_SYSTEM_TIME:
+		NVDIMM_WARN("System Time cannot be set from OS");
+		break;
+	case SUBOP_DIMM_PARTITION_INFO:
+		return cr_send_command(fw_cmd, mb);
+		break;
+	default:
+		NVDIMM_DBG("Unknown Get Admin Feature Sub-Op received");
+		return -EOPNOTSUPP;
+	}
+}
+
 /*TODO: In the future only sniff out the commands we care about
  * for now though sniff all commands and leave stubs incase we need to take
  * action on any command to stay in sync with simics
@@ -411,6 +446,12 @@ int cr_sniff_fw_command(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 		break;
 	case CR_PT_SET_SEC_INFO:
 		return cr_fw_set_security(c_dimm, fw_cmd, mb);
+		break;
+	case CR_PT_GET_ADMIN_FEATURES:
+		return cr_fw_get_admin_features(c_dimm, fw_cmd, mb);
+		break;
+	case CR_PT_SET_ADMIN_FEATURES:
+		return cr_fw_set_admin_features(c_dimm, fw_cmd, mb);
 		break;
 	default:
 		NVDIMM_DBG("Opcode: %#hhx Not Supported in yet",
