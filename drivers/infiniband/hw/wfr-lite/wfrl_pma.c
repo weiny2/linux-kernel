@@ -173,6 +173,7 @@ struct stl_port_status_rsp {
 		__be64 port_vl_mark_fecn;
 
 		__be64 port_vl_xmit_discards;
+
 	} vls[1];		/* actual array size defined by number of bits in VLSelectmask */
 };
 
@@ -222,8 +223,6 @@ struct stl_port_data_counters_msg {
 			__be64 port_vl_xmit_wait_data;
 			__be64 port_vl_rcv_bubble;
 			__be64 port_vl_mark_fecn;
-
-			__be64 port_vl_xmit_discards;
 		} vls[1];		/* actual array size defined by number of bits in VLSelectmask */
 	} port[1]; 	/* actual array size defined by number of ports in attribute modifier */
 };
@@ -258,6 +257,61 @@ struct stl_port_error_counters_msg {
 		} vls[1];	/* actual array size defined by number of bits in VLSelectmask */
 	} port[1]; 	/* actual array size defined by number of ports in attribute modifier */
 };
+
+struct stl_port_error_info_msg {
+	__be64 port_select_mask[4];
+	__be32 error_info_select_mask;
+	__be32 reserved1;
+	struct _port_ei {
+
+		u8 port_Number;
+		u8 reserved2[7];
+
+		u8 status_and_code;
+		u8 packet_flit1[8]; /* EI1to12 format */
+		u8 packet_flit2[8];
+		u8 remaining_flit_bits12;
+		u8 reserved3[6];
+
+		u8 excessive_buffer_overrun_info;
+		u8 reserved4[7];
+
+		u8 port_xmit_constraint_error_info_status;
+		u8 reserved5;
+		__be16 port_xmit_constraint_error_info_pkey;
+		__be32 port_xmit_constraint_error_info_slid;
+
+		u8 port_rcv_constraint_error_info_status;
+		u8 reserved6;
+		__be16 port_rcv_constraint_error_info_pkey;
+		__be32 port_rcv_constraint_error_info_slid;
+
+		u8 port_rcv_switch_relay_error_info_status;
+		u8 reserved7[3];
+		__u32 relay_error_code_info;
+
+		u8 uncorrectable_error_info_status;
+		u8 reserved8;
+
+		u8 fm_config_error_info_status;
+		u8 config_error_info;
+		__u32 reserved9;
+	} port[1]; 	/* actual array size defined by number of ports in attribute modifier */
+};
+
+/* stl_port_error_info_msg error_info_select_mask bit definitions */
+enum error_info_selects {
+	PM_EIS_PortRcvErrorInfo             = (1 << 31),
+	PM_EIS_ExcessiveBufferOverrunInfo   = (1 << 30),
+	PM_EIS_PortXmitConstraintErrorInfo  = (1 << 29),
+	PM_EIS_PortRcvConstraintErrorInfo   = (1 << 28),
+	PM_EIS_PortRcvSwitchRelayErrorInfo  = (1 << 27),
+	PM_EIS_UncorrectableErrorInfo       = (1 << 26),
+	PM_EIS_FMConfigErrorInfo            = (1 << 25)
+};
+
+/* static_test_error_info is purely for mgmt code get/set test*/
+static struct stl_port_error_info_msg static_test_error_info;
 
 /**
  * BEGIN Functions
@@ -550,7 +604,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		printk(KERN_WARNING PFX "PMA Data Requested for Port %u not valid for HFI\n",
+		printk(KERN_WARNING PFX "PMA Data Requested for Port num %u not valid for HFI\n",
 			   (u8)port_num);
 		return reply_stl_pma(pmp);
 	}
@@ -580,10 +634,9 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		cpu_to_be64(cntrs.port_xmit_discards) + 
 		cpu_to_be64(cntrs.port_rcv_remphys_errors) +
 		cpu_to_be64(cntrs.local_link_integrity_errors) +
-		cpu_to_be64(cntrs.excessive_buffer_overrun_errors) +
-		cpu_to_be64(cntrs.vl15_dropped);
+		cpu_to_be64(cntrs.excessive_buffer_overrun_errors);
 
-	vlinfo = (struct _vls_dctrs *)&(rsp->vls[0]);
+	vlinfo = &(rsp->vls[0]);
 	vl_index = 0;
 	vl_select_mask = cpu_to_be32(req->vl_select_mask);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
@@ -594,6 +647,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		memset(vlinfo, 0, sizeof(*vlinfo));
 		vlinfo->port_vl_rcv_pkts  = cpu_to_be64(cntrs.port_rcv_packets);
 		vlinfo->port_vl_xmit_pkts = cpu_to_be64(cntrs.port_xmit_packets);
+		vlinfo->port_vl_rcv_data = cpu_to_be64(cntrs.port_rcv_data);
+		vlinfo->port_vl_xmit_data = cpu_to_be64(cntrs.port_xmit_data);
 		vlinfo += 1;
 	}
 	rsp = (struct _port_dctrs *)vlinfo;
@@ -679,7 +734,7 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 	qib_get_counters(ppd, &cntrs);
 	pma_adjust_counters_for_reset_done(&cntrs, ibp);
 
-	memset(rsp, 0, sizeof(*rsp) - sizeof(struct _vls_dctrs));
+	memset(rsp, 0, sizeof(*rsp));
 	rsp->portNumber = (u8)port_num;
 
 	/* The real WFR will have more than this. This is just Suzie-Q
@@ -715,11 +770,218 @@ static int pma_get_stl_errorcounters(struct stl_pma_mad *pmp,
 	return reply_stl_pma((struct stl_pma_mad *)pmp);
 }
 
+static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
+				struct ib_device *ibdev, u8 port)
+{
+	size_t response_data_size;
+	struct _port_ei *rsp;
+	struct stl_port_error_info_msg *req;
+	u64 port_mask;
+	u32 num_ports;
+	unsigned long port_num;
+	u8 num_pslm;
+
+	req = (struct stl_port_error_info_msg *)pmp->data;
+	rsp = (struct _port_ei *)&(req->port[0]);
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+
+	if (num_ports != 1 || num_ports != num_pslm ) { 
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL Get STL Error Info PMA 0x%x ;"
+			   " Invalid Req. num ports=%u, mask=0x%llx\n",
+			   be16_to_cpu(pmp->mad_hdr.attr_id), num_ports,
+			   be64_to_cpu(req->port_select_mask[3]));
+		return reply_stl_pma(pmp);
+	}
+
+	/* Sanity check */
+	response_data_size = sizeof(struct stl_port_error_info_msg) 
+		- sizeof(struct _port_ei) + num_ports * (sizeof(struct _port_ei)); 
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL PMA Requested Info Response too big for reply!" 
+			   " %zu vs 0x%zu, num_ports %u\n",
+			   response_data_size, sizeof(pmp->data), num_ports);
+		return reply_stl_pma(pmp);
+	}
+
+	/**
+	 * The real WFR will have only one port (port 1), so the bit set
+	 * in the mask needs to be consistent with the port the request 
+	 * came in on. 
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+					 sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "PMA Errors Requested for Port %u not valid for HFI\n",
+			   (u8)port_num);
+		return reply_stl_pma(pmp);
+	}
+
+	/* for testing, populate some non-zeros on first get */
+	if (static_test_error_info.reserved1 != 0xbabeface) {
+		u8 i;
+		memset(&static_test_error_info, 0, sizeof(static_test_error_info));
+		static_test_error_info.reserved1 = 0xbabeface;
+
+		static_test_error_info.port[0].port_Number = port;
+
+		static_test_error_info.port[0].status_and_code = 0x83;
+		for (i=0; i<8; i++) {
+			static_test_error_info.port[0].packet_flit1[i] = i;
+			static_test_error_info.port[0].packet_flit2[i] = i;
+		}
+
+		static_test_error_info.port[0].excessive_buffer_overrun_info = 0xFF - 3;
+
+		static_test_error_info.port[0].port_xmit_constraint_error_info_status = 
+			0x80;
+		static_test_error_info.port[0].port_xmit_constraint_error_info_pkey = 
+			be16_to_cpu(0x1234);
+		static_test_error_info.port[0].port_xmit_constraint_error_info_slid = 
+			be32_to_cpu(0x55667788);
+
+		static_test_error_info.port[0].port_rcv_constraint_error_info_status = 
+			0x80;
+		static_test_error_info.port[0].port_rcv_constraint_error_info_pkey = 
+			be16_to_cpu(0x1234);
+		static_test_error_info.port[0].port_rcv_constraint_error_info_slid = 
+			be32_to_cpu(0x55667788);
+
+		static_test_error_info.port[0].port_rcv_switch_relay_error_info_status =
+			0x86;
+		static_test_error_info.port[0].relay_error_code_info = 
+			be32_to_cpu(0x19181716);
+
+		static_test_error_info.port[0].uncorrectable_error_info_status = 0x85;
+
+		static_test_error_info.port[0].fm_config_error_info_status = 0x07;
+	}
+
+	/* for testing purposes, provide some recognizable test data */
+	memcpy(rsp, &static_test_error_info.port[0], sizeof(*rsp));
+	rsp->port_Number = (u8)port_num;
+
+	/* TODO - FIXME May need to change the size of the reply, as it will
+	 * not match request
+	 *
+	 * IKW same comment as above
+	 */
+	return reply_stl_pma((struct stl_pma_mad *)pmp);
+}
+
+static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
+				struct ib_device *ibdev, u8 port)
+{
+	size_t response_data_size;
+	struct _port_ei *rsp;
+	struct stl_port_error_info_msg *req;
+	u64 port_mask;
+	u32 num_ports;
+	unsigned long port_num;
+	u8 num_pslm;
+	u32 error_select_mask;
+
+	req = (struct stl_port_error_info_msg *)pmp->data;
+	rsp = (struct _port_ei *)&(req->port[0]);
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+
+	if (num_ports != 1 || num_ports != num_pslm ) { 
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL Set STL Error Info PMA 0x%x ;"
+			   " Invalid Req. num ports=%u, mask=0x%llx\n",
+			   be16_to_cpu(pmp->mad_hdr.attr_id), num_ports,
+			   be64_to_cpu(req->port_select_mask[3]));
+		return reply_stl_pma(pmp);
+	}
+
+	/* Sanity check */
+	response_data_size = sizeof(struct stl_port_error_info_msg) 
+		- sizeof(struct _port_ei) + num_ports * (sizeof(struct _port_ei)); 
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "STL PMA Requested Info Response too big for reply!" 
+			   " %zu vs 0x%zu, num_ports %u\n",
+			   response_data_size, sizeof(pmp->data), num_ports);
+		return reply_stl_pma(pmp);
+	}
+
+	/**
+	 * The real WFR will have only one port (port 1), so the bit set
+	 * in the mask needs to be consistent with the port the request 
+	 * came in on. 
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+					 sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		printk(KERN_WARNING PFX "PMA Errors Requested for Port %u not valid for HFI\n",
+			   (u8)port_num);
+		return reply_stl_pma(pmp);
+	}
+
+	/* for testing, clear the requested static_test_error_info */
+	error_select_mask = be32_to_cpu(req->error_info_select_mask);
+
+	if (error_select_mask & PM_EIS_PortRcvErrorInfo) {
+		u8 i;
+		static_test_error_info.port[0].status_and_code = 0;
+		for (i=0; i<8; i++) {
+			static_test_error_info.port[0].packet_flit1[i] = 0;
+			static_test_error_info.port[0].packet_flit2[i] = 0;
+		}
+	}
+
+	if (error_select_mask & PM_EIS_ExcessiveBufferOverrunInfo) 
+		static_test_error_info.port[0].excessive_buffer_overrun_info = 0;
+
+	if (error_select_mask & PM_EIS_PortXmitConstraintErrorInfo) {
+		static_test_error_info.port[0].port_xmit_constraint_error_info_status = 0;
+		static_test_error_info.port[0].port_xmit_constraint_error_info_pkey = 0;
+		static_test_error_info.port[0].port_xmit_constraint_error_info_slid = 0;
+	}
+
+	if (error_select_mask & PM_EIS_PortRcvConstraintErrorInfo) {
+		static_test_error_info.port[0].port_rcv_constraint_error_info_status = 0;
+		static_test_error_info.port[0].port_rcv_constraint_error_info_pkey = 0;
+		static_test_error_info.port[0].port_rcv_constraint_error_info_slid = 0;
+	}
+
+	if (error_select_mask & PM_EIS_PortRcvSwitchRelayErrorInfo) {
+		static_test_error_info.port[0].port_rcv_switch_relay_error_info_status = 0;
+		static_test_error_info.port[0].relay_error_code_info = 0;
+	}
+
+	if (error_select_mask & PM_EIS_UncorrectableErrorInfo) 
+		static_test_error_info.port[0].uncorrectable_error_info_status = 0;
+
+	if (error_select_mask & PM_EIS_FMConfigErrorInfo) 
+		static_test_error_info.port[0].fm_config_error_info_status = 0;
+
+	rsp->port_Number = (u8)port_num;
+
+	/* TODO - FIXME May need to change the size of the reply, as it will
+	 * not match request
+	 *
+	 * IKW same comment as above
+	 */
+	return reply_stl_pma((struct stl_pma_mad *)pmp);
+}
+
 /* Return 0's */
-static int pma_get_stl_stub(struct stl_pma_mad *pmp, struct ib_device *ibdev, u8 port)
+static int pma_send_unsupported_method_response(struct stl_pma_mad *pmp)
 {
 	pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
-	printk(KERN_WARNING PFX "STL Get PMA Attribute 0x%x stubbed out; returning 0's\n",
+	printk(KERN_WARNING PFX "STL PMA Unsupported Attribute 0x%x\n",
 			be16_to_cpu(pmp->mad_hdr.attr_id));
 	return reply_stl_pma(pmp);
 }
@@ -735,7 +997,8 @@ int process_stl_perf(struct ib_device *ibdev, u8 port,
 	if (pmp->mad_hdr.class_version != STL_PM_CLASS_VERSION) {
 		if (pmp->mad_hdr.attr_id != IB_PMA_CLASS_PORT_INFO) {
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_VERSION;
-			printk(KERN_WARNING PFX "STL Perf bad request received: class_ver 0x%x, attr 0x%x, status 0x%x\n",
+			printk(KERN_WARNING PFX "STL Perf bad request received:"
+				   " class_ver 0x%x, attr 0x%x, status 0x%x\n",
 				   (unsigned int)pmp->mad_hdr.class_version,
 				   (unsigned int)be16_to_cpu(pmp->mad_hdr.attr_id),
 				   (unsigned int)be16_to_cpu(pmp->mad_hdr.status));
@@ -760,11 +1023,10 @@ int process_stl_perf(struct ib_device *ibdev, u8 port,
 			ret = pma_get_stl_errorcounters(pmp, ibdev, port);
 			goto bail;
 		case STL_PM_ATTRIB_ID_ERROR_INFO:
-			/* TODO - FIXME not yet supported */
-			ret = pma_get_stl_stub(pmp, ibdev, port);
+			ret = pma_get_stl_errorinfo(pmp, ibdev, port);
 			goto bail;
 		default:
-			ret = pma_get_stl_stub(pmp, ibdev, port);
+			ret = pma_send_unsupported_method_response(pmp);
 			goto bail;
 		}
 
@@ -773,14 +1035,15 @@ int process_stl_perf(struct ib_device *ibdev, u8 port,
 		case STL_PM_ATTRIB_ID_CLEAR_PORT_STATUS:
 			ret = pma_set_stl_portstatus(pmp, ibdev, port);
 			goto bail;
+		case STL_PM_ATTRIB_ID_ERROR_INFO:
+			ret = pma_set_stl_errorinfo(pmp, ibdev, port);
+			goto bail;
 		case IB_PMA_CLASS_PORT_INFO:
 		case STL_PM_ATTRIB_ID_PORT_STATUS:
 		case STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS:
 		case STL_PM_ATTRIB_ID_ERROR_PORT_COUNTERS:
-		case STL_PM_ATTRIB_ID_ERROR_INFO:
 		default:
-			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply_stl_pma(pmp);
+			ret = pma_send_unsupported_method_response(pmp);
 			goto bail;
 		}
 
