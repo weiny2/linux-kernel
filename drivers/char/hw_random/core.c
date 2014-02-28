@@ -39,6 +39,7 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/miscdevice.h>
+#include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
@@ -50,10 +51,11 @@
 
 
 static struct hwrng *current_rng;
+static struct task_struct *hwrng_fill;
 static LIST_HEAD(rng_list);
 static DEFINE_MUTEX(rng_mutex);
 static int data_avail;
-static u8 *rng_buffer;
+static u8 *rng_buffer, *rng_fillbuf;
 
 static size_t rng_buffer_size(void)
 {
@@ -300,6 +302,26 @@ err_misc_dereg:
 	goto out;
 }
 
+static int hwrng_fillfn(void * unused)
+{
+       long rc;
+       
+       while (!kthread_should_stop()) {
+	       if (!current_rng)
+		       break;
+               rc = rng_get_data(current_rng, rng_fillbuf,
+				 rng_buffer_size(), 1);
+               if (rc == 0) {
+                       pr_warn("hwrng: no data available\n");
+                       msleep_interruptible(10000);
+                       continue;
+               }
+               add_hwgenerator_randomness((void*)rng_fillbuf, rc, rc);
+       }
+       hwrng_fill = 0;
+       return 0;
+}
+
 int hwrng_register(struct hwrng *rng)
 {
 	int must_register_misc;
@@ -318,6 +340,13 @@ int hwrng_register(struct hwrng *rng)
 		rng_buffer = kmalloc(rng_buffer_size(), GFP_KERNEL);
 		if (!rng_buffer)
 			goto out_unlock;
+	}
+	if (!rng_fillbuf) {
+		rng_fillbuf = kmalloc(rng_buffer_size(), GFP_KERNEL);
+		if (!rng_fillbuf) {
+			kfree(rng_buffer);
+			goto out_unlock;
+		}
 	}
 
 	/* Must not register two RNGs with the same name. */
@@ -348,6 +377,12 @@ int hwrng_register(struct hwrng *rng)
 	}
 	INIT_LIST_HEAD(&rng->list);
 	list_add_tail(&rng->list, &rng_list);
+	hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
+	if (hwrng_fill == ERR_PTR(-ENOMEM)) {
+		pr_err("hwrng_fill thread creation failed");
+		hwrng_fill = NULL;
+	}
+
 out_unlock:
 	mutex_unlock(&rng_mutex);
 out:
@@ -373,8 +408,11 @@ void hwrng_unregister(struct hwrng *rng)
 				current_rng = NULL;
 		}
 	}
-	if (list_empty(&rng_list))
+	if (list_empty(&rng_list)) {
 		unregister_miscdev();
+		if (hwrng_fill)
+			kthread_stop(hwrng_fill);
+	}
 
 	mutex_unlock(&rng_mutex);
 }
@@ -385,6 +423,7 @@ static void __exit hwrng_exit(void)
 	mutex_lock(&rng_mutex);
 	BUG_ON(current_rng);
 	kfree(rng_buffer);
+	kfree(rng_fillbuf);
 	mutex_unlock(&rng_mutex);
 }
 
