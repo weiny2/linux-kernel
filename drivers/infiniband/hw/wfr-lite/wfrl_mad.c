@@ -399,7 +399,7 @@ static void set_virtual_mtu(u8 port, struct stl_port_info *pi)
 }
 
 static int get_pkeys(struct qib_devdata *dd, u8 port, u16 *pkeys);
-static void init_virtual_stl(struct ib_device *ibdev, u8 port)
+static void init_virtual_stl(struct ib_device *ibdev)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
 	u8 i;
@@ -409,7 +409,7 @@ static void init_virtual_stl(struct ib_device *ibdev, u8 port)
 	for (i = 0; i < NUM_VIRT_PORTS; i++) {
 		u32 j;
 		memset(&virtual_stl[i], 0, sizeof(virtual_stl[i]));
-		get_pkeys(dd, port, virtual_stl[port-1].pkeys);
+		get_pkeys(dd, i+1, virtual_stl[i].pkeys);
 		init_virtual_port_info(i+1);
 		memset(&virtual_stl[i].cable_info, 0,
 			sizeof(virtual_stl[i].cable_info));
@@ -544,6 +544,8 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 			struct qib_pportdata *ppd = dd->pport + port - 1;
 			struct qib_ctxtdata *rcd = dd->rcd[ppd->hw_pidx];
 			rcd->pkeys[2] = 0xffff;
+			virtual_stl[port-1].member_full_mgmt = 1;
+			get_pkeys(dd, port, virtual_stl[port-1].pkeys);
 		}
 	}
 
@@ -4880,7 +4882,7 @@ int wfr_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 
 	if (!virtual_stl_init) {
-		init_virtual_stl(ibdev, port);
+		init_virtual_stl(ibdev);
 	}
 
 	if (in_mad->mad_hdr.base_version == IB_MGMT_BASE_VERSION &&
