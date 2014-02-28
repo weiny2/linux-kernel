@@ -971,10 +971,10 @@ static void alua_rtpg_work(struct work_struct *work)
 		pg->flags &= ~ALUA_PG_RUN_STPG;
 		if (err == SCSI_DH_RETRY) {
 			pg->flags |= ALUA_PG_RUN_RTPG;
-			pg->interval = ALUA_RTPG_DELAY_MSECS * 1000;
+			pg->interval = 0;
 			spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 			queue_delayed_work(kmpath_aluad, &pg->rtpg_work,
-					   pg->interval * HZ);
+				msecs_to_jiffies(ALUA_RTPG_DELAY_MSECS));
 			return;
 		}
 	}
