@@ -68,7 +68,6 @@
 /* State machine flags */
 #define ALUA_PG_RUN_RTPG		0x10
 #define ALUA_PG_RUN_STPG		0x20
-#define ALUA_PG_STPG_DONE		0x40
 
 
 static LIST_HEAD(port_group_list);
@@ -970,7 +969,6 @@ static void alua_rtpg_work(struct work_struct *work)
 		err = alua_stpg(sdev, pg);
 		spin_lock_irqsave(&pg->rtpg_lock, flags);
 		pg->flags &= ~ALUA_PG_RUN_STPG;
-		pg->flags |= ALUA_PG_STPG_DONE;
 		if (err == SCSI_DH_RETRY) {
 			pg->flags |= ALUA_PG_RUN_RTPG;
 			pg->interval = ALUA_RTPG_DELAY_MSECS * 1000;
@@ -1007,29 +1005,17 @@ static void alua_rtpg_queue(struct alua_port_group *pg,
 
 	kref_get(&pg->kref);
 	spin_lock_irqsave(&pg->rtpg_lock, flags);
-	if (qdata)
+	if (qdata) {
 		list_add_tail(&qdata->entry, &pg->rtpg_list);
+		pg->flags |= ALUA_PG_RUN_STPG;
+	}
 	if (pg->rtpg_sdev == NULL) {
 		pg->interval = 0;
-		pg->flags &= ~ALUA_PG_STPG_DONE;
 		pg->flags |= ALUA_PG_RUN_RTPG;
-		if (qdata)
-			pg->flags |= ALUA_PG_RUN_STPG;
-
 		kref_get(&pg->kref);
 		pg->rtpg_sdev = sdev;
 		scsi_device_get(sdev);
 		start_queue = 1;
-	} else {
-		/*
-		 * RTPG update is already queued.
-		 * Check if STPG is scheduled or done,
-		 * and set the STPG flag if not.
-		 */
-		if (qdata &&
-		    !(pg->flags & ALUA_PG_RUN_STPG) &&
-		    !(pg->flags & ALUA_PG_STPG_DONE))
-			pg->flags |= ALUA_PG_RUN_STPG;
 	}
 	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 
