@@ -962,6 +962,8 @@ static void alua_rtpg_work(struct work_struct *work)
 		}
 		spin_lock_irqsave(&pg->rtpg_lock, flags);
 		pg->flags &= ~ALUA_PG_RUN_RTPG;
+		if (err != SCSI_DH_OK)
+			pg->flags &= ~ALUA_PG_RUN_STPG;
 	}
 	if (pg->flags & ALUA_PG_RUN_STPG) {
 		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
