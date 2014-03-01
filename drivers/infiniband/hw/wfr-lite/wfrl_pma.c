@@ -849,18 +849,19 @@ static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
 		static_test_error_info.port[0].port_rcv_constraint_error_info_status = 
 			0x80;
 		static_test_error_info.port[0].port_rcv_constraint_error_info_pkey = 
-			be16_to_cpu(0x1234);
+			be16_to_cpu(0x5678);
 		static_test_error_info.port[0].port_rcv_constraint_error_info_slid = 
-			be32_to_cpu(0x55667788);
+			be32_to_cpu(0x99001122);
 
 		static_test_error_info.port[0].port_rcv_switch_relay_error_info_status =
-			0x86;
+			0x83;
 		static_test_error_info.port[0].relay_error_code_info = 
 			be32_to_cpu(0x19181716);
 
-		static_test_error_info.port[0].uncorrectable_error_info_status = 0x85;
+		static_test_error_info.port[0].uncorrectable_error_info_status = 0x81;
 
-		static_test_error_info.port[0].fm_config_error_info_status = 0x07;
+		static_test_error_info.port[0].fm_config_error_info_status = 0x82;
+		static_test_error_info.port[0].config_error_info = 0x34;
 	}
 
 	/* for testing purposes, provide some recognizable test data */
