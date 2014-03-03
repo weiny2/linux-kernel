@@ -33,7 +33,9 @@
  */
 
 #include <rdma/ib_smi.h>
+#ifdef CONFIG_STL_MGMT
 #include <rdma/stl_smi.h>
+#endif /* CONFIG_STL_MGMT */
 
 #include "hfi.h"
 #include "mad.h"
@@ -276,6 +278,7 @@ static int subn_get_nodedescription(struct ib_smp *smp,
 	return reply(smp);
 }
 
+#ifdef CONFIG_STL_MGMT
 static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
 				 u8 port)
 {
@@ -315,6 +318,7 @@ static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	return reply(smp);
 }
+#endif /* CONFIG_STL_MGMT */
 
 static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
@@ -331,8 +335,13 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	else
 		nip->port_guid = dd->pport[pidx].guid;
 
+#ifdef CONFIG_STL_MGMT
 	nip->base_version = JUMBO_MGMT_BASE_VERSION;
 	nip->class_version = STL_SMI_CLASS_VERSION;
+#else
+	nip->base_version = 1;
+	nip->class_version = 1;
+#endif /* CONFIG_STL_MGMT */
 	nip->node_type = 1;     /* channel adapter */
 	nip->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
@@ -1851,6 +1860,7 @@ static int pma_set_portcounters_ext(struct ib_pma_mad *pmp,
 	return pma_get_portcounters_ext(pmp, ibdev, port);
 }
 
+#ifdef CONFIG_STL_MGMT
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			    u8 port, struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad)
@@ -1994,6 +2004,7 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 bail:
 	return ret;
 }
+#endif /* CONFIG_STL_MGMT */
 
 static int process_subn(struct ib_device *ibdev, int mad_flags,
 			u8 port, struct ib_mad *in_mad,
@@ -2527,6 +2538,7 @@ bail:
 	return ret;
 }
 
+#ifdef CONFIG_STL_MGMT
 static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
 			       u8 port, struct ib_wc *in_wc,
 			       struct ib_grh *in_grh,
@@ -2565,6 +2577,7 @@ static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
 bail:
 	return ret;
 }
+#endif /* CONFIG_STL_MGMT */
 
 static int hfi_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			      struct ib_wc *in_wc, struct ib_grh *in_grh,
@@ -2625,11 +2638,13 @@ int qib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		    struct ib_mad *in_mad, struct ib_mad *out_mad)
 {
 	switch (in_mad->mad_hdr.base_version) {
+#ifdef CONFIG_STL_MGMT
 	case JUMBO_MGMT_BASE_VERSION:
 		return hfi_process_stl_mad(ibdev, mad_flags, port,
 					    in_wc, in_grh,
 					    (struct jumbo_mad *)in_mad,
 					    (struct jumbo_mad *)out_mad);
+#endif /* CONFIG_STL_MGMT */
 	case IB_MGMT_BASE_VERSION:
 		return hfi_process_ib_mad(ibdev, mad_flags, port,
 					  in_wc, in_grh, in_mad, out_mad);
@@ -2682,7 +2697,11 @@ int qib_create_agents(struct qib_ibdev *dev)
 		ibp = &dd->pport[p].ibport_data;
 		agent = ib_register_mad_agent(&dev->ibdev, p + 1, IB_QPT_SMI,
 					      NULL, 0, send_handler,
+#ifdef CONFIG_STL_MGMT
 					      NULL, NULL, 0);
+#else
+					      NULL, NULL);
+#endif
 		if (IS_ERR(agent)) {
 			ret = PTR_ERR(agent);
 			goto err;
