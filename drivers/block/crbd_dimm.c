@@ -380,7 +380,7 @@ int cr_fw_set_security(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 		break;
 	default:
 		NVDIMM_DBG("Unknown Get Security Sub-Op received");
-		return -EOPNOTSUPP;
+		return cr_send_command(fw_cmd, mb);
 	}
 }
 
@@ -396,7 +396,7 @@ int cr_fw_get_admin_features(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 		break;
 	default:
 		NVDIMM_DBG("Unknown Get Admin Feature Sub-Op received");
-		return -EOPNOTSUPP;
+		return cr_send_command(fw_cmd, mb);
 	}
 }
 
@@ -408,13 +408,14 @@ int cr_fw_set_admin_features(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 	switch (fw_cmd->sub_opcode) {
 	case SUBOP_SYSTEM_TIME:
 		NVDIMM_WARN("System Time cannot be set from OS");
+		return cr_send_command(fw_cmd, mb);
 		break;
 	case SUBOP_DIMM_PARTITION_INFO:
 		return cr_send_command(fw_cmd, mb);
 		break;
 	default:
 		NVDIMM_DBG("Unknown Get Admin Feature Sub-Op received");
-		return -EOPNOTSUPP;
+		return cr_send_command(fw_cmd, mb);
 	}
 }
 
@@ -454,9 +455,9 @@ int cr_sniff_fw_command(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 		return cr_fw_set_admin_features(c_dimm, fw_cmd, mb);
 		break;
 	default:
-		NVDIMM_DBG("Opcode: %#hhx Not Supported in yet",
+		NVDIMM_DBG("Opcode: %#hhx Not Recognized",
 				fw_cmd->opcode);
-		return -EOPNOTSUPP;
+		return cr_send_command(fw_cmd, mb);
 	}
 
 	return 0;
