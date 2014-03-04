@@ -33,12 +33,18 @@
  */
 
 #include <rdma/ib_smi.h>
+#ifdef CONFIG_STL_MGMT
+#include <rdma/stl_smi.h>
+#endif /* CONFIG_STL_MGMT */
 
 #include "hfi.h"
 #include "mad.h"
 
-static int reply(struct ib_smp *smp)
+static int reply(void *arg)
 {
+	/* XXX change all callers so that they all pass a
+	 * struct ib_mad_hdr * */
+	struct ib_mad_hdr *smp = (struct ib_mad_hdr *)arg;
 	/*
 	 * The verbs framework will handle the directed/LID route
 	 * packet changes.
@@ -165,7 +171,8 @@ void qib_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 /*
  * Send a bad M_Key trap (ch. 14.3.9).
  */
-static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_smp *smp)
+static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
+			 u64 mkey, u32 dr_slid, u8 return_path[], u8 hop_cnt)
 {
 	struct ib_mad_notice_attr data;
 
@@ -178,23 +185,21 @@ static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_smp *smp)
 	data.toggle_count = 0;
 	memset(&data.details, 0, sizeof data.details);
 	data.details.ntc_256.lid = data.issuer_lid;
-	data.details.ntc_256.method = smp->method;
-	data.details.ntc_256.attr_id = smp->attr_id;
-	data.details.ntc_256.attr_mod = smp->attr_mod;
-	data.details.ntc_256.mkey = smp->mkey;
-	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
-		u8 hop_cnt;
+	data.details.ntc_256.method = mad->method;
+	data.details.ntc_256.attr_id = mad->attr_id;
+	data.details.ntc_256.attr_mod = mad->attr_mod;
+	data.details.ntc_256.mkey = mkey;
+	if (mad->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
 
-		data.details.ntc_256.dr_slid = smp->dr_slid;
+		data.details.ntc_256.dr_slid = dr_slid;
 		data.details.ntc_256.dr_trunc_hop = IB_NOTICE_TRAP_DR_NOTICE;
-		hop_cnt = smp->hop_cnt;
 		if (hop_cnt > ARRAY_SIZE(data.details.ntc_256.dr_rtn_path)) {
 			data.details.ntc_256.dr_trunc_hop |=
 				IB_NOTICE_TRAP_DR_TRUNC;
 			hop_cnt = ARRAY_SIZE(data.details.ntc_256.dr_rtn_path);
 		}
 		data.details.ntc_256.dr_trunc_hop |= hop_cnt;
-		memcpy(data.details.ntc_256.dr_rtn_path, smp->return_path,
+		memcpy(data.details.ntc_256.dr_rtn_path, return_path,
 		       hop_cnt);
 	}
 
@@ -273,6 +278,48 @@ static int subn_get_nodedescription(struct ib_smp *smp,
 	return reply(smp);
 }
 
+#ifdef CONFIG_STL_MGMT
+static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
+				 u8 port)
+{
+	struct stl_node_info *ni;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u32 vendor, majrev, minrev;
+	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
+
+	ni = (struct stl_node_info *)stl_get_smp_data(smp);
+
+	memset(ni, 0, sizeof(*ni));
+
+	/* GUID 0 is illegal */
+	if (smp->attr_mod || pidx >= dd->num_pports ||
+	    dd->pport[pidx].guid == 0)
+		smp->status |= IB_SMP_INVALID_FIELD;
+	else
+		ni->port_guid = dd->pport[pidx].guid;
+
+	ni->base_version = JUMBO_MGMT_BASE_VERSION;
+	ni->class_version = STL_SMI_CLASS_VERSION;
+	ni->node_type = 1;     /* channel adapter */
+	ni->num_ports = ibdev->phys_port_cnt;
+	/* This is already in network order */
+	ni->system_image_guid = ib_qib_sys_image_guid;
+	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
+	ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
+	ni->device_id = cpu_to_be16(dd->deviceid);
+	majrev = dd->majrev;
+	minrev = dd->minrev;
+	ni->revision = cpu_to_be32((majrev << 16) | minrev);
+	ni->local_port_num = port;
+	vendor = dd->vendorid;
+	ni->vendor_id[0] = WFR_SRC_OUI_1;
+	ni->vendor_id[1] = WFR_SRC_OUI_2;
+	ni->vendor_id[2] = WFR_SRC_OUI_3;
+
+	return reply(smp);
+}
+#endif /* CONFIG_STL_MGMT */
+
 static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -288,8 +335,13 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	else
 		nip->port_guid = dd->pport[pidx].guid;
 
+#ifdef CONFIG_STL_MGMT
+	nip->base_version = JUMBO_MGMT_BASE_VERSION;
+	nip->class_version = STL_SMI_CLASS_VERSION;
+#else
 	nip->base_version = 1;
 	nip->class_version = 1;
+#endif /* CONFIG_STL_MGMT */
 	nip->node_type = 1;     /* channel adapter */
 	nip->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
@@ -402,7 +454,9 @@ static int get_linkdowndefaultstate(struct qib_pportdata *ppd)
 		IB_LINKINITCMD_SLEEP;
 }
 
-static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
+static int check_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
+		      int mad_flags, u64 mkey, u32 dr_slid,
+		      u8 return_path[], u8 hop_cnt)
 {
 	int valid_mkey = 0;
 	int ret = 0;
@@ -416,18 +470,18 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 	}
 
 	if ((mad_flags & IB_MAD_IGNORE_MKEY) ||  ibp->mkey == 0 ||
-	    ibp->mkey == smp->mkey)
+	    ibp->mkey == mkey)
 		valid_mkey = 1;
 
 	/* Unset lease timeout on any valid Get/Set/TrapRepress */
 	if (valid_mkey && ibp->mkey_lease_timeout &&
-	    (smp->method == IB_MGMT_METHOD_GET ||
-	     smp->method == IB_MGMT_METHOD_SET ||
-	     smp->method == IB_MGMT_METHOD_TRAP_REPRESS))
+	    (mad->method == IB_MGMT_METHOD_GET ||
+	     mad->method == IB_MGMT_METHOD_SET ||
+	     mad->method == IB_MGMT_METHOD_TRAP_REPRESS))
 		ibp->mkey_lease_timeout = 0;
 
 	if (!valid_mkey) {
-		switch (smp->method) {
+		switch (mad->method) {
 		case IB_MGMT_METHOD_GET:
 			/* Bad mkey not a violation below level 2 */
 			if (ibp->mkeyprot < 2)
@@ -440,7 +494,8 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 				ibp->mkey_lease_timeout = jiffies +
 					ibp->mkey_lease_period * HZ;
 			/* Generate a trap notice. */
-			qib_bad_mkey(ibp, smp);
+			qib_bad_mkey(ibp, mad, mkey, dr_slid, return_path,
+				     hop_cnt);
 			ret = 1;
 		}
 	}
@@ -470,7 +525,9 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		}
 		if (port_num != port) {
 			ibp = to_iport(ibdev, port_num);
-			ret = check_mkey(ibp, smp, 0);
+			ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, 0,
+					 smp->mkey, smp->dr_slid,
+					 smp->return_path, smp->hop_cnt);
 			if (ret) {
 				ret = IB_MAD_RESULT_FAILURE;
 				goto bail;
@@ -1803,6 +1860,152 @@ static int pma_set_portcounters_ext(struct ib_pma_mad *pmp,
 	return pma_get_portcounters_ext(pmp, ibdev, port);
 }
 
+#ifdef CONFIG_STL_MGMT
+static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
+			    u8 port, struct jumbo_mad *in_mad,
+			    struct jumbo_mad *out_mad)
+{
+	struct stl_smp *smp = (struct stl_smp *)out_mad;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	/* XXX struct qib_pportdata *ppd = ppd_from_ibp(ibp);*/
+	int ret;
+
+	*out_mad = *in_mad;
+	if (smp->class_version != STL_SMI_CLASS_VERSION) {
+		smp->status |= IB_SMP_UNSUP_VERSION;
+		ret = reply(smp);
+		goto bail;
+	}
+	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags, smp->mkey,
+			 smp->route.dr.dr_slid, smp->route.dr.return_path,
+			 smp->hop_cnt);
+	if (ret) {
+		ret = IB_MAD_RESULT_FAILURE;
+		goto bail;
+	}
+
+	switch (smp->method) {
+	case IB_MGMT_METHOD_GET:
+		switch (smp->attr_id) {
+#if 0
+		case IB_SMP_ATTR_NODE_DESC:
+			ret = subn_get_nodedescription(smp, ibdev);
+			goto bail;
+#endif /* 01 */
+		case IB_SMP_ATTR_NODE_INFO:
+			ret = subn_get_stl_nodeinfo(smp, ibdev, port);
+			goto bail;
+#if 0
+		case IB_SMP_ATTR_GUID_INFO:
+			ret = subn_get_guidinfo(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_PORT_INFO:
+			ret = subn_get_portinfo(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_PKEY_TABLE:
+			ret = subn_get_pkeytable(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_SL_TO_VL_TABLE:
+			ret = subn_get_sl_to_vl(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_VL_ARB_TABLE:
+			ret = subn_get_vl_arb(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_SM_INFO:
+			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
+				ret = IB_MAD_RESULT_SUCCESS |
+					IB_MAD_RESULT_CONSUMED;
+				goto bail;
+			}
+			if (ibp->port_cap_flags & IB_PORT_SM) {
+				ret = IB_MAD_RESULT_SUCCESS;
+				goto bail;
+			}
+			/* FALLTHROUGH */
+#endif /* 01 */
+		default:
+			smp->status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply(smp);
+			goto bail;
+		}
+
+#if 0
+	case IB_MGMT_METHOD_SET:
+		switch (smp->attr_id) {
+		case IB_SMP_ATTR_GUID_INFO:
+			ret = subn_set_guidinfo(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_PORT_INFO:
+			ret = subn_set_portinfo(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_PKEY_TABLE:
+			ret = subn_set_pkeytable(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_SL_TO_VL_TABLE:
+			ret = subn_set_sl_to_vl(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_VL_ARB_TABLE:
+			ret = subn_set_vl_arb(smp, ibdev, port);
+			goto bail;
+		case IB_SMP_ATTR_SM_INFO:
+			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
+				ret = IB_MAD_RESULT_SUCCESS |
+					IB_MAD_RESULT_CONSUMED;
+				goto bail;
+			}
+			if (ibp->port_cap_flags & IB_PORT_SM) {
+				ret = IB_MAD_RESULT_SUCCESS;
+				goto bail;
+			}
+			/* FALLTHROUGH */
+		default:
+			smp->status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply(smp);
+			goto bail;
+		}
+
+	case IB_MGMT_METHOD_TRAP_REPRESS:
+		if (smp->attr_id == IB_SMP_ATTR_NOTICE)
+			ret = subn_trap_repress(smp, ibdev, port);
+		else {
+			smp->status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply(smp);
+		}
+		goto bail;
+#endif /* 01 */
+	case IB_MGMT_METHOD_TRAP:
+	case IB_MGMT_METHOD_REPORT:
+	case IB_MGMT_METHOD_REPORT_RESP:
+	case IB_MGMT_METHOD_GET_RESP:
+		/*
+		 * The ib_mad module will call us to process responses
+		 * before checking for other consumers.
+		 * Just tell the caller to process it normally.
+		 */
+		ret = IB_MAD_RESULT_SUCCESS;
+		goto bail;
+#if 0
+	case IB_MGMT_METHOD_SEND:
+		if (ib_get_smp_direction(smp) &&
+		    smp->attr_id == QIB_VENDOR_IPG) {
+			ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PORT,
+					      smp->data[0]);
+			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		} else
+			ret = IB_MAD_RESULT_SUCCESS;
+		goto bail;
+
+#endif /* 0 */
+	default:
+		smp->status |= IB_SMP_UNSUP_METHOD;
+		ret = reply(smp);
+	}
+
+bail:
+	return ret;
+}
+#endif /* CONFIG_STL_MGMT */
+
 static int process_subn(struct ib_device *ibdev, int mad_flags,
 			u8 port, struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
@@ -1819,7 +2022,9 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		goto bail;
 	}
 
-	ret = check_mkey(ibp, smp, mad_flags);
+	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags,
+			 smp->mkey, smp->dr_slid, smp->return_path,
+			 smp->hop_cnt);
 	if (ret) {
 		u32 port_num = be32_to_cpu(smp->attr_mod);
 
@@ -1835,7 +2040,10 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		     smp->method == IB_MGMT_METHOD_SET) &&
 		    port_num && port_num <= ibdev->phys_port_cnt &&
 		    port != port_num)
-			(void) check_mkey(to_iport(ibdev, port_num), smp, 0);
+			(void) check_mkey(to_iport(ibdev, port_num),
+					  (struct ib_mad_hdr *)smp, 0,
+					  smp->mkey, smp->dr_slid,
+					  smp->return_path, smp->hop_cnt);
 		ret = IB_MAD_RESULT_FAILURE;
 		goto bail;
 	}
@@ -2330,28 +2538,50 @@ bail:
 	return ret;
 }
 
-/**
- * qib_process_mad - process an incoming MAD packet
- * @ibdev: the infiniband device this packet came in on
- * @mad_flags: MAD flags
- * @port: the port number this packet came in on
- * @in_wc: the work completion entry for this packet
- * @in_grh: the global route header for this packet
- * @in_mad: the incoming MAD
- * @out_mad: any outgoing MAD reply
- *
- * Returns IB_MAD_RESULT_SUCCESS if this is a MAD that we are not
- * interested in processing.
- *
- * Note that the verbs framework has already done the MAD sanity checks,
- * and hop count/pointer updating for IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
- * MADs.
- *
- * This is called by the ib_mad module.
- */
-int qib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-		    struct ib_wc *in_wc, struct ib_grh *in_grh,
-		    struct ib_mad *in_mad, struct ib_mad *out_mad)
+#ifdef CONFIG_STL_MGMT
+static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
+			       u8 port, struct ib_wc *in_wc,
+			       struct ib_grh *in_grh,
+			       struct jumbo_mad *in_mad,
+			       struct jumbo_mad *out_mad)
+{
+	int ret;
+	/* XXX struct qib_ibport *ibp = to_iport(ibdev, port); */ 
+	/* XXX struct qib_pportdata *ppd = ppd_from_ibp(ibp); */
+
+	switch (in_mad->mad_hdr.mgmt_class) {
+	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
+	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
+				       out_mad);
+		goto bail;
+#if 0
+	case IB_MGMT_CLASS_PERF_MGMT:
+		ret = process_perf(ibdev, port, in_mad, out_mad);
+		goto bail;
+
+	case IB_MGMT_CLASS_CONG_MGMT:
+		if (!ppd->congestion_entries_shadow ||
+			 !qib_cc_table_size) {
+			ret = IB_MAD_RESULT_SUCCESS;
+			goto bail;
+		}
+		ret = process_cc(ibdev, mad_flags, port, in_mad, out_mad);
+		goto bail;
+
+#endif /* 0 */
+	default:
+		ret = IB_MAD_RESULT_SUCCESS;
+	}
+
+bail:
+	return ret;
+}
+#endif /* CONFIG_STL_MGMT */
+
+static int hfi_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+			      struct ib_wc *in_wc, struct ib_grh *in_grh,
+			      struct ib_mad *in_mad, struct ib_mad *out_mad)
 {
 	int ret;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
@@ -2382,6 +2612,47 @@ int qib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 
 bail:
 	return ret;
+}
+
+/**
+ * qib_process_mad - process an incoming MAD packet
+ * @ibdev: the infiniband device this packet came in on
+ * @mad_flags: MAD flags
+ * @port: the port number this packet came in on
+ * @in_wc: the work completion entry for this packet
+ * @in_grh: the global route header for this packet
+ * @in_mad: the incoming MAD
+ * @out_mad: any outgoing MAD reply
+ *
+ * Returns IB_MAD_RESULT_SUCCESS if this is a MAD that we are not
+ * interested in processing.
+ *
+ * Note that the verbs framework has already done the MAD sanity checks,
+ * and hop count/pointer updating for IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
+ * MADs.
+ *
+ * This is called by the ib_mad module.
+ */
+int qib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+		    struct ib_wc *in_wc, struct ib_grh *in_grh,
+		    struct ib_mad *in_mad, struct ib_mad *out_mad)
+{
+	switch (in_mad->mad_hdr.base_version) {
+#ifdef CONFIG_STL_MGMT
+	case JUMBO_MGMT_BASE_VERSION:
+		return hfi_process_stl_mad(ibdev, mad_flags, port,
+					    in_wc, in_grh,
+					    (struct jumbo_mad *)in_mad,
+					    (struct jumbo_mad *)out_mad);
+#endif /* CONFIG_STL_MGMT */
+	case IB_MGMT_BASE_VERSION:
+		return hfi_process_ib_mad(ibdev, mad_flags, port,
+					  in_wc, in_grh, in_mad, out_mad);
+	default:
+		break;
+	}
+
+	return IB_MAD_RESULT_FAILURE;
 }
 
 static void send_handler(struct ib_mad_agent *agent,
@@ -2426,7 +2697,11 @@ int qib_create_agents(struct qib_ibdev *dev)
 		ibp = &dd->pport[p].ibport_data;
 		agent = ib_register_mad_agent(&dev->ibdev, p + 1, IB_QPT_SMI,
 					      NULL, 0, send_handler,
+#ifdef CONFIG_STL_MGMT
+					      NULL, NULL, 0);
+#else
 					      NULL, NULL);
+#endif
 		if (IS_ERR(agent)) {
 			ret = PTR_ERR(agent);
 			goto err;

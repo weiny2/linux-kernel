@@ -64,7 +64,7 @@ test_list = [
     # IB Send Lat test
     { "test_name" : "IbSendLat.py",
       "args" : "--nodelist %HOST[2]% --simics",
-      "type" : "default,quick",
+      "type" : "default,quick,verbs",
       "desc" : "Run ib_send_lat for 5 iterations.",
     },
 
@@ -81,15 +81,27 @@ test_list = [
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using RC.",
     },
 
-     { "test_name" : "IbSendBwRC-a.py",
+    { "test_name" : "IpoibPing.py",
+      "args" : "--nodelist %HOST[2]% --simics",
+      "type" : "default,quick,verbs",
+      "desc" : "Run ping for 5 packets using ipoib.",
+    },
+
+    { "test_name" : "IbSendBwRC-a.py",
       "args" : "--nodelist %HOST[2]% --simics",
       "type" : "default,verbs",
       "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
     },
 
+    { "test_name" : "IpoibQperf.py",
+      "args" : "--nodelist %HOST[2]% --simics",
+      "type" : "default,verbs",
+      "desc" : "Run qperf/tcp_bw for 8 to 64 bytes.",
+    },
+
    # OSU MPI tests
     { "test_name" : "OsuMpi.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]% --simics --psm %PSM_LIB%",
       "type" : "mpi,default",
       "desc" : "Run OSU MPI benchmarks",
     },
@@ -104,6 +116,7 @@ variable_map = {
     "KBUILD_DIR" : test_info.get_kbuild_dir,
     "HFI_SRC" : test_info.get_hfi_src,
     "HOST" : test_info.get_host_name_by_index,
+    "PSM_LIB" : test_info.get_psm_lib,
 }
 
 if test_info.list_only:

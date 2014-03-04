@@ -79,6 +79,10 @@ uint set_link_credits = 1;
 module_param_named(set_link_credits, set_link_credits, uint, S_IRUGO);
 MODULE_PARM_DESC(set_link_credits, "Set per-VL link credits so traffic will flow");
 
+uint nodma_rtail;
+module_param(nodma_rtail, uint, S_IRUGO);
+MODULE_PARM_DESC(use_flr, "0 for no DMA of hdr tail, 1 to DMA the hdr tail");
+
 /* TODO: temporary */
 static uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
@@ -2604,6 +2608,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	if (!rcd)
 		return;
 
+	dd_dev_info(dd, "ctxt %d op 0x%x", ctxt, op);
 	// FIXME: QIB_RCVCTRL_PKEY_ENB/DIS
 	if (op & QIB_RCVCTRL_PKEY_ENB)
 		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_PKEY_ENB");
@@ -2620,17 +2625,16 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	/* if the context already enabled, don't do the extra steps */
 	if ((op & QIB_RCVCTRL_CTXT_ENB)
 			&& !(rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK)) {
+		dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n",
+			    (unsigned long)rcd->rcvhdrq_phys);
+		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR,
+				rcd->rcvhdrq_phys);
 		if (!(dd->flags & QIB_NODMA_RTAIL)) {
 			dd_dev_info(dd, "rcd->rcvhdrqtailaddr_phys 0x%lx\n",
 				    (unsigned long)rcd->rcvhdrqtailaddr_phys);
-			dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n",
-				    (unsigned long)rcd->rcvhdrq_phys);
-
 			/* reset the tail and hdr addresses, and sequence count */
 			write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR,
 					rcd->rcvhdrqtailaddr_phys);
-			write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR,
-					rcd->rcvhdrq_phys);
 		}
 
 		rcd->seq_cnt = 1;
@@ -2689,6 +2693,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
 	rcd->rcvctrl = rcvctrl;
+	dd_dev_info(dd, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
 	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);
 
 	/*
@@ -4211,9 +4216,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (mod_num_sdma && mod_num_sdma < dd->chip_sdma_engines)
 		dd->num_sdma = mod_num_sdma;
 
-	/* FIXME: don't set NODMA_RTAIL until we know the sequence numbers
-	   are right */
-	//dd->flags = QIB_NODMA_RTAIL;
+	if (nodma_rtail)
+		dd->flags |= QIB_NODMA_RTAIL;
 
 	dd->palign = 0x1000;	// TODO: is there a WFR value for this?
 
