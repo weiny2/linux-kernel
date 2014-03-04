@@ -10,6 +10,7 @@ import subprocess
 import shlex
 import tempfile
 import time
+import random
 from optparse import OptionParser
 from datetime import datetime
 
@@ -74,6 +75,9 @@ def chomp_comma(str):
         return matchObj.group(1)
     else:
         return str
+
+def get_test_port():
+    return random.randrange(1025, 65535)
 
 class HostInfo:
     """Holds information on a host under test"""

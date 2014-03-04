@@ -44,13 +44,13 @@ def main():
     ################
 
     sizes = ['1', '256', '512', '1024', '2048', '4096']
-
+    test_port = RegLib.get_test_port()
     for size in sizes:
         test_fail = 0
         # Start ib_send_lat on host1 (server)
         child_pid = os.fork()
         if child_pid == 0:
-            cmd = "ib_send_bw -d hfi0 -c UD -n 5 -s " + size
+            cmd = "ib_send_bw -d hfi0 -c UD -n 5 -p %d -s %s" % (test_port, size)
             (err, out) = do_ssh(host1, cmd)
             if err:
                 RegLib.test_log(0, "Child SSH exit status bad")
@@ -63,10 +63,12 @@ def main():
 
         # Start ib_send_lat on host2 (client)
         server_name = host1.get_name()
-        cmd = "ib_send_bw -d hfi0 -c UD -n 5  -s " + size + " " +  server_name
+        cmd = "ib_send_bw -d hfi0 -c UD -n 5  -p %d -s %s %s" % (test_port, size,
+                                                                 server_name)
         (err, out) = do_ssh(host2, cmd)
         if err:
             RegLib.test_log(0, "Error on client")
+            for x in out: print x.strip()
             test_fail = 1
 
         (pid, status) = os.waitpid(child_pid, 0)
