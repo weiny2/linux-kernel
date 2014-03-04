@@ -64,7 +64,7 @@ test_list = [
     # IB Send Lat test
     { "test_name" : "IbSendLat.py",
       "args" : "--nodelist %HOST[2]% --simics",
-      "type" : "default,quick",
+      "type" : "default,quick,verbs",
       "desc" : "Run ib_send_lat for 5 iterations.",
     },
 
