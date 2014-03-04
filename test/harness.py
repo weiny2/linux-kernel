@@ -81,10 +81,22 @@ test_list = [
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using RC.",
     },
 
-     { "test_name" : "IbSendBwRC-a.py",
+    { "test_name" : "IpoibPing.py",
+      "args" : "--nodelist %HOST[2]% --simics",
+      "type" : "default,quick,verbs",
+      "desc" : "Run ping for 5 packets using ipoib.",
+    },
+
+    { "test_name" : "IbSendBwRC-a.py",
       "args" : "--nodelist %HOST[2]% --simics",
       "type" : "default,verbs",
       "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
+    },
+
+    { "test_name" : "IpoibQperf.py",
+      "args" : "--nodelist %HOST[2]% --simics",
+      "type" : "default,verbs",
+      "desc" : "Run qperf/tcp_bw for 8 to 64 bytes.",
     },
 
    # OSU MPI tests
