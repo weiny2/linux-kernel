@@ -193,18 +193,10 @@ def main():
         if num_loaded != 2:
             RegLib.test_fail(name + " Unable to get active state on at least 1 node")
 
-        # Now that open sm has been started we need to stop till things are working
-        # better.
-        stop_opensm(opensmhost)
-        if is_opensm_active(opensmhost) == True:
-                    RegLib.test_fail("Unable to stop OpenSM")
-        else:
-            RegLib.test_pass("Driver loaded, adapters up, openSM stopped")
+        RegLib.test_pass("Driver loaded, adapters up, openSM running.")
 
     else:
         RegLib.test_fail("Only simics supported right now")
-
-    
 
 if __name__ == "__main__":
     main()
