@@ -317,6 +317,9 @@ class TestInfo:
         else:
             return "DEFAULT"
 
+    def is_simics(self):
+        return self.simics
+
     def __str__(self):
         ret = ""
         for node in self.nodelist:
