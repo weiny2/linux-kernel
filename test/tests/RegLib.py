@@ -270,6 +270,10 @@ class TestInfo:
 
         # Optional PSM libs
         if options.psm_lib:
+            if options.psm_lib  == "DEFAULT":
+                self.psm_lib = options.psm_lib
+                return
+
             self.psm_lib = os.path.abspath(options.psm_lib)
             if not os.path.exists(self.psm_lib):
                 test_fail("psm lib is not a valid path")
@@ -311,7 +315,7 @@ class TestInfo:
         if self.psm_lib:
             return self.psm_lib
         else:
-            return None
+            return "DEFAULT"
 
     def __str__(self):
         ret = ""

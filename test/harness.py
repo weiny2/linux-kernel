@@ -101,7 +101,7 @@ test_list = [
 
    # OSU MPI tests
     { "test_name" : "OsuMpi.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]% --simics --psm %PSM_LIB%",
       "type" : "mpi,default",
       "desc" : "Run OSU MPI benchmarks",
     },
@@ -116,6 +116,7 @@ variable_map = {
     "KBUILD_DIR" : test_info.get_kbuild_dir,
     "HFI_SRC" : test_info.get_hfi_src,
     "HOST" : test_info.get_host_name_by_index,
+    "PSM_LIB" : test_info.get_psm_lib,
 }
 
 if test_info.list_only:

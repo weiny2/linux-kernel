@@ -38,9 +38,13 @@ def main():
 
     psm_libs = test_info.get_psm_lib()
     if psm_libs:
-        print "We have PSM path set to", psm_libs
+        if psm_libs == "DEFAULT":
+            psm_libs = None
+            print "Using default PSM lib"
+        else:
+            print "We have PSM path set to", psm_libs
     else:
-        print "no PSM"
+        RegLib.test_fail("MPI with verbs not yet supported")
 
     benchmarks = ["pt2pt/osu_latency", "pt2pt/osu_bw"]
 
