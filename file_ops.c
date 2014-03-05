@@ -322,9 +322,9 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	switch(type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
-		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) +
-			   (uctxt->ctxt * (1 << 16))) +
-			(type == PIO_BUFS_SOP ? (WFR_TXE_PIO_SIZE / 2) : 0);
+		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) + /* chip pio base */
+			   (uctxt->sc->context * (1 << 16))) + /* 64K PIO space / ctxt */
+			(type == PIO_BUFS_SOP ? (WFR_TXE_PIO_SIZE / 2) : 0); /* sop? */
 		/*
 		 * Map only the amount allocated to the context, not the
 		 * entire available context's PIO space.
