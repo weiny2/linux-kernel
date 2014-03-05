@@ -4132,10 +4132,60 @@ static void init_kdeth_qp(struct hfi_devdata *dd)
 				<< WFR_RCV_BTH_QP_KDETH_QP_SHIFT);
 }
 
+/**
+ * init_qpmap_table
+ * @dd - device data
+ * @regno - first register in 32 register series
+ * @first_ctxt - first context
+ * @last_ctxt - first context
+ *
+ * This return sets the qpn mapping table that
+ * sitting being qpn[8:1].
+ *
+ * The routine will round robin the 256 settings
+ * from first_ctxt to last_ctxt.
+ *
+ * The first/last looks ahead to having specialized
+ * receive contexts for mgmt and bypass.  Normal
+ * verbs traffic will assumed to be on a range
+ * of receive contexts.
+ */
+static void init_qpmap_table(struct hfi_devdata *dd,
+			     u32 first_ctxt,
+			     u32 last_ctxt)
+{
+	u64 reg = 0;
+	u64 regno = WFR_RCV_QP_MAP_TABLE;
+	int i;
+	u64 ctxt = first_ctxt;
+
+	for (i = 0; i < 256; ) {
+		reg |= ctxt << (8 * (i % 8));
+		i++;
+		ctxt++;
+		if (ctxt > last_ctxt)
+			ctxt = first_ctxt;
+		if (i % 8 == 0) {
+			write_csr(dd, regno, reg);
+			reg = 0;
+			regno += 8;
+		}
+	}
+	if (i % 8)
+		write_csr(dd, regno, reg);
+}
+
 void init_rxe(struct hfi_devdata *dd)
 {
+	u64 reg = 0;
 	/* enable all receive errors */
 	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
+	/* setup QPN map table */
+	init_qpmap_table(dd, 0, dd->n_krcv_queues - 1);
+	/* enable map table */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_QP_MAP_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
 
 	/* TODO: others...? */
 }
