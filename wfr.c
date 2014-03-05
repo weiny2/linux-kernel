@@ -283,6 +283,196 @@ static struct flag_table pio_err_status_flags[] = {
 };
 
 /*
+ * TXE Egress Error flags and consequences
+ * TODO: Add consequences
+ */
+static struct flag_table egress_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY("TxPktIntegrityMemCorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_PKT_INTEGRITY_MEM_COR_ERR_SMASK),
+/* 1*/	FLAG_ENTRY("TxPktIntegrityMemUncErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_PKT_INTEGRITY_MEM_UNC_ERR_SMASK),
+/* 2 reserved */
+/* 3*/	FLAG_ENTRY("TxEgressFifoUnderrunOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_EGRESS_FIFO_UNDERRUN_OR_PARITY_ERR_SMASK),
+/* 4*/	FLAG_ENTRY("TxLinkdownErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LINKDOWN_ERR_SMASK),
+/* 5*/	FLAG_ENTRY("TxIncorrectLinkStateErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_INCORRECT_LINK_STATE_ERR_SMASK),
+/* 6 reserved */
+/* 7*/	FLAG_ENTRY("TxLaunchIntfParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_PIO_LAUNCH_INTF_PARITY_ERR_SMASK),
+/* 8*/	FLAG_ENTRY("TxSdmaLaunchIntfParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA_LAUNCH_INTF_PARITY_ERR_SMASK),
+/* 9-10 reserved */
+/*11*/	FLAG_ENTRY("TxSbrdCtlStateMachineParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SBRD_CTL_STATE_MACHINE_PARITY_ERR_SMASK),
+/*12*/	FLAG_ENTRY("TxDcParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_DC_PARITY_ERR_SMASK),
+/*13*/	FLAG_ENTRY("TxLaunchCsrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_CSR_PARITY_ERR_SMASK),
+/*14*/	FLAG_ENTRY("TxSbrdCtlCsrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SBRD_CTL_CSR_PARITY_ERR_SMASK),
+/*15*/	FLAG_ENTRY("TxConfigParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_CONFIG_PARITY_ERR_SMASK),
+/*16*/	FLAG_ENTRY("TxSdma0DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA0_DISALLOWED_PACKET_ERR_SMASK),
+/*17*/	FLAG_ENTRY("TxSdma1DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA1_DISALLOWED_PACKET_ERR_SMASK),
+/*18*/	FLAG_ENTRY("TxSdma2DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA2_DISALLOWED_PACKET_ERR_SMASK),
+/*19*/	FLAG_ENTRY("TxSdma3DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA3_DISALLOWED_PACKET_ERR_SMASK),
+/*20*/	FLAG_ENTRY("TxSdma4DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA4_DISALLOWED_PACKET_ERR_SMASK),
+/*21*/	FLAG_ENTRY("TxSdma5DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA5_DISALLOWED_PACKET_ERR_SMASK),
+/*22*/	FLAG_ENTRY("TxSdma6DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA6_DISALLOWED_PACKET_ERR_SMASK),
+/*23*/	FLAG_ENTRY("TxSdma7DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA7_DISALLOWED_PACKET_ERR_SMASK),
+/*24*/	FLAG_ENTRY("TxSdma8DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA8_DISALLOWED_PACKET_ERR_SMASK),
+/*25*/	FLAG_ENTRY("TxSdma9DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA9_DISALLOWED_PACKET_ERR_SMASK),
+/*26*/	FLAG_ENTRY("TxSdma10DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA10_DISALLOWED_PACKET_ERR_SMASK),
+/*27*/	FLAG_ENTRY("TxSdma11DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA11_DISALLOWED_PACKET_ERR_SMASK),
+/*28*/	FLAG_ENTRY("TxSdma12DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA12_DISALLOWED_PACKET_ERR_SMASK),
+/*29*/	FLAG_ENTRY("TxSdma13DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA13_DISALLOWED_PACKET_ERR_SMASK),
+/*30*/	FLAG_ENTRY("TxSdma14DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA14_DISALLOWED_PACKET_ERR_SMASK),
+/*31*/	FLAG_ENTRY("TxSdma15DisallowedPacketErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA15_DISALLOWED_PACKET_ERR_SMASK),
+/*32*/	FLAG_ENTRY("TxLaunchFifo0UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO0_UNC_OR_PARITY_ERR_SMASK),
+/*33*/	FLAG_ENTRY("TxLaunchFifo1UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO1_UNC_OR_PARITY_ERR_SMASK),
+/*34*/	FLAG_ENTRY("TxLaunchFifo2UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO2_UNC_OR_PARITY_ERR_SMASK),
+/*35*/	FLAG_ENTRY("TxLaunchFifo3UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO3_UNC_OR_PARITY_ERR_SMASK),
+/*36*/	FLAG_ENTRY("TxLaunchFifo4UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO4_UNC_OR_PARITY_ERR_SMASK),
+/*37*/	FLAG_ENTRY("TxLaunchFifo5UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO5_UNC_OR_PARITY_ERR_SMASK),
+/*38*/	FLAG_ENTRY("TxLaunchFifo6UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO6_UNC_OR_PARITY_ERR_SMASK),
+/*39*/	FLAG_ENTRY("TxLaunchFifo7UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO7_UNC_OR_PARITY_ERR_SMASK),
+/*40*/	FLAG_ENTRY("TxLaunchFifo8UncOrParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO8_UNC_OR_PARITY_ERR_SMASK),
+/*41*/	FLAG_ENTRY("TxCreditReturnParityErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_PARITY_ERR_SMASK),
+/*42*/	FLAG_ENTRY("TxSbHdrUncErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SB_HDR_UNC_ERR_SMASK),
+/*43*/	FLAG_ENTRY("TxReadSdmaMemoryUncErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_SDMA_MEMORY_UNC_ERR_SMASK),
+/*44*/	FLAG_ENTRY("TxReadPioMemoryUncErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_PIO_MEMORY_UNC_ERR_SMASK),
+/*45*/	FLAG_ENTRY("TxEgressFifoUncErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_EGRESS_FIFO_UNC_ERR_SMASK),
+/*46*/	FLAG_ENTRY("TxHcrcInsertionErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_HCRC_INSERTION_ERR_SMASK),
+/*47*/	FLAG_ENTRY("TxCreditReturnVLErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_VL_ERR_SMASK),
+/*48*/	FLAG_ENTRY("TxLaunchFifo0CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO0_COR_ERR_SMASK),
+/*49*/	FLAG_ENTRY("TxLaunchFifo1CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO1_COR_ERR_SMASK),
+/*50*/	FLAG_ENTRY("TxLaunchFifo2CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO2_COR_ERR_SMASK),
+/*51*/	FLAG_ENTRY("TxLaunchFifo3CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO3_COR_ERR_SMASK),
+/*52*/	FLAG_ENTRY("TxLaunchFifo4CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO4_COR_ERR_SMASK),
+/*53*/	FLAG_ENTRY("TxLaunchFifo5CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO5_COR_ERR_SMASK),
+/*54*/	FLAG_ENTRY("TxLaunchFifo6CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO6_COR_ERR_SMASK),
+/*55*/	FLAG_ENTRY("TxLaunchFifo7CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO7_COR_ERR_SMASK),
+/*56*/	FLAG_ENTRY("TxLaunchFifo8CorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO8_COR_ERR_SMASK),
+/*57*/	FLAG_ENTRY("TxCreditOverrunErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_OVERRUN_ERR_SMASK),
+/*58*/	FLAG_ENTRY("TxSbHdrCorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_SB_HDR_COR_ERR_SMASK),
+/*59*/	FLAG_ENTRY("TxReadSdmaMemoryCorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_SDMA_MEMORY_COR_ERR_SMASK),
+/*60*/	FLAG_ENTRY("TxReadPioMemoryCorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_PIO_MEMORY_COR_ERR_SMASK),
+/*61*/	FLAG_ENTRY("TxEgressFifoCorErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_EGRESS_FIFO_COR_ERR_SMASK),
+/*62*/	FLAG_ENTRY("TxReadSdmaMemoryCsrUncErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_SDMA_MEMORY_CSR_UNC_ERR_SMASK),
+/*63*/	FLAG_ENTRY("TxReadPioMemoryCsrUncErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_PIO_MEMORY_CSR_UNC_ERR_SMASK),
+};
+
+/*
  * TXE Send Context Error flags and consequences
  */
 static struct flag_table sc_err_status_flags[] = {
@@ -574,6 +764,12 @@ static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
 			pio_err_status_flags, ARRAY_SIZE(pio_err_status_flags));
 }
 
+static char *egress_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+		egress_err_status_flags, ARRAY_SIZE(egress_err_status_flags));
+}
+
 /*
  * CCE block "misc" interrupt.  Source is < 16.
  */
@@ -582,7 +778,23 @@ static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
 	char buf[96];
 	u64 reg;
 
+	/* TODO: do something for these */
 	switch (source) {
+	case 0: /* CceErr */
+		reg = read_csr(dd, WFR_CCE_ERR_STATUS);
+		write_csr(dd, WFR_CCE_ERR_CLEAR, reg);
+		dd_dev_info(dd, "CCE Error: 0x%llx\n", reg);
+		break;
+	case 1: /* RxeErr */
+		reg = read_csr(dd, WFR_RCV_ERR_STATUS);
+		write_csr(dd, WFR_RCV_ERR_CLEAR, reg);
+		dd_dev_info(dd, "Receive Error: 0x%llx\n", reg);
+		break;
+	case 2: /* MiscErr */
+		reg = read_csr(dd, WFR_MISC_ERR_STATUS);
+		write_csr(dd, WFR_MISC_ERR_CLEAR, reg);
+		dd_dev_info(dd, "Misc Error: 0x%llx\n", reg);
+		break;
 	case 4: /* PioErr */
 		/* TODO: do more here.. most of these put the hfi in
 		   freeze more.  We need to recognize that and unfreeze */
@@ -592,15 +804,21 @@ static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
 		dd_dev_info(dd, "PIO Error: %s\n",
 			pio_err_status_string(buf, sizeof(buf), reg));
 		break;
-
-	/* TODO: do something for the unhandled cases */
-	case 0: /* CceErr */
-	case 1: /* RxeErr */
-	case 2: /* MiscErr */
 	case 5: /* SDmaErr */
+		reg = read_csr(dd, WFR_SEND_DMA_ERR_STATUS);
+		write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, reg);
+		dd_dev_info(dd, "DMA Error: 0x%llx\n", reg);
+		break;
 	case 6: /* EgressErr */
+		reg = read_csr(dd, WFR_SEND_EGRESS_ERR_STATUS);
+		write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, reg);
+		dd_dev_info(dd, "Egress Error: %s\n",
+			egress_err_status_string(buf, sizeof(buf), reg));
+		break;
 	case 7: /* TxeErr */
-		printk("%s: int%u - unimplemented\n", __func__ , source);
+		reg = read_csr(dd, WFR_SEND_ERR_STATUS);
+		write_csr(dd, WFR_SEND_ERR_CLEAR, reg);
+		dd_dev_info(dd, "Send Error: 0x%llx\n", reg);
 		break;
 	default: /* Reserved */
 		dd_dev_err(dd, "Unexpected misc interrupt (%u) - reserved\n",
@@ -3922,6 +4140,14 @@ void init_rxe(struct hfi_devdata *dd)
 	/* TODO: others...? */
 }
 
+void init_other(struct hfi_devdata *dd)
+{
+	/* enable all CCE errors */
+	write_csr(dd, WFR_CCE_ERR_MASK, ~0ull);
+	/* enable all Misc errors */
+	write_csr(dd, WFR_MISC_ERR_MASK, ~0ull);
+}
+
 /*
  * Fill out the given AU table using the given CU.  A CU is defined in terms
  * AUs.  The table is a an encoding: given the index, how many AUs does that
@@ -4277,6 +4503,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	init_rxe(dd);
 	/* set initial TXE CSRs */
 	init_txe(dd);
+	/* set initial non-RXE, non-TXE CSRs */
+	init_other(dd);
 	/* set up KDETH QP prefix in both RX and TX CSRs */
 	init_kdeth_qp(dd);
 
@@ -4320,6 +4548,17 @@ bail:
 }
 
 /* interrupt testing */
+static void force_errors(struct hfi_devdata *dd, u32 csr, const char *what)
+{
+	int i;
+
+	for (i = 0; i < 64; i++) {
+		dd_dev_info(dd, "** Forced interrupt: %s %d\n", what, i);
+		write_csr(dd, csr, 1ull << i);
+		msleep(100);
+	}
+}
+
 void force_all_interrupts(struct hfi_devdata *dd)
 {
 	int i, j;
@@ -4340,4 +4579,11 @@ void force_all_interrupts(struct hfi_devdata *dd)
 			msleep(100);
 		}
 	}
+
+	force_errors(dd, WFR_CCE_ERR_FORCE, "CCE Err");
+	force_errors(dd, WFR_RCV_ERR_FORCE, "Receive Err");
+	force_errors(dd, WFR_SEND_PIO_ERR_FORCE, "Send PIO Err");
+	force_errors(dd, WFR_SEND_DMA_ERR_FORCE, "Send DMA Err");
+	force_errors(dd, WFR_SEND_EGRESS_ERR_FORCE, "Send Egress Err");
+	force_errors(dd, WFR_SEND_ERR_FORCE, "Send Err");
 }
