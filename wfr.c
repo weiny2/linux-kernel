@@ -2887,8 +2887,12 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 				<< WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_SHIFT);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_EGR_CTRL, reg);
 
-		/* set TID (expected) count and base index */
-		reg = ((rcd->expected_count &
+		/*
+		 * Set TID (expected) count and base index.
+		 * rcd->expected_count is set to individual RcvArray entries,
+		 * not pairs.
+		 */
+		reg = (((rcd->expected_count / 2) &
 					WFR_RCV_TID_CTRL_TID_PAIR_CNT_MASK)
 				<< WFR_RCV_TID_CTRL_TID_PAIR_CNT_SHIFT) |
 		      ((rcd->expected_base &
@@ -3147,26 +3151,53 @@ static int sdma_busy(struct qib_pportdata *ppd)
 static int init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	u32 context = rcd->ctxt;
+	u32 context = rcd->ctxt, max_entries = 0, eager_base;
+	u16 ngroups = rcd->rcv_array_groups;
 	int ret = 0;
 
 	/*
 	 * Simple allocation: we have already pre-allocated the number
-	 * of entries per context in dd->rcv_entries. Expected entry
-	 * count is whatis left after assigning Eager. This requires that
-	 * the count be divisible by 4 as the expected array base and count
-	 * must be divisible by 2.
+	 * of RcvArray entry groups. Each ctxtdata structure holds the
+	 * number of groups for that context.
+	 * To maintain cacheline alignment, check that Eager count is
+	 * multiple of group_size.
+	 * Expected entry count is whatis left after assigning Eager.
 	 */
-	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES)
+	eager_base = context * ngroups * dd->rcv_entries.group_size;
+	if (context >= dd->first_user_ctxt &&
+	    (context - dd->first_user_ctxt) <
+	    dd->rcv_entries.nctxt_extra) {
+		eager_base += (context - dd->first_user_ctxt) *
+			dd->rcv_entries.group_size;
+	}
+	dd_dev_info(dd, "ctxt%u: total ctxt ngroups %u\n",
+		    context, ngroups);
+
+	max_entries = ngroups * dd->rcv_entries.group_size;
+
+	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES) {
+		dd_dev_err(dd,
+			   "ctxt%u: requested too many RcvArray entries.\n",
+			   context);
 		rcd->eager_count = WFR_MAX_EAGER_ENTRIES;
-	rcd->expected_count = dd->rcv_entries - rcd->eager_count;
+	}
+	if (rcd->eager_count % dd->rcv_entries.group_size) {
+		/* eager_count is not a multiple of the group size */
+		dd_dev_err(dd, "Eager count not multiple of group size (%u/%u)\n",
+			   rcd->eager_count, dd->rcv_entries.group_size);
+		ret = -EINVAL;
+		goto done;
+	}
+	rcd->expected_count = max_entries - rcd->eager_count;
 	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
 		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
-	rcd->eager_base = (dd->rcv_entries * context);
+
+	rcd->eager_base = eager_base;
 	rcd->expected_base = rcd->eager_base + rcd->eager_count;
-	if ((rcd->expected_base % 2 == 1) ||
-	    (rcd->expected_count % 2 == 1))	/* must be even */
-		ret = -EINVAL;
+	dd_dev_info(dd, "ctxt%u: eager:%u, exp:%u, egrbase:%u, expbase:%u\n",
+		    context, rcd->eager_count, rcd->expected_count,
+		    rcd->eager_base, rcd->expected_base);
+done:
 	return ret;
 }
 
@@ -3679,7 +3710,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 	int num_user_contexts;
 	int total_contexts;
 	int ret;
-	u32 per_context;
+	unsigned ngroups;
 
 	/*
 	 * Kernel contexts: (to be fixed later):
@@ -3744,25 +3775,32 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 		(int)dd->num_rcv_contexts - dd->n_krcv_queues);
 
 	/*
-	 * Simple recieve array allocation:  Evenly divide them
-	 * Requirements:
-	 *	- Expected TID indices must be even (they are pairs)
+	 * Recieve array allocation:
+	 *   All RcvArray entries are divided into groups of 8. This will
+	 *   speed up writes to consecuitive entries by using write-
+	 *   combining of the entire cacheline.
 	 *
-	 * Alogrithm.  Make the requirement always true by:
-	 *	- making the per-context count be divisible by 4
-	 *	- evenly divide between eager and TID count
-	 *
-	 * TODO: Make this more sophisticated
+	 *   The number of groups are evenly divided among all contexts.
+	 *   any left over groups will be given to the first N user
+	 *   contexts.
 	 */
-	per_context = dd->chip_rcv_array_count / dd->num_rcv_contexts;
-	per_context -= (per_context % 4);
-	/* FIXME: no more than 24 each of eager and expected TIDs, for now! */
-#define TEMP_MAX_ENTRIES 48
-	if (per_context > TEMP_MAX_ENTRIES)
-		per_context = TEMP_MAX_ENTRIES;
-	dd->rcv_entries = per_context;
-	dd_dev_info(dd, "rcv entries %u\n", dd->rcv_entries);
-
+	dd->rcv_entries.group_size = L1_CACHE_BYTES / sizeof(u64);
+	ngroups = dd->chip_rcv_array_count / dd->rcv_entries.group_size;
+	dd->rcv_entries.ngroups = ngroups / dd->num_rcv_contexts;
+	dd->rcv_entries.nctxt_extra = ngroups -
+		(dd->num_rcv_contexts * dd->rcv_entries.ngroups);
+	dd_dev_info(dd, "RcvAntry groups %u, ctxts extra %u\n",
+		    dd->rcv_entries.ngroups,
+		    dd->rcv_entries.nctxt_extra);
+	if (dd->rcv_entries.ngroups * dd->rcv_entries.group_size >
+	    WFR_MAX_EAGER_ENTRIES * 2) {
+		dd->rcv_entries.ngroups = (WFR_MAX_EAGER_ENTRIES * 2) /
+			dd->rcv_entries.group_size;
+		dd_dev_info(dd,
+		   "RcvAntry group count too high, change to %u\n",
+		   dd->rcv_entries.ngroups);
+		dd->rcv_entries.nctxt_extra = 0;
+	}
 	/*
 	 * PIO send contexts
 	 */

@@ -127,8 +127,10 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry size
 		 * as DWords. However, hfi_setup_ctxt takes bytes from PSM and
 		 * converts to DWords. Should we just use bytes in hfi_devdata? */
-		ret = hfi_setup_ctxt(rcd, dd->rcv_entries / 2, dd->rcvegrbufsize,
-				     dd->rcvhdrcnt, dd->rcvhdrentsize << 2);
+		ret = hfi_setup_ctxt(rcd, ((dd->rcv_entries.ngroups / 2) *
+					   dd->rcv_entries.group_size),
+				     dd->rcvegrbufsize, dd->rcvhdrcnt,
+				     dd->rcvhdrentsize << 2);
 		if (ret < 0) {
 			dd_dev_err(dd,
 				   "Failed to setup kernel receive context, failing\n");
@@ -161,7 +163,12 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
+	unsigned kctxt_ngroups = 0;
 
+	if (dd->rcv_entries.nctxt_extra >
+	    dd->num_rcv_contexts - dd->first_user_ctxt)
+		kctxt_ngroups = (dd->rcv_entries.nctxt_extra %
+				 (dd->num_rcv_contexts - dd->first_user_ctxt));
 	rcd = kzalloc(sizeof(*rcd), GFP_KERNEL);
 	if (rcd) {
 		INIT_LIST_HEAD(&rcd->qp_wait_list);
@@ -170,6 +177,19 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 		rcd->cnt = 1;
 		rcd->ctxt = ctxt;
 		dd->rcd[ctxt] = rcd;
+		rcd->rcv_array_groups = dd->rcv_entries.ngroups;
+
+		if (ctxt >= dd->first_user_ctxt && (ctxt - dd->first_user_ctxt)
+		    < dd->rcv_entries.nctxt_extra)
+			rcd->rcv_array_groups += (dd->rcv_entries.nctxt_extra /
+				 (dd->num_rcv_contexts - dd->first_user_ctxt));;
+		/*
+		 * It is possible for nctxt_extra to be larger than the number
+		 * of user contexts. In that case, give the difference to the
+		 * kernel contexts.
+		 */
+		if (kctxt_ngroups && ctxt < kctxt_ngroups)
+			rcd->rcv_array_groups++;
 	}
 	return rcd;
 }
@@ -190,13 +210,6 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 		goto done;
 	}
 
-	if (egrtids > dd->rcv_entries) {
-		dd_dev_err(dd,
-			   "%s: requesting too many egrtids %u (limit: %u)\n",
-			   __func__, egrtids, dd->rcv_entries);
-		ret = -EINVAL;
-		goto done;
-	}
 	uctxt->eager_count = egrtids;
 
 	ret = dd->f_init_ctxt(uctxt);

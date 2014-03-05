@@ -918,7 +918,8 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 	cinfo.unit = uctxt->dd->unit;
 	cinfo.ctxt = uctxt->ctxt;
 	cinfo.subctxt = subctxt_fp(fp);
-	cinfo.rcvtids = uctxt->dd->rcv_entries;
+	cinfo.rcvtids = uctxt->rcv_array_groups *
+		uctxt->dd->rcv_entries.group_size;
 	cinfo.credits = uctxt->sc->credits;
 	/* FIXME: set proper numa node */
 	cinfo.numa_node = 0;

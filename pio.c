@@ -238,7 +238,10 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		 * value is checked later when we compare against total
 		 * memory available.
 		 */
-		if (count == SCC_PER_NUMA) {
+		if (qib_n_krcv_queues &&
+		    (i == SC_KERNEL || i == SC_ACK )) {
+			count = qib_n_krcv_queues;
+		} else if (count == SCC_PER_NUMA) {
 			count = num_online_nodes();
 		} else if (count == SCC_PER_CPU) {
 			count = num_online_cpus();

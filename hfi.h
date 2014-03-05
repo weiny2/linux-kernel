@@ -153,6 +153,8 @@ struct qib_ctxtdata {
 	u16 subctxt_cnt;
 	/* non-zero if ctxt is being shared. */
 	u16 subctxt_id;
+	/* number of RcvArray groups for this context. */
+	u32 rcv_array_groups;
 	/* number of eager TID entries. */
 	u32 eager_count;
 	/* index of first eager TID entry. */
@@ -648,6 +650,12 @@ struct sdma_engine {
 	/* add sdma fields here... */
 };
 
+struct rcv_array_data {
+	u8 group_size;
+	u16 ngroups;
+	u16 nctxt_extra;
+};
+
 /* device data struct now contains only "general per-device" info.
  * fields related to a physical IB port are in a qib_pportdata struct,
  * described above) while fields only used by a particular chip-type are in
@@ -936,10 +944,8 @@ struct hfi_devdata {
 	u32 num_sdma;		/* number being used */
 	struct sdma_engine per_sdma[WFR_TXE_NUM_SDMA_ENGINES];
 	/*
-	 * Simple receive array allocation: the number per receive array entries
-	 * per context.
 	 */
-	u32 rcv_entries;
+	struct rcv_array_data rcv_entries;
 };
 
 /* f_put_tid types */
