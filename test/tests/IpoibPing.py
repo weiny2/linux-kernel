@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
-# Test IbSendLat
-# Author: Denny Dalessandro (dennis.dalessandro@intel.com)
+# Test IpoibPing.py
+# Author: Mike Marciniszyn (mike.marciniszyn@intel.com)
 #
 
 import RegLib
