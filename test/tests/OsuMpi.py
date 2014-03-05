@@ -42,6 +42,8 @@ def main():
             psm_libs = None
             print "Using default PSM lib"
         else:
+            if test_info.is_simics():
+                psm_libs = "/host" + psm_libs
             print "We have PSM path set to", psm_libs
     else:
         RegLib.test_fail("MPI with verbs not yet supported")
