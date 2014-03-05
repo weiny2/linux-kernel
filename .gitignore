@@ -4,5 +4,6 @@
 *.ko.cmd
 .tmp_versions
 *.mod.c
+*.pyc
 Module.symvers
 modules.order
