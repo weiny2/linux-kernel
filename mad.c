@@ -35,6 +35,8 @@
 #include <rdma/ib_smi.h>
 #ifdef CONFIG_STL_MGMT
 #include <rdma/stl_smi.h>
+#define STL_NUM_PKEY_BLOCKS_PER_SMP (STL_SMP_DR_DATA_SIZE \
+			/ (STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16)))
 #endif /* CONFIG_STL_MGMT */
 
 #include "hfi.h"
@@ -266,6 +268,23 @@ void qib_node_desc_chg(struct qib_ibport *ibp)
 
 	qib_send_trap(ibp, &data, sizeof data);
 }
+
+#ifdef CONFIG_STL_MGMT
+static int subn_get_stl_nodedescription(struct stl_smp *smp, 
+					struct ib_device *ibdev)
+{
+	struct stl_node_description *nd;
+ 
+	if (smp->attr_mod)
+		smp->status |= IB_SMP_INVALID_FIELD;
+ 
+	nd = (struct stl_node_description *)stl_get_smp_data(smp);
+ 
+	memcpy(nd->data, ibdev->node_desc, sizeof(nd->data));
+ 
+	return reply(smp);
+}
+#endif /* CONFIG_STL_MGMT */
 
 static int subn_get_nodedescription(struct ib_smp *smp,
 				    struct ib_device *ibdev)
@@ -823,11 +842,11 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp,
 	memset(stl_get_smp_data(smp), 0, stl_get_smp_data_size(smp));
 
 	if (start_block + n_blocks_req > n_blocks_avail ||
-	    n_blocks_req > 1 /* XXX was STL_NUM_PKEY_BLOCKS_PER_SMP*/) {
+	    n_blocks_req > STL_NUM_PKEY_BLOCKS_PER_SMP) {
 		pr_warn("STL Get PKey AM Invalid : s 0x%x; req 0x%x; "
 			"avail 0x%x; blk/smp 0x%lx\n",
 			start_block, n_blocks_req, n_blocks_avail,
-			1UL /* XXX */);
+			STL_NUM_PKEY_BLOCKS_PER_SMP);
 		smp->status |= IB_SMP_INVALID_FIELD;
 		goto error;
 	}
@@ -894,6 +913,305 @@ static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	/* The only GUID we support is the first read-only entry. */
 	return subn_get_guidinfo(smp, ibdev, port);
 }
+
+#ifdef CONFIG_STL_MGMT
+/**
+ * subn_set_stl_portinfo - set port information
+ * @smp: the incoming SM packet
+ * @ibdev: the infiniband device
+ * @port: the port on the device
+ *
+ */
+static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
+				 u8 port)
+{
+	struct stl_port_info *pi;
+	struct ib_event event;
+	struct hfi_devdata *dd;
+	struct qib_pportdata *ppd;
+	struct qib_ibport *ibp;
+	u8 clientrereg;
+	unsigned long flags;
+	u32 stl_lid; /* Temp to hold STL LID values */
+	u16 lid, smlid;
+	u8 state;
+	u8 vls;
+	u8 msl;
+	u16 lse, lwe;
+	u16 lstate;
+	int ret, ore;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
+	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
+
+	if (num_ports != 1) {
+		pr_warn("STL Set(STLPortInfo) invalid AM.N\n");
+		goto err;
+	}
+
+	/* PortInfo is only valid on receiving port
+	 * or 0 for wildcard
+	 */
+	if (port_num == 0)
+		port_num = port;
+	else {
+		if (port_num != port)
+			goto get_only;
+	}
+
+	pi = (struct stl_port_info *)stl_get_smp_data(smp);
+
+	stl_lid = be32_to_cpu(pi->lid);
+	if (stl_lid & 0xFFFF0000) {
+		pr_warn("STL_PortInfo lid out of range: %X\n", stl_lid);
+		goto err;
+	}
+	lid = (u16)(stl_lid & 0x0000FFFF);
+
+	stl_lid = be32_to_cpu(pi->sm_lid);
+	if (stl_lid & 0xFFFF0000) {
+		pr_warn("STL_PortInfo SM lid out of range: %X\n", stl_lid);
+		goto err;
+	}
+	smlid = (u16)(stl_lid & 0x0000FFFF);
+
+	clientrereg = (pi->clientrereg_subnettimeout &
+			STL_PI_MASK_CLIENT_REREGISTER);
+
+	dd = dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hdw from 0 */
+	ppd = dd->pport + (port_num - 1);
+	ibp = &ppd->ibport_data;
+	event.device = ibdev;
+	event.element.port_num = port;
+
+	ibp->mkey = pi->mkey;
+	ibp->gid_prefix = pi->subnet_prefix;
+	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
+
+	/* Must be a valid unicast LID address. */
+	if (lid == 0 || lid >= QIB_MULTICAST_LID_BASE) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		pr_warn("SubnSet(STL_PortInfo) lid invalid 0x%x\n",
+			lid);
+	} else if (ppd->lid != lid ||
+		 ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC)) {
+		if (ppd->lid != lid)
+			qib_set_uevent_bits(ppd, _QIB_EVENT_LID_CHANGE_BIT);
+		if (ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC))
+			qib_set_uevent_bits(ppd, _QIB_EVENT_LMC_CHANGE_BIT);
+		qib_set_lid(ppd, lid, pi->mkeyprotect_lmc & STL_PI_MASK_LMC);
+		event.event = IB_EVENT_LID_CHANGE;
+		ib_dispatch_event(&event);
+	}
+
+	msl = pi->smsl & STL_PI_MASK_SMSL;
+	/* Must be a valid unicast LID address. */
+	if (smlid == 0 || smlid >= QIB_MULTICAST_LID_BASE) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		pr_warn("SubnSet(STL_PortInfo) smlid invalid 0x%x\n", smlid);
+	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
+		pr_warn("SubnSet(STL_PortInfo) smlid 0x%x\n", smlid);
+		spin_lock_irqsave(&ibp->lock, flags);
+		if (ibp->sm_ah) {
+			if (smlid != ibp->sm_lid)
+				ibp->sm_ah->attr.dlid = smlid;
+			if (msl != ibp->sm_sl)
+				ibp->sm_ah->attr.sl = msl;
+		}
+		spin_unlock_irqrestore(&ibp->lock, flags);
+		if (smlid != ibp->sm_lid)
+			ibp->sm_lid = smlid;
+		if (msl != ibp->sm_sl)
+			ibp->sm_sl = msl;
+		event.event = IB_EVENT_SM_CHANGE;
+		ib_dispatch_event(&event);
+	}
+
+	lwe = be16_to_cpu(pi->link_width.enabled);
+	if (lwe) {
+		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED) == STL_LINK_WIDTH_ALL_SUPPORTED) {
+			set_link_width_enabled(ppd, STL_LINK_WIDTH_ALL_SUPPORTED);
+		} else if (lwe & be16_to_cpu(pi->link_width.supported)) {
+			set_link_width_enabled(ppd, lwe);
+		} else
+			smp->status |= IB_SMP_INVALID_FIELD;
+	}
+	lse = be16_to_cpu(pi->link_speed.enabled);
+	if (lse) {
+		if ((lse & STL_LINK_SPEED_ALL_SUPPORTED) == STL_LINK_SPEED_ALL_SUPPORTED) {
+			set_link_speed_enabled(ppd, STL_LINK_SPEED_ALL_SUPPORTED);
+		} else if (lse & be16_to_cpu(pi->link_speed.supported)) {
+			set_link_speed_enabled(ppd, lse);
+		} else
+			smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	/* Set link down default state. */
+	/* Again make this virtual.  Only IB PortInfo controls the actual port
+	 * states */
+	switch (pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE) {
+	case 0: /* NOP */
+		break;
+	case 1: /* SLEEP */
+	/*
+		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
+					IB_LINKINITCMD_SLEEP);
+					*/
+		break;
+	case 2: /* POLL */
+	/*
+		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
+					IB_LINKINITCMD_POLL);
+					*/
+		break;
+	default:
+		pr_warn("SubnSet(STL_PortInfo) Default state invalid 0x%x\n",
+			pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	ibp->mkeyprot = (pi->mkeyprotect_lmc & STL_PI_MASK_MKEY_PROT_BIT) >> 6;
+	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
+	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
+				    ibp->vl_high_limit);
+
+#if 0 /* XXX we need *something* here, no? */
+	mtu = ib_mtu_enum_to_int((pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+	if (mtu == -1) {
+		printk(KERN_WARNING 
+			"SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n", mtu,
+			(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	} else {
+		printk(KERN_WARNING "SubnSet(STL_PortInfo) Neigh MTU ignored %d\n", mtu);
+		qib_set_mtu(ppd, mtu);
+	}
+#endif
+
+	/* Set operational VLs */
+	vls = pi->operational_vls & STL_PI_MASK_OPERATIONAL_VL;
+	if (vls) {
+		if (vls > ppd->vls_supported) {
+			pr_warn("SubnSet(STL_PortInfo) VL's supported invalid %d\n",
+				pi->operational_vls);
+			smp->status |= IB_SMP_INVALID_FIELD;
+		} else
+			(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS, vls);
+	}
+
+	if (pi->mkey_violations == 0)
+		ibp->mkey_violations = 0;
+
+	if (pi->pkey_violations == 0)
+		ibp->pkey_violations = 0;
+
+	if (pi->qkey_violations == 0)
+		ibp->qkey_violations = 0;
+
+	ore = pi->localphy_overrun_errors;
+	if (set_phyerrthreshold(ppd, (ore >> 4) & 0xF)) {
+		pr_warn("SubnSet(STL_PortInfo) phyerrthreshold invalid 0x%x\n",
+			(ore >> 4) & 0xF);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	if (set_overrunthreshold(ppd, (ore & 0xF))) {
+		pr_warn("SubnSet(STL_PortInfo) overrunthreshold invalid 0x%x\n",
+			ore & 0xF);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	ibp->subnet_timeout = pi->clientrereg_subnettimeout & STL_PI_MASK_SUBNET_TIMEOUT;
+
+	/*
+	 * Do the port state change now that the other link parameters
+	 * have been set.
+	 * Changing the port physical state only makes sense if the link
+	 * is down or is being set to down.
+	 */
+	state = pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_STATE;
+	lstate = (pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
+	if (lstate && !(state == IB_PORT_DOWN || state == IB_PORT_NOP)) {
+		pr_warn("SubnSet(STL_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
+			state, lstate);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	/*
+	 * Only state changes of DOWN, ARM, and ACTIVE are valid
+	 * and must be in the correct state to take effect (see 7.2.6).
+	 */
+	switch (state) {
+	case IB_PORT_NOP:
+		if (lstate == 0)
+			break;
+		/* FALLTHROUGH */
+	case IB_PORT_DOWN:
+#if 0
+		if (lstate == 0)
+			//lstate = QIB_IB_LINKDOWN_ONLY;
+		else if (lstate == 1)
+			//lstate = QIB_IB_LINKDOWN_SLEEP;
+		else if (lstate == 2)
+			//lstate = QIB_IB_LINKDOWN;
+		else if (lstate == 3)
+			//lstate = QIB_IB_LINKDOWN_DISABLE;
+		else {
+#endif
+		/* FIXME allow other STL states */
+		if (lstate > 3) {
+			pr_warn("SubnSet(STL_PortInfo) invalid Physical state 0x%x\n",
+				lstate);
+			smp->status |= IB_SMP_INVALID_FIELD;
+			break;
+		}
+
+		qib_set_linkstate(ppd, lstate);
+		/*
+		 * Don't send a reply if the response would be sent
+		 * through the disabled port.
+		 */
+		if (lstate == QIB_IB_LINKDOWN_DISABLE && smp->hop_cnt) {
+			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+			goto done;
+		}
+		/* XXX ??? qib_wait_linkstate(ppd, QIBL_LINKV, 10); */
+		break;
+	case IB_PORT_ARMED:
+		qib_set_linkstate(ppd, QIB_IB_LINKARM);
+		break;
+	case IB_PORT_ACTIVE:
+		qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+		break;
+	default:
+		pr_warn("SubnSet(STL_PortInfo) invalid state 0x%x\n", state);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	if (clientrereg) {
+		event.event = IB_EVENT_CLIENT_REREGISTER;
+		ib_dispatch_event(&event);
+	}
+
+	ret = subn_get_stl_portinfo(smp, ibdev, port);
+
+	/* restore re-reg bit per o14-12.2.1 */
+	pi->clientrereg_subnettimeout |= clientrereg;
+
+#if 1 /* XXX HACK HACK HACK */
+	pi->overall_buffer_space = 2304; /* 144 * 1024 / 64 */
+#endif /* 01 */
+
+	goto done;
+
+err:
+	smp->status |= IB_SMP_INVALID_FIELD;
+get_only:
+	ret = subn_get_stl_portinfo(smp, ibdev, port);
+done:
+	return ret;
+}
+#endif /* CONFIG_STL_MGMT */
 
 /**
  * subn_set_portinfo - set port information
@@ -1288,6 +1606,52 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	}
 	return 0;
 }
+
+#ifdef CONFIG_STL_MGMT
+static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
+			      u8 port)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u32 n_blocks_sent = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
+	u16 *p = (u16 *) stl_get_smp_data(smp);
+	int i;
+	u16 n_blocks_avail;
+
+	if (am_port == 0)
+		am_port = port;
+
+	if (am_port != port || n_blocks_sent == 0) {
+		pr_warn("STL Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
+			am_port, start_block, n_blocks_sent);
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	n_blocks_avail = (u16)(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) +1;
+
+	if (start_block + n_blocks_sent > n_blocks_avail ||
+	    n_blocks_sent > STL_NUM_PKEY_BLOCKS_PER_SMP) {
+		pr_warn("STL Set PKey AM Invalid : s 0x%x; req 0x%x; avail 0x%x; blk/smp 0x%lx\n",
+			start_block, n_blocks_sent, n_blocks_avail,
+			STL_NUM_PKEY_BLOCKS_PER_SMP);
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	p = (u16 *) stl_get_smp_data(smp);
+	for (i = 0; i < n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE; i++)
+		p[i] = be16_to_cpu(p[i]);
+
+	if (start_block == 0 && set_pkeys(dd, port, p) != 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	return subn_get_stl_pkeytable(smp, ibdev, port);
+}
+#endif /* CONFIG_STL_MGMT */
 
 static int subn_set_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 			      u8 port)
@@ -2122,11 +2486,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
 		switch (smp->attr_id) {
-#if 0
 		case IB_SMP_ATTR_NODE_DESC:
-			ret = subn_get_nodedescription(smp, ibdev);
+			ret = subn_get_stl_nodedescription(smp, ibdev);
 			goto bail;
-#endif /* 01 */
 		case IB_SMP_ATTR_NODE_INFO:
 			ret = subn_get_stl_nodeinfo(smp, ibdev, port);
 			goto bail;
@@ -2166,18 +2528,20 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		}
 
-#if 0
 	case IB_MGMT_METHOD_SET:
 		switch (smp->attr_id) {
+#if 0
 		case IB_SMP_ATTR_GUID_INFO:
 			ret = subn_set_guidinfo(smp, ibdev, port);
 			goto bail;
+#endif /* 01 */
 		case IB_SMP_ATTR_PORT_INFO:
-			ret = subn_set_portinfo(smp, ibdev, port);
+			ret = subn_set_stl_portinfo(smp, ibdev, port);
 			goto bail;
 		case IB_SMP_ATTR_PKEY_TABLE:
-			ret = subn_set_pkeytable(smp, ibdev, port);
+			ret = subn_set_stl_pkeytable(smp, ibdev, port);
 			goto bail;
+#if 0
 		case IB_SMP_ATTR_SL_TO_VL_TABLE:
 			ret = subn_set_sl_to_vl(smp, ibdev, port);
 			goto bail;
@@ -2195,12 +2559,13 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 				goto bail;
 			}
 			/* FALLTHROUGH */
+#endif /* 01 */
 		default:
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply(smp);
 			goto bail;
 		}
-
+#if 0
 	case IB_MGMT_METHOD_TRAP_REPRESS:
 		if (smp->attr_id == IB_SMP_ATTR_NOTICE)
 			ret = subn_trap_repress(smp, ibdev, port);
