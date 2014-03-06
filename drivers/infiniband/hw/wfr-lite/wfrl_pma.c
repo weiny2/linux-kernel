@@ -356,7 +356,6 @@ static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
 {
 	struct ib_class_port_info *p =
 		(struct ib_class_port_info *)pmp->data;
-	struct qib_devdata *dd = dd_from_ibdev(ibdev);
 
 	memset(pmp->data, 0, sizeof(pmp->data));
 
@@ -367,11 +366,6 @@ static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
 	p->base_version = 0x80;
 	p->class_version = 0x80;
 	p->capability_mask = 0;
-	/*
-	 * Set the most significant bit of CM2 to indicate support for
-	 * congestion statistics
-	 */
-	p->reserved[0] = dd->psxmitwait_supported << 7;
 	/*
 	 * Expected response time is 4.096 usec. * 2^18 == 1.073741824 sec.
 	 */
