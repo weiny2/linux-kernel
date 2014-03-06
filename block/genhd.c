@@ -502,6 +502,18 @@ static int exact_lock(dev_t devt, void *data)
 	return 0;
 }
 
+static int __read_mostly no_partition_scan;
+
+static int __init no_partition_scan_setup(char *str)
+{
+	no_partition_scan = 1;
+	printk(KERN_INFO "genhd: omit partition scan.\n");
+
+	return 1;
+}
+
+__setup("no_partition_scan", no_partition_scan_setup);
+
 static void register_disk(struct gendisk *disk)
 {
 	struct device *ddev = disk_to_dev(disk);
@@ -537,6 +549,9 @@ static void register_disk(struct gendisk *disk)
 
 	disk->part0.holder_dir = kobject_create_and_add("holders", &ddev->kobj);
 	disk->slave_dir = kobject_create_and_add("slaves", &ddev->kobj);
+
+	if (no_partition_scan)
+		disk->flags |= GENHD_FL_NO_PART_SCAN;
 
 	/* No minors to use for partitions */
 	if (!disk_part_scan_enabled(disk))
@@ -922,7 +937,28 @@ static ssize_t disk_range_show(struct device *dev,
 {
 	struct gendisk *disk = dev_to_disk(dev);
 
-	return sprintf(buf, "%d\n", disk->minors);
+	return sprintf(buf, "%d\n",
+		       (disk->flags & GENHD_FL_NO_PART_SCAN) ?
+		       0 : disk->minors);
+}
+
+static ssize_t disk_range_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	int i;
+
+	if (count > 0 && sscanf(buf, "%d", &i) > 0) {
+		if (i == 0)
+			disk->flags |= GENHD_FL_NO_PART_SCAN;
+		else if (i <= disk->minors)
+			disk->flags &= ~GENHD_FL_NO_PART_SCAN;
+		else
+			count = -EINVAL;
+	}
+
+	return count;
 }
 
 static ssize_t disk_ext_range_show(struct device *dev,
@@ -976,7 +1012,7 @@ static ssize_t disk_discard_alignment_show(struct device *dev,
 	return sprintf(buf, "%d\n", queue_discard_alignment(disk->queue));
 }
 
-static DEVICE_ATTR(range, S_IRUGO, disk_range_show, NULL);
+static DEVICE_ATTR(range, S_IRUGO|S_IWUSR, disk_range_show, disk_range_store);
 static DEVICE_ATTR(ext_range, S_IRUGO, disk_ext_range_show, NULL);
 static DEVICE_ATTR(removable, S_IRUGO, disk_removable_show, NULL);
 static DEVICE_ATTR(ro, S_IRUGO, disk_ro_show, NULL);
