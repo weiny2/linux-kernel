@@ -503,6 +503,169 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
 	return ret;
 }
 
+#ifdef CONFIG_STL_MGMT
+static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
+				 u8 port)
+{
+	int i;
+	struct hfi_devdata *dd;
+	struct qib_pportdata *ppd;
+	struct qib_ibport *ibp;
+	struct stl_port_info *pi;
+	u8 mtu;
+	int ret;
+	u32 state;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
+	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
+
+	if (num_ports > 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		ret = reply(smp);
+		goto bail;
+	}
+	if (port_num == 0)
+		port_num = port;
+	else {
+		if (port_num > ibdev->phys_port_cnt) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			ret = reply(smp);
+			goto bail;
+		}
+		if (port_num != port) {
+			ibp = to_iport(ibdev, port_num);
+			ret = check_mkey(ibp, (struct ib_mad_hdr *)smp,
+					 0, smp->mkey,
+					 smp->route.dr.dr_slid,
+					 smp->route.dr.return_path,
+					 smp->hop_cnt);
+			if (ret) {
+				ret = IB_MAD_RESULT_FAILURE;
+				goto bail;
+			}
+		}
+	}
+
+	dd = dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hdw from 0 */
+	ppd = dd->pport + (port_num - 1);
+	ibp = &ppd->ibport_data;
+
+	pi = (struct stl_port_info *)stl_get_smp_data(smp);
+	/* Clear all fields.  Only set the non-zero fields. */
+	memset(pi, 0, sizeof(*pi));
+
+	pi->lid = cpu_to_be32(ppd->lid);
+
+	/* Only return the mkey if the protection field allows it. */
+	if (!(smp->method == IB_MGMT_METHOD_GET &&
+	      ibp->mkey != smp->mkey &&
+	      ibp->mkeyprot == 1))
+		pi->mkey = ibp->mkey;
+
+	pi->subnet_prefix = ibp->gid_prefix;
+	pi->sm_lid = cpu_to_be32(ibp->sm_lid);
+	pi->ib_cap_mask = cpu_to_be32(ibp->port_cap_flags);
+	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
+
+	pi->link_width.enabled = cpu_to_be16(ppd->link_width_enabled);
+	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
+	pi->link_width.active = cpu_to_be16(ppd->link_width_active);
+
+	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
+	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
+	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
+
+	/* FIXME make sure that this default state matches */
+	pi->port_states.offline_reason = 0;
+	pi->port_states.unsleepstate_downdefstate =
+		(get_linkdowndefaultstate(ppd) ? 1 : 2);
+
+	state = dd->f_iblink_state(ppd);
+	pi->port_states.portphysstate_portstate =
+		(dd->f_ibphys_portstate(ppd) << 4) | state;
+
+	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
+
+	/* return simulated mtu data */
+	switch (ppd->ibmtu) {
+	default: /* something is wrong; fall through */
+	case 4096:
+		mtu = IB_MTU_4096;
+		break;
+	case 2048:
+		mtu = IB_MTU_2048;
+		break;
+	case 1024:
+		mtu = IB_MTU_1024;
+		break;
+	case 512:
+		mtu = IB_MTU_512;
+		break;
+	case 256:
+		mtu = IB_MTU_256;
+		break;
+	}
+
+	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
+	for (i = 0; i < ppd->vls_supported; i++)
+		if ((i % 2) == 0)
+			pi->neigh_mtu.pvlx_to_mtu[i/2] |= (mtu << 4);
+		else
+			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
+
+	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
+	pi->operational_vls = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS);
+
+	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
+	/* P_KeyViolations are counted by hardware. */
+	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
+	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
+
+	pi->vl.cap = ppd->vls_supported;
+	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
+	pi->vl.arb_high_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
+	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
+
+	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
+	pi->localphy_overrun_errors =
+		(get_phyerrthreshold(ppd) << 4) |
+		get_overrunthreshold(ppd);
+
+	/* FIXME supported, enabled, active all == STL */
+	pi->port_link_mode  = STL_PORT_LINK_MODE_STL << 10;
+	pi->port_link_mode |= STL_PORT_LINK_MODE_STL << 5;
+	pi->port_link_mode |= STL_PORT_LINK_MODE_STL;
+	pi->port_link_mode = cpu_to_be16(pi->port_link_mode);
+
+	/* FIXME supported, enabled, active all == 16-bit */
+	pi->port_ltp_crc_mode  = STL_PORT_LTP_CRC_MODE_16 << 8;
+	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16 << 4;
+	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16;
+	pi->port_ltp_crc_mode = cpu_to_be16(pi->port_ltp_crc_mode);
+
+	pi->port_packet_format.supported =
+		cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
+	pi->port_packet_format.enabled =
+		cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
+
+	pi->link_down_reason = STL_LINKDOWN_REASON_NONE;
+
+	pi->link_width_downgrade.supported = 0;
+	pi->link_width_downgrade.enabled = 0;
+	pi->link_width_downgrade.active = 0;
+
+	/* 32.768 usec. response time (guessing) */
+	pi->resptimevalue = 3;
+
+	pi->local_port_num = port;
+
+	ret = reply(smp);
+
+bail:
+	return ret;
+}
+#endif /* CONFIG_STL_MGMT */
+
 static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -629,6 +792,59 @@ static int get_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 
 	return 0;
 }
+
+#ifdef CONFIG_STL_MGMT
+static int subn_get_stl_pkeytable(struct stl_smp *smp,
+				  struct ib_device *ibdev,
+				  u8 port)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u32 n_blocks_req = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
+	__be16 *p;
+	int i;
+	u16 n_blocks_avail;
+
+	if (am_port == 0)
+		am_port = port;
+
+	if (am_port != port || n_blocks_req == 0) {
+		pr_warn("STL Get PKey AM Invalid : "
+			"P = %d; B = 0x%x; N = 0x%x\n", am_port,
+			start_block, n_blocks_req);
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	n_blocks_avail = (u16)
+		(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) + 1;
+
+	memset(stl_get_smp_data(smp), 0, stl_get_smp_data_size(smp));
+
+	if (start_block + n_blocks_req > n_blocks_avail ||
+	    n_blocks_req > 1 /* XXX was STL_NUM_PKEY_BLOCKS_PER_SMP*/) {
+		pr_warn("STL Get PKey AM Invalid : s 0x%x; req 0x%x; "
+			"avail 0x%x; blk/smp 0x%lx\n",
+			start_block, n_blocks_req, n_blocks_avail,
+			1UL /* XXX */);
+		smp->status |= IB_SMP_INVALID_FIELD;
+		goto error;
+	}
+
+	p = (__be16 *) stl_get_smp_data(smp);
+	/* get the real pkeys if we are requesting the first block */
+	if (start_block == 0) {
+		get_pkeys(dd, port, p);
+		for (i = 0; i < qib_get_npkeys(dd); i++)
+			p[i] = cpu_to_be16(p[i]);
+	} else
+		smp->status |= IB_SMP_INVALID_FIELD;
+
+error:
+	return reply(smp);
+}
+#endif /* CONFIG_STL_MGMT */
 
 static int subn_get_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 			      u8 port)
@@ -1880,6 +2096,25 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			 smp->route.dr.dr_slid, smp->route.dr.return_path,
 			 smp->hop_cnt);
 	if (ret) {
+		u32 port_num = be32_to_cpu(smp->attr_mod);
+
+		/*
+		 * If this is a get/set portinfo, we already check the
+		 * M_Key if the MAD is for another port and the M_Key
+		 * is OK on the receiving port. This check is needed
+		 * to increment the error counters when the M_Key
+		 * fails to match on *both* ports.
+		 */
+		if (in_mad->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO &&
+		    (smp->method == IB_MGMT_METHOD_GET ||
+		     smp->method == IB_MGMT_METHOD_SET) &&
+		    port_num && port_num <= ibdev->phys_port_cnt &&
+		    port != port_num)
+			(void) check_mkey(to_iport(ibdev, port_num),
+					  (struct ib_mad_hdr *)smp, 0,
+					  smp->mkey, smp->route.dr.dr_slid,
+					  smp->route.dr.return_path,
+					  smp->hop_cnt);
 		ret = IB_MAD_RESULT_FAILURE;
 		goto bail;
 	}
@@ -1899,12 +2134,14 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_GUID_INFO:
 			ret = subn_get_guidinfo(smp, ibdev, port);
 			goto bail;
+#endif /* 01 */
 		case IB_SMP_ATTR_PORT_INFO:
-			ret = subn_get_portinfo(smp, ibdev, port);
+			ret = subn_get_stl_portinfo(smp, ibdev, port);
 			goto bail;
 		case IB_SMP_ATTR_PKEY_TABLE:
-			ret = subn_get_pkeytable(smp, ibdev, port);
+			ret = subn_get_stl_pkeytable(smp, ibdev, port);
 			goto bail;
+#if 0
 		case IB_SMP_ATTR_SL_TO_VL_TABLE:
 			ret = subn_get_sl_to_vl(smp, ibdev, port);
 			goto bail;
