@@ -1583,4 +1583,6 @@ void wfrl_set_stl_virtual_link_info(struct ib_device *ibdev, u8 port,
 				uint8_t state, __be64 local_node_guid,
 				u8 local_port_mode);
 
+void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev);
+
 #endif                          /* _QIB_KERNEL_H */

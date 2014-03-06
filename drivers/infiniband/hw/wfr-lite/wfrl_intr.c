@@ -69,7 +69,7 @@ void qib_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
 			qib_format_hwmsg(msg, msgl, hwerrmsgs[i].msg);
 }
 
-static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
+void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
 {
 	struct ib_event event;
 	struct qib_devdata *dd = ppd->dd;

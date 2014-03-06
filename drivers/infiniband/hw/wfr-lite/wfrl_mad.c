@@ -384,9 +384,10 @@ static void arm_virtual_port(u8 port)
 	printk(KERN_WARNING PFX "Virtual Port %d Armed\n", port);
 }
 
-static void activate_virtual_port(u8 port)
+static void activate_virtual_port(struct qib_pportdata *ppd, u8 port)
 {
 	set_virtual_port_state(port, IB_PORT_ACTIVE);
+	signal_ib_event(ppd, IB_EVENT_PORT_ACTIVE);
 	printk(KERN_WARNING PFX "Virtual Port %d Activated\n", port);
 }
 
@@ -493,6 +494,7 @@ err:
 static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibdev,
 			   u8 port, int send_GetResp)
 {
+	enum ib_event_type ev = 0;
 	u8 rem_phys_state, rem_link_state;
 	u8 loc_phys_state, loc_link_state, new_loc_phys_state;
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
@@ -500,6 +502,7 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 					(struct wfr_link_info *)smp->data;
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
 	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
+	struct qib_pportdata *ppd = dd->pport + (port - 1);
 
 	rem_phys_state = (link_info->port_state >> 4) & 0xF;
 	rem_link_state = link_info->port_state & 0xF;
@@ -518,6 +521,12 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 		virtual_port_linkup_init(port);
 	}
 
+	if (loc_phys_state == 0x05 /* LinkUp */
+	    && rem_phys_state == 0x02 /* Polling */) {
+		virtual_port_linkup_init(port);
+		ev = IB_EVENT_PORT_ERR;
+	}
+
 	if (rem_link_state == IB_PORT_DOWN) {
 		/* Set local port to Down... */
 		vpi->port_states.portphysstate_portstate = 1;
@@ -531,6 +540,7 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 				vpi->port_states.portphysstate_portstate |= 2 << 4;
 				printk(KERN_WARNING PFX
 					"STL local Virt Port '%d' : down/polling\n", port);
+				ev = IB_EVENT_PORT_ERR;
 			} else {
 				virtual_port_linkup_init(port);
 			}
@@ -549,12 +559,8 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 		}
 	}
 
-// FIXME at some point we should tell users about the state change
-//int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
-//qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
-//ev = IB_EVENT_PORT_ACTIVE;
-//if (ev)
-//signal_ib_event(ppd, ev);
+	if (ev)
+		signal_ib_event(ppd, ev);
 
 	new_loc_phys_state = (vpi->port_states.portphysstate_portstate >> 4) & 0xF;
 	if (new_loc_phys_state == 0x5) { /* LinkUp */
@@ -1886,7 +1892,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		break;
 	case IB_PORT_ACTIVE:
 		//qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
-		activate_virtual_port(port);
+		activate_virtual_port(ppd, port);
 		break;
 	default:
 		printk(KERN_WARNING PFX
