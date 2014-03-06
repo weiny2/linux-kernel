@@ -4215,7 +4215,7 @@ static void init_qpmap_table(struct hfi_devdata *dd,
 
 void init_rxe(struct hfi_devdata *dd)
 {
-	u64 reg = 0;
+	u64 reg;
 	/* enable all receive errors */
 	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
 	/* setup QPN map table */
