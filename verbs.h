@@ -632,10 +632,16 @@ struct qib_lkey_table {
 	struct qib_mregion __rcu **table;
 };
 
-struct qib_opcode_stats {
+#ifdef CONFIG_DEBUG_FS
+struct hfi_opcode_stats {
 	u64 n_packets;          /* number of packets */
 	u64 n_bytes;            /* total number of bytes */
 };
+
+struct hfi_opcode_stats_perctx {
+	struct hfi_opcode_stats stats[128];
+};
+#endif
 
 struct qib_ibport {
 	struct qib_qp __rcu *qp0;
@@ -702,8 +708,6 @@ struct qib_ibport {
 	u8 subnet_timeout;
 	u8 vl_high_limit;
 	u8 sl_to_vl[16];
-
-	struct qib_opcode_stats opstats[128];
 };
 
 
@@ -744,6 +748,10 @@ struct qib_ibdev {
 	spinlock_t n_srqs_lock;
 	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
 	spinlock_t n_mcast_grps_lock;
+#ifdef CONFIG_DEBUG_FS
+	/* per HFI debugfs */
+	struct dentry *hfi_ibdev_dbg;
+#endif
 };
 
 struct qib_verbs_counters {
