@@ -1379,6 +1379,7 @@ read_again:
 		    test_bit(R10BIO_FailFast, &r10_bio->state))
 			read_bio->bi_rw |= REQ_FAILFAST_DEV;
 		read_bio->bi_private = r10_bio;
+
 		if (max_sectors < r10_bio->sectors) {
 			/* Could not read all from this device, so we will
 			 * need another r10_bio.
@@ -1408,9 +1409,10 @@ read_again:
 			r10_bio->sector = bio->bi_sector + sectors_handled;
 			goto read_again;
 		} else {
-			trace_block_bio_remap(bdev_get_queue(read_bio->bi_bdev),
-					      read_bio, disk_devt(mddev->gendisk),
-					      r10_bio->sector);
+			if (mddev->gendisk)
+				trace_block_bio_remap(bdev_get_queue(read_bio->bi_bdev),
+						      read_bio, disk_devt(mddev->gendisk),
+						      r10_bio->sector);
 			generic_make_request(read_bio);
 		}
 		return;
@@ -1605,9 +1607,10 @@ retry_write:
 			else
 				plug = NULL;
 			spin_lock_irqsave(&conf->device_lock, flags);
-			trace_block_bio_remap(bdev_get_queue(mbio->bi_bdev),
-					      mbio, disk_devt(mddev->gendisk),
-					      r10_bio->sector);
+			if (mddev->gendisk)
+				trace_block_bio_remap(bdev_get_queue(mbio->bi_bdev),
+						      mbio, disk_devt(mddev->gendisk),
+						      r10_bio->sector);
 			mbio->bi_bdev = (void *)conf->mirrors[d].rdev;
 			if (plug) {
 				bio_list_add(&plug->pending, mbio);
