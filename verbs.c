@@ -658,7 +658,9 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 	struct qib_qp *qp;
 	u32 qp_num;
 	int lnh;
+#ifdef CONFIG_DEBUG_FS
 	u8 opcode;
+#endif
 	u16 lid;
 
 	/* 24 == LRH+BTH+CRC */
@@ -691,9 +693,11 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 
 	trace_input_ibhdr(rcd->dd, hdr);
 
-	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-	ibp->opstats[opcode & 0x7f].n_bytes += tlen;
-	ibp->opstats[opcode & 0x7f].n_packets++;
+#ifdef CONFIG_DEBUG_FS
+	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
+	rcd->opstats->stats[opcode].n_bytes += tlen;
+	rcd->opstats->stats[opcode].n_packets++;
+#endif
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;

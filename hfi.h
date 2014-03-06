@@ -105,6 +105,11 @@ extern struct pci_driver qib_driver;
 /*
  * Below contains all data related to a single context (formerly called port).
  */
+
+#ifdef CONFIG_DEBUG_FS
+struct hfi_opcode_stats_perctx;
+#endif
+
 struct qib_ctxtdata {
 	/* shadow the ctxt's RcvCtrl register */
 	u64 rcvctrl;
@@ -235,6 +240,10 @@ struct qib_ctxtdata {
 	/* interrupt handling */
 	u64 imask;	/* clear interupt mask */
 	int ireg;	/* clear interrupt register */
+#ifdef CONFIG_DEBUG_FS
+	/* verbs stats per CTX */
+	struct hfi_opcode_stats_perctx *opstats;
+#endif
 };
 
 struct qib_sge_state;
