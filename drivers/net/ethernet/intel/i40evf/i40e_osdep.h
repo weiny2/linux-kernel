@@ -66,7 +66,7 @@ struct i40e_virt_mem {
 
 #define i40e_debug(h, m, s, ...)  i40evf_debug_d(h, m, s, ##__VA_ARGS__)
 extern void i40evf_debug_d(void *hw, u32 mask, char *fmt_str, ...)
-	__attribute__ ((format(gnu_printf, 3, 4)));
+	__attribute__ ((format(printf, 3, 4)));
 
 typedef enum i40e_status_code i40e_status;
 #endif /* _I40E_OSDEP_H_ */
