@@ -1896,18 +1896,16 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	if (lstate) {
 		u8 tmp;
-		tmp = virtual_stl[port-1].port_info.port_states.portphysstate_portstate;
-		virtual_stl[port-1].port_info.port_states.portphysstate_portstate =
+		tmp = vpi->port_states.portphysstate_portstate;
+		vpi->port_states.portphysstate_portstate =
 			((lstate << 4) & STL_PI_MASK_PORT_PHYSICAL_STATE) |
 			(tmp & STL_PI_MASK_PORT_STATE);
 		printk(KERN_WARNING PFX
 			"SubnSet(STL_PortInfo) Port PhyState 0x%x virtualized\n",
 			lstate);
-		if (lstate == 3) {
-			virtual_stl[port-1].port_info.port_states.portphysstate_portstate = 3 << 4;
-			virtual_stl[port-1].port_info.port_states.portphysstate_portstate |= 1;
-		} else if (lstate == 2) {
-			virtual_port_linkup_init(port);
+		if (lstate == 3 || lstate == 2) {
+			vpi->port_states.portphysstate_portstate = lstate << 4;
+			vpi->port_states.portphysstate_portstate |= 1;
 		}
 	}
 
