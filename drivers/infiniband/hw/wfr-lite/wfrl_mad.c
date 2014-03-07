@@ -378,6 +378,11 @@ static inline void set_virtual_port_state(u8 port, u8 state)
 			(state & STL_PI_MASK_PORT_STATE);
 }
 
+static void down_virtual_port(struct qib_pportdata *ppd, u8 port)
+{
+	signal_ib_event(ppd, IB_EVENT_PORT_ERR);
+}
+
 static void arm_virtual_port(u8 port)
 {
 	set_virtual_port_state(port, IB_PORT_ARMED);
@@ -1869,6 +1874,9 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 				lstate);
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
+		}
+		if (((orig_portphysstate_portstate & 0xf0) >> 4) == 5) {
+			down_virtual_port(ppd, port);
 		}
 #if 0
 		spin_lock_irqsave(&ppd->lflags_lock, flags);
