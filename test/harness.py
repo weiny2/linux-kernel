@@ -111,6 +111,13 @@ test_list = [
       "type" : "default,mpi,verbs",
       "desc" : "Run OSU MPI benchmarks with verbs",
     },
+
+    { "test_name" : "OpcodeCounters.py",
+      "args" : "--nodelist %HOST[2]% --simics",
+      "type" : "default,quick,verbs",
+      "desc" : "Run test opcode counters after quick tests have been run.",
+    },
+
 ]
 
 
