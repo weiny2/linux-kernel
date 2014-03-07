@@ -171,6 +171,7 @@ class TestInfo:
     hfi_src = None
     kbuild_dir = None
     simics = False
+    mpiverbs = False
 
     def get_hfi_src(self):
         return self.hfi_src
@@ -212,12 +213,18 @@ class TestInfo:
                           help="Optional PSM Location. Default: <none>",
                           metavar="PATH")
 
+        parser.add_option("--mpiverbs", action="store_true", dest="mpiverbs",
+                          help="Run MPI over verbs instead of the default PSM")
+
         (options, args) = parser.parse_args()
 
         # Simics or not?
         self.simics = options.simics
         if self.simics == None:
             self.simics = False
+
+        if options.mpiverbs:
+            self.mpiverbs = True
 
         # Listing?
         self.list_only = options.list_only
@@ -329,8 +336,8 @@ class TestInfo:
         for node in self.nodelist:
             info = repr(node)
             ret = ret + "\n\t\t" + info
-        return "\tNodeList: %s\n\tHFI: %s\n\tkbuild: %s\n\tsimics: %s" % (
-               ret, self.hfi_src, self.kbuild_dir, self.simics)
+        return "\tNodeList: %s\n\tHFI: %s\n\tkbuild: %s\n\tsimics: %s\n\tmpiverbs: %s" % (
+               ret, self.hfi_src, self.kbuild_dir, self.simics, self.mpiverbs)
 
     # For now just hard code the MPI paths since MPI is installed in the craff
     # file for simics. If we need to pass a custom MPI path we can add an option
@@ -343,7 +350,11 @@ class TestInfo:
 
     def get_mpi_opts(self):
         # This part is different depending on if we use verbs or PSM
-        return " --mca mtl psm -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_TID=0 -x PSM_SDMA=0 -x"
+	if not self.mpiverbs:
+             ret = " --mca mtl psm -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_TID=0 -x PSM_SDMA=0 -x"
+	else:
+             ret = " --mca btl sm,openib,self --mca mtl ^psm -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params 0 -x"
+        return ret
 
     def get_osu_benchmark_dir(self):
         return "/usr/local/libexec/osu-micro-benchmarks"
