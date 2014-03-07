@@ -16,18 +16,6 @@
  * on which the application runs is high enough.
  */
 
-/*?
- * Text: "The af_iucv module cannot be loaded without z/VM\n"
- * Severity: Error
- * Description:
- * The AF_IUCV protocol connects socket applications running in Linux
- * kernels on different z/VM virtual machines, or it connects a Linux
- * application to another sockets application running in a z/VM virtual
- * machine. On Linux instances that run in environments other than the
- * z/VM hypervisor, the AF_IUCV protocol does not provide any useful
- * function and the corresponding af_iucv module cannot be loaded.
- * User action:
- * Load the af_iucv module only on Linux instances that run as guest
- * operating systems of the z/VM hypervisor. If the module has been
- * compiled into the kernel, ignore this message.
- */
+/*? Text: "Attempt to release alive iucv socket %p\n" */
+/*? Text: "netif_stop_queue() cannot be called before register_netdev()\n" */
+/*? Text: "flen=%u proglen=%u pass=%u image=%pK\n" */

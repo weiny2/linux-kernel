@@ -52,7 +52,19 @@
  */
 
 /*?
- * Text: "%s: Start track number %d used in formatting is too big\n"
+ * Text: "%s: Start track number %u used in formatting is too big\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: track number
+ * Description:
+ * The DASD format I/O control was used incorrectly by a formatting tool.
+ * User action:
+ * Contact the owner of the formatting tool.
+ */
+
+/*?
+ * Text: "%s: Stop track number %u used in formatting is too big\n"
  * Severity: Warning
  * Parameter:
  *   @1: bus ID of the DASD
@@ -115,7 +127,7 @@
  */
 
 /*?
- * Text: "%s: New DASD %04X/%02X (CU %04X/%02X) with %d cylinders, %d heads, %d sectors\n"
+ * Text: "%s: New DASD %04X/%02X (CU %04X/%02X) with %d cylinders, %d heads, %d sectors%s\n"
  * Severity: Informational
  * Parameter:
  *   @1: bus ID of the DASD
@@ -126,8 +138,13 @@
  *   @6: number of cylinders
  *   @7: tracks per cylinder
  *   @8: sectors per track
+ *   @9: access mode
  * Description:
  * A DASD with the shown characteristics has been set online.
+ * If the DASD is configured as read-only to the real or virtual hardware,
+ * the message includes an indication of this hardware access mode. The
+ * hardware access mode is independent from the 'readonly' attribute of
+ * the device in sysfs.
  * User action:
  * None.
  */
@@ -145,7 +162,7 @@
  */
 
 /*?
- * Text: "%s: Start track %d used in formatting exceeds end track\n"
+ * Text: "%s: Start track %u used in formatting exceeds end track\n"
  * Severity: Warning
  * Parameter:
  *   @1: bus ID of the DASD
@@ -171,7 +188,7 @@
  */
 
 /*?
- * Text: "%s: The DASD cannot be formatted with block size %d\n"
+ * Text: "%s: The DASD cannot be formatted with block size %u\n"
  * Severity: Warning
  * Parameter:
  *   @1: bus ID of the DASD
@@ -1797,18 +1814,6 @@
  */
 
 /*?
- * Text: "%s: ERP failed\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the DASD
- * Description:
- * The error recovery procedure (ERP) tried to recover an error but has
- * failed. A retry is not recommended. The I/O will also fail.
- * User action:
- * Check for related previous error messages.
- */
-
-/*?
  * Text: "%s: SIM - SRC: %02x%02x%02x%02x\n"
  * Severity: Error
  * Parameter:
@@ -1898,4 +1903,169 @@
  * then set it offline and back online. If the DASD is unformatted, format the
  * DASD, for example, with dasdfmt.
  * ATTENTION: Formatting irreversibly destroys all data on the DASD.
+ */
+
+/*?
+ * Text: "%s: An I/O request was rejected because writing is inhibited\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * An I/O request was returned with an error indication of 'command reject'
+ * and 'write inhibited'. The most likely reason for this error is a
+ * failed write request to a device that was attached as read-only in z/VM.
+ * User action:
+ * Set the device offline, ensure that the device is configured correctly in
+ * z/VM, then set the device online again.
+ */
+
+/*?
+ * Text: "%s: An Alias device was reassigned to a new base device with UID: %s\n"
+ * Severity: Informational
+ * Parameter:
+ *   @1: bus ID of the alias
+ *   @2: UID of new base device
+ * Description:
+ * The alias device with the indicated bus ID has been reassigned. The UID of the new base device is shown in the message.
+ * User action:
+ * None.
+ */
+
+/*?
+ * Text: "%s: Detecting the maximum supported data size for zHPF requests failed\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * High Performance FICON (zHPF) requests are limited to a hardware-dependent
+ * maximum data size. The DASD device driver failed to detect this size and zHPF
+ * is not available for this device.
+ * User action:
+ * Set the device offline and online again. If this problem persists, gather
+ * Linux debug data and report the problem to your support organization.
+ */
+
+/*?
+ * Text: "%s: Reading device feature codes failed (rc=%d) for new path %x\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: return code
+ *   @3: path mask
+ * Description:
+ * A new path has been made available to the a device.
+ * A command to read the device feature codes on this device returned an error.
+ * The new path will not be used for I/O.
+ * User action:
+ * Set the new path offline and online again to repeat the path verification.
+ * Alternatively, set the device offline and online again to
+ * verify all available paths for this device.
+ * If this problem persists, gather Linux debug data and report the problem
+ * to your support organization.
+ */
+
+/*?
+ * Text: "%s: Detecting the maximum data size for zHPF requests failed (rc=%d) for a new path %x\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: return code
+ *   @3: path mask
+ * Description:
+ * High Performance FICON (zHPF) requests are limited to a hardware-dependent
+ * maximum data size. A command to detect this size for
+ * a new path returned an error. The new path will not be used for I/O.
+ * User action:
+ * Set the new path offline and online again to repeat the path verification.
+ * Alternatively, set the device offline and online again to
+ * verify all available paths for this device.
+ * If this problem persists, gather Linux debug data and report the problem
+ * to your support organization.
+ */
+
+/*?
+ * Text: "%s: The maximum data size for zHPF requests %u on a new path %x is below the active maximum %u\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: size in bytes
+ *   @3: path mask
+ *   @4: size in bytes
+ * Description:
+ * High Performance FICON (zHPF) requests are limited to a hardware-dependent
+ * maximum data size. The maximum of the new path is below
+ * the previously established common maximum for the
+ * existing paths for this device. This could cause requests on the new
+ * path to fail. The new path will not be used for I/O.
+ * User action:
+ * Set the device offline and online again to establish a new common maximum
+ * data size for the device.
+ */
+
+/*?
+ * Text: "%s: The device reservation was lost\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * This Linux instance has lost its reservation of the device to another
+ * operating system instance. Depending on the reservation policy for the
+ * device, I/O might be blocked until the other operating system instance
+ * surrenders the reservation or all I/O requests might fail until the
+ * device is reset.
+ * User action:
+ * None, if this situation is handled by system automation software.
+ * If this situation is not handled by automation, check the
+ * last_known_reservation_state attribute of the device in sysfs.
+ * If the value is 'lost', verify that the device is no longer reserved
+ * by another operating system instance, then set the device offline and
+ * online again. For any other value of the last_known_reservation_state
+ * no action is required. I/O will resume when the device reservation is
+ * surrendered by the other operating system instance.
+ */
+
+/*?
+ * Text: "%s: The storage server does not support raw-track access\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * The DASD cannot be accessed in raw-track access mode because the storage
+ * server does not have all required features for this access mode.
+ * In raw-track access mode, the DASD device driver accesses complete ECKD
+ * tracks.
+ * By default, the DASD device driver accesses only the data fields of ECKD
+ * devices and omits the count and key data fields.
+ * User action:
+ * Ensure that the raw_track_access sysfs attribute of the DASD has the value
+ * 0 to access the device in default ECKD mode.
+ */
+
+/*?
+ * Text: "%s: The newly added channel path %02X will not be used because it leads to a different device %s\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: logical path mask
+ *   @3: UID
+ * Description:
+ * The newly added channel path has a different UID than the DASD device. This indicates
+ * an incorrect cabling. This path is not going to be used.
+ * User action:
+ * Check the cabling of the DASD device. Disconnect and reconnect the cable.
+ */
+
+/*?
+ * Text: "%s: Not all channel paths lead to the same device, path %02X leads to device %s instead of %s\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: logical path mask
+ *   @3: UID
+ *   @4: UID
+ * Description:
+ * Some channel paths have a different UID than others. This indicates
+ * an incorrect cabling. The DASD device is not enabled.
+ * User action:
+ * Check cabling of the DASD device and retry to enable the device.
  */

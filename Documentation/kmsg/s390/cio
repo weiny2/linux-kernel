@@ -143,3 +143,51 @@
  * User action:
  * None.
  */
+
+/*?
+ * Text: "Logging for subchannel 0.%x.%04x failed with errno=%d\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: subchannel set ID
+ *   @2: subchannel number
+ *   @3: errno
+ * Description:
+ * Capturing model-dependent logs and traces could not be triggered for the
+ * specified subchannel.
+ * User action:
+ * See the errno man page to find out what caused the problem.
+ */
+
+/*?
+ * Text: "Logging for subchannel 0.%x.%04x was triggered\n"
+ * Severity: Notice
+ * Parameter:
+ *   @1: subchannel set ID
+ *   @2: subchannel number
+ * Description:
+ * Model-dependent logs and traces may be captured for the specified
+ * subchannel.
+ * User action:
+ * None.
+ */
+
+/*?
+ * Text: "%s: No interrupt was received within %lus (CS=%02x, DS=%02x, CHPID=%x.%02x)\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: device number
+ *   @2: timeout value
+ *   @3: channel status
+ *   @4: device status
+ *   @5: channel subsystem ID
+ *   @6: CHPID
+ * Description:
+ * Internal I/Os are used by the common I/O layer to ensure that devices are
+ * operational and accessible.
+ * The common I/O layer did not receive an interrupt for an internal I/O
+ * during the specified timeout period.
+ * As a result, the device might assume a state that makes the device
+ * unusable to Linux until the problem is resolved.
+ * User action:
+ * Make sure that the device is working correctly and try the action again.
+ */

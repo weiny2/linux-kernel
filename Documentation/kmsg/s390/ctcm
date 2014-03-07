@@ -190,10 +190,11 @@
 
 /*? Text: "CTCM driver unloaded\n" */
 /*? Text: "%s: %s Internal error: net_device is NULL, ch = 0x%p\n" */
-/*? Text: "%s / register_cu3088_discipline failed, ret = %d\n" */
+/*? Text: "%s / Initializing the ctcm device driver failed, ret = %d\n" */
 /*? Text: "%s: %s: Internal error: Can't determine channel for interrupt device %s\n" */
 /*? Text: "CTCM driver initialized\n" */
 /*? Text: "%s: setup OK : r/w = %s/%s, protocol : %d\n" */
 /*? Text: "%s: Connected with remote side\n" */
 /*? Text: "%s: Restarting device\n" */
-
+/*? Text: "netif_stop_queue() cannot be called before register_netdev()\n" */
+/*? Text: "flen=%u proglen=%u pass=%u image=%pK\n" */

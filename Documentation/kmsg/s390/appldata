@@ -86,3 +86,4 @@
  * Linux instance to support less than 110 CPUs.
  */
 
+/*? Text: "netif_stop_queue() cannot be called before register_netdev()\n" */

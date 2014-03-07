@@ -23,4 +23,3 @@
  * the command: 'echo V > /dev/vmwatchdog'. Alternatively, stop the program that
  * uses the watchdog or reconfigure the program to not use the watchdog.
  */
-

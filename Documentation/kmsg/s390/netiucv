@@ -135,5 +135,20 @@
  * then try again to remove the interface.
  */
 
+/*?
+ * Text: "%s: The peer z/VM guest %s has closed the connection\n"
+ * Severity: Informational
+ * Parameter:
+ *   @1: bus ID of the IUCV device
+ *   @2: remote z/VM user ID
+ * Description:
+ * The peer interface is no longer available.
+ * User action:
+ * Either deactivate and remove the interface, or wait for the peer
+ * z/VM guest to re-establish the interface.
+ */
+
 /*? Text: "driver unloaded\n" */
 /*? Text: "driver initialized\n" */
+/*? Text: "netif_stop_queue() cannot be called before register_netdev()\n" */
+/*? Text: "flen=%u proglen=%u pass=%u image=%pK\n" */
