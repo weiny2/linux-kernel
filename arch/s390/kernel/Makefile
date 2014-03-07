@@ -68,3 +68,6 @@ endif
 obj-$(CONFIG_64BIT)		+= vdso64/
 obj-$(CONFIG_32BIT)		+= vdso32/
 obj-$(CONFIG_COMPAT)		+= vdso32/
+
+# kernel message catalog
+obj-$(CONFIG_KMSG_IDS)		+= kmsg.o

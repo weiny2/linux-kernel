@@ -159,14 +159,14 @@ sub add_kmsg_print($$$$)
     $tag = $component . "." . $hash;
 
     # Pretty print severity
-    $sev =~ s/"<0>"/Emerg/;
-    $sev =~ s/"<1>"/Alert/;
-    $sev =~ s/"<2>"/Critical/;
-    $sev =~ s/"<3>"/Error/;
-    $sev =~ s/"<4>"/Warning/;
-    $sev =~ s/"<5>"/Notice/;
-    $sev =~ s/"<6>"/Informational/;
-    $sev =~ s/"<7>"/Debug/;
+    $sev =~ s/"0"/Emerg/;
+    $sev =~ s/"1"/Alert/;
+    $sev =~ s/"2"/Critical/;
+    $sev =~ s/"3"/Error/;
+    $sev =~ s/"4"/Warning/;
+    $sev =~ s/"5"/Notice/;
+    $sev =~ s/"6"/Informational/;
+    $sev =~ s/"7"/Debug/;
     $kmsg_print{$kmsg_count}->{'TAG'} = $tag;
     $kmsg_print{$kmsg_count}->{'TEXT'} = $text;
     $kmsg_print{$kmsg_count}->{'SEV'} = $sev;
@@ -306,16 +306,16 @@ sub process_cpp_file($$$$)
 
     while (<FD>) {
 	chomp;
-	if (/.*__KMSG_PRINT\(\s*(\S*)\s*_FMT_(.*)_ARGS_\s*"(.*)"\s*_END_\s*\)/o) {
+	if (/.*__KMSG_PRINT\(\s*(\S*)\s*(\S*)\s*_FMT_(.*)_ARGS_\s*(.*)?_END_\s*\)/o) {
 	    if ($component ne "") {
-		add_kmsg_print($component, $1, $2, $3);
+		add_kmsg_print($component, $2, $3, $4);
 	    } else {
 		warn "Error(${file}:$.): kmsg without component\n";
 		$errors++;
 	    }
-	} elsif (/.*__KMSG_DEV\(\s*(\S*)\s*_FMT_(.*)_ARGS_\s*(.*)?_END_\s*\)/o) {
+	} elsif (/.*__KMSG_DEV\(\s*(\S*)\s*(\S*)\s*_FMT_(.*)_ARGS_\s*(.*)?_END_\s*\)/o) {
 	    if ($component ne "") {
-		add_kmsg_print($component, $1, "\"%s: \"" . $2, $3);
+		add_kmsg_print($component, $2, "\"%s: \"" . $3, $4);
 	    } else {
 		warn "Error(${file}:$.): kmsg without component\n";
 		$errors++;

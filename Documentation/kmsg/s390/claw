@@ -1,21 +1,4 @@
 /*?
- * Text: "%s: Creating the /proc files for a new CLAW device failed\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the failed CLAW device
- * Description:
- * For each Common Link Access to Workstation (CLAW) device the CLAW device
- * driver maintains files in the proc file system. The CLAW device driver
- * failed to create a new CLAW device because it could not create these /proc
- * files for the new device. You cannot create CLAW devices for Linux kernels
- * that do not include a proc file system.
- * User action:
- * Ensure that your Linux kernel provides a proc file system. Reboot Linux.
- * If your kernel provides a proc file system and the problem persists, contact
- * your support organization.
- */
-
-/*?
  * Text: "%s: An uninitialized CLAW device received an IRQ, c-%02x d-%02x\n"
  * Severity: Warning
  * Parameter:
@@ -506,7 +489,6 @@
  * The remote Common Link Access to Workstation (CLAW) device rejected a
  * request to open a connection. A connection can only be opened if the same
  * connection type has been set for both the local and the remote CLAW device.
- * not be started.
  * User action:
  * Ensure that the connection types for the local and remote CLAW device match.
  * Restart the CLAW device, local or remote, for which you have changed the
@@ -687,23 +669,7 @@
  * information about the error code.
  */
 
-/*?
- * Text: "Registering with the cu3088 device driver failed with error code %d\n"
- * Severity: Error
- * Parameter:
- *   @1: errno
- * Description:
- * The Common Link Access to Workstation (CLAW) device driver failed to register
- * with the cu3088 channel subsystem device driver. The CLAW device driver
- * requires the cu3088 device driver.
- * User action:
- * Enter 'lsmod | grep cu3088' or an equivalent command to check if the cu3088
- * device driver is loaded. If the output does not show the cu3088 module,
- * unload the CLAW device driver, load the cu3088 device driver, then reload
- * the CLAW device driver. See the errno man page for information about the
- * error code.
- */
-
+/*? Text: "Initializing the claw device driver failed\n" */
 /*? Text: "%s: %s: CLAW device %.8s: Received Control Packet\n" */
 /*? Text: "%s: %s: CLAW device %.8s: System validate completed.\n" */
 /*? Text: "%s: %s: CLAW device %.8s: Connection completed link_id=%d.\n" */
@@ -716,7 +682,7 @@
 /*? Text: "%s: %s: Recv Conn Req: Vers=%d,link_id=%d,Corr=%d,HOST appl=%.8s,WS appl=%.8s\n" */
 /*? Text: "%s: %s: Recv Sys Validate Request: Vers=%d,link_id=%d,Corr=%d,WS name=%.8s,Host name=%.8s\n" */
 /*? Text: "%s: %s: Confirmed Now packing\n" */
-/*? Text: "%s: %s: Unit Check Occured in write channel\n" */
+/*? Text: "%s: %s: Unit Check Occurred in write channel\n" */
 /*? Text: "%s: %s: Restart is required after remote side recovers \n" */
 /*? Text: "%s: %s: sys Validate Rsize:%d Wsize:%d\n" */
 /*? Text: "%s: %s:readsize=%d  writesize=%d readbuffer=%d writebuffer=%d read=0x%04x write=0x%04x\n" */
@@ -725,7 +691,9 @@
 /*? Text: "Loading %s\n" */
 /*? Text: "%s:  will be removed.\n" */
 /*? Text: "%s: add for %s\n" */
-/*? Text: "%s: %s: shutting down \n" */
+/*? Text: "%s: %s: shutting down\n" */
 /*? Text: "%s: CLAW device %.8s: System validate completed.\n" */
 /*? Text: "%s: %s: Disconnect: Vers=%d,link_id=%d,Corr=%d\n" */
 /*? Text: "%s: %s: Recv Conn Resp: Vers=%d,link_id=%d,Corr=%d,RC=%d,Host appl=%.8s, WS appl=%.8s\n" */
+/*? Text: "netif_stop_queue() cannot be called before register_netdev()\n" */
+/*? Text: "flen=%u proglen=%u pass=%u image=%pK\n" */

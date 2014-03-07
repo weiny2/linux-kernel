@@ -76,7 +76,6 @@
  * Description:
  * The tape device driver has received an unknown sense message from the
  * tape unit.
- * driver.
  * User action:
  * See the documentation for the tape unit for further information.
  */
@@ -181,4 +180,3 @@
  * User action:
  * Unload the current cartridge to solve this problem.
  */
-

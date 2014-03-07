@@ -1,0 +1,18 @@
+/*?
+ * Text: "CPU[%i] CPUM_CF: ver=%u.%u A=%04x E=%04x C=%04x\n"
+ * Severity: Informational
+ * Parameter:
+ *   @1: cpu number
+ *   @2: first version number
+ *   @3: second version number
+ *   @4: counter set authorization
+ *   @5: counter set enable controls
+ *   @6: counter set activation controls
+ * Description:
+ * This message displays information about the CPU-measurement counter
+ * facility (CPUM_CF) on a particular CPU.
+ * For details, see
+ * "The Load-Program-Parameter and the CPU-Measurement Facilities", SA23-2260.
+ * User action:
+ * None.
+ */

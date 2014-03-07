@@ -69,19 +69,6 @@
 /* dasd */
 
 /*?
- * Text: "%s: start_IO run out of retries and failed with request %s\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the DASD
- *   @2: pointer to request
- * Description:
- * The start IO function tried to start an IO request but the number
- * of retries for the I/O was exceeded before the request could be started.
- * User action:
- * Check for related previous error messages.
- */
-
-/*?
  * Text: "%s: Cancelling request %p failed with rc=%d\n"
  * Severity: Error
  * Parameter:
@@ -135,28 +122,30 @@
  */
 
 /*?
- * Text: "%s: cqr %p timed out (%is), %i retries remaining\n"
+ * Text: "%s: cqr %p timed out (%lus), %i retries remaining\n"
  * Severity: Error
  * Parameter:
  *   @1: bus ID of the DASD
- *   @2: pointer to request
+ *   @2: request
  *   @3: timeout value
  *   @4: number of retries left
  * Description:
- * One try of the error recovery procedure (ERP) for the channel queued request
+ * A try of the error recovery procedure (ERP) for the channel queued request
  * (cqr) timed out and failed to recover the error. ERP continues for the DASD.
  * User action:
  * Ignore this message if it occurs infrequently and if the recovery succeeds
  * during one of the retries. If this error persists, check for related
  * previous error messages and report the problem to your support organization.
+ *
+ * The timeout can be changed by writing a new value to the sysfs 'expires' attribute of the DASD. The value specifies the timeout in seconds.
  */
 
 /*?
- * Text: "%s: cqr %p timed out (%is) but cannot be ended, retrying in 5 s\n"
+ * Text: "%s: cqr %p timed out (%lus) but cannot be ended, retrying in 5 s\n"
  * Severity: Error
  * Parameter:
  *   @1: bus ID of the DASD
- *   @2: pointer to request
+ *   @2: request
  *   @3: timeout value
  * Description:
  * A try of the error recovery procedure (ERP) for the channel queued request
@@ -167,6 +156,8 @@
  * Ignore this message if it occurs infrequently and if the recovery succeeds
  * during one of the retries. If this error persists, check for related
  * previous error messages and report the problem to your support organization.
+ *
+ * The timeout can be changed by writing a new value to the sysfs 'expires' attribute of the DASD. The value specifies the timeout in seconds.
  */
 
 /*?
@@ -464,3 +455,220 @@
  * User action:
  * Note the reason code and contact your support organization.
 */
+
+/*?
+ * Text: "%s: No operational channel path is left for the device\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * All channel paths to the device have become non-operational. The DASD
+ * device driver suspends I/O operations and queues I/O requests for this
+ * device until at least one channel path becomes operational again.
+ * User action:
+ * Ensure that each channel path to the device has been set up correctly
+ * and that the related physical cable connections are in place.
+ */
+
+/*?
+ * Text: "%s: No verified channel paths remain for the device\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * All verified channel paths to the device have become non-operational.
+ * Any other paths to the device have previously been identified as not usable.
+ * The DASD device driver suspends I/O operations and queues I/O requests
+ * for this device until at least one channel path becomes operational
+ * again.
+ * User action:
+ * Ensure that each channel path to the device has been set up correctly
+ * and that the related physical cable connections are in place.
+ * Set all paths to the device offline and online again to repeat the path
+ * verification. Alternatively, set the device offline and online again to
+ * verify all available paths for this device.
+ * If this problem persists, gather Linux debug data and report the problem
+ * to your support organization.
+ */
+
+/*?
+ * Text: "%s: A channel path to the device has become operational\n"
+ * Severity: Informational
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * At least one channel path of this device has become operational again.
+ * The DASD device driver resumes I/O operations to the device and processes
+ * the I/O requests that were queued while there was no operational channel path.
+ * User action:
+ * None.
+ */
+
+------------------------------------------------------------------------------------
+/* dasd_diag */
+
+/*?
+ * Text: "%s: A 64-bit DIAG call failed\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * 64-bit DIAG calls require a 64-bit z/VM version.
+ * User action:
+ * Use z/VM 5.2 or later or set the sysfs 'use_diag' attribute of the DASD to 0
+ * to switch off DIAG.
+ */
+
+/*?
+ * Text: "%s: Accessing the DASD failed because of an incorrect format (rc=%d)\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: return code
+ * Description:
+ * The format of the DASD is not correct.
+ * User action:
+ * Check the device format. For details about the return code see the
+ * section about the INITIALIZE function for DIAGNOSE Code X'250'
+ * in "z/VM CP Programming Services". If you cannot resolve the error, note
+ * the return code and contact your support organization.
+ */
+
+/*?
+ * Text: "%s: New DASD with %ld byte/block, total size %ld KB%s\n"
+ * Severity: Informational
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: bytes per block
+ *   @3: size
+ *   @4: access mode
+ * Description:
+ * A DASD with the indicated block size and total size has been set online.
+ * If the DASD is configured as read-only to the real or virtual hardware,
+ * the message includes an indication of this hardware access mode. The
+ * hardware access mode is independent from the 'readonly' attribute of
+ * the device in sysfs.
+ * User action:
+ * None.
+ */
+
+/*?
+ * Text: "%s: DIAG ERP failed with rc=%d\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: return code
+ * Description:
+ * An error in the DIAG processing could not be recovered by the error
+ * recovery procedure (ERP) of the DIAG discipline.
+ * User action:
+ * Note the return code, check for related I/O errors, and report this problem
+ * to your support organization.
+ */
+
+/*?
+ * Text: "%s: DIAG initialization failed with rc=%d\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: return code
+ * Description:
+ * Initializing the DASD with the DIAG discipline failed. Possible reasons for
+ * this problem are that the device has a device type other than FBA or ECKD,
+ * or has a block size other than one of the supported sizes:
+ * 512 byte, 1024 byte, 2048 byte, or 4096 byte.
+ * User action:
+ * Ensure that the device can be written to and has a supported device type
+ * and block size. For details about the return code see the section about
+ * the INITIALIZE function for DIAGNOSE Code X'250' in "z/VM CP Programming
+ * Services". If you cannot resolve the error, note the error code and contact
+ * your support organization.
+ */
+
+/*?
+ * Text: "%s: Device type %d is not supported in DIAG mode\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: device type
+ * Description:
+ * Only DASD of type FBA and ECKD are supported in DIAG mode.
+ * User action:
+ * Set the sysfs 'use_diag' attribute of the DASD to 0 and try again to access
+ * the DASD.
+ */
+
+/*?
+ * Text: "Discipline %s cannot be used without z/VM\n"
+ * Severity: Informational
+ * Parameter:
+ *   @1: discipline name
+ * Description:
+ * The discipline that is specified with the dasd= kernel or module parameter
+ * is only available for Linux instances that run as guest operating
+ * systems of the z/VM hypervisor.
+ * User action:
+ * Remove the unsupported discipline from the parameter string.
+ */
+
+/*?
+ * Text: "%s: The access mode of a DIAG device changed to read-only\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the DASD
+ * Description:
+ * A device changed its access mode from writeable to
+ * read-only while in use.
+ * User action:
+ * Set the device offline, ensure that the device is configured correctly in
+ * z/VM, then set the device online again.
+ */
+
+------------------------------------------------------------------------------------
+/* dasd_erp */
+
+/*?
+ * Text: "%s: A timeout error occurred for cqr %p"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: pointer to request
+ * Description:
+ * A channel queued request (cqr) failed because it timed out.
+ * One possible reason for this error is that a request did not
+ * complete within the timeout interval specified for the DASD.
+ * The timeout interval is set as the value of the 'timeout' sysfs
+ * attribute of a DASD. A value of 0 disables the timeout function.
+ * The timeout function can be used; for example, by mirroring setups;
+ * to quickly process a request queue for a DASD that has become unavailable.
+ * User action:
+ * Check the message log for previous related error messages.  Verify
+ * that the storage server and the connection from host to storage
+ * server are operational.  If the 'timeout' sysfs attribute of the
+ * DASD has been set to a value other than 0, verify that this
+ * setting is intentional and change it if required.
+ */
+
+/*?
+ * Text: "%s: A transport error occurred for cqr %p"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the DASD
+ *   @2: pointer to request
+ * Description:
+ * A channel queued request (cqr) failed because the connection to the
+ * device was lost and the 'failfast' flag is set for the request.
+ * This flag can result from, for example:
+ *
+ * - A software layer above the DASD device driver;
+ *   for example, in a host based mirroring setup.
+ *
+ * - Value 1 for the 'failfast' sysfs attribute of the DASD.
+ *   This setting applies to all requests on the DASD.
+ *
+ * User action:
+ * Ensure that each channel path to the device has been set up
+ * correctly and that the related physical cable connections are in
+ * place. If the 'failfast' attribute of the DASD is set to 1,
+ * verify that this setting is intentional and change it to 0 if required.
+ */

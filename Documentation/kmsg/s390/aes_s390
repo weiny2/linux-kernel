@@ -1,4 +1,19 @@
 /*?
+ * Text: "Allocating XTS fallback algorithm %s failed\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: algorithm name
+ * Description:
+ * The aes_s390 module failed to allocate a software fallback for the AES
+ * modes that are not supported by the hardware. A possible reason for this
+ * problem is that the aes_generic module that provides the fallback
+ * algorithms is not available.
+ * User action:
+ * Ensure that the aes_generic module is available and loaded and reload
+ * the aes_s390 module.
+ */
+
+/*?
  * Text: "Allocating AES fallback algorithm %s failed\n"
  * Severity: Error
  * Parameter:
@@ -27,4 +42,3 @@
  * User action:
  * None.
  */
-

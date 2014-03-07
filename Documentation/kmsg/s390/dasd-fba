@@ -1,6 +1,6 @@
 
 /*?
- * Text: "%s: New FBA DASD %04X/%02X (CU %04X/%02X) with %d MB and %d B/blk\n"
+ * Text: "%s: New FBA DASD %04X/%02X (CU %04X/%02X) with %d MB and %d B/blk%s\n"
  * Severity: Informational
  * Parameter:
  *   @1: bus ID of the DASD
@@ -10,8 +10,13 @@
  *   @5: control unit model
  *   @6: size
  *   @7: bytes per block
+ *   @8: access mode
  * Description:
  * A DASD with the shown characteristics has been set online.
+ * If the DASD is configured as read-only to the real or virtual hardware,
+ * the message includes an indication of this hardware access mode. The
+ * hardware access mode is independent from the 'readonly' attribute of
+ * the device in sysfs.
  * User action:
  * None.
  */

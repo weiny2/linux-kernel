@@ -38,48 +38,6 @@
  */
 
 /*?
- * Text: "%s: Determining the size of the recorded area...\n"
- * Severity: Informational
- * Parameter:
- *   @1: bus ID of the tape device
- * Description:
- * The tape block device driver is currently determining the size of the
- * recorded area on the tape medium. This operation typically takes a
- * few minutes.
- * User action:
- * Wait until the size is shown in a completion message.
- */
-
-/*?
- * Text: "%s: Opening the tape failed because of missing end-of-file marks\n"
- * Severity: Warning
- * Parameter:
- *   @1: bus ID of the tape device
- * Description:
- * The tape block device driver requires end-of-file marks at the end of
- * the recorded area on a tape. If the tape device was to be opened in
- * response to a mount command, the mount command will fail.
- * User action:
- * Insert a tape cartridge that has been prepared for use with the tape
- * block device driver and try the operation again.
- */
-
-/*?
- * Text: "%s: The size of the recorded area is %i blocks\n"
- * Severity: Informational
- * Parameter:
- *   @1: bus ID of the tape device
- *   @2: number of blocks
- * Description:
- * The tape block device driver has successfully determined the size of the
- * recorded area on the tape medium. The tape device can now be used as
- * a block device. See the mount(8) man page for details on how to access
- * block devices.
- * User action:
- * None.
- */
-
-/*?
  * Text: "A cartridge is loaded in tape device %s, refusing to suspend\n"
  * Severity: Error
  * Parameter:
