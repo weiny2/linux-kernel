@@ -150,6 +150,7 @@ struct stl_vlarb_data
 /* stored in network order to be able to pass right back to the user. */
 struct stl_buffer_control_table
 {
+	__be16 reserved;
 	__be16 tx_overall_shared_limit;
 	struct {
 		__be16 tx_dedicated_limit;
