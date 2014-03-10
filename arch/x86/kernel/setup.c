@@ -912,11 +912,11 @@ void __init setup_arch(char **cmdline_p)
 #ifdef CONFIG_EFI
 	if (!strncmp((char *)&boot_params.efi_info.efi_loader_signature,
 		     "EL32", 4)) {
-		set_bit(EFI_BOOT, &x86_efi_facility);
+		set_bit(EFI_BOOT, &efi.flags);
 	} else if (!strncmp((char *)&boot_params.efi_info.efi_loader_signature,
 		     "EL64", 4)) {
-		set_bit(EFI_BOOT, &x86_efi_facility);
-		set_bit(EFI_64BIT, &x86_efi_facility);
+		set_bit(EFI_BOOT, &efi.flags);
+		set_bit(EFI_64BIT, &efi.flags);
 	}
 
 	if (efi_enabled(EFI_BOOT))
@@ -1131,7 +1131,7 @@ void __init setup_arch(char **cmdline_p)
 
 #ifdef CONFIG_EFI_SECURE_BOOT_SIG_ENFORCE
 	if (boot_params.secure_boot) {
-		set_bit(EFI_SECURE_BOOT, &x86_efi_facility);
+		set_bit(EFI_SECURE_BOOT, &efi.flags);
 		enforce_signed_modules();
 		pr_info("Secure boot enabled\n");
 	}
