@@ -608,7 +608,7 @@
 #define PWRM_SHALLOW_SLEEP	0x4
 #define PWRM_DEEP_SLEEP		0x8
 
-/* verify capability fabirc CRC size bits */
+/* verify capability fabric CRC size bits */
 #define CRC_16BIT	   0x1
 #define CRC_48BIT	   0x2
 #define CRC_12BIT_PER_LANE 0x4
