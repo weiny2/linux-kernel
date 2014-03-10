@@ -1025,8 +1025,6 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	if (ret < 0) {
 		qib_early_err(&pdev->dev,
 			      "Could not allocate unit ID: error %d\n", -ret);
-		ib_dealloc_device(&dd->verbs_dev.ibdev);
-		dd = ERR_PTR(ret);
 		goto bail;
 	}
 
@@ -1043,11 +1041,13 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 #ifdef CONFIG_DEBUG_FS
 	hfi_dbg_ibdev_init(&dd->verbs_dev);
 #endif
+	return dd;
 
 bail:
 	if (!list_empty(&dd->list))
 		list_del_init(&dd->list);
-	return dd;
+	ib_dealloc_device(&dd->verbs_dev.ibdev);
+	return ERR_PTR(ret);
 }
 
 /*
