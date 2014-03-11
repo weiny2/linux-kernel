@@ -11,6 +11,9 @@
 #include <linux/rcupdate.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
+#if defined(CONFIG_KCOPY_DEBUG)
+#include <linux/debugfs.h>
+#endif
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Arthur Jones <arthur.jones@qlogic.com>");
@@ -19,8 +22,12 @@ MODULE_DESCRIPTION("QLogic kcopy driver");
 #define KCOPY_ABI		1
 #define KCOPY_MAX_MINORS	64
 
+#if defined(CONFIG_X86_64)
+static int cache_coherent;
+module_param(cache_coherent, int, 0644);
 static unsigned cpu_vendor;
-static unsigned cpu_halfcachesize;
+long cpu_halfcachesize;
+#endif
 
 struct kcopy_device {
 	struct cdev cdev;
@@ -31,6 +38,114 @@ struct kcopy_device {
 	struct kcopy_file *kf[KCOPY_MAX_MINORS];
 	struct mutex open_lock;
 };
+
+struct kcopy_stats {
+	u64 s_gets;
+	u64 s_gets_bytes;
+	u64 s_puts;
+	u64 s_puts_bytes;
+#if defined(CONFIG_X86_64)
+	u64 s_large_nocache_moves;
+	u64 s_large_nocache_bytes;
+	u64 s_intel_moves;
+	u64 s_intel_bytes;
+	u64 s_streaming_moves;
+	u64 s_streaming_bytes;
+	u64 s_amd_moves;
+	u64 s_amd_bytes;
+	u64 s_coherent_moves;
+	u64 s_coherent_bytes;
+#endif
+};
+
+#if defined(CONFIG_KCOPY_DEBUG)
+
+static struct kcopy_stats *pcpu_stats;
+
+struct kcopy_counter {
+	char *filename;
+	struct dentry *dent;
+	const struct file_operations *fops;
+	size_t offset;
+};
+
+static int kcopy_stats_get(void *data, u64 *val)
+{
+	struct kcopy_counter *c;
+	u64 v = 0;
+	int cpu;
+
+	if (!pcpu_stats)
+		return -EINVAL;
+	c = (struct kcopy_counter *)data;
+	for_each_possible_cpu(cpu) {
+		struct kcopy_stats *s =
+			per_cpu_ptr(pcpu_stats, cpu);
+		v += *(u64 *)((char *)s + c->offset);
+	}
+	*val = v;
+	return 0;
+}
+
+static void kcopy_stats_inc(struct kcopy_stats *s, struct kcopy_counter *c,
+				u64 val)
+{
+	*(u64 *)((char *)s + c->offset) += val;
+}
+
+
+#define DEFINE_STATS_COUNTER(name) \
+	static struct kcopy_counter kcopy_counter_##name = { \
+		.filename = #name, \
+		.fops = &kcopy_stats_ops_##name,  \
+		.offset = offsetof(struct kcopy_stats, s_##name), \
+	}
+
+#define KCOPY_DEFINE_STAT(name) \
+	DEFINE_SIMPLE_ATTRIBUTE( \
+		kcopy_stats_ops_##name, \
+		kcopy_stats_get, \
+		NULL, \
+		"%llu\n"); \
+	DEFINE_STATS_COUNTER(name); \
+
+
+KCOPY_DEFINE_STAT(gets);
+KCOPY_DEFINE_STAT(gets_bytes);
+KCOPY_DEFINE_STAT(puts);
+KCOPY_DEFINE_STAT(puts_bytes);
+
+#if defined(CONFIG_X86_64)
+
+KCOPY_DEFINE_STAT(large_nocache_moves);
+KCOPY_DEFINE_STAT(large_nocache_bytes);
+KCOPY_DEFINE_STAT(intel_moves);
+KCOPY_DEFINE_STAT(intel_bytes);
+KCOPY_DEFINE_STAT(streaming_moves);
+KCOPY_DEFINE_STAT(streaming_bytes);
+KCOPY_DEFINE_STAT(amd_moves);
+KCOPY_DEFINE_STAT(amd_bytes);
+KCOPY_DEFINE_STAT(coherent_moves);
+KCOPY_DEFINE_STAT(coherent_bytes);
+
+#endif
+
+
+#define ADD_STATS_COUNTER(name) \
+	kcopy_stats_add(&kcopy_counter_##name);
+#define REMOVE_STATS_COUNTER(name) \
+	kcopy_stats_remove(&kcopy_counter_##name);
+#define INC_STATS_COUNTER(name, val) \
+	kcopy_stats_inc(stats, &kcopy_counter_##name, val);
+
+static struct dentry *kcopy_stats_dir;
+
+#else
+
+#define INC_STATS_COUNTER(name, val)
+
+#endif
+
 
 static struct kcopy_device kcopy_dev;
 
@@ -53,6 +168,8 @@ struct kcopy_map_entry {
 	struct list_head list; /* free map list */
 	struct rb_node   node; /* live map tree */
 };
+
+static struct kcopy_device kcopy_dev;
 
 #define KCOPY_GET_SYSCALL 1
 #define KCOPY_PUT_SYSCALL 2
@@ -84,7 +201,7 @@ static unsigned long kcopy_syscall_n(const struct kcopy_syscall *ks)
 static struct kcopy_map_entry *kcopy_create_entry(struct kcopy_file *file)
 {
 	struct kcopy_map_entry *kme =
-		kmalloc(sizeof(struct kcopy_map_entry), GFP_KERNEL);
+		kzalloc(sizeof(struct kcopy_map_entry), GFP_KERNEL);
 
 	if (!kme)
 		return NULL;
@@ -247,18 +364,25 @@ static int kcopy_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static void kcopy_put_pages(struct page **pages, int npages)
+static void kcopy_put_pages(struct page **pages,
+			    int npages,
+			    int dirty)
 {
 	int j;
 
-	for (j = 0; j < npages; j++)
+	for (j = 0; j < npages; j++) {
+		if (dirty)
+			set_page_dirty_lock(pages[j]);
 		put_page(pages[j]);
+	}
 }
 
 static int kcopy_validate_task(struct task_struct *p)
 {
-	return (p && ((current_euid() == task_euid(p)) ||
-			(current_euid() == task_uid(p))));
+	return p && (
+			uid_eq(current_euid(), task_euid(p)) ||
+			uid_eq(current_euid(), task_uid(p))
+		    );
 }
 
 static int kcopy_get_pages(struct kcopy_file *kf, pid_t pid,
@@ -288,10 +412,15 @@ static int kcopy_get_pages(struct kcopy_file *kf, pid_t pid,
 			     (unsigned long) addr, npages, write, 0,
 			     pages, NULL);
 
-	if (err < npages && err > 0) {
-		kcopy_put_pages(pages, err);
+	if (unlikely(err != npages)) {
+		if (err > 0) {
+			pr_warn(
+			  "kcopy: get_user_pages() returned %d out of %ld\n",
+			  err, npages);
+			kcopy_put_pages(pages, err, 0);
+		}
 		err = -ENOMEM;
-	} else if (err == npages)
+	} else
 		err = 0;
 
 	up_read(&mm->mmap_sem);
@@ -309,7 +438,9 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 						unsigned doff,
 						unsigned long n,
 						unsigned long total,
-						int streaming)
+						int streaming,
+						struct kcopy_stats *stats
+						)
 {
 	struct page *dpage = *dpages;
 	char *daddr = kmap(dpage);
@@ -319,29 +450,51 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 		const unsigned long nleft = PAGE_SIZE - doff;
 		const unsigned long nc = (n < nleft) ? n : nleft;
 
-		if (total > cpu_halfcachesize) {
-			if (__copy_from_user_nocache(daddr + doff, src, nc)) {
-				ret = -EFAULT;
-				goto bail;
-			}
-		} else if (cpu_vendor == X86_VENDOR_INTEL) {
+#if defined(CONFIG_X86_64)
+		if (cache_coherent) {
 			if (copy_from_user(daddr + doff, src, nc)) {
 				ret = -EFAULT;
 				goto bail;
 			}
-		} else if (streaming) {
-			if (copy_from_user(daddr + doff, src, nc)) {
-				ret = -EFAULT;
-				goto bail;
-			}
+			INC_STATS_COUNTER(coherent_moves, 1);
+			INC_STATS_COUNTER(coherent_bytes, nc);
 		} else {
-			if (__copy_from_user_nocache(daddr + doff, src, nc)) {
-				ret = -EFAULT;
-				goto bail;
+			if (total > cpu_halfcachesize) {
+				if (__copy_from_user_nocache(
+						daddr + doff, src, nc)) {
+					ret = -EFAULT;
+					goto bail;
+				}
+				INC_STATS_COUNTER(large_nocache_moves, 1);
+				INC_STATS_COUNTER(large_nocache_bytes, nc);
+			} else if (cpu_vendor == X86_VENDOR_INTEL) {
+				if (copy_from_user(
+						daddr + doff, src, nc)) {
+					ret = -EFAULT;
+					goto bail;
+				}
+				INC_STATS_COUNTER(intel_moves, 1);
+				INC_STATS_COUNTER(intel_bytes, nc);
+			} else if (streaming) {
+				if (copy_from_user(
+						daddr + doff, src, nc)) {
+					ret = -EFAULT;
+					goto bail;
+				}
+				INC_STATS_COUNTER(streaming_moves, 1);
+				INC_STATS_COUNTER(streaming_bytes, nc);
+			} else {
+				if (__copy_from_user_nocache(
+						daddr + doff, src, nc)) {
+					ret = -EFAULT;
+					goto bail;
+				}
+				INC_STATS_COUNTER(amd_moves, 1);
+				INC_STATS_COUNTER(amd_bytes, nc);
 			}
 		}
 
-#if 0
+#else
 		/* if (copy_from_user(daddr + doff, src, nc)) { */
 		if (__copy_from_user_nocache(daddr + doff, src, nc)) {
 			ret = -EFAULT;
@@ -441,7 +594,7 @@ static unsigned long kcopy_copy_to_user(void __user *dst,
 			goto bail_free;
 
 		ret = kcopy_copy_pages_to_user(dst, pages, soff, nbytes);
-		kcopy_put_pages(pages, spages_cp);
+		kcopy_put_pages(pages, spages_cp, 0);
 		if (ret)
 			goto bail_free;
 		dst = (char *) dst + nbytes;
@@ -459,21 +612,25 @@ bail:
 static unsigned long kcopy_copy_from_user(const void __user *src,
 					  struct kcopy_file *kf, pid_t pid,
 					  void __user *dst,
-					  unsigned long n)
+					  unsigned long n,
+					  struct kcopy_stats *stats
+					  )
 {
 	struct page **pages;
 	const int pages_len = PAGE_SIZE / sizeof(struct page *);
 	int ret = 0;
 	unsigned long total = n;
-	int streaming = 0;
+	int streaming = cache_coherent;
 	static pid_t last_dpid;
 	static pid_t last_spid;
 
-	if (last_dpid == pid && last_spid == current->pid) {
-		streaming = 1;
-	} else {
-		last_dpid = pid;
-		last_spid = current->pid;
+	if (!streaming) {
+		if (last_dpid == pid && last_spid == current->pid) {
+			streaming = 1;
+		} else {
+			last_dpid = pid;
+			last_spid = current->pid;
+		}
 	}
 
 	pages = (struct page **) __get_free_page(GFP_KERNEL);
@@ -497,9 +654,10 @@ static unsigned long kcopy_copy_from_user(const void __user *src,
 			goto bail_free;
 
 		ret = kcopy_copy_pages_from_user((void __user *) src,
-				 pages, doff, nbytes, total, streaming);
-		kcopy_put_pages(pages, dpages_cp);
-		if (ret)
+				 pages, doff, nbytes, total, streaming, stats
+				 );
+		kcopy_put_pages(pages, dpages_cp, !ret ? cache_coherent : 0);
+		if (unlikely(ret))
 			goto bail_free;
 
 		dst = (char *) dst + nbytes;
@@ -520,13 +678,27 @@ static int kcopy_do_get(struct kcopy_map_entry *kme, pid_t pid,
 {
 	struct kcopy_file *kf = kme->file;
 	int ret = 0;
+#if defined(CONFIG_KCOPY_DEBUG)
+	struct kcopy_stats *stats;
+#endif
 
 	if (n == 0) {
 		ret = -EINVAL;
 		goto bail;
 	}
 
+#if defined(CONFIG_KCOPY_DEBUG)
+	if (pcpu_stats)
+		stats = per_cpu_ptr(pcpu_stats, get_cpu());
+#endif
 	ret = kcopy_copy_to_user(dst, kf, pid, (void __user *) src, n);
+	if (!ret) {
+		INC_STATS_COUNTER(gets, 1);
+		INC_STATS_COUNTER(gets_bytes, n);
+	}
+#if defined(CONFIG_KCOPY_DEBUG)
+	put_cpu();
+#endif
 
 bail:
 	return ret;
@@ -538,13 +710,24 @@ static int kcopy_do_put(struct kcopy_map_entry *kme, const void __user *src,
 {
 	struct kcopy_file *kf = kme->file;
 	int ret = 0;
+	struct kcopy_stats *stats = NULL;
 
 	if (n == 0) {
 		ret = -EINVAL;
 		goto bail;
 	}
 
-	ret = kcopy_copy_from_user(src, kf, pid, (void __user *) dst, n);
+#if defined(CONFIG_KCOPY_DEBUG)
+	stats = per_cpu_ptr(pcpu_stats, get_cpu());
+#endif
+	ret = kcopy_copy_from_user(src, kf, pid, (void __user *) dst, n, stats);
+	if (!ret) {
+		INC_STATS_COUNTER(puts, 1);
+		INC_STATS_COUNTER(puts_bytes, n);
+	}
+#if defined(CONFIG_KCOPY_DEBUG)
+	put_cpu();
+#endif
 
 bail:
 	return ret;
@@ -605,6 +788,79 @@ static const struct file_operations kcopy_fops = {
 	.write = kcopy_write,
 };
 
+#if defined(CONFIG_KCOPY_DEBUG)
+
+static void kcopy_stats_add(struct kcopy_counter *c)
+{
+	if (!kcopy_stats_dir)
+		return;
+
+	c->dent = debugfs_create_file(c->filename,
+				      0444,
+				      kcopy_stats_dir,
+				      c,
+				      c->fops);
+}
+
+static void kcopy_stats_remove(struct kcopy_counter *c)
+{
+	debugfs_remove(c->dent);
+}
+
+static void kcopy_stats_init(void)
+{
+	pcpu_stats = alloc_percpu(struct kcopy_stats);
+	if (!pcpu_stats) {
+		pr_err("kcopy: Could not allocate stats\n");
+		return;
+	}
+	kcopy_stats_dir = debugfs_create_dir("kcopy", NULL);
+	if (!kcopy_stats_dir) {
+		pr_warn("kcopy: Could not create kcopy stats dir\n");
+		return;
+	}
+	ADD_STATS_COUNTER(gets);
+	ADD_STATS_COUNTER(gets_bytes);
+	ADD_STATS_COUNTER(puts);
+	ADD_STATS_COUNTER(puts_bytes);
+#if defined(CONFIG_X86_64)
+	ADD_STATS_COUNTER(large_nocache_moves);
+	ADD_STATS_COUNTER(large_nocache_bytes);
+	ADD_STATS_COUNTER(intel_moves);
+	ADD_STATS_COUNTER(intel_bytes);
+	ADD_STATS_COUNTER(streaming_moves);
+	ADD_STATS_COUNTER(streaming_bytes);
+	ADD_STATS_COUNTER(amd_moves);
+	ADD_STATS_COUNTER(amd_bytes);
+	ADD_STATS_COUNTER(coherent_moves);
+	ADD_STATS_COUNTER(coherent_bytes);
+#endif
+}
+
+static void kcopy_stats_fini(void)
+{
+	REMOVE_STATS_COUNTER(gets);
+	REMOVE_STATS_COUNTER(gets_bytes);
+	REMOVE_STATS_COUNTER(puts);
+	REMOVE_STATS_COUNTER(puts_bytes);
+#if defined(CONFIG_X86_64)
+	REMOVE_STATS_COUNTER(large_nocache_moves);
+	REMOVE_STATS_COUNTER(large_nocache_bytes);
+	REMOVE_STATS_COUNTER(large_nocache_bytes);
+	REMOVE_STATS_COUNTER(intel_moves);
+	REMOVE_STATS_COUNTER(intel_bytes);
+	REMOVE_STATS_COUNTER(streaming_moves);
+	REMOVE_STATS_COUNTER(streaming_bytes);
+	REMOVE_STATS_COUNTER(amd_moves);
+	REMOVE_STATS_COUNTER(amd_bytes);
+#endif
+	debugfs_remove(kcopy_stats_dir);
+
+	free_percpu(pcpu_stats);
+}
+
+#endif
+
 static int __init kcopy_init(void)
 {
 	int ret;
@@ -615,13 +871,19 @@ static int __init kcopy_init(void)
 #if defined(CONFIG_X86_64)
 	cpu_vendor = boot_cpu_data.x86_vendor;
 	cpu_halfcachesize = boot_cpu_data.x86_cache_size*1024/2;
+	pr_info("kcopy: vendor %d size threshold %ld\n",
+	       cpu_vendor, cpu_halfcachesize);
+#endif
+
+#if defined(CONFIG_KCOPY_DEBUG)
+	kcopy_stats_init();
 #endif
 
 	mutex_init(&kcopy_dev.open_lock);
 
 	ret = alloc_chrdev_region(&kcopy_dev.dev, 0, KCOPY_MAX_MINORS, name);
 	if (ret)
-		goto bail;
+		goto bail_stats;
 
 	kcopy_dev.class = class_create(THIS_MODULE, (char *) name);
 
@@ -670,6 +932,10 @@ bail_class:
 	class_destroy(kcopy_dev.class);
 bail_chrdev:
 	unregister_chrdev_region(kcopy_dev.dev, KCOPY_MAX_MINORS);
+bail_stats:
+#if defined(CONFIG_KCOPY_DEBUG)
+	kcopy_stats_fini();
+#endif
 bail:
 	return ret;
 }
@@ -678,6 +944,9 @@ static void __exit kcopy_fini(void)
 {
 	int i;
 
+#if defined(CONFIG_KCOPY_DEBUG)
+	kcopy_stats_fini();
+#endif
 	for (i = 0; i < KCOPY_MAX_MINORS; i++)
 		device_unregister(kcopy_dev.devp[i]);
 
