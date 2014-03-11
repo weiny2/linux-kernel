@@ -584,6 +584,7 @@ config DEVPORT
 	default y
 
 source "drivers/s390/char/Kconfig"
+source "drivers/char/kcopy/Kconfig"
 
 config MSM_SMD_PKT
 	bool "Enable device interface for some SMD packet ports"
