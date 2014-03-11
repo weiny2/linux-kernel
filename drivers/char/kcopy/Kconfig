@@ -15,7 +15,7 @@ config KCOPY
 
 config KCOPY_DEBUG
 	bool "kcopy debugging"
-	depends on KCOPY && CONFIG_DEBUG_FS
+	depends on KCOPY && DEBUG_FS
 	---help---
 	  Enables debugfs counters to analyze kcopy code paths
 endmenu
