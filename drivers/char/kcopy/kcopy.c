@@ -853,6 +853,8 @@ static void kcopy_stats_fini(void)
 	REMOVE_STATS_COUNTER(streaming_bytes);
 	REMOVE_STATS_COUNTER(amd_moves);
 	REMOVE_STATS_COUNTER(amd_bytes);
+	REMOVE_STATS_COUNTER(coherent_moves);
+	REMOVE_STATS_COUNTER(coherent_bytes);
 #endif
 	debugfs_remove(kcopy_stats_dir);
 
