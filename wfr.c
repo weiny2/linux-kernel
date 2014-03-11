@@ -4119,34 +4119,34 @@ static void init_chip(struct hfi_devdata *dd)
 	 * "EasyLinkup" mode.  When in EayLinkup mode, we don't change
 	 * the DC's physical and logical states.
 	 */
-	{
-	u32 ps = read_physical_state(dd);
-	u32 ls = __read_logical_state(dd);
-	if (ps == WFR_PLS_LINKUP && ls == WFR_LSTATE_ACTIVE) {
-		/* assume we're in the simulator's easy linkup mode */
-		if (sim_easy_linkup == EASY_LINKUP_UNSET
-						|| sim_easy_linkup == 1) {
-			sim_easy_linkup = 1;
-			dd_dev_info(dd, "Assuming simulation EasyLinkup mode\n");
-		} else { 
-			dd_dev_info(dd, "This HFI is in EasyLinkup mode, but the other is not?\n");
-		}
-	} else {
-		sim_easy_linkup = 0;
-		if (sim_easy_linkup == EASY_LINKUP_UNSET
-						|| sim_easy_linkup == 0) {
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		u32 ps = read_physical_state(dd);
+		u32 ls = __read_logical_state(dd);
+		if (ps == WFR_PLS_LINKUP && ls == WFR_LSTATE_ACTIVE) {
+			/* assume we're in the simulator's easy linkup mode */
+			if (sim_easy_linkup == EASY_LINKUP_UNSET
+							|| sim_easy_linkup == 1) {
+				sim_easy_linkup = 1;
+				dd_dev_info(dd, "Assuming simulation EasyLinkup mode\n");
+			} else { 
+				dd_dev_info(dd, "This HFI is in EasyLinkup mode, but the other is not?\n");
+			}
+		} else {
 			sim_easy_linkup = 0;
-		} else { 
-			dd_dev_info(dd, "This HFI is in normal link mode, but the other is not?\n");
+			if (sim_easy_linkup == EASY_LINKUP_UNSET
+							|| sim_easy_linkup == 0) {
+				sim_easy_linkup = 0;
+			} else { 
+				dd_dev_info(dd, "This HFI is in normal link mode, but the other is not?\n");
+			}
+			/* otherwise the link should be offline with port down */
+			if (!(ps == WFR_PLS_OFFLINE && ls == WFR_LSTATE_DOWN)) {
+				__print_current_states(dd, __func__, "at start", ps, ls);
+				set_physical_link_state(dd, WFR_PLS_OFFLINE);
+				dd_dev_err(dd, "Manually setting physical link to offline - not supposed to be necessary\n");
+				print_current_states(dd, __func__, "after force offline");
+			}
 		}
-		/* otherwise the link should be offline with port down */
-		if (!(ps == WFR_PLS_OFFLINE && ls == WFR_LSTATE_DOWN)) {
-			__print_current_states(dd, __func__, "at start", ps, ls);
-			set_physical_link_state(dd, WFR_PLS_OFFLINE);
-			dd_dev_err(dd, "Manually setting physical link to offline - not supposed to be necessary\n");
-			print_current_states(dd, __func__, "after force offline");
-		}
-	}
 	}
 }
 
