@@ -396,13 +396,24 @@ static int kcopy_get_pages(struct kcopy_file *kf, pid_t pid,
 	mutex_lock(&kf->map_lock);
 
 	rkme = kcopy_lookup_pid(&kf->live_map_tree, pid);
-	if (!rkme || !kcopy_validate_task(rkme->task)) {
+	if (!rkme) {
+		pr_warn(
+		   "kcopy: kcopy_lookup_pid() returned NULL for pid %d\n",
+		    pid);
+		err = -EINVAL;
+		goto bail_unlock;
+	}
+	if (!kcopy_validate_task(rkme->task)) {
+		pr_warn(
+		   "kcopy: kcopy_validate_task() returned NULL\n");
 		err = -EINVAL;
 		goto bail_unlock;
 	}
 
 	mm = get_task_mm(rkme->task);
 	if (unlikely(!mm)) {
+		pr_warn(
+			 "kcopy: get_task_mm() returned NULL\n");
 		err = -ENOMEM;
 		goto bail_unlock;
 	}
@@ -418,8 +429,11 @@ static int kcopy_get_pages(struct kcopy_file *kf, pid_t pid,
 			  "kcopy: get_user_pages() returned %d out of %ld\n",
 			  err, npages);
 			kcopy_put_pages(pages, err, 0);
-		}
-		err = -ENOMEM;
+			err = -ENOMEM;
+		} else
+			pr_warn(
+			  "kcopy: get_user_pages() failed err %d\n",
+			  -err);
 	} else
 		err = 0;
 
@@ -453,6 +467,12 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 #if defined(CONFIG_X86_64)
 		if (cache_coherent) {
 			if (copy_from_user(daddr + doff, src, nc)) {
+				pr_warn(
+				    "kcopy: copy_from_user failed from\n"
+				    "%llx to %llx for %ld bytes\n",
+				    (unsigned long long)src,
+				    (unsigned long long)daddr + doff,
+				    nc);
 				ret = -EFAULT;
 				goto bail;
 			}
@@ -462,6 +482,13 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 			if (total > cpu_halfcachesize) {
 				if (__copy_from_user_nocache(
 						daddr + doff, src, nc)) {
+					pr_warn(
+					    "kcopy: __copy_from_user_nocache\n"
+					    "failed from %llx to %llx for %ld\n"
+					    "bytes\n",
+					    (unsigned long long)src,
+					    (unsigned long long)daddr + doff,
+					    nc);
 					ret = -EFAULT;
 					goto bail;
 				}
@@ -470,6 +497,12 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 			} else if (cpu_vendor == X86_VENDOR_INTEL) {
 				if (copy_from_user(
 						daddr + doff, src, nc)) {
+					pr_warn(
+					    "kcopy: copy_from_user failed\n"
+					    "from %llx to %llx for %ld bytes\n",
+					    (unsigned long long)src,
+					    (unsigned long long)daddr + doff,
+					    nc);
 					ret = -EFAULT;
 					goto bail;
 				}
@@ -478,6 +511,12 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 			} else if (streaming) {
 				if (copy_from_user(
 						daddr + doff, src, nc)) {
+					pr_warn(
+					    "kcopy: copy_from_user failed\n"
+					    "from %llx to %llx for %ld bytes\n",
+					    (unsigned long long)src,
+					    (unsigned long long)daddr + doff,
+					    nc);
 					ret = -EFAULT;
 					goto bail;
 				}
@@ -486,6 +525,13 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 			} else {
 				if (__copy_from_user_nocache(
 						daddr + doff, src, nc)) {
+					pr_warn(
+					    "kcopy: __copy_from_user_nocache\n"
+					    "failed from %llx to %llx for %ld\n"
+					    "bytes\n",
+					    (unsigned long long)src,
+					    (unsigned long long)daddr + doff,
+					    nc);
 					ret = -EFAULT;
 					goto bail;
 				}
@@ -497,6 +543,12 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 #else
 		/* if (copy_from_user(daddr + doff, src, nc)) { */
 		if (__copy_from_user_nocache(daddr + doff, src, nc)) {
+			pr_warn(
+			    "kcopy: __copy_from_user_nocache\n"
+			    "failed from %llx to %llx for %ld bytes\n",
+			    (unsigned long long)src,
+			    (unsigned long long)daddr + doff,
+			    nc);
 			ret = -EFAULT;
 			goto bail;
 		}
@@ -538,6 +590,12 @@ static unsigned long kcopy_copy_pages_to_user(void __user *dst,
 		const unsigned long nc = (n < nleft) ? n : nleft;
 
 		if (copy_to_user(dst, saddr + soff, nc)) {
+			pr_warn(
+			    "kcopy: copy_to_user failed\n"
+			    "from %llx to %llx for %ld bytes\n",
+			    (unsigned long long)saddr + soff,
+			    (unsigned long long)dst,
+			    nc);
 			ret = -EFAULT;
 			goto bail;
 		}
@@ -573,8 +631,11 @@ static unsigned long kcopy_copy_to_user(void __user *dst,
 	const int pages_len = PAGE_SIZE / sizeof(struct page *);
 	int ret = 0;
 
-	pages = (struct page **) __get_free_page(GFP_KERNEL);
+	pages = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!pages) {
+		pr_warn(
+			"kcopy: kmalloc could not allocate %ld bytes\n",
+			PAGE_SIZE);
 		ret = -ENOMEM;
 		goto bail;
 	}
@@ -604,7 +665,7 @@ static unsigned long kcopy_copy_to_user(void __user *dst,
 	}
 
 bail_free:
-	free_page((unsigned long) pages);
+	kfree(pages);
 bail:
 	return ret;
 }
@@ -633,8 +694,11 @@ static unsigned long kcopy_copy_from_user(const void __user *src,
 		}
 	}
 
-	pages = (struct page **) __get_free_page(GFP_KERNEL);
+	pages = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!pages) {
+		pr_warn(
+			"kcopy: kmalloc could not allocate %ld bytes\n",
+			PAGE_SIZE);
 		ret = -ENOMEM;
 		goto bail;
 	}
@@ -667,7 +731,7 @@ static unsigned long kcopy_copy_from_user(const void __user *src,
 	}
 
 bail_free:
-	free_page((unsigned long) pages);
+	kfree(pages);
 bail:
 	return ret;
 }
