@@ -4573,6 +4573,17 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case STL_ATTRIB_ID_AGGREGATE:
 			ret = subn_get_stl_aggregate((struct stl_smp *)smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_SM_INFO:
+			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
+				ret = IB_MAD_RESULT_SUCCESS |
+					IB_MAD_RESULT_CONSUMED;
+				goto bail;
+			}
+			if (ibp->port_cap_flags & IB_PORT_SM) {
+				ret = IB_MAD_RESULT_SUCCESS;
+				goto bail;
+			}
+			/* FALLTHROUGH */
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: STL SubnGet(%x) not supported yet...\n",
@@ -4607,6 +4618,17 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
 			ret = subn_set_stl_bct((struct stl_smp *)smp, ibdev, port);
 			goto bail;
+		case STL_ATTRIB_ID_SM_INFO:
+			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
+				ret = IB_MAD_RESULT_SUCCESS |
+					IB_MAD_RESULT_CONSUMED;
+				goto bail;
+			}
+			if (ibp->port_cap_flags & IB_PORT_SM) {
+				ret = IB_MAD_RESULT_SUCCESS;
+				goto bail;
+			}
+			/* FALLTHROUGH */
 		default:
 			printk(KERN_WARNING PFX
 				"WARN: STL SubnSet(%x) not supported yet...\n",
