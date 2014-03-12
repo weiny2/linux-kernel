@@ -140,7 +140,6 @@ struct stl_port_status_rsp {
 
 	/* Error counters */
 	__be64 port_rcv_constraint_errors;
-	__be64 vl15_dropped;
 	__be64 port_rcv_switch_relay_errors;
 	__be64 port_xmit_discards;
 	__be64 port_xmit_constraint_errors;
@@ -149,7 +148,6 @@ struct stl_port_status_rsp {
 	__be64 port_rcv_errors;
 	__be64 excessive_buffer_overruns;
 	__be64 fm_config_errors;
-	__be64 symbol_errors;
 	__be32 link_error_recovery;
 	__be32 link_downed;
 	u8 uncorrectabe_errors;
@@ -384,13 +382,15 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	struct stl_port_status_rsp *rsp;
 	u8 vl_index;
 	unsigned long vl;
-	u32 vl_select_mask;
 
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_counters cntrs;
 	u32 num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
-	u8 num_vls = hweight64(be64_to_cpu(req->vl_select_mask));
+	u32 vl_select_mask = be32_to_cpu(req->vl_select_mask);
+	u8 num_vls = hweight32(vl_select_mask);
+	u8 port_num = req->port_num;
+
 
 	/* Sanity check */
 	size_t response_data_size = sizeof(struct stl_port_status_rsp) -
@@ -415,12 +415,16 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	}
 
 	rsp = (struct stl_port_status_rsp *)pmp->data;
+	if (port_num)
+		rsp->port_num = port_num;
+	else
+		rsp->port_num = port;
+	rsp->vl_select_mask = cpu_to_be32(vl_select_mask);
 
 	qib_get_counters(ppd, &cntrs);
 	pma_adjust_counters_for_reset_done(&cntrs, ibp);
 
 	/* The real WFR will have more than this. This is just Suzie-Q info we have */
-	rsp->symbol_errors = cpu_to_be64(cntrs.symbol_error_counter);
 	rsp->link_error_recovery = cpu_to_be64(cntrs.link_error_recovery_counter);
 	rsp->link_downed = cpu_to_be64(cntrs.link_downed_counter);
 	rsp->port_rcv_errors = cpu_to_be64(cntrs.port_rcv_errors);
@@ -429,7 +433,6 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	rsp->port_rcv_remote_physical_errors = cpu_to_be64(cntrs.port_rcv_remphys_errors);
 	rsp->local_link_integrity_errors = cpu_to_be64(cntrs.local_link_integrity_errors);
 	rsp->excessive_buffer_overruns = cpu_to_be64(cntrs.excessive_buffer_overrun_errors);
-	rsp->vl15_dropped = cpu_to_be64(cntrs.vl15_dropped);
 	rsp->port_xmit_data = cpu_to_be64(cntrs.port_xmit_data);
 	rsp->port_rcv_data = cpu_to_be64(cntrs.port_rcv_data);
 	rsp->port_xmit_pkts = cpu_to_be64(cntrs.port_xmit_packets);
@@ -439,9 +442,8 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 
 	/* SuzieQ does not have per-VL counters, but put in some data for debug */
 	vl_index = 0;
-	vl_select_mask = cpu_to_be32(req->vl_select_mask);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
-			sizeof(req->vl_select_mask)) {
+			sizeof(vl_select_mask)) {
 		rsp->vls[vl_index].port_vl_xmit_pkts = cpu_to_be64(cntrs.port_xmit_packets);
 		rsp->vls[vl_index].port_vl_rcv_pkts = cpu_to_be64(cntrs.port_rcv_packets);
 		vl_index++;
