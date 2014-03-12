@@ -325,6 +325,9 @@ int __init efi_config_init(
 	}
 	pr_cont("\n");
 	early_iounmap(config_tables, nr_tables * sz);
+
+	set_bit(EFI_CONFIG_TABLES, &efi.flags);
+
 	return 0;
 #undef early_memremap
 }
