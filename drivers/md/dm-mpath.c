@@ -58,8 +58,6 @@ struct priority_group {
 	struct list_head pgpaths;
 };
 
-#define FEATURE_NO_PARTITIONS 1
-
 /* Multipath context */
 struct multipath {
 	struct list_head list;
@@ -90,11 +88,11 @@ struct multipath {
 	unsigned saved_queue_if_no_path:1; /* Saved state during suspension */
 	unsigned retain_attached_hw_handler:1; /* If there's already a hw_handler present, don't change it. */
 	unsigned pg_init_disabled:1;	/* pg_init is not currently allowed */
+	unsigned no_partitions:1;	/* Disable partition scan for kpartx */
 
 	unsigned pg_init_retries;	/* Number of times to retry pg_init */
 	unsigned pg_init_count;		/* Number of times pg_init called */
 	unsigned pg_init_delay_msecs;	/* Number of msecs before pg_init retry */
-	unsigned features;		/* Additional selected features */
 
 	unsigned queue_size;
 	struct work_struct process_queued_ios;
@@ -853,9 +851,10 @@ static int parse_features(struct dm_arg_set *as, struct multipath *m)
 		}
 
 		if (!strcasecmp(arg_name, "no_partitions")) {
-			m->features |= FEATURE_NO_PARTITIONS;
+			m->no_partitions = 1;
 			continue;
 		}
+
 		if (!strcasecmp(arg_name, "pg_init_retries") &&
 		    (argc >= 1)) {
 			r = dm_read_arg(_args + 1, as, &m->pg_init_retries, &ti->error);
@@ -1497,12 +1496,12 @@ static void multipath_status(struct dm_target *ti, status_type_t type,
 			      (m->pg_init_retries > 0) * 2 +
 			      (m->pg_init_delay_msecs != DM_PG_INIT_DELAY_DEFAULT) * 2 +
 			      m->retain_attached_hw_handler +
-			      (m->features & FEATURE_NO_PARTITIONS));
+			      m->no_partitions);
 		if (m->queue_if_no_path)
 			DMEMIT("queue_if_no_path ");
 		if (m->pg_init_retries)
 			DMEMIT("pg_init_retries %u ", m->pg_init_retries);
-		if (m->features & FEATURE_NO_PARTITIONS)
+		if (m->no_partitions)
 			DMEMIT("no_partitions ");
 		if (m->pg_init_delay_msecs != DM_PG_INIT_DELAY_DEFAULT)
 			DMEMIT("pg_init_delay_msecs %u ", m->pg_init_delay_msecs);
@@ -1687,8 +1686,11 @@ static int multipath_ioctl(struct dm_target *ti, unsigned int cmd,
 	/*
 	 * Only pass ioctls through if the device sizes match exactly.
 	 */
-	if (!r && ti->len != i_size_read(bdev->bd_inode) >> SECTOR_SHIFT)
-		r = scsi_verify_blk_ioctl(NULL, cmd);
+	if (!bdev || ti->len != i_size_read(bdev->bd_inode) >> SECTOR_SHIFT) {
+		int err = scsi_verify_blk_ioctl(NULL, cmd);
+		if (err)
+			r = err;
+	}
 
 	if (r == -ENOTCONN && !fatal_signal_pending(current))
 		queue_work(kmultipathd, &m->process_queued_ios);

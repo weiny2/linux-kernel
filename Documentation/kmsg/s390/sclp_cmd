@@ -4,6 +4,7 @@
 /*? Text: "configure channel-path failed (cmd=0x%08x, response=0x%04x)\n" */
 /*? Text: "read channel-path info failed (response=0x%04x)\n" */
 /*? Text: "assign storage failed (cmd=0x%08x, response=0x%04x, rn=0x%04x)\n" */
+/*? Text: "configure PCI I/O adapter failed: cmd=0x%08x  response=0x%04x\n" */
 
 /*?
  * Text: "Memory hotplug state changed, suspend refused.\n"

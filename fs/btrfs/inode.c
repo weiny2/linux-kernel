@@ -864,7 +864,8 @@ static noinline int cow_file_range(struct inode *inode,
 
 	if (btrfs_is_free_space_inode(inode)) {
 		WARN_ON_ONCE(1);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	num_bytes = ALIGN(end - start + 1, blocksize);
@@ -4460,8 +4461,12 @@ static int btrfs_setsize(struct inode *inode, struct iattr *attr)
 	 * these flags set.  For all other operations the VFS set these flags
 	 * explicitly if it wants a timestamp update.
 	 */
-	if (newsize != oldsize && (!(mask & (ATTR_CTIME | ATTR_MTIME))))
-		inode->i_ctime = inode->i_mtime = current_fs_time(inode->i_sb);
+	if (newsize != oldsize) {
+		inode_inc_iversion(inode);
+		if (!(mask & (ATTR_CTIME | ATTR_MTIME)))
+			inode->i_ctime = inode->i_mtime =
+				current_fs_time(inode->i_sb);
+	}
 
 	if (newsize > oldsize) {
 		truncate_pagecache(inode, newsize);
@@ -4926,7 +4931,8 @@ void btrfs_invalidate_inodes(struct btrfs_root *root)
 	struct inode *inode;
 	u64 objectid = 0;
 
-	WARN_ON(btrfs_root_refs(&root->root_item) != 0);
+	if (!test_bit(BTRFS_FS_STATE_ERROR, &root->fs_info->fs_state))
+		WARN_ON(btrfs_root_refs(&root->root_item) != 0);
 
 	spin_lock(&root->inode_lock);
 again:
@@ -5807,6 +5813,7 @@ static int btrfs_mknod(struct inode *dir, struct dentry *dentry,
 	}
 out_unlock:
 	btrfs_end_transaction(trans, root);
+	btrfs_balance_delayed_items(root);
 	btrfs_btree_balance_dirty(root);
 	if (drop_inode) {
 		inode_dec_link_count(inode);
@@ -5880,6 +5887,7 @@ out_unlock:
 		inode_dec_link_count(inode);
 		iput(inode);
 	}
+	btrfs_balance_delayed_items(root);
 	btrfs_btree_balance_dirty(root);
 	return err;
 }
@@ -5938,6 +5946,7 @@ static int btrfs_link(struct dentry *old_dentry, struct inode *dir,
 	}
 
 	btrfs_end_transaction(trans, root);
+	btrfs_balance_delayed_items(root);
 fail:
 	if (drop_inode) {
 		inode_dec_link_count(inode);
@@ -6004,6 +6013,7 @@ out_fail:
 	btrfs_end_transaction(trans, root);
 	if (drop_on_err)
 		iput(inode);
+	btrfs_balance_delayed_items(root);
 	btrfs_btree_balance_dirty(root);
 	return err;
 }
@@ -6558,6 +6568,7 @@ noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
 	int ret;
 	struct extent_buffer *leaf;
 	struct btrfs_root *root = BTRFS_I(inode)->root;
+	struct extent_io_tree *io_tree = &BTRFS_I(inode)->io_tree;
 	struct btrfs_file_extent_item *fi;
 	struct btrfs_key key;
 	u64 disk_bytenr;
@@ -6634,6 +6645,20 @@ noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
 
 	if (btrfs_extent_readonly(root, disk_bytenr))
 		goto out;
+
+	num_bytes = min(offset + *len, extent_end) - offset;
+	if (!nocow && found_type == BTRFS_FILE_EXTENT_PREALLOC) {
+		u64 range_end;
+
+		range_end = round_up(offset + num_bytes, root->sectorsize) - 1;
+		ret = test_range_bit(io_tree, offset, range_end,
+				     EXTENT_DELALLOC, 0, NULL);
+		if (ret) {
+			ret = -EAGAIN;
+			goto out;
+		}
+	}
+
 	btrfs_release_path(path);
 
 	/*
@@ -6662,7 +6687,6 @@ noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
 	 */
 	disk_bytenr += backref_offset;
 	disk_bytenr += offset - key.offset;
-	num_bytes = min(offset + *len, extent_end) - offset;
 	if (csum_exist_in_range(root, disk_bytenr, num_bytes))
 				goto out;
 	/*

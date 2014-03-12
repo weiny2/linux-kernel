@@ -386,6 +386,10 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	}
 
  legacy_irq:
+	if (!strlen(hcd->irq_descr))
+		snprintf(hcd->irq_descr, sizeof(hcd->irq_descr), "%s:usb%d",
+			 hcd->driver->description, hcd->self.busnum);
+
 	/* fall back to legacy interrupt*/
 	ret = request_irq(pdev->irq, &usb_hcd_irq, IRQF_SHARED,
 			hcd->irq_descr, hcd);
@@ -4744,11 +4748,8 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	struct device		*dev = hcd->self.controller;
 	int			retval;
 
-	/* Limit the block layer scatter-gather lists to half a segment. */
-	hcd->self.sg_tablesize = TRBS_PER_SEGMENT / 2;
-
-	/* support to build packet from discontinuous buffers */
-	hcd->self.no_sg_constraint = 1;
+	/* Accept arbitrarily long scatter-gather lists */
+	hcd->self.sg_tablesize = ~0;
 
 	/* XHCI controllers don't stop the ep queue on short packets :| */
 	hcd->self.no_stop_on_short = 1;
@@ -4774,6 +4775,14 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 		/* xHCI private pointer was set in xhci_pci_probe for the second
 		 * registered roothub.
 		 */
+		xhci = hcd_to_xhci(hcd);
+		/*
+		 * Support arbitrarily aligned sg-list entries on hosts without
+		 * TD fragment rules (which are currently unsupported).
+		 */
+		if (xhci->hci_version < 0x100)
+			hcd->self.no_sg_constraint = 1;
+
 		return 0;
 	}
 
@@ -4799,6 +4808,9 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	 */
 	if (xhci->hci_version > 0x96)
 		xhci->quirks |= XHCI_SPURIOUS_SUCCESS;
+
+	if (xhci->hci_version < 0x100)
+		hcd->self.no_sg_constraint = 1;
 
 	/* Make sure the HC is halted. */
 	retval = xhci_halt(xhci);

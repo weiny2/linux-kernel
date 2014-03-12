@@ -15,19 +15,6 @@
  */
 
 /*?
- * Text: "%s: The user canceled setting the qeth device offline\n"
- * Severity: Warning
- * Parameter:
- *   @1: bus ID of the qeth device
- * Description:
- * A user initiated setting the device offline but subsequently canceled the
- * operation, for example, with CTRL+C.
- * User action:
- * Check the status of the qeth device, for example, with the lsqeth command.
- * If necessary, repeat the operation to set the device offline.
- */
-
-/*?
  * Text: "%s: A recovery process has been started for the device\n"
  * Severity: Warning
  * Parameter:
@@ -223,22 +210,6 @@
  * network adapter.
  * User action:
  * Ungroup and regroup the subchannel triplet of the device. If this does not
- * resolve the problem, reboot Linux. If the problem persists, gather Linux
- * debug data and report the problem to your support organization.
- */
-
-/*?
- * Text: "%s: Starting proxy ARP support for %s failed\n"
- * Severity: Warning
- * Parameter:
- *   @1: bus ID of the qeth device
- *   @2: network interface name
- * Description:
- * The qeth device driver could not start proxy ARP support on the network
- * adapter.
- * User action:
- * None if you do not require proxy ARP support. If you need proxy ARP,
- * ungroup and regroup the subchannel triplet of the device. If this does not
  * resolve the problem, reboot Linux. If the problem persists, gather Linux
  * debug data and report the problem to your support organization.
  */
@@ -469,16 +440,11 @@
  */
 
 /*?
- * Text: "%s: MAC address %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x already exists\n"
+ * Text: "%s: MAC address %pM already exists\n"
  * Severity: Warning
  * Parameter:
  *   @1: bus ID of the qeth device
- *   @2: first token of the MAC-address
- *   @3: second token of the MAC-address
- *   @4: third token of the MAC-address
- *   @5: fourth token of the MAC-address
- *   @6: fifth token of the MAC-address
- *   @7: sixth token of the MAC-address
+ *   @2: MAC-address
  * Description:
  * Setting the MAC address for the qeth device fails, because this
  * MAC address is already defined on the OSA CHPID.
@@ -487,16 +453,11 @@
  */
 
 /*?
- * Text: "%s: MAC address %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x is not authorized\n"
+ * Text: "%s: MAC address %pM is not authorized\n"
  * Severity: Warning
  * Parameter:
  *   @1: bus ID of the qeth device
- *   @2: first token of the MAC-address
- *   @3: second token of the MAC-address
- *   @4: third token of the MAC-address
- *   @5: fourth token of the MAC-address
- *   @6: fifth token of the MAC-address
- *   @7: sixth token of the MAC-address
+ *   @2: MAC-address
  * Description:
  * This qeth device is a virtual network interface card (NIC), to which z/VM
  * has already assigned a MAC address. z/VM MAC address verification does
@@ -564,6 +525,54 @@
  * tracing devices.
  */
 
+/*?
+ * Text: "%s: Enabling HW TX checksumming for %s failed, using SW TX checksumming\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ *   @2: network interface name
+ * Description:
+ * The network adapter supports hardware checksumming for outgoing IP packages
+ * but the qeth device driver could not enable hardware TX checksumming on the
+ * adapter. The qeth device driver continues to use software checksumming for
+ * outgoing IP packages.
+ * User action:
+ * None if you do not require hardware checksumming for outgoing network
+ * traffic. If you want to enable hardware checksumming, ungroup and regroup
+ * the subchannel triplet of the device. If this does not resolve the problem,
+ * reboot Linux. If the problem persists, gather Linux debug data and report
+ * the problem to your support organization.
+ */
+
+/*?
+ * Text: "%s: A connection could not be established because of an OLM limit\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * z/OS has activated Optimized Latency Mode (OLM) for a connection through an OSA Express3 adapter.
+ * This reduces the maximum number of concurrent connections per physical port for shared adapters.
+ * The new connection would exceed the maximum. Linux cannot establish further connections using
+ * this adapter.
+ * User action:
+ * If possible, deactivate an existing connection that uses this adapter and try again to establish
+ * the new connection. If you cannot free an existing connection, use a different adapter for the
+ * new connection.
+ */
+
+/*?
+ * Text: "%s: Setting the device online failed because of insufficient authorization\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The qeth device is configured with OSX CHPIDs. An OSX CHPID cannot be activated unless the LPAR is explicitly authorized to access it.
+ * For z/VM guest operating systems, the z/VM user ID must be explicitly authorized in addition to the LPAR.
+ * You grant these authorizations through the Service Element.
+ * User action:
+ * At the Service Element, authorize the LPAR and, if applicable, the z/VM user ID for using the OSX CHPIDs with which the qeth device has been configured.
+ * Then try again to set the device online.
+ */
 
 /*? Text: "core functions removed\n" */
 /*? Text: "%s: Device is a%s card%s%s%s\nwith link type %s.\n" */
@@ -573,7 +582,7 @@
 /*? Text: "%s: Priority Queueing not supported\n" */
 /*? Text: "%s: sense data available. cstat 0x%X dstat 0x%X\n" */
 /*? Text: "loading core functions\n" */
-/*? Text: "%s: MAC address %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x successfully registered on device %s\n" */
+/*? Text: "%s: MAC address %pM successfully registered on device %s\n" */
 /*? Text: "%s: Device successfully recovered!\n" */
 /*? Text: "register layer 2 discipline\n" */
 /*? Text: "unregister layer 2 discipline\n" */
@@ -603,4 +612,117 @@
 /*? Text: "%s: Adapter does not support QDIO data connection isolation\n" */
 /*? Text: "%s: Adapter is dedicated. QDIO data connection isolation not supported\n" */
 /*? Text: "%s: TSO does not permit QDIO data connection isolation\n" */
+/*? Text: "%s: HW TX Checksumming enabled\n" */
+/*? Text: "netif_stop_queue() cannot be called before register_netdev()\n" */
+/*? Text: "qeth_l3: ignoring TR device\n" */
+/*? Text: "flen=%u proglen=%u pass=%u image=%pK\n" */
 
+/*?
+ * Text: "%s: Turning off reflective relay mode at the adjacent switch failed\n"
+ * Severity: Warning
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The policy for the QDIO data connection isolation was
+ * changed successfully, and communications are now handled according to the
+ * new policy. The ISOLATION_FORWARD policy is no longer used, but the qeth
+ * device driver could not turn off the reflective relay mode on the adjacent
+ * switch port.
+ * User action:
+ * Check the adjacent switch for errors and correct the problem.
+ */
+
+/*?
+ * Text: "%s: The adjacent switch port does not support reflective relay mode\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The 'isolation' sysfs attribute of the qeth device could not be set to 'forward'.
+ * This setting selects the ISOLATION_FORWARD policy for the QDIO data connection
+ * isolation. The ISOLATION_FORWARD policy requires a network adapter in Virtual
+ * Ethernet Port Aggregator (VEPA) mode with an adjacent switch port in reflective
+ * relay mode.
+ * User action:
+ * Use a switch port that supports reflective relay mode if you want to use the
+ * ISOLATION_FORWARD policy for the qeth device.
+ */
+
+/*?
+ * Text: "%s: The reflective relay mode cannot be enabled at the adjacent switch port"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The 'isolation' sysfs attribute of the qeth device could not be set to 'forward'.
+ * This setting selects the ISOLATION_FORWARD policy for the QDIO data connection
+ * isolation. The ISOLATION_FORWARD policy requires a network adapter in Virtual
+ * Ethernet Port Aggregator (VEPA) mode with an adjacent switch port in reflective relay
+ * mode. The qeth device driver failed to enable the required reflective relay mode on
+ * the adjacent switch port although the switch port supports this mode.
+ * User action:
+ * Enable reflective relay mode on the switch for the adjacent port and try again.
+ */
+
+/*?
+ * Text: "%s: Interface %s is down because the adjacent port is no longer in reflective relay mode\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ *   @2: interface name
+ * Description:
+ * The ISOLATION_FORWARD policy is active for the QDIO data connection isolation
+ * of the qeth device. This policy requires a network adapter in Virtual Ethernet
+ * Port Aggregator (VEPA) mode with an adjacent switch port in reflective relay mode.
+ * The reflective relay mode on the adjacent switch port was disabled. The qeth device
+ * was set offline and the interface was deactivated to prevent any unintended network traffic.
+ * User action:
+ * Enable the reflective relay mode again on the adjacent port or use the 'isolation'
+ * sysfs attribute of the qeth device to set a different policy for the QDIO data connection
+ * isolation. You can then resume operations by setting the qeth device back
+ * online and activating the interface.
+ */
+
+/*?
+ * Text: "%s: Failed to create completion queue\n"
+ * Severity: Error
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The HiperSockets device could not be configured with a completion queue.
+ * A completion queue is required to operate AF_IUCV communication in an LPAR.
+ * User action:
+ * i) Investigate if you have the latest firmware level in place.
+ * ii) If the problem persists and is not caused by a version mismatch, contact IBM
+ * support.
+ */
+
+/*?
+ * Text: "%s: Completion Queueing supported\n"
+ * Severity: Informational
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The HiperSockets device supports completion queueing. This is required to
+ * set up AF_IUCV communication in an LPAR.
+ */
+
+/*?
+ * Text: "%s: Completion Queue support enabled"
+ * Severity: Informational
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The HiperSockets device is enabled for completion queueing. This is part of
+ * the process to set up AF_IUCV communication in an LPAR.
+ */
+
+/*?
+ * Text: "%s: Completion Queue support disabled"
+ * Severity: Informational
+ * Parameter:
+ *   @1: bus ID of the qeth device
+ * Description:
+ * The HiperSockets device is disabled for completion queueing. This device
+ * cannot or no longer be used to set up AF_IUCV communication in an LPAR.
+ */

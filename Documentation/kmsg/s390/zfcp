@@ -15,21 +15,6 @@
  */
 
 /*?
- * Text: "Registering the misc device zfcp_cfdc failed\n"
- * Severity: Error
- * Description:
- * The zfcp device driver failed to register the device that provides access to
- * the adapter access control file (ACL tables). The device driver
- * initialization failed. A possible cause for this problem is memory
- * constraints.
- * User action:
- * Free some memory and try again to load the zfcp device driver. If the zfcp
- * device driver has been compiled into the kernel, reboot Linux. Consider
- * assigning more memory to your LPAR or z/VM guest virtual machine. If the
- * problem persists, contact your support organization.
- */
-
-/*?
  * Text: "The zfcp device driver could not register with the common I/O layer\n"
  * Severity: Error
  * Description:
@@ -159,7 +144,7 @@
  */
 
 /*?
- * Text: "%s: ERP failed for unit 0x%016Lx on port 0x%016Lx\n"
+ * Text: "%s: ERP failed for LUN 0x%016Lx on port 0x%016Lx\n"
  * Severity: Error
  * Parameter:
  *   @1: bus ID of the zfcp device
@@ -189,36 +174,6 @@
  */
 
 /*?
- * Text: "%s: Attaching the name server port to the FCP device failed\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the zfcp device
- * Description:
- * The zfcp device driver could not attach the name server port of the fibre
- * channel fabric to an FCP device. A possible cause of this problem is
- * memory constraints.
- * User action:
- * Set the FCP device offline, free some memory, then set the FCP device online
- * again. If this does not resolve the problem, reboot Linux and try again to
- * set the FCP device online.
- */
-
-/*?
- * Text: "%s: Registering unit 0x%016Lx on port 0x%016Lx failed\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: LUN
- *   @3: WWPN
- * Description:
- * The Linux kernel could not allocate enough memory to register the SCSI
- * device at the indicated LUN with the SCSI stack. The SCSI device is not
- * available.
- * User action:
- * Free some memory then detach the LUN and attach it again.
- */
-
-/*?
  * Text: "%s: Registering port 0x%016Lx failed\n"
  * Severity: Error
  * Parameter:
@@ -243,20 +198,6 @@
  * User action:
  * Check for related error messages. If this problem occurs frequently, gather
  * Linux debug data and contact your support organization.
- */
-
-/*?
- * Text: "%s: A QDIO protocol error occurred, operations continue\n"
- * Severity: Warning
- * Parameter:
- *   @1: bus ID of the zfcp device
- * Description:
- * The zfcp device driver detected a missing flag in a QDIO queue. The device
- * driver tries to keep the FCP device operational.
- * User action:
- * Check for related error messages. If this problem occurs frequently, gather
- * Linux debug data, collect the FCP adapter hardware logs, and report the
- * problem to your support organization.
  */
 
 /*?
@@ -297,21 +238,6 @@
  * User action:
  * Remove the wrap plug from the FCP adapter and connect the adapter with the
  * fibre channel fabric.
- */
-
-/*?
- * Text: "%s: Access denied to unit 0x%016Lx on port 0x%016Lx\n"
- * Severity: Warning
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: LUN
- *   @3: WWPN
- * Description:
- * The Linux system is not allowed to access the SCSI device at the indicated
- * LUN.
- * User action:
- * Update the access control table of the FCP device to grant the Linux
- * system access to the LUN or remove the LUN from the Linux system.
  */
 
 /*?
@@ -414,20 +340,6 @@
  */
 
 /*?
- * Text: "%s: Access denied to port 0x%016Lx\n"
- * Severity: Warning
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: WWPN
- * Description:
- * The Linux system is not allowed to access the remote port with the specified
- * WWPN.
- * User action:
- * Update the access control table of the FCP device to grant the Linux
- * system access to the WWPN or remove the WWPN from the Linux system.
- */
-
-/*?
  * Text: "%s: The QTCB type is not supported by the FCP adapter\n"
  * Severity: Error
  * Parameter:
@@ -467,21 +379,6 @@
  * available again.
  * User action:
  * None.
- */
-
-/*?
- * Text: "%s: Access denied according to ACT rule type %s, rule %d\n"
- * Severity: Warning
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: access rule type
- *   @3: access rule
- * Description:
- * A rule in the access control table (ACT) for the FCP device denies access
- * to a remote port or a LUN.
- * User action:
- * Examine the access control tables for the FCP device to see if the
- * specified rule is correct.
  */
 
 /*?
@@ -718,57 +615,18 @@
  * The FCP adapter can only open a limited number of SCSI devices. This limit
  * has been reached and the SCSI device at the indicated LUN cannot be opened.
  * User action:
- * Check all SCSI devices opened through the FCP adapter and close some of them.
+ * For FCP subchannels running in non-NPIV mode, check all SCSI
+ * devices opened through the FCP adapter and close some of them.  For
+ * FCP subchannels running in NPIV mode, verify the SAN zoning and
+ * host connections on the storage systems. Ensure that the zoning and
+ * host connections only allow access to the required LUNs. As a
+ * workaround, disable the automatic LUN scanning by setting the
+ * zfcp.allow_lun_scan kernel parameter or the allow_lun_scan module
+ * parameter to 0.
  */
 
 /*?
- * Text: "%s: SCSI device at LUN 0x%016Lx on port 0x%016Lx opened read-only\n"
- * Severity: Informational
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: LUN
- *   @3: WWPN
- * Description:
- * The access control tables in the FCP adapter allow read-only access for the
- * LUN. Write access is not permitted for your Linux instance. The SCSI
- * device has been opened successfully in read-only access mode.
- * User action:
- * None if read-only access is sufficient. If you require write access, change
- * the access control tables in the FCP adapter.
- */
-
-/*?
- * Text: "%s: Exclusive read-only access not supported (unit 0x%016Lx, port 0x%016Lx)\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: LUN
- *   @3: WWPN
- * Description:
- * The access configuration specified in the access control tables of the FCP
- * adapter is not valid. The SCSI device at the indicated LUN cannot be
- * accessed.
- * User action:
- * Change the access control tables in the FCP adapter.
- */
-
-/*?
- * Text: "%s: Shared read-write access not supported (unit 0x%016Lx, port 0x%016Lx)\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: LUN
- *   @3: WWPN
- * Description:
- * The access configuration specified in the access control tables of the FCP
- * adapter is not valid. The SCSI device at the indicated LUN cannot be
- * accessed.
- * User action:
- * Change the access control tables in the FCP adapter.
- */
-
-/*?
- * Text: "%s: Incorrect direction %d, unit 0x%016Lx on port 0x%016Lx closed\n"
+ * Text: "%s: Incorrect direction %d, LUN 0x%016Lx on port 0x%016Lx closed\n"
  * Severity: Error
  * Parameter:
  *   @1: bus ID of the zfcp device
@@ -783,7 +641,7 @@
  */
 
 /*?
- * Text: "%s: Incorrect CDB length %d, unit 0x%016Lx on port 0x%016Lx closed\n"
+ * Text: "%s: Incorrect CDB length %d, LUN 0x%016Lx on port 0x%016Lx closed\n"
  * Severity: Error
  * Parameter:
  *   @1: bus ID of the zfcp device
@@ -794,21 +652,6 @@
  * The control-data-block (CDB) length field in a SCSI request is not valid or
  * too large for the FCP adapter. The zfcp device driver closed down the SCSI
  * device at the indicated LUN.
- * User action:
- * Gather Linux debug data and report this problem to your support organization.
- */
-
-/*?
- * Text: "%s: Oversize data package, unit 0x%016Lx on port 0x%016Lx closed\n"
- * Severity: Error
- * Parameter:
- *   @1: bus ID of the zfcp device
- *   @2: LUN
- *   @3: WWPN
- * Description:
- * A SCSI request with too much data has been sent to the SCSI device at the
- * indicated LUN. The FCP adapter cannot handle data packets of this size and
- * the SCSI device driver closed down the SCSI device.
  * User action:
  * Gather Linux debug data and report this problem to your support organization.
  */

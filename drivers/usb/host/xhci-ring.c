@@ -906,6 +906,57 @@ remove_finished_td:
 	/* Return to the event handler with xhci->lock re-acquired */
 }
 
+static void xhci_kill_ring_urbs(struct xhci_hcd *xhci, struct xhci_ring *ring)
+{
+	struct xhci_td *cur_td;
+
+	while (!list_empty(&ring->td_list)) {
+		cur_td = list_first_entry(&ring->td_list,
+				struct xhci_td, td_list);
+		list_del_init(&cur_td->td_list);
+		if (!list_empty(&cur_td->cancelled_td_list))
+			list_del_init(&cur_td->cancelled_td_list);
+		xhci_giveback_urb_in_irq(xhci, cur_td, -ESHUTDOWN);
+	}
+}
+
+static void xhci_kill_endpoint_urbs(struct xhci_hcd *xhci,
+		int slot_id, int ep_index)
+{
+	struct xhci_td *cur_td;
+	struct xhci_virt_ep *ep;
+	struct xhci_ring *ring;
+
+	ep = &xhci->devs[slot_id]->eps[ep_index];
+	if ((ep->ep_state & EP_HAS_STREAMS) ||
+			(ep->ep_state & EP_GETTING_NO_STREAMS)) {
+		int stream_id;
+
+		for (stream_id = 0; stream_id < ep->stream_info->num_streams;
+				stream_id++) {
+			xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
+					"Killing URBs for slot ID %u, ep index %u, stream %u",
+					slot_id, ep_index, stream_id + 1);
+			xhci_kill_ring_urbs(xhci,
+					ep->stream_info->stream_rings[stream_id]);
+		}
+	} else {
+		ring = ep->ring;
+		if (!ring)
+			return;
+		xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
+				"Killing URBs for slot ID %u, ep index %u",
+				slot_id, ep_index);
+		xhci_kill_ring_urbs(xhci, ring);
+	}
+	while (!list_empty(&ep->cancelled_td_list)) {
+		cur_td = list_first_entry(&ep->cancelled_td_list,
+				struct xhci_td, cancelled_td_list);
+		list_del_init(&cur_td->cancelled_td_list);
+		xhci_giveback_urb_in_irq(xhci, cur_td, -ESHUTDOWN);
+	}
+}
+
 /* Watchdog timer function for when a stop endpoint command fails to complete.
  * In this case, we assume the host controller is broken or dying or dead.  The
  * host may still be completing some other events, so we have to be careful to
@@ -929,9 +980,6 @@ void xhci_stop_endpoint_command_watchdog(unsigned long arg)
 {
 	struct xhci_hcd *xhci;
 	struct xhci_virt_ep *ep;
-	struct xhci_virt_ep *temp_ep;
-	struct xhci_ring *ring;
-	struct xhci_td *cur_td;
 	int ret, i, j;
 	unsigned long flags;
 
@@ -988,34 +1036,8 @@ void xhci_stop_endpoint_command_watchdog(unsigned long arg)
 	for (i = 0; i < MAX_HC_SLOTS; i++) {
 		if (!xhci->devs[i])
 			continue;
-		for (j = 0; j < 31; j++) {
-			temp_ep = &xhci->devs[i]->eps[j];
-			ring = temp_ep->ring;
-			if (!ring)
-				continue;
-			xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
-					"Killing URBs for slot ID %u, "
-					"ep index %u", i, j);
-			while (!list_empty(&ring->td_list)) {
-				cur_td = list_first_entry(&ring->td_list,
-						struct xhci_td,
-						td_list);
-				list_del_init(&cur_td->td_list);
-				if (!list_empty(&cur_td->cancelled_td_list))
-					list_del_init(&cur_td->cancelled_td_list);
-				xhci_giveback_urb_in_irq(xhci, cur_td,
-						-ESHUTDOWN);
-			}
-			while (!list_empty(&temp_ep->cancelled_td_list)) {
-				cur_td = list_first_entry(
-						&temp_ep->cancelled_td_list,
-						struct xhci_td,
-						cancelled_td_list);
-				list_del_init(&cur_td->cancelled_td_list);
-				xhci_giveback_urb_in_irq(xhci, cur_td,
-						-ESHUTDOWN);
-			}
-		}
+		for (j = 0; j < 31; j++)
+			xhci_kill_endpoint_urbs(xhci, i, j);
 	}
 	spin_unlock_irqrestore(&xhci->lock, flags);
 	xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
@@ -2989,58 +3011,8 @@ static int prepare_ring(struct xhci_hcd *xhci, struct xhci_ring *ep_ring,
 	}
 
 	while (1) {
-		if (room_on_ring(xhci, ep_ring, num_trbs)) {
-			union xhci_trb *trb = ep_ring->enqueue;
-			unsigned int usable = ep_ring->enq_seg->trbs +
-					TRBS_PER_SEGMENT - 1 - trb;
-			u32 nop_cmd;
-
-			/*
-			 * Section 4.11.7.1 TD Fragments states that a link
-			 * TRB must only occur at the boundary between
-			 * data bursts (eg 512 bytes for 480M).
-			 * While it is possible to split a large fragment
-			 * we don't know the size yet.
-			 * Simplest solution is to fill the trb before the
-			 * LINK with nop commands.
-			 */
-			if (num_trbs == 1 || num_trbs <= usable || usable == 0)
-				break;
-
-			if (ep_ring->type != TYPE_BULK)
-				/*
-				 * While isoc transfers might have a buffer that
-				 * crosses a 64k boundary it is unlikely.
-				 * Since we can't add NOPs without generating
-				 * gaps in the traffic just hope it never
-				 * happens at the end of the ring.
-				 * This could be fixed by writing a LINK TRB
-				 * instead of the first NOP - however the
-				 * TRB_TYPE_LINK_LE32() calls would all need
-				 * changing to check the ring length.
-				 */
-				break;
-
-			if (num_trbs >= TRBS_PER_SEGMENT) {
-				xhci_err(xhci, "Too many fragments %d, max %d\n",
-						num_trbs, TRBS_PER_SEGMENT - 1);
-				return -EINVAL;
-			}
-
-			nop_cmd = cpu_to_le32(TRB_TYPE(TRB_TR_NOOP) |
-					ep_ring->cycle_state);
-			ep_ring->num_trbs_free -= usable;
-			do {
-				trb->generic.field[0] = 0;
-				trb->generic.field[1] = 0;
-				trb->generic.field[2] = 0;
-				trb->generic.field[3] = nop_cmd;
-				trb++;
-			} while (--usable);
-			ep_ring->enqueue = trb;
-			if (room_on_ring(xhci, ep_ring, num_trbs))
-				break;
-		}
+		if (room_on_ring(xhci, ep_ring, num_trbs))
+			break;
 
 		if (ep_ring == xhci->cmd_ring) {
 			xhci_err(xhci, "Do not support expand command ring\n");

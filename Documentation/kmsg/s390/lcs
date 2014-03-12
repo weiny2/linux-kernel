@@ -159,3 +159,7 @@
 /*? Text: "Initialization failed\n" */
 /*? Text: "Terminating lcs module.\n" */
 /*? Text: "Device %s could not be recovered!\n" */
+/*? Text: "Initializing the lcs device driver failed\n" */
+/*? Text: "%s: The lcs device driver failed to recover the device\n" */
+/*? Text: "netif_stop_queue() cannot be called before register_netdev()\n" */
+/*? Text: "flen=%u proglen=%u pass=%u image=%pK\n" */

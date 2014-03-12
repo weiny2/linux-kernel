@@ -1,28 +1,4 @@
 /*?
- * Text: "Processor %d started, address %d, identification %06X\n"
- * Severity: Informational
- * Parameter:
- *   @1: logical CPU number
- *   @2: CPU address
- *   @3: CPU identification number
- * Description:
- * The kernel detected a CPU with the given characteristics.
- * User action:
- * None.
- */
-
-/*?
- * Text: "Processor %d stopped\n"
- * Severity: Informational
- * Parameter:
- *   @1: logical CPU number
- * Description:
- * A logical CPU has been set offline.
- * User action:
- * None.
- */
-
-/*?
  * Text: "%d configured CPUs, %d standby CPUs\n"
  * Severity: Informational
  * Parameter:
