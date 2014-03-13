@@ -174,10 +174,6 @@ static struct board_type products[] = {
 
 static int number_of_controllers;
 
-static struct list_head hpsa_ctlr_list = LIST_HEAD_INIT(hpsa_ctlr_list);
-static spinlock_t lockup_detector_lock;
-static struct task_struct *hpsa_lockup_detector;
-
 static irqreturn_t do_hpsa_intr_intx(int irq, void *dev_id);
 static irqreturn_t do_hpsa_intr_msi(int irq, void *dev_id);
 static int hpsa_ioctl(struct scsi_device *dev, int cmd, void *arg);
@@ -226,8 +222,6 @@ static int hpsa_lookup_board_id(struct pci_dev *pdev, u32 *board_id);
 static int hpsa_wait_for_board_state(struct pci_dev *pdev, void __iomem *vaddr,
 				     int wait_for_ready);
 static inline void finish_cmd(struct CommandList *c);
-static unsigned char hpsa_format_in_progress(struct ctlr_info *h,
-		unsigned char scsi3addr[]);
 #define BOARD_NOT_READY 0
 #define BOARD_READY 1
 
@@ -952,112 +946,6 @@ static int hpsa_scsi_find_entry(struct hpsa_scsi_dev_t *needle,
 	return DEVICE_NOT_FOUND;
 }
 
-#define OFFLINE_DEVICE_POLL_INTERVAL (120 * HZ)
-static int hpsa_offline_device_thread(void *v)
-{
-	struct ctlr_info *h = v;
-	unsigned long flags;
-	struct offline_device_entry *d;
-	unsigned char need_rescan = 0;
-	struct list_head *this, *tmp;
-
-	while (1) {
-		schedule_timeout_interruptible(OFFLINE_DEVICE_POLL_INTERVAL);
-		if (kthread_should_stop())
-			break;
-
-		/* Check if any of the offline devices have become ready */
-		spin_lock_irqsave(&h->offline_device_lock, flags);
-		list_for_each_safe(this, tmp, &h->offline_device_list) {
-			d = list_entry(this, struct offline_device_entry,
-					offline_list);
-			spin_unlock_irqrestore(&h->offline_device_lock, flags);
-			if (!hpsa_format_in_progress(h, d->scsi3addr)) {
-				need_rescan = 1;
-				goto do_rescan;
-			}
-			spin_lock_irqsave(&h->offline_device_lock, flags);
-		}
-		spin_unlock_irqrestore(&h->offline_device_lock, flags);
-	}
-
-do_rescan:
-
-	/* Remove all entries from the list and rescan and exit this thread.
-	 * If there are still offline devices, the rescan will make a new list
-	 * and create a new offline device monitor thread.
-	 */
-	spin_lock_irqsave(&h->offline_device_lock, flags);
-	list_for_each_safe(this, tmp, &h->offline_device_list) {
-		d = list_entry(this, struct offline_device_entry, offline_list);
-		list_del_init(this);
-		kfree(d);
-	}
-	h->offline_device_monitor = NULL;
-	h->offline_device_thread_state = OFFLINE_DEVICE_THREAD_STOPPED;
-	spin_unlock_irqrestore(&h->offline_device_lock, flags);
-	if (need_rescan)
-		hpsa_scan_start(h->scsi_host);
-	return 0;
-}
-
-static void hpsa_monitor_offline_device(struct ctlr_info *h,
-					unsigned char scsi3addr[])
-{
-	struct offline_device_entry *device;
-	unsigned long flags;
-
-	/* Check to see if device is already on the list */
-	spin_lock_irqsave(&h->offline_device_lock, flags);
-	list_for_each_entry(device, &h->offline_device_list, offline_list) {
-		if (memcmp(device->scsi3addr, scsi3addr,
-				sizeof(device->scsi3addr)) == 0) {
-			spin_unlock_irqrestore(&h->offline_device_lock, flags);
-			return;
-		}
-	}
-	spin_unlock_irqrestore(&h->offline_device_lock, flags);
-
-	/* Device is not on the list, add it. */
-	device = kmalloc(sizeof(*device), GFP_KERNEL);
-	if (!device) {
-		dev_warn(&h->pdev->dev, "out of memory in %s\n", __func__);
-		return;
-	}
-	memcpy(device->scsi3addr, scsi3addr, sizeof(device->scsi3addr));
-	spin_lock_irqsave(&h->offline_device_lock, flags);
-	list_add_tail(&device->offline_list, &h->offline_device_list);
-	if (h->offline_device_thread_state == OFFLINE_DEVICE_THREAD_STOPPED) {
-		h->offline_device_thread_state = OFFLINE_DEVICE_THREAD_RUNNING;
-		spin_unlock_irqrestore(&h->offline_device_lock, flags);
-		h->offline_device_monitor =
-			kthread_run(hpsa_offline_device_thread, h, HPSA "-odm");
-		spin_lock_irqsave(&h->offline_device_lock, flags);
-	}
-	if (!h->offline_device_monitor) {
-		dev_warn(&h->pdev->dev, "failed to start offline device monitor thread.\n");
-		h->offline_device_thread_state = OFFLINE_DEVICE_THREAD_STOPPED;
-	}
-	spin_unlock_irqrestore(&h->offline_device_lock, flags);
-}
-
-static void stop_offline_device_monitor(struct ctlr_info *h)
-{
-	unsigned long flags;
-	int stop_thread;
-
-	spin_lock_irqsave(&h->offline_device_lock, flags);
-	stop_thread = (h->offline_device_thread_state ==
-				OFFLINE_DEVICE_THREAD_RUNNING);
-	if (stop_thread)
-		/* STOPPING state prevents new thread from starting. */
-		h->offline_device_thread_state =
-				OFFLINE_DEVICE_THREAD_STOPPING;
-	spin_unlock_irqrestore(&h->offline_device_lock, flags);
-	if (stop_thread)
-		kthread_stop(h->offline_device_monitor);
-}
-
 static void adjust_hpsa_scsi_table(struct ctlr_info *h, int hostno,
 	struct hpsa_scsi_dev_t *sd[], int nsds)
 {
@@ -1122,23 +1010,6 @@ static void adjust_hpsa_scsi_table(struct ctlr_info *h, int hostno,
 	for (i = 0; i < nsds; i++) {
 		if (!sd[i]) /* if already added above. */
 			continue;
-
-		/* Don't add devices which are NOT READY, FORMAT IN PROGRESS
-		 * as the SCSI mid-layer does not handle such devices well.
-		 * It relentlessly loops sending TUR at 3Hz, then READ(10)
-		 * at 160Hz, and prevents the system from coming up.
-		 */
-		if (sd[i]->format_in_progress) {
-			dev_info(&h->pdev->dev,
-				"c%db%dt%dl%d: Logical drive parity initialization, erase or format in progress\n",
-				h->scsi_host->host_no,
-				sd[i]->bus, sd[i]->target, sd[i]->lun);
-			dev_info(&h->pdev->dev, "c%db%dt%dl%d: temporarily offline\n",
-				h->scsi_host->host_no,
-				sd[i]->bus, sd[i]->target, sd[i]->lun);
-			continue;
-		}
-
 		device_change = hpsa_scsi_find_entry(sd[i], h->dev,
 					h->ndevices, &entry);
 		if (device_change == DEVICE_NOT_FOUND) {
@@ -1156,17 +1027,6 @@ static void adjust_hpsa_scsi_table(struct ctlr_info *h, int hostno,
 		}
 	}
 	spin_unlock_irqrestore(&h->devlock, flags);
-
-	/* Monitor devices which are NOT READY, FORMAT IN PROGRESS to be
-	 * brought online later. This must be done without holding h->devlock,
-	 * so don't touch h->dev[]
-	 */
-	for (i = 0; i < nsds; i++) {
-		if (!sd[i]) /* if already added above. */
-			continue;
-		if (sd[i]->format_in_progress)
-			hpsa_monitor_offline_device(h, sd[i]->scsi3addr);
-	}
 
 	/* Don't notify scsi mid layer of any changes the first time through
 	 * (or if there are no changes) scsi_scan_host will do it later the
@@ -1387,10 +1247,8 @@ static void complete_scsi_command(struct CommandList *cp)
 		}
 
 		if (ei->ScsiStatus == SAM_STAT_CHECK_CONDITION) {
-			if (check_for_unit_attention(h, cp)) {
-				cmd->result = DID_SOFT_ERROR << 16;
+			if (check_for_unit_attention(h, cp))
 				break;
-			}
 			if (sense_key == ILLEGAL_REQUEST) {
 				/*
 				 * SCSI REPORT_LUNS is commonly unsupported on
@@ -1855,34 +1713,6 @@ static inline void hpsa_set_bus_target_lun(struct hpsa_scsi_dev_t *device,
 	device->lun = lun;
 }
 
-static unsigned char hpsa_format_in_progress(struct ctlr_info *h,
-		unsigned char scsi3addr[])
-{
-	struct CommandList *c;
-	unsigned char *sense, sense_key, asc, ascq;
-#define ASC_LUN_NOT_READY 0x04
-#define ASCQ_LUN_NOT_READY_FORMAT_IN_PROGRESS 0x04
-
-
-	c = cmd_special_alloc(h);
-	if (!c)
-		return 0;
-	fill_cmd(c, TEST_UNIT_READY, h, NULL, 0, 0, scsi3addr, TYPE_CMD);
-	hpsa_scsi_do_simple_cmd_core(h, c);
-	sense = c->err_info->SenseInfo;
-	sense_key = sense[2];
-	asc = sense[12];
-	ascq = sense[13];
-	if (c->err_info->CommandStatus == CMD_TARGET_STATUS &&
-		c->err_info->ScsiStatus == SAM_STAT_CHECK_CONDITION &&
-		sense_key == NOT_READY &&
-		asc == ASC_LUN_NOT_READY &&
-		ascq == ASCQ_LUN_NOT_READY_FORMAT_IN_PROGRESS)
-		return 1;
-	cmd_special_free(h, c);
-	return 0;
-}
-
 static int hpsa_update_device_info(struct ctlr_info *h,
 	unsigned char scsi3addr[], struct hpsa_scsi_dev_t *this_device,
 	unsigned char *is_OBDR_device)
@@ -1921,14 +1751,10 @@ static int hpsa_update_device_info(struct ctlr_info *h,
 		sizeof(this_device->device_id));
 
 	if (this_device->devtype == TYPE_DISK &&
-		is_logical_dev_addr_mode(scsi3addr)) {
+		is_logical_dev_addr_mode(scsi3addr))
 		hpsa_get_raid_level(h, scsi3addr, &this_device->raid_level);
-		this_device->format_in_progress =
-			hpsa_format_in_progress(h, scsi3addr);
-	} else {
+	else
 		this_device->raid_level = RAID_UNKNOWN;
-		this_device->format_in_progress = 0;
-	}
 
 	if (is_OBDR_device) {
 		/* See if this is a One-Button-Disaster-Recovery device
@@ -4226,23 +4052,6 @@ static int hpsa_kdump_hard_reset_controller(struct pci_dev *pdev)
 	   need a little pause here */
 	msleep(HPSA_POST_RESET_PAUSE_MSECS);
 
-	if (!use_doorbell) {
-		/* Wait for board to become not ready, then ready.
-		 * (if we used the doorbell, then we already waited 5 secs
-		 * so the "not ready" state is already gone by so we
-		 * won't catch it.)
-		 */
-		dev_info(&pdev->dev, "Waiting for board to reset.\n");
-		rc = hpsa_wait_for_board_state(pdev, vaddr, BOARD_NOT_READY);
-		if (rc) {
-			dev_warn(&pdev->dev,
-				"failed waiting for board to reset."
-				" Will try soft reset.\n");
-			/* Not expected, but try soft reset later */
-			rc = -ENOTSUPP;
-			goto unmap_cfgtable;
-		}
-	}
 	rc = hpsa_wait_for_board_state(pdev, vaddr, BOARD_READY);
 	if (rc) {
 		dev_warn(&pdev->dev,
@@ -4567,16 +4376,17 @@ static inline bool hpsa_CISS_signature_present(struct ctlr_info *h)
 	return true;
 }
 
-/* Need to enable prefetch in the SCSI core for 6400 in x86 */
-static inline void hpsa_enable_scsi_prefetch(struct ctlr_info *h)
+static inline void hpsa_set_driver_support_bits(struct ctlr_info *h)
 {
-#ifdef CONFIG_X86
-	u32 prefetch;
+	u32 driver_support;
 
-	prefetch = readl(&(h->cfgtable->SCSI_Prefetch));
-	prefetch |= 0x100;
-	writel(prefetch, &(h->cfgtable->SCSI_Prefetch));
+#ifdef CONFIG_X86
+	/* Need to enable prefetch in the SCSI core for 6400 in x86 */
+	driver_support = readl(&(h->cfgtable->driver_support));
+	driver_support |= ENABLE_SCSI_PREFETCH;
 #endif
+	driver_support |= ENABLE_UNIT_ATTN;
+	writel(driver_support, &(h->cfgtable->driver_support));
 }
 
 /* Disable DMA prefetch for the P600.  Otherwise an ASIC bug may result
@@ -4686,7 +4496,7 @@ static int hpsa_pci_init(struct ctlr_info *h)
 		err = -ENODEV;
 		goto err_out_free_res;
 	}
-	hpsa_enable_scsi_prefetch(h);
+	hpsa_set_driver_support_bits(h);
 	hpsa_p600_dma_prefetch_quirk(h);
 	err = hpsa_enter_simple_mode(h);
 	if (err)
@@ -4897,16 +4707,6 @@ static void hpsa_undo_allocations_after_kdump_soft_reset(struct ctlr_info *h)
 	kfree(h);
 }
 
-static void remove_ctlr_from_lockup_detector_list(struct ctlr_info *h)
-{
-	assert_spin_locked(&lockup_detector_lock);
-	if (!hpsa_lockup_detector)
-		return;
-	if (h->lockup_detected)
-		return; /* already stopped the lockup detector */
-	list_del(&h->lockup_list);
-}
-
 /* Called when controller lockup detected. */
 static void fail_all_cmds_on_list(struct ctlr_info *h, struct list_head *list)
 {
@@ -4925,8 +4725,6 @@ static void controller_lockup_detected(struct ctlr_info *h)
 {
 	unsigned long flags;
 
-	assert_spin_locked(&lockup_detector_lock);
-	remove_ctlr_from_lockup_detector_list(h);
 	h->access.set_intr_mask(h, HPSA_INTR_OFF);
 	spin_lock_irqsave(&h->lock, flags);
 	h->lockup_detected = readl(h->vaddr + SA5_SCRATCHPAD_OFFSET);
@@ -4946,7 +4744,6 @@ static void detect_controller_lockup(struct ctlr_info *h)
 	u32 heartbeat;
 	unsigned long flags;
 
-	assert_spin_locked(&lockup_detector_lock);
 	now = get_jiffies_64();
 	/* If we've received an interrupt recently, we're ok. */
 	if (time_after64(h->last_intr_timestamp +
@@ -4976,68 +4773,22 @@ static void detect_controller_lockup(struct ctlr_info *h)
 	h->last_heartbeat_timestamp = now;
 }
 
-static int detect_controller_lockup_thread(void *notused)
-{
-	struct ctlr_info *h;
-	unsigned long flags;
-
-	while (1) {
-		struct list_head *this, *tmp;
-
-		schedule_timeout_interruptible(HEARTBEAT_SAMPLE_INTERVAL);
-		if (kthread_should_stop())
-			break;
-		spin_lock_irqsave(&lockup_detector_lock, flags);
-		list_for_each_safe(this, tmp, &hpsa_ctlr_list) {
-			h = list_entry(this, struct ctlr_info, lockup_list);
-			detect_controller_lockup(h);
-		}
-		spin_unlock_irqrestore(&lockup_detector_lock, flags);
-	}
-	return 0;
-}
-
-static void add_ctlr_to_lockup_detector_list(struct ctlr_info *h)
+static void hpsa_monitor_ctlr_worker(struct work_struct *work)
 {
 	unsigned long flags;
-
-	h->heartbeat_sample_interval = HEARTBEAT_SAMPLE_INTERVAL;
-	spin_lock_irqsave(&lockup_detector_lock, flags);
-	list_add_tail(&h->lockup_list, &hpsa_ctlr_list);
-	spin_unlock_irqrestore(&lockup_detector_lock, flags);
-}
-
-static void start_controller_lockup_detector(struct ctlr_info *h)
-{
-	/* Start the lockup detector thread if not already started */
-	if (!hpsa_lockup_detector) {
-		spin_lock_init(&lockup_detector_lock);
-		hpsa_lockup_detector =
-			kthread_run(detect_controller_lockup_thread,
-						NULL, HPSA);
-	}
-	if (!hpsa_lockup_detector) {
-		dev_warn(&h->pdev->dev,
-			"Could not start lockup detector thread\n");
+	struct ctlr_info *h = container_of(to_delayed_work(work),
+					struct ctlr_info, monitor_ctlr_work);
+	detect_controller_lockup(h);
+	if (h->lockup_detected)
+		return;
+	spin_lock_irqsave(&h->lock, flags);
+	if (h->remove_in_progress) {
+		spin_unlock_irqrestore(&h->lock, flags);
 		return;
 	}
-	add_ctlr_to_lockup_detector_list(h);
-}
-
-static void stop_controller_lockup_detector(struct ctlr_info *h)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&lockup_detector_lock, flags);
-	remove_ctlr_from_lockup_detector_list(h);
-	/* If the list of ctlr's to monitor is empty, stop the thread */
-	if (list_empty(&hpsa_ctlr_list)) {
-		spin_unlock_irqrestore(&lockup_detector_lock, flags);
-		kthread_stop(hpsa_lockup_detector);
-		spin_lock_irqsave(&lockup_detector_lock, flags);
-		hpsa_lockup_detector = NULL;
-	}
-	spin_unlock_irqrestore(&lockup_detector_lock, flags);
+	schedule_delayed_work(&h->monitor_ctlr_work,
+				h->heartbeat_sample_interval);
+	spin_unlock_irqrestore(&h->lock, flags);
 }
 
 static int hpsa_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -5079,10 +4830,8 @@ reinit_after_soft_reset:
 	h->intr_mode = hpsa_simple_mode ? SIMPLE_MODE_INT : PERF_MODE_INT;
 	INIT_LIST_HEAD(&h->cmpQ);
 	INIT_LIST_HEAD(&h->reqQ);
-	INIT_LIST_HEAD(&h->offline_device_list);
 	spin_lock_init(&h->lock);
 	spin_lock_init(&h->scan_lock);
-	spin_lock_init(&h->offline_device_lock);
 	spin_lock_init(&h->passthru_count_lock);
 	rc = hpsa_pci_init(h);
 	if (rc != 0)
@@ -5091,7 +4840,6 @@ reinit_after_soft_reset:
 	sprintf(h->devname, HPSA "%d", number_of_controllers);
 	h->ctlr = number_of_controllers;
 	number_of_controllers++;
-	h->offline_device_thread_state = OFFLINE_DEVICE_THREAD_STOPPED;
 
 	/* configure PCI DMA stuff */
 	rc = pci_set_dma_mask(pdev, DMA_BIT_MASK(64));
@@ -5188,7 +4936,12 @@ reinit_after_soft_reset:
 
 	hpsa_hba_inquiry(h);
 	hpsa_register_scsi(h);	/* hook ourselves into SCSI subsystem */
-	start_controller_lockup_detector(h);
+
+	/* Monitor the controller for firmware lockups */
+	h->heartbeat_sample_interval = HEARTBEAT_SAMPLE_INTERVAL;
+	INIT_DELAYED_WORK(&h->monitor_ctlr_work, hpsa_monitor_ctlr_worker);
+	schedule_delayed_work(&h->monitor_ctlr_work,
+				h->heartbeat_sample_interval);
 	return 0;
 
 clean4:
@@ -5263,14 +5016,20 @@ static void hpsa_free_device_info(struct ctlr_info *h)
 static void hpsa_remove_one(struct pci_dev *pdev)
 {
 	struct ctlr_info *h;
+	unsigned long flags;
 
 	if (pci_get_drvdata(pdev) == NULL) {
 		dev_err(&pdev->dev, "unable to remove device\n");
 		return;
 	}
 	h = pci_get_drvdata(pdev);
-	stop_controller_lockup_detector(h);
-	stop_offline_device_monitor(h);
+
+	/* Get rid of any controller monitoring work items */
+	spin_lock_irqsave(&h->lock, flags);
+	h->remove_in_progress = 1;
+	cancel_delayed_work(&h->monitor_ctlr_work);
+	spin_unlock_irqrestore(&h->lock, flags);
+
 	hpsa_unregister_scsi(h);	/* unhook from SCSI subsystem */
 	hpsa_shutdown(pdev);
 	iounmap(h->vaddr);
