@@ -1027,7 +1027,7 @@ void qib_do_send(struct work_struct *work);
 void qib_send_complete(struct qib_qp *qp, struct qib_swqe *wqe,
 		       enum ib_wc_status status);
 
-void qib_send_rc_ack(struct qib_qp *qp);
+void qib_send_rc_ack(struct qib_ctxtdata *, struct qib_qp *qp);
 
 int qib_make_rc_req(struct qib_qp *qp);
 

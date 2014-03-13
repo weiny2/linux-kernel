@@ -647,7 +647,7 @@ unlock:
  * Note that RDMA reads and atomics are handled in the
  * send side QP state and tasklet.
  */
-void qib_send_rc_ack(struct qib_qp *qp)
+void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 {
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
@@ -710,7 +710,7 @@ void qib_send_rc_ack(struct qib_qp *qp)
 	if (ppd->lstate != IB_PORT_ACTIVE)
 		goto done;
 
-	sc = qp_to_send_context(qp);
+	sc = rcd->sc;
 	plen = 2 /* PBC */ + hwords;
 	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
 
@@ -2261,7 +2261,7 @@ nack_acc:
 	qp->r_nak_state = IB_NAK_REMOTE_ACCESS_ERROR;
 	qp->r_ack_psn = qp->r_psn;
 send_ack:
-	qib_send_rc_ack(qp);
+	qib_send_rc_ack(rcd, qp);
 	return;
 
 sunlock:

@@ -637,5 +637,7 @@ int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
 void read_guid(struct hfi_devdata *dd);
 
+extern uint num_vls;
+
 #endif /* _WFR_H */
 

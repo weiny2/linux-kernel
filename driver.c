@@ -590,7 +590,7 @@ move_along:
 		list_del_init(&qp->rspwait);
 		if (qp->r_flags & QIB_R_RSP_NAK) {
 			qp->r_flags &= ~QIB_R_RSP_NAK;
-			qib_send_rc_ack(qp);
+			qib_send_rc_ack(rcd, qp);
 		}
 		if (qp->r_flags & QIB_R_RSP_SEND) {
 			unsigned long flags;

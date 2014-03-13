@@ -1020,6 +1020,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	struct send_context *sc;
 	u64 pbc;
 	u32 ndesc;
+	u32 vl;
 	int ret;
 
 	tx = qp->s_tx;
@@ -1034,9 +1035,9 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
-	sc = qp_to_send_context(qp);
-	pbc = create_pbc(sc, 0, qp->s_srate,
-				       be16_to_cpu(hdr->lrh[0]) >> 12, plen);
+	vl = be16_to_cpu(hdr->lrh[0]) >> 12;
+	sc = qp_to_send_context(qp, vl);
+	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
 
 	tx->qp = qp;
 	atomic_inc(&qp->refcount);
@@ -1143,17 +1144,11 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 	return ret;
 }
 
-struct send_context *qp_to_send_context(struct qib_qp *qp)
+struct send_context *qp_to_send_context(struct qib_qp *qp, u32 vl)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 
-	/*
-	 * Expect that the 0th receive context is always a kernel context.
-	 *
-	 * TODO: The mapping may want to take into account NUMA and possible
-	 * additional kernel contexts.
-	 */
-	return dd->rcd[0]->sc;
+	return dd->pervl_scs[vl];
 }
 
 static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
@@ -1162,14 +1157,14 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 {
 	u32 *hdr = (u32 *) ibhdr;
 	u64 pbc;
+	u32 vl;
 	unsigned long flags;
 	struct send_context *sc;
 	struct pio_buf *pbuf;
 
-	sc = qp_to_send_context(qp);
-
-	pbc = create_pbc(sc, 0, qp->s_srate,
-				be16_to_cpu(ibhdr->lrh[0]) >> 12, plen);
+	vl = be16_to_cpu(ibhdr->lrh[0]) >> 12;
+	sc = qp_to_send_context(qp, vl);
+	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (unlikely(pbuf == NULL))
 		return no_bufs_available(qp, sc);

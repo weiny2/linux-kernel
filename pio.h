@@ -76,6 +76,7 @@ struct send_context {
 	void __iomem *base_addr;	/* start of PIO memory */
 	union pio_shadow_ring *sr;	/* shadow ring */
 	volatile __le64 *hw_free;	/* HW free counter */
+	int node;			/* context home node */
 	u32 context;			/* context number */
 	u32 credits;			/* number of blocks in context */
 	u32 sr_size;			/* size of the shadow ring */
@@ -126,6 +127,7 @@ void free_credit_return(struct hfi_devdata *dd);
 int init_sc_pools_and_sizes(struct hfi_devdata *dd);
 int init_send_contexts(struct hfi_devdata *dd);
 int init_credit_return(struct hfi_devdata *dd);
+int init_pervl_scs(struct hfi_devdata *dd);
 struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa);
 void sc_free(struct send_context *sc);
 int sc_enable(struct send_context *sc);

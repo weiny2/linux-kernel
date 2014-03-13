@@ -56,7 +56,7 @@ uint kdeth_qp;
 module_param_named(kdeth_qp, kdeth_qp, uint, S_IRUGO);
 MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
 
-static uint num_vls = 4;
+uint num_vls = 4;
 module_param(num_vls, uint, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 
@@ -4599,6 +4599,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* send contexts must be set up before receive contexts */
 	ret = init_send_contexts(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	ret = init_pervl_scs(dd);
 	if (ret)
 		goto bail_cleanup;
 

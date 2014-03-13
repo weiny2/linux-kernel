@@ -107,8 +107,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 	if (!dd->rcd) {
 		dd_dev_err(dd, 
 			"Unable to allocate receive context array, failing\n");
-		ret = -ENOMEM;
-		goto done;
+		goto nomem;
 	}
 
 	/* create one or more kernel contexts */
@@ -121,8 +120,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		if (!rcd) {
 			dd_dev_err(dd,
 				"Unable to allocate kernel receive context, failing\n");
-			ret = -ENOMEM;
-			goto done;
+			goto nomem;
 		}
 		/*
 		 * We can setup the kernel contexts here and now because they use
@@ -142,22 +140,24 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			dd->rcd[rcd->ctxt] = NULL;
 			qib_free_ctxtdata(dd, rcd);
 			ret = -EFAULT;
-			goto done;
+			goto bail;
 		}
 		rcd->pkeys[0] = QIB_DEFAULT_P_KEY;
 		rcd->seq_cnt = 1;
 
-		/* TODO: add NUMA information */
-		rcd->sc = sc_alloc(dd, SC_KERNEL, 0 /*numa*/);
+		rcd->sc = sc_alloc(dd, SC_ACK, dd->node);
 		if (!rcd->sc) {
 			dd_dev_err(dd,
 				"Unable to allocate kernel send context, failing\n");
-			ret = -ENOMEM;
-			goto done;
+			goto nomem;
 		}
 	}
-	ret = 0;
-done:
+	return 0;
+nomem:
+	ret = -ENOMEM;
+bail:
+	kfree(dd->rcd);
+	dd->rcd = NULL;
 	return ret;
 }
 
@@ -1009,7 +1009,9 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&dd->list);
-
+	dd->node = dev_to_node(&pdev->dev);
+	if (dd->node < 0)
+		dd->node = 0;
 	idr_preload(GFP_KERNEL);
 	spin_lock_irqsave(&qib_devs_lock, flags);
 

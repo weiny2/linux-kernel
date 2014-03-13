@@ -85,17 +85,20 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 #define SCS_POOL_0 -1
 #define SCS_POOL_1 -2
 /* Send Context Count (SCC) wildcards */
-#define SCC_PER_NUMA -1
+#define SCC_PER_VL -1
 #define SCC_PER_CPU  -2
+
+/* TODO: decide on size and counts */
+#define SCC_PER_KRCVQ  -3
+#define SCC_ACK_CREDITS  32
 
 /* default send context sizes */
 static struct sc_config_sizes sc_config_sizes[SC_MAX] = {
 	[SC_KERNEL] = { .size  = SCS_POOL_0,	/* even divide, pool 0 */
-			.count = SCC_PER_NUMA },/* one per NUMA */
-	/* TODO: decide on size and counts */
-	[SC_ACK   ] = { .size  = 0,
-			.count = 0 },
-	[SC_USER  ] = { .size  = SCS_POOL_0,	/* even divide, pool 0 */
+			.count = SCC_PER_VL },/* one per NUMA */
+	[SC_ACK]    = { .size  = SCC_ACK_CREDITS,
+			.count = SCC_PER_KRCVQ },
+	[SC_USER]   = { .size  = SCS_POOL_0,	/* even divide, pool 0 */
 			.count = SCC_PER_CPU },	/* one per CPU */
 
 };
@@ -238,11 +241,10 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		 * value is checked later when we compare against total
 		 * memory available.
 		 */
-		if (qib_n_krcv_queues &&
-		    (i == SC_KERNEL || i == SC_ACK )) {
-			count = qib_n_krcv_queues;
-		} else if (count == SCC_PER_NUMA) {
-			count = num_online_nodes();
+		if (i == SC_ACK) {
+			count = dd->n_krcv_queues;
+		} else if (i == SC_KERNEL) {
+			count = num_vls + 1 /* VL15 */;
 		} else if (count == SCC_PER_CPU) {
 			count = num_online_cpus();
 		} else if (count < 0) {
@@ -338,6 +340,14 @@ int init_send_contexts(struct hfi_devdata *dd)
 	ret = init_credit_return(dd);
 	if (ret)
 		return ret;
+
+	dd->pervl_scs = kzalloc(sizeof(struct send_context *) *
+				PER_VL_SEND_CONTEXTS, GFP_KERNEL);
+	if (!dd->pervl_scs) {
+		dd_dev_err(dd, "Unable to allocate per vl pointers\n");
+		free_credit_return(dd);
+		return -ENOMEM;
+	}
 
 	dd->send_contexts = kzalloc(sizeof(struct send_context_info) * dd->num_send_contexts, GFP_KERNEL);
 	if (!dd->send_contexts) {
@@ -469,25 +479,26 @@ static inline u32 group_size(u32 group)
 	return 1 << group;
 }
 
-/* obtain the credit return addresses, kernel virtual and physical */
-static void cr_group_addresses(struct hfi_devdata *dd, int numa, u32 context,
-			u32 group, volatile __le64 **va, unsigned long *pa)
+/* obtain the credit return addresses, kernel virtual and physical for sc */
+static void cr_group_addresses(struct send_context *sc, dma_addr_t *pa)
 {
-	u32 gc = group_context(context, group);
+	u32 gc = group_context(sc->context, sc->group);
 
-	*va = &dd->cr_base[numa].va[gc].cr[context & 0x7];
-	*pa = (unsigned long)&((struct credit_return *)dd->cr_base[numa].pa)[gc].cr[context & 0x7];
+	sc->hw_free = &sc->dd->cr_base[sc->node].va[gc].cr[sc->context & 0x7];
+	*pa = (unsigned long)
+	       &((struct credit_return *)
+	       sc->dd->cr_base[sc->node].pa)[gc].cr[sc->context & 0x7];
 }
 
 /*
- * Allocate a per-NUMA send context structure of the given type along
+ * Allocate a NUMA relative send context structure of the given type along
  * with a HW context.
  */
 struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 {
 	struct send_context_info *sci;
 	struct send_context *sc;
-	unsigned long pa;
+	dma_addr_t pa;
 	u64 reg;
 	u32 release_credits, thresh;
 	u32 context;
@@ -507,6 +518,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	sci->sc = sc;
 
 	sc->dd = dd;
+	sc->node = numa;
 	spin_lock_init(&sc->alloc_lock);
 	spin_lock_init(&sc->release_lock);
 	spin_lock_init(&sc->wait_lock);
@@ -515,8 +527,8 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	/* TBD: group set-up.  Make it always 0 for now. */
 	sc->group = 0;
 
-	cr_group_addresses(dd, numa, context, sc->group, &sc->hw_free, &pa);
 	sc->context = context;
+	cr_group_addresses(sc, &pa);
 	sc->credits = sci->credits;
 
 /* PIO Send Memory Address details */
@@ -560,8 +572,9 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	 * PROBLEM: ibmtu is not yet set up when the kernel send
 	 * contexts are created.
 	 */
-	release_credits = DIV_ROUND_UP(default_mtu + (dd->rcvhdrentsize<<2),
-							WFR_PIO_BLOCK_SIZE);
+	release_credits = DIV_ROUND_UP((type == SC_ACK ? 0 : default_mtu) +
+					(dd->rcvhdrentsize<<2),
+					WFR_PIO_BLOCK_SIZE);
 	if (sc->credits <= release_credits)
 		thresh = 1;
 	else
@@ -572,8 +585,13 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_CTRL, reg);
 
 	dd_dev_info(dd,
-		"Send context %u group %u credits %u credit_ctrl 0x%llx threshold %u\n",
-		context, sc->group, sc->credits, sc->credit_ctrl, thresh);
+		"Send context %u %s group %u credits %u credit_ctrl 0x%llx threshold %u\n",
+		context,
+		sc_type_name(type),
+		sc->group,
+		sc->credits,
+		sc->credit_ctrl,
+		thresh);
 
 	return sc;
 
@@ -991,12 +1009,46 @@ void sc_group_release_update(struct send_context *sc)
 		sc_release_update(sc->dd->send_contexts[gc].sc);
 }
 
+int init_pervl_scs(struct hfi_devdata *dd)
+{
+	int i;
+
+	dd->pervl_scs = kzalloc(sizeof(struct send_context *)
+				* PER_VL_SEND_CONTEXTS, GFP_KERNEL);
+	if (!dd->pervl_scs) {
+		dd_dev_err(dd, "Unable to allocate per vl pointers\n");
+		goto nomem;
+	}
+	dd->pervl_scs[15] = sc_alloc(dd, SC_KERNEL, dd->node);
+	if (!dd->pervl_scs[15])
+		goto nomem;
+	for (i = 0; i < num_vls; i++) {
+		dd->pervl_scs[i] = sc_alloc(dd, SC_KERNEL, dd->node);
+		if (!dd->pervl_scs[i])
+			goto nomem;
+	}
+	sc_enable(dd->pervl_scs[15]);
+	dd_dev_info(dd,
+		    "Using send context %d for VL15\n",
+		    dd->pervl_scs[15]->context);
+	for (i = 0; i < num_vls; i++)
+		sc_enable(dd->pervl_scs[i]);
+	/* default to vl0 send context for others */
+	for (; i < 15; i++)
+		dd->pervl_scs[i] = dd->pervl_scs[0];
+	return 0;
+nomem:
+	sc_free(dd->pervl_scs[15]);
+	for (i = 0; i < num_vls; i++)
+		sc_free(dd->pervl_scs[i]);
+	return -ENOMEM;
+}
+
 int init_credit_return(struct hfi_devdata *dd)
 {
 	int ret;
 	int num_numa;
 	int i;
-	int original_node_id;
 
 	num_numa = num_online_nodes();
 	/* enforce the expectation that the numas are compact */
@@ -1013,7 +1065,6 @@ int init_credit_return(struct hfi_devdata *dd)
 		dd_dev_err(dd, "Unable to allocate credit return base\n");
 		ret = -ENOMEM;
 	}
-	original_node_id = dev_to_node(&dd->pcidev->dev);
 	for (i = 0; i < num_numa; i++) {
 		int bytes = dd->num_send_contexts*sizeof(struct credit_return);
 
@@ -1024,7 +1075,7 @@ int init_credit_return(struct hfi_devdata *dd)
 					&dd->cr_base[i].pa,
 					GFP_KERNEL);
 		if (dd->cr_base[i].va == NULL) {
-			set_dev_node(&dd->pcidev->dev, original_node_id);
+			set_dev_node(&dd->pcidev->dev, dd->node);
 			dd_dev_err(dd, "Unable to allocate credit return "
 				"DMA range for NUMA %d\n", i);
 			ret = -ENOMEM;
@@ -1032,7 +1083,7 @@ int init_credit_return(struct hfi_devdata *dd)
 		}
 		memset(dd->cr_base[i].va, 0, bytes);
 	}
-	set_dev_node(&dd->pcidev->dev, original_node_id);
+	set_dev_node(&dd->pcidev->dev, dd->node);
 
 	ret = 0;
 done:

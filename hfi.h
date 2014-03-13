@@ -140,7 +140,7 @@ struct qib_ctxtdata {
 	/* mmap of hdrq, must fit in 44 bits */
 	dma_addr_t rcvhdrq_phys;
 	dma_addr_t rcvhdrqtailaddr_phys;
-	/* this receive context's assigned PIO send context */
+	/* this receive context's assigned PIO ACK send context */
 	struct send_context *sc;
 
 	/*
@@ -665,6 +665,9 @@ struct rcv_array_data {
 	u16 nctxt_extra;
 };
 
+/* 16 to directly index */
+#define PER_VL_SEND_CONTEXTS 16
+
 /* device data struct now contains only "general per-device" info.
  * fields related to a physical IB port are in a qib_pportdata struct,
  * described above) while fields only used by a particular chip-type are in
@@ -693,6 +696,8 @@ struct hfi_devdata {
 	struct qib_ctxtdata **rcd;
 	/* send context data */
 	struct send_context_info *send_contexts;
+	/* per VL  context data */
+	struct send_context **pervl_scs;
 	/* Send Context initialization lock. */
 	spinlock_t sc_init_lock;
 
@@ -876,6 +881,7 @@ struct hfi_devdata {
 	/* localbus speed in MHz */
 	u32 lbus_speed;
 	int unit; /* unit # of this chip */
+	int node; /* home node of this chip */
 
 	/* so we can rewrite it after a chip reset */
 	u32 pcibar0;
@@ -1002,7 +1008,7 @@ void qib_chip_cleanup(struct hfi_devdata *);
 /* clean up any chip type-specific stuff */
 void qib_chip_done(void);
 
-struct send_context *qp_to_send_context(struct qib_qp *qp);
+struct send_context *qp_to_send_context(struct qib_qp *qp, u32 vl);
 
 int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
