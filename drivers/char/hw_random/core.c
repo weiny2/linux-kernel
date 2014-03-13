@@ -56,6 +56,17 @@ static LIST_HEAD(rng_list);
 static DEFINE_MUTEX(rng_mutex);
 static int data_avail;
 static u8 *rng_buffer, *rng_fillbuf;
+#ifdef __s390__
+#define KHWRNGD_DEFAULT 1
+#else
+#define KHWRNGD_DEFAULT 0
+#endif
+static int khwrngd = KHWRNGD_DEFAULT;
+module_param(khwrngd, int, 0644);
+MODULE_PARM_DESC(khwrngd, "start kernel thread to fill "
+		 "input random pool when a backend registers");
+
+static void start_khwrngd(void);
 
 static size_t rng_buffer_size(void)
 {
@@ -262,18 +273,66 @@ static ssize_t hwrng_attr_available_show(struct device *dev,
 	return ret;
 }
 
+static ssize_t hwrng_attr_khwrngd_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t len)
+{
+	int err;
+
+	err = mutex_lock_interruptible(&rng_mutex);
+	if (err)
+		return -ERESTARTSYS;
+	err = -ENODEV;
+
+	if (buf) {
+		if(*buf == '0') {
+			khwrngd = 0;
+			if (hwrng_fill)
+				kthread_stop(hwrng_fill);
+		} else {
+			khwrngd = 1;
+			if (current_rng && !hwrng_fill)
+				start_khwrngd();
+		}
+	}
+	mutex_unlock(&rng_mutex);
+
+	return err ? : len;
+}
+
+static ssize_t hwrng_attr_khwrngd_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	int err;
+	ssize_t ret;
+
+	err = mutex_lock_interruptible(&rng_mutex);
+	if (err)
+		return -ERESTARTSYS;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", khwrngd);
+
+	mutex_unlock(&rng_mutex);
+
+	return ret;
+}
+
 static DEVICE_ATTR(rng_current, S_IRUGO | S_IWUSR,
 		   hwrng_attr_current_show,
 		   hwrng_attr_current_store);
 static DEVICE_ATTR(rng_available, S_IRUGO,
 		   hwrng_attr_available_show,
 		   NULL);
-
+static DEVICE_ATTR(khwrngd, S_IRUGO | S_IWUSR,
+		   hwrng_attr_khwrngd_show,
+		   hwrng_attr_khwrngd_store);
 
 static void unregister_miscdev(void)
 {
 	device_remove_file(rng_miscdev.this_device, &dev_attr_rng_available);
 	device_remove_file(rng_miscdev.this_device, &dev_attr_rng_current);
+	device_remove_file(rng_miscdev.this_device, &dev_attr_khwrngd);
 	misc_deregister(&rng_miscdev);
 }
 
@@ -292,9 +351,15 @@ static int register_miscdev(void)
 				 &dev_attr_rng_available);
 	if (err)
 		goto err_remove_current;
+	err = device_create_file(rng_miscdev.this_device,
+				 &dev_attr_khwrngd);
+	if (err)
+		goto err_remove_available;
 out:
 	return err;
 
+err_remove_available:
+	device_remove_file(rng_miscdev.this_device, &dev_attr_rng_available);
 err_remove_current:
 	device_remove_file(rng_miscdev.this_device, &dev_attr_rng_current);
 err_misc_dereg:
@@ -320,6 +385,15 @@ static int hwrng_fillfn(void * unused)
        }
        hwrng_fill = 0;
        return 0;
+}
+
+static void start_khwrngd()
+{
+	hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
+	if (hwrng_fill == ERR_PTR(-ENOMEM)) {
+		pr_err("hwrng_fill thread creation failed");
+		hwrng_fill = NULL;
+	}
 }
 
 int hwrng_register(struct hwrng *rng)
@@ -377,11 +451,8 @@ int hwrng_register(struct hwrng *rng)
 	}
 	INIT_LIST_HEAD(&rng->list);
 	list_add_tail(&rng->list, &rng_list);
-	hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
-	if (hwrng_fill == ERR_PTR(-ENOMEM)) {
-		pr_err("hwrng_fill thread creation failed");
-		hwrng_fill = NULL;
-	}
+	if (khwrngd && !hwrng_fill)
+		start_khwrngd();
 
 out_unlock:
 	mutex_unlock(&rng_mutex);
