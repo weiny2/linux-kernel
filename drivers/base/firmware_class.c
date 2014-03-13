@@ -318,7 +318,7 @@ static int verify_sig_file(struct firmware_buf *buf, const char *path)
 
 	file = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(file))
-		return -ENOKEY;
+		return -ENOENT;
 
 	ret = fw_read_file_contents(file, &sig_data, &sig_size);
 	fput(file);
@@ -361,11 +361,13 @@ static bool fw_get_filesystem_firmware(struct device *device,
 #ifdef CONFIG_FIRMWARE_SIG
 		snprintf(path, PATH_MAX, "%s/%s.sig", fw_path[i], buf->fw_id);
 		ret = verify_sig_file(buf, path);
+		if (ret == -ENOENT && !sig_enforce)
+			ret = 0;
 		if (ret < 0) {
 			if (ret == -ENOENT)
 				pr_err("Cannot find firmware signature %s\n",
 				       path);
-			else
+			else if (sig_enforce)
 				pr_err("Invalid firmware signature %s\n", path);
 			if (sig_enforce) {
 				vfree(buf->data);
