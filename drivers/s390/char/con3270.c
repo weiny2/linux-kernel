@@ -30,6 +30,9 @@
 
 static struct raw3270_fn con3270_fn;
 
+static int auto_update = 1;
+module_param(auto_update, bool, 0);
+
 /*
  * Main 3270 console view data structure.
  */
@@ -378,6 +381,9 @@ static int
 con3270_activate(struct raw3270_view *view)
 {
 	struct con3270 *cp;
+
+	if (!auto_update)
+		return 0;
 
 	cp = (struct con3270 *) view;
 	cp->update_flags = CON_UPDATE_ALL;
