@@ -840,7 +840,7 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 
 		for (e = 0; e < rcd->rcvegrbuf_chunks; e++) {
 			void *base = rcd->rcvegrbuf[e];
-			size_t size = rcd->rcvegrbuf_size;
+			size_t size = rcd->rcvegrbuf_chunksize;
 
 			dma_free_coherent(&dd->pcidev->dev, size,
 					  base, rcd->rcvegrbuf_phys[e]);
@@ -1268,6 +1268,8 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	kfree(dd->send_contexts);
 	dd->send_contexts = NULL;
 	kfree(dd->boardname);
+	vfree(dd->events);
+	vfree(dd->status);
 }
 
 /*
