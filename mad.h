@@ -425,6 +425,7 @@ struct vl_limit {
 };
 
 struct buffer_control {
+	u16 reserved;
 	u16 overall_shared_limit;
 	struct vl_limit vl[STL_NUM_VLS];
 };
