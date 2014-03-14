@@ -175,7 +175,7 @@
  *
  *------------------------- Backend Device Properties -------------------------
  *
- * discard-aligment
+ * discard-alignment
  *      Values:         <uint32_t>
  *      Default Value:  0
  *      Notes:          4, 5
@@ -194,6 +194,7 @@
  * discard-secure
  *      Values:         0/1 (boolean)
  *      Default Value:  0
+ *      Notes:          10
  *
  *      A value of "1" indicates that the backend can process BLKIF_OP_DISCARD
  *      requests with the BLKIF_DISCARD_SECURE flag set.
@@ -323,9 +324,15 @@
  *     For full interoperability, block front and backends should publish
  *     identical ring parameters, adjusted for unit differences, to the
  *     XenStore nodes used in both schemes.
- * (4) Devices that support discard functionality may internally allocate
- *     space (discardable extents) in units that are larger than the
- *     exported logical block size.
+ * (4) Devices that support discard functionality may internally allocate space
+ *     (discardable extents) in units that are larger than the exported logical
+ *     block size. If the backing device has such discardable extents the
+ *     backend should provide both discard-granularity and discard-alignment.
+ *     Providing just one of the two may be considered an error by the frontend.
+ *     Backends supporting discard should include discard-granularity and
+ *     discard-alignment even if it supports discarding individual sectors.
+ *     Frontends should assume discard-alignment == 0 and discard-granularity
+ *     == sector size if these keys are missing.
  * (5) The discard-alignment parameter allows a physical device to be
  *     partitioned into virtual devices that do not necessarily begin or
  *     end on a discardable extent boundary.
@@ -344,6 +351,8 @@
  *     grants that can be persistently mapped in the frontend driver, but
  *     due to the frontent driver implementation it should never be bigger
  *     than RING_SIZE * BLKIF_MAX_SEGMENTS_PER_REQUEST.
+ *(10) The discard-secure property may be present and will be set to 1 if the
+ *     backing device supports secure discard.
  */
 
 /*
@@ -477,13 +486,13 @@
  * it's less than the number provided by the backend. The indirect_grefs field
  * in blkif_request_indirect should be filled by the frontend with the
  * grant references of the pages that are holding the indirect segments.
- * This pages are filled with an array of blkif_request_segment_aligned
- * that hold the information about the segments. The number of indirect
- * pages to use is determined by the maximum number of segments
- * an indirect request contains. Every indirect page can contain a maximum
- * of 512 segments (PAGE_SIZE/sizeof(blkif_request_segment_aligned)),
- * so to calculate the number of indirect pages to use we have to do
- * ceil(indirect_segments/512).
+ * These pages are filled with an array of blkif_request_segment that hold the
+ * information about the segments. The number of indirect pages to use is
+ * determined by the number of segments an indirect request contains. Every
+ * indirect page can contain a maximum of
+ * (PAGE_SIZE / sizeof(struct blkif_request_segment)) segments, so to
+ * calculate the number of indirect pages to use we have to do
+ * ceil(indirect_segments / (PAGE_SIZE / sizeof(struct blkif_request_segment))).
  *
  * If a backend does not recognize BLKIF_OP_INDIRECT, it should *not*
  * create the "feature-max-indirect-segments" node!
@@ -613,14 +622,6 @@ struct blkif_request_indirect {
 };
 typedef struct blkif_request_indirect blkif_request_indirect_t;
 #endif
-
-struct blkif_request_segment_aligned {
-    grant_ref_t gref;            /* reference to I/O buffer frame        */
-    /* @first_sect: first sector in frame to transfer (inclusive).   */
-    /* @last_sect: last sector in frame to transfer (inclusive).     */
-    uint8_t     first_sect, last_sect;
-    uint16_t    _pad; /* padding to make it 8 bytes, so it's cache-aligned */
-};
 
 struct blkif_response {
 	uint64_t        id;              /* copied from request */

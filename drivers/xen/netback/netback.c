@@ -415,7 +415,7 @@ int netif_be_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	netbk_rx_cb(skb)->nr_frags = skb_shinfo(skb)->nr_frags;
-	netbk_rx_cb(skb)->nr_slots = 1 + !!skb_shinfo(skb)->gso_size +
+	netbk_rx_cb(skb)->nr_slots = 1 + !!skb_is_gso(skb) +
 				     netbk_count_slots(skb_shinfo(skb),
 						       netif->copying_receiver);
 	netif->rx_req_cons_peek += netbk_rx_cb(skb)->nr_slots;
