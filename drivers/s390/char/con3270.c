@@ -7,6 +7,7 @@
  *     Copyright IBM Corp. 2003, 2009
  */
 
+#include <linux/module.h>
 #include <linux/console.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -30,7 +31,7 @@
 
 static struct raw3270_fn con3270_fn;
 
-static int auto_update = 1;
+static bool auto_update = 1;
 module_param(auto_update, bool, 0);
 
 /*
