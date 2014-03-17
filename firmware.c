@@ -120,7 +120,9 @@ struct firmware_details {
 	const struct firmware *fw;
 
 	struct firmware_file *firmware;
+	u8 *firmware_ptr;		/* pointer to binary data */
 	u32 firmware_len;		/* length in bytes */
+	struct firmware_file dummy_header;
 };
 
 /*
@@ -162,6 +164,9 @@ static struct firmware_details fw_sbus;
 /* hardware mutex timeout, in ms */
 #define HM_TIMEOUT 20 /* ms */
 
+/* 8051 memory access timout, in us */
+#define DC8051_ACCESS_TIMEOUT 100 /* us */
+
 static int print_css_header = 1;	/* TODO: hook to verbosity level */
 
 /* the number of SerDes on the SBUS */
@@ -201,8 +206,7 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start,
 {
 	u64 reg;
 	u32 offset;
-	int err = 0;
-	int aligned;
+	int aligned, count;
 
 	/* check alignment */
 	aligned = ((unsigned long)data & 0x7) == 0;
@@ -229,14 +233,26 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start,
 			memcpy(&reg, &data[offset], 8);
 		}
 		write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_WR_DATA, reg);
+
+		/* wait until ACCESS_COMPLETED is set */
+		count = 0;
+		while ((read_csr(dd, DC_DC8051_CFG_RAM_ACCESS_STATUS)
+		    & DC_DC8051_CFG_RAM_ACCESS_STATUS_ACCESS_COMPLETED_SMASK)
+		    == 0) {
+			count++;
+			if (count > DC8051_ACCESS_TIMEOUT) {
+				dd_dev_err(dd, "timeout writing 8051 data\n");
+				return -ENXIO;
+			}
+			udelay(1);
+		}
 	}
 
-	/* TODO: Needed?  Not in recepe any more */
 	/* turn off write access, auto increment (also sets to data access) */
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, 0);
 	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_SETUP, 0);
 
-	return err;
+	return 0;
 }
 
 /* return 0 if values match, non-zero and complain otherwise */
@@ -306,6 +322,19 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 			dd_dev_info(dd, "firmware size: ? header too long\n");
 	}
 
+	if (css->module_vendor != CSS_MODULE_VENDOR) {
+		/* assume this is a raw binary, with no CSS header */
+		dd_dev_info(dd,
+			"Invalid module vendor for \"%s\"- assuming raw binary, turning off validation",
+			name);
+		fw_validate = 0;
+		/* assign a dummy header in case we go down an incorect path */
+		fdet->firmware = &fdet->dummy_header;
+		fdet->firmware_ptr = (u8 *)fdet->fw->data;
+		fdet->firmware_len = fdet->fw->size;
+		goto done;
+	}
+
 	fdet->firmware = (struct firmware_file *)fdet->fw->data;
 
 	/*
@@ -345,6 +374,7 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 		goto done;
 	}
 
+	fdet->firmware_ptr = fdet->firmware->firmware;
 	fdet->firmware_len = fdet->fw->size - sizeof(struct firmware_file);
 
 done:
@@ -595,7 +625,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 */
 
 	/* Firmware load steps 3-5 */
-	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware->firmware,
+	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware_ptr,
 							fdet->firmware_len);
 	if (ret)
 		return ret;
@@ -639,6 +669,15 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 			break; /* timed out */
 		msleep(1);
 	};
+
+	/*
+	 * TODO: the functional simulator stopped doing this correctly in
+	 * v28-v34 timeframe.
+	 */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		dd_dev_info(dd, "8051 start timed out (ignored)\n");
+		return 0;
+	}
 
 	/* timed out */
 	dd_dev_err(dd, "8051 start timeout, current state 0x%llx\n", firmware);
@@ -686,7 +725,7 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	/* step 5: download SerDes machine code */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x0a, WRITE_SBUS_RECEIVER,
-					*(u32 *)&fdet->firmware->firmware[i]);
+					*(u32 *)&fdet->firmware_ptr[i]);
 	}
 	/* step 6: IMEM override off */
 	sbus_request(dd, ra, 0x00, WRITE_SBUS_RECEIVER, 0x00000000);
@@ -724,7 +763,7 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	/* step 5: download the SBUS Master machine code */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x14, WRITE_SBUS_RECEIVER,
-					*(u32 *)&fdet->firmware->firmware[i]);
+					*(u32 *)&fdet->firmware_ptr[i]);
 	}
 	/* step 6: set IMEM_CNTL_EN off */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000040);
@@ -760,7 +799,7 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	   we only need to pick up the bytes and write them */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x04, WRITE_SBUS_RECEIVER,
-					*(u32 *)&fdet->firmware->firmware[i]);
+					*(u32 *)&fdet->firmware_ptr[i]);
 	}
 	/* step 5: disable XDMEM access */
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000140);
