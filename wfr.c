@@ -314,9 +314,17 @@ static struct flag_table egress_err_status_flags[] = {
 /*11*/	FLAG_ENTRY("TxSbrdCtlStateMachineParityErr",
 		0,
 		WFR_SEND_EGRESS_ERR_STATUS_TX_SBRD_CTL_STATE_MACHINE_PARITY_ERR_SMASK),
+#ifdef WFR_SEND_EGRESS_ERR_STATUS_TX_DC_PARITY_ERR_SMASK
+/* TODO: sim v33 */
 /*12*/	FLAG_ENTRY("TxDcParityErr",
 		0,
 		WFR_SEND_EGRESS_ERR_STATUS_TX_DC_PARITY_ERR_SMASK),
+#else
+/* TODO: sim v34 and higher */
+/*12*/	FLAG_ENTRY("TxIllegalVLErr",
+		0,
+		WFR_SEND_EGRESS_ERR_STATUS_TX_ILLEGAL_VL_ERR_SMASK),
+#endif
 /*13*/	FLAG_ENTRY("TxLaunchCsrParityErr",
 		0,
 		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_CSR_PARITY_ERR_SMASK),
