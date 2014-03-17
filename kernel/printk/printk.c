@@ -2024,7 +2024,6 @@ EXPORT_SYMBOL(console_trylock);
  */
 static int console_lock_try_spin(void)
 {
-	WARN_ON_ONCE(!in_atomic());
 	/* Someone already spinning? Don't waste cpu time... */
 	if (test_and_set_bit(PRINTK_CONSOLE_SPIN_B, &printk_handover_state))
 		return 0;
