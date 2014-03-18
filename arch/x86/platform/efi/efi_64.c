@@ -137,12 +137,38 @@ void efi_sync_low_kernel_mappings(void)
 		sizeof(pgd_t) * num_pgds);
 }
 
-void efi_setup_page_tables(void)
+int efi_setup_page_tables(unsigned long pa_memmap, unsigned num_pages)
 {
-	efi_scratch.efi_pgt = (pgd_t *)(unsigned long)real_mode_header->trampoline_pgd;
+	pgd_t *pgd;
 
-	if (!efi_enabled(EFI_OLD_MEMMAP))
-		efi_scratch.use_pgd = true;
+	if (efi_enabled(EFI_OLD_MEMMAP))
+		return 0;
+
+	efi_scratch.efi_pgt = (pgd_t *)(unsigned long)real_mode_header->trampoline_pgd;
+	pgd = __va(efi_scratch.efi_pgt);
+
+	/*
+	 * It can happen that the physical address of new_memmap lands in memory
+	 * which is not mapped in the EFI page table. Therefore we need to go
+	 * and ident-map those pages containing the map before calling
+	 * phys_efi_set_virtual_address_map().
+	 */
+	if (kernel_map_pages_in_pgd(pgd, pa_memmap, pa_memmap, num_pages, _PAGE_NX)) {
+		pr_err("Error ident-mapping new memmap (0x%lx)!\n", pa_memmap);
+		return 1;
+	}
+
+	efi_scratch.use_pgd = true;
+
+
+	return 0;
+}
+
+void efi_cleanup_page_tables(unsigned long pa_memmap, unsigned num_pages)
+{
+	pgd_t *pgd = (pgd_t *)__va(real_mode_header->trampoline_pgd);
+
+	kernel_unmap_pages_in_pgd(pgd, pa_memmap, num_pages);
 }
 
 static void __init __map_region(efi_memory_desc_t *md, u64 va)
@@ -232,4 +258,22 @@ void __iomem *__init efi_ioremap(unsigned long phys_addr, unsigned long size,
 void __init parse_efi_setup(u64 phys_addr, u32 data_len)
 {
 	efi_setup = phys_addr + sizeof(struct setup_data);
+}
+
+void __init efi_runtime_mkexec(void)
+{
+	if (!efi_enabled(EFI_OLD_MEMMAP))
+		return;
+
+	if (__supported_pte_mask & _PAGE_NX)
+		runtime_code_page_mkexec();
+}
+
+void __init efi_dump_pagetable(void)
+{
+#ifdef CONFIG_EFI_PGT_DUMP
+	pgd_t *pgd = (pgd_t *)__va(real_mode_header->trampoline_pgd);
+
+	ptdump_walk_pgd_level(NULL, pgd);
+#endif
 }
