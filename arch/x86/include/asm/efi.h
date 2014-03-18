@@ -119,7 +119,6 @@ extern void __iomem *efi_ioremap(unsigned long addr, unsigned long size,
 #endif /* CONFIG_X86_32 */
 
 extern int add_efi_memmap;
-extern unsigned long x86_efi_facility;
 extern struct efi_scratch efi_scratch;
 extern void efi_set_executable(efi_memory_desc_t *md, bool executable);
 extern int efi_memblock_x86_reserve_range(void);
@@ -130,8 +129,13 @@ extern void efi_memory_uc(u64 addr, unsigned long size);
 extern void __init efi_map_region(efi_memory_desc_t *md);
 extern void __init efi_map_region_fixed(efi_memory_desc_t *md);
 extern void efi_sync_low_kernel_mappings(void);
-extern void efi_setup_page_tables(void);
+extern int efi_setup_page_tables(unsigned long pa_memmap, unsigned num_pages);
+extern void efi_cleanup_page_tables(unsigned long pa_memmap, unsigned num_pages);
 extern void __init old_map_region(efi_memory_desc_t *md);
+extern void __init runtime_code_page_mkexec(void);
+extern void __init efi_runtime_mkexec(void);
+extern void __init efi_dump_pagetable(void);
+extern void __init efi_apply_memmap_quirks(void);
 
 struct efi_setup_data {
 	u64 fw_vendor;
