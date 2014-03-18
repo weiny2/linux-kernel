@@ -1183,7 +1183,9 @@ static void __exit qlogic_ib_cleanup(void)
 		pr_err("Unable to cleanup counter filesystem: error %d\n", ret);
 
 	pci_unregister_driver(&qib_driver);
-
+#ifdef CONFIG_DEBUG_FS
+	hfi_dbg_exit();
+#endif
 	qib_cpulist_count = 0;
 	kfree(qib_cpulist);
 
