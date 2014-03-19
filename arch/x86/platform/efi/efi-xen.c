@@ -59,8 +59,6 @@
 
 static efi_char16_t efi_dummy_name[6] = { 'D', 'U', 'M', 'M', 'Y', 0 };
 
-static unsigned long efi_facility;
-
 static __initdata efi_config_table_type_t arch_tables[] = {
 #ifdef CONFIG_X86_UV
 	{UV_SYSTEM_TABLE_GUID, "UVsystab", &efi.uv_systab},
@@ -68,18 +66,9 @@ static __initdata efi_config_table_type_t arch_tables[] = {
 	{NULL_GUID, NULL, NULL},
 };
 
-/*
- * Returns 1 if 'facility' is enabled, 0 otherwise.
- */
-int efi_enabled(int facility)
-{
-	return test_bit(facility, &efi_facility) != 0;
-}
-EXPORT_SYMBOL(efi_enabled);
-
 static int __init setup_noefi(char *arg)
 {
-	__clear_bit(EFI_RUNTIME_SERVICES, &efi_facility);
+	__clear_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	return 0;
 }
 early_param("noefi", setup_noefi);
@@ -405,13 +394,13 @@ void __init efi_probe(void)
 		efi.update_capsule           = xen_efi_update_capsule;
 		efi.query_capsule_caps       = xen_efi_query_capsule_caps;
 
-		__set_bit(EFI_BOOT, &efi_facility);
+		__set_bit(EFI_BOOT, &efi.flags);
 #ifdef CONFIG_64BIT
-		__set_bit(EFI_64BIT, &efi_facility);
+		__set_bit(EFI_64BIT, &efi.flags);
 #endif
-		__set_bit(EFI_SYSTEM_TABLES, &efi_facility);
-		__set_bit(EFI_RUNTIME_SERVICES, &efi_facility);
-		__set_bit(EFI_MEMMAP, &efi_facility);
+		__set_bit(EFI_SYSTEM_TABLES, &efi.flags);
+		__set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
+		__set_bit(EFI_MEMMAP, &efi.flags);
 
 		if (xen_efi_get_variable(L"SecureBoot", &var_guid, NULL,
 					 &datasize, &sb) == EFI_SUCCESS
@@ -420,7 +409,7 @@ void __init efi_probe(void)
 			xen_efi_get_variable(L"SetupMode", &var_guid, NULL,
 					     &datasize, &setup) == EFI_SUCCESS)
 		    && !setup)
-			__set_bit(EFI_SECURE_BOOT, &efi_facility);
+			__set_bit(EFI_SECURE_BOOT, &efi.flags);
 	}
 }
 
@@ -476,7 +465,7 @@ void __init efi_init(void)
 	if (efi_config_init(info->cfg.addr, info->cfg.nent, arch_tables))
 		return;
 
-	__set_bit(EFI_CONFIG_TABLES, &efi_facility);
+	__set_bit(EFI_CONFIG_TABLES, &efi.flags);
 }
 
 #undef DECLARE_CALL

@@ -85,7 +85,7 @@ config X86_PTDUMP
 
 config EFI_PGT_DUMP
 	bool "Dump the EFI pagetable"
-	depends on EFI && X86_PTDUMP
+	depends on EFI && X86_PTDUMP && !XEN
 	---help---
 	  Enable this if you want to dump the EFI page table before
 	  enabling virtual mode. This can be used to debug miscellaneous
