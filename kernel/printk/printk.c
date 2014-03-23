@@ -2310,7 +2310,7 @@ void console_flush(void)
 		raw_spin_lock_irqsave(&logbuf_lock, flags);
 		retry = console_seq != log_next_seq;
 		raw_spin_unlock_irqrestore(&logbuf_lock, flags);
-		if (!retry)
+		if (!retry || console_suspended)
 			break;
 		/* Cycle console_sem to wait for outstanding printing */
 		console_lock();
