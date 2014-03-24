@@ -400,6 +400,30 @@ static struct dmi_system_id acpi_osi_dmi_table[] __initdata = {
 		     DMI_MATCH(DMI_PRODUCT_NAME, "HP EliteBook 8780w"),
 		},
 	},
+	{
+	.callback = dmi_disable_osi_win8,
+	.ident = "HP ProBook 4440s",
+	.matches = {
+		     DMI_MATCH(DMI_SYS_VENDOR, "Hewlett-Packard"),
+		     DMI_MATCH(DMI_PRODUCT_NAME, "HP ProBook 4440s"),
+		},
+	},
+	{
+	.callback = dmi_disable_osi_win8,
+	.ident = "HP ProBook 4540s",
+	.matches = {
+		     DMI_MATCH(DMI_SYS_VENDOR, "Hewlett-Packard"),
+		     DMI_MATCH(DMI_PRODUCT_NAME, "HP ProBook 4540s"),
+		},
+	},
+	{
+	.callback = dmi_disable_osi_win8,
+	.ident = "HP ProBook 4740s",
+	.matches = {
+		     DMI_MATCH(DMI_SYS_VENDOR, "Hewlett-Packard"),
+		     DMI_MATCH(DMI_PRODUCT_NAME, "HP ProBook 4740s"),
+		},
+	},
 
 	/*
 	 * BIOS invocation of _OSI(Linux) is almost always a BIOS bug.
