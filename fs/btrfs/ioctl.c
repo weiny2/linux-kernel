@@ -957,7 +957,8 @@ static bool defrag_check_next_extent(struct inode *inode, struct extent_map *em)
 		return false;
 
 	next = defrag_lookup_extent(inode, em->start + em->len);
-	if (!next || next->block_start >= EXTENT_MAP_LAST_BYTE)
+	if (!next || next->block_start >= EXTENT_MAP_LAST_BYTE ||
+	    (em->block_start + em->block_len == next->block_start))
 		ret = false;
 
 	free_extent_map(next);
@@ -1781,7 +1782,9 @@ static noinline int may_destroy_subvol(struct btrfs_root *root)
 	if (di && !IS_ERR(di)) {
 		btrfs_dir_item_key_to_cpu(path->nodes[0], di, &key);
 		if (key.objectid == root->root_key.objectid) {
-			ret = -ENOTEMPTY;
+			ret = -EPERM;
+			btrfs_err(root->fs_info, "deleting default subvolume "
+				  "%llu is not allowed", key.objectid);
 			goto out;
 		}
 		btrfs_release_path(path);
