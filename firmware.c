@@ -643,8 +643,8 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 */
 	write_csr(dd, WFR_MISC_CFG_FW_CTRL,
 			WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK |
-			fw_validate ? 0 :
-			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
+			(fw_validate ? 0 :
+			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
 
 	/* Firmware load steps 7-10 */
 	ret = run_rsa(dd, FW_TIMEOUT_8051, "8051", fdet->firmware->signature);
