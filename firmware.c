@@ -688,7 +688,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 #define SBUS_MASTER_BROADCAST 0xfd
 
 /* SBUS commands */
-#define WRITE_SBUS_RECEIVER 0x1
+#define WRITE_SBUS_RECEIVER 0x21
 
 /*
  * Write the SBUS request register
@@ -721,7 +721,7 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	/* step 3:  remove SerDes reset */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000010);
 	/* step 4: assert IMEM override */
-	sbus_request(dd, ra, 0x00, WRITE_SBUS_RECEIVER, 0xc0000000);
+	sbus_request(dd, ra, 0x00, WRITE_SBUS_RECEIVER, 0x40000000);
 	/* step 5: download SerDes machine code */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x0a, WRITE_SBUS_RECEIVER,
