@@ -500,13 +500,14 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		break;
 	case SUBCTXT_RCV_HDRQ:
 		memaddr = (u64)uctxt->subctxt_rcvhdr_base;
-		memlen = uctxt->rcvhdrq_size;
+		memlen = uctxt->rcvhdrq_size * uctxt->subctxt_cnt;
 		flags |= VM_IO | VM_DONTEXPAND;
 		vmf = 1;
 		break;
 	case SUBCTXT_EGRBUF:
 		memaddr = (u64)uctxt->subctxt_rcvegrbuf;
-		memlen = uctxt->rcvegrbuf_chunks * uctxt->rcvegrbuf_chunksize;
+		memlen = uctxt->rcvegrbuf_chunks * uctxt->rcvegrbuf_chunksize *
+			uctxt->subctxt_cnt;
 		flags |= VM_IO | VM_DONTEXPAND;
 		flags &= ~VM_MAYWRITE;
 		vmf = 1;
