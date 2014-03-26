@@ -1400,12 +1400,14 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		tid = uctxt->expected_base + offset;
 
 		/* Calculate how many pages we can pin based on free bits */
-		pinned = min((free * dd->rcv_entries.group_size), npages);
+		pinned = min((free * dd->rcv_entries.group_size),
+			     (npages - mapped));
 		/*
 		 * Now that we know how many free RcvArray entries we have,
 		 * we can pin that many user pages.
 		 */
-		ret = qib_get_user_pages(vaddr, pinned, pages);
+		ret = qib_get_user_pages(vaddr + (mapped * PAGE_SIZE),
+					 pinned, pages);
 		if (ret) {
 			/*
 			 * We can't continue because the pages array won't be
