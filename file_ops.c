@@ -41,6 +41,7 @@
 #include <asm/pgtable.h>
 #include <linux/delay.h>
 #include <linux/export.h>
+#include <linux/module.h>
 
 #include "hfi.h"
 #include "pio.h"
@@ -50,6 +51,10 @@
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
+
+uint hdrsup_enable = 1;
+module_param(hdrsup_enable, uint, S_IRUGO);
+MODULE_PARM_DESC(hdrsup_enable, "Enable/disable header suppression");
 
 /*
  * File operation functions
@@ -939,7 +944,9 @@ static int user_init(struct file *fp)
 	if (uctxt->rcvhdrtail_kvaddr)
 		qib_clear_rcvhdrtail(uctxt);
 
-	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_TIDFLOW_ENB;
+	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB;
+	if (hdrsup_enable)
+		rcvctrl_ops |= QIB_RCVCTRL_TIDFLOW_ENB;
 	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
 		rcvctrl_ops |= QIB_RCVCTRL_TAILUPD_ENB;
 	uctxt->dd->f_rcvctrl(uctxt->dd, rcvctrl_ops, uctxt->ctxt);
@@ -1071,6 +1078,11 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	ret = dd->f_get_base_info(uctxt, &binfo);
 	if (ret < 0)
 		goto done;
+	/* XXX MITKO: This runtime flag should be set in
+	 * wfr.c:get_base_info(). However, for now set it here
+	 * in accordance with the hdrsup_enable flag */
+	if (hdrsup_enable)
+		binfo.runtime_flags |= HFI_RUNTIME_HDRSUPP;
 	/* XXX MITKO: When expTID caching is implemented, properly,
 	 * handle this flag. */
 	binfo.runtime_flags |= HFI_RUNTIME_TID_UNMAP;

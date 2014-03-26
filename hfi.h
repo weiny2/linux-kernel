@@ -1116,7 +1116,6 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 #define QIB_HAS_INTX          0x800 /* Supports INTx interrupts */
 #define QIB_HAS_SEND_DMA      0x1000 /* Supports Send DMA */
 #define QIB_HAS_VLSUPP        0x2000 /* Supports multiple VLs; PBC different */
-#define QIB_HAS_HDRSUPP       0x4000 /* Supports header suppression */
 #define QIB_BADINTR           0x8000 /* severe interrupt problems */
 #define QIB_DCA_ENABLED       0x10000 /* Direct Cache Access enabled */
 #define QIB_HAS_QSFP          0x20000 /* device (card instance) has QSFP */
