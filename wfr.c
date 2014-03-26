@@ -3910,7 +3910,7 @@ static void reset_txe(struct hfi_devdata *dd)
 		write_csr(dd, WFR_SEND_LOW_PRIORITY_LIST + (8*i), 0);
 	for (i = 0; i < WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE; i++)
 		write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIST + (8*i), 0);
-	for (i = 0; i < WFR_TXE_NUM_CONTEXT_SET; i++)
+	for (i = 0; i < dd->chip_send_contexts/WFR_NUM_CONTEXTS_PER_SET; i++)
 		write_csr(dd, WFR_SEND_CONTEXT_SET_CTRL + (8*i), 0);
 	for (i = 0; i < WFR_TXE_NUM_32_BIT_COUNTER; i++)
 		write_csr(dd, WFR_SEND_COUNTER_ARRAY32 + (8*i), 0);
