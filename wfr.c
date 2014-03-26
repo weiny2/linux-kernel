@@ -1901,6 +1901,11 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 		    u32 type, unsigned long pa, u16 order)
 {
 	u64 reg;
+	void __iomem *base = (dd->rcvarray_wc ? dd->rcvarray_wc :
+			      (dd->kregbase + WFR_RCV_ARRAY));
+
+	if (!(dd->flags & QIB_PRESENT))
+		goto done;
 
 	if (type == PT_INVALID) {
 		pa = 0;
@@ -1921,7 +1926,14 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 		| (u64)order << WFR_RCV_ARRAY_RT_BUF_SIZE_SHIFT
 		| ((pa >> RT_ADDR_SHIFT) & WFR_RCV_ARRAY_RT_ADDR_MASK)
 					<< WFR_RCV_ARRAY_RT_ADDR_SHIFT;
-	write_csr(dd, WFR_RCV_ARRAY + (index * 8), reg);
+	writeq(cpu_to_le64(reg), base + (index * 8));
+
+	if (type == PT_EAGER)
+		/*
+		 * Eager entries are written one-by-one so we have to push them
+		 * after we write the entry.
+		 */
+		qib_flush_wc();
 done:
 	return;
 }
@@ -4021,7 +4033,6 @@ static void init_chip(struct hfi_devdata *dd)
 	int i;
 
 	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
-	dd->chip_rcv_array_count = read_csr(dd, WFR_RCV_ARRAY_CNT);
 	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
 	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
 	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);

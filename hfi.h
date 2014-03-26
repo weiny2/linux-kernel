@@ -718,6 +718,11 @@ struct hfi_devdata {
 	/* mem-mapped pointer to base of PIO buffers */
 	void __iomem *piobase;
 	/*
+	 * write-combining mem-mapped pointer to base of RcvArray
+	 * memory.
+	 */
+	void __iomem *rcvarray_wc;
+	/*
 	 * credit return base - a per-NUMA range of DMA address that
 	 * the chip will use to update the per-context free counter
 	 */

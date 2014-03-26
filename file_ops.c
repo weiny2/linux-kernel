@@ -1474,6 +1474,11 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 				}
 			}
 			set_bit(grpidx, &tidmap[useidx]);
+			/*
+			 * We've programmed the entire group (or as much of the
+			 * group as we'll use. Now, it's time to push it out...
+			 */
+			qib_flush_wc();
 		}
 		mapped += pinned;
 		uctxt->tidcursor = (uctxt->tidcursor + i) % uctxt->numtidgroups;

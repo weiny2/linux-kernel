@@ -175,6 +175,16 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	dd->physaddr = addr;        /* used for io_remap, etc. */
 
 	/*
+	 * Re-map the chip's RcvArray as write-compbining to allow us
+	 * to write an entire cacheline worth of entries in one shot.
+	 * If this re-map fails, just continue - the RcvArray programming
+	 * function will handle both cases.
+	 */
+	dd->chip_rcv_array_count = read_csr(dd, WFR_RCV_ARRAY_CNT);
+	dd->rcvarray_wc = ioremap_wc(addr + WFR_RCV_ARRAY,
+				     dd->chip_rcv_array_count * 8);
+	dd_dev_info(dd, "WC Remapped RcvArray: %p\n", dd->rcvarray_wc);
+	/*
 	 * Save BARs to rewrite after device reset.
 	 */
 	dd->pcibar0 = addr;
@@ -197,6 +207,8 @@ void qib_pcie_ddcleanup(struct hfi_devdata *dd)
 	dd->flags &= ~QIB_PRESENT;
 	dd->kregbase = NULL;
 	iounmap(base);
+	if (dd->rcvarray_wc)
+		iounmap(dd->rcvarray_wc);
 	if (dd->piobase)
 		iounmap(dd->piobase);
 
