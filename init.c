@@ -184,6 +184,8 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 		dd->rcd[ctxt] = rcd;
 		rcd->rcv_array_groups = dd->rcv_entries.ngroups;
 
+		spin_lock_init(&rcd->exp_lock);
+
 		if (ctxt >= dd->first_user_ctxt && (ctxt - dd->first_user_ctxt)
 		    < dd->rcv_entries.nctxt_extra)
 			rcd->rcv_array_groups += (dd->rcv_entries.nctxt_extra /
@@ -361,47 +363,6 @@ bail:
 }
 
 /*
- * init_shadow_tids - allocate the shadow TID array
- * @dd: device data
- *
- * Allocate the shadow TID array, so we can qib_munlock previous
- * entries.  Parts of the shadow array will be unused as it is
- * combined with the eager array.  For now, live with it for
- * simplicity.
- *
- * We don't want failures here to prevent use of the driver/chip,
- * so no return value.
- */
-static void init_shadow_tids(struct hfi_devdata *dd)
-{
-	struct page **pages;
-	dma_addr_t *addrs;
-
-	pages = vzalloc(dd->chip_rcv_array_count * sizeof(struct page *));
-	if (!pages) {
-		dd_dev_err(dd,
-			"failed to allocate shadow page * array, no expected sends!\n");
-		goto bail;
-	}
-
-	addrs = vzalloc(dd->chip_rcv_array_count * sizeof(dma_addr_t));
-	if (!addrs) {
-		dd_dev_err(dd,
-			"failed to allocate shadow dma handle array, no expected sends!\n");
-		goto bail_free;
-	}
-
-	dd->pageshadow = pages;
-	dd->physshadow = addrs;
-	return;
-
-bail_free:
-	vfree(pages);
-bail:
-	dd->pageshadow = NULL;
-}
-
-/*
  * Do initialization for device that is only needed on
  * first detect, not on resets.
  */
@@ -433,8 +394,6 @@ static int loadtime_init(struct hfi_devdata *dd)
 	spin_lock_init(&dd->dc8051_lock);
 	spin_lock_init(&dd->qib_diag_trans_lock);
 	mutex_init(&dd->qsfp_lock);
-
-	init_shadow_tids(dd);
 
 	/* set up worker (don't start yet) to verify interrupts are working */
 	INIT_DELAYED_WORK(&dd->interrupt_check_worker, verify_interrupt);
@@ -856,11 +815,13 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 		sc_free(rcd->sc);
 		rcd->sc = NULL;
 	}
-	kfree(rcd->tid_pg_list);
+	vfree(rcd->physshadow);
+	vfree(rcd->tid_pg_list);
 	vfree(rcd->user_event_mask);
 	vfree(rcd->subctxt_uregbase);
 	vfree(rcd->subctxt_rcvegrbuf);
 	vfree(rcd->subctxt_rcvhdr_base);
+	kfree(rcd->tidusemap);
 #ifdef CONFIG_DEBUG_FS
 	kfree(rcd->opstats);
 #endif
@@ -1225,26 +1186,6 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	}
 
 	free_credit_return(dd);
-
-	if (dd->pageshadow) {
-		struct page **tmpp = dd->pageshadow;
-		dma_addr_t *tmpd = dd->physshadow;
-		int i;
-
-		for (i = 0;  i < dd->chip_rcv_array_count; i++) {
-			if (!tmpp[i])
-				continue;
-			pci_unmap_page(dd->pcidev, tmpd[i],
-				       PAGE_SIZE, PCI_DMA_FROMDEVICE);
-			qib_release_user_pages(&tmpp[i], 1);
-			tmpp[i] = NULL;
-		}
-
-		dd->pageshadow = NULL;
-		vfree(tmpp);
-		dd->physshadow = NULL;
-		vfree(tmpd);
-	}
 
 	/*
 	 * Free any resources still in use (usually just kernel contexts)

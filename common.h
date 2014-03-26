@@ -114,6 +114,7 @@ enum hfi_ureg {
 #define HFI_RUNTIME_FORCE_PIOAVAIL      0x04
 #define HFI_RUNTIME_HDRSUPP             0x08
 #define HFI_RUNTIME_EXTENDED_PSN        0x10
+#define HFI_RUNTIME_TID_UNMAP           0x20
 
 /*
  * This structure is returned by qib_userinit() immediately after
@@ -352,17 +353,13 @@ struct hfi_ctxt_setup {
 
 struct hfi_tid_info {
 	/* virtual address of first page in transfer */
-	/* in free tids, this is casted to count */
-	__u64 tidvaddr;
-	/* pointer to __u16 tid array */
-	/* this array is bigger enough */
+	__u64 vaddr;
+	/* pointer to tid array. this array is big enough */
 	__u64 tidlist;
-	/*
-	 * pointer to __u32 length array
-	 * this array is bigger enough so driver should
-	 * write tidlength[ntids] with total programmed bytes.
-	 */
-	__u64 tidlength;
+	/* number of tids programmed by this request */
+	__u32 tidcnt;
+	/* length of transfer buffer programmed by this request */
+	__u32 length;
 	/*
 	 * pointer to bitmap of TIDs used for this call;
 	 * checked for being large enough at open

@@ -80,6 +80,9 @@ static unsigned int poll_next(struct file *, struct poll_table_struct *);
 static int user_event_ack(struct qib_ctxtdata *, int, unsigned long);
 static int manage_rcvq(struct qib_ctxtdata *, unsigned, int);
 static int vma_fault(struct vm_area_struct *, struct vm_fault *);
+static int exp_tid_setup(struct file *, struct hfi_tid_info *);
+static int exp_tid_free(struct file *, struct hfi_tid_info *);
+static void unlock_exp_tids(struct qib_ctxtdata *);
 
 static const struct file_operations qib_file_ops = {
 	.owner = THIS_MODULE,
@@ -141,6 +144,31 @@ enum mmap_types {
 	HFI_MMAP_TOKEN_SET(CTXT, ctxt) | \
 	HFI_MMAP_TOKEN_SET(SUBCTXT, subctxt) | \
 	HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & ~PAGE_MASK))
+
+#define EXP_TID_TIDLEN_MASK   0x7FFULL
+#define EXP_TID_TIDLEN_SHIFT  0
+#define EXP_TID_TIDCTRL_MASK  0x3ULL
+#define EXP_TID_TIDCTRL_SHIFT 20
+#define EXP_TID_TIDIDX_MASK   0x7FFULL
+#define EXP_TID_TIDIDX_SHIFT  22
+#define EXP_TID_GET(tid, field)				\
+	(((tid) >> EXP_TID_TID##field##_SHIFT) &	\
+	 EXP_TID_TID##field##_MASK)
+#define EXP_TID_SET(field, value)			\
+	(((value) & EXP_TID_TID##field##_MASK) <<	\
+	 EXP_TID_TID##field##_SHIFT)
+#define EXP_TID_CLEAR(tid, field) {					\
+		(tid) &= ~(EXP_TID_TID##field##_MASK <<			\
+			   EXP_TID_TID##field##_SHIFT);			\
+			}
+#define EXP_TID_RESET(tid, field, value) do {				\
+		EXP_TID_CLEAR(tid, field);				\
+		(tid) |= EXP_TID_SET(field, value);			\
+	} while (0)
+
+#define dbg(fmt, ...)				\
+	pr_info(fmt, ##__VA_ARGS__)
+
 
 static inline int is_valid_mmap(u64 token)
 {
@@ -258,9 +286,31 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 			sc_return_credits(uctxt->sc);
 		break;
 	case HFI_CMD_TID_UPDATE:
+		ret = exp_tid_setup(fp, &tinfo);
+		if (!ret) {
+			unsigned long addr;
+			/* Copy the mapped length back to user space */
+			addr = (unsigned long)ucmd->addr +
+				offsetof(struct hfi_tid_info, length);
+			dbg("write %lubytes at 0x%lx\n", sizeof(tinfo.length),
+			    addr);
+			if (copy_to_user((void __user *)addr, &tinfo.length,
+					 sizeof(tinfo.length))) {
+				ret = -EFAULT;
+				goto bail;
+			}
+			/* Now, copy the number of tidlist entries we used */
+			addr = (unsigned long)ucmd->addr +
+				offsetof(struct hfi_tid_info, tidcnt);
+			dbg("write %lubytes at 0x%lx\n", sizeof(tinfo.tidcnt),
+			    addr);
+			if (copy_to_user((void __user *)addr, &tinfo.tidcnt,
+					 sizeof(tinfo.tidcnt)))
+				ret = -EFAULT;
+		}
+		break;
 	case HFI_CMD_TID_FREE:
-		printk(KERN_WARNING " %s: TID update/free unimplemented\n",
-		       __func__);
+		ret = exp_tid_free(fp, &tinfo);
 		break;
 	case HFI_CMD_RECV_CTRL:
 		ret = manage_rcvq(uctxt, subctxt_fp(fp), (int)user_val);
@@ -404,6 +454,10 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 */
 		memaddr = (unsigned long)(dd->physaddr + dd->uregbase) +
 			(uctxt->ctxt * dd->ureg_align);
+		/*
+		 * TidFlow table is on the same page as the rest of the
+		 * user registers.
+		 */
 		memlen = PAGE_SIZE;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
@@ -462,16 +516,16 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		break;
 	}
 
-	if ((vma->vm_end - vma->vm_start) < memlen) {
+	if ((vma->vm_end - vma->vm_start) != memlen) {
 		ret = -EINVAL;
 		goto done;
 	}
 
 	vma->vm_flags = flags;
 	dd_dev_info(dd,
-		"%s: %u:%u type:%u io/vf:%d/%d, addr:0x%llx, len:%lu, flags:0x%lx\n",
+		    "%s: %u:%u type:%u io/vf:%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
 		    __func__, ctxt, subctxt, type, mapio, vmf, memaddr, memlen,
-		    vma->vm_flags);
+		    vma->vm_end - vma->vm_start, vma->vm_flags);
 	pfn = (unsigned long)(memaddr >> PAGE_SHIFT);
 	if (vmf) {
 		vma->vm_pgoff = pfn;
@@ -536,8 +590,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	if (!uctxt)
 		goto done;
 
-	printk(KERN_INFO " freeing ctxt %u:%u\n", uctxt->ctxt,
-	       fdata->subctxt);
+	dbg("freeing ctxt %u:%u\n", uctxt->ctxt, fdata->subctxt);
 	dd = uctxt->dd;
 	mutex_lock(&qib_mutex);
 
@@ -570,12 +623,15 @@ static int hfi_close(struct inode *inode, struct file *fp)
 
 	dd->rcd[uctxt->ctxt] = NULL;
 	uctxt->rcvwait_to = 0;
-        uctxt->piowait_to = 0;
-        uctxt->rcvnowait = 0;
-        uctxt->pionowait = 0;
-        uctxt->flag = 0;
+	uctxt->piowait_to = 0;
+	uctxt->rcvnowait = 0;
+	uctxt->pionowait = 0;
+	uctxt->flag = 0;
 
-        dd->f_clear_tids(uctxt);
+	dd->f_clear_tids(uctxt);
+
+	if (uctxt->tid_pg_list)
+		unlock_exp_tids(uctxt);
 
 	qib_stats.sps_ctxts--;
 	dd->freectxts++;
@@ -716,7 +772,6 @@ static int find_shared_ctxt(struct file *fp,
 			ctxt_fp(fp) = uctxt;
 			subctxt_fp(fp) = uctxt->cnt++;
 			uctxt->subpid[subctxt_fp(fp)] = current->pid;
-			tidcursor_fp(fp) = 0;
 			uctxt->active_slaves |= 1 << subctxt_fp(fp);
 			ret = 1;
 			goto done;
@@ -732,7 +787,6 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 {
 	struct qib_ctxtdata *uctxt;
 	unsigned ctxt;
-	void *ptmp = NULL;
 	int ret = 0;
 
 	for (ctxt = dd->first_user_ctxt;
@@ -743,10 +797,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	}
 
 	uctxt = qib_create_ctxtdata(dd->pport, ctxt);
-	if (uctxt)
-		ptmp = kmalloc(uctxt->expected_count * sizeof(struct page **) +
-			       uctxt->expected_count * sizeof(u16), GFP_KERNEL);
-	if (!uctxt || !ptmp) {
+	if (!uctxt) {
 		dd_dev_err(dd,
 			   "Unable to allocate ctxtdata memory, failing open\n");
 		ret = -ENOMEM;
@@ -761,7 +812,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 		ret = -ENOMEM;
 		goto done;
 	}
-	printk(KERN_INFO " allocated send context %d\n", uctxt->sc->context);
+	dbg("allocated send context %d\n", uctxt->sc->context);
 	ret = sc_enable(uctxt->sc);
 	if (ret)
 		goto done;
@@ -781,7 +832,6 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 			goto done;
 	}
 	uctxt->userversion = uinfo->userversion;
-	uctxt->tid_pg_list = ptmp;
 	uctxt->pid = current->pid;
 	init_waitqueue_head(&uctxt->wait);
 	strlcpy(uctxt->comm, current->comm, sizeof(uctxt->comm));
@@ -871,8 +921,6 @@ static int user_init(struct file *fp)
 		goto done;
 	}
 
-	tidcursor_fp(fp) = 0; /* start at beginning after open */
-
 	/* initialize poll variables... */
 	uctxt->urgent = 0;
 	uctxt->urgent_poll = 0;
@@ -933,9 +981,10 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 {
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi_devdata *dd = uctxt->dd;
 	int ret = 0;
 
-	trace_hfi_ctxt_setup(uctxt->dd, uctxt->ctxt, subctxt_fp(fp),
+	trace_hfi_ctxt_setup(dd, uctxt->ctxt, subctxt_fp(fp),
 			     cinfo);
 
 	/*
@@ -963,12 +1012,41 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 			goto done;
 
 		/* Now allocate the RcvHdr queue and eager buffers. */
-		if ((ret = qib_create_rcvhdrq(uctxt->dd, uctxt)))
+		ret = qib_create_rcvhdrq(dd, uctxt);
+		if (ret)
 			goto done;
 		if ((ret = qib_setup_eagerbufs(uctxt)))
 			goto done;
-		if (uctxt->subctxt_cnt && !subctxt_fp(fp))
+		if (uctxt->subctxt_cnt && !subctxt_fp(fp)) {
 			ret = setup_subctxt(uctxt);
+			if (ret)
+				goto done;
+		}
+		/* Setup Expected Rcv memories */
+		uctxt->tid_pg_list = vzalloc(uctxt->expected_count *
+					     sizeof(struct page **));
+		if (!uctxt->tid_pg_list) {
+			ret = -ENOMEM;
+			goto done;
+		}
+		uctxt->physshadow = vzalloc(uctxt->expected_count *
+					    sizeof(*uctxt->physshadow));
+		if (!uctxt->physshadow) {
+			ret = -ENOMEM;
+			goto done;
+		}
+		/* allocate expected TID map and initialize the cursor */
+		uctxt->tidcursor = 0;
+		uctxt->numtidgroups = uctxt->expected_count /
+			dd->rcv_entries.group_size;
+		uctxt->tidmapcnt = uctxt->numtidgroups / BITS_PER_LONG +
+			!!(uctxt->numtidgroups % BITS_PER_LONG);
+		/* XXX MITKO: Use proper NUMA node id */
+		uctxt->tidusemap = kzalloc_node(uctxt->tidmapcnt *
+						sizeof(*uctxt->tidusemap),
+						GFP_KERNEL, 0);
+		if (!uctxt->tidusemap)
+			ret = -ENOMEM;
 	}
 	if (ret)
 		goto done;
@@ -993,6 +1071,9 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	ret = dd->f_get_base_info(uctxt, &binfo);
 	if (ret < 0)
 		goto done;
+	/* XXX MITKO: When expTID caching is implemented, properly,
+	 * handle this flag. */
+	binfo.runtime_flags |= HFI_RUNTIME_TID_UNMAP;
 	binfo.hw_version = dd->revision;
 	binfo.sw_version = QIB_KERN_SWVERSION;
 	binfo.bthqp = kdeth_qp;
@@ -1196,6 +1277,263 @@ static int user_event_ack(struct qib_ctxtdata *uctxt, int subctxt,
 		clear_bit(i, &uctxt->user_event_mask[subctxt]);
 	}
 	return ret;
+}
+
+#define num_user_pages(vaddr, len)					\
+	(1 + (((((unsigned long)(vaddr) +				\
+		 (unsigned long)(len) - 1) & PAGE_MASK) -		\
+	       ((unsigned long)vaddr & PAGE_MASK)) >> PAGE_SHIFT))
+
+/**
+ * tzcnt - count the number of trailing zeros in a 64bit value
+ * @value: the value to be examined
+ *
+ * Returns the number of trailing least significant zeros in the
+ * the input value. If the value is zero, return the number of
+ * bits of the value.
+ */
+static inline u8 tzcnt(u64 value)
+{
+	return value ? __builtin_ctzl(value) : sizeof(value) * 8;
+}
+
+static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
+{
+	int ret = 0;
+	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi_devdata *dd = uctxt->dd;
+	unsigned tid, npages, ngroups, tidpairs = uctxt->expected_count / 2;
+	unsigned long vaddr;
+	struct page **pages;
+	unsigned long tidmap[uctxt->tidmapcnt], map, flags;
+	dma_addr_t *phys;
+	u32 pmapped = 0, tidlist[tidpairs], pairidx = 0;
+	u16 useidx, idx, grp, bitidx, tidcnt = 0;
+
+	pages = uctxt->tid_pg_list +
+		(uctxt->tidcursor * dd->rcv_entries.group_size);
+	phys = uctxt->physshadow +
+		(uctxt->tidcursor * dd->rcv_entries.group_size);
+	tid = uctxt->expected_base +
+		(uctxt->tidcursor * dd->rcv_entries.group_size);
+	vaddr = tinfo->vaddr;
+
+	npages = num_user_pages(vaddr, tinfo->length);
+	if (!npages) {
+		ret = -EINVAL;
+		goto done;
+	}
+	if (!access_ok(VERIFY_WRITE, (void __user *)vaddr,
+		       npages * PAGE_SIZE)) {
+		dd_dev_err(dd, "Fail vaddr %p, %u pages, !access_ok\n",
+			   (void *)vaddr, npages);
+		ret = -EFAULT;
+		goto done;
+	}
+	memset(tidmap, 0, sizeof(tidmap));
+	memset(tidlist, 0, sizeof(tidlist));
+	ret = qib_get_user_pages(vaddr, npages, pages);
+	if (ret) {
+		/*
+		 * if (ret == -EBUSY)
+		 * We can't continue because the pages array won't be
+		 * initialized. This should never happen,
+		 * unless perhaps the user has mpin'ed the pages
+		 * themselves.
+		 */
+		dd_dev_info(dd,
+			    "Failed to lock addr %p, %u pages: errno %d\n",
+			    (void *) vaddr, npages, -ret);
+		goto done;
+	}
+	/* how many groups does this request need? */
+	ngroups = (npages / dd->rcv_entries.group_size) +
+		!!(npages % dd->rcv_entries.group_size);
+	/*
+	 * From this point on, we need exclusive access to the context's
+	 * Expected TID/RcvArray data. Since this is a per-context lock
+	 * a maximum of QLOGIC_IB_MAX_SUBCTXT processes will be contending
+	 * to access it at any given time.
+	 */
+	spin_lock_irqsave(&uctxt->exp_lock, flags);
+	/* which group set do we look at first? */
+	useidx = uctxt->tidcursor / BITS_PER_LONG;
+	bitidx = uctxt->tidcursor % BITS_PER_LONG;
+	dbg("bitidx: %u\n", bitidx);
+	for (grp = 0, idx = 0; grp < ngroups && idx < uctxt->tidmapcnt; ) {
+		u64 i;
+		u8 free;
+		if (uctxt->tidusemap[useidx] == -1ULL ||
+		    bitidx == BITS_PER_LONG) {
+			/* no free groups in the set, use the next */
+			useidx = (useidx + 1) % uctxt->tidmapcnt;
+			idx++;
+			bitidx = 0;
+			continue;
+		}
+		/*
+		 * If we've gotten here, the current set of groups does have
+		 * one or more free groups.
+		 */
+		map = uctxt->tidusemap[useidx];
+		/* "turn off" any bits set before our bit index */
+		map &= ~((1 << bitidx) - 1);
+		free = tzcnt(map) - bitidx;
+		while (!free) {
+			/* zero out the last set bit so we look at the rest */
+			map &= ~(1ULL << (bitidx-1));
+			/*
+			 * account for the previously checked bits and advance
+			 * the bit index
+			 */
+			free = tzcnt(map) - bitidx++;
+		}
+		for (i = 0; i < free && grp < ngroups; i++, grp++) {
+			unsigned grpidx = bitidx + i, j;
+			u32 pair_size = 0, tidsize;
+			/*
+			 * This inner loop will program the entire group or the
+			 * array of pages (which ever limit is hit first).
+			 */
+			for (j = 0; j < dd->rcv_entries.group_size &&
+				     pmapped < npages; j++, pmapped++, tid++) {
+				tidsize = PAGE_SIZE;
+				/* XXX MITKO: This code needs to properly handle
+				 * 8K MTU with respect to RcvTIDPairs */
+				phys[pmapped] = qib_map_page(dd->pcidev,
+						   pages[pmapped], 0,
+						   tidsize, PCI_DMA_FROMDEVICE);
+				dd_dev_info(dd,
+				       "TID %u, vaddrs %lx, physaddr %llx, pgp %p\n",
+				       tid, vaddr,
+				       (unsigned long long)phys[pmapped],
+				       pages[pmapped]);
+				/* XXX MITKO: better determine the order of the
+				 * TID */
+				dd->f_put_tid(dd, tid, PT_EXPECTED,
+					      phys[pmapped],
+					      tidsize >> PAGE_SHIFT);
+				pair_size += tidsize >> PAGE_SHIFT;
+				EXP_TID_RESET(tidlist[pairidx], LEN, pair_size);
+				if (!(tid % 2)) {
+					tidlist[pairidx] |=
+					   EXP_TID_SET(IDX,
+						(tid - uctxt->expected_base)
+						       / 2);
+					tidlist[pairidx] |=
+						EXP_TID_SET(CTRL, 1);
+					tidcnt++;
+				} else {
+					tidlist[pairidx] |=
+						EXP_TID_SET(CTRL, 2);
+					pair_size = 0;
+					pairidx++;
+				}
+			}
+			set_bit(grpidx, &tidmap[useidx]);
+		}
+		uctxt->tidcursor = (uctxt->tidcursor + i) % uctxt->numtidgroups;
+		uctxt->tidusemap[useidx] |= tidmap[useidx];
+
+	}
+	spin_unlock_irqrestore(&uctxt->exp_lock, flags);
+	/*
+	 * Calculate mapped length. New Exp TID protocol does not "unwind" and
+	 * report an error if it can't map the entire buffer. It just reports
+	 * the length that was mapped.
+	 */
+	tinfo->length = pmapped * PAGE_SIZE;
+	tinfo->tidcnt = tidcnt;
+	dbg("writing %lubytes to 0x%lx\n", sizeof(tidlist[0]) * tidcnt,
+	    (unsigned long)tinfo->tidlist);
+	if (copy_to_user((void __user *)(unsigned long)tinfo->tidlist,
+			 tidlist, sizeof(tidlist[0]) * tidcnt)) {
+		ret = -EFAULT;
+		goto done;
+	}
+	/* copy TID info to user */
+	dbg("writing %lubytes to 0x%lx\n", sizeof(tidmap),
+	    (unsigned long)tinfo->tidmap);
+	if (copy_to_user((void __user *)(unsigned long)tinfo->tidmap,
+			 tidmap, sizeof(tidmap)))
+		ret = -EFAULT;
+done:
+	return ret;
+}
+
+static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
+{
+	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi_devdata *dd = uctxt->dd;
+	unsigned long tidmap[uctxt->tidmapcnt];
+	struct page **pages;
+	dma_addr_t *phys;
+	u16 idx, bitidx, tid;
+	int ret = 0;
+
+	if (copy_from_user(&tidmap, (void __user *)(unsigned long)
+			   tinfo->tidmap, sizeof(tidmap))) {
+		ret = -EFAULT;
+		goto done;
+	}
+	for (idx = 0; idx < uctxt->tidmapcnt; idx++) {
+		unsigned long map;
+		bitidx = 0;
+		if (!tidmap[idx])
+			continue;
+		map = tidmap[idx];
+		while ((bitidx = tzcnt(map)) < BITS_PER_LONG) {
+			int i;
+			unsigned offset = ((idx * BITS_PER_LONG) + bitidx);
+			pages = uctxt->tid_pg_list +
+				(offset * dd->rcv_entries.group_size);
+			phys = uctxt->physshadow +
+				(offset * dd->rcv_entries.group_size);
+			tid = uctxt->expected_base +
+				(offset * dd->rcv_entries.group_size);
+			for (i = 0; i < dd->rcv_entries.group_size;
+			     i++, tid++) {
+				if (pages[i]) {
+					dd->f_put_tid(dd, tid, PT_INVALID,
+						      0, 0);
+					dd_dev_info(dd,
+					   "freeing TID %u, 0x%llx, pgp %p\n",
+					   tid, phys[i], pages[i]);
+					pci_unmap_page(dd->pcidev, phys[i],
+					      PAGE_SIZE, PCI_DMA_FROMDEVICE);
+					qib_release_user_pages(&pages[i], 1);
+					pages[i] = NULL;
+					phys[i] = 0;
+				}
+			}
+			clear_bit(bitidx, &uctxt->tidusemap[idx]);
+			map &= ~(1ULL<<bitidx);
+		};
+	}
+done:
+	return ret;
+}
+
+static void unlock_exp_tids(struct qib_ctxtdata *uctxt)
+{
+	struct hfi_devdata *dd = uctxt->dd;
+	unsigned tid;
+
+	dd_dev_info(dd, "ctxt %u unlocking any locked expTID pages\n",
+		    uctxt->ctxt);
+	for (tid = 0; tid < uctxt->expected_count; tid++) {
+		struct page *p = uctxt->tid_pg_list[tid];
+		dma_addr_t phys;
+
+		if (!p)
+			continue;
+
+		phys = uctxt->physshadow[tid];
+		uctxt->physshadow[tid] = 0;
+		uctxt->tid_pg_list[tid] = NULL;
+		pci_unmap_page(dd->pcidev, phys, PAGE_SIZE, PCI_DMA_FROMDEVICE);
+		qib_release_user_pages(&p, 1);
+	}
 }
 
 static int ui_open(struct inode *inode, struct file *filp)

@@ -120,11 +120,6 @@ struct qib_ctxtdata {
 	/* kernel virtual address where hdrqtail is updated */
 	void *rcvhdrtail_kvaddr;
 	/*
-	 * temp buffer for expected send setup, allocated at open, instead
-	 * of each setup call
-	 */
-	void *tid_pg_list;
-	/*
 	 * Shared page for kernel to signal user processes that send buffers
 	 * need disarming.  The process should call QIB_CMD_DISARM_BUFS
 	 * or QIB_CMD_ACK_EVENT with IPATH_EVENT_DISARM_BUFS set.
@@ -168,6 +163,20 @@ struct qib_ctxtdata {
 	u32 expected_count;
 	/* index of first expected TID entry. */
 	u32 expected_base;
+	/* cursor into the exp group sets */
+	u16 tidcursor;
+	/* number of exp TID groups assigned to the ctxt */
+	u16 numtidgroups;
+	/* size of exp TID group fields in tidusemap */
+	u16 tidmapcnt;
+	/* exp TID group usage bitfield array */
+	unsigned long *tidusemap;
+	/* pinned pages for exp sends, allocated at open */
+	struct page **tid_pg_list;
+	/* dma handles for exp tid pages */
+	dma_addr_t *physshadow;
+	/* lock protecting all Expected TID data */
+	spinlock_t exp_lock;
 	/* number of pio bufs for this ctxt (all procs, if shared) */
 	u32 piocnt;
 	/* first pio buffer for this ctxt */
@@ -813,10 +822,6 @@ struct hfi_devdata {
 	unsigned long wc_base;
 	unsigned long wc_len;
 
-	/* shadow copy of struct page *'s for exp tid pages */
-	struct page **pageshadow;
-	/* shadow copy of dma handles for exp tid pages */
-	dma_addr_t *physshadow;
 	u64 __iomem *egrtidbase;
 	spinlock_t sendctrl_lock; /* protect changes to sendctrl shadow */
 	/* around rcd and (user ctxts) ctxt_cnt use (intr vs free) */
@@ -978,7 +983,6 @@ struct hfi_devdata {
 struct hfi_filedata {
 	struct qib_ctxtdata *uctxt;
 	unsigned subctxt;
-	unsigned tidcursor;
 	struct qib_user_sdma_queue *pq;
 	int rec_cpu_num; // for cpu affinity; -1 if none
 };
