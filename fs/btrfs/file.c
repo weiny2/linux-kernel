@@ -798,7 +798,10 @@ next_slot:
 		 */
 		if (start > key.offset && end < extent_end) {
 			BUG_ON(del_nr > 0);
-			BUG_ON(extent_type == BTRFS_FILE_EXTENT_INLINE);
+			if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
+				ret = -EOPNOTSUPP;
+				break;
+			}
 
 			memcpy(&new_key, &key, sizeof(new_key));
 			new_key.offset = start;
@@ -841,7 +844,10 @@ next_slot:
 		 *      | -------- extent -------- |
 		 */
 		if (start <= key.offset && end < extent_end) {
-			BUG_ON(extent_type == BTRFS_FILE_EXTENT_INLINE);
+			if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
+				ret = -EOPNOTSUPP;
+				break;
+			}
 
 			memcpy(&new_key, &key, sizeof(new_key));
 			new_key.offset = end;
@@ -864,7 +870,10 @@ next_slot:
 		 */
 		if (start > key.offset && end >= extent_end) {
 			BUG_ON(del_nr > 0);
-			BUG_ON(extent_type == BTRFS_FILE_EXTENT_INLINE);
+			if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
+				ret = -EOPNOTSUPP;
+				break;
+			}
 
 			btrfs_set_file_extent_num_bytes(leaf, fi,
 							start - key.offset);
