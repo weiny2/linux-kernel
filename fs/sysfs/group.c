@@ -71,8 +71,11 @@ static int create_files(struct sysfs_dirent *dir_sd, struct kobject *kobj,
 	if (grp->bin_attrs) {
 		for (bin_attr = grp->bin_attrs; *bin_attr; bin_attr++) {
 			if (update)
-				sysfs_remove_bin_file(kobj, *bin_attr);
-			error = sysfs_create_bin_file(kobj, *bin_attr);
+				sysfs_hash_and_remove(dir_sd, NULL,
+						(*bin_attr)->attr.name);
+			error = sysfs_add_file_mode(dir_sd, &(*bin_attr)->attr,
+					SYSFS_KOBJ_BIN_ATTR,
+					(*bin_attr)->attr.mode);
 			if (error)
 				break;
 		}
