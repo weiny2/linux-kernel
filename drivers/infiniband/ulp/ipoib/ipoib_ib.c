@@ -817,6 +817,8 @@ int ipoib_ib_dev_stop(struct net_device *dev, int flush)
 {
 	struct ipoib_dev_priv *priv = netdev_priv(dev);
 	struct ib_qp_attr qp_attr;
+	struct ib_qp_init_attr query_init_attr;
+	int ret;
 	unsigned long begin;
 	struct ipoib_tx_buf *tx_req;
 	int i;
@@ -830,9 +832,17 @@ int ipoib_ib_dev_stop(struct net_device *dev, int flush)
 	 * Move our QP to the error state and then reinitialize in
 	 * when all work requests have completed or have been flushed.
 	 */
-	qp_attr.qp_state = IB_QPS_ERR;
-	if (ib_modify_qp(priv->qp, &qp_attr, IB_QP_STATE))
-		ipoib_warn(priv, "Failed to modify QP to ERROR state\n");
+	ret = ib_query_qp(priv->qp, &qp_attr, IB_QP_STATE, &query_init_attr);
+
+	/* Cannot move to Error state if we still in RESET state.*/
+	if (!ret && qp_attr.qp_state != IB_QPS_RESET) {
+		qp_attr.qp_state = IB_QPS_ERR;
+		if (ib_modify_qp(priv->qp, &qp_attr, IB_QP_STATE))
+			ipoib_warn(priv, "Failed to modify QP to ERROR state\n");
+	} else
+		ipoib_dbg(priv, "ib_query_qp returned: %d,"
+				"qp state is %d, no need to move to ERROR.\n",
+			  ret, qp_attr.qp_state);
 
 	/* Wait for all sends and receives to complete */
 	begin = jiffies;
