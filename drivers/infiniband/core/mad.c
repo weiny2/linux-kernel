@@ -750,14 +750,14 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 		     stl_smi_handle_dr_smp_send(stl_smp, device->node_type,
 						port_num) == IB_SMI_DISCARD) {
 			ret = -EINVAL;
-			printk(KERN_ERR PFX "STL Invalid directed route\n");
+			pr_err("STL Invalid directed route\n");
 			goto out;
 		}
 		stl_drslid = be32_to_cpu(stl_smp->route.dr.dr_slid);
 		if (stl_drslid != STL_LID_PERMISSIVE &&
 		    stl_drslid & 0xffff0000) {
 			ret = -EINVAL;
-			printk(KERN_ERR PFX "STL Invalid dr_slid 0x%x\n",
+			pr_err("STL Invalid dr_slid 0x%x\n",
 			       stl_drslid);
 			goto out;
 		}
@@ -3096,7 +3096,7 @@ static int ib_mad_port_open(struct ib_device *device,
 
 	port_priv->supports_jumbo_mads = mad_device_supports_jumbo_mads(device);
 	if (port_priv->supports_jumbo_mads)
-		printk(KERN_INFO PFX "Jumbo MAD support enabled for %s:%d\n",
+		pr_info("Jumbo MAD support enabled for %s:%d\n",
 				device->name, port_num);
 
 	if (has_smi) {
@@ -3303,7 +3303,7 @@ static int __init ib_mad_init_module(void)
 					 SLAB_HWCACHE_ALIGN,
 					 NULL);
 	if (!jumbo_mad_cache) {
-		printk(KERN_ERR PFX "Couldn't create ib_mad cache\n");
+		pr_err("Couldn't create ib_mad cache\n");
 		ret = -ENOMEM;
 		goto error2;
 	}
