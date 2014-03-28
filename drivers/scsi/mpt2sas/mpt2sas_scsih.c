@@ -127,6 +127,11 @@ static int disable_discovery = -1;
 module_param(disable_discovery, int, 0);
 MODULE_PARM_DESC(disable_discovery, " disable discovery ");
 
+/* Enable or disable EEDP support */
+static int disable_eedp;
+module_param(disable_eedp, uint, 0);
+MODULE_PARM_DESC(disable_eedp, " disable EEDP support: (default=0)");
+
 /* permit overriding the host protection capabilities mask (EEDP/T10 PI) */
 static int prot_mask = 0;
 module_param(prot_mask, int, 0);
@@ -4031,7 +4036,8 @@ _scsih_qcmd_lck(struct scsi_cmnd *scmd, void (*done)(struct scsi_cmnd *))
 	}
 	mpi_request = mpt2sas_base_get_msg_frame(ioc, smid);
 	memset(mpi_request, 0, sizeof(Mpi2SCSIIORequest_t));
-	_scsih_setup_eedp(scmd, mpi_request);
+	if (!ioc->disable_eedp_support)
+		_scsih_setup_eedp(scmd, mpi_request);
 	if (scmd->cmd_len == 32)
 		mpi_control |= 4 << MPI2_SCSIIO_CONTROL_ADDCDBLEN_SHIFT;
 	mpi_request->Function = MPI2_FUNCTION_SCSI_IO_REQUEST;
@@ -4196,14 +4202,20 @@ _scsih_scsi_ioc_info(struct MPT2SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
 		desc_ioc_state = "scsi ext terminated";
 		break;
 	case MPI2_IOCSTATUS_EEDP_GUARD_ERROR:
-		desc_ioc_state = "eedp guard error";
-		break;
+		if (!ioc->disable_eedp_support) {
+			desc_ioc_state = "eedp guard error";
+			break;
+		}
 	case MPI2_IOCSTATUS_EEDP_REF_TAG_ERROR:
-		desc_ioc_state = "eedp ref tag error";
-		break;
+		if (!ioc->disable_eedp_support) {
+			desc_ioc_state = "eedp ref tag error";
+			break;
+		}
 	case MPI2_IOCSTATUS_EEDP_APP_TAG_ERROR:
-		desc_ioc_state = "eedp app tag error";
-		break;
+		if (!ioc->disable_eedp_support) {
+			desc_ioc_state = "eedp app tag error";
+			break;
+		}
 	default:
 		desc_ioc_state = "unknown";
 		break;
@@ -4625,8 +4637,10 @@ _scsih_io_done(struct MPT2SAS_ADAPTER *ioc, u16 smid, u8 msix_index, u32 reply)
 	case MPI2_IOCSTATUS_EEDP_GUARD_ERROR:
 	case MPI2_IOCSTATUS_EEDP_REF_TAG_ERROR:
 	case MPI2_IOCSTATUS_EEDP_APP_TAG_ERROR:
-		_scsih_eedp_error_handling(scmd, ioc_status);
-		break;
+		if (!ioc->disable_eedp_support) {
+			_scsih_eedp_error_handling(scmd, ioc_status);
+			break;
+		}
 	case MPI2_IOCSTATUS_SCSI_PROTOCOL_ERROR:
 	case MPI2_IOCSTATUS_INVALID_FUNCTION:
 	case MPI2_IOCSTATUS_INVALID_SGL:
@@ -8213,15 +8227,18 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_add_shost_fail;
 	}
 
-	/* register EEDP capabilities with SCSI layer */
-	if (prot_mask)
-		scsi_host_set_prot(shost, prot_mask);
-	else
-		scsi_host_set_prot(shost, SHOST_DIF_TYPE1_PROTECTION
+	ioc->disable_eedp_support = disable_eedp;
+	if (!ioc->disable_eedp_support) {
+		/* register EEDP capabilities with SCSI layer */
+		if (prot_mask)
+			scsi_host_set_prot(shost, prot_mask);
+		else
+			scsi_host_set_prot(shost, SHOST_DIF_TYPE1_PROTECTION
 				   | SHOST_DIF_TYPE2_PROTECTION
 				   | SHOST_DIF_TYPE3_PROTECTION);
 
-	scsi_host_set_guard(shost, SHOST_DIX_GUARD_CRC);
+		scsi_host_set_guard(shost, SHOST_DIX_GUARD_CRC);
+	}
 
 	/* event thread */
 	snprintf(ioc->firmware_event_name, sizeof(ioc->firmware_event_name),
