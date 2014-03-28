@@ -266,10 +266,6 @@ static void be_async_grp5_evt_process(struct be_adapter *adapter,
 		be_async_grp5_pvid_state_process(adapter,
 		(struct be_async_event_grp5_pvid_state *)evt);
 	break;
-	default:
-		dev_warn(&adapter->pdev->dev, "Unknown grp5 event 0x%x!\n",
-			 event_type);
-		break;
 	}
 }
 
