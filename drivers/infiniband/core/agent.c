@@ -174,7 +174,7 @@ void agent_send_jumbo_response(struct jumbo_mad *mad, struct ib_grh *grh,
 				      JUMBO_MGMT_MAD_HDR, data_len,
 				      GFP_KERNEL);
 	if (IS_ERR(send_buf)) {
-		printk(KERN_ERR SPFX "ib_create_send_mad error\n");
+		pr_err("ib_create_send_mad error\n");
 		goto err1;
 	}
 
@@ -192,7 +192,7 @@ void agent_send_jumbo_response(struct jumbo_mad *mad, struct ib_grh *grh,
 */
 
 	if (ib_post_send_mad(send_buf, NULL)) {
-		printk(KERN_ERR SPFX "ib_post_send_mad error\n");
+		pr_err("ib_post_send_mad error\n");
 		goto err2;
 	}
 	return;
