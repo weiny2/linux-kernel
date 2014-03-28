@@ -791,6 +791,7 @@ struct MPT3SAS_ADAPTER {
 	u32		event_context;
 	void		*event_log;
 	u32		event_masks[MPI2_EVENT_NOTIFY_EVENTMASK_WORDS];
+	u8              disable_eedp_support;
 
 	/* static config pages */
 	struct mpt3sas_facts facts;

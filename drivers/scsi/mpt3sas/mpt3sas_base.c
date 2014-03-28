@@ -429,13 +429,16 @@ _base_sas_ioc_info(struct MPT3SAS_ADAPTER *ioc, MPI2DefaultReply_t *mpi_reply,
 ****************************************************************************/
 
 	case MPI2_IOCSTATUS_EEDP_GUARD_ERROR:
-		desc = "eedp guard error";
+		if (!ioc->disable_eedp_support)
+			desc = "eedp guard error";
 		break;
 	case MPI2_IOCSTATUS_EEDP_REF_TAG_ERROR:
-		desc = "eedp ref tag error";
+		if (!ioc->disable_eedp_support)
+			desc = "eedp ref tag error";
 		break;
 	case MPI2_IOCSTATUS_EEDP_APP_TAG_ERROR:
-		desc = "eedp app tag error";
+		if (!ioc->disable_eedp_support)
+			desc = "eedp app tag error";
 		break;
 
 /****************************************************************************
@@ -2429,21 +2432,22 @@ _base_static_config_pages(struct MPT3SAS_ADAPTER *ioc)
 	if (ioc->ir_firmware)
 		mpt3sas_config_get_manufacturing_pg10(ioc, &mpi_reply,
 		    &ioc->manu_pg10);
-
-	/*
-	 * Ensure correct T10 PI operation if vendor left EEDPTagMode
-	 * flag unset in NVDATA.
-	 */
-	mpt3sas_config_get_manufacturing_pg11(ioc, &mpi_reply, &ioc->manu_pg11);
-	if (ioc->manu_pg11.EEDPTagMode == 0) {
-		pr_err("%s: overriding NVDATA EEDPTagMode setting\n",
-		    ioc->name);
-		ioc->manu_pg11.EEDPTagMode &= ~0x3;
-		ioc->manu_pg11.EEDPTagMode |= 0x1;
-		mpt3sas_config_set_manufacturing_pg11(ioc, &mpi_reply,
-		    &ioc->manu_pg11);
+	if (!ioc->disable_eedp_support) {
+		/*
+		 * Ensure correct T10 PI operation if vendor left EEDPTagMode
+		 * flag unset in NVDATA.
+		 */
+		mpt3sas_config_get_manufacturing_pg11(ioc, &mpi_reply,
+							&ioc->manu_pg11);
+		if (ioc->manu_pg11.EEDPTagMode == 0) {
+			pr_err("%s: overriding NVDATA EEDPTagMode setting\n",
+			ioc->name);
+			ioc->manu_pg11.EEDPTagMode &= ~0x3;
+			ioc->manu_pg11.EEDPTagMode |= 0x1;
+			mpt3sas_config_set_manufacturing_pg11(ioc, &mpi_reply,
+			    &ioc->manu_pg11);
+		}
 	}
-
 	mpt3sas_config_get_bios_pg2(ioc, &mpi_reply, &ioc->bios_pg2);
 	mpt3sas_config_get_bios_pg3(ioc, &mpi_reply, &ioc->bios_pg3);
 	mpt3sas_config_get_ioc_pg8(ioc, &mpi_reply, &ioc->ioc_pg8);
