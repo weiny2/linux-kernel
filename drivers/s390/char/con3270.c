@@ -208,6 +208,8 @@ con3270_update(struct con3270 *cp)
 	struct string *s, *n;
 	int rc;
 
+	if (!auto_update && !raw3270_view_active(&cp->view))
+		return;
 	if (cp->view.dev)
 		raw3270_activate_view(&cp->view);
 
@@ -383,9 +385,6 @@ con3270_activate(struct raw3270_view *view)
 {
 	struct con3270 *cp;
 
-	if (!auto_update)
-		return 0;
-
 	cp = (struct con3270 *) view;
 	cp->update_flags = CON_UPDATE_ALL;
 	con3270_set_timer(cp, 1);
@@ -536,6 +535,7 @@ con3270_flush(void)
 	if (!cp->view.dev)
 		return;
 	raw3270_pm_unfreeze(&cp->view);
+	raw3270_activate_view(&cp->view);
 	spin_lock_irqsave(&cp->view.lock, flags);
 	con3270_wait_write(cp);
 	cp->nr_up = 0;
