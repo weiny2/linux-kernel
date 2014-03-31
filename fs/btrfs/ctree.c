@@ -1538,10 +1538,6 @@ static inline int should_cow_block(struct btrfs_trans_handle *trans,
 				   struct btrfs_root *root,
 				   struct extent_buffer *buf)
 {
-#ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
-	if (unlikely(root->dummy_root))
-		return 0;
-#endif
 	/* ensure we can see the force_cow */
 	smp_rmb();
 

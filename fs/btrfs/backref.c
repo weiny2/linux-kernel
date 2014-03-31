@@ -852,8 +852,7 @@ static int __add_keyed_refs(struct btrfs_fs_info *fs_info,
 static int find_parent_nodes(struct btrfs_trans_handle *trans,
 			     struct btrfs_fs_info *fs_info, u64 bytenr,
 			     u64 time_seq, struct ulist *refs,
-			     struct ulist *roots, const u64 *extent_item_pos,
-			     int search_commit_root)
+			     struct ulist *roots, const u64 *extent_item_pos)
 {
 	struct btrfs_key key;
 	struct btrfs_path *path;
@@ -880,7 +879,7 @@ static int find_parent_nodes(struct btrfs_trans_handle *trans,
 	path = btrfs_alloc_path();
 	if (!path)
 		return -ENOMEM;
-	if (search_commit_root)
+	if (!trans)
 		path->search_commit_root = 1;
 
 	/*
@@ -1082,8 +1081,7 @@ static int btrfs_find_all_leafs(struct btrfs_trans_handle *trans,
 	}
 
 	ret = find_parent_nodes(trans, fs_info, bytenr,
-				time_seq, *leafs, tmp, extent_item_pos,
-				(trans == NULL));
+				time_seq, *leafs, tmp, extent_item_pos);
 	ulist_free(tmp);
 
 	if (ret < 0 && ret != -ENOENT) {
@@ -1108,9 +1106,8 @@ static int btrfs_find_all_leafs(struct btrfs_trans_handle *trans,
  * returns 0 on success, < 0 on error.
  */
 int btrfs_find_all_roots(struct btrfs_trans_handle *trans,
-			 struct btrfs_fs_info *fs_info, u64 bytenr,
-			 u64 time_seq, struct ulist **roots,
-			 int search_commit_root)
+				struct btrfs_fs_info *fs_info, u64 bytenr,
+				u64 time_seq, struct ulist **roots)
 {
 	struct ulist *tmp;
 	struct ulist_node *node = NULL;
@@ -1129,8 +1126,7 @@ int btrfs_find_all_roots(struct btrfs_trans_handle *trans,
 	ULIST_ITER_INIT(&uiter);
 	while (1) {
 		ret = find_parent_nodes(trans, fs_info, bytenr,
-					time_seq, tmp, *roots, NULL,
-					search_commit_root);
+					time_seq, tmp, *roots, NULL);
 		if (ret < 0 && ret != -ENOENT) {
 			ulist_free(tmp);
 			ulist_free(*roots);
@@ -1562,8 +1558,7 @@ int iterate_extent_inodes(struct btrfs_fs_info *fs_info,
 	ULIST_ITER_INIT(&ref_uiter);
 	while (!ret && (ref_node = ulist_next(refs, &ref_uiter))) {
 		ret = btrfs_find_all_roots(trans, fs_info, ref_node->val,
-					   tree_mod_seq_elem.seq, &roots,
-					   search_commit_root);
+					   tree_mod_seq_elem.seq, &roots);
 		if (ret)
 			break;
 		ULIST_ITER_INIT(&root_uiter);
