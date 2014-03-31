@@ -1711,6 +1711,47 @@ static int subn_set_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 	return subn_get_sl_to_vl(smp, ibdev, port);
 }
 
+#ifdef CONFIG_STL_MGMT
+static int subn_get_stl_vl_arb(struct stl_smp *smp, struct ib_device *ibdev,
+			       u8 port)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(to_iport(ibdev, port));
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *p = stl_get_smp_data(smp);
+
+	if (port_num == 0)
+		port_num = port;
+
+	if (num_ports != 1 || port_num != port) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+	switch (section) {
+	case STL_VLARB_LOW_ELEMENTS:
+		(void) fm_get_table(ppd, FM_TBL_VL_LOW_ARB, p);
+		break;
+	case STL_VLARB_HIGH_ELEMENTS:
+		(void) fm_get_table(ppd, FM_TBL_VL_HIGH_ARB, p);
+		break;
+	case STL_VLARB_PREEMPT_ELEMENTS:
+		/* XXX FIXME */
+		break;
+	case STL_VLARB_PREEMPT_MATRIX:
+		/* XXX FIXME */
+		break;
+	default:
+		pr_warn("STL SubnGet(VL Arb) AM Invalid : 0x%x\n",
+			be32_to_cpu(smp->attr_mod));
+		smp->status |= IB_SMP_INVALID_FIELD;
+		break;
+	}
+
+	return reply(smp);
+}
+#endif /* CONFIG_STL_MGMT */
+
 static int subn_get_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 			   u8 port)
 {
@@ -1730,6 +1771,49 @@ static int subn_get_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 
 	return reply(smp);
 }
+
+#ifdef CONFIG_STL_MGMT
+static int subn_set_stl_vl_arb(struct stl_smp *smp, struct ib_device *ibdev,
+			       u8 port)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(to_iport(ibdev, port));
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *p = stl_get_smp_data(smp);
+
+	if (port_num == 0)
+		port_num = port;
+
+	if (num_ports != 1 || port_num != port) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	switch (section) {
+	case STL_VLARB_LOW_ELEMENTS:
+		(void) fm_set_table(ppd, FM_TBL_VL_LOW_ARB, p);
+		break;
+	case STL_VLARB_HIGH_ELEMENTS:
+		(void) fm_set_table(ppd, FM_TBL_VL_HIGH_ARB, p);
+		break;
+	case STL_VLARB_PREEMPT_ELEMENTS:
+		/* XXX FIXME */
+		break;
+	case STL_VLARB_PREEMPT_MATRIX:
+		/* XXX FIXME */
+		break;
+	default:
+		pr_warn("STL SubnSet(VL Arb) AM Invalid : 0x%x\n",
+			be32_to_cpu(smp->attr_mod));
+		smp->status |= IB_SMP_INVALID_FIELD;
+		break;
+	}
+
+	return subn_get_stl_vl_arb(smp, ibdev, port);
+}
+#endif /* CONFIG_STL_MGMT */
+
 
 static int subn_set_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 			   u8 port)
@@ -2507,8 +2591,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_SL_TO_VL_TABLE:
 			ret = subn_get_sl_to_vl(smp, ibdev, port);
 			goto bail;
+#endif /* 01 */
 		case IB_SMP_ATTR_VL_ARB_TABLE:
-			ret = subn_get_vl_arb(smp, ibdev, port);
+			ret = subn_get_stl_vl_arb(smp, ibdev, port);
 			goto bail;
 		case IB_SMP_ATTR_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
@@ -2521,7 +2606,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 				goto bail;
 			}
 			/* FALLTHROUGH */
-#endif /* 01 */
 		default:
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply(smp);
@@ -2545,8 +2629,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_SL_TO_VL_TABLE:
 			ret = subn_set_sl_to_vl(smp, ibdev, port);
 			goto bail;
+#endif /* 01 */
 		case IB_SMP_ATTR_VL_ARB_TABLE:
-			ret = subn_set_vl_arb(smp, ibdev, port);
+			ret = subn_set_stl_vl_arb(smp, ibdev, port);
 			goto bail;
 		case IB_SMP_ATTR_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
@@ -2559,7 +2644,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 				goto bail;
 			}
 			/* FALLTHROUGH */
-#endif /* 01 */
 		default:
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply(smp);

@@ -184,6 +184,12 @@ struct ib_vl_weight_elem {
 #define IB_VLARB_HIGHPRI_0_31   3
 #define IB_VLARB_HIGHPRI_32_63  4
 
+#define STL_MAX_PREEMPT_CAP         32
+#define STL_VLARB_LOW_ELEMENTS       0
+#define STL_VLARB_HIGH_ELEMENTS      1
+#define STL_VLARB_PREEMPT_ELEMENTS   2
+#define STL_VLARB_PREEMPT_MATRIX     3
+
 #define IB_PMA_PORT_COUNTERS_CONG       cpu_to_be16(0xFF00)
 
 struct ib_pma_portcounters_cong {
