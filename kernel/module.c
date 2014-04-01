@@ -1086,6 +1086,8 @@ static size_t module_flags_taint(struct module *mod, char *buf)
 		buf[l++] = 'F';
 	if (mod->taints & (1 << TAINT_CRAP))
 		buf[l++] = 'C';
+	if (mod->taints & (1 << TAINT_UNSIGNED_MODULE))
+		buf[l++] = 'X';
 #ifdef CONFIG_SUSE_KERNEL_SUPPORTED
 	if (mod->taints & (1 << TAINT_NO_SUPPORT))
 		buf[l++] = 'N';
@@ -3354,7 +3356,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 			    "%s: module verification failed: signature and/or"
 			    " required key missing - tainting kernel\n",
 			    mod->name);
-		add_taint_module(mod, TAINT_FORCED_MODULE, LOCKDEP_STILL_OK);
+		add_taint_module(mod, TAINT_UNSIGNED_MODULE, LOCKDEP_STILL_OK);
 	}
 #endif
 
