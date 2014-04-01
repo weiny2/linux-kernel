@@ -634,7 +634,11 @@ EXPORT_SYMBOL_GPL(tracepoint_iter_reset);
 bool trace_module_has_bad_taint(struct module *mod)
 {
 	return mod->taints & ~((1 << TAINT_OOT_MODULE) | (1 << TAINT_CRAP) |
-			       (1 << TAINT_UNSIGNED_MODULE));
+			       (1 << TAINT_UNSIGNED_MODULE)
+#ifdef CONFIG_SUSE_KERNEL_SUPPORTED
+			       | (1 << TAINT_EXTERNAL_SUPPORT) | (1 << TAINT_NO_SUPPORT)
+#endif
+			       );
 }
 
 static int tracepoint_module_coming(struct module *mod)
