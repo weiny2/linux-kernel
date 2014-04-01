@@ -2576,11 +2576,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_NODE_INFO:
 			ret = subn_get_stl_nodeinfo(smp, ibdev, port);
 			goto bail;
-#if 0
-		case IB_SMP_ATTR_GUID_INFO:
-			ret = subn_get_guidinfo(smp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		case IB_SMP_ATTR_PORT_INFO:
 			ret = subn_get_stl_portinfo(smp, ibdev, port);
 			goto bail;
@@ -2614,11 +2609,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 
 	case IB_MGMT_METHOD_SET:
 		switch (smp->attr_id) {
-#if 0
-		case IB_SMP_ATTR_GUID_INFO:
-			ret = subn_set_guidinfo(smp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		case IB_SMP_ATTR_PORT_INFO:
 			ret = subn_set_stl_portinfo(smp, ibdev, port);
 			goto bail;
