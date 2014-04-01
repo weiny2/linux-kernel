@@ -1087,7 +1087,7 @@ static size_t module_flags_taint(struct module *mod, char *buf)
 	if (mod->taints & (1 << TAINT_CRAP))
 		buf[l++] = 'C';
 	if (mod->taints & (1 << TAINT_UNSIGNED_MODULE))
-		buf[l++] = 'X';
+		buf[l++] = 'E';
 #ifdef CONFIG_SUSE_KERNEL_SUPPORTED
 	if (mod->taints & (1 << TAINT_NO_SUPPORT))
 		buf[l++] = 'N';
