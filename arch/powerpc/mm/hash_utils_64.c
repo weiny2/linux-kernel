@@ -444,6 +444,20 @@ static void mmu_psize_set_default_penc(void)
 			mmu_psize_defs[bpsize].penc[apsize] = -1;
 }
 
+static bool might_have_hea(void)
+{
+	/*
+	 * The HEA ethernet adapter requires awareness of the
+	 * GX bus. Without that awareness we can easily assume
+	 * we will never see an HEA ethernet device.
+	 */
+#ifdef CONFIG_IBMEBUS
+	return true;
+#else
+	return false;
+#endif
+}
+
 static void __init htab_init_page_sizes(void)
 {
 	int rc;
@@ -498,10 +512,11 @@ static void __init htab_init_page_sizes(void)
 			mmu_linear_psize = MMU_PAGE_64K;
 		if (mmu_has_feature(MMU_FTR_CI_LARGE_PAGE)) {
 			/*
-			 * Don't use 64k pages for ioremap on pSeries, since
-			 * that would stop us accessing the HEA ethernet.
+			 * When running on pSeries using 64k pages for ioremap
+			 * would stop us accessing the HEA ethernet. So if we
+			 * have the chance of ever seeing one, stay at 4k.
 			 */
-			if (!machine_is(pseries))
+			if (!might_have_hea() || !machine_is(pseries))
 				mmu_io_psize = MMU_PAGE_64K;
 		} else
 			mmu_ci_restrictions = 1;
