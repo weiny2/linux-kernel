@@ -2087,13 +2087,11 @@ int megasas_sriov_start_heartbeat(struct megasas_instance *instance,
 	printk(KERN_WARNING "megasas: SR-IOV: Starting heartbeat for scsi%d\n",
 	       instance->host->host_no);
 
-	if (!megasas_issue_polled(instance, cmd)) {
-		retval = 0;
-	} else {
+	retval = megasas_issue_polled(instance, cmd);
+	if (retval < 0) {
 		printk(KERN_WARNING "megasas: SR-IOV: MR_DCMD_CTRL_SHARED_HOST"
 		       "_MEM_ALLOC DCMD timed out for scsi%d\n",
 		       instance->host->host_no);
-		retval = 1;
 		goto out;
 	}
 
@@ -3569,11 +3567,7 @@ megasas_get_pd_list(struct megasas_instance *instance)
 	dcmd->sgl.sge32[0].phys_addr = cpu_to_le32(ci_h);
 	dcmd->sgl.sge32[0].length = cpu_to_le32(MEGASAS_MAX_PD * sizeof(struct MR_PD_LIST));
 
-	if (!megasas_issue_polled(instance, cmd)) {
-		ret = 0;
-	} else {
-		ret = -1;
-	}
+	ret = megasas_issue_polled(instance, cmd);
 
 	/*
 	* the following function will get the instance PD LIST.
@@ -3627,7 +3621,7 @@ megasas_get_ld_list(struct megasas_instance *instance)
 	struct megasas_dcmd_frame *dcmd;
 	struct MR_LD_LIST *ci;
 	dma_addr_t ci_h = 0;
-	u32 ld_count;
+	u32 ld_count = 0;
 
 	cmd = megasas_get_cmd(instance);
 
@@ -3662,13 +3656,9 @@ megasas_get_ld_list(struct megasas_instance *instance)
 	dcmd->sgl.sge32[0].length = cpu_to_le32(sizeof(struct MR_LD_LIST));
 	dcmd->pad_0  = 0;
 
-	if (!megasas_issue_polled(instance, cmd)) {
-		ret = 0;
-	} else {
-		ret = -1;
-	}
-
-	ld_count = le32_to_cpu(ci->ldCount);
+	ret = megasas_issue_polled(instance, cmd);
+	if (ret == 0)
+		ld_count = le32_to_cpu(ci->ldCount);
 
 	/* the following function will get the instance PD LIST */
 
@@ -3710,7 +3700,7 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 	struct megasas_dcmd_frame *dcmd;
 	struct MR_LD_TARGETID_LIST *ci;
 	dma_addr_t ci_h = 0;
-	u32 tgtid_count;
+	u32 tgtid_count = 0;
 
 	cmd = megasas_get_cmd(instance);
 
@@ -3748,14 +3738,14 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 	dcmd->sgl.sge32[0].length = cpu_to_le32(sizeof(struct MR_LD_TARGETID_LIST));
 	dcmd->pad_0  = 0;
 
-	if (!megasas_issue_polled(instance, cmd) && !dcmd->cmd_status) {
-		ret = 0;
-	} else {
+	ret = megasas_issue_polled(instance, cmd);
+	if (!ret && dcmd->cmd_status) {
 		/* On failure, call older LD list DCMD */
 		ret = 1;
 	}
+	if (!ret)
+		tgtid_count = le32_to_cpu(ci->count);
 
-	tgtid_count = le32_to_cpu(ci->count);
 	if (tgtid_count == 0) {
 		/* No drives found, try the older LD list DCMD */
 		ret = 1;
@@ -3829,12 +3819,9 @@ megasas_get_ctrl_info(struct megasas_instance *instance,
 	dcmd->sgl.sge32[0].phys_addr = cpu_to_le32(ci_h);
 	dcmd->sgl.sge32[0].length = cpu_to_le32(sizeof(struct megasas_ctrl_info));
 
-	if (!megasas_issue_polled(instance, cmd)) {
-		ret = 0;
+	ret = megasas_issue_polled(instance, cmd);
+	if (!ret)
 		memcpy(ctrl_info, ci, sizeof(struct megasas_ctrl_info));
-	} else {
-		ret = -1;
-	}
 
 	pci_free_consistent(instance->pdev, sizeof(struct megasas_ctrl_info),
 			    ci, ci_h);
@@ -4013,7 +4000,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	struct megasas_register_set __iomem *reg_set;
 	struct megasas_ctrl_info *ctrl_info;
 	unsigned long bar_list;
-	int i, loop, fw_msix_count = 0;
+	int i, loop, fw_msix_count = 0, ret;
 	struct IOV_111 *iovPtr;
 
 	/* Find first memory bar */
@@ -4160,11 +4147,19 @@ static int megasas_init_fw(struct megasas_instance *instance)
 
 	memset(instance->pd_list, 0 ,
 		(MEGASAS_MAX_PD * sizeof(struct megasas_pd_list)));
-	megasas_get_pd_list(instance);
+	if (megasas_get_pd_list(instance) < 0) {
+		dev_err(&instance->pdev->dev, "failed to get PD list\n");
+		goto fail_init_adapter;
+	}
 
 	memset(instance->ld_ids, 0xff, MEGASAS_MAX_LD_IDS);
-	if (megasas_ld_list_query(instance,
-				  MR_LD_QUERY_TYPE_EXPOSED_TO_HOST))
+	ret  = megasas_ld_list_query(instance,
+				     MR_LD_QUERY_TYPE_EXPOSED_TO_HOST);
+	if (ret < 0) {
+		dev_err(&instance->pdev->dev, "failed to get LD list\n");
+		goto fail_init_adapter;
+	}
+	if (ret > 0)
 		megasas_get_ld_list(instance);
 
 	ctrl_info = kmalloc(sizeof(struct megasas_ctrl_info), GFP_KERNEL);
