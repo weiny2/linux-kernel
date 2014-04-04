@@ -3756,6 +3756,10 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 	}
 
 	tgtid_count = le32_to_cpu(ci->count);
+	if (tgtid_count == 0) {
+		/* No drives found, try the older LD list DCMD */
+		ret = 1;
+	}
 
 	if ((ret == 0) && (tgtid_count <= (MAX_LOGICAL_DRIVES))) {
 		memset(instance->ld_ids, 0xff, MEGASAS_MAX_LD_IDS);
