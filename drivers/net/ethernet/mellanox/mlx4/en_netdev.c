@@ -632,8 +632,9 @@ static int mlx4_en_get_qp(struct mlx4_en_priv *priv)
 	if (err)
 		goto steer_err;
 
-	if (mlx4_en_tunnel_steer_add(priv, priv->dev->dev_addr, *qpn,
-				     &priv->tunnel_reg_id))
+	err = mlx4_en_tunnel_steer_add(priv, priv->dev->dev_addr, *qpn,
+				       &priv->tunnel_reg_id);
+	if (err)
 		goto tunnel_err;
 
 	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
@@ -741,6 +742,14 @@ static int mlx4_en_replace_mac(struct mlx4_en_priv *priv, int qpn,
 				err = mlx4_en_uc_steer_add(priv, new_mac,
 							   &qpn,
 							   &entry->reg_id);
+				if (err)
+					return err;
+				if (priv->tunnel_reg_id) {
+					mlx4_flow_detach(priv->mdev->dev, priv->tunnel_reg_id);
+					priv->tunnel_reg_id = 0;
+				}
+				err = mlx4_en_tunnel_steer_add(priv, new_mac, qpn,
+							       &priv->tunnel_reg_id);
 				return err;
 			}
 		}
@@ -1791,6 +1800,8 @@ void mlx4_en_stop_port(struct net_device *dev, int detach)
 		mc_list[5] = priv->port;
 		mlx4_multicast_detach(mdev->dev, &priv->rss_map.indir_qp,
 				      mc_list, MLX4_PROT_ETH, mclist->reg_id);
+		if (mclist->tunnel_reg_id)
+			mlx4_flow_detach(mdev->dev, mclist->tunnel_reg_id);
 	}
 	mlx4_en_clear_list(dev);
 	list_for_each_entry_safe(mclist, tmp, &priv->curr_list, list) {
@@ -2105,7 +2116,7 @@ static int mlx4_en_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-static int mlx4_en_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
+static int mlx4_en_hwtstamp_set(struct net_device *dev, struct ifreq *ifr)
 {
 	struct mlx4_en_priv *priv = netdev_priv(dev);
 	struct mlx4_en_dev *mdev = priv->mdev;
@@ -2164,11 +2175,21 @@ static int mlx4_en_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 			    sizeof(config)) ? -EFAULT : 0;
 }
 
+static int mlx4_en_hwtstamp_get(struct net_device *dev, struct ifreq *ifr)
+{
+	struct mlx4_en_priv *priv = netdev_priv(dev);
+
+	return copy_to_user(ifr->ifr_data, &priv->hwtstamp_config,
+			    sizeof(priv->hwtstamp_config)) ? -EFAULT : 0;
+}
+
 static int mlx4_en_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	switch (cmd) {
 	case SIOCSHWTSTAMP:
-		return mlx4_en_hwtstamp_ioctl(dev, ifr);
+		return mlx4_en_hwtstamp_set(dev, ifr);
+	case SIOCGHWTSTAMP:
+		return mlx4_en_hwtstamp_get(dev, ifr);
 	default:
 		return -EOPNOTSUPP;
 	}
