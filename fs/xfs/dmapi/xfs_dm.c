@@ -2114,9 +2114,11 @@ xfs_dm_round_hole(
 			return -EINVAL; /* requested length is too small */
 	}
 #ifdef CONFIG_DMAPI_DEBUG
-	printk("xfs_dm_round_hole: off %lu, len %ld, align %lu, "
-	       "filesize %llu, roff %ld, rlen %ld\n",
-	       offset, length, align, filesize, *roff, *rlen);
+	printk("xfs_dm_round_hole: off %lld, len %llu, align %llu, "
+	       "filesize %llu, roff %lld, rlen %llu\n",
+	       (long long)offset, (unsigned long long)length,
+	       (unsigned long long)align, filesize, (long long)*roff,
+	       (unsigned long long)*rlen);
 #endif
 	return 0; /* hole geometry successfully rounded */
 }
@@ -2247,8 +2249,9 @@ xfs_dm_punch_hole(
 	}
 
 #ifdef CONFIG_DMAPI_DEBUG
-	printk("xfs_dm_punch_hole: off %lu, len %ld, align %lu\n",
-		off, len, align);
+	printk("xfs_dm_punch_hole: off %lld, len %llu, align %llu\n",
+	       (long long)off, (unsigned long long)len,
+	       (unsigned long long)align);
 #endif
 
 	error = xfs_change_file_space(ip, XFS_IOC_UNRESVSP, &bf,
