@@ -4504,7 +4504,8 @@ bail:
 
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			u8 port, struct jumbo_mad *in_jumbo,
-			struct jumbo_mad *out_jumbo)
+			struct jumbo_mad *out_jumbo,
+			u32 *resp_len)
 {
 	struct stl_smp *smp = (struct stl_smp *)out_jumbo;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
@@ -4541,6 +4542,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		ret = IB_MAD_RESULT_FAILURE;
 		goto bail;
 	}
+
+	/* FIXME decide proper length for all these */
+	*resp_len = sizeof(struct stl_smp);
 
 /* FIXME add other STL SMP's as we go */
 	switch (smp->method) {
@@ -4834,6 +4838,7 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	int ret;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	int pkey_idx;
+	u32 resp_len = 0;
 
 	if ((ret = invalid_mad_pkey(ibp, port, in_jumbo, in_wc)) != 0) {
 		return ret;
@@ -4858,12 +4863,14 @@ int wfr_process_jumbo_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	switch (in_jumbo->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
 	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
-		ret = process_subn_stl(ibdev, mad_flags, port, in_jumbo, out_jumbo);
+		ret = process_subn_stl(ibdev, mad_flags, port, in_jumbo,
+					out_jumbo, &resp_len);
 		goto bail;
 
 	/* Only process SMP's right now */
 	case IB_MGMT_CLASS_PERF_MGMT:
-		ret = process_stl_perf(ibdev, port, in_jumbo, out_jumbo);
+		ret = process_stl_perf(ibdev, port, in_jumbo,
+					out_jumbo, &resp_len);
 		goto bail;
 #if 0
 	case IB_MGMT_CLASS_CONG_MGMT:
@@ -4892,6 +4899,11 @@ bail:
 		       sizeof(*out_jumbo));
 		dump_mad((uint8_t *)out_jumbo, sizeof(*out_jumbo));
 	}
+
+	/* FIXME upstream; byte_len should be return as a parameter */
+	if (ret & IB_MAD_RESULT_REPLY)
+		in_wc->byte_len = round_up(resp_len, 8);
+
 	return ret;
 }
 
@@ -4915,6 +4927,11 @@ bail:
  * This is called by the ib_mad module.
  */
 int wfr_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+		    /* NOTE: we are using the byte_len in in_wc to return the
+		     * resp_len of the MAD
+		     * For upstream this should be another parameter here.
+		     */
+#warning "FIXME: upstream add parameter for return MAD length"
 		    struct ib_wc *in_wc, struct ib_grh *in_grh,
 		    /* NOTE: for compatiblity with the core layer these are
 		     * declared as ib_mad
