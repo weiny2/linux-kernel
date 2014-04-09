@@ -149,7 +149,7 @@ err1:
 /* FIXME merge with agent_send_response */
 void agent_send_jumbo_response(struct jumbo_mad *mad, struct ib_grh *grh,
 			 struct ib_wc *wc, struct ib_device *device,
-			 int port_num, int qpn)
+			 int port_num, int qpn, u32 resp_len)
 {
 	struct ib_mad_agent *agent;
 	struct ib_mad_send_buf *send_buf;
@@ -162,10 +162,9 @@ void agent_send_jumbo_response(struct jumbo_mad *mad, struct ib_grh *grh,
 		return;
 
 	/* base version determines MAD size */
-	/* FIXME adjust size so Jumbos are not full 2048 packets */
 	base_version = mad->mad_hdr.base_version;
 	if (base_version == JUMBO_MGMT_BASE_VERSION)
-		data_len = JUMBO_MGMT_MAD_DATA;
+		data_len = resp_len - JUMBO_MGMT_MAD_HDR;
 	else
 		data_len = IB_MGMT_MAD_DATA;
 
