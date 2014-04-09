@@ -2595,7 +2595,7 @@ static int subn_get_stl_aggregate(struct stl_smp *smp, struct ib_device *ibdev,
 		u8 cd[CABLE_INFO_ATTRIB_SIZE];
 	} data;
 
-	if (num_attr > 117) {
+	if (num_attr < 1 || num_attr > 117) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply_stl(smp);
 	}
