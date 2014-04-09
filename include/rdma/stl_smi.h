@@ -144,4 +144,12 @@ static inline size_t stl_get_smp_data_size(struct stl_smp *smp)
 		return sizeof(smp->route.lid.data);
 }
 
+static inline size_t stl_get_smp_header_size(struct stl_smp *smp)
+{
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
+		return sizeof(*smp) - sizeof(smp->route.dr.data);
+	else
+		return sizeof(*smp) - sizeof(smp->route.lid.data);
+}
+
 #endif /* STL_SMI_H */
