@@ -125,7 +125,9 @@ static void *get_call_destination(u8 type)
 		.pv_cpu_ops = pv_cpu_ops,
 		.pv_irq_ops = pv_irq_ops,
 		.pv_apic_ops = pv_apic_ops,
+#ifdef CONFIG_PARAVIRT_MMU
 		.pv_mmu_ops = pv_mmu_ops,
+#endif /* CONFIG_PARAVIRT_MMU */
 #ifdef CONFIG_PARAVIRT_SPINLOCKS
 		.pv_lock_ops = pv_lock_ops,
 #endif
@@ -180,6 +182,7 @@ unsigned paravirt_patch_insns(void *insnbuf, unsigned len,
 	return insn_len;
 }
 
+#ifdef CONFIG_PARAVIRT_MMU
 static void native_flush_tlb(void)
 {
 	__native_flush_tlb();
@@ -198,6 +201,7 @@ static void native_flush_tlb_single(unsigned long addr)
 {
 	__native_flush_tlb_single(addr);
 }
+#endif /* CONFIG_PARAVIRT_MMU */
 
 struct static_key paravirt_steal_enabled;
 struct static_key paravirt_steal_rq_enabled;
@@ -403,6 +407,7 @@ struct pv_apic_ops pv_apic_ops = {
 #define PTE_IDENT	__PV_IS_CALLEE_SAVE(_paravirt_ident_64)
 #endif
 
+#ifdef CONFIG_PARAVIRT_MMU
 struct pv_mmu_ops pv_mmu_ops = {
 
 	.read_cr2 = native_read_cr2,
@@ -474,10 +479,11 @@ struct pv_mmu_ops pv_mmu_ops = {
 
 	.set_fixmap = native_set_fixmap,
 };
+EXPORT_SYMBOL    (pv_mmu_ops);
+#endif /* CONFIG_PARAVIRT_MMU */
 
 EXPORT_SYMBOL_GPL(pv_time_ops);
 EXPORT_SYMBOL    (pv_cpu_ops);
-EXPORT_SYMBOL    (pv_mmu_ops);
 EXPORT_SYMBOL_GPL(pv_apic_ops);
 EXPORT_SYMBOL_GPL(pv_info);
 EXPORT_SYMBOL    (pv_irq_ops);

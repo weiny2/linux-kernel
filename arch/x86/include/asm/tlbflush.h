@@ -7,7 +7,7 @@
 #include <asm/processor.h>
 #include <asm/special_insns.h>
 
-#ifdef CONFIG_PARAVIRT
+#ifdef CONFIG_PARAVIRT_MMU
 #include <asm/paravirt.h>
 #else
 #define __flush_tlb() __native_flush_tlb()
@@ -198,7 +198,7 @@ static inline void reset_lazy_tlbstate(void)
 
 #endif	/* SMP */
 
-#ifndef CONFIG_PARAVIRT
+#ifndef CONFIG_PARAVIRT_MMU
 #define flush_tlb_others(mask, mm, start, end)	\
 	native_flush_tlb_others(mask, mm, start, end)
 #endif

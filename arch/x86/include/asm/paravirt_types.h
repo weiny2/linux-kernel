@@ -347,7 +347,9 @@ struct paravirt_patch_template {
 	struct pv_cpu_ops pv_cpu_ops;
 	struct pv_irq_ops pv_irq_ops;
 	struct pv_apic_ops pv_apic_ops;
+#ifdef CONFIG_PARAVIRT_MMU
 	struct pv_mmu_ops pv_mmu_ops;
+#endif /* CONFIG_PARAVIRT_MMU */
 	struct pv_lock_ops pv_lock_ops;
 };
 

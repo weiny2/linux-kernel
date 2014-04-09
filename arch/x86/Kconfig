@@ -642,6 +642,16 @@ config PARAVIRT
 	  over full virtualization.  However, when run without a hypervisor
 	  the kernel is theoretically slower and slightly larger.
 
+config PARAVIRT_MMU
+	bool "PV MMU support"
+	select PARAVIRT_MMU
+	---help---
+	  This option enables the paravirtualized MMU. In most (all?) cases
+	  it's pretty useless and shouldn't be used. It will only cost you
+	  performance, because it drags in pv-ops for memory management.
+
+	  If in doubt, say N.
+
 config PARAVIRT_DEBUG
 	bool "paravirt-ops debugging"
 	depends on PARAVIRT && DEBUG_KERNEL
