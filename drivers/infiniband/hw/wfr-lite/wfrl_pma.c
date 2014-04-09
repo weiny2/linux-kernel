@@ -985,7 +985,8 @@ static int pma_send_unsupported_method_response(struct stl_pma_mad *pmp)
 
 int process_stl_perf(struct ib_device *ibdev, u8 port,
 			struct jumbo_mad *in_mad,
-			struct jumbo_mad *out_mad)
+			struct jumbo_mad *out_mad,
+			u32 *resp_len)
 {
 	struct stl_pma_mad *pmp = (struct stl_pma_mad *)out_mad;
 	int ret;
@@ -1003,6 +1004,9 @@ int process_stl_perf(struct ib_device *ibdev, u8 port,
 			goto bail;
 		}
 	}
+
+	/* FIXME decide proper length for all these */
+	*resp_len = sizeof(struct jumbo_mad);
 
 	switch (pmp->mad_hdr.method) {
 	case IB_MGMT_METHOD_GET:

@@ -36,6 +36,7 @@
 
 int process_stl_perf(struct ib_device *ibdev, u8 port,
 			struct jumbo_mad *in_mad,
-			struct jumbo_mad *out_mad);
+			struct jumbo_mad *out_mad,
+			u32 *resp_len);
 
 #endif				/* _WFRL_PMA_H */
