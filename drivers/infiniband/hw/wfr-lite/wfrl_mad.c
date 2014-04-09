@@ -174,8 +174,9 @@ struct wfr_lite_link_init_data
 };
 static int reply(struct ib_smp *smp); /* fwd declare */
 
-#define CABLE_INFO_SIZE       4096
-#define CABLE_INFO_PAGE_MASK  0x0000007f /* 128 byte page size */
+#define CABLE_INFO_ATTRIB_SIZE  64
+#define CABLE_INFO_SIZE         4096
+#define CABLE_INFO_PAGE_MASK    0x0000007f /* 128 byte page size */
 static struct {
 	struct stl_port_info port_info;
 	u16 pkeys[STL_NUM_PKEYS];
@@ -2588,6 +2589,11 @@ static int subn_get_stl_aggregate(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 num_attr = be32_to_cpu(smp->attr_mod) & 0x000000ff;
 	u8 *next_smp = stl_get_smp_data(smp);
 	struct stl_aggregate *ag;
+	union {
+		struct stl_node_info ni;
+		struct stl_node_description nd;
+		u8 cd[CABLE_INFO_ATTRIB_SIZE];
+	} data;
 
 	if (num_attr > 117) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -2596,10 +2602,12 @@ static int subn_get_stl_aggregate(struct stl_smp *smp, struct ib_device *ibdev,
 
 	for (i = 0; i < num_attr; i++) {
 		__be16 status;
+		size_t ag_data_len;
 		size_t ag_size;
 
 		ag = (struct stl_aggregate *)next_smp;
-		ag_size = sizeof(*ag) + ((be16_to_cpu(ag->err_reqlength) & 0x007f) * 8);
+		ag_data_len = ((be16_to_cpu(ag->err_reqlength) & 0x007f) * 8);
+		ag_size = sizeof(*ag) + ag_data_len;
 
 		if (next_smp + ag_size > ((u8 *)smp) + sizeof(*smp)) {
 			printk(KERN_WARNING PFX
@@ -2613,19 +2621,23 @@ static int subn_get_stl_aggregate(struct stl_smp *smp, struct ib_device *ibdev,
 		switch (ag->attr_id) {
 			case STL_ATTRIB_ID_NODE_INFO:
 			{
-				struct stl_node_info *ni = (struct stl_node_info *)ag->data;
-				status = __get_stl_nodeinfo(ni, be32_to_cpu(ag->attr_mod), ibdev, port);
+				status = __get_stl_nodeinfo(&data.ni, be32_to_cpu(ag->attr_mod), ibdev, port);
+				memcpy(ag->data, &data.ni,
+					min_t(size_t, ag_data_len, sizeof(data.ni)));
 				break;
 			}
 			case STL_ATTRIB_ID_NODE_DESCRIPTION:
 			{
-				struct stl_node_description *nd = (struct stl_node_description *)ag->data;
-				status = __get_stl_nodedescription(nd, be32_to_cpu(ag->attr_mod), ibdev);
+				status = __get_stl_nodedescription(&data.nd, be32_to_cpu(ag->attr_mod), ibdev);
+				memcpy(ag->data, &data.nd,
+					min_t(size_t, ag_data_len, sizeof(data.nd)));
 				break;
 			}
 			case STL_ATTRIB_ID_CABLE_INFO:
 			{
-				status = __get_stl_cable_info(ag->data, be32_to_cpu(ag->attr_mod), ibdev, port);
+				status = __get_stl_cable_info(data.cd, be32_to_cpu(ag->attr_mod), ibdev, port);
+				memcpy(ag->data, data.cd,
+					min_t(size_t, ag_data_len, sizeof(data.cd)));
 				break;
 			}
 			default:
