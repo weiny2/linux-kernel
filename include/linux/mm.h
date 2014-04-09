@@ -212,6 +212,7 @@ struct vm_fault {
 					 * is set (which is also implied by
 					 * VM_FAULT_ERROR).
 					 */
+	void *spare;			/* DAX futureproofing */
 };
 
 /*
