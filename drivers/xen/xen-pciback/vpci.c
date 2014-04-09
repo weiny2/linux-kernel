@@ -134,9 +134,11 @@ static int __xen_pcibk_add_pci_dev(struct xen_pcibk_device *pdev,
 unlock:
 	mutex_unlock(&vpci_dev->lock);
 
-	/* Publish this device. */
-	if (!err)
+	if (!err) {
+		/* Publish this device. */
 		err = publish_cb(pdev, 0, 0, PCI_DEVFN(slot, func), devid);
+	} else
+		kfree(dev_entry);
 
 out:
 	return err;
