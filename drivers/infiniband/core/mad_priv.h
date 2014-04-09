@@ -184,6 +184,7 @@ struct ib_mad_local_private {
 	struct ib_mad_private *mad_priv; /* can be jumbo_mad_private */
 	struct ib_mad_agent_private *recv_mad_agent;
 	struct ib_mad_send_wr_private *mad_send_wr;
+	size_t return_wc_byte_len;
 };
 
 struct ib_mad_mgmt_method_table {
