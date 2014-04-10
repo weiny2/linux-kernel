@@ -1440,8 +1440,6 @@ void vmbus_driver_unregister(struct hv_driver *hv_driver);
 #define ICMSGHDRFLAG_RESPONSE		4
 
 
-extern struct resource hyperv_mmio;
-
 /*
  * While we want to handle util services as regular devices,
  * there is only one instance of each of these services; so
@@ -1537,6 +1535,8 @@ void hv_vss_onchannelcallback(void *);
 int hv_fcopy_init(struct hv_util_service *);
 void hv_fcopy_deinit(void);
 void hv_fcopy_onchannelcallback(void *);
+
+extern struct resource hyperv_mmio;
 
 /*
  * Negotiated version with the Host.
