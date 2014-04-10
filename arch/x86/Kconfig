@@ -644,7 +644,6 @@ config PARAVIRT
 
 config PARAVIRT_MMU
 	bool "PV MMU support"
-	select PARAVIRT_MMU
 	---help---
 	  This option enables the paravirtualized MMU. In most (all?) cases
 	  it's pretty useless and shouldn't be used. It will only cost you
