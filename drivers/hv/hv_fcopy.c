@@ -29,6 +29,8 @@
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
 
+#include "hyperv_vmbus.h"
+
 #define WIN8_SRV_MAJOR		1
 #define WIN8_SRV_MINOR		1
 #define WIN8_SRV_VERSION	(WIN8_SRV_MAJOR << 16 | WIN8_SRV_MINOR)
@@ -106,7 +108,7 @@ static int fcopy_handle_handshake(u32 version)
 	if (fcopy_transaction.fcopy_context)
 		hv_fcopy_onchannelcallback(fcopy_transaction.fcopy_context);
 	in_hand_shake = false;
-	return sizeof(int);
+	return 0;
 }
 
 static void fcopy_send_data(void)
@@ -158,14 +160,17 @@ static void fcopy_send_data(void)
 static void
 fcopy_respond_to_host(int error)
 {
-	struct icmsg_hdr *icmsghdrp;
+	struct icmsg_hdr *icmsghdr;
 	u32 buf_len;
 	struct vmbus_channel *channel;
 	u64 req_id;
 
 	/*
 	 * Copy the global state for completing the transaction. Note that
-	 * only one transaction can be active at a time.
+	 * only one transaction can be active at a time. This is guaranteed
+	 * by the file copy protocol implemented by the host. Furthermore,
+	 * the "transaction active" state we maintain ensures that there can
+	 * only be one active transaction at a time.
 	 */
 
 	buf_len = fcopy_transaction.recv_len;
@@ -174,7 +179,7 @@ fcopy_respond_to_host(int error)
 
 	fcopy_transaction.active = false;
 
-	icmsghdrp = (struct icmsg_hdr *)
+	icmsghdr = (struct icmsg_hdr *)
 			&recv_buffer[sizeof(struct vmbuspipe_hdr)];
 
 	if (channel->onchannel_callback == NULL)
@@ -184,8 +189,8 @@ fcopy_respond_to_host(int error)
 		 */
 		return;
 
-	icmsghdrp->status = error;
-	icmsghdrp->icflags = ICMSGHDRFLAG_TRANSACTION | ICMSGHDRFLAG_RESPONSE;
+	icmsghdr->status = error;
+	icmsghdr->icflags = ICMSGHDRFLAG_TRANSACTION | ICMSGHDRFLAG_RESPONSE;
 	vmbus_sendpacket(channel, recv_buffer, buf_len, req_id,
 				VM_PKT_DATA_INBAND, 0);
 }
@@ -196,7 +201,7 @@ void hv_fcopy_onchannelcallback(void *context)
 	u32 recvlen;
 	u64 requestid;
 	struct hv_fcopy_hdr *fcopy_msg;
-	struct icmsg_hdr *icmsghdrp;
+	struct icmsg_hdr *icmsghdr;
 	struct icmsg_negotiate *negop = NULL;
 	int util_fw_version;
 	int fcopy_srv_version;
@@ -215,12 +220,12 @@ void hv_fcopy_onchannelcallback(void *context)
 	if (recvlen <= 0)
 		return;
 
-	icmsghdrp = (struct icmsg_hdr *)&recv_buffer[
+	icmsghdr = (struct icmsg_hdr *)&recv_buffer[
 			sizeof(struct vmbuspipe_hdr)];
-	if (icmsghdrp->icmsgtype == ICMSGTYPE_NEGOTIATE) {
+	if (icmsghdr->icmsgtype == ICMSGTYPE_NEGOTIATE) {
 		util_fw_version = UTIL_FW_VERSION;
 		fcopy_srv_version = WIN8_SRV_VERSION;
-		vmbus_prep_negotiate_resp(icmsghdrp, negop, recv_buffer,
+		vmbus_prep_negotiate_resp(icmsghdr, negop, recv_buffer,
 				util_fw_version, fcopy_srv_version);
 	} else {
 		fcopy_msg = (struct hv_fcopy_hdr *)&recv_buffer[
@@ -245,7 +250,7 @@ void hv_fcopy_onchannelcallback(void *context)
 		schedule_delayed_work(&fcopy_work, 5*HZ);
 		return;
 	}
-	icmsghdrp->icflags = ICMSGHDRFLAG_TRANSACTION | ICMSGHDRFLAG_RESPONSE;
+	icmsghdr->icflags = ICMSGHDRFLAG_TRANSACTION | ICMSGHDRFLAG_RESPONSE;
 	vmbus_sendpacket(channel, recv_buffer, recvlen, requestid,
 			VM_PKT_DATA_INBAND, 0);
 }
@@ -267,6 +272,12 @@ static ssize_t fcopy_read(struct file *file, char __user *buf,
 	 */
 	if (down_interruptible(&fcopy_transaction.read_sema))
 		return -EINTR;
+
+	/*
+	 * The channel may be rescinded and in this case, we will wakeup the
+	 * the thread blocked on the semaphore and we will use the opened
+	 * state to correctly handle this case.
+	 */
 	if (!opened)
 		return -ENODEV;
 
@@ -300,8 +311,11 @@ static ssize_t fcopy_write(struct file *file, const char __user *buf,
 	if (copy_from_user(&response, buf, sizeof(int)))
 		return -EFAULT;
 
-	if (in_hand_shake)
-		return fcopy_handle_handshake(response);
+	if (in_hand_shake) {
+		if (fcopy_handle_handshake(response))
+			return -EINVAL;
+		return sizeof(int);
+	}
 
 	/*
 	 * Complete the transaction by forwarding the result
@@ -313,8 +327,13 @@ static ssize_t fcopy_write(struct file *file, const char __user *buf,
 	return sizeof(int);
 }
 
-int fcopy_open(struct inode *inode, struct file *f)
+static int fcopy_open(struct inode *inode, struct file *f)
 {
+	/*
+	 * The user level daemon that will open this device is
+	 * really an extension of this driver. We can have only
+	 * active open at a time.
+	 */
 	if (opened)
 		return -EBUSY;
 
@@ -325,7 +344,7 @@ int fcopy_open(struct inode *inode, struct file *f)
 	return 0;
 }
 
-int fcopy_release(struct inode *inode, struct file *f)
+static int fcopy_release(struct inode *inode, struct file *f)
 {
 	/*
 	 * The daemon has exited; reset the state.
@@ -356,6 +375,13 @@ static int fcopy_dev_init(void)
 
 static void fcopy_dev_deinit(void)
 {
+
+	/*
+	 * The device is going away - perhaps because the
+	 * host has rescinded the channel. Setup state so that
+	 * user level daemon can gracefully exit if it is blocked
+	 * on the read semaphore.
+	 */
 	opened = false;
 	/*
 	 * Signal the semaphore as the device is

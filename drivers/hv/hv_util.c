@@ -28,6 +28,7 @@
 #include <linux/reboot.h>
 #include <linux/hyperv.h>
 
+#include "hyperv_vmbus.h"
 
 #define SD_MAJOR	3
 #define SD_MINOR	0

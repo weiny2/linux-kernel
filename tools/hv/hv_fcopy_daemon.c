@@ -142,7 +142,7 @@ int main(void)
 	fcopy_fd = open("/dev/vmbus/hv_fcopy", O_RDWR);
 
 	if (fcopy_fd < 0) {
-		syslog(LOG_ERR, "open /dev/hv_fcopy failed; error: %d %s",
+		syslog(LOG_ERR, "open /dev/vmbus/hv_fcopy failed; error: %d %s",
 			errno, strerror(errno));
 		exit(EXIT_FAILURE);
 	}
