@@ -584,10 +584,11 @@ isolate_migratepages_range(struct zone *zone, struct compact_control *cc,
 
 		/*
 		 * Migration will fail if an anonymous page is pinned in memory,
-		 * so avoid taking zone->lru_lock and isolating it unnecessarily
-		 * in an admittedly racy check.
+		 * so avoid taking lru_lock and isolating it unnecessarily in an
+		 * admittedly racy check.
 		 */
-		if (!page_mapping(page) && page_count(page))
+		if (!page_mapping(page) &&
+		    page_count(page) > page_mapcount(page))
 			continue;
 
 		/* Check if it is ok to still hold the lock */
