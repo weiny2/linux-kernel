@@ -24,7 +24,7 @@ config X86
 	select ARCH_HAS_DEBUG_STRICT_USER_COPY_CHECKS
 	select HAVE_AOUT if X86_32
 	select HAVE_UNSTABLE_SCHED_CLOCK
-	select ARCH_SUPPORTS_NUMA_BALANCING
+	select ARCH_SUPPORTS_NUMA_BALANCING if X86_64
 	select ARCH_WANTS_PROT_NUMA_PROT_NONE
 	select HAVE_IDE
 	select HAVE_OPROFILE
@@ -641,6 +641,15 @@ config PARAVIRT
 	  under a hypervisor, potentially improving performance significantly
 	  over full virtualization.  However, when run without a hypervisor
 	  the kernel is theoretically slower and slightly larger.
+
+config PARAVIRT_MMU
+	bool "PV MMU support"
+	---help---
+	  This option enables the paravirtualized MMU. In most (all?) cases
+	  it's pretty useless and shouldn't be used. It will only cost you
+	  performance, because it drags in pv-ops for memory management.
+
+	  If in doubt, say N.
 
 config PARAVIRT_DEBUG
 	bool "paravirt-ops debugging"

@@ -60,6 +60,7 @@ static inline void write_cr0(unsigned long x)
 	PVOP_VCALL1(pv_cpu_ops.write_cr0, x);
 }
 
+#ifdef CONFIG_PARAVIRT_MMU
 static inline unsigned long read_cr2(void)
 {
 	return PVOP_CALL0(unsigned long, pv_mmu_ops.read_cr2);
@@ -79,6 +80,7 @@ static inline void write_cr3(unsigned long x)
 {
 	PVOP_VCALL1(pv_mmu_ops.write_cr3, x);
 }
+#endif /* CONFIG_PARAVIRT_MMU */
 
 static inline unsigned long read_cr4(void)
 {
@@ -324,6 +326,7 @@ static inline void startup_ipi_hook(int phys_apicid, unsigned long start_eip,
 }
 #endif
 
+#ifdef CONFIG_PARAVIRT_MMU
 static inline void paravirt_activate_mm(struct mm_struct *prev,
 					struct mm_struct *next)
 {
@@ -676,6 +679,7 @@ static inline void pmd_clear(pmd_t *pmdp)
 	set_pmd(pmdp, __pmd(0));
 }
 #endif	/* CONFIG_X86_PAE */
+#endif  /* CONFIG_PARAVIRT_MMU */
 
 #define  __HAVE_ARCH_START_CONTEXT_SWITCH
 static inline void arch_start_context_switch(struct task_struct *prev)
@@ -688,6 +692,7 @@ static inline void arch_end_context_switch(struct task_struct *next)
 	PVOP_VCALL1(pv_cpu_ops.end_context_switch, next);
 }
 
+#ifdef CONFIG_PARAVIRT_MMU
 #define  __HAVE_ARCH_ENTER_LAZY_MMU_MODE
 static inline void arch_enter_lazy_mmu_mode(void)
 {
@@ -709,6 +714,7 @@ static inline void __set_fixmap(unsigned /* enum fixed_addresses */ idx,
 {
 	pv_mmu_ops.set_fixmap(idx, phys, flags);
 }
+#endif /* CONFIG_PARAVIRT_MMU */
 
 #if defined(CONFIG_SMP) && defined(CONFIG_PARAVIRT_SPINLOCKS)
 
@@ -964,8 +970,10 @@ extern void default_banner(void);
 		  call PARA_INDIRECT(pv_cpu_ops+PV_CPU_swapgs)		\
 		 )
 
+#ifdef CONFIG_PARAVIRT_MMU
 #define GET_CR2_INTO_RAX				\
 	call PARA_INDIRECT(pv_mmu_ops+PV_MMU_read_cr2)
+#endif /* CONFIG_PARAVIRT_MMU */
 
 #define PARAVIRT_ADJUST_EXCEPTION_FRAME					\
 	PARA_SITE(PARA_PATCH(pv_irq_ops, PV_IRQ_adjust_exception_frame), \

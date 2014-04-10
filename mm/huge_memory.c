@@ -1545,8 +1545,8 @@ int change_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 				entry = pmd_mknonnuma(entry);
 			entry = pmd_modify(entry, newprot);
 			ret = HPAGE_PMD_NR;
-			BUG_ON(pmd_write(entry));
 			set_pmd_at(mm, addr, pmd, entry);
+			BUG_ON(pmd_write(entry));
 		} else {
 			struct page *page = pmd_page(*pmd);
 			entry = *pmd;
@@ -1559,8 +1559,7 @@ int change_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 			 */
 			if (!is_huge_zero_page(page) &&
 			    !pmd_numa(*pmd)) {
-				entry = pmd_mknuma(entry);
-				set_pmd_at(mm, addr, pmd, entry);
+				pmdp_set_numa(mm, addr, pmd);
 				ret = HPAGE_PMD_NR;
 			}
 		}
