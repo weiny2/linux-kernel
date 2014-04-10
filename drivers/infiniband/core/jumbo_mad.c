@@ -328,8 +328,8 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 	if (mad_agent) {
 		jumbo_mad_complete_recv(mad_agent, &recv->header.recv_wc);
 		/*
-		 * recv is freed up in error cases in ib_mad_complete_recv
-		 * or via recv_handler in ib_mad_complete_recv()
+		 * recv is freed up in error cases in jumbo_mad_complete_recv
+		 * or via recv_handler in jumbo_mad_complete_recv()
 		 */
 		recv = NULL;
 	} else if ((ret & IB_MAD_RESULT_SUCCESS) &&
