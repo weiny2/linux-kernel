@@ -1289,6 +1289,7 @@ int qibfs_add(struct hfi_devdata *);
 int qibfs_remove(struct hfi_devdata *);
 
 int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
+void hfi_pcie_cleanup(struct pci_dev *);
 int qib_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
 		    const struct pci_device_id *);
 void qib_pcie_ddcleanup(struct hfi_devdata *);

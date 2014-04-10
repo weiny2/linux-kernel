@@ -1232,6 +1232,7 @@ static void qib_postinit_cleanup(struct hfi_devdata *dd)
 		dd->f_cleanup(dd);
 
 	qib_pcie_ddcleanup(dd);
+	hfi_pcie_cleanup(dd->pcidev);
 
 	cleanup_device_data(dd);
 
@@ -1268,11 +1269,11 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (IS_ERR(dd))
 		ret = PTR_ERR(dd);
 	if (ret)
-		goto bail; /* error already printed */
+		goto clean_bail; /* error already printed */
 
 	ret = qib_create_workqueues(dd);
 	if (ret)
-		goto bail;
+		goto clean_bail;
 
 	/* do the generic initialization */
 	initfail = qib_init(dd, 0);
@@ -1310,7 +1311,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		qib_postinit_cleanup(dd);
 		if (initfail)
 			ret = initfail;
-		goto bail;
+		goto bail;	/* everything already cleaned */
 	}
 
 	qib_verify_pioperf(dd);
@@ -1323,6 +1324,10 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		if (atomic_inc_return(&tested) <= test_interrupts)
 			force_all_interrupts(dd);
 	}
+	return 0;
+
+clean_bail:
+	hfi_pcie_cleanup(pdev);
 bail:
 	return ret;
 }

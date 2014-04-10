@@ -118,10 +118,22 @@ int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	goto done;
 
 bail:
-	pci_disable_device(pdev);
-	pci_release_regions(pdev);
+	hfi_pcie_cleanup(pdev);
 done:
 	return ret;
+}
+
+/*
+ * Clean what was done in qib_pcie_init()
+ */
+void hfi_pcie_cleanup(struct pci_dev *pdev)
+{
+	pci_disable_device(pdev);
+	/*
+	 * Release regions should be called after the disable. OK to
+	 * call if request regions has not been called or failed.
+	 */
+	pci_release_regions(pdev);
 }
 
 /*
@@ -196,7 +208,7 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 }
 
 /*
- * Do PCIe cleanup, after chip-specific cleanup, etc.  Just prior
+ * Do PCIe cleanup related to dd, after chip-specific cleanup, etc.  Just prior
  * to releasing the dd memory.
  * Void because all of the core pcie cleanup functions are void.
  */
@@ -211,9 +223,6 @@ void qib_pcie_ddcleanup(struct hfi_devdata *dd)
 		iounmap(dd->rcvarray_wc);
 	if (dd->piobase)
 		iounmap(dd->piobase);
-
-	pci_disable_device(dd->pcidev);
-	pci_release_regions(dd->pcidev);
 
 	pci_set_drvdata(dd->pcidev, NULL);
 }

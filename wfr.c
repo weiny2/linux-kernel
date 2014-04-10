@@ -4510,7 +4510,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (dd->revision == ~(u64)0) {
 		dd_dev_err(dd, "cannot read chip CSRs\n");
 		ret = -EINVAL;
-		goto bail_free;
+		goto bail_cleanup;
 	}
 	dd->majrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MAJOR_SHIFT)
 			& WFR_CCE_REVISION_CHIP_REV_MAJOR_MASK;
