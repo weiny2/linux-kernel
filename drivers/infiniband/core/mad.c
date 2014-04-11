@@ -69,6 +69,10 @@ module_param_named(support_jumbo, mad_support_jumbo, int, 0444);
 MODULE_PARM_DESC(support_jumbo,
 	"Enable Jumbo MAD support on devices which support them (default 1)");
 
+static int mad_fix_stl_size = 0;
+module_param_named(fix_stl_size, mad_fix_stl_size, int, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(fix_stl_size, "Fix Jumbo MAD's to be 2K (default 0)");
+
 static struct kmem_cache *ib_mad_cache;
 struct kmem_cache *jumbo_mad_cache;
 
@@ -886,7 +890,10 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	local->mad_send_wr->send_wr.wr.ud.pkey_index = mad_wc.pkey_index;
 	/* FIXME upstream; mad_wc.byte_len should be additional param in
 	 * process_mad */
-	local->return_wc_byte_len = mad_wc.byte_len;
+	if (mad_fix_stl_size)
+		local->return_wc_byte_len = sizeof(struct jumbo_mad);
+	else
+		local->return_wc_byte_len = mad_wc.byte_len;
 	/* Reference MAD agent until send side of local completion handled */
 	atomic_inc(&mad_agent_priv->refcount);
 	/* Queue local completion to local list */
@@ -2135,6 +2142,8 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 			if (ret & IB_MAD_RESULT_CONSUMED)
 				goto out;
 			if (ret & IB_MAD_RESULT_REPLY) {
+				if (mad_fix_stl_size)
+					wc->byte_len = sizeof(struct jumbo_mad);
 				agent_send_response(&response->mad.mad,
 						    &recv->grh, wc,
 						    port_priv->device,
