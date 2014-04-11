@@ -4165,6 +4165,8 @@ static void init_chip(struct hfi_devdata *dd)
 				print_current_states(dd, __func__, "after force offline");
 			}
 		}
+	} else {
+		sim_easy_linkup = 0;
 	}
 }
 
