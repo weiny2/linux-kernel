@@ -1,7 +1,7 @@
 /*
  * net/tipc/bearer.c: TIPC bearer code
  *
- * Copyright (c) 1996-2006, Ericsson AB
+ * Copyright (c) 1996-2006, 2013, Ericsson AB
  * Copyright (c) 2004-2006, 2010-2011, Wind River Systems
  * All rights reserved.
  *
@@ -41,12 +41,17 @@
 
 #define MAX_ADDR_STR 60
 
-static struct tipc_media *media_list[MAX_MEDIA];
-static u32 media_count;
+static struct tipc_media * const media_info_array[] = {
+	&eth_media_info,
+#ifdef CONFIG_TIPC_MEDIA_IB
+	&ib_media_info,
+#endif
+	NULL
+};
 
 struct tipc_bearer tipc_bearers[MAX_BEARERS];
 
-static void bearer_disable(struct tipc_bearer *b_ptr);
+static void bearer_disable(struct tipc_bearer *b_ptr, bool shutting_down);
 
 /**
  * tipc_media_find - locates specified media object by name
@@ -55,11 +60,11 @@ struct tipc_media *tipc_media_find(const char *name)
 {
 	u32 i;
 
-	for (i = 0; i < media_count; i++) {
-		if (!strcmp(media_list[i]->name, name))
-			return media_list[i];
+	for (i = 0; media_info_array[i] != NULL; i++) {
+		if (!strcmp(media_info_array[i]->name, name))
+			break;
 	}
-	return NULL;
+	return media_info_array[i];
 }
 
 /**
@@ -69,44 +74,11 @@ static struct tipc_media *media_find_id(u8 type)
 {
 	u32 i;
 
-	for (i = 0; i < media_count; i++) {
-		if (media_list[i]->type_id == type)
-			return media_list[i];
+	for (i = 0; media_info_array[i] != NULL; i++) {
+		if (media_info_array[i]->type_id == type)
+			break;
 	}
-	return NULL;
-}
-
-/**
- * tipc_register_media - register a media type
- *
- * Bearers for this media type must be activated separately at a later stage.
- */
-int tipc_register_media(struct tipc_media *m_ptr)
-{
-	int res = -EINVAL;
-
-	write_lock_bh(&tipc_net_lock);
-
-	if ((strlen(m_ptr->name) + 1) > TIPC_MAX_MEDIA_NAME)
-		goto exit;
-	if (m_ptr->priority > TIPC_MAX_LINK_PRI)
-		goto exit;
-	if ((m_ptr->tolerance < TIPC_MIN_LINK_TOL) ||
-	    (m_ptr->tolerance > TIPC_MAX_LINK_TOL))
-		goto exit;
-	if (media_count >= MAX_MEDIA)
-		goto exit;
-	if (tipc_media_find(m_ptr->name) || media_find_id(m_ptr->type_id))
-		goto exit;
-
-	media_list[media_count] = m_ptr;
-	media_count++;
-	res = 0;
-exit:
-	write_unlock_bh(&tipc_net_lock);
-	if (res)
-		pr_warn("Media <%s> registration error\n", m_ptr->name);
-	return res;
+	return media_info_array[i];
 }
 
 /**
@@ -144,13 +116,11 @@ struct sk_buff *tipc_media_get_names(void)
 	if (!buf)
 		return NULL;
 
-	read_lock_bh(&tipc_net_lock);
-	for (i = 0; i < media_count; i++) {
+	for (i = 0; media_info_array[i] != NULL; i++) {
 		tipc_cfg_append_tlv(buf, TIPC_TLV_MEDIA_NAME,
-				    media_list[i]->name,
-				    strlen(media_list[i]->name) + 1);
+				    media_info_array[i]->name,
+				    strlen(media_info_array[i]->name) + 1);
 	}
-	read_unlock_bh(&tipc_net_lock);
 	return buf;
 }
 
@@ -215,31 +185,12 @@ struct tipc_bearer *tipc_bearer_find(const char *name)
 }
 
 /**
- * tipc_bearer_find_interface - locates bearer object with matching interface name
- */
-struct tipc_bearer *tipc_bearer_find_interface(const char *if_name)
-{
-	struct tipc_bearer *b_ptr;
-	char *b_if_name;
-	u32 i;
-
-	for (i = 0, b_ptr = tipc_bearers; i < MAX_BEARERS; i++, b_ptr++) {
-		if (!b_ptr->active)
-			continue;
-		b_if_name = strchr(b_ptr->name, ':') + 1;
-		if (!strcmp(b_if_name, if_name))
-			return b_ptr;
-	}
-	return NULL;
-}
-
-/**
  * tipc_bearer_get_names - record names of bearers in buffer
  */
 struct sk_buff *tipc_bearer_get_names(void)
 {
 	struct sk_buff *buf;
-	struct tipc_bearer *b_ptr;
+	struct tipc_bearer *b;
 	int i, j;
 
 	buf = tipc_cfg_reply_alloc(MAX_BEARERS * TLV_SPACE(TIPC_MAX_BEARER_NAME));
@@ -247,13 +198,13 @@ struct sk_buff *tipc_bearer_get_names(void)
 		return NULL;
 
 	read_lock_bh(&tipc_net_lock);
-	for (i = 0; i < media_count; i++) {
+	for (i = 0; media_info_array[i] != NULL; i++) {
 		for (j = 0; j < MAX_BEARERS; j++) {
-			b_ptr = &tipc_bearers[j];
-			if (b_ptr->active && (b_ptr->media == media_list[i])) {
+			b = &tipc_bearers[j];
+			if (b->active && (b->media == media_info_array[i])) {
 				tipc_cfg_append_tlv(buf, TIPC_TLV_BEARER_NAME,
-						    b_ptr->name,
-						    strlen(b_ptr->name) + 1);
+						    b->name,
+						    strlen(b->name) + 1);
 			}
 		}
 	}
@@ -273,31 +224,6 @@ void tipc_bearer_remove_dest(struct tipc_bearer *b_ptr, u32 dest)
 	tipc_nmap_remove(&b_ptr->nodes, dest);
 	tipc_bcbearer_sort();
 	tipc_disc_remove_dest(b_ptr->link_req);
-}
-
-/*
- * Interrupt enabling new requests after bearer blocking:
- * See bearer_send().
- */
-void tipc_continue(struct tipc_bearer *b)
-{
-	spin_lock_bh(&b->lock);
-	b->blocked = 0;
-	spin_unlock_bh(&b->lock);
-}
-
-/*
- * tipc_bearer_blocked - determines if bearer is currently blocked
- */
-int tipc_bearer_blocked(struct tipc_bearer *b)
-{
-	int res;
-
-	spin_lock_bh(&b->lock);
-	res = b->blocked;
-	spin_unlock_bh(&b->lock);
-
-	return res;
 }
 
 /**
@@ -387,7 +313,7 @@ restart:
 
 	b_ptr = &tipc_bearers[bearer_id];
 	strcpy(b_ptr->name, name);
-	res = m_ptr->enable_bearer(b_ptr);
+	res = m_ptr->enable_media(b_ptr);
 	if (res) {
 		pr_warn("Bearer <%s> rejected, enable failure (%d)\n",
 			name, -res);
@@ -401,12 +327,10 @@ restart:
 	b_ptr->net_plane = bearer_id + 'A';
 	b_ptr->active = 1;
 	b_ptr->priority = priority;
-	INIT_LIST_HEAD(&b_ptr->links);
-	spin_lock_init(&b_ptr->lock);
 
 	res = tipc_disc_create(b_ptr, &b_ptr->bcast_addr, disc_domain);
 	if (res) {
-		bearer_disable(b_ptr);
+		bearer_disable(b_ptr, false);
 		pr_warn("Bearer <%s> rejected, discovery object creation failed\n",
 			name);
 		goto exit;
@@ -420,33 +344,13 @@ exit:
 }
 
 /**
- * tipc_block_bearer - Block the bearer with the given name, and reset all its links
+ * tipc_reset_bearer - Reset all links established over this bearer
  */
-int tipc_block_bearer(const char *name)
+int tipc_reset_bearer(struct tipc_bearer *b_ptr)
 {
-	struct tipc_bearer *b_ptr = NULL;
-	struct tipc_link *l_ptr;
-	struct tipc_link *temp_l_ptr;
-
 	read_lock_bh(&tipc_net_lock);
-	b_ptr = tipc_bearer_find(name);
-	if (!b_ptr) {
-		pr_warn("Attempt to block unknown bearer <%s>\n", name);
-		read_unlock_bh(&tipc_net_lock);
-		return -EINVAL;
-	}
-
-	pr_info("Blocking bearer <%s>\n", name);
-	spin_lock_bh(&b_ptr->lock);
-	b_ptr->blocked = 1;
-	list_for_each_entry_safe(l_ptr, temp_l_ptr, &b_ptr->links, link_list) {
-		struct tipc_node *n_ptr = l_ptr->owner;
-
-		spin_lock_bh(&n_ptr->lock);
-		tipc_link_reset(l_ptr);
-		spin_unlock_bh(&n_ptr->lock);
-	}
-	spin_unlock_bh(&b_ptr->lock);
+	pr_info("Resetting bearer <%s>\n", b_ptr->name);
+	tipc_link_reset_list(b_ptr->identity);
 	read_unlock_bh(&tipc_net_lock);
 	return 0;
 }
@@ -456,26 +360,14 @@ int tipc_block_bearer(const char *name)
  *
  * Note: This routine assumes caller holds tipc_net_lock.
  */
-static void bearer_disable(struct tipc_bearer *b_ptr)
+static void bearer_disable(struct tipc_bearer *b_ptr, bool shutting_down)
 {
-	struct tipc_link *l_ptr;
-	struct tipc_link *temp_l_ptr;
-	struct tipc_link_req *temp_req;
-
 	pr_info("Disabling bearer <%s>\n", b_ptr->name);
-	spin_lock_bh(&b_ptr->lock);
-	b_ptr->blocked = 1;
-	b_ptr->media->disable_bearer(b_ptr);
-	list_for_each_entry_safe(l_ptr, temp_l_ptr, &b_ptr->links, link_list) {
-		tipc_link_delete(l_ptr);
-	}
-	temp_req = b_ptr->link_req;
-	b_ptr->link_req = NULL;
-	spin_unlock_bh(&b_ptr->lock);
+	b_ptr->media->disable_media(b_ptr);
 
-	if (temp_req)
-		tipc_disc_delete(temp_req);
-
+	tipc_link_delete_list(b_ptr->identity, shutting_down);
+	if (b_ptr->link_req)
+		tipc_disc_delete(b_ptr->link_req);
 	memset(b_ptr, 0, sizeof(struct tipc_bearer));
 }
 
@@ -490,14 +382,12 @@ int tipc_disable_bearer(const char *name)
 		pr_warn("Attempt to disable unknown bearer <%s>\n", name);
 		res = -EINVAL;
 	} else {
-		bearer_disable(b_ptr);
+		bearer_disable(b_ptr, false);
 		res = 0;
 	}
 	write_unlock_bh(&tipc_net_lock);
 	return res;
 }
-
-
 
 void tipc_bearer_stop(void)
 {
@@ -505,7 +395,6 @@ void tipc_bearer_stop(void)
 
 	for (i = 0; i < MAX_BEARERS; i++) {
 		if (tipc_bearers[i].active)
-			bearer_disable(&tipc_bearers[i]);
+			bearer_disable(&tipc_bearers[i], true);
 	}
-	media_count = 0;
 }

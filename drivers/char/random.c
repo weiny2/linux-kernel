@@ -1515,7 +1515,8 @@ randomize_range(unsigned long start, unsigned long end, unsigned long len)
  * Those devices may produce endless random bits and will be throttled
  * when our pool is full.
  */
-void add_hwgenerator_randomness(const char *buffer, size_t count, size_t entropy)
+void add_hwgenerator_randomness(const char *buffer, size_t count,
+				 size_t entropy)
 {
 	struct entropy_store *poolp = &input_pool;
 

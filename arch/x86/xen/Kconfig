@@ -6,6 +6,7 @@ config PARAVIRT_XEN
 	bool "Xen guest support"
 	depends on PARAVIRT
 	select PARAVIRT_CLOCK
+	select PARAVIRT_MMU
 	select XEN_HAVE_PVMMU
 	depends on X86_64 || (X86_32 && X86_PAE && !X86_VISWS)
 	depends on X86_TSC
