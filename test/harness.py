@@ -107,6 +107,12 @@ test_list = [
     },
 
     { "test_name" : "OsuMpi.py",
+      "args" : "--nodelist %HOST[1]% --simics --psm %PSM_LIB%",
+      "type" : "mpi,mpipsm,default",
+      "desc" : "Run OSU MPI benchmarks on one node with PSM",
+    },
+
+    { "test_name" : "OsuMpi.py",
       "args" : "--nodelist %HOST[2]% --simics --mpiverbs",
       "type" : "default,mpi,mpiverbs,verbs",
       "desc" : "Run OSU MPI benchmarks with verbs",

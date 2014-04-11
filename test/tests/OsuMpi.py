@@ -50,6 +50,13 @@ def main():
 
     benchmarks = ["pt2pt/osu_latency", "pt2pt/osu_bw"]
 
+    host_list = test_info.get_host_list()
+    hosts = ",".join(host_list)
+
+    if len(host_list) == 1:
+        # Only provided one host: run two ranks on that host.
+        host_count = 2
+
     for benchmark in benchmarks:
         RegLib.test_log(0, "Starting OSU MPI benchmark " + benchmark)
         cmd = "export LD_LIBRARY_PATH=" + test_info.get_mpi_lib_path()
@@ -60,11 +67,6 @@ def main():
         cmd = cmd + test_info.get_mpi_opts()
         cmd = cmd + " LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
         cmd = cmd + " -np " + str(host_count) + " -H "
-        host_list = test_info.get_host_list()
-        hosts = ""
-        for host in host_list:
-            hosts = hosts + host + ","
-        hosts = RegLib.chomp_comma(hosts)
         cmd = cmd + hosts + " " + test_info.get_osu_benchmark_dir()
         cmd = cmd + "/mpi/" + benchmark
         RegLib.test_log(5,  "MPI CMD: " + cmd)
