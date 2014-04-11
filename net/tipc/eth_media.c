@@ -138,7 +138,7 @@ static int recv_msg(struct sk_buff *buf, struct net_device *dev,
 	if (likely(eb_ptr->bearer)) {
 		if (likely(buf->pkt_type <= PACKET_BROADCAST)) {
 			buf->next = NULL;
-			tipc_recv_msg(buf, eb_ptr->bearer);
+			tipc_rcv(buf, eb_ptr->bearer);
 			return NET_RX_SUCCESS;
 		}
 	}

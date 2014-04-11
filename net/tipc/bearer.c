@@ -413,8 +413,6 @@ int tipc_disable_bearer(const char *name)
 	return res;
 }
 
-
-
 void tipc_bearer_stop(void)
 {
 	u32 i;

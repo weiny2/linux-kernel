@@ -158,7 +158,7 @@ extern struct tipc_bearer tipc_bearers[];
  * TIPC routines available to supported media types
  */
 
-void tipc_recv_msg(struct sk_buff *buf, struct tipc_bearer *tb_ptr);
+void tipc_rcv(struct sk_buff *buf, struct tipc_bearer *tb_ptr);
 
 int  tipc_reset_bearer(struct tipc_bearer *b_ptr);
 
