@@ -108,7 +108,7 @@ static void end_reshape_write(struct bio *bio, int error);
 static void end_reshape(struct r10conf *conf);
 
 #define raid10_log(md, fmt, args...)				\
-	blk_add_trace_msg((md)->queue, "raid10 " fmt, ##args)
+	do { if ((md)->queue) blk_add_trace_msg((md)->queue, "raid10 " fmt, ##args); } while (0)
 
 static void * r10bio_pool_alloc(gfp_t gfp_flags, void *data)
 {
