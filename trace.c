@@ -1,4 +1,5 @@
 #define CREATE_TRACE_POINTS
+#define HFI_TRACE_DO_NOT_CREATE_INLINES
 #include "trace.h"
 
 u8 ibhdr_exhdr_len(struct qib_ib_header *hdr)
@@ -113,3 +114,5 @@ const char *parse_everbs_hdrs(
 	}
 	return ret;
 }
+
+#undef HFI_TRACE_DO_NOT_CREATE_INLINES
