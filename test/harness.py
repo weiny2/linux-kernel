@@ -124,6 +124,18 @@ test_list = [
       "desc" : "Run test opcode counters after quick tests have been run.",
     },
 
+    # wfr-diagtools-sw tests
+    { "test_name" : "HfiPktTest.py",
+      "args" : "--nodelist %HOST[1]% --simics --psm %PSM_LIB%",
+      "type" : "diagtools,default",
+      "desc" : "Run hfi_pkt_test PIO buffer benchmark.",
+    },
+
+    { "test_name" : "HfiPktTest.py",
+      "args" : "--nodelist %HOST[2]% --simics --psm %PSM_LIB%",
+      "type" : "diagtools,default",
+      "desc" : "Run hfi_pkt_test ping-pong benchmark.",
+    },
 ]
 
 

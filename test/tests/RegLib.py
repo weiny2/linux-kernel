@@ -95,6 +95,19 @@ class HostInfo:
     def get_name(self):
         return self.name
 
+    def get_lid(self):
+        cmd = "/usr/sbin/ibportstate -D 0 query"
+        (err, out) = self.send_ssh(cmd)
+        if err:
+            return None
+
+        for line in out:
+            matchObj = re.match(r"Lid.+(\d+)", line)
+            if matchObj:
+               return matchObj.group(1) #no error
+
+        return None #error if we got to here
+
     def send_ssh(self, cmd, buffered=1):
         """ Send an SSH command. We may need to add a timeout mechanism
             buffered mode will save output and return it. Non buffered mode
