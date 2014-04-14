@@ -4953,6 +4953,8 @@ bail:
 	/* FIXME upstream; resp_len should be return as a parameter */
 	if (ret & IB_MAD_RESULT_REPLY)
 		in_wc->byte_len = round_up(resp_len, 8);
+	else if (ret & IB_MAD_RESULT_SUCCESS)
+		in_wc->byte_len -= sizeof(struct ib_grh);
 
 	return ret;
 }
