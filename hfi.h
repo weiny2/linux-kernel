@@ -933,6 +933,7 @@ struct hfi_devdata {
 	u8 qpn_mask;
 
 	u16 rhf_offset; /* offset of RHF within receive header entry */
+	u16 irev;	/* implementation revision */
 
 	/*
 	 * GPIO pins for twsi-connected devices
