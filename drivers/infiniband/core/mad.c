@@ -228,19 +228,22 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	/* Validate parameters */
 	qpn = get_spl_qp_index(qp_type);
 	if (qpn == -1) {
-		pr_notice("ib_register_mad_agent: invalid QP Type\n");
+		pr_notice("ib_register_mad_agent: invalid QP Type %d\n",
+			qp_type);
 		goto error1;
 	}
 
 	if (rmpp_version && rmpp_version != IB_MGMT_RMPP_VERSION) {
-		pr_notice("ib_register_mad_agent: invalid RMPP Version\n");
+		pr_notice("ib_register_mad_agent: invalid RMPP Version %u\n",
+			rmpp_version);
 		goto error1;
 	}
 
 	/* Validate MAD registration request if supplied */
 	if (mad_reg_req) {
 		if (mad_reg_req->mgmt_class_version >= MAX_MGMT_VERSION) {
-			pr_notice("ib_register_mad_agent: invalid Class Version\n");
+			pr_notice("ib_register_mad_agent: invalid Class Version %u\n",
+				mad_reg_req->mgmt_class_version);
 			goto error1;
 		}
 		if (!recv_handler) {
@@ -254,7 +257,8 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 			 */
 			if (mad_reg_req->mgmt_class !=
 			    IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
-				pr_notice("ib_register_mad_agent: Invalid Mgmt Class\n");
+				pr_notice("ib_register_mad_agent: Invalid Mgmt Class %u\n",
+					mad_reg_req->mgmt_class);
 				goto error1;
 			}
 		} else if (mad_reg_req->mgmt_class == 0) {
@@ -262,7 +266,8 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 			 * Class 0 is reserved in IBA and is used for
 			 * aliasing of IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
 			 */
-			pr_notice("ib_register_mad_agent: Invalid Mgmt Class\n");
+			pr_notice("ib_register_mad_agent: Invalid Mgmt Class %u\n",
+				mad_reg_req->mgmt_class);
 			goto error1;
 		} else if (is_vendor_class(mad_reg_req->mgmt_class)) {
 			/*
@@ -290,7 +295,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 					IB_MGMT_CLASS_SUBN_LID_ROUTED) &&
 			    (mad_reg_req->mgmt_class !=
 					IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)) {
-				pr_notice("ib_register_mad_agent: Invalid QP type for class 0x%x\n",
+				pr_notice("ib_register_mad_agent: Invalid SM QP type: class 0x%x\n",
 					mad_reg_req->mgmt_class);
 				goto error1;
 			}
@@ -299,7 +304,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 					IB_MGMT_CLASS_SUBN_LID_ROUTED) ||
 			    (mad_reg_req->mgmt_class ==
 					IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)) {
-				pr_notice("ib_register_mad_agent: Invalid QP type for class 0x%x\n",
+				pr_notice("ib_register_mad_agent: Invalid GS QP type: class 0x%x\n",
 					mad_reg_req->mgmt_class);
 				goto error1;
 			}

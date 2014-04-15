@@ -667,7 +667,8 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 		if (!__get_agent(file, agent_id))
 			goto found;
 
-	pr_notice("ib_umad_reg_agent: Max Agents reached\n");
+	pr_notice("ib_umad_reg_agent: Max Agents (%u) reached\n",
+		IB_UMAD_MAX_AGENTS);
 	ret = -ENOMEM;
 	goto out;
 
