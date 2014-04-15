@@ -524,6 +524,93 @@ static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 				u8 *continous);
 static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 				u16 *vl15buf, u8 *crc_sizes);
+static void handle_send_context_err(struct hfi_devdata *dd,
+				unsigned int context, u64 err_status);
+static void handle_sdma_eng_err(struct hfi_devdata *dd,
+				unsigned int context, u64 err_status);
+static void handle_dcc_err(struct hfi_devdata *dd,
+				unsigned int context, u64 err_status);
+static void handle_lcb_err(struct hfi_devdata *dd,
+				unsigned int context, u64 err_status);
+static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_misc_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+
+/*
+ * Error interrupt table entry.  This is used as input to the interrupt
+ * "clear down" routine used for all second tier error interrupt register.
+ * Second tier interrupt registers have a single bit representing them
+ * in the top-level CceIntStatus.
+ */
+struct err_reg_info {
+	u32 status;		/* status CSR offset */
+	u32 clear;		/* clear CSR offset */
+	u32 mask;		/* mask CSR offset */
+	void (*handler)(struct hfi_devdata *dd, u32 source, u64 reg);
+	const char *desc;
+};
+
+#define NUM_MISC_ERRS (WFR_IS_GENERAL_ERR_END - WFR_IS_GENERAL_ERR_START)
+#define NUM_DC_ERRS (WFR_IS_DC_END - WFR_IS_DC_START)
+
+/*
+ * Helpers for building WFR and DC error interrupt table entries.  Different
+ * helpers are needed because of inconsistent register names.
+ */
+#define WFR_EE(reg, handler, desc) \
+	{ WFR_##reg##_STATUS, WFR_##reg##_CLEAR, WFR_##reg##_CLEAR, \
+		handler, desc }
+#define DC_EE1(reg, handler, desc) \
+	{ reg##_FLG, reg##_FLG_CLR, reg##_FLG_EN, handler, desc }
+#define DC_EE2(reg, handler, desc) \
+	{ reg##_FLG, reg##_CLR, reg##_EN, handler, desc }
+
+/*
+ * Table of the "misc" grouping of error interrupts.  Each entry refers to
+ * another register containing more information.
+ */
+static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
+/* 0*/	WFR_EE(CCE_ERR,		handle_cce_err,    "CceErr"),
+/* 1*/	WFR_EE(RCV_ERR,		handle_rxe_err,    "RxeErr"),
+/* 2*/	WFR_EE(MISC_ERR,	handle_misc_err,   "MiscErr"),
+/* 3*/	{ 0, 0, 0, 0 }, /* reserved */
+/* 4*/	WFR_EE(SEND_PIO_ERR,    handle_pio_err,    "PioErr"),
+/* 5*/	WFR_EE(SEND_DMA_ERR,    handle_sdma_err,   "SDmaErr"),
+/* 6*/	WFR_EE(SEND_EGRESS_ERR, handle_egress_err, "EgressErr"),
+/* 7*/	WFR_EE(SEND_ERR,	handle_txe_err,    "TxeErr")
+	/* the rest are reserved */
+};
+
+/*
+ * Send context error interupt entry - refers to another register
+ * containing more information.
+ */
+static const struct err_reg_info sendctxt_err =
+	WFR_EE(SEND_CTXT_ERR,	handle_send_context_err, "SendCtxtErr");
+
+/*
+ * SDMA error interupt entry - refers to another register containing more
+ * information.
+ */
+static const struct err_reg_info sdma_eng_err =
+	WFR_EE(SEND_DMA_ERR,	handle_sdma_eng_err, "SDmaEngErr");
+
+/*
+ * Table of the DC grouping of error interupts.  Each entry refers to
+ * another register containing more information.
+ */
+static const struct err_reg_info dc_errs[NUM_DC_ERRS] = {
+/* 0*/	DC_EE1(DCC_ERR,		handle_dcc_err,	       "DCC Err"),
+/* 1*/	DC_EE2(DC_LCB_ERR,	handle_lcb_err,	       "LCB Err"),
+/* 2*/	DC_EE2(DC_DC8051_ERR,	handle_8051_interrupt, "DC8051 Interrupt"),
+/* 3*/	/* dc_lbm_int - special, see is_dc_int() */
+	/* the rest are reserved */
+};
 
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -778,60 +865,130 @@ static char *egress_err_status_string(char *buf, int buf_len, u64 flags)
 		egress_err_status_flags, ARRAY_SIZE(egress_err_status_flags));
 }
 
+/* TODO */
+static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "CCE Error: 0x%llx (unhandled)\n", reg);
+}
+
+/* TODO */
+static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "Receive Error: 0x%llx (unhandled)\n", reg);
+}
+
+/* TODO */
+static void handle_misc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "Misc Error: 0x%llx (unhandled)\n", reg);
+}
+
+/* TODO */
+static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	char buf[96];
+
+	dd_dev_info(dd, "PIO Error: %s (unhandled)\n",
+		pio_err_status_string(buf, sizeof(buf), reg));
+}
+
+/* TODO */
+static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "SDMA Error: 0x%llx (unhandled)\n", reg);
+}
+
+/* TODO */
+static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	char buf[96];
+
+	dd_dev_info(dd, "Egress Error: %s (unhandled)\n",
+		egress_err_status_string(buf, sizeof(buf), reg));
+}
+
+/* TODO */
+static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "Send Error: 0x%llx (unhandled)\n", reg);
+}
+
+/*
+ * The maximum number of times the error clear down will loop before
+ * blocking a repeating error.  This value is arbitrary.
+ */
+#define MAX_CLEAR_COUNT 20
+
+/*
+ * Clear and handle an error register.  All error interrupts are funneled
+ * through here to have a central location to correctly handle single-
+ * or multi-shot errors.
+ *
+ * For non per-context registers, call this routine with a context value
+ * of 0 so the per-context offset is zero.
+ *
+ * If the handler loops too many times, assume that something is wrong
+ * and can't be fixed, so mask the error bits.
+ */
+static void interrupt_clear_down(struct hfi_devdata *dd,
+				 u32 context,
+				 const struct err_reg_info *eri)
+{
+	u64 reg;
+	u32 count;
+
+	/* read in a loop until no more errors are seen */
+	count = 0;
+	while (1) {
+		reg = read_kctxt_csr(dd, context, eri->status);
+		if (reg == 0)
+			break;
+		write_kctxt_csr(dd, context, eri->clear, reg);
+		if (likely(eri->handler))
+			eri->handler(dd, context, reg);
+		count++;
+		if (count > MAX_CLEAR_COUNT) {
+			u64 mask;
+
+			dd_dev_err(dd, "Repeating %s bits 0x%llx - masking\n",
+				eri->desc, reg);
+			/*
+			 * Read-modify-write so any other masked bits
+			 * remain masked.
+			 */
+			mask = read_kctxt_csr(dd, context, eri->mask);
+			mask &= ~reg;
+			write_kctxt_csr(dd, context, eri->mask, mask);
+			break;
+		}
+		/*
+		 * TODO: This is to work around a bug in simulator
+		 * versions before v36.  In versions before v36, the
+		 * DC8051_ERR_CLR did not work, making this loop keep
+		 * going until the max count was achieved.  We don't
+		 * want to mask the DC8051 interrupt, so work around
+		 * it by always breaking here.  In the simulator,
+		 * we don't need to loop, so the first time through
+		 * will handle everything that has come in.
+		 */
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
+				&& dd->irev < 36)
+			break;
+	}
+}
+
 /*
  * CCE block "misc" interrupt.  Source is < 16.
  */
 static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
 {
-	char buf[96];
-	u64 reg;
+	const struct err_reg_info *eri = &misc_errs[source];
 
-	/* TODO: do something for these */
-	switch (source) {
-	case 0: /* CceErr */
-		reg = read_csr(dd, WFR_CCE_ERR_STATUS);
-		write_csr(dd, WFR_CCE_ERR_CLEAR, reg);
-		dd_dev_info(dd, "CCE Error: 0x%llx\n", reg);
-		break;
-	case 1: /* RxeErr */
-		reg = read_csr(dd, WFR_RCV_ERR_STATUS);
-		write_csr(dd, WFR_RCV_ERR_CLEAR, reg);
-		dd_dev_info(dd, "Receive Error: 0x%llx\n", reg);
-		break;
-	case 2: /* MiscErr */
-		reg = read_csr(dd, WFR_MISC_ERR_STATUS);
-		write_csr(dd, WFR_MISC_ERR_CLEAR, reg);
-		dd_dev_info(dd, "Misc Error: 0x%llx\n", reg);
-		break;
-	case 4: /* PioErr */
-		/* TODO: do more here.. most of these put the hfi in
-		   freeze more.  We need to recognize that and unfreeze */
-		/* clear the error(s) */
-		reg = read_csr(dd, WFR_SEND_PIO_ERR_STATUS);
-		write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, reg);
-		dd_dev_info(dd, "PIO Error: %s\n",
-			pio_err_status_string(buf, sizeof(buf), reg));
-		break;
-	case 5: /* SDmaErr */
-		reg = read_csr(dd, WFR_SEND_DMA_ERR_STATUS);
-		write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, reg);
-		dd_dev_info(dd, "DMA Error: 0x%llx\n", reg);
-		break;
-	case 6: /* EgressErr */
-		reg = read_csr(dd, WFR_SEND_EGRESS_ERR_STATUS);
-		write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, reg);
-		dd_dev_info(dd, "Egress Error: %s\n",
-			egress_err_status_string(buf, sizeof(buf), reg));
-		break;
-	case 7: /* TxeErr */
-		reg = read_csr(dd, WFR_SEND_ERR_STATUS);
-		write_csr(dd, WFR_SEND_ERR_CLEAR, reg);
-		dd_dev_info(dd, "Send Error: 0x%llx\n", reg);
-		break;
-	default: /* Reserved */
+	if (eri->handler) {
+		interrupt_clear_down(dd, 0, eri);
+	} else {
 		dd_dev_err(dd, "Unexpected misc interrupt (%u) - reserved\n",
 			source);
-		break;
 	}
 }
 
@@ -927,15 +1084,14 @@ static void handle_send_context_err(struct hfi_devdata *dd,
  */
 static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 {
-	u64 err_status;
+	interrupt_clear_down(dd, source, &sendctxt_err);
+}
 
-	/* read and clear the error status */
-	err_status = read_kctxt_csr(dd, source, WFR_SEND_CTXT_ERR_STATUS);
-	if (err_status) {
-		write_kctxt_csr(dd, source,
-				WFR_SEND_CTXT_ERR_CLEAR, err_status);
-		handle_send_context_err(dd, source, err_status);
-	}
+/* TODO */
+static void handle_sdma_eng_err(struct hfi_devdata *dd,
+		unsigned int source, u64 status)
+{
+	dd_dev_info(dd, "SDMA #%d error: 0x%llx (unhandled)\n", source, status);
 }
 
 /*
@@ -943,12 +1099,11 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
  */
 static void is_sdma_err_int(struct hfi_devdata *dd, unsigned int source)
 {
-	/* TODO: actually do something */
-	printk("%s: int%u - unimplemented\n", __func__ , source);
+	interrupt_clear_down(dd, source, &sdma_eng_err);
 }
 
 /*
- * CCE block "various" interrupt.  Source is < 12.
+ * CCE block "various" interrupt.  Source is < 8.
  */
 static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 {
@@ -1115,7 +1270,7 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	set_physical_link_state(dd, WFR_PLS_LINKUP);
 }
 
-static void handle_8051_interrupt(struct hfi_devdata *dd, u64 reg)
+static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	u64 info, err, host_msg;
 
@@ -1192,39 +1347,28 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u64 reg)
 	}
 }
 
+/* TODO */
+static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "DCC Error: 0x%llx (unhandled)\n", reg);
+}
+
+/* TODO */
+static void handle_lcb_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "LCB Error: 0x%llx (unhandled)\n", reg);
+}
+
 /*
  * CCE block DC interrupt.  Source is < 8.
  */
 static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 {
-	u64 reg;
+	const struct err_reg_info *eri = &dc_errs[source];
 
-	switch (source) {
-	case 0: /* dc_common_int */
-		/* read and clear the DCC error register */
-		reg = read_csr(dd, DCC_ERR_FLG);
-		if (reg)
-			write_csr(dd, DCC_ERR_FLG_CLR, reg);
-		/* TODO: implement DCC error handling */
-		dd_dev_info(dd, "%s: DCC Error (dc%u): 0x%llx (unhandled)\n", __func__ , source, reg);
-		break;
-	case 1: /* dc_lcb_int */
-		/* read and clear the LCB error register */
-		reg = read_csr(dd, DC_LCB_ERR_FLG);
-		if (reg)
-			write_csr(dd, DC_LCB_ERR_CLR, reg);
-		/* TODO: implement LCB error handling */
-		dd_dev_info(dd, "%s: LCB Error (dc%u): 0x%llx (unhandled)\n", __func__ , source, reg);
-		break;
-	case 2: /* dc_8051_int */
-		/* read and clear the 8051 error register */
-		reg = read_csr(dd, DC_DC8051_ERR_FLG);
-		if (reg) {
-			write_csr(dd, DC_DC8051_ERR_CLR, reg);
-			handle_8051_interrupt(dd, reg);
-		}
-		break;
-	case 3: /* dc_lbm_int */
+	if (eri->handler) {
+		interrupt_clear_down(dd, 0, eri);
+	} else if (source == 3 /* dc_lbm_int */) {
 		/*
 		 * This indicates that a parity error has occurred on the
 		 * address/control lines presented to the LBM.  The error
@@ -1235,10 +1379,8 @@ static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 		 * ever does.
 		 */
 		dd_dev_err(dd, "Parity error in DC LBM block\n");
-		break;
-	default:
+	} else {
 		dd_dev_err(dd, "Invalid DC interrupt %u\n", source);
-		break;
 	}
 }
 
@@ -1470,7 +1612,7 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 		/* clear the interrupt(s) */
 		write_csr(dd,
 			WFR_CCE_INT_CLEAR + (8*(WFR_IS_SDMA_START/64)),
-			per_sdma->imask);
+			status);
 
 		/* handle the interrupt(s) */
 		handle_sdma_interrupt(per_sdma, status);
