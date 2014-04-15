@@ -4036,6 +4036,10 @@ static void write_uninitialized_csrs_and_memories(struct hfi_devdata *dd)
 	for (i = 0; i < dd->chip_rcv_array_count; i++)
 		write_csr(dd, WFR_RCV_ARRAY + (8*i),
 					WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK);
+
+	/* RcvQPMapTable */
+	for (i = 0; i < 32; i++)
+		write_csr(dd, WFR_RCV_QP_MAP_TABLE + (8 * i), 0);
 }
 
 /* set TXE CSRs to chip reset defaults */
