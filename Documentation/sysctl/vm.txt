@@ -198,10 +198,10 @@ use outside of a testing or debugging environment is not recommended.
 You may see informational messages in your kernel log when this file is
 used:
 
-	cat (1234): dropped kernel caches: 3
+	cat (1234): drop_caches: 3
 
 These are informational only.  They do not mean that anything is wrong
-with your system.
+with your system.  To disable them, echo 4 (bit 3) into drop_caches.
 
 ==============================================================
 
