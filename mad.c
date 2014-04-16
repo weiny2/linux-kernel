@@ -673,6 +673,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	pi->link_width_downgrade.enabled = 0;
 	pi->link_width_downgrade.active = 0;
 
+	pi->mtucap = mtu_to_enum(max_mtu, IB_MTU_4096);
+
 	/* 32.768 usec. response time (guessing) */
 	pi->resptimevalue = 3;
 
