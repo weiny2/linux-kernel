@@ -1847,6 +1847,40 @@ static int subn_trap_repress(struct ib_smp *smp, struct ib_device *ibdev,
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 }
 
+#ifdef CONFIG_STL_MGMT
+struct stl_pma_mad {
+	struct ib_mad_hdr mad_hdr;
+	u8 data[2024];
+} __packed;
+
+static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
+				     struct ib_device *ibdev)
+{
+	struct ib_class_port_info *p =
+		(struct ib_class_port_info *)pmp->data;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+
+	memset(pmp->data, 0, sizeof(pmp->data));
+
+	if (pmp->mad_hdr.attr_mod != 0)
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+
+	p->base_version = JUMBO_MGMT_BASE_VERSION;
+	p->class_version = STL_SMI_CLASS_VERSION;
+	/*
+	 * Set the most significant bit of CM2 to indicate support for
+	 * congestion statistics
+	 */
+	p->reserved[0] = dd->psxmitwait_supported << 7;
+	/*
+	 * Expected response time is 4.096 usec. * 2^18 == 1.073741824 sec.
+	 */
+	p->resp_time_value = 18;
+
+	return reply(pmp);
+}
+#endif /* CONFIG_STL_MGMT */
+
 static int pma_get_classportinfo(struct ib_pma_mad *pmp,
 				 struct ib_device *ibdev)
 {
@@ -2841,6 +2875,95 @@ bail:
 	return ret;
 }
 
+#ifdef CONFIG_STL_MGMT
+static int process_perf_stl(struct ib_device *ibdev, u8 port,
+			    struct jumbo_mad *in_mad,
+			    struct jumbo_mad *out_mad)
+{
+	struct stl_pma_mad *pmp = (struct stl_pma_mad *)out_mad;
+	int ret;
+
+	*out_mad = *in_mad;
+
+	if (pmp->mad_hdr.class_version != STL_SMI_CLASS_VERSION) {
+		pmp->mad_hdr.status |= IB_SMP_UNSUP_VERSION;
+		return reply(pmp);
+	}
+
+	switch (pmp->mad_hdr.method) {
+	case IB_MGMT_METHOD_GET:
+		switch (pmp->mad_hdr.attr_id) {
+		case IB_PMA_CLASS_PORT_INFO:
+			ret = pma_get_stl_classportinfo(pmp, ibdev);
+			goto bail;
+#if 0
+		case IB_PMA_PORT_SAMPLES_CONTROL:
+			ret = pma_get_portsamplescontrol(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_SAMPLES_RESULT:
+			ret = pma_get_portsamplesresult(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_SAMPLES_RESULT_EXT:
+			ret = pma_get_portsamplesresult_ext(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_COUNTERS:
+			ret = pma_get_portcounters(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_COUNTERS_EXT:
+			ret = pma_get_portcounters_ext(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_COUNTERS_CONG:
+			ret = pma_get_portcounters_cong(pmp, ibdev, port);
+			goto bail;
+#endif /* 01 */
+		default:
+			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply(pmp);
+			goto bail;
+		}
+
+	case IB_MGMT_METHOD_SET:
+		switch (pmp->mad_hdr.attr_id) {
+#if 0
+		case IB_PMA_PORT_SAMPLES_CONTROL:
+			ret = pma_set_portsamplescontrol(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_COUNTERS:
+			ret = pma_set_portcounters(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_COUNTERS_EXT:
+			ret = pma_set_portcounters_ext(pmp, ibdev, port);
+			goto bail;
+		case IB_PMA_PORT_COUNTERS_CONG:
+			ret = pma_set_portcounters_cong(pmp, ibdev, port);
+			goto bail;
+#endif /* 01 */
+		default:
+			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
+			ret = reply(pmp);
+			goto bail;
+		}
+
+	case IB_MGMT_METHOD_TRAP:
+	case IB_MGMT_METHOD_GET_RESP:
+		/*
+		 * The ib_mad module will call us to process responses
+		 * before checking for other consumers.
+		 * Just tell the caller to process it normally.
+		 */
+		ret = IB_MAD_RESULT_SUCCESS;
+		goto bail;
+
+	default:
+		pmp->mad_hdr.status |= IB_SMP_UNSUP_METHOD;
+		ret = reply(pmp);
+	}
+
+bail:
+	return ret;
+}
+#endif /* CONFIG_STL_MGMT */
+
 static int process_perf(struct ib_device *ibdev, u8 port,
 			struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
@@ -3233,11 +3356,11 @@ static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
 		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
 				       out_mad);
 		goto bail;
-#if 0
 	case IB_MGMT_CLASS_PERF_MGMT:
-		ret = process_perf(ibdev, port, in_mad, out_mad);
+		ret = process_perf_stl(ibdev, port, in_mad, out_mad);
 		goto bail;
 
+#if 0
 	case IB_MGMT_CLASS_CONG_MGMT:
 		if (!ppd->congestion_entries_shadow ||
 			 !qib_cc_table_size) {
