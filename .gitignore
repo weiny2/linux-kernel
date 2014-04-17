@@ -1,9 +1,12 @@
-*.o
-*.swp
-*.o.cmd
+*.ko
 *.ko.cmd
-.tmp_versions
 *.mod.c
+*.o
+*.o.cmd
+*.out
 *.pyc
+*.swp
+.tmp_versions
 Module.symvers
+cscope.*
 modules.order
