@@ -105,7 +105,7 @@ void test_id_dimm(void)
 
 	ret = crbd_ioctl_pass_thru(&fw_cmd);
 
-	MY_ASSERT_EQUAL(ret, MB_SUCCESS);
+	MY_ASSERT_EQUAL(ret, FNV_MB_SUCCESS);
 
 	id_dimm_payload = *(struct cr_pt_payload_identify_dimm *) fw_cmd.output_payload;
 
@@ -129,14 +129,14 @@ void test_get_security(void)
 	char security_status;
 
 	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 	MY_ASSERT_EQUAL(security_status, 0);
 }
 
 void test_set_nonce(void)
 {
 	int test_dimm = 1;
-	MY_ASSERT_EQUAL(crbd_set_nonce(test_dimm), MB_UNSUPPORTED_CMD);
+	MY_ASSERT_EQUAL(crbd_set_nonce(test_dimm), FNV_MB_UNSUPPORTED_CMD);
 }
 
 void test_passphrase(void)
@@ -147,7 +147,7 @@ void test_passphrase(void)
 	char security_status;
 
 	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 	MY_ASSERT_EQUAL(security_status, 0);
 
 	strncpy(pphrase, "monkey", sizeof(pphrase));
@@ -155,20 +155,20 @@ void test_passphrase(void)
 
 	/*Set Passphrase*/
 	MY_ASSERT_EQUAL(crbd_set_passphrase(test_dimm, empty_pphrase, pphrase),
-			MB_SUCCESS);
+			FNV_MB_SUCCESS);
 
 	/*Verify Security State*/
 	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 	MY_ASSERT_EQUAL(security_status, CR_SEC_ENABLED);
 
 	/*Disable Passphrase*/
 	MY_ASSERT_EQUAL(crbd_disable_passphrase(test_dimm, pphrase)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 
 	/*Check Security State*/
 	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 	MY_ASSERT_EQUAL(security_status, 0);
 }
 
@@ -180,7 +180,7 @@ void test_secure_erase(void)
 	char security_status;
 
 	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 	MY_ASSERT_EQUAL(security_status, 0);
 
 	strncpy(pphrase, "monkey", sizeof(pphrase));
@@ -188,24 +188,24 @@ void test_secure_erase(void)
 
 	/*Set Passphrase*/
 	MY_ASSERT_EQUAL(crbd_set_passphrase(test_dimm, empty_pphrase, pphrase),
-			MB_SUCCESS);
+			FNV_MB_SUCCESS);
 
 	/*Verify Security State*/
 	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 	MY_ASSERT_EQUAL(security_status, CR_SEC_ENABLED);
 
 	/*Erase Prepare*/
 	MY_ASSERT_EQUAL(crbd_erase_prepare(test_dimm)
-				, MB_SUCCESS);
+				, FNV_MB_SUCCESS);
 
 	/*Secure Erase*/
 	MY_ASSERT_EQUAL(crbd_erase_unit(test_dimm, pphrase)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 
 	/*Check Security State*/
 	MY_ASSERT_EQUAL(crbd_get_security(test_dimm, &security_status)
-			, MB_SUCCESS);
+			, FNV_MB_SUCCESS);
 	MY_ASSERT_EQUAL(security_status, 0);
 }
 

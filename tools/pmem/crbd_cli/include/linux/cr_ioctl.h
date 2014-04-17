@@ -2,7 +2,7 @@
  * The interface between the platform independent device adapter and the device
  * driver, that defines the shared structures shared across that interface.
  *
- * Copyright 2013 Intel Corporation All Rights Reserved.
+ * Copyright 2013 2014 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
  *
@@ -50,7 +50,7 @@ extern "C"
 #define	CR_SECURITY_NONCE_LEN	8 /* Length of a security nonce */
 #define	CR_BCD_DATE_LEN	4 /* Length of a BDC Formatted Date */
 #define	CR_BCD_TIME_LEN	3 /* Length of a BDC Formatted Time */
-#define	CR_BCD_PCT_COMPLETE 3 /* Length of a BDC Formated Percent Complete */
+#define	CR_BCD_ETC_TIME_LEN	5 /* Length of a BDC Formatted Time for longop*/
 #define	CR_FW_REV_LEN 5	/* Length of the formatted Firmware Revision string */
 #define	CR_MFR_LEN	19 /* Length of manufacturer name buffer */
 #define	CR_MODELNUM_LEN	19 /* Length of DIMM Model Number buffer */
@@ -58,23 +58,15 @@ extern "C"
 #define	CR_OS_PARTITION	2 /* get platform config OS partition number */
 #define	CR_CONFIG_GET_SIZE	1 /* get platform config get size command */
 #define	CR_CONFIG_GET_DATA	2 /* get platform config get data command */
-
-/*Mailbox Status Codes*/
-enum {
-	MB_SUCCESS = 0x00, /*Command Complete*/
-	MB_INVALID_PARAM = 0x01, /*Input parameter invalid*/
-	MB_DATA_TRANS_ERR = 0x02, /*Error in the data transfer*/
-	MB_INTERNAL_ERR = 0x03, /*Internal device error*/
-	MB_UNSUPPORTED_CMD = 0x04, /*Opcode or Sub opcode not supported*/
-	MB_BUSY = 0x05, /*Device is busy processing a long operation*/
-	MB_PASSPHRASE_ERR = 0x06, /*Incorrect Passphrase*/
-	MB_SECURITY_ERR = 0x07, /*Security check on the image has failed*/
-	MB_INVALID_STATE = 0x08, /*Op not permitted in current security state*/
-	MB_SYS_TIME_ERR = 0x09, /*System time has not been set yet*/
-	MB_DATA_NOT_SET = 0x0A /*Get data called without ever calling set data*/
-};
-
-#define MB_COMPLETE 0x1
+#define CR_DDRT_ALERT_TYPES	128 /*Max number of different DDRT Alerts*/
+#define CR_DEV_CERTIFICATE_LEN 138 /*Length of the device certificate*/
+/*Length of the signed device authentication challenge*/
+#define CR_SIGNED_AUTH_CHALLENGE_LEN 64
+/*
+ * Number of error addresses returned in a long operation for
+ *  address range scrub
+ */
+#define CR_DPA_ERROR_ADDRESSES 14
 
 /*CR Security Status*/
 enum {
@@ -85,74 +77,40 @@ enum {
 	CR_SEC_COUNT_EXP	= 1 << 4,
 };
 
+#define MB_COMPLETE 0x1
+
+#define	CR_MODULE_NAME	"crbd" /* Module name */
+
 /*
  * ****************************************************************************
  * ENUMS
  * ****************************************************************************
  */
 
-/*
- * TODO: for reference only, delete this comment block when no longer needed.
- * Notes on the implementation of the above IOCTL types.  The following IOCTL
- * enumerations must support the stated function prototypes and their arguments
+/* 
+ * FNV Mail Box error codes
  *
- * IOCTL_GET_TOPOLOGY_COUNT
- *		int ioctl_get_topology_count();
- *
- * IOCTL_GET_TOPOLOGY
- *		int ioctl_get_topology(
- *				const NVM_UINT8 count,
- *				struct nvdimm_topology *p_dimm_topo);
- *
- * IOCTL_GET_DIMM_DETAILS
- *		int ioctl_get_dimm_details(
- *				const struct nvdimm_topology,
- *				struct ioctl_dimm_details *p_dimm_details);
- *
- * IOCTL_GET_POOL_COUNT
- *		int ioctl_get_pool_count();
- *
- * IOCTL_GET_POOLS
- *		int ioctl_get_pools(
- *				const NVM_UINT32 count,
- *				struct ioctl_pool_discovery *p_pools);
- *
- * IOCTL_GET_POOL_DETAILS
- *		int ioctl_get_pool(
- *				const NVM_GUID uuid,
- *				struct nvdimm_pool_details *p_details);
- *
- * IOCTL_GET_VOLUME_COUNT
- *		int ioctl_get_volume_count();
- *
- * IOCTL_GET_VOLUMES
- *		int ioctl_get_volumes(
- *				const NVM_UINT32 count,
- *				struct nvdimm_volume_discovery *p_volumes);
- *
- * IOCTL_GET_VOLUME_DETAILS
- *		int ioctl_get_volume(
- *				const NVM_GUID uuid,
- *				struct nvdimm_volume_details *p_details);
- *
- * IOCTL_GET_VOLUME_POOLS
- *		int ioctl_get_volume_pools(
- *				const NVM_GUID vol_uuid,
- *				const NVM_UINT32 pool_count,
- *				NVM_GUID *p_pool_uuids);
- *
- * IOCTL_CREATE_VOLUME
- *		(pending)
- *
- * IOCTL_DELETE_VOLUME
- *		(pending)
- *
- * IOCTL_MODIFY_VOLUME
- *		(pending)
- *
- * IOCTL_PASSTHROUGH_CMD
- *		(pending)
+ * These are returned from the device driver when it completes a pass through
+ * command with an error state from the firmware.
  */
+enum fnv_mb_error
+{
+	FNV_MB_SUCCESS = 0x00, //!< Command was successfully completed
+	FNV_MB_INVALID_CMD_PARAM = 0x01, //!< An input parameter was not valid
+	FNV_MB_DATA_XFER_ERR = 0x02, //!< There was an error in the data transfer
+	FNV_MB_INTERNAL_DEV_ERR = 0x03, //!< There was an internal device error
+	FNV_MB_UNSUPPORTED_CMD = 0x04, //!< The command opcode or subopcode was not recognized
+	FNV_MB_DEVICE_BUSY = 0x05, //!< Device is currently busy processing a long operation
+	FNV_MB_INVALID_CREDENTIAL = 0x06, //!< Passphrase or Security Nonce does is not acceptable
+	FNV_MB_SECURITY_CHK_FAIL = 0x07, //!< The Security CHeck on the image has failed verification
+	FNV_MB_INVALID_SECURITY_STATE = 0x08, //!< Operation is valid in the current security state
+	FNV_MB_SYSTEM_TIME_NOT_SET = 0x09, //!< The system time has not been set yet
+	FNV_MB_DATA_NOT_SET = 0x0A, //!< Returned if "get data" is called before "set data"
+	FNV_MB_ABORTED = 0x0B, //!< Command has been aborted. A long operation command has aborted.
+	FNV_MB_NO_NEW_FW = 0x0C, //!< Execute FNV FW was called prior to uploading new FW image.
+	FNV_MB_REVISION_FAILURE = 0x0D, //!< Illegal rollback failure.
+	FNV_MB_INJECTION_DISABLED = 0x0E //!< Error injection is not currently enabled on the device.
+};
 
 /*
  * Defines the Firmware Command Table opcodes accessed via the
@@ -217,7 +175,8 @@ enum cr_get_set_feat_subop {
 	SUBOP_POLICY_MEM_TEST = 0x03, /* TODO*/
 	/* TODO Action policy to extend DIMM life. */
 	SUBOP_POLICY_DIE_SPARRING = 0x04,
-	SUBOP_POLICY_PATROL_SCRUB = 0x05  /* TODO */
+	SUBOP_POLICY_PATROL_SCRUB = 0x05,  /* TODO */
+	SUBOP_DDRT_ALERTS = 0x06 /*Alerts to notify user*/
 };
 
 /*
@@ -231,7 +190,11 @@ enum cr_get_set_admin_feat_subop {
 	/* TODO Set/Get DIMM Partition Config */
 	SUBOP_DIMM_PARTITION_INFO = 0x02,
 	/* TODO Get/Set log level of FNV FW */
-	SUBOP_FNV_FW_DBG_LOG_LEVEL = 0x03
+	SUBOP_FNV_FW_DBG_LOG_LEVEL = 0x03,
+	SUBOP_BLK_WINDOW = 0x04, /*Get/Set info about persistent partition*/
+	SUBOP_HW_CFG_PARAMETER = 0x05, /*Set/Set Various HW Parameters*/
+	SUBOP_DDRT_IO_INIT_INFO = 0x06, /*Get/Set DDRT Initialization info*/
+	SUBOP_RSVD = 0x07
 };
 
 /*
@@ -241,16 +204,18 @@ enum cr_get_set_dbg_feat_subop {
 	SUBOP_CSR = 0x00, /* TODO */
 	SUBOP_ERR_POLICY = 0x01,
 	SUBOP_THERMAL_POLICY = 0x02,
-	SUBOP_MEDIA_TRAIN_DATA = 0x03
+	SUBOP_MEDIA_TRAIN_DATA = 0x03,
+	SUBOP_DDRT_AUTHENTICATION_REQUEST = 0x04
 };
 
 /*
  * Defines the Sub-Opcodes for CR_PT_INJECT_ERROR
  */
 enum cr_inject_error_subop {
-	SUBOP_CLEAR_ALL_ERRORS = 0x00, /* TODO */
-	SUBOP_ERROR_POISON = 0x01, /* TODO */
-	SUBOP_ERROR_TEMP = 0x02, /* TODO */
+	SUBOP_ENABLE_INJECTION = 0x00, /*Enable Error Injection BIOS MB only*/
+	SUBOP_CLEAR_ALL_ERRORS = 0x01, /* Clears all errors currently set */
+	SUBOP_ERROR_POISON = 0x02, /* TODO */
+	SUBOP_ERROR_TEMP = 0x03, /* TODO */
 };
 
 /*
@@ -271,8 +236,8 @@ enum cr_get_log_subop {
  * Defines the Sub-Opcodes for CR_PT_UPDATE_FW
  */
 enum cr_update_fw_subop {
-	SUBOP_UPDATE_FNV_FW = 0x00, /* TODO */
-	SUBOP_UPDATE_MEDIA_TRAINING_CODE = 0x01 /* TODO */
+	SUBOP_UPDATE_FNV_FW = 0x00, /* Update the running FNV FW */
+	SUBOP_EXECUTE_FNV_FW = 0x01 /* Force the execution of a newly updated FW image. */
 };
 
 /*
@@ -432,7 +397,7 @@ struct fv_fw_cmd {
 
 /*
  * Passthrough CR Payload:
- *		Opcode: 0x0Ah (Identify DIMM)
+ *		Opcode: 0x01h (Identify DIMM)
  *	Small Output Payload
  */
 struct cr_pt_payload_identify_dimm {
@@ -456,7 +421,7 @@ struct cr_pt_payload_identify_dimm {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x01h (Get Security Info)
+ *		Opcode:		0x02h (Get Security Info)
  *		Sub-Opcode:	0x00h (Get Security State)
  *	Small Output Payload
  */
@@ -478,7 +443,19 @@ struct cr_pt_payload_get_security_state {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x02h (Set Security Info)
+ *		Opcode:		0x03h (Set Security Info)
+ *		Sub-Opcode:	0x00h (Set BIOS Nonce)
+ *	Small Input Payload
+ *	TODO: [NWM]Nonce is a BIOS only command, remove?
+ */
+struct cr_pt_payload_smm_security_nonce {
+	/* Security nonce to lock down SMM mailbox */
+	unsigned char sec_nonce[CR_SECURITY_NONCE_LEN];
+};
+
+/*
+ * Passthrough CR Payload:
+ *		Opcode:		0x03h (Set Security Info)
  *		Sub-Opcode:	0xF1h (Set Passphrase)
  *	Small Input Payload
  */
@@ -491,7 +468,7 @@ struct cr_pt_payload_set_passphrase {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x02h (Set Security Info)
+ *		Opcode:		0x03h (Set Security Info)
  *		Sub-Opcode:	0xF2h (Disable Passphrase)
  *		Sub-Opcode:	0xF3h (Unlock Unit)
  *	Small Input Payload
@@ -503,9 +480,10 @@ struct cr_pt_payload_passphrase {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x02h (Set Security Info)
+ *		Opcode:		0x03h (Set Security Info)
  *		Sub-Opcode:	0xF5h (Secure Erase Unit)
  *	Small Input Payload
+ *	TODO: [NWM] This structure is exactly the same as payload passphrase, do we need two?
  */
 struct cr_pt_payload_secure_erase_unit {
 	/* the end user passphrase */
@@ -514,17 +492,7 @@ struct cr_pt_payload_secure_erase_unit {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x03h (Set SMM Security Nonce)
- *	Small Input Payload
- */
-struct cr_pt_payload_smm_security_nonce {
-	/* Security nonce to lock down SMM mailbox */
-	unsigned char sec_nonce[CR_SECURITY_NONCE_LEN];
-};
-
-/*
- * Passthrough CR Payload:
- *		Opcode:		0x04h (Get/Set Features)
+ *		Opcode:		0x04/0x05h (Get/Set Features)
  *		Sub-Opcode:	0x01h (Alarm Thresholds)
  *	Get - Small Output Payload
  *	Set - Small Input Payload
@@ -573,6 +541,50 @@ struct cr_pt_get_die_spare_policy {
 
 /*
  * Passthrough CR Payload:
+ * 		Opcode:		0x04h/5h (Get/Set Features)
+ * 		Sub-Opcode:	0x05h (Address Range Scrub Policy)
+ * 	Get - Small Output Payload
+ * 	Set - Small Input Payload
+ */
+struct cr_addr_range_scrub_policy {
+	__le64 dpa_start_addr; /*Address to start the range scrub from*/
+	__le64 dpa_end_addr; /*Address that the range scrub will end*/
+	__u8 enable; /*Indicates an address range scrub in progress*/
+};
+
+/*
+ * Passthrough CR Payload:
+ * 		Opcode:		0x04h/0x05h (Get/Set Features)
+ * 		Sub-Opcode:	0x06h (DDRT Alerts)
+ * 	Get - Small output payload
+ * 	Set - Small input payload
+ */
+struct cr_pt_ddrt_alert {
+	/*
+	 * Each byte represents a transaction type 0..127
+	 * Bit 1:0 Log/Alert Level: Specifies which log should receive this
+	 * transaction type. Also indicates which Interrupt Packet to use for
+	 * Interrupts if enabled.
+	 * 0h = Do Not Log
+	 * 1h = Low Priority Log
+	 * 2h = High Priority Log
+	 *
+	 * Bit 2:7 Alert Policy Enables: Bitfies to enable signaling policy
+	 * for this transaction type for different error types. Also allows
+	 * configurability to signal Viral on this transaction/error type.
+	 *
+	 * (7) = UNC ERROR INTERRUPT ENABLE
+	 * (6) = UNC ERROR VIRAL ENABLE
+	 * (5) = DPA ERROR INTERRUPT ENABLE
+	 * (4) = DPA ERROR VIRAL ENABLE
+	 * (3) = AIT ERROR INTERRUPT ENABLE
+	 * (2) = AIT ERROR VIRAL ENABLE
+	 */
+	__u8 transaction_type0[CR_DDRT_ALERT_TYPES];
+};
+
+/*
+ * Passthrough CR Payload:
  *		Opcode:		0x05h (Set Features)
  *		Sub-Opcode:	0x04h (Die Sparing Policy)
  *	Small Input Payload
@@ -590,11 +602,9 @@ struct cr_pt_set_die_spare_policy {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x06h (Get Admin Features)
+ *		Opcode:		0x06h/0x07h (Get/Set Admin Features)
  *		Sub-Opcode:	0x00h (System Time)
- *
- *		Opcode:		0x07h (Set Admin Features)
- *		Sub-Opcode:	0x00h (System Time)
+
  *	Get - Small Output Payload
  *	Set - Small Input Payload
  */
@@ -623,10 +633,10 @@ struct cr_pt_payload_system_time {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x06h (Get Admin Features)
+ *		Opcode:		0x06h/0x07h (Get/Set Admin Features)
  *		Sub-Opcode:	0x01h (Platform Config Data)
- *	Get - Small Input Payload - Data placed in Large Output Payload
- *	Set - Small Input Payload - Data read from Large Input Payload
+ *	Get - Small Input Payload
+ *	Set - Small Input Payload
  */
 struct cr_pt_payload_platform_cfg_data {
 	/*
@@ -638,7 +648,7 @@ struct cr_pt_payload_platform_cfg_data {
 	unsigned char partition_id;
 
 	/*
-	 * Dictates what information you want to read
+	 * Dictates what information you want to act on
 	 * 0x01 - Retrieve Size
 	 * 0x02 - Retrieve/Set Data
 	 * All other values are reserved
@@ -656,38 +666,14 @@ struct cr_pt_payload_platform_cfg_data {
  * Passthrough CR Payload:
  *		Opcode:		0x06h (Get Admin Features)
  *		Sub-Opcode:	0x01h (Platform Config Data)
- *	Small Output Payload
- */
+ *
+ *	Small output payload for retrieving partition size.
+  */
 struct cr_pt_payload_platform_get_size {
 	__le32 size; /* In bytes of the selected partition */
 	__le32 total_size; /* In bytes of the platform config area */
 };
 
-/*
- * Passthrough CR Payload:
- *		Opcode:		0x06h (Set Admin Features)
- *		Sub-Opcode:	0x01h (Platform Config Data)
- */
-struct cr_pt_payload_platform_set_size {
-	/*
-	 * Which Partition to access
-	 * 0x01 - The first partition
-	 * 0x02 - The second partition
-	 * All other values are reserved
-	 */
-	unsigned char partition_id;
-
-	/*
-	 * Dictates what information you want to read
-	 * 0x01 - Retrieve Size
-	 * 0x02 - Retrieve/Set Data
-	 * All other values are resvered
-	 */
-	unsigned char command_parameter;
-
-	/* Size to set for the partition */
-	__le32 size;
-};
 /*
  * Passthrough CR Payload:
  *		Opcode:		0x06h (Get Admin Features)
@@ -720,7 +706,136 @@ struct cr_pt_payload_get_dimm_partion_info {
 	/* The raw usable size of the DIMM (Volatile + Persistent)
 	 * (in 4KB multiples of bytes) */
 	__le32 raw_capacity;
-	unsigned char rsvd3[102];
+	unsigned char rsvd3[92];
+};
+
+/*
+ * Passthrough CR Payload:
+ *		Opcode:		0x06h (Get Admin Features)
+ *		Sub-Opcode:	0x03h (FNV FW Debug Log Level)
+ *	Small Input Payload
+ */
+struct cr_pt_payload_input_get_fnv_fw_dbg_log_level {
+	/*
+	 * This is the ID(0 to 255) for the log from which to retrieve the log
+	 * level. If no log ID is sent then log ID 0 will be assumed.
+	 */
+	unsigned char log_id;
+};
+
+/*
+ * Passthrough CR Payload:
+ *		Opcode:		0x06h (Get Admin Features)
+ *		Sub-Opcode:	0x03h (FNV FW Debug Log Level)
+ *	Small Output Payload
+ */
+struct cr_pt_payload_output_get_fnv_fw_dbg_log_level {
+	/*
+	 * The current logging level of the FNV FW (0-255).
+	 *
+	 * 0 = Disabled @n
+	 * 1 = Error @n
+	 * 2 = Warning @n
+	 * 3 = Info @n
+	 * 4 = Debug
+	 */
+	unsigned char log_level;
+	/*
+	 * The number of logs available for which to change the level(0 to 255).
+	 */
+	unsigned char logs;
+};
+
+/*
+ * Passthrough CR Payload:
+ * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ * 		Sub-Opcode:	0x04h (Block Window)
+ * 	Get - Small Output Payload
+ * 	Set - Small Input Payload
+ */
+struct cr_pt_payload_block_window {
+
+	/*
+	 * The current state of the persistent partition
+	 * 0x0 = Disabled (default)
+	 * 0x1 = Enabled
+	 */
+	unsigned char enabled;
+	__le16 size; /*Current size of the partition in multiples of 64GB*/
+};
+
+/*
+ * Passthrough CR Payload:
+ * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ * 		Sub-Opcode:	0x05h (Hardware Configuration Parameters)
+ * 	Get - Small Output Payload
+ * 	Set - Small Input Payload
+ */
+struct cr_pt_payload_hw_cfg_data {
+
+	/*Shows the current TDP DIMM power limit*/
+	unsigned char TDP;
+	unsigned char rsvd[127];
+};
+
+/*
+ * Passthrough CR Payload:
+ * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ * 		Sub-Opcode:	0x06h (DDRT IO Init Info)
+ * 	Small Output Payload
+ */
+struct cr_pt_payload_ddrt_init_info {
+
+	/*
+	 * Information required to configure DDRT
+	 * Bit 3:0 - Operating Frequency (default 0x0)
+	 * Valid Values:
+	 * x000 - f < 1600MT/s
+	 * x001 - 1600 MT/s < f < 1867 MT/s
+	 * x010 - 1867 MT/s < f < 2134 MT/s
+	 * x011 - 2134 MT/s < f < 2400 MT/s
+	 * x100 - 2400 MT/s < f < 2667 MT/s
+	 * x101 - 2667 MT/s < f < 3200 MT/s
+	 * x110 - Reserved
+	 * x111 - Reserved
+	 * 0xxx - Reserved
+	 * 1xxx - Reserved
+	 *
+	 * Bit 4 - VDDQ: Encoding for DDRT Voltage
+	 * Valid Values
+	 * 0 - 1.2V (Default)
+	 * 1 - Reserved for low voltage
+	 *
+	 * Bit 7:5 Reserved
+	 */
+	unsigned char ddrt_io_info;
+	unsigned char rsvd[127];
+};
+
+/*
+ * Passthrough CR Payload:
+ *		Opcode:		0x07h (Set Admin Features)
+ *		Sub-Opcode:	0x01h (Platform Config Data)
+ */
+struct cr_pt_payload_platform_set_size {
+	/*
+	 * Which Partition to access
+	 * 0x01 - The first partition
+	 * 0x02 - The second partition
+	 * All other values are reserved
+	 */
+	unsigned char partition_id;
+
+	/*
+	 * Dictates what information you want to read
+	 * 0x01 - Set Size
+	 * 0x02 - Set Data
+	 * All other values are resvered
+	 */
+	unsigned char command_parameter;
+
+	/* Size to set for the partition */
+	__le32 size;
 };
 
 /*
@@ -750,25 +865,6 @@ struct cr_pt_payload_set_dimm_partion_info {
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x06h (Get Admin Features)
- *		Sub-Opcode:	0x03h (FNV FW Debug Log Level)
- *	Small Payload Output
- */
-struct cr_pt_payload_get_fnv_fw_dbg_log_level {
-	/*
-	 * The current logging level of the FNV FW (0-255).
-	 *
-	 * 0 = Disabled @n
-	 * 1 = Error @n
-	 * 2 = Warning @n
-	 * 3 = Info @n
-	 * 4 = Debug
-	 */
-	unsigned char log_level;
-};
-
-/*
- * Passthrough CR Payload:
  *		Opcode:		0x07h (Set Admin Features)
  *		Sub-Opcode:	0x03h (FNV FW Debug Log Level)
  *	Small Payload Input
@@ -784,6 +880,8 @@ struct cr_pt_payload_set_fnv_fw_dbg_log_level {
 	 * 4 = Debug
 	 */
 	unsigned char log_level;
+	/*ID of the log you are changing the level for(0-255)*/
+	unsigned char log_id;
 };
 
 /*
@@ -806,15 +904,16 @@ struct cr_pt_input_payload_read_csr {
  *		Sub-Opcode:	0x00h (Write CSR)
  *	Small Output Payload
  */
-struct cr_pt_output_payload_read_write_csr {
+struct cr_pt_output_payload_csr {
 	__le32 csr_value; /* The value of the CSR register */
 };
 
 /*
  * Passthrough CR Payload
- *		Opcode:		0x0Eh (Get Debug Features)
+ *		Opcode:		0x0Eh/0x0Fh (Get/Set Debug Features)
  *		Sub-Opcode:	0x01h (Error Correction/Erasure Policy)
- *	Small Output Payload
+ *	Get - Small Output Payload
+ *	Set - Small Input Payload
  */
 struct cr_pt_payload_err_correct_erasure_policy {
 	/**
@@ -847,17 +946,40 @@ struct cr_pt_payload_err_correct_erasure_policy {
  */
 struct cr_pt_payload_thermal_policy {
 	/**
-	 * Reflects whether the termal policy is enabled or disabled
+	 * Reflects whether the thermal policy is enabled or disabled
 	 * 0x00 - Disabled
 	 * 0x01 - Enabled
 	 */
 	unsigned char enabled;
 };
 
+/**
+ * Passthrough CR Payload:
+ *		Opcode:		0x0Eh (Get Debug Features)
+ *		Sub-Opcode:	0x04h (DDRT Authentication Request)
+ *	Small input payload
+ */
+
+struct cr_pt_payload_input_ddrt_auth_req {
+	__u64 nonce;
+};
+
+/**
+ * Passthrough CR Payload:
+ *		Opcode:		0x0Eh (Get Debug Features)
+ *		Sub-Opcode:	0x04h (DDRT Authentication Request)
+ *	Large output payload
+ */
+
+struct cr_pt_payload_output_ddrt_auth_req {
+	unsigned char device_certificate[CR_DEV_CERTIFICATE_LEN];
+	unsigned char signed_auth_challenge[CR_SIGNED_AUTH_CHALLENGE_LEN];
+};
 /*
  * Passthrough CR Input Payload:
  *		Opcode:		0x0Fh (Set Debug Features)
  *		Sub-Opcode:	0x00h (Write CSR)
+ *	Small Input Payload
  */
 struct cr_pt_input_payload_write_csr {
 	__le32 csr_register_address; /* The address of the CSR register */
@@ -872,12 +994,18 @@ struct cr_pt_input_payload_write_csr {
  */
 struct cr_pt_payload_poison_err {
 	__le64 dpa_address; /* Address to set the poison bit for */
+	/*
+	 * Allows the enabling or disabling of poison for this address
+	 * 0x00h - Clear
+	 * 0x01h - Set
+	 */
+	unsigned char enable;
 };
 
 /*
  * Passthrough CR Payload:
- *		Opcode:		0x0bh (Inject Error)
- *		Sub-Opcode:	0x0sh (Temperature Error)
+ *		Opcode:		0x0Bh (Inject Error)
+ *		Sub-Opcode:	0x03h (Temperature Error)
  */
 struct cr_pt_payload_temp_err {
 	/*
@@ -944,8 +1072,18 @@ struct cr_pt_payload_fw_image_info {
 	 * dddd = 4 digit Build Version
 	 */
 	unsigned char fw_rev[CR_FW_REV_LEN];
+	unsigned char rsvd[123];
 };
 
+/*
+ * Passthrough CR Payload:
+ *		Opcode:		0x08h (Get Log Page)
+ *		Sub-Opcode:	0x02h (Firmware Debug Log)
+ *	Small Input Payload
+ */
+struct cr_pt_payload_fw_debug_log {
+	unsigned char log_id;
+};
 /*
  * Passthrough CR Payload:
  *		Opcode:		0x08h (Get Log Page)
@@ -988,16 +1126,16 @@ struct cr_pt_payload_memory_info {
 struct cr_pt_payload_long_op_stat {
 	/*
 	 * This will coincide with the opcode & sub-opcode
-	 * Bytes 7:0 - Opcode
-	 * Bytes 15:8 - Sub-Opcode
+	 * Byte 0 - Opcode
+	 * Byte 1 - Sub-Opcode
 	 */
-	unsigned char command[16];
+	__le16 command;
 
 	/*
 	 * The % complete of the current command
-	 * BCD Format
+	 * BCD Format = XXX
 	 */
-	unsigned char percent_complete[CR_BCD_PCT_COMPLETE];
+	__le16 percent_complete;
 
 	/*
 	 * Estimated Time to Completion.
@@ -1007,22 +1145,31 @@ struct cr_pt_payload_long_op_stat {
 	 * HH = 2 digit hour (00-23) @n
 	 * MM = 2 digit minute (00-59) @n
 	 * SS = 3 digit second (00 - 59) @n
-	 * mmm = 3 digit miliseconds (000 - 9990
+	 * mmm = 3 digit milliseconds (000 - 9990
 	 */
-	unsigned char etc[CR_BCD_TIME_LEN];
+	unsigned char etc[CR_BCD_ETC_TIME_LEN];
 
-	unsigned char reserved[106]; /* TODO */
+	/*
+	 * The status code that would normally be found in
+	 * the mailbox status register*/
+	unsigned char status_code;
+
+	unsigned char command_specific_data[118];
 };
 
 /*
  * Passthrough CR Payload:
  *		Opcode:		0x08h (Get Log Page)
- *		Sub-Opcode:	0x02h (Firmware Debug Log)
- *	Small Input Payload
- *	Log returned in Large Output Payload
+ *		Sub-Opcode:	0x04h (Long Operations Status)
+ *	Contained inside of long operation status payload
  */
-struct cr_pt_payload_fw_debug_log {
-	unsigned char log_id; /* The ID of the log to retrieve*/
+struct cr_pt_long_op_addr_range_scrub_data {
+	unsigned char rsvd1[2];
+	/*Number of errors found during range scrub*/
+	unsigned char num_err_found;
+	/*List of last 14 DPA addresses that it encountered.*/
+	__le64 dpa_err_addresses[CR_DPA_ERROR_ADDRESSES];
+	unsigned char rsvd2[3];
 };
 
 /*
@@ -1079,7 +1226,7 @@ struct cr_pt_fw_log_entry {
 	 * Last System Time set by BIOS using the Set Admin Feature-System Time
 	 * (BCD format).
 	 */
-	unsigned char system_timestamp[7];
+	unsigned char system_timestamp[CR_BCD_DATE_LEN + CR_BCD_TIME_LEN];
 	/*
 	 * Power on time in seconds since last System Time update
 	 */
@@ -1122,6 +1269,12 @@ struct cr_pt_fw_log_entry {
 	 *		2h=PM READ
 	 *		3h=PM WRITE
 	 *		4h=BW READ
+	 *		5h=BW WRITE
+	 *		6h=AIT READ
+	 *		7h=AIT WRITE
+	 *		8h=Wear Level Move
+	 *		9h=Patrol Scrub(Refresh)
+	 *		All other values reserved
 	 */
 	unsigned char transaction_type;
 };
