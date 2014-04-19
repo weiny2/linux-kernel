@@ -968,6 +968,9 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	dd = (struct hfi_devdata *) ib_alloc_device(sizeof(*dd) + extra);
 	if (!dd)
 		return ERR_PTR(-ENOMEM);
+	/* extra is * number of ports */
+	dd->num_pports = extra/sizeof(struct qib_pportdata);
+	dd->pport = (struct qib_pportdata *)(dd + 1);
 
 	INIT_LIST_HEAD(&dd->list);
 	dd->node = dev_to_node(&pdev->dev);

@@ -751,6 +751,8 @@ struct qib_ibdev {
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
 	struct dentry *hfi_ibdev_dbg;
+	/* per HFI symlinks to above */
+	struct dentry *hfi_ibdev_link;
 #endif
 };
 

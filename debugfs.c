@@ -43,7 +43,10 @@
 
 static struct dentry *hfi_dbg_root;
 
-#define DEBUGFS_FILE(name) \
+#define private2dd(file) (file_inode(file)->i_private)
+#define private2ppd(file) (file_inode(file)->i_private)
+
+#define DEBUGFS_SEQ_FILE(name) \
 static const struct seq_operations _##name##_seq_ops = { \
 	.start = _##name##_seq_start, \
 	.next  = _##name##_seq_next, \
@@ -69,14 +72,18 @@ static const struct file_operations _##name##_file_ops = { \
 	.release = seq_release \
 };
 
-#define DEBUGFS_FILE_CREATE(name) \
+#define DEBUGFS_FILE_CREATE(name, parent, data, ops) \
 do { \
 	struct dentry *ent; \
-	ent = debugfs_create_file(#name , 0400, ibd->hfi_ibdev_dbg, \
-		ibd, &_##name##_file_ops); \
+	ent = debugfs_create_file(name , 0400, parent, \
+		data, ops); \
 	if (!ent) \
-		pr_warn("create of " #name " failed\n"); \
+		pr_warn("create of %s failed\n", name); \
 } while (0)
+
+
+#define DEBUGFS_SEQ_FILE_CREATE(name, parent, data) \
+	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops)
 
 static void *_opcode_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -127,7 +134,7 @@ static int _opcode_stats_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-DEBUGFS_FILE(opcode_stats)
+DEBUGFS_SEQ_FILE(opcode_stats)
 
 static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -189,7 +196,7 @@ static int _ctx_stats_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-DEBUGFS_FILE(ctx_stats)
+DEBUGFS_SEQ_FILE(ctx_stats)
 
 static void *_qp_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -242,24 +249,178 @@ static int _qp_stats_seq_show(struct seq_file *s, void *iter_ptr)
 	return 0;
 }
 
-DEBUGFS_FILE(qp_stats)
+DEBUGFS_SEQ_FILE(qp_stats)
+
+/* read the per-device counters */
+static ssize_t dev_counters_read(struct file *file, char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	u64 *counters;
+	size_t avail;
+	struct hfi_devdata *dd;
+	ssize_t rval;
+
+	rcu_read_lock();
+	dd = private2dd(file);
+	avail = dd->f_read_cntrs(dd, *ppos, NULL, &counters);
+	rval =  simple_read_from_buffer(buf, count, ppos, counters, avail);
+	rcu_read_unlock();
+	return rval;
+}
+
+/* read the per-device counters */
+static ssize_t dev_names_read(struct file *file, char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	char *names;
+	size_t avail;
+	struct hfi_devdata *dd;
+	ssize_t rval;
+
+	rcu_read_lock();
+	dd = private2dd(file);
+	avail = dd->f_read_cntrs(dd, *ppos, &names, NULL);
+	rval =  simple_read_from_buffer(buf, count, ppos, names, avail);
+	rcu_read_unlock();
+	return rval;
+}
+
+struct counter_info {
+	char *name;
+	const struct file_operations ops;
+};
+
+/*
+ * Could use file_inode(file)->i_ino to figure out which file,
+ * instead of separate routine for each, but for now, this works...
+ */
+
+/* read the per-port names (same for each port) */
+static ssize_t portnames_read(struct file *file, char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	char *names;
+	size_t avail;
+	struct hfi_devdata *dd;
+	ssize_t rval;
+
+	rcu_read_lock();
+	dd = private2dd(file);
+	/* port num n/a here since names are constant */
+	avail = dd->f_read_portcntrs(dd, *ppos, 0, &names, NULL);
+	rval = simple_read_from_buffer(buf, count, ppos, names, avail);
+	rcu_read_unlock();
+	return rval;
+}
+
+/* read the per-port counters */
+static ssize_t portcntrs_read(struct file *file, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	u64 *counters;
+	size_t avail;
+	struct hfi_devdata *dd;
+	struct qib_pportdata *ppd;
+	ssize_t rval;
+
+	rcu_read_lock();
+	ppd = private2ppd(file);
+	dd = ppd->dd;
+	avail = dd->f_read_portcntrs(dd, *ppos, ppd->port - 1, NULL, &counters);
+	rval = simple_read_from_buffer(buf, count, ppos, counters, avail);
+	rcu_read_unlock();
+	return rval;
+}
+
+/*
+ * read the per-port QSFP data for ppd
+ */
+static ssize_t qsfp_read(struct file *file, char __user *buf,
+			   size_t count, loff_t *ppos)
+{
+	struct qib_pportdata *ppd;
+	char *tmp;
+	int ret;
+
+	rcu_read_lock();
+	ppd = private2ppd(file);
+	tmp = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	ret = qib_qsfp_dump(ppd, tmp, PAGE_SIZE);
+	if (ret > 0)
+		ret = simple_read_from_buffer(buf, count, ppos, tmp, ret);
+	rcu_read_unlock();
+	kfree(tmp);
+	return ret;
+}
+
+#define DEBUGFS_OPS(nm, readroutine) \
+{ \
+	.name = nm, \
+	.ops = { \
+		.read = readroutine, \
+		.llseek = generic_file_llseek, \
+	}, \
+}
+
+static const struct counter_info cntr_ops[] = {
+	DEBUGFS_OPS("counter_names", dev_names_read),
+	DEBUGFS_OPS("counters", dev_counters_read),
+	DEBUGFS_OPS("portcounter_names", portnames_read),
+};
+
+static const struct counter_info port_cntr_ops[] = {
+	DEBUGFS_OPS("port%dcounters", portcntrs_read),
+	DEBUGFS_OPS("qsfp%d", qsfp_read),
+};
 
 void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 {
-	char name[10];
+	char name[sizeof("port0counters") + 1];
+	char link[10];
+	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct qib_pportdata *ppd;
+	int unit = dd->unit;
+	int i, j;
 
 	if (!hfi_dbg_root)
 		return;
-	snprintf(name, sizeof(name), "%s%d",
-		class_name(), dd_from_dev(ibd)->unit);
+	snprintf(name, sizeof(name), "%s%d", class_name(), unit);
+	snprintf(link, sizeof(link), "%d", unit);
 	ibd->hfi_ibdev_dbg = debugfs_create_dir(name, hfi_dbg_root);
 	if (!ibd->hfi_ibdev_dbg) {
 		pr_warn("create of %s failed\n", name);
 		return;
 	}
-	DEBUGFS_FILE_CREATE(opcode_stats);
-	DEBUGFS_FILE_CREATE(ctx_stats);
-	DEBUGFS_FILE_CREATE(qp_stats);
+	ibd->hfi_ibdev_link =
+		debugfs_create_symlink(link, hfi_dbg_root, name);
+	if (!ibd->hfi_ibdev_link) {
+		pr_warn("create of %s symlink failed\n", name);
+		return;
+	}
+	DEBUGFS_SEQ_FILE_CREATE(opcode_stats, ibd->hfi_ibdev_dbg, ibd);
+	DEBUGFS_SEQ_FILE_CREATE(ctx_stats, ibd->hfi_ibdev_dbg, ibd);
+	DEBUGFS_SEQ_FILE_CREATE(qp_stats, ibd->hfi_ibdev_dbg, ibd);
+	/* dev counter files */
+	for (i = 0; i < ARRAY_SIZE(cntr_ops); i++)
+		DEBUGFS_FILE_CREATE(cntr_ops[i].name,
+				    ibd->hfi_ibdev_dbg,
+				    dd,
+				    &cntr_ops[i].ops);
+	/* per port files */
+	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
+		for (i = 0; i < ARRAY_SIZE(port_cntr_ops); i++) {
+			snprintf(name,
+				 sizeof(name),
+				 port_cntr_ops[i].name,
+				 j + 1);
+			DEBUGFS_FILE_CREATE(name,
+					    ibd->hfi_ibdev_dbg,
+					    ppd,
+					    &port_cntr_ops[i].ops);
+		}
 	return;
 }
 
@@ -267,16 +428,109 @@ void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd)
 {
 	if (!hfi_dbg_root)
 		goto out;
+	debugfs_remove(ibd->hfi_ibdev_link);
 	debugfs_remove_recursive(ibd->hfi_ibdev_dbg);
 out:
 	ibd->hfi_ibdev_dbg = NULL;
 }
+
+/*
+ * driver stats field names, one line per stat, single string.  Used by
+ * programs like hfistats to print the stats in a way which works for
+ * different versions of drivers, without changing program source.
+ * if hfi_ib_stats changes, this needs to change.  Names need to be
+ * 12 chars or less (w/o newline), for proper display by hfistats utility.
+ */
+static const char * const hfi_statnames[] = {
+	"KernIntr",
+	"ErrorIntr",
+	"Tx_Errs",
+	"Rcv_Errs",
+	"H/W_Errs",
+	"NoPIOBufs",
+	"CtxtsOpen",
+	"RcvLen_Errs",
+	"EgrBufFull",
+	"EgrHdrFull"
+};
+
+static void *_driver_stats_names_seq_start(struct seq_file *s, loff_t *pos)
+{
+	rcu_read_lock();
+	if (*pos >= ARRAY_SIZE(hfi_statnames))
+		return NULL;
+	return pos;
+}
+
+static void *_driver_stats_names_seq_next(
+	struct seq_file *s,
+	void *v,
+	loff_t *pos)
+{
+	++*pos;
+	if (*pos >= ARRAY_SIZE(hfi_statnames))
+		return NULL;
+	return pos;
+}
+
+static void _driver_stats_names_seq_stop(struct seq_file *s, void *v)
+{
+	rcu_read_unlock();
+}
+
+static int _driver_stats_names_seq_show(struct seq_file *s, void *v)
+{
+	loff_t *spos = v;
+	seq_printf(s, "%s\n", hfi_statnames[*spos]);
+	return 0;
+}
+
+DEBUGFS_SEQ_FILE(driver_stats_names)
+
+static void *_driver_stats_seq_start(struct seq_file *s, loff_t *pos)
+{
+	rcu_read_lock();
+	if (*pos >= ARRAY_SIZE(hfi_statnames))
+		return NULL;
+	return pos;
+}
+
+static void *_driver_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	++*pos;
+	if (*pos >= ARRAY_SIZE(hfi_statnames))
+		return NULL;
+	return pos;
+}
+
+static void _driver_stats_seq_stop(struct seq_file *s, void *v)
+{
+	rcu_read_unlock();
+}
+
+static int _driver_stats_seq_show(struct seq_file *s, void *v)
+{
+	loff_t *spos = v;
+	char *buffer;
+	u64 *stats = (u64 *)&qib_stats;
+	size_t sz = seq_get_buf(s, &buffer);
+
+	if (sz < sizeof(u64))
+		return SEQ_SKIP;
+	*(u64 *)buffer = stats[*spos];
+	seq_commit(s,  sizeof(u64));
+	return 0;
+}
+
+DEBUGFS_SEQ_FILE(driver_stats)
 
 void hfi_dbg_init(void)
 {
 	hfi_dbg_root  = debugfs_create_dir(DRIVER_NAME, NULL);
 	if (!hfi_dbg_root)
 		pr_warn("init of debugfs failed\n");
+	DEBUGFS_SEQ_FILE_CREATE(driver_stats_names, hfi_dbg_root, NULL);
+	DEBUGFS_SEQ_FILE_CREATE(driver_stats, hfi_dbg_root, NULL);
 }
 
 void hfi_dbg_exit(void)

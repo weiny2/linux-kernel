@@ -4550,27 +4550,23 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		NUM_IB_PORTS * sizeof(struct qib_pportdata));
 	if (IS_ERR(dd))
 		goto bail;
-	dd->num_pports = NUM_IB_PORTS;
-
-	/* pport structs are contiguous, allocated after devdata */
-	ppd = (struct qib_pportdata *)(dd + 1);
-	dd->pport = ppd;
-	for (i = 0; i < dd->num_pports; i++) {
+	ppd = dd->pport;
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		/* init common fields */
-		qib_init_pportdata(&ppd[i], dd, 0, 1);
+		qib_init_pportdata(ppd, dd, 0, 1);
 		/* chip specific */
 		/* TODO: correct for STL */
-		ppd[i].link_speed_supported = IB_SPEED_EDR;
-		ppd[i].link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
-		ppd[i].link_width_enabled = IB_WIDTH_4X;
-		ppd[i].link_speed_enabled = ppd[i].link_speed_supported;
+		ppd->link_speed_supported = IB_SPEED_EDR;
+		ppd->link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
+		ppd->link_width_enabled = IB_WIDTH_4X;
+		ppd->link_speed_enabled = ppd[i].link_speed_supported;
 
 		switch (num_vls) {
 		case 1:
-			ppd[i].vls_supported = IB_VL_VL0;
+			ppd->vls_supported = IB_VL_VL0;
 			break;
 		case 2:
-			ppd[i].vls_supported = IB_VL_VL0_1;
+			ppd->vls_supported = IB_VL_VL0_1;
 			break;
 		default:
 			dd_dev_info(dd,
@@ -4579,23 +4575,23 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			num_vls = 4;
 			/* fall through */
 		case 4:
-			ppd[i].vls_supported = IB_VL_VL0_3;
+			ppd->vls_supported = IB_VL_VL0_3;
 			break;
 		case 8:
-			ppd[i].vls_supported = IB_VL_VL0_7;
+			ppd->vls_supported = IB_VL_VL0_7;
 			break;
 		}
-		ppd[i].vls_operational = ppd[i].vls_supported;
+		ppd->vls_operational = ppd->vls_supported;
 
 		/*
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
 		 */
-		ppd[i].link_width_active = IB_WIDTH_4X;
-		ppd[i].link_speed_active = IB_SPEED_EDR;
-		ppd[i].lstate = IB_PORT_DOWN;
-		ppd[i].overrun_threshold = 0x4;
-		ppd[i].phy_error_threshold = 0xf;
+		ppd->link_width_active = IB_WIDTH_4X;
+		ppd->link_speed_active = IB_SPEED_EDR;
+		ppd->lstate = IB_PORT_DOWN;
+		ppd->overrun_threshold = 0x4;
+		ppd->phy_error_threshold = 0xf;
 	}
 
 	dd->f_bringup_serdes    = bringup_serdes;
