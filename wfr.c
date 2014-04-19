@@ -612,6 +612,88 @@ static const struct err_reg_info dc_errs[NUM_DC_ERRS] = {
 	/* the rest are reserved */
 };
 
+struct cntr_entry {
+	/*
+	 * stat name
+	 */
+	char *name;
+	/*
+	 * csr for name
+	 */
+	u64 csr;
+	/*
+	 * offset synthetic counter into dd or ppd
+	 */
+	size_t offset;
+	/*
+	 * reader for stat element, context either dd or ppd
+	 */
+	u64 (*read_cntr)(const struct cntr_entry *, void *context);
+};
+
+#define CNTR_ELEM(name, csr, offset, read) \
+{ \
+	name, \
+	csr, \
+	offset, \
+	read \
+}
+
+#define RXE64_DEV_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
+	  0 , \
+	  dev_read_u64_csr)
+
+#define RXE64_PORT_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
+	  0 , \
+	  port_read_u64_csr)
+
+#define RXE32_DEV_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
+	  0 , \
+	  dev_read_u32_csr)
+
+#define CCE_PERF_DEV_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_CCE_COUNTER_ARRAY32), \
+	  0 , \
+	  dev_read_u32_csr)
+
+#define CCE_INT_DEV_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_CCE_INT_COUNTER_ARRAY32), \
+	  0 , \
+	  dev_read_u32_csr)
+
+#define RXE32_PORT_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
+	  0 , \
+	  port_read_u32_csr)
+
+#define TXE32_PORT_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_SEND_COUNTER_ARRAY32), \
+	  0 , \
+	  port_read_u32_csr)
+
+#define TXE64_PORT_CNTR_ELEM(name, counter) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_SEND_COUNTER_ARRAY64), \
+	  0 , \
+	  port_read_u64_csr)
+
+#define OVERFLOW_ELEM(ctx) \
+CNTR_ELEM("RcvHdrOvr" #ctx, \
+	  (WFR_RCV_HDR_OVFL_CNT + ctx*0x100), \
+	  0, port_read_u64_csr)
+
+
+
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
@@ -628,6 +710,128 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 	if (dd->flags & QIB_PRESENT)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
+
+static u64 dev_read_u32_csr(const struct cntr_entry *entry, void *context)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
+	return read_csr(dd, entry->csr);
+}
+
+static u64 port_read_u64_csr(const struct cntr_entry *entry, void *context)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	return read_csr(ppd->dd, entry->csr);
+}
+
+static u64 port_read_u32_csr(const struct cntr_entry *entry, void *context)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	return read_csr(ppd->dd, entry->csr);
+}
+
+static const struct cntr_entry dev_cntrs[] = {
+RXE32_DEV_CNTR_ELEM(RxTIDFullEr, RCV_TID_FULL_ERR_CNT),
+RXE32_DEV_CNTR_ELEM(RxTIDInvalid, RCV_TID_VALID_ERR_CNT),
+RXE32_DEV_CNTR_ELEM(RxTidFLGMs, RCV_TID_FLOW_GEN_MISMATCH_CNT),
+RXE32_DEV_CNTR_ELEM(RxCtxRHQS, RCV_CONTEXT_RHQ_STALL),
+RXE32_DEV_CNTR_ELEM(RxCtxEgrS, RCV_CONTEXT_EGR_STALL),
+RXE32_DEV_CNTR_ELEM(RxTidFLSMs, RCV_TID_FLOW_SEQ_MISMATCH_CNT),
+CCE_PERF_DEV_CNTR_ELEM(CcePciCrSt, CCE_PCIE_POSTED_CRDT_STALL_CNT),
+CCE_PERF_DEV_CNTR_ELEM(CcePciTrSt, CCE_PCIE_TRGT_STALL_CNT),
+CCE_PERF_DEV_CNTR_ELEM(CcePioWrSt, CCE_PIO_WR_STALL_CNT),
+CCE_INT_DEV_CNTR_ELEM(CceErrInt, CCE_ERR_INT_CNT),
+CCE_INT_DEV_CNTR_ELEM(CceSdmaInt, CCE_SDMA_INT_CNT),
+CCE_INT_DEV_CNTR_ELEM(CceMiscInt, CCE_MISC_INT_CNT),
+CCE_INT_DEV_CNTR_ELEM(CceRcvAvInt, CCE_RCV_AVAIL_INT_CNT),
+CCE_INT_DEV_CNTR_ELEM(CceRcvUrgInt, CCE_RCV_URGENT_INT_CNT),
+CCE_INT_DEV_CNTR_ELEM(CceSndCrInt, CCE_SEND_CREDIT_INT_CNT),
+};
+
+static const struct cntr_entry port_cntrs[] = {
+TXE32_PORT_CNTR_ELEM(TxUnVLErr, SEND_UNSUP_VL_ERR_CNT),
+TXE32_PORT_CNTR_ELEM(TxInvalLen, SEND_LEN_ERR_CNT),
+TXE32_PORT_CNTR_ELEM(TxMMLenErr, SEND_MAX_MIN_LEN_ERR_CNT),
+TXE32_PORT_CNTR_ELEM(TxUnderrun, SEND_UNDERRUN_CNT),
+TXE32_PORT_CNTR_ELEM(TxFlowStall, SEND_FLOW_STALL_CNT),
+TXE32_PORT_CNTR_ELEM(TxDropped, SEND_DROPPED_PKT_CNT),
+TXE32_PORT_CNTR_ELEM(TxHdrErr, SEND_HEADERS_ERR_CNT),
+TXE64_PORT_CNTR_ELEM(TxPkt, SEND_DATA_PKT_CNT),
+TXE64_PORT_CNTR_ELEM(TxWords, SEND_DWORD_CNT),
+TXE64_PORT_CNTR_ELEM(TxWait, SEND_WAIT_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL0, SEND_DATA_VL0_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL1, SEND_DATA_VL1_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL2, SEND_DATA_VL2_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL3, SEND_DATA_VL3_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL4, SEND_DATA_VL4_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL5, SEND_DATA_VL5_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL6, SEND_DATA_VL6_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL7, SEND_DATA_VL7_CNT),
+TXE64_PORT_CNTR_ELEM(TxFlitVL15, SEND_DATA_VL15_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL0, SEND_DATA_PKT_VL0_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL1, SEND_DATA_PKT_VL1_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL2, SEND_DATA_PKT_VL2_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL3, SEND_DATA_PKT_VL3_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL4, SEND_DATA_PKT_VL4_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL5, SEND_DATA_PKT_VL5_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL6, SEND_DATA_PKT_VL6_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL7, SEND_DATA_PKT_VL7_CNT),
+TXE64_PORT_CNTR_ELEM(TxPktVL15, SEND_DATA_PKT_VL15_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL0, SEND_WAIT_VL0_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL1, SEND_WAIT_VL1_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL2, SEND_WAIT_VL2_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL3, SEND_WAIT_VL3_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL4, SEND_WAIT_VL4_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL5, SEND_WAIT_VL5_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL6, SEND_WAIT_VL6_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL7, SEND_WAIT_VL7_CNT),
+TXE64_PORT_CNTR_ELEM(TxWaitVL15, SEND_WAIT_VL15_CNT),
+RXE64_PORT_CNTR_ELEM(RxPkt, RCV_DATA_PKT_CNT),
+RXE64_PORT_CNTR_ELEM(RxWords, RCV_DWORD_CNT),
+/* assumed to be last in array for sizing */
+OVERFLOW_ELEM(0),   OVERFLOW_ELEM(1),   OVERFLOW_ELEM(2),   OVERFLOW_ELEM(3),
+OVERFLOW_ELEM(4),   OVERFLOW_ELEM(5),   OVERFLOW_ELEM(6),   OVERFLOW_ELEM(7),
+OVERFLOW_ELEM(8),   OVERFLOW_ELEM(9),   OVERFLOW_ELEM(10),  OVERFLOW_ELEM(11),
+OVERFLOW_ELEM(12),  OVERFLOW_ELEM(13),  OVERFLOW_ELEM(14),  OVERFLOW_ELEM(15),
+OVERFLOW_ELEM(16),  OVERFLOW_ELEM(17),  OVERFLOW_ELEM(18),  OVERFLOW_ELEM(19),
+OVERFLOW_ELEM(20),  OVERFLOW_ELEM(21),  OVERFLOW_ELEM(22),  OVERFLOW_ELEM(23),
+OVERFLOW_ELEM(24),  OVERFLOW_ELEM(25),  OVERFLOW_ELEM(26),  OVERFLOW_ELEM(27),
+OVERFLOW_ELEM(28),  OVERFLOW_ELEM(29),  OVERFLOW_ELEM(30),  OVERFLOW_ELEM(31),
+OVERFLOW_ELEM(32),  OVERFLOW_ELEM(33),  OVERFLOW_ELEM(34),  OVERFLOW_ELEM(35),
+OVERFLOW_ELEM(36),  OVERFLOW_ELEM(37),  OVERFLOW_ELEM(38),  OVERFLOW_ELEM(39),
+OVERFLOW_ELEM(40),  OVERFLOW_ELEM(41),  OVERFLOW_ELEM(42),  OVERFLOW_ELEM(43),
+OVERFLOW_ELEM(44),  OVERFLOW_ELEM(45),  OVERFLOW_ELEM(46),  OVERFLOW_ELEM(47),
+OVERFLOW_ELEM(48),  OVERFLOW_ELEM(49),  OVERFLOW_ELEM(50),  OVERFLOW_ELEM(51),
+OVERFLOW_ELEM(52),  OVERFLOW_ELEM(53),  OVERFLOW_ELEM(54),  OVERFLOW_ELEM(55),
+OVERFLOW_ELEM(56),  OVERFLOW_ELEM(57),  OVERFLOW_ELEM(58),  OVERFLOW_ELEM(59),
+OVERFLOW_ELEM(60),  OVERFLOW_ELEM(61),  OVERFLOW_ELEM(62),  OVERFLOW_ELEM(63),
+OVERFLOW_ELEM(64),  OVERFLOW_ELEM(65),  OVERFLOW_ELEM(66),  OVERFLOW_ELEM(67),
+OVERFLOW_ELEM(68),  OVERFLOW_ELEM(69),  OVERFLOW_ELEM(70),  OVERFLOW_ELEM(71),
+OVERFLOW_ELEM(72),  OVERFLOW_ELEM(73),  OVERFLOW_ELEM(74),  OVERFLOW_ELEM(75),
+OVERFLOW_ELEM(76),  OVERFLOW_ELEM(77),  OVERFLOW_ELEM(78),  OVERFLOW_ELEM(79),
+OVERFLOW_ELEM(80),  OVERFLOW_ELEM(81),  OVERFLOW_ELEM(82),  OVERFLOW_ELEM(83),
+OVERFLOW_ELEM(84),  OVERFLOW_ELEM(85),  OVERFLOW_ELEM(86),  OVERFLOW_ELEM(87),
+OVERFLOW_ELEM(88),  OVERFLOW_ELEM(89),  OVERFLOW_ELEM(90),  OVERFLOW_ELEM(91),
+OVERFLOW_ELEM(92),  OVERFLOW_ELEM(93),  OVERFLOW_ELEM(94),  OVERFLOW_ELEM(95),
+OVERFLOW_ELEM(96),  OVERFLOW_ELEM(97),  OVERFLOW_ELEM(98),  OVERFLOW_ELEM(99),
+OVERFLOW_ELEM(100), OVERFLOW_ELEM(101), OVERFLOW_ELEM(102), OVERFLOW_ELEM(103),
+OVERFLOW_ELEM(104), OVERFLOW_ELEM(105), OVERFLOW_ELEM(106), OVERFLOW_ELEM(107),
+OVERFLOW_ELEM(108), OVERFLOW_ELEM(109), OVERFLOW_ELEM(110), OVERFLOW_ELEM(111),
+OVERFLOW_ELEM(112), OVERFLOW_ELEM(113), OVERFLOW_ELEM(114), OVERFLOW_ELEM(115),
+OVERFLOW_ELEM(116), OVERFLOW_ELEM(117), OVERFLOW_ELEM(118), OVERFLOW_ELEM(119),
+OVERFLOW_ELEM(120), OVERFLOW_ELEM(121), OVERFLOW_ELEM(122), OVERFLOW_ELEM(123),
+OVERFLOW_ELEM(124), OVERFLOW_ELEM(125), OVERFLOW_ELEM(126), OVERFLOW_ELEM(127),
+OVERFLOW_ELEM(128), OVERFLOW_ELEM(129), OVERFLOW_ELEM(130), OVERFLOW_ELEM(131),
+OVERFLOW_ELEM(132), OVERFLOW_ELEM(133), OVERFLOW_ELEM(134), OVERFLOW_ELEM(135),
+OVERFLOW_ELEM(136), OVERFLOW_ELEM(137), OVERFLOW_ELEM(138), OVERFLOW_ELEM(139),
+OVERFLOW_ELEM(140), OVERFLOW_ELEM(141), OVERFLOW_ELEM(142), OVERFLOW_ELEM(143),
+OVERFLOW_ELEM(144), OVERFLOW_ELEM(145), OVERFLOW_ELEM(146), OVERFLOW_ELEM(147),
+OVERFLOW_ELEM(148), OVERFLOW_ELEM(149), OVERFLOW_ELEM(150), OVERFLOW_ELEM(151),
+OVERFLOW_ELEM(152), OVERFLOW_ELEM(153), OVERFLOW_ELEM(154), OVERFLOW_ELEM(155),
+OVERFLOW_ELEM(156), OVERFLOW_ELEM(157), OVERFLOW_ELEM(158), OVERFLOW_ELEM(159),
+};
 
 #if 0
 u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt, u32 offset0)
@@ -3110,21 +3314,77 @@ static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
 static u32 read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp)
 {
-	if (print_unimplemented)
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-	return 0; /* final read after getting everything */
+	int ret;
+
+	if (namep) {
+		ret = dd->cntrnameslen;
+		if (pos >= ret)
+			return 0;
+		*namep = dd->cntrnames;
+	} else {
+		const struct cntr_entry *entry;
+		u64 *cntr;
+		int i;
+
+		ret = ARRAY_SIZE(dev_cntrs) * sizeof(u64);
+		if (pos >= ret)
+			return 0;
+
+		cntr = *cntrp = dd->cntrs;
+		for (entry = &dev_cntrs[0], i = 0;
+		     i < ARRAY_SIZE(dev_cntrs); i++, entry++)
+			*cntr++ = entry->read_cntr(entry, dd);
+	}
+	return ret;
 }
 
 static u32 read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 				  char **namep, u64 **cntrp)
 {
-	static int called;
-	if (!called) {
-		called = 1;
-		if (print_unimplemented)
-			dd_dev_info(dd, "%s: not implemented\n", __func__);
+	int ret;
+
+	if (namep) {
+		ret = dd->portcntrnameslen;
+		if (pos >= ret)
+			return 0;
+		*namep = dd->portcntrnames;
+	} else {
+		const struct cntr_entry *entry;
+		struct qib_pportdata *ppd;
+		u64 *cntr;
+		int i;
+
+		ret = (dd->nportcntrs) * sizeof(u64);
+		if (pos >= ret)
+			return 0;
+		ppd = (struct qib_pportdata *)(dd + 1 + port);
+		cntr = *cntrp = ppd->cntrs;
+		for (entry = &port_cntrs[0], i = 0;
+		     i < dd->nportcntrs; i++, entry++)
+			*cntr++ = entry->read_cntr(entry, ppd);
 	}
-	return 0; /* final read after getting everything */
+	return ret; /* final read after getting everything */
+}
+
+static void free_cntrs(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	if (dd->stats_timer.data)
+		del_timer_sync(&dd->stats_timer);
+	dd->stats_timer.data = 0;
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		kfree(ppd->cntrs);
+		ppd->cntrs = NULL;
+	}
+	kfree(dd->portcntrnames);
+	dd->portcntrnames = NULL;
+	kfree(dd->cntrs);
+	dd->cntrs = NULL;
+	kfree(dd->cntrnames);
+	dd->cntrnames = NULL;
 }
 
 static void get_faststats(unsigned long opaque)
@@ -3137,6 +3397,66 @@ static void get_faststats(unsigned long opaque)
 			dd_dev_info(dd, "%s: not implemented\n", __func__);
 	}
 	mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
+}
+
+static int init_cntrs(struct hfi_devdata *dd)
+{
+	int i;
+	size_t sz;
+	char *p;
+	struct qib_pportdata *ppd;
+
+	/* set up the stats timer; the add_timer is done at end of init */
+	init_timer(&dd->stats_timer);
+	dd->stats_timer.function = get_faststats;
+	dd->stats_timer.data = (unsigned long) dd;
+
+	/* per device */
+	dd->cntrs = kzalloc(sizeof(u64) * ARRAY_SIZE(dev_cntrs), GFP_KERNEL);
+	if (!dd->cntrs)
+		goto bail;
+	/* size cntrnames */
+	for (sz = 0, i = 0; i < ARRAY_SIZE(dev_cntrs); i++)
+		/* +1 for newline  */
+		sz += strlen(dev_cntrs[i].name) + 1;
+	dd->cntrnameslen = sz;
+	dd->cntrnames = kmalloc(sz, GFP_KERNEL);
+	if (!dd->cntrnames)
+		goto bail;
+	/* fill in cntrnames */
+	for (p = dd->cntrnames, i = 0; i < ARRAY_SIZE(dev_cntrs); i++) {
+		memcpy(p, dev_cntrs[i].name, strlen(dev_cntrs[i].name));
+		p += strlen(dev_cntrs[i].name);
+		*p++ = '\n';
+	}
+	/* size port counter names */
+	/* assume context overflows are last and adjust */
+	dd->nportcntrs = ARRAY_SIZE(port_cntrs) + dd->num_rcv_contexts - 160;
+	for (sz = 0, i = 0; i < dd->nportcntrs; i++)
+		/* +1 for newline  */
+		sz += strlen(port_cntrs[i].name) + 1;
+	dd->portcntrnameslen = sz;
+	dd->portcntrnames = kmalloc(sz, GFP_KERNEL);
+	if (!dd->portcntrnames)
+		goto bail;
+	for (p = dd->portcntrnames, i = 0; i < dd->nportcntrs; i++) {
+		memcpy(p, port_cntrs[i].name, strlen(port_cntrs[i].name));
+		p += strlen(port_cntrs[i].name);
+		*p++ = '\n';
+	}
+	/* per port */
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		ppd->cntrs = kzalloc(sizeof(u64) * dd->nportcntrs,
+				     GFP_KERNEL);
+		if (!ppd->cntrs)
+			goto bail;
+	}
+	mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
+	return 0;
+bail:
+	free_cntrs(dd);
+	return -ENOMEM;
 }
 
 static void xgxs_reset(struct qib_pportdata *ppd)
@@ -4518,6 +4838,7 @@ void assign_link_credits(struct hfi_devdata *dd)
  */
 static void cleanup(struct hfi_devdata *dd)
 {
+	free_cntrs(dd);
 	clean_up_interrupts(dd);
 }
 
@@ -4725,11 +5046,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->boardname = kmalloc(64, GFP_KERNEL);
 	sprintf(dd->boardname, "fake wfr");
 
-	/* set up the stats timer; the add_timer is done at end of init */
-	init_timer(&dd->stats_timer);
-	dd->stats_timer.function = get_faststats;
-	dd->stats_timer.data = (unsigned long) dd;
-
 	/* TODO: RcvHdrEntSize, RcvHdrCnt, and RcvHdrSize are now
 	   per context, rather than global. */
 	/* FIXME: arbitrary/old values */
@@ -4787,6 +5103,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	 * Set the CSRs to sane, expected values - the driver can be
 	 * loaded and unloaded, we can't expect reset values.
 	 */
+
+	ret = init_cntrs(dd);
+	if (ret)
+		goto bail_clear_intr;
 
 	goto bail;
 

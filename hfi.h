@@ -631,6 +631,9 @@ struct qib_pportdata {
 
 	/* CA's max number of 64 entry units in the congestion control table */
 	u8 cc_max_table_entries;
+
+	/* port relative counter buffer */
+	u64 *cntrs;
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */
@@ -845,8 +848,6 @@ struct hfi_devdata {
 	 */
 	struct hfi_status *status;
 	u32 freezelen; /* max length of freezemsg */
-	/* timer used to prevent stats overflow, error throttling, etc. */
-	struct timer_list stats_timer;
 
 	/* timer to verify interrupts work, and fall back if possible */
 	struct delayed_work interrupt_check_worker;
@@ -972,6 +973,29 @@ struct hfi_devdata {
 	/*
 	 */
 	struct rcv_array_data rcv_entries;
+
+	/* timer used for 64 bit counter emulation  */
+	/* See HAS section 13.2 */
+	struct timer_list stats_timer;
+
+	/*
+	 * per device 64 bit counters
+	 */
+	u64 *cntrs;
+	/*
+	 * per device counters names
+	 */
+	char *cntrnames;
+	size_t cntrnameslen;
+	/*
+	 * number of port counters
+	 */
+	size_t nportcntrs;
+	/*
+	 * port cntr names
+	 */
+	char *portcntrnames;
+	size_t portcntrnameslen;
 };
 
 /* f_put_tid types */
@@ -1282,12 +1306,6 @@ int qib_verbs_register_sysfs(struct hfi_devdata *);
 void qib_verbs_unregister_sysfs(struct hfi_devdata *);
 /* Hook for sysfs read of QSFP */
 extern int qib_qsfp_dump(struct qib_pportdata *ppd, char *buf, int len);
-
-int __init qib_init_qibfs(void);
-int __exit qib_exit_qibfs(void);
-
-int qibfs_add(struct hfi_devdata *);
-int qibfs_remove(struct hfi_devdata *);
 
 int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
 void hfi_pcie_cleanup(struct pci_dev *);

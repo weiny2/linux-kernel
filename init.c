@@ -642,8 +642,6 @@ done:
 		 */
 		mod_delayed_work(system_unbound_wq,
 					&dd->interrupt_check_worker, HZ/2);
-		/* start stats retrieval timer */
-		mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
 	}
 
 	/* if ret is non-zero, we probably should do some cleanup here... */
@@ -676,10 +674,6 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 	struct qib_pportdata *ppd;
 	int pidx;
 
-	if (dd->stats_timer.data) {
-		del_timer_sync(&dd->stats_timer);
-		dd->stats_timer.data = 0;
-	}
 	if (dd->flags & ICHECK_WORKER_INITED)
 		cancel_delayed_work_sync(&dd->interrupt_check_worker);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
@@ -1115,9 +1109,6 @@ static int __init qlogic_ib_init(void)
 		pr_err("Unable to register driver: error %d\n", -ret);
 		goto bail_unit;
 	}
-	/* not fatal if it doesn't work */
-	if (qib_init_qibfs())
-		pr_err("Unable to register ipathfs\n");
 	goto bail; /* all OK */
 
 bail_unit:
@@ -1140,12 +1131,6 @@ module_init(qlogic_ib_init);
  */
 static void __exit qlogic_ib_cleanup(void)
 {
-	int ret;
-
-	ret = qib_exit_qibfs();
-	if (ret)
-		pr_err("Unable to cleanup counter filesystem: error %d\n", ret);
-
 	pci_unregister_driver(&qib_driver);
 #ifdef CONFIG_DEBUG_FS
 	hfi_dbg_exit();
@@ -1295,10 +1280,6 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	j = hfi_device_create(dd);
 	if (j)
 		dd_dev_err(dd, "Failed to create /dev devices: %d\n", -j);
-	j = qibfs_add(dd);
-	if (j)
-		dd_dev_err(dd, "Failed filesystem setup for counters: %d\n",
-			    -j);
 
 	if (initfail || ret) {
 		qib_stop_timers(dd);
@@ -1306,7 +1287,6 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		for (pidx = 0; pidx < dd->num_pports; ++pidx)
 			dd->f_quiet_serdes(dd->pport + pidx);
 		if (!j) {
-			(void) qibfs_remove(dd);
 			hfi_device_remove(dd);
 		}
 		if (!ret)
@@ -1338,7 +1318,6 @@ bail:
 static void qib_remove_one(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
-	int ret;
 
 	/* unregister from IB core */
 	qib_unregister_ib_device(dd);
@@ -1353,11 +1332,6 @@ static void qib_remove_one(struct pci_dev *pdev)
 
 	/* wait until all of our (qsfp) queue_work() calls complete */
 	flush_workqueue(ib_wq);
-
-	ret = qibfs_remove(dd);
-	if (ret)
-		dd_dev_err(dd, "Failed counters filesystem cleanup: %d\n",
-			    -ret);
 
 	hfi_device_remove(dd);
 

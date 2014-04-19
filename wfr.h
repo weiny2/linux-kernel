@@ -77,6 +77,94 @@
 #include "include/wfr/dcc_csrs_defs.h"
 #include "include/wfr/dc_lcb_csrs_defs.h"
 
+#ifndef SEND_UNSUP_VL_ERR_CNT
+/* Remove when autogened headers have values */
+
+/* 32 bit TXE counters */
+#define SEND_UNSUP_VL_ERR_CNT               0
+#define SEND_LEN_ERR_CNT                    1
+#define SEND_MAX_MIN_LEN_ERR_CNT            2
+#define SEND_UNDERRUN_CNT                   3
+#define SEND_FLOW_STALL_CNT                 4
+#define SEND_DROPPED_PKT_CNT                5
+#define SEND_HEADERS_ERR_CNT                6
+
+/* 64 bit TXE counters */
+#define SEND_DATA_PKT_CNT                   0
+#define SEND_DWORD_CNT                      1
+#define SEND_WAIT_CNT                       2
+#define SEND_DATA_VL0_CNT                   3
+#define SEND_DATA_VL1_CNT                   4
+#define SEND_DATA_VL2_CNT                   5
+#define SEND_DATA_VL3_CNT                   6
+#define SEND_DATA_VL4_CNT                   7
+#define SEND_DATA_VL5_CNT                   8
+#define SEND_DATA_VL6_CNT                   9
+#define SEND_DATA_VL7_CNT                   10
+#define SEND_DATA_VL15_CNT                  11
+#define SEND_DATA_PKT_VL0_CNT               12
+#define SEND_DATA_PKT_VL1_CNT               13
+#define SEND_DATA_PKT_VL2_CNT               14
+#define SEND_DATA_PKT_VL3_CNT               15
+#define SEND_DATA_PKT_VL4_CNT               16
+#define SEND_DATA_PKT_VL5_CNT               17
+#define SEND_DATA_PKT_VL6_CNT               18
+#define SEND_DATA_PKT_VL7_CNT               19
+#define SEND_DATA_PKT_VL15_CNT              20
+#define SEND_WAIT_VL0_CNT                   21
+#define SEND_WAIT_VL1_CNT                   22
+#define SEND_WAIT_VL2_CNT                   23
+#define SEND_WAIT_VL3_CNT                   24
+#define SEND_WAIT_VL4_CNT                   25
+#define SEND_WAIT_VL5_CNT                   26
+#define SEND_WAIT_VL6_CNT                   27
+#define SEND_WAIT_VL7_CNT                   28
+#define SEND_WAIT_VL15_CNT                  29
+
+/* 32 bit RXE counters */
+#define RCV_LENGTH_ERR_CNT                  0
+#define RCV_MAX_MIN_LENGTH_ERR_CNT          1
+#define RCV_SHORT_LENGTH_ERR_CNT            2
+#define RCV_LONG_LENGTH_ERR_CNT             3
+#define RCV_EXCESS_BUFFER_OVERRUNS_CNT      4
+#define RCV_UNEXP_CHAR_ERR_CNT              5
+#define RCV_ICRC_ERR_CNT                    6
+/* 7,8 reserved */
+#define RCV_EBP_CNT                         9
+#define RCV_BUF_OVFL_CNT                    10
+#define RCV_PKEY_MISMATCH_CNT               11
+#define RCV_VL15_DROPPED_PKT_CNT            12
+#define RCV_INVALID_CONTEXT_CNT             13
+#define RCV_JKEY_MISMATCH_CNT               14
+#define RCV_DISABLED_CONTEXT_CNT            15
+#define RCV_DROPPED_PKT_CNT                 16
+#define RCV_DROPPED_BYPASS_PKT_CNT          17
+#define RCV_TID_FULL_ERR_CNT                18
+#define RCV_TID_VALID_ERR_CNT               19
+#define RCV_TID_FLOW_GEN_MISMATCH_CNT       20
+#define RCV_CONTEXT_RHQ_STALL               21
+#define RCV_CONTEXT_EGR_STALL               22
+#define RCV_TID_FLOW_SEQ_MISMATCH_CNT       23
+
+/* 64 bit RXE counters */
+#define RCV_DATA_PKT_CNT                    0
+#define RCV_DWORD_CNT                       1
+
+/* 32 bit CCE performance counters */
+#define CCE_PCIE_POSTED_CRDT_STALL_CNT      0
+#define CCE_PCIE_TRGT_STALL_CNT             1
+#define CCE_PIO_WR_STALL_CNT                2
+
+/* 32 bit CCE Interrupt counters */
+#define CCE_ERR_INT_CNT                     0
+#define CCE_SDMA_INT_CNT                    1
+#define CCE_MISC_INT_CNT                    2
+#define CCE_RCV_AVAIL_INT_CNT               3
+#define CCE_RCV_URGENT_INT_CNT              4
+#define CCE_SEND_CREDIT_INT_CNT             5
+
+#endif
+
 /* not defined in wfr_core.h */
 #define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000
 #define WFR_RXE_PER_CONTEXT_USER   (WFR_RXE + WFR_RXE_PER_CONTEXT_USER_OFFSET)
