@@ -257,7 +257,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 			 */
 			if (mad_reg_req->mgmt_class !=
 			    IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
-				pr_notice("ib_register_mad_agent: Invalid Mgmt Class %u\n",
+				pr_notice("ib_register_mad_agent: Invalid Mgmt Class 0x%x\n",
 					mad_reg_req->mgmt_class);
 				goto error1;
 			}
@@ -266,8 +266,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 			 * Class 0 is reserved in IBA and is used for
 			 * aliasing of IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
 			 */
-			pr_notice("ib_register_mad_agent: Invalid Mgmt Class %u\n",
-				mad_reg_req->mgmt_class);
+			pr_notice("ib_register_mad_agent: Invalid Mgmt Class 0\n");
 			goto error1;
 		} else if (is_vendor_class(mad_reg_req->mgmt_class)) {
 			/*
