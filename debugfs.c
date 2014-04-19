@@ -39,6 +39,7 @@
 #include "verbs.h"
 #include "debugfs.h"
 #include "device.h"
+#include "qp.h"
 
 static struct dentry *hfi_dbg_root;
 
@@ -190,6 +191,59 @@ static int _ctx_stats_seq_show(struct seq_file *s, void *v)
 
 DEBUGFS_FILE(ctx_stats)
 
+static void *_qp_stats_seq_start(struct seq_file *s, loff_t *pos)
+{
+	struct qib_qp_iter *iter;
+	loff_t n = *pos;
+
+	iter = qib_qp_iter_init(s->private);
+	if (!iter)
+		return NULL;
+
+	while (n--) {
+		if (qib_qp_iter_next(iter)) {
+			kfree(iter);
+			return NULL;
+		}
+	}
+
+	return iter;
+}
+
+static void *_qp_stats_seq_next(struct seq_file *s, void *iter_ptr,
+				   loff_t *pos)
+{
+	struct qib_qp_iter *iter = iter_ptr;
+
+	(*pos)++;
+
+	if (qib_qp_iter_next(iter)) {
+		kfree(iter);
+		return NULL;
+	}
+
+	return iter;
+}
+
+static void _qp_stats_seq_stop(struct seq_file *s, void *iter_ptr)
+{
+	/* nothing for now */
+}
+
+static int _qp_stats_seq_show(struct seq_file *s, void *iter_ptr)
+{
+	struct qib_qp_iter *iter = iter_ptr;
+
+	if (!iter)
+		return 0;
+
+	qib_qp_iter_print(s, iter);
+
+	return 0;
+}
+
+DEBUGFS_FILE(qp_stats)
+
 void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 {
 	char name[10];
@@ -205,6 +259,7 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 	}
 	DEBUGFS_FILE_CREATE(opcode_stats);
 	DEBUGFS_FILE_CREATE(ctx_stats);
+	DEBUGFS_FILE_CREATE(qp_stats);
 	return;
 }
 
@@ -231,4 +286,3 @@ void hfi_dbg_exit(void)
 }
 
 #endif
-

@@ -161,4 +161,29 @@ void qib_qp_exit(struct qib_ibdev *dev);
  */
 void qib_qp_wakeup(struct qib_qp *qp, u32 flag);
 
+#ifdef CONFIG_DEBUG_FS
+
+struct qib_qp_iter;
+
+/**
+ * qib_qp_iter_init - wakeup on the indicated event
+ * @dev: the qib_ib_dev
+ */
+struct qib_qp_iter *qib_qp_iter_init(struct qib_ibdev *dev);
+
+/**
+ * qib_qp_iter_next - wakeup on the indicated event
+ * @iter: the iterator for the qp hash list
+ */
+int qib_qp_iter_next(struct qib_qp_iter *iter);
+
+/**
+ * qib_qp_iter_next - wakeup on the indicated event
+ * @s: the seq_file to emit the qp information on
+ * @iter: the iterator for the qp hash list
+ */
+void qib_qp_iter_print(struct seq_file *s, struct qib_qp_iter *iter);
+
+#endif
+
 #endif /* _PIO_H */
