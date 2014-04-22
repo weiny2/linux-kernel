@@ -41,10 +41,10 @@
 /* REAL HW Offset*/
 /*#define CR_OS_MB_OFFSET 0 Offset from the start of the CTRL
 				region to the start of the OS mailbox*/
-#define CR_OS_MB_IN_OFFSET (2 << 20)
+#define CR_OS_MB_IN_OFFSET (1 << 20)
 /*Offset from the start of the CTRL region
 			to the start of the OS mailbox large input payload*/
-#define CR_OS_MB_OUT_OFFSET (3 << 20)
+#define CR_OS_MB_OUT_OFFSET (2 << 20)
 /*Offset from the start of the CTRL region
 			to the start of the OS mailbox large output payload*/
 #define CR_IN_MB_SIZE (1 << 20) /*Size of the OS mailbox large input payload*/

@@ -311,7 +311,7 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 
 	cr_write_barrier();
 
-	/*BUG: Simics MB bug never resests status code*/
+	/*BUG: Simics MB bug never resets status code*/
 	memset_io(mb->status, 0, CR_REG_SIZE);
 
 	cr_set_mb_door_bell(mb);
@@ -429,11 +429,11 @@ int cr_sniff_fw_command(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 	if (cr_verify_fw_cmd(fw_cmd))
 		return -EINVAL;
 
-	if (fw_cmd->large_output_payload_size > 0 ||
+/*	if (fw_cmd->large_output_payload_size > 0 ||
 			fw_cmd->large_input_payload_size > 0) {
 		NVDIMM_DBG("Large Mailboxes not supported in yet");
 		return -EINVAL;
-	}
+	}*/
 
 	switch (fw_cmd->opcode) {
 	case CR_PT_NULL_COMMAND:
