@@ -145,6 +145,24 @@ static inline int qib_num_vls(int vls)
 	}
 }
 
+static inline int qib_vls_to_ib_enum(u8 num_vls)
+{
+	switch (num_vls) {
+	case 1:
+		return IB_VL_VL0;
+	case 2:
+		return IB_VL_VL0_1;
+	case 4:
+		return IB_VL_VL0_3;
+	case 8:
+		return IB_VL_VL0_7;
+	case 15:
+		return IB_VL_VL0_14;
+	default:
+		return -1;
+	}
+}
+
 struct ib_reth {
 	__be64 vaddr;
 	__be32 rkey;
