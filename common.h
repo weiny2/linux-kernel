@@ -581,6 +581,9 @@ struct qib_message_header {
 /* misc. */
 #define SIZE_OF_CRC 1
 
+#define WFR_LIM_MGMT_P_KEY       0x7FFF
+#define WFR_FULL_MGMT_P_KEY      0xFFFF
+
 #define QIB_DEFAULT_P_KEY 0xFFFF
 #define QIB_PERMISSIVE_LID 0xFFFF
 #define QIB_AETH_CREDIT_SHIFT 24

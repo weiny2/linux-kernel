@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 
+#include <linux/net.h>
 #include <rdma/ib_smi.h>
 
 #include "hfi.h"
@@ -393,14 +394,42 @@ unlock:
 	return ret;
 }
 
-static unsigned qib_lookup_pkey(struct qib_ibport *ibp, u16 pkey)
+/*
+ * Hardware can't check this so we do it here.
+ *
+ * This is a slightly different algorithm than the standard pkey check.  It
+ * special cases the management keys and allows for 0x7fff and 0xffff to be in
+ * the table at the same time.
+ *
+ * @returns the index found or -1 if not found
+ */
+int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct hfi_devdata *dd = ppd->dd;
 	unsigned ctxt = ppd->hw_pidx;
 	unsigned i;
 
-	pkey &= 0x7fff;	/* remove limited/full membership bit */
+	if (pkey == WFR_FULL_MGMT_P_KEY || pkey == WFR_LIM_MGMT_P_KEY) {
+		unsigned lim_idx = -1;
+
+		for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i) {
+			/* here we look for an exact match */
+			if (dd->rcd[ctxt]->pkeys[i] == pkey)
+				return i;
+			if (dd->rcd[ctxt]->pkeys[i] == WFR_LIM_MGMT_P_KEY)
+				lim_idx = i;
+		}
+
+		/* did not find 0xffff return 0x7fff idx if found */
+		if (pkey == WFR_FULL_MGMT_P_KEY)
+			return lim_idx;
+
+		/* no match...  */
+		return -1;
+	}
+
+	pkey &= 0x7fff; /* remove limited/full membership bit */
 
 	for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i)
 		if ((dd->rcd[ctxt]->pkeys[i] & 0x7fff) == pkey)
@@ -408,10 +437,10 @@ static unsigned qib_lookup_pkey(struct qib_ibport *ibp, u16 pkey)
 
 	/*
 	 * Should not get here, this means hardware failed to validate pkeys.
-	 * Punt and return index 0.
 	 */
-	return 0;
+	return -1;
 }
+
 
 /**
  * qib_ud_rcv - receive an incoming UD packet
@@ -437,6 +466,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	u32 qkey;
 	u32 src_qp;
 	u16 dlid;
+	int mgmt_pkey_idx = 0;
 
 	/* Check for GRH */
 	if (!has_grh) {
@@ -481,6 +511,13 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 					      hdr->lrh[3], hdr->lrh[1]);
 				return;
 			}
+		} else {
+			/* lookup GSI pkey */
+			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+			mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
+			if (mgmt_pkey_idx < 0)
+				goto drop;
+
 		}
 		if (unlikely(qkey != qp->qkey)) {
 			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
@@ -496,6 +533,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			goto drop;
 	} else {
 		struct ib_smp *smp;
+		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 
 		/* Drop invalid MAD packets (see 13.5.3.1). */
 		if (tlen > 2048 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
@@ -505,6 +543,12 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		     hdr->lrh[3] == IB_LID_PERMISSIVE) &&
 		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 			goto drop;
+
+		/* lookup SMI pkey */
+		mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
+		if (mgmt_pkey_idx < 0)
+			goto drop;
+
 	}
 
 	/*
@@ -569,8 +613,22 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	wc.vendor_err = 0;
 	wc.qp = &qp->ibqp;
 	wc.src_qp = src_qp;
-	wc.pkey_index = qp->ibqp.qp_type == IB_QPT_GSI ?
-		qib_lookup_pkey(ibp, be32_to_cpu(ohdr->bth[0])) : 0;
+
+	if (qp->ibqp.qp_type == IB_QPT_GSI ||
+	    qp->ibqp.qp_type == IB_QPT_SMI) {
+		if (mgmt_pkey_idx < 0) {
+			if (net_ratelimit()) {
+				struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+				struct hfi_devdata *dd = ppd->dd;
+				dd_dev_err(dd, "QP type %d mgmt_pkey_idx < 0 and packet not dropped???\n",
+					   qp->ibqp.qp_type);
+				mgmt_pkey_idx = 0;
+			}
+		}
+		wc.pkey_index = (unsigned)mgmt_pkey_idx;
+	} else
+		wc.pkey_index = 0;
+
 	wc.slid = be16_to_cpu(hdr->lrh[3]);
 	wc.sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF;
 	dlid = be16_to_cpu(hdr->lrh[1]);
