@@ -532,7 +532,8 @@ static void complete_sdma_err_req(struct qib_pportdata *ppd,
  */
 int qib_sdma_verbs_send(struct qib_pportdata *ppd,
 			struct qib_sge_state *ss, u32 dwords,
-			struct qib_verbs_txreq *tx)
+			struct qib_verbs_txreq *tx,
+			struct snoop_packet *packet)
 {
 	unsigned long flags;
 	struct qib_sge *sge;
@@ -543,6 +544,10 @@ int qib_sdma_verbs_send(struct qib_pportdata *ppd,
 	u64 sdmadesc[2];
 	u32 dwoffset;
 	dma_addr_t addr;
+	u8 *packet_data = NULL;
+
+	if (packet)
+		packet_data = packet->data + ((tx->hdr_dwords-2) << 2);
 
 	spin_lock_irqsave(&ppd->sdma_lock, flags);
 
@@ -599,6 +604,10 @@ retry:
 				      dw << 2, DMA_TO_DEVICE);
 		if (dma_mapping_error(&ppd->dd->pcidev->dev, addr))
 			goto unmap;
+		if (packet) {
+			memcpy(packet_data, sge->vaddr, len);
+			packet_data += len;
+		}
 		sdmadesc[0] = 0;
 		make_sdma_desc(ppd, sdmadesc, (u64) addr, dw, dwoffset);
 		/* SDmaUseLargeBuf has to be set in every descriptor */
