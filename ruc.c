@@ -724,6 +724,7 @@ void qib_do_send(struct work_struct *work)
 
 	if ((qp->ibqp.qp_type == IB_QPT_RC ||
 	     qp->ibqp.qp_type == IB_QPT_UC) &&
+	    !loopback &&
 	    (qp->remote_ah_attr.dlid & ~((1 << ppd->lmc) - 1)) == ppd->lid) {
 		qib_ruc_loopback(qp);
 		return;

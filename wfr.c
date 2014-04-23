@@ -79,6 +79,10 @@ uint set_link_credits = 1;
 module_param_named(set_link_credits, set_link_credits, uint, S_IRUGO);
 MODULE_PARM_DESC(set_link_credits, "Set per-VL link credits so traffic will flow");
 
+uint loopback;
+module_param_named(loopback, loopback, uint, S_IRUGO);
+MODULE_PARM_DESC(loopback, "Put into LCB loopback mode");
+
 uint nodma_rtail;
 module_param(nodma_rtail, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "0 for no DMA of hdr tail, 1 to DMA the hdr tail");
@@ -2131,6 +2135,83 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 	*crc_sizes = (frame >> CRC_SIZES_SHIFT) & CRC_SIZES_MASK;
 }
 
+int init_loopback(struct hfi_devdata *dd)
+{
+	u64 reg;
+	unsigned long timeout;
+	int ret;
+
+	/* clear lcb run: LCB_CFG_RUN.EN = 0 */
+	write_csr(dd, DC_LCB_CFG_RUN, 0);
+	/* set tx fifo reset: LCB_CFG_TX_FIFOS_RESET.VAL = 1 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
+		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
+	/* set dcc reset csr: DCC_CFG_RESET.reset_lcb = 1 */
+	reg = read_csr(dd, DCC_CFG_RESET);
+	write_csr(dd, DCC_CFG_RESET,
+		reg | 1ull << DCC_CFG_RESET_RESET_LCB_SHIFT);
+	udelay(20);
+	write_csr(dd, DCC_CFG_RESET, reg);
+
+	/* configure LCBs in loopback */
+	/*	LCB_CFG_LOOPBACK.VAL = 2 */
+	/*	LCB_CFG_LANE_WIDTH.VAL = 0 */
+	write_csr(dd, DC_LCB_CFG_LOOPBACK,
+		2ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
+	write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
+	/* start the LCBs */
+	/*	LCB_CFG_TX_FIFOS_RESET.VAL = 0 */
+	/*	LCB_CFG_RUN.EN = 1 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
+	write_csr(dd, DC_LCB_CFG_RUN,
+		1ull << DC_LCB_CFG_RUN_EN_SHIFT);
+
+	/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
+	timeout = jiffies + msecs_to_jiffies(10);
+	while (1) {
+		reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
+		if (reg)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"timeout waiting for LINK_TRANSFER_ACTIVE\n");
+			return -ETIMEDOUT;
+		}
+		udelay(2);
+	}
+
+	write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
+		1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
+
+	/*
+	 * TODO: State 0xe2 is a special hack to allow a move to LinkUp.
+	 * This is in a special 8051 firmware and in simulator v37 and
+	 * later.
+	 */
+	ret = set_physical_link_state(dd, 0xe2);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd,
+			"%s: set phsyical link state to LinkUp failed with return 0x%x\n",
+			__func__, ret);
+
+		if (ret >= 0)
+			ret = -EINVAL;
+		return ret;
+	}
+
+	/*
+	 * In sim v37 and later, the special state move above
+	 * sets of the 8051 LinkUp interrupt which calls
+	 * handle_link_change().  On hardware, there is no
+	 * LinkUp interrupt for the same operation.  Make the
+	 * call here, instead.
+	 */
+	if (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR)
+		handle_linkup_change(dd, 1);
+
+	return 0;
+}
+
 static int bringup_serdes(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -2168,6 +2249,11 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 		if (dd->base_guid)
 			guid = be64_to_cpu(dd->base_guid) + ppd->port - 1;
 		ppd->guid = cpu_to_be64(guid);
+	}
+
+	if (loopback) {
+		dd_dev_info(dd, "Entering loopback mode\n");
+		return init_loopback(dd);
 	}
 
 	/* TODO: only start Polling if we have verified that media is

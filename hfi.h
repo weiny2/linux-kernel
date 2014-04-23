@@ -1344,6 +1344,7 @@ extern unsigned int set_link_credits;
 extern uint num_rcv_contexts;
 extern unsigned qib_n_krcv_queues;
 extern uint kdeth_qp;
+extern uint loopback;
 
 extern struct mutex qib_mutex;
 

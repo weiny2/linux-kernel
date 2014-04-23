@@ -103,6 +103,8 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 	if (linkup) {
 		/*
+		 * Loopback does not go through VerifyCap.
+		 *
 		 * The simulator does not implement:
 		 *	- VerifyCap interupt
 		 *	- VerifyCap frames
@@ -115,7 +117,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		 * NOTE: This uses this device's vAU and CU for the remote
 		 * values.  Both sides must be using the values.
 		 */
-		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		if (loopback || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
 			dd->remote_vau = WFR_CM_VAU;
 			/* enough credits for 16 * (2K MAD + max header) */
 			set_up_vl15(dd, dd->remote_vau, 16 * (32 + 2));

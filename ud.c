@@ -287,7 +287,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 	} else {
 		ibp->n_unicast_xmit++;
 		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
-		if (unlikely(lid == ppd->lid)) {
+		if (unlikely(!loopback && lid == ppd->lid)) {
 			/*
 			 * If DMAs are in progress, we can't generate
 			 * a completion for the loopback packet since
