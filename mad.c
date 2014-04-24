@@ -1673,6 +1673,67 @@ static int subn_set_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 	return subn_get_pkeytable(smp, ibdev, port);
 }
 
+#ifdef CONFIG_STL_MGMT
+static int get_sc2vlt_tables(struct hfi_devdata *dd, void *data)
+{
+	u64 *val = (u64 *)data;
+	*val++ = read_csr(dd, WFR_SEND_SC2VLT0);
+	*val++ = read_csr(dd, WFR_SEND_SC2VLT1);
+	*val++ = read_csr(dd, WFR_SEND_SC2VLT2);
+	*val++ = read_csr(dd, WFR_SEND_SC2VLT3);
+	return 0;
+}
+
+static int set_sc2vlt_tables(struct hfi_devdata *dd, void *data)
+{
+	u64 *val = (u64 *)data;
+	write_csr(dd, WFR_SEND_SC2VLT0, *val++);
+	write_csr(dd, WFR_SEND_SC2VLT1, *val++);
+	write_csr(dd, WFR_SEND_SC2VLT2, *val++);
+	write_csr(dd, WFR_SEND_SC2VLT3, *val++);
+	return 0;
+}
+
+static int subn_get_stl_sc_to_vlt(struct stl_smp *smp,
+				  struct ib_device *ibdev, u8 port)
+{
+	u32 n_blocks = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x000000ff);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	void *vp = (void *) stl_get_smp_data(smp);
+
+	if (am_port !=  0 || port != 1 || n_blocks != 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	memset(vp, 0, stl_get_smp_data_size(smp));
+
+	get_sc2vlt_tables(dd, vp);
+
+	return reply(smp);
+}
+
+static int subn_set_stl_sc_to_vlt(struct stl_smp *smp,
+				  struct ib_device *ibdev, u8 port)
+{
+	u32 n_blocks = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x000000ff);
+	int async_update = !!(be32_to_cpu(smp->attr_mod) & 0x1000);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	void *vp = (void *) stl_get_smp_data(smp);
+
+	if (am_port !=  0 || port != 1 || n_blocks != 1 || async_update) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	set_sc2vlt_tables(dd, vp);
+
+	return subn_get_stl_sc_to_vlt(smp, ibdev, port);
+}
+#endif /* CONFIG_STL_MGMT */
+
 static int subn_get_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -2561,6 +2622,9 @@ static int pma_set_portcounters_ext(struct ib_pma_mad *pmp,
 }
 
 #ifdef CONFIG_STL_MGMT
+
+#define STL_SMP_ATTR_SC_TO_VLT_TABLE cpu_to_be16(0x0084)
+
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			    u8 port, struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad)
@@ -2623,6 +2687,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_get_sl_to_vl(smp, ibdev, port);
 			goto bail;
 #endif /* 01 */
+		case STL_SMP_ATTR_SC_TO_VLT_TABLE:
+			ret = subn_get_stl_sc_to_vlt(smp, ibdev, port);
+			goto bail;
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_get_stl_vl_arb(smp, ibdev, port);
 			goto bail;
@@ -2656,6 +2723,9 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_set_sl_to_vl(smp, ibdev, port);
 			goto bail;
 #endif /* 01 */
+		case STL_SMP_ATTR_SC_TO_VLT_TABLE:
+			ret = subn_set_stl_sc_to_vlt(smp, ibdev, port);
+			goto bail;
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_set_stl_vl_arb(smp, ibdev, port);
 			goto bail;
