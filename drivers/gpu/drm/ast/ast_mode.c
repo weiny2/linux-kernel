@@ -760,23 +760,23 @@ static int ast_mode_valid(struct drm_connector *connector,
 	uint32_t jtemp;
 
 	if (ast->support_wide_screen) {
-		if ( (mode->crtc_hdisplay == 1680) && (mode->crtc_vdisplay == 1050) )
+		if ( (mode->hdisplay == 1680) && (mode->vdisplay == 1050) )
 			return MODE_OK;
-		if ( (mode->crtc_hdisplay == 1280) && (mode->crtc_vdisplay == 800) )
+		if ( (mode->hdisplay == 1280) && (mode->vdisplay == 800) )
 			return MODE_OK;
-		if ( (mode->crtc_hdisplay == 1440) && (mode->crtc_vdisplay == 900) )
+		if ( (mode->hdisplay == 1440) && (mode->vdisplay == 900) )
 			return MODE_OK;
-		if ( (mode->crtc_hdisplay == 1360) && (mode->crtc_vdisplay == 768) )
+		if ( (mode->hdisplay == 1360) && (mode->vdisplay == 768) )
 			return MODE_OK;
-		if ( (mode->crtc_hdisplay == 1600) && (mode->crtc_vdisplay == 900) )
+		if ( (mode->hdisplay == 1600) && (mode->vdisplay == 900) )
 			return MODE_OK;
 
 		if ( (ast->chip == AST2100) || (ast->chip == AST2200) || (ast->chip == AST2300) || (ast->chip == AST2400) || (ast->chip == AST1180) )
 		{
-			if ( (mode->crtc_hdisplay == 1920) && (mode->crtc_vdisplay == 1080) )
+			if ( (mode->hdisplay == 1920) && (mode->vdisplay == 1080) )
 				return MODE_OK;
 			
-			if ( (mode->crtc_hdisplay == 1920) && (mode->crtc_vdisplay == 1200) )
+			if ( (mode->hdisplay == 1920) && (mode->vdisplay == 1200) )
 			{
 				jtemp = ast_get_index_reg_mask(ast, AST_IO_CRTC_PORT, 0xd1, 0xff);
 				if (jtemp & 0x01)
@@ -786,22 +786,22 @@ static int ast_mode_valid(struct drm_connector *connector,
 			}
 		}
 	}
-	switch (mode->crtc_hdisplay)
+	switch (mode->hdisplay)
 	{
 	case 640:
-		if (mode->crtc_vdisplay == 480) flags=MODE_OK;
+		if (mode->vdisplay == 480) flags=MODE_OK;
 		break;
 	case 800:
-		if (mode->crtc_vdisplay == 600) flags=MODE_OK;
+		if (mode->vdisplay == 600) flags=MODE_OK;
 		break;
 	case 1024:
-		if (mode->crtc_vdisplay == 768) flags=MODE_OK;
+		if (mode->vdisplay == 768) flags=MODE_OK;
 		break;
 	case 1280:
-		if (mode->crtc_vdisplay == 1024) flags=MODE_OK;
+		if (mode->vdisplay == 1024) flags=MODE_OK;
 		break;
 	case 1600:
-		if (mode->crtc_vdisplay == 1200) flags=MODE_OK;
+		if (mode->vdisplay == 1200) flags=MODE_OK;
 		break;
 	default:
 		return flags;
