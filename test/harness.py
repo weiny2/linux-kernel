@@ -63,76 +63,76 @@ test_list = [
 
     # IB Send Lat test
     { "test_name" : "IbSendLat.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]%",
       "type" : "default,quick,verbs",
       "desc" : "Run ib_send_lat for 5 iterations.",
     },
 
     # IB Send BW tests
     { "test_name" : "IbSendBwUD.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]%",
       "type" : "default,quick,verbs",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using UD.",
     },
 
     { "test_name" : "IbSendBwRC.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]%",
       "type" : "default,quick,verbs",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using RC.",
     },
 
     { "test_name" : "IpoibPing.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]%",
       "type" : "default,quick,verbs",
       "desc" : "Run ping for 5 packets using ipoib.",
     },
 
     { "test_name" : "IbSendBwRC-a.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]%",
       "type" : "default,verbs",
       "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
     },
 
     { "test_name" : "IpoibQperf.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]%",
       "type" : "default,verbs",
       "desc" : "Run qperf/tcp_bw for 8 to 64 bytes.",
     },
 
    # OSU MPI tests
     { "test_name" : "OsuMpi.py",
-      "args" : "--nodelist %HOST[2]% --simics --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB%",
       "type" : "mpi,mpipsm,default",
       "desc" : "Run OSU MPI benchmarks with PSM",
     },
 
     { "test_name" : "OsuMpi.py",
-      "args" : "--nodelist %HOST[1]% --simics --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB%",
       "type" : "mpi,mpipsm,default",
       "desc" : "Run OSU MPI benchmarks on one node with PSM",
     },
 
     { "test_name" : "OsuMpi.py",
-      "args" : "--nodelist %HOST[2]% --simics --mpiverbs",
+      "args" : "--nodelist %HOST[2]% --mpiverbs",
       "type" : "default,mpi,mpiverbs,verbs",
       "desc" : "Run OSU MPI benchmarks with verbs",
     },
 
     { "test_name" : "OpcodeCounters.py",
-      "args" : "--nodelist %HOST[2]% --simics",
+      "args" : "--nodelist %HOST[2]%",
       "type" : "default,quick,verbs",
       "desc" : "Run test opcode counters after quick tests have been run.",
     },
 
     # wfr-diagtools-sw tests
     { "test_name" : "HfiPktTest.py",
-      "args" : "--nodelist %HOST[1]% --simics --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB%",
       "type" : "diagtools,default",
       "desc" : "Run hfi_pkt_test PIO buffer benchmark.",
     },
 
     { "test_name" : "HfiPktTest.py",
-      "args" : "--nodelist %HOST[2]% --simics --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB%",
       "type" : "diagtools,default",
       "desc" : "Run hfi_pkt_test ping-pong benchmark.",
     },
@@ -166,6 +166,7 @@ if test_info.list_only:
 # what we have in the test_info settings if we can't figure out an argument we
 # bail and fail. Once we have swizzled the command line run the test and look at
 # the retrun value.
+simics = test_info.is_simics()
 for test in test_list:
 
     curr_name = test["test_name"]
@@ -222,7 +223,8 @@ for test in test_list:
                         WARN("Did not find a mapping for" + arg)
 
                 processed_args += arg + " "
-
+            if simics == True:
+                processed_args += "--simics"
             RegLib.test_log(5, "Running test: " + curr_name)
             RegLib.test_log(5, "Raw Test args: " + curr_args)
             RegLib.test_log(5, "Processed Test args: " + processed_args)

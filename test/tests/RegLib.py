@@ -197,6 +197,13 @@ class TestInfo:
 
         git_root = os.popen('git rev-parse --show-toplevel').read()
         git_root = chomp(git_root)
+
+        # Some ancient disros do not support the above git command. Or git may
+        # not be in the users path. Rather than getting garbage and accepting
+        # it, if the path is not valid, just clear it out.
+        if not os.path.exists(git_root):
+            git_root = ""
+
         parser.add_option("--nodelist", dest="nodelist",
                           help="Nodes to run on. Default: \"viper0,viper1\"",
                           metavar="NODES",
@@ -257,12 +264,13 @@ class TestInfo:
 
             for node in nodelist:
                 found_localhost = 0
+                oopts = "-o StrictHostKeyChecking=no "
+                oopts += "-o UserKnownHostsFile=/dev/null"
+
                 if self.simics:
                     # For simics we will accept only viper0, viper1 and
                     # localhost for running directly on one of the vipers. This
                     # is not bullet proof so user has to do the right thing.
-                    oopts = "-o StrictHostKeyChecking=no "
-                    oopts += "-o UserKnownHostsFile=/dev/null"
                     iopts = "-i SIMICS_KEY_FILE"
                     if node == "viper0":
                         host = HostInfo(node, "localhost", "4022", oopts + " " +
@@ -275,7 +283,8 @@ class TestInfo:
                     else:
                         test_fail("Simics specified but did not find vipers")
                 else:
-                    test_fail("Only supporting simics nodes at this time")
+                    host = HostInfo(node, node, "22", oopts)
+
                 self.nodelist.append(host)
 
         # What is the location of the driver source tree?
