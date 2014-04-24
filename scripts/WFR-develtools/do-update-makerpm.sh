@@ -226,6 +226,8 @@ make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
 #       which require a rebuild
 #       See NOTE in build script under sources to copy
 make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_cm.ko
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core rdma_cm.ko
+make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core rdma_ucm.ko
 
 
 # Then build drivers...
@@ -260,6 +262,8 @@ cp drivers/infiniband/hw/wfr-lite/ib_wfr_lite.ko \$RPM_BUILD_ROOT/lib/modules/%k
 
 # See NOTE above
 cp drivers/infiniband/core/ib_cm.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/core/rdma_cm.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
+cp drivers/infiniband/core/rdma_ucm.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/qib/ib_qib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/mlx4/mlx4_ib.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/mthca/ib_mthca.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
