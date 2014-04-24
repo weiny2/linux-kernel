@@ -104,6 +104,36 @@ static int ast_detect_chip(struct drm_device *dev)
 			DRM_INFO("AST 2000 detected\n");
 		}
 	}
+
+	switch (ast->chip) {
+	case AST1180:
+		ast->support_wide_screen = true;
+		break;
+	case AST2000:
+		ast->support_wide_screen = false;
+		break;
+	default:
+	{
+		uint32_t data, jreg;
+		jreg = ast_get_index_reg_mask(ast, AST_IO_CRTC_PORT, 0xd0, 0xff);
+		if (!(jreg & 0x80))
+			ast->support_wide_screen = true;
+		else if (jreg & 0x01)
+			ast->support_wide_screen = true;
+		else {
+			ast->support_wide_screen = false;
+			if (ast->chip == AST2300) {
+				ast_write32(ast, 0xf004, 0x1e6e0000);
+				ast_write32(ast, 0xf000, 0x1);
+				data = ast_read32(ast, 0x1207c);
+				if ((data & 0x300) == 0) /* ast1300 */
+					ast->support_wide_screen = true;
+			}
+		}
+	}
+	break;
+	}
+			       
 	return 0;
 }
 
