@@ -4762,6 +4762,12 @@ static void init_chip(struct hfi_devdata *dd)
 	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
 	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
 	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
+	/* FPGA workaround: this CSR may not contain the correct value */
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION
+						&& dd->chip_sdma_engines != 4) {
+		dd_dev_info(dd, "WORKAROUND: forcing sdma engines to 4\n");
+		dd->chip_sdma_engines = 4;
+	}
 
 	/*
 	 * If we are holding the ASIC mutex, clear it.
