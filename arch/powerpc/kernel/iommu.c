@@ -1137,6 +1137,17 @@ static int iommu_add_device(struct device *dev)
 
 static void iommu_del_device(struct device *dev)
 {
+	/*
+	 * Some devices might not have IOMMU table and group
+	 * and we needn't detach them from the associated
+	 * IOMMU groups
+	 */
+	if (!dev->iommu_group) {
+		pr_debug("iommu_tce: skipping device %s with no tbl\n",
+			 dev_name(dev));
+		return;
+	}
+
 	iommu_group_remove_device(dev);
 }
 
