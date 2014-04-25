@@ -33,12 +33,6 @@
 
 #include <linux/types.h>
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-
 /*
  * ****************************************************************************
  * DEFINES
@@ -1335,9 +1329,5 @@ struct cr_pt_output_payload_fw_error_log {
  */
 
 /* FIXME: where is the structure for above comment? */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif	/* _CR_IOCTL_H */
