@@ -34,30 +34,9 @@
 #include <linux/nvdimm_core.h>
 #include <linux/gen_nvm_volumes.h>
 
-/*CR Specific*/
-struct btt_entry {
-	__u64 lba;
-	__u64 rdpa;
-	__u16 dimm_id;
-};
-
-/*CR Specific*/
-struct cr_block_translation_tbl {
-	__u64 num_btt_entries;
-	struct btt_entry *btt;
-};
-
-/*CR Specific*/
-struct cr_freelist {
-	/*XXX: TBD*/
-};
-
-/*CR Specific*/
 struct cr_volume {
 	bool atomic;
 	struct list_head extent_set_node;
-	struct cr_block_translation_tbl btt;
-	struct cr_freelist freelist;
 };
 
 /****************************************************
@@ -73,13 +52,11 @@ struct cr_volume {
  * Create a new user defined volume. Perform all of the creation and
  * initialization duties for a CR volume.
  * Claim extents from pool
- * create BTT/Freelist
  *
  * CR Specific
  *
  * Returns:
  */
-
 int cr_create_volume(struct nvm_volume *volume,
 	struct ioctl_create_volume *ioctl);
 
@@ -102,7 +79,7 @@ int cr_delete_volume(struct nvm_volume *volume);
  * @ioctl: The structure that contains all of the CR specific information
  * from the user required to modify a CR volume
  *
- * Grow|Shrink, modify extents and BTT accordingly.
+ * Grow|Shrink, modify extents accordingly.
  *
  * CR Specific
  *
@@ -118,7 +95,7 @@ int cr_modify_volume(struct nvm_volume *volume,
  * @nbytes: Number of bytes to read
  * @buffer: Buffer to place read data into
  *
- * Transform LBA into RDPA and DIMM through the BTT.
+ * Transform LBA into RDPA and DIMM
  * Call the CR DIMM read function
  *
  * CR Specific
@@ -150,97 +127,12 @@ int cr_write(struct nvm_volume *volume, unsigned long lba, unsigned long nbytes,
  * @volume: NVM Volume the CR volume is a part of
  *
  * Perform all actions required to check the consistency of a CR Volume
- * Validate extents, check BTT, check freelist
  *
  * CR Specific
  *
  * Returns:
  */
 int cr_check_consistency(struct nvm_volume *volume);
-
-/**
- * cr_create_btt() - Create the BTT for a given Volume
- * @cr_vol: CR Volume to create the BTT for
- *
- * Extents should of been allocated to the volume before hand.
- * Create the BTT for the Extents
- *
- * CR Specific
- *
- * Returns:
- */
-int cr_create_btt(struct cr_volume *cr_vol);
-
-/**
- * cr_modify_btt() - Modify the size of the BTT
- * @???
- *
- * Grow or shrink the size of the BTT
- */
-int cr_modify_btt(void /*???*/);
-
-/**
- * cr_read_btt() - Translate a LBA to a RDPA and retrieve the PTR to the DIMM
- * @cr_vol: CR Volume containing the BTT
- * @lba: LBA to retrieve the rdpa and dimm_ptr for
- * @rdpa: retrieved from btt
- * @dimm_id: retrieved from btt
- *
- * CR_Specific
- *
- * Returns:???
- */
-int cr_read_btt(struct cr_volume *cr_vol, __u64 lba, __u64 *rdpa,
-	__u16 *dimm_id);
-
-/**
- * cr_write_btt() - Update a LBA with a new RDPA
- * @cr_vol: CR volume containing the BTT
- * @lba: LBA to update
- * @rdpa: new rdpa for the lba
- * @dimm_id: new dimm id for the lba
- *
- * update the in-memory BTT then write the update out to disk,
- * function should only be called if it supports atomic writes
- */
-int cr_write_btt(struct cr_volume *cr_vol, __u64 lba, __u64 rdpa,
-	__u16 dimm_id);
-
-/**
- * cr_check_btt_consistency() - Verify the BTT is valid for use
- * @cr_vol: The CR volume
- *
- * Check the consistency of the BTT
- * Ensure all RDPA's are contained within the extents in the volume
- * Ensure all the DIMMs in the BTT are part of the volume
- *
- * CR_Specific
- *
- * Returns:
- */
-int cr_check_btt_consistency(struct cr_volume *cr_vol);
-
-/**
- * cr_create_freelist() - Create the block free list
- */
-int cr_create_freelist(struct cr_volume *cr_vol);
-
-/**
- * cr_check_freelist_consistency() - Check that the free list is able to be used
- */
-int cr_check_freelist_consistency(struct cr_volume *cr_vol);
-
-/**
- * cr_provision_free_block() - retrieve a block of memory from free list
- * XXX: When freelist is defined this can be decided
- */
-int cr_provision_free_block(void);
-
-/**
- * cr_return_free_block() - return a block of memory to free list
- * XXX: When freelist is defined this can be decided
- */
-int cr_return_free_block(void);
 
 /**
  * cr_get_capacity() - Get the total capacity of a CR Volume
@@ -257,10 +149,5 @@ int cr_write_labels(struct nvm_volume *volume);
  */
 int cr_volume_ioctl(struct nvm_volume *volume, fmode_t mode, unsigned cmd,
 	unsigned long arg);
-
-/**
- * cr_write_freelist() - Write the free list out to disk
- */
-int cr_write_freelist(void);
 
 #endif
