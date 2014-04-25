@@ -32,10 +32,7 @@
 #define	_NVDIMM_IOCTL_H
 
 #include <linux/nvdimm.h>
-
-#ifdef __linux__
 #include <linux/ioctl.h>
-#endif
 
 /*
  * ****************************************************************************
@@ -245,7 +242,6 @@ struct nvdimm_req {
 #define nvdr_volume_details	nvdr_arg2.volume_details
 #define nvdr_platform_capabilities	nvdr_arg2.platform_capabilities
 
-#ifdef __linux__
 #define NVDIMM_MAGIC (0xDA)
 
 /* Debug IOCTLS */
@@ -282,6 +278,5 @@ struct nvdimm_req {
 	_IOWR(NVDIMM_MAGIC, IOCTL_MODIFY_VOLUME, struct nvdimm_req)
 #define NVDIMM_PASSTHROUGH_CMD	\
 	_IOWR(NVDIMM_MAGIC, IOCTL_PASSTHROUGH_CMD, struct nvdimm_req)
-#endif
 
 #endif /* _NVDIMM_IOCTL_H */
