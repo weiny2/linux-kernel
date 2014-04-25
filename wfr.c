@@ -4448,27 +4448,92 @@ static void write_uninitialized_csrs_and_memories(struct hfi_devdata *dd)
 		write_csr(dd, WFR_RCV_QP_MAP_TABLE + (8 * i), 0);
 }
 
+/* set CCE CSRs to chip reset defaults */
+static void reset_cce(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* WFR_CCE_REVISION read-only */
+	/* WFR_CCE_REVISION2 read-only */
+	write_csr(dd, WFR_CCE_CTRL, read_csr(dd, WFR_CCE_CTRL));
+	/* WFR_CCE_STATUS read-only */
+	for (i = 0; i < CCE_NUM_SCRATCH; i++)
+		write_csr(dd, WFR_CCE_SCRATCH + (8 * i), 0);
+	/* WFR_CCE_ERR_STATUS read-only */
+	write_csr(dd, WFR_CCE_ERR_MASK, 0);
+	write_csr(dd, WFR_CCE_ERR_CLEAR, ~0ull);
+	/* WFR_CCE_ERR_FORCE leave alone */
+	for (i = 0; i < CCE_NUM_32_BIT_COUNTERS; i++)
+		write_csr(dd, WFR_CCE_COUNTER_ARRAY32 + (8 * i), 0);
+	/* TODO: what is the policy for CceDbiCtrl? */
+	/* TODO: WFR_CCE_DBI_CTRL */
+	/* TODO: WFR_CCE_DBI_ADDR */
+	/* TODO: WFR_CCE_DBI_DATA */
+	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_RESETCSR);
+	/* TODO: what is the policy for CcePcieCtrl? Leave alone? */
+	/* TODO: write_csr(dd, WFR_CCE_PCIE_CTRL, 0);*/
+	for (i = 0; i < CCE_NUM_MSIX_VECTORS; i++) {
+		write_csr(dd, WFR_CCE_MSIX_TABLE_LOWER + (8 * i), 0);
+		write_csr(dd, WFR_CCE_MSIX_TABLE_UPPER + (8 * i),
+					WFR_CCE_MSIX_TABLE_UPPER_RESETCSR);
+	}
+	for (i = 0; i < CCE_NUM_MSIX_PBAS; i++) {
+		/* WFR_CCE_MSIX_PBA read-only */
+		write_csr(dd, WFR_CCE_MSIX_INT_GRANTED, ~0ull);
+		write_csr(dd, WFR_CCE_MSIX_VEC_CLR_WITHOUT_INT, ~0ull);
+	}
+	for (i = 0; i < CCE_NUM_INT_MAP_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MAP, 0);
+	for (i = 0; i < CCE_NUM_INT_CSRS; i++) {
+		/* WFR_CCE_INT_STATUS read-only */
+		write_csr(dd, WFR_CCE_INT_MASK + (8 * i), 0);
+		write_csr(dd, WFR_CCE_INT_CLEAR + (8 * i), ~0ull);
+		/* WFR_CCE_INT_FORCE leave alone */
+		/* WFR_CCE_INT_BLOCKED read-only */
+	}
+	for (i = 0; i < CCE_NUM_32_BIT_INT_COUNTERS; i++)
+		write_csr(dd, WFR_CCE_INT_COUNTER_ARRAY32 + (8 * i), 0);
+}
+
 /* set TXE CSRs to chip reset defaults */
 static void reset_txe(struct hfi_devdata *dd)
 {
 	int i;
 
+	/*
+	 * TXE Kernel CSRs
+	 */
 	write_csr(dd, WFR_SEND_CTRL, 0);
+	/* WFR_SEND_CONTEXTS read-only */
+	/* WFR_SEND_DMA_ENGINES read-only */
+	/* WFR_SEND_PIO_MEM_SIZE read-only */
+	/* WFR_SEND_DMA_MEM_SIZE read-only */
 	write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIMIT, 0);
-	/* TODO: wait for SendPioInitCtxt.PioInitInProgress to be clear? */
+	pio_reset_all(dd);	/* WFR_SEND_PIO_INIT_CTXT */
+	/* WFR_SEND_PIO_ERR_STATUS read-only */
 	write_csr(dd, WFR_SEND_PIO_ERR_MASK, 0);
 	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_PIO_ERR_FORCE leave alone */
+	/* WFR_SEND_DMA_ERR_STATUS read-only */
 	write_csr(dd, WFR_SEND_DMA_ERR_MASK, 0);
 	write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_DMA_ERR_FORCE leave alone */
+	/* WFR_SEND_EGRESS_ERR_STATUS read-only */
 	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, 0);
 	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_EGRESS_ERR_FORCE leave alone */
 	write_csr(dd, WFR_SEND_BTH_QP, 0);
 	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, 0);
-	/* SL2VL init now moved to init_chip() */
+	write_csr(dd, WFR_SEND_SC2VLT0, 0);
+	write_csr(dd, WFR_SEND_SC2VLT1, 0);
+	write_csr(dd, WFR_SEND_SC2VLT2, 0);
+	write_csr(dd, WFR_SEND_SC2VLT3, 0);
 	write_csr(dd, WFR_SEND_LEN_CHECK0, 0);
 	write_csr(dd, WFR_SEND_LEN_CHECK1, 0);
+	/* WFR_SEND_ERR_STATUS read-only */
 	write_csr(dd, WFR_SEND_ERR_MASK, 0);
 	write_csr(dd, WFR_SEND_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_ERR_FORCE read-only */
 	for (i = 0; i < WFR_VL_ARB_LOW_PRIO_TABLE_SIZE; i++)
 		write_csr(dd, WFR_SEND_LOW_PRIORITY_LIST + (8*i), 0);
 	for (i = 0; i < WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE; i++)
@@ -4479,8 +4544,10 @@ static void reset_txe(struct hfi_devdata *dd)
 		write_csr(dd, WFR_SEND_COUNTER_ARRAY32 + (8*i), 0);
 	for (i = 0; i < WFR_TXE_NUM_64_BIT_COUNTER; i++)
 		write_csr(dd, WFR_SEND_COUNTER_ARRAY64 + (8*i), 0);
-	write_csr(dd, WFR_SEND_CM_CTRL, 0x2 << 4);
-	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, 0);
+	write_csr(dd, WFR_SEND_CM_CTRL, WFR_SEND_CM_CTRL_RESETCSR);
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
+					WFR_SEND_CM_GLOBAL_CREDIT_RESETCSR);
+	/* WFR_SEND_CM_CREDIT_USED_STATUS read-only */
 	write_csr(dd, WFR_SEND_CM_TIMER_CTRL, 0);
 	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE0_TO3, 0);
 	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE4_TO7, 0);
@@ -4489,12 +4556,21 @@ static void reset_txe(struct hfi_devdata *dd)
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
 		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8*i), 0);
 	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, 0);
+	/* WFR_SEND_CM_CREDIT_USED_VL read-only */
+	/* WFR_SEND_CM_CREDIT_USED_VL15 read-only */
+	/* WFR_SEND_EGRESS_CTXT_STATUS read-only */
+	/* WFR_SEND_EGRESS_SEND_DMA_STATUS read-only */
 	write_csr(dd, WFR_SEND_EGRESS_ERR_INFO, ~0ull);
+	/* WFR_SEND_EGRESS_ERR_INFO read-only */
+	/* WFR_SEND_EGRESS_ERR_SOURCE read-only */
 
+	/*
+	 * TXE Per-Context CSRs
+	 */
 	for (i = 0; i < dd->chip_send_contexts; i++) {
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 0);
-		/* WFR_SEND_CTXT_CREDIT_RETURN_ADDR initialized elsewhere */
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_FORCE, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, 0);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, ~0ull);
@@ -4506,7 +4582,105 @@ static void reset_txe(struct hfi_devdata *dd)
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_OPCODE, 0);
 	}
 
-	//FIXME: Add SDMA registers
+	/*
+	 * TXE Per-SDMA CSRs
+	 */
+	for (i = 0; i < dd->chip_sdma_engines; i++) {
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CTRL, 0);
+		/* WFR_SEND_DMA_STATUS read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_BASE_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_LEN_GEN, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_TAIL, 0);
+		/* WFR_SEND_DMA_HEAD read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_HEAD_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_PRIORITY_THLD, 0);
+		/* WFR_SEND_DMA_IDLE_CNT read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_RELOAD_CNT, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_DESC_CNT, 0);
+		/* WFR_SEND_DMA_DESC_FETCHED_CNT read-only */
+		/* WFR_SEND_DMA_ENG_ERR_STATUS read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_MASK, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_CLEAR, ~0ull);
+		/* WFR_SEND_DMA_ENG_ERR_FORCE leave alone */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_ENABLE, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_VL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_JOB_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_PARTITION_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_SLID, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_OPCODE, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_MEMORY, 0);
+	}
+}
+
+/* set RXE CSRs to chip reset defaults */
+static void reset_rxe(struct hfi_devdata *dd)
+{
+	int i, j;
+
+	/*
+	 * RXE Kernel CSRs
+	 */
+	write_csr(dd, WFR_RCV_CTRL, 0);
+	/* WFR_RCV_STATUS read-only */
+	/* WFR_RCV_CONTEXTS read-only */
+	/* WFR_RCV_ARRAY_CNT read-only */
+	/* WFR_RCV_BUF_SIZE read-only */
+	write_csr(dd, WFR_RCV_BTH_QP, 0);
+	write_csr(dd, WFR_RCV_MULTICAST, 0);
+	write_csr(dd, WFR_RCV_BYPASS, 0);
+	write_csr(dd, WFR_RCV_VL15, 0);
+	/* this is a clear-down */
+	write_csr(dd, WFR_RCV_ERR_INFO,
+			WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK);
+	/* WFR_RCV_ERR_STATUS read-only */
+	write_csr(dd, WFR_RCV_ERR_MASK, 0);
+	write_csr(dd, WFR_RCV_ERR_CLEAR, ~0ull);
+	/* WFR_RCV_ERR_FORCE leave alone */
+	for (i = 0; i < 32; i++)
+		write_csr(dd, WFR_RCV_QP_MAP_TABLE + (8 * i), 0);
+	for (i = 0; i < 4; i++)
+		write_csr(dd, WFR_RCV_PARTITION_KEY + (8 * i), 0);
+	for (i = 0; i < RXE_NUM_32_BIT_COUNTERS; i++)
+		write_csr(dd, WFR_RCV_COUNTER_ARRAY32 + (8 * i), 0);
+	for (i = 0; i < RXE_NUM_64_BIT_COUNTERS; i++)
+		write_csr(dd, WFR_RCV_COUNTER_ARRAY64 + (8 * i), 0);
+	for (i = 0; i < RXE_NUM_RSM_INSTANCES; i++) {
+		write_csr(dd, WFR_RCV_RSM_CFG + (8 * i), 0);
+		write_csr(dd, WFR_RCV_RSM_SELECT + (8 * i), 0);
+		write_csr(dd, WFR_RCV_RSM_MATCH + (8 * i), 0);
+	}
+	for (i = 0; i < 32; i++)
+		write_csr(dd, WFR_RCV_RSM_MAP_TABLE + (8 * i), 0);
+
+	/*
+	 * RXE Kernel and User Per-Context CSRs
+	 */
+	for (i = 0; i < dd->chip_rcv_contexts; i++) {
+		/* kernel */
+		write_kctxt_csr(dd, i, WFR_RCV_CTXT_CTRL, 0);
+		/* WFR_RCV_CTXT_STATUS read-only */
+		write_kctxt_csr(dd, i, WFR_RCV_EGR_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_TID_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_KEY_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_CNT, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_ENT_SIZE, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_SIZE, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_TAIL_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_AVAIL_TIME_OUT, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_OVFL_CNT, 0);
+
+		/* user */
+		/* WFR_RCV_HDR_TAIL read-only */
+		write_uctxt_csr(dd, i, WFR_RCV_HDR_HEAD, 0);
+		/* WFR_RCV_EGR_INDEX_TAIL read-only */
+		write_uctxt_csr(dd, i, WFR_RCV_EGR_INDEX_HEAD, 0);
+		/* WFR_RCV_EGR_OFFSET_TAIL read-only */
+		for (j = 0; j < RXE_NUM_TID_FLOWS; j++) {
+			write_uctxt_csr(dd, i, WFR_RCV_TID_FLOW_TABLE + (8 * j),
+				0);
+		}
+	}
 }
 
 /*
@@ -4597,71 +4771,62 @@ static void init_chip(struct hfi_devdata *dd)
 	if (reg & mask)
 		write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);
 
+	/*
+	 * Put the WFR CSRs in a known state.
+	 * Combine this with a DC reset.
+	 *
+	 * Stop the device from doing anything while we do a
+	 * reset.  We know there are no other active users of
+	 * the device since we are now in charge.  Turn off
+	 * off all outbound and inbound traffic and make sure
+	 * the device does not generate any interrupts.
+	 */
+
+	/* disable send contexts and SDMA engines */
+	write_csr(dd, WFR_SEND_CTRL, 0);
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
+	for (i = 0; i < dd->chip_sdma_engines; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CTRL, 0);
+	/* disable port (turn off RXE inbound traffic) and contexts */
+	write_csr(dd, WFR_RCV_CTRL, 0);
+	for (i = 0; i < dd->chip_rcv_contexts; i++)
+		write_csr(dd, WFR_RCV_CTXT_CTRL, 0);
+	/* mask all interrupt sources */
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
+
+	/*
+	 * DC Reset: do a full DC reset before the register clear.
+	 * A recommended length of time to hold is one CSR read,
+	 * so reread the CceDcCtrl.  Then, hold the DC in reset
+	 * across the clear.
+	 */
+	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
+	(void) read_csr(dd, WFR_CCE_DC_CTRL);
+
 	if (use_flr) {
-		dd_dev_info(dd, "Using FLR+DC reset to clear CSRs\n");
 		/*
-		 * Reset the device to put the CSRs in a known state.
-		 * A FLR will reset the SPC core without resetting the
-		 * PCIe.  Combine this with a DC reset.
-		 *
-		 * Stop the device from doing anything while we do a
-		 * reset.  We know there are no other active users of
-		 * the device since we are now in charge.  Next, turn
-		 * off all outbound and inbound traffic and make sure
-		 * the device does not generate any interrupts.
+		 * A FLR will reset the SPC core and part of the PCIe.
+		 * TODO: This wipes out the PCIe BARs - anything else
+		 *`	in PCIe?
 		 */
-
-		/* disable send contexts and SDMA engines */
-		for (i = 0; i < dd->chip_send_contexts; i++)
-			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
-		for (i = 0; i < dd->chip_sdma_engines; i++)
-			write_kctxt_csr(dd, i, WFR_SEND_DMA_CTRL, 0);
-		/* disable port (turn off RXE inbound traffic) */
-		write_csr(dd, WFR_RCV_CTRL, 0);
-		/* mask all interrupt sources */
-		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
-			write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
-
-		/*
-		 * DC Reset: do a full DC reset before the FLR.  A
-		 * recommended length of time to hold is one CSR read,
-		 * so reread the CceDcCtrl.  Then, hold the DC in reset
-		 * across the FLR.
-		 */
-		write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
-		(void) read_csr(dd, WFR_CCE_DC_CTRL);
+		dd_dev_info(dd, "Resetting CSRs with FLR\n");
 
 		/* do the FLR, the DC reset will remain */
 		hfi_pcie_flr(dd);
 
-		/* now clear the DC reset */
-		write_csr(dd, WFR_CCE_DC_CTRL, 0);
-
-		/*
-		 * After FLR, SendCmGlobalCredit contains this
-		 * hardware's vAU and total link credits.
-		 */
-/* TODO: these values are only set in HAS 0.76 */
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
-		reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
-		dd->vau = (reg >> WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT)
-				& WFR_SEND_CM_GLOBAL_CREDIT_AU_MASK;
-		dd->link_credits = (reg >>
-			WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
-			& WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_MASK;
-#endif
 	} else {
-		dd_dev_info(dd, "Clearing CSRs with writes\n");
-		/* clear the DC reset */
-		write_csr(dd, WFR_CCE_DC_CTRL, 0);
-		// FIXME:
-		// o make sure all rcv contexts are disabled
-		// o make sure all of SDMA engines are disabled
-		// o make sure all interrupts are disabled
-		// o reset all interrupt mappings back to default
-		// o other...
+		dd_dev_info(dd, "Resetting CSRs with writes\n");
+		reset_cce(dd);
 		reset_txe(dd);
+		reset_rxe(dd);
+		/* FIXME: */
+		/* reset_asic(dd); */
+		/* reset_misc(dd); */
 	}
+	/* clear the DC reset */
+	write_csr(dd, WFR_CCE_DC_CTRL, 0);
 
 	/*
 	 * TODO:  Remove manual setting of vAU and link credits when

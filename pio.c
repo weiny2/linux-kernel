@@ -642,6 +642,63 @@ void sc_disable(struct send_context *sc)
 	}
 }
 
+/*
+ * Wait for the SendPioInitCtxt.PioInitInProgress bit to clear.
+ * Returns:
+ *	-ETIMEDOUT - if we wait too long
+ *	-EIO	   - if there was an error
+ */
+static int pio_init_wait_progress(struct hfi_devdata *dd)
+{
+	u64 reg;
+	int count = 0;
+
+	while (1) {
+		reg = read_csr(dd, WFR_SEND_PIO_INIT_CTXT);
+		if (!(reg & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SMASK))
+			break;
+		msleep(20);
+		if (count++ > 10)
+			return -ETIMEDOUT;
+	}
+
+	return reg & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_ERR_SMASK ? -EIO : 0;
+}
+
+/*
+ * Reset all of the send contexts to their power-on state.  Used
+ * only during manual init - no lock against sc_enable needed.
+ */
+void pio_reset_all(struct hfi_devdata *dd)
+{
+	int ret;
+
+	/* make sure the init engine is not busy */
+	ret = pio_init_wait_progress(dd);
+	if (ret == -ETIMEDOUT) {
+		dd_dev_err(dd,
+			"PIO send context init is stuck, not initializing PIO blocks\n");
+		return;
+	}
+
+	if (ret == -EIO) {
+		/* clear the error */
+		write_csr(dd, WFR_SEND_PIO_ERR_CLEAR,
+			WFR_SEND_PIO_ERR_CLEAR_PIO_INIT_SM_IN_ERR_SMASK);
+	}
+
+	/* reset init all */
+	write_csr(dd, WFR_SEND_PIO_INIT_CTXT,
+			WFR_SEND_PIO_INIT_CTXT_PIO_ALL_CTXT_INIT_SMASK);
+	udelay(2);
+	ret = pio_init_wait_progress(dd);
+	if (ret < 0) {
+		dd_dev_err(dd,
+			"PIO send context init %s while initializing all PIO blocks\n",
+			ret == -ETIMEDOUT ? "is stuck" : "had an error");
+	}
+}
+
 /* enable the context */
 int sc_enable(struct send_context *sc)
 {
@@ -691,21 +748,16 @@ int sc_enable(struct send_context *sc)
 		 * register just once.
 		 */
 		udelay(2);
-		pio = read_csr(sc->dd, WFR_SEND_PIO_INIT_CTXT);
-		while(pio & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SMASK) {
-			msleep(20);
-			pio = read_csr(sc->dd, WFR_SEND_PIO_INIT_CTXT);
-		}
+		ret = pio_init_wait_progress(dd);
 		spin_unlock_irqrestore(&dd->sc_init_lock, flags);
 		/*
 		 * Initialization is done. The register holds a valid error
 		 * status.
 		 */
-		if (pio & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_ERR_SMASK) {
+		if (ret) {
                         dd_dev_err(sc->dd,
-				   "ctxt%u: Ctxt not enabled due to init failure\n",
-				   sc->context);
-			ret = -EFAULT;
+				   "ctxt%u: Context not enabled due to init failure %d\n",
+				   sc->context, ret);
 		} else {
 			/*
 			 * All is well. Enable the context.

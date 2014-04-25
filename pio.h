@@ -143,6 +143,9 @@ void sc_return_credits(struct send_context *sc);
 void sc_group_release_update(struct send_context *sc);
 void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
 
+/* support functions */
+void pio_reset_all(struct hfi_devdata *dd);
+
 /* global PIO send control operations */
 #define PSC_GLOBAL_ENABLE 0
 #define PSC_GLOBAL_DISABLE 1
