@@ -456,7 +456,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	const u32 maxcnt = dd->rcvhdrcnt * rsize;   /* words */
 	u32 etail = -1, l, hdrqtail;
 	struct qib_message_header *hdr;
-	u32 eflags, etype, tlen, i = 0, updegr = 0;
+	u32 eflags, etype, hlen, tlen, i = 0, updegr = 0;
 	int last;
 	u64 lval;
 	struct qib_qp *qp, *nqp;
@@ -477,6 +477,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 
 	for (last = 0, i = 1; !last; i += !last) {
 		hdr = dd->f_get_msgheader(dd, rhf_addr);
+		hlen = (u8 *)rhf_addr - (u8 *)hdr;
 		eflags = rhf_err_flags(rhf_addr);
 		etype = rhf_rcv_type(rhf_addr);
 		/* total length */
@@ -501,6 +502,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 				 rcd->ctxt,
 				 eflags,
 				 etype,
+				 hlen,
 				 tlen,
 				 updegr,
 				 etail);

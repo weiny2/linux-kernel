@@ -26,15 +26,17 @@ TRACE_EVENT(hfi_rcvhdr,
 		 u32 ctxt,
 		 u32 eflags,
 		 u32 etype,
+		 u32 hlen,
 		 u32 tlen,
 		 u32 updegr,
 		 u32 etail),
-	TP_ARGS(dd, ctxt, eflags, etype, tlen, updegr, etail),
+	TP_ARGS(dd, ctxt, eflags, etype, hlen, tlen, updegr, etail),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__field(u32, ctxt)
 		__field(u32, eflags)
 		__field(u32, etype)
+		__field(u32, hlen)
 		__field(u32, tlen)
 		__field(u32, updegr)
 		__field(u32, etail)
@@ -44,16 +46,18 @@ TRACE_EVENT(hfi_rcvhdr,
 		__entry->ctxt = ctxt;
 		__entry->eflags = eflags;
 		__entry->etype = etype;
+		__entry->hlen = hlen;
 		__entry->tlen = tlen;
 		__entry->updegr = updegr;
 		__entry->etail = etail;
 	),
 	TP_printk(
-"[%s] ctxt %d eflags 0x%x etype %d,%s tlen %d updegr %d etail %d",
+"[%s] ctxt %d eflags 0x%x etype %d,%s hlen %d tlen %d updegr %d etail %d",
 		__get_str(dev),
 		__entry->ctxt,
 		__entry->eflags,
 		__entry->etype, show_packettype(__entry->etype),
+		__entry->hlen,
 		__entry->tlen,
 		__entry->updegr,
 		__entry->etail
@@ -213,7 +217,7 @@ __print_symbolic(opcode,                                   \
 
 #define LRH_PRN "vl %d lver %d sl %d lnh %d,%s dlid %.4x len %d slid %.4x"
 #define BTH_PRN \
-	"op 0x%.2x,%s se %d m %d tver %d pkey 0x%.4x " \
+	"op 0x%.2x,%s se %d m %d pad %d tver %d pkey 0x%.4x " \
 	"qpn 0x%.6x a %d psn 0x%.8x"
 #define EHDR_PRN "%s"
 
@@ -235,6 +239,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__field(u8, opcode)
 		__field(u8, se)
 		__field(u8, m)
+		__field(u8, pad)
 		__field(u8, tver)
 		__field(u16, pkey)
 		__field(u32, qpn)
@@ -273,6 +278,8 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 			(be32_to_cpu(ohdr->bth[0]) >> 23) & 1;
 		__entry->m =
 			 (be32_to_cpu(ohdr->bth[0]) >> 22) & 1;
+		__entry->pad =
+			(be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		__entry->tver =
 			(be32_to_cpu(ohdr->bth[0]) >> 16) & 0xf;
 		__entry->pkey =
@@ -304,6 +311,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__entry->opcode, show_ib_opcode(__entry->opcode),
 		__entry->se,
 		__entry->m,
+		__entry->pad,
 		__entry->tver,
 		__entry->pkey,
 		__entry->qpn,
