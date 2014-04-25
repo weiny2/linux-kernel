@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,11 +23,10 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
-#ifndef GEN_NVDIMM_H_
-#define GEN_NVDIMM_H_
+#ifndef _GEN_NVDIMM_H
+#define _GEN_NVDIMM_H
 
 #include <linux/nvdimm_core.h>
 #include <linux/nvdimm_ioctl.h>
@@ -63,4 +60,4 @@ int nvm_get_dimm_topology(int array_size,
 	struct nvdimm_topology *dimm_topo_array,
 	struct pmem_dev *dev);
 
-#endif
+#endif /* _GEN_NVDIMM_H */

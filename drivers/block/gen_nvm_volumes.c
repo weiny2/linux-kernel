@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,7 +23,6 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
 #include <linux/gen_nvm_volumes.h>
@@ -97,7 +94,7 @@ static struct extent_set *spa_rng_to_extent(struct fit_header *fit_head,
 	mem_extent->pm_capable = 1;
 	mem_extent->spa_start = s_tbl->start_addr;
 
-	/*TODO: Find NUMA Node from SPA RNG*/
+	/* TODO: Find NUMA Node from SPA RNG */
 	mem_extent->numa_node = NUMA_NO_NODE;
 
 	mem_extent->interleave_size = 0;
@@ -121,10 +118,10 @@ static struct extent_set *spa_rng_to_extent(struct fit_header *fit_head,
  */
 static void nvm_replace_extent(struct extent_set *extent)
 {
-	/*TODO: remove memory free when pool implemented*/
+	/* TODO: remove memory free when pool implemented */
 	kfree(extent);
-	/*TODO: Locate pool extent came from*/
-	/*TODO: Add extent to pool*/
+	/* TODO: Locate pool extent came from */
+	/* TODO: Add extent to pool */
 }
 
 /**
@@ -158,9 +155,9 @@ static void nvm_remove_extents(struct nvm_volume *volume)
 void nvm_delete_volume(struct nvm_volume *volume)
 {
 	nvm_remove_extents(volume);
-	/*TODO: Destroy volume label on disk*/
-	/*TODO: Modify the freelist of labels on disk*/
-	/*TODO: Free volume labels*/
+	/* TODO: Destroy volume label on disk */
+	/* TODO: Modify the freelist of labels on disk */
+	/* TODO: Free volume labels */
 	kfree(volume);
 }
 

@@ -2,7 +2,7 @@
  * The interface between the platform independent device adapter and the device
  * driver, that defines the shared structures shared across that interface.
  *
- * Copyright 2013 2014 Intel Corporation All Rights Reserved.
+ * Copyright 2013-2014 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
  *
@@ -28,8 +28,8 @@
  * suppliers or licensors in any way.
  */
 
-#ifndef	_CR_IOCTL_H_
-#define	_CR_IOCTL_H_
+#ifndef	_CR_IOCTL_H
+#define	_CR_IOCTL_H
 
 #include <linux/types.h>
 
@@ -45,30 +45,31 @@ extern "C"
  * ****************************************************************************
  */
 
-#define	CR_SN_LEN	19 /* DIMM Serial Number buffer length */
-#define	CR_PASSPHRASE_LEN	32 /* Length of a passphrase buffer */
-#define	CR_SECURITY_NONCE_LEN	8 /* Length of a security nonce */
-#define	CR_BCD_DATE_LEN	4 /* Length of a BDC Formatted Date */
-#define	CR_BCD_TIME_LEN	3 /* Length of a BDC Formatted Time */
-#define	CR_BCD_ETC_TIME_LEN	5 /* Length of a BDC Formatted Time for longop*/
-#define	CR_FW_REV_LEN 5	/* Length of the formatted Firmware Revision string */
-#define	CR_MFR_LEN	19 /* Length of manufacturer name buffer */
-#define	CR_MODELNUM_LEN	19 /* Length of DIMM Model Number buffer */
-#define CR_FW_LOG_ENTRY_COUNT 5 /* max number of log entries returned by FW */
-#define	CR_OS_PARTITION	2 /* get platform config OS partition number */
-#define	CR_CONFIG_GET_SIZE	1 /* get platform config get size command */
-#define	CR_CONFIG_GET_DATA	2 /* get platform config get data command */
-#define CR_DDRT_ALERT_TYPES	128 /*Max number of different DDRT Alerts*/
-#define CR_DEV_CERTIFICATE_LEN 138 /*Length of the device certificate*/
+#define	CR_SN_LEN		19  /* DIMM Serial Number buffer length */
+#define	CR_PASSPHRASE_LEN	32  /* Length of a passphrase buffer */
+#define	CR_SECURITY_NONCE_LEN	8   /* Length of a security nonce */
+#define	CR_BCD_DATE_LEN		4   /* Length of a BDC Formatted Date */
+#define	CR_BCD_TIME_LEN		3   /* Length of a BDC Formatted Time */
+#define	CR_BCD_ETC_TIME_LEN	5   /* Len of a BDC Formatted Time for longop */
+#define	CR_FW_REV_LEN		5   /* Length of the Firmware Revision string */
+#define	CR_MFR_LEN		19  /* Length of manufacturer name buffer */
+#define	CR_MODELNUM_LEN		19  /* Length of DIMM Model Number buffer */
+#define CR_FW_LOG_ENTRY_COUNT	5   /* max num of log entries returned by FW */
+#define	CR_OS_PARTITION		2   /* get platform config OS partition num */
+#define	CR_CONFIG_GET_SIZE	1   /* get platform config get size command */
+#define	CR_CONFIG_GET_DATA	2   /* get platform config get data command */
+#define CR_DDRT_ALERT_TYPES	128 /* Max number of different DDRT Alerts */
+#define CR_DEV_CERTIFICATE_LEN  138 /* Length of the device certificate */
 /*Length of the signed device authentication challenge*/
 #define CR_SIGNED_AUTH_CHALLENGE_LEN 64
+
 /*
  * Number of error addresses returned in a long operation for
- *  address range scrub
+ * address range scrub
  */
 #define CR_DPA_ERROR_ADDRESSES 14
 
-/*CR Security Status*/
+/* CR Security Status */
 enum {
 	CR_SEC_RSVD		= 1 << 0,
 	CR_SEC_ENABLED		= 1 << 1,
@@ -95,21 +96,35 @@ enum {
  */
 enum fnv_mb_error
 {
-	FNV_MB_SUCCESS = 0x00, //!< Command was successfully completed
-	FNV_MB_INVALID_CMD_PARAM = 0x01, //!< An input parameter was not valid
-	FNV_MB_DATA_XFER_ERR = 0x02, //!< There was an error in the data transfer
-	FNV_MB_INTERNAL_DEV_ERR = 0x03, //!< There was an internal device error
-	FNV_MB_UNSUPPORTED_CMD = 0x04, //!< The command opcode or subopcode was not recognized
-	FNV_MB_DEVICE_BUSY = 0x05, //!< Device is currently busy processing a long operation
-	FNV_MB_INVALID_CREDENTIAL = 0x06, //!< Passphrase or Security Nonce does is not acceptable
-	FNV_MB_SECURITY_CHK_FAIL = 0x07, //!< The Security CHeck on the image has failed verification
-	FNV_MB_INVALID_SECURITY_STATE = 0x08, //!< Operation is valid in the current security state
-	FNV_MB_SYSTEM_TIME_NOT_SET = 0x09, //!< The system time has not been set yet
-	FNV_MB_DATA_NOT_SET = 0x0A, //!< Returned if "get data" is called before "set data"
-	FNV_MB_ABORTED = 0x0B, //!< Command has been aborted. A long operation command has aborted.
-	FNV_MB_NO_NEW_FW = 0x0C, //!< Execute FNV FW was called prior to uploading new FW image.
-	FNV_MB_REVISION_FAILURE = 0x0D, //!< Illegal rollback failure.
-	FNV_MB_INJECTION_DISABLED = 0x0E //!< Error injection is not currently enabled on the device.
+	FNV_MB_SUCCESS = 0x00, /* Command was successfully completed */
+	/* An input parameter was not valid */
+	FNV_MB_INVALID_CMD_PARAM = 0x01,
+	/* There was an error in the data transfer */
+	FNV_MB_DATA_XFER_ERR = 0x02,
+	/* There was an internal device error */
+	FNV_MB_INTERNAL_DEV_ERR = 0x03,
+	/* The command opcode or subopcode was not recognized */
+	FNV_MB_UNSUPPORTED_CMD = 0x04,
+	/* Device is currently busy processing a long operation */
+	FNV_MB_DEVICE_BUSY = 0x05,
+	/* Passphrase or Security Nonce does is not acceptable */
+	FNV_MB_INVALID_CREDENTIAL = 0x06,
+	/* The Security CHeck on the image has failed verification */
+	FNV_MB_SECURITY_CHK_FAIL = 0x07,
+	/* Operation is valid in the current security state */
+	FNV_MB_INVALID_SECURITY_STATE = 0x08,
+	/* The system time has not been set yet */
+	FNV_MB_SYSTEM_TIME_NOT_SET = 0x09,
+	/* Returned if "get data" is called before "set data" */
+	FNV_MB_DATA_NOT_SET = 0x0A,
+	/* Command has been aborted. A long operation command has aborted. */
+	FNV_MB_ABORTED = 0x0B,
+	/* Execute FNV FW was called prior to uploading new FW image. */
+	FNV_MB_NO_NEW_FW = 0x0C,
+	/* Illegal rollback failure. */
+	FNV_MB_REVISION_FAILURE = 0x0D,
+	/* Error injection is not currently enabled on the device. */
+	FNV_MB_INJECTION_DISABLED = 0x0E
 };
 
 /*
@@ -185,15 +200,15 @@ enum cr_get_set_feat_subop {
  */
 enum cr_get_set_admin_feat_subop {
 	SUBOP_SYSTEM_TIME = 0x00, /* TODO Get/Set System Time */
-	/*TODO Get/Set Platform Config Data (PCD) */
+	/* TODO Get/Set Platform Config Data (PCD) */
 	SUBOP_PLATFORM_DATA_INFO = 0x01,
 	/* TODO Set/Get DIMM Partition Config */
 	SUBOP_DIMM_PARTITION_INFO = 0x02,
 	/* TODO Get/Set log level of FNV FW */
 	SUBOP_FNV_FW_DBG_LOG_LEVEL = 0x03,
-	SUBOP_BLK_WINDOW = 0x04, /*Get/Set info about persistent partition*/
-	SUBOP_HW_CFG_PARAMETER = 0x05, /*Set/Set Various HW Parameters*/
-	SUBOP_DDRT_IO_INIT_INFO = 0x06, /*Get/Set DDRT Initialization info*/
+	SUBOP_BLK_WINDOW = 0x04, /* Get/Set info about persistent partition */
+	SUBOP_HW_CFG_PARAMETER = 0x05, /* Set/Set Various HW Parameters */
+	SUBOP_DDRT_IO_INIT_INFO = 0x06, /* Get/Set DDRT Initialization info */
 	SUBOP_RSVD = 0x07
 };
 
@@ -242,7 +257,6 @@ enum cr_update_fw_subop {
 
 /*
  * Defines the various memory mode capabilities bits
- *
  */
 enum cr_mem_mode_bits {
 	CR_MEM_MODE_1LM = 1, /* 1LM mode supported */
@@ -253,7 +267,6 @@ enum cr_mem_mode_bits {
 
 /*
  * Defines the interleave capabilities bits
- *
  */
 enum cr_interleave_bits {
 	CR_INTERLEAVE_64_CH = 1, /* 64 Bytes channel interleave */
@@ -541,10 +554,10 @@ struct cr_pt_get_die_spare_policy {
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x04h/5h (Get/Set Features)
- * 		Sub-Opcode:	0x05h (Address Range Scrub Policy)
- * 	Get - Small Output Payload
- * 	Set - Small Input Payload
+ *		Opcode:		0x04h/5h (Get/Set Features)
+ *		Sub-Opcode:	0x05h (Address Range Scrub Policy)
+ *	Get - Small Output Payload
+ *	Set - Small Input Payload
  */
 struct cr_addr_range_scrub_policy {
 	__le64 dpa_start_addr; /*Address to start the range scrub from*/
@@ -554,10 +567,10 @@ struct cr_addr_range_scrub_policy {
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x04h/0x05h (Get/Set Features)
- * 		Sub-Opcode:	0x06h (DDRT Alerts)
- * 	Get - Small output payload
- * 	Set - Small input payload
+ *		Opcode:		0x04h/0x05h (Get/Set Features)
+ *		Sub-Opcode:	0x06h (DDRT Alerts)
+ *	Get - Small output payload
+ *	Set - Small input payload
  */
 struct cr_pt_ddrt_alert {
 	/*
@@ -604,7 +617,6 @@ struct cr_pt_set_die_spare_policy {
  * Passthrough CR Payload:
  *		Opcode:		0x06h/0x07h (Get/Set Admin Features)
  *		Sub-Opcode:	0x00h (System Time)
-
  *	Get - Small Output Payload
  *	Set - Small Input Payload
  */
@@ -668,7 +680,7 @@ struct cr_pt_payload_platform_cfg_data {
  *		Sub-Opcode:	0x01h (Platform Config Data)
  *
  *	Small output payload for retrieving partition size.
-  */
+ */
 struct cr_pt_payload_platform_get_size {
 	__le32 size; /* In bytes of the selected partition */
 	__le32 total_size; /* In bytes of the platform config area */
@@ -748,10 +760,10 @@ struct cr_pt_payload_output_get_fnv_fw_dbg_log_level {
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
- * 		Sub-Opcode:	0x04h (Block Window)
- * 	Get - Small Output Payload
- * 	Set - Small Input Payload
+ *		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ *		Sub-Opcode:	0x04h (Block Window)
+ *	Get - Small Output Payload
+ *	Set - Small Input Payload
  */
 struct cr_pt_payload_block_window {
 
@@ -766,10 +778,10 @@ struct cr_pt_payload_block_window {
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
- * 		Sub-Opcode:	0x05h (Hardware Configuration Parameters)
- * 	Get - Small Output Payload
- * 	Set - Small Input Payload
+ *		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ *		Sub-Opcode:	0x05h (Hardware Configuration Parameters)
+ *	Get - Small Output Payload
+ *	Set - Small Input Payload
  */
 struct cr_pt_payload_hw_cfg_data {
 
@@ -780,9 +792,9 @@ struct cr_pt_payload_hw_cfg_data {
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
- * 		Sub-Opcode:	0x06h (DDRT IO Init Info)
- * 	Small Output Payload
+ *		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ *		Sub-Opcode:	0x06h (DDRT IO Init Info)
+ *	Small Output Payload
  */
 struct cr_pt_payload_ddrt_init_info {
 
@@ -964,17 +976,17 @@ struct cr_pt_payload_input_ddrt_auth_req {
 	__u64 nonce;
 };
 
-/**
+/*
  * Passthrough CR Payload:
  *		Opcode:		0x0Eh (Get Debug Features)
  *		Sub-Opcode:	0x04h (DDRT Authentication Request)
  *	Large output payload
  */
-
 struct cr_pt_payload_output_ddrt_auth_req {
 	unsigned char device_certificate[CR_DEV_CERTIFICATE_LEN];
 	unsigned char signed_auth_challenge[CR_SIGNED_AUTH_CHALLENGE_LEN];
 };
+
 /*
  * Passthrough CR Input Payload:
  *		Opcode:		0x0Fh (Set Debug Features)
@@ -1084,6 +1096,7 @@ struct cr_pt_payload_fw_image_info {
 struct cr_pt_payload_fw_debug_log {
 	unsigned char log_id;
 };
+
 /*
  * Passthrough CR Payload:
  *		Opcode:		0x08h (Get Log Page)
@@ -1321,8 +1334,10 @@ struct cr_pt_output_payload_fw_error_log {
  *	For DDRT Large Input Payload holds new firmware image
  */
 
+/* FIXME: where is the structure for above comment? */
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif	/* _CR_IOCTL_H_ */
+#endif	/* _CR_IOCTL_H */

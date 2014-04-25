@@ -44,5 +44,4 @@ struct pmem_layout {
 #define PMEM_COMMIT  0x0000000000000004 /* commit function available */
 #define PMEM_CLEAR_ERROR  0x0000000000000008 /* clear error function provided */
 
-#endif
-
+#endif /* _LINUX_PMEM_H */

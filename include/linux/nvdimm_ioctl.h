@@ -28,8 +28,8 @@
  * suppliers or licensors in any way.
  */
 
-#ifndef	NVDIMM_IOCTL_H_
-#define	NVDIMM_IOCTL_H_
+#ifndef	_NVDIMM_IOCTL_H
+#define	_NVDIMM_IOCTL_H
 
 #include <linux/nvdimm.h>
 
@@ -55,7 +55,7 @@ enum nvdimm_ioctl_type {
 	/* Get the number of dimms in the system's memory topology */
 	IOCTL_GET_TOPOLOGY_COUNT = 11,
 	IOCTL_GET_TOPOLOGY = 12, /* Get the system's memory topology */
-	/*TODO Get the details for one specific Vendor DIMM */
+	/* TODO Get the details for one specific Vendor DIMM */
 	IOCTL_GET_DIMM_DETAILS = 13,
 
 	IOCTL_GET_POOL_COUNT = 21, /* Get the number of pools allocated */
@@ -86,7 +86,6 @@ enum nvdimm_ioctl_type {
  * Describes the system-level view of a memory module's properties,
  * based upon its physical location and access patterns within the system
  */
-
 struct nvdimm_topology {
 	unsigned short id; /* The physical ID of the memory module */
 	unsigned short vendor_id; /* The vendor identifier */
@@ -122,7 +121,8 @@ struct nvdimm_details {
 	unsigned long long total_width; /* Width in bits for data and ECC */
 	unsigned long long speed; /* Speed in MHz */
 	char part_number[NVDIMM_PART_NUMBER_LEN]; /* DIMM part number */
-	char device_locator[NVDIMM_DEVICE_LOCATOR_LEN]; /*Socket or board pos*/
+	/* Socket or board pos */
+	char device_locator[NVDIMM_DEVICE_LOCATOR_LEN];
 };
 
 /*
@@ -199,8 +199,6 @@ struct nvdimm_volume_details {
 	unsigned short pool_ids[NVDIMM_MAX_TOPO_SIZE];
 };
 
-
-
 /*
  * Structure for IOCTL data
  */
@@ -227,7 +225,8 @@ struct nvdimm_req {
 	} nvdr_arg1;
 
 	union {
-		/* buffer for any structure that is vendor specific or
+		/*
+		 * buffer for any structure that is vendor specific or
 		 * for IOCTLs that transfer a variable array of structures
 		 */
 		void *data;
@@ -249,7 +248,7 @@ struct nvdimm_req {
 #ifdef __linux__
 #define NVDIMM_MAGIC (0xDA)
 
-/*Debug IOCTLS*/
+/* Debug IOCTLS */
 #define NVDIMM_LOAD_ACPI_FIT	\
 	_IOR(NVDIMM_MAGIC, 0x04, void *)
 #define NVDIMM_INIT _IO(NVDIMM_MAGIC, 0x03)
@@ -285,4 +284,4 @@ struct nvdimm_req {
 	_IOWR(NVDIMM_MAGIC, IOCTL_PASSTHROUGH_CMD, struct nvdimm_req)
 #endif
 
-#endif /* NVDIMM_IOCTL_H_ */
+#endif /* _NVDIMM_IOCTL_H */

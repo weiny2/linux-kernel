@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,21 +23,20 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
-#ifndef GEN_NVM_VOLUMES_H_
-#define GEN_NVM_VOLUMES_H_
+#ifndef _GEN_NVM_VOLUMES_H
+#define _GEN_NVM_VOLUMES_H
 
 #include <linux/nvdimm_core.h>
 
-/* TODO: these need to move*/
-/*Ignore*/
+/* TODO: these need to move */
+/* Ignore */
 struct ioctl_create_volume {
 	int tbd;
 };
 
-/*Ignore*/
+/* Ignore */
 struct ioctl_modify_volume {
 	int tbd;
 };
@@ -213,4 +210,4 @@ void nvm_make_request(struct request_queue *q, struct bio *bio);
 
 struct nvm_volume *nvm_create_single_volume(struct pmem_dev *dev);
 
-#endif
+#endif /* _GEN_NVM_VOLUMES_H */

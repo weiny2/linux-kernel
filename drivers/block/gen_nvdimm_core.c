@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,7 +23,6 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
 #include <linux/nvdimm_core.h>
@@ -172,7 +169,7 @@ struct nvdimm *nvm_initialize_dimm(struct fit_header *fit_head,
 	dimm->ids.fmt_interface_code = memdev_tbl->fmt_interface_code;
 
 	err = get_dmi_memdev(dimm);
-	/*TODO: remove comment when SMBIOS contains AEP DIMMS*/
+	/* TODO: remove comment when SMBIOS contains AEP DIMMS */
 	/*if (err) {
 		ret = ERR_PTR(err);
 		goto after_dimm;
@@ -222,7 +219,7 @@ void nvm_remove_dimm_inventory(struct pmem_dev *dev)
 		spin_unlock(&dev->nvdimm_lock);
 
 		ret = nvm_remove_dimm(cur_dimm);
-		/*TODO: What happens if an NVDIMM is unable to be removed?*/
+		/* TODO: What happens if an NVDIMM is unable to be removed? */
 		if (ret)
 			NVDIMM_INFO("Unable to remove NVDIMM %#x Error: %d",
 				cur_dimm->physical_id, ret);

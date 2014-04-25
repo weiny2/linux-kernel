@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,11 +23,10 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
-#ifndef CRBD_VOLUMES_H_
-#define CRBD_VOLUMES_H_
+#ifndef _CRBD_VOLUMES_H
+#define _CRBD_VOLUMES_H
 
 #include <linux/nvdimm_core.h>
 #include <linux/gen_nvm_volumes.h>
@@ -150,4 +147,4 @@ int cr_write_labels(struct nvm_volume *volume);
 int cr_volume_ioctl(struct nvm_volume *volume, fmode_t mode, unsigned cmd,
 	unsigned long arg);
 
-#endif
+#endif /* _CRBD_VOLUMES_H */

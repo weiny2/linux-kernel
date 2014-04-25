@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,7 +23,6 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
 #include <linux/nvdimm_core.h>
@@ -51,7 +48,8 @@ static void print_fw_cmd(struct fv_fw_cmd *fw_cmd)
 		fw_cmd->large_output_payload_size);
 }
 
-/**TODO: Shockingly the MB flow is changing a bit due to the inclusion
+/**
+ * TODO: Shockingly the MB flow is changing a bit due to the inclusion
  * of a sequence bit. FIS > 0.65 should include this change.
  */
 
@@ -311,7 +309,7 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 
 	cr_write_barrier();
 
-	/*BUG: Simics MB bug never resets status code*/
+	/* BUG: Simics MB bug never resets status code */
 	memset_io(mb->status, 0, CR_REG_SIZE);
 
 	cr_set_mb_door_bell(mb);
@@ -320,7 +318,7 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 
 	status = (readq(mb->status) & STATUS_MASK) >> STATUS_SHIFT;
 
-	/*TODO: MB Error handling logic needs to be defined*/
+	/* TODO: MB Error handling logic needs to be defined */
 	if (status)
 		return status;
 
@@ -350,7 +348,8 @@ int cr_fw_get_security(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 	return cr_send_command(fw_cmd, mb);
 }
 
-/*TODO: CR_DIMM security state needs to be updated by some
+/*
+ * TODO: CR_DIMM security state needs to be updated by some
  * of these commands
  */
 int cr_fw_set_security(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
@@ -400,8 +399,10 @@ int cr_fw_get_admin_features(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 	}
 }
 
-/*TODO: Internal information may need to be updated on some of these FW commands*/
-
+/*
+ * TODO: Internal information may need to be updated on some of these FW
+ * commands
+ */
 int cr_fw_set_admin_features(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 		struct cr_mailbox *mb)
 {
@@ -419,7 +420,8 @@ int cr_fw_set_admin_features(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 	}
 }
 
-/*TODO: In the future only sniff out the commands we care about
+/*
+ * TODO: In the future only sniff out the commands we care about
  * for now though sniff all commands and leave stubs incase we need to take
  * action on any command to stay in sync with simics
  */
@@ -428,12 +430,6 @@ int cr_sniff_fw_command(struct cr_dimm *c_dimm, struct fv_fw_cmd *fw_cmd,
 {
 	if (cr_verify_fw_cmd(fw_cmd))
 		return -EINVAL;
-
-/*	if (fw_cmd->large_output_payload_size > 0 ||
-			fw_cmd->large_input_payload_size > 0) {
-		NVDIMM_DBG("Large Mailboxes not supported in yet");
-		return -EINVAL;
-	}*/
 
 	switch (fw_cmd->opcode) {
 	case CR_PT_NULL_COMMAND:
@@ -503,7 +499,8 @@ int fw_cmd_pass_thru(struct cr_dimm *c_dimm, struct fv_fw_cmd *cmd)
  * Various errors from FW are still TBD
  */
 
-/*TODO: It may be possible to roll up all internal fw commands
+/*
+ * TODO: It may be possible to roll up all internal fw commands
  * into one function
  */
 static
@@ -602,7 +599,7 @@ after_fw_alloc:
 }
 
 /**
- *cr_free_mailbox() - Free a mailbox structure
+ * cr_free_mailbox() - Free a mailbox structure
  * @mb: Mailbox structure to free
  *
  * Frees the resources held by a mailbox
@@ -657,7 +654,9 @@ void cr_free_block_windows(struct cr_dimm *c_dimm)
  * Error - ERR_PTR on error
  */
 
-/*TODO: This is a very long function can anything be done to make it cleaner?*/
+/*
+ * TODO: This is a very long function can anything be done to make it cleaner?
+ */
 struct cr_mailbox *cr_create_mailbox(struct cr_dimm *c_dimm,
 	struct interleave_tbl *i_tbl)
 {
@@ -1301,7 +1300,7 @@ int cr_initialize_dimm(struct nvdimm *dimm, struct fit_header *fit_head)
 	cr_parse_fw_version(c_dimm, id_payload);
 	cr_parse_fw_api_version(c_dimm, id_payload);
 
-	/*TODO: Call Get DIMM Partition FNV FW Command*/
+	/* TODO: Call Get DIMM Partition FNV FW Command */
 
 	security_payload = kzalloc(sizeof(*security_payload), GFP_KERNEL);
 
@@ -1353,12 +1352,11 @@ after_cr_dimm:
  *
  * Free the memory resources associated with a
  * cr_dimm
- *
  */
 void cr_free_dimm(struct cr_dimm *c_dimm)
 {
 	cr_free_mailbox(c_dimm->host_mailbox);
-	/*TODO: cr_free_block_windows(c_dimm);*/
+	/* TODO: cr_free_block_windows(c_dimm); */
 
 	kfree(c_dimm);
 }
@@ -1406,7 +1404,6 @@ int cr_remove_dimm(struct nvdimm *dimm)
  *
  * Returns: Error Code?
  */
-
 int cr_write_volume_label(struct nvdimm *dimm, struct label_info *l_info)
 {
 	return 0;
@@ -1424,7 +1421,6 @@ int cr_write_volume_label(struct nvdimm *dimm, struct label_info *l_info)
  *
  *  Returns: Error Code
  */
-
 int cr_read_labels(struct nvdimm *dimm, struct list_head *list)
 {
 	return 0;
@@ -1441,7 +1437,6 @@ int cr_read_labels(struct nvdimm *dimm, struct list_head *list)
  *
  * Returns:
  */
-
 int cr_dimm_read(struct nvdimm *dimm, unsigned long offset,
 	unsigned long nbytes, char *buffer)
 {

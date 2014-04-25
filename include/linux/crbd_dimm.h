@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,33 +23,39 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
-#ifndef CRBD_CRDIMM_H_
-#define CRBD_CRDIMM_H_
+#ifndef _CRBD_CRDIMM_H
+#define _CRBD_CRDIMM_H
 
 #include <linux/nvdimm_acpi.h>
 #include <linux/nvdimm_core.h>
 #include <linux/cr_ioctl.h>
 
-/*Simics Offset*/
-#define CR_OS_MB_OFFSET 0x400 /*Offset from the start of the CTRL
-				region to the start of the OS mailbox*/
-/* REAL HW Offset*/
-/*#define CR_OS_MB_OFFSET 0 Offset from the start of the CTRL
-				region to the start of the OS mailbox*/
+/* Offset from the start of the CTRL region to the start of the OS mailbox */
+/* Simics Offset */
+#define CR_OS_MB_OFFSET 0x400
+/* REAL HW Offset */
+/* #define CR_OS_MB_OFFSET 0  */
+
 #define CR_OS_MB_IN_OFFSET (1 << 20)
-/*Offset from the start of the CTRL region
-			to the start of the OS mailbox large input payload*/
+/*
+ * Offset from the start of the CTRL region to the start of the OS mailbox
+ * large input payload
+ */
 #define CR_OS_MB_OUT_OFFSET (2 << 20)
-/*Offset from the start of the CTRL region
-			to the start of the OS mailbox large output payload*/
-#define CR_IN_MB_SIZE (1 << 20) /*Size of the OS mailbox large input payload*/
-#define CR_OUT_MB_SIZE (1 << 20)/*Size of the OS mailbox large output payload*/
-#define CR_REG_SIZE (8) /*Size of a CR Mailbox Register Bytes*/
-#define CR_IN_PAYLOAD_SIZE (128) /*Total size of the input payload registers*/
-#define CR_OUT_PAYLOAD_SIZE (128) /*Total size of the output payload registers*/
+/*
+ * Offset from the start of the CTRL region to the start of the OS mailbox
+ * large output payload
+ */
+#define CR_IN_MB_SIZE (1 << 20) /* Size of the OS mailbox large input payload */
+/* Size of the OS mailbox large output payload */
+#define CR_OUT_MB_SIZE (1 << 20)
+#define CR_REG_SIZE (8) /* Size of a CR Mailbox Register Bytes */
+/* Total size of the input payload registers */
+#define CR_IN_PAYLOAD_SIZE (128)
+/* Total size of the output payload registers */
+#define CR_OUT_PAYLOAD_SIZE (128)
 
 #define STATUS_MASK 0xFF00
 #define STATUS_SHIFT 8
@@ -59,86 +63,86 @@
 #define DB_SHIFT 16
 #define SUB_OP_SHIFT 8
 
-/*Simics Offset*/
-/* Offset from the start of the OS mailbox*/
+/* Simics Offset */
+/* Offset from the start of the OS mailbox */
 enum {
-	CR_MB_COMMAND_OFFSET = 0,
-	CR_MB_NONCE0_OFFSET = 0x08,
-	CR_MB_NONCE1_OFFSET = 0x10,
-	CR_MB_IN_PAYLOAD0_OFFSET = 0x18,
-	CR_MB_IN_PAYLOAD1_OFFSET = 0x20,
-	CR_MB_IN_PAYLOAD2_OFFSET = 0x28,
-	CR_MB_IN_PAYLOAD3_OFFSET = 0x30,
-	CR_MB_IN_PAYLOAD4_OFFSET = 0x38,
-	CR_MB_IN_PAYLOAD5_OFFSET = 0x40,
-	CR_MB_IN_PAYLOAD6_OFFSET = 0x48,
-	CR_MB_IN_PAYLOAD7_OFFSET = 0x50,
-	CR_MB_IN_PAYLOAD8_OFFSET = 0x58,
-	CR_MB_IN_PAYLOAD9_OFFSET = 0x60,
-	CR_MB_IN_PAYLOAD10_OFFSET = 0x68,
-	CR_MB_IN_PAYLOAD11_OFFSET = 0x70,
-	CR_MB_IN_PAYLOAD12_OFFSET = 0x78,
-	CR_MB_IN_PAYLOAD13_OFFSET = 0x80,
-	CR_MB_IN_PAYLOAD14_OFFSET = 0x88,
-	CR_MB_IN_PAYLOAD15_OFFSET = 0x90,
-	CR_MB_STATUS_OFFSET = 0x98,
-	CR_MB_OUT_PAYLOAD0_OFFSET = 0xA0,
-	CR_MB_OUT_PAYLOAD1_OFFSET = 0xA8,
-	CR_MB_OUT_PAYLOAD2_OFFSET = 0xB0,
-	CR_MB_OUT_PAYLOAD3_OFFSET = 0xB8,
-	CR_MB_OUT_PAYLOAD4_OFFSET = 0xC0,
-	CR_MB_OUT_PAYLOAD5_OFFSET = 0xC8,
-	CR_MB_OUT_PAYLOAD6_OFFSET = 0xD0,
-	CR_MB_OUT_PAYLOAD7_OFFSET = 0xD8,
-	CR_MB_OUT_PAYLOAD8_OFFSET = 0xE0,
-	CR_MB_OUT_PAYLOAD9_OFFSET = 0xE8,
-	CR_MB_OUT_PAYLOAD10_OFFSET = 0xF0,
-	CR_MB_OUT_PAYLOAD11_OFFSET = 0xF8,
-	CR_MB_OUT_PAYLOAD12_OFFSET = 0x100,
-	CR_MB_OUT_PAYLOAD13_OFFSET = 0x108,
-	CR_MB_OUT_PAYLOAD14_OFFSET = 0x110,
-	CR_MB_OUT_PAYLOAD15_OFFSET = 0x118,
+	CR_MB_COMMAND_OFFSET		= 0,
+	CR_MB_NONCE0_OFFSET		= 0x08,
+	CR_MB_NONCE1_OFFSET		= 0x10,
+	CR_MB_IN_PAYLOAD0_OFFSET	= 0x18,
+	CR_MB_IN_PAYLOAD1_OFFSET	= 0x20,
+	CR_MB_IN_PAYLOAD2_OFFSET	= 0x28,
+	CR_MB_IN_PAYLOAD3_OFFSET	= 0x30,
+	CR_MB_IN_PAYLOAD4_OFFSET	= 0x38,
+	CR_MB_IN_PAYLOAD5_OFFSET	= 0x40,
+	CR_MB_IN_PAYLOAD6_OFFSET	= 0x48,
+	CR_MB_IN_PAYLOAD7_OFFSET	= 0x50,
+	CR_MB_IN_PAYLOAD8_OFFSET	= 0x58,
+	CR_MB_IN_PAYLOAD9_OFFSET	= 0x60,
+	CR_MB_IN_PAYLOAD10_OFFSET	= 0x68,
+	CR_MB_IN_PAYLOAD11_OFFSET	= 0x70,
+	CR_MB_IN_PAYLOAD12_OFFSET	= 0x78,
+	CR_MB_IN_PAYLOAD13_OFFSET	= 0x80,
+	CR_MB_IN_PAYLOAD14_OFFSET	= 0x88,
+	CR_MB_IN_PAYLOAD15_OFFSET	= 0x90,
+	CR_MB_STATUS_OFFSET		= 0x98,
+	CR_MB_OUT_PAYLOAD0_OFFSET	= 0xA0,
+	CR_MB_OUT_PAYLOAD1_OFFSET	= 0xA8,
+	CR_MB_OUT_PAYLOAD2_OFFSET	= 0xB0,
+	CR_MB_OUT_PAYLOAD3_OFFSET	= 0xB8,
+	CR_MB_OUT_PAYLOAD4_OFFSET	= 0xC0,
+	CR_MB_OUT_PAYLOAD5_OFFSET	= 0xC8,
+	CR_MB_OUT_PAYLOAD6_OFFSET	= 0xD0,
+	CR_MB_OUT_PAYLOAD7_OFFSET	= 0xD8,
+	CR_MB_OUT_PAYLOAD8_OFFSET	= 0xE0,
+	CR_MB_OUT_PAYLOAD9_OFFSET	= 0xE8,
+	CR_MB_OUT_PAYLOAD10_OFFSET	= 0xF0,
+	CR_MB_OUT_PAYLOAD11_OFFSET	= 0xF8,
+	CR_MB_OUT_PAYLOAD12_OFFSET	= 0x100,
+	CR_MB_OUT_PAYLOAD13_OFFSET	= 0x108,
+	CR_MB_OUT_PAYLOAD14_OFFSET	= 0x110,
+	CR_MB_OUT_PAYLOAD15_OFFSET	= 0x118,
 };
 
-/*Real HW Offsets*/
-/* Offset from the start of the OS mailbox*/
+/* Real HW Offsets */
+/* Offset from the start of the OS mailbox */
 /*enum {
-	CR_MB_COMMAND_OFFSET = 0,
-	CR_MB_NONCE0_OFFSET = 0x40,
-	CR_MB_NONCE1_OFFSET = 0x80,
-	CR_MB_IN_PAYLOAD0_OFFSET = 0xC0,
-	CR_MB_IN_PAYLOAD1_OFFSET = 0x100,
-	CR_MB_IN_PAYLOAD2_OFFSET = 0x140,
-	CR_MB_IN_PAYLOAD3_OFFSET = 0x180,
-	CR_MB_IN_PAYLOAD4_OFFSET = 0x1C0,
-	CR_MB_IN_PAYLOAD5_OFFSET = 0x200,
-	CR_MB_IN_PAYLOAD6_OFFSET = 0x240,
-	CR_MB_IN_PAYLOAD7_OFFSET = 0x280,
-	CR_MB_IN_PAYLOAD8_OFFSET = 0x2C0,
-	CR_MB_IN_PAYLOAD9_OFFSET = 0x300,
-	CR_MB_IN_PAYLOAD10_OFFSET = 0x340,
-	CR_MB_IN_PAYLOAD11_OFFSET = 0x380,
-	CR_MB_IN_PAYLOAD12_OFFSET = 0x3C0,
-	CR_MB_IN_PAYLOAD13_OFFSET = 0x400,
-	CR_MB_IN_PAYLOAD14_OFFSET = 0x440,
-	CR_MB_IN_PAYLOAD15_OFFSET = 0x480,
-	CR_MB_STATUS_OFFSET = 0x4C0,
-	CR_MB_OUT_PAYLOAD0_OFFSET = 0x500,
-	CR_MB_OUT_PAYLOAD1_OFFSET = 0x540,
-	CR_MB_OUT_PAYLOAD2_OFFSET = 0x580,
-	CR_MB_OUT_PAYLOAD3_OFFSET = 0x5C0,
-	CR_MB_OUT_PAYLOAD4_OFFSET = 0x600,
-	CR_MB_OUT_PAYLOAD5_OFFSET = 0x640,
-	CR_MB_OUT_PAYLOAD6_OFFSET = 0x680,
-	CR_MB_OUT_PAYLOAD7_OFFSET = 0x6C0,
-	CR_MB_OUT_PAYLOAD8_OFFSET = 0x700,
-	CR_MB_OUT_PAYLOAD9_OFFSET = 0x740,
-	CR_MB_OUT_PAYLOAD10_OFFSET = 0x780,
-	CR_MB_OUT_PAYLOAD11_OFFSET = 0x7C0,
-	CR_MB_OUT_PAYLOAD12_OFFSET = 0x800,
-	CR_MB_OUT_PAYLOAD13_OFFSET = 0x840,
-	CR_MB_OUT_PAYLOAD14_OFFSET = 0x880,
-	CR_MB_OUT_PAYLOAD15_OFFSET = 0x8C0,
+	CR_MB_COMMAND_OFFSET		= 0,
+	CR_MB_NONCE0_OFFSET		= 0x40,
+	CR_MB_NONCE1_OFFSET		= 0x80,
+	CR_MB_IN_PAYLOAD0_OFFSET	= 0xC0,
+	CR_MB_IN_PAYLOAD1_OFFSET	= 0x100,
+	CR_MB_IN_PAYLOAD2_OFFSET	= 0x140,
+	CR_MB_IN_PAYLOAD3_OFFSET	= 0x180,
+	CR_MB_IN_PAYLOAD4_OFFSET	= 0x1C0,
+	CR_MB_IN_PAYLOAD5_OFFSET	= 0x200,
+	CR_MB_IN_PAYLOAD6_OFFSET	= 0x240,
+	CR_MB_IN_PAYLOAD7_OFFSET	= 0x280,
+	CR_MB_IN_PAYLOAD8_OFFSET	= 0x2C0,
+	CR_MB_IN_PAYLOAD9_OFFSET	= 0x300,
+	CR_MB_IN_PAYLOAD10_OFFSET	= 0x340,
+	CR_MB_IN_PAYLOAD11_OFFSET	= 0x380,
+	CR_MB_IN_PAYLOAD12_OFFSET	= 0x3C0,
+	CR_MB_IN_PAYLOAD13_OFFSET	= 0x400,
+	CR_MB_IN_PAYLOAD14_OFFSET	= 0x440,
+	CR_MB_IN_PAYLOAD15_OFFSET	= 0x480,
+	CR_MB_STATUS_OFFSET		= 0x4C0,
+	CR_MB_OUT_PAYLOAD0_OFFSET	= 0x500,
+	CR_MB_OUT_PAYLOAD1_OFFSET	= 0x540,
+	CR_MB_OUT_PAYLOAD2_OFFSET	= 0x580,
+	CR_MB_OUT_PAYLOAD3_OFFSET	= 0x5C0,
+	CR_MB_OUT_PAYLOAD4_OFFSET	= 0x600,
+	CR_MB_OUT_PAYLOAD5_OFFSET	= 0x640,
+	CR_MB_OUT_PAYLOAD6_OFFSET	= 0x680,
+	CR_MB_OUT_PAYLOAD7_OFFSET	= 0x6C0,
+	CR_MB_OUT_PAYLOAD8_OFFSET	= 0x700,
+	CR_MB_OUT_PAYLOAD9_OFFSET	= 0x740,
+	CR_MB_OUT_PAYLOAD10_OFFSET	= 0x780,
+	CR_MB_OUT_PAYLOAD11_OFFSET	= 0x7C0,
+	CR_MB_OUT_PAYLOAD12_OFFSET	= 0x800,
+	CR_MB_OUT_PAYLOAD13_OFFSET	= 0x840,
+	CR_MB_OUT_PAYLOAD14_OFFSET	= 0x880,
+	CR_MB_OUT_PAYLOAD15_OFFSET	= 0x8C0,
 };*/
 
 #define CR_OS_BW_CONTROL_REG_BASE	(0x00000000)
@@ -151,51 +155,51 @@ enum {
 struct block_window {
 	struct list_head bw_node;
 	__u16 bw_id;
-	__u64 __iomem *bw_ctrl; /*va of the control register*/
-	__u64 __iomem *bw_status; /*va of the status register*/
-	__u32 num_apt_segments; /*number of aperture segments*/
-	void __iomem **bw_apt; /*v. addresses of the aperture segments*/
+	__u64 __iomem *bw_ctrl; /* va of the control register */
+	__u64 __iomem *bw_status; /* va of the status register */
+	__u32 num_apt_segments; /* number of aperture segments */
+	void __iomem **bw_apt; /* v. addresses of the aperture segments */
 };
 
 struct cr_mailbox {
 	struct mutex mb_lock;
-	__u64 __iomem *command; /*va of the command register*/
-	__u64 __iomem *nonce0; /*va of the nonce0 register*/
-	__u64 __iomem *nonce1; /*va of the nonce1 register*/
-	__u64 __iomem *in_payload[16]; /*va of the 16 in payload
-						registers write only*/
+	__u64 __iomem *command; /* va of the command register */
+	__u64 __iomem *nonce0; /* va of the nonce0 register */
+	__u64 __iomem *nonce1; /* va of the nonce1 register */
+	/* va of the 16 in payload registers write only*/
+	__u64 __iomem *in_payload[16];
 	__u64 __iomem *status; /*va of the status register*/
-	__u64 __iomem *out_payload[16]; /*va of the 8 out payload
-						registers read only*/
+	/* va of the 8 out payload registers read only */
+	__u64 __iomem *out_payload[16];
 	__u32 mb_in_line_size;
 	__u32 mb_out_line_size;
-	__u32 num_mb_in_segments; /*number of segments of the IN mailbox */
-	__u32 num_mb_out_segments; /*number of segments of the OUT mailbox */
-	void __iomem **mb_in; /*va of the IN mailbox segments*/
-	void __iomem **mb_out; /*va of the OUT mailbox segments*/
+	__u32 num_mb_in_segments; /* number of segments of the IN mailbox  */
+	__u32 num_mb_out_segments; /* number of segments of the OUT mailbox  */
+	void __iomem **mb_in; /* va of the IN mailbox segments */
+	void __iomem **mb_out; /* va of the OUT mailbox segments */
 };
 
 struct cr_dimm {
-	__u8 fw_major; /*FW Version Major*/
-	__u8 fw_minor; /*FW Version Minor*/
-	__u8 fw_hot_fix; /*FW Version HotFix*/
-	__u16 fw_build; /*FW Version Build Number*/
-	__u8 fw_api_major; /*FW API Version Major*/
-	__u8 fw_api_minor; /*FW API Version Minor*/
-	__u8 security_flag; /*Identifies the security status of the DIMM
-	 collected from FW*/
-	__u64 pm_start; /*The DPA start address of the PM region*/
-	__u64 pm_capacity; /*DIMM Capacity (Bytes) to reserve for PM*/
-	__u16 num_block_windows; /*Number of Block Windows Supported*/
+	__u8 fw_major; /* FW Version Major */
+	__u8 fw_minor; /* FW Version Minor */
+	__u8 fw_hot_fix; /* FW Version HotFix */
+	__u16 fw_build; /* FW Version Build Number */
+	__u8 fw_api_major; /* FW API Version Major */
+	__u8 fw_api_minor; /* FW API Version Minor */
+	/* Identifies the security status of the DIMM collected from FW */
+	__u8 security_flag;
+	__u64 pm_start; /* The DPA start address of the PM region */
+	__u64 pm_capacity; /* DIMM Capacity (Bytes) to reserve for PM */
+	__u16 num_block_windows; /* Number of Block Windows Supported */
 	__u16 num_write_flush_addrs;
-	__u64 raw_capacity; /*PM + volatile*/
+	__u64 raw_capacity; /* PM + volatile */
 	struct list_head bw_list;
 	struct cr_mailbox *host_mailbox;
-	struct memdev_spa_rng_tbl *ctrl_tbl; /*ptr to the table used to
-	 configure the mailbox*/
-	struct memdev_spa_rng_tbl *data_tbl; /*ptr to the table used to
-	 configure the block windows*/
-	/*XXX: Flush Hint Tables need to be accounted for somehow*/
+	/* ptr to the table used to configure the mailbox */
+	struct memdev_spa_rng_tbl *ctrl_tbl;
+	/* ptr to the table used to configure the block windows */
+	struct memdev_spa_rng_tbl *data_tbl;
+	/* TODO: Flush Hint Tables need to be accounted for somehow */
 };
 
 #define CR_BCD_TO_TWO_DEC(BUFF) (((BUFF>>4) * 10) + (BUFF & 0xF))
@@ -219,7 +223,6 @@ int cr_remove_dimm(struct nvdimm *dimm);
  *
  *  Returns: Error Code?
  */
-
 int cr_get_dimm_partition_info(struct cr_dimm *dimm);
 
 int cr_write_volume_label(struct nvdimm *dimm, struct label_info *l_info);
@@ -260,4 +263,4 @@ void cr_memcopy_large_outpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd);
 int fw_cmd_pass_thru(struct cr_dimm *c_dimm, struct fv_fw_cmd *cmd);
 
-#endif
+#endif /* _CRBD_CRDIMM_H */

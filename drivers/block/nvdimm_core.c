@@ -128,7 +128,7 @@ static void nvm_remove_vendor_dimm(struct nvdimm *dimm)
 			NVDIMM_DBG(
 		"Dimm %#x failed to Remove, Error: %d",
 					dimm->physical_id, err);
-		/*TODO: What happens if vendor says removal failed?*/
+		/* TODO: What happens if vendor says removal failed? */
 		} else {
 			dimm->health = NVDIMM_UNINITIALIZED;
 			NVDIMM_INFO("DIMM:%#hx uninitialized",
@@ -151,8 +151,10 @@ static void nvm_remove_ops(struct pmem_dev *dev, struct nvdimm_driver *driver)
 	}
 }
 
-/** TODO:Determine what pool ops are required for a driver that
- * wishes to support block ops*/
+/**
+ * TODO:Determine what pool ops are required for a driver that
+ * wishes to support block ops
+ */
 static int validate_pool_ops(const struct nvm_pool_ops *pool_ops)
 {
 	return 0;
@@ -180,7 +182,7 @@ static int validate_driver(struct nvdimm_driver *driver)
 
 	if (driver->dimm_ops) {
 
-		/*TODO: Implement when pool ops have been created*/
+		/* TODO: Implement when pool ops have been created */
 /*		if (!driver->pool_ops)
 			return -EINVAL;*/
 
@@ -237,8 +239,8 @@ int nvm_register_nvdimm_driver(struct nvdimm_driver *driver)
 
 		nvm_attach_ops(dev, driver);
 
-		/**TODO: Call init_pools*/
-		/**TODO: Call volume init due to new pools*/
+		/* TODO: Call init_pools */
+		/* TODO: Call volume init due to new pools */
 	}
 
 	return 0;
@@ -267,16 +269,16 @@ void nvm_unregister_nvdimm_driver(struct nvdimm_driver *driver)
 	spin_lock(&nvdimm_driver_lock);
 	if (!find_nvdimm_driver(driver->ids)) {
 		NVDIMM_DBG("Trying to remove unregistered NVDIMM driver");
-		/*TODO: Bug out?*/
+		/* TODO: Bug out? */
 	}
 	list_del(&driver->nvdimm_driver_node);
 	spin_unlock(&nvdimm_driver_lock);
 
 	driver->remove(dev);
 
-	/*Remove volumes that contain extents from this driver*/
-	/*Destory pools made from this driver*/
-	/*Remove the ops from nvdimms that match this driver*/
+	/* Remove volumes that contain extents from this driver */
+	/* Destory pools made from this driver */
+	/* Remove the ops from nvdimms that match this driver */
 	nvm_remove_ops(dev, driver);
 }
 EXPORT_SYMBOL(nvm_unregister_nvdimm_driver);
@@ -425,14 +427,14 @@ static long pmem_dev_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	}
 
 	switch (cmd) {
-	/*Debug IOCTLs*/
+	/* Debug IOCTLs */
 	case NVDIMM_LOAD_ACPI_FIT:
 		return nvdimm_user_load_fit(dev, (void *)arg);
 		break;
 	case NVDIMM_INIT:
 		return nvdimm_user_dimm_init(dev);
 		break;
-	/*IOCTLS that do not require data from userspace*/
+	/* IOCTLS that do not require data from userspace */
 	case NVDIMM_GET_TOPOLOGY_COUNT:
 		return nvm_dimm_list_size(dev);
 		break;
@@ -441,15 +443,14 @@ static long pmem_dev_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	if (copy_from_user(&nvdr, (void __user *)arg, sizeof(nvdr)))
 		return -EFAULT;
 
-	/*IOCTLs that apply to all vendors*/
+	/* IOCTLs that apply to all vendors */
 	switch (cmd) {
 	case NVDIMM_GET_DIMM_TOPOLOGY:
 		return nvdimm_get_dimm_topology(dev, &nvdr);
 		break;
 	}
 
-	/*IOCTLS for specific NVDIMM types*/
-
+	/* IOCTLS for specific NVDIMM types */
 	dimm = get_nvdimm_by_pid(nvdr.nvdr_dimm_id, dev);
 
 	if (!dimm)
@@ -468,7 +469,6 @@ static long pmem_dev_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 }
 
 /**
- *
  * Return -ENOTTY if PM not supported
  */
 static struct pmem_layout *nvdimm_getpmem(struct block_device *bdev)
@@ -688,8 +688,10 @@ int gen_nvdimm_init(struct pmem_dev *dev)
 
 	nvm_initialize_dimm_inventory(dev);
 
-	/**TODO: temp holding spot for single volume until initialization
-	 * order has been finalized*/
+	/*
+	 * TODO: temp holding spot for single volume until initialization
+	 * order has been finalized
+	 */
 	nvm_create_single_volume(dev);
 
 	list_for_each_entry(pos, &dev->volumes, volume_node) {
@@ -705,12 +707,11 @@ int gen_nvdimm_init(struct pmem_dev *dev)
  *
  * Removes all NVDIMM and type specific DIMM structures from memory
  * Calls each type specific exit function
- *
  */
 void gen_nvdimm_exit(struct pmem_dev *dev)
 {
 	pmem_free_volumes(dev);
-	/*pmem_free_pools(dev);*/
+	/* pmem_free_pools(dev); */
 	nvm_remove_dimm_inventory(dev);
 }
 

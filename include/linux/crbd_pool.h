@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,11 +23,10 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
-#ifndef CRBD_POOL_H_
-#define CRBD_POOL_H_
+#ifndef _CRBD_POOL_H
+#define _CRBD_POOL_H
 
 #include <linux/nvdimm_core.h>
 #include <linux/nvdimm_acpi.h>
@@ -52,7 +49,6 @@
  *
  * Returns: Error Code?
  */
-
 int cr_initialize_pools(struct fit_header *fit_head,
 	struct list_head *dimm_list, struct list_head *pool_list);
 
@@ -68,7 +64,6 @@ int cr_initialize_pools(struct fit_header *fit_head,
  *
  * Return: Error Code?
  */
-
 int cr_insert_pool(struct pool *pl, struct list_head *pool_list);
 
 /**
@@ -87,7 +82,6 @@ int cr_insert_pool(struct pool *pl, struct list_head *pool_list);
  *
  * Return: Error Code?
  */
-
 int cr_remove_pool(__u32 pool_id, struct list_head *pool_list);
 
 /**
@@ -112,7 +106,6 @@ __u64 cr_get_remaining_capacity(struct pool *pl);
  *
  * Returns: Error Code?
  */
-
 int cr_free_pool(struct pool *pl);
 
 /**
@@ -151,7 +144,6 @@ struct extent_set *cr_provision_extent(struct pool *pl, size_t size,
  *
  * Returns: Error Code?
  */
-
 int cr_return_extent(struct pool *pl, struct extent_set *es);
 
 /**
@@ -176,6 +168,4 @@ int cr_return_extent(struct pool *pl, struct extent_set *es);
 int cr_find_adjacent_extent(struct pool *pl, struct extent_set *es,
 	struct extent_set *before_es, struct extent_set *after_ex);
 
-
-
-#endif
+#endif /* _CRBD_POOL_H */

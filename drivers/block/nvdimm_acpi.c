@@ -1,6 +1,4 @@
 /*
- * @internal
- * @copyright
  * Copyright 2013 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
@@ -25,7 +23,6 @@
  * Unless otherwise agreed by Intel in writing, you may not remove or alter
  * this notice or any other notice embedded in Materials by Intel or Intel's
  * suppliers or licensors in any way.
- * @endinternal
  */
 
 #include <linux/sort.h>
@@ -34,7 +31,6 @@
 
 /* TODO: Change all sizeof(struct type) to sizeof(*variable)*/
 /* TODO: Change all casting such as (__u64 *) to typeof(variable_name)*/
-
 
 /**
  * spa_to_rdpa() - Convert System Physical Address to Device Region Physical
@@ -173,7 +169,7 @@ struct memdev_spa_rng_tbl *__get_memdev_spa_tbl(struct fit_header *fit_head,
 
 	if (!fit_head->memdev_spa_rng_tbls) {
 		NVDIMM_ERR("No Memdev tables to search");
-		/*TODO: Is bug the correct action?*/
+		/* TODO: Is bug the correct action? */
 		BUG();
 	}
 
@@ -199,7 +195,6 @@ struct memdev_spa_rng_tbl *__get_memdev_spa_tbl(struct fit_header *fit_head,
  * type you are looking for
  * Meaning if you are trying to match a PM Range type you better be sure there
  * can only ever be 1 PM Range type per NVDIMM.
- *
  */
 struct memdev_spa_rng_tbl *get_memdev_spa_tbl(struct fit_header *fit_head,
 	__u16 pid, __u16 addr_rng_type)
@@ -210,7 +205,7 @@ struct memdev_spa_rng_tbl *get_memdev_spa_tbl(struct fit_header *fit_head,
 
 	if (!fit_head->memdev_spa_rng_tbls) {
 		NVDIMM_DBG("No Memdev tables to search");
-		/*TODO: Bug?*/
+		/* TODO: Bug? */
 		BUG();
 	}
 
@@ -288,7 +283,6 @@ __u8 get_num_pm_dimms(struct fit_header *fit_head)
  *
  * Returns: Number of NVM DIMMs in the FIT
  */
-
 __u8 get_num_dimms(struct memdev_spa_rng_tbl *memdev_tbls, __u16 num_tbls)
 {
 	__u8 num_unique_dimms = 0;
@@ -639,7 +633,7 @@ err_out:
 	return ERR_PTR(-ENOMEM);
 }
 
-/*TODO: Enable Checksum when we determine which algorithm to use*/
+/* TODO: Enable Checksum when we determine which algorithm to use */
 static int checksum_fit(void *nvdimm_fit_ptr, __u8 checksum, __u32 length)
 {
 	return 0;
@@ -712,13 +706,13 @@ struct fit_header *create_fit_table(void *nvdimm_fit_ptr)
 		NVDIMM_DBG("NVDIMM FIT Signature does not match\n");
 		NVDIMM_DBG("Expected Sig: %u, Actual Sig: %u", NVDIMM_SIG,
 			header->fit->signature);
-		ret = ERR_PTR(-ENOTTY);/*No idea what Error Code to return*/
+		ret = ERR_PTR(-ENOTTY);/* No idea what Error Code to return */
 		goto after_fit;
 	}
 
 	if (checksum_fit(nvdimm_fit_ptr, header->fit->checksum,
 		header->fit->length)) {
-		ret = ERR_PTR(-EFAULT);/*No idea what error code to return*/
+		ret = ERR_PTR(-EFAULT);/* No idea what error code to return */
 		goto after_fit;
 	}
 
