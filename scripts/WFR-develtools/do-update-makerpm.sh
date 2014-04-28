@@ -131,6 +131,7 @@ echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/
 echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/qib/Makefile
 echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/mlx4/Makefile
 echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/mthca/Makefile
+echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/ulp/ipoib/Makefile
 
 
 # make sure rpm component strings are clean, should be no-ops
