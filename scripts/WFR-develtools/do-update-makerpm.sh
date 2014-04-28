@@ -124,15 +124,11 @@ mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 # patch Makefile to use local include files first
 # kind of a hack, perfect thing to put in SOURCES as a real patch
-echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include -I\$(M)/../../../include/uapi' >> ksrc/drivers/infiniband/core/Makefile
-echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/wfr-lite/Makefile
-
-# See NOTE above under sources to copy.
-echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/qib/Makefile
-echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/mlx4/Makefile
-echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/hw/mthca/Makefile
-echo 'NOSTDINC_FLAGS := -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> ksrc/drivers/infiniband/ulp/ipoib/Makefile
-
+for file in `find ksrc -name Makefile`; do
+	echo "updating '$file' for non-standard headers"
+	echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include -I\$(M)/../../../include/uapi' >> $file
+	echo 'NOSTDINC_FLAGS += -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> $file
+done
 
 # make sure rpm component strings are clean, should be no-ops
 rpmname=$(echo "$rpmname" | sed -e 's/[.]/_/g')
