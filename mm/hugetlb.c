@@ -1950,7 +1950,11 @@ module_exit(hugetlb_exit);
 
 static int __init hugetlb_init(void)
 {
-	if (!hugepages_supported())
+	/* Some platform decide whether they support huge pages at boot
+	 * time. On these, such as powerpc, HPAGE_SHIFT is set to 0 when
+	 * there is no such support
+	 */
+	if (HPAGE_SHIFT == 0)
 		return 0;
 
 	if (!size_to_hstate(default_hstate_size)) {
