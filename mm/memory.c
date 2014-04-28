@@ -3791,8 +3791,9 @@ static int __handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		}
 	}
 
-	/* THP should already have been handled */
-	BUG_ON(pmd_numa(*pmd));
+	/* The PMD became NUMA while we examined orig_pmd. Return & retry */
+	if (pmd_numa(*pmd))
+		return 0;
 
 	/*
 	 * Use __pte_alloc instead of pte_alloc_map, because we can't
