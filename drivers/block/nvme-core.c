@@ -76,6 +76,7 @@ struct async_cmd_info {
 struct nvme_queue {
 	struct device *q_dmadev;
 	struct nvme_dev *dev;
+	char irqname[24];	/* nvme4294967295-65535\0 */
 	spinlock_t q_lock;
 	struct nvme_command *sq_cmds;
 	volatile struct nvme_completion *cqes;
@@ -1234,6 +1235,8 @@ static struct nvme_queue *nvme_alloc_queue(struct nvme_dev *dev, int qid,
 
 	nvmeq->q_dmadev = dmadev;
 	nvmeq->dev = dev;
+	snprintf(nvmeq->irqname, sizeof(nvmeq->irqname), "nvme%dq%d",
+			dev->instance, qid);
 	spin_lock_init(&nvmeq->q_lock);
 	nvmeq->cq_head = 0;
 	nvmeq->cq_phase = 1;
@@ -1296,7 +1299,7 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid)
 	if (result < 0)
 		goto release_cq;
 
-	result = queue_request_irq(dev, nvmeq, "nvme");
+	result = queue_request_irq(dev, nvmeq, nvmeq->irqname);
 	if (result < 0)
 		goto release_sq;
 
@@ -1414,7 +1417,7 @@ static int nvme_configure_admin_queue(struct nvme_dev *dev)
 	if (result)
 		return result;
 
-	result = queue_request_irq(dev, nvmeq, "nvme admin");
+	result = queue_request_irq(dev, nvmeq, nvmeq->irqname);
 	if (result)
 		return result;
 
@@ -1871,6 +1874,7 @@ static size_t db_bar_size(struct nvme_dev *dev, unsigned nr_io_queues)
 
 static int nvme_setup_io_queues(struct nvme_dev *dev)
 {
+	struct nvme_queue *adminq = dev->queues[0];
 	struct pci_dev *pdev = dev->pci_dev;
 	int result, cpu, i, vecs, nr_io_queues, size, q_depth;
 
@@ -1897,7 +1901,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 	}
 
 	/* Deregister the admin queue's interrupt */
-	free_irq(dev->entry[0].vector, dev->queues[0]);
+	free_irq(dev->entry[0].vector, adminq);
 
 	vecs = nr_io_queues;
 	for (i = 0; i < vecs; i++)
@@ -1935,9 +1939,9 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 	 */
 	nr_io_queues = vecs;
 
-	result = queue_request_irq(dev, dev->queues[0], "nvme admin");
+	result = queue_request_irq(dev, adminq, adminq->irqname);
 	if (result) {
-		dev->queues[0]->q_suspended = 1;
+		adminq->q_suspended = 1;
 		goto free_queues;
 	}
 
