@@ -39,6 +39,21 @@
  * Send Context functions
  */
 
+/*
+ * Set the CM reset bit and wait for it to clear.  Use the provided
+ * sendctrl register.  This routine has no locking.
+ */
+void __cm_reset(struct hfi_devdata *dd, u64 sendctrl)
+{
+	write_csr(dd, WFR_SEND_CTRL, sendctrl | WFR_SEND_CTRL_CM_RESET_SMASK);
+	while (1) {
+		udelay(1);
+		sendctrl = read_csr(dd, WFR_SEND_CTRL);
+		if ((sendctrl & WFR_SEND_CTRL_CM_RESET_SMASK) == 0)
+			break;
+	}
+}
+
 /* global control of PIO send */
 void pio_send_control(struct hfi_devdata *dd, int op)
 {
@@ -59,18 +74,9 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 	case PSC_GLOBAL_VLARB_DISABLE:
 		reg &= ~WFR_SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
 		break;
-	case PSC_CM_RESET_ENABLE:
-#ifdef WFR_SEND_CTRL_CM_RESET_SMASK
-/* TODO: defined in HAS 0.77 */
-		reg |= WFR_SEND_CTRL_CM_RESET_SMASK;
-#endif
-		break;
-	case PSC_CM_RESET_DISABLE:
-#ifdef WFR_SEND_CTRL_CM_RESET_SMASK
-/* TODO: defined HAS 0.77 */
-		reg &= ~WFR_SEND_CTRL_CM_RESET_SMASK;
-#endif
-		break;
+	case PSC_CM_RESET:
+		__cm_reset(dd, reg);
+		return; /* NOTE: return, not break */
 	default:
 		dd_dev_err(dd, "%s: invalid control %d\n", __func__, op);
 		return;

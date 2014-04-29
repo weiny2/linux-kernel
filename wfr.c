@@ -1421,8 +1421,7 @@ void reset_link_credits(struct hfi_devdata *dd)
 	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, 0);
 	write_global_credit(dd, 0, 0, 0);
 	/* reset the CM block */
-	pio_send_control(dd, PSC_CM_RESET_ENABLE);
-	pio_send_control(dd, PSC_CM_RESET_DISABLE);
+	pio_send_control(dd, PSC_CM_RESET);
 }
 
 /* convert a vCU to a CU */
@@ -4504,6 +4503,7 @@ static void reset_txe(struct hfi_devdata *dd)
 	 * TXE Kernel CSRs
 	 */
 	write_csr(dd, WFR_SEND_CTRL, 0);
+	__cm_reset(dd, 0);	/* reset CM internal state */
 	/* WFR_SEND_CONTEXTS read-only */
 	/* WFR_SEND_DMA_ENGINES read-only */
 	/* WFR_SEND_PIO_MEM_SIZE read-only */

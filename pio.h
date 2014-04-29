@@ -151,9 +151,9 @@ void pio_reset_all(struct hfi_devdata *dd);
 #define PSC_GLOBAL_DISABLE 1
 #define PSC_GLOBAL_VLARB_ENABLE 2
 #define PSC_GLOBAL_VLARB_DISABLE 3
-#define PSC_CM_RESET_ENABLE 4
-#define PSC_CM_RESET_DISABLE 5
+#define PSC_CM_RESET 4
 
+void __cm_reset(struct hfi_devdata *dd, u64 sendctrl);
 void pio_send_control(struct hfi_devdata *dd, int op);
 
 
