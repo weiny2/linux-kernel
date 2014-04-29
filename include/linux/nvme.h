@@ -93,6 +93,7 @@ struct nvme_dev {
 	struct miscdevice miscdev;
 	work_func_t reset_workfn;
 	struct work_struct reset_work;
+	struct notifier_block nb;
 	char name[12];
 	char serial[20];
 	char model[40];
