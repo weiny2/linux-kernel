@@ -345,9 +345,12 @@ int mei_irq_read_handler(struct mei_device *dev,
 
 	/* decide where to read the message too */
 	if (!mei_hdr->host_addr) {
-		dev_dbg(&dev->pdev->dev, "call mei_irq_thread_read_bus_message.\n");
-		mei_hbm_dispatch(dev, mei_hdr);
-		dev_dbg(&dev->pdev->dev, "end mei_irq_thread_read_bus_message.\n");
+		ret = mei_hbm_dispatch(dev, mei_hdr);
+		if (ret) {
+			dev_dbg(&dev->pdev->dev, "mei_hbm_dispatch failed ret = %d\n",
+					ret);
+			goto end;
+		}
 	} else if (mei_hdr->host_addr == dev->iamthif_cl.host_client_id &&
 		   (MEI_FILE_CONNECTED == dev->iamthif_cl.state) &&
 		   (dev->iamthif_state == MEI_IAMTHIF_READING)) {
