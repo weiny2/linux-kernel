@@ -592,6 +592,10 @@ struct qib_message_header {
 #define QIB_PSN_MASK 0xFFFFFF
 #define QIB_MSN_MASK 0xFFFFFF
 #define QIB_QPN_MASK 0xFFFFFF
+#define QIB_FECN_SHIFT 31
+#define QIB_FECN_MASK 0x1
+#define QIB_BECN_SHIFT 30
+#define QIB_BECN_MASK 0x1
 #define QIB_MULTICAST_LID_BASE 0xC000
 #define QIB_MULTICAST_QPN 0xFFFFFF
 

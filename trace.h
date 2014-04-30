@@ -218,7 +218,7 @@ __print_symbolic(opcode,                                   \
 #define LRH_PRN "vl %d lver %d sl %d lnh %d,%s dlid %.4x len %d slid %.4x"
 #define BTH_PRN \
 	"op 0x%.2x,%s se %d m %d pad %d tver %d pkey 0x%.4x " \
-	"qpn 0x%.6x a %d psn 0x%.8x"
+	"f %d b %d qpn 0x%.6x a %d psn 0x%.8x"
 #define EHDR_PRN "%s"
 
 DECLARE_EVENT_CLASS(hfi_ibhdr_template,
@@ -242,6 +242,8 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__field(u8, pad)
 		__field(u8, tver)
 		__field(u16, pkey)
+		__field(u8, f)
+		__field(u8, b)
 		__field(u32, qpn)
 		__field(u8, a)
 		__field(u32, psn)
@@ -284,6 +286,12 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 			(be32_to_cpu(ohdr->bth[0]) >> 16) & 0xf;
 		__entry->pkey =
 			be32_to_cpu(ohdr->bth[0]) & 0xffff;
+		__entry->f =
+			(be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
+			& QIB_FECN_MASK;
+		__entry->b =
+			(be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT)
+			& QIB_BECN_MASK;
 		__entry->qpn =
 			be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
 		__entry->a =
@@ -314,6 +322,8 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__entry->pad,
 		__entry->tver,
 		__entry->pkey,
+		__entry->f,
+		__entry->b,
 		__entry->qpn,
 		__entry->a,
 		__entry->psn,
