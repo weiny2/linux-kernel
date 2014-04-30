@@ -147,9 +147,15 @@ echo ""
 popd
 for mfile in `find ksrc -name Makefile`; do
 	echo "updating '$mfile' for non-standard headers"
-	echo 'NOSTDINC_FLAGS := -I\$(M)/../../include' >> $mfile
+	relpathcnt=$(echo $mfile | tr -cd / | wc -c)
+	let relpathcnt=relpathcnt-1
+	relpath=""
+	for i in `seq 1 $relpathcnt`; do
+		relpath=$relpath/..
+	done
+	echo "NOSTDINC_FLAGS := -I\$(M)/$relpath/include" >> $mfile
 	for dir in $incdir; do
-		echo "NOSTDINC_FLAGS += -I\$(M)/../../$dir" >> $mfile
+		echo "NOSTDINC_FLAGS += -I\$(M)/$relpath/$dir" >> $mfile
 	done
 done
 
