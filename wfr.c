@@ -3322,13 +3322,9 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 
 		/* set the control's eager buffer size */
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
-		rcvctrl |= (encoded_size(dd->rcvegrbufsize)
+		rcvctrl |= (encoded_size(rcd->rcvegrbuf_size)
 				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
 					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
-
-		/* FIXME: for now, always set OnePacketPerEgrBuffer until
-		   we know the driver can handle packed eager buffers */
-		rcvctrl |= WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
 
 		/* set eager count and base index */
 		reg = ((rcd->eager_count & WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
@@ -3364,6 +3360,18 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
 	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
+	if (op & QIB_RCVCTRL_ONE_PKT_EGR_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
+	if (op & QIB_RCVCTRL_ONE_PKT_EGR_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
+	if (op & QIB_RCVCTRL_NO_RHQ_DROP_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK;
+	if (op & QIB_RCVCTRL_NO_RHQ_DROP_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK;
+	if (op & QIB_RCVCTRL_NO_EGR_DROP_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_DONT_DROP_EGR_FULL_SMASK;
+	if (op & QIB_RCVCTRL_NO_EGR_DROP_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_DONT_DROP_EGR_FULL_SMASK;
 	rcd->rcvctrl = rcvctrl;
 	dd_dev_info(dd, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
 	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);

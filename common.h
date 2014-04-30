@@ -137,7 +137,11 @@ struct hfi_base_info {
 	 * IB MTU, packets IB data must be less than this.
 	 * The MTU is in bytes, and will be a multiple of 4 bytes.
 	 */
-	__u32 mtu;
+	__u16 mtu;
+	/*
+	 * Job key
+	 */
+	__u16 jkey;
 	/*
 	 * The special QP (queue pair) value that identifies PSM
 	 * protocol packet from standard IB packets.
@@ -254,6 +258,16 @@ struct hfi_base_info {
 #define HFI_ALG_COUNT  2 /* number of algorithm choices */
 
 /*
+ * PSM can set any of these bits in the flags field of the
+ * hfi_user_info structure to alter the benavior of the HW on
+ * a per-context level.
+ */
+#define HFI_CTXTFLAG_ONEPKTPEREGRBUF  (1<<0)
+#define HFI_CTXTFLAG_DONTDROPEGRFULL  (1<<1)
+#define HFI_CTXTFLAG_DONTDROPHDRQFULL (1<<2)
+#define HFI_CTXTFLAG_TIDFLOWENABLE    (1<<3)
+
+/*
  * This structure is passed to qib_userinit() to tell the driver where
  * user code buffers are, sizes, etc.   The offsets and sizes of the
  * fields must remain unchanged, for binary compatibility.  It can
@@ -265,19 +279,8 @@ struct hfi_user_info {
 	 * Should be set to HFI_USER_SWVERSION.
 	 */
 	__u32 userversion;
-	/* job key to program the send context and receive context. */
-	__u16 job_key;
-	/*
-	 * context group recommendation, driver decides how to use it.
-	 * 0: 8 groups (no grouping); 1: 4 groups; 2: 2 groups;
-	 * 3: 1 group (max grouping);
-	 */
-	__u16 context_group;
-	/*
-	 * If multi-packets per eager entry, driver should program
-	 * accordingly.
-	 */
-	__u16 rcvegr_multipackets;
+	/* various context setup flags. See HFI_CTXTFLAG_* */
+	__u16 flags;
 	/* HFI selection algorithm, if unit has not selected */
 	__u16 hfi_alg;
 	/*
@@ -303,6 +306,8 @@ struct hfi_user_info {
 #define HFI_CMD_RECV_CTRL	9	/* control receipt of packets */
 #define HFI_CMD_POLL_TYPE	10	/* set the kind of polling we want */
 #define HFI_CMD_ACK_EVENT       11	/* ack & clear bits *spi_sendbuf_status */
+#define HFI_CMD_SET_PKEY        12      /* set context's pkey */
+#define HFI_CMD_CTXT_RESET      13      /* reset context's HW send context */
 
 /*
  * HFI_CMD_ACK_EVENT obsoletes HFI_CMD_DISARM_BUFS, but we keep it for

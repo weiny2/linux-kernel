@@ -198,8 +198,10 @@ struct qib_ctxtdata {
 	u16 rcvhdrqentsize;
 	/* rcvhdrq size (for freeing) */
 	size_t rcvhdrq_size;
-	/* per-context flags for fileops/intr communication */
-	unsigned long flag;
+	/* per-context configuration flags */
+	u16 flags;
+	/* per-context event flags for fileops/intr communication */
+	unsigned long event_flags;
 	/* WAIT_RCV that timed out, no interrupt */
 	u32 rcvwait_to;
 	/* WAIT_PIO that timed out, no interrupt */
@@ -378,6 +380,12 @@ struct qib_verbs_txreq {
 #define QIB_RCVCTRL_BP_DIS 0x0200
 #define QIB_RCVCTRL_TIDFLOW_ENB 0x0400
 #define QIB_RCVCTRL_TIDFLOW_DIS 0x0800
+#define QIB_RCVCTRL_ONE_PKT_EGR_ENB 0x1000
+#define QIB_RCVCTRL_ONE_PKT_EGR_DIS 0x2000
+#define QIB_RCVCTRL_NO_RHQ_DROP_ENB 0x4000
+#define QIB_RCVCTRL_NO_RHQ_DROP_DIS 0x8000
+#define QIB_RCVCTRL_NO_EGR_DROP_ENB 0x10000
+#define QIB_RCVCTRL_NO_EGR_DROP_DIS 0x20000
 
 /*
  * These are the generic indices for requesting per-port

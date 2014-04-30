@@ -616,9 +616,14 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	}
 
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
-	/* disable receive context and interrupt available */
+	/*
+	 * Disable receive context and interrupt available, reset all
+	 * RcvCtxtCtrl bits to default values.
+	 */
 	dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS | QIB_RCVCTRL_TIDFLOW_DIS |
-		      QIB_RCVCTRL_INTRAVAIL_DIS, uctxt->ctxt);
+		      QIB_RCVCTRL_INTRAVAIL_DIS | QIB_RCVCTRL_ONE_PKT_EGR_DIS |
+		      QIB_RCVCTRL_NO_RHQ_DROP_DIS | QIB_RCVCTRL_NO_EGR_DROP_DIS,
+		      uctxt->ctxt);
 	sc_disable(uctxt->sc);
 	uctxt->pid = 0;
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
@@ -628,7 +633,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	uctxt->piowait_to = 0;
 	uctxt->rcvnowait = 0;
 	uctxt->pionowait = 0;
-	uctxt->flag = 0;
+	uctxt->event_flags = 0;
 
 	dd->f_clear_tids(uctxt);
 
@@ -835,6 +840,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	}
 	uctxt->userversion = uinfo->userversion;
 	uctxt->pid = current->pid;
+	uctxt->flags = uinfo->flags;
 	init_waitqueue_head(&uctxt->wait);
 	strlcpy(uctxt->comm, current->comm, sizeof(uctxt->comm));
 	qib_stats.sps_ctxts++;
@@ -861,7 +867,7 @@ static int init_subctxts(struct qib_ctxtdata *uctxt,
 	uctxt->subctxt_id = uinfo->subctxt_id;
 	uctxt->active_slaves = 1;
 	uctxt->redirect_seq_cnt = 1;
-	set_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->flag);
+	set_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->event_flags);
 bail:
 	return ret;
 }
@@ -908,7 +914,7 @@ static int user_init(struct file *fp)
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 
 	/* make sure that the context has already been setup */
-	if (!test_bit(QIB_CTXT_SETUP_DONE, &uctxt->flag)) {
+	if (!test_bit(QIB_CTXT_SETUP_DONE, &uctxt->event_flags)) {
 		ret = -EFAULT;
 		goto done;
 	}
@@ -919,7 +925,7 @@ static int user_init(struct file *fp)
 	 */
 	if (subctxt_fp(fp)) {
 		ret = wait_event_interruptible(uctxt->wait,
-			!test_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->flag));
+			!test_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->event_flags));
 		goto done;
 	}
 
@@ -942,15 +948,28 @@ static int user_init(struct file *fp)
 		qib_clear_rcvhdrtail(uctxt);
 
 	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB;
-	if (hdrsup_enable)
+	if (hdrsup_enable && (uctxt->flags & HFI_CTXTFLAG_TIDFLOWENABLE))
 		rcvctrl_ops |= QIB_RCVCTRL_TIDFLOW_ENB;
+	/*
+	 * Ignore the bit in the flags for now until proper
+	 * support for multiple packet per rcv array entry is
+	 * added.
+	 */
+#if 0
+	 if (uctxt->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF)
+#endif
+	rcvctrl_ops |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
+	if (uctxt->flags & HFI_CTXTFLAG_DONTDROPEGRFULL)
+		rcvctrl_ops |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
+	if (uctxt->flags & HFI_CTXTFLAG_DONTDROPHDRQFULL)
+		rcvctrl_ops |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
 	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
 		rcvctrl_ops |= QIB_RCVCTRL_TAILUPD_ENB;
 	uctxt->dd->f_rcvctrl(uctxt->dd, rcvctrl_ops, uctxt->ctxt);
 
 	/* Notify any waiting slaves */
 	if (uctxt->subctxt_cnt) {
-		clear_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->flag);
+		clear_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->event_flags);
 		wake_up(&uctxt->wait);
 	}
 	ret = 0;
@@ -1055,7 +1074,7 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 	if (ret)
 		goto done;
 
-	set_bit(QIB_CTXT_SETUP_DONE, &uctxt->flag);
+	set_bit(QIB_CTXT_SETUP_DONE, &uctxt->event_flags);
 done:
 	return ret;
 }
@@ -1167,7 +1186,7 @@ static unsigned int poll_urgent(struct file *fp,
 		uctxt->urgent_poll = uctxt->urgent;
 	} else {
 		pollflag = 0;
-		set_bit(QIB_CTXT_WAITING_URG, &uctxt->flag);
+		set_bit(QIB_CTXT_WAITING_URG, &uctxt->event_flags);
 	}
 	spin_unlock_irq(&dd->uctxt_lock);
 
@@ -1185,7 +1204,7 @@ static unsigned int poll_next(struct file *fp,
 
 	spin_lock_irq(&dd->uctxt_lock);
 	if (dd->f_hdrqempty(uctxt)) {
-		set_bit(QIB_CTXT_WAITING_RCV, &uctxt->flag);
+		set_bit(QIB_CTXT_WAITING_RCV, &uctxt->event_flags);
 		dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_ENB, uctxt->ctxt);
 		pollflag = 0;
 	} else
