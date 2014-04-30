@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DEFAULT_KERNEL_VERSION="3.9.2-wfr+"
+DEFAULT_KERNEL_VERSION=""
 DEFAULT_USER=$USER
 DEFAULT_URL_PREFIX="ssh://"
 DEFAULT_URL_SUFFIX="@git-amr-2.devtools.intel.com:29418/wfr-linux-devel"
@@ -117,7 +117,18 @@ else
 	echo "Copying source from $srcdir"
 	(cd "$srcdir"; tar cf - ${sources_to_copy}) | (cd ksrc; tar xf -)
 fi
-rpmversion="$rpmversion".$(cd "$srcdir"; git rev-list "v3.9.2^..HEAD" | wc -l)
+
+pushd $srcdir
+DEFAULT_KERNEL_VERSION=`make kernelversion`
+DEFAULT_KERNEL_VERSION=$DEFAULT_KERNEL_VERSION`./scripts/setlocalversion`
+popd
+if [ "$DEFAULT_KERNEL_VERSION" == "" ]; then
+	echo "Unable to generate the kernel version"
+	exit 1
+fi
+basekern=$(echo "$DEFAULT_KERNEL_VERSION" | sed -e 's/\(.*\)-.*/\1/g')
+
+rpmversion="$rpmversion".$(cd "$srcdir"; git rev-list "v$basekern^..HEAD" | wc -l)
 
 echo "Setting up RPM build area"
 mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
