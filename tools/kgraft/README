@@ -1,0 +1,50 @@
+Some tools for kgraft.
+
+# make && make check
+
+will build most of them, and the check target contains example invocations.
+The only thing not built automatically is the hacked objcopy (objcopy-hacked),
+as usually the necessary binutils headers aren't installed.  You'll
+have to have (recent) binutils sources, apply the patch objcopy.diff
+and build it yourself.
+
+objcopy-hacked:
+  Given a list of symbols (e.g. in a file symlist) this will extract
+  all sections defining those symbols.  It will also recursively extract
+  sections needed by those (e.g. by section based relocations).
+
+dwarf-inline-tree:
+  Given an ELF file with debug info this will generate a parsable
+  output of the inline tree, like so:
+    U somesymbol
+    D filename.c:anothersym
+    I bla.h:helper
+  Meaning there's a reference to 'somesymbol', there's a definition
+  of function anothersym() from file filename.c, and that one contains
+  an inline expansion of function helper() from bla.h.
+
+  Filenames are directly from the debuginfo, and so can contain
+  directory prefixes dependending on how the objects were compiled.
+
+it2rev.pl [<path-prefix>]
+  This transforms the output of dwarf-inline-tree into a list of
+  whats-inlined-where lists, like
+    bla.h:helper filename.c:anothersym file2.c:bar
+  (helper is inlined into anothersym and bar).  If path-prefix
+  is given it is removed from all filenames from the input list.
+
+extract-syms.sh <list of symbol names>
+  This will use objcopy-hacked to extract the sections for the given
+  symbols from vmlinux.o into extracted.o.  All given symbols will
+  be prefixed with "new_" in the generated output.
+
+create-stub.sh <list of symbol names>
+  This will generate on stdout a C source that is the module source
+  code for a kgraft module patching the given symbols.
+
+create-kgrmodule.sh <list of symbol names>
+  This will generated a full kgraft module from a list of symbol
+  names (by using the above scripts).  Take care for compiling
+  the kernel providing the new code with
+    -ffunction-sections -fdata-sections .
+  The module will be in kgrafttmp/kgrmodule.ko .

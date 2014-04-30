@@ -387,6 +387,7 @@ static int devtmpfsd(void *p)
 	sys_chroot(".");
 	complete(&setup_done);
 	while (1) {
+		kgr_task_safe(current);
 		spin_lock(&req_lock);
 		while (requests) {
 			struct req *req = requests;

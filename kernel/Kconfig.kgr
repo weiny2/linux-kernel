@@ -1,0 +1,10 @@
+config HAVE_KGR
+	bool
+
+config KGR
+	bool "Kgr infrastructure"
+	depends on DYNAMIC_FTRACE_WITH_REGS
+	depends on HAVE_KGR
+	help
+	 Select this to enable kGraft online kernel patching. The
+	 runtime price is zero, so it is safe to say Y here.

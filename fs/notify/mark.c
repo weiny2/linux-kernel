@@ -82,6 +82,7 @@
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/srcu.h>
@@ -355,7 +356,9 @@ static int fsnotify_mark_destroy(void *ignored)
 			fsnotify_put_mark(mark);
 		}
 
-		wait_event_interruptible(destroy_waitq, !list_empty(&destroy_list));
+		wait_event_interruptible(destroy_waitq, ({
+					kgr_task_safe(current);
+					!list_empty(&destroy_list); }));
 	}
 
 	return 0;
