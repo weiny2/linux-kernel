@@ -124,11 +124,24 @@ mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 # patch Makefile to use local include files first
 # kind of a hack, perfect thing to put in SOURCES as a real patch
-for file in `find ksrc -name Makefile`; do
-	echo "updating '$file' for non-standard headers"
-	echo 'NOSTDINC_FLAGS := -I\$(M)/../../../include -I\$(M)/../../../include/uapi' >> $file
-	echo 'NOSTDINC_FLAGS += -I\$(M)/../../../../include -I\$(M)/../../../../include/uapi' >> $file
+echo "Finding all include directories"
+incdir=""
+pushd ksrc
+echo -n "Found: "
+for dir in `find include -type d`; do
+	echo -n "$dir "
+	incdir="$incdir $dir"
 done
+echo ""
+popd
+for mfile in `find ksrc -name Makefile`; do
+	echo "updating '$mfile' for non-standard headers"
+	echo 'NOSTDINC_FLAGS := -I\$(M)/../../include' >> $mfile
+	for dir in $incdir; do
+		echo "NOSTDINC_FLAGS += -I\$(M)/../../$dir" >> $mfile
+	done
+done
+
 
 # make sure rpm component strings are clean, should be no-ops
 rpmname=$(echo "$rpmname" | sed -e 's/[.]/_/g')
