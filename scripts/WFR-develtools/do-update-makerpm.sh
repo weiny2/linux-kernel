@@ -305,10 +305,10 @@ cp -r include/* \$RPM_BUILD_ROOT/usr/src/kernels/%kver/include-ifs-kernel; \
 cp drivers/infiniband/core/Module.symvers \$RPM_BUILD_ROOT/usr/src/kernels/%kver/include-ifs-kernel; \
 
 %post
-depmod -a
+depmod -a $DEFAULT_KERNEL_VERSION
 
 %postun
-depmod -a
+depmod -a $DEFAULT_KERNEL_VERSION
 
 %clean
 rm -rf \${RPM_BUILD_ROOT}
