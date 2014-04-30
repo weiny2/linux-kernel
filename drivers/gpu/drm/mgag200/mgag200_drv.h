@@ -247,6 +247,7 @@ void mgag200_modeset_fini(struct mga_device *mdev);
 				/* mgag200_fb.c */
 int mgag200_fbdev_init(struct mga_device *mdev);
 void mgag200_fbdev_fini(struct mga_device *mdev);
+void mgag200_fbdev_set_suspend(struct mga_device *mdev, int state);
 
 				/* mgag200_main.c */
 int mgag200_framebuffer_init(struct drm_device *dev,

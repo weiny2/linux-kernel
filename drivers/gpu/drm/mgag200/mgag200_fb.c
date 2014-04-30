@@ -326,3 +326,8 @@ void mgag200_fbdev_fini(struct mga_device *mdev)
 
 	mga_fbdev_destroy(mdev->dev, mdev->mfbdev);
 }
+
+void mgag200_fbdev_set_suspend(struct mga_device *mdev, int state)
+{
+	fb_set_suspend(mdev->mfbdev->helper.fbdev, state);
+}

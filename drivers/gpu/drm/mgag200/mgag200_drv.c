@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/console.h>
 #include <drm/drmP.h>
+#include <drm/drm_crtc_helper.h>
 
 #include "mgag200_drv.h"
 
@@ -74,6 +75,79 @@ static void mga_pci_remove(struct pci_dev *pdev)
 	drm_put_dev(dev);
 }
 
+static int mgag200_pm_freeze(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	struct mga_device *mdev = drm_dev->dev_private;
+	struct drm_connector *connector;
+
+	drm_kms_helper_poll_disable(drm_dev);
+	list_for_each_entry(connector, &drm_dev->mode_config.connector_list,
+			    head)
+		drm_helper_connector_dpms(connector, DRM_MODE_DPMS_OFF);
+
+	console_lock();
+	mgag200_fbdev_set_suspend(mdev, FBINFO_STATE_SUSPENDED);
+	console_unlock();
+
+	return 0;
+}
+
+static int mgag200_pm_thaw(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	struct mga_device *mdev = drm_dev->dev_private;
+	struct drm_connector *connector;
+
+	console_lock();
+	mgag200_fbdev_set_suspend(mdev, FBINFO_STATE_RUNNING);
+	console_unlock();
+
+	drm_helper_resume_force_mode(drm_dev);
+	list_for_each_entry(connector, &drm_dev->mode_config.connector_list,
+			    head)
+		drm_helper_connector_dpms(connector, DRM_MODE_DPMS_ON);
+
+	drm_kms_helper_poll_enable(drm_dev);
+	return 0;
+}
+
+static int mgag200_pm_suspend(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int err;
+
+	err = mgag200_pm_freeze(dev);
+	if (err)
+		return err;
+
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+	return 0;
+}
+
+static int mgag200_pm_resume(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	pci_set_power_state(pdev, PCI_D0);
+	pci_restore_state(pdev);
+	if (pci_enable_device(pdev))
+		return -EIO;
+
+	return mgag200_pm_thaw(dev);
+}
+
+static const struct dev_pm_ops mgag200_pm_ops = {
+	.suspend = mgag200_pm_suspend,
+	.resume = mgag200_pm_resume,
+	.freeze = mgag200_pm_freeze,
+	.thaw = mgag200_pm_thaw,
+	.poweroff = mgag200_pm_freeze,
+	.restore = mgag200_pm_resume,
+};
+
 static const struct file_operations mgag200_driver_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
@@ -111,6 +185,7 @@ static struct pci_driver mgag200_pci_driver = {
 	.id_table = pciidlist,
 	.probe = mga_pci_probe,
 	.remove = mga_pci_remove,
+	.driver.pm = &mgag200_pm_ops,
 };
 
 static int __init mgag200_init(void)
