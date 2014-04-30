@@ -3791,10 +3791,6 @@ static int __handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		}
 	}
 
-	/* The PMD became NUMA while we examined orig_pmd. Return & retry */
-	if (pmd_numa(*pmd))
-		return 0;
-
 	/*
 	 * Use __pte_alloc instead of pte_alloc_map, because we can't
 	 * run pte_offset_map on the pmd, if an huge pmd could
