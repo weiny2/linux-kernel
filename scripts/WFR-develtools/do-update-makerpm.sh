@@ -5,6 +5,7 @@ DEFAULT_USER=$USER
 DEFAULT_URL_PREFIX="ssh://"
 DEFAULT_URL_SUFFIX="@git-amr-2.devtools.intel.com:29418/wfr-linux-devel"
 DEFAULT_BRANCH="wfr-for-ifs"
+wfrconfig="arch/x86/configs/wfr-config"
 
 # NOTE: qib, mlx4, mthca, and ib_cm are not needed for STL
 #       However, they have changes[*] within them we are actively trying to get
@@ -25,6 +26,7 @@ sources_to_copy="
 	drivers/infiniband/hw/qib
 	drivers/infiniband/hw/mthca
 	drivers/infiniband/hw/mlx4
+	$wfrconfig
 "
 
 # ridiculously long to encourage good names later
@@ -119,8 +121,14 @@ else
 fi
 
 pushd $srcdir
-DEFAULT_KERNEL_VERSION=`make kernelversion`
-DEFAULT_KERNEL_VERSION=$DEFAULT_KERNEL_VERSION`./scripts/setlocalversion`
+echo "Preping kernel source tree..."
+cp $wfrconfig .config
+echo "   config \"$wfrconfig\""
+make oldconfig
+make prepare
+echo -n "Generating kernel version... "
+DEFAULT_KERNEL_VERSION=`make kernelrelease`
+echo "$DEFAULT_KERNEL_VERSION"
 popd
 if [ "$DEFAULT_KERNEL_VERSION" == "" ]; then
 	echo "Unable to generate the kernel version"
@@ -281,6 +289,9 @@ make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/ulp/ipoib
 rm -rf \$RPM_BUILD_ROOT
 mkdir -p \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 mkdir -p \$RPM_BUILD_ROOT/sbin
+
+cp $wfrconfig \$RPM_BUILD_ROOT/lib/modules/%kver/updates/ifs-pkg-config
+cp /lib/modules/$DEFAULT_KERNEL_VERSION/build/.config \$RPM_BUILD_ROOT/lib/modules/%kver/updates/ifs-base-config
 
 cp scripts/WFR-develtools/activate-wfrl-b2b.sh \$RPM_BUILD_ROOT/sbin
 cp scripts/WFR-develtools/umad-trace.stp \$RPM_BUILD_ROOT/sbin
