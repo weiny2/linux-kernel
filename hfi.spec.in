@@ -36,7 +36,7 @@
 %if 0%{?require_kver:1}
 %define kdir /lib/modules/%{require_kver}/build
 %define kver %{require_kver}
-BuildRequires: kernel-devel >= %{kver}
+BuildRequires: kernel-devel = %(echo %{kver}|sed -e 's/-/_/g')
 %else
 %define kver %(uname -r)
 %define kdir /lib/modules/%{kver}/build
@@ -58,7 +58,7 @@ Group: System Environment/Base
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Url: http://openfabrics.org
 %define arch %(uname -p)
-Requires: kernel = %(echo %{kver} | sed -e 's/\(.*\)\.%{arch}/\1/g')
+Requires: kernel = %(echo %{kver} | sed -e 's/\(.*\)\.%{arch}/\1/g' | sed -e 's/-/_/g')
 
 %description
 hfi provides the driver for Intel HFI gen1 cards
