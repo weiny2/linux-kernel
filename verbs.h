@@ -125,7 +125,7 @@ struct qib_verbs_txreq;
 #define IB_VL_VL0_7     4
 #define IB_VL_VL0_14    5
 
-static inline int qib_num_vls(int vls)
+static inline int hfi_num_vls(int vls)
 {
 	switch (vls) {
 	default:
@@ -139,6 +139,24 @@ static inline int qib_num_vls(int vls)
 		return 8;
 	case IB_VL_VL0_14:
 		return 15;
+	}
+}
+
+static inline int hfi_vls_to_ib_enum(u8 num_vls)
+{
+	switch (num_vls) {
+	case 1:
+		return IB_VL_VL0;
+	case 2:
+		return IB_VL_VL0_1;
+	case 4:
+		return IB_VL_VL0_3;
+	case 8:
+		return IB_VL_VL0_7;
+	case 15:
+		return IB_VL_VL0_14;
+	default:
+	return -1;
 	}
 }
 

@@ -626,21 +626,22 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
-	for (i = 0; i < ppd->vls_supported; i++)
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++)
 		if ((i % 2) == 0)
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= (mtu << 4);
 		else
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
 
 	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
-	pi->operational_vls = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS);
+	pi->operational_vls =
+		hfi_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
 
 	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
 	/* P_KeyViolations are counted by hardware. */
 	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
 	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
 
-	pi->vl.cap = ppd->vls_supported;
+	pi->vl.cap = hfi_num_vls(ppd->vls_supported);
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
 	pi->vl.arb_high_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
 	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
@@ -1093,12 +1094,14 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* Set operational VLs */
 	vls = pi->operational_vls & STL_PI_MASK_OPERATIONAL_VL;
 	if (vls) {
-		if (vls > ppd->vls_supported) {
+		int vl_enum = hfi_vls_to_ib_enum(vls);
+		if (vls > hfi_num_vls(ppd->vls_supported) || vl_enum < 0) {
 			pr_warn("SubnSet(STL_PortInfo) VL's supported invalid %d\n",
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		} else
-			(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS, vls);
+			(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS,
+						vl_enum);
 	}
 
 	if (pi->mkey_violations == 0)

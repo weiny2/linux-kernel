@@ -1410,7 +1410,7 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->active_width = ppd->link_width_active;
 	/* See rate_show() */
 	props->active_speed = ppd->link_speed_active;
-	props->max_vl_num = qib_num_vls(ppd->vls_supported);
+	props->max_vl_num = hfi_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
 	props->max_mtu = mtu_to_enum(max_mtu, IB_MTU_4096);
