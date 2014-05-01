@@ -68,6 +68,10 @@
  */
 int number_of_cpusets __read_mostly;
 
+#ifdef HAVE_JUMP_LABEL
+struct static_key cpusets_enabled_key = STATIC_KEY_INIT_FALSE;
+#endif
+
 /* See "Frequency meter" comments, below. */
 
 struct fmeter {
@@ -1980,7 +1984,7 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	if (is_spread_slab(parent))
 		set_bit(CS_SPREAD_SLAB, &cs->flags);
 
-	number_of_cpusets++;
+	cpuset_inc();
 
 	if (!test_bit(CGRP_CPUSET_CLONE_CHILDREN, &css->cgroup->flags))
 		goto out_unlock;
@@ -2031,7 +2035,7 @@ static void cpuset_css_offline(struct cgroup_subsys_state *css)
 	if (is_sched_load_balance(cs))
 		update_flag(CS_SCHED_LOAD_BALANCE, cs, 0);
 
-	number_of_cpusets--;
+	cpuset_dec();
 	clear_bit(CS_ONLINE, &cs->flags);
 
 	mutex_unlock(&cpuset_mutex);

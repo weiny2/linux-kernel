@@ -17,6 +17,35 @@
 
 extern int number_of_cpusets;	/* How many cpusets are defined in system? */
 
+#ifdef HAVE_JUMP_LABEL
+extern struct static_key cpusets_enabled_key;
+static inline bool cpusets_enabled(void)
+{
+	return static_key_false(&cpusets_enabled_key);
+}
+#else
+static inline bool cpusets_enabled(void)
+{
+	return number_of_cpusets > 1;
+}
+#endif
+
+static inline void cpuset_inc(void)
+{
+	number_of_cpusets++;
+#ifdef HAVE_JUMP_LABEL
+	static_key_slow_inc(&cpusets_enabled_key);
+#endif
+}
+
+static inline void cpuset_dec(void)
+{
+	number_of_cpusets--;
+#ifdef HAVE_JUMP_LABEL
+	static_key_slow_dec(&cpusets_enabled_key);
+#endif
+}
+
 extern int cpuset_init(void);
 extern void cpuset_init_smp(void);
 extern void cpuset_update_active_cpus(bool cpu_online);
@@ -119,6 +148,8 @@ static inline void set_mems_allowed(nodemask_t nodemask)
 }
 
 #else /* !CONFIG_CPUSETS */
+
+static inline bool cpusets_enabled(void) { return false; }
 
 static inline int cpuset_init(void) { return 0; }
 static inline void cpuset_init_smp(void) {}
