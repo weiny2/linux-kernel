@@ -4,12 +4,12 @@
 #include <linux/init.h>
 #include <linux/ftrace.h>
 
+#if IS_ENABLED(CONFIG_KGR)
+
 static void kgr_mark_task_in_progress(struct task_struct *p);
 static bool kgr_task_in_progress(struct task_struct *p);
 
 #include <asm/kgr.h>
-
-#if IS_ENABLED(CONFIG_KGR)
 
 #define KGR_TIMEOUT 30
 
