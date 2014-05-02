@@ -233,6 +233,10 @@ class TestInfo:
                           help="Optional PSM Location. Default: <none>",
                           metavar="PATH")
 
+        parser.add_option("--sw-diags", dest="diag_lib",
+                          help="Optional location to diag libs. Default: <none>",
+                          metavar="PATH")
+
         parser.add_option("--mpiverbs", action="store_true", dest="mpiverbs",
                           help="Run MPI over verbs instead of the default PSM")
 
@@ -313,6 +317,17 @@ class TestInfo:
         else:
             self.psm_lib = None
 
+        if options.diag_lib:
+            if options.diag_lib  == "DEFAULT":
+                self.diag_lib = options.diag_lib
+                return
+
+            self.diag_lib = os.path.abspath(options.diag_lib)
+            if not os.path.exists(self.diag_lib):
+                test_fail("diag lib is not a valid path")
+        else:
+            self.diag_lib = None
+
         if options.test_types:
             self.test_types = options.test_types
         else:
@@ -350,8 +365,11 @@ class TestInfo:
         else:
             return "DEFAULT"
 
-    def is_simics(self):
-        return self.simics
+    def get_diag_lib(self):
+        if self.diag_lib:
+            return self.diag_lib
+        else:
+            return "DEFAULT"
 
     def __str__(self):
         ret = ""
