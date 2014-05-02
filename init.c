@@ -213,14 +213,14 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 	return rcd;
 }
 
-int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
+int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 		   u16 hdrqcnt, u16 hdrqentsize)
 {
-	struct hfi_devdata *dd = uctxt->dd;
+	struct hfi_devdata *dd = cd->dd;
 	int ret = 0;
 
 	dd_dev_info(dd, "%s: setting up context %u\n", __func__,
-		    uctxt->ctxt);
+		    cd->ctxt);
 
 	if (hdrqcnt <= HFI_MIN_HDRQ_EGRBUF_CNT ||
 	    egrtids <= HFI_MIN_HDRQ_EGRBUF_CNT) {
@@ -229,9 +229,9 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 		goto done;
 	}
 
-	uctxt->eager_count = egrtids;
+	cd->eager_count = egrtids;
 
-	ret = dd->f_init_ctxt(uctxt);
+	ret = dd->f_init_ctxt(cd);
 	if (ret)
 		goto done;
 
@@ -246,22 +246,20 @@ int hfi_setup_ctxt(struct qib_ctxtdata *uctxt, u16 egrtids, u16 egrsize,
 	 * get invoked, even though we say we can sleep and this can
 	 * cause significant system problems....
 	 */
-	uctxt->rcvegrbuf_chunksize = hfi_egrbuf_alloc_size;
-	uctxt->rcvegrbuf_size = egrsize;
-	uctxt->rcvegrbufs_perchunk =
-		uctxt->rcvegrbuf_chunksize / uctxt->rcvegrbuf_size;
-	if (!is_power_of_2(uctxt->rcvegrbufs_perchunk)) {
+	cd->rcvegrbuf_chunksize = hfi_egrbuf_alloc_size;
+	cd->rcvegrbuf_size = egrsize;
+	cd->rcvegrbufs_perchunk =
+		cd->rcvegrbuf_chunksize / cd->rcvegrbuf_size;
+	if (!is_power_of_2(cd->rcvegrbufs_perchunk)) {
 		ret = -EFAULT;
 		goto done;
 	}
-	uctxt->rcvegrbuf_chunks = (uctxt->rcvegrbuf_size *
-				   uctxt->eager_count) /
-		uctxt->rcvegrbuf_chunksize;
-	uctxt->rcvegrbufs_perchunk_shift =
-		ilog2(uctxt->rcvegrbufs_perchunk);
-	uctxt->rcvhdrq_cnt = hdrqcnt;
+	cd->rcvegrbuf_chunks = (cd->rcvegrbuf_size * cd->eager_count) /
+		cd->rcvegrbuf_chunksize;
+	cd->rcvegrbufs_perchunk_shift =	ilog2(cd->rcvegrbufs_perchunk);
+	cd->rcvhdrq_cnt = hdrqcnt;
 	/* RcvHdrQ Entry Size is in DWords */
-	uctxt->rcvhdrqentsize = hdrqentsize >> 2;
+	cd->rcvhdrqentsize = hdrqentsize >> 2;
 done:
 	return ret;
 }
@@ -449,6 +447,8 @@ static void enable_chip(struct hfi_devdata *dd)
 	rcvmask = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_INTRAVAIL_ENB;
 	rcvmask |= (dd->flags & QIB_NODMA_RTAIL) ?
 		  QIB_RCVCTRL_TAILUPD_DIS : QIB_RCVCTRL_TAILUPD_ENB;
+	/* Set this as the default for kernel contexts */
+	rcvmask |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
 		dd->f_rcvctrl(dd, rcvmask, i);
 		/* XXX (Mitko): Do we care about the result of this?
@@ -720,7 +720,8 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 			dd->f_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
 					  QIB_RCVCTRL_CTXT_DIS |
 					  QIB_RCVCTRL_INTRAVAIL_DIS |
-					  QIB_RCVCTRL_PKEY_ENB, i);
+					  QIB_RCVCTRL_PKEY_DIS |
+					  QIB_RCVCTRL_ONE_PKT_EGR_DIS, i);
 		/*
 		 * Gracefully stop all sends allowing any in progress to
 		 * trickle out first.
