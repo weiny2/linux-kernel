@@ -277,6 +277,15 @@ static void __d_free(struct rcu_head *head)
 	kmem_cache_free(dentry_cache, dentry); 
 }
 
+static void dentry_free(struct dentry *dentry)
+{
+	/* if dentry was never visible to RCU, immediate free is OK */
+	if (!(dentry->d_flags & DCACHE_RCUACCESS))
+		__d_free(&dentry->d_u.d_rcu);
+	else
+		call_rcu(&dentry->d_u.d_rcu, __d_free);
+}
+
 /*
  * no locks, please.
  */
@@ -287,11 +296,14 @@ static void d_free(struct dentry *dentry)
 	if (dentry->d_op && dentry->d_op->d_release)
 		dentry->d_op->d_release(dentry);
 
-	/* if dentry was never visible to RCU, immediate free is OK */
-	if (!(dentry->d_flags & DCACHE_RCUACCESS))
-		__d_free(&dentry->d_u.d_rcu);
-	else
-		call_rcu(&dentry->d_u.d_rcu, __d_free);
+	spin_lock(&dentry->d_lock);
+	if (dentry->d_flags & DCACHE_SHRINK_LIST) {
+		dentry->d_flags |= DCACHE_MAY_FREE;
+		spin_unlock(&dentry->d_lock);
+	} else {
+		spin_unlock(&dentry->d_lock);
+		dentry_free(dentry);
+	}
 }
 
 /**
@@ -549,6 +561,16 @@ dentry_kill(struct dentry *dentry, int unlock_on_failure)
 	struct inode *inode;
 	struct dentry *parent;
 
+	if (unlikely(dentry->d_flags & DCACHE_DENTRY_KILLED)) {
+		if (dentry->d_flags & DCACHE_MAY_FREE) {
+			spin_unlock(&dentry->d_lock);
+			dentry_free(dentry);
+		} else {
+			spin_unlock(&dentry->d_lock);
+		}
+		return NULL;
+	}
+
 	inode = dentry->d_inode;
 	if (inode && !spin_trylock(&inode->i_lock)) {
 relock:
@@ -580,7 +602,10 @@ relock:
 	if ((dentry->d_flags & DCACHE_OP_PRUNE) && !d_unhashed(dentry))
 		dentry->d_op->d_prune(dentry);
 
-	dentry_lru_del(dentry);
+	if (dentry->d_flags & DCACHE_LRU_LIST) {
+		if (!(dentry->d_flags & DCACHE_SHRINK_LIST))
+			d_lru_del(dentry);
+	}
 	/* if it was on the hash then remove it */
 	__d_drop(dentry);
 	return d_kill(dentry, parent);
@@ -922,7 +947,7 @@ static void shrink_dentry_list(struct list_head *list)
 		 * We found an inuse dentry which was not removed from
 		 * the LRU because of laziness during lookup. Do not free it.
 		 */
-		if (dentry->d_lockref.count) {
+		if ((int) dentry->d_lockref.count > 0) {
 			spin_unlock(&dentry->d_lock);
 			continue;
 		}
