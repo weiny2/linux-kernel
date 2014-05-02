@@ -1471,9 +1471,10 @@ static int __noreturn rcu_gp_kthread(void *arg)
 
 		/* Handle grace-period start. */
 		for (;;) {
-			wait_event_interruptible(rsp->gp_wq,
+			wait_event_interruptible(rsp->gp_wq, ({
+						 kgr_task_safe(current);
 						 rsp->gp_flags &
-						 RCU_GP_FLAG_INIT);
+						 RCU_GP_FLAG_INIT; }));
 			if ((rsp->gp_flags & RCU_GP_FLAG_INIT) &&
 			    rcu_gp_init(rsp))
 				break;
@@ -1495,6 +1496,7 @@ static int __noreturn rcu_gp_kthread(void *arg)
 					(!ACCESS_ONCE(rnp->qsmask) &&
 					 !rcu_preempt_blocked_readers_cgp(rnp)),
 					j);
+			kgr_task_safe(current);
 			/* If grace period done, leave loop. */
 			if (!ACCESS_ONCE(rnp->qsmask) &&
 			    !rcu_preempt_blocked_readers_cgp(rnp))

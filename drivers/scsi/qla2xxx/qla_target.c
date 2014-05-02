@@ -2593,8 +2593,6 @@ static int qlt_handle_cmd_for_atio(struct scsi_qla_host *vha,
 		return -ENOMEM;
 	}
 
-	INIT_LIST_HEAD(&cmd->cmd_list);
-
 	memcpy(&cmd->atio, atio, sizeof(*atio));
 	cmd->state = QLA_TGT_STATE_NEW;
 	cmd->tgt = ha->tgt.qla_tgt;
@@ -4292,6 +4290,7 @@ int qlt_lport_register(struct qla_tgt_func_tmpl *qla_tgt_ops, u64 wwpn,
 		if (rc != 0) {
 			ha->tgt.tgt_ops = NULL;
 			ha->tgt.target_lport_ptr = NULL;
+			scsi_host_put(host);
 		}
 		mutex_unlock(&qla_tgt_mutex);
 		return rc;

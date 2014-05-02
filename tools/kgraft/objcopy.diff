@@ -1,0 +1,131 @@
+diff --git a/binutils/objcopy.c b/binutils/objcopy.c
+index 14f6b96..a6d59de 100644
+--- a/binutils/objcopy.c
++++ b/binutils/objcopy.c
+@@ -1301,7 +1301,14 @@ filter_symbols (bfd *abfd, bfd *obfd, asymbol **osyms,
+ 	keep = TRUE;
+ 
+       if (keep && is_strip_section (abfd, bfd_get_section (sym)))
+-	keep = FALSE;
++	{
++	  if (relocatable && used_in_reloc)
++	    {
++	      sym->section = bfd_und_section_ptr;
++	    }
++	  else
++	    keep = FALSE;
++	}
+ 
+       if (keep)
+ 	{
+@@ -1564,6 +1571,72 @@ copy_unknown_object (bfd *ibfd, bfd *obfd)
+   return TRUE;
+ }
+ 
++static bfd_boolean traverse_reloc_changed;
++
++static void
++traverse_relocs (bfd *ibfd, sec_ptr isection, void *symbolsarg)
++{
++  asymbol **symbols = (asymbol **) symbolsarg;
++  long relsize;
++  arelent **relpp;
++  long relcount, i;
++
++  /* If we don't keep this section, don't look at it.  */
++  if (!find_section_list (bfd_get_section_name (ibfd, isection),
++			  FALSE, SECTION_CONTEXT_COPY))
++    return;
++
++  relsize = bfd_get_reloc_upper_bound (ibfd, isection);
++  if (relsize < 0)
++    {
++      /* Do not complain if the target does not support relocations.  */
++      if (relsize == -1 && bfd_get_error () == bfd_error_invalid_operation)
++	return;
++      bfd_fatal (bfd_get_filename (ibfd));
++    }
++
++  if (relsize == 0)
++    return;
++
++  relpp = (arelent **) xmalloc (relsize);
++  relcount = bfd_canonicalize_reloc (ibfd, isection, relpp, symbols);
++  if (relcount < 0)
++    bfd_fatal (bfd_get_filename (ibfd));
++
++  /* Examine each symbol used in a relocation.  If it's not one of the
++     special bfd section symbols, then mark it with BSF_KEEP.  */
++  for (i = 0; i < relcount; i++)
++    {
++      asymbol *sym = *relpp[i]->sym_ptr_ptr;
++      asection *sec;
++      if (sym != bfd_com_section_ptr->symbol
++	  && sym != bfd_abs_section_ptr->symbol
++	  && sym != bfd_und_section_ptr->symbol)
++	{
++	  if (sym->flags & BSF_KEEP)
++	    continue;
++	  sym->flags |= BSF_KEEP;
++	}
++      /* We need to copy sections defining stuff we need for section-based
++         relocs.  For the others we can just emit undef symbols.  */
++      if (!(sym->flags & BSF_SECTION_SYM))
++	continue;
++      sec = bfd_get_section (sym);
++      if (find_section_list (bfd_get_section_name (ibfd, sec),
++			     FALSE, SECTION_CONTEXT_COPY))
++	continue;
++      printf ("copying section %s because of symbol %s (reloc from %s).\n",
++	      bfd_get_section_name (ibfd, sec), bfd_asymbol_name (sym),
++	      bfd_get_section_name (ibfd, isection));
++      find_section_list (bfd_get_section_name (ibfd, sec), TRUE,
++			 SECTION_CONTEXT_COPY);
++      traverse_reloc_changed = TRUE;
++    }
++
++  if (relpp != NULL)
++    free (relpp);
++}
++
+ /* Copy object file IBFD onto OBFD.
+    Returns TRUE upon success, FALSE otherwise.  */
+ 
+@@ -1746,6 +1819,37 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
+       return FALSE;
+     }
+ 
++  if (1)
++    {
++      long i;
++      for (i = 0; i < symcount; i++)
++	{
++	  asymbol *sym = isympp[i];
++	  asection *sec;
++	  char *name = (char *) bfd_asymbol_name (sym);
++	  bfd_boolean undefined;
++
++	  sec = bfd_get_section (sym);
++	  undefined = bfd_is_und_section (sec);
++	  if (!undefined
++	      && is_specified_symbol (name, keep_specific_htab))
++	    {
++	      find_section_list (bfd_get_section_name (ibfd, sec),
++				 TRUE, SECTION_CONTEXT_COPY);
++	      sections_copied = TRUE;
++	      traverse_reloc_changed = TRUE;
++	      printf ("copying section %s because of symbol %s.\n",
++		      bfd_get_section_name (ibfd, sec), name);
++	    }
++	}
++      /* Now mark all sections copied that are referred to from
++         relocations of sections that are already copied, transitively.  */
++      while (traverse_reloc_changed)
++	{
++	  traverse_reloc_changed = FALSE;
++	  bfd_map_over_sections (ibfd, traverse_relocs, isympp);
++	}
++    }
+   /* BFD mandates that all output sections be created and sizes set before
+      any output is done.  Thus, we traverse all sections multiple times.  */
+   bfd_map_over_sections (ibfd, setup_section, obfd);

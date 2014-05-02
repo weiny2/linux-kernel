@@ -78,6 +78,8 @@ static struct kthread *to_live_kthread(struct task_struct *k)
  */
 bool kthread_should_stop(void)
 {
+	kgr_task_safe(current);
+
 	return test_bit(KTHREAD_SHOULD_STOP, &to_kthread(current)->flags);
 }
 EXPORT_SYMBOL(kthread_should_stop);
@@ -479,6 +481,7 @@ int kthreadd(void *unused)
 		if (list_empty(&kthread_create_list))
 			schedule();
 		__set_current_state(TASK_RUNNING);
+		kgr_task_safe(current);
 
 		spin_lock(&kthread_create_lock);
 		while (!list_empty(&kthread_create_list)) {

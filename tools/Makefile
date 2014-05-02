@@ -6,6 +6,7 @@ help:
 	@echo '  cgroup     - cgroup tools'
 	@echo '  cpupower   - a tool for all things x86 CPU power'
 	@echo '  firewire   - the userspace part of nosy, an IEEE-1394 traffic sniffer'
+	@echo '  kgraft     - the userspace part needed for online patching'
 	@echo '  lguest     - a minimal 32-bit x86 hypervisor'
 	@echo '  perf       - Linux performance measurement and analysis tool'
 	@echo '  selftests  - various kernel selftests'
@@ -35,7 +36,7 @@ help:
 cpupower: FORCE
 	$(call descend,power/$@)
 
-cgroup firewire guest usb virtio vm net: FORCE
+cgroup firewire kgraft guest usb virtio vm net: FORCE
 	$(call descend,$@)
 
 liblk: FORCE
@@ -53,7 +54,7 @@ turbostat x86_energy_perf_policy: FORCE
 cpupower_install:
 	$(call descend,power/$(@:_install=),install)
 
-cgroup_install firewire_install lguest_install perf_install usb_install virtio_install vm_install net_install:
+cgroup_install firewire_install kgraft_install lguest_install perf_install usb_install virtio_install vm_install net_install:
 	$(call descend,$(@:_install=),install)
 
 selftests_install:
@@ -62,14 +63,15 @@ selftests_install:
 turbostat_install x86_energy_perf_policy_install:
 	$(call descend,power/x86/$(@:_install=),install)
 
-install: cgroup_install cpupower_install firewire_install lguest_install \
+install: cgroup_install cpupower_install \
+		kgraft_install firewire_install lguest_install \
 		perf_install selftests_install turbostat_install usb_install \
 		virtio_install vm_install net_install x86_energy_perf_policy_install
 
 cpupower_clean:
 	$(call descend,power/cpupower,clean)
 
-cgroup_clean firewire_clean lguest_clean usb_clean virtio_clean vm_clean net_clean:
+cgroup_clean kgraft_clean firewire_clean lguest_clean usb_clean virtio_clean vm_clean net_clean:
 	$(call descend,$(@:_clean=),clean)
 
 liblk_clean:
@@ -84,7 +86,8 @@ selftests_clean:
 turbostat_clean x86_energy_perf_policy_clean:
 	$(call descend,power/x86/$(@:_clean=),clean)
 
-clean: cgroup_clean cpupower_clean firewire_clean lguest_clean perf_clean \
+clean: cgroup_clean cpupower_clean kgraft_clean \
+		firewire_clean lguest_clean perf_clean \
 		selftests_clean turbostat_clean usb_clean virtio_clean \
 		vm_clean net_clean x86_energy_perf_policy_clean
 

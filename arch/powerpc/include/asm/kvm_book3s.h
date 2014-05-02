@@ -491,6 +491,11 @@ static inline ulong kvmppc_get_fault_dar(struct kvm_vcpu *vcpu)
 	return vcpu->arch.fault_dar;
 }
 
+static inline bool is_kvmppc_resume_guest(int r)
+{
+	return (r == RESUME_GUEST || r == RESUME_GUEST_NV);
+}
+
 static inline bool kvmppc_critical_section(struct kvm_vcpu *vcpu)
 {
 	return false;

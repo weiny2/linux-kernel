@@ -61,6 +61,11 @@ extern const uuid_le mei_wd_guid;
 #define MEI_CLIENTS_MAX 256
 
 /*
+ * maximum number of consecutive resets
+ */
+#define MEI_MAX_CONSEC_RESET  3
+
+/*
  * Number of File descriptors/handles
  * that can be opened to the driver.
  *
@@ -326,6 +331,7 @@ struct mei_cl_device {
 /**
  * struct mei_device -  MEI private device struct
 
+ * @reset_count - limits the number of consecutive resets
  * @hbm_state - state of host bus message protocol
  * @mem_addr - mem mapped base register address
 
@@ -369,6 +375,7 @@ struct mei_device {
 	/*
 	 * mei device  states
 	 */
+	unsigned long reset_count;
 	enum mei_dev_state dev_state;
 	enum mei_hbm_state hbm_state;
 	u16 init_clients_timer;
@@ -426,6 +433,7 @@ struct mei_device {
 	bool iamthif_canceled;
 
 	struct work_struct init_work;
+	struct work_struct reset_work;
 
 	/* List of bus devices */
 	struct list_head device_list;
@@ -459,9 +467,11 @@ static inline u32 mei_data2slots(size_t length)
  * mei init function prototypes
  */
 void mei_device_init(struct mei_device *dev);
-void mei_reset(struct mei_device *dev, int interrupts);
+int mei_reset(struct mei_device *dev);
 int mei_start(struct mei_device *dev);
+int mei_restart(struct mei_device *dev);
 void mei_stop(struct mei_device *dev);
+void mei_cancel_work(struct mei_device *dev);
 
 /*
  *  MEI interrupt functions prototype
@@ -509,7 +519,7 @@ int mei_amthif_irq_read(struct mei_device *dev, s32 *slots);
  * NFC functions
  */
 int mei_nfc_host_init(struct mei_device *dev);
-void mei_nfc_host_exit(void);
+void mei_nfc_host_exit(struct mei_device *dev);
 
 /*
  * NFC Client UUID

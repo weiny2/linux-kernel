@@ -809,6 +809,7 @@ static struct svc_xprt *svc_tcp_accept(struct svc_xprt *xprt)
 	struct socket	*newsock;
 	struct svc_sock	*newsvsk;
 	int		err, slen;
+	struct dst_entry *dst;
 	RPC_IFDEBUG(char buf[RPC_MAX_ADDRBUFLEN]);
 
 	dprintk("svc: tcp_accept %p sock %p\n", svsk, sock);
@@ -864,6 +865,14 @@ static struct svc_xprt *svc_tcp_accept(struct svc_xprt *xprt)
 		slen = offsetof(struct sockaddr, sa_data);
 	}
 	svc_xprt_set_local(&newsvsk->sk_xprt, sin, slen);
+
+	clear_bit(XPT_LOCAL, &newsvsk->sk_xprt.xpt_flags);
+	rcu_read_lock();
+	dst = rcu_dereference(newsock->sk->sk_dst_cache);
+	if (dst && dst->dev &&
+	    (dst->dev->features & NETIF_F_LOOPBACK))
+		set_bit(XPT_LOCAL, &newsvsk->sk_xprt.xpt_flags);
+	rcu_read_unlock();
 
 	if (serv->sv_stats)
 		serv->sv_stats->nettcpconn++;
@@ -1110,6 +1119,7 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 
 	rqstp->rq_xprt_ctxt   = NULL;
 	rqstp->rq_prot	      = IPPROTO_TCP;
+	rqstp->rq_local	      = !!test_bit(XPT_LOCAL, &svsk->sk_xprt.xpt_flags);
 
 	p = (__be32 *)rqstp->rq_arg.head[0].iov_base;
 	calldir = p[1];

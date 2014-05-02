@@ -14,6 +14,7 @@
 #include <linux/writeback.h>
 #include <linux/swap.h>
 #include <linux/migrate.h>
+#include <linux/freezer.h>
 
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>
@@ -1452,6 +1453,43 @@ void nfs_writeback_done(struct rpc_task *task, struct nfs_write_data *data)
 
 
 #if IS_ENABLED(CONFIG_NFS_V3) || IS_ENABLED(CONFIG_NFS_V4)
+
+static int _wait_bit_connected(struct rpc_clnt *cl)
+{
+	if (fatal_signal_pending(current))
+		return -ERESTARTSYS;
+	if (!cl || rpc_is_foreign(cl)) {
+		/* it might not stay foreign forever */
+		freezable_schedule_timeout_unsafe(HZ);
+	} else {
+		unsigned long *commit_start = current->journal_info;
+		unsigned long waited = jiffies - *commit_start;
+
+		/* we could block forever here ... */
+		if (waited >= HZ/10)
+			/* Too long, give up */
+			return -EAGAIN;
+
+		freezable_schedule_timeout_unsafe(HZ/10 - waited);
+	}
+	return 0;
+}
+
+static int nfs_wait_bit_connected(void *word)
+{
+	struct nfs_inode *nfsi = container_of(word, struct nfs_inode, flags);
+
+	return _wait_bit_connected(NFS_CLIENT(&nfsi->vfs_inode));
+}
+
+static int rpc_wait_bit_connected(void *word)
+{
+	struct rpc_task *task = container_of(word, struct rpc_task, tk_runstate);
+
+	return _wait_bit_connected(task->tk_client);
+}
+
+
 static int nfs_commit_set_lock(struct nfs_inode *nfsi, int may_wait)
 {
 	int ret;
@@ -1462,7 +1500,8 @@ static int nfs_commit_set_lock(struct nfs_inode *nfsi, int may_wait)
 		return 0;
 	ret = out_of_line_wait_on_bit_lock(&nfsi->flags,
 				NFS_INO_COMMIT,
-				nfs_wait_bit_killable,
+				(may_wait & FLUSH_COND_CONNECTED) ?
+				   nfs_wait_bit_connected : nfs_wait_bit_killable,
 				TASK_KILLABLE);
 	return (ret < 0) ? ret : 1;
 }
@@ -1513,8 +1552,12 @@ int nfs_initiate_commit(struct rpc_clnt *clnt, struct nfs_commit_data *data,
 	task = rpc_run_task(&task_setup_data);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
-	if (how & FLUSH_SYNC)
-		rpc_wait_for_completion_task(task);
+	if (how & FLUSH_SYNC) {
+		if (how & FLUSH_COND_CONNECTED)
+			__rpc_wait_for_completion_task(task, rpc_wait_bit_connected);
+		else
+			rpc_wait_for_completion_task(task);
+	}
 	rpc_put_task(task);
 	return 0;
 }
@@ -1690,8 +1733,15 @@ int nfs_commit_inode(struct inode *inode, int how)
 {
 	LIST_HEAD(head);
 	struct nfs_commit_info cinfo;
-	int may_wait = how & FLUSH_SYNC;
+	int may_wait = how & (FLUSH_SYNC | FLUSH_COND_CONNECTED);
 	int res;
+	int error;
+	unsigned long commit_start;
+
+	if (how & FLUSH_COND_CONNECTED) {
+		commit_start = jiffies;
+		current->journal_info = &commit_start;
+	}
 
 	res = nfs_commit_set_lock(NFS_I(inode), may_wait);
 	if (res <= 0)
@@ -1699,21 +1749,24 @@ int nfs_commit_inode(struct inode *inode, int how)
 	nfs_init_cinfo_from_inode(&cinfo, inode);
 	res = nfs_scan_commit(inode, &head, &cinfo);
 	if (res) {
-		int error;
 
 		error = nfs_generic_commit_list(inode, &head, how, &cinfo);
 		if (error < 0)
-			return error;
+			goto error;
 		if (!may_wait)
 			goto out_mark_dirty;
 		error = wait_on_bit(&NFS_I(inode)->flags,
 				NFS_INO_COMMIT,
-				nfs_wait_bit_killable,
+				(how & FLUSH_COND_CONNECTED) ?
+				   nfs_wait_bit_connected : nfs_wait_bit_killable,
 				TASK_KILLABLE);
+		if ((how & FLUSH_COND_CONNECTED) && error == -EAGAIN)
+			goto out_mark_dirty;
 		if (error < 0)
-			return error;
+			goto error;
 	} else
 		nfs_commit_clear_lock(NFS_I(inode));
+	current->journal_info = NULL;
 	return res;
 	/* Note: If we exit without ensuring that the commit is complete,
 	 * we must mark the inode as dirty. Otherwise, future calls to
@@ -1721,8 +1774,12 @@ int nfs_commit_inode(struct inode *inode, int how)
 	 * that the data is on the disk.
 	 */
 out_mark_dirty:
+	current->journal_info = NULL;
 	__mark_inode_dirty(inode, I_DIRTY_DATASYNC);
 	return res;
+error:
+	current->journal_info = NULL;
+	return error;
 }
 
 static int nfs_commit_unstable_pages(struct inode *inode, struct writeback_control *wbc)

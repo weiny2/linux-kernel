@@ -14,6 +14,7 @@
 #include <linux/kthread.h>
 #include <linux/lockdep.h>
 #include <linux/export.h>
+#include <linux/sched.h>
 #include <linux/sysctl.h>
 #include <linux/utsname.h>
 
@@ -213,8 +214,10 @@ static int watchdog(void *dummy)
 	for ( ; ; ) {
 		unsigned long timeout = sysctl_hung_task_timeout_secs;
 
-		while (schedule_timeout_interruptible(timeout_jiffies(timeout)))
+		while (schedule_timeout_interruptible(timeout_jiffies(timeout))) {
+			kgr_task_safe(current);
 			timeout = sysctl_hung_task_timeout_secs;
+		}
 
 		check_hung_uninterruptible_tasks(timeout);
 	}

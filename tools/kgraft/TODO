@@ -1,0 +1,20 @@
+TODO list for kgraft tools
+
+extract-syms.sh shouldn't use vmlinux.o for extraction, but the
+underlying individual .o files.  The sections in vmlinux.o will be
+catted together already (for things like data.mostly_read), referencing
+too much unrelated stuff.
+
+extract-syms.sh should use an optional inliner tree to expand the set
+of symbols to those that have them inlined.  Further it should use
+(optionally) filename:symbol pairs for those cases where static functions
+need to be extracted whose names happen to occur multiple times in different
+units.
+
+Perhaps a top-level script taking a kernel patch, and pulling everything
+together should be created (applying patch, building kernel the right way,
+extracting stuff and so on).
+
+The seeding symbol list currently needs to come from a human.  It's probably
+feasible to generate that list for most cases by interpreting a kernel
+diff.  Binary comparison should _not_ be used to generate it.

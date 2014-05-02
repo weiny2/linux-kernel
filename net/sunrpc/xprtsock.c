@@ -636,6 +636,15 @@ static int xs_udp_send_request(struct rpc_task *task)
 			xdr->len - req->rq_bytes_sent, status);
 
 	if (status >= 0) {
+		struct dst_entry *dst;
+		rcu_read_lock();
+		dst = rcu_dereference(transport->sock->sk->sk_dst_cache);
+		if (dst && dst->dev && (dst->dev->features & NETIF_F_LOOPBACK))
+			set_bit(XPRT_LOCAL, &xprt->state);
+		else
+			clear_bit(XPRT_LOCAL, &xprt->state);
+		rcu_read_unlock();
+
 		req->rq_xmit_bytes_sent += status;
 		if (status >= req->rq_slen)
 			return 0;
@@ -1502,6 +1511,7 @@ static void xs_sock_mark_closed(struct rpc_xprt *xprt)
 static void xs_tcp_state_change(struct sock *sk)
 {
 	struct rpc_xprt *xprt;
+	struct dst_entry *dst;
 
 	read_lock_bh(&sk->sk_callback_lock);
 	if (!(xprt = xprt_from_sock(sk)))
@@ -1531,6 +1541,13 @@ static void xs_tcp_state_change(struct sock *sk)
 
 			xprt_wake_pending_tasks(xprt, -EAGAIN);
 		}
+		rcu_read_lock();
+		dst = rcu_dereference(sk->sk_dst_cache);
+		if (dst && dst->dev && (dst->dev->features & NETIF_F_LOOPBACK))
+			set_bit(XPRT_LOCAL, &xprt->state);
+		else
+			clear_bit(XPRT_LOCAL, &xprt->state);
+		rcu_read_unlock();
 		spin_unlock(&xprt->transport_lock);
 		break;
 	case TCP_FIN_WAIT1:

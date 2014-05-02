@@ -1513,6 +1513,35 @@ ftrace_ops_test(struct ftrace_ops *ops, unsigned long ip, void *regs)
 		}				\
 	}
 
+/**
+ * ftrace_function_to_fentry -- lookup fentry location for a function
+ * @addr: function address to find a fentry in
+ *
+ * Perform a lookup in a list of fentry callsites to find one that fits a
+ * specified function @addr. It returns the corresponding fentry callsite or
+ * zero on failure.
+ */
+unsigned long ftrace_function_to_fentry(unsigned long addr)
+{
+	const struct dyn_ftrace *rec;
+	const struct ftrace_page *pg;
+	unsigned long ret = 0;
+
+	mutex_lock(&ftrace_lock);
+	do_for_each_ftrace_rec(pg, rec) {
+		unsigned long off;
+		if (!kallsyms_lookup_size_offset(rec->ip, NULL, &off))
+			continue;
+		if (addr + off == rec->ip) {
+			ret = rec->ip;
+			goto end;
+		}
+	} while_for_each_ftrace_rec()
+end:
+	mutex_unlock(&ftrace_lock);
+
+	return ret;
+}
 
 static int ftrace_cmp_recs(const void *a, const void *b)
 {
