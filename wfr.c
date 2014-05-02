@@ -4456,7 +4456,7 @@ static void write_uninitialized_csrs_and_memories(struct hfi_devdata *dd)
 }
 
 /* set CCE CSRs to chip reset defaults */
-static void reset_cce(struct hfi_devdata *dd)
+static void reset_cce_csrs(struct hfi_devdata *dd)
 {
 	int i;
 
@@ -4502,8 +4502,135 @@ static void reset_cce(struct hfi_devdata *dd)
 		write_csr(dd, WFR_CCE_INT_COUNTER_ARRAY32 + (8 * i), 0);
 }
 
+/* set ASIC CSRs to chip reset defaults */
+static void reset_asic_csrs(struct hfi_devdata *dd)
+{
+	static DEFINE_MUTEX(asic_mutex);
+	static int called;
+	int i;
+
+	/*
+	 * TODO:  If the HFIs are shared between separate nodes or VMs,
+	 * then more will need to be done here.  One idea is a module
+	 * parameter that returns early, letting the first power-on or
+	 * a known first load do the reset and blocking all others.
+	 */
+
+	/*
+	 * These CSRs should only be reset once - the first one here will
+	 * do the work.  Use a mutex so that a non-first caller waits until
+	 * the first is finished before it can proceed.
+	 */
+	mutex_lock(&asic_mutex);
+	if (called)
+		goto done;
+	called = 1;
+
+	if (dd->icode != WFR_ICODE_FPGA_EMULATION) {
+		/* emulation does not have an SBUS - leave these alone */
+		/*
+		 * TODO: All writes to ASIC_CFG_SBUS_REQUEST do something.
+		 * Do we want to write a reset here or leave it alone?
+		 * Notes:
+		 * o The reset is not zero if aimed at the core.  See the
+		 *   SBUS documentation for details.
+		 * o If the SBUS firmware has been upated (e.g. by the BIOS),
+		 *   will the reset revert that?
+		 */
+		/*write_csr(dd, WFR_ASIC_CFG_SBUS_REQUEST, 0);*/
+		write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
+	}
+	/* WFR_ASIC_SBUS_RESULT read-only */
+	write_csr(dd, WFR_ASIC_STS_SBUS_COUNTERS, 0);
+	for (i = 0; i < ASIC_NUM_SCRATCH; i++)
+		write_csr(dd, WFR_ASIC_CFG_SCRATCH + (8 * i), 0);
+	write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);	/* this will clear it */
+	write_csr(dd, WFR_ASIC_CFG_DRV_STR, 0);
+	write_csr(dd, WFR_ASIC_CFG_THERM_POLL_EN, 0);
+	/* WFR_ASIC_STS_THERM read-only */
+	/* WFR_ASIC_CFG_RESET leave alone */
+
+	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, 0);
+	/* WFR_ASIC_PCIE_SD_HOST_STATUS read-only */
+	write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_DATA_CODE, 0);
+	write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_ENABLE, 0);
+	/* WFR_ASIC_PCIE_SD_INTRPT_PROGRESS read-only */
+	write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_STATUS, ~0ull); /* clear */
+	/* WFR_ASIC_HFI0_PCIE_SD_INTRPT_RSPD_DATA read-only */
+	/* WFR_ASIC_HFI1_PCIE_SD_INTRPT_RSPD_DATA read-only */
+	for (i = 0; i < 16; i++)
+		write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_LIST + (8 * i), 0);
+
+	/* WFR_ASIC_GPIO_IN read-only */
+	write_csr(dd, WFR_ASIC_GPIO_OE, 0);
+	write_csr(dd, WFR_ASIC_GPIO_INVERT, 0);
+	write_csr(dd, WFR_ASIC_GPIO_OUT, 0);
+	write_csr(dd, WFR_ASIC_GPIO_MASK, 0);
+	/* WFR_ASIC_GPIO_STATUS read-only */
+	write_csr(dd, WFR_ASIC_GPIO_CLEAR, ~0ull);
+	/* WFR_ASIC_GPIO_FORCE leave alone */
+
+	/* WFR_ASIC_QSFP1_IN read-only */
+	write_csr(dd, WFR_ASIC_QSFP1_OE, 0);
+	write_csr(dd, WFR_ASIC_QSFP1_INVERT, 0);
+	write_csr(dd, WFR_ASIC_QSFP1_OUT, 0);
+	write_csr(dd, WFR_ASIC_QSFP1_MASK, 0);
+	/* WFR_ASIC_QSFP1_STATUS read-only */
+	write_csr(dd, WFR_ASIC_QSFP1_CLEAR, ~0ull);
+	/* WFR_ASIC_QSFP1_FORCE leave alone */
+
+	/* WFR_ASIC_QSFP2_IN read-only */
+	write_csr(dd, WFR_ASIC_QSFP2_OE, 0);
+	write_csr(dd, WFR_ASIC_QSFP2_INVERT, 0);
+	write_csr(dd, WFR_ASIC_QSFP2_OUT, 0);
+	write_csr(dd, WFR_ASIC_QSFP2_MASK, 0);
+	/* WFR_ASIC_QSFP2_STATUS read-only */
+	write_csr(dd, WFR_ASIC_QSFP2_CLEAR, ~0ull);
+	/* WFR_ASIC_QSFP2_FORCE leave alone */
+
+	write_csr(dd, WFR_ASIC_EEP_CTL_STAT, WFR_ASIC_EEP_CTL_STAT_RESETCSR);
+	/* this also writes a NOP command, clearing paging mode */
+	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, 0);
+	write_csr(dd, WFR_ASIC_EEP_DATA, 0);
+	/* WFR_ASIC_MAN_EFUSE* read-only */
+	/* WFR_ASIC_WFR_EFUSE read-only */
+	/* WFR_ASIC_WFR_EFUSE_REGS* read-only */
+
+done:
+	mutex_unlock(&asic_mutex);
+}
+
+/* set MISC CSRs to chip reset defaults */
+static void reset_misc_csrs(struct hfi_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < 32; i++) {
+		write_csr(dd, WFR_MISC_CFG_RSA_R2 + (8 * i), 0);
+		write_csr(dd, WFR_MISC_CFG_RSA_SIGNATURE + (8 * i), 0);
+		/*
+		 * TODO: Writing this causes the PCIe to fail in emulation.
+		 * Note: It is not required that these RSA arrays be zeroed
+		 * as they all need to be completely written to work correctly.
+		 */
+		/*write_csr(dd, WFR_MISC_CFG_RSA_MODULUS + (8 * i), 0);*/
+	}
+	write_csr(dd, WFR_MISC_CFG_SHA_PRELOAD, 0);
+	write_csr(dd, WFR_MISC_CFG_RSA_CMD, 0);
+	write_csr(dd, WFR_MISC_CFG_RSA_MU, 0);
+	write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
+	/* WFR_MISC_STS_8051_DIGEST read-only */
+	/* WFR_MISC_STS_SBM_DIGEST read-only */
+	/* WFR_MISC_STS_PCIE_DIGEST read-only */
+	/* WFR_MISC_STS_FAB_DIGEST read-only */
+	/* WFR_MISC_ERR_STATUS read-only */
+	write_csr(dd, WFR_MISC_ERR_MASK, 0);
+	write_csr(dd, WFR_MISC_ERR_CLEAR, ~0ull);
+	/* WFR_MISC_ERR_FORCE leave alone */
+}
+
 /* set TXE CSRs to chip reset defaults */
-static void reset_txe(struct hfi_devdata *dd)
+static void reset_txe_csrs(struct hfi_devdata *dd)
 {
 	int i;
 
@@ -4620,8 +4747,64 @@ static void reset_txe(struct hfi_devdata *dd)
 	}
 }
 
+/*
+ * Expect on entry:
+ * o Packet ingress is disabled, i.e. RcvCtrl.RcvPortEnable == 0
+ */
+static void init_rbufs(struct hfi_devdata *dd)
+{
+	u64 reg;
+	int count;
+
+	/*
+	 * Wait for DMA to stop: RxRbufPktPending and RxPktInProgress are
+	 * clear.
+	 */
+	count = 0;
+	while (1) {
+		reg = read_csr(dd, WFR_RCV_STATUS);
+		if ((reg & (WFR_RCV_STATUS_RX_RBUF_PKT_PENDING_SMASK
+			    | WFR_RCV_STATUS_RX_PKT_IN_PROGRESS_SMASK)) == 0)
+			break;
+		/*
+		 * TODO: always happens in simlulator on reload as of v38.
+		 * See HSD 290668 for details.
+		 */
+		if (count++ > 100) {
+			dd_dev_err(dd,
+				"%s: in-progress DMA not clearing: RcvStatus 0x%llx, continuing\n",
+				__func__, reg);
+			break;
+		}
+		udelay(2);
+	}
+
+	/* start the init */
+	write_csr(dd, WFR_RCV_CTRL,
+		read_csr(dd, WFR_RCV_CTRL) | WFR_RCV_CTRL_RX_RBUF_INIT_SMASK);
+
+	/* wait for the init to finish */
+	count = 0;
+	while (1) {
+		udelay(2);
+		reg = read_csr(dd, WFR_RCV_STATUS);
+		if (reg & (WFR_RCV_STATUS_RX_RBUF_INIT_DONE_SMASK))
+			break;
+		/*
+		 * TODO: always happens in simlulator as of v38.
+		 * See HSD 290669 for details.
+		 */
+		if (count++ > 100) {
+			dd_dev_err(dd,
+				"%s: RcvStatus.RxRbufInit not set, continuing\n",
+				__func__);
+			break;
+		}
+	}
+}
+
 /* set RXE CSRs to chip reset defaults */
-static void reset_rxe(struct hfi_devdata *dd)
+static void reset_rxe_csrs(struct hfi_devdata *dd)
 {
 	int i, j;
 
@@ -4629,6 +4812,7 @@ static void reset_rxe(struct hfi_devdata *dd)
 	 * RXE Kernel CSRs
 	 */
 	write_csr(dd, WFR_RCV_CTRL, 0);
+	init_rbufs(dd);
 	/* WFR_RCV_STATUS read-only */
 	/* WFR_RCV_CONTEXTS read-only */
 	/* WFR_RCV_ARRAY_CNT read-only */
@@ -4763,7 +4947,6 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
  */
 static void init_chip(struct hfi_devdata *dd)
 {
-	u64 reg, mask;
 	int i;
 
 	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
@@ -4776,14 +4959,6 @@ static void init_chip(struct hfi_devdata *dd)
 		dd_dev_info(dd, "WORKAROUND: forcing sdma engines to 4\n");
 		dd->chip_sdma_engines = 4;
 	}
-
-	/*
-	 * If we are holding the ASIC mutex, clear it.
-	 */
-	reg = read_csr(dd, WFR_ASIC_CFG_MUTEX);
-	mask = 1ull << dd->hfi_id;
-	if (reg & mask)
-		write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);
 
 	/*
 	 * Put the WFR CSRs in a known state.
@@ -4832,12 +5007,11 @@ static void init_chip(struct hfi_devdata *dd)
 
 	} else {
 		dd_dev_info(dd, "Resetting CSRs with writes\n");
-		reset_cce(dd);
-		reset_txe(dd);
-		reset_rxe(dd);
-		/* FIXME: */
-		/* reset_asic(dd); */
-		/* reset_misc(dd); */
+		reset_cce_csrs(dd);
+		reset_txe_csrs(dd);
+		reset_rxe_csrs(dd);
+		reset_asic_csrs(dd);
+		reset_misc_csrs(dd);
 	}
 	/* clear the DC reset */
 	write_csr(dd, WFR_CCE_DC_CTRL, 0);
@@ -5361,13 +5535,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	ret = load_firmware(dd); /* asymmetric with dispose_firmware() */
 	if (ret)
 		goto bail_clear_intr;
-
-	/*
-	 * TODO: RX init, TX init
-	 * 
-	 * Set the CSRs to sane, expected values - the driver can be
-	 * loaded and unloaded, we can't expect reset values.
-	 */
 
 	ret = init_cntrs(dd);
 	if (ret)
