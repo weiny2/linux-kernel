@@ -2981,8 +2981,9 @@ process_slot:
 							 new_key.offset + datal,
 							 1);
 				if (ret) {
-					btrfs_abort_transaction(trans, root,
-								ret);
+					if (ret != -EOPNOTSUPP)
+						btrfs_abort_transaction(trans,
+							root, ret);
 					btrfs_end_transaction(trans, root);
 					goto out;
 				}
@@ -3141,8 +3142,9 @@ static noinline long btrfs_ioctl_clone(struct file *file, unsigned long srcfd,
 	 *   decompress into destination's address_space (the file offset
 	 *   may change, so source mapping won't do), then recompress (or
 	 *   otherwise reinsert) a subrange.
-	 * - allow ranges within the same file to be cloned (provided
-	 *   they don't overlap)?
+	 *
+	 * - split destination inode's inline extents.  The inline extents can
+	 *   be either compressed or non-compressed.
 	 */
 
 	/* the destination must be opened for writing */
@@ -3453,6 +3455,11 @@ static long btrfs_ioctl_space_info(struct btrfs_root *root, void __user *arg)
 		up_read(&info->groups_sem);
 	}
 
+	/*
+	 * Global block reserve, exported as a space_info
+	 */
+	slot_count++;
+
 	/* space_slots == 0 means they are asking for a count */
 	if (space_args.space_slots == 0) {
 		space_args.total_spaces = slot_count;
@@ -3509,6 +3516,21 @@ static long btrfs_ioctl_space_info(struct btrfs_root *root, void __user *arg)
 				break;
 		}
 		up_read(&info->groups_sem);
+	}
+
+	/*
+	 * Add global block reserve
+	 */
+	if (slot_count) {
+		struct btrfs_block_rsv *block_rsv = &root->fs_info->global_block_rsv;
+
+		spin_lock(&block_rsv->lock);
+		space.total_bytes = block_rsv->size;
+		space.used_bytes = block_rsv->size - block_rsv->reserved;
+		spin_unlock(&block_rsv->lock);
+		space.flags = BTRFS_SPACE_INFO_GLOBAL_RSV;
+		memcpy(dest, &space, sizeof(space));
+		space_args.total_spaces++;
 	}
 
 	user_dest = (struct btrfs_ioctl_space_info __user *)
