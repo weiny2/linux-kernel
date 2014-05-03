@@ -337,18 +337,21 @@ int mgag200_driver_load(struct drm_device *dev, unsigned long flags)
 	/* Make small buffers to store a hardware cursor (double buffered icon updates) */
 	mgag200_bo_create(dev, roundup(48*64, PAGE_SIZE), 0, 0,
 					  &mdev->cursor.pixels_1);
+	if (!mdev->cursor.pixels_1)
+		goto cursor_nospace;
 	mgag200_bo_create(dev, roundup(48*64, PAGE_SIZE), 0, 0,
 					  &mdev->cursor.pixels_2);
-	if (!mdev->cursor.pixels_2 || !mdev->cursor.pixels_1)
-		goto cursor_nospace;
-	mdev->cursor.pixels_current = mdev->cursor.pixels_1;
-	mdev->cursor.pixels_prev = mdev->cursor.pixels_2;
-	goto cursor_done;
- cursor_nospace:
-	mdev->cursor.pixels_1 = NULL;
-	mdev->cursor.pixels_2 = NULL;
+	if (!mdev->cursor.pixels_2) {
+		drm_gem_object_unreference_unlocked(&mdev->cursor.pixels_1->gem);
+		mdev->cursor.pixels_1 = NULL;
+	} else {
+		mdev->cursor.pixels_current = mdev->cursor.pixels_1;
+		mdev->cursor.pixels_prev = mdev->cursor.pixels_2;
+		goto out;
+	}
+
+cursor_nospace:
 	dev_warn(&dev->pdev->dev, "Could not allocate space for cursors. Not doing hardware cursors.\n");
- cursor_done:
 
 out:
 	if (r)
@@ -363,6 +366,10 @@ int mgag200_driver_unload(struct drm_device *dev)
 	if (mdev == NULL)
 		return 0;
 	mgag200_modeset_fini(mdev);
+	if (mdev->cursor.pixels_1)
+		drm_gem_object_unreference_unlocked(&mdev->cursor.pixels_1->gem);
+	if (mdev->cursor.pixels_2)
+		drm_gem_object_unreference_unlocked(&mdev->cursor.pixels_2->gem);
 	mgag200_fbdev_fini(mdev);
 	drm_mode_config_cleanup(dev);
 	mgag200_mm_fini(mdev);
