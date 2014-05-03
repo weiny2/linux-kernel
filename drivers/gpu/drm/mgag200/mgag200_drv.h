@@ -172,6 +172,8 @@ struct mga_mc {
 };
 
 enum mga_type {
+	G200_PCI,
+	G200,
 	G200_SE_A,
 	G200_SE_B,
 	G200_WB,
@@ -216,6 +218,11 @@ struct mga_device {
 
 	/* SE model number stored in reg 0x1e24 */
 	u32 unique_rev_id;
+	struct  {
+		long ref_clk;
+		long pclk_min;
+		long pclk_max;
+	} bios;
 };
 
 

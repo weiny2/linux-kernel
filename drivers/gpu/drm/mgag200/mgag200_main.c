@@ -146,6 +146,111 @@ static int mga_vram_init(struct mga_device *mdev)
 	return 0;
 }
 
+#define MGA_BIOS_OFFSET 0x7ffc
+static void mgag200_interpret_bios(struct mga_device *mdev, uint8_t __iomem *bios, size_t size)
+{
+	int offset;
+	uint pins_len, version;
+	static const unsigned expected_length[] = { 0, 64, 64, 64, 128, 128 };
+	int tmp;
+
+	if (size < MGA_BIOS_OFFSET + 1)
+		return;
+
+	if (bios[45] != 'M' || bios[46] != 'A' || bios[47] != 'T' ||
+	    bios[48] != 'R' || bios[49] != 'O' || bios[50] != 'X')
+		return;
+
+	offset = bios[MGA_BIOS_OFFSET + 1] << 8 | bios[MGA_BIOS_OFFSET];
+
+	if (offset + 5 > size)
+		return;
+
+#define PINS(x) (bios[offset + x])
+	if (PINS(0) == 0x2e && PINS(1) == 0x41) {
+		version = PINS(5);
+		pins_len = PINS(2);
+	} else {
+		version = 1;
+		pins_len = PINS(0) + (PINS(1) << 8);
+	}
+
+	if (version < 1 || version > 5) {
+		printk(KERN_WARNING "mgag200: Unknown BIOS PInS version: %d\n", version);
+		return;
+	}
+	if (pins_len != expected_length[version]) {
+		printk(KERN_WARNING "mgag200: Unexpected BIOS PInS size: %d expeced: %d\n",
+		       pins_len, expected_length[version]);
+		return;
+	}
+
+	if (offset + pins_len > size)
+		return;
+
+	DRM_DEBUG_KMS("MATROX BIOS PInS version %d size: %d found\n", version, pins_len);
+
+	switch (version) {
+	case 1:
+		tmp = PINS(24) + (PINS(25) << 8);
+		if (tmp)
+			mdev->bios.pclk_max = tmp * 10;
+		break;
+	case 2:
+		if (PINS(41) != 0xff)
+			mdev->bios.pclk_max = (PINS(41) + 100) * 1000;
+		break;
+	case 3:
+		if (PINS(36) != 0xff)
+			mdev->bios.pclk_max = (PINS(36) + 100) * 1000;
+		if ((PINS(52) & 0x20) != 0)
+			mdev->bios.ref_clk = 14318;
+		break;
+	case 4:
+		if (PINS(39) != 0xff)
+			mdev->bios.pclk_max = PINS(39) * 4 * 1000;
+		if ((PINS(92) & 0x01) != 0)
+		    mdev->bios.ref_clk = 14318;
+		break;
+	case 5:
+		tmp = (PINS(4) != 0) ? 8000 : 6000;
+		if (PINS(123) != 0xff)
+			mdev->bios.pclk_min = PINS(123) * tmp;
+		if (PINS(38) != 0xff)
+			mdev->bios.pclk_max = PINS(38) * tmp;
+		if ((PINS(110) & 0x01) != 0)
+			mdev->bios.ref_clk = 14318;
+		break;
+	default:
+		break;
+	}
+#undef PINS
+}
+
+static void mgag200_probe_bios(struct mga_device *mdev)
+{
+	uint8_t __iomem *bios;
+	size_t size;
+
+	mdev->bios.pclk_min = 50000;
+	mdev->bios.pclk_max = 230000;
+	mdev->bios.ref_clk = 27050;
+
+	bios = pci_map_rom(mdev->dev->pdev, &size);
+
+	if (!bios)
+		return;
+
+	if (size != 0 && bios[0] == 0x55 && bios[1] == 0xaa)
+		mgag200_interpret_bios(mdev, bios, size);
+
+	pci_unmap_rom(mdev->dev->pdev, bios);
+
+	DRM_DEBUG_KMS("pclk_min: %ld pclk_max: %ld ref_clk: %ld\n",
+		      mdev->bios.pclk_min, mdev->bios.pclk_max,
+		      mdev->bios.ref_clk);
+}
+
 static int mgag200_device_init(struct drm_device *dev,
 			       uint32_t flags)
 {
@@ -177,6 +282,9 @@ static int mgag200_device_init(struct drm_device *dev,
 	/* stash G200 SE model number for later use */
 	if (IS_G200_SE(mdev))
 		mdev->unique_rev_id = RREG32(0x1e24);
+
+	if (mdev->type == G200_PCI || mdev->type == G200)
+		mgag200_probe_bios(mdev);
 
 	ret = mga_vram_init(mdev);
 	if (ret)

@@ -103,6 +103,72 @@ static bool mga_crtc_mode_fixup(struct drm_crtc *crtc,
 	return true;
 }
 
+static int mga_set_plls(struct mga_device *mdev, long clock)
+{
+	const int post_div_max = 7;
+	const int in_div_min = 1;
+	const int in_div_max = 6;
+	const int feed_div_min = 7;
+	const int feed_div_max = 127;
+	u8 testm, testn;
+	u8 n = 0, m = 0, p, s;
+	long f_vco;
+	long computed;
+	long delta, tmp_delta;
+
+	long ref_clk = mdev->bios.ref_clk;
+	long p_clk_min = mdev->bios.pclk_min;
+	long p_clk_max =  mdev->bios.pclk_max;
+
+	if (clock > p_clk_max) {
+		printk(KERN_WARNING "Pixel Clock %ld too high\n", clock);
+		return 1;
+	}
+
+	if (clock <  p_clk_min >> 3)
+		clock = p_clk_min >> 3;
+
+	f_vco = clock;
+	for (p = 0;
+	     p <= post_div_max && f_vco < p_clk_min;
+	     p = (p << 1) + 1, f_vco <<= 1);
+
+	delta = clock;
+
+	for ( testm = in_div_min; testm <= in_div_max; testm++) {
+		for (testn = feed_div_min; testn <= feed_div_max; testn++) {
+			computed = ref_clk * (testn + 1) / (testm + 1);
+			if (computed < f_vco)
+				tmp_delta = f_vco - computed;
+			else
+				tmp_delta  = computed - f_vco;
+			if (tmp_delta < delta) {
+				delta = tmp_delta;
+				m = testm;
+				n = testn;
+			}
+		}
+	}
+	f_vco = ref_clk * (n + 1) / (m + 1);
+	if (f_vco < 100000)
+		s = 0;
+	else if (f_vco < 140000)
+		s = 1;
+	else if (f_vco < 180000)
+		s = 2;
+	else
+		s = 3;
+
+	DRM_DEBUG_KMS("clock: %ld vco: %ld m: %d n: %d p: %d s: %d\n",
+		      clock, f_vco, m, n, p, s);
+
+	WREG_DAC(MGA1064_PIX_PLLC_M, m);
+	WREG_DAC(MGA1064_PIX_PLLC_N, n);
+	WREG_DAC(MGA1064_PIX_PLLC_P, (p | (s << 3)));
+
+	return 0;
+}
+
 static int mga_g200se_set_plls(struct mga_device *mdev, long clock)
 {
 	unsigned int vcomax, vcomin, pllreffreq;
@@ -566,6 +632,10 @@ static int mga_g200er_set_plls(struct mga_device *mdev, long clock)
 static int mga_crtc_set_plls(struct mga_device *mdev, long clock)
 {
 	switch(mdev->type) {
+	case G200:
+	case G200_PCI:
+		return mga_set_plls(mdev, clock);
+		break;
 	case G200_SE_A:
 	case G200_SE_B:
 		return mga_g200se_set_plls(mdev, clock);
@@ -810,6 +880,17 @@ static int mga_crtc_mode_set(struct drm_crtc *crtc,
 	bppshift = mdev->bpp_shifts[(crtc->fb->bits_per_pixel >> 3) - 1];
 
 	switch (mdev->type) {
+	case G200:
+	case G200_PCI:
+		dacvalue[MGA1064_SYS_PLL_M] = 0x04;
+		dacvalue[MGA1064_SYS_PLL_N] = 0x2D;
+		dacvalue[MGA1064_SYS_PLL_P] = 0x19;
+		if (mdev->has_sdram)
+			option = 0x40499121;
+		else
+			option = 0x4049cd21;
+		option2 = 0x00008000;
+		break;
 	case G200_SE_A:
 	case G200_SE_B:
 		dacvalue[MGA1064_VREF_CTL] = 0x03;
