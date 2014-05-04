@@ -2576,6 +2576,7 @@ static int printing_task(void *arg)
 		if (!test_bit(PRINTK_HANDOVER_B, &printk_handover_state))
 			schedule();
 		finish_wait(&print_queue, &wait);
+		kgr_task_safe(current);
 		/*
 		 * We don't want to be scheduled away once we got the CPU (that
 		 * would be especially problematic if we hold console_sem at
