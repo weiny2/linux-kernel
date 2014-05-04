@@ -1,6 +1,7 @@
 #ifndef LINUX_KGR_H
 #define LINUX_KGR_H
 
+#include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/init.h>
 #include <linux/ftrace.h>
 
