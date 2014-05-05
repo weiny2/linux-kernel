@@ -450,6 +450,7 @@ struct devkmsg_user {
 	u64 seq;
 	u32 idx;
 	enum log_flags prev;
+	struct ratelimit_state rs;
 	struct mutex lock;
 	char buf[8192];
 };
@@ -461,11 +462,17 @@ static ssize_t devkmsg_writev(struct kiocb *iocb, const struct iovec *iv,
 	int i;
 	int level = default_message_loglevel;
 	int facility = 1;	/* LOG_USER */
+	struct file *file = iocb->ki_filp;
+	struct devkmsg_user *user = file->private_data;
 	size_t len = iov_length(iv, count);
 	ssize_t ret = len;
 
-	if (len > LOG_LINE_MAX)
+	if (!user || len > LOG_LINE_MAX)
 		return -EINVAL;
+
+	if (!___ratelimit(&user->rs, current->comm))
+		return ret;
+
 	buf = kmalloc(len+1, GFP_KERNEL);
 	if (buf == NULL)
 		return -ENOMEM;
@@ -696,20 +703,23 @@ static unsigned int devkmsg_poll(struct file *file, poll_table *wait)
 static int devkmsg_open(struct inode *inode, struct file *file)
 {
 	struct devkmsg_user *user;
-	int err;
 
-	/* write-only does not need any file context */
-	if ((file->f_flags & O_ACCMODE) == O_WRONLY)
-		return 0;
-
-	err = check_syslog_permissions(SYSLOG_ACTION_READ_ALL,
-				       SYSLOG_FROM_READER);
-	if (err)
-		return err;
+	/* write-only does not need to check read permissions */
+	if ((file->f_flags & O_ACCMODE) != O_WRONLY) {
+		int err = check_syslog_permissions(SYSLOG_ACTION_READ_ALL,
+					       SYSLOG_FROM_READER);
+		if (err)
+			return err;
+	}
 
 	user = kmalloc(sizeof(struct devkmsg_user), GFP_KERNEL);
 	if (!user)
 		return -ENOMEM;
+
+	/* Configurable? */
+	ratelimit_state_init(&user->rs, DEFAULT_RATELIMIT_INTERVAL,
+					DEFAULT_RATELIMIT_BURST,
+					RATELIMIT_MSG_ON_RELEASE);
 
 	mutex_init(&user->lock);
 
@@ -728,6 +738,8 @@ static int devkmsg_release(struct inode *inode, struct file *file)
 
 	if (!user)
 		return 0;
+
+	ratelimit_state_exit(&user->rs);
 
 	mutex_destroy(&user->lock);
 	kfree(user);

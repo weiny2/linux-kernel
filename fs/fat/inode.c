@@ -1277,7 +1277,7 @@ int fat_fill_super(struct super_block *sb, void *data, int silent, int isvfat,
 	sb->s_export_op = &fat_export_ops;
 	mutex_init(&sbi->nfs_build_inode_lock);
 	ratelimit_state_init(&sbi->ratelimit, DEFAULT_RATELIMIT_INTERVAL,
-			     DEFAULT_RATELIMIT_BURST);
+			     DEFAULT_RATELIMIT_BURST, 0);
 
 	error = parse_options(sb, data, isvfat, silent, &debug, &sbi->options);
 	if (error)

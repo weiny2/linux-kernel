@@ -2,10 +2,14 @@
 #define _LINUX_RATELIMIT_H
 
 #include <linux/param.h>
+#include <linux/sched.h>
 #include <linux/spinlock.h>
+
 
 #define DEFAULT_RATELIMIT_INTERVAL	(5 * HZ)
 #define DEFAULT_RATELIMIT_BURST		10
+
+#define RATELIMIT_MSG_ON_RELEASE	BIT(0)
 
 struct ratelimit_state {
 	raw_spinlock_t	lock;		/* protect the state */
@@ -15,6 +19,7 @@ struct ratelimit_state {
 	int		printed;
 	int		missed;
 	unsigned long	begin;
+	unsigned long	flags;
 };
 
 #define DEFINE_RATELIMIT_STATE(name, interval_init, burst_init)		\
@@ -26,14 +31,25 @@ struct ratelimit_state {
 	}
 
 static inline void ratelimit_state_init(struct ratelimit_state *rs,
-					int interval, int burst)
+					int interval, int burst,
+					unsigned long flags)
 {
+	memset(rs, 0, sizeof(*rs));
+
 	raw_spin_lock_init(&rs->lock);
-	rs->interval = interval;
-	rs->burst = burst;
-	rs->printed = 0;
-	rs->missed = 0;
-	rs->begin = 0;
+	rs->interval	= interval;
+	rs->burst	= burst;
+	rs->flags	= flags;
+}
+
+static inline void ratelimit_state_exit(struct ratelimit_state *rs)
+{
+	if (!(rs->flags & RATELIMIT_MSG_ON_RELEASE))
+		return;
+
+	if (rs->missed)
+		printk(KERN_WARNING "%s: %d callbacks suppressed\n",
+		       current->comm, rs->missed);
 }
 
 extern struct ratelimit_state printk_ratelimit_state;
