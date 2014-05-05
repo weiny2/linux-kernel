@@ -537,6 +537,7 @@ static enum drm_connector_status cirrus_vga_detect(struct drm_connector
 
 static void cirrus_connector_destroy(struct drm_connector *connector)
 {
+	drm_sysfs_connector_remove(connector);
 	drm_connector_cleanup(connector);
 	kfree(connector);
 }
@@ -569,6 +570,7 @@ static struct drm_connector *cirrus_vga_init(struct drm_device *dev)
 			   &cirrus_vga_connector_funcs, DRM_MODE_CONNECTOR_VGA);
 
 	drm_connector_helper_add(connector, &cirrus_vga_connector_helper_funcs);
+	drm_sysfs_connector_add(connector);
 
 	return connector;
 }
