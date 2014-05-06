@@ -123,3 +123,4 @@ OPAL_CALL(opal_xscom_write,			OPAL_XSCOM_WRITE);
 OPAL_CALL(opal_lpc_read,			OPAL_LPC_READ);
 OPAL_CALL(opal_lpc_write,			OPAL_LPC_WRITE);
 OPAL_CALL(opal_return_cpu,			OPAL_RETURN_CPU);
+OPAL_CALL(opal_sensor_read,			OPAL_SENSOR_READ);

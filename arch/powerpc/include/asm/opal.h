@@ -129,6 +129,7 @@ extern int opal_enter_rtas(struct rtas_args *args,
 #define OPAL_LPC_READ				67
 #define OPAL_LPC_WRITE				68
 #define OPAL_RETURN_CPU				69
+#define OPAL_SENSOR_READ			88
 
 #ifndef __ASSEMBLY__
 
@@ -656,6 +657,8 @@ int64_t opal_lpc_write(uint32_t chip_id, enum OpalLPCAddressType addr_type,
 		       uint32_t addr, uint32_t data, uint32_t sz);
 int64_t opal_lpc_read(uint32_t chip_id, enum OpalLPCAddressType addr_type,
 		      uint32_t addr, uint32_t *data, uint32_t sz);
+int64_t opal_sensor_read(uint32_t sensor_hndl, int token,
+		uint32_t *sensor_data);
 
 /* Internal functions */
 extern int early_init_dt_scan_opal(unsigned long node, const char *uname, int depth, void *data);
@@ -676,6 +679,7 @@ extern void opal_notifier_update_evt(uint64_t evt_mask, uint64_t evt_val);
 
 extern int opal_get_chars(uint32_t vtermno, char *buf, int count);
 extern int opal_put_chars(uint32_t vtermno, const char *buf, int total_len);
+extern int opal_get_sensor_data(u32 sensor_hndl, u32 *sensor_data);
 
 extern void hvc_opal_init_early(void);
 
