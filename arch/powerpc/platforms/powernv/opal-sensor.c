@@ -33,6 +33,7 @@ int opal_get_sensor_data(u32 sensor_hndl, u32 *sensor_data)
 {
 	int ret, token;
 	struct opal_msg msg;
+	__be32 data;
 
 	token = opal_async_get_token_interruptible();
 	if (token < 0) {
@@ -42,7 +43,7 @@ int opal_get_sensor_data(u32 sensor_hndl, u32 *sensor_data)
 	}
 
 	mutex_lock(&opal_sensor_mutex);
-	ret = opal_sensor_read(sensor_hndl, token, sensor_data);
+	ret = opal_sensor_read(sensor_hndl, token, &data);
 	if (ret != OPAL_ASYNC_COMPLETION)
 		goto out_token;
 

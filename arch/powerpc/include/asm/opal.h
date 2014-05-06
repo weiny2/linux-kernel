@@ -657,8 +657,7 @@ int64_t opal_lpc_write(uint32_t chip_id, enum OpalLPCAddressType addr_type,
 		       uint32_t addr, uint32_t data, uint32_t sz);
 int64_t opal_lpc_read(uint32_t chip_id, enum OpalLPCAddressType addr_type,
 		      uint32_t addr, uint32_t *data, uint32_t sz);
-int64_t opal_sensor_read(uint32_t sensor_hndl, int token,
-		uint32_t *sensor_data);
+int64_t opal_sensor_read(uint32_t sensor_hndl, int token, uint32_t *sensor_data);
 
 /* Internal functions */
 extern int early_init_dt_scan_opal(unsigned long node, const char *uname, int depth, void *data);
