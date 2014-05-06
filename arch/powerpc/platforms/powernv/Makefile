@@ -1,4 +1,4 @@
-obj-y			+= setup.o opal-takeover.o opal-wrappers.o opal.o
+obj-y			+= setup.o opal-takeover.o opal-wrappers.o opal.o opal-async.o
 obj-y			+= opal-rtc.o opal-nvram.o opal-lpc.o
 obj-y			+= opal-sensor.o
 
