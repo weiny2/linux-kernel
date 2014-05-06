@@ -125,4 +125,6 @@ OPAL_CALL(opal_lpc_write,			OPAL_LPC_WRITE);
 OPAL_CALL(opal_return_cpu,			OPAL_RETURN_CPU);
 OPAL_CALL(opal_get_msg,				OPAL_GET_MSG);
 OPAL_CALL(opal_check_completion,		OPAL_CHECK_ASYNC_COMPLETION);
+OPAL_CALL(opal_get_param,			OPAL_GET_PARAM);
+OPAL_CALL(opal_set_param,			OPAL_SET_PARAM);
 OPAL_CALL(opal_sensor_read,			OPAL_SENSOR_READ);

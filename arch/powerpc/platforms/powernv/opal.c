@@ -524,6 +524,8 @@ static int __init opal_init(void)
 			pr_warning("opal: Error %d requesting irq %d"
 				   " (0x%x)\n", rc, irq, hwirq);
 		opal_irqs[i] = irq;
+		/* Setup system parameters interface */
+		opal_sys_param_init();
 	}
 
 	/* Create "opal" kobject under /sys/firmware */
