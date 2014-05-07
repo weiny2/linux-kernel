@@ -12,7 +12,7 @@
 	.align	7
 _GLOBAL(memcpy)
 BEGIN_FTR_SECTION
-	std	r3,STK_PARAM(R3)(r1)	/* save destination pointer for return value */
+	std	r3,-STACKFRAMESIZE+STK_REG(R31)(r1)	/* save destination pointer for return value */
 FTR_SECTION_ELSE
 	b	memcpy_power7
 ALT_FTR_SECTION_END_IFCLR(CPU_FTR_VMX_COPY)
@@ -71,7 +71,7 @@ END_FTR_SECTION_IFCLR(CPU_FTR_UNALIGNED_LD_STD)
 2:	bf	cr7*4+3,3f
 	lbz	r9,8(r4)
 	stb	r9,0(r3)
-3:	ld	r3,STK_PARAM(R3)(r1)	/* return dest pointer */
+3:	ld	r3,-STACKFRAMESIZE+STK_REG(R31)(r1)	/* return dest pointer */
 	blr
 
 .Lsrc_unaligned:
@@ -154,7 +154,7 @@ END_FTR_SECTION_IFCLR(CPU_FTR_UNALIGNED_LD_STD)
 2:	bf	cr7*4+3,3f
 	rotldi	r9,r9,8
 	stb	r9,0(r3)
-3:	ld	r3,STK_PARAM(R3)(r1)	/* return dest pointer */
+3:	ld	r3,-STACKFRAMESIZE+STK_REG(R31)(r1)	/* return dest pointer */
 	blr
 
 .Ldst_unaligned:
@@ -199,5 +199,5 @@ END_FTR_SECTION_IFCLR(CPU_FTR_UNALIGNED_LD_STD)
 3:	bf	cr7*4+3,4f
 	lbz	r0,0(r4)
 	stb	r0,0(r3)
-4:	ld	r3,STK_PARAM(R3)(r1)	/* return dest pointer */
+4:	ld	r3,-STACKFRAMESIZE+STK_REG(R31)(r1)	/* return dest pointer */
 	blr
