@@ -833,14 +833,8 @@ bail:
 static int get_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 {
 	struct qib_pportdata *ppd = dd->pport + port - 1;
-	/*
-	 * always a kernel context, no locking needed.
-	 * If we get here with ppd setup, no need to check
-	 * that pd is valid.
-	 */
-	struct qib_ctxtdata *rcd = dd->rcd[ppd->hw_pidx];
 
-	memcpy(pkeys, rcd->pkeys, sizeof(rcd->pkeys));
+	memcpy(pkeys, ppd->pkeys, sizeof(ppd->pkeys));
 
 	return 0;
 }
@@ -1498,101 +1492,6 @@ done:
 }
 
 /**
- * rm_pkey - decrecment the reference count for the given PKEY
- * @dd: the qlogic_ib device
- * @key: the PKEY index
- *
- * Return true if this was the last reference and the hardware table entry
- * needs to be changed.
- */
-static int rm_pkey(struct qib_pportdata *ppd, u16 key)
-{
-	int i;
-	int ret;
-
-	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); i++) {
-		if (ppd->pkeys[i] != key)
-			continue;
-		if (atomic_dec_and_test(&ppd->pkeyrefs[i])) {
-			ppd->pkeys[i] = 0;
-			ret = 1;
-			goto bail;
-		}
-		break;
-	}
-
-	ret = 0;
-
-bail:
-	return ret;
-}
-
-/**
- * add_pkey - add the given PKEY to the hardware table
- * @dd: the qlogic_ib device
- * @key: the PKEY
- *
- * Return an error code if unable to add the entry, zero if no change,
- * or 1 if the hardware PKEY register needs to be updated.
- */
-static int add_pkey(struct qib_pportdata *ppd, u16 key)
-{
-	int i;
-	u16 lkey = key & 0x7FFF;
-	int any = 0;
-	int ret;
-
-	if (lkey == 0x7FFF) {
-		ret = 0;
-		goto bail;
-	}
-
-	/* Look for an empty slot or a matching PKEY. */
-	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); i++) {
-		if (!ppd->pkeys[i]) {
-			any++;
-			continue;
-		}
-		/* If it matches exactly, try to increment the ref count */
-		if (ppd->pkeys[i] == key) {
-			if (atomic_inc_return(&ppd->pkeyrefs[i]) > 1) {
-				ret = 0;
-				goto bail;
-			}
-			/* Lost the race. Look for an empty slot below. */
-			atomic_dec(&ppd->pkeyrefs[i]);
-			any++;
-		}
-		/*
-		 * It makes no sense to have both the limited and unlimited
-		 * PKEY set at the same time since the unlimited one will
-		 * disable the limited one.
-		 */
-		if ((ppd->pkeys[i] & 0x7FFF) == lkey) {
-			ret = -EEXIST;
-			goto bail;
-		}
-	}
-	if (!any) {
-		ret = -EBUSY;
-		goto bail;
-	}
-	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); i++) {
-		if (!ppd->pkeys[i] &&
-		    atomic_inc_return(&ppd->pkeyrefs[i]) == 1) {
-			/* for qibstats, etc. */
-			ppd->pkeys[i] = key;
-			ret = 1;
-			goto bail;
-		}
-	}
-	ret = -EBUSY;
-
-bail:
-	return ret;
-}
-
-/**
  * set_pkeys - set the PKEY table for ctxt 0
  * @dd: the qlogic_ib device
  * @port: the IB port number
@@ -1601,10 +1500,10 @@ bail:
 static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 {
 	struct qib_pportdata *ppd;
-	struct qib_ctxtdata *rcd;
 	int i;
 	int changed = 0;
 	int update_includes_mgmt_partition = 0;
+
 	/*
 	 * IB port one/two always maps to context zero/one,
 	 * always a kernel context, no locking needed
@@ -1612,11 +1511,10 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	 * that rcd is valid.
 	 */
 	ppd = dd->pport + (port - 1);
-	rcd = dd->rcd[ppd->hw_pidx];
 	/*
 	 * If the update does not include the management pkey, don't do it.
 	 */
-	for (i = 0; i < ARRAY_SIZE(rcd->pkeys); i++) {
+	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); i++) {
 		if (pkeys[i] == WFR_LIM_MGMT_P_KEY) {
 			update_includes_mgmt_partition = 1;
 			break;
@@ -1626,28 +1524,21 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	if (!update_includes_mgmt_partition)
 		return 1;
 
-	for (i = 0; i < ARRAY_SIZE(rcd->pkeys); i++) {
+	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); i++) {
 		u16 key = pkeys[i];
-		u16 okey = rcd->pkeys[i];
+		u16 okey = ppd->pkeys[i];
 
 		if (key == okey)
 			continue;
 		/*
-		 * The value of this PKEY table entry is changing.
-		 * Remove the old entry in the hardware's array of PKEYs.
+		 * The SM gives us the complete PKey table. We have
+		 * to ensure that we put the PKeys in the matching
+		 * slots.
 		 */
-		if (okey & 0x7FFF)
-			changed |= rm_pkey(ppd, okey);
-		if (key & 0x7FFF) {
-			int ret = add_pkey(ppd, key);
-
-			if (ret < 0)
-				key = 0;
-			else
-				changed |= ret;
-		}
-		rcd->pkeys[i] = key;
+		ppd->pkeys[i] = key;
+		changed = 1;
 	}
+
 	if (changed) {
 		struct ib_event event;
 

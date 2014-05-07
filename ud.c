@@ -363,7 +363,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
-	bth0 |= qp->ibqp.qp_type == IB_QPT_SMI ? QIB_DEFAULT_P_KEY :
+	bth0 |= qp->ibqp.qp_type == IB_QPT_SMI ? WFR_DEFAULT_P_KEY :
 		qib_get_pkey(ibp, qp->ibqp.qp_type == IB_QPT_GSI ?
 			     wqe->wr.wr.ud.pkey_index : qp->s_pkey_index);
 	ohdr->bth[0] = cpu_to_be32(bth0);
@@ -406,18 +406,16 @@ unlock:
 int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct hfi_devdata *dd = ppd->dd;
-	unsigned ctxt = ppd->hw_pidx;
 	unsigned i;
 
 	if (pkey == WFR_FULL_MGMT_P_KEY || pkey == WFR_LIM_MGMT_P_KEY) {
 		unsigned lim_idx = -1;
 
-		for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i) {
+		for (i = 0; i < ARRAY_SIZE(ppd->pkeys); ++i) {
 			/* here we look for an exact match */
-			if (dd->rcd[ctxt]->pkeys[i] == pkey)
+			if (ppd->pkeys[i] == pkey)
 				return i;
-			if (dd->rcd[ctxt]->pkeys[i] == WFR_LIM_MGMT_P_KEY)
+			if (ppd->pkeys[i] == WFR_LIM_MGMT_P_KEY)
 				lim_idx = i;
 		}
 
@@ -431,8 +429,8 @@ int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 
 	pkey &= 0x7fff; /* remove limited/full membership bit */
 
-	for (i = 0; i < ARRAY_SIZE(dd->rcd[ctxt]->pkeys); ++i)
-		if ((dd->rcd[ctxt]->pkeys[i] & 0x7fff) == pkey)
+	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); ++i)
+		if ((ppd->pkeys[i] & 0x7fff) == pkey)
 			return i;
 
 	/*

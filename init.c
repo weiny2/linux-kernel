@@ -142,7 +142,6 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			ret = -EFAULT;
 			goto bail;
 		}
-		rcd->pkeys[0] = QIB_DEFAULT_P_KEY;
 		rcd->seq_cnt = 1;
 
 		rcd->sc = sc_alloc(dd, SC_ACK, dd->node);
@@ -287,6 +286,11 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	ppd->dd = dd;
 	ppd->hw_pidx = hw_pidx;
 	ppd->port = port; /* IB port number, not index */
+#ifdef CONFIG_STL_MGMT
+	ppd->pkeys[1] = WFR_DEFAULT_P_KEY;
+#else
+	ppd->pkeys[0] = WFR_DEFAULT_P_KEY;
+#endif
 
 	spin_lock_init(&ppd->sdma_lock);
 

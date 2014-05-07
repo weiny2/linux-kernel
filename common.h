@@ -592,7 +592,11 @@ struct qib_message_header {
 #define WFR_LIM_MGMT_P_KEY       0x7FFF
 #define WFR_FULL_MGMT_P_KEY      0xFFFF
 
-#define QIB_DEFAULT_P_KEY 0xFFFF
+#ifdef CONFIG_STL_MGMT
+#define WFR_DEFAULT_P_KEY WFR_LIM_MGMT_P_KEY
+#else
+#define WFR_DEFAULT_P_KEY WFR_FULL_MGMT_P_KEY
+#endif
 #define QIB_PERMISSIVE_LID 0xFFFF
 #define QIB_AETH_CREDIT_SHIFT 24
 #define QIB_AETH_CREDIT_MASK 0x1F

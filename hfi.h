@@ -222,8 +222,6 @@ struct qib_ctxtdata {
 	pid_t subpid[QLOGIC_IB_MAX_SUBCTXT];
 	/* same size as task_struct .comm[], command that opened context */
 	char comm[16];
-	/* pkeys set by this use of this ctxt */
-	u16 pkeys[4];
 	/* so file ops can get at unit */
 	struct hfi_devdata *dd;
 	/* so funcs that need physical port can get it easily */
@@ -562,9 +560,6 @@ struct qib_pportdata {
 	/* up or down physical link state */
 	u32 linkup;
 
-	/* ref count for each pkey */
-	atomic_t pkeyrefs[4];
-
 	/*
 	 * this address is mapped readonly into user processes so they can
 	 * get status cheaply, whenever they want.  One qword of status per port
@@ -610,7 +605,7 @@ struct qib_pportdata {
 	/* LID programmed for this instance */
 	u16 lid;
 	/* list of pkeys programmed; 0 if not set */
-	u16 pkeys[4];
+	u16 pkeys[WFR_MAX_PKEY_VALUES];
 	u16 link_width_supported;
 	u16 link_speed_supported;
 	u16 link_width_enabled;

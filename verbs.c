@@ -1738,25 +1738,21 @@ static int qib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
  */
 unsigned qib_get_npkeys(struct hfi_devdata *dd)
 {
-	return ARRAY_SIZE(dd->rcd[0]->pkeys);
+	return ARRAY_SIZE(dd->pport[0].pkeys);
 }
 
 /*
  * Return the indexed PKEY from the port PKEY table.
- * No need to validate rcd[ctxt]; the port is setup if we are here.
  */
 unsigned qib_get_pkey(struct qib_ibport *ibp, unsigned index)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct hfi_devdata *dd = ppd->dd;
-	unsigned ctxt = ppd->hw_pidx;
 	unsigned ret;
 
-	/* dd->rcd null if mini_init or some init failures */
-	if (!dd->rcd || index >= ARRAY_SIZE(dd->rcd[ctxt]->pkeys))
+	if (index >= ARRAY_SIZE(ppd->pkeys))
 		ret = 0;
 	else
-		ret = dd->rcd[ctxt]->pkeys[index];
+		ret = ppd->pkeys[index];
 
 	return ret;
 }

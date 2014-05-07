@@ -558,6 +558,7 @@ static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void set_partition_keys(struct qib_pportdata *);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -2359,7 +2360,6 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 				& DC_DC8051_CFG_HOST_CMD_1_RSP_DATA_MASK;
 	return_code = (reg >> DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_SHIFT)
 				& DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_MASK;
-
 	/*
 	 * Clear command for next user.
 	 */
@@ -3141,6 +3141,10 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 
 	case QIB_IB_CFG_MTU:
 		set_send_length(ppd);
+		break;
+
+	case QIB_IB_CFG_PKEYS:
+		set_partition_keys(ppd);
 		break;
 
 	default:
@@ -5024,19 +5028,28 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 }
 
 /*
- * The partition key values are undefined after reset.
- * Set up the minimal partition keys:
- *	- 0xffff in the first key
-	- 0 in all other keys
+ * Set the device/port partition key table. The MAD code
+ * will ensure that, at least, the partial management
+ * partition key is present in the table.
  */
-static void init_partition_keys(struct hfi_devdata *dd)
+static void set_partition_keys(struct qib_pportdata *ppd)
 {
-	write_csr(dd, WFR_RCV_PARTITION_KEY + (0 * 8), 
-		(DEFAULT_PKEY & WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK)
-			<< WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_SHIFT);
-	write_csr(dd, WFR_RCV_PARTITION_KEY + (1 * 8),  0);
-	write_csr(dd, WFR_RCV_PARTITION_KEY + (2 * 8),  0);
-	write_csr(dd, WFR_RCV_PARTITION_KEY + (3 * 8),  0);
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg = 0;
+	int i;
+	dd_dev_info(dd, "Setting partition keys\n");
+	for (i = 0; i < qib_get_npkeys(dd); i++) {
+		reg |= (ppd->pkeys[i] &
+			WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK) <<
+			((i % 4) *
+			 WFR_RCV_PARTITION_KEY_PARTITION_KEY_B_SHIFT);
+		/* Each register holds 4 PKey values. */
+		if ((i % 4) == 3) {
+			write_csr(dd, WFR_RCV_PARTITION_KEY +
+				  ((i - 3) * 2), reg);
+			reg = 0;
+		}
+	}
 }
 
 /*
@@ -5666,7 +5679,10 @@ static void init_chip(struct hfi_devdata *dd)
 
 	write_uninitialized_csrs_and_memories(dd);
 
-	init_partition_keys(dd);
+	for (i = 0; i < dd->num_pports; i++) {
+		struct qib_pportdata *ppd = &dd->pport[i];
+		set_partition_keys(ppd);
+	}
 	init_sc2vl_tables(dd);
 
 	/*

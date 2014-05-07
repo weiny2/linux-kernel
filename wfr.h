@@ -63,6 +63,8 @@
 #define WFR_CM_VAU 3
 /* WFR link credit count, AKA receive buffer depth (RBUF_DEPTH) */
 #define WFR_CM_GLOBAL_CREDITS 0x940
+/* Number of PKey entries in the HW */
+#define WFR_MAX_PKEY_VALUES 16
 
 #define USE_GENERATED_WFR_HEADERS 1
 #ifdef USE_GENERATED_WFR_HEADERS
