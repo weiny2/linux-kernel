@@ -47,7 +47,7 @@ _GLOBAL(power7_nap)
 	/* Make sure FPU, VSX etc... are flushed as we may lose
 	 * state when going to nap mode
 	 */
-	bl	.discard_lazy_cpu_state
+	bl	discard_lazy_cpu_state
 #endif /* CONFIG_SMP */
 
 	/* Hard disable interrupts */
@@ -115,7 +115,7 @@ _GLOBAL(power7_wakeup_loss)
 _GLOBAL(power7_wakeup_noloss)
 	lbz	r0,PACA_NAPSTATELOST(r13)
 	cmpwi	r0,0
-	bne	.power7_wakeup_loss
+	bne	power7_wakeup_loss
 	ld	r1,PACAR1(r13)
 	ld	r4,_MSR(r1)
 	ld	r5,_NIP(r1)
