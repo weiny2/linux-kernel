@@ -567,7 +567,7 @@ struct err_reg_info {
  * helpers are needed because of inconsistent register names.
  */
 #define WFR_EE(reg, handler, desc) \
-	{ WFR_##reg##_STATUS, WFR_##reg##_CLEAR, WFR_##reg##_CLEAR, \
+	{ WFR_##reg##_STATUS, WFR_##reg##_CLEAR, WFR_##reg##_MASK, \
 		handler, desc }
 #define DC_EE1(reg, handler, desc) \
 	{ reg##_FLG, reg##_FLG_CLR, reg##_FLG_EN, handler, desc }
@@ -602,7 +602,7 @@ static const struct err_reg_info sendctxt_err =
  * information.
  */
 static const struct err_reg_info sdma_eng_err =
-	WFR_EE(SEND_DMA_ERR,	handle_sdma_eng_err, "SDmaEngErr");
+	WFR_EE(SEND_DMA_ENG_ERR, handle_sdma_eng_err, "SDmaEngErr");
 
 /*
  * Table of the DC grouping of error interupts.  Each entry refers to
@@ -2136,7 +2136,7 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 
 int init_loopback(struct hfi_devdata *dd)
 {
-	u64 reg;
+	u64 reg, saved_lcb_err_en;
 	unsigned long timeout;
 	int ret;
 
@@ -2146,11 +2146,13 @@ int init_loopback(struct hfi_devdata *dd)
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
 		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
 	/* set dcc reset csr: DCC_CFG_RESET.reset_lcb = 1 */
+	saved_lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
 	reg = read_csr(dd, DCC_CFG_RESET);
 	write_csr(dd, DCC_CFG_RESET,
 		reg | 1ull << DCC_CFG_RESET_RESET_LCB_SHIFT);
 	udelay(20);
 	write_csr(dd, DCC_CFG_RESET, reg);
+	write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
 
 	/* configure LCBs in loopback */
 	/*	LCB_CFG_LOOPBACK.VAL = 2 */
@@ -3801,9 +3803,6 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 		/* enable all interrupts */
 		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
 			write_csr(dd, WFR_CCE_INT_MASK + (8*i), ~(u64)0);
-		write_csr(dd, DCC_ERR_FLG_EN, ~(u64)0);
-		write_csr(dd, DC_LCB_ERR_EN, ~(u64)0);
-		write_csr(dd, DC_DC8051_ERR_EN, ~(u64)0);
 		/*
 		 * TODO: the 7322 wrote to INTCLEAR to "cause any
 		 * pending interrupts to be redelivered".  The
@@ -3819,9 +3818,6 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 	} else {
 		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
 			write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
-		write_csr(dd, DCC_ERR_FLG_EN, 0);
-		write_csr(dd, DC_LCB_ERR_EN, 0);
-		write_csr(dd, DC_DC8051_ERR_EN, 0);
 	}
 }
 
@@ -3834,6 +3830,19 @@ static void clear_all_interrupts(struct hfi_devdata *dd)
 
 	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
 		write_csr(dd, WFR_CCE_INT_CLEAR + (8*i), ~(u64)0);
+
+	write_csr(dd, WFR_CCE_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_MISC_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_RCV_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, ~(u64)0);
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, ~(u64)0);
+	for (i = 0; i < dd->chip_sdma_engines; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ERR_CLEAR, ~(u64)0);
+
 	write_csr(dd, DCC_ERR_FLG_CLR, ~(u64)0);
 	write_csr(dd, DC_LCB_ERR_CLR, ~(u64)0);
 	write_csr(dd, DC_DC8051_ERR_CLR, ~(u64)0);
@@ -5159,6 +5168,10 @@ void init_other(struct hfi_devdata *dd)
 	write_csr(dd, WFR_CCE_ERR_MASK, ~0ull);
 	/* enable all Misc errors */
 	write_csr(dd, WFR_MISC_ERR_MASK, ~0ull);
+	/* enable all DC errors */
+	write_csr(dd, DCC_ERR_FLG_EN, ~0ull);
+	write_csr(dd, DC_LCB_ERR_EN, ~0ull);
+	write_csr(dd, DC_DC8051_ERR_EN, ~0ull);
 }
 
 /*
@@ -5207,11 +5220,19 @@ void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu)
 
 void init_txe(struct hfi_devdata *dd)
 {
+	int i;
+
 	/* enable all PIO, SDMA, general, and Egress errors */
 	write_csr(dd, WFR_SEND_PIO_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_DMA_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_ERR_MASK, ~0ull);
 	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, ~0ull);
+
+	/* enable all per-context and per-SDMA engine errors */
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, ~0ull);
+	for (i = 0; i < dd->chip_sdma_engines; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
 
 	/* set the local CU to AU mapping */
 	assign_local_cm_au_table(dd, hfi_cu);
