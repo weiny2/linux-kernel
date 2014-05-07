@@ -240,6 +240,12 @@ class TestInfo:
         parser.add_option("--mpiverbs", action="store_true", dest="mpiverbs",
                           help="Run MPI over verbs instead of the default PSM")
 
+        test_pkt_dir_default = "/usr/share/hfi-diagtools-sw/test_packets"
+        parser.add_option("--test-pkt-dir", dest="test_pkt_dir",
+                          help="Optional location of test packets. Default: "
+                          + test_pkt_dir_default,
+                          metavar="PATH", default=test_pkt_dir_default)
+
         (options, args) = parser.parse_args()
 
         # Simics or not?
@@ -290,6 +296,15 @@ class TestInfo:
                     host = HostInfo(node, node, "22", oopts)
 
                 self.nodelist.append(host)
+
+        # Diagtools test packet directory
+        # test_pkt_dir specifies a directory on the test host (e.g.,
+        # viper0).  Since that direct may not exist (in the same place) on
+        # this host, we cannot do sanity checks here for presence/type.
+        if options.test_pkt_dir:
+            self.test_pkt_dir = os.path.abspath(options.test_pkt_dir)
+        else:
+            self.test_pkt_dir = test_pkt_dir_default
 
         # What is the location of the driver source tree?
         if options.hfisrc:
@@ -370,6 +385,9 @@ class TestInfo:
             return self.diag_lib
         else:
             return "DEFAULT"
+
+    def get_test_pkt_dir(self):
+        return self.test_pkt_dir
 
     def __str__(self):
         ret = ""
