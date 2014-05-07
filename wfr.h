@@ -488,6 +488,11 @@
 #define WFR_PBC_TEST_BAD_ICRC	(1ull << 23)
 #define WFR_PBC_FECN		(1ull << 22)
 
+/* PbcInsertHcrc field settings */
+#define WFR_PBC_IHCRC_LKDETH 0x0	/* insert @ local KDETH offset */
+#define WFR_PBC_IHCRC_GKDETH 0x1	/* insert @ global KDETH offset */
+#define WFR_PBC_IHCRC_NONE   0x2	/* no HCRC inserted */
+
 /* PBC fields */
 #define WFR_PBC_STATIC_RATE_CONTROL_COUNT_SHIFT 32
 #define WFR_PBC_STATIC_RATE_CONTROL_COUNT_MASK 0xffffull

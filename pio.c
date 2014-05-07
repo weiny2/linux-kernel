@@ -818,6 +818,14 @@ void sc_drop(struct send_context *sc)
 			__func__, sc->context);
 }
 
+/*
+ * Create a PBC with the given flags, rate, VL, and length.
+ *
+ * NOTE: The PBC created will not insert any HCRC - all callers but one are
+ * for verbs, which does not use this PSM feature.  The lone other caller
+ * is for the diagnostic interface which calls this if the user does not
+ * supply their own PBC.
+ */
 u64 create_pbc(struct send_context *sc, u64 flags, u32 srate,
 							u32 vl, u32 dw_len)
 {
@@ -826,6 +834,7 @@ u64 create_pbc(struct send_context *sc, u64 flags, u32 srate,
 	u32 rate = 0;
 
 	pbc = flags
+		| ((u64)WFR_PBC_IHCRC_NONE << WFR_PBC_INSERT_HCRC_SHIFT)
 		| (vl & WFR_PBC_VL_MASK) << WFR_PBC_VL_SHIFT
 		| (rate & WFR_PBC_STATIC_RATE_CONTROL_COUNT_MASK)
 			<< WFR_PBC_STATIC_RATE_CONTROL_COUNT_SHIFT
