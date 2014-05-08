@@ -153,6 +153,7 @@ struct qib_ctxtdata {
 	u16 subctxt_cnt;
 	/* non-zero if ctxt is being shared. */
 	u16 subctxt_id;
+	u8 uuid[16];
 	/* number of RcvArray groups for this context. */
 	u32 rcv_array_groups;
 	/* number of eager TID entries. */
