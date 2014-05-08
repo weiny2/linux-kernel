@@ -220,8 +220,9 @@ static ssize_t catalog_read(struct file *filp, struct kobject *kobj,
 				page, 4096, page_offset * 4096);
 e_free:
 	if (hret)
-		pr_err("h_get_24x7_catalog_page(ver=%d, page=%lld) failed: rc=%ld\n",
-				catalog_version_num, page_offset, hret);
+		pr_err("h_get_24x7_catalog_page(ver=%lld, page=%lld) failed:"
+		       " rc=%ld\n",
+		       catalog_version_num, page_offset, hret);
 	kfree(page);
 
 	pr_devel("catalog_read: offset=%lld(%lld) count=%zu(%zu) catalog_len=%zu(%zu) => %zd\n",
