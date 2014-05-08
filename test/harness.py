@@ -136,6 +136,12 @@ test_list = [
       "type" : "diagtools,default",
       "desc" : "Run hfi_pkt_test ping-pong benchmark.",
     },
+
+    { "test_name" : "HfiPktSend.py",
+      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --test-pkt-dir %TEST_PKT_DIR%",
+      "type" : "diagtools,default",
+      "desc" : "Run hfi_pkt_send tests.",
+    },
 ]
 
 
@@ -148,6 +154,7 @@ variable_map = {
     "HFI_SRC" : test_info.get_hfi_src,
     "HOST" : test_info.get_host_name_by_index,
     "PSM_LIB" : test_info.get_psm_lib,
+    "TEST_PKT_DIR" : test_info.get_test_pkt_dir,
 }
 
 if test_info.list_only:
