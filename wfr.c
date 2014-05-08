@@ -47,6 +47,10 @@
 
 #define NUM_IB_PORTS 1
 
+/* JAG SDMA from HAS 7.3.1 */
+#define DEFAULT_WFR_SEND_DMA_MEMORY (((unsigned long long) \
+	(TXE_SDMA_MEMORY_BYTES/(TXE_NUM_SDMA_ENGINES * 64))) \
+	<< WFR_SEND_DMA_MEMORY_SDMA_MEMORY_CNT_SHIFT )
 
 static uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
@@ -94,6 +98,10 @@ static uint sim_easy_linkup = EASY_LINKUP_UNSET;
 static uint extended_psn = 0;
 module_param(extended_psn, uint, S_IRUGO);
 MODULE_PARM_DESC(extended_psn, "Use 24 or 31 bit PSN");
+
+static unsigned sdma_idle_cnt = 64;
+module_param_named(sdma_idle_cnt, sdma_idle_cnt, uint, S_IRUGO);
+MODULE_PARM_DESC(sdma_idle_cnt, "sdma interrupt idle delay (default 64)");
 
 struct flag_table {
 	u64 flag;	/* the flag */
@@ -917,7 +925,7 @@ static char *is_misc_err_name(char *buf, size_t bsize, unsigned int source)
 /*
  * Return the SDMA engine error interrupt name.
  */
-static char *is_sdma_err_name(char *buf, size_t bsize, unsigned int source)
+static char *is_sdma_eng_err_name(char *buf, size_t bsize, unsigned int source)
 {
 	snprintf(buf, bsize, "SDmaEngErrInt%u", source);
 	return buf;
@@ -1036,9 +1044,12 @@ static char *is_reserved_name(char *buf, size_t bsize, unsigned int source)
  */
 static void handle_sdma_interrupt(struct sdma_engine *per_sdma, u64 status)
 {
-	/* TODO: actually do something */
-	printk("%s: engine #%d, status 0x%llx - unimplemented\n", __func__,
-		per_sdma->which, status);
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(per_sdma->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(per_sdma->dd, "status: 0x%llx\n", status);
+#endif
+
+	qib_sdma_intr(per_sdma->dd->pport);
 }
 
 static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
@@ -1084,6 +1095,10 @@ static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	dd_dev_info(dd, "SDMA Error: 0x%llx (unhandled)\n", reg);
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+qib_sdma0_dumpstate(dd);
+#endif
 }
 
 /* TODO */
@@ -1289,18 +1304,64 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
 	interrupt_clear_down(dd, source, &sendctxt_err);
 }
 
-/* TODO */
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
 		unsigned int source, u64 status)
 {
-	dd_dev_info(dd, "SDMA #%d error: 0x%llx (unhandled)\n", source, status);
+	struct qib_pportdata *ppd = dd->pport;
+	unsigned long flags;
+
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(dd, "JAG SDMA source: %u\n", source);
+dd_dev_err(dd, "JAG SDMA source: 0x%llx\n", (unsigned long long)status);
+qib_sdma0_dumpstate(dd);
+#endif
+
+	BUG_ON(source != 0);
+
+	spin_lock_irqsave(&ppd->sdma_lock, flags);
+
+	switch (ppd->sdma_state.current_state) {
+	case qib_sdma_state_s00_hw_down:
+		break;
+
+	case qib_sdma_state_s10_hw_start_up_halt_wait:
+		if (status & WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK)
+			__qib_sdma_process_event(ppd, qib_sdma_event_e15_hw_started1);
+		break;
+
+	case qib_sdma_state_s15_hw_start_up_clean_wait:
+		break;
+
+	case qib_sdma_state_s20_idle:
+		break;
+
+	case qib_sdma_state_s30_sw_clean_up_wait:
+		break;
+
+	case qib_sdma_state_s40_hw_clean_up_wait:
+		break;
+
+	case qib_sdma_state_s50_hw_halt_wait:
+		break;
+
+	case qib_sdma_state_s99_running:
+		break;
+	}
+
+	spin_unlock_irqrestore(&ppd->sdma_lock, flags);
 }
 
 /*
  * CCE block SDMA error interrupt.  Source is < 16.
  */
-static void is_sdma_err_int(struct hfi_devdata *dd, unsigned int source)
+static void is_sdma_eng_err_int(struct hfi_devdata *dd, unsigned int source)
 {
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(dd, "JAG SDMA source: %u\n", source);
+qib_sdma0_dumpstate(dd);
+#endif
 	interrupt_clear_down(dd, source, &sdma_eng_err);
 }
 
@@ -1662,8 +1723,13 @@ static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
 	/* which engine */
 	unsigned int which = source % WFR_TXE_NUM_SDMA_ENGINES;
 
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+qib_sdma0_dumpstate(dd);
+#endif
+
 	if (likely(what < 3 && which < dd->num_sdma)) {
-		handle_sdma_interrupt(&dd->per_sdma[which], 1ull << source);
+		handle_sdma_interrupt(&dd->per_sdma[which], 1ull << what);
 	} else {
 		/* should not happen */
 		dd_dev_err(dd, "Invalid SDMA interrupt 0x%x\n", source);
@@ -1749,7 +1815,7 @@ static const struct is_table is_table[] = {
 { WFR_IS_GENERAL_ERR_START,  WFR_IS_GENERAL_ERR_END,
 				is_misc_err_name,	is_misc_err_int },
 { WFR_IS_SDMAENG_ERR_START,  WFR_IS_SDMAENG_ERR_END,
-				is_sdma_err_name,	is_sdma_err_int },
+				is_sdma_eng_err_name,	is_sdma_eng_err_int },
 { WFR_IS_SENDCTXT_ERR_START, WFR_IS_SENDCTXT_ERR_END,
 				is_sendctxt_err_name,	is_sendctxt_err_int },
 { WFR_IS_SDMA_START,	     WFR_IS_SDMA_END,
@@ -1853,6 +1919,11 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 	struct hfi_devdata *dd = per_sdma->dd;
 	u64 status;
 
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+qib_sdma0_dumpstate(dd);
+#endif
+
 	dd->int_counter++;
 
 	status = read_csr(dd,
@@ -1899,26 +1970,153 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 
 static void sdma_sendctrl(struct qib_pportdata *ppd, unsigned op)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+	struct hfi_devdata *dd = ppd->dd;
+	u64 set_senddmactrl = 0;
+	u64 clr_senddmactrl = 0;
+
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(dd, "JAG SDMA senddmactrl E=%d I=%d H=%d C=%d\n",
+	(op & QIB_SDMA_SENDCTRL_OP_ENABLE) ? 1 : 0,
+	(op & QIB_SDMA_SENDCTRL_OP_INTENABLE) ? 1 : 0,
+	(op & QIB_SDMA_SENDCTRL_OP_HALT) ? 1 : 0,
+	(op & QIB_SDMA_SENDCTRL_OP_CLEANUP) ? 1 : 0);
+#endif
+
+	if (op & QIB_SDMA_SENDCTRL_OP_ENABLE)
+		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_ENABLE_SMASK;
+	else
+		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_ENABLE_SMASK;
+
+	if (op & QIB_SDMA_SENDCTRL_OP_INTENABLE)
+		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_INT_ENABLE_SMASK;
+	else
+		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_INT_ENABLE_SMASK;
+
+	if (op & QIB_SDMA_SENDCTRL_OP_HALT)
+		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_HALT_SMASK;
+	else
+		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_HALT_SMASK;
+
+	/* JAG TODO: OP_DRAIN */
+
+	spin_lock(&dd->per_sdma[0].senddmactrl_lock);
+
+	/* JAG TODO: OP_DRAIN */
+
+	dd->per_sdma[0].p_senddmactrl |= set_senddmactrl;
+	dd->per_sdma[0].p_senddmactrl &= ~clr_senddmactrl;
+
+	if (op & QIB_SDMA_SENDCTRL_OP_CLEANUP)
+		write_kctxt_csr(dd, 0, WFR_SEND_DMA_CTRL,
+			dd->per_sdma[0].p_senddmactrl | WFR_SEND_DMA_CTRL_SDMA_CLEANUP_SMASK);
+	else
+		write_kctxt_csr(dd, 0, WFR_SEND_DMA_CTRL, dd->per_sdma[0].p_senddmactrl);
+	/* JAG XXX: do we have kr_scratch need/equivalent */
+
+	/* JAG TODO: OP_DRAIN */
+
+	spin_unlock(&dd->per_sdma[0].senddmactrl_lock);
+
+	/* JAG TODO: OP_DRAIN */
+#ifdef JAG_SDMA_VERBOSITY
+qib_sdma0_dumpstate(dd);
+#endif
 }
 
 static void sdma_hw_clean_up(struct qib_pportdata *ppd)
 {
+
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
 	if (print_unimplemented)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+
+#ifdef JAG_SDMA_VERBOSITY
+qib_sdma0_dumpstate(ppd->dd);
+#endif
+}
+
+static void sdma_setlengen(struct qib_pportdata *ppd)
+{
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
+	/*
+	 * Set SendDmaLenGen and clear-then-set the MSB of the generation
+	 * count to enable generation checking and load the internal
+	 * generation counter.
+	 */
+	write_kctxt_csr(ppd->dd, 0, WFR_SEND_DMA_LEN_GEN,
+		(ppd->sdma_descq_cnt/64) << WFR_SEND_DMA_LEN_GEN_LENGTH_SHIFT
+	);
+	write_kctxt_csr(ppd->dd, 0, WFR_SEND_DMA_LEN_GEN,
+		((ppd->sdma_descq_cnt/64) << WFR_SEND_DMA_LEN_GEN_LENGTH_SHIFT)
+		| (4ULL << WFR_SEND_DMA_LEN_GEN_GENERATION_SHIFT)
+	);
 }
 
 static void sdma_update_tail(struct qib_pportdata *ppd, u16 tail)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(ppd->dd, "tail: 0x%x --> 0x%x\n", ppd->sdma_descq_tail, tail);
+
+do {
+u16 i, start, end;
+start = ppd->sdma_descq_tail;
+end = tail;
+if (start < end) {
+/**/for (i = start; i < end; ++i) {
+/**//**/dd_dev_err(ppd->dd, "desc[%d] = %016llx %016llx\n",
+/**//**//**/i,
+/**//**//**/le64_to_cpu(ppd->sdma_descq[i].qw[0]),
+/**//**//**/le64_to_cpu(ppd->sdma_descq[i].qw[1])
+/**//**/);
+/**/}
+} else if (end < start) {
+/**/for (i = start; i < ppd->sdma_descq_cnt; ++i) {
+/**//**/dd_dev_err(ppd->dd, "desc[%d] = %016llx %016llx\n",
+/**//**//**/i,
+/**//**//**/le64_to_cpu(ppd->sdma_descq[i].qw[0]),
+/**//**//**/le64_to_cpu(ppd->sdma_descq[i].qw[1])
+/**//**/);
+/**/}
+/**/for (i = 0; i < end; ++i) {
+/**//**/dd_dev_err(ppd->dd, "desc[%d] = %016llx %016llx\n",
+/**//**//**/i,
+/**//**//**/le64_to_cpu(ppd->sdma_descq[i].qw[0]),
+/**//**//**/le64_to_cpu(ppd->sdma_descq[i].qw[1])
+/**//**/);
+/**/}
+} else {
+/**/dd_dev_err(ppd->dd, "Empty!???\n");
+}} while (0);
+#endif
+
+	/* Commit writes to memory and advance the tail on the chip */
+	wmb();
+	ppd->sdma_descq_tail = tail;
+	write_kctxt_csr(ppd->dd, 0, WFR_SEND_DMA_TAIL, tail);
 }
 
 static void sdma_hw_start_up(struct qib_pportdata *ppd)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
+/* JAG SDMA keep until fixed in simics */
+write_kctxt_csr(ppd->dd, 0, WFR_SEND_DMA_MEMORY, DEFAULT_WFR_SEND_DMA_MEMORY);
+write_kctxt_csr(ppd->dd, 0, WFR_SEND_DMA_BASE_ADDR, ppd->sdma_descq_phys);
+
+	sdma_setlengen(ppd);
+	sdma_update_tail(ppd, 0); /* Set SendDmaTail */
+	ppd->sdma_head_dma[0] = 0;
+	//sdma_sendctrl(ppd, ppd->sdma_state.current_op | QIB_SDMA_SENDCTRL_OP_CLEANUP);
 }
 
 static void set_armlaunch(struct hfi_devdata *dd, u32 enable)
@@ -3785,32 +3983,165 @@ static void set_cntr_sample(struct qib_pportdata *ppd, u32 intv,
 
 static void sdma_set_desc_cnt(struct qib_pportdata *ppd, unsigned cnt)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+	u64 reg = cnt;
+
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
+	reg &= WFR_SEND_DMA_DESC_CNT_CNT_MASK;
+	reg <<= WFR_SEND_DMA_RELOAD_CNT_CNT_SHIFT;
+	write_kctxt_csr(ppd->dd, 0, WFR_SEND_DMA_DESC_CNT, reg);
 }
+
+static const struct sdma_set_state_action sdma_action_table[] = {
+	[qib_sdma_state_s00_hw_down] = {
+		.go_s99_running_tofalse = 1,
+		.op_enable = 0,
+		.op_intenable = 0,
+		.op_halt = 0,
+		.op_cleanup = 0,
+		.op_drain = 0,
+	},
+	[qib_sdma_state_s10_hw_start_up_halt_wait] = {
+		.op_enable = 0,
+		.op_intenable = 1,
+		.op_halt = 1,
+		.op_cleanup = 0,
+		.op_drain = 0,
+	},
+	[qib_sdma_state_s15_hw_start_up_clean_wait] = {
+		.op_enable = 0,
+		.op_intenable = 1,
+		.op_halt = 0,
+		.op_cleanup = 1,
+		.op_drain = 0,
+	},
+	[qib_sdma_state_s20_idle] = {
+		.op_enable = 0,
+		.op_intenable = 1,
+		.op_halt = 0,
+		.op_cleanup = 0,
+		.op_drain = 0,
+	},
+	[qib_sdma_state_s30_sw_clean_up_wait] = {
+		.op_enable = 0,
+		.op_intenable = 1,
+		.op_halt = 0,
+		.op_cleanup = 0,
+		.op_drain = 0,
+	},
+	[qib_sdma_state_s40_hw_clean_up_wait] = {
+		.op_enable = 1,
+		.op_intenable = 1,
+		.op_halt = 0,
+		.op_cleanup = 0,
+		.op_drain = 0,
+	},
+	[qib_sdma_state_s50_hw_halt_wait] = {
+		.op_enable = 1,
+		.op_intenable = 1,
+		.op_halt = 1,
+		.op_cleanup = 0,
+		.op_drain = 1,
+	},
+	[qib_sdma_state_s99_running] = {
+		.op_enable = 1,
+		.op_intenable = 1,
+		.op_halt = 0,
+		.op_cleanup = 0,
+		.op_drain = 0,
+		.go_s99_running_totrue = 1,
+	},
+};
 
 static void sdma_init_early(struct qib_pportdata *ppd)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
+	ppd->sdma_state.set_state_action = sdma_action_table;
 }
 
-static int init_sdma_regs(struct qib_pportdata *ppd)
+static void init_sdma_regs(struct qib_pportdata *ppd)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-	return 0;
+	struct hfi_devdata *dd = ppd->dd;
+
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
+	write_kctxt_csr(dd, 0, WFR_SEND_DMA_BASE_ADDR, ppd->sdma_descq_phys);
+	sdma_setlengen(ppd);
+	sdma_update_tail(ppd, 0); /* Set SendDmaTail */
+	write_kctxt_csr(dd, 0, WFR_SEND_DMA_RELOAD_CNT, sdma_idle_cnt);
+	write_kctxt_csr(dd, 0, WFR_SEND_DMA_DESC_CNT, 0);
+	write_kctxt_csr(dd, 0, WFR_SEND_DMA_HEAD_ADDR, ppd->sdma_head_phys);
+	write_kctxt_csr(dd, 0, WFR_SEND_DMA_MEMORY, DEFAULT_WFR_SEND_DMA_MEMORY);
+	write_kctxt_csr(dd, 0, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
 }
 
 static u16 sdma_gethead(struct qib_pportdata *ppd)
 {
-	if (print_unimplemented)
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-	return 0;
+	struct hfi_devdata *dd = ppd->dd;
+	int sane;
+	int use_dmahead;
+	u16 swhead;
+	u16 swtail;
+	u16 cnt;
+	u16 hwhead;
+
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
+	use_dmahead = __qib_sdma_running(ppd) &&
+		(dd->flags & QIB_HAS_SDMA_TIMEOUT);
+retry:
+	hwhead = use_dmahead ?
+		(u16) le64_to_cpu(*ppd->sdma_head_dma) :
+		(u16) read_kctxt_csr(dd, 0, WFR_SEND_DMA_HEAD);
+
+	swhead = ppd->sdma_descq_head;
+	swtail = ppd->sdma_descq_tail;
+	cnt = ppd->sdma_descq_cnt;
+
+	if (swhead < swtail)
+		/* not wrapped */
+		sane = (hwhead >= swhead) & (hwhead <= swtail);
+	else if (swhead > swtail)
+		/* wrapped around */
+		sane = ((hwhead >= swhead) && (hwhead < cnt)) ||
+			(hwhead <= swtail);
+	else
+		/* empty */
+		sane = (hwhead == swhead);
+
+	if (unlikely(!sane)) {
+		dd_dev_err(dd, "IB%u:%u bad head %s hwhd=%hu swhd=%hu swtl=%hu "
+			"cnt=%hu\n", dd->unit, ppd->port,
+			use_dmahead ? "(dma)" : "(kreg)",
+			hwhead, swhead, swtail, cnt);
+		if (use_dmahead) {
+			/* try one more time, directly from the register */
+			use_dmahead = 0;
+			goto retry;
+		}
+		/* proceed as if no progress */
+		hwhead = swhead;
+	}
+
+	return hwhead;
 }
 
 static int sdma_busy(struct qib_pportdata *ppd)
 {
+
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+#endif
+
 	if (print_unimplemented)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 	return 0;
@@ -4326,6 +4657,8 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 	for (i = 0; i < dd->num_sdma; i++) {
 		dd->per_sdma[i].dd = dd;
 		dd->per_sdma[i].which = i;
+		spin_lock_init(&dd->per_sdma[i].senddmactrl_lock);
+		dd->per_sdma[i].p_senddmactrl = 0; // JAG - probably wrong
 	}
 
 	if (single_interrupt)
@@ -5637,9 +5970,16 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 #endif
 
 	/* sdma init */
+	dd->flags |= QIB_HAS_SEND_DMA;
+	dd->flags |= sdma_idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
 	dd->num_sdma = dd->chip_sdma_engines;
 	if (mod_num_sdma && mod_num_sdma < dd->chip_sdma_engines)
 		dd->num_sdma = mod_num_sdma;
+
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(dd, "JAG SDMA mod_num_sdma: %u\n", mod_num_sdma);
+dd_dev_err(dd, "JAG SDMA dd->chip_sdma_engines: %u\n", dd->chip_sdma_engines);
+dd_dev_err(dd, "JAG SDMA dd->num_sdma: %u\n", dd->num_sdma);
 
 	if (nodma_rtail)
 		dd->flags |= QIB_NODMA_RTAIL;
@@ -5782,3 +6122,55 @@ void force_all_interrupts(struct hfi_devdata *dd)
 	force_errors(dd, WFR_SEND_EGRESS_ERR_FORCE, "Send Egress Err");
 	force_errors(dd, WFR_SEND_ERR_FORCE, "Send Err");
 }
+
+#define sdma_dumpstate_helper(reg) do { \
+		csr = read_kctxt_csr(dd, 0, reg); \
+		dd_dev_err(dd, "%36s 0x%016llx\n", #reg, csr); \
+	} while ( 0 )
+
+#define sdma_dumpstate_helper2(reg) do { \
+		csr = read_csr(dd, reg + (8 * i)); \
+		dd_dev_err(dd, "%33s_%02u 0x%016llx\n", #reg, i, csr); \
+	} while ( 0 )
+
+#ifdef JAG_SDMA_VERBOSITY
+void qib_sdma0_dumpstate(struct hfi_devdata *dd)
+{
+	u64 csr;
+	unsigned i;
+
+	sdma_dumpstate_helper(WFR_SEND_DMA_CTRL);
+	sdma_dumpstate_helper(WFR_SEND_DMA_STATUS);
+	sdma_dumpstate_helper(WFR_SEND_DMA_ERR_STATUS);
+	sdma_dumpstate_helper(WFR_SEND_DMA_ERR_MASK);
+	sdma_dumpstate_helper(WFR_SEND_DMA_ENG_ERR_STATUS);
+	sdma_dumpstate_helper(WFR_SEND_DMA_ENG_ERR_MASK);
+
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; ++i ) {
+		sdma_dumpstate_helper2(WFR_CCE_INT_STATUS);
+		sdma_dumpstate_helper2(WFR_CCE_INT_MASK);
+		sdma_dumpstate_helper2(WFR_CCE_INT_BLOCKED);
+	}
+
+	sdma_dumpstate_helper(WFR_SEND_DMA_TAIL);
+	sdma_dumpstate_helper(WFR_SEND_DMA_HEAD);
+	sdma_dumpstate_helper(WFR_SEND_DMA_PRIORITY_THLD);
+	sdma_dumpstate_helper(WFR_SEND_DMA_IDLE_CNT);
+	sdma_dumpstate_helper(WFR_SEND_DMA_RELOAD_CNT);
+	sdma_dumpstate_helper(WFR_SEND_DMA_DESC_CNT);
+	sdma_dumpstate_helper(WFR_SEND_DMA_DESC_FETCHED_CNT);
+	sdma_dumpstate_helper(WFR_SEND_DMA_MEMORY);
+	sdma_dumpstate_helper(WFR_SEND_DMA_ENGINES);
+	sdma_dumpstate_helper(WFR_SEND_DMA_MEM_SIZE);
+	sdma_dumpstate_helper(WFR_SEND_EGRESS_SEND_DMA_STATUS);
+	sdma_dumpstate_helper(WFR_SEND_DMA_BASE_ADDR);
+	sdma_dumpstate_helper(WFR_SEND_DMA_LEN_GEN);
+	sdma_dumpstate_helper(WFR_SEND_DMA_HEAD_ADDR);
+	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_ENABLE);
+	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_VL);
+	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_JOB_KEY);
+	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_PARTITION_KEY);
+	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_SLID);
+	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_OPCODE);
+}
+#endif

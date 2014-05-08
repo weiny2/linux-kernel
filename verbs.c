@@ -916,6 +916,11 @@ void qib_verbs_sdma_desc_avail(struct qib_pportdata *ppd, unsigned avail)
 	struct qib_ibdev *dev;
 	unsigned i, n;
 
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(ppd->dd, "avail: %u\n", avail);
+#endif
+
 	n = 0;
 	dev = &ppd->dd->verbs_dev;
 	spin_lock(&dev->pending_lock);
@@ -1230,6 +1235,11 @@ int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 	int ret;
 	u32 dwords = (len + 3) >> 2;
 
+#ifdef JAG_SDMA_VERBOSITY
+dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
+dd_dev_err(dd, "hdrwords = %u, len = %u\n", hdrwords, len);
+#endif
+
 	/*
 	 * Calculate the send buffer trigger address.
 	 * The +2 counts for the pbc control qword
@@ -1240,6 +1250,10 @@ int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 	 * VL15 packets (IB_QPT_SMI) will always use PIO, so we
 	 * can defer SDMA restart until link goes ACTIVE without
 	 * worrying about just how we got there.
+	 */
+	/* 
+	 * XXX JAG SDMA - I don't think the SMI test has to hold true for
+	 * WFR, but is probably a fine simplification for the time being.
 	 */
 	if (qp->ibqp.qp_type == IB_QPT_SMI ||
 	    !(dd->flags & QIB_HAS_SEND_DMA))

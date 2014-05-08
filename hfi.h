@@ -475,7 +475,8 @@ struct qib_msix_entry {
 
 enum qib_sdma_states {
 	qib_sdma_state_s00_hw_down,
-	qib_sdma_state_s10_hw_start_up_wait,
+	qib_sdma_state_s10_hw_start_up_halt_wait,
+	qib_sdma_state_s15_hw_start_up_clean_wait,
 	qib_sdma_state_s20_idle,
 	qib_sdma_state_s30_sw_clean_up_wait,
 	qib_sdma_state_s40_hw_clean_up_wait,
@@ -486,7 +487,8 @@ enum qib_sdma_states {
 enum qib_sdma_events {
 	qib_sdma_event_e00_go_hw_down,
 	qib_sdma_event_e10_go_hw_start,
-	qib_sdma_event_e20_hw_started,
+	qib_sdma_event_e15_hw_started1,
+	qib_sdma_event_e25_hw_started2,
 	qib_sdma_event_e30_go_running,
 	qib_sdma_event_e40_sw_cleaned,
 	qib_sdma_event_e50_hw_cleaned,
@@ -505,6 +507,7 @@ struct sdma_set_state_action {
 	unsigned op_intenable:1;
 	unsigned op_halt:1;
 	unsigned op_drain:1;
+	unsigned op_cleanup:1;
 	unsigned go_s99_running_tofalse:1;
 	unsigned go_s99_running_totrue:1;
 };
@@ -513,11 +516,9 @@ struct qib_sdma_state {
 	struct kref          kref;
 	struct completion    comp;
 	enum qib_sdma_states current_state;
-	struct sdma_set_state_action *set_state_action;
+	const struct sdma_set_state_action *set_state_action;
 	unsigned             current_op;
 	unsigned             go_s99_running;
-	unsigned             first_sendbuf;
-	unsigned             last_sendbuf; /* really last +1 */
 	/* debugging/devel */
 	enum qib_sdma_states previous_state;
 	unsigned             previous_op;
@@ -589,6 +590,9 @@ struct qib_pportdata {
 	u16                   sdma_descq_tail;
 	u16                   sdma_descq_head;
 	u8                    sdma_generation;
+
+	struct tasklet_struct sdma_hw_clean_up_task
+		____cacheline_aligned_in_smp;
 
 	struct tasklet_struct sdma_sw_clean_up_task
 		____cacheline_aligned_in_smp;
@@ -711,6 +715,8 @@ struct sdma_engine {
 	int which;			/* which engine */
 	u64 imask;			/* clear interrupt mask */
 	/* add sdma fields here... */
+	spinlock_t senddmactrl_lock;	/* protect changes to senddmactrl shadow */
+	u64 p_senddmactrl;		/* shadow per-engine SendDmaCtrl */
 };
 
 struct rcv_array_data {
@@ -818,7 +824,7 @@ struct hfi_devdata {
 	void (*f_set_intr_state)(struct hfi_devdata *, u32);
 	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
 	void (*f_wantpiobuf_intr)(struct send_context *, u32);
-	int (*f_init_sdma_regs)(struct qib_pportdata *);
+	void (*f_init_sdma_regs)(struct qib_pportdata *);
 	u16 (*f_sdma_gethead)(struct qib_pportdata *);
 	int (*f_sdma_busy)(struct qib_pportdata *);
 	void (*f_sdma_update_tail)(struct qib_pportdata *, u16);
@@ -1259,6 +1265,10 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 void qib_dump_lookup_output_queue(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
+#ifdef JAG_SDMA_VERBOSITY
+/* XXX JAG SDMA - Temporary debug/dump routine */
+void qib_sdma0_dumpstate(struct hfi_devdata *dd);
+#endif
 
 /*
  * Set LED override, only the two LSBs have "public" meaning, but

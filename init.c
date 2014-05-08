@@ -1315,6 +1315,11 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto bail;	/* everything already cleaned */
 	}
 
+	if (dd->flags & QIB_HAS_SEND_DMA) {
+		/* JAG SDMA - is there a better place to put this? */
+		qib_sdma_process_event(dd->pport, qib_sdma_event_e30_go_running);
+	}
+
 	qib_verify_pioperf(dd);
 
 	/* interrupt testing */
@@ -1325,6 +1330,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		if (atomic_inc_return(&tested) <= test_interrupts)
 			force_all_interrupts(dd);
 	}
+
 	return 0;
 
 clean_bail:
