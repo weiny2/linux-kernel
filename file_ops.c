@@ -767,7 +767,9 @@ static int find_shared_ctxt(struct file *fp,
 			if (!uctxt || !uctxt->cnt)
 				continue;
 			/* Skip ctxt if it doesn't match the requested one */
-			if (uctxt->subctxt_id != uinfo->subctxt_id)
+			if (memcmp(uctxt->uuid, uinfo->uuid,
+				   sizeof(uctxt->uuid)) ||
+			    uctxt->subctxt_id != uinfo->subctxt_id)
 				continue;
 			/* Verify the sharing process matches the master */
 			if (uctxt->subctxt_cnt != uinfo->subctxt_cnt ||
@@ -843,6 +845,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	uctxt->flags = uinfo->flags;
 	init_waitqueue_head(&uctxt->wait);
 	strlcpy(uctxt->comm, current->comm, sizeof(uctxt->comm));
+	memcpy(uctxt->uuid, uinfo->uuid, sizeof(uctxt->uuid));
 	qib_stats.sps_ctxts++;
 	dd->freectxts--;
 	ctxt_fp(fp) = uctxt;

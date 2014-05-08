@@ -291,6 +291,8 @@ struct hfi_user_info {
 	 */
 	__u16 subctxt_cnt;
 	__u16 subctxt_id;
+	/* 128bit UUID passed in by PSM. */
+	__u8 uuid[16];
 };
 
 /* User commands. */
