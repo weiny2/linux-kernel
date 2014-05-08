@@ -620,7 +620,7 @@ done:
 			lastfail = dd->f_bringup_serdes(ppd);
 			if (lastfail) {
 				dd_dev_info(dd,
-					"Failed to bringup IB port %u\n",
+					"Failed to bring up IB port %u\n",
 					ppd->port);
 			}
 			/*
