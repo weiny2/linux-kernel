@@ -821,3 +821,8 @@ int qib_reset_device(int unit)
 bail:
 	return ret;
 }
+
+inline u16 generate_jkey(unsigned int uid)
+{
+	return uid & 0xffff;
+}

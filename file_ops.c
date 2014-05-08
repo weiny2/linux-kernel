@@ -42,6 +42,7 @@
 #include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/module.h>
+#include <linux/cred.h>
 
 #include "hfi.h"
 #include "pio.h"
@@ -624,6 +625,8 @@ static int hfi_close(struct inode *inode, struct file *fp)
 		      QIB_RCVCTRL_INTRAVAIL_DIS | QIB_RCVCTRL_ONE_PKT_EGR_DIS |
 		      QIB_RCVCTRL_NO_RHQ_DROP_DIS | QIB_RCVCTRL_NO_EGR_DROP_DIS,
 		      uctxt->ctxt);
+	/* Clear the context's J_KEY */
+	dd->f_clear_ctxt_jkey(dd, uctxt->ctxt);
 	sc_disable(uctxt->sc);
 	uctxt->pid = 0;
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
@@ -846,6 +849,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	init_waitqueue_head(&uctxt->wait);
 	strlcpy(uctxt->comm, current->comm, sizeof(uctxt->comm));
 	memcpy(uctxt->uuid, uinfo->uuid, sizeof(uctxt->uuid));
+	uctxt->jkey = generate_jkey(current_uid());
 	qib_stats.sps_ctxts++;
 	dd->freectxts--;
 	ctxt_fp(fp) = uctxt;
@@ -949,6 +953,9 @@ static int user_init(struct file *fp)
 	 */
 	if (uctxt->rcvhdrtail_kvaddr)
 		qib_clear_rcvhdrtail(uctxt);
+
+	/* Setup J_KEY before enabling the context */
+	uctxt->dd->f_set_ctxt_jkey(uctxt->dd, uctxt->ctxt, uctxt->jkey);
 
 	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB;
 	if (hdrsup_enable && (uctxt->flags & HFI_CTXTFLAG_TIDFLOWENABLE))
@@ -1108,6 +1115,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	binfo.hw_version = dd->revision;
 	binfo.sw_version = QIB_KERN_SWVERSION;
 	binfo.bthqp = kdeth_qp;
+	binfo.jkey = uctxt->jkey;
 	/* XXX (Mitko): We are hard-coding the pport index since WFR
 	 * has only one port and the expectation is that ppd will go
 	 * away. */
@@ -1671,7 +1679,6 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 	/* must be in range */
 	if (*f_pos + count > dd->kregend - dd->kregbase)
 		return -EINVAL;
-
 	base = (void *)dd->kregbase + *f_pos;
 	for (total = 0; total < count; total += 8) {
 		data = readq(base + total);

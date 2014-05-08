@@ -712,6 +712,12 @@
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);
 
+/*
+ *
+ * The *_kctxt_* flavor of the CSR read/write functions are for
+ * per-context or per-SDMA CSRs that are not mappable to user-space.
+ * Their spacing is not a PAGE_SIZE multiple.
+ */
 static inline u64 read_kctxt_csr(const struct hfi_devdata *dd, int ctxt,
 					u32 offset0)
 {
@@ -725,6 +731,26 @@ static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
 	/* kernel per-context CSRs are separated by 0x100 */
 	write_csr(dd, offset0 + (0x100 * ctxt), value);
 } 
+/*
+ * The *_uctxt_* flavor of the CSR read/write functions are for
+ * per-context CSRs that are mappable to user space. All these CSRs
+ * are spaced by a PAGE_SIZE multiple in order to be mappable to
+ * different processes without exposing other contexts' CSRs
+ */
+static inline u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt,
+				 u32 offset0)
+{
+	/* user per-context CSRs are separated by 0x1000 */
+	return read_csr(dd, offset0 + (0x1000 * ctxt));
+}
+
+static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
+				   u32 offset0, u64 value)
+{
+	/* TODO: write to user mapping if available? */
+	/* user per-context CSRs are separated by 0x1000 */
+	write_csr(dd, offset0 + (0x1000 * ctxt), value);
+}
 
 int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);

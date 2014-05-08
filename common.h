@@ -266,6 +266,7 @@ struct hfi_base_info {
 #define HFI_CTXTFLAG_DONTDROPEGRFULL  (1<<1)
 #define HFI_CTXTFLAG_DONTDROPHDRQFULL (1<<2)
 #define HFI_CTXTFLAG_TIDFLOWENABLE    (1<<3)
+#define HFI_CTXTFLAG_ALLOWPERMJKEY    (1<<4)
 
 /*
  * This structure is passed to qib_userinit() to tell the driver where

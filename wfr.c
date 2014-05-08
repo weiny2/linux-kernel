@@ -837,22 +837,6 @@ OVERFLOW_ELEM(152), OVERFLOW_ELEM(153), OVERFLOW_ELEM(154), OVERFLOW_ELEM(155),
 OVERFLOW_ELEM(156), OVERFLOW_ELEM(157), OVERFLOW_ELEM(158), OVERFLOW_ELEM(159),
 };
 
-#if 0
-u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt, u32 offset0)
-{
-	/* user per-context CSRs are separated by 0x1000 */
-	return read_csr(dd, offset0 + (0x1000 * ctxt));
-}
-#endif
-
-static void write_uctxt_csr(struct hfi_devdata *dd, int ctxt, u32 offset0,
-		u64 value)
-{
-	/* TODO: write to user mapping if available? */
-	/* user per-context CSRs are separated by 0x1000 */
-	write_csr(dd, offset0 + (0x1000 * ctxt), value);
-} 
-
 /* ======================================================================== */
 
 /*
@@ -5260,6 +5244,63 @@ void init_txe(struct hfi_devdata *dd)
 	assign_local_cm_au_table(dd, dd->vcu);
 }
 
+int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
+{
+	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	reg = WFR_SEND_CTXT_CHECK_JOB_KEY_MASK_SMASK | /* mask is always 1's */
+		((jkey & WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_MASK) <<
+		 WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_SHIFT);
+	/* JOB_KEY_ALLOW_PERMISSIVE is not allowed by default */
+	if (rcd->flags & HFI_CTXTFLAG_ALLOWPERMJKEY)
+		reg |= WFR_SEND_CTXT_CHECK_JOB_KEY_ALLOW_PERMISSIVE_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, reg);
+	/* Turn on the J_KEY check */
+	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+	reg |= WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+
+	/* Enable J_KEY check on receive context. */
+	reg = WFR_RCV_KEY_CTRL_JOB_KEY_ENABLE_SMASK |
+		WFR_RCV_KEY_CTRL_JOB_KEY_MASK_SMASK |
+		((jkey & WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_MASK) <<
+		 WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_SHIFT);
+	write_uctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, reg);
+done:
+	return ret;
+}
+
+int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
+{
+	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, 0);
+	/* Turn off the J_KEY check on the send context */
+	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+	reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	/* Turn off the J_KEY on the receive side */
+	write_uctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, 0);
+done:
+	return ret;
+}
+
 /*
  * Assign link credits.
  *
@@ -5448,6 +5489,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_sdma_hw_start_up  = sdma_hw_start_up;
 	dd->f_sdma_init_early   = sdma_init_early;
 	dd->f_tempsense_rd	= tempsense_rd;
+	dd->f_set_ctxt_jkey     = set_ctxt_jkey;
+	dd->f_clear_ctxt_jkey   = clear_ctxt_jkey;
 
 	/*
 	 * Set other early dd values.

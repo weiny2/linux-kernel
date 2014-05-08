@@ -154,6 +154,8 @@ struct qib_ctxtdata {
 	/* non-zero if ctxt is being shared. */
 	u16 subctxt_id;
 	u8 uuid[16];
+	/* job key */
+	u16 jkey;
 	/* number of RcvArray groups for this context. */
 	u32 rcv_array_groups;
 	/* number of eager TID entries. */
@@ -803,6 +805,8 @@ struct hfi_devdata {
 		char **, u64 **);
 	int (*f_init_ctxt)(struct qib_ctxtdata *);
 	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
+	int (*f_set_ctxt_jkey)(struct hfi_devdata *, unsigned, u16);
+	int (*f_clear_ctxt_jkey)(struct hfi_devdata *, unsigned);
 
 	char *boardname; /* human readable board info */
 
@@ -1071,6 +1075,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 int qib_set_linkstate(struct qib_pportdata *, u8);
+inline u16 generate_jkey(unsigned int);
 
 /* MTU handling */
 
