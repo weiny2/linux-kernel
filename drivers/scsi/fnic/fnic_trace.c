@@ -439,10 +439,10 @@ int fnic_trace_buf_init(void)
 	}
 	err = fnic_trace_debugfs_init();
 	if (err < 0) {
-		printk(KERN_ERR PFX "Failed to initialize debugfs for tracing\n");
+		pr_err("fnic: Failed to initialize debugfs for tracing\n");
 		goto err_fnic_trace_debugfs_init;
 	}
-	printk(KERN_INFO PFX "Successfully Initialized Trace Buffer\n");
+	pr_info("fnic: Successfully Initialized Trace Buffer\n");
 	return err;
 err_fnic_trace_debugfs_init:
 	fnic_trace_free();
@@ -470,7 +470,7 @@ void fnic_trace_free(void)
 
 /*
  * fnic_fc_ctlr_trace_buf_init -
- * 	Initialize trace buffer to log fnic control frames
+ * Initialize trace buffer to log fnic control frames
  * Description:
  * Initialize trace buffer data structure by allocating
  * required memory for trace data as well as for Indexes.
@@ -488,12 +488,12 @@ int fnic_fc_trace_init(void)
 	int i;
 
 	fc_trace_max_entries = (fnic_fc_trace_max_pages * PAGE_SIZE)/
-                               FC_TRC_SIZE_BYTES;
+				FC_TRC_SIZE_BYTES;
 	fnic_fc_ctlr_trace_buf_p = (unsigned long)vmalloc(
 					fnic_fc_trace_max_pages * PAGE_SIZE);
 	if (!fnic_fc_ctlr_trace_buf_p) {
-		printk(KERN_ERR PFX "Failed to allocate memory "
-                       "for fnic_fc_ctlr_trace_buf_p\n");
+		pr_err("fnic: Failed to allocate memory for "
+			"FC Control Trace Buf\n");	
 		err = -ENOMEM;
 		goto err_fnic_fc_ctlr_trace_buf_init;
 	}
@@ -503,13 +503,11 @@ int fnic_fc_trace_init(void)
 
 	/* Allocate memory for page offset */
 	fc_trace_entries.page_offset = vmalloc(fc_trace_max_entries *
-                                                      sizeof (unsigned long));
+						sizeof(unsigned long));
 	if (!fc_trace_entries.page_offset) {
-		printk(KERN_ERR PFX "Failed to allocate memory for"
-                       " page_offset\n");
-		if (!fnic_fc_ctlr_trace_buf_p) {
-			printk(KERN_DEBUG PFX
-				"Release fnic_fc_ctlr_trace_buf_p");
+		pr_err("fnic:Failed to allocate memory for page_offset\n");
+		if (fnic_fc_ctlr_trace_buf_p) {
+			pr_err("fnic: Freeing FC Control Trace Buf\n");
 			vfree((void *)fnic_fc_ctlr_trace_buf_p);
 			fnic_fc_ctlr_trace_buf_p = 0;
 		}
@@ -517,27 +515,25 @@ int fnic_fc_trace_init(void)
 		goto err_fnic_fc_ctlr_trace_buf_init;
 	}
 	memset((void *)fc_trace_entries.page_offset, 0,
-			(fc_trace_max_entries * sizeof (unsigned long)));
+		(fc_trace_max_entries * sizeof(unsigned long)));
 
 	fc_trace_entries.rd_idx = fc_trace_entries.wr_idx = 0;
 	fc_trace_buf_head = fnic_fc_ctlr_trace_buf_p;
 
-        /*
-         * Set up fc_trace_entries.page_offset field with memory location
-         * for every trace entry
-         */
+	/*
+	 * Set up fc_trace_entries.page_offset field with memory location
+	 * for every trace entry
+	 */
 	for (i = 0; i < fc_trace_max_entries; i++) {
 		fc_trace_entries.page_offset[i] = fc_trace_buf_head;
 		fc_trace_buf_head += FC_TRC_SIZE_BYTES;
 	}
 	err = fnic_fc_trace_debugfs_init();
 	if (err < 0) {
-		printk(KERN_ERR PFX
-			"Failed to initialize debugfs for FC_CTLR tracing\n");
+		pr_err("fnic: Failed to initialize FC_CTLR tracing.\n");
 		goto err_fnic_fc_ctlr_trace_debugfs_init;
 	}
-	printk(KERN_DEBUG PFX
-		"Successfully Initialized FC_CTLR Trace Buffer\n");
+	pr_info("fnic: Successfully Initialized FC_CTLR Trace Buffer\n");
 	return err;
 
 err_fnic_fc_ctlr_trace_debugfs_init:
@@ -561,7 +557,7 @@ void fnic_fc_trace_free(void)
 		vfree((void *)fnic_fc_ctlr_trace_buf_p);
 		fnic_fc_ctlr_trace_buf_p = 0;
 	}
-	printk(KERN_DEBUG PFX "Successfully FC_CTLR Freed Trace Buffer\n");
+	pr_info("fnic:Successfully FC_CTLR Freed Trace Buffer\n");
 }
 
 /*
@@ -573,37 +569,36 @@ void fnic_fc_trace_free(void)
  *       fc_frame: pointer to fc_frame
  *       frame_len: Length of the fc_frame
  * Description:
- * 	This routine will get next available wr_idx and
- * 	copy all passed trace data to the buffer pointed by wr_idx
- * 	and increment wr_idx. It will also make sure that we dont
- * 	overwrite the entry which we are reading and also
- * 	wrap around if we reach the maximum entries.
+ *       This routine will get next available wr_idx and
+ *       copy all passed trace data to the buffer pointed by wr_idx
+ *       and increment wr_idx. It will also make sure that we dont
+ *       overwrite the entry which we are reading and also
+ *       wrap around if we reach the maximum entries.
  * Returned Value:
- * 	It will return 0 for success or -1 for failure
+ *       It will return 0 for success or -1 for failure
  */
 int fnic_fc_trace_set_data(u32 host_no, u8 frame_type,
-                                char *frame, u32 fc_trc_frame_len)
+			char *frame, u32 fc_trc_frame_len)
 {
 	unsigned long flags;
-	fc_trace_hdr_t *fc_buf;
+	struct fc_trace_hdr *fc_buf;
 	unsigned long eth_fcoe_hdr_len;
 	char *fc_trace;
 
-	if (fnic_fc_tracing_enabled == 0) {
+	if (fnic_fc_tracing_enabled == 0)
 		return 0;
-	}
 
 	spin_lock_irqsave(&fnic_fc_trace_lock, flags);
 
 	if (fnic_fc_trace_cleared == 1) {
 		fc_trace_entries.rd_idx = fc_trace_entries.wr_idx = 0;
-		printk(KERN_DEBUG "Reseting the read idx \n");
+		pr_info("fnic: Reseting the read idx\n");
 		memset((void *)fnic_fc_ctlr_trace_buf_p, 0,
 				fnic_fc_trace_max_pages * PAGE_SIZE);
 		fnic_fc_trace_cleared = 0;
 	}
 
-	fc_buf = (fc_trace_hdr_t *)
+	fc_buf = (struct fc_trace_hdr *)
 		fc_trace_entries.page_offset[fc_trace_entries.wr_idx];
 
 	fc_trace_entries.wr_idx++;
@@ -627,8 +622,8 @@ int fnic_fc_trace_set_data(u32 host_no, u8 frame_type,
 	 * at trace entry point so we will stuff 0xff just to make it generic.
 	 */
 	if( frame_type == FNIC_FC_RECV ) {
-		eth_fcoe_hdr_len = sizeof (struct ethhdr) +
-					sizeof (struct fcoe_hdr);
+		eth_fcoe_hdr_len = sizeof(struct ethhdr) +
+					sizeof(struct fcoe_hdr);
 		fc_trc_frame_len = fc_trc_frame_len + eth_fcoe_hdr_len;
 		memset((char *)fc_trace, 0xff, eth_fcoe_hdr_len);
 		/* Copy the rest of data frame */
@@ -653,41 +648,43 @@ int fnic_fc_trace_set_data(u32 host_no, u8 frame_type,
  * Passed parameter:
  *       @fnic_dbgfs_t: pointer to debugfs trace buffer
  *       rdata_flag: 1 => Unformated file
- * 		0 => formated file
+ * 	             0 => formated file
  * Description:
- *	 This routine will copy the trace data to memory file with
- *	 proper formatting and also copy to another memory
- *	 file without formatting for further procesing.
+ *       This routine will copy the trace data to memory file with
+ *       proper formatting and also copy to another memory
+ *       file without formatting for further procesing.
  * Retrun Value:
- * 	Number of bytes that were dumped into fnic_dbgfs_t
+ *       Number of bytes that were dumped into fnic_dbgfs_t
  */
 
-int fnic_fc_trace_get_data(fnic_dbgfs_t *fnic_dbgfs_prt, u8 rdata_flag) {
+int fnic_fc_trace_get_data(fnic_dbgfs_t *fnic_dbgfs_prt, u8 rdata_flag)
+{
 	int rd_idx, wr_idx;
 	unsigned long flags;
 	int len = 0, j;
-	fc_trace_hdr_t *tdata;
+	struct fc_trace_hdr *tdata;
 	char *fc_trace;
 
 	spin_lock_irqsave(&fnic_fc_trace_lock, flags);
 	if (fc_trace_entries.wr_idx == fc_trace_entries.rd_idx) {
 		spin_unlock_irqrestore(&fnic_fc_trace_lock, flags);
-		printk(KERN_DEBUG "Buffer is empty");
+		pr_info("fnic: Buffer is empty\n");
 		return 0;
 	}
 	rd_idx = fc_trace_entries.rd_idx;
 	wr_idx = fc_trace_entries.wr_idx;
 	if (rdata_flag == 0) {
 		len += snprintf(fnic_dbgfs_prt->buffer + len,
-				(fnic_fc_trace_max_pages * PAGE_SIZE *3) -len,
-				"Time Stamp (UTC)\t\t Host No:"
-				"   F Type:  len:     FCoE_FRAME:\n");
+			(fnic_fc_trace_max_pages * PAGE_SIZE * 3) - len,
+			"Time Stamp (UTC)\t\t"
+			"Host No:   F Type:  len:     FCoE_FRAME:\n");
 	}
 
 	while (rd_idx != wr_idx) {
-		tdata = (fc_trace_hdr_t *)fc_trace_entries.page_offset[rd_idx];
+		tdata = (struct fc_trace_hdr *)
+			fc_trace_entries.page_offset[rd_idx];
 		if (!tdata) {
-			printk(KERN_DEBUG "Rd data is NULL");
+			pr_info("fnic: Rd data is NULL\n");
 			spin_unlock_irqrestore(&fnic_fc_trace_lock, flags);
 			return 0;
 		}
@@ -696,46 +693,47 @@ int fnic_fc_trace_get_data(fnic_dbgfs_t *fnic_dbgfs_prt, u8 rdata_flag) {
 				fnic_dbgfs_prt, &len, rdata_flag);
 		} else {
 			fc_trace = (char *)tdata;
-                        for (j = 0; j < FC_TRC_SIZE_BYTES; j++) {
-                                len += snprintf(fnic_dbgfs_prt->buffer + len,
-                                    (fnic_fc_trace_max_pages * PAGE_SIZE * 3)
-				     - len, "%02x", fc_trace[j] & 0xff);
-                        } // for loop
-                        len += snprintf(fnic_dbgfs_prt->buffer + len,
-                                (fnic_fc_trace_max_pages * PAGE_SIZE *3) -len,
-                                "\n");
+			for (j = 0; j < FC_TRC_SIZE_BYTES; j++) {
+				len += snprintf(fnic_dbgfs_prt->buffer + len,
+				(fnic_fc_trace_max_pages * PAGE_SIZE * 3)
+				- len, "%02x", fc_trace[j] & 0xff);
+			} /* for loop */
+			len += snprintf(fnic_dbgfs_prt->buffer + len,
+				(fnic_fc_trace_max_pages * PAGE_SIZE * 3) - len,
+				"\n");
 		}
 		rd_idx++;
-		if (rd_idx > (fc_trace_max_entries -1))
+		if (rd_idx > (fc_trace_max_entries - 1))
 			rd_idx = 0;
 	}
 
-        spin_unlock_irqrestore(&fnic_fc_trace_lock, flags);
-        return len;
+	spin_unlock_irqrestore(&fnic_fc_trace_lock, flags);
+	return len;
 }
 
 /*
  * copy_and_format_trace_data: Copy formatted data to char * buffer
  * Passed Parameter:
- * 	@fc_trace_hdr_t: pointer to trace data
- * 	@fnic_dbgfs_t: pointer to debugfs trace buffer
- * 	@orig_len: pointer to len
- * 	rdata_flag: 0 => Formated file, 1 => Unformated file
+ *      @fc_trace_hdr_t: pointer to trace data
+ *      @fnic_dbgfs_t: pointer to debugfs trace buffer
+ *      @orig_len: pointer to len
+ * rdata_flag: 0 => Formated file, 1 => Unformated file
  * Description:
- * 	This routine will format and copy the passed trace data
- * 	for formated file or unformated file accordingly.
+ *      This routine will format and copy the passed trace data
+ *      for formated file or unformated file accordingly.
  */
 
-void copy_and_format_trace_data(fc_trace_hdr_t *tdata,
-                               fnic_dbgfs_t *fnic_dbgfs_prt, int *orig_len,
-                               u8 rdata_flag)
+void copy_and_format_trace_data(struct fc_trace_hdr *tdata,
+				fnic_dbgfs_t *fnic_dbgfs_prt, int *orig_len,
+				u8 rdata_flag)
 {
-        struct tm tm;
-        int j, i = 1, len;
-        char *fc_trace;
-	int ethhdr_len = sizeof (struct ethhdr) - 1;
-	int fcoehdr_len = sizeof (struct fcoe_hdr);
-	int fchdr_len = sizeof (struct fc_frame_header);
+	struct tm tm;
+	int j, i = 1, len;
+	char *fc_trace, *fmt;
+	int ethhdr_len = sizeof(struct ethhdr) - 1;
+	int fcoehdr_len = sizeof(struct fcoe_hdr);
+	int fchdr_len = sizeof(struct fc_frame_header);
+	int max_size = fnic_fc_trace_max_pages * PAGE_SIZE * 3;
 
 	tdata->frame_type = tdata->frame_type & 0x7F;
 
@@ -743,44 +741,39 @@ void copy_and_format_trace_data(fc_trace_hdr_t *tdata,
 
 	time_to_tm(tdata->time_stamp.tv_sec, 0, &tm);
 
-        len += snprintf(fnic_dbgfs_prt->buffer + len,
-                       (fnic_fc_trace_max_pages * PAGE_SIZE *3) -len,
-                        "%02d:%02d:%04ld %02d:%02d:%02d.%09lu ns"
-                        "%8x       %c%8x\t",
-                        tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900,
-                        tm.tm_hour, tm.tm_min, tm.tm_sec,
-                        tdata->time_stamp.tv_nsec, tdata->host_no,
-                        tdata->frame_type, tdata->frame_len);
+	fmt = "%02d:%02d:%04ld %02d:%02d:%02d.%09lu ns%8x       %c%8x\t";
+	len += snprintf(fnic_dbgfs_prt->buffer + len,
+		max_size - len,
+		fmt,
+		tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900,
+		tm.tm_hour, tm.tm_min, tm.tm_sec,
+		tdata->time_stamp.tv_nsec, tdata->host_no,
+		tdata->frame_type, tdata->frame_len);
 
-        fc_trace = (char *)FC_TRACE_ADDRESS(tdata);
+	fc_trace = (char *)FC_TRACE_ADDRESS(tdata);
 
 	for (j = 0; j < min_t(u8, tdata->frame_len,
 		(u8)(FC_TRC_SIZE_BYTES - FC_TRC_HEADER_SIZE)); j++) {
 		if (tdata->frame_type == FNIC_FC_LE) {
 			len += snprintf(fnic_dbgfs_prt->buffer + len,
-				(fnic_fc_trace_max_pages * PAGE_SIZE * 3) -len,
-				"%c", fc_trace[j]);
+				max_size - len, "%c", fc_trace[j]);
 		} else {
 			len += snprintf(fnic_dbgfs_prt->buffer + len,
-				(fnic_fc_trace_max_pages * PAGE_SIZE * 3) -len,
-                               "%02x", fc_trace[j] & 0xff);
+				max_size - len, "%02x", fc_trace[j] & 0xff);
 			len += snprintf(fnic_dbgfs_prt->buffer + len,
-                               (fnic_fc_trace_max_pages * PAGE_SIZE * 3)
-                                -len, " ");
+				max_size - len, " ");
 			if (j == ethhdr_len ||
-			    j == ethhdr_len + fcoehdr_len ||
-                            j == ethhdr_len + fcoehdr_len + fchdr_len ||
-                            (i > 3 && j%fchdr_len == 0)) {
+				j == ethhdr_len + fcoehdr_len ||
+				j == ethhdr_len + fcoehdr_len + fchdr_len ||
+				(i > 3 && j%fchdr_len == 0)) {
 				len += snprintf(fnic_dbgfs_prt->buffer
-					+ len, (fnic_fc_trace_max_pages
-                                        * PAGE_SIZE * 3) -len,
-                                        "\n\t\t\t\t\t\t\t\t");
+					+ len, max_size - len,
+					"\n\t\t\t\t\t\t\t\t");
 				i++;
 			}
-		} // end of else
-	} // for loop
+		} /* end of else */
+	} /* end of for loop */
 	len += snprintf(fnic_dbgfs_prt->buffer + len,
-                        (fnic_fc_trace_max_pages * PAGE_SIZE *3) -len,
-                        "\n");
+		 max_size - len, "\n");
 	*orig_len = len;
 }

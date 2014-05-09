@@ -78,8 +78,6 @@ struct fc_trace_hdr {
 	u8 frame_len;
 } __attribute__((__packed__));
 
-typedef struct fc_trace_hdr fc_trace_hdr_t;
-
 #define FC_TRACE_ADDRESS(a) \
 	((unsigned long )(a) + sizeof (struct fc_trace_hdr))
 
@@ -120,11 +118,11 @@ void fnic_trace_debugfs_terminate(void);
 int fnic_fc_trace_init(void);
 void fnic_fc_trace_free(void);
 int fnic_fc_trace_set_data(u32 host_no, u8 frame_type,
-                                char *frame, u32 fc_frame_len);
+				char *frame, u32 fc_frame_len);
 int fnic_fc_trace_get_data(fnic_dbgfs_t *fnic_dbgfs_prt, u8 rdata_flag);
-void copy_and_format_trace_data(fc_trace_hdr_t *tdata,
-                               fnic_dbgfs_t *fnic_dbgfs_prt,
-                               int *len, u8 rdata_flag);
+void copy_and_format_trace_data(struct fc_trace_hdr *tdata,
+				fnic_dbgfs_t *fnic_dbgfs_prt,
+				int *len, u8 rdata_flag);
 int fnic_fc_trace_debugfs_init(void);
 void fnic_fc_trace_debugfs_terminate(void);
 

@@ -1312,9 +1312,9 @@ static void fnic_cleanup_io(struct fnic *fnic, int exclude_id)
 
 cleanup_scsi_cmd:
 		sc->result = DID_TRANSPORT_DISRUPTED << 16;
-		FNIC_SCSI_DBG(KERN_DEBUG, fnic->lport->host, "fnic_cleanup_io:"
-			      " sc duration = %lu DID_TRANSPORT_DISRUPTED\n",
-				(jiffies - start_time));
+		FNIC_SCSI_DBG(KERN_DEBUG, fnic->lport->host,
+				"%s: sc duration = %lu DID_TRANSPORT_DISRUPTED\n",
+				__func__, (jiffies - start_time));
 
 		if (atomic64_read(&fnic->io_cmpl_skip))
 			atomic64_dec(&fnic->io_cmpl_skip);
