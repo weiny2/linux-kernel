@@ -2342,7 +2342,7 @@ int __bond_3ad_get_active_agg_info(struct bonding *bond,
 	struct slave *slave;
 	struct port *port;
 
-	bond_for_each_slave(bond, slave, iter) {
+	bond_for_each_slave_rcu(bond, slave, iter) {
 		port = &(SLAVE_AD_INFO(slave).port);
 		if (port->aggregator && port->aggregator->is_active) {
 			aggregator = port->aggregator;
@@ -2367,9 +2367,9 @@ int bond_3ad_get_active_agg_info(struct bonding *bond, struct ad_info *ad_info)
 {
 	int ret;
 
-	read_lock(&bond->lock);
+	rcu_read_lock();
 	ret = __bond_3ad_get_active_agg_info(bond, ad_info);
-	read_unlock(&bond->lock);
+	rcu_read_unlock();
 
 	return ret;
 }
@@ -2386,7 +2386,6 @@ int bond_3ad_xmit_xor(struct sk_buff *skb, struct net_device *dev)
 	int res = 1;
 	int agg_id;
 
-	read_lock(&bond->lock);
 	if (__bond_3ad_get_active_agg_info(bond, &ad_info)) {
 		pr_debug("%s: Error: __bond_3ad_get_active_agg_info failed\n",
 			 dev->name);
@@ -2404,7 +2403,7 @@ int bond_3ad_xmit_xor(struct sk_buff *skb, struct net_device *dev)
 	slave_agg_no = bond_xmit_hash(bond, skb, slaves_in_agg);
 	first_ok_slave = NULL;
 
-	bond_for_each_slave(bond, slave, iter) {
+	bond_for_each_slave_rcu(bond, slave, iter) {
 		agg = SLAVE_AD_INFO(slave).port.aggregator;
 		if (!agg || agg->aggregator_identifier != agg_id)
 			continue;
@@ -2434,7 +2433,6 @@ int bond_3ad_xmit_xor(struct sk_buff *skb, struct net_device *dev)
 		res = bond_dev_queue_xmit(bond, skb, first_ok_slave->dev);
 
 out:
-	read_unlock(&bond->lock);
 	if (res) {
 		/* no suitable interface, frame not sent */
 		kfree_skb(skb);
