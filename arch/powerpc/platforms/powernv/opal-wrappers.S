@@ -24,7 +24,7 @@
 	mflr	r0;			\
 	mfcr	r12;			\
 	std	r0,16(r1);		\
-	stw	r12,8(r1);		\
+	std	r12,8(r1);		\
 	std	r1,PACAR1(r13);		\
 	li	r0,0;			\
 	mfmsr	r12;			\
@@ -32,7 +32,7 @@
 	std	r12,PACASAVEDMSR(r13);	\
 	andc	r12,r12,r0;		\
 	mtmsrd	r12,1;			\
-	LOAD_REG_ADDR(r0,opal_return);	\
+	LOAD_REG_ADDR(r0,.opal_return);	\
 	mtlr	r0;			\
 	li	r0,MSR_DR|MSR_IR|MSR_LE;\
 	andc	r12,r12,r0;		\
@@ -44,7 +44,7 @@
 	mtspr	SPRN_HSRR0,r12;		\
 	hrfid
 
-opal_return:
+_STATIC(opal_return)
 	/*
 	 * Fixup endian on OPAL return... we should be able to simplify
 	 * this by instead converting the below trampoline to a set of
@@ -53,7 +53,7 @@ opal_return:
 	 */
 	FIXUP_ENDIAN
 	ld	r2,PACATOC(r13);
-	lwz	r4,8(r1);
+	ld	r4,8(r1);
 	ld	r5,16(r1);
 	ld	r6,PACASAVEDMSR(r13);
 	mtspr	SPRN_SRR0,r5;

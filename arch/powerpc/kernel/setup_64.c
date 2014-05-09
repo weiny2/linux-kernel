@@ -284,7 +284,7 @@ void smp_release_cpus(void)
 
 	ptr  = (unsigned long *)((unsigned long)&__secondary_hold_spinloop
 			- PHYSICAL_START);
-	*ptr = ppc_function_entry(generic_secondary_smp_init);
+	*ptr = __pa(generic_secondary_smp_init);
 
 	/* And wait a bit for them to catch up */
 	for (i = 0; i < 100000; i++) {

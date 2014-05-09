@@ -139,8 +139,8 @@ BEGIN_FTR_SECTION
 #endif
 
 	beq	cr1,2f
-	b	power7_wakeup_noloss
-2:	b	power7_wakeup_loss
+	b	.power7_wakeup_noloss
+2:	b	.power7_wakeup_loss
 9:
 END_FTR_SECTION_IFSET(CPU_FTR_HVMODE | CPU_FTR_ARCH_206)
 #endif /* CONFIG_PPC_P7_NAP */
@@ -186,16 +186,16 @@ data_access_slb_pSeries:
 #endif /* __DISABLED__ */
 	mfspr	r12,SPRN_SRR1
 #ifndef CONFIG_RELOCATABLE
-	b	slb_miss_realmode
+	b	.slb_miss_realmode
 #else
 	/*
-	 * We can't just use a direct branch to slb_miss_realmode
+	 * We can't just use a direct branch to .slb_miss_realmode
 	 * because the distance from here to there depends on where
 	 * the kernel ends up being put.
 	 */
 	mfctr	r11
 	ld	r10,PACAKBASE(r13)
-	LOAD_HANDLER(r10, slb_miss_realmode)
+	LOAD_HANDLER(r10, .slb_miss_realmode)
 	mtctr	r10
 	bctr
 #endif
@@ -218,11 +218,11 @@ instruction_access_slb_pSeries:
 #endif /* __DISABLED__ */
 	mfspr	r12,SPRN_SRR1
 #ifndef CONFIG_RELOCATABLE
-	b	slb_miss_realmode
+	b	.slb_miss_realmode
 #else
 	mfctr	r11
 	ld	r10,PACAKBASE(r13)
-	LOAD_HANDLER(r10, slb_miss_realmode)
+	LOAD_HANDLER(r10, .slb_miss_realmode)
 	mtctr	r10
 	bctr
 #endif
@@ -441,7 +441,7 @@ do_stab_bolted_pSeries:
 	std	r12,PACA_EXSLB+EX_R12(r13)
 	GET_SCRATCH0(r10)
 	std	r10,PACA_EXSLB+EX_R13(r13)
-	EXCEPTION_PROLOG_PSERIES_1(do_stab_bolted, EXC_STD)
+	EXCEPTION_PROLOG_PSERIES_1(.do_stab_bolted, EXC_STD)
 
 	KVM_HANDLER_SKIP(PACA_EXGEN, EXC_STD, 0x300)
 	KVM_HANDLER_SKIP(PACA_EXSLB, EXC_STD, 0x380)
@@ -660,7 +660,7 @@ slb_miss_user_pseries:
 
 /*** Common interrupt handlers ***/
 
-	STD_EXCEPTION_COMMON(0x100, system_reset, system_reset_exception)
+	STD_EXCEPTION_COMMON(0x100, system_reset, .system_reset_exception)
 
 	/*
 	 * Machine check is different because we use a different
@@ -681,41 +681,41 @@ machine_check_common:
 	lwz	r4,PACA_EXGEN+EX_DSISR(r13)
 	std	r3,_DAR(r1)
 	std	r4,_DSISR(r1)
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	machine_check_exception
-	b	ret_from_except
+	bl	.machine_check_exception
+	b	.ret_from_except
 
 	STD_EXCEPTION_COMMON_ASYNC(0x500, hardware_interrupt, do_IRQ)
-	STD_EXCEPTION_COMMON_ASYNC(0x900, decrementer, timer_interrupt)
-	STD_EXCEPTION_COMMON(0x980, hdecrementer, hdec_interrupt)
+	STD_EXCEPTION_COMMON_ASYNC(0x900, decrementer, .timer_interrupt)
+	STD_EXCEPTION_COMMON(0x980, hdecrementer, .hdec_interrupt)
 #ifdef CONFIG_PPC_DOORBELL
-	STD_EXCEPTION_COMMON_ASYNC(0xa00, doorbell_super, doorbell_exception)
+	STD_EXCEPTION_COMMON_ASYNC(0xa00, doorbell_super, .doorbell_exception)
 #else
-	STD_EXCEPTION_COMMON_ASYNC(0xa00, doorbell_super, unknown_exception)
+	STD_EXCEPTION_COMMON_ASYNC(0xa00, doorbell_super, .unknown_exception)
 #endif
-	STD_EXCEPTION_COMMON(0xb00, trap_0b, unknown_exception)
-	STD_EXCEPTION_COMMON(0xd00, single_step, single_step_exception)
-	STD_EXCEPTION_COMMON(0xe00, trap_0e, unknown_exception)
-	STD_EXCEPTION_COMMON(0xe40, emulation_assist, emulation_assist_interrupt)
-	STD_EXCEPTION_COMMON(0xe60, hmi_exception, unknown_exception)
+	STD_EXCEPTION_COMMON(0xb00, trap_0b, .unknown_exception)
+	STD_EXCEPTION_COMMON(0xd00, single_step, .single_step_exception)
+	STD_EXCEPTION_COMMON(0xe00, trap_0e, .unknown_exception)
+	STD_EXCEPTION_COMMON(0xe40, emulation_assist, .emulation_assist_interrupt)
+	STD_EXCEPTION_COMMON(0xe60, hmi_exception, .unknown_exception)
 #ifdef CONFIG_PPC_DOORBELL
-	STD_EXCEPTION_COMMON_ASYNC(0xe80, h_doorbell, doorbell_exception)
+	STD_EXCEPTION_COMMON_ASYNC(0xe80, h_doorbell, .doorbell_exception)
 #else
-	STD_EXCEPTION_COMMON_ASYNC(0xe80, h_doorbell, unknown_exception)
+	STD_EXCEPTION_COMMON_ASYNC(0xe80, h_doorbell, .unknown_exception)
 #endif
-	STD_EXCEPTION_COMMON_ASYNC(0xf00, performance_monitor, performance_monitor_exception)
-	STD_EXCEPTION_COMMON(0x1300, instruction_breakpoint, instruction_breakpoint_exception)
-	STD_EXCEPTION_COMMON(0x1502, denorm, unknown_exception)
+	STD_EXCEPTION_COMMON_ASYNC(0xf00, performance_monitor, .performance_monitor_exception)
+	STD_EXCEPTION_COMMON(0x1300, instruction_breakpoint, .instruction_breakpoint_exception)
+	STD_EXCEPTION_COMMON(0x1502, denorm, .unknown_exception)
 #ifdef CONFIG_ALTIVEC
-	STD_EXCEPTION_COMMON(0x1700, altivec_assist, altivec_assist_exception)
+	STD_EXCEPTION_COMMON(0x1700, altivec_assist, .altivec_assist_exception)
 #else
-	STD_EXCEPTION_COMMON(0x1700, altivec_assist, unknown_exception)
+	STD_EXCEPTION_COMMON(0x1700, altivec_assist, .unknown_exception)
 #endif
 #ifdef CONFIG_CBE_RAS
-	STD_EXCEPTION_COMMON(0x1200, cbe_system_error, cbe_system_error_exception)
-	STD_EXCEPTION_COMMON(0x1600, cbe_maintenance, cbe_maintenance_exception)
-	STD_EXCEPTION_COMMON(0x1800, cbe_thermal, cbe_thermal_exception)
+	STD_EXCEPTION_COMMON(0x1200, cbe_system_error, .cbe_system_error_exception)
+	STD_EXCEPTION_COMMON(0x1600, cbe_maintenance, .cbe_maintenance_exception)
+	STD_EXCEPTION_COMMON(0x1800, cbe_thermal, .cbe_thermal_exception)
 #endif /* CONFIG_CBE_RAS */
 
 	/*
@@ -744,16 +744,16 @@ data_access_slb_relon_pSeries:
 	mfspr	r3,SPRN_DAR
 	mfspr	r12,SPRN_SRR1
 #ifndef CONFIG_RELOCATABLE
-	b	slb_miss_realmode
+	b	.slb_miss_realmode
 #else
 	/*
-	 * We can't just use a direct branch to slb_miss_realmode
+	 * We can't just use a direct branch to .slb_miss_realmode
 	 * because the distance from here to there depends on where
 	 * the kernel ends up being put.
 	 */
 	mfctr	r11
 	ld	r10,PACAKBASE(r13)
-	LOAD_HANDLER(r10, slb_miss_realmode)
+	LOAD_HANDLER(r10, .slb_miss_realmode)
 	mtctr	r10
 	bctr
 #endif
@@ -769,11 +769,11 @@ instruction_access_slb_relon_pSeries:
 	mfspr	r3,SPRN_SRR0		/* SRR0 is faulting address */
 	mfspr	r12,SPRN_SRR1
 #ifndef CONFIG_RELOCATABLE
-	b	slb_miss_realmode
+	b	.slb_miss_realmode
 #else
 	mfctr	r11
 	ld	r10,PACAKBASE(r13)
-	LOAD_HANDLER(r10, slb_miss_realmode)
+	LOAD_HANDLER(r10, .slb_miss_realmode)
 	mtctr	r10
 	bctr
 #endif
@@ -881,7 +881,7 @@ system_call_entry:
 	b	system_call_common
 
 ppc64_runlatch_on_trampoline:
-	b	__ppc64_runlatch_on
+	b	.__ppc64_runlatch_on
 
 /*
  * Here we have detected that the kernel stack pointer is bad.
@@ -940,7 +940,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_CFAR)
 	std	r12,RESULT(r1)
 	std	r11,STACK_FRAME_OVERHEAD-16(r1)
 1:	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	kernel_bad_stack
+	bl	.kernel_bad_stack
 	b	1b
 
 /*
@@ -961,7 +961,7 @@ data_access_common:
 	ld	r3,PACA_EXGEN+EX_DAR(r13)
 	lwz	r4,PACA_EXGEN+EX_DSISR(r13)
 	li	r5,0x300
-	b	do_hash_page		/* Try to handle as hpte fault */
+	b	.do_hash_page		/* Try to handle as hpte fault */
 
 	.align  7
 	.globl  h_data_storage_common
@@ -971,11 +971,11 @@ h_data_storage_common:
 	mfspr   r10,SPRN_HDSISR
 	stw     r10,PACA_EXGEN+EX_DSISR(r13)
 	EXCEPTION_PROLOG_COMMON(0xe00, PACA_EXGEN)
-	bl      save_nvgprs
+	bl      .save_nvgprs
 	DISABLE_INTS
 	addi    r3,r1,STACK_FRAME_OVERHEAD
-	bl      unknown_exception
-	b       ret_from_except
+	bl      .unknown_exception
+	b       .ret_from_except
 
 	.align	7
 	.globl instruction_access_common
@@ -986,9 +986,9 @@ instruction_access_common:
 	ld	r3,_NIP(r1)
 	andis.	r4,r12,0x5820
 	li	r5,0x400
-	b	do_hash_page		/* Try to handle as hpte fault */
+	b	.do_hash_page		/* Try to handle as hpte fault */
 
-	STD_EXCEPTION_COMMON(0xe20, h_instr_storage, unknown_exception)
+	STD_EXCEPTION_COMMON(0xe20, h_instr_storage, .unknown_exception)
 
 /*
  * Here is the common SLB miss user that is used when going to virtual
@@ -1003,7 +1003,7 @@ slb_miss_user_common:
 	stw	r9,PACA_EXGEN+EX_CCR(r13)
 	std	r10,PACA_EXGEN+EX_LR(r13)
 	std	r11,PACA_EXGEN+EX_SRR0(r13)
-	bl	slb_allocate_user
+	bl	.slb_allocate_user
 
 	ld	r10,PACA_EXGEN+EX_LR(r13)
 	ld	r3,PACA_EXGEN+EX_R3(r13)
@@ -1046,9 +1046,9 @@ slb_miss_fault:
 unrecov_user_slb:
 	EXCEPTION_PROLOG_COMMON(0x4200, PACA_EXGEN)
 	DISABLE_INTS
-	bl	save_nvgprs
+	bl	.save_nvgprs
 1:	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	unrecoverable_exception
+	bl	.unrecoverable_exception
 	b	1b
 
 #endif /* __DISABLED__ */
@@ -1066,31 +1066,31 @@ alignment_common:
 	lwz	r4,PACA_EXGEN+EX_DSISR(r13)
 	std	r3,_DAR(r1)
 	std	r4,_DSISR(r1)
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	alignment_exception
-	b	ret_from_except
+	bl	.alignment_exception
+	b	.ret_from_except
 
 	.align	7
 	.globl program_check_common
 program_check_common:
 	EXCEPTION_PROLOG_COMMON(0x700, PACA_EXGEN)
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	program_check_exception
-	b	ret_from_except
+	bl	.program_check_exception
+	b	.ret_from_except
 
 	.align	7
 	.globl fp_unavailable_common
 fp_unavailable_common:
 	EXCEPTION_PROLOG_COMMON(0x800, PACA_EXGEN)
 	bne	1f			/* if from user, just load it up */
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	kernel_fp_unavailable_exception
+	bl	.kernel_fp_unavailable_exception
 	BUG_OPCODE
 1:
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM
@@ -1102,15 +1102,15 @@ BEGIN_FTR_SECTION
 	bne-	2f
 END_FTR_SECTION_IFSET(CPU_FTR_TM)
 #endif
-	bl	load_up_fpu
+	bl	.load_up_fpu
 	b	fast_exception_return
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM
 2:	/* User process was in a transaction */
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	fp_unavailable_tm
-	b	ret_from_except
+	bl	.fp_unavailable_tm
+	b	.ret_from_except
 #endif
 	.align	7
 	.globl altivec_unavailable_common
@@ -1128,24 +1128,24 @@ BEGIN_FTR_SECTION
 	bne-	2f
   END_FTR_SECTION_NESTED(CPU_FTR_TM, CPU_FTR_TM, 69)
 #endif
-	bl	load_up_altivec
+	bl	.load_up_altivec
 	b	fast_exception_return
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM
 2:	/* User process was in a transaction */
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	altivec_unavailable_tm
-	b	ret_from_except
+	bl	.altivec_unavailable_tm
+	b	.ret_from_except
 #endif
 1:
 END_FTR_SECTION_IFSET(CPU_FTR_ALTIVEC)
 #endif
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	altivec_unavailable_exception
-	b	ret_from_except
+	bl	.altivec_unavailable_exception
+	b	.ret_from_except
 
 	.align	7
 	.globl vsx_unavailable_common
@@ -1163,26 +1163,26 @@ BEGIN_FTR_SECTION
 	bne-	2f
   END_FTR_SECTION_NESTED(CPU_FTR_TM, CPU_FTR_TM, 69)
 #endif
-	b	load_up_vsx
+	b	.load_up_vsx
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM
 2:	/* User process was in a transaction */
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	vsx_unavailable_tm
-	b	ret_from_except
+	bl	.vsx_unavailable_tm
+	b	.ret_from_except
 #endif
 1:
 END_FTR_SECTION_IFSET(CPU_FTR_VSX)
 #endif
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	DISABLE_INTS
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	vsx_unavailable_exception
-	b	ret_from_except
+	bl	.vsx_unavailable_exception
+	b	.ret_from_except
 
-	STD_EXCEPTION_COMMON(0xf60, facility_unavailable, facility_unavailable_exception)
-	STD_EXCEPTION_COMMON(0xf80, hv_facility_unavailable, facility_unavailable_exception)
+	STD_EXCEPTION_COMMON(0xf60, facility_unavailable, .facility_unavailable_exception)
+	STD_EXCEPTION_COMMON(0xf80, hv_facility_unavailable, .facility_unavailable_exception)
 
 	.align	7
 	.globl	__end_handlers
@@ -1245,7 +1245,7 @@ _GLOBAL(opal_mc_secondary_handler)
  * r3 is saved in paca->slb_r3
  * We assume we aren't going to take any exceptions during this procedure.
  */
-slb_miss_realmode:
+_GLOBAL(slb_miss_realmode)
 	mflr	r10
 #ifdef CONFIG_RELOCATABLE
 	mtctr	r11
@@ -1254,7 +1254,7 @@ slb_miss_realmode:
 	stw	r9,PACA_EXSLB+EX_CCR(r13)	/* save CR in exc. frame */
 	std	r10,PACA_EXSLB+EX_LR(r13)	/* save LR */
 
-	bl	slb_allocate_realmode
+	bl	.slb_allocate_realmode
 
 	/* All done -- return from exception. */
 
@@ -1294,9 +1294,9 @@ slb_miss_realmode:
 unrecov_slb:
 	EXCEPTION_PROLOG_COMMON(0x4100, PACA_EXSLB)
 	DISABLE_INTS
-	bl	save_nvgprs
+	bl	.save_nvgprs
 1:	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	unrecoverable_exception
+	bl	.unrecoverable_exception
 	b	1b
 
 
@@ -1313,7 +1313,7 @@ power4_fixup_nap:
  * Hash table stuff
  */
 	.align	7
-do_hash_page:
+_STATIC(do_hash_page)
 	std	r3,_DAR(r1)
 	std	r4,_DSISR(r1)
 
@@ -1350,7 +1350,7 @@ END_MMU_FTR_SECTION_IFCLR(MMU_FTR_SLB)
 	 *
 	 * at return r3 = 0 for success, 1 for page fault, negative for error
 	 */
-	bl	hash_page		/* build HPTE if possible */
+	bl	.hash_page		/* build HPTE if possible */
 	cmpdi	r3,0			/* see if hash_page succeeded */
 
 	/* Success */
@@ -1364,35 +1364,35 @@ handle_page_fault:
 11:	ld	r4,_DAR(r1)
 	ld	r5,_DSISR(r1)
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	do_page_fault
+	bl	.do_page_fault
 	cmpdi	r3,0
 	beq+	12f
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	mr	r5,r3
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	lwz	r4,_DAR(r1)
-	bl	bad_page_fault
-	b	ret_from_except
+	bl	.bad_page_fault
+	b	.ret_from_except
 
 /* We have a data breakpoint exception - handle it */
 handle_dabr_fault:
-	bl	save_nvgprs
+	bl	.save_nvgprs
 	ld      r4,_DAR(r1)
 	ld      r5,_DSISR(r1)
 	addi    r3,r1,STACK_FRAME_OVERHEAD
-	bl      do_break
-12:	b       ret_from_except_lite
+	bl      .do_break
+12:	b       .ret_from_except_lite
 
 
 /* We have a page fault that hash_page could handle but HV refused
  * the PTE insertion
  */
-13:	bl	save_nvgprs
+13:	bl	.save_nvgprs
 	mr	r5,r3
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	ld	r4,_DAR(r1)
-	bl	low_hash_fault
-	b	ret_from_except
+	bl	.low_hash_fault
+	b	.ret_from_except
 
 /*
  * We come here as a result of a DSI at a point where we don't want
@@ -1401,16 +1401,16 @@ handle_dabr_fault:
  * were soft-disabled.  We want to invoke the exception handler for
  * the access, or panic if there isn't a handler.
  */
-77:	bl	save_nvgprs
+77:	bl	.save_nvgprs
 	mr	r4,r3
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	li	r5,SIGSEGV
-	bl	bad_page_fault
-	b	ret_from_except
+	bl	.bad_page_fault
+	b	.ret_from_except
 
 	/* here we have a segment miss */
 do_ste_alloc:
-	bl	ste_allocate		/* try to insert stab entry */
+	bl	.ste_allocate		/* try to insert stab entry */
 	cmpdi	r3,0
 	bne-	handle_page_fault
 	b	fast_exception_return
@@ -1423,7 +1423,7 @@ do_ste_alloc:
  * We assume (DAR >> 60) == 0xc.
  */
 	.align	7
-do_stab_bolted:
+_GLOBAL(do_stab_bolted)
 	stw	r9,PACA_EXSLB+EX_CCR(r13)	/* save CR in exc. frame */
 	std	r11,PACA_EXSLB+EX_SRR0(r13)	/* save SRR0 in exc. frame */
 	mfspr	r11,SPRN_DAR			/* ea */

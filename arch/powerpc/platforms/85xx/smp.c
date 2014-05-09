@@ -26,7 +26,6 @@
 #include <asm/cacheflush.h>
 #include <asm/dbell.h>
 #include <asm/fsl_guts.h>
-#include <asm/code-patching.h>
 
 #include <sysdev/fsl_soc.h>
 #include <sysdev/mpic.h>
@@ -267,7 +266,7 @@ out:
 	flush_spin_table(spin_table);
 	out_be32(&spin_table->pir, hw_cpu);
 	out_be64((u64 *)(&spin_table->addr_h),
-		__pa(ppc_function_entry(generic_secondary_smp_init)));
+	  __pa((u64)*((unsigned long long *)generic_secondary_smp_init)));
 	flush_spin_table(spin_table);
 #endif
 

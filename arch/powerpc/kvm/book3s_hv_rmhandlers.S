@@ -1280,7 +1280,7 @@ kvmppc_hdsi:
 	/* Search the hash table. */
 	mr	r3, r9			/* vcpu pointer */
 	li	r7, 1			/* data fault */
-	bl	kvmppc_hpte_hv_fault
+	bl	.kvmppc_hpte_hv_fault
 	ld	r9, HSTATE_KVM_VCPU(r13)
 	ld	r10, VCPU_PC(r9)
 	ld	r11, VCPU_MSR(r9)
@@ -1355,7 +1355,7 @@ kvmppc_hisi:
 	mr	r4, r10
 	mr	r6, r11
 	li	r7, 0			/* instruction fault */
-	bl	kvmppc_hpte_hv_fault
+	bl	.kvmppc_hpte_hv_fault
 	ld	r9, HSTATE_KVM_VCPU(r13)
 	ld	r10, VCPU_PC(r9)
 	ld	r11, VCPU_MSR(r9)
@@ -1421,16 +1421,16 @@ hcall_real_fallback:
 	.globl	hcall_real_table
 hcall_real_table:
 	.long	0		/* 0 - unused */
-	.long	DOTSYM(kvmppc_h_remove) - hcall_real_table
-	.long	DOTSYM(kvmppc_h_enter) - hcall_real_table
-	.long	DOTSYM(kvmppc_h_read) - hcall_real_table
+	.long	.kvmppc_h_remove - hcall_real_table
+	.long	.kvmppc_h_enter - hcall_real_table
+	.long	.kvmppc_h_read - hcall_real_table
 	.long	0		/* 0x10 - H_CLEAR_MOD */
 	.long	0		/* 0x14 - H_CLEAR_REF */
-	.long	DOTSYM(kvmppc_h_protect) - hcall_real_table
-	.long	DOTSYM(kvmppc_h_get_tce) - hcall_real_table
-	.long	DOTSYM(kvmppc_h_put_tce) - hcall_real_table
+	.long	.kvmppc_h_protect - hcall_real_table
+	.long	.kvmppc_h_get_tce - hcall_real_table
+	.long	.kvmppc_h_put_tce - hcall_real_table
 	.long	0		/* 0x24 - H_SET_SPRG0 */
-	.long	DOTSYM(kvmppc_h_set_dabr) - hcall_real_table
+	.long	.kvmppc_h_set_dabr - hcall_real_table
 	.long	0		/* 0x2c */
 	.long	0		/* 0x30 */
 	.long	0		/* 0x34 */
@@ -1446,11 +1446,11 @@ hcall_real_table:
 	.long	0		/* 0x5c */
 	.long	0		/* 0x60 */
 #ifdef CONFIG_KVM_XICS
-	.long	DOTSYM(kvmppc_rm_h_eoi) - hcall_real_table
-	.long	DOTSYM(kvmppc_rm_h_cppr) - hcall_real_table
-	.long	DOTSYM(kvmppc_rm_h_ipi) - hcall_real_table
+	.long	.kvmppc_rm_h_eoi - hcall_real_table
+	.long	.kvmppc_rm_h_cppr - hcall_real_table
+	.long	.kvmppc_rm_h_ipi - hcall_real_table
 	.long	0		/* 0x70 - H_IPOLL */
-	.long	DOTSYM(kvmppc_rm_h_xirr) - hcall_real_table
+	.long	.kvmppc_rm_h_xirr - hcall_real_table
 #else
 	.long	0		/* 0x64 - H_EOI */
 	.long	0		/* 0x68 - H_CPPR */
@@ -1484,7 +1484,7 @@ hcall_real_table:
 	.long	0		/* 0xd4 */
 	.long	0		/* 0xd8 */
 	.long	0		/* 0xdc */
-	.long	DOTSYM(kvmppc_h_cede) - hcall_real_table
+	.long	.kvmppc_h_cede - hcall_real_table
 	.long	0		/* 0xe4 */
 	.long	0		/* 0xe8 */
 	.long	0		/* 0xec */
@@ -1501,7 +1501,7 @@ hcall_real_table:
 	.long	0		/* 0x118 */
 	.long	0		/* 0x11c */
 	.long	0		/* 0x120 */
-	.long	DOTSYM(kvmppc_h_bulk_remove) - hcall_real_table
+	.long	.kvmppc_h_bulk_remove - hcall_real_table
 hcall_real_table_end:
 
 ignore_hdec:
@@ -1689,7 +1689,7 @@ kvm_cede_exit:
 	/* Try to handle a machine check in real mode */
 machine_check_realmode:
 	mr	r3, r9		/* get vcpu pointer */
-	bl	kvmppc_realmode_machine_check
+	bl	.kvmppc_realmode_machine_check
 	nop
 	cmpdi	r3, 0		/* continue exiting from guest? */
 	ld	r9, HSTATE_KVM_VCPU(r13)
