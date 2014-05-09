@@ -2066,8 +2066,10 @@ void bond_3ad_state_machine_handler(struct work_struct *work)
 	struct slave *slave;
 	struct port *port;
 
-	read_lock(&bond->lock);
-
+	if (!rtnl_trylock()) {
+		queue_delayed_work(bond->wq, &bond->ad_work, ad_delta_in_ticks);
+		return;
+	}
 	//check if there are any slaves
 	if (!bond_has_slaves(bond))
 		goto re_arm;
@@ -2120,9 +2122,8 @@ void bond_3ad_state_machine_handler(struct work_struct *work)
 	}
 
 re_arm:
+	rtnl_unlock();
 	queue_delayed_work(bond->wq, &bond->ad_work, ad_delta_in_ticks);
-
-	read_unlock(&bond->lock);
 }
 
 /**
