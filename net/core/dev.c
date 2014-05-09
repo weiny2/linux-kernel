@@ -1308,7 +1308,7 @@ static int __dev_close_many(struct list_head *head)
 	ASSERT_RTNL();
 	might_sleep();
 
-	list_for_each_entry(dev, head, unreg_list) {
+	list_for_each_entry(dev, head, close_list) {
 		call_netdevice_notifiers(NETDEV_GOING_DOWN, dev);
 
 		clear_bit(__LINK_STATE_START, &dev->state);
@@ -1324,7 +1324,7 @@ static int __dev_close_many(struct list_head *head)
 
 	dev_deactivate_many(head);
 
-	list_for_each_entry(dev, head, unreg_list) {
+	list_for_each_entry(dev, head, close_list) {
 		const struct net_device_ops *ops = dev->netdev_ops;
 
 		/*
@@ -1352,7 +1352,7 @@ static int __dev_close(struct net_device *dev)
 	/* Temporarily disable netpoll until the interface is down */
 	netpoll_rx_disable(dev);
 
-	list_add(&dev->unreg_list, &single);
+	list_add(&dev->close_list, &single);
 	retval = __dev_close_many(&single);
 	list_del(&single);
 
@@ -1363,21 +1363,20 @@ static int __dev_close(struct net_device *dev)
 static int dev_close_many(struct list_head *head)
 {
 	struct net_device *dev, *tmp;
-	LIST_HEAD(tmp_list);
 
-	list_for_each_entry_safe(dev, tmp, head, unreg_list)
+	/* Remove the devices that don't need to be closed */
+	list_for_each_entry_safe(dev, tmp, head, close_list)
 		if (!(dev->flags & IFF_UP))
-			list_move(&dev->unreg_list, &tmp_list);
+			list_del_init(&dev->close_list);
 
 	__dev_close_many(head);
 
-	list_for_each_entry(dev, head, unreg_list) {
+	list_for_each_entry_safe(dev, tmp, head, close_list) {
 		rtmsg_ifinfo(RTM_NEWLINK, dev, IFF_UP|IFF_RUNNING, GFP_KERNEL);
 		call_netdevice_notifiers(NETDEV_DOWN, dev);
+		list_del_init(&dev->close_list);
 	}
 
-	/* rollback_registered_many needs the complete original list */
-	list_splice(&tmp_list, head);
 	return 0;
 }
 
@@ -1398,7 +1397,7 @@ int dev_close(struct net_device *dev)
 		/* Block netpoll rx while the interface is going down */
 		netpoll_rx_disable(dev);
 
-		list_add(&dev->unreg_list, &single);
+		list_add(&dev->close_list, &single);
 		dev_close_many(&single);
 		list_del(&single);
 
@@ -4472,7 +4471,18 @@ struct net_device *netdev_master_upper_dev_get(struct net_device *dev)
 }
 EXPORT_SYMBOL(netdev_master_upper_dev_get);
 
-/* netdev_all_upper_get_next_dev_rcu - Get the next dev from upper list
+void *netdev_adjacent_get_private(struct list_head *adj_list)
+{
+	struct netdev_adjacent *adj;
+
+	adj = list_entry(adj_list, struct netdev_adjacent, list);
+
+	return adj->private;
+}
+EXPORT_SYMBOL(netdev_adjacent_get_private);
+
+/**
+ * netdev_all_upper_get_next_dev_rcu - Get the next dev from upper list
  * @dev: device
  * @iter: list_head ** of the current position
  *
@@ -4496,6 +4506,84 @@ struct net_device *netdev_all_upper_get_next_dev_rcu(struct net_device *dev,
 	return upper->dev;
 }
 EXPORT_SYMBOL(netdev_all_upper_get_next_dev_rcu);
+
+/**
+ * netdev_lower_get_next_private - Get the next ->private from the
+ *				   lower neighbour list
+ * @dev: device
+ * @iter: list_head ** of the current position
+ *
+ * Gets the next netdev_adjacent->private from the dev's lower neighbour
+ * list, starting from iter position. The caller must hold either hold the
+ * RTNL lock or its own locking that guarantees that the neighbour lower
+ * list will remain unchainged.
+ */
+void *netdev_lower_get_next_private(struct net_device *dev,
+				    struct list_head **iter)
+{
+	struct netdev_adjacent *lower;
+
+	lower = list_entry(*iter, struct netdev_adjacent, list);
+
+	if (&lower->list == &dev->adj_list.lower)
+		return NULL;
+
+	if (iter)
+		*iter = lower->list.next;
+
+	return lower->private;
+}
+EXPORT_SYMBOL(netdev_lower_get_next_private);
+
+/**
+ * netdev_lower_get_next_private_rcu - Get the next ->private from the
+ *				       lower neighbour list, RCU
+ *				       variant
+ * @dev: device
+ * @iter: list_head ** of the current position
+ *
+ * Gets the next netdev_adjacent->private from the dev's lower neighbour
+ * list, starting from iter position. The caller must hold RCU read lock.
+ */
+void *netdev_lower_get_next_private_rcu(struct net_device *dev,
+					struct list_head **iter)
+{
+	struct netdev_adjacent *lower;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	lower = list_entry_rcu((*iter)->next, struct netdev_adjacent, list);
+
+	if (&lower->list == &dev->adj_list.lower)
+		return NULL;
+
+	if (iter)
+		*iter = &lower->list;
+
+	return lower->private;
+}
+EXPORT_SYMBOL(netdev_lower_get_next_private_rcu);
+
+/**
+ * netdev_lower_get_first_private_rcu - Get the first ->private from the
+ *				       lower neighbour list, RCU
+ *				       variant
+ * @dev: device
+ *
+ * Gets the first netdev_adjacent->private from the dev's lower neighbour
+ * list. The caller must hold RCU read lock.
+ */
+void *netdev_lower_get_first_private_rcu(struct net_device *dev)
+{
+	struct netdev_adjacent *lower;
+
+	lower = list_first_or_null_rcu(&dev->adj_list.lower,
+			struct netdev_adjacent, list);
+	if (lower)
+		return lower->private;
+	return NULL;
+}
+EXPORT_SYMBOL(netdev_lower_get_first_private_rcu);
 
 /**
  * netdev_master_upper_dev_get_rcu - Get master upper device
@@ -4522,6 +4610,8 @@ static int __netdev_adjacent_dev_insert(struct net_device *dev,
 					void *private, bool master)
 {
 	struct netdev_adjacent *adj;
+	char linkname[IFNAMSIZ+7];
+	int ret;
 
 	adj = __netdev_find_adj(dev, adj_dev, dev_list);
 
@@ -4543,13 +4633,47 @@ static int __netdev_adjacent_dev_insert(struct net_device *dev,
 	pr_debug("dev_hold for %s, because of link added from %s to %s\n",
 		 adj_dev->name, dev->name, adj_dev->name);
 
+	if (dev_list == &dev->adj_list.lower) {
+		sprintf(linkname, "lower_%s", adj_dev->name);
+		ret = sysfs_create_link(&(dev->dev.kobj),
+					&(adj_dev->dev.kobj), linkname);
+		if (ret)
+			goto free_adj;
+	} else if (dev_list == &dev->adj_list.upper) {
+		sprintf(linkname, "upper_%s", adj_dev->name);
+		ret = sysfs_create_link(&(dev->dev.kobj),
+					&(adj_dev->dev.kobj), linkname);
+		if (ret)
+			goto free_adj;
+	}
+
 	/* Ensure that master link is always the first item in list. */
-	if (master)
+	if (master) {
+		ret = sysfs_create_link(&(dev->dev.kobj),
+					&(adj_dev->dev.kobj), "master");
+		if (ret)
+			goto remove_symlinks;
+
 		list_add_rcu(&adj->list, dev_list);
-	else
+	} else {
 		list_add_tail_rcu(&adj->list, dev_list);
+	}
 
 	return 0;
+
+remove_symlinks:
+	if (dev_list == &dev->adj_list.lower) {
+		sprintf(linkname, "lower_%s", adj_dev->name);
+		sysfs_remove_link(&(dev->dev.kobj), linkname);
+	} else if (dev_list == &dev->adj_list.upper) {
+		sprintf(linkname, "upper_%s", adj_dev->name);
+		sysfs_remove_link(&(dev->dev.kobj), linkname);
+	}
+
+free_adj:
+	kfree(adj);
+
+	return ret;
 }
 
 void __netdev_adjacent_dev_remove(struct net_device *dev,
@@ -4557,6 +4681,7 @@ void __netdev_adjacent_dev_remove(struct net_device *dev,
 				  struct list_head *dev_list)
 {
 	struct netdev_adjacent *adj;
+	char linkname[IFNAMSIZ+7];
 
 	adj = __netdev_find_adj(dev, adj_dev, dev_list);
 
@@ -4571,6 +4696,17 @@ void __netdev_adjacent_dev_remove(struct net_device *dev,
 			 adj->ref_nr-1);
 		adj->ref_nr--;
 		return;
+	}
+
+	if (adj->master)
+		sysfs_remove_link(&(dev->dev.kobj), "master");
+
+	if (dev_list == &dev->adj_list.lower) {
+		sprintf(linkname, "lower_%s", adj_dev->name);
+		sysfs_remove_link(&(dev->dev.kobj), linkname);
+	} else if (dev_list == &dev->adj_list.upper) {
+		sprintf(linkname, "upper_%s", adj_dev->name);
+		sysfs_remove_link(&(dev->dev.kobj), linkname);
 	}
 
 	list_del_rcu(&adj->list);
@@ -4863,7 +4999,7 @@ static void dev_change_rx_flags(struct net_device *dev, int flags)
 		ops->ndo_change_rx_flags(dev, flags);
 }
 
-static int __dev_set_promiscuity(struct net_device *dev, int inc)
+static int __dev_set_promiscuity(struct net_device *dev, int inc, bool notify)
 {
 	unsigned int old_flags = dev->flags;
 	kuid_t uid;
@@ -4906,6 +5042,8 @@ static int __dev_set_promiscuity(struct net_device *dev, int inc)
 
 		dev_change_rx_flags(dev, IFF_PROMISC);
 	}
+	if (notify)
+		__dev_notify_flags(dev, old_flags, IFF_PROMISC);
 	return 0;
 }
 
@@ -4925,7 +5063,7 @@ int dev_set_promiscuity(struct net_device *dev, int inc)
 	unsigned int old_flags = dev->flags;
 	int err;
 
-	err = __dev_set_promiscuity(dev, inc);
+	err = __dev_set_promiscuity(dev, inc, true);
 	if (err < 0)
 		return err;
 	if (dev->flags != old_flags)
@@ -4934,22 +5072,9 @@ int dev_set_promiscuity(struct net_device *dev, int inc)
 }
 EXPORT_SYMBOL(dev_set_promiscuity);
 
-/**
- *	dev_set_allmulti	- update allmulti count on a device
- *	@dev: device
- *	@inc: modifier
- *
- *	Add or remove reception of all multicast frames to a device. While the
- *	count in the device remains above zero the interface remains listening
- *	to all interfaces. Once it hits zero the device reverts back to normal
- *	filtering operation. A negative @inc value is used to drop the counter
- *	when releasing a resource needing all multicasts.
- *	Return 0 if successful or a negative errno code on error.
- */
-
-int dev_set_allmulti(struct net_device *dev, int inc)
+static int __dev_set_allmulti(struct net_device *dev, int inc, bool notify)
 {
-	unsigned int old_flags = dev->flags;
+	unsigned int old_flags = dev->flags, old_gflags = dev->gflags;
 
 	ASSERT_RTNL();
 
@@ -4972,8 +5097,29 @@ int dev_set_allmulti(struct net_device *dev, int inc)
 	if (dev->flags ^ old_flags) {
 		dev_change_rx_flags(dev, IFF_ALLMULTI);
 		dev_set_rx_mode(dev);
+		if (notify)
+			__dev_notify_flags(dev, old_flags,
+					   dev->gflags ^ old_gflags);
 	}
 	return 0;
+}
+
+/**
+ *	dev_set_allmulti	- update allmulti count on a device
+ *	@dev: device
+ *	@inc: modifier
+ *
+ *	Add or remove reception of all multicast frames to a device. While the
+ *	count in the device remains above zero the interface remains listening
+ *	to all interfaces. Once it hits zero the device reverts back to normal
+ *	filtering operation. A negative @inc value is used to drop the counter
+ *	when releasing a resource needing all multicasts.
+ *	Return 0 if successful or a negative errno code on error.
+ */
+
+int dev_set_allmulti(struct net_device *dev, int inc)
+{
+	return __dev_set_allmulti(dev, inc, true);
 }
 EXPORT_SYMBOL(dev_set_allmulti);
 
@@ -4999,10 +5145,10 @@ void __dev_set_rx_mode(struct net_device *dev)
 		 * therefore calling __dev_set_promiscuity here is safe.
 		 */
 		if (!netdev_uc_empty(dev) && !dev->uc_promisc) {
-			__dev_set_promiscuity(dev, 1);
+			__dev_set_promiscuity(dev, 1, false);
 			dev->uc_promisc = true;
 		} else if (netdev_uc_empty(dev) && dev->uc_promisc) {
-			__dev_set_promiscuity(dev, -1);
+			__dev_set_promiscuity(dev, -1, false);
 			dev->uc_promisc = false;
 		}
 	}
@@ -5091,9 +5237,13 @@ int __dev_change_flags(struct net_device *dev, unsigned int flags)
 
 	if ((flags ^ dev->gflags) & IFF_PROMISC) {
 		int inc = (flags & IFF_PROMISC) ? 1 : -1;
+		unsigned int old_flags = dev->flags;
 
 		dev->gflags ^= IFF_PROMISC;
-		dev_set_promiscuity(dev, inc);
+
+		if (__dev_set_promiscuity(dev, inc, false) >= 0)
+			if (dev->flags != old_flags)
+				dev_set_rx_mode(dev);
 	}
 
 	/* NOTE: order of synchronization of IFF_PROMISC and IFF_ALLMULTI
@@ -5104,15 +5254,19 @@ int __dev_change_flags(struct net_device *dev, unsigned int flags)
 		int inc = (flags & IFF_ALLMULTI) ? 1 : -1;
 
 		dev->gflags ^= IFF_ALLMULTI;
-		dev_set_allmulti(dev, inc);
+		__dev_set_allmulti(dev, inc, false);
 	}
 
 	return ret;
 }
 
-void __dev_notify_flags(struct net_device *dev, unsigned int old_flags)
+void __dev_notify_flags(struct net_device *dev, unsigned int old_flags,
+			unsigned int gchanges)
 {
 	unsigned int changes = dev->flags ^ old_flags;
+
+	if (gchanges)
+		rtmsg_ifinfo(RTM_NEWLINK, dev, gchanges, GFP_ATOMIC);
 
 	if (changes & IFF_UP) {
 		if (dev->flags & IFF_UP)
@@ -5142,17 +5296,14 @@ void __dev_notify_flags(struct net_device *dev, unsigned int old_flags)
 int dev_change_flags(struct net_device *dev, unsigned int flags)
 {
 	int ret;
-	unsigned int changes, old_flags = dev->flags;
+	unsigned int changes, old_flags = dev->flags, old_gflags = dev->gflags;
 
 	ret = __dev_change_flags(dev, flags);
 	if (ret < 0)
 		return ret;
 
-	changes = old_flags ^ dev->flags;
-	if (changes)
-		rtmsg_ifinfo(RTM_NEWLINK, dev, changes, GFP_KERNEL);
-
-	__dev_notify_flags(dev, old_flags);
+	changes = (old_flags ^ dev->flags) | (old_gflags ^ dev->gflags);
+	__dev_notify_flags(dev, old_flags, changes);
 	return ret;
 }
 EXPORT_SYMBOL(dev_change_flags);
@@ -5299,6 +5450,7 @@ static void net_set_todo(struct net_device *dev)
 static void rollback_registered_many(struct list_head *head)
 {
 	struct net_device *dev, *tmp;
+	LIST_HEAD(close_head);
 
 	BUG_ON(dev_boot_phase);
 	ASSERT_RTNL();
@@ -5321,7 +5473,9 @@ static void rollback_registered_many(struct list_head *head)
 	}
 
 	/* If device is running, close it first. */
-	dev_close_many(head);
+	list_for_each_entry(dev, head, unreg_list)
+		list_add_tail(&dev->close_list, &close_head);
+	dev_close_many(&close_head);
 
 	list_for_each_entry(dev, head, unreg_list) {
 		/* And unlink it from device chain. */
@@ -6112,6 +6266,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 
 	INIT_LIST_HEAD(&dev->napi_list);
 	INIT_LIST_HEAD(&dev->unreg_list);
+	INIT_LIST_HEAD(&dev->close_list);
 	INIT_LIST_HEAD(&dev->link_watch_list);
 	INIT_LIST_HEAD(&dev->adj_list.upper);
 	INIT_LIST_HEAD(&dev->adj_list.lower);
