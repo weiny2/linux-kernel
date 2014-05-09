@@ -1716,7 +1716,7 @@ static int subn_get_stl_sc_to_vlt(struct stl_smp *smp,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	void *vp = (void *) stl_get_smp_data(smp);
 
-	if (am_port !=  0 || port != 1 || n_blocks != 1) {
+	if (am_port != port || port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
@@ -1740,7 +1740,7 @@ static int subn_set_stl_sc_to_vlt(struct stl_smp *smp,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	void *vp = (void *) stl_get_smp_data(smp);
 
-	if (am_port !=  0 || port != 1 || n_blocks != 1 || async_update) {
+	if (am_port != port || port != 1 || n_blocks != 1 || async_update) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
