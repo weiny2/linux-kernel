@@ -738,6 +738,9 @@ struct netdev_phys_port_id {
 	unsigned char id_len;
 };
 
+typedef u16 (*select_queue_fallback_t)(struct net_device *dev,
+				       struct sk_buff *skb);
+
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -769,7 +772,7 @@ struct netdev_phys_port_id {
  *	Required can not be NULL.
  *
  * u16 (*ndo_select_queue)(struct net_device *dev, struct sk_buff *skb,
- *                         void *accel_priv);
+ *                         void *accel_priv, select_queue_fallback_t fallback);
  *	Called to decide which queue to when device supports multiple
  *	transmit queues.
  *
@@ -991,7 +994,8 @@ struct net_device_ops {
 						   struct net_device *dev);
 	u16			(*ndo_select_queue)(struct net_device *dev,
 						    struct sk_buff *skb,
-						    void *accel_priv);
+						    void *accel_priv,
+						    select_queue_fallback_t fallback);
 	void			(*ndo_change_rx_flags)(struct net_device *dev,
 						       int flags);
 	void			(*ndo_set_rx_mode)(struct net_device *dev);
@@ -1532,7 +1536,6 @@ static inline void netdev_for_each_tx_queue(struct net_device *dev,
 extern struct netdev_queue *netdev_pick_tx(struct net_device *dev,
 					   struct sk_buff *skb,
 					   void *accel_priv);
-extern u16 __netdev_pick_tx(struct net_device *dev, struct sk_buff *skb);
 
 /*
  * Net namespace inlines
