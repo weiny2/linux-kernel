@@ -39,7 +39,7 @@ static int fc_trace_max_entries;
 static unsigned long fnic_fc_ctlr_trace_buf_p;
 static fnic_trace_dbg_t fc_trace_entries;
 int fnic_fc_tracing_enabled = 1;
-int fnic_fc_trace_cleared = 0; // default it is off
+int fnic_fc_trace_cleared = 1;
 static DEFINE_SPINLOCK(fnic_fc_trace_lock);
 
 
@@ -587,7 +587,7 @@ int fnic_fc_trace_set_data(u32 host_no, u8 frame_type,
 	unsigned long flags;
 	fc_trace_hdr_t *fc_buf;
 	unsigned long eth_fcoe_hdr_len;
-	char * fc_trace;
+	char *fc_trace;
 
 	if (fnic_fc_tracing_enabled == 0) {
 		return 0;
@@ -667,7 +667,7 @@ int fnic_fc_trace_get_data(fnic_dbgfs_t *fnic_dbgfs_prt, u8 rdata_flag) {
 	unsigned long flags;
 	int len = 0, j;
 	fc_trace_hdr_t *tdata;
-	char * fc_trace;
+	char *fc_trace;
 
 	spin_lock_irqsave(&fnic_fc_trace_lock, flags);
 	if (fc_trace_entries.wr_idx == fc_trace_entries.rd_idx) {
@@ -732,7 +732,7 @@ void copy_and_format_trace_data(fc_trace_hdr_t *tdata,
 {
         struct tm tm;
         int j, i = 1, len;
-        char * fc_trace;
+        char *fc_trace;
 	int ethhdr_len = sizeof (struct ethhdr) - 1;
 	int fcoehdr_len = sizeof (struct fcoe_hdr);
 	int fchdr_len = sizeof (struct fc_frame_header);

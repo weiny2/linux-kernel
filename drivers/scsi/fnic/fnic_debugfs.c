@@ -150,7 +150,7 @@ static ssize_t fnic_trace_ctrl_read(struct file *filp,
 {
 	char buf[64];
 	int len;
-	u8 * trace_type;
+	u8 *trace_type;
 	len = 0;
 	trace_type = (u8 *)filp->private_data;
 	if (*trace_type == fc_trc_flag->fnic_trace) {
@@ -190,7 +190,7 @@ static ssize_t fnic_trace_ctrl_write(struct file *filp,
 	char buf[64];
 	unsigned long val;
 	int ret;
-	u8 * trace_type;
+	u8 *trace_type;
 	trace_type = (u8 *)filp->private_data;
 
 	if (cnt >= sizeof(buf))
