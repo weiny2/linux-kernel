@@ -170,7 +170,9 @@ static ssize_t bonding_show_slaves(struct device *d,
 	struct slave *slave;
 	int res = 0;
 
-	read_lock(&bond->lock);
+	if (!rtnl_trylock())
+		return restart_syscall();
+
 	bond_for_each_slave(bond, slave, iter) {
 		if (res > (PAGE_SIZE - IFNAMSIZ)) {
 			/* not enough space for another interface name */
@@ -181,7 +183,9 @@ static ssize_t bonding_show_slaves(struct device *d,
 		}
 		res += sprintf(buf + res, "%s ", slave->dev->name);
 	}
-	read_unlock(&bond->lock);
+
+	rtnl_unlock();
+
 	if (res)
 		buf[res-1] = '\n'; /* eat the leftover space */
 
@@ -618,6 +622,9 @@ static ssize_t bonding_store_arp_targets(struct device *d,
 	unsigned long *targets_rx;
 	int ind, i, j, ret = -EINVAL;
 
+	if (!rtnl_trylock())
+		return restart_syscall();
+
 	targets = bond->params.arp_targets;
 	newtarget = in_aton(buf + 1);
 	/* look for adds */
@@ -691,6 +698,7 @@ static ssize_t bonding_store_arp_targets(struct device *d,
 
 	ret = count;
 out:
+	rtnl_unlock();
 	return ret;
 }
 static DEVICE_ATTR(arp_ip_target, S_IRUGO | S_IWUSR , bonding_show_arp_targets, bonding_store_arp_targets);
@@ -1465,7 +1473,6 @@ static ssize_t bonding_show_queue_id(struct device *d,
 	if (!rtnl_trylock())
 		return restart_syscall();
 
-	read_lock(&bond->lock);
 	bond_for_each_slave(bond, slave, iter) {
 		if (res > (PAGE_SIZE - IFNAMSIZ - 6)) {
 			/* not enough space for another interface_name:queue_id pair */
@@ -1477,9 +1484,9 @@ static ssize_t bonding_show_queue_id(struct device *d,
 		res += sprintf(buf + res, "%s:%d ",
 			       slave->dev->name, slave->queue_id);
 	}
-	read_unlock(&bond->lock);
 	if (res)
 		buf[res-1] = '\n'; /* eat the leftover space */
+
 	rtnl_unlock();
 
 	return res;
@@ -1528,8 +1535,6 @@ static ssize_t bonding_store_queue_id(struct device *d,
 	if (!sdev)
 		goto err_no_cmd;
 
-	read_lock(&bond->lock);
-
 	/* Search for thes slave and check for duplicate qids */
 	update_slave = NULL;
 	bond_for_each_slave(bond, slave, iter) {
@@ -1540,23 +1545,20 @@ static ssize_t bonding_store_queue_id(struct device *d,
 			 */
 			update_slave = slave;
 		else if (qid && qid == slave->queue_id) {
-			goto err_no_cmd_unlock;
+			goto err_no_cmd;
 		}
 	}
 
 	if (!update_slave)
-		goto err_no_cmd_unlock;
+		goto err_no_cmd;
 
 	/* Actually set the qids for the slave */
 	update_slave->queue_id = qid;
 
-	read_unlock(&bond->lock);
 out:
 	rtnl_unlock();
 	return ret;
 
-err_no_cmd_unlock:
-	read_unlock(&bond->lock);
 err_no_cmd:
 	pr_info("invalid input for queue_id set for %s.\n",
 		bond->dev->name);
@@ -1589,6 +1591,9 @@ static ssize_t bonding_store_slaves_active(struct device *d,
 	struct list_head *iter;
 	struct slave *slave;
 
+	if (!rtnl_trylock())
+		return restart_syscall();
+
 	if (sscanf(buf, "%d", &new_value) != 1) {
 		pr_err("%s: no all_slaves_active value specified.\n",
 		       bond->dev->name);
@@ -1608,7 +1613,6 @@ static ssize_t bonding_store_slaves_active(struct device *d,
 		goto out;
 	}
 
-	read_lock(&bond->lock);
 	bond_for_each_slave(bond, slave, iter) {
 		if (!bond_is_active_slave(slave)) {
 			if (new_value)
@@ -1617,8 +1621,8 @@ static ssize_t bonding_store_slaves_active(struct device *d,
 				slave->inactive = 1;
 		}
 	}
-	read_unlock(&bond->lock);
 out:
+	rtnl_unlock();
 	return ret;
 }
 static DEVICE_ATTR(all_slaves_active, S_IRUGO | S_IWUSR,
