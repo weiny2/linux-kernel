@@ -1576,6 +1576,7 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	struct qib_ctxtdata *rcd;
 	int i;
 	int changed = 0;
+	int update_includes_mgmt_partition = 0;
 
 	/*
 	 * IB port one/two always maps to context zero/one,
@@ -1585,6 +1586,19 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	 */
 	ppd = dd->pport + (port - 1);
 	rcd = dd->rcd[ppd->hw_pidx];
+
+	/*
+	 * If the update does not include the management pkey, don't do it.
+	 */
+	for (i = 0; i < ARRAY_SIZE(rcd->pkeys); i++) {
+		if (pkeys[i] == WFR_LIM_MGMT_P_KEY) {
+			update_includes_mgmt_partition = 1;
+			break;
+		}
+	}
+
+	if (!update_includes_mgmt_partition)
+		return 1;
 
 	for (i = 0; i < ARRAY_SIZE(rcd->pkeys); i++) {
 		u16 key = pkeys[i];
