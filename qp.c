@@ -654,8 +654,21 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		int mtu, pidx = qp->port_num - 1;
 
 		mtu = ib_mtu_enum_to_int(attr->path_mtu);
-		if (mtu == -1)
-			goto inval;
+		if (mtu == -1) {
+			/*
+			 * If the ib_mtu_enum_to_int function did not
+			 * recognize the MTU but the enum_to_mtu did,
+			 * then it must be one of the IB-unsupported
+			 * STL MTUs (and, therefore, larger than max
+			 * IB-supported).
+			 */
+			if (enum_to_mtu(attr->path_mtu) != -1) {
+				mtu = IB_MTU_4096;
+				/* attr->path_mtu is only used below */
+				attr->path_mtu = mtu_to_enum(mtu, IB_MTU_4096);
+			} else
+				goto inval;
+		}
 		if (mtu > dd->pport[pidx].ibmtu) {
 			pmtu = mtu_to_enum(dd->pport[pidx].ibmtu, IB_MTU_2048);
 		} else

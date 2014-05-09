@@ -1147,8 +1147,11 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 struct send_context *qp_to_send_context(struct qib_qp *qp, u32 vl)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct qib_pportdata *ppd = dd->pport + (qp->port_num - 1);
 
-	return dd->pervl_scs[vl];
+	if (vl >= hfi_num_vls(ppd->vls_supported) && vl != 15)
+		return NULL;
+	return dd->vld[vl].sc;
 }
 
 static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
@@ -1164,6 +1167,8 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 
 	vl = be16_to_cpu(ibhdr->lrh[0]) >> 12;
 	sc = qp_to_send_context(qp, vl);
+	if (!sc)
+		return -EINVAL;
 	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (unlikely(pbuf == NULL))
@@ -1413,8 +1418,14 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->max_vl_num = hfi_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
-	props->max_mtu = mtu_to_enum(max_mtu, IB_MTU_4096);
-	props->active_mtu = mtu_to_enum(ppd->ibmtu, IB_MTU_2048);
+	/* FIXME (Mitko): I am not sure whether this is the correct thing
+	 * for STL1 but for now IB can't really handle IB-unsupported
+	 * MTUs. The alternative would be to add the STL MTUs to the
+	 * core IB headers. */
+	props->max_mtu = mtu_to_enum((!valid_ib_mtu(max_mtu) ?
+				      4096 : max_mtu), IB_MTU_4096);
+	props->active_mtu = !valid_ib_mtu(ppd->ibmtu) ? props->max_mtu :
+		mtu_to_enum(ppd->ibmtu, IB_MTU_2048);
 	props->subnet_timeout = ibp->subnet_timeout;
 
 	return 0;

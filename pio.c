@@ -347,14 +347,6 @@ int init_send_contexts(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	dd->pervl_scs = kzalloc(sizeof(struct send_context *) *
-				PER_VL_SEND_CONTEXTS, GFP_KERNEL);
-	if (!dd->pervl_scs) {
-		dd_dev_err(dd, "Unable to allocate per vl pointers\n");
-		free_credit_return(dd);
-		return -ENOMEM;
-	}
-
 	dd->send_contexts = kzalloc(sizeof(struct send_context_info) * dd->num_send_contexts, GFP_KERNEL);
 	if (!dd->send_contexts) {
 		dd_dev_err(dd, "Unable to allocate send context array\n");
@@ -1079,34 +1071,28 @@ int init_pervl_scs(struct hfi_devdata *dd)
 {
 	int i;
 
-	dd->pervl_scs = kzalloc(sizeof(struct send_context *)
-				* PER_VL_SEND_CONTEXTS, GFP_KERNEL);
-	if (!dd->pervl_scs) {
-		dd_dev_err(dd, "Unable to allocate per vl pointers\n");
-		goto nomem;
-	}
-	dd->pervl_scs[15] = sc_alloc(dd, SC_KERNEL, dd->node);
-	if (!dd->pervl_scs[15])
+	dd->vld[15].sc = sc_alloc(dd, SC_KERNEL, dd->node);
+	if (!dd->vld[15].sc)
 		goto nomem;
 	for (i = 0; i < num_vls; i++) {
-		dd->pervl_scs[i] = sc_alloc(dd, SC_KERNEL, dd->node);
-		if (!dd->pervl_scs[i])
+		dd->vld[i].sc = sc_alloc(dd, SC_KERNEL, dd->node);
+		if (!dd->vld[i].sc)
 			goto nomem;
 	}
-	sc_enable(dd->pervl_scs[15]);
+	sc_enable(dd->vld[15].sc);
 	dd_dev_info(dd,
 		    "Using send context %d for VL15\n",
-		    dd->pervl_scs[15]->context);
+		    dd->vld[15].sc->context);
 	for (i = 0; i < num_vls; i++)
-		sc_enable(dd->pervl_scs[i]);
-	/* default to vl0 send context for others */
+		sc_enable(dd->vld[i].sc);
+	/* default to vl0 send context for others
 	for (; i < 15; i++)
-		dd->pervl_scs[i] = dd->pervl_scs[0];
+	dd->pervl_scs[i] = dd->pervl_scs[0];*/
 	return 0;
 nomem:
-	sc_free(dd->pervl_scs[15]);
+	sc_free(dd->vld[15].sc);
 	for (i = 0; i < num_vls; i++)
-		sc_free(dd->pervl_scs[i]);
+		sc_free(dd->vld[i].sc);
 	return -ENOMEM;
 }
 

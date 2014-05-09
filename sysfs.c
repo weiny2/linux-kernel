@@ -401,6 +401,78 @@ static struct kobj_type qib_sl2vl_ktype = {
 
 /* End sl2vl */
 
+/* Start vl2mtu */
+
+#define HFI_VL2MTU_ATTR(N) \
+	static struct hfi_vl2mtu_attr hfi_vl2mtu_attr_##N = { \
+		.attr = { .name = __stringify(N), .mode = 0444 }, \
+		.vl = N						  \
+	}
+
+struct hfi_vl2mtu_attr {
+	struct attribute attr;
+	int vl;
+};
+
+HFI_VL2MTU_ATTR(0);
+HFI_VL2MTU_ATTR(1);
+HFI_VL2MTU_ATTR(2);
+HFI_VL2MTU_ATTR(3);
+HFI_VL2MTU_ATTR(4);
+HFI_VL2MTU_ATTR(5);
+HFI_VL2MTU_ATTR(6);
+HFI_VL2MTU_ATTR(7);
+HFI_VL2MTU_ATTR(8);
+HFI_VL2MTU_ATTR(9);
+HFI_VL2MTU_ATTR(10);
+HFI_VL2MTU_ATTR(11);
+HFI_VL2MTU_ATTR(12);
+HFI_VL2MTU_ATTR(13);
+HFI_VL2MTU_ATTR(14);
+HFI_VL2MTU_ATTR(15);
+
+static struct attribute *vl2mtu_default_attributes[] = {
+	&hfi_vl2mtu_attr_0.attr,
+	&hfi_vl2mtu_attr_1.attr,
+	&hfi_vl2mtu_attr_2.attr,
+	&hfi_vl2mtu_attr_3.attr,
+	&hfi_vl2mtu_attr_4.attr,
+	&hfi_vl2mtu_attr_5.attr,
+	&hfi_vl2mtu_attr_6.attr,
+	&hfi_vl2mtu_attr_7.attr,
+	&hfi_vl2mtu_attr_8.attr,
+	&hfi_vl2mtu_attr_9.attr,
+	&hfi_vl2mtu_attr_10.attr,
+	&hfi_vl2mtu_attr_11.attr,
+	&hfi_vl2mtu_attr_12.attr,
+	&hfi_vl2mtu_attr_13.attr,
+	&hfi_vl2mtu_attr_14.attr,
+	&hfi_vl2mtu_attr_15.attr,
+	NULL
+};
+
+static ssize_t vl2mtu_attr_show(struct kobject *kobj, struct attribute *attr,
+				char *buf)
+{
+	struct hfi_vl2mtu_attr *vlattr =
+		container_of(attr, struct hfi_vl2mtu_attr, attr);
+	struct qib_pportdata *ppd =
+		container_of(kobj, struct qib_pportdata, vl2mtu_kobj);
+	struct hfi_devdata *dd = ppd->dd;
+
+	return sprintf(buf, "%u\n", dd->vld[vlattr->vl].mtu);
+}
+
+static const struct sysfs_ops hfi_vl2mtu_ops = {
+	.show = vl2mtu_attr_show,
+};
+
+static struct kobj_type hfi_vl2mtu_ktype = {
+	.release = qib_port_release,
+	.sysfs_ops = &hfi_vl2mtu_ops,
+	.default_attrs = vl2mtu_default_attributes
+};
+
 /* Start diag_counters */
 
 #define QIB_DIAGC_ATTR(N) \
@@ -708,13 +780,23 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->sl2vl_kobj, KOBJ_ADD);
 
+	ret = kobject_init_and_add(&ppd->vl2mtu_kobj, &hfi_vl2mtu_ktype, kobj,
+				   "vl2mtu");
+	if (ret) {
+		dd_dev_err(dd,
+			   "Skipping vl2mtu sysfs info, (err %d) port %u\n",
+			   ret, port_num);
+		goto bail_sl;
+	}
+	kobject_uevent(&ppd->vl2mtu_kobj, KOBJ_ADD);
+
 	ret = kobject_init_and_add(&ppd->diagc_kobj, &qib_diagc_ktype, kobj,
 				   "diag_counters");
 	if (ret) {
 		dd_dev_err(dd,
 			"Skipping diag_counters sysfs info, (err %d) port %u\n",
 			ret, port_num);
-		goto bail_sl;
+		goto bail_mtu;
 	}
 	kobject_uevent(&ppd->diagc_kobj, KOBJ_ADD);
 
@@ -762,6 +844,8 @@ bail_cc:
 	kobject_put(&ppd->pport_cc_kobj);
 bail_diagc:
 	kobject_put(&ppd->diagc_kobj);
+bail_mtu:
+	kobject_put(&ppd->vl2mtu_kobj);
 bail_sl:
 	kobject_put(&ppd->sl2vl_kobj);
 bail_link:
@@ -805,6 +889,7 @@ void qib_verbs_unregister_sysfs(struct hfi_devdata *dd)
 				&cc_table_bin_attr);
 			kobject_put(&ppd->pport_cc_kobj);
 		}
+		kobject_put(&ppd->vl2mtu_kobj);
 		kobject_put(&ppd->sl2vl_kobj);
 		kobject_put(&ppd->pport_kobj);
 	}

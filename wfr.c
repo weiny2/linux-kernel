@@ -2502,8 +2502,7 @@ u32 lrh_max_header_bytes(struct hfi_devdata *dd)
 
 /*
  * Set Send Length
- * @dd - device data
- * @mtu_bytes - mtu size, in bytes
+ * @ppd - per port data
  *
  * Set the MTU by limiting how many DWs may be sent.  The SendLenCheck*
  * registers compare against LRH.PktLen, so use the max bytes included
@@ -2512,26 +2511,27 @@ u32 lrh_max_header_bytes(struct hfi_devdata *dd)
  * This routine changes all VL values except VL15, which it maintains at
  * the same value.
  */
-static void set_send_length(struct hfi_devdata *dd, u32 mtu_bytes)
+static void set_send_length(struct qib_pportdata *ppd)
 {
+	struct hfi_devdata *dd = ppd->dd;
 	u32 max_hb = lrh_max_header_bytes(dd);
-	u64 len = ((mtu_bytes + max_hb) >> 2)
-				& WFR_SEND_LEN_CHECK0_LEN_VL0_MASK;
-	u64 vl15_len = ((MAX_MAD_PACKET  + max_hb) >> 2)
-				& WFR_SEND_LEN_CHECK0_LEN_VL0_MASK;
+	u64 len1 = 0, len2 = (((dd->vld[15].mtu + max_hb) >> 2)
+			      & WFR_SEND_LEN_CHECK1_LEN_VL15_MASK) <<
+		WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT;
+	int i;
 
-	write_csr(dd, WFR_SEND_LEN_CHECK0,
-		len << WFR_SEND_LEN_CHECK0_LEN_VL3_SHIFT
-		| len << WFR_SEND_LEN_CHECK0_LEN_VL2_SHIFT
-		| len << WFR_SEND_LEN_CHECK0_LEN_VL1_SHIFT
-		| len << WFR_SEND_LEN_CHECK0_LEN_VL0_SHIFT);
-
-	write_csr(dd, WFR_SEND_LEN_CHECK1,
-		vl15_len << WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT
-		| len << WFR_SEND_LEN_CHECK1_LEN_VL7_SHIFT
-		| len << WFR_SEND_LEN_CHECK1_LEN_VL6_SHIFT
-		| len << WFR_SEND_LEN_CHECK1_LEN_VL5_SHIFT
-		| len << WFR_SEND_LEN_CHECK1_LEN_VL4_SHIFT);
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
+		if (i <= 3)
+			len1 |= (((dd->vld[i].mtu + max_hb) >> 2)
+				 & WFR_SEND_LEN_CHECK0_LEN_VL0_MASK) <<
+				((i % 4) * WFR_SEND_LEN_CHECK0_LEN_VL1_SHIFT);
+		else
+			len2 |= (((dd->vld[i].mtu + max_hb) >> 2)
+				 & WFR_SEND_LEN_CHECK1_LEN_VL4_MASK) <<
+				((i % 4) * WFR_SEND_LEN_CHECK1_LEN_VL5_SHIFT);
+	}
+	write_csr(dd, WFR_SEND_LEN_CHECK0, len1);
+	write_csr(dd, WFR_SEND_LEN_CHECK1, len2);
 }
 
 static void set_lidlmc(struct qib_pportdata *ppd)
@@ -2690,7 +2690,7 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		break;
 
 	case QIB_IB_CFG_MTU:
-		set_send_length(dd, val);
+		set_send_length(ppd);
 		break;
 
 	default:
@@ -5396,6 +5396,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		goto bail;
 	ppd = dd->pport;
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		int vl;
 		/* init common fields */
 		qib_init_pportdata(ppd, dd, 0, 1);
 		/* chip specific */
@@ -5434,7 +5435,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			break;
 		}
 		ppd->vls_operational = ppd->vls_supported;
-
+		/* Set the default MTU. */
+		for (vl = 0; vl < num_vls; vl++)
+			dd->vld[vl].mtu = default_mtu;
+		dd->vld[15].mtu = MAX_MAD_PACKET;
 		/*
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.

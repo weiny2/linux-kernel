@@ -616,33 +616,14 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 
-	/* return simulated mtu data */
-	switch (ppd->ibmtu) {
-	default: /* something is wrong; fall through */
-	case 4096:
-		mtu = IB_MTU_4096;
-		break;
-	case 2048:
-		mtu = IB_MTU_2048;
-		break;
-	case 1024:
-		mtu = IB_MTU_1024;
-		break;
-	case 512:
-		mtu = IB_MTU_512;
-		break;
-	case 256:
-		mtu = IB_MTU_256;
-		break;
-	}
-
 	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
-	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++)
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
+		mtu = mtu_to_enum(dd->vld[i].mtu, HFI_DEFAULT_ACTIVE_MTU);
 		if ((i % 2) == 0)
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= (mtu << 4);
 		else
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
-
+	}
 	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
 	pi->operational_vls =
 		hfi_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
@@ -990,9 +971,9 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u8 state;
 	u8 vls;
 	u8 msl;
-	u16 lse, lwe;
+	u16 lse, lwe, mtu;
 	u16 lstate;
-	int ret, ore;
+	int ret, ore, i;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
 	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
 
@@ -1128,18 +1109,20 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
-#if 0 /* XXX we need *something* here, no? */
-	mtu = ib_mtu_enum_to_int((pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
-	if (mtu == -1) {
-		printk(KERN_WARNING 
-			"SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n", mtu,
-			(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	} else {
-		printk(KERN_WARNING "SubnSet(STL_PortInfo) Neigh MTU ignored %d\n", mtu);
-		qib_set_mtu(ppd, mtu);
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
+		if ((i % 2) == 0)
+			mtu = enum_to_mtu((pi->neigh_mtu.pvlx_to_mtu[i/2] >> 4)
+					  & 0xF);
+		else
+			mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[i/2]);
+		if (mtu == -1) {
+			printk(KERN_WARNING
+			       "SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n", mtu,
+			       (pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+			smp->status |= IB_SMP_INVALID_FIELD;
+		}
 	}
-#endif
+	set_mtu(ppd);
 
 	/* Set operational VLs */
 	vls = pi->operational_vls & STL_PI_MASK_OPERATIONAL_VL;
@@ -1397,11 +1380,19 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
-	mtu = ib_mtu_enum_to_int((pip->neighbormtu_mastersmsl >> 4) & 0xF);
+	mtu = enum_to_mtu((pip->neighbormtu_mastersmsl >> 4) & 0xF);
 	if (mtu == -1)
 		smp->status |= IB_SMP_INVALID_FIELD;
-	else
-		set_mtu(ppd, mtu);
+	else {
+		int i;
+		/*
+		 * Non-STL SM's will set the MTU per port, so set all VLs
+		 * to the same MTU.
+		 */
+		for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++)
+			dd->vld[i].mtu = mtu;
+		set_mtu(ppd);
+	}
 
 	/* Set operational VLs */
 	vls = (pip->operationalvl_pei_peo_fpi_fpo >> 4) & 0xF;

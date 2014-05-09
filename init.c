@@ -593,7 +593,7 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 			/* Currently, we only have one port */
 			ppd->statusp = &dd->status->port;
 
-		set_mtu(ppd, default_mtu);
+		set_mtu(ppd);
 	}
 
 	/* enable chip even if we have an error, so we can debug cause */
@@ -1082,9 +1082,9 @@ static int __init qlogic_ib_init(void)
 		goto bail;
 
 	/* validate max and default MTUs before any devices start */
-	if (!valid_mtu(default_mtu))
+	if (!valid_stl_mtu(default_mtu))
 		default_mtu = HFI_DEFAULT_ACTIVE_MTU;
-	if (!valid_mtu(max_mtu))
+	if (!valid_stl_mtu(max_mtu))
 		max_mtu = HFI_DEFAULT_MAX_MTU;
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))

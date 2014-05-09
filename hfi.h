@@ -352,10 +352,9 @@ struct qib_verbs_txreq {
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU 4096
 /* use this MTU size as the default maximum */
-/* TODO: more work is needed for the 8K and 10K STL sizes */
 /* TODO: bad things may happen if 8K and 10K STL sizes used with an IB FM,
    e.g. opensm */
-#define HFI_DEFAULT_MAX_MTU 4096
+#define HFI_DEFAULT_MAX_MTU 8192
 /* default parition key */
 #define DEFAULT_PKEY 0xffff
 
@@ -524,6 +523,7 @@ struct qib_pportdata {
 	struct kobject pport_kobj;
 	struct kobject pport_cc_kobj;
 	struct kobject sl2vl_kobj;
+	struct kobject vl2mtu_kobj;
 	struct kobject diagc_kobj;
 
 	/* GUID for this interface, in network order */
@@ -692,6 +692,11 @@ struct rcv_array_data {
 	u16 nctxt_extra;
 };
 
+struct per_vl_data {
+	u16 mtu;
+	struct send_context *sc;
+};
+
 /* 16 to directly index */
 #define PER_VL_SEND_CONTEXTS 16
 
@@ -723,8 +728,8 @@ struct hfi_devdata {
 	struct qib_ctxtdata **rcd;
 	/* send context data */
 	struct send_context_info *send_contexts;
-	/* per VL  context data */
-	struct send_context **pervl_scs;
+	/* Per VL data. Enough for all VLs but not all elements are set/used. */
+	struct per_vl_data vld[PER_VL_SEND_CONTEXTS];
 	/* Send Context initialization lock. */
 	spinlock_t sc_init_lock;
 
@@ -1095,14 +1100,18 @@ inline u16 generate_jkey(unsigned int);
 
 u32 lrh_max_header_bytes(struct hfi_devdata *dd);
 int mtu_to_enum(u32 mtu, int default_if_bad);
-static inline int valid_mtu(unsigned int mtu)
+u32 enum_to_mtu(int);
+static inline int valid_ib_mtu(unsigned int mtu)
 {
-	return mtu == 256|| mtu == 512
-		|| mtu == 1024 || mtu == 2048
-		|| mtu == 4096 || mtu == 8192
-		|| mtu == 10240;
+	return mtu == 256 || mtu == 512 ||
+		mtu == 1024 || mtu == 2048 ||
+		mtu == 4096;
 }
-int set_mtu(struct qib_pportdata *, u16);
+static inline int valid_stl_mtu(unsigned int mtu)
+{
+	return valid_ib_mtu(mtu) || mtu == 8192	|| mtu == 10240;
+}
+int set_mtu(struct qib_pportdata *);
 
 int qib_set_lid(struct qib_pportdata *, u32, u8);
 void qib_disable_after_error(struct hfi_devdata *);

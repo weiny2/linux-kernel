@@ -61,7 +61,7 @@ MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 10240");
 
 unsigned int default_mtu;
 module_param_named(default_mtu, default_mtu, uint, S_IRUGO);
-MODULE_PARM_DESC(max_mtu, "Set default MTU bytes, default is 4096");
+MODULE_PARM_DESC(default_mtu, "Set default MTU bytes, default is 4096");
 
 unsigned int hfi_cu = 1;
 module_param_named(cu, hfi_cu, uint, S_IRUGO);
@@ -634,25 +634,38 @@ int mtu_to_enum(u32 mtu, int default_if_bad)
 	return default_if_bad;
 }
 
+u32 enum_to_mtu(int mtu)
+{
+	switch (mtu) {
+	case STL_MTU_256:   return 256;
+	case STL_MTU_1024:  return 1024;
+	case STL_MTU_2048:  return 2048;
+	case STL_MTU_4096:  return 4096;
+	case STL_MTU_8192:  return 8192;
+	case STL_MTU_10240: return 10240;
+	default: return -1;
+	}
+}
+
 /*
  * set_mtu - set the MTU
- * @ppd: the perport data
- * @arg: the new MTU
+ * @ppd: the per port data
  *
  * We can handle "any" incoming size, the issue here is whether we
  * need to restrict our outgoing size.  We do not deal with what happens
  * to programs that are already running when the size changes.
  */
-int set_mtu(struct qib_pportdata *ppd, u16 arg)
+int set_mtu(struct qib_pportdata *ppd)
 {
-	if (!valid_mtu(arg))
-		return -EINVAL;
-	if (arg > max_mtu)
-		return -EINVAL;
+	struct hfi_devdata *dd = ppd->dd;
+	int i;
 
-	ppd->ibmtu = arg;
-	ppd->ibmaxlen = arg + lrh_max_header_bytes(ppd->dd);
-	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, arg);
+	ppd->ibmtu = 0;
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++)
+		if (ppd->ibmtu < dd->vld[i].mtu)
+			ppd->ibmtu = dd->vld[i].mtu;
+	ppd->ibmaxlen = ppd->ibmtu + lrh_max_header_bytes(ppd->dd);
+	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
 
 	return 0;
 }
