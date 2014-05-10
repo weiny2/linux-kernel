@@ -1474,8 +1474,6 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 			for (j = 0; j < dd->rcv_entries.group_size &&
 				     pmapped < pinned; j++, pmapped++, tid++) {
 				tidsize = PAGE_SIZE;
-				/* XXX MITKO: This code needs to properly handle
-				 * 8K MTU with respect to RcvTIDPairs */
 				phys[pmapped] = qib_map_page(dd->pcidev,
 						   pages[pmapped], 0,
 						   tidsize, PCI_DMA_FROMDEVICE);
@@ -1484,6 +1482,16 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 				       tid, vaddr,
 				       (unsigned long long)phys[pmapped],
 				       pages[pmapped]);
+				/*
+				 * Each RcvArray entry is programmed with one page
+				 * worth of memory. This will handle the 8K MTU
+				 * as well as anything smaller due to the fact that
+				 * both entries in the RcvTidPair are programmed
+				 * with a page.
+				 * PSM currently does not handle anything bigger
+				 * than 8K MTU, so should we even worry about 10K
+				 * here?
+				 */
 				/* XXX MITKO: better determine the order of the
 				 * TID */
 				dd->f_put_tid(dd, tid, PT_EXPECTED,

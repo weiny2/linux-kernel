@@ -57,7 +57,7 @@ DEFINE_MUTEX(qib_mutex);	/* general driver use */
 
 unsigned int max_mtu;
 module_param_named(max_mtu, max_mtu, uint, S_IRUGO);
-MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 10240");
+MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 8192");
 
 unsigned int default_mtu;
 module_param_named(default_mtu, default_mtu, uint, S_IRUGO);
