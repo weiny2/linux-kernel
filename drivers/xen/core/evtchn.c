@@ -34,7 +34,6 @@
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
-#include <linux/kconfig.h>
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>
 #include <linux/ftrace.h>
