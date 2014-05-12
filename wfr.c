@@ -1450,8 +1450,10 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	u8 power_management;
 	u8 continious;
 	u8 vcu;
+	u8 vau;
 	u16 vl15buf;
 	u8 crc_sizes;
+	struct qib_pportdata *ppd = dd->pport;
 
 	/*
 	 * These are now valid:
@@ -1461,20 +1463,25 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
 	 */
 	read_vc_remote_phy(dd, &power_management, &continious);
-	read_vc_remote_fabric(dd, &dd->remote_vau, &vcu, &vl15buf, &crc_sizes);
+	read_vc_remote_fabric(dd, &vau, &vcu, &vl15buf, &crc_sizes);
 	dd_dev_info(dd,
 		"Peer PHY: power management 0x%x, continous updates 0x%x\n",
 		(int)power_management, (int)continious);
 	dd_dev_info(dd,
 		"Peer Fabric: vAU %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
-		(int)dd->remote_vau, (int)vcu, (int)vl15buf, (int)crc_sizes);
-	set_up_vl15(dd, dd->remote_vau, vl15buf);
+		(int)vau, (int)vcu, (int)vl15buf, (int)crc_sizes);
+	set_up_vl15(dd, vau, vl15buf);
 
 	/* set up the remote credit return table */
-	assign_remote_cm_au_table(dd, vcu_to_cu(vcu));
+	assign_remote_cm_au_table(dd, vcu);
 
 	/* tell the 8051 to go to LinkUp */
 	set_physical_link_state(dd, WFR_PLS_LINKUP);
+
+	ppd->neighbor_guid =
+		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
+	dd_dev_info(dd, "Neighbor Guid: %llx\n",
+		be64_to_cpu(ppd->neighbor_guid));
 }
 
 static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -2218,7 +2225,6 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	struct hfi_devdata *dd = ppd->dd;
 	u64 guid, reg;
 	int ret;
-	u16 vl15_cred;
 
 	/*
 	 * Write link verify capability frames before moving the
@@ -2228,12 +2234,7 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	/* TODO: Does WFR support continuous update? */
 	write_vc_local_phy(dd, PWRM_BER_CONTROL, 0);
 
-	/* TODO: Make initial VL15 credit size a parameter? */
-	/* enough room for 8 MAD packets plus header - 17K */
-	vl15_cred = (8 * (2048 + 128)) / vau_to_au(dd->vau);
-	if (vl15_cred > dd->link_credits)
-		vl15_cred = dd->link_credits;
-	write_vc_local_fabric(dd, dd->vau, cu_to_vcu(hfi_cu), vl15_cred,
+	write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
 		WFR_SUPPORTED_CRCS);
 
 	/* enable the port */
@@ -5048,19 +5049,15 @@ static void init_chip(struct hfi_devdata *dd)
 	/* clear the DC reset */
 	write_csr(dd, WFR_CCE_DC_CTRL, 0);
 
-	/*
-	 * TODO:  Remove manual setting of vAU and link credits when
-	 * (1) the sim reports the correct values
-	 * (2) only the FLR is used
-	 */
-	if (dd->vau == 0) {
-		dd_dev_info(dd,
-			"Fixup: manuallly setting vAU and link credits\n");
-		dd->vau = WFR_CM_VAU;
-		dd->link_credits = WFR_CM_GLOBAL_CREDITS;
-	}
-	dd_dev_info(dd, "AU %d, CU %d, link credits 0x%x\n",
-		8 * (1 << dd->vau), (int)hfi_cu, (int)dd->link_credits);
+	/* assign link credit variables */
+	dd->vau = WFR_CM_VAU;
+	dd->link_credits = WFR_CM_GLOBAL_CREDITS;
+	dd->vcu = cu_to_vcu(hfi_cu);
+	/* TODO: Make initial VL15 credit size a parameter? */
+	/* enough room for 8 MAD packets plus header - 17K */
+	dd->vl15_init = (8 * (2048 + 128)) / vau_to_au(dd->vau);
+	if (dd->vl15_init > dd->link_credits)
+		dd->vl15_init = dd->link_credits;
 
 	write_uninitialized_csrs_and_memories(dd);
 
@@ -5229,15 +5226,15 @@ static void assign_cm_au_table(struct hfi_devdata *dd, u32 cu,
 
 }
 
-static void assign_local_cm_au_table(struct hfi_devdata *dd, u32 cu)
+static void assign_local_cm_au_table(struct hfi_devdata *dd, u8 vcu)
 {
-	assign_cm_au_table(dd, cu, WFR_SEND_CM_LOCAL_AU_TABLE0_TO3,
+	assign_cm_au_table(dd, vcu_to_cu(vcu), WFR_SEND_CM_LOCAL_AU_TABLE0_TO3,
 					WFR_SEND_CM_LOCAL_AU_TABLE4_TO7);
 }
 
-void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu)
+void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu)
 {
-	assign_cm_au_table(dd, cu, WFR_SEND_CM_REMOTE_AU_TABLE0_TO3,
+	assign_cm_au_table(dd, vcu_to_cu(vcu), WFR_SEND_CM_REMOTE_AU_TABLE0_TO3,
 					WFR_SEND_CM_REMOTE_AU_TABLE4_TO7);
 }
 
@@ -5258,7 +5255,7 @@ void init_txe(struct hfi_devdata *dd)
 		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
 
 	/* set the local CU to AU mapping */
-	assign_local_cm_au_table(dd, hfi_cu);
+	assign_local_cm_au_table(dd, dd->vcu);
 }
 
 /*

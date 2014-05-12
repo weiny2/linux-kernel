@@ -114,14 +114,17 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		 * handle_verify_cap(), but do not try moving the state to
 		 * LinkUp as we are already there.
 		 *
-		 * NOTE: This uses this device's vAU and CU for the remote
-		 * values.  Both sides must be using the values.
+		 * NOTE: This uses this device's vAU, vCU, and vl15_init for
+		 * the remote values.  Both sides must be using the values.
 		 */
 		if (loopback || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
-			dd->remote_vau = WFR_CM_VAU;
-			/* enough credits for 16 * (2K MAD + max header) */
-			set_up_vl15(dd, dd->remote_vau, 16 * (32 + 2));
-			assign_remote_cm_au_table(dd, hfi_cu);
+			set_up_vl15(dd, dd->vau, dd->vl15_init);
+			assign_remote_cm_au_table(dd, dd->vcu);
+			ppd->neighbor_guid =
+				cpu_to_be64(read_csr(dd,
+					DC_DC8051_STS_REMOTE_GUID));
+			dd_dev_info(dd, "Neighbor GUID: %llx\n",
+				be64_to_cpu(ppd->neighbor_guid));
 		}
 
 		/* physical link went up */

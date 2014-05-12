@@ -526,6 +526,8 @@ struct qib_pportdata {
 
 	/* GUID for this interface, in network order */
 	__be64 guid;
+	/* GUID for peer interface, in network order */
+	__be64 neighbor_guid;
 
 	/* up or down physical link state */
 	u32 linkup;
@@ -929,10 +931,12 @@ struct hfi_devdata {
 	u8 link_default;
 	/* vAU of this device */
 	u8 vau;
-	/* vAU of remote (peer) device */
-	u8 remote_vau;
+	/* vCU of this device */
+	u8 vcu;
 	/* link crediits of this device */
 	u16 link_credits;
+	/* initial vl15 credits to use */
+	u16 vl15_init;
 
 	/* Misc small ints */
 	/* Number of physical ports available */
@@ -1098,7 +1102,7 @@ int fm_set_table(struct qib_pportdata *, int, void *);
 
 void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf);
 void reset_link_credits(struct hfi_devdata *dd);
-void assign_remote_cm_au_table(struct hfi_devdata *dd, u32 cu);
+void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu);
 void assign_link_credits(struct hfi_devdata *dd);
 
 /* for use in system calls, where we want to know device type, etc. */
