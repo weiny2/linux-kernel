@@ -1480,8 +1480,10 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 
 	ppd->neighbor_guid =
 		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
-	dd_dev_info(dd, "Neighbor Guid: %llx\n",
-		be64_to_cpu(ppd->neighbor_guid));
+	ppd->neighbor_type =
+		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE);
+	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d\n",
+		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type);
 }
 
 static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -2982,8 +2984,8 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	int change_count;
 	int i, use_all_mask;
 	struct buffer_control cur_bc;
-	u8 changing[STL_NUM_VLS];
-	u8 lowering_dedicated[STL_NUM_VLS];
+	u8 changing[STL_MAX_VLS];
+	u8 lowering_dedicated[STL_MAX_VLS];
 	u16 cur_total;
 	u32 new_total = 0;
 	const u64 all_mask =
@@ -3002,7 +3004,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 
 
 	/* find the new total credits, do sanity check on unused VLs */
-	for (i = 0; i < STL_NUM_VLS; i++) {
+	for (i = 0; i < STL_MAX_VLS; i++) {
 		if (valid_vl(i)) {
 			new_total += be16_to_cpu(new_bc->vl[i].dedicated);
 			continue;
@@ -5356,10 +5358,18 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		/* init common fields */
 		qib_init_pportdata(ppd, dd, 0, 1);
 		/* chip specific */
-		/* TODO: correct for STL */
+#ifndef CONFIG_STL_MGMT
 		ppd->link_speed_supported = IB_SPEED_EDR;
 		ppd->link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
-		ppd->link_width_enabled = IB_WIDTH_4X;
+#else
+		/* from DC HAS */
+		ppd->link_speed_supported =
+			STL_LINK_SPEED_25G | STL_LINK_SPEED_12_5G;
+		/* widths build on IB - adds 2,3 */
+		ppd->link_width_supported =
+			IB_WIDTH_1X | IB_WIDTH_4X |
+			STL_LINK_WIDTH_2X | STL_LINK_WIDTH_3X;
+#endif
 		ppd->link_speed_enabled = ppd[i].link_speed_supported;
 
 		switch (num_vls) {
@@ -5388,8 +5398,12 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
 		 */
-		ppd->link_width_active = IB_WIDTH_4X;
+#ifndef CONFIG_STL_MGMT
 		ppd->link_speed_active = IB_SPEED_EDR;
+#else
+		ppd->link_speed_active = STL_LINK_SPEED_25G;
+#endif
+		ppd->link_width_active = IB_WIDTH_4X;
 		ppd->lstate = IB_PORT_DOWN;
 		ppd->overrun_threshold = 0x4;
 		ppd->phy_error_threshold = 0xf;

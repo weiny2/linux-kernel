@@ -424,7 +424,13 @@ struct cc_table_shadow {
 /*
  * STL BufferControl MAD
  */
-#define STL_NUM_VLS 32	/* STL defines 32 VLs */
+#ifdef CONFIG_STL_MGMT
+#include <rdma/stl_smi.h>
+#include <rdma/stl_port_info.h>
+#else
+#define STL_MAX_VLS 32	/* STL defines 32 VLs */
+#endif
+
 struct vl_limit {
 	__be16 dedicated;
 	__be16 shared;
@@ -433,7 +439,7 @@ struct vl_limit {
 struct buffer_control {
 	__be16 reserved;
 	__be16 overall_shared_limit;
-	struct vl_limit vl[STL_NUM_VLS];
+	struct vl_limit vl[STL_MAX_VLS];
 };
 #endif				/* _QIB_MAD_H */
 /*

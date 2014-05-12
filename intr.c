@@ -123,8 +123,11 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 			ppd->neighbor_guid =
 				cpu_to_be64(read_csr(dd,
 					DC_DC8051_STS_REMOTE_GUID));
-			dd_dev_info(dd, "Neighbor GUID: %llx\n",
-				be64_to_cpu(ppd->neighbor_guid));
+			/* FIXME when simulator works */
+			ppd->neighbor_type = 0;
+			dd_dev_info(dd, "Neighbor GUID: %llx Neighbor type %d\n",
+				be64_to_cpu(ppd->neighbor_guid),
+					ppd->neighbor_type);
 		}
 
 		/* physical link went up */

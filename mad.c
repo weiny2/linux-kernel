@@ -540,10 +540,12 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	struct qib_ibport *ibp;
 	struct stl_port_info *pi;
 	u8 mtu;
+	u8 credit_rate;
 	int ret;
 	u32 state;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
 	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
+	u32 buffer_units;
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -689,6 +691,24 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->local_port_num = port;
 
+	/* buffer info for FM */
+	pi->overall_buffer_space = cpu_to_be16(dd->link_credits);
+
+	pi->neigh_node_guid = ppd->neighbor_guid;
+	pi->port_neigh_mode = ppd->neighbor_type & STL_PI_MASK_NEIGH_NODE_TYPE;
+	if (pi->port_neigh_mode == 1)
+		credit_rate = 0;
+	else
+		credit_rate = 18;
+	buffer_units  = (dd->vau) & STL_PI_MASK_BUF_UNIT_BUF_ALLOC;
+	buffer_units |= (dd->vcu << 3) & STL_PI_MASK_BUF_UNIT_CREDIT_ACK;
+	buffer_units |= (credit_rate << 6) &
+				STL_PI_MASK_BUF_UNIT_VL15_CREDIT_RATE;
+	buffer_units |= (dd->vl15_init << 11) & STL_PI_MASK_BUF_UNIT_VL15_INIT;
+	pi->buffer_units = cpu_to_be32(buffer_units);
+
+	pi->stl_cap_mask = cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
+
 	ret = reply(smp);
 
 	*resp_len += sizeof(*pi);
@@ -705,6 +725,9 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	struct qib_ibport *ibp;
 	struct ib_port_info *pip = (struct ib_port_info *)smp->data;
 	u8 mtu;
+	u16 link_speed_supported;
+	u16 link_speed_active;
+	u16 link_speed_enabled;
 	int ret;
 	u32 state;
 	u32 port_num = be32_to_cpu(smp->attr_mod);
@@ -749,18 +772,33 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	/* pip->diag_code; */
 	pip->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
 	pip->local_port_num = port;
-	pip->link_width_enabled = ppd->link_width_enabled;
-	pip->link_width_supported = ppd->link_width_supported;
-	pip->link_width_active = ppd->link_width_active;
+
+	/* will drop STL 1,3 */
+	pip->link_width_enabled = (u8)ppd->link_width_enabled;
+	pip->link_width_supported = (u8)ppd->link_width_supported;
+	pip->link_width_active = (u8)ppd->link_width_active;
 	state = dd->f_iblink_state(ppd);
-	pip->linkspeed_portstate = ppd->link_speed_supported << 4 | state;
+	link_speed_supported = ppd->link_speed_supported;
+	link_speed_active = ppd->link_speed_active;
+	link_speed_enabled = ppd->link_speed_enabled;
+#ifdef CONFIG_STL_MGMT
+	/* IB has no support for 12.5G */
+	link_speed_supported &= ~STL_LINK_SPEED_12_5G;
+	/* Most signficant 8 bits of 16 bit field match IB */
+	link_speed_supported >>= 8;
+	link_speed_active &= ~STL_LINK_SPEED_12_5G;
+	link_speed_active >>= 8;
+	link_speed_enabled &= ~STL_LINK_SPEED_12_5G;
+	link_speed_enabled >>= 8;
+#endif
+	pip->linkspeed_portstate = link_speed_supported << 4 | state;
 
 	pip->portphysstate_linkdown =
 		(dd->f_ibphys_portstate(ppd) << 4) |
 		(get_linkdowndefaultstate(ppd) ? 1 : 2);
 	pip->mkeyprot_resv_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
-	pip->linkspeedactive_enabled = (ppd->link_speed_active << 4) |
-		ppd->link_speed_enabled;
+	pip->linkspeedactive_enabled = ((u8)link_speed_active << 4) |
+		(u8)link_speed_enabled;
 	mtu = mtu_to_enum(ppd->ibmtu, IB_MTU_4096);
 	pip->neighbormtu_mastersmsl = (mtu << 4) | ibp->sm_sl;
 	pip->vlcap_inittype = ppd->vls_supported << 4;  /* InitType = 0 */
@@ -1213,10 +1251,6 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	/* restore re-reg bit per o14-12.2.1 */
 	pi->clientrereg_subnettimeout |= clientrereg;
-
-#if 1 /* XXX HACK HACK HACK */
-	pi->overall_buffer_space = 2304; /* 144 * 1024 / 64 */
-#endif /* 01 */
 
 	return ret;
 

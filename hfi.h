@@ -578,21 +578,23 @@ struct qib_pportdata {
 	u16 lid;
 	/* list of pkeys programmed; 0 if not set */
 	u16 pkeys[4];
-	/* LID mask control */
-	u8 lmc;
-	u8 link_width_supported;
-	u8 link_speed_supported;
-	u8 link_width_enabled;
-	u8 link_speed_enabled;
-	u8 link_width_active;
-	u8 link_speed_active;
+	u16 link_width_supported;
+	u16 link_speed_supported;
+	u16 link_width_enabled;
+	u16 link_speed_enabled;
+	u16 link_width_active;
+	u16 link_speed_active;
 	u8 vls_supported;
 	u8 vls_operational;
+	/* LID mask control */
+	u8 lmc;
 	/* Rx Polarity inversion (compensate for ~tx on partner) */
 	u8 rx_pol_inv;
 
 	u8 hw_pidx;     /* physical port index */
 	u8 port;        /* IB port number and index into dd->pports - 1 */
+	/* type of neighbor node */
+	u8 neighbor_type;
 
 	u8 delay_mult;
 	/* placeholders for IB MAD packet settings */
@@ -933,7 +935,7 @@ struct hfi_devdata {
 	u8 vau;
 	/* vCU of this device */
 	u8 vcu;
-	/* link crediits of this device */
+	/* link credits of this device */
 	u16 link_credits;
 	/* initial vl15 credits to use */
 	u16 vl15_init;
@@ -1078,8 +1080,13 @@ int qib_set_linkstate(struct qib_pportdata *, u8);
 #define STL_MTU_1024  3
 #define STL_MTU_2048  4
 #define STL_MTU_4096  5
+#ifndef CONFIG_STL_MGMT
 #define STL_MTU_8192  8
 #define STL_MTU_10240 9
+#else
+#include <rdma/stl_smi.h>
+#include <rdma/stl_port_info.h>
+#endif
 
 u32 lrh_max_header_bytes(struct hfi_devdata *dd);
 int mtu_to_enum(u32 mtu, int default_if_bad);
