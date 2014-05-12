@@ -179,10 +179,9 @@ int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
 int qib_set_linkstate(struct qib_pportdata *ppd, u8 newstate)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	int set_ib_ready = 0;
 	u32 phys_command;
 	u32 lstate;
-	int ret;
+	int ret = 0;
 
 	/* update cached value */
 	dd->f_iblink_state(ppd);
@@ -206,38 +205,31 @@ int qib_set_linkstate(struct qib_pportdata *ppd, u8 newstate)
 down_common:
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 				 IB_LINKCMD_DOWN | phys_command);
-		if (ppd->statusp)
-			*ppd->statusp &= ~QIB_STATUS_IB_READY;
 		lstate = IB_PORT_DOWN;
 		break;
 
 	case QIB_IB_LINKARM:
-		if (ppd->lstate == IB_PORT_ARMED) {
-			ret = 0;
-			goto bail;
+		if (ppd->lstate != IB_PORT_ARMED) {
+			if (ppd->lstate != IB_PORT_INIT) {
+				ret = -EINVAL;
+				goto bail;
+			}
+			dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
+					 IB_LINKCMD_ARMED | IB_LINKINITCMD_NOP);
 		}
-		if (ppd->lstate != IB_PORT_INIT) {
-			ret = -EINVAL;
-			goto bail;
-		}
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_ARMED | IB_LINKINITCMD_NOP);
 		lstate = IB_PORT_ARMED;
 		break;
 
 	case QIB_IB_LINKACTIVE:
-		if (ppd->lstate == IB_PORT_ACTIVE) {
-			ret = 0;
-			goto bail;
+		if (ppd->lstate != IB_PORT_ACTIVE) {
+			if (ppd->lstate != IB_PORT_ARMED) {
+				ret = -EINVAL;
+				goto bail;
+			}
+			dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
+					 IB_LINKCMD_ACTIVE | IB_LINKINITCMD_NOP);
 		}
-		if (ppd->lstate != IB_PORT_ARMED) {
-			ret = -EINVAL;
-			goto bail;
-		}
-		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
-				 IB_LINKCMD_ACTIVE | IB_LINKINITCMD_NOP);
 		lstate = IB_PORT_ACTIVE;
-		set_ib_ready = 1;
 		break;
 
 	default:
@@ -246,12 +238,20 @@ down_common:
 	}
 
 	ret = qib_wait_linkstate(ppd, lstate, 10);
-	if (ret == 0 && set_ib_ready) {
-		/* only set if the state really moved */
-		if (ppd->statusp)
+	if (ret == 0 && ppd->statusp) {
+		switch(lstate) {
+		case IB_PORT_DOWN:
+			*ppd->statusp &= ~(QIB_STATUS_IB_CONF |
+					   QIB_STATUS_IB_READY);
+			break;
+		case IB_PORT_ARMED:
+			*ppd->statusp |= QIB_STATUS_IB_CONF;
+			break;
+		case IB_PORT_ACTIVE:
 			*ppd->statusp |= QIB_STATUS_IB_READY;
+			break;
+		}
 	}
-
 bail:
 	return ret;
 }

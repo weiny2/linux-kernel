@@ -133,10 +133,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* physical link went up */
 		ppd->linkup = 1;
 
-		if (ppd->statusp)
-			*ppd->statusp |=
-				QIB_STATUS_IB_READY | QIB_STATUS_IB_CONF;
-
 		/*expected_state = IB_PORT_INIT; see TODO below */
 		ev = IB_EVENT_PORT_ACTIVE;
 
@@ -155,9 +151,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		/* clear HW details of the prevoius connection */
 		reset_link_credits(dd);
-
-		if (ppd->statusp)
-			*ppd->statusp &= ~QIB_STATUS_IB_READY;
 
 		/*expected_state = IB_PORT_DOWN; see TODO below */
 		ev = IB_EVENT_PORT_ERR;
