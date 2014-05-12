@@ -2769,26 +2769,30 @@ static void set_vl_weights(struct hfi_devdata *dd, u32 target,
  * Read one credit merge VL register.
  */
 static void read_one_cm_vl(struct hfi_devdata *dd, u32 csr,
-							struct vl_limit *vll)
+			   struct vl_limit *vll)
 {
 	u64 reg = read_csr(dd, csr);
-	vll->dedicated = (reg >> WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT)
-				& WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK;
-	vll->shared = (reg >> WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT)
-				& WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_MASK;
+	vll->dedicated = cpu_to_be16(
+		(reg >> WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT)
+		& WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK);
+	vll->shared = cpu_to_be16(
+		(reg >> WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT)
+		& WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_MASK);
 }
 
 /*
  * Read the current credit merge limits.
  */
-static void get_buffer_control(struct hfi_devdata *dd,
-				struct buffer_control *bc, u16 *overall_limit)
+static void get_buffer_control(
+	struct hfi_devdata *dd,
+	struct buffer_control *bc,
+	u16 *overall_limit)
 {
 	u64 reg;
 	int i;
 
 	/* not all entries are filled in */
-	memset(bc, 0, sizeof(struct buffer_control));
+	memset(bc, 0, sizeof(*bc));
 
 	/* STL and WFR have a 1-1 mapping */
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
@@ -2800,9 +2804,9 @@ static void get_buffer_control(struct hfi_devdata *dd,
 	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
 /* TODO: defined in future HAS 0.76 */
 #ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
-	bc->overall_shared_limit =
+	bc->overall_shared_limit = cpu_to_be16(
 		(reg >> WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT)
-		& WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_MASK;
+		& WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_MASK);
 	if (overall_limit)
 		*overall_limit = (reg
 			>> WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
@@ -2820,10 +2824,10 @@ static void get_buffer_control(struct hfi_devdata *dd,
 	/* calculate the shared total by subtracting the summed
 	   dedicated limit from the overall limit */
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
-		ded_total += bc->vl[i].dedicated;
-	ded_total += bc->vl[15].dedicated;
+		ded_total += be16_to_cpu(bc->vl[i].dedicated);
+	ded_total += be16_to_cpu(bc->vl[15].dedicated);
 
-	bc->overall_shared_limit = global_limit - ded_total;
+	bc->overall_shared_limit = cpu_to_be16(global_limit - ded_total);
 	}
 #endif
 }
@@ -2833,19 +2837,28 @@ static void print_bc(struct hfi_devdata *dd, const char *func, struct buffer_con
 {
 	dd_dev_info(dd, "%s: buffer control \"%s\" (hex values)\n", func, what);
 	dd_dev_info(dd, "%s:   overall_shared_limit %x\n", func,
-		bc->overall_shared_limit);
+		be16_to_cpu(bc->overall_shared_limit));
 	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
-		(int)bc->vl[0].dedicated, (int)bc->vl[0].shared, 
-		(int)bc->vl[1].dedicated, (int)bc->vl[1].shared, 
-		(int)bc->vl[2].dedicated, (int)bc->vl[2].shared, 
-		(int)bc->vl[3].dedicated, (int)bc->vl[3].shared);
+		(unsigned)be16_to_cpu(bc->vl[0].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[0].shared),
+		(unsigned)be16_to_cpu(bc->vl[1].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[1].shared),
+		(unsigned)be16_to_cpu(bc->vl[2].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[2].shared),
+		(unsigned)be16_to_cpu(bc->vl[3].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[3].shared));
 	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
-		(int)bc->vl[4].dedicated, (int)bc->vl[4].shared, 
-		(int)bc->vl[5].dedicated, (int)bc->vl[5].shared, 
-		(int)bc->vl[6].dedicated, (int)bc->vl[6].shared, 
-		(int)bc->vl[7].dedicated, (int)bc->vl[7].shared);
+		(unsigned)be16_to_cpu(bc->vl[4].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[4].shared),
+		(unsigned)be16_to_cpu(bc->vl[5].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[5].shared),
+		(unsigned)be16_to_cpu(bc->vl[6].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[6].shared),
+		(unsigned)be16_to_cpu(bc->vl[7].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[7].shared));
 	dd_dev_info(dd, "%s:   vls [%x,%x]\n", func,
-		(int)bc->vl[15].dedicated, (int)bc->vl[15].shared);
+		(unsigned)be16_to_cpu(bc->vl[15].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[15].shared));
 }
 #endif
 
@@ -2961,8 +2974,8 @@ static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask)
  * raise = if the new limit is higher than the current value (may be changed
  * 	earlier in the algorithm), set the new limit to the new value
  */
-static void set_buffer_control(struct hfi_devdata *dd,
-						struct buffer_control *new_bc)
+static int set_buffer_control(struct hfi_devdata *dd,
+			       struct buffer_control *new_bc)
 {
 	u64 changing_mask, ld_mask, stat_mask;
 	int change_count;
@@ -2970,7 +2983,8 @@ static void set_buffer_control(struct hfi_devdata *dd,
 	struct buffer_control cur_bc;
 	u8 changing[STL_NUM_VLS];
 	u8 lowering_dedicated[STL_NUM_VLS];
-	u16 cur_total, new_total;
+	u16 cur_total;
+	u32 new_total = 0;
 	const u64 all_mask =
 		WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK
 		| WFR_SEND_CM_CREDIT_USED_STATUS_VL1_RETURN_CREDIT_STATUS_SMASK
@@ -2987,19 +3001,21 @@ static void set_buffer_control(struct hfi_devdata *dd,
 
 
 	/* find the new total credits, do sanity check on unused VLs */
-	new_total = 0;
 	for (i = 0; i < STL_NUM_VLS; i++) {
 		if (valid_vl(i)) {
-			new_total += new_bc->vl[i].dedicated;
+			new_total += be16_to_cpu(new_bc->vl[i].dedicated);
 			continue;
 		}
-		nonzero_msg(dd, i, "dedicated", new_bc->vl[i].dedicated);
-		nonzero_msg(dd, i, "shared", new_bc->vl[i].shared);
+		nonzero_msg(dd, i, "dedicated",
+			be16_to_cpu(new_bc->vl[i].dedicated));
+		nonzero_msg(dd, i, "shared",
+			be16_to_cpu(new_bc->vl[i].shared));
 		new_bc->vl[i].dedicated = 0;
 		new_bc->vl[i].shared = 0;
 	}
-	new_total += new_bc->overall_shared_limit;
-
+	new_total += be16_to_cpu(new_bc->overall_shared_limit);
+	if (new_total > (u32)dd->link_credits)
+		return -EINVAL;
 	/* fetch the curent values */
 	get_buffer_control(dd, &cur_bc, &cur_total);
 
@@ -3039,8 +3055,8 @@ static void set_buffer_control(struct hfi_devdata *dd,
 			changing_mask |= stat_mask;
 			change_count++;
 		}
-		if (new_bc->vl[i].dedicated <
-						cur_bc.vl[i].dedicated) {
+		if (be16_to_cpu(new_bc->vl[i].dedicated) <
+					be16_to_cpu(cur_bc.vl[i].dedicated)) {
 			lowering_dedicated[i] = 1;
 			ld_mask |= stat_mask;
 		}
@@ -3054,7 +3070,8 @@ static void set_buffer_control(struct hfi_devdata *dd,
 	 * Start the credit change algorithm.
 	 */
 	use_all_mask = 0;
-	if (new_bc->overall_shared_limit < cur_bc.overall_shared_limit) {
+	if (be16_to_cpu(new_bc->overall_shared_limit) <
+			be16_to_cpu(cur_bc.overall_shared_limit)) {
 		set_global_shared(dd, 0);
 		cur_bc.overall_shared_limit = 0;
 		use_all_mask = 1;
@@ -3079,7 +3096,7 @@ static void set_buffer_control(struct hfi_devdata *dd,
 
 			if (lowering_dedicated[i]) {
 				set_vl_dedicated(dd, i, 
-						new_bc->vl[i].dedicated);
+					be16_to_cpu(new_bc->vl[i].dedicated));
 				cur_bc.vl[i].dedicated =
 						new_bc->vl[i].dedicated;
 			}
@@ -3092,10 +3109,10 @@ static void set_buffer_control(struct hfi_devdata *dd,
 			if (!valid_vl(i))
 				continue;
 
-			if (new_bc->vl[i].dedicated >
-						cur_bc.vl[i].dedicated)
+			if (be16_to_cpu(new_bc->vl[i].dedicated) >
+					be16_to_cpu(cur_bc.vl[i].dedicated))
 				set_vl_dedicated(dd, i, 
-						new_bc->vl[i].dedicated);
+					be16_to_cpu(new_bc->vl[i].dedicated));
 		}
 	}
 
@@ -3104,17 +3121,21 @@ static void set_buffer_control(struct hfi_devdata *dd,
 		if (!valid_vl(i))
 			continue;
 
-		if (new_bc->vl[i].shared > cur_bc.vl[i].shared)
-			set_vl_shared(dd, i, new_bc->vl[i].shared);
+		if (be16_to_cpu(new_bc->vl[i].shared) >
+				be16_to_cpu(cur_bc.vl[i].shared))
+			set_vl_shared(dd, i, be16_to_cpu(new_bc->vl[i].shared));
 	}
 
 	/* finally raise the global shared */
-	if (new_bc->overall_shared_limit > cur_bc.overall_shared_limit)
-		set_global_shared(dd, new_bc->overall_shared_limit);
+	if (be16_to_cpu(new_bc->overall_shared_limit) >
+			be16_to_cpu(cur_bc.overall_shared_limit))
+		set_global_shared(dd,
+			be16_to_cpu(new_bc->overall_shared_limit));
 
 	/* bracket the credit change with a total adjustment */
 	if (new_total < cur_total)
 		set_global_limit(dd, new_total);
+	return 0;
 }
 
 /*
@@ -3145,6 +3166,8 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
  */
 int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 {
+	int ret = 0;
+
 	switch (which) {
 	case FM_TBL_VL_HIGH_ARB:
 		set_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
@@ -3155,12 +3178,12 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
-		set_buffer_control(ppd->dd, t);
+		ret = set_buffer_control(ppd->dd, t);
 		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
-	return 0;
+	return ret;
 }
 
 static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
@@ -5273,12 +5296,12 @@ void assign_link_credits(struct hfi_devdata *dd)
 #define PER_VL_SHARED_CREDITS TOTAL_SHARED_CREDITS
 
 	BUG_ON(WFR_CM_GLOBAL_CREDITS < TOTAL_DEDICATED_CREDITS);
-	t.overall_shared_limit = TOTAL_SHARED_CREDITS;
+	t.overall_shared_limit = cpu_to_be16(TOTAL_SHARED_CREDITS);
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++) {
-		t.vl[i].dedicated = PER_VL_DEDICATED_CREDITS;
-		t.vl[i].shared = PER_VL_SHARED_CREDITS;
+		t.vl[i].dedicated = cpu_to_be16(PER_VL_DEDICATED_CREDITS);
+		t.vl[i].shared = cpu_to_be16(PER_VL_SHARED_CREDITS);
 	}
-	t.vl[15].dedicated = VL15_CREDITS;
+	t.vl[15].dedicated = cpu_to_be16(VL15_CREDITS);
 
 	set_buffer_control(dd, &t);
 }

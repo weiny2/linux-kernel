@@ -426,13 +426,13 @@ struct cc_table_shadow {
  */
 #define STL_NUM_VLS 32	/* STL defines 32 VLs */
 struct vl_limit {
-	u16 dedicated;
-	u16 shared;
+	__be16 dedicated;
+	__be16 shared;
 };
 
 struct buffer_control {
-	u16 reserved;
-	u16 overall_shared_limit;
+	__be16 reserved;
+	__be16 overall_shared_limit;
 	struct vl_limit vl[STL_NUM_VLS];
 };
 #endif				/* _QIB_MAD_H */

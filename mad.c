@@ -1763,6 +1763,51 @@ static int subn_set_stl_sc_to_vlt(struct stl_smp *smp,
 
 	return subn_get_stl_sc_to_vlt(smp, ibdev, port, resp_len);
 }
+
+static int subn_get_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
+			    u8 port, u32 *resp_len)
+{
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_pportdata *ppd;
+	void *p = stl_get_smp_data(smp);
+
+	if (num_ports != 1 || port_num != port) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	memset(p, 0, stl_get_smp_data_size(smp));
+
+	ppd = dd->pport + (port_num - 1);
+	fm_get_table(ppd, FM_TBL_BUFFER_CONTROL, p);
+	*resp_len += sizeof(struct buffer_control);
+
+	return reply(smp);
+}
+
+static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
+			    u8 port, u32 *resp_len)
+{
+	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_pportdata *ppd;
+	void *p = stl_get_smp_data(smp);
+
+	if (num_ports != 1 || port_num != port) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+	ppd = dd->pport + (port_num - 1);
+	if (fm_set_table(ppd, FM_TBL_BUFFER_CONTROL, p) < 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+	return subn_get_stl_bct(smp, ibdev, port, resp_len);
+}
+
 #endif /* CONFIG_STL_MGMT */
 
 static int subn_get_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
@@ -2847,8 +2892,6 @@ static int pma_set_portcounters_ext(struct ib_pma_mad *pmp,
 
 #ifdef CONFIG_STL_MGMT
 
-#define STL_SMP_ATTR_SC_TO_VLT_TABLE cpu_to_be16(0x0084)
-
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			    u8 port, struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad,
@@ -2918,9 +2961,12 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_get_sl_to_vl(smp, ibdev, port);
 			goto bail;
 #endif /* 01 */
-		case STL_SMP_ATTR_SC_TO_VLT_TABLE:
+		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
 			ret = subn_get_stl_sc_to_vlt(smp, ibdev, port,
 						     resp_len);
+			goto bail;
+		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+			ret = subn_get_stl_bct(smp, ibdev, port, resp_len);
 			goto bail;
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_get_stl_vl_arb(smp, ibdev, port, resp_len);
@@ -2957,9 +3003,12 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_set_sl_to_vl(smp, ibdev, port);
 			goto bail;
 #endif /* 01 */
-		case STL_SMP_ATTR_SC_TO_VLT_TABLE:
+		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
 			ret = subn_set_stl_sc_to_vlt(smp, ibdev, port,
 						     resp_len);
+			goto bail;
+		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+			ret = subn_set_stl_bct(smp, ibdev, port, resp_len);
 			goto bail;
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_set_stl_vl_arb(smp, ibdev, port, resp_len);
