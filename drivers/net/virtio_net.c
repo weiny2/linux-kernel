@@ -1267,7 +1267,8 @@ static int virtnet_change_mtu(struct net_device *dev, int new_mtu)
  * txq based on the processor id.
  */
 static u16 virtnet_select_queue(struct net_device *dev, struct sk_buff *skb,
-				void *accel_priv)
+				void *accel_priv,
+				select_queue_fallback_t fallback)
 {
 	int txq;
 	struct virtnet_info *vi = netdev_priv(dev);

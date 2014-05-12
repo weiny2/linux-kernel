@@ -56,9 +56,10 @@ static int create_files(struct sysfs_dirent *dir_sd, struct kobject *kobj,
 				if (!mode)
 					continue;
 			}
-			error = sysfs_add_file_mode(dir_sd, *attr,
-						    SYSFS_KOBJ_ATTR,
-						    (*attr)->mode | mode);
+			error = sysfs_add_file_mode_ns(dir_sd, *attr,
+						       SYSFS_KOBJ_ATTR,
+						       (*attr)->mode | mode,
+						       NULL);
 			if (unlikely(error))
 				break;
 		}
@@ -73,9 +74,10 @@ static int create_files(struct sysfs_dirent *dir_sd, struct kobject *kobj,
 			if (update)
 				sysfs_hash_and_remove(dir_sd, NULL,
 						(*bin_attr)->attr.name);
-			error = sysfs_add_file_mode(dir_sd, &(*bin_attr)->attr,
-					SYSFS_KOBJ_BIN_ATTR,
-					(*bin_attr)->attr.mode);
+			error = sysfs_add_file_mode_ns(dir_sd, &(*bin_attr)->attr,
+						       SYSFS_KOBJ_BIN_ATTR,
+						       (*bin_attr)->attr.mode,
+						       NULL);
 			if (error)
 				break;
 		}

@@ -1930,10 +1930,6 @@ static void tulip_remove_one(struct pci_dev *pdev)
 		return;
 
 	tp = netdev_priv(dev);
-
-	/* shoot NIC in the head before deallocating descriptors */
-	pci_disable_device(tp->pdev);
-
 	unregister_netdev(dev);
 	pci_free_consistent (pdev,
 			     sizeof (struct tulip_rx_desc) * RX_RING_SIZE +
@@ -1944,6 +1940,7 @@ static void tulip_remove_one(struct pci_dev *pdev)
 	free_netdev (dev);
 	pci_release_regions (pdev);
 	pci_set_drvdata (pdev, NULL);
+	pci_disable_device(pdev);
 
 	/* pci_power_off (pdev, -1); */
 }

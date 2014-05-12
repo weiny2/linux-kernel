@@ -31,11 +31,11 @@ static struct dentry *fnic_fc_trace_enable;
 static struct dentry *fnic_fc_trace_clear;
 
 struct fc_trace_flag_type {
-        u8 fc_row_file;
-        u8 fc_normal_file;
-        u8 fnic_trace;
-        u8 fc_trace;
-        u8 fc_clear;
+	u8 fc_row_file;
+	u8 fc_normal_file;
+	u8 fnic_trace;
+	u8 fc_trace;
+	u8 fc_clear;
 };
 
 static struct fc_trace_flag_type *fc_trc_flag;
@@ -72,16 +72,16 @@ int fnic_debugfs_init(void)
 	}
 
 	/* Allocate memory to structure */
-        fc_trc_flag = (struct fc_trace_flag_type *)
-                vmalloc(sizeof(struct fc_trace_flag_type));
+	fc_trc_flag = (struct fc_trace_flag_type *)
+		vmalloc(sizeof(struct fc_trace_flag_type));
 
-        if (fc_trc_flag) {
-                fc_trc_flag->fc_row_file = 0;
-                fc_trc_flag->fc_normal_file = 1;
-                fc_trc_flag->fnic_trace = 2;
-                fc_trc_flag->fc_trace = 3;
-                fc_trc_flag->fc_clear = 4;
-        }
+	if (fc_trc_flag) {
+		fc_trc_flag->fc_row_file = 0;
+		fc_trc_flag->fc_normal_file = 1;
+		fc_trc_flag->fnic_trace = 2;
+		fc_trc_flag->fc_trace = 3;
+		fc_trc_flag->fc_clear = 4;
+	}
 
 	rc = 0;
 	return rc;
@@ -102,9 +102,8 @@ void fnic_debugfs_terminate(void)
 	debugfs_remove(fnic_trace_debugfs_root);
 	fnic_trace_debugfs_root = NULL;
 
-	if (fc_trc_flag) {
+	if (fc_trc_flag)
 		vfree(fc_trc_flag);
-	}
 }
 
 /*
@@ -150,18 +149,17 @@ static ssize_t fnic_trace_ctrl_read(struct file *filp,
 {
 	char buf[64];
 	int len;
-	u8 * trace_type;
+	u8 *trace_type;
 	len = 0;
 	trace_type = (u8 *)filp->private_data;
-	if (*trace_type == fc_trc_flag->fnic_trace) {
+	if (*trace_type == fc_trc_flag->fnic_trace)
 		len = sprintf(buf, "%u\n", fnic_tracing_enabled);
-	} else if (*trace_type == fc_trc_flag->fc_trace) {
+	else if (*trace_type == fc_trc_flag->fc_trace)
 		len = sprintf(buf, "%u\n", fnic_fc_tracing_enabled);
-	} else if (*trace_type == fc_trc_flag->fc_clear) {
+	else if (*trace_type == fc_trc_flag->fc_clear)
 		len = sprintf(buf, "%u\n", fnic_fc_trace_cleared);
-	} else {
-		printk(KERN_ERR PFX "cannot read to any debugfs file");
-	}
+	else
+		pr_err("fnic: Cannot read to any debugfs file\n");
 
 	return simple_read_from_buffer(ubuf, cnt, ppos, buf, len);
 }
@@ -190,7 +188,7 @@ static ssize_t fnic_trace_ctrl_write(struct file *filp,
 	char buf[64];
 	unsigned long val;
 	int ret;
-	u8 * trace_type;
+	u8 *trace_type;
 	trace_type = (u8 *)filp->private_data;
 
 	if (cnt >= sizeof(buf))
@@ -205,15 +203,15 @@ static ssize_t fnic_trace_ctrl_write(struct file *filp,
 	if (ret < 0)
 		return ret;
 
-	if (*trace_type == fc_trc_flag->fnic_trace) {
+	if (*trace_type == fc_trc_flag->fnic_trace)
 		fnic_tracing_enabled = val;
-	} else if (*trace_type == fc_trc_flag->fc_trace) {
+	else if (*trace_type == fc_trc_flag->fc_trace)
 		fnic_fc_tracing_enabled = val;
-	} else if (*trace_type == fc_trc_flag->fc_clear) {
+	else if (*trace_type == fc_trc_flag->fc_clear)
 		fnic_fc_trace_cleared = val;
-	} else {
-		printk(KERN_ERR PFX "cannot write to any debufs file");
-	}
+	else
+		pr_err("fnic: cannot write to any debufs file\n");
+
 	(*ppos)++;
 
 	return cnt;
@@ -247,28 +245,29 @@ static int fnic_trace_debugfs_open(struct inode *inode,
 	fnic_dbgfs_t *fnic_dbg_prt;
 	u8 *rdata_ptr;
 	rdata_ptr = (u8 *)inode->i_private;
-	fnic_dbg_prt = kzalloc(sizeof (fnic_dbgfs_t), GFP_KERNEL);
+	fnic_dbg_prt = kzalloc(sizeof(fnic_dbgfs_t), GFP_KERNEL);
 	if (!fnic_dbg_prt)
 		return -ENOMEM;
 
 	if (*rdata_ptr == fc_trc_flag->fnic_trace) {
-		fnic_dbg_prt->buffer = vmalloc(3*(trace_max_pages * PAGE_SIZE));
+		fnic_dbg_prt->buffer = vmalloc(3 *
+					(trace_max_pages * PAGE_SIZE));
 		if (!fnic_dbg_prt->buffer) {
 			kfree(fnic_dbg_prt);
 			return -ENOMEM;
 		}
 		memset((void *)fnic_dbg_prt->buffer, 0,
-		3*(trace_max_pages * PAGE_SIZE));
+		3 * (trace_max_pages * PAGE_SIZE));
 		fnic_dbg_prt->buffer_len = fnic_get_trace_data(fnic_dbg_prt);
 	} else {
 		fnic_dbg_prt->buffer =
-			vmalloc(3*(fnic_fc_trace_max_pages * PAGE_SIZE));
+			vmalloc(3 * (fnic_fc_trace_max_pages * PAGE_SIZE));
 		if (!fnic_dbg_prt->buffer) {
 			kfree(fnic_dbg_prt);
 			return -ENOMEM;
 		}
 		memset((void *)fnic_dbg_prt->buffer, 0,
-		3*(fnic_fc_trace_max_pages * PAGE_SIZE));
+			3 * (fnic_fc_trace_max_pages * PAGE_SIZE));
 		fnic_dbg_prt->buffer_len =
 			fnic_fc_trace_get_data(fnic_dbg_prt, *rdata_ptr);
 	}
@@ -382,10 +381,10 @@ int fnic_trace_debugfs_init(void)
 		return rc;
 	}
 	fnic_trace_enable = debugfs_create_file("tracing_enable",
-					  S_IFREG|S_IRUGO|S_IWUSR,
-					  fnic_trace_debugfs_root,
-					&(fc_trc_flag->fnic_trace),
-					&fnic_trace_ctrl_fops);
+						S_IFREG|S_IRUGO|S_IWUSR,
+						fnic_trace_debugfs_root,
+						&(fc_trc_flag->fnic_trace),
+						&fnic_trace_ctrl_fops);
 
 	if (!fnic_trace_enable) {
 		printk(KERN_DEBUG
@@ -394,10 +393,10 @@ int fnic_trace_debugfs_init(void)
 	}
 
 	fnic_trace_debugfs_file = debugfs_create_file("trace",
-						  S_IFREG|S_IRUGO|S_IWUSR,
-						  fnic_trace_debugfs_root,
+						S_IFREG|S_IRUGO|S_IWUSR,
+						fnic_trace_debugfs_root,
 						&(fc_trc_flag->fnic_trace),
-						  &fnic_trace_debugfs_fops);
+						&fnic_trace_debugfs_fops);
 
 	if (!fnic_trace_debugfs_file) {
 		printk(KERN_DEBUG
@@ -438,59 +437,56 @@ void fnic_trace_debugfs_terminate(void)
 
 int fnic_fc_trace_debugfs_init(void)
 {
-        int rc = -1;
+	int rc = -1;
 
 	if (!fnic_trace_debugfs_root) {
-		printk(KERN_DEBUG
-			"fnic Debugfs root directory doesn't exist\n");
+		pr_err("fnic:Debugfs root directory doesn't exist\n");
 		return rc;
 	}
 
 	fnic_fc_trace_enable = debugfs_create_file("fc_trace_enable",
-							S_IFREG|S_IRUGO|S_IWUSR,
-							fnic_trace_debugfs_root,
-							&(fc_trc_flag->fc_trace),
-							&fnic_trace_ctrl_fops);
+						S_IFREG|S_IRUGO|S_IWUSR,
+						fnic_trace_debugfs_root,
+						&(fc_trc_flag->fc_trace),
+						&fnic_trace_ctrl_fops);
 
 	if (!fnic_fc_trace_enable) {
-		printk(KERN_DEBUG "Cannot create fc_trace_enable"
-			"under debugfs");
+		pr_err("fnic: Failed create fc_trace_enable file\n");
 		return rc;
 	}
 
 	fnic_fc_trace_clear = debugfs_create_file("fc_trace_clear",
-                                                  S_IFREG|S_IRUGO|S_IWUSR,
-                                                  fnic_trace_debugfs_root,
-                                                  &(fc_trc_flag->fc_clear),
-                                                  &fnic_trace_ctrl_fops);
+						S_IFREG|S_IRUGO|S_IWUSR,
+						fnic_trace_debugfs_root,
+						&(fc_trc_flag->fc_clear),
+						&fnic_trace_ctrl_fops);
 
 	if (!fnic_fc_trace_clear) {
-		printk(KERN_DEBUG "Cannot create fc_trace_enable"
-			"under debugfs");
+		pr_err("fnic: Failed to create fc_trace_enable file\n");
 		return rc;
 	}
 
 	fnic_fc_rdata_trace_debugfs_file =
 		debugfs_create_file("fc_trace_rdata",
-				    S_IFREG|S_IRUGO|S_IWUSR,
-                                    fnic_trace_debugfs_root,
-				    &(fc_trc_flag->fc_normal_file),
-                                    &fnic_trace_debugfs_fops);
+					S_IFREG|S_IRUGO|S_IWUSR,
+					fnic_trace_debugfs_root,
+					&(fc_trc_flag->fc_normal_file),
+					&fnic_trace_debugfs_fops);
 
 	if (!fnic_fc_rdata_trace_debugfs_file) {
-		printk(KERN_DEBUG "Cannot create fc_rdata_trace under debugfs");
+		pr_err("fnic: Failed create fc_rdata_trace file\n");
 		return rc;
 	}
 
 	fnic_fc_trace_debugfs_file =
 		debugfs_create_file("fc_trace",
-                                    S_IFREG|S_IRUGO|S_IWUSR,
-                                    fnic_trace_debugfs_root,
-				    &(fc_trc_flag->fc_row_file),
-                                    &fnic_trace_debugfs_fops);
+					S_IFREG|S_IRUGO|S_IWUSR,
+					fnic_trace_debugfs_root,
+					&(fc_trc_flag->fc_row_file),
+					&fnic_trace_debugfs_fops);
 
 	if (!fnic_fc_trace_debugfs_file) {
-		printk(KERN_DEBUG "Cannot create fc_trace file under debugfs");
+		pr_err("fnic: Failed to create fc_trace file\n");
 		return rc;
 	}
 	rc = 0;

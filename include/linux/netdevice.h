@@ -738,6 +738,9 @@ struct netdev_phys_port_id {
 	unsigned char id_len;
 };
 
+typedef u16 (*select_queue_fallback_t)(struct net_device *dev,
+				       struct sk_buff *skb);
+
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -769,7 +772,7 @@ struct netdev_phys_port_id {
  *	Required can not be NULL.
  *
  * u16 (*ndo_select_queue)(struct net_device *dev, struct sk_buff *skb,
- *                         void *accel_priv);
+ *                         void *accel_priv, select_queue_fallback_t fallback);
  *	Called to decide which queue to when device supports multiple
  *	transmit queues.
  *
@@ -991,7 +994,8 @@ struct net_device_ops {
 						   struct net_device *dev);
 	u16			(*ndo_select_queue)(struct net_device *dev,
 						    struct sk_buff *skb,
-						    void *accel_priv);
+						    void *accel_priv,
+						    select_queue_fallback_t fallback);
 	void			(*ndo_change_rx_flags)(struct net_device *dev,
 						       int flags);
 	void			(*ndo_set_rx_mode)(struct net_device *dev);
@@ -1173,6 +1177,7 @@ struct net_device {
 	struct list_head	dev_list;
 	struct list_head	napi_list;
 	struct list_head	unreg_list;
+	struct list_head	close_list;
 
 	/* directly linked devices, like slaves for bonding */
 	struct {
@@ -1531,7 +1536,6 @@ static inline void netdev_for_each_tx_queue(struct net_device *dev,
 extern struct netdev_queue *netdev_pick_tx(struct net_device *dev,
 					   struct sk_buff *skb,
 					   void *accel_priv);
-extern u16 __netdev_pick_tx(struct net_device *dev, struct sk_buff *skb);
 
 /*
  * Net namespace inlines
@@ -2421,7 +2425,9 @@ extern int		dev_ethtool(struct net *net, struct ifreq *);
 extern unsigned int	dev_get_flags(const struct net_device *);
 extern int		__dev_change_flags(struct net_device *, unsigned int flags);
 extern int		dev_change_flags(struct net_device *, unsigned int);
-extern void		__dev_notify_flags(struct net_device *, unsigned int old_flags);
+void			__dev_notify_flags(struct net_device *,
+					   unsigned int old_flags,
+					   unsigned int gchanges);
 extern int		dev_change_name(struct net_device *, const char *);
 extern int		dev_set_alias(struct net_device *, const char *, size_t);
 extern int		dev_change_net_namespace(struct net_device *,
@@ -2876,6 +2882,25 @@ extern struct net_device *netdev_all_upper_get_next_dev_rcu(struct net_device *d
 	     updev; \
 	     updev = netdev_all_upper_get_next_dev_rcu(dev, &(iter)))
 
+extern void *netdev_lower_get_next_private(struct net_device *dev,
+					   struct list_head **iter);
+extern void *netdev_lower_get_next_private_rcu(struct net_device *dev,
+					       struct list_head **iter);
+
+#define netdev_for_each_lower_private(dev, priv, iter) \
+	for (iter = (dev)->adj_list.lower.next, \
+	     priv = netdev_lower_get_next_private(dev, &(iter)); \
+	     priv; \
+	     priv = netdev_lower_get_next_private(dev, &(iter)))
+
+#define netdev_for_each_lower_private_rcu(dev, priv, iter) \
+	for (iter = &(dev)->adj_list.lower, \
+	     priv = netdev_lower_get_next_private_rcu(dev, &(iter)); \
+	     priv; \
+	     priv = netdev_lower_get_next_private_rcu(dev, &(iter)))
+
+extern void *netdev_adjacent_get_private(struct list_head *adj_list);
+void *netdev_lower_get_first_private_rcu(struct net_device *dev);
 extern struct net_device *netdev_master_upper_dev_get(struct net_device *dev);
 extern struct net_device *netdev_master_upper_dev_get_rcu(struct net_device *dev);
 extern int netdev_upper_dev_link(struct net_device *dev,
@@ -2931,8 +2956,20 @@ extern int __init dev_proc_init(void);
 #define dev_proc_init() 0
 #endif
 
-extern int netdev_class_create_file(struct class_attribute *class_attr);
-extern void netdev_class_remove_file(struct class_attribute *class_attr);
+extern int netdev_class_create_file_ns(struct class_attribute *class_attr,
+				       const void *ns);
+extern void netdev_class_remove_file_ns(struct class_attribute *class_attr,
+					const void *ns);
+
+static inline int netdev_class_create_file(struct class_attribute *class_attr)
+{
+	return netdev_class_create_file_ns(class_attr, NULL);
+}
+
+static inline void netdev_class_remove_file(struct class_attribute *class_attr)
+{
+	netdev_class_remove_file_ns(class_attr, NULL);
+}
 
 extern struct kobj_ns_type_operations net_ns_type_operations;
 
