@@ -630,10 +630,13 @@ static inline int inode_unhashed(struct inode *inode)
  * 0: the object of the current VFS operation
  * 1: parent
  * 2: child/target
- * 3: quota file
+ * 3: xattr
+ * 4: second non-directory
+ * The last is for certain operations (such as rename) which lock two
+ * non-directories at once.
  *
  * The locking order between these classes is
- * parent -> child -> normal -> xattr -> quota
+ * parent -> child -> normal -> xattr -> second non-directory
  */
 enum inode_i_mutex_lock_class
 {
@@ -641,8 +644,11 @@ enum inode_i_mutex_lock_class
 	I_MUTEX_PARENT,
 	I_MUTEX_CHILD,
 	I_MUTEX_XATTR,
-	I_MUTEX_QUOTA
+	I_MUTEX_NONDIR2
 };
+
+void lock_two_nondirectories(struct inode *, struct inode*);
+void unlock_two_nondirectories(struct inode *, struct inode*);
 
 /*
  * NOTE: in a 32bit arch with a preemptable kernel and
@@ -889,6 +895,7 @@ static inline int file_check_writeable(struct file *filp)
 
 #define FL_POSIX	1
 #define FL_FLOCK	2
+#define FL_DELEG	4	/* NFSv4 delegation */
 #define FL_ACCESS	8	/* not trying to lock, just looking */
 #define FL_EXISTS	16	/* when unlocking, test for existence */
 #define FL_LEASE	32	/* lease held on this file */
@@ -1030,7 +1037,7 @@ extern int vfs_test_lock(struct file *, struct file_lock *);
 extern int vfs_lock_file(struct file *, unsigned int, struct file_lock *, struct file_lock *);
 extern int vfs_cancel_lock(struct file *filp, struct file_lock *fl);
 extern int flock_lock_file_wait(struct file *filp, struct file_lock *fl);
-extern int __break_lease(struct inode *inode, unsigned int flags);
+extern int __break_lease(struct inode *inode, unsigned int flags, unsigned int type);
 extern void lease_get_mtime(struct inode *, struct timespec *time);
 extern int generic_setlease(struct file *, long, struct file_lock **);
 extern int vfs_setlease(struct file *, long, struct file_lock **);
@@ -1139,7 +1146,7 @@ static inline int flock_lock_file_wait(struct file *filp,
 	return -ENOLCK;
 }
 
-static inline int __break_lease(struct inode *inode, unsigned int mode)
+static inline int __break_lease(struct inode *inode, unsigned int mode, unsigned int type)
 {
 	return 0;
 }
@@ -1470,10 +1477,10 @@ extern int vfs_create(struct inode *, struct dentry *, umode_t, bool);
 extern int vfs_mkdir(struct inode *, struct dentry *, umode_t);
 extern int vfs_mknod(struct inode *, struct dentry *, umode_t, dev_t);
 extern int vfs_symlink(struct inode *, struct dentry *, const char *);
-extern int vfs_link(struct dentry *, struct inode *, struct dentry *);
+extern int vfs_link(struct dentry *, struct inode *, struct dentry *, struct inode **);
 extern int vfs_rmdir(struct inode *, struct dentry *);
-extern int vfs_unlink(struct inode *, struct dentry *);
-extern int vfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
+extern int vfs_unlink(struct inode *, struct dentry *, struct inode **);
+extern int vfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *, struct inode **);
 
 /*
  * VFS dentry helper functions.
@@ -1923,6 +1930,9 @@ extern bool fs_fully_visible(struct file_system_type *);
 
 extern int current_umask(void);
 
+extern void ihold(struct inode * inode);
+extern void iput(struct inode *);
+
 /* /sys/fs */
 extern struct kobject *fs_kobj;
 
@@ -1979,9 +1989,39 @@ static inline int locks_verify_truncate(struct inode *inode,
 static inline int break_lease(struct inode *inode, unsigned int mode)
 {
 	if (inode->i_flock)
-		return __break_lease(inode, mode);
+		return __break_lease(inode, mode, FL_LEASE);
 	return 0;
 }
+
+static inline int break_deleg(struct inode *inode, unsigned int mode)
+{
+	if (inode->i_flock)
+		return __break_lease(inode, mode, FL_DELEG);
+	return 0;
+}
+
+static inline int try_break_deleg(struct inode *inode, struct inode **delegated_inode)
+{
+	int ret;
+
+	ret = break_deleg(inode, O_WRONLY|O_NONBLOCK);
+	if (ret == -EWOULDBLOCK && delegated_inode) {
+		*delegated_inode = inode;
+		ihold(inode);
+	}
+	return ret;
+}
+
+static inline int break_deleg_wait(struct inode **delegated_inode)
+{
+	int ret;
+
+	ret = break_deleg(*delegated_inode, O_WRONLY);
+	iput(*delegated_inode);
+	*delegated_inode = NULL;
+	return ret;
+}
+
 #else /* !CONFIG_FILE_LOCKING */
 static inline int locks_mandatory_locked(struct inode *inode)
 {
@@ -2018,6 +2058,22 @@ static inline int locks_verify_truncate(struct inode *inode, struct file *filp,
 
 static inline int break_lease(struct inode *inode, unsigned int mode)
 {
+	return 0;
+}
+
+static inline int break_deleg(struct inode *inode, unsigned int mode)
+{
+	return 0;
+}
+
+static inline int try_break_deleg(struct inode *inode, struct inode **delegated_inode)
+{
+	return 0;
+}
+
+static inline int break_deleg_wait(struct inode **delegated_inode)
+{
+	BUG();
 	return 0;
 }
 
@@ -2248,7 +2304,7 @@ extern void emergency_remount(void);
 #ifdef CONFIG_BLOCK
 extern sector_t bmap(struct inode *, sector_t);
 #endif
-extern int notify_change(struct dentry *, struct iattr *);
+extern int notify_change(struct dentry *, struct iattr *, struct inode **);
 extern int inode_permission(struct inode *, int);
 extern int __inode_permission(struct inode *, int);
 extern int generic_permission(struct inode *, int);
@@ -2358,8 +2414,6 @@ extern loff_t vfs_llseek(struct file *file, loff_t offset, int whence);
 extern int inode_init_always(struct super_block *, struct inode *);
 extern void inode_init_once(struct inode *);
 extern void address_space_init_once(struct address_space *mapping);
-extern void ihold(struct inode * inode);
-extern void iput(struct inode *);
 extern struct inode * igrab(struct inode *);
 extern ino_t iunique(struct super_block *, ino_t);
 extern int inode_needs_sync(struct inode *inode);
