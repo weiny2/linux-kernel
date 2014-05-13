@@ -3851,7 +3851,7 @@ static void clear_all_interrupts(struct hfi_devdata *dd)
 	for (i = 0; i < dd->chip_send_contexts; i++)
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, ~(u64)0);
 	for (i = 0; i < dd->chip_sdma_engines; i++)
-		write_kctxt_csr(dd, i, WFR_SEND_DMA_ERR_CLEAR, ~(u64)0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_CLEAR, ~(u64)0);
 
 	write_csr(dd, DCC_ERR_FLG_CLR, ~(u64)0);
 	write_csr(dd, DC_LCB_ERR_CLR, ~(u64)0);
