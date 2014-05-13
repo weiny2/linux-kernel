@@ -59,7 +59,7 @@ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 	INIT_LIST_HEAD(&lock->wait_list);
 	mutex_clear_owner(lock);
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
-	lock->spin_mlock = NULL;
+	lock->osq = NULL;
 #endif
 
 	debug_mutex_init(lock, name, key);
@@ -113,60 +113,6 @@ EXPORT_SYMBOL(mutex_lock);
 #endif
 
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
-/*
- * In order to avoid a stampede of mutex spinners from acquiring the mutex
- * more or less simultaneously, the spinners need to acquire a MCS lock
- * first before spinning on the owner field.
- *
- * We don't inline mspin_lock() so that perf can correctly account for the
- * time spent in this lock function.
- */
-struct mspin_node {
-	struct mspin_node *next ;
-	int		  locked;	/* 1 if lock acquired */
-};
-#define	MLOCK(mutex)	((struct mspin_node **)&((mutex)->spin_mlock))
-
-static noinline
-void mspin_lock(struct mspin_node **lock, struct mspin_node *node)
-{
-	struct mspin_node *prev;
-
-	/* Init node */
-	node->locked = 0;
-	node->next   = NULL;
-
-	prev = xchg(lock, node);
-	if (likely(prev == NULL)) {
-		/* Lock acquired */
-		node->locked = 1;
-		return;
-	}
-	ACCESS_ONCE(prev->next) = node;
-	smp_wmb();
-	/* Wait until the lock holder passes the lock down */
-	while (!ACCESS_ONCE(node->locked))
-		arch_mutex_cpu_relax();
-}
-
-static void mspin_unlock(struct mspin_node **lock, struct mspin_node *node)
-{
-	struct mspin_node *next = ACCESS_ONCE(node->next);
-
-	if (likely(!next)) {
-		/*
-		 * Release the lock by setting it to NULL
-		 */
-		if (cmpxchg(lock, node, NULL) == node)
-			return;
-		/* Wait until the next pointer is set */
-		while (!(next = ACCESS_ONCE(node->next)))
-			arch_mutex_cpu_relax();
-	}
-	ACCESS_ONCE(next->locked) = 1;
-	smp_wmb();
-}
-
 /*
  * Mutex spinning code migrated from kernel/sched/core.c
  */
@@ -430,7 +376,6 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	struct mutex_waiter waiter;
 	unsigned long flags;
 	int ret;
-	struct mspin_node node;
 
 	preempt_disable();
 	mutex_acquire_nest(&lock->dep_map, subclass, 0, nest_lock, ip);
@@ -461,7 +406,9 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	if (!mutex_can_spin_on_owner(lock))
 		goto slowpath;
 
-	mspin_lock(MLOCK(lock), &node);
+	if (!osq_lock(&lock->osq))
+		goto slowpath;
+
 	for (;;) {
 		struct task_struct *owner;
 
@@ -500,7 +447,7 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 			}
 
 			mutex_set_owner(lock);
-			mspin_unlock(MLOCK(lock), &node);
+			osq_unlock(&lock->osq);
 			preempt_enable();
 			return 0;
 		}
@@ -522,7 +469,7 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		 */
 		arch_mutex_cpu_relax();
 	}
-	mspin_unlock(MLOCK(lock), &node);
+	osq_unlock(&lock->osq);
 slowpath:
 #endif
 	spin_lock_mutex(&lock->wait_lock, flags);

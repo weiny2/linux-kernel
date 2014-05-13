@@ -19,6 +19,21 @@
 #include <asm/processor.h>
 
 /*
+ * Cancellable version of the MCS lock above.
+ *
+ * Intended for adaptive spinning of sleeping locks:
+ * mutex_lock()/rwsem_down_{read,write}() etc.
+ */
+
+struct optimistic_spin_queue {
+	struct optimistic_spin_queue *next, *prev;
+	int locked; /* 1 if lock acquired */
+};
+
+extern bool osq_lock(struct optimistic_spin_queue **lock);
+extern void osq_unlock(struct optimistic_spin_queue **lock);
+
+/*
  * Simple, straightforward mutexes with strict semantics:
  *
  * - only one task can hold the mutex at a time
@@ -55,7 +70,7 @@ struct mutex {
 	struct task_struct	*owner;
 #endif
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
-	void			*spin_mlock;	/* Spinner MCS lock */
+	struct optimistic_spin_queue	*osq;	/* Spinner MCS lock */
 #endif
 #ifdef CONFIG_DEBUG_MUTEXES
 	const char 		*name;
