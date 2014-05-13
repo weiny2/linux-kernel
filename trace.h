@@ -5,6 +5,7 @@
 #include <linux/trace_seq.h>
 
 #include "hfi.h"
+#include "mad.h"
 
 #define DD_DEV_ENTRY(dd)       __string(dev, dev_name(&(dd)->pcidev->dev))
 #define DD_DEV_ASSIGN(dd)      __assign_str(dev, dev_name(&(dd)->pcidev->dev))
@@ -427,15 +428,81 @@ TRACE_EVENT(hfi_ctxt_setup,
 	);
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_trace
+#define TRACE_SYSTEM hfi_sma
 
-#define MAX_MSG_LEN 512
+#define BCT_FORMAT \
+	"shared_limit %x vls 0-7 [%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x] 15 [%x,%x]"
+
+#define BCT(field) \
+	be16_to_cpu( \
+		((struct buffer_control *)__get_dynamic_array(bct))->field \
+	)
+
+DECLARE_EVENT_CLASS(hfi_bct_template,
+	TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
+	TP_ARGS(dd, bc),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(dd)
+		__dynamic_array(u8, bct, sizeof(*bc))
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(dd);
+		memcpy(
+			__get_dynamic_array(bct),
+			bc,
+			sizeof(*bc));
+	),
+	TP_printk(BCT_FORMAT,
+		BCT(overall_shared_limit),
+
+		BCT(vl[0].dedicated),
+		BCT(vl[0].shared),
+
+		BCT(vl[1].dedicated),
+		BCT(vl[1].shared),
+
+		BCT(vl[2].dedicated),
+		BCT(vl[2].shared),
+
+		BCT(vl[3].dedicated),
+		BCT(vl[3].shared),
+
+		BCT(vl[4].dedicated),
+		BCT(vl[4].shared),
+
+		BCT(vl[5].dedicated),
+		BCT(vl[5].shared),
+
+		BCT(vl[6].dedicated),
+		BCT(vl[6].shared),
+
+		BCT(vl[7].dedicated),
+		BCT(vl[7].shared),
+
+		BCT(vl[15].dedicated),
+		BCT(vl[15].shared)
+	)
+);
+
+
+DEFINE_EVENT(hfi_bct_template, bct_set,
+	TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
+	TP_ARGS(dd, bc));
+
+DEFINE_EVENT(hfi_bct_template, bct_get,
+	TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
+	TP_ARGS(dd, bc));
 
 /*
  * Note:
  * This produces a REALLY ugly trace in the console output when the string is
  * too long.
  */
+
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi_trace
+
+#define MAX_MSG_LEN 512
 
 DECLARE_EVENT_CLASS(hfi_trace_template,
         TP_PROTO( const char *function, struct va_format *vaf),

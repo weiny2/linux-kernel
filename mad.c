@@ -41,6 +41,7 @@
 
 #include "hfi.h"
 #include "mad.h"
+#include "trace.h"
 
 static int reply(void *arg)
 {
@@ -1805,7 +1806,8 @@ static int subn_get_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
-	void *p = stl_get_smp_data(smp);
+	struct buffer_control *p =
+		(struct buffer_control *)stl_get_smp_data(smp);
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1816,6 +1818,7 @@ static int subn_get_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
 
 	ppd = dd->pport + (port_num - 1);
 	fm_get_table(ppd, FM_TBL_BUFFER_CONTROL, p);
+	trace_bct_get(dd, p);
 	*resp_len += sizeof(struct buffer_control);
 
 	return reply(smp);
@@ -1828,13 +1831,15 @@ static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
-	void *p = stl_get_smp_data(smp);
+	struct buffer_control *p =
+		(struct buffer_control *)stl_get_smp_data(smp);
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
 	ppd = dd->pport + (port_num - 1);
+	trace_bct_set(dd, p);
 	if (fm_set_table(ppd, FM_TBL_BUFFER_CONTROL, p) < 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
