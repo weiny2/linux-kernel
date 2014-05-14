@@ -123,7 +123,7 @@ config X86
 	select COMPAT_OLD_SIGACTION if IA32_EMULATION
 	select RTC_LIB if !XEN_UNPRIVILEGED_GUEST
 	select HAVE_DEBUG_STACKOVERFLOW
-	select HAVE_KGR
+	select HAVE_KGRAFT
 
 config INSTRUCTION_DECODER
 	def_bool y
@@ -273,7 +273,7 @@ config ARCH_SUPPORTS_UPROBES
 
 source "init/Kconfig"
 source "kernel/Kconfig.freezer"
-source "kernel/Kconfig.kgr"
+source "kernel/Kconfig.kgraft"
 
 menu "Processor type and features"
 

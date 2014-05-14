@@ -2,16 +2,7 @@ Some tools for kgraft.
 
 # make && make check
 
-will build most of them, and the check target contains example invocations.
-The only thing not built automatically is the hacked objcopy (objcopy-hacked),
-as usually the necessary binutils headers aren't installed.  You'll
-have to have (recent) binutils sources, apply the patch objcopy.diff
-and build it yourself.
-
-objcopy-hacked:
-  Given a list of symbols (e.g. in a file symlist) this will extract
-  all sections defining those symbols.  It will also recursively extract
-  sections needed by those (e.g. by section based relocations).
+will build them, and the check target contains example invocations.
 
 dwarf-inline-tree:
   Given an ELF file with debug info this will generate a parsable

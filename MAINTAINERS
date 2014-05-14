@@ -4964,8 +4964,10 @@ M:	Jiri Kosina <jkosina@suse.cz>
 M:	Jiri Slaby <jslaby@suse.cz>
 M:	Michael Matz <matz@suse.de>
 M:	Vojtech Pavlik <vojtech@suse.cz>
-F:	include/linux/kgr.h
-F:	kernel/kgr.c
+F:	arch/x86/include/asm/kgraft.h
+F:	include/linux/kgraft.h
+F:	kernel/kgraft.c
+F:	samples/kgraft/
 F:	tools/kgraft/
 
 KMEMCHECK

@@ -16,7 +16,7 @@
 
 #include <linux/ftrace.h>
 #include <linux/kallsyms.h>
-#include <linux/kgr.h>
+#include <linux/kgraft.h>
 #include <linux/module.h>
 #include <linux/percpu.h>
 #include <linux/sched.h>
@@ -27,7 +27,7 @@
 #include <linux/workqueue.h>
 
 static int kgr_patch_code(const struct kgr_patch *patch,
-		const struct kgr_patch_fun *patch_fun, bool final);
+		struct kgr_patch_fun *patch_fun, bool final);
 static void kgr_work_fn(struct work_struct *work);
 
 static struct workqueue_struct *kgr_wq;
@@ -55,7 +55,7 @@ static bool kgr_still_patching(void)
 
 static void kgr_finalize(void)
 {
-	const struct kgr_patch_fun *const *patch_fun;
+	struct kgr_patch_fun *const *patch_fun;
 
 	for (patch_fun = kgr_patch->patches; *patch_fun; patch_fun++) {
 		int ret = kgr_patch_code(kgr_patch, *patch_fun, true);
@@ -120,15 +120,14 @@ static unsigned long kgr_get_fentry_loc(const char *f_name)
 
 	orig_addr = kallsyms_lookup_name(f_name);
 	if (!orig_addr) {
-		WARN(1, "kgr: function %s not resolved ... kernel in inconsistent state\n",
-				f_name);
-		return -EINVAL;
+		pr_err("kgr: function %s not resolved\n", f_name);
+		return -ENOENT;
 	}
 
 	fentry_loc = ftrace_function_to_fentry(orig_addr);
 	if (!fentry_loc) {
 		pr_err("kgr: fentry_loc not properly resolved\n");
-		return -EINVAL;
+		return -ENXIO;
 	}
 
 	check_name = kallsyms_lookup(fentry_loc, NULL, NULL, NULL, check_buf);
@@ -159,6 +158,7 @@ static int kgr_init_ftrace_ops(const struct kgr_patch_fun *patch_fun)
 {
 	struct kgr_loc_caches *caches;
 	unsigned long fentry_loc;
+	int ret;
 
 	/*
 	 * Initialize the ftrace_ops->private with pointers to the fentry
@@ -178,7 +178,8 @@ static int kgr_init_ftrace_ops(const struct kgr_patch_fun *patch_fun)
 	fentry_loc = kgr_get_fentry_loc(patch_fun->new_name);
 	if (IS_ERR_VALUE(fentry_loc)) {
 		pr_debug("kgr: fentry location lookup failed\n");
-		return fentry_loc;
+		ret = fentry_loc;
+		goto free_caches;
 	}
 	pr_debug("kgr: storing %lx to caches->new for %s\n",
 			fentry_loc, patch_fun->new_name);
@@ -187,7 +188,8 @@ static int kgr_init_ftrace_ops(const struct kgr_patch_fun *patch_fun)
 	fentry_loc = kgr_get_fentry_loc(patch_fun->name);
 	if (IS_ERR_VALUE(fentry_loc)) {
 		pr_debug("kgr: fentry location lookup failed\n");
-		return fentry_loc;
+		ret = fentry_loc;
+		goto free_caches;
 	}
 
 	pr_debug("kgr: storing %lx to caches->old for %s\n",
@@ -198,10 +200,13 @@ static int kgr_init_ftrace_ops(const struct kgr_patch_fun *patch_fun)
 	patch_fun->ftrace_ops_slow->private = caches;
 
 	return 0;
+free_caches:
+	kfree(caches);
+	return ret;
 }
 
 static int kgr_patch_code(const struct kgr_patch *patch,
-		const struct kgr_patch_fun *patch_fun, bool final)
+		struct kgr_patch_fun *patch_fun, bool final)
 {
 	struct ftrace_ops *new_ops;
 	struct kgr_loc_caches *caches;
@@ -211,11 +216,16 @@ static int kgr_patch_code(const struct kgr_patch *patch,
 	/* Choose between slow and fast stub */
 	if (!final) {
 		err = kgr_init_ftrace_ops(patch_fun);
-		if (err)
+		if (err) {
+			if (err == -ENOENT && !patch_fun->abort_if_missing)
+				return 0;
 			return err;
+		}
 		pr_debug("kgr: patching %s to slow stub\n", patch_fun->name);
 		new_ops = patch_fun->ftrace_ops_slow;
 	} else {
+		if (!patch_fun->applied)
+			return 0;
 		pr_debug("kgr: patching %s to fast stub\n", patch_fun->name);
 		new_ops = patch_fun->ftrace_ops_fast;
 	}
@@ -246,11 +256,14 @@ static int kgr_patch_code(const struct kgr_patch *patch,
 	if (final) {
 		err = unregister_ftrace_function(patch_fun->ftrace_ops_slow);
 		if (err) {
-			pr_debug("kgr: unregistering ftrace function for %lx (%s) failed\n",
-					fentry_loc, patch_fun->name);
-			return err;
+			pr_debug("kgr: unregistering ftrace function for %lx (%s) failed with %d\n",
+					fentry_loc, patch_fun->name, err);
+			/* don't fail: we are only slower */
+			return 0;
 		}
-	}
+	} else
+		patch_fun->applied = true;
+
 	pr_debug("kgr: redirection for %lx (%s) done\n", fentry_loc,
 			patch_fun->name);
 
@@ -265,7 +278,8 @@ static int kgr_patch_code(const struct kgr_patch *patch,
  */
 int kgr_start_patching(struct kgr_patch *patch)
 {
-	const struct kgr_patch_fun *const *patch_fun;
+	struct kgr_patch_fun *const *patch_fun;
+	int ret;
 
 	if (!kgr_initialized) {
 		pr_err("kgr: can't patch, not initialized\n");
@@ -281,13 +295,11 @@ int kgr_start_patching(struct kgr_patch *patch)
 	mutex_lock(&kgr_in_progress_lock);
 	if (kgr_in_progress) {
 		pr_err("kgr: can't patch, another patching not yet finalized\n");
-		mutex_unlock(&kgr_in_progress_lock);
-		return -EAGAIN;
+		ret = -EAGAIN;
+		goto unlock_free;
 	}
 
 	for (patch_fun = patch->patches; *patch_fun; patch_fun++) {
-		int ret;
-
 		ret = kgr_patch_code(patch, *patch_fun, false);
 		/*
 		 * In case any of the symbol resolutions in the set
@@ -295,10 +307,13 @@ int kgr_start_patching(struct kgr_patch *patch)
 		 * callsites back to nops and fail with grace
 		 */
 		if (ret < 0) {
-			for (; patch_fun >= patch->patches; patch_fun--)
-				unregister_ftrace_function((*patch_fun)->ftrace_ops_slow);
-			mutex_unlock(&kgr_in_progress_lock);
-			return ret;
+			for (patch_fun--; patch_fun >= patch->patches;
+					patch_fun--) {
+				if ((*patch_fun)->applied)
+					unregister_ftrace_function(
+						(*patch_fun)->ftrace_ops_slow);
+			}
+			goto unlock_free;
 		}
 	}
 	kgr_in_progress = true;
@@ -314,17 +329,23 @@ int kgr_start_patching(struct kgr_patch *patch)
 	queue_delayed_work(kgr_wq, &kgr_work, 5 * HZ);
 
 	return 0;
+unlock_free:
+	mutex_unlock(&kgr_in_progress_lock);
+
+	free_percpu(patch->irq_use_new);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(kgr_start_patching);
 
 static int __init kgr_init(void)
 {
 	if (ftrace_is_dead()) {
-		pr_warning("kgr: enabled, but no fentry locations found ... aborting\n");
+		pr_warn("kgr: enabled, but no fentry locations found ... aborting\n");
 		return -ENODEV;
 	}
 
-	kgr_wq = create_singlethread_workqueue("kgr");
+	kgr_wq = create_singlethread_workqueue("kgraft");
 	if (!kgr_wq) {
 		pr_err("kgr: cannot allocate a work queue, aborting!\n");
 		return -ENOMEM;

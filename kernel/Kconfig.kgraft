@@ -1,0 +1,10 @@
+config HAVE_KGRAFT
+	bool
+
+config KGRAFT
+	bool "kGraft infrastructure"
+	depends on DYNAMIC_FTRACE_WITH_REGS
+	depends on HAVE_KGRAFT
+	help
+	  Select this to enable kGraft online kernel patching. The
+	  runtime price is zero, so it is safe to say Y here.

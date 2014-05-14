@@ -28,7 +28,7 @@ obj-y += printk/
 obj-y += cpu/
 obj-y += irq/
 
-obj-$(CONFIG_KGR) += kgr.o
+obj-$(CONFIG_KGRAFT) += kgraft.o
 obj-$(CONFIG_CHECKPOINT_RESTORE) += kcmp.o
 obj-$(CONFIG_FREEZER) += freezer.o
 obj-$(CONFIG_PROFILING) += profile.o

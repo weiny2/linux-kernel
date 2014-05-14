@@ -1530,6 +1530,7 @@ unsigned long ftrace_function_to_fentry(unsigned long addr)
 	mutex_lock(&ftrace_lock);
 	do_for_each_ftrace_rec(pg, rec) {
 		unsigned long off;
+
 		if (!kallsyms_lookup_size_offset(rec->ip, NULL, &off))
 			continue;
 		if (addr + off == rec->ip) {

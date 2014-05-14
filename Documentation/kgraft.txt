@@ -1,0 +1,33 @@
+Live Kernel Patching with kGraft
+--------------------------------
+
+Written by Udo Seidel <udoseidel at gmx dot de>
+Based on the Blog entry by Vojtech Pavlik
+
+April 2014
+
+kGraft's developement was started by the SUSE Labs. kGraft builds on
+technologies and ideas that are already present in the kernel: ftrace [1] and
+its mcount-based reserved space in function headers [2], the INT3/IPI-NMI
+patching also used in jump labels [3], and RCU-like update of code that does
+not require stopping the kernel.
+
+A kGraft patch is a kernel module and fully relies on the in-kernel module
+loader to link the new code with the kernel. Thanks to all that, the design
+can be nicely minimalistic.
+
+While kGraft is, by choice, limited to replacing whole functions and constants
+they reference, this does not limit the set of code patches that can be
+applied significantly. kGraft offers tools to assist in creating the live
+patch modules, identifying which functions need to be replaced based on a
+patch, and creating the patch module source code. They are located in
+tools/kgraft/.
+
+
+
+References
+----------
+
+[1] Documentation/trace/ftrace.txt
+[2] Documentation/trace/ftrace-design.txt
+[3] Documentation/static-keys.txt

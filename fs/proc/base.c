@@ -87,7 +87,7 @@
 #include <linux/slab.h>
 #include <linux/flex_array.h>
 #include <linux/posix-timers.h>
-#include <linux/kgr.h>
+#include <linux/kgraft.h>
 #ifdef CONFIG_HARDWALL
 #include <asm/hardwall.h>
 #endif
@@ -2131,12 +2131,12 @@ static const struct file_operations proc_timers_operations = {
 };
 #endif /* CONFIG_CHECKPOINT_RESTORE */
 
-#if IS_ENABLED(CONFIG_KGR)
+#if IS_ENABLED(CONFIG_KGRAFT)
 static int proc_pid_kgr_in_progress(struct task_struct *task, char *buffer)
 {
 	return sprintf(buffer, "%d\n", kgr_task_in_progress(task));
 }
-#endif /* IS_ENABLED(CONFIG_KGR) */
+#endif /* IS_ENABLED(CONFIG_KGRAFT) */
 
 static int proc_pident_instantiate(struct inode *dir,
 	struct dentry *dentry, struct task_struct *task, const void *ptr)
@@ -2670,7 +2670,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_CHECKPOINT_RESTORE
 	REG("timers",	  S_IRUGO, proc_timers_operations),
 #endif
-#if IS_ENABLED(CONFIG_KGR)
+#if IS_ENABLED(CONFIG_KGRAFT)
 	INF("kgr_in_progress",	S_IRUSR, proc_pid_kgr_in_progress),
 #endif
 };

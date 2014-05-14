@@ -8,7 +8,7 @@ cat <<EOF
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/kgr.h>
+#include <linux/kgraft.h>
 #include <linux/kallsyms.h>
 #include <linux/sched.h>
 #include <linux/types.h>
