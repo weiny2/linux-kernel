@@ -609,22 +609,9 @@ void add_page_wait_queue(struct page *page, wait_queue_t *waiter)
 
 	spin_lock_irqsave(&q->lock, flags);
 	__add_wait_queue(q, waiter);
-	if (!PageWaiters(page))
-		SetPageWaiters(page);
 	spin_unlock_irqrestore(&q->lock, flags);
 }
 EXPORT_SYMBOL_GPL(add_page_wait_queue);
-
-/*
- * If PageWaiters was found to be set at unlock time, __wake_page_waiters
- * should be called to actually perform the wakeup of waiters.
- */
-static inline void __wake_page_waiters(struct page *page)
-{
-	ClearPageWaiters(page);
-	smp_mb__after_clear_bit();
-	wake_up_page(page, PG_locked);
-}
 
 /**
  * unlock_page - unlock a locked page
@@ -642,8 +629,8 @@ void unlock_page(struct page *page)
 {
 	VM_BUG_ON(!PageLocked(page));
 	clear_bit_unlock(PG_locked, &page->flags);
-	if (unlikely(PageWaiters(page)))
-		__wake_page_waiters(page);
+	smp_mb__after_clear_bit();
+	wake_up_page(page, PG_locked);
 }
 EXPORT_SYMBOL(unlock_page);
 
@@ -670,86 +657,21 @@ EXPORT_SYMBOL(end_page_writeback);
  */
 void __lock_page(struct page *page)
 {
-	wait_queue_head_t *wq = page_waitqueue(page);
 	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
 
-	do {
-		prepare_to_wait(wq, &wait.wait, TASK_UNINTERRUPTIBLE);
-		if (!PageWaiters(page))
-			SetPageWaiters(page);
-		if (likely(PageLocked(page)))
-			sleep_on_page(page);
-	} while (!trylock_page(page));
-	finish_wait(wq, &wait.wait);
+	__wait_on_bit_lock(page_waitqueue(page), &wait, sleep_on_page,
+							TASK_UNINTERRUPTIBLE);
 }
 EXPORT_SYMBOL(__lock_page);
 
 int __lock_page_killable(struct page *page)
 {
-	wait_queue_head_t *wq = page_waitqueue(page);
 	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
-	int err = 0;
 
-	do {
-		prepare_to_wait(wq, &wait.wait, TASK_KILLABLE);
-		if (!PageWaiters(page))
-			SetPageWaiters(page);
-		if (likely(PageLocked(page))) {
-			err = sleep_on_page_killable(page);
-			if (err)
-				break;
-		}
-	} while (!trylock_page(page));
-	finish_wait(wq, &wait.wait);
-
-	return err;
+	return __wait_on_bit_lock(page_waitqueue(page), &wait,
+					sleep_on_page_killable, TASK_KILLABLE);
 }
 EXPORT_SYMBOL_GPL(__lock_page_killable);
-
-int  __wait_on_page_locked_killable(struct page *page)
-{
-	int ret = 0;
-	wait_queue_head_t *wq = page_waitqueue(page);
-	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
-
-	if (!test_bit(PG_locked, &page->flags))
-		return 0;
-	do {
-		prepare_to_wait(wq, &wait.wait, TASK_KILLABLE);
-		if (!PageWaiters(page))
-			SetPageWaiters(page);
-		if (likely(PageLocked(page)))
-			ret = sleep_on_page_killable(page);
-		finish_wait(wq, &wait.wait);
-	} while (PageLocked(page) && !ret);
-
-	/* Clean up a potentially dangling PG_waiters */
-	if (unlikely(PageWaiters(page)))
-		__wake_page_waiters(page);
-
-	return ret;
-}
-EXPORT_SYMBOL(__wait_on_page_locked_killable);
-
-void  __wait_on_page_locked(struct page *page)
-{
-	wait_queue_head_t *wq = page_waitqueue(page);
-	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
-
-	do {
-		prepare_to_wait(wq, &wait.wait, TASK_UNINTERRUPTIBLE);
-		if (!PageWaiters(page))
-			SetPageWaiters(page);
-		if (likely(PageLocked(page)))
-			sleep_on_page(page);
-	} while (PageLocked(page));
-	finish_wait(wq, &wait.wait);
-
-	/* Clean up a potentially dangling PG_waiters */
-	if (unlikely(PageWaiters(page)))
-		__wake_page_waiters(page);
-}
-EXPORT_SYMBOL(__wait_on_page_locked);
 
 int __lock_page_or_retry(struct page *page, struct mm_struct *mm,
 			 unsigned int flags)
