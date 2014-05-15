@@ -167,6 +167,12 @@ test_list = [
       "type" : "snoop",
       "desc" : "Run snoop IOCTL tests (modifies HFI state and kills SM.",
     },
+
+    { "test_name" : "MTUTest.py",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
+      "type" : "mgmt",
+      "desc" : "Test 4K and 8K MTU with verbs traffic"
+    },
 ]
 
 

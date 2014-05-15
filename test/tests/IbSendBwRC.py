@@ -22,7 +22,7 @@ def main():
     #############################
     test_info = RegLib.TestInfo()
 
-    RegLib.test_log(0, "Test: LoadModule.py started")
+    RegLib.test_log(0, "Test: IbSendBwRC.py started")
     RegLib.test_log(0, "Dumping test parameters")
 
     # Dump out the test and host info. We need 2 hosts for this test
@@ -43,7 +43,7 @@ def main():
     # body of test #
     ################
 
-    sizes = ['1', '256', '512', '1024', '2048', '4096']
+    sizes = ['1', '256', '512', '1024', '2048', '4096', '8192']
     test_port = RegLib.get_test_port()
     for size in sizes:
         test_fail = 0
