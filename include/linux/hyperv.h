@@ -155,6 +155,7 @@ hv_get_ringbuffer_availbytes(struct hv_ring_buffer_info *rbi,
 #define VERSION_WIN8    ((2 << 16) | (4))
 #define VERSION_WIN8_1    ((3 << 16) | (0))
 
+
 #define VERSION_INVAL -1
 
 #define VERSION_CURRENT VERSION_WIN8_1

@@ -1048,10 +1048,10 @@ isert_put_login_tx(struct iscsi_conn *conn, struct iscsi_login *login,
 				u8 pi_support = login->np->tpg_np->tpg->tpg_attrib.t10_pi;
 
 				ret = isert_conn_create_fastreg_pool(isert_conn,
-								     pi_support);
+						pi_support);
 				if (ret) {
-					pr_err("Conn: %p failed to create"
-					       " fastreg pool\n", isert_conn);
+					pr_err("Conn: %p failed to create fastreg pool\n",
+					       isert_conn);
 					return ret;
 				}
 			}
@@ -1957,7 +1957,6 @@ isert_cq_drain_comp_llist(struct isert_conn *isert_conn, struct ib_device *ib_de
 				   &isert_conn->post_send_buf_count);
 		else
 			atomic_dec(&isert_conn->post_send_buf_count);
-
 		isert_completion_put(t, t->isert_cmd, ib_dev, true);
 	}
 }
@@ -1988,7 +1987,6 @@ isert_cq_tx_comp_err(struct iser_tx_desc *tx_desc, struct isert_conn *isert_conn
 				   &isert_conn->post_send_buf_count);
 		else
 			atomic_dec(&isert_conn->post_send_buf_count);
-
 		isert_completion_put(t, t->isert_cmd, ib_dev, true);
 	}
 	tx_desc->comp_llnode_batch = NULL;

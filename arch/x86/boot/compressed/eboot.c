@@ -457,6 +457,9 @@ static int get_secure_boot(void)
  * Because the x86 boot code expects to be passed a boot_params we
  * need to create one ourselves (usually the bootloader would create
  * one for us).
+ *
+ * The caller is responsible for filling out ->code32_start in the
+ * returned boot_params.
  */
 struct boot_params *make_boot_params(void *handle, efi_system_table_t *_table)
 {
@@ -513,8 +516,6 @@ struct boot_params *make_boot_params(void *handle, efi_system_table_t *_table)
 	hdr->root_flags = 1;
 	hdr->vid_mode = 0xffff;
 	hdr->boot_flag = 0xAA55;
-
-	hdr->code32_start = (__u64)(unsigned long)image->image_base;
 
 	hdr->type_of_loader = 0x21;
 
