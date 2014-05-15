@@ -37,6 +37,7 @@ def main():
 
     # Enable tracing
     trace_points.append("/sys/kernel/debug/tracing/events/hfi_trace/enable")
+    trace_points.append("/sys/kernel/debug/tracing/events/hfi_snoop/enable")
     trace_points.append("/sys/kernel/debug/tracing/events/hfi_ibhdrs/input_ibhdr/enable")
     trace_points.append("/sys/kernel/debug/tracing/events/hfi_ibhdrs/output_ibhdr/enable")
     

@@ -142,6 +142,31 @@ test_list = [
       "type" : "diagtools,default",
       "desc" : "Run hfi_pkt_send tests.",
     },
+
+    # Snoop/Capture tests
+    { "test_name" : "Snoop.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "snoop",
+      "desc" : "Run snoop hijack tests.",
+    },
+
+    { "test_name" : "Pcap.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "snoop",
+      "desc" : "Run simple packet capture tests.",
+    },
+
+    { "test_name" : "SnoopFilter.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "snoop",
+      "desc" : "Run snoop filter tests",
+    },
+
+    { "test_name" : "SnoopIoctl.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "snoop",
+      "desc" : "Run snoop IOCTL tests (modifies HFI state and kills SM.",
+    },
 ]
 
 

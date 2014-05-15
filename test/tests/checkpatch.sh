@@ -5,12 +5,13 @@
 
 kernel_build=$1
 if [ -z $1 ]; then
-	kernel_build="/lib/modules/3.9.2-wfr+/build"
+	kernel_build="/lib/modules/3.12.18-wfr+/build"
 fi
 
-for i in $(git log origin/master..$(git symbolic-ref HEAD) | head -n 1 | awk '{print $2}'); do
+for i in \
+    $(git log origin/master..$(git symbolic-ref HEAD) --pretty=format:'%H' ); do
 	echo Checking patch $i
-	git show $i > check_patch.tmp
-	$kernel_build/scripts/checkpatch.pl --no-tree check_patch.tmp
-	rm -f check_patch.tmp
+	patch=$(git format-patch -1 $i)
+	$kernel_build/scripts/checkpatch.pl --no-tree $patch
+	rm -f $patch
 done

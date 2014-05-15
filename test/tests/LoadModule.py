@@ -31,8 +31,8 @@ def unload_driver(host, driver_name):
     loaded = is_driver_loaded(host, driver_name)
     return not loaded
 
-def load_driver(host, driver_name, driver_path):
-    cmd = "/sbin/insmod " + driver_path
+def load_driver(host, driver_name, driver_path, driver_opts):
+    cmd = "/sbin/insmod " + driver_path + " " + driver_opts
     out = do_ssh(host, cmd)
     loaded = is_driver_loaded(host, driver_name)
     return loaded
@@ -125,6 +125,26 @@ def main():
         driver_name = "hfi"
         driver_file = "hfi.ko"
         driver_path = "/host" + test_info.get_hfi_src() + "/" + driver_file
+        driver_parms = test_info.get_mod_parms()
+        sm = test_info.which_sm()
+
+        if sm == "none":
+            # Make sure to stop openSM
+            opensmhost = None
+            for host in host1, host2:
+                opensm = is_opensm_active(host)
+                if opensm == True:
+                    if opensmhost:
+                        RegLib.test_fail("Open SM detected on both nodes")
+                    else:
+                        opensmhost = host
+            if opensmhost == None:
+                RegLib.test_log(0, "OpenSM not detected on either host")
+            else:
+                RegLib.test_log(0, "OpenSM detected, stopping")
+                stop_opensm(opensmhost)
+                if is_opensm_active(opensmhost) == True:
+                    RegLib.test_fail("Could not disable OpenSM")
 
         # Go ahead and get the driver loaded or reloaded on both hosts
         for host in host1,host2:
@@ -136,11 +156,14 @@ def main():
                 if removed == False:
                     RegLib.test_fail(name + " Could not remove HFI driver")
             RegLib.test_log(0, name + " Loading Driver")
-            loaded = load_driver(host, driver_name, driver_path)
+            loaded = load_driver(host, driver_name, driver_path, driver_parms)
             if loaded == True:
                 RegLib.test_log(0, name + " Driver loaded successfully")
             else:
                 RegLib.test_fail(name + " Could not load driver")
+
+        if sm == "none":
+            RegLib.test_pass("Driver loaded OpenSM not running")
 
         # Now that the driver is loaded make sure one of the hosts is running
         # opensm if none are then start it on host1.

@@ -8,7 +8,7 @@
 
 kernel_build=$1
 if [ -z $1 ]; then
-	kernel_build="/lib/modules/3.9.2-wfr+/build"
+	kernel_build="/lib/modules/3.12.18-wfr+/build"
 fi
 
 wfr_src=$2
@@ -48,7 +48,7 @@ make
 
 if [ $? -ne 0 ]; then
 	echo "Failed to do build"
-	exit $?
+	exit 1
 fi
 
 if [ -e hfi.ko ]; then

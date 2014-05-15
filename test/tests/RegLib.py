@@ -61,8 +61,8 @@ def test_log(lvl, msg):
 
 def chomp(str):
     # How can python not have chomp, guess we need to make one. The built in
-    # strip function will remove all newlines we just want to cut off the one on
-    # the end.
+    # strip function will remove all newlines we just want to cut off the last
+    # one.
     matchObj = re.match(r"(.*)\n$", str)
     if matchObj:
         return matchObj.group(1)
@@ -246,6 +246,18 @@ class TestInfo:
                           + test_pkt_dir_default,
                           metavar="PATH", default=test_pkt_dir_default)
 
+        parser.add_option("--modparm", dest="module_params",
+                          help="Optional module paramters to pass "
+                               + "Like: param1=X param2=Y")
+        parser.add_option("--args", dest="extra_args",
+                          help="Optional params to pass to tests as a comma sep list",
+                          metavar="LIST",
+                          default="")
+        parser.add_option("--sm", dest="sm",
+                          help="Which SM to use. Valid values are opensm or none. Default: opensm",
+                          metavar="SM",
+                          default="opensm")
+
         (options, args) = parser.parse_args()
 
         # Simics or not?
@@ -348,6 +360,19 @@ class TestInfo:
         else:
             self.test_types = "default"
 
+        if options.module_params:
+            self.module_params = options.module_params
+        else:
+            self.module_params = ""
+
+        if options.extra_args:
+            self.extra_args = options.extra_args
+        else:
+            self.extra_args = ""
+
+        if options.sm:
+            self.sm = options.sm
+
     def get_host_list(self):
         host_list = []
         for host in self.nodelist:
@@ -416,3 +441,14 @@ class TestInfo:
 
     def get_osu_benchmark_dir(self):
         return "/usr/local/libexec/osu-micro-benchmarks"
+
+    def get_mod_parms(self):
+        return self.module_params
+
+    def parse_extra_args(self):
+        list_args = self.extra_args.split(",")
+        return list_args
+
+    def which_sm(self):
+        return self.sm
+
