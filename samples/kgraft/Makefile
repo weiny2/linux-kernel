@@ -1,1 +1,1 @@
-obj-$(CONFIG_SAMPLE_KGRAFT_PATCHER) += kgr_patcher.o
+obj-$(CONFIG_SAMPLE_KGRAFT_PATCHER) += kgraft_patcher.o
