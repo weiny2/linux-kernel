@@ -460,6 +460,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	int last;
 	u64 lval;
 	struct qib_qp *qp, *nqp;
+	struct hfi_packet packet;
 
 	l = rcd->head;
 	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
@@ -540,8 +541,15 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		if (unlikely(eflags))
 			rcv_hdrerr(rcd, ppd, rcd->ctxt, eflags, l,
 					       etail, rhf_addr, hdr);
-		else if (etype == RHF_RCV_TYPE_IB)
-			qib_ib_rcv(rcd, hdr, ebuf, tlen);
+		else if (etype == RHF_RCV_TYPE_IB) {
+			packet.tlen = tlen;
+			packet.hlen = hlen;
+			packet.rhf_addr = rhf_addr;
+			packet.ebuf = ebuf;
+			packet.hdr = hdr;
+			packet.rcd = rcd;
+			dd->process_receive(&packet);
+		}
 		/* FIXME: Handle bypass packets */
 move_along:
 		l += rsize;

@@ -49,6 +49,7 @@ struct qib_ctxtdata;
 struct qib_pportdata;
 struct hfi_devdata;
 struct qib_verbs_txreq;
+struct hfi_packet;
 
 #define QIB_MAX_RDMA_ATOMIC     16
 #define QIB_GUIDS_PER_PORT	5
@@ -1059,11 +1060,19 @@ int qib_register_ib_device(struct hfi_devdata *);
 
 void qib_unregister_ib_device(struct hfi_devdata *);
 
-void qib_ib_rcv(struct qib_ctxtdata *, void *, void *, u32);
+void qib_ib_rcv(struct hfi_packet *packet);
 
 unsigned qib_get_npkeys(struct hfi_devdata *);
 
 unsigned qib_get_pkey(struct qib_ibport *, unsigned);
+
+int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
+			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
+			      u32 plen, u32 dwords);
+
+int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *hdr,
+			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
+			      u32 plen, u32 dwords);
 
 extern const enum ib_wc_opcode ib_qib_wc_opcode[];
 

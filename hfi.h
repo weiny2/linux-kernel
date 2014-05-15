@@ -260,6 +260,33 @@ struct qib_ctxtdata {
 #endif
 };
 
+/*
+ * Represents a single packet at a high level. Put commonly computed things in
+ * here so we do not have to keep doing them over and over.
+ */
+struct hfi_packet {
+	void *ebuf;
+	void *hdr;
+	struct qib_ctxtdata *rcd;
+	u16 tlen;
+	u16 hlen;
+	__le32 *rhf_addr;
+};
+
+/*
+ * Private data for snoop/capture support.
+ */
+struct hfi_snoop_data {
+	int mode_flag;
+	struct cdev cdev;
+	struct device *class_dev;
+	spinlock_t snoop_lock;
+	struct list_head queue;
+	wait_queue_head_t waitq;
+	void *filter_value;
+	int (*filter_callback)(void *hdr, void *data, void *value);
+};
+
 struct qib_sge_state;
 
 struct qib_sdma_txreq {
@@ -1020,6 +1047,19 @@ struct hfi_devdata {
 	 */
 	char *portcntrnames;
 	size_t portcntrnameslen;
+	struct hfi_snoop_data hfi_snoop;
+
+	/*
+	 * Handlers for incoming/outgoing data so that snoop/capture does not
+	 * have to have its hooks in the send and recv path
+	 */
+	void (*process_receive)(struct hfi_packet *packet);
+	int (*process_pio_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+				u32 hdrwords, struct qib_sge_state *ss, u32 len,
+				u32 plen, u32 dwords);
+	int (*process_dma_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+				u32 hdrwords, struct qib_sge_state *ss, u32 len,
+				u32 plen, u32 dwords);
 };
 
 /* f_put_tid types */
@@ -1048,6 +1088,9 @@ extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
 
 extern unsigned qib_cc_table_size;
+extern unsigned int snoop_enable;
+extern unsigned int snoop_drop_send;
+extern unsigned int snoop_force_capture;
 int qib_init(struct hfi_devdata *, int);
 int qib_count_units(int *npresentp, int *nupp);
 int qib_count_active_units(void);
@@ -1125,6 +1168,14 @@ void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf);
 void reset_link_credits(struct hfi_devdata *dd);
 void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu);
 void assign_link_credits(struct hfi_devdata *dd);
+
+void snoop_recv_handler(struct hfi_packet *packet);
+int snoop_send_dma_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
+			   u32 plen, u32 dwords);
+int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
+			   u32 plen, u32 dwords);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \
@@ -1390,12 +1441,32 @@ extern struct mutex qib_mutex;
 #define HFI_TRACE_MINOR         127
 #define HFI_DIAGPKT_MINOR       128
 #define HFI_DIAG_MINOR_BASE     129
+#define HFI_SNOOP_CAPTURE_BASE  200
 #define HFI_NMINORS             255
 
 #define PCI_VENDOR_ID_INTEL 0x8086
 #define PCI_DEVICE_ID_INTEL_WFR0 0x24f0
 #define PCI_DEVICE_ID_INTEL_WFR1 0x24f1
 #define PCI_DEVICE_ID_INTEL_WFR2 0x24f2
+
+#define HFI_PKT_BASE_INTEGRITY                                              \
+	 (WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_BAD_PKT_LEN_SMASK      \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_LONG_BYPASS_PACKETS_SMASK \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_LONG_IB_PACKETS_SMASK     \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BAD_PKT_LEN_SMASK             \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_TEST_SMASK                \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_SMALL_BYPASS_PACKETS_SMASK\
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_TOO_SMALL_IB_PACKETS_SMASK    \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_RAW_IPV6_SMASK                \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_RAW_SMASK                     \
+	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_BYPASS_VL_MAPPING_SMASK          \
+	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_VL_MAPPING_SMASK                 \
+	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_OPCODE_SMASK                     \
+	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_SLID_SMASK                       \
+	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK                    \
+	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_VL_SMASK                         \
+	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_ENABLE_SMASK)
 
 /*
  * qib_early_err is used (only!) to print early errors before devdata is

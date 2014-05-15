@@ -532,6 +532,11 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	struct qib_ctxtdata *rcd;
 	struct qib_pportdata *ppd;
 
+	/* Set up send/recv low level handlers */
+	dd->process_receive = qib_ib_rcv;
+	dd->process_pio_send = qib_verbs_send_pio;
+	dd->process_dma_send = qib_verbs_send_dma;
+
 	/* make sure the link is not "up" */
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;

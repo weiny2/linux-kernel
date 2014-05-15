@@ -337,13 +337,11 @@ static u32 qib_count_sge(struct qib_sge_state *ss, u32 length)
 /*
  * Copy from the SGEs to the data buffer.
  */
-static void qib_copy_from_sge(void *data, struct qib_sge_state *ss, u32 length)
+void qib_copy_from_sge(void *data, struct qib_sge_state *ss, u32 length)
 {
 	struct qib_sge *sge = &ss->sge;
-
 	while (length) {
 		u32 len = sge->length;
-
 		if (len > length)
 			len = length;
 		if (len > sge->sge_length)
@@ -649,8 +647,12 @@ unlock:
  * This is called from qib_kreceive() to process an incoming packet at
  * interrupt level. Tlen is the length of the header + data + CRC in bytes.
  */
-void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
+void qib_ib_rcv(struct hfi_packet *packet)
 {
+	struct qib_ctxtdata *rcd = packet->rcd;
+	void *rhdr = packet->hdr;
+	void *data = packet->ebuf;
+	u32 tlen = packet->tlen;
 	struct qib_pportdata *ppd = rcd->ppd;
 	struct qib_ibport *ibp = &ppd->ibport_data;
 	struct qib_ib_header *hdr = rhdr;
@@ -1007,7 +1009,7 @@ static int wait_kmem(struct qib_ibdev *dev, struct qib_qp *qp)
 	return ret;
 }
 
-static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
+int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords)
 {
@@ -1154,7 +1156,7 @@ struct send_context *qp_to_send_context(struct qib_qp *qp, u32 vl)
 	return dd->vld[vl].sc;
 }
 
-static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords)
 {
@@ -1241,11 +1243,11 @@ int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 	 */
 	if (qp->ibqp.qp_type == IB_QPT_SMI ||
 	    !(dd->flags & QIB_HAS_SEND_DMA))
-		ret = qib_verbs_send_pio(qp, hdr, hdrwords, ss, len,
-					 plen, dwords);
+		ret = dd->process_pio_send(qp, hdr, hdrwords, ss, len,
+					  plen, dwords);
 	else
-		ret = qib_verbs_send_dma(qp, hdr, hdrwords, ss, len,
-					 plen, dwords);
+		ret = dd->process_dma_send(qp, hdr, hdrwords, ss, len,
+					  plen, dwords);
 
 	return ret;
 }
