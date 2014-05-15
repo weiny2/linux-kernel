@@ -4008,7 +4008,8 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	instance->bar = find_first_bit(&bar_list, sizeof(unsigned long));
 	if (pci_request_selected_regions(instance->pdev, instance->bar,
 					 "megasas: LSI")) {
-		printk(KERN_DEBUG "megasas: IO memory region busy!\n");
+		dev_info(&instance->pdev->dev,
+			 "IO memory region busy!\n");
 		return -EBUSY;
 	}
 
@@ -4016,7 +4017,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	instance->reg_set = ioremap_nocache(base_addr, 8192);
 
 	if (!instance->reg_set) {
-		printk(KERN_DEBUG "megasas: Failed to map IO mem\n");
+		dev_err(&instance->pdev->dev, "Failed to map IO mem\n");
 		goto fail_ioremap;
 	}
 
@@ -4139,7 +4140,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	if (instance->instancet->init_adapter(instance))
 		goto fail_init_adapter;
 
-	printk(KERN_ERR "megasas: INIT adapter done\n");
+	dev_info(&instance->pdev->dev, "INIT adapter done\n");
 
 	/** for passthrough
 	* the following function will get the PD LIST.
@@ -4223,8 +4224,8 @@ static int megasas_init_fw(struct megasas_instance *instance)
 				iovPtr = (struct IOV_111 *)((unsigned char *)ctrl_info + IOV_111_OFFSET);
 				instance->requestorId = iovPtr->requestorId;
 			}
-			printk(KERN_WARNING "megaraid_sas: I am VF "
-			       "requestorId %d\n", instance->requestorId);
+			dev_info(&instance->pdev->dev,
+				 "VF requestorId %d\n", instance->requestorId);
 		}
 	}
 	instance->max_sectors_per_req = instance->max_num_sge *
@@ -4251,9 +4252,9 @@ static int megasas_init_fw(struct megasas_instance *instance)
 			instance->throttlequeuedepth = throttlequeuedepth;
 	}
 
-        /*
-	* Setup tasklet for cmd completion
-	*/
+	/*
+	 * Setup tasklet for cmd completion
+	 */
 
 	tasklet_init(&instance->isr_tasklet, instance->instancet->tasklet,
 		(unsigned long)instance);
@@ -4696,7 +4697,7 @@ static int megasas_probe_one(struct pci_dev *pdev,
 			       sizeof(struct megasas_instance));
 
 	if (!host) {
-		printk(KERN_DEBUG "megasas: scsi_host_alloc failed\n");
+		dev_err(&pdev->dev, "scsi_host_alloc failed\n");
 		goto fail_alloc_instance;
 	}
 
@@ -4716,8 +4717,8 @@ static int megasas_probe_one(struct pci_dev *pdev,
 		instance->ctrl_context =
 			kzalloc(sizeof(struct fusion_context), GFP_KERNEL);
 		if (!instance->ctrl_context) {
-			printk(KERN_DEBUG "megasas: Failed to allocate "
-			       "memory for Fusion context info\n");
+			dev_err(&pdev->dev, "Failed to allocate "
+				"memory for Fusion context info\n");
 			goto fail_alloc_dma_buf;
 		}
 		fusion = instance->ctrl_context;
@@ -4735,7 +4736,7 @@ static int megasas_probe_one(struct pci_dev *pdev,
 					     &instance->consumer_h);
 
 		if (!instance->producer || !instance->consumer) {
-			printk(KERN_DEBUG "megasas: Failed to allocate"
+			dev_err(&pdev->dev, "Failed to allocate"
 			       "memory for producer, consumer\n");
 			goto fail_alloc_dma_buf;
 		}
@@ -4759,7 +4760,7 @@ static int megasas_probe_one(struct pci_dev *pdev,
 						    &instance->evt_detail_h);
 
 	if (!instance->evt_detail) {
-		printk(KERN_DEBUG "megasas: Failed to allocate memory for "
+		dev_err(&pdev->dev "Failed to allocate memory for "
 		       "event detail structure\n");
 		goto fail_alloc_dma_buf;
 	}
@@ -4823,8 +4824,8 @@ static int megasas_probe_one(struct pci_dev *pdev,
 				pci_alloc_consistent(pdev, sizeof(struct MR_LD_VF_AFFILIATION_111),
 						     &instance->vf_affiliation_111_h);
 			if (!instance->vf_affiliation_111)
-				printk(KERN_WARNING "megasas: Can't allocate "
-				       "memory for VF affiliation buffer\n");
+				dev_warn(&pdev->dev, "Can't allocate "
+					 "memory for VF affiliation buffer\n");
 		} else {
 			instance->vf_affiliation =
 				pci_alloc_consistent(pdev,
@@ -4832,8 +4833,8 @@ static int megasas_probe_one(struct pci_dev *pdev,
 						     sizeof(struct MR_LD_VF_AFFILIATION),
 						     &instance->vf_affiliation_h);
 			if (!instance->vf_affiliation)
-				printk(KERN_WARNING "megasas: Can't allocate "
-				       "memory for VF affiliation buffer\n");
+				dev_warn(&pdev->dev, "Can't allocate "
+					 "memory for VF affiliation buffer\n");
 		}
 	}
 
@@ -4850,8 +4851,8 @@ retry_irq_register:
 					instance->instancet->service_isr, 0,
 					"megasas",
 					&instance->irq_context[i])) {
-				printk(KERN_DEBUG "megasas: Failed to "
-				       "register IRQ for vector %d.\n", i);
+				dev_info(&pdev->dev, "Failed to register IRQ "
+					 "for vector %d.\n", i);
 				for (j = 0; j < i; j++) {
 					irq_set_affinity_hint(
 						instance->msixentry[j].vector, NULL);
@@ -4875,7 +4876,7 @@ retry_irq_register:
 		if (request_irq(pdev->irq, instance->instancet->service_isr,
 				IRQF_SHARED, "megasas",
 				&instance->irq_context[0])) {
-			printk(KERN_DEBUG "megasas: Failed to register IRQ\n");
+			dev_err(&pdev->dev, "Failed to register IRQ\n");
 			goto fail_irq;
 		}
 	}
@@ -4907,7 +4908,7 @@ retry_irq_register:
 	 * Initiate AEN (Asynchronous Event Notification)
 	 */
 	if (megasas_start_aen(instance)) {
-		printk(KERN_DEBUG "megasas: start aen failed\n");
+		dev_info(&pdev->dev, "start aen failed\n");
 		goto fail_start_aen;
 	}
 
