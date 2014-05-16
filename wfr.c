@@ -65,12 +65,7 @@ module_param(eager_buffer_size, uint, S_IRUGO);
 MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`");
 
 /* TODO: temporary */
-static uint use_flr
-/* TODO: HAS 0.76 - we should use FLR when using v33 and higer */
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
-	= 1
-#endif
-	;
+static uint use_flr;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
 
