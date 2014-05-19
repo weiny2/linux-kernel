@@ -1956,7 +1956,26 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
 
 	/*
-	 * NOTE: We expect that the command interface is in "neutral".
+	 * If an 8051 host command timed out previously, then the 8051 is
+	 * stuck.  Fail this command immediately.  Handling it this way
+	 * allows the driver to properly unload.
+	 *
+	 * TODO: reset the 8051?
+	 * Alternative: Reset the 8051 at timeout time (no need to re-download
+	 * firmware).  The concern with this approach is all state, if any,
+	 * is lost. OTOH, immediately failing has no chance of recovery.
+	 */
+	if (dd->dc8051_timed_out) {
+		dd_dev_err(dd,
+			"Previous 8051 host command timed out, skipping command %u\n",
+			type);
+		return_code = -ENXIO;
+		goto fail;
+	}
+
+	/*
+	 * If there is no timeout, then the 8051 command interface is
+	 * waiting for a command.
 	 */
 
 	/*
@@ -1983,10 +2002,12 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 		if (completed)
 			break;
 		if (time_after(jiffies, timeout)) {
-			dd_dev_err(dd, "host command timeout\n");
+			dd->dc8051_timed_out = 1;
+			dd_dev_err(dd, "8051 host command %u timeout\n", type);
 			if (out_data)
 				*out_data = 0;
-			return -ETIMEDOUT;
+			return_code = -ETIMEDOUT;
+			goto fail;
 		}
 		udelay(2);
 	}
@@ -2001,6 +2022,8 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 	 * Clear command for next user.
 	 */
 	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, 0);
+
+fail:
 	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
 
 	return return_code;

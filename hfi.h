@@ -885,6 +885,7 @@ struct hfi_devdata {
 	spinlock_t uctxt_lock; /* rcd and user context changes */
 	/* exclusive access to 8051 */
 	spinlock_t dc8051_lock;
+	int dc8051_timed_out;	/* remember if the 8051 timed out */
 	/*
 	 * A page that will hold event notification bitmaps for all
 	 * contexts. This page will be mapped into all processes.
