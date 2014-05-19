@@ -1770,6 +1770,12 @@ static int mce_chrdev_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+int mce_get_userspace_consumers_count(void)
+{
+	return mce_chrdev_open_count;
+}
+EXPORT_SYMBOL_GPL(mce_get_userspace_consumers_count);
+
 static void collect_tscs(void *data)
 {
 	unsigned long *cpu_tsc = (unsigned long *)data;

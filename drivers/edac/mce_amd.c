@@ -738,6 +738,9 @@ int amd_decode_mce(struct notifier_block *nb, unsigned long val, void *data)
 	struct cpuinfo_x86 *c = &cpu_data(m->extcpu);
 	int ecc;
 
+	if (mce_get_userspace_consumers_count())
+		return NOTIFY_STOP;
+
 	if (amd_filter_mce(m))
 		return NOTIFY_STOP;
 
