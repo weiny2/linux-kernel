@@ -2,7 +2,7 @@
  * The interface between the platform independent device adapter and the device
  * driver, that defines the shared structures shared across that interface.
  *
- * Copyright 2013 Intel Corporation All Rights Reserved.
+ * Copyright 2013-2014 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
  *
@@ -46,6 +46,8 @@
 #define	NVDIMM_PART_NUMBER_LEN	32
 /* Device locator length */
 #define	NVDIMM_DEVICE_LOCATOR_LEN	128
+/* Bank label length */
+#define	NVDIMM_BANK_LABEL_LEN	128
 /* Volume 'Friendly Name' buffer length */
 #define	NVDIMM_VOL_FRIENDLY_NAME_LEN	32
 /* Volume 'Purpose' buffer length */

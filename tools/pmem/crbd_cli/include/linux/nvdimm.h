@@ -2,7 +2,7 @@
  * The interface between the platform independent device adapter and the device
  * driver, that defines the shared structures shared across that interface.
  *
- * Copyright 2013 Intel Corporation All Rights Reserved.
+ * Copyright 2013-2014 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
  *
@@ -28,9 +28,8 @@
  * suppliers or licensors in any way.
  */
 
-#ifndef	NVDIMM_H_
-#define	NVDIMM_H_
-
+#ifndef	_NVDIMM_H
+#define	_NVDIMM_H
 
 #define	MAX_REGIONS_PER_VOLUME	60 /* Maximum regions per volume */
 
@@ -47,6 +46,8 @@
 #define	NVDIMM_PART_NUMBER_LEN	32
 /* Device locator length */
 #define	NVDIMM_DEVICE_LOCATOR_LEN	128
+/* Bank label length */
+#define	NVDIMM_BANK_LABEL_LEN	128
 /* Volume 'Friendly Name' buffer length */
 #define	NVDIMM_VOL_FRIENDLY_NAME_LEN	32
 /* Volume 'Purpose' buffer length */
@@ -71,7 +72,7 @@ enum pool_attributes {
 	POOL_PM_CAPABLE = (1 << 2),
 	POOL_DPA = (1 << 6), /* Pool memory expects DPAs for block I/O */
 	POOL_SPA = (1 << 7), /* Pool memory expects SPAs for block I/O */
-	/*TODO: Cached needs more clarification*/
+	/* TODO: Cached needs more clarification */
 	POOL_CACHED = (1 << 16), /* Pool is being used for file caching */
 	POOL_MIRRORED = (1 << 17), /* Pool memory is being mirrored by HW */
 	POOL_ENCRYPTED = (1 << 18), /* Pool memory is encrypted by HW */
@@ -79,7 +80,7 @@ enum pool_attributes {
 
 enum volume_attributes {
 	VOLUME_ENABLED = (1 << 0), /* Volume has been enabled by user */
-	 /*Volume is not missing any extents/labels */
+	/* Volume is not missing any extents/labels */
 	VOLUME_COMPLETE = (1 << 1),
 	/* Volume supports persistent memory access */
 	VOLUME_PM_CAPABLE = (1 << 2),
@@ -91,4 +92,4 @@ enum volume_attributes {
 	VOLUME_BTT_ATOMIC = (1 << 9),
 };
 
-#endif /* NVDIMM_H_ */
+#endif /* _NVDIMM_H */

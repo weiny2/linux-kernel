@@ -2,7 +2,7 @@
  * The interface between the platform independent device adapter and the device
  * driver, that defines the shared structures shared across that interface.
  *
- * Copyright 2013 2014 Intel Corporation All Rights Reserved.
+ * Copyright 2013-2014 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
  *
@@ -28,16 +28,10 @@
  * suppliers or licensors in any way.
  */
 
-#ifndef	_CR_IOCTL_H_
-#define	_CR_IOCTL_H_
+#ifndef	_CR_IOCTL_H
+#define	_CR_IOCTL_H
 
 #include <linux/types.h>
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 
 /*
  * ****************************************************************************
@@ -45,30 +39,31 @@ extern "C"
  * ****************************************************************************
  */
 
-#define	CR_SN_LEN	19 /* DIMM Serial Number buffer length */
-#define	CR_PASSPHRASE_LEN	32 /* Length of a passphrase buffer */
-#define	CR_SECURITY_NONCE_LEN	8 /* Length of a security nonce */
-#define	CR_BCD_DATE_LEN	4 /* Length of a BDC Formatted Date */
-#define	CR_BCD_TIME_LEN	3 /* Length of a BDC Formatted Time */
-#define	CR_BCD_ETC_TIME_LEN	5 /* Length of a BDC Formatted Time for longop*/
-#define	CR_FW_REV_LEN 5	/* Length of the formatted Firmware Revision string */
-#define	CR_MFR_LEN	19 /* Length of manufacturer name buffer */
-#define	CR_MODELNUM_LEN	19 /* Length of DIMM Model Number buffer */
-#define CR_FW_LOG_ENTRY_COUNT 5 /* max number of log entries returned by FW */
-#define	CR_OS_PARTITION	2 /* get platform config OS partition number */
-#define	CR_CONFIG_GET_SIZE	1 /* get platform config get size command */
-#define	CR_CONFIG_GET_DATA	2 /* get platform config get data command */
-#define CR_DDRT_ALERT_TYPES	128 /*Max number of different DDRT Alerts*/
-#define CR_DEV_CERTIFICATE_LEN 138 /*Length of the device certificate*/
+#define	CR_SN_LEN		19  /* DIMM Serial Number buffer length */
+#define	CR_PASSPHRASE_LEN	32  /* Length of a passphrase buffer */
+#define	CR_SECURITY_NONCE_LEN	8   /* Length of a security nonce */
+#define	CR_BCD_DATE_LEN		4   /* Length of a BDC Formatted Date */
+#define	CR_BCD_TIME_LEN		3   /* Length of a BDC Formatted Time */
+#define	CR_BCD_ETC_TIME_LEN	5   /* Len of a BDC Formatted Time for longop */
+#define	CR_FW_REV_LEN		5   /* Length of the Firmware Revision string */
+#define	CR_MFR_LEN		19  /* Length of manufacturer name buffer */
+#define	CR_MODELNUM_LEN		19  /* Length of DIMM Model Number buffer */
+#define CR_FW_LOG_ENTRY_COUNT	5   /* max num of log entries returned by FW */
+#define	CR_OS_PARTITION		2   /* get platform config OS partition num */
+#define	CR_CONFIG_GET_SIZE	1   /* get platform config get size command */
+#define	CR_CONFIG_GET_DATA	2   /* get platform config get data command */
+#define CR_DDRT_ALERT_TYPES	128 /* Max number of different DDRT Alerts */
+#define CR_DEV_CERTIFICATE_LEN  138 /* Length of the device certificate */
 /*Length of the signed device authentication challenge*/
 #define CR_SIGNED_AUTH_CHALLENGE_LEN 64
+
 /*
  * Number of error addresses returned in a long operation for
- *  address range scrub
+ * address range scrub
  */
 #define CR_DPA_ERROR_ADDRESSES 14
 
-/*CR Security Status*/
+/* CR Security Status */
 enum {
 	CR_SEC_RSVD		= 1 << 0,
 	CR_SEC_ENABLED		= 1 << 1,
@@ -87,29 +82,42 @@ enum {
  * ****************************************************************************
  */
 
-/* 
+/*
  * FNV Mail Box error codes
  *
  * These are returned from the device driver when it completes a pass through
  * command with an error state from the firmware.
  */
-enum fnv_mb_error
-{
-	FNV_MB_SUCCESS = 0x00, //!< Command was successfully completed
-	FNV_MB_INVALID_CMD_PARAM = 0x01, //!< An input parameter was not valid
-	FNV_MB_DATA_XFER_ERR = 0x02, //!< There was an error in the data transfer
-	FNV_MB_INTERNAL_DEV_ERR = 0x03, //!< There was an internal device error
-	FNV_MB_UNSUPPORTED_CMD = 0x04, //!< The command opcode or subopcode was not recognized
-	FNV_MB_DEVICE_BUSY = 0x05, //!< Device is currently busy processing a long operation
-	FNV_MB_INVALID_CREDENTIAL = 0x06, //!< Passphrase or Security Nonce does is not acceptable
-	FNV_MB_SECURITY_CHK_FAIL = 0x07, //!< The Security CHeck on the image has failed verification
-	FNV_MB_INVALID_SECURITY_STATE = 0x08, //!< Operation is valid in the current security state
-	FNV_MB_SYSTEM_TIME_NOT_SET = 0x09, //!< The system time has not been set yet
-	FNV_MB_DATA_NOT_SET = 0x0A, //!< Returned if "get data" is called before "set data"
-	FNV_MB_ABORTED = 0x0B, //!< Command has been aborted. A long operation command has aborted.
-	FNV_MB_NO_NEW_FW = 0x0C, //!< Execute FNV FW was called prior to uploading new FW image.
-	FNV_MB_REVISION_FAILURE = 0x0D, //!< Illegal rollback failure.
-	FNV_MB_INJECTION_DISABLED = 0x0E //!< Error injection is not currently enabled on the device.
+enum fnv_mb_error {
+	FNV_MB_SUCCESS = 0x00, /* Command was successfully completed */
+	/* An input parameter was not valid */
+	FNV_MB_INVALID_CMD_PARAM = 0x01,
+	/* There was an error in the data transfer */
+	FNV_MB_DATA_XFER_ERR = 0x02,
+	/* There was an internal device error */
+	FNV_MB_INTERNAL_DEV_ERR = 0x03,
+	/* The command opcode or subopcode was not recognized */
+	FNV_MB_UNSUPPORTED_CMD = 0x04,
+	/* Device is currently busy processing a long operation */
+	FNV_MB_DEVICE_BUSY = 0x05,
+	/* Passphrase or Security Nonce does is not acceptable */
+	FNV_MB_INVALID_CREDENTIAL = 0x06,
+	/* The Security CHeck on the image has failed verification */
+	FNV_MB_SECURITY_CHK_FAIL = 0x07,
+	/* Operation is valid in the current security state */
+	FNV_MB_INVALID_SECURITY_STATE = 0x08,
+	/* The system time has not been set yet */
+	FNV_MB_SYSTEM_TIME_NOT_SET = 0x09,
+	/* Returned if "get data" is called before "set data" */
+	FNV_MB_DATA_NOT_SET = 0x0A,
+	/* Command has been aborted. A long operation command has aborted. */
+	FNV_MB_ABORTED = 0x0B,
+	/* Execute FNV FW was called prior to uploading new FW image. */
+	FNV_MB_NO_NEW_FW = 0x0C,
+	/* Illegal rollback failure. */
+	FNV_MB_REVISION_FAILURE = 0x0D,
+	/* Error injection is not currently enabled on the device. */
+	FNV_MB_INJECTION_DISABLED = 0x0E
 };
 
 /*
@@ -175,7 +183,7 @@ enum cr_get_set_feat_subop {
 	SUBOP_POLICY_MEM_TEST = 0x03, /* TODO*/
 	/* TODO Action policy to extend DIMM life. */
 	SUBOP_POLICY_DIE_SPARRING = 0x04,
-	SUBOP_POLICY_PATROL_SCRUB = 0x05,  /* TODO */
+	SUBOP_POLICY_ADDRESS_SCRUB = 0x05,  /* TODO */
 	SUBOP_DDRT_ALERTS = 0x06 /*Alerts to notify user*/
 };
 
@@ -185,15 +193,15 @@ enum cr_get_set_feat_subop {
  */
 enum cr_get_set_admin_feat_subop {
 	SUBOP_SYSTEM_TIME = 0x00, /* TODO Get/Set System Time */
-	/*TODO Get/Set Platform Config Data (PCD) */
+	/* TODO Get/Set Platform Config Data (PCD) */
 	SUBOP_PLATFORM_DATA_INFO = 0x01,
 	/* TODO Set/Get DIMM Partition Config */
 	SUBOP_DIMM_PARTITION_INFO = 0x02,
 	/* TODO Get/Set log level of FNV FW */
 	SUBOP_FNV_FW_DBG_LOG_LEVEL = 0x03,
-	SUBOP_BLK_WINDOW = 0x04, /*Get/Set info about persistent partition*/
-	SUBOP_HW_CFG_PARAMETER = 0x05, /*Set/Set Various HW Parameters*/
-	SUBOP_DDRT_IO_INIT_INFO = 0x06, /*Get/Set DDRT Initialization info*/
+	SUBOP_BLK_WINDOW = 0x04, /* Get/Set info about persistent partition */
+	SUBOP_HW_CFG_PARAMETER = 0x05, /* Set/Set Various HW Parameters */
+	SUBOP_DDRT_IO_INIT_INFO = 0x06, /* Get/Set DDRT Initialization info */
 	SUBOP_RSVD = 0x07
 };
 
@@ -237,23 +245,24 @@ enum cr_get_log_subop {
  */
 enum cr_update_fw_subop {
 	SUBOP_UPDATE_FNV_FW = 0x00, /* Update the running FNV FW */
-	SUBOP_EXECUTE_FNV_FW = 0x01 /* Force the execution of a newly updated FW image. */
+	/* Force the execution of a newly updated FW image. */
+	SUBOP_EXECUTE_FNV_FW = 0x01
 };
 
 /*
  * Defines the various memory mode capabilities bits
- *
  */
 enum cr_mem_mode_bits {
 	CR_MEM_MODE_1LM = 1, /* 1LM mode supported */
 	CR_MEM_MODE_2LM = 1 << 1, /* 2LM mode supported */
-	CR_MEM_MODE_BLOCK = 1 << 2, /* block mode supported */
-	CR_MEM_MODE_PM = 1 << 3, /* PM mode supported */
+	CR_MEM_MODE_PM_DIRECT = 1 << 2, /* Persistent memory mode supported */
+	/* Cached persistent memory mode supported */
+	CR_MEM_MODE_PM_CACHED = 1 << 2,
+	CR_MEM_MODE_BLOCK = 1 << 3, /* Block mode supported */
 };
 
 /*
  * Defines the interleave capabilities bits
- *
  */
 enum cr_interleave_bits {
 	CR_INTERLEAVE_64_CH = 1, /* 64 Bytes channel interleave */
@@ -267,6 +276,14 @@ enum cr_interleave_bits {
 };
 
 /*
+ * Defines management software BIOS config support
+ */
+enum cr_mgmt_sw_config_support_bits {
+	CR_BIOS_SUPPORT_CONFIG_CHANGE = 1,
+	CR_BIOS_SUPPORT_RUNTIME_INTERFACE = 1 << 1
+};
+
+/*
  * ****************************************************************************
  * STRUCTURES
  * ****************************************************************************
@@ -277,93 +294,233 @@ enum cr_interleave_bits {
  */
 struct cr_platform_capabilites {
 	/* header */
-	unsigned char signature[4]; /* 'PCAP' is Signature for this table */
-	unsigned int length; /* Length in bytes for entire table */
-	unsigned char revision;
-	unsigned char checksum; /* Must sum to zero */
-	unsigned char reserved1[6]; /* reserved */
+	__u8 signature[4]; /* 'PCAP' is Signature for this table */
+	__u32 length; /* Length in bytes for entire table */
+	__u8 revision;
+	__u8 checksum; /* Must sum to zero */
+	__u8 oem_id[6]; /* OEM ID */
+	__u64 oem_table_id; /* The table ID is the manufacturer model ID */
+	/* OEM revision of table for supplied OEM Table ID */
+	__u32 oem_revision;
+	__u32 creator_id; /* Vendor ID of utility that created the table */
+	__u32 creator_revision; /* Revision of utility that created the table */
 
 	/* body */
 	/*
 	 * Bit0 Clear: BIOS does not allow config change
-	 *				request from CR mgmt software @n
+	 *				request from CR mgmt software
 	 * Bit0 Set: BIOS allows config change request from CR mgmt software
+	 *
+	 * Bit1 Clear: BIOS does not support runtime interface to validate
+	 *                              management configuration change request
+	 * BIT1 Set:	BIOS supports runtime interface to validate management
+	 *      configuration change request
 	 */
-	unsigned short cr_mgmt_sw_config_request_support;
+	__u8 cr_mgmt_sw_config_request_support;
 
 	/*
 	 * Bit0: 1LM Supported @n
 	 * Bit1: 2LM supported @n
-	 * Bit2: Block supported @n
-	 * Bit3: PM supported @n
+	 * Bit2: PM supported @n
+	 * Bit3: Block supported @n
 	 */
-	unsigned short mem_mode_capabilities;
+	__u8 mem_mode_capabilities;
 
 	/*
-	 * Interleave size supported by BIOS for 1LM @n
-	 * Bit0: 64 Bytes channel interleave @n
-	 * Bit1: 256 Bytes channel interleave @n
-	 * Bit2: 4KB channel interleave @n
-	 * Bit3: 1MB channel interleave @n
-	 * Bit4: 64 Bytes iMC interleave @n
-	 * Bit5: 256 Bytes iMC interleave @n
-	 * Bit6: 4KB iMC interleave @n
-	 * Bit7: 1MB iMC interleave
+	 * Memory Mode selected in the BIOS setup
+	 * Bit1: 1LM Mode
+	 * Bit2: 2LM + PM-Direct Mode
+	 * Bit3: 2LM + PM-Cached Mode
+	 * Bit4: Auto
+	 * (2LM if DDR4+AEP DIMM with volatile mode present, 1LM otherwise)
+	 * Note: No direct control is given to the management software to
+	 *      switch the mode
 	 */
-	unsigned short one_lm_interleave_capabilities;
+	__u8 current_memory_mode;
+
 
 	/*
-	 * Interleave size supported by BIOS for 2LM @n
-	 * Bit0: 64 Bytes channel interleave @n
-	 * Bit1: 256 Bytes channel interleave @n
-	 * Bit2: 4KB channel interleave @n
-	 * Bit3: 1MB channel interleave @n
-	 * Bit4: 64 Bytes iMC interleave @n
-	 * Bit5: 256 Bytes iMC interleave @n
-	 * Bit6: 4KB iMC interleave @n
-	 * Bit7: 1MB iMC interleave
+	 * Bit0: If set, AEP DIMM Mirror supported (address based)
+	 *
+	 * If mirror is supported, management software can select interleave
+	 * sets for mirror
 	 */
-	unsigned short two_lm_interleave_capabilities;
+	__u8 memory_mirror_capability;
 
+
+	/* variable data */
 	/*
-	 * Interleave size supported by BIOS for Persistent Memory @n
-	 * Bit0: 64 Bytes channel interleave @n
-	 * Bit1: 256 Bytes channel interleave @n
-	 * Bit2: 4KB channel interleave @n
-	 * Bit3: 1MB channel interleave @n
-	 * Bit4: 64 Bytes iMC interleave @n
-	 * Bit5: 256 Bytes iMC interleave @n
-	 * Bit6: 4KB iMC interleave @n
-	 * Bit7: 1MB iMC interleave
+	 * Capability Structures is a list of platform capability structures for
+	 * this implementation. The list will contains information such as
+	 * runtime configuration input validation interface, 1LM mode/2LM mode
+	 * interleave capability formats, etc.
+	 * These structures are described in the following sections.
 	 */
-	unsigned short pm_interleave_capabilities;
+	struct {
+		/*
+		 * Type of the capability structure.
+		 * 0 - Runtime Interface for configuration change input
+		 *      validation
+		 * 1 - Interleave Capability
+		 */
+		unsigned char type;
 
-	/*
-	 * Supported if set, not supported if clear
-	 * Bit0: Spare control through  management sw @n
-	 * Bit1: AEP DIMM spare @n
-	 */
-	unsigned char mem_spare_capability;
+		union {
+			/*
+			 * Runtime Interface to validate configuration input
+			 */
+			struct runtime_config_validation {
+				unsigned char reserved_1[3];
 
-	/*
-	 * Supported if set, not supported if clear
-	 * Bit0: Memory control through mgmt sw @n
-	 * Bit1: intra channel mirror @n
-	 * Bit2: intra MC mirror @n
-	 * Bit3: intra socket mirror (inter MC) @n
-	 * Bit4: inter socket mirror @n
-	 * Bit5: intra socket address based mirror @n
-	 * Bit6: inter socket address based mirror @n
-	 */
-	unsigned char memory_mirror_capability;
+				/*
+				 * Address space type of command register
+				 * 1: System I/O
+				 * All other values reserved
+				 */
+				__u8 address_space_id;
 
-	unsigned char reserved2[4]; /* reserved */
+				/*
+				 * The size in bits of the command register
+				 */
+				__u8 bit_width;
 
-	/*
-	 * AEP DIMM partition size needed to align to this value in bytes
-	 */
-	unsigned long long mem_alignment;
-};
+				/*
+				 * The bit offset command register at the given
+				 * address
+				 */
+				__u8 bit_offset;
+
+				/*
+				 * Command register access size
+				 *	0 Undefined
+				 *	1 Byte Access
+				 *	2 Word Access
+				 *	3 Dword Access
+				 *      4 Qword Access
+				 */
+				__u8 access_size;
+
+				/*
+				 * Register in the given address space
+				 */
+				__u64 address;
+
+				/*
+				 * Type of register operation to submit the
+				 * command
+				 * 0 – Read register
+				 * 1 – Write register
+				 */
+				__u8 operation_type_1;
+
+				__u8 reserved_2[7];
+
+				/*
+				 * If operation type is write, this filed
+				 * provides the data to be written
+				 */
+				__u64 value;
+
+				/*
+				 * Mask value to be used to preserve the bits
+				 * on the write.
+				 * Note: If the bits are not 1, read the value
+				 * from the address space, mask the value part
+				 * and then do the write
+				 */
+				__u64 mask_1;
+
+				/*
+				 * ACPI GAS structure with Address Space ID
+				 * 0: System Memory
+				 * All other values reserved
+				 */
+				__u8 gas_structure[12];
+
+				/*
+				 * Type of register operation to submit the
+				 * command
+				 * 3 – Read Memory
+				 */
+				__u8 operation_type_2;
+
+				__u8 reserved_3[3];
+
+				/*
+				 * Read the value from given address and mask
+				 * using this value
+				 * Resulting Status:
+				 * 0 – None
+				 * 1 – Busy
+				 * 2 – Done,results are updated on AEP DIMMs
+				 * config output structures
+				 */
+				__u64 mask_2;
+			} __attribute__((packed)) runtime_config_validation;
+
+			/*
+			 * Memory Interleave Capability Information
+			 */
+			struct memory_interleave_capabilities {
+				/*
+				 * Value defines memory mode
+				 * 0 – 1LM
+				 * 1 – 2LM
+				 * 3 – PM-Direct
+				 * 4 – PM-Cached
+				 * Other values reserved
+				 */
+				__u8 memory_mode;
+
+				/*
+				 * Interleave alignment size in 2^n bytes.
+				 * n=26 for 64MB
+				 * n=27 for 128MB
+				 */
+				__u16 interleave_alignment_size;
+
+				/*
+				 * Number of interleave formats supported by
+				 * BIOS for the above memory mode. The variable
+				 * body of this structure contains m number of
+				 * interleave formats.
+				 */
+				__u16 supported_interleave_count;
+
+				/*
+				 * This field will have a list of 2byte values
+				 * that provide information about BIOS supported
+				 * interleave formts and the recommended
+				 * interleave informations.
+				 * Bits[3:0] - Channel interleave size
+				 * 0 – 64B
+				 * 1 – 256B
+				 * 2 – 4KB
+				 * All other values are reserved
+				 *
+				 * Bits[7:4] - iMC interleave size
+				 * 0 – 64B
+				 * 1 – 256B
+				 * 2 – 4KB
+				 * 3 – 1GB
+				 * All other values are reserved
+				 *
+				 * Bits[14:8] – Number of channel ways
+				 * 0 – None
+				 * 1, 2, 3, 4, 6, 8, 12, 16, 24 ways are
+				 * supported for SKX/CNX. The 16 way is
+				 * supported on only certain interleave
+				 * size combinations.
+				 * Bit[15] – If clear, the interleave format
+				 * s supported but not recommended. If set,
+				 * the interleave format is recommended.
+				 * All other values are reserved
+				 */
+				__u16 interleave_format_list[112];
+			} __attribute__((packed)) memory_interleave_capabilities;
+		} __attribute__((packed)) cap_struct_type;
+	} __attribute__((packed)) cap_structures[5];
+} __attribute__((packed));
 
 /*
  * ****************************************************************************
@@ -417,7 +574,7 @@ struct cr_pt_payload_identify_dimm {
 	char sn[CR_SN_LEN]; /* ASCII Serial Number */
 	char mn[CR_MODELNUM_LEN]; /* ASCII Model Number */
 	__u8 resrvd[43]; /* Reserved */
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -439,7 +596,7 @@ struct cr_pt_payload_get_security_state {
 	unsigned char security_status;
 
 	unsigned char reserved[7]; /* TODO */
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -451,7 +608,7 @@ struct cr_pt_payload_get_security_state {
 struct cr_pt_payload_smm_security_nonce {
 	/* Security nonce to lock down SMM mailbox */
 	unsigned char sec_nonce[CR_SECURITY_NONCE_LEN];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -464,7 +621,7 @@ struct cr_pt_payload_set_passphrase {
 	char passphrase_current[CR_PASSPHRASE_LEN];
 	/* The new passphrase to be set/changed to */
 	char passphrase_new[CR_PASSPHRASE_LEN];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -476,19 +633,18 @@ struct cr_pt_payload_set_passphrase {
 struct cr_pt_payload_passphrase {
 	/* The end user passphrase */
 	char passphrase_current[CR_PASSPHRASE_LEN];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
  *		Opcode:		0x03h (Set Security Info)
  *		Sub-Opcode:	0xF5h (Secure Erase Unit)
  *	Small Input Payload
- *	TODO: [NWM] This structure is exactly the same as payload passphrase, do we need two?
  */
 struct cr_pt_payload_secure_erase_unit {
 	/* the end user passphrase */
 	char passphrase_current[CR_PASSPHRASE_LEN];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -512,7 +668,7 @@ struct cr_pt_payload_alarm_thresholds {
 	unsigned char spare;
 
 	unsigned char reserved[5]; /* TODO*/
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -537,27 +693,27 @@ struct cr_pt_get_die_spare_policy {
 	 */
 	unsigned char supported;
 
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x04h/5h (Get/Set Features)
- * 		Sub-Opcode:	0x05h (Address Range Scrub Policy)
- * 	Get - Small Output Payload
- * 	Set - Small Input Payload
+ *		Opcode:		0x04h/5h (Get/Set Features)
+ *		Sub-Opcode:	0x05h (Address Range Scrub Policy)
+ *	Get - Small Output Payload
+ *	Set - Small Input Payload
  */
 struct cr_addr_range_scrub_policy {
 	__le64 dpa_start_addr; /*Address to start the range scrub from*/
 	__le64 dpa_end_addr; /*Address that the range scrub will end*/
 	__u8 enable; /*Indicates an address range scrub in progress*/
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x04h/0x05h (Get/Set Features)
- * 		Sub-Opcode:	0x06h (DDRT Alerts)
- * 	Get - Small output payload
- * 	Set - Small input payload
+ *		Opcode:		0x04h/0x05h (Get/Set Features)
+ *		Sub-Opcode:	0x06h (DDRT Alerts)
+ *	Get - Small output payload
+ *	Set - Small input payload
  */
 struct cr_pt_ddrt_alert {
 	/*
@@ -580,8 +736,8 @@ struct cr_pt_ddrt_alert {
 	 * (3) = AIT ERROR INTERRUPT ENABLE
 	 * (2) = AIT ERROR VIRAL ENABLE
 	 */
-	__u8 transaction_type0[CR_DDRT_ALERT_TYPES];
-};
+	__u8 transaction_type[CR_DDRT_ALERT_TYPES];
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -598,13 +754,12 @@ struct cr_pt_set_die_spare_policy {
 	unsigned char enable;
 	/* How aggressive to be on die sparing (0...255), Default 128 */
 	unsigned char aggressiveness;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
  *		Opcode:		0x06h/0x07h (Get/Set Admin Features)
  *		Sub-Opcode:	0x00h (System Time)
-
  *	Get - Small Output Payload
  *	Set - Small Input Payload
  */
@@ -629,7 +784,7 @@ struct cr_pt_payload_system_time {
 	unsigned char time[CR_BCD_TIME_LEN];
 
 	unsigned char rsvd[121];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -660,7 +815,7 @@ struct cr_pt_payload_platform_cfg_data {
 
 	/* Length in bytes to read from designated offset */
 	__le32 length;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -668,11 +823,11 @@ struct cr_pt_payload_platform_cfg_data {
  *		Sub-Opcode:	0x01h (Platform Config Data)
  *
  *	Small output payload for retrieving partition size.
-  */
+ */
 struct cr_pt_payload_platform_get_size {
 	__le32 size; /* In bytes of the selected partition */
 	__le32 total_size; /* In bytes of the platform config area */
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -707,7 +862,7 @@ struct cr_pt_payload_get_dimm_partion_info {
 	 * (in 4KB multiples of bytes) */
 	__le32 raw_capacity;
 	unsigned char rsvd3[92];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -721,7 +876,7 @@ struct cr_pt_payload_input_get_fnv_fw_dbg_log_level {
 	 * level. If no log ID is sent then log ID 0 will be assumed.
 	 */
 	unsigned char log_id;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -744,14 +899,14 @@ struct cr_pt_payload_output_get_fnv_fw_dbg_log_level {
 	 * The number of logs available for which to change the level(0 to 255).
 	 */
 	unsigned char logs;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
- * 		Sub-Opcode:	0x04h (Block Window)
- * 	Get - Small Output Payload
- * 	Set - Small Input Payload
+ *		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ *		Sub-Opcode:	0x04h (Block Window)
+ *	Get - Small Output Payload
+ *	Set - Small Input Payload
  */
 struct cr_pt_payload_block_window {
 
@@ -762,27 +917,27 @@ struct cr_pt_payload_block_window {
 	 */
 	unsigned char enabled;
 	__le16 size; /*Current size of the partition in multiples of 64GB*/
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
- * 		Sub-Opcode:	0x05h (Hardware Configuration Parameters)
- * 	Get - Small Output Payload
- * 	Set - Small Input Payload
+ *		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ *		Sub-Opcode:	0x05h (Hardware Configuration Parameters)
+ *	Get - Small Output Payload
+ *	Set - Small Input Payload
  */
 struct cr_pt_payload_hw_cfg_data {
 
 	/*Shows the current TDP DIMM power limit*/
 	unsigned char TDP;
 	unsigned char rsvd[127];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
- * 		Opcode:		0x06/0x07h (Get/Set Admin Features)
- * 		Sub-Opcode:	0x06h (DDRT IO Init Info)
- * 	Small Output Payload
+ *		Opcode:		0x06/0x07h (Get/Set Admin Features)
+ *		Sub-Opcode:	0x06h (DDRT IO Init Info)
+ *	Small Output Payload
  */
 struct cr_pt_payload_ddrt_init_info {
 
@@ -810,7 +965,7 @@ struct cr_pt_payload_ddrt_init_info {
 	 */
 	unsigned char ddrt_io_info;
 	unsigned char rsvd[127];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -836,7 +991,7 @@ struct cr_pt_payload_platform_set_size {
 
 	/* Size to set for the partition */
 	__le32 size;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -861,7 +1016,7 @@ struct cr_pt_payload_set_dimm_partion_info {
 	__le32 pm_capacity;
 
 	unsigned char rsvd[120];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -882,7 +1037,7 @@ struct cr_pt_payload_set_fnv_fw_dbg_log_level {
 	unsigned char log_level;
 	/*ID of the log you are changing the level for(0-255)*/
 	unsigned char log_id;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Input Payload:
@@ -893,7 +1048,7 @@ struct cr_pt_payload_set_fnv_fw_dbg_log_level {
 struct cr_pt_input_payload_read_csr {
 	/* The address of the CSR register to read */
 	__le32 csr_register_address;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Output Payload:
@@ -906,7 +1061,7 @@ struct cr_pt_input_payload_read_csr {
  */
 struct cr_pt_output_payload_csr {
 	__le32 csr_value; /* The value of the CSR register */
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload
@@ -933,7 +1088,7 @@ struct cr_pt_payload_err_correct_erasure_policy {
 	 * Bit 4 - Refreshed Enabled
 	 */
 	__le16 policy;
-};
+} __attribute__((packed));
 
 /**
  * Passthrough CR Payload:
@@ -951,7 +1106,7 @@ struct cr_pt_payload_thermal_policy {
 	 * 0x01 - Enabled
 	 */
 	unsigned char enabled;
-};
+} __attribute__((packed));
 
 /**
  * Passthrough CR Payload:
@@ -962,19 +1117,19 @@ struct cr_pt_payload_thermal_policy {
 
 struct cr_pt_payload_input_ddrt_auth_req {
 	__u64 nonce;
-};
+} __attribute__((packed));
 
-/**
+/*
  * Passthrough CR Payload:
  *		Opcode:		0x0Eh (Get Debug Features)
  *		Sub-Opcode:	0x04h (DDRT Authentication Request)
  *	Large output payload
  */
-
 struct cr_pt_payload_output_ddrt_auth_req {
 	unsigned char device_certificate[CR_DEV_CERTIFICATE_LEN];
 	unsigned char signed_auth_challenge[CR_SIGNED_AUTH_CHALLENGE_LEN];
-};
+} __attribute__((packed));
+
 /*
  * Passthrough CR Input Payload:
  *		Opcode:		0x0Fh (Set Debug Features)
@@ -984,7 +1139,7 @@ struct cr_pt_payload_output_ddrt_auth_req {
 struct cr_pt_input_payload_write_csr {
 	__le32 csr_register_address; /* The address of the CSR register */
 	__le32 csr_value; /* The value to be written to the CSR register */
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1000,7 +1155,7 @@ struct cr_pt_payload_poison_err {
 	 * 0x01h - Set
 	 */
 	unsigned char enable;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1012,7 +1167,7 @@ struct cr_pt_payload_temp_err {
 	 * A number representing the temperature (Kelvin) to inject
 	 */
 	__le16 temperature;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1053,7 +1208,7 @@ struct cr_pt_payload_smart_health {
 	unsigned char power_on_hours[16];
 	unsigned char unsafe_shutdowns[16];
 	unsigned char reserved_b[64];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1073,7 +1228,7 @@ struct cr_pt_payload_fw_image_info {
 	 */
 	unsigned char fw_rev[CR_FW_REV_LEN];
 	unsigned char rsvd[123];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1083,7 +1238,8 @@ struct cr_pt_payload_fw_image_info {
  */
 struct cr_pt_payload_fw_debug_log {
 	unsigned char log_id;
-};
+} __attribute__((packed));
+
 /*
  * Passthrough CR Payload:
  *		Opcode:		0x08h (Get Log Page)
@@ -1115,7 +1271,7 @@ struct cr_pt_payload_memory_info {
 	unsigned char media_errors[16]; /* ECC uncorrectable errors. */
 
 	unsigned char reserved[48]; /* TODO */
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1155,7 +1311,7 @@ struct cr_pt_payload_long_op_stat {
 	unsigned char status_code;
 
 	unsigned char command_specific_data[118];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1170,7 +1326,7 @@ struct cr_pt_long_op_addr_range_scrub_data {
 	/*List of last 14 DPA addresses that it encountered.*/
 	__le64 dpa_err_addresses[CR_DPA_ERROR_ADDRESSES];
 	unsigned char rsvd2[3];
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1212,7 +1368,7 @@ struct cr_pt_input_payload_fw_error_log {
 	 */
 	unsigned char request_count;
 	unsigned char reserved[125];
-};
+} __attribute__((packed));
 
 
 /*
@@ -1277,7 +1433,7 @@ struct cr_pt_fw_log_entry {
 	 *		All other values reserved
 	 */
 	unsigned char transaction_type;
-};
+} __attribute__((packed));
 
 /*
  * Passthrough CR Payload:
@@ -1312,17 +1468,6 @@ struct cr_pt_output_payload_fw_error_log {
 	struct cr_pt_fw_log_entry log_entries[CR_FW_LOG_ENTRY_COUNT];
 
 	unsigned char reservers[4];
-};
+} __attribute__((packed));
 
-/*
- * Passthrough CR Payload:
- *		Opcode:		0x09h (Update Firmware)
- *		Sub-Opcode:	0x00h (Update FNV FW)
- *	For DDRT Large Input Payload holds new firmware image
- */
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif	/* _CR_IOCTL_H_ */
+#endif	/* _CR_IOCTL_H */

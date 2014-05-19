@@ -2,7 +2,7 @@
  * The interface between the platform independent device adapter and the device
  * driver, that defines the shared structures shared across that interface.
  *
- * Copyright 2013 Intel Corporation All Rights Reserved.
+ * Copyright 2013-2014 Intel Corporation All Rights Reserved.
  *
  * INTEL CONFIDENTIAL
  *
@@ -28,14 +28,11 @@
  * suppliers or licensors in any way.
  */
 
-#ifndef	NVDIMM_IOCTL_H_
-#define	NVDIMM_IOCTL_H_
+#ifndef	_NVDIMM_IOCTL_H
+#define	_NVDIMM_IOCTL_H
 
 #include <linux/nvdimm.h>
-
-#ifdef __linux__
 #include <linux/ioctl.h>
-#endif
 
 /*
  * ****************************************************************************
@@ -55,12 +52,11 @@ enum nvdimm_ioctl_type {
 	/* Get the number of dimms in the system's memory topology */
 	IOCTL_GET_TOPOLOGY_COUNT = 11,
 	IOCTL_GET_TOPOLOGY = 12, /* Get the system's memory topology */
-	/*TODO Get the details for one specific Vendor DIMM */
+	/* TODO Get the details for one specific Vendor DIMM */
 	IOCTL_GET_DIMM_DETAILS = 13,
 
 	IOCTL_GET_POOL_COUNT = 21, /* Get the number of pools allocated */
 	IOCTL_GET_POOLS = 22, /* Get the details for a given number of pools */
-	IOCTL_GET_POOL_DETAILS = 23, /* Get the details for a specific pool */
 
 	IOCTL_GET_VOLUME_COUNT = 31, /* Get the number of existing volumes */
 	/* Get the details for a given number of pools */
@@ -86,7 +82,6 @@ enum nvdimm_ioctl_type {
  * Describes the system-level view of a memory module's properties,
  * based upon its physical location and access patterns within the system
  */
-
 struct nvdimm_topology {
 	unsigned short id; /* The physical ID of the memory module */
 	unsigned short vendor_id; /* The vendor identifier */
@@ -106,57 +101,48 @@ struct nvdimm_topology {
 	unsigned short proximity_domain;
 	/* The ID of the associated memory controller */
 	unsigned short memory_controller_id;
-	char driver_rev[NVDIMM_DRIVER_REV_LEN]; /* ASCII revision of the driver */
 };
 
 /*
- * Detailed information about a specific DIMM including information from the SMBIOS tables
+ * Detailed information about a specific DIMM including information from the
+ *  SMBIOS tables
  */
 struct nvdimm_details {
 	/* SMBIOS Type 17 Table Info */
 	unsigned short form_factor; /* DIMM Form Factor */
-	unsigned long long data_width; /* Width in bits used to store user data */
+	/* Width in bits used to store user data */
+	unsigned long long data_width;
 	unsigned long long total_width; /* Width in bits for data and ECC */
 	unsigned long long speed; /* Speed in MHz */
 	char part_number[NVDIMM_PART_NUMBER_LEN]; /* DIMM part number */
-	char device_locator[NVDIMM_DEVICE_LOCATOR_LEN]; /* Socket or board pos */
-};
-
-/*
- * A lightweight description of a pool.
- */
-struct nvdimm_pool_discovery {
-	unsigned short id; /* The unique system ID of the pool */
+	/* Socket or board pos */
+	char device_locator[NVDIMM_DEVICE_LOCATOR_LEN];
+	/* Bank label */
+	char bank_label[NVDIMM_BANK_LABEL_LEN];
 };
 
 /*
  * Describes the features pertaining to the unique construction and usage of a
  * pool of memory.
  */
-struct nvdimm_pool_details {
-	/* The pool discovery information */
-	struct nvdimm_pool_discovery discovery;
-
-	/*
-	 * Number of NVDIMMs present in the memory interleave
-	 * for this pool. Also equal to the number of NVDIMMs
-	 * present in the pool
-	 */
-	unsigned char interleave_way;
-	unsigned int interleave_size;
-	unsigned short proximity_domain;
-
-	/*
-	 * Bitwise QoS attributes for the pool
-	 */
-	unsigned int pool_attributes;
-	unsigned long long capacity; /* The capacity of the pool, in MB */
-
-	/*
-	 * A list of the DIMMs used to implement the pool,
-	 * allocating for max DIMMs possible
-	 */
-	unsigned short dimm_id[NVDIMM_MAX_TOPO_SIZE];
+struct nvdimm_pool {
+	unsigned char uuid[NVDIMM_UUID_LEN]; /* unique ID of the pool */
+	unsigned char type;  /* volatile or persistent */
+	unsigned char health; /* Rolled up health of underlying NVM-DIMMs */
+	unsigned long long capacity; /* The capacity in MB */
+	unsigned long long free_capacity; /* The free capacity in MB */
+	unsigned short interleave; /* Interleave settings */
+	unsigned char mirrored; /* Mirrored by iMC */
+	unsigned char pmem_addressable; /* Fully mapped into SPA */
+	/* Has block windows and not mirrored */
+	unsigned char device_addressable;
+	unsigned char encrypted; /* 0 - disabled, 1 - enabled, 2 - mixed */
+	unsigned short atomic_write_size; /* min atomic write size*/
+	unsigned short atomic_write_size_powerfail; /* min during power fail*/
+	/* The number of NVM-DIMMs making up the pool */
+	unsigned short dimm_count;
+	/* Unique ID's of underlying NVM-DIMMs */
+	unsigned short dimms[NVDIMM_MAX_TOPO_SIZE];
 };
 
 /*
@@ -196,8 +182,6 @@ struct nvdimm_volume_details {
 	unsigned short pool_ids[NVDIMM_MAX_TOPO_SIZE];
 };
 
-
-
 /*
  * Structure for IOCTL data
  */
@@ -214,9 +198,9 @@ struct nvdimm_req {
 		 */
 		unsigned char volume_uuid[NVDIMM_UUID_LEN];
 		/* Pool ID for IOCTLs that require a specific pool
-		 * example: IOCTL_GET_POOL_DETAILS
+		 * example: IOCTL_GET_POOLS
 		 */
-		unsigned short pool_id;
+		unsigned char pool_uuid[NVDIMM_UUID_LEN];
 		/* DIMM ID for IOCTLs that require a specific nvdimm
 		 * example: IOCTL_PASSTHROUGH_CMD
 		 */
@@ -224,11 +208,12 @@ struct nvdimm_req {
 	} nvdr_arg1;
 
 	union {
-		/* buffer for any structure that is vendor specific or
+		/*
+		 * buffer for any structure that is vendor specific or
 		 * for IOCTLs that transfer a variable array of structures
 		 */
 		void *data;
-		struct nvdimm_pool_details pool_details;
+		struct nvdimm_pool pool_details;
 		struct nvdimm_volume_discovery volume_details;
 	} nvdr_arg2;
 };
@@ -243,10 +228,9 @@ struct nvdimm_req {
 #define nvdr_volume_details	nvdr_arg2.volume_details
 #define nvdr_platform_capabilities	nvdr_arg2.platform_capabilities
 
-#ifdef __linux__
 #define NVDIMM_MAGIC (0xDA)
 
-/*Debug IOCTLS*/
+/* Debug IOCTLS */
 #define NVDIMM_LOAD_ACPI_FIT	\
 	_IOR(NVDIMM_MAGIC, 0x04, void *)
 #define NVDIMM_INIT _IO(NVDIMM_MAGIC, 0x03)
@@ -280,6 +264,5 @@ struct nvdimm_req {
 	_IOWR(NVDIMM_MAGIC, IOCTL_MODIFY_VOLUME, struct nvdimm_req)
 #define NVDIMM_PASSTHROUGH_CMD	\
 	_IOWR(NVDIMM_MAGIC, IOCTL_PASSTHROUGH_CMD, struct nvdimm_req)
-#endif
 
-#endif /* NVDIMM_IOCTL_H_ */
+#endif /* _NVDIMM_IOCTL_H */
