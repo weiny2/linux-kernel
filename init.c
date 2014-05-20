@@ -236,6 +236,18 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 		goto done;
 
 	/*
+	 * The size of the buffers programmed into the RcvArray
+	 * entries needs to be big enough to handle the highest
+	 * MTU supported.
+	 */
+	if (max_mtu > egrsize) {
+		u32 bufsize = __roundup_pow_of_two(max_mtu);
+		dd_dev_info(dd,
+			    "Eager buffer size changed from %u to %u\n",
+			    egrsize, bufsize);
+		egrsize = bufsize;
+	}
+	/*
 	 * To avoid wasting a lot of memory, we allocate 32KB chunks
 	 * of physically contiguous memory, advance through it until
 	 * used up and then allocate more.  Of course, we need
