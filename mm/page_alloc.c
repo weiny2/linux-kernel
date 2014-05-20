@@ -2533,7 +2533,7 @@ restart:
 	if (!(alloc_flags & ALLOC_CPUSET) && !nodemask) {
 		struct zoneref *preferred_zoneref;
 		preferred_zoneref = first_zones_zonelist(zonelist, high_zoneidx,
-				nodemask ? : &cpuset_current_mems_allowed,
+				NULL,
 				&preferred_zone);
 		classzone_idx = zonelist_zone_idx(preferred_zoneref);
 	}
