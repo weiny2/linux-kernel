@@ -655,10 +655,12 @@
 #define WFR_ICODE_FUNCTIONAL_SIMULATOR	0x03
 
 /* 8051 general register Field IDs */
-#define VERIFY_CAP_LOCAL_PHY	 0xc
-#define VERIFY_CAP_LOCAL_FABRIC	 0xd
-#define VERIFY_CAP_REMOTE_PHY	 0xe
-#define VERIFY_CAP_REMOTE_FABRIC 0xf
+#define VERIFY_CAP_LOCAL_PHY	     0x0c
+#define VERIFY_CAP_LOCAL_FABRIC	     0x0d
+#define VERIFY_CAP_LOCAL_LINK_WIDTH  0x0e
+#define VERIFY_CAP_REMOTE_PHY	     0x0f
+#define VERIFY_CAP_REMOTE_FABRIC     0x10
+#define VERIFY_CAP_REMOTE_LINK_WIDTH 0x11
 
 /* Lane ID for general configuration registers */
 #define GENERAL_CONFIG 4
@@ -695,6 +697,10 @@
 #define CRC_SIZES_SHIFT 20
 #define CRC_SIZES_MASK 0x7
 
+/* verify capability link width fields */
+#define LINK_WIDTH_SHIFT 0
+#define LINK_WIDTH_MASK 0xffff
+
 /* verify capability PHY power management bits */
 #define PWRM_BER_CONTROL	0x1
 #define PWRM_BANDWIDTH_CONTROL	0x2
@@ -702,11 +708,11 @@
 #define PWRM_DEEP_SLEEP		0x8
 
 /* verify capability fabric CRC size bits */
-#define CRC_16BIT	   0x1
-#define CRC_48BIT	   0x2
-#define CRC_12BIT_PER_LANE 0x4
+#define CRC_14B			0x1	/* 14b CRC */
+#define CRC_48B			0x2	/* 48b CRC */
+#define CRC_12B_16B_PER_LANE	0x4	/* 12b-16b per lane CRC */
 
-#define WFR_SUPPORTED_CRCS (CRC_16BIT | CRC_48BIT | CRC_12BIT_PER_LANE)
+#define WFR_SUPPORTED_CRCS (CRC_14B | CRC_48B | CRC_12B_16B_PER_LANE)
 
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);

@@ -523,6 +523,7 @@ static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 				u8 *continous);
 static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 				u16 *vl15buf, u8 *crc_sizes);
+static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *link_widths);
 static void handle_send_context_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
@@ -1121,8 +1122,19 @@ static void interrupt_clear_down(struct hfi_devdata *dd,
 				 u32 context,
 				 const struct err_reg_info *eri)
 {
+	u64 lcb_sel = 0;
 	u64 reg;
 	u32 count;
+	int restore_sel = 0;
+
+	if (eri->handler == handle_lcb_err) {
+		lcb_sel = read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL);
+		if (!(lcb_sel & DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK)) {
+			restore_sel = 1;
+			write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL, lcb_sel
+				| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+		}
+	}
 
 	/* read in a loop until no more errors are seen */
 	count = 0;
@@ -1162,6 +1174,9 @@ static void interrupt_clear_down(struct hfi_devdata *dd,
 				&& dd->irev < 36)
 			break;
 	}
+
+	if (restore_sel)
+		write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL, lcb_sel);
 }
 
 /*
@@ -1422,6 +1437,28 @@ static u32 vau_to_au(u8 vau)
 }
 
 /*
+ * Graceful LCB shutdown.  This leaves the LCB FIFOs in reset.
+ */
+void lcb_shutdown(struct hfi_devdata *dd)
+{
+	u64 reg, saved_lcb_err_en;
+
+	/* clear lcb run: LCB_CFG_RUN.EN = 0 */
+	write_csr(dd, DC_LCB_CFG_RUN, 0);
+	/* set tx fifo reset: LCB_CFG_TX_FIFOS_RESET.VAL = 1 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
+		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
+	/* set dcc reset csr: DCC_CFG_RESET.reset_lcb = 1 */
+	saved_lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
+	reg = read_csr(dd, DCC_CFG_RESET);
+	write_csr(dd, DCC_CFG_RESET,
+		reg | 1ull << DCC_CFG_RESET_RESET_LCB_SHIFT);
+	udelay(1);	/* must hold for the longer of 16cclks or 20ns */
+	write_csr(dd, DCC_CFG_RESET, reg);
+	write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
+}
+
+/*
  * Handle a verify capabilities interrupt from the 8051
  */
 static void handle_verify_cap(struct hfi_devdata *dd)
@@ -1431,8 +1468,16 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	u8 vcu;
 	u8 vau;
 	u16 vl15buf;
+	u16 link_widths;
 	u8 crc_sizes;
 	struct qib_pportdata *ppd = dd->pport;
+
+	/* give host access to the LCB CSRs */
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
+		| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+
+	lcb_shutdown(dd);
 
 	/*
 	 * These are now valid:
@@ -1443,16 +1488,26 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	 */
 	read_vc_remote_phy(dd, &power_management, &continious);
 	read_vc_remote_fabric(dd, &vau, &vcu, &vl15buf, &crc_sizes);
+	read_vc_remote_link_width(dd, &link_widths);
 	dd_dev_info(dd,
 		"Peer PHY: power management 0x%x, continous updates 0x%x\n",
 		(int)power_management, (int)continious);
 	dd_dev_info(dd,
 		"Peer Fabric: vAU %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
 		(int)vau, (int)vcu, (int)vl15buf, (int)crc_sizes);
+	dd_dev_info(dd, "Peer Link width: 0x%x\n", (u32)link_widths);
 	set_up_vl15(dd, vau, vl15buf);
 
 	/* set up the remote credit return table */
 	assign_remote_cm_au_table(dd, vcu);
+
+	/* pull LCB fifos out of reset - all fifo clocks must be stable */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
+
+	/* give 8051 access to the LCB CSRs */
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
+		& ~DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
 
 	/* tell the 8051 to go to LinkUp */
 	set_physical_link_state(dd, WFR_PLS_LINKUP);
@@ -2121,6 +2176,16 @@ static void write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
 	load_8051_config(dd, VERIFY_CAP_LOCAL_FABRIC, GENERAL_CONFIG, frame);
 }
 
+static void write_vc_local_link_width(struct hfi_devdata *dd,
+				u16 link_widths)
+{
+	u32 frame;
+
+	frame = (u32)link_widths << LINK_WIDTH_SHIFT;
+	load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
+		frame);
+}
+
 static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 					u8 *continous)
 {
@@ -2145,25 +2210,26 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 	*crc_sizes = (frame >> CRC_SIZES_SHIFT) & CRC_SIZES_MASK;
 }
 
+static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *link_widths)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_REMOTE_PHY, GENERAL_CONFIG, &frame);
+	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
+}
+
 int init_loopback(struct hfi_devdata *dd)
 {
-	u64 reg, saved_lcb_err_en;
+	u64 reg;
 	unsigned long timeout;
 	int ret;
 
-	/* clear lcb run: LCB_CFG_RUN.EN = 0 */
-	write_csr(dd, DC_LCB_CFG_RUN, 0);
-	/* set tx fifo reset: LCB_CFG_TX_FIFOS_RESET.VAL = 1 */
-	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
-		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
-	/* set dcc reset csr: DCC_CFG_RESET.reset_lcb = 1 */
-	saved_lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
-	reg = read_csr(dd, DCC_CFG_RESET);
-	write_csr(dd, DCC_CFG_RESET,
-		reg | 1ull << DCC_CFG_RESET_RESET_LCB_SHIFT);
-	udelay(20);
-	write_csr(dd, DCC_CFG_RESET, reg);
-	write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
+	/* give host access to the LCB CSRs */
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
+		| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+
+	lcb_shutdown(dd);
 
 	/* configure LCBs in loopback */
 	/*	LCB_CFG_LOOPBACK.VAL = 2 */
@@ -2240,6 +2306,9 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 
 	write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
 		WFR_SUPPORTED_CRCS);
+
+	/* TODO: 0x0f = 4 lanes max, 1 lanes min */
+	write_vc_local_link_width(dd, 0x0f);
 
 	/* enable the port */
 	/* TODO: 7322: done within rcvmod_lock */
