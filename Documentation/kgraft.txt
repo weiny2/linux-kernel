@@ -23,6 +23,20 @@ patch modules, identifying which functions need to be replaced based on a
 patch, and creating the patch module source code. They are located in
 tools/kgraft/.
 
+Use
+---
+
+1) Build a kernel with CONFIG_KGRAFT enabled
+2) Create a module with a patch
+   * Look at samples/kgraft/kgraft_patcher.c for an example
+   * tools/kgraft/ can be used for automatic generation
+3) Insert the module from 2) into the booted kernel from 1)
+4) All processes need to enter the kernel to acknowledge the new state
+   * This can be done e.g. by sending a non-fatal signal to all processes
+   * Check /proc/*/kgr_in_progress to check who still needs to be poked
+5) You should see "kgr succeeded" in dmesg now
+
+Enjoy your patched system!
 
 
 References

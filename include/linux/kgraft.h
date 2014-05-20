@@ -1,14 +1,28 @@
+/*
+ * kGraft Online Kernel Patching
+ *
+ *  Copyright (c) 2013-2014 SUSE
+ *   Authors: Jiri Kosina
+ *	      Vojtech Pavlik
+ *	      Jiri Slaby
+ */
+
+/*
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ */
+
 #ifndef LINUX_KGR_H
 #define LINUX_KGR_H
 
-#include <linux/hardirq.h> /* for in_interrupt() */
-#include <linux/init.h>
+#include <linux/bitops.h>
+#include <linux/compiler.h>
 #include <linux/ftrace.h>
+#include <linux/sched.h>
 
 #if IS_ENABLED(CONFIG_KGRAFT)
-
-static void kgr_mark_task_in_progress(struct task_struct *p);
-static bool kgr_task_in_progress(struct task_struct *p);
 
 #include <asm/kgraft.h>
 
@@ -41,18 +55,10 @@ struct kgr_loc_caches {
 };
 
 #define KGR_PATCHED_FUNCTION(_name, _new_function, abort)			\
-	KGR_STUB_ARCH_SLOW(_name, _new_function);				\
-	KGR_STUB_ARCH_FAST(_name, _new_function);				\
-	extern void _new_function ## _stub_slow (unsigned long, unsigned long,	\
-				       struct ftrace_ops *, struct pt_regs *);	\
-	extern void _new_function ## _stub_fast (unsigned long, unsigned long,	\
-				       struct ftrace_ops *, struct pt_regs *);	\
 	static struct ftrace_ops __kgr_patch_ftrace_ops_slow_ ## _name = {	\
-		.func = _new_function ## _stub_slow,				\
 		.flags = FTRACE_OPS_FL_SAVE_REGS,				\
 	};									\
 	static struct ftrace_ops __kgr_patch_ftrace_ops_fast_ ## _name = {	\
-		.func = _new_function ## _stub_fast,				\
 		.flags = FTRACE_OPS_FL_SAVE_REGS,				\
 	};									\
 	static struct kgr_patch_fun __kgr_patch_ ## _name = {			\
@@ -62,7 +68,7 @@ struct kgr_loc_caches {
 		.new_function = _new_function,					\
 		.ftrace_ops_slow = &__kgr_patch_ftrace_ops_slow_ ## _name,	\
 		.ftrace_ops_fast = &__kgr_patch_ftrace_ops_fast_ ## _name,	\
-	};									\
+	};
 
 #define KGR_PATCH(name)		&__kgr_patch_ ## name
 #define KGR_PATCH_END		NULL

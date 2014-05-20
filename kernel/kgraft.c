@@ -15,6 +15,7 @@
  */
 
 #include <linux/ftrace.h>
+#include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/kallsyms.h>
 #include <linux/kgraft.h>
 #include <linux/module.h>
@@ -25,6 +26,8 @@
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include <linux/seq_file.h>
+#include <linux/proc_fs.h>
 
 static int kgr_patch_code(const struct kgr_patch *patch,
 		struct kgr_patch_fun *patch_fun, bool final);
@@ -36,6 +39,37 @@ static DEFINE_MUTEX(kgr_in_progress_lock);
 static bool kgr_in_progress;
 static bool kgr_initialized;
 static const struct kgr_patch *kgr_patch;
+
+/*
+ * The stub needs to modify the RIP value stored in struct pt_regs
+ * so that ftrace redirects the execution properly.
+ */
+static void kgr_stub_fast(unsigned long ip, unsigned long parent_ip,
+		struct ftrace_ops *ops, struct pt_regs *regs)
+{
+	struct kgr_loc_caches *c = ops->private;
+
+	pr_info("kgr: fast stub: calling new code at %lx\n", c->new);
+	kgr_set_regs_ip(regs, c->new);
+}
+
+static void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
+		struct ftrace_ops *ops, struct pt_regs *regs)
+{
+	struct kgr_loc_caches *c = ops->private;
+	bool irq = !!in_interrupt();
+
+	if ((!irq && kgr_task_in_progress(current)) ||
+			(irq && !*this_cpu_ptr(c->irq_use_new))) {
+		pr_info("kgr: slow stub: calling old code at %lx\n",
+				c->old);
+		kgr_set_regs_ip(regs, c->old + MCOUNT_INSN_SIZE);
+	} else {
+		pr_info("kgr: slow stub: calling new code at %lx\n",
+				c->new);
+		kgr_set_regs_ip(regs, c->new);
+	}
+}
 
 static bool kgr_still_patching(void)
 {
@@ -92,14 +126,22 @@ static void kgr_work_fn(struct work_struct *work)
 	mutex_unlock(&kgr_in_progress_lock);
 }
 
+static void kgr_mark_processes(void)
+{
+	struct task_struct *p;
+
+	read_lock(&tasklist_lock);
+	for_each_process(p)
+		kgr_mark_task_in_progress(p);
+	read_unlock(&tasklist_lock);
+}
+
 static void kgr_handle_processes(void)
 {
 	struct task_struct *p;
 
 	read_lock(&tasklist_lock);
 	for_each_process(p) {
-		kgr_mark_task_in_progress(p);
-
 		/* wake up kthreads, they will clean the progress flag */
 		if (!p->mm) {
 			/*
@@ -197,7 +239,9 @@ static int kgr_init_ftrace_ops(const struct kgr_patch_fun *patch_fun)
 	caches->old = fentry_loc;
 
 	patch_fun->ftrace_ops_fast->private = caches;
+	patch_fun->ftrace_ops_fast->func = kgr_stub_fast;
 	patch_fun->ftrace_ops_slow->private = caches;
+	patch_fun->ftrace_ops_slow->func = kgr_stub_slow;
 
 	return 0;
 free_caches:
@@ -299,6 +343,8 @@ int kgr_start_patching(struct kgr_patch *patch)
 		goto unlock_free;
 	}
 
+	kgr_mark_processes();
+
 	for (patch_fun = patch->patches; *patch_fun; patch_fun++) {
 		ret = kgr_patch_code(patch, *patch_fun, false);
 		/*
@@ -338,6 +384,25 @@ unlock_free:
 }
 EXPORT_SYMBOL_GPL(kgr_start_patching);
 
+static int kgr_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", kgr_in_progress);
+	return 0;
+}
+
+static int kgr_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, kgr_show, NULL);
+}
+
+static const struct file_operations kgr_fops = {
+	.owner      = THIS_MODULE,
+	.open       = kgr_open,
+	.read       = seq_read,
+	.llseek     = seq_lseek,
+	.release    = single_release,
+};
+
 static int __init kgr_init(void)
 {
 	if (ftrace_is_dead()) {
@@ -353,6 +418,9 @@ static int __init kgr_init(void)
 
 	kgr_initialized = true;
 	pr_info("kgr: successfully initialized\n");
+
+	if (!proc_create("kgr_in_progress", 0, NULL, &kgr_fops))
+		pr_warn("kgr: cannot create kgr_in_progress in procfs\n");
 
 	return 0;
 }
