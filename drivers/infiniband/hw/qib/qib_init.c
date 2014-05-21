@@ -1253,7 +1253,7 @@ static int qib_notify_dca(struct notifier_block *nb, unsigned long event,
  * Do all the generic driver unit- and chip-independent memory
  * allocation and initialization.
  */
-static int __init qlogic_ib_init(void)
+static int __init qib_ib_init(void)
 {
 	int ret;
 
@@ -1303,12 +1303,12 @@ bail:
 	return ret;
 }
 
-module_init(qlogic_ib_init);
+module_init(qib_ib_init);
 
 /*
  * Do the non-unit driver cleanup, memory free, etc. at unload.
  */
-static void __exit qlogic_ib_cleanup(void)
+static void __exit qib_ib_cleanup(void)
 {
 	int ret;
 
@@ -1334,7 +1334,7 @@ static void __exit qlogic_ib_cleanup(void)
 	qib_clean_mod_param();
 }
 
-module_exit(qlogic_ib_cleanup);
+module_exit(qib_ib_cleanup);
 
 /* this can only be called after a successful initialization */
 static void cleanup_device_data(struct qib_devdata *dd)
