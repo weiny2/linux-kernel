@@ -238,20 +238,6 @@ down_common:
 	}
 
 	ret = qib_wait_linkstate(ppd, lstate, 10);
-	if (ret == 0 && ppd->statusp) {
-		switch(lstate) {
-		case IB_PORT_DOWN:
-			*ppd->statusp &= ~(QIB_STATUS_IB_CONF |
-					   QIB_STATUS_IB_READY);
-			break;
-		case IB_PORT_ARMED:
-			*ppd->statusp |= QIB_STATUS_IB_CONF;
-			break;
-		case IB_PORT_ACTIVE:
-			*ppd->statusp |= QIB_STATUS_IB_READY;
-			break;
-		}
-	}
 bail:
 	return ret;
 }

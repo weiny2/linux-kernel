@@ -3944,6 +3944,29 @@ static u32 iblink_state(struct qib_pportdata *ppd)
 			__func__, ib_lstate_name(new_state), new_state);
 		ppd->lstate = new_state;
 	}
+	/*
+	 * Set port status flags in the page mapped into userspace
+	 * memory. Do it here to ensure a reliable state - this is
+	 * the only function called by all state handling code.
+	 * Always set the flags due to the fact that the cache value
+	 * might have been changed explicitly outside of this
+	 * function.
+	 */
+	if (ppd->statusp) {
+		switch(ppd->lstate) {
+		case IB_PORT_DOWN:
+		case IB_PORT_INIT:
+			*ppd->statusp &= ~(QIB_STATUS_IB_CONF |
+					   QIB_STATUS_IB_READY);
+			break;
+		case IB_PORT_ARMED:
+			*ppd->statusp |= QIB_STATUS_IB_CONF;
+			break;
+		case IB_PORT_ACTIVE:
+			*ppd->statusp |= QIB_STATUS_IB_READY;
+			break;
+		}
+	}
 	return ppd->lstate;
 }
 
