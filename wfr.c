@@ -609,6 +609,14 @@ static const struct err_reg_info sdma_eng_err =
 	WFR_EE(SEND_DMA_ENG_ERR, handle_sdma_eng_err, "SDmaEngErr");
 
 /*
+ * The DC encoding of mtu_cap for 10K MTU in the DCC_CFG_PORT_CONFIG
+ * register can not be derived from the MTU value because 10K is not
+ * a power of 2. Therefore, we need a constant. Everything else can
+ * be calculated.
+ */
+#define DCC_CFG_PORT_MTU_CAP_10240 7
+
+/*
  * Table of the DC grouping of error interupts.  Each entry refers to
  * another register containing more information.
  */
@@ -2799,13 +2807,15 @@ u32 lrh_max_header_bytes(struct hfi_devdata *dd)
 static void set_send_length(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u32 max_hb = lrh_max_header_bytes(dd);
+	u32 max_hb = lrh_max_header_bytes(dd), maxvlmtu = 0, dcmtu;
 	u64 len1 = 0, len2 = (((dd->vld[15].mtu + max_hb) >> 2)
 			      & WFR_SEND_LEN_CHECK1_LEN_VL15_MASK) <<
 		WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT;
 	int i;
 
 	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
+		if (dd->vld[i].mtu > maxvlmtu)
+			maxvlmtu = dd->vld[i].mtu;
 		if (i <= 3)
 			len1 |= (((dd->vld[i].mtu + max_hb) >> 2)
 				 & WFR_SEND_LEN_CHECK0_LEN_VL0_MASK) <<
@@ -2817,6 +2827,15 @@ static void set_send_length(struct qib_pportdata *ppd)
 	}
 	write_csr(dd, WFR_SEND_LEN_CHECK0, len1);
 	write_csr(dd, WFR_SEND_LEN_CHECK1, len2);
+
+	/* Adjust maximum MTU for the port in DC */
+	dcmtu = maxvlmtu == 10240 ? DCC_CFG_PORT_MTU_CAP_10240 :
+		(ilog2(maxvlmtu >> 8) + 1);
+	len1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG);
+	len1 &= ~DCC_CFG_PORT_CONFIG_MTU_CAP_SMASK;
+	len1 |= ((u64)dcmtu & DCC_CFG_PORT_CONFIG_MTU_CAP_MASK) <<
+		DCC_CFG_PORT_CONFIG_MTU_CAP_SHIFT;
+	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG, len1);
 }
 
 static void set_lidlmc(struct qib_pportdata *ppd)
