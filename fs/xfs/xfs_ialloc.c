@@ -40,6 +40,8 @@
 #include "xfs_buf_item.h"
 #include "xfs_icreate_item.h"
 #include "xfs_icache.h"
+#include "xfs_dinode.h"
+#include "xfs_trace.h"
 
 
 /*
@@ -369,6 +371,18 @@ xfs_ialloc_ag_alloc(
 		args.minleft = args.mp->m_in_maxlevels - 1;
 		if ((error = xfs_alloc_vextent(&args)))
 			return error;
+
+		/*
+		 * This request might have dirtied the transaction if the AG can
+		 * satisfy the request, but the exact block was not available.
+		 * If the allocation did fail, subsequent requests will relax
+		 * the exact agbno requirement and increase the alignment
+		 * instead. It is critical that the total size of the request
+		 * (len + alignment + slop) does not increase from this point
+		 * on, so reset minalignslop to ensure it is not included in
+		 * subsequent requests.
+		 */
+		args.minalignslop = 0;
 	} else
 		args.fsbno = NULLFSBLOCK;
 
@@ -1228,7 +1242,7 @@ xfs_difree(
 		}
 
 		xfs_bmap_add_free(XFS_AGB_TO_FSB(mp,
-				agno, XFS_INO_TO_AGBNO(mp,rec.ir_startino)),
+				agno, XFS_AGINO_TO_AGBNO(mp, rec.ir_startino)),
 				XFS_IALLOC_BLOCKS(mp), flist, mp);
 	} else {
 		*delete = 0;
@@ -1574,18 +1588,17 @@ xfs_agi_read_verify(
 	struct xfs_buf	*bp)
 {
 	struct xfs_mount *mp = bp->b_target->bt_mount;
-	int		agi_ok = 1;
 
-	if (xfs_sb_version_hascrc(&mp->m_sb))
-		agi_ok = xfs_verify_cksum(bp->b_addr, BBTOB(bp->b_length),
-					  offsetof(struct xfs_agi, agi_crc));
-	agi_ok = agi_ok && xfs_agi_verify(bp);
-
-	if (unlikely(XFS_TEST_ERROR(!agi_ok, mp, XFS_ERRTAG_IALLOC_READ_AGI,
-			XFS_RANDOM_IALLOC_READ_AGI))) {
-		XFS_CORRUPTION_ERROR(__func__, XFS_ERRLEVEL_LOW, mp, bp->b_addr);
+	if (xfs_sb_version_hascrc(&mp->m_sb) &&
+	    !xfs_buf_verify_cksum(bp, XFS_AGI_CRC_OFF))
+		xfs_buf_ioerror(bp, EFSBADCRC);
+	else if (XFS_TEST_ERROR(!xfs_agi_verify(bp), mp,
+				XFS_ERRTAG_IALLOC_READ_AGI,
+				XFS_RANDOM_IALLOC_READ_AGI))
 		xfs_buf_ioerror(bp, EFSCORRUPTED);
-	}
+
+	if (bp->b_error)
+		xfs_verifier_error(bp);
 }
 
 static void
@@ -1596,8 +1609,8 @@ xfs_agi_write_verify(
 	struct xfs_buf_log_item	*bip = bp->b_fspriv;
 
 	if (!xfs_agi_verify(bp)) {
-		XFS_CORRUPTION_ERROR(__func__, XFS_ERRLEVEL_LOW, mp, bp->b_addr);
 		xfs_buf_ioerror(bp, EFSCORRUPTED);
+		xfs_verifier_error(bp);
 		return;
 	}
 
@@ -1606,8 +1619,7 @@ xfs_agi_write_verify(
 
 	if (bip)
 		XFS_BUF_TO_AGI(bp)->agi_lsn = cpu_to_be64(bip->bli_item.li_lsn);
-	xfs_update_cksum(bp->b_addr, BBTOB(bp->b_length),
-			 offsetof(struct xfs_agi, agi_crc));
+	xfs_buf_update_cksum(bp, XFS_AGI_CRC_OFF);
 }
 
 const struct xfs_buf_ops xfs_agi_buf_ops = {
@@ -1627,8 +1639,9 @@ xfs_read_agi(
 {
 	int			error;
 
-	ASSERT(agno != NULLAGNUMBER);
+	trace_xfs_read_agi(mp, agno);
 
+	ASSERT(agno != NULLAGNUMBER);
 	error = xfs_trans_read_buf(mp, tp, mp->m_ddev_targp,
 			XFS_AG_DADDR(mp, agno, XFS_AGI_DADDR(mp)),
 			XFS_FSS_TO_BB(mp, 1), 0, bpp, &xfs_agi_buf_ops);
@@ -1650,6 +1663,8 @@ xfs_ialloc_read_agi(
 	struct xfs_agi		*agi;	/* allocation group header */
 	struct xfs_perag	*pag;	/* per allocation group data */
 	int			error;
+
+	trace_xfs_ialloc_read_agi(mp, agno);
 
 	error = xfs_read_agi(mp, tp, agno, bpp);
 	if (error)

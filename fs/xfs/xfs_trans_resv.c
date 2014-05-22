@@ -89,20 +89,28 @@ xfs_calc_buf_res(
  * on disk. Hence we need an inode reservation function that calculates all this
  * correctly. So, we log:
  *
- * - log op headers for object
+ * - 4 log op headers for object
+ *	- for the ilf, the inode core and 2 forks
  * - inode log format object
- * - the entire inode contents (core + 2 forks)
- * - two bmap btree block headers
+ * - the inode core
+ * - two inode forks containing bmap btree root blocks.
+ *	- the btree data contained by both forks will fit into the inode size,
+ *	  hence when combined with the inode core above, we have a total of the
+ *	  actual inode size.
+ *	- the BMBT headers need to be accounted separately, as they are
+ *	  additional to the records and pointers that fit inside the inode
+ *	  forks.
  */
 STATIC uint
 xfs_calc_inode_res(
 	struct xfs_mount	*mp,
 	uint			ninodes)
 {
-	return ninodes * (sizeof(struct xlog_op_header) +
-			  sizeof(struct xfs_inode_log_format) +
-			  mp->m_sb.sb_inodesize +
-			  2 * XFS_BMBT_BLOCK_LEN(mp));
+	return ninodes *
+		(4 * sizeof(struct xlog_op_header) +
+		 sizeof(struct xfs_inode_log_format) +
+		 mp->m_sb.sb_inodesize +
+		 2 * XFS_BMBT_BLOCK_LEN(mp));
 }
 
 /*
@@ -393,8 +401,7 @@ xfs_calc_ifree_reservation(
 		xfs_calc_inode_res(mp, 1) +
 		xfs_calc_buf_res(2, mp->m_sb.sb_sectsize) +
 		xfs_calc_buf_res(1, XFS_FSB_TO_B(mp, 1)) +
-		MAX((__uint16_t)XFS_FSB_TO_B(mp, 1),
-		    XFS_INODE_CLUSTER_SIZE(mp)) +
+		max_t(uint, XFS_FSB_TO_B(mp, 1), XFS_INODE_CLUSTER_SIZE(mp)) +
 		xfs_calc_buf_res(1, 0) +
 		xfs_calc_buf_res(2 + XFS_IALLOC_BLOCKS(mp) +
 				 mp->m_in_maxlevels, 0) +
@@ -653,15 +660,14 @@ xfs_calc_qm_setqlim_reservation(
 
 /*
  * Allocating quota on disk if needed.
- *	the write transaction log space: M_RES(mp)->tr_write.tr_logres
+ *	the write transaction log space for quota file extent allocation
  *	the unit of quota allocation: one system block size
  */
 STATIC uint
 xfs_calc_qm_dqalloc_reservation(
 	struct xfs_mount	*mp)
 {
-	ASSERT(M_RES(mp)->tr_write.tr_logres);
-	return M_RES(mp)->tr_write.tr_logres +
+	return xfs_calc_write_reservation(mp) +
 		xfs_calc_buf_res(1,
 			XFS_FSB_TO_B(mp, XFS_DQUOT_CLUSTER_SIZE_FSB) - 1);
 }

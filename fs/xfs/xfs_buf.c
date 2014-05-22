@@ -395,7 +395,17 @@ _xfs_buf_map_pages(
 		bp->b_addr = NULL;
 	} else {
 		int retried = 0;
+		unsigned noio_flag;
 
+		/*
+		 * vm_map_ram() will allocate auxillary structures (e.g.
+		 * pagetables) with GFP_KERNEL, yet we are likely to be under
+		 * GFP_NOFS context here. Hence we need to tell memory reclaim
+		 * that we are in such a context via PF_MEMALLOC_NOIO to prevent
+		 * memory reclaim re-entering the filesystem here and
+		 * potentially deadlocking.
+		 */
+		noio_flag = memalloc_noio_save();
 		do {
 			bp->b_addr = vm_map_ram(bp->b_pages, bp->b_page_count,
 						-1, PAGE_KERNEL);
@@ -403,6 +413,7 @@ _xfs_buf_map_pages(
 				break;
 			vm_unmap_aliases();
 		} while (retried++ <= 1);
+		memalloc_noio_restore(noio_flag);
 
 		if (!bp->b_addr)
 			return -ENOMEM;
@@ -444,8 +455,8 @@ _xfs_buf_find(
 	numbytes = BBTOB(numblks);
 
 	/* Check for IOs smaller than the sector size / not sector aligned */
-	ASSERT(!(numbytes < (1 << btp->bt_sshift)));
-	ASSERT(!(BBTOB(blkno) & (xfs_off_t)btp->bt_smask));
+	ASSERT(!(numbytes < btp->bt_meta_sectorsize));
+	ASSERT(!(BBTOB(blkno) & (xfs_off_t)btp->bt_meta_sectormask));
 
 	/*
 	 * Corrupted block numbers can get through to here, unfortunately, so we
@@ -1151,7 +1162,7 @@ xfs_bwrite(
 	ASSERT(xfs_buf_islocked(bp));
 
 	bp->b_flags |= XBF_WRITE;
-	bp->b_flags &= ~(XBF_ASYNC | XBF_READ | _XBF_DELWRI_Q);
+	bp->b_flags &= ~(XBF_ASYNC | XBF_READ | _XBF_DELWRI_Q | XBF_WRITE_FAIL);
 
 	xfs_bdstrat_cb(bp);
 
@@ -1375,21 +1386,29 @@ xfs_buf_iorequest(
 		xfs_buf_wait_unpin(bp);
 	xfs_buf_hold(bp);
 
-	/* Set the count to 1 initially, this will stop an I/O
+	/*
+	 * Set the count to 1 initially, this will stop an I/O
 	 * completion callout which happens before we have started
 	 * all the I/O from calling xfs_buf_ioend too early.
 	 */
 	atomic_set(&bp->b_io_remaining, 1);
 	_xfs_buf_ioapply(bp);
-	_xfs_buf_ioend(bp, 1);
+	/*
+	 * If _xfs_buf_ioapply failed, we'll get back here with
+	 * only the reference we took above.  _xfs_buf_ioend will
+	 * drop it to zero, so we'd better not queue it for later,
+	 * or we'll free it before it's done.
+	 */
+	_xfs_buf_ioend(bp, bp->b_error ? 0 : 1);
 
 	xfs_buf_rele(bp);
 }
 
 /*
  * Waits for I/O to complete on the buffer supplied.  It returns immediately if
- * no I/O is pending or there is already a pending error on the buffer.  It
- * returns the I/O error code, if any, or 0 if there was no error.
+ * no I/O is pending or there is already a pending error on the buffer, in which
+ * case nothing will ever complete.  It returns the I/O error code, if any, or
+ * 0 if there was no error.
  */
 int
 xfs_buf_iowait(
@@ -1515,6 +1534,12 @@ xfs_wait_buftarg(
 			struct xfs_buf *bp;
 			bp = list_first_entry(&dispose, struct xfs_buf, b_lru);
 			list_del_init(&bp->b_lru);
+			if (bp->b_flags & XBF_WRITE_FAIL) {
+				xfs_alert(btp->bt_mount,
+"Corruption Alert: Buffer at block 0x%llx had permanent write failures!\n"
+"Please run xfs_repair to determine the extent of the problem.",
+					(long long)bp->b_bn);
+			}
 			xfs_buf_rele(bp);
 		}
 		if (loop++ != 0)
@@ -1608,9 +1633,9 @@ xfs_setsize_buftarg_flags(
 	unsigned int		sectorsize,
 	int			verbose)
 {
-	btp->bt_bsize = blocksize;
-	btp->bt_sshift = ffs(sectorsize) - 1;
-	btp->bt_smask = sectorsize - 1;
+	/* Set up metadata sector size info */
+	btp->bt_meta_sectorsize = sectorsize;
+	btp->bt_meta_sectormask = sectorsize - 1;
 
 	if (set_blocksize(btp->bt_bdev, sectorsize)) {
 		char name[BDEVNAME_SIZE];
@@ -1622,6 +1647,10 @@ xfs_setsize_buftarg_flags(
 			sectorsize, name);
 		return EINVAL;
 	}
+
+	/* Set up device logical sector size mask */
+	btp->bt_logical_sectorsize = bdev_logical_block_size(btp->bt_bdev);
+	btp->bt_logical_sectormask = bdev_logical_block_size(btp->bt_bdev) - 1;
 
 	return 0;
 }
@@ -1798,7 +1827,7 @@ __xfs_buf_delwri_submit(
 
 	blk_start_plug(&plug);
 	list_for_each_entry_safe(bp, n, io_list, b_list) {
-		bp->b_flags &= ~(_XBF_DELWRI_Q | XBF_ASYNC);
+		bp->b_flags &= ~(_XBF_DELWRI_Q | XBF_ASYNC | XBF_WRITE_FAIL);
 		bp->b_flags |= XBF_WRITE;
 
 		if (!wait) {

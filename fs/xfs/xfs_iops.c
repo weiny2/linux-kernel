@@ -53,6 +53,18 @@
 #include <linux/fiemap.h>
 #include <linux/slab.h>
 
+/*
+ * Directories have different lock order w.r.t. mmap_sem compared to regular
+ * files. This is due to readdir potentially triggering page faults on a user
+ * buffer inside filldir(), and this happens with the ilock on the directory
+ * held. For regular files, the lock order is the other way around - the
+ * mmap_sem is taken during the page fault, and then we lock the ilock to do
+ * block mapping. Hence we need a different class for the directory ilock so
+ * that lockdep can tell them apart.
+ */
+static struct lock_class_key xfs_nondir_ilock_class;
+static struct lock_class_key xfs_dir_ilock_class;
+
 static int
 xfs_initxattrs(
 	struct inode		*inode,
@@ -623,7 +635,8 @@ xfs_setattr_nonsize(
 		}
 		if (!gid_eq(igid, gid)) {
 			if (XFS_IS_QUOTA_RUNNING(mp) && XFS_IS_GQUOTA_ON(mp)) {
-				ASSERT(!XFS_IS_PQUOTA_ON(mp));
+				ASSERT(xfs_sb_version_has_pquotino(&mp->m_sb) ||
+				       !XFS_IS_PQUOTA_ON(mp));
 				ASSERT(mask & ATTR_GID);
 				ASSERT(gdqp);
 				olddquot2 = xfs_qm_vop_chown(tp, ip,
@@ -1239,6 +1252,7 @@ xfs_setup_inode(
 	inode->i_ctime.tv_nsec	= ip->i_d.di_ctime.t_nsec;
 	xfs_diflags_to_iflags(inode, ip);
 
+	lockdep_set_class(&ip->i_lock.mr_lock, &xfs_nondir_ilock_class);
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFREG:
 		inode->i_op = &xfs_inode_operations;
@@ -1246,6 +1260,7 @@ xfs_setup_inode(
 		inode->i_mapping->a_ops = &xfs_address_space_operations;
 		break;
 	case S_IFDIR:
+		lockdep_set_class(&ip->i_lock.mr_lock, &xfs_dir_ilock_class);
 		if (xfs_sb_version_hasasciici(&XFS_M(inode->i_sb)->m_sb))
 			inode->i_op = &xfs_dir_ci_inode_operations;
 		else

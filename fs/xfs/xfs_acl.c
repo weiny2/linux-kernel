@@ -397,7 +397,7 @@ xfs_xattr_acl_set(struct dentry *dentry, const char *name,
 	if (error)
 		goto out_release;
 
-	error = -EINVAL;
+	error = -E2BIG;
 	if (acl->a_count > XFS_ACL_MAX_ENTRIES(XFS_M(inode->i_sb)))
 		goto out_release;
 
