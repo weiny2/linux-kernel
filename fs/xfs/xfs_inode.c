@@ -90,8 +90,7 @@ xfs_get_extsz_hint(
  * have been read in yet, and only lock the inode exclusively if they have not.
  *
  * The function returns a value which should be given to the corresponding
- * xfs_iunlock_map_shared().  This value is the mode in which the lock was
- * actually taken.
+ * xfs_iunlock() call.
  */
 uint
 xfs_ilock_map_shared(
@@ -109,18 +108,6 @@ xfs_ilock_map_shared(
 	xfs_ilock(ip, lock_mode);
 
 	return lock_mode;
-}
-
-/*
- * This is simply the unlock routine to go with xfs_ilock_map_shared().
- * All it does is call xfs_iunlock() with the given lock_mode.
- */
-void
-xfs_iunlock_map_shared(
-	xfs_inode_t	*ip,
-	unsigned int	lock_mode)
-{
-	xfs_iunlock(ip, lock_mode);
 }
 
 /*
@@ -592,7 +579,7 @@ xfs_lookup(
 
 	lock_mode = xfs_ilock_map_shared(dp);
 	error = xfs_dir_lookup(NULL, dp, name, &inum, ci_name);
-	xfs_iunlock_map_shared(dp, lock_mode);
+	xfs_iunlock(dp, lock_mode);
 
 	if (error)
 		goto out;

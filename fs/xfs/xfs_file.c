@@ -1465,7 +1465,7 @@ out:
 	offset = vfs_setpos(file, offset, inode->i_sb->s_maxbytes);
 
 out_unlock:
-	xfs_iunlock_map_shared(ip, lock);
+	xfs_iunlock(ip, lock);
 
 	if (error)
 		return -error;
@@ -1573,7 +1573,7 @@ out:
 	offset = vfs_setpos(file, offset, inode->i_sb->s_maxbytes);
 
 out_unlock:
-	xfs_iunlock_map_shared(ip, lock);
+	xfs_iunlock(ip, lock);
 
 	if (error)
 		return -error;
