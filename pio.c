@@ -385,7 +385,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	/* set up packet checking */
 
 	/* checks/disallow to set on all context types */
-	all = HFI_PKT_BASE_INTEGRITY;
+	all = HFI_PKT_BASE_SC_INTEGRITY;
 
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		/* per context type checks */

@@ -991,7 +991,7 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	 */
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		reg_cur = read_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE);
-		reg_new = ~(HFI_PKT_BASE_INTEGRITY) & reg_cur;
+		reg_new = ~(HFI_PKT_BASE_SC_INTEGRITY) & reg_cur;
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg_new);
 	}
 
@@ -1041,7 +1041,7 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	drain_snoop_list(&dd->hfi_snoop.queue);
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		reg_cur = read_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE);
-		reg_new = HFI_PKT_BASE_INTEGRITY | reg_cur;
+		reg_new = HFI_PKT_BASE_SC_INTEGRITY | reg_cur;
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg_new);
 	}
 

@@ -4080,6 +4080,8 @@ dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
 	write_kctxt_csr(dd, 0, WFR_SEND_DMA_HEAD_ADDR, ppd->sdma_head_phys);
 	write_kctxt_csr(dd, 0, WFR_SEND_DMA_MEMORY, DEFAULT_WFR_SEND_DMA_MEMORY);
 	write_kctxt_csr(dd, 0, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
+	write_kctxt_csr(dd, 0, WFR_SEND_DMA_CHECK_ENABLE,
+			HFI_PKT_BASE_SDMA_INTEGRITY);
 }
 
 static u16 sdma_gethead(struct qib_pportdata *ppd)
