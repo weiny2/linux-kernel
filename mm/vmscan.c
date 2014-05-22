@@ -2017,6 +2017,7 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long nr_reclaimed = 0;
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
 	struct blk_plug plug;
+	bool scan_adjusted = false;
 
 	get_scan_count(lruvec, sc, nr);
 
@@ -2039,7 +2040,7 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 			}
 		}
 
-		if (nr_reclaimed < nr_to_reclaim)
+		if (nr_reclaimed < nr_to_reclaim || scan_adjusted)
 			continue;
 
 		/*
@@ -2060,15 +2061,6 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		 */
 		nr_file = nr[LRU_INACTIVE_FILE] + nr[LRU_ACTIVE_FILE];
 		nr_anon = nr[LRU_INACTIVE_ANON] + nr[LRU_ACTIVE_ANON];
-
-		/*
-		 * It's just vindictive to attack the larger once the smaller
-		 * has gone to zero.  And given the way we stop scanning the
-		 * smaller below, this makes sure that we only make one nudge
-		 * towards proportionality once we've got nr_to_reclaim.
-		 */
-		if (!nr_file || !nr_anon)
-			break;
 
 		if (nr_file > nr_anon) {
 			unsigned long scan_target = targets[LRU_INACTIVE_ANON] +
@@ -2099,6 +2091,8 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		nr_scanned = targets[lru] - nr[lru];
 		nr[lru] = targets[lru] * (100 - percentage) / 100;
 		nr[lru] -= min(nr[lru], nr_scanned);
+
+		scan_adjusted = true;
 	}
 	blk_finish_plug(&plug);
 	sc->nr_reclaimed += nr_reclaimed;
