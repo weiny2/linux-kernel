@@ -1049,11 +1049,11 @@ xfs_dm_get_allocinfo_rvp(
 		num = MIN((u_int)(nelem - elem), bmpcnt);
 
 		xfs_ilock(ip, XFS_IOLOCK_SHARED);
-		lock = xfs_ilock_map_shared(ip);
+		lock = xfs_ilock_data_map_shared(ip);
 
 		error = xfs_bmapi_read(ip, fsb_offset, fsb_length,
 				       bmp, &num, XFS_BMAPI_ENTIRE);
-		xfs_iunlock_map_shared(ip, lock);
+		xfs_iunlock(ip, lock);
 		xfs_iunlock(ip, XFS_IOLOCK_SHARED);
 
 		if (error) {

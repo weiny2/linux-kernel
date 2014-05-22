@@ -62,7 +62,6 @@
 
 EXPORT_SYMBOL(xfs_iunlock);
 EXPORT_SYMBOL(xfs_attr_remove);
-EXPORT_SYMBOL(xfs_iunlock_map_shared);
 EXPORT_SYMBOL(xfs_iget);
 EXPORT_SYMBOL(xfs_bmapi_read);
 EXPORT_SYMBOL(xfs_internal_inum);
@@ -81,7 +80,7 @@ EXPORT_SYMBOL(xfs_trans_alloc);
 EXPORT_SYMBOL(xfs_trans_cancel);
 EXPORT_SYMBOL(xfs_fsync);
 EXPORT_SYMBOL(xfs_bulkstat);
-EXPORT_SYMBOL(xfs_ilock_map_shared);
+EXPORT_SYMBOL(xfs_ilock_data_map_shared);
 EXPORT_SYMBOL(xfs_trans_log_inode);
 EXPORT_SYMBOL(xfs_attr_list);
 EXPORT_SYMBOL(kmem_zalloc_large);
