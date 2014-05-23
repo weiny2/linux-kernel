@@ -341,7 +341,7 @@ void __wake_up_page_bit(wait_queue_head_t *wqh, struct page *page, void *word, i
 		 * lookup of the page waitqueue on the next unlock_page or
 		 * end of writeback.
 		 */
-		__wake_up_common(wqh, TASK_NORMAL, 1, 0, &key);
+		__wake_up(wqh, TASK_NORMAL, 1, &key);
 	} else {
 		/* No potential waiters, safe to clear PG_waiters */
 		ClearPageWaiters(page);

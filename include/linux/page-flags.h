@@ -561,7 +561,7 @@ static inline void ClearPageSlabPfmemalloc(struct page *page)
  */
 #define PAGE_FLAGS_CHECK_AT_FREE \
 	(1 << PG_lru	 | 1 << PG_locked    | \
-	 __PG_WAITERS \
+	 __PG_WAITERS | \
 	 1 << PG_private | 1 << PG_private_2 | \
 	 1 << PG_writeback | 1 << PG_reserved | \
 	 1 << PG_slab	 | 1 << PG_swapcache | 1 << PG_active | \
