@@ -103,6 +103,10 @@ static unsigned sdma_idle_cnt = 64;
 module_param_named(sdma_idle_cnt, sdma_idle_cnt, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_idle_cnt, "sdma interrupt idle delay (default 64)");
 
+static uint use_sdma = 1;
+module_param(use_sdma, uint, S_IRUGO);
+MODULE_PARM_DESC(use_sdma, "enable sdma traffic");
+
 struct flag_table {
 	u64 flag;	/* the flag */
 	char *str;	/* description string */
@@ -6014,7 +6018,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 #endif
 
 	/* sdma init */
-	dd->flags |= QIB_HAS_SEND_DMA;
+	if (use_sdma)
+		dd->flags |= QIB_HAS_SEND_DMA;
 	dd->flags |= sdma_idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
 	dd->num_sdma = dd->chip_sdma_engines;
 	if (mod_num_sdma && mod_num_sdma < dd->chip_sdma_engines)
