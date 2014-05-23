@@ -1208,6 +1208,8 @@ static void __setup_root(u32 nodesize, u32 leafsize, u32 sectorsize,
 	init_waitqueue_head(&root->log_writer_wait);
 	init_waitqueue_head(&root->log_commit_wait[0]);
 	init_waitqueue_head(&root->log_commit_wait[1]);
+	INIT_LIST_HEAD(&root->log_ctxs[0]);
+	INIT_LIST_HEAD(&root->log_ctxs[1]);
 	atomic_set(&root->log_commit[0], 0);
 	atomic_set(&root->log_commit[1], 0);
 	atomic_set(&root->log_writers, 0);
@@ -1215,6 +1217,7 @@ static void __setup_root(u32 nodesize, u32 leafsize, u32 sectorsize,
 	atomic_set(&root->orphan_inodes, 0);
 	atomic_set(&root->refs, 1);
 	root->log_transid = 0;
+	root->log_transid_committed = -1;
 	root->last_log_commit = 0;
 	if (fs_info)
 		extent_io_tree_init(&root->dirty_log_pages,
@@ -1430,6 +1433,7 @@ int btrfs_add_log_tree(struct btrfs_trans_handle *trans,
 	WARN_ON(root->log_root);
 	root->log_root = log_root;
 	root->log_transid = 0;
+	root->log_transid_committed = -1;
 	root->last_log_commit = 0;
 	return 0;
 }

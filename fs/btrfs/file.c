@@ -587,7 +587,6 @@ void btrfs_drop_extent_cache(struct inode *inode, u64 start, u64 end,
 		clear_bit(EXTENT_FLAG_PINNED, &em->flags);
 		clear_bit(EXTENT_FLAG_LOGGING, &flags);
 		modified = !list_empty(&em->list);
-		remove_extent_mapping(em_tree, em);
 		if (no_splits)
 			goto next;
 
@@ -618,8 +617,7 @@ void btrfs_drop_extent_cache(struct inode *inode, u64 start, u64 end,
 			split->bdev = em->bdev;
 			split->flags = flags;
 			split->compress_type = em->compress_type;
-			ret = add_extent_mapping(em_tree, split, modified);
-			BUG_ON(ret); /* Logic error */
+			replace_extent_mapping(em_tree, em, split, modified);
 			free_extent_map(split);
 			split = split2;
 			split2 = NULL;
@@ -657,12 +655,20 @@ void btrfs_drop_extent_cache(struct inode *inode, u64 start, u64 end,
 				split->orig_block_len = 0;
 			}
 
-			ret = add_extent_mapping(em_tree, split, modified);
-			BUG_ON(ret); /* Logic error */
+			if (extent_map_in_tree(em)) {
+				replace_extent_mapping(em_tree, em, split,
+						       modified);
+			} else {
+				ret = add_extent_mapping(em_tree, split,
+							 modified);
+				ASSERT(ret == 0); /* Logic error */
+			}
 			free_extent_map(split);
 			split = NULL;
 		}
 next:
+		if (extent_map_in_tree(em))
+			remove_extent_mapping(em_tree, em);
 		write_unlock(&em_tree->lock);
 
 		/* once for us */
@@ -716,7 +722,7 @@ int __btrfs_drop_extents(struct btrfs_trans_handle *trans,
 	if (drop_cache)
 		btrfs_drop_extent_cache(inode, start, end - 1, 0);
 
-	if (start >= BTRFS_I(inode)->disk_i_size)
+	if (start >= BTRFS_I(inode)->disk_i_size && !replace_extent)
 		modify_tree = 0;
 
 	while (1) {
@@ -943,34 +949,42 @@ next_slot:
 		 * Set path->slots[0] to first slot, so that after the delete
 		 * if items are move off from our leaf to its immediate left or
 		 * right neighbor leafs, we end up with a correct and adjusted
-		 * path->slots[0] for our insertion.
+		 * path->slots[0] for our insertion (if replace_extent != 0).
 		 */
 		path->slots[0] = del_slot;
 		ret = btrfs_del_items(trans, root, path, del_slot, del_nr);
 		if (ret)
 			btrfs_abort_transaction(trans, root, ret);
+	}
 
-		leaf = path->nodes[0];
-		/*
-		 * leaf eb has flag EXTENT_BUFFER_STALE if it was deleted (that
-		 * is, its contents got pushed to its neighbors), in which case
-		 * it means path->locks[0] == 0
-		 */
-		if (!ret && replace_extent && leafs_visited == 1 &&
-		    path->locks[0] &&
-		    btrfs_leaf_free_space(root, leaf) >=
-		    sizeof(struct btrfs_item) + extent_item_size) {
+	leaf = path->nodes[0];
+	/*
+	 * If btrfs_del_items() was called, it might have deleted a leaf, in
+	 * which case it unlocked our path, so check path->locks[0] matches a
+	 * write lock.
+	 */
+	if (!ret && replace_extent && leafs_visited == 1 &&
+	    (path->locks[0] == BTRFS_WRITE_LOCK_BLOCKING ||
+	     path->locks[0] == BTRFS_WRITE_LOCK) &&
+	    btrfs_leaf_free_space(root, leaf) >=
+	    sizeof(struct btrfs_item) + extent_item_size) {
 
-			key.objectid = ino;
-			key.type = BTRFS_EXTENT_DATA_KEY;
-			key.offset = start;
-			setup_items_for_insert(root, path, &key,
-					       &extent_item_size,
-					       extent_item_size,
-					       sizeof(struct btrfs_item) +
-					       extent_item_size, 1);
-			*key_inserted = 1;
+		key.objectid = ino;
+		key.type = BTRFS_EXTENT_DATA_KEY;
+		key.offset = start;
+		if (!del_nr && path->slots[0] < btrfs_header_nritems(leaf)) {
+			struct btrfs_key slot_key;
+
+			btrfs_item_key_to_cpu(leaf, &slot_key, path->slots[0]);
+			if (btrfs_comp_cpu_keys(&key, &slot_key) > 0)
+				path->slots[0]++;
 		}
+		setup_items_for_insert(root, path, &key,
+				       &extent_item_size,
+				       extent_item_size,
+				       sizeof(struct btrfs_item) +
+				       extent_item_size, 1);
+		*key_inserted = 1;
 	}
 
 	if (!replace_extent || !(*key_inserted))
@@ -1857,8 +1871,9 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
 	struct btrfs_root *root = BTRFS_I(inode)->root;
-	int ret = 0;
 	struct btrfs_trans_handle *trans;
+	struct btrfs_log_ctx ctx;
+	int ret = 0;
 	bool full_sync = 0;
 
 	trace_btrfs_sync_file(file, datasync);
@@ -1952,7 +1967,9 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	}
 	trans->sync = true;
 
-	ret = btrfs_log_dentry_safe(trans, root, dentry);
+	btrfs_init_log_ctx(&ctx);
+
+	ret = btrfs_log_dentry_safe(trans, root, dentry, &ctx);
 	if (ret < 0) {
 		/* Fallthrough and commit/free transaction. */
 		ret = 1;
@@ -1972,7 +1989,7 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 
 	if (ret != BTRFS_NO_LOG_SYNC) {
 		if (!ret) {
-			ret = btrfs_sync_log(trans, root);
+			ret = btrfs_sync_log(trans, root, &ctx);
 			if (!ret) {
 				ret = btrfs_end_transaction(trans, root);
 				goto out;
