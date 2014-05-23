@@ -5575,7 +5575,3 @@ MODULE_DESCRIPTION("Fourth Extended Filesystem");
 MODULE_LICENSE("GPL");
 module_init(ext4_init_fs)
 module_exit(ext4_exit_fs)
-
-static bool rw;
-module_param(rw, bool, 0644);
-MODULE_PARM_DESC(rw, "Allow read-write file systems (ignored; for compatibility with SLE11)");
