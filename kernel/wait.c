@@ -64,44 +64,52 @@ EXPORT_SYMBOL(remove_wait_queue);
  * stops them from bleeding out - it would still allow subsequent
  * loads to move into the critical region).
  */
-void
-prepare_to_wait(wait_queue_head_t *q, wait_queue_t *wait, int state)
+static __always_inline void
+__prepare_to_wait(wait_queue_head_t *q, wait_queue_t *wait,
+			struct page *page, int state, bool exclusive)
 {
 	unsigned long flags;
 
-	wait->flags &= ~WQ_FLAG_EXCLUSIVE;
 	spin_lock_irqsave(&q->lock, flags);
-	if (list_empty(&wait->task_list))
-		__add_wait_queue(q, wait);
+
+	/*
+	 * pages are hashed on a waitqueue that is expensive to lookup.
+	 * __wait_on_page_bit and __wait_on_page_bit_lock pass in a page
+	 * to set PG_waiters here. A PageWaiters() can then be used at
+	 * unlock time or when writeback completes to detect if there
+	 * are any potential waiters that justify a lookup.
+	 */
+	if (page && !PageWaiters(page))
+		SetPageWaiters(page);
+	if (list_empty(&wait->task_list)) {
+		if (exclusive) {
+			wait->flags |= WQ_FLAG_EXCLUSIVE;
+			__add_wait_queue_tail(q, wait);
+		} else {
+			wait->flags &= ~WQ_FLAG_EXCLUSIVE;
+			__add_wait_queue(q, wait);
+		}
+	}
 	set_current_state(state);
 	spin_unlock_irqrestore(&q->lock, flags);
+}
+
+void
+prepare_to_wait(wait_queue_head_t *q, wait_queue_t *wait, int state)
+{
+	return __prepare_to_wait(q, wait, NULL, state, false);
 }
 EXPORT_SYMBOL(prepare_to_wait);
 
 void
 prepare_to_wait_exclusive(wait_queue_head_t *q, wait_queue_t *wait, int state)
 {
-	unsigned long flags;
-
-	wait->flags |= WQ_FLAG_EXCLUSIVE;
-	spin_lock_irqsave(&q->lock, flags);
-	if (list_empty(&wait->task_list))
-		__add_wait_queue_tail(q, wait);
-	set_current_state(state);
-	spin_unlock_irqrestore(&q->lock, flags);
+	return __prepare_to_wait(q, wait, NULL, state, true);
 }
 EXPORT_SYMBOL(prepare_to_wait_exclusive);
 
-/**
- * finish_wait - clean up after waiting in a queue
- * @q: waitqueue waited on
- * @wait: wait descriptor
- *
- * Sets current thread back to running state and removes
- * the wait descriptor from the given waitqueue if still
- * queued.
- */
-void finish_wait(wait_queue_head_t *q, wait_queue_t *wait)
+static __always_inline void __finish_wait(wait_queue_head_t *q,
+			wait_queue_t *wait, struct page *page)
 {
 	unsigned long flags;
 
@@ -122,8 +130,32 @@ void finish_wait(wait_queue_head_t *q, wait_queue_t *wait)
 	if (!list_empty_careful(&wait->task_list)) {
 		spin_lock_irqsave(&q->lock, flags);
 		list_del_init(&wait->task_list);
+
+		/*
+		 * Clear PG_waiters if the waitqueue is no longer active. There
+		 * is no guarantee that a page with no waiters will get cleared
+		 * as there may be unrelated pages hashed to sleep on the same
+		 * queue. Accurate detection would require a counter but
+		 * collisions are expected to be rare.
+		 */
+		if (page && !waitqueue_active(q))
+			ClearPageWaiters(page);
 		spin_unlock_irqrestore(&q->lock, flags);
 	}
+}
+
+/**
+ * finish_wait - clean up after waiting in a queue
+ * @q: waitqueue waited on
+ * @wait: wait descriptor
+ *
+ * Sets current thread back to running state and removes
+ * the wait descriptor from the given waitqueue if still
+ * queued.
+ */
+void finish_wait(wait_queue_head_t *q, wait_queue_t *wait)
+{
+	return __finish_wait(q, wait, NULL);
 }
 EXPORT_SYMBOL(finish_wait);
 
@@ -186,6 +218,28 @@ int wake_bit_function(wait_queue_t *wait, unsigned mode, int sync, void *arg)
 EXPORT_SYMBOL(wake_bit_function);
 
 /*
+ * waits on a bit to be cleared (see wait_on_bit in wait.h for details.
+ * A page is optionally provided when used to wait on the PG_locked or
+ * PG_writeback bit. By setting PG_waiters a lookup of the waitqueue
+ * can be avoided during unlock_page or end_page_writeback.
+ */
+int __sched
+__wait_on_page_bit(wait_queue_head_t *wq, struct wait_bit_queue *q,
+			struct page *page,
+			int (*action)(void *), unsigned mode)
+{
+	int ret = 0;
+
+	do {
+		__prepare_to_wait(wq, &q->wait, page, mode, false);
+		if (test_bit(q->key.bit_nr, q->key.flags))
+			ret = (*action)(q->key.flags);
+	} while (test_bit(q->key.bit_nr, q->key.flags) && !ret);
+	__finish_wait(wq, &q->wait, page);
+	return ret;
+}
+
+/*
  * To allow interruptible waiting and asynchronous (i.e. nonblocking)
  * waiting, the actions of __wait_on_bit() and __wait_on_bit_lock() are
  * permitted return codes. Nonzero return codes halt waiting and return.
@@ -194,16 +248,9 @@ int __sched
 __wait_on_bit(wait_queue_head_t *wq, struct wait_bit_queue *q,
 			int (*action)(void *), unsigned mode)
 {
-	int ret = 0;
-
-	do {
-		prepare_to_wait(wq, &q->wait, mode);
-		if (test_bit(q->key.bit_nr, q->key.flags))
-			ret = (*action)(q->key.flags);
-	} while (test_bit(q->key.bit_nr, q->key.flags) && !ret);
-	finish_wait(wq, &q->wait);
-	return ret;
+	return __wait_on_page_bit(wq, q, NULL, action, mode);
 }
+
 EXPORT_SYMBOL(__wait_on_bit);
 
 int __sched out_of_line_wait_on_bit(void *word, int bit,
@@ -217,13 +264,14 @@ int __sched out_of_line_wait_on_bit(void *word, int bit,
 EXPORT_SYMBOL(out_of_line_wait_on_bit);
 
 int __sched
-__wait_on_bit_lock(wait_queue_head_t *wq, struct wait_bit_queue *q,
+__wait_on_page_bit_lock(wait_queue_head_t *wq, struct wait_bit_queue *q,
+			struct page *page,
 			int (*action)(void *), unsigned mode)
 {
 	do {
 		int ret;
 
-		prepare_to_wait_exclusive(wq, &q->wait, mode);
+		__prepare_to_wait(wq, &q->wait, page, mode, true);
 		if (!test_bit(q->key.bit_nr, q->key.flags))
 			continue;
 		ret = action(q->key.flags);
@@ -232,8 +280,15 @@ __wait_on_bit_lock(wait_queue_head_t *wq, struct wait_bit_queue *q,
 		abort_exclusive_wait(wq, &q->wait, mode, &q->key);
 		return ret;
 	} while (test_and_set_bit(q->key.bit_nr, q->key.flags));
-	finish_wait(wq, &q->wait);
+	__finish_wait(wq, &q->wait, page);
 	return 0;
+}
+
+int __sched
+__wait_on_bit_lock(wait_queue_head_t *wq, struct wait_bit_queue *q,
+			int (*action)(void *), unsigned mode)
+{
+	return __wait_on_page_bit_lock(wq, q, NULL, action, mode);
 }
 EXPORT_SYMBOL(__wait_on_bit_lock);
 
@@ -253,6 +308,48 @@ void __wake_up_bit(wait_queue_head_t *wq, void *word, int bit)
 	if (waitqueue_active(wq))
 		__wake_up(wq, TASK_NORMAL, 1, &key);
 }
+
+void __wake_up_page_bit(wait_queue_head_t *wqh, struct page *page, void *word, int bit)
+{
+	struct wait_bit_key key = __WAIT_BIT_KEY_INITIALIZER(word, bit);
+	unsigned long flags;
+
+	/*
+	 * If there is no PG_waiters bit (32-bit), then waitqueue_active can be
+	 * checked without wqh->lock as there is no PG_waiters race to protect.
+	 */
+	if (!__PG_WAITERS) {
+		if (waitqueue_active(wqh))
+			__wake_up(wqh, TASK_NORMAL, 1, &key);
+		return;
+	}
+
+	/*
+	 * Unlike __wake_up_bit it is necessary to check waitqueue_active
+	 * under the wqh->lock to avoid races with parallel additions that
+	 * could result in lost wakeups.
+	 */
+	spin_lock_irqsave(&wqh->lock, flags);
+	if (waitqueue_active(wqh)) {
+		/*
+		 * Try waking a task on the queue. Responsibility for clearing
+		 * the PG_waiters bit is left to the last waiter on the
+		 * waitqueue as PageWaiters is called outside wqh->lock and
+		 * we cannot miss wakeups. Due to hashqueue collisions, there
+		 * may be colliding pages that still have PG_waiters set but
+		 * the impact means there will be at least one unnecessary
+		 * lookup of the page waitqueue on the next unlock_page or
+		 * end of writeback.
+		 */
+		__wake_up_common(wqh, TASK_NORMAL, 1, 0, &key);
+	} else {
+		/* No potential waiters, safe to clear PG_waiters */
+		ClearPageWaiters(page);
+	}
+	spin_unlock_irqrestore(&wqh->lock, flags);
+}
+
+
 EXPORT_SYMBOL(__wake_up_bit);
 
 /**

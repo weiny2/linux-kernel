@@ -67,6 +67,10 @@ static void __page_cache_release(struct page *page)
 static void __put_single_page(struct page *page)
 {
 	__page_cache_release(page);
+
+	/* See release_pages on why this clear may be necessary */
+	__ClearPageWaiters(page);
+
 	free_hot_cold_page(page, false);
 }
 
@@ -864,6 +868,14 @@ void release_pages(struct page **pages, int nr, bool cold)
 
 		/* Clear Active bit in case of parallel mark_page_accessed */
 		__ClearPageActive(page);
+
+		/*
+		 * pages are hashed on a waitqueue so there may be collisions.
+		 * When waiters are woken the waitqueue is checked but
+		 * unrelated pages on the queue can leave the bit set. Clear
+		 * it here if that happens.
+		 */
+		__ClearPageWaiters(page);
 
 		list_add(&page->lru, &pages_to_free);
 	}

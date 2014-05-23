@@ -591,9 +591,9 @@ static wait_queue_head_t *page_waitqueue(struct page *page)
 	return &zone->wait_table[hash_ptr(page, zone->wait_table_bits)];
 }
 
-static inline void wake_up_page(struct page *page, int bit)
+static inline void wake_up_page(struct page *page, int bit_nr)
 {
-	__wake_up_bit(page_waitqueue(page), &page->flags, bit);
+	__wake_up_page_bit(page_waitqueue(page), page, &page->flags, bit_nr);
 }
 
 void wait_on_page_bit(struct page *page, int bit_nr)
@@ -601,8 +601,8 @@ void wait_on_page_bit(struct page *page, int bit_nr)
 	DEFINE_WAIT_BIT(wait, &page->flags, bit_nr);
 
 	if (test_bit(bit_nr, &page->flags))
-		__wait_on_bit(page_waitqueue(page), &wait, sleep_on_page,
-							TASK_UNINTERRUPTIBLE);
+		__wait_on_page_bit(page_waitqueue(page), &wait, page,
+					sleep_on_page, TASK_UNINTERRUPTIBLE);
 }
 EXPORT_SYMBOL(wait_on_page_bit);
 
@@ -613,7 +613,7 @@ int wait_on_page_bit_killable(struct page *page, int bit_nr)
 	if (!test_bit(bit_nr, &page->flags))
 		return 0;
 
-	return __wait_on_bit(page_waitqueue(page), &wait,
+	return __wait_on_page_bit(page_waitqueue(page), &wait, page,
 			     sleep_on_page_killable, TASK_KILLABLE);
 }
 
@@ -652,7 +652,8 @@ void unlock_page(struct page *page)
 	VM_BUG_ON(!PageLocked(page));
 	clear_bit_unlock(PG_locked, &page->flags);
 	smp_mb__after_clear_bit();
-	wake_up_page(page, PG_locked);
+	if (unlikely(PageWaiters(page)))
+		wake_up_page(page, PG_locked);
 }
 EXPORT_SYMBOL(unlock_page);
 
@@ -678,7 +679,8 @@ void end_page_writeback(struct page *page)
 		BUG();
 
 	smp_mb__after_clear_bit();
-	wake_up_page(page, PG_writeback);
+	if (unlikely(PageWaiters(page)))
+		wake_up_page(page, PG_writeback);
 }
 EXPORT_SYMBOL(end_page_writeback);
 
@@ -690,8 +692,8 @@ void __lock_page(struct page *page)
 {
 	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
 
-	__wait_on_bit_lock(page_waitqueue(page), &wait, sleep_on_page,
-							TASK_UNINTERRUPTIBLE);
+	__wait_on_page_bit_lock(page_waitqueue(page), &wait, page,
+					sleep_on_page, TASK_UNINTERRUPTIBLE);
 }
 EXPORT_SYMBOL(__lock_page);
 
@@ -699,9 +701,10 @@ int __lock_page_killable(struct page *page)
 {
 	DEFINE_WAIT_BIT(wait, &page->flags, PG_locked);
 
-	return __wait_on_bit_lock(page_waitqueue(page), &wait,
-					sleep_on_page_killable, TASK_KILLABLE);
+	return __wait_on_page_bit_lock(page_waitqueue(page), &wait, page,
+					sleep_on_page, TASK_KILLABLE);
 }
+
 EXPORT_SYMBOL_GPL(__lock_page_killable);
 
 int __lock_page_or_retry(struct page *page, struct mm_struct *mm,

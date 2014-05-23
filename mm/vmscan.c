@@ -1060,6 +1060,9 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 		 * waiting on the page lock, because there are no references.
 		 */
 		__clear_page_locked(page);
+
+		/* See release_pages on why this clear may be necessary */
+		__ClearPageWaiters(page);
 free_it:
 		nr_reclaimed++;
 
@@ -1391,6 +1394,8 @@ putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
 		if (put_page_testzero(page)) {
 			__ClearPageLRU(page);
 			__ClearPageActive(page);
+			/* See release_pages on why this clear may be necessary */
+			__ClearPageWaiters(page);
 			del_page_from_lru_list(page, lruvec, lru);
 
 			if (unlikely(PageCompound(page))) {
@@ -1613,6 +1618,8 @@ static void move_active_pages_to_lru(struct lruvec *lruvec,
 		if (put_page_testzero(page)) {
 			__ClearPageLRU(page);
 			__ClearPageActive(page);
+			/* See release_pages on why this clear may be necessary */
+			__ClearPageWaiters(page);
 			del_page_from_lru_list(page, lruvec, lru);
 
 			if (unlikely(PageCompound(page))) {
