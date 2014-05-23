@@ -225,8 +225,8 @@ static bool compact_checklock_irqsave(spinlock_t *lock, unsigned long *flags,
 /*
  * Aside from avoiding lock contention, compaction also periodically checks
  * need_resched() and either schedules in sync compaction, or aborts async
- * compaction. This is similar to compact_checklock_irqsave() does, but used
- * where no lock is concerned.
+ * compaction. This is similar to what compact_checklock_irqsave() does, but
+ * is used where no lock is concerned.
  *
  * Returns false when no scheduling was needed, or sync compaction scheduled.
  * Returns true when async compaction should abort.
@@ -237,13 +237,13 @@ static inline bool compact_should_abort(struct compact_control *cc)
 	if (need_resched()) {
 		if (cc->mode == MIGRATE_ASYNC) {
 			cc->contended = true;
-			return false;
+			return true;
 		}
 
 		cond_resched();
 	}
 
-	return true;
+	return false;
 }
 
 /* Returns true if the page is within a block suitable for migration to */
