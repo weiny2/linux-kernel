@@ -329,6 +329,8 @@ static inline void set_freezable(void) {}
 
 #define freezable_schedule_timeout(timeout)  schedule_timeout(timeout)
 
+#define freezable_schedule_timeout_unsafe(timeout)  schedule_timeout(timeout)
+
 #define freezable_schedule_timeout_interruptible(timeout)		\
 	schedule_timeout_interruptible(timeout)
 
