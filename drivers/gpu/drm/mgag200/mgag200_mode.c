@@ -1572,6 +1572,7 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 	int lace = 1 + ((mode->flags & DRM_MODE_FLAG_INTERLACE) ? 1 : 0);
 	int bpp = 32;
 	int i = 0;
+	uint32_t bw;
 
 	if (IS_G200_SE(mdev)) {
 		if (mdev->unique_rev_id == 0x01) {
@@ -1579,37 +1580,54 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 				return MODE_VIRTUAL_X;
 			if (mode->vdisplay > 1200)
 				return MODE_VIRTUAL_Y;
-			if (mga_vga_calculate_mode_bandwidth(mode, bpp)
-				> (24400 * 1024))
+			if ((bw =
+			     mga_vga_calculate_mode_bandwidth(mode, bpp))
+			    > (24400 * 1024)) {
+				DRM_DEBUG_KMS("Mode %d exceeds bandwidth: %d > %d",
+					      mode->base.id, bw, 24400 * 1024);
 				return MODE_BANDWIDTH;
+			}
 		} else if (mdev->unique_rev_id >= 0x02) {
 			if (mode->hdisplay > 1920)
 				return MODE_VIRTUAL_X;
 			if (mode->vdisplay > 1200)
 				return MODE_VIRTUAL_Y;
-			if (mga_vga_calculate_mode_bandwidth(mode, bpp)
-				> (30100 * 1024))
+			if ((bw =
+			     mga_vga_calculate_mode_bandwidth(mode, bpp))
+			    > (30100 * 1024)) {
+				DRM_DEBUG_KMS("Mode %d exceeds bandwidth: %d > %d",
+					      mode->base.id, bw, 30100 * 1024);
 				return MODE_BANDWIDTH;
+			}
 		}
 	} else if (mdev->type == G200_WB) {
 		if (mode->hdisplay > 1280)
 			return MODE_VIRTUAL_X;
 		if (mode->vdisplay > 1024)
 			return MODE_VIRTUAL_Y;
-		if (mga_vga_calculate_mode_bandwidth(mode,
-			bpp > (31877 * 1024)))
-			return MODE_BANDWIDTH;
+		if ((bw = mga_vga_calculate_mode_bandwidth(mode, bpp))
+		    > (31877 * 1024)) {
+		DRM_DEBUG_KMS("Mode %d exceeds bandwidth: %d > %d",
+			      mode->base.id, bw, 31877 * 1024);
+		return MODE_BANDWIDTH;
+		}
 	} else if (mdev->type == G200_EV &&
-		(mga_vga_calculate_mode_bandwidth(mode, bpp)
+		   ((bw = mga_vga_calculate_mode_bandwidth(mode, bpp))
 			> (32700 * 1024))) {
+		DRM_DEBUG_KMS("Mode %d exceeds bandwidth: %d > %d",
+			      mode->base.id, bw, 32700 * 1024);
 		return MODE_BANDWIDTH;
 	} else if (mdev->type == G200_EH &&
-		(mga_vga_calculate_mode_bandwidth(mode, bpp)
+		   ((bw = mga_vga_calculate_mode_bandwidth(mode, bpp))
 			> (37500 * 1024))) {
+		DRM_DEBUG_KMS("Mode %d exceeds bandwidth: %d > %d",
+			      mode->base.id, bw, 31877 * 1024);
 		return MODE_BANDWIDTH;
 	} else if (mdev->type == G200_ER &&
-		(mga_vga_calculate_mode_bandwidth(mode,
-			bpp) > (55000 * 1024))) {
+		   ((bw = mga_vga_calculate_mode_bandwidth(mode, bpp))
+		    > (55000 * 1024))) {
+		DRM_DEBUG_KMS("Mode %d exceeds bandwidth: %d > %d",
+			      mode->base.id, bw, 55000 * 1024);
 		return MODE_BANDWIDTH;
 	}
 	if (mode->hdisplay % 8)
@@ -1621,6 +1639,8 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 	    mode->vsync_start > 4096 * lace ||
 	    mode->vsync_end > 4096 * lace ||
 	    mode->vtotal > 4096 * lace) {
+		DRM_DEBUG_KMS("Mode: %d exceeds h/v param max limits\n",
+			      mode->base.id);
 		return MODE_BAD;
 	}
 
@@ -1640,6 +1660,8 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 	if ((mode->hdisplay * mode->vdisplay * (bpp/8)) > mdev->mc.vram_size) {
 		if (fb_helper_conn)
 			fb_helper_conn->cmdline_mode.specified = false;
+		DRM_DEBUG_KMS("Mode %d needs more than %lu vram\n",
+			      mode->base.id, (unsigned long)mdev->mc.vram_size);
 		return MODE_BAD;
 	}
 
