@@ -1615,12 +1615,12 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 	if (mode->hdisplay % 8)
 		return MODE_H_ILLEGAL;
 
-	if (mode->crtc_hdisplay > 2048 || mode->crtc_hsync_start > 4096 ||
-	    mode->crtc_hsync_end > 4096 || mode->crtc_htotal > 4096 ||
-	    mode->crtc_vdisplay > 2048 * lace ||
-	    mode->crtc_vsync_start > 4096 * lace ||
-	    mode->crtc_vsync_end > 4096 * lace ||
-	    mode->crtc_vtotal > 4096 * lace) {
+	if (mode->hdisplay > 2048 || mode->hsync_start > 4096 ||
+	    mode->hsync_end > 4096 || mode->htotal > 4096 ||
+	    mode->vdisplay > 2048 * lace ||
+	    mode->vsync_start > 4096 * lace ||
+	    mode->vsync_end > 4096 * lace ||
+	    mode->vtotal > 4096 * lace) {
 		return MODE_BAD;
 	}
 
