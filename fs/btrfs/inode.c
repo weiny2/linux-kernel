@@ -1273,6 +1273,15 @@ next_slot:
 			disk_bytenr += cur_offset - found_key.offset;
 			num_bytes = min(end + 1, extent_end) - cur_offset;
 			/*
+			 * if there are pending snapshots for this root,
+			 * we fall into common COW way.
+			 */
+			if (!nolock) {
+				err = btrfs_start_nocow_write(root);
+				if (!err)
+					goto out_check;
+			}
+			/*
 			 * force cow if csum exists in the range.
 			 * this ensure that csum for a given extent are
 			 * either valid or do not exist.
@@ -1291,6 +1300,8 @@ next_slot:
 out_check:
 		if (extent_end <= start) {
 			path->slots[0]++;
+			if (!nolock && nocow)
+				btrfs_end_nocow_write(root);
 			goto next_slot;
 		}
 		if (!nocow) {
@@ -1308,8 +1319,11 @@ out_check:
 			ret = cow_file_range(inode, locked_page,
 					     cow_start, found_key.offset - 1,
 					     page_started, nr_written, 1);
-			if (ret)
+			if (ret) {
+				if (!nolock && nocow)
+					btrfs_end_nocow_write(root);
 				goto error;
+			}
 			cow_start = (u64)-1;
 		}
 
@@ -1356,8 +1370,11 @@ out_check:
 		    BTRFS_DATA_RELOC_TREE_OBJECTID) {
 			ret = btrfs_reloc_clone_csums(inode, cur_offset,
 						      num_bytes);
-			if (ret)
+			if (ret) {
+				if (!nolock && nocow)
+					btrfs_end_nocow_write(root);
 				goto error;
+			}
 		}
 
 		extent_clear_unlock_delalloc(inode, cur_offset,
@@ -1365,6 +1382,8 @@ out_check:
 					     locked_page, EXTENT_LOCKED |
 					     EXTENT_DELALLOC, PAGE_UNLOCK |
 					     PAGE_SET_PRIVATE2);
+		if (!nolock && nocow)
+			btrfs_end_nocow_write(root);
 		cur_offset = extent_end;
 		if (cur_offset > end)
 			break;
@@ -7442,15 +7461,15 @@ static ssize_t btrfs_direct_IO(int rw, struct kiocb *iocb,
 	smp_mb__after_atomic_inc();
 
 	/*
-	 * The generic stuff only does filemap_write_and_wait_range, which isn't
-	 * enough if we've written compressed pages to this area, so we need to
-	 * call btrfs_wait_ordered_range to make absolutely sure that any
-	 * outstanding dirty pages are on disk.
+	 * The generic stuff only does filemap_write_and_wait_range, which
+	 * isn't enough if we've written compressed pages to this area, so
+	 * we need to flush the dirty pages again to make absolutely sure
+	 * that any outstanding dirty pages are on disk.
 	 */
 	count = iov_length(iov, nr_segs);
-	ret = btrfs_wait_ordered_range(inode, offset, count);
-	if (ret)
-		return ret;
+	if (test_bit(BTRFS_INODE_HAS_ASYNC_EXTENT,
+		     &BTRFS_I(inode)->runtime_flags))
+		filemap_fdatawrite_range(inode->i_mapping, offset, count);
 
 	if (rw & WRITE) {
 		/*
@@ -8457,7 +8476,8 @@ void btrfs_wait_and_free_delalloc_work(struct btrfs_delalloc_work *work)
  * some fairly slow code that needs optimization. This walks the list
  * of all the inodes with pending delalloc and forces them to disk.
  */
-static int __start_delalloc_inodes(struct btrfs_root *root, int delay_iput)
+static int __start_delalloc_inodes(struct btrfs_root *root, int delay_iput,
+				   int nr)
 {
 	struct btrfs_inode *binode;
 	struct inode *inode;
@@ -8469,6 +8489,7 @@ static int __start_delalloc_inodes(struct btrfs_root *root, int delay_iput)
 	INIT_LIST_HEAD(&works);
 	INIT_LIST_HEAD(&splice);
 
+	mutex_lock(&root->delalloc_mutex);
 	spin_lock(&root->delalloc_lock);
 	list_splice_init(&root->delalloc_inodes, &splice);
 	while (!list_empty(&splice)) {
@@ -8496,17 +8517,14 @@ static int __start_delalloc_inodes(struct btrfs_root *root, int delay_iput)
 		list_add_tail(&work->list, &works);
 		btrfs_queue_worker(&root->fs_info->flush_workers,
 				   &work->work);
-
+		ret++;
+		if (nr != -1 && ret >= nr)
+			goto out;
 		cond_resched();
 		spin_lock(&root->delalloc_lock);
 	}
 	spin_unlock(&root->delalloc_lock);
 
-	list_for_each_entry_safe(work, next, &works, list) {
-		list_del_init(&work->list);
-		btrfs_wait_and_free_delalloc_work(work);
-	}
-	return 0;
 out:
 	list_for_each_entry_safe(work, next, &works, list) {
 		list_del_init(&work->list);
@@ -8518,6 +8536,7 @@ out:
 		list_splice_tail(&splice, &root->delalloc_inodes);
 		spin_unlock(&root->delalloc_lock);
 	}
+	mutex_unlock(&root->delalloc_mutex);
 	return ret;
 }
 
@@ -8528,7 +8547,9 @@ int btrfs_start_delalloc_inodes(struct btrfs_root *root, int delay_iput)
 	if (test_bit(BTRFS_FS_STATE_ERROR, &root->fs_info->fs_state))
 		return -EROFS;
 
-	ret = __start_delalloc_inodes(root, delay_iput);
+	ret = __start_delalloc_inodes(root, delay_iput, -1);
+	if (ret > 0)
+		ret = 0;
 	/*
 	 * the filemap_flush will queue IO into the worker threads, but
 	 * we have to make sure the IO is actually started and that
@@ -8545,7 +8566,8 @@ int btrfs_start_delalloc_inodes(struct btrfs_root *root, int delay_iput)
 	return ret;
 }
 
-int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, int delay_iput)
+int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, int delay_iput,
+			       int nr)
 {
 	struct btrfs_root *root;
 	struct list_head splice;
@@ -8556,9 +8578,10 @@ int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, int delay_iput)
 
 	INIT_LIST_HEAD(&splice);
 
+	mutex_lock(&fs_info->delalloc_root_mutex);
 	spin_lock(&fs_info->delalloc_root_lock);
 	list_splice_init(&fs_info->delalloc_roots, &splice);
-	while (!list_empty(&splice)) {
+	while (!list_empty(&splice) && nr) {
 		root = list_first_entry(&splice, struct btrfs_root,
 					delalloc_root);
 		root = btrfs_grab_fs_root(root);
@@ -8567,15 +8590,20 @@ int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, int delay_iput)
 			       &fs_info->delalloc_roots);
 		spin_unlock(&fs_info->delalloc_root_lock);
 
-		ret = __start_delalloc_inodes(root, delay_iput);
+		ret = __start_delalloc_inodes(root, delay_iput, nr);
 		btrfs_put_fs_root(root);
-		if (ret)
+		if (ret < 0)
 			goto out;
 
+		if (nr != -1) {
+			nr -= ret;
+			WARN_ON(nr < 0);
+		}
 		spin_lock(&fs_info->delalloc_root_lock);
 	}
 	spin_unlock(&fs_info->delalloc_root_lock);
 
+	ret = 0;
 	atomic_inc(&fs_info->async_submit_draining);
 	while (atomic_read(&fs_info->nr_async_submits) ||
 	      atomic_read(&fs_info->async_delalloc_pages)) {
@@ -8584,13 +8612,13 @@ int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, int delay_iput)
 		    atomic_read(&fs_info->async_delalloc_pages) == 0));
 	}
 	atomic_dec(&fs_info->async_submit_draining);
-	return 0;
 out:
 	if (!list_empty_careful(&splice)) {
 		spin_lock(&fs_info->delalloc_root_lock);
 		list_splice_tail(&splice, &fs_info->delalloc_roots);
 		spin_unlock(&fs_info->delalloc_root_lock);
 	}
+	mutex_unlock(&fs_info->delalloc_root_mutex);
 	return ret;
 }
 

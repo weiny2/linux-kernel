@@ -1365,11 +1365,11 @@ lock_and_cleanup_extent_if_need(struct inode *inode, struct page **pages,
 		struct btrfs_ordered_extent *ordered;
 		lock_extent_bits(&BTRFS_I(inode)->io_tree,
 				 start_pos, last_pos, 0, cached_state);
-		ordered = btrfs_lookup_first_ordered_extent(inode, last_pos);
+		ordered = btrfs_lookup_ordered_range(inode, start_pos,
+						     last_pos - start_pos + 1);
 		if (ordered &&
 		    ordered->file_offset + ordered->len > start_pos &&
 		    ordered->file_offset <= last_pos) {
-			btrfs_put_ordered_extent(ordered);
 			unlock_extent_cached(&BTRFS_I(inode)->io_tree,
 					     start_pos, last_pos,
 					     cached_state, GFP_NOFS);
@@ -1377,12 +1377,9 @@ lock_and_cleanup_extent_if_need(struct inode *inode, struct page **pages,
 				unlock_page(pages[i]);
 				page_cache_release(pages[i]);
 			}
-			ret = btrfs_wait_ordered_range(inode, start_pos,
-						last_pos - start_pos + 1);
-			if (ret)
-				return ret;
-			else
-				return -EAGAIN;
+			btrfs_start_ordered_extent(inode, ordered, 1);
+			btrfs_put_ordered_extent(ordered);
+			return -EAGAIN;
 		}
 		if (ordered)
 			btrfs_put_ordered_extent(ordered);
@@ -1415,6 +1412,10 @@ static noinline int check_can_nocow(struct inode *inode, loff_t pos,
 	u64 num_bytes;
 	int ret;
 
+	ret = btrfs_start_nocow_write(root);
+	if (!ret)
+		return -ENOSPC;
+
 	lockstart = round_down(pos, root->sectorsize);
 	lockend = round_up(pos + *write_bytes, root->sectorsize) - 1;
 
@@ -1432,11 +1433,13 @@ static noinline int check_can_nocow(struct inode *inode, loff_t pos,
 
 	num_bytes = lockend - lockstart + 1;
 	ret = can_nocow_extent(inode, lockstart, &num_bytes, NULL, NULL, NULL);
-	if (ret <= 0)
+	if (ret <= 0) {
 		ret = 0;
-	else
+		btrfs_end_nocow_write(root);
+	} else {
 		*write_bytes = min_t(size_t, *write_bytes ,
 				     num_bytes - pos + lockstart);
+	}
 
 	unlock_extent(&BTRFS_I(inode)->io_tree, lockstart, lockend);
 
@@ -1525,6 +1528,8 @@ static noinline ssize_t __btrfs_buffered_write(struct file *file,
 			if (!only_release_metadata)
 				btrfs_free_reserved_data_space(inode,
 							       reserve_bytes);
+			else
+				btrfs_end_nocow_write(root);
 			break;
 		}
 
@@ -1613,6 +1618,9 @@ again:
 		}
 
 		release_bytes = 0;
+		if (only_release_metadata)
+			btrfs_end_nocow_write(root);
+
 		if (only_release_metadata && copied > 0) {
 			u64 lockstart = round_down(pos, root->sectorsize);
 			u64 lockend = lockstart +
@@ -1639,10 +1647,12 @@ again:
 	kfree(pages);
 
 	if (release_bytes) {
-		if (only_release_metadata)
+		if (only_release_metadata) {
+			btrfs_end_nocow_write(root);
 			btrfs_delalloc_release_metadata(inode, release_bytes);
-		else
+		} else {
 			btrfs_delalloc_release_space(inode, release_bytes);
+		}
 	}
 
 	return num_written ? num_written : ret;
@@ -1713,6 +1723,7 @@ static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 	struct btrfs_root *root = BTRFS_I(inode)->root;
 	loff_t *ppos = &iocb->ki_pos;
 	u64 start_pos;
+	u64 end_pos;
 	ssize_t num_written = 0;
 	ssize_t err = 0;
 	size_t count, ocount;
@@ -1767,7 +1778,9 @@ static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 
 	start_pos = round_down(pos, root->sectorsize);
 	if (start_pos > i_size_read(inode)) {
-		err = btrfs_cont_expand(inode, i_size_read(inode), start_pos);
+		/* Expand hole size to cover write data, preventing empty gap */
+		end_pos = round_up(pos + count, root->sectorsize);
+		err = btrfs_cont_expand(inode, i_size_read(inode), end_pos);
 		if (err) {
 			mutex_unlock(&inode->i_mutex);
 			goto out;

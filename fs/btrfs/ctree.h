@@ -1497,6 +1497,7 @@ struct btrfs_fs_info {
 	 */
 	struct list_head ordered_roots;
 
+	struct mutex delalloc_root_mutex;
 	spinlock_t delalloc_root_lock;
 	/* all fs/file tree roots that have delalloc inodes. */
 	struct list_head delalloc_roots;
@@ -1689,6 +1690,11 @@ struct btrfs_fs_info {
 	unsigned int update_uuid_tree_gen:1;
 };
 
+struct btrfs_subvolume_writers {
+	struct percpu_counter	counter;
+	wait_queue_head_t	wait;
+};
+
 /*
  * in ram representation of the tree.  extent_root is used for all allocations
  * and for the extent tree extent_root root.
@@ -1808,6 +1814,7 @@ struct btrfs_root {
 	spinlock_t root_item_lock;
 	atomic_t refs;
 
+	struct mutex delalloc_mutex;
 	spinlock_t delalloc_lock;
 	/*
 	 * all of the inodes that have delalloc bytes.  It is possible for
@@ -1817,6 +1824,8 @@ struct btrfs_root {
 	struct list_head delalloc_inodes;
 	struct list_head delalloc_root;
 	u64 nr_delalloc_inodes;
+
+	struct mutex ordered_extent_mutex;
 	/*
 	 * this is used by the balancing code to wait for all the pending
 	 * ordered extents
@@ -1831,6 +1840,8 @@ struct btrfs_root {
 	struct list_head ordered_extents;
 	struct list_head ordered_root;
 	u64 nr_ordered_extents;
+	struct btrfs_subvolume_writers *subv_writers;
+	atomic_t will_be_snapshoted;
 };
 
 struct btrfs_ioctl_defrag_range_args {
@@ -3355,6 +3366,9 @@ int btrfs_init_space_info(struct btrfs_fs_info *fs_info);
 int btrfs_delayed_refs_qgroup_accounting(struct btrfs_trans_handle *trans,
 					 struct btrfs_fs_info *fs_info);
 int __get_raid_index(u64 flags);
+
+int btrfs_start_nocow_write(struct btrfs_root *root);
+void btrfs_end_nocow_write(struct btrfs_root *root);
 /* ctree.c */
 int btrfs_bin_search(struct extent_buffer *eb, struct btrfs_key *key,
 		     int level, int *slot);
@@ -3732,7 +3746,8 @@ int btrfs_truncate_inode_items(struct btrfs_trans_handle *trans,
 			       u32 min_type);
 
 int btrfs_start_delalloc_inodes(struct btrfs_root *root, int delay_iput);
-int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, int delay_iput);
+int btrfs_start_delalloc_roots(struct btrfs_fs_info *fs_info, int delay_iput,
+			       int nr);
 int btrfs_set_extent_delalloc(struct inode *inode, u64 start, u64 end,
 			      struct extent_state **cached_state);
 int btrfs_create_subvol_root(struct btrfs_trans_handle *trans,

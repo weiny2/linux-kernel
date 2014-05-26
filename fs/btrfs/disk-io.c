@@ -1160,6 +1160,32 @@ void clean_tree_block(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 	}
 }
 
+static struct btrfs_subvolume_writers *btrfs_alloc_subvolume_writers(void)
+{
+	struct btrfs_subvolume_writers *writers;
+	int ret;
+
+	writers = kmalloc(sizeof(*writers), GFP_NOFS);
+	if (!writers)
+		return ERR_PTR(-ENOMEM);
+
+	ret = percpu_counter_init(&writers->counter, 0);
+	if (ret < 0) {
+		kfree(writers);
+		return ERR_PTR(ret);
+	}
+
+	init_waitqueue_head(&writers->wait);
+	return writers;
+}
+
+static void
+btrfs_free_subvolume_writers(struct btrfs_subvolume_writers *writers)
+{
+	percpu_counter_destroy(&writers->counter);
+	kfree(writers);
+}
+
 static void __setup_root(u32 nodesize, u32 leafsize, u32 sectorsize,
 			 u32 stripesize, struct btrfs_root *root,
 			 struct btrfs_fs_info *fs_info,
@@ -1205,6 +1231,8 @@ static void __setup_root(u32 nodesize, u32 leafsize, u32 sectorsize,
 	spin_lock_init(&root->log_extents_lock[1]);
 	mutex_init(&root->objectid_mutex);
 	mutex_init(&root->log_mutex);
+	mutex_init(&root->ordered_extent_mutex);
+	mutex_init(&root->delalloc_mutex);
 	init_waitqueue_head(&root->log_writer_wait);
 	init_waitqueue_head(&root->log_commit_wait[0]);
 	init_waitqueue_head(&root->log_commit_wait[1]);
@@ -1216,6 +1244,7 @@ static void __setup_root(u32 nodesize, u32 leafsize, u32 sectorsize,
 	atomic_set(&root->log_batch, 0);
 	atomic_set(&root->orphan_inodes, 0);
 	atomic_set(&root->refs, 1);
+	atomic_set(&root->will_be_snapshoted, 0);
 	root->log_transid = 0;
 	root->log_transid_committed = -1;
 	root->last_log_commit = 0;
@@ -1515,6 +1544,7 @@ struct btrfs_root *btrfs_read_fs_root(struct btrfs_root *tree_root,
 int btrfs_init_fs_root(struct btrfs_root *root)
 {
 	int ret;
+	struct btrfs_subvolume_writers *writers;
 
 	root->free_ino_ctl = kzalloc(sizeof(*root->free_ino_ctl), GFP_NOFS);
 	root->free_ino_pinned = kzalloc(sizeof(*root->free_ino_pinned),
@@ -1524,6 +1554,13 @@ int btrfs_init_fs_root(struct btrfs_root *root)
 		goto fail;
 	}
 
+	writers = btrfs_alloc_subvolume_writers();
+	if (IS_ERR(writers)) {
+		ret = PTR_ERR(writers);
+		goto fail;
+	}
+	root->subv_writers = writers;
+
 	btrfs_init_free_ino_ctl(root);
 	mutex_init(&root->fs_commit_mutex);
 	spin_lock_init(&root->cache_lock);
@@ -1531,8 +1568,11 @@ int btrfs_init_fs_root(struct btrfs_root *root)
 
 	ret = get_anon_bdev(&root->anon_dev);
 	if (ret)
-		goto fail;
+		goto free_writers;
 	return 0;
+
+free_writers:
+	btrfs_free_subvolume_writers(root->subv_writers);
 fail:
 	kfree(root->free_ino_ctl);
 	kfree(root->free_ino_pinned);
@@ -2184,6 +2224,7 @@ int open_ctree(struct super_block *sb,
 	spin_lock_init(&fs_info->buffer_lock);
 	rwlock_init(&fs_info->tree_mod_log_lock);
 	mutex_init(&fs_info->reloc_mutex);
+	mutex_init(&fs_info->delalloc_root_mutex);
 	seqlock_init(&fs_info->profiles_lock);
 
 	init_completion(&fs_info->kobj_unregister);
@@ -2870,7 +2911,7 @@ retry_root_backup:
 			printk(KERN_ERR "BTRFS: failed to read log tree\n");
 			free_extent_buffer(log_tree_root->node);
 			kfree(log_tree_root);
-			goto fail_trans_kthread;
+			goto fail_qgroup;
 		}
 		/* returns with log_tree_root freed on success */
 		ret = btrfs_recover_log_trees(log_tree_root);
@@ -2879,24 +2920,24 @@ retry_root_backup:
 				    "Failed to recover log tree");
 			free_extent_buffer(log_tree_root->node);
 			kfree(log_tree_root);
-			goto fail_trans_kthread;
+			goto fail_qgroup;
 		}
 
 		if (sb->s_flags & MS_RDONLY) {
 			ret = btrfs_commit_super(tree_root);
 			if (ret)
-				goto fail_trans_kthread;
+				goto fail_qgroup;
 		}
 	}
 
 	ret = btrfs_find_orphan_roots(tree_root);
 	if (ret)
-		goto fail_trans_kthread;
+		goto fail_qgroup;
 
 	if (!(sb->s_flags & MS_RDONLY)) {
 		ret = btrfs_cleanup_fs_roots(fs_info);
 		if (ret)
-			goto fail_trans_kthread;
+			goto fail_qgroup;
 
 		ret = btrfs_recover_relocation(tree_root);
 		if (ret < 0) {
@@ -3523,6 +3564,8 @@ static void free_fs_root(struct btrfs_root *root)
 	root->orphan_block_rsv = NULL;
 	if (root->anon_dev)
 		free_anon_bdev(root->anon_dev);
+	if (root->subv_writers)
+		btrfs_free_subvolume_writers(root->subv_writers);
 	free_extent_buffer(root->node);
 	free_extent_buffer(root->commit_root);
 	kfree(root->free_ino_ctl);

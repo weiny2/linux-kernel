@@ -349,10 +349,13 @@ int btrfs_dec_test_first_ordered_pending(struct inode *inode,
 	if (!uptodate)
 		set_bit(BTRFS_ORDERED_IOERR, &entry->flags);
 
-	if (entry->bytes_left == 0)
+	if (entry->bytes_left == 0) {
 		ret = test_and_set_bit(BTRFS_ORDERED_IO_DONE, &entry->flags);
-	else
+		if (waitqueue_active(&entry->wait))
+			wake_up(&entry->wait);
+	} else {
 		ret = 1;
+	}
 out:
 	if (!ret && cached && entry) {
 		*cached = entry;
@@ -410,10 +413,13 @@ have_entry:
 	if (!uptodate)
 		set_bit(BTRFS_ORDERED_IOERR, &entry->flags);
 
-	if (entry->bytes_left == 0)
+	if (entry->bytes_left == 0) {
 		ret = test_and_set_bit(BTRFS_ORDERED_IO_DONE, &entry->flags);
-	else
+		if (waitqueue_active(&entry->wait))
+			wake_up(&entry->wait);
+	} else {
 		ret = 1;
+	}
 out:
 	if (!ret && cached && entry) {
 		*cached = entry;
@@ -598,7 +604,7 @@ int btrfs_wait_ordered_extents(struct btrfs_root *root, int nr)
 	INIT_LIST_HEAD(&splice);
 	INIT_LIST_HEAD(&works);
 
-	mutex_lock(&root->fs_info->ordered_operations_mutex);
+	mutex_lock(&root->ordered_extent_mutex);
 	spin_lock(&root->ordered_extent_lock);
 	list_splice_init(&root->ordered_extents, &splice);
 	while (!list_empty(&splice) && nr) {
@@ -629,7 +635,7 @@ int btrfs_wait_ordered_extents(struct btrfs_root *root, int nr)
 		btrfs_put_ordered_extent(ordered);
 		cond_resched();
 	}
-	mutex_unlock(&root->fs_info->ordered_operations_mutex);
+	mutex_unlock(&root->ordered_extent_mutex);
 
 	return count;
 }
@@ -642,6 +648,7 @@ void btrfs_wait_ordered_roots(struct btrfs_fs_info *fs_info, int nr)
 
 	INIT_LIST_HEAD(&splice);
 
+	mutex_lock(&fs_info->ordered_operations_mutex);
 	spin_lock(&fs_info->ordered_root_lock);
 	list_splice_init(&fs_info->ordered_roots, &splice);
 	while (!list_empty(&splice) && nr) {
@@ -664,6 +671,7 @@ void btrfs_wait_ordered_roots(struct btrfs_fs_info *fs_info, int nr)
 	}
 	list_splice_tail(&splice, &fs_info->ordered_roots);
 	spin_unlock(&fs_info->ordered_root_lock);
+	mutex_unlock(&fs_info->ordered_operations_mutex);
 }
 
 /*
