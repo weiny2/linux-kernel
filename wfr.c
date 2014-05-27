@@ -1664,6 +1664,21 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		   include this */
 		reg &= ~DC_DC8051_ERR_FLG_SET_BY_8051_SMASK;
 	}
+	if (reg & DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK) {
+		/*
+		 * Lost the 8051 heartbeat.  If this happens, we
+		 * receive constant interrupts about it.  Disable
+		 * the interrupt after the first.
+		 */
+		dd_dev_err(dd, "Lost 8051 heartbeat\n");
+		write_csr(dd, DC_DC8051_ERR_EN,
+			read_csr(dd, DC_DC8051_ERR_EN)
+			  & ~DC_DC8051_ERR_EN_LOST_8051_HEART_BEAT_SMASK);
+
+		/* clear flag so "unhandled" message below does not
+		   include this */
+		reg &= ~DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK;
+	}
 	if (reg) {
 		/* TODO: implement all other flags here */
 		dd_dev_info(dd, "%s: 8051 Error: 0x%llx (unhandled)\n", __func__ , reg);
