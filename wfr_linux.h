@@ -42,9 +42,17 @@
 /* Unless CONFIG_STL_MGMT is defined, this file is empty */
 #ifdef CONFIG_STL_MGMT
 
-#define STL_ATTRIB_ID_CONGESTION_INFO                  cpu_to_be16(0x008b)
-#define STL_ATTRIB_ID_HFI_CONGESTION_SETTING           cpu_to_be16(0x0090)
-#define STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE         cpu_to_be16(0x0091)
+/* STL SMA attribute IDs */
+#define STL_ATTRIB_ID_CONGESTION_INFO		cpu_to_be16(0x008b)
+#define STL_ATTRIB_ID_HFI_CONGESTION_SETTING	cpu_to_be16(0x0090)
+#define STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE	cpu_to_be16(0x0091)
+
+/* STL PMA attribute IDs */
+#define STL_PM_ATTRIB_ID_PORT_STATUS		cpu_to_be16(0x0040)
+#define STL_PM_ATTRIB_ID_CLEAR_PORT_STATUS	cpu_to_be16(0x0041)
+
+/* STL status codes */
+#define STL_PM_STATUS_REQUEST_TOO_LARGE		cpu_to_be16(0x100)
 
 #endif /* CONFIG_STL_MGMT */
 #endif /* _WFR_LINUX_H */
