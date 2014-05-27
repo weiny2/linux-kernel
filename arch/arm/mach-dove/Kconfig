@@ -32,13 +32,6 @@ config MACH_DOVE_DT
 	  Say 'Y' here if you want your kernel to support the
 	  Marvell Dove using flattened device tree.
 
-config MACH_CUBOX
-	bool "SolidRun CuBox"
-	select CPU_PJ4
-	select IWMMXT
-	help
-	  Say 'Y' here if you want your kernel to support the
-	  SolidRun CuBox platform
 endmenu
 
 endif
