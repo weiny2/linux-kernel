@@ -58,8 +58,11 @@ static int reply(void *arg)
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
 }
 
-static int reply_failure(struct ib_smp *smp)
+static int reply_failure(void *arg)
 {
+	/* XXX change all callers so that they all pass a
+	 * struct ib_mad_hdr * */
+	struct ib_mad_hdr *smp = (struct ib_mad_hdr *)arg;
 	/*
 	 * The verbs framework will handle the directed/LID route
 	 * packet changes.
@@ -2922,6 +2925,218 @@ static int pma_set_portcounters_ext(struct ib_pma_mad *pmp,
 
 #ifdef CONFIG_STL_MGMT
 
+struct stl_congestion_info_attr {
+	__be16 congestion_info;
+	u8 control_table_cap;	/* Multiple of 64 entry unit CCTs */
+	u8 congestion_log_length;
+} __packed;
+
+static int subn_get_stl_congestion_info(struct stl_smp *smp,
+				      struct ib_device *ibdev, u8 port,
+				      u32 *resp_len)
+{
+	struct stl_congestion_info_attr *p =
+		(struct stl_congestion_info_attr *)stl_get_smp_data(smp);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	memset(p, 0, sizeof(*p));
+
+	p->congestion_info = 0;
+	p->control_table_cap = ppd->cc_max_table_entries;
+	p->congestion_log_length = 0; /* FIXME */
+
+	*resp_len += sizeof(*p);
+
+	return reply(smp);
+}
+
+static int subn_get_stl_congestion_setting(struct stl_smp *smp,
+					   struct ib_device *ibdev, u8 port,
+					   u32 *resp_len)
+{
+	int i;
+	struct stl_congestion_setting_attr *p =
+		(struct stl_congestion_setting_attr *)stl_get_smp_data(smp);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct stl_congestion_setting_entry_shadow *entries;
+
+	memset(p, 0, sizeof(*p));
+
+	spin_lock(&ppd->cc_shadow_lock);
+
+	if (!ppd->congestion_entries_shadow) {
+		spin_unlock(&ppd->cc_shadow_lock);
+		return IB_MAD_RESULT_SUCCESS;
+	}
+
+	entries = ppd->congestion_entries_shadow->entries;
+	p->port_control = cpu_to_be16(
+		ppd->congestion_entries_shadow->port_control);
+	p->control_map = cpu_to_be32(
+		ppd->congestion_entries_shadow->control_map);
+	for (i = 0; i < STL_MAX_SLS; i++) {
+		p->entries[i].ccti_increase = entries[i].ccti_increase;
+		p->entries[i].ccti_timer = cpu_to_be16(entries[i].ccti_timer);
+		p->entries[i].trigger_threshold =
+			entries[i].trigger_threshold;
+		p->entries[i].ccti_min = entries[i].ccti_min;
+	}
+
+	spin_unlock(&ppd->cc_shadow_lock);
+
+	*resp_len += sizeof(*p);
+
+	return reply(smp);
+}
+
+static int subn_set_stl_congestion_setting(struct stl_smp *smp,
+					   struct ib_device *ibdev, u8 port,
+					   u32 *resp_len)
+{
+	struct stl_congestion_setting_attr *p =
+		(struct stl_congestion_setting_attr *)stl_get_smp_data(smp);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	int i;
+
+	ppd->cc_sl_control_map = be32_to_cpu(p->control_map);
+
+	for (i = 0; i < STL_MAX_SLS; i++) {
+		ppd->congestion_entries[i].ccti_increase =
+			p->entries[i].ccti_increase;
+
+		ppd->congestion_entries[i].ccti_timer =
+			be16_to_cpu(p->entries[i].ccti_timer);
+
+		ppd->congestion_entries[i].trigger_threshold =
+			p->entries[i].trigger_threshold;
+
+		ppd->congestion_entries[i].ccti_min =
+			p->entries[i].ccti_min;
+	}
+
+	return subn_get_stl_congestion_setting(smp, ibdev, port, resp_len);
+}
+
+static int subn_get_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
+				 u8 port, u32 *resp_len)
+{
+	struct ib_cc_table_attr *p =
+		(struct ib_cc_table_attr *)stl_get_smp_data(smp);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	u32 am = smp->attr_mod;
+	u32 cct_block_index = be32_to_cpu(am) & 0xff;
+	u32 n_blocks_req = (be32_to_cpu(am) & 0xff000000) >> 24;
+	u32 max_cct_block;
+	u32 cct_entry;
+	struct ib_cc_table_entry_shadow *entries;
+	int i;
+
+	memset(p, 0, sizeof(*p));
+
+	if (cct_block_index > ppd->cc_max_table_entries) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply_failure(smp);
+	}
+
+	if (!ppd->congestion_entries_shadow)
+		return reply_failure(smp);
+
+	smp->attr_mod = am;
+
+	spin_lock(&ppd->cc_shadow_lock);
+
+	max_cct_block =
+		(ppd->ccti_entries_shadow->ccti_last_entry + 1)/IB_CCT_ENTRIES;
+	max_cct_block = max_cct_block ? max_cct_block - 1 : 0;
+
+	if (cct_block_index + n_blocks_req - 1 > max_cct_block) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		spin_unlock(&ppd->cc_shadow_lock);
+		return reply_failure(smp);
+	}
+
+	cct_entry = IB_CCT_ENTRIES * n_blocks_req;
+
+	cct_entry--;
+
+	p->ccti_limit = cpu_to_be16(cct_entry);
+
+	entries = &ppd->ccti_entries_shadow->
+		entries[IB_CCT_ENTRIES * cct_block_index];
+
+	for (i = 0; i <= cct_entry; i++)
+		p->ccti_entries[i].entry = cpu_to_be16(entries[i].entry);
+
+	spin_unlock(&ppd->cc_shadow_lock);
+
+	*resp_len += sizeof(u16)*(IB_CCT_ENTRIES * n_blocks_req + 1);
+
+	return reply(smp);
+}
+
+static int subn_set_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
+				 u8 port, u32 *resp_len)
+{
+	struct ib_cc_table_attr *p =
+		(struct ib_cc_table_attr *)stl_get_smp_data(smp);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	u32 cct_block_index = be32_to_cpu(smp->attr_mod) & 0xff;
+	u32 n_blocks_req = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 cct_entry;
+	struct ib_cc_table_entry_shadow *entries;
+	int i;
+
+	/* Is the table index more than what is supported? */
+	if (cct_block_index > ppd->cc_max_table_entries)
+		goto bail;
+
+	if (!ppd->congestion_entries_shadow)
+		return reply_failure(smp);
+
+	/* If this packet is the first in the sequence then
+	 * zero the total table entry count.
+	 */
+	if (be16_to_cpu(p->ccti_limit) < IB_CCT_ENTRIES)
+		ppd->total_cct_entry = 0;
+
+	cct_entry = ((n_blocks_req - 1) * IB_CCT_ENTRIES) +
+		    (be16_to_cpu(p->ccti_limit))%IB_CCT_ENTRIES;
+
+	if (ppd->total_cct_entry + (cct_entry + 1) >
+	    ppd->cc_supported_table_entries)
+		goto bail;
+
+	ppd->total_cct_entry += (cct_entry + 1);
+
+	ppd->ccti_limit = be16_to_cpu(p->ccti_limit);
+
+	entries = ppd->ccti_entries + (IB_CCT_ENTRIES * cct_block_index);
+
+	for (i = 0; i <= cct_entry; i++)
+		entries[i].entry = be16_to_cpu(p->ccti_entries[i].entry);
+
+	spin_lock(&ppd->cc_shadow_lock);
+
+	ppd->ccti_entries_shadow->ccti_last_entry = ppd->total_cct_entry - 1;
+	memcpy(ppd->ccti_entries_shadow->entries, ppd->ccti_entries,
+	       (ppd->total_cct_entry * sizeof(struct ib_cc_table_entry)));
+
+	ppd->congestion_entries_shadow->port_control = IB_CC_CCS_PC_SL_BASED;
+	ppd->congestion_entries_shadow->control_map = ppd->cc_sl_control_map;
+	memcpy(ppd->congestion_entries_shadow->entries, ppd->congestion_entries,
+	       STL_MAX_SLS * sizeof(struct ib_cc_congestion_entry));
+	spin_unlock(&ppd->cc_shadow_lock);
+
+	return subn_get_stl_cc_table(smp, ibdev, port, resp_len);
+
+bail:
+	return reply_failure(smp);
+}
+
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			    u8 port, struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad,
@@ -3001,6 +3216,18 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_get_stl_vl_arb(smp, ibdev, port, resp_len);
 			goto bail;
+		case STL_ATTRIB_ID_CONGESTION_INFO:
+			ret = subn_get_stl_congestion_info(smp, ibdev, port,
+							 resp_len);
+			goto bail;
+		case STL_ATTRIB_ID_HFI_CONGESTION_SETTING:
+			ret = subn_get_stl_congestion_setting(smp, ibdev,
+							      port, resp_len);
+			goto bail;
+		case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
+			ret = subn_get_stl_cc_table(smp, ibdev, port,
+						    resp_len);
+			goto bail;
 		case IB_SMP_ATTR_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
 				ret = IB_MAD_RESULT_SUCCESS |
@@ -3042,6 +3269,14 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		case IB_SMP_ATTR_VL_ARB_TABLE:
 			ret = subn_set_stl_vl_arb(smp, ibdev, port, resp_len);
+			goto bail;
+		case STL_ATTRIB_ID_HFI_CONGESTION_SETTING:
+			ret = subn_set_stl_congestion_setting(smp, ibdev,
+							      port, resp_len);
+			goto bail;
+		case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
+			ret = subn_set_stl_cc_table(smp, ibdev, port,
+						    resp_len);
 			goto bail;
 		case IB_SMP_ATTR_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
@@ -3484,7 +3719,12 @@ static int cc_get_congestion_setting(struct ib_cc_mad *ccp,
 		(struct ib_cc_congestion_setting_attr *)ccp->mgmt_data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+#ifdef CONFIG_STL_MGMT
+	struct stl_congestion_setting_entry_shadow *entries;
+#else
 	struct ib_cc_congestion_entry_shadow *entries;
+#endif /* !CONFIG_STL_MGMT */
+
 
 	memset(ccp->mgmt_data, 0, sizeof(ccp->mgmt_data));
 
@@ -3494,7 +3734,7 @@ static int cc_get_congestion_setting(struct ib_cc_mad *ccp,
 	p->port_control = cpu_to_be16(
 		ppd->congestion_entries_shadow->port_control);
 	p->control_map = cpu_to_be16(
-		ppd->congestion_entries_shadow->control_map);
+		ppd->congestion_entries_shadow->control_map & 0xffff);
 	for (i = 0; i < IB_CC_CCS_ENTRIES; i++) {
 		p->entries[i].ccti_increase = entries[i].ccti_increase;
 		p->entries[i].ccti_timer = cpu_to_be16(entries[i].ccti_timer);
@@ -3569,7 +3809,7 @@ static int cc_set_congestion_setting(struct ib_cc_mad *ccp,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int i;
 
-	ppd->cc_sl_control_map = be16_to_cpu(p->control_map);
+	ppd->cc_sl_control_map = be16_to_cpu(p->control_map) & 0xffff;
 
 	for (i = 0; i < IB_CC_CCS_ENTRIES; i++) {
 		ppd->congestion_entries[i].ccti_increase =
@@ -3632,7 +3872,8 @@ static int cc_set_congestion_control_table(struct ib_cc_mad *ccp,
 		(ppd->total_cct_entry * sizeof(struct ib_cc_table_entry)));
 
 	ppd->congestion_entries_shadow->port_control = IB_CC_CCS_PC_SL_BASED;
-	ppd->congestion_entries_shadow->control_map = ppd->cc_sl_control_map;
+	ppd->congestion_entries_shadow->control_map =
+		ppd->cc_sl_control_map & 0xffff;
 	memcpy(ppd->congestion_entries_shadow->entries, ppd->congestion_entries,
 		IB_CC_CCS_ENTRIES * sizeof(struct ib_cc_congestion_entry));
 

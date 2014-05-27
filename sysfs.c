@@ -268,8 +268,11 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 
 	if (!qib_cc_table_size || !ppd->congestion_entries_shadow)
 		return -EINVAL;
-
+#ifdef CONFIG_STL_MGMT
+	ret = sizeof(struct stl_congestion_setting_attr_shadow);
+#else
 	ret = sizeof(struct ib_cc_congestion_setting_attr_shadow);
+#endif
 
 	if (pos > ret)
 		return -EINVAL;

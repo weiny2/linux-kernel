@@ -316,8 +316,11 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 		  port);
 		goto bail;
 	}
-
+#ifdef CONFIG_STL_MGMT
+	size = STL_MAX_SLS * sizeof(struct stl_congestion_setting_entry);
+#else
 	size = IB_CC_CCS_ENTRIES * sizeof(struct ib_cc_congestion_entry);
+#endif
 	ppd->congestion_entries = kzalloc(size, GFP_KERNEL);
 	if (!ppd->congestion_entries) {
 		dd_dev_err(dd,
@@ -335,7 +338,11 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 		goto bail_2;
 	}
 
+#ifdef CONFIG_STL_MGMT
+	size = sizeof(struct stl_congestion_setting_attr);
+#else
 	size = sizeof(struct ib_cc_congestion_setting_attr);
+#endif
 	ppd->congestion_entries_shadow = kzalloc(size, GFP_KERNEL);
 	if (!ppd->congestion_entries_shadow) {
 		dd_dev_err(dd,

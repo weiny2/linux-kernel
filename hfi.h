@@ -653,13 +653,21 @@ struct qib_pportdata {
 	struct cc_table_shadow *ccti_entries_shadow;
 
 	/* Shadow copy of the congestion control entries */
+#ifdef CONFIG_STL_MGMT
+	struct stl_congestion_setting_attr_shadow *congestion_entries_shadow;
+#else
 	struct ib_cc_congestion_setting_attr_shadow *congestion_entries_shadow;
+#endif
 
 	/* List of congestion control table entries */
 	struct ib_cc_table_entry_shadow *ccti_entries;
 
 	/* 16 congestion entries with each entry corresponding to a SL */
+#ifdef CONFIG_STL_MGMT
+	struct stl_congestion_setting_entry_shadow *congestion_entries;
+#else
 	struct ib_cc_congestion_entry_shadow *congestion_entries;
+#endif
 
 	/* Maximum number of congestion control entries that the agent expects
 	 * the manager to send.
@@ -670,7 +678,11 @@ struct qib_pportdata {
 	u16 total_cct_entry;
 
 	/* Bit map identifying service level */
+#ifdef CONFIG_STL_MGMT
+	u32 cc_sl_control_map;
+#else
 	u16 cc_sl_control_map;
+#endif
 
 	/* maximum congestion control table index */
 	u16 ccti_limit;

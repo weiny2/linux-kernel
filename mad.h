@@ -34,6 +34,7 @@
 #ifndef _QIB_MAD_H
 #define _QIB_MAD_H
 
+#include "wfr_linux.h"
 #include <rdma/ib_pma.h>
 
 #define IB_SMP_UNSUP_VERSION    cpu_to_be16(0x0004)
@@ -387,6 +388,36 @@ struct ib_cc_congestion_setting_attr_shadow {
 	u16 control_map;
 	struct ib_cc_congestion_entry_shadow entries[IB_CC_CCS_ENTRIES];
 } __packed;
+
+#ifdef CONFIG_STL_MGMT
+struct stl_congestion_setting_entry {
+	u8 ccti_increase;
+	u8 reserved;
+	__be16 ccti_timer;
+	u8 trigger_threshold;
+	u8 ccti_min; /* min CCTI for cc table */
+} __packed;
+
+struct stl_congestion_setting_entry_shadow {
+	u8 ccti_increase;
+	u8 reserved;
+	u16 ccti_timer;
+	u8 trigger_threshold;
+	u8 ccti_min; /* min CCTI for cc table */
+} __packed;
+
+struct stl_congestion_setting_attr {
+	__be32 control_map;
+	__be16 port_control;
+	struct stl_congestion_setting_entry entries[STL_MAX_SLS];
+} __packed;
+
+struct stl_congestion_setting_attr_shadow {
+	u32 control_map;
+	u16 port_control;
+	struct stl_congestion_setting_entry_shadow entries[STL_MAX_SLS];
+} __packed;
+#endif /* CONFIG_STL_MGMT */
 
 #define IB_CC_TABLE_ENTRY_INCREASE_DEFAULT 1
 #define IB_CC_TABLE_ENTRY_TIMER_DEFAULT 1
