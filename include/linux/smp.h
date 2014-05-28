@@ -49,6 +49,8 @@ void on_each_cpu_cond(bool (*cond_func)(int cpu, void *info),
 		smp_call_func_t func, void *info, bool wait,
 		gfp_t gfp_flags);
 
+void flush_smp_call_function_queue(void);
+
 #ifdef CONFIG_SMP
 
 #include <linux/preempt.h>

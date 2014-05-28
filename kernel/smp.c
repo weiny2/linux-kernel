@@ -214,6 +214,46 @@ void generic_smp_call_function_single_interrupt(void)
 
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct call_single_data, csd_data);
 
+/**
+ * flush_smp_call_function_queue - Flush pending smp-call-function callbacks
+ *
+ * Flush any pending smp-call-function callbacks queued on this CPU (including
+ * those for which the source CPU's IPIs might not have been received on this
+ * CPU yet). This is invoked by a CPU about to go offline, to ensure that all
+ * pending IPI functions are run before it goes completely offline.
+ *
+ * Loop through the call_single_queue and run all the queued functions.
+ * Must be called with interrupts disabled.
+ */
+void flush_smp_call_function_queue(void)
+{
+	struct call_single_queue *q = &__get_cpu_var(call_single_queue);
+	LIST_HEAD(list);
+
+	WARN_ON(!irqs_disabled());
+
+	raw_spin_lock(&q->lock);
+
+	if (likely(list_empty(&q->list))) {
+		raw_spin_unlock(&q->lock);
+		return;
+	}
+
+	list_replace_init(&q->list, &list);
+	raw_spin_unlock(&q->lock);
+
+	while (!list_empty(&list)) {
+		struct call_single_data *csd;
+
+		csd = list_entry(list.next, struct call_single_data, list);
+		list_del(&csd->list);
+
+		csd->func(csd->info);
+
+		csd_unlock(csd);
+	}
+}
+
 /*
  * smp_call_function_single - Run a function on a specific CPU
  * @func: The function to run. This must be fast and non-blocking.
