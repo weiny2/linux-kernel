@@ -180,16 +180,25 @@ void generic_exec_single(int cpu, struct call_single_data *csd, int wait)
 void generic_smp_call_function_single_interrupt(void)
 {
 	struct call_single_queue *q = &__get_cpu_var(call_single_queue);
+	struct call_single_data *cur_csd;
+	static bool warned;
 	LIST_HEAD(list);
-
-	/*
-	 * Shouldn't receive this interrupt on a cpu that is not yet online.
-	 */
-	WARN_ON_ONCE(!cpu_online(smp_processor_id()));
 
 	raw_spin_lock(&q->lock);
 	list_replace_init(&q->list, &list);
 	raw_spin_unlock(&q->lock);
+
+	/*
+	 * Shouldn't receive this interrupt on a cpu that is not yet online.
+	 */
+	if (unlikely(!cpu_online(smp_processor_id()) && !warned)) {
+		warned = true;
+		WARN(1, "IPI on offline CPU %d\n", smp_processor_id());
+
+		list_for_each_entry(cur_csd, &list, list)
+			pr_warn("IPI callback %pS sent to offline CPU\n",
+				cur_csd->func);
+	}
 
 	while (!list_empty(&list)) {
 		struct call_single_data *csd;
