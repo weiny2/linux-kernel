@@ -211,8 +211,9 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 			    acpi.debug_layer=0x2 acpi.debug_level=0xffffffff
 
 			Some values produce so much output that the system is
-			unusable.  The "log_buf_len" parameter may be useful
-			if you need to capture more output.
+			unusable.  The "log_buf_len" and "nmi_log_buf_len"
+			parameters may be useful if you need to capture more
+			output.
 
 	acpi_irq_balance [HW,ACPI]
 			ACPI will balance active IRQs
@@ -1981,6 +1982,20 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 	nmi_debug=	[KNL,AVR32,SH] Specify one or more actions to take
 			when a NMI is triggered.
 			Format: [state][,regs][,debounce][,die]
+
+	nmi_log_buf_len=n[KMG]	Sets the size of a helper ring buffer for
+			printk messages in NMI context. It is used only as
+			fallback when the lock for the main ring buffer is
+			already taken. The content is merged into the main
+			buffer when possible.
+
+			The size is in bytes and must be a power of two. The
+			default size is the same as for the main printk ring
+			buffer.
+
+			The size 0 can be used to disable the extra buffer
+			entirely. It saves space but there is a higher risk
+			that some messages will get lost.
 
 	nmi_watchdog=	[KNL,BUGS=X86] Debugging features for SMP kernels
 			Format: [panic,][nopanic,][num]

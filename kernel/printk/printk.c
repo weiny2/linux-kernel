@@ -151,6 +151,25 @@ EXPORT_SYMBOL(console_set_on_cmdline);
 static int console_may_schedule;
 
 /*
+ * The logbuf_lock protects kmsg buffer, indexes, counters. This can be taken
+ * within the scheduler's rq lock. It must be released before calling
+ * console_unlock() or anything else that might wake up a process.
+ */
+static DEFINE_RAW_SPINLOCK(logbuf_lock);
+
+#ifdef CONFIG_PRINTK
+/*
+ * The nmi_logbuf_lock protects writing into the nmi_log_buf. It is used in NMI
+ * context when logbuf_lock is already taken or it is not safe to take it. NEVER
+ * EVER take this lock outside of NMI context.
+ *
+ * The messages are moved from nmi_logbuf without this lock. Be careful about
+ * racing when writing and reading, see log_store and merge_nmi_delayed_printk.
+ */
+static DEFINE_RAW_SPINLOCK(nmi_logbuf_lock);
+#endif
+
+/*
  * The printk log buffer consists of a chain of concatenated variable
  * length records. Every record starts with a record header, containing
  * the overall length of the record.
@@ -224,6 +243,12 @@ enum log_flags {
 	LOG_CONT	= 8,	/* text is a fragment of a continuation line */
 };
 
+/* define which log buffer need to be used in the given function */
+enum printk_log_type {
+	MAIN_LOG,
+	NMI_LOG,
+};
+
 struct printk_log {
 	u64 ts_nsec;		/* timestamp in nanoseconds */
 	u16 len;		/* length of entire record */
@@ -234,15 +259,27 @@ struct printk_log {
 	u8 level:3;		/* syslog level */
 };
 
-/*
- * The logbuf_lock protects kmsg buffer, indices, counters.  This can be taken
- * within the scheduler's rq lock. It must be released before calling
- * console_unlock() or anything else that might wake up a process.
- */
-static DEFINE_RAW_SPINLOCK(logbuf_lock);
-
 #ifdef CONFIG_PRINTK
+/*
+ * Continuation lines are buffered, and not committed to the record buffer
+ * until the line is complete, or a race forces it. The line fragments
+ * though, are printed immediately to the consoles to ensure everything has
+ * reached the console in case of a kernel crash.
+ */
+struct printk_cont {
+	char *buf;
+	size_t len;			/* length == 0 means unused buffer */
+	size_t cons;			/* bytes written to console */
+	struct task_struct *owner;	/* task of first print*/
+	u64 ts_nsec;			/* time of first print */
+	u8 level;			/* log level of first message */
+	u8 facility;			/* log level of first message */
+	enum log_flags flags;		/* prefix, newline flags */
+	bool flushed:1;			/* buffer sealed and committed */
+};
+
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
+
 /* the next printk record to read by syslog(READ) or /proc/kmsg */
 static u64 syslog_seq;
 static u32 syslog_idx;
@@ -257,10 +294,23 @@ static u32 log_first_idx;
 static u64 log_next_seq;
 static u32 log_next_idx;
 
+/*
+ * NMI log buffer is handled assynchronously. It is important to keep the index
+ * and sequence number in sync. We need to modify the values atomically and
+ * store both values in unsigned long. The following variables describe the
+ * first and next record stored in the NMI log buffer.
+ */
+static unsigned long nmi_log_first_id;
+static unsigned long nmi_log_next_id;
+
 /* the next printk record to write to the console */
 static u64 console_seq;
 static u32 console_idx;
 static enum log_flags console_prev;
+
+/* the next printk record to merge from NMI log buffer */
+static u64 nmi_merge_seq;
+static u32 nmi_merge_idx;
 
 /* the next printk record to read after the last 'clear' command */
 static u64 clear_seq;
@@ -277,8 +327,132 @@ static u32 clear_idx;
 #endif
 #define __LOG_BUF_LEN (1 << CONFIG_LOG_BUF_SHIFT)
 static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
+static char __main_cont_buf[LOG_LINE_MAX];
 static char *log_buf = __log_buf;
 static u32 log_buf_len = __LOG_BUF_LEN;
+
+static struct printk_cont main_cont = {
+	.buf = __main_cont_buf,
+};
+
+/*
+ * NMI ring buffer must be used if we are in NMI context and the lock for
+ * the main buffer is already in use by code that has been interrupted.
+ * The content of the NMI buffer is moved to the main buffer on the first
+ * occasion.
+ */
+static char __nmi_cont_buf[LOG_LINE_MAX];
+static char *nmi_log_buf;
+static u32 nmi_log_buf_len = __LOG_BUF_LEN;
+
+static struct printk_cont nmi_cont = {
+	.buf = __nmi_cont_buf,
+};
+
+/*
+ * Byte operations needed to manipulate index and sequence numbers for the NMI
+ * log buffer:
+ *	+ sequence number takes the lower half of the _id variable
+ *	+ index takes the higher half of the _id variable
+ */
+#define NMI_SEQ_BYTES (sizeof(nmi_log_first_id) * 8 / 2)
+#define NMI_IDX_BYTES NMI_SEQ_BYTES
+#define NMI_SEQ_MASK ((1UL << NMI_SEQ_BYTES) - 1)
+#define NMI_IDX_MASK (~NMI_SEQ_MASK)
+#define idx_from_id(id) ((id & NMI_IDX_MASK) >> NMI_SEQ_BYTES)
+#define seq_from_id(id) (id & NMI_SEQ_MASK)
+#define make_id(idx, seq) (((unsigned long)idx << NMI_SEQ_BYTES) | \
+			   (seq & NMI_SEQ_MASK))
+/* maximum number of sequence numbers */
+#define NMI_MAX_SEQ (1UL << NMI_SEQ_BYTES)
+/*
+ * Maximum length of the allocated buffer. It has to be a power of two.
+ * It can be limited either by the maximum number of indexes or
+ * by the "buf_len" variable size.
+ */
+#define NMI_MAX_LEN_POWER (min(NMI_IDX_BYTES, sizeof(nmi_log_buf_len) * 8 - 1))
+#define NMI_MAX_LEN (1UL << NMI_MAX_LEN_POWER)
+/* maximum number of merged strings in one call */
+#define NMI_MAX_MERGE 5000
+
+static struct printk_cont *get_cont(enum printk_log_type log)
+{
+	if (log == MAIN_LOG)
+		return &main_cont;
+	else
+		return &nmi_cont;
+}
+
+static char *get_buf(enum printk_log_type log)
+{
+	if (log == MAIN_LOG)
+		return log_buf;
+	else
+		return nmi_log_buf;
+}
+
+static u32 get_buf_len(enum printk_log_type log)
+{
+	if (log == MAIN_LOG)
+		return log_buf_len;
+	else
+		return nmi_log_buf_len;
+}
+
+/* maximum number of messages that fit into NMI log buffer */
+static unsigned int nmi_max_messages;
+/* temporary buffer to print the formatted string */
+static char textbuf[LOG_LINE_MAX];
+/* temporary buffer to print the formatted string in NMI context */
+static char nmi_textbuf[LOG_LINE_MAX];
+
+/*
+ * Define functions needed to get the position values,
+ * for example, first_idx. Possible values are:
+ *	+ side: "first", "next"
+ *	+ pos: "idx", "seq"
+ *
+ * ACCESS_ONCE is needed to avoid speculative store operations, see bnc#879933.
+ * These functions are almost every time called under a lock and only the locked
+ * variables are accessed. Where the "nmi_log_*" variables are guarded by
+ * "nmi_logbuf_lock" and the "log_*" variables are guarded by "logbuf_lock".
+ *
+ * The only exception are functions merging messages from the NMI log buffer
+ * to the main log buffer, e.g. merge_nmi_delayed_printk(). There the
+ * "nmi_log_*" variables have to be accessed without the "nmi_logbuf_lock".
+ */
+#define DEFINE_GET_POS(rettype, funcname, side, pos)		\
+static rettype funcname(const enum printk_log_type log)		\
+{								\
+	if (log == MAIN_LOG)					\
+		return ACCESS_ONCE(log_##side##_##pos);		\
+	else							\
+		return pos##_from_id(ACCESS_ONCE(nmi_log_##side##_id)); \
+}
+
+DEFINE_GET_POS(u32, get_first_idx, first, idx)
+DEFINE_GET_POS(u64, get_first_seq, first, seq)
+DEFINE_GET_POS(u32, get_next_idx, next, idx)
+DEFINE_GET_POS(u64, get_next_seq, next, seq)
+
+/*
+ * Define functions needed to set the position values,
+ * for example, first_idx. Possible values are:
+ *	+ side: "first", "next"
+ */
+#define DEFINE_SET_POS(funcname, side)					\
+static void funcname(enum printk_log_type log, u32 idx, u64 seq)	\
+{									\
+	if (log == MAIN_LOG) {						\
+		log_##side##_idx = idx;					\
+		log_##side##_seq = seq;					\
+	} else {							\
+		nmi_log_##side##_id = make_id(idx, seq);		\
+	}								\
+}
+
+DEFINE_SET_POS(set_first_pos, first)
+DEFINE_SET_POS(set_next_pos, next)
 
 /*
  * How many characters can we print in one call of printk before asking
@@ -305,24 +479,30 @@ static char *log_dict(const struct printk_log *msg)
 	return (char *)msg + sizeof(struct printk_log) + msg->text_len;
 }
 
-/* get record by index; idx must point to valid msg */
-static struct printk_log *log_from_idx(u32 idx)
+/* safe variant that could be used in lock-less situation */
+static char *log_dict_safely(const struct printk_log *msg, u16 text_len)
 {
-	struct printk_log *msg = (struct printk_log *)(log_buf + idx);
+	return (char *)msg + sizeof(struct printk_log) + text_len;
+}
+
+/* get record by index; idx must point to valid msg */
+static struct printk_log *log_from_idx(enum printk_log_type log, u32 idx)
+{
+	struct printk_log *msg = (struct printk_log *)(get_buf(log) + idx);
 
 	/*
 	 * A length == 0 record is the end of buffer marker. Wrap around and
 	 * read the message at the start of the buffer.
 	 */
 	if (!msg->len)
-		return (struct printk_log *)log_buf;
+		return (struct printk_log *)get_buf(log);
 	return msg;
 }
 
 /* get next record; idx must point to valid msg */
-static u32 log_next(u32 idx)
+static u32 inc_idx(enum printk_log_type log, u32 idx)
 {
-	struct printk_log *msg = (struct printk_log *)(log_buf + idx);
+	struct printk_log *msg = (struct printk_log *)(get_buf(log) + idx);
 
 	/* length == 0 indicates the end of the buffer; wrap */
 	/*
@@ -331,56 +511,177 @@ static u32 log_next(u32 idx)
 	 * return the one after that.
 	 */
 	if (!msg->len) {
-		msg = (struct printk_log *)log_buf;
+		msg = (struct printk_log *)get_buf(log);
 		return msg->len;
 	}
 	return idx + msg->len;
 }
 
+/* get next sequence number for the given one */
+static u64 inc_seq(enum printk_log_type log, u64 seq)
+{
+	if (log == MAIN_LOG)
+		return ++seq;
+	else
+		return ++seq & NMI_SEQ_MASK;
+}
+
+/*
+ * Define helper functions to move the position to the next message
+ * a safe way. Possible values are:
+ *	+ side: "first", "next"
+ */
+#define GENERATE_INC_POS(funcname, side)	\
+static void funcname(enum printk_log_type log)	\
+{						\
+	u32 idx;				\
+	u64 seq;				\
+						\
+	idx = get_##side##_idx(log);		\
+	seq = get_##side##_seq(log);		\
+						\
+	idx = inc_idx(log, idx);		\
+	seq = inc_seq(log, seq);		\
+						\
+	set_##side##_pos(log, idx, seq);	\
+}
+
+GENERATE_INC_POS(inc_first_pos, first)
+GENERATE_INC_POS(inc_next_pos, next)
+
+/*
+ * Check whether there is enough free space for the given message.
+ *
+ * The same values of first_idx and next_idx mean that the buffer
+ * is either empty or full.
+ *
+ * If the buffer is empty, we must respect the position of the indexes.
+ * They cannot be reset to the beginning of the buffer.
+ */
+static int logbuf_has_space(enum printk_log_type log, u32 msg_size, bool empty)
+{
+	u32 free;
+
+	if (get_next_idx(log) > get_first_idx(log) || empty)
+		free = max(get_buf_len(log) - get_next_idx(log),
+			   get_first_idx(log));
+	else
+		free = get_first_idx(log) - get_next_idx(log);
+
+	/*
+	 * We need space also for an empty header that signalizes wrapping
+	 * of the buffer.
+	 */
+	return free >= msg_size + sizeof(struct printk_log);
+}
+
+static int log_make_free_space(enum printk_log_type log, u32 msg_size)
+{
+	int freed = 0;
+	int ret = 0;
+
+	while (get_first_seq(log) != get_next_seq(log)) {
+		if (logbuf_has_space(log, msg_size, false))
+			goto out;
+
+		/* drop old messages until we have enough continuous space */
+		inc_first_pos(log);
+		freed = 1;
+	}
+
+	/* sequence numbers are equal, so the log buffer is empty */
+	if (!logbuf_has_space(log, msg_size, true))
+		ret = -ENOMEM;
+
+out:
+	/* propagate the updated values before the freed space is overwritten */
+	if (unlikely(log == NMI_LOG) && freed)
+		smp_wmb();
+
+	return ret;
+}
+
+/* compute the message size including the padding bytes */
+static u32 msg_used_size(u16 text_len, u16 dict_len, u32 *pad_len)
+{
+	u32 size;
+
+	size = sizeof(struct printk_log) + text_len + dict_len;
+	*pad_len = (-size) & (LOG_ALIGN - 1);
+	size += *pad_len;
+
+	return size;
+}
+
+/*
+ * Define how much of the log buffer we could take at maximum. The value
+ * must be greater than two. Note that only half of the buffer is available
+ * when the index points to the middle.
+ */
+#define MAX_LOG_TAKE_PART 4
+static const char trunc_msg[] = "<truncated>";
+
+static u32 truncate_msg(enum printk_log_type log,
+			u16 *text_len, u16 *trunc_msg_len,
+			u16 *dict_len, u32 *pad_len)
+{
+	/*
+	 * The message should not take the whole buffer. Otherwise, it might
+	 * get removed too soon.
+	 */
+	u32 max_text_len = get_buf_len(log) / MAX_LOG_TAKE_PART;
+	if (*text_len > max_text_len)
+		*text_len = max_text_len;
+	/* enable the warning message */
+	*trunc_msg_len = strlen(trunc_msg);
+	/* disable the "dict" completely */
+	*dict_len = 0;
+	/* compute the size again, count also the warning message */
+	return msg_used_size(*text_len + *trunc_msg_len, 0, pad_len);
+}
+
 /* insert record into the buffer, discard old ones, update heads */
-static void log_store(int facility, int level,
-		      enum log_flags flags, u64 ts_nsec,
-		      const char *dict, u16 dict_len,
-		      const char *text, u16 text_len)
+static int log_store(enum printk_log_type log, int facility, int level,
+		     enum log_flags flags, u64 ts_nsec,
+		     const char *dict, u16 dict_len,
+		     const char *text, u16 text_len)
 {
 	struct printk_log *msg;
 	u32 size, pad_len;
+	u16 trunc_msg_len = 0;
 
 	/* number of '\0' padding bytes to next message */
-	size = sizeof(struct printk_log) + text_len + dict_len;
-	pad_len = (-size) & (LOG_ALIGN - 1);
-	size += pad_len;
+	size = msg_used_size(text_len, dict_len, &pad_len);
 
-	while (log_first_seq < log_next_seq) {
-		u32 free;
-
-		if (log_next_idx > log_first_idx)
-			free = max(log_buf_len - log_next_idx, log_first_idx);
-		else
-			free = log_first_idx - log_next_idx;
-
-		if (free > size + sizeof(struct printk_log))
-			break;
-
-		/* drop old messages until we have enough contiuous space */
-		log_first_idx = log_next(log_first_idx);
-		log_first_seq++;
+	if (log_make_free_space(log, size)) {
+		/* truncate the message if it is too long for empty buffer */
+		size = truncate_msg(log, &text_len, &trunc_msg_len,
+				    &dict_len, &pad_len);
+		/* survive when the log buffer is too small for trunc_msg */
+		if (log_make_free_space(log, size))
+			return 0;
 	}
 
-	if (log_next_idx + size + sizeof(struct printk_log) >= log_buf_len) {
+	if (get_next_idx(log) + size + sizeof(struct printk_log) >
+	    get_buf_len(log)) {
 		/*
 		 * This message + an additional empty header does not fit
 		 * at the end of the buffer. Add an empty header with len == 0
 		 * to signify a wrap around.
 		 */
-		memset(log_buf + log_next_idx, 0, sizeof(struct printk_log));
-		log_next_idx = 0;
+		memset(get_buf(log) + get_next_idx(log), 0,
+		       sizeof(struct printk_log));
+		set_next_pos(log, 0, get_next_seq(log));
 	}
 
 	/* fill message */
-	msg = (struct printk_log *)(log_buf + log_next_idx);
+	msg = (struct printk_log *)(get_buf(log) + get_next_idx(log));
 	memcpy(log_text(msg), text, text_len);
 	msg->text_len = text_len;
+	if (trunc_msg_len) {
+		memcpy(log_text(msg) + text_len, trunc_msg, trunc_msg_len);
+		msg->text_len += trunc_msg_len;
+	}
 	memcpy(log_dict(msg), dict, dict_len);
 	msg->dict_len = dict_len;
 	msg->facility = facility;
@@ -391,11 +692,16 @@ static void log_store(int facility, int level,
 	else
 		msg->ts_nsec = local_clock();
 	memset(log_dict(msg) + dict_len, 0, pad_len);
-	msg->len = sizeof(struct printk_log) + text_len + dict_len + pad_len;
+	msg->len = size;
+
+	/* write the data before we move to the next position */
+	if (log == NMI_LOG)
+		smp_wmb();
 
 	/* insert message */
-	log_next_idx += msg->len;
-	log_next_seq++;
+	inc_next_pos(log);
+
+	return msg->text_len;
 }
 
 #ifdef CONFIG_SECURITY_DMESG_RESTRICT
@@ -559,7 +865,7 @@ static ssize_t devkmsg_read(struct file *file, char __user *buf,
 		goto out;
 	}
 
-	msg = log_from_idx(user->idx);
+	msg = log_from_idx(MAIN_LOG, user->idx);
 	ts_usec = msg->ts_nsec;
 	do_div(ts_usec, 1000);
 
@@ -620,7 +926,7 @@ static ssize_t devkmsg_read(struct file *file, char __user *buf,
 		user->buf[len++] = '\n';
 	}
 
-	user->idx = log_next(user->idx);
+	user->idx = inc_idx(MAIN_LOG, user->idx);
 	user->seq++;
 	raw_spin_unlock_irq(&logbuf_lock);
 
@@ -799,26 +1105,61 @@ static int __init log_buf_len_setup(char *str)
 }
 early_param("log_buf_len", log_buf_len_setup);
 
+/* NMI log buffer can be completely disabled by setting 0 value */
+static int __init nmi_log_buf_len_setup(char *str)
+{
+	nmi_log_buf_len = memparse(str, &str);
+
+	if (nmi_log_buf_len)
+		nmi_log_buf_len = roundup_pow_of_two(nmi_log_buf_len);
+
+	return 0;
+}
+early_param("nmi_log_buf_len", nmi_log_buf_len_setup);
+
+char * __init alloc_log_buf(int early, unsigned len)
+{
+	if (early) {
+		unsigned long mem;
+
+		mem = memblock_alloc(len, PAGE_SIZE);
+		if (!mem)
+			return 0;
+		return __va(mem);
+	}
+
+	return alloc_bootmem_nopanic(len);
+}
+
 void __init setup_log_buf(int early)
 {
 	unsigned long flags;
 	char *new_log_buf;
 	int free;
 
+	if (!nmi_log_buf) {
+		if (nmi_log_buf_len > NMI_MAX_LEN)
+			nmi_log_buf_len = NMI_MAX_LEN;
+		nmi_max_messages = nmi_log_buf_len / sizeof(struct printk_log);
+		/* zero length means that the feature is disabled */
+		if (nmi_log_buf_len)
+			nmi_log_buf = alloc_log_buf(early, nmi_log_buf_len);
+
+		if (!nmi_log_buf && nmi_log_buf_len)
+			pr_err("%d bytes not available for NMI ring buffer\n",
+			       nmi_log_buf_len);
+		else
+			pr_info("NMI ring buffer size: %d\n", nmi_log_buf_len);
+	}
+
+	/*
+	 * The default static buffer is used when the size is not increased
+	 * by the boot parameter.
+	 */
 	if (!new_log_buf_len)
 		return;
 
-	if (early) {
-		unsigned long mem;
-
-		mem = memblock_alloc(new_log_buf_len, PAGE_SIZE);
-		if (!mem)
-			return;
-		new_log_buf = __va(mem);
-	} else {
-		new_log_buf = alloc_bootmem_nopanic(new_log_buf_len);
-	}
-
+	new_log_buf = alloc_log_buf(early, new_log_buf_len);
 	if (unlikely(!new_log_buf)) {
 		pr_err("log_buf_len: %ld bytes not available\n",
 			new_log_buf_len);
@@ -1041,12 +1382,12 @@ static int syslog_print(char __user *buf, int size)
 		}
 
 		skip = syslog_partial;
-		msg = log_from_idx(syslog_idx);
+		msg = log_from_idx(MAIN_LOG, syslog_idx);
 		n = msg_print_text(msg, syslog_prev, true, text,
 				   LOG_LINE_MAX + PREFIX_MAX);
 		if (n - syslog_partial <= size) {
 			/* message fits into buffer, move forward */
-			syslog_idx = log_next(syslog_idx);
+			syslog_idx = inc_idx(MAIN_LOG, syslog_idx);
 			syslog_seq++;
 			syslog_prev = msg->flags;
 			n -= syslog_partial;
@@ -1107,11 +1448,11 @@ static int syslog_print_all(char __user *buf, int size, bool clear)
 		idx = clear_idx;
 		prev = 0;
 		while (seq < log_next_seq) {
-			struct printk_log *msg = log_from_idx(idx);
+			struct printk_log *msg = log_from_idx(MAIN_LOG, idx);
 
 			len += msg_print_text(msg, prev, true, NULL, 0);
 			prev = msg->flags;
-			idx = log_next(idx);
+			idx = inc_idx(MAIN_LOG, idx);
 			seq++;
 		}
 
@@ -1120,11 +1461,11 @@ static int syslog_print_all(char __user *buf, int size, bool clear)
 		idx = clear_idx;
 		prev = 0;
 		while (len > size && seq < log_next_seq) {
-			struct printk_log *msg = log_from_idx(idx);
+			struct printk_log *msg = log_from_idx(MAIN_LOG, idx);
 
 			len -= msg_print_text(msg, prev, true, NULL, 0);
 			prev = msg->flags;
-			idx = log_next(idx);
+			idx = inc_idx(MAIN_LOG, idx);
 			seq++;
 		}
 
@@ -1133,7 +1474,7 @@ static int syslog_print_all(char __user *buf, int size, bool clear)
 
 		len = 0;
 		while (len >= 0 && seq < next_seq) {
-			struct printk_log *msg = log_from_idx(idx);
+			struct printk_log *msg = log_from_idx(MAIN_LOG, idx);
 			int textlen;
 
 			textlen = msg_print_text(msg, prev, true, text,
@@ -1142,7 +1483,7 @@ static int syslog_print_all(char __user *buf, int size, bool clear)
 				len = textlen;
 				break;
 			}
-			idx = log_next(idx);
+			idx = inc_idx(MAIN_LOG, idx);
 			seq++;
 			prev = msg->flags;
 
@@ -1279,10 +1620,10 @@ int do_syslog(int type, char __user *buf, int len, bool from_file)
 
 			error = 0;
 			while (seq < log_next_seq) {
-				struct printk_log *msg = log_from_idx(idx);
+				struct printk_log *msg = log_from_idx(MAIN_LOG, idx);
 
 				error += msg_print_text(msg, prev, true, NULL, 0);
-				idx = log_next(idx);
+				idx = inc_idx(MAIN_LOG, idx);
 				seq++;
 				prev = msg->flags;
 			}
@@ -1423,115 +1764,351 @@ static inline void printk_delay(void)
 }
 
 /*
- * Continuation lines are buffered, and not committed to the record buffer
- * until the line is complete, or a race forces it. The line fragments
- * though, are printed immediately to the consoles to ensure everything has
- * reached the console in case of a kernel crash.
+ * Delayed printk version, for scheduler-internal messages:
  */
-static struct cont {
-	char buf[LOG_LINE_MAX];
-	size_t len;			/* length == 0 means unused buffer */
-	size_t cons;			/* bytes written to console */
-	struct task_struct *owner;	/* task of first print*/
-	u64 ts_nsec;			/* time of first print */
-	u8 level;			/* log level of first message */
-	u8 facility;			/* log level of first message */
-	enum log_flags flags;		/* prefix, newline flags */
-	bool flushed:1;			/* buffer sealed and committed */
-} cont;
+#define PRINTK_PENDING_WAKEUP	0x01
+#define PRINTK_PENDING_OUTPUT	0x02
 
-static void cont_flush(enum log_flags flags)
+static DEFINE_PER_CPU(int, printk_pending);
+
+static void merge_nmi_delayed_printk(void);
+
+static void wake_up_klogd_work_func(struct irq_work *irq_work)
 {
-	if (cont.flushed)
+	int pending = __this_cpu_xchg(printk_pending, 0);
+	u64 nmi_next_id = ACCESS_ONCE(nmi_log_next_id);
+
+	/*
+	 * Check if there are any pending messages in NMI log buffer.
+	 * We do not need any lock. If new message are being added,
+	 * another IRQ work is automatically scheduled.
+	 */
+	if (ACCESS_ONCE(nmi_merge_seq) != seq_from_id(nmi_next_id)) {
+		raw_spin_lock(&logbuf_lock);
+		merge_nmi_delayed_printk();
+		raw_spin_unlock(&logbuf_lock);
+	}
+
+	if (pending & PRINTK_PENDING_OUTPUT) {
+		/* If trylock fails, someone else is doing the printing */
+		if (console_trylock())
+			console_unlock();
+	}
+
+	if (pending & PRINTK_PENDING_WAKEUP)
+		wake_up_interruptible(&log_wait);
+}
+
+static DEFINE_PER_CPU(struct irq_work, wake_up_klogd_work) = {
+	.func = wake_up_klogd_work_func,
+	.flags = IRQ_WORK_LAZY,
+};
+
+void wake_up_klogd(void)
+{
+	preempt_disable();
+	if (waitqueue_active(&log_wait)) {
+		this_cpu_or(printk_pending, PRINTK_PENDING_WAKEUP);
+		irq_work_queue(&__get_cpu_var(wake_up_klogd_work));
+	}
+	preempt_enable();
+}
+
+int printk_sched(const char *fmt, ...)
+{
+	va_list args;
+	int r;
+
+	va_start(args, fmt);
+	r = vprintk_emit(0, SCHED_MESSAGE_LOGLEVEL, NULL, 0, fmt, args);
+	va_end(args);
+
+	return r;
+}
+
+static void cont_flush(enum printk_log_type log, enum log_flags flags)
+{
+	struct printk_cont *cont = get_cont(log);
+
+	if (cont->flushed)
 		return;
-	if (cont.len == 0)
+	if (cont->len == 0)
 		return;
 
-	if (cont.cons) {
+	if (cont->cons) {
 		/*
 		 * If a fragment of this line was directly flushed to the
 		 * console; wait for the console to pick up the rest of the
 		 * line. LOG_NOCONS suppresses a duplicated output.
 		 */
-		log_store(cont.facility, cont.level, flags | LOG_NOCONS,
-			  cont.ts_nsec, NULL, 0, cont.buf, cont.len);
-		cont.flags = flags;
-		cont.flushed = true;
+		log_store(log, cont->facility, cont->level, flags | LOG_NOCONS,
+			  cont->ts_nsec, NULL, 0, cont->buf, cont->len);
+		cont->flags = flags;
+		cont->flushed = true;
 	} else {
 		/*
 		 * If no fragment of this line ever reached the console,
 		 * just submit it to the store and free the buffer.
 		 */
-		log_store(cont.facility, cont.level, flags, 0,
-			  NULL, 0, cont.buf, cont.len);
-		cont.len = 0;
+		log_store(log, cont->facility, cont->level, flags, 0,
+			  NULL, 0, cont->buf, cont->len);
+		cont->len = 0;
 	}
 }
 
-static bool cont_add(int facility, int level, const char *text, size_t len)
+static bool cont_add(enum printk_log_type log, int facility, int level,
+		     const char *text, size_t len)
 {
-	if (cont.len && cont.flushed)
+	struct printk_cont *cont = get_cont(log);
+
+	if (cont->len && cont->flushed)
 		return false;
 
-	if (cont.len + len > sizeof(cont.buf)) {
+	if (cont->len + len > sizeof(cont->buf)) {
 		/* the line gets too long, split it up in separate records */
-		cont_flush(LOG_CONT);
+		cont_flush(log, LOG_CONT);
 		return false;
 	}
 
-	if (!cont.len) {
-		cont.facility = facility;
-		cont.level = level;
-		cont.owner = current;
-		cont.ts_nsec = local_clock();
-		cont.flags = 0;
-		cont.cons = 0;
-		cont.flushed = false;
+	if (!cont->len) {
+		cont->facility = facility;
+		cont->level = level;
+		cont->owner = current;
+		cont->ts_nsec = local_clock();
+		cont->flags = 0;
+		cont->cons = 0;
+		cont->flushed = false;
 	}
 
-	memcpy(cont.buf + cont.len, text, len);
-	cont.len += len;
+	memcpy(cont->buf + cont->len, text, len);
+	cont->len += len;
 
-	if (cont.len > (sizeof(cont.buf) * 80) / 100)
-		cont_flush(LOG_CONT);
+	if (cont->len > (sizeof(cont->buf) * 80) / 100)
+		cont_flush(log, LOG_CONT);
 
 	return true;
 }
 
+/*
+ * Only messages from the main log buffer are printed directly to
+ * the console. Therefore this function operates directly with the main
+ * continuous buffer.
+ */
 static size_t cont_print_text(char *text, size_t size)
 {
 	size_t textlen = 0;
 	size_t len;
 
-	if (cont.cons == 0 && (console_prev & LOG_NEWLINE)) {
-		textlen += print_time(cont.ts_nsec, text);
+	if (main_cont.cons == 0 && (console_prev & LOG_NEWLINE)) {
+		textlen += print_time(main_cont.ts_nsec, text);
 		size -= textlen;
 	}
 
-	len = cont.len - cont.cons;
+	len = main_cont.len - main_cont.cons;
 	if (len > 0) {
 		if (len+1 > size)
 			len = size-1;
-		memcpy(text + textlen, cont.buf + cont.cons, len);
+		memcpy(text + textlen, main_cont.buf + main_cont.cons, len);
 		textlen += len;
-		cont.cons = cont.len;
+		main_cont.cons = main_cont.len;
 	}
 
-	if (cont.flushed) {
-		if (cont.flags & LOG_NEWLINE)
+	if (main_cont.flushed) {
+		if (main_cont.flags & LOG_NEWLINE)
 			text[textlen++] = '\n';
 		/* got everything, release buffer */
-		cont.len = 0;
+		main_cont.len = 0;
 	}
 	return textlen;
+}
+
+/*
+ * This function copies one message from NMI log buffer to the main one.
+ * It cannot guarantee that a valid data are copied because NMI buffer
+ * can be modified in parallel. It just do some basic checks, especially
+ * to make sure that we do not read outside of the buffer. Anyway, the
+ * caller should do more checks, for example by validating the sequence
+ * number.
+ */
+static int merge_nmi_msg(u32 merge_idx, u64 merge_seq)
+{
+	struct printk_log *msg;
+	u16 text_len, dict_len;
+	u32 after_msg_idx, pad_len, size, counted_size;
+
+	/*
+	 * The given idx might be invalid, especially when it was read via
+	 * inc_idx() without having the related log buffer lock.
+	 */
+	if (merge_idx > nmi_log_buf_len - sizeof(struct printk_log))
+		return -EINVAL;
+
+	/*
+	 * Get more info about the message. The values could be modified in NMI
+	 * context at any time.
+	 */
+	msg = log_from_idx(NMI_LOG, merge_idx);
+	text_len = ACCESS_ONCE(msg->text_len);
+	dict_len = ACCESS_ONCE(msg->dict_len);
+	size = ACCESS_ONCE(msg->len);
+
+	/* check a bit the consistency */
+	counted_size = msg_used_size(text_len, dict_len, &pad_len);
+	if (counted_size != size)
+		return -EINVAL;
+	/*
+	 * Make sure that we do not read outside of NMI log buf.
+	 *
+	 * First, get the real idx. The original one might have pointed to the
+	 * zero length message that signalizes the end of the buffer. Thus we
+	 * need to compute it from the "msg" pointer.
+	 */
+	merge_idx = (char *)msg - nmi_log_buf;
+	after_msg_idx = merge_idx + counted_size;
+	if (after_msg_idx > nmi_log_buf_len)
+		return -EINVAL;
+
+	log_store(MAIN_LOG, msg->facility, msg->level,
+		  msg->flags, msg->ts_nsec,
+		  log_dict_safely(msg, text_len), dict_len,
+		  log_text(msg), text_len);
+
+	return 0;
+}
+
+/*
+ * Unfortunately, we could not guarantee that a sequence number
+ * is 100% valid because the whole range can get rotated in NMI
+ * context between readings in the normal context.
+ *
+ * This is just the best guess. Any valid sequence number must in
+ * the range from first_seq to first_seq + maximum number of
+ * messages that fit the buffer.
+ *
+ * Invalid result is not critical because it will get detected
+ * by the consistency check in merge_nmi_msg(). In the worst case
+ * it will copy some mess and the inconsistency will get detected
+ * and resolved later.
+ */
+static int nmi_seq_is_invalid(u64 seq, u64 first_seq)
+{
+	if (seq >= first_seq) {
+		if (seq - first_seq > nmi_max_messages)
+			return 1;
+		else
+			return 0;
+	}
+
+	if (first_seq - seq < NMI_MAX_SEQ - nmi_max_messages)
+		return 1;
+	else
+		return 0;
+}
+
+/*
+ * Called to merge strings from NMI ring buffer into the regular ring buffer.
+ *
+ * Messages can be asynchronously added and even removed in NMI context under
+ * nmi_logbuf_lock. We need to be VERY CAUTIOUS and work with valid indexes all
+ * the time. We even might need to revert a store operation if the message
+ * gets overwritten in the meantime.
+ */
+static void merge_nmi_delayed_printk(void)
+{
+	unsigned long nmi_first_id, nmi_next_id;
+	u32 old_main_next_idx;
+	u64 old_main_next_seq;
+	int main_cont_flushed = 0;
+	int merged = 0;
+
+	while (true) {
+		/*
+		 * Refresh next_id information in every iteration. There might
+		 * be new messages.
+		 */
+		nmi_next_id = ACCESS_ONCE(nmi_log_next_id);
+
+		/* we are done when all messages have been merged already */
+		if (likely(nmi_merge_seq == seq_from_id(nmi_next_id)))
+			return;
+
+		/*
+		 * The main cont buffer might include the first part of the
+		 * first message from NMI context.
+		 */
+		if (unlikely(!main_cont_flushed)) {
+			cont_flush(MAIN_LOG, LOG_CONT);
+			main_cont_flushed = 1;
+		}
+
+		/* check if we lost some messages */
+		nmi_first_id = ACCESS_ONCE(nmi_log_first_id);
+		if (nmi_seq_is_invalid(nmi_merge_seq,
+				       seq_from_id(nmi_first_id))) {
+restart_merge:
+			nmi_merge_seq = seq_from_id(nmi_first_id);
+			nmi_merge_idx = idx_from_id(nmi_first_id);
+		}
+
+		/* do not stale CPU with too many merges */
+		if (merged++ > NMI_MAX_MERGE) {
+			__this_cpu_or(printk_pending, PRINTK_PENDING_OUTPUT);
+			irq_work_queue(&__get_cpu_var(wake_up_klogd_work));
+			return;
+		}
+
+		/*
+		 * Make sure that the whole message has been written for the
+		 * given idx.
+		 */
+		smp_rmb();
+		/* store current state of the main log buffer */
+		old_main_next_idx = get_next_idx(MAIN_LOG);
+		old_main_next_seq = get_next_seq(MAIN_LOG);
+		/* restart merge if copying fails */
+		if (merge_nmi_msg(nmi_merge_idx, nmi_merge_seq)) {
+			nmi_first_id = ACCESS_ONCE(nmi_log_first_id);
+			goto restart_merge;
+		}
+
+		/*
+		 * Make sure that the data were copied before validating. We
+		 * check that we did read correct data, so read the barrier is
+		 * enough.
+		 */
+		smp_rmb();
+		/* check if we have copied a valid message */
+		nmi_first_id = ACCESS_ONCE(nmi_log_first_id);
+		if (nmi_seq_is_invalid(nmi_merge_seq,
+				       seq_from_id(nmi_first_id))) {
+			/*
+			 * The copied message does not longer exist in the NMI
+			 * log buffer. It was most likely modified during
+			 * copying, so forget it and restart the merge.
+			 */
+			set_next_pos(MAIN_LOG,
+				     old_main_next_idx, old_main_next_seq);
+			goto restart_merge;
+		}
+
+		/*
+		 * The message was valid when copying. Go to next one. Note that
+		 * we might read broken idx here that might point outside of the
+		 * log buffer. But this will be detected in merge_nmi_msg() when
+		 * checking the index validity.
+		 */
+		nmi_merge_idx = inc_idx(NMI_LOG, nmi_merge_idx);
+		nmi_merge_seq = inc_seq(NMI_LOG, nmi_merge_seq);
+	}
 }
 
 asmlinkage int vprintk_emit(int facility, int level,
 			    const char *dict, size_t dictlen,
 			    const char *fmt, va_list args)
 {
+	enum printk_log_type log = MAIN_LOG;
+	struct printk_cont *cont = &main_cont;
 	static int recursion_bug;
-	static char textbuf[LOG_LINE_MAX];
 	char *text = textbuf;
 	size_t text_len = 0;
 	enum log_flags lflags = 0;
@@ -1557,7 +2134,7 @@ asmlinkage int vprintk_emit(int facility, int level,
 	/*
 	 * Ouch, printk recursed into itself!
 	 */
-	if (unlikely(logbuf_cpu == this_cpu)) {
+	if (unlikely(logbuf_cpu == this_cpu) && !in_nmi()) {
 		/*
 		 * If a crash is occurring during printk() on this CPU,
 		 * then try to get the crash message out but make sure
@@ -1574,18 +2151,61 @@ asmlinkage int vprintk_emit(int facility, int level,
 	}
 
 	lockdep_off();
-	raw_spin_lock(&logbuf_lock);
-	logbuf_cpu = this_cpu;
 
-	if (recursion_bug) {
-		static const char recursion_msg[] =
-			"BUG: recent printk recursion!";
+	/*
+	 * Get lock for a log buffer. Make sure we are not going to deadlock
+	 * when we managed to preempt the currently running printk from NMI
+	 * context. When we are not sure, rather copy the current message
+	 * into NMI ring buffer and merge it later.
+	 *
+	 * Special case are Oops messages from NMI context. We try hard to print
+	 * them. So we forcefully drop existing locks, try to pass them via the
+	 * main log buffer, and even later push them to the console.
+	 */
+	if (likely(!in_nmi())) {
+		raw_spin_lock(&logbuf_lock);
+	} else {
+		/*
+		 * Always use NMI ring buffer if something is already
+		 * in the cont buffer, except for Oops.
+		 */
+		bool force_nmi_logbuf = nmi_cont.len &&
+			nmi_cont.owner == current &&
+			!oops_in_progress;
 
-		recursion_bug = 0;
-		printed_len += strlen(recursion_msg);
-		/* emit KERN_CRIT message */
-		log_store(0, 2, LOG_PREFIX|LOG_NEWLINE, 0,
-			  NULL, 0, recursion_msg, printed_len);
+		if (oops_in_progress)
+			zap_locks();
+
+		if (force_nmi_logbuf || !raw_spin_trylock(&logbuf_lock)) {
+			if (!nmi_log_buf) {
+				lockdep_on();
+				local_irq_restore(flags);
+				return 0;
+			}
+
+			raw_spin_lock(&nmi_logbuf_lock);
+			log = NMI_LOG;
+			cont = &nmi_cont;
+			text = nmi_textbuf;
+		}
+	}
+
+	if (likely(log == MAIN_LOG)) {
+		logbuf_cpu = this_cpu;
+		merge_nmi_delayed_printk();
+
+		if (recursion_bug) {
+			static const char recursion_msg[] =
+				"BUG: recent printk recursion!";
+
+			recursion_bug = 0;
+			text_len = strlen(recursion_msg);
+			/* emit KERN_CRIT message */
+			printed_len += log_store(log, 0, 2,
+						 LOG_PREFIX|LOG_NEWLINE, 0,
+						 NULL, 0, recursion_msg,
+						 text_len);
+		}
 	}
 
 	/*
@@ -1636,13 +2256,17 @@ asmlinkage int vprintk_emit(int facility, int level,
 		 * Flush the conflicting buffer. An earlier newline was missing,
 		 * or another task also prints continuation lines.
 		 */
-		if (cont.len && (lflags & LOG_PREFIX || cont.owner != current))
-			cont_flush(LOG_NEWLINE);
+		if (cont->len &&
+		    (lflags & LOG_PREFIX || cont->owner != current))
+			cont_flush(log, LOG_NEWLINE);
 
 		/* buffer line if possible, otherwise store it right away */
-		if (!cont_add(facility, level, text, text_len))
-			log_store(facility, level, lflags | LOG_CONT, 0,
-				  dict, dictlen, text, text_len);
+		if (cont_add(log, facility, level, text, text_len))
+			printed_len += text_len;
+		else
+			printed_len += log_store(log, facility, level,
+						 lflags | LOG_CONT, 0,
+						 dict, dictlen, text, text_len);
 	} else {
 		bool stored = false;
 
@@ -1651,27 +2275,47 @@ asmlinkage int vprintk_emit(int facility, int level,
 		 * either merge it with the current buffer and flush, or if
 		 * there was a race with interrupts (prefix == true) then just
 		 * flush it out and store this line separately.
+		 * If the preceding printk was from a different task and missed
+		 * a newline, flush and append the newline.
 		 */
-		if (cont.len && cont.owner == current) {
-			if (!(lflags & LOG_PREFIX))
-				stored = cont_add(facility, level, text, text_len);
-			cont_flush(LOG_NEWLINE);
+		if (cont->len) {
+			if (cont->owner == current && !(lflags & LOG_PREFIX))
+				stored = cont_add(log, facility, level, text,
+						  text_len);
+			cont_flush(log, LOG_NEWLINE);
 		}
 
-		if (!stored)
-			log_store(facility, level, lflags, 0,
-				  dict, dictlen, text, text_len);
+		if (stored)
+			printed_len += text_len;
+		else
+			printed_len += log_store(log, facility, level, lflags,
+						 0, dict, dictlen,
+						 text, text_len);
 	}
-	printed_len += text_len;
 
-	logbuf_cpu = UINT_MAX;
-	raw_spin_unlock(&logbuf_lock);
+	if (likely(log == MAIN_LOG)) {
+		logbuf_cpu = UINT_MAX;
+		raw_spin_unlock(&logbuf_lock);
+	} else {
+		raw_spin_unlock(&nmi_logbuf_lock);
+	}
+
 	lockdep_on();
 	local_irq_restore(flags);
 
-	/* If called from the scheduler, we can not call up(). */
-	if (in_sched)
+	/*
+	 * If called from the scheduler or NMI context, we can not get console
+	 * without a possible deadlock.
+	 *
+	 * The only exception are Oops messages from NMI context where all
+	 * relevant locks have been forcefully dropped above. We have to try
+	 * to get the console, otherwise the last messages would get lost.
+	 */
+	if (in_sched || (in_nmi() && !oops_in_progress)) {
+		__this_cpu_or(printk_pending, PRINTK_PENDING_OUTPUT);
+		irq_work_queue(&__get_cpu_var(wake_up_klogd_work));
 		return printed_len;
+	}
 
 	/*
 	 * Disable preemption to avoid being preempted while holding
@@ -1775,7 +2419,7 @@ static struct cont {
 	bool flushed:1;
 } cont;
 static struct printk_log *log_from_idx(u32 idx) { return NULL; }
-static u32 log_next(u32 idx) { return 0; }
+static u32 inc_idx(enum printk_log_type log, u32 idx) { return 0; }
 static void call_console_drivers(int level, const char *text, size_t len) {}
 static size_t msg_print_text(const struct printk_log *msg, enum log_flags prev,
 			     bool syslog, char *buf, size_t size) { return 0; }
@@ -2060,6 +2704,7 @@ int is_console_locked(void)
 	return console_locked;
 }
 
+/* only messages from the main cont buffer are flushed directly */
 static void console_cont_flush(char *text, size_t size)
 {
 	unsigned long flags;
@@ -2067,7 +2712,7 @@ static void console_cont_flush(char *text, size_t size)
 
 	raw_spin_lock_irqsave(&logbuf_lock, flags);
 
-	if (!cont.len)
+	if (!main_cont.len)
 		goto out;
 
 	/*
@@ -2075,13 +2720,13 @@ static void console_cont_flush(char *text, size_t size)
 	 * busy. The earlier ones need to be printed before this one, we
 	 * did not flush any fragment so far, so just let it queue up.
 	 */
-	if (console_seq < log_next_seq && !cont.cons)
+	if (console_seq < log_next_seq && !main_cont.cons)
 		goto out;
 
 	len = cont_print_text(text, size);
 	raw_spin_unlock(&logbuf_lock);
 	stop_critical_timings();
-	call_console_drivers(cont.level, text, len);
+	call_console_drivers(main_cont.level, text, len);
 	start_critical_timings();
 	local_irq_restore(flags);
 	return;
@@ -2180,13 +2825,13 @@ skip:
 			break;
 		}
 
-		msg = log_from_idx(console_idx);
+		msg = log_from_idx(MAIN_LOG, console_idx);
 		if (msg->flags & LOG_NOCONS) {
 			/*
 			 * Skip record we have buffered and already printed
 			 * directly to the console when we received it.
 			 */
-			console_idx = log_next(console_idx);
+			console_idx = inc_idx(MAIN_LOG, console_idx);
 			console_seq++;
 			/*
 			 * We will get here again when we register a new
@@ -2201,7 +2846,7 @@ skip:
 		level = msg->level;
 		len = msg_print_text(msg, console_prev, false,
 				     text, sizeof(text));
-		console_idx = log_next(console_idx);
+		console_idx = inc_idx(MAIN_LOG, console_idx);
 		console_seq++;
 		console_prev = msg->flags;
 		raw_spin_unlock(&logbuf_lock);
@@ -2638,58 +3283,6 @@ late_initcall(printk_late_init);
 
 #if defined CONFIG_PRINTK
 /*
- * Delayed printk version, for scheduler-internal messages:
- */
-#define PRINTK_PENDING_WAKEUP	0x01
-#define PRINTK_PENDING_OUTPUT	0x02
-
-static DEFINE_PER_CPU(int, printk_pending);
-
-static void wake_up_klogd_work_func(struct irq_work *irq_work)
-{
-	int pending = __this_cpu_xchg(printk_pending, 0);
-
-	if (pending & PRINTK_PENDING_OUTPUT) {
-		/* If trylock fails, someone else is doing the printing */
-		if (console_trylock())
-			console_unlock();
-	}
-
-	if (pending & PRINTK_PENDING_WAKEUP)
-		wake_up_interruptible(&log_wait);
-}
-
-static DEFINE_PER_CPU(struct irq_work, wake_up_klogd_work) = {
-	.func = wake_up_klogd_work_func,
-	.flags = IRQ_WORK_LAZY,
-};
-
-void wake_up_klogd(void)
-{
-	preempt_disable();
-	if (waitqueue_active(&log_wait)) {
-		this_cpu_or(printk_pending, PRINTK_PENDING_WAKEUP);
-		irq_work_queue(&__get_cpu_var(wake_up_klogd_work));
-	}
-	preempt_enable();
-}
-
-int printk_sched(const char *fmt, ...)
-{
-	va_list args;
-	int r;
-
-	va_start(args, fmt);
-	r = vprintk_emit(0, SCHED_MESSAGE_LOGLEVEL, NULL, 0, fmt, args);
-	va_end(args);
-
-	__this_cpu_or(printk_pending, PRINTK_PENDING_OUTPUT);
-	irq_work_queue(&__get_cpu_var(wake_up_klogd_work));
-
-	return r;
-}
-
-/*
  * printk rate limiting, lifted from the networking subsystem.
  *
  * This enforces a rate limit: not more than 10 kernel messages
@@ -2866,10 +3459,10 @@ bool kmsg_dump_get_line_nolock(struct kmsg_dumper *dumper, bool syslog,
 	if (dumper->cur_seq >= log_next_seq)
 		goto out;
 
-	msg = log_from_idx(dumper->cur_idx);
+	msg = log_from_idx(MAIN_LOG, dumper->cur_idx);
 	l = msg_print_text(msg, 0, syslog, line, size);
 
-	dumper->cur_idx = log_next(dumper->cur_idx);
+	dumper->cur_idx = inc_idx(MAIN_LOG, dumper->cur_idx);
 	dumper->cur_seq++;
 	ret = true;
 out:
@@ -2961,10 +3554,10 @@ bool kmsg_dump_get_buffer(struct kmsg_dumper *dumper, bool syslog,
 	idx = dumper->cur_idx;
 	prev = 0;
 	while (seq < dumper->next_seq) {
-		struct printk_log *msg = log_from_idx(idx);
+		struct printk_log *msg = log_from_idx(MAIN_LOG, idx);
 
 		l += msg_print_text(msg, prev, true, NULL, 0);
-		idx = log_next(idx);
+		idx = inc_idx(MAIN_LOG, idx);
 		seq++;
 		prev = msg->flags;
 	}
@@ -2974,10 +3567,10 @@ bool kmsg_dump_get_buffer(struct kmsg_dumper *dumper, bool syslog,
 	idx = dumper->cur_idx;
 	prev = 0;
 	while (l > size && seq < dumper->next_seq) {
-		struct printk_log *msg = log_from_idx(idx);
+		struct printk_log *msg = log_from_idx(MAIN_LOG, idx);
 
 		l -= msg_print_text(msg, prev, true, NULL, 0);
-		idx = log_next(idx);
+		idx = inc_idx(MAIN_LOG, idx);
 		seq++;
 		prev = msg->flags;
 	}
@@ -2988,10 +3581,10 @@ bool kmsg_dump_get_buffer(struct kmsg_dumper *dumper, bool syslog,
 
 	l = 0;
 	while (seq < dumper->next_seq) {
-		struct printk_log *msg = log_from_idx(idx);
+		struct printk_log *msg = log_from_idx(MAIN_LOG, idx);
 
 		l += msg_print_text(msg, prev, syslog, buf + l, size - l);
-		idx = log_next(idx);
+		idx = inc_idx(MAIN_LOG, idx);
 		seq++;
 		prev = msg->flags;
 	}
