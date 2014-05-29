@@ -1532,6 +1532,7 @@ void lcb_shutdown(struct hfi_devdata *dd)
 	reg = read_csr(dd, DCC_CFG_RESET);
 	write_csr(dd, DCC_CFG_RESET,
 		reg | 1ull << DCC_CFG_RESET_RESET_LCB_SHIFT);
+	(void) read_csr(dd, DCC_CFG_RESET); /* make sure the write completed */
 	udelay(1);	/* must hold for the longer of 16cclks or 20ns */
 	write_csr(dd, DCC_CFG_RESET, reg);
 	write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
