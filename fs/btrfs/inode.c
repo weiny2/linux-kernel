@@ -2948,14 +2948,15 @@ void btrfs_orphan_commit_root(struct btrfs_trans_handle *trans,
 	root->orphan_block_rsv = NULL;
 	spin_unlock(&root->orphan_lock);
 
-	if (root->orphan_item_inserted &&
+	if (test_bit(BTRFS_ROOT_ORPHAN_ITEM_INSERTED, &root->state) &&
 	    btrfs_root_refs(&root->root_item) > 0) {
 		ret = btrfs_del_orphan_item(trans, root->fs_info->tree_root,
 					    root->root_key.objectid);
 		if (ret)
 			btrfs_abort_transaction(trans, root, ret);
 		else
-			root->orphan_item_inserted = 0;
+			clear_bit(BTRFS_ROOT_ORPHAN_ITEM_INSERTED,
+				  &root->state);
 	}
 
 	if (block_rsv) {
@@ -3272,7 +3273,8 @@ int btrfs_orphan_cleanup(struct btrfs_root *root)
 		btrfs_block_rsv_release(root, root->orphan_block_rsv,
 					(u64)-1);
 
-	if (root->orphan_block_rsv || root->orphan_item_inserted) {
+	if (root->orphan_block_rsv ||
+	    test_bit(BTRFS_ROOT_ORPHAN_ITEM_INSERTED, &root->state)) {
 		trans = btrfs_join_transaction(root);
 		if (!IS_ERR(trans))
 			btrfs_end_transaction(trans, root);
@@ -3999,7 +4001,8 @@ int btrfs_truncate_inode_items(struct btrfs_trans_handle *trans,
 	 * not block aligned since we will be keeping the last block of the
 	 * extent just the way it is.
 	 */
-	if (root->ref_cows || root == root->fs_info->tree_root)
+	if (test_bit(BTRFS_ROOT_REF_COWS, &root->state) ||
+	    root == root->fs_info->tree_root)
 		btrfs_drop_extent_cache(inode, ALIGN(new_size,
 					root->sectorsize), (u64)-1, 0);
 
@@ -4092,7 +4095,9 @@ search_again:
 							 extent_num_bytes);
 				num_dec = (orig_num_bytes -
 					   extent_num_bytes);
-				if (root->ref_cows && extent_start != 0)
+				if (test_bit(BTRFS_ROOT_REF_COWS,
+					     &root->state) &&
+				    extent_start != 0)
 					inode_sub_bytes(inode, num_dec);
 				btrfs_mark_buffer_dirty(leaf);
 			} else {
@@ -4106,7 +4111,8 @@ search_again:
 				num_dec = btrfs_file_extent_num_bytes(leaf, fi);
 				if (extent_start != 0) {
 					found_extent = 1;
-					if (root->ref_cows)
+					if (test_bit(BTRFS_ROOT_REF_COWS,
+						     &root->state))
 						inode_sub_bytes(inode, num_dec);
 				}
 			}
@@ -4121,10 +4127,9 @@ search_again:
 			    btrfs_file_extent_other_encoding(leaf, fi) == 0) {
 				u32 size = new_size - found_key.offset;
 
-				if (root->ref_cows) {
+				if (test_bit(BTRFS_ROOT_REF_COWS, &root->state))
 					inode_sub_bytes(inode, item_end + 1 -
 							new_size);
-				}
 
 				/*
 				 * update the ram bytes to properly reflect
@@ -4134,7 +4139,8 @@ search_again:
 				size =
 				    btrfs_file_extent_calc_inline_size(size);
 				btrfs_truncate_item(root, path, size, 1);
-			} else if (root->ref_cows) {
+			} else if (test_bit(BTRFS_ROOT_REF_COWS,
+					    &root->state)) {
 				inode_sub_bytes(inode, item_end + 1 -
 						found_key.offset);
 			}
@@ -4156,8 +4162,9 @@ delete:
 		} else {
 			break;
 		}
-		if (found_extent && (root->ref_cows ||
-				     root == root->fs_info->tree_root)) {
+		if (found_extent &&
+		    (test_bit(BTRFS_ROOT_REF_COWS, &root->state) ||
+		     root == root->fs_info->tree_root)) {
 			btrfs_set_path_blocking(path);
 			ret = btrfs_free_extent(trans, root, extent_start,
 						extent_num_bytes, 0,

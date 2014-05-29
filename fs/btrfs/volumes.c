@@ -1451,6 +1451,22 @@ out:
 	return ret;
 }
 
+/*
+ * Function to update ctime/mtime for a given device path.
+ * Mainly used for ctime/mtime based probe like libblkid.
+ */
+static void update_dev_time(char *path_name)
+{
+	struct file *filp;
+
+	filp = filp_open(path_name, O_RDWR, 0);
+	if (!filp)
+		return;
+	file_update_time(filp);
+	filp_close(filp, NULL);
+	return;
+}
+
 static int btrfs_rm_dev_item(struct btrfs_root *root,
 			     struct btrfs_device *device)
 {
@@ -1693,19 +1709,54 @@ int btrfs_rm_device(struct btrfs_root *root, char *device_path)
 	 * remove it from the devices list and zero out the old super
 	 */
 	if (clear_super && disk_super) {
+		u64 bytenr;
+		int i;
+
 		/* make sure this device isn't detected as part of
 		 * the FS anymore
 		 */
 		memset(&disk_super->magic, 0, sizeof(disk_super->magic));
 		set_buffer_dirty(bh);
 		sync_dirty_buffer(bh);
+
+		/* clear the mirror copies of super block on the disk
+		 * being removed, 0th copy is been taken care above and
+		 * the below would take of the rest
+		 */
+		for (i = 1; i < BTRFS_SUPER_MIRROR_MAX; i++) {
+			bytenr = btrfs_sb_offset(i);
+			if (bytenr + BTRFS_SUPER_INFO_SIZE >=
+					i_size_read(bdev->bd_inode))
+				break;
+
+			brelse(bh);
+			bh = __bread(bdev, bytenr / 4096,
+					BTRFS_SUPER_INFO_SIZE);
+			if (!bh)
+				continue;
+
+			disk_super = (struct btrfs_super_block *)bh->b_data;
+
+			if (btrfs_super_bytenr(disk_super) != bytenr ||
+				btrfs_super_magic(disk_super) != BTRFS_MAGIC) {
+				continue;
+			}
+			memset(&disk_super->magic, 0,
+						sizeof(disk_super->magic));
+			set_buffer_dirty(bh);
+			sync_dirty_buffer(bh);
+		}
 	}
 
 	ret = 0;
 
-	/* Notify udev that device has changed */
-	if (bdev)
+	if (bdev) {
+		/* Update ctime/mtime for device path for libblkid */
+		update_dev_time(device_path);
+
+		/* Notify udev that device has changed */
 		btrfs_kobject_uevent(bdev, KOBJ_CHANGE);
+	}
 
 error_brelse:
 	brelse(bh);
@@ -2145,6 +2196,8 @@ int btrfs_init_new_device(struct btrfs_root *root, char *device_path)
 		ret = btrfs_commit_transaction(trans, root);
 	}
 
+	/* Update ctime/mtime for libblkid */
+	update_dev_time(device_path);
 	return ret;
 
 error_trans:
@@ -3880,7 +3933,8 @@ static int btrfs_add_system_chunk(struct btrfs_root *root,
 	u8 *ptr;
 
 	array_size = btrfs_super_sys_array_size(super_copy);
-	if (array_size + item_size > BTRFS_SYSTEM_CHUNK_ARRAY_SIZE)
+	if (array_size + item_size + sizeof(disk_key)
+			> BTRFS_SYSTEM_CHUNK_ARRAY_SIZE)
 		return -EFBIG;
 
 	ptr = super_copy->sys_chunk_array + array_size;
@@ -3985,6 +4039,16 @@ static void check_raid56_incompat_flag(struct btrfs_fs_info *info, u64 type)
 	btrfs_set_fs_incompat(info, RAID56);
 }
 
+#define BTRFS_MAX_DEVS(r) ((BTRFS_LEAF_DATA_SIZE(r)		\
+			- sizeof(struct btrfs_item)		\
+			- sizeof(struct btrfs_chunk))		\
+			/ sizeof(struct btrfs_stripe) + 1)
+
+#define BTRFS_MAX_DEVS_SYS_CHUNK ((BTRFS_SYSTEM_CHUNK_ARRAY_SIZE	\
+				- 2 * sizeof(struct btrfs_disk_key)	\
+				- 2 * sizeof(struct btrfs_chunk))	\
+				/ sizeof(struct btrfs_stripe) + 1)
+
 static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 			       struct btrfs_root *extent_root, u64 start,
 			       u64 type)
@@ -4034,6 +4098,8 @@ static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 	if (type & BTRFS_BLOCK_GROUP_DATA) {
 		max_stripe_size = 1024 * 1024 * 1024;
 		max_chunk_size = 10 * max_stripe_size;
+		if (!devs_max)
+			devs_max = BTRFS_MAX_DEVS(info->chunk_root);
 	} else if (type & BTRFS_BLOCK_GROUP_METADATA) {
 		/* for larger filesystems, use larger metadata chunks */
 		if (fs_devices->total_rw_bytes > 50ULL * 1024 * 1024 * 1024)
@@ -4041,9 +4107,13 @@ static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 		else
 			max_stripe_size = 256 * 1024 * 1024;
 		max_chunk_size = max_stripe_size;
+		if (!devs_max)
+			devs_max = BTRFS_MAX_DEVS(info->chunk_root);
 	} else if (type & BTRFS_BLOCK_GROUP_SYSTEM) {
 		max_stripe_size = 32 * 1024 * 1024;
 		max_chunk_size = 2 * max_stripe_size;
+		if (!devs_max)
+			devs_max = BTRFS_MAX_DEVS_SYS_CHUNK;
 	} else {
 		btrfs_err(info, "invalid chunk type 0x%llx requested\n",
 		       type);
