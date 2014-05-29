@@ -82,6 +82,11 @@ uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(loopback, "Put into LCB loopback mode");
 
+/* TODO: the only way to get normal linkup to work is to skip BCC steps */
+uint disable_bcc = 1;
+module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
+MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
+
 uint nodma_rtail;
 module_param(nodma_rtail, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "0 for no DMA of hdr tail, 1 to DMA the hdr tail");
@@ -535,7 +540,8 @@ static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 				u8 *continous);
 static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 				u16 *vl15buf, u8 *crc_sizes);
-static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *link_widths);
+static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
+				u16 *link_widths);
 static void handle_send_context_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
@@ -1532,6 +1538,33 @@ void lcb_shutdown(struct hfi_devdata *dd)
 }
 
 /*
+ * These LCB adjustments are for the Aurora SerDes core in the FPGA.
+ */
+void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
+{
+	/*
+	 * LCB_CFG_RX_FIFOS_RADR.RST_VAL = 4
+	 * LCB_CFG_RX_FIFOS_RADR.OK_TO_JUMP_VAL = 4
+	 * LCB_CFG_RX_FIFOS_RADR.DO_NOT_JUMP_VAL = 5
+	 */
+	write_csr(dd, DC_LCB_CFG_RX_FIFOS_RADR,
+		4ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT
+		| 4ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		| 5ull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT
+		);
+	/* LCB_CFG_IGNORE_LOST_RCLK.EN = 1 */
+	write_csr(dd, DC_LCB_CFG_IGNORE_LOST_RCLK,
+		DC_LCB_CFG_IGNORE_LOST_RCLK_EN_SMASK);
+	/*
+	 * Brian Stokka is getting fewer errors with this:
+	 * LCB_CFG_TX_FIFOS_RADR.ON_REINIT = 0 (default)
+	 * LCB_CFG_TX_FIFOS_RADR.RST_VAL = 6
+	 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RADR,
+		6ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT);
+}
+
+/*
  * Handle a verify capabilities interrupt from the 8051
  */
 static void handle_verify_cap(struct hfi_devdata *dd)
@@ -1541,6 +1574,7 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	u8 vcu;
 	u8 vau;
 	u16 vl15buf;
+	u16 flag_bits;
 	u16 link_widths;
 	u8 crc_sizes;
 	struct qib_pportdata *ppd = dd->pport;
@@ -1551,6 +1585,7 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 		| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
 
 	lcb_shutdown(dd);
+	adjust_lcb_for_fpga_serdes(dd);
 
 	/*
 	 * These are now valid:
@@ -1561,14 +1596,32 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	 */
 	read_vc_remote_phy(dd, &power_management, &continious);
 	read_vc_remote_fabric(dd, &vau, &vcu, &vl15buf, &crc_sizes);
-	read_vc_remote_link_width(dd, &link_widths);
+	read_vc_remote_link_width(dd, &flag_bits, &link_widths);
 	dd_dev_info(dd,
 		"Peer PHY: power management 0x%x, continous updates 0x%x\n",
 		(int)power_management, (int)continious);
 	dd_dev_info(dd,
 		"Peer Fabric: vAU %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
 		(int)vau, (int)vcu, (int)vl15buf, (int)crc_sizes);
-	dd_dev_info(dd, "Peer Link width: 0x%x\n", (u32)link_widths);
+	dd_dev_info(dd, "Peer Link Width: flags 0x%x, widths 0x%x\n",
+		(u32)flag_bits, (u32)link_widths);
+	if (disable_bcc) {
+		/*
+		 * TODO:
+		 * With the BCC disabled, no Verify Cap exchange takes
+		 * place, so the above values will all be zero.
+		 * For now, use our values as we know that we are
+		 * talking back-to-back with another WFR.  If we hook up
+		 * with a PRR, we will need to revisit this.  In particular,
+		 * vl15buf and vcu, which may be different.  vau is fixed
+		 * at 3 for all Gen1 chips.
+		 */
+		dd_dev_info(dd,
+			"Overriding invalid remote details with local data\n");
+		vau = dd->vau;
+		vl15buf = dd->vl15_init;
+		vcu = dd->vcu;
+	}
 	set_up_vl15(dd, vau, vl15buf);
 
 	/* set up the remote credit return table */
@@ -2275,7 +2328,7 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, reg);
 
 	/* wait for completion, alternate: interrupt */
-	timeout = jiffies + msecs_to_jiffies(5);
+	timeout = jiffies + msecs_to_jiffies(100);
 	while (1) {
 		reg = read_csr(dd, DC_DC8051_CFG_HOST_CMD_1);
 		completed = reg & DC_DC8051_CFG_HOST_CMD_1_COMPLETED_SMASK;
@@ -2402,11 +2455,13 @@ static void write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
 }
 
 static void write_vc_local_link_width(struct hfi_devdata *dd,
+				u16 flag_bits,
 				u16 link_widths)
 {
 	u32 frame;
 
-	frame = (u32)link_widths << LINK_WIDTH_SHIFT;
+	frame = (u32)flag_bits << FLAG_BITS_SHIFT
+		| (u32)link_widths << LINK_WIDTH_SHIFT;
 	load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
 		frame);
 }
@@ -2435,11 +2490,14 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 	*crc_sizes = (frame >> CRC_SIZES_SHIFT) & CRC_SIZES_MASK;
 }
 
-static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *link_widths)
+static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
+					u16 *link_widths)
 {
 	u32 frame;
 
-	read_8051_config(dd, VERIFY_CAP_REMOTE_PHY, GENERAL_CONFIG, &frame);
+	read_8051_config(dd, VERIFY_CAP_REMOTE_LINK_WIDTH, GENERAL_CONFIG,
+				&frame);
+	*flag_bits = (frame >> FLAG_BITS_SHIFT) & FLAG_BITS_MASK;
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
 }
 
@@ -2456,45 +2514,96 @@ int init_loopback(struct hfi_devdata *dd)
 
 	lcb_shutdown(dd);
 
+	/*
+	 * TODO: Better document loopback values, e.g. define or enum.
+	 * This is currently in flux.  Some current values may disappear,
+	 * new ones may be added.  Perhaps go with loopback types, e.g.
+	 * LCB, SerDes, Cable.
+	 */
+	/* the simulator can only use LCB loopback v8 */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+		loopback = 8;
+
 	/* configure LCBs in loopback */
-	/*	LCB_CFG_LOOPBACK.VAL = 2 */
-	/*	LCB_CFG_LANE_WIDTH.VAL = 0 */
-	write_csr(dd, DC_LCB_CFG_LOOPBACK,
-		2ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
-	write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
+	if (loopback == 1 || loopback == 2) {
+		/*
+		 * Loopback value:
+		 * 1 - internal SerDes Loopback, quick linkup
+		 * 2 - back-to-back, quick linkup
+		 */
+		if (loopback == 1) {
+			/* this sets the SerDes to internal loopback mode */
+			ret = set_physical_link_state(dd,
+					WFR_PLS_INTERNAL_SERDES_LOOPBACK);
+			if (ret != WFR_HCMD_SUCCESS) {
+				dd_dev_err(dd,
+					"%s: set phsyical link state to SerDes Loopback failed with return 0x%x\n",
+					__func__, ret);
+				if (ret >= 0)
+					ret = -EINVAL;
+				return ret;
+			}
+		}
+
+		adjust_lcb_for_fpga_serdes(dd);
+	} else if (loopback == 8) {	/* LCB loopback for FPGA_P r8 */
+		/* LCB_CFG_LOOPBACK.VAL = 2 */
+		/* LCB_CFG_LANE_WIDTH.VAL = 0 */
+		write_csr(dd, DC_LCB_CFG_LOOPBACK,
+			2ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
+		write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
+	} else if (loopback == 9) {	/* LCB loopback for FPGA_P r9 */
+		/* this requires ILP 8051 firmware, or later */
+		/*	LCB_CFG_LOOPBACK.VAL = 1 */
+		/*	LCB_CFG_LANE_WIDTH.VAL = 0 */
+		write_csr(dd, DC_LCB_CFG_LOOPBACK,
+			1ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
+		write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
+	} else {
+		dd_dev_err(dd, "%s: Invalid loopback mode %d\n",
+			__func__, loopback);
+		return -EINVAL;
+	}
 	/* start the LCBs */
 	/*	LCB_CFG_TX_FIFOS_RESET.VAL = 0 */
-	/*	LCB_CFG_RUN.EN = 1 */
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
-	write_csr(dd, DC_LCB_CFG_RUN,
-		1ull << DC_LCB_CFG_RUN_EN_SHIFT);
 
-	/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
-	timeout = jiffies + msecs_to_jiffies(10);
-	while (1) {
-		reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
-		if (reg)
-			break;
-		if (time_after(jiffies, timeout)) {
-			dd_dev_err(dd,
-				"timeout waiting for LINK_TRANSFER_ACTIVE\n");
-			return -ETIMEDOUT;
+	if (loopback == 8) {
+		/* LCB_CFG_RUN.EN = 1 */
+		write_csr(dd, DC_LCB_CFG_RUN,
+			1ull << DC_LCB_CFG_RUN_EN_SHIFT);
+
+		/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
+		timeout = jiffies + msecs_to_jiffies(10);
+		while (1) {
+			reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
+			if (reg)
+				break;
+			if (time_after(jiffies, timeout)) {
+				dd_dev_err(dd,
+					"timeout waiting for LINK_TRANSFER_ACTIVE\n");
+				return -ETIMEDOUT;
+			}
+			udelay(2);
 		}
-		udelay(2);
+
+		write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
+			1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
 	}
 
-	write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
-		1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+			read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
+				& ~DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
 
 	/*
-	 * TODO: State 0xe2 is a special hack to allow a move to LinkUp.
-	 * This is in a special 8051 firmware and in simulator v37 and
-	 * later.
+	 * State "quick" LinkUp request sets the physical link state to
+	 * LinkUp without a verify capabilbity sequence.
+	 * This state is in simulator v37 and later.
 	 */
-	ret = set_physical_link_state(dd, 0xe2);
+	ret = set_physical_link_state(dd, WFR_PLS_QUICK_LINKUP);
 	if (ret != WFR_HCMD_SUCCESS) {
 		dd_dev_err(dd,
-			"%s: set phsyical link state to LinkUp failed with return 0x%x\n",
+			"%s: set phsyical link state to quick LinkUp failed with return 0x%x\n",
 			__func__, ret);
 
 		if (ret >= 0)
@@ -2532,8 +2641,14 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
 		WFR_SUPPORTED_CRCS);
 
-	/* TODO: 0x0f = 4 lanes max, 1 lanes min */
-	write_vc_local_link_width(dd, 0x0f);
+	/*
+	 * TODO: 0x2f00 are undocumented flags co-located with the
+	 * local link width capability register.  These flags turn
+	 * off some BCC steps during LinkUp, currently necessary
+	 * for back-to-back operation (doesn't matter for loopback).
+	 */
+	write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
+		WFR_SUPPORTED_LINK_WIDTHS);
 
 	/* enable the port */
 	/* TODO: 7322: done within rcvmod_lock */

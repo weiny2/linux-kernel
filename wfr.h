@@ -593,6 +593,8 @@
 #define WFR_PLS_CONFIGLT_LINK_TRANSFER_ACTIVE	   0x49
 #define WFR_PLS_LINKUP				   0x50
 #define WFR_PLS_PHYTEST				   0xB0
+#define WFR_PLS_INTERNAL_SERDES_LOOPBACK	   0xe1
+#define WFR_PLS_QUICK_LINKUP			   0xe2
 
 /* DC_DC8051_CFG_HOST_CMD_0.REQ_TYPE - 8051 host commands */
 #define WFR_HCMD_LOAD_CONFIG_DATA 0x01
@@ -700,6 +702,11 @@
 /* verify capability link width fields */
 #define LINK_WIDTH_SHIFT 0
 #define LINK_WIDTH_MASK 0xffff
+#define FLAG_BITS_SHIFT 16
+#define FLAG_BITS_MASK 0xffff
+
+/* verify capability link width values */
+#define WFR_SUPPORTED_LINK_WIDTHS 0xb	/* 4,2,1 widths */
 
 /* verify capability PHY power management bits */
 #define PWRM_BER_CONTROL	0x1
