@@ -624,14 +624,17 @@ int rm_device_membership(struct btrfs_fs_info *fs_info,
 	return 0;
 }
 
-static int add_device_membership(struct btrfs_fs_info *fs_info)
+int add_device_membership(struct btrfs_fs_info *fs_info,
+		struct btrfs_device *one_device)
 {
 	int error = 0;
 	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	struct btrfs_device *dev;
 
-	fs_info->device_dir_kobj = kobject_create_and_add("devices",
+	if (!fs_info->device_dir_kobj)
+		fs_info->device_dir_kobj = kobject_create_and_add("devices",
 						&fs_info->super_kobj);
+
 	if (!fs_info->device_dir_kobj)
 		return -ENOMEM;
 
@@ -640,6 +643,9 @@ static int add_device_membership(struct btrfs_fs_info *fs_info)
 		struct kobject *disk_kobj;
 
 		if (!dev->bdev)
+			continue;
+
+		if (one_device && one_device != dev)
 			continue;
 
 		disk = dev->bdev->bd_part;
@@ -679,7 +685,7 @@ int btrfs_sysfs_add_one(struct btrfs_fs_info *fs_info)
 	if (error)
 		goto failure;
 
-	error = add_device_membership(fs_info);
+	error = add_device_membership(fs_info, NULL);
 	if (error)
 		goto failure;
 
