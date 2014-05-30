@@ -188,47 +188,6 @@ static void release_port_group(struct kref *kref)
 }
 
 /*
- * submit_vpd_inquiry - Issue an INQUIRY VPD page 0x83 command
- * @sdev: sdev the command should be sent to
- */
-static int submit_vpd_inquiry(struct scsi_device *sdev, unsigned char *buff,
-			      int bufflen, unsigned char *sense)
-{
-	struct request *rq;
-	int err;
-
-	rq = get_alua_req(sdev, buff, bufflen, READ);
-	if (!rq) {
-		err = DRIVER_BUSY << 24;
-		goto done;
-	}
-
-	/* Prepare the command. */
-	rq->cmd[0] = INQUIRY;
-	rq->cmd[1] = 1;
-	rq->cmd[2] = 0x83;
-	rq->cmd[4] = bufflen;
-	rq->cmd_len = COMMAND_SIZE(INQUIRY);
-
-	rq->sense = sense;
-	memset(rq->sense, 0, SCSI_SENSE_BUFFERSIZE);
-	rq->sense_len = 0;
-
-	err = blk_execute_rq(rq->q, NULL, rq, 1);
-	if (err < 0) {
-		if (!rq->errors)
-			err = DID_ERROR << 16;
-		else
-			err = rq->errors;
-		if (rq->sense_len)
-			err |= (DRIVER_SENSE << 24);
-	}
-	blk_put_request(rq);
-done:
-	return err;
-}
-
-/*
  * submit_rtpg - Issue a REPORT TARGET GROUP STATES command
  * @sdev: sdev the command should be sent to
  */
@@ -387,84 +346,30 @@ static int alua_check_tpgs(struct scsi_device *sdev, struct alua_dh_data *h)
 }
 
 /*
- * alua_vpd_inquiry - Evaluate INQUIRY vpd page 0x83
+ * alua_check_vpd - Evaluate INQUIRY vpd page 0x83
  * @sdev: device to be checked
  *
  * Extract the relative target port and the target port group
  * descriptor from the list of identificators.
  */
-static int alua_vpd_inquiry(struct scsi_device *sdev, struct alua_dh_data *h)
+static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 {
-	unsigned char *buff;
-	unsigned char bufflen = 36;
-	int len, timeout = ALUA_FAILOVER_TIMEOUT;
-	unsigned char sense[SCSI_SENSE_BUFFERSIZE];
 	char target_id_str[256], *target_id = NULL;
 	int target_id_size;
-	struct scsi_sense_hdr sense_hdr;
-	unsigned retval, err;
 	int group_id = -1;
 	unsigned char *d;
-	unsigned long expiry;
 	struct alua_port_group *tmp_pg, *pg = NULL;
 
-	expiry = round_jiffies_up(jiffies + timeout);
- retry:
-	buff = kmalloc(bufflen, GFP_ATOMIC);
-	if (!buff) {
-		sdev_printk(KERN_WARNING, sdev,
-			    "%s: kmalloc buffer failed\n",
-			    ALUA_DH_NAME);
-		/* Temporary failure, bypass */
-		return SCSI_DH_DEV_TEMP_BUSY;
-	}
-	retval = submit_vpd_inquiry(sdev, buff, bufflen, sense);
-	if (retval) {
-		if (!(driver_byte(retval) & DRIVER_SENSE) ||
-		    !scsi_normalize_sense(sense, SCSI_SENSE_BUFFERSIZE,
-					  &sense_hdr)) {
-			sdev_printk(KERN_INFO, sdev,
-				    "%s: evpd inquiry failed, ", ALUA_DH_NAME);
-			scsi_show_result(retval);
-			if (driver_byte(retval) == DRIVER_BUSY)
-				err = SCSI_DH_DEV_TEMP_BUSY;
-			else
-				err = SCSI_DH_IO;
-			goto out;
-		}
-		err = alua_check_sense(sdev, &sense_hdr);
-		if (sense_hdr.sense_key == UNIT_ATTENTION)
-			err = ADD_TO_MLQUEUE;
-		if (err == ADD_TO_MLQUEUE && time_before(jiffies, expiry))
-			goto retry;
-		if (err != SUCCESS) {
-			sdev_printk(KERN_INFO, sdev,
-				    "%s: evpd inquiry failed, ", ALUA_DH_NAME);
-			scsi_show_sense_hdr(&sense_hdr);
-			sdev_printk(KERN_INFO, sdev,
-				    "%s: evpd inquiry failed, ", ALUA_DH_NAME);
-			scsi_show_extd_sense(sense_hdr.asc, sense_hdr.ascq);
-			err = SCSI_DH_IO;
-			goto out;
-		}
-	}
-
-	/* Check if vpd page exceeds initial buffer */
-	len = (buff[2] << 8) + buff[3] + 4;
-	if (len > bufflen) {
-		/* Resubmit with the correct length */
-		kfree(buff);
-		bufflen = len;
-		goto retry;
-	}
+	if (!sdev->vpd_pg83)
+		return SCSI_DH_DEV_UNSUPP;
 
 	/*
-	 * Now look for the correct descriptor.
+	 * Look for the correct descriptor.
 	 */
 	memset(target_id_str, 0, 256);
 	target_id_size = 0;
-	d = buff + 4;
-	while (d < buff + len) {
+	d = sdev->vpd_pg83 + 4;
+	while (d < sdev->vpd_pg83 + sdev->vpd_pg83_len) {
 		switch (d[1] & 0xf) {
 		case 0x2:
 			/* EUI-64 */
@@ -545,8 +450,7 @@ static int alua_vpd_inquiry(struct scsi_device *sdev, struct alua_dh_data *h)
 			    "%s: No target port descriptors found\n",
 			    ALUA_DH_NAME);
 		h->tpgs = TPGS_MODE_NONE;
-		err = SCSI_DH_DEV_UNSUPP;
-		goto out;
+		return SCSI_DH_DEV_UNSUPP;
 	}
 	if (!target_id_size) {
 		/* Check for EMC Clariion extended inquiry */
@@ -598,8 +502,7 @@ static int alua_vpd_inquiry(struct scsi_device *sdev, struct alua_dh_data *h)
 		rcu_assign_pointer(h->pg, pg);
 		spin_unlock(&h->pg_lock);
 		synchronize_rcu();
-		err = SCSI_DH_OK;
-		goto out;
+		return SCSI_DH_OK;
 	}
 	pg = kzalloc(sizeof(struct alua_port_group), GFP_ATOMIC);
 	if (!pg) {
@@ -608,8 +511,7 @@ static int alua_vpd_inquiry(struct scsi_device *sdev, struct alua_dh_data *h)
 			    ALUA_DH_NAME);
 		/* Temporary failure, bypass */
 		spin_unlock(&port_group_lock);
-		err = SCSI_DH_DEV_TEMP_BUSY;
-		goto out;
+		return SCSI_DH_DEV_TEMP_BUSY;
 	}
 	if (target_id_size) {
 		memcpy(pg->target_id, target_id, target_id_size);
@@ -637,10 +539,7 @@ static int alua_vpd_inquiry(struct scsi_device *sdev, struct alua_dh_data *h)
 	spin_unlock(&h->pg_lock);
 	kref_put(&pg->kref, release_port_group);
 	synchronize_rcu();
-	err = SCSI_DH_OK;
-out:
-	kfree(buff);
-	return err;
+	return SCSI_DH_OK;
 }
 
 static char print_alua_state(int state)
@@ -1038,7 +937,7 @@ static int alua_initialize(struct scsi_device *sdev, struct alua_dh_data *h)
 
 	h->error = alua_check_tpgs(sdev, h);
 	if (h->error == SCSI_DH_OK) {
-		h->error = alua_vpd_inquiry(sdev, h);
+		h->error = alua_check_vpd(sdev, h);
 		rcu_read_lock();
 		pg = rcu_dereference(h->pg);
 		if (!pg) {
