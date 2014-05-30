@@ -1584,6 +1584,7 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
 		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
 		| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
 	lcb_shutdown(dd);
 	adjust_lcb_for_fpga_serdes(dd);
@@ -1632,6 +1633,7 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
 
 	/* give 8051 access to the LCB CSRs */
+	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
 	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
 		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
 		& ~DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
@@ -2512,6 +2514,7 @@ int init_loopback(struct hfi_devdata *dd)
 	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
 		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
 		| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
 	lcb_shutdown(dd);
 
@@ -2592,6 +2595,7 @@ int init_loopback(struct hfi_devdata *dd)
 			1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
 	}
 
+	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
 	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
 			read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
 				& ~DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
