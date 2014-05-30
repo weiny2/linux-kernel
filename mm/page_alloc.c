@@ -1958,11 +1958,11 @@ zonelist_scan:
 		 * time the page has in memory before being reclaimed.
 		 */
 		if (alloc_flags & ALLOC_FAIR) {
+			if (!zone_local(preferred_zone, zone))
+				continue;
 			if (zone_page_state(zone, NR_ALLOC_BATCH) <= 0)
 				continue;
 			batch_depleted = false;
-			if (!zone_local(preferred_zone, zone))
-				continue;
 		}
 
 		/*
