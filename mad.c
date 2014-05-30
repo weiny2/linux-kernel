@@ -2087,7 +2087,40 @@ struct stl_port_status_rsp {
 	} vls[0]; /* real array size defined by # bits set in vl_select_mask */
 };
 
-#define STL_PM_STATUS_REQUEST_TOO_LARGE  cpu_to_be16(0x100)
+enum counter_selects {
+	cs_port_xmit_data			= (1 << 0),
+	cs_port_rcv_data			= (1 << 1),
+	cs_port_xmit_pkts			= (1 << 2),
+	cs_port_rcv_pkts			= (1 << 3),
+	cs_port_mcast_xmit_pkts			= (1 << 4),
+	cs_port_mcast_rcv_pkts			= (1 << 5),
+	cs_port_xmit_wait			= (1 << 6),
+	cs_sw_port_congestion			= (1 << 7),
+	cs_port_rcv_fecn			= (1 << 8),
+	cs_port_rcv_becn			= (1 << 9),
+	cs_port_xmit_time_cong			= (1 << 10),
+	cs_port_xmit_wasted_bw			= (1 << 11),
+	cs_port_xmit_wait_data			= (1 << 12),
+	cs_port_rcv_bubble			= (1 << 13),
+	cs_port_mark_fecn			= (1 << 14),
+	cs_port_rcv_constraint_errors		= (1 << 15),
+	cs_port_rcv_switch_relay_errors		= (1 << 16),
+	cs_port_xmit_discards			= (1 << 17),
+	cs_port_xmit_constraint_errors		= (1 << 18),
+	cs_port_rcv_remote_physical_errors	= (1 << 19),
+	cs_local_link_integrity_errors		= (1 << 20),
+	cs_port_rcv_errors			= (1 << 21),
+	cs_excessive_buffer_overruns		= (1 << 22),
+	cs_fm_config_errors			= (1 << 23),
+	cs_link_error_recovery			= (1 << 24),
+	cs_link_downed				= (1 << 25),
+	cs_uncorrectable_errors			= (1 << 26),
+};
+
+struct stl_clear_port_status {
+	__be64 port_select_mask[4];
+	__be32 counter_select_mask;
+};
 
 static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
 				     struct ib_device *ibdev)
@@ -2242,6 +2275,84 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 
 	return reply(pmp);
 }
+
+static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
+				  struct ib_device *ibdev, u8 port)
+{
+	struct stl_clear_port_status *req =
+		(struct stl_clear_port_status *)pmp->data;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u32 nports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	u64 portn = be64_to_cpu(req->port_select_mask[3]);
+	u32 counter_select = be32_to_cpu(req->counter_select_mask);
+	u32 offset;
+
+	if ((nports != 1) || (portn != 1 << port)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+	/*
+	 * only counters returned by pma_get_stl_portstatus() are
+	 * handled, so when pma_get_stl_portstatus() gets a fix,
+	 * the corresponding change should be made here as well.
+	 */
+	if (counter_select & cs_port_xmit_data)
+		write_csr(dd, DCC_PRF_PORT_XMIT_DATA_CNT, 0);
+
+	if (counter_select & cs_port_rcv_data)
+		write_csr(dd, DCC_PRF_PORT_RCV_DATA_CNT, 0);
+
+	if (counter_select & cs_port_xmit_pkts)
+		write_csr(dd, DCC_PRF_PORT_XMIT_PKTS_CNT, 0);
+
+	if (counter_select & cs_port_rcv_pkts)
+		write_csr(dd, DCC_PRF_PORT_RCV_PKTS_CNT, 0);
+
+	if (counter_select & cs_port_mcast_xmit_pkts)
+		write_csr(dd, DCC_PRF_PORT_XMIT_MULTICAST_CNT, 0);
+
+	if (counter_select & cs_port_mcast_rcv_pkts)
+		write_csr(dd, DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT, 0);
+
+	if (counter_select & cs_port_xmit_wait) {
+		offset = SEND_WAIT_CNT * 8 + WFR_SEND_COUNTER_ARRAY64;
+		write_csr(dd, offset, 0);
+	}
+
+	/* ignore cs_sw_portCongestion for HFIs */
+
+	if (counter_select & cs_port_rcv_fecn)
+		write_csr(dd, DCC_PRF_PORT_RCV_FECN_CNT, 0);
+	if (counter_select & cs_port_rcv_becn)
+		write_csr(dd, DCC_PRF_PORT_RCV_BECN_CNT, 0);
+
+	/* ignore cs_port_xmit_time_cong for HFIs */
+	/* ignore cs_port_xmit_wasted_bw for now */
+	/* ignore cs_port_xmit_wait_data for now */
+	if (counter_select & cs_port_rcv_bubble)
+		write_csr(dd, DCC_PRF_PORT_RCV_BUBBLE_CNT, 0);
+	if (counter_select & cs_port_mark_fecn)
+		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);
+	/* ignore cs_port_rcv_constraint_errors for now */
+	/* ignore cs_port_rcv_switch_relay_errors for HFIs */
+	/* ignore cs_port_xmit_discards for now */
+	/* ignore cs_port_xmit_constraint_errors for now */
+	if (counter_select & cs_port_rcv_remote_physical_errors)
+		write_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT, 0);
+	/* ignore cs_local_link_integrity_errors for now */
+	if (counter_select & cs_port_rcv_errors)
+		write_csr(dd, DCC_ERR_PORTRCV_ERR_CNT, 0);
+	/* ignore cs_excessive_buffer_overruns for now */
+	if (counter_select & cs_fm_config_errors)
+		write_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT, 0);
+	/* ignore cs_link_error_recovery for now */
+	/* ignore cs_link_downed for now */
+	if (counter_select & cs_uncorrectable_errors)
+		write_csr(dd, DCC_ERR_UNCORRECTABLE_CNT, 0);
+
+	return reply(pmp);
+}
+
 #endif /* CONFIG_STL_MGMT */
 
 static int pma_get_classportinfo(struct ib_pma_mad *pmp,
@@ -3496,8 +3607,6 @@ bail:
 
 #ifdef CONFIG_STL_MGMT
 
-#define STL_PMA_PORT_STATUS cpu_to_be16(0x0040)
-
 static int process_perf_stl(struct ib_device *ibdev, u8 port,
 			    struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad, u32 *resp_len)
@@ -3521,7 +3630,7 @@ static int process_perf_stl(struct ib_device *ibdev, u8 port,
 		case IB_PMA_CLASS_PORT_INFO:
 			ret = pma_get_stl_classportinfo(pmp, ibdev);
 			goto bail;
-		case STL_PMA_PORT_STATUS:
+		case STL_PM_ATTRIB_ID_PORT_STATUS:
 			ret = pma_get_stl_portstatus(pmp, ibdev, port);
 			goto bail;
 #if 0
@@ -3552,6 +3661,9 @@ static int process_perf_stl(struct ib_device *ibdev, u8 port,
 
 	case IB_MGMT_METHOD_SET:
 		switch (pmp->mad_hdr.attr_id) {
+		case STL_PM_ATTRIB_ID_CLEAR_PORT_STATUS:
+			ret = pma_set_stl_portstatus(pmp, ibdev, port);
+			goto bail;
 #if 0
 		case IB_PMA_PORT_SAMPLES_CONTROL:
 			ret = pma_set_portsamplescontrol(pmp, ibdev, port);
