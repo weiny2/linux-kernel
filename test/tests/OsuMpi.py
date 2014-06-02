@@ -22,7 +22,7 @@ def main():
     #############################
     test_info = RegLib.TestInfo()
 
-    RegLib.test_log(0, "Test: LoadModule.py started")
+    RegLib.test_log(0, "Test: OsuMpi.py started")
     RegLib.test_log(0, "Dumping test parameters")
 
     print test_info
@@ -48,7 +48,7 @@ def main():
     else:
         RegLib.test_fail("MPI with verbs not yet supported")
 
-    benchmarks = ["pt2pt/osu_latency", "pt2pt/osu_bw"]
+    benchmarks = ["osu_latency", "osu_bw"]
 
     host_list = test_info.get_host_list()
     hosts = ",".join(host_list)
@@ -66,9 +66,9 @@ def main():
         cmd = cmd + " " +  test_info.get_mpi_bin_path() + "/mpirun"
         cmd = cmd + test_info.get_mpi_opts()
         cmd = cmd + " LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-        cmd = cmd + " -np " + str(host_count) + " -H "
-        cmd = cmd + hosts + " " + test_info.get_osu_benchmark_dir()
-        cmd = cmd + "/mpi/" + benchmark
+        cmd = cmd + " -np " + str(host_count)
+        cmd = cmd + " -H " + hosts
+        cmd = cmd + " " + test_info.get_osu_benchmark_dir() + benchmark
         RegLib.test_log(5,  "MPI CMD: " + cmd)
 
         err = do_ssh(host1, cmd)

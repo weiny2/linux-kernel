@@ -440,7 +440,21 @@ class TestInfo:
         return ret
 
     def get_osu_benchmark_dir(self):
-        return "/usr/local/libexec/osu-micro-benchmarks"
+        # Look on one of the target nodes for the benchmark location.
+        # Use buffered send_ssh() so we don't see the annoying
+        # "Warning: Permanently added ..." message on the output.
+        node = self.nodelist[0]
+        # current simualtion disk images
+        (err, out) = node.send_ssh(
+                          "test -d /usr/local/libexec/osu-micro-benchmarks")
+        if err == 0:
+            return "/usr/local/libexec/osu-micro-benchmarks/mpi/pt2pt/"
+        # FPGA machiines
+        (err, out) = node.send_ssh("test -d /usr/lib64/openmpi/bin")
+        if err == 0:
+            return "/usr/lib64/openmpi/bin/mpitests-"
+        # no identifiable path, return no prefix
+        return ""
 
     def get_mod_parms(self):
         return self.module_params
