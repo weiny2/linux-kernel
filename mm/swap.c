@@ -78,6 +78,7 @@ static void __put_compound_page(struct page *page)
 {
 	compound_page_dtor *dtor;
 
+	__ClearPageWaiters(page);
 	__page_cache_release(page);
 	dtor = get_compound_page_dtor(page);
 	(*dtor)(page);
