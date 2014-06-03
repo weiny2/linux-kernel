@@ -443,6 +443,7 @@ rdma_first:
 			if (unlikely(!ok))
 				goto drop;
 			qp->r_sge.num_sge = 1;
+			qp->r_sge.total_len = be32_to_cpu(reth->length);
 		} else {
 			qp->r_sge.num_sge = 0;
 			qp->r_sge.sge.mr = NULL;

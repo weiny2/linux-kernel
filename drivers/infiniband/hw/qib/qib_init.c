@@ -1257,6 +1257,7 @@ static int __init qib_ib_init(void)
 {
 	int ret;
 
+	qib_copy_sge_init();
 	ret = qib_dev_init();
 	if (ret)
 		goto bail;

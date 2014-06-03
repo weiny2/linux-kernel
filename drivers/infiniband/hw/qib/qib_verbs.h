@@ -940,6 +940,62 @@ void qib_put_txreq(struct qib_verbs_txreq *tx);
 int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len);
 
+#ifdef CONFIG_X86_64
+
+extern void *__memcpy(void *dst, const void *src, size_t n);
+
+static inline void qib_eager_prefetch(void *src)
+{
+	__asm__ __volatile__(
+		"prefetchnta (%0)\n"
+		"prefetchnta 64(%0)\n"
+		"prefetchnta 128(%0)\n"
+		"prefetchnta 192(%0)\n"
+	: /* no output */
+	: "S" (src)
+	);
+}
+
+static inline void *memcpy_string_op(void *dst, const void *src, size_t n)
+{
+	__asm__ __volatile__(
+		"        movq %2, %%rax\n"
+		"        shrq $3, %2\n"
+		"        je 1f\n"
+		"        cld\n"
+		"        rep movsq\n"
+		"1:      movq %%rax, %2\n"
+		"        andq $7, %2\n"
+		"        je 3f\n"
+		"2:      movb (%1), %%al\n"
+		"        incq %1\n"
+		"        movb %%al, (%0)\n"
+		"        incq %0\n"
+		"        decq %2\n"
+		"        jne 2b\n"
+		"3:\n"
+	: "+D" (dst), "+S" (src), "+c" (n)
+	:
+	: "rax", "memory");
+	return dst;
+
+}
+
+#else
+
+static inline void qib_eager_prefetch(void *src)
+{
+}
+
+static inline void *memcpy_string_op(void *dst, const void *src, size_t n)
+{
+	return memcpy(dst, src, n);
+}
+
+#endif
+
+void qib_copy_sge_init(void);
+
 void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length,
 		  int release);
 
