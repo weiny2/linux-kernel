@@ -123,6 +123,13 @@ MODULE_PARM_DESC(inq_timeout,
 		 "Timeout (in seconds) waiting for devices to answer INQUIRY."
 		 " Default is 20. Some devices may need more; most need less.");
 
+static unsigned int scsi_scan_timeout = SCSI_TIMEOUT/HZ + 58;
+
+module_param_named(scan_timeout, scsi_scan_timeout, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(scan_timeout,
+		 "Timeout (in seconds) waiting for devices to become ready"
+		 " after INQUIRY. Default is 60.");
+
 /* This lock protects only this list */
 static DEFINE_SPINLOCK(async_scan_lock);
 static LIST_HEAD(scanning_hosts);
@@ -712,19 +719,6 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	}
 
 	/*
-	 * Related to the above issue:
-	 *
-	 * XXX Devices (disk or all?) should be sent a TEST UNIT READY,
-	 * and if not ready, sent a START_STOP to start (maybe spin up) and
-	 * then send the INQUIRY again, since the INQUIRY can change after
-	 * a device is initialized.
-	 *
-	 * Ideally, start a device if explicitly asked to do so.  This
-	 * assumes that a device is spun up on power on, spun down on
-	 * request, and then spun up on request.
-	 */
-
-	/*
 	 * The scanning code needs to know the scsi_level, even if no
 	 * device is attached at LUN 0 (SCSI_SCAN_TARGET_PRESENT) so
 	 * non-zero LUNs can be scanned.
@@ -736,6 +730,65 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	sdev->sdev_target->scsi_level = sdev->scsi_level;
 
 	return 0;
+}
+
+/**
+ * scsi_test_lun - waiting for a LUN to become ready
+ * @sdev:	scsi_device to test
+ *
+ * Description:
+ *     Wait for the lun associated with @sdev to become ready
+ *
+ *     Send a TEST UNIT READY to detect any unit attention conditions.
+ *     Retry TEST UNIT READY for up to @scsi_scan_timeout if the
+ *     returned sense key is 02/04/01 (Not ready, Logical Unit is
+ *     in process of becoming ready)
+ **/
+static int
+scsi_test_lun(struct scsi_device *sdev)
+{
+	struct scsi_sense_hdr sshdr;
+	int res = SCSI_SCAN_TARGET_PRESENT;
+	int tur_result;
+	unsigned long tur_timeout = jiffies + scsi_scan_timeout * HZ;
+
+	/* Skip for older devices */
+	if (sdev->scsi_level <= SCSI_3)
+		return SCSI_SCAN_LUN_PRESENT;
+
+	/*
+	 * Wait for the device to become ready.
+	 *
+	 * Some targets take some time before the firmware is
+	 * fully initialized, during which time they might not
+	 * be able to fill out any REPORT_LUN command correctly.
+	 * And as we're not capable of handling the
+	 * INQUIRY DATA CHANGED unit attention correctly we'd
+	 * rather wait here.
+	 */
+	do {
+		tur_result = scsi_test_unit_ready(sdev, SCSI_TIMEOUT,
+							  3, &sshdr);
+		if (!tur_result) {
+			res = SCSI_SCAN_LUN_PRESENT;
+			break;
+		}
+		if ((driver_byte(tur_result) & DRIVER_SENSE) &&
+		    scsi_sense_valid(&sshdr)) {
+			SCSI_LOG_SCAN_BUS(3, sdev_printk(KERN_INFO, sdev,
+				"scsi_scan: tur returned %02x/%02x/%02x\n",
+				sshdr.sense_key, sshdr.asc, sshdr.ascq));
+			if (sshdr.sense_key == NOT_READY &&
+			    sshdr.asc == 0x04 && sshdr.ascq == 0x01) {
+				/* Logical Unit is in process
+				 * of becoming ready */
+				msleep(100);
+				continue;
+			}
+		}
+		res = SCSI_SCAN_LUN_PRESENT;
+	} while (time_before_eq(jiffies, tur_timeout));
+	return res;
 }
 
 /**
@@ -1139,6 +1192,13 @@ static int scsi_probe_and_add_lun(struct scsi_target *starget,
 					"scsi scan: peripheral device type"
 					" of 31, no device added\n"));
 		res = SCSI_SCAN_TARGET_PRESENT;
+		goto out_free_result;
+	}
+
+	res = scsi_test_lun(sdev);
+	if (res == SCSI_SCAN_TARGET_PRESENT) {
+		SCSI_LOG_SCAN_BUS(1, sdev_printk(KERN_INFO, sdev,
+			"scsi scan: device not ready\n"));
 		goto out_free_result;
 	}
 
