@@ -224,7 +224,7 @@ static bool compact_checklock_irqsave(spinlock_t *lock, unsigned long *flags,
 
 /*
  * Aside from avoiding lock contention, compaction also periodically checks
- * need_resched() and either schedules in sync compaction, or aborts async
+ * need_resched() and either schedules in sync compaction or aborts async
  * compaction. This is similar to what compact_checklock_irqsave() does, but
  * is used where no lock is concerned.
  *
