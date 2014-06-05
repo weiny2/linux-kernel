@@ -49,6 +49,7 @@
 #include "dev-replace.h"
 #include "raid56.h"
 #include "sysfs.h"
+#include "qgroup.h"
 
 #ifdef CONFIG_X86
 #include <asm/cpufeature.h>
@@ -1105,6 +1106,11 @@ struct extent_buffer *btrfs_find_tree_block(struct btrfs_root *root,
 struct extent_buffer *btrfs_find_create_tree_block(struct btrfs_root *root,
 						 u64 bytenr, u32 blocksize)
 {
+#ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
+	if (unlikely(test_bit(BTRFS_ROOT_DUMMY_ROOT, &root->state)))
+		return alloc_test_extent_buffer(root->fs_info, bytenr,
+						blocksize);
+#endif
 	return alloc_extent_buffer(root->fs_info, bytenr, blocksize);
 }
 
@@ -1283,6 +1289,7 @@ struct btrfs_root *btrfs_alloc_dummy_root(void)
 		return ERR_PTR(-ENOMEM);
 	__setup_root(4096, 4096, 4096, 4096, root, NULL, 1);
 	set_bit(BTRFS_ROOT_DUMMY_ROOT, &root->state);
+	root->alloc_bytenr = 0;
 
 	return root;
 }
@@ -2090,7 +2097,7 @@ static void free_root_pointers(struct btrfs_fs_info *info, int chunk_root)
 		free_root_extent_buffers(info->chunk_root);
 }
 
-static void del_fs_roots(struct btrfs_fs_info *fs_info)
+void btrfs_free_fs_roots(struct btrfs_fs_info *fs_info)
 {
 	int ret;
 	struct btrfs_root *gang[8];
@@ -2219,6 +2226,7 @@ int open_ctree(struct super_block *sb,
 	spin_lock_init(&fs_info->free_chunk_lock);
 	spin_lock_init(&fs_info->tree_mod_seq_lock);
 	spin_lock_init(&fs_info->super_lock);
+	spin_lock_init(&fs_info->qgroup_op_lock);
 	spin_lock_init(&fs_info->buffer_lock);
 	rwlock_init(&fs_info->tree_mod_log_lock);
 	mutex_init(&fs_info->reloc_mutex);
@@ -2244,6 +2252,7 @@ int open_ctree(struct super_block *sb,
 	atomic_set(&fs_info->async_submit_draining, 0);
 	atomic_set(&fs_info->nr_async_bios, 0);
 	atomic_set(&fs_info->defrag_running, 0);
+	atomic_set(&fs_info->qgroup_op_seq, 0);
 	atomic64_set(&fs_info->tree_mod_seq, 0);
 	fs_info->sb = sb;
 	fs_info->max_inline = 8192 * 1024;
@@ -2352,6 +2361,7 @@ int open_ctree(struct super_block *sb,
 	spin_lock_init(&fs_info->qgroup_lock);
 	mutex_init(&fs_info->qgroup_ioctl_lock);
 	fs_info->qgroup_tree = RB_ROOT;
+	fs_info->qgroup_op_tree = RB_ROOT;
 	INIT_LIST_HEAD(&fs_info->dirty_qgroups);
 	fs_info->qgroup_seq = 1;
 	fs_info->quota_enabled = 0;
@@ -3014,7 +3024,7 @@ fail_qgroup:
 fail_trans_kthread:
 	kthread_stop(fs_info->transaction_kthread);
 	btrfs_cleanup_transaction(fs_info->tree_root);
-	del_fs_roots(fs_info);
+	btrfs_free_fs_roots(fs_info);
 fail_cleaner:
 	kthread_stop(fs_info->cleaner_kthread);
 
@@ -3549,8 +3559,10 @@ void btrfs_drop_and_free_fs_root(struct btrfs_fs_info *fs_info,
 	if (test_bit(BTRFS_FS_STATE_ERROR, &fs_info->fs_state))
 		btrfs_free_log(NULL, root);
 
-	__btrfs_remove_free_space_cache(root->free_ino_pinned);
-	__btrfs_remove_free_space_cache(root->free_ino_ctl);
+	if (root->free_ino_pinned)
+		__btrfs_remove_free_space_cache(root->free_ino_pinned);
+	if (root->free_ino_ctl)
+		__btrfs_remove_free_space_cache(root->free_ino_ctl);
 	free_fs_root(root);
 }
 
@@ -3698,7 +3710,7 @@ int close_ctree(struct btrfs_root *root)
 
 	btrfs_sysfs_remove_one(fs_info);
 
-	del_fs_roots(fs_info);
+	btrfs_free_fs_roots(fs_info);
 
 	btrfs_put_block_group_cache(fs_info);
 
