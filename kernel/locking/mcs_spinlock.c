@@ -2,6 +2,7 @@
 #include <linux/percpu.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
+#include "mcs_spinlock.h"
 
 #ifdef CONFIG_SMP
 
@@ -80,8 +81,8 @@ bool osq_lock(struct optimistic_spin_queue **lock)
 	 * guaranteed their existence -- this allows us to apply
 	 * cmpxchg in an attempt to undo our queueing.
 	 */
-	smp_mb();
-	while (!node->locked) {
+
+	while (!smp_load_acquire(&node->locked)) {
 		/*
 		 * If we need to reschedule bail... so we can block.
 		 */
@@ -111,8 +112,7 @@ unqueue:
 		 * in which case we should observe @node->locked becomming
 		 * true.
 		 */
-		smp_mb();
-		if (&node->locked)
+		if (smp_load_acquire(&node->locked))
 			return true;
 
 		arch_mutex_cpu_relax();

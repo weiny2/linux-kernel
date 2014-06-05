@@ -26,6 +26,8 @@
 #include <linux/interrupt.h>
 #include <linux/debug_locks.h>
 
+#include "mcs_spinlock.h"
+
 /*
  * In the DEBUG case we are using the "NULL fastpath" for mutexes,
  * which forces all calls into the slowpath:
@@ -113,6 +115,13 @@ EXPORT_SYMBOL(mutex_lock);
 #endif
 
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
+/*
+ * In order to avoid a stampede of mutex spinners from acquiring the mutex
+ * more or less simultaneously, the spinners need to acquire a MCS lock
+ * first before spinning on the owner field.
+ *
+ */
+
 /*
  * Mutex spinning code migrated from kernel/sched/core.c
  */

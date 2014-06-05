@@ -19,21 +19,6 @@
 #include <asm/processor.h>
 
 /*
- * Cancellable version of the MCS lock above.
- *
- * Intended for adaptive spinning of sleeping locks:
- * mutex_lock()/rwsem_down_{read,write}() etc.
- */
-
-struct optimistic_spin_queue {
-	struct optimistic_spin_queue *next, *prev;
-	int locked; /* 1 if lock acquired */
-};
-
-extern bool osq_lock(struct optimistic_spin_queue **lock);
-extern void osq_unlock(struct optimistic_spin_queue **lock);
-
-/*
  * Simple, straightforward mutexes with strict semantics:
  *
  * - only one task can hold the mutex at a time
@@ -61,6 +46,7 @@ extern void osq_unlock(struct optimistic_spin_queue **lock);
  * - detects multi-task circular deadlocks and prints out all affected
  *   locks and tasks (and only those tasks)
  */
+struct optimistic_spin_queue;
 struct mutex {
 	/* 1: unlocked, 0: locked, negative: locked, possible waiters */
 	atomic_t		count;
@@ -194,4 +180,4 @@ extern int atomic_dec_and_mutex_lock(atomic_t *cnt, struct mutex *lock);
 # define arch_mutex_cpu_relax() cpu_relax()
 #endif
 
-#endif
+#endif /* __LINUX_MUTEX_H */
