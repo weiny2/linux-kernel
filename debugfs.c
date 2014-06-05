@@ -442,6 +442,7 @@ out:
  * 12 chars or less (w/o newline), for proper display by hfistats utility.
  */
 static const char * const hfi_statnames[] = {
+	/* must be element 0*/
 	"KernIntr",
 	"ErrorIntr",
 	"Tx_Errs",
@@ -508,6 +509,20 @@ static void _driver_stats_seq_stop(struct seq_file *s, void *v)
 	rcu_read_unlock();
 }
 
+static u64 hfi_sps_ints(void)
+{
+	unsigned long flags;
+	struct hfi_devdata *dd;
+	u64 sps_ints = 0;
+
+	spin_lock_irqsave(&qib_devs_lock, flags);
+	list_for_each_entry(dd, &qib_dev_list, list) {
+		sps_ints += hfi_int_counter(dd);
+	}
+	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	return sps_ints;
+}
+
 static int _driver_stats_seq_show(struct seq_file *s, void *v)
 {
 	loff_t *spos = v;
@@ -517,7 +532,11 @@ static int _driver_stats_seq_show(struct seq_file *s, void *v)
 
 	if (sz < sizeof(u64))
 		return SEQ_SKIP;
-	*(u64 *)buffer = stats[*spos];
+	/* special case for interrupts */
+	if (*spos == 0)
+		*(u64 *)buffer = hfi_sps_ints();
+	else
+		*(u64 *)buffer = stats[*spos];
 	seq_commit(s,  sizeof(u64));
 	return 0;
 }

@@ -480,11 +480,13 @@ static void verify_interrupt(struct work_struct *work)
 {
         struct hfi_devdata *dd = container_of(work, struct hfi_devdata,
 						interrupt_check_worker.work);
+	u64 int_counter;
 
 	/*
 	 * We should have interrupts by now.  If not, try falling back.
 	 */
-	if (dd->int_counter == 0) {
+	int_counter = hfi_int_counter(dd) - dd->z_int_counter;
+	if (int_counter == 0) {
 		if (!dd->f_intr_fallback(dd))
 			dev_err(&dd->pcidev->dev,
 				"No interrupts detected, not usable.\n");
@@ -967,7 +969,32 @@ void qib_free_devdata(struct hfi_devdata *dd)
 	hfi_dbg_ibdev_exit(&dd->verbs_dev);
 	synchronize_rcu();
 #endif
+	free_percpu(dd->int_counter);
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
+}
+
+u64 hfi_int_counter(struct hfi_devdata *dd)
+{
+	int cpu;
+	u64 int_counter = 0;
+
+	for_each_possible_cpu(cpu)
+		int_counter += *per_cpu_ptr(dd->int_counter, cpu);
+	return int_counter;
+}
+
+u64 qib_sps_ints(void)
+{
+	unsigned long flags;
+	struct hfi_devdata *dd;
+	u64 sps_ints = 0;
+
+	spin_lock_irqsave(&qib_devs_lock, flags);
+	list_for_each_entry(dd, &qib_dev_list, list) {
+		sps_ints += hfi_int_counter(dd);
+	}
+	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	return sps_ints;
 }
 
 /*
@@ -1010,6 +1037,13 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	if (ret < 0) {
 		qib_early_err(&pdev->dev,
 			      "Could not allocate unit ID: error %d\n", -ret);
+		goto bail;
+	}
+	dd->int_counter = alloc_percpu(u64);
+	if (!dd->int_counter) {
+		ret = -ENOMEM;
+		qib_early_err(&pdev->dev,
+			      "Could not allocate per-cpu int_counter\n");
 		goto bail;
 	}
 

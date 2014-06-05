@@ -1965,7 +1965,7 @@ static irqreturn_t general_interrupt(int irq, void *data)
 	u32 bit;
 	int i;
 
-	dd->int_counter++;
+	this_cpu_inc(*dd->int_counter);
 
 	/* phase 1: scan and clear all handled interrupts */
 	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
@@ -2007,7 +2007,7 @@ dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
 qib_sdma0_dumpstate(dd);
 #endif
 
-	dd->int_counter++;
+	this_cpu_inc(*dd->int_counter);
 
 	status = read_csr(dd,
 			WFR_CCE_INT_STATUS + (8*(WFR_IS_SDMA_START/64)))
@@ -2038,7 +2038,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 	struct hfi_devdata *dd = rcd->dd;
 
 	trace_hfi_receive_interrupt(dd, rcd->ctxt);
-	dd->int_counter++;
+	this_cpu_inc(*dd->int_counter);
 
 	/* clear the interrupt */
 	write_csr(rcd->dd, WFR_CCE_INT_CLEAR + (8*rcd->ireg), rcd->imask);
@@ -2731,6 +2731,7 @@ static int reset(struct hfi_devdata *dd)
 {
 	if (print_unimplemented)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
+	dd->z_int_counter = hfi_int_counter(dd);
 	return 0;
 }
 
@@ -4886,7 +4887,7 @@ static int intr_fallback(struct hfi_devdata *dd)
 	/* try again */
 	return 1;
 #else
-	dd->int_counter++; /* fake an interrupt so we stop getting called */
+	this_cpu_inc(*dd->int_counter);
 	return 1;
 #endif
 }

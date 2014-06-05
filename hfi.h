@@ -865,8 +865,10 @@ struct hfi_devdata {
 	/* device (not port) flags, basically device capabilities */
 	u32 flags;
 
-	/* saturating counter of (non-port-specific) device interrupts */
-	u32 int_counter;
+	/* reset value */
+	u64 z_int_counter;
+	/* percpu int_counter */
+	u64 __percpu *int_counter;
 
 	/* number of receive contexts in use by the driver */
 	u32 num_rcv_contexts;
@@ -1426,6 +1428,8 @@ void qib_enable_intx(struct pci_dev *);
 void qib_nomsix(struct hfi_devdata *);
 void qib_pcie_getcmd(struct hfi_devdata *, u16 *, u8 *, u8 *);
 void qib_pcie_reenable(struct hfi_devdata *, u16, u8, u8);
+/* interrupts for device */
+u64 hfi_int_counter(struct hfi_devdata *);
 
 /*
  * dma_addr wrappers - all 0's invalid for hw
