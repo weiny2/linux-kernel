@@ -787,7 +787,8 @@ scsi_test_lun(struct scsi_device *sdev)
 			}
 		}
 		res = SCSI_SCAN_LUN_PRESENT;
-	} while (time_before_eq(jiffies, tur_timeout));
+	} while (time_before_eq(jiffies, tur_timeout) &&
+		 (res == SCSI_SCAN_TARGET_PRESENT));
 	return res;
 }
 
