@@ -702,6 +702,13 @@ static void __enable_runtime(struct rq *rq)
 
 int __read_mostly sysctl_sched_rtsched_debug;
 
+static int __init parse_rtsched_debug(char *arg)
+{
+	sysctl_sched_rtsched_debug = 1;
+	return 0;
+}
+early_param("rtsched_debug", parse_rtsched_debug);
+
 static int balance_runtime(struct rt_rq *rt_rq)
 {
 	int more = 0;
@@ -2055,10 +2062,3 @@ void print_rt_stats(struct seq_file *m, int cpu)
 	rcu_read_unlock();
 }
 #endif /* CONFIG_SCHED_DEBUG */
-
-static int __init parse_rtsched_debug(char *arg)
-{
-	sysctl_sched_rtsched_debug = 1;
-	return 0;
-}
-early_param("rtsched_debug", parse_rtsched_debug);

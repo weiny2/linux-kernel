@@ -2937,7 +2937,8 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 
 	sched_debug	[KNL] Enables verbose scheduler debug messages.
 
-	rtsched_debug   [KNL] Disallows borrowing of excess rt_runtime from neighboring runqueues.
+	rtsched_debug   [KNL] On systems with CONFIG_SMP set, disallows borrowing of excess
+			rt_runtime from neighboring runqueues.
 			  /proc/sys/kernel/sched_rt_runtime_us becomes a hard limit per runqueue.
 
 	nortsched       [KNL] Disables realtime task bandwidth control.
