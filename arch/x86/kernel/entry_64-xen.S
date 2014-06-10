@@ -670,7 +670,7 @@ sysret_check:
 	/* Handle reschedules */
 	/* edx:	work, edi: workmask */
 sysret_careful:
-#if IS_ENABLED(CONFIG_KGR)
+#if IS_ENABLED(CONFIG_KGRAFT)
 	andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
 #endif
 	bt $TIF_NEED_RESCHED,%edx
@@ -736,7 +736,7 @@ sysret_audit:
 
 	/* Do syscall tracing */
 tracesys:
-#if IS_ENABLED(CONFIG_KGR)
+#if IS_ENABLED(CONFIG_KGRAFT)
 	andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
 #endif
 #ifdef CONFIG_AUDITSYSCALL
@@ -789,7 +789,7 @@ GLOBAL(int_with_check)
 	/* First do a reschedule test. */
 	/* edx:	work, edi: workmask */
 int_careful:
-#if IS_ENABLED(CONFIG_KGR)
+#if IS_ENABLED(CONFIG_KGRAFT)
 	andl $~_TIF_KGR_IN_PROGRESS,TI_flags(%rcx)
 #endif
 	bt $TIF_NEED_RESCHED,%edx
