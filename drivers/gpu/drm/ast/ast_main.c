@@ -490,7 +490,7 @@ int ast_gem_init_object(struct drm_gem_object *obj)
 	return 0;
 }
 
-void ast_bo_unref(struct ast_bo **bo)
+static void ast_bo_unref(struct ast_bo **bo)
 {
 	struct ttm_buffer_object *tbo;
 
