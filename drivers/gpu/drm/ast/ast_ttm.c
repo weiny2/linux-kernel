@@ -318,10 +318,8 @@ int ast_bo_create(struct drm_device *dev, int size, int align,
 		return -ENOMEM;
 
 	ret = drm_gem_object_init(dev, &astbo->gem, size);
-	if (ret) {
-		kfree(astbo);
-		return ret;
-	}
+	if (ret)
+		goto error;
 
 	astbo->bo.bdev = &ast->ttm.bdev;
 	astbo->bo.bdev->dev_mapping = dev->dev_mapping;
@@ -336,10 +334,13 @@ int ast_bo_create(struct drm_device *dev, int size, int align,
 			  align >> PAGE_SHIFT, false, NULL, acc_size,
 			  NULL, ast_bo_ttm_destroy);
 	if (ret)
-		return ret;
+		goto error;
 
 	*pastbo = astbo;
 	return 0;
+error:
+	kfree(astbo);
+	return ret;
 }
 
 static inline u64 ast_bo_gpu_offset(struct ast_bo *bo)
