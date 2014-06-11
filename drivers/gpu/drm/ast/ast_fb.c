@@ -190,10 +190,10 @@ static int astfb_create(struct drm_fb_helper *helper,
 	struct drm_device *dev = afbdev->helper.dev;
 	struct drm_mode_fb_cmd2 mode_cmd;
 	struct drm_framebuffer *fb;
-	struct fb_info *info;
+	struct fb_info *info = NULL;
 	int size, ret;
 	struct device *device = &dev->pdev->dev;
-	void *sysram;
+	void *sysram = NULL;
 	struct drm_gem_object *gobj = NULL;
 	struct ast_bo *bo = NULL;
 	mode_cmd.width = sizes->surface_width;
@@ -266,6 +266,14 @@ static int astfb_create(struct drm_fb_helper *helper,
 
 	return 0;
 out:
+	vfree(sysram);
+	afbdev->sysram = NULL;
+	if (info && info->cmap.len)
+		fb_dealloc_cmap(&info->cmap);
+	framebuffer_release(info);
+	afbdev->helper.fb = NULL;
+	afbdev->helper.fbdev = NULL;
+
 	return ret;
 }
 
