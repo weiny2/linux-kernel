@@ -188,12 +188,13 @@ static int astfb_create(struct drm_fb_helper *helper,
 {
 	struct ast_fbdev *afbdev = (struct ast_fbdev *)helper;
 	struct drm_device *dev = afbdev->helper.dev;
+	struct ast_private *ast = dev->dev_private;
 	struct drm_mode_fb_cmd2 mode_cmd;
 	struct drm_framebuffer *fb;
-	struct fb_info *info;
+	struct fb_info *info = NULL;
 	int size, ret;
 	struct device *device = &dev->pdev->dev;
-	void *sysram;
+	void *sysram = NULL;
 	struct drm_gem_object *gobj = NULL;
 	struct ast_bo *bo = NULL;
 	mode_cmd.width = sizes->surface_width;
@@ -252,6 +253,8 @@ static int astfb_create(struct drm_fb_helper *helper,
 	}
 	info->apertures->ranges[0].base = pci_resource_start(dev->pdev, 0);
 	info->apertures->ranges[0].size = pci_resource_len(dev->pdev, 0);
+	info->fix.smem_start = info->apertures->ranges[0].base;
+	info->fix.smem_len = ast->vram_size;
 
 	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->depth);
 	drm_fb_helper_fill_var(info, &afbdev->helper, sizes->fb_width, sizes->fb_height);
@@ -266,6 +269,14 @@ static int astfb_create(struct drm_fb_helper *helper,
 
 	return 0;
 out:
+	vfree(sysram);
+	afbdev->sysram = NULL;
+	if (info && info->cmap.len)
+		fb_dealloc_cmap(&info->cmap);
+	framebuffer_release(info);
+	afbdev->helper.fb = NULL;
+	afbdev->helper.fbdev = NULL;
+
 	return ret;
 }
 
