@@ -274,22 +274,23 @@ void qib_node_desc_chg(struct qib_ibport *ibp)
 }
 
 #ifdef CONFIG_STL_MGMT
-static int subn_get_stl_nodedescription(struct stl_smp *smp, 
-					struct ib_device *ibdev,
-					u32 *resp_len)
+static int __subn_get_stl_nodedesc(struct stl_smp *smp, u32 am,
+				   u8 *data, struct ib_device *ibdev,
+				   u8 port, u32 *resp_len)
 {
 	struct stl_node_description *nd;
- 
-	if (smp->attr_mod) {
+
+	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
  
-	nd = (struct stl_node_description *)stl_get_smp_data(smp);
+	nd = (struct stl_node_description *)data;
  
 	memcpy(nd->data, ibdev->node_desc, sizeof(nd->data));
 
-	*resp_len += sizeof(*nd);
+	if (resp_len)
+		*resp_len += sizeof(*nd);
  
 	return reply(smp);
 }
@@ -307,21 +308,20 @@ static int subn_get_nodedescription(struct ib_smp *smp,
 }
 
 #ifdef CONFIG_STL_MGMT
-static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
-				 u8 port, u32 *resp_len)
+static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
 {
 	struct stl_node_info *ni;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	u32 vendor, majrev, minrev;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
-
-	ni = (struct stl_node_info *)stl_get_smp_data(smp);
+	ni = (struct stl_node_info *)data;
 
 	memset(ni, 0, sizeof(*ni));
 
 	/* GUID 0 is illegal */
-	if (smp->attr_mod || pidx >= dd->num_pports ||
-	    dd->pport[pidx].guid == 0) {
+	if (am || pidx >= dd->num_pports || dd->pport[pidx].guid == 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
@@ -345,7 +345,8 @@ static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	ni->vendor_id[1] = WFR_SRC_OUI_2;
 	ni->vendor_id[2] = WFR_SRC_OUI_3;
 
-	*resp_len += sizeof(*ni);
+	if (resp_len)
+		*resp_len += sizeof(*ni);
 
 	return reply(smp);
 }
@@ -535,34 +536,36 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
 }
 
 #ifdef CONFIG_STL_MGMT
-static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
-				 u8 port, u32 *resp_len)
+static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
 {
 	int i;
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	struct qib_ibport *ibp;
-	struct stl_port_info *pi;
+	struct stl_port_info *pi = (struct stl_port_info *)data;
 	u8 mtu;
 	u8 credit_rate;
 	int ret;
 	u32 state;
-	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
-	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
+	u32 port_num = am & 0xff;
+	u32 num_ports = am >> 24;
 	u32 buffer_units;
+
+	/* Clear all fields.  Only set the non-zero fields. */
+	memset(pi, 0, sizeof(*pi));
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		ret = reply(smp);
-		goto bail;
+		return reply(smp);
 	}
 	if (port_num == 0)
 		port_num = port;
 	else {
 		if (port_num > ibdev->phys_port_cnt) {
 			smp->status |= IB_SMP_INVALID_FIELD;
-			ret = reply(smp);
-			goto bail;
+			return reply(smp);
 		}
 		if (port_num != port) {
 			ibp = to_iport(ibdev, port_num);
@@ -572,8 +575,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 					 smp->route.dr.return_path,
 					 smp->hop_cnt);
 			if (ret) {
-				ret = IB_MAD_RESULT_FAILURE;
-				goto bail;
+				return IB_MAD_RESULT_FAILURE;
 			}
 		}
 	}
@@ -582,10 +584,6 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* IB numbers ports from 1, hdw from 0 */
 	ppd = dd->pport + (port_num - 1);
 	ibp = &ppd->ibport_data;
-
-	pi = (struct stl_port_info *)stl_get_smp_data(smp);
-	/* Clear all fields.  Only set the non-zero fields. */
-	memset(pi, 0, sizeof(*pi));
 
 	pi->lid = cpu_to_be32(ppd->lid);
 
@@ -694,12 +692,12 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->stl_cap_mask = cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
 
-	ret = reply(smp);
+	if (resp_len)
+		*resp_len += sizeof(struct stl_port_info);
 
-	*resp_len += sizeof(*pi);
-bail:
-	return ret;
+	return reply(smp);
 }
+
 #endif /* CONFIG_STL_MGMT */
 
 static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
@@ -848,17 +846,19 @@ static int get_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 }
 
 #ifdef CONFIG_STL_MGMT
-static int subn_get_stl_pkeytable(struct stl_smp *smp,
-				  struct ib_device *ibdev,
-				  u8 port, u32 *resp_len)
+static int __subn_get_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	u32 n_blocks_req = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
-	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
+	u32 n_blocks_req = (am & 0xff000000) >> 24;
+	u32 am_port = (am & 0x00ff0000) >> 16;
+	u32 start_block = am & 0x7ff;
 	__be16 *p;
 	int i;
 	u16 n_blocks_avail;
+	unsigned npkeys = qib_get_npkeys(dd);
+	size_t size;
 
 	if (am_port == 0)
 		am_port = port;
@@ -871,10 +871,10 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp,
 		return reply(smp);
 	}
 
-	n_blocks_avail = (u16)
-		(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) + 1;
+	n_blocks_avail = (u16) (npkeys/STL_PARTITION_TABLE_BLK_SIZE) + 1;
 
-	memset(stl_get_smp_data(smp), 0, stl_get_smp_data_size(smp));
+	size = (n_blocks_req * STL_PARTITION_TABLE_BLK_SIZE) * sizeof(u16);
+	memset(data, 0, size);
 
 	if (start_block + n_blocks_req > n_blocks_avail ||
 	    n_blocks_req > STL_NUM_PKEY_BLOCKS_PER_SMP) {
@@ -883,21 +883,20 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp,
 			start_block, n_blocks_req, n_blocks_avail,
 			STL_NUM_PKEY_BLOCKS_PER_SMP);
 		smp->status |= IB_SMP_INVALID_FIELD;
-		goto error;
+		return reply(smp);
 	}
 
-	p = (__be16 *) stl_get_smp_data(smp);
+	p = (__be16 *) data;
 	/* get the real pkeys if we are requesting the first block */
 	if (start_block == 0) {
 		get_pkeys(dd, port, p);
-		for (i = 0; i < qib_get_npkeys(dd); i++)
+		for (i = 0; i < npkeys; i++)
 			p[i] = cpu_to_be16(p[i]);
-		resp_len += n_blocks_req * STL_PARTITION_TABLE_BLK_SIZE *
-				sizeof(u16);
+		if (resp_len)
+			*resp_len += size;
 	} else
 		smp->status |= IB_SMP_INVALID_FIELD;
 
-error:
 	return reply(smp);
 }
 #endif /* CONFIG_STL_MGMT */
@@ -959,10 +958,11 @@ static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
  * @port: the port on the device
  *
  */
-static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
-				 u8 port, u32 *resp_len)
+static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
 {
-	struct stl_port_info *pi;
+	struct stl_port_info *pi = (struct stl_port_info *)data;
 	struct ib_event event;
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
@@ -977,12 +977,12 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	u16 lse, lwe, mtu;
 	u16 lstate;
 	int ret, ore, i;
-	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
-	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
+	u32 port_num = am & 0xff;
+	u32 num_ports = am >> 24;
 
 	if (num_ports != 1) {
-		pr_warn("STL Set(STLPortInfo) invalid AM.N\n");
-		goto err;
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
 	}
 
 	/* PortInfo is only valid on receiving port
@@ -995,19 +995,20 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			goto get_only;
 	}
 
-	pi = (struct stl_port_info *)stl_get_smp_data(smp);
-
 	stl_lid = be32_to_cpu(pi->lid);
 	if (stl_lid & 0xFFFF0000) {
 		pr_warn("STL_PortInfo lid out of range: %X\n", stl_lid);
-		goto err;
+		smp->status |= IB_SMP_INVALID_FIELD;
+		goto get_only;
 	}
+
 	lid = (u16)(stl_lid & 0x0000FFFF);
 
 	stl_lid = be32_to_cpu(pi->sm_lid);
 	if (stl_lid & 0xFFFF0000) {
 		pr_warn("STL_PortInfo SM lid out of range: %X\n", stl_lid);
-		goto err;
+		smp->status |= IB_SMP_INVALID_FIELD;
+		goto get_only;
 	}
 	smlid = (u16)(stl_lid & 0x0000FFFF);
 
@@ -1234,17 +1235,15 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		ib_dispatch_event(&event);
 	}
 
-	ret = subn_get_stl_portinfo(smp, ibdev, port, resp_len);
+	ret = __subn_get_stl_portinfo(smp, am, data, ibdev, port, resp_len);
 
 	/* restore re-reg bit per o14-12.2.1 */
 	pi->clientrereg_subnettimeout |= clientrereg;
 
 	return ret;
 
-err:
-	smp->status |= IB_SMP_INVALID_FIELD;
 get_only:
-	return subn_get_stl_portinfo(smp, ibdev, port, resp_len);
+	return __subn_get_stl_portinfo(smp, am, data, ibdev, port, resp_len);
 }
 #endif /* CONFIG_STL_MGMT */
 
@@ -1606,7 +1605,6 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	int i;
 	int changed = 0;
 	int update_includes_mgmt_partition = 0;
-
 	/*
 	 * IB port one/two always maps to context zero/one,
 	 * always a kernel context, no locking needed
@@ -1615,7 +1613,6 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	 */
 	ppd = dd->pport + (port - 1);
 	rcd = dd->rcd[ppd->hw_pidx];
-
 	/*
 	 * If the update does not include the management pkey, don't do it.
 	 */
@@ -1665,18 +1662,18 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 }
 
 #ifdef CONFIG_STL_MGMT
-static int subn_set_stl_pkeytable(struct stl_smp *smp,
-				  struct ib_device *ibdev,
-				  u8 port, u32 *resp_len)
+static int __subn_set_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	u32 n_blocks_sent = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
-	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
-	u16 *p = (u16 *) stl_get_smp_data(smp);
+	u32 n_blocks_sent = (am & 0xff000000) >> 24;
+	u32 am_port = (am & 0x00ff0000) >> 16;
+	u32 start_block = am & 0x7ff;
+	u16 *p = (u16 *) data;
 	int i;
 	u16 n_blocks_avail;
-
+	unsigned npkeys = qib_get_npkeys(dd);
 	if (am_port == 0)
 		am_port = port;
 
@@ -1687,7 +1684,7 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp,
 		return reply(smp);
 	}
 
-	n_blocks_avail = (u16)(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) +1;
+	n_blocks_avail = (u16)(npkeys/STL_PARTITION_TABLE_BLK_SIZE) + 1;
 
 	if (start_block + n_blocks_sent > n_blocks_avail ||
 	    n_blocks_sent > STL_NUM_PKEY_BLOCKS_PER_SMP) {
@@ -1698,7 +1695,6 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp,
 		return reply(smp);
 	}
 
-	p = (u16 *) stl_get_smp_data(smp);
 	for (i = 0; i < n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE; i++)
 		p[i] = be16_to_cpu(p[i]);
 
@@ -1707,7 +1703,7 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp,
 		return reply(smp);
 	}
 
-	return subn_get_stl_pkeytable(smp, ibdev, port, resp_len);
+	return __subn_get_stl_pkeytable(smp, am, data, ibdev, port, resp_len);
 }
 #endif /* CONFIG_STL_MGMT */
 
@@ -1750,38 +1746,40 @@ static int set_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 	return 0;
 }
 
-static int subn_get_stl_sc_to_vlt(struct stl_smp *smp,
-				  struct ib_device *ibdev, u8 port,
-				  u32 *resp_len)
+static int __subn_get_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
 {
-	u32 n_blocks = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x000000ff);
+	u32 n_blocks = (am & 0xff000000) >> 24;
+	u32 am_port = (am & 0x000000ff);
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	void *vp = (void *) stl_get_smp_data(smp);
+	void *vp = (void *) data;
+	size_t size = 4 * sizeof(u64);
+
+	memset(vp, 0, size);
 
 	if (am_port != port || port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
 
-	memset(vp, 0, stl_get_smp_data_size(smp));
-
 	get_sc2vlt_tables(dd, vp);
 
-	resp_len += 4 * sizeof(u64);
+	if (resp_len)
+		*resp_len += size;
 
 	return reply(smp);
 }
 
-static int subn_set_stl_sc_to_vlt(struct stl_smp *smp,
-				  struct ib_device *ibdev, u8 port,
-				  u32 *resp_len)
+static int __subn_set_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
 {
-	u32 n_blocks = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x000000ff);
-	int async_update = !!(be32_to_cpu(smp->attr_mod) & 0x1000);
+	u32 n_blocks = (am & 0xff000000) >> 24;
+	u32 am_port = (am & 0x000000ff);
+	int async_update = !!(am & 0x1000);
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	void *vp = (void *) stl_get_smp_data(smp);
+	void *vp = (void *) data;
 
 	if (am_port != port || port != 1 || n_blocks != 1 || async_update) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1790,43 +1788,41 @@ static int subn_set_stl_sc_to_vlt(struct stl_smp *smp,
 
 	set_sc2vlt_tables(dd, vp);
 
-	return subn_get_stl_sc_to_vlt(smp, ibdev, port, resp_len);
+	return __subn_get_stl_sc_to_vlt(smp, am, data, ibdev, port, resp_len);
 }
 
-static int subn_get_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
-			    u8 port, u32 *resp_len)
+static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
+			      struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
-	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u32 num_ports = (am & 0xff000000) >> 24;
+	u32 port_num = am & 0x000000ff;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
-	struct buffer_control *p =
-		(struct buffer_control *)stl_get_smp_data(smp);
+	struct buffer_control *p = (struct buffer_control *) data;
+	memset(p, 0, sizeof(*p));
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
 
-	memset(p, 0, stl_get_smp_data_size(smp));
-
 	ppd = dd->pport + (port_num - 1);
 	fm_get_table(ppd, FM_TBL_BUFFER_CONTROL, p);
 	trace_bct_get(dd, p);
-	*resp_len += sizeof(struct buffer_control);
+	if (resp_len)
+		*resp_len += sizeof(struct buffer_control);
 
 	return reply(smp);
 }
 
-static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
-			    u8 port, u32 *resp_len)
+static int __subn_set_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
+			      struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
-	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u32 num_ports = (am & 0xff000000) >> 24;
+	u32 port_num = am & 0x000000ff;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
-	struct buffer_control *p =
-		(struct buffer_control *)stl_get_smp_data(smp);
+	struct buffer_control *p = (struct buffer_control *) data;
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1838,7 +1834,8 @@ static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
-	return subn_get_stl_bct(smp, ibdev, port, resp_len);
+
+	return __subn_get_stl_bct(smp, am, data, ibdev, port, resp_len);
 }
 
 #endif /* CONFIG_STL_MGMT */
@@ -1884,14 +1881,15 @@ static int subn_set_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 }
 
 #ifdef CONFIG_STL_MGMT
-static int subn_get_stl_vl_arb(struct stl_smp *smp, struct ib_device *ibdev,
-			       u8 port, u32 *resp_len)
+static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
+				 struct ib_device *ibdev, u8 port,
+				 u32 *resp_len)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(to_iport(ibdev, port));
-	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
-	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = stl_get_smp_data(smp);
+	u32 num_ports = (am & 0xff000000) >> 24;
+	u8 section = (am & 0x00ff0000) >> 16;
+	u32 port_num = am & 0x000000ff;
+	u8 *p = data;
 
 	if (port_num == 0)
 		port_num = port;
@@ -1900,14 +1898,17 @@ static int subn_get_stl_vl_arb(struct stl_smp *smp, struct ib_device *ibdev,
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
+
 	switch (section) {
 	case STL_VLARB_LOW_ELEMENTS:
 		(void) fm_get_table(ppd, FM_TBL_VL_LOW_ARB, p);
-		resp_len += WFR_VL_ARB_LOW_PRIO_TABLE_SIZE * 2;
+		if (resp_len)
+			*resp_len += WFR_VL_ARB_LOW_PRIO_TABLE_SIZE * 2;
 		break;
 	case STL_VLARB_HIGH_ELEMENTS:
 		(void) fm_get_table(ppd, FM_TBL_VL_HIGH_ARB, p);
-		resp_len += WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE * 2;
+		if (resp_len)
+			*resp_len += WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE * 2;
 		break;
 	case STL_VLARB_PREEMPT_ELEMENTS:
 		/* XXX FIXME */
@@ -1947,14 +1948,15 @@ static int subn_get_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 }
 
 #ifdef CONFIG_STL_MGMT
-static int subn_set_stl_vl_arb(struct stl_smp *smp, struct ib_device *ibdev,
-			       u8 port, u32 *resp_len)
+static int __subn_set_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
+				 struct ib_device *ibdev, u8 port,
+				 u32 *resp_len)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(to_iport(ibdev, port));
-	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
-	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
-	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = stl_get_smp_data(smp);
+	u32 num_ports = (am & 0xff000000) >> 24;
+	u8 section = (am & 0x00ff0000) >> 16;
+	u32 port_num = am & 0x000000ff;
+	u8 *p = data;
 
 	if (port_num == 0)
 		port_num = port;
@@ -1984,7 +1986,7 @@ static int subn_set_stl_vl_arb(struct stl_smp *smp, struct ib_device *ibdev,
 		break;
 	}
 
-	return subn_get_stl_vl_arb(smp, ibdev, port, resp_len);
+	return __subn_get_stl_vl_arb(smp, am, data, ibdev, port, resp_len);
 }
 #endif /* CONFIG_STL_MGMT */
 
@@ -2120,6 +2122,13 @@ enum counter_selects {
 struct stl_clear_port_status {
 	__be64 port_select_mask[4];
 	__be32 counter_select_mask;
+};
+
+struct stl_aggregate {
+	__be16 attr_id;
+	__be16 err_reqlength;	/* 1 bit, 8 res, 7 bit */
+	__be32 attr_mod;
+	u8 data[0];
 };
 
 static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
@@ -3042,12 +3051,12 @@ struct stl_congestion_info_attr {
 	u8 congestion_log_length;
 } __packed;
 
-static int subn_get_stl_congestion_info(struct stl_smp *smp,
-				      struct ib_device *ibdev, u8 port,
-				      u32 *resp_len)
+static int __subn_get_stl_cong_info(struct stl_smp *smp, u32 am, u8 *data,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
 {
 	struct stl_congestion_info_attr *p =
-		(struct stl_congestion_info_attr *)stl_get_smp_data(smp);
+		(struct stl_congestion_info_attr *)data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	memset(p, 0, sizeof(*p));
@@ -3056,18 +3065,20 @@ static int subn_get_stl_congestion_info(struct stl_smp *smp,
 	p->control_table_cap = ppd->cc_max_table_entries;
 	p->congestion_log_length = 0; /* FIXME */
 
-	*resp_len += sizeof(*p);
+	if (resp_len)
+		*resp_len += sizeof(*p);
 
 	return reply(smp);
 }
 
-static int subn_get_stl_congestion_setting(struct stl_smp *smp,
-					   struct ib_device *ibdev, u8 port,
-					   u32 *resp_len)
+static int __subn_get_stl_cong_setting(struct stl_smp *smp, u32 am,
+					     u8 *data,
+					     struct ib_device *ibdev,
+					     u8 port, u32 *resp_len)
 {
 	int i;
 	struct stl_congestion_setting_attr *p =
-		(struct stl_congestion_setting_attr *)stl_get_smp_data(smp);
+		(struct stl_congestion_setting_attr *) data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct stl_congestion_setting_entry_shadow *entries;
@@ -3078,7 +3089,7 @@ static int subn_get_stl_congestion_setting(struct stl_smp *smp,
 
 	if (!ppd->congestion_entries_shadow) {
 		spin_unlock(&ppd->cc_shadow_lock);
-		return IB_MAD_RESULT_SUCCESS;
+		return reply(smp);
 	}
 
 	entries = ppd->congestion_entries_shadow->entries;
@@ -3096,17 +3107,18 @@ static int subn_get_stl_congestion_setting(struct stl_smp *smp,
 
 	spin_unlock(&ppd->cc_shadow_lock);
 
-	*resp_len += sizeof(*p);
+	if (resp_len)
+		*resp_len += sizeof(*p);
 
 	return reply(smp);
 }
 
-static int subn_set_stl_congestion_setting(struct stl_smp *smp,
-					   struct ib_device *ibdev, u8 port,
-					   u32 *resp_len)
+static int __subn_set_stl_cong_setting(struct stl_smp *smp, u32 am, u8 *data,
+				       struct ib_device *ibdev, u8 port,
+				       u32 *resp_len)
 {
 	struct stl_congestion_setting_attr *p =
-		(struct stl_congestion_setting_attr *)stl_get_smp_data(smp);
+		(struct stl_congestion_setting_attr *) data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int i;
@@ -3127,19 +3139,20 @@ static int subn_set_stl_congestion_setting(struct stl_smp *smp,
 			p->entries[i].ccti_min;
 	}
 
-	return subn_get_stl_congestion_setting(smp, ibdev, port, resp_len);
+	return __subn_get_stl_cong_setting(smp, am, data, ibdev, port,
+					   resp_len);
 }
 
-static int subn_get_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
-				 u8 port, u32 *resp_len)
+static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
 {
 	struct ib_cc_table_attr *p =
-		(struct ib_cc_table_attr *)stl_get_smp_data(smp);
+		(struct ib_cc_table_attr *) data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	u32 am = smp->attr_mod;
-	u32 cct_block_index = be32_to_cpu(am) & 0xff;
-	u32 n_blocks_req = (be32_to_cpu(am) & 0xff000000) >> 24;
+	u32 cct_block_index = am & 0xff;
+	u32 n_blocks_req = (am & 0xff000000) >> 24;
 	u32 max_cct_block;
 	u32 cct_entry;
 	struct ib_cc_table_entry_shadow *entries;
@@ -3153,9 +3166,7 @@ static int subn_get_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 	if (!ppd->congestion_entries_shadow)
-		return reply_failure(smp);
-
-	smp->attr_mod = am;
+		return reply(smp);
 
 	spin_lock(&ppd->cc_shadow_lock);
 
@@ -3183,20 +3194,21 @@ static int subn_get_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
 
 	spin_unlock(&ppd->cc_shadow_lock);
 
-	*resp_len += sizeof(u16)*(IB_CCT_ENTRIES * n_blocks_req + 1);
+	if (resp_len)
+		*resp_len += sizeof(u16)*(IB_CCT_ENTRIES * n_blocks_req + 1);
 
 	return reply(smp);
 }
 
-static int subn_set_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
-				 u8 port, u32 *resp_len)
+static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
 {
-	struct ib_cc_table_attr *p =
-		(struct ib_cc_table_attr *)stl_get_smp_data(smp);
+	struct ib_cc_table_attr *p = (struct ib_cc_table_attr *) data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	u32 cct_block_index = be32_to_cpu(smp->attr_mod) & 0xff;
-	u32 n_blocks_req = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
+	u32 cct_block_index = am & 0xff;
+	u32 n_blocks_req = (am & 0xff000000) >> 24;
 	u32 cct_entry;
 	struct ib_cc_table_entry_shadow *entries;
 	int i;
@@ -3206,7 +3218,7 @@ static int subn_set_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
 		goto bail;
 
 	if (!ppd->congestion_entries_shadow)
-		return reply_failure(smp);
+		return reply(smp);
 
 	/* If this packet is the first in the sequence then
 	 * zero the total table entry count.
@@ -3242,10 +3254,215 @@ static int subn_set_stl_cc_table(struct stl_smp *smp, struct ib_device *ibdev,
 	       STL_MAX_SLS * sizeof(struct ib_cc_congestion_entry));
 	spin_unlock(&ppd->cc_shadow_lock);
 
-	return subn_get_stl_cc_table(smp, ibdev, port, resp_len);
+	return __subn_get_stl_cc_table(smp, am, data, ibdev, port, resp_len);
 
 bail:
 	return reply_failure(smp);
+}
+
+static int subn_get_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
+			    u8 *data, struct ib_device *ibdev, u8 port,
+			    u32 *resp_len)
+{
+	int ret;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+
+	switch (attr_id) {
+	case IB_SMP_ATTR_NODE_DESC:
+		ret = __subn_get_stl_nodedesc(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_NODE_INFO:
+		ret = __subn_get_stl_nodeinfo(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_PORT_INFO:
+		ret = __subn_get_stl_portinfo(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_PKEY_TABLE:
+		ret = __subn_get_stl_pkeytable(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case STL_ATTRIB_ID_SC_TO_VLT_MAP:
+		ret = __subn_get_stl_sc_to_vlt(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+		ret = __subn_get_stl_bct(smp, am, data, ibdev, port,
+					 resp_len);
+		break;
+	case IB_SMP_ATTR_VL_ARB_TABLE:
+		ret = __subn_get_stl_vl_arb(smp, am, data, ibdev, port,
+					    resp_len);
+		break;
+	case STL_ATTRIB_ID_CONGESTION_INFO:
+		ret = __subn_get_stl_cong_info(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case STL_ATTRIB_ID_HFI_CONGESTION_SETTING:
+		ret = __subn_get_stl_cong_setting(smp, am, data, ibdev,
+						  port, resp_len);
+		break;
+	case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
+		ret = __subn_get_stl_cc_table(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_SM_INFO:
+		if (ibp->port_cap_flags & IB_PORT_SM_DISABLED)
+			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		if (ibp->port_cap_flags & IB_PORT_SM)
+			return IB_MAD_RESULT_SUCCESS;
+		/* FALLTHROUGH */
+	default:
+		smp->status |= IB_SMP_UNSUP_METH_ATTR;
+		ret = reply(smp);
+		break;
+	}
+	return ret;
+}
+
+static int subn_set_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
+			    u8 *data, struct ib_device *ibdev, u8 port,
+			    u32 *resp_len)
+{
+	int ret;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+
+	switch (attr_id) {
+	case IB_SMP_ATTR_PORT_INFO:
+		ret = __subn_set_stl_portinfo(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_PKEY_TABLE:
+		ret = __subn_set_stl_pkeytable(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case STL_ATTRIB_ID_SC_TO_VLT_MAP:
+		ret = __subn_set_stl_sc_to_vlt(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+		ret = __subn_set_stl_bct(smp, am, data, ibdev, port,
+					 resp_len);
+		break;
+	case IB_SMP_ATTR_VL_ARB_TABLE:
+		ret = __subn_set_stl_vl_arb(smp, am, data, ibdev, port,
+					    resp_len);
+		break;
+	case STL_ATTRIB_ID_HFI_CONGESTION_SETTING:
+		ret = __subn_set_stl_cong_setting(smp, am, data, ibdev,
+						  port, resp_len);
+		break;
+	case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
+		ret = __subn_set_stl_cc_table(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_SM_INFO:
+		if (ibp->port_cap_flags & IB_PORT_SM_DISABLED)
+			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		if (ibp->port_cap_flags & IB_PORT_SM)
+			return IB_MAD_RESULT_SUCCESS;
+		/* FALLTHROUGH */
+	default:
+		smp->status |= IB_SMP_UNSUP_METH_ATTR;
+		ret = reply(smp);
+		break;
+	}
+	return ret;
+}
+
+static inline void set_aggr_error(struct stl_aggregate *ag)
+{
+	ag->err_reqlength |= cpu_to_be16(0x8000);
+}
+
+static int subn_get_stl_aggregate(struct stl_smp *smp,
+				  struct ib_device *ibdev, u8 port,
+				  u32 *resp_len)
+{
+	int i;
+	u32 num_attr = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *next_smp = stl_get_smp_data(smp);
+
+	if (num_attr < 1 || num_attr > 117) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	for (i = 0; i < num_attr; i++) {
+		struct stl_aggregate *agg;
+		size_t agg_data_len;
+		size_t agg_size;
+		u32 am;
+
+		agg = (struct stl_aggregate *)next_smp;
+		agg_data_len = (be16_to_cpu(agg->err_reqlength) & 0x007f) * 8;
+		agg_size = sizeof(*agg) + agg_data_len;
+		am = be32_to_cpu(agg->attr_mod);
+
+		*resp_len += agg_size;
+
+		if (next_smp + agg_size > ((u8 *)smp) + sizeof(*smp)) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply(smp);
+		}
+
+		(void) subn_get_stl_sma(agg->attr_id, smp, am, agg->data,
+					ibdev, port, NULL);
+		if (smp->status & ~IB_SMP_DIRECTION) {
+			set_aggr_error(agg);
+			return reply(smp);
+		}
+		next_smp += agg_size;
+
+	}
+
+	return reply(smp);
+}
+
+static int subn_set_stl_aggregate(struct stl_smp *smp,
+				  struct ib_device *ibdev, u8 port,
+				  u32 *resp_len)
+{
+	int i;
+	u32 num_attr = be32_to_cpu(smp->attr_mod) & 0x000000ff;
+	u8 *next_smp = stl_get_smp_data(smp);
+
+	if (num_attr < 1 || num_attr > 117) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	for (i = 0; i < num_attr; i++) {
+		struct stl_aggregate *agg;
+		size_t agg_data_len;
+		size_t agg_size;
+		u32 am;
+
+		agg = (struct stl_aggregate *)next_smp;
+		agg_data_len = (be16_to_cpu(agg->err_reqlength) & 0x007f) * 8;
+		agg_size = sizeof(*agg) + agg_data_len;
+		am = be32_to_cpu(agg->attr_mod);
+
+		*resp_len += agg_size;
+
+		if (next_smp + agg_size > ((u8 *)smp) + sizeof(*smp)) {
+			smp->status |= IB_SMP_INVALID_FIELD;
+			return reply(smp);
+		}
+
+		(void) subn_set_stl_sma(agg->attr_id, smp, am, agg->data,
+					ibdev, port, NULL);
+		if (smp->status & ~IB_SMP_DIRECTION) {
+			set_aggr_error(agg);
+			return reply(smp);
+		}
+		next_smp += agg_size;
+
+	}
+
+	return reply(smp);
 }
 
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
@@ -3256,9 +3473,15 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 	struct stl_smp *smp = (struct stl_smp *)out_mad;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	/* XXX struct qib_pportdata *ppd = ppd_from_ibp(ibp);*/
+	u8 *data;
+	u32 am;
+	__be16 attr_id;
 	int ret;
 
 	*out_mad = *in_mad;
+	data = stl_get_smp_data(smp);
+	am = be32_to_cpu(smp->attr_mod);
+	attr_id = smp->attr_id;
 	if (smp->class_version != STL_SMI_CLASS_VERSION) {
 		smp->status |= IB_SMP_UNSUP_VERSION;
 		ret = reply(smp);
@@ -3277,7 +3500,7 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		 * to increment the error counters when the M_Key
 		 * fails to match on *both* ports.
 		 */
-		if (in_mad->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO &&
+		if (attr_id == IB_SMP_ATTR_PORT_INFO &&
 		    (smp->method == IB_MGMT_METHOD_GET ||
 		     smp->method == IB_MGMT_METHOD_SET) &&
 		    port_num && port_num <= ibdev->phys_port_cnt &&
@@ -3295,75 +3518,29 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
-		switch (smp->attr_id) {
-		case IB_SMP_ATTR_NODE_DESC:
-			ret = subn_get_stl_nodedescription(smp, ibdev,
-							   resp_len);
-			goto bail;
-		case IB_SMP_ATTR_NODE_INFO:
-			ret = subn_get_stl_nodeinfo(smp, ibdev, port,
-						    resp_len);
-			goto bail;
-		case IB_SMP_ATTR_PORT_INFO:
-			ret = subn_get_stl_portinfo(smp, ibdev, port,
-						    resp_len);
-			goto bail;
-		case IB_SMP_ATTR_PKEY_TABLE:
-			ret = subn_get_stl_pkeytable(smp, ibdev, port,
-						     resp_len);
+		switch (attr_id) {
+		default:
+			ret = subn_get_stl_sma(attr_id, smp, am, data,
+					       ibdev, port, resp_len);
 			goto bail;
 #if 0
 		case IB_SMP_ATTR_SL_TO_VL_TABLE:
 			ret = subn_get_sl_to_vl(smp, ibdev, port);
 			goto bail;
 #endif /* 01 */
-		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
-			ret = subn_get_stl_sc_to_vlt(smp, ibdev, port,
+		case STL_ATTRIB_ID_AGGREGATE:
+			ret = subn_get_stl_aggregate(smp, ibdev, port,
 						     resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
-			ret = subn_get_stl_bct(smp, ibdev, port, resp_len);
-			goto bail;
-		case IB_SMP_ATTR_VL_ARB_TABLE:
-			ret = subn_get_stl_vl_arb(smp, ibdev, port, resp_len);
-			goto bail;
-		case STL_ATTRIB_ID_CONGESTION_INFO:
-			ret = subn_get_stl_congestion_info(smp, ibdev, port,
-							 resp_len);
-			goto bail;
-		case STL_ATTRIB_ID_HFI_CONGESTION_SETTING:
-			ret = subn_get_stl_congestion_setting(smp, ibdev,
-							      port, resp_len);
-			goto bail;
-		case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
-			ret = subn_get_stl_cc_table(smp, ibdev, port,
-						    resp_len);
-			goto bail;
-		case IB_SMP_ATTR_SM_INFO:
-			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
-				ret = IB_MAD_RESULT_SUCCESS |
-					IB_MAD_RESULT_CONSUMED;
-				goto bail;
-			}
-			if (ibp->port_cap_flags & IB_PORT_SM) {
-				ret = IB_MAD_RESULT_SUCCESS;
-				goto bail;
-			}
-			/* FALLTHROUGH */
-		default:
-			smp->status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply(smp);
-			goto bail;
 		}
-
 	case IB_MGMT_METHOD_SET:
-		switch (smp->attr_id) {
-		case IB_SMP_ATTR_PORT_INFO:
-			ret = subn_set_stl_portinfo(smp, ibdev, port,
-						    resp_len);
+		switch (attr_id) {
+		default:
+			ret = subn_set_stl_sma(attr_id, smp, am, data,
+					       ibdev, port, resp_len);
 			goto bail;
-		case IB_SMP_ATTR_PKEY_TABLE:
-			ret = subn_set_stl_pkeytable(smp, ibdev, port,
+		case STL_ATTRIB_ID_AGGREGATE:
+			ret = subn_set_stl_aggregate(smp, ibdev, port,
 						     resp_len);
 			goto bail;
 #if 0
@@ -3371,39 +3548,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_set_sl_to_vl(smp, ibdev, port);
 			goto bail;
 #endif /* 01 */
-		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
-			ret = subn_set_stl_sc_to_vlt(smp, ibdev, port,
-						     resp_len);
-			goto bail;
-		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
-			ret = subn_set_stl_bct(smp, ibdev, port, resp_len);
-			goto bail;
-		case IB_SMP_ATTR_VL_ARB_TABLE:
-			ret = subn_set_stl_vl_arb(smp, ibdev, port, resp_len);
-			goto bail;
-		case STL_ATTRIB_ID_HFI_CONGESTION_SETTING:
-			ret = subn_set_stl_congestion_setting(smp, ibdev,
-							      port, resp_len);
-			goto bail;
-		case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
-			ret = subn_set_stl_cc_table(smp, ibdev, port,
-						    resp_len);
-			goto bail;
-		case IB_SMP_ATTR_SM_INFO:
-			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
-				ret = IB_MAD_RESULT_SUCCESS |
-					IB_MAD_RESULT_CONSUMED;
-				goto bail;
-			}
-			if (ibp->port_cap_flags & IB_PORT_SM) {
-				ret = IB_MAD_RESULT_SUCCESS;
-				goto bail;
-			}
-			/* FALLTHROUGH */
-		default:
-			smp->status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply(smp);
-			goto bail;
 		}
 #if 0
 	case IB_MGMT_METHOD_TRAP_REPRESS:
