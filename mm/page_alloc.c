@@ -6467,7 +6467,7 @@ unsigned long pagecache_over_limit()
 	unsigned long pgcache_lru_pages = global_page_state(NR_ACTIVE_FILE)
 				        + global_page_state(NR_INACTIVE_FILE);
 	unsigned long free_pages = global_page_state(NR_FREE_PAGES);
-	unsigned long swap_pages = total_swap_pages - atomic_long_read(&nr_swap_pages);
+	unsigned long swap_pages = total_swap_pages - get_nr_swap_pages();
 	unsigned long limit;
 
 	if (vm_pagecache_ignore_dirty != 0)
