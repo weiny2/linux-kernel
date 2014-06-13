@@ -20,6 +20,7 @@ struct scsi_nl_hdr;
  */
 #define SCSI_EH_CANCEL_CMD	0x0001	/* Cancel this cmd */
 #define SCSI_EH_ABORT_SCHEDULED	0x0002	/* Abort has been scheduled */
+#define SCSI_EH_CMD_TIMEOUT	0x0004	/* Command has timed out */
 
 #define SCSI_SENSE_VALID(scmd) \
 	(((scmd)->sense_buffer[0] & 0x70) == 0x70)

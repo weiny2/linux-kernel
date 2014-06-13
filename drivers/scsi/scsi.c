@@ -760,6 +760,8 @@ int scsi_dispatch_cmd(struct scsi_cmnd *cmd)
 static void scsi_done(struct scsi_cmnd *cmd)
 {
 	cmd->host_scribble = NULL;
+	if (WARN_ON_ONCE(cmd->eh_eflags & SCSI_EH_ABORT_SCHEDULED))
+		return;
 	trace_scsi_dispatch_cmd_done(cmd);
 	blk_complete_request(cmd->request);
 }

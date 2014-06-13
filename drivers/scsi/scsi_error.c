@@ -125,11 +125,13 @@ scmd_eh_abort_handler(struct work_struct *work)
 			scmd_printk(KERN_INFO, scmd,
 				    "scmd %p eh timeout, not aborting\n",
 				    scmd));
+		scmd->eh_eflags &= ~SCSI_EH_ABORT_SCHEDULED;
 	} else {
 		SCSI_LOG_ERROR_RECOVERY(3,
 			scmd_printk(KERN_INFO, scmd,
 				    "aborting command %p\n", scmd));
 		rtn = scsi_try_to_abort_cmd(sdev->host->hostt, scmd);
+		scmd->eh_eflags &= ~SCSI_EH_ABORT_SCHEDULED;
 		if (rtn == SUCCESS) {
 			scmd->result |= DID_TIME_OUT << 16;
 			if (scsi_host_eh_past_deadline(sdev->host)) {
@@ -185,7 +187,7 @@ scsi_abort_command(struct scsi_cmnd *scmd)
 	struct Scsi_Host *shost = sdev->host;
 	unsigned long flags;
 
-	if (scmd->eh_eflags & SCSI_EH_ABORT_SCHEDULED) {
+	if (scmd->eh_eflags & SCSI_EH_CMD_TIMEOUT) {
 		/*
 		 * Retry after abort failed, escalate to next level.
 		 */
@@ -195,6 +197,7 @@ scsi_abort_command(struct scsi_cmnd *scmd)
 		cancel_delayed_work(&scmd->abort_work);
 		return FAILED;
 	}
+	scmd->eh_eflags |= SCSI_EH_CMD_TIMEOUT;
 
 	/*
 	 * Do not try a command abort if
@@ -290,11 +293,11 @@ enum blk_eh_timer_return scsi_times_out(struct request *req)
 		if (scsi_abort_command(scmd) == SUCCESS)
 			return BLK_EH_NOT_HANDLED;
 
-	scmd->result |= DID_TIME_OUT << 16;
-
-	if (unlikely(rtn == BLK_EH_NOT_HANDLED &&
-		     !scsi_eh_scmd_add(scmd, SCSI_EH_CANCEL_CMD)))
-		rtn = BLK_EH_HANDLED;
+	if (unlikely(rtn == BLK_EH_NOT_HANDLED)) {
+		scmd->result |= DID_TIME_OUT << 16;
+		if (!scsi_eh_scmd_add(scmd, SCSI_EH_CANCEL_CMD))
+			rtn = BLK_EH_HANDLED;
+	}
 
 	return rtn;
 }
@@ -941,10 +944,12 @@ void scsi_eh_prep_cmnd(struct scsi_cmnd *scmd, struct scsi_eh_save *ses,
 	ses->prot_op = scmd->prot_op;
 
 	scmd->prot_op = SCSI_PROT_NORMAL;
+	scmd->eh_eflags = 0;
 	scmd->cmnd = ses->eh_cmnd;
 	memset(scmd->cmnd, 0, BLK_MAX_CDB);
 	memset(&scmd->sdb, 0, sizeof(scmd->sdb));
 	scmd->request->next_rq = NULL;
+	scmd->result = 0;
 
 	if (sense_bytes) {
 		scmd->sdb.length = min_t(unsigned, SCSI_SENSE_BUFFERSIZE,
@@ -1047,6 +1052,7 @@ retry:
 		rtn = NEEDS_RETRY;
 	} else {
 		timeleft = wait_for_completion_timeout(&done, timeout);
+		rtn = SUCCESS;
 	}
 
 	shost->eh_action = NULL;
@@ -1178,6 +1184,15 @@ int scsi_eh_get_sense(struct list_head *work_q,
 					     __func__));
 			break;
 		}
+		if (status_byte(scmd->result) != CHECK_CONDITION)
+			/*
+			 * don't request sense if there's no check condition
+			 * status because the error we're processing isn't one
+			 * that has a sense code (and some devices get
+			 * confused by sense requests out of the blue)
+			 */
+			continue;
+
 		SCSI_LOG_ERROR_RECOVERY(2, scmd_printk(KERN_INFO, scmd,
 						  "%s: requesting sense\n",
 						  current->comm));
