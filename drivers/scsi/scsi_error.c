@@ -125,11 +125,13 @@ scmd_eh_abort_handler(struct work_struct *work)
 			scmd_printk(KERN_INFO, scmd,
 				    "scmd %p eh timeout, not aborting\n",
 				    scmd));
+		scmd->eh_eflags &= ~SCSI_EH_ABORT_SCHEDULED;
 	} else {
 		SCSI_LOG_ERROR_RECOVERY(3,
 			scmd_printk(KERN_INFO, scmd,
 				    "aborting command %p\n", scmd));
 		rtn = scsi_try_to_abort_cmd(sdev->host->hostt, scmd);
+		scmd->eh_eflags &= ~SCSI_EH_ABORT_SCHEDULED;
 		if (rtn == SUCCESS) {
 			scmd->result |= DID_TIME_OUT << 16;
 			if (scsi_host_eh_past_deadline(sdev->host)) {
@@ -185,17 +187,17 @@ scsi_abort_command(struct scsi_cmnd *scmd)
 	struct Scsi_Host *shost = sdev->host;
 	unsigned long flags;
 
-	if (scmd->eh_eflags & SCSI_EH_ABORT_SCHEDULED) {
+	if (scmd->eh_eflags & SCSI_EH_CMD_TIMEOUT) {
 		/*
 		 * Retry after abort failed, escalate to next level.
 		 */
-		scmd->eh_eflags &= ~SCSI_EH_ABORT_SCHEDULED;
 		SCSI_LOG_ERROR_RECOVERY(3,
 			scmd_printk(KERN_INFO, scmd,
 				    "scmd %p previous abort failed\n", scmd));
 		cancel_delayed_work(&scmd->abort_work);
 		return FAILED;
 	}
+	scmd->eh_eflags |= SCSI_EH_CMD_TIMEOUT;
 
 	/*
 	 * Do not try a command abort if
