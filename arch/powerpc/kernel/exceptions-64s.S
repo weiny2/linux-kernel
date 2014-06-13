@@ -140,7 +140,11 @@ BEGIN_FTR_SECTION
 
 	beq	cr1,2f
 	b	power7_wakeup_noloss
-2:	b	power7_wakeup_tb_loss
+2:	b	power7_wakeup_loss
+
+	/* Fast Sleep wakeup on PowerNV */
+8:	GET_PACA(r13)
+	b 	power7_wakeup_tb_loss
 9:
 END_FTR_SECTION_IFSET(CPU_FTR_HVMODE | CPU_FTR_ARCH_206)
 #endif /* CONFIG_PPC_P7_NAP */
@@ -1129,10 +1133,10 @@ machine_check_common:
 	lwz	r4,PACA_EXGEN+EX_DSISR(r13)
 	std	r3,_DAR(r1)
 	std	r4,_DSISR(r1)
-	bl	.save_nvgprs
+	bl	save_nvgprs
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	.machine_check_exception
-	b	.ret_from_except
+	bl	machine_check_exception
+	b	ret_from_except
 
 	.align	7
 	.globl alignment_common
@@ -1357,9 +1361,9 @@ _GLOBAL(opal_mc_secondary_handler)
 machine_check_handle_early:
 	std	r0,GPR0(r1)	/* Save r0 */
 	EXCEPTION_PROLOG_COMMON_3(0x200)
-	bl	.save_nvgprs
+	bl	save_nvgprs
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	.machine_check_early
+	bl	machine_check_early
 	ld	r12,_MSR(r1)
 #ifdef	CONFIG_PPC_P7_NAP
 	/*
@@ -1379,11 +1383,11 @@ machine_check_handle_early:
 	/* Supervisor state loss */
 	li	r0,1
 	stb	r0,PACA_NAPSTATELOST(r13)
-3:	bl	.machine_check_queue_event
+3:	bl	machine_check_queue_event
 	MACHINE_CHECK_HANDLER_WINDUP
 	GET_PACA(r13)
 	ld	r1,PACAR1(r13)
-	b	.power7_enter_nap_mode
+	b	power7_enter_nap_mode
 4:
 #endif
 	/*
@@ -1415,7 +1419,7 @@ machine_check_handle_early:
 	andi.	r11,r12,MSR_RI
 	bne	2f
 1:	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	.unrecoverable_exception
+	bl	unrecoverable_exception
 	b	1b
 2:
 	/*
@@ -1423,7 +1427,7 @@ machine_check_handle_early:
 	 * Queue up the MCE event so that we can log it later, while
 	 * returning from kernel or opal call.
 	 */
-	bl	.machine_check_queue_event
+	bl	machine_check_queue_event
 	MACHINE_CHECK_HANDLER_WINDUP
 	rfid
 9:
