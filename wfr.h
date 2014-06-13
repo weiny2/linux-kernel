@@ -77,6 +77,11 @@
 #include "include/wfr/dcc_csrs_defs.h"
 #include "include/wfr/dc_lcb_csrs_defs.h"
 
+#ifdef CONFIG_STL_MGMT
+#include "rdma/stl_smi.h"
+#include "rdma/stl_port_info.h"
+#endif
+
 #ifndef SEND_UNSUP_VL_ERR_CNT
 /* Remove when autogened headers have values */
 
@@ -764,6 +769,33 @@ static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
 	/* TODO: write to user mapping if available? */
 	/* user per-context CSRs are separated by 0x1000 */
 	write_csr(dd, offset0 + (0x1000 * ctxt), value);
+}
+
+
+static inline int stl_speed_to_ib(u16 in)
+{
+#ifdef CONFIG_STL_MGMT
+	if (in & STL_LINK_SPEED_25G) {
+		in &= ~STL_LINK_SPEED_25G;
+		in |= IB_SPEED_EDR;
+	}
+
+	if (in & STL_LINK_SPEED_12_5G) {
+		in &= ~STL_LINK_SPEED_12_5G;
+		in |= IB_SPEED_QDR;
+	}
+#endif
+	BUG_ON(!in);
+	return in;
+}
+
+static inline int stl_width_to_ib(u16 in)
+{
+#ifdef CONFIG_STL_MGMT
+	in &= ~(STL_LINK_WIDTH_2X | STL_LINK_WIDTH_3X);
+#endif
+	BUG_ON(!in);
+	return in;
 }
 
 int load_firmware(struct hfi_devdata *dd);

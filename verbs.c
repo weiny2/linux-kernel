@@ -1428,9 +1428,9 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->pkey_tbl_len = qib_get_npkeys(dd);
 	props->bad_pkey_cntr = ibp->pkey_violations;
 	props->qkey_viol_cntr = ibp->qkey_violations;
-	props->active_width = ppd->link_width_active;
-	/* See rate_show() */
-	props->active_speed = ppd->link_speed_active;
+	props->active_width = (u8)stl_width_to_ib(ppd->link_width_active);
+	/* see rate_show() in ib core/sysfs.c */
+	props->active_speed = (u8)stl_speed_to_ib(ppd->link_speed_active);
 	props->max_vl_num = hfi_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
