@@ -713,7 +713,7 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 		pg->transition_tmo = ALUA_FAILOVER_TIMEOUT;
 
 	if (orig_transition_tmo != pg->transition_tmo) {
-		printk(KERN_INFO
+		sdev_printk(KERN_INFO, sdev,
 		       "%s: target %s transition timeout set to %d seconds\n",
 		       ALUA_DH_NAME, pg->target_id_str, pg->transition_tmo);
 		pg->expiry = jiffies + pg->transition_tmo * HZ;
@@ -736,17 +736,19 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 		off = 8 + (ucp[7] * 4);
 	}
 
-	printk(KERN_INFO "%s: target %s port group %02x state %c %s "
-	       "supports %c%c%c%c%c%c%c\n", ALUA_DH_NAME, pg->target_id_str,
-	       pg->group_id, print_alua_state(pg->state),
-	       pg->pref ? "preferred" : "non-preferred",
-	       valid_states&TPGS_SUPPORT_TRANSITION?'T':'t',
-	       valid_states&TPGS_SUPPORT_OFFLINE?'O':'o',
-	       valid_states&TPGS_SUPPORT_LBA_DEPENDENT?'L':'l',
-	       valid_states&TPGS_SUPPORT_UNAVAILABLE?'U':'u',
-	       valid_states&TPGS_SUPPORT_STANDBY?'S':'s',
-	       valid_states&TPGS_SUPPORT_NONOPTIMIZED?'N':'n',
-	       valid_states&TPGS_SUPPORT_OPTIMIZED?'A':'a');
+	sdev_printk(KERN_INFO, sdev,
+		    "%s: target %s port group %02x state %c %s "
+		    "supports %c%c%c%c%c%c%c\n", ALUA_DH_NAME,
+		    pg->target_id_str, pg->group_id,
+		    print_alua_state(pg->state),
+		    pg->pref ? "preferred" : "non-preferred",
+		    valid_states&TPGS_SUPPORT_TRANSITION?'T':'t',
+		    valid_states&TPGS_SUPPORT_OFFLINE?'O':'o',
+		    valid_states&TPGS_SUPPORT_LBA_DEPENDENT?'L':'l',
+		    valid_states&TPGS_SUPPORT_UNAVAILABLE?'U':'u',
+		    valid_states&TPGS_SUPPORT_STANDBY?'S':'s',
+		    valid_states&TPGS_SUPPORT_NONOPTIMIZED?'N':'n',
+		    valid_states&TPGS_SUPPORT_OPTIMIZED?'A':'a');
 
 	switch (pg->state) {
 	case TPGS_STATE_TRANSITIONING:
