@@ -1709,6 +1709,13 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			   does not include this */
 			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
 		}
+		if (host_msg & WFR_LINK_GOING_DOWN) {
+			dd_dev_info(dd, "8051: Link down\n");
+			handle_linkup_change(dd, 0);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_LINK_GOING_DOWN;
+		}
 		/* look for unhandled flags */
 		if (host_msg) {
 			/* TODO: implement all other valid flags here */
