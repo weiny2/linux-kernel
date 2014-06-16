@@ -1374,6 +1374,7 @@ static int zcrypt_rng_data_read(struct hwrng *rng, u32 *data)
 static struct hwrng zcrypt_rng_dev = {
 	.name		= "zcrypt",
 	.data_read	= zcrypt_rng_data_read,
+	.quality	= 990,
 };
 
 static int zcrypt_rng_device_add(void)
