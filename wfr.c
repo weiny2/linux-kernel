@@ -5411,11 +5411,19 @@ static void init_rbufs(struct hfi_devdata *dd)
 	/* start the init */
 	write_csr(dd, WFR_RCV_CTRL,
 		read_csr(dd, WFR_RCV_CTRL) | WFR_RCV_CTRL_RX_RBUF_INIT_SMASK);
+	/*
+	 * Read to force the write of Rcvtrl.RxRbufInit.  There is a brief
+	 * period after the write before RcvStatus.RxRbufInitDone is valid.
+	 * The delay in the first run through the loop below is sufficient and
+	 * required before the first read of RcvStatus.RxRbufInintDone.
+	 */
+	read_csr(dd, WFR_RCV_CTRL);
 
 	/* wait for the init to finish */
 	count = 0;
 	while (1) {
-		udelay(2);
+		/* delay is required first time through - see above */
+		udelay(2); /* do not busy-wait the CSR */
 		reg = read_csr(dd, WFR_RCV_STATUS);
 		if (reg & (WFR_RCV_STATUS_RX_RBUF_INIT_DONE_SMASK))
 			break;
