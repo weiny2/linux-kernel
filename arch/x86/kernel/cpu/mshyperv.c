@@ -132,7 +132,6 @@ static void __init ms_hyperv_init_platform(void)
 		lapic_timer_frequency = hv_lapic_frequency;
 		printk(KERN_INFO "HyperV: LAPIC Timer Frequency: %#x\n",
 				lapic_timer_frequency);
-
 	}
 #endif
 

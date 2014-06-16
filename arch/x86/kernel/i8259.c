@@ -316,7 +316,7 @@ static void init_8259A(int auto_eoi)
 	outb(0xff, PIC_SLAVE_IMR);	/* mask all of 8259A-2 */
 	outb(probe_val, PIC_MASTER_IMR);
 	new_val = inb(PIC_MASTER_IMR);
-	if (probe_val != new_val) {
+	if (new_val != probe_val) {
 		printk(KERN_INFO "Using NULL legacy PIC\n");
 		legacy_pic = &null_legacy_pic;
 		raw_spin_unlock_irqrestore(&i8259A_lock, flags);
@@ -324,7 +324,6 @@ static void init_8259A(int auto_eoi)
 	}
 
 	outb(0xff, PIC_MASTER_IMR);	/* mask all of 8259A-1 */
-	outb(0xff, PIC_SLAVE_IMR);	/* mask all of 8259A-2 */
 
 	/*
 	 * outb_pic - this has to work on a wide range of PC hardware.
