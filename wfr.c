@@ -5396,16 +5396,19 @@ static void init_rbufs(struct hfi_devdata *dd)
 			    | WFR_RCV_STATUS_RX_PKT_IN_PROGRESS_SMASK)) == 0)
 			break;
 		/*
-		 * TODO: always happens in simlulator on reload as of v38.
-		 * See HSD 290668 for details.
+		 * Give up after 1ms - maximum wait time.
+		 *
+		 * RBuf size is 148KiB.  Slowest possible is PCIe Gen1 x1 at
+		 * 250MB/s bandwidth.  Derate that at 66% for overhead to get:
+		 *	148 KB / (66% * 250MB/s) = 920us
 		 */
-		if (count++ > 100) {
+		if (count++ > 500) {
 			dd_dev_err(dd,
 				"%s: in-progress DMA not clearing: RcvStatus 0x%llx, continuing\n",
 				__func__, reg);
 			break;
 		}
-		udelay(2);
+		udelay(2); /* do not busy-wait the CSR */
 	}
 
 	/* start the init */
@@ -5427,11 +5430,9 @@ static void init_rbufs(struct hfi_devdata *dd)
 		reg = read_csr(dd, WFR_RCV_STATUS);
 		if (reg & (WFR_RCV_STATUS_RX_RBUF_INIT_DONE_SMASK))
 			break;
-		/*
-		 * TODO: always happens in simlulator as of v38.
-		 * See HSD 290669 for details.
-		 */
-		if (count++ > 100) {
+
+		/* give up after 100us - slowest possible at 33MHz is 73us */
+		if (count++ > 50) {
 			dd_dev_err(dd,
 				"%s: RcvStatus.RxRbufInit not set, continuing\n",
 				__func__);
