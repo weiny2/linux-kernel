@@ -56,14 +56,14 @@ static LIST_HEAD(rng_list);
 static DEFINE_MUTEX(rng_mutex);
 static int data_avail;
 static u8 *rng_buffer, *rng_fillbuf;
-static unsigned short derating_current;
-static unsigned short derating_default = 500; /* an arbitrary 50% */
+static unsigned short current_quality;
+static unsigned short default_quality; /* = 0; default to "off" */
 
-module_param(derating_current, ushort, 0644);
-MODULE_PARM_DESC(derating_current,
+module_param(current_quality, ushort, 0644);
+MODULE_PARM_DESC(current_quality,
 		 "current hwrng entropy estimation per mill");
-module_param(derating_default, ushort, 0644);
-MODULE_PARM_DESC(derating_default,
+module_param(default_quality, ushort, 0644);
+MODULE_PARM_DESC(default_quality,
 		 "default entropy content of hwrng per mill");
 
 static void start_khwrngd(void);
@@ -77,18 +77,18 @@ static inline int hwrng_init(struct hwrng *rng)
 {
 	int err;
 
-	if (!rng->init)
-		return 0;
-	err = rng->init(rng);
-	if (err)
-		return err;
+	if (rng->init) {
+		err = rng->init(rng);
+		if (err)
+			return err;
+	}
 
-	derating_current = rng->derating ? : derating_default;
-	derating_current &= 1023;
+	current_quality = rng->quality ? : default_quality;
+	current_quality &= 1023;
 
-	if (derating_current == 0 && hwrng_fill)
+	if (current_quality == 0 && hwrng_fill)
 		kthread_stop(hwrng_fill);
-	if (derating_current > 0 && !hwrng_fill)
+	if (current_quality > 0 && !hwrng_fill)
 		start_khwrngd();
 
 	return 0;
@@ -342,7 +342,7 @@ static int hwrng_fillfn(void *unused)
 			continue;
 		}
 		add_hwgenerator_randomness((void *)rng_fillbuf, rc,
-					   (rc*derating_current)>>10);
+					   (rc*current_quality)>>10);
 	}
 	hwrng_fill = 0;
 	return 0;
