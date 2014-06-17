@@ -2253,14 +2253,14 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 			 sizeof(vl_select_mask)) {
 		rsp->vls[vl].port_vl_xmit_data =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					SEND_DATA_VL0_CNT + (vl * 8)));
+					8 * (SEND_DATA_VL0_CNT + vl)));
 		rsp->vls[vl].port_vl_rcv_data =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
 					+ (vl * 8)));
 		/* rsp->vls[vl].port_vl_xmit_pkts ??? (table 13-9 WFR spec) */
 		rsp->vls[vl].port_vl_xmit_wait =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					SEND_WAIT_VL0_CNT + (vl * 8)));
+					8 * (SEND_WAIT_VL0_CNT + vl)));
 		/* rsp->vls[vl].sw_port_vl_congestion is 0 for HFIs */
 		rsp->vls[vl].port_vl_rcv_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
