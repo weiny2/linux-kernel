@@ -339,7 +339,7 @@ int mei_irq_read_handler(struct mei_device *dev,
 				"we can't read the message slots =%08x.\n",
 				*slots);
 		/* we can't read the message */
-		ret = -ERANGE;
+		ret = -ENODATA;
 		goto end;
 	}
 
