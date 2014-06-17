@@ -257,6 +257,10 @@ class TestInfo:
                           help="Which SM to use. Valid values are opensm or none. Default: opensm",
                           metavar="SM",
                           default="opensm")
+        parser.add_option("--basedir", dest="base_dir",
+                          help="Optional base directory to pass to a test. Used to source executables and such.",
+                          metavar="PATH",
+                          default="")
 
         (options, args) = parser.parse_args()
 
@@ -336,11 +340,10 @@ class TestInfo:
         if options.psm_lib:
             if options.psm_lib  == "DEFAULT":
                 self.psm_lib = options.psm_lib
-                return
-
-            self.psm_lib = os.path.abspath(options.psm_lib)
-            if not os.path.exists(self.psm_lib):
-                test_fail("psm lib is not a valid path")
+            else:
+                self.psm_lib = os.path.abspath(options.psm_lib)
+                if not os.path.exists(self.psm_lib):
+                    test_fail("psm lib is not a valid path")
         else:
             self.psm_lib = None
 
@@ -369,6 +372,11 @@ class TestInfo:
             self.extra_args = options.extra_args
         else:
             self.extra_args = ""
+
+        if options.base_dir:
+            self.base_dir = options.base_dir
+        else:
+            self.base_dir = ""
 
         if options.sm:
             self.sm = options.sm
@@ -462,6 +470,9 @@ class TestInfo:
     def parse_extra_args(self):
         list_args = self.extra_args.split(",")
         return list_args
+
+    def get_base_dir(self):
+        return self.base_dir
 
     def which_sm(self):
         return self.sm

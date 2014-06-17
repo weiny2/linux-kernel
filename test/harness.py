@@ -173,6 +173,31 @@ test_list = [
       "type" : "mgmt",
       "desc" : "Test 4K and 8K MTU with verbs traffic"
     },
+
+    # Fast MPI tests
+    { "test_name" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "type" : "mpi,mpipsm,quick",
+      "desc" : "Run quick MPI stress with PSM",
+    },
+
+    { "test_name" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "type" : "mpi,mpiverbs,verbs,quick",
+      "desc" : "Run quick MPI stress with verbs",
+    },
+
+    { "test_name" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --args \"-L 10 -M 10 -w 20 -z\"",
+      "type" : "mpi,mpipsm,default,integrity",
+      "desc" : "Run MPI stress with PSM",
+    },
+
+    { "test_name" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 10 -M 10 -w 20 -z\"",
+      "type" : "default,mpi,mpiverbs,verbs,default,integrity",
+      "desc" : "Run MPI stress with verbs",
+    },
 ]
 
 
