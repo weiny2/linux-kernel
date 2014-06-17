@@ -124,6 +124,10 @@ static uint use_sdma = 1;
 module_param(use_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(use_sdma, "enable sdma traffic");
 
+static uint enable_pkeys = 1;
+module_param(enable_pkeys, uint, S_IRUGO);
+MODULE_PARM_DESC(enable_pkeys, "Enable PKey checking on receive");
+
 struct flag_table {
 	u64 flag;	/* the flag */
 	char *str;	/* description string */
@@ -3537,7 +3541,8 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		break;
 
 	case QIB_IB_CFG_PKEYS:
-		set_partition_keys(ppd);
+		if (enable_pkeys)
+			set_partition_keys(ppd);
 		break;
 
 	default:
@@ -4134,11 +4139,6 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		return;
 
 	dd_dev_info(dd, "ctxt %d op 0x%x", ctxt, op);
-	// FIXME: QIB_RCVCTRL_PKEY_ENB/DIS
-	if (op & QIB_RCVCTRL_PKEY_ENB)
-		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_PKEY_ENB");
-	if (op & QIB_RCVCTRL_PKEY_DIS)
-		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_PKEY_DIS");
 	// FIXME: QIB_RCVCTRL_BP_ENB/DIS
 	if (op & QIB_RCVCTRL_BP_ENB)
 		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_BP_ENB");
@@ -5432,6 +5432,10 @@ static void set_partition_keys(struct qib_pportdata *ppd)
 			reg = 0;
 		}
 	}
+
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_PARTITION_KEY_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
 }
 
 /*
@@ -6061,10 +6065,11 @@ static void init_chip(struct hfi_devdata *dd)
 
 	write_uninitialized_csrs_and_memories(dd);
 
-	for (i = 0; i < dd->num_pports; i++) {
-		struct qib_pportdata *ppd = &dd->pport[i];
-		set_partition_keys(ppd);
-	}
+	if (enable_pkeys)
+		for (i = 0; i < dd->num_pports; i++) {
+			struct qib_pportdata *ppd = &dd->pport[i];
+			set_partition_keys(ppd);
+		}
 	init_sc2vl_tables(dd);
 
 	/*
@@ -6318,6 +6323,60 @@ done:
 	return ret;
 }
 
+int set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
+{
+	struct qib_ctxtdata *rcd;
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (ctxt < dd->num_rcv_contexts)
+		rcd = dd->rcd[ctxt];
+	else {
+		ret = -EINVAL;
+		goto done;
+	}
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	reg = ((u64)pkey & WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_MASK) <<
+		WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_SHIFT;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_PARTITION_KEY, reg);
+	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+	reg |= WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+done:
+	return ret;
+}
+
+int clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
+{
+	struct qib_ctxtdata *rcd;
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (ctxt < dd->num_rcv_contexts)
+		rcd = dd->rcd[ctxt];
+	else {
+		ret = -EINVAL;
+		goto done;
+	}
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+	reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_PARTITION_KEY, 0);
+done:
+	return ret;
+}
+
 /*
  * Assign link credits.
  *
@@ -6512,6 +6571,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_tempsense_rd	= tempsense_rd;
 	dd->f_set_ctxt_jkey     = set_ctxt_jkey;
 	dd->f_clear_ctxt_jkey   = clear_ctxt_jkey;
+	dd->f_set_ctxt_pkey     = set_ctxt_pkey;
+	dd->f_clear_ctxt_pkey   = clear_ctxt_pkey;
 
 	/*
 	 * Set other early dd values.

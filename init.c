@@ -293,14 +293,22 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 			u8 hw_pidx, u8 port)
 {
 	int size;
+	uint default_pkey_idx;
 	ppd->dd = dd;
 	ppd->hw_pidx = hw_pidx;
 	ppd->port = port; /* IB port number, not index */
 #ifdef CONFIG_STL_MGMT
-	ppd->pkeys[1] = WFR_DEFAULT_P_KEY;
+	default_pkey_idx = 1;
 #else
-	ppd->pkeys[0] = WFR_DEFAULT_P_KEY;
+	default_pkey_idx = 0;
 #endif
+	ppd->pkeys[default_pkey_idx] = WFR_DEFAULT_P_KEY;
+	if (loopback == 1) {
+		/* Can't use any other info/err print function */
+		pr_err("Faking data partition 0x8001 in idx %u\n",
+			!default_pkey_idx);
+		ppd->pkeys[!default_pkey_idx] = 0x8001;
+	}
 
 	spin_lock_init(&ppd->sdma_lock);
 

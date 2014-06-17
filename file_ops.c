@@ -84,6 +84,7 @@ static int allocate_ctxt(struct file *, struct hfi_devdata *,
 static unsigned int poll_urgent(struct file *, struct poll_table_struct *);
 static unsigned int poll_next(struct file *, struct poll_table_struct *);
 static int user_event_ack(struct qib_ctxtdata *, int, unsigned long);
+static int set_ctxt_pkey(struct qib_ctxtdata *, unsigned, u16);
 static int manage_rcvq(struct qib_ctxtdata *, unsigned, int);
 static int vma_fault(struct vm_area_struct *, struct vm_fault *);
 static int exp_tid_setup(struct file *, struct hfi_tid_info *);
@@ -239,6 +240,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_POLL_TYPE:
 	case HFI_CMD_ACK_EVENT:
 	case HFI_CMD_CTXT_INFO:
+	case HFI_CMD_SET_PKEY:
 		copy = 0;
 		user_val = ucmd->addr;
 		break;
@@ -323,6 +325,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_ACK_EVENT:
 		ret = user_event_ack(uctxt, subctxt_fp(fp), user_val);
 		break;
+	case HFI_CMD_SET_PKEY:
+		ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
 	}
 
 	if (ret >= 0)
@@ -638,6 +642,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	uctxt->event_flags = 0;
 
 	dd->f_clear_tids(uctxt);
+	dd->f_clear_ctxt_pkey(dd, uctxt->ctxt);
 
 	if (uctxt->tid_pg_list)
 		unlock_exp_tids(uctxt);
@@ -1619,6 +1624,29 @@ static void unlock_exp_tids(struct qib_ctxtdata *uctxt)
 		pci_unmap_page(dd->pcidev, phys, PAGE_SIZE, PCI_DMA_FROMDEVICE);
 		qib_release_user_pages(&p, 1);
 	}
+}
+
+static int set_ctxt_pkey(struct qib_ctxtdata *uctxt, unsigned subctxt, u16 pkey)
+{
+	int ret = -ENOENT, i, intable = 0;
+	struct qib_pportdata *ppd = uctxt->ppd;
+	struct hfi_devdata *dd = uctxt->dd;
+
+	if (pkey == WFR_LIM_MGMT_P_KEY || pkey == WFR_FULL_MGMT_P_KEY) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); i++)
+		if (pkey == ppd->pkeys[i]) {
+			intable = 1;
+			break;
+		}
+
+	if (intable)
+		ret = dd->f_set_ctxt_pkey(dd, uctxt->ctxt, pkey);
+done:
+	return ret;
 }
 
 static int ui_open(struct inode *inode, struct file *filp)

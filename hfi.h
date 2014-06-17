@@ -860,6 +860,8 @@ struct hfi_devdata {
 	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
 	int (*f_set_ctxt_jkey)(struct hfi_devdata *, unsigned, u16);
 	int (*f_clear_ctxt_jkey)(struct hfi_devdata *, unsigned);
+	int (*f_set_ctxt_pkey)(struct hfi_devdata *, unsigned, u16);
+	int (*f_clear_ctxt_pkey)(struct hfi_devdata *, unsigned);
 
 	char *boardname; /* human readable board info */
 
