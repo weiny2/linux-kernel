@@ -1518,6 +1518,7 @@ int split_free_page(struct page *page)
  */
 static inline
 struct page *buffered_rmqueue(struct zone *preferred_zone,
+			struct zoneref *z,
 			struct zone *zone, unsigned int order,
 			gfp_t gfp_flags, int migratetype)
 {
@@ -1571,7 +1572,11 @@ again:
 					  get_freepage_migratetype(page));
 	}
 
-	__mod_zone_page_state(zone, NR_ALLOC_BATCH, -(1 << order));
+	if (z->fair_enabled) {
+		__mod_zone_page_state(zone, NR_ALLOC_BATCH, -(1 << order));
+		if (zone_page_state(zone, NR_ALLOC_BATCH) == 0)
+			zone_set_flag(zone, ZONE_FAIR_DEPLETED);
+	}
 
 	__count_zone_vm_events(PGALLOC, zone, 1 << order);
 	zone_statistics(preferred_zone, zone, gfp_flags);
@@ -1895,26 +1900,16 @@ static inline void init_zone_allows_reclaim(int nid)
 }
 #endif	/* CONFIG_NUMA */
 
-static void reset_alloc_batches(struct zonelist *zonelist,
-				enum zone_type high_zoneidx,
-				struct zone *preferred_zone)
+static void reset_alloc_batches(struct zone *preferred_zone)
 {
-	struct zoneref *z;
-	struct zone *zone;
+	struct zone *zone = preferred_zone->zone_pgdat->node_zones;
 
-	for_each_zone_zonelist(zone, z, zonelist, high_zoneidx) {
-		/*
-		 * Only reset the batches of zones that were actually
-		 * considered in the fairness pass, we don't want to
-		 * trash fairness information for zones that are not
-		 * actually part of this zonelist's round-robin cycle.
-		 */
-		if (!zone_local(preferred_zone, zone))
-			continue;
+	do {
 		mod_zone_page_state(zone, NR_ALLOC_BATCH,
-			high_wmark_pages(zone) - low_wmark_pages(zone) -
+			(zone->managed_pages >> 2) -
 			atomic_long_read(&zone->vm_stat[NR_ALLOC_BATCH]));
-	}
+		zone_clear_flag(zone, ZONE_FAIR_DEPLETED);
+	} while (zone++ != preferred_zone);
 }
 
 /*
@@ -1934,9 +1929,11 @@ get_page_from_freelist(gfp_t gfp_mask, nodemask_t *nodemask, unsigned int order,
 	int did_zlc_setup = 0;		/* just call zlc_setup() one time */
 	bool consider_zone_dirty = (alloc_flags & ALLOC_WMARK_LOW) &&
 				(gfp_mask & __GFP_WRITE);
-	bool batch_depleted = (alloc_flags & ALLOC_FAIR);
+	int nr_fair_skipped = 0, nr_fair_eligible = 0, nr_fail_watermark = 0;
+	bool zonelist_rescan;
 
 zonelist_scan:
+	zonelist_rescan = false;
 	/*
 	 * Scan zonelist, looking for a zone with enough free.
 	 * See also __cpuset_node_allowed_softwall() comment in kernel/cpuset.c.
@@ -1944,6 +1941,7 @@ zonelist_scan:
 	for_each_zone_zonelist_nodemask(zone, z, zonelist,
 						high_zoneidx, nodemask) {
 		unsigned long mark;
+
 		if (IS_ENABLED(CONFIG_NUMA) && zlc_active &&
 			!zlc_zone_worth_trying(zonelist, z, allowednodes))
 				continue;
@@ -1958,11 +1956,13 @@ zonelist_scan:
 		 * time the page has in memory before being reclaimed.
 		 */
 		if (alloc_flags & ALLOC_FAIR) {
-			if (!zone_local(preferred_zone, zone))
+			if (!zone_local(preferred_zone, zone) || !z->fair_enabled)
+				break;
+			nr_fair_eligible++;
+			if (zone_is_fair_depleted(zone)) {
+				nr_fair_skipped++;
 				continue;
-			if (zone_page_state(zone, NR_ALLOC_BATCH) <= 0)
-				continue;
-			batch_depleted = false;
+			}
 		}
 
 		/*
@@ -2003,6 +2003,8 @@ zonelist_scan:
 			BUILD_BUG_ON(ALLOC_NO_WATERMARKS < NR_WMARK);
 			if (alloc_flags & ALLOC_NO_WATERMARKS)
 				goto try_this_zone;
+
+			nr_fail_watermark++;
 
 			if (IS_ENABLED(CONFIG_NUMA) &&
 					!did_zlc_setup && nr_online_nodes > 1) {
@@ -2060,19 +2062,13 @@ zonelist_scan:
 		}
 
 try_this_zone:
-		page = buffered_rmqueue(preferred_zone, zone, order,
+		page = buffered_rmqueue(preferred_zone, z, zone, order,
 						gfp_mask, migratetype);
 		if (page)
 			break;
 this_zone_full:
 		if (IS_ENABLED(CONFIG_NUMA) && zlc_active)
 			zlc_mark_zone_full(zonelist, z);
-	}
-
-	if (unlikely(IS_ENABLED(CONFIG_NUMA) && page == NULL && zlc_active)) {
-		/* Disable zlc cache for second zonelist scan */
-		zlc_active = 0;
-		goto zonelist_scan;
 	}
 
 	if (page) {
@@ -2084,27 +2080,36 @@ this_zone_full:
 		 * for !PFMEMALLOC purposes.
 		 */
 		page->pfmemalloc = !!(alloc_flags & ALLOC_NO_WATERMARKS);
-	} else {
-		/*
-		 * The first pass makes sure allocations are spread
-		 * fairly within the local node.  However, the local
-		 * node might have free pages left after the fairness
-		 * batches are exhausted, and remote zones haven't
-		 * even been considered yet.  Try once more without
-		 * fairness, and include remote zones now, before
-		 * entering the slowpath and waking kswapd: prefer
-		 * spilling to a remote zone over swapping locally.
-		 */
-		if ((alloc_flags & ALLOC_FAIR)) {
-			if (batch_depleted)
-				reset_alloc_batches(zonelist, high_zoneidx,
-					    preferred_zone);
-			alloc_flags &= ~ALLOC_FAIR;
-			goto zonelist_scan;
+		return page;
+	}
+
+	if (unlikely(IS_ENABLED(CONFIG_NUMA) && zlc_active)) {
+		/* Disable zlc cache for second zonelist scan */
+		zlc_active = 0;
+		zonelist_rescan = true;
+	}
+
+	/*
+	 * The first pass spreads allocations fairly within the local node.
+	 * Reset the counters if necessary and recheck the zonelist taking
+	 * the remote nodes and the fact that a batch count might have
+	 * failed due to per-cpu vmstat accounting drift into account. This
+	 * is preferable to entering the slowpath and waking kswapd.
+	 */
+	if (alloc_flags & ALLOC_FAIR) {
+		alloc_flags &= ~ALLOC_FAIR;
+		if (nr_online_nodes > 1)
+			zonelist_rescan = true;
+		if (nr_fail_watermark || nr_fair_eligible == nr_fair_skipped) {
+			zonelist_rescan = true;
+			reset_alloc_batches(preferred_zone);
 		}
 	}
 
-	return page;
+	if (zonelist_rescan)
+		goto zonelist_scan;
+
+	return NULL;
 }
 
 /*
@@ -2719,7 +2724,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	struct page *page = NULL;
 	int migratetype = allocflags_to_migratetype(gfp_mask);
 	unsigned int cpuset_mems_cookie;
-	int alloc_flags = ALLOC_WMARK_LOW|ALLOC_CPUSET|ALLOC_FAIR;
+	int alloc_flags = ALLOC_WMARK_LOW|ALLOC_CPUSET;
 	struct mem_cgroup *memcg = NULL;
 	int classzone_idx;
 
@@ -2758,6 +2763,8 @@ retry_cpuset:
 		goto out;
 	classzone_idx = zonelist_zone_idx(preferred_zoneref);
 
+	if (preferred_zoneref->fair_enabled)
+		alloc_flags |= ALLOC_FAIR;
 #ifdef CONFIG_CMA
 	if (allocflags_to_migratetype(gfp_mask) == MIGRATE_MOVABLE)
 		alloc_flags |= ALLOC_CMA;
@@ -3258,10 +3265,19 @@ void show_free_areas(unsigned int filter)
 	show_swap_cache_info();
 }
 
-static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
+static int zoneref_set_zone(pg_data_t *pgdat, struct zone *zone,
+			struct zoneref *zoneref, struct zone *preferred_zone)
 {
+	int zone_type = zone_idx(zone);
+	bool fair_enabled = zone_local(zone, preferred_zone);
+	if (zone_type == 0 &&
+			zone->managed_pages < (pgdat->node_present_pages >> 4))
+		fair_enabled = false;
+
 	zoneref->zone = zone;
-	zoneref->zone_idx = zone_idx(zone);
+	zoneref->zone_idx = zone_type;
+	zoneref->fair_enabled = fair_enabled;
+	return fair_enabled;
 }
 
 /*
@@ -3274,16 +3290,25 @@ static int build_zonelists_node(pg_data_t *pgdat, struct zonelist *zonelist,
 {
 	struct zone *zone;
 	enum zone_type zone_type = MAX_NR_ZONES;
+	struct zone *preferred_zone = NULL;
+	int nr_fair = 0;
 
 	do {
 		zone_type--;
 		zone = pgdat->node_zones + zone_type;
 		if (populated_zone(zone)) {
-			zoneref_set_zone(zone,
-				&zonelist->_zonerefs[nr_zones++]);
+			if (!preferred_zone)
+				preferred_zone = zone;
+
+			nr_fair += zoneref_set_zone(pgdat, zone,
+				&zonelist->_zonerefs[nr_zones++],
+				preferred_zone);
 			check_highest_zone(zone_type);
 		}
 	} while (zone_type);
+
+	if (nr_fair <= 1)
+		zonelist->_zonerefs[0].fair_enabled = false;
 
 	return nr_zones;
 }
@@ -3481,6 +3506,7 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int node)
 	j = build_zonelists_node(NODE_DATA(node), zonelist, j);
 	zonelist->_zonerefs[j].zone = NULL;
 	zonelist->_zonerefs[j].zone_idx = 0;
+	zonelist->_zonerefs[j].fair_enabled = false;
 }
 
 /*
@@ -3509,8 +3535,9 @@ static void build_zonelists_in_zone_order(pg_data_t *pgdat, int nr_nodes)
 {
 	int pos, j, node;
 	int zone_type;		/* needs to be signed */
-	struct zone *z;
+	struct zone *z, *preferred_zone = NULL;
 	struct zonelist *zonelist;
+	int nr_fair = 0;
 
 	zonelist = &pgdat->node_zonelists[0];
 	pos = 0;
@@ -3518,15 +3545,22 @@ static void build_zonelists_in_zone_order(pg_data_t *pgdat, int nr_nodes)
 		for (j = 0; j < nr_nodes; j++) {
 			node = node_order[j];
 			z = &NODE_DATA(node)->node_zones[zone_type];
+			if (!preferred_zone)
+				preferred_zone = z;
 			if (populated_zone(z)) {
-				zoneref_set_zone(z,
-					&zonelist->_zonerefs[pos++]);
+				nr_fair += zoneref_set_zone(pgdat, z,
+					&zonelist->_zonerefs[pos++],
+					preferred_zone);
 				check_highest_zone(zone_type);
 			}
 		}
 	}
 	zonelist->_zonerefs[pos].zone = NULL;
 	zonelist->_zonerefs[pos].zone_idx = 0;
+	zonelist->_zonerefs[pos].fair_enabled = false;
+
+	if (nr_fair <= 1)
+		zonelist->_zonerefs[0].fair_enabled = false;
 }
 
 static int default_zonelist_order(void)
@@ -5673,8 +5707,7 @@ static void __setup_per_zone_wmarks(void)
 		zone->watermark[WMARK_HIGH] = min_wmark_pages(zone) + (tmp >> 1);
 
 		__mod_zone_page_state(zone, NR_ALLOC_BATCH,
-				      high_wmark_pages(zone) -
-				      low_wmark_pages(zone) -
+				      (zone->managed_pages >> 2) -
 				      zone_page_state(zone, NR_ALLOC_BATCH));
 
 		setup_zone_migrate_reserve(zone);
