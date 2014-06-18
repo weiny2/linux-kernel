@@ -2022,6 +2022,58 @@ struct stl_aggregate {
 	u8 data[0];
 };
 
+/* Request contains first two fields, response contains those plus the rest */
+struct stl_port_data_counters_msg {
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
+
+	/* Response fields follow */
+	__be32 reserved1;
+	struct _port_dctrs {
+		u8 port_number;
+		u8 reserved2[3];
+		__be32 link_quality_indicator; /* 4res, 4bit */
+
+		/* Data counters */
+		__be64 port_xmit_data;
+		__be64 port_rcv_data;
+		__be64 port_xmit_pkts;
+		__be64 port_rcv_pkts;
+		__be64 port_multicast_xmit_pkts;
+		__be64 port_multicast_rcv_pkts;
+		__be64 port_xmit_wait;
+		__be64 sw_port_congestion;
+		__be64 port_rcv_fecn;
+		__be64 port_rcv_becn;
+		__be64 port_xmit_time_cong;
+		__be64 port_xmit_wasted_bw;
+		__be64 port_xmit_wait_data;
+		__be64 port_rcv_bubble;
+		__be64 port_mark_fecn;
+
+		__be64 port_error_counter_summary;
+		/* Sum of error counts/port */
+
+		struct _vls_dctrs {
+			/* per-VL Data counters */
+			__be64 port_vl_xmit_data;
+			__be64 port_vl_rcv_data;
+			__be64 port_vl_xmit_pkts;
+			__be64 port_vl_rcv_pkts;
+			__be64 port_vl_xmit_wait;
+			__be64 sw_port_vl_congestion;
+			__be64 port_vl_rcv_fecn;
+			__be64 port_vl_rcv_becn;
+			__be64 port_xmit_time_cong;
+			__be64 port_vl_xmit_wasted_bw;
+			__be64 port_vl_xmit_wait_data;
+			__be64 port_vl_rcv_bubble;
+			__be64 port_vl_mark_fecn;
+		} vls[0];
+		/* array size defined by #bits set in vl_select_mask*/
+	} port[1]; /* array size defined by  #ports in attribute modifier */
+};
+
 static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
 				     struct ib_device *ibdev)
 {
@@ -2171,6 +2223,170 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 					 + (vl * 8)));
 		/* rsp->vls[vl].port_vl_xmit_discards ??? */
 		vl_index++;
+	}
+
+	return reply(pmp);
+}
+
+static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u64 error_counter_summary = 0;
+	/* FIXME
+	 * some of the counters are not implemented. if the WFR spec
+	 * indicates the source of the value (e.g., driver, DC, etc.)
+	 * that's noted. If I don't have a clue how to get the counter,
+	 * a '???' appears.
+	 */
+
+	/* port_rcv_constraint_errors ??? */
+	/* port_rcv_switch_relay_errors is 0 for HFIs */
+	/* port_xmit_discards ??? */
+	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
+	error_counter_summary +=
+		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
+	/* local_link_integrity_errors - DC (table 13-11 WFR spec)
+	 * is this LCB_ERR_INFO_TX_REPLAY_CNT ??? */
+	error_counter_summary +=
+		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
+	/* excessive_buffer_overruns - SPC RXE block
+	 * (table 13-11 WFR spec) */
+	error_counter_summary +=
+		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
+	/* link_error_recovery - DC (table 13-11 WFR spec) */
+	/* link_downed - DC (table 13-11 WFR spec) */
+	error_counter_summary +=
+		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
+	/* link_quality_indicator ??? */
+
+	return error_counter_summary;
+}
+
+static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
+				    struct ib_device *ibdev, u8 port)
+{
+	struct stl_port_data_counters_msg *req =
+		(struct stl_port_data_counters_msg *)pmp->data;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct _port_dctrs *rsp;
+	struct _vls_dctrs *vlinfo;
+	size_t response_data_size;
+	u32 num_ports;
+	u8 num_pslm;
+	u8 num_vls;
+	u64 port_mask;
+	unsigned long port_num;
+	unsigned long vl;
+	u32 vl_select_mask;
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
+
+	if (num_ports != 1) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	/* Sanity check */
+	response_data_size = sizeof(struct stl_port_data_counters_msg) +
+				num_vls * sizeof(struct _vls_dctrs);
+
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	/*
+	 * The bit set in the mask needs to be consistent with the
+	 * port the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+				  sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	rsp = (struct _port_dctrs *)&(req->port[0]);
+	memset(rsp, 0, sizeof(*rsp));
+
+	rsp->port_number = port;
+	rsp->link_quality_indicator = 0; /* FIXME */
+
+	/* FIXME
+	 * some of the counters are not implemented. if the WFR spec
+	 * indicates the source of the value (e.g., driver, DC, etc.)
+	 * that's noted. If I don't have a clue how to get the counter,
+	 * a '???' appears.
+	 */
+
+	rsp->port_xmit_data =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_DATA_CNT));
+	rsp->port_rcv_data =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_DATA_CNT));
+	rsp->port_xmit_pkts =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_PKTS_CNT));
+	rsp->port_rcv_pkts =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_PKTS_CNT));
+	rsp->port_multicast_xmit_pkts =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_MULTICAST_CNT));
+	rsp->port_multicast_rcv_pkts =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT));
+	rsp->port_xmit_wait =
+		cpu_to_be64(read_csr(dd,
+			    (SEND_WAIT_CNT * 8 + WFR_SEND_COUNTER_ARRAY64)));
+	/* rsp->sw_port_congestion is 0 for HFIs */
+	rsp->port_rcv_fecn =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_FECN_CNT));
+	rsp->port_rcv_becn =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_BECN_CNT));
+	/* rsp->port_xmit_time_cong is 0 for HFIs */
+	/* rsp->port_xmit_wasted_bw ??? */
+	/* rsp->port_xmit_wait_data ??? */
+	rsp->port_rcv_bubble =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_BUBBLE_CNT));
+	rsp->port_mark_fecn =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));
+
+	rsp->port_error_counter_summary =
+		get_error_counter_summary(ibdev, port);
+
+	vlinfo = &(rsp->vls[0]);
+	vl_select_mask = cpu_to_be32(req->vl_select_mask);
+	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+		 sizeof(req->vl_select_mask)) {
+		memset(vlinfo, 0, sizeof(*vlinfo));
+		rsp->vls[vl].port_vl_xmit_data =
+			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
+				8 * (SEND_DATA_VL0_CNT + vl)));
+		rsp->vls[vl].port_vl_rcv_data =
+			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
+				+ (vl * 8)));
+		/* rsp->vls[vl].port_vl_xmit_pkts ??? (table 13-9 WFR spec) */
+		rsp->vls[vl].port_vl_xmit_wait =
+			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
+				8 * (SEND_WAIT_VL0_CNT + vl)));
+		/* rsp->vls[vl].sw_port_vl_congestion is 0 for HFIs */
+		rsp->vls[vl].port_vl_rcv_fecn =
+			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
+				+ (vl * 8)));
+		rsp->vls[vl].port_vl_rcv_becn =
+			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT
+				+ (vl * 8)));
+		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
+		/* rsp->port_vl_xmit_wasted_bw ??? */
+		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
+		 * does this differ from rsp->vls[vl].port_vl_xmit_wait */
+		rsp->vls[vl].port_vl_rcv_bubble =
+			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT
+				+ (vl * 8)));
+		rsp->vls[vl].port_vl_mark_fecn =
+			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
+				+ (vl * 8)));
+		vlinfo += 1;
 	}
 
 	return reply(pmp);
@@ -3667,6 +3883,9 @@ static int process_perf_stl(struct ib_device *ibdev, u8 port,
 			goto bail;
 		case STL_PM_ATTRIB_ID_PORT_STATUS:
 			ret = pma_get_stl_portstatus(pmp, ibdev, port);
+			goto bail;
+		case STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS:
+			ret = pma_get_stl_datacounters(pmp, ibdev, port);
 			goto bail;
 #if 0
 		case IB_PMA_PORT_SAMPLES_CONTROL:

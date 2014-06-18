@@ -50,6 +50,7 @@
 /* STL PMA attribute IDs */
 #define STL_PM_ATTRIB_ID_PORT_STATUS		cpu_to_be16(0x0040)
 #define STL_PM_ATTRIB_ID_CLEAR_PORT_STATUS	cpu_to_be16(0x0041)
+#define STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS	cpu_to_be16(0x0042)
 
 /* STL status codes */
 #define STL_PM_STATUS_REQUEST_TOO_LARGE		cpu_to_be16(0x100)
