@@ -90,8 +90,8 @@ uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(loopback, "Put into LCB loopback mode");
 
-/* TODO: the only way to get normal linkup to work is to skip BCC steps */
-uint disable_bcc = 1;
+/* TODO: temporary; skip BCC steps */
+uint disable_bcc = 0;
 module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
 MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
 
