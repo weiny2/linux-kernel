@@ -1452,6 +1452,8 @@ extern uint num_rcv_contexts;
 extern unsigned qib_n_krcv_queues;
 extern uint kdeth_qp;
 extern uint loopback;
+extern uint rcv_intr_timeout;
+extern uint rcv_intr_count;
 
 extern struct mutex qib_mutex;
 

@@ -1151,6 +1151,13 @@ static int __init qlogic_ib_init(void)
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
 		hfi_cu = 1;
+	/* sanitize receive interrupt parameters, both cannot be zero */
+	rcv_intr_timeout &= WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_MASK;
+	rcv_intr_count &= WFR_RCV_HDR_HEAD_COUNTER_MASK;
+	if (rcv_intr_count == 0 && rcv_intr_timeout == 0) {
+		pr_err("Invalid mode: both receive interrupt count and available timeout are zero - setting interrupt count to 1\n");
+		rcv_intr_count = 1;
+	}
 
 	qib_cq_wq = create_singlethread_workqueue("qib_cq");
 	if (!qib_cq_wq) {

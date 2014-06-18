@@ -68,6 +68,14 @@ static uint eager_buffer_size;
 module_param(eager_buffer_size, uint, S_IRUGO);
 MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`");
 
+uint rcv_intr_timeout;
+module_param(rcv_intr_timeout, uint, S_IRUGO);
+MODULE_PARM_DESC(rcv_intr_timeout, "Receive interrupt mitigation timeout");
+
+uint rcv_intr_count = 1;
+module_param(rcv_intr_count, uint, S_IRUGO);
+MODULE_PARM_DESC(rcv_intr_count, "Receive interrupt mitigation count");
+
 /* TODO: temporary */
 static uint use_flr;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
@@ -3650,9 +3658,7 @@ static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, reg);
 	}
 	mmiowb();
-	// FIXME: We're hard-coding the counter to 1 here.  We need
-	// a scheme - likely integrated with a timeout.
-	reg = (1ull << WFR_RCV_HDR_HEAD_COUNTER_SHIFT) |
+	reg = ((u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT) |
 		((hd & WFR_RCV_HDR_HEAD_HEAD_MASK)
 			<< WFR_RCV_HDR_HEAD_HEAD_SHIFT);
 	write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
@@ -3735,7 +3741,6 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
-	u32 eager_header_counter = 0;	/* non-zero means do something */
 	int hp = 0;			/* header printed? */
 
 	rcd = dd->rcd[ctxt];
@@ -3759,38 +3764,35 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	/* if the context already enabled, don't do the extra steps */
 	if ((op & QIB_RCVCTRL_CTXT_ENB)
 			&& !(rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK)) {
-		dd_dev_info(dd, "rcd->rcvhdrq_phys 0x%lx\n",
-			    (unsigned long)rcd->rcvhdrq_phys);
+		/* reset the tail and hdr addresses, and sequence count */
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR,
 				rcd->rcvhdrq_phys);
 		if (!(dd->flags & QIB_NODMA_RTAIL)) {
-			dd_dev_info(dd, "rcd->rcvhdrqtailaddr_phys 0x%lx\n",
-				    (unsigned long)rcd->rcvhdrqtailaddr_phys);
-			/* reset the tail and hdr addresses, and sequence count */
 			write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR,
 					rcd->rcvhdrqtailaddr_phys);
 		}
-
 		rcd->seq_cnt = 1;
-		/*
-		 * When the context enable goes from 0 to 1, RcvEgrIndexHead,
-		 * RcvEgrIndexTail, and RcvEgrOffsetTail are reset to 0.
-		 * However, once we activate the context, we need to add a
-		 * count of (at least) 1 to RcvEgrHdrHead.Counter so
-		 * interrupts are generated.
-		 * TODO: We don't always want interrupts.  Need a
-		 * mechanism for that. Also, we could make this
-		 * conditional on IntrAvail.  Not sure it we need to
-		 * worry about it, though.
-		 */
+
+		/* enable the context */
 		rcvctrl |= WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
-		eager_header_counter = 1; /* non-zero means do something */
 
 		/* set the control's eager buffer size */
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
 		rcvctrl |= (encoded_size(rcd->rcvegrbuf_size)
 				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
 					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
+
+		/* set interrupt timeout */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_AVAIL_TIME_OUT,
+			(u64)rcv_intr_timeout <<
+				WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
+
+		/* zero RcvHdrHead.Head, set RcvHdrHead.Counter */
+		reg = (u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
+		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
+
+		/* zero RcvEgrIndexHead */
+		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, 0);
 
 		/* set eager count and base index */
 		reg = ((rcd->eager_count & WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
@@ -3841,22 +3843,6 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	rcd->rcvctrl = rcvctrl;
 	dd_dev_info(dd, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
 	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);
-
-	/*
-	 * This must be done after we transition a context to enabled
-	 * in RcvCtxtCtrl.
-	 */
-	if (eager_header_counter) {
-		/*
-		 * ASSUMPTION: we've just transitioned the context
-		 * to enabled with the write to RcvCtxtCtrl above.
-		 * This will zero out RcvHdrHead, so we only need to
-		 * update the Counter field.
-		 */
-		reg = (eager_header_counter & WFR_RCV_HDR_HEAD_COUNTER_MASK)
-			<< WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
-		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
-	}
 }
 
 static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
