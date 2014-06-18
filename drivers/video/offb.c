@@ -91,8 +91,6 @@ extern boot_infos_t *boot_infos;
 #define AVIVO_DC_LUTB_WHITE_OFFSET_GREEN        0x6cd4
 #define AVIVO_DC_LUTB_WHITE_OFFSET_RED          0x6cd8
 
-#define FB_RIGHT_POS(p, bpp)         (fb_be_math(p) ? 0 : (32 - (bpp)))
-
     /*
      *  Set a single color register. The values supplied are already
      *  rounded down to the hardware's capabilities (according to the
@@ -444,8 +442,6 @@ static void __init offb_init_fb(const char *name, const char *full_name,
 	else
 		fix->visual = FB_VISUAL_TRUECOLOR;
 
-	info->flags = FBINFO_DEFAULT | FBINFO_MISC_FIRMWARE | foreign_endian;
-
 	var->xoffset = var->yoffset = 0;
 	switch (depth) {
 	case 8:
@@ -461,54 +457,35 @@ static void __init offb_init_fb(const char *name, const char *full_name,
 		break;
 	case 15:		/* RGB 555 */
 		var->bits_per_pixel = 16;
-		if (fb_be_math(info)) {
-			var->red.offset = 10;
-			var->green.offset = 5;
-			var->blue.offset = 0;
-		} else {
-			var->red.offset = 0;
-			var->green.offset = 5;
-			var->blue.offset = 10;
-		}
+		var->red.offset = 10;
 		var->red.length = 5;
+		var->green.offset = 5;
 		var->green.length = 5;
+		var->blue.offset = 0;
 		var->blue.length = 5;
 		var->transp.offset = 0;
 		var->transp.length = 0;
 		break;
 	case 16:		/* RGB 565 */
 		var->bits_per_pixel = 16;
-		if (fb_be_math(info)) {
-			var->red.offset = 11;
-			var->green.offset = 5;
-			var->blue.offset = 0;
-		} else {
-			var->red.offset = 0;
-			var->green.offset = 5;
-			var->blue.offset = 11;
-		}
+		var->red.offset = 11;
 		var->red.length = 5;
+		var->green.offset = 5;
 		var->green.length = 6;
+		var->blue.offset = 0;
 		var->blue.length = 5;
 		var->transp.offset = 0;
 		var->transp.length = 0;
 		break;
 	case 32:		/* RGB 888 */
 		var->bits_per_pixel = 32;
-		if (fb_be_math(info)) {
-			var->red.offset = 16;
-			var->green.offset = 8;
-			var->blue.offset = 0;
-			var->transp.offset = 24;
-		} else {
-			var->red.offset = 8;
-			var->green.offset = 16;
-			var->blue.offset = 24;
-			var->transp.offset = 0;
-		}
+		var->red.offset = 16;
 		var->red.length = 8;
+		var->green.offset = 8;
 		var->green.length = 8;
+		var->blue.offset = 0;
 		var->blue.length = 8;
+		var->transp.offset = 24;
 		var->transp.length = 8;
 		break;
 	}
@@ -535,6 +512,7 @@ static void __init offb_init_fb(const char *name, const char *full_name,
 	info->fbops = &offb_ops;
 	info->screen_base = ioremap(address, fix->smem_len);
 	info->pseudo_palette = (void *) (info + 1);
+	info->flags = FBINFO_DEFAULT | FBINFO_MISC_FIRMWARE | foreign_endian;
 
 	fb_alloc_cmap(&info->cmap, 256, 0);
 
