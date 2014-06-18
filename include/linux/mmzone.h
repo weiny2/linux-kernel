@@ -391,6 +391,8 @@ struct zone {
 	int			compact_order_failed;
 #endif
 
+	unsigned long		dirty_limit_cached;
+
 	ZONE_PADDING(_pad1_)
 
 	/* Fields commonly accessed by the page reclaim scanner */
@@ -513,6 +515,7 @@ typedef enum {
 	ZONE_WRITEBACK,			/* reclaim scanning has recently found
 					 * many pages under writeback
 					 */
+	ZONE_FAIR_DEPLETED,		/* fair zone policy batch depleted */
 } zone_flags_t;
 
 static inline void zone_set_flag(struct zone *zone, zone_flags_t flag)
@@ -548,6 +551,11 @@ static inline int zone_is_reclaim_writeback(const struct zone *zone)
 static inline int zone_is_reclaim_locked(const struct zone *zone)
 {
 	return test_bit(ZONE_RECLAIM_LOCKED, &zone->flags);
+}
+
+static inline int zone_is_fair_depleted(const struct zone *zone)
+{
+	return test_bit(ZONE_FAIR_DEPLETED, &zone->flags);
 }
 
 static inline int zone_is_oom_locked(const struct zone *zone)
@@ -673,6 +681,7 @@ struct zonelist_cache;
 struct zoneref {
 	struct zone *zone;	/* Pointer to actual zone */
 	int zone_idx;		/* zone_idx(zoneref->zone) */
+	bool fair_enabled;	/* eligible for fair zone policy */
 };
 
 /*

@@ -54,8 +54,9 @@ void mminit_verify_zonelist(void)
 			/* Iterate the zonelist */
 			for_each_zone_zonelist(zone, z, zonelist, zoneid) {
 #ifdef CONFIG_NUMA
-				printk(KERN_CONT "%d:%s ",
-					zone->node, zone->name);
+				printk(KERN_CONT "%d:%s%s ",
+					zone->node, zone->name,
+					z->fair_enabled ? "(F)" : "");
 #else
 				printk(KERN_CONT "0:%s ", zone->name);
 #endif /* CONFIG_NUMA */
