@@ -121,6 +121,7 @@ static inline void laptop_sync_completion(void) { }
 #endif
 void throttle_vm_writeout(gfp_t gfp_mask);
 bool zone_dirty_ok(struct zone *zone);
+unsigned long zone_dirty_limit(struct zone *zone);
 
 extern unsigned long global_dirty_limit;
 

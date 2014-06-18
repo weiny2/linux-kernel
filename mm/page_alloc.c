@@ -1927,9 +1927,8 @@ get_page_from_freelist(gfp_t gfp_mask, nodemask_t *nodemask, unsigned int order,
 	nodemask_t *allowednodes = NULL;/* zonelist_cache approximation */
 	int zlc_active = 0;		/* set if using zonelist_cache */
 	int did_zlc_setup = 0;		/* just call zlc_setup() one time */
-	bool consider_zone_dirty = (alloc_flags & ALLOC_WMARK_LOW) &&
-				(gfp_mask & __GFP_WRITE);
 	int nr_fair_skipped = 0, nr_fair_eligible = 0, nr_fail_watermark = 0;
+	int nr_fail_dirty = 0;
 	bool zonelist_rescan;
 
 zonelist_scan:
@@ -1991,8 +1990,11 @@ zonelist_scan:
 		 * will require awareness of zones in the
 		 * dirty-throttling and the flusher threads.
 		 */
-		if (consider_zone_dirty && !zone_dirty_ok(zone))
+		if ((alloc_flags & ALLOC_DIRTY) && !zone_dirty_ok(zone)) {
+			nr_fail_dirty++;
+			zone->dirty_limit_cached = zone_dirty_limit(zone);
 			continue;
+		}
 
 		mark = zone->watermark[alloc_flags & ALLOC_WMARK_MASK];
 		if (!zone_watermark_ok(zone, order, mark,
@@ -2104,6 +2106,11 @@ this_zone_full:
 			zonelist_rescan = true;
 			reset_alloc_batches(preferred_zone);
 		}
+	}
+
+	if ((alloc_flags & ALLOC_DIRTY) && nr_fail_dirty) {
+		alloc_flags &= ~ALLOC_DIRTY;
+		zonelist_rescan = true;
 	}
 
 	if (zonelist_rescan)
@@ -2765,6 +2772,8 @@ retry_cpuset:
 
 	if (preferred_zoneref->fair_enabled)
 		alloc_flags |= ALLOC_FAIR;
+	if (gfp_mask & __GFP_WRITE)
+		alloc_flags |= ALLOC_DIRTY;
 #ifdef CONFIG_CMA
 	if (allocflags_to_migratetype(gfp_mask) == MIGRATE_MOVABLE)
 		alloc_flags |= ALLOC_CMA;

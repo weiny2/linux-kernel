@@ -391,6 +391,8 @@ struct zone {
 	int			compact_order_failed;
 #endif
 
+	unsigned long		dirty_limit_cached;
+
 	ZONE_PADDING(_pad1_)
 
 	/* Fields commonly accessed by the page reclaim scanner */
