@@ -283,6 +283,8 @@ struct printk_log {
 };
 
 #ifdef CONFIG_PRINTK
+#define PREFIX_MAX		32
+#define LOG_LINE_MAX		1024 - PREFIX_MAX
 /*
  * Continuation lines are buffered, and not committed to the record buffer
  * until the line is complete, or a race forces it. The line fragments
@@ -290,7 +292,7 @@ struct printk_log {
  * reached the console in case of a kernel crash.
  */
 struct printk_cont {
-	char *buf;
+	char buf[LOG_LINE_MAX];
 	size_t len;			/* length == 0 means unused buffer */
 	size_t cons;			/* bytes written to console */
 	struct task_struct *owner;	/* task of first print*/
@@ -339,9 +341,6 @@ static u32 nmi_merge_idx;
 static u64 clear_seq;
 static u32 clear_idx;
 
-#define PREFIX_MAX		32
-#define LOG_LINE_MAX		1024 - PREFIX_MAX
-
 /* record buffer */
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
 #define LOG_ALIGN 4
@@ -350,13 +349,9 @@ static u32 clear_idx;
 #endif
 #define __LOG_BUF_LEN (1 << CONFIG_LOG_BUF_SHIFT)
 static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
-static char __main_cont_buf[LOG_LINE_MAX];
 static char *log_buf = __log_buf;
 static u32 log_buf_len = __LOG_BUF_LEN;
-
-static struct printk_cont main_cont = {
-	.buf = __main_cont_buf,
-};
+static struct printk_cont main_cont;
 
 /*
  * NMI ring buffer must be used if we are in NMI context and the lock for
@@ -364,13 +359,9 @@ static struct printk_cont main_cont = {
  * The content of the NMI buffer is moved to the main buffer on the first
  * occasion.
  */
-static char __nmi_cont_buf[LOG_LINE_MAX];
 static char *nmi_log_buf;
 static u32 nmi_log_buf_len = __LOG_BUF_LEN;
-
-static struct printk_cont nmi_cont = {
-	.buf = __nmi_cont_buf,
-};
+static struct printk_cont nmi_cont;
 
 /*
  * Byte operations needed to manipulate index and sequence numbers for the NMI
