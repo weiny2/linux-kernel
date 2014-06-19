@@ -683,81 +683,79 @@ void pio_reset_all(struct hfi_devdata *dd)
 /* enable the context */
 int sc_enable(struct send_context *sc)
 {
-	u64 reg;
-	int ret = 0;
+	u64 reg, pio;
+	struct hfi_devdata *dd;
+	unsigned long flags;
+	int ret;
 
-	if (!sc) {
-		ret = -EINVAL;
-		goto done;
-	}
+	if (!sc)
+		return -EINVAL;
+	dd = sc->dd;
 
-	reg = read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL);
+	reg = read_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL);
+	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK))
+		return 0; /* already enabled */
+
 	/* IMPORTANT: only clear free and fill if transitioning 0 -> 1 */
-	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK) == 0) {
-		u64 pio;
-		unsigned long flags;
-		struct hfi_devdata *dd = sc->dd;
 
-		// FIXME: obtain the locks?
-		*sc->hw_free = 0;
-		sc->free = 0;
-		sc->alloc_free = 0;
-		sc->fill = 0;
-		sc->sr_head = 0;
-		sc->sr_tail = 0;
+	// FIXME: obtain the locks?
+	*sc->hw_free = 0;
+	sc->free = 0;
+	sc->alloc_free = 0;
+	sc->fill = 0;
+	sc->sr_head = 0;
+	sc->sr_tail = 0;
 
-		/*
-		 * The HW PIO initialization engine can handle only one
-		 * init request at a time. Serialize access to each device's
-		 * engine.
-		 */
-		spin_lock_irqsave(&dd->sc_init_lock, flags);
-		/*
-		 * Since access to this code block is serialized and
-		 * each access waits for the initialization to complete
-		 * before releasing the lock, the PIO initialization engine
-		 * should not be in use, so we don't have to wait for the
-		 * InProgress bit to go down.
-		 */
-		pio = ((sc->context & WFR_SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_MASK) <<
-		       WFR_SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_SHIFT) |
-			WFR_SEND_PIO_INIT_CTXT_PIO_SINGLE_CTXT_INIT_SMASK;
-		write_csr(sc->dd, WFR_SEND_PIO_INIT_CTXT, pio);
-		/*
-		 * Wait until the engine is done.
-		 * Give the chip the required time so, hopefully, we read the
-		 * register just once.
-		 */
-		udelay(2);
-		ret = pio_init_wait_progress(dd);
-		spin_unlock_irqrestore(&dd->sc_init_lock, flags);
-		/*
-		 * Initialization is done. The register holds a valid error
-		 * status.
-		 */
-		if (ret) {
-                        dd_dev_err(sc->dd,
-				   "ctxt%u: Context not enabled due to init failure %d\n",
-				   sc->context, ret);
-		} else {
-			/*
-			 * All is well. Enable the context.
-			 * We get the allocator lock to guards against any
-			 * allocation attempts (which should not happen prior
-			 * to context being enabled). On the release/disable
-			 * side we don't need to worry about locking since the
-			 * releaser will not do anything if the context
-			 * accounting values have not changed.
-			 */
-			reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
-			spin_lock_irqsave(&sc->alloc_lock, flags);
-			write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
-			sc->enabled = 1;
-			spin_unlock_irqrestore(&sc->alloc_lock, flags);
-		}
+	/*
+	 * The HW PIO initialization engine can handle only one init
+	 * request at a time. Serialize access to each device's engine.
+	 */
+	spin_lock_irqsave(&dd->sc_init_lock, flags);
+	/*
+	 * Since access to this code block is serialized and
+	 * each access waits for the initialization to complete
+	 * before releasing the lock, the PIO initialization engine
+	 * should not be in use, so we don't have to wait for the
+	 * InProgress bit to go down.
+	 */
+	pio = ((sc->context & WFR_SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_MASK) <<
+	       WFR_SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_SHIFT) |
+		WFR_SEND_PIO_INIT_CTXT_PIO_SINGLE_CTXT_INIT_SMASK;
+	write_csr(dd, WFR_SEND_PIO_INIT_CTXT, pio);
+	/*
+	 * Wait until the engine is done.  Give the chip the required time
+	 * so, hopefully, we read the register just once.
+	 */
+	udelay(2);
+	ret = pio_init_wait_progress(dd);
+	spin_unlock_irqrestore(&dd->sc_init_lock, flags);
+	if (ret) {
+		dd_dev_err(dd,
+			   "ctxt%u: Context not enabled due to init failure %d\n",
+			   sc->context, ret);
+		return ret;
 	}
-done:
-	return ret;
+
+	/*
+	 * All is well. Enable the context.
+	 * Obtain the allocator lock to guard against any allocation
+	 * attempts (which should not happen prior to context being
+	 * enabled). On the release/disable side we don't need to
+	 * worry about locking since the releaser will not do anything
+	 * if the context accounting values have not changed.
+	 */
+	reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+	spin_lock_irqsave(&sc->alloc_lock, flags);
+	write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+	/*
+	 * Read SendCtxtCtrl to force the write out and prevent a timing
+	 * hazard where a PIO write may reach the context before the enable.
+	 */
+	read_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL);
+	sc->enabled = 1;
+	spin_unlock_irqrestore(&sc->alloc_lock, flags);
+
+	return 0;
 }
 
 /* force a credit return on the context */
