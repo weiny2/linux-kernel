@@ -270,7 +270,16 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 	cd->rcvegrbufs_perchunk_shift =	ilog2(cd->rcvegrbufs_perchunk);
 	cd->rcvhdrq_cnt = hdrqcnt;
 	/* RcvHdrQ Entry Size is in DWords */
-	cd->rcvhdrqentsize = hdrqentsize >> 2;
+	hdrqentsize = hdrqentsize >> 2;
+	/*
+	 * #290698 - RcvHdrEntSize must be set to 2DWs or multiple of
+	 * 16DWs.
+	 */
+	if (hdrqentsize != 2 && (hdrqentsize % 0x10)) {
+		ret = -EINVAL;
+		goto done;
+	}
+	cd->rcvhdrqentsize = hdrqentsize;
 done:
 	return ret;
 }
