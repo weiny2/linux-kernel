@@ -124,6 +124,19 @@ test_list = [
       "desc" : "Run test opcode counters after quick tests have been run.",
     },
 
+    # IMB (Intel MPI Benchmark) tests
+    { "test_name" : "IMB.py",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --args \"-time 1 -iter 10\"",
+      "type" : "default,mpi,mpipsm",
+      "desc" : "Run full IMB suite with PSM",
+    },
+
+    { "test_name" : "IMB.py",
+      "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-time 1 -iter 10\"",
+      "type" : "default,mpi,mpiverbs,verbs",
+      "desc" : "Run full IMB suite with verbs",
+    },
+
     # wfr-diagtools-sw tests
     { "test_name" : "HfiPktTest.py",
       "args" : "--nodelist %HOST[1]% --psm %PSM_LIB%",
