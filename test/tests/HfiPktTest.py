@@ -16,7 +16,8 @@ def do_ssh(host, cmd):
     RegLib.test_log(5, "Running " + cmd)
     return (host.send_ssh(cmd, 0))
 
-def do_pingpong(host1, host2, psm_libs = None, payload = 1024, count = 500):
+def do_pingpong(diag_path, host1, host2, psm_libs = None,
+	        payload = 1024, count = 500):
     RegLib.test_log(0, "Starting hfi_pkt_test ping-pong benchmark")
     test_pass = True
 
@@ -35,7 +36,7 @@ def do_pingpong(host1, host2, psm_libs = None, payload = 1024, count = 500):
     # Start the receiver on host1; host2 will initiate ping-pongs.
     child_pid = os.fork()
     if child_pid == 0:
-        cmd = cmd_libs + "hfi_pkt_test -r"
+        cmd = cmd_libs + diag_path + "hfi_pkt_test -r"
 
         err = do_ssh(host1, cmd)
         sys.exit(err)
@@ -43,8 +44,8 @@ def do_pingpong(host1, host2, psm_libs = None, payload = 1024, count = 500):
     RegLib.test_log(5, "Sleeping for 5 seconds to let server start")
     time.sleep(5)
 
-    cmd_pattern = "%s hfi_pkt_test -C 1 -L %s -s %d -p -c %d"
-    cmd = cmd_pattern % (cmd_libs, host1_lid, payload, count)
+    cmd_pattern = "%s %shfi_pkt_test -C 1 -L %s -s %d -p -c %d"
+    cmd = cmd_pattern % (cmd_libs, diag_path, host1_lid, payload, count)
 
     err = do_ssh(host2, cmd)
     if err:
@@ -66,7 +67,7 @@ def do_pingpong(host1, host2, psm_libs = None, payload = 1024, count = 500):
         RegLib.test_fail("Failed!")
     return test_pass
 
-def do_piotest(host, psm_libs):
+def do_piotest(diag_path, host, psm_libs):
     RegLib.test_log(0, "Starting hfi_pkt_test PIO buffer copy benchmark")
 
     if psm_libs is not None:
@@ -74,7 +75,7 @@ def do_piotest(host, psm_libs):
     else:
         cmd_libs = ""
 
-    cmd = cmd_libs + "hfi_pkt_test -B"
+    cmd = cmd_libs + diag_path + "hfi_pkt_test -B"
     err = do_ssh(host, cmd)
 
     if err:
@@ -120,10 +121,17 @@ def main():
             psm_libs = "/host" + psm_libs
         print "We have PSM path set to", psm_libs
 
+    diag_path = test_info.get_diag_lib()
+    if diag_path == "DEFAULT":
+	# Assume the diagtools are already installed somewhere in $PATH.
+	diag_path = ""
+    else:
+	diag_path += "/build/targ-x86_64/utils/"
+
     if count == 1:
-        do_piotest(host1, psm_libs)
+        do_piotest(diag_path, host1, psm_libs)
     elif count >= 2:
-        do_pingpong(host1, host2, psm_libs)
+        do_pingpong(diag_path, host1, host2, psm_libs)
 
 if __name__ == "__main__":
     main()

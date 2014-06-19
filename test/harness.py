@@ -139,19 +139,19 @@ test_list = [
 
     # wfr-diagtools-sw tests
     { "test_name" : "HfiPktTest.py",
-      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --sw-diags %DIAG_LIB%",
       "type" : "diagtools,default",
       "desc" : "Run hfi_pkt_test PIO buffer benchmark.",
     },
 
     { "test_name" : "HfiPktTest.py",
-      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --sw-diags %DIAG_LIB%",
       "type" : "diagtools,default",
       "desc" : "Run hfi_pkt_test ping-pong benchmark.",
     },
 
     { "test_name" : "HfiPktSend.py",
-      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --test-pkt-dir %TEST_PKT_DIR%",
+      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --test-pkt-dir %TEST_PKT_DIR% --sw-diags %DIAG_LIB%",
       "type" : "diagtools,default",
       "desc" : "Run hfi_pkt_send tests.",
     },
@@ -224,6 +224,7 @@ variable_map = {
     "HOST" : test_info.get_host_name_by_index,
     "PSM_LIB" : test_info.get_psm_lib,
     "TEST_PKT_DIR" : test_info.get_test_pkt_dir,
+    "DIAG_LIB" : test_info.get_diag_lib,
 }
 
 if test_info.list_only:

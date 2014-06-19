@@ -16,7 +16,7 @@ def do_ssh(host, cmd):
     RegLib.test_log(5, "Running " + cmd)
     return (host.send_ssh(cmd, 0))
 
-def do_pkt_send(host, packet_file, dest_lid = None, dest_ctxt = 1, count = 1, use_diagpkt = False, psm_libs = None):
+def do_pkt_send(diag_path, host, packet_file, dest_lid = None, dest_ctxt = 1, count = 1, use_diagpkt = False, psm_libs = None):
     RegLib.test_log(0, "Starting hfi_pkt_send test with packet file %s" % packet_file)
 
     if psm_libs is not None:
@@ -37,8 +37,8 @@ def do_pkt_send(host, packet_file, dest_lid = None, dest_ctxt = 1, count = 1, us
     if use_diagpkt:
         cmd_diagpkt_arg = "-k "
 
-    cmd_pattern = "%s hfi_pkt_send -L %d -C %d -c %d %s%s"
-    cmd = cmd_pattern % (cmd_libs, dest_lid, dest_ctxt,
+    cmd_pattern = "%s %shfi_pkt_send -L %d -C %d -c %d %s%s"
+    cmd = cmd_pattern % (cmd_libs, diag_path, dest_lid, dest_ctxt,
                          count, cmd_diagpkt_arg, packet_file)
 
     err = do_ssh(host, cmd)
@@ -81,17 +81,24 @@ def main():
             psm_libs = "/host" + psm_libs
         print "We have PSM path set to", psm_libs
 
+    diag_path = test_info.get_diag_lib()
+    if diag_path == "DEFAULT":
+	# Assume the diagtools are already installed somewhere in $PATH.
+	diag_path = ""
+    else:
+	diag_path += "/build/targ-x86_64/tests/"
+
     pkt_dir = test_info.get_test_pkt_dir() + "/"
 
     # Send packets via user-level HFI context.
-    do_pkt_send(host, pkt_dir + "normal", psm_libs = psm_libs)
-    do_pkt_send(host, pkt_dir + "psm_min", psm_libs = psm_libs)
-    do_pkt_send(host, pkt_dir + "psm_min_psn31", count = 10, psm_libs = psm_libs)
+    do_pkt_send(diag_path, host, pkt_dir + "normal", psm_libs = psm_libs)
+    do_pkt_send(diag_path, host, pkt_dir + "psm_min", psm_libs = psm_libs)
+    do_pkt_send(diag_path, host, pkt_dir + "psm_min_psn31", count = 10, psm_libs = psm_libs)
 
     # Send packets via kernel diagpkt interface
-    do_pkt_send(host, pkt_dir + "bypass8", use_diagpkt = True, psm_libs = psm_libs)
-    do_pkt_send(host, pkt_dir + "bypass10", use_diagpkt = True, psm_libs = psm_libs)
-    do_pkt_send(host, pkt_dir + "bypass16", use_diagpkt = True, psm_libs = psm_libs)
+    do_pkt_send(diag_path, host, pkt_dir + "bypass8", use_diagpkt = True, psm_libs = psm_libs)
+    do_pkt_send(diag_path, host, pkt_dir + "bypass10", use_diagpkt = True, psm_libs = psm_libs)
+    do_pkt_send(diag_path, host, pkt_dir + "bypass16", use_diagpkt = True, psm_libs = psm_libs)
     RegLib.test_pass("Success!")
 
 if __name__ == "__main__":
