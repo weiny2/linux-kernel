@@ -78,8 +78,6 @@ static struct kthread *to_live_kthread(struct task_struct *k)
  */
 bool kthread_should_stop(void)
 {
-	kgr_task_safe(current);
-
 	return test_bit(KTHREAD_SHOULD_STOP, &to_kthread(current)->flags);
 }
 EXPORT_SYMBOL(kthread_should_stop);
@@ -112,6 +110,8 @@ bool kthread_should_park(void)
 bool kthread_freezable_should_stop(bool *was_frozen)
 {
 	bool frozen = false;
+
+	kgr_task_safe(current);
 
 	might_sleep();
 

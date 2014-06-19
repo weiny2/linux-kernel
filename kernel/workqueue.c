@@ -2423,6 +2423,8 @@ static int rescuer_thread(void *__rescuer)
 repeat:
 	set_current_state(TASK_INTERRUPTIBLE);
 
+	kgr_task_safe(current);
+
 	/*
 	 * By the time the rescuer is requested to stop, the workqueue
 	 * shouldn't have any work pending, but @wq->maydays may still have

@@ -2239,6 +2239,7 @@ static int rcu_nocb_kthread(void *arg)
 	/* Each pass through this loop invokes one batch of callbacks */
 	for (;;) {
 		kgr_task_safe(current);
+
 		/* If not polling, wait for next batch of callbacks. */
 		if (!rcu_nocb_poll)
 			wait_event_interruptible(rdp->nocb_wq, ({

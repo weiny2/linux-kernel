@@ -3,8 +3,9 @@ Live Kernel Patching with kGraft
 
 Written by Udo Seidel <udoseidel at gmx dot de>
 Based on the Blog entry by Vojtech Pavlik
+Updated by Jiri Slaby
 
-April 2014
+June 2014
 
 kGraft's developement was started by the SUSE Labs. kGraft builds on
 technologies and ideas that are already present in the kernel: ftrace [1] and
@@ -18,10 +19,7 @@ can be nicely minimalistic.
 
 While kGraft is, by choice, limited to replacing whole functions and constants
 they reference, this does not limit the set of code patches that can be
-applied significantly. kGraft offers tools to assist in creating the live
-patch modules, identifying which functions need to be replaced based on a
-patch, and creating the patch module source code. They are located in
-tools/kgraft/.
+applied significantly.
 
 Use
 ---
@@ -29,7 +27,6 @@ Use
 1) Build a kernel with CONFIG_KGRAFT enabled
 2) Create a module with a patch
    * Look at samples/kgraft/kgraft_patcher.c for an example
-   * tools/kgraft/ can be used for automatic generation
 3) Insert the module from 2) into the booted kernel from 1)
 4) All processes need to enter the kernel to acknowledge the new state
    * This can be done e.g. by sending a non-fatal signal to all processes

@@ -2189,6 +2189,8 @@ int scsi_error_handler(void *data)
 	 * disables signal delivery for the created thread.
 	 */
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		set_current_state(TASK_INTERRUPTIBLE);
 		if ((shost->host_failed == 0 && shost->host_eh_scheduled == 0) ||
 		    shost->host_failed != shost->host_busy) {

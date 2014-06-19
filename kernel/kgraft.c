@@ -108,7 +108,7 @@ static void kgr_finalize(void)
 static void kgr_work_fn(struct work_struct *work)
 {
 	if (kgr_still_patching()) {
-		pr_info("kgr failed after timeout (%d), still in degraded mode\n",
+		pr_info("kgr still in progress after timeout (%d)\n",
 			KGR_TIMEOUT);
 		/* recheck again later */
 		queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
@@ -150,6 +150,9 @@ static void kgr_handle_processes(void)
 			 */
 			wake_up_process(p);
 		}
+		/* mark tasks wandering in userspace as already migrated */
+		if (!kgr_needs_lazy_migration(p))
+			kgr_task_safe(p);
 	}
 	read_unlock(&tasklist_lock);
 }

@@ -4963,9 +4963,9 @@ static int hub_thread(void *__unused)
 
 	do {
 		hub_events();
-		wait_event_freezable(khubd_wait,
+		wait_event_freezable(khubd_wait, ({ kgr_task_safe(current);
 				!list_empty(&hub_event_list) ||
-				kthread_should_stop());
+				kthread_should_stop(); }));
 	} while (!kthread_should_stop() || !list_empty(&hub_event_list));
 
 	pr_debug("%s: khubd exiting\n", usbcore_name);

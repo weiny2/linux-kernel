@@ -2765,6 +2765,7 @@ static void khugepaged_do_scan(void)
 			break;
 
 		cond_resched();
+		kgr_task_safe(current);
 
 		if (unlikely(kthread_should_stop() || freezing(current)))
 			break;
