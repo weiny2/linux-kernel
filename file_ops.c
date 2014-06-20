@@ -738,8 +738,10 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 		} else {
 			for (dev = 0; dev < devmax; dev++) {
 				pdd = qib_lookup(dev);
-				if (pdd && pdd->freectxts)
+				if (pdd && pdd->freectxts) {
 					dd = pdd;
+					break;
+				}
 			}
 		}
 		if (!dd)
