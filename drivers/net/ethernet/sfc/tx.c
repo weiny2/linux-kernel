@@ -190,17 +190,15 @@ struct efx_short_copy_buffer {
 };
 
 /* Copy in explicit 64-bit writes. */
-static void efx_memcpy_64(void *dest, void *src, size_t len)
+static void efx_memcpy_64(void __iomem *dest, void *src, size_t len)
 {
-	uint64_t *src64 = src, *dest64 = dest;
-	size_t i, l64 = len / 8;
+	u64 *src64 = src;
+	u64 __iomem *dest64 = dest;
+	size_t l64 = len / 8;
+	size_t i;
 
-	WARN_ON_ONCE(len % 8 != 0);
-	WARN_ON_ONCE(((u8 *)dest - (u8 *) 0) % 8 != 0);
-	BUILD_BUG_ON(sizeof(uint64_t) != 8);
-
-	for(i = 0; i < l64; ++i)
-		dest64[i] = src64[i];
+	for (i = 0; i < l64; i++)
+		writeq(src64[i], &dest64[i]);
 }
 
 /* Copy to PIO, respecting that writes to PIO buffers must be dword aligned.
