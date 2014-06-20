@@ -206,6 +206,8 @@ struct mga_device {
 	int				has_sdram;
 	struct drm_display_mode		mode;
 
+	int preferred_bpp;
+
 	int bpp_shifts[4];
 
 	int fb_mtrr;

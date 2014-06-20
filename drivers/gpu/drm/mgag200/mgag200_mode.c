@@ -1570,9 +1570,24 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 	struct drm_fb_helper *fb_helper = &mfbdev->helper;
 	struct drm_fb_helper_connector *fb_helper_conn = NULL;
 	int lace = 1 + ((mode->flags & DRM_MODE_FLAG_INTERLACE) ? 1 : 0);
-	int bpp = 32;
+	int bpp;
 	int i = 0;
 	uint32_t bw;
+
+	bpp = mdev->preferred_bpp;
+        /* Validate the mode input by the user - since we don't have depth information
+	 * in the mode this is the best we can do */
+	for (i = 0; i < fb_helper->connector_count; i++) {
+		if (fb_helper->connector_info[i]->connector == connector) {
+			/* Found the helper for this connector */
+			fb_helper_conn = fb_helper->connector_info[i];
+			if (fb_helper_conn->cmdline_mode.specified) {
+				if (fb_helper_conn->cmdline_mode.bpp_specified) {
+					bpp = fb_helper_conn->cmdline_mode.bpp;
+				}
+			}
+		}
+	}
 
 	if (IS_G200_SE(mdev)) {
 		if (mdev->unique_rev_id == 0x01) {
@@ -1642,19 +1657,6 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 		DRM_DEBUG_KMS("Mode: %d exceeds h/v param max limits\n",
 			      mode->base.id);
 		return MODE_BAD;
-	}
-
-	/* Validate the mode input by the user */
-	for (i = 0; i < fb_helper->connector_count; i++) {
-		if (fb_helper->connector_info[i]->connector == connector) {
-			/* Found the helper for this connector */
-			fb_helper_conn = fb_helper->connector_info[i];
-			if (fb_helper_conn->cmdline_mode.specified) {
-				if (fb_helper_conn->cmdline_mode.bpp_specified) {
-					bpp = fb_helper_conn->cmdline_mode.bpp;
-				}
-			}
-		}
 	}
 
 	if ((mode->hdisplay * mode->vdisplay * (bpp/8)) > mdev->mc.vram_size) {
