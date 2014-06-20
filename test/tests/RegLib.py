@@ -444,7 +444,7 @@ class TestInfo:
 	if not self.mpiverbs:
              ret = " --mca mtl psm -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_TID=0 -x PSM_SDMA=0 -x"
 	else:
-             ret = " --mca btl sm,openib,self --mca mtl ^psm -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params 0 -x"
+             ret = " --mca btl sm,openib,self --mca mtl ^psm -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params_found 0 -x"
         return ret
 
     def get_osu_benchmark_dir(self):
