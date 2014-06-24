@@ -8001,6 +8001,24 @@ int btrfs_drop_snapshot(struct btrfs_root *root,
 				goto out_end_trans;
 			}
 
+			/*
+			 * Qgroup update accounting is run from
+			 * delayed ref handling. This usually works
+			 * out because delayed refs are normally the
+			 * only way qgroup updates are added. However,
+			 * we may have added updates during our tree
+			 * walk so run qgroups here to make sure we
+			 * don't lose any updates.
+			 */
+			ret = btrfs_delayed_qgroup_accounting(trans,
+							      root->fs_info);
+			if (ret)
+				printk_ratelimited(KERN_ERR "BTRFS: Failure %d "
+						   "running qgroup updates "
+						   "during snapshot delete. "
+						   "Quota is out of sync, "
+						   "rescan required.\n", ret);
+
 			btrfs_end_transaction_throttle(trans, tree_root);
 			if (!for_reloc && btrfs_need_cleaner_sleep(root)) {
 				pr_debug("BTRFS: drop snapshot early exit\n");
@@ -8054,6 +8072,14 @@ int btrfs_drop_snapshot(struct btrfs_root *root,
 	}
 	root_dropped = true;
 out_end_trans:
+	ret = btrfs_delayed_qgroup_accounting(trans, root->fs_info);
+	if (ret)
+		printk_ratelimited(KERN_ERR "BTRFS: Failure %d "
+				   "running qgroup updates "
+				   "during snapshot delete. "
+				   "Quota is out of sync, "
+				   "rescan required.\n", ret);
+
 	btrfs_end_transaction_throttle(trans, tree_root);
 out_free:
 	kfree(wc);
