@@ -4579,7 +4579,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 	first_general = 0;
 	first_sdma = last_general = first_general + 1;
 	first_rx = last_sdma = first_sdma + dd->num_sdma;
-	last_rx = first_rx + dd->num_rcv_contexts;
+	last_rx = first_rx + dd->n_krcv_queues;
 
 	/*
 	 * Interrupt affinity.
@@ -4681,9 +4681,6 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 		} else if (first_rx <= i && i < last_rx) {
 			struct qib_ctxtdata *rcd;
 			idx = i - first_rx;
-			/* no interrupt for user contexts */
-			if (idx >= dd->first_user_ctxt)
-				continue;
 			rcd = dd->rcd[idx];
 			/* no interrupt if no rcd */
 			if (!rcd)
@@ -4776,10 +4773,9 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 	 *	1 general, "slow path" interrupt (includes the SDMA engines
 	 *		slow source, SDMACleanupDone)
 	 *	N interrupts - one per used SDMA engine
-	 *	M interrupt - one per used rx context
-	 *	TODO: pio (tx) contexts?
+	 *	M interrupt - one per kernel receive context
 	 */
-	total = 1 + dd->num_sdma + dd->num_rcv_contexts;
+	total = 1 + dd->num_sdma + dd->n_krcv_queues;
 
 	entries = kzalloc(sizeof(*entries) * total, GFP_KERNEL);
 	if (!entries) {
@@ -4825,7 +4821,6 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 	set_intr_state(dd, 0);
 	/* clear all pending interrupts */
 	clear_all_interrupts(dd);
-	/* TODO: clear diagnostic reg? */
 
 	/* reset general handler mask, chip MSI-X mappings */
 	reset_interrupts(dd);
