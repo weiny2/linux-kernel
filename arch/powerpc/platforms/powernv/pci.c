@@ -601,8 +601,8 @@ void pnv_pci_setup_iommu_table(struct iommu_table *tbl,
 static struct iommu_table *pnv_pci_setup_bml_iommu(struct pci_controller *hose)
 {
 	struct iommu_table *tbl;
-	const __be64 *basep;
-	const __be32 *sizep, *swinvp;
+	const __be64 *basep, *swinvp;
+	const __be32 *sizep;
 
 	basep = of_get_property(hose->dn, "linux,tce-base", NULL);
 	sizep = of_get_property(hose->dn, "linux,tce-size", NULL);
@@ -623,9 +623,8 @@ static struct iommu_table *pnv_pci_setup_bml_iommu(struct pci_controller *hose)
 	swinvp = of_get_property(hose->dn, "linux,tce-sw-invalidate-info",
 				 NULL);
 	if (swinvp) {
-		tbl->it_busno = of_read_ulong(&swinvp[1], 2);
-		tbl->it_index =
-			(unsigned long)ioremap(of_read_number(swinvp, 2), 8);
+		tbl->it_busno = be64_to_cpu(swinvp[1]);
+		tbl->it_index = (unsigned long)ioremap(be64_to_cpup(swinvp), 8);
 		tbl->it_type = TCE_PCI_SWINV_CREATE | TCE_PCI_SWINV_FREE;
 	}
 	return tbl;
