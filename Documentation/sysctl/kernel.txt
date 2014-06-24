@@ -427,11 +427,6 @@ rate for each task.
 numa_balancing_scan_size_mb is how many megabytes worth of pages are
 scanned for a given scan.
 
-numa_balancing_settle_count is how many scan periods must complete before
-the schedule balancer stops pushing the task towards a preferred node. This
-gives the scheduler a chance to place the task on an alternative node if the
-preferred node is overloaded.
-
 ==============================================================
 
 osrelease, ostype & version:
