@@ -75,7 +75,7 @@ static const struct file_operations _##name##_file_ops = { \
 #define DEBUGFS_FILE_CREATE(name, parent, data, ops) \
 do { \
 	struct dentry *ent; \
-	ent = debugfs_create_file(name , 0400, parent, \
+	ent = debugfs_create_file(name , S_IRUGO, parent, \
 		data, ops); \
 	if (!ent) \
 		pr_warn("create of %s failed\n", name); \
