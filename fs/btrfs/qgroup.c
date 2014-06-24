@@ -1325,10 +1325,6 @@ int btrfs_qgroup_record_ref(struct btrfs_trans_handle *trans,
 		 * If any operation for this bytenr/ref_root combo
 		 * exists, then we know it's not exclusively owned and
 		 * shouldn't be queued up.
-		 *
-		 * XXX: Do other operations need to search for
-		 * SUB_SHARED opers queued up on this bytenr? What do
-		 * they do in that case?
 		 */
 		if (qgroup_oper_exists(fs_info, oper)) {
 			kfree(oper);
@@ -1939,11 +1935,16 @@ static int qgroup_subtree_accounting(struct btrfs_trans_handle *trans,
 	struct ulist *roots = NULL;
 	struct ulist_node *unode;
 	struct ulist_iterator uiter;
+	struct btrfs_qgroup_list *glist;
+	struct ulist *parents;
 	int ret = 0;
-	int found;
 	struct btrfs_qgroup *qg;
 	u64 root_obj = 0;
 	struct seq_list elem = {};
+
+	parents = ulist_alloc(GFP_NOFS);
+	if (!parents)
+		return -ENOMEM;
 
 	btrfs_get_tree_mod_seq(fs_info, &elem);
 	ret = btrfs_find_all_roots(trans, fs_info, oper->bytenr,
@@ -1952,48 +1953,73 @@ static int qgroup_subtree_accounting(struct btrfs_trans_handle *trans,
 	if (ret < 0)
 		return ret;
 
-	found = 0;
-	ULIST_ITER_INIT(&uiter);
-	while ((unode = ulist_next(roots, &uiter))) {
-		/*
-		 * If we find our ref root then that means all refs
-		 * this extent has to the root have not yet been
-		 * deleted. In that case, we do nothing and let the
-		 * last ref for this bytenr drive our update.
-		 *
-		 * This can happen for example if an extent is
-		 * referenced multiple times in a snapshot (clone,
-		 * etc). If we are in the middle of snapshot removal,
-		 * queued updates for such an extent will find the
-		 * root if we have not yet finished removing the
-		 * snapshot.
-		 */
-		if (unode->val == oper->ref_root)
-			goto out;
+	if (roots->nnodes != 1)
+		goto out;
 
-		if (!found)
-			root_obj = unode->val;
-		found++;
+	ULIST_ITER_INIT(&uiter);
+	unode = ulist_next(roots, &uiter); /* Only want 1 so no need to loop */
+	/*
+	 * If we find our ref root then that means all refs
+	 * this extent has to the root have not yet been
+	 * deleted. In that case, we do nothing and let the
+	 * last ref for this bytenr drive our update.
+	 *
+	 * This can happen for example if an extent is
+	 * referenced multiple times in a snapshot (clone,
+	 * etc). If we are in the middle of snapshot removal,
+	 * queued updates for such an extent will find the
+	 * root if we have not yet finished removing the
+	 * snapshot.
+	 */
+	if (unode->val == oper->ref_root)
+		goto out;
+
+	root_obj = unode->val;
+	BUG_ON(!root_obj);
+
+	spin_lock(&fs_info->qgroup_lock);
+	qg = find_qgroup_rb(fs_info, root_obj);
+	if (!qg)
+		goto out_unlock;
+
+	qg->excl += oper->num_bytes;
+	qg->excl_cmpr += oper->num_bytes;
+	qgroup_dirty(fs_info, qg);
+
+	/*
+	 * Adjust counts for parent groups. First we find all
+	 * parents, then in the 2nd loop we do the adjustment
+	 * while adding parents of the parents to our ulist.
+	 */
+	list_for_each_entry(glist, &qg->groups, next_group) {
+		ret = ulist_add(parents, glist->group->qgroupid,
+				ptr_to_u64(glist->group), GFP_ATOMIC);
+		if (ret < 0)
+			goto out_unlock;
 	}
 
-	if (found == 1) {
-		BUG_ON(!root_obj);
-		spin_lock(&fs_info->qgroup_lock);
-		qg = find_qgroup_rb(fs_info, root_obj);
-		if (!qg) {
-			spin_unlock(&fs_info->qgroup_lock);
-			goto out;
-		}
-
+	ULIST_ITER_INIT(&uiter);
+	while ((unode = ulist_next(parents, &uiter))) {
+		qg = u64_to_ptr(unode->aux);
 		qg->excl += oper->num_bytes;
 		qg->excl_cmpr += oper->num_bytes;
 		qgroup_dirty(fs_info, qg);
-		spin_unlock(&fs_info->qgroup_lock);
+
+		/* Add any parents of the parents */
+		list_for_each_entry(glist, &qg->groups, next_group) {
+			ret = ulist_add(parents, glist->group->qgroupid,
+					ptr_to_u64(glist->group), GFP_ATOMIC);
+			if (ret < 0)
+				goto out_unlock;
+		}
 	}
+
+out_unlock:
+	spin_unlock(&fs_info->qgroup_lock);
 
 out:
 	ulist_free(roots);
-
+	ulist_free(parents);
 	return ret;
 }
 

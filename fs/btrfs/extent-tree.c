@@ -7348,11 +7348,6 @@ static int account_shared_subtree(struct btrfs_trans_handle *trans,
 		if (ret)
 			goto out;
 	}
-	/* XXX: Is this check necessary? */
-	if (!extent_buffer_uptodate(root_eb)) {
-		ret = -EIO;
-		goto out;
-	}
 
 	if (root_level == 0) {
 		ret = account_leaf_items(trans, root, root_eb);
@@ -7444,11 +7439,8 @@ out_done:
 	if (ret)
 		goto out;
 
-	ret = 0;
 out:
-
-	if (path)
-		btrfs_free_path(path);
+	btrfs_free_path(path);
 
 	return ret;
 }
@@ -7601,8 +7593,14 @@ static noinline int do_walk_down(struct btrfs_trans_handle *trans,
 
 	if (wc->stage == DROP_REFERENCE) {
 		if (wc->refs[level - 1] > 1) {
-			account_shared_subtree(trans, root, next, generation,
-					       level - 1);
+			ret = account_shared_subtree(trans, root, next,
+						     generation, level - 1);
+			if (ret) {
+				printk_ratelimited(KERN_ERR "BTRFS: %s Error "
+					"%d accounting shared subtree. Quota "
+					"is out of sync, rescan required.\n",
+					root->fs_info->sb->s_id, ret);
+			}
 
 			if (level == 1 &&
 			    (wc->flags[0] & BTRFS_BLOCK_FLAG_FULL_BACKREF))
