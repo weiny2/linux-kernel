@@ -397,12 +397,12 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		numa = numa_node_id();
 		/*
 		 * The credit return location for this context could be on the
-		 * second of two pages allocated for credit returns (if number
-		 * of enabled contexts > 128).
+		 * second or third page allocated for credit returns (if number
+		 * of enabled contexts > 64 and 128 respectively).
 		 */
 		memaddr = dd->cr_base[numa].pa +
-			((uctxt->ctxt * sizeof(*dd->cr_base[numa].va)) > PAGE_SIZE ?
-			 PAGE_SIZE : 0);
+			(((u64)uctxt->sc->hw_free - (u64)dd->cr_base[numa].va) &
+			 PAGE_MASK);
 		memlen = PAGE_SIZE;
 		flags &= ~VM_MAYWRITE;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
@@ -1125,13 +1125,13 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 
 	numa = numa_node_id();
 	/*
-	 * If more than 128 contexts are enabled the allocated credit
-	 * return will span two contiguous pages. Since we only map
-	 * the page containing the context's credit return address,
+	 * If more than 64 contexts are enabled the allocated credit
+	 * return will span two or three contiguous pages. Since we only
+	 * map the page containing the context's credit return address,
 	 * we need to calculate the offset in the proper page.
 	 */
-	offset = (u64)uctxt->sc->hw_free - (u64)dd->cr_base[numa].va;
-	offset -= (offset > PAGE_SIZE) ? PAGE_SIZE : 0;
+	offset = ((u64)uctxt->sc->hw_free - (u64)dd->cr_base[numa].va) %
+		PAGE_SIZE;
 	binfo.sc_credits_addr = HFI_MMAP_TOKEN(PIO_CRED, uctxt->ctxt,
 					       subctxt_fp(fp), offset);
 	binfo.pio_bufbase = HFI_MMAP_TOKEN(PIO_BUFS, uctxt->ctxt,
