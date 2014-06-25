@@ -170,7 +170,7 @@ static const char *sc_type_name(int index)
 int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 {
 	struct mem_pool_info mem_pool_info[NUM_SC_POOLS] = { { 0 } };
-	int total_blocks = dd->chip_pio_mem_size;
+	int total_blocks = dd->chip_pio_mem_size / WFR_PIO_BLOCK_SIZE;
 	int total_contexts = 0;
 	int fixed_blocks;
 	int pool_blocks;
@@ -375,7 +375,6 @@ int init_send_contexts(struct hfi_devdata *dd)
 			reg = ((sci->credits & WFR_SEND_CTXT_CTRL_CTXT_DEPTH_MASK) << WFR_SEND_CTXT_CTRL_CTXT_DEPTH_SHIFT)
 				| ((sci->base & WFR_SEND_CTXT_CTRL_CTXT_BASE_MASK) << WFR_SEND_CTXT_CTRL_CTXT_BASE_SHIFT);
 			write_kctxt_csr(dd, context, WFR_SEND_CTXT_CTRL, reg);
-
 
 			context++;
 			base += scs->size;
