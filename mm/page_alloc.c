@@ -1516,11 +1516,11 @@ int split_free_page(struct page *page)
  * we cheat by calling it from here, in the order > 0 path.  Saves a branch
  * or two.
  */
-static inline
+static
 struct page *buffered_rmqueue(struct zone *preferred_zone,
-			struct zoneref *z,
 			struct zone *zone, unsigned int order,
-			gfp_t gfp_flags, int migratetype)
+			gfp_t gfp_flags, int migratetype,
+			bool acct_fair)
 {
 	unsigned long flags;
 	struct page *page;
@@ -1572,7 +1572,7 @@ again:
 					  get_freepage_migratetype(page));
 	}
 
-	if (z->fair_enabled) {
+	if (acct_fair) {
 		__mod_zone_page_state(zone, NR_ALLOC_BATCH, -(1 << order));
 		if (zone_page_state(zone, NR_ALLOC_BATCH) == 0)
 			zone_set_flag(zone, ZONE_FAIR_DEPLETED);
@@ -1679,7 +1679,6 @@ static bool __zone_watermark_ok(struct zone *z, unsigned int order,
 {
 	/* free_pages my go negative - that's OK */
 	long min = mark;
-	long lowmem_reserve = z->lowmem_reserve[classzone_idx];
 	int o;
 	long free_cma = 0;
 
@@ -1694,7 +1693,7 @@ static bool __zone_watermark_ok(struct zone *z, unsigned int order,
 		free_cma = zone_page_state(z, NR_FREE_CMA_PAGES);
 #endif
 
-	if (free_pages - free_cma <= min + lowmem_reserve)
+	if (free_pages - free_cma <= min + z->lowmem_reserve[classzone_idx])
 		return false;
 	for (o = 0; o < order; o++) {
 		/* At the next order, this order's pages become unavailable */
@@ -1905,8 +1904,10 @@ static void reset_alloc_batches(struct zone *preferred_zone)
 	struct zone *zone = preferred_zone->zone_pgdat->node_zones;
 
 	do {
+		if (!zone_is_fair_depleted(zone))
+			continue;
 		mod_zone_page_state(zone, NR_ALLOC_BATCH,
-			(zone->managed_pages >> 2) -
+			high_wmark_pages(zone) - low_wmark_pages(zone) -
 			atomic_long_read(&zone->vm_stat[NR_ALLOC_BATCH]));
 		zone_clear_flag(zone, ZONE_FAIR_DEPLETED);
 	} while (zone++ != preferred_zone);
@@ -1927,8 +1928,8 @@ get_page_from_freelist(gfp_t gfp_mask, nodemask_t *nodemask, unsigned int order,
 	nodemask_t *allowednodes = NULL;/* zonelist_cache approximation */
 	int zlc_active = 0;		/* set if using zonelist_cache */
 	int did_zlc_setup = 0;		/* just call zlc_setup() one time */
-	int nr_fair_skipped = 0, nr_fair_eligible = 0, nr_fail_watermark = 0;
-	int nr_fail_dirty = 0;
+	int nr_fair_skipped = 0, nr_fail_dirty = 0;
+	struct zone *fair_zone = NULL;
 	bool zonelist_rescan;
 
 zonelist_scan:
@@ -1957,8 +1958,8 @@ zonelist_scan:
 		if (alloc_flags & ALLOC_FAIR) {
 			if (!zone_local(preferred_zone, zone) || !z->fair_enabled)
 				break;
-			nr_fair_eligible++;
-			if (zone_is_fair_depleted(zone)) {
+
+			if (fair_zone && zone_is_fair_depleted(zone)) {
 				nr_fair_skipped++;
 				continue;
 			}
@@ -2005,8 +2006,6 @@ zonelist_scan:
 			BUILD_BUG_ON(ALLOC_NO_WATERMARKS < NR_WMARK);
 			if (alloc_flags & ALLOC_NO_WATERMARKS)
 				goto try_this_zone;
-
-			nr_fail_watermark++;
 
 			if (IS_ENABLED(CONFIG_NUMA) &&
 					!did_zlc_setup && nr_online_nodes > 1) {
@@ -2064,10 +2063,21 @@ zonelist_scan:
 		}
 
 try_this_zone:
-		page = buffered_rmqueue(preferred_zone, z, zone, order,
-						gfp_mask, migratetype);
+		if (alloc_flags & ALLOC_FAIR) {
+			if (zone_is_fair_depleted(zone)) {
+				if (!fair_zone)
+					fair_zone = zone;
+				nr_fair_skipped++;
+				continue;
+			}
+		}
+
+		page = buffered_rmqueue(preferred_zone, zone, order,
+						gfp_mask, migratetype,
+						z->fair_enabled);
 		if (page)
 			break;
+
 this_zone_full:
 		if (IS_ENABLED(CONFIG_NUMA) && zlc_active)
 			zlc_mark_zone_full(zonelist, z);
@@ -2085,27 +2095,30 @@ this_zone_full:
 		return page;
 	}
 
+	if (alloc_flags & ALLOC_FAIR) {
+		if (nr_fair_skipped)
+			reset_alloc_batches(preferred_zone);
+
+		/*
+		 * If there was a zone with a depleted fair policy batch but
+		 * that made the watermark then use it now instead of stalling
+		 * waiting on kswapd to make progress
+		 */
+		if (fair_zone)
+			return buffered_rmqueue(preferred_zone, fair_zone,
+					order, gfp_mask, migratetype, true);
+
+		/* Recheck remote nodes if there are any */
+		if (nr_online_nodes > 1) {
+			alloc_flags &= ~ALLOC_FAIR;
+			zonelist_rescan = true;
+		}
+	}
+
 	if (unlikely(IS_ENABLED(CONFIG_NUMA) && zlc_active)) {
 		/* Disable zlc cache for second zonelist scan */
 		zlc_active = 0;
 		zonelist_rescan = true;
-	}
-
-	/*
-	 * The first pass spreads allocations fairly within the local node.
-	 * Reset the counters if necessary and recheck the zonelist taking
-	 * the remote nodes and the fact that a batch count might have
-	 * failed due to per-cpu vmstat accounting drift into account. This
-	 * is preferable to entering the slowpath and waking kswapd.
-	 */
-	if (alloc_flags & ALLOC_FAIR) {
-		alloc_flags &= ~ALLOC_FAIR;
-		if (nr_online_nodes > 1)
-			zonelist_rescan = true;
-		if (nr_fail_watermark || nr_fair_eligible == nr_fair_skipped) {
-			zonelist_rescan = true;
-			reset_alloc_batches(preferred_zone);
-		}
 	}
 
 	if ((alloc_flags & ALLOC_DIRTY) && nr_fail_dirty) {
@@ -2731,7 +2744,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	struct page *page = NULL;
 	int migratetype = allocflags_to_migratetype(gfp_mask);
 	unsigned int cpuset_mems_cookie;
-	int alloc_flags = ALLOC_WMARK_LOW|ALLOC_CPUSET;
+	int alloc_flags = ALLOC_WMARK_LOW|ALLOC_CPUSET|ALLOC_FAIR;
 	struct mem_cgroup *memcg = NULL;
 	int classzone_idx;
 
@@ -3231,7 +3244,7 @@ void show_free_areas(unsigned int filter)
 			);
 		printk("lowmem_reserve[]:");
 		for (i = 0; i < MAX_NR_ZONES; i++)
-			printk(" %lu", zone->lowmem_reserve[i]);
+			printk(" %u", zone->lowmem_reserve[i]);
 		printk("\n");
 	}
 
@@ -3568,7 +3581,11 @@ static void build_zonelists_in_zone_order(pg_data_t *pgdat, int nr_nodes)
 	zonelist->_zonerefs[pos].zone_idx = 0;
 	zonelist->_zonerefs[pos].fair_enabled = false;
 
-	if (nr_fair <= 1)
+	/*
+	 * For this policy, the fair zone allocation policy is disabled as the
+	 * stated priority is to preserve lower zones, not balance them fairly.
+	 */
+	if (nr_fair == 1 || nr_online_nodes > 1)
 		zonelist->_zonerefs[0].fair_enabled = false;
 }
 
@@ -4023,6 +4040,7 @@ static void setup_zone_migrate_reserve(struct zone *zone)
 	struct page *page;
 	unsigned long block_migratetype;
 	int reserve;
+	int old_reserve;
 
 	/*
 	 * Get the start pfn, end pfn and the number of blocks to reserve
@@ -4044,6 +4062,12 @@ static void setup_zone_migrate_reserve(struct zone *zone)
 	 * future allocation of hugepages at runtime.
 	 */
 	reserve = min(2, reserve);
+	old_reserve = zone->nr_migrate_reserve_block;
+
+	/* When memory hot-add, we almost always need to do nothing */
+	if (reserve == old_reserve)
+		return;
+	zone->nr_migrate_reserve_block = reserve;
 
 	for (pfn = start_pfn; pfn < end_pfn; pfn += pageblock_nr_pages) {
 		if (!pfn_valid(pfn))
@@ -4081,6 +4105,12 @@ static void setup_zone_migrate_reserve(struct zone *zone)
 				reserve--;
 				continue;
 			}
+		} else if (!old_reserve) {
+			/*
+			 * At boot time we don't need to scan the whole zone
+			 * for turning off MIGRATE_RESERVE.
+			 */
+			break;
 		}
 
 		/*
@@ -5601,7 +5631,7 @@ static void calculate_totalreserve_pages(void)
 	for_each_online_pgdat(pgdat) {
 		for (i = 0; i < MAX_NR_ZONES; i++) {
 			struct zone *zone = pgdat->node_zones + i;
-			unsigned long max = 0;
+			unsigned int max = 0;
 
 			/* Find valid and maximum lowmem_reserve in the zone */
 			for (j = i; j < MAX_NR_ZONES; j++) {
@@ -5652,6 +5682,7 @@ static void setup_per_zone_lowmem_reserve(void)
 			idx = j;
 			while (idx) {
 				struct zone *lower_zone;
+				unsigned long reserve;
 
 				idx--;
 
@@ -5659,8 +5690,11 @@ static void setup_per_zone_lowmem_reserve(void)
 					sysctl_lowmem_reserve_ratio[idx] = 1;
 
 				lower_zone = pgdat->node_zones + idx;
-				lower_zone->lowmem_reserve[j] = managed_pages /
+				reserve = managed_pages /
 					sysctl_lowmem_reserve_ratio[idx];
+				if (WARN_ON(reserve > UINT_MAX))
+					reserve = UINT_MAX;
+				lower_zone->lowmem_reserve[j] = reserve;
 				managed_pages += lower_zone->managed_pages;
 			}
 		}
@@ -5716,7 +5750,8 @@ static void __setup_per_zone_wmarks(void)
 		zone->watermark[WMARK_HIGH] = min_wmark_pages(zone) + (tmp >> 1);
 
 		__mod_zone_page_state(zone, NR_ALLOC_BATCH,
-				      (zone->managed_pages >> 2) -
+				      high_wmark_pages(zone) -
+				      low_wmark_pages(zone) -
 				      zone_page_state(zone, NR_ALLOC_BATCH));
 
 		setup_zone_migrate_reserve(zone);

@@ -3082,12 +3082,13 @@ static unsigned long balance_pgdat(pg_data_t *pgdat, int order,
 
 		/*
 		 * Now scan the zone in the dma->highmem direction, stopping
-		 * at the last zone which needs scanning.
-		 *
-		 * We do this because the page allocator works in the opposite
-		 * direction.  This prevents the page allocator from allocating
-		 * pages behind kswapd's direction of progress, which would
-		 * cause too much scanning of the lower zones.
+		 * at the last zone which needs scanning. We do this because
+		 * the page allocators prefers to work in the opposite
+		 * direction and we want to avoid the page allocator reclaiming
+		 * behind kswapd's direction of progress. Due to the fair zone
+		 * allocation policy interleaving allocations between zones
+		 * we no longer proportionally scan the lower zones if the
+		 * watermarks are ok.
 		 */
 		for (i = 0; i <= end_zone; i++) {
 			struct zone *zone = pgdat->node_zones + i;
@@ -3109,6 +3110,9 @@ static unsigned long balance_pgdat(pg_data_t *pgdat, int order,
 							order, sc.gfp_mask,
 							&nr_soft_scanned);
 			sc.nr_reclaimed += nr_soft_reclaimed;
+
+			if (zone_balanced(zone, order, 0, 0))
+				continue;
 
 			/*
 			 * There should be no need to raise the scanning

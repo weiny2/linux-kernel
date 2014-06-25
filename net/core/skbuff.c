@@ -2916,10 +2916,7 @@ perform_csum_check:
 	return segs;
 
 err:
-	while ((head_skb = segs)) {
-		segs = head_skb->next;
-		kfree_skb(head_skb);
-	}
+	kfree_skb_list(segs);
 	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(skb_segment);
