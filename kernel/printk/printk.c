@@ -95,11 +95,6 @@ enum {
 	 * hand over printing. Cleared before console_sem is released.
 	 */
 	PRINTK_HANDOVER_B,
-	/*
-	 * Set if there's someone spinning on console_sem to take over printing.
-	 * Cleared after acquiring console_sem.
-	 */
-	PRINTK_CONSOLE_SPIN_B,
 };
 static long printk_handover_state;
 
@@ -2680,36 +2675,6 @@ int console_trylock(void)
 }
 EXPORT_SYMBOL(console_trylock);
 
-/*
- * This is a version of console_lock() which spins to acquire console_sem.
- * It is only for use by threads that take care of flushing printk buffer so
- * that they can be sure they are not preempted while waiting for console_sem.
- *
- * The function returns 1 if we acquired console_sem, 0 if we failed (either
- * someone else is already spinning, someone acquired console_sem, or console
- * is suspended).
- */
-static int console_lock_try_spin(void)
-{
-	/* Someone already spinning? Don't waste cpu time... */
-	if (test_and_set_bit(PRINTK_CONSOLE_SPIN_B, &printk_handover_state))
-		return 0;
-	while (down_trylock_console_sem()) {
-		/* Someone else took console_sem? */
-		if (!test_bit(PRINTK_CONSOLE_SPIN_B, &printk_handover_state))
-			return 0;
-		cpu_relax();
-	}
-	printk_handover_state = 0;
-	if (console_suspended) {
-		up_console_sem();
-		return 0;
-	}
-	console_locked = 1;
-	console_may_schedule = 0;
-	return 1;
-}
-
 int is_console_locked(void)
 {
 	return console_locked;
@@ -2758,7 +2723,7 @@ static bool cpu_stop_printing(int printed_chars)
 	if (!printk_offload_chars || printed_chars < printk_offload_chars)
 		return false;
 	/* Someone is spinning on console_sem? Give away to him. */
-	if (test_bit(PRINTK_CONSOLE_SPIN_B, &printk_handover_state))
+	if (sema_has_waiters(&console_sem))
 		return true;
 	if (!test_bit(PRINTK_HANDOVER_B, &printk_handover_state)) {
 		set_bit(PRINTK_HANDOVER_B, &printk_handover_state);
@@ -3240,22 +3205,14 @@ static int printing_task(void *arg)
 	while (1) {
 		prepare_to_wait_exclusive(&print_queue, &wait,
 					  TASK_INTERRUPTIBLE);
-		if (!test_bit(PRINTK_HANDOVER_B, &printk_handover_state))
+		if (!test_bit(PRINTK_HANDOVER_B, &printk_handover_state) ||
+		    sema_has_waiters(&console_sem))
 			schedule();
 		finish_wait(&print_queue, &wait);
 		kgr_task_safe(current);
-		/*
-		 * We don't want to be scheduled away once we got the CPU (that
-		 * would be especially problematic if we hold console_sem at
-		 * that moment since noone else could print to console). So
-		 * disable preemption and spin on console_sem. We shouldn't
-		 * spin for long since printing CPU drops console_sem as soon
-		 * as it notices there is someone spinning on it.
-		 */
-		preempt_disable();
-		if (console_lock_try_spin())
-			console_unlock();
-		preempt_enable();
+		/* Wait for console_sem and take over printing */
+		console_lock();
+		console_unlock();
 	}
 	return 0;
 }
