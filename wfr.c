@@ -2299,6 +2299,8 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 	unsigned long flags;
 	unsigned long timeout;
 
+	dd_dev_info(dd, "%s: type %d, data 0x%012llx\n", __func__, type,
+		in_data);
 	/*
 	 * TODO: Do we want to hold the lock for this long?
 	 * Alternatives:
