@@ -548,7 +548,11 @@ struct qib_pportdata {
 	struct hfi_devdata *dd;
 	struct kobject pport_kobj;
 	struct kobject pport_cc_kobj;
+#ifdef CONFIG_STL_MGMT
+	struct kobject sc2vl_kobj;
+#else
 	struct kobject sl2vl_kobj;
+#endif
 	struct kobject vl2mtu_kobj;
 	struct kobject diagc_kobj;
 
@@ -770,6 +774,7 @@ struct hfi_devdata {
 	struct send_context_info *send_contexts;
 	/* Per VL data. Enough for all VLs but not all elements are set/used. */
 	struct per_vl_data vld[PER_VL_SEND_CONTEXTS];
+	u64 sc2vl[4];
 	/* Send Context initialization lock. */
 	spinlock_t sc_init_lock;
 
