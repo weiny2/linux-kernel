@@ -4130,13 +4130,15 @@ static u32 iblink_state(struct qib_pportdata *ppd)
 static u8 ibphys_portstate(struct qib_pportdata *ppd)
 {
 	static u32 remembered_state = 0xff;
+	u32 pstate;
 	u32 ib_pstate;
 
-	ib_pstate = chip_to_ib_pstate(ppd->dd, read_physical_state(ppd->dd));
+	pstate = read_physical_state(ppd->dd);
+	ib_pstate = chip_to_ib_pstate(ppd->dd, pstate);
 	if (remembered_state != ib_pstate) {
 		dd_dev_info(ppd->dd,
-			"%s: physical state changed to %s (0x%x)\n", __func__,
-			ib_pstate_name(ib_pstate), ib_pstate);
+			"%s: physical state changed to %s (0x%x), phy 0x%x\n",
+			__func__, ib_pstate_name(ib_pstate), ib_pstate, pstate);
 		remembered_state = ib_pstate;
 	}
 	return ib_pstate;
