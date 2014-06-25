@@ -30,7 +30,7 @@
 
 struct kgr_patch {
 	bool __percpu *irq_use_new;
-	unsigned long reserved[8];
+	unsigned long suse_kabi_padding[8];
 	struct kgr_patch_fun {
 		const char *name;
 		const char *new_name;
@@ -43,7 +43,7 @@ struct kgr_patch {
 		struct ftrace_ops *ftrace_ops_slow;
 		struct ftrace_ops *ftrace_ops_fast;
 
-		unsigned long reserved[4];
+		unsigned long suse_kabi_padding[4];
 	} *patches[];
 };
 

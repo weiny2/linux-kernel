@@ -1475,7 +1475,8 @@ struct task_struct {
 	unsigned int	sequential_io;
 	unsigned int	sequential_io_avg;
 #endif
-	unsigned long	kgraft_reserved;
+	/* Reserved for kGraft */
+	unsigned long	suse_kabi_padding;
 };
 
 /* Future-safe accessor for struct task_struct's cpus_allowed. */
