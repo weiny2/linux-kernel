@@ -6270,7 +6270,7 @@ int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 		WFR_RCV_KEY_CTRL_JOB_KEY_MASK_SMASK |
 		((jkey & WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_MASK) <<
 		 WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_SHIFT);
-	write_uctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, reg);
+	write_kctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, reg);
 done:
 	return ret;
 }
@@ -6293,7 +6293,7 @@ int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
 	reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
 	/* Turn off the J_KEY on the receive side */
-	write_uctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, 0);
+	write_kctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, 0);
 done:
 	return ret;
 }
