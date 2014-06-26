@@ -1634,6 +1634,7 @@ static int set_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 	write_csr(dd, WFR_SEND_SC2VLT1, *val++);
 	write_csr(dd, WFR_SEND_SC2VLT2, *val++);
 	write_csr(dd, WFR_SEND_SC2VLT3, *val++);
+	memcpy(dd->sc2vl, (u64 *)data, sizeof(dd->sc2vl));
 	return 0;
 }
 
