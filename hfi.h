@@ -252,6 +252,7 @@ struct qib_ctxtdata {
 	/* interrupt handling */
 	u64 imask;	/* clear interupt mask */
 	int ireg;	/* clear interrupt register */
+	unsigned numa_id; /* numa node of this context */
 #ifdef CONFIG_DEBUG_FS
 	/* verbs stats per CTX */
 	struct hfi_opcode_stats_perctx *opstats;
