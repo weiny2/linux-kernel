@@ -1178,7 +1178,7 @@ static void task_numa_compare(struct task_numa_env *env,
 	struct task_struct *cur;
 	long src_load, dst_load;
 	long load;
-	long imp = (groupimp > 0) ? groupimp : taskimp;
+	long imp = env->p->numa_group ? groupimp : taskimp;
 
 	rcu_read_lock();
 	cur = ACCESS_ONCE(dst_rq->curr);
@@ -1216,11 +1216,6 @@ static void task_numa_compare(struct task_numa_env *env,
 			 * itself (not part of a group), use the task weight
 			 * instead.
 			 */
-			if (env->p->numa_group)
-				imp = groupimp;
-			else
-				imp = taskimp;
-
 			if (cur->numa_group)
 				imp += group_weight(cur, env->src_nid) -
 				       group_weight(cur, env->dst_nid);
