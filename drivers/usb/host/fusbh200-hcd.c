@@ -345,7 +345,7 @@ struct debug_buffer {
 		case QH_LOW_SPEED:  tmp = 'l'; break; \
 		case QH_HIGH_SPEED: tmp = 'h'; break; \
 		default: tmp = '?'; break; \
-		}; tmp; })
+		} tmp; })
 
 static inline char token_mark(struct fusbh200_hcd *fusbh200, __hc32 token)
 {
@@ -5798,6 +5798,7 @@ static int fusbh200_hcd_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to add hcd with err %d\n", retval);
 		goto fail_add_hcd;
 	}
+	device_wakeup_enable(hcd->self.controller);
 
 	return retval;
 

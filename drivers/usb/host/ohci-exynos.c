@@ -206,6 +206,7 @@ skip_phy:
 
 	platform_set_drvdata(pdev, exynos_ohci);
 
+	device_wakeup_enable(hcd->self.controller);
 	return 0;
 
 fail_add_hcd:

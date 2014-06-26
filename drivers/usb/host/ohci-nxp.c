@@ -320,8 +320,10 @@ static int usb_hcd_nxp_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "at 0x%p, irq %d\n", hcd->regs, hcd->irq);
 	ret = usb_add_hcd(hcd, irq, 0);
-	if (ret == 0)
+	if (ret == 0) {
+		device_wakeup_enable(hcd->self.controller);
 		return ret;
+	}
 
 	nxp_stop_hc();
 fail_resource:

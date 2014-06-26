@@ -2108,7 +2108,7 @@ static int isp1362_show(struct seq_file *s, void *unused)
 				   default:
 					   s = "?";
 					   break;
-				   };
+				   }
 				   s;}), ep->maxpacket) ;
 		list_for_each_entry(urb, &ep->hep->urb_list, urb_list) {
 			seq_printf(s, "  urb%p, %d/%d\n", urb,
@@ -2746,6 +2746,8 @@ static int isp1362_probe(struct platform_device *pdev)
 	retval = usb_add_hcd(hcd, irq, irq_flags | IRQF_SHARED);
 	if (retval != 0)
 		goto err6;
+	device_wakeup_enable(hcd->self.controller);
+
 	pr_info("%s, irq %d\n", hcd->product_desc, irq);
 
 	create_debug_file(isp1362_hcd);

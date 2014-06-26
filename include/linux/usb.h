@@ -352,6 +352,8 @@ struct usb_bus {
 	struct usb_bus *hs_companion;	/* Companion EHCI bus, if any */
 	struct list_head bus_list;	/* list of busses */
 
+	struct mutex usb_address0_mutex; /* unaddressed device mutex */
+
 	int bandwidth_allocated;	/* on this bus: how much of the time
 					 * reserved for periodic (intr/iso)
 					 * requests is used, on average?
@@ -369,6 +371,8 @@ struct usb_bus {
 	int monitored;			/* non-zero when monitored */
 #endif
 };
+
+struct usb_dev_state;
 
 /* ----------------------------------------------------------------------- */
 
@@ -753,6 +757,11 @@ extern struct usb_host_interface *usb_find_alt_setting(
 		unsigned int iface_num,
 		unsigned int alt_num);
 
+/* port claiming functions */
+int usb_hub_claim_port(struct usb_device *hdev, unsigned port1,
+		struct usb_dev_state *owner);
+int usb_hub_release_port(struct usb_device *hdev, unsigned port1,
+		struct usb_dev_state *owner);
 
 /**
  * usb_make_path - returns stable device path in the usb tree
@@ -969,6 +978,7 @@ struct usb_dynid {
 };
 
 extern ssize_t usb_store_new_id(struct usb_dynids *dynids,
+				const struct usb_device_id *id_table,
 				struct device_driver *driver,
 				const char *buf, size_t count);
 

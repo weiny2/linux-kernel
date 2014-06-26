@@ -350,6 +350,7 @@ static int stub_probe(struct usb_interface *interface,
 	const char *udev_busid = dev_name(interface->dev.parent);
 	int err = 0;
 	struct bus_id_priv *busid_priv;
+	int rc;
 
 	dev_dbg(&interface->dev, "Enter\n");
 
@@ -424,7 +425,31 @@ static int stub_probe(struct usb_interface *interface,
 	busid_priv->interf_count++;
 	busid_priv->sdev = sdev;
 
-	err = stub_add_files(&interface->dev);
+	/*
+	 * Claim this hub port.
+	 * It doesn't matter what value we pass as owner
+	 * (struct dev_state) as long as it is unique.
+	 */
+	rc = usb_hub_claim_port(udev->parent, udev->portnum,
+			(struct usb_dev_state *) udev);
+	if (rc) {
+		dev_dbg(&udev->dev, "unable to claim port\n");
+		return rc;
+	}
+
+	/*
+	 * Claim this hub port.
+	 * It doesn't matter what value we pass as owner
+	 * (struct dev_state) as long as it is unique.
+	 */
+	rc = usb_hub_claim_port(udev->parent, udev->portnum,
+			(struct usb_dev_state *) udev);
+	if (rc) {
+		dev_dbg(&udev->dev, "unable to claim port\n");
+		return rc;
+	}
+
+	err = stub_add_files(&udev->dev);
 	if (err) {
 		dev_err(&interface->dev, "stub_add_files for %s\n", udev_busid);
 		usb_set_intfdata(interface, NULL);
@@ -462,6 +487,7 @@ static void stub_disconnect(struct usb_interface *interface)
 	struct stub_device *sdev;
 	const char *udev_busid = dev_name(interface->dev.parent);
 	struct bus_id_priv *busid_priv;
+	int rc;
 
 	dev_dbg(&interface->dev, "Enter\n");
 
@@ -485,6 +511,22 @@ static void stub_disconnect(struct usb_interface *interface)
 	 * NOTE: rx/tx threads are invoked for each usb_device.
 	 */
 	stub_remove_files(&interface->dev);
+
+	/* release port */
+	rc = usb_hub_release_port(udev->parent, udev->portnum,
+				  (struct usb_dev_state *) udev);
+	if (rc) {
+		dev_dbg(&udev->dev, "unable to release port\n");
+		return;
+	}
+
+	/* release port */
+	rc = usb_hub_release_port(udev->parent, udev->portnum,
+				  (struct usb_dev_state *) udev);
+	if (rc) {
+		dev_dbg(&udev->dev, "unable to release port\n");
+		return;
+	}
 
 	/* If usb reset is called from event handler */
 	if (busid_priv->sdev->ud.eh == current) {

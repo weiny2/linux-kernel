@@ -88,7 +88,7 @@ static int pnpacpi_set_resources(struct pnp_dev *dev)
 
 	pnp_dbg(&dev->dev, "set resources\n");
 
-	handle = DEVICE_ACPI_HANDLE(&dev->dev);
+	handle = ACPI_HANDLE(&dev->dev);
 	if (!handle || acpi_bus_get_device(handle, &acpi_dev)) {
 		dev_dbg(&dev->dev, "ACPI device not found in %s!\n", __func__);
 		return -ENODEV;
@@ -128,7 +128,7 @@ static int pnpacpi_disable_resources(struct pnp_dev *dev)
 
 	dev_dbg(&dev->dev, "disable resources\n");
 
-	handle = DEVICE_ACPI_HANDLE(&dev->dev);
+	handle = ACPI_HANDLE(&dev->dev);
 	if (!handle || acpi_bus_get_device(handle, &acpi_dev)) {
 		dev_dbg(&dev->dev, "ACPI device not found in %s!\n", __func__);
 		return 0;
@@ -152,7 +152,7 @@ static bool pnpacpi_can_wakeup(struct pnp_dev *dev)
 	struct acpi_device *acpi_dev;
 	acpi_handle handle;
 
-	handle = DEVICE_ACPI_HANDLE(&dev->dev);
+	handle = ACPI_HANDLE(&dev->dev);
 	if (!handle || acpi_bus_get_device(handle, &acpi_dev)) {
 		dev_dbg(&dev->dev, "ACPI device not found in %s!\n", __func__);
 		return false;
@@ -167,7 +167,7 @@ static int pnpacpi_suspend(struct pnp_dev *dev, pm_message_t state)
 	acpi_handle handle;
 	int error = 0;
 
-	handle = DEVICE_ACPI_HANDLE(&dev->dev);
+	handle = ACPI_HANDLE(&dev->dev);
 	if (!handle || acpi_bus_get_device(handle, &acpi_dev)) {
 		dev_dbg(&dev->dev, "ACPI device not found in %s!\n", __func__);
 		return 0;
@@ -202,7 +202,7 @@ static int pnpacpi_suspend(struct pnp_dev *dev, pm_message_t state)
 static int pnpacpi_resume(struct pnp_dev *dev)
 {
 	struct acpi_device *acpi_dev;
-	acpi_handle handle = DEVICE_ACPI_HANDLE(&dev->dev);
+	acpi_handle handle = ACPI_HANDLE(&dev->dev);
 	int error = 0;
 
 	if (!handle || acpi_bus_get_device(handle, &acpi_dev)) {
@@ -342,20 +342,15 @@ static int __init acpi_pnp_match(struct device *dev, void *_pnp)
 	    && compare_pnp_id(pnp->id, acpi_device_hid(acpi));
 }
 
-static int __init acpi_pnp_find_device(struct device *dev, acpi_handle * handle)
+static struct acpi_device * __init acpi_pnp_find_companion(struct device *dev)
 {
-	struct device *adev;
-	struct acpi_device *acpi;
+	dev = bus_find_device(&acpi_bus_type, NULL, to_pnp_dev(dev),
+			      acpi_pnp_match);
+	if (!dev)
+		return NULL;
 
-	adev = bus_find_device(&acpi_bus_type, NULL,
-			       to_pnp_dev(dev), acpi_pnp_match);
-	if (!adev)
-		return -ENODEV;
-
-	acpi = to_acpi_device(adev);
-	*handle = acpi->handle;
-	put_device(adev);
-	return 0;
+	put_device(dev);
+	return to_acpi_device(dev);
 }
 
 /* complete initialization of a PNPACPI device includes having
@@ -369,7 +364,7 @@ static bool acpi_pnp_bus_match(struct device *dev)
 static struct acpi_bus_type __initdata acpi_pnp_bus = {
 	.name	     = "PNP",
 	.match	     = acpi_pnp_bus_match,
-	.find_device = acpi_pnp_find_device,
+	.find_companion = acpi_pnp_find_companion,
 };
 
 int pnpacpi_disabled __initdata;
