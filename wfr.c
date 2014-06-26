@@ -3744,6 +3744,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
 	int hp = 0;			/* header printed? */
+	int did_enable = 0;
 
 	rcd = dd->rcd[ctxt];
 	if (!rcd)
@@ -3784,14 +3785,12 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
 					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
 
-		/* set interrupt timeout */
-		write_kctxt_csr(dd, ctxt, WFR_RCV_AVAIL_TIME_OUT,
-			(u64)rcv_intr_timeout <<
-				WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
+		/* zero interrupt timeout - set after enable */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_AVAIL_TIME_OUT, 0);
 
-		/* zero RcvHdrHead.Head, set RcvHdrHead.Counter */
-		reg = (u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
-		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
+		/* zero RcvHdrHead - set RcvHdrHead.Counter after enable */
+		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, 0);
+		did_enable = 1;
 
 		/* zero RcvEgrIndexHead */
 		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, 0);
@@ -3845,6 +3844,21 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	rcd->rcvctrl = rcvctrl;
 	dd_dev_info(dd, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
 	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);
+
+	if (did_enable) {
+		/*
+		 * The interrupt timeout and count must be set after
+		 * the context is enabled to take effect.
+		 */
+		/* set interrupt timeout */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_AVAIL_TIME_OUT,
+			(u64)rcv_intr_timeout <<
+				WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
+
+		/* set RcvHdrHead.Counter, zero RcvHdrHead.Head (again) */
+		reg = (u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
+		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
+	}
 }
 
 static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
