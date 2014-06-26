@@ -2110,12 +2110,12 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct stl_port_status_rsp *rsp;
 	u32 vl_select_mask = be32_to_cpu(req->vl_select_mask);
-	unsigned vl_index;
 	unsigned long vl;
 	size_t response_data_size;
 	u32 nports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	u8 port_num = req->port_num;
 	u8 num_vls = hweight32(vl_select_mask);
+	struct _vls_pctrs *vlinfo;
 
 	/* FIXME
 	 * some of the counters are not implemented. if the WFR spec
@@ -2192,38 +2192,47 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	rsp->uncorrectable_errors = /* XXX why is this only 8 bits? */
 		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
 	/* rsp->link_quality_indicator ??? */
-	vl_index = 0;
+	vlinfo = &(rsp->vls[0]);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			 sizeof(vl_select_mask)) {
+		unsigned offset;
+		memset(vlinfo, 0, sizeof(*vlinfo));
+		/* WFR supports 8 data VLs (0-7), and VL15 */
+		if (vl >= 8 && vl != 15)
+			goto next;
+		/* for data VLs, the byte offset from the associated VL0
+		 * register is 8 * vl, but for VL15 it's 8 * 8 */
+		offset = 8 * (unsigned)((vl == 15) ? 8 : vl);
 		rsp->vls[vl].port_vl_xmit_data =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * (SEND_DATA_VL0_CNT + vl)));
+					8 * SEND_DATA_VL0_CNT + offset));
 		rsp->vls[vl].port_vl_rcv_data =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
-					+ (vl * 8)));
+					+ offset));
 		/* rsp->vls[vl].port_vl_xmit_pkts ??? (table 13-9 WFR spec) */
 		rsp->vls[vl].port_vl_xmit_wait =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * (SEND_WAIT_VL0_CNT + vl)));
+					8 * SEND_WAIT_VL0_CNT + offset));
 		/* rsp->vls[vl].sw_port_vl_congestion is 0 for HFIs */
 		rsp->vls[vl].port_vl_rcv_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
-					+ (vl * 8)));
+					+ offset));
 		rsp->vls[vl].port_vl_rcv_becn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT
-					+ (vl * 8)));
+					+ offset));
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
 		 * does this differ from rsp->vls[vl].port_vl_xmit_wait */
 		rsp->vls[vl].port_vl_rcv_bubble =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT
-					+ (vl * 8)));
+					+ offset));
 		rsp->vls[vl].port_vl_mark_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
-					 + (vl * 8)));
+					 + offset));
 		/* rsp->vls[vl].port_vl_xmit_discards ??? */
-		vl_index++;
+next:
+		vlinfo++;
 	}
 
 	return reply(pmp);
@@ -2359,35 +2368,43 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	vl_select_mask = cpu_to_be32(req->vl_select_mask);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 		 sizeof(req->vl_select_mask)) {
+		unsigned offset;
 		memset(vlinfo, 0, sizeof(*vlinfo));
+		/* WFR supports 8 data VLs (0-7), and VL15 */
+		if (vl >= 8 && vl != 15)
+			goto next;
+		/* for data VLs, the byte offset from the associated VL0
+		 * register is 8 * vl, but for VL15 it's 8 * 8 */
+		offset = 8 * (unsigned)((vl == 15) ? 8 :  vl);
 		rsp->vls[vl].port_vl_xmit_data =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-				8 * (SEND_DATA_VL0_CNT + vl)));
+				8 * SEND_DATA_VL0_CNT + offset));
 		rsp->vls[vl].port_vl_rcv_data =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
-				+ (vl * 8)));
+				+ offset));
 		/* rsp->vls[vl].port_vl_xmit_pkts ??? (table 13-9 WFR spec) */
 		rsp->vls[vl].port_vl_xmit_wait =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-				8 * (SEND_WAIT_VL0_CNT + vl)));
+				8 * SEND_WAIT_VL0_CNT + offset));
 		/* rsp->vls[vl].sw_port_vl_congestion is 0 for HFIs */
 		rsp->vls[vl].port_vl_rcv_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
-				+ (vl * 8)));
+				+ offset));
 		rsp->vls[vl].port_vl_rcv_becn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT
-				+ (vl * 8)));
+				+ offset));
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
 		 * does this differ from rsp->vls[vl].port_vl_xmit_wait */
 		rsp->vls[vl].port_vl_rcv_bubble =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT
-				+ (vl * 8)));
+				+ offset));
 		rsp->vls[vl].port_vl_mark_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
-				+ (vl * 8)));
-		vlinfo += 1;
+				+ offset));
+next:
+		vlinfo++;
 	}
 
 	return reply(pmp);
