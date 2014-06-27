@@ -926,7 +926,7 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	dd->f_set_armlaunch(dd, 0);
 
 	/* minimal PBC - just the length in DW */
-	pbc = create_pbc(sc, 0, 0, 0, dw);
+	pbc = create_pbc(0, 0, 0, dw);
 
 	preempt_disable();  /* we want reasonably accurate elapsed time */
 

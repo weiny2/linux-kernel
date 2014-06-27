@@ -646,7 +646,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 
 	/* if 0, fill in a default */
 	if (dp->pbc == 0)
-		dp->pbc = create_pbc(sc, 0, 0, 0, total_len);
+		dp->pbc = create_pbc(0, 0, 0, total_len);
 
 	pbuf = sc_buffer_alloc(sc, total_len, NULL, 0);
 	if (!pbuf) {
@@ -1119,8 +1119,7 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 
 	vl = (byte_one >> 4) & 0xf;
 	len = (count >> 2) + 2; /* Add in PBC */
-	pbc = create_pbc(dd->send_contexts[dpkt.context].sc,
-			     0, 0, vl, len);
+	pbc = create_pbc(0, 0, vl, len);
 	dpkt.pbc = pbc;
 	ret = diagpkt_send(&dpkt);
 	/*

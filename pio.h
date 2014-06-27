@@ -135,7 +135,6 @@ void sc_disable(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
 void sc_flush(struct send_context *sc);
 void sc_drop(struct send_context *sc);
-u64 create_pbc(struct send_context *, u64, u32, u32, u32);
 struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 			pio_release_cb cb, void *arg);
 void sc_release_update(struct send_context *sc);

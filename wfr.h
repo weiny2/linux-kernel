@@ -773,6 +773,7 @@ static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
 	write_csr(dd, offset0 + (0x1000 * ctxt), value);
 }
 
+u64 create_pbc(u64, u32, u32, u32);
 
 static inline int stl_speed_to_ib(u16 in)
 {

@@ -712,7 +712,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 
 	sc = rcd->sc;
 	plen = 2 /* PBC */ + hwords;
-	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
+	pbc = create_pbc(0, qp->s_srate, vl, plen);
 
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (!pbuf) {

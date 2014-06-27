@@ -1024,7 +1024,6 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_txreq *tx;
 	struct qib_pio_header *phdr;
-	struct send_context *sc;
 	u64 pbc;
 	u32 ndesc;
 	u32 vl;
@@ -1043,8 +1042,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		goto bail_tx;
 
 	vl = be16_to_cpu(hdr->lrh[0]) >> 12;
-	sc = qp_to_send_context(qp, vl);
-	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
+	pbc = create_pbc(0, qp->s_srate, vl, plen);
 
 	tx->qp = qp;
 	atomic_inc(&qp->refcount);
@@ -1176,7 +1174,7 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	sc = qp_to_send_context(qp, vl);
 	if (!sc)
 		return -EINVAL;
-	pbc = create_pbc(sc, 0, qp->s_srate, vl, plen);
+	pbc = create_pbc(0, qp->s_srate, vl, plen);
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (unlikely(pbuf == NULL))
 		return no_bufs_available(qp, sc);
