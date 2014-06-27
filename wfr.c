@@ -2944,11 +2944,12 @@ int init_loopback(struct hfi_devdata *dd)
 	return 0;
 }
 
-static int bringup_serdes(struct qib_pportdata *ppd)
+static int start_polling(struct hfi_devdata *dd)
 {
-	struct hfi_devdata *dd = ppd->dd;
-	u64 guid, reg;
 	int ret;
+
+	/* TODO: only start Polling if we have verified that media is
+	   present */
 
 	/*
 	 * Write link verify capability frames before moving the
@@ -2970,6 +2971,41 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
 		WFR_SUPPORTED_LINK_WIDTHS);
 
+	ret = set_physical_link_state(dd, WFR_PLS_POLLING);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd,
+			"%s: set phsyical link state to Polling failed with return 0x%x\n",
+			__func__, ret);
+
+		if (ret >= 0)
+			ret = -EINVAL;
+		return ret;
+	}
+	return 0;
+}
+
+void restart_link(unsigned long opaque)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
+	int ret;
+
+	if (!ppd->link_enabled)
+		return;
+
+	ret = start_polling(ppd->dd);
+	if (ret) {
+		dd_dev_err(ppd->dd,
+			"Unable to restart polling on the link, err %d\n", ret);
+		/* for now, just try to restart in 30s */
+		mod_timer(&ppd->link_restart_timer, msecs_to_jiffies(30000));
+	}
+}
+
+static int bringup_serdes(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 guid, reg;
+
 	/* enable the port */
 	/* TODO: 7322: done within rcvmod_lock */
 	reg = read_csr(dd, WFR_RCV_CTRL);
@@ -2986,24 +3022,15 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 		ppd->guid = cpu_to_be64(guid);
 	}
 
+	/* the link defaults to enabled */
+	ppd->link_enabled = 1;
+
 	if (loopback) {
 		dd_dev_info(dd, "Entering loopback mode\n");
 		return init_loopback(dd);
 	}
 
-	/* TODO: only start Polling if we have verified that media is
-	   present */
-
-	ret = set_physical_link_state(dd, WFR_PLS_POLLING);
-	if (ret != WFR_HCMD_SUCCESS) {
-		dd_dev_err(dd, "%s: set phsyical link state to Polling failed with return 0x%x\n", __func__, ret);
-
-		if (ret >= 0)
-			ret = -EINVAL;
-		return ret;
-	}
-
-	return 0;
+	return start_polling(dd);
 }
 
 static void quiet_serdes(struct qib_pportdata *ppd)
@@ -3011,6 +3038,9 @@ static void quiet_serdes(struct qib_pportdata *ppd)
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
 	int ret;
+
+	/* link is now disabled */
+	ppd->link_enabled = 0;
 
 	ret = set_physical_link_state(dd, WFR_PLS_OFFLINE);
 	if (ret == WFR_HCMD_SUCCESS) {
@@ -3315,12 +3345,124 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
 }
 
-static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
+static int set_link_state(struct qib_pportdata *ppd, u32 val)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u64 reg;
-	u32 phys_request;
+	u32 phys_request, logical_request;
 	int ret1, ret = 0;
+
+	phys_request = val & 0xffff;
+	logical_request = val & 0xffff0000;
+	dd_dev_info(dd,
+		"%s: logical: %s, physical %s\n",
+		__func__,
+		logical_request == IB_LINKCMD_ARMED ?
+						"LINKCMD_ARMED" :
+		logical_request == IB_LINKCMD_ACTIVE ?
+						"LINKCMD_ACTIVE" :
+		logical_request == IB_LINKCMD_DOWN ?
+						"LINKCMD_DOWN" :
+						"unknown",
+		phys_request == IB_LINKINITCMD_NOP ?
+						"LINKINITCMD_NOP" :
+		phys_request == IB_LINKINITCMD_POLL ?
+						"LINKINITCMD_POLL" :
+		phys_request == IB_LINKINITCMD_SLEEP ?
+						"LINKINITCMD_SLEEP" :
+		phys_request == IB_LINKINITCMD_DISABLE ?
+						"LINKINITCMD_DISABLE" :
+						"unknwon");
+	switch (logical_request) {
+	case IB_LINKCMD_ARMED:
+		set_logical_state(dd, WFR_LSTATE_ARMED);
+		break;
+	case IB_LINKCMD_ACTIVE:
+		set_logical_state(dd, WFR_LSTATE_ACTIVE);
+		break;
+	case IB_LINKCMD_DOWN:
+		/*
+		 * If no physical state change is given,
+		 * use the default down state.
+		 */
+		if (phys_request == IB_LINKINITCMD_NOP)
+			phys_request = dd->link_default;
+		break;
+	default:
+		dd_dev_info(dd, "%s: logical request 0x%x: not implemented\n",
+			__func__, logical_request);
+	}
+
+	switch (phys_request) {
+	case IB_LINKINITCMD_NOP:	/* nothing */
+		break;
+	case IB_LINKINITCMD_POLL:
+		/* link is enabled */
+		ppd->link_enabled = 1;
+		/* must transistion to offline first */
+		ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
+		if (ret1 != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to Offline link state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+			break;
+		}
+		/*
+		 * The above move to physical Offline state will
+		 * also move the logical state to Down.  Wait for it.
+		 */
+		qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
+		ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
+		if (ret1 != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to Polling link state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+			break;
+		}
+		break;
+	case IB_LINKINITCMD_SLEEP:
+		/* not valid on WFR */
+		dd_dev_err(dd, "Cannot transition Sleep link state\n");
+		ret = -EINVAL;
+		break;
+	case IB_LINKINITCMD_DISABLE:
+		/* link is disabled */
+		ppd->link_enabled = 0;
+		/* must transistion to offline first */
+		ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
+		if (ret1 != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to Offline link state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+			break;
+		}
+		/*
+		 * The above move to physical Offline state will
+		 * also move the logical state to Down.  Wait for it.
+		 */
+		qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
+		ret1 = set_physical_link_state(dd, WFR_PLS_DISABLED);
+		if (ret1 != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to Disabled link state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+		}
+		break;
+	default:
+		dd_dev_info(dd, "%s: physical request 0x%x: not implemented\n",
+			__func__, phys_request);
+	}
+
+	return ret;
+}
+
+static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
+{
+	u64 reg;
+	int ret = 0;
 
 	switch (which) {
 	case QIB_IB_CFG_LIDLMC:
@@ -3337,85 +3479,7 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		write_csr(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIMIT, reg);
 		break;
 	case QIB_IB_CFG_LSTATE:
-		phys_request = val & 0xffff;
-		switch (val & 0xffff0000) {
-		case IB_LINKCMD_ARMED:
-			set_logical_state(dd, WFR_LSTATE_ARMED);
-			break;
-		case IB_LINKCMD_ACTIVE:
-			set_logical_state(dd, WFR_LSTATE_ACTIVE);
-			break;
-		case IB_LINKCMD_DOWN:
-			/*
-			 * If no physical state change is given,
-			 * use the default down state.
-			 */
-			if (phys_request == IB_LINKINITCMD_NOP)
-				phys_request = dd->link_default;
-			break;
-		default:
-			dd_dev_info(dd,
-			  "%s: which %s, val 0x%x: not implemented\n",
-			  __func__, ib_cfg_name(which), val & 0xffff0000);
-		}
-
-		switch (phys_request) {
-		case IB_LINKINITCMD_NOP:	/* nothing */
-			break;
-		case IB_LINKINITCMD_POLL:
-			/* must transistion to offline first */
-			ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
-			if (ret1 != WFR_HCMD_SUCCESS) {
-				dd_dev_err(dd, "Failed to transition to Offline link state, return 0x%x\n", ret1);
-				ret = -EINVAL;
-				break;
-			}
-			/*
-			 * The above move to physical Offline state will 
-			 * also move the logical state to Down.  Adjust
-			 * the cached value.
-			 * ** Do this before moving to Polling as the link
-			 * may transition to LinkUp (and update the cache)
-			 * before we do.
-			 */
-			ppd->lstate = IB_PORT_DOWN;
-			ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
-			if (ret1 != WFR_HCMD_SUCCESS) {
-				dd_dev_err(dd, "Failed to transition to Polling link state, return 0x%x\n", ret1);
-				ret = -EINVAL;
-				break;
-			}
-			break;
-		case IB_LINKINITCMD_SLEEP:
-			/* not valid on WFR */
-			dd_dev_err(dd, "Cannot transition Sleep link state\n");
-			ret = -EINVAL;
-			break;
-		case IB_LINKINITCMD_DISABLE:
-			/* must transistion to offline first */
-			ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
-			if (ret1 != WFR_HCMD_SUCCESS) {
-				dd_dev_err(dd, "Failed to transition to Offline link state, return 0x%x\n", ret1);
-				ret = -EINVAL;
-				break;
-			}
-			/*
-			 * The above move to physical Offline state will 
-			 * also move the logical state to Down.  Adjust
-			 * the cached value.
-			 */
-			ppd->lstate = IB_PORT_DOWN;
-			ret1 = set_physical_link_state(dd, WFR_PLS_DISABLED);
-			if (ret1 != WFR_HCMD_SUCCESS) {
-				dd_dev_err(dd, "Failed to transition to Disabled link state, return 0x%x\n", ret1);
-				ret = -EINVAL;
-			}
-			break;
-		default:
-			dd_dev_info(dd,
-			  "%s: which %s, val 0x%x: not implemented\n",
-			  __func__, ib_cfg_name(which), val & 0xffff);
-		}
+		ret = set_link_state(ppd, val);
 		break;
 	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
 		/* WFR only supports POLL as the default link down state */

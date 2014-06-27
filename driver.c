@@ -180,11 +180,11 @@ int qib_set_linkstate(struct qib_pportdata *ppd, u8 newstate)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u32 phys_command;
-	u32 lstate;
+	u32 lstate, next_lstate;
 	int ret = 0;
 
-	/* update cached value */
-	dd->f_iblink_state(ppd);
+	/* get the current logical state */
+	lstate = dd->f_iblink_state(ppd);
 
 	switch (newstate) {
 	case QIB_IB_LINKDOWN_ONLY:
@@ -205,31 +205,31 @@ int qib_set_linkstate(struct qib_pportdata *ppd, u8 newstate)
 down_common:
 		dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 				 IB_LINKCMD_DOWN | phys_command);
-		lstate = IB_PORT_DOWN;
+		next_lstate = IB_PORT_DOWN;
 		break;
 
 	case QIB_IB_LINKARM:
-		if (ppd->lstate != IB_PORT_ARMED) {
-			if (ppd->lstate != IB_PORT_INIT) {
+		if (lstate != IB_PORT_ARMED) {
+			if (lstate != IB_PORT_INIT) {
 				ret = -EINVAL;
 				goto bail;
 			}
 			dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 					 IB_LINKCMD_ARMED | IB_LINKINITCMD_NOP);
 		}
-		lstate = IB_PORT_ARMED;
+		next_lstate = IB_PORT_ARMED;
 		break;
 
 	case QIB_IB_LINKACTIVE:
-		if (ppd->lstate != IB_PORT_ACTIVE) {
-			if (ppd->lstate != IB_PORT_ARMED) {
+		if (lstate != IB_PORT_ACTIVE) {
+			if (lstate != IB_PORT_ARMED) {
 				ret = -EINVAL;
 				goto bail;
 			}
 			dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LSTATE,
 					 IB_LINKCMD_ACTIVE | IB_LINKINITCMD_NOP);
 		}
-		lstate = IB_PORT_ACTIVE;
+		next_lstate = IB_PORT_ACTIVE;
 		break;
 
 	default:
@@ -237,7 +237,7 @@ down_common:
 		goto bail;
 	}
 
-	ret = qib_wait_linkstate(ppd, lstate, 10);
+	ret = qib_wait_linkstate(ppd, next_lstate, 10);
 bail:
 	return ret;
 }

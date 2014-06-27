@@ -628,6 +628,7 @@ struct qib_pportdata {
 	u8 port;        /* IB port number and index into dd->pports - 1 */
 	/* type of neighbor node */
 	u8 neighbor_type;
+	u8 link_enabled;	/* link enabled? */
 
 	u8 delay_mult;
 	/* placeholders for IB MAD packet settings */
@@ -644,6 +645,7 @@ struct qib_pportdata {
 	struct timer_list led_override_timer;
 	struct xmit_wait cong_stats;
 	struct timer_list symerr_clear_timer;
+	struct timer_list link_restart_timer;
 
 	/* Synchronize access between driver writes and sysfs reads */
 	spinlock_t cc_shadow_lock
@@ -1280,6 +1282,7 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 void qib_dump_lookup_output_queue(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
+void restart_link(unsigned long opaque);
 #ifdef JAG_SDMA_VERBOSITY
 /* XXX JAG SDMA - Temporary debug/dump routine */
 void qib_sdma0_dumpstate(struct hfi_devdata *dd);

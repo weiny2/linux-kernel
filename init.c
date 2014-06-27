@@ -308,6 +308,10 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	ppd->symerr_clear_timer.function = qib_clear_symerror_on_linkup;
 	ppd->symerr_clear_timer.data = (unsigned long)ppd;
 
+	init_timer(&ppd->link_restart_timer);
+	ppd->link_restart_timer.function = restart_link;
+	ppd->link_restart_timer.data = (unsigned long)ppd;
+
 	ppd->qib_wq = NULL;
 
 	spin_lock_init(&ppd->cc_shadow_lock);
@@ -724,6 +728,8 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 		}
 		if (ppd->symerr_clear_timer.data)
 			del_timer_sync(&ppd->symerr_clear_timer);
+		if (ppd->link_restart_timer.data)
+			del_timer_sync(&ppd->link_restart_timer);
 	}
 }
 

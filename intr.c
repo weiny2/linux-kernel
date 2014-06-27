@@ -156,6 +156,9 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		ev = IB_EVENT_PORT_ERR;
 
 		qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
+
+		/* restart the link after a delay and out of this interrupt */
+		mod_timer(&ppd->link_restart_timer, msecs_to_jiffies(1));
 	}
 
 	/*
