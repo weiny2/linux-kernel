@@ -541,6 +541,168 @@ static struct flag_table credit_return_flags[] = {
 		WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
 };
 
+/*
+ * DCC Error Flags
+ */
+static struct flag_table dcc_err_flags[] = {
+	FLAG_ENTRY("bad_l2_err", 0,
+		DCC_ERR_FLG_BAD_L2_ERR_SMASK),
+	FLAG_ENTRY("bad_sc_err", 0,
+		DCC_ERR_FLG_BAD_SC_ERR_SMASK),
+	FLAG_ENTRY("bad_mid_tail_err", 0,
+		DCC_ERR_FLG_BAD_MID_TAIL_ERR_SMASK),
+	FLAG_ENTRY("bad_preemption_err", 0,
+		DCC_ERR_FLG_BAD_PREEMPTION_ERR_SMASK),
+	FLAG_ENTRY("preemption_err", 0,
+		DCC_ERR_FLG_PREEMPTION_ERR_SMASK),
+	FLAG_ENTRY("preemptionvl15_err", 0,
+		DCC_ERR_FLG_PREEMPTIONVL15_ERR_SMASK),
+	FLAG_ENTRY("bad_vl_marker_err", 0,
+		DCC_ERR_FLG_BAD_VL_MARKER_ERR_SMASK),
+	FLAG_ENTRY("bad_dlid_target_err", 0,
+		DCC_ERR_FLG_BAD_DLID_TARGET_ERR_SMASK),
+	FLAG_ENTRY("bad_lver_err", 0,
+		DCC_ERR_FLG_BAD_LVER_ERR_SMASK),
+	FLAG_ENTRY("uncorrectable_err", 0,
+		DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK),
+	FLAG_ENTRY("bad_crdt_ack_err", 0,
+		DCC_ERR_FLG_BAD_CRDT_ACK_ERR_SMASK),
+	FLAG_ENTRY("unsup_pkt_type", 0,
+		DCC_ERR_FLG_UNSUP_PKT_TYPE_SMASK),
+	FLAG_ENTRY("bad_ctrl_flit_err", 0,
+		DCC_ERR_FLG_BAD_CTRL_FLIT_ERR_SMASK),
+	FLAG_ENTRY("event_cntr_parity_err", 0,
+		DCC_ERR_FLG_EVENT_CNTR_PARITY_ERR_SMASK),
+	FLAG_ENTRY("event_cntr_rollover_err", 0,
+		DCC_ERR_FLG_EVENT_CNTR_ROLLOVER_ERR_SMASK),
+	FLAG_ENTRY("link_err", 0,
+		DCC_ERR_FLG_LINK_ERR_SMASK),
+	FLAG_ENTRY("misc_cntr_rollover_err", 0,
+		DCC_ERR_FLG_MISC_CNTR_ROLLOVER_ERR_SMASK),
+	FLAG_ENTRY("bad_ctrl_dist_err", 0,
+		DCC_ERR_FLG_BAD_CTRL_DIST_ERR_SMASK),
+	FLAG_ENTRY("bad_tail_dist_err", 0,
+		DCC_ERR_FLG_BAD_TAIL_DIST_ERR_SMASK),
+	FLAG_ENTRY("bad_head_dist_err", 0,
+		DCC_ERR_FLG_BAD_HEAD_DIST_ERR_SMASK),
+	FLAG_ENTRY("nonvl15_state_err", 0,
+		DCC_ERR_FLG_NONVL15_STATE_ERR_SMASK),
+	FLAG_ENTRY("vl15_multi_err", 0,
+		DCC_ERR_FLG_VL15_MULTI_ERR_SMASK),
+	FLAG_ENTRY("bad_pkt_length_err", 0,
+		DCC_ERR_FLG_BAD_PKT_LENGTH_ERR_SMASK),
+	FLAG_ENTRY("unsup_vl_err", 0,
+		DCC_ERR_FLG_UNSUP_VL_ERR_SMASK),
+	FLAG_ENTRY("perm_nvl15_err", 0,
+		DCC_ERR_FLG_PERM_NVL15_ERR_SMASK),
+	FLAG_ENTRY("slid_zero_err", 0,
+		DCC_ERR_FLG_SLID_ZERO_ERR_SMASK),
+	FLAG_ENTRY("dlid_zero_err", 0,
+		DCC_ERR_FLG_DLID_ZERO_ERR_SMASK),
+	FLAG_ENTRY("length_mtu_err", 0,
+		DCC_ERR_FLG_LENGTH_MTU_ERR_SMASK),
+	FLAG_ENTRY("rx_early_drop_err", 0,
+		DCC_ERR_FLG_RX_EARLY_DROP_ERR_SMASK),
+	FLAG_ENTRY("late_short_err", 0,
+		DCC_ERR_FLG_LATE_SHORT_ERR_SMASK),
+	FLAG_ENTRY("late_long_err", 0,
+		DCC_ERR_FLG_LATE_LONG_ERR_SMASK),
+	FLAG_ENTRY("late_ebp_err", 0,
+		DCC_ERR_FLG_LATE_EBP_ERR_SMASK),
+	FLAG_ENTRY("fpe_tx_fifo_ovflw_err", 0,
+		DCC_ERR_FLG_FPE_TX_FIFO_OVFLW_ERR_SMASK),
+	FLAG_ENTRY("fpe_tx_fifo_unflw_err", 0,
+		DCC_ERR_FLG_FPE_TX_FIFO_UNFLW_ERR_SMASK),
+	FLAG_ENTRY("csr_access_blocked_host", 0,
+		DCC_ERR_FLG_CSR_ACCESS_BLOCKED_HOST_SMASK),
+	FLAG_ENTRY("csr_access_blocked_uc", 0,
+		DCC_ERR_FLG_CSR_ACCESS_BLOCKED_UC_SMASK),
+	FLAG_ENTRY("tx_ctrl_parity_err", 0,
+		DCC_ERR_FLG_TX_CTRL_PARITY_ERR_SMASK),
+	FLAG_ENTRY("tx_ctrl_parity_mbe_err", 0,
+		DCC_ERR_FLG_TX_CTRL_PARITY_MBE_ERR_SMASK),
+	FLAG_ENTRY("tx_sc_parity_err", 0,
+		DCC_ERR_FLG_TX_SC_PARITY_ERR_SMASK),
+	FLAG_ENTRY("rx_ctrl_parity_mbe_err", 0,
+		DCC_ERR_FLG_RX_CTRL_PARITY_MBE_ERR_SMASK),
+	FLAG_ENTRY("csr_parity_err", 0,
+		DCC_ERR_FLG_CSR_PARITY_ERR_SMASK),
+	FLAG_ENTRY("csr_inval_addr", 0,
+		DCC_ERR_FLG_CSR_INVAL_ADDR_SMASK),
+	FLAG_ENTRY("tx_byte_shft_parity_err", 0,
+		DCC_ERR_FLG_TX_BYTE_SHFT_PARITY_ERR_SMASK),
+	FLAG_ENTRY("rx_byte_shft_parity_err", 0,
+		DCC_ERR_FLG_RX_BYTE_SHFT_PARITY_ERR_SMASK),
+	FLAG_ENTRY("fmconfig_err", 0,
+		DCC_ERR_FLG_FMCONFIG_ERR_SMASK),
+	FLAG_ENTRY("rcvport_err", 0,
+		DCC_ERR_FLG_RCVPORT_ERR_SMASK),
+};
+
+/*
+ * DC8051 Error Flags
+ */
+static struct flag_table dc8051_err_flags[] = {
+	FLAG_ENTRY("SET_BY_8051", 0,
+		DC_DC8051_ERR_FLG_SET_BY_8051_SMASK),
+	FLAG_ENTRY("LOST_8051_HEART_BEAT", 0,
+		DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK),
+	FLAG_ENTRY("CRAM_MBE", 0,
+		DC_DC8051_ERR_FLG_CRAM_MBE_SMASK),
+	FLAG_ENTRY("CRAM_SBE", 0,
+		DC_DC8051_ERR_FLG_CRAM_SBE_SMASK),
+	FLAG_ENTRY("DRAM_MBE", 0,
+		DC_DC8051_ERR_FLG_DRAM_MBE_SMASK),
+	FLAG_ENTRY("DRAM_SBE", 0,
+		DC_DC8051_ERR_FLG_DRAM_SBE_SMASK),
+	FLAG_ENTRY("IRAM_MBE", 0,
+		DC_DC8051_ERR_FLG_IRAM_MBE_SMASK),
+	FLAG_ENTRY("IRAM_SBE", 0,
+		DC_DC8051_ERR_FLG_IRAM_SBE_SMASK),
+	FLAG_ENTRY("UNMATCHED_SECURE_MSG_ACROSS_BCC_LANES", 0,
+		DC_DC8051_ERR_FLG_UNMATCHED_SECURE_MSG_ACROSS_BCC_LANES_SMASK),
+	FLAG_ENTRY("INVALID_CSR_ADDR", 0,
+		DC_DC8051_ERR_FLG_INVALID_CSR_ADDR_SMASK),
+};
+
+/*
+ * DC8051 Information Error flags
+ *
+ * Flags in DC8051_DBG_ERR_INFO_SET_BY_8051.ERROR field.
+ */
+static struct flag_table dc8051_info_err_flags[] = {
+	FLAG_ENTRY("Spico ROM check failed",		0, 0x0001),
+	FLAG_ENTRY("UNKNOWN_FRAME type",		0, 0x0002),
+	FLAG_ENTRY("Target BER not met",		0, 0x0004),
+	FLAG_ENTRY("Serdes internal looopback failure", 0, 0x0008),
+	FLAG_ENTRY("Failed SerDes Init",		0, 0x0010),
+	FLAG_ENTRY("Failed LNI(Polling)",		0, 0x0020),
+	FLAG_ENTRY("Failed LNI(Debounce)",		0, 0x0040),
+	FLAG_ENTRY("Failed LNI(EstbComm)",		0, 0x0080),
+	FLAG_ENTRY("Failed LNI(OptEq)",			0, 0x0100),
+	FLAG_ENTRY("Failed LNI(VerifyCap_1)",		0, 0x0200),
+	FLAG_ENTRY("Failed LNI(VerifyCap_2)",		0, 0x0400),
+	FLAG_ENTRY("Failed LNI(ConfigLT)",		0, 0x0800)
+};
+
+/*
+ * DC8051 Information Host Information flags
+ *
+ * Flags in DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG field.
+ */
+static struct flag_table dc8051_info_host_msg_flags[] = {
+	FLAG_ENTRY("Host request done",			0, 0x0001),
+	FLAG_ENTRY("BC SMA message",			0, 0x0002),
+	FLAG_ENTRY("BC PWR_MGM message",		0, 0x0004),
+	FLAG_ENTRY("BC Unknown message (BCC)",		0, 0x0008),
+	FLAG_ENTRY("BC Unknown message (LCB)",		0, 0x0010),
+	FLAG_ENTRY("External device config request",	0, 0x0020),
+	FLAG_ENTRY("VerifyCap all frames received",	0, 0x0040),
+	FLAG_ENTRY("LinkUp achieved",			0, 0x0080),
+	FLAG_ENTRY("Link going down",			0, 0x0100),
+};
+
+
 static u32 encoded_size(u32 size);
 static u32 chip_to_ib_lstate(struct hfi_devdata *dd, u32 chip_lstate);
 static int set_physical_link_state(struct hfi_devdata *dd, u64 state);
@@ -1657,9 +1819,34 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type);
 }
 
+static char *dcc_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dcc_err_flags,
+		ARRAY_SIZE(dcc_err_flags));
+}
+
+static char *dc8051_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dc8051_err_flags,
+		ARRAY_SIZE(dc8051_err_flags));
+}
+
+static char *dc8051_info_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dc8051_info_err_flags,
+		ARRAY_SIZE(dc8051_info_err_flags));
+}
+
+static char *dc8051_info_host_msg_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dc8051_info_host_msg_flags,
+		ARRAY_SIZE(dc8051_info_host_msg_flags));
+}
+
 static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	u64 info, err, host_msg;
+	char buf[96];
 
 	/* look at the flags */
 	if (reg & DC_DC8051_ERR_FLG_SET_BY_8051_SMASK) {
@@ -1677,7 +1864,8 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		 */
 		if (err) {
 			/* TODO: implement 8051 error handling */
-			dd_dev_info(dd, "8051 info: error flags 0x%llx (unhandled)\n", err);
+			dd_dev_info(dd, "8051 info error: %s (unhandled)\n",
+				dc8051_info_err_string(buf, sizeof(buf), err));
 		}
 
 		/*
@@ -1728,7 +1916,10 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		/* look for unhandled flags */
 		if (host_msg) {
 			/* TODO: implement all other valid flags here */
-			dd_dev_info(dd, "8051: host message flags 0x%llx (unhandled)\n", host_msg);
+			dd_dev_info(dd,
+				"8051 info host message: %s (unhandled)\n",
+				dc8051_info_host_msg_string(buf, sizeof(buf),
+					host_msg));
 		}
 
 		/* clear flag so "unhandled" message below does not
@@ -1752,14 +1943,122 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 	if (reg) {
 		/* TODO: implement all other flags here */
-		dd_dev_info(dd, "%s: 8051 Error: 0x%llx (unhandled)\n", __func__ , reg);
+		dd_dev_info(dd, "%s: 8051 Error: %s (unhandled)\n", __func__,
+			dc8051_err_string(buf, sizeof(buf), reg));
 	}
 }
 
 /* TODO */
 static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	dd_dev_info(dd, "DCC Error: 0x%llx (unhandled)\n", reg);
+	u64 info, hdr0, hdr1;
+	char *extra;
+	char buf[96];
+
+	if (reg & DCC_ERR_FLG_FMCONFIG_ERR_SMASK) {
+		info = read_csr(dd, DCC_ERR_INFO_FMCONFIG);
+		switch (info) {
+		case 0:
+			extra = "BadHeadDist: Distance violation between "
+				"two head flits";
+			break;
+		case 1:
+			extra = "BadTailDist: Distance violation between "
+				"two tail flits";
+			break;
+		case 2:
+			extra = "BadCtrlDist: Dstance violation between "
+				"two credit control flits";
+			break;
+		case 3:
+			extra = "BadCrdAck: Credits return for unsupported VL";
+			break;
+		case 4:
+			extra = "UnsupportedVLMarker: Received VL Marker";
+			break;
+		case 5:
+			extra = "BadPreempt: Exceeded the preemtion nesting "
+				"level";
+			break;
+		case 6:
+			extra = "BadControlFlit: Received unsupport control "
+				"flit";
+			break;
+		case 8:
+			extra = "UnsupportedVL: Recevied VL that was not "
+				"configured";
+			break;
+		default:
+			snprintf(buf, sizeof(buf), "reserved%lld", info);
+			extra = buf;
+			break;
+		}
+		/* just report this */
+		dd_dev_info(dd, "DCC Error: fmconfig error: %s\n",
+			extra);
+
+		/* strip so we don't see in the generic unhandled */
+		reg &= ~DCC_ERR_FLG_FMCONFIG_ERR_SMASK;
+	}
+
+	if (reg & DCC_ERR_FLG_RCVPORT_ERR_SMASK) {
+		info = read_csr(dd, DCC_ERR_INFO_PORTRCV);
+		hdr0 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR0);
+		hdr1 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR1);
+		switch (info) {
+		case 1:
+			extra = "BadPktLen: Illegal PktLen";
+			break;
+		case 2:
+			extra = "PktLenTooLong: Packet longer than PktLen";
+			break;
+		case 3:
+			extra = "PktLenTooShort: Packet shorterthan PktLen";
+			break;
+		case 4:
+			extra = "BadSLID: Illegal SLID (0, using multicast "
+				"as SLID, does not include security "
+				"validation of SLID)";
+			break;
+		case 5:
+			extra = "BadDLID: Illegal DLID (0, doesn't match HFI)";
+			break;
+		case 6:
+			extra = "BadL2: Illegal L2 opcode";
+			break;
+		case 7:
+			extra = "BadSC: Unsupported SC";
+			break;
+		case 9:
+			extra = "BadRC: Illegal RC";
+			break;
+		case 11:
+			extra = "PreemptError: Preempting with same VL";
+			break;
+		case 12:
+			extra = "PreemptVL15: Preempting a VL15 packet";
+			break;
+		case 13:
+			extra = "BadVLMarker: VL Marker for an unpreempted VL";
+			break;
+		default:
+			snprintf(buf, sizeof(buf), "reserved%lld", info);
+			extra = buf;
+			break;
+		}
+		/* just report this */
+		dd_dev_info(dd, "DCC Error: PortRcv error: %s\n",
+			extra);
+		dd_dev_info(dd, "           hdr0 0x%llx, hdr1 0x%llx\n",
+			hdr0, hdr1);
+
+		/* strip so we don't see in the generic unhandled */
+		reg &= ~DCC_ERR_FLG_RCVPORT_ERR_SMASK;
+	}
+
+	if (reg)
+		dd_dev_info(dd, "DCC Error: %s (unhandled)\n",
+			dcc_err_string(buf, sizeof(buf), reg));
 }
 
 /* TODO */
