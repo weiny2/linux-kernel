@@ -261,6 +261,8 @@ class TestInfo:
                           help="Optional base directory to pass to a test. Used to source executables and such.",
                           metavar="PATH",
                           default="")
+        parser.add_option("--testlist", dest="test_list",
+                          help="List of tests to execute. Can be used with '--type' to further filter the test list.")
 
         (options, args) = parser.parse_args()
 
@@ -363,6 +365,11 @@ class TestInfo:
         else:
             self.test_types = "default"
 
+        if options.test_list:
+            self.test_list = options.test_list
+        else:
+            self.test_list = None
+
         if options.module_params:
             self.module_params = options.module_params
         else:
@@ -400,6 +407,9 @@ class TestInfo:
 
     def get_test_types(self):
         return self.test_types
+
+    def get_test_list(self):
+        return self.test_list
 
     def get_kbuild_dir(self):
         return self.kbuild_dir
