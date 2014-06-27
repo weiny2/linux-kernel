@@ -352,7 +352,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	u8 subctxt, mapio = 0, vmf = 0, type;
 	ssize_t memlen = 0;
 	int ret = 0;
-	u16 ctxt, numa;
+	u16 ctxt;
 
 	uctxt = ctxt_fp(fp);
 	if (!is_valid_mmap(token) || !uctxt ||
@@ -394,15 +394,14 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 			ret = -EPERM;
 			goto done;
 		}
-		numa = numa_node_id();
 		/*
 		 * The credit return location for this context could be on the
 		 * second or third page allocated for credit returns (if number
 		 * of enabled contexts > 64 and 128 respectively).
 		 */
-		memaddr = dd->cr_base[numa].pa +
-			(((u64)uctxt->sc->hw_free - (u64)dd->cr_base[numa].va) &
-			 PAGE_MASK);
+		memaddr = dd->cr_base[uctxt->numa_id].pa +
+			(((u64)uctxt->sc->hw_free -
+			  (u64)dd->cr_base[uctxt->numa_id].va) & PAGE_MASK);
 		memlen = PAGE_SIZE;
 		flags &= ~VM_MAYWRITE;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
@@ -809,7 +808,6 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 		ret = -EBUSY;
 		goto done;
 	}
-
 	uctxt = qib_create_ctxtdata(dd->pport, ctxt);
 	if (!uctxt) {
 		dd_dev_err(dd,
@@ -820,8 +818,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	/*
 	 * Allocate and enable a PIO send context.
 	 */
-	//FIXME: Add the numa the sc_alloc call
-	uctxt->sc = sc_alloc(dd, SC_USER, 0 /*numa*/);
+	uctxt->sc = sc_alloc(dd, SC_USER, uctxt->numa_id);
 	if (!uctxt->sc) {
 		ret = -ENOMEM;
 		goto done;
@@ -1005,7 +1002,7 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 		uctxt->dd->rcv_entries.group_size;
 	cinfo.credits = uctxt->sc->credits;
 	/* FIXME: set proper numa node */
-	cinfo.numa_node = 0;
+	cinfo.numa_node = uctxt->numa_id;
 	cinfo.rec_cpu = fd->rec_cpu_num;
 
 	if (copy_to_user(ubase, &cinfo, sizeof(cinfo)))
@@ -1076,10 +1073,9 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 			dd->rcv_entries.group_size;
 		uctxt->tidmapcnt = uctxt->numtidgroups / BITS_PER_LONG +
 			!!(uctxt->numtidgroups % BITS_PER_LONG);
-		/* XXX MITKO: Use proper NUMA node id */
 		uctxt->tidusemap = kzalloc_node(uctxt->tidmapcnt *
 						sizeof(*uctxt->tidusemap),
-						GFP_KERNEL, 0);
+						GFP_KERNEL, uctxt->numa_id);
 		if (!uctxt->tidusemap)
 			ret = -ENOMEM;
 	}
@@ -1097,7 +1093,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	ssize_t sz;
-	unsigned offset, numa;
+	unsigned offset;
 	int ret = 0;
 
 	trace_hfi_uctxtdata(uctxt->dd, uctxt);
@@ -1123,15 +1119,14 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	 * away. */
 	binfo.mtu = dd->pport[0].ibmtu;
 
-	numa = numa_node_id();
 	/*
 	 * If more than 64 contexts are enabled the allocated credit
 	 * return will span two or three contiguous pages. Since we only
 	 * map the page containing the context's credit return address,
 	 * we need to calculate the offset in the proper page.
 	 */
-	offset = ((u64)uctxt->sc->hw_free - (u64)dd->cr_base[numa].va) %
-		PAGE_SIZE;
+	offset = ((u64)uctxt->sc->hw_free -
+		  (u64)dd->cr_base[uctxt->numa_id].va) % PAGE_SIZE;
 	binfo.sc_credits_addr = HFI_MMAP_TOKEN(PIO_CRED, uctxt->ctxt,
 					       subctxt_fp(fp), offset);
 	binfo.pio_bufbase = HFI_MMAP_TOKEN(PIO_BUFS, uctxt->ctxt,

@@ -181,6 +181,7 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 		rcd->cnt = 1;
 		rcd->ctxt = ctxt;
 		dd->rcd[ctxt] = rcd;
+		rcd->numa_id = numa_node_id();
 		rcd->rcv_array_groups = dd->rcv_entries.ngroups;
 
 		spin_lock_init(&rcd->exp_lock);
