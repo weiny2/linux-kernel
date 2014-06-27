@@ -1925,6 +1925,8 @@ struct stl_port_status_req {
 	__be32 vl_select_mask;
 };
 
+#define WFR_VL_MASK_ALL		0x000080ff
+
 struct stl_port_status_rsp {
 	__u8 port_num;
 	__u8 reserved[3];
@@ -2166,7 +2168,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	}
 
 	if (nports != 1 || (req->port_num && req->port_num != port)
-	    || num_vls > STL_MAX_VLS) {
+	    || num_vls > STL_MAX_VLS || (vl_select_mask & ~WFR_VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		return reply(pmp);
 	}
@@ -2327,8 +2329,9 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
 	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
+	vl_select_mask = cpu_to_be32(req->vl_select_mask);
 
-	if (num_ports != 1) {
+	if (num_ports != 1 || (vl_select_mask & ~WFR_VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		return reply(pmp);
 	}
@@ -2400,7 +2403,6 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		get_error_counter_summary(ibdev, port);
 
 	vlinfo = &(rsp->vls[0]);
-	vl_select_mask = cpu_to_be32(req->vl_select_mask);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 		 sizeof(req->vl_select_mask)) {
 		unsigned offset;
