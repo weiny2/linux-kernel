@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation. All rights reserved.
+ * Copyright (c) 2012, 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -554,6 +554,7 @@ static ssize_t qib_diagpkt_write(struct file *fp,
 	ssize_t ret = 0;
 
 	if (count != sizeof(dp)) {
+		qib_dbg("Invalid cmd length %u\n", (unsigned)count);
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -564,11 +565,14 @@ static ssize_t qib_diagpkt_write(struct file *fp,
 
 	dd = qib_lookup(dp.unit);
 	if (!dd || !(dd->flags & QIB_PRESENT) || !dd->kregbase) {
+		qib_cdbg(VERBOSE, "illegal unit %u for diag data send\n",
+			 dp.unit);
 		ret = -ENODEV;
 		goto bail;
 	}
 	if (!(dd->flags & QIB_INITTED)) {
 		/* no hardware, freeze, etc. */
+		qib_cdbg(VERBOSE, "unit %u not usable\n", dd->unit);
 		ret = -ENODEV;
 		goto bail;
 	}
@@ -585,6 +589,8 @@ static ssize_t qib_diagpkt_write(struct file *fp,
 		goto bail;
 	}
 	if (!dp.port || dp.port > dd->num_pports) {
+		qib_dbg("unit %u doesn't have physical port %u\n",
+			 dd->unit, dp.port);
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -596,6 +602,8 @@ static ssize_t qib_diagpkt_write(struct file *fp,
 	clen = dp.len >> 2;
 
 	if ((plen + 4) > ppd->ibmaxlen) {
+		qib_dbg("Pkt len 0x%x > ibmaxlen %x\n",
+			plen - 4, ppd->ibmaxlen);
 		ret = -EINVAL;
 		goto bail;      /* before writing pbc */
 	}
@@ -621,6 +629,8 @@ static ssize_t qib_diagpkt_write(struct file *fp,
 
 	piobuf = dd->f_getsendbuf(ppd, dp.pbc_wd, &pbufn);
 	if (!piobuf) {
+		qib_cdbg(VERBOSE, "No PIO buffers avail unit for %u\n",
+			   dd->unit);
 		ret = -EBUSY;
 		goto bail;
 	}
@@ -629,6 +639,10 @@ static ssize_t qib_diagpkt_write(struct file *fp,
 
 	/* disable header check on pbufn for this packet */
 	dd->f_txchk_change(dd, pbufn, 1, TXCHK_CHG_TYPE_DIS1, NULL);
+
+	if (qib_debug & __QIB_PKTDBG)
+		qib_cdbg(VERBOSE, "unit %u 0x%x+1w pio%d\n",
+			 dd->unit, plen - 1, pbufn);
 
 	writeq(dp.pbc_wd, piobuf);
 	/*

@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -52,11 +53,14 @@ static int qsfp_read(struct qib_pportdata *ppd, int addr, void *bp, int len)
 	int stuck = 0;
 	u8 *buff = bp;
 
+	qib_cdbg(VERBOSE, "Grabbing Mutex for QSFP in %d:%d\n", dd->unit,
+		 ppd->port);
 	ret = mutex_lock_interruptible(&dd->eep_lock);
 	if (ret)
 		goto no_unlock;
 
 	if (dd->twsi_eeprom_dev == QIB_TWSI_NO_DEV) {
+		qib_dbg("QSFP read on board without QSFP\n");
 		ret = -ENXIO;
 		goto bail;
 	}
@@ -143,6 +147,8 @@ deselect:
 
 bail:
 	mutex_unlock(&dd->eep_lock);
+	qib_cdbg(VERBOSE, "Released Mutex for QSFP %d:%d, ret %d\n", dd->unit,
+		ppd->port, ret);
 
 no_unlock:
 	return ret;
@@ -161,11 +167,15 @@ static int qib_qsfp_write(struct qib_pportdata *ppd, int addr, void *bp,
 	int ret, cnt;
 	u8 *buff = bp;
 
+	qib_cdbg(VERBOSE, "Grabbing Mutex for QSFP %d:%d Wr\n", dd->unit,
+		 ppd->port);
 	ret = mutex_lock_interruptible(&dd->eep_lock);
 	if (ret)
 		goto no_unlock;
 
 	if (dd->twsi_eeprom_dev == QIB_TWSI_NO_DEV) {
+		qib_dbg("QSFP write on board (%d:%d) without QSFP\n", dd->unit,
+			ppd->port);
 		ret = -ENXIO;
 		goto bail;
 	}
@@ -212,6 +222,8 @@ static int qib_qsfp_write(struct qib_pportdata *ppd, int addr, void *bp,
 		ret = qib_twsi_blk_wr(dd, QSFP_DEV, addr, buff + cnt, wlen);
 		if (ret) {
 			/* qib_twsi_blk_wr() 1 for error, else 0 */
+			qib_dbg("qib_twsi_blk_wr(%d:%d, %d, , %d) failed\n",
+				dd->unit, ppd->port, addr, wlen);
 			ret = -EIO;
 			goto deselect;
 		}
@@ -238,6 +250,8 @@ deselect:
 
 bail:
 	mutex_unlock(&dd->eep_lock);
+	qib_cdbg(VERBOSE, "Released Mutex for QSFP %d:%d, ret %d\n", dd->unit,
+		 ppd->port, ret);
 
 no_unlock:
 	return ret;
@@ -279,6 +293,7 @@ int qib_refresh_qsfp_cache(struct qib_pportdata *ppd, struct qib_qsfp_cache *cp)
 	memset(cp, 0, sizeof(*cp));
 
 	if (!qib_qsfp_mod_present(ppd)) {
+		qib_dbg("No QSFP module in %d:%d\n", ppd->dd->unit, ppd->port);
 		ret = -ENODEV;
 		goto bail;
 	}
@@ -503,8 +518,11 @@ int qib_qsfp_dump(struct qib_pportdata *ppd, char *buf, int len)
 
 	sofar = 0;
 	ret = qib_refresh_qsfp_cache(ppd, &cd);
-	if (ret < 0)
+	if (ret < 0) {
+		qib_dbg("IB%u:%u QSFP cache-refresh failed\n", ppd->dd->unit,
+			ppd->port);
 		goto bail;
+	}
 
 	lenstr[0] = ' ';
 	lenstr[1] = '\0';

@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2008, 2009, 2010 QLogic Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -64,6 +65,7 @@ void qib_disarm_piobufs(struct qib_devdata *dd, unsigned first, unsigned cnt)
 	unsigned i;
 	unsigned last;
 
+	qib_cdbg(ERRPKT, "disarm %u PIObufs first=%u\n", cnt, first);
 	last = first + cnt;
 	spin_lock_irqsave(&dd->pioavail_lock, flags);
 	for (i = first; i < last; i++) {
@@ -108,6 +110,8 @@ int qib_disarm_piobufs_ifneeded(struct qib_ctxtdata *rcd)
 		}
 	}
 	spin_unlock_irq(&dd->pioavail_lock);
+	qib_cdbg(ERRPKT, "Ctxt%u, User disarm (%u bufs (%u-%u)) done\n",
+		rcd->ctxt, n, rcd->pio_base, last);
 	return 0;
 }
 
@@ -206,12 +210,17 @@ void qib_disarm_piobufs_set(struct qib_devdata *dd, unsigned long *mask,
 			dd->f_sendctrl(dd->pport, QIB_SENDCTRL_DISARM_BUF(i));
 		}
 		spin_unlock_irqrestore(&dd->pioavail_lock, flags);
+		qib_cdbg(ERRPKT, "disarm buf %u %s\n", i, which ?
+			 "now" : "later");
 	}
 
 	/* do cancel_sends once per port that had sdma piobufs in error */
 	for (i = 0; i < dd->num_pports; i++)
-		if (pppd[i])
+		if (pppd[i]) {
+			qib_cdbg(ERRPKT, "IB%u:%u sdma bufs; do cancel\n",
+				 dd->unit, pppd[i]->port);
 			qib_cancel_sends(pppd[i]);
+		}
 }
 
 /**
@@ -244,8 +253,28 @@ static void update_send_bufs(struct qib_devdata *dd)
 	 * happens when all buffers are in use, so only cpu overhead, not
 	 * latency or bandwidth is affected.
 	 */
-	if (!dd->pioavailregs_dma)
+	if (!dd->pioavailregs_dma) {
+		qib_dbg("Update shadow pioavail, but regs_dma NULL!\n");
 		return;
+	}
+#if _QIB_DEBUGGING
+	if (qib_debug & __QIB_VERBDBG) {
+		/* only if packet debug and verbose */
+		__le64 *dma = (__le64 *) dd->pioavailregs_dma; /* DMA'ed */
+		unsigned long *shadow = dd->pioavailshadow;
+
+		qib_dbg("Refill avail, ts%lx; dmacopy: %llx %llx %llx %llx %llx %llx; shadow: %lx %lx %lx %lx %lx %lx\n",
+			(unsigned long)get_cycles(),
+			(unsigned long long) le64_to_cpu(dma[0]),
+			(unsigned long long) le64_to_cpu(dma[1]),
+			(unsigned long long) le64_to_cpu(dma[2]),
+			(unsigned long long) le64_to_cpu(dma[3]),
+			(unsigned long long) le64_to_cpu(dma[4]),
+			(unsigned long long) le64_to_cpu(dma[5]),
+			shadow[0], shadow[1], shadow[2], shadow[3],
+			shadow[4], shadow[5]);
+	}
+#endif /* _QIB_DEBUGGING */
 	spin_lock_irqsave(&dd->pioavail_lock, flags);
 	for (i = 0; i < piobregs; i++) {
 		u64 pchbusy, pchg, piov, pnew;
@@ -387,6 +416,13 @@ void qib_chg_pioavailkernel(struct qib_devdata *dd, unsigned start,
 	unsigned long flags;
 	unsigned end;
 	unsigned ostart = start;
+
+	if (rcd)
+		qib_cdbg(SDMA, "start %u len %u avail %d ctxt%u\n", start,
+			 len, avail, rcd->ctxt);
+	else
+		qib_cdbg(SDMA, "start %u len %u avail %d (nowait)\n",
+			 start, len, avail);
 
 	/* There are two bits per send buffer (busy and generation) */
 	start *= 2;

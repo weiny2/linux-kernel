@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013, 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -217,6 +217,7 @@ static int qib_resync_ibepb(struct qib_devdata *dd)
 		if (++chn == 4)
 			break;  /* Success */
 	}
+	qib_cdbg(VERBOSE, "Resync in %d tries\n", tries);
 	return (ret > 0) ? 0 : ret;
 }
 
@@ -324,6 +325,8 @@ static void qib_sd_trimdone_monitor(struct qib_devdata *dd,
 	val = qib_read_kreg64(dd, kr_ibcstatus);
 	if (!(val & (1ULL << 11)))
 		qib_dev_err(dd, "IBCS TRIMDONE clear (%s)\n", where);
+	else
+		qib_cdbg(VERBOSE, "IBCS TRIMDONE set (%s)\n", where);
 	/*
 	 * Do "dummy read/mod/wr" to get EPB in sane state after reset
 	 * The default value for MPREG6 is 0.
@@ -398,6 +401,9 @@ int qib_sd7220_init(struct qib_devdata *dd)
 
 	/* SERDES MPU reset recorded in D0 */
 	was_reset = (qib_read_kreg64(dd, kr_ibserdesctrl) & 1);
+	qib_cdbg(INIT, "IBReset %s xgxsconfig %llx\n",
+		 was_reset ? "Asserted" : "Negated", (unsigned long long)
+		 qib_read_kreg64(dd, kr_xgxs_cfg));
 	if (!was_reset) {
 		/* entered with reset not asserted, we need to do it */
 		qib_ibsd_reset(dd, 1);
@@ -460,6 +466,7 @@ int qib_sd7220_init(struct qib_devdata *dd)
 		int vfy;
 		int trim_done;
 
+		qib_dbg("SerDes uC was reset, reloading PRAM\n");
 		ret = qib_sd7220_ib_load(dd, fw);
 		if (ret < 0) {
 			qib_dev_err(dd, "Failed to load IB SERDES image\n");
@@ -778,6 +785,9 @@ static int qib_sd7220_ram_xfer(struct qib_devdata *dd, int sdnum, u32 loc,
 	owned = epb_access(dd, sdnum, 1);
 	if (owned < 0) {
 		spin_unlock_irqrestore(&dd->cspec->sdepb_lock, flags);
+		qib_dbg("Could not get %s access to %s EPB: %X, loc %X\n",
+			op, (sdnum == IB_7220_SERDES) ? "IB" : "PCIe",
+			owned, loc);
 		return -1;
 	}
 
@@ -808,6 +818,8 @@ static int qib_sd7220_ram_xfer(struct qib_devdata *dd, int sdnum, u32 loc,
 		transval = csbit | EPB_UC_CTL |
 			(rd_notwr ? EPB_ROM_R : EPB_ROM_W);
 		tries = epb_trans(dd, trans, transval, &transval);
+		if (tries <= 0)
+			qib_dbg("No EPB response to uC %s cmd\n", op);
 		while (tries > 0 && sofar < cnt) {
 			if (!sofar) {
 				/* Only set address at start of chunk */
@@ -815,14 +827,18 @@ static int qib_sd7220_ram_xfer(struct qib_devdata *dd, int sdnum, u32 loc,
 				transval = csbit | EPB_MADDRH | addrbyte;
 				tries = epb_trans(dd, trans, transval,
 						  &transval);
-				if (tries <= 0)
+				if (tries <= 0) {
+					qib_dbg("No EPB response ADDRH\n");
 					break;
+				}
 				addrbyte = (addr + sofar) & 0xFF;
 				transval = csbit | EPB_MADDRL | addrbyte;
 				tries = epb_trans(dd, trans, transval,
 						 &transval);
-				if (tries <= 0)
+				if (tries <= 0) {
+					qib_dbg("No EPB response ADDRL\n");
 					break;
+				}
 			}
 
 			if (rd_notwr)
@@ -830,8 +846,10 @@ static int qib_sd7220_ram_xfer(struct qib_devdata *dd, int sdnum, u32 loc,
 			else
 				transval = csbit | EPB_ROMDATA | buf[sofar];
 			tries = epb_trans(dd, trans, transval, &transval);
-			if (tries <= 0)
+			if (tries <= 0) {
+				qib_dbg("No EPB response DATA\n");
 				break;
+			}
 			if (rd_notwr)
 				buf[sofar] = transval & EPB_DATA_MASK;
 			++sofar;
@@ -839,6 +857,10 @@ static int qib_sd7220_ram_xfer(struct qib_devdata *dd, int sdnum, u32 loc,
 		/* Finally, clear control-bit for Read or Write */
 		transval = csbit | EPB_UC_CTL;
 		tries = epb_trans(dd, trans, transval, &transval);
+		if (tries <= 0)
+			qib_dbg("No EPB response to drop of uC %s cmd\n", op);
+	} else {
+		qib_dbg("No initial RDY on EPB access request\n");
 	}
 
 	ret = sofar;
@@ -847,8 +869,10 @@ static int qib_sd7220_ram_xfer(struct qib_devdata *dd, int sdnum, u32 loc,
 		ret = -1;
 
 	spin_unlock_irqrestore(&dd->cspec->sdepb_lock, flags);
-	if (tries <= 0)
+	if (tries <= 0) {
+		qib_dbg("SERDES PRAM %s failed after %d bytes\n", op, sofar);
 		ret = -1;
+	}
 	return ret;
 }
 
@@ -937,6 +961,7 @@ static int qib_sd_trimdone_poll(struct qib_devdata *dd)
 	for (trim_tmo = 0; trim_tmo < TRIM_TMO; ++trim_tmo) {
 		val = qib_read_kreg64(dd, kr_ibcstatus);
 		if (val & IB_SERDES_TRIM_DONE) {
+			qib_cdbg(VERBOSE, "TRIMDONE after %d\n", trim_tmo);
 			ret = 1;
 			break;
 		}
@@ -1402,8 +1427,10 @@ static void qib_run_relock(unsigned long opaque)
 	    (QIBL_IB_AUTONEG_INPROG | QIBL_LINKINIT | QIBL_LINKARMED |
 	     QIBL_LINKACTIVE))) {
 		if (qib_relock_by_timer) {
-			if (!(ppd->lflags & QIBL_IB_LINK_DISABLED))
+			if (!(ppd->lflags & QIBL_IB_LINK_DISABLED)) {
+				qib_cdbg(VERBOSE, "RELOCK\n");
 				toggle_7220_rclkrls(dd);
+			}
 		}
 		/* re-set timer for next check */
 		timeoff = cs->relock_interval << 1;

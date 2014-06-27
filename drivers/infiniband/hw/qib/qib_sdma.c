@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation. All rights reserved.
+ * Copyright (c) 2012, 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2007 - 2012 QLogic Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -272,6 +272,8 @@ static int alloc_sdma(struct qib_pportdata *ppd)
 		ppd->sdma_descq_cnt = 256;
 
 	/* Allocate memory for SendDMA descriptor FIFO */
+	qib_cdbg(SDMA, "IB%u:%u allocating %u SDMA descq entries\n",
+		 ppd->dd->unit, ppd->port, (unsigned)ppd->sdma_descq_cnt);
 	ppd->sdma_descq = dma_alloc_coherent(&ppd->dd->pcidev->dev,
 		ppd->sdma_descq_cnt * sizeof(u64[2]), &ppd->sdma_descq_phys,
 		GFP_KERNEL);
@@ -672,6 +674,7 @@ unmap:
 		unmap_desc(ppd, tail);
 	}
 	qp = tx->qp;
+	qib_dbg("QP%d I/O error\n", qp->ibqp.qp_num);
 	qib_put_txreq(tx);
 	spin_lock(&qp->r_lock);
 	spin_lock(&qp->s_lock);
@@ -799,6 +802,9 @@ void __qib_sdma_process_event(struct qib_pportdata *ppd,
 {
 	struct qib_sdma_state *ss = &ppd->sdma_state;
 
+	qib_cdbg(SDMA, "IB%u:%u [%s] %s\n", ppd->dd->unit, ppd->port,
+		 qib_sdma_state_names[ss->current_state],
+		 qib_sdma_event_names[event]);
 	switch (ss->current_state) {
 	case qib_sdma_state_s00_hw_down:
 		switch (event) {
@@ -1045,4 +1051,7 @@ void __qib_sdma_process_event(struct qib_pportdata *ppd,
 	}
 
 	ss->last_event = event;
+
+	qib_cdbg(SDMA, "IB%u:%u [%s]\n", ppd->dd->unit, ppd->port,
+		 qib_sdma_state_names[ss->current_state]);
 }

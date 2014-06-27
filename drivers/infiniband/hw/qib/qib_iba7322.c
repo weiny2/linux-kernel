@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012, 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2008 - 2012 QLogic Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -1447,8 +1447,10 @@ static void flush_fifo(struct qib_pportdata *ppd)
 		(((u64)ppd->hw_pidx) << (PBC_PORT_SEL_LSB + 32)) |
 		(hdrwords + SIZE_OF_CRC);
 	piobuf = qib_7322_getsendbuf(ppd, pbc, &bufn);
-	if (!piobuf)
+	if (!piobuf) {
+		qib_dbg("IB%u:%u: no VL15 buffer\n", dd->unit, ppd->port);
 		return;
+	}
 	writeq(pbc, piobuf);
 	hdr = (u32 *) &ibhdr;
 	if (dd->flags & QIB_PIO_FLUSH_WC) {
@@ -1470,6 +1472,13 @@ static void qib_7322_sdma_sendctrl(struct qib_pportdata *ppd, unsigned op)
 	struct qib_devdata *dd = ppd->dd;
 	u64 set_sendctrl = 0;
 	u64 clr_sendctrl = 0;
+
+	qib_cdbg(SDMA, "IB%u:%u sendctrl E=%d I=%d H=%d C=%d\n",
+		 dd->unit, ppd->port,
+		 (op & QIB_SDMA_SENDCTRL_OP_ENABLE) ? 1 : 0,
+		 (op & QIB_SDMA_SENDCTRL_OP_INTENABLE) ? 1 : 0,
+		 (op & QIB_SDMA_SENDCTRL_OP_HALT) ? 1 : 0,
+		 (op & QIB_SDMA_SENDCTRL_OP_CLEANUP) ? 1 : 0);
 
 	if (op & QIB_SDMA_SENDCTRL_OP_ENABLE)
 		set_sendctrl |= SYM_MASK(SendCtrl_0, SDmaEnable);
@@ -1596,12 +1605,17 @@ static void sdma_7322_p_errors(struct qib_pportdata *ppd, u64 errs)
 	errs &= QIB_E_P_SDMAERRS;
 	err_decode(ppd->cpspec->sdmamsgbuf, sizeof(ppd->cpspec->sdmamsgbuf),
 		   errs, qib_7322p_error_msgs);
+	qib_dbg("IB%u:%u %s (0x%016lx)\n", dd->unit, ppd->port,
+		ppd->cpspec->sdmamsgbuf, (long)errs);
 
 	if (errs & QIB_E_P_SDMAUNEXPDATA)
 		qib_dev_err(dd, "IB%u:%u SDmaUnexpData\n", dd->unit,
 			    ppd->port);
 
 	spin_lock_irqsave(&ppd->sdma_lock, flags);
+	qib_cdbg(SDMA, "IB%u:%u %s 0x%016llx %s\n", dd->unit, ppd->port,
+		 qib_sdma_state_names[ppd->sdma_state.current_state],
+		 errs, ppd->cpspec->sdmamsgbuf);
 
 	if (errs != QIB_E_P_SDMAHALT) {
 		/* SDMA errors have QIB_E_P_SDMAHALT and another bit set */
@@ -1682,12 +1696,20 @@ static noinline void handle_7322_errors(struct qib_devdata *dd)
 				qib_inc_eeprom_err(dd, log_idx, 1);
 
 	if (errs & QIB_E_SPKTERRS) {
+		/*
+		 * Can't print errors in senderrbufs, it
+		 * decodes per-port error bits only.
+		 */
+		qib_dbg("Clear sendbuferrs, err %llX\n",
+			(unsigned long long)(errs & QIB_E_P_SPKTERRS));
 		qib_disarm_7322_senderrbufs(dd->pport);
 		qib_stats.sps_txerrs++;
-	} else if (errs & QIB_E_INVALIDADDR)
+	} else if (errs & QIB_E_INVALIDADDR) {
 		qib_stats.sps_txerrs++;
-	else if (errs & QIB_E_ARMLAUNCH) {
+	} else if (errs & QIB_E_ARMLAUNCH) {
 		qib_stats.sps_txerrs++;
+		qib_cdbg(ERRPKT, "ARMLAUNCH (0x%llX): clear sendbufs\n",
+			 (unsigned long long) errs);
 		qib_disarm_7322_senderrbufs(dd->pport);
 	}
 	qib_write_kreg(dd, kr_errclear, errs);
@@ -1755,6 +1777,8 @@ static void reenable_chase(unsigned long opaque)
 	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
 
 	ppd->cpspec->chase_timer.expires = 0;
+	qib_cdbg(LINKVERB, "IB%u:%u re-enable link\n", ppd->dd->unit,
+		 ppd->port);
 	qib_set_ib_7322_lstate(ppd, QLOGIC_IB_IBCC_LINKCMD_DOWN,
 		QLOGIC_IB_IBCC_LINKINITCMD_POLL);
 }
@@ -1766,6 +1790,11 @@ static void disable_chase(struct qib_pportdata *ppd, unsigned long tnow,
 
 	if (!qib_chase)
 		return;
+
+	qib_cdbg(LINKVERB, "IB%u:%u after %u msec (ibclt %x)\n",
+		 ppd->dd->unit, ppd->port,
+		 jiffies_to_msecs(QIB_CHASE_TIME + tnow -
+			 ppd->cpspec->chase_end), ibclt);
 
 	qib_set_ib_7322_lstate(ppd, QLOGIC_IB_IBCC_LINKCMD_DOWN,
 		QLOGIC_IB_IBCC_LINKINITCMD_DISABLE);
@@ -1797,6 +1826,9 @@ static void handle_serdes_issues(struct qib_pportdata *ppd, u64 ibcst)
 			disable_chase(ppd, tnow, ibclt);
 		else if (!ppd->cpspec->chase_end)
 			ppd->cpspec->chase_end = tnow + QIB_CHASE_TIME;
+		else
+			qib_cdbg(LINKVERB, "IB%u:%u chasing, ibclt %x\n",
+				 ppd->dd->unit, ppd->port, ibclt);
 		break;
 	default:
 		ppd->cpspec->chase_end = 0;
@@ -1882,6 +1914,8 @@ static noinline void handle_7322_p_errors(struct qib_pportdata *ppd)
 		errs &= ~QIB_E_P_IBSTATUSCHANGED;
 	if (!errs)
 		goto done;
+	if (errs != QIB_E_P_IBSTATUSCHANGED)
+		qib_cdbg(VERBOSE, "errs 0x%016Lx\n", errs);
 
 	msg = ppd->cpspec->epmsgbuf;
 	*msg = '\0';
@@ -1906,6 +1940,8 @@ static noinline void handle_7322_p_errors(struct qib_pportdata *ppd)
 		qib_write_kreg_port(ppd, krp_sendhdrsymptom, 0);
 		err_decode(msg, sizeof ppd->cpspec->epmsgbuf, symptom,
 			   hdrchk_msgs);
+		qib_dbg("IB%u:%u Txhdrcheck error (%s)\n", dd->unit,
+			ppd->port, msg);
 		*msg = '\0';
 		/* senderrbuf cleared in SPKTERRS below */
 	}
@@ -1923,8 +1959,16 @@ static noinline void handle_7322_p_errors(struct qib_pportdata *ppd)
 			err_decode(msg, sizeof ppd->cpspec->epmsgbuf,
 				   (errs & QIB_E_P_LINK_PKTERRS),
 				   qib_7322p_error_msgs);
+			qib_dbg("IB%u:%u Ignoring pkt errors 0x%llx; link not up: %s\n",
+				dd->unit, ppd->port, (u64)errs, msg);
 			*msg = '\0';
 			ignore_this_time = errs & QIB_E_P_LINK_PKTERRS;
+		} else if (qib_debug & __QIB_ERRPKTDBG) {
+			err_decode(msg, sizeof ppd->cpspec->epmsgbuf, errs,
+				   qib_7322p_error_msgs);
+			qib_cdbg(ERRPKT, "IB%u:%u clearing sendbuferrs: %s\n",
+				 dd->unit, ppd->port, msg);
+			*msg = '\0';
 		}
 		qib_disarm_7322_senderrbufs(ppd);
 	} else if ((errs & QIB_E_P_LINK_PKTERRS) &&
@@ -1938,6 +1982,10 @@ static noinline void handle_7322_p_errors(struct qib_pportdata *ppd)
 		 */
 		err_decode(msg, sizeof ppd->cpspec->epmsgbuf, errs,
 			   qib_7322p_error_msgs);
+		qib_dbg("IB%d Ignoring pkt errors 0x%016Lx; link not up\n",
+			ppd->port, (u64)errs);
+		if (*msg)
+			qib_dbg(" %s", msg);
 		ignore_this_time = errs & QIB_E_P_LINK_PKTERRS;
 		*msg = '\0';
 	}
@@ -1959,14 +2007,25 @@ static noinline void handle_7322_p_errors(struct qib_pportdata *ppd)
 		sdma_7322_p_errors(ppd, errs);
 
 	if (errs & QIB_E_P_IBSTATUSCHANGED) {
-		u64 ibcs;
+		u64 ibcs[2];
 		u8 ltstate;
 
-		ibcs = qib_read_kreg_port(ppd, krp_ibcstatus_a);
-		ltstate = qib_7322_phys_portstate(ibcs);
+		ibcs[0] = qib_read_kreg_port(ppd, krp_ibcstatus_a);
+		ltstate = qib_7322_phys_portstate(ibcs[0]);
 
 		if (!(ppd->lflags & QIBL_IB_AUTONEG_INPROG))
-			handle_serdes_issues(ppd, ibcs);
+			handle_serdes_issues(ppd, ibcs[0]);
+		if (((qib_debug & __QIB_LINKVERBDBG)) && qib_trace_buf) {
+			ibcs[1] = (((u64)ppd->lflags)<<32) | (dd->unit << 24) |
+				(ppd->port << 16) | BLOB_7322_IBCHG;
+			qib_trace_putblob(qib_trace_buf,
+					  raw_smp_processor_id(),
+					  get_cycles(), __QIB_LINKVERBDBG,
+					  ibcs, sizeof(ibcs));
+		}
+		if (errs & QIB_E_P_RIBLOSTLINK)
+			qib_dbg("IB%u:%u link down in receive (ibcs %llx)\n",
+				dd->unit, ppd->port, ibcs[0]);
 		if (!(ppd->cpspec->ibcctrl_a &
 		      SYM_MASK(IBCCtrlA_0, IBStatIntReductionEn))) {
 			/*
@@ -1982,10 +2041,10 @@ static noinline void handle_7322_p_errors(struct qib_pportdata *ppd)
 
 		/* Update our picture of width and speed from chip */
 		ppd->link_width_active =
-			(ibcs & SYM_MASK(IBCStatusA_0, LinkWidthActive)) ?
+			(ibcs[0] & SYM_MASK(IBCStatusA_0, LinkWidthActive)) ?
 			    IB_WIDTH_4X : IB_WIDTH_1X;
-		ppd->link_speed_active = (ibcs & SYM_MASK(IBCStatusA_0,
-			LinkSpeedQDR)) ? QIB_IB_QDR : (ibcs &
+		ppd->link_speed_active = (ibcs[0] & SYM_MASK(IBCStatusA_0,
+			LinkSpeedQDR)) ? QIB_IB_QDR : (ibcs[0] &
 			  SYM_MASK(IBCStatusA_0, LinkSpeedActive)) ?
 				   QIB_IB_DDR : QIB_IB_SDR;
 
@@ -2006,13 +2065,18 @@ static noinline void handle_7322_p_errors(struct qib_pportdata *ppd)
 			    ltstate != IB_PHYSPORTSTATE_RECOVERY_RETRAIN &&
 			    ltstate != IB_PHYSPORTSTATE_RECOVERY_WAITRMT &&
 			    ltstate != IB_PHYSPORTSTATE_RECOVERY_IDLE)
-				qib_handle_e_ibstatuschanged(ppd, ibcs);
+				qib_handle_e_ibstatuschanged(ppd, ibcs[0]);
 	}
 	if (*msg && iserr)
 		qib_dev_porterr(dd, ppd->port, "%s error\n", msg);
 
-	if (ppd->state_wanted & ppd->lflags)
+	if (ppd->state_wanted & ppd->lflags) {
+		qib_cdbg(VERBOSE,
+			"P%d driver wanted state %x, iflags now %x, waking\n",
+			 ppd->port, ppd->state_wanted,
+			 ppd->lflags);
 		wake_up_interruptible(&ppd->state_wait);
+	}
 done:
 	return;
 }
@@ -2109,9 +2173,15 @@ static void qib_7322_handle_hwerrors(struct qib_devdata *dd, char *msg,
 	int isfatal = 0;
 
 	hwerrs = qib_read_kreg64(dd, kr_hwerrstatus);
-	if (!hwerrs)
+	if (!hwerrs) {
+		/*
+		 * Better than printing confusing messages.
+		 * This seems to be related to clearing the crc error, or
+		 * the pll error during init.
+		 */
+		qib_cdbg(VERBOSE, "Called but no hardware errors set\n");
 		goto bail;
-	if (hwerrs == ~0ULL) {
+	} else if (hwerrs == ~0ULL) {
 		qib_dev_err(dd,
 			"Read of hardware error status failed (all bits set); ignoring\n");
 		goto bail;
@@ -2126,7 +2196,7 @@ static void qib_7322_handle_hwerrors(struct qib_devdata *dd, char *msg,
 
 	/* no EEPROM logging, yet */
 
-	if (hwerrs)
+	if (hwerrs || (qib_debug & __QIB_VERBDBG))
 		qib_devinfo(dd->pcidev,
 			"Hardware error: hwerr=0x%llx (cleared)\n",
 			(unsigned long long) hwerrs);
@@ -2147,8 +2217,10 @@ static void qib_7322_handle_hwerrors(struct qib_devdata *dd, char *msg,
 			 */
 			if (dd->flags & QIB_INITTED)
 				isfatal = 1;
-		} else
+		} else {
+			qib_dbg("Clearing freezemode on ignored or recovered hardware error\n");
 			qib_7322_clear_freeze(dd);
+		}
 	}
 
 	if (hwerrs & HWE_MASK(PowerOnBISTFailed)) {
@@ -2268,6 +2340,14 @@ static void qib_set_ib_7322_lstate(struct qib_pportdata *ppd, u16 linkcmd,
 	u64 mod_wd;
 	struct qib_devdata *dd = ppd->dd;
 	unsigned long flags;
+#if _QIB_DEBUGGING
+	static const char *what[4] = {
+		[0] = "NOP",
+		[QLOGIC_IB_IBCC_LINKCMD_DOWN] = "DOWN",
+		[QLOGIC_IB_IBCC_LINKCMD_ARMED] = "ARM",
+		[QLOGIC_IB_IBCC_LINKCMD_ACTIVE] = "ACTIVE"
+	};
+#endif /* _QIB_DEBUGGING */
 
 	if (linitcmd == QLOGIC_IB_IBCC_LINKINITCMD_DISABLE) {
 		/*
@@ -2300,6 +2380,9 @@ static void qib_set_ib_7322_lstate(struct qib_pportdata *ppd, u16 linkcmd,
 
 	mod_wd = (linkcmd << IBA7322_IBCC_LINKCMD_SHIFT) |
 		(linitcmd << QLOGIC_IB_IBCC_LINKINITCMD_SHIFT);
+	qib_cdbg(LINKVERB,
+		 "Moving IB%u:%u to %s (linitcmd=0x%x)\n",
+		 dd->unit, ppd->port, what[linkcmd], linitcmd);
 
 	qib_write_kreg_port(ppd, krp_ibcctrl_a, ppd->cpspec->ibcctrl_a |
 			    mod_wd);
@@ -2326,6 +2409,8 @@ static void set_vls(struct qib_pportdata *ppd)
 	u64 val;
 
 	numvls = qib_num_vls(ppd->vls_operational);
+	qib_cdbg(INIT, "IB%u:%u Using %d VLs (+VL15)\n", ppd->dd->unit,
+		 ppd->port, numvls);
 
 	/*
 	 * Set up per-VL credits. Below is kluge based on these assumptions:
@@ -2338,8 +2423,18 @@ static void set_vls(struct qib_pportdata *ppd)
 	cred_vl = (2 * 288 + RCV_BUF_UNITSZ - 1) / RCV_BUF_UNITSZ;
 	totcred -= cred_vl;
 	qib_write_kreg_port(ppd, krp_rxcreditvl15, (u64) cred_vl);
+	qib_dbg("IB%u:%u VL15 gets %x * %x (%x) bytes buffer space\n",
+		dd->unit, ppd->port, cred_vl,  RCV_BUF_UNITSZ,
+		cred_vl * RCV_BUF_UNITSZ);
 	cred_vl = totcred / numvls;
 	vl0extra = totcred - cred_vl * numvls;
+	if (numvls > 1)
+		qib_dbg("IB%u:%u vl0 %x cred vl1-%u %x each (tot %x after vl15)\n",
+			dd->unit, ppd->port,
+			cred_vl + vl0extra, numvls - 1, cred_vl, totcred);
+	else
+		qib_dbg("IB%u:%u vl0 %x cred, (tot %x after vl15)\n",
+			dd->unit, ppd->port, cred_vl + vl0extra, totcred);
 	qib_write_kreg_port(ppd, krp_rxcreditvl0, cred_vl + vl0extra);
 	for (i = 1; i < numvls; i++)
 		qib_write_kreg_port(ppd, krp_rxcreditvl0 + i, cred_vl);
@@ -2354,9 +2449,23 @@ static void set_vls(struct qib_pportdata *ppd)
 	val &= ~SYM_MASK(IB_SDTEST_IF_TX_0, CREDIT_CHANGE);
 	qib_write_kreg_port(ppd, krp_ibsdtestiftx, val);
 
-	for (i = 0; i < numvls; i++)
+	for (i = 0; i < numvls; i++) {
 		val = qib_read_kreg_port(ppd, krp_rxcreditvl0 + i);
+		qib_dbg("IB%u:%u VL%u prog %llx bytes, %llx used\n",
+			dd->unit, ppd->port, i, RCV_BUF_UNITSZ *
+			  ((val >> QIB_7322_RxCreditVL0_0_RxMaxCreditVL_LSB)
+			  & QIB_7322_RxCreditVL0_0_RxMaxCreditVL_RMASK),
+			32 * ((val >>
+			  QIB_7322_RxCreditVL0_0_RxBufrConsumedVL_LSB)
+			  & QIB_7322_RxCreditVL0_0_RxBufrConsumedVL_RMASK));
+	}
 	val = qib_read_kreg_port(ppd, krp_rxcreditvl15);
+	qib_dbg("IB%u:%u VL15, prog %llx bytes, %llx used\n",
+		dd->unit, ppd->port, RCV_BUF_UNITSZ *
+		  ((val >> QIB_7322_RxCreditVL0_0_RxMaxCreditVL_LSB)
+		  & QIB_7322_RxCreditVL0_0_RxMaxCreditVL_RMASK),
+		32 * ((val >> QIB_7322_RxCreditVL0_0_RxBufrConsumedVL_LSB)
+		  & QIB_7322_RxCreditVL0_0_RxBufrConsumedVL_RMASK));
 
 	/* Change the number of operational VLs */
 	ppd->cpspec->ibcctrl_a = (ppd->cpspec->ibcctrl_a &
@@ -2488,17 +2597,23 @@ static int qib_7322_bringup_serdes(struct qib_pportdata *ppd)
 		ppd->guid = cpu_to_be64(guid);
 	}
 
+	qib_cdbg(VERBOSE, "Wrote %llX to HRTBT_GUID(%d)\n", guid, ppd->port);
 	qib_write_kreg_port(ppd, krp_hrtbt_guid, guid);
 	/* write to chip to prevent back-to-back writes of ibc reg */
 	qib_write_kreg(dd, kr_scratch, 0);
 
 	/* Enable port */
+	qib_cdbg(INIT, "Enable IB%u:%u\n", dd->unit, ppd->port);
 	ppd->cpspec->ibcctrl_a |= SYM_MASK(IBCCtrlA_0, IBLinkEn);
 	set_vls(ppd);
 
 	/* initially come up DISABLED, without sending anything. */
 	val = ppd->cpspec->ibcctrl_a | (QLOGIC_IB_IBCC_LINKINITCMD_DISABLE <<
 					QLOGIC_IB_IBCC_LINKINITCMD_SHIFT);
+	qib_cdbg(INIT,
+		"Writing IB%u:%u ibcctrl as 0x%llx (shadow %llx), ibmaxlen 0x%x\n",
+		dd->unit, ppd->port, val,
+		ppd->cpspec->ibcctrl_a, ppd->ibmaxlen);
 	qib_write_kreg_port(ppd, krp_ibcctrl_a, val);
 	qib_write_kreg(dd, kr_scratch, 0ULL);
 	/* clear the linkinit cmds */
@@ -2862,6 +2977,8 @@ static void qib_7322_nomsix(struct qib_devdata *dd)
 static void qib_7322_free_irq(struct qib_devdata *dd)
 {
 	if (dd->cspec->irq) {
+		qib_cdbg(VERBOSE, "unit %u free irq %d\n",
+			 dd->unit, dd->cspec->irq);
 		free_irq(dd->cspec->irq, dd);
 		dd->cspec->irq = 0;
 	}
@@ -2919,6 +3036,12 @@ static void sdma_7322_intr(struct qib_devdata *dd, u64 istat)
 		qib_sdma_intr(ppd0);
 	if (intr1)
 		qib_sdma_intr(ppd1);
+
+	if (istat & (INT_MASK_PM(SDmaCleanupDone, 0) |
+		     INT_MASK_PM(SDmaCleanupDone, 1)))
+		qib_cdbg(SDMA, "intr 0: 0x%016llx 1: 0x%016llx\n",
+			 istat & QIB_I_P_SDMAINT(0),
+			 istat & QIB_I_P_SDMAINT(1));
 
 	if (istat & INT_MASK_PM(SDmaCleanupDone, 0))
 		qib_sdma_process_event(ppd0, qib_sdma_event_e20_hw_started);
@@ -3005,20 +3128,41 @@ static noinline void unknown_7322_gpio_intr(struct qib_devdata *dd)
 			pins >>= SYM_LSB(EXTStatus, GPIOIn);
 			if (!(pins & mask)) {
 				++handled;
+				qib_cdbg(LINKVERB,
+					 "IB%u:%u Processing GPIO ModPrs interrupt\n",
+					 dd->unit, ppd->port);
 				qd->t_insert = jiffies;
 				queue_work(ib_wq, &qd->work);
+			} else {
+				qib_dbg("ModPrs IRQ, but no ModPrs IB%d:%d\n",
+					dd->unit, ppd->port);
 			}
 		}
 	}
 
 	if (gpiostatus && !handled) {
+		const u32 mask_shad = (u32) dd->cspec->gpio_mask;
 		const u32 mask = qib_read_kreg32(dd, kr_gpio_mask);
 		u32 gpio_irq = mask & gpiostatus;
 
 		/*
 		 * Clear any troublemakers, and update chip from shadow
+		 * A bit set in status and (chip) Mask register
+		 * would cause an interrupt. Since we are not
+		 * expecting any, report it. Also check that the
+		 * chip reflects our shadow, report issues,
+		 * and refresh from the shadow.
+		 */
+		if (mask != mask_shad)
+			qib_dbg("GPIOMask %04X != shadow %04X, fix\n",
+				mask, mask_shad);
+		/*
+		 * Clear any troublemakers, and update chip
+		 * from shadow
 		 */
 		dd->cspec->gpio_mask &= ~gpio_irq;
+		qib_dbg("Unexpected GPIO IRQ bits %x (&%x -> %x)\n", gpiostatus,
+			mask, gpio_irq);
 		qib_write_kreg(dd, kr_gpio_mask, dd->cspec->gpio_mask);
 	}
 }
@@ -3105,10 +3249,16 @@ static irqreturn_t qib_7322intr(int irq, void *data)
 		ret = IRQ_NONE;
 		goto bail;
 	}
+	if (istat & ~dd->cspec->main_int_mask)
+		qib_cdbg(VERBOSE, "Other handlers istat bits %llx\n",
+			 (unsigned long long)
+			 (istat & ~dd->cspec->main_int_mask));
 
 	istat &= dd->cspec->main_int_mask;
 	if (unlikely(!istat)) {
 		/* already handled, or shared and not us */
+		qib_cdbg(VERBOSE, "nothing to do (main_mask %llx)\n",
+			 (unsigned long long) dd->cspec->main_int_mask);
 		ret = IRQ_NONE;
 		goto bail;
 	}
@@ -3188,6 +3338,10 @@ static irqreturn_t qib_7322pintr(int irq, void *data)
 	if (dd->int_counter != (u32) -1)
 		dd->int_counter++;
 
+	qib_cdbg(VERBOSE, "clear IB%u:%u rcvintr (%llx)\n", dd->unit,
+		 rcd->ppd->port,
+		 ((1ULL << QIB_I_RCVAVAIL_LSB) | (1ULL << QIB_I_RCVURG_LSB)) <<
+		 rcd->ctxt);
 	/* Clear the interrupt bit we expect to be set. */
 	qib_write_kreg(dd, kr_intclear, ((1ULL << QIB_I_RCVAVAIL_LSB) |
 		       (1ULL << QIB_I_RCVURG_LSB)) << rcd->ctxt);
@@ -3410,8 +3564,10 @@ static void qib_setup_7322_interrupt(struct qib_devdata *dd, int clearpend)
 	const struct cpumask *local_mask;
 	int firstcpu, secondcpu = 0, currrcvcpu = 0;
 
-	if (!dd->num_pports)
+	if (!dd->num_pports) {
+		qib_dbg("No ports, skipping interrupt setup\n");
 		return;
+	}
 
 	if (clearpend) {
 		/*
@@ -3521,6 +3677,8 @@ try_intx:
 				 QIB_DRV_NAME "%d:%d (kctx)", dd->unit,
 				 ((struct qib_ctxtdata *)arg)->ppd->port);
 		}
+		qib_log(__QIB_INFO, "MSIx name: %s\n",
+			dd->cspec->msix_entries[msixnum].name);
 		ret = request_irq(
 			dd->cspec->msix_entries[msixnum].msix.vector,
 			handler, 0, dd->cspec->msix_entries[msixnum].name,
@@ -3550,6 +3708,11 @@ try_intx:
 				SYM_LSB(IntRedirect0, vec1);
 			mask &= ~(1ULL << lsb);
 			redirect[reg] |= ((u64) msixnum) << sh;
+			qib_cdbg(VERBOSE,
+				 "Int %u map to MSIx[%u] vec 0x%x (%s)\n",
+				 lsb, msixnum,
+				 dd->cspec->msix_entries[msixnum].msix.vector,
+				 dd->cspec->msix_entries[msixnum].name);
 		}
 		val = qib_read_kreg64(dd, 2 * msixnum + 1 +
 			(QIB_7322_MsixTable_OFFS / sizeof(u64)));
@@ -3578,6 +3741,8 @@ try_intx:
 	for (i = 0; i < ARRAY_SIZE(redirect); i++)
 		qib_write_kreg(dd, kr_intredirect + i, redirect[i]);
 	dd->cspec->main_int_mask = mask;
+	qib_cdbg(VERBOSE, "main_int_mask sets %llx\n",
+		 (unsigned long long) mask);
 	tasklet_init(&dd->error_tasklet, qib_error_tasklet,
 		(unsigned long)dd);
 bail:;
@@ -3758,8 +3923,13 @@ static int qib_do_7322_reset(struct qib_devdata *dd)
 			ret = 0;
 			goto  bail;
 		}
+		qib_dbg("Didn't get expected revision register, got %llx, try %d\n",
+			(unsigned long long) val, i + 1);
 	}
 
+	qib_cdbg(INIT,
+		"Got matching revision register %llx on try %d, marking PRESENT\n",
+		(unsigned long long) val, i);
 	dd->flags |= QIB_PRESENT; /* it's back */
 
 	if (msix_entries) {
@@ -3863,6 +4033,7 @@ static void qib_7322_clear_tids(struct qib_devdata *dd,
 		return;
 
 	ctxt = rcd->ctxt;
+	qib_cdbg(VERBOSE, "Invalidate TIDs for context %u\n", ctxt);
 
 	tidinv = dd->tidinvalid;
 	tidbase = (u64 __iomem *)
@@ -3957,16 +4128,22 @@ static void qib_7322_config_ctxts(struct qib_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; pidx++) {
 		nkrcvqs = QIB_MODPARAM_GET(krcvqs, dd->unit, pidx+1);
 		if (nkrcvqs > 1) {
-			if (nkrcvqs - 1 > nchipctxts - dd->first_user_ctxt)
+			if (nkrcvqs - 1 > nchipctxts - dd->first_user_ctxt) {
+				qib_dbg("IB%u:%u Requested rcv queues (%d) exceed available (%d)\n",
+					dd->unit,
+					dd->pport[pidx].port, nkrcvqs,
+					nchipctxts - dd->first_user_ctxt);
 				dd->pport[pidx].n_krcv_queues =
 					(nchipctxts - dd->first_user_ctxt) + 1;
-			else
+			} else {
 				dd->pport[pidx].n_krcv_queues = nkrcvqs;
+			}
 			dd->first_user_ctxt +=
 				dd->pport[pidx].n_krcv_queues - 1;
-		} else
+		} else {
 			/* Account for the HW ctxt */
 			dd->pport[pidx].n_krcv_queues = 1;
+		}
 	}
 
 	if (!cfgctxts) {
@@ -3978,6 +4155,10 @@ static void qib_7322_config_ctxts(struct qib_devdata *dd)
 			dd->ctxtcnt = 10;
 		else if (nctxts <= nchipctxts)
 			dd->ctxtcnt = nchipctxts;
+		if (dd->ctxtcnt)
+			qib_dbg("Auto-configured for %u ctxts, %d cpus online\n",
+				dd->ctxtcnt,
+				num_online_cpus());
 	} else if (cfgctxts < dd->num_pports)
 		dd->ctxtcnt = dd->num_pports;
 	else if (cfgctxts <= nchipctxts)
@@ -4228,6 +4409,8 @@ static int qib_7322_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		maskr = (u64) ppd->pkeys[0] | ((u64) ppd->pkeys[1] << 16) |
 			((u64) ppd->pkeys[2] << 32) |
 			((u64) ppd->pkeys[3] << 48);
+		qib_cdbg(VERBOSE, "IB%u:%u kctxt new pkey reg %llx\n",
+			 dd->unit, ppd->port, maskr);
 		qib_write_kreg_port(ppd, krp_partitionkey, maskr);
 		goto bail;
 
@@ -4252,6 +4435,10 @@ static int qib_7322_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		 * on changes.
 		 */
 		val = (ppd->ibmaxlen >> 2) + 1;
+		if ((val << SYM_LSB(IBCCtrlA_0, MaxPktLen)) !=
+		    (ppd->cpspec->ibcctrl_a & SYM_MASK(IBCCtrlA_0, MaxPktLen)))
+			qib_dbg("New maxpktlen 0x%x words, mtu 0x%x\n",
+				ppd->ibmaxlen, ppd->ibmtu);
 		ppd->cpspec->ibcctrl_a &= ~SYM_MASK(IBCCtrlA_0, MaxPktLen);
 		ppd->cpspec->ibcctrl_a |= (u64)val <<
 			SYM_LSB(IBCCtrlA_0, MaxPktLen);
@@ -4356,6 +4543,8 @@ static int qib_7322_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 
 	case QIB_IB_CFG_PORT:
 		/* val is the port number of the switch we are connected to. */
+		qib_cdbg(LINKVERB, "IB%u:%u switch port %u\n", dd->unit,
+			ppd->port, val);
 		if (ppd->dd->cspec->r1) {
 			cancel_delayed_work(&ppd->cpspec->ipg_work);
 			ppd->cpspec->ipg_tries = 0;
@@ -4711,6 +4900,8 @@ static void sendctrl_7322_mod(struct qib_pportdata *ppd, u32 op)
 		 * disabling updates until done.
 		 */
 		tmp_dd_sendctrl &= ~SYM_MASK(SendCtrl, SendBufAvailUpd);
+		qib_dbg("Disarming all %u send buffers, using 0x%016Lx, rewrite at end as 0x%016lx\n",
+			last, tmp_dd_sendctrl, dd->sendctrl);
 		for (i = 0; i < last; i++) {
 			qib_write_kreg(dd, kr_sendctrl,
 				       tmp_dd_sendctrl |
@@ -4721,6 +4912,9 @@ static void sendctrl_7322_mod(struct qib_pportdata *ppd, u32 op)
 
 	if (op & QIB_SENDCTRL_FLUSH) {
 		u64 tmp_ppd_sendctrl = ppd->p_sendctrl;
+#if _QIB_DEBUGGING
+		u64 stall = read_7322_creg_port(ppd, crp_tx_creditstalls);
+#endif /* _QIB_DEBUGGING */
 
 		/*
 		 * Now drain all the fifos.  The Abort bit should never be
@@ -4730,6 +4924,11 @@ static void sendctrl_7322_mod(struct qib_pportdata *ppd, u32 op)
 			SYM_MASK(SendCtrl_0, TxeDrainRmFifo) |
 			SYM_MASK(SendCtrl_0, TxeDrainLaFifo) |
 			SYM_MASK(SendCtrl_0, TxeBypassIbc);
+		qib_cdbg(LINKVERB,
+			"IB%u:%u Draining FIFOs with 0x%llx, txestatus 0x%x ibcstatusA 0x%llx stall %llx\n",
+			dd->unit, ppd->port, tmp_ppd_sendctrl,
+			(u32)qib_read_kreg_port(ppd, krp_txestatus),
+			qib_read_kreg_port(ppd, krp_ibcstatus_a), stall);
 		qib_write_kreg_port(ppd, krp_sendctrl, tmp_ppd_sendctrl);
 		qib_write_kreg(dd, kr_scratch, 0);
 	}
@@ -5210,6 +5409,8 @@ static void qib_get_7322_faststats(unsigned long opaque)
 		    time_is_before_jiffies(ppd->cpspec->qdr_dfe_time)) {
 			ppd->cpspec->qdr_dfe_on = 0;
 
+			qib_cdbg(LINKVERB, "IB%u:%u Disable QDR DFE, gain\n",
+				ppd->dd->unit, ppd->port);
 			qib_write_kreg_port(ppd, krp_static_adapt_dis(2),
 					    ppd->dd->cspec->r1 ?
 					    QDR_STATIC_ADAPT_INIT_R1 :
@@ -5253,6 +5454,7 @@ static void qib_7322_mini_pcs_reset(struct qib_pportdata *ppd)
 		SYM_MASK(IBPCSConfig_0, xcv_treset) |
 		SYM_MASK(IBPCSConfig_0, tx_rx_reset);
 
+	qib_cdbg(LINKVERB, "Assert PCS reset\n");
 	val = qib_read_kreg_port(ppd, krp_ib_pcsconfig);
 	qib_write_kreg(dd, kr_hwerrmask,
 		       dd->cspec->hwerrmask & ~HWE_MASK(statusValidNoEop));
@@ -5292,8 +5494,10 @@ static void autoneg_7322_sendpkt(struct qib_pportdata *ppd, u32 *hdr,
 	control = qib_7322_setpbc_control(ppd, len, 0, 15);
 	pbc = ((u64) control << 32) | len;
 	while (!(piobuf = qib_7322_getsendbuf(ppd, pbc, &pnum))) {
-		if (i++ > 15)
+		if (i++ > 15) {
+			qib_dbg("Couldn't get pio buffer for send\n");
 			return;
+		}
 		udelay(2);
 	}
 	/* disable header check on this packet, since it can't be valid */
@@ -5352,6 +5556,7 @@ static void qib_autoneg_7322_send(struct qib_pportdata *ppd, int which)
 	}
 
 	data = which ? madpayload_done : madpayload_start;
+	qib_cdbg(PKT, "Sending %s special MADs\n", which ? "done" : "start");
 
 	autoneg_7322_sendpkt(ppd, hdr, dcnt, data);
 	qib_read_kreg64(dd, kr_scratch);
@@ -5392,9 +5597,15 @@ static void set_7322_ibspeed_fast(struct qib_pportdata *ppd, u32 speed)
 			((speed == QIB_IB_DDR ?
 			  IBA7322_IBC_SPEED_DDR : IBA7322_IBC_SPEED_SDR));
 
-	if (newctrlb == ppd->cpspec->ibcctrl_b)
+	if (newctrlb == ppd->cpspec->ibcctrl_b) {
+		qib_cdbg(LINKVERB, "IB%u:%u skip; speed %x same ctrlb %llx\n",
+			 ppd->dd->unit, ppd->port, speed, newctrlb);
 		return;
+	}
 
+	qib_cdbg(INIT, "IB%u:%u Set speed %x, ctrl_b %llx from %llx\n",
+		 ppd->dd->unit, ppd->port, speed, newctrlb,
+		 ppd->cpspec->ibcctrl_b);
 	ppd->cpspec->ibcctrl_b = newctrlb;
 	qib_write_kreg_port(ppd, krp_ibcctrl_b, ppd->cpspec->ibcctrl_b);
 	qib_write_kreg(ppd->dd, kr_scratch, 0);
@@ -5480,10 +5691,15 @@ static void autoneg_7322_work(struct work_struct *work)
 		msecs_to_jiffies(250));
 done:
 	if (ppd->lflags & QIBL_IB_AUTONEG_INPROG) {
+		qib_dbg("IB%u:%u Did not get to DDR INIT after %llu msecs\n",
+			dd->unit, ppd->port,
+			(unsigned long long) jiffies_to_msecs(jiffies)-startms);
 		spin_lock_irqsave(&ppd->lflags_lock, flags);
 		ppd->lflags &= ~QIBL_IB_AUTONEG_INPROG;
 		if (ppd->cpspec->autoneg_tries == AUTONEG_TRIES) {
 			ppd->lflags |= QIBL_IB_AUTONEG_FAILED;
+			qib_dbg("IB%u:%u Giving up on DDR until next IB link Down\n",
+				dd->unit, ppd->port);
 			ppd->cpspec->autoneg_tries = 0;
 		}
 		spin_unlock_irqrestore(&ppd->lflags_lock, flags);
@@ -5542,6 +5758,9 @@ static void try_7322_ipg(struct qib_pportdata *ppd)
 		ret = ib_post_send_mad(send_buf, NULL);
 	if (ret)
 		ib_free_send_mad(send_buf);
+	else
+		qib_cdbg(VERBOSE, "IB%u:%u send IPG try %u\n",
+			 ppd->dd->unit, ppd->port, ppd->cpspec->ipg_tries);
 retry:
 	delay = 2 << ppd->cpspec->ipg_tries;
 	queue_delayed_work(ib_wq, &ppd->cpspec->ipg_work,
@@ -5561,6 +5780,9 @@ static void ipg_7322_work(struct work_struct *work)
 	if ((ppd->lflags & (QIBL_LINKINIT | QIBL_LINKARMED | QIBL_LINKACTIVE))
 	    && ++ppd->cpspec->ipg_tries <= 10)
 		try_7322_ipg(ppd);
+	else
+		qib_dbg("IB%u:%u Giving up on setting IPG until next IB link Down\n",
+			ppd->dd->unit, ppd->port);
 }
 
 static u32 qib_7322_iblink_state(u64 ibcs)
@@ -5626,6 +5848,8 @@ static int qib_7322_ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 		u64 clr;
 
 		/* Link went down. */
+		qib_cdbg(LINKVERB, "IB%u:%u Link down\n", ppd->dd->unit,
+			 ppd->port);
 		/* do IPG MAD again after linkdown, even if last time failed */
 		ppd->cpspec->ipg_tries = 0;
 		clr = qib_read_kreg_port(ppd, krp_ibcstatus_b) &
@@ -5653,15 +5877,24 @@ static int qib_7322_ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 				queue_work(ib_wq, &qd->work);
 			}
 			spin_lock_irqsave(&ppd->sdma_lock, flags);
-			if (__qib_sdma_running(ppd))
+			if (__qib_sdma_running(ppd)) {
+				qib_dbg("IB%u:%u went down, idling sdma\n",
+					 ppd->dd->unit, ppd->port);
 				__qib_sdma_process_event(ppd,
 					qib_sdma_event_e70_go_idle);
+			}
 			spin_unlock_irqrestore(&ppd->sdma_lock, flags);
 		}
 		clr = read_7322_creg32_port(ppd, crp_iblinkdown);
 		if (clr == ppd->cpspec->iblnkdownsnap)
 			ppd->cpspec->iblnkdowndelta++;
 	} else {
+		qib_cdbg(LINKVERB, "IB%u:%u Link up act_speed 0x%x\n",
+			 ppd->dd->unit, ppd->port, ppd->link_speed_active);
+
+		if (ibcs & SYM_MASK(IBCStatusA_0, ScrambleEn))
+			qib_cdbg(LINKVERB, "IB%u:%u scrambling enabled\n",
+				 ppd->dd->unit, ppd->port);
 		if (qib_compat_ddr_negotiate &&
 		    !(ppd->lflags & (QIBL_IB_AUTONEG_FAILED |
 				     QIBL_IB_AUTONEG_INPROG)) &&
@@ -5670,6 +5903,10 @@ static int qib_7322_ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 		    && ppd->cpspec->autoneg_tries < AUTONEG_TRIES) {
 			/* we are SDR, and auto-negotiation enabled */
 			++ppd->cpspec->autoneg_tries;
+			qib_dbg("IB%u:%u speed negotiation try, %u/%u\n",
+				ppd->dd->unit, ppd->port,
+				ppd->cpspec->autoneg_tries,
+				AUTONEG_TRIES);
 			if (!ppd->cpspec->ibdeltainprog) {
 				ppd->cpspec->ibdeltainprog = 1;
 				ppd->cpspec->ibsymdelta +=
@@ -5692,6 +5929,8 @@ static int qib_7322_ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 			ret = 1; /* no other IB status change processing */
 		} else if ((ppd->lflags & QIBL_IB_AUTONEG_INPROG) &&
 			   (ppd->link_speed_active & QIB_IB_DDR)) {
+			qib_dbg("IB%u:%u Got to INIT with DDR autoneg\n",
+				ppd->dd->unit, ppd->port);
 			spin_lock_irqsave(&ppd->lflags_lock, flags);
 			ppd->lflags &= ~(QIBL_IB_AUTONEG_INPROG |
 					 QIBL_IB_AUTONEG_FAILED);
@@ -5708,6 +5947,11 @@ static int qib_7322_ib_updown(struct qib_pportdata *ppd, int ibup, u64 ibcs)
 			 * back to INIT (possibly connected to a
 			 * different device).
 			 */
+			qib_dbg("IB%u:%u INIT %sDR; autoneg failure\n",
+				ppd->dd->unit, ppd->port,
+				(ppd->link_speed_active & QIB_IB_QDR) ? "Q" :
+				((ppd->link_speed_active & QIB_IB_DDR) ?
+				 "D" : "S"));
 			spin_lock_irqsave(&ppd->lflags_lock, flags);
 			ppd->lflags &= ~QIBL_IB_AUTONEG_FAILED;
 			spin_unlock_irqrestore(&ppd->lflags_lock, flags);
@@ -5847,11 +6091,19 @@ static void get_7322_chip_params(struct qib_devdata *dd)
 	 * ever buf allocate
 	 */
 	dd->align4k = ALIGN(dd->piosize4k, dd->palign);
+	qib_cdbg(VERBOSE,
+		"%u 2k(%x) piobufs @ %p, %u 4k(%x) @ %p (%x aligned)\n",
+		dd->piobcnt2k, dd->piosize2k,
+		dd->pio2kbase, dd->piobcnt4k,
+		dd->piosize4k, dd->pio4kbase,
+		dd->align4k);
 
 	piobufs = dd->piobcnt4k + dd->piobcnt2k + NUM_VL15_BUFS;
 
 	dd->pioavregs = ALIGN(piobufs, sizeof(u64) * BITS_PER_BYTE / 2) /
 		(sizeof(u64) * BITS_PER_BYTE / 2);
+	qib_cdbg(VERBOSE, "%d sndbuffs, %d pioavregs\n", piobufs,
+		 dd->pioavregs);
 }
 
 /*
@@ -5882,6 +6134,15 @@ static void qib_7322_set_baseaddrs(struct qib_devdata *dd)
 	dd->pport[1].cpspec->cpregbase =
 		(u64 __iomem *)(qib_read_kreg_port(&dd->pport[1],
 		kr_counterregbase) + (char __iomem *)dd->kregbase);
+
+	qib_cdbg(VERBOSE, "usrbase %x, cntrbase %x, cregbase %p\n",
+		 dd->uregbase, cregbase, dd->cspec->cregbase);
+	qib_cdbg(VERBOSE,
+		"kpregbase0 %p, kpregbase1 %p, cpregbase0 %p, cpregbase1 %p\n",
+		dd->pport[0].cpspec->kpregbase,
+		dd->pport[1].cpspec->kpregbase,
+		dd->pport[0].cpspec->cpregbase,
+		dd->pport[1].cpspec->cpregbase);
 }
 
 /*
@@ -5951,6 +6212,12 @@ static int sendctrl_hook(struct qib_devdata *dd,
 			local_data = (u64)qib_read_kreg32(dd, idx);
 		else
 			local_data = qib_read_kreg64(dd, idx);
+		if (ppd &&
+		    (local_data & SENDCTRL_SHADOWED) !=
+		    (ppd->p_sendctrl & SENDCTRL_SHADOWED))
+			qib_dbg("Sendctrl read: %X shadow is %X\n",
+				    (u32) local_data,
+				    (u32) ppd->p_sendctrl);
 		*data = (local_data & ~mask) | (*data & mask);
 	}
 	if (mask) {
@@ -5971,6 +6238,9 @@ static int sendctrl_hook(struct qib_devdata *dd,
 		} else
 			sval = *data & SENDCTRL_SHADOWED & mask;
 		tval = sval | (*data & ~SENDCTRL_SHADOWED & mask);
+		if (ppd)
+			qib_dbg("Sendctrl <- %X, Shad <- %X\n",
+				(u32) tval, (u32) sval);
 		qib_write_kreg(dd, idx, tval);
 		qib_write_kreg(dd, kr_scratch, 0Ull);
 	}
@@ -6015,6 +6285,9 @@ static void qsfp_7322_event(struct work_struct *work)
 	if (!qib_qsfp_mod_present(ppd)) {
 		ppd->cpspec->qsfp_data.modpresent = 0;
 		/* Set the physical link to disabled */
+		qib_cdbg(LINKVERB,
+			 "IB%u:%u Holding physical state machine\n",
+			 ppd->dd->unit, ppd->port);
 		qib_set_ib_7322_lstate(ppd, 0,
 				       QLOGIC_IB_IBCC_LINKINITCMD_DISABLE);
 		spin_lock_irqsave(&ppd->lflags_lock, flags);
@@ -6051,6 +6324,8 @@ static void qsfp_7322_event(struct work_struct *work)
 		} else
 			le2 = LE2_DEFAULT;
 		ibsd_wr_allchans(ppd, 13, (le2 << 7), BMASK(9, 7));
+		qib_cdbg(INIT, "IB%u:%u set LE2=%u\n", ppd->dd->unit,
+			 ppd->port, le2);
 		/*
 		 * We always change parameteters, since we can choose
 		 * values for cables without eeproms, and the cable may have
@@ -6064,6 +6339,9 @@ static void qsfp_7322_event(struct work_struct *work)
 		 * physically pulled. */
 		if (!ppd->cpspec->qsfp_data.modpresent &&
 		    (ppd->lflags & (QIBL_LINKV | QIBL_IB_LINK_DISABLED))) {
+			qib_cdbg(LINKVERB,
+				 "IB%u:%u Releasing phys state machine\n",
+				 ppd->dd->unit, ppd->port);
 			ppd->cpspec->qsfp_data.modpresent = 1;
 			qib_set_ib_7322_lstate(ppd, 0,
 				QLOGIC_IB_IBCC_LINKINITCMD_SLEEP);
@@ -6132,6 +6410,7 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 		str = ++nxt;
 		unit = simple_strtoul(str, &nxt, 0);
 		if (nxt == str || !*nxt || *nxt != ',') {
+			qib_dbg("Invalid unit string at \"%s\"\n", str);
 			while (*nxt && *nxt++ != ' ') /* skip to next, if any */
 				;
 			continue;
@@ -6139,6 +6418,7 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 		str = ++nxt;
 		port = simple_strtoul(str, &nxt, 0);
 		if (nxt == str || *nxt != '=') {
+			qib_dbg("Invalid port string at \"%s\"\n", str);
 			while (*nxt && *nxt++ != ' ') /* skip to next, if any */
 				;
 			continue;
@@ -6146,22 +6426,28 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 		str = ++nxt;
 		val = simple_strtoul(str, &nxt, 0);
 		if (nxt == str) {
+			qib_dbg("Invalid atten string at \"%s\"\n", str);
 			while (*nxt && *nxt++ != ' ') /* skip to next, if any */
 				;
 			continue;
 		}
-		if (val >= txdds_size)
+		if (val >= txdds_size) {
+			qib_dbg("Out of range atten value at \"%s\"\n", str);
 			continue;
+		}
 		seth1 = 0;
 		h1 = 0; /* gcc thinks it might be used uninitted */
 		if (*nxt == ',' && nxt[1]) {
 			str = ++nxt;
 			h1 = (u32)simple_strtoul(str, &nxt, 0);
-			if (nxt == str)
+			if (nxt == str) {
+				qib_dbg("Invalid h1 atten string at \"%s\"\n",
+					str);
 				while (*nxt && *nxt++ != ' ') /* skip */
 					;
-			else
+			} else {
 				seth1 = 1;
+			}
 		}
 		for (pidx = 0; dd->unit == unit && pidx < dd->num_pports;
 		     ++pidx) {
@@ -6177,9 +6463,13 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 			/* Re-enable the physical state machine on mezz boards
 			 * now that the correct settings have been set.
 			 * QSFP boards are handles by the QSFP event handler */
-			if (IS_QMH(dd) || IS_QME(dd))
+			if (IS_QMH(dd) || IS_QME(dd)) {
+				qib_cdbg(LINKVERB,
+					"IB%u:%u Re-enable phys state machine\n",
+					dd->unit, ppd->port);
 				qib_set_ib_7322_lstate(ppd, 0,
 					    QLOGIC_IB_IBCC_LINKINITCMD_SLEEP);
+			}
 			any++;
 		}
 		if (*nxt == '\n')
@@ -6231,6 +6521,8 @@ static int qib_late_7322_initreg(struct qib_devdata *dd)
 	int ret = 0, n;
 	u64 val;
 
+	qib_cdbg(INIT, "rcvhdrentsize %u rcvhdrsize %u rcvhdrcnt %u\n",
+		 dd->rcvhdrentsize, dd->rcvhdrsize, dd->rcvhdrcnt);
 	qib_write_kreg(dd, kr_rcvhdrentsize, dd->rcvhdrentsize);
 	qib_write_kreg(dd, kr_rcvhdrsize, dd->rcvhdrsize);
 	qib_write_kreg(dd, kr_rcvhdrcnt, dd->rcvhdrcnt);
@@ -6244,6 +6536,7 @@ static int qib_late_7322_initreg(struct qib_devdata *dd)
 		ret = -EINVAL;
 	}
 
+	qib_cdbg(VERBOSE, "Enabling Tx Hdr Checks, all buffers\n");
 	n = dd->piobcnt2k + dd->piobcnt4k + NUM_VL15_BUFS;
 	qib_7322_txchk_change(dd, 0, n, TXCHK_CHG_TYPE_KERN, NULL);
 	/* driver sends get pkey, lid, etc. checking also, to catch bugs */
@@ -6448,6 +6741,7 @@ static int qib_init_7322_variables(struct qib_devdata *dd)
 	spin_lock_init(&dd->cspec->gpio_lock);
 
 	/* we haven't yet set QIB_PRESENT, so use read directly */
+	qib_cdbg(VERBOSE, "Try to read chip revision\n");
 	dd->revision = readq(&dd->kregbase[kr_revision]);
 
 	if ((dd->revision & 0xffffffffU) == 0xffffffffU) {
@@ -6691,7 +6985,10 @@ static int qib_init_7322_variables(struct qib_devdata *dd)
 			dd->piobcnt4k * dd->align4k;
 		dd->piovl15base	= ioremap_nocache(vl15off,
 						  NUM_VL15_BUFS * dd->align4k);
+		qib_cdbg(VERBOSE, "WC PAT remapped VL15 bufs to %p\n",
+			 dd->piovl15base);
 		if (!dd->piovl15base) {
+			qib_dbg("Unable to remap vl15 buffers\n");
 			ret = -ENOMEM;
 			goto bail;
 		}
@@ -6743,8 +7040,11 @@ static int qib_init_7322_variables(struct qib_devdata *dd)
 	 * want to update before we actually run out, at low pbufs/ctxt
 	 * so give ourselves some margin.
 	 */
-	if (dd->pbufsctxt >= 2 && dd->pbufsctxt - 2 < updthresh)
+	if (dd->pbufsctxt >= 2 && dd->pbufsctxt - 2 < updthresh) {
+		qib_cdbg(INIT, "pbufs/ctxts %u, thresh %u, reduce threshold\n",
+			 dd->pbufsctxt, updthresh);
 		updthresh = dd->pbufsctxt - 2;
+	}
 	dd->cspec->updthresh_dflt = updthresh;
 	dd->cspec->updthresh = updthresh;
 
@@ -6952,6 +7252,8 @@ static int init_sdma_7322_regs(struct qib_pportdata *ppd)
 		dd->cspec->sdmabufcnt);
 	lastbuf = erstbuf + n;
 
+	qib_cdbg(INIT, "IB%u:%u sdma gets buffers %u - %u\n", dd->unit,
+		 ppd->port, erstbuf, lastbuf);
 	ppd->sdma_state.first_sendbuf = erstbuf;
 	ppd->sdma_state.last_sendbuf = lastbuf;
 	for (; erstbuf < lastbuf; ++erstbuf) {
@@ -7001,6 +7303,10 @@ retry:
 		sane = (hwhead == swhead);
 
 	if (unlikely(!sane)) {
+		qib_dbg("IB%u:%u bad head %s hwhd=%hu swhd=%hu swtl=%hu cnt=%hu\n",
+			dd->unit, ppd->port,
+			use_dmahead ? "(dma)" : "(kreg)",
+			hwhead, swhead, swtail, cnt);
 		if (use_dmahead) {
 			/* try one more time, directly from the register */
 			use_dmahead = 0;
@@ -7121,8 +7427,11 @@ static void qib_7322_txchk_change(struct qib_devdata *dd, u32 start,
 		if (cstart > last)
 			break;
 
-		if (sleeps == QTXSLEEPS)
+		if (sleeps == QTXSLEEPS) {
+			qib_dbg("%u:ctxt%u buf %u busy after %u msec, continue anyway\n",
+				dd->unit, rcd->ctxt, cstart, sleeps);
 			break;
+		}
 		/* make sure we see an updated copy next time around */
 		sendctrl_7322_mod(dd->pport, QIB_SENDCTRL_AVAIL_BLIP);
 		sleeps++;
@@ -7153,6 +7462,8 @@ static void qib_7322_txchk_change(struct qib_devdata *dd, u32 start,
 
 	case TXCHK_CHG_TYPE_KERN:
 		/* usable by kernel */
+		qib_cdbg(PROC, "clear GRH, set IB CHK bits, bufs %u-%u\n",
+			 start, last);
 		for (i = start; i <= last; i++) {
 			set_bit(i, dd->cspec->sendibchk);
 			clear_bit(i, dd->cspec->sendgrhchk);
@@ -7176,11 +7487,15 @@ static void qib_7322_txchk_change(struct qib_devdata *dd, u32 start,
 					   SYM_LSB(SendCtrl, AvailUpdThld);
 			spin_unlock_irqrestore(&dd->sendctrl_lock, flags);
 			sendctrl_7322_mod(dd->pport, QIB_SENDCTRL_AVAIL_BLIP);
+			qib_cdbg(PROC, "Changed availupdthresh back to %u\n",
+				dd->cspec->updthresh);
 		}
 		break;
 
 	case TXCHK_CHG_TYPE_USER:
 		/* for user process */
+		qib_cdbg(PROC, "set GRH, clear IB CHK bits, bufs %u-%u\n",
+			 start, last);
 		for (i = start; i <= last; i++) {
 			clear_bit(i, dd->cspec->sendibchk);
 			set_bit(i, dd->cspec->sendgrhchk);
@@ -7196,11 +7511,14 @@ static void qib_7322_txchk_change(struct qib_devdata *dd, u32 start,
 					<< SYM_LSB(SendCtrl, AvailUpdThld);
 			spin_unlock_irqrestore(&dd->sendctrl_lock, flags);
 			sendctrl_7322_mod(dd->pport, QIB_SENDCTRL_AVAIL_BLIP);
+			qib_cdbg(PROC, "Decreased availupdthresh to %u\n",
+				dd->cspec->updthresh);
 		} else
 			spin_unlock_irqrestore(&dd->sendctrl_lock, flags);
 		break;
 
 	default:
+		qib_dbg("Illegal operation %u\n", which);
 		break;
 	}
 
@@ -7209,6 +7527,10 @@ static void qib_7322_txchk_change(struct qib_devdata *dd, u32 start,
 			       dd->cspec->sendchkenable[i]);
 
 	for (i = start / BITS_PER_LONG; which < 2 && i <= lastr; ++i) {
+		qib_cdbg(PROC, "wh%u bufs %u-%u, grh[%d]->%lx ibpkt->%lx\n",
+			 which, start, last, i,
+			 (unsigned long) dd->cspec->sendgrhchk[i],
+			 (unsigned long) dd->cspec->sendibchk[i]);
 		qib_write_kreg(dd, kr_sendgrhcheckmask + i,
 			       dd->cspec->sendgrhchk[i]);
 		qib_write_kreg(dd, kr_sendibpktmask + i,
@@ -7320,8 +7642,10 @@ struct qib_devdata *qib_init_iba7322_funcs(struct pci_dev *pdev,
 	 * are not set up until start of qib_init_7322_variables.
 	 */
 	ret = qib_pcie_ddinit(dd, pdev, ent);
-	if (ret < 0)
+	if (ret < 0) {
+		qib_dbg("pcie_ddinit code failed: %d\n", ret);
 		goto bail_free;
+	}
 
 	/* initialize chip-specific variables */
 	ret = qib_init_7322_variables(dd);

@@ -1,7 +1,7 @@
 #ifndef _QIB_KERNEL_H
 #define _QIB_KERNEL_H
 /*
- * Copyright (c) 2012, 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012, 2013, 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -55,6 +55,7 @@
 #include <linux/moduleparam.h>
 
 #include "qib_common.h"
+#include "qib_debug.h"
 #include "qib_verbs.h"
 
 /* only s/w major version of QLogic_IB we can handle */
@@ -1622,6 +1623,7 @@ const char *qib_get_unit_name(int unit);
 QIB_MODPARAM_GLOBAL(ibmtu);
 QIB_MODPARAM_GLOBAL(cfgctxts);
 QIB_MODPARAM_GLOBAL(krcvqs);
+extern unsigned qib_debug; /* debugging bit mask */
 extern ushort qib_mini_init; /* If set, do few (ideally 0) writes to chip */
 extern unsigned qib_sdma_fetch_arb;
 extern unsigned qib_compat_ddr_negotiate;
@@ -1656,23 +1658,66 @@ extern struct mutex qib_mutex;
  * first to avoid possible serial port delays from printk.
  */
 #define qib_early_err(dev, fmt, ...) \
-	dev_err(dev, fmt, ##__VA_ARGS__)
+	do { \
+		qib_log(__QIB_INFO, "EarlyErr: " fmt, ##__VA_ARGS__); \
+		dev_err(dev, fmt, ##__VA_ARGS__); \
+	} while (0)
 
 #define qib_dev_err(dd, fmt, ...) \
-	dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
-		qib_get_unit_name((dd)->unit), ##__VA_ARGS__)
+	do { \
+		qib_log(__QIB_INFO, "%s: " fmt, \
+			qib_get_unit_name((dd)->unit), ##__VA_ARGS__); \
+		dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
+			qib_get_unit_name((dd)->unit), ##__VA_ARGS__); \
+	} while (0)
 
 #define qib_dev_warn(dd, fmt, ...) \
-	dev_warn(&(dd)->pcidev->dev, "%s: " fmt, \
-		qib_get_unit_name((dd)->unit), ##__VA_ARGS__)
+	do { \
+		dev_warn(&(dd)->pcidev->dev, "%s: " fmt, \
+			qib_get_unit_name((dd)->unit), ##__VA_ARGS__); \
+	} while (0)
 
 #define qib_dev_porterr(dd, port, fmt, ...) \
-	dev_err(&(dd)->pcidev->dev, "%s: IB%u:%u " fmt, \
-		qib_get_unit_name((dd)->unit), (dd)->unit, (port), \
-		##__VA_ARGS__)
+	do { \
+		qib_log(__QIB_INFO, "%s IB%u:%u " fmt, \
+			qib_get_unit_name((dd)->unit), (dd)->unit, (port), \
+			##__VA_ARGS__); \
+		dev_err(&(dd)->pcidev->dev, "%s: IB%u:%u " fmt, \
+			qib_get_unit_name((dd)->unit), (dd)->unit, (port), \
+			##__VA_ARGS__); \
+	} while (0)
 
 #define qib_devinfo(pcidev, fmt, ...) \
-	dev_info(&(pcidev)->dev, fmt, ##__VA_ARGS__)
+	do { \
+		qib_log(__QIB_INFO, "INFO: " fmt, ##__VA_ARGS__); \
+		dev_info(&(pcidev)->dev, fmt, ##__VA_ARGS__); \
+	} while (0)
+
+#define qib_dev_trace(pcidev, fmt, ...) \
+	do { \
+		qib_log(__QIB_INFO, "INFO: " fmt, ##__VA_ARGS__); \
+	} while (0)
+
+#if _QIB_DEBUGGING
+
+#define __QIB_DBG_WHICH(which, fmt, ...) \
+	do { \
+		if (unlikely(qib_debug & (which))) { \
+			qib_log(which, fmt, ##__VA_ARGS__); \
+		} \
+	} while (0)
+
+# define qib_dbg(fmt, ...) \
+	__QIB_DBG_WHICH(__QIB_DBG, fmt, ##__VA_ARGS__)
+# define qib_cdbg(which, fmt, ...) \
+	__QIB_DBG_WHICH(__QIB_##which##DBG, fmt, ##__VA_ARGS__)
+
+#else /* ! _QIB_DEBUGGING */
+
+# define qib_dbg(fmt, ...)
+# define qib_cdbg(which, fmt, ...)
+
+#endif /* _QIB_DEBUGGING */
 
 /*
  * this is used for formatting hw error messages...

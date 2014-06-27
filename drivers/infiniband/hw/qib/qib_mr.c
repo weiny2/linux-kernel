@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -264,8 +265,11 @@ struct ib_mr *qib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	mr->mr.access_flags = mr_access_flags;
 	mr->umem = umem;
 
-	if (is_power_of_2(umem->page_size))
+	if (is_power_of_2(umem->page_size)) {
 		mr->mr.page_shift = ilog2(umem->page_size);
+		qib_dbg("mr %llx using page_shift optimization %u\n",
+			(unsigned long long)mr, mr->mr.page_shift);
+	}
 	m = 0;
 	n = 0;
 	list_for_each_entry(chunk, &umem->chunk_list, list) {
@@ -315,6 +319,7 @@ int qib_dereg_mr(struct ib_mr *ibmr)
 	if (!timeout) {
 		qib_get_mr(&mr->mr);
 		ret = -EBUSY;
+		qib_dbg("MR busy (LKEY %x cnt %u)\n", mr->mr.lkey, ret);
 		goto out;
 	}
 	deinit_qib_mregion(&mr->mr);
@@ -448,8 +453,11 @@ int qib_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
 	int ret;
 
 	i = atomic_read(&fmr->mr.refcount);
-	if (i > 2)
+	if (i > 2) {
+		qib_dbg("FMR modified when busy (LKEY %x cnt %u)\n",
+			fmr->mr.lkey, i);
 		return -EBUSY;
+	}
 
 	if (list_len > fmr->mr.max_segs) {
 		ret = -EINVAL;
@@ -489,10 +497,15 @@ int qib_unmap_fmr(struct list_head *fmr_list)
 	struct qib_fmr *fmr;
 	struct qib_lkey_table *rkt;
 	unsigned long flags;
+	int i;
 
 	list_for_each_entry(fmr, fmr_list, ibfmr.list) {
 		rkt = &to_idev(fmr->ibfmr.device)->lk_table;
 		spin_lock_irqsave(&rkt->lock, flags);
+		i = atomic_read(&fmr->mr.refcount);
+		if (i > 2)
+			qib_dbg("FMR busy (LKEY %x cnt %u)\n",
+				fmr->mr.lkey, i);
 		fmr->mr.user_base = 0;
 		fmr->mr.iova = 0;
 		fmr->mr.length = 0;
@@ -520,6 +533,7 @@ int qib_dealloc_fmr(struct ib_fmr *ibfmr)
 	if (!timeout) {
 		qib_get_mr(&fmr->mr);
 		ret = -EBUSY;
+		qib_dbg("MR busy (LKEY %x cnt %u)\n", fmr->mr.lkey, ret);
 		goto out;
 	}
 	deinit_qib_mregion(&fmr->mr);

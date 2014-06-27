@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -374,6 +375,7 @@ next_fragment:
 	pkt->payload_size += newlen;
 	pkt->naddr++;
 	if (pkt->naddr == pkt->addrlimit) {
+		qib_dbg("pkt addr array is too small...\n");
 		ret = -EFAULT;
 		goto done;
 	}
@@ -407,6 +409,7 @@ next_fragment:
 		} else {
 			pkt->tidsmidx++;
 			if (pkt->tidsmidx == pkt->tidsmcount) {
+				qib_dbg("tidsm array is too small...\n");
 				ret = -EFAULT;
 				goto done;
 			}
@@ -534,6 +537,7 @@ next_fragment:
 	pkt->payload_size = 0;
 	pkt->naddr++;
 	if (pkt->naddr == pkt->addrlimit) {
+		qib_dbg("pkt addr array is too small...\n");
 		ret = -EFAULT;
 		goto done;
 	}
@@ -837,6 +841,7 @@ static int qib_user_sdma_queue_pkts(const struct qib_devdata *dd,
 
 		if (len < QIB_USER_SDMA_MIN_HEADER_LENGTH ||
 		    len > PAGE_SIZE || len & 3 || addr & 3) {
+			qib_dbg("iov_len %lx invalid\n", (long)len);
 			ret = -EINVAL;
 			goto free_list;
 		}
@@ -871,6 +876,8 @@ static int qib_user_sdma_queue_pkts(const struct qib_devdata *dd,
 		 */
 		pktnw = le32_to_cpu(*pbc) & 0xFFFF;
 		if (pktnw < pktnwc) {
+			qib_dbg("pbc nwords %x invalid (pbc32 %x)\n", pktnw,
+				le32_to_cpu(*pbc));
 			ret = -EINVAL;
 			goto free_pbc;
 		}
@@ -882,6 +889,8 @@ static int qib_user_sdma_queue_pkts(const struct qib_devdata *dd,
 				(unsigned long) iov[idx].iov_base;
 
 			if (slen & 3 || faddr & 3 || !slen) {
+				qib_dbg("iov_len %lx or addr %lx idx=%lu bad\n",
+					(long)slen, faddr, idx);
 				ret = -EINVAL;
 				goto free_pbc;
 			}
@@ -895,6 +904,8 @@ static int qib_user_sdma_queue_pkts(const struct qib_devdata *dd,
 		}
 
 		if (pktnwc != pktnw) {
+			qib_dbg("pktnwc %x != pktnw %x, pbc32 %x\n",
+				pktnwc, pktnw, le32_to_cpu(*pbc));
 			ret = -EINVAL;
 			goto free_pbc;
 		}
@@ -902,6 +913,8 @@ static int qib_user_sdma_queue_pkts(const struct qib_devdata *dd,
 		frag_size = ((le32_to_cpu(*pbc))>>16) & 0xFFFF;
 		if (((frag_size ? frag_size : bytes_togo) + len) >
 						ppd->ibmaxlen) {
+			qib_dbg("frag size %x bytes_togo %x len %x, ibmax %x\n",
+				frag_size, bytes_togo, (int)len, ppd->ibmaxlen);
 			ret = -EINVAL;
 			goto free_pbc;
 		}
@@ -1327,14 +1340,17 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 {
 	unsigned long flags;
 
-	if (unlikely(!(ppd->lflags & QIBL_LINKACTIVE)))
+	if (unlikely(!(ppd->lflags & QIBL_LINKACTIVE))) {
+		qib_dbg("<1>!QIBL_LINKACTIVE\n");
 		return -ECOMM;
+	}
 
 	/* non-blocking mode */
 	if (pq->sdma_rb_node->refcount > 1) {
 		spin_lock_irqsave(&ppd->sdma_lock, flags);
 		if (unlikely(!__qib_sdma_running(ppd))) {
 			spin_unlock_irqrestore(&ppd->sdma_lock, flags);
+			qib_dbg("<1>non-blocking: sdma_running...\n");
 			return -ECOMM;
 		}
 		pq->num_pending += count;
@@ -1349,9 +1365,8 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 	 * won't update this process, it is OK to directly
 	 * modify without sdma lock.
 	 */
-
-
 	pq->num_pending += count;
+
 	/*
 	 * Blocking mode for single rail process, we must
 	 * release/regain sdma_lock to give other process
@@ -1362,6 +1377,7 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 		spin_lock_irqsave(&ppd->sdma_lock, flags);
 		if (unlikely(!__qib_sdma_running(ppd))) {
 			spin_unlock_irqrestore(&ppd->sdma_lock, flags);
+			qib_dbg("<1>blocking: sdma_running...\n");
 			return -ECOMM;
 		}
 		qib_user_sdma_send_desc(ppd, pktlist);

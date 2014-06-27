@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -878,8 +879,11 @@ static void qib_restart_rc(struct qib_qp *qp, u32 psn, int wait)
 			qib_send_complete(qp, wqe, IB_WC_RETRY_EXC_ERR);
 			qib_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 			return;
-		} else /* XXX need to handle delayed completion */
+		} else {
+			/* XXX need to handle delayed completion */
+			qib_dbg("Delayed too many retries\n");
 			return;
+		}
 	} else
 		qp->s_retry--;
 
@@ -1322,6 +1326,9 @@ class_b:
 			if (qp->s_last == qp->s_acked) {
 				qib_send_complete(qp, wqe, status);
 				qib_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+			} else {
+				/* XXX need to handle delayed completion */
+				qib_dbg("Delayed too many retries\n");
 			}
 			break;
 
@@ -1597,6 +1604,9 @@ ack_err:
 	if (qp->s_last == qp->s_acked) {
 		qib_send_complete(qp, wqe, status);
 		qib_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+	} else {
+		/* XXX need to handle delayed completion */
+		qib_dbg("Delayed too many retries\n");
 	}
 ack_done:
 	spin_unlock_irqrestore(&qp->s_lock, flags);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012, 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2008 - 2012 QLogic Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -102,6 +102,7 @@ int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 			qib_devinfo(pdev, "Unable to set DMA mask: %d\n", ret);
 			goto bail;
 		}
+		qib_dbg("No 64bit DMA mask, used 32 bit mask\n");
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
 	} else
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64));
@@ -118,6 +119,8 @@ int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 			      "Unable to enable pcie error reporting: %d\n",
 			      ret);
 		ret = 0;
+	} else {
+		qib_dbg("AER capability not found! AER reports not enabled\n");
 	}
 	goto done;
 
@@ -144,6 +147,10 @@ int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
 
 	addr = pci_resource_start(pdev, 0);
 	len = pci_resource_len(pdev, 0);
+	qib_cdbg(VERBOSE,
+		"regbase (0) %llx len %ld vend %x/%x driver_data %p\n",
+		(unsigned long long)addr, len,
+		ent->vendor, ent->device, pci_get_drvdata(pdev));
 
 #if defined(__powerpc__)
 	/* There isn't a generic way to specify writethrough mappings */
@@ -152,11 +159,17 @@ int qib_pcie_ddinit(struct qib_devdata *dd, struct pci_dev *pdev,
 	dd->kregbase = ioremap_nocache(addr, len);
 #endif
 
-	if (!dd->kregbase)
+	if (!dd->kregbase) {
+		qib_dbg("Unable to map io addr %llx to kvirt, failing\n",
+			(unsigned long long)addr);
 		return -ENOMEM;
+	}
 
 	dd->kregend = (u64 __iomem *)((void __iomem *) dd->kregbase + len);
 	dd->physaddr = addr;        /* used for io_remap, etc. */
+	/* for user mmap */
+	qib_cdbg(VERBOSE, "mapped io addr %llx to kregbase %p through %p\n",
+		 (unsigned long long)addr, dd->kregbase, dd->kregend);
 
 	/*
 	 * Save BARs to rewrite after device reset.  Save all 64 bits of
@@ -179,15 +192,26 @@ void qib_pcie_ddcleanup(struct qib_devdata *dd)
 {
 	u64 __iomem *base = (void __iomem *) dd->kregbase;
 
+	qib_cdbg(VERBOSE, "Unmapping kregbase %p\n", dd->kregbase);
 	dd->kregbase = NULL;
 	iounmap(base);
-	if (dd->piobase)
+	if (dd->piobase) {
+		qib_cdbg(VERBOSE, "Unmapping piobase %p\n",
+			 dd->piobase);
 		iounmap(dd->piobase);
-	if (dd->userbase)
+	}
+	if (dd->userbase) {
+		qib_cdbg(VERBOSE, "Unmapping userbase %p\n",
+			 dd->userbase);
 		iounmap(dd->userbase);
-	if (dd->piovl15base)
+	}
+	if (dd->piovl15base) {
+		qib_cdbg(VERBOSE, "Unmapping vl15base %p\n",
+			 dd->piovl15base);
 		iounmap(dd->piovl15base);
+	}
 
+	qib_cdbg(VERBOSE, "calling pci_disable_device\n");
 	pci_disable_device(dd->pcidev);
 	pci_release_regions(dd->pcidev);
 
@@ -220,6 +244,8 @@ static void qib_msix_setup(struct qib_devdata *dd, int pos, u32 *msixcnt,
 		tabsize = *msixcnt;
 	ret = pci_enable_msix(dd->pcidev, msix_entry, tabsize);
 	if (ret > 0) {
+		qib_dbg("Couldn't get %d MSIx vectors, trying to get %d\n",
+			tabsize, ret);
 		tabsize = ret;
 		ret = pci_enable_msix(dd->pcidev, msix_entry, tabsize);
 	}
@@ -267,6 +293,11 @@ static int qib_msi_setup(struct qib_devdata *dd, int pos)
 	pci_read_config_word(pdev, pos + ((control & PCI_MSI_FLAGS_64BIT)
 				    ? 12 : 8),
 			     &dd->msi_data);
+	qib_cdbg(VERBOSE,
+		"Read msi data 0x%x from config offset 0x%x, control=0x%x\n",
+		dd->msi_data,
+		pos + ((control & PCI_MSI_FLAGS_64BIT) ? 12 : 8),
+		control);
 	return ret;
 }
 
@@ -317,6 +348,7 @@ int qib_pcie_params(struct qib_devdata *dd, u32 minw, u32 *nent,
 		dd->lbus_speed = 5000; /* Gen1, 5GHz */
 		break;
 	default: /* not defined, assume gen1 */
+		qib_dbg("PCIe unexpected link speed %u\n", speed);
 		dd->lbus_speed = 2500;
 		break;
 	}
@@ -329,6 +361,9 @@ int qib_pcie_params(struct qib_devdata *dd, u32 minw, u32 *nent,
 		qib_dev_err(dd,
 			    "PCIe width %u (x%u HCA), performance reduced\n",
 			    linkstat, minw);
+	else
+		qib_cdbg(VERBOSE, "PCIe speed %u width %u (x8 HCA)\n",
+			 dd->lbus_speed, linkstat);
 
 	qib_tune_pcie_caps(dd);
 
@@ -367,12 +402,20 @@ int qib_reinit_intr(struct qib_devdata *dd)
 		/* nothing special for MSIx, just MSI */
 		goto bail;
 	}
+	qib_cdbg(VERBOSE, "Writing msi_lo 0x%x to config offset 0x%x\n",
+		 dd->msi_lo, pos + PCI_MSI_ADDRESS_LO);
 	pci_write_config_dword(dd->pcidev, pos + PCI_MSI_ADDRESS_LO,
 			       dd->msi_lo);
+	qib_cdbg(VERBOSE, "Writing msi_lo 0x%x to config offset 0x%x\n",
+		 dd->msi_hi, pos + PCI_MSI_ADDRESS_HI);
 	pci_write_config_dword(dd->pcidev, pos + PCI_MSI_ADDRESS_HI,
 			       dd->msi_hi);
 	pci_read_config_word(dd->pcidev, pos + PCI_MSI_FLAGS, &control);
 	if (!(control & PCI_MSI_FLAGS_ENABLE)) {
+		qib_cdbg(INIT,
+			"MSI control at off %x was %x, setting MSI enable (%x)\n",
+			pos + PCI_MSI_FLAGS,
+			control, control | PCI_MSI_FLAGS_ENABLE);
 		control |= PCI_MSI_FLAGS_ENABLE;
 		pci_write_config_word(dd->pcidev, pos + PCI_MSI_FLAGS,
 				      control);
@@ -384,6 +427,7 @@ int qib_reinit_intr(struct qib_devdata *dd)
 	ret = 1;
 bail:
 	if (!ret && (dd->flags & QIB_HAS_INTX)) {
+		qib_cdbg(INIT, "Using INTx, MSI disabled or not configured\n");
 		qib_enable_intx(dd->pcidev);
 		ret = 1;
 	}
@@ -402,6 +446,7 @@ bail:
 void qib_nomsi(struct qib_devdata *dd)
 {
 	dd->msi_lo = 0;
+	qib_cdbg(INIT, "disable device MSI interrupts\n");
 	pci_disable_msi(dd->pcidev);
 }
 
@@ -410,6 +455,7 @@ void qib_nomsi(struct qib_devdata *dd)
  */
 void qib_nomsix(struct qib_devdata *dd)
 {
+	qib_cdbg(INIT, "disable device MSIx interrupts\n");
 	pci_disable_msix(dd->pcidev);
 }
 
@@ -421,6 +467,8 @@ void qib_enable_intx(struct pci_dev *pdev)
 {
 	u16 cw, new;
 	int pos;
+
+	qib_cdbg(INIT, "Using INTx interrupts\n");
 
 	/* first, turn on INTx */
 	pci_read_config_word(pdev, PCI_COMMAND, &cw);
@@ -530,10 +578,15 @@ static int qib_tune_pcie_coalesce(struct qib_devdata *dd)
 		return 1;
 	}
 	ppos = pci_pcie_cap(parent);
-	if (!ppos)
+	if (!ppos) {
+		qib_dbg("parent not PCIe root complex!?\n");
 		return 1;
-	if (parent->vendor != 0x8086)
+	}
+	if (parent->vendor != 0x8086) {
+		qib_cdbg(VERBOSE, "VendorID 0x%x isn't Intel, skip\n",
+			 parent->vendor);
 		return 1;
+	}
 
 	/*
 	 *  - bit 12: Max_rdcmp_Imt_EN: need to set to 1
@@ -547,10 +600,13 @@ static int qib_tune_pcie_coalesce(struct qib_devdata *dd)
 	devid = parent->device;
 	if (devid >= 0x25e2 && devid <= 0x25fa) {
 		/* 5000 P/V/X/Z */
-		if (parent->revision <= 0xb2)
+		if (parent->revision <= 0xb2) {
 			bits = 1U << 10;
-		else
+			qib_cdbg(INIT, "Old rev 5000* (0x%x), enable-only\n",
+				 parent->revision);
+		} else {
 			bits = 7U << 10;
+		}
 		mask = (3U << 24) | (7U << 10);
 	} else if (devid >= 0x65e2 && devid <= 0x65fa) {
 		/* 5100 */
@@ -566,12 +622,23 @@ static int qib_tune_pcie_coalesce(struct qib_devdata *dd)
 		mask = (3U << 24) | (7U << 10);
 	} else {
 		/* not one of the chipsets that we know about */
+		qib_cdbg(VERBOSE, "DeviceID 0x%x isn't one we know, skip\n",
+			 devid);
 		return 1;
 	}
 	pci_read_config_dword(parent, 0x48, &val);
+	qib_cdbg(VERBOSE, "Read initial value 0x%x at 0x48, deviceid 0x%x\n",
+		val, devid);
 	val &= ~mask;
 	val |= bits;
 	r = pci_write_config_dword(parent, 0x48, val);
+	if (r)
+		qib_dev_err(dd,
+				"Unable to update deviceid 0x%x to val 0x%x for PCIe coalescing\n",
+				devid, val);
+	else
+		qib_dbg("Updated deviceid 0x%x to val 0x%x for PCIe coalescing\n",
+			devid, val);
 	return 0;
 }
 
@@ -602,6 +669,7 @@ static int qib_tune_pcie_caps(struct qib_devdata *dd)
 	if (ppos) {
 		pci_read_config_word(parent, ppos + PCI_EXP_DEVCAP, &pcaps);
 		pci_read_config_word(parent, ppos + PCI_EXP_DEVCTL, &pctl);
+		qib_cdbg(VERBOSE, "Root caps %04X, ctl %04X\n", pcaps, pctl);
 	} else
 		goto bail;
 	/* Find out supported and configured values for endpoint (us) */
@@ -609,17 +677,22 @@ static int qib_tune_pcie_caps(struct qib_devdata *dd)
 	if (epos) {
 		pci_read_config_word(dd->pcidev, epos + PCI_EXP_DEVCAP, &ecaps);
 		pci_read_config_word(dd->pcidev, epos + PCI_EXP_DEVCTL, &ectl);
+		qib_cdbg(VERBOSE, "our caps %04X, ctl %04X\n", ecaps, ectl);
 	} else
 		goto bail;
 	ret = 0;
 	/* Find max payload supported by root, endpoint */
 	rc_sup = fld2val(pcaps, PCI_EXP_DEVCAP_PAYLOAD);
 	ep_sup = fld2val(ecaps, PCI_EXP_DEVCAP_PAYLOAD);
+	qib_cdbg(VERBOSE, "Root supports %d payload, we support %d\n",
+		(1U << (rc_sup + 7)), (1U << (ep_sup + 7)));
 	if (rc_sup > ep_sup)
 		rc_sup = ep_sup;
 
 	rc_cur = fld2val(pctl, PCI_EXP_DEVCTL_PAYLOAD);
 	ep_cur = fld2val(ectl, PCI_EXP_DEVCTL_PAYLOAD);
+	qib_cdbg(VERBOSE, "Root set to %d payload, we are %d\n",
+		 (1U << (rc_cur + 7)), (1U << (ep_cur + 7)));
 
 	/* If Supported greater than limit in module param, limit it */
 	if (rc_sup > (caps & 7))
@@ -627,6 +700,8 @@ static int qib_tune_pcie_caps(struct qib_devdata *dd)
 	/* If less than (allowed, supported), bump root payload */
 	if (rc_sup > rc_cur) {
 		rc_cur = rc_sup;
+		qib_cdbg(INIT, "Increase Root to %d Payload\n",
+			 (1U << (rc_cur + 7)));
 		pctl = (pctl & ~PCI_EXP_DEVCTL_PAYLOAD) |
 			val2fld(rc_cur, PCI_EXP_DEVCTL_PAYLOAD);
 		pci_write_config_word(parent, ppos + PCI_EXP_DEVCTL, pctl);
@@ -634,6 +709,8 @@ static int qib_tune_pcie_caps(struct qib_devdata *dd)
 	/* If less than (allowed, supported), bump endpoint payload */
 	if (rc_sup > ep_cur) {
 		ep_cur = rc_sup;
+		qib_cdbg(INIT, "Increase Endpoint to %d Payload\n",
+			 (1U << (ep_cur + 7)));
 		ectl = (ectl & ~PCI_EXP_DEVCTL_PAYLOAD) |
 			val2fld(ep_cur, PCI_EXP_DEVCTL_PAYLOAD);
 		pci_write_config_word(dd->pcidev, epos + PCI_EXP_DEVCTL, ectl);
@@ -650,14 +727,21 @@ static int qib_tune_pcie_caps(struct qib_devdata *dd)
 	rc_cur = fld2val(pctl, PCI_EXP_DEVCTL_READRQ);
 	ep_cur = fld2val(ectl, PCI_EXP_DEVCTL_READRQ);
 
+	qib_cdbg(VERBOSE, "Root set to %d rdreq, we are %d\n",
+		 1U << (rc_cur + 7), 1U << (ep_cur + 7));
+
 	if (rc_sup > rc_cur) {
 		rc_cur = rc_sup;
+		qib_cdbg(INIT, "Increase Root to %d RdReq\n",
+			 (1U << (rc_cur + 7)));
 		pctl = (pctl & ~PCI_EXP_DEVCTL_READRQ) |
 			val2fld(rc_cur, PCI_EXP_DEVCTL_READRQ);
 		pci_write_config_word(parent, ppos + PCI_EXP_DEVCTL, pctl);
 	}
 	if (rc_sup > ep_cur) {
 		ep_cur = rc_sup;
+		qib_cdbg(INIT, "Increase Endpoint to %d RdReq\n",
+			 (1U << (ep_cur + 7)));
 		ectl = (ectl & ~PCI_EXP_DEVCTL_READRQ) |
 			val2fld(ep_cur, PCI_EXP_DEVCTL_READRQ);
 		pci_write_config_word(dd->pcidev, epos + PCI_EXP_DEVCTL, ectl);

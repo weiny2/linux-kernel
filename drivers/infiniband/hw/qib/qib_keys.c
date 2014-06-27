@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -77,8 +78,10 @@ int qib_alloc_lkey(struct qib_mregion *mr, int dma_region)
 		if (rkt->table[r] == NULL)
 			break;
 		r = (r + 1) & (rkt->max - 1);
-		if (r == n)
+		if (r == n) {
+			qib_dbg("LKEY table full\n");
 			goto bail;
+		}
 	}
 	rkt->next = (r + 1) & (rkt->max - 1);
 	/*

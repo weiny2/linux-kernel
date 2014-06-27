@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
  * All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
@@ -178,6 +179,7 @@ void qib_clear_symerror_on_linkup(unsigned long opaque)
 	if (ppd->lflags & QIBL_LINKACTIVE)
 		return;
 
+	qib_cdbg(VERB, "Resetting IBSymError count after LinkUP\n");
 	ppd->ibport_data.z_symbol_error_counter =
 		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_IBSYMBOLERR);
 }

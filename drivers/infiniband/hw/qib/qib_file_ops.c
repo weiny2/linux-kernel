@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2012, 2013, 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -116,6 +116,8 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	if (!shared)
 		sz -= 7 * sizeof(u64);
 	if (ubase_size < sz) {
+		qib_cdbg(PROC, "Base size %zu, need %zu (version mismatch?)\n",
+			 ubase_size, sz);
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -214,6 +216,12 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 			cvt_kvaddr(rcd->subctxt_rcvegrbuf);
 		kinfo->spi_subctxt_rcvhdr_base =
 			cvt_kvaddr(rcd->subctxt_rcvhdr_base);
+		qib_cdbg(PROC, "ctxt %u:%u flags %x %llx %llx %llx %llx\n",
+			 rcd->ctxt, subctxt_fp(fp), kinfo->spi_runtime_flags,
+			 (unsigned long long) kinfo->spi_subctxt_uregbase,
+			 (unsigned long long) kinfo->spi_uregbase,
+			 (unsigned long long) kinfo->spi_subctxt_rcvegrbuf,
+			 (unsigned long long) kinfo->spi_subctxt_rcvhdr_base);
 	}
 
 	/*
@@ -225,6 +233,12 @@ static int qib_get_base_info(struct file *fp, void __user *ubase,
 	kinfo->spi_pioindex = (kinfo->spi_piobufbase - dd->pio2k_bufbase) /
 		dd->palign;
 	kinfo->spi_pioalign = dd->palign;
+	qib_cdbg(PROC, "%u:%u (pid%u) gets piobufs %u - %u (cnt %u)\n",
+		 dd->unit, rcd->ctxt, rcd->pid,
+		 kinfo->spi_pioindex,
+		 kinfo->spi_pioindex + kinfo->spi_piocnt - 1,
+		 kinfo->spi_piocnt);
+
 	kinfo->spi_qpair = QIB_KD_QP;
 	/*
 	 * user mode PIO buffers are always 2KB, even when 4KB can
@@ -296,6 +310,8 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 
 	cnt = ti->tidcnt;
 	if (!cnt) {
+		qib_dbg("After copyin, tidcnt 0, tidlist %llx\n",
+			(unsigned long long) ti->tidlist);
 		ret = -EFAULT;
 		goto done;
 	}
@@ -335,10 +351,15 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 				   dd->rcvtidbase +
 				   ctxttid * sizeof(*tidbase));
 
+	qib_cdbg(VERBOSE, "ctxt%u %u tids, cursor %u, tidbase %p\n",
+		 rcd->ctxt, cnt, tid, tidbase);
+
 	/* virtual address of first page in transfer */
 	vaddr = ti->tidvaddr;
 	if (!access_ok(VERIFY_WRITE, (void __user *) vaddr,
 		       cnt * PAGE_SIZE)) {
+		qib_dbg("Fail vaddr %p, %u pages, !access_ok\n",
+			  (void *)vaddr, cnt);
 		ret = -EFAULT;
 		goto done;
 	}
@@ -369,11 +390,15 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 			 * and didn't have enough free; see comments at
 			 * start of routine
 			 */
+			qib_dbg("Not enough free TIDs for %u pages (index %d), failing\n",
+				cnt, i);
 			i--;    /* last tidlist[i] not filled in */
 			ret = -ENOMEM;
 			break;
 		}
 		tidlist[i] = tid + tidoff;
+		qib_cdbg(VERBOSE, "Updating idx %u to TID %u, vaddr %lx\n",
+			i, tid + tidoff, vaddr);
 		/* we "know" system pages and TID pages are same size */
 		dd->pageshadow[ctxttid + tid] = pagep[i];
 		dd->physshadow[ctxttid + tid] =
@@ -384,6 +409,10 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 		 */
 		__set_bit(tid, tidmap);
 		physaddr = dd->physshadow[ctxttid + tid];
+		qib_cdbg(VERBOSE,
+			 "TID %u, vaddr %lx, physaddr %llx pgp %p\n",
+			 tid, vaddr, (unsigned long long) physaddr,
+			 pagep[i]);
 		/* PERFORMANCE: below should almost certainly be cached */
 		dd->f_put_tid(dd, &tidbase[tid],
 				  RCVHQ_RCV_TYPE_EXPECTED, physaddr);
@@ -398,6 +427,8 @@ static int qib_tid_update(struct qib_ctxtdata *rcd, struct file *fp,
 		u32 limit;
 cleanup:
 		/* jump here if copy out of updated info failed... */
+		qib_dbg("After failure (ret=%d), undo %d of %d entries\n",
+			-ret, i, cnt);
 		/* same code that's in qib_free_tid() */
 		limit = sizeof(tidmap) * BITS_PER_BYTE;
 		if (limit > tidcnt)
@@ -410,6 +441,7 @@ cleanup:
 			if (dd->pageshadow[ctxttid + tid]) {
 				dma_addr_t phys;
 
+				qib_cdbg(VERBOSE, "Freeing TID %u\n", tid);
 				phys = dd->physshadow[ctxttid + tid];
 				dd->physshadow[ctxttid + tid] = dd->tidinvalid;
 				/* PERFORMANCE: below should almost certainly
@@ -450,6 +482,9 @@ cleanup:
 	}
 
 done:
+	if (ret)
+		qib_dbg("Failed to map %u TID pages, failing with %d\n",
+			ti->tidcnt, -ret);
 	return ret;
 }
 
@@ -509,6 +544,10 @@ static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 		/* just in case size changes in future */
 		limit = tidcnt;
 	tid = find_first_bit(tidmap, limit);
+	qib_cdbg(VERBOSE,
+		"Context%u free %u tids; first bit (max=%d) set is %d, ctxttid %u\n",
+		rcd->ctxt, ti->tidcnt,
+		limit, tid, ctxttid);
 	for (cnt = 0; tid < limit; tid++) {
 		/*
 		 * small optimization; if we detect a run of 3 or so without
@@ -526,6 +565,8 @@ static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 
 			p = dd->pageshadow[ctxttid + tid];
 			dd->pageshadow[ctxttid + tid] = NULL;
+			qib_cdbg(VERBOSE, "PID %u freeing TID %u\n",
+				 rcd->pid, tid);
 			phys = dd->physshadow[ctxttid + tid];
 			dd->physshadow[ctxttid + tid] = dd->tidinvalid;
 			/* PERFORMANCE: below should almost certainly be
@@ -536,9 +577,17 @@ static int qib_tid_free(struct qib_ctxtdata *rcd, unsigned subctxt,
 			pci_unmap_page(dd->pcidev, phys, PAGE_SIZE,
 				       PCI_DMA_FROMDEVICE);
 			qib_release_user_pages(&p, 1);
+		} else {
+			qib_dbg("Unused tid %u, ignoring\n", tid);
 		}
 	}
+	if (cnt != ti->tidcnt)
+		qib_dbg("passed in tidcnt %d, only %d bits set in map\n",
+			ti->tidcnt, cnt);
 done:
+	if (ret)
+		qib_dbg("Failed to unmap %u TID pages, failing with %d\n",
+			ti->tidcnt, -ret);
 	return ret;
 }
 
@@ -571,7 +620,17 @@ static int qib_set_part_key(struct qib_ctxtdata *rcd, u16 key)
 		goto bail;
 	}
 
+	qib_cdbg(VERBOSE,
+		"p%u try to set pkey %hx, current keys %hx:%x %hx:%x %hx:%x %hx:%x\n",
+		rcd->ctxt, key, ppd->pkeys[0],
+		atomic_read(&ppd->pkeyrefs[0]), ppd->pkeys[1],
+		atomic_read(&ppd->pkeyrefs[1]), ppd->pkeys[2],
+		atomic_read(&ppd->pkeyrefs[2]), ppd->pkeys[3],
+		atomic_read(&ppd->pkeyrefs[3]));
+
 	if (!lkey) {
+		qib_cdbg(PROC, "p%u tries to set key 0, not allowed\n",
+			 rcd->ctxt);
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -588,11 +647,16 @@ static int qib_set_part_key(struct qib_ctxtdata *rcd, u16 key)
 		if (!rcd->pkeys[i] && pidx == -1)
 			pidx = i;
 		if (rcd->pkeys[i] == key) {
+			qib_cdbg(VERBOSE,
+				"p%u tries to set same pkey (%x) more than once\n",
+				rcd->ctxt, key);
 			ret = -EEXIST;
 			goto bail;
 		}
 	}
 	if (pidx == -1) {
+		qib_dbg("All pkeys for context %u already in use, can't set %x\n",
+			rcd->ctxt, key);
 		ret = -EBUSY;
 		goto bail;
 	}
@@ -606,6 +670,10 @@ static int qib_set_part_key(struct qib_ctxtdata *rcd, u16 key)
 
 			if (atomic_inc_return(pkrefs) > 1) {
 				rcd->pkeys[pidx] = key;
+				qib_cdbg(VERBOSE,
+					"p%u set key %x matches #%d, count now %d\n",
+					rcd->ctxt, key, i,
+					atomic_read(pkrefs));
 				ret = 0;
 				goto bail;
 			} else {
@@ -613,6 +681,9 @@ static int qib_set_part_key(struct qib_ctxtdata *rcd, u16 key)
 				 * lost race, decrement count, catch below
 				 */
 				atomic_dec(pkrefs);
+				qib_cdbg(VERBOSE,
+					"Lost race, count was 0, after dec, it's %d\n",
+					atomic_read(pkrefs));
 				any++;
 			}
 		}
@@ -627,6 +698,8 @@ static int qib_set_part_key(struct qib_ctxtdata *rcd, u16 key)
 		}
 	}
 	if (!any) {
+		qib_dbg("context %u, all pkeys already in use, can't set %x\n",
+			rcd->ctxt, key);
 		ret = -EBUSY;
 		goto bail;
 	}
@@ -640,6 +713,8 @@ static int qib_set_part_key(struct qib_ctxtdata *rcd, u16 key)
 			goto bail;
 		}
 	}
+	qib_dbg("ctxt %u, all pkeys already in use 2nd pass, can't set %x\n",
+		rcd->ctxt, key);
 	ret = -EBUSY;
 
 bail:
@@ -662,6 +737,9 @@ static int qib_manage_rcvq(struct qib_ctxtdata *rcd, unsigned subctxt,
 	struct qib_devdata *dd = rcd->dd;
 	unsigned int rcvctrl_op;
 
+	qib_cdbg(PROC, "%sabling rcv for unit %u ctxt %u:%u\n",
+		 start_stop ? "en" : "dis", dd->unit,
+		 rcd->ctxt, subctxt);
 	if (subctxt)
 		goto bail;
 	/* atomically clear receive enable ctxt. */
@@ -701,14 +779,26 @@ static void qib_clean_part_key(struct qib_ctxtdata *rcd,
 	for (i = 0; i < ARRAY_SIZE(rcd->pkeys); i++) {
 		if (!rcd->pkeys[i])
 			continue;
+		qib_cdbg(VERBOSE, "look for key[%d] %hx in pkeys\n", i,
+			 rcd->pkeys[i]);
 		for (j = 0; j < ARRAY_SIZE(ppd->pkeys); j++) {
 			/* check for match independent of the global bit */
 			if ((ppd->pkeys[j] & 0x7fff) !=
 			    (rcd->pkeys[i] & 0x7fff))
 				continue;
 			if (atomic_dec_and_test(&ppd->pkeyrefs[j])) {
+				qib_cdbg(VERBOSE,
+					"p%u clear key %x matches #%d\n",
+					rcd->ctxt,
+					rcd->pkeys[i], j);
 				ppd->pkeys[j] = 0;
 				pchanged++;
+			} else {
+				qib_cdbg(VERBOSE,
+					"p%u key %x matches #%d, but ref still %d\n",
+					rcd->ctxt,
+					rcd->pkeys[i], j,
+					atomic_read(&ppd->pkeyrefs[j]));
 			}
 			break;
 		}
@@ -757,6 +847,9 @@ static int qib_mmap_mem(struct vm_area_struct *vma, struct qib_ctxtdata *rcd,
 		qib_devinfo(dd->pcidev,
 			"%s ctxt%u mmap of %lx, %x bytes failed: %d\n",
 			what, rcd->ctxt, pfn, len, ret);
+	else
+		qib_cdbg(VERBOSE, "%s ctxt%u mmaped %lx, %x bytes\n",
+			 what, rcd->ctxt, pfn, len);
 bail:
 	return ret;
 }
@@ -965,6 +1058,7 @@ static int mmap_kvaddr(struct vm_area_struct *vma, u64 pgaddr,
 		goto bail;
 	len = vma->vm_end - vma->vm_start;
 	if (len > size) {
+		qib_dbg("FAIL: reqlen %lx > %zx\n", len, size);
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -1023,6 +1117,11 @@ static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
 		goto bail;
 	}
 
+	qib_cdbg(MM, "pgaddr %llx vm_start=%lx len %lx ctxt %u:%u:%u\n",
+		 (unsigned long long) pgaddr, vma->vm_start,
+		 vma->vm_end - vma->vm_start, dd->unit,
+		 rcd->ctxt, subctxt_fp(fp));
+
 	/*
 	 * Physical addresses must fit in 40 bits for our hardware.
 	 * Check for kernel virtual addresses first, anything else must
@@ -1032,6 +1131,9 @@ static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
 	if (ret) {
 		if (ret > 0)
 			ret = 0;
+		else
+			qib_cdbg(PROC, "ctxt%u:%x pgaddr %Lx mmapkv ret %d\n",
+				  rcd->ctxt, rcd->subctxt_id, pgaddr, ret);
 		goto bail;
 	}
 
@@ -1080,8 +1182,14 @@ static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
 				   "rcvhdrq tail");
 	else
 		match = 0;
-	if (!match)
+	if (!match) {
 		ret = -EINVAL;
+		qib_dbg("ctxt%u:%u pgaddr %Lx matches no areas\n",
+			rcd->ctxt, rcd->subctxt_id, pgaddr);
+	} else if (ret) {
+		qib_dbg("ctxt%u:%u pgaddr %Lx mmap fail %d\n",
+			rcd->ctxt, rcd->subctxt_id, pgaddr, ret);
+	}
 
 	vma->vm_private_data = NULL;
 
@@ -1171,6 +1279,14 @@ static void assign_ctxt_affinity(struct file *fp, struct qib_devdata *dd)
 		for_each_cpu(local_cpu, local_mask)
 			if (!test_and_set_bit(local_cpu, qib_cpulist)) {
 				fd->rec_cpu_num = local_cpu;
+
+				qib_dev_trace(dd->pcidev, "%s PID %u CPU %u "\
+					"unit %u: assign cpu %d on local NUMA "\
+					"node %d\n", current->comm,
+					current->pid, get_cpu(), dd->unit,
+					fd->rec_cpu_num,
+					cpu_to_node(local_cpu));
+
 				return;
 			}
 	}
@@ -1194,7 +1310,27 @@ static void assign_ctxt_affinity(struct file *fp, struct qib_devdata *dd)
 		else {
 			__set_bit(cpu, qib_cpulist);
 			fd->rec_cpu_num = cpu;
+			qib_dev_trace(dd->pcidev, "%s PID %u CPU %u " \
+				"unit %u: assign cpu %d on NUMA node " \
+				"%d\n", current->comm, current->pid,
+				get_cpu(), dd->unit, cpu,
+				cpu_to_node(cpu));
 		}
+	} else if (weight == 1 &&
+		test_bit(cpumask_first(&current->cpus_allowed),
+			   qib_cpulist))
+		qib_dev_trace(dd->pcidev, "%s PID %u CPU %u unit %u: "\
+			"affinity already set to cpu %d on NUMA "\
+			"node %d\n", current->comm, current->pid,
+			get_cpu(), dd->unit,
+			cpumask_first(&current->cpus_allowed),
+			cpu_to_node(cpumask_first(&current->cpus_allowed)));
+
+	else {
+		qib_dev_trace(dd->pcidev, "%s PID %u CPU %u unit %u: "\
+			"affinity already set for %d of %d cpus\n",
+			current->comm, current->pid, get_cpu(),
+			dd->unit, weight, qib_cpulist_count);
 	}
 }
 
@@ -1317,6 +1453,11 @@ static int setup_ctxt(struct qib_pportdata *ppd, int ctxt,
 
 	rcd = qib_create_ctxtdata(ppd, ctxt, numa_id);
 
+	qib_dev_trace(dd->pcidev, "%s PID %u CPU %u unit %u: " \
+		"allocated context memory on NUMA node %d\n",
+		current->comm, current->pid, get_cpu(), dd->unit,
+		numa_id);
+
 	/*
 	 * Allocate memory for use in qib_tid_update() at open to
 	 * reduce cost of expected send setup per message segment
@@ -1341,6 +1482,9 @@ static int setup_ctxt(struct qib_pportdata *ppd, int ctxt,
 	init_waitqueue_head(&dd->rcd[ctxt]->wait);
 	strlcpy(rcd->comm, current->comm, sizeof(rcd->comm));
 	ctxt_fp(fp) = rcd;
+	qib_cdbg(PROC, "%s[%u] opened u:p:c %u:%u:%u\n",
+		 rcd->comm, current->pid, dd->unit,
+		 rcd->ppd->port, ctxt);
 	qib_stats.sps_ctxts++;
 	dd->freectxts--;
 	ret = 0;
@@ -1383,7 +1527,7 @@ static int choose_port_ctxt(struct file *fp, struct qib_devdata *dd, u32 port,
 			ppd = dd->pport + port - 1;
 	}
 	for (ctxt = dd->first_user_ctxt; ctxt < dd->cfgctxts && dd->rcd[ctxt];
-	     ctxt++)
+		ctxt++)
 		;
 	if (ctxt == dd->cfgctxts) {
 		ret = -EBUSY;
@@ -1411,10 +1555,14 @@ static int find_free_ctxt(int unit, struct file *fp,
 	struct qib_devdata *dd = qib_lookup(unit);
 	int ret;
 
-	if (!dd || (uinfo->spu_port && uinfo->spu_port > dd->num_pports))
+	if (!dd || (uinfo->spu_port && uinfo->spu_port > dd->num_pports)) {
+		if (dd)
+			qib_cdbg(PROC, "Skip invalid port %u on unit %u\n",
+				 uinfo->spu_port, unit);
 		ret = -ENODEV;
-	else
+	} else {
 		ret = choose_port_ctxt(fp, dd, uinfo->spu_port, uinfo);
+	}
 
 	return ret;
 }
@@ -1429,13 +1577,17 @@ static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 	devmax = qib_count_units(&npresent, &nup);
 	if (!npresent) {
 		ret = -ENXIO;
+		qib_dbg("No boards found\n");
 		goto done;
 	}
 	if (nup == 0) {
 		ret = -ENETDOWN;
+		qib_dbg("No contexts available (none initialized and ACTIVE)\n");
 		goto done;
 	}
 
+	if (port)
+		qib_cdbg(PROC, "user wants IB port %u\n", port);
 	if (alg == QIB_PORT_ALG_ACROSS) {
 		unsigned inuse = ~0U;
 		/* find device (with ACTIVE ports) with fewest ctxts in use */
@@ -1445,12 +1597,14 @@ static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 			if (!dd)
 				continue;
 			if (port && port <= dd->num_pports &&
-			    usable(dd->pport + port - 1))
+				usable(dd->pport + port - 1))
 				pusable = 1;
 			else
 				for (i = 0; i < dd->num_pports; i++)
 					if (usable(dd->pport + i))
 						pusable++;
+			qib_cdbg(PROC, "Found %d usable port(s) on dev %d\n",
+				 pusable, dd->unit);
 			if (!pusable)
 				continue;
 			for (ctxt = dd->first_user_ctxt; ctxt < dd->cfgctxts;
@@ -1465,6 +1619,8 @@ static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 			}
 		}
 		if (udd) {
+			qib_cdbg(PROC, "Use unit %d, port %d\n",
+				 udd->unit, port);
 			ret = choose_port_ctxt(fp, udd, port, uinfo);
 			goto done;
 		}
@@ -1481,6 +1637,7 @@ static int get_a_ctxt(struct file *fp, const struct qib_user_info *uinfo,
 		}
 	}
 	ret = dusable ? -EBUSY : -ENETDOWN;
+	qib_dbg("All contexts busy\n");
 
 done:
 	return ret;
@@ -1521,6 +1678,11 @@ static int find_shared_ctxt(struct file *fp,
 			rcd->subpid[subctxt_fp(fp)] = current->pid;
 			tidcursor_fp(fp) = 0;
 			rcd->active_slaves |= 1 << subctxt_fp(fp);
+			qib_cdbg(PROC,
+				 "%s[%u] %u sharing %s[%u] unit:ctxt %u:%u\n",
+				 current->comm, current->pid, subctxt_fp(fp),
+				 rcd->comm, rcd->pid, dd->unit,
+				 rcd->ctxt);
 			ret = 1;
 			goto done;
 		}
@@ -1548,16 +1710,19 @@ static int find_hca(unsigned int cpu, int *unit)
 	devmax = qib_count_units(&npresent, &nup);
 	if (!npresent) {
 		ret = -ENXIO;
+		qib_dbg("No boards found\n");
 		goto done;
 	}
 	if (!nup) {
 		ret = -ENETDOWN;
+		qib_dbg("No contexts available (none initialized and ACTIVE)\n");
 		goto done;
 	}
 	for (ndev = 0; ndev < devmax; ndev++) {
 		struct qib_devdata *dd = qib_lookup(ndev);
 		if (dd) {
 			if (pcibus_to_node(dd->pcidev->bus) < 0) {
+				qib_dbg("No NUMA node to HCA binding\n");
 				ret = -EINVAL;
 				goto done;
 			}
@@ -1608,14 +1773,25 @@ static int qib_assign_ctxt(struct file *fp, const struct qib_user_info *uinfo)
 	/* for now, if major version is different, bail */
 	swmajor = uinfo->spu_userversion >> 16;
 	if (swmajor != QIB_USER_SWMAJOR) {
+		qib_dbg("User major version %d not same as driver major %d\n",
+			uinfo->spu_userversion >> 16, QIB_USER_SWMAJOR);
 		ret = -ENODEV;
 		goto done;
 	}
 
 	swminor = uinfo->spu_userversion & 0xffff;
+	if (swminor != QIB_USER_SWMINOR)
+		qib_dbg("User minor version %d not same as driver minor %d\n",
+			swminor, QIB_USER_SWMINOR);
 
-	if (swminor >= 11 && uinfo->spu_port_alg < QIB_PORT_ALG_COUNT)
+	if (swminor >= 11 && uinfo->spu_port_alg < QIB_PORT_ALG_COUNT) {
 		alg = uinfo->spu_port_alg;
+		qib_cdbg(PROC, "Use port algorithm 0x%x\n", alg);
+	} else {
+		qib_cdbg(PROC,
+			"Invalid port algorthm 0x%x, ignoring\n",
+			uinfo->spu_port_alg);
+	}
 
 	mutex_lock(&qib_mutex);
 
@@ -1631,6 +1807,9 @@ static int qib_assign_ctxt(struct file *fp, const struct qib_user_info *uinfo)
 	}
 
 	i_minor = iminor(fp->f_dentry->d_inode) - QIB_USER_MINOR_BASE;
+	qib_cdbg(VERBOSE, "open on dev %lx (minor %d)\n",
+		 (long)fp->f_dentry->d_inode->i_rdev, i_minor);
+
 	if (i_minor)
 		ret = find_free_ctxt(i_minor - 1, fp, uinfo);
 	else {
@@ -1651,6 +1830,9 @@ static int qib_assign_ctxt(struct file *fp, const struct qib_user_info *uinfo)
 done_chk_sdma:
 	if (!ret)
 		ret = do_qib_user_sdma_queue_create(fp);
+	else
+		qib_cdbg(PROC, "No contexts available (%u,%u): err %d\n",
+			i_minor, uinfo->spu_port, -ret);
 done_ok:
 	mutex_unlock(&qib_mutex);
 done:
@@ -1782,6 +1964,8 @@ static void unlock_expected_tids(struct qib_ctxtdata *rcd)
 	int ctxt_tidbase = rcd->ctxt * dd->rcvtidcnt;
 	int i, cnt = 0, maxtid = ctxt_tidbase + dd->rcvtidcnt;
 
+	qib_cdbg(VERBOSE, "Context %u unlocking any locked expTID pages\n",
+		 rcd->ctxt);
 	for (i = ctxt_tidbase; i < maxtid; i++) {
 		struct page *p = dd->pageshadow[i];
 		dma_addr_t phys;
@@ -1797,6 +1981,9 @@ static void unlock_expected_tids(struct qib_ctxtdata *rcd)
 		qib_release_user_pages(&p, 1);
 		cnt++;
 	}
+	if (cnt)
+		qib_cdbg(VERBOSE, "Context %u locked %u expTID entries\n",
+			 rcd->ctxt, cnt);
 }
 
 static int qib_close(struct inode *in, struct file *fp)
@@ -1815,9 +2002,16 @@ static int qib_close(struct inode *in, struct file *fp)
 	fp->private_data = NULL;
 	rcd = fd->rcd;
 	if (!rcd) {
+		qib_cdbg(PROC,
+			"close on dev %lx, private data %p, PID %u rcd NULL\n",
+			(long)in->i_rdev, fp->private_data,
+			current->pid);
 		mutex_unlock(&qib_mutex);
 		goto bail;
 	}
+	qib_cdbg(VERBOSE, "close dev %lx, private %p PID %u %u:%u:%u\n",
+		 (long)in->i_rdev, fp->private_data, current->pid,
+		 rcd->dd->unit, rcd->ctxt, rcd->subctxt_id);
 
 	dd = rcd->dd;
 
@@ -1830,8 +2024,12 @@ static int qib_close(struct inode *in, struct file *fp)
 		qib_user_sdma_queue_destroy(fd->pq);
 	}
 
-	if (fd->rec_cpu_num != -1)
+	if (fd->rec_cpu_num != -1) {
+		qib_cdbg(PROC, "mark cpu %d from unit%u ctxt%u:%u available\n",
+			fd->rec_cpu_num, dd->unit, rcd->ctxt,
+				 rcd->subctxt_id);
 		__clear_bit(fd->rec_cpu_num, qib_cpulist);
+	}
 
 	if (--rcd->cnt) {
 		/*
@@ -1855,13 +2053,21 @@ static int qib_close(struct inode *in, struct file *fp)
 
 	if (rcd->rcvwait_to || rcd->piowait_to ||
 	    rcd->rcvnowait || rcd->pionowait) {
+		qib_cdbg(VERBOSE,
+			"ctxt%u, %u rcv, %u pio wait timeo; %u rcv %u, pio already\n",
+			 rcd->ctxt, rcd->rcvwait_to,
+			 rcd->piowait_to, rcd->rcvnowait,
+			 rcd->pionowait);
 		rcd->rcvwait_to = 0;
 		rcd->piowait_to = 0;
 		rcd->rcvnowait = 0;
 		rcd->pionowait = 0;
 	}
-	if (rcd->flag)
+	if (rcd->flag) {
+		qib_cdbg(PROC, "ctxt %u flag set: 0x%lx\n",
+			 rcd->ctxt, rcd->flag);
 		rcd->flag = 0;
+	}
 
 	if (dd->kregbase) {
 		/* atomically clear receive enable ctxt and intr avail. */
@@ -1880,6 +2086,9 @@ static int qib_close(struct inode *in, struct file *fp)
 			unlock_expected_tids(rcd);
 		qib_stats.sps_ctxts--;
 		dd->freectxts++;
+
+		qib_cdbg(PROC, "%s[%u] closed ctxt %u:%u\n",
+			 rcd->comm, pid, dd->unit, ctxt);
 	}
 
 	mutex_unlock(&qib_mutex);
@@ -1965,6 +2174,9 @@ static int disarm_req_delay(struct qib_ctxtdata *rcd)
 		 * in trying to get the chip back to ACTIVE, and
 		 * set flag so they make the call again.
 		 */
+		qib_cdbg(ERRPKT,
+			"Ctxt%u, set disarm needed, link is down\n",
+			rcd->ctxt);
 		if (rcd->user_event_mask) {
 			/*
 			 * subctxt_cnt is 0 if not shared, so do base
@@ -1995,6 +2207,8 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 	int ret = 0;
 	unsigned long flags;
 
+	qib_cdbg(PROC, "IB%u:%u set event bit %d\n", ppd->dd->unit, ppd->port,
+		 evtbit);
 	spin_lock_irqsave(&ppd->dd->uctxt_lock, flags);
 	for (ctxt = ppd->dd->first_user_ctxt; ctxt < ppd->dd->cfgctxts;
 	     ctxt++) {
@@ -2008,6 +2222,9 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 			 * separately, first, then remaining subctxt, if any
 			 */
 			set_bit(evtbit, &rcd->user_event_mask[0]);
+			qib_cdbg(PROC, "qib%u,ctxt%u, uevent_mask %lx\n",
+				 ppd->dd->unit, rcd->ctxt,
+				rcd->user_event_mask[0]);
 			for (i = 1; i < rcd->subctxt_cnt; i++)
 				set_bit(evtbit, &rcd->user_event_mask[i]);
 		}
@@ -2039,8 +2256,17 @@ static int qib_user_event_ack(struct qib_ctxtdata *rcd, int subctxt,
 		if (i == _QIB_EVENT_DISARM_BUFS_BIT) {
 			(void)qib_disarm_piobufs_ifneeded(rcd);
 			ret = disarm_req_delay(rcd);
-		} else
+			qib_cdbg(PROC,
+				"qib%u,ctxt%u, disarmed bufs, uevent_mask %lx\n",
+				rcd->ppd->dd->unit, rcd->ctxt,
+				rcd->user_event_mask[subctxt]);
+		} else {
 			clear_bit(i, &rcd->user_event_mask[subctxt]);
+			qib_cdbg(PROC,
+				"qib%u,ctxt%u, cleared uevent %d, uevent_mask now %lx\n",
+				rcd->ppd->dd->unit, rcd->ctxt, i,
+				rcd->user_event_mask[subctxt]);
+		}
 	}
 	return ret;
 }

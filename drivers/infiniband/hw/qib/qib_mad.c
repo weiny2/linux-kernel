@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012, 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -728,12 +728,16 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	/* Allow 1x or 4x to be set (see 14.2.6.6). */
 	lwe = pip->link_width_enabled;
 	if (lwe) {
-		if (lwe == 0xFF)
+		if (lwe == 0xFF) {
 			set_link_width_enabled(ppd, ppd->link_width_supported);
-		else if (lwe >= 16 || (lwe & ~ppd->link_width_supported))
+		} else if (lwe >= 16 || (lwe & ~ppd->link_width_supported)) {
 			smp->status |= IB_SMP_INVALID_FIELD;
-		else if (lwe != ppd->link_width_enabled)
+		} else if (lwe != ppd->link_width_enabled) {
+			qib_cdbg(INIT, "IB%u:%u linkwidth set from %x to %x\n",
+				 ppd->dd->unit, ppd->port,
+				ppd->link_width_enabled, lwe);
 			set_link_width_enabled(ppd, lwe);
+		}
 	}
 
 	lse = pip->linkspeedactive_enabled & 0xF;
@@ -743,13 +747,17 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		 * 1, 3, 5, 7, 15.  1.2.1 extended to allow specific
 		 * speeds.
 		 */
-		if (lse == 15)
+		if (lse == 15) {
 			set_link_speed_enabled(ppd,
 					       ppd->link_speed_supported);
-		else if (lse >= 8 || (lse & ~ppd->link_speed_supported))
+		} else if (lse >= 8 || (lse & ~ppd->link_speed_supported)) {
 			smp->status |= IB_SMP_INVALID_FIELD;
-		else if (lse != ppd->link_speed_enabled)
+		} else if (lse != ppd->link_speed_enabled) {
+			qib_cdbg(INIT, "IB%u:%u speed set from %x to %x\n",
+				 ppd->dd->unit, ppd->port,
+				ppd->link_speed_enabled, lse);
 			set_link_speed_enabled(ppd, lse);
+		}
 	}
 
 	/* Set link down default state. */
@@ -818,6 +826,16 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		smp->status |= IB_SMP_INVALID_FIELD;
 
 	/*
+	 * interesting stuff reported elsewhere, so verbose only,
+	 * unless a link changes is requested
+	 */
+	if (lstate || state)
+		qib_dbg("IB%u:%u state %u lstate %u lflags %x\n",
+			dd->unit, ppd->port, state, lstate, ppd->lflags);
+	else
+		qib_cdbg(LINKVERB, "IB%u:%u state %u lstate %u lflags %x\n",
+			dd->unit, ppd->port, state, lstate, ppd->lflags);
+	/*
 	 * Only state changes of DOWN, ARM, and ACTIVE are valid
 	 * and must be in the correct state to take effect (see 7.2.6).
 	 */
@@ -876,6 +894,7 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	goto get_only;
 
 err:
+	qib_dbg("invalid field\n");
 	smp->status |= IB_SMP_INVALID_FIELD;
 get_only:
 	ret = subn_get_portinfo(smp, ibdev, port);

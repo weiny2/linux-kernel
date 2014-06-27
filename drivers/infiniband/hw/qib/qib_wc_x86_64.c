@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation. All rights reserved.
+ * Copyright (c) 2012, 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -101,6 +101,9 @@ int qib_enable_wc(struct qib_devdata *dd)
 	}
 	if (pioaddr & (piolen - 1)) {
 		u64 atmp;
+		qib_dbg("pioaddr %llx not on right boundary for size %llx, fixing\n",
+			  (unsigned long long) pioaddr,
+			  (unsigned long long) piolen);
 		atmp = pioaddr & ~(piolen - 1);
 		if (atmp < addr || (atmp + piolen) > (addr + len)) {
 			qib_dev_err(dd,
@@ -109,6 +112,11 @@ int qib_enable_wc(struct qib_devdata *dd)
 				(unsigned long long) piolen << 1);
 			ret = -ENODEV;
 		} else {
+			qib_dbg("changing WC base from %llx to %llx, len from %llx to %llx\n",
+				(unsigned long long) pioaddr,
+				(unsigned long long) atmp,
+				(unsigned long long) piolen,
+				(unsigned long long) piolen << 1);
 			pioaddr = atmp;
 			piolen <<= 1;
 		}
@@ -116,6 +124,10 @@ int qib_enable_wc(struct qib_devdata *dd)
 
 	if (!ret) {
 		int cookie;
+		qib_cdbg(VERBOSE,
+			"Setting mtrr for chip to WC (addr %llx, len=0x%llx)\n",
+			(unsigned long long) pioaddr,
+			(unsigned long long) piolen);
 
 		cookie = mtrr_add(pioaddr, piolen, MTRR_TYPE_WRCOMB, 0);
 		if (cookie < 0) {
@@ -126,6 +138,9 @@ int qib_enable_wc(struct qib_devdata *dd)
 				ret = -EINVAL;
 			}
 		} else {
+			qib_cdbg(VERBOSE,
+				"Set mtrr for chip to WC, cookie is %d\n",
+				cookie);
 			dd->wc_cookie = cookie;
 			dd->wc_base = (unsigned long) pioaddr;
 			dd->wc_len = (unsigned long) piolen;
@@ -144,6 +159,7 @@ void qib_disable_wc(struct qib_devdata *dd)
 	if (dd->wc_cookie) {
 		int r;
 
+		qib_cdbg(VERBOSE, "undoing WCCOMB on pio buffers\n");
 		r = mtrr_del(dd->wc_cookie, dd->wc_base,
 			     dd->wc_len);
 		if (r < 0)

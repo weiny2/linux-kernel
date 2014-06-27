@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -42,6 +43,8 @@ static void __qib_release_user_pages(struct page **p, size_t num_pages,
 	size_t i;
 
 	for (i = 0; i < num_pages; i++) {
+		qib_cdbg(MM, "%lu/%lu put_page %p\n", (unsigned long) i,
+			 (unsigned long) num_pages, p[i]);
 		if (dirty)
 			set_page_dirty_lock(p[i]);
 		put_page(p[i]);
@@ -64,6 +67,9 @@ static int __qib_get_user_pages(unsigned long start_page, size_t num_pages,
 		ret = -ENOMEM;
 		goto bail;
 	}
+
+	qib_cdbg(VERBOSE, "pin %lx pages from vaddr %lx\n",
+		 (unsigned long) num_pages, start_page);
 
 	for (got = 0; got < num_pages; got += ret) {
 		ret = get_user_pages(current, current->mm,
