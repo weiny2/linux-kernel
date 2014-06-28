@@ -2075,6 +2075,41 @@ struct stl_port_data_counters_msg {
 	} port[1]; /* array size defined by  #ports in attribute modifier */
 };
 
+#define COUNTER_SIZE_MODE_ALL64		0
+#define COUNTER_SIZE_MODE_ALL32		1
+#define COUNTER_SIZE_MODE_MIXED		2
+
+struct stl_port_error_counters64_msg {
+	/* Request contains first two fields, response contains the
+	 * whole magilla */
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
+
+	/* Response-only fields follow */
+	__be32 reserved1;
+	struct _port_ectrs {
+		u8 port_number;
+		u8 reserved2[7];
+		__be64 port_rcv_constraint_errors;
+		__be64 port_rcv_switch_relay_errors;
+		__be64 port_xmit_discards;
+		__be64 port_xmit_constraint_errors;
+		__be64 port_rcv_remote_physical_errors;
+		__be64 local_link_integrity_errors;
+		__be64 port_rcv_errors;
+		__be64 excessive_buffer_overruns;
+		__be64 fm_config_errors;
+		__be32 link_error_recovery;
+		__be32 link_downed;
+		u8 uncorrectable_errors;
+		u8 reserved3[7];
+		struct _vls_ectrs {
+			__be64 port_vl_xmit_discards;
+		} vls[0];
+		/* array size defined by #bits set in vl_select_mask */
+	} port[1]; /* array size defined by #ports in attribute modifier */
+};
+
 static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
 				     struct ib_device *ibdev)
 {
@@ -2405,6 +2440,107 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 				+ offset));
 next:
 		vlinfo++;
+	}
+
+	return reply(pmp);
+}
+
+static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
+				  struct ib_device *ibdev, u8 port)
+{
+	size_t response_data_size;
+	struct _port_ectrs *rsp;
+	unsigned long port_num;
+	struct stl_port_error_counters64_msg *req;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u32 num_ports;
+	u32 counter_size_mode;
+	u8 num_pslm;
+	u8 num_vls;
+	struct qib_ibport *ibp;
+	struct qib_pportdata *ppd;
+	struct _vls_ectrs *vlinfo;
+	unsigned long vl;
+	u64 port_mask;
+	u32 vl_select_mask;
+
+	req = (struct stl_port_error_counters64_msg *)pmp->data;
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	counter_size_mode = (be32_to_cpu(pmp->mad_hdr.attr_mod) >> 22) & 0x3;
+
+	num_pslm = hweight64(req->port_select_mask[3]);
+	num_vls = hweight32(req->vl_select_mask);
+
+	/* TODO add support for:
+	 *	COUNTER_SIZE_MODE_ALL32
+	 *	COUNTER_SIZE_MODE_MIXED
+	 */
+	if (num_ports != 1 || num_ports != num_pslm ||
+		(counter_size_mode != COUNTER_SIZE_MODE_ALL64)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	response_data_size = sizeof(struct stl_port_error_counters64_msg) +
+				num_vls * sizeof(struct _vls_ectrs);
+
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+	/*
+	 * The bit set in the mask needs to be consistent with the
+	 * port the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+					sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	rsp = (struct _port_ectrs *)&(req->port[0]);
+
+	ibp = to_iport(ibdev, port_num);
+	ppd = ppd_from_ibp(ibp);
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->port_number = (u8)port_num;
+
+	/* FIXME
+	 * some of the counters are not implemented. if the WFR spec
+	 * indicates the source of the value (e.g., driver, DC, etc.)
+	 * that's noted. If I don't have a clue how to get the counter,
+	 * a '???' appears.
+	 */
+
+	/* rsp->port_rcv_constraint_errors = ??? */
+	/* port_rcv_switch_relay_errors is 0 for HFIs */
+	/* rsp->port_xmit_discards = ??? */
+	/* rsp->port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
+	rsp->port_rcv_remote_physical_errors =
+		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
+	/* local_link_integrity_errors - DC (table 13-11 WFR spec)
+	 * is this LCB_ERR_INFO_TX_REPLAY_CNT ??? */
+	/* rsp->excessive_buffer_overruns - SPC RXE block
+	 * (table 13-11 WFR spec) */
+	rsp->fm_config_errors =
+		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
+	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
+	/* rsp->link_downed - DC (table 13-11 WFR spec) */
+	rsp->uncorrectable_errors = /* XXX why is this only 8 bits? */
+		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
+
+	vlinfo = (struct _vls_ectrs *)&(rsp->vls[0]);
+	vl_select_mask = cpu_to_be32(req->vl_select_mask);
+	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+			 sizeof(req->vl_select_mask)) {
+		memset(vlinfo, 0, sizeof(*vlinfo));
+		/* vlinfo->vls[vl].port_vl_xmit_discards ??? */
+		vlinfo += 1;
 	}
 
 	return reply(pmp);
@@ -3904,6 +4040,9 @@ static int process_perf_stl(struct ib_device *ibdev, u8 port,
 			goto bail;
 		case STL_PM_ATTRIB_ID_DATA_PORT_COUNTERS:
 			ret = pma_get_stl_datacounters(pmp, ibdev, port);
+			goto bail;
+		case STL_PM_ATTRIB_ID_ERROR_PORT_COUNTERS:
+			ret = pma_get_stl_porterrors(pmp, ibdev, port);
 			goto bail;
 #if 0
 		case IB_PMA_PORT_SAMPLES_CONTROL:
