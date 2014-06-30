@@ -1174,6 +1174,8 @@ static int __init qlogic_ib_init(void)
 		pr_err("Invalid mode: both receive interrupt count and available timeout are zero - setting interrupt count to 1\n");
 		rcv_intr_count = 1;
 	}
+	/* sanitize link CRC options */
+	link_crc_mask &= WFR_SUPPORTED_CRCS;
 
 	qib_cq_wq = create_singlethread_workqueue("qib_cq");
 	if (!qib_cq_wq) {

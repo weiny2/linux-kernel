@@ -729,6 +729,12 @@
 
 #define WFR_SUPPORTED_CRCS (CRC_14B | CRC_48B | CRC_12B_16B_PER_LANE)
 
+/* LCB_CFG_CRC_MODE TX_VAL and RX_VAL CRC mode values */
+#define LCB_CRC_16B			0x0	/* 16b CRC */
+#define LCB_CRC_14B			0x1	/* 14b CRC */
+#define LCB_CRC_48B			0x2	/* 48b CRC */
+#define LCB_CRC_12B_16B_PER_LANE	0x3	/* 12b-16b per lane CRC */
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);

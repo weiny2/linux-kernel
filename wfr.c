@@ -76,6 +76,10 @@ uint rcv_intr_count = 1;
 module_param(rcv_intr_count, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_count, "Receive interrupt mitigation count");
 
+ushort link_crc_mask = WFR_SUPPORTED_CRCS;
+module_param(link_crc_mask, ushort, S_IRUGO);
+MODULE_PARM_DESC(link_crc_mask, "CRCs to use on the link");
+
 /* TODO: temporary */
 static uint use_flr;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
@@ -1747,6 +1751,8 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	u16 vl15buf;
 	u16 flag_bits;
 	u16 link_widths;
+	u16 crc_mask;
+	u16 crc_val;
 	u8 crc_sizes;
 	struct qib_pportdata *ppd = dd->pport;
 
@@ -1795,6 +1801,20 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 		vcu = dd->vcu;
 	}
 	set_up_vl15(dd, vau, vl15buf);
+
+	/* set up the LCB CRC mode */
+	crc_mask = link_crc_mask & crc_sizes;
+	/* order is important: use the highest bit in common */
+	if (crc_mask & CRC_12B_16B_PER_LANE)
+		crc_val = LCB_CRC_12B_16B_PER_LANE;
+	else if (crc_mask & CRC_48B)
+		crc_val = LCB_CRC_48B;
+	else if (crc_mask & CRC_14B)
+		crc_val = LCB_CRC_14B;
+	else
+		crc_val = LCB_CRC_16B;
+	write_csr(dd, DC_LCB_CFG_CRC_MODE,
+		(u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 
 	/* set up the remote credit return table */
 	assign_remote_cm_au_table(dd, vcu);
@@ -2960,7 +2980,7 @@ static int start_polling(struct hfi_devdata *dd)
 	write_vc_local_phy(dd, PWRM_BER_CONTROL, 0);
 
 	write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
-		WFR_SUPPORTED_CRCS);
+		link_crc_mask);
 
 	/*
 	 * TODO: 0x2f00 are undocumented flags co-located with the

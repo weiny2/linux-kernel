@@ -1463,6 +1463,7 @@ extern uint kdeth_qp;
 extern uint loopback;
 extern uint rcv_intr_timeout;
 extern uint rcv_intr_count;
+extern ushort link_crc_mask;
 
 extern struct mutex qib_mutex;
 
