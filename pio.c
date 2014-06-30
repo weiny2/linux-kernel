@@ -500,7 +500,6 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	sc->node = numa;
 	spin_lock_init(&sc->alloc_lock);
 	spin_lock_init(&sc->release_lock);
-	spin_lock_init(&sc->wait_lock);
 	INIT_LIST_HEAD(&sc->piowait);
 
 	/* TBD: group set-up.  Make it always 0 for now. */
@@ -920,6 +919,7 @@ void sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 static void sc_piobufavail(struct send_context *sc)
 {
 	struct hfi_devdata *dd = sc->dd;
+	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct list_head *list;
 	struct qib_qp *qps[5];
 	struct qib_qp *qp;
@@ -935,7 +935,7 @@ static void sc_piobufavail(struct send_context *sc)
 	 * could end up with QPs on the wait list with the interrupt
 	 * disabled.
 	 */
-	spin_lock_irqsave(&sc->wait_lock, flags);
+	spin_lock_irqsave(&dev->pending_lock, flags);
 	while (!list_empty(list)) {
 		if (n == ARRAY_SIZE(qps))
 			goto full;
@@ -946,7 +946,7 @@ static void sc_piobufavail(struct send_context *sc)
 	}
 	dd->f_wantpiobuf_intr(sc, 0);
 full:
-	spin_unlock_irqrestore(&sc->wait_lock, flags);
+	spin_unlock_irqrestore(&dev->pending_lock, flags);
 
 	for (i = 0; i < n; i++)
 		qib_qp_wakeup(qps[i], QIB_S_WAIT_PIO);

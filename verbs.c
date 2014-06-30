@@ -1121,6 +1121,7 @@ bail_tx:
 static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 {
 	struct hfi_devdata *dd = sc->dd;
+	struct qib_ibdev *dev = &dd->verbs_dev;
 	unsigned long flags;
 	int ret = 0;
 
@@ -1132,7 +1133,7 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 	 */
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) {
-		spin_lock(&sc->wait_lock);
+		spin_lock(&dev->pending_lock);
 		if (list_empty(&qp->iowait)) {
 			struct qib_ibdev *dev = &dd->verbs_dev;
 			dev->n_piowait++;
@@ -1141,7 +1142,7 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 			trace_hfi_qpsleep(qp, QIB_S_WAIT_PIO);
 			dd->f_wantpiobuf_intr(sc, 1);
 		}
-		spin_unlock(&sc->wait_lock);
+		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;
 		ret = -EBUSY;
 	}
