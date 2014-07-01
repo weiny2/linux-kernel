@@ -831,7 +831,8 @@ static int mga_crtc_do_set_base(struct drm_crtc *crtc,
 		ret = ttm_bo_kmap(&bo->bo, 0, bo->bo.num_pages, &bo->kmap);
 		if (ret)
 			DRM_ERROR("failed to kmap fbcon\n");
-
+		else
+			mgag200_fbdev_set_base(mdev, gpu_addr);
 	}
 	mgag200_bo_unreserve(bo);
 
