@@ -39,6 +39,10 @@ struct res_counter {
 	 * the limit that usage can be exceed
 	 */
 	unsigned long long soft_limit;
+	/* reserved for min/low/high limits */
+	unsigned long long suse_kabi_padding1;
+	unsigned long long suse_kabi_padding2;
+	unsigned long long suse_kabi_padding3;
 	/*
 	 * the number of unsuccessful attempts to consume the resource
 	 */
