@@ -696,8 +696,7 @@ static netdev_features_t macvlan_fix_features(struct net_device *dev,
 	features = netdev_increment_features(vlan->lowerdev->features,
 					     features,
 					     mask);
-	if (!vlan->fwd_priv)
-		features |= NETIF_F_LLTX;
+	features |= NETIF_F_LLTX;
 
 	return features;
 }
