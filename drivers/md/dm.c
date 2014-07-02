@@ -2357,17 +2357,10 @@ static int dm_init_request_based_queue(struct mapped_device *md)
 	if (md->queue->elevator)
 		return 1;
 
-	md->queue->flush_rq = kzalloc(sizeof(struct request), GFP_KERNEL);
-	if (!md->queue->flush_rq)
-		return 0;
-
 	/* Fully initialize the queue */
 	q = blk_init_allocated_queue(md->queue, dm_request_fn, NULL);
-	if (!q) {
-		kfree(md->queue->flush_rq);
-		md->queue->flush_rq = NULL;
+	if (!q)
 		return 0;
-	}
 
 	md->queue = q;
 	dm_init_md_queue(md);
