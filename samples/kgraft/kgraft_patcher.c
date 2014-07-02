@@ -70,6 +70,8 @@ static void new_function(unsigned long data)
 KGR_PATCHED_FUNCTION(unknown_function, new_function, false);
 
 static struct kgr_patch patch = {
+	.name = "sample_patcher",
+	.owner = THIS_MODULE,
 	.patches = {
 		KGR_PATCH(SyS_iopl),
 		KGR_PATCH(capable),
@@ -80,16 +82,12 @@ static struct kgr_patch patch = {
 
 static int __init kgr_patcher_init(void)
 {
-	/* removing not supported */
-	__module_get(THIS_MODULE);
-	kgr_start_patching(&patch);
-	return 0;
+	return kgr_patch_kernel(&patch);
 }
 
 static void __exit kgr_patcher_cleanup(void)
 {
-	/* extra care needs to be taken when freeing ftrace_ops->private */
-	pr_err("removing now buggy!\n");
+	kgr_patch_remove(&patch);
 }
 
 module_init(kgr_patcher_init);
