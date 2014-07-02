@@ -614,7 +614,7 @@ static struct pgpath *parse_path(struct dm_arg_set *as, struct path_selector *ps
 			format_dev_t(p->path.pdev, dev);
 			p->is_active = 0;
 		} else {
-			ti->error = "error getting device";
+			DMWARN("error getting device %s", path);
 			goto bad;
 		}
 	} else {

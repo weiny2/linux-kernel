@@ -37,11 +37,6 @@ MODULE_AUTHOR("Manuel Estrada Sainz");
 MODULE_DESCRIPTION("Multi purpose firmware loading support");
 MODULE_LICENSE("GPL");
 
-#ifdef CONFIG_FIRMWARE_SIG
-static bool sig_enforce;
-module_param(sig_enforce, bool, 0644);
-#endif
-
 /* Builtin firmware support */
 
 #ifdef CONFIG_FW_LOADER
@@ -287,7 +282,7 @@ static noinline_for_stack long fw_file_size(struct file *file)
 	return st.size;
 }
 
-static bool fw_read_file_contents(struct file *file, void **bufp, size_t *sizep)
+static bool fw_read_file_contents(struct file *file, struct firmware_buf *fw_buf)
 {
 	long size;
 	char *buf;
@@ -302,43 +297,15 @@ static bool fw_read_file_contents(struct file *file, void **bufp, size_t *sizep)
 		vfree(buf);
 		return false;
 	}
-	*bufp = buf;
-	*sizep = size;
+	fw_buf->data = buf;
+	fw_buf->size = size;
 	return true;
 }
-
-#ifdef CONFIG_FIRMWARE_SIG
-static int verify_sig_file(struct firmware_buf *buf, const char *path)
-{
-	const unsigned long markerlen = sizeof(FIRMWARE_SIG_STRING) - 1;
-	struct file *file;
-	void *sig_data;
-	size_t sig_size;
-	int ret;
-
-	file = filp_open(path, O_RDONLY, 0);
-	if (IS_ERR(file))
-		return -ENOENT;
-
-	ret = fw_read_file_contents(file, &sig_data, &sig_size);
-	fput(file);
-	if (!ret)
-		return -ENOKEY;
-	if (sig_size <= markerlen ||
-		memcmp(sig_data, FIRMWARE_SIG_STRING, markerlen))
-		return -EBADMSG;
-	ret = fw_verify_sig(buf->data, buf->size,
-			sig_data + markerlen, sig_size - markerlen);
-	pr_debug("verified signature %s: %d\n", path, ret);
-	vfree(sig_data);
-	return ret;
-}
-#endif /* CONFIG_FIRMWARE_SIG */
 
 static bool fw_get_filesystem_firmware(struct device *device,
 				       struct firmware_buf *buf)
 {
-	int i, ret;
+	int i;
 	bool success = false;
 	char *path = __getname();
 
@@ -354,32 +321,10 @@ static bool fw_get_filesystem_firmware(struct device *device,
 		file = filp_open(path, O_RDONLY, 0);
 		if (IS_ERR(file))
 			continue;
-		success = fw_read_file_contents(file, &buf->data, &buf->size);
+		success = fw_read_file_contents(file, buf);
 		fput(file);
-		if (!success)
-			continue;
-#ifdef CONFIG_FIRMWARE_SIG
-		snprintf(path, PATH_MAX, "%s/%s.sig", fw_path[i], buf->fw_id);
-		ret = verify_sig_file(buf, path);
-		if (ret == -ENOENT && !sig_enforce)
-			ret = 0;
-		if (ret < 0) {
-			if (ret == -ENOENT)
-				pr_err("Cannot find firmware signature %s\n",
-				       path);
-			else if (sig_enforce)
-				pr_err("Invalid firmware signature %s\n", path);
-			if (sig_enforce) {
-				vfree(buf->data);
-				buf->data = NULL;
-				buf->size = 0;
-				success = false;
-				continue;
-			}
-			add_taint(TAINT_USER, LOCKDEP_STILL_OK);
-		}
-#endif /* CONFIG_FIRMWARE_SIG */
-		break;
+		if (success)
+			break;
 	}
 	__putname(path);
 
@@ -902,16 +847,6 @@ static int _request_firmware_load(struct firmware_priv *fw_priv, bool uevent,
 	int retval = 0;
 	struct device *f_dev = &fw_priv->dev;
 	struct firmware_buf *buf = fw_priv->buf;
-
-#ifdef CONFIG_FIRMWARE_SIG
-	/* FIXME: we don't handle signature check for fw loaded via udev */
-	if (sig_enforce) {
-		pr_err("Cannot find firmware file %s; aborting fw loading\n",
-		       buf->fw_id);
-		fw_load_abort(fw_priv);
-		return retval;
-	}
-#endif
 
 	/* fall back on userspace loading */
 	buf->is_paged_buf = true;

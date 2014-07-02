@@ -81,6 +81,8 @@ struct alua_port_group {
 	unsigned char		target_id_str[256];
 	int			target_id_size;
 	int			group_id;
+	int			lun;
+	int			lugrp;
 	int			tpgs;
 	int			state;
 	int			pref;
@@ -103,7 +105,6 @@ struct alua_dh_data {
 	int			rel_port;
 	int			tpgs;
 	int			error;
-	unsigned		flags; /* used for optimizing STPG */
 	struct completion       init_complete;
 };
 
@@ -356,7 +357,7 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 {
 	char target_id_str[256], *target_id = NULL;
 	int target_id_size;
-	int group_id = -1;
+	int group_id = -1, lun = sdev->lun, lugrp = 0;
 	unsigned char *d;
 	struct alua_port_group *tmp_pg, *pg = NULL;
 
@@ -422,6 +423,12 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 			/* Target port group */
 			group_id = (d[6] << 8) + d[7];
 			break;
+		case 0x6:
+			/* Logical unit group */
+			lugrp = (d[2] << 8) + d[3];
+			/* -1 indicates valid LUN group */
+			lun = -1;
+			break;
 		case 0x8:
 			/* SCSI name string */
 			if ((d[1] & 0x30) == 0x20) {
@@ -484,6 +491,13 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 				continue;
 			if (tmp_pg->target_id_size != target_id_size)
 				continue;
+			if (lun != -1) {
+				if (tmp_pg->lun != lun)
+					continue;
+			} else {
+				if (tmp_pg->lugrp != lugrp)
+					continue;
+			}
 			if (memcmp(tmp_pg->target_id, target_id,
 				   target_id_size))
 				continue;
@@ -522,11 +536,12 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 	}
 	pg->target_id_size = target_id_size;
 	pg->group_id = group_id;
+	pg->lun = lun;
+	pg->lugrp = lugrp;
 	pg->buff = pg->inq;
 	pg->bufflen = ALUA_INQUIRY_SIZE;
 	pg->tpgs = h->tpgs;
 	pg->state = TPGS_STATE_OPTIMIZED;
-	pg->flags = h->flags;
 	kref_init(&pg->kref);
 	INIT_DELAYED_WORK(&pg->rtpg_work, alua_rtpg_work);
 	INIT_LIST_HEAD(&pg->rtpg_list);
@@ -973,9 +988,11 @@ static int alua_initialize(struct scsi_device *sdev, struct alua_dh_data *h)
 static int alua_set_params(struct scsi_device *sdev, const char *params)
 {
 	struct alua_dh_data *h = get_alua_data(sdev);
+	struct alua_port_group *pg = NULL;
 	unsigned int optimize = 0, argc;
 	const char *p = params;
 	int result = SCSI_DH_OK;
+	unsigned long flags;
 
 	if (!h)
 		return -ENXIO;
@@ -988,11 +1005,21 @@ static int alua_set_params(struct scsi_device *sdev, const char *params)
 	if ((sscanf(p, "%u", &optimize) != 1) || (optimize > 1))
 		return -EINVAL;
 
-	if (optimize)
-		h->flags |= ALUA_OPTIMIZE_STPG;
-	else
-		h->flags &= ~ALUA_OPTIMIZE_STPG;
+	rcu_read_lock();
+	pg = rcu_dereference(h->pg);
+	if (!pg) {
+		rcu_read_unlock();
+		return -ENXIO;
+	}
+	rcu_read_unlock();
 
+	spin_lock_irqsave(&pg->rtpg_lock, flags);
+	if (optimize)
+		pg->flags |= ALUA_OPTIMIZE_STPG;
+	else
+		pg->flags |= ~ALUA_OPTIMIZE_STPG;
+
+	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 	return result;
 }
 
@@ -1016,15 +1043,13 @@ static int alua_activate(struct scsi_device *sdev,
 	struct alua_dh_data *h = get_alua_data(sdev);
 	struct alua_queue_data *qdata;
 	struct alua_port_group *pg;
+	unsigned long flags;
 
 	if (!h) {
 		if (fn)
 			fn(data, SCSI_DH_NOSYS);
 		return 0;
 	}
-
-	if (optimize_stpg)
-		h->flags |= ALUA_OPTIMIZE_STPG;
 
 	qdata = kzalloc(sizeof(*qdata), GFP_KERNEL);
 	if (!qdata) {
@@ -1053,6 +1078,12 @@ static int alua_activate(struct scsi_device *sdev,
 	}
 	kref_get(&pg->kref);
 	rcu_read_unlock();
+
+	if (optimize_stpg) {
+		spin_lock_irqsave(&pg->rtpg_lock, flags);
+		pg->flags |= ALUA_OPTIMIZE_STPG;
+		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
+	}
 
 	alua_rtpg_queue(pg, sdev, qdata);
 	kref_put(&pg->kref, release_port_group);
