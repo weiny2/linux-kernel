@@ -193,6 +193,7 @@ struct usb_hcd {
 	 * (ohci 32, uhci 1024, ehci 256/512/1024).
 	 */
 
+	void *suse_kabi_padding;
 	/* The HC driver's private data is stored at the end of
 	 * this structure.
 	 */
@@ -377,6 +378,8 @@ struct hc_driver {
 	int	(*disable_usb3_lpm_timeout)(struct usb_hcd *,
 			struct usb_device *, enum usb3_link_state state);
 	int	(*find_raw_port_number)(struct usb_hcd *, int);
+
+	void *suse_kabi_padding;
 };
 
 static inline int hcd_giveback_urb_in_bh(struct usb_hcd *hcd)

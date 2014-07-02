@@ -92,7 +92,7 @@ struct net {
 #if defined(CONFIG_IP_SCTP) || defined(CONFIG_IP_SCTP_MODULE)
 	struct netns_sctp	sctp;
 #endif
-#if defined(CONFIG_IP_DCCP) || defined(CONFIG_IP_DCCP_MODULE)
+#if defined(CONFIG_IP_DCCP) || defined(CONFIG_IP_DCCP_MODULE) || 1
 	struct netns_dccp	dccp;
 #endif
 #ifdef CONFIG_NETFILTER
