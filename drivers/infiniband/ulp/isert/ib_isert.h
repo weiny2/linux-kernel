@@ -116,7 +116,6 @@ struct isert_device;
 
 struct isert_conn {
 	enum iser_conn_state	state;
-	bool			logout_posted;
 	int			post_recv_buf_count;
 	atomic_t		post_send_buf_count;
 	u32			responder_resources;
@@ -148,6 +147,7 @@ struct isert_conn {
 	int			conn_fr_pool_size;
 	/* lock to protect fastreg pool */
 	spinlock_t		conn_lock;
+	bool                    disconnect;
 #define ISERT_COMP_BATCH_COUNT	8
 	int			conn_comp_batch;
 	struct llist_head	conn_comp_llist;

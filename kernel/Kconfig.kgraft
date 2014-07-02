@@ -6,5 +6,7 @@ config KGRAFT
 	depends on DYNAMIC_FTRACE_WITH_REGS
 	depends on HAVE_KGRAFT
 	help
-	  Select this to enable kGraft online kernel patching. The
-	  runtime price is zero, so it is safe to say Y here.
+	  Select this to enable kGraft live kernel patching. The
+	  runtime penalty is nearly zero, so it is safe to say Y here
+	  if you want the kernel to expose the API for live patching
+	  to modules.
