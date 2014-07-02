@@ -516,9 +516,7 @@ NMI_MASK = 0x80000000
 	/* We entered an interrupt context - irqs are off: */
 	TRACE_IRQS_OFF
 	.endm
-#endif
 
-#ifndef CONFIG_XEN
 /* save complete stack frame */
 	.pushsection .kprobes.text, "ax"
 ENTRY(save_paranoid)
