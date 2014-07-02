@@ -72,7 +72,12 @@ static inline void atomic64_sub(long i, atomic64_t *v)
  */
 static inline int atomic64_sub_and_test(long i, atomic64_t *v)
 {
-	GEN_BINARY_RMWcc(LOCK_PREFIX "subq", v->counter, "er", i, "%0", "e");
+	unsigned char c;
+
+	asm volatile(LOCK_PREFIX "subq %2,%0; sete %1"
+		     : "=m" (v->counter), "=qm" (c)
+		     : "er" (i), "m" (v->counter) : "memory");
+	return c;
 }
 
 /**
@@ -111,7 +116,12 @@ static inline void atomic64_dec(atomic64_t *v)
  */
 static inline int atomic64_dec_and_test(atomic64_t *v)
 {
-	GEN_UNARY_RMWcc(LOCK_PREFIX "decq", v->counter, "%0", "e");
+	unsigned char c;
+
+	asm volatile(LOCK_PREFIX "decq %0; sete %1"
+		     : "=m" (v->counter), "=qm" (c)
+		     : "m" (v->counter) : "memory");
+	return c != 0;
 }
 
 /**
@@ -124,7 +134,12 @@ static inline int atomic64_dec_and_test(atomic64_t *v)
  */
 static inline int atomic64_inc_and_test(atomic64_t *v)
 {
-	GEN_UNARY_RMWcc(LOCK_PREFIX "incq", v->counter, "%0", "e");
+	unsigned char c;
+
+	asm volatile(LOCK_PREFIX "incq %0; sete %1"
+		     : "=m" (v->counter), "=qm" (c)
+		     : "m" (v->counter) : "memory");
+	return c != 0;
 }
 
 /**
@@ -138,7 +153,12 @@ static inline int atomic64_inc_and_test(atomic64_t *v)
  */
 static inline int atomic64_add_negative(long i, atomic64_t *v)
 {
-	GEN_BINARY_RMWcc(LOCK_PREFIX "addq", v->counter, "er", i, "%0", "s");
+	unsigned char c;
+
+	asm volatile(LOCK_PREFIX "addq %2,%0; sets %1"
+		     : "=m" (v->counter), "=qm" (c)
+		     : "er" (i), "m" (v->counter) : "memory");
+	return c;
 }
 
 /**
