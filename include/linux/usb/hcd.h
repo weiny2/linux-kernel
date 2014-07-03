@@ -518,6 +518,8 @@ struct usb_tt {
 	spinlock_t		lock;
 	struct list_head	clear_list;	/* of usb_tt_clear */
 	struct work_struct	clear_work;
+
+	void *suse_kabi_padding;
 };
 
 struct usb_tt_clear {
