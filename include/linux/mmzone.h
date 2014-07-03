@@ -350,6 +350,14 @@ struct zone {
 #endif /* CONFIG_SPARSEMEM */
 
 	/*
+	 * This atomic counter is set when there is pagecache limit
+	 * reclaim going on on this particular zone. Other potential
+	 * reclaiers should back off to prevent from heavy lru_lock
+	 * bouncing.
+	 */
+	atomic_t		pagecache_reclaim;
+
+	/*
 	 * This is a per-zone reserve of pages that should not be
 	 * considered dirtyable memory.
 	 */
@@ -379,7 +387,6 @@ struct zone {
 	int			nr_migrate_reserve_block;
 
 	struct pglist_data	*zone_pgdat;
-
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;
 
