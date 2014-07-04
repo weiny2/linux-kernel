@@ -604,7 +604,7 @@ static void init_feature_attrs(void)
 	}
 }
 
-int rm_device_membership(struct btrfs_fs_info *fs_info,
+int btrfs_kobj_rm_device(struct btrfs_fs_info *fs_info,
 		struct btrfs_device *one_device)
 {
 	struct hd_struct *disk;
@@ -624,7 +624,7 @@ int rm_device_membership(struct btrfs_fs_info *fs_info,
 	return 0;
 }
 
-int add_device_membership(struct btrfs_fs_info *fs_info,
+int btrfs_kobj_add_device(struct btrfs_fs_info *fs_info,
 		struct btrfs_device *one_device)
 {
 	int error = 0;
@@ -685,7 +685,7 @@ int btrfs_sysfs_add_one(struct btrfs_fs_info *fs_info)
 	if (error)
 		goto failure;
 
-	error = add_device_membership(fs_info, NULL);
+	error = btrfs_kobj_add_device(fs_info, NULL);
 	if (error)
 		goto failure;
 

@@ -1511,7 +1511,9 @@ static int btrfs_remount(struct super_block *sb, int *flags, char *data)
 			goto restore;
 
 		/* recover relocation */
+		mutex_lock(&fs_info->cleaner_mutex);
 		ret = btrfs_recover_relocation(root);
+		mutex_unlock(&fs_info->cleaner_mutex);
 		if (ret)
 			goto restore;
 
@@ -1851,6 +1853,8 @@ static int btrfs_show_devname(struct seq_file *m, struct dentry *root)
 		head = &cur_devices->devices;
 		list_for_each_entry(dev, head, dev_list) {
 			if (dev->missing)
+				continue;
+			if (!dev->name)
 				continue;
 			if (!first_dev || dev->devid < first_dev->devid)
 				first_dev = dev;

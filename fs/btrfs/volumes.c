@@ -554,12 +554,14 @@ static struct btrfs_fs_devices *clone_fs_devices(struct btrfs_fs_devices *orig)
 		 * This is ok to do without rcu read locked because we hold the
 		 * uuid mutex so nothing we touch in here is going to disappear.
 		 */
-		name = rcu_string_strdup(orig_dev->name->str, GFP_NOFS);
-		if (!name) {
-			kfree(device);
-			goto error;
+		if (orig_dev->name) {
+			name = rcu_string_strdup(orig_dev->name->str, GFP_NOFS);
+			if (!name) {
+				kfree(device);
+				goto error;
+			}
+			rcu_assign_pointer(device->name, name);
 		}
-		rcu_assign_pointer(device->name, name);
 
 		list_add(&device->dev_list, &fs_devices->devices);
 		device->fs_devices = fs_devices;
@@ -1681,7 +1683,7 @@ int btrfs_rm_device(struct btrfs_root *root, char *device_path)
 		device->fs_devices->open_devices--;
 
 	/* remove sysfs entry */
-	rm_device_membership(root->fs_info, device);
+	btrfs_kobj_rm_device(root->fs_info, device);
 
 	call_rcu(&device->rcu, free_device);
 
@@ -2148,7 +2150,7 @@ int btrfs_init_new_device(struct btrfs_root *root, char *device_path)
 				    total_bytes + 1);
 
 	/* add sysfs device entry */
-	add_device_membership(root->fs_info, device);
+	btrfs_kobj_add_device(root->fs_info, device);
 
 	mutex_unlock(&root->fs_info->fs_devices->device_list_mutex);
 
@@ -2212,7 +2214,7 @@ error_trans:
 	unlock_chunks(root);
 	btrfs_end_transaction(trans, root);
 	rcu_string_free(device->name);
-	rm_device_membership(root->fs_info, device);
+	btrfs_kobj_rm_device(root->fs_info, device);
 	kfree(device);
 error:
 	blkdev_put(bdev, FMODE_EXCL);
@@ -2550,9 +2552,6 @@ static int btrfs_relocate_chunk(struct btrfs_root *root,
 	write_lock(&em_tree->lock);
 	remove_extent_mapping(em_tree, em);
 	write_unlock(&em_tree->lock);
-
-	kfree(map);
-	em->bdev = NULL;
 
 	/* once for the tree */
 	free_extent_map(em);
@@ -4291,9 +4290,11 @@ static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 
 	em = alloc_extent_map();
 	if (!em) {
+		kfree(map);
 		ret = -ENOMEM;
 		goto error;
 	}
+	set_bit(EXTENT_FLAG_FS_MAPPING, &em->flags);
 	em->bdev = (struct block_device *)map;
 	em->start = start;
 	em->len = num_bytes;
@@ -4336,7 +4337,6 @@ error_del_extent:
 	/* One for the tree reference */
 	free_extent_map(em);
 error:
-	kfree(map);
 	kfree(devices_info);
 	return ret;
 }
@@ -4548,7 +4548,6 @@ void btrfs_mapping_tree_free(struct btrfs_mapping_tree *tree)
 		write_unlock(&tree->map_tree.lock);
 		if (!em)
 			break;
-		kfree(em->bdev);
 		/* once for us */
 		free_extent_map(em);
 		/* once for the tree */
@@ -5812,6 +5811,7 @@ static int read_one_chunk(struct btrfs_root *root, struct btrfs_key *key,
 		return -ENOMEM;
 	}
 
+	set_bit(EXTENT_FLAG_FS_MAPPING, &em->flags);
 	em->bdev = (struct block_device *)map;
 	em->start = logical;
 	em->len = length;
@@ -5836,7 +5836,6 @@ static int read_one_chunk(struct btrfs_root *root, struct btrfs_key *key,
 		map->stripes[i].dev = btrfs_find_device(root->fs_info, devid,
 							uuid, NULL);
 		if (!map->stripes[i].dev && !btrfs_test_opt(root, DEGRADED)) {
-			kfree(map);
 			free_extent_map(em);
 			return -EIO;
 		}
@@ -5844,7 +5843,6 @@ static int read_one_chunk(struct btrfs_root *root, struct btrfs_key *key,
 			map->stripes[i].dev =
 				add_missing_dev(root, devid, uuid);
 			if (!map->stripes[i].dev) {
-				kfree(map);
 				free_extent_map(em);
 				return -EIO;
 			}

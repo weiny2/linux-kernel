@@ -564,8 +564,8 @@ static int btrfs_dev_replace_finishing(struct btrfs_fs_info *fs_info,
 	list_add(&tgt_device->dev_alloc_list, &fs_info->fs_devices->alloc_list);
 
 	/* replace the sysfs entry */
-	rm_device_membership(fs_info, src_device);
-	add_device_membership(fs_info, tgt_device);
+	btrfs_kobj_rm_device(fs_info, src_device);
+	btrfs_kobj_add_device(fs_info, tgt_device);
 
 	btrfs_rm_dev_replace_blocked(fs_info);
 
