@@ -665,7 +665,8 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	int to_free = count;
 
 	spin_lock(&zone->lock);
-	zone->pages_scanned = 0;
+	if (zone_page_state(zone, NR_PAGES_SCANNED))
+		__mod_zone_page_state(zone, NR_PAGES_SCANNED, 0);
 
 	while (to_free) {
 		struct page *page;
@@ -715,7 +716,8 @@ static void free_one_page(struct zone *zone,
 				int migratetype)
 {
 	spin_lock(&zone->lock);
-	zone->pages_scanned = 0;
+	if (zone_page_state(zone, NR_PAGES_SCANNED))
+		__mod_zone_page_state(zone, NR_PAGES_SCANNED, 0);
 
 	__free_one_page(page, pfn, zone, order, migratetype);
 	if (unlikely(!is_migrate_isolate(migratetype)))
@@ -3210,7 +3212,7 @@ void show_free_areas(unsigned int filter)
 			K(zone_page_state(zone, NR_BOUNCE)),
 			K(zone_page_state(zone, NR_FREE_CMA_PAGES)),
 			K(zone_page_state(zone, NR_WRITEBACK_TEMP)),
-			zone->pages_scanned,
+			K(zone_page_state(zone, NR_PAGES_SCANNED)),
 			(!zone_reclaimable(zone) ? "yes" : "no")
 			);
 		printk("lowmem_reserve[]:");
