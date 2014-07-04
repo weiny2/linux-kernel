@@ -316,9 +316,10 @@ void global_dirty_limits(unsigned long *pbackground, unsigned long *pdirty)
  * Returns the maximum number of dirty pages allowed in a zone, based
  * on the zone's dirtyable memory.
  */
-unsigned long zone_dirty_limit(struct zone *zone)
+static unsigned long zone_dirty_limit(struct zone *zone)
 {
 	unsigned long zone_memory = zone_dirtyable_memory(zone);
+	struct task_struct *tsk = current;
 	unsigned long dirty;
 
 	if (vm_dirty_bytes)
@@ -326,6 +327,9 @@ unsigned long zone_dirty_limit(struct zone *zone)
 			zone_memory / global_dirtyable_memory();
 	else
 		dirty = vm_dirty_ratio * zone_memory / 100;
+
+	if (tsk->flags & PF_LESS_THROTTLE || rt_task(tsk))
+		dirty += dirty / 4;
 
 	return dirty;
 }
@@ -339,14 +343,7 @@ unsigned long zone_dirty_limit(struct zone *zone)
  */
 bool zone_dirty_ok(struct zone *zone)
 {
-	unsigned long limit = zone->dirty_limit_cached;
-	struct task_struct *tsk = current;
-
-	if (tsk->flags & PF_LESS_THROTTLE || rt_task(tsk)) {
-		limit = zone_dirty_limit(zone);
-		zone->dirty_limit_cached = limit;
-		limit += limit / 4;
-	}
+	unsigned long limit = zone_dirty_limit(zone);
 
 	return zone_page_state(zone, NR_FILE_DIRTY) +
 	       zone_page_state(zone, NR_UNSTABLE_NFS) +

@@ -375,6 +375,5 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 #define ALLOC_CPUSET		0x40 /* check for correct cpuset */
 #define ALLOC_CMA		0x80 /* allow allocations from CMA areas */
 #define ALLOC_FAIR		0x100 /* fair zone allocation */
-#define ALLOC_DIRTY		0x200 /* spread GFP_WRITE allocations */
 
 #endif	/* __MM_INTERNAL_H */

@@ -329,17 +329,26 @@ struct zone {
 	 * on the higher zones). This array is recalculated at runtime if the
 	 * sysctl_lowmem_reserve_ratio sysctl changes.
 	 */
-	unsigned int lowmem_reserve[MAX_NR_ZONES];
+	long lowmem_reserve[MAX_NR_ZONES];
 
-	struct per_cpu_pageset __percpu *pageset;
 #ifdef CONFIG_NUMA
 	int node;
 #endif
+
 	/*
 	 * The target ratio of ACTIVE_ANON to INACTIVE_ANON pages on
 	 * this zone's LRU.  Maintained by the pageout code.
 	 */
 	unsigned int inactive_ratio;
+
+	struct pglist_data	*zone_pgdat;
+	struct per_cpu_pageset __percpu *pageset;
+
+	/*
+	 * This is a per-zone reserve of pages that should not be
+	 * considered dirtyable memory.
+	 */
+	unsigned long		dirty_balance_reserve;
 
 #ifndef CONFIG_SPARSEMEM
 	/*
@@ -349,27 +358,6 @@ struct zone {
 	unsigned long		*pageblock_flags;
 #endif /* CONFIG_SPARSEMEM */
 
-	/*
-	 * This atomic counter is set when there is pagecache limit
-	 * reclaim going on on this particular zone. Other potential
-	 * reclaiers should back off to prevent from heavy lru_lock
-	 * bouncing.
-	 */
-	atomic_t		pagecache_reclaim;
-
-	/*
-	 * This is a per-zone reserve of pages that should not be
-	 * considered dirtyable memory.
-	 */
-	unsigned long		dirty_balance_reserve;
-
-	/*
-	 * When free pages are below this point, additional steps are taken
-	 * when reading the number of free pages to avoid per-cpu counter
-	 * drift allowing watermarks to be breached
-	 */
-	unsigned long percpu_drift_mark;
-
 #ifdef CONFIG_NUMA
 	/*
 	 * zone reclaim becomes active if more unmapped pages exist.
@@ -378,15 +366,6 @@ struct zone {
 	unsigned long		min_slab_pages;
 #endif /* CONFIG_NUMA */
 
-	const char		*name;
-
-	/*
-	 * Number of MIGRATE_RESEVE page block. To maintain for just
-	 * optimization. Protected by zone->lock.
-	 */
-	int			nr_migrate_reserve_block;
-
-	struct pglist_data	*zone_pgdat;
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;
 
@@ -432,9 +411,17 @@ struct zone {
 	 * adjust_managed_page_count() should be used instead of directly
 	 * touching zone->managed_pages and totalram_pages.
 	 */
+	unsigned long		managed_pages;
 	unsigned long		spanned_pages;
 	unsigned long		present_pages;
-	unsigned long		managed_pages;
+
+	const char		*name;
+
+	/*
+	 * Number of MIGRATE_RESEVE page block. To maintain for just
+	 * optimization. Protected by zone->lock.
+	 */
+	int			nr_migrate_reserve_block;
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 	/* see spanned/present_pages for more description */
@@ -480,17 +467,21 @@ struct zone {
 	/* zone flags, see below */
 	unsigned long		flags;
 
-	unsigned long		dirty_limit_cached;
-
 	ZONE_PADDING(_pad2_)
 
 	/* Write-intensive fields used by page reclaim */
 
 	/* Fields commonly accessed by the page reclaim scanner */
 	spinlock_t		lru_lock;
+	unsigned long		pages_scanned;	   /* since last reclaim */
 	struct lruvec		lruvec;
 
-	unsigned long		pages_scanned;	   /* since last reclaim */
+	/*
+	 * When free pages are below this point, additional steps are taken
+	 * when reading the number of free pages to avoid per-cpu counter
+	 * drift allowing watermarks to be breached
+	 */
+	unsigned long percpu_drift_mark;
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 	/* pfn where compaction free scanner should start */
@@ -515,6 +506,14 @@ struct zone {
 	bool			compact_blockskip_flush;
 #endif
 
+	/*
+	 * This atomic counter is set when there is pagecache limit
+	 * reclaim going on on this particular zone. Other potential
+	 * reclaiers should back off to prevent from heavy lru_lock
+	 * bouncing.
+	 */
+	atomic_t		pagecache_reclaim;
+
 	ZONE_PADDING(_pad3_)
 	/* Zone statistics */
 	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
@@ -534,7 +533,6 @@ typedef enum {
 	ZONE_WRITEBACK,			/* reclaim scanning has recently found
 					 * many pages under writeback
 					 */
-	ZONE_FAIR_DEPLETED,		/* fair zone policy batch depleted */
 } zone_flags_t;
 
 static inline void zone_set_flag(struct zone *zone, zone_flags_t flag)
@@ -570,11 +568,6 @@ static inline int zone_is_reclaim_writeback(const struct zone *zone)
 static inline int zone_is_reclaim_locked(const struct zone *zone)
 {
 	return test_bit(ZONE_RECLAIM_LOCKED, &zone->flags);
-}
-
-static inline int zone_is_fair_depleted(const struct zone *zone)
-{
-	return test_bit(ZONE_FAIR_DEPLETED, &zone->flags);
 }
 
 static inline int zone_is_oom_locked(const struct zone *zone)
@@ -700,7 +693,6 @@ struct zonelist_cache;
 struct zoneref {
 	struct zone *zone;	/* Pointer to actual zone */
 	int zone_idx;		/* zone_idx(zoneref->zone) */
-	bool fair_enabled;	/* eligible for fair zone policy */
 };
 
 /*
