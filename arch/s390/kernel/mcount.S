@@ -53,6 +53,49 @@ ENTRY(ftrace_graph_caller)
 3:	lm	%r2,%r5,16(%r15)
 	br	%r14
 
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+ENTRY(ftrace_regs_caller)
+	bras	%r1,1f
+0:	.long	function_trace_stop
+1:	l	%r1,0(%r1)
+	icm	%r1,0xf,0(%r1)
+	bnzr	%r14
+	lr	%r1,%r15
+	ahi	%r15,-188
+	st	%r1,__SF_BACKCHAIN(%r15)
+	st	%r1,168(%r15)
+	stm	%r0,%r13,108(%r15)
+	st	%r14,104(%r15)
+	lr	%r2,%r14
+	ahi	%r2,-MCOUNT_INSN_SIZE
+	l	%r3,192(%r15)
+	st	%r3,164(%r15)
+	bras	%r1,1f
+0:	.long	ftrace_trace_function
+1:	.long	function_trace_op
+	l	%r4,1b-0b(%r1)
+	l	%r4,0(%r4)
+	lr	%r5, %r15
+	ahi	%r5, 96
+	l	%r14,0(%r1)
+	l	%r14,0(%r14)
+	basr	%r14,%r14
+#ifdef CONFIG_FUNCTION_GRAPH_TRACER
+	l	%r2,192(%r15)
+	l	%r3,244(%r15)
+ENTRY(ftrace_regs_graph_caller)
+# The bras instruction gets runtime patched to call prepare_ftrace_return.
+# See ftrace_enable_ftrace_graph_caller. The patched instruction is:
+#	bras	%r14,prepare_ftrace_return
+	bras	%r14,0f
+0:	st	%r2,192(%r15)
+#endif
+	lm	%r0,%r13,108(%r15)
+	l	%r14,104(%r15)
+	ahi	%r15,188
+	br	%r14
+#endif
+
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 
 ENTRY(return_to_handler)

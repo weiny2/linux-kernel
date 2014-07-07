@@ -483,5 +483,8 @@ void __init startup_init(void)
 #ifdef CONFIG_DYNAMIC_FTRACE
 	S390_lowcore.ftrace_func = (unsigned long)ftrace_caller;
 #endif
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+	S390_lowcore.ftrace_regs_func = (unsigned long)ftrace_regs_caller;
+#endif
 	lockdep_on();
 }

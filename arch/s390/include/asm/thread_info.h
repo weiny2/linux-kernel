@@ -92,6 +92,7 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_MEMDIE		18	/* is terminating due to OOM killer */
 #define TIF_RESTORE_SIGMASK	19	/* restore signal mask in do_signal() */
 #define TIF_SINGLE_STEP		20	/* This task is single stepped */
+#define TIF_KGR_IN_PROGRESS	21	/* This task has not finished patching */
 
 #define _TIF_SYSCALL		(1<<TIF_SYSCALL)
 #define _TIF_NOTIFY_RESUME	(1<<TIF_NOTIFY_RESUME)
@@ -106,6 +107,7 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_SYSCALL_TRACEPOINT	(1<<TIF_SYSCALL_TRACEPOINT)
 #define _TIF_31BIT		(1<<TIF_31BIT)
 #define _TIF_SINGLE_STEP	(1<<TIF_SINGLE_STEP)
+#define _TIF_KGR_IN_PROGRESS	(1<<TIF_KGR_IN_PROGRESS)
 
 #ifdef CONFIG_64BIT
 #define is_32bit_task()		(test_thread_flag(TIF_31BIT))
