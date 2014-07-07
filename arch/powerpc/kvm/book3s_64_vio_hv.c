@@ -103,3 +103,4 @@ long kvmppc_h_get_tce(struct kvm_vcpu *vcpu, unsigned long liobn,
 	return H_TOO_HARD;
 }
 EXPORT_SYMBOL_GPL(kvmppc_h_get_tce);
+EXPORT_SYMBOL_GPL(kvmppc_h_put_tce);

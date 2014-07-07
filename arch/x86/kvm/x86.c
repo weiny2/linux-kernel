@@ -6101,7 +6101,7 @@ static int __vcpu_run(struct kvm_vcpu *vcpu)
 		}
 		if (need_resched()) {
 			srcu_read_unlock(&kvm->srcu, vcpu->srcu_idx);
-			kvm_resched(vcpu);
+			cond_resched();
 			vcpu->srcu_idx = srcu_read_lock(&kvm->srcu);
 		}
 	}
@@ -7065,7 +7065,7 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 	kfree(rcu_dereference_check(kvm->arch.apic_map, 1));
 }
 
-void kvm_arch_free_memslot(struct kvm_memory_slot *free,
+void kvm_arch_free_memslot(struct kvm *kvm, struct kvm_memory_slot *free,
 			   struct kvm_memory_slot *dont)
 {
 	int i;
@@ -7086,7 +7086,8 @@ void kvm_arch_free_memslot(struct kvm_memory_slot *free,
 	}
 }
 
-int kvm_arch_create_memslot(struct kvm_memory_slot *slot, unsigned long npages)
+int kvm_arch_create_memslot(struct kvm *kvm, struct kvm_memory_slot *slot,
+			    unsigned long npages)
 {
 	int i;
 
