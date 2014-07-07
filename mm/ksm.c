@@ -1729,8 +1729,9 @@ static int ksm_scan_thread(void *nothing)
 			schedule_timeout_interruptible(
 				msecs_to_jiffies(ksm_thread_sleep_millisecs));
 		} else {
-			wait_event_freezable(ksm_thread_wait,
-				ksmd_should_run() || kthread_should_stop());
+			wait_event_freezable(ksm_thread_wait, ({
+				kgr_task_safe(current);
+				ksmd_should_run() || kthread_should_stop(); }));
 		}
 	}
 	return 0;
