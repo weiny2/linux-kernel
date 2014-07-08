@@ -21,6 +21,7 @@
 
 void ftrace_disable_code(void);
 void ftrace_enable_insn(void);
+void ftrace_enable_regs_insn(void);
 
 #ifdef CONFIG_64BIT
 /*
@@ -56,7 +57,13 @@ asm(
 	"0:\n"
 	"	.align	4\n"
 	"ftrace_enable_insn:\n"
-	"	lg	%r1,"__stringify(__LC_FTRACE_FUNC)"\n");
+	"	lg	%r1,"__stringify(__LC_FTRACE_FUNC)"\n"
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+	"	.align	4\n"
+	"ftrace_enable_regs_insn:\n"
+	"	lg	%r1,"__stringify(__LC_FTRACE_REGS_FUNC)"\n"
+#endif
+);
 
 #define FTRACE_INSN_SIZE	6
 
@@ -101,7 +108,13 @@ asm(
 	"1:\n"
 	"	.align	4\n"
 	"ftrace_enable_insn:\n"
-	"	l	%r14,"__stringify(__LC_FTRACE_FUNC)"\n");
+	"	l	%r14,"__stringify(__LC_FTRACE_FUNC)"\n"
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+	"	.align	4\n"
+	"ftrace_enable_regs_insn:\n"
+	"	l	%r14,"__stringify(__LC_FTRACE_REGS_FUNC)"\n"
+#endif
+);
 
 #define FTRACE_INSN_SIZE	4
 
@@ -119,11 +132,28 @@ int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
 
 int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 {
-	if (probe_kernel_write((void *) rec->ip, ftrace_enable_insn,
-			       FTRACE_INSN_SIZE))
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+	if (rec->flags & FTRACE_FL_REGS) {
+		if (probe_kernel_write((void *) rec->ip, ftrace_enable_regs_insn,
+				       FTRACE_INSN_SIZE))
 		return -EPERM;
+	} else
+#endif
+	{
+		if (probe_kernel_write((void *) rec->ip, ftrace_enable_insn,
+				       FTRACE_INSN_SIZE))
+		return -EPERM;
+	}
 	return 0;
 }
+
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
+				unsigned long addr)
+{
+	return ftrace_make_call(rec, addr);
+}
+#endif
 
 int ftrace_update_ftrace_func(ftrace_func_t func)
 {
@@ -175,19 +205,41 @@ out:
 int ftrace_enable_ftrace_graph_caller(void)
 {
 	unsigned short offset;
+	int ret;
+
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+	offset = ((void *) prepare_ftrace_return -
+		  (void *) ftrace_regs_graph_caller) / 2;
+	if ((ret = probe_kernel_write((void *) ftrace_regs_graph_caller + 2,
+				  &offset, sizeof(offset))))
+		return ret;
+#endif
 
 	offset = ((void *) prepare_ftrace_return -
 		  (void *) ftrace_graph_caller) / 2;
-	return probe_kernel_write((void *) ftrace_graph_caller + 2,
-				  &offset, sizeof(offset));
+	if ((ret = probe_kernel_write((void *) ftrace_graph_caller + 2,
+				  &offset, sizeof(offset))))
+		return ret;
+
+	return 0;
 }
 
 int ftrace_disable_ftrace_graph_caller(void)
 {
 	static unsigned short offset = 0x0002;
+	int ret;
 
-	return probe_kernel_write((void *) ftrace_graph_caller + 2,
-				  &offset, sizeof(offset));
+#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+	if ((ret = probe_kernel_write((void *) ftrace_regs_graph_caller + 2,
+			  &offset, sizeof(offset))))
+		return ret;
+#endif
+
+	if ((ret = probe_kernel_write((void *) ftrace_graph_caller + 2,
+			  &offset, sizeof(offset))))
+		return ret;
+
+	return 0;
 }
 
 #endif /* CONFIG_DYNAMIC_FTRACE */
