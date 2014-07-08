@@ -141,11 +141,12 @@ BEGIN_FTR_SECTION
 
 	beq	cr1,2f
 	b	power7_wakeup_noloss
-2:	b	power7_wakeup_loss
+2:	b	power7_wakeup_tb_loss
 
 	/* Fast Sleep wakeup on PowerNV */
 8:	GET_PACA(r13)
-	b 	power7_wakeup_tb_loss
+	b 	power7_wakeup_loss
+
 9:
 END_FTR_SECTION_IFSET(CPU_FTR_HVMODE | CPU_FTR_ARCH_206)
 #endif /* CONFIG_PPC_P7_NAP */
