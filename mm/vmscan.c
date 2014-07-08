@@ -1490,7 +1490,7 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 	__mod_zone_page_state(zone, NR_ISOLATED_ANON + file, nr_taken);
 
 	if (global_reclaim(sc)) {
-		zone_page_state_add(NR_PAGES_SCANNED, zone, nr_scanned);
+		__mod_zone_page_state(zone, NR_PAGES_SCANNED, nr_scanned);
 		if (current_is_kswapd())
 			__count_zone_vm_events(PGSCAN_KSWAPD, zone, nr_scanned);
 		else
@@ -1682,7 +1682,7 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	nr_taken = isolate_lru_pages(nr_to_scan, lruvec, &l_hold,
 				     &nr_scanned, sc, isolate_mode, lru);
 	if (global_reclaim(sc))
-		zone_page_state_add(NR_PAGES_SCANNED, zone, nr_scanned);
+		__mod_zone_page_state(zone, NR_PAGES_SCANNED, nr_scanned);
 
 	reclaim_stat->recent_scanned[file] += nr_taken;
 
