@@ -10,7 +10,7 @@
 
 #include <net/secure_seq.h>
 
-#if IS_ENABLED(CONFIG_IPV6) || IS_ENABLED(CONFIG_INET)
+#if IS_ENABLED(CONFIG_IPV6) || IS_ENABLED(CONFIG_INET) || 1
 #define NET_SECRET_SIZE (MD5_MESSAGE_BYTES / 4)
 
 static u32 net_secret[NET_SECRET_SIZE] ____cacheline_aligned;
