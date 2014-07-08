@@ -20,6 +20,7 @@
 #include <linux/bitops.h>
 #include <linux/compiler.h>
 #include <linux/kobject.h>
+#include <linux/list.h>
 #include <linux/ftrace.h>
 #include <linux/sched.h>
 
@@ -35,7 +36,7 @@ struct kgr_patch;
  * struct kgr_patch_fun -- state of a single function in a kGraft patch
  *
  * @name: function to patch
- * @new_name: function with new body
+ * @new_fun: function with the new body
  * @loc_old: cache of @name's fentry
  * @loc_new: cache of @new_name's fentry
  * @ftrace_ops_slow: ftrace ops for slow (temporary) stub
@@ -45,7 +46,7 @@ struct kgr_patch_fun {
 	struct kgr_patch *patch;
 
 	const char *name;
-	const char *new_name;
+	void *new_fun;
 
 	bool abort_if_missing;
 	enum kgr_patch_state {
@@ -62,8 +63,8 @@ struct kgr_patch_fun {
 	unsigned long loc_old;
 	unsigned long loc_new;
 
-	struct ftrace_ops *ftrace_ops_slow;
-	struct ftrace_ops *ftrace_ops_fast;
+	struct ftrace_ops ftrace_ops_slow;
+	struct ftrace_ops ftrace_ops_fast;
 
 	unsigned long suse_kabi_padding[4];
 };
@@ -72,7 +73,9 @@ struct kgr_patch_fun {
  * struct kgr_patch -- a kGraft patch
  *
  * @kobj: object representing the sysfs entry
+ * @list: member in patches list
  * @finish: waiting till it is safe to remove the module with the patch
+ * @refs: how many patches need to be reverted before this one
  * @name: name of the patch (to appear in sysfs)
  * @owner: module to refcount on patching
  * @irq_use_new: per-cpu array to remember kGraft state for interrupts
@@ -80,32 +83,25 @@ struct kgr_patch_fun {
  */
 struct kgr_patch {
 	struct kobject kobj;
+	struct list_head list;
 	struct completion finish;
+	unsigned int refs;
 	const char *name;
 	struct module *owner;
 	bool __percpu *irq_use_new;
 	unsigned long suse_kabi_padding[8];
-	struct kgr_patch_fun *patches[];
+	struct kgr_patch_fun patches[];
 };
 
-#define KGR_PATCHED_FUNCTION(_name, _new_function, abort)			\
-	typeof(_new_function) __used _new_function;				\
-	static struct ftrace_ops __kgr_patch_ftrace_ops_slow_ ## _name = {	\
-		.flags = FTRACE_OPS_FL_SAVE_REGS,				\
-	};									\
-	static struct ftrace_ops __kgr_patch_ftrace_ops_fast_ ## _name = {	\
-		.flags = FTRACE_OPS_FL_SAVE_REGS,				\
-	};									\
-	static struct kgr_patch_fun __kgr_patch_ ## _name = {			\
-		.name = #_name,							\
-		.new_name = #_new_function,					\
-		.abort_if_missing = abort,					\
-		.ftrace_ops_slow = &__kgr_patch_ftrace_ops_slow_ ## _name,	\
-		.ftrace_ops_fast = &__kgr_patch_ftrace_ops_fast_ ## _name,	\
-	};
+#define kgr_for_each_patch(p, pf)	\
+	for (pf = p->patches; pf->name; pf++)
 
-#define KGR_PATCH(name)		&__kgr_patch_ ## name
-#define KGR_PATCH_END		NULL
+#define KGR_PATCH(_name, _new_function, abort)	{			\
+		.name = #_name,						\
+		.new_fun = _new_function,				\
+		.abort_if_missing = abort,				\
+	}
+#define KGR_PATCH_END				{ }
 
 extern bool kgr_in_progress;
 

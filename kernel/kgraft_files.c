@@ -42,15 +42,13 @@ static struct kobj_type kgr_patch_kobj_ktype = {
 static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 		char *buf)
 {
-	struct kgr_patch_fun *const *patch_fun;
 	struct kgr_patch *p = kobj_to_patch(kobj);
+	const struct kgr_patch_fun *pf;
 	ssize_t size;
 
 	size = snprintf(buf, PAGE_SIZE, "%-20s  State  Fatal\n", "Function");
 
-	for (patch_fun = p->patches; *patch_fun; patch_fun++) {
-		const struct kgr_patch_fun *pf = *patch_fun;
-
+	kgr_for_each_patch(p, pf) {
 		size += snprintf(buf + size, PAGE_SIZE - size,
 				"%-20s  %5d  %5d\n",
 				pf->name, pf->state, pf->abort_if_missing);
@@ -58,21 +56,32 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 	return size;
 }
 
+static ssize_t refs_show(struct kobject *kobj, struct kobj_attribute *attr,
+		char *buf)
+{
+	struct kgr_patch *p = kobj_to_patch(kobj);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", p->refs);
+}
+
 static ssize_t revert_store(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
 {
 	struct kgr_patch *p = kobj_to_patch(kobj);
+	int ret;
 
-	kgr_modify_kernel(p, true);
+	ret = kgr_modify_kernel(p, true);
 
-	return count;
+	return ret < 0 ? ret : count;
 }
 
 static struct kobj_attribute kgr_attr_state = __ATTR_RO(state);
+static struct kobj_attribute kgr_attr_refs = __ATTR_RO(refs);
 static struct kobj_attribute kgr_attr_revert = __ATTR_WO(revert);
 
 static struct attribute *kgr_patch_sysfs_entries[] = {
 	&kgr_attr_state.attr,
+	&kgr_attr_refs.attr,
 	&kgr_attr_revert.attr,
 	NULL
 };

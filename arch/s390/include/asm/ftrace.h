@@ -4,6 +4,7 @@
 #ifndef __ASSEMBLY__
 
 extern void _mcount(void);
+extern void ftrace_regs_graph_caller(void);
 
 struct dyn_arch_ftrace { };
 

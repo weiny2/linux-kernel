@@ -450,7 +450,6 @@ void ftrace_modify_all_code(int command);
 
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 extern void ftrace_graph_caller(void);
-extern void ftrace_regs_graph_caller(void);
 extern int ftrace_enable_ftrace_graph_caller(void);
 extern int ftrace_disable_ftrace_graph_caller(void);
 #else
