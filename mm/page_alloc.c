@@ -663,10 +663,12 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	int migratetype = 0;
 	int batch_free = 0;
 	int to_free = count;
+	unsigned long nr_scanned;
 
 	spin_lock(&zone->lock);
-	if (zone_page_state(zone, NR_PAGES_SCANNED))
-		__mod_zone_page_state(zone, NR_PAGES_SCANNED, 0);
+	nr_scanned = zone_page_state(zone, NR_PAGES_SCANNED);
+	if (nr_scanned)
+		__mod_zone_page_state(zone, NR_PAGES_SCANNED, -nr_scanned);
 
 	while (to_free) {
 		struct page *page;
@@ -715,9 +717,11 @@ static void free_one_page(struct zone *zone,
 				unsigned int order,
 				int migratetype)
 {
+	unsigned long nr_scanned;
 	spin_lock(&zone->lock);
-	if (zone_page_state(zone, NR_PAGES_SCANNED))
-		__mod_zone_page_state(zone, NR_PAGES_SCANNED, 0);
+	nr_scanned = zone_page_state(zone, NR_PAGES_SCANNED);
+	if (nr_scanned)
+		__mod_zone_page_state(zone, NR_PAGES_SCANNED, -nr_scanned);
 
 	__free_one_page(page, pfn, zone, order, migratetype);
 	if (unlikely(!is_migrate_isolate(migratetype)))
@@ -1909,8 +1913,6 @@ static void reset_alloc_batches(struct zone *preferred_zone)
 	struct zone *zone = preferred_zone->zone_pgdat->node_zones;
 
 	do {
-		if (!zone_is_fair_depleted(zone))
-			continue;
 		mod_zone_page_state(zone, NR_ALLOC_BATCH,
 			high_wmark_pages(zone) - low_wmark_pages(zone) -
 			atomic_long_read(&zone->vm_stat[NR_ALLOC_BATCH]));
@@ -1935,7 +1937,6 @@ get_page_from_freelist(gfp_t gfp_mask, nodemask_t *nodemask, unsigned int order,
 	int did_zlc_setup = 0;		/* just call zlc_setup() one time */
 	bool consider_zone_dirty = (alloc_flags & ALLOC_WMARK_LOW) &&
 				(gfp_mask & __GFP_WRITE);
-	int nr_fair_eligible = 0;
 	int nr_fair_skipped = 0;
 	bool zonelist_rescan;
 
@@ -1964,19 +1965,8 @@ zonelist_scan:
 		 * time the page has in memory before being reclaimed.
 		 */
 		if (alloc_flags & ALLOC_FAIR) {
-			if (!zone_local(preferred_zone, zone)) {
-				/*
-				 * If this is the first non-preferred
-				 * zone and it's not local then we can
-				 * cancel the fair zone policy now
-				 * instead of looping back around
-				 */
-				if (!nr_fair_eligible)
-					alloc_flags &= ~ALLOC_FAIR;
-				else
-					break;
-			}
-			nr_fair_eligible++;
+			if (!zone_local(preferred_zone, zone))
+				break;
 			if (zone_is_fair_depleted(zone)) {
 				nr_fair_skipped++;
 				continue;
