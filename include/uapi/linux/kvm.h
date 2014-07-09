@@ -518,6 +518,10 @@ struct kvm_ppc_smmu_info {
 /* machine type bits, to be used as argument to KVM_CREATE_VM */
 #define KVM_VM_S390_UCONTROL	1
 
+/* on ppc, 0 indicate default, 1 should force HV and 2 PR */
+#define KVM_VM_PPC_HV 1
+#define KVM_VM_PPC_PR 2
+
 #define KVM_S390_SIE_PAGE_OFFSET 1
 
 /*
@@ -668,6 +672,16 @@ struct kvm_ppc_smmu_info {
 #define KVM_CAP_IRQ_XICS 92
 #define KVM_CAP_ARM_EL1_32BIT 93
 #define KVM_CAP_SPAPR_MULTITCE 94
+#define KVM_CAP_EXT_EMUL_CPUID 95
+#define KVM_CAP_HYPERV_TIME 96
+#define KVM_CAP_IOAPIC_POLARITY_IGNORED 97
+#define KVM_CAP_ENABLE_CAP_VM 98
+#define KVM_CAP_S390_IRQCHIP 99
+#define KVM_CAP_IOEVENTFD_NO_LENGTH 100
+#define KVM_CAP_VM_ATTRIBUTES 101
+#define KVM_CAP_ARM_PSCI_0_2 102
+#define KVM_CAP_PPC_FIXUP_HCALL 103
+#define KVM_CAP_PPC_ENABLE_HCALL 104
 
 #ifdef KVM_CAP_IRQ_ROUTING
 

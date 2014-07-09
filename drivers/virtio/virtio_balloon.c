@@ -300,11 +300,12 @@ static int balloon(void *_vballoon)
 		s64 diff;
 
 		try_to_freeze();
-		wait_event_interruptible(vb->config_change,
+		wait_event_interruptible(vb->config_change, ({
+					 kgr_task_safe(current);
 					 (diff = towards_target(vb)) != 0
 					 || vb->need_stats_update
 					 || kthread_should_stop()
-					 || freezing(current));
+					 || freezing(current); }));
 		if (vb->need_stats_update)
 			stats_handle_request(vb);
 		if (diff > 0)

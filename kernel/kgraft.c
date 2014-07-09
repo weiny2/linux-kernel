@@ -18,6 +18,7 @@
 #include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/kallsyms.h>
 #include <linux/kgraft.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/percpu.h>
 #include <linux/sched.h>
@@ -34,9 +35,10 @@ static void kgr_work_fn(struct work_struct *work);
 static struct workqueue_struct *kgr_wq;
 static DECLARE_DELAYED_WORK(kgr_work, kgr_work_fn);
 static DEFINE_MUTEX(kgr_in_progress_lock);
+static LIST_HEAD(patches);
 bool kgr_in_progress;
 static bool kgr_initialized;
-static const struct kgr_patch *kgr_patch;
+static struct kgr_patch *kgr_patch;
 static bool kgr_revert;
 
 /*
@@ -80,6 +82,22 @@ static void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	}
 }
 
+static void kgr_refs_inc(void)
+{
+	struct kgr_patch *p;
+
+	list_for_each_entry(p, &patches, list)
+		p->refs++;
+}
+
+static void kgr_refs_dec(void)
+{
+	struct kgr_patch *p;
+
+	list_for_each_entry(p, &patches, list)
+		p->refs--;
+}
+
 static bool kgr_still_patching(void)
 {
 	struct task_struct *p;
@@ -98,19 +116,29 @@ static bool kgr_still_patching(void)
 
 static void kgr_finalize(void)
 {
-	struct kgr_patch_fun *const *patch_fun;
+	struct kgr_patch_fun *patch_fun;
 
-	for (patch_fun = kgr_patch->patches; *patch_fun; patch_fun++) {
-		int ret = kgr_patch_code(*patch_fun, true, kgr_revert);
+	kgr_for_each_patch(kgr_patch, patch_fun) {
+		int ret = kgr_patch_code(patch_fun, true, kgr_revert);
 
 		if (ret < 0)
 			pr_err("kgr: finalize for %s failed, trying to continue\n",
-					(*patch_fun)->name);
+					patch_fun->name);
 	}
+
 	free_percpu(kgr_patch->irq_use_new);
 
 	if (kgr_revert)
 		module_put(kgr_patch->owner);
+
+	mutex_lock(&kgr_in_progress_lock);
+	kgr_in_progress = false;
+	if (kgr_revert) {
+		list_del(&kgr_patch->list);
+		kgr_refs_dec();
+	} else
+		list_add_tail(&kgr_patch->list, &patches);
+	mutex_unlock(&kgr_in_progress_lock);
 }
 
 static void kgr_work_fn(struct work_struct *work)
@@ -129,9 +157,6 @@ static void kgr_work_fn(struct work_struct *work)
 	 */
 	pr_info("kgr succeeded\n");
 	kgr_finalize();
-	mutex_lock(&kgr_in_progress_lock);
-	kgr_in_progress = false;
-	mutex_unlock(&kgr_in_progress_lock);
 }
 
 static void kgr_mark_processes(void)
@@ -207,42 +232,68 @@ static void kgr_handle_irqs(void)
 	schedule_on_each_cpu(kgr_handle_irq_cpu);
 }
 
+static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
+{
+	const char *name = patch_fun->name;
+	unsigned long last_new_fun = 0;
+	struct kgr_patch_fun *pf;
+	struct kgr_patch *p;
+
+	list_for_each_entry(p, &patches, list) {
+		kgr_for_each_patch(p, pf) {
+			if (pf->state != KGR_PATCH_APPLIED)
+				continue;
+
+			if (!strcmp(pf->name, name))
+				last_new_fun = (unsigned long)pf->new_fun;
+		}
+	}
+
+	if (last_new_fun)
+		return ftrace_function_to_fentry(last_new_fun);
+
+	return kgr_get_fentry_loc(name);
+}
+
 static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
 {
+	struct ftrace_ops *fops;
 	unsigned long fentry_loc;
 
 	/*
 	 * Initialize the ftrace_ops->private with pointers to the fentry
 	 * sites of both old and new functions. This is used as a
-	 * redirection target in the per-arch stubs.
-	 *
-	 * Beware! -- freeing (once unloading will be implemented)
-	 * will require synchronize_sched() etc.
+	 * redirection target in the stubs.
 	 */
 
-	fentry_loc = kgr_get_fentry_loc(patch_fun->new_name);
-	if (IS_ERR_VALUE(fentry_loc)) {
-		pr_debug("kgr: fentry location lookup failed\n");
-		return fentry_loc;
+	fentry_loc = ftrace_function_to_fentry(
+			((unsigned long)patch_fun->new_fun));
+	if (!fentry_loc) {
+		pr_err("kgr: fentry_loc not properly resolved\n");
+		return -ENXIO;
 	}
-	pr_debug("kgr: storing %lx to loc_new for %s\n",
-			fentry_loc, patch_fun->new_name);
+
+	pr_debug("kgr: storing %lx to loc_new for %pf\n",
+			fentry_loc, patch_fun->new_fun);
 	patch_fun->loc_new = fentry_loc;
 
-	fentry_loc = kgr_get_fentry_loc(patch_fun->name);
-	if (IS_ERR_VALUE(fentry_loc)) {
-		pr_debug("kgr: fentry location lookup failed\n");
+	fentry_loc = kgr_get_old_fun(patch_fun);
+	if (IS_ERR_VALUE(fentry_loc))
 		return fentry_loc;
-	}
 
 	pr_debug("kgr: storing %lx to loc_old for %s\n",
 			fentry_loc, patch_fun->name);
 	patch_fun->loc_old = fentry_loc;
 
-	patch_fun->ftrace_ops_fast->private = patch_fun;
-	patch_fun->ftrace_ops_fast->func = kgr_stub_fast;
-	patch_fun->ftrace_ops_slow->private = patch_fun;
-	patch_fun->ftrace_ops_slow->func = kgr_stub_slow;
+	fops = &patch_fun->ftrace_ops_fast;
+	fops->private = patch_fun;
+	fops->func = kgr_stub_fast;
+	fops->flags = FTRACE_OPS_FL_SAVE_REGS;
+
+	fops = &patch_fun->ftrace_ops_slow;
+	fops->private = patch_fun;
+	fops->func = kgr_stub_slow;
+	fops->flags = FTRACE_OPS_FL_SAVE_REGS;
 
 	return 0;
 }
@@ -268,27 +319,27 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 		}
 
 		next_state = KGR_PATCH_SLOW;
-		new_ops = patch_fun->ftrace_ops_slow;
+		new_ops = &patch_fun->ftrace_ops_slow;
 		break;
 	case KGR_PATCH_SLOW:
 		if (revert || !final)
 			return -EINVAL;
 		next_state = KGR_PATCH_APPLIED;
-		new_ops = patch_fun->ftrace_ops_fast;
-		unreg_ops = patch_fun->ftrace_ops_slow;
+		new_ops = &patch_fun->ftrace_ops_fast;
+		unreg_ops = &patch_fun->ftrace_ops_slow;
 		break;
 	case KGR_PATCH_APPLIED:
 		if (!revert || final)
 			return -EINVAL;
 		next_state = KGR_PATCH_REVERT_SLOW;
-		new_ops = patch_fun->ftrace_ops_slow;
-		unreg_ops = patch_fun->ftrace_ops_fast;
+		new_ops = &patch_fun->ftrace_ops_slow;
+		unreg_ops = &patch_fun->ftrace_ops_fast;
 		break;
 	case KGR_PATCH_REVERT_SLOW:
 		if (!revert || !final)
 			return -EINVAL;
 		next_state = KGR_PATCH_REVERTED;
-		unreg_ops = patch_fun->ftrace_ops_slow;
+		unreg_ops = &patch_fun->ftrace_ops_slow;
 		break;
 	case KGR_PATCH_SKIPPED:
 		return 0;
@@ -336,7 +387,7 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 
 int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 {
-	struct kgr_patch_fun *const *patch_fun;
+	struct kgr_patch_fun *patch_fun;
 	int ret;
 
 	if (!kgr_initialized) {
@@ -351,6 +402,12 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	}
 
 	mutex_lock(&kgr_in_progress_lock);
+	if (patch->refs) {
+		pr_err("kgr: can't patch, this patch is still referenced\n");
+		ret = -EBUSY;
+		goto err_unlock;
+	}
+
 	if (kgr_in_progress) {
 		pr_err("kgr: can't patch, another patching not yet finalized\n");
 		ret = -EAGAIN;
@@ -359,10 +416,10 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 
 	kgr_mark_processes();
 
-	for (patch_fun = patch->patches; *patch_fun; patch_fun++) {
-		(*patch_fun)->patch = patch;
+	kgr_for_each_patch(patch, patch_fun) {
+		patch_fun->patch = patch;
 
-		ret = kgr_patch_code(*patch_fun, false, revert);
+		ret = kgr_patch_code(patch_fun, false, revert);
 		/*
 		 * In case any of the symbol resolutions in the set
 		 * has failed, patch all the previously replaced fentry
@@ -371,9 +428,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		if (ret < 0) {
 			for (patch_fun--; patch_fun >= patch->patches;
 					patch_fun--) {
-				if ((*patch_fun)->state == KGR_PATCH_SLOW)
-					unregister_ftrace_function(
-						(*patch_fun)->ftrace_ops_slow);
+				if (patch_fun->state == KGR_PATCH_SLOW)
+					unregister_ftrace_function(&patch_fun->ftrace_ops_slow);
 			}
 			goto err_unlock;
 		}
@@ -381,6 +437,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	kgr_in_progress = true;
 	kgr_patch = patch;
 	kgr_revert = revert;
+	if (!revert)
+		kgr_refs_inc();
 	mutex_unlock(&kgr_in_progress_lock);
 
 	kgr_handle_irqs();

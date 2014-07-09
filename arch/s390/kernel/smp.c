@@ -242,6 +242,7 @@ static void pcpu_prepare_secondary(struct pcpu *pcpu, int cpu)
 	lc->kernel_asce = S390_lowcore.kernel_asce;
 	lc->machine_flags = S390_lowcore.machine_flags;
 	lc->ftrace_func = S390_lowcore.ftrace_func;
+	lc->ftrace_regs_func = S390_lowcore.ftrace_regs_func;
 	lc->user_timer = lc->system_timer = lc->steal_timer = 0;
 	__ctl_store(lc->cregs_save_area, 0, 15);
 	save_access_regs((unsigned int *) lc->access_regs_save_area);
