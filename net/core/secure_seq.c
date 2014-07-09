@@ -10,7 +10,7 @@
 
 #include <net/secure_seq.h>
 
-#if IS_ENABLED(CONFIG_IPV6) || IS_ENABLED(CONFIG_INET) || 1
+#if IS_ENABLED(CONFIG_IPV6) || IS_ENABLED(CONFIG_INET)
 #define NET_SECRET_SIZE (MD5_MESSAGE_BYTES / 4)
 
 static u32 net_secret[NET_SECRET_SIZE] ____cacheline_aligned;
@@ -154,7 +154,7 @@ u32 secure_ipv4_port_ephemeral(__be32 saddr, __be32 daddr, __be16 dport)
 EXPORT_SYMBOL_GPL(secure_ipv4_port_ephemeral);
 #endif
 
-#if IS_ENABLED(CONFIG_IP_DCCP) || 1
+#if IS_ENABLED(CONFIG_IP_DCCP) || IS_ENABLED(CONFIG_INET)
 u64 secure_dccp_sequence_number(__be32 saddr, __be32 daddr,
 				__be16 sport, __be16 dport)
 {
