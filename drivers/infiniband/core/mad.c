@@ -1265,6 +1265,15 @@ int ib_post_send_mad(struct ib_mad_send_buf *send_buf,
 		mad_send_wr->tid = ((struct ib_mad_hdr *) send_buf->mad)->tid;
 		/* Timeout will be updated after send completes */
 		mad_send_wr->timeout = msecs_to_jiffies(send_buf->timeout_ms);
+
+		/*
+		 * Add 1 sec to detect a send queue problem.
+		 * This will give send only MAD's 1 sec to get on the wire
+		 */
+		mad_send_wr->sq_timeout = msecs_to_jiffies(send_buf->timeout_ms);
+		mad_send_wr->sq_timeout += msecs_to_jiffies(1000);
+		mad_send_wr->sq_timeout += jiffies;
+
 		mad_send_wr->max_retries = send_buf->retries;
 		mad_send_wr->retries_left = send_buf->retries;
 		send_buf->retries = 0;
@@ -2479,6 +2488,48 @@ static void ib_mad_completion_handler(struct work_struct *work)
 	}
 }
 
+/**
+ * mad_agent_priv->lock should be held
+ */
+static int check_send_queue_stall(struct ib_mad_agent_private *mad_agent_priv)
+{
+	struct ib_mad_send_wr_private *mad_send_wr;
+	int stalled = 0;
+
+	if (list_empty(&mad_agent_priv->send_list)) {
+		if (unlikely(mad_agent_priv->qp_info->send_queue_stalled)) {
+			mad_agent_priv->qp_info->send_queue_stalled = 0;
+			pr_err("QP %d of %s no longer stalled\n",
+				mad_agent_priv->qp_info->qp->qp_num,
+				mad_agent_priv->qp_info->qp->device->name);
+		}
+		return 0;
+	}
+
+	mad_send_wr = list_entry(mad_agent_priv->send_list.next,
+				 struct ib_mad_send_wr_private,
+				 agent_list);
+
+	if (time_after(jiffies, mad_send_wr->sq_timeout)) {
+		struct ib_qp *stuck_qp;
+		struct ib_qp_attr qp_attr;
+		struct ib_qp_init_attr iqp_attr;
+
+		stuck_qp = mad_agent_priv->qp_info->qp;
+
+		ib_query_qp(stuck_qp, &qp_attr, IB_QP_STATE, &iqp_attr);
+
+		if (!mad_agent_priv->qp_info->send_queue_stalled)
+			pr_err("Detected stalled send queue on QP %d of %s (QP state %d)\n",
+				stuck_qp->qp_num, stuck_qp->device->name,
+				qp_attr.qp_state);
+
+		mad_agent_priv->qp_info->send_queue_stalled = 1;
+		stalled = 1;
+	}
+	return stalled;
+}
+
 static void cancel_mads(struct ib_mad_agent_private *mad_agent_priv)
 {
 	unsigned long flags;
@@ -2502,6 +2553,9 @@ static void cancel_mads(struct ib_mad_agent_private *mad_agent_priv)
 		deref_mad_agent(mad_agent_priv);
 #endif
 	}
+
+	if (check_send_queue_stall(mad_agent_priv))
+		pr_crit("Detected stalled send queue while trying to cancel MAD's\n");
 
 	/* Empty wait list to prevent receives from finding a request */
 	list_splice_init(&mad_agent_priv->wait_list, &cancel_list);
@@ -2757,6 +2811,8 @@ static void timeout_sends(struct work_struct *work)
 		atomic_dec(&mad_agent_priv->refcount);
 		spin_lock_irqsave(&mad_agent_priv->lock, flags);
 	}
+
+	check_send_queue_stall(mad_agent_priv);
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 }
 
