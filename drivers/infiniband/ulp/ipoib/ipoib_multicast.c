@@ -561,6 +561,14 @@ void ipoib_mcast_join_task(struct work_struct *work)
 		}
 
 		spin_lock_irq(&priv->lock);
+
+		if (!test_bit(IPOIB_FLAG_SUBINTERFACE, &priv->flags)) {
+			/* fix broadcast gid in case if pkey was changed */
+			priv->pkey |= 0x8000;
+			priv->dev->broadcast[8] = priv->pkey >> 8;
+			priv->dev->broadcast[9] = priv->pkey & 0xff;
+		}
+
 		memcpy(broadcast->mcmember.mgid.raw, priv->dev->broadcast + 4,
 		       sizeof (union ib_gid));
 		priv->broadcast = broadcast;

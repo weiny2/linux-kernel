@@ -52,6 +52,7 @@ MODULE_PARM_DESC(data_debug_level,
 #endif
 
 static DEFINE_MUTEX(pkey_mutex);
+static void ipoib_pkey_dev_check_presence(struct net_device *dev);
 
 struct ipoib_ah *ipoib_create_ah(struct net_device *dev,
 				 struct ib_pd *pd, struct ib_ah_attr *attr)
@@ -668,12 +669,13 @@ int ipoib_ib_dev_open(struct net_device *dev)
 	struct ipoib_dev_priv *priv = netdev_priv(dev);
 	int ret;
 
-	if (ib_find_pkey(priv->ca, priv->port, priv->pkey, &priv->pkey_index)) {
+	ipoib_pkey_dev_check_presence(dev);
+
+	if (!test_bit(IPOIB_PKEY_ASSIGNED, &priv->flags)) {
 		ipoib_warn(priv, "P_Key 0x%04x not found\n", priv->pkey);
 		clear_bit(IPOIB_PKEY_ASSIGNED, &priv->flags);
 		return -1;
 	}
-	set_bit(IPOIB_PKEY_ASSIGNED, &priv->flags);
 
 	ret = ipoib_init_qp(dev);
 	if (ret) {
@@ -708,9 +710,27 @@ int ipoib_ib_dev_open(struct net_device *dev)
 static void ipoib_pkey_dev_check_presence(struct net_device *dev)
 {
 	struct ipoib_dev_priv *priv = netdev_priv(dev);
-	u16 pkey_index = 0;
+	struct ib_port_attr    port_attr;
 
-	if (ib_find_pkey(priv->ca, priv->port, priv->pkey, &pkey_index))
+	if (!test_bit(IPOIB_FLAG_SUBINTERFACE, &priv->flags)) {
+		clear_bit(IPOIB_PKEY_ASSIGNED, &priv->flags);
+		if (ib_query_port(priv->ca, priv->port, &port_attr)) {
+			ipoib_warn(priv, "Query port attrs failed\n");
+			return;
+		}
+
+		if (port_attr.state != IB_PORT_ACTIVE)
+			return;
+
+		if (ib_query_pkey(priv->ca, priv->port, 0, &priv->pkey)) {
+			ipoib_warn(priv, "Query P_Key table entry 0 failed\n");
+			return;
+		}
+		set_bit(IPOIB_PKEY_ASSIGNED, &priv->flags);
+	}
+
+
+	if (ib_find_pkey(priv->ca, priv->port, priv->pkey, &priv->pkey_index))
 		clear_bit(IPOIB_PKEY_ASSIGNED, &priv->flags);
 	else
 		set_bit(IPOIB_PKEY_ASSIGNED, &priv->flags);
@@ -969,7 +989,8 @@ static void __ipoib_ib_dev_flush(struct ipoib_dev_priv *priv,
 		}
 
 		/* restart QP only if P_Key index is changed */
-		if (test_and_set_bit(IPOIB_PKEY_ASSIGNED, &priv->flags) &&
+		if (test_bit(IPOIB_FLAG_SUBINTERFACE, &priv->flags) &&
+		    test_and_set_bit(IPOIB_PKEY_ASSIGNED, &priv->flags) &&
 		    new_index == priv->pkey_index) {
 			ipoib_dbg(priv, "Not flushing - P_Key index not changed.\n");
 			return;
