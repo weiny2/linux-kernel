@@ -2153,6 +2153,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	u8 port_num = req->port_num;
 	u8 num_vls = hweight32(vl_select_mask);
 	struct _vls_pctrs *vlinfo;
+	int vfi;
 
 	/* FIXME
 	 * some of the counters are not implemented. if the WFR spec
@@ -2230,46 +2231,49 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
 	/* rsp->link_quality_indicator ??? */
 	vlinfo = &(rsp->vls[0]);
+	vfi = 0;
+	/* The vl_select_mask has been checked above, and we know
+	 * that it contains only entries which represent valid VLs.
+	 * So in the for_each_set_bit() loop below, we don't need
+	 * any additional checks for vl.
+	 */
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
-			 sizeof(vl_select_mask)) {
+			 8 * sizeof(vl_select_mask)) {
 		unsigned offset;
 		memset(vlinfo, 0, sizeof(*vlinfo));
-		/* WFR supports 8 data VLs (0-7), and VL15 */
-		if (vl >= 8 && vl != 15)
-			goto next;
 		/* for data VLs, the byte offset from the associated VL0
 		 * register is 8 * vl, but for VL15 it's 8 * 8 */
 		offset = 8 * (unsigned)((vl == 15) ? 8 : vl);
-		rsp->vls[vl].port_vl_xmit_data =
+		rsp->vls[vfi].port_vl_xmit_data =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
 					8 * SEND_DATA_VL0_CNT + offset));
-		rsp->vls[vl].port_vl_rcv_data =
+		rsp->vls[vfi].port_vl_rcv_data =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
 					+ offset));
-		/* rsp->vls[vl].port_vl_xmit_pkts ??? (table 13-9 WFR spec) */
-		rsp->vls[vl].port_vl_xmit_wait =
+		/* rsp->vls[vfi].port_vl_xmit_pkts ??? (tbl 13-9 WFR spec) */
+		rsp->vls[vfi].port_vl_xmit_wait =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
 					8 * SEND_WAIT_VL0_CNT + offset));
-		/* rsp->vls[vl].sw_port_vl_congestion is 0 for HFIs */
-		rsp->vls[vl].port_vl_rcv_fecn =
+		/* rsp->vls[vfi].sw_port_vl_congestion is 0 for HFIs */
+		rsp->vls[vfi].port_vl_rcv_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
 					+ offset));
-		rsp->vls[vl].port_vl_rcv_becn =
+		rsp->vls[vfi].port_vl_rcv_becn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT
 					+ offset));
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
-		 * does this differ from rsp->vls[vl].port_vl_xmit_wait */
-		rsp->vls[vl].port_vl_rcv_bubble =
+		 * does this differ from rsp->vls[vfi].port_vl_xmit_wait */
+		rsp->vls[vfi].port_vl_rcv_bubble =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT
 					+ offset));
-		rsp->vls[vl].port_vl_mark_fecn =
+		rsp->vls[vfi].port_vl_mark_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
 					 + offset));
-		/* rsp->vls[vl].port_vl_xmit_discards ??? */
-next:
+		/* rsp->vls[vfi].port_vl_xmit_discards ??? */
 		vlinfo++;
+		vfi++;
 	}
 
 	return reply(pmp);
@@ -2325,6 +2329,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	unsigned long port_num;
 	unsigned long vl;
 	u32 vl_select_mask;
+	int vfi;
 
 	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
@@ -2403,45 +2408,48 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		get_error_counter_summary(ibdev, port);
 
 	vlinfo = &(rsp->vls[0]);
+	vfi = 0;
+	/* The vl_select_mask has been checked above, and we know
+	 * that it contains only entries which represent valid VLs.
+	 * So in the for_each_set_bit() loop below, we don't need
+	 * any additional checks for vl.
+	 */
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
-		 sizeof(req->vl_select_mask)) {
+		 8 * sizeof(req->vl_select_mask)) {
 		unsigned offset;
 		memset(vlinfo, 0, sizeof(*vlinfo));
-		/* WFR supports 8 data VLs (0-7), and VL15 */
-		if (vl >= 8 && vl != 15)
-			goto next;
 		/* for data VLs, the byte offset from the associated VL0
 		 * register is 8 * vl, but for VL15 it's 8 * 8 */
 		offset = 8 * (unsigned)((vl == 15) ? 8 :  vl);
-		rsp->vls[vl].port_vl_xmit_data =
+		rsp->vls[vfi].port_vl_xmit_data =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
 				8 * SEND_DATA_VL0_CNT + offset));
-		rsp->vls[vl].port_vl_rcv_data =
+		rsp->vls[vfi].port_vl_rcv_data =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
 				+ offset));
-		/* rsp->vls[vl].port_vl_xmit_pkts ??? (table 13-9 WFR spec) */
-		rsp->vls[vl].port_vl_xmit_wait =
+		/* rsp->vls[vfi].port_vl_xmit_pkts ??? (tbl 13-9 WFR spec) */
+		rsp->vls[vfi].port_vl_xmit_wait =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
 				8 * SEND_WAIT_VL0_CNT + offset));
-		/* rsp->vls[vl].sw_port_vl_congestion is 0 for HFIs */
-		rsp->vls[vl].port_vl_rcv_fecn =
+		/* rsp->vls[vfi].sw_port_vl_congestion is 0 for HFIs */
+		rsp->vls[vfi].port_vl_rcv_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
 				+ offset));
-		rsp->vls[vl].port_vl_rcv_becn =
+		rsp->vls[vfi].port_vl_rcv_becn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT
 				+ offset));
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
-		 * does this differ from rsp->vls[vl].port_vl_xmit_wait */
-		rsp->vls[vl].port_vl_rcv_bubble =
+		 * does this differ from rsp->vls[vfi].port_vl_xmit_wait */
+		rsp->vls[vfi].port_vl_rcv_bubble =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT
 				+ offset));
-		rsp->vls[vl].port_vl_mark_fecn =
+		rsp->vls[vfi].port_vl_mark_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
 				+ offset));
-next:
 		vlinfo++;
+		vfi++;
 	}
 
 	return reply(pmp);
@@ -2465,6 +2473,7 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	unsigned long vl;
 	u64 port_mask;
 	u32 vl_select_mask;
+	int vfi;
 
 	req = (struct stl_port_error_counters64_msg *)pmp->data;
 
@@ -2537,12 +2546,14 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
 
 	vlinfo = (struct _vls_ectrs *)&(rsp->vls[0]);
+	vfi = 0;
 	vl_select_mask = cpu_to_be32(req->vl_select_mask);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
-			 sizeof(req->vl_select_mask)) {
+			 8 * sizeof(req->vl_select_mask)) {
 		memset(vlinfo, 0, sizeof(*vlinfo));
-		/* vlinfo->vls[vl].port_vl_xmit_discards ??? */
+		/* vlinfo->vls[vfi].port_vl_xmit_discards ??? */
 		vlinfo += 1;
+		vfi++;
 	}
 
 	return reply(pmp);
