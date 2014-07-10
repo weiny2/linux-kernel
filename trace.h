@@ -83,6 +83,62 @@ TRACE_EVENT(hfi_receive_interrupt,
 	)
 );
 
+TRACE_EVENT(hfi_exp_rcv_set,
+	    TP_PROTO(unsigned ctxt, u16 subctxt, u32 tid,
+		     unsigned long vaddr, u64 phys_addr, void *page),
+	    TP_ARGS(ctxt, subctxt, tid, vaddr, phys_addr, page),
+	    TP_STRUCT__entry(
+		    __field(unsigned, ctxt)
+		    __field(u16, subctxt)
+		    __field(u32, tid)
+		    __field(unsigned long, vaddr)
+		    __field(u64, phys_addr)
+		    __field(void *, page)
+		    ),
+	    TP_fast_assign(
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->tid = tid;
+		    __entry->vaddr = vaddr;
+		    __entry->phys_addr = phys_addr;
+		    __entry->page = page;
+		    ),
+	    TP_printk("[%u:%u] TID %u, vaddrs 0x%lx, physaddr 0x%llx, pgp %p",
+		      __entry->ctxt,
+		      __entry->subctxt,
+		      __entry->tid,
+		      __entry->vaddr,
+		      __entry->phys_addr,
+		      __entry->page
+		    )
+	);
+
+TRACE_EVENT(hfi_exp_rcv_free,
+	    TP_PROTO(unsigned ctxt, u16 subctxt, u32 tid,
+		     unsigned long phys, void *page),
+	    TP_ARGS(ctxt, subctxt, tid, phys, page),
+	    TP_STRUCT__entry(
+		    __field(unsigned, ctxt)
+		    __field(u16, subctxt)
+		    __field(u32, tid)
+		    __field(unsigned long, phys)
+		    __field(void *, page)
+		    ),
+	    TP_fast_assign(
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->tid = tid;
+		    __entry->phys = phys;
+		    __entry->page = page;
+		    ),
+	    TP_printk("[%u:%u] freeing TID %u, 0x%lx, pgp %p",
+		      __entry->ctxt,
+		      __entry->subctxt,
+		      __entry->tid,
+		      __entry->phys,
+		      __entry->page
+		    )
+	);
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi_tx
 

@@ -1343,7 +1343,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	int ret = 0;
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
-	unsigned tid, mapped, npages, ngroups,
+	unsigned tid, mapped, npages, ngroups, exp_groups,
 		tidpairs = uctxt->expected_count / 2;
 	unsigned long vaddr;
 	struct page **pages;
@@ -1369,6 +1369,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	memset(tidmap, 0, sizeof(tidmap));
 	memset(tidlist, 0, sizeof(tidlist));
 
+	exp_groups = uctxt->expected_count / dd->rcv_entries.group_size;
 	/*
 	 * From this point on, we need exclusive access to the context's
 	 * Expected TID/RcvArray data. Since this is a per-context lock
@@ -1385,7 +1386,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	 */
 	for (mapped = 0, idx = 0; mapped < npages && idx < uctxt->tidmapcnt; ) {
 		u64 i, offset = 0;
-		unsigned free, pinned, pmapped = 0;
+		unsigned free, pinned, pmapped = 0, used_groups;
 		u16 grp;
 
 		if (uctxt->tidusemap[useidx] == -1ULL ||
@@ -1420,13 +1421,32 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		/* If the entire map is used up, move to the next one. */
 		if (bitidx > BITS_PER_LONG)
 			continue;
+		used_groups = ((useidx * BITS_PER_LONG) + bitidx);
+		/*
+		 * If the number of groups does not fit nicely into the number
+		 * of bits in the bitmap, we could get wrong impression of the
+		 * number of free groups. Check if this is the case and
+		 * adjust the count accordingly.
+		 */
+		if (used_groups + free > exp_groups) {
+			free = exp_groups - used_groups;
+			/*
+			 * We've adjusted to the "real" free. Do we have any?
+			 * Here, we break out of the loop instead of moving on
+			 * to the next bitmask because this could only happen
+			 * at the end of the range. Therefore, there is no
+			 * reason to continue.
+			 */
+			if (!free)
+				break;
+		}
+
 		/*
 		 * At this point, we know where in the map we have free bits.
 		 * properly offset into the various "shadow" arrays and compute
 		 * the RcvArray entry index.
 		 */
-		offset = ((useidx * BITS_PER_LONG) + bitidx) *
-			dd->rcv_entries.group_size;
+		offset = used_groups * dd->rcv_entries.group_size;
 		pages = uctxt->tid_pg_list + offset;
 		phys = uctxt->physshadow + offset;
 		tid = uctxt->expected_base + offset;
@@ -1479,11 +1499,10 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 				phys[pmapped] = qib_map_page(dd->pcidev,
 						   pages[pmapped], 0,
 						   tidsize, PCI_DMA_FROMDEVICE);
-				dd_dev_info(dd,
-				       "TID %u, vaddrs %lx, physaddr %llx, pgp %p\n",
-				       tid, vaddr,
-				       (unsigned long long)phys[pmapped],
-				       pages[pmapped]);
+				trace_hfi_exp_rcv_set(uctxt->ctxt,
+						      subctxt_fp(fp),
+						      tid, vaddr, phys[pmapped],
+						      pages[pmapped]);
 				/*
 				 * Each RcvArray entry is programmed with one page
 				 * worth of memory. This will handle the 8K MTU
@@ -1584,9 +1603,10 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 				if (pages[i]) {
 					dd->f_put_tid(dd, tid, PT_INVALID,
 						      0, 0);
-					dd_dev_info(dd,
-					   "freeing TID %u, 0x%llx, pgp %p\n",
-					   tid, phys[i], pages[i]);
+					trace_hfi_exp_rcv_free(uctxt->ctxt,
+							       subctxt_fp(fp),
+							       tid, phys[i],
+							       pages[i]);
 					pci_unmap_page(dd->pcidev, phys[i],
 					      PAGE_SIZE, PCI_DMA_FROMDEVICE);
 					qib_release_user_pages(&pages[i], 1);
