@@ -70,11 +70,6 @@ static struct cpufreq_frequency_table g5_cpu_freqs[] = {
 	{0,			CPUFREQ_TABLE_END},
 };
 
-static struct freq_attr* g5_cpu_freqs_attr[] = {
-	&cpufreq_freq_attr_scaling_available_freqs,
-	NULL,
-};
-
 /* Power mode data is an array of the 32 bits PCR values to use for
  * the various frequencies, retrieved from the device-tree
  */
@@ -317,32 +312,18 @@ static int g5_pfunc_query_freq(void)
  * Common interface to the cpufreq core
  */
 
-static int g5_cpufreq_verify(struct cpufreq_policy *policy)
+static int g5_cpufreq_target(struct cpufreq_policy *policy, unsigned int index)
 {
-	return cpufreq_frequency_table_verify(policy, g5_cpu_freqs);
-}
-
-static int g5_cpufreq_target(struct cpufreq_policy *policy,
-	unsigned int target_freq, unsigned int relation)
-{
-	unsigned int newstate = 0;
 	struct cpufreq_freqs freqs;
 	int rc;
-
-	if (cpufreq_frequency_table_target(policy, g5_cpu_freqs,
-			target_freq, relation, &newstate))
-		return -EINVAL;
-
-	if (g5_pmode_cur == newstate)
-		return 0;
 
 	mutex_lock(&g5_switch_mutex);
 
 	freqs.old = g5_cpu_freqs[g5_pmode_cur].frequency;
-	freqs.new = g5_cpu_freqs[newstate].frequency;
+	freqs.new = g5_cpu_freqs[index].frequency;
 
 	cpufreq_notify_transition(policy, &freqs, CPUFREQ_PRECHANGE);
-	rc = g5_switch_freq(newstate);
+	rc = g5_switch_freq(index);
 	cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
 
 	mutex_unlock(&g5_switch_mutex);
@@ -374,10 +355,10 @@ static struct cpufreq_driver g5_cpufreq_driver = {
 	.name		= "powermac",
 	.flags		= CPUFREQ_CONST_LOOPS,
 	.init		= g5_cpufreq_cpu_init,
-	.verify		= g5_cpufreq_verify,
-	.target		= g5_cpufreq_target,
+	.verify		= cpufreq_generic_frequency_table_verify,
+	.target_index	= g5_cpufreq_target,
 	.get		= g5_cpufreq_get_speed,
-	.attr 		= g5_cpu_freqs_attr,
+	.attr 		= cpufreq_generic_attr,
 };
 
 

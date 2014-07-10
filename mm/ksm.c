@@ -945,7 +945,6 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 	pmd = mm_find_pmd(mm, addr);
 	if (!pmd)
 		goto out;
-	BUG_ON(pmd_trans_huge(*pmd));
 
 	mmun_start = addr;
 	mmun_end   = addr + PAGE_SIZE;
@@ -1729,8 +1728,9 @@ static int ksm_scan_thread(void *nothing)
 			schedule_timeout_interruptible(
 				msecs_to_jiffies(ksm_thread_sleep_millisecs));
 		} else {
-			wait_event_freezable(ksm_thread_wait,
-				ksmd_should_run() || kthread_should_stop());
+			wait_event_freezable(ksm_thread_wait, ({
+				kgr_task_safe(current);
+				ksmd_should_run() || kthread_should_stop(); }));
 		}
 	}
 	return 0;

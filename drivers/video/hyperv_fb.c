@@ -227,10 +227,15 @@ struct hvfb_par {
 	u8 recv_buf[MAX_VMBUS_PKT_SIZE];
 };
 
+static struct fb_info *hvfb_info;
+
 static uint screen_width = HVFB_WIDTH;
 static uint screen_height = HVFB_HEIGHT;
 static uint screen_depth;
 static uint screen_fb_size;
+
+/* If true, the VSC notifies the VSP on every framebuffer change */
+static bool synchronous_fb;
 
 /* Send message to Hyper-V host */
 static inline int synthvid_send(struct hv_device *hdev,
@@ -540,6 +545,20 @@ static void hvfb_update_work(struct work_struct *w)
 		schedule_delayed_work(&par->dwork, HVFB_UPDATE_DELAY);
 }
 
+static int hvfb_on_panic(struct notifier_block *nb,
+			unsigned long e, void *p)
+{
+	if (hvfb_info)
+		synthvid_update(hvfb_info);
+
+	synchronous_fb = true;
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block hvfb_panic_nb = {
+	.notifier_call = hvfb_on_panic,
+};
 
 /* Framebuffer operation handlers */
 
@@ -590,14 +609,41 @@ static int hvfb_blank(int blank, struct fb_info *info)
 	return 1;	/* get fb_blank to set the colormap to all black */
 }
 
+static void hvfb_cfb_fillrect(struct fb_info *p,
+				const struct fb_fillrect *rect)
+{
+	cfb_fillrect(p, rect);
+
+	if (synchronous_fb)
+		synthvid_update(p);
+}
+
+static void hvfb_cfb_copyarea(struct fb_info *p,
+				const struct fb_copyarea *area)
+{
+	cfb_copyarea(p, area);
+
+	if (synchronous_fb)
+		synthvid_update(p);
+}
+
+static void hvfb_cfb_imageblit(struct fb_info *p,
+				const struct fb_image *image)
+{
+	cfb_imageblit(p, image);
+
+	if (synchronous_fb)
+		synthvid_update(p);
+}
+
 static struct fb_ops hvfb_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = hvfb_check_var,
 	.fb_set_par = hvfb_set_par,
 	.fb_setcolreg = hvfb_setcolreg,
-	.fb_fillrect = cfb_fillrect,
-	.fb_copyarea = cfb_copyarea,
-	.fb_imageblit = cfb_imageblit,
+	.fb_fillrect = hvfb_cfb_fillrect,
+	.fb_copyarea = hvfb_cfb_copyarea,
+	.fb_imageblit = hvfb_cfb_imageblit,
 	.fb_blank = hvfb_blank,
 };
 
@@ -809,6 +855,9 @@ static int hvfb_probe(struct hv_device *hdev,
 
 	par->fb_ready = true;
 
+	hvfb_info = info;
+	atomic_notifier_chain_register(&panic_notifier_list, &hvfb_panic_nb);
+
 	return 0;
 
 error:
@@ -827,6 +876,9 @@ static int hvfb_remove(struct hv_device *hdev)
 {
 	struct fb_info *info = hv_get_drvdata(hdev);
 	struct hvfb_par *par = info->par;
+
+	atomic_notifier_chain_unregister(&panic_notifier_list, &hvfb_panic_nb);
+	hvfb_info = NULL;
 
 	par->update = false;
 	par->fb_ready = false;

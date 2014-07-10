@@ -317,10 +317,14 @@ interrupt_end_book3e:
 	START_EXCEPTION(critical_input);
 	CRIT_EXCEPTION_PROLOG(0x100, BOOKE_INTERRUPT_CRITICAL,
 			      PROLOG_ADDITION_NONE)
-//	EXCEPTION_COMMON_CRIT(0x100)
-//	bl	save_nvgprs
-//	bl	special_reg_save
-//	CHECK_NAPPING();
+	EXCEPTION_COMMON_CRIT(0x100)
+	bl	.save_nvgprs
+	bl	special_reg_save
+	CHECK_NAPPING();
+	EXCEPTION_COMMON_CRIT(0x100)
+	bl	save_nvgprs
+	bl	special_reg_save
+	CHECK_NAPPING();
 //	addi	r3,r1,STACK_FRAME_OVERHEAD
 //	bl	critical_exception
 //	b	ret_from_crit_except
@@ -330,11 +334,11 @@ interrupt_end_book3e:
 	START_EXCEPTION(machine_check);
 	MC_EXCEPTION_PROLOG(0x200, BOOKE_INTERRUPT_MACHINE_CHECK,
 			    PROLOG_ADDITION_NONE)
-//	EXCEPTION_COMMON_MC(0x000)
-//	bl	save_nvgprs
-//	bl	special_reg_save
-//	CHECK_NAPPING();
-//	addi	r3,r1,STACK_FRAME_OVERHEAD
+	EXCEPTION_COMMON_MC(0x000)
+	bl	save_nvgprs
+	bl	special_reg_save
+	CHECK_NAPPING();
+	addi	r3,r1,STACK_FRAME_OVERHEAD
 //	CHECK_NAPPING();
 //	bl	machine_check_exception
 //	b	ret_from_mc_except
@@ -452,17 +456,18 @@ END_FTR_SECTION_IFSET(CPU_FTR_ALTIVEC)
 	START_EXCEPTION(watchdog);
 	CRIT_EXCEPTION_PROLOG(0x9f0, BOOKE_INTERRUPT_WATCHDOG,
 			      PROLOG_ADDITION_NONE)
-//	EXCEPTION_COMMON_CRIT(0x9f0)
-//	bl	save_nvgprs
-//	bl	special_reg_save
-//	CHECK_NAPPING();
+	EXCEPTION_COMMON_CRIT(0x9f0)
+	bl	save_nvgprs
+	bl	special_reg_save
+	CHECK_NAPPING();
 //	addi	r3,r1,STACK_FRAME_OVERHEAD
-// #ifdef CONFIG_BOOKE_WDT
+#ifdef CONFIG_BOOKE_WDT
 	bl	WatchdogException
 #else
 	bl	unknown_exception
 #endif
 	b	ret_from_crit_except
+
 
 /* System Call Interrupt */
 	START_EXCEPTION(system_call)
@@ -627,10 +632,10 @@ kernel_dbg_exc:
 	START_EXCEPTION(doorbell_crit);
 	CRIT_EXCEPTION_PROLOG(0x2a0, BOOKE_INTERRUPT_DOORBELL_CRITICAL,
 			      PROLOG_ADDITION_NONE)
-//	EXCEPTION_COMMON_CRIT(0x2a0)
-//	bl	save_nvgprs
-//	bl	special_reg_save
-//	CHECK_NAPPING();
+	EXCEPTION_COMMON_CRIT(0x2a0)
+	bl	save_nvgprs
+	bl	special_reg_save
+	CHECK_NAPPING();
 //	addi	r3,r1,STACK_FRAME_OVERHEAD
 //	bl	doorbell_critical_exception
 //	b	ret_from_crit_except
@@ -654,10 +659,10 @@ kernel_dbg_exc:
 	START_EXCEPTION(guest_doorbell_crit);
 	CRIT_EXCEPTION_PROLOG(0x2e0, BOOKE_INTERRUPT_GUEST_DBELL_CRIT,
 			      PROLOG_ADDITION_NONE)
-//	EXCEPTION_COMMON_CRIT(0x2e0)
-//	bl	save_nvgprs
-//	bl	special_reg_save
-//	CHECK_NAPPING();
+	EXCEPTION_COMMON_CRIT(0x2e0)
+	bl	save_nvgprs
+	bl	special_reg_save
+	CHECK_NAPPING();
 //	addi	r3,r1,STACK_FRAME_OVERHEAD
 //	bl	guest_doorbell_critical_exception
 //	b	ret_from_crit_except

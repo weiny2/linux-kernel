@@ -93,10 +93,11 @@ static unsigned long text_ip_addr(unsigned long ip)
 	 * For 32bit kernels, these mappings are same and we can use
 	 * kernel identity mapping to modify code.
 	 */
+#ifdef CONFIG_DEBUG_RODATA
 	if (kernel_set_to_readonly &&
 	    within(ip, (unsigned long)_text, (unsigned long)_etext))
 		ip = (unsigned long)__va(__pa_symbol(ip));
-
+#endif
 	return ip;
 }
 

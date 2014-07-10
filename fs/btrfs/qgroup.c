@@ -1201,27 +1201,22 @@ out:
 	mutex_unlock(&fs_info->qgroup_ioctl_lock);
 	return ret;
 }
-static int comp_oper(struct btrfs_qgroup_operation *oper1,
-		     struct btrfs_qgroup_operation *oper2, int for_insert)
+
+static int comp_oper_exist(struct btrfs_qgroup_operation *oper1,
+			   struct btrfs_qgroup_operation *oper2)
 {
+	/*
+	 * Ignore seq and type here, we're looking for any operation
+	 * at all related to this extent on that root.
+	 */
 	if (oper1->bytenr < oper2->bytenr)
 		return -1;
 	if (oper1->bytenr > oper2->bytenr)
 		return 1;
-	if (oper1->seq < oper2->seq)
-		return -1;
-	if (oper1->seq > oper2->seq)
-		return -1;
 	if (oper1->ref_root < oper2->ref_root)
 		return -1;
 	if (oper1->ref_root > oper2->ref_root)
 		return 1;
-	if (for_insert) {
-		if (oper1->type < oper2->type)
-			return -1;
-		if (oper1->type > oper2->type)
-			return 1;
-	}
 	return 0;
 }
 
@@ -1236,7 +1231,7 @@ static int qgroup_oper_exists(struct btrfs_fs_info *fs_info,
 	n = fs_info->qgroup_op_tree.rb_node;
 	while (n) {
 		cur = rb_entry(n, struct btrfs_qgroup_operation, n);
-		cmp = comp_oper(cur, oper, 0);
+		cmp = comp_oper_exist(cur, oper);
 		if (cmp < 0) {
 			n = n->rb_right;
 		} else if (cmp) {
@@ -1247,6 +1242,28 @@ static int qgroup_oper_exists(struct btrfs_fs_info *fs_info,
 		}
 	}
 	spin_unlock(&fs_info->qgroup_op_lock);
+	return 0;
+}
+
+static int comp_oper(struct btrfs_qgroup_operation *oper1,
+		     struct btrfs_qgroup_operation *oper2)
+{
+	if (oper1->bytenr < oper2->bytenr)
+		return -1;
+	if (oper1->bytenr > oper2->bytenr)
+		return 1;
+	if (oper1->seq < oper2->seq)
+		return -1;
+	if (oper1->seq > oper2->seq)
+		return -1;
+	if (oper1->ref_root < oper2->ref_root)
+		return -1;
+	if (oper1->ref_root > oper2->ref_root)
+		return 1;
+	if (oper1->type < oper2->type)
+		return -1;
+	if (oper1->type > oper2->type)
+		return 1;
 	return 0;
 }
 
@@ -1263,7 +1280,7 @@ static int insert_qgroup_oper(struct btrfs_fs_info *fs_info,
 	while (*p) {
 		parent = *p;
 		cur = rb_entry(parent, struct btrfs_qgroup_operation, n);
-		cmp = comp_oper(cur, oper, 1);
+		cmp = comp_oper(cur, oper);
 		if (cmp < 0) {
 			p = &(*p)->rb_right;
 		} else if (cmp) {
@@ -1325,6 +1342,10 @@ int btrfs_qgroup_record_ref(struct btrfs_trans_handle *trans,
 		 * If any operation for this bytenr/ref_root combo
 		 * exists, then we know it's not exclusively owned and
 		 * shouldn't be queued up.
+		 *
+		 * This also catches the case where we have a cloned
+		 * extent that gets queued up multiple times during
+		 * drop snapshot.
 		 */
 		if (qgroup_oper_exists(fs_info, oper)) {
 			kfree(oper);
