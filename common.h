@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
  * All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
@@ -392,8 +393,8 @@ enum hfi_sdma_comp_state {
  * SDMA completion ring entry
  */
 struct hfi_sdma_comp_entry {
-	enum hfi_sdma_comp_state status;
-	int errno;
+	u32 status;
+	u32 errno;
 };
 
 /*
@@ -581,6 +582,29 @@ struct qib_flash {
 struct qib_message_header {
 	__be16 lrh[4];
 };
+
+struct hfi_header {
+	__le32 ver_tid_offset;
+	__le16 hcrc;
+	__le16 jkey;
+	__le32 ackpsn;
+	__le32 flags_connidx;
+	__le32 tag2;
+	__le64 tag;
+	__le32 msglen;
+	__le32 offset;
+} __packed;
+
+/*
+ * Structure describing the headers that User space uses. The
+ * structure above is a subset of this one.
+ */
+struct hfi_pio_hdr {
+	__le16 pbc[4];
+	__be16 lrh[4];
+	__be32 bth[3];
+	struct hfi_header kdeth;
+} __packed;
 
 /* IB - LRH header consts */
 #define QIB_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */

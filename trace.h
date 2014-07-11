@@ -1,3 +1,34 @@
+/*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * OpenIB.org BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 #if !defined(__HFI_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
 #define __HFI_TRACE_H
 
@@ -722,6 +753,152 @@ TRACE_EVENT(hfi_sdma_engine_interrupt,
 	)
 );
 
+#define USDMA_HDR_FORMAT \
+	"[%s:%u:%u:%u] PBC=(%#x %#x) LRH=(%#x %#x) BTH=(%#x %#x %#x) KDETH=(%#x %#x %#x %#x %#x %#x %#x %#x %#x)"
+
+TRACE_EVENT(hfi_sdma_user_header,
+	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
+		     struct hfi_pio_hdr *hdr),
+	    TP_ARGS(dd, ctxt, subctxt, req, hdr),
+	    TP_STRUCT__entry(
+		    DD_DEV_ENTRY(dd)
+		    __field(u16, ctxt)
+		    __field(u8, subctxt)
+		    __field(u16, req)
+		    __field(__le32, pbc0)
+		    __field(__le32, pbc1)
+		    __field(__be32, lrh0)
+		    __field(__be32, lrh1)
+		    __field(__be32, bth0)
+		    __field(__be32, bth1)
+		    __field(__be32, bth2)
+		    __field(__le32, kdeth0)
+		    __field(__le32, kdeth1)
+		    __field(__le32, kdeth2)
+		    __field(__le32, kdeth3)
+		    __field(__le32, kdeth4)
+		    __field(__le32, kdeth5)
+		    __field(__le32, kdeth6)
+		    __field(__le32, kdeth7)
+		    __field(__le32, kdeth8)
+		    ),
+	    TP_fast_assign(
+		    __le32 *pbc = (__le32 *)hdr->pbc;
+		    __be32 *lrh = (__be32 *)hdr->lrh;
+		    __be32 *bth = (__be32 *)hdr->bth;
+		    __le32 *kdeth = (__le32 *)&hdr->kdeth;
+		    DD_DEV_ASSIGN(dd);
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->req = req;
+		    __entry->pbc0 = pbc[0];
+		    __entry->pbc1 = pbc[1];
+		    __entry->lrh0 = be32_to_cpu(lrh[0]);
+		    __entry->lrh1 = be32_to_cpu(lrh[1]);
+		    __entry->bth0 = be32_to_cpu(bth[0]);
+		    __entry->bth1 = be32_to_cpu(bth[1]);
+		    __entry->bth2 = be32_to_cpu(bth[2]);
+		    __entry->kdeth0 = kdeth[0];
+		    __entry->kdeth1 = kdeth[1];
+		    __entry->kdeth2 = kdeth[2];
+		    __entry->kdeth3 = kdeth[3];
+		    __entry->kdeth4 = kdeth[4];
+		    __entry->kdeth5 = kdeth[5];
+		    __entry->kdeth6 = kdeth[6];
+		    __entry->kdeth7 = kdeth[7];
+		    __entry->kdeth8 = kdeth[8];
+		    ),
+	    TP_printk(USDMA_HDR_FORMAT,
+		      __get_str(dev),
+		      __entry->ctxt,
+		      __entry->subctxt,
+		      __entry->req,
+		      __entry->pbc1,
+		      __entry->pbc0,
+		      __entry->lrh0,
+		      __entry->lrh1,
+		      __entry->bth0,
+		      __entry->bth1,
+		      __entry->bth2,
+		      __entry->kdeth0,
+		      __entry->kdeth1,
+		      __entry->kdeth2,
+		      __entry->kdeth3,
+		      __entry->kdeth4,
+		      __entry->kdeth5,
+		      __entry->kdeth6,
+		      __entry->kdeth7,
+		      __entry->kdeth8
+		    )
+	);
+
+#define SDMA_UREQ_FMT \
+	"[%s:%u:%u] ver/op=%#x, iovcnt=%u, npkts=%u, frag=%u, idx=%u"
+TRACE_EVENT(hfi_sdma_user_reqinfo,
+	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 *i),
+	    TP_ARGS(dd, ctxt, subctxt, i),
+	    TP_STRUCT__entry(
+		    DD_DEV_ENTRY(dd);
+		    __field(u16, ctxt)
+		    __field(u8, subctxt)
+		    __field(u8, ver_opcode)
+		    __field(u8, iovcnt)
+		    __field(u16, npkts)
+		    __field(u16, fragsize)
+		    __field(u16, comp_idx)
+		    ),
+	    TP_fast_assign(
+		    DD_DEV_ASSIGN(dd);
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->ver_opcode = i[0] & 0xff;
+		    __entry->iovcnt = (i[0] >> 8) & 0xff;
+		    __entry->npkts = i[1];
+		    __entry->fragsize = i[2];
+		    __entry->comp_idx = i[3];
+		    ),
+	    TP_printk(SDMA_UREQ_FMT,
+		      __get_str(dev),
+		      __entry->ctxt,
+		      __entry->subctxt,
+		      __entry->ver_opcode,
+		      __entry->iovcnt,
+		      __entry->npkts,
+		      __entry->fragsize,
+		      __entry->comp_idx
+		    )
+	);
+
+const char *print_u32_array(struct trace_seq *, u32 *, int);
+#define __print_u32_hex(arr, len) print_u32_array(p, arr, len)
+
+TRACE_EVENT(hfi_sdma_user_header_ahg,
+	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
+		     u32 *ahg),
+	    TP_ARGS(dd, ctxt, subctxt, req, ahg),
+	    TP_STRUCT__entry(
+		    DD_DEV_ENTRY(dd)
+		    __field(u16, ctxt)
+		    __field(u8, subctxt)
+		    __field(u16, req)
+		    __array(u32, ahg, 10)
+		    ),
+	    TP_fast_assign(
+		    DD_DEV_ASSIGN(dd);
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->req = req;
+		    memcpy(__entry->ahg, ahg, 10 * sizeof(u32));
+		    ),
+	    TP_printk("[%s:%u:%u:%u] ahg[0-9]=(%s)",
+		      __get_str(dev),
+		      __entry->ctxt,
+		      __entry->subctxt,
+		      __entry->req,
+		      __print_u32_hex(__entry->ahg, 10)
+		    )
+	);
+
 /*
  * Note:
  * This produces a REALLY ugly trace in the console output when the string is
@@ -767,7 +944,8 @@ DEFINE_EVENT(hfi_trace_template, hfi_ ##lvl,				\
 #else
 #define __hfi_trace_fn(fn) \
 __hfi_trace_event(fn); \
-static inline void __hfi_trace_ ##fn(const char *func, char *fmt, ...)  \
+__printf(2, 3) \
+static inline void __hfi_trace_ ##fn(const char *func, char *fmt, ...)	\
 {									\
 	struct va_format vaf = {					\
 		.fmt = fmt,						\

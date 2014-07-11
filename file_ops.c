@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013, 2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,12 +43,14 @@
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/cred.h>
+#include <linux/aio.h>
 
 #include "hfi.h"
 #include "pio.h"
 #include "device.h"
 #include "common.h"
 #include "trace.h"
+#include "user_sdma.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
@@ -152,15 +154,6 @@ enum mmap_types {
 	HFI_MMAP_TOKEN_SET(SUBCTXT, subctxt) | \
 	HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & ~PAGE_MASK))
 
-#define EXP_TID_TIDLEN_MASK   0x7FFULL
-#define EXP_TID_TIDLEN_SHIFT  0
-#define EXP_TID_TIDCTRL_MASK  0x3ULL
-#define EXP_TID_TIDCTRL_SHIFT 20
-#define EXP_TID_TIDIDX_MASK   0x7FFULL
-#define EXP_TID_TIDIDX_SHIFT  22
-#define EXP_TID_GET(tid, field)				\
-	(((tid) >> EXP_TID_TID##field##_SHIFT) &	\
-	 EXP_TID_TID##field##_MASK)
 #define EXP_TID_SET(field, value)			\
 	(((value) & EXP_TID_TID##field##_MASK) <<	\
 	 EXP_TID_TID##field##_SHIFT)
@@ -338,12 +331,45 @@ bail:
 static ssize_t hfi_aio_write(struct kiocb *kiocb, const struct iovec *iovec,
 		     unsigned long dim, loff_t offset)
 {
-	//struct qib_ctxtdata *uctxt = ctxt_fp(kiocb->ki_filp);
-	//struct hfi_sdma_request_ring *sdmar = uctxt->sdma_ring;
+	struct hfi_user_sdma_pkt_q *pq;
+	struct hfi_user_sdma_comp_q *cq;
+	int ret = 0, done = 0, reqs = 0;
 
-	//if (!dim || !sdmar)
-	//	return -EINVAL;
-	return 0;
+	if (!user_sdma_comp_fp(kiocb->ki_filp) ||
+	    !user_sdma_pkt_fp(kiocb->ki_filp)) {
+		ret = -EIO;
+		goto done;
+	}
+
+	if (!dim) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	hfi_cdbg(SDMA, "SDMA request from %u:%u (%lu)\n",
+		 ctxt_fp(kiocb->ki_filp)->ctxt, subctxt_fp(kiocb->ki_filp),
+		 dim);
+	pq = user_sdma_pkt_fp(kiocb->ki_filp);
+	cq = user_sdma_comp_fp(kiocb->ki_filp);
+
+	if (atomic_read(&pq->n_reqs) == pq->n_max_reqs) {
+		ret = -ENOSPC;
+		goto done;
+	}
+
+	while (dim) {
+		unsigned long count = 0;
+		ret = hfi_user_sdma_process_request(
+			kiocb->ki_filp,	(struct iovec *)(iovec + done),
+			dim, &count);
+		if (ret)
+			goto done;
+		dim -= count;
+		done += count;
+		reqs++;
+	}
+done:
+	return ret ? ret : reqs;
 }
 
 static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
@@ -516,13 +542,29 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		flags &= ~VM_MAYWRITE;
 		vmf = 1;
 		break;
-	case SDMA_COMP:
+	case SDMA_COMP: {
+		struct hfi_user_sdma_comp_q *cq;
+
+		if (!user_sdma_comp_fp(fp)) {
+			ret = -EFAULT;
+			goto done;
+		}
+		cq = user_sdma_comp_fp(fp);
+		memaddr = (u64)cq->comps;
+		memlen = ALIGN(sizeof(*cq->comps) * cq->nentries, PAGE_SIZE);
+		flags |= VM_IO | VM_DONTEXPAND;
+		vmf = 1;
+		break;
+	}
 	default:
 		ret = -EINVAL;
 		break;
 	}
 
 	if ((vma->vm_end - vma->vm_start) != memlen) {
+		hfi_cdbg(PROC, "%u:%u Memory size mismatch %lu:%lu\n",
+			 uctxt->ctxt, subctxt_fp(fp),
+			 (vma->vm_end - vma->vm_start), memlen);
 		ret = -EINVAL;
 		goto done;
 	}
@@ -591,21 +633,19 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	struct hfi_devdata *dd;
 	unsigned long flags;
 
+	hfi_cdbg(PROC, "freeing ctxt %u:%u\n", uctxt->ctxt, fdata->subctxt);
 	fp->private_data = NULL;
 
 	if (!uctxt)
 		goto done;
 
-	dbg("freeing ctxt %u:%u\n", uctxt->ctxt, fdata->subctxt);
 	dd = uctxt->dd;
 	mutex_lock(&qib_mutex);
 
 	qib_flush_wc();
 	/* drain user sdma queue */
-	/*if (fdata->pq) {
-		qib_user_sdma_queue_drain(uctxt->ppd, fdata->pq);
-		qib_user_sdma_queue_destroy(fdata->pq);
-		}*/
+	if (fdata->pq)
+		hfi_user_sdma_free_queues(fdata);
 
 	if (--uctxt->cnt) {
 		/*
@@ -854,6 +894,8 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	strlcpy(uctxt->comm, current->comm, sizeof(uctxt->comm));
 	memcpy(uctxt->uuid, uinfo->uuid, sizeof(uctxt->uuid));
 	uctxt->jkey = generate_jkey(current_uid());
+	INIT_LIST_HEAD(&uctxt->sdma_queues);
+	spin_lock_init(&uctxt->sdma_qlock);
 	qib_stats.sps_ctxts++;
 	dd->freectxts--;
 	ctxt_fp(fp) = uctxt;
@@ -1079,9 +1121,14 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 		uctxt->tidusemap = kzalloc_node(uctxt->tidmapcnt *
 						sizeof(*uctxt->tidusemap),
 						GFP_KERNEL, uctxt->numa_id);
-		if (!uctxt->tidusemap)
+		if (!uctxt->tidusemap) {
 			ret = -ENOMEM;
+			goto done;
+		}
+
 	}
+	ret = hfi_user_sdma_alloc_queues(uctxt, fp,
+					 cinfo->sdma_ring_size);
 	if (ret)
 		goto done;
 

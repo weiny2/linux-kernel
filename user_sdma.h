@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2008 QLogic Corporation. All rights reserved.
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,23 +30,43 @@
  * SOFTWARE.
  */
 #include <linux/device.h>
+#include <linux/wait.h>
 
-struct qib_user_sdma_queue;
+#include "common.h"
+#include "iowait.h"
 
-struct qib_user_sdma_queue *
-qib_user_sdma_queue_create(struct device *dev, int unit, int port, int sport);
-void qib_user_sdma_queue_destroy(struct qib_user_sdma_queue *pq);
+#define EXP_TID_TIDLEN_MASK   0x7FFULL
+#define EXP_TID_TIDLEN_SHIFT  0
+#define EXP_TID_TIDCTRL_MASK  0x3ULL
+#define EXP_TID_TIDCTRL_SHIFT 20
+#define EXP_TID_TIDIDX_MASK   0x7FFULL
+#define EXP_TID_TIDIDX_SHIFT  22
+#define EXP_TID_GET(tid, field)	\
+	(((tid) >> EXP_TID_TID##field##_SHIFT) & EXP_TID_TID##field##_MASK)
 
-int qib_user_sdma_writev(struct qib_ctxtdata *pd,
-			 struct qib_user_sdma_queue *pq,
-			 const struct iovec *iov,
-			 unsigned long dim);
+extern uint extended_psn;
 
-int qib_user_sdma_make_progress(struct qib_pportdata *ppd,
-				struct qib_user_sdma_queue *pq);
+struct hfi_user_sdma_pkt_q {
+	struct list_head list;
+	unsigned ctxt;
+	unsigned subctxt;
+	u16 n_max_reqs;
+	atomic_t n_reqs;
+	u16 reqidx;
+	struct hfi_devdata *dd;
+	struct kmem_cache *txreq_cache;
+	struct user_sdma_request *reqs;
+	atomic64_t npkts;
+	struct iowait busy;
+	unsigned state;
+};
 
-void qib_user_sdma_queue_drain(struct qib_pportdata *ppd,
-			       struct qib_user_sdma_queue *pq);
+struct hfi_user_sdma_comp_q {
+	u16 nentries;
+	struct hfi_sdma_comp_entry *comps;
+};
 
-u32 qib_user_sdma_complete_counter(const struct qib_user_sdma_queue *pq);
-u32 qib_user_sdma_inflight_counter(struct qib_user_sdma_queue *pq);
+int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *, struct file *, u16);
+int hfi_user_sdma_free_queues(struct hfi_filedata *);
+int hfi_user_sdma_process_request(struct file *, struct iovec *, unsigned long,
+				  unsigned long *);

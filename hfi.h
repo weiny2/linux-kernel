@@ -259,6 +259,14 @@ struct qib_ctxtdata {
 	/* verbs stats per CTX */
 	struct hfi_opcode_stats_perctx *opstats;
 #endif
+	/*
+	 * This is the kernel thread that will keep making
+	 * progress on the user sdma requests behind the scenes.
+	 * There is one per context (shared contexts use the master's).
+	 */
+	struct task_struct *progress;
+	struct list_head sdma_queues;
+	spinlock_t sdma_qlock;
 };
 
 /*
@@ -1035,7 +1043,8 @@ struct hfi_devdata {
 struct hfi_filedata {
 	struct qib_ctxtdata *uctxt;
 	unsigned subctxt;
-	struct qib_user_sdma_queue *pq;
+	struct hfi_user_sdma_comp_q *cq;
+	struct hfi_user_sdma_pkt_q *pq;
 	int rec_cpu_num; // for cpu affinity; -1 if none
 };
 
@@ -1160,8 +1169,10 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	(((struct hfi_filedata *)(fp)->private_data)->subctxt)
 #define tidcursor_fp(fp) \
 	(((struct hfi_filedata *)(fp)->private_data)->tidcursor)
-#define user_sdma_queue_fp(fp) \
+#define user_sdma_pkt_fp(fp) \
 	(((struct hfi_filedata *)(fp)->private_data)->pq)
+#define user_sdma_comp_fp(fp) \
+	(((struct hfi_filedata *)(fp)->private_data)->cq)
 
 static inline struct hfi_devdata *dd_from_ppd(struct qib_pportdata *ppd)
 {

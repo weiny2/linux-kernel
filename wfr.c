@@ -116,7 +116,7 @@ MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
 #define EASY_LINKUP_UNSET 100
 static uint sim_easy_linkup = EASY_LINKUP_UNSET;
 
-static uint extended_psn = 0;
+uint extended_psn = 0;
 module_param(extended_psn, uint, S_IRUGO);
 MODULE_PARM_DESC(extended_psn, "Use 24 or 31 bit PSN");
 
@@ -3561,6 +3561,8 @@ static int get_base_info(struct qib_ctxtdata *rcd,
 		kinfo->runtime_flags |= HFI_RUNTIME_NODMA_RTAIL;
 	if (extended_psn)
 		kinfo->runtime_flags |= HFI_RUNTIME_EXTENDED_PSN;
+	if (use_sdma)
+		kinfo->runtime_flags |= HFI_RUNTIME_SDMA;
 	return 0;
 }
 
