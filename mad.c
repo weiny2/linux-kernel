@@ -294,7 +294,7 @@ static int __subn_get_stl_nodedesc(struct stl_smp *smp, u32 am,
  
 	return reply(smp);
 }
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int subn_get_nodedescription(struct ib_smp *smp,
 				    struct ib_device *ibdev)
@@ -306,6 +306,7 @@ static int subn_get_nodedescription(struct ib_smp *smp,
 
 	return reply(smp);
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
@@ -366,7 +367,6 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		smp->status |= IB_SMP_INVALID_FIELD;
 	else
 		nip->port_guid = dd->pport[pidx].guid;
-
 #ifdef CONFIG_STL_MGMT
 	nip->base_version = JUMBO_MGMT_BASE_VERSION;
 	nip->class_version = STL_SMI_CLASS_VERSION;
@@ -393,6 +393,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	return reply(smp);
 }
 
+#ifndef CONFIG_STL_MGMT
 static int subn_get_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
@@ -425,6 +426,7 @@ static int subn_get_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 
 	return reply(smp);
 }
+#endif /* !CONFIG_STL_MGMT */
 
 static void set_link_width_enabled(struct qib_pportdata *ppd, u32 w)
 {
@@ -697,8 +699,7 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	return reply(smp);
 }
-
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
@@ -764,16 +765,7 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	link_speed_supported = ppd->link_speed_supported;
 	link_speed_active = ppd->link_speed_active;
 	link_speed_enabled = ppd->link_speed_enabled;
-#ifdef CONFIG_STL_MGMT
-	/* IB has no support for 12.5G */
-	link_speed_supported &= ~STL_LINK_SPEED_12_5G;
-	/* Most signficant 8 bits of 16 bit field match IB */
-	link_speed_supported >>= 8;
-	link_speed_active &= ~STL_LINK_SPEED_12_5G;
-	link_speed_active >>= 8;
-	link_speed_enabled &= ~STL_LINK_SPEED_12_5G;
-	link_speed_enabled >>= 8;
-#endif
+
 	pip->linkspeed_portstate = link_speed_supported << 4 | state;
 
 	pip->portphysstate_linkdown =
@@ -823,6 +815,7 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 bail:
 	return ret;
 }
+#endif /* !CONFIG_STL_MGMT */
 
 /**
  * get_pkeys - return the PKEY table
@@ -893,7 +886,7 @@ static int __subn_get_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 
 	return reply(smp);
 }
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int subn_get_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 			      u8 port)
@@ -943,6 +936,7 @@ static int subn_set_guidinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	/* The only GUID we support is the first read-only entry. */
 	return subn_get_guidinfo(smp, ibdev, port);
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 /**
@@ -1239,7 +1233,7 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 get_only:
 	return __subn_get_stl_portinfo(smp, am, data, ibdev, port, resp_len);
 }
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 /**
  * subn_set_portinfo - set port information
@@ -1490,6 +1484,7 @@ get_only:
 done:
 	return ret;
 }
+#endif /* !CONFIG_STL_MGMT */
 
 /**
  * set_pkeys - set the PKEY table for ctxt 0
@@ -1596,7 +1591,7 @@ static int __subn_set_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 
 	return __subn_get_stl_pkeytable(smp, am, data, ibdev, port, resp_len);
 }
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int subn_set_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 			      u8 port)
@@ -1615,6 +1610,7 @@ static int subn_set_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 
 	return subn_get_pkeytable(smp, ibdev, port);
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 static int get_sc2vlt_tables(struct hfi_devdata *dd, void *data)
@@ -1730,7 +1726,7 @@ static int __subn_set_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 	return __subn_get_stl_bct(smp, am, data, ibdev, port, resp_len);
 }
 
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int subn_get_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
@@ -1771,6 +1767,7 @@ static int subn_set_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 
 	return subn_get_sl_to_vl(smp, ibdev, port);
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
@@ -1817,7 +1814,7 @@ static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 
 	return reply(smp);
 }
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int subn_get_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 			   u8 port)
@@ -1838,6 +1835,7 @@ static int subn_get_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 
 	return reply(smp);
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 static int __subn_set_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
@@ -1880,8 +1878,7 @@ static int __subn_set_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 
 	return __subn_get_stl_vl_arb(smp, am, data, ibdev, port, resp_len);
 }
-#endif /* CONFIG_STL_MGMT */
-
+#else /* !CONFIG_STL_MGMT */
 
 static int subn_set_vl_arb(struct ib_smp *smp, struct ib_device *ibdev,
 			   u8 port)
@@ -1912,6 +1909,7 @@ static int subn_trap_repress(struct ib_smp *smp, struct ib_device *ibdev,
 	 */
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 struct stl_pma_mad {
@@ -2635,8 +2633,7 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 
 	return reply(pmp);
 }
-
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int pma_get_classportinfo(struct ib_pma_mad *pmp,
 				 struct ib_device *ibdev)
@@ -2751,6 +2748,7 @@ static int pma_set_portsamplescontrol(struct ib_pma_mad *pmp,
 bail:
 	return ret;
 }
+#endif /* !CONFIG_STL_MGMT */
 
 static u64 get_counter(struct qib_ibport *ibp, struct qib_pportdata *ppd,
 		       __be16 sel)
@@ -2806,6 +2804,7 @@ static void cache_hw_sample_counters(struct qib_pportdata *ppd)
 		get_counter(ibp, ppd, IB_PMA_PORT_XMIT_WAIT);
 }
 
+#ifndef CONFIG_STL_MGMT
 static u64 get_cache_hw_sample_counters(struct qib_pportdata *ppd,
 					__be16 sel)
 {
@@ -3316,6 +3315,7 @@ static int pma_set_portcounters_ext(struct ib_pma_mad *pmp,
 
 	return pma_get_portcounters_ext(pmp, ibdev, port);
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 
@@ -3872,7 +3872,6 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 {
 	struct ib_smp *smp = (struct ib_smp *)out_mad;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int ret;
 
 	*out_mad = *in_mad;
@@ -3911,12 +3910,15 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
 		switch (smp->attr_id) {
+#ifndef CONFIG_STL_MGMT
 		case IB_SMP_ATTR_NODE_DESC:
 			ret = subn_get_nodedescription(smp, ibdev);
 			goto bail;
+#endif /* !CONFIG_STL_MGMT */
 		case IB_SMP_ATTR_NODE_INFO:
 			ret = subn_get_nodeinfo(smp, ibdev, port);
 			goto bail;
+#ifndef CONFIG_STL_MGMT
 		case IB_SMP_ATTR_GUID_INFO:
 			ret = subn_get_guidinfo(smp, ibdev, port);
 			goto bail;
@@ -3943,12 +3945,14 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 				goto bail;
 			}
 			/* FALLTHROUGH */
+#endif /* !CONFIG_STL_MGMT */
 		default:
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply(smp);
 			goto bail;
 		}
 
+#ifndef CONFIG_STL_MGMT
 	case IB_MGMT_METHOD_SET:
 		switch (smp->attr_id) {
 		case IB_SMP_ATTR_GUID_INFO:
@@ -4005,6 +4009,8 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		goto bail;
 
 	case IB_MGMT_METHOD_SEND:
+	{
+		struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 		if (ib_get_smp_direction(smp) &&
 		    smp->attr_id == QIB_VENDOR_IPG) {
 			ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PORT,
@@ -4013,10 +4019,11 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		} else
 			ret = IB_MAD_RESULT_SUCCESS;
 		goto bail;
-
+	}
 	default:
 		smp->status |= IB_SMP_UNSUP_METHOD;
 		ret = reply(smp);
+#endif /* !CONFIG_STL_MGMT */
 	}
 
 bail:
@@ -4024,7 +4031,6 @@ bail:
 }
 
 #ifdef CONFIG_STL_MGMT
-
 static int process_perf_stl(struct ib_device *ibdev, u8 port,
 			    struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad, u32 *resp_len)
@@ -4126,7 +4132,7 @@ static int process_perf_stl(struct ib_device *ibdev, u8 port,
 bail:
 	return ret;
 }
-#endif /* CONFIG_STL_MGMT */
+#else /* !CONFIG_STL_MGMT */
 
 static int process_perf(struct ib_device *ibdev, u8 port,
 			struct ib_mad *in_mad,
@@ -4255,12 +4261,7 @@ static int cc_get_congestion_setting(struct ib_cc_mad *ccp,
 		(struct ib_cc_congestion_setting_attr *)ccp->mgmt_data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-#ifdef CONFIG_STL_MGMT
-	struct stl_congestion_setting_entry_shadow *entries;
-#else
 	struct ib_cc_congestion_entry_shadow *entries;
-#endif /* !CONFIG_STL_MGMT */
-
 
 	memset(ccp->mgmt_data, 0, sizeof(ccp->mgmt_data));
 
@@ -4508,6 +4509,7 @@ static int process_cc(struct ib_device *ibdev, int mad_flags,
 bail:
 	return ret;
 }
+#endif /* !CONFIG_STL_MGMT */
 
 #ifdef CONFIG_STL_MGMT
 static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
@@ -4555,27 +4557,28 @@ bail:
 
 	return ret;
 }
-#endif /* CONFIG_STL_MGMT */
+#endif /* !CONFIG_STL_MGMT */
 
 static int hfi_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			      struct ib_wc *in_wc, struct ib_grh *in_grh,
 			      struct ib_mad *in_mad, struct ib_mad *out_mad)
 {
 	int ret;
-	struct qib_ibport *ibp = to_iport(ibdev, port);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
 	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
 		ret = process_subn(ibdev, mad_flags, port, in_mad, out_mad);
 		goto bail;
-
+#ifndef CONFIG_STL_MGMT
 	case IB_MGMT_CLASS_PERF_MGMT:
 		ret = process_perf(ibdev, port, in_mad, out_mad);
 		goto bail;
 
 	case IB_MGMT_CLASS_CONG_MGMT:
+	{
+		struct qib_ibport *ibp = to_iport(ibdev, port);
+		struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 		if (!ppd->congestion_entries_shadow ||
 			 !qib_cc_table_size) {
 			ret = IB_MAD_RESULT_SUCCESS;
@@ -4583,7 +4586,8 @@ static int hfi_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		}
 		ret = process_cc(ibdev, mad_flags, port, in_mad, out_mad);
 		goto bail;
-
+	}
+#endif /* !CONFIG_STL_MGMT */
 	default:
 		ret = IB_MAD_RESULT_SUCCESS;
 	}
