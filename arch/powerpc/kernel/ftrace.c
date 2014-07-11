@@ -105,7 +105,7 @@ __ftrace_make_nop(struct module *mod,
 		  struct dyn_ftrace *rec, unsigned long addr)
 {
 	unsigned int op;
-	unsigned long ptr;
+	unsigned long entry, ptr;
 	unsigned long ip = rec->ip;
 	void *tramp;
 
@@ -136,10 +136,11 @@ __ftrace_make_nop(struct module *mod,
 
 	pr_devel("trampoline target %lx", ptr);
 
+	entry = ppc_global_function_entry((void *)addr);
 	/* This should match what was called */
-	if (ptr != ppc_function_entry((void *)addr)) {
+	if (ptr != entry) {
 		printk(KERN_ERR "addr %lx does not match expected %lx\n",
-			ptr, ppc_function_entry((void *)addr));
+			ptr, entry);
 		return -EINVAL;
 	}
 
@@ -307,7 +308,7 @@ __ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 	 * The load offset is different depending on the ABI. For simplicity
 	 * just mask it out when doing the compare.
 	 */
-	if ((op[0] != 0x48000008) || ((op[1] & 0xffff00000) != 0xe8410000)) {
+	if ((op[0] != 0x48000008) || ((op[1] & 0xffff0000) != 0xe8410000)) {
 		printk(KERN_ERR "Unexpected call sequence: %x %x\n",
 			op[0], op[1]);
 		return -EINVAL;
@@ -320,7 +321,7 @@ __ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 	}
 
 	/* Ensure branch is within 24 bits */
-	if (create_branch(ip, rec->arch.mod->arch.tramp, BRANCH_SET_LINK)) {
+	if (!create_branch(ip, rec->arch.mod->arch.tramp, BRANCH_SET_LINK)) {
 		printk(KERN_ERR "Branch out of range");
 		return -EINVAL;
 	}
