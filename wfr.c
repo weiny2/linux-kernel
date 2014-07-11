@@ -4077,8 +4077,7 @@ static u32 hdrqempty(struct qib_ctxtdata *rcd)
  *	0x9   1 MB (Receive Array only)
  *	0xa   2 MB (Receive Array only)
  *
- *	0x8-0xF - reserved (Context Control)
- *	0xB-0xF - reserved (Receive Array)
+ *	0xB-0xF - reserved (Receive Array only)
  *	
  *
  * This routine assumes that the value has already been sanity checked.
@@ -4179,22 +4178,25 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, 0);
 
 		/* set eager count and base index */
-		reg = ((rcd->eager_count & WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
+		reg = (((rcd->eager_count >> WFR_RCV_SHIFT)
+					& WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
 				<< WFR_RCV_EGR_CTRL_EGR_CNT_SHIFT) |
-		      ((rcd->eager_base & WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_MASK)
+		      (((rcd->eager_base >> WFR_RCV_SHIFT)
+					& WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_MASK)
 				<< WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_SHIFT);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_EGR_CTRL, reg);
 
 		/*
 		 * Set TID (expected) count and base index.
 		 * rcd->expected_count is set to individual RcvArray entries,
-		 * not pairs.
+		 * not pairs, and the CSR takes a pair-count in groups of
+		 * four, so divide by 8.
 		 */
-		reg = (((rcd->expected_count / 2) &
-					WFR_RCV_TID_CTRL_TID_PAIR_CNT_MASK)
+		reg = (((rcd->expected_count >> WFR_RCV_SHIFT)
+					& WFR_RCV_TID_CTRL_TID_PAIR_CNT_MASK)
 				<< WFR_RCV_TID_CTRL_TID_PAIR_CNT_SHIFT) |
-		      ((rcd->expected_base &
-					WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
+		      (((rcd->expected_base >> WFR_RCV_SHIFT)
+					& WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
 				<< WFR_RCV_TID_CTRL_TID_BASE_INDEX_SHIFT);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_TID_CTRL, reg);
 	}
@@ -4736,7 +4738,7 @@ dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
 static int init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	u32 context = rcd->ctxt, max_entries = 0, eager_base;
+	u32 context = rcd->ctxt, max_entries, eager_base;
 	u16 ngroups = rcd->rcv_array_groups;
 	int ret = 0;
 
@@ -4744,9 +4746,11 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 	 * Simple allocation: we have already pre-allocated the number
 	 * of RcvArray entry groups. Each ctxtdata structure holds the
 	 * number of groups for that context.
-	 * To maintain cacheline alignment, check that Eager count is
-	 * multiple of group_size.
-	 * Expected entry count is whatis left after assigning Eager.
+	 *
+	 * To follow CSR requirements and maintain cacheline alignment,
+	 * make sure all sizes and bases are multiples of group_size.
+	 *
+	 * The expected entry count is what is left after assigning eager.
 	 */
 	eager_base = context * ngroups * dd->rcv_entries.group_size;
 	if (context >= dd->first_user_ctxt &&
@@ -5365,20 +5369,21 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 
 	/*
 	 * Recieve array allocation:
-	 *   All RcvArray entries are divided into groups of 8. This will
-	 *   speed up writes to consecuitive entries by using write-
-	 *   combining of the entire cacheline.
+	 *   All RcvArray entries are divided into groups of 8. This
+	 *   is required by the hardware and will speed up writes to
+	 *   consecutive entries by using write-combining of the entire
+	 *   cacheline.
 	 *
 	 *   The number of groups are evenly divided among all contexts.
 	 *   any left over groups will be given to the first N user
 	 *   contexts.
 	 */
-	dd->rcv_entries.group_size = L1_CACHE_BYTES / sizeof(u64);
+	dd->rcv_entries.group_size = WFR_RCV_INCREMENT;
 	ngroups = dd->chip_rcv_array_count / dd->rcv_entries.group_size;
 	dd->rcv_entries.ngroups = ngroups / dd->num_rcv_contexts;
 	dd->rcv_entries.nctxt_extra = ngroups -
 		(dd->num_rcv_contexts * dd->rcv_entries.ngroups);
-	dd_dev_info(dd, "RcvAntry groups %u, ctxts extra %u\n",
+	dd_dev_info(dd, "RcvArray groups %u, ctxts extra %u\n",
 		    dd->rcv_entries.ngroups,
 		    dd->rcv_entries.nctxt_extra);
 	if (dd->rcv_entries.ngroups * dd->rcv_entries.group_size >
@@ -5386,7 +5391,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 		dd->rcv_entries.ngroups = (WFR_MAX_EAGER_ENTRIES * 2) /
 			dd->rcv_entries.group_size;
 		dd_dev_info(dd,
-		   "RcvAntry group count too high, change to %u\n",
+		   "RcvArray group count too high, change to %u\n",
 		   dd->rcv_entries.ngroups);
 		dd->rcv_entries.nctxt_extra = 0;
 	}
@@ -6292,7 +6297,6 @@ int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 
 	/* Enable J_KEY check on receive context. */
 	reg = WFR_RCV_KEY_CTRL_JOB_KEY_ENABLE_SMASK |
-		WFR_RCV_KEY_CTRL_JOB_KEY_MASK_SMASK |
 		((jkey & WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_MASK) <<
 		 WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_SHIFT);
 	write_kctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, reg);
@@ -6612,6 +6616,19 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
 
+	/* cannot run on older revisions */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 43) {
+		dd_dev_err(dd, "Version mismatch: This driver requires simulator version 43 or higher\n");
+		ret = -EINVAL;
+		goto bail_cleanup;
+	}
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION && dd->irev < 0x1503) {
+		dd_dev_err(dd, "Version mismatch: This driver requires emulation version 0x15 or higher\n");
+		ret = -EINVAL;
+		goto bail_cleanup;
+	}
+
+
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
 
@@ -6677,15 +6694,9 @@ dd_dev_err(dd, "JAG SDMA dd->num_sdma: %u\n", dd->num_sdma);
 	   per context, rather than global. */
 	/* FIXME: arbitrary/old values */
 	dd->rcvhdrcnt = 64;
-#if 1
+	/* TODO: make rcvhdrentsize and rcvhdrsize adjustable? */
 	dd->rcvhdrentsize = DEFAULT_RCVHDR_ENTSIZE;
 	dd->rcvhdrsize = DEFAULT_RCVHDRSIZE;
-#else
-	dd->rcvhdrentsize = qib_rcvhdrentsize ?
-		qib_rcvhdrentsize : DEFAULT_RCVHDR_ENTSIZE;
-	dd->rcvhdrsize = qib_rcvhdrsize ?
-		qib_rcvhdrsize : DEFAULT_RCVHDRSIZE;
-#endif
 	dd->rhf_offset = dd->rcvhdrentsize - sizeof(u64) / sizeof(u32);
 
 	ret = set_up_context_variables(dd);

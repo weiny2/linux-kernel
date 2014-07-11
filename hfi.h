@@ -1347,7 +1347,7 @@ void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
  *	---
  *	 28 + KDETH
  *
- * For a 64-byte cache line, KETH would need to be 36 bytes or 9 DWORDS
+ * For a 64-byte cache line, KDETH would need to be 36 bytes or 9 DWORDS
  */
 #define DEFAULT_RCVHDRSIZE 9
 

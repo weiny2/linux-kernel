@@ -657,6 +657,20 @@
 #define WFR_MAX_EAGER_BUFFER (256 * 1024)
 
 /*
+ * Receive expected base and count and eager base and count increment -
+ * the CSR fields hold multiples of this value.
+ */
+#define WFR_RCV_SHIFT 3
+#define WFR_RCV_INCREMENT (1 << WFR_RCV_SHIFT)
+
+/*
+ * Receive header queue entry increment - the CSR holds multiples of
+ * this value.
+ */
+#define WFR_HDRQ_SIZE_SHIFT 5
+#define WFR_HDRQ_INCREMENT (1 << WFR_HDRQ_SIZE_SHIFT)
+
+/*
  * Chip implementation codes.
  */
 #define WFR_ICODE_RTL_SILICON		0x00
