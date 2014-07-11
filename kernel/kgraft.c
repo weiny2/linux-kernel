@@ -65,9 +65,6 @@ static void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	else
 		go_old = kgr_task_in_progress(current);
 
-	WARN(p->state != KGR_PATCH_SLOW && p->state != KGR_PATCH_REVERT_SLOW,
-			"state is %d", p->state);
-
 	if (p->state == KGR_PATCH_REVERT_SLOW)
 		go_old = !go_old;
 
@@ -252,7 +249,7 @@ static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
 	if (last_new_fun)
 		return ftrace_function_to_fentry(last_new_fun);
 
-	return kgr_get_fentry_loc(name);
+	return patch_fun->loc_name;
 }
 
 static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
@@ -277,6 +274,14 @@ static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
 			fentry_loc, patch_fun->new_fun);
 	patch_fun->loc_new = fentry_loc;
 
+	fentry_loc = kgr_get_fentry_loc(patch_fun->name);
+	if (IS_ERR_VALUE(fentry_loc))
+		return fentry_loc;
+
+	pr_debug("kgr: storing %lx to loc_name for %s\n",
+			fentry_loc, patch_fun->name);
+	patch_fun->loc_name = fentry_loc;
+
 	fentry_loc = kgr_get_old_fun(patch_fun);
 	if (IS_ERR_VALUE(fentry_loc))
 		return fentry_loc;
@@ -296,6 +301,36 @@ static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
 	fops->flags = FTRACE_OPS_FL_SAVE_REGS;
 
 	return 0;
+}
+
+static int kgr_ftrace_enable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
+{
+	int ret;
+
+	ret = ftrace_set_filter_ip(fops, pf->loc_name, 0, 0);
+	if (ret)
+		return ret;
+
+	ret = register_ftrace_function(fops);
+	if (ret)
+		ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
+
+	return ret;
+}
+
+static int kgr_ftrace_disable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
+{
+	int ret;
+
+	ret = unregister_ftrace_function(fops);
+	if (ret)
+		return ret;
+
+	ret = ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
+	if (ret)
+		register_ftrace_function(fops);
+
+	return ret;
 }
 
 static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
@@ -349,16 +384,9 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 
 	if (new_ops) {
 		/* Flip the switch */
-		err = ftrace_set_filter_ip(new_ops, patch_fun->loc_old, 0, 0);
+		err = kgr_ftrace_enable(patch_fun, new_ops);
 		if (err) {
-			pr_err("kgr: setting filter for %lx (%s) failed\n",
-					patch_fun->loc_old, patch_fun->name);
-			return err;
-		}
-
-		err = register_ftrace_function(new_ops);
-		if (err) {
-			pr_err("kgr: registering ftrace function for %lx (%s) failed\n",
+			pr_err("kgr: cannot enable ftrace function for %lx (%s)\n",
 					patch_fun->loc_old, patch_fun->name);
 			return err;
 		}
@@ -370,9 +398,9 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 	 * ftrace hashtable
 	 */
 	if (unreg_ops) {
-		err = unregister_ftrace_function(unreg_ops);
+		err = kgr_ftrace_disable(patch_fun, unreg_ops);
 		if (err) {
-			pr_warning("kgr: unregistering ftrace function for %s failed with %d\n",
+			pr_warning("kgr: disabling ftrace function for %s failed with %d\n",
 					patch_fun->name, err);
 			/* don't fail: we are only slower */
 		}
@@ -427,10 +455,10 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		 */
 		if (ret < 0) {
 			for (patch_fun--; patch_fun >= patch->patches;
-					patch_fun--) {
+					patch_fun--)
 				if (patch_fun->state == KGR_PATCH_SLOW)
-					unregister_ftrace_function(&patch_fun->ftrace_ops_slow);
-			}
+					kgr_ftrace_disable(patch_fun,
+						&patch_fun->ftrace_ops_slow);
 			goto err_unlock;
 		}
 	}

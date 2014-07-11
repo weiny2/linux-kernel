@@ -99,16 +99,33 @@ int kgr_patch_dir_add(struct kgr_patch *patch)
 	if (ret)
 		return ret;
 
+	if (patch->owner) {
+		ret = sysfs_create_link(&patch->kobj, &patch->owner->mkobj.kobj,
+				"owner");
+		if (ret)
+			goto err_put;
+	}
+
 	ret = sysfs_create_group(&patch->kobj, &kgr_patch_sysfs_group);
 	if (ret)
-		kobject_put(&patch->kobj);
+		goto err_del_link;
 
+	return 0;
+err_del_link:
+	if (patch->owner)
+		sysfs_delete_link(&patch->kobj, &patch->owner->mkobj.kobj,
+				"owner");
+err_put:
+	kobject_put(&patch->kobj);
 	return ret;
 }
 
 void kgr_patch_dir_del(struct kgr_patch *patch)
 {
 	sysfs_remove_group(&patch->kobj, &kgr_patch_sysfs_group);
+	if (patch->owner)
+		sysfs_delete_link(&patch->kobj, &patch->owner->mkobj.kobj,
+				"owner");
 	kobject_put(&patch->kobj);
 	wait_for_completion(&patch->finish);
 }

@@ -37,7 +37,8 @@ struct kgr_patch;
  *
  * @name: function to patch
  * @new_fun: function with the new body
- * @loc_old: cache of @name's fentry
+ * @loc_name: cache of @name's fentry
+ * @loc_old: cache of the last entry for @name in the patches list
  * @loc_new: cache of @new_name's fentry
  * @ftrace_ops_slow: ftrace ops for slow (temporary) stub
  * @ftrace_ops_fast: ftrace ops for fast () stub
@@ -60,6 +61,7 @@ struct kgr_patch_fun {
 		KGR_PATCH_SKIPPED,
 	} state;
 
+	unsigned long loc_name;
 	unsigned long loc_old;
 	unsigned long loc_new;
 
@@ -75,21 +77,24 @@ struct kgr_patch_fun {
  * @kobj: object representing the sysfs entry
  * @list: member in patches list
  * @finish: waiting till it is safe to remove the module with the patch
+ * @irq_use_new: per-cpu array to remember kGraft state for interrupts
  * @refs: how many patches need to be reverted before this one
  * @name: name of the patch (to appear in sysfs)
  * @owner: module to refcount on patching
- * @irq_use_new: per-cpu array to remember kGraft state for interrupts
  * @patches: array of @kgr_patch_fun structures
  */
 struct kgr_patch {
+	/* internal state information */
 	struct kobject kobj;
 	struct list_head list;
 	struct completion finish;
+	bool __percpu *irq_use_new;
 	unsigned int refs;
+	unsigned long suse_kabi_padding[8];
+
+	/* a patch shall set these */
 	const char *name;
 	struct module *owner;
-	bool __percpu *irq_use_new;
-	unsigned long suse_kabi_padding[8];
 	struct kgr_patch_fun patches[];
 };
 
