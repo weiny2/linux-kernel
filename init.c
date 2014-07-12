@@ -213,6 +213,23 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 	return rcd;
 }
 
+/*
+ * Convert a receive header entry size that to the encoding used in the CSR.
+ *
+ * Return a zero if the given size is invalid.
+ */
+static inline u64 encode_rcv_header_entry_size(u16 size)
+{
+	/* there are only 3 valid receive header entry sizes */
+	if (size == 2)
+		return 1;
+	if (size == 16)
+		return 2;
+	else if (size == 32)
+		return 4;
+	return 0; /* invalid */
+}
+
 int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 		   u16 hdrqcnt, u16 hdrqentsize)
 {
@@ -229,6 +246,7 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 		goto done;
 	}
 
+	/* checked in init_ctxt() */
 	cd->eager_count = egrtids;
 
 	ret = dd->f_init_ctxt(cd);
@@ -259,6 +277,10 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 	 * cause significant system problems....
 	 */
 	cd->rcvegrbuf_chunksize = hfi_egrbuf_alloc_size;
+	/*
+	 * rcvegrbuf_size is validated later in
+	 *	qib_setup_eagerbufs()->hfi_rcvbuf_validate()
+	 */
 	cd->rcvegrbuf_size = egrsize;
 	cd->rcvegrbufs_perchunk =
 		cd->rcvegrbuf_chunksize / cd->rcvegrbuf_size;
@@ -269,14 +291,21 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 	cd->rcvegrbuf_chunks = (cd->rcvegrbuf_size * cd->eager_count) /
 		cd->rcvegrbuf_chunksize;
 	cd->rcvegrbufs_perchunk_shift =	ilog2(cd->rcvegrbufs_perchunk);
+	if (hdrqcnt % WFR_HDRQ_INCREMENT) {
+		dd_dev_err(dd,
+			"header queue count %d must be divisible by %d\n",
+			hdrqcnt, WFR_HDRQ_INCREMENT);
+		ret = -EFAULT;
+		goto done;
+	}
 	cd->rcvhdrq_cnt = hdrqcnt;
 	/* RcvHdrQ Entry Size is in DWords */
 	hdrqentsize = hdrqentsize >> 2;
-	/*
-	 * #290698 - RcvHdrEntSize must be set to 2DWs or multiple of
-	 * 16DWs.
-	 */
-	if (hdrqentsize != 2 && (hdrqentsize % 0x10)) {
+	/* RcvHdrEntSize has only a specific set of valid values */
+	if (encode_rcv_header_entry_size(hdrqentsize) == 0) {
+		dd_dev_err(dd,
+			"header queue entry size %d must be 2, 16, or 32\n",
+			hdrqentsize);
 		ret = -EINVAL;
 		goto done;
 	}
@@ -1508,10 +1537,12 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 	 *	RcvHdrEntSize
 	 *	RcvHdrSize
 	 */
-	reg = (rcd->rcvhdrq_cnt & WFR_RCV_HDR_CNT_CNT_MASK)
+	reg = ((u64)(rcd->rcvhdrq_cnt >> WFR_HDRQ_SIZE_SHIFT)
+			& WFR_RCV_HDR_CNT_CNT_MASK)
 		<< WFR_RCV_HDR_CNT_CNT_SHIFT;
 	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_CNT, reg);
-	reg = (rcd->rcvhdrqentsize & WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
+	reg = (encode_rcv_header_entry_size(rcd->rcvhdrqentsize)
+			& WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
 		<< WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
 	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_ENT_SIZE, reg);
 	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
