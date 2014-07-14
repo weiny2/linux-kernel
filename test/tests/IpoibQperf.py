@@ -43,6 +43,18 @@ def main():
     # body of test #
     ################
     test_fail = 0
+
+    (err, out) = do_ssh(host1, "modprobe ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not load ipoib on host1")
+
+    (err, out) = do_ssh(host2, "modprobe ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not load ipoib on host2")
+
+    RegLib.test_log(0,"Waiting 10 seconds for Ipoib to get running")
+    time.sleep(10)
+
     # insure not running on either host
     cmd = "pkill qperf"
     err = do_ssh(host1, "pkill qperf")
@@ -76,10 +88,22 @@ def main():
     for line in out:
         print RegLib.chomp(line)
 
+    (err, out) = do_ssh(host1, "rmmod ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not unload ipoib on host1")
+
+    (err, out) = do_ssh(host2, "rmmod ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not unload ipoib on host2")
+
+    RegLib.test_log(0, "Waiting 10 seconds for Ipoib to stop running")
+    time.sleep(10)
+
     if test_fail:
         RegLib.test_fail("Failed!")
     else:
         RegLib.test_pass("Success!")
+
 
 if __name__ == "__main__":
     main()

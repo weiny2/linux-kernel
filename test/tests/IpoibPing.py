@@ -43,6 +43,17 @@ def main():
     # body of test #
     ################
 
+    (err, out) = do_ssh(host1, "modprobe ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not load ipoib on host1")
+
+    (err, out) = do_ssh(host2, "modprobe ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not load ipoib on host2")
+
+    RegLib.test_log(0, "Waiting 10 seconds for Ipoib to get running")
+    time.sleep(10)
+
     test_fail = 0
     # Run ping from host 1
     cmd = "ping -c 5 -W 10 " + host2.get_name() + "-ib"
@@ -52,10 +63,23 @@ def main():
         RegLib.test_log(0, "Child SSH exit status bad")
     for line in out:
         print RegLib.chomp(line)
+
+    (err, out) = do_ssh(host1, "rmmod ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not unload ipoib on host1")
+
+    (err, out) = do_ssh(host2, "rmmod ib_ipoib")
+    if err:
+        RegLib.test_fail("Could not unload ipoib on host2")
+
+    RegLib.test_log(0, "Waiting 10 seconds for Ipoib to stop running")
+    time.sleep(10)
+
     if test_fail:
         RegLib.test_fail("Failed!")
     else:
         RegLib.test_pass("Success!")
+
 
 if __name__ == "__main__":
     main()

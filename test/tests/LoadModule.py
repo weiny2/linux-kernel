@@ -37,60 +37,51 @@ def load_driver(host, driver_name, driver_path, driver_opts):
     loaded = is_driver_loaded(host, driver_name)
     return loaded
 
-def is_opensm_active(host):
-    cmd = "/sbin/service opensm status"
-    out = do_ssh(host, cmd)
-    for line in out:
-        if "is running" in line:
-            return True
-    return False
+def is_sm_active(host, sm):
+    cmd = "/sbin/service %s status" % sm
+    ret = host.send_ssh(cmd, 0)
+    if ret != 0:
+        RegLib.test_log(0, "%s is not running" % sm)
+    else:
+        RegLib.test_log(0, "%s is running" % sm)
+    
+    return ret
 
-def start_opensm(host):
-    cmd = "/sbin/service opensm start"
-    out = do_ssh(host, cmd)
-    return
-
-def restart_opensm(host):
-    cmd = "/sbin/service opensm restart"
+def start_sm(host, sm):
+    cmd = "/sbin/service %s start" % sm
     out = do_ssh(host, cmd)
     return
 
-def stop_opensm(host):
-    cmd = "/sbin/service opensm stop"
+def restart_sm(host, sm):
+    cmd = "/sbin/service %s restart" % sm
+    out = do_ssh(host, cmd)
+    return
+
+def stop_sm(host, sm):
+    cmd = "/sbin/service %s stop" % sm
     out = do_ssh(host, cmd)
     return
 
 def wait_for_active(host, timeout, attempts):
     for iter in range(attempts):
-        RegLib.test_log(0, "Checking for active")
-        cmd = "/usr/sbin/ibportstate -D 0 query"
+        RegLib.test_log(0, "Checking for LinkUp")
+        cmd = "cat /sys/class/infiniband/hfi0/ports/1/phys_state"
         out = do_ssh(host, cmd)
         for line in out:
-            #print line
-            matchObj = re.match(r"LinkState.+Active", line)
+            matchObj = re.match(r"5: LinkUp", line)
             if matchObj:
-               return 0 #no error
-
+                RegLib.test_log(0, "LinkUp")
+                cmd = "cat /sys/class/infiniband/hfi0/ports/1/state"
+                out = do_ssh(host, cmd)
+                for line in out:
+                    matchObj = re.match(r"4: ACTIVE", line)
+                    if matchObj:
+                        RegLib.test_log(0, "Active")
+                        return 0
         RegLib.test_log(0, "Not active yet trying again in a few seconds")
         time.sleep(timeout)
 
     return 1 #error if we got to here
-
-        # Sample output if we want to check for more details later:
-        #[root@viper0 ~]# ibportstate -D 0 query
-        #CA PortInfo:
-        #        Port info: DR path slid 65535; dlid 65535; 0 port 0
-        #LinkState:.......................Active
-        #PhysLinkState:...................LinkUp
-        #Lid:.............................1
-        #SMLid:...........................1
-        #LMC:.............................0
-        #LinkWidthSupported:..............1X or 4X
-        #LinkWidthEnabled:................1X or 4X
-        #LinkWidthActive:.................4X
-        #LinkSpeedSupported:..............undefined (0) (IBA extension)
-        #LinkSpeedEnabled:................undefined (0) (IBA extension)
-        #LinkSpeedActive:.................5.0 Gbps
 
 def main():
 
@@ -128,23 +119,47 @@ def main():
         driver_parms = test_info.get_mod_parms()
         sm = test_info.which_sm()
 
-        if sm == "none":
-            # Make sure to stop openSM
-            opensmhost = None
+        opensm_host = None
+        ifs_fm_host = None
+        if sm != "none":
+            RegLib.test_log(0, "Trying to determine sm")
+
             for host in host1, host2:
-                opensm = is_opensm_active(host)
-                if opensm == True:
-                    if opensmhost:
-                        RegLib.test_fail("Open SM detected on both nodes")
+                active = is_sm_active(host, "opensm")
+                if active == 0:
+                    if opensm_host == None:
+                        opensm_host = host
                     else:
-                        opensmhost = host
-            if opensmhost == None:
-                RegLib.test_log(0, "OpenSM not detected on either host")
-            else:
-                RegLib.test_log(0, "OpenSM detected, stopping")
-                stop_opensm(opensmhost)
-                if is_opensm_active(opensmhost) == True:
-                    RegLib.test_fail("Could not disable OpenSM")
+                        RegLib.test_fail("OpenSM detected on both nodes")
+
+                active = is_sm_active(host, "ifs_fm")
+                if active == 0:
+                    if ifs_fm_host == None:
+                        ifs_fm_host = host
+                    else:
+                        RegLib.test_fail("ifs_fm detected on both nodes")
+
+            if opensm_host != None and ifs_fm_host != None:
+                RegLib.test_fail("Both ifs_fm and open_sm detected")
+            
+            if opensm_host == None and ifs_fm_host == None:
+                RegLib.test_log(0, "Neither ifs_fm nor open sm detected will try after loading driver")
+
+            if opensm_host != None:
+                RegLib.test_log(0, "Using %s as the open sm host" % opensm_host.get_name())
+
+            if ifs_fm_host != None:
+                RegLib.test_log(0, "Using %s as the ifs_fm host" % ifs_fm_host.get_name())
+
+        # Make sure no fm/sm is running now
+        RegLib.test_log(0, "Stopping all sm on all hosts")
+        for host in host1, host2:
+            for my_sm in "opensm", "ifs_fm":
+                stop_sm(host, my_sm)
+                active = is_sm_active(host, my_sm)
+                if active == 0:
+                    RegLib.test_fail("%s is still running on host" % my_sm)
+                RegLib.test_log(0, "%s not found to be running" % my_sm)
 
         # Go ahead and get the driver loaded or reloaded on both hosts
         for host in host1,host2:
@@ -163,52 +178,70 @@ def main():
                 RegLib.test_fail(name + " Could not load driver")
 
         if sm == "none":
-            RegLib.test_pass("Driver loaded OpenSM not running")
+            RegLib.test_pass("Driver loaded sm/fm not running")
 
-        # Now that the driver is loaded make sure one of the hosts is running
-        # opensm if none are then start it on host1.
-        opensmhost = None
-        for host in host1,host2:
-            name = host.get_name()
-            opensm = is_opensm_active(host)
-            if opensm == True:
-                if opensmhost:
-                    RegLib.test_fail(name + " OpenSM detected on both nodes!")
-                else:
-                    opensmhost = host
+        if sm == "ifs_fm":
+            if ifs_fm_host == None:
+                ifs_fm_host = host1
+            RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
+            start_sm(ifs_fm_host, "ifs_fm")
+            active = is_sm_active(ifs_fm_host, "ifs_fm")
+            if active != 0:
+                RegLib.test_fail("Could not start ifs_fm")
 
-        if opensmhost == None:
-            opensmhost = host1
-            start_opensm(host1)
-            if is_opensm_active(host1) == True:
-                RegLib.test_log(0, "Driver loaded and opensm started")
-            else:
+        if sm == "opensm":
+            if opensm_host == None:
+                opensm_host = host1
+            RegLib.test_log(0, "Starting opensm on %s" % opensm_host.get_name())
+            start_sm(opensm_host, "opensm")
+            active = is_sm_active(opensm_host, "opensm")
+            if active != 0:
                 RegLib.test_fail("Could not start opensm")
-        else:
-            # if we do not restart opensm it can take a long time for it to
-            # notice the driver has been reloaded and bring it up so don't wait
-            # restarting the service forces a rescan
-            RegLib.test_log(0, "Driver loaded and opensm running restarting")
-            restart_opensm(opensmhost)
-            if is_opensm_active(opensmhost) == True:
-                RegLib.test_log(0, "Open SM reloaded")
-            else:
-                RegLib.test_fail("Could not reload opensm")
 
-        # Driver loaded and opensm ready now wait till links are active on both
+        if sm == "detect":
+            RegLib.test_log(0, "Determining where to start SM")
+            if opensm_host != None:
+                RegLib.test_log(0, "Starting opensm on %s" % opensm_host.get_name())
+                start_sm(opensm_host, "opensm")
+                active = is_sm_active(opensm_host, "opensm")
+                if active == 0:
+                    RegLib.test_log(0, "opensm running on %s" % opensm_host.get_name())
+                else:
+                    RegLib.test_fail("Could not start opensm")
+            elif ifs_fm_host != None:
+                RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
+                start_sm(ifs_fm_host, "ifs_fm")
+                active = is_sm_active(ifs_fm_host, "ifs_fm")
+                if active == 0:
+                    RegLib.test_log(0, "ifs_fm running on %s" % ifs_fm_host.get_name())
+                else:
+                    RegLib.test_fail("Could not start ifs_fm")
+            else:
+                ifs_fm_host = host1
+                RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
+                start_sm(ifs_fm_host, "ifs_fm")
+                active = is_sm_active(ifs_fm_host, "ifs_fm")
+                if active == 0:
+                    RegLib.test_log(0, "ifs_fm running on %s" % ifs_fm_host.get_name())
+                else:
+                    opensm_host = host1
+                    ifs_fm_host = None
+                    RegLib.test_log(0, "Starting opensm on %s" % opensm_host.get_name())
+                    start_sm(opensm_host, "opensm")
+                    active = is_sm_active(opensm_host, "opensm")
+                    if active == 0:
+                        RegLib.test_log(0, "opensm running on %s" % opensm_host.get_name())
+                    else:
+                        RegLib.test_fail("Could not start any sm")
+
+        # Driver loaded and sm ready now wait till links are active on both
         # nodes.
         num_loaded = 0
         for host in host1,host2:
             name = host.get_name()
-            err = wait_for_active(host, 10, 2)
+            err = wait_for_active(host, 10, 6)
             if err:
                 RegLib.test_log(0, name + " Could not reach active state")
-                RegLib.test_log(0, name + " Attempting to restart opensm")
-                restart_opensm(opensmhost)
-                if is_opensm_active(opensmhost) == True:
-                    RegLib.test_log(0, name + " Open SM reloaded")
-                else:
-                    RegLib.test_fail(name + " Could not reload opensm")
             else:
                 RegLib.test_log(0, name + " Adapter is up and running")
                 num_loaded = num_loaded + 1
@@ -216,7 +249,7 @@ def main():
         if num_loaded != 2:
             RegLib.test_fail(name + " Unable to get active state on at least 1 node")
 
-        RegLib.test_pass("Driver loaded, adapters up, openSM running.")
+        RegLib.test_pass("Driver loaded, adapters up SM running.")
 
     else:
         RegLib.test_fail("Only simics supported right now")

@@ -96,15 +96,15 @@ class HostInfo:
         return self.name
 
     def get_lid(self):
-        cmd = "/usr/sbin/ibportstate -D 0 query"
+        cmd = "cat /sys/class/infiniband/hfi0/ports/1/lid"
         (err, out) = self.send_ssh(cmd)
         if err:
             return None
 
         for line in out:
-            matchObj = re.match(r"Lid.+(\d+)", line)
+            matchObj = re.match(r"0x\d+", line)
             if matchObj:
-               return matchObj.group(1) #no error
+                return line.strip()
 
         return None #error if we got to here
 
@@ -254,9 +254,10 @@ class TestInfo:
                           metavar="LIST",
                           default="")
         parser.add_option("--sm", dest="sm",
-                          help="Which SM to use. Valid values are opensm or none. Default: opensm",
+                          help="Which SM to use. Valid values are opensm, " +
+                          "ifs_fm, detect, or none. Default: detect",
                           metavar="SM",
-                          default="opensm")
+                          default="detect")
         parser.add_option("--basedir", dest="base_dir",
                           help="Optional base directory to pass to a test. Used to source executables and such.",
                           metavar="PATH",
