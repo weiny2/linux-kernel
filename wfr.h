@@ -134,9 +134,9 @@
 #define RCV_SHORT_LENGTH_ERR_CNT            2
 #define RCV_LONG_LENGTH_ERR_CNT             3
 #define RCV_EXCESS_BUFFER_OVERRUNS_CNT      4
-#define RCV_UNEXP_CHAR_ERR_CNT              5
+/* 5 not used */
 #define RCV_ICRC_ERR_CNT                    6
-/* 7,8 reserved */
+/* 7,8 not used */
 #define RCV_EBP_CNT                         9
 #define RCV_BUF_OVFL_CNT                    10
 #define RCV_PKEY_MISMATCH_CNT               11
