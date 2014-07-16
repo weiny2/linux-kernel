@@ -1722,25 +1722,42 @@ void lcb_shutdown(struct hfi_devdata *dd)
  */
 void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 {
-	/*
-	 * LCB_CFG_RX_FIFOS_RADR.RST_VAL = 0x9
-	 * LCB_CFG_RX_FIFOS_RADR.OK_TO_JUMP_VAL = 0x9
-	 * LCB_CFG_RX_FIFOS_RADR.DO_NOT_JUMP_VAL = 0xa
-	 */
-	write_csr(dd, DC_LCB_CFG_RX_FIFOS_RADR,
-		0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT
-		| 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
-		| 0xaull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT
-		);
+	u64 rx_radr, tx_radr;
+
+	if (dd->icode != WFR_ICODE_FPGA_EMULATION)
+		return;
+
+	if ((dd->irev >> 8) <= 0x12) {
+		/* release 0x12 and below */
+
+		/*
+		 * LCB_CFG_RX_FIFOS_RADR.RST_VAL = 0x9
+		 * LCB_CFG_RX_FIFOS_RADR.OK_TO_JUMP_VAL = 0x9
+		 * LCB_CFG_RX_FIFOS_RADR.DO_NOT_JUMP_VAL = 0xa
+		 */
+		rx_radr =
+		      0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT
+		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0xaull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT;
+		/*
+		 * LCB_CFG_TX_FIFOS_RADR.ON_REINIT = 0 (default)
+		 * LCB_CFG_TX_FIFOS_RADR.RST_VAL = 6
+		 */
+		tx_radr = 6ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+	} else  {
+		/* release 0x13 and higher */
+		rx_radr =
+		      0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT
+		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT;
+		tx_radr = 7ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+	}
+
+	write_csr(dd, DC_LCB_CFG_RX_FIFOS_RADR, rx_radr);
 	/* LCB_CFG_IGNORE_LOST_RCLK.EN = 1 */
 	write_csr(dd, DC_LCB_CFG_IGNORE_LOST_RCLK,
 		DC_LCB_CFG_IGNORE_LOST_RCLK_EN_SMASK);
-	/*
-	 * LCB_CFG_TX_FIFOS_RADR.ON_REINIT = 0 (default)
-	 * LCB_CFG_TX_FIFOS_RADR.RST_VAL = 6
-	 */
-	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RADR,
-		6ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT);
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RADR, tx_radr);
 }
 
 /*
