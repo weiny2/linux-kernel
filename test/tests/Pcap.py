@@ -55,15 +55,14 @@ def start_pcap(host):
         ping = 0;
         pong = 0;
         for line in output:
-            #.....logged 36 byte pkt vl 0 pktlen 9 Dwords dlid 1 slid 2
-            #.....logged 36 byte pkt vl 0 pktlen 9 Dwords dlid 2 slid 1
-            matchObj = re.search(r"logged (\d+) byte pkt .+ dlid (\d+) slid (\d+)",
+            #BytesRead: 304 PacketBytes: 288 Port: 0 Dir: INGRESS  PBC|RHF: 0 SLID: 2 DLID: 65535 VL: 15 PktWords: 72
+            matchObj = re.search(r"PacketBytes: (\d+) .+ SLID: (\d+) DLID: (\d+)",
                                  line)
             if matchObj:
                 #print RegLib.chomp(line)
                 size = matchObj.group(1)
-                dlid = matchObj.group(2)
-                slid = matchObj.group(3)
+                slid = matchObj.group(2)
+                dlid = matchObj.group(3)
                 if size == "36":
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
@@ -143,7 +142,6 @@ def main():
     if status:
         RegLib.test_fail("Test Failed")
     RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-
 
     if disable_snoop:
         restore_default_params()

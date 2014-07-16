@@ -240,19 +240,19 @@ def capture_do_not_intercept_outgoing(host):
         ping = 0;
         pong = 0;
         for line in output:
-            #.....logged 36 byte pkt vl 0 pktlen 9 Dwords dlid 1 slid 2
-            #.....logged 36 byte pkt vl 0 pktlen 9 Dwords dlid 2 slid 1
-            matchObj = re.search(r"logged (\d+) byte pkt .+ dlid (\d+) slid (\d+)",
+            matchObj = re.search(r"PacketBytes: (\d+) .+ SLID: (\d+) DLID: (\d+)",
                                  line)
             if matchObj:
                 #print RegLib.chomp(line)
                 size = matchObj.group(1)
-                dlid = matchObj.group(2)
-                slid = matchObj.group(3)
+                slid = matchObj.group(2)
+                dlid = matchObj.group(3)
                 if size == "36":
-                    # Why 36? This is because it is a 2 byte write which gets
+                    # Why 36 This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
-                    # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
+                    # byte ICRC = 36 or 9 Dwords. There is a 16 byte header
+                    # for Pcap metadata but it is not included in PacketBytes.
+                    # The test does a 5x ping pong
                     if (dlid == "1") and (slid == "2"):
                         ping = ping+1
                     elif (dlid == "2") and (slid == "1"):
@@ -278,19 +278,15 @@ def capture_do_not_intercept_outgoing_2(host):
         pong = 0
         foreign_lid = 0
         for line in output:
-            #.....logged 36 byte pkt vl 0 pktlen 9 Dwords dlid 1 slid 2
-            #.....logged 36 byte pkt vl 0 pktlen 9 Dwords dlid 2 slid 1
-            matchObj = re.search(r"logged (\d+) byte pkt .+ dlid (\d+) slid (\d+)",
+            matchObj = re.search(r"PacketBytes: (\d+) .+ SLID: (\d+) DLID: (\d+)",
                                  line)
             if matchObj:
                 #print RegLib.chomp(line)
                 size = matchObj.group(1)
-                dlid = matchObj.group(2)
-                slid = matchObj.group(3)
+                slid = matchObj.group(2)
+                dlid = matchObj.group(3)
                 if size == "36":
-                    # Why 36? This is because it is a 2 byte write which gets
-                    # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
-                    # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
+                    # Why 36? See previous function
                     if (dlid == "1") and (slid == "2"):
                         ping = ping+1
                     elif (dlid == "2") and (slid == "1"):

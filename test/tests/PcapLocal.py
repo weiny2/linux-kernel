@@ -14,8 +14,55 @@ import array
 import select
 import signal
 import sys
+from ctypes import *
 
-packet_list = []
+def print_packet(bytes):
+    # Packet Capture Metadata is as follows:
+    #struct capture_md {
+    #	u8 port;
+    #	u8 dir;
+    #	u8 reserved[6];
+    #	union {
+    #		u64 pbc;
+    #		u64 rhf;
+    #	} u;
+    #};
+    port = bytes[0]
+    direction = "INVALID"
+    if bytes[1] == 0:
+        direction = " EGRESS "
+
+    if bytes[1] == 1:
+        direction = "INGRESS "
+
+    pbcrhf = c_ulonglong.from_buffer(bytes[8:])
+
+    md_len = 16
+    vl_offset = md_len
+    dlid_upper_offset = 2 + md_len
+    dlid_lower_offset = 3 + md_len
+    pkt_len_offset = 5 + md_len
+    slid_upper_offset = 6 + md_len
+    slid_lower_offset = 7 + md_len
+
+    bytes_read = len(bytes)
+    packet_bytes = bytes_read - md_len
+
+    dlid_upper = bytes[dlid_upper_offset] << 8
+    dlid_lower = bytes[dlid_lower_offset]
+    dlid = dlid_upper | dlid_lower
+
+    slid_upper = bytes[slid_upper_offset] << 8
+    slid_lower = bytes[slid_lower_offset]
+    slid = slid_upper | slid_lower
+
+    vl = bytes[vl_offset] >> 4
+
+    pkt_len = bytes[pkt_len_offset]
+
+    print "BytesRead:", bytes_read, "PacketBytes:", packet_bytes,
+    print "Port:", port, "Dir:", direction, "PBC|RHF:", pbcrhf,
+    print "SLID:", slid, "DLID:", dlid, "VL:", vl, "PktWords:", pkt_len
 
 def signal_handler(signal, frame):
 
@@ -24,20 +71,6 @@ def signal_handler(signal, frame):
     # Don't worry about closing the FD or file_obj pyhon gets mad if we
     # close one then the other. Just let the interrpruter do all the
     # work.
-
-    for packet in packet_list:
-        bytes = bytearray(packet)
-        vl = bytes[0] >> 4
-        dlid_upper = bytes[2] << 8
-        dlid = dlid_upper | bytes[3]
-        pkt_len = bytes[5]
-        slid_upper = bytes[6] << 8
-        slid = slid_upper | bytes[7]
-        print ".....logged", len(packet), "byte pkt",
-        print "vl", vl, "pktlen", pkt_len, "Dwords",
-        print "dlid", dlid, "slid", slid
-
-    RegLib.test_pass("Success!")
     sys.exit(0)
 
 
@@ -94,21 +127,12 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     # Go collect some packets
+    RegLib.test_log(0, "Waiting for a packet")
     while True:
-        RegLib.test_log(0, "Waiting for a packet")
         packet = os.read(fd, IB_PACKET_SIZE)
-        packet_list.append(packet)
         packet_len = str(len(packet))
         bytes = bytearray(packet)
-        vl = bytes[0] >> 4
-        dlid_upper = bytes[2] << 8
-        dlid = dlid_upper | bytes[3]
-        pkt_len = bytes[5]
-        slid_upper = bytes[6] << 8
-        slid = slid_upper | bytes[7]
-        print "Found a", len(packet), "byte pkt",
-        print "vl", vl, "pktlen", pkt_len, "Dwords",
-        print "dlid", dlid, "slid", slid
+        print_packet(bytes)
 
 if __name__ == "__main__":
     main()
