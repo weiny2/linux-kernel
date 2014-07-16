@@ -5306,6 +5306,50 @@ static int intr_fallback(struct hfi_devdata *dd)
 }
 
 /*
+ * TODO: temporary code for missing interrupts, HSD 291041.
+ *
+ * Check the kernel recive FIFOs to see if they are stuck.  If a receive
+ * FIFO is stuck, force an interrupt on it.
+ */
+void check_fifos(unsigned long opaque)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)opaque;
+	u32 head, tail;
+	int i, index, bit;
+
+	for (i = 0; i < dd->n_krcv_queues; i++) {
+		if (dd->rcd[i]->rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK) {
+			head = (read_uctxt_csr(dd, i, WFR_RCV_HDR_HEAD)
+						>> WFR_RCV_HDR_HEAD_HEAD_SHIFT)
+					& WFR_RCV_HDR_HEAD_HEAD_MASK;
+			tail = (read_uctxt_csr(dd, i, WFR_RCV_HDR_TAIL)
+						>> WFR_RCV_HDR_TAIL_TAIL_SHIFT)
+					& WFR_RCV_HDR_TAIL_TAIL_MASK;
+			/* stuck if not empty and head matches last call */
+			if (head != tail
+				&& dd->last_krcv_fifo_head[i] == head) {
+				/* we appear to be stuck */
+				dd_dev_err(dd,
+					"Receive context FIFO %d appears stuck (head 0x%x, tail 0x%x), forcing an interrupt\n",
+					i, head, tail);
+				index = (WFR_IS_RCVAVAIL_START + i) / 64;
+				bit = (WFR_IS_RCVAVAIL_START + i) % 64;
+				write_csr(dd, WFR_CCE_INT_FORCE + (8*index),
+					1ull << bit);
+				fifo_stalled_count++;
+			}
+		} else {
+			head = 0;
+		}
+
+		/* save the last values */
+		dd->last_krcv_fifo_head[i] = head;
+	}
+
+	mod_timer(&dd->fifo_timer, jiffies + msecs_to_jiffies(fifo_check));
+}
+
+/*
  * Set up context values in dd.  Sets:
  *
  *	num_rcv_contexts - number of contexts being used

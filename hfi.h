@@ -1059,6 +1059,9 @@ struct hfi_devdata {
 	/* timer used for 64 bit counter emulation  */
 	/* See HAS section 13.2 */
 	struct timer_list stats_timer;
+	/* TODO: temporary code for missing interrupts, HSD 291041 */
+	struct timer_list fifo_timer;	/* interval timer for FIFO check */
+	u32 *last_krcv_fifo_head;	/* last read FIFO head value */
 
 	/*
 	 * per device 64 bit counters
@@ -1478,6 +1481,8 @@ extern uint kdeth_qp;
 extern uint loopback;
 extern uint rcv_intr_timeout;
 extern uint rcv_intr_count;
+extern uint fifo_check;
+extern uint fifo_stalled_count;
 extern ushort link_crc_mask;
 
 extern struct mutex qib_mutex;

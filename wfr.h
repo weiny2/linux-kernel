@@ -824,6 +824,7 @@ static inline int stl_width_to_ib(u16 in)
 int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
 void read_guid(struct hfi_devdata *dd);
+void check_fifos(unsigned long opaque);
 
 extern uint num_vls;
 
