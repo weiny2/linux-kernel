@@ -611,6 +611,11 @@ struct qib_message_header {
 #define QIB_MULTICAST_LID_BASE 0xC000
 #define QIB_MULTICAST_QPN 0xFFFFFF
 
+static inline __u64 rhf_to_cpu(const __le32 *rbuf)
+{
+	return __le64_to_cpu(*((__le64 *)rbuf));
+}
+
 static inline __u32 rhf_err_flags(const __le32 *rbuf)
 {
 	return __le32_to_cpu(rbuf[1]) & RHF1_ERROR_SMASK;

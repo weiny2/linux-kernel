@@ -436,6 +436,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	struct hfi_devdata *dd = rcd->dd;
 	struct qib_pportdata *ppd = rcd->ppd;
 	__le32 *rhf_addr;
+	u64 rhf;
 	void *ebuf;
 	const u32 rsize = dd->rcvhdrentsize;        /* words */
 	const u32 maxcnt = dd->rcvhdrcnt * rsize;   /* words */
@@ -449,6 +450,8 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 
 	l = rcd->head;
 	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
+	rhf = rhf_to_cpu(rhf_addr);
+
 	if (dd->flags & QIB_NODMA_RTAIL) {
 		u32 seq = rhf_rcv_seq(rhf_addr);
 		if (seq != rcd->seq_cnt)
@@ -484,6 +487,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 				tlen - ((dd->rcvhdrentsize -
 					  (rhf_hdrq_offset(rhf_addr)+2)) * 4));
 		}
+
 		trace_hfi_rcvhdr(dd,
 				 rcd->ctxt,
 				 eflags,
@@ -529,7 +533,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		else if (etype == RHF_RCV_TYPE_IB) {
 			packet.tlen = tlen;
 			packet.hlen = hlen;
-			packet.rhf_addr = rhf_addr;
+			packet.rhf = rhf;
 			packet.ebuf = ebuf;
 			packet.hdr = hdr;
 			packet.rcd = rcd;
@@ -544,6 +548,8 @@ move_along:
 			last = 1;
 
 		rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
+		rhf = rhf_to_cpu(rhf_addr);
+
 		if (dd->flags & QIB_NODMA_RTAIL) {
 			u32 seq = rhf_rcv_seq(rhf_addr);
 
