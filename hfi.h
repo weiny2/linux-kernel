@@ -261,7 +261,10 @@ struct qib_ctxtdata {
 
 /*
  * Represents a single packet at a high level. Put commonly computed things in
- * here so we do not have to keep doing them over and over.
+ * here so we do not have to keep doing them over and over. The rule of thumb is
+ * if something is used one time to derive some value, store that soemthing in
+ * here. If it is used mutliple times, then store the result of that derivation
+ * in here.
  */
 struct hfi_packet {
 	void *ebuf;
@@ -270,6 +273,8 @@ struct hfi_packet {
 	u16 tlen;
 	u16 hlen;
 	u64 rhf;
+	u32 updegr;
+	__le32 *rhf_addr;
 };
 
 /*
@@ -1076,10 +1081,9 @@ struct hfi_devdata {
 	struct hfi_snoop_data hfi_snoop;
 
 	/*
-	 * Handlers for incoming/outgoing data so that snoop/capture does not
-	 * have to have its hooks in the send and recv path
+	 * Handlers for outgoing data so that snoop/capture does not
+	 * have to have its hooks in the send path
 	 */
-	void (*process_receive)(struct hfi_packet *packet);
 	int (*process_pio_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 				u32 hdrwords, struct qib_sge_state *ss, u32 len,
 				u32 plen, u32 dwords, u64 pbc);
@@ -1453,6 +1457,15 @@ const char *get_unit_name(int unit);
 #else
 #define qib_flush_wc() wmb() /* no reorder around wc flush */
 #endif
+
+extern void handle_eflags(struct hfi_packet *packet);
+extern void process_receive_ib(struct hfi_packet *packet);
+extern void process_receive_bypass(struct hfi_packet *packet);
+extern void process_receive_error(struct hfi_packet *packet);
+extern void process_receive_expected(struct hfi_packet *packet);
+extern void process_receive_eager(struct hfi_packet *packet);
+
+extern void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 
 /* global module parameter variables */
 extern unsigned int max_mtu;

@@ -1023,7 +1023,12 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	 * allocated and get stuck on the snoop_lock before getting added to the
 	 * queue. Same goes for send.
 	 */
-	dd->process_receive = snoop_recv_handler;
+	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = snoop_recv_handler;
+	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = snoop_recv_handler;
+	rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = snoop_recv_handler;
+	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler;
+	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = snoop_recv_handler;
+
 	dd->process_pio_send = snoop_send_pio_handler;
 	dd->process_dma_send = snoop_send_pio_handler;
 
@@ -1069,7 +1074,13 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	 * handler. Re-enable SDMA handling.
 	 */
 	dd->hfi_snoop.mode_flag = 0;
-	dd->process_receive = qib_ib_rcv;
+
+	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
+	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
+	rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = process_receive_error;
+	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
+	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = process_receive_expected;
+
 	dd->process_pio_send = qib_verbs_send_pio;
 	dd->process_dma_send = qib_verbs_send_dma;
 
@@ -1691,7 +1702,11 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
  * both the interrupt handler and qib_ib_rcv() we are going to hijack the call
  * and land in here for snoop/capture but if not enbaled the call will go
  * through as before. This gives us a single point to constrain all of the snoop
- * snoop recv logic.
+ * snoop recv logic. There is nothign special that needs to happen for bypass
+ * packets. This routine should not try to look into the packet. It just copied
+ * it. There is no gurantee for filters when it comes to bypass packets as there
+ * is no specific support. Bottom line is this routine does now even know what a
+ * bypass packet is.
  */
 void snoop_recv_handler(struct hfi_packet *packet)
 {
@@ -1741,7 +1756,8 @@ void snoop_recv_handler(struct hfi_packet *packet)
 						 tlen - header_size,
 						 md_len);
 		if (unlikely(s_packet == NULL)) {
-			dd_dev_err(ppd->dd, "Unable to allocate snoop/capture packet\n");
+			dd_dev_err(ppd->dd,
+				"Unable to allocate snoop/capture packet\n");
 			break;
 		}
 
@@ -1782,6 +1798,15 @@ void snoop_recv_handler(struct hfi_packet *packet)
 		snoop_dbg("Capturing packet\n");
 		if (ppd->dd->hfi_snoop.mode_flag & HFI_PORT_SNOOP_MODE) {
 			snoop_dbg("Throwing packet away");
+			/*
+			 * If we are dropping the packet we still may need to
+			 * handle the case where error flags are set, this is
+			 * normally done by the type specific handler but that
+			 * won't be called in this case.
+			 */
+			if (unlikely(rhf_err_flags(packet->rhf_addr)))
+				handle_eflags(packet);
+
 			return; /* throw the packet on the floor */
 		}
 		break;
@@ -1789,7 +1814,32 @@ void snoop_recv_handler(struct hfi_packet *packet)
 		break;
 	}
 
-	qib_ib_rcv(packet);
+	/*
+	 * We do not care what type of packet came in here just pass it off to
+	 * its usual handler. See qib_init(). We can't just rely on calling into
+	 * the function map array becaue snoop/capture has hijacked it. If we
+	 * call the IB type specific handler we will be calling ourself
+	 * recursively.
+	 */
+	switch (rhf_rcv_type(packet->rhf_addr)) {
+	case RHF_RCV_TYPE_IB:
+		process_receive_ib(packet);
+		break;
+	case RHF_RCV_TYPE_BYPASS:
+		process_receive_bypass(packet);
+		break;
+	case RHF_RCV_TYPE_ERROR:
+		process_receive_error(packet);
+		break;
+	case RHF_RCV_TYPE_EXPECTED:
+		process_receive_expected(packet);
+		break;
+	case RHF_RCV_TYPE_EAGER:
+		process_receive_eager(packet);
+		break;
+	default:
+		dd_dev_err(ppd->dd, "Unknown packet type dropping!\n");
+	}
 }
 
 /*
@@ -1806,7 +1856,9 @@ int snoop_send_dma_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 }
 
 /*
- * Handle snooping and capturing packets when pio is being used.
+ * Handle snooping and capturing packets when pio is being used. Does not handle
+ * bypass packets. The only way to send a bypass packet currently is to use the
+ * diagpkt interface. When that interface is enable snoop/capture is not.
  */
 int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,

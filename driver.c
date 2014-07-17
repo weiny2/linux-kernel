@@ -72,6 +72,9 @@ MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
 MODULE_VERSION(HFI_DRIVER_VERSION);
 
+/* See qib_init() */
+void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
+
 /*
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
  */
@@ -279,10 +282,10 @@ inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 /*
  */
 static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
-			  u32 ctxt, u32 eflags, u32 l, u32 etail,
-			  __le32 *rhf_addr, struct qib_message_header *rhdr)
+		       __le32 *rhf_addr, struct qib_message_header *rhdr)
 {
 	/*u32 rcv_type = rhf_rcv_type(rhf_addr);*/
+	u32 eflags = rhf_err_flags(rhf_addr);
 
 	if (eflags & (RHF1_VCRC_ERR | RHF1_ICRC_ERR))
 		return;
@@ -434,7 +437,6 @@ drop:
 void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	struct qib_pportdata *ppd = rcd->ppd;
 	__le32 *rhf_addr;
 	u64 rhf;
 	void *ebuf;
@@ -442,7 +444,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	const u32 maxcnt = dd->rcvhdrcnt * rsize;   /* words */
 	u32 etail = -1, l, hdrqtail;
 	struct qib_message_header *hdr;
-	u32 eflags, etype, hlen, tlen, i = 0, updegr = 0;
+	u32 etype, hlen, tlen, i = 0, updegr = 0;
 	int last;
 	u64 lval;
 	struct qib_qp *qp, *nqp;
@@ -467,7 +469,6 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	for (last = 0, i = 1; !last; i += !last) {
 		hdr = dd->f_get_msgheader(dd, rhf_addr);
 		hlen = (u8 *)rhf_addr - (u8 *)hdr;
-		eflags = rhf_err_flags(rhf_addr);
 		etype = rhf_rcv_type(rhf_addr);
 		/* total length */
 		tlen = rhf_pkt_len(rhf_addr);	/* in bytes */
@@ -488,59 +489,26 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 					  (rhf_hdrq_offset(rhf_addr)+2)) * 4));
 		}
 
-		trace_hfi_rcvhdr(dd,
-				 rcd->ctxt,
-				 eflags,
-				 etype,
-				 hlen,
-				 tlen,
-				 updegr,
-				 etail);
-		/*
-		 * TODO: This is a redundant check and should eventually
-		 * be removed - the HW is doing the checking for us.
-		 * Leave for now to double check the simulator.
-		 */
-		if (!eflags) {
-			u16 lrh_len = be16_to_cpu(hdr->lrh[2]) << 2;
+		packet.tlen = tlen;
+		packet.hlen = hlen;
+		packet.rhf = rhf;
+		packet.rhf_addr = rhf_addr; /* TODO: Get rid of this */
+		packet.ebuf = ebuf;
+		packet.hdr = hdr;
+		packet.rcd = rcd;
 
-			if (lrh_len != tlen) {
-				qib_stats.sps_lenerrs++;
-				dd_dev_err(dd,
-					"%s: tlen %d != lrh_len %d, skipping\n",
-					__func__, tlen, (u32)lrh_len);
-				goto move_along;
-			}
-		}
 		/*
-		 * TODO: What is the purpose of this check?  It looks like
-		 * it is dropping an IB packet if didn't use an eager buffer
-		 * but its total length is larger than 1 DWORD more than
-		 * the header. (Why the +1?)
-		 * This looks redundant - and should be removed.
+		 * Call a type specific handler for the packet. We
+		 * should be able to trust that etype won't be beyond
+		 * the range of valid indexes. If so something is really
+		 * wrong and we can probably just let things come
+		 * crashing down. There is no need to eat another
+		 * comparision in this performance critical code.
 		 */
-		if (etype == RHF_RCV_TYPE_IB && !eflags &&
-		    ebuf == NULL &&
-		    tlen > (dd->rcvhdrentsize - 2 + 1 -
-				rhf_hdrq_offset(rhf_addr)) << 2) {
-			dd_dev_err(dd, "%s: IB, no errors, no eager, tlen > headerlen+1, skipping\n", __func__);
-			goto move_along;
-		}
+		rhf_rcv_function_map[etype](&packet);
 
-		if (unlikely(eflags))
-			rcv_hdrerr(rcd, ppd, rcd->ctxt, eflags, l,
-					       etail, rhf_addr, hdr);
-		else if (etype == RHF_RCV_TYPE_IB) {
-			packet.tlen = tlen;
-			packet.hlen = hlen;
-			packet.rhf = rhf;
-			packet.ebuf = ebuf;
-			packet.hdr = hdr;
-			packet.rcd = rcd;
-			dd->process_receive(&packet);
-		}
-		/* FIXME: Handle bypass packets */
-move_along:
+		/* On to the next packet */
+
 		l += rsize;
 		if (l >= maxcnt)
 			l = 0;
@@ -838,3 +806,73 @@ inline u16 generate_jkey(unsigned int uid)
 {
 	return uid & 0xffff;
 }
+
+void handle_eflags(struct hfi_packet *packet)
+{
+	dd_dev_err(packet->rcd->ppd->dd,
+		   "Error flags on recv. RHF = %llu\n",
+		   packet->rhf);
+	rcv_hdrerr(packet->rcd, packet->rcd->ppd,
+		   packet->rhf_addr, packet->hdr);
+}
+
+/*
+ * The following functions are called by the interrupt handler. They are type
+ * specific handlers for each packet type.
+ */
+void process_receive_ib(struct hfi_packet *packet)
+{
+
+	trace_hfi_rcvhdr(packet->rcd->ppd->dd,
+			 packet->rcd->ctxt,
+			 rhf_err_flags(packet->rhf_addr),
+			 RHF_RCV_TYPE_IB,
+			 packet->hlen,
+			 packet->tlen,
+			 packet->updegr,
+			 rhf_egr_index(packet->rhf_addr));
+
+	if (unlikely(rhf_err_flags(packet->rhf_addr))) {
+		handle_eflags(packet);
+		return;
+	}
+
+	qib_ib_rcv(packet);
+}
+
+void process_receive_bypass(struct hfi_packet *packet)
+{
+	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+		handle_eflags(packet);
+
+	dd_dev_err(packet->rcd->ppd->dd,
+	   "Bypass packets are not supported in normal operation. Dropping\n");
+}
+
+void process_receive_error(struct hfi_packet *packet)
+{
+	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+		handle_eflags(packet);
+
+	dd_dev_err(packet->rcd->ppd->dd,
+		   "Unahndled error packet received. Dropping.\n");
+}
+
+void process_receive_expected(struct hfi_packet *packet)
+{
+	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+		handle_eflags(packet);
+
+	dd_dev_err(packet->rcd->ppd->dd,
+		   "Unhandled expected packet received. Dropping.\n");
+}
+
+void process_receive_eager(struct hfi_packet *packet)
+{
+	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+		handle_eflags(packet);
+
+	dd_dev_err(packet->rcd->ppd->dd,
+		   "Unhandled eager packet received. Dropping.\n");
+}
+

@@ -608,8 +608,14 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	struct qib_ctxtdata *rcd;
 	struct qib_pportdata *ppd;
 
-	/* Set up send/recv low level handlers */
-	dd->process_receive = qib_ib_rcv;
+	/* Set up recv low level handlers */
+	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
+	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
+	rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = process_receive_error;
+	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = process_receive_expected;
+	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
+
+	/* Set up send low level handlers */
 	dd->process_pio_send = qib_verbs_send_pio;
 	dd->process_dma_send = qib_verbs_send_dma;
 

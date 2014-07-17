@@ -6207,6 +6207,7 @@ void init_rxe(struct hfi_devdata *dd)
 	/* enable map table */
 	reg = read_csr(dd, WFR_RCV_CTRL);
 	reg |= WFR_RCV_CTRL_RCV_QP_MAP_ENABLE_SMASK;
+	reg |= WFR_RCV_CTRL_RCV_BYPASS_ENABLE_SMASK;
 	write_csr(dd, WFR_RCV_CTRL, reg);
 
 	/* TODO: others...? */
