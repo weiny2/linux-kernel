@@ -190,6 +190,7 @@ struct qib_ctxtdata {
 	/* how many alloc_pages() chunks in rcvegrbuf_pages */
 	u32 rcvegrbuf_chunks;
 	u32 rcvegrbuf_chunksize;
+	u32 rcvegrbufs_idx_mask;
 	/* how many egrbufs per chunk */
 	u16 rcvegrbufs_perchunk;
 	/* ilog2 of above */

@@ -80,6 +80,7 @@ void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
  */
 #define MAX_PKT_RECV 64
+#define WFR_EGR_HEAD_UPDATE_THRESHOLD 16
 
 struct qlogic_ib_stats qib_stats;
 
@@ -184,12 +185,18 @@ int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
  * Get address of eager buffer from it's index (allocated in chunks, not
  * contiguous).
  */
-static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u32 etail)
+static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, __le32 *rhf,
+				   u32 *update)
 {
-	const u32 chunk = etail >> rcd->rcvegrbufs_perchunk_shift;
-	const u32 idx =  etail & ((u32)rcd->rcvegrbufs_perchunk - 1);
+	u32 idx = rhf_egr_index(rhf),
+		shift = rcd->rcvegrbufs_perchunk_shift,
+		mask = rcd->rcvegrbufs_idx_mask,
+		offset = rhf_egr_buf_offset(rhf);
 
-	return rcd->rcvegrbuf[chunk] + (idx << rcd->dd->rcvegrbufsize_shift);
+	*update = !(idx % WFR_EGR_HEAD_UPDATE_THRESHOLD) && !offset;
+	return (void *)(((u64)rcd->rcvegrbuf[(idx >> shift)]) +
+			((idx & mask) << rcd->dd->rcvegrbufsize_shift) +
+			(offset * WFR_RCV_BUF_BLOCK_SIZE));
 }
 
 /*
@@ -411,8 +418,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		/* retreive eager buffer details */
 		if (rhf_use_egr_bfr(rhf_addr)) {
 			etail = rhf_egr_index(rhf_addr);
-			updegr = 1;
-			ebuf = qib_get_egrbuf(rcd, etail);
+			ebuf = qib_get_egrbuf(rcd, rhf_addr, &updegr);
 			/* TODO: Keep the prefetch?  Why are we doing it? */
 			/*
 			 * Prefetch the contents of the eager buffer.  It is

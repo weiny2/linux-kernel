@@ -969,10 +969,8 @@ static int user_init(struct file *fp)
 	 * support for multiple packet per rcv array entry is
 	 * added.
 	 */
-#if 0
-	 if (uctxt->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF)
-#endif
-	rcvctrl_ops |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
+	if (uctxt->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF)
+		rcvctrl_ops |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
 	if (uctxt->flags & HFI_CTXTFLAG_DONTDROPEGRFULL)
 		rcvctrl_ops |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
 	if (uctxt->flags & HFI_CTXTFLAG_DONTDROPHDRQFULL)

@@ -665,4 +665,9 @@ static inline __u32 rhf_use_egr_bfr(const __le32 *rbuf)
 	return __le32_to_cpu(rbuf[0]) & RHF0_USE_EGR_BFR_SMASK;
 }
 
+static inline __u32 rhf_egr_buf_offset(const __le32 *rbuf)
+{
+	return (__le32_to_cpu(rbuf[1]) >> RHF1_EGR_OFFSET_SHIFT) &
+		RHF1_EGR_OFFSET_MASK;
+}
 #endif /* _COMMON_H */
