@@ -16,7 +16,7 @@ import signal
 import sys
 
 
-IOCTL_SET_LINK_STATE_EXTRA = 3225426822
+IOCTL_SET_LINK_STATE_EXTRA = 3225426823
 
 def get_link_state(val):
     val = val & 0xF
@@ -139,6 +139,12 @@ def create_hfi_link_info():
 
     return hfi_link_info
 
+def get_version(file_obj):
+    ioctl = 7045
+    val = send_simple_ioctl(file_obj, ioctl)
+    RegLib.test_log(0, "IOCTL_GET_VERSION:")
+    RegLib.test_log(0, "\tVers: %s" % val)
+
 def get_link_phys_state(file_obj):
         ioctl = 7040
         val = send_simple_ioctl(file_obj, ioctl)
@@ -168,7 +174,7 @@ def parse_complex_ioctl(info):
         return (link, phys)
 
 def get_link_phys_state_extra(file_obj):
-        ioctl = 3225426821
+        ioctl = 3225426822
         buffer = create_hfi_link_info()
         info = send_complex_ioctl(file_obj, int(ioctl), buffer)
         (link, phys) = parse_complex_ioctl(info)
@@ -252,6 +258,8 @@ def main():
     if not file_obj:
         RegLib.test_fail("Could not open snoop device %s" % dev)
 
+    get_version(file_obj)
+
     # Make sure link is physically up not diabled but in init state
     (link, phys) = get_link_phys_state(file_obj)
     if is_active(link, phys):
@@ -269,7 +277,6 @@ def main():
     bring_down(file_obj)
 
     RegLib.test_pass("Completed!")
-
 
 if __name__ == "__main__":
     main()
