@@ -212,6 +212,36 @@ static ssize_t sprintf_ipaddr(char *buf, u8 *ip)
 	return str - buf;
 }
 
+static ssize_t sprintf_netmask(char *buf, u8 *ip, unsigned int prefix_len)
+{
+	char *str = buf;
+
+	if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0 &&
+	    ip[4] == 0 && ip[5] == 0 && ip[6] == 0 && ip[7] == 0 &&
+	    ip[8] == 0 && ip[9] == 0 && ip[10] == 0xff && ip[11] == 0xff) {
+		__be32 val;
+		/*
+		 * IPV4
+		 */
+		val = cpu_to_be32(~((1 << (32-prefix_len))-1));
+		str += sprintf(str, "%pI4", &val);
+	} else {
+		u8 netmask[16];
+		int o = prefix_len >> 3,
+		    b = prefix_len & 0x7;
+		/*
+		 * IPv6
+		 */
+		memset(netmask, 0, 16);
+		memset(netmask, 0xff, o);
+		if (b != 0)
+			netmask[o] = 0xff & (0xff00 >> b);
+		str += sprintf(buf, "%pI6", netmask);
+	}
+	str += sprintf(str, "\n");
+	return str - buf;
+}
+
 static ssize_t sprintf_string(char *str, int len, char *buf)
 {
 	return sprintf(str, "%.*s\n", len, buf);
@@ -288,7 +318,6 @@ static ssize_t ibft_attr_show_nic(void *data, int type, char *buf)
 	struct ibft_nic *nic = entry->nic;
 	void *ibft_loc = entry->header;
 	char *str = buf;
-	__be32 val;
 
 	if (!nic)
 		return 0;
@@ -304,8 +333,8 @@ static ssize_t ibft_attr_show_nic(void *data, int type, char *buf)
 		str += sprintf_ipaddr(str, nic->ip_addr);
 		break;
 	case ISCSI_BOOT_ETH_SUBNET_MASK:
-		val = cpu_to_be32(~((1 << (32-nic->subnet_mask_prefix))-1));
-		str += sprintf(str, "%pI4", &val);
+		str += sprintf_netmask(str, nic->ip_addr,
+				       nic->subnet_mask_prefix);
 		break;
 	case ISCSI_BOOT_ETH_ORIGIN:
 		str += sprintf(str, "%d\n", nic->origin);
