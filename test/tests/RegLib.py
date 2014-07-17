@@ -248,7 +248,9 @@ class TestInfo:
 
         parser.add_option("--modparm", dest="module_params",
                           help="Optional module paramters to pass "
-                               + "Like: param1=X param2=Y")
+                               + "Like: param1=X param2=Y "
+                               + "or colon separated for per host like: "
+                               + "parm1 = X param2=Y : parm1 = Z")
         parser.add_option("--args", dest="extra_args",
                           help="Optional params to pass to tests as a comma sep list",
                           metavar="LIST",

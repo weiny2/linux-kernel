@@ -119,6 +119,24 @@ def main():
         driver_parms = test_info.get_mod_parms()
         sm = test_info.which_sm()
 
+        matchObj = re.match(r"(.*):(.*)", driver_parms)
+        host1_parms = ""
+        host2_parms = ""
+        if matchObj:
+            RegLib.test_log(5, "Using new style modparms");
+            host1_parms = matchObj.group(1)
+            host2_parms = matchObj.group(2)
+        else:
+            RegLib.test_log(5, "Using old style modparms");
+            host1_parms = driver_parms
+            host2_parms = driver_parms
+
+        host1_parms = host1_parms.strip()
+        host2_parms = host2_parms.strip()
+
+        RegLib.test_log(5, "host1 parms: %s" %host1_parms)
+        RegLib.test_log(5, "host2 parms: %s" %host2_parms)
+        
         opensm_host = None
         ifs_fm_host = None
         if sm != "none":
@@ -171,6 +189,11 @@ def main():
                 if removed == False:
                     RegLib.test_fail(name + " Could not remove HFI driver")
             RegLib.test_log(0, name + " Loading Driver")
+            if host == host1:
+                driver_parms = host1_parms
+            else:
+                driver_parms = host2_parms
+
             loaded = load_driver(host, driver_name, driver_path, driver_parms)
             if loaded == True:
                 RegLib.test_log(0, name + " Driver loaded successfully")
