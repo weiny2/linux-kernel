@@ -1016,7 +1016,7 @@ static int wait_kmem(struct qib_ibdev *dev, struct qib_qp *qp)
 
 int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			      u32 plen, u32 dwords)
+			      u32 plen, u32 dwords, u64 pbc)
 {
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
 	struct hfi_devdata *dd = dd_from_dev(dev);
@@ -1024,7 +1024,6 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_txreq *tx;
 	struct qib_pio_header *phdr;
-	u64 pbc;
 	u32 ndesc;
 	u32 vl;
 	int ret;
@@ -1042,7 +1041,8 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		goto bail_tx;
 
 	vl = be16_to_cpu(hdr->lrh[0]) >> 12;
-	pbc = create_pbc(0, qp->s_srate, vl, plen);
+	if (likely(pbc == 0))
+		pbc = create_pbc(0, qp->s_srate, vl, plen);
 
 	tx->qp = qp;
 	atomic_inc(&qp->refcount);
@@ -1162,10 +1162,9 @@ struct send_context *qp_to_send_context(struct qib_qp *qp, u32 vl)
 
 int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			      u32 plen, u32 dwords)
+			      u32 plen, u32 dwords, u64 pbc)
 {
 	u32 *hdr = (u32 *) ibhdr;
-	u64 pbc;
 	u32 vl;
 	unsigned long flags;
 	struct send_context *sc;
@@ -1175,7 +1174,8 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	sc = qp_to_send_context(qp, vl);
 	if (!sc)
 		return -EINVAL;
-	pbc = create_pbc(0, qp->s_srate, vl, plen);
+	if (likely(pbc == 0))
+		pbc = create_pbc(0, qp->s_srate, vl, plen);
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (unlikely(pbuf == NULL))
 		return no_bufs_available(qp, sc);
@@ -1257,10 +1257,10 @@ dd_dev_err(dd, "hdrwords = %u, len = %u\n", hdrwords, len);
 	if (qp->ibqp.qp_type == IB_QPT_SMI ||
 	    !(dd->flags & QIB_HAS_SEND_DMA))
 		ret = dd->process_pio_send(qp, hdr, hdrwords, ss, len,
-					  plen, dwords);
+					  plen, dwords, 0);
 	else
 		ret = dd->process_dma_send(qp, hdr, hdrwords, ss, len,
-					  plen, dwords);
+					  plen, dwords, 0);
 
 	return ret;
 }

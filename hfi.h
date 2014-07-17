@@ -269,7 +269,7 @@ struct hfi_packet {
 	struct qib_ctxtdata *rcd;
 	u16 tlen;
 	u16 hlen;
-	__le32 *rhf_addr;
+	u64 rhf;
 };
 
 /*
@@ -1082,10 +1082,10 @@ struct hfi_devdata {
 	void (*process_receive)(struct hfi_packet *packet);
 	int (*process_pio_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 				u32 hdrwords, struct qib_sge_state *ss, u32 len,
-				u32 plen, u32 dwords);
+				u32 plen, u32 dwords, u64 pbc);
 	int (*process_dma_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 				u32 hdrwords, struct qib_sge_state *ss, u32 len,
-				u32 plen, u32 dwords);
+				u32 plen, u32 dwords, u64 pbc);
 };
 
 /* f_put_tid types */
@@ -1198,10 +1198,10 @@ void assign_link_credits(struct hfi_devdata *dd);
 void snoop_recv_handler(struct hfi_packet *packet);
 int snoop_send_dma_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			   u32 plen, u32 dwords);
+			   u32 plen, u32 dwords, u64 pbc);
 int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			   u32 plen, u32 dwords);
+			   u32 plen, u32 dwords, u64 pbc);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \

@@ -1068,11 +1068,11 @@ unsigned qib_get_pkey(struct qib_ibport *, unsigned);
 
 int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			      u32 plen, u32 dwords);
+			      u32 plen, u32 dwords, u64 pbc);
 
 int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			      u32 plen, u32 dwords);
+			      u32 plen, u32 dwords, u64 pbc);
 
 extern const enum ib_wc_opcode ib_qib_wc_opcode[];
 
