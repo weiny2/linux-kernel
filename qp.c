@@ -586,6 +586,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	int mig = 0;
 	int ret;
 	u32 pmtu = 0; /* for gcc warning only */
+	u8 sc;
 
 	spin_lock_irq(&qp->r_lock);
 	spin_lock(&qp->s_lock);
@@ -775,11 +776,17 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	if (attr_mask & IB_QP_AV) {
 		qp->remote_ah_attr = attr->ah_attr;
+		/* convert sl to sc */
+		sc = ah_to_sc(ibqp->device, &qp->remote_ah_attr);
+		qp->remote_ah_attr.sl = sc;
 		qp->s_srate = attr->ah_attr.static_rate;
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
 		qp->alt_ah_attr = attr->alt_ah_attr;
+		/* convert sl to sc */
+		sc = ah_to_sc(ibqp->device, &qp->alt_ah_attr);
+		qp->alt_ah_attr.sl = sc;
 		qp->s_alt_pkey_index = attr->alt_pkey_index;
 	}
 

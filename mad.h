@@ -462,6 +462,12 @@ struct cc_table_shadow {
 #define STL_MAX_VLS 32	/* STL defines 32 VLs */
 #endif
 
+/* attribute modifier macros */
+#define STL_AM_NPORT_SHIFT	(24)
+#define STL_AM_NPORT_SMASK	(0xff000000)
+#define STL_AM_NPORT(am)	((am & STL_AM_NPORT_SMASK) >> \
+					STL_AM_NPORT_SHIFT)
+
 struct vl_limit {
 	__be16 dedicated;
 	__be16 shared;
@@ -471,6 +477,10 @@ struct buffer_control {
 	__be16 reserved;
 	__be16 overall_shared_limit;
 	struct vl_limit vl[STL_MAX_VLS];
+};
+
+struct sc2vlnt {
+	u8 vlnt[32]; /* 5 bit VL, 3 bits reserved */
 };
 #endif				/* _QIB_MAD_H */
 /*

@@ -589,7 +589,7 @@ bail:
  * qib_qp_rcv - processing an incoming packet on a QP
  * @rcd: the context pointer
  * @hdr: the packet header
- * @has_grh: true if the packet has a GRH
+ * @rcv_flags: flags relevant to rcv processing
  * @data: the packet data
  * @tlen: the packet length
  * @qp: the QP the packet came on
@@ -599,7 +599,7 @@ bail:
  * Called at interrupt level.
  */
 static void qib_qp_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
-		       int has_grh, void *data, u32 tlen, struct qib_qp *qp)
+		       u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
 {
 	struct qib_ibport *ibp = &rcd->ppd->ibport_data;
 
@@ -618,15 +618,15 @@ static void qib_qp_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 			break;
 		/* FALLTHROUGH */
 	case IB_QPT_UD:
-		qib_ud_rcv(ibp, hdr, has_grh, data, tlen, qp);
+		qib_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
 		break;
 
 	case IB_QPT_RC:
-		qib_rc_rcv(rcd, hdr, has_grh, data, tlen, qp);
+		qib_rc_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
 		break;
 
 	case IB_QPT_UC:
-		qib_uc_rcv(ibp, hdr, has_grh, data, tlen, qp);
+		qib_uc_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
 		break;
 
 	default:
@@ -653,12 +653,14 @@ void qib_ib_rcv(struct hfi_packet *packet)
 	void *rhdr = packet->hdr;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
+	__le32 *rhf_addr = packet->rhf_addr;
 	struct qib_pportdata *ppd = rcd->ppd;
 	struct qib_ibport *ibp = &ppd->ibport_data;
 	struct qib_ib_header *hdr = rhdr;
 	struct qib_other_headers *ohdr;
 	struct qib_qp *qp;
 	u32 qp_num;
+	u32 rcv_flags = 0;
 	int lnh;
 #ifdef CONFIG_DEBUG_FS
 	u8 opcode;
@@ -713,8 +715,11 @@ void qib_ib_rcv(struct hfi_packet *packet)
 		if (mcast == NULL)
 			goto drop;
 		ibp->n_multicast_rcv++;
+		rcv_flags |= QIB_HAS_GRH;
+		if (le32_to_cpu(*rhf_addr) & RHF0_DC_INFO_SMASK)
+			rcv_flags |= QIB_SC4_BIT;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list)
-			qib_qp_rcv(rcd, hdr, 1, data, tlen, p->qp);
+			qib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, p->qp);
 		/*
 		 * Notify qib_multicast_detach() if it is waiting for us
 		 * to finish.
@@ -740,7 +745,11 @@ void qib_ib_rcv(struct hfi_packet *packet)
 		} else
 			qp = rcd->lookaside_qp;
 		ibp->n_unicast_rcv++;
-		qib_qp_rcv(rcd, hdr, lnh == QIB_LRH_GRH, data, tlen, qp);
+		if (lnh == QIB_LRH_GRH)
+			rcv_flags |= QIB_HAS_GRH;
+		if (le32_to_cpu(*rhf_addr) & RHF0_DC_INFO_SMASK)
+			rcv_flags |= QIB_SC4_BIT;
+		qib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
 	}
 	return;
 
@@ -1024,8 +1033,9 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_txreq *tx;
 	struct qib_pio_header *phdr;
+	u64 pbc_flags = 0;
 	u32 ndesc;
-	u32 vl;
+	u32 sc5;
 	int ret;
 
 	tx = qp->s_tx;
@@ -1040,9 +1050,14 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
-	vl = be16_to_cpu(hdr->lrh[0]) >> 12;
-	if (likely(pbc == 0))
-		pbc = create_pbc(0, qp->s_srate, vl, plen);
+	if (likely(pbc == 0)) {
+		/* No vl15 here */
+		sc5 = qp->s_sc;
+		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
+		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
+
+		pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
+	}
 
 	tx->qp = qp;
 	atomic_inc(&qp->refcount);
@@ -1150,10 +1165,24 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 	return ret;
 }
 
-struct send_context *qp_to_send_context(struct qib_qp *qp, u32 vl)
+static u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc)
+{
+	/* XXX no locking => no protection against update to sc2vlt tables */
+
+	if (sc > 32)
+		return (u8)(-1);
+
+	return *(((u8 *)dd->sc2vl) + sc);
+}
+
+struct send_context *qp_to_send_context(struct qib_qp *qp, u32 sc5)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct qib_pportdata *ppd = dd->pport + (qp->port_num - 1);
+	u32 vl;
+	u8 sc = (u8)sc5;
+
+	vl = sc_to_vlt(dd, sc);
 
 	if (vl >= hfi_num_vls(ppd->vls_supported) && vl != 15)
 		return NULL;
@@ -1165,17 +1194,23 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			      u32 plen, u32 dwords, u64 pbc)
 {
 	u32 *hdr = (u32 *) ibhdr;
-	u32 vl;
+	u64 pbc_flags = 0;
+	u32 sc5;
 	unsigned long flags;
 	struct send_context *sc;
 	struct pio_buf *pbuf;
 
-	vl = be16_to_cpu(ibhdr->lrh[0]) >> 12;
-	sc = qp_to_send_context(qp, vl);
+	/* vl15 special case taken care of in ud.c */
+	sc5 = qp->s_sc;
+	sc = qp_to_send_context(qp, sc5);
+
 	if (!sc)
 		return -EINVAL;
-	if (likely(pbc == 0))
-		pbc = create_pbc(0, qp->s_srate, vl, plen);
+	if (likely(pbc == 0)) {
+		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
+		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
+		pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
+	}
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (unlikely(pbuf == NULL))
 		return no_bufs_available(qp, sc);
@@ -1597,6 +1632,16 @@ static int stl_rate_to_mult(int rate)
 	}
 }
 
+/*
+ * convert ah port,sl to sc
+ */
+u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah)
+{
+	struct qib_ibport *ibp = to_iport(ibdev, ah->port_num);
+
+	return ibp->sl_to_sc[ah->sl];
+}
+
 int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
 	/* A multicast address requires a GRH (see ch. 8.4.1). */
@@ -1636,6 +1681,7 @@ static struct ib_ah *qib_create_ah(struct ib_pd *pd,
 	struct ib_ah *ret;
 	struct qib_ibdev *dev = to_idev(pd->device);
 	unsigned long flags;
+	u8 sc;
 
 	if (qib_check_ah(pd->device, ah_attr)) {
 		ret = ERR_PTR(-EINVAL);
@@ -1661,6 +1707,9 @@ static struct ib_ah *qib_create_ah(struct ib_pd *pd,
 
 	/* ib_create_ah() will initialize ah->ibah. */
 	ah->attr = *ah_attr;
+	/* convert sl to sc */
+	sc = ah_to_sc(pd->device, &ah->attr);
+	ah->attr.sl = sc;
 	atomic_set(&ah->refcount, 0);
 
 	ret = &ah->ibah;
@@ -1808,6 +1857,14 @@ static void init_ibport(struct qib_pportdata *ppd)
 {
 	struct qib_verbs_counters cntrs;
 	struct qib_ibport *ibp = &ppd->ibport_data;
+#ifdef CONFIG_STL_MGMT
+	int i;
+
+	for (i = 0; i < 32; i++) {
+		ibp->sl_to_sc[i] = i;
+		ibp->sc_to_sl[i] = i;
+	}
+#endif /* CONFIG_STL_MGMT */
 
 	spin_lock_init(&ibp->lock);
 	/* Set the prefix to the default value (see ch. 4.1.1) */

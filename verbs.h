@@ -126,6 +126,12 @@ struct hfi_packet;
 #define IB_VL_VL0_7     4
 #define IB_VL_VL0_14    5
 
+/* flags passed by qib_ib_rcv() */
+enum {
+	QIB_HAS_GRH = (1 << 0),
+	QIB_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
+};
+
 static inline int hfi_num_vls(int vls)
 {
 	switch (vls) {
@@ -442,6 +448,7 @@ struct qib_qp {
 	struct qib_swqe *s_wq;  /* send work queue */
 	struct qib_mmap_info *ip;
 	struct qib_ib_header *s_hdr;     /* next packet header to send */
+	u8 s_sc;			/* SC[0..4] for next packet */
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;
@@ -726,7 +733,12 @@ struct qib_ibport {
 	u8 mkeyprot;
 	u8 subnet_timeout;
 	u8 vl_high_limit;
+#ifdef CONFIG_STL_MGMT
+	u8 sl_to_sc[32];
+	u8 sc_to_sl[32];
+#else /* !CONFIG_STL_MGMT */
 	u8 sl_to_vl[16];
+#endif /* CONFIG_STL_MGMT */
 };
 
 
@@ -906,10 +918,12 @@ void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length,
 void qib_skip_sge(struct qib_sge_state *ss, u32 length, int release);
 
 void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		int has_grh, void *data, u32 tlen, struct qib_qp *qp);
+		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
 
 void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
-		int has_grh, void *data, u32 tlen, struct qib_qp *qp);
+		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
+
+u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 
 int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 
@@ -924,7 +938,7 @@ void qib_rc_error(struct qib_qp *qp, enum ib_wc_status err);
 int qib_post_ud_send(struct qib_qp *qp, struct ib_send_wr *wr);
 
 void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		int has_grh, void *data, u32 tlen, struct qib_qp *qp);
+		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
 
 int qib_alloc_lkey(struct qib_mregion *mr, int dma_region);
 

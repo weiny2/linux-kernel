@@ -346,11 +346,14 @@ int qib_make_ud_req(struct qib_qp *qp)
 		bth0 = IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE << 24;
 	} else
 		bth0 = IB_OPCODE_UD_SEND_ONLY << 24;
-	lrh0 |= ah_attr->sl << 4;
-	if (qp->ibqp.qp_type == IB_QPT_SMI)
+	lrh0 |= (ah_attr->sl & 0xf) << 4;
+	if (qp->ibqp.qp_type == IB_QPT_SMI) {
 		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
-	else
-		lrh0 |= ibp->sl_to_vl[ah_attr->sl] << 12;
+		qp->s_sc = 0xf;
+	} else {
+		lrh0 |= (ah_attr->sl & 0xf) << 12;
+		qp->s_sc = ah_attr->sl;
+	}
 	qp->s_hdr->lrh[0] = cpu_to_be16(lrh0);
 	qp->s_hdr->lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
 	qp->s_hdr->lrh[2] = cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
@@ -444,7 +447,7 @@ int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
  * qib_ud_rcv - receive an incoming UD packet
  * @ibp: the port the packet came in on
  * @hdr: the packet header
- * @has_grh: true if the packet has a GRH
+ * @rcv_flags: flags relevant to rcv processing
  * @data: the packet data
  * @tlen: the packet length
  * @qp: the QP the packet came on
@@ -454,7 +457,7 @@ int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
  * Called at interrupt level.
  */
 void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		int has_grh, void *data, u32 tlen, struct qib_qp *qp)
+		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
 {
 	struct qib_other_headers *ohdr;
 	int opcode;
@@ -465,6 +468,9 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	u32 src_qp;
 	u16 dlid;
 	int mgmt_pkey_idx = 0;
+	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
+	int sc4_bit = (!!(rcv_flags & QIB_SC4_BIT)) << 4;
+	u8 sc;
 
 	/* Check for GRH */
 	if (!has_grh) {
@@ -628,7 +634,10 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		wc.pkey_index = 0;
 
 	wc.slid = be16_to_cpu(hdr->lrh[3]);
-	wc.sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF;
+	sc = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
+	sc |= sc4_bit;
+	wc.sl = ibp->sc_to_sl[sc];
+
 	dlid = be16_to_cpu(hdr->lrh[1]);
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.

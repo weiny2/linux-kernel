@@ -230,7 +230,7 @@ unlock:
  * qib_uc_rcv - handle an incoming UC packet
  * @ibp: the port the packet came in on
  * @hdr: the header of the packet
- * @has_grh: true if the packet has a GRH
+ * @rcv_flags: flags relevant to rcv processing
  * @data: the packet data
  * @tlen: the length of the packet
  * @qp: the QP for this packet.
@@ -240,7 +240,7 @@ unlock:
  * Called at interrupt level.
  */
 void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		int has_grh, void *data, u32 tlen, struct qib_qp *qp)
+		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
 {
 	struct qib_other_headers *ohdr;
 	u32 opcode;
@@ -250,6 +250,7 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	struct ib_wc wc;
 	u32 pmtu = qp->pmtu;
 	struct ib_reth *reth;
+	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
 	int ret;
 
 	/* Check for GRH */
@@ -407,7 +408,19 @@ last_imm:
 		wc.qp = &qp->ibqp;
 		wc.src_qp = qp->remote_qpn;
 		wc.slid = qp->remote_ah_attr.dlid;
-		wc.sl = qp->remote_ah_attr.sl;
+		/* Note that we're using the service channel to map to the
+		 * correct service level. (The service channel is somewhat
+		 * confusingly cached as the 'sl' member of the qp's
+		 * remote_ah_attr.)
+		 * It seems that IB mandates the presence of an SL in a
+		 * work completion only for the UD transport (see section
+		 * 11.4.2 of IBTA Vol. 1).
+		 * However, the way the SL is chosen below is consistent
+		 * with the way that IB works, to try to avoid introducing
+		 * incompatabilities.
+		 * See also STL Vol. 1, section 9.7.6, and table 9-17.
+		 */
+		wc.sl = ibp->sc_to_sl[qp->remote_ah_attr.sl];
 		/* zero fields that are N/A */
 		wc.vendor_err = 0;
 		wc.pkey_index = 0;

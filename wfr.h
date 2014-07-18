@@ -90,7 +90,8 @@
 
 /* PBC flags */
 #define WFR_PBC_INTR		(1ull << 31)
-#define WFR_PBC_DC_INFO		(1ull << 30)
+#define WFR_PBC_DC_INFO_SHIFT	(30)
+#define WFR_PBC_DC_INFO		(1ull << WFR_PBC_DC_INFO_SHIFT)
 #define WFR_PBC_TEST_EBP	(1ull << 29)
 #define WFR_PBC_PACKET_BYPASS	(1ull << 28)
 #define WFR_PBC_CREDIT_RETURN	(1ull << 25)

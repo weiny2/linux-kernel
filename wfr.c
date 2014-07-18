@@ -3688,6 +3688,66 @@ static void get_buffer_control(
 #endif
 }
 
+static void get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
+{
+	u64 reg;
+	int i;
+	/* each register contains 16 SC->VLnt mappings, 4 bits each */
+	reg = read_csr(dd, DCC_CFG_SC_VL_TABLE_15_0);
+	for (i = 0; i < sizeof(u64); i++) {
+		u8 byte = *(((u8 *)&reg) + i);
+		dp->vlnt[2 * i] = byte & 0xf;
+		dp->vlnt[(2 * i) + 1] = (byte & 0xf0) >> 4;
+	}
+
+	reg = read_csr(dd, DCC_CFG_SC_VL_TABLE_31_16);
+	for (i = 0; i < sizeof(u64); i++) {
+		u8 byte = *(((u8 *)&reg) + i);
+		dp->vlnt[16 + (2 * i)] = byte & 0xf;
+		dp->vlnt[16 + (2 * i) + 1] = (byte & 0xf0) >> 4;
+	}
+}
+
+static void set_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
+{
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_15_0,
+		DC_SC_VL_VAL(15_0,
+		0, dp->vlnt[0] & 0xf,
+		1, dp->vlnt[1] & 0xf,
+		2, dp->vlnt[2] & 0xf,
+		3, dp->vlnt[3] & 0xf,
+		4, dp->vlnt[4] & 0xf,
+		5, dp->vlnt[5] & 0xf,
+		6, dp->vlnt[6] & 0xf,
+		7, dp->vlnt[7] & 0xf,
+		8, dp->vlnt[8] & 0xf,
+		9, dp->vlnt[9] & 0xf,
+		10, dp->vlnt[10] & 0xf,
+		11, dp->vlnt[11] & 0xf,
+		12, dp->vlnt[12] & 0xf,
+		13, dp->vlnt[13] & 0xf,
+		14, dp->vlnt[14] & 0xf,
+		15, dp->vlnt[15] & 0xf));
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_31_16,
+		DC_SC_VL_VAL(31_16,
+		16, dp->vlnt[16] & 0xf,
+		17, dp->vlnt[17] & 0xf,
+		18, dp->vlnt[18] & 0xf,
+		19, dp->vlnt[19] & 0xf,
+		20, dp->vlnt[20] & 0xf,
+		21, dp->vlnt[21] & 0xf,
+		22, dp->vlnt[22] & 0xf,
+		23, dp->vlnt[23] & 0xf,
+		24, dp->vlnt[24] & 0xf,
+		25, dp->vlnt[25] & 0xf,
+		26, dp->vlnt[26] & 0xf,
+		27, dp->vlnt[27] & 0xf,
+		28, dp->vlnt[28] & 0xf,
+		29, dp->vlnt[29] & 0xf,
+		30, dp->vlnt[30] & 0xf,
+		31, dp->vlnt[31] & 0xf));
+}
+
 #if 0
 static void print_bc(struct hfi_devdata *dd, const char *func, struct buffer_control *bc, const char *what)
 {
@@ -4011,6 +4071,9 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 	case FM_TBL_BUFFER_CONTROL:
 		get_buffer_control(ppd->dd, t, NULL);
 		break;
+	case FM_TBL_SC2VLNT:
+		get_sc2vlnt(ppd->dd, t);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -4035,6 +4098,9 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 		break;
 	case FM_TBL_BUFFER_CONTROL:
 		ret = set_buffer_control(ppd->dd, t);
+		break;
+	case FM_TBL_SC2VLNT:
+		set_sc2vlnt(ppd->dd, t);
 		break;
 	default:
 		ret = -EINVAL;
@@ -5991,6 +6057,7 @@ static void reset_rxe_csrs(struct hfi_devdata *dd)
  */
 void init_sc2vl_tables(struct hfi_devdata *dd)
 {
+	int i;
 	/* init per architecture spec, contrained by hardware capability */
 
 	/* WFR maps sent packets */
@@ -6031,6 +6098,15 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
 		31_16,
 		16, 0, 17, 0, 18, 0, 19, 0, 20, 0, 21, 0, 22, 0, 23, 0,
 		24, 0, 25, 0, 26, 0, 27, 0, 28, 0, 29, 0, 30, 0, 31, 0));
+
+	/* initialize the cached sc2vl values consistently with h/w */
+	for (i = 0; i < 32; i++) {
+		if (i < 8 || i == 15)
+			*((u8 *)(dd->sc2vl) + i) = (u8)i;
+		else
+			*((u8 *)(dd->sc2vl) + i) = 0;
+	}
+
 #endif
 }
 

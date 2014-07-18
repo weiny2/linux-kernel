@@ -651,9 +651,9 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 {
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	u64 pbc;
+	u64 pbc, pbc_flags = 0;
 	u16 lrh0;
-	u16 vl;
+	u16 sc5;
 	u32 bth0;
 	u32 hwords;
 	u32 plen;
@@ -694,8 +694,11 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 					     QIB_AETH_CREDIT_SHIFT));
 	else
 		ohdr->u.aeth = qib_compute_aeth(qp);
-	vl = ibp->sl_to_vl[qp->remote_ah_attr.sl];
-	lrh0 |= vl << 12 | qp->remote_ah_attr.sl << 4;
+	/* ah sl already an sc */
+	sc5 = qp->remote_ah_attr.sl;
+	/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
+	pbc_flags |= ((!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT);
+	lrh0 |= (sc5 & 0xf) << 12 | (sc5 & 0xf) << 4;
 	hdr.lrh[0] = cpu_to_be16(lrh0);
 	hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
@@ -712,7 +715,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 
 	sc = rcd->sc;
 	plen = 2 /* PBC */ + hwords;
-	pbc = create_pbc(0, qp->s_srate, vl, plen);
+	pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
 
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (!pbuf) {
@@ -1830,7 +1833,7 @@ static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
  * qib_rc_rcv - process an incoming RC packet
  * @rcd: the context pointer
  * @hdr: the header of this packet
- * @has_grh: true if the header has a GRH
+ * @rcv_flags: flags relevant to rcv processing
  * @data: the packet data
  * @tlen: the packet length
  * @qp: the QP for this packet
@@ -1840,7 +1843,7 @@ static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
  * Called at interrupt level.
  */
 void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
-		int has_grh, void *data, u32 tlen, struct qib_qp *qp)
+		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
 {
 	struct qib_ibport *ibp = &rcd->ppd->ibport_data;
 	struct qib_other_headers *ohdr;
@@ -1853,6 +1856,7 @@ void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 	int diff;
 	struct ib_reth *reth;
 	unsigned long flags;
+	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
 	int ret;
 
 	/* Check for GRH */
@@ -2018,7 +2022,19 @@ send_last:
 		wc.qp = &qp->ibqp;
 		wc.src_qp = qp->remote_qpn;
 		wc.slid = qp->remote_ah_attr.dlid;
-		wc.sl = qp->remote_ah_attr.sl;
+		/* Note that we're using the service channel to map to the
+		 * correct service level. (The service channel is somewhat
+		 * confusingly cached as the 'sl' member of the qp's
+		 * remote_ah_attr.)
+		 * It seems that IB mandates the presence of an SL in a
+		 * work completion only for the UD transport (see section
+		 * 11.4.2 of IBTA Vol. 1).
+		 * However, the way the SL is chosen below is consistent
+		 * with the way that IB works, to try to avoid introducing
+		 * incompatabilities.
+		 * See also STL Vol. 1, section 9.7.6, and table 9-17.
+		 */
+		wc.sl = ibp->sc_to_sl[qp->remote_ah_attr.sl];
 		/* zero fields that are N/A */
 		wc.vendor_err = 0;
 		wc.pkey_index = 0;

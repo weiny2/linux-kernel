@@ -395,6 +395,7 @@ struct qib_verbs_txreq {
 #define FM_TBL_VL_HIGH_ARB	1 /* Get/set VL high priority weights */
 #define FM_TBL_VL_LOW_ARB	2 /* Get/set VL low priority weights */
 #define FM_TBL_BUFFER_CONTROL	3 /* Get/set Buffer Control */
+#define FM_TBL_SC2VLNT		4 /* Get/set SC->VLnt */
 
 /*
  * Possible "operations" for f_rcvctrl(ppd, op, ctxt)

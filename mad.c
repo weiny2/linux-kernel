@@ -1634,6 +1634,96 @@ static int set_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 	return 0;
 }
 
+static int __subn_get_stl_sl_to_sc(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	u32 n_blocks = STL_AM_NPORT(am);
+	u8 *p = (u8 *)data;
+	size_t size = ARRAY_SIZE(ibp->sl_to_sc); /* == 32 */
+	unsigned i;
+
+	memset(data, 0, size);
+
+	if (n_blocks != 1 || am & 0x00ffffff) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++)
+		*p++ = ibp->sl_to_sc[i];
+
+	if (resp_len)
+		*resp_len += size;
+
+	return reply(smp);
+}
+
+static int __subn_set_stl_sl_to_sc(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	u32 n_blocks = STL_AM_NPORT(am);
+	u8 *p = (u8 *)data;
+	int i;
+
+	if (n_blocks != 1 || am & 0x00ffffff) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	for (i = 0; i <  ARRAY_SIZE(ibp->sl_to_sc); i++)
+		ibp->sl_to_sc[i] = *p++;
+
+	return __subn_get_stl_sl_to_sc(smp, am, data, ibdev, port, resp_len);
+}
+
+static int __subn_get_stl_sc_to_sl(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	u8 *p = (u8 *)data;
+	size_t size = ARRAY_SIZE(ibp->sc_to_sl); /* == 32 */
+	unsigned i;
+
+	memset(data, 0, size);
+
+	if (am) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_sl); i++)
+		*p++ = ibp->sc_to_sl[i];
+
+	if (resp_len)
+		*resp_len += size;
+
+	return reply(smp);
+}
+
+static int __subn_set_stl_sc_to_sl(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	u8 *p = (u8 *)data;
+	int i;
+
+	if (am) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_sl); i++)
+		ibp->sc_to_sl[i] = *p++;
+
+	return __subn_get_stl_sc_to_sl(smp, am, data, ibdev, port, resp_len);
+}
+
 static int __subn_get_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
 				    struct ib_device *ibdev, u8 port,
 				    u32 *resp_len)
@@ -1677,6 +1767,55 @@ static int __subn_set_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
 	set_sc2vlt_tables(dd, vp);
 
 	return __subn_get_stl_sc_to_vlt(smp, am, data, ibdev, port, resp_len);
+}
+
+static int __subn_get_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
+				     struct ib_device *ibdev, u8 port,
+				     u32 *resp_len)
+{
+	u32 n_blocks = STL_AM_NPORT(am);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_pportdata *ppd;
+	void *vp = (void *) data;
+	size_t size = 4 * sizeof(u64);
+
+	memset(vp, 0, size);
+
+	if (port != 1 || n_blocks != 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	ppd = dd->pport + (port - 1);
+
+	fm_get_table(ppd, FM_TBL_SC2VLNT, vp);
+
+	if (resp_len)
+		*resp_len += size;
+
+	return reply(smp);
+}
+
+static int __subn_set_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
+				     struct ib_device *ibdev, u8 port,
+				     u32 *resp_len)
+{
+	u32 n_blocks = STL_AM_NPORT(am);
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_pportdata *ppd;
+	void *vp = (void *) data;
+
+	if (port != 1 || n_blocks != 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	ppd = dd->pport + (port - 1);
+
+	fm_set_table(ppd, FM_TBL_SC2VLNT, vp);
+
+	return __subn_get_stl_sc_to_vlnt(smp, am, data, ibdev, port,
+					 resp_len);
 }
 
 static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
@@ -3558,8 +3697,20 @@ static int subn_get_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 		ret = __subn_get_stl_pkeytable(smp, am, data, ibdev, port,
 					       resp_len);
 		break;
+	case STL_ATTRIB_ID_SL_TO_SC_MAP:
+		ret = __subn_get_stl_sl_to_sc(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case STL_ATTRIB_ID_SC_TO_SL_MAP:
+		ret = __subn_get_stl_sc_to_sl(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
 	case STL_ATTRIB_ID_SC_TO_VLT_MAP:
 		ret = __subn_get_stl_sc_to_vlt(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
+		ret = __subn_get_stl_sc_to_vlnt(smp, am, data, ibdev, port,
 					       resp_len);
 		break;
 	case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
@@ -3612,8 +3763,20 @@ static int subn_set_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 		ret = __subn_set_stl_pkeytable(smp, am, data, ibdev, port,
 					       resp_len);
 		break;
+	case STL_ATTRIB_ID_SL_TO_SC_MAP:
+		ret = __subn_set_stl_sl_to_sc(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case STL_ATTRIB_ID_SC_TO_SL_MAP:
+		ret = __subn_set_stl_sc_to_sl(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
 	case STL_ATTRIB_ID_SC_TO_VLT_MAP:
 		ret = __subn_set_stl_sc_to_vlt(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
+		ret = __subn_set_stl_sc_to_vlnt(smp, am, data, ibdev, port,
 					       resp_len);
 		break;
 	case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
@@ -3797,11 +3960,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_get_stl_sma(attr_id, smp, am, data,
 					       ibdev, port, resp_len);
 			goto bail;
-#if 0
-		case IB_SMP_ATTR_SL_TO_VL_TABLE:
-			ret = subn_get_sl_to_vl(smp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		case STL_ATTRIB_ID_AGGREGATE:
 			ret = subn_get_stl_aggregate(smp, ibdev, port,
 						     resp_len);
@@ -3817,11 +3975,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			ret = subn_set_stl_aggregate(smp, ibdev, port,
 						     resp_len);
 			goto bail;
-#if 0
-		case IB_SMP_ATTR_SL_TO_VL_TABLE:
-			ret = subn_set_sl_to_vl(smp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		}
 #if 0
 	case IB_MGMT_METHOD_TRAP_REPRESS:
