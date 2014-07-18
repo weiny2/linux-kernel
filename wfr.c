@@ -101,7 +101,7 @@ MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
 
 uint nodma_rtail;
 module_param(nodma_rtail, uint, S_IRUGO);
-MODULE_PARM_DESC(use_flr, "0 for no DMA of hdr tail, 1 to DMA the hdr tail");
+MODULE_PARM_DESC(nodma_rtail, "1 for no DMA of hdr tail, 0 to DMA the hdr tail");
 
 /* TODO: temporary */
 static uint print_unimplemented = 1;
