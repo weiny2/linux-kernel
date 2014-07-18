@@ -455,7 +455,7 @@ class TestInfo:
     def get_mpi_opts(self):
         # This part is different depending on if we use verbs or PSM
 	if not self.mpiverbs:
-             ret = " --mca mtl psm -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_TID=0 -x PSM_SDMA=0 -x"
+             ret = " --mca mtl psm --mca mtl_psm_ib_pkey 0x8001 -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_TID=0 -x PSM_SDMA=0 -x"
 	else:
              ret = " --mca btl sm,openib,self --mca mtl ^psm -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params_found 0 -x"
         return ret
