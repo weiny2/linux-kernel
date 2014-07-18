@@ -663,6 +663,21 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->port_packet_format.enabled =
 		cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
 
+	/* flit_control.interleave is (STL V1, version .76):
+	 * bits		use
+	 * ----		---
+	 * 2		res
+	 * 2		DistanceSupported
+	 * 2		DistanceEnabled
+	 * 5		MaxNextLevelTxEnabled
+	 * 5		MaxNestLevelRxSupported
+	 *
+	 * WFR supports only "distance mode 1" (see STL V1, version .76,
+	 * section 9.6.2), so set DistanceSupported, DistanceEnabled
+	 * to 0x1.
+	 */
+	pi->flit_control.interleave = cpu_to_be16(0x1400);
+
 	pi->link_down_reason = STL_LINKDOWN_REASON_NONE;
 
 	pi->link_width_downgrade.supported = 0;
