@@ -1,6 +1,6 @@
 /*
  * QLogic Fibre Channel HBA Driver
- * Copyright (c)  2003-2013 QLogic Corporation
+ * Copyright (c)  2003-2014 QLogic Corporation
  *
  * See LICENSE.qla2xxx for copyright and licensing details.
  */
@@ -40,7 +40,7 @@ qlafx00_mailbox_command(scsi_qla_host_t *vha, struct mbx_cmd_32 *mcp)
 {
 	int		rval;
 	unsigned long    flags = 0;
-	device_reg_t __iomem *reg;
+	device_reg_t *reg;
 	uint8_t		abort_active;
 	uint8_t		io_lock_on;
 	uint16_t	command = 0;
@@ -527,21 +527,63 @@ qlafx00_soc_cpu_reset(scsi_qla_host_t *vha)
 	struct qla_hw_data *ha = vha->hw;
 	int i, core;
 	uint32_t cnt;
+	uint32_t reg_val;
+
+	spin_lock_irqsave(&ha->hardware_lock, flags);
+
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x80004, 0);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x82004, 0);
+
+	/* stop the XOR DMA engines */
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x60920, 0x02);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x60924, 0x02);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0xf0920, 0x02);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0xf0924, 0x02);
+
+	/* stop the IDMA engines */
+	reg_val = QLAFX00_GET_HBA_SOC_REG(ha, 0x60840);
+	reg_val &= ~(1<<12);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x60840, reg_val);
+
+	reg_val = QLAFX00_GET_HBA_SOC_REG(ha, 0x60844);
+	reg_val &= ~(1<<12);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x60844, reg_val);
+
+	reg_val = QLAFX00_GET_HBA_SOC_REG(ha, 0x60848);
+	reg_val &= ~(1<<12);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x60848, reg_val);
+
+	reg_val = QLAFX00_GET_HBA_SOC_REG(ha, 0x6084C);
+	reg_val &= ~(1<<12);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x6084C, reg_val);
+
+	for (i = 0; i < 100000; i++) {
+		if ((QLAFX00_GET_HBA_SOC_REG(ha, 0xd0000) & 0x10000000) == 0 &&
+		    (QLAFX00_GET_HBA_SOC_REG(ha, 0x10600) & 0x1) == 0)
+			break;
+		udelay(100);
+	}
 
 	/* Set all 4 cores in reset */
 	for (i = 0; i < 4; i++) {
 		QLAFX00_SET_HBA_SOC_REG(ha,
 		    (SOC_SW_RST_CONTROL_REG_CORE0 + 8*i), (0xF01));
-	}
-
-	/* Set all 4 core Clock gating control */
-	for (i = 0; i < 4; i++) {
 		QLAFX00_SET_HBA_SOC_REG(ha,
 		    (SOC_SW_RST_CONTROL_REG_CORE0 + 4 + 8*i), (0x01010101));
 	}
 
 	/* Reset all units in Fabric */
-	QLAFX00_SET_HBA_SOC_REG(ha, SOC_FABRIC_RST_CONTROL_REG, (0x11F0101));
+	QLAFX00_SET_HBA_SOC_REG(ha, SOC_FABRIC_RST_CONTROL_REG, (0x011f0101));
+
+	/* */
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x10610, 1);
+	QLAFX00_SET_HBA_SOC_REG(ha, 0x10600, 0);
+
+	/* Set all 4 core Memory Power Down Registers */
+	for (i = 0; i < 5; i++) {
+		QLAFX00_SET_HBA_SOC_REG(ha,
+		    (SOC_PWR_MANAGEMENT_PWR_DOWN_REG + 4*i), (0x0));
+	}
 
 	/* Reset all interrupt control registers */
 	for (i = 0; i < 115; i++) {
@@ -564,20 +606,19 @@ qlafx00_soc_cpu_reset(scsi_qla_host_t *vha)
 	QLAFX00_SET_HBA_SOC_REG(ha, SOC_FABRIC_CONTROL_REG, (0x2));
 	QLAFX00_SET_HBA_SOC_REG(ha, SOC_FABRIC_CONFIG_REG, (0x3));
 
-	spin_lock_irqsave(&ha->hardware_lock, flags);
-
 	/* Kick in Fabric units */
 	QLAFX00_SET_HBA_SOC_REG(ha, SOC_FABRIC_RST_CONTROL_REG, (0x0));
 
 	/* Kick in Core0 to start boot process */
 	QLAFX00_SET_HBA_SOC_REG(ha, SOC_SW_RST_CONTROL_REG_CORE0, (0xF00));
 
+	spin_unlock_irqrestore(&ha->hardware_lock, flags);
+
 	/* Wait 10secs for soft-reset to complete. */
 	for (cnt = 10; cnt; cnt--) {
 		msleep(1000);
 		barrier();
 	}
-	spin_unlock_irqrestore(&ha->hardware_lock, flags);
 }
 
 /**
@@ -597,7 +638,6 @@ qlafx00_soft_reset(scsi_qla_host_t *vha)
 
 	ha->isp_ops->disable_intrs(ha);
 	qlafx00_soc_cpu_reset(vha);
-	ha->isp_ops->enable_intrs(ha);
 }
 
 /**
@@ -687,78 +727,16 @@ qlafx00_disable_intrs(struct qla_hw_data *ha)
 	spin_unlock_irqrestore(&ha->hardware_lock, flags);
 }
 
-static void
-qlafx00_tmf_iocb_timeout(void *data)
-{
-	srb_t *sp = (srb_t *)data;
-	struct srb_iocb *tmf = &sp->u.iocb_cmd;
-
-	tmf->u.tmf.comp_status = cpu_to_le16((uint16_t)CS_TIMEOUT);
-	complete(&tmf->u.tmf.comp);
-}
-
-static void
-qlafx00_tmf_sp_done(void *data, void *ptr, int res)
-{
-	srb_t *sp = (srb_t *)ptr;
-	struct srb_iocb *tmf = &sp->u.iocb_cmd;
-
-	complete(&tmf->u.tmf.comp);
-}
-
-static int
-qlafx00_async_tm_cmd(fc_port_t *fcport, uint32_t flags,
-		     uint32_t lun, uint32_t tag)
-{
-	scsi_qla_host_t *vha = fcport->vha;
-	struct srb_iocb *tm_iocb;
-	srb_t *sp;
-	int rval = QLA_FUNCTION_FAILED;
-
-	sp = qla2x00_get_sp(vha, fcport, GFP_KERNEL);
-	if (!sp)
-		goto done;
-
-	tm_iocb = &sp->u.iocb_cmd;
-	sp->type = SRB_TM_CMD;
-	sp->name = "tmf";
-	qla2x00_init_timer(sp, qla2x00_get_async_timeout(vha));
-	tm_iocb->u.tmf.flags = flags;
-	tm_iocb->u.tmf.lun = lun;
-	tm_iocb->u.tmf.data = tag;
-	sp->done = qlafx00_tmf_sp_done;
-	tm_iocb->timeout = qlafx00_tmf_iocb_timeout;
-	init_completion(&tm_iocb->u.tmf.comp);
-
-	rval = qla2x00_start_sp(sp);
-	if (rval != QLA_SUCCESS)
-		goto done_free_sp;
-
-	ql_dbg(ql_dbg_async, vha, 0x507b,
-	    "Task management command issued target_id=%x\n",
-	    fcport->tgt_id);
-
-	wait_for_completion(&tm_iocb->u.tmf.comp);
-
-	rval = tm_iocb->u.tmf.comp_status == CS_COMPLETE ?
-	    QLA_SUCCESS : QLA_FUNCTION_FAILED;
-
-done_free_sp:
-	sp->free(vha, sp);
-done:
-	return rval;
-}
-
 int
 qlafx00_abort_target(fc_port_t *fcport, unsigned int l, int tag)
 {
-	return qlafx00_async_tm_cmd(fcport, TCF_TARGET_RESET, l, tag);
+	return qla2x00_async_tm_cmd(fcport, TCF_TARGET_RESET, l, tag);
 }
 
 int
 qlafx00_lun_reset(fc_port_t *fcport, unsigned int l, int tag)
 {
-	return qlafx00_async_tm_cmd(fcport, TCF_LUN_RESET, l, tag);
+	return qla2x00_async_tm_cmd(fcport, TCF_LUN_RESET, l, tag);
 }
 
 int
@@ -2026,94 +2004,6 @@ done:
 	return rval;
 }
 
-static void
-qlafx00_abort_iocb_timeout(void *data)
-{
-	srb_t *sp = (srb_t *)data;
-	struct srb_iocb *abt = &sp->u.iocb_cmd;
-
-	abt->u.abt.comp_status = cpu_to_le16((uint16_t)CS_TIMEOUT);
-	complete(&abt->u.abt.comp);
-}
-
-static void
-qlafx00_abort_sp_done(void *data, void *ptr, int res)
-{
-	srb_t *sp = (srb_t *)ptr;
-	struct srb_iocb *abt = &sp->u.iocb_cmd;
-
-	complete(&abt->u.abt.comp);
-}
-
-static int
-qlafx00_async_abt_cmd(srb_t *cmd_sp)
-{
-	scsi_qla_host_t *vha = cmd_sp->fcport->vha;
-	fc_port_t *fcport = cmd_sp->fcport;
-	struct srb_iocb *abt_iocb;
-	srb_t *sp;
-	int rval = QLA_FUNCTION_FAILED;
-
-	sp = qla2x00_get_sp(vha, fcport, GFP_KERNEL);
-	if (!sp)
-		goto done;
-
-	abt_iocb = &sp->u.iocb_cmd;
-	sp->type = SRB_ABT_CMD;
-	sp->name = "abort";
-	qla2x00_init_timer(sp, FXDISC_TIMEOUT);
-	abt_iocb->u.abt.cmd_hndl = cmd_sp->handle;
-	sp->done = qlafx00_abort_sp_done;
-	abt_iocb->timeout = qlafx00_abort_iocb_timeout;
-	init_completion(&abt_iocb->u.abt.comp);
-
-	rval = qla2x00_start_sp(sp);
-	if (rval != QLA_SUCCESS)
-		goto done_free_sp;
-
-	ql_dbg(ql_dbg_async, vha, 0x507c,
-	    "Abort command issued - hdl=%x, target_id=%x\n",
-	    cmd_sp->handle, fcport->tgt_id);
-
-	wait_for_completion(&abt_iocb->u.abt.comp);
-
-	rval = abt_iocb->u.abt.comp_status == CS_COMPLETE ?
-	    QLA_SUCCESS : QLA_FUNCTION_FAILED;
-
-done_free_sp:
-	sp->free(vha, sp);
-done:
-	return rval;
-}
-
-int
-qlafx00_abort_command(srb_t *sp)
-{
-	unsigned long   flags = 0;
-
-	uint32_t	handle;
-	fc_port_t	*fcport = sp->fcport;
-	struct scsi_qla_host *vha = fcport->vha;
-	struct qla_hw_data *ha = vha->hw;
-	struct req_que *req = vha->req;
-
-	spin_lock_irqsave(&ha->hardware_lock, flags);
-	for (handle = 1; handle < DEFAULT_OUTSTANDING_COMMANDS; handle++) {
-		if (req->outstanding_cmds[handle] == sp)
-			break;
-	}
-	spin_unlock_irqrestore(&ha->hardware_lock, flags);
-	if (handle == DEFAULT_OUTSTANDING_COMMANDS) {
-		/* Command not found. */
-		return QLA_FUNCTION_FAILED;
-	}
-	if (sp->type == SRB_FXIOCB_DCMD)
-		return qlafx00_fx_disc(vha, &vha->hw->mr.fcport,
-		    FXDISC_ABORT_IOCTL);
-
-	return qlafx00_async_abt_cmd(sp);
-}
-
 /*
  * qlafx00_initialize_adapter
  *      Initialize board.
@@ -2827,7 +2717,7 @@ qlafx00_process_response_queue(struct scsi_qla_host *vha,
 	uint16_t lreq_q_out = 0;
 
 	lreq_q_in = RD_REG_DWORD(rsp->rsp_q_in);
-	lreq_q_out = RD_REG_DWORD(rsp->rsp_q_out);
+	lreq_q_out = rsp->ring_index;
 
 	while (lreq_q_in != lreq_q_out) {
 		lptr = rsp->ring_ptr;
@@ -3578,7 +3468,7 @@ qlafx00_fxdisc_iocb(srb_t *sp, struct fxdisc_entry_fx00 *pfxiocb)
 	    sp->fcport->vha, 0x3047,
 	    (uint8_t *)&fx_iocb, sizeof(struct fxdisc_entry_fx00));
 
-	memcpy((void *)pfxiocb, &fx_iocb,
+	memcpy_toio((void __iomem *)pfxiocb, &fx_iocb,
 	    sizeof(struct fxdisc_entry_fx00));
 	wmb();
 }
