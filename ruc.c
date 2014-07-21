@@ -692,9 +692,9 @@ void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
 		lrh0 = QIB_LRH_GRH;
 	}
 	/* already an sc */
-	sc5 = qp->remote_ah_attr.sl;
+	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	lrh0 |= (sc5 & 0xf) << 12 | (sc5 & 0xf) << 4;
-	qp->s_sc = qp->remote_ah_attr.sl;
+	qp->s_sc = sc5;
 	qp->s_hdr->lrh[0] = cpu_to_be16(lrh0);
 	qp->s_hdr->lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	qp->s_hdr->lrh[2] = cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);

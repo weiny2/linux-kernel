@@ -408,19 +408,18 @@ last_imm:
 		wc.qp = &qp->ibqp;
 		wc.src_qp = qp->remote_qpn;
 		wc.slid = qp->remote_ah_attr.dlid;
-		/* Note that we're using the service channel to map to the
-		 * correct service level. (The service channel is somewhat
-		 * confusingly cached as the 'sl' member of the qp's
-		 * remote_ah_attr.)
+		/*
 		 * It seems that IB mandates the presence of an SL in a
 		 * work completion only for the UD transport (see section
 		 * 11.4.2 of IBTA Vol. 1).
+		 *
 		 * However, the way the SL is chosen below is consistent
-		 * with the way that IB works, to try to avoid introducing
+		 * with the way that IB/qib works and is trying avoid introducing
 		 * incompatabilities.
+		 *
 		 * See also STL Vol. 1, section 9.7.6, and table 9-17.
 		 */
-		wc.sl = ibp->sc_to_sl[qp->remote_ah_attr.sl];
+		wc.sl = qp->remote_ah_attr.sl;
 		/* zero fields that are N/A */
 		wc.vendor_err = 0;
 		wc.pkey_index = 0;

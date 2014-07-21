@@ -249,6 +249,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 	u16 lid;
 	int ret = 0;
 	int next_cur;
+	u8 sc5;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -346,13 +347,14 @@ int qib_make_ud_req(struct qib_qp *qp)
 		bth0 = IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE << 24;
 	} else
 		bth0 = IB_OPCODE_UD_SEND_ONLY << 24;
-	lrh0 |= (ah_attr->sl & 0xf) << 4;
+	sc5 = ibp->sl_to_sc[ah_attr->sl];
+	lrh0 |= (sc5 & 0xf) << 4;
 	if (qp->ibqp.qp_type == IB_QPT_SMI) {
 		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
 		qp->s_sc = 0xf;
 	} else {
-		lrh0 |= (ah_attr->sl & 0xf) << 12;
-		qp->s_sc = ah_attr->sl;
+		lrh0 |= (sc5 & 0xf) << 12;
+		qp->s_sc = sc5;
 	}
 	qp->s_hdr->lrh[0] = cpu_to_be16(lrh0);
 	qp->s_hdr->lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */

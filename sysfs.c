@@ -463,7 +463,7 @@ static ssize_t sl2vl_attr_show(struct kobject *kobj, struct attribute *attr,
 		container_of(kobj, struct qib_pportdata, sl2vl_kobj);
 	struct qib_ibport *qibp = &ppd->ibport_data;
 
-	return sprintf(buf, "%u\n", qibp->sl_to_vl[sattr->sl]);
+	return sprintf(buf, "%u\n", qibp->sl_to_sc[sattr->sl]);
 }
 
 static const struct sysfs_ops qib_sl2vl_ops = {

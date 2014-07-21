@@ -1681,7 +1681,6 @@ static struct ib_ah *qib_create_ah(struct ib_pd *pd,
 	struct ib_ah *ret;
 	struct qib_ibdev *dev = to_idev(pd->device);
 	unsigned long flags;
-	u8 sc;
 
 	if (qib_check_ah(pd->device, ah_attr)) {
 		ret = ERR_PTR(-EINVAL);
@@ -1707,9 +1706,6 @@ static struct ib_ah *qib_create_ah(struct ib_pd *pd,
 
 	/* ib_create_ah() will initialize ah->ibah. */
 	ah->attr = *ah_attr;
-	/* convert sl to sc */
-	sc = ah_to_sc(pd->device, &ah->attr);
-	ah->attr.sl = sc;
 	atomic_set(&ah->refcount, 0);
 
 	ret = &ah->ibah;
@@ -1858,13 +1854,16 @@ static void init_ibport(struct qib_pportdata *ppd)
 	struct qib_verbs_counters cntrs;
 	struct qib_ibport *ibp = &ppd->ibport_data;
 #ifdef CONFIG_STL_MGMT
+	size_t sz = ARRAY_SIZE(ibp->sl_to_sc);
+#else
+	size_t sz = ARRAY_SIZE(ibp->sl_to_sc)/2;
+#endif /* CONFIG_STL_MGMT */
 	int i;
 
-	for (i = 0; i < 32; i++) {
+	for (i = 0; i < sz; i++) {
 		ibp->sl_to_sc[i] = i;
 		ibp->sc_to_sl[i] = i;
 	}
-#endif /* CONFIG_STL_MGMT */
 
 	spin_lock_init(&ibp->lock);
 	/* Set the prefix to the default value (see ch. 4.1.1) */

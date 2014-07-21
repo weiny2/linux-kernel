@@ -733,12 +733,9 @@ struct qib_ibport {
 	u8 mkeyprot;
 	u8 subnet_timeout;
 	u8 vl_high_limit;
-#ifdef CONFIG_STL_MGMT
+	/* the first 16 entries are sl_to_vl for !STL */
 	u8 sl_to_sc[32];
 	u8 sc_to_sl[32];
-#else /* !CONFIG_STL_MGMT */
-	u8 sl_to_vl[16];
-#endif /* CONFIG_STL_MGMT */
 };
 
 

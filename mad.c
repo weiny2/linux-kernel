@@ -1894,8 +1894,8 @@ static int subn_get_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 	if (!(ibp->port_cap_flags & IB_PORT_SL_MAP_SUP))
 		smp->status |= IB_SMP_UNSUP_METHOD;
 	else
-		for (i = 0; i < ARRAY_SIZE(ibp->sl_to_vl); i += 2)
-			*p++ = (ibp->sl_to_vl[i] << 4) | ibp->sl_to_vl[i + 1];
+		for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc)/2; i += 2)
+			*p++ = (ibp->sl_to_sc[i] << 4) | ibp->sl_to_sc[i + 1];
 
 	return reply(smp);
 }
@@ -1912,9 +1912,9 @@ static int subn_set_sl_to_vl(struct ib_smp *smp, struct ib_device *ibdev,
 		return reply(smp);
 	}
 
-	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_vl); i += 2, p++) {
-		ibp->sl_to_vl[i] = *p >> 4;
-		ibp->sl_to_vl[i + 1] = *p & 0xF;
+	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc)/2; i += 2, p++) {
+		ibp->sl_to_sc[i] = *p >> 4;
+		ibp->sl_to_sc[i + 1] = *p & 0xF;
 	}
 	qib_set_uevent_bits(ppd_from_ibp(to_iport(ibdev, port)),
 			    _QIB_EVENT_SL2VL_CHANGE_BIT);
