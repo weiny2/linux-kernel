@@ -460,6 +460,8 @@ struct cc_table_shadow {
 #include <rdma/stl_port_info.h>
 #else
 #define STL_MAX_VLS 32	/* STL defines 32 VLs */
+#define STL_MAX_SLS 32
+#define STL_MAX_SCS 32
 #endif
 
 /* attribute modifier macros */

@@ -1660,7 +1660,7 @@ int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	if (ah_attr->static_rate != IB_RATE_PORT_CURRENT &&
 	    stl_rate_to_mult(ah_attr->static_rate) < 0)
 		goto bail;
-	if (ah_attr->sl > 15)
+	if (ah_attr->sl >= STL_MAX_SLS)
 		goto bail;
 	return 0;
 bail:
