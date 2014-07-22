@@ -317,14 +317,10 @@ interrupt_end_book3e:
 	START_EXCEPTION(critical_input);
 	CRIT_EXCEPTION_PROLOG(0x100, BOOKE_INTERRUPT_CRITICAL,
 			      PROLOG_ADDITION_NONE)
-	EXCEPTION_COMMON_CRIT(0x100)
-	bl	.save_nvgprs
-	bl	special_reg_save
-	CHECK_NAPPING();
-	EXCEPTION_COMMON_CRIT(0x100)
-	bl	save_nvgprs
-	bl	special_reg_save
-	CHECK_NAPPING();
+//	EXCEPTION_COMMON_CRIT(0x100)
+//	bl	save_nvgprs
+//	bl	special_reg_save
+//	CHECK_NAPPING();
 //	addi	r3,r1,STACK_FRAME_OVERHEAD
 //	bl	critical_exception
 //	b	ret_from_crit_except
