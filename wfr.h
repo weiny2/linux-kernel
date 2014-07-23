@@ -1,7 +1,7 @@
 #ifndef _WFR_H
 #define _WFR_H
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013, 2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -432,6 +432,8 @@ void check_fifos(unsigned long opaque);
 int set_link_state(struct qib_pportdata *, u32 state);
 
 extern uint num_vls;
+
+extern uint print_unimplemented;
 
 #endif /* _WFR_H */
 

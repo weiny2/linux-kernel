@@ -1,7 +1,7 @@
 #ifndef _QIB_KERNEL_H
 #define _QIB_KERNEL_H
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -57,6 +57,7 @@
 #include "verbs.h"
 #include "pio.h"
 #include "wfr.h"
+#include "mad.h"
 
 /* only s/w major version of QLogic_IB we can handle */
 #define QIB_CHIP_VERS_MAJ 2U
@@ -303,10 +304,6 @@ struct qib_sdma_txreq {
 	struct list_head    list;       /* sdma private */
 };
 
-struct qib_sdma_desc {
-	__le64 qw[2];
-};
-
 struct qib_verbs_txreq {
 	struct qib_sdma_txreq   txreq;
 	struct qib_qp           *qp;
@@ -319,11 +316,10 @@ struct qib_verbs_txreq {
 	struct qib_sge_state    *ss;
 };
 
-#define QIB_SDMA_TXREQ_F_USELARGEBUF  0x1
-#define QIB_SDMA_TXREQ_F_HEADTOHOST   0x2
-#define QIB_SDMA_TXREQ_F_INTREQ       0x4
-#define QIB_SDMA_TXREQ_F_FREEBUF      0x8
-#define QIB_SDMA_TXREQ_F_FREEDESC     0x10
+#define QIB_SDMA_TXREQ_F_HEADTOHOST   0x1
+#define QIB_SDMA_TXREQ_F_INTREQ       0x2
+#define QIB_SDMA_TXREQ_F_FREEBUF      0x4
+#define QIB_SDMA_TXREQ_F_FREEDESC     0x8
 
 #define QIB_SDMA_TXREQ_S_OK        0
 #define QIB_SDMA_TXREQ_S_SENDERROR 1
@@ -464,58 +460,6 @@ struct qib_msix_entry {
 	cpumask_var_t mask;
 };
 
-enum qib_sdma_states {
-	qib_sdma_state_s00_hw_down,
-	qib_sdma_state_s10_hw_start_up_halt_wait,
-	qib_sdma_state_s15_hw_start_up_clean_wait,
-	qib_sdma_state_s20_idle,
-	qib_sdma_state_s30_sw_clean_up_wait,
-	qib_sdma_state_s40_hw_clean_up_wait,
-	qib_sdma_state_s50_hw_halt_wait,
-	qib_sdma_state_s99_running,
-};
-
-enum qib_sdma_events {
-	qib_sdma_event_e00_go_hw_down,
-	qib_sdma_event_e10_go_hw_start,
-	qib_sdma_event_e15_hw_started1,
-	qib_sdma_event_e25_hw_started2,
-	qib_sdma_event_e30_go_running,
-	qib_sdma_event_e40_sw_cleaned,
-	qib_sdma_event_e50_hw_cleaned,
-	qib_sdma_event_e60_hw_halted,
-	qib_sdma_event_e70_go_idle,
-	qib_sdma_event_e7220_err_halted,
-	qib_sdma_event_e7322_err_halted,
-	qib_sdma_event_e90_timer_tick,
-};
-
-extern char *qib_sdma_state_names[];
-extern char *qib_sdma_event_names[];
-
-struct sdma_set_state_action {
-	unsigned op_enable:1;
-	unsigned op_intenable:1;
-	unsigned op_halt:1;
-	unsigned op_drain:1;
-	unsigned op_cleanup:1;
-	unsigned go_s99_running_tofalse:1;
-	unsigned go_s99_running_totrue:1;
-};
-
-struct qib_sdma_state {
-	struct kref          kref;
-	struct completion    comp;
-	enum qib_sdma_states current_state;
-	const struct sdma_set_state_action *set_state_action;
-	unsigned             current_op;
-	unsigned             go_s99_running;
-	/* debugging/devel */
-	enum qib_sdma_states previous_state;
-	unsigned             previous_op;
-	enum qib_sdma_events last_event;
-};
-
 struct xmit_wait {
 	struct timer_list timer;
 	u64 counter;
@@ -565,29 +509,9 @@ struct qib_pportdata {
 
 	/* SendDMA related entries */
 
-	/* read mostly */
-	struct qib_sdma_desc *sdma_descq;
 	struct workqueue_struct *qib_wq;
-	struct qib_sdma_state sdma_state;
-	dma_addr_t       sdma_descq_phys;
-	volatile __le64 *sdma_head_dma; /* DMA'ed by chip */
-	dma_addr_t       sdma_head_phys;
-	u16                   sdma_descq_cnt;
 
-	/* read/write using lock */
-	spinlock_t            sdma_lock ____cacheline_aligned_in_smp;
-	struct list_head      sdma_activelist;
-	u64                   sdma_descq_added;
-	u64                   sdma_descq_removed;
-	u16                   sdma_descq_tail;
-	u16                   sdma_descq_head;
-	u8                    sdma_generation;
-
-	struct tasklet_struct sdma_hw_clean_up_task
-		____cacheline_aligned_in_smp;
-
-	struct tasklet_struct sdma_sw_clean_up_task
-		____cacheline_aligned_in_smp;
+	spinlock_t            sdma_alllock ____cacheline_aligned_in_smp;
 
 	u32 lstate;	/* logical link state */
 
@@ -713,18 +637,6 @@ extern int qib_register_observer(struct hfi_devdata *dd,
 /* Only declared here, not defined. Private to diags */
 struct diag_observer_list_elt;
 
-/*
- * Data pertaining to each SDMA engine.
- */
-struct sdma_engine {
-	struct hfi_devdata *dd;
-	int which;			/* which engine */
-	u64 imask;			/* clear interrupt mask */
-	/* add sdma fields here... */
-	spinlock_t senddmactrl_lock;	/* protect changes to senddmactrl shadow */
-	u64 p_senddmactrl;		/* shadow per-engine SendDmaCtrl */
-};
-
 struct rcv_array_data {
 	u8 group_size;
 	u16 ngroups;
@@ -744,6 +656,7 @@ struct per_vl_data {
  * described above) while fields only used by a particular chip-type are in
  * a qib_chipdata struct, whose contents are opaque to this file.
  */
+struct sdma_engine;
 struct hfi_devdata {
 	struct qib_ibdev verbs_dev;     /* must be first */
 	struct list_head list;
@@ -769,9 +682,28 @@ struct hfi_devdata {
 	struct send_context_info *send_contexts;
 	/* Per VL data. Enough for all VLs but not all elements are set/used. */
 	struct per_vl_data vld[PER_VL_SEND_CONTEXTS];
+	/* seqlock for sc2vl */
+	seqlock_t sc2vl_lock;
 	u64 sc2vl[4];
 	/* Send Context initialization lock. */
 	spinlock_t sc_init_lock;
+
+	volatile __le64                    *sdma_heads_dma; /* DMA'ed by chip */
+	dma_addr_t                          sdma_heads_phys;
+	/* for deallocation */
+	size_t                              sdma_heads_size;
+	/* number from the chip */
+	u32                                 chip_sdma_engines;
+	/* num used */
+	u32                                 num_sdma;
+	/* lock for selector_sdma_mask and sdma_map */
+	seqlock_t                           sde_map_lock;
+	u32                                 selector_sdma_mask;
+	u32                                 selector_sdma_shift;
+	/* array of engines dimensioned by num_sdma */
+	struct sdma_engine                 *per_sdma;
+	/* array of engines to select based on vl,selector */
+	struct sdma_engine                **sdma_map;
 
 	/* qib_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
@@ -831,15 +763,8 @@ struct hfi_devdata {
 	void (*f_set_intr_state)(struct hfi_devdata *, u32);
 	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
 	void (*f_wantpiobuf_intr)(struct send_context *, u32);
-	void (*f_init_sdma_regs)(struct qib_pportdata *);
-	u16 (*f_sdma_gethead)(struct qib_pportdata *);
-	int (*f_sdma_busy)(struct qib_pportdata *);
-	void (*f_sdma_update_tail)(struct qib_pportdata *, u16);
-	void (*f_sdma_set_desc_cnt)(struct qib_pportdata *, unsigned);
-	void (*f_sdma_sendctrl)(struct qib_pportdata *, unsigned);
-	void (*f_sdma_hw_clean_up)(struct qib_pportdata *);
-	void (*f_sdma_hw_start_up)(struct qib_pportdata *);
-	void (*f_sdma_init_early)(struct qib_pportdata *);
+	/* FIXME - get rid of this */
+	void (*f_sdma_update_tail)(struct sdma_engine *, u16);
 	void (*f_set_cntr_sample)(struct qib_pportdata *, u32, u32);
 	void (*f_update_usrhead)(struct qib_ctxtdata *, u64, u32, u32, u32);
 	u32 (*f_hdrqempty)(struct qib_ctxtdata *);
@@ -1036,11 +961,6 @@ struct hfi_devdata {
 	/* general interrupt: mask of handled interrupts */
 	u64 gi_mask[WFR_CCE_NUM_INT_CSRS];
 
-	u32 chip_sdma_engines;	/* number from the chip */
-	u32 num_sdma;		/* number being used */
-	struct sdma_engine per_sdma[WFR_TXE_NUM_SDMA_ENGINES];
-	/*
-	 */
 	struct rcv_array_data rcv_entries;
 
 	/* timer used for 64 bit counter emulation  */
@@ -1129,8 +1049,6 @@ void qib_chip_cleanup(struct hfi_devdata *);
 /* clean up any chip type-specific stuff */
 void qib_chip_done(void);
 
-struct send_context *qp_to_send_context(struct qib_qp *qp, u32 vl);
-
 int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
 int qib_create_ctxts(struct hfi_devdata *dd);
@@ -1143,6 +1061,27 @@ void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 inline u16 generate_jkey(unsigned int);
+
+/**
+ * sc_to_vlt() reverse lookup sc to vl
+ * @dd - devdata
+ * @sc5 - 5 bit sc
+ */
+static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
+{
+	unsigned seq;
+	u8 rval;
+
+	if (sc5 > STL_MAX_SCS)
+		return (u8)(0xff);
+
+	do {
+		seq = read_seqbegin(&dd->sc2vl_lock);
+		rval = *(((u8 *)dd->sc2vl) + sc5);
+	} while (read_seqretry(&dd->sc2vl_lock, seq));
+
+	return rval;
+}
 
 /* MTU handling */
 
@@ -1278,10 +1217,6 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 void qib_dump_lookup_output_queue(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
 void restart_link(unsigned long opaque);
-#ifdef JAG_SDMA_VERBOSITY
-/* XXX JAG SDMA - Temporary debug/dump routine */
-void qib_sdma0_dumpstate(struct hfi_devdata *dd);
-#endif
 
 /*
  * Set LED override, only the two LSBs have "public" meaning, but
@@ -1293,36 +1228,10 @@ void qib_sdma0_dumpstate(struct hfi_devdata *dd);
 void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val);
 
 /* send dma routines */
-int qib_setup_sdma(struct qib_pportdata *);
-void qib_teardown_sdma(struct qib_pportdata *);
 void __qib_sdma_intr(struct qib_pportdata *);
 void qib_sdma_intr(struct qib_pportdata *);
-int qib_sdma_verbs_send(struct qib_pportdata *, struct qib_sge_state *,
+int qib_sdma_verbs_send(struct sdma_engine *, struct qib_sge_state *,
 			u32, struct qib_verbs_txreq *);
-/* ppd->sdma_lock should be locked before calling this. */
-int qib_sdma_make_progress(struct qib_pportdata *dd);
-
-static inline int qib_sdma_empty(const struct qib_pportdata *ppd)
-{
-	return ppd->sdma_descq_added == ppd->sdma_descq_removed;
-}
-
-/* must be called under qib_sdma_lock */
-static inline u16 qib_sdma_descq_freecnt(const struct qib_pportdata *ppd)
-{
-	return ppd->sdma_descq_cnt -
-		(ppd->sdma_descq_added - ppd->sdma_descq_removed) - 1;
-}
-
-static inline int __qib_sdma_running(struct qib_pportdata *ppd)
-{
-	return ppd->sdma_state.current_state == qib_sdma_state_s99_running;
-}
-int qib_sdma_running(struct qib_pportdata *);
-
-void __qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
-void qib_sdma_process_event(struct qib_pportdata *, enum qib_sdma_events);
-
 /*
  * The number of words for the KDETH protocol field.  If this is
  * larger then the actual field used, then part of the payload

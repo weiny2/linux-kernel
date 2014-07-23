@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -46,6 +46,7 @@
 #include "device.h"
 #include "trace.h"
 #include "qp.h"
+#include "sdma.h"
 
 unsigned int ib_qib_lkey_table_size = 16;
 module_param_named(lkey_table_size, ib_qib_lkey_table_size, uint,
@@ -387,8 +388,14 @@ static int qib_post_one_send(struct qib_qp *qp, struct ib_send_wr *wr,
 	unsigned long flags;
 	struct qib_lkey_table *rkt;
 	struct qib_pd *pd;
+	u8 sc5;
+	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct qib_pportdata *ppd;
+	struct qib_ibport *ibp;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
+	ppd = &dd->pport[qp->port_num - 1];
+	ibp = &ppd->ibport_data;
 
 	/* Check that state is OK to post send. */
 	if (unlikely(!(ib_qib_state_ops[qp->state] & QIB_POST_SEND_OK)))
@@ -463,11 +470,15 @@ static int qib_post_one_send(struct qib_qp *qp, struct ib_send_wr *wr,
 	    qp->ibqp.qp_type == IB_QPT_RC) {
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
+		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	} else if (wqe->length > (dd_from_ibdev(qp->ibqp.device)->pport +
 				  qp->port_num - 1)->ibmtu)
 		goto bail_inval_free;
-	else
-		atomic_inc(&to_iah(wr->wr.ud.ah)->refcount);
+	else {
+		struct qib_ah *ah = to_iah(wr->wr.ud.ah);
+		atomic_inc(&ah->refcount);
+		sc5 = ibp->sl_to_sc[ah->attr.sl];
+	}
 	wqe->ssn = qp->s_ssn++;
 	qp->s_head = next;
 
@@ -483,11 +494,14 @@ bail_inval_free:
 bail_inval:
 	ret = -EINVAL;
 bail:
-	if (!ret && !wr->next &&
-	 !qib_sdma_empty(
-	   dd_from_ibdev(qp->ibqp.device)->pport + qp->port_num - 1)) {
-		qib_schedule_send(qp);
-		*scheduled = 1;
+	if (!ret && !wr->next) {
+		struct sdma_engine *sde;
+
+		sde = qp_to_sdma_engine(qp, sc5);
+		if (sde && !sdma_empty(sde)) {
+			qib_schedule_send(qp);
+			*scheduled = 1;
+		}
 	}
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
@@ -918,7 +932,7 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
  *
  * This is called with ppd->sdma_lock held.
  */
-void qib_verbs_sdma_desc_avail(struct qib_pportdata *ppd, unsigned avail)
+void qib_verbs_sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 {
 	struct qib_qp *qp, *nqp;
 	struct qib_qp *qps[20];
@@ -926,17 +940,18 @@ void qib_verbs_sdma_desc_avail(struct qib_pportdata *ppd, unsigned avail)
 	unsigned i, n;
 
 #ifdef JAG_SDMA_VERBOSITY
-dd_dev_err(ppd->dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
-dd_dev_err(ppd->dd, "avail: %u\n", avail);
+	dd_dev_err(sde->dd, "JAG SDMA %s:%d %s()\n", slashstrip(__FILE__),
+		__LINE__, __func__);
+	dd_dev_err(sde->dd, "avail: %u\n", avail);
 #endif
 
 	n = 0;
-	dev = &ppd->dd->verbs_dev;
+	dev = &sde->dd->verbs_dev;
 	spin_lock(&dev->pending_lock);
 
 	/* Search wait list for first QP wanting DMA descriptors. */
 	list_for_each_entry_safe(qp, nqp, &dev->dmawait, iowait) {
-		if (qp->port_num != ppd->port)
+		if (qp->port_num != sde->ppd->port)
 			continue;
 		if (n == ARRAY_SIZE(qps))
 			break;
@@ -1030,19 +1045,23 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_verbs_txreq *tx;
 	struct qib_pio_header *phdr;
 	u64 pbc_flags = 0;
+	struct sdma_engine *sde;
 	u32 ndesc;
-	u32 sc5;
+	u8 sc5;
 	int ret;
 
 	tx = qp->s_tx;
 	if (tx) {
 		qp->s_tx = NULL;
 		/* resend previously constructed packet */
-		ret = qib_sdma_verbs_send(ppd, tx->ss, tx->dwords, tx);
+		phdr = &dev->pio_hdrs[tx->hdr_inx];
+		sc5 = be16_to_cpu(phdr->hdr.lrh[0]) >> 12 |
+			(!!(phdr->pbc & WFR_PBC_DC_INFO)) << 4;
+		sde = qp_to_sdma_engine(qp, sc5);
+		ret = qib_sdma_verbs_send(sde, tx->ss, tx->dwords, tx);
 		goto bail;
 	}
 
@@ -1050,15 +1069,15 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
+	sc5 = qp->s_sc;
+	sde = qp_to_sdma_engine(qp, sc5);
 	if (likely(pbc == 0)) {
 		/* No vl15 here */
-		sc5 = qp->s_sc;
 		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
 
 		pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
 	}
-
 	tx->qp = qp;
 	atomic_inc(&qp->refcount);
 	tx->wqe = qp->s_wqe;
@@ -1066,20 +1085,13 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (qp->s_rdma_mr)
 		qp->s_rdma_mr = NULL;
 	tx->txreq.callback = sdma_complete;
-	if (dd->flags & QIB_HAS_SDMA_TIMEOUT)
-		tx->txreq.flags = QIB_SDMA_TXREQ_F_HEADTOHOST;
-	else
-		tx->txreq.flags = QIB_SDMA_TXREQ_F_INTREQ;
-	if (plen + 1 > dd->piosize2kmax_dwords)
-		tx->txreq.flags |= QIB_SDMA_TXREQ_F_USELARGEBUF;
-
 	if (len) {
 		/*
 		 * Don't try to DMA if it takes more descriptors than
 		 * the queue holds.
 		 */
 		ndesc = qib_count_sge(ss, len);
-		if (ndesc >= ppd->sdma_descq_cnt)
+		if (ndesc >= sde->descq_cnt)
 			ndesc = 0;
 	} else
 		ndesc = 1;
@@ -1092,7 +1104,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		tx->txreq.addr = dev->pio_hdrs_phys +
 			tx->hdr_inx * sizeof(struct qib_pio_header);
 		tx->hdr_dwords = hdrwords + 2; /* add PBC length */
-		ret = qib_sdma_verbs_send(ppd, ss, dwords, tx);
+		ret = qib_sdma_verbs_send(sde, ss, dwords, tx);
 		goto bail;
 	}
 
@@ -1112,7 +1124,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	tx->align_buf = phdr;
 	tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEBUF;
 	tx->txreq.sg_count = 1;
-	ret = qib_sdma_verbs_send(ppd, NULL, 0, tx);
+	ret = qib_sdma_verbs_send(sde, NULL, 0, tx);
 	goto unaligned;
 
 map_err:
@@ -1165,25 +1177,13 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 	return ret;
 }
 
-static u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc)
-{
-	/* XXX no locking => no protection against update to sc2vlt tables */
-
-	if (sc > 32)
-		return (u8)(-1);
-
-	return *(((u8 *)dd->sc2vl) + sc);
-}
-
-struct send_context *qp_to_send_context(struct qib_qp *qp, u32 sc5)
+struct send_context *qp_to_send_context(struct qib_qp *qp, u8 sc5)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct qib_pportdata *ppd = dd->pport + (qp->port_num - 1);
-	u32 vl;
-	u8 sc = (u8)sc5;
+	u8 vl;
 
-	vl = sc_to_vlt(dd, sc);
-
+	vl = sc_to_vlt(dd, sc5);
 	if (vl >= hfi_num_vls(ppd->vls_supported) && vl != 15)
 		return NULL;
 	return dd->vld[vl].sc;
@@ -1269,11 +1269,6 @@ int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 	int ret;
 	u32 dwords = (len + 3) >> 2;
 
-#ifdef JAG_SDMA_VERBOSITY
-dd_dev_err(dd, "JAG SDMA %s:%d %s()\n", __FILE__, __LINE__, __func__);
-dd_dev_err(dd, "hdrwords = %u, len = %u\n", hdrwords, len);
-#endif
-
 	/*
 	 * Calculate the send buffer trigger address.
 	 * The +2 counts for the pbc control qword
@@ -1285,17 +1280,20 @@ dd_dev_err(dd, "hdrwords = %u, len = %u\n", hdrwords, len);
 	 * can defer SDMA restart until link goes ACTIVE without
 	 * worrying about just how we got there.
 	 */
-	/* 
-	 * XXX JAG SDMA - I don't think the SMI test has to hold true for
-	 * WFR, but is probably a fine simplification for the time being.
-	 */
-	if (qp->ibqp.qp_type == IB_QPT_SMI ||
-	    !(dd->flags & QIB_HAS_SEND_DMA))
-		ret = dd->process_pio_send(qp, hdr, hdrwords, ss, len,
-					  plen, dwords, 0);
-	else
-		ret = dd->process_dma_send(qp, hdr, hdrwords, ss, len,
-					  plen, dwords, 0);
+	if (qp->ibqp.qp_type == IB_QPT_SMI
+		|| !(dd->flags & QIB_HAS_SEND_DMA)) {
+		ret = dd->process_pio_send(
+			qp, hdr, hdrwords, ss, len, plen, dwords, 0);
+	} else {
+
+#ifdef JAG_SDMA_VERBOSITY
+		dd_dev_err(dd, "JAG SDMA %s:%d %s()\n",
+			slashstrip(__FILE__), __LINE__, __func__);
+		dd_dev_err(dd, "SDMA hdrwords = %u, len = %u\n", hdrwords, len);
+#endif
+		ret = dd->process_dma_send(
+			qp, hdr, hdrwords, ss, len, plen, dwords, 0);
+	}
 
 	return ret;
 }
@@ -1917,6 +1915,7 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	unsigned i, lk_tab_size;
 	int ret;
 	size_t lcpysz = IB_DEVICE_NAME_MAX;
+	u16 descq_cnt;
 
 	ret = qib_qp_init(dev);
 	if (ret)
@@ -1963,10 +1962,14 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	INIT_LIST_HEAD(&dev->memwait);
 	INIT_LIST_HEAD(&dev->txreq_free);
 
-	if (ppd->sdma_descq_cnt) {
+	/* FIXME - come up with a better scheme
+	 * - this one doesn't scale for multiple sdma engines
+	 */
+	descq_cnt = sdma_get_descq_cnt();
+	dev->pio_hdr_bytes = descq_cnt * sizeof(struct qib_pio_header);
+	if (descq_cnt) {
 		dev->pio_hdrs = dma_alloc_coherent(&dd->pcidev->dev,
-						ppd->sdma_descq_cnt *
-						sizeof(struct qib_pio_header),
+						dev->pio_hdr_bytes,
 						&dev->pio_hdrs_phys,
 						GFP_KERNEL);
 		if (!dev->pio_hdrs) {
@@ -1975,7 +1978,7 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 		}
 	}
 
-	for (i = 0; i < ppd->sdma_descq_cnt; i++) {
+	for (i = 0; i < descq_cnt; i++) {
 		struct qib_verbs_txreq *tx;
 
 		tx = kzalloc(sizeof *tx, GFP_KERNEL);
@@ -2112,10 +2115,9 @@ err_tx:
 		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
 		kfree(tx);
 	}
-	if (ppd->sdma_descq_cnt)
+	if (dev->pio_hdrs)
 		dma_free_coherent(&dd->pcidev->dev,
-				  ppd->sdma_descq_cnt *
-					sizeof(struct qib_pio_header),
+				  dev->pio_hdr_bytes,
 				  dev->pio_hdrs, dev->pio_hdrs_phys);
 err_hdrs:
 	free_pages((unsigned long) dev->lk_table.table, get_order(lk_tab_size));
@@ -2158,10 +2160,9 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
 		kfree(tx);
 	}
-	if (dd->pport->sdma_descq_cnt)
+	if (dev->pio_hdrs)
 		dma_free_coherent(&dd->pcidev->dev,
-				  dd->pport->sdma_descq_cnt *
-					sizeof(struct qib_pio_header),
+				  dev->pio_hdr_bytes,
 				  dev->pio_hdrs, dev->pio_hdrs_phys);
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	free_pages((unsigned long) dev->lk_table.table,

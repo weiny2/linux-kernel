@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -43,6 +44,7 @@
 #include <linux/delay.h>
 
 #include "hfi.h"
+#include "sdma.h"
 #include "user_sdma.h"
 
 /* minimum size of header */
@@ -566,6 +568,7 @@ static int qib_user_sdma_queue_clean(struct qib_pportdata *ppd,
 				     struct qib_user_sdma_queue *pq)
 {
 	struct hfi_devdata *dd = ppd->dd;
+	struct sdma_engine *this = &ppd->dd->per_sdma[0];
 	struct list_head free_list;
 	struct qib_user_sdma_pkt *pkt;
 	struct qib_user_sdma_pkt *pkt_prev;
@@ -574,7 +577,7 @@ static int qib_user_sdma_queue_clean(struct qib_pportdata *ppd,
 	INIT_LIST_HEAD(&free_list);
 
 	list_for_each_entry_safe(pkt, pkt_prev, &pq->sent, list) {
-		s64 descd = ppd->sdma_descq_removed - pkt->added;
+		s64 descd = this->descq_removed - pkt->added;
 
 		if (descd < 0)
 			break;
@@ -614,10 +617,11 @@ static int qib_user_sdma_hwqueue_clean(struct qib_pportdata *ppd)
 {
 	int ret;
 	unsigned long flags;
+	struct sdma_engine *this = &ppd->dd->per_sdma[0];
 
-	spin_lock_irqsave(&ppd->sdma_lock, flags);
-	ret = qib_sdma_make_progress(ppd);
-	spin_unlock_irqrestore(&ppd->sdma_lock, flags);
+	spin_lock_irqsave(&this->lock, flags);
+	ret = qib_sdma_make_progress(this);
+	spin_unlock_irqrestore(&this->lock, flags);
 
 	return ret;
 }
@@ -659,9 +663,10 @@ void qib_user_sdma_queue_drain(struct qib_pportdata *ppd,
 static inline __le64 qib_sdma_make_desc0(struct qib_pportdata *ppd,
 					 u64 addr, u64 dwlen, u64 dwoffset)
 {
+	struct sdma_engine *this = &ppd->dd->per_sdma[0];
 	u8 tmpgen;
 
-	tmpgen = ppd->sdma_generation;
+	tmpgen = this->generation;
 
 	return cpu_to_le64(/* SDmaPhyAddr[31:0] */
 			   ((addr & 0xfffffffcULL) << 32) |
@@ -697,10 +702,13 @@ static void qib_user_sdma_send_frag(struct qib_pportdata *ppd,
 	const u64 addr = (u64) pkt->addr[idx].addr +
 		(u64) pkt->addr[idx].offset;
 	const u64 dwlen = (u64) pkt->addr[idx].length / 4;
+	struct sdma_engine *this;
 	__le64 *descqp;
 	__le64 descq0;
 
-	descqp = &ppd->sdma_descq[tail].qw[0];
+	this = &ppd->dd->per_sdma[0];
+
+	descqp = &this->descq[tail].qw[0];
 
 	descq0 = qib_sdma_make_desc0(ppd, addr, dwlen, ofs);
 	if (idx == 0)
@@ -723,6 +731,7 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 	u16 tail;
 	u8 generation;
 	u64 descq_added;
+	struct sdma_engine *this = &ppd->dd->per_sdma[0];
 
 	if (list_empty(pktlist))
 		return 0;
@@ -730,18 +739,18 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 	if (unlikely(ppd->lstate != IB_PORT_ACTIVE))
 		return -ECOMM;
 
-	spin_lock_irqsave(&ppd->sdma_lock, flags);
+	spin_lock_irqsave(&this->lock, flags);
 
 	/* keep a copy for restoring purposes in case of problems */
-	generation = ppd->sdma_generation;
-	descq_added = ppd->sdma_descq_added;
+	generation = this->generation;
+	descq_added = this->descq_added;
 
-	if (unlikely(!__qib_sdma_running(ppd))) {
+	if (unlikely(!__sdma_running(this))) {
 		ret = -ECOMM;
 		goto unlock;
 	}
 
-	tail = ppd->sdma_descq_tail;
+	tail = this->descq_tail;
 	while (!list_empty(pktlist)) {
 		struct qib_user_sdma_pkt *pkt =
 			list_entry(pktlist->next, struct qib_user_sdma_pkt,
@@ -750,16 +759,16 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 		unsigned ofs = 0;
 		u16 dtail = tail;
 
-		if (pkt->naddr > qib_sdma_descq_freecnt(ppd))
+		if (pkt->naddr > sdma_descq_freecnt(this))
 			goto unlock_check_tail;
 
 		for (i = 0; i < pkt->naddr; i++) {
 			qib_user_sdma_send_frag(ppd, pkt, i, ofs, tail);
 			ofs += pkt->addr[i].length >> 2;
 
-			if (++tail == ppd->sdma_descq_cnt) {
+			if (++tail == this->descq_cnt) {
 				tail = 0;
-				++ppd->sdma_generation;
+				++this->generation;
 			}
 		}
 
@@ -775,30 +784,30 @@ static int qib_user_sdma_push_pkts(struct qib_pportdata *ppd,
 		 */
 		if (ofs > dd->piosize2kmax_dwords) {
 			for (i = 0; i < pkt->naddr; i++) {
-				ppd->sdma_descq[dtail].qw[0] |=
+				this->descq[dtail].qw[0] |=
 					cpu_to_le64(1ULL << 14);
-				if (++dtail == ppd->sdma_descq_cnt)
+				if (++dtail == this->descq_cnt)
 					dtail = 0;
 			}
 		}
 
-		ppd->sdma_descq_added += pkt->naddr;
-		pkt->added = ppd->sdma_descq_added;
+		this->descq_added += pkt->naddr;
+		pkt->added = this->descq_added;
 		list_move_tail(&pkt->list, &pq->sent);
 		ret++;
 	}
 
 unlock_check_tail:
 	/* advance the tail on the chip if necessary */
-	if (ppd->sdma_descq_tail != tail)
-		dd->f_sdma_update_tail(ppd, tail);
+	if (this->descq_tail != tail)
+		dd->f_sdma_update_tail(this, tail);
 
 unlock:
 	if (unlikely(ret < 0)) {
-		ppd->sdma_generation = generation;
-		ppd->sdma_descq_added = descq_added;
+		this->generation = generation;
+		this->descq_added = descq_added;
 	}
-	spin_unlock_irqrestore(&ppd->sdma_lock, flags);
+	spin_unlock_irqrestore(&this->lock, flags);
 
 	return ret;
 }
@@ -810,6 +819,7 @@ int qib_user_sdma_writev(struct qib_ctxtdata *rcd,
 {
 	struct hfi_devdata *dd = rcd->dd;
 	struct qib_pportdata *ppd = rcd->ppd;
+	struct sdma_engine *this = &ppd->dd->per_sdma[0];
 	int ret = 0;
 	struct list_head list;
 	int npkts = 0;
@@ -819,10 +829,10 @@ int qib_user_sdma_writev(struct qib_ctxtdata *rcd,
 	mutex_lock(&pq->lock);
 
 	/* why not -ECOMM like qib_user_sdma_push_pkts() below? */
-	if (!qib_sdma_running(ppd))
+	if (!sdma_running(this))
 		goto done_unlock;
 
-	if (ppd->sdma_descq_added != ppd->sdma_descq_removed) {
+	if (this->descq_added != this->descq_removed) {
 		qib_user_sdma_hwqueue_clean(ppd);
 		qib_user_sdma_queue_clean(ppd, pq);
 	}
@@ -848,7 +858,7 @@ int qib_user_sdma_writev(struct qib_ctxtdata *rcd,
 			 * how many sdma descriptors a packet will take (it
 			 * doesn't have to be perfect).
 			 */
-			if (qib_sdma_descq_freecnt(ppd) < ret * 4) {
+			if (sdma_descq_freecnt(this) < ret * 4) {
 				qib_user_sdma_hwqueue_clean(ppd);
 				qib_user_sdma_queue_clean(ppd, pq);
 			}

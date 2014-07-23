@@ -1,7 +1,7 @@
 #ifndef _QP_H
 #define _QP_H
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013, 2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -67,7 +67,7 @@ struct hfi_qp_ibdev {
 
 /**
  * qib_lookup_qpn - return the QP with the given QPN
- * @qpt: the QP table
+ * @ibp: a pointer to the IB port
  * @qpn: the QP number to look up
  *
  * The caller is responsible for decrementing the QP reference count
@@ -145,21 +145,24 @@ void qib_get_credit(struct qib_qp *qp, u32 aeth);
 
 /**
  * qib_qp_init - allocate QP tables
- * @dd: hfi devdata
+ * @dev: a pointer to the qib_ibdev
  */
 int qib_qp_init(struct qib_ibdev *dev);
 
 /**
  * qib_qp_exit - free the QP related structures
- * @dd: hfi devdata
+ * @dev: a pointer to the qib_ibdev
  */
 void qib_qp_exit(struct qib_ibdev *dev);
 
 /**
  * qib_qp_waitup - wakeup on the indicated event
  * @qp: the QP
+ * @flag: flag the qp on which the qp is stalled
  */
 void qib_qp_wakeup(struct qib_qp *qp, u32 flag);
+
+struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5);
 
 #ifdef CONFIG_DEBUG_FS
 

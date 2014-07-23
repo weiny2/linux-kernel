@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -44,6 +44,8 @@
 #include <linux/completion.h>
 #include <rdma/ib_pack.h>
 #include <rdma/ib_user_verbs.h>
+
+#include "verbs.h"
 
 struct qib_ctxtdata;
 struct qib_pportdata;
@@ -757,6 +759,7 @@ struct qib_ibdev {
 	struct list_head txreq_free;
 	struct timer_list mem_timer;
 	struct qib_pio_header *pio_hdrs;
+	size_t pio_hdr_bytes;
 	dma_addr_t pio_hdrs_phys;
 	/* list of QPs waiting for RNR timer */
 	spinlock_t pending_lock; /* protect wait lists, PMA counters, etc. */
@@ -902,7 +905,8 @@ int qib_mcast_tree_empty(struct qib_ibport *ibp);
 
 unsigned qib_pkt_delay(u32 plen, u8 snd_mult, u8 rcv_mult);
 
-void qib_verbs_sdma_desc_avail(struct qib_pportdata *ppd, unsigned avail);
+struct sdma_engine;
+void qib_verbs_sdma_desc_avail(struct sdma_engine *engine, unsigned avail);
 
 void qib_put_txreq(struct qib_verbs_txreq *tx);
 
@@ -1084,6 +1088,8 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc);
+
+struct send_context *qp_to_send_context(struct qib_qp *qp, u8 sc5);
 
 extern const enum ib_wc_opcode ib_qib_wc_opcode[];
 

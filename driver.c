@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013, 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@
 #include "hfi.h"
 #include "trace.h"
 #include "qp.h"
+#include "sdma.h"
 
 /*
  * The size has to be longer than this string, so we can append
@@ -715,9 +716,9 @@ int qib_reset_device(int unit)
 		/* Shut off LEDs after we are sure timer is not running */
 		ppd->led_override = LED_OVER_BOTH_OFF;
 		dd->f_setextled(ppd, 0);
-		if (dd->flags & QIB_HAS_SEND_DMA)
-			qib_teardown_sdma(ppd);
 	}
+	if (dd->flags & QIB_HAS_SEND_DMA)
+		sdma_exit(dd);
 
 	ret = dd->f_reset(dd);
 	if (ret == 1)

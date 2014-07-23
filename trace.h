@@ -6,6 +6,7 @@
 
 #include "hfi.h"
 #include "mad.h"
+#include "sdma.h"
 
 #define DD_DEV_ENTRY(dd)       __string(dev, dev_name(&(dd)->pcidev->dev))
 #define DD_DEV_ASSIGN(dd)      __assign_str(dev, dev_name(&(dd)->pcidev->dev))
@@ -615,6 +616,66 @@ DEFINE_EVENT(hfi_bct_template, bct_set,
 DEFINE_EVENT(hfi_bct_template, bct_get,
 	TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
 	TP_ARGS(dd, bc));
+
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi_sdma
+
+TRACE_EVENT(hfi_sdma_descriptor,
+	TP_PROTO(struct sdma_engine *sde, u64 desc0, u64 desc1, void *descp),
+	TP_ARGS(sde, desc0, desc1, descp),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sde->dd)
+		__field(void *, descp)
+		__field(u64, desc0)
+		__field(u64, desc1)
+		__field(u8, idx)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sde->dd);
+		__entry->desc0 = desc0;
+		__entry->desc1 = desc1;
+		__entry->idx = sde->this_idx;
+		__entry->descp = descp;
+	),
+	TP_printk(
+		"[%s] SDE(%u) d0 %016llx d1 %016llx to %p",
+		__get_str(dev),
+		__entry->idx,
+		__entry->desc0,
+		__entry->desc1,
+		__entry->descp
+	)
+);
+
+TRACE_EVENT(hfi_sdma_engine_select,
+	TP_PROTO(struct hfi_devdata *dd, u32 sel, u8 vl, u8 idx),
+	TP_ARGS(dd, sel, vl, idx),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(dd)
+		__field(u32, sel)
+		__field(u32, mask)
+		__field(u32, shift)
+		__field(u8, vl)
+		__field(u8, idx)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(dd);
+		__entry->sel = sel;
+		__entry->mask = dd->selector_sdma_mask;
+		__entry->shift = dd->selector_sdma_shift;
+		__entry->vl = vl;
+		__entry->idx = idx;
+	),
+	TP_printk(
+		"[%s] selecting SDE %u sel 0x%x mask 0x%x shift %u vl %u",
+		__get_str(dev),
+		__entry->idx,
+		__entry->sel,
+		__entry->mask,
+		__entry->shift,
+		__entry->vl
+	)
+);
 
 /*
  * Note:

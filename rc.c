@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -35,6 +36,7 @@
 
 #include "hfi.h"
 #include "qp.h"
+#include "sdma.h"
 #include "trace.h"
 
 /* cut down ridiculously long IB macro names */
@@ -694,8 +696,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 					     QIB_AETH_CREDIT_SHIFT));
 	else
 		ohdr->u.aeth = qib_compute_aeth(qp);
-	/* ah sl already an sc */
-	sc5 = qp->remote_ah_attr.sl;
+	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 	pbc_flags |= ((!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT);
 	lrh0 |= (sc5 & 0xf) << 12 | (sc5 & 0xf) << 4;
@@ -1407,12 +1408,14 @@ static void qib_rc_rcv_resp(struct qib_ibport *ibp,
 			 * SDMA queue.
 			 */
 			if (!(qp->s_flags & QIB_S_BUSY)) {
-				/* Acquire SDMA Lock */
-				spin_lock_irqsave(&ppd->sdma_lock, flags);
-				/* Invoke sdma make progress */
-				qib_sdma_make_progress(ppd);
-				/* Release SDMA Lock */
-				spin_unlock_irqrestore(&ppd->sdma_lock, flags);
+				struct sdma_engine *engine;
+				u8 sc5;
+
+				/* For now use sc to find engine */
+				sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+				engine = qp_to_sdma_engine(qp, sc5);
+				BUG_ON(!engine);
+				sdma_engine_progress_schedule(engine);
 			}
 		}
 	}

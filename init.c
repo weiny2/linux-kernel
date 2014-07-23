@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@
 #include "device.h"
 #include "common.h"
 #include "mad.h"
+#include "sdma.h"
 #ifdef CONFIG_DEBUG_FS
 #include "debugfs.h"
 #include "verbs.h"
@@ -371,7 +372,7 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 		ppd->pkeys[!default_pkey_idx] = 0x8001;
 	}
 
-	spin_lock_init(&ppd->sdma_lock);
+	spin_lock_init(&ppd->sdma_alllock);
 
 	init_timer(&ppd->symerr_clear_timer);
 	ppd->symerr_clear_timer.function = qib_clear_symerror_on_linkup;
@@ -497,6 +498,7 @@ static int loadtime_init(struct hfi_devdata *dd)
 	spin_lock_init(&dd->uctxt_lock);
 	spin_lock_init(&dd->dc8051_lock);
 	spin_lock_init(&dd->qib_diag_trans_lock);
+	seqlock_init(&dd->sc2vl_lock);
 	mutex_init(&dd->qsfp_lock);
 
 	/* set up worker (don't start yet) to verify interrupts are working */
@@ -751,8 +753,6 @@ done:
 							QIB_STATUS_INITTED;
 			if (!ppd->link_speed_enabled)
 				continue;
-			if (dd->flags & QIB_HAS_SEND_DMA)
-				ret = qib_setup_sdma(ppd);
 		}
 
 		/*
@@ -861,9 +861,6 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 		ppd = dd->pport + pidx;
 		dd->f_setextled(ppd, 0); /* make sure LEDs are off */
 
-		if (dd->flags & QIB_HAS_SEND_DMA)
-			qib_teardown_sdma(ppd);
-
 		/* disable all contexts */
 		for (i = 0; i < dd->num_send_contexts; i++)
 			sc_disable(dd->send_contexts[i].sc);
@@ -881,6 +878,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 			ppd->qib_wq = NULL;
 		}
 	}
+	sdma_exit(dd);
 }
 
 /**
@@ -1468,10 +1466,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto bail;	/* everything already cleaned */
 	}
 
-	if (dd->flags & QIB_HAS_SEND_DMA) {
-		/* JAG SDMA - is there a better place to put this? */
-		qib_sdma_process_event(dd->pport, qib_sdma_event_e30_go_running);
-	}
+	sdma_start(dd);
 
 	qib_verify_pioperf(dd);
 

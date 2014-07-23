@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012,2013  Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2014  Intel Corporation.  All rights reserved.
  * Copyright (c) 2006-2012 QLogic Corporation.  * All rights reserved.
  * Copyright (c) 2005,2006 PathScale, Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@
 #include "hfi.h"
 #include "qp.h"
 #include "trace.h"
+#include "sdma.h"
 
 #define BITS_PER_PAGE           (PAGE_SIZE*BITS_PER_BYTE)
 #define BITS_PER_PAGE_MASK      (BITS_PER_PAGE-1)
@@ -1393,6 +1394,35 @@ void qib_qp_exit(struct qib_ibdev *dev)
 		free_qpn_table(&dev->qp_dev->qpn_table);
 		kfree(dev->qp_dev);
 	}
+}
+
+/**
+ *
+ * qp_to_sdma_engine - map a qp to a send engine
+ * @qp: the QP
+ * @sc5: the 5 bit sc
+ *
+ * Return:
+ * A send engine for the qp or NULL for SMI type qp.
+ */
+struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct sdma_engine *sde;
+
+	if (!(dd->flags & QIB_HAS_SEND_DMA))
+		return NULL;
+	switch (qp->ibqp.qp_type) {
+	case IB_QPT_UC:
+	case IB_QPT_RC:
+		break;
+	case IB_QPT_SMI:
+		return NULL;
+	default:
+		break;
+	}
+	sde =  sdma_select_engine_sc(dd, qp->ibqp.qp_num >> 1, sc5);
+	return sde;
 }
 
 #ifdef CONFIG_DEBUG_FS

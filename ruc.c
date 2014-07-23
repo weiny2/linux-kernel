@@ -691,7 +691,6 @@ void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
 					       qp->s_hdrwords, nwords);
 		lrh0 = QIB_LRH_GRH;
 	}
-	/* already an sc */
 	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	lrh0 |= (sc5 & 0xf) << 12 | (sc5 & 0xf) << 4;
 	qp->s_sc = sc5;
