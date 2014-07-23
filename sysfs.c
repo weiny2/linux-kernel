@@ -359,6 +359,23 @@ HFI_SC2VL_ATTR(12);
 HFI_SC2VL_ATTR(13);
 HFI_SC2VL_ATTR(14);
 HFI_SC2VL_ATTR(15);
+HFI_SC2VL_ATTR(16);
+HFI_SC2VL_ATTR(17);
+HFI_SC2VL_ATTR(18);
+HFI_SC2VL_ATTR(19);
+HFI_SC2VL_ATTR(20);
+HFI_SC2VL_ATTR(21);
+HFI_SC2VL_ATTR(22);
+HFI_SC2VL_ATTR(23);
+HFI_SC2VL_ATTR(24);
+HFI_SC2VL_ATTR(25);
+HFI_SC2VL_ATTR(26);
+HFI_SC2VL_ATTR(27);
+HFI_SC2VL_ATTR(28);
+HFI_SC2VL_ATTR(29);
+HFI_SC2VL_ATTR(30);
+HFI_SC2VL_ATTR(31);
+
 
 static struct attribute *sc2vl_default_attributes[] = {
 	&hfi_sc2vl_attr_0.attr,
@@ -377,6 +394,22 @@ static struct attribute *sc2vl_default_attributes[] = {
 	&hfi_sc2vl_attr_13.attr,
 	&hfi_sc2vl_attr_14.attr,
 	&hfi_sc2vl_attr_15.attr,
+	&hfi_sc2vl_attr_16.attr,
+	&hfi_sc2vl_attr_17.attr,
+	&hfi_sc2vl_attr_18.attr,
+	&hfi_sc2vl_attr_19.attr,
+	&hfi_sc2vl_attr_20.attr,
+	&hfi_sc2vl_attr_21.attr,
+	&hfi_sc2vl_attr_22.attr,
+	&hfi_sc2vl_attr_23.attr,
+	&hfi_sc2vl_attr_24.attr,
+	&hfi_sc2vl_attr_25.attr,
+	&hfi_sc2vl_attr_26.attr,
+	&hfi_sc2vl_attr_27.attr,
+	&hfi_sc2vl_attr_28.attr,
+	&hfi_sc2vl_attr_29.attr,
+	&hfi_sc2vl_attr_30.attr,
+	&hfi_sc2vl_attr_31.attr,
 	NULL
 };
 
@@ -403,8 +436,114 @@ static struct kobj_type hfi_sc2vl_ktype = {
 };
 
 /* End sc2vl */
+
+/* Start sl2sc */
+#define HFI_SL2SC_ATTR(N)				    \
+	static struct hfi_sl2sc_attr hfi_sl2sc_attr_##N = {	  \
+		.attr = { .name = __stringify(N), .mode = 0444 }, \
+		.sl = N						  \
+	}
+
+struct hfi_sl2sc_attr {
+	struct attribute attr;
+	int sl;
+};
+
+HFI_SL2SC_ATTR(0);
+HFI_SL2SC_ATTR(1);
+HFI_SL2SC_ATTR(2);
+HFI_SL2SC_ATTR(3);
+HFI_SL2SC_ATTR(4);
+HFI_SL2SC_ATTR(5);
+HFI_SL2SC_ATTR(6);
+HFI_SL2SC_ATTR(7);
+HFI_SL2SC_ATTR(8);
+HFI_SL2SC_ATTR(9);
+HFI_SL2SC_ATTR(10);
+HFI_SL2SC_ATTR(11);
+HFI_SL2SC_ATTR(12);
+HFI_SL2SC_ATTR(13);
+HFI_SL2SC_ATTR(14);
+HFI_SL2SC_ATTR(15);
+HFI_SL2SC_ATTR(16);
+HFI_SL2SC_ATTR(17);
+HFI_SL2SC_ATTR(18);
+HFI_SL2SC_ATTR(19);
+HFI_SL2SC_ATTR(20);
+HFI_SL2SC_ATTR(21);
+HFI_SL2SC_ATTR(22);
+HFI_SL2SC_ATTR(23);
+HFI_SL2SC_ATTR(24);
+HFI_SL2SC_ATTR(25);
+HFI_SL2SC_ATTR(26);
+HFI_SL2SC_ATTR(27);
+HFI_SL2SC_ATTR(28);
+HFI_SL2SC_ATTR(29);
+HFI_SL2SC_ATTR(30);
+HFI_SL2SC_ATTR(31);
+
+
+static struct attribute *sl2sc_default_attributes[] = {
+	&hfi_sl2sc_attr_0.attr,
+	&hfi_sl2sc_attr_1.attr,
+	&hfi_sl2sc_attr_2.attr,
+	&hfi_sl2sc_attr_3.attr,
+	&hfi_sl2sc_attr_4.attr,
+	&hfi_sl2sc_attr_5.attr,
+	&hfi_sl2sc_attr_6.attr,
+	&hfi_sl2sc_attr_7.attr,
+	&hfi_sl2sc_attr_8.attr,
+	&hfi_sl2sc_attr_9.attr,
+	&hfi_sl2sc_attr_10.attr,
+	&hfi_sl2sc_attr_11.attr,
+	&hfi_sl2sc_attr_12.attr,
+	&hfi_sl2sc_attr_13.attr,
+	&hfi_sl2sc_attr_14.attr,
+	&hfi_sl2sc_attr_15.attr,
+	&hfi_sl2sc_attr_16.attr,
+	&hfi_sl2sc_attr_17.attr,
+	&hfi_sl2sc_attr_18.attr,
+	&hfi_sl2sc_attr_19.attr,
+	&hfi_sl2sc_attr_20.attr,
+	&hfi_sl2sc_attr_21.attr,
+	&hfi_sl2sc_attr_22.attr,
+	&hfi_sl2sc_attr_23.attr,
+	&hfi_sl2sc_attr_24.attr,
+	&hfi_sl2sc_attr_25.attr,
+	&hfi_sl2sc_attr_26.attr,
+	&hfi_sl2sc_attr_27.attr,
+	&hfi_sl2sc_attr_28.attr,
+	&hfi_sl2sc_attr_29.attr,
+	&hfi_sl2sc_attr_30.attr,
+	&hfi_sl2sc_attr_31.attr,
+	NULL
+};
+
+static ssize_t sl2sc_attr_show(struct kobject *kobj, struct attribute *attr,
+			       char *buf)
+{
+	struct hfi_sl2sc_attr *sattr =
+		container_of(attr, struct hfi_sl2sc_attr, attr);
+	struct qib_pportdata *ppd =
+		container_of(kobj, struct qib_pportdata, sl2sc_kobj);
+	struct qib_ibport *ibp = &ppd->ibport_data;
+
+	return sprintf(buf, "%u\n", ibp->sl_to_sc[sattr->sl]);
+}
+
+static const struct sysfs_ops hfi_sl2sc_ops = {
+	.show = sl2sc_attr_show,
+};
+
+static struct kobj_type hfi_sl2sc_ktype = {
+	.release = qib_port_release,
+	.sysfs_ops = &hfi_sl2sc_ops,
+	.default_attrs = sl2sc_default_attributes
+};
+
+/* End sl2sc */
 #else
-/* Start sl2vl */
+/* Start non-STL sl2vl */
 
 #define QIB_SL2VL_ATTR(N) \
 	static struct qib_sl2vl_attr qib_sl2vl_attr_##N = { \
@@ -858,6 +997,15 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 		goto bail_link;
 	}
 	kobject_uevent(&ppd->sc2vl_kobj, KOBJ_ADD);
+	ret = kobject_init_and_add(&ppd->sl2sc_kobj, &hfi_sl2sc_ktype, kobj,
+				   "sl2sc");
+	if (ret) {
+		dd_dev_err(dd,
+			   "Skipping sl2sc sysfs info, (err %d) port %u\n",
+			   ret, port_num);
+		goto bail_link;
+	}
+	kobject_uevent(&ppd->sl2sc_kobj, KOBJ_ADD);
 #else
 	ret = kobject_init_and_add(&ppd->sl2vl_kobj, &qib_sl2vl_ktype, kobj,
 				   "sl2vl");

@@ -487,6 +487,7 @@ struct qib_pportdata {
 	struct kobject pport_cc_kobj;
 #ifdef CONFIG_STL_MGMT
 	struct kobject sc2vl_kobj;
+	struct kobject sl2sc_kobj;
 #else
 	struct kobject sl2vl_kobj;
 #endif
