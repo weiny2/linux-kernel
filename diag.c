@@ -1294,36 +1294,29 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			case IB_PORT_DOWN:
 				switch (physState) {
 				case 0:
-					if (dd->f_ibphys_portstate &&
-					    (dd->f_ibphys_portstate(ppd)
-					    & 0xF & IB_PHYSPORTSTATE_SLEEP))
-						devState =
-						QIB_IB_LINKDOWN_SLEEP;
-					else
-						devState =
-						QIB_IB_LINKDOWN;
-						break;
+					devState = HFI_LINKDOWN_DOWNDEF;
+					break;
 				case 1:
-					devState = QIB_IB_LINKDOWN_SLEEP;
+					devState = HFI_LINKDOWN_SLEEP;
 					break;
 				case 2:
-					devState = QIB_IB_LINKDOWN;
+					devState = HFI_LINKDOWN_POLL;
 					break;
 				case 3:
-					devState = QIB_IB_LINKDOWN_DISABLE;
+					devState = HFI_LINKDOWN_DISABLE;
 					break;
 				default:
 					ret = -EINVAL;
 					goto done;
 					break;
 				}
-				ret = qib_set_linkstate(ppd, devState);
+				ret = set_link_state(ppd, devState);
 				break;
 			case IB_PORT_ARMED:
-				ret = qib_set_linkstate(ppd, QIB_IB_LINKARM);
+				ret = set_link_state(ppd, HFI_LINKARMED);
 				break;
 			case IB_PORT_ACTIVE:
-				ret = qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+				ret = set_link_state(ppd, HFI_LINKACTIVE);
 				break;
 			default:
 				ret = -EINVAL;

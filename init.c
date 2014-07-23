@@ -1181,8 +1181,8 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 
 				ppd = dd->pport + pidx;
 				if (dd->flags & QIB_PRESENT) {
-					qib_set_linkstate(ppd,
-						QIB_IB_LINKDOWN_DISABLE);
+					set_link_state(ppd,
+						HFI_LINKDOWN_DISABLE);
 					dd->f_setextled(ppd, 0);
 				}
 				if (ppd->statusp)

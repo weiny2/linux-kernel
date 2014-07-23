@@ -485,7 +485,7 @@ static int set_phyerrthreshold(struct qib_pportdata *ppd, unsigned n)
 static int get_linkdowndefaultstate(struct qib_pportdata *ppd)
 {
 	return ppd->dd->f_get_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT) ==
-		IB_LINKINITCMD_SLEEP;
+		HFI_LINKDOWN_SLEEP;
 }
 
 static int check_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
@@ -1192,41 +1192,35 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 			break;
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
-#if 0
 		if (lstate == 0)
-			//lstate = QIB_IB_LINKDOWN_ONLY;
-		else if (lstate == 1)
-			//lstate = QIB_IB_LINKDOWN_SLEEP;
+			lstate = HFI_LINKDOWN_DOWNDEF;
 		else if (lstate == 2)
-			//lstate = QIB_IB_LINKDOWN;
+			lstate = HFI_LINKDOWN_POLL;
 		else if (lstate == 3)
-			//lstate = QIB_IB_LINKDOWN_DISABLE;
+			lstate = HFI_LINKDOWN_DISABLE;
 		else {
-#endif
-		/* FIXME allow other STL states */
-		if (lstate > 3) {
 			pr_warn("SubnSet(STL_PortInfo) invalid Physical state 0x%x\n",
 				lstate);
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
 		}
 
-		qib_set_linkstate(ppd, lstate);
+		set_link_state(ppd, lstate);
 		/*
 		 * Don't send a reply if the response would be sent
 		 * through the disabled port.
 		 */
-		if (lstate == QIB_IB_LINKDOWN_DISABLE && smp->hop_cnt) {
+		if (lstate == HFI_LINKDOWN_DISABLE && smp->hop_cnt) {
 			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 			return ret;
 		}
 		/* XXX ??? qib_wait_linkstate(ppd, QIBL_LINKV, 10); */
 		break;
 	case IB_PORT_ARMED:
-		qib_set_linkstate(ppd, QIB_IB_LINKARM);
+		set_link_state(ppd, HFI_LINKARMED);
 		break;
 	case IB_PORT_ACTIVE:
-		qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+		set_link_state(ppd, HFI_LINKACTIVE);
 		break;
 	default:
 		pr_warn("SubnSet(STL_PortInfo) invalid state 0x%x\n", state);
@@ -1448,33 +1442,33 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
 		if (lstate == IB_PORTPHYSSTATE_NO_CHANGE)
-			lstate = QIB_IB_LINKDOWN_ONLY;
+			lstate = HFI_LINKDOWN_DOWNDEF;
 		else if (lstate == IB_PORTPHYSSTATE_SLEEP)
-			lstate = QIB_IB_LINKDOWN_SLEEP;
+			lstate = HFI_LINKDOWN_SLEEP;
 		else if (lstate == IB_PORTPHYSSTATE_POLL)
-			lstate = QIB_IB_LINKDOWN;
+			lstate = HFI_IB_LINKDOWN_POLL;
 		else if (lstate == IB_PORTPHYSSTATE_DISABLED)
-			lstate = QIB_IB_LINKDOWN_DISABLE;
+			lstate = HFI_LINKDOWN_DISABLE;
 		else {
 			/* TODO: The spec say other values are ignored... */
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
 		}
-		qib_set_linkstate(ppd, lstate);
+		set_link_state(ppd, lstate);
 		/*
 		 * Don't send a reply if the response would be sent
 		 * through the disabled port.
 		 */
-		if (lstate == QIB_IB_LINKDOWN_DISABLE && smp->hop_cnt) {
+		if (lstate == HFI_LINKDOWN_DISABLE && smp->hop_cnt) {
 			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 			goto done;
 		}
 		break;
 	case IB_PORT_ARMED:
-		qib_set_linkstate(ppd, QIB_IB_LINKARM);
+		set_link_state(ppd, HFI_LINKARMED);
 		break;
 	case IB_PORT_ACTIVE:
-		qib_set_linkstate(ppd, QIB_IB_LINKACTIVE);
+		set_link_state(ppd, HFI_LINKACTIVE);
 		break;
 	default:
 		smp->status |= IB_SMP_INVALID_FIELD;

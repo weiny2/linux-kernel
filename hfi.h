@@ -352,33 +352,19 @@ struct qib_verbs_txreq {
 #define QIB_IB_CFG_LINKDEFAULT 15 /* IB link default (sleep/poll) */
 #define QIB_IB_CFG_PKEYS 16 /* update partition keys */
 #define QIB_IB_CFG_MTU 17 /* update MTU in IBC */
-#define QIB_IB_CFG_LSTATE 18 /* update linkcmd and linkinitcmd in IBC */
 #define QIB_IB_CFG_VL_HIGH_LIMIT 19
 #define QIB_IB_CFG_PMA_TICKS 20 /* PMA sample tick resolution */
 #define QIB_IB_CFG_PORT 21 /* switch port we are connected to */
 
 /*
- * for CFG_LSTATE: LINKCMD in upper 16 bits, LINKINITCMD in lower 16
- * IB_LINKINITCMD_POLL and SLEEP are also used as set/get values for
- * QIB_IB_CFG_LINKDEFAULT cmd
+ * valid states passed to set_link_state()
  */
-#define   IB_LINKCMD_DOWN   (0 << 16)
-#define   IB_LINKCMD_ARMED  (1 << 16)
-#define   IB_LINKCMD_ACTIVE (2 << 16)
-#define   IB_LINKINITCMD_NOP     0
-#define   IB_LINKINITCMD_POLL    1
-#define   IB_LINKINITCMD_SLEEP   2
-#define   IB_LINKINITCMD_DISABLE 3
-
-/*
- * valid states passed to qib_set_linkstate() user call
- */
-#define QIB_IB_LINKDOWN         0
-#define QIB_IB_LINKARM          1
-#define QIB_IB_LINKACTIVE       2
-#define QIB_IB_LINKDOWN_ONLY    3
-#define QIB_IB_LINKDOWN_SLEEP   4
-#define QIB_IB_LINKDOWN_DISABLE 5
+#define HFI_LINKARMED        0
+#define HFI_LINKACTIVE       1
+#define HFI_LINKDOWN_DOWNDEF 2	/* link down default */
+#define HFI_LINKDOWN_POLL    3
+#define HFI_LINKDOWN_SLEEP   4
+#define HFI_LINKDOWN_DISABLE 5
 
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU 4096
@@ -1156,7 +1142,6 @@ int hfi_setup_ctxt(struct qib_ctxtdata *, u16, u16, u16, u16);
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
-int qib_set_linkstate(struct qib_pportdata *, u8);
 inline u16 generate_jkey(unsigned int);
 
 /* MTU handling */

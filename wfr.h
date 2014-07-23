@@ -429,6 +429,7 @@ int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
 void read_guid(struct hfi_devdata *dd);
 void check_fifos(unsigned long opaque);
+int set_link_state(struct qib_pportdata *, u32 state);
 
 extern uint num_vls;
 

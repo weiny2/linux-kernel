@@ -3386,57 +3386,46 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
 }
 
-static int set_link_state(struct qib_pportdata *ppd, u32 val)
+int set_link_state(struct qib_pportdata *ppd, u32 state)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u32 phys_request, logical_request;
+	u32 lstate;
 	int ret1, ret = 0;
+	static const char * const names[] = {
+		"ARM",
+		"ACTIVE",
+		"DOWN_DOWNDEF",
+		"DOWN_POLL",
+		"DOWN_SLEEP",
+		"DOWN_DISABLE"
+	};
 
-	phys_request = val & 0xffff;
-	logical_request = val & 0xffff0000;
-	dd_dev_info(dd,
-		"%s: logical: %s, physical %s\n",
-		__func__,
-		logical_request == IB_LINKCMD_ARMED ?
-						"LINKCMD_ARMED" :
-		logical_request == IB_LINKCMD_ACTIVE ?
-						"LINKCMD_ACTIVE" :
-		logical_request == IB_LINKCMD_DOWN ?
-						"LINKCMD_DOWN" :
-						"unknown",
-		phys_request == IB_LINKINITCMD_NOP ?
-						"LINKINITCMD_NOP" :
-		phys_request == IB_LINKINITCMD_POLL ?
-						"LINKINITCMD_POLL" :
-		phys_request == IB_LINKINITCMD_SLEEP ?
-						"LINKINITCMD_SLEEP" :
-		phys_request == IB_LINKINITCMD_DISABLE ?
-						"LINKINITCMD_DISABLE" :
-						"unknwon");
-	switch (logical_request) {
-	case IB_LINKCMD_ARMED:
-		set_logical_state(dd, WFR_LSTATE_ARMED);
-		break;
-	case IB_LINKCMD_ACTIVE:
-		set_logical_state(dd, WFR_LSTATE_ACTIVE);
-		break;
-	case IB_LINKCMD_DOWN:
-		/*
-		 * If no physical state change is given,
-		 * use the default down state.
-		 */
-		if (phys_request == IB_LINKINITCMD_NOP)
-			phys_request = dd->link_default;
-		break;
-	default:
-		dd_dev_info(dd, "%s: logical request 0x%x: not implemented\n",
-			__func__, logical_request);
-	}
+	dd_dev_info(dd, "%s: state %s\n", __func__,
+		state < ARRAY_SIZE(names) ? names[state] : "uknown");
 
-	switch (phys_request) {
-	case IB_LINKINITCMD_NOP:	/* nothing */
+	if (state == HFI_LINKDOWN_DOWNDEF)
+		state = dd->link_default;
+
+	switch (state) {
+	case HFI_LINKARMED:
+		lstate = dd->f_iblink_state(ppd);
+		if (lstate == IB_PORT_INIT) {
+			set_logical_state(dd, WFR_LSTATE_ARMED);
+			ret = qib_wait_linkstate(ppd, IB_PORT_ARMED, 1000);
+		} else if (lstate != IB_PORT_ARMED) {
+			ret = -EINVAL;
+		}
 		break;
-	case IB_LINKINITCMD_POLL:
+	case HFI_LINKACTIVE:
+		lstate = dd->f_iblink_state(ppd);
+		if (lstate == IB_PORT_ARMED) {
+			set_logical_state(dd, WFR_LSTATE_ACTIVE);
+			ret = qib_wait_linkstate(ppd, IB_PORT_ACTIVE, 1000);
+		} else if (lstate != IB_PORT_ACTIVE) {
+			ret = -EINVAL;
+		}
+		break;
+	case HFI_LINKDOWN_POLL:
 		/* link is enabled */
 		ppd->link_enabled = 1;
 		/* must transistion to offline first */
@@ -3462,12 +3451,7 @@ static int set_link_state(struct qib_pportdata *ppd, u32 val)
 			break;
 		}
 		break;
-	case IB_LINKINITCMD_SLEEP:
-		/* not valid on WFR */
-		dd_dev_err(dd, "Cannot transition Sleep link state\n");
-		ret = -EINVAL;
-		break;
-	case IB_LINKINITCMD_DISABLE:
+	case HFI_LINKDOWN_DISABLE:
 		/* link is disabled */
 		ppd->link_enabled = 0;
 		/* must transistion to offline first */
@@ -3492,9 +3476,13 @@ static int set_link_state(struct qib_pportdata *ppd, u32 val)
 			ret = -EINVAL;
 		}
 		break;
+
+	case HFI_LINKDOWN_SLEEP:	/* not supported by the HW */
 	default:
-		dd_dev_info(dd, "%s: physical request 0x%x: not implemented\n",
-			__func__, phys_request);
+		dd_dev_info(dd, "%s: state 0x%x: not implemented\n",
+			__func__, state);
+		ret = -EINVAL;
+		break;
 	}
 
 	return ret;
@@ -3519,12 +3507,9 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 			<< WFR_SEND_HIGH_PRIORITY_LIMIT_LIMIT_SHIFT;
 		write_csr(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIMIT, reg);
 		break;
-	case QIB_IB_CFG_LSTATE:
-		ret = set_link_state(ppd, val);
-		break;
 	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
 		/* WFR only supports POLL as the default link down state */
-		if (val != IB_LINKINITCMD_POLL)
+		if (val != HFI_LINKDOWN_POLL)
 			ret = -EINVAL;
 		break;
 	case QIB_IB_CFG_OP_VLS:
@@ -6719,7 +6704,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/*
 	 * Set other early dd values.
 	 */
-	dd->link_default = IB_LINKINITCMD_POLL;
+	dd->link_default = HFI_LINKDOWN_POLL;
 
 	/*
 	 * Do remaining PCIe setup and save PCIe values in dd.
