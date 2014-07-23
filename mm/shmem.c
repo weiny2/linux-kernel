@@ -1306,7 +1306,7 @@ static int shmem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 			shmem_falloc_waitq = shmem_falloc->waitq;
 			prepare_to_wait(shmem_falloc_waitq, &shmem_fault_wait,
-					TASK_KILLABLE);
+					TASK_UNINTERRUPTIBLE);
 			spin_unlock(&inode->i_lock);
 			schedule();
 
