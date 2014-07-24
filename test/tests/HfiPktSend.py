@@ -31,7 +31,7 @@ def do_pkt_send(diag_path, host, packet_file, dest_lid = None, dest_ctxt = 1, co
                 RegLib.test_log(0, "Unable to query host (%s) LID" % host.get_name())
                 RegLib.test_fail("Failed!")
                 return False
-        dest_lid = int(dest_lid)
+        dest_lid = int(dest_lid, 0)
 
     cmd_diagpkt_arg = ""
     if use_diagpkt:
