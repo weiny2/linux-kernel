@@ -1766,11 +1766,24 @@ static int __subn_set_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
 {
 	u32 n_blocks = (am & 0xff000000) >> 24;
 	u32 am_port = (am & 0x000000ff);
-	int async_update = !!(am & 0x1000);
+	int async_update = STL_AM_ASYNC(am);
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	void *vp = (void *) data;
+	struct qib_pportdata *ppd;
+	int lstate;
 
 	if (am_port != port || port != 1 || n_blocks != 1 || async_update) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	/* IB numbers ports from 1, hdw from 0 */
+	ppd = dd->pport + (port - 1);
+	lstate = dd->f_iblink_state(ppd);
+	/* it's known that async_update is 0 by this point, but include
+	 * the explicit check for clarity */
+	if (!async_update &&
+	    (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
@@ -1815,8 +1828,17 @@ static int __subn_set_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
 	void *vp = (void *) data;
+	int lstate;
 
 	if (port != 1 || n_blocks != 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	/* IB numbers ports from 1, hdw from 0 */
+	ppd = dd->pport + (port - 1);
+	lstate = dd->f_iblink_state(ppd);
+	if (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}

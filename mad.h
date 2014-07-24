@@ -469,6 +469,10 @@ struct cc_table_shadow {
 #define STL_AM_NPORT_SMASK	(0xff000000)
 #define STL_AM_NPORT(am)	((am & STL_AM_NPORT_SMASK) >> \
 					STL_AM_NPORT_SHIFT)
+#define STL_AM_ASYNC_SHIFT	(12)
+#define STL_AM_ASYNC_SMASK	(0x00001000)
+#define STL_AM_ASYNC(am)	((am & STL_AM_ASYNC_SMASK) >> \
+					STL_AM_ASYNC_SHIFT)
 
 struct vl_limit {
 	__be16 dedicated;
