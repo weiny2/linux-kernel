@@ -6952,8 +6952,10 @@ static int btrfs_get_blocks_direct(struct inode *inode, sector_t iblock,
 						       block_start, len,
 						       orig_block_len,
 						       ram_bytes, type);
-				if (IS_ERR(em))
+				if (IS_ERR(em)) {
+					ret = PTR_ERR(em);
 					goto unlock_err;
+				}
 			}
 
 			ret = btrfs_add_ordered_extent_dio(inode, start,
@@ -7489,7 +7491,8 @@ static ssize_t btrfs_direct_IO(int rw, struct kiocb *iocb,
 	count = iov_length(iov, nr_segs);
 	if (test_bit(BTRFS_INODE_HAS_ASYNC_EXTENT,
 		     &BTRFS_I(inode)->runtime_flags))
-		filemap_fdatawrite_range(inode->i_mapping, offset, count);
+		filemap_fdatawrite_range(inode->i_mapping, offset,
+					offset + count - 1);
 
 	if (rw & WRITE) {
 		/*

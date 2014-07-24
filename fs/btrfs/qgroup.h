@@ -98,6 +98,9 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans,
 int btrfs_qgroup_reserve(struct btrfs_root *root, u64 num_bytes);
 void btrfs_qgroup_free(struct btrfs_root *root, u64 num_bytes);
 
+int btrfs_del_qgroup_items(struct btrfs_trans_handle *trans,
+			   struct btrfs_root *root);
+
 void assert_qgroups_uptodate(struct btrfs_trans_handle *trans);
 
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
