@@ -166,26 +166,26 @@ struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5);
 
 #ifdef CONFIG_DEBUG_FS
 
-struct qib_qp_iter;
+struct qp_iter;
 
 /**
- * qib_qp_iter_init - wakeup on the indicated event
+ * qp_iter_init - wakeup on the indicated event
  * @dev: the qib_ib_dev
  */
-struct qib_qp_iter *qib_qp_iter_init(struct qib_ibdev *dev);
+struct qp_iter *qp_iter_init(struct qib_ibdev *dev);
 
 /**
- * qib_qp_iter_next - wakeup on the indicated event
+ * qp_iter_next - wakeup on the indicated event
  * @iter: the iterator for the qp hash list
  */
-int qib_qp_iter_next(struct qib_qp_iter *iter);
+int qp_iter_next(struct qp_iter *iter);
 
 /**
- * qib_qp_iter_next - wakeup on the indicated event
+ * qp_iter_next - wakeup on the indicated event
  * @s: the seq_file to emit the qp information on
  * @iter: the iterator for the qp hash list
  */
-void qib_qp_iter_print(struct seq_file *s, struct qib_qp_iter *iter);
+void qp_iter_print(struct seq_file *s, struct qp_iter *iter);
 
 #endif
 

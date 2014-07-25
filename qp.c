@@ -1427,22 +1427,24 @@ struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5)
 
 #ifdef CONFIG_DEBUG_FS
 
-struct qib_qp_iter {
+struct qp_iter {
 	struct qib_ibdev *dev;
 	struct qib_qp *qp;
+	int specials;
 	int n;
 };
 
-struct qib_qp_iter *qib_qp_iter_init(struct qib_ibdev *dev)
+struct qp_iter *qp_iter_init(struct qib_ibdev *dev)
 {
-	struct qib_qp_iter *iter;
+	struct qp_iter *iter;
 
 	iter = kzalloc(sizeof(*iter), GFP_KERNEL);
 	if (!iter)
 		return NULL;
 
 	iter->dev = dev;
-	if (qib_qp_iter_next(iter)) {
+	iter->specials = dev->ibdev.phys_port_cnt * 2;
+	if (qp_iter_next(iter)) {
 		kfree(iter);
 		return NULL;
 	}
@@ -1450,7 +1452,7 @@ struct qib_qp_iter *qib_qp_iter_init(struct qib_ibdev *dev)
 	return iter;
 }
 
-int qib_qp_iter_next(struct qib_qp_iter *iter)
+int qp_iter_next(struct qp_iter *iter)
 {
 	struct qib_ibdev *dev = iter->dev;
 	int n = iter->n;
@@ -1459,11 +1461,43 @@ int qib_qp_iter_next(struct qib_qp_iter *iter)
 	struct qib_qp *qp;
 
 	rcu_read_lock();
-	for (; n <  dev->qp_dev->qp_table_size; n++) {
-		if (pqp)
+	/*
+	 * The approach is to consider the special qps
+	 * as an additional table entries before the
+	 * real hash table.  Since the qp code null's
+	 * the qp->next hash link, this works just fine.
+	 *
+	 * iter->specials is 2 * # ports
+	 *
+	 * n = 0..iter->specials is the special qp indicies
+	 *
+	 * n = iter->specials..dev->qp_dev->qp_table_size+iter->specials are
+	 * the potential hash bucket entries
+	 *
+	 */
+	for (; n <  dev->qp_dev->qp_table_size + iter->specials; n++) {
+		if (pqp) {
 			qp = rcu_dereference(pqp->next);
-		else
-			qp = rcu_dereference(dev->qp_dev->qp_table[n]);
+		} else {
+			if (n < iter->specials) {
+				struct qib_pportdata *ppd;
+				struct qib_ibport *ibp;
+				int pidx;
+
+				pidx = n % dev->ibdev.phys_port_cnt;
+				ppd = &dd_from_dev(dev)->pport[pidx];
+				ibp = &ppd->ibport_data;
+
+				if (!(n & 1))
+					qp = rcu_dereference(ibp->qp0);
+				else
+					qp = rcu_dereference(ibp->qp1);
+			} else {
+				qp = rcu_dereference(
+					dev->qp_dev->qp_table[
+						(n - iter->specials)]);
+			}
+		}
 		pqp = qp;
 		if (qp) {
 			if (iter->qp)
@@ -1485,19 +1519,20 @@ static const char * const qp_type_str[] = {
 	"SMI", "GSI", "RC", "UC", "UD",
 };
 
-void qib_qp_iter_print(struct seq_file *s, struct qib_qp_iter *iter)
+void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 {
 	struct qib_swqe *wqe;
 	struct qib_qp *qp = iter->qp;
 
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d QP%u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x\n",
+		   "N %d QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x\n",
 		   iter->n,
 		   qp->ibqp.qp_num,
+		   atomic_read(&qp->refcount),
 		   qp_type_str[qp->ibqp.qp_type],
 		   qp->state,
-		   wqe->wr.opcode,
+		   wqe ? wqe->wr.opcode : 0,
 		   qp->s_hdrwords,
 		   qp->s_flags,
 		   atomic_read(&qp->s_dma_busy),

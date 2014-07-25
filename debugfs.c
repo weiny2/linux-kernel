@@ -200,15 +200,15 @@ DEBUGFS_SEQ_FILE(ctx_stats)
 
 static void *_qp_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
-	struct qib_qp_iter *iter;
+	struct qp_iter *iter;
 	loff_t n = *pos;
 
-	iter = qib_qp_iter_init(s->private);
+	iter = qp_iter_init(s->private);
 	if (!iter)
 		return NULL;
 
 	while (n--) {
-		if (qib_qp_iter_next(iter)) {
+		if (qp_iter_next(iter)) {
 			kfree(iter);
 			return NULL;
 		}
@@ -220,11 +220,11 @@ static void *_qp_stats_seq_start(struct seq_file *s, loff_t *pos)
 static void *_qp_stats_seq_next(struct seq_file *s, void *iter_ptr,
 				   loff_t *pos)
 {
-	struct qib_qp_iter *iter = iter_ptr;
+	struct qp_iter *iter = iter_ptr;
 
 	(*pos)++;
 
-	if (qib_qp_iter_next(iter)) {
+	if (qp_iter_next(iter)) {
 		kfree(iter);
 		return NULL;
 	}
@@ -239,12 +239,12 @@ static void _qp_stats_seq_stop(struct seq_file *s, void *iter_ptr)
 
 static int _qp_stats_seq_show(struct seq_file *s, void *iter_ptr)
 {
-	struct qib_qp_iter *iter = iter_ptr;
+	struct qp_iter *iter = iter_ptr;
 
 	if (!iter)
 		return 0;
 
-	qib_qp_iter_print(s, iter);
+	qp_iter_print(s, iter);
 
 	return 0;
 }
