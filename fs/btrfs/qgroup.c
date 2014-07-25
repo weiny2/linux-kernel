@@ -35,6 +35,7 @@
 #include "qgroup.h"
 
 /* TODO XXX FIXME
+ *  - subvol delete -> delete when ref goes to 0? delete limits also?
  *  - reorganize keys
  *  - compressed
  *  - sync
@@ -96,16 +97,6 @@ struct btrfs_qgroup_list {
 	struct list_head next_member;
 	struct btrfs_qgroup *group;
 	struct btrfs_qgroup *member;
-};
-
-/*
- * used in remove_qgroup_relations() to track qgroup relations that
- * need deleting
- */
-struct relation_rec {
-	struct list_head list;
-	u64 src;
-	u64 dst;
 };
 
 #define ptr_to_u64(x) ((u64)(uintptr_t)x)
@@ -560,15 +551,9 @@ static int add_qgroup_item(struct btrfs_trans_handle *trans,
 	key.type = BTRFS_QGROUP_INFO_KEY;
 	key.offset = qgroupid;
 
-	/*
-	 * Avoid a transaction abort by catching -EEXIST here. In that
-	 * case, we proceed by re-initializing the existing structure
-	 * on disk.
-	 */
-
 	ret = btrfs_insert_empty_item(trans, quota_root, path, &key,
 				      sizeof(*qgroup_info));
-	if (ret && ret != -EEXIST)
+	if (ret)
 		goto out;
 
 	leaf = path->nodes[0];
@@ -587,7 +572,7 @@ static int add_qgroup_item(struct btrfs_trans_handle *trans,
 	key.type = BTRFS_QGROUP_LIMIT_KEY;
 	ret = btrfs_insert_empty_item(trans, quota_root, path, &key,
 				      sizeof(*qgroup_limit));
-	if (ret && ret != -EEXIST)
+	if (ret)
 		goto out;
 
 	leaf = path->nodes[0];
@@ -2833,97 +2818,4 @@ btrfs_qgroup_rescan_resume(struct btrfs_fs_info *fs_info)
 	if (fs_info->qgroup_flags & BTRFS_QGROUP_STATUS_FLAG_RESCAN)
 		btrfs_queue_worker(&fs_info->qgroup_rescan_workers,
 				   &fs_info->qgroup_rescan_work);
-}
-
-static struct relation_rec *
-qlist_to_relation_rec(struct btrfs_qgroup_list *qlist, struct list_head *all)
-{
-	u64 group, member;
-	struct relation_rec *rec;
-
-	BUILD_BUG_ON(sizeof(struct btrfs_qgroup_list) < sizeof(struct relation_rec));
-
-	list_del(&qlist->next_group);
-	list_del(&qlist->next_member);
-	group = qlist->group->qgroupid;
-	member = qlist->member->qgroupid;
-	rec = (struct relation_rec *)qlist;
-	rec->src = group;
-	rec->dst = member;
-
-	list_add(&rec->list, all);
-	return rec;
-}
-
-static int remove_qgroup_relations(struct btrfs_trans_handle *trans,
-				   struct btrfs_fs_info *fs_info, u64 qgroupid)
-{
-	int ret, err;
-	struct btrfs_root *quota_root = fs_info->quota_root;
-	struct relation_rec *rec;
-	struct btrfs_qgroup_list *qlist;
-	struct btrfs_qgroup *qgroup;
-	LIST_HEAD(relations);
-
-	spin_lock(&fs_info->qgroup_lock);
-	qgroup = find_qgroup_rb(fs_info, qgroupid);
-
-	while (!list_empty(&qgroup->groups)) {
-		qlist = list_first_entry(&qgroup->groups,
-					 struct btrfs_qgroup_list, next_group);
-		rec = qlist_to_relation_rec(qlist, &relations);
-	}
-
-	while (!list_empty(&qgroup->members)) {
-		qlist = list_first_entry(&qgroup->members,
-					 struct btrfs_qgroup_list, next_member);
-		rec = qlist_to_relation_rec(qlist, &relations);
-	}
-
-	spin_unlock(&fs_info->qgroup_lock);
-
-	ret = 0;
-	list_for_each_entry(rec, &relations, list) {
-		ret = del_qgroup_relation_item(trans, quota_root, rec->src, rec->dst);
-		err = del_qgroup_relation_item(trans, quota_root, rec->dst, rec->src);
-		if (err && !ret)
-			ret = err;
-		if (ret && ret != -ENOENT)
-			break;
-		ret = 0;
-	}
-
-	return ret;
-}
-
-int btrfs_del_qgroup_items(struct btrfs_trans_handle *trans,
-			   struct btrfs_root *root)
-{
-	int ret;
-	struct btrfs_fs_info *fs_info = root->fs_info;
-	struct btrfs_root *quota_root = fs_info->quota_root;
-	u64 qgroupid = root->root_key.objectid;
-
-	if (!fs_info->quota_enabled)
-		return 0;
-
-	mutex_lock(&fs_info->qgroup_ioctl_lock);
-
-	ret = remove_qgroup_relations(trans, fs_info, qgroupid);
-	if (ret)
-		goto out_unlock;
-
-	spin_lock(&fs_info->qgroup_lock);
-	del_qgroup_rb(quota_root->fs_info, qgroupid);
-	spin_unlock(&fs_info->qgroup_lock);
-
-	ret = del_qgroup_item(trans, quota_root, qgroupid);
-	if (ret && ret != -ENOENT)
-		goto out_unlock;
-
-	ret = 0;
-out_unlock:
-	mutex_unlock(&fs_info->qgroup_ioctl_lock);
-
-	return ret;
 }

@@ -8117,12 +8117,6 @@ int btrfs_drop_snapshot(struct btrfs_root *root,
 	if (err)
 		goto out_end_trans;
 
-	ret = btrfs_del_qgroup_items(trans, root);
-	if (ret) {
-		btrfs_abort_transaction(trans, root, ret);
-		goto out_end_trans;
-	}
-
 	ret = btrfs_del_root(trans, tree_root, &root->root_key);
 	if (ret) {
 		btrfs_abort_transaction(trans, tree_root, ret);
