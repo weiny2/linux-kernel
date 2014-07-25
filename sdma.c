@@ -162,9 +162,16 @@ static void sdma_sw_clean_up_task(unsigned long);
 static void unmap_desc(struct sdma_engine *, unsigned);
 static void sdma_sendctrl(struct sdma_engine *, unsigned);
 static void init_sdma_regs(struct sdma_engine *);
+static void sdma_process_event(
+	struct sdma_engine *sde,
+	enum sdma_events event);
+static void __sdma_process_event(
+	struct sdma_engine *sde,
+	enum sdma_events event);
 
 /**
  * sdma_event_name() - return event string from enum
+ * @event: event
  */
 const char *sdma_event_name(enum sdma_events event)
 {
@@ -173,6 +180,7 @@ const char *sdma_event_name(enum sdma_events event)
 
 /**
  * sdma_state_name() - return state string from enum
+ * @state: state
  */
 const char *sdma_state_name(enum sdma_states state)
 {
@@ -435,9 +443,9 @@ u16 sdma_get_descq_cnt(void)
 }
 /**
  * sdma_select_engine_vl() - select sdma engine
- * @dd - devdata
- * @selector - a spreading factor
- * @vl - this vl
+ * @dd: devdata
+ * @selector: a spreading factor
+ * @vl: this vl
  *
  *
  * This function returns an engine based on the selector and a vl.  The
@@ -465,9 +473,9 @@ struct sdma_engine *sdma_select_engine_vl(
 
 /**
  * sdma_select_engine_sc() - select sdma engine
- * @dd - devdata
- * @selector - a spreading factor
- * @sc5 - the 5 bit sc
+ * @dd: devdata
+ * @selector: a spreading factor
+ * @sc5: the 5 bit sc
  *
  *
  * This function returns an engine based on the selector and an sc.
@@ -926,7 +934,7 @@ static int sdma_make_progress(struct sdma_engine *sde)
 
 /**
  * sdma_engine_interrupt() - interrupt handler for engine
- * @engine: sdma engine
+ * @sde: sdma engine
  * @status: sdma interrupt reason
  *
  * Status is a mask of the 3 possible interrupts for this engine.  It will
@@ -1562,7 +1570,7 @@ nodesc:
  * @sde: sdma engine to use
  * @wait: wait structure to use when full (may be NULL)
  * @busycb: callback when send hits full ring (may be NULL)
- * @tx: sdma_txreq to submit
+ * @tx_list: list of sdma_txreqs to submit
  *
  * The call submits the list into the ring.
  *
@@ -1576,7 +1584,8 @@ nodesc:
  * via the  callback with the capability of "waiting" via a queuing mechanism.
  *
  * The intent of this call is to provide a more efficient
- * way of submitting multiple packets to SDMA.
+ * way of submitting multiple packets to SDMA while holding the tail
+ * side locking.
  *
  * Return:
  * 0 - Success, -EBUSY - no space in ring (wait == NULL)
@@ -1592,7 +1601,7 @@ int sdma_send_txlist(struct sdma_engine *sde,
 	BUG_ON(1);
 }
 
-void sdma_process_event(struct sdma_engine *sde,
+static void sdma_process_event(struct sdma_engine *sde,
 	enum sdma_events event)
 {
 	unsigned long flags;
@@ -1607,7 +1616,7 @@ void sdma_process_event(struct sdma_engine *sde,
 	spin_unlock_irqrestore(&sde->lock, flags);
 }
 
-void __sdma_process_event(struct sdma_engine *sde,
+static void __sdma_process_event(struct sdma_engine *sde,
 	enum sdma_events event)
 {
 	struct sdma_state *ss = &sde->state;

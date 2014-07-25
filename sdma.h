@@ -37,6 +37,7 @@
 #include <linux/types.h>
 #include <linux/list.h>
 #include <asm/byteorder.h>
+#include <linux/workqueue.h>
 
 #include "hfi.h"
 #include "iowait.h"
@@ -171,7 +172,7 @@ struct sdma_state {
  */
 
 /**
- * DOC: sdma API
+ * DOC: sdma PSM/verbs API
  *
  * The sdma API is designed to be used by both PSM
  * and verbs to supply packets to the SDMA ring.
@@ -186,7 +187,7 @@ struct sdma_state {
  * for their version of the txreq. slabs, pre-allocated lists,
  * and dma pools can be used.  Once the user's overload of
  * the sdma_txreq has been allocated, the sdma_txreq member
- * must be initialized with sdma_txinit() or _sdma_txinit().
+ * must be initialized with sdma_txinit() or sdma_txinit_ahg().
  *
  * The txreq must be declared with the sdma_txreq first.
  *
@@ -212,18 +213,39 @@ struct sdma_state {
  * (This would usually be at an unload or job termination.)
  *
  * The routine sdma_send_txreq() is used to submit
- * the tx to the ring after the appropriate nubmer of
+ * a tx to the ring after the appropriate nubmer of
  * sdma_txadd_* have been done.
  *
- * The user is free to use the link overhead in
- * the struct sdma_txreq as long as the tx isn't
- * in flight.
+ * If it is desired to send a burst of sdma_txreqs, sdma_send_txlist()
+ * can be used to submit a list of packets.
+ *
+ * The user is free to use the link overhead in the struct sdma_txreq as
+ * long as the tx isn't in flight.
  *
  * The extreme degenerate case of the number of descriptors
  * exceeding the ring size is automatically handled as
  * memory locations are added.  An overflow of the descriptor
  * array that is part of the sdma_txreq is also automatically
  * handled.
+ *
+ */
+
+/**
+ * DOC: Infrastructure calls
+ *
+ * sdma_init() is used to initialize data structures and
+ * csrs for the desired number of SDMA engines.
+ *
+ * sdma_start() is used to kick the SDMA engines initialized
+ * with sdma_init().   Interrupts must be enabled at this
+ * point since aspects of the state machine are interrupt
+ * driven.
+ *
+ * sdma_engine_error() and sdma_engine_interrupt() are
+ * entrances for interrupts.
+ *
+ * sdma_map_init() is for the management of the mapping
+ * table when the number of vls is changed.
  *
  */
 
@@ -299,10 +321,9 @@ struct sdma_txreq {
 
 /**
  * struct sdma_engine - Data pertaining to each SDMA engine.
- * @dd: device data
+ * @dd: a backpointer to the device data
  * @ppd: per port backpointer
  * @imask: make for irq manipulation
- * @wq: work queue specific to engine
  *
  * This structure has the start for each sdma_engine.
  *
@@ -314,7 +335,9 @@ struct sdma_engine {
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	u64 imask;			/* clear interrupt mask */
+	/* private: */
 	__le64 default_desc1;
+	/* private: */
 	struct workqueue_struct *wq;
 	/* add sdma fields here... */
 	/* private: */
@@ -440,12 +463,20 @@ static inline int sdma_running(struct sdma_engine *engine)
  * completion is desired as soon as possible.
  *
  * SDMA_TXREQ_F_AHG_COPY causes the header in the first descriptor to be
- * copied to chip entry. SDMA_TXREQ_F_USE_AHG causes the code to or in
- * the AHG descriptor into the first descriptor.
+ * copied to chip entry. SDMA_TXREQ_F_USE_AHG causes the code to add in
+ * the AHG descriptors into the first 1 to 3 descriptors.
  *
- * The callback will be provided this tx and a status.  The status will be
- * one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR, SDMA_TXREQ_S_ABORTED, or
- * SDMA_TXREQ_S_SHUTDOWN.
+ * Completions of submitted requests can be gotten on selected
+ * txreqs by giving a completion routine callback to sdma_txinit() or
+ * sdma_txinit_ahg().  The environment in which the callback runs
+ * can be from an ISR, a tasklet, or a thread, so no sleepable
+ * kernel routines can be used.   Aspects of the sdma ring may
+ * be locked so care should be taken with locking.
+ *
+ * The callback pointer can be NULL to avoid any callback for the packet
+ * being submitted. The callback will be provided this tx and a status.  The
+ * status will be one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR,
+ * SDMA_TXREQ_S_ABORTED, or SDMA_TXREQ_S_SHUTDOWN.
  *
  */
 static inline void sdma_txinit_ahg(
@@ -473,7 +504,7 @@ static inline void sdma_txinit_ahg(
  * @tx: tx request to init
  * @flags: flags to key last descriptor additions
  * @tlen: total packet length (pbc + headers + data)
- * @cb: callback
+ * @cb: callback pointer
  *
  * The allocation of the sdma_txreq and it enclosing structure is user
  * dependent.  This routine must be called to initialize the user
@@ -484,9 +515,19 @@ static inline void sdma_txinit_ahg(
  * SDMA_TXREQ_F_URGENT is used for latency sensitive situations where the
  * completion is desired as soon as possible.
  *
- * The callback will be provided this tx and a status.  The status will be
- * one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR, SDMA_TXREQ_S_ABORTED, or
- * SDMA_TXREQ_S_SHUTDOWN.
+ * Completions of submitted requests can be gotten on selected
+ * txreqs by giving a completion routine callback to sdma_txinit() or
+ * sdma_txinit_ahg().  The environment in which the callback runs
+ * can be from an ISR, a tasklet, or a thread, so no sleepable
+ * kernel routines can be used.   The head size of the sdma ring may
+ * be locked so care should be taken with locking.
+ *
+ * The callback pointer can be NULL to avoid any callback for the packet
+ * being submitted.
+ *
+ * The callback, if non-NULL,  will be provided this tx and a status.  The
+ * status will be one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR,
+ * SDMA_TXREQ_S_ABORTED, or SDMA_TXREQ_S_SHUTDOWN.
  *
  */
 static inline void sdma_txinit(
@@ -744,14 +785,11 @@ static inline void sdma_iowait_schedule(
 	iowait_schedule(wait, sde->wq);
 }
 
-/* state machine helpers */
-void sdma_process_event(struct sdma_engine *sde, enum sdma_events);
-void __sdma_process_event(struct sdma_engine *sde, enum sdma_events);
-const char *sdma_current_state_name(struct sdma_engine *sde);
-enum sdma_states sdma_current_state(struct sdma_engine *sde);
 /* for use by interrupt handling */
 void sdma_engine_error(struct sdma_engine *sde, u64 status);
 void sdma_engine_interrupt(struct sdma_engine *sde, u64 status);
+/* for use when the number of vls is changes */
+void sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls);
 
 /**
  * sdma_engine_progress_schedule() - schedule progress on engine
@@ -778,14 +816,6 @@ struct sdma_engine *sdma_select_engine_vl(
 	struct hfi_devdata *dd,
 	u32 selector,
 	u8 vl);
-
-/* state machine helpers */
-void sdma_process_event(struct sdma_engine *sde, enum sdma_events);
-/* state to string */
-const char *sdma_state_name(enum sdma_states state);
-/* event to string */
-const char *sdma_event_name(enum sdma_events event);
-void sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls);
 
 /* deprecated for now */
 int qib_sdma_make_progress(struct sdma_engine *);
