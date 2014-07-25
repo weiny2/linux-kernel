@@ -115,7 +115,7 @@ static void kgr_finalize(void)
 {
 	struct kgr_patch_fun *patch_fun;
 
-	kgr_for_each_patch(kgr_patch, patch_fun) {
+	kgr_for_each_patch_fun(kgr_patch, patch_fun) {
 		int ret = kgr_patch_code(patch_fun, true, kgr_revert);
 
 		if (ret < 0)
@@ -237,7 +237,7 @@ static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
 	struct kgr_patch *p;
 
 	list_for_each_entry(p, &patches, list) {
-		kgr_for_each_patch(p, pf) {
+		kgr_for_each_patch_fun(p, pf) {
 			if (pf->state != KGR_PATCH_APPLIED)
 				continue;
 
@@ -423,12 +423,6 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		return -EINVAL;
 	}
 
-	patch->irq_use_new = alloc_percpu(bool);
-	if (!patch->irq_use_new) {
-		pr_err("kgr: can't patch, cannot allocate percpu data\n");
-		return -ENOMEM;
-	}
-
 	mutex_lock(&kgr_in_progress_lock);
 	if (patch->refs) {
 		pr_err("kgr: can't patch, this patch is still referenced\n");
@@ -442,9 +436,16 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		goto err_unlock;
 	}
 
+	patch->irq_use_new = alloc_percpu(bool);
+	if (!patch->irq_use_new) {
+		pr_err("kgr: can't patch, cannot allocate percpu data\n");
+		ret = -ENOMEM;
+		goto err_unlock;
+	}
+
 	kgr_mark_processes();
 
-	kgr_for_each_patch(patch, patch_fun) {
+	kgr_for_each_patch_fun(patch, patch_fun) {
 		patch_fun->patch = patch;
 
 		ret = kgr_patch_code(patch_fun, false, revert);
@@ -459,7 +460,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 				if (patch_fun->state == KGR_PATCH_SLOW)
 					kgr_ftrace_disable(patch_fun,
 						&patch_fun->ftrace_ops_slow);
-			goto err_unlock;
+			goto err_free;
 		}
 	}
 	kgr_in_progress = true;
@@ -478,9 +479,10 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	queue_delayed_work(kgr_wq, &kgr_work, 10 * HZ);
 
 	return 0;
+err_free:
+	free_percpu(patch->irq_use_new);
 err_unlock:
 	mutex_unlock(&kgr_in_progress_lock);
-	free_percpu(patch->irq_use_new);
 
 	return ret;
 }
