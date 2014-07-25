@@ -2420,7 +2420,12 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		rsp->vls[vfi].port_vl_rcv_data =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
 					+ offset));
-		/* rsp->vls[vfi].port_vl_xmit_pkts ??? (tbl 13-9 WFR spec) */
+		rsp->vls[vfi].port_vl_xmit_pkts =
+			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
+					8 * SEND_DATA_PKT_VL0_CNT + offset));
+		rsp->vls[vfi].port_vl_rcv_pkts =
+			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_PKTS_CNT
+					+ offset));
 		rsp->vls[vfi].port_vl_xmit_wait =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
 					8 * SEND_WAIT_VL0_CNT + offset));
@@ -2597,7 +2602,12 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		rsp->vls[vfi].port_vl_rcv_data =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
 				+ offset));
-		/* rsp->vls[vfi].port_vl_xmit_pkts ??? (tbl 13-9 WFR spec) */
+		rsp->vls[vfi].port_vl_xmit_pkts =
+			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
+					8 * SEND_DATA_PKT_VL0_CNT + offset));
+		rsp->vls[vfi].port_vl_rcv_pkts =
+			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_PKTS_CNT
+					+ offset));
 		rsp->vls[vfi].port_vl_xmit_wait =
 			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
 				8 * SEND_WAIT_VL0_CNT + offset));
