@@ -117,16 +117,16 @@ struct kioctx {
 
 	struct work_struct	free_work;
 
+	/*
+	 * signals when all in-flight requests are done
+	 */
+	struct completion *requests_done;
+
 #ifdef CONFIG_EPOLL
 	/* poll integration */
 	wait_queue_head_t       poll_wait;
 	struct file		*file;
 #endif
-
-	/*
-	 * signals when all in-flight requests are done
-	 */
-	struct completion *requests_done;
 
 	struct {
 		/*
