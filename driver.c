@@ -533,6 +533,7 @@ int mtu_to_enum(u32 mtu, int default_if_bad)
 {
 	switch (mtu) {
 	case   256: return STL_MTU_256;
+	case   512: return STL_MTU_512;
 	case  1024: return STL_MTU_1024;
 	case  2048: return STL_MTU_2048;
 	case  4096: return STL_MTU_4096;
@@ -546,6 +547,7 @@ u32 enum_to_mtu(int mtu)
 {
 	switch (mtu) {
 	case STL_MTU_256:   return 256;
+	case STL_MTU_512:   return 512;
 	case STL_MTU_1024:  return 1024;
 	case STL_MTU_2048:  return 2048;
 	case STL_MTU_4096:  return 4096;
