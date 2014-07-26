@@ -52,9 +52,6 @@
 
 #include <linux/atomic.h>
 #include <asm/uaccess.h>
-#ifdef __s390x__
-#include <rdma/ib_user_verbs.h>
-#endif
 
 extern struct workqueue_struct *ib_wq;
 
@@ -1609,11 +1606,6 @@ struct ib_device {
 	int			   (*destroy_flow)(struct ib_flow *flow_id);
 	int			   (*check_mr_status)(struct ib_mr *mr, u32 check_mask,
 						      struct ib_mr_status *mr_status);
-#ifdef __s390x__
-	int			   (*kwrite_mmio) (
-					struct ib_ucontext *ib_ucontext,
-					struct ib_uverbs_kwrite_mmio *cmd);
-#endif
 
 	struct ib_dma_mapping_ops   *dma_ops;
 

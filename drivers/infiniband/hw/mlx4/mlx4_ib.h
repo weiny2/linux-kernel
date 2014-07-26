@@ -75,10 +75,6 @@ struct mlx4_ib_ucontext {
 	struct mlx4_uar		uar;
 	struct list_head	db_page_list;
 	struct mutex		db_page_mutex;
-#ifdef __s390x__
-	void __iomem		*uar_mmap;
-	void __iomem		*bf_page_mmap;
-#endif
 };
 
 struct mlx4_ib_pd {
@@ -769,8 +765,4 @@ void mlx4_ib_steer_qp_free(struct mlx4_ib_dev *dev, u32 qpn, int count);
 int mlx4_ib_steer_qp_reg(struct mlx4_ib_dev *mdev, struct mlx4_ib_qp *mqp,
 			 int is_attach);
 
-#ifdef __s390x__
-int mlx4_ib_kwrite_mmio(struct ib_ucontext  *ibcontext,
-			struct ib_uverbs_kwrite_mmio *cmd);
-#endif
 #endif /* MLX4_IB_H */
