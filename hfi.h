@@ -652,6 +652,12 @@ struct per_vl_data {
 /* 16 to directly index */
 #define PER_VL_SEND_CONTEXTS 16
 
+struct err_info_rcvport {
+	u8 status_and_code;
+	u64 packet_flit1;
+	u64 packet_flit2;
+};
+
 /* device data struct now contains only "general per-device" info.
  * fields related to a physical IB port are in a qib_pportdata struct,
  * described above) while fields only used by a particular chip-type are in
@@ -991,6 +997,9 @@ struct hfi_devdata {
 	size_t portcntrnameslen;
 	struct hfi_snoop_data hfi_snoop;
 
+	struct err_info_rcvport err_info_rcvport;
+	u8 err_info_uncorrectable;
+	u8 err_info_fmconfig;
 	/*
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path

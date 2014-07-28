@@ -2154,33 +2154,33 @@ struct stl_port_status_rsp {
 };
 
 enum counter_selects {
-	cs_port_xmit_data			= (1 << 0),
-	cs_port_rcv_data			= (1 << 1),
-	cs_port_xmit_pkts			= (1 << 2),
-	cs_port_rcv_pkts			= (1 << 3),
-	cs_port_mcast_xmit_pkts			= (1 << 4),
-	cs_port_mcast_rcv_pkts			= (1 << 5),
-	cs_port_xmit_wait			= (1 << 6),
-	cs_sw_port_congestion			= (1 << 7),
-	cs_port_rcv_fecn			= (1 << 8),
-	cs_port_rcv_becn			= (1 << 9),
-	cs_port_xmit_time_cong			= (1 << 10),
-	cs_port_xmit_wasted_bw			= (1 << 11),
-	cs_port_xmit_wait_data			= (1 << 12),
-	cs_port_rcv_bubble			= (1 << 13),
-	cs_port_mark_fecn			= (1 << 14),
-	cs_port_rcv_constraint_errors		= (1 << 15),
-	cs_port_rcv_switch_relay_errors		= (1 << 16),
-	cs_port_xmit_discards			= (1 << 17),
-	cs_port_xmit_constraint_errors		= (1 << 18),
-	cs_port_rcv_remote_physical_errors	= (1 << 19),
-	cs_local_link_integrity_errors		= (1 << 20),
-	cs_port_rcv_errors			= (1 << 21),
-	cs_excessive_buffer_overruns		= (1 << 22),
-	cs_fm_config_errors			= (1 << 23),
-	cs_link_error_recovery			= (1 << 24),
-	cs_link_downed				= (1 << 25),
-	cs_uncorrectable_errors			= (1 << 26),
+	CS_PORT_XMIT_DATA			= (1 << 0),
+	CS_PORT_RCV_DATA			= (1 << 1),
+	CS_PORT_XMIT_PKTS			= (1 << 2),
+	CS_PORT_RCV_PKTS			= (1 << 3),
+	CS_PORT_MCAST_XMIT_PKTS			= (1 << 4),
+	CS_PORT_MCAST_RCV_PKTS			= (1 << 5),
+	CS_PORT_XMIT_WAIT			= (1 << 6),
+	CS_SW_PORT_CONGESTION			= (1 << 7),
+	CS_PORT_RCV_FECN			= (1 << 8),
+	CS_PORT_RCV_BECN			= (1 << 9),
+	CS_PORT_XMIT_TIME_CONG			= (1 << 10),
+	CS_PORT_XMIT_WASTED_BW			= (1 << 11),
+	CS_PORT_XMIT_WAIT_DATA			= (1 << 12),
+	CS_PORT_RCV_BUBBLE			= (1 << 13),
+	CS_PORT_MARK_FECN			= (1 << 14),
+	CS_PORT_RCV_CONSTRAINT_ERRORS		= (1 << 15),
+	CS_PORT_RCV_SWITCH_RELAY_ERRORS		= (1 << 16),
+	CS_PORT_XMIT_DISCARDS			= (1 << 17),
+	CS_PORT_XMIT_CONSTRAINT_ERRORS		= (1 << 18),
+	CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS	= (1 << 19),
+	CS_LOCAL_LINK_INTEGRITY_ERRORS		= (1 << 20),
+	CS_PORT_RCV_ERRORS			= (1 << 21),
+	CS_EXCESSIVE_BUFFER_OVERRUNS		= (1 << 22),
+	CS_FM_CONFIG_ERRORS			= (1 << 23),
+	CS_LINK_ERROR_RECOVERY			= (1 << 24),
+	CS_LINK_DOWNED				= (1 << 25),
+	CS_UNCORRECTABLE_ERRORS			= (1 << 26),
 };
 
 struct stl_clear_port_status {
@@ -2280,6 +2280,89 @@ struct stl_port_error_counters64_msg {
 		} vls[0];
 		/* array size defined by #bits set in vl_select_mask */
 	} port[1]; /* array size defined by #ports in attribute modifier */
+};
+
+struct stl_port_error_info_msg {
+	__be64 port_select_mask[4];
+	__be32 error_info_select_mask;
+	__be32 reserved1;
+	struct _port_ei {
+
+		u8 port_number;
+		u8 reserved2[7];
+
+		/* PortRcvErrorInfo */
+		struct {
+			u8 status_and_code;
+			union {
+				u8 raw[17];
+				struct {
+					/* EI1to12 format */
+					u8 packet_flit1[8];
+					u8 packet_flit2[8];
+					u8 remaining_flit_bits12;
+				} ei1to12;
+				struct {
+					u8 packet_bytes[8];
+					u8 remaining_flit_bits;
+				} ei13;
+			} ei;
+			u8 reserved3[6];
+		} port_rcv_ei;
+
+		/* ExcessiveBufferOverrunInfo */
+		struct {
+			u8 status_and_sc;
+			u8 reserved4[7];
+		} excessive_buffer_overrun_ei;
+
+		/* PortXmitConstraintErrorInfo */
+		struct {
+			u8 status;
+			u8 reserved5;
+			__be16 pkey;
+			__be32 slid;
+		} port_xmit_constraint_ei;
+
+		/* PortRcvConstraintErrorInfo */
+		struct {
+			u8 status;
+			u8 reserved6;
+			__be16 pkey;
+			__be32 slid;
+		} port_rcv_constraint_ei;
+
+		/* PortRcvSwitchRelayErrorInfo */
+		struct {
+			u8 status_and_code;
+			u8 reserved7[3];
+			__u32 error_info;
+		} port_rcv_switch_relay_ei;
+
+		/* UncorrectableErrorInfo */
+		struct {
+			u8 status_and_code;
+			u8 reserved8;
+		} uncorrectable_ei;
+
+		/* FMConfigErrorInfo */
+		struct {
+			u8 status_and_code;
+			u8 error_info;
+			__u32 reserved9;
+		} fm_config_ei;
+	} port[1]; /* actual array size defined by #ports in attr modifier */
+};
+
+/* stl_port_error_info_msg error_info_select_mask bit definitions */
+enum error_info_selects {
+	ES_PORT_RCV_ERROR_INFO			= (1 << 31),
+	ES_EXCESSIVE_BUFFER_OVERRUN_INFO	= (1 << 30),
+	ES_PORT_XMIT_CONSTRAINT_ERROR_INFO	= (1 << 29),
+	ES_PORT_RCV_CONSTRAINT_ERROR_INFO	= (1 << 28),
+	ES_PORT_RCV_SWITCH_RELAY_ERROR_INFO	= (1 << 27),
+	ES_UNCORRECTABLE_ERROR_INFO		= (1 << 26),
+	ES_FM_CONFIG_ERROR_INFO			= (1 << 25)
 };
 
 static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
@@ -2739,6 +2822,92 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	return reply(pmp);
 }
 
+static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
+				 struct ib_device *ibdev, u8 port)
+{
+	size_t response_data_size;
+	struct _port_ei *rsp;
+	struct stl_port_error_info_msg *req;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u64 port_mask;
+	u32 num_ports;
+	unsigned long port_num;
+	u8 num_pslm;
+	u64 reg;
+
+	req = (struct stl_port_error_info_msg *)pmp->data;
+	rsp = (struct _port_ei *)&(req->port[0]);
+
+	num_ports = STL_AM_NPORT(be32_to_cpu(pmp->mad_hdr.attr_mod));
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+
+	memset(rsp, 0, sizeof(*rsp));
+
+	if (num_ports != 1 || num_ports != num_pslm) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	/* Sanity check */
+	response_data_size = sizeof(struct stl_port_error_info_msg);
+
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	/*
+	 * The bit set in the mask needs to be consistent with the port
+	 * the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+				  sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	/* PortRcvErrorInfo */
+	rsp->port_rcv_ei.status_and_code =
+		dd->err_info_rcvport.status_and_code;
+	memcpy(&rsp->port_rcv_ei.ei.ei1to12.packet_flit1,
+		&dd->err_info_rcvport.packet_flit1, sizeof(u64));
+	memcpy(&rsp->port_rcv_ei.ei.ei1to12.packet_flit2,
+		&dd->err_info_rcvport.packet_flit2, sizeof(u64));
+
+	/* ExcessiverBufferOverrunInfo */
+	reg = read_csr(dd, WFR_RCV_ERR_INFO);
+	if (reg & WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK) {
+		/* if the RcvExcessBufferOverrun bit is set, save SC of
+		 * first pkt that encountered an excess buffer overrun */
+		u8 tmp = (u8)reg;
+		tmp &=  WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SC_SMASK;
+		tmp <<= 2;
+		rsp->excessive_buffer_overrun_ei.status_and_sc = tmp;
+		/* set the status bit */
+		rsp->excessive_buffer_overrun_ei.status_and_sc |= 0x80;
+	}
+
+	/* PortXmitConstraintErrorInfo */
+	/* FIXME this error counter isn't implemented yet */
+
+	/* PortRcvConstraintErrorInfo */
+	/* FIXME this error counter isn't implemented yet */
+
+	/* PortRcvSwitchRelayErrorInfo */
+	/* FIXME this error counter isn't relevant to HFIs */
+
+	/* UncorrectableErrorInfo */
+	rsp->uncorrectable_ei.status_and_code = dd->err_info_uncorrectable;
+
+	/* FMConfigErrorInfo */
+	rsp->fm_config_ei.status_and_code = dd->err_info_fmconfig;
+
+	return reply(pmp);
+}
+
 static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 				  struct ib_device *ibdev, u8 port)
 {
@@ -2759,62 +2928,137 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	 * handled, so when pma_get_stl_portstatus() gets a fix,
 	 * the corresponding change should be made here as well.
 	 */
-	if (counter_select & cs_port_xmit_data)
+	if (counter_select & CS_PORT_XMIT_DATA)
 		write_csr(dd, DCC_PRF_PORT_XMIT_DATA_CNT, 0);
 
-	if (counter_select & cs_port_rcv_data)
+	if (counter_select & CS_PORT_RCV_DATA)
 		write_csr(dd, DCC_PRF_PORT_RCV_DATA_CNT, 0);
 
-	if (counter_select & cs_port_xmit_pkts)
+	if (counter_select & CS_PORT_XMIT_PKTS)
 		write_csr(dd, DCC_PRF_PORT_XMIT_PKTS_CNT, 0);
 
-	if (counter_select & cs_port_rcv_pkts)
+	if (counter_select & CS_PORT_RCV_PKTS)
 		write_csr(dd, DCC_PRF_PORT_RCV_PKTS_CNT, 0);
 
-	if (counter_select & cs_port_mcast_xmit_pkts)
+	if (counter_select & CS_PORT_MCAST_XMIT_PKTS)
 		write_csr(dd, DCC_PRF_PORT_XMIT_MULTICAST_CNT, 0);
 
-	if (counter_select & cs_port_mcast_rcv_pkts)
+	if (counter_select & CS_PORT_MCAST_RCV_PKTS)
 		write_csr(dd, DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT, 0);
 
-	if (counter_select & cs_port_xmit_wait) {
+	if (counter_select & CS_PORT_XMIT_WAIT) {
 		offset = SEND_WAIT_CNT * 8 + WFR_SEND_COUNTER_ARRAY64;
 		write_csr(dd, offset, 0);
 	}
 
 	/* ignore cs_sw_portCongestion for HFIs */
 
-	if (counter_select & cs_port_rcv_fecn)
+	if (counter_select & CS_PORT_RCV_FECN)
 		write_csr(dd, DCC_PRF_PORT_RCV_FECN_CNT, 0);
-	if (counter_select & cs_port_rcv_becn)
+	if (counter_select & CS_PORT_RCV_BECN)
 		write_csr(dd, DCC_PRF_PORT_RCV_BECN_CNT, 0);
 
 	/* ignore cs_port_xmit_time_cong for HFIs */
 	/* ignore cs_port_xmit_wasted_bw for now */
 	/* ignore cs_port_xmit_wait_data for now */
-	if (counter_select & cs_port_rcv_bubble)
+	if (counter_select & CS_PORT_RCV_BUBBLE)
 		write_csr(dd, DCC_PRF_PORT_RCV_BUBBLE_CNT, 0);
-	if (counter_select & cs_port_mark_fecn)
+	if (counter_select & CS_PORT_MARK_FECN)
 		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);
 	/* ignore cs_port_rcv_constraint_errors for now */
 	/* ignore cs_port_rcv_switch_relay_errors for HFIs */
 	/* ignore cs_port_xmit_discards for now */
 	/* ignore cs_port_xmit_constraint_errors for now */
-	if (counter_select & cs_port_rcv_remote_physical_errors)
+	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT, 0);
 	/* ignore cs_local_link_integrity_errors for now */
-	if (counter_select & cs_port_rcv_errors)
+	if (counter_select & CS_PORT_RCV_ERRORS)
 		write_csr(dd, DCC_ERR_PORTRCV_ERR_CNT, 0);
 	/* ignore cs_excessive_buffer_overruns for now */
-	if (counter_select & cs_fm_config_errors)
+	if (counter_select & CS_FM_CONFIG_ERRORS)
 		write_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT, 0);
 	/* ignore cs_link_error_recovery for now */
 	/* ignore cs_link_downed for now */
-	if (counter_select & cs_uncorrectable_errors)
+	if (counter_select & CS_UNCORRECTABLE_ERRORS)
 		write_csr(dd, DCC_ERR_UNCORRECTABLE_CNT, 0);
 
 	return reply(pmp);
 }
+
+static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
+				 struct ib_device *ibdev, u8 port)
+{
+	struct _port_ei *rsp;
+	struct stl_port_error_info_msg *req;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u64 port_mask;
+	u32 num_ports;
+	unsigned long port_num;
+	u8 num_pslm;
+	u32 error_info_select;
+
+	req = (struct stl_port_error_info_msg *)pmp->data;
+	rsp = (struct _port_ei *)&(req->port[0]);
+
+	num_ports = STL_AM_NPORT(be32_to_cpu(pmp->mad_hdr.attr_mod));
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+
+	memset(rsp, 0, sizeof(*rsp));
+
+	if (num_ports != 1 || num_ports != num_pslm) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	/*
+	 * The bit set in the mask needs to be consistent with the port
+	 * the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+				  sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply(pmp);
+	}
+
+	error_info_select = be32_to_cpu(req->error_info_select_mask);
+
+	/* PortRcvErrorInfo */
+	if (error_info_select & ES_PORT_RCV_ERROR_INFO)
+		/* turn off status bit */
+		dd->err_info_rcvport.status_and_code &= ~0x80;
+
+	/* ExcessiverBufferOverrunInfo */
+	if (error_info_select & ES_EXCESSIVE_BUFFER_OVERRUN_INFO)
+		/* status bit is essentially kept in the h/w - bit 5 of
+		 * WFR_RCV_ERR_INFO */
+		write_csr(dd, WFR_RCV_ERR_INFO,
+			  WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK);
+
+	/* PortXmitConstraintErrorInfo */
+	/* FIXME this error counter isn't implemented yet */
+
+	/* PortRcvConstraintErrorInfo */
+	/* FIXME this error counter isn't implemented yet */
+
+	/* PortRcvSwitchRelayErrorInfo */
+	/* FIXME this error counter isn't relevant to HFIs */
+
+	/* UncorrectableErrorInfo */
+	if (error_info_select & ES_UNCORRECTABLE_ERROR_INFO)
+		/* turn off status bit */
+		dd->err_info_uncorrectable &= ~0x80;
+
+	/* FMConfigErrorInfo */
+	if (error_info_select & ES_FM_CONFIG_ERROR_INFO)
+		/* turn off status bit */
+		dd->err_info_fmconfig &= ~0x80;
+
+	return reply(pmp);
+}
+
 #else /* !CONFIG_STL_MGMT */
 
 static int pma_get_classportinfo(struct ib_pma_mad *pmp,
@@ -2930,7 +3174,7 @@ static int pma_set_portsamplescontrol(struct ib_pma_mad *pmp,
 bail:
 	return ret;
 }
-#endif /* !CONFIG_STL_MGMT */
+#endif /* CONFIG_STL_MGMT */
 
 static u64 get_counter(struct qib_ibport *ibp, struct qib_pportdata *ppd,
 		       __be16 sel)
@@ -4259,6 +4503,9 @@ static int process_perf_stl(struct ib_device *ibdev, u8 port,
 		case STL_PM_ATTRIB_ID_ERROR_PORT_COUNTERS:
 			ret = pma_get_stl_porterrors(pmp, ibdev, port);
 			goto bail;
+		case STL_PM_ATTRIB_ID_ERROR_INFO:
+			ret = pma_get_stl_errorinfo(pmp, ibdev, port);
+			goto bail;
 #if 0
 		case IB_PMA_PORT_SAMPLES_CONTROL:
 			ret = pma_get_portsamplescontrol(pmp, ibdev, port);
@@ -4289,6 +4536,9 @@ static int process_perf_stl(struct ib_device *ibdev, u8 port,
 		switch (pmp->mad_hdr.attr_id) {
 		case STL_PM_ATTRIB_ID_CLEAR_PORT_STATUS:
 			ret = pma_set_stl_portstatus(pmp, ibdev, port);
+			goto bail;
+		case STL_PM_ATTRIB_ID_ERROR_INFO:
+			ret = pma_set_stl_errorinfo(pmp, ibdev, port);
 			goto bail;
 #if 0
 		case IB_PMA_PORT_SAMPLES_CONTROL:

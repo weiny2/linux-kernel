@@ -1936,8 +1936,25 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	char *extra;
 	char buf[96];
 
+	if (reg & DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK) {
+		if (!(dd->err_info_uncorrectable & STL_EI_STATUS_SMASK)) {
+			info = read_csr(dd, DCC_ERR_INFO_UNCORRECTABLE);
+			dd->err_info_uncorrectable = info & STL_EI_CODE_SMASK;
+			/* set status bit */
+			dd->err_info_uncorrectable |= STL_EI_STATUS_SMASK;
+		}
+
+		/* strip so we don't see in the generic unhandled */
+		reg &= ~DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK;
+	}
+
 	if (reg & DCC_ERR_FLG_FMCONFIG_ERR_SMASK) {
 		info = read_csr(dd, DCC_ERR_INFO_FMCONFIG);
+		if (!(dd->err_info_fmconfig & STL_EI_STATUS_SMASK)) {
+			dd->err_info_fmconfig = info & STL_EI_CODE_SMASK;
+			/* set status bit */
+			dd->err_info_fmconfig |= STL_EI_STATUS_SMASK;
+		}
 		switch (info) {
 		case 0:
 			extra = "BadHeadDist: Distance violation between "
@@ -1986,7 +2003,19 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		info = read_csr(dd, DCC_ERR_INFO_PORTRCV);
 		hdr0 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR0);
 		hdr1 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR1);
-		switch (info) {
+		if (!(dd->err_info_rcvport.status_and_code &
+		      STL_EI_STATUS_SMASK)) {
+			dd->err_info_rcvport.status_and_code =
+				info & STL_EI_CODE_SMASK;
+			/* set status bit */
+			dd->err_info_rcvport.status_and_code |=
+				STL_EI_STATUS_SMASK;
+			/* save first 2 flits in the packet that caused
+			 * the error */
+			 dd->err_info_rcvport.packet_flit1 = hdr0;
+			 dd->err_info_rcvport.packet_flit2 = hdr1;
+		}
+		switch (info & 0xf) {
 		case 1:
 			extra = "BadPktLen: Illegal PktLen";
 			break;

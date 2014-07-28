@@ -474,6 +474,10 @@ struct cc_table_shadow {
 #define STL_AM_ASYNC(am)	((am & STL_AM_ASYNC_SMASK) >> \
 					STL_AM_ASYNC_SHIFT)
 
+/* error info macros */
+#define STL_EI_STATUS_SMASK	0x80
+#define STL_EI_CODE_SMASK	0x0f
+
 struct vl_limit {
 	__be16 dedicated;
 	__be16 shared;
