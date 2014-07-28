@@ -821,6 +821,8 @@ struct sdma_engine *sdma_select_engine_vl(
 int qib_sdma_make_progress(struct sdma_engine *);
 void sdma_update_tail(struct sdma_engine *, u16);
 
+void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *);
+
 #ifdef JAG_SDMA_VERBOSITY
 /* XXX JAG SDMA - Temporary debug/dump routine */
 void sdma_dumpstate(struct sdma_engine *);

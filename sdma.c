@@ -1257,6 +1257,26 @@ void sdma_dumpstate(struct sdma_engine *sde)
 }
 #endif
 
+#define SDE_FMT "SDE %u STE %s C 0x%lld S 0x%lld T(HW) 0x%lld T(SW) 0x%lld H(HW) 0x%lld H(SW) 0x%lld\n"
+/**
+ * sdma_seqfile_dump_sde() - debugfs dump of sde
+ * @s - seq file
+ * @sde - send dma engine to dump
+ *
+ * This routine dumps the sde to the indicated seq file.
+ */
+void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
+{
+	seq_printf(s, SDE_FMT, sde->this_idx,
+		sdma_state_name(sde->state.current_state),
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CTRL),
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_STATUS),
+		(unsigned long long)sde->descq_tail,
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_TAIL),
+		(unsigned long long)sde->descq_head,
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD));
+}
+
 /*
  * Complete a request when sdma not running; likely only request
  * but to simplify the code, always queue it, then process the full

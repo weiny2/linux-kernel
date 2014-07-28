@@ -40,6 +40,7 @@
 #include "debugfs.h"
 #include "device.h"
 #include "qp.h"
+#include "sdma.h"
 
 static struct dentry *hfi_dbg_root;
 
@@ -251,6 +252,49 @@ static int _qp_stats_seq_show(struct seq_file *s, void *iter_ptr)
 
 DEBUGFS_SEQ_FILE(qp_stats)
 
+static void *_sdes_seq_start(struct seq_file *s, loff_t *pos)
+{
+	struct qib_ibdev *ibd;
+	struct hfi_devdata *dd;
+
+	rcu_read_lock();
+	ibd = (struct qib_ibdev *)s->private;
+	dd = dd_from_dev(ibd);
+	if (!dd->per_sdma || *pos >= dd->num_sdma)
+		return NULL;
+	return pos;
+}
+
+static void *_sdes_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi_devdata *dd = dd_from_dev(ibd);
+
+	++*pos;
+	if (!dd->per_sdma || *pos >= dd->num_sdma)
+		return NULL;
+	return pos;
+}
+
+
+static void _sdes_seq_stop(struct seq_file *s, void *v)
+{
+	rcu_read_unlock();
+}
+
+static int _sdes_seq_show(struct seq_file *s, void *v)
+{
+	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi_devdata *dd = dd_from_dev(ibd);
+	loff_t *spos = v;
+	loff_t i = *spos;
+
+	sdma_seqfile_dump_sde(s, &dd->per_sdma[i]);
+	return 0;
+}
+
+DEBUGFS_SEQ_FILE(sdes)
+
 /* read the per-device counters */
 static ssize_t dev_counters_read(struct file *file, char __user *buf,
 				 size_t count, loff_t *ppos)
@@ -403,6 +447,7 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 	DEBUGFS_SEQ_FILE_CREATE(opcode_stats, ibd->hfi_ibdev_dbg, ibd);
 	DEBUGFS_SEQ_FILE_CREATE(ctx_stats, ibd->hfi_ibdev_dbg, ibd);
 	DEBUGFS_SEQ_FILE_CREATE(qp_stats, ibd->hfi_ibdev_dbg, ibd);
+	DEBUGFS_SEQ_FILE_CREATE(sdes, ibd->hfi_ibdev_dbg, ibd);
 	/* dev counter files */
 	for (i = 0; i < ARRAY_SIZE(cntr_ops); i++)
 		DEBUGFS_FILE_CREATE(cntr_ops[i].name,
