@@ -804,7 +804,7 @@ static void mem_timer(unsigned long data)
 	}
 }
 
-static void update_sge(struct qib_sge_state *ss, u32 length)
+void update_sge(struct qib_sge_state *ss, u32 length)
 {
 	struct qib_sge *sge = &ss->sge;
 

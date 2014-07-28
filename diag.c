@@ -1717,10 +1717,8 @@ void snoop_recv_handler(struct hfi_packet *packet)
 	snoop_dbg("PACKET IN: hdr size %d tlen %d data %p\n", header_size, tlen,
 		  data);
 
-#ifdef SNOOP_RING_TRACE
 	trace_snoop_capture(ppd->dd, header_size, hdr, tlen - header_size,
 			    data);
-#endif
 
 	if (!ppd->dd->hfi_snoop.filter_callback) {
 		snoop_dbg("filter not set\n");
@@ -1863,8 +1861,6 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	u32 *hdr = (u32 *) ibhdr;
 	u32 length = 0;
 	struct qib_sge_state temp_ss;
-	struct qib_sge temp_sge;
-	struct qib_sge *sge;
 	void *data = NULL;
 	void *data_start = NULL;
 	int ret;
@@ -1877,8 +1873,8 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 
 	md.u.pbc = 0;
 
-	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u lrh[2] %u\n",
-		 hdrwords, len, plen, dwords, hdr_len);
+	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u ss->total_len %u tlen %u/n",
+		  hdrwords, len, plen, dwords, ss->total_len, tlen);
 
 	if (ppd->dd->hfi_snoop.mode_flag & HFI_PORT_SNOOP_MODE)
 		snoop_mode = 1;
@@ -1919,55 +1915,39 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	}
 
 	if (ss) {
-		/*
-		 * Copy payload, basically a nondestructive version of
-		 * qib_from_from_sge() copy sges and work on them instead of the
-		 * actual sges.
-		 */
 		data = s_packet->data + hdr_len + md_len;
 		data_start = data;
+
+		/*
+		 * Copy SGE State
+		 * The update_sge() function below will not modify the
+		 * individual SGEs in the array. It will make a copy each time
+		 * and operate on that. So we only need to copy this instance
+		 * and it won't impact PIO.
+		 */
+		temp_ss = *ss;
+
 		length = ss->total_len;
-		memcpy(&temp_ss, ss, sizeof(struct qib_sge_state));
-		memcpy(&temp_sge, &temp_ss.sge, sizeof(struct qib_sge));
-		sge = &temp_sge;
-
+		snoop_dbg("Need to copy %d bytes\n", length);
 		while (length) {
-			u32 len = sge->length;
-			if (len > length)
-				len = length;
-			if (len > sge->sge_length)
-				len = sge->sge_length;
-			BUG_ON(len == 0);
-			memcpy(data, sge->vaddr, len);
-			sge->vaddr += len;
-			sge->length -= len;
-			sge->sge_length -= len;
-			if (sge->sge_length == 0) {
-				if (--temp_ss.num_sge)
-					temp_ss.sg_list++;
-				memcpy(&temp_sge, &temp_ss.sg_list,
-					sizeof(struct qib_sge));
-				sge = &temp_sge;
-			} else if (sge->length == 0 && sge->mr->lkey) {
-				if (++sge->n >= QIB_SEGSZ) {
-					if (++sge->m >= sge->mr->mapsz)
-						break;
-					sge->n = 0;
-				}
-				sge->vaddr =
-				    sge->mr->map[sge->m]->segs[sge->n].vaddr;
-				sge->length =
-				    sge->mr->map[sge->m]->segs[sge->n].length;
+			void *addr = temp_ss.sge.vaddr;
+			u32 slen = temp_ss.sge.length;
+			if (slen > len) {
+				slen = len;
+				snoop_dbg("slen %d > len %d", slen, len);
 			}
-			data += len;
-			length -= len;
+			snoop_dbg("copy %d to %p", slen, addr);
+			memcpy(data, addr, slen);
+			update_sge(&temp_ss, slen);
+			length -= slen;
+			data += slen;
+			snoop_dbg("data is now %p bytes left %d", data, length);
 		}
+		snoop_dbg("Completed SGE copy");
 
-#ifdef SNOOP_RING_TRACE
-		/*This gets the header and payload, what about the CRC?*/
+		/* This gets the header and payload */
 		trace_snoop_capture(ppd->dd, hdr_len, ibhdr, ss->total_len,
 				    data_start);
-#endif
 	}
 
 	/*

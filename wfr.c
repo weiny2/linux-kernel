@@ -6492,7 +6492,7 @@ bail:
  * @flags: special case flags or-ed in built pbc
  * @srate: static rate
  * @vl: vl
- * @dwlen: dwork length
+ * @dwlen: dword length (header words + data words + pbc words)
  *
  * Create a PBC with the given flags, rate, VL, and length.
  *

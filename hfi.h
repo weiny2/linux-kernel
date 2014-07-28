@@ -1366,6 +1366,8 @@ extern void process_receive_eager(struct hfi_packet *packet);
 
 extern void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 
+extern void update_sge(struct qib_sge_state *ss, u32 length);
+
 /* global module parameter variables */
 extern unsigned int max_mtu;
 extern unsigned int default_mtu;

@@ -400,7 +400,6 @@ DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
 	TP_PROTO(struct hfi_devdata *dd, struct qib_ib_header *hdr),
 	TP_ARGS(dd, hdr));
 
-#ifdef SNOOP_RING_TRACE
 #define SNOOP_PRN \
 	"slid %.4x dlid %.4x mgmt_class %d qpn 0x%.6x opcode 0x%.2x,%s " \
 	"svc lvl %d pkey 0x%.4x [header = %d bytes] [data = %d bytes]"
@@ -465,7 +464,6 @@ TRACE_EVENT(snoop_capture,
 		__entry->data_len
 	)
 );
-#endif
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi_ctxts
