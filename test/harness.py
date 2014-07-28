@@ -188,6 +188,13 @@ test_list = [
       "desc" : "Run simple packet capture tests.",
     },
 
+    { "test_name" : "SnoopIntegrity",
+      "test_exe" : "SnoopInteg.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "snoop",
+      "desc" : "Sweep fabric and check MD5 sums of packets *requires ifs_fm*",
+    },
+
     { "test_name" : "SnoopFilter",
       "test_exe" : "SnoopFilter.py",
       "args" : "--nodelist %HOST[2]%",

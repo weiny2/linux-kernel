@@ -36,8 +36,8 @@ def main():
     RegLib.test_log(0, "Running on host: " + host_name)
 
     # Enable tracing
-    trace_points.append("/sys/kernel/debug/tracing/events/hfi_trace/enable")
-    trace_points.append("/sys/kernel/debug/tracing/events/hfi_snoop/enable")
+    trace_points.append("/sys/kernel/debug/tracing/events/hfi_trace/enable") # All of the hfi_dbg/hfi_cdbg calls
+    trace_points.append("/sys/kernel/debug/tracing/events/hfi_snoop/enable") # Snoop Capture
     trace_points.append("/sys/kernel/debug/tracing/events/hfi_ibhdrs/input_ibhdr/enable")
     trace_points.append("/sys/kernel/debug/tracing/events/hfi_ibhdrs/output_ibhdr/enable")
     

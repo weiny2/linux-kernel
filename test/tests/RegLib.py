@@ -11,6 +11,9 @@ import shlex
 import tempfile
 import time
 import random
+import struct
+import hashlib
+from ctypes import *
 from optparse import OptionParser
 from datetime import datetime
 
@@ -78,6 +81,129 @@ def chomp_comma(str):
 
 def get_test_port():
     return random.randrange(1025, 65535)
+
+def md5_from_packet(packet):
+
+    # Build the md5 of the packet
+    m = hashlib.md5()
+    m.update(packet)
+    return m.hexdigest()
+
+# Parse a string representation of a packet
+def parse_packet(packet, has_metadata=False):
+
+    offset = 0
+
+    # First thing we do is strip off the last 4 bytes because that is CRC
+    # which is meaningless here.
+    packet = packet[:-4]
+
+    # ---------
+    # Meta Data
+    # ---------
+    if has_metadata == True:
+        port = struct.unpack('B', packet[offset:offset+1])[0]
+        offset += 1
+
+        dir_val = struct.unpack('B', packet[offset:offset+1])[0]
+        offset = offset + 1
+        dir = ""
+        if dir_val == 0:
+            dir = "EGRESS"
+        else:
+            dir = "INGRESS"
+
+        offset += 6
+        pbc_rhf = struct.unpack('Q', packet[offset:offset+8])[0]
+        offset += 8
+        md_offset = 16
+        print "MD5:", md5_from_packet(packet[16:]), "Len:", len(packet[16:]), "bytes"
+        print "MetaData:\n\tPort:", port, "\n\tDir:", dir, "\n\tPBC/RHF:", hex(pbc_rhf)
+    else:
+        md_offset = 0
+        print "MD5:", md5_from_packet(packet), "Len:", len(packet), "bytes"
+
+    # ----------------
+    # LRH - big endian
+    # ----------------
+    vl_lver = struct.unpack('B', packet[offset:offset+1])[0]
+    offset += 1
+    vl = (vl_lver >> 4) & 0xF
+    lver = vl_lver & 0xF
+
+    sl_lnh = struct.unpack('B', packet[offset:offset+1])[0]
+    offset += 1
+    sl = (sl_lnh >> 4) & 0xF
+    lnh = sl_lnh & 0x3
+
+    dlid = struct.unpack('>H', packet[offset:offset+2])[0]
+    offset += 2
+
+    pktlen = struct.unpack('>H', packet[offset:offset+2])[0]
+    offset += 2
+    pktlen = pktlen & 0xFFF
+
+    slid = struct.unpack('>H', packet[offset:offset+2])[0]
+    offset += 2
+
+    print "LRH:\n\tVL:", vl, "LVer:", lver, "SL:", sl, "LNH:", lnh
+    print "\tDLID:", hex(dlid), "SLID:", hex(slid), "PktLen:", pktlen
+
+    if lnh == 0:
+        test_fail("Error: Detected Raw packet, unsupported")
+    elif lnh == 1:
+        test_fail("Error: Detected Ipv6 packet, unsupported")
+    elif lnh == 3:
+        print "GRH: Detected. Skipping though"
+        offset += 40
+    elif lnh != 2:
+        test_fail("Error: Undetectable packet")
+
+    # ----------------
+    # BTH - big endian
+    # ----------------
+    opcode = struct.unpack('B', packet[offset:offset+1])[0]
+    offset += 1
+
+    # skip solicited event, migration state, padding, and tversion
+    offset += 1
+
+    pkey = struct.unpack('>H', packet[offset:offset+2])[0]
+    offset += 2
+
+    f_b_qp = struct.unpack('>I', packet[offset:offset+4])[0]
+    offset += 4
+    dest_qp = f_b_qp & 0xFFFFFF00
+
+    psn_resv = struct.unpack('>I', packet[offset:offset+4])[0]
+    offset += 4
+    psn = psn_resv & 0x7FFFFFFF
+
+    print "BTH:"
+    print "\tOpcode:", hex(opcode), "Pkey:", hex(pkey)
+    print "\tDestQP:", hex(dest_qp), "PSN:", hex(psn)
+
+    # Now go on to the payload
+    bytes = len(packet)
+    line_count = 0
+    line_offset = 0
+    offset = md_offset # show the full packet starting at end of metadata
+    while offset < bytes:
+        byte = struct.unpack('B', packet[offset:offset+1])[0]
+        if line_count == 0:
+            print line_offset, ":: ",
+            line_offset += 16
+
+        line_count += 1
+        print format(byte,'X').zfill(2),
+
+        if line_count == 16:
+            print ""
+            line_count = 0
+        offset += 1
+
+    # Packet end
+    print ""
 
 class HostInfo:
     """Holds information on a host under test"""
@@ -489,4 +615,3 @@ class TestInfo:
 
     def which_sm(self):
         return self.sm
-

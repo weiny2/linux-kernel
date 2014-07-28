@@ -14,6 +14,8 @@ import array
 import select
 import signal
 import sys
+import struct
+import hashlib
 from ctypes import *
 
 def print_packet(bytes):
@@ -58,11 +60,13 @@ def print_packet(bytes):
 
     vl = bytes[vl_offset] >> 4
 
+    # This is wrong it only picks up the last byte but works for short packets
+    # leaving alone b/c tests that use it don't use big packets
     pkt_len = bytes[pkt_len_offset]
 
     print "BytesRead:", bytes_read, "PacketBytes:", packet_bytes,
     print "Port:", port, "Dir:", direction, "PBC|RHF:", pbcrhf,
-    print "SLID:", slid, "DLID:", dlid, "VL:", vl, "PktWords:", pkt_len
+    print "SLID:", slid, "DLID:", dlid, "VL:", vl
 
 def signal_handler(signal, frame):
 
@@ -88,6 +92,16 @@ def main():
     dev = "/dev/hfi_diagpkt0"
     set_ioctl = 0
     test_fail = 0
+
+    test_info = RegLib.TestInfo()
+
+    dump = 0
+    args = test_info.parse_extra_args()
+    verbose = args[0]
+    print "verbose parm is", verbose
+    if verbose != None:
+        if verbose == "verbose":
+            dump = 1
 
     # Open the device and create a file object.
     # Need a file object for sending ioctl
@@ -130,9 +144,10 @@ def main():
     RegLib.test_log(0, "Waiting for a packet")
     while True:
         packet = os.read(fd, IB_PACKET_SIZE)
-        packet_len = str(len(packet))
         bytes = bytearray(packet)
         print_packet(bytes)
+        if dump:
+            RegLib.parse_packet(packet, True)
 
 if __name__ == "__main__":
     main()
