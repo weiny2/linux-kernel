@@ -268,8 +268,17 @@ struct vm_operations_struct {
 	int (*migrate)(struct vm_area_struct *vma, const nodemask_t *from,
 		const nodemask_t *to, unsigned long flags);
 #endif
+
+	/* !!!!!!KABI WARNING!!!!!!!!!
+	 *
+	 * non-linear mappings will go away and the syscall will be emulated
+	 * by multiple mmaps. So this callback will not be needed in future.
+	 * Please DO NOT USE it in ANY OUT OF TREE code for anything else than
+	 * generic implementation or LET US KNOW why this doesn't suit your
+	 * needs via bugzilla.novell.com.
+	 */
 	/* called by sys_remap_file_pages() to populate non-linear mapping */
-	int (*remap_pages)(struct vm_area_struct *vma, unsigned long addr,
+	int (*__deprecated_remap_pages)(struct vm_area_struct *vma, unsigned long addr,
 			   unsigned long size, pgoff_t pgoff);
 };
 

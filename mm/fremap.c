@@ -102,7 +102,7 @@ out:
 	return err;
 }
 
-int generic_file_remap_pages(struct vm_area_struct *vma, unsigned long addr,
+int generic_file_remap_pages2(struct vm_area_struct *vma, unsigned long addr,
 			     unsigned long size, pgoff_t pgoff)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -120,7 +120,7 @@ int generic_file_remap_pages(struct vm_area_struct *vma, unsigned long addr,
 
 	return 0;
 }
-EXPORT_SYMBOL(generic_file_remap_pages);
+EXPORT_SYMBOL(generic_file_remap_pages2);
 
 /**
  * sys_remap_file_pages - remap arbitrary pages of an existing VM_SHARED vma
@@ -187,7 +187,7 @@ SYSCALL_DEFINE5(remap_file_pages, unsigned long, start, unsigned long, size,
 	if (!vma || !(vma->vm_flags & VM_SHARED))
 		goto out;
 
-	if (!vma->vm_ops || !vma->vm_ops->remap_pages)
+	if (!vma->vm_ops || !vma->vm_ops->__deprecated_remap_pages)
 		goto out;
 
 	if (start < vma->vm_start || start + size > vma->vm_end)
@@ -258,7 +258,10 @@ get_write_lock:
 	}
 
 	mmu_notifier_invalidate_range_start(mm, start, start + size);
-	err = vma->vm_ops->remap_pages(vma, start, size, pgoff);
+	WARN_ONCE(1, "The current implementation of remap_file_pages is deprecated "
+		  "and will be replaced by mmap emulation. "
+		  "Please let us know if this might be problem at bugzilla.novell.com.\n");
+	err = vma->vm_ops->__deprecated_remap_pages(vma, start, size, pgoff);
 	mmu_notifier_invalidate_range_end(mm, start, start + size);
 
 	/*
