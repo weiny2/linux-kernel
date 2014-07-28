@@ -1261,7 +1261,7 @@ out:
 static struct vm_operations_struct ceph_vmops = {
 	.fault		= filemap_fault,
 	.page_mkwrite	= ceph_page_mkwrite,
-	.remap_pages	= generic_file_remap_pages,
+	.__deprecated_remap_pages	= generic_file_remap_pages2,
 };
 
 int ceph_mmap(struct file *file, struct vm_area_struct *vma)
