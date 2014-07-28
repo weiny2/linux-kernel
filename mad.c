@@ -2406,6 +2406,8 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	u8 port_num = req->port_num;
 	u8 num_vls = hweight32(vl_select_mask);
 	struct _vls_pctrs *vlinfo;
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int vfi;
 
 	/* FIXME
@@ -2421,7 +2423,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		return reply(pmp);
 	}
 
-	if (nports != 1 || (req->port_num && req->port_num != port)
+	if (nports != 1 || (port_num && port_num != port)
 	    || num_vls > STL_MAX_VLS || (vl_select_mask & ~WFR_VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		return reply(pmp);
@@ -2479,7 +2481,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	rsp->fm_config_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
-	/* rsp->link_downed - DC (table 13-11 WFR spec) */
+	rsp->link_downed = cpu_to_be32(ppd->link_downed);
 	rsp->uncorrectable_errors = /* XXX why is this only 8 bits? */
 		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
 	/* rsp->link_quality_indicator ??? */
@@ -2540,6 +2542,8 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 error_counter_summary = 0;
 	/* FIXME
 	 * some of the counters are not implemented. if the WFR spec
@@ -2563,7 +2567,7 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* link_error_recovery - DC (table 13-11 WFR spec) */
-	/* link_downed - DC (table 13-11 WFR spec) */
+	error_counter_summary += cpu_to_be32(ppd->link_downed);
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
 	/* link_quality_indicator ??? */
@@ -2804,7 +2808,7 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	rsp->fm_config_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
-	/* rsp->link_downed - DC (table 13-11 WFR spec) */
+	rsp->link_downed = cpu_to_be32(ppd->link_downed);
 	rsp->uncorrectable_errors = /* XXX why is this only 8 bits? */
 		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
 
@@ -2914,6 +2918,8 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	struct stl_clear_port_status *req =
 		(struct stl_clear_port_status *)pmp->data;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	u32 nports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	u64 portn = be64_to_cpu(req->port_select_mask[3]);
 	u32 counter_select = be32_to_cpu(req->counter_select_mask);
@@ -2978,7 +2984,8 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	if (counter_select & CS_FM_CONFIG_ERRORS)
 		write_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT, 0);
 	/* ignore cs_link_error_recovery for now */
-	/* ignore cs_link_downed for now */
+	if (counter_select & CS_LINK_DOWNED)
+		ppd->link_downed = 0;
 	if (counter_select & CS_UNCORRECTABLE_ERRORS)
 		write_csr(dd, DCC_ERR_UNCORRECTABLE_CNT, 0);
 

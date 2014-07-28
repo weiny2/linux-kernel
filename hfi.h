@@ -611,6 +611,8 @@ struct qib_pportdata {
 
 	/* port relative counter buffer */
 	u64 *cntrs;
+	/* count of 'link_err' interrupts from DC */
+	u32 link_downed;
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */

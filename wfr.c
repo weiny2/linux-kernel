@@ -1948,6 +1948,14 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		reg &= ~DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK;
 	}
 
+	if (reg & DCC_ERR_FLG_LINK_ERR_SMASK) {
+		struct qib_pportdata *ppd = dd->pport;
+		/* this counter saturates at (2^32) - 1 */
+		if (ppd->link_downed < (u32)UINT_MAX)
+			ppd->link_downed++;
+		reg &= ~DCC_ERR_FLG_LINK_ERR_SMASK;
+	}
+
 	if (reg & DCC_ERR_FLG_FMCONFIG_ERR_SMASK) {
 		info = read_csr(dd, DCC_ERR_INFO_FMCONFIG);
 		if (!(dd->err_info_fmconfig & STL_EI_STATUS_SMASK)) {
