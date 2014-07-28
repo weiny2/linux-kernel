@@ -1257,7 +1257,7 @@ void sdma_dumpstate(struct sdma_engine *sde)
 }
 #endif
 
-#define SDE_FMT "SDE %u STE %s C 0x%lld S 0x%lld T(HW) 0x%lld T(SW) 0x%lld H(HW) 0x%lld H(SW) 0x%lld\n"
+#define SDE_FMT "SDE %u STE %s C 0x%llx S 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s - seq file
@@ -1271,10 +1271,11 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		sdma_state_name(sde->state.current_state),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CTRL),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_STATUS),
-		(unsigned long long)sde->descq_tail,
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_TAIL),
-		(unsigned long long)sde->descq_head,
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD));
+		sde->descq_tail,
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD),
+		sde->descq_head,
+		(unsigned long long)*sde->head_dma);
 }
 
 /*
