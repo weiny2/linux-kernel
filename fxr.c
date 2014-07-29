@@ -1,0 +1,129 @@
+/*
+ * Copyright (c) 2013 - 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2008 - 2012 QLogic Corporation. All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * OpenIB.org BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#include <linux/pci.h>
+#include <linux/module.h>
+#include "hfi.h"
+#include "fxr.h"
+
+u64 read_csr(const struct hfi_devdata *dd, u32 offset)
+{
+	u64 val;
+
+	if (dd->kregbase) {
+		val = readq((void *)dd->kregbase + offset);
+		return le64_to_cpu(val);
+	}
+	return -1;
+}
+
+void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
+{
+	if (dd->kregbase)
+		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
+}
+
+/*
+ * Do HFI chip-specific and PCIe cleanup. Free dd memory.
+ */
+void hfi_pci_dd_free(struct hfi_devdata *dd)
+{
+	cleanup_interrupts(dd);
+
+	if (dd->kregbase)
+		iounmap((void __iomem *)dd->kregbase);
+
+	pci_set_drvdata(dd->pcidev, NULL);
+	kfree(dd);
+}
+
+/**
+ * hfi_pci_dd_init - chip-specific initialization
+ * @dev: the pci_dev for this HFI device
+ * @ent: pci_device_id struct for this dev
+ *
+ * Allocates, inits, and returns the devdata struct for this
+ * device instance.
+ *
+ * Do remaining PCIe setup, once dd is allocated, and save away
+ * fields required to re-initialize after a chip reset, or for
+ * various other purposes.
+ */
+struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
+				    const struct pci_device_id *ent)
+{
+	struct hfi_devdata *dd;
+	unsigned long len;
+	resource_size_t addr;
+	int ret;
+
+	dd = hfi_alloc_devdata(pdev, 0);
+	if (IS_ERR(dd))
+		return dd;
+
+	/*
+	 * Do remaining PCIe setup and save PCIe values in dd.
+	 * On return, we have the chip mapped.
+	 */
+
+	dd->pcidev = pdev;
+	pci_set_drvdata(pdev, dd);
+
+	/* FXR has a single 128 MB BAR. */
+	addr = pci_resource_start(pdev, 0);
+	len = pci_resource_len(pdev, 0);
+	pr_debug("BAR @ start 0x%lx len %lu\n", (long)addr, len);
+
+	dd->kregbase = ioremap_nocache(addr, len);
+	if (!dd->kregbase) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
+	dd->kregend = dd->kregbase + len;
+
+	/* Save BAR to rewrite after device reset. */
+	dd->pcibar0 = addr;
+	dd->pcibar1 = 0;
+	dd->physaddr = addr;		/* used for io_remap, etc. */
+
+	ret = setup_interrupts(dd, FXR_NUM_INTERRUPTS, 0);
+	if (ret)
+		goto err_post_alloc;
+
+	return dd;
+
+err_post_alloc:
+	hfi_pci_dd_free(dd);
+
+	return ERR_PTR(ret);
+}
