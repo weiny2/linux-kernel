@@ -141,6 +141,9 @@ void pio_copy(struct pio_buf *pbuf, u64 pbc, const void *from, size_t count)
 		dest += sizeof(u64);
 	}
 	/* TODO: update qw_written? */
+
+	/* finished with this buffer */
+	atomic_dec(&pbuf->sc->buffers_allocated);
 }
 
 /* USE_SHIFTS is faster in user-space tests on a Xeon X5570 @ 2.93GHz */
@@ -831,4 +834,7 @@ void seg_pio_copy_end(struct pio_buf *pbuf)
 	/* TODO: update qw_written? set carry_valid to 0?  set carry to 0 */
 	/* TODO: sanity check? pbuf->qw_written*sizeof(u64) ==
 		pbuf->block_count * WFR_PIO_BLOCK_SIZE */
+
+	/* finished with this buffer */
+	atomic_dec(&pbuf->sc->buffers_allocated);
 }

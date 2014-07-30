@@ -1377,6 +1377,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	/* must follow rcv context free - need to remove rcv's hooks */
 	for (ctxt = 0; ctxt < dd->num_send_contexts; ctxt++)
 		sc_free(dd->send_contexts[ctxt].sc);
+	dd->num_send_contexts = 0;
 	kfree(dd->send_contexts);
 	dd->send_contexts = NULL;
 	kfree(dd->boardname);

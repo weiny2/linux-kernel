@@ -51,6 +51,7 @@ union mix {
 
 /* an allocated PIO buffer */
 struct pio_buf {
+	struct send_context *sc;/* back pointer to owning send context */
 	pio_release_cb cb;	/* called when the buffer is released */
 	void *arg;		/* argument for cb */
 	void __iomem *start;	/* buffer start address */
@@ -66,7 +67,7 @@ struct pio_buf {
 /* cache line aligned pio buffer array */
 union pio_shadow_ring {
 	struct pio_buf pbuf;
-	u64 unused[8];		/* cache line spacer */
+	u64 unused[16];		/* cache line spacer */
 } ____cacheline_aligned;
 
 /* per-NUMA send context */
@@ -76,12 +77,16 @@ struct send_context {
 	void __iomem *base_addr;	/* start of PIO memory */
 	union pio_shadow_ring *sr;	/* shadow ring */
 	volatile __le64 *hw_free;	/* HW free counter */
+	struct work_struct halt_work;	/* halted context work queue entry */
 	int node;			/* context home node */
+	int type;			/* context type */
 	u32 context;			/* context number */
 	u32 credits;			/* number of blocks in context */
 	u32 sr_size;			/* size of the shadow ring */
 	u32 group;			/* credit return group */
-	u16 enabled;                    /* is the send ctxt enabled */
+	u16 enabled;                    /* is the context enabled? */
+	u16 halted;			/* is the context halted? */
+	u16 in_free;			/* is this structure being free'd? */
 	/* allocator fields */
 	spinlock_t alloc_lock ____cacheline_aligned_in_smp;
 	unsigned long fill;		/* official alloc count */
@@ -93,6 +98,7 @@ struct send_context {
 	u32 sr_tail;			/* shadow ring tail */
 	struct list_head piowait  ____cacheline_aligned_in_smp;       /* list for PIO waiters */
 	u64 credit_ctrl;		/* cache for credit control */
+	atomic_t buffers_allocated;	/* count of buffers allocated */
 };
 
 struct send_context_info {
@@ -131,9 +137,11 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa);
 void sc_free(struct send_context *sc);
 int sc_enable(struct send_context *sc);
 void sc_disable(struct send_context *sc);
+void sc_restart(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
 void sc_flush(struct send_context *sc);
 void sc_drop(struct send_context *sc);
+void sc_halting(struct send_context *sc);
 struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 			pio_release_cb cb, void *arg);
 void sc_release_update(struct send_context *sc);

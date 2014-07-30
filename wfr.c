@@ -522,6 +522,7 @@ static struct flag_table sc_err_status_flags[] = {
 /* 5-63 reserved*/
 };
 
+#if 0 /* no users at present */
 /*
  * Credit Return flags
  */
@@ -536,6 +537,7 @@ static struct flag_table credit_return_flags[] = {
 	FLAG_ENTRY("CreditReturnDueToForce", 0,
 		WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
 };
+#endif
 
 /*
  * DCC Error Flags
@@ -708,8 +710,6 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 				u16 *vl15buf, u8 *crc_sizes);
 static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 				u16 *link_widths);
-static void handle_send_context_err(struct hfi_devdata *dd,
-				unsigned int context, u64 err_status);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
 static void handle_dcc_err(struct hfi_devdata *dd,
@@ -770,13 +770,6 @@ static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
 /* 7*/	WFR_EE(SEND_ERR,	handle_txe_err,    "TxeErr")
 	/* the rest are reserved */
 };
-
-/*
- * Send context error interupt entry - refers to another register
- * containing more information.
- */
-static const struct err_reg_info sendctxt_err =
-	WFR_EE(SEND_CTXT_ERR,	handle_send_context_err, "SendCtxtErr");
 
 /*
  * SDMA error interupt entry - refers to another register containing more
@@ -1381,93 +1374,56 @@ static char *send_err_status_string(char *buf, int buf_len, u64 flags)
 			sc_err_status_flags, ARRAY_SIZE(sc_err_status_flags));
 }
 
+#if 0 /* no users at present */
+/* print credit return flag fields */
 static char *credit_return_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags,
 			credit_return_flags, ARRAY_SIZE(credit_return_flags));
 }
-
-/*
- * Handle a send context error interrupt on the given send context.
- */
-static void handle_send_context_err(struct hfi_devdata *dd,
-		unsigned int context, u64 err_status)
-{
-	struct send_context_info *sci;
-	struct send_context *sc;
-	u64 hw_free;
-	char flags[96];
-	int write_dropped = 0;
-	int packet_dropped = 0;
-	int sc_halted = 0;
-	int i;
-
-	if (context >= dd->num_send_contexts) {
-		dd_dev_err(dd, "unexpected out of range send contexter interrupt %u\n", context);
-		return;
-	}
-
-	sci = &dd->send_contexts[context];
-	sc = sci->sc;
-
-	/* by the time we are called, the credit return should have been
-	   updated */
-	hw_free = *sc->hw_free;
-
-	dd_dev_info(dd, "%s: sc%d:\n", __func__, sc->context);
-	dd_dev_info(dd, "%s:   hw_free: counter 0x%lx, flags: %s\n", __func__,
-		(unsigned long)(hw_free & WFR_CR_COUNTER_SMASK)
-			>> WFR_CR_COUNTER_SHIFT,
-		credit_return_string(flags, sizeof(flags), hw_free));
-	dd_dev_info(dd, "%s:   fill 0x%lx, free 0x%lx\n", __func__,
-		sc->fill, sc->free);
-	dd_dev_info(dd, "%s:   ErrStatus: %s", __func__,
-		send_err_status_string(flags, sizeof(flags), err_status));
-
-	/* find out what effect has been had on this context */
-	for (i = 0; i < ARRAY_SIZE(sc_err_status_flags); i++) {
-		if (err_status & sc_err_status_flags[i].flag) {
-			if (sc_err_status_flags[i].extra & SEC_WRITE_DROPPED)
-				write_dropped = 1;
-			if (sc_err_status_flags[i].extra & SEC_PACKET_DROPPED)
-				packet_dropped = 1;
-			if (sc_err_status_flags[i].extra & SEC_SC_HALTED)
-				sc_halted = 1;
-		}
-	}
-
-	if (write_dropped) {
-		// TODO: do something?
-	}
-
-	if (packet_dropped) {
-		// TODO: do something?
-	}
-
-	if (sc_halted) {
-		// TODO: do something  -
-		// user context: given an extra indication to user space?
-		// 	They can see an error via credit return - maybe?
-		//	Question: is the Status bit set for any error or if
-		//	the context is halted?
-		//	When the user calls in, then restart
-		// kernel context: try to restart
-		// ack context: same as kernel
-	} else {
-		// TODO: set a counter?
-	}
-
-	// TODO: call sc_release_update()? 
-}
+#endif
 
 /*
  * Send context error interrupt.  Source (context) is < 160.
  *
- * Check and clear the context error status register.
+ * All send context errors cause the send context to halt.  The normal
+ * clear-down mechanism cannot be used because we cannot clear the
+ * error bits until several other long-running items are done first.
+ * This is OK because with the context halted, nothing else is going
+ * to happen on it anyway.
  */
-static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int source)
+static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
 {
-	interrupt_clear_down(dd, source, &sendctxt_err);
+	struct send_context_info *sci;
+	struct send_context *sc;
+	char flags[96];
+
+	if (context >= dd->num_send_contexts) {
+		dd_dev_err(dd,
+			"unexpected out of range send context interrupt %u\n",
+			context);
+		return;
+	}
+	sci = &dd->send_contexts[context];
+	sc = sci->sc;
+	if (!sc) {
+		dd_dev_err(dd, "%s: context %u: no sc?\n", __func__, context);
+		return;
+	}
+
+	/* tell the software that a halt has begun */
+	sc_halting(sc);
+
+	dd_dev_info(dd, "Send Context %u Error: %s\n", context,
+		send_err_status_string(flags, sizeof(flags),
+			read_kctxt_csr(dd, context, WFR_SEND_CTXT_ERR_STATUS)));
+
+	/*
+	 * Automatically restart halted kernel contexts out of interrupt
+	 * context.  User contexts must ask the driver to restart the context.
+	 */
+	if (sc->type != SC_USER)
+		queue_work(dd->pport->qib_wq, &sc->halt_work);
 }
 
 static void handle_sdma_eng_err(struct hfi_devdata *dd,

@@ -470,6 +470,19 @@ static void cr_group_addresses(struct send_context *sc, dma_addr_t *pa)
 }
 
 /*
+ * Work queue function triggered in error interrupt routine for
+ * kernel contexts.
+ */
+static void sc_halted(struct work_struct *work)
+{
+	struct send_context *sc;
+
+	sc = container_of(work, struct send_context, halt_work);
+	sc_restart(sc);
+	/* idea: add a timed retry if the restart fails */
+}
+
+/*
  * Allocate a NUMA relative send context structure of the given type along
  * with a HW context.
  */
@@ -498,9 +511,12 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 
 	sc->dd = dd;
 	sc->node = numa;
+	sc->type = type;
 	spin_lock_init(&sc->alloc_lock);
 	spin_lock_init(&sc->release_lock);
 	INIT_LIST_HEAD(&sc->piowait);
+	INIT_WORK(&sc->halt_work, sc_halted);
+	atomic_set(&sc->buffers_allocated, 0);
 
 	/* TBD: group set-up.  Make it always 0 for now. */
 	sc->group = 0;
@@ -590,11 +606,13 @@ void sc_free(struct send_context *sc)
 	if (!sc)
 		return;
 
+	sc->in_free = 1;	/* ensure no restarts */
 	dd = sc->dd;
 	if (!list_empty(&sc->piowait))
 		dd_dev_err(dd, "piowait list not empty!\n");
 	context = sc->context;
 	sc_disable(sc);	/* make sure the HW is disabled */
+	flush_work(&sc->halt_work);
 	dd->send_contexts[context].sc = NULL;
 	sc_hw_free(dd, context);
 
@@ -611,14 +629,133 @@ void sc_disable(struct send_context *sc)
 	if (!sc)
 		return;
 
+	/* do all steps, even if already disabled */
 	reg = read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL);
-	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK)) {
-		reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
-		spin_lock_irqsave(&sc->alloc_lock, flags);
-		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
-		sc->enabled = 0;
-		spin_unlock_irqrestore(&sc->alloc_lock, flags);
+	reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+	spin_lock_irqsave(&sc->alloc_lock, flags);
+	sc->enabled = 0;
+	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+	spin_unlock_irqrestore(&sc->alloc_lock, flags);
+}
+
+/* return SendEgressCtxtStatus.PacketOccupancy */
+#define packet_occupancy(r) \
+	(((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SMASK)\
+	>> WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SHIFT)
+
+/* wait for packet egress */
+static void sc_wait_for_packet_egress(struct send_context *sc)
+{
+	struct hfi_devdata *dd = sc->dd;
+	u64 reg;
+	u32 loop = 0;
+
+	while (1) {
+		reg = read_kctxt_csr(dd, sc->context,
+						WFR_SEND_EGRESS_CTXT_STATUS);
+		reg = packet_occupancy(reg);
+		if (reg == 0)
+			break;
+		if (loop > 100) {
+			dd_dev_err(dd,
+				"%s: context %u timeout waiting for packets to egress, remaining count %u\n",
+				__func__, sc->context, (u32)reg);
+			break;
+		}
+		loop++;
+		udelay(1);
 	}
+}
+
+/*
+ * Restart a context after it has been halted due to error.
+ *
+ * This follows the ordering given in the HAS. If the first step fails
+ * - wait for the halt to be asserted, return early.  Otherwise complain
+ * about timeouts but keep going.
+ *
+ * It is expected that allocations (sc->enabled) have been shut off already
+ * (only applies to kernel contexts).
+ */
+void sc_restart(struct send_context *sc)
+{
+	struct hfi_devdata *dd = sc->dd;
+	u64 reg;
+	u32 loop;
+	int count;
+
+	/* bounce off if not halted, or being free'd */
+	if (!sc->halted || sc->in_free)
+		return;
+
+	dd_dev_info(dd, "restarting context %u\n", sc->context);
+
+	/*
+	 * Step 1: Wait for the context to actually halt.
+	 *
+	 * The error interrupt is asynchronous of actually setting halt
+	 * on the context.
+	 */
+	loop = 0;
+	while (1) {
+		reg = read_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_STATUS);
+		if (reg & WFR_SEND_CTXT_STATUS_CTXT_HALTED_SMASK)
+			break;
+		if (loop > 100) {
+			dd_dev_err(dd, "%s: context %d not halting, skipping\n",
+				__func__, sc->context);
+			return;
+		}
+		loop++;
+		udelay(1);
+	}
+
+	/*
+	 * Step 2: Wait for all packets to egress.
+	 */
+	sc_wait_for_packet_egress(sc);
+
+	/*
+	 * Step 3: Ensure no users are still trying to write to PIO.
+	 *
+	 * For kernel contexts, we have already turned off buffer allocation.
+	 * Now wait for the buffer count to go to zero.
+	 *
+	 * For user contexts, the user handling code has cut off write access
+	 * to the context's PIO pages before calling this routine and will
+	 * restore write access after this routine returns.
+	 */
+	if (sc->type != SC_USER) {
+		/* kernel context */
+		loop = 0;
+		while (1) {
+			count = atomic_read(&sc->buffers_allocated);
+			if (count == 0)
+				break;
+			if (loop > 100) {
+				dd_dev_err(dd,
+					"%s: context %u timeout waiting for PIO buffers to zero, remaining %d\n",
+					__func__, sc->context, count);
+			}
+			loop++;
+			udelay(1);
+		}
+	}
+
+	/*
+	 * Step 4: Disable the context
+	 *
+	 * This is a superset of the halt.  After the disable, the
+	 * errors can be cleared.
+	 */
+	sc_disable(sc);
+
+	/*
+	 * Step 5: Enable the context
+	 *
+	 * This enable will clear sc->halted and per-send context error flags.
+	 */
+	sc_enable(sc);
 }
 
 /*
@@ -681,7 +818,7 @@ void pio_reset_all(struct hfi_devdata *dd)
 /* enable the context */
 int sc_enable(struct send_context *sc)
 {
-	u64 reg, pio;
+	u64 sc_ctrl, reg, pio;
 	struct hfi_devdata *dd;
 	unsigned long flags;
 	int ret;
@@ -690,8 +827,8 @@ int sc_enable(struct send_context *sc)
 		return -EINVAL;
 	dd = sc->dd;
 
-	reg = read_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL);
-	if ((reg & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK))
+	sc_ctrl = read_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL);
+	if ((sc_ctrl & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK))
 		return 0; /* already enabled */
 
 	/* IMPORTANT: only clear free and fill if transitioning 0 -> 1 */
@@ -703,6 +840,18 @@ int sc_enable(struct send_context *sc)
 	sc->fill = 0;
 	sc->sr_head = 0;
 	sc->sr_tail = 0;
+	sc->halted = 0;
+	atomic_set(&sc->buffers_allocated, 0);
+
+	/*
+	 * Clear all per-context errors.  Some of these will be set when
+	 * we are re-enabling after a context halt.  Now that the context
+	 * is disabled, the halt will not clear until after the PIO init
+	 * engine runs below.
+	 */
+	reg = read_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_ERR_STATUS);
+	if (reg)
+		write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_ERR_CLEAR, reg);
 
 	/*
 	 * The HW PIO initialization engine can handle only one init
@@ -742,9 +891,9 @@ int sc_enable(struct send_context *sc)
 	 * worry about locking since the releaser will not do anything
 	 * if the context accounting values have not changed.
 	 */
-	reg |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+	sc_ctrl |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
 	spin_lock_irqsave(&sc->alloc_lock, flags);
-	write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
+	write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL, sc_ctrl);
 	/*
 	 * Read SendCtxtCtrl to force the write out and prevent a timing
 	 * hazard where a PIO write may reach the context before the enable.
@@ -787,6 +936,27 @@ void sc_drop(struct send_context *sc)
 
 	dd_dev_info(sc->dd, "%s: context %d - not implemented\n",
 			__func__, sc->context);
+}
+
+/*
+ * Start the software reaction to a context halt:
+ *	- mark the context as halted
+ *	- stop buffer allocations
+ *
+ * Called from the error interrupt.  Other work is deferred until
+ * out of the interrupt, see sc_restart().
+ */
+void sc_halting(struct send_context *sc)
+{
+	unsigned long flags;
+
+	/* this context has been halted */
+	sc->halted = 1;
+
+	/* stop buffer allocations */
+	spin_lock_irqsave(&sc->alloc_lock, flags);
+	sc->enabled = 0;
+	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 }
 
 #define BLOCK_DWORDS (WFR_PIO_BLOCK_SIZE/sizeof(u32))
@@ -843,6 +1013,8 @@ retry:
 
 	/* there is enough room */
 
+	atomic_inc(&sc->buffers_allocated);
+
 	/* read this once */
 	head = sc->sr_head;
 
@@ -865,6 +1037,7 @@ retry:
 	pbuf->sent_at = sc->fill;
 	pbuf->cb = cb;
 	pbuf->arg = arg;
+	pbuf->sc = sc;	/* could be filled in at sc->sr init time */
 	/* make sure this is in memory before updating the head */
 	//FIXME: is this the right barrier call?
 	mb();
