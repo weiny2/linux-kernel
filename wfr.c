@@ -4060,9 +4060,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		/* enable the context */
 		rcvctrl |= WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
 
-		/* set the control's eager buffer size */
-		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
-		rcvctrl |= (encoded_size(rcd->rcvegrbuf_size)
+		rcvctrl |= ((u64)encoded_size(rcd->rcvegrbuf_chunksize)
 				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
 					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
 
@@ -4077,7 +4075,9 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, 0);
 
 		/* set eager count and base index */
-		reg = (((rcd->eager_count >> WFR_RCV_SHIFT)
+		reg = ((((u64)(rcd->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF ?
+			       rcd->eager_count : rcd->rcvegrbuf_chunks)
+			 >> WFR_RCV_SHIFT)
 					& WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
 				<< WFR_RCV_EGR_CTRL_EGR_CNT_SHIFT) |
 		      (((rcd->eager_base >> WFR_RCV_SHIFT)
@@ -4113,8 +4113,12 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
 	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
-	if (op & QIB_RCVCTRL_ONE_PKT_EGR_ENB)
+	if (op & QIB_RCVCTRL_ONE_PKT_EGR_ENB) {
+		/* In one-packet-per-eager mode, the size comes from
+		   the RcvArray entry. */
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
 		rcvctrl |= WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
+	}
 	if (op & QIB_RCVCTRL_ONE_PKT_EGR_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
 	if (op & QIB_RCVCTRL_NO_RHQ_DROP_ENB)

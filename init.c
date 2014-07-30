@@ -95,6 +95,10 @@ unsigned hfi_egrbuf_alloc_size = 0x8000;
 module_param_named(egrbuf_alloc_size, hfi_egrbuf_alloc_size, uint, S_IRUGO);
 MODULE_PARM_DESC(egrbuf_alloc_size, "Chunk size for Eager buffer allocation");
 
+unsigned hfi_one_pkt_egr = 1;
+module_param_named(one_pkt_per_egr, hfi_one_pkt_egr, uint, S_IRUGO);
+MODULE_PARM_DESC(one_pkt_per_egr, "Use one packet per eager buffer (default: 1)");
+
 /* interrupt testing */
 unsigned int test_interrupts;
 module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
@@ -139,6 +143,8 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		 * default values for all receive side memories. User contexts will
 		 * be handled differently.
 		 */
+		if (hfi_one_pkt_egr)
+			rcd->flags |= HFI_CTXTFLAG_ONEPKTPEREGRBUF;
 		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry size
 		 * as DWords. However, hfi_setup_ctxt takes bytes from PSM and
 		 * converts to DWords. Should we just use bytes in hfi_devdata? */
@@ -323,7 +329,13 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 	}
 	cd->rcvegrbuf_chunks = (cd->rcvegrbuf_size * cd->eager_count) /
 		cd->rcvegrbuf_chunksize;
-	cd->rcvegrbufs_perchunk_shift =	ilog2(cd->rcvegrbufs_perchunk);
+	if (cd->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF) {
+		cd->rcvegrbufs_idx_mask = (u32)cd->rcvegrbufs_perchunk - 1;
+		cd->rcvegrbufs_perchunk_shift = ilog2(cd->rcvegrbufs_perchunk);
+	} else {
+		cd->rcvegrbufs_idx_mask = 0;
+		cd->rcvegrbufs_perchunk_shift = 0;
+	}
 	if (hdrqcnt % WFR_HDRQ_INCREMENT) {
 		dd_dev_err(dd,
 			"header queue count %d must be divisible by %d\n",
@@ -555,9 +567,9 @@ static void enable_chip(struct hfi_devdata *dd)
 	rcvmask = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_INTRAVAIL_ENB;
 	rcvmask |= (dd->flags & QIB_NODMA_RTAIL) ?
 		  QIB_RCVCTRL_TAILUPD_DIS : QIB_RCVCTRL_TAILUPD_ENB;
-	/* Set this as the default for kernel contexts */
-	rcvmask |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
+		if (dd->rcd[i]->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF)
+			rcvmask |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
 		dd->f_rcvctrl(dd, rcvmask, i);
 		/* XXX (Mitko): Do we care about the result of this?
 		 * sc_enable() will display an error message. */
@@ -1631,13 +1643,24 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 
 	egrcnt = rcd->eager_count;
 	egroff = rcd->eager_base;
-	egrsize = rcd->rcvegrbuf_size;
+
+	/*
+	 * If multiple packets per RcvArray buffer is enabled in
+	 * the context's RcvCtrl register, use one RcvArray TID
+	 * per chunk.
+	 */
+	if (rcd->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF) {
+		egrperchunk = rcd->rcvegrbufs_perchunk;
+		egrsize = rcd->rcvegrbuf_size;
+	} else {
+		egrperchunk = 1;
+		egrsize = rcd->rcvegrbuf_chunksize;
+	}
 
 	if (!hfi_rcvbuf_validate(egrsize, PT_EAGER, &order))
 		return -EINVAL;
 
 	chunk = rcd->rcvegrbuf_chunks;
-	egrperchunk = rcd->rcvegrbufs_perchunk;
 	size = rcd->rcvegrbuf_chunksize;
 	if (!rcd->rcvegrbuf) {
 		rcd->rcvegrbuf =
@@ -1666,14 +1689,6 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 
 	rcd->rcvegr_phys = rcd->rcvegrbuf_phys[0];
 
-	/*
-	 * If multiple packets per RcvArray buffer is enabled in
-	 * the context's RcvCtrl register, use one RcvArray TID
-	 * per chunk.
-	 */
-	if (rcd->rcvctrl & WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK)
-		egrperchunk = 1;
-			
 	for (e = chunk = 0; chunk < rcd->rcvegrbuf_chunks; chunk++) {
 		dma_addr_t pa = rcd->rcvegrbuf_phys[chunk];
 		unsigned i;
