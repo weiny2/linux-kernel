@@ -967,11 +967,19 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
 		sde->this_idx,
 		slashstrip(__FILE__), __LINE__, __func__);
-	dd_dev_err(sde->dd, "JAG SDMA status: 0x%llx state %s\n",
+	dd_dev_err(sde->dd, "JAG SDMA (%u) status: 0x%llx state %s\n",
+		sde->this_idx,
 		(unsigned long long)status,
 		sdma_state_names[sde->state.current_state]);
 	sdma_dumpstate(sde);
 #endif
+	/* FIXME : need to determine level of error, perhaps recovery */
+	if (status & ~WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK)
+		dd_dev_err(sde->dd,
+			"SDMA (%u) engine error: 0x%llx state %s\n",
+			sde->this_idx,
+			(unsigned long long)status,
+			sdma_state_names[sde->state.current_state]);
 	spin_lock_irqsave(&sde->lock, flags);
 
 	switch (sde->state.current_state) {
@@ -1257,11 +1265,11 @@ void sdma_dumpstate(struct sdma_engine *sde)
 }
 #endif
 
-#define SDE_FMT "SDE %u STE %s C 0x%llx S 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx\n"
+#define SDE_FMT "SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
- * @s - seq file
- * @sde - send dma engine to dump
+ * @s: seq file
+ * @sde: send dma engine to dump
  *
  * This routine dumps the sde to the indicated seq file.
  */
@@ -1271,6 +1279,7 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		sdma_state_name(sde->state.current_state),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CTRL),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_STATUS),
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_STATUS),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_TAIL),
 		sde->descq_tail,
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD),
