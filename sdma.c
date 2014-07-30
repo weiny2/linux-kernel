@@ -587,6 +587,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 		init_completion(&sde->state.comp);
 
 		INIT_LIST_HEAD(&sde->activelist);
+		INIT_LIST_HEAD(&sde->dmawait);
 
 		if (dd->flags & QIB_HAS_SDMA_TIMEOUT)
 			sde->default_desc1 =
@@ -707,7 +708,11 @@ void sdma_exit(struct hfi_devdata *dd)
 
 	for (this_idx = 0; dd->per_sdma && this_idx < dd->num_sdma;
 			++this_idx) {
+
 		sde = &dd->per_sdma[this_idx];
+		if (!list_empty(&sde->dmawait))
+			dd_dev_err(dd, "sde %u: dmawait list not empty!\n",
+				sde->this_idx);
 		sdma_process_event(sde, sdma_event_e00_go_hw_down);
 
 		/*
@@ -1599,7 +1604,7 @@ busy:
 			ibp = &sde->ppd->ibport_data;
 			ibp->n_dmawait++;
 			qp->s_flags |= QIB_S_WAIT_DMA_DESC;
-			list_add_tail(&qp->iowait, &dev->dmawait);
+			list_add_tail(&qp->iowait, &sde->dmawait);
 		}
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;

@@ -950,9 +950,7 @@ void qib_verbs_sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 	spin_lock(&dev->pending_lock);
 
 	/* Search wait list for first QP wanting DMA descriptors. */
-	list_for_each_entry_safe(qp, nqp, &dev->dmawait, iowait) {
-		if (qp->port_num != sde->ppd->port)
-			continue;
+	list_for_each_entry_safe(qp, nqp, &sde->dmawait, iowait) {
 		if (n == ARRAY_SIZE(qps))
 			break;
 		if (qp->s_tx->txreq.sg_count > avail)
@@ -1957,7 +1955,6 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	spin_lock_init(&dev->pending_lock);
 	dev->mmap_offset = PAGE_SIZE;
 	spin_lock_init(&dev->mmap_offset_lock);
-	INIT_LIST_HEAD(&dev->dmawait);
 	INIT_LIST_HEAD(&dev->txwait);
 	INIT_LIST_HEAD(&dev->memwait);
 	INIT_LIST_HEAD(&dev->txreq_free);
@@ -2141,8 +2138,6 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 
 	ib_unregister_device(ibdev);
 
-	if (!list_empty(&dev->dmawait))
-		dd_dev_err(dd, "dmawait list not empty!\n");
 	if (!list_empty(&dev->txwait))
 		dd_dev_err(dd, "txwait list not empty!\n");
 	if (!list_empty(&dev->memwait))

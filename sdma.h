@@ -376,6 +376,8 @@ struct sdma_engine {
 	u16                   descq_tail;
 	/* private: */
 	u16                   descq_head;
+	/* private: */
+	struct list_head      dmawait;
 
 	/* JAG SDMA for now, just blindly duplicate */
 	/* private: */

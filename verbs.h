@@ -753,7 +753,6 @@ struct qib_ibdev {
 
 	/* QP numbers are shared by all IB ports */
 	struct qib_lkey_table lk_table;
-	struct list_head dmawait;	/* list for wait DMA */
 	struct list_head txwait;        /* list for wait qib_verbs_txreq */
 	struct list_head memwait;       /* list for wait kernel memory */
 	struct list_head txreq_free;
