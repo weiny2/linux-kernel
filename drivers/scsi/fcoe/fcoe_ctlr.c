@@ -203,6 +203,7 @@ static int fcoe_sysfs_fcf_add(struct fcoe_fcf *new)
 		fcf_dev = fcoe_fcf_device_add(ctlr_dev, temp);
 		if (unlikely(!fcf_dev)) {
 			rc = -ENOMEM;
+			mutex_unlock(&ctlr_dev->lock);
 			goto out;
 		}
 
@@ -1491,6 +1492,9 @@ err:
  */
 void fcoe_ctlr_recv(struct fcoe_ctlr *fip, struct sk_buff *skb)
 {
+	skb = skb_share_check(skb, GFP_ATOMIC);
+	if (!skb)
+		return;
 	skb_queue_tail(&fip->fip_recv_list, skb);
 	schedule_work(&fip->recv_work);
 }
@@ -2863,8 +2867,8 @@ unlock:
  * disabled, so that should ensure that this routine is only called
  * when nothing is happening.
  */
-void fcoe_ctlr_mode_set(struct fc_lport *lport, struct fcoe_ctlr *fip,
-			enum fip_state fip_mode)
+static void fcoe_ctlr_mode_set(struct fc_lport *lport, struct fcoe_ctlr *fip,
+			       enum fip_state fip_mode)
 {
 	void *priv;
 

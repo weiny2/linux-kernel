@@ -4238,9 +4238,13 @@ static long btrfs_ioctl_quota_ctl(struct file *file, void __user *arg)
 	switch (sa->cmd) {
 	case BTRFS_QUOTA_CTL_ENABLE:
 		ret = btrfs_quota_enable(trans, root->fs_info);
+		if (!ret)
+			btrfs_info(root->fs_info, "quota is enabled");
 		break;
 	case BTRFS_QUOTA_CTL_DISABLE:
 		ret = btrfs_quota_disable(trans, root->fs_info);
+		if (!ret)
+			btrfs_info(root->fs_info, "quota is disabled");
 		break;
 	default:
 		ret = -EINVAL;
@@ -4870,6 +4874,12 @@ long btrfs_ioctl(struct file *file, unsigned int
 		if (ret)
 			return ret;
 		ret = btrfs_sync_fs(file->f_dentry->d_sb, 1);
+		/*
+		 * The transaction thread may want to do more work,
+		 * namely it pokes the cleaner ktread that will start
+		 * processing uncleaned subvols.
+		 */
+		wake_up_process(root->fs_info->transaction_kthread);
 		return ret;
 	}
 	case BTRFS_IOC_START_SYNC:

@@ -2132,9 +2132,13 @@ static const struct file_operations proc_timers_operations = {
 #endif /* CONFIG_CHECKPOINT_RESTORE */
 
 #if IS_ENABLED(CONFIG_KGRAFT)
-static int proc_pid_kgr_in_progress(struct task_struct *task, char *buffer)
+static int proc_pid_kgr_in_progress(struct seq_file *m,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *task)
 {
-	return sprintf(buffer, "%d\n", kgr_task_in_progress(task));
+	seq_printf(m, "%d\n", kgr_task_in_progress(task));
+
+	return 0;
 }
 #endif /* IS_ENABLED(CONFIG_KGRAFT) */
 
@@ -2671,7 +2675,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("timers",	  S_IRUGO, proc_timers_operations),
 #endif
 #if IS_ENABLED(CONFIG_KGRAFT)
-	INF("kgr_in_progress",	S_IRUSR, proc_pid_kgr_in_progress),
+	ONE("kgr_in_progress",	S_IRUSR, proc_pid_kgr_in_progress),
 #endif
 };
 

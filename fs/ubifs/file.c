@@ -1538,7 +1538,7 @@ out_unlock:
 static const struct vm_operations_struct ubifs_file_vm_ops = {
 	.fault        = filemap_fault,
 	.page_mkwrite = ubifs_vm_page_mkwrite,
-	.remap_pages = generic_file_remap_pages,
+	.__deprecated_remap_pages = generic_file_remap_pages2,
 };
 
 static int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma)

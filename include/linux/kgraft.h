@@ -98,7 +98,7 @@ struct kgr_patch {
 	struct kgr_patch_fun patches[];
 };
 
-#define kgr_for_each_patch(p, pf)	\
+#define kgr_for_each_patch_fun(p, pf)	\
 	for (pf = p->patches; pf->name; pf++)
 
 #define KGR_PATCH(_name, _new_function, abort)	{			\

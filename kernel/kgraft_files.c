@@ -48,7 +48,7 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 
 	size = snprintf(buf, PAGE_SIZE, "%-20s  State  Fatal\n", "Function");
 
-	kgr_for_each_patch(p, pf) {
+	kgr_for_each_patch_fun(p, pf) {
 		size += snprintf(buf + size, PAGE_SIZE - size,
 				"%-20s  %5d  %5d\n",
 				pf->name, pf->state, pf->abort_if_missing);
