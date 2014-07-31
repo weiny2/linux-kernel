@@ -2363,11 +2363,13 @@ asmlinkage int vprintk_emit(int facility, int level,
 		return printed_len;
 	}
 
-	/*
-	 * Disable preemption to avoid being preempted while holding
-	 * console_sem which would prevent anyone from printing to console
-	 */
-	preempt_disable();
+      	lockdep_off();
+      	/*
+      	 * Disable preemption to avoid being preempted while holding
+      	 * console_sem which would prevent anyone from printing to
+      	 * console
+      	 */
+      	preempt_disable();
 	/*
 	 * Try to acquire and then immediately release the console semaphore.
 	 * The release will print out buffers and wake up /dev/kmsg and syslog()
@@ -2376,6 +2378,7 @@ asmlinkage int vprintk_emit(int facility, int level,
 	if (console_trylock_for_printk())
 		console_unlock();
 	preempt_enable();
+	lockdep_on();
 
 	return printed_len;
 }
