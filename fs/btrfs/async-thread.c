@@ -340,6 +340,8 @@ again:
 		spin_lock_irq(&worker->lock);
 		check_idle_worker(worker);
 
+		kgr_task_safe(current);
+
 		if (freezing(current)) {
 			worker->working = 0;
 			spin_unlock_irq(&worker->lock);
