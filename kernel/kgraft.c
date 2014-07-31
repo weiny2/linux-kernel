@@ -36,6 +36,7 @@ static struct workqueue_struct *kgr_wq;
 static DECLARE_DELAYED_WORK(kgr_work, kgr_work_fn);
 static DEFINE_MUTEX(kgr_in_progress_lock);
 static LIST_HEAD(patches);
+static LIST_HEAD(to_revert);
 bool kgr_in_progress;
 static bool kgr_initialized;
 static struct kgr_patch *kgr_patch;
@@ -111,9 +112,57 @@ static bool kgr_still_patching(void)
 	return failed;
 }
 
+static bool kgr_patch_contains(const struct kgr_patch *p, const char *name)
+{
+	const struct kgr_patch_fun *pf;
+
+	kgr_for_each_patch_fun(p, pf)
+		if (!strcmp(pf->name, name))
+			return true;
+
+	return false;
+}
+
+static void kgr_replace_all(void)
+{
+	struct kgr_patch_fun *pf;
+	struct kgr_patch *p;
+	int err;
+
+	list_for_each_entry(p, &patches, list) {
+		bool needs_revert = false;
+
+		kgr_for_each_patch_fun(p, pf) {
+			if (pf->state != KGR_PATCH_APPLIED)
+				continue;
+
+			if (!kgr_patch_contains(kgr_patch, pf->name)) {
+				needs_revert = true;
+				continue;
+			}
+
+			pr_info("UNREG %s -> %s\n", p->name, pf->name);
+			err = unregister_ftrace_function(&pf->ftrace_ops_fast);
+			if (err) {
+				pr_warning("kgr: unregistering ftrace function for %s failed with %d\n",
+						pf->name, err);
+				continue;
+			}
+			pf->state = KGR_PATCH_REVERTED;
+		}
+
+		if (needs_revert)
+			list_move(&p->list, &to_revert);
+		else
+			module_put(p->owner);
+	}
+}
+
 static void kgr_finalize(void)
 {
 	struct kgr_patch_fun *patch_fun;
+
+	mutex_lock(&kgr_in_progress_lock);
 
 	kgr_for_each_patch_fun(kgr_patch, patch_fun) {
 		int ret = kgr_patch_code(patch_fun, true, kgr_revert);
@@ -125,16 +174,18 @@ static void kgr_finalize(void)
 
 	free_percpu(kgr_patch->irq_use_new);
 
-	if (kgr_revert)
-		module_put(kgr_patch->owner);
-
-	mutex_lock(&kgr_in_progress_lock);
-	kgr_in_progress = false;
 	if (kgr_revert) {
-		list_del(&kgr_patch->list);
 		kgr_refs_dec();
-	} else
+		module_put(kgr_patch->owner);
+	} else {
+		if (kgr_patch->replace_all)
+			kgr_replace_all();
 		list_add_tail(&kgr_patch->list, &patches);
+	}
+
+	kgr_patch = NULL;
+	kgr_in_progress = false;
+
 	mutex_unlock(&kgr_in_progress_lock);
 }
 
@@ -378,6 +429,12 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 		break;
 	case KGR_PATCH_SKIPPED:
 		return 0;
+	case KGR_PATCH_APPLIED_NON_FINALIZED:
+		/* like KGR_PATCH_SLOW but ops changes are already in place */
+		if (revert || !final)
+			return -EINVAL;
+		next_state = KGR_PATCH_APPLIED;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -430,7 +487,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		goto err_unlock;
 	}
 
-	if (kgr_in_progress) {
+	if (kgr_in_progress || !list_empty(&to_revert)) {
 		pr_err("kgr: can't patch, another patching not yet finalized\n");
 		ret = -EAGAIN;
 		goto err_unlock;
@@ -466,7 +523,9 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	kgr_in_progress = true;
 	kgr_patch = patch;
 	kgr_revert = revert;
-	if (!revert)
+	if (revert)
+		list_del(&kgr_patch->list);
+	else
 		kgr_refs_inc();
 	mutex_unlock(&kgr_in_progress_lock);
 
@@ -533,6 +592,193 @@ void kgr_patch_remove(struct kgr_patch *patch)
 }
 EXPORT_SYMBOL_GPL(kgr_patch_remove);
 
+/*
+ * This function is called when new module is loaded but before it is used.
+ * Therefore it could set the fast path directly.
+ */
+static void kgr_handle_patch_for_loaded_module(struct kgr_patch *patch,
+					       const struct module *mod)
+{
+	struct kgr_patch_fun *patch_fun;
+	unsigned long addr;
+	int err;
+
+	kgr_for_each_patch_fun(patch, patch_fun) {
+		if (patch_fun->state != KGR_PATCH_SKIPPED)
+			continue;
+
+		addr =  kallsyms_lookup_name(patch_fun->name);
+		if (!within_module(addr, mod))
+			continue;
+
+		err = kgr_init_ftrace_ops(patch_fun);
+		if (err)
+			continue;
+
+		err = kgr_ftrace_enable(patch_fun, &patch_fun->ftrace_ops_fast);
+		if (err) {
+			pr_err("kgr: cannot enable ftrace function for the originally skipped %lx (%s)\n",
+			       patch_fun->loc_old, patch_fun->name);
+			continue;
+		}
+
+		if (patch == kgr_patch)
+			patch_fun->state = KGR_PATCH_APPLIED_NON_FINALIZED;
+		else
+			patch_fun->state = KGR_PATCH_APPLIED;
+
+		pr_debug("kgr: fast redirection for %s done\n", patch_fun->name);
+	}
+}
+
+/**
+ * kgr_module_init -- apply skipped patches for newly loaded modules
+ *
+ * It must be called when symbols are visible to kallsyms but before the module
+ * init is called. Otherwise, it would not be able to use the fast stub.
+ */
+void kgr_module_init(const struct module *mod)
+{
+	struct kgr_patch *p;
+
+	/* early modules will be patched once KGraft is initialized */
+	if (!kgr_initialized)
+		return;
+
+	mutex_lock(&kgr_in_progress_lock);
+
+	/*
+	 * Check already applied patches for skipped functions. If there are
+	 * more patches we want to set them all. They need to be in place when
+	 * we remove some patch.
+	 */
+	list_for_each_entry(p, &patches, list)
+		kgr_handle_patch_for_loaded_module(p, mod);
+
+	/* also check the patch in progress that is being applied */
+	if (kgr_patch && !kgr_revert)
+		kgr_handle_patch_for_loaded_module(kgr_patch, mod);
+
+	mutex_unlock(&kgr_in_progress_lock);
+}
+
+/*
+ * Disable the patch immediately. It does not matter in which state it is.
+ *
+ * This function is used when a module is being removed and the code is
+ * not longer called.
+ */
+static int kgr_forced_code_patch_removal(struct kgr_patch_fun *patch_fun)
+{
+	struct ftrace_ops *ops;
+	int err;
+
+	switch (patch_fun->state) {
+	case KGR_PATCH_INIT:
+	case KGR_PATCH_SKIPPED:
+		return 0;
+	case KGR_PATCH_SLOW:
+	case KGR_PATCH_REVERT_SLOW:
+		ops = &patch_fun->ftrace_ops_slow;
+		break;
+	case KGR_PATCH_APPLIED:
+	case KGR_PATCH_APPLIED_NON_FINALIZED:
+		ops = &patch_fun->ftrace_ops_fast;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	err = kgr_ftrace_disable(patch_fun, ops);
+	if (err) {
+		pr_warn("kgr: forced disabling of ftrace function for %s failed with %d\n",
+			patch_fun->name, err);
+		return err;
+	}
+
+	patch_fun->state = KGR_PATCH_SKIPPED;
+	pr_debug("kgr: forced disabling for %s done\n", patch_fun->name);
+	return 0;
+}
+
+/*
+ * Check the given patch and disable pieces related to the module
+ * that is being removed.
+ */
+static int kgr_handle_patch_for_going_module(struct kgr_patch *patch,
+					     const struct module *mod)
+{
+	struct kgr_patch_fun *patch_fun;
+	unsigned long addr;
+	int err = 0;
+
+	kgr_for_each_patch_fun(patch, patch_fun) {
+		addr = kallsyms_lookup_name(patch_fun->name);
+		if (!within_module(addr, mod))
+			continue;
+		/*
+		 * FIXME: It should schedule the patch removal or block
+		 *	  the module removal or taint kernel or so.
+		 */
+		if (patch_fun->abort_if_missing) {
+			pr_err("kgr: removing function %s that is required for the patch %s\n",
+			       patch_fun->name, patch->name);
+			err |= -EPERM;
+		}
+
+		err |= kgr_forced_code_patch_removal(patch_fun);
+	}
+
+	return err;
+}
+
+/*
+ * Disable patches for the module that is being removed.
+ *
+ * FIXME: The module removal cannot be stopped at this stage. All affected
+ * patches have to be removed. Therefore, the operation continues even in
+ * case of errors.
+ */
+static int kgr_handle_going_module(const struct module *mod)
+{
+	struct kgr_patch *p;
+	int err = 0;
+
+	/* Nope when kGraft has not been initialized yet */
+	if (!kgr_initialized)
+		return 0;
+
+	mutex_lock(&kgr_in_progress_lock);
+
+	list_for_each_entry(p, &patches, list)
+		err |= kgr_handle_patch_for_going_module(p, mod);
+
+	/* also check the patch in progress for removed functions */
+	if (kgr_patch)
+		err |= kgr_handle_patch_for_going_module(kgr_patch, mod);
+
+	mutex_unlock(&kgr_in_progress_lock);
+
+	return err;
+}
+
+static int kgr_module_notify_exit(struct notifier_block *self,
+				  unsigned long val, void *data)
+{
+	const struct module *mod = data;
+	int err = 0;
+
+	if (val == MODULE_STATE_GOING)
+		err = kgr_handle_going_module(mod);
+
+	return err;
+}
+
+struct notifier_block kgr_module_exit_nb = {
+	.notifier_call = kgr_module_notify_exit,
+	.priority = 0,
+};
+
 static int __init kgr_init(void)
 {
 	int ret;
@@ -552,6 +798,10 @@ static int __init kgr_init(void)
 		ret = -ENOMEM;
 		goto err_remove_files;
 	}
+
+	ret = register_module_notifier(&kgr_module_exit_nb);
+	if (ret)
+		pr_warn("Failed to register kGraft module exit notifier\n");
 
 	kgr_initialized = true;
 	pr_info("kgr: successfully initialized\n");

@@ -2243,8 +2243,8 @@ static int rcu_nocb_kthread(void *arg)
 		/* If not polling, wait for next batch of callbacks. */
 		if (!rcu_nocb_poll)
 			wait_event_interruptible(rdp->nocb_wq, ({
-						kgr_task_safe(current);
-						rdp->nocb_head; }));
+						 kgr_task_safe(current);
+						 rdp->nocb_head; }));
 		list = ACCESS_ONCE(rdp->nocb_head);
 		if (!list) {
 			schedule_timeout_interruptible(1);

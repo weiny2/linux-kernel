@@ -653,6 +653,7 @@ static int irq_wait_for_interrupt(struct irqaction *action)
 	set_current_state(TASK_INTERRUPTIBLE);
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 
 		if (test_and_clear_bit(IRQTF_RUNTHREAD,
 				       &action->thread_flags)) {
