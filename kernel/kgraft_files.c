@@ -46,12 +46,13 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 	const struct kgr_patch_fun *pf;
 	ssize_t size;
 
-	size = snprintf(buf, PAGE_SIZE, "%-20s  State  Fatal\n", "Function");
+	size = snprintf(buf, PAGE_SIZE, "%-20s   Weak  State\n", "Function");
+
 
 	kgr_for_each_patch_fun(p, pf) {
 		size += snprintf(buf + size, PAGE_SIZE - size,
-				"%-20s  %5d  %5d\n",
-				pf->name, pf->state, pf->abort_if_missing);
+				"%-20s  %5d  %5d\n", pf->name,
+				 !(pf->abort_if_missing), pf->state);
 	}
 	return size;
 }
@@ -62,6 +63,14 @@ static ssize_t refs_show(struct kobject *kobj, struct kobj_attribute *attr,
 	struct kgr_patch *p = kobj_to_patch(kobj);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", p->refs);
+}
+
+static ssize_t replace_all_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	struct kgr_patch *p = kobj_to_patch(kobj);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", p->replace_all);
 }
 
 static ssize_t revert_store(struct kobject *kobj,
@@ -77,11 +86,13 @@ static ssize_t revert_store(struct kobject *kobj,
 
 static struct kobj_attribute kgr_attr_state = __ATTR_RO(state);
 static struct kobj_attribute kgr_attr_refs = __ATTR_RO(refs);
+static struct kobj_attribute kgr_attr_replace_all = __ATTR_RO(replace_all);
 static struct kobj_attribute kgr_attr_revert = __ATTR_WO(revert);
 
 static struct attribute *kgr_patch_sysfs_entries[] = {
 	&kgr_attr_state.attr,
 	&kgr_attr_refs.attr,
+	&kgr_attr_replace_all.attr,
 	&kgr_attr_revert.attr,
 	NULL
 };
@@ -99,12 +110,14 @@ int kgr_patch_dir_add(struct kgr_patch *patch)
 	if (ret)
 		return ret;
 
+#ifdef CONFIG_MODULES
 	if (patch->owner) {
 		ret = sysfs_create_link(&patch->kobj, &patch->owner->mkobj.kobj,
 				"owner");
 		if (ret)
 			goto err_put;
 	}
+#endif
 
 	ret = sysfs_create_group(&patch->kobj, &kgr_patch_sysfs_group);
 	if (ret)
@@ -112,10 +125,12 @@ int kgr_patch_dir_add(struct kgr_patch *patch)
 
 	return 0;
 err_del_link:
+#ifdef CONFIG_MODULES
 	if (patch->owner)
 		sysfs_delete_link(&patch->kobj, &patch->owner->mkobj.kobj,
 				"owner");
 err_put:
+#endif
 	kobject_put(&patch->kobj);
 	return ret;
 }
@@ -123,9 +138,11 @@ err_put:
 void kgr_patch_dir_del(struct kgr_patch *patch)
 {
 	sysfs_remove_group(&patch->kobj, &kgr_patch_sysfs_group);
+#ifdef CONFIG_MODULES
 	if (patch->owner)
 		sysfs_delete_link(&patch->kobj, &patch->owner->mkobj.kobj,
 				"owner");
+#endif
 	kobject_put(&patch->kobj);
 	wait_for_completion(&patch->finish);
 }
