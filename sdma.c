@@ -168,6 +168,7 @@ static void sdma_process_event(
 static void __sdma_process_event(
 	struct sdma_engine *sde,
 	enum sdma_events event);
+static void dump_sdma_state(struct sdma_engine *sde);
 
 /**
  * sdma_event_name() - return event string from enum
@@ -974,12 +975,14 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 	sdma_dumpstate(sde);
 #endif
 	/* FIXME : need to determine level of error, perhaps recovery */
-	if (status & ~WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK)
+	if (status & ~WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK) {
 		dd_dev_err(sde->dd,
 			"SDMA (%u) engine error: 0x%llx state %s\n",
 			sde->this_idx,
 			(unsigned long long)status,
 			sdma_state_names[sde->state.current_state]);
+		dump_sdma_state(sde);
+	}
 	spin_lock_irqsave(&sde->lock, flags);
 
 	switch (sde->state.current_state) {
@@ -1265,6 +1268,71 @@ void sdma_dumpstate(struct sdma_engine *sde)
 }
 #endif
 
+/*
+ * sdma_lock should be acquired before calling this routine
+ */
+static void dump_sdma_state(struct sdma_engine *sde)
+{
+	struct hw_sdma_desc *descq;
+	struct qib_sdma_txreq *txp, *txpnext;
+	struct hw_sdma_desc *descqp;
+	u64 desc[2];
+	u64 addr;
+	u8 gen;
+	u16 len;
+	u16 head, tail, cnt;
+
+	head = sde->descq_head;
+	tail = sde->descq_tail;
+	cnt = sdma_descq_freecnt(sde);
+	descq = sde->descq;
+
+	dd_dev_err(sde->dd, 
+		"SDMA (%u) descq_head: %u\n",
+		sde->this_idx,
+		head);
+	dd_dev_err(sde->dd, 
+		"SDMA (%u) descq_tail: %u\n",
+		sde->this_idx,
+		tail);
+	dd_dev_err(sde->dd, 
+		"SDMA (%u) freecnt: %u\n",
+		sde->this_idx,
+		cnt);
+
+	/* print info for each entry in the descriptor queue */
+	while (head != tail) {
+		char flags[6] = { 'x', 'x', 'x', 'x', 0 };
+
+		descqp = &sde->descq[head];
+		desc[0] = le64_to_cpu(descqp->qw[0]);
+		desc[1] = le64_to_cpu(descqp->qw[1]);
+		flags[0] = (desc[1] & SDMA_DESC1_INT_REQ_FLAG) ? 'I' : '-';
+		flags[1] = (desc[1] & SDMA_DESC1_HEAD_TO_HOST_FLAG) ?
+				'H' : '-';
+		flags[2] = (desc[0] & SDMA_DESC0_FIRST_DESC_FLAG) ? 'F' : '-';
+		flags[3] = (desc[0] & SDMA_DESC0_LAST_DESC_FLAG) ? 'L' : '-';
+		addr = (desc[0] >> SDMA_DESC0_PHY_ADDR_SHIFT)
+			& SDMA_DESC0_PHY_ADDR_MASK;
+		gen = (desc[1] >> SDMA_DESC1_GENERATION_SHIFT)
+			& SDMA_DESC1_GENERATION_MASK;
+		len = (desc[0] >> SDMA_DESC0_BYTE_COUNT_SHIFT)
+			& SDMA_DESC0_BYTE_COUNT_MASK;
+		dd_dev_err(sde->dd,
+			"SDMA sdmadesc[%u]: flags:%s addr:0x%016llx gen:%u len:%u bytes\n",
+			 head, flags, addr, gen, len);
+		if (++head == sde->descq_cnt)
+			head = 0;
+	}
+
+	/* print dma descriptor indices from the TX requests */
+	list_for_each_entry_safe(txp, txpnext, &sde->activelist, list) {
+		dd_dev_err(sde->dd,
+			"SDMA txp->start_idx: %u txp->next_descq_idx: %u\n",
+			txp->start_idx, txp->next_descq_idx);
+	}
+}
+
 #define SDE_FMT "SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
@@ -1275,16 +1343,50 @@ void sdma_dumpstate(struct sdma_engine *sde)
  */
 void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 {
+	u16 head, tail;
+	struct hw_sdma_desc *descqp;
+	u64 desc[2];
+	u64 addr;
+	u8 gen;
+	u16 len;
+
+	head = sde->descq_head;
+	tail = sde->descq_tail;
 	seq_printf(s, SDE_FMT, sde->this_idx,
 		sdma_state_name(sde->state.current_state),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CTRL),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_STATUS),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_STATUS),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_TAIL),
-		sde->descq_tail,
+		tail,
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD),
-		sde->descq_head,
+		head,
 		(unsigned long long)*sde->head_dma);
+
+	/* print info for each entry in the descriptor queue */
+	while (head != tail) {
+		char flags[6] = { 'x', 'x', 'x', 'x', 0 };
+
+		descqp = &sde->descq[head];
+		desc[0] = le64_to_cpu(descqp->qw[0]);
+		desc[1] = le64_to_cpu(descqp->qw[1]);
+		flags[0] = (desc[1] & SDMA_DESC1_INT_REQ_FLAG) ? 'I' : '-';
+		flags[1] = (desc[1] & SDMA_DESC1_HEAD_TO_HOST_FLAG) ?
+				'H' : '-';
+		flags[2] = (desc[0] & SDMA_DESC0_FIRST_DESC_FLAG) ? 'F' : '-';
+		flags[3] = (desc[0] & SDMA_DESC0_LAST_DESC_FLAG) ? 'L' : '-';
+		addr = (desc[0] >> SDMA_DESC0_PHY_ADDR_SHIFT)
+			& SDMA_DESC0_PHY_ADDR_MASK;
+		gen = (desc[1] >> SDMA_DESC1_GENERATION_SHIFT)
+			& SDMA_DESC1_GENERATION_MASK;
+		len = (desc[0] >> SDMA_DESC0_BYTE_COUNT_SHIFT)
+			& SDMA_DESC0_BYTE_COUNT_MASK;
+		seq_printf(s,
+			"\tdesc[%u]: flags:%s addr:0x%016llx gen:%u len:%u bytes\n",
+			head, flags, addr, gen, len);
+		if (++head == sde->descq_cnt)
+			head = 0;
+	}
 }
 
 /*
@@ -1358,7 +1460,7 @@ retry:
 	/* write to the descq */
 	tail = sde->descq_tail;
 	descqp = &sde->descq[tail];
-	trace_hfi_sdma_descriptor(sde, sdmadesc[0], sdmadesc[1], descqp);
+	trace_hfi_sdma_descriptor(sde, sdmadesc[0], sdmadesc[1], tail, descqp);
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) writing desc %016llx %016llx to %016llx\n",
 		sde->this_idx,
@@ -1396,7 +1498,7 @@ retry:
 		make_sdma_desc(sde, sdmadesc, (u64) addr, dw);
 		/* write to the descq */
 		trace_hfi_sdma_descriptor(sde, sdmadesc[0], sdmadesc[1],
-			descqp);
+			tail, descqp);
 #ifdef JAG_SDMA_VERBOSITY
 		dd_dev_err(sde->dd, "JAG SDMA(%u) writing desc %016llx %016llx to %016llx\n",
 			sde->this_idx,
@@ -1560,7 +1662,7 @@ retry:
 			<< SDMA_DESC1_GENERATION_SHIFT;
 		sde->descq[tail].qw[1] = descp->qw[1];
 		trace_hfi_sdma_descriptor(sde, descp->qw[0], descp->qw[1],
-			&sde->descq[tail]);
+			tail, &sde->descq[tail]);
 		if (++tail == sde->descq_cnt)
 			++sde->generation;
 	}

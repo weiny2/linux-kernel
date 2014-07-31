@@ -619,13 +619,19 @@ DEFINE_EVENT(hfi_bct_template, bct_get,
 #define TRACE_SYSTEM hfi_sdma
 
 TRACE_EVENT(hfi_sdma_descriptor,
-	TP_PROTO(struct sdma_engine *sde, u64 desc0, u64 desc1, void *descp),
-	TP_ARGS(sde, desc0, desc1, descp),
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u64 desc0,
+		u64 desc1,
+		u16 e,
+		void *descp),
+	TP_ARGS(sde, desc0, desc1, e, descp),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(sde->dd)
 		__field(void *, descp)
 		__field(u64, desc0)
 		__field(u64, desc1)
+		__field(u16, e)
 		__field(u8, idx)
 	),
 	TP_fast_assign(
@@ -634,14 +640,16 @@ TRACE_EVENT(hfi_sdma_descriptor,
 		__entry->desc1 = desc1;
 		__entry->idx = sde->this_idx;
 		__entry->descp = descp;
+		__entry->e = e;
 	),
 	TP_printk(
-		"[%s] SDE(%u) d0 %016llx d1 %016llx to %p",
+		"[%s] SDE(%u) d0 %016llx d1 %016llx to %p,%u",
 		__get_str(dev),
 		__entry->idx,
 		__entry->desc0,
 		__entry->desc1,
-		__entry->descp
+		__entry->descp,
+		__entry->e
 	)
 );
 

@@ -1097,7 +1097,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		ndesc = 1;
 	if (ndesc) {
 		phdr = &dev->pio_hdrs[tx->hdr_inx];
-		phdr->pbc = pbc;
+		phdr->pbc = cpu_to_le64(pbc);
 		memcpy(&phdr->hdr, hdr, hdrwords << 2);
 		tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEDESC;
 		tx->txreq.sg_count = ndesc;
@@ -1113,7 +1113,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	phdr = kmalloc(tx->hdr_dwords << 2, GFP_ATOMIC);
 	if (!phdr)
 		goto err_tx;
-	phdr->pbc = pbc;
+	phdr->pbc = cpu_to_le64(pbc);
 	memcpy(&phdr->hdr, hdr, hdrwords << 2);
 	qib_copy_from_sge((u32 *) &phdr->hdr + hdrwords, ss, len);
 
