@@ -1109,7 +1109,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	}
 
 	/* Allocate a buffer and copy the header and payload to it. */
-	tx->hdr_dwords = plen + 1;
+	tx->hdr_dwords = plen;
 	phdr = kmalloc(tx->hdr_dwords << 2, GFP_ATOMIC);
 	if (!phdr)
 		goto err_tx;
