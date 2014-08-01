@@ -752,11 +752,22 @@ inline u16 generate_jkey(unsigned int uid)
 
 void handle_eflags(struct hfi_packet *packet)
 {
-	dd_dev_err(packet->rcd->ppd->dd,
-		   "Error flags on recv. RHF = %llu\n",
-		   packet->rhf);
-	rcv_hdrerr(packet->rcd, packet->rcd->ppd,
-		   packet->rhf_addr, packet->hdr);
+	struct qib_ctxtdata *rcd = packet->rcd;
+	u32 eflags = rhf_err_flags(packet->rhf_addr);
+
+	dd_dev_err(rcd->dd,
+		"receive context %d: rhf 0x%016llx, errs [ %s%s%s%s%s%s%s%s]\n",
+		rcd->ctxt, packet->rhf,
+		eflags & RHF1_K_HDR_LEN_ERR ? "k_hdr_len " : "",
+		eflags & RHF1_DC_UNC_ERR ? "dc_unc " : "",
+		eflags & RHF1_DC_ERR ? "dc " : "",
+		eflags & RHF1_TID_ERR ? "tid " : "",
+		eflags & RHF1_LEN_ERR ? "len " : "",
+		eflags & RHF1_ECC_ERR ? "ecc " : "",
+		eflags & RHF1_VCRC_ERR ? "vcrc " : "",
+		eflags & RHF1_ICRC_ERR ? "icrc " : "");
+
+	rcv_hdrerr(rcd, rcd->ppd, packet->rhf_addr, packet->hdr);
 }
 
 /*
