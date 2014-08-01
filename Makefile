@@ -1,6 +1,6 @@
 VERSION = 3
 PATCHLEVEL = 12
-SUBLEVEL = 25
+SUBLEVEL = 26
 EXTRAVERSION =
 NAME = One Giant Leap for Frogkind
 
@@ -657,6 +657,8 @@ ifndef CONFIG_FUNCTION_TRACER
 KBUILD_CFLAGS	+= -fomit-frame-pointer
 endif
 endif
+
+KBUILD_CFLAGS   += $(call cc-option, -fno-var-tracking-assignments)
 
 ifdef CONFIG_UNWIND_INFO
 KBUILD_CFLAGS	+= -fasynchronous-unwind-tables
