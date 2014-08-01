@@ -5729,6 +5729,7 @@ static void init_chip(struct hfi_devdata *dd)
 	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
 	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
 	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
+	dd->chip_sdma_mem_size = read_csr(dd, WFR_SEND_DMA_MEM_SIZE);
 
 	/*
 	 * Put the WFR CSRs in a known state.
@@ -6446,6 +6447,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			mod_num_sdma);
 		dd_dev_info(dd, "SDMA chip_sdma_engines: %u\n",
 			dd->chip_sdma_engines);
+		dd_dev_info(dd, "SDMA chip_sdma_mem_size: %u\n",
+			dd->chip_sdma_mem_size);
 		for (i = 0; i < dd->num_pports; ++i) {
 			ret = sdma_init(dd, i, num_sdma);
 			if (ret)

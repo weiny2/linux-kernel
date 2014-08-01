@@ -876,6 +876,8 @@ struct hfi_devdata {
 	u32 chip_send_contexts;
 	/* number of bytes in the PIO memory buffer */
 	u32 chip_pio_mem_size;
+	/* number of bytes in the SDMA memory buffer */
+	u32 chip_sdma_mem_size;
 	/* kr_pagealign value */
 	u32 palign;
 	/* max usable size in dwords of a "2KB" PIO buffer before going "4KB" */

@@ -42,11 +42,6 @@
 #include "iowait.h"
 #include "trace.h"
 
-/* JAG SDMA from HAS 7.3.1 */
-#define DEFAULT_WFR_SEND_DMA_MEMORY (((unsigned long long) \
-	(TXE_SDMA_MEMORY_BYTES/(TXE_NUM_SDMA_ENGINES * 64))) \
-	<< WFR_SEND_DMA_MEMORY_SDMA_MEMORY_CNT_SHIFT)
-
 /* must be a power of 2 >= 64 <= 32768 */
 #define SDMA_DESCQ_CNT 1024
 /* default pio off, sdma on */
@@ -161,7 +156,7 @@ static void sdma_start_sw_clean_up(struct sdma_engine *);
 static void sdma_sw_clean_up_task(unsigned long);
 static void unmap_desc(struct sdma_engine *, unsigned);
 static void sdma_sendctrl(struct sdma_engine *, unsigned);
-static void init_sdma_regs(struct sdma_engine *);
+static void init_sdma_regs(struct sdma_engine *, u32);
 static void sdma_process_event(
 	struct sdma_engine *sde,
 	enum sdma_events event);
@@ -550,6 +545,8 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	void *curr_head;
 	unsigned long flags;
 	struct qib_pportdata *ppd = dd->pport + port;
+	u32 per_sdma_credits =
+		TXE_SDMA_MEMORY_BYTES/(TXE_NUM_SDMA_ENGINES * 64);
 
 	descq_cnt = sdma_get_descq_cnt();
 	dd_dev_info(dd, "SDMA engines %zu descq_cnt %u\n",
@@ -638,7 +635,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 		phys_offset = (unsigned long)sde->head_dma -
 			      (unsigned long)dd->sdma_heads_dma;
 		sde->head_phys = dd->sdma_heads_phys + phys_offset;
-		init_sdma_regs(sde);
+		init_sdma_regs(sde, per_sdma_credits);
 	}
 	dd->flags |= QIB_HAS_SEND_DMA;
 	dd->flags |= sdma_idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
@@ -1194,7 +1191,7 @@ static void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
 	write_sde_csr(sde, WFR_SEND_DMA_DESC_CNT, reg);
 }
 
-static void init_sdma_regs(struct sdma_engine *sde)
+static void init_sdma_regs(struct sdma_engine *sde, u32 credits)
 {
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
@@ -1207,7 +1204,11 @@ static void init_sdma_regs(struct sdma_engine *sde)
 	write_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT, sdma_idle_cnt);
 	write_sde_csr(sde, WFR_SEND_DMA_DESC_CNT, 0);
 	write_sde_csr(sde, WFR_SEND_DMA_HEAD_ADDR, sde->head_phys);
-	write_sde_csr(sde, WFR_SEND_DMA_MEMORY, DEFAULT_WFR_SEND_DMA_MEMORY);
+	write_sde_csr(sde, WFR_SEND_DMA_MEMORY,
+		((u64)credits <<
+			WFR_SEND_DMA_MEMORY_SDMA_MEMORY_CNT_SHIFT) |
+		((u64)(credits * sde->this_idx) <<
+			WFR_SEND_DMA_MEMORY_SDMA_MEMORY_INDEX_SHIFT));
 	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
 	write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE,
 			HFI_PKT_BASE_SDMA_INTEGRITY);
@@ -1338,7 +1339,8 @@ static void dump_sdma_state(struct sdma_engine *sde)
 	}
 }
 
-#define SDE_FMT "SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx\n"
+#define SDE_FMT \
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1361,12 +1363,14 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		sdma_state_name(sde->state.current_state),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CTRL),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_STATUS),
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_STATUS),
+		(unsigned long long)read_sde_csr(sde,
+			WFR_SEND_DMA_ENG_ERR_STATUS),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_TAIL),
 		tail,
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD),
 		head,
-		(unsigned long long)*sde->head_dma);
+		(unsigned long long)*sde->head_dma,
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_MEMORY));
 
 	/* print info for each entry in the descriptor queue */
 	while (head != tail) {
