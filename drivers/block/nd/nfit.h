@@ -109,6 +109,15 @@ struct nfit_mem {
 	__le32 reserved;
 } __packed;
 
+#define NFIT_DIMM_HANDLE(node, socket, imc, chan, dimm) \
+	(((node & 0xfff) << 16) | ((socket & 0xf) << 12) \
+	 | ((imc & 0xf) << 8) | ((chan & 0xf) << 4) | (dimm & 0xf))
+#define NFIT_DIMM_NODE(handle) ((handle) >> 16 & 0xfff)
+#define NFIT_DIMM_SOCKET(handle) ((handle) >> 12 & 0xf)
+#define NFIT_DIMM_CHAN(handle) ((handle) >> 8 & 0xf)
+#define NFIT_DIMM_IMC(handle) ((handle) >> 4 & 0xf)
+#define NFIT_DIMM_DIMM(handle) ((handle) & 0xf)
+
 /**
  * struct nfit_idt - Interleave description Table
  * @line_offset: at least 1 plus (num_lines - 1) lines

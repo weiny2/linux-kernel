@@ -35,4 +35,19 @@ config NFIT_ACPI
 	  register the platform-global NFIT blob with the core.  Also
 	  enables the core to craft ACPI._DSM messages for platform/dimm
 	  configuration.
+
+config NFIT_TEST
+	tristate "NFIT TEST: Manufactured NFIT for interface testing"
+	select ND_CORE
+	depends on !(NFIT_ACPI=y || NFIT_ACPI=m)
+	depends on DMA_CMA
+	help
+	  For development purposes register a manufactured
+	  NFIT table to verify the resulting device model topology.
+	  Note, this module arranges for ioremap_cache() to be
+	  overridden locally to allow simulation of system-memory as an
+	  io-memory-resource.
+
+	  Say N unless you are doing development of the 'nd' subsystem.
+
 endif
