@@ -627,6 +627,9 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 		else
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
 	}
+	/* don't forget VL 15 */
+	mtu = mtu_to_enum(dd->vld[15].mtu, 2048);
+	pi->neigh_mtu.pvlx_to_mtu[15/2] |= mtu;
 	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
 	pi->operational_vls =
 		hfi_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
