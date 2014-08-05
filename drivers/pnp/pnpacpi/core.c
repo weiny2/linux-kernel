@@ -252,6 +252,7 @@ static int __init pnpacpi_add_device(struct acpi_device *device)
 	struct pnp_dev *dev;
 	char *pnpid;
 	struct acpi_hardware_id *id;
+	int error;
 
 	/* Skip devices that are already bound */
 	if (device->physical_node_count)
@@ -313,10 +314,18 @@ static int __init pnpacpi_add_device(struct acpi_device *device)
 	/* clear out the damaged flags */
 	if (!dev->active)
 		pnp_init_resources(dev);
-	pnp_add_device(dev);
+
+	error = pnp_add_device(dev);
+	if (error) {
+		put_device(&dev->dev);
+		return error;
+	}
+
+	error = acpi_bind_one(&dev->dev, device->handle);
+
 	num++;
 
-	return AE_OK;
+	return error;
 }
 
 static acpi_status __init pnpacpi_add_device_handler(acpi_handle handle,
@@ -332,41 +341,6 @@ static acpi_status __init pnpacpi_add_device_handler(acpi_handle handle,
 	return AE_OK;
 }
 
-static int __init acpi_pnp_match(struct device *dev, void *_pnp)
-{
-	struct acpi_device *acpi = to_acpi_device(dev);
-	struct pnp_dev *pnp = _pnp;
-
-	/* true means it matched */
-	return !acpi->physical_node_count
-	    && compare_pnp_id(pnp->id, acpi_device_hid(acpi));
-}
-
-static struct acpi_device * __init acpi_pnp_find_companion(struct device *dev)
-{
-	dev = bus_find_device(&acpi_bus_type, NULL, to_pnp_dev(dev),
-			      acpi_pnp_match);
-	if (!dev)
-		return NULL;
-
-	put_device(dev);
-	return to_acpi_device(dev);
-}
-
-/* complete initialization of a PNPACPI device includes having
- * pnpdev->dev.archdata.acpi_handle point to its ACPI sibling.
- */
-static bool acpi_pnp_bus_match(struct device *dev)
-{
-	return dev->bus == &pnp_bus_type;
-}
-
-static struct acpi_bus_type __initdata acpi_pnp_bus = {
-	.name	     = "PNP",
-	.match	     = acpi_pnp_bus_match,
-	.find_companion = acpi_pnp_find_companion,
-};
-
 int pnpacpi_disabled __initdata;
 static int __init pnpacpi_init(void)
 {
@@ -376,10 +350,8 @@ static int __init pnpacpi_init(void)
 	}
 	printk(KERN_INFO "pnp: PnP ACPI init\n");
 	pnp_register_protocol(&pnpacpi_protocol);
-	register_acpi_bus_type(&acpi_pnp_bus);
 	acpi_get_devices(NULL, pnpacpi_add_device_handler, NULL, NULL);
 	printk(KERN_INFO "pnp: PnP ACPI: found %d devices\n", num);
-	unregister_acpi_bus_type(&acpi_pnp_bus);
 	pnp_platform_devices = 1;
 	return 0;
 }
