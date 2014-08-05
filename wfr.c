@@ -1640,13 +1640,20 @@ void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 		 * LCB_CFG_TX_FIFOS_RADR.RST_VAL = 6
 		 */
 		tx_radr = 6ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
-	} else  {
-		/* release 0x13 and higher */
+	} else if ((dd->irev >> 8) <= 0x18) {
+		/* release 0x13 up to 0x18 */
 		rx_radr =
 		      0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT
 		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
 		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT;
 		tx_radr = 7ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+	} else  {
+		/* release 0x19 and higher */
+		rx_radr =
+		      0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT
+		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0xAull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT;
+		tx_radr = 3ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
 	}
 
 	write_csr(dd, DC_LCB_CFG_RX_FIFOS_RADR, rx_radr);
