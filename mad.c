@@ -2415,6 +2415,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int vfi;
+	u64 tmp;
 
 	/* FIXME
 	 * some of the counters are not implemented. if the WFR spec
@@ -2488,8 +2489,9 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
-	rsp->uncorrectable_errors = /* XXX why is this only 8 bits? */
-		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
+	/* rsp->uncorrectable_errors is 8 bits wide, and it pegs at 0xff */
+	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
+	rsp->uncorrectable_errors = tmp < 0x100 ? (tmp & 0xff) : 0xff;
 	/* rsp->link_quality_indicator ??? */
 	vlinfo = &(rsp->vls[0]);
 	vfi = 0;
@@ -2574,8 +2576,8 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* link_error_recovery - DC (table 13-11 WFR spec) */
 	error_counter_summary += cpu_to_be32(ppd->link_downed);
-	error_counter_summary +=
-		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
+	error_counter_summary += /* this is an 8-bit quantity */
+		read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT) & 0xff;
 	/* link_quality_indicator ??? */
 
 	return error_counter_summary;
@@ -2744,7 +2746,7 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	struct qib_pportdata *ppd;
 	struct _vls_ectrs *vlinfo;
 	unsigned long vl;
-	u64 port_mask;
+	u64 port_mask, tmp;
 	u32 vl_select_mask;
 	int vfi;
 
@@ -2815,8 +2817,8 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
-	rsp->uncorrectable_errors = /* XXX why is this only 8 bits? */
-		cpu_to_be64(read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT));
+	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
+	rsp->uncorrectable_errors = tmp < 0x100 ? (tmp & 0xff) : 0xff;
 
 	vlinfo = (struct _vls_ectrs *)&(rsp->vls[0]);
 	vfi = 0;
