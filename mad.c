@@ -2929,6 +2929,8 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	u32 nports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	u64 portn = be64_to_cpu(req->port_select_mask[3]);
 	u32 counter_select = be32_to_cpu(req->counter_select_mask);
+	u32 vl_select_mask = WFR_VL_MASK_ALL; /* clear all per-vl cnts */
+	unsigned long vl;
 	u32 offset;
 
 	if ((nports != 1) || (portn != 1 << port)) {
@@ -2994,6 +2996,39 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 		ppd->link_downed = 0;
 	if (counter_select & CS_UNCORRECTABLE_ERRORS)
 		write_csr(dd, DCC_ERR_UNCORRECTABLE_CNT, 0);
+
+	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+			 8 * sizeof(vl_select_mask)) {
+		/* for data VLs, the byte offset from the associated VL0
+		 * register is 8 * vl, but for VL15 it's 8 * 8 */
+		offset = 8 * (unsigned)((vl == 15) ? 8 : vl);
+		if (counter_select & CS_PORT_XMIT_DATA)
+			write_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
+					8 * SEND_DATA_VL0_CNT + offset, 0);
+		if (counter_select & CS_PORT_RCV_DATA)
+			write_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT + offset, 0);
+		if (counter_select & CS_PORT_XMIT_PKTS)
+			write_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
+					8 * SEND_DATA_PKT_VL0_CNT + offset, 0);
+		if (counter_select & CS_PORT_RCV_PKTS)
+			write_csr(dd, DCC_PRF_PORT_VL_RCV_PKTS_CNT + offset, 0);
+		if (counter_select & CS_PORT_XMIT_WAIT)
+			write_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
+					8 * SEND_WAIT_VL0_CNT + offset, 0);
+		/* sw_port_vl_congestion is 0 for HFIs */
+		if (counter_select & CS_PORT_RCV_FECN)
+			write_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT + offset, 0);
+		if (counter_select & CS_PORT_RCV_BECN)
+			write_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT + offset, 0);
+		/* port_vl_xmit_time_cong is 0 for HFIs */
+		/* port_vl_xmit_wasted_bw ??? */
+		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ??? */
+		if (counter_select & CS_PORT_RCV_BUBBLE)
+			write_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT + offset, 0);
+		if (counter_select & CS_PORT_MARK_FECN)
+			write_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT + offset, 0);
+		/* port_vl_xmit_discards ??? */
+	}
 
 	return reply(pmp);
 }
