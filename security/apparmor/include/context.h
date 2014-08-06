@@ -139,6 +139,37 @@ static inline struct aa_profile *__aa_current_profile(void)
 }
 
 /**
+ * aa_begin_current_profile - find newest version of the current tasks profile
+ *
+ * Returns: newest version of confining profile (NOT NULL)
+ *
+ * This fn will not update the tasks cred, so it is safe inside of locks
+ *
+ * The returned reference must be put with aa_end_current_profile()
+ */
+static inline struct aa_profile *aa_begin_current_profile(void)
+{
+	struct aa_profile *p = __aa_current_profile();
+
+	if (PROFILE_INVALID(p))
+		p = aa_get_newest_profile(p);
+	return p;
+}
+
+/**
+ * aa_end_current_label - put a reference found with aa_begin_current_label
+ * @profile: profile reference to put
+ *
+ * Should only be used with a reference obtained with aa_begin_current_profile
+ * and never used in situations where the task cred may be updated
+ */
+static inline void aa_end_current_profile(struct aa_profile *profile)
+{
+	if (profile != __aa_current_profile())
+		aa_put_profile(profile);
+}
+
+/**
  * aa_current_profile - find the current tasks confining profile and do updates
  *
  * Returns: up to date confining profile or the ns unconfined profile (NOT NULL)
