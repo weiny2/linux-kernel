@@ -39,18 +39,15 @@
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
-
-	if (dd->kregbase) {
-		val = readq((void *)dd->kregbase + offset);
-		return le64_to_cpu(val);
-	}
-	return -1;
+	BUG_ON(dd->kregbase == NULL);
+	val = readq((void *)dd->kregbase + offset);
+	return le64_to_cpu(val);
 }
 
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
-	if (dd->kregbase)
-		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
+	BUG_ON(dd->kregbase == NULL);
+	writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
 
 /*
@@ -87,7 +84,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	resource_size_t addr;
 	int ret;
 
-	dd = hfi_alloc_devdata(pdev, 0);
+	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
 		return dd;
 

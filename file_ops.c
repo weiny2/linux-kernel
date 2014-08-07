@@ -284,14 +284,7 @@ int hfi_user_add(struct hfi_devdata *dd)
 	snprintf(name, sizeof(name), "%s%d", DRIVER_DEVICE_PREFIX, dd->unit);
 	ret = hfi_cdev_init(dd->unit + 1, name, &hfi_file_ops,
 			    &dd->user_cdev, &dd->user_device);
-	if (ret)
-		goto done;
-
-	dev_set_drvdata(dd->user_device, dd);
-
-	return 0;
-
-done:
-	hfi_user_remove(dd);
+	if (!ret)
+		dev_set_drvdata(dd->user_device, dd);
 	return ret;
 }
