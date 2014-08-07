@@ -1389,6 +1389,8 @@ static int zcrypt_rng_device_add(void)
 			goto out;
 		}
 		zcrypt_rng_buffer_index = 0;
+		if (!ap_hwrng_seed)
+			zcrypt_rng_dev.quality = 0;
 		rc = hwrng_register(&zcrypt_rng_dev);
 		if (rc)
 			goto out_free;
