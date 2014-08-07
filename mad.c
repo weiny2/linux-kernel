@@ -2552,7 +2552,7 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	u64 error_counter_summary = 0;
+	u64 error_counter_summary = 0, tmp;
 	/* FIXME
 	 * some of the counters are not implemented. if the WFR spec
 	 * indicates the source of the value (e.g., driver, DC, etc.)
@@ -2576,8 +2576,9 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* link_error_recovery - DC (table 13-11 WFR spec) */
 	error_counter_summary += cpu_to_be32(ppd->link_downed);
-	error_counter_summary += /* this is an 8-bit quantity */
-		read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT) & 0xff;
+	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
+	/* this is an 8-bit quantity */
+	error_counter_summary += tmp < 0x100 ? (tmp & 0xff) : 0xff;
 	/* link_quality_indicator ??? */
 
 	return error_counter_summary;
