@@ -89,12 +89,12 @@ struct pci_driver hfi_driver = {
 /*
  * Allocate our primary per HFI-device data structure.
  */
-struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev, size_t extra)
+struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd;
 	int unit;
 
-	dd = kzalloc(sizeof(*dd) + extra, GFP_KERNEL);
+	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
 	if (!dd)
 		return ERR_PTR(-ENOMEM);
 

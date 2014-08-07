@@ -121,7 +121,7 @@ void hfi_disable_msix(struct hfi_devdata *);
 int setup_interrupts(struct hfi_devdata *dd, int, int);
 void cleanup_interrupts(struct hfi_devdata *dd);
 
-struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev, size_t extra);
+struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
 int hfi_user_add(struct hfi_devdata *);
 void hfi_user_remove(struct hfi_devdata *);
 int hfi_ui_add(struct hfi_devdata *);
