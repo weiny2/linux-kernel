@@ -1870,7 +1870,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	struct zone *zone = lruvec_zone(lruvec);
 	unsigned long anon_prio, file_prio;
 	enum scan_balance scan_balance;
-	unsigned long anon, file, free;
+	unsigned long anon, file;
 	bool force_scan = false;
 	unsigned long ap, fp;
 	enum lru_list lru;
