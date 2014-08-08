@@ -368,9 +368,10 @@ int qib_make_ud_req(struct qib_qp *qp)
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
-	bth0 |= qp->ibqp.qp_type == IB_QPT_SMI ? WFR_DEFAULT_P_KEY :
-		qib_get_pkey(ibp, qp->ibqp.qp_type == IB_QPT_GSI ?
-			     wqe->wr.wr.ud.pkey_index : qp->s_pkey_index);
+	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
+		bth0 |= qib_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+	else
+		bth0 |= qib_get_pkey(ibp, qp->s_pkey_index);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	/*
 	 * Use the multicast QP if the destination LID is a multicast LID.
