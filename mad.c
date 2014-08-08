@@ -5016,9 +5016,17 @@ static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
 			       struct jumbo_mad *out_mad)
 {
 	int ret;
+	int pkey_idx;
 	u32 resp_len = 0;
-	/* XXX struct qib_ibport *ibp = to_iport(ibdev, port); */ 
-	/* XXX struct qib_pportdata *ppd = ppd_from_ibp(ibp); */
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+
+	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
+	if (pkey_idx < 0) {
+		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
+			qib_get_pkey(ibp, 1));
+		pkey_idx = 1;
+	}
+	in_wc->pkey_index = (u16)pkey_idx;
 
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
