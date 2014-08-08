@@ -376,6 +376,7 @@ static int apparmor_inode_getattr(struct vfsmount *mnt, struct dentry *dentry)
 
 static int apparmor_file_open(struct file *file, const struct cred *cred)
 {
+	const struct aa_task_cxt *cxt = cred_cxt(cred);
 	struct aa_file_cxt *fcxt = file->f_security;
 	struct aa_profile *profile;
 	int error = 0;
@@ -393,7 +394,7 @@ static int apparmor_file_open(struct file *file, const struct cred *cred)
 		return 0;
 	}
 
-	profile = aa_cred_profile(cred);
+	profile = aa_get_newest_profile(cxt->profile);
 	if (!unconfined(profile)) {
 		struct inode *inode = file_inode(file);
 		struct path_cond cond = { inode->i_uid, inode->i_mode };
@@ -403,6 +404,7 @@ static int apparmor_file_open(struct file *file, const struct cred *cred)
 		/* todo cache full allowed permissions set and state */
 		fcxt->allow = aa_map_file_to_perms(file);
 	}
+	aa_put_profile(profile);
 
 	return error;
 }
