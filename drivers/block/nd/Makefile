@@ -9,4 +9,4 @@ obj-$(CONFIG_NFIT_TEST) += nfit-test.o
 obj-$(CONFIG_NFIT_TEST) += nfit-test-mem.o
 
 nd-acpi-y := acpi.o
-nd-core-y := nd.o
+nd-core-y := nd.o bus.o
