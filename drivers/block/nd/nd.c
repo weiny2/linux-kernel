@@ -14,10 +14,13 @@
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include "nd-private.h"
 #include "nfit.h"
 
+LIST_HEAD(nd_bus_list);
+DEFINE_MUTEX(nd_bus_list_mutex);
 static DEFINE_IDA(nd_ida);
 
 static void nd_bus_release(struct device *dev)
@@ -72,6 +75,7 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->dcrs);
 	INIT_LIST_HEAD(&nd_bus->bdws);
 	INIT_LIST_HEAD(&nd_bus->memdevs);
+	INIT_LIST_HEAD(&nd_bus->list);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
 	if (test_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags))
 		nd_bus->format_interface_code = 1;
@@ -200,6 +204,7 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 	void __iomem *base = nfit;
 	const void __iomem *end;
 	size_t size, i;
+	int rc;
 
 	if (!nd_bus)
 		return NULL;
@@ -236,6 +241,14 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 		goto err;
 	}
 
+	rc = nd_bus_create_ndctl(nd_bus);
+	if (rc)
+		goto err;
+
+	mutex_lock(&nd_bus_list_mutex);
+	list_add_tail(&nd_bus->list, &nd_bus_list);
+	mutex_unlock(&nd_bus_list_mutex);
+
 	return nd_bus;
  err:
 	put_device(&nd_bus->dev);
@@ -266,6 +279,13 @@ void nfit_bus_unregister(struct nd_bus *nd_bus)
 {
 	if (!nd_bus)
 		return;
+
+	mutex_lock(&nd_bus_list_mutex);
+	list_del_init(&nd_bus->list);
+	mutex_unlock(&nd_bus_list_mutex);
+
+	nd_bus_destroy_ndctl(nd_bus);
+
 	device_unregister(&nd_bus->dev);
 }
 EXPORT_SYMBOL(nfit_bus_unregister);
@@ -281,11 +301,13 @@ static __init int nd_core_init(void)
 	BUILD_BUG_ON(sizeof(struct nfit_bdw) != 40);
 	BUILD_BUG_ON(sizeof(struct nfit_flush) != 24);
 
-	return 0;
+	return nd_bus_init();
 }
 
 static __exit void nd_core_exit(void)
 {
+	WARN_ON(!list_empty(&nd_bus_list));
+	nd_bus_exit();
 }
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Intel Corporation");

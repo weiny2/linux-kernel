@@ -13,3 +13,4 @@ obj-$(CONFIG_NFIT_TEST) += nfit_test_mem.o
 nd_acpi-y := acpi.o
 
 nd_core-y := nd.o
+nd_core-y += bus.o
