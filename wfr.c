@@ -6239,7 +6239,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			ppd->vls_supported = IB_VL_VL0_1;
 			break;
 		default:
-			dd_dev_info(dd,
+			qib_early_err(&pdev->dev,
 				    "Invalid num_vls %u, using 4 VLs\n",
 				    num_vls);
 			num_vls = 4;
