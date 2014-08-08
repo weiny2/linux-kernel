@@ -73,42 +73,38 @@ fsreg_read_pfs(struct seq_file *seq, void *data)
 		break;
 	}
 
-	while(1){
-		seq_printf(seq, "fsrp=0x%p\n", fsrp);
-		seq_printf(seq, "fr_next=0x%p\n", fsrp->fr_next);
-		seq_printf(seq, "fr_sb=0x%p\n", fsrp->fr_sb);
-		seq_printf(seq, "fr_tevp=0x%p\n", fsrp->fr_tevp);
-		seq_printf(seq, "fr_fsid=%c\n", '?');
-		seq_printf(seq, "fr_msg=0x%p\n", fsrp->fr_msg);
-		seq_printf(seq, "fr_msgsize=%d\n", fsrp->fr_msgsize);
-		seq_printf(seq, "fr_state=%s\n", statebuf);
-		seq_printf(seq, "fr_dispq=%c\n", '?');
-		seq_printf(seq, "fr_dispcnt=%d\n", fsrp->fr_dispcnt);
+	seq_printf(seq, "fsrp=0x%p\n", fsrp);
+	seq_printf(seq, "fr_next=0x%p\n", fsrp->fr_next);
+	seq_printf(seq, "fr_sb=0x%p\n", fsrp->fr_sb);
+	seq_printf(seq, "fr_tevp=0x%p\n", fsrp->fr_tevp);
+	seq_printf(seq, "fr_fsid=%c\n", '?');
+	seq_printf(seq, "fr_msg=0x%p\n", fsrp->fr_msg);
+	seq_printf(seq, "fr_msgsize=%d\n", fsrp->fr_msgsize);
+	seq_printf(seq, "fr_state=%s\n", statebuf);
+	seq_printf(seq, "fr_dispq=%c\n", '?');
+	seq_printf(seq, "fr_dispcnt=%d\n", fsrp->fr_dispcnt);
 
-		seq_printf(seq, "fr_evt_dispq.eq_head=0x%p\n", fsrp->fr_evt_dispq.eq_head);
-		seq_printf(seq, "fr_evt_dispq.eq_tail=0x%p\n", fsrp->fr_evt_dispq.eq_tail);
-		seq_printf(seq, "fr_evt_dispq.eq_count=%d\n", fsrp->fr_evt_dispq.eq_count);
+	seq_printf(seq, "fr_evt_dispq.eq_head=0x%p\n", fsrp->fr_evt_dispq.eq_head);
+	seq_printf(seq, "fr_evt_dispq.eq_tail=0x%p\n", fsrp->fr_evt_dispq.eq_tail);
+	seq_printf(seq, "fr_evt_dispq.eq_count=%d\n", fsrp->fr_evt_dispq.eq_count);
 
-		seq_printf(seq, "fr_queue=%c\n", '?');
-		seq_printf(seq, "fr_lock=%c\n", '?');
-		seq_printf(seq, "fr_hdlcnt=%d\n", fsrp->fr_hdlcnt);
-		seq_printf(seq, "fr_vfscnt=%d\n", fsrp->fr_vfscnt);
-		seq_printf(seq, "fr_unmount=%d\n", fsrp->fr_unmount);
+	seq_printf(seq, "fr_queue=%c\n", '?');
+	seq_printf(seq, "fr_lock=%c\n", '?');
+	seq_printf(seq, "fr_hdlcnt=%d\n", fsrp->fr_hdlcnt);
+	seq_printf(seq, "fr_vfscnt=%d\n", fsrp->fr_vfscnt);
+	seq_printf(seq, "fr_unmount=%d\n", fsrp->fr_unmount);
 
-		seq_printf(seq, "fr_rattr=");
-		for(i = 0; i <= DM_ATTR_NAME_SIZE; ++i){
-			seq_printf(seq, "%c", fsrp->fr_rattr.an_chars[i]);
+	seq_printf(seq, "fr_rattr=");
+	for(i = 0; i < DM_ATTR_NAME_SIZE; ++i){
+		seq_printf(seq, "%c", fsrp->fr_rattr.an_chars[i]);
+	}
+	seq_printf(seq, "\n");
+
+	for(i = 0; i < DM_EVENT_MAX; i++){
+		if( fsrp->fr_sessp[i] != NULL ){
+			seq_printf(seq, "fr_sessp[%d]=", i);
+			seq_printf(seq, "0x%p\n", fsrp->fr_sessp[i]);
 		}
-		seq_printf(seq, "\n");
-
-		for(i = 0; i < DM_EVENT_MAX; i++){
-			if( fsrp->fr_sessp[i] != NULL ){
-				seq_printf(seq, "fr_sessp[%d]=", i);
-				seq_printf(seq, "0x%p\n", fsrp->fr_sessp[i]);
-			}
-		}
-
-		break;
 	}
 
 	return 0;
