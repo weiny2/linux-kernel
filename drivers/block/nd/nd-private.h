@@ -27,6 +27,7 @@ enum {
 struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;
 	int format_interface_code;
+	struct list_head regions;
 	struct list_head memdevs;
 	struct list_head spas;
 	struct list_head dcrs;
@@ -71,4 +72,7 @@ void __init nd_bus_exit(void);
 int nd_bus_create_ndctl(struct nd_bus *nd_bus);
 void nd_bus_destroy_ndctl(struct nd_bus *nd_bus);
 int nd_bus_register_dimms(struct nd_bus *nd_bus);
+int nd_bus_register_regions(struct nd_bus *nd_bus);
+int nd_match_dimm(struct device *dev, void *data);
+bool is_nd_dimm(struct device *dev);
 #endif /* __ND_PRIVATE_H__ */
