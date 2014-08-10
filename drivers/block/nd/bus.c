@@ -21,6 +21,10 @@
 static int nd_major;
 static struct class *nd_class;
 
+struct bus_type nd_bus_type = {
+	.name = "nd",
+};
+
 static const char *nfit_desc_provider(struct device *parent,
 		struct nfit_bus_descriptor *nfit_desc)
 {
@@ -131,9 +135,13 @@ int __init nd_bus_init(void)
 {
 	int rc;
 
+	rc = bus_register(&nd_bus_type);
+	if (rc)
+		return rc;
+
 	rc = register_chrdev(0, "ndctl", &nd_bus_fops);
 	if (rc < 0)
-		return rc;
+		goto err_chrdev;
 	nd_major = rc;
 
 	nd_class = class_create(THIS_MODULE, "nd_bus");
@@ -144,6 +152,8 @@ int __init nd_bus_init(void)
 
  err_class:
 	unregister_chrdev(nd_major, "ndctl");
+ err_chrdev:
+	bus_unregister(&nd_bus_type);
 
 	return rc;
 }
@@ -152,4 +162,5 @@ void __exit nd_bus_exit(void)
 {
 	class_destroy(nd_class);
 	unregister_chrdev(nd_major, "ndctl");
+	bus_unregister(&nd_bus_type);
 }
