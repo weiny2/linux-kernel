@@ -179,6 +179,18 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 	return table + readw(&hdr->length);
 }
 
+static int nd_child_unregister(struct device *dev, void *data)
+{
+	/*
+	 * the singular ndctl class device per bus needs to be
+	 * "device_destroy"ed, so skip it here
+	 */
+	if (dev->class)
+		/* pass */;
+	else
+		device_unregister(dev);
+	return 0;
+}
 
 static struct nd_bus *__nd_bus_register(struct device *parent,
 		struct nd_bus *nd_bus)
@@ -236,11 +248,18 @@ static struct nd_bus *__nd_bus_register(struct device *parent,
 	if (rc)
 		goto err;
 
+	rc = nd_bus_register_dimms(nd_bus);
+	if (rc)
+		goto err_child;
+
 	mutex_lock(&nd_bus_list_mutex);
 	list_add_tail(&nd_bus->list, &nd_bus_list);
 	mutex_unlock(&nd_bus_list_mutex);
 
 	return nd_bus;
+ err_child:
+	device_for_each_child(&nd_bus->dev, NULL, nd_child_unregister);
+	nd_bus_destroy(nd_bus);
  err:
 	nd_bus_free(nd_bus);
 	return NULL;
@@ -277,6 +296,7 @@ void nfit_bus_unregister(struct nd_bus *nd_bus)
 	list_del_init(&nd_bus->list);
 	mutex_unlock(&nd_bus_list_mutex);
 
+	device_for_each_child(&nd_bus->dev, NULL, nd_child_unregister);
 	nd_bus_destroy(nd_bus);
 
 	device_unregister(&nd_bus->dev);

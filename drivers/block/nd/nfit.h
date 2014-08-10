@@ -121,6 +121,7 @@ struct nfit_mem {
 	(((node & 0xfff) << 16) | ((socket & 0xf) << 12) \
 	 | ((imc & 0xf) << 8) | ((chan & 0xf) << 4) | (dimm & 0xf))
 #define NFIT_DIMM_NODE(handle) ((handle) >> 16 & 0xfff)
+#define NFIT_DIMM_SICD(handle) ((handle) & 0xffff)
 #define NFIT_DIMM_SOCKET(handle) ((handle) >> 12 & 0xf)
 #define NFIT_DIMM_CHAN(handle) ((handle) >> 8 & 0xf)
 #define NFIT_DIMM_IMC(handle) ((handle) >> 4 & 0xf)

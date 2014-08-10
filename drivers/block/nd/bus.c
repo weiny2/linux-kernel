@@ -46,6 +46,37 @@
 static int nd_major;
 static struct class *nd_class;
 
+struct nd_dimm {
+	struct device dev;
+	u32 handle;
+};
+
+static inline struct nd_dimm *to_nd_dimm(struct device *dev)
+{
+	return container_of(dev, struct nd_dimm, dev);
+}
+
+static void nd_dimm_release(struct device *dev)
+{
+	struct nd_dimm *dimm = to_nd_dimm(dev);
+
+	kfree(dimm);
+}
+
+static struct device_type nd_dimm_device_type = {
+	.name = "nd_dimm",
+	.release = nd_dimm_release,
+};
+
+static struct bus_type nd_bus_type = {
+	.name = "nd",
+};
+
+static bool is_nd_dimm(struct device *dev)
+{
+	return dev->type == &nd_dimm_device_type;
+}
+
 static ssize_t provider_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -264,6 +295,73 @@ static int __nd_ioctl(struct nd_bus *nd_bus, int read_only, unsigned int cmd,
 	return rc;
 }
 
+static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
+		struct nd_mem *nd_mem)
+{
+	struct nd_dimm *dimm = kzalloc(sizeof(*dimm), GFP_KERNEL);
+	struct device *dev;
+
+	if (!dimm)
+		return NULL;
+
+	dimm->handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	dev = &dimm->dev;
+	dev_set_name(dev, "dimm-%.3x:%.4x",
+			NFIT_DIMM_NODE(dimm->handle),
+			NFIT_DIMM_SICD(dimm->handle));
+	dev->parent = &nd_bus->dev;
+	dev->type = &nd_dimm_device_type;
+	dev->bus = &nd_bus_type;
+	if (device_register(dev) != 0) {
+		kfree(dimm);
+		dimm = NULL;
+	}
+
+	return dimm;
+}
+
+static int match_dimm(struct device *dev, void *data)
+{
+	u32 handle = *(u32 *) data;
+	struct nd_dimm *nd_dimm;
+
+	if (!is_nd_dimm(dev))
+		return 0;
+	nd_dimm = to_nd_dimm(dev);
+	if (handle == nd_dimm->handle)
+		return 1;
+
+	return 0;
+}
+
+int nd_bus_register_dimms(struct nd_bus *nd_bus)
+{
+	struct nd_mem *nd_mem;
+	struct nd_dimm *dimm;
+	u32 handle;
+	int rc = 0;
+
+	mutex_lock(&nd_bus_list_mutex);
+	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
+		struct device *dev;
+
+		handle = readl(&nd_mem->nfit_mem->nfit_handle);
+		dev = device_find_child(&nd_bus->dev, &handle, match_dimm);
+		if (dev) {
+			put_device(dev);
+			continue;
+		}
+		dimm = nd_dimm_create(nd_bus, nd_mem);
+		if (!dimm) {
+			rc = -ENOMEM;
+			break;
+		}
+	}
+	mutex_unlock(&nd_bus_list_mutex);
+
+	return rc;
+}
+
 static long nd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	long id = (long) file->private_data;
@@ -303,9 +401,13 @@ int __init nd_bus_init(void)
 {
 	int rc;
 
+	rc = bus_register(&nd_bus_type);
+	if (rc)
+		return rc;
+
 	rc = register_chrdev(0, "ndctl", &nd_bus_fops);
 	if (rc < 0)
-		return rc;
+		goto err_chrdev;
 	nd_major = rc;
 
 	nd_class = class_create(THIS_MODULE, "nd_bus");
@@ -316,6 +418,8 @@ int __init nd_bus_init(void)
 
  err_class:
 	unregister_chrdev(nd_major, "ndctl");
+ err_chrdev:
+	bus_unregister(&nd_bus_type);
 
 	return rc;
 }
@@ -324,4 +428,5 @@ void __exit nd_bus_exit(void)
 {
 	class_destroy(nd_class);
 	unregister_chrdev(nd_major, "ndctl");
+	bus_unregister(&nd_bus_type);
 }
