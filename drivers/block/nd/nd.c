@@ -252,6 +252,10 @@ static struct nd_bus *__nd_bus_register(struct device *parent,
 	if (rc)
 		goto err_child;
 
+	rc = nd_bus_register_regions(nd_bus);
+	if (rc)
+		goto err_child;
+
 	mutex_lock(&nd_bus_list_mutex);
 	list_add_tail(&nd_bus->list, &nd_bus_list);
 	mutex_unlock(&nd_bus_list_mutex);

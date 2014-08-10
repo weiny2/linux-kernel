@@ -42,6 +42,7 @@
 #include <linux/mm.h>
 #include "nd-private.h"
 #include "nfit.h"
+#include "nd.h"
 
 static int nd_major;
 static struct class *nd_class;
@@ -56,6 +57,11 @@ static inline struct nd_dimm *to_nd_dimm(struct device *dev)
 	return container_of(dev, struct nd_dimm, dev);
 }
 
+static struct nd_region *to_nd_region(struct device *dev)
+{
+	return container_of(dev, struct nd_region, dev);
+}
+
 static void nd_dimm_release(struct device *dev)
 {
 	struct nd_dimm *dimm = to_nd_dimm(dev);
@@ -67,6 +73,40 @@ static struct device_type nd_dimm_device_type = {
 	.name = "nd_dimm",
 	.release = nd_dimm_release,
 };
+
+static void nd_region_release(struct device *dev)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+	u16 i;
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+
+		put_device(&nd_dimm->dev);
+	}
+	kfree(nd_region);
+}
+
+static struct device_type nd_block_device_type = {
+	.name = "nd_blk",
+	.release = nd_region_release,
+};
+
+static struct device_type nd_pmem_device_type = {
+	.name = "nd_pm",
+	.release = nd_region_release,
+};
+
+static bool is_nd_pm(struct device *dev)
+{
+	return dev->type == &nd_pmem_device_type;
+}
+
+static bool is_nd_blk(struct device *dev)
+{
+	return dev->type == &nd_block_device_type;
+}
 
 static struct bus_type nd_bus_type = {
 	.name = "nd",
@@ -354,6 +394,280 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 		dimm = nd_dimm_create(nd_bus, nd_mem);
 		if (!dimm) {
 			rc = -ENOMEM;
+			break;
+		}
+	}
+	mutex_unlock(&nd_bus_list_mutex);
+
+	return rc;
+}
+
+static ssize_t type_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n", is_nd_pm(dev) ? "pm" : is_nd_blk(dev)
+			? "block" : "unknown");
+}
+DEVICE_ATTR_RO(type);
+
+static ssize_t size_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%llu\n", nd_region->ndr_size);
+}
+DEVICE_ATTR_RO(size);
+
+static ssize_t mappings_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%d\n", nd_region->ndr_mappings);
+}
+DEVICE_ATTR_RO(mappings);
+
+static ssize_t interleave_ways_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%d\n", nd_region->interleave_ways);
+}
+DEVICE_ATTR_RO(interleave_ways);
+
+static struct attribute *nd_region_attributes[] = {
+	&dev_attr_type.attr,
+	&dev_attr_size.attr,
+	&dev_attr_mappings.attr,
+	&dev_attr_interleave_ways.attr,
+	NULL,
+};
+
+static struct attribute_group nd_region_attribute_group = {
+	.attrs = nd_region_attributes,
+};
+
+/*
+ * Retrieve the nth entry referencing this spa, for pm there may be not only
+ * multiple per device in the interleave, but multiple per-dimm for each region
+ * of the dimm that maps into the interleave.
+ */
+static struct nd_mem *nd_mem_from_spa(struct nd_bus *nd_bus, u16 spa_index, int n)
+{
+	struct nd_mem *nd_mem;
+
+	list_for_each_entry(nd_mem, &nd_bus->memdevs, list)
+		if (readw(&nd_mem->nfit_mem->spa_index) == spa_index)
+			if (n-- == 0)
+				return nd_mem;
+	return NULL;
+}
+
+static int num_nd_mem(struct nd_bus *nd_bus, u16 spa_index)
+{
+	struct nd_mem *nd_mem;
+	int count = 0;
+
+	list_for_each_entry(nd_mem, &nd_bus->memdevs, list)
+		if (readw(&nd_mem->nfit_mem->spa_index) == spa_index)
+			count++;
+	return count;
+}
+
+static ssize_t mappingN(struct device *dev, char *buf, int n)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+	struct nd_mapping *nd_mapping;
+	struct nd_dimm *nd_dimm;
+
+	if (n >= nd_region->ndr_mappings)
+		return -ENXIO;
+	nd_mapping = &nd_region->mapping[n];
+	nd_dimm = nd_mapping->nd_dimm;
+
+	return sprintf(buf, "%.3x:%.4x,%llu,%llu\n",
+			NFIT_DIMM_NODE(nd_dimm->handle),
+			NFIT_DIMM_SICD(nd_dimm->handle),
+			nd_mapping->start, nd_mapping->size);
+}
+
+#define REGION_MAPPING(idx) \
+static ssize_t mapping##idx##_show(struct device *dev,		\
+		struct device_attribute *attr, char *buf)	\
+{								\
+	return mappingN(dev, buf, idx);				\
+}								\
+DEVICE_ATTR_RO(mapping##idx)
+
+/* FIXME: might we ever have more than 8 mappings per region? */
+REGION_MAPPING(0);
+REGION_MAPPING(1);
+REGION_MAPPING(2);
+REGION_MAPPING(3);
+REGION_MAPPING(4);
+REGION_MAPPING(5);
+REGION_MAPPING(6);
+REGION_MAPPING(7);
+
+static umode_t nd_mapping_visible(struct kobject *kobj, struct attribute *a, int n)
+{
+	struct device *dev = container_of(kobj, struct device, kobj);
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	if (n < nd_region->ndr_mappings)
+		return a->mode;
+	return 0;
+}
+
+static struct attribute *nd_mapping_attributes[] = {
+	&dev_attr_mapping0.attr,
+	&dev_attr_mapping1.attr,
+	&dev_attr_mapping2.attr,
+	&dev_attr_mapping3.attr,
+	&dev_attr_mapping4.attr,
+	&dev_attr_mapping5.attr,
+	&dev_attr_mapping6.attr,
+	&dev_attr_mapping7.attr,
+	NULL,
+};
+
+static struct attribute_group nd_mapping_attribute_group = {
+	.is_visible = nd_mapping_visible,
+	.attrs = nd_mapping_attributes,
+};
+
+const struct attribute_group *nd_region_attribute_groups[] = {
+	&nd_region_attribute_group,
+	&nd_mapping_attribute_group,
+	NULL,
+};
+
+static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
+{
+	struct nd_bdw *iter, *nd_bdw = NULL;
+	struct nd_mapping *nd_mapping;
+	struct nd_mem *nd_mem;
+	struct device *dev;
+	u16 dcr_index;
+	u32 handle;
+
+	nd_region->dev.type = &nd_block_device_type;
+
+	nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, 0);
+	dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
+	list_for_each_entry(iter, &nd_bus->bdws, list) {
+		if (readw(&iter->nfit_bdw->dcr_index) == dcr_index) {
+			nd_bdw = iter;
+			break;
+		}
+	}
+
+	if (!nd_bdw) {
+		dev_err(&nd_bus->dev, "%s: failed to find bdw table for dcr %d\n",
+				__func__, dcr_index);
+		return;
+	}
+
+	handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	nd_region->interleave_ways = 1;
+	nd_mapping = &nd_region->mapping[0];
+	dev = device_find_child(&nd_bus->dev, &handle, match_dimm);
+	nd_mapping->nd_dimm = to_nd_dimm(dev);
+	nd_mapping->size = readq(&nd_bdw->nfit_bdw->dimm_capacity);
+	nd_mapping->start = readq(&nd_bdw->nfit_bdw->dimm_block_offset);
+}
+
+static void nd_pm_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
+{
+	struct nd_mem *nd_mem;
+	u16 i;
+
+	nd_region->dev.type = &nd_pmem_device_type;
+	nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, 0);
+	nd_region->interleave_ways = readw(&nd_mem->nfit_mem->interleave_ways);
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct device *dev;
+		u32 handle;
+
+		nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, i);
+		handle = readl(&nd_mem->nfit_mem->nfit_handle);
+		dev = device_find_child(&nd_bus->dev, &handle, match_dimm);
+		nd_mapping->nd_dimm = to_nd_dimm(dev);
+		nd_mapping->start = readq(&nd_mem->nfit_mem->region_offset);
+		nd_mapping->size = readq(&nd_mem->nfit_mem->region_len);
+	}
+}
+
+static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
+		struct nd_spa *nd_spa)
+{
+	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	u16 spa_type = readw(&nd_spa->nfit_spa->spa_type);
+	struct nd_region *nd_region;
+	struct device *dev;
+	u16 num_mappings;
+
+	num_mappings = num_nd_mem(nd_bus, spa_index);
+	nd_region = kzalloc(sizeof(struct nd_region)
+			+ sizeof(struct nd_mapping) * num_mappings, GFP_KERNEL);
+	if (!nd_region)
+		return NULL;
+	nd_region->spa_index = spa_index;
+	nd_region->ndr_mappings = num_mappings;
+	dev = &nd_region->dev;
+	dev_set_name(dev, "region%d-%d", nd_bus->id, spa_index - 1);
+	dev->bus = &nd_bus_type;
+	dev->parent = &nd_bus->dev;
+	dev->groups = nd_region_attribute_groups;
+	nd_region->ndr_size = readq(&nd_spa->nfit_spa->spa_length);
+	nd_region->ndr_start = readq(&nd_spa->nfit_spa->spa_base);
+	if (spa_type == NFIT_SPA_PM)
+		nd_pm_init(nd_bus, nd_region);
+	else
+		nd_blk_init(nd_bus, nd_region);
+
+	if (device_register(dev) != 0) {
+		kfree(nd_region);
+		nd_region = NULL;
+	}
+
+	return nd_region;
+}
+
+int nd_bus_register_regions(struct nd_bus *nd_bus)
+{
+	struct nd_spa *nd_spa;
+	int rc = 0;
+
+	mutex_lock(&nd_bus_list_mutex);
+	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
+		u16 spa_type, spa_index;
+		struct nd_region *nd_region;
+
+		spa_type = readw(&nd_spa->nfit_spa->spa_type);
+		spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		if (spa_index == 0) {
+			dev_dbg(&nd_bus->dev, "detected invalid spa index\n");
+			continue;
+		}
+		switch (spa_type) {
+		case NFIT_SPA_PM:
+		case NFIT_SPA_DCR:
+			nd_region = nd_region_create(nd_bus, nd_spa);
+			if (!nd_region) {
+				rc = -ENOMEM;
+				break;
+			}
+		default:
+			dev_dbg(&nd_bus->dev, "spa[%d] unknown type: %d\n",
+					spa_index, spa_type);
+			/* fallthrough */
+		case NFIT_SPA_BDW:
+			/* we'll consume this in nd_blk_register */
 			break;
 		}
 	}

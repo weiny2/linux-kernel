@@ -34,62 +34,24 @@
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  */
-#ifndef __ND_PRIVATE_H__
-#define __ND_PRIVATE_H__
+#ifndef __ND_H__
+#define __ND_H__
 #include <linux/device.h>
-#include <linux/sizes.h>
 
-extern struct list_head nd_bus_list;
-extern struct mutex nd_bus_list_mutex;
-
-enum {
-	/* need to set a limit somewhere, but yes, this is ludicrously big */
-	ND_IOCTL_MAX_BUFLEN = SZ_4M,
+struct nd_dimm;
+struct nd_mapping {
+	struct nd_dimm *nd_dimm;
+	u64 start;
+	u64 size;
 };
 
-struct nd_bus {
-	struct nfit_bus_descriptor *nfit_desc;
-	int format_interface_code;
-	struct nfit __iomem *nfit;
-	struct list_head regions;
-	struct list_head memdevs;
-	struct list_head spas;
-	struct list_head dcrs;
-	struct list_head bdws;
-	struct list_head list;
+struct nd_region {
 	struct device dev;
-	int id;
+	u16 spa_index;
+	u16 interleave_ways;
+	u16 ndr_mappings;
+	u64 ndr_size;
+	u64 ndr_start;
+	struct nd_mapping mapping[0];
 };
-
-static inline struct nd_bus *to_nd_bus(struct device *dev)
-{
-	return container_of(dev, struct nd_bus, dev);
-}
-
-struct nd_spa {
-	struct nfit_spa __iomem *nfit_spa;
-	struct list_head list;
-};
-
-struct nd_dcr {
-	struct nfit_dcr __iomem *nfit_dcr;
-	struct list_head list;
-};
-
-struct nd_bdw {
-	struct nfit_bdw __iomem *nfit_bdw;
-	struct list_head list;
-};
-
-struct nd_mem {
-	struct nfit_mem __iomem *nfit_mem;
-	struct list_head list;
-};
-
-int __init nd_bus_init(void);
-void __init nd_bus_exit(void);
-int nd_bus_create(struct nd_bus *nd_bus);
-void nd_bus_destroy(struct nd_bus *nd_bus);
-int nd_bus_register_dimms(struct nd_bus *nd_bus);
-int nd_bus_register_regions(struct nd_bus *nd_bus);
-#endif /* __ND_PRIVATE_H__ */
+#endif /* __ND_H__ */
