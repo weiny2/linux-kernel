@@ -258,7 +258,7 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	return nd_dimm;
 }
 
-static int match_dimm(struct device *dev, void *data)
+int nd_match_dimm(struct device *dev, void *data)
 {
 	struct nfit_mem __iomem *nfit_mem;
 	u32 handle = *(u32 *) data;
@@ -287,7 +287,7 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 		u16 dcr_index;
 
 		handle = readl(&nd_mem->nfit_mem->nfit_handle);
-		dev = device_find_child(&nd_bus->dev, &handle, match_dimm);
+		dev = device_find_child(&nd_bus->dev, &handle, nd_match_dimm);
 		if (dev) {
 			put_device(dev);
 			continue;

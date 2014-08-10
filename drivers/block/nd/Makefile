@@ -16,3 +16,4 @@ nd_core-y := nd.o
 nd_core-y += bus.o
 nd_core-y += dimm_devs.o
 nd_core-y += dimm.o
+nd_core-y += region_devs.o
