@@ -190,7 +190,7 @@ static int fanotify_handle_event(struct fsnotify_group *group,
 	event->response = 0;
 #endif
 
-	ret = fsnotify_add_notify_event(group, fsn_event, fanotify_merge);
+	ret = fsnotify_add_event(group, fsn_event, fanotify_merge);
 	if (ret) {
 		/* Permission events shouldn't be merged */
 		BUG_ON(ret == 1 && mask & FAN_ALL_PERM_EVENTS);
