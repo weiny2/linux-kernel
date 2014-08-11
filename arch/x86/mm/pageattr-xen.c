@@ -1954,10 +1954,7 @@ int kernel_map_pages_in_pgd(pgd_t *pgd, u64 pfn, unsigned long address,
 		.flags = 0,
 	};
 
-	if (!(__supported_pte_mask & _PAGE_NX))
-		goto out;
-
-	if (!(page_flags & _PAGE_NX))
+	if ((!(__supported_pte_mask & _PAGE_NX)) || !(page_flags & _PAGE_NX))
 		cpa.mask_clr = __pgprot(_PAGE_NX);
 
 	cpa.mask_set = __pgprot(_PAGE_PRESENT | page_flags);
@@ -1965,7 +1962,6 @@ int kernel_map_pages_in_pgd(pgd_t *pgd, u64 pfn, unsigned long address,
 	retval = __change_page_attr_set_clr(&cpa, 0);
 	__flush_tlb_all();
 
-out:
 	return retval;
 }
 

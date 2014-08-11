@@ -2048,9 +2048,10 @@ static int netbk_action_thread(void *index)
 
 	while (!kthread_should_stop()) {
 		wait_event_interruptible(netbk->action_wq,
-					 rx_work_todo(netbk) ||
-					 tx_work_todo(netbk) ||
-					 kthread_should_stop());
+					 (kgr_task_safe(current),
+					  rx_work_todo(netbk) ||
+					  tx_work_todo(netbk) ||
+					  kthread_should_stop()));
 		cond_resched();
 
 		if (rx_work_todo(netbk))

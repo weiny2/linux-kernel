@@ -336,6 +336,9 @@ void netif_disconnect(struct backend_info *be)
 {
 	netif_t *netif = be->netif;
 
+	if (!netif->irq)
+		return;
+
 	if (netback_carrier_ok(netif)) {
 		rtnl_lock();
 		netback_carrier_off(netif);
@@ -351,10 +354,8 @@ void netif_disconnect(struct backend_info *be)
 	del_timer_sync(&netif->credit_timeout);
 	del_timer_sync(&netif->tx_queue_timeout);
 
-	if (netif->irq) {
-		unbind_from_irqhandler(netif->irq, netif);
-		netif->irq = 0;
-	}
+	unbind_from_irqhandler(netif->irq, netif);
+	netif->irq = 0;
 	
 	if (netif->tx.sring) {
 		xenbus_unmap_ring_vfree(be->dev, netif->tx_comms_area);

@@ -515,7 +515,8 @@ int xenhcd_schedule(void *arg)
 	while (!kthread_should_stop()) {
 		wait_event_interruptible(
 				info->wq,
-				info->waiting_resp || kthread_should_stop());
+				(kgr_task_safe(current),
+				 info->waiting_resp || kthread_should_stop()));
 		info->waiting_resp = 0;
 		smp_mb();
 

@@ -247,10 +247,12 @@ int blkif_schedule(void *arg)
 
 		wait_event_interruptible(
 			blkif->wq,
-			blkif->waiting_reqs || kthread_should_stop());
+			(kgr_task_safe(current),
+			 blkif->waiting_reqs || kthread_should_stop()));
 		wait_event_interruptible(
 			pending_free_wq,
-			!list_empty(&pending_free) || kthread_should_stop());
+			(kgr_task_safe(current),
+			 !list_empty(&pending_free) || kthread_should_stop()));
 
 		blkif->waiting_reqs = 0;
 		smp_mb(); /* clear flag *before* checking for work */
@@ -262,7 +264,8 @@ int blkif_schedule(void *arg)
 			break;
 		case -EACCES:
 			wait_event_interruptible(blkif->shutdown_wq,
-						 kthread_should_stop());
+						 (kgr_task_safe(current),
+						  kthread_should_stop()));
 			break;
 		default:
 			BUG();
@@ -297,6 +300,7 @@ static void drain_io(blkif_t *blkif)
 
 		if (!atomic_read(&blkif->drain))
 			break;
+		kgr_task_safe(current);
 	} while (!kthread_should_stop());
 	atomic_set(&blkif->drain, 0);
 }

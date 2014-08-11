@@ -271,7 +271,8 @@ static int xenfb_thread(void *data)
 		xenfb_handle_resize_dpy(info);
 		xenfb_update_screen(info);
 		wait_event_interruptible(info->wq,
-			kthread_should_stop() || info->dirty);
+			(kgr_task_safe(current),
+			 kthread_should_stop() || info->dirty));
 		try_to_freeze();
 	}
 	return 0;
