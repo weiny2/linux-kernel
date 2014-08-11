@@ -76,7 +76,7 @@ static int fanotify_get_response_from_access(struct fsnotify_group *group,
 		 * it from group's event list because we are responsible for
 		 * freeing the permission event.
 		 */
-		fsnotify_remove_event(group, &event->fae.fse);
+		fsnotify_remove_event(group, &event->fse);
 		return 0;
 	}
 
