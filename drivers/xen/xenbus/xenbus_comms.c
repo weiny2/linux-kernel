@@ -181,7 +181,9 @@ int xb_data_to_read(void)
 
 int xb_wait_for_data_to_read(void)
 {
-	return wait_event_interruptible(xb_waitq, xb_data_to_read());
+	return wait_event_interruptible(xb_waitq,
+					(kgr_task_safe(current),
+					 xb_data_to_read()));
 }
 
 int xb_read(void *data, unsigned len)

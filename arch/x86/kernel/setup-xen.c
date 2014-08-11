@@ -1102,6 +1102,17 @@ void __init setup_arch(char **cmdline_p)
 
 	iomem_resource.end = (1ULL << boot_cpu_data.x86_phys_bits) - 1;
 	setup_memory_map();
+
+	/*
+	 * x86_configure_nx() is called before parse_setup_data() to detect
+	 * whether hardware doesn't support NX (so that parse_setup_data()
+	 * can safely call early_memremap() without setting the XD bit in
+	 * the PTE, which can cause an unrecoverable page fault). It may
+	 * then be called again from within noexec_setup() during parsing
+	 * early parameters to honor the respective command line option.
+	 */
+	x86_configure_nx();
+
 	parse_setup_data();
 
 	copy_edd();
@@ -1137,15 +1148,6 @@ void __init setup_arch(char **cmdline_p)
 
 	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
-
-	/*
-	 * x86_configure_nx() is called before parse_early_param() to detect
-	 * whether hardware doesn't support NX (so that the early EHCI debug
-	 * console setup can safely call set_fixmap()). It may then be called
-	 * again from within noexec_setup() during parsing early parameters
-	 * to honor the respective command line option.
-	 */
-	x86_configure_nx();
 
 	parse_early_param();
 

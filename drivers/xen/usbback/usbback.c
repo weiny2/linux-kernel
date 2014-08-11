@@ -1087,10 +1087,12 @@ int usbbk_schedule(void *arg)
 	while (!kthread_should_stop()) {
 		wait_event_interruptible(
 			usbif->wq,
-			usbif->waiting_reqs || kthread_should_stop());
+			(kgr_task_safe(current),
+			 usbif->waiting_reqs || kthread_should_stop()));
 		wait_event_interruptible(
 			pending_free_wq,
-			!list_empty(&pending_free) || kthread_should_stop());
+			(kgr_task_safe(current),
+			 !list_empty(&pending_free) || kthread_should_stop()));
 		usbif->waiting_reqs = 0;
 		smp_mb();
 
@@ -1101,7 +1103,8 @@ int usbbk_schedule(void *arg)
 			break;
 		case -EACCES:
 			wait_event_interruptible(usbif->shutdown_wq,
-						 kthread_should_stop());
+						 (kgr_task_safe(current),
+						  kthread_should_stop()));
 			break;
 		default:
 			BUG();
