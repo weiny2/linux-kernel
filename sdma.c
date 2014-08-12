@@ -546,7 +546,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	unsigned long flags;
 	struct qib_pportdata *ppd = dd->pport + port;
 	u32 per_sdma_credits =
-		TXE_SDMA_MEMORY_BYTES/(TXE_NUM_SDMA_ENGINES * 64);
+		dd->chip_sdma_mem_size/(num_engines * WFR_SDMA_BLOCK_SIZE);
 
 	descq_cnt = sdma_get_descq_cnt();
 	dd_dev_info(dd, "SDMA engines %zu descq_cnt %u\n",

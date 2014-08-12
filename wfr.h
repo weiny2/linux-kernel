@@ -55,6 +55,7 @@
 #define WFR_TXE_NUM_DATA_VL 8
 #define WFR_TXE_PIO_SIZE (32 * 0x100000)	/* 32 MB */
 #define WFR_PIO_BLOCK_SIZE 64			/* bytes */
+#define WFR_SDMA_BLOCK_SIZE 64			/* bytes */
 #define WFR_RCV_BUF_BLOCK_SIZE 64               /* bytes */
 #define WFR_PIO_CMASK 0x7ff	/* counter mask for free and fill counters */
 #define WFR_MAX_EAGER_ENTRIES    2048	/* max receive eager entries */
