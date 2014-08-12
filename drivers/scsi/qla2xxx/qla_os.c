@@ -968,9 +968,11 @@ qla2xxx_eh_abort(struct scsi_cmnd *cmd)
 		if (rval == QLA_FUNCTION_PARAMETER_ERROR) {
 			/*
 			 * Decrement the ref_count since we can't find the
-			 * command
+			 * command if there is another reference to the
+			 * command.
 			 */
-			atomic_dec(&sp->ref_count);
+			if (atomic_read(&sp->ref_count) > 1)
+				atomic_dec(&sp->ref_count);
 			ret = SUCCESS;
 		} else
 			ret = FAILED;
