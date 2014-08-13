@@ -2479,8 +2479,8 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	/* local_link_integrity_errors - DC (table 13-11 WFR spec)
-	 * is this LCB_ERR_INFO_TX_REPLAY_CNT ??? */
+	rsp->local_link_integrity_errors =
+		cpu_to_be64(read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
 	rsp->port_rcv_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
 	/* rsp->excessive_buffer_overruns - SPC RXE block
@@ -2566,8 +2566,8 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	/* local_link_integrity_errors - DC (table 13-11 WFR spec)
-	 * is this LCB_ERR_INFO_TX_REPLAY_CNT ??? */
+	error_counter_summary +=
+		cpu_to_be64(read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
 	/* excessive_buffer_overruns - SPC RXE block
@@ -2810,8 +2810,8 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	/* rsp->port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	/* local_link_integrity_errors - DC (table 13-11 WFR spec)
-	 * is this LCB_ERR_INFO_TX_REPLAY_CNT ??? */
+	rsp->local_link_integrity_errors =
+		cpu_to_be64(read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
 	/* rsp->excessive_buffer_overruns - SPC RXE block
 	 * (table 13-11 WFR spec) */
 	rsp->fm_config_errors =
@@ -2988,7 +2988,8 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	/* ignore cs_port_xmit_constraint_errors for now */
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT, 0);
-	/* ignore cs_local_link_integrity_errors for now */
+	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS)
+		write_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		write_csr(dd, DCC_ERR_PORTRCV_ERR_CNT, 0);
 	/* ignore cs_excessive_buffer_overruns for now */
