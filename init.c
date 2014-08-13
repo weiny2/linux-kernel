@@ -77,7 +77,7 @@ module_param_named(krcvqs, qib_n_krcv_queues, uint, S_IRUGO);
 MODULE_PARM_DESC(krcvqs, "number of kernel receive queues per IB port");
 
 /* TODO: temporary code for missing interrupts, HSD 291041 */
-uint fifo_check = 500; /* 500 ms default, zeroed if non-FPGA */
+uint fifo_check;	/* off by default */
 module_param(fifo_check, uint, S_IRUGO);
 MODULE_PARM_DESC(fifo_check, "Check for stalled receive FIFOs every N milliseconds (set to 0 to disable)");
 
