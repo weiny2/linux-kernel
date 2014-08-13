@@ -566,9 +566,9 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	 * PROBLEM: ibmtu is not yet set up when the kernel send
 	 * contexts are created.
 	 */
-	release_credits = DIV_ROUND_UP((type == SC_ACK ? 0 : default_mtu) +
-					(dd->rcvhdrentsize<<2),
-					WFR_PIO_BLOCK_SIZE);
+	release_credits = DIV_ROUND_UP(
+			(type == SC_ACK ? 0 : enum_to_mtu(STL_MTU_10240)) +
+				(dd->rcvhdrentsize<<2), WFR_PIO_BLOCK_SIZE);
 	if (sc->credits <= release_credits)
 		thresh = 1;
 	else
