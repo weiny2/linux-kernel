@@ -8150,7 +8150,7 @@ int btrfs_drop_snapshot(struct btrfs_root *root,
 	}
 	root_dropped = true;
 out_end_trans:
-	ret = btrfs_delayed_qgroup_accounting(trans, root->fs_info);
+	ret = btrfs_delayed_qgroup_accounting(trans, tree_root->fs_info);
 	if (ret)
 		printk_ratelimited(KERN_ERR "BTRFS: Failure %d "
 				   "running qgroup updates "
