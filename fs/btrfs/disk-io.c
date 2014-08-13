@@ -3573,7 +3573,8 @@ static void free_fs_root(struct btrfs_root *root)
 	WARN_ON(!RB_EMPTY_ROOT(&root->inode_tree));
 	btrfs_free_block_rsv(root, root->orphan_block_rsv);
 	root->orphan_block_rsv = NULL;
-	remove_anon_sbdev(&root->sbdev);
+	if (likely(!test_bit(BTRFS_ROOT_DUMMY_ROOT, &root->state)))
+		remove_anon_sbdev(&root->sbdev);
 	if (root->subv_writers)
 		btrfs_free_subvolume_writers(root->subv_writers);
 	free_extent_buffer(root->node);
