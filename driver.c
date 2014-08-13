@@ -193,7 +193,7 @@ static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, __le32 *rhf,
 		mask = rcd->rcvegrbufs_idx_mask,
 		offset = rhf_egr_buf_offset(rhf);
 
-	*update = !(idx % WFR_EGR_HEAD_UPDATE_THRESHOLD) && !offset;
+	*update |= !(idx % WFR_EGR_HEAD_UPDATE_THRESHOLD) && !offset;
 	return (void *)(((u64)rcd->rcvegrbuf[(idx >> shift)]) +
 			((idx & mask) << rcd->dd->rcvegrbufsize_shift) +
 			(offset * WFR_RCV_BUF_BLOCK_SIZE));
