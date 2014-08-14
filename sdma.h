@@ -567,10 +567,10 @@ static inline void make_tx_sdma_desc(
 	size_t len)
 {
 	/* first already there */
-	desc->qw[0] = ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
+	desc->qw[0] |= ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
 				<< SDMA_DESC0_BYTE_COUNT_SHIFT;
-	desc->qw[0] |= ((u64)addr & SDMA_DESC0_BYTE_COUNT_MASK)
-				<< SDMA_DESC0_BYTE_COUNT_SHIFT;
+	desc->qw[0] |= ((u64)addr & SDMA_DESC0_PHY_ADDR_MASK)
+				<< SDMA_DESC0_PHY_ADDR_SHIFT;
 	desc->qw[1] = ((u64)type & SDMA_DESC1_GENERATION_MASK)
 				<< SDMA_DESC1_GENERATION_SHIFT;
 }
