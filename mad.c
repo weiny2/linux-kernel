@@ -649,17 +649,12 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 		(get_phyerrthreshold(ppd) << 4) |
 		get_overrunthreshold(ppd);
 
-	/* FIXME supported, enabled, active all == STL */
 	pi->port_link_mode  = STL_PORT_LINK_MODE_STL << 10;
 	pi->port_link_mode |= STL_PORT_LINK_MODE_STL << 5;
 	pi->port_link_mode |= STL_PORT_LINK_MODE_STL;
 	pi->port_link_mode = cpu_to_be16(pi->port_link_mode);
 
-	/* FIXME supported, enabled, active all == 16-bit */
-	pi->port_ltp_crc_mode  = STL_PORT_LTP_CRC_MODE_16 << 8;
-	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16 << 4;
-	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16;
-	pi->port_ltp_crc_mode = cpu_to_be16(pi->port_ltp_crc_mode);
+	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
 
 	pi->port_packet_format.supported =
 		cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);

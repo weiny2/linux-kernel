@@ -614,6 +614,8 @@ struct qib_pportdata {
 	u64 *cntrs;
 	/* count of 'link_err' interrupts from DC */
 	u32 link_downed;
+	/* port_ltp_crc_mode is returned in 'portinfo' MADs */
+	u16 port_ltp_crc_mode;
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */

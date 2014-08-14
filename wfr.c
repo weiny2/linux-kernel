@@ -1740,6 +1740,11 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	write_csr(dd, DC_LCB_CFG_CRC_MODE,
 		(u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 
+	ppd->port_ltp_crc_mode =
+		link_crc_mask << 8; /* supported crc modes */
+	ppd->port_ltp_crc_mode |= crc_sizes << 4; /* enabled crc modes */
+	ppd->port_ltp_crc_mode |= crc_val; /* active crc mode */
+
 	/* set up the remote credit return table */
 	assign_remote_cm_au_table(dd, vcu);
 
