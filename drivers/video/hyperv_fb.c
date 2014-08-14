@@ -225,17 +225,17 @@ struct hvfb_par {
 	u32 pseudo_palette[16];
 	u8 init_buf[MAX_VMBUS_PKT_SIZE];
 	u8 recv_buf[MAX_VMBUS_PKT_SIZE];
-};
 
-static struct fb_info *hvfb_info;
+	/* If true, the VSC notifies the VSP on every framebuffer change */
+	bool synchronous_fb;
+
+	struct notifier_block hvfb_panic_nb;
+};
 
 static uint screen_width = HVFB_WIDTH;
 static uint screen_height = HVFB_HEIGHT;
 static uint screen_depth;
 static uint screen_fb_size;
-
-/* If true, the VSC notifies the VSP on every framebuffer change */
-static bool synchronous_fb;
 
 /* Send message to Hyper-V host */
 static inline int synthvid_send(struct hv_device *hdev,
@@ -546,19 +546,18 @@ static void hvfb_update_work(struct work_struct *w)
 }
 
 static int hvfb_on_panic(struct notifier_block *nb,
-			unsigned long e, void *p)
+			 unsigned long e, void *p)
 {
-	if (hvfb_info)
-		synthvid_update(hvfb_info);
+	struct hvfb_par *par;
+	struct fb_info *info;
 
-	synchronous_fb = true;
+	par = container_of(nb, struct hvfb_par, hvfb_panic_nb);
+	par->synchronous_fb = true;
+	info = par->info;
+	synthvid_update(info);
 
 	return NOTIFY_DONE;
 }
-
-static struct notifier_block hvfb_panic_nb = {
-	.notifier_call = hvfb_on_panic,
-};
 
 /* Framebuffer operation handlers */
 
@@ -610,29 +609,32 @@ static int hvfb_blank(int blank, struct fb_info *info)
 }
 
 static void hvfb_cfb_fillrect(struct fb_info *p,
-				const struct fb_fillrect *rect)
+			      const struct fb_fillrect *rect)
 {
-	cfb_fillrect(p, rect);
+	struct hvfb_par *par = p->par;
 
-	if (synchronous_fb)
+	cfb_fillrect(p, rect);
+	if (par->synchronous_fb)
 		synthvid_update(p);
 }
 
 static void hvfb_cfb_copyarea(struct fb_info *p,
-				const struct fb_copyarea *area)
+			      const struct fb_copyarea *area)
 {
-	cfb_copyarea(p, area);
+	struct hvfb_par *par = p->par;
 
-	if (synchronous_fb)
+	cfb_copyarea(p, area);
+	if (par->synchronous_fb)
 		synthvid_update(p);
 }
 
 static void hvfb_cfb_imageblit(struct fb_info *p,
-				const struct fb_image *image)
+			       const struct fb_image *image)
 {
-	cfb_imageblit(p, image);
+	struct hvfb_par *par = p->par;
 
-	if (synchronous_fb)
+	cfb_imageblit(p, image);
+	if (par->synchronous_fb)
 		synthvid_update(p);
 }
 
@@ -855,8 +857,10 @@ static int hvfb_probe(struct hv_device *hdev,
 
 	par->fb_ready = true;
 
-	hvfb_info = info;
-	atomic_notifier_chain_register(&panic_notifier_list, &hvfb_panic_nb);
+	par->synchronous_fb = false;
+	par->hvfb_panic_nb.notifier_call = hvfb_on_panic;
+	atomic_notifier_chain_register(&panic_notifier_list,
+				       &par->hvfb_panic_nb);
 
 	return 0;
 
@@ -877,8 +881,8 @@ static int hvfb_remove(struct hv_device *hdev)
 	struct fb_info *info = hv_get_drvdata(hdev);
 	struct hvfb_par *par = info->par;
 
-	atomic_notifier_chain_unregister(&panic_notifier_list, &hvfb_panic_nb);
-	hvfb_info = NULL;
+	atomic_notifier_chain_unregister(&panic_notifier_list,
+					 &par->hvfb_panic_nb);
 
 	par->update = false;
 	par->fb_ready = false;
