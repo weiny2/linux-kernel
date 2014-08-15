@@ -193,21 +193,25 @@ struct ib_user_mad_reg_req {
 
 /**
  * ib_user_mad_reg_req2 - MAD registration request
- * @id - Set by the kernel; used to identify agent in future requests.
- * @qpn - Queue pair number; must be 0 or 1.
- * @mgmt_class - Indicates which management class is being registered.
- * @mgmt_class_version - Indicates which version of MADs for the given
- *   management class to receive.
- * @res - reserved field.  must be set to 0
- * @flags - additional registration flags
- *          Must be in the set of flags defined by IB_USER_MAD_REG_FLAGS_CAP
- * @method_mask - The caller will receive unsolicited MADs for any method
- *   whose bit is set.
- * @oui - Indicates IEEE OUI when mgmt_class is a vendor class
- *   in the range from 0x30 to 0x4f. Otherwise not used.
- * @rmpp_version - If set, indicates the RMPP version used.
- * @res2 - must be set to 0
  *
+ * @id                 - Set by the _kernel_; used by userspace to identify the
+ *                       registered agent in future requests.
+ * @qpn                - Queue pair number; must be 0 or 1.
+ * @mgmt_class         - Indicates which management class of MADs should be
+ *                       receive by the caller.  This field is only required if
+ *                       the user wishes to receive unsolicited MADs, otherwise
+ *                       it should be 0.
+ * @mgmt_class_version - Indicates which version of MADs for the given
+ *                       management class to receive.
+ * @res                - Ignored.
+ * @flags              - additional registration flags; Must be in the set of
+ *                       flags defined in IB_USER_MAD_REG_FLAGS_CAP
+ * @method_mask        - The caller wishes to receive unsolicited MADs for the
+ *                       methods whose bit(s) is(are) set.
+ * @oui                - Indicates IEEE OUI to use when mgmt_class is a vendor
+ *                       class in the range from 0x30 to 0x4f. Otherwise not
+ *                       used.
+ * @rmpp_version       - If set, indicates the RMPP version to use.
  */
 enum {
 	IB_USER_MAD_USER_RMPP = (1 << 0),
@@ -221,9 +225,9 @@ struct ib_user_mad_reg_req2 {
 	__u16   res;
 	__u32   flags;
 	__u64   method_mask[2];
-	__u8    oui[3]; /* network order */
+	__u32   oui;
 	__u8	rmpp_version;
-	__u8    res2[68];
+	__u8	reserved[3];
 };
 
 #define IB_IOCTL_MAGIC		0x1b
