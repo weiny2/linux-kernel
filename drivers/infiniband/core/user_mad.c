@@ -647,7 +647,8 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 	mutex_lock(&file->mutex);
 
 	if (!file->port->ib_dev) {
-		pr_notice("ib_umad_reg_agent: invalid device\n");
+		dev_notice(file->port->dev,
+			   "ib_umad_reg_agent: invalid device\n");
 		ret = -EPIPE;
 		goto out;
 	}
@@ -658,8 +659,9 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 	}
 
 	if (ureq.qpn != 0 && ureq.qpn != 1) {
-		pr_notice("ib_umad_reg_agent: invalid QPN %d specified\n",
-			ureq.qpn);
+		dev_notice(file->port->dev,
+			   "ib_umad_reg_agent: invalid QPN %d specified\n",
+			   ureq.qpn);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -668,14 +670,15 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 		if (!__get_agent(file, agent_id))
 			goto found;
 
-	pr_notice("ib_umad_reg_agent: Max Agents (%u) reached\n",
-		IB_UMAD_MAX_AGENTS);
+	dev_notice(file->port->dev,
+		   "ib_umad_reg_agent: Max Agents (%u) reached\n",
+		   IB_UMAD_MAX_AGENTS);
 	ret = -ENOMEM;
 	goto out;
 
 found:
 	if (ureq.mgmt_class) {
-		memset(&req, 0, sizeof req);
+		memset(&req, 0, sizeof(req));
 		req.mgmt_class         = ureq.mgmt_class;
 		req.mgmt_class_version = ureq.mgmt_class_version;
 		memcpy(req.oui, ureq.oui, sizeof req.oui);
@@ -712,9 +715,11 @@ found:
 	if (!file->already_used) {
 		file->already_used = 1;
 		if (!file->use_pkey_index) {
-			pr_warn("process %s did not enable P_Key index support.\n",
+			dev_warn(file->port->dev,
+				"process %s did not enable P_Key index support.\n",
 				current->comm);
-			pr_warn("   Documentation/infiniband/user_mad.txt has info on the new ABI.\n");
+			dev_warn(file->port->dev,
+				"   Documentation/infiniband/user_mad.txt has info on the new ABI.\n");
 		}
 	}
 
@@ -745,7 +750,8 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 	mutex_lock(&file->mutex);
 
 	if (!file->port->ib_dev) {
-		pr_notice("ib_umad_reg_agent2: invalid device\n");
+		dev_notice(file->port->dev,
+			   "ib_umad_reg_agent2: invalid device\n");
 		ret = -EPIPE;
 		goto out;
 	}
@@ -764,15 +770,17 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 	}
 
 	if (ureq.qpn != 0 && ureq.qpn != 1) {
-		pr_notice("ib_umad_reg_agent2: invalid QPN %d specified\n",
-			ureq.qpn);
+		dev_notice(file->port->dev,
+			   "ib_umad_reg_agent2: invalid QPN %d specified\n",
+			   ureq.qpn);
 		ret = -EINVAL;
 		goto out;
 	}
 
 	if (ureq.flags & ~IB_USER_MAD_REG_FLAGS_CAP) {
-		pr_notice("ib_umad_reg_agent2 failed: invalid registration flags specified 0x%x; supported 0x%x\n",
-			ureq.flags, IB_USER_MAD_REG_FLAGS_CAP);
+		dev_notice(file->port->dev,
+			   "ib_umad_reg_agent2 failed: invalid registration flags specified 0x%x; supported 0x%x\n",
+			   ureq.flags, IB_USER_MAD_REG_FLAGS_CAP);
 		ret = -EINVAL;
 
 		if (put_user((u32)IB_USER_MAD_REG_FLAGS_CAP,
@@ -787,8 +795,9 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 		if (!__get_agent(file, agent_id))
 			goto found;
 
-	pr_notice("ib_umad_reg_agent2: Max Agents (%u) reached\n",
-		IB_UMAD_MAX_AGENTS);
+	dev_notice(file->port->dev,
+		   "ib_umad_reg_agent2: Max Agents (%u) reached\n",
+		   IB_UMAD_MAX_AGENTS);
 	ret = -ENOMEM;
 	goto out;
 
@@ -814,7 +823,8 @@ found:
 	}
 
 	if (put_user(agent_id,
-		     (u32 __user *) (arg + offsetof(struct ib_user_mad_reg_req2, id)))) {
+		     (u32 __user *)(arg +
+				offsetof(struct ib_user_mad_reg_req2, id)))) {
 		ret = -EFAULT;
 		goto out;
 	}
@@ -1127,7 +1137,7 @@ static CLASS_ATTR_STRING(abi_version, S_IRUGO,
 
 static dev_t overflow_maj;
 static DECLARE_BITMAP(overflow_map, IB_UMAD_MAX_PORTS);
-static int find_overflow_devnum(void)
+static int find_overflow_devnum(struct ib_device *device)
 {
 	int ret;
 
@@ -1135,7 +1145,8 @@ static int find_overflow_devnum(void)
 		ret = alloc_chrdev_region(&overflow_maj, 0, IB_UMAD_MAX_PORTS * 2,
 					  "infiniband_mad");
 		if (ret) {
-			pr_err("couldn't register dynamic device number\n");
+			dev_err(&device->dev,
+				"couldn't register dynamic device number\n");
 			return ret;
 		}
 	}
@@ -1157,7 +1168,7 @@ static int ib_umad_init_port(struct ib_device *device, int port_num,
 	devnum = find_first_zero_bit(dev_map, IB_UMAD_MAX_PORTS);
 	if (devnum >= IB_UMAD_MAX_PORTS) {
 		spin_unlock(&port_lock);
-		devnum = find_overflow_devnum();
+		devnum = find_overflow_devnum(device);
 		if (devnum < 0)
 			return -1;
 
