@@ -893,8 +893,8 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
 		qib_put_mr(tx->mr);
 		tx->mr = NULL;
 	}
-	if (tx->txreq.flags & QIB_SDMA_TXREQ_F_FREEBUF) {
-		tx->txreq.flags &= ~QIB_SDMA_TXREQ_F_FREEBUF;
+	if (tx->txreq.flags & SDMA_TXREQ_F_FREEBUF) {
+		tx->txreq.flags &= ~SDMA_TXREQ_F_FREEBUF;
 		dma_unmap_single(&dd_from_dev(dev)->pcidev->dev,
 				 tx->txreq.addr, tx->hdr_dwords << 2,
 				 DMA_TO_DEVICE);
@@ -991,7 +991,7 @@ static void sdma_complete(struct qib_sdma_txreq *cookie, int status)
 	else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		struct qib_ib_header *hdr;
 
-		if (tx->txreq.flags & QIB_SDMA_TXREQ_F_FREEBUF)
+		if (tx->txreq.flags & SDMA_TXREQ_F_FREEBUF)
 			hdr = &tx->align_buf->hdr;
 		else {
 			struct qib_ibdev *dev = to_idev(qp->ibqp.device);
@@ -1097,7 +1097,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		phdr = &dev->pio_hdrs[tx->hdr_inx];
 		phdr->pbc = cpu_to_le64(pbc);
 		memcpy(&phdr->hdr, hdr, hdrwords << 2);
-		tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEDESC;
+		tx->txreq.flags |= SDMA_TXREQ_F_FREEDESC;
 		tx->txreq.sg_count = ndesc;
 		tx->txreq.addr = dev->pio_hdrs_phys +
 			tx->hdr_inx * sizeof(struct qib_pio_header);
@@ -1120,7 +1120,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (dma_mapping_error(&dd->pcidev->dev, tx->txreq.addr))
 		goto map_err;
 	tx->align_buf = phdr;
-	tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEBUF;
+	tx->txreq.flags |= SDMA_TXREQ_F_FREEBUF;
 	tx->txreq.sg_count = 1;
 	ret = qib_sdma_verbs_send(sde, NULL, 0, tx);
 	goto unaligned;

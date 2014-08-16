@@ -295,38 +295,6 @@ struct hfi_snoop_data {
 
 struct qib_sge_state;
 
-struct qib_sdma_txreq {
-	int                 flags;
-	int                 sg_count;
-	dma_addr_t          addr;
-	void              (*callback)(struct qib_sdma_txreq *, int);
-	u16                 start_idx;  /* sdma private */
-	u16                 next_descq_idx;  /* sdma private */
-	struct list_head    list;       /* sdma private */
-};
-
-struct qib_verbs_txreq {
-	struct qib_sdma_txreq   txreq;
-	struct qib_qp           *qp;
-	struct qib_swqe         *wqe;
-	u32                     dwords;
-	u16                     hdr_dwords;
-	u16                     hdr_inx;
-	struct qib_pio_header	*align_buf;
-	struct qib_mregion	*mr;
-	struct qib_sge_state    *ss;
-};
-
-#define QIB_SDMA_TXREQ_F_HEADTOHOST   0x1
-#define QIB_SDMA_TXREQ_F_INTREQ       0x2
-#define QIB_SDMA_TXREQ_F_FREEBUF      0x4
-#define QIB_SDMA_TXREQ_F_FREEDESC     0x8
-
-#define QIB_SDMA_TXREQ_S_OK        0
-#define QIB_SDMA_TXREQ_S_SENDERROR 1
-#define QIB_SDMA_TXREQ_S_ABORTED   2
-#define QIB_SDMA_TXREQ_S_SHUTDOWN  3
-
 /*
  * Get/Set IB link-level config parameters for f_get/set_ib_cfg()
  * Mostly for MADs that set or query link parameters, also ipath

@@ -239,7 +239,7 @@ static void clear_sdma_activelist(struct sdma_engine *sde)
 
 	list_for_each_entry_safe(txp, txp_next, &sde->activelist, list) {
 		list_del_init(&txp->list);
-		if (txp->flags & QIB_SDMA_TXREQ_F_FREEDESC) {
+		if (txp->flags & SDMA_TXREQ_F_FREEDESC) {
 			unsigned idx;
 
 			idx = txp->start_idx;
@@ -890,7 +890,7 @@ int qib_sdma_make_progress(struct sdma_engine *sde)
 
 	while (sde->descq_head != hwhead) {
 		/* if desc is part of this txp, unmap if needed */
-		if (txp && (txp->flags & QIB_SDMA_TXREQ_F_FREEDESC) &&
+		if (txp && (txp->flags & SDMA_TXREQ_F_FREEDESC) &&
 		    (idx == sde->descq_head)) {
 			unmap_desc(sde, sde->descq_head);
 			if (++idx == sde->descq_cnt)
