@@ -1527,7 +1527,7 @@ static int qib_modify_port(struct ib_device *ibdev, u8 port,
 	if (props->set_port_cap_mask || props->clr_port_cap_mask)
 		qib_cap_mask_chg(ibp);
 	if (port_modify_mask & IB_PORT_SHUTDOWN)
-		set_link_state(ppd, HFI_LINKDOWN_DOWNDEF);
+		set_link_state(ppd, HLS_DN_DOWNDEF);
 	if (port_modify_mask & IB_PORT_RESET_QKEY_CNTR)
 		ibp->qkey_violations = 0;
 	return 0;

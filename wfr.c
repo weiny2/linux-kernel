@@ -1675,10 +1675,39 @@ void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 }
 
 /*
- * Handle a verify capabilities interrupt from the 8051
+ * Handle a link up interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
  */
-static void handle_verify_cap(struct hfi_devdata *dd)
+void handle_link_up(struct work_struct *work)
 {
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								link_up_work);
+	set_link_state(ppd, HLS_UP_INIT);
+}
+
+/*
+ * Handle a link down interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_link_down(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								link_down_work);
+	set_link_state(ppd, HLS_DN_OFFLINE);
+}
+
+/*
+ * Handle a verify capabilities interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_verify_cap(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								link_vc_work);
+	struct hfi_devdata *dd = ppd->dd;
 	u8 power_management;
 	u8 continious;
 	u8 vcu;
@@ -1689,7 +1718,8 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 	u16 crc_mask;
 	u16 crc_val;
 	u8 crc_sizes;
-	struct qib_pportdata *ppd = dd->pport;
+
+	set_link_state(ppd, HLS_VERIFY_CAP);
 
 	/* give host access to the LCB CSRs */
 	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
@@ -1768,15 +1798,15 @@ static void handle_verify_cap(struct hfi_devdata *dd)
 		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
 		& ~DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
 
-	/* tell the 8051 to go to LinkUp */
-	set_physical_link_state(dd, WFR_PLS_LINKUP);
-
 	ppd->neighbor_guid =
 		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
 	ppd->neighbor_type =
 		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE);
 	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d\n",
 		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type);
+
+	/* tell the 8051 to go to LinkUp */
+	set_link_state(ppd, HLS_GOING_UP);
 }
 
 static char *dcc_err_string(char *buf, int buf_len, u64 flags)
@@ -1805,6 +1835,7 @@ static char *dc8051_info_host_msg_string(char *buf, int buf_len, u64 flags)
 
 static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
+	struct qib_pportdata *ppd = dd->pport;
 	u64 info, err, host_msg;
 	char buf[96];
 
@@ -1849,7 +1880,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		}
 		if (host_msg & WFR_LINKUP_ACHIEVED) {
 			dd_dev_info(dd, "8051: LinkUp achieved\n");
-			handle_linkup_change(dd, 1);
+			queue_work(ppd->qib_wq, &ppd->link_up_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
@@ -1861,14 +1892,14 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			host_msg &= ~(u64)WFR_EXT_DEVICE_CFG_REQ;
 		}
 		if (host_msg & WFR_VERIFY_CAP_FRAME) {
-			handle_verify_cap(dd);
+			queue_work(ppd->qib_wq, &ppd->link_vc_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
 		}
 		if (host_msg & WFR_LINK_GOING_DOWN) {
 			dd_dev_info(dd, "8051: Link down\n");
-			handle_linkup_change(dd, 0);
+			queue_work(ppd->qib_wq, &ppd->link_down_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINK_GOING_DOWN;
@@ -2540,7 +2571,6 @@ static int set_physical_link_state(struct hfi_devdata *dd, u64 state)
 		case WFR_PLS_POLLING:
 			/* fake moving to link up */
 			dd->pport[0].lstate = IB_PORT_INIT;
-			handle_linkup_change(dd, 1);
 			break;
 		case WFR_PLS_OFFLINE:
 			/* going offline will trigger a port down */
@@ -2668,7 +2698,14 @@ static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
 }
 
-int init_loopback(struct hfi_devdata *dd)
+/*
+ * The simulator does an LCB loopback followed by a "quick" linkup.  A
+ * "normal" linkup could be done but it not well supprted by the
+ * simulator, so we stick with this method.
+
+ * return 0 on success, -errno on error
+ */
+int simulator_loopback_quick_linkup(struct hfi_devdata *dd)
 {
 	u64 reg;
 	unsigned long timeout;
@@ -2682,82 +2719,36 @@ int init_loopback(struct hfi_devdata *dd)
 
 	lcb_shutdown(dd);
 
-	/*
-	 * TODO: Better document loopback values, e.g. define or enum.
-	 * This is currently in flux.  Some current values may disappear,
-	 * new ones may be added.  Perhaps go with loopback types, e.g.
-	 * LCB, SerDes, Cable.
-	 */
-	/* the simulator can only use LCB loopback v8 */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
-		loopback = 8;
+	/* LCB_CFG_LOOPBACK.VAL = 2 */
+	/* LCB_CFG_LANE_WIDTH.VAL = 0 */
+	write_csr(dd, DC_LCB_CFG_LOOPBACK,
+		2ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
+	write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
 
-	/* configure LCBs in loopback */
-	if (loopback == 1 || loopback == 2) {
-		/*
-		 * Loopback value:
-		 * 1 - internal SerDes Loopback, quick linkup
-		 * 2 - back-to-back, quick linkup
-		 */
-		if (loopback == 1) {
-			/* this sets the SerDes to internal loopback mode */
-			ret = set_physical_link_state(dd,
-					WFR_PLS_INTERNAL_SERDES_LOOPBACK);
-			if (ret != WFR_HCMD_SUCCESS) {
-				dd_dev_err(dd,
-					"%s: set phsyical link state to SerDes Loopback failed with return 0x%x\n",
-					__func__, ret);
-				if (ret >= 0)
-					ret = -EINVAL;
-				return ret;
-			}
-		}
-
-		adjust_lcb_for_fpga_serdes(dd);
-	} else if (loopback == 8) {	/* LCB loopback for FPGA_P r8 */
-		/* LCB_CFG_LOOPBACK.VAL = 2 */
-		/* LCB_CFG_LANE_WIDTH.VAL = 0 */
-		write_csr(dd, DC_LCB_CFG_LOOPBACK,
-			2ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
-		write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
-	} else if (loopback == 9) {	/* LCB loopback for FPGA_P r9 */
-		/* this requires ILP 8051 firmware, or later */
-		/*	LCB_CFG_LOOPBACK.VAL = 1 */
-		/*	LCB_CFG_LANE_WIDTH.VAL = 0 */
-		write_csr(dd, DC_LCB_CFG_LOOPBACK,
-			1ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
-		write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
-	} else {
-		dd_dev_err(dd, "%s: Invalid loopback mode %d\n",
-			__func__, loopback);
-		return -EINVAL;
-	}
 	/* start the LCBs */
-	/*	LCB_CFG_TX_FIFOS_RESET.VAL = 0 */
+	/* LCB_CFG_TX_FIFOS_RESET.VAL = 0 */
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
 
-	if (loopback == 8) {
-		/* LCB_CFG_RUN.EN = 1 */
-		write_csr(dd, DC_LCB_CFG_RUN,
-			1ull << DC_LCB_CFG_RUN_EN_SHIFT);
+	/* LCB_CFG_RUN.EN = 1 */
+	write_csr(dd, DC_LCB_CFG_RUN,
+		1ull << DC_LCB_CFG_RUN_EN_SHIFT);
 
-		/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
-		timeout = jiffies + msecs_to_jiffies(10);
-		while (1) {
-			reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
-			if (reg)
-				break;
-			if (time_after(jiffies, timeout)) {
-				dd_dev_err(dd,
-					"timeout waiting for LINK_TRANSFER_ACTIVE\n");
-				return -ETIMEDOUT;
-			}
-			udelay(2);
+	/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
+	timeout = jiffies + msecs_to_jiffies(10);
+	while (1) {
+		reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
+		if (reg)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"timeout waiting for LINK_TRANSFER_ACTIVE\n");
+			return -ETIMEDOUT;
 		}
-
-		write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
-			1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
+		udelay(2);
 	}
+
+	write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
+		1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
 
 	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
 	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
@@ -2780,23 +2771,51 @@ int init_loopback(struct hfi_devdata *dd)
 		return ret;
 	}
 
-	/*
-	 * In sim v37 and later, the special state move above
-	 * sets of the 8051 LinkUp interrupt which calls
-	 * handle_link_change().  On hardware, there is no
-	 * LinkUp interrupt for the same operation.  Make the
-	 * call here, instead.
-	 */
-	if (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR)
-		handle_linkup_change(dd, 1);
+	return 0; /* success */
+}
 
-	return 0;
+/*
+ * Set the SerDes to internal loopback mode.
+ * Returns 0 on success, -errno on error.
+ */
+static int set_serdes_loopback_mode(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = set_physical_link_state(dd, WFR_PLS_INTERNAL_SERDES_LOOPBACK);
+	if (ret == WFR_HCMD_SUCCESS)
+		return 0;
+	dd_dev_err(dd,
+		"Set phsyical link state to SerDes Loopback failed with return %d\n",
+		ret);
+	if (ret >= 0)
+		ret = -EINVAL;
+	return ret;
+}
+
+/*
+ * Do all special steps to set up loopback.
+ */
+int init_loopback(struct hfi_devdata *dd)
+{
+	dd_dev_info(dd, "Entering loopback mode\n");
+
+	/* all loopbacks should disable self GUID check */
+	write_csr(dd, DC_DC8051_CFG_MODE,
+		(read_csr(dd, DC_DC8051_CFG_MODE) | DISABLE_SELF_GUID_CHECK));
+
+	/*
+	 * The simulator has LCB loopback, not serdes loopback.  Skip
+	 * setting serdes loopback.
+	 */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+		return 0;
+
+	return set_serdes_loopback_mode(dd);
 }
 
 static int start_polling(struct hfi_devdata *dd)
 {
-	int ret;
-
 	/* TODO: only start Polling if we have verified that media is
 	   present */
 
@@ -2820,22 +2839,11 @@ static int start_polling(struct hfi_devdata *dd)
 	write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
 		WFR_SUPPORTED_LINK_WIDTHS);
 
-	ret = set_physical_link_state(dd, WFR_PLS_POLLING);
-	if (ret != WFR_HCMD_SUCCESS) {
-		dd_dev_err(dd,
-			"%s: set phsyical link state to Polling failed with return 0x%x\n",
-			__func__, ret);
-
-		if (ret >= 0)
-			ret = -EINVAL;
-		return ret;
-	}
-	return 0;
+	return set_link_state(dd->pport, HLS_DN_POLL);
 }
 
-void restart_link(unsigned long opaque)
+static void restart_link(struct qib_pportdata *ppd)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
 	int ret;
 
 	if (!ppd->link_enabled)
@@ -2844,16 +2852,28 @@ void restart_link(unsigned long opaque)
 	ret = start_polling(ppd->dd);
 	if (ret) {
 		dd_dev_err(ppd->dd,
-			"Unable to restart polling on the link, err %d\n", ret);
-		/* for now, just try to restart in 30s */
-		mod_timer(&ppd->link_restart_timer, msecs_to_jiffies(30000));
+			"Unable to restart polling on the link, err %d, restarting in 10 seconds\n",
+			ret);
+		/* for now, just try to restart in 10s */
+		/* TODO: lump timeouts in a header somewhere? */
+		schedule_delayed_work(&ppd->link_restart_work,
+						msecs_to_jiffies(10000));
 	}
+}
+
+void link_restart_worker(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct qib_pportdata *ppd = container_of(dwork, struct qib_pportdata,
+							link_restart_work);
+	restart_link(ppd);
 }
 
 static int bringup_serdes(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 guid, reg;
+	int ret;
 
 	/* enable the port */
 	/* TODO: 7322: done within rcvmod_lock */
@@ -2875,8 +2895,10 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	ppd->link_enabled = 1;
 
 	if (loopback) {
-		dd_dev_info(dd, "Entering loopback mode\n");
-		return init_loopback(dd);
+		ret = init_loopback(dd);
+		if (ret < 0)
+			return ret;
+		/* otherwise, proceed to polling */
 	}
 
 	return start_polling(dd);
@@ -2886,21 +2908,11 @@ static void quiet_serdes(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
-	int ret;
 
 	/* link is now disabled */
 	ppd->link_enabled = 0;
 
-	ret = set_physical_link_state(dd, WFR_PLS_OFFLINE);
-	if (ret == WFR_HCMD_SUCCESS) {
-		/*
-		 * The DC does not inform us when the link goes down after
-		 * we ask it to.  Make an explicit change here
-		 */
-		handle_linkup_change(dd, 0);
-	} else {
-		dd_dev_err(dd, "%s: set phsyical link state to Offline.Quiet failed with return 0x%x\n", __func__, ret);
-	}
+	set_link_state(ppd, HLS_DN_OFFLINE);
 
 	/* disable the port */
 	/* TODO: 7322: done within rcvmod_lock */
@@ -3194,62 +3206,216 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
 }
 
+/* TODO: this is almost exactly like qib_wait_linkstate() */
+static int wait_phy_linkstate(struct hfi_devdata *dd, u32 state, u32 msecs)
+{
+	unsigned long timeout;
+	u32 curr_state;
+
+	timeout = jiffies + msecs_to_jiffies(msecs);
+	while (1) {
+		curr_state = read_physical_state(dd);
+		if (curr_state == state)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"timeout waiting for phy link state 0x%x, current state is 0x%x\n",
+				state, curr_state);
+			return -ETIMEDOUT;
+		}
+		usleep_range(1950, 2050); /* sleep 2ms-ish */
+	}
+
+	return 0;
+}
+
+/*
+ * Helper for set_link_state().  Do not call excecpt from that routine.
+ * Expects ppd->hls_mutex to be held.
+ */
+static int goto_offline(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u32 pstate, previous_state;
+	int ret;
+	int do_transition;
+	int do_wait;
+
+	previous_state = ppd->host_link_state;
+	pstate = read_physical_state(dd);
+	if (pstate == WFR_PLS_OFFLINE) {
+		do_transition = 0;	/* in right state */
+		do_wait = 0;		/* ...no need to wait */
+	} else if ((pstate & 0xff) == WFR_PLS_OFFLINE) {
+		do_transition = 0;	/* in an offline transient state */
+		do_wait = 1;		/* ...wait for it to settle */
+		ppd->host_link_state = HLS_GOING_DOWN;
+	} else {
+		do_transition = 1;	/* need to move to offline */
+		do_wait = 1;		/* ...will need to wait */
+		ppd->host_link_state = HLS_GOING_DOWN;
+	}
+
+	if (do_transition) {
+		ret = set_physical_link_state(dd, WFR_PLS_OFFLINE);
+		if (ret != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to Offline link state, return 0x%x\n",
+				ret);
+			return -EINVAL;
+		}
+	}
+
+	if (do_wait) {
+		/* it can take a while for the link to go down */
+		ret = wait_phy_linkstate(dd, WFR_PLS_OFFLINE, 5000);
+		if (ret < 0)
+			return ret;
+	}
+	/* make sure the logical state is also down */
+	qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
+
+	/*
+	 * There is a 600ms quiet time after the state goes offline before it
+	 * will accept host requests.  Wait for that (plus some extra) here.
+	 */
+	ret = wait_fm_ready(dd, 1000);
+	if (ret) {
+		dd_dev_err(dd, "After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
+		return ret;
+	}
+
+	/*
+	 * The state is now offline and the 8051 is ready to accept host
+	 * requests.
+	 *	- change our state
+	 *	- notify others if we were previously in a linkup state
+	 */
+	ppd->host_link_state = HLS_DN_OFFLINE;
+	if (previous_state == HLS_UP_INIT || previous_state == HLS_UP_ARMED
+					|| previous_state == HLS_UP_ACTIVE) {
+		handle_linkup_change(dd, 0);
+	}
+
+	return 0;
+}
+
+/* return the link state name */
+static const char *link_state_name(u32 state)
+{
+	const char *name;
+	static const char * const names[] = {
+		[HLS_UP_INIT]	 = "INIT",
+		[HLS_UP_ARMED]	 = "ARMED",
+		[HLS_UP_ACTIVE]	 = "ACTIVE",
+		[HLS_DN_DOWNDEF] = "DOWNDEF",
+		[HLS_DN_POLL]	 = "POLL",
+		[HLS_DN_SLEEP]	 = "SLEEP",
+		[HLS_DN_DISABLE] = "DISABLE",
+		[HLS_DN_OFFLINE] = "OFFLINE",
+		[HLS_VERIFY_CAP] = "VERIFY_CAP",
+		[HLS_GOING_UP]	 = "GOING_UP",
+		[HLS_GOING_DOWN] = "GOING_DOWN"
+	};
+
+	name = state < ARRAY_SIZE(names) ? names[state] : NULL;
+	return name ? name : "unkown";
+}
+
+/*
+ * Change the physical and/or logical link state.
+ *
+ * Returns 0 on success, -errno on failure.
+ */
 int set_link_state(struct qib_pportdata *ppd, u32 state)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u32 lstate;
 	int ret1, ret = 0;
-	static const char * const names[] = {
-		"ARM",
-		"ACTIVE",
-		"DOWN_DOWNDEF",
-		"DOWN_POLL",
-		"DOWN_SLEEP",
-		"DOWN_DISABLE"
-	};
 
-	dd_dev_info(dd, "%s: state %s\n", __func__,
-		state < ARRAY_SIZE(names) ? names[state] : "uknown");
+	mutex_lock(&ppd->hls_lock);
 
-	if (state == HFI_LINKDOWN_DOWNDEF)
+	dd_dev_info(dd, "%s: current %s, new %s\n", __func__,
+		link_state_name(ppd->host_link_state), link_state_name(state));
+
+	if (state == HLS_DN_DOWNDEF)
 		state = dd->link_default;
 
+	/* nothing to do if already in that state */
+	if (ppd->host_link_state == state)
+		goto done;
+
 	switch (state) {
-	case HFI_LINKARMED:
-		lstate = dd->f_iblink_state(ppd);
-		if (lstate == IB_PORT_INIT) {
-			set_logical_state(dd, WFR_LSTATE_ARMED);
-			ret = qib_wait_linkstate(ppd, IB_PORT_ARMED, 1000);
-		} else if (lstate != IB_PORT_ARMED) {
-			ret = -EINVAL;
-		}
-		break;
-	case HFI_LINKACTIVE:
-		lstate = dd->f_iblink_state(ppd);
-		if (lstate == IB_PORT_ARMED) {
-			set_logical_state(dd, WFR_LSTATE_ACTIVE);
-			ret = qib_wait_linkstate(ppd, IB_PORT_ACTIVE, 1000);
-		} else if (lstate != IB_PORT_ACTIVE) {
-			ret = -EINVAL;
-		}
-		break;
-	case HFI_LINKDOWN_POLL:
-		/* link is enabled */
-		ppd->link_enabled = 1;
-		/* must transistion to offline first */
-		ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
-		if (ret1 != WFR_HCMD_SUCCESS) {
+	case HLS_UP_INIT:
+		if (ppd->host_link_state != HLS_GOING_UP)
+			goto unexpected;
+
+		ppd->host_link_state = HLS_UP_INIT;
+		ret = qib_wait_linkstate(ppd, IB_PORT_INIT, 1000);
+		if (ret) {
+			/* logical state didn't change, stay at going_up */
+			ppd->host_link_state = HLS_GOING_UP;
 			dd_dev_err(dd,
-				"Failed to transition to Offline link state, return 0x%x\n",
-				ret1);
-			ret = -EINVAL;
+				"%s: logical state did not change to INIT\n",
+				__func__);
+		} else {
+			handle_linkup_change(dd, 1);
+		}
+		break;
+	case HLS_UP_ARMED:
+		if (ppd->host_link_state != HLS_UP_INIT)
+			goto unexpected;
+
+		ppd->host_link_state = HLS_UP_ARMED;
+		set_logical_state(dd, WFR_LSTATE_ARMED);
+		ret = qib_wait_linkstate(ppd, IB_PORT_ARMED, 1000);
+		if (ret) {
+			/* logical state didn't change, stay at init */
+			ppd->host_link_state = HLS_UP_INIT;
+			dd_dev_err(dd,
+				"%s: logical state did not change to ARMED\n",
+				__func__);
+		}
+		break;
+	case HLS_UP_ACTIVE:
+		if (ppd->host_link_state != HLS_UP_ARMED)
+			goto unexpected;
+
+		ppd->host_link_state = HLS_UP_ACTIVE;
+		set_logical_state(dd, WFR_LSTATE_ACTIVE);
+		ret = qib_wait_linkstate(ppd, IB_PORT_ACTIVE, 1000);
+		if (ret) {
+			/* logical state didn't change, stay at armed */
+			ppd->host_link_state = HLS_UP_ARMED;
+			dd_dev_err(dd,
+				"%s: logical state did not change to ACTIVE\n",
+				__func__);
+		}
+		break;
+	case HLS_DN_POLL:
+		/* OK to move from disabled to polling, via offline */
+		if (ppd->host_link_state == HLS_DN_DISABLE) {
+			ret = goto_offline(ppd);
+			if (ret)
+				break;
+		}
+
+		if (ppd->host_link_state != HLS_DN_OFFLINE)
+			goto unexpected;
+
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && loopback) {
+			/*
+			 * The simulator loopback does not go into polling.
+			 * Rather, it does a "quick" linkup that will jump
+			 * directly to generating a linkup interrupt.
+			 * Skip directly to just before that point.
+			 */
+			ret = simulator_loopback_quick_linkup(dd);
+			if (ret)
+				break;
+			ppd->host_link_state = HLS_GOING_UP;
 			break;
 		}
-		/*
-		 * The above move to physical Offline state will
-		 * also move the logical state to Down.  Wait for it.
-		 */
-		qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
+
 		ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
 		if (ret1 != WFR_HCMD_SUCCESS) {
 			dd_dev_err(dd,
@@ -3258,41 +3424,76 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 			ret = -EINVAL;
 			break;
 		}
+
+		/* link is enabled */
+		ppd->link_enabled = 1;
+		ppd->host_link_state = HLS_DN_POLL;
 		break;
-	case HFI_LINKDOWN_DISABLE:
+	case HLS_DN_DISABLE:
 		/* link is disabled */
 		ppd->link_enabled = 0;
+
+		/* allow any state to transition to disabled */
+
 		/* must transistion to offline first */
-		ret1 = set_physical_link_state(dd, WFR_PLS_OFFLINE);
-		if (ret1 != WFR_HCMD_SUCCESS) {
-			dd_dev_err(dd,
-				"Failed to transition to Offline link state, return 0x%x\n",
-				ret1);
-			ret = -EINVAL;
-			break;
+		if (ppd->host_link_state != HLS_DN_OFFLINE) {
+			ret = goto_offline(ppd);
+			if (ret)
+				break;
 		}
-		/*
-		 * The above move to physical Offline state will
-		 * also move the logical state to Down.  Wait for it.
-		 */
-		qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
+
 		ret1 = set_physical_link_state(dd, WFR_PLS_DISABLED);
 		if (ret1 != WFR_HCMD_SUCCESS) {
 			dd_dev_err(dd,
 				"Failed to transition to Disabled link state, return 0x%x\n",
 				ret1);
 			ret = -EINVAL;
+			break;
 		}
+		ppd->host_link_state = HLS_DN_DISABLE;
+		break;
+	case HLS_DN_OFFLINE:
+		/* allow any state to transition to offline */
+		ret = goto_offline(ppd);
+		break;
+	case HLS_VERIFY_CAP:
+		if (ppd->host_link_state != HLS_DN_POLL)
+			goto unexpected;
+		ppd->host_link_state = HLS_VERIFY_CAP;
+		break;
+	case HLS_GOING_UP:
+		if (ppd->host_link_state != HLS_VERIFY_CAP)
+			goto unexpected;
+
+		ret1 = set_physical_link_state(dd, WFR_PLS_LINKUP);
+		if (ret1 != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to link up state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+			break;
+		}
+		ppd->host_link_state = HLS_GOING_UP;
 		break;
 
-	case HFI_LINKDOWN_SLEEP:	/* not supported by the HW */
+	case HLS_DN_SLEEP:	/* not supported by the HW */
+	case HLS_GOING_DOWN:		/* transient within goto_offline() */
 	default:
-		dd_dev_info(dd, "%s: state 0x%x: not implemented\n",
+		dd_dev_info(dd, "%s: state 0x%x: not supported\n",
 			__func__, state);
 		ret = -EINVAL;
 		break;
 	}
+	goto done;
 
+unexpected:
+	dd_dev_err(dd, "%s: unexpected state trasition from %s to %s\n",
+		__func__, link_state_name(ppd->host_link_state),
+		link_state_name(state));
+	ret = -EINVAL;
+
+done:
+	mutex_unlock(&ppd->hls_lock);
 	return ret;
 }
 
@@ -3317,7 +3518,7 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		break;
 	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
 		/* WFR only supports POLL as the default link down state */
-		if (val != HFI_LINKDOWN_POLL)
+		if (val != HLS_DN_POLL)
 			ret = -EINVAL;
 		break;
 	case QIB_IB_CFG_OP_VLS:
@@ -3727,7 +3928,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	new_total += be16_to_cpu(new_bc->overall_shared_limit);
 	if (new_total > (u32)dd->link_credits)
 		return -EINVAL;
-	/* fetch the curent values */
+	/* fetch the current values */
 	get_buffer_control(dd, &cur_bc, &cur_total);
 
 	/*
@@ -6285,6 +6486,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd->lstate = IB_PORT_DOWN;
 		ppd->overrun_threshold = 0x4;
 		ppd->phy_error_threshold = 0xf;
+		/* start in offline */
+		ppd->host_link_state = HLS_DN_OFFLINE;
 	}
 
 	dd->f_bringup_serdes    = bringup_serdes;
@@ -6326,7 +6529,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/*
 	 * Set other early dd values.
 	 */
-	dd->link_default = HFI_LINKDOWN_POLL;
+	dd->link_default = HLS_DN_POLL;
 
 	/*
 	 * Do remaining PCIe setup and save PCIe values in dd.
@@ -6393,7 +6596,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		dd->flags |= QIB_NODMA_RTAIL;
 
 	dd->palign = 0x1000;	// TODO: is there a WFR value for this?
-
 
 	/* TODO these are set by the chip and don't change */
 	/* per-context kernel/user CSRs */

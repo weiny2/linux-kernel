@@ -96,15 +96,14 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 {
 	struct qib_pportdata *ppd = &dd->pport[0];
 	enum ib_event_type ev;
-	/*u32 expected_state; see TODO below */
 
+/* see when we are called */
+dd_dev_info(dd, "%s: linkup %u\n", __func__, linkup);
 	if (!(ppd->linkup ^ !!linkup))
 		return;	/* no change, nothing to do */
 
 	if (linkup) {
 		/*
-		 * Loopback does not go through VerifyCap.
-		 *
 		 * The simulator does not implement:
 		 *	- VerifyCap interupt
 		 *	- VerifyCap frames
@@ -117,7 +116,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		 * NOTE: This uses this device's vAU, vCU, and vl15_init for
 		 * the remote values.  Both sides must be using the values.
 		 */
-		if (loopback || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
 			set_up_vl15(dd, dd->vau, dd->vl15_init);
 			assign_remote_cm_au_table(dd, dd->vcu);
 			ppd->neighbor_guid =
@@ -133,7 +132,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* physical link went up */
 		ppd->linkup = 1;
 
-		/*expected_state = IB_PORT_INIT; see TODO below */
 		ev = IB_EVENT_PORT_ACTIVE;
 
 		/* start a 75msec timer to clear symbol errors */
@@ -152,25 +150,14 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* clear HW details of the prevoius connection */
 		reset_link_credits(dd);
 
-		/*expected_state = IB_PORT_DOWN; see TODO below */
 		ev = IB_EVENT_PORT_ERR;
 
 		qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
 
-		/* restart the link after a delay and out of this interrupt */
-		mod_timer(&ppd->link_restart_timer, msecs_to_jiffies(1));
+		/* restart the link after a delay */
+		schedule_delayed_work(&ppd->link_restart_work,
+						msecs_to_jiffies(1000));
 	}
-
-	/*
-	 * If the physical link changes, the HW will change logical link
-	 * state shortly after.  Re-read the logical state to update
-	 * ppd->lstate.
-	 * TODO: Wait until the link state goes to expected_state?
-	 * This function may be called in an interrupt, so we would
-	 * need to be careful about calling
-	 * qib_wait_linkstate(ppd, expected_state, ??)
-	 */
-	dd->f_iblink_state(ppd);
 
 	/* notify IB of the link change */
 	signal_ib_event(ppd, ev);

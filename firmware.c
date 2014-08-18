@@ -578,14 +578,39 @@ static void load_security_variables(struct hfi_devdata *dd,
 #endif
 }
 
+/* return the 8051 firmware statte */
+static inline u32 get_firmware_state(struct hfi_devdata *dd)
+{
+	u64 reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
+	return (reg >> DC_DC8051_STS_CUR_STATE_FIRMWARE_SHIFT)
+				& DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK;
+}
+
+/*
+ * Wait until the firmware is up and ready to take host requests.
+ * Return 0 on success, -ETIMEDOUT on timeout.
+ */
+int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout)
+{
+	unsigned long timeout;
+
+	timeout = msecs_to_jiffies(mstimeout) + jiffies;
+	while (1) {
+		if (get_firmware_state(dd) == 0xa0)	/* ready */
+			return 0;
+		if (time_after(jiffies, timeout))	/* timed out */
+			return -ETIMEDOUT;
+		usleep_range(1950, 2050); /* sleep 2ms-ish */
+	};
+}
+
 /*
  * Load the 8051 firmware.
  */
 static int load_8051_firmware(struct hfi_devdata *dd,
 				struct firmware_details *fdet)
 {
-	u64 reg, firmware;
-	unsigned long timeout;
+	u64 reg;
 	int ret;
 
 	/*
@@ -658,30 +683,23 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 * DC reset step 5. Wait for firmware to be ready to accept host
 	 * requests.
 	 */
-	timeout = msecs_to_jiffies(TIMEOUT_8051_START) + jiffies;
-	while (1) {
-		reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
-		firmware = (reg >> DC_DC8051_STS_CUR_STATE_FIRMWARE_SHIFT)
-				& DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK;
-		if (firmware == 0xa0)	/* ready for HOST request */
-			return 0; /* success */
-		if (time_after(jiffies, timeout))
-			break; /* timed out */
-		msleep(1);
-	};
+	ret = wait_fm_ready(dd, TIMEOUT_8051_START);
+	if (ret) { /* timed out */
+		/*
+		 * TODO: the functional simulator stopped doing this
+		 * correctly in the v28-v34 timeframe.
+		 */
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+			dd_dev_info(dd, "8051 start timed out (ignored)\n");
+			return 0;
+		}
 
-	/*
-	 * TODO: the functional simulator stopped doing this correctly in
-	 * v28-v34 timeframe.
-	 */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
-		dd_dev_info(dd, "8051 start timed out (ignored)\n");
-		return 0;
+		dd_dev_err(dd, "8051 start timeout, current state 0x%x\n",
+			get_firmware_state(dd));
+		return -ETIMEDOUT;
 	}
 
-	/* timed out */
-	dd_dev_err(dd, "8051 start timeout, current state 0x%llx\n", firmware);
-	return -ETIMEDOUT;
+	return 0;
 }
 
 /* SBUS Master broadcast address */

@@ -1294,16 +1294,16 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			case IB_PORT_DOWN:
 				switch (physState) {
 				case 0:
-					devState = HFI_LINKDOWN_DOWNDEF;
+					devState = HLS_DN_DOWNDEF;
 					break;
 				case 1:
-					devState = HFI_LINKDOWN_SLEEP;
+					devState = HLS_DN_SLEEP;
 					break;
 				case 2:
-					devState = HFI_LINKDOWN_POLL;
+					devState = HLS_DN_POLL;
 					break;
 				case 3:
-					devState = HFI_LINKDOWN_DISABLE;
+					devState = HLS_DN_DISABLE;
 					break;
 				default:
 					ret = -EINVAL;
@@ -1313,10 +1313,10 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				ret = set_link_state(ppd, devState);
 				break;
 			case IB_PORT_ARMED:
-				ret = set_link_state(ppd, HFI_LINKARMED);
+				ret = set_link_state(ppd, HLS_UP_ARMED);
 				break;
 			case IB_PORT_ACTIVE:
-				ret = set_link_state(ppd, HFI_LINKACTIVE);
+				ret = set_link_state(ppd, HLS_UP_ACTIVE);
 				break;
 			default:
 				ret = -EINVAL;

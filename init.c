@@ -384,15 +384,16 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 		ppd->pkeys[!default_pkey_idx] = 0x8001;
 	}
 
+	INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
+	INIT_WORK(&ppd->link_up_work, handle_link_up);
+	INIT_WORK(&ppd->link_down_work, handle_link_down);
+	INIT_DELAYED_WORK(&ppd->link_restart_work, link_restart_worker);
+	mutex_init(&ppd->hls_lock);
 	spin_lock_init(&ppd->sdma_alllock);
 
 	init_timer(&ppd->symerr_clear_timer);
 	ppd->symerr_clear_timer.function = qib_clear_symerror_on_linkup;
 	ppd->symerr_clear_timer.data = (unsigned long)ppd;
-
-	init_timer(&ppd->link_restart_timer);
-	ppd->link_restart_timer.function = restart_link;
-	ppd->link_restart_timer.data = (unsigned long)ppd;
 
 	ppd->qib_wq = NULL;
 
@@ -815,8 +816,7 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 		}
 		if (ppd->symerr_clear_timer.data)
 			del_timer_sync(&ppd->symerr_clear_timer);
-		if (ppd->link_restart_timer.data)
-			del_timer_sync(&ppd->link_restart_timer);
+		cancel_delayed_work_sync(&ppd->link_restart_work);
 	}
 }
 
@@ -1191,8 +1191,7 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 
 				ppd = dd->pport + pidx;
 				if (dd->flags & QIB_PRESENT) {
-					set_link_state(ppd,
-						HFI_LINKDOWN_DISABLE);
+					set_link_state(ppd, HLS_DN_DISABLE);
 					dd->f_setextled(ppd, 0);
 				}
 				if (ppd->statusp)

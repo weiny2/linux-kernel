@@ -322,14 +322,22 @@ struct qib_sge_state;
 #define QIB_IB_CFG_PORT 21 /* switch port we are connected to */
 
 /*
- * valid states passed to set_link_state()
+ * HFI or Host Link States
+ *
+ * These describe the states the driver thinks the logical and physicial
+ * states are in.  Used as an argument to set_link_state().
  */
-#define HFI_LINKARMED        0
-#define HFI_LINKACTIVE       1
-#define HFI_LINKDOWN_DOWNDEF 2	/* link down default */
-#define HFI_LINKDOWN_POLL    3
-#define HFI_LINKDOWN_SLEEP   4
-#define HFI_LINKDOWN_DISABLE 5
+#define HLS_UP_INIT	 0
+#define HLS_UP_ARMED	 1
+#define HLS_UP_ACTIVE	 2
+#define HLS_DN_DOWNDEF	 3	/* link down default */
+#define HLS_DN_POLL	 4
+#define HLS_DN_SLEEP	 5
+#define HLS_DN_DISABLE	 6
+#define HLS_DN_OFFLINE	 7
+#define HLS_VERIFY_CAP	 8
+#define HLS_GOING_UP	 9
+#define HLS_GOING_DOWN	10
 
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU 4096
@@ -481,6 +489,15 @@ struct qib_pportdata {
 
 	struct workqueue_struct *qib_wq;
 
+	/* move out of interrupt context */
+	struct work_struct link_vc_work;
+	struct work_struct link_up_work;
+	struct work_struct link_down_work;
+	struct delayed_work link_restart_work;
+	/* host link state variables */
+	struct mutex hls_lock;
+	u32 host_link_state;
+
 	spinlock_t            sdma_alllock ____cacheline_aligned_in_smp;
 
 	u32 lstate;	/* logical link state */
@@ -531,7 +548,6 @@ struct qib_pportdata {
 	struct timer_list led_override_timer;
 	struct xmit_wait cong_stats;
 	struct timer_list symerr_clear_timer;
-	struct timer_list link_restart_timer;
 
 	/* Synchronize access between driver writes and sysfs reads */
 	spinlock_t cc_shadow_lock
@@ -1201,7 +1217,6 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 void qib_dump_lookup_output_queue(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
-void restart_link(unsigned long opaque);
 
 /*
  * Set LED override, only the two LSBs have "public" meaning, but

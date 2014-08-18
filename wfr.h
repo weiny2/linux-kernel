@@ -255,6 +255,9 @@
 #define WFR_HREQ_REQUEST_REJECTED	0xfe
 #define WFR_HREQ_EXECUTION_ONGOING	0xff
 
+/* DC_DC8051_CFG_MODE.GENERAL bits */
+#define DISABLE_SELF_GUID_CHECK 0x2
+
 /*
  * Eager buffer minimum and maximum sizes supported by the hardware.
  * All power-of-two sizes in between are supported as well.
@@ -430,8 +433,13 @@ static inline int stl_width_to_ib(u16 in)
 int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
 void read_guid(struct hfi_devdata *dd);
+int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
 void check_fifos(unsigned long opaque);
 int set_link_state(struct qib_pportdata *, u32 state);
+void handle_verify_cap(struct work_struct *work);
+void handle_link_up(struct work_struct *work);
+void handle_link_down(struct work_struct *work);
+void link_restart_worker(struct work_struct *work);
 
 extern uint num_vls;
 
