@@ -500,6 +500,8 @@ xfsaild(
 	current->flags |= PF_MEMALLOC;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		if (tout && tout <= 20)
 			__set_current_state(TASK_KILLABLE);
 		else

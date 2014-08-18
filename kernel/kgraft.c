@@ -303,6 +303,30 @@ static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
 	return patch_fun->loc_name;
 }
 
+/*
+ * Obtain the "previous" (in the sense of patch stacking) value of ftrace_ops
+ * so that it can be put back properly in case of reverting the patch
+ */
+static struct ftrace_ops *kgr_get_old_fops(const struct kgr_patch_fun *patch_fun)
+{
+	const char *name = patch_fun->name;
+	struct ftrace_ops *last_new_fops = NULL;
+	struct kgr_patch_fun *pf;
+	struct kgr_patch *p;
+
+	list_for_each_entry(p, &patches, list) {
+		kgr_for_each_patch_fun(p, pf) {
+			if (pf->state != KGR_PATCH_APPLIED)
+				continue;
+
+			if (!strcmp(pf->name, name))
+				last_new_fops = &pf->ftrace_ops_fast;
+		}
+	}
+
+	return last_new_fops;
+}
+
 static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
 {
 	struct ftrace_ops *fops;
@@ -406,6 +430,12 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 
 		next_state = KGR_PATCH_SLOW;
 		new_ops = &patch_fun->ftrace_ops_slow;
+		/*
+		 * If some previous patch already patched a function, the old
+		 * fops need to be disabled, otherwise the new redirection will
+		 * never be used.
+		 */
+		unreg_ops = kgr_get_old_fops(patch_fun);
 		break;
 	case KGR_PATCH_SLOW:
 		if (revert || !final)
@@ -426,6 +456,11 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 			return -EINVAL;
 		next_state = KGR_PATCH_REVERTED;
 		unreg_ops = &patch_fun->ftrace_ops_slow;
+		/*
+		 * Put back in place the old fops that were deregistered in
+		 * case of stacked patching (see the comment above).
+		 */
+		new_ops = kgr_get_old_fops(patch_fun);
 		break;
 	case KGR_PATCH_SKIPPED:
 		return 0;
@@ -592,6 +627,8 @@ void kgr_patch_remove(struct kgr_patch *patch)
 }
 EXPORT_SYMBOL_GPL(kgr_patch_remove);
 
+#ifdef CONFIG_MODULES
+
 /*
  * This function is called when new module is loaded but before it is used.
  * Therefore it could set the fast path directly.
@@ -666,7 +703,7 @@ void kgr_module_init(const struct module *mod)
  * Disable the patch immediately. It does not matter in which state it is.
  *
  * This function is used when a module is being removed and the code is
- * not longer called.
+ * no longer called.
  */
 static int kgr_forced_code_patch_removal(struct kgr_patch_fun *patch_fun)
 {
@@ -774,7 +811,17 @@ static int kgr_module_notify_exit(struct notifier_block *self,
 	return err;
 }
 
-struct notifier_block kgr_module_exit_nb = {
+#else
+
+static int kgr_module_notify_exit(struct notifier_block *self,
+		unsigned long val, void *data)
+{
+	return 0;
+}
+
+#endif /* CONFIG_MODULES */
+
+static struct notifier_block kgr_module_exit_nb = {
 	.notifier_call = kgr_module_notify_exit,
 	.priority = 0,
 };
