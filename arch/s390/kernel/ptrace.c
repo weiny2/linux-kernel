@@ -321,7 +321,9 @@ static int __poke_user(struct task_struct *child, addr_t addr, addr_t data)
 		 * psw and gprs are stored on the stack
 		 */
 		if (addr == (addr_t) &dummy->regs.psw.mask &&
-		    ((data & ~PSW_MASK_USER) != PSW_USER_BITS ||
+		    (((data^PSW_USER_BITS) & ~PSW_MASK_USER) ||
+		     (((data^PSW_USER_BITS) & PSW_MASK_ASC) &&
+		      ((data|PSW_USER_BITS) & PSW_MASK_ASC) == PSW_MASK_ASC) ||
 		     ((data & PSW_MASK_EA) && !(data & PSW_MASK_BA))))
 			/* Invalid psw mask. */
 			return -EINVAL;
@@ -654,7 +656,10 @@ static int __poke_user_compat(struct task_struct *child,
 		 */
 		if (addr == (addr_t) &dummy32->regs.psw.mask) {
 			/* Build a 64 bit psw mask from 31 bit mask. */
-			if ((tmp & ~PSW32_MASK_USER) != PSW32_USER_BITS)
+			if (((tmp^PSW32_USER_BITS) & ~PSW32_MASK_USER) ||
+			    (((tmp^PSW32_USER_BITS) & PSW32_MASK_ASC) &&
+			     ((tmp|PSW32_USER_BITS) & PSW32_MASK_ASC)
+			     == PSW32_MASK_ASC))
 				/* Invalid psw mask. */
 				return -EINVAL;
 			regs->psw.mask = (regs->psw.mask & ~PSW_MASK_USER) |
