@@ -1361,8 +1361,10 @@ out_finish:
 	}
 	swsusp_show_speed(&start, &stop, nr_to_read, "Read");
 out_clean:
+	/* Use put_page here to make sure any stale page flags get cleared */
 	for (i = 0; i < ring_size; i++)
-		free_page((unsigned long)page[i]);
+		put_page(virt_to_page(page[i]));
+
 	if (crc) {
 		if (crc->thr)
 			kthread_stop(crc->thr);
