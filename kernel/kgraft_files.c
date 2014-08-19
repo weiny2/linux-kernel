@@ -73,11 +73,29 @@ static ssize_t replace_all_show(struct kobject *kobj,
 	return snprintf(buf, PAGE_SIZE, "%d\n", p->replace_all);
 }
 
+static void kgr_taint_kernel(const struct kgr_patch *p)
+{
+#ifdef CONFIG_SUSE_KERNEL_SUPPORTED
+	const char *modname;
+
+#ifdef CONFIG_MODULES
+	modname = p->owner ? p->owner->name : "n/a";
+#else
+	modname = "n/a";
+#endif
+	pr_warning("attempt to revert kgr patch %s (%s), setting NO_SUPPORT taint flag\n",
+			p->name, modname);
+	add_taint(TAINT_NO_SUPPORT, LOCKDEP_STILL_OK);
+#endif
+}
+
 static ssize_t revert_store(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
 {
 	struct kgr_patch *p = kobj_to_patch(kobj);
 	int ret;
+
+	kgr_taint_kernel(p);
 
 	ret = kgr_modify_kernel(p, true);
 
