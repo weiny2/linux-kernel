@@ -1117,7 +1117,7 @@ static void sc_piobufavail(struct send_context *sc)
 		wait = list_first_entry(list, struct iowait, list);
 		qp = container_of(wait, struct qib_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
-		atomic_inc(&qp->refcount);
+		/* refcount held until actual wakeup */
 		qps[n++] = qp;
 	}
 	dd->f_wantpiobuf_intr(sc, 0);

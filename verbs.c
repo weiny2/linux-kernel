@@ -788,22 +788,14 @@ static void mem_timer(unsigned long data)
 		wait = list_first_entry(list, struct iowait, list);
 		qp = container_of(wait, struct qib_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
-		atomic_inc(&qp->refcount);
+		/* refcount held until actual wakeup */
 		if (!list_empty(list))
 			mod_timer(&dev->mem_timer, jiffies + 1);
 	}
 	spin_unlock_irqrestore(&dev->pending_lock, flags);
 
-	if (qp) {
-		spin_lock_irqsave(&qp->s_lock, flags);
-		if (qp->s_flags & QIB_S_WAIT_KMEM) {
-			qp->s_flags &= ~QIB_S_WAIT_KMEM;
-			qib_schedule_send(qp);
-		}
-		spin_unlock_irqrestore(&qp->s_lock, flags);
-		if (atomic_dec_and_test(&qp->refcount))
-			wake_up(&qp->wait);
-	}
+	if (qp)
+		qib_qp_wakeup(qp, QIB_S_WAIT_KMEM);
 }
 
 void update_sge(struct qib_sge_state *ss, u32 length)
@@ -849,6 +841,8 @@ static noinline struct qib_verbs_txreq *__get_txreq(struct qib_ibdev *dev,
 			dev->n_txwait++;
 			qp->s_flags |= QIB_S_WAIT_TX;
 			list_add_tail(&qp->s_iowait.list, &dev->txwait);
+			trace_hfi_qpsleep(qp, QIB_S_WAIT_TX);
+			atomic_inc(&qp->refcount);
 		}
 		qp->s_flags &= ~QIB_S_BUSY;
 		spin_unlock(&dev->pending_lock);
@@ -915,18 +909,9 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
 		wait = list_first_entry(&dev->txwait, struct iowait, list);
 		qp = container_of(wait, struct qib_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
-		atomic_inc(&qp->refcount);
+		/* refcount held until actual wakeup */
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
-
-		spin_lock_irqsave(&qp->s_lock, flags);
-		if (qp->s_flags & QIB_S_WAIT_TX) {
-			qp->s_flags &= ~QIB_S_WAIT_TX;
-			qib_schedule_send(qp);
-		}
-		spin_unlock_irqrestore(&qp->s_lock, flags);
-
-		if (atomic_dec_and_test(&qp->refcount))
-			wake_up(&qp->wait);
+		qib_qp_wakeup(qp, QIB_S_WAIT_TX);
 	} else
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
 }
@@ -967,23 +952,14 @@ void qib_verbs_sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 			break;
 		avail -= stx->sg_count;
 		list_del_init(&qp->s_iowait.list);
-		atomic_inc(&qp->refcount);
+		/* refcount held until actual wakeup */
 		qps[n++] = qp;
 	}
 
 	spin_unlock(&dev->pending_lock);
 
-	for (i = 0; i < n; i++) {
-		qp = qps[i];
-		spin_lock(&qp->s_lock);
-		if (qp->s_flags & QIB_S_WAIT_DMA_DESC) {
-			qp->s_flags &= ~QIB_S_WAIT_DMA_DESC;
-			qib_schedule_send(qp);
-		}
-		spin_unlock(&qp->s_lock);
-		if (atomic_dec_and_test(&qp->refcount))
-			wake_up(&qp->wait);
-	}
+	for (i = 0; i < n; i++)
+		qib_qp_wakeup(qps[i], QIB_S_WAIT_DMA_DESC);
 }
 
 /*
@@ -1036,6 +1012,8 @@ static int wait_kmem(struct qib_ibdev *dev, struct qib_qp *qp)
 				mod_timer(&dev->mem_timer, jiffies + 1);
 			qp->s_flags |= QIB_S_WAIT_KMEM;
 			list_add_tail(&qp->s_iowait.list, &dev->memwait);
+			trace_hfi_qpsleep(qp, QIB_S_WAIT_KMEM);
+			atomic_inc(&qp->refcount);
 		}
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;
@@ -1180,6 +1158,7 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 			qp->s_flags |= QIB_S_WAIT_PIO;
 			list_add_tail(&qp->s_iowait.list, &sc->piowait);
 			trace_hfi_qpsleep(qp, QIB_S_WAIT_PIO);
+			atomic_inc(&qp->refcount);
 			dd->f_wantpiobuf_intr(sc, 1);
 		}
 		spin_unlock(&dev->pending_lock);

@@ -506,6 +506,8 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 	if (!list_empty(&qp->s_iowait.list) && !(qp->s_flags & QIB_S_BUSY)) {
 		qp->s_flags &= ~QIB_S_ANY_WAIT_IO;
 		list_del_init(&qp->s_iowait.list);
+		if (atomic_dec_and_test(&qp->refcount))
+			wake_up(&qp->wait);
 	}
 	spin_unlock(&dev->pending_lock);
 
@@ -566,7 +568,7 @@ bail:
 	return ret;
 }
 
-static inline void flush_tx_list(struct qib_qp *qp)
+static void flush_tx_list(struct qib_qp *qp)
 {
 	while (!list_empty(&qp->s_iowait.tx_head)) {
 		struct qib_sdma_txreq *tx;
@@ -582,14 +584,17 @@ static inline void flush_tx_list(struct qib_qp *qp)
 	}
 }
 
-static inline void flush_iowait(struct qib_qp *qp)
+static void flush_iowait(struct qib_qp *qp)
 {
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->pending_lock, flags);
-	if (!list_empty(&qp->s_iowait.list))
+	if (!list_empty(&qp->s_iowait.list)) {
 		list_del_init(&qp->s_iowait.list);
+		if (atomic_dec_and_test(&qp->refcount))
+			wake_up(&qp->wait);
+	}
 	spin_unlock_irqrestore(&dev->pending_lock, flags);
 }
 

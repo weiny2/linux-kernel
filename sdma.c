@@ -1609,6 +1609,8 @@ busy:
 			ibp->n_dmawait++;
 			qp->s_flags |= QIB_S_WAIT_DMA_DESC;
 			list_add_tail(&qp->s_iowait.list, &sde->dmawait);
+			trace_hfi_qpsleep(qp, QIB_S_WAIT_DMA_DESC);
+			atomic_inc(&qp->refcount);
 		}
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;
