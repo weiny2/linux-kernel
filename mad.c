@@ -554,6 +554,7 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u32 port_num = am & 0xff;
 	u32 num_ports = am >> 24;
 	u32 buffer_units;
+	u64 tmp;
 
 	/* Clear all fields.  Only set the non-zero fields. */
 	memset(pi, 0, sizeof(*pi));
@@ -706,6 +707,17 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->buffer_units = cpu_to_be32(buffer_units);
 
 	pi->stl_cap_mask = cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
+
+	pi->replay_depth.buffer = 0x80;
+	/* WFR supports a replay buffer 128 LTPs in size */
+	tmp = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
+	tmp >>= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_SHIFT;
+	tmp &= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_MASK;
+	/* this counter is 16 bits wide, but the replay_depth.wire
+	 * variable is only 8 bits */
+	if (tmp > 0xff)
+		tmp = 0xff;
+	pi->replay_depth.wire = tmp;
 
 	if (resp_len)
 		*resp_len += sizeof(struct stl_port_info);
