@@ -98,6 +98,8 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 #define SCC_PER_KRCVQ  -3
 #define SCC_ACK_CREDITS  32
 
+#define PIO_WAIT_BATCH_SIZE 5
+
 /* default send context sizes */
 static struct sc_config_sizes sc_config_sizes[SC_MAX] = {
 	[SC_KERNEL] = { .size  = SCS_POOL_0,	/* even divide, pool 0 */
@@ -1094,7 +1096,7 @@ static void sc_piobufavail(struct send_context *sc)
 	struct hfi_devdata *dd = sc->dd;
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct list_head *list;
-	struct qib_qp *qps[5];
+	struct qib_qp *qps[PIO_WAIT_BATCH_SIZE];
 	struct qib_qp *qp;
 	unsigned long flags;
 	unsigned i, n = 0;

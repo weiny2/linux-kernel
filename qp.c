@@ -54,6 +54,8 @@ module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
 static inline void flush_tx_list(struct qib_qp *qp);
+static void iowait_sleep(struct iowait *wait, struct sdma_txreq *tx);
+static void iowait_wakeup(struct iowait *wait, int reason);
 
 static inline unsigned mk_qpn(struct hfi_qpn_table *qpt,
 			      struct qpn_map *map, unsigned off)
@@ -385,7 +387,12 @@ static void qib_reset_qp(struct qib_qp *qp, enum ib_qp_type type)
 	qp->remote_qpn = 0;
 	qp->qkey = 0;
 	qp->qp_access_flags = 0;
-	iowait_init(&qp->s_iowait, 1, qib_do_send);
+	iowait_init(
+		&qp->s_iowait,
+		1,
+		qib_do_send,
+		iowait_sleep,
+		iowait_wakeup);
 	qp->s_flags &= QIB_S_SIGNAL_REQ_WR;
 	qp->s_hdrwords = 0;
 	qp->s_wqe = NULL;
@@ -571,12 +578,11 @@ bail:
 static void flush_tx_list(struct qib_qp *qp)
 {
 	while (!list_empty(&qp->s_iowait.tx_head)) {
-		struct qib_sdma_txreq *tx;
+		struct sdma_txreq *tx;
 
-		/* FIXME - old API */
 		tx = list_first_entry(
 			&qp->s_iowait.tx_head,
-			struct qib_sdma_txreq,
+			struct sdma_txreq,
 			list);
 		list_del_init(&tx->list);
 		qib_put_txreq(
@@ -1359,6 +1365,18 @@ void qib_qp_wakeup(struct qib_qp *qp, u32 flag)
 	/* Notify qib_destroy_qp() if it is waiting. */
 	if (atomic_dec_and_test(&qp->refcount))
 		wake_up(&qp->wait);
+}
+
+static void iowait_sleep(struct iowait *wait, struct sdma_txreq *tx)
+{
+	BUG_ON(1);
+}
+
+static void iowait_wakeup(struct iowait *wait, int reason)
+{
+	struct qib_qp *qp = container_of(wait, struct qib_qp, s_iowait);
+	BUG_ON(reason != SDMA_AVAIL_REASON);
+	qib_qp_wakeup(qp, QIB_S_WAIT_DMA_DESC);
 }
 
 int qib_qp_init(struct qib_ibdev *dev)

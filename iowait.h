@@ -43,10 +43,13 @@
  */
 typedef void (*restart_t)(struct work_struct *work);
 
+struct sdma_txreq;
 /**
  * struct iowait - linkage for delayed progress/waiting
  * @list: used to add/insert into QP/PQ wait lists
  * @tx_head: overflow list of sdma_txreq's
+ * @sleep: nospace callback
+ * @wakeup: space callback
  * @iowork: workqueue overhead
  * @sdma_busy: # of packets inflight
  * @count: total number of descriptors in tx_head'ed list
@@ -56,11 +59,23 @@ typedef void (*restart_t)(struct work_struct *work);
  * This is to be embedded in user's state structure
  * (QP or PQ).
  *
+ * The sleep and wakeup members are a
+ * bit misnamed.   They do not strictly
+ * speaking sleep or wakeup, but they
+ * are callbacks for the ULP to implement
+ * what ever queuing/dequeuing of
+ * the embedded iowait and its containing struct
+ * when a resource shortage like SDMA ring space is seen.
+ *
+ * Both potentially have locks help
+ * so sleeping is not allowed.
  */
 
 struct iowait {
 	struct list_head list;
 	struct list_head tx_head;
+	void (*sleep)(struct iowait *wait, struct sdma_txreq *tx);
+	void (*wakeup)(struct iowait *wait, int reason);
 	struct work_struct iowork;
 	atomic_t sdma_busy;
 	u32 count;
@@ -68,11 +83,15 @@ struct iowait {
 	u32 tx_count;
 };
 
+#define SDMA_AVAIL_REASON 0
+
 /**
  * iowait_init() - init wait structure
  * @wait: wait struct to initialize
  * @tx_limit: limit for overflow queueing
- * @func: restart function
+ * @func: restart function for workqueue
+ * @sleep: sleep function for no space
+ * @wakeup: wakeup function for no space
  *
  * This function initializes the iowait
  * structure embedded in the QP or PQ.
@@ -82,7 +101,9 @@ struct iowait {
 static inline void iowait_init(
 	struct iowait *wait,
 	u32 tx_limit,
-	void (*func)(struct work_struct *work))
+	void (*func)(struct work_struct *work),
+	void (*sleep)(struct iowait *wait, struct sdma_txreq *tx),
+	void (*wakeup)(struct iowait *wait, int reason))
 {
 	wait->count = 0;
 	INIT_LIST_HEAD(&wait->list);
@@ -90,6 +111,8 @@ static inline void iowait_init(
 	INIT_WORK(&wait->iowork, func);
 	atomic_set(&wait->sdma_busy, 0);
 	wait->tx_limit = tx_limit;
+	wait->sleep = sleep;
+	wait->wakeup = wakeup;
 }
 
 /**

@@ -42,7 +42,8 @@
 #include "hfi.h"
 #include "verbs.h"
 
-#define NUM_DESC 4
+/* increased for AHG */
+#define NUM_DESC 6
 
 #define SDMA_TXREQ_S_OK        0
 #define SDMA_TXREQ_S_SENDERROR 1
@@ -60,6 +61,17 @@
 #define SDMA_MAP_NONE          0
 #define SDMA_MAP_SINGLE        1
 #define SDMA_MAP_PAGE          2
+
+#define SDMA_AHG_VALUE_MASK          0xff
+#define SDMA_AHG_VALUE_SHIFT         0
+#define SDMA_AHG_INDEX_MASK          0xf
+#define SDMA_AHG_INDEX_SHIFT         16
+#define SDMA_AHG_FIELD_LEN_MASK      0xf
+#define SDMA_AHG_FIELD_LEN_SHIFT     20
+#define SDMA_AHG_FIELD_START_MASK    0x1f
+#define SDMA_AHG_FIELD_START_SHIFT   24
+#define SDMA_AHG_UPDATE_ENABLE_MASK  0x1
+#define SDMA_AHG_UPDATE_ENABLE_SHIFT 31
 
 /*
  * Bits defined in the send DMA descriptor.
@@ -158,30 +170,6 @@ struct sdma_state {
 	enum sdma_states previous_state;
 	unsigned             previous_op;
 	enum sdma_events last_event;
-};
-
-/* FIXME - remove when verbs done */
-struct qib_sdma_txreq {
-	int                 flags;
-	int                 sg_count;
-	dma_addr_t          addr;
-	void              (*callback)(struct qib_sdma_txreq *, int);
-	u16                 start_idx;  /* sdma private */
-	u16                 next_descq_idx;  /* sdma private */
-	struct list_head    list;       /* sdma private */
-};
-
-/* FIXME - remove when verbs done */
-struct qib_verbs_txreq {
-	struct qib_sdma_txreq   txreq;
-	struct qib_qp           *qp;
-	struct qib_swqe         *wqe;
-	u32                     dwords;
-	u16                     hdr_dwords;
-	u16                     hdr_inx;
-	struct qib_pio_header	*align_buf;
-	struct qib_mregion	*mr;
-	struct qib_sge_state    *ss;
 };
 
 /**
@@ -344,6 +332,20 @@ struct sdma_txreq {
 	u16                         next_descq_idx;
 	/* private: */
 	struct sdma_desc descs[NUM_DESC];
+};
+
+/* FIXME - remove when verbs done */
+struct qib_verbs_txreq {
+	struct sdma_txreq       txreq;
+	struct qib_qp           *qp;
+	struct qib_swqe         *wqe;
+	dma_addr_t              addr;
+	u32                     dwords;
+	u16                     hdr_dwords;
+	u16                     hdr_inx;
+	struct qib_pio_header	*align_buf;
+	struct qib_mregion	*mr;
+	struct qib_sge_state    *ss;
 };
 
 /**
@@ -794,8 +796,15 @@ static inline u32 sdma_build_ahg_descriptor(
 	u8 startbit,
 	u8 bits)
 {
-	/* FIXME stub for now */
-	return 0;
+	return (u32)(1UL << SDMA_AHG_UPDATE_ENABLE_SHIFT |
+		((startbit & SDMA_AHG_FIELD_START_MASK) <<
+		SDMA_AHG_FIELD_START_SHIFT) |
+		((bits & SDMA_AHG_FIELD_LEN_MASK) <<
+		SDMA_AHG_FIELD_LEN_SHIFT) |
+		((dwindex & SDMA_AHG_INDEX_MASK) <<
+		SDMA_AHG_INDEX_SHIFT) |
+		((data & SDMA_AHG_VALUE_MASK) <<
+		SDMA_AHG_VALUE_SHIFT));
 }
 
 /**

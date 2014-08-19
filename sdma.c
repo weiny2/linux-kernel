@@ -57,6 +57,8 @@ uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 
+#define SDMA_WAIT_BATCH_SIZE 20
+
 static const char * const sdma_state_names[] = {
 	[sdma_state_s00_hw_down]                = "s00_HwDown",
 	[sdma_state_s10_hw_start_up_halt_wait]  = "s10_HwStartUpHaltWait",
@@ -164,6 +166,7 @@ static void __sdma_process_event(
 	struct sdma_engine *sde,
 	enum sdma_events event);
 static void dump_sdma_state(struct sdma_engine *sde);
+static int sdma_make_progress(struct sdma_engine *sde);
 
 /**
  * sdma_event_name() - return event string from enum
@@ -232,13 +235,14 @@ static inline u64 read_sde_csr(
  *
  * Must be called with sdma_lock held
  */
-/* FIXME - old routine */
+/* new API version */
 static void clear_sdma_activelist(struct sdma_engine *sde)
 {
-	struct qib_sdma_txreq *txp, *txp_next;
+	struct sdma_txreq *txp, *txp_next;
 
 	list_for_each_entry_safe(txp, txp_next, &sde->activelist, list) {
 		list_del_init(&txp->list);
+		/* FIXME - old api code fragment */
 		if (txp->flags & SDMA_TXREQ_F_FREEDESC) {
 			unsigned idx;
 
@@ -248,22 +252,11 @@ static void clear_sdma_activelist(struct sdma_engine *sde)
 				if (++idx == sde->descq_cnt)
 					idx = 0;
 			}
+		} else {
+			sdma_txclean(sde->dd, txp);
 		}
-		if (txp->callback)
-			(*txp->callback)(txp, SDMA_TXREQ_S_ABORTED);
-	}
-}
-
-/* new API version */
-static void _clear_sdma_activelist(struct sdma_engine *sde)
-{
-	struct sdma_txreq *tx, *txp_next;
-
-	list_for_each_entry_safe(tx, txp_next, &sde->activelist, list) {
-		list_del_init(&tx->list);
-		sdma_txclean(sde->dd, tx);
-		if (tx->complete)
-			(*tx->complete)(tx, SDMA_TXREQ_S_ABORTED);
+		if (txp->complete)
+			(*txp->complete)(txp, SDMA_TXREQ_S_ABORTED);
 	}
 }
 
@@ -306,7 +299,7 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 	spin_lock(&sde->dd->pport->sdma_alllock);
 
 	/* Process all retired requests. */
-	qib_sdma_make_progress(sde);
+	sdma_make_progress(sde);
 
 	clear_sdma_activelist(sde);
 
@@ -772,14 +765,14 @@ void sdma_txclean(
 				&dd->pcidev->dev,
 				sdma_mapping_addr(&tx->descp[i]),
 				sdma_mapping_len(&tx->descp[i]),
-				DMA_FROM_DEVICE);
+				DMA_TO_DEVICE);
 			break;
 		case SDMA_MAP_PAGE:
 			dma_unmap_page(
 				&dd->pcidev->dev,
 				sdma_mapping_addr(&tx->descp[i]),
 				sdma_mapping_len(&tx->descp[i]),
-				DMA_FROM_DEVICE);
+				DMA_TO_DEVICE);
 			break;
 		}
 	}
@@ -859,12 +852,55 @@ retry:
 	return hwhead;
 }
 
+/*
+ * This is called when there are send DMA descriptors that might be
+ * available.
+ *
+ * This is called with ppd->sdma_lock held.
+ */
+void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
+{
+	struct iowait *wait, *nw;
+	struct iowait *waits[SDMA_WAIT_BATCH_SIZE];
+	unsigned i, n;
+	struct sdma_txreq *stx;
+	struct qib_ibdev *dev;
+
+#ifdef JAG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "JAG SDMA %s:%d %s()\n", slashstrip(__FILE__),
+		__LINE__, __func__);
+	dd_dev_err(sde->dd, "avail: %u\n", avail);
+#endif
+
+	n = 0;
+
+	dev = &sde->dd->verbs_dev;
+	spin_lock(&dev->pending_lock);
+	/* Search wait list for first QP wanting DMA descriptors. */
+	list_for_each_entry_safe(wait, nw, &sde->dmawait, list) {
+		if (!wait->wakeup)
+			continue;
+		if (n == ARRAY_SIZE(waits))
+			break;
+		stx = list_first_entry(&wait->tx_head, struct sdma_txreq, list);
+		if (stx->num_desc > avail)
+			break;
+		avail -= stx->num_desc;
+		list_del_init(&wait->list);
+		waits[n++] = wait;
+	}
+	spin_unlock(&dev->pending_lock);
+
+	for (i = 0; i < n; i++)
+		waits[i]->wakeup(waits[i], SDMA_AVAIL_REASON);
+}
+
 /* sdma_lock must be held */
 /* FIXME - convert to new routine */
-int qib_sdma_make_progress(struct sdma_engine *sde)
+static int sdma_make_progress(struct sdma_engine *sde)
 {
 	struct list_head *lp = NULL;
-	struct qib_sdma_txreq *txp = NULL;
+	struct sdma_txreq *txp = NULL;
 	int progress = 0;
 	u16 hwhead;
 	u16 idx = 0;
@@ -884,12 +920,13 @@ int qib_sdma_make_progress(struct sdma_engine *sde)
 
 	if (!list_empty(&sde->activelist)) {
 		lp = sde->activelist.next;
-		txp = list_entry(lp, struct qib_sdma_txreq, list);
+		txp = list_entry(lp, struct sdma_txreq, list);
 		idx = txp->start_idx;
 	}
 
 	while (sde->descq_head != hwhead) {
 		/* if desc is part of this txp, unmap if needed */
+		/* FIXME - old api code fragment */
 		if (txp && (txp->flags & SDMA_TXREQ_F_FREEDESC) &&
 		    (idx == sde->descq_head)) {
 			unmap_desc(sde, sde->descq_head);
@@ -905,34 +942,38 @@ int qib_sdma_make_progress(struct sdma_engine *sde)
 			sde->descq_head = 0;
 
 		/* if now past this txp's descs, do the callback */
+		/* FIXME - old api code fragment */
 		if (txp && txp->next_descq_idx == sde->descq_head) {
 			/* remove from active list */
 			list_del_init(&txp->list);
-			if (txp->callback)
-				(*txp->callback)(txp, SDMA_TXREQ_S_OK);
+			/* FIXME - old api code fragment */
+			if (!(txp->flags &
+					(SDMA_TXREQ_F_FREEDESC|
+					 SDMA_TXREQ_F_FREEBUF)))
+				sdma_txclean(sde->dd, txp);
+			if (txp->complete)
+				(*txp->complete)(txp, SDMA_TXREQ_S_OK);
 			/* see if there is another txp */
 			if (list_empty(&sde->activelist))
 				txp = NULL;
 			else {
 				lp = sde->activelist.next;
-				txp = list_entry(lp, struct qib_sdma_txreq,
-					list);
+				txp = list_entry(lp, struct sdma_txreq, list);
 				idx = txp->start_idx;
 			}
 		}
-		progress = 1;
+		progress++;
 	}
 	if (progress)
-		qib_verbs_sdma_desc_avail(sde, sdma_descq_freecnt(sde));
+		sdma_desc_avail(sde, sdma_descq_freecnt(sde));
 	return progress;
 }
 
-/* This is the new routine */
 /* sdma_lock must be held */
-static int sdma_make_progress(struct sdma_engine *sde)
+/* Old API - delete */
+int qib_sdma_make_progress(struct sdma_engine *sde)
 {
-	BUG_ON(1);
-	return 0;
+	return sdma_make_progress(sde);
 }
 
 /**
@@ -1280,7 +1321,7 @@ void sdma_dumpstate(struct sdma_engine *sde)
 static void dump_sdma_state(struct sdma_engine *sde)
 {
 	struct hw_sdma_desc *descq;
-	struct qib_sdma_txreq *txp, *txpnext;
+	struct sdma_txreq *txp, *txpnext;
 	struct hw_sdma_desc *descqp;
 	u64 desc[2];
 	u64 addr;
@@ -1454,7 +1495,7 @@ retry:
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
-	if (tx->txreq.sg_count > sdma_descq_freecnt(sde)) {
+	if (tx->txreq.num_desc > sdma_descq_freecnt(sde)) {
 		if (qib_sdma_make_progress(sde))
 			goto retry;
 		if (sde->dd->flags & QIB_HAS_SDMA_TIMEOUT)
@@ -1462,7 +1503,7 @@ retry:
 		goto busy;
 	}
 
-	make_sdma_desc(sde, sdmadesc, (u64) tx->txreq.addr, tx->hdr_dwords);
+	make_sdma_desc(sde, sdmadesc, (u64) tx->addr, tx->hdr_dwords);
 
 	sdmadesc[0] |= SDMA_DESC0_FIRST_DESC_FLAG;
 
@@ -1557,7 +1598,7 @@ retry:
 	atomic_inc(&tx->qp->s_iowait.sdma_busy);
 	tx->txreq.next_descq_idx = tail;
 	sdma_update_tail(sde, tail);
-	sde->descq_added += tx->txreq.sg_count;
+	sde->descq_added += tx->txreq.num_desc;
 	list_add_tail(&tx->txreq.list, &sde->activelist);
 	goto unlock;
 
@@ -1660,6 +1701,7 @@ int sdma_send_txreq(struct sdma_engine *sde,
 	spin_lock_irqsave(&sde->lock, flags);
 retry:
 	tail = sde->descq_tail;
+	tx->start_idx = tail;
 	if (unlikely(!__sdma_running(sde)))
 		goto unlock_noconn;
 	if (unlikely(tx->num_desc > sdma_descq_freecnt(sde)))
@@ -1674,10 +1716,13 @@ retry:
 		sde->descq[tail].qw[1] = descp->qw[1];
 		trace_hfi_sdma_descriptor(sde, descp->qw[0], descp->qw[1],
 			tail, &sde->descq[tail]);
-		if (++tail == sde->descq_cnt)
+		if (++tail == sde->descq_cnt) {
 			++sde->generation;
+			tail = 0;
+		}
 	}
 	sde->descq_added += tx->num_desc;
+	tx->next_descq_idx = tail;
 	list_add_tail(&tx->list, &sde->activelist);
 	sdma_update_tail(sde, tail);
 	if (wait)
@@ -1694,7 +1739,7 @@ unlock_noconn:
 		wait->tx_count++;
 		wait->count += tx->num_desc;
 	}
-	_clear_sdma_activelist(sde);
+	clear_sdma_activelist(sde);
 	ret = -ECOMM;
 	goto unlock;
 nodesc:
@@ -1754,7 +1799,7 @@ static void sdma_process_event(struct sdma_engine *sde,
 	__sdma_process_event(sde, event);
 
 	if (sde->state.current_state == sdma_state_s99_running)
-		qib_verbs_sdma_desc_avail(sde, sdma_descq_freecnt(sde));
+		sdma_desc_avail(sde, sdma_descq_freecnt(sde));
 
 	spin_unlock_irqrestore(&sde->lock, flags);
 }

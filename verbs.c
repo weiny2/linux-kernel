@@ -892,7 +892,7 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
 	if (tx->txreq.flags & SDMA_TXREQ_F_FREEBUF) {
 		tx->txreq.flags &= ~SDMA_TXREQ_F_FREEBUF;
 		dma_unmap_single(&dd_from_dev(dev)->pcidev->dev,
-				 tx->txreq.addr, tx->hdr_dwords << 2,
+				 tx->addr, tx->hdr_dwords << 2,
 				 DMA_TO_DEVICE);
 		kfree(tx->align_buf);
 	}
@@ -917,55 +917,9 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
 }
 
 /*
- * This is called when there are send DMA descriptors that might be
- * available.
- *
  * This is called with ppd->sdma_lock held.
  */
-void qib_verbs_sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
-{
-	struct iowait *wait, *nw;
-	struct qib_qp *qp = NULL;
-	struct qib_qp *qps[20];
-	struct qib_ibdev *dev;
-	unsigned i, n;
-	struct qib_sdma_txreq *stx;
-
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA %s:%d %s()\n", slashstrip(__FILE__),
-		__LINE__, __func__);
-	dd_dev_err(sde->dd, "avail: %u\n", avail);
-#endif
-
-	n = 0;
-	dev = &sde->dd->verbs_dev;
-	spin_lock(&dev->pending_lock);
-
-	/* Search wait list for first QP wanting DMA descriptors. */
-	list_for_each_entry_safe(wait, nw, &sde->dmawait, list) {
-		if (n == ARRAY_SIZE(qps))
-			break;
-		qp = container_of(wait, struct qib_qp, s_iowait);
-		stx = list_first_entry(&qp->s_iowait.tx_head,
-			struct qib_sdma_txreq, list);
-		if (stx->sg_count > avail)
-			break;
-		avail -= stx->sg_count;
-		list_del_init(&qp->s_iowait.list);
-		/* refcount held until actual wakeup */
-		qps[n++] = qp;
-	}
-
-	spin_unlock(&dev->pending_lock);
-
-	for (i = 0; i < n; i++)
-		qib_qp_wakeup(qps[i], QIB_S_WAIT_DMA_DESC);
-}
-
-/*
- * This is called with ppd->sdma_lock held.
- */
-static void sdma_complete(struct qib_sdma_txreq *cookie, int status)
+static void sdma_complete(struct sdma_txreq *cookie, int status)
 {
 	struct qib_verbs_txreq *tx =
 		container_of(cookie, struct qib_verbs_txreq, txreq);
@@ -1032,7 +986,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_verbs_txreq *tx;
-	struct qib_sdma_txreq *stx;
+	struct sdma_txreq *stx;
 	struct qib_pio_header *phdr;
 	u64 pbc_flags = 0;
 	struct sdma_engine *sde;
@@ -1043,7 +997,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (!list_empty(&qp->s_iowait.tx_head)) {
 		stx = list_first_entry(
 			&qp->s_iowait.tx_head,
-			struct qib_sdma_txreq,
+			struct sdma_txreq,
 			list);
 		list_del_init(&stx->list);
 		tx = container_of(stx, struct qib_verbs_txreq, txreq);
@@ -1075,7 +1029,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	tx->mr = qp->s_rdma_mr;
 	if (qp->s_rdma_mr)
 		qp->s_rdma_mr = NULL;
-	tx->txreq.callback = sdma_complete;
+	tx->txreq.complete = sdma_complete;
 	if (len) {
 		/*
 		 * Don't try to DMA if it takes more descriptors than
@@ -1091,8 +1045,8 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		phdr->pbc = cpu_to_le64(pbc);
 		memcpy(&phdr->hdr, hdr, hdrwords << 2);
 		tx->txreq.flags |= SDMA_TXREQ_F_FREEDESC;
-		tx->txreq.sg_count = ndesc;
-		tx->txreq.addr = dev->pio_hdrs_phys +
+		tx->txreq.num_desc = ndesc;
+		tx->addr = dev->pio_hdrs_phys +
 			tx->hdr_inx * sizeof(struct qib_pio_header);
 		tx->hdr_dwords = hdrwords + 2; /* add PBC length */
 		ret = qib_sdma_verbs_send(sde, ss, dwords, tx);
@@ -1108,13 +1062,13 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	memcpy(&phdr->hdr, hdr, hdrwords << 2);
 	qib_copy_from_sge((u32 *) &phdr->hdr + hdrwords, ss, len);
 
-	tx->txreq.addr = dma_map_single(&dd->pcidev->dev, phdr,
+	tx->addr = dma_map_single(&dd->pcidev->dev, phdr,
 					tx->hdr_dwords << 2, DMA_TO_DEVICE);
-	if (dma_mapping_error(&dd->pcidev->dev, tx->txreq.addr))
+	if (dma_mapping_error(&dd->pcidev->dev, tx->addr))
 		goto map_err;
 	tx->align_buf = phdr;
 	tx->txreq.flags |= SDMA_TXREQ_F_FREEBUF;
-	tx->txreq.sg_count = 1;
+	tx->txreq.num_desc = 1;
 	ret = qib_sdma_verbs_send(sde, NULL, 0, tx);
 	goto unaligned;
 
