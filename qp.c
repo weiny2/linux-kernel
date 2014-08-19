@@ -53,6 +53,8 @@ static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
+static inline void flush_tx_list(struct qib_qp *qp);
+
 static inline unsigned mk_qpn(struct hfi_qpn_table *qpt,
 			      struct qpn_map *map, unsigned off)
 {
@@ -383,7 +385,7 @@ static void qib_reset_qp(struct qib_qp *qp, enum ib_qp_type type)
 	qp->remote_qpn = 0;
 	qp->qkey = 0;
 	qp->qp_access_flags = 0;
-	atomic_set(&qp->s_dma_busy, 0);
+	iowait_init(&qp->s_iowait, 1, qib_do_send);
 	qp->s_flags &= QIB_S_SIGNAL_REQ_WR;
 	qp->s_hdrwords = 0;
 	qp->s_wqe = NULL;
@@ -501,9 +503,9 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 		qp->s_flags &= ~QIB_S_ANY_WAIT_SEND;
 
 	spin_lock(&dev->pending_lock);
-	if (!list_empty(&qp->iowait) && !(qp->s_flags & QIB_S_BUSY)) {
+	if (!list_empty(&qp->s_iowait.list) && !(qp->s_flags & QIB_S_BUSY)) {
 		qp->s_flags &= ~QIB_S_ANY_WAIT_IO;
-		list_del_init(&qp->iowait);
+		list_del_init(&qp->s_iowait.list);
 	}
 	spin_unlock(&dev->pending_lock);
 
@@ -513,10 +515,7 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 			qib_put_mr(qp->s_rdma_mr);
 			qp->s_rdma_mr = NULL;
 		}
-		if (qp->s_tx) {
-			qib_put_txreq(qp->s_tx);
-			qp->s_tx = NULL;
-		}
+		flush_tx_list(qp);
 	}
 
 	/* Schedule the sending tasklet to drain the send work queue. */
@@ -565,6 +564,33 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 
 bail:
 	return ret;
+}
+
+static inline void flush_tx_list(struct qib_qp *qp)
+{
+	while (!list_empty(&qp->s_iowait.tx_head)) {
+		struct qib_sdma_txreq *tx;
+
+		/* FIXME - old API */
+		tx = list_first_entry(
+			&qp->s_iowait.tx_head,
+			struct qib_sdma_txreq,
+			list);
+		list_del_init(&tx->list);
+		qib_put_txreq(
+			container_of(tx, struct qib_verbs_txreq, txreq));
+	}
+}
+
+static inline void flush_iowait(struct qib_qp *qp)
+{
+	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->pending_lock, flags);
+	if (!list_empty(&qp->s_iowait.list))
+		list_del_init(&qp->s_iowait.list);
+	spin_unlock_irqrestore(&dev->pending_lock, flags);
 }
 
 /**
@@ -701,21 +727,16 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	case IB_QPS_RESET:
 		if (qp->state != IB_QPS_RESET) {
 			qp->state = IB_QPS_RESET;
-			spin_lock(&dev->pending_lock);
-			if (!list_empty(&qp->iowait))
-				list_del_init(&qp->iowait);
-			spin_unlock(&dev->pending_lock);
+			flush_iowait(qp);
 			qp->s_flags &= ~(QIB_S_TIMER | QIB_S_ANY_WAIT);
 			spin_unlock(&qp->s_lock);
 			spin_unlock_irq(&qp->r_lock);
 			/* Stop the sending work queue and retry timer */
-			cancel_work_sync(&qp->s_work);
+			cancel_work_sync(&qp->s_iowait.iowork);
 			del_timer_sync(&qp->s_timer);
-			wait_event(qp->wait_dma, !atomic_read(&qp->s_dma_busy));
-			if (qp->s_tx) {
-				qib_put_txreq(qp->s_tx);
-				qp->s_tx = NULL;
-			}
+			wait_event(qp->wait_dma,
+				!atomic_read(&qp->s_iowait.sdma_busy));
+			flush_tx_list(qp);
 			remove_qp(dev, qp);
 			wait_event(qp->wait, !atomic_read(&qp->refcount));
 			spin_lock_irq(&qp->r_lock);
@@ -1083,8 +1104,6 @@ struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
 		init_waitqueue_head(&qp->wait_dma);
 		init_timer(&qp->s_timer);
 		qp->s_timer.data = (unsigned long)qp;
-		INIT_WORK(&qp->s_work, qib_do_send);
-		INIT_LIST_HEAD(&qp->iowait);
 		INIT_LIST_HEAD(&qp->rspwait);
 		qp->state = IB_QPS_RESET;
 		qp->s_wq = swq;
@@ -1200,19 +1219,13 @@ int qib_destroy_qp(struct ib_qp *ibqp)
 	spin_lock_irq(&qp->s_lock);
 	if (qp->state != IB_QPS_RESET) {
 		qp->state = IB_QPS_RESET;
-		spin_lock(&dev->pending_lock);
-		if (!list_empty(&qp->iowait))
-			list_del_init(&qp->iowait);
-		spin_unlock(&dev->pending_lock);
+		flush_iowait(qp);
 		qp->s_flags &= ~(QIB_S_TIMER | QIB_S_ANY_WAIT);
 		spin_unlock_irq(&qp->s_lock);
-		cancel_work_sync(&qp->s_work);
+		cancel_work_sync(&qp->s_iowait.iowork);
 		del_timer_sync(&qp->s_timer);
-		wait_event(qp->wait_dma, !atomic_read(&qp->s_dma_busy));
-		if (qp->s_tx) {
-			qib_put_txreq(qp->s_tx);
-			qp->s_tx = NULL;
-		}
+		wait_event(qp->wait_dma, !atomic_read(&qp->s_iowait.sdma_busy));
+		flush_tx_list(qp);
 		remove_qp(dev, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
 		clear_mr_refs(qp, 1);
@@ -1535,8 +1548,8 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   wqe ? wqe->wr.opcode : 0,
 		   qp->s_hdrwords,
 		   qp->s_flags,
-		   atomic_read(&qp->s_dma_busy),
-		   !list_empty(&qp->iowait),
+		   atomic_read(&qp->s_iowait.sdma_busy),
+		   !list_empty(&qp->s_iowait.list),
 		   qp->timeout,
 		   wqe->ssn,
 		   qp->s_lsn,

@@ -260,7 +260,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 		if (qp->s_last == qp->s_head)
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
-		if (atomic_read(&qp->s_dma_busy)) {
+		if (atomic_read(&qp->s_iowait.sdma_busy)) {
 			qp->s_flags |= QIB_S_WAIT_DMA;
 			goto bail;
 		}
@@ -297,7 +297,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 			 * XXX Instead of waiting, we could queue a
 			 * zero length descriptor so we get a callback.
 			 */
-			if (atomic_read(&qp->s_dma_busy)) {
+			if (atomic_read(&qp->s_iowait.sdma_busy)) {
 				qp->s_flags |= QIB_S_WAIT_DMA;
 				goto bail;
 			}

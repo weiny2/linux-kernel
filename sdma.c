@@ -1409,7 +1409,7 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 static void complete_sdma_err_req(struct sdma_engine *sde,
 				  struct qib_verbs_txreq *tx)
 {
-	atomic_inc(&tx->qp->s_dma_busy);
+	atomic_inc(&tx->qp->s_iowait.sdma_busy);
 	/* no sdma descriptors, so no unmap_desc */
 	tx->txreq.start_idx = 0;
 	tx->txreq.next_descq_idx = 0;
@@ -1554,7 +1554,7 @@ retry:
 	descqp->qw[1] |= cpu_to_le64(SDMA_DESC1_HEAD_TO_HOST_FLAG);
 	descqp->qw[1] |= cpu_to_le64(SDMA_DESC1_INT_REQ_FLAG);
 
-	atomic_inc(&tx->qp->s_dma_busy);
+	atomic_inc(&tx->qp->s_iowait.sdma_busy);
 	tx->txreq.next_descq_idx = tail;
 	sdma_update_tail(sde, tail);
 	sde->descq_added += tx->txreq.sg_count;
@@ -1599,16 +1599,16 @@ busy:
 		 */
 		tx->ss = ss;
 		tx->dwords = dwords;
-		qp->s_tx = tx;
+		list_add_tail(&tx->txreq.list, &qp->s_iowait.tx_head);
 		dev = &sde->dd->verbs_dev;
 		spin_lock(&dev->pending_lock);
-		if (list_empty(&qp->iowait)) {
+		if (list_empty(&qp->s_iowait.list)) {
 			struct qib_ibport *ibp;
 
 			ibp = &sde->ppd->ibport_data;
 			ibp->n_dmawait++;
 			qp->s_flags |= QIB_S_WAIT_DMA_DESC;
-			list_add_tail(&qp->iowait, &sde->dmawait);
+			list_add_tail(&qp->s_iowait.list, &sde->dmawait);
 		}
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;

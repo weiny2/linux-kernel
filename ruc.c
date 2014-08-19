@@ -718,7 +718,8 @@ void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
  */
 void qib_do_send(struct work_struct *work)
 {
-	struct qib_qp *qp = container_of(work, struct qib_qp, s_work);
+	struct iowait *wait = container_of(work, struct iowait, iowork);
+	struct qib_qp *qp = container_of(wait, struct qib_qp, s_iowait);
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int (*make_req)(struct qib_qp *qp);

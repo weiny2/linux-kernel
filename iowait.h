@@ -37,7 +37,6 @@
 #include <linux/list.h>
 #include <linux/workqueue.h>
 
-#include "sdma.h"
 /*
  * typedef (*restart_t)() - restart callback
  * @work: pointer to work structure
@@ -46,11 +45,10 @@ typedef void (*restart_t)(struct work_struct *work);
 
 /**
  * struct iowait - linkage for delayed progress/waiting
- * @list: link overhead for QP/PQ list
+ * @list: used to add/insert into QP/PQ wait lists
  * @tx_head: overflow list of sdma_txreq's
- * @context: containing object QP or PQ
  * @iowork: workqueue overhead
- * @sdma_busy: # of descriptors inflight
+ * @sdma_busy: # of packets inflight
  * @count: total number of descriptors in tx_head'ed list
  * @tx_limit: limit for overflow queuing
  * @tx_count: number of tx entry's in tx_head'ed list
@@ -63,7 +61,6 @@ typedef void (*restart_t)(struct work_struct *work);
 struct iowait {
 	struct list_head list;
 	struct list_head tx_head;
-	void *context;
 	struct work_struct iowork;
 	atomic_t sdma_busy;
 	u32 count;

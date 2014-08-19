@@ -40,7 +40,7 @@
 #include <linux/workqueue.h>
 
 #include "hfi.h"
-#include "iowait.h"
+#include "verbs.h"
 
 #define NUM_DESC 4
 

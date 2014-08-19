@@ -1110,10 +1110,13 @@ static void sc_piobufavail(struct send_context *sc)
 	 */
 	spin_lock_irqsave(&dev->pending_lock, flags);
 	while (!list_empty(list)) {
+		struct iowait *wait;
+
 		if (n == ARRAY_SIZE(qps))
 			goto full;
-		qp = list_entry(list->next, struct qib_qp, iowait);
-		list_del_init(&qp->iowait);
+		wait = list_first_entry(list, struct iowait, list);
+		qp = container_of(wait, struct qib_qp, s_iowait);
+		list_del_init(&qp->s_iowait.list);
 		atomic_inc(&qp->refcount);
 		qps[n++] = qp;
 	}

@@ -45,13 +45,14 @@
 #include <rdma/ib_pack.h>
 #include <rdma/ib_user_verbs.h>
 
-#include "verbs.h"
 
 struct qib_ctxtdata;
 struct qib_pportdata;
 struct hfi_devdata;
 struct qib_verbs_txreq;
 struct hfi_packet;
+
+#include "iowait.h"
 
 #define QIB_MAX_RDMA_ATOMIC     16
 #define QIB_GUIDS_PER_PORT	5
@@ -508,11 +509,9 @@ struct qib_qp {
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
 	struct qib_sge_state *s_cur_sge;
 	u32 s_flags;
-	struct qib_verbs_txreq *s_tx;
 	struct qib_swqe *s_wqe;
 	struct qib_sge_state s_sge;     /* current send request data */
 	struct qib_mregion *s_rdma_mr;
-	atomic_t s_dma_busy;
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
 	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
@@ -543,10 +542,8 @@ struct qib_qp {
 
 	struct qib_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
-	struct list_head iowait;        /* link for wait PIO buf */
 
-	struct work_struct s_work;
-
+	struct iowait s_iowait;
 	wait_queue_head_t wait_dma;
 
 	struct qib_sge r_sg_list[0] /* verified SGEs */
