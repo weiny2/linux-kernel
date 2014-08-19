@@ -37,8 +37,15 @@
 #ifndef __ND_PRIVATE_H__
 #define __ND_PRIVATE_H__
 #include <linux/device.h>
+#include <linux/sizes.h>
+
 extern struct list_head nd_bus_list;
 extern struct mutex nd_bus_list_mutex;
+
+enum {
+	/* need to set a limit somewhere, but yes, this is ludicrously big */
+	ND_IOCTL_MAX_BUFLEN = SZ_4M,
+};
 
 struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;

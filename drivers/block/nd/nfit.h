@@ -54,6 +54,14 @@ enum {
 	NFIT_SPA_DCR = 2,
 	NFIT_SPA_BDW = 3,
 	NFIT_FLAG_FIC1_CAP = 0,
+	NFIT_CMD_SMART = 1,
+	NFIT_CMD_GET_CONFIG_SIZE = 2,
+	NFIT_CMD_GET_CONFIG_DATA = 3,
+	NFIT_CMD_SET_CONFIG_DATA = 4,
+	NFIT_CMD_VENDOR = 5,
+	NFIT_CMD_SCRUB = 6,
+	NFIT_ARS_START = 1,
+	NFIT_ARS_QUERY = 2,
 };
 
 /**
@@ -191,6 +199,57 @@ struct nfit_flush {
 	__le16 num_flush;
 	__le16 num_flush_valid;
 	__le64 flush_addr[1];
+} __packed;
+
+struct nfit_cmd_smart {
+	u32 nfit_handle;
+	u32 status;
+	u32 out_length;
+	u8 out_buf[0];
+} __packed;
+
+struct nfit_cmd_get_config_size {
+	u32 nfit_handle;
+	u32 status;
+	u32 config_size;
+	u32 optimal_io_size;
+} __packed;
+
+struct nfit_cmd_get_config_data {
+	u32 nfit_handle;
+	u32 in_offset;
+	u32 in_length;
+	u32 status;
+	u32 out_length;
+	u8 out_buf[0];
+} __packed;
+
+struct nfit_cmd_set_config_hdr {
+	u32 nfit_handle;
+	u32 in_offset;
+	u32 in_length;
+	u8 in_buf[0];
+} __packed;
+
+struct nfit_cmd_vendor_hdr {
+	u32 nfit_handle;
+	u32 in_length;
+	u8 in_buf[0];
+} __packed;
+
+struct nfit_cmd_vendor_tail {
+	u32 status;
+	u32 out_length;
+	u8 out_buf[0];
+};
+
+struct nfit_cmd_scrub {
+	u32 cmd;
+	u64 start_addr;
+	u64 length;
+	u32 status;
+	u16 out_length;
+	u64 out_buf[0];
 } __packed;
 
 struct nfit_bus_descriptor;
