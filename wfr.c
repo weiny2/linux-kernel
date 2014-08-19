@@ -3278,9 +3278,12 @@ static int goto_offline(struct qib_pportdata *ppd)
 	/*
 	 * There is a 600ms quiet time after the state goes offline before it
 	 * will accept host requests.  Wait for that (plus some extra) here.
+	 *
+	 * The simulator firmware state does not return to accepting
+	 * requests.  Ignore that.
 	 */
 	ret = wait_fm_ready(dd, 1000);
-	if (ret) {
+	if (ret && !(dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)) {
 		dd_dev_err(dd, "After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
 		return ret;
 	}
@@ -3346,8 +3349,17 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 
 	switch (state) {
 	case HLS_UP_INIT:
-		if (ppd->host_link_state != HLS_GOING_UP)
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
+				&& ppd->host_link_state == HLS_DN_POLL) {
+			/*
+			 * Whether in normal or loopback mode, the
+			 * simulator jumps from polling to link up.
+			 * Accept that here.
+			 */
+			/* ok */;
+		} else if (ppd->host_link_state != HLS_GOING_UP) {
 			goto unexpected;
+		}
 
 		ppd->host_link_state = HLS_UP_INIT;
 		ret = qib_wait_linkstate(ppd, IB_PORT_INIT, 1000);
@@ -3405,24 +3417,20 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && loopback) {
 			/*
 			 * The simulator loopback does not go into polling.
-			 * Rather, it does a "quick" linkup that will jump
-			 * directly to generating a linkup interrupt.
-			 * Skip directly to just before that point.
+			 * Rather, it does a "quick" linkup.
 			 */
 			ret = simulator_loopback_quick_linkup(dd);
 			if (ret)
 				break;
-			ppd->host_link_state = HLS_GOING_UP;
-			break;
-		}
-
-		ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
-		if (ret1 != WFR_HCMD_SUCCESS) {
-			dd_dev_err(dd,
-				"Failed to transition to Polling link state, return 0x%x\n",
-				ret1);
-			ret = -EINVAL;
-			break;
+		} else {
+			ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
+			if (ret1 != WFR_HCMD_SUCCESS) {
+				dd_dev_err(dd,
+					"Failed to transition to Polling link state, return 0x%x\n",
+					ret1);
+				ret = -EINVAL;
+				break;
+			}
 		}
 
 		/* link is enabled */
