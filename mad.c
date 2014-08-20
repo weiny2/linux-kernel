@@ -1375,12 +1375,12 @@ static int subn_set_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 		break;
 	case 1: /* SLEEP */
 		if (dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					HFI_LINKDOWN_SLEEP) < 0)
+					HLS_DN_SLEEP) < 0)
 			smp->status |= IB_SMP_INVALID_FIELD;
 		break;
 	case 2: /* POLL */
 		if (dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					HFI_LINKDOWN_POLL) < 0)
+					HLS_DN_POLL) < 0)
 			smp->status |= IB_SMP_INVALID_FIELD;
 		break;
 	default:
