@@ -145,7 +145,8 @@ static inline void free_image_page(void *addr, int clear_nosave_free)
 	if (clear_nosave_free)
 		swsusp_unset_page_free(page);
 
-	__free_page(page);
+	/* Use put_page here to make sure any stale page flags get cleared */
+	put_page(page);
 }
 
 /* struct linked_page is used to build chains of pages */
