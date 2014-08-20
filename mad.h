@@ -176,7 +176,7 @@ struct ib_mad_notice_attr {
 #define IB_NOTICE_TRAP_DR_TRUNC		0x40
 
 struct ib_vl_weight_elem {
-	u8      vl;     /* Only low 4 bits, upper 4 bits reserved */
+	u8      vl;     /* VL is low 5 bits, upper 3 bits reserved */
 	u8      weight;
 };
 

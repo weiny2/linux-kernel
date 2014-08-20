@@ -351,10 +351,12 @@ struct qib_sge_state;
 /*
  * Possible fabric manager config parameters for fm_{get,set}_table()
  */
-#define FM_TBL_VL_HIGH_ARB	1 /* Get/set VL high priority weights */
-#define FM_TBL_VL_LOW_ARB	2 /* Get/set VL low priority weights */
-#define FM_TBL_BUFFER_CONTROL	3 /* Get/set Buffer Control */
-#define FM_TBL_SC2VLNT		4 /* Get/set SC->VLnt */
+#define FM_TBL_VL_HIGH_ARB		1 /* Get/set VL high prio weights */
+#define FM_TBL_VL_LOW_ARB		2 /* Get/set VL low prio weights */
+#define FM_TBL_BUFFER_CONTROL		3 /* Get/set Buffer Control */
+#define FM_TBL_SC2VLNT			4 /* Get/set SC->VLnt */
+#define FM_TBL_VL_PREEMPT_ELEMS		5 /* Get (no set) VL preempt elems */
+#define FM_TBL_VL_PREEMPT_MATRIX	6 /* Get (no set) VL preempt matrix */
 
 /*
  * Possible "operations" for f_rcvctrl(ppd, op, ctxt)

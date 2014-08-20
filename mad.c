@@ -1814,9 +1814,9 @@ static int __subn_get_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
 	void *vp = (void *) data;
-	size_t size = 4 * sizeof(u64);
+	int size;
 
-	memset(vp, 0, size);
+	memset(vp, 0, sizeof(struct sc2vlnt));
 
 	if (port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1825,7 +1825,7 @@ static int __subn_get_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
 
 	ppd = dd->pport + (port - 1);
 
-	fm_get_table(ppd, FM_TBL_SC2VLNT, vp);
+	size = fm_get_table(ppd, FM_TBL_SC2VLNT, vp);
 
 	if (resp_len)
 		*resp_len += size;
@@ -1872,6 +1872,8 @@ static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
 	struct buffer_control *p = (struct buffer_control *) data;
+	int size;
+
 	memset(p, 0, sizeof(*p));
 
 	if (num_ports != 1 || port_num != port) {
@@ -1880,10 +1882,10 @@ static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 	}
 
 	ppd = dd->pport + (port_num - 1);
-	fm_get_table(ppd, FM_TBL_BUFFER_CONTROL, p);
+	size = fm_get_table(ppd, FM_TBL_BUFFER_CONTROL, p);
 	trace_bct_get(dd, p);
 	if (resp_len)
-		*resp_len += sizeof(struct buffer_control);
+		*resp_len += size;
 
 	return reply(smp);
 }
@@ -1964,6 +1966,7 @@ static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 	u8 section = (am & 0x00ff0000) >> 16;
 	u32 port_num = am & 0x000000ff;
 	u8 *p = data;
+	int size = 0;
 
 	if (port_num == 0)
 		port_num = port;
@@ -1975,20 +1978,16 @@ static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 
 	switch (section) {
 	case STL_VLARB_LOW_ELEMENTS:
-		(void) fm_get_table(ppd, FM_TBL_VL_LOW_ARB, p);
-		if (resp_len)
-			*resp_len += WFR_VL_ARB_LOW_PRIO_TABLE_SIZE * 2;
+		size = fm_get_table(ppd, FM_TBL_VL_LOW_ARB, p);
 		break;
 	case STL_VLARB_HIGH_ELEMENTS:
-		(void) fm_get_table(ppd, FM_TBL_VL_HIGH_ARB, p);
-		if (resp_len)
-			*resp_len += WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE * 2;
+		size = fm_get_table(ppd, FM_TBL_VL_HIGH_ARB, p);
 		break;
 	case STL_VLARB_PREEMPT_ELEMENTS:
-		/* XXX FIXME */
+		size = fm_get_table(ppd, FM_TBL_VL_PREEMPT_ELEMS, p);
 		break;
 	case STL_VLARB_PREEMPT_MATRIX:
-		/* XXX FIXME */
+		size = fm_get_table(ppd, FM_TBL_VL_PREEMPT_MATRIX, p);
 		break;
 	default:
 		pr_warn("STL SubnGet(VL Arb) AM Invalid : 0x%x\n",
@@ -1996,6 +1995,9 @@ static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 		smp->status |= IB_SMP_INVALID_FIELD;
 		break;
 	}
+
+	if (size > 0 && resp_len)
+		*resp_len += size;
 
 	return reply(smp);
 }
@@ -2048,11 +2050,12 @@ static int __subn_set_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 	case STL_VLARB_HIGH_ELEMENTS:
 		(void) fm_set_table(ppd, FM_TBL_VL_HIGH_ARB, p);
 		break;
+	/* neither STL_VLARB_PREEMPT_ELEMENTS, or STL_VLARB_PREEMPT_MATRIX
+	 * can be changed from the default values */
 	case STL_VLARB_PREEMPT_ELEMENTS:
-		/* XXX FIXME */
-		break;
+		/* FALLTHROUGH */
 	case STL_VLARB_PREEMPT_MATRIX:
-		/* XXX FIXME */
+		smp->status |= IB_SMP_UNSUP_METH_ATTR;
 		break;
 	default:
 		pr_warn("STL SubnSet(VL Arb) AM Invalid : 0x%x\n",

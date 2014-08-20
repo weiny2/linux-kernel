@@ -3591,7 +3591,7 @@ static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
 	return 0;
 }
 
-static void get_vl_weights(struct hfi_devdata *dd, u32 target,
+static int get_vl_weights(struct hfi_devdata *dd, u32 target,
 			   u32 size, struct ib_vl_weight_elem *vl)
 {
 	u64 reg;
@@ -3609,6 +3609,7 @@ static void get_vl_weights(struct hfi_devdata *dd, u32 target,
 		vl->weight = (reg >> WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT)
 				& WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_MASK;
 	}
+	return WFR_VL_ARB_LOW_PRIO_TABLE_SIZE * 2;
 }
 
 static void set_vl_weights(struct hfi_devdata *dd, u32 target,
@@ -3651,10 +3652,8 @@ static void read_one_cm_vl(struct hfi_devdata *dd, u32 csr,
 /*
  * Read the current credit merge limits.
  */
-static void get_buffer_control(
-	struct hfi_devdata *dd,
-	struct buffer_control *bc,
-	u16 *overall_limit)
+static int get_buffer_control(struct hfi_devdata *dd,
+			      struct buffer_control *bc, u16 *overall_limit)
 {
 	u64 reg;
 	int i;
@@ -3698,9 +3697,10 @@ static void get_buffer_control(
 	bc->overall_shared_limit = cpu_to_be16(global_limit - ded_total);
 	}
 #endif
+	return sizeof(struct buffer_control);
 }
 
-static void get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
+static int get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 {
 	u64 reg;
 	int i;
@@ -3718,6 +3718,27 @@ static void get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 		dp->vlnt[16 + (2 * i)] = byte & 0xf;
 		dp->vlnt[16 + (2 * i) + 1] = (byte & 0xf0) >> 4;
 	}
+	return sizeof(struct sc2vlnt);
+}
+
+static int get_vlarb_preempt(struct hfi_devdata *dd, u32 nelems,
+			     struct ib_vl_weight_elem *vl)
+{
+	unsigned int i;
+
+	for (i = 0; i < nelems; i++, vl++) {
+		vl->vl = 0xf;
+		vl->weight = 0;
+	}
+	return nelems * sizeof(struct ib_vl_weight_elem);
+}
+
+static int get_vlarb_matrix(struct hfi_devdata *dd, u32 *m)
+{
+	int size = STL_MAX_VLS * sizeof(u32);
+	memset(m, 0, size);
+
+	return size;
 }
 
 static void set_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
@@ -4067,29 +4088,38 @@ static int set_buffer_control(struct hfi_devdata *dd,
 }
 
 /*
- * Read the given fabric manager table.
+ * Read the given fabric manager table. Return the size of the
+ * table (in bytes) on success, and a negative error code on
+ * failure.
  */
 int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 {
+	int ret;
 	switch (which) {
 	case FM_TBL_VL_HIGH_ARB:
-		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
-			WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
+		ret = get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
+				     WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_VL_LOW_ARB:
-		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
-			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		ret = get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
+				     WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
-		get_buffer_control(ppd->dd, t, NULL);
+		ret = get_buffer_control(ppd->dd, t, NULL);
 		break;
 	case FM_TBL_SC2VLNT:
-		get_sc2vlnt(ppd->dd, t);
+		ret = get_sc2vlnt(ppd->dd, t);
+		break;
+	case FM_TBL_VL_PREEMPT_ELEMS:
+		ret = get_vlarb_preempt(ppd->dd, STL_MAX_VLS, t);
+		break;
+	case FM_TBL_VL_PREEMPT_MATRIX:
+		ret = get_vlarb_matrix(ppd->dd, t);
 		break;
 	default:
 		return -EINVAL;
 	}
-	return 0;
+	return ret;
 }
 
 /*
