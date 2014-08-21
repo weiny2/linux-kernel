@@ -595,8 +595,11 @@ static inline void make_tx_sdma_desc(
 	dma_addr_t addr,
 	size_t len)
 {
-	/* first already there */
-	desc->qw[0] |= ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
+	if (desc->qw[0] & SDMA_DESC0_FIRST_DESC_FLAG)
+		desc->qw[0] |= ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
+				<< SDMA_DESC0_BYTE_COUNT_SHIFT;
+	else
+		desc->qw[0] = ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
 				<< SDMA_DESC0_BYTE_COUNT_SHIFT;
 	desc->qw[0] |= ((u64)addr & SDMA_DESC0_PHY_ADDR_MASK)
 				<< SDMA_DESC0_PHY_ADDR_SHIFT;
