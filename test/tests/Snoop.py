@@ -19,36 +19,39 @@ capture_path = directory + "/PcapLocal.py"
 err_cnt = 0
 captured = 0
 
-def enable_snoop():
+def enable_snoop(hosts, params):
     global host1
     global host2
 
-    os.system(directory + "/LoadModule.py --modparm \"snoop_enable=1\"")
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
     if snoop_enabled(host1) == False:
         error("Could not enable snoop on host1")
 
     if snoop_enabled(host2) == False:
         error("Could not enable snoop on host2")
 
-def enable_snoop_for_bypass():
+def enable_snoop_for_bypass(hosts, params):
     global host1
     global host2
-    os.system(directory + "/LoadModule.py --modparm \" : snoop_enable=1\"")
+
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
     if snoop_enabled(host1) == True:
         error("Snoop should not be on for host1")
 
     if snoop_enabled(host2) == False:
         error("Snoop should be on for host2")
 
+def enable_snoop_drop_send(hosts, params):
+    global host1
+    global host2
 
-def enable_snoop_drop_send():
-    os.system(directory + "/LoadModule.py --modparm \"snoop_enable=1 snoop_drop_send=1\"")
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
     if (snoop_enabled(host1) == False or snoop_enabled(host2) == False or
         snoop_drop_send_enabled(host1) == False or snoop_drop_send_enabled(host2) == False):
         error("Could not enable snoop and snoop_drop_send on all hosts")
 
-def restore_default_params():
-    os.system(directory + "/LoadModule.py")
+def restore_default_params(hosts, params):
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
 
 def snoop_enabled(host):
     # First check and see if snoop is enabled.
@@ -340,7 +343,8 @@ def run_ib_send_lat():
 
     RegLib.test_log(0, "Running IbSendLat, be patient")
 
-    cmd = directory + "/IbSendLat.py"
+    cmd = directory + "/IbSendLat.py --nodelist " + host1.get_name() + "," + host2.get_name()
+    RegLib.test_log(0, "IbSendLat cmd is %s" % cmd)
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     status = proc.wait()
@@ -373,10 +377,9 @@ def run_ib_send_lat_2():
 
     RegLib.test_log(0, "Running IbSendLat, be patient")
 
-    cmd = directory + "/IbSendLat.py"
+    cmd = directory + "/IbSendLat.py --nodelist " + host1.get_name() + "," + host2.get_name()
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
-
 
     # IbSendLat will not finish this is by design so give it 30 seconds
     # before killing it off
@@ -489,7 +492,7 @@ def main():
     global err_cnt
 
     test_info = RegLib.TestInfo()
-    if test_info.is_simics():
+    if test_info.is_simics() == True:
         snoop_path = "/host" + snoop_path
         capture_path = "/host" + capture_path
 
@@ -498,6 +501,13 @@ def main():
 
     host1 = test_info.get_host_record(0)
     host2 = test_info.get_host_record(1)
+
+    nodes = host1.get_name() + "," + host2.get_name()
+    default_parms = test_info.get_mod_parms()
+    snoop_parms = default_parms + " snoop_enable=1"
+    snoop_bypass_parms = default_parms + " : " + default_parms + " snoop_enable=1"
+    snoop_drop_send_parms = default_parms + " snoop_enable=1 snoop_drop_send=1"
+    RegLib.test_log(0, "Default parms [%s] Snoop parms [%s]" % (default_parms, snoop_parms))
 
     diag_path = test_info.get_diag_lib()
     if diag_path == "DEFAULT":
@@ -512,10 +522,10 @@ def main():
     print "Starting Test 1"
     print "XXXXXXXXXXXXXXX"
     if snoop_enabled(host1) == False or snoop_enabled(host2) == False:
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
 
     if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
 
     snoop_pid = snoop_do_not_intercept_outgoing(host1)
     capture_pid = capture_do_not_intercept_outgoing(host2)
@@ -541,7 +551,7 @@ def main():
     if (snoop_enabled(host1) == False or snoop_enabled(host2) == False or
         snoop_drop_send_enabled(host1) == False or
         snoop_drop_send_enabled(host2) == False):
-            enable_snoop_drop_send()
+            enable_snoop_drop_send(nodes, snoop_drop_send_parms)
 
     snoop_pid = snoop_intercept_outgoing(host1)
     capture_pid = capture_do_not_intercept_outgoing(host2)
@@ -565,10 +575,10 @@ def main():
     print "XXXXXXXXXXXXXXX"
 
     if snoop_enabled(host1) == False or snoop_enabled(host2) == False:
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
 
     if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
 
     snoop_pid = snoop_intercept_outgoing_2(host1)
     capture_pid = capture_do_not_intercept_outgoing(host2)
@@ -592,10 +602,10 @@ def main():
     print "XXXXXXXXXXXXXXX"
 
     if (snoop_enabled(host1) == False or snoop_enabled(host2) == False):
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
 
     if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
 
     snoop_pid = snoop_intercept_outgoing_3(host1)
     capture_pid = capture_do_not_intercept_outgoing_2(host2)
@@ -621,7 +631,7 @@ def main():
 
     if (snoop_enabled(host1) == True or snoop_enabled(host2) == False or
        snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2)):
-        enable_snoop_for_bypass()
+        enable_snoop_for_bypass(nodes, snoop_bypass_parms)
 
     RegLib.test_log(0, "Starting packet capture on host2")
     capture_pid = capture_bypass(host2)
@@ -642,7 +652,7 @@ def main():
     else:
         error("Wrong number of bypass packets.")
 
-    restore_default_params()
+    restore_default_params(nodes, default_parms)
 
     done_check_error()
 

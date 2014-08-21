@@ -13,12 +13,11 @@ import subprocess
 
 
 directory = os.path.dirname(os.path.realpath(__file__))
+def enable_snoop(hosts, params):
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
 
-def enable_snoop():
-    os.system(directory + "/LoadModule.py --modparm \"snoop_enable=1\"")
-
-def restore_default_params():
-    os.system(directory + "/LoadModule.py")
+def restore_default_params(hosts, params):
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
 
 def snoop_enabled(hosts):
     # Firs check and see if snoop is enabled.
@@ -96,15 +95,21 @@ def main():
     path = directory + "/SnoopFilterLocal.py"
 
     test_info = RegLib.TestInfo()
-    if test_info.is_simics():
+    if test_info.is_simics() == True:
         path = "/host" + path
 
     host1 = test_info.get_host_record(0)
     host2 = test_info.get_host_record(1)
-
+    nodes = host1.get_name() + "," + host2.get_name()
+    
     disable_snoop = 0
+
+    default_parms = test_info.get_mod_parms()
+    snoop_parms = default_parms + " snoop_enable=1"
+    RegLib.test_log(0, "Default parms [%s] Snoop parms [%s]" % (default_parms, snoop_parms))
+
     if not snoop_enabled([host1,host2]):
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
         disable_snoop = 1
         if not snoop_enabled([host1,host2]):
             RegLib.test_fail("Could not enable snoop")
@@ -115,7 +120,7 @@ def main():
         run_filter_test(host1, host2, path, filter)
 
     if disable_snoop:
-        restore_default_params()
+        restore_default_params(nodes, default_parms)
 
     RegLib.test_pass("Success!")
 

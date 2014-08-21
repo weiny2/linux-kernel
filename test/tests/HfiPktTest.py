@@ -34,18 +34,25 @@ def do_pingpong(diag_path, host1, host2, psm_libs = None,
         return False
 
     # Start the receiver on host1; host2 will initiate ping-pongs.
-    child_pid = os.fork()
-    if child_pid == 0:
-        cmd = cmd_libs + diag_path + "hfi_pkt_test -r"
+    cmd = cmd_libs + diag_path + "hfi_pkt_test -r"
+    (err, out) = host1.send_ssh(cmd, 0, 10)
 
-        err = do_ssh(host1, cmd)
-        sys.exit(err)
+    # Now figure out what context is being listend on look for:
+    #         Receiving on LID 1 context 1
+    context = ""
+    for line in out:
+        print line
+        matchObj = re.search(r"Receiving on LID \d+ context (\d+)", line)
+        if matchObj:
+            context = matchObj.group(1)
 
-    RegLib.test_log(5, "Sleeping for 5 seconds to let server start")
-    time.sleep(5)
+    if context == "":
+        RegLib.test_fail("Could not determine context of receiver")
 
-    cmd_pattern = "%s %shfi_pkt_test -C 1 -L %s -s %d -p -c %d"
-    cmd = cmd_pattern % (cmd_libs, diag_path, host1_lid, payload, count)
+    RegLib.test_log(0, "Using context %s" % context)
+
+    cmd_pattern = "%s %shfi_pkt_test -C %s -L %s -s %d -p -c %d"
+    cmd = cmd_pattern % (cmd_libs, diag_path, context, host1_lid, payload, count)
 
     err = do_ssh(host2, cmd)
     if err:
@@ -55,11 +62,6 @@ def do_pingpong(diag_path, host1, host2, psm_libs = None,
 
     # Receiver side of hfi_pkt_test never exits on its own, it must be killed.
     do_ssh(host1, "pkill hfi_pkt_test")
-    os.waitpid(child_pid, 0)
-
-    # Skip checking the child's exit status.  Since the child is killed, it
-    # will always return an error (non-zero status).  Overall test success
-    # depends on the status of the sender process.
 
     if test_pass:
         RegLib.test_pass("Success!")
@@ -123,10 +125,10 @@ def main():
 
     diag_path = test_info.get_diag_lib()
     if diag_path == "DEFAULT":
-	# Assume the diagtools are already installed somewhere in $PATH.
-	diag_path = ""
+	    # Assume the diagtools are already installed somewhere in $PATH.
+    	diag_path = ""
     else:
-	diag_path += "/build/targ-x86_64/utils/"
+	    diag_path += "/build/targ-x86_64/utils/"
 
     if count == 1:
         do_piotest(diag_path, host1, psm_libs)

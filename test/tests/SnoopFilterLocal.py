@@ -74,14 +74,14 @@ def init_packet():
     for i in range(284):
         packet[i] = 0x0
 
-    packet[0] = 0x00    # LRH.link vers
+    packet[0] = 0xF0    # LRH.link vers
     packet[1] = 0x02    # LRH.lnh
-    packet[2] = 0xff    # LRH.dlid
-    packet[3] = 0xff    #
+    packet[2] = 0x00    # LRH.dlid
+    packet[3] = 0x02    #
     packet[4] = 0x0     # LRH.len
     packet[5] = 0x48    #
     packet[6] = 0x0     # LRH.slid
-    packet[7] = 0x2
+    packet[7] = 0x1
 
     packet[8] = 0x64    # BTH.opcode
     packet[9] = 0x0     # BTH.header version
@@ -262,7 +262,7 @@ def main():
 
     if filter_type == FILTER_BY_DLID:
         RegLib.test_log(0, "Testing DLID")
-        do_packet_test(filter_type, 3, 0x5, 0x1, 0xFF05)
+        do_packet_test(filter_type, 3, 0x5, 0x1, 0x5)
 
 
     RegLib.test_pass("Completed!")

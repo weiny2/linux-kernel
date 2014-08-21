@@ -16,11 +16,11 @@ host2 = None
 directory = os.path.dirname(os.path.realpath(__file__))
 test_path = directory + "/PcapLocal.py"
 
-def enable_snoop():
-    os.system(directory + "/LoadModule.py --modparm \"snoop_enable=1\"")
+def enable_snoop(hosts, params):
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
 
-def restore_default_params():
-    os.system(directory + "/LoadModule.py")
+def restore_default_params(hosts, params):
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
 
 def snoop_enabled():
     # Firs check and see if snoop is enabled.
@@ -88,18 +88,23 @@ def main():
     global test_path
 
     test_info = RegLib.TestInfo()
-    if test_info.is_simics():
+    if test_info.is_simics() == True:
         test_path = "/host" + test_path
 
     host1 = test_info.get_host_record(0)
     host2 = test_info.get_host_record(1)
-
+    nodes = host1.get_name() + "," + host2.get_name()
+    
     disable_snoop = 1
+
+    default_parms = test_info.get_mod_parms()
+    snoop_parms = default_parms + " snoop_enable=1"
+    RegLib.test_log(0, "Default parms [%s] Snoop parms [%s]" % (default_parms, snoop_parms))
 
     if snoop_enabled():
         disable_snoop = 0
     else:
-        enable_snoop()
+        enable_snoop(nodes, snoop_parms)
         if not snoop_enabled():
             RegLib.test_fail("Couild not enable capture")
 
@@ -110,7 +115,8 @@ def main():
     time.sleep(5)
     RegLib.test_log(0, "Running IbSendLat, be patient")
 
-    cmd = directory + "/IbSendLat.py"
+
+    cmd = directory + "/IbSendLat.py --nodelist %s" % nodes
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     status = proc.wait()
@@ -144,7 +150,7 @@ def main():
     RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
 
     if disable_snoop:
-        restore_default_params()
+        restore_default_params(nodes, default_parms)
 
     if status:
         RegLib.test_fail("Failed!")

@@ -34,8 +34,9 @@ def snoop_enabled(host):
     RegLib.test_log(0, "Snoop is enabled")
     return True
 
-def enable_snoop(host1, host2, directory):
-    os.system(directory + "/LoadModule.py --modparm snoop_enable=1")
+def enable_snoop(host1, host2, directory, mod_parms):
+    host = host1.get_name() + "," + host2.get_name() 
+    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
     if (snoop_enabled(host1) == False or snoop_enabled(host2) == False):
         error("Could not enable snoop and snoop_drop_send on all hosts")
 
@@ -78,8 +79,12 @@ def main():
     host1 = test_info.get_host_record(0)
     host2 = test_info.get_host_record(1)
 
+    default_parms = test_info.get_mod_parms()
+    snoop_parms = default_parms + " snoop_enable=1"
+    RegLib.test_log(0, "Default parms [%s] Snoop parms [%s]" % (default_parms, snoop_parms))
+
     if (snoop_enabled(host1) == False or snoop_enabled(host2) == False):
-            enable_snoop(host1, host2, directory)
+            enable_snoop(host1, host2, directory, snoop_parms)
   
     RegLib.test_log(0, "Trying to determine sm")
 
