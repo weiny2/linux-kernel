@@ -697,6 +697,30 @@ TRACE_EVENT(hfi_sdma_engine_select,
 	)
 );
 
+TRACE_EVENT(hfi_sdma_engine_interrupt,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u64 status
+	),
+	TP_ARGS(sde, status),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sde->dd)
+		__field(u64, status)
+		__field(u8, idx)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sde->dd);
+		__entry->status = status;
+		__entry->idx = sde->this_idx;
+	),
+	TP_printk(
+		"[%s] SDE(%u) status %llx",
+		__get_str(dev),
+		__entry->idx,
+		(unsigned long long)__entry->status
+	)
+);
+
 /*
  * Note:
  * This produces a REALLY ugly trace in the console output when the string is

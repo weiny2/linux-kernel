@@ -49,9 +49,9 @@ uint sdma_descq_cnt = SDMA_DESCQ_CNT;
 module_param(sdma_descq_cnt, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_descq_cnt, "Number of SDMA descq entries");
 
-static uint sdma_idle_cnt = 64;
+static uint sdma_idle_cnt = 250;
 module_param(sdma_idle_cnt, uint, S_IRUGO);
-MODULE_PARM_DESC(sdma_idle_cnt, "sdma interrupt idle delay (default 64)");
+MODULE_PARM_DESC(sdma_idle_cnt, "sdma interrupt idle delay (ns,default 250)");
 
 uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
@@ -158,7 +158,7 @@ static void sdma_start_sw_clean_up(struct sdma_engine *);
 static void sdma_sw_clean_up_task(unsigned long);
 static void unmap_desc(struct sdma_engine *, unsigned);
 static void sdma_sendctrl(struct sdma_engine *, unsigned);
-static void init_sdma_regs(struct sdma_engine *, u32);
+static void init_sdma_regs(struct sdma_engine *, u32, uint);
 static void sdma_process_event(
 	struct sdma_engine *sde,
 	enum sdma_events event);
@@ -540,6 +540,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	struct qib_pportdata *ppd = dd->pport + port;
 	u32 per_sdma_credits =
 		dd->chip_sdma_mem_size/(num_engines * WFR_SDMA_BLOCK_SIZE);
+	uint idle_cnt = sdma_idle_cnt;
 
 	descq_cnt = sdma_get_descq_cnt();
 	dd_dev_info(dd, "SDMA engines %zu descq_cnt %u\n",
@@ -557,6 +558,16 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	if (!dd->sdma_map)
 		goto nomem;
 
+	/* 1240 is 1.24 ns (805MHZ) * 1000 */
+	idle_cnt = (idle_cnt*1000)/1240;
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		if (dd->irev < 46)
+			idle_cnt = 0;
+			/* pick ASIC cclocks? */
+	}
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION)
+		/* 30303 is 30.303 ns (33 MHZ) * 1000 */
+		idle_cnt = (idle_cnt*1000)/30303;
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
@@ -579,7 +590,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 		INIT_LIST_HEAD(&sde->activelist);
 		INIT_LIST_HEAD(&sde->dmawait);
 
-		if (sdma_idle_cnt)
+		if (idle_cnt)
 			dd->default_desc1 =
 				cpu_to_le64(SDMA_DESC1_HEAD_TO_HOST_FLAG);
 		else
@@ -641,10 +652,10 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 		phys_offset = (unsigned long)sde->head_dma -
 			      (unsigned long)dd->sdma_heads_dma;
 		sde->head_phys = dd->sdma_heads_phys + phys_offset;
-		init_sdma_regs(sde, per_sdma_credits);
+		init_sdma_regs(sde, per_sdma_credits, idle_cnt);
 	}
 	dd->flags |= QIB_HAS_SEND_DMA;
-	dd->flags |= sdma_idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
+	dd->flags |= idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
 	dd->num_sdma = num_engines;
 	seqlock_init(&dd->sde_map_lock);
 	sdma_map_init(dd, port, hfi_num_vls(ppd->vls_operational));
@@ -1025,6 +1036,7 @@ void sdma_engine_interrupt(struct sdma_engine *sde, u64 status)
 		slashstrip(__FILE__), __LINE__, __func__);
 	dd_dev_err(sde->dd, "status: 0x%llx\n", status);
 #endif
+	trace_hfi_sdma_engine_interrupt(sde, status);
 	spin_lock_irqsave(&sde->lock, flags);
 	qib_sdma_make_progress(sde);
 	spin_unlock_irqrestore(&sde->lock, flags);
@@ -1260,11 +1272,14 @@ static void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
 #endif
 
 	reg &= WFR_SEND_DMA_DESC_CNT_CNT_MASK;
-	reg <<= WFR_SEND_DMA_RELOAD_CNT_CNT_SHIFT;
+	reg <<= WFR_SEND_DMA_DESC_CNT_CNT_SHIFT;
 	write_sde_csr(sde, WFR_SEND_DMA_DESC_CNT, reg);
 }
 
-static void init_sdma_regs(struct sdma_engine *sde, u32 credits)
+static void init_sdma_regs(
+	struct sdma_engine *sde,
+	u32 credits,
+	uint idle_cnt)
 {
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
@@ -1274,7 +1289,7 @@ static void init_sdma_regs(struct sdma_engine *sde, u32 credits)
 	write_sde_csr(sde, WFR_SEND_DMA_BASE_ADDR, sde->descq_phys);
 	sdma_setlengen(sde);
 	sdma_update_tail(sde, 0); /* Set SendDmaTail */
-	write_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT, sdma_idle_cnt);
+	write_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT, idle_cnt);
 	write_sde_csr(sde, WFR_SEND_DMA_DESC_CNT, 0);
 	write_sde_csr(sde, WFR_SEND_DMA_HEAD_ADDR, sde->head_phys);
 	write_sde_csr(sde, WFR_SEND_DMA_MEMORY,
@@ -1623,10 +1638,6 @@ retry:
 	descqp--;
 	descqp->qw[0] |= cpu_to_le64(SDMA_DESC0_LAST_DESC_FLAG);
 	descqp->qw[1] |= sde->dd->default_desc1;
-
-	/* JAG SDMA TODO determine if there's a problem if not applied */
-	descqp->qw[1] |= cpu_to_le64(SDMA_DESC1_HEAD_TO_HOST_FLAG);
-	descqp->qw[1] |= cpu_to_le64(SDMA_DESC1_INT_REQ_FLAG);
 
 	atomic_inc(&tx->qp->s_iowait.sdma_busy);
 	tx->txreq.next_descq_idx = tail;
