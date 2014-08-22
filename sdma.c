@@ -44,6 +44,7 @@
 
 /* must be a power of 2 >= 64 <= 32768 */
 #define SDMA_DESCQ_CNT 1024
+#define INVALID_TAIL 0xffff
 /* default pio off, sdma on */
 uint sdma_descq_cnt = SDMA_DESCQ_CNT;
 module_param(sdma_descq_cnt, uint, S_IRUGO);
@@ -1710,6 +1711,46 @@ unlock:
 	return ret;
 }
 
+/*
+ * This routine submits the indicated tx
+ *
+ * Space has already been guaranteed and
+ * tail side of ring is locked.
+ *
+ * The hardware tail update is done
+ * in the caller and that is facilitated
+ * by returning the new tail.
+ *
+ */
+static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
+{
+	int i;
+	u16 tail;
+	struct sdma_desc *descp = tx->descp;
+
+	tail = sde->descq_tail;
+	tx->start_idx = tail;
+	for (i = 0; i < tx->num_desc; i++, descp++) {
+		sde->descq[tail].qw[0] = descp->qw[0];
+		/* replace generation with real one */
+		descp->qw[1] &= ~(3ULL << SDMA_DESC1_GENERATION_SHIFT);
+		descp->qw[1] |=
+			(sde->generation & SDMA_DESC1_GENERATION_MASK)
+			<< SDMA_DESC1_GENERATION_SHIFT;
+		sde->descq[tail].qw[1] = descp->qw[1];
+		trace_hfi_sdma_descriptor(sde, descp->qw[0], descp->qw[1],
+			tail, &sde->descq[tail]);
+		if (++tail == sde->descq_cnt) {
+			tail = 0;
+			++sde->generation;
+		}
+	}
+	sde->descq_added += tx->num_desc;
+	tx->next_descq_idx = tail;
+	list_add_tail(&tx->list, &sde->activelist);
+	return tail;
+}
+
 /**
  * sdma_send_txreq() - submit a tx req to ring
  * @sde: sdma engine to use
@@ -1724,7 +1765,8 @@ unlock:
  * via the  callback with the capability of "waiting" via a queuing mechanism.
  *
  * Return:
- * 0 - Success, -EBUSY - no space in ring (wait == NULL)
+ * 0 - Success, -EINVAL - sdma_txreq incomplete, -EBUSY - no space in
+ * ring (wait == NULL)
  * -EIOCBQUEUED - tx queued to iowait, -ECOMM bad sdma state
  */
 int sdma_send_txreq(struct sdma_engine *sde,
@@ -1735,42 +1777,22 @@ int sdma_send_txreq(struct sdma_engine *sde,
 		    struct sdma_txreq *tx)
 {
 	int ret = 0;
-	int i;
 	u16 tail;
 	unsigned long flags;
-	struct sdma_desc *descp = tx->descp;
 
 	/* user should have supplied entire packet */
-	BUG_ON(tx->tlen);
+	if (unlikely(tx->tlen))
+		return -EINVAL;
 	spin_lock_irqsave(&sde->lock, flags);
 retry:
-	tail = sde->descq_tail;
-	tx->start_idx = tail;
 	if (unlikely(!__sdma_running(sde)))
 		goto unlock_noconn;
 	if (unlikely(tx->num_desc > sdma_descq_freecnt(sde)))
 		goto nodesc;
-	for (i = 0; i < tx->num_desc; i++, descp++) {
-		sde->descq[tail].qw[0] = descp->qw[0];
-		/* replace generation with real one */
-		descp->qw[1] &= ~(3ULL << SDMA_DESC1_GENERATION_SHIFT);
-		descp->qw[1] |=
-			(sde->generation & SDMA_DESC1_GENERATION_MASK)
-			<< SDMA_DESC1_GENERATION_SHIFT;
-		sde->descq[tail].qw[1] = descp->qw[1];
-		trace_hfi_sdma_descriptor(sde, descp->qw[0], descp->qw[1],
-			tail, &sde->descq[tail]);
-		if (++tail == sde->descq_cnt) {
-			++sde->generation;
-			tail = 0;
-		}
-	}
-	sde->descq_added += tx->num_desc;
-	tx->next_descq_idx = tail;
-	list_add_tail(&tx->list, &sde->activelist);
-	sdma_update_tail(sde, tail);
+	tail = submit_tx(sde, tx);
 	if (wait)
 		atomic_inc(&wait->sdma_busy);
+	sdma_update_tail(sde, tail);
 unlock:
 	spin_unlock_irqrestore(&sde->lock, flags);
 	return ret;
@@ -1820,7 +1842,8 @@ nodesc:
  * side locking.
  *
  * Return:
- * 0 - Success, -EBUSY - no space in ring (wait == NULL)
+ * 0 - Success, -EINVAL - sdma_txreq incomplete, -EBUSY - no space in ring
+ * (wait == NULL)
  * -EIOCBQUEUED - tx queued to iowait, -ECOMM bad sdma state
  */
 int sdma_send_txlist(struct sdma_engine *sde,
@@ -1830,7 +1853,56 @@ int sdma_send_txlist(struct sdma_engine *sde,
 			struct iowait *wait),
 		    struct list_head *tx_list)
 {
-	BUG_ON(1);
+	struct sdma_txreq *tx, *tx_next;
+	int ret = 0;
+	unsigned long flags;
+	u16 freecnt;
+	u16 tail = INVALID_TAIL;
+
+	spin_lock_irqsave(&sde->lock, flags);
+retry:
+	freecnt = sdma_descq_freecnt(sde);
+	list_for_each_entry_safe(tx, tx_next, tx_list, list) {
+		if (unlikely(!__sdma_running(sde)))
+			goto unlock_noconn;
+		if (unlikely(tx->num_desc > freecnt))
+			goto nodesc;
+		if (unlikely(tx->tlen)) {
+			ret = -EINVAL;
+			goto update_tail;
+		}
+		list_del_init(&tx->list);
+		tail = submit_tx(sde, tx);
+		if (wait)
+			atomic_inc(&wait->sdma_busy);
+	}
+update_tail:
+	if (tail != INVALID_TAIL)
+		sdma_update_tail(sde, tail);
+unlock:
+	spin_unlock_irqrestore(&sde->lock, flags);
+	return ret;
+unlock_noconn:
+	if (wait)
+		atomic_inc(&wait->sdma_busy);
+	tx->start_idx = tx->next_descq_idx = 0;
+	list_add_tail(&tx->list, &sde->activelist);
+	if (wait) {
+		wait->tx_count++;
+		wait->count += tx->num_desc;
+	}
+	clear_sdma_activelist(sde);
+	ret = -ECOMM;
+	goto unlock;
+nodesc:
+	if (sdma_make_progress(sde))
+		goto retry;
+	if (sde->dd->flags & QIB_HAS_SDMA_TIMEOUT)
+		sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
+	if (busycb && wait)
+		busycb(tx, wait);
+	ret = -EBUSY;
+	goto update_tail;
 }
 
 static void sdma_process_event(struct sdma_engine *sde,
