@@ -14,6 +14,7 @@
  * any later version.
  */
 
+#include <linux/bitmap.h>
 #include <linux/ftrace.h>
 #include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/kallsyms.h>
@@ -37,6 +38,7 @@ static DECLARE_DELAYED_WORK(kgr_work, kgr_work_fn);
 static DEFINE_MUTEX(kgr_in_progress_lock);
 static LIST_HEAD(patches);
 static LIST_HEAD(to_revert);
+static DECLARE_BITMAP(kgr_immutable, 1);
 bool kgr_in_progress;
 static bool kgr_initialized;
 static struct kgr_patch *kgr_patch;
@@ -63,7 +65,10 @@ static void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 
 	if (in_interrupt())
 		go_old = !*this_cpu_ptr(p->patch->irq_use_new);
-	else
+	else if (test_bit(0, kgr_immutable)) {
+		kgr_mark_task_in_progress(current);
+		go_old = true;
+	} else
 		go_old = kgr_task_in_progress(current);
 
 	if (p->state == KGR_PATCH_REVERT_SLOW)
@@ -535,7 +540,15 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		goto err_unlock;
 	}
 
-	kgr_mark_processes();
+	/*
+	 * If the patch has immediate flag set, avoid the lazy-switching
+	 * between universes completely, and just flip the switch as soon
+	 * as possible
+	 */
+	if (!patch->immediate) {
+		kgr_mark_processes();
+		set_bit(0, kgr_immutable);
+	}
 
 	kgr_for_each_patch_fun(patch, patch_fun) {
 		patch_fun->patch = patch;
@@ -564,13 +577,21 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		kgr_refs_inc();
 	mutex_unlock(&kgr_in_progress_lock);
 
+	clear_bit(0, kgr_immutable);
 	kgr_handle_irqs();
 	kgr_handle_processes();
 
 	/*
-	 * give everyone time to exit kernel, and check after a while
+	 * Give everyone time to exit kernel, and check after a while.
+	 *
+	 * When applying the patch with 'immediate' flag set, it makes
+	 * sense to check immediately; in case there was no other patching
+	 * running in parallel, we will claim victory right away.
 	 */
-	queue_delayed_work(kgr_wq, &kgr_work, 10 * HZ);
+	if (patch->immediate)
+		queue_work(kgr_wq, &kgr_work.work);
+	else
+		queue_delayed_work(kgr_wq, &kgr_work, 10 * HZ);
 
 	return 0;
 err_free:
@@ -636,6 +657,7 @@ EXPORT_SYMBOL_GPL(kgr_patch_remove);
 static void kgr_handle_patch_for_loaded_module(struct kgr_patch *patch,
 					       const struct module *mod)
 {
+	struct ftrace_ops *unreg_ops;
 	struct kgr_patch_fun *patch_fun;
 	unsigned long addr;
 	int err;
@@ -652,11 +674,21 @@ static void kgr_handle_patch_for_loaded_module(struct kgr_patch *patch,
 		if (err)
 			continue;
 
+		unreg_ops = kgr_get_old_fops(patch_fun);
+
 		err = kgr_ftrace_enable(patch_fun, &patch_fun->ftrace_ops_fast);
 		if (err) {
 			pr_err("kgr: cannot enable ftrace function for the originally skipped %lx (%s)\n",
 			       patch_fun->loc_old, patch_fun->name);
 			continue;
+		}
+
+		if (unreg_ops) {
+			err = kgr_ftrace_disable(patch_fun, unreg_ops);
+			if (err) {
+				pr_warning("kgr: disabling ftrace function for %s failed with %d\n",
+					   patch_fun->name, err);
+			}
 		}
 
 		if (patch == kgr_patch)
@@ -742,12 +774,11 @@ static int kgr_forced_code_patch_removal(struct kgr_patch_fun *patch_fun)
  * Check the given patch and disable pieces related to the module
  * that is being removed.
  */
-static int kgr_handle_patch_for_going_module(struct kgr_patch *patch,
+static void kgr_handle_patch_for_going_module(struct kgr_patch *patch,
 					     const struct module *mod)
 {
 	struct kgr_patch_fun *patch_fun;
 	unsigned long addr;
-	int err = 0;
 
 	kgr_for_each_patch_fun(patch, patch_fun) {
 		addr = kallsyms_lookup_name(patch_fun->name);
@@ -760,13 +791,10 @@ static int kgr_handle_patch_for_going_module(struct kgr_patch *patch,
 		if (patch_fun->abort_if_missing) {
 			pr_err("kgr: removing function %s that is required for the patch %s\n",
 			       patch_fun->name, patch->name);
-			err |= -EPERM;
 		}
 
-		err |= kgr_forced_code_patch_removal(patch_fun);
+		kgr_forced_code_patch_removal(patch_fun);
 	}
-
-	return err;
 }
 
 /*
@@ -776,39 +804,35 @@ static int kgr_handle_patch_for_going_module(struct kgr_patch *patch,
  * patches have to be removed. Therefore, the operation continues even in
  * case of errors.
  */
-static int kgr_handle_going_module(const struct module *mod)
+static void kgr_handle_going_module(const struct module *mod)
 {
 	struct kgr_patch *p;
-	int err = 0;
 
 	/* Nope when kGraft has not been initialized yet */
 	if (!kgr_initialized)
-		return 0;
+		return;
 
 	mutex_lock(&kgr_in_progress_lock);
 
 	list_for_each_entry(p, &patches, list)
-		err |= kgr_handle_patch_for_going_module(p, mod);
+		kgr_handle_patch_for_going_module(p, mod);
 
 	/* also check the patch in progress for removed functions */
 	if (kgr_patch)
-		err |= kgr_handle_patch_for_going_module(kgr_patch, mod);
+		kgr_handle_patch_for_going_module(kgr_patch, mod);
 
 	mutex_unlock(&kgr_in_progress_lock);
-
-	return err;
 }
 
 static int kgr_module_notify_exit(struct notifier_block *self,
 				  unsigned long val, void *data)
 {
 	const struct module *mod = data;
-	int err = 0;
 
 	if (val == MODULE_STATE_GOING)
-		err = kgr_handle_going_module(mod);
+		kgr_handle_going_module(mod);
 
-	return err;
+	return 0;
 }
 
 #else

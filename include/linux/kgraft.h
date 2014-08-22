@@ -83,6 +83,7 @@ struct kgr_patch_fun {
  * @name: name of the patch (to appear in sysfs)
  * @owner: module to refcount on patching
  * @replace_all: revert everything applied before and apply this one instead
+ * @immediate: avoid the lazy-switching mechanism and flip the switch ASAP
  * @patches: array of @kgr_patch_fun structures
  */
 struct kgr_patch {
@@ -92,7 +93,15 @@ struct kgr_patch {
 	struct completion finish;
 	bool __percpu *irq_use_new;
 	unsigned int refs;
+#ifdef __GENKSYMS__
 	unsigned long suse_kabi_padding[8];
+#else
+	union {
+		bool immediate;
+		unsigned long krtek; /* just for alignment and sizing */
+	};
+	unsigned long suse_kabi_padding[7];
+#endif
 
 	/* a patch shall set these */
 	const char *name;
