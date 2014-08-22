@@ -579,11 +579,11 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 		INIT_LIST_HEAD(&sde->activelist);
 		INIT_LIST_HEAD(&sde->dmawait);
 
-		if (dd->flags & QIB_HAS_SDMA_TIMEOUT)
-			sde->default_desc1 =
+		if (sdma_idle_cnt)
+			dd->default_desc1 =
 				cpu_to_le64(SDMA_DESC1_HEAD_TO_HOST_FLAG);
 		else
-			sde->default_desc1 =
+			dd->default_desc1 =
 				cpu_to_le64(SDMA_DESC1_INT_REQ_FLAG);
 
 		tasklet_init(&sde->sdma_hw_clean_up_task, sdma_hw_clean_up_task,
@@ -606,16 +606,29 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 
 	dd->sdma_heads_size = L1_CACHE_BYTES * num_engines;
 	/* Allocate memory for DMA of head registers to memory */
-	dd->sdma_heads_dma = dma_alloc_coherent(
+	dd->sdma_heads_dma = dma_zalloc_coherent(
 		&dd->pcidev->dev,
 		dd->sdma_heads_size,
 		&dd->sdma_heads_phys,
 		GFP_KERNEL
 	);
-	if (!dd->sdma_heads_dma)
-		goto heads_fail;
+	if (!dd->sdma_heads_dma) {
+		dd_dev_err(dd, "failed to allocate SendDMA head memory\n");
+		goto cleanup_descq;
+	}
 
-	memset((void *)dd->sdma_heads_dma, 0, dd->sdma_heads_size);
+	/* Allocate memory for pad */
+	dd->sdma_pad_dma = dma_zalloc_coherent(
+		&dd->pcidev->dev,
+		sizeof(u32),
+		&dd->sdma_pad_phys,
+		GFP_KERNEL
+	);
+	if (!dd->sdma_pad_dma) {
+		dd_dev_err(dd, "failed to allocate SendDMA pad memory\n");
+		goto pad_fail;
+	}
+
 	/* assign each engine to different cacheline and init registers */
 	curr_head = (void *)dd->sdma_heads_dma;
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
@@ -637,8 +650,12 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	sdma_map_init(dd, port, hfi_num_vls(ppd->vls_operational));
 	return 0;
 
-heads_fail:
-	dd_dev_err(dd, "failed to allocate SendDMA head memory\n");
+pad_fail:
+	dma_free_coherent(&dd->pcidev->dev, dd->sdma_heads_size,
+			  (void *)dd->sdma_heads_dma,
+			  dd->sdma_heads_phys);
+	dd->sdma_heads_dma = NULL;
+	dd->sdma_heads_phys = 0;
 cleanup_descq:
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
@@ -711,6 +728,13 @@ void sdma_exit(struct hfi_devdata *dd)
 		 * it is not running.
 		 */
 		sdma_finalput(&sde->state);
+	}
+	if (dd->sdma_pad_dma) {
+		dma_free_coherent(&dd->pcidev->dev, 4,
+				  (void *)dd->sdma_pad_dma,
+				  dd->sdma_pad_phys);
+		dd->sdma_pad_dma = NULL;
+		dd->sdma_pad_phys = 0;
 	}
 	if (dd->sdma_heads_dma) {
 		dma_free_coherent(&dd->pcidev->dev, dd->sdma_heads_size,
@@ -1598,7 +1622,7 @@ retry:
 		descqp = &sde->descq[sde->descq_cnt];
 	descqp--;
 	descqp->qw[0] |= cpu_to_le64(SDMA_DESC0_LAST_DESC_FLAG);
-	descqp->qw[1] |= sde->default_desc1;
+	descqp->qw[1] |= sde->dd->default_desc1;
 
 	/* JAG SDMA TODO determine if there's a problem if not applied */
 	descqp->qw[1] |= cpu_to_le64(SDMA_DESC1_HEAD_TO_HOST_FLAG);
@@ -2152,4 +2176,25 @@ void sdma_update_lmc(struct hfi_devdata *dd, u64 mask, u32 lid)
 		sde = &dd->per_sdma[i];
 		write_sde_csr(sde, WFR_SEND_DMA_CHECK_SLID, sreg);
 	}
+}
+
+/* tx not dword sized - pad */
+int _pad_sdma_tx_descs(struct hfi_devdata *dd, struct sdma_txreq *tx)
+{
+	int rval = 0;
+
+	if ((unlikely(tx->num_desc == tx->desc_limit))) {
+		rval = _extend_sdma_tx_descs(dd, tx);
+		if (rval)
+			return rval;
+	}
+	/* finish the one just added  */
+	tx->num_desc++;
+	make_tx_sdma_desc(
+		SDMA_MAP_NONE,
+		&tx->descp[tx->num_desc],
+		dd->sdma_pad_phys,
+		sizeof(u32) - (tx->packet_len & (sizeof(u32) - 1)));
+	_sdma_close_tx(dd, tx);
+	return rval;
 }

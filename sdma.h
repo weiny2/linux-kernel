@@ -316,9 +316,9 @@ struct sdma_txreq {
 	void *coalesce_buf;
 	/* private: */
 	callback_t                  complete;
-	/* private: - used in coalesce processing */
+	/* private: - used in coalesce/pad processing */
 	u16                         packet_len;
-	/* private: - downcounteded to trigger last */
+	/* private: - downcounted to trigger last */
 	u16                         tlen;
 	/* private: flags */
 	u16                         flags;
@@ -364,8 +364,6 @@ struct sdma_engine {
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	u64 imask;			/* clear interrupt mask */
-	/* private: */
-	__le64 default_desc1;
 	/* private: */
 	struct workqueue_struct *wq;
 	/* add sdma fields here... */
@@ -509,6 +507,10 @@ static inline int sdma_running(struct sdma_engine *engine)
  * status will be one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR,
  * SDMA_TXREQ_S_ABORTED, or SDMA_TXREQ_S_SHUTDOWN.
  *
+ * user data portion of tlen should be precise.   The sdma_txadd_* entrances
+ * will pad with a descriptor references 1 - 3 bytes when the number of bytes
+ * specified in tlen have been supplied to the sdma_txreq.
+ *
  */
 static inline void sdma_txinit_ahg(
 	struct sdma_txreq *tx,
@@ -609,9 +611,22 @@ static inline void make_tx_sdma_desc(
 
 /* helper to extend txreq */
 int _extend_sdma_tx_descs(struct hfi_devdata *, struct sdma_txreq *);
+int _pad_sdma_tx_descs(struct hfi_devdata *, struct sdma_txreq *);
 void sdma_txclean(struct hfi_devdata *, struct sdma_txreq *);
 
-/* helper used by public routines */
+/* helpers used by public routines */
+static inline void _sdma_close_tx(struct hfi_devdata *dd, struct sdma_txreq *tx)
+{
+	tx->descp[tx->num_desc].qw[0] |=
+		SDMA_DESC0_LAST_DESC_FLAG;
+	tx->descp[tx->num_desc].qw[1] |=
+		dd->default_desc1;
+	if (tx->flags & SDMA_TXREQ_F_URGENT)
+		tx->descp[tx->num_desc].qw[1] |=
+			(SDMA_DESC1_HEAD_TO_HOST_FLAG|
+			 SDMA_DESC1_INT_REQ_FLAG);
+}
+
 static inline int _sdma_txadd_daddr(
 	struct hfi_devdata *dd,
 	int type,
@@ -634,12 +649,10 @@ static inline int _sdma_txadd_daddr(
 	tx->tlen -= len;
 	/* special cases for last */
 	if (!tx->tlen) {
-		tx->descp[tx->num_desc].qw[0] |=
-			SDMA_DESC0_LAST_DESC_FLAG;
-		if (tx->flags & SDMA_TXREQ_F_URGENT)
-			tx->descp[tx->num_desc].qw[1] |=
-				(SDMA_DESC1_HEAD_TO_HOST_FLAG|
-				 SDMA_DESC1_INT_REQ_FLAG);
+		if (tx->packet_len & (sizeof(u32) - 1))
+			rval = _pad_sdma_tx_descs(dd, tx);
+		else
+			_sdma_close_tx(dd, tx);
 	}
 	tx->num_desc++;
 	return rval;

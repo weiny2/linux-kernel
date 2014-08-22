@@ -686,8 +686,14 @@ struct hfi_devdata {
 	/* Send Context initialization lock. */
 	spinlock_t sc_init_lock;
 
+	/* fields common to all SDMA engines */
+
+	/* default flags to last descriptor */
+	__le64 default_desc1;
 	volatile __le64                    *sdma_heads_dma; /* DMA'ed by chip */
 	dma_addr_t                          sdma_heads_phys;
+	void                               *sdma_pad_dma; /* DMA'ed by chip */
+	dma_addr_t                          sdma_pad_phys;
 	/* for deallocation */
 	size_t                              sdma_heads_size;
 	/* number from the chip */
