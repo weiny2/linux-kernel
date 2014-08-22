@@ -271,6 +271,8 @@ static void efi_stub_entry_update(void)
 static inline void update_pecoff_setup_and_reloc(unsigned int size) {}
 static inline void update_pecoff_text(unsigned int text_start,
 				      unsigned int file_sz) {}
+static inline void update_pecoff_bss(unsigned int file_sz,
+				     unsigned int init_sz) {}
 static inline void efi_stub_defaults(void) {}
 static inline void efi_stub_entry_update(void) {}
 
@@ -321,7 +323,7 @@ static void parse_zoffset(char *fname)
 
 int main(int argc, char ** argv)
 {
-	unsigned int i, sz, setup_sectors;
+	unsigned int i, sz, setup_sectors, init_sz;
 	int c;
 	u32 sys_size;
 	struct stat sb;
@@ -329,9 +331,6 @@ int main(int argc, char ** argv)
 	int fd;
 	void *kernel;
 	u32 crc = 0xffffffffUL;
-#ifdef CONFIG_EFI_STUB
-	unsigned int init_sz;
-#endif
 
 	efi_stub_defaults();
 
