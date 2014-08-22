@@ -1259,8 +1259,9 @@ static void init_sdma_regs(struct sdma_engine *sde, u32 credits)
 		((u64)(credits * sde->this_idx) <<
 			WFR_SEND_DMA_MEMORY_SDMA_MEMORY_INDEX_SHIFT));
 	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
-	write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE,
-			HFI_PKT_BASE_SDMA_INTEGRITY);
+	if (likely(!disable_integrity))
+		write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE,
+				HFI_PKT_BASE_SDMA_INTEGRITY);
 }
 
 #ifdef JAG_SDMA_VERBOSITY
@@ -1387,7 +1388,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 			txp->start_idx, txp->next_descq_idx);
 	}
 }
-
+/* TODO augment this to dump slid check register */
 #define SDE_FMT \
 	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx\n"
 /**
@@ -2131,4 +2132,24 @@ int _extend_sdma_tx_descs(struct hfi_devdata *dd, struct sdma_txreq *tx)
 {
 	BUG_ON(1);
 	return 0;
+}
+
+/* Update sdes when the lmc changes */
+void sdma_update_lmc(struct hfi_devdata *dd, u64 mask, u32 lid)
+{
+	struct sdma_engine *sde;
+	int i;
+	u64 sreg;
+
+	sreg = ((mask & WFR_SEND_DMA_CHECK_SLID_MASK_MASK) <<
+		WFR_SEND_DMA_CHECK_SLID_MASK_SHIFT) |
+		(((lid & mask) & WFR_SEND_DMA_CHECK_SLID_VALUE_MASK) <<
+		WFR_SEND_DMA_CHECK_SLID_VALUE_SHIFT);
+
+	for (i = 0; i < dd->num_sdma; i++) {
+		hfi_cdbg(LINKVERB, "SendDmaEngine[%d].SLID_CHECK = 0x%x",
+			 i, (u32)sreg);
+		sde = &dd->per_sdma[i];
+		write_sde_csr(sde, WFR_SEND_DMA_CHECK_SLID, sreg);
+	}
 }

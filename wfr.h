@@ -445,5 +445,7 @@ extern uint num_vls;
 
 extern uint print_unimplemented;
 
+extern uint disable_integrity;
+
 #endif /* _WFR_H */
 

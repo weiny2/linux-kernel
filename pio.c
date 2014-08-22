@@ -396,9 +396,11 @@ int init_send_contexts(struct hfi_devdata *dd)
 		} else {
 			reg = all | WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETH_PACKETS_SMASK;
 		}
-		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
-		/* unmask all errors */
 
+		if (likely(!disable_integrity))
+			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+
+		/* unmask all errors */
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
 
 		/* set the default partition key */

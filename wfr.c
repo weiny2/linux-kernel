@@ -116,6 +116,10 @@ static uint enable_pkeys = 1;
 module_param(enable_pkeys, uint, S_IRUGO);
 MODULE_PARM_DESC(enable_pkeys, "Enable PKey checking on receive");
 
+uint disable_integrity = 0;
+module_param(disable_integrity, uint, S_IRUGO);
+MODULE_PARM_DESC(disable_integrity, "Disablep HW packet integrity checks");
+
 struct flag_table {
 	u64 flag;	/* the flag */
 	char *str;	/* description string */
@@ -3194,7 +3198,16 @@ static void set_send_length(struct qib_pportdata *ppd)
 
 static void set_lidlmc(struct qib_pportdata *ppd)
 {
+	int i;
+	u64 sreg = 0;
+	struct hfi_devdata *dd = ppd->dd;
+	u32 mask = ~((1U << ppd->lmc) - 1);
 	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
+
+	/*
+	 * TODO Use the correct value here for LMC this is setting number of
+	 * bits not the maks as it should be
+	 */
 #ifdef DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK
 /* TODO HAS 0.76 - field names changed, same meaning */
 	c1 &= ~(DCC_CFG_PORT_CONFIG1_TARGET_DLID_SMASK
@@ -3212,6 +3225,23 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 			<< DCC_CFG_PORT_CONFIG1_LMC_SHIFT);
 #endif
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
+
+	/*
+	 * Iterate over all the send contexts and set their SLID check
+	 */
+	sreg = ((mask & WFR_SEND_CTXT_CHECK_SLID_MASK_MASK) <<
+			WFR_SEND_CTXT_CHECK_SLID_MASK_SHIFT) |
+	       (((ppd->lid & mask) & WFR_SEND_CTXT_CHECK_SLID_VALUE_MASK) <<
+			WFR_SEND_CTXT_CHECK_SLID_VALUE_SHIFT);
+
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		hfi_cdbg(LINKVERB, "SendContext[%d].SLID_CHECK = 0x%x",
+			 i, (u32)sreg);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_SLID, sreg);
+	}
+
+	/* Now we have to do the same thing for the sdma engines */
+	sdma_update_lmc(dd, mask, ppd->lid);
 }
 
 /* TODO: this is almost exactly like qib_wait_linkstate() */

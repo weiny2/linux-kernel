@@ -880,4 +880,7 @@ static inline char *slashstrip(char *s)
 extern uint mod_num_sdma;
 u16 sdma_get_descq_cnt(void);
 
+extern void sdma_update_lmc(struct hfi_devdata *dd, u64 mask, u32 lid);
+
+
 #endif
