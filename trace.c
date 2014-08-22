@@ -115,4 +115,19 @@ const char *parse_everbs_hdrs(
 	return ret;
 }
 
+const char *parse_sdma_flags(
+	struct trace_seq *p,
+	u64 desc0, u64 desc1)
+{
+	const char *ret = p->buffer + p->len;
+	char flags[5] = { 'x', 'x', 'x', 'x', 0 };
+
+	flags[0] = (desc1 & SDMA_DESC1_INT_REQ_FLAG) ? 'I' : '-';
+	flags[1] = (desc1 & SDMA_DESC1_HEAD_TO_HOST_FLAG) ?  'H' : '-';
+	flags[2] = (desc0 & SDMA_DESC0_FIRST_DESC_FLAG) ? 'F' : '-';
+	flags[3] = (desc0 & SDMA_DESC0_LAST_DESC_FLAG) ? 'L' : '-';
+	trace_seq_printf(p, "%s", flags);
+	return ret;
+}
+
 #undef HFI_TRACE_DO_NOT_CREATE_INLINES

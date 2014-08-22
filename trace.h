@@ -228,6 +228,13 @@ const char *parse_everbs_hdrs(
 
 #define __parse_ib_ehdrs(op, ehdrs) parse_everbs_hdrs(p, op, ehdrs)
 
+const char *parse_sdma_flags(
+	struct trace_seq *p,
+	u64 desc0, u64 desc1);
+
+#define __parse_sdma_flags(desc0, desc1) parse_sdma_flags(p, desc0, desc1)
+
+
 #define lrh_name(lrh) { QIB_##lrh, #lrh }
 #define show_lnh(lrh)                    \
 __print_symbolic(lrh,                    \
@@ -643,9 +650,16 @@ TRACE_EVENT(hfi_sdma_descriptor,
 		__entry->e = e;
 	),
 	TP_printk(
-		"[%s] SDE(%u) d0 %016llx d1 %016llx to %p,%u",
+		"[%s] SDE(%u) flags:%s addr:0x%016llx gen:%u len:%u d0:%016llx d1:%016llx to %p,%u",
 		__get_str(dev),
 		__entry->idx,
+		__parse_sdma_flags(__entry->desc0, __entry->desc1),
+		(__entry->desc0 >> SDMA_DESC0_PHY_ADDR_SHIFT)
+			& SDMA_DESC0_PHY_ADDR_MASK,
+		(u8)((__entry->desc1 >> SDMA_DESC1_GENERATION_SHIFT)
+			& SDMA_DESC1_GENERATION_MASK),
+		(u16)((__entry->desc0 >> SDMA_DESC0_BYTE_COUNT_SHIFT)
+			& SDMA_DESC0_BYTE_COUNT_MASK),
 		__entry->desc0,
 		__entry->desc1,
 		__entry->descp,
