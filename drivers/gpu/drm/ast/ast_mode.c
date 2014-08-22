@@ -145,7 +145,7 @@ static bool ast_get_vbios_mode_info(struct drm_crtc *crtc, struct drm_display_mo
 	refresh_rate = drm_mode_vrefresh(mode);
 	check_sync = vbios_mode->enh_table->flags & WideScreenMode;
 	do {
-		struct ast_vbios_enhtable *loop = best = vbios_mode->enh_table;
+		struct ast_vbios_enhtable *loop = vbios_mode->enh_table;
 
 		while (loop->refresh_rate != 0xff) {
 			if ((check_sync) &&
@@ -161,16 +161,16 @@ static bool ast_get_vbios_mode_info(struct drm_crtc *crtc, struct drm_display_mo
 				continue;
 			}
 			if (loop->refresh_rate <= refresh_rate
-			    && loop->refresh_rate > best->refresh_rate)
+			    && (!best || loop->refresh_rate > best->refresh_rate))
 				best = loop;
 			loop++;
 		}
-		if (!check_sync)
+		if (best || !check_sync)
 			break;
 		check_sync = 0;
 	} while (1);
 	if (!best)
-		return false;
+		best = vbios_mode->enh_table;
 	vbios_mode->enh_table = best;
 
 	hborder = (vbios_mode->enh_table->flags & HBorder) ? 8 : 0;
