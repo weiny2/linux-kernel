@@ -1575,6 +1575,10 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 	int i = 0;
 	uint32_t bw;
 
+	if (mode->hdisplay % 8 || mode->hsync_start % 8 ||
+	    mode->hsync_end % 8 || mode->htotal % 8)
+		return MODE_H_ILLEGAL;
+
 	bpp = mdev->preferred_bpp;
         /* Validate the mode input by the user - since we don't have depth information
 	 * in the mode this is the best we can do */
@@ -1583,7 +1587,7 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 			/* Found the helper for this connector */
 			fb_helper_conn = fb_helper->connector_info[i];
 			if (fb_helper_conn->cmdline_mode.specified) {
-				if (fb_helper_conn->cmdline_mode.bpp_specified) {
+				if (fb_helper_conn->cmdline_mode.bpp_specified){
 					bpp = fb_helper_conn->cmdline_mode.bpp;
 				}
 			}
@@ -1637,7 +1641,7 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 		   ((bw = mga_vga_calculate_mode_bandwidth(mode, bpp))
 			> (37500 * 1024))) {
 		DRM_DEBUG_KMS("Mode %d exceeds bandwidth: %d > %d",
-			      mode->base.id, bw, 31877 * 1024);
+			      mode->base.id, bw, 37500 * 1024);
 		return MODE_BANDWIDTH;
 	} else if (mdev->type == G200_ER &&
 		   ((bw = mga_vga_calculate_mode_bandwidth(mode, bpp))
@@ -1646,8 +1650,6 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 			      mode->base.id, bw, 55000 * 1024);
 		return MODE_BANDWIDTH;
 	}
-	if (mode->hdisplay % 8)
-		return MODE_H_ILLEGAL;
 
 	if (mode->hdisplay > 2048 || mode->hsync_start > 4096 ||
 	    mode->hsync_end > 4096 || mode->htotal > 4096 ||
