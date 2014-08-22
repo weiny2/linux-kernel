@@ -72,6 +72,10 @@ ushort link_crc_mask = WFR_SUPPORTED_CRCS;
 module_param(link_crc_mask, ushort, S_IRUGO);
 MODULE_PARM_DESC(link_crc_mask, "CRCs to use on the link");
 
+ushort crc_14b_sideband = 1;
+module_param(crc_14b_sideband, ushort, S_IRUGO);
+MODULE_PARM_DESC(crc_14b_sideband, "Use sideband credit return (14b CRC only)");
+
 /* TODO: temporary */
 static uint use_flr;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
@@ -1720,6 +1724,7 @@ void handle_verify_cap(struct work_struct *work)
 	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
 								link_vc_work);
 	struct hfi_devdata *dd = ppd->dd;
+	u64 reg;
 	u8 power_management;
 	u8 continious;
 	u8 vcu;
@@ -1753,7 +1758,7 @@ void handle_verify_cap(struct work_struct *work)
 	read_vc_remote_fabric(dd, &vau, &vcu, &vl15buf, &crc_sizes);
 	read_vc_remote_link_width(dd, &flag_bits, &link_widths);
 	dd_dev_info(dd,
-		"Peer PHY: power management 0x%x, continous updates 0x%x\n",
+		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
 		(int)power_management, (int)continious);
 	dd_dev_info(dd,
 		"Peer Fabric: vAU %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
@@ -1790,8 +1795,19 @@ void handle_verify_cap(struct work_struct *work)
 		crc_val = LCB_CRC_14B;
 	else
 		crc_val = LCB_CRC_16B;
+	dd_dev_info(dd, "Final LCB CRC mode: %d\n", (int)crc_val);
 	write_csr(dd, DC_LCB_CFG_CRC_MODE,
 		(u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+
+	/* set (14b only) or clear sideband credit */
+	reg = read_csr(dd, WFR_SEND_CM_CTRL);
+	if (crc_val == LCB_CRC_14B && crc_14b_sideband) {
+		write_csr(dd, WFR_SEND_CM_CTRL,
+			reg | WFR_SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
+	} else {
+		write_csr(dd, WFR_SEND_CM_CTRL,
+			reg & ~WFR_SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
+	}
 
 	ppd->port_ltp_crc_mode =
 		link_crc_mask << 8; /* supported crc modes */
