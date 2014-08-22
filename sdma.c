@@ -747,7 +747,11 @@ void sdma_exit(struct hfi_devdata *dd)
  * @dd: hfi_devdata for unmapping
  * @tx: tx request to clean
  *
- * This is used in the progress routine to clean the tx.
+ * This is used in the progress routine to clean the tx or
+ * by the ULP to toss an inprocess tx build.
+ *
+ * The code can be called multiple times without issue.
+ *
  */
 void sdma_txclean(
 	struct hfi_devdata *dd,
@@ -755,7 +759,6 @@ void sdma_txclean(
 {
 	u16 i;
 
-	kfree(tx->coalesce_buf);
 	/* free mappings */
 	for (i = 0; i < tx->num_desc; i++) {
 		/* TODO - skip over AHG descriptors */
@@ -776,9 +779,14 @@ void sdma_txclean(
 			break;
 		}
 	}
+	tx->num_desc = 0;
+	kfree(tx->coalesce_buf);
+	tx->coalesce_buf = NULL;
 	/* kmalloc'ed descp */
-	if (unlikely(tx->desc_limit > ARRAY_SIZE(tx->descs)))
+	if (unlikely(tx->desc_limit > ARRAY_SIZE(tx->descs))) {
+		tx->desc_limit = ARRAY_SIZE(tx->descs);
 		kfree(tx->descp);
+	}
 }
 
 static inline void make_sdma_desc(struct sdma_engine *sde,
