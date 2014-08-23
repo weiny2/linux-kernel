@@ -111,6 +111,11 @@ static unsigned int ib_qib_disable_sma;
 module_param_named(disable_sma, ib_qib_disable_sma, uint, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(disable_sma, "Disable the SMA");
 
+static void verbs_sdma_complete(
+	struct sdma_txreq *cookie,
+	int status,
+	int drained);
+
 /*
  * Note that it is OK to post send work requests in the SQE and ERR
  * states; qib_do_send() will process them and generate error
@@ -203,7 +208,6 @@ const u8 hdr_len_by_opcode[256] = {
  */
 __be64 ib_qib_sys_image_guid;
 
-
 /**
  * qib_copy_sge - copy data to SGE memory
  * @ss: the SGE state
@@ -285,54 +289,6 @@ void qib_skip_sge(struct qib_sge_state *ss, u32 length, int release)
 		}
 		length -= len;
 	}
-}
-
-/*
- * Count the number of DMA descriptors needed to send length bytes of data.
- * Don't modify the qib_sge_state to get the count.
- * Return zero if any of the segments is not aligned.
- */
-static u32 qib_count_sge(struct qib_sge_state *ss, u32 length)
-{
-	struct qib_sge *sg_list = ss->sg_list;
-	struct qib_sge sge = ss->sge;
-	u8 num_sge = ss->num_sge;
-	u32 ndesc = 1;  /* count the header */
-
-	while (length) {
-		u32 len = sge.length;
-
-		if (len > length)
-			len = length;
-		if (len > sge.sge_length)
-			len = sge.sge_length;
-		BUG_ON(len == 0);
-		if (((long) sge.vaddr & (sizeof(u32) - 1)) ||
-		    (len != length && (len & (sizeof(u32) - 1)))) {
-			ndesc = 0;
-			break;
-		}
-		ndesc++;
-		sge.vaddr += len;
-		sge.length -= len;
-		sge.sge_length -= len;
-		if (sge.sge_length == 0) {
-			if (--num_sge)
-				sge = *sg_list++;
-		} else if (sge.length == 0 && sge.mr->lkey) {
-			if (++sge.n >= QIB_SEGSZ) {
-				if (++sge.m >= sge.mr->mapsz)
-					break;
-				sge.n = 0;
-			}
-			sge.vaddr =
-				sge.mr->map[sge.m]->segs[sge.n].vaddr;
-			sge.length =
-				sge.mr->map[sge.m]->segs[sge.n].length;
-		}
-		length -= len;
-	}
-	return ndesc;
 }
 
 /*
@@ -819,10 +775,10 @@ void update_sge(struct qib_sge_state *ss, u32 length)
 	}
 }
 
-static noinline struct qib_verbs_txreq *__get_txreq(struct qib_ibdev *dev,
+static noinline struct verbs_txreq *__get_txreq(struct qib_ibdev *dev,
 					   struct qib_qp *qp)
 {
-	struct qib_verbs_txreq *tx;
+	struct verbs_txreq *tx;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
@@ -834,7 +790,9 @@ static noinline struct qib_verbs_txreq *__get_txreq(struct qib_ibdev *dev,
 		list_del(l);
 		spin_unlock(&dev->pending_lock);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
-		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
+		tx = list_entry(l, struct verbs_txreq, txreq.list);
+		tx->qp = qp;
+		atomic_inc(&qp->refcount);
 	} else {
 		if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK &&
 		    list_empty(&qp->s_iowait.list)) {
@@ -852,10 +810,10 @@ static noinline struct qib_verbs_txreq *__get_txreq(struct qib_ibdev *dev,
 	return tx;
 }
 
-static inline struct qib_verbs_txreq *get_txreq(struct qib_ibdev *dev,
+static inline struct verbs_txreq *get_txreq(struct qib_ibdev *dev,
 					 struct qib_qp *qp)
 {
-	struct qib_verbs_txreq *tx;
+	struct verbs_txreq *tx;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->pending_lock, flags);
@@ -865,7 +823,9 @@ static inline struct qib_verbs_txreq *get_txreq(struct qib_ibdev *dev,
 
 		list_del(l);
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
-		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
+		tx = list_entry(l, struct verbs_txreq, txreq.list);
+		tx->qp = qp;
+		atomic_inc(&qp->refcount);
 	} else {
 		/* call slow path to get the extra lock */
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
@@ -874,7 +834,7 @@ static inline struct qib_verbs_txreq *get_txreq(struct qib_ibdev *dev,
 	return tx;
 }
 
-void qib_put_txreq(struct qib_verbs_txreq *tx)
+void qib_put_txreq(struct verbs_txreq *tx)
 {
 	struct qib_ibdev *dev;
 	struct qib_qp *qp;
@@ -889,13 +849,7 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
 		qib_put_mr(tx->mr);
 		tx->mr = NULL;
 	}
-	if (tx->txreq.flags & SDMA_TXREQ_F_FREEBUF) {
-		tx->txreq.flags &= ~SDMA_TXREQ_F_FREEBUF;
-		dma_unmap_single(&dd_from_dev(dev)->pcidev->dev,
-				 tx->addr, tx->hdr_dwords << 2,
-				 DMA_TO_DEVICE);
-		kfree(tx->align_buf);
-	}
+	sdma_txclean(dd_from_dev(dev), &tx->txreq);
 
 	spin_lock_irqsave(&dev->pending_lock, flags);
 
@@ -917,12 +871,16 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
 }
 
 /*
- * This is called with ppd->sdma_lock held.
+ * This is called with progress side lock held.
  */
-static void sdma_complete(struct sdma_txreq *cookie, int status, int drained)
+/* New API */
+static void verbs_sdma_complete(
+	struct sdma_txreq *cookie,
+	int status,
+	int drained)
 {
-	struct qib_verbs_txreq *tx =
-		container_of(cookie, struct qib_verbs_txreq, txreq);
+	struct verbs_txreq *tx =
+		container_of(cookie, struct verbs_txreq, txreq);
 	struct qib_qp *qp = tx->qp;
 
 	spin_lock(&qp->s_lock);
@@ -930,14 +888,9 @@ static void sdma_complete(struct sdma_txreq *cookie, int status, int drained)
 		qib_send_complete(qp, tx->wqe, IB_WC_SUCCESS);
 	else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		struct qib_ib_header *hdr;
+		struct qib_ibdev *dev = to_idev(qp->ibqp.device);
 
-		if (tx->txreq.flags & SDMA_TXREQ_F_FREEBUF)
-			hdr = &tx->align_buf->hdr;
-		else {
-			struct qib_ibdev *dev = to_idev(qp->ibqp.device);
-
-			hdr = &dev->pio_hdrs[tx->hdr_inx].hdr;
-		}
+		hdr = &dev->pio_hdrs[tx->hdr_inx].hdr;
 		qib_rc_send_complete(qp, hdr);
 	}
 	if (drained) {
@@ -982,19 +935,100 @@ static int wait_kmem(struct qib_ibdev *dev, struct qib_qp *qp)
 	return ret;
 }
 
+/*
+ * This routine calls txadds for each sg entry.
+ *
+ * Add failures will revert the sge cursor
+ */
+static int build_verbs_ulp_payload(
+	struct sdma_engine *sde,
+	struct qib_sge_state *ss,
+	u32 length,
+	struct verbs_txreq *tx)
+{
+	struct qib_sge *sg_list = ss->sg_list;
+	struct qib_sge sge = ss->sge;
+	u8 num_sge = ss->num_sge;
+	u32 len;
+	int ret = 0;
+
+	while (length) {
+		len = ss->sge.length;
+		if (len > length)
+			len = length;
+		if (len > ss->sge.sge_length)
+			len = ss->sge.sge_length;
+		BUG_ON(len == 0);
+		ret = sdma_txadd_kvaddr(
+			sde->dd,
+			&tx->txreq,
+			ss->sge.vaddr,
+			len);
+		if (ret)
+			goto bail_txadd;
+		update_sge(ss, len);
+		length -= len;
+	}
+	return ret;
+bail_txadd:
+	/* unwind cursor */
+	ss->sge = sge;
+	ss->num_sge = num_sge;
+	ss->sg_list = sg_list;
+	return ret;
+}
+
+/*
+ * Build the number of DMA descriptors needed to send length bytes of data.
+ *
+ * NOTE: DMA mapping is held in the tx until completed in the ring or
+ *       the tx desc is freed without having been submitted to the ring
+ *
+ * This routine insures the following all the helper routine
+ * calls succeed.
+ */
+/* New API */
+static int build_verbs_tx_desc(
+	struct sdma_engine *sde,
+	struct qib_sge_state *ss,
+	u32 length,
+	struct verbs_txreq *tx)
+{
+	struct qib_ibdev *dev = to_idev(tx->qp->ibqp.device);
+	int ret = 0;
+
+	sdma_txinit(
+		&tx->txreq,
+		0,
+		(tx->hdr_dwords<<2) + length,
+		verbs_sdma_complete);
+
+	/* add the header */
+	ret = sdma_txadd_daddr(
+		sde->dd,
+		&tx->txreq,
+		dev->pio_hdrs_phys + tx->hdr_inx *
+			sizeof(struct qib_pio_header),
+		tx->hdr_dwords << 2);
+	if (ret)
+		goto bail_txadd;
+	/* add the ulp payload - if any.  ss can be NULL for acks */
+	if (ss)
+		build_verbs_ulp_payload(sde, ss, length, tx);
+bail_txadd:
+	return ret;
+}
+
 int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc)
 {
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
-	struct hfi_devdata *dd = dd_from_dev(dev);
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	struct qib_verbs_txreq *tx;
-	struct sdma_txreq *stx;
 	struct qib_pio_header *phdr;
+	struct verbs_txreq *tx;
+	struct sdma_txreq *stx;
 	u64 pbc_flags = 0;
 	struct sdma_engine *sde;
-	u32 ndesc;
 	u8 sc5;
 	int ret;
 
@@ -1004,14 +1038,8 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 			struct sdma_txreq,
 			list);
 		list_del_init(&stx->list);
-		tx = container_of(stx, struct qib_verbs_txreq, txreq);
-		/* resend previously constructed packet */
-		phdr = &dev->pio_hdrs[tx->hdr_inx];
-		sc5 = be16_to_cpu(phdr->hdr.lrh[0]) >> 12 |
-			(!!(phdr->pbc & WFR_PBC_DC_INFO)) << 4;
-		sde = qp_to_sdma_engine(qp, sc5);
-		ret = qib_sdma_verbs_send(sde, tx->ss, tx->dwords, tx);
-		goto bail;
+		tx = container_of(stx, struct verbs_txreq, txreq);
+		return sdma_send_txreq(tx->sde, &qp->s_iowait, NULL, stx);
 	}
 
 	tx = get_txreq(dev, qp);
@@ -1019,7 +1047,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		goto bail_tx;
 
 	sc5 = qp->s_sc;
-	sde = qp_to_sdma_engine(qp, sc5);
+	tx->sde = sde = qp_to_sdma_engine(qp, sc5);
 	if (likely(pbc == 0)) {
 		/* No vl15 here */
 		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
@@ -1027,67 +1055,25 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 
 		pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
 	}
-	tx->qp = qp;
-	atomic_inc(&qp->refcount);
 	tx->wqe = qp->s_wqe;
 	tx->mr = qp->s_rdma_mr;
 	if (qp->s_rdma_mr)
 		qp->s_rdma_mr = NULL;
-	tx->txreq.complete = sdma_complete;
-	if (len) {
-		/*
-		 * Don't try to DMA if it takes more descriptors than
-		 * the queue holds.
-		 */
-		ndesc = qib_count_sge(ss, len);
-		if (ndesc >= sde->descq_cnt)
-			ndesc = 0;
-	} else
-		ndesc = 1;
-	if (ndesc) {
-		phdr = &dev->pio_hdrs[tx->hdr_inx];
-		phdr->pbc = cpu_to_le64(pbc);
-		memcpy(&phdr->hdr, hdr, hdrwords << 2);
-		tx->txreq.flags |= SDMA_TXREQ_F_FREEDESC;
-		tx->txreq.num_desc = ndesc;
-		tx->addr = dev->pio_hdrs_phys +
-			tx->hdr_inx * sizeof(struct qib_pio_header);
-		tx->hdr_dwords = hdrwords + 2; /* add PBC length */
-		ret = qib_sdma_verbs_send(sde, ss, dwords, tx);
-		goto bail;
-	}
-
-	/* Allocate a buffer and copy the header and payload to it. */
-	tx->hdr_dwords = plen;
-	phdr = kmalloc(tx->hdr_dwords << 2, GFP_ATOMIC);
-	if (!phdr)
-		goto err_tx;
+	phdr = &dev->pio_hdrs[tx->hdr_inx];
 	phdr->pbc = cpu_to_le64(pbc);
 	memcpy(&phdr->hdr, hdr, hdrwords << 2);
-	qib_copy_from_sge((u32 *) &phdr->hdr + hdrwords, ss, len);
-
-	tx->addr = dma_map_single(&dd->pcidev->dev, phdr,
-					tx->hdr_dwords << 2, DMA_TO_DEVICE);
-	if (dma_mapping_error(&dd->pcidev->dev, tx->addr))
-		goto map_err;
-	tx->align_buf = phdr;
-	tx->txreq.flags |= SDMA_TXREQ_F_FREEBUF;
-	tx->txreq.num_desc = 1;
-	ret = qib_sdma_verbs_send(sde, NULL, 0, tx);
-	goto unaligned;
-
-map_err:
-	kfree(phdr);
-err_tx:
+	tx->hdr_dwords = hdrwords + 2;
+	ret = build_verbs_tx_desc(sde, ss, len, tx);
+	if (unlikely(ret))
+		goto bail_build;
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), hdr);
+	return sdma_send_txreq(sde, &qp->s_iowait, NULL, &tx->txreq);
+bail_build:
+	/* kmalloc or mapping fail */
 	qib_put_txreq(tx);
-	ret = wait_kmem(dev, qp);
-unaligned:
-	ibp->n_unaligned++;
-bail:
-	return ret;
+	return wait_kmem(dev, qp);
 bail_tx:
-	ret = PTR_ERR(tx);
-	goto bail;
+	return PTR_ERR(tx);
 }
 
 /*
@@ -1928,7 +1914,7 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	}
 
 	for (i = 0; i < descq_cnt; i++) {
-		struct qib_verbs_txreq *tx;
+		struct verbs_txreq *tx;
 
 		tx = kzalloc(sizeof *tx, GFP_KERNEL);
 		if (!tx) {
@@ -2058,10 +2044,10 @@ err_reg:
 err_tx:
 	while (!list_empty(&dev->txreq_free)) {
 		struct list_head *l = dev->txreq_free.next;
-		struct qib_verbs_txreq *tx;
+		struct verbs_txreq *tx;
 
 		list_del(l);
-		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
+		tx = list_entry(l, struct verbs_txreq, txreq.list);
 		kfree(tx);
 	}
 	if (dev->pio_hdrs)
@@ -2101,10 +2087,10 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 	del_timer_sync(&dev->mem_timer);
 	while (!list_empty(&dev->txreq_free)) {
 		struct list_head *l = dev->txreq_free.next;
-		struct qib_verbs_txreq *tx;
+		struct verbs_txreq *tx;
 
 		list_del(l);
-		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
+		tx = list_entry(l, struct verbs_txreq, txreq.list);
 		kfree(tx);
 	}
 	if (dev->pio_hdrs)

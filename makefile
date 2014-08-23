@@ -48,7 +48,7 @@ NAME = hfi
 KVER=$(shell uname -r)
 KBUILD  ?= /lib/modules/$(KVER)/build
 
-#NOSTDINC_FLAGS := -DJAG_SDMA_VERBOSITY
+#NOSTDINC_FLAGS += -DJAG_SDMA_VERBOSITY
 STL_MGMT := $(shell test -d $(KBUILD)/include-ifs-kernel && echo 1)
 ifeq (1, $(STL_MGMT))
 NOSTDINC_FLAGS += -I$(KBUILD)/include-ifs-kernel -DCONFIG_STL_MGMT

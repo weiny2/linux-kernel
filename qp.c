@@ -586,7 +586,7 @@ static void flush_tx_list(struct qib_qp *qp)
 			list);
 		list_del_init(&tx->list);
 		qib_put_txreq(
-			container_of(tx, struct qib_verbs_txreq, txreq));
+			container_of(tx, struct verbs_txreq, txreq));
 	}
 }
 
@@ -1367,8 +1367,7 @@ void qib_qp_wakeup(struct qib_qp *qp, u32 flag)
 
 static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx)
 {
-	struct qib_verbs_txreq *tx =
-		container_of(stx, struct qib_verbs_txreq, txreq);
+	struct verbs_txreq *tx = container_of(stx, struct verbs_txreq, txreq);
 	struct qib_qp *qp;
 	unsigned long flags;
 	int ret = 0;

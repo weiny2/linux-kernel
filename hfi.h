@@ -1240,8 +1240,9 @@ void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val);
 /* send dma routines */
 void __qib_sdma_intr(struct qib_pportdata *);
 void qib_sdma_intr(struct qib_pportdata *);
+struct verbs_txreq;
 int qib_sdma_verbs_send(struct sdma_engine *, struct qib_sge_state *,
-			u32, struct qib_verbs_txreq *);
+			u32, struct verbs_txreq *);
 /*
  * The number of words for the KDETH protocol field.  If this is
  * larger then the actual field used, then part of the payload

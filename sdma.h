@@ -56,9 +56,6 @@
 #define SDMA_TXREQ_F_URGENT       0x0001
 #define SDMA_TXREQ_F_AHG_COPY     0x0002
 #define SDMA_TXREQ_F_USE_AHG      0x0004
-/* FIXME - remove when verbs ready */
-#define SDMA_TXREQ_F_FREEDESC 0x0008
-#define SDMA_TXREQ_F_FREEBUF  0x0010
 
 #define SDMA_MAP_NONE          0
 #define SDMA_MAP_SINGLE        1
@@ -331,27 +328,21 @@ struct sdma_txreq {
 	/* private: */
 	u16                         desc_limit;
 	/* private: */
-	u16                         start_idx;
-	/* private: */
 	u16                         next_descq_idx;
 	/* private: */
 	struct sdma_desc descs[NUM_DESC];
 };
 
 /* FIXME - remove when verbs done */
-struct sdma_engine;
-struct qib_verbs_txreq {
+struct verbs_txreq {
 	struct sdma_txreq       txreq;
 	struct qib_qp           *qp;
 	struct qib_swqe         *wqe;
-	struct sdma_engine      *sde;
-	dma_addr_t              addr;
-	u32                     dwords;
-	u16                     hdr_dwords;
-	u16                     hdr_inx;
-	struct qib_pio_header	*align_buf;
 	struct qib_mregion	*mr;
 	struct qib_sge_state    *ss;
+	struct sdma_engine     *sde;
+	u16                     hdr_dwords;
+	u16                     hdr_inx;
 };
 
 /**

@@ -45,6 +45,7 @@
 typedef void (*restart_t)(struct work_struct *work);
 
 struct sdma_txreq;
+struct sdma_engine;
 /**
  * struct iowait - linkage for delayed progress/waiting
  * @list: used to add/insert into QP/PQ wait lists

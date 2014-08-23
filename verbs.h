@@ -903,7 +903,8 @@ unsigned qib_pkt_delay(u32 plen, u8 snd_mult, u8 rcv_mult);
 struct sdma_engine;
 void qib_verbs_sdma_desc_avail(struct sdma_engine *engine, unsigned avail);
 
-void qib_put_txreq(struct qib_verbs_txreq *tx);
+struct verbs_txreq;
+void qib_put_txreq(struct verbs_txreq *tx);
 
 int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len);

@@ -157,7 +157,6 @@ static void sdma_set_state(struct sdma_engine *, enum sdma_states);
 static void sdma_start_hw_clean_up(struct sdma_engine *);
 static void sdma_start_sw_clean_up(struct sdma_engine *);
 static void sdma_sw_clean_up_task(unsigned long);
-static void unmap_desc(struct sdma_engine *, unsigned);
 static void sdma_sendctrl(struct sdma_engine *, unsigned);
 static void init_sdma_regs(struct sdma_engine *, u32, uint);
 static void sdma_process_event(
@@ -247,22 +246,12 @@ static void clear_sdma_activelist(struct sdma_engine *sde)
 		struct iowait *wait = txp->wait;
 
 		list_del_init(&txp->list);
-		/* FIXME - old api code fragment */
-		if (txp->flags & SDMA_TXREQ_F_FREEDESC) {
-			unsigned idx;
-
-			idx = txp->start_idx;
-			while (idx != txp->next_descq_idx) {
-				unmap_desc(sde, idx);
-				if (++idx == sde->descq_cnt)
-					idx = 0;
-			}
-		} else {
-			sdma_txclean(sde->dd, txp);
-		}
-		if (txp->wait)
+		if (wait)
 			drained = atomic_dec_and_test(
 					&txp->wait->sdma_busy);
+		sdma_txclean(sde->dd, txp);
+		if (wait)
+			drained = atomic_dec_and_test(&wait->sdma_busy);
 		if (txp->complete)
 			(*txp->complete)(txp, SDMA_TXREQ_S_ABORTED, drained);
 		if (drained)
@@ -391,27 +380,6 @@ static void sdma_set_state(struct sdma_engine *sde,
 	ss->current_op = op;
 
 	sdma_sendctrl(sde, ss->current_op);
-}
-
-/* FIXME - old routine */
-static void unmap_desc(struct sdma_engine *sde, unsigned head)
-{
-	__le64 *descqp;
-	u64 desc[2];
-	dma_addr_t addr;
-	size_t len;
-
-	descqp = &sde->descq[head].qw[0];
-
-	desc[0] = le64_to_cpu(descqp[0]);
-	desc[1] = le64_to_cpu(descqp[1]);
-
-	/* JAG SDMA TODO - these should only be in wfr.c */
-	addr = (desc[0] >> SDMA_DESC0_PHY_ADDR_SHIFT) &
-		SDMA_DESC0_PHY_ADDR_MASK;
-	len = (desc[0] >> SDMA_DESC0_BYTE_COUNT_SHIFT) &
-		SDMA_DESC0_BYTE_COUNT_MASK;
-	dma_unmap_single(&sde->dd->pcidev->dev, addr, len, DMA_TO_DEVICE);
 }
 
 /**
@@ -955,7 +923,6 @@ static int sdma_make_progress(struct sdma_engine *sde)
 	struct sdma_txreq *txp = NULL;
 	int progress = 0;
 	u16 hwhead;
-	u16 idx = 0;
 
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
@@ -970,22 +937,10 @@ static int sdma_make_progress(struct sdma_engine *sde)
 	 * the next txp on the list.
 	 */
 
-	if (!list_empty(&sde->activelist)) {
+	if (!list_empty(&sde->activelist))
 		txp = list_first_entry(&sde->activelist,
 			struct sdma_txreq, list);
-		idx = txp->start_idx;
-	}
-
 	while (sde->descq_head != hwhead) {
-		/* if desc is part of this txp, unmap if needed */
-		/* FIXME - old api code fragment */
-		if (txp && (txp->flags & SDMA_TXREQ_F_FREEDESC) &&
-		    (idx == sde->descq_head)) {
-			unmap_desc(sde, sde->descq_head);
-			if (++idx == sde->descq_cnt)
-				idx = 0;
-		}
-
 		/* increment dequed desc count */
 		sde->descq_removed++;
 
@@ -1002,14 +957,10 @@ static int sdma_make_progress(struct sdma_engine *sde)
 
 			/* remove from active list */
 			list_del_init(&txp->list);
-			/* FIXME - old api code fragment */
-			if (!(txp->flags &
-					(SDMA_TXREQ_F_FREEDESC|
-					 SDMA_TXREQ_F_FREEBUF)))
-				sdma_txclean(sde->dd, txp);
-			if (txp->wait)
+			if (wait)
 				drained = atomic_dec_and_test(
-						&txp->wait->sdma_busy);
+						&wait->sdma_busy);
+			sdma_txclean(sde->dd, txp);
 			if (txp->complete)
 				(*txp->complete)(
 					txp,
@@ -1020,11 +971,9 @@ static int sdma_make_progress(struct sdma_engine *sde)
 			/* see if there is another txp */
 			if (list_empty(&sde->activelist))
 				txp = NULL;
-			else {
+			else
 				txp = list_first_entry(&sde->activelist,
 					struct sdma_txreq, list);
-				idx = txp->start_idx;
-			}
 		}
 		progress++;
 	}
@@ -1052,14 +1001,10 @@ int qib_sdma_make_progress(struct sdma_engine *sde)
 void sdma_engine_interrupt(struct sdma_engine *sde, u64 status)
 {
 	unsigned long flags;
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
-		slashstrip(__FILE__), __LINE__, __func__);
-	dd_dev_err(sde->dd, "status: 0x%llx\n", status);
-#endif
+
 	trace_hfi_sdma_engine_interrupt(sde, status);
 	spin_lock_irqsave(&sde->lock, flags);
-	qib_sdma_make_progress(sde);
+	sdma_make_progress(sde);
 	spin_unlock_irqrestore(&sde->lock, flags);
 }
 
@@ -1444,8 +1389,8 @@ static void dump_sdma_state(struct sdma_engine *sde)
 	/* print dma descriptor indices from the TX requests */
 	list_for_each_entry_safe(txp, txpnext, &sde->activelist, list) {
 		dd_dev_err(sde->dd,
-			"SDMA txp->start_idx: %u txp->next_descq_idx: %u\n",
-			txp->start_idx, txp->next_descq_idx);
+			"SDMA txp->next_descq_idx: %u\n",
+			txp->next_descq_idx);
 	}
 }
 /* TODO augment this to dump slid check register */
@@ -1509,231 +1454,6 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 }
 
 /*
- * Complete a request when sdma not running; likely only request
- * but to simplify the code, always queue it, then process the full
- * activelist.  We process the entire list to ensure that this particular
- * request does get it's callback, but in the correct order.
- * Must be called with sdma_lock held
- */
-/* FIXME - old routine */
-static void complete_sdma_err_req(struct sdma_engine *sde,
-				  struct qib_verbs_txreq *tx)
-{
-	atomic_inc(&tx->qp->s_iowait.sdma_busy);
-	/* no sdma descriptors, so no unmap_desc */
-	tx->txreq.start_idx = 0;
-	tx->txreq.next_descq_idx = 0;
-	list_add_tail(&tx->txreq.list, &sde->activelist);
-	tx->txreq.wait = &tx->qp->s_iowait;
-	clear_sdma_activelist(sde);
-}
-
-/*
- * This function queues one IB packet onto the send DMA queue per call.
- * The caller is responsible for checking:
- * 1) The number of send DMA descriptor entries is less than the size of
- *    the descriptor queue.
- * 2) The IB SGE addresses and lengths are 32-bit aligned
- *    (except possibly the last SGE's length)
- * 3) The SGE addresses are suitable for passing to dma_map_single().
- */
-/* FIXME - old routine, move to verbs
- * and re-implement in terms of new API
- */
-int qib_sdma_verbs_send(struct sdma_engine *sde,
-			struct qib_sge_state *ss, u32 dwords,
-			struct qib_verbs_txreq *tx)
-{
-	unsigned long flags;
-	struct qib_sge *sge;
-	struct qib_qp *qp;
-	int ret = 0;
-	u16 tail;
-	struct hw_sdma_desc *descqp;
-	u64 sdmadesc[2];
-	dma_addr_t addr;
-
-	spin_lock_irqsave(&sde->lock, flags);
-
-retry:
-	if (unlikely(!__sdma_running(sde))) {
-		complete_sdma_err_req(sde, tx);
-		goto unlock;
-	}
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s() running\n",
-		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
-#endif
-
-	if (tx->txreq.num_desc > sdma_descq_freecnt(sde)) {
-		if (qib_sdma_make_progress(sde))
-			goto retry;
-		if (sde->dd->flags & QIB_HAS_SDMA_TIMEOUT)
-			sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
-		goto busy;
-	}
-
-	make_sdma_desc(sde, sdmadesc, (u64) tx->addr, tx->hdr_dwords);
-
-	sdmadesc[0] |= SDMA_DESC0_FIRST_DESC_FLAG;
-
-	/* write to the descq */
-	tail = sde->descq_tail;
-	descqp = &sde->descq[tail];
-	trace_hfi_sdma_descriptor(sde, sdmadesc[0], sdmadesc[1], tail, descqp);
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) writing desc %016llx %016llx to %016llx\n",
-		sde->this_idx,
-		sdmadesc[0], sdmadesc[1], (unsigned long long)descqp);
-#endif
-	descqp->qw[0] = cpu_to_le64(sdmadesc[0]);
-	descqp->qw[1] = cpu_to_le64(sdmadesc[1]);
-	descqp++;
-
-	/* increment the tail */
-	if (++tail == sde->descq_cnt) {
-		tail = 0;
-		descqp = &sde->descq[0];
-		++sde->generation;
-	}
-
-	tx->txreq.start_idx = tail;
-
-	sge = &ss->sge;
-	while (dwords) {
-		u32 dw;
-		u32 len;
-
-		len = dwords << 2;
-		if (len > sge->length)
-			len = sge->length;
-		if (len > sge->sge_length)
-			len = sge->sge_length;
-		BUG_ON(len == 0);
-		dw = (len + 3) >> 2;
-		addr = dma_map_single(&sde->dd->pcidev->dev, sge->vaddr,
-				      dw << 2, DMA_TO_DEVICE);
-		if (dma_mapping_error(&sde->dd->pcidev->dev, addr))
-			goto unmap;
-		make_sdma_desc(sde, sdmadesc, (u64) addr, dw);
-		/* write to the descq */
-		trace_hfi_sdma_descriptor(sde, sdmadesc[0], sdmadesc[1],
-			tail, descqp);
-#ifdef JAG_SDMA_VERBOSITY
-		dd_dev_err(sde->dd, "JAG SDMA(%u) writing desc %016llx %016llx to %016llx\n",
-			sde->this_idx,
-			sdmadesc[0], sdmadesc[1], (unsigned long long)descqp);
-#endif
-		descqp->qw[0] = cpu_to_le64(sdmadesc[0]);
-		descqp->qw[1] = cpu_to_le64(sdmadesc[1]);
-		descqp++;
-
-		/* increment the tail */
-		if (++tail == sde->descq_cnt) {
-			tail = 0;
-			descqp = &sde->descq[0];
-			++sde->generation;
-		}
-		sge->vaddr += len;
-		sge->length -= len;
-		sge->sge_length -= len;
-		if (sge->sge_length == 0) {
-			if (--ss->num_sge)
-				*sge = *ss->sg_list++;
-		} else if (sge->length == 0 && sge->mr->lkey) {
-			if (++sge->n >= QIB_SEGSZ) {
-				if (++sge->m >= sge->mr->mapsz)
-					break;
-				sge->n = 0;
-			}
-			sge->vaddr =
-				sge->mr->map[sge->m]->segs[sge->n].vaddr;
-			sge->length =
-				sge->mr->map[sge->m]->segs[sge->n].length;
-		}
-
-		dwords -= dw;
-	}
-
-	if (!tail)
-		descqp = &sde->descq[sde->descq_cnt];
-	descqp--;
-	descqp->qw[0] |= cpu_to_le64(SDMA_DESC0_LAST_DESC_FLAG);
-	descqp->qw[1] |= sde->dd->default_desc1;
-
-	atomic_inc(&tx->qp->s_iowait.sdma_busy);
-	tx->txreq.next_descq_idx = tail;
-	sdma_update_tail(sde, tail);
-	sde->descq_added += tx->txreq.num_desc;
-	list_add_tail(&tx->txreq.list, &sde->activelist);
-	tx->txreq.wait = &tx->qp->s_iowait;
-	goto unlock;
-
-unmap:
-	for (;;) {
-		if (!tail)
-			tail = sde->descq_cnt - 1;
-		else
-			tail--;
-		if (tail == sde->descq_tail)
-			break;
-		unmap_desc(sde, tail);
-	}
-	qp = tx->qp;
-	qib_put_txreq(tx);
-	spin_lock(&qp->r_lock);
-	spin_lock(&qp->s_lock);
-	if (qp->ibqp.qp_type == IB_QPT_RC) {
-		/* XXX what about error sending RDMA read responses? */
-		if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK)
-			qib_error_qp(qp, IB_WC_GENERAL_ERR);
-	} else if (qp->s_wqe)
-		qib_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
-	spin_unlock(&qp->s_lock);
-	spin_unlock(&qp->r_lock);
-	/* return zero to process the next send work request */
-	goto unlock;
-
-busy:
-	qp = tx->qp;
-	spin_lock(&qp->s_lock);
-	if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) {
-		struct qib_ibdev *dev;
-
-		/*
-		 * If we couldn't queue the DMA request, save the info
-		 * and try again later rather than destroying the
-		 * buffer and undoing the side effects of the copy.
-		 */
-		tx->ss = ss;
-		tx->dwords = dwords;
-		list_add_tail(&tx->txreq.list, &qp->s_iowait.tx_head);
-		dev = &sde->dd->verbs_dev;
-		spin_lock(&dev->pending_lock);
-		if (list_empty(&qp->s_iowait.list)) {
-			struct qib_ibport *ibp;
-
-			ibp = &sde->ppd->ibport_data;
-			ibp->n_dmawait++;
-			qp->s_flags |= QIB_S_WAIT_DMA_DESC;
-			list_add_tail(&qp->s_iowait.list, &sde->dmawait);
-			trace_hfi_qpsleep(qp, QIB_S_WAIT_DMA_DESC);
-			atomic_inc(&qp->refcount);
-		}
-		spin_unlock(&dev->pending_lock);
-		qp->s_flags &= ~QIB_S_BUSY;
-		spin_unlock(&qp->s_lock);
-		ret = -EBUSY;
-	} else {
-		spin_unlock(&qp->s_lock);
-		qib_put_txreq(tx);
-	}
-unlock:
-	spin_unlock_irqrestore(&sde->lock, flags);
-	return ret;
-}
-
-/*
  * This routine submits the indicated tx
  *
  * Space has already been guaranteed and
@@ -1751,7 +1471,6 @@ static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
 	struct sdma_desc *descp = tx->descp;
 
 	tail = sde->descq_tail;
-	tx->start_idx = tail;
 	for (i = 0; i < tx->num_desc; i++, descp++) {
 		sde->descq[tail].qw[0] = descp->qw[0];
 		/* replace generation with real one */
@@ -1822,7 +1541,7 @@ unlock:
 unlock_noconn:
 	if (wait)
 		atomic_inc(&wait->sdma_busy);
-	tx->start_idx = tx->next_descq_idx = 0;
+	tx->next_descq_idx = 0;
 	list_add_tail(&tx->list, &sde->activelist);
 	tx->wait = wait;
 	if (wait) {
@@ -1914,7 +1633,7 @@ unlock_noconn:
 	tx->wait = wait;
 	if (wait)
 		atomic_inc(&wait->sdma_busy);
-	tx->start_idx = tx->next_descq_idx = 0;
+	tx->next_descq_idx = 0;
 	list_add_tail(&tx->list, &sde->activelist);
 	if (wait) {
 		wait->tx_count++;
