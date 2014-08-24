@@ -76,6 +76,7 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->bdws);
 	INIT_LIST_HEAD(&nd_bus->memdevs);
 	INIT_LIST_HEAD(&nd_bus->list);
+	init_completion(&nd_bus->registration);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
 	if (test_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags))
 		nd_bus->format_interface_code = 1;
@@ -272,9 +273,11 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 	mutex_lock(&nd_bus_list_mutex);
 	list_add_tail(&nd_bus->list, &nd_bus_list);
 	mutex_unlock(&nd_bus_list_mutex);
+	complete_all(&nd_bus->registration);
 
 	return nd_bus;
  err_child:
+	complete_all(&nd_bus->registration);
 	device_for_each_child(&nd_bus->dev, NULL, child_unregister);
 	nd_bus_destroy_ndctl(nd_bus);
  err:

@@ -33,4 +33,7 @@ struct nd_region {
 };
 
 struct nd_region *to_nd_region(struct device *dev);
+void nd_region_wait_for_peers(struct nd_region *nd_region);
+int nd_region_to_namespace_type(struct nd_region *nd_region);
+extern struct attribute_group nd_device_attribute_group;
 #endif /* __ND_H__ */

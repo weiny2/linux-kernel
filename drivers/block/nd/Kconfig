@@ -56,4 +56,23 @@ config NFIT_TEST
 
 	  Say N unless you are doing development of the 'nd' subsystem.
 
+config NFIT_REGION
+	tristate "NFIT: Region Support"
+	depends on ND_CORE
+	default ND_CORE
+	help
+	  The "NFIT Region Driver" is an intermediary driver that
+	  translates NFIT defined regions into "namespace" devices that
+	  are consumed by peristent memory block drivers.  A "namespace"
+	  is a sub-division of a region.
+
+	  NVDIMM memory regions, in some instances, alias with each
+	  other.  When this occurs a label (metadata superblock) stored
+	  on the dimm resolves that aliasing.  This driver provides
+	  facilities to parse the label and publishes a sysfs interface
+	  for adding/deleting/modifying "namespaces" (as defined by the
+	  NVDIMM Label Specification).
+
+	  Say Y if you want to use a NVDIMM described by NFIT
+
 endif

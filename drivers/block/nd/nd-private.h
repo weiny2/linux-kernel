@@ -26,6 +26,7 @@ enum {
 
 struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;
+	struct completion registration;
 	int format_interface_code;
 	struct list_head regions;
 	struct list_head memdevs;

@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/nd.h>
 #include "nd-private.h"
 #include "nfit.h"
 #include "nd.h"
@@ -23,10 +24,6 @@
 static int nd_major;
 static struct class *nd_class;
 static DEFINE_IDA(region_ida);
-
-struct bus_type nd_bus_type = {
-	.name = "nd",
-};
 
 static void nd_region_release(struct device *dev)
 {
@@ -53,6 +50,10 @@ static struct device_type nd_pmem_device_type = {
 	.release = nd_region_release,
 };
 
+/**
+ * to_nd_region() - cast a device to a nd_region and verify it is a nd_region
+ * @dev: device to cast
+ */
 struct nd_region *to_nd_region(struct device *dev)
 {
 	struct nd_region *nd_region = container_of(dev, struct nd_region, dev);
@@ -60,6 +61,96 @@ struct nd_region *to_nd_region(struct device *dev)
 	WARN_ON(dev->type->release != nd_region_release);
 	return nd_region;
 }
+EXPORT_SYMBOL(to_nd_region);
+
+static bool is_nd_pmem(struct device *dev)
+{
+	return dev ? dev->type == &nd_pmem_device_type : false;
+}
+
+static bool is_nd_blk(struct device *dev)
+{
+	return dev ? dev->type == &nd_block_device_type : false;
+}
+
+static int to_nd_device_type(struct device *dev)
+{
+	if (is_nd_pmem(dev))
+		return ND_DEVICE_REGION_PMEM;
+	else if (is_nd_blk(dev))
+		return ND_DEVICE_REGION_BLOCK;
+	else if (is_nd_pmem(dev->parent) || is_nd_blk(dev->parent))
+		return nd_region_to_namespace_type(to_nd_region(dev->parent));
+
+	return 0;
+}
+
+static int nd_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	add_uevent_var(env, "MODALIAS=" ND_DEVICE_MODALIAS_FMT,
+			to_nd_device_type(dev));
+	return 0;
+}
+
+static int nd_bus_match(struct device *dev, struct device_driver *drv)
+{
+	struct nd_device_driver *nd_drv = to_nd_drv(drv);
+
+	return test_bit(to_nd_device_type(dev), &nd_drv->type);
+}
+
+struct bus_type nd_bus_type = {
+	.name = "nd",
+	.uevent = nd_bus_uevent,
+	.match = nd_bus_match,
+};
+
+/**
+ * nd_region_to_namespace_type() - region to an integer namespace type
+ * @nd_region: region-device to interrogate
+ *
+ * This is the 'nstype' attribute of a region as well, an input to the
+ * MODALIAS for namespace devices, and bit number for a nd_bus to match
+ * namespace devices with namespace drivers.
+ */
+int nd_region_to_namespace_type(struct nd_region *nd_region)
+{
+	if (is_nd_pmem(&nd_region->dev)) {
+		if (nd_region->ndr_mappings)
+			return ND_DEVICE_NAMESPACE_PMEM;
+		else
+			return ND_DEVICE_NAMESPACE_IO;
+	} else if (is_nd_blk(&nd_region->dev)) {
+		return ND_DEVICE_NAMESPACE_BLOCK;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(nd_region_to_namespace_type);
+
+/**
+ * __nd_driver_register() - register a region or a namespace driver
+ * @nd_drv: driver to register
+ * @owner: automatically set by nd_driver_register() macro
+ * @mod_name: automatically set by nd_driver_register() macro
+ */
+int __nd_driver_register(struct nd_device_driver *nd_drv, struct module *owner,
+			  const char *mod_name)
+{
+	struct device_driver *drv = &nd_drv->drv;
+
+	if (!nd_drv->type) {
+		pr_debug("nd: driver type flags not set\n");
+		return -EINVAL;
+	}
+
+	drv->bus = &nd_bus_type;
+	drv->owner = owner;
+	drv->mod_name = mod_name;
+
+	return driver_register(drv);
+}
+EXPORT_SYMBOL(__nd_driver_register);
 
 static const char *nfit_desc_provider(struct device *parent,
 		struct nfit_bus_descriptor *nfit_desc)
@@ -310,16 +401,79 @@ static ssize_t interleave_ways_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(interleave_ways);
 
+static ssize_t spa_index_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%d\n", nd_region->spa_index);
+}
+DEVICE_ATTR_RO(spa_index);
+
+static ssize_t nstype_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%d\n", nd_region_to_namespace_type(nd_region));
+}
+DEVICE_ATTR_RO(nstype);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
+	&dev_attr_nstype.attr,
 	&dev_attr_mappings.attr,
+	&dev_attr_spa_index.attr,
 	&dev_attr_interleave_ways.attr,
 	NULL,
 };
 
+static umode_t nd_region_visible(struct kobject *kobj, struct attribute *a, int n)
+{
+	struct device *dev = container_of(kobj, struct device, kobj);
+
+	if (a != &dev_attr_spa_index.attr)
+		return a->mode;
+
+	if (is_nd_pmem(dev))
+		return a->mode;
+
+	return 0;
+}
+
 static struct attribute_group nd_region_attribute_group = {
 	.attrs = nd_region_attributes,
+	.is_visible = nd_region_visible,
 };
+
+static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	return sprintf(buf, ND_DEVICE_MODALIAS_FMT "\n",
+			to_nd_device_type(dev));
+}
+static DEVICE_ATTR_RO(modalias);
+
+static ssize_t devtype_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	return sprintf(buf, "%s\n", dev->type->name);
+}
+DEVICE_ATTR_RO(devtype);
+
+static struct attribute *nd_device_attributes[] = {
+	&dev_attr_modalias.attr,
+	&dev_attr_devtype.attr,
+	NULL,
+};
+
+/**
+ * nd_device_attribute_group - generic attributes for regions and namespaces
+ */
+struct attribute_group nd_device_attribute_group = {
+	.attrs = nd_device_attributes,
+};
+EXPORT_SYMBOL(nd_device_attribute_group);
 
 /*
  * Retrieve the nth entry referencing this spa, for pm there may be not only
@@ -463,6 +617,7 @@ static struct attribute_group nd_mapping_attribute_group = {
 
 static const struct attribute_group *nd_region_attribute_groups[] = {
 	&nd_region_attribute_group,
+	&nd_device_attribute_group,
 	&nd_mapping_attribute_group,
 	NULL,
 };
@@ -567,6 +722,22 @@ static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 
 	return nd_region;
 }
+
+/**
+ * nd_region_wait_for_peers() - wait for all region devices to be discovered
+ * @nd_region: wait for all peers of this region to be registered
+ *
+ * Region devices are registered asynchronously.  Before proceeding to
+ * parsing the label, the ND subsystem needs to know what regions (pmem
+ * vs blk) might alias with each other.
+ */
+void nd_region_wait_for_peers(struct nd_region *nd_region)
+{
+	struct nd_bus *nd_bus = to_nd_bus(nd_region->dev.parent);
+
+	wait_for_completion(&nd_bus->registration);
+}
+EXPORT_SYMBOL(nd_region_wait_for_peers);
 
 int nd_bus_register_regions(struct nd_bus *nd_bus)
 {
