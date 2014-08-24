@@ -30,6 +30,12 @@ static int to_nd_device_type(struct device *dev)
 {
 	if (is_nd_dimm(dev))
 		return ND_DEVICE_DIMM;
+	else if (is_nd_pmem(dev))
+		return ND_DEVICE_REGION_PMEM;
+	else if (is_nd_blk(dev))
+		return ND_DEVICE_REGION_BLOCK;
+	else if (is_nd_pmem(dev->parent) || is_nd_blk(dev->parent))
+		return nd_region_to_namespace_type(to_nd_region(dev->parent));
 
 	return 0;
 }

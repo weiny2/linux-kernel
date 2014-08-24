@@ -52,10 +52,12 @@ enum nd_async_mode {
 int nd_device_register(struct device *dev, enum nd_async_mode mode);
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode);
 extern struct attribute_group nd_device_attribute_group;
+struct nd_region *to_nd_region(struct device *dev);
 struct nd_dimm *to_nd_dimm(struct device *dev);
 struct nd_region *to_nd_region(struct device *dev);
 int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_size *cmd);
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_data *cmd, size_t len);
+int nd_region_to_namespace_type(struct nd_region *nd_region);
 #endif /* __ND_H__ */
