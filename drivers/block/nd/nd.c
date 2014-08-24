@@ -363,7 +363,12 @@ static __init int nd_core_init(void)
 	rc = nd_dimm_init();
 	if (rc)
 		goto err_dimm;
+	rc = nd_region_init();
+	if (rc)
+		goto err_region;
 	return 0;
+ err_region:
+	nd_dimm_exit();
  err_dimm:
 	nd_bus_exit();
 	return rc;
@@ -373,6 +378,7 @@ static __init int nd_core_init(void)
 static __exit void nd_core_exit(void)
 {
 	WARN_ON(!list_empty(&nd_bus_list));
+	nd_region_exit();
 	nd_dimm_exit();
 	nd_bus_exit();
 }

@@ -47,12 +47,44 @@ static struct device_type nd_volatile_device_type = {
 	.release = nd_region_release,
 };
 
+bool is_nd_pmem(struct device *dev)
+{
+	return dev ? dev->type == &nd_pmem_device_type : false;
+}
+
+bool is_nd_blk(struct device *dev)
+{
+	return dev ? dev->type == &nd_block_device_type : false;
+}
+
 struct nd_region *to_nd_region(struct device *dev)
 {
 	struct nd_region *nd_region = container_of(dev, struct nd_region, dev);
 
 	WARN_ON(dev->type->release != nd_region_release);
 	return nd_region;
+}
+
+/**
+ * nd_region_to_namespace_type() - region to an integer namespace type
+ * @nd_region: region-device to interrogate
+ *
+ * This is the 'nstype' attribute of a region as well, an input to the
+ * MODALIAS for namespace devices, and bit number for a nd_bus to match
+ * namespace devices with namespace drivers.
+ */
+int nd_region_to_namespace_type(struct nd_region *nd_region)
+{
+	if (is_nd_pmem(&nd_region->dev)) {
+		if (nd_region->ndr_mappings)
+			return ND_DEVICE_NAMESPACE_PMEM;
+		else
+			return ND_DEVICE_NAMESPACE_IO;
+	} else if (is_nd_blk(&nd_region->dev)) {
+		return ND_DEVICE_NAMESPACE_BLOCK;
+	}
+
+	return 0;
 }
 
 static ssize_t size_show(struct device *dev,
@@ -82,9 +114,29 @@ static ssize_t interleave_ways_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(interleave_ways);
 
+static ssize_t spa_index_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%d\n", nd_region->spa_index);
+}
+DEVICE_ATTR_RO(spa_index);
+
+static ssize_t nstype_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%d\n", nd_region_to_namespace_type(nd_region));
+}
+DEVICE_ATTR_RO(nstype);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
+	&dev_attr_nstype.attr,
 	&dev_attr_mappings.attr,
+	&dev_attr_spa_index.attr,
 	&dev_attr_interleave_ways.attr,
 	NULL,
 };
@@ -235,6 +287,7 @@ static struct attribute_group nd_mapping_attribute_group = {
 
 static const struct attribute_group *nd_region_attribute_groups[] = {
 	&nd_region_attribute_group,
+	&nd_device_attribute_group,
 	&nd_mapping_attribute_group,
 	NULL,
 };
