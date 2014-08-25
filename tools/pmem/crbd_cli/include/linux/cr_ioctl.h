@@ -533,7 +533,7 @@ struct cr_platform_capabilites {
  * upon by the FV firmware.
  */
 struct fv_fw_cmd {
-	unsigned short id; /* The physical ID of the memory module */
+	unsigned int id; /* The physical ID of the memory module */
 	unsigned char opcode; /* The command opcode. */
 	unsigned char sub_opcode; /* The command sub-opcode. */
 	unsigned int input_payload_size; /* The size of the input payload */
