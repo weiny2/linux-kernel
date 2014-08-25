@@ -44,6 +44,8 @@
 
 /* increased for AHG */
 #define NUM_DESC 6
+/* Hardware limit - see HAS 7.3 */
+#define MAX_DESC 64
 
 #define SDMA_TXREQ_S_OK        0
 #define SDMA_TXREQ_S_SENDERROR 1

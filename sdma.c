@@ -2234,10 +2234,31 @@ static void __sdma_process_event(struct sdma_engine *sde,
 	ss->last_event = event;
 }
 
-/* helper to extend txreq */
+/*
+ * _extend_sdma_tx_descs() - helper to extend txreq
+ *
+ * This is called once the initial nominal allocation
+ * of descriptors in the sdma_txreq is exhausted.
+ *
+ * The code will bump the allocation up to the max
+ * of MAX_DESC (64) descriptors.  There doesn't seem
+ * much point in an interim step.
+ *
+ * TODO:
+ * - Add coalesce processing for > MAX_DESC descriptors
+ *
+ */
 int _extend_sdma_tx_descs(struct hfi_devdata *dd, struct sdma_txreq *tx)
 {
-	BUG_ON(1);
+	int i;
+
+	tx->descp = kmalloc(MAX_DESC * sizeof(struct sdma_desc) , GFP_ATOMIC);
+	if (!tx->descp)
+		return -ENOMEM;
+	tx->desc_limit = MAX_DESC;
+	/* copy ones already built */
+	for (i = 0; i < tx->num_desc; i++)
+		tx->descp[i] = tx->descs[i];
 	return 0;
 }
 
