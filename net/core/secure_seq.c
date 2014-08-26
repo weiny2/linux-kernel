@@ -106,7 +106,6 @@ __u32 secure_ip_id(__be32 daddr)
 	hash[3] = net_secret[15];
 
 	md5_transform(hash, net_secret);
-
 	return hash[0];
 }
 
