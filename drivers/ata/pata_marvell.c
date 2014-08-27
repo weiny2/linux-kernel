@@ -178,7 +178,18 @@ static struct pci_driver marvell_pci_driver = {
 #endif
 };
 
-module_pci_driver(marvell_pci_driver);
+/* Once asynch probe gets added use that instead of this */
+static int __init marvell_pci_init(void)
+{
+	return pci_register_driver(&marvell_pci_driver);
+}
+module_long_probe_init(marvell_pci_init);
+
+static void __exit marvell_pci_exit(void)
+{
+	pci_unregister_driver(&marvell_pci_driver);
+}
+module_long_probe_exit(marvell_pci_exit);
 
 MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("SCSI low-level driver for Marvell ATA in legacy mode");
