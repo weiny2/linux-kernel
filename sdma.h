@@ -289,7 +289,7 @@ struct sdma_desc {
 };
 
 struct sdma_txreq;
-typedef void (*callback_t)(struct sdma_txreq *, int);
+typedef void (*callback_t)(struct sdma_txreq *, int, int);
 
 /**
  * struct sdma_txreq - the sdma_txreq structure (one per packet)
@@ -317,6 +317,8 @@ struct sdma_txreq {
 	/* private: */
 	void *coalesce_buf;
 	/* private: */
+	struct iowait *wait;
+	/* private: */
 	callback_t                  complete;
 	/* private: - used in coalesce/pad processing */
 	u16                         packet_len;
@@ -337,10 +339,12 @@ struct sdma_txreq {
 };
 
 /* FIXME - remove when verbs done */
+struct sdma_engine;
 struct qib_verbs_txreq {
 	struct sdma_txreq       txreq;
 	struct qib_qp           *qp;
 	struct qib_swqe         *wqe;
+	struct sdma_engine      *sde;
 	dma_addr_t              addr;
 	u32                     dwords;
 	u16                     hdr_dwords;
@@ -505,9 +509,13 @@ static inline int sdma_running(struct sdma_engine *engine)
  * be locked so care should be taken with locking.
  *
  * The callback pointer can be NULL to avoid any callback for the packet
- * being submitted. The callback will be provided this tx and a status.  The
- * status will be one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR,
+ * being submitted. The callback will be provided this tx, a status, and a flag.
+ *
+ * The status will be one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR,
  * SDMA_TXREQ_S_ABORTED, or SDMA_TXREQ_S_SHUTDOWN.
+ *
+ * The flag, if the is the iowait had been used, indicats the iowait
+ * sdma_busy count has reached zero.
  *
  * user data portion of tlen should be precise.   The sdma_txadd_* entrances
  * will pad with a descriptor references 1 - 3 bytes when the number of bytes
@@ -521,7 +529,7 @@ static inline void sdma_txinit_ahg(
 	u8 ahg_entry,
 	u8 num_ahg,
 	u32 *ahg,
-	void (*cb)(struct sdma_txreq *, int))
+	void (*cb)(struct sdma_txreq *, int, int))
 {
 	tx->desc_limit = ARRAY_SIZE(tx->descs);
 	tx->descp = &tx->descs[0];
@@ -530,6 +538,7 @@ static inline void sdma_txinit_ahg(
 	tx->flags = flags;
 	tx->complete = cb;
 	tx->coalesce_buf = NULL;
+	tx->wait = NULL;
 	BUG_ON(tlen == 0);
 	tx->tlen = tx->packet_len = tlen;
 }
@@ -569,7 +578,7 @@ static inline void sdma_txinit(
 	struct sdma_txreq *tx,
 	u16 flags,
 	u16 tlen,
-	void (*cb)(struct sdma_txreq *, int status))
+	void (*cb)(struct sdma_txreq *, int, int))
 {
 	sdma_txinit_ahg(tx, flags, tlen, 0, 0, NULL, cb);
 }

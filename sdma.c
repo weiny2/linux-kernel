@@ -242,6 +242,10 @@ static void clear_sdma_activelist(struct sdma_engine *sde)
 	struct sdma_txreq *txp, *txp_next;
 
 	list_for_each_entry_safe(txp, txp_next, &sde->activelist, list) {
+		int drained = 0;
+		/* protect against complete modifying */
+		struct iowait *wait = txp->wait;
+
 		list_del_init(&txp->list);
 		/* FIXME - old api code fragment */
 		if (txp->flags & SDMA_TXREQ_F_FREEDESC) {
@@ -256,8 +260,13 @@ static void clear_sdma_activelist(struct sdma_engine *sde)
 		} else {
 			sdma_txclean(sde->dd, txp);
 		}
+		if (txp->wait)
+			drained = atomic_dec_and_test(
+					&txp->wait->sdma_busy);
 		if (txp->complete)
-			(*txp->complete)(txp, SDMA_TXREQ_S_ABORTED);
+			(*txp->complete)(txp, SDMA_TXREQ_S_ABORTED, drained);
+		if (drained)
+			iowait_drain_wakeup(wait);
 	}
 }
 
@@ -943,7 +952,6 @@ void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 /* FIXME - convert to new routine */
 static int sdma_make_progress(struct sdma_engine *sde)
 {
-	struct list_head *lp = NULL;
 	struct sdma_txreq *txp = NULL;
 	int progress = 0;
 	u16 hwhead;
@@ -963,8 +971,8 @@ static int sdma_make_progress(struct sdma_engine *sde)
 	 */
 
 	if (!list_empty(&sde->activelist)) {
-		lp = sde->activelist.next;
-		txp = list_entry(lp, struct sdma_txreq, list);
+		txp = list_first_entry(&sde->activelist,
+			struct sdma_txreq, list);
 		idx = txp->start_idx;
 	}
 
@@ -988,6 +996,10 @@ static int sdma_make_progress(struct sdma_engine *sde)
 		/* if now past this txp's descs, do the callback */
 		/* FIXME - old api code fragment */
 		if (txp && txp->next_descq_idx == sde->descq_head) {
+			int drained = 0;
+			/* protect against complete modifying */
+			struct iowait *wait = txp->wait;
+
 			/* remove from active list */
 			list_del_init(&txp->list);
 			/* FIXME - old api code fragment */
@@ -995,14 +1007,22 @@ static int sdma_make_progress(struct sdma_engine *sde)
 					(SDMA_TXREQ_F_FREEDESC|
 					 SDMA_TXREQ_F_FREEBUF)))
 				sdma_txclean(sde->dd, txp);
+			if (txp->wait)
+				drained = atomic_dec_and_test(
+						&txp->wait->sdma_busy);
 			if (txp->complete)
-				(*txp->complete)(txp, SDMA_TXREQ_S_OK);
+				(*txp->complete)(
+					txp,
+					SDMA_TXREQ_S_OK,
+					drained);
+			if (drained)
+				iowait_drain_wakeup(wait);
 			/* see if there is another txp */
 			if (list_empty(&sde->activelist))
 				txp = NULL;
 			else {
-				lp = sde->activelist.next;
-				txp = list_entry(lp, struct sdma_txreq, list);
+				txp = list_first_entry(&sde->activelist,
+					struct sdma_txreq, list);
 				idx = txp->start_idx;
 			}
 		}
@@ -1504,6 +1524,7 @@ static void complete_sdma_err_req(struct sdma_engine *sde,
 	tx->txreq.start_idx = 0;
 	tx->txreq.next_descq_idx = 0;
 	list_add_tail(&tx->txreq.list, &sde->activelist);
+	tx->txreq.wait = &tx->qp->s_iowait;
 	clear_sdma_activelist(sde);
 }
 
@@ -1645,6 +1666,7 @@ retry:
 	sdma_update_tail(sde, tail);
 	sde->descq_added += tx->txreq.num_desc;
 	list_add_tail(&tx->txreq.list, &sde->activelist);
+	tx->txreq.wait = &tx->qp->s_iowait;
 	goto unlock;
 
 unmap:
@@ -1790,6 +1812,7 @@ retry:
 	if (unlikely(tx->num_desc > sdma_descq_freecnt(sde)))
 		goto nodesc;
 	tail = submit_tx(sde, tx);
+	tx->wait = wait;
 	if (wait)
 		atomic_inc(&wait->sdma_busy);
 	sdma_update_tail(sde, tail);
@@ -1801,6 +1824,7 @@ unlock_noconn:
 		atomic_inc(&wait->sdma_busy);
 	tx->start_idx = tx->next_descq_idx = 0;
 	list_add_tail(&tx->list, &sde->activelist);
+	tx->wait = wait;
 	if (wait) {
 		wait->tx_count++;
 		wait->count += tx->num_desc;
@@ -1815,7 +1839,10 @@ nodesc:
 		sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
 	if (busycb && wait)
 		busycb(tx, wait);
-	ret = -EBUSY;
+	if (wait && wait->sleep)
+		ret = wait->sleep(wait, tx);
+	else
+		ret = -EBUSY;
 	goto unlock;
 }
 
@@ -1873,6 +1900,7 @@ retry:
 		}
 		list_del_init(&tx->list);
 		tail = submit_tx(sde, tx);
+		tx->wait = wait;
 		if (wait)
 			atomic_inc(&wait->sdma_busy);
 	}
@@ -1883,6 +1911,7 @@ unlock:
 	spin_unlock_irqrestore(&sde->lock, flags);
 	return ret;
 unlock_noconn:
+	tx->wait = wait;
 	if (wait)
 		atomic_inc(&wait->sdma_busy);
 	tx->start_idx = tx->next_descq_idx = 0;
@@ -1901,7 +1930,10 @@ nodesc:
 		sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
 	if (busycb && wait)
 		busycb(tx, wait);
-	ret = -EBUSY;
+	if (wait && wait->sleep)
+		ret = wait->sleep(wait, tx);
+	else
+		ret = -EBUSY;
 	goto update_tail;
 }
 

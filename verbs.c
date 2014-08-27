@@ -919,7 +919,7 @@ void qib_put_txreq(struct qib_verbs_txreq *tx)
 /*
  * This is called with ppd->sdma_lock held.
  */
-static void sdma_complete(struct sdma_txreq *cookie, int status)
+static void sdma_complete(struct sdma_txreq *cookie, int status, int drained)
 {
 	struct qib_verbs_txreq *tx =
 		container_of(cookie, struct qib_verbs_txreq, txreq);
@@ -940,10 +940,14 @@ static void sdma_complete(struct sdma_txreq *cookie, int status)
 		}
 		qib_rc_send_complete(qp, hdr);
 	}
-	if (atomic_dec_and_test(&qp->s_iowait.sdma_busy)) {
-		if (qp->state == IB_QPS_RESET)
-			wake_up(&qp->wait_dma);
-		else if (qp->s_flags & QIB_S_WAIT_DMA) {
+	if (drained) {
+		/*
+		 * This happens when the send engine notes
+		 * a QP in the error state and cannot
+		 * do the flush work until that QP's
+		 * sdma work has finished.
+		 */
+		if (qp->s_flags & QIB_S_WAIT_DMA) {
 			qp->s_flags &= ~QIB_S_WAIT_DMA;
 			qib_schedule_send(qp);
 		}
@@ -2122,6 +2126,6 @@ void qib_schedule_send(struct qib_qp *qp)
 			to_iport(qp->ibqp.device, qp->port_num);
 		struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 
-		queue_work(ppd->qib_wq, &qp->s_iowait.iowork);
+		iowait_schedule(&qp->s_iowait, ppd->qib_wq);
 	}
 }

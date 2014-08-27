@@ -36,6 +36,7 @@
 
 #include <linux/list.h>
 #include <linux/workqueue.h>
+#include <linux/sched.h>
 
 /*
  * typedef (*restart_t)() - restart callback
@@ -51,6 +52,7 @@ struct sdma_txreq;
  * @sleep: nospace callback
  * @wakeup: space callback
  * @iowork: workqueue overhead
+ * @wait_dma: wait for sdma_busy == 0
  * @sdma_busy: # of packets inflight
  * @count: total number of descriptors in tx_head'ed list
  * @tx_limit: limit for overflow queuing
@@ -69,14 +71,17 @@ struct sdma_txreq;
  *
  * Both potentially have locks help
  * so sleeping is not allowed.
+ *
+ * The wait_dma member along with the iow
  */
 
 struct iowait {
 	struct list_head list;
 	struct list_head tx_head;
-	void (*sleep)(struct iowait *wait, struct sdma_txreq *tx);
+	int (*sleep)(struct iowait *wait, struct sdma_txreq *tx);
 	void (*wakeup)(struct iowait *wait, int reason);
 	struct work_struct iowork;
+	wait_queue_head_t wait_dma;
 	atomic_t sdma_busy;
 	u32 count;
 	u32 tx_limit;
@@ -102,13 +107,14 @@ static inline void iowait_init(
 	struct iowait *wait,
 	u32 tx_limit,
 	void (*func)(struct work_struct *work),
-	void (*sleep)(struct iowait *wait, struct sdma_txreq *tx),
+	int (*sleep)(struct iowait *wait, struct sdma_txreq *tx),
 	void (*wakeup)(struct iowait *wait, int reason))
 {
 	wait->count = 0;
 	INIT_LIST_HEAD(&wait->list);
 	INIT_LIST_HEAD(&wait->tx_head);
 	INIT_WORK(&wait->iowork, func);
+	init_waitqueue_head(&wait->wait_dma);
 	atomic_set(&wait->sdma_busy, 0);
 	wait->tx_limit = tx_limit;
 	wait->sleep = sleep;
@@ -125,6 +131,31 @@ static inline void iowait_schedule(
 	struct workqueue_struct *wq)
 {
 	queue_work(wq, &wait->iowork);
+}
+
+/**
+ * iowait_sdma_drain() - wait for DMAs to drain
+ *
+ * @wait: iowait structure
+ *
+ * This will delay until the iowait sdmas have
+ * completed.
+ */
+static inline void iowait_sdma_drain(struct iowait *wait)
+{
+	wait_event(wait->wait_dma, !atomic_read(&wait->sdma_busy));
+}
+
+/**
+ * iowait_drain_wakeup() - trigger iowait_drain() waiter
+ *
+ * @wait: iowait structure
+ *
+ * This will trigger any waiters.
+ */
+static inline void iowait_drain_wakeup(struct iowait *wait)
+{
+	wake_up(&wait->wait_dma);
 }
 
 #endif

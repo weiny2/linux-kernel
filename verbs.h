@@ -544,7 +544,6 @@ struct qib_qp {
 	struct timer_list s_timer;
 
 	struct iowait s_iowait;
-	wait_queue_head_t wait_dma;
 
 	struct qib_sge r_sg_list[0] /* verified SGEs */
 		____cacheline_aligned_in_smp;

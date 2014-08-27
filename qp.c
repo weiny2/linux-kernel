@@ -54,7 +54,7 @@ module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
 static inline void flush_tx_list(struct qib_qp *qp);
-static void iowait_sleep(struct iowait *wait, struct sdma_txreq *tx);
+static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx);
 static void iowait_wakeup(struct iowait *wait, int reason);
 
 static inline unsigned mk_qpn(struct hfi_qpn_table *qpt,
@@ -745,8 +745,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			/* Stop the sending work queue and retry timer */
 			cancel_work_sync(&qp->s_iowait.iowork);
 			del_timer_sync(&qp->s_timer);
-			wait_event(qp->wait_dma,
-				!atomic_read(&qp->s_iowait.sdma_busy));
+			iowait_sdma_drain(&qp->s_iowait);
 			flush_tx_list(qp);
 			remove_qp(dev, qp);
 			wait_event(qp->wait, !atomic_read(&qp->refcount));
@@ -1112,7 +1111,6 @@ struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
 		spin_lock_init(&qp->r_rq.lock);
 		atomic_set(&qp->refcount, 0);
 		init_waitqueue_head(&qp->wait);
-		init_waitqueue_head(&qp->wait_dma);
 		init_timer(&qp->s_timer);
 		qp->s_timer.data = (unsigned long)qp;
 		INIT_LIST_HEAD(&qp->rspwait);
@@ -1235,7 +1233,7 @@ int qib_destroy_qp(struct ib_qp *ibqp)
 		spin_unlock_irq(&qp->s_lock);
 		cancel_work_sync(&qp->s_iowait.iowork);
 		del_timer_sync(&qp->s_timer);
-		wait_event(qp->wait_dma, !atomic_read(&qp->s_iowait.sdma_busy));
+		iowait_sdma_drain(&qp->s_iowait);
 		flush_tx_list(qp);
 		remove_qp(dev, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
@@ -1367,9 +1365,48 @@ void qib_qp_wakeup(struct qib_qp *qp, u32 flag)
 		wake_up(&qp->wait);
 }
 
-static void iowait_sleep(struct iowait *wait, struct sdma_txreq *tx)
+static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx)
 {
-	BUG_ON(1);
+	struct qib_verbs_txreq *tx =
+		container_of(stx, struct qib_verbs_txreq, txreq);
+	struct qib_qp *qp;
+	unsigned long flags;
+	int ret = 0;
+
+	qp = tx->qp;
+
+	spin_lock_irqsave(&qp->s_lock, flags);
+	if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) {
+		struct qib_ibdev *dev;
+
+		/*
+		 * If we couldn't queue the DMA request, save the info
+		 * and try again later rather than destroying the
+		 * buffer and undoing the side effects of the copy.
+		 */
+		/* FIXME - make a common routine? */
+		list_add_tail(&stx->list, &wait->tx_head);
+		dev = &tx->sde->dd->verbs_dev;
+		spin_lock(&dev->pending_lock);
+		if (list_empty(&qp->s_iowait.list)) {
+			struct qib_ibport *ibp =
+				to_iport(qp->ibqp.device, qp->port_num);
+
+			ibp->n_dmawait++;
+			qp->s_flags |= QIB_S_WAIT_DMA_DESC;
+			list_add_tail(&qp->s_iowait.list, &tx->sde->dmawait);
+			trace_hfi_qpsleep(qp, QIB_S_WAIT_DMA_DESC);
+			atomic_inc(&qp->refcount);
+		}
+		spin_unlock(&dev->pending_lock);
+		qp->s_flags &= ~QIB_S_BUSY;
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		ret = -EBUSY;
+	} else {
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		qib_put_txreq(tx);
+	}
+	return ret;
 }
 
 static void iowait_wakeup(struct iowait *wait, int reason)
