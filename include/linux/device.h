@@ -26,6 +26,7 @@
 #include <linux/atomic.h>
 #include <linux/ratelimit.h>
 #include <linux/uidgid.h>
+#include <linux/kthread.h>
 #include <asm/device.h>
 
 struct device;
@@ -1260,5 +1261,76 @@ static void __exit __driver##_exit(void) \
 	__unregister(&(__driver) , ##__VA_ARGS__); \
 } \
 module_exit(__driver##_exit);
+
+#ifndef MODULE
+
+#define module_long_probe_init(x)      __initcall(x);
+#define module_long_probe_exit(x)      __exitcall(x);
+
+#else
+/*
+ * Linux device drivers must strive to handle driver initialization
+ * within less than 30 seconds, init simply should never take
+ * more than 30 seecond. Unfortunatley current kernels bundle
+ * processing both init and probe together serially on buses
+ * that do autoprobe, which is most buses. This means restrictions
+ * on init right now for 30 seconds will also restrict probe to
+ * 30 seconds. This is a problem and future kernels will handle
+ * this by lettin drivers specify if they need asynch probe.
+ *
+ * This solution is kabi safe and can be used for older kernels,
+ * it asynchs both init and probe.
+ *
+ * module init will return immediately and since we are not waiting
+ * for the kthread to end on init we won't be able to inform userspace
+ * of the result of the full init / probe sequence.
+ *
+ * Once asynch probing support is added to the kernel we can remove
+ * this and driver's using this should be modified to use asynch
+ * probe.
+ */
+#define module_long_probe_init(initfn)				\
+	static struct task_struct *__init_thread;		\
+	static int _long_probe_##initfn(void *arg)		\
+	{							\
+		return initfn();				\
+	}							\
+	static __init int __long_probe_##initfn(void)		\
+	{							\
+		__init_thread = kthread_create(_long_probe_##initfn,\
+					       NULL,		\
+					       #initfn);	\
+		if (IS_ERR(__init_thread))			\
+			return PTR_ERR(__init_thread);		\
+		/*						\
+		 * callback won't check kthread_should_stop()	\
+		 * before bailing, so we need to protect it	\
+		 * before running it.				\
+		 */						\
+		get_task_struct(__init_thread); 		\
+		wake_up_process(__init_thread);			\
+		return 0;					\
+	}							\
+	module_init(__long_probe_##initfn);
+
+/* To be used by modules that require module_long_probe_init() */
+#define module_long_probe_exit(exitfn)				\
+	static __exit void __long_probe_##exitfn(void)		\
+	{							\
+		int err;					\
+		/*						\
+		 * exitfn() will not be run if the driver's	\
+		 * real probe which is run on the kthread	\
+		 * failed for whatever reason, this will	\
+		 * wait for it to end.				\
+		 */						\
+		err = kthread_stop(__init_thread);		\
+		if (!err)					\
+			exitfn();				\
+		put_task_struct(__init_thread);	 		\
+	}							\
+	module_exit(__long_probe_##exitfn);
+
+#endif /* MODULE */
 
 #endif /* _DEVICE_H_ */
