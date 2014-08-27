@@ -6274,5 +6274,6 @@ static void __exit cxgb4_cleanup_module(void)
 	destroy_workqueue(workq);
 }
 
-module_init(cxgb4_init_module);
-module_exit(cxgb4_cleanup_module);
+/* Once asynch probe gets added use that instead of this */
+module_long_probe_init(cxgb4_init_module);
+module_long_probe_exit(cxgb4_cleanup_module);
