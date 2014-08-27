@@ -5447,5 +5447,6 @@ mptsas_exit(void)
 	mpt_deregister(mptsasDeviceResetCtx);
 }
 
-module_init(mptsas_init);
-module_exit(mptsas_exit);
+/* Once asynch probe gets added use that instead of this */
+module_long_probe_init(mptsas_init);
+module_long_probe_exit(mptsas_exit);
