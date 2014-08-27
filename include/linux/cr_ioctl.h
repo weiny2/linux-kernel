@@ -568,12 +568,13 @@ struct cr_pt_payload_identify_dimm {
 	__u8 reserved;
 	__le16 nbw; /* Number of block windows */
 	__le16 nwfa; /* Number write flush addresses */
+	__le64 wfas; /* write flush address start */
 	__le32 obmcr; /* Offset of block mode control region */
 	__le32 rc; /* raw capacity (volatile+persistent in 4KB multiples*/
 	char mf[CR_MFR_LEN]; /* ASCII Manufacturer */
 	char sn[CR_SN_LEN]; /* ASCII Serial Number */
 	char mn[CR_MODELNUM_LEN]; /* ASCII Model Number */
-	__u8 resrvd[43]; /* Reserved */
+	__u8 resrvd[35]; /* Reserved */
 } __attribute__((packed));
 
 /*
