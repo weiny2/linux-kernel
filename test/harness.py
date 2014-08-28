@@ -58,7 +58,7 @@ test_list = [
     # Load an aleady built driver on 2 nodes and bring the links up
     { "test_name" : "ModuleLoad",
       "test_exe" : "LoadModule.py",
-      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --simics",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
       "type" : "default,",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
@@ -349,6 +349,12 @@ for test in tests_to_run:
                 processed_args += arg + " "
             if simics == True:
                 processed_args += "--simics"
+
+            # We may need to pass on some module parameters too
+            modparms = test_info.get_mod_parms()
+            if modparms != "":
+                processed_args += " --modparm " + modparms
+
             RegLib.test_log(5, "Running test: " + curr_name)
             RegLib.test_log(5, "Raw Test args: " + curr_args)
             RegLib.test_log(5, "Processed Test args: " + processed_args)
@@ -371,15 +377,18 @@ print "-------------"
 print "Test Summary:"
 print "-------------"
 
+final_status = 0
 if len(warnings):
     for warning in warnings:
         print "[WARN]", warning
 if len(tests_failed):
     for failure in tests_failed:
         print "[FAIL]", failure
+        final_status = 255
 if len(tests_passed):
     for passed in tests_passed:
         print "[PASS]", passed
 print ""
 
+sys.exit(final_status)
 

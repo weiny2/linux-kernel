@@ -13,6 +13,7 @@ import time
 import random
 import struct
 import hashlib
+import fcntl
 from ctypes import *
 from optparse import OptionParser
 from datetime import datetime
@@ -234,10 +235,12 @@ class HostInfo:
 
         return None #error if we got to here
 
-    def send_ssh(self, cmd, buffered=1):
+    def send_ssh(self, cmd, buffered=1, timeout=0):
         """ Send an SSH command. We may need to add a timeout mechanism
             buffered mode will save output and return it. Non buffered mode
-            will display the output on the screen and only return a status"""
+            will display the output on the screen and only return a status.
+            Passing a timeout value will cause the command to run then return
+            after a set amount of time"""
 
         cmd = "'" + cmd + "'"
         test_log(10, "Sending CMD to [" + self.name + "|" +
@@ -278,7 +281,37 @@ class HostInfo:
         ssh = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT)
 
-        if buffered:
+        if timeout:
+            # Note that this leaves the command running it is up to the caller
+            # to send another ssh command to kill the proc if needed.
+            start = time.time()
+            test_log(0, "Waiting for %d seconds for cmd to run" % timeout)
+            output = ""
+            fd = ssh.stdout.fileno()
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            while True:
+                # Read a character
+                ch = ''
+                try:    ch = ssh.stdout.read(1)
+                except: pass
+                if ch != '':
+                    output += ch
+
+                # Make sure we haven't timed out yet
+                now = time.time()
+                duration = int(now - start)
+                if duration >= timeout:
+                    break
+
+            test_log(0, "Done waiting. Returning.")
+            lines = output.split('/n')
+            for line in lines:
+                line += "\n"
+            # Now go ahead and return the output
+            return (0, lines)
+
+        elif buffered:
             result = ssh.wait()
             # Now that we have the data go ahead and dump it on the screen before
             # returning the list of lines. Call off to our version of chomp to strip
@@ -311,6 +344,7 @@ class TestInfo:
     kbuild_dir = None
     simics = False
     mpiverbs = False
+    paramdict = None
 
     def get_hfi_src(self):
         return self.hfi_src
@@ -376,7 +410,7 @@ class TestInfo:
                           help="Optional module paramters to pass "
                                + "Like: param1=X param2=Y "
                                + "or colon separated for per host like: "
-                               + "parm1 = X param2=Y : parm1 = Z")
+                               + "parm1=X param2=Y : parm1=Z")
         parser.add_option("--args", dest="extra_args",
                           help="Optional params to pass to tests as a comma sep list",
                           metavar="LIST",
@@ -605,6 +639,29 @@ class TestInfo:
 
     def get_mod_parms(self):
         return self.module_params
+
+    def get_mod_params_dict(self, host=None):
+        if not self.paramdict:
+            hostnames = [x.get_name() for x in self.nodelist]
+            self.paramdict = dict.fromkeys(hostnames, None)
+            if ':' in self.module_params:
+                per_host = [x.strip() for x in self.module_params.split(':') if x]
+            else:
+                per_host = [self.module_params] * len(hostnames) if self.module_params else []
+            for idx in range(len(hostnames)):
+                self.paramdict[hostnames[idx]] = {}
+                if len(per_host) and idx < len(per_host):
+                    for opt in per_host[idx].split():
+                        try:
+                            k, v = opt.strip().split('=')
+                            self.paramdict[hostnames[idx]][k] = v
+                        except ValueError:
+                            continue
+        if host:
+            if host in self.paramdict :
+                return self.paramdict[host]
+            else: return {}
+        return self.paramdict
 
     def parse_extra_args(self):
         list_args = self.extra_args.split(",")

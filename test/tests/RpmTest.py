@@ -63,7 +63,7 @@ def install_rpm(test_info, host, rpms):
         if test_info.is_simics():
             rpm = "/host/%s" % rpm
         RegLib.test_log(0,"Installing RPM: %s" % rpm)
-        cmd = "rpm -ivh --replacefiles --replacepkgs %s" % rpm
+        cmd = "rpm -Uvh --replacefiles --replacepkgs %s" % rpm
         err = host.send_ssh(cmd, 0)
         if err:
             RegLib.test_fail("Could not install RPM %s" % rpm)

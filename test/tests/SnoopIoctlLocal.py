@@ -21,34 +21,19 @@ IOCTL_SET_LINK_STATE_EXTRA = 3225426823
 def get_link_state(val):
     val = val & 0xF
 
-    #/* DCC_CFG_PORT_CONFIG logical link states */
-    #define WFR_LSTATE_DOWN    0x1
-    #define WFR_LSTATE_INIT    0x2
-    #define WFR_LSTATE_ARMED   0x3
-    #define WFR_LSTATE_ACTIVE  0x4
-
     if val ==  0x1:
-        return "WFR_LSTATE_DOWN"
+        return "IB_PORT_DOWN"
     elif val == 0x2:
-        return "WFR_LSTATE_INIT"
+        return "IB_PORT_INIT"
     elif val == 0x3:
-        return "WFR_LSTATE_ARMED"
+        return "IB_PORT_ARMED"
     elif val == 0x4:
-        return "WFR_LSTATE_ACTIVE"
+        return "IB_PORT_ACTIVE"
     else:
         RegLib.test_fail("Unknown link state")
 
 def get_phys_link_state(val):
     val = (val >> 4) & 0xF
-
-    #define IB_PORTPHYSSTATE_NO_CHANGE        0
-    #define IB_PORTPHYSSTATE_SLEEP            1
-    #define IB_PORTPHYSSTATE_POLL             2
-    #define IB_PORTPHYSSTATE_DISABLED         3
-    #define IB_PORTPHYSSTATE_CFG_TRAIN        4
-    #define IB_PORTPHYSSTATE_LINKUP           5
-    #define IB_PORTPHYSSTATE_LINK_ERR_RECOVER 6
-    #define IB_PORTPHYSSTATE_PHY_TEST         7
 
     if val == 0:
         return "IB_PORTPHYSSTATE_NO_CHANGE"
@@ -70,31 +55,37 @@ def get_phys_link_state(val):
         RegLib.test_fail("Unknown phys state %s" % val)
 
 def is_active(link, phys):
-    if (link == "WFR_LSTATE_ACTIVE") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
+    if (link == "IB_PORT_ACTIVE") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
         return True
     else:
         return False
 
 def is_init(link, phys):
-    if (link == "WFR_LSTATE_INIT") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
+    if (link == "IB_PORT_INIT") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
         return True
     else:
         return False
 
 def is_armed(link, phys):
-    if (link == "WFR_LSTATE_ARMED") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
+    if (link == "IB_PORT_ARMED") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
         return True
     else:
         return False
 
 def is_down(link, phys):
-    if (link == "WFR_LSTATE_DOWN") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
+    if (link == "IB_PORT_DOWN") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
         return True
     else:
         return False
 
 def is_polling(link, phys):
-    if (link == "WFR_LSTATE_DOWN") and (phys == "IB_PORTPHYSSTATE_POLL"):
+    if phys == "IB_PORTPHYSSTATE_POLL":
+        return True
+    else:
+        return False
+
+def is_training(link, phys):
+    if phys == "IB_PORTPHYSSTATE_CFG_TRAIN":
         return True
     else:
         return False
@@ -180,24 +171,38 @@ def get_link_phys_state_extra(file_obj):
         (link, phys) = parse_complex_ioctl(info)
         return (link, phys)
 
-def change_port_state(file_obj, ioctl, link, phys):
-    RegLib.test_log(0, "Modifying port to %s|%s" % (link, phys))
+def change_port_state(file_obj, ioctl, logical, phys):
+    RegLib.test_log(0, "Modifying port to %s|%s" % (logical, phys))
+
+    if logical == "IB_PORT_NOP": logical_val = 0
+    elif logical == "IB_PORT_DOWN": logical_val = 1
+    elif logical == "IB_PORT_INIT": logical_val = 2
+    elif logical == "IB_PORT_ARMED": logical_val = 3
+    elif logical == "IB_PORT_ACTIVE": logical_val = 4
+    else: RegLib.test_fail("Unknown logical state")
+
+    if phys == "IB_PORTPHYSSTATE_NO_CHANGE": phys_val = 0
+    elif phys == "IB_PORTPHYSSTATE_SLEEP": phys_val = 1
+    elif phys == "IB_PORTPHYSSTATE_POLL": phys_val = 2
+    elif phys == "IB_PORTPHYSSTATE_DISABLED": phys_val = 3
+    elif phys == "IB_PORTPHYSSTATE_LINKUP": phys_val = 5
+    else: RegLib.test_fail("Unknown Physical state")
 
     link_settings = create_hfi_link_info()
 
     link_phys = 0
-    link_phys = phys
+    link_phys = phys_val
     link_phys = link_phys << 4
-    link_phys = link_phys | link
+    link_phys = link_phys | logical_val
     RegLib.test_log(0, "Setting state to 0x%x" % link_phys)
 
     link_settings[9] = link_phys
 
     info = send_complex_ioctl(file_obj, ioctl, link_settings)
 
-    (link, phys) = parse_complex_ioctl(info)
+    (rlink, rphys) = parse_complex_ioctl(info)
 
-    return (link, phys)
+    return (rlink, rphys)
 
 def check_sanity(file_obj, link, phys):
     (link_check, phys_check) = get_link_phys_state(file_obj)
@@ -211,7 +216,7 @@ def check_sanity(file_obj, link, phys):
 def arm(file_obj):
     ioctl = IOCTL_SET_LINK_STATE_EXTRA
     RegLib.test_log(0,"Arming...")
-    (link, phys) = change_port_state(file_obj, ioctl, 0x3, 2)
+    (link, phys) = change_port_state(file_obj, ioctl, "IB_PORT_ARMED", "IB_PORTPHYSSTATE_NO_CHANGE")
     if not is_armed(link, phys):
         RegLib.test_fail("Failed to bring to armed state")
     check_sanity(file_obj, link, phys)
@@ -219,7 +224,7 @@ def arm(file_obj):
 def make_active(file_obj):
     ioctl = IOCTL_SET_LINK_STATE_EXTRA
     RegLib.test_log(0, "Bringing to active...")
-    (link, phys) = change_port_state(file_obj, ioctl, 0x4, 2)
+    (link, phys) = change_port_state(file_obj, ioctl, "IB_PORT_ACTIVE", "IB_PORTPHYSSTATE_NO_CHANGE")
     if not is_active(link, phys):
         RegLib.test_fail("Failed to bring to active state")
     check_sanity(file_obj, link, phys)
@@ -227,12 +232,14 @@ def make_active(file_obj):
 def bring_down(file_obj):
     ioctl = IOCTL_SET_LINK_STATE_EXTRA
     RegLib.test_log(0, "Bringing port down...")
-    (link, phys) = change_port_state(file_obj, int(IOCTL_SET_LINK_STATE_EXTRA), 0x1, 2)
+    (link, phys) = change_port_state(file_obj, int(IOCTL_SET_LINK_STATE_EXTRA), "IB_PORT_DOWN", "IB_PORTPHYSSTATE_POLL")
+    RegLib.test_log(0, "After sending port down ioctl: link %s phys %s" % (link, phys))
     attempts = 0
     while attempts < 60:
         if not is_init(link, phys):
-            if is_polling(link, phys):
-                RegLib.test_log(0, "Down but polling, check again in 1 second")
+            RegLib.test_log(0, "Not in init: %s | %s" % (link, phys))
+            if is_polling(link, phys) or is_training(link, phys):
+                RegLib.test_log(0, "Down but polling or training, check again in 1 second")
                 time.sleep(1)
                 attempts += 1
                 (link, phys) = get_link_phys_state_extra(file_obj)
@@ -244,6 +251,32 @@ def bring_down(file_obj):
         RegLib.test_fail("Failed to bring port it down after 60 seconds")
 
     check_sanity(file_obj, link, phys)
+
+def disable(file_obj):
+    ioctl = IOCTL_SET_LINK_STATE_EXTRA
+    RegLib.test_log(0, "Disabling...")
+    (link, phys) = change_port_state(file_obj, ioctl, "IB_PORT_NOP", "IB_PORTPHYSSTATE_DISABLED")
+    check_sanity(file_obj, link, phys)
+
+def show_sys_state():
+    RegLib.test_log(0, "----------------------------")
+    RegLib.test_log(0, "Dumping logical state from sysfs")
+    os.system("cat /sys/class/infiniband/hfi0/ports/1/state")
+    RegLib.test_log(0, "Dumping phyhsical state from sysfs")
+    os.system("cat /sys/class/infiniband/hfi0/ports/1/phys_state")
+    RegLib.test_log(0, "----------------------------")
+
+def get_crc_errors(hfidiags):
+    # adapted from Dean's script
+
+    RegLib.test_log(0, "Dumping CRC error count")
+    os.system("%s -t -e \"w DC8051_CFG_HOST_CMD_0 0x0100000000000500\"" % hfidiags)
+    os.system("%s -t -e \"w DC8051_CFG_HOST_CMD_0 0x0100000000000501\"" % hfidiags)
+    os.system("%s -t -e \"w DC8051_CFG_CSR_ACCESS_SEL.LCB 1\"" % hfidiags)
+    os.system("%s -t -e \"r LCB_ERR_INFO_TOTAL_CRC_ERR\"" % hfidiags)
+    os.system("%s -t -e \"w DC8051_CFG_CSR_ACCESS_SEL.LCB 0\"" % hfidiags)
+    os.system("%s -t -e \"w DC8051_CFG_HOST_CMD_0 0x0200000000000500\"" % hfidiags)
+    os.system("%s -t -e \"w DC8051_CFG_HOST_CMD_0 0x0200000000000501\"" % hfidiags)
 
 def main():
     SNOOP_MODE = os.O_RDWR
@@ -260,21 +293,63 @@ def main():
 
     get_version(file_obj)
 
-    # Make sure link is physically up not diabled but in init state
+    test_info = RegLib.TestInfo()
+    diags_path = test_info.get_diag_lib()
+    hfidiags = "hfidiags"
+    if diags_path != "DEFAULT":
+        hfidiags = diags_path + "/hfidiags/hfidiags"
+    RegLib.test_log(0, "Using %s for hfidiags" % hfidiags)
+    
+
+    show_sys_state()
+    get_crc_errors(hfidiags)
+
+    # Make sure link is physically up not disabled but in init state
     (link, phys) = get_link_phys_state(file_obj)
-    if is_active(link, phys):
-        RegLib.test_log(0,"Link is up, needs to be in init to start test")
-        bring_down(file_obj)
-    else:
-        (link, phys) = get_link_phys_state(file_obj)
-        if not is_init(link,phys):
-            RegLib.test_fail("Not in init state can not continue")
 
+    # First make sure we can go from init to active. If not in init bring it down
+    if not is_init(link,phys):
+        RegLib.test_log(0,"Not in init state bringing down to polling")
+        bring_down(file_obj) 
+        get_crc_errors(hfidiags)
+        show_sys_state()
+    RegLib.test_log(0, "Bringing port up")
     arm(file_obj)
-
+    get_crc_errors(hfidiags)
+    show_sys_state()
     make_active(file_obj)
-
+    get_crc_errors(hfidiags)
+    show_sys_state()
+    
+    # Now make sure we can bounce the port, sort of redundant with the above
+    RegLib.test_log(0, "Bouncing port")
     bring_down(file_obj)
+    get_crc_errors(hfidiags)
+    show_sys_state()
+    arm(file_obj)
+    get_crc_errors(hfidiags)
+    show_sys_state()
+    make_active(file_obj)
+    get_crc_errors(hfidiags)
+    show_sys_state()
+
+    # Now do something more sinister and disable the port
+    RegLib.test_log(0, "Disabling the port")
+    disable(file_obj)
+    get_crc_errors(hfidiags)
+    show_sys_state()
+
+    # Ok port is disabled now lets bring it back to sanity land
+    RegLib.test_log(0, "Bringing port back up")
+    bring_down(file_obj)
+    get_crc_errors(hfidiags)
+    show_sys_state()
+    arm(file_obj)
+    get_crc_errors(hfidiags)
+    show_sys_state()
+    make_active(file_obj)
+    get_crc_errors(hfidiags)
+    show_sys_state()
 
     RegLib.test_pass("Completed!")
 
