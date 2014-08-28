@@ -109,6 +109,21 @@ typedef __u32 hfi_ptl_uid_t;
 #define IN  /* input argument */
 #define OUT /* output argument */
 
+#define HFI_CQ_TX 0
+#define HFI_CQ_RX 1
+
+struct hfi_cq_assign_args {
+	OUT __u8 auth_idx;
+	OUT __u16 cq_idx;
+	OUT __u64 cq_tx_token;
+	OUT __u64 cq_rx_token;
+	OUT __u64 cq_head_token;
+};
+
+struct hfi_cq_release_args {
+	IN  __u16 cq_idx;
+};
+
 struct hfi_ptl_attach_args {
 	IN  __u32 api_version;  /* HFI_USER_SWVERSION */
 	IN  hfi_ptl_pid_t pid;

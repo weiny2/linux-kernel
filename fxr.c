@@ -35,8 +35,14 @@
 #include <linux/module.h>
 #include "hfi.h"
 #include "fxr.h"
+#include "include/fxr/fxr_fast_path_defs.h"
+#include "include/fxr/fxr_tx_ci_csrs.h"
+#include "include/fxr/fxr_rx_ci_csrs.h"
 #include "include/fxr/fxr_rx_hiarb_defs.h"
 #include "include/fxr/fxr_rx_hiarb_csrs.h"
+
+static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
+			       void *head_base);
 
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -60,6 +66,9 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	cleanup_interrupts(dd);
 
 	/* free host memory for FXR and Portals resources */
+	if (dd->cq_head_base)
+		free_pages((unsigned long)dd->cq_head_base,
+			   get_order(dd->cq_head_size));
 	if (dd->ptl_pid_user)
 		free_pages((unsigned long)dd->ptl_pid_user,
 			   get_order(dd->ptl_pid_user_size));
@@ -92,7 +101,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	struct hfi_devdata *dd;
 	unsigned long len;
 	resource_size_t addr;
-	int ret;
+	int i, ret;
 	rx_cfg_hiarb_pcb_base_t pcb_base = {.val = 0};
 
 	dd = hfi_alloc_devdata(pdev);
@@ -145,6 +154,18 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		goto err_post_alloc;
 	}
 
+	/* CQ head (read) indices - 16 KB */
+	dd->cq_head_size = (HFI_CQ_COUNT * HFI_CQ_HEAD_OFFSET);
+	dd->cq_head_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
+						    get_order(dd->cq_head_size));
+	if (!dd->cq_head_base) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
+	/* now configure CQ head addresses */
+	for (i = 0; i < HFI_CQ_COUNT; i++)
+		hfi_cq_head_config(dd, i, dd->cq_head_base);
+
 	/* write PCB address in FXR */
 	pcb_base.base_address = virt_to_phys(dd->ptl_control);
 	pcb_base.physical = 1;
@@ -157,6 +178,13 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->trig_op_min_entries = HFI_PSB_TRIG_MIN_COUNT;
 	dd->ptl_state_min_size = HFI_PSB_MIN_TOTAL_MEM;
 
+	/* TX and RX command queues */
+	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_ENTRY;
+	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_ENTRY;
+	memset(&dd->cq_pair, HFI_PTL_PID_NONE,
+	       sizeof(hfi_ptl_pid_t) * HFI_CQ_COUNT);
+	spin_lock_init(&dd->cq_lock);
+
 	ret = setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
 	if (ret)
 		goto err_post_alloc;
@@ -167,4 +195,76 @@ err_post_alloc:
 	hfi_pci_dd_free(dd);
 
 	return ERR_PTR(ret);
+}
+
+/* Write CSR address for CQ head index, maintained by FXR */
+static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
+			       void *head_base)
+{
+	u32 offset;
+	u64 paddr;
+	RX_CQ_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
+
+	paddr = virt_to_phys(HFI_CQ_HEAD_ADDR(head_base, cq_idx));
+	cq_head.VALID = 1;
+	cq_head.PA = 1;
+	cq_head.HD_PTR_HOST_ADDR = paddr;
+	offset = FXR_RX_CQ_HEAD_UPDATE_ADDR + (cq_idx * 8);
+	write_csr(dd, offset, cq_head.val);
+}
+
+/* Disable pair of CQs and reset flow control.
+ * Reset of flow control is needed since CQ might have only had
+ * a partial command or slot written by errant user.
+ */
+void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
+{
+	/* write 0 to disable CSR (enable=0) */
+	write_csr(dd, FXR_TX_CQ_CONFIG_CSR + (cq_idx * 8), 0);
+	write_csr(dd, FXR_RX_CQ_CONFIG_CSR + (cq_idx * 8), 0);
+
+	/* TODO - Drain or Reset CQ */
+}
+
+/* Write CSRs to configure a TX and RX Command Queue */
+void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
+		   u8 *auth_idx)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	int i;
+	u32 offset;
+	TX_CQ_AUTHENTICATION_CSR_t cq_auth = {.val = 0};
+	TX_CQ_CONFIG_CSR_t tx_cq_config = {.val = 0};
+	RX_CQ_CONFIG_CSR_t rx_cq_config = {.val = 0};
+
+	/* write AUTH tuples */
+	offset = FXR_TX_CQ_AUTHENTICATION_CSR + (cq_idx * 8);
+	cq_auth.SRANK = ud->srank;
+	if (ud->auth_mask != 0) {
+		for (i = 0; i < HFI_NUM_PTL_AUTH_TUPLES; i++) {
+			if (ud->auth_mask & (1 << i)) {
+				cq_auth.USER_ID = ud->auth_table[i];
+				write_csr(dd, offset, cq_auth.val);
+			}
+		}
+	} else {
+		cq_auth.USER_ID = ud->ptl_uid;
+		write_csr(dd, offset, cq_auth.val);
+	}
+	*auth_idx = 0;
+
+	/* set TX CQ config, enable */
+	tx_cq_config.ENABLE = 1;
+	tx_cq_config.PID = ud->ptl_pid;
+	tx_cq_config.PRIV_LEVEL = 1;
+	tx_cq_config.SL_ENABLE = -1;
+	offset = FXR_TX_CQ_CONFIG_CSR + (cq_idx * 8);
+	write_csr(dd, offset, tx_cq_config.val);
+
+	/* set RX CQ config, enable */
+	rx_cq_config.ENABLE = 1;
+	rx_cq_config.PID = ud->ptl_pid;
+	rx_cq_config.PRIV_LEVEL = 1;
+	offset = FXR_RX_CQ_CONFIG_CSR + (cq_idx * 8);
+	write_csr(dd, offset, rx_cq_config.val);
 }

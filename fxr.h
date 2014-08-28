@@ -75,4 +75,23 @@
 #define HFI_PSB_TRIG_MIN_COUNT  (HFI_PSB_TRIG_MIN_SIZE / HFI_TRIG_OP_SIZE)
 #define HFI_PSB_MIN_TOTAL_MEM	(HFI_PSB_FIXED_TOTAL_MEM + \
 				HFI_PSB_TRIG_MIN_SIZE)
+
+/* CQs */
+#define HFI_CQ_COUNT		FXR_NUM_CONTEXTS
+/* TX - 256 queues, 128 slots x 64 bytes = 8192 bytes per CQ. */
+#define HFI_CQ_TX_ENTRIES	FXR_TX_CONTEXT_ENTRIES
+#define HFI_CQ_TX_ENTRY_SIZE	64
+#define HFI_CQ_TX_SIZE          (HFI_CQ_TX_ENTRIES * HFI_CQ_TX_ENTRY_SIZE)
+#define HFI_CQ_TX_OFFSET        HFI_CQ_TX_SIZE
+/* RX - 256 queues, 16 slots x 64 bytes = 1024 bytes per CQ. */
+#define HFI_CQ_RX_ENTRIES	FXR_RX_CONTEXT_ENTRIES
+#define HFI_CQ_RX_ENTRY_SIZE	64
+#define HFI_CQ_RX_SIZE          (HFI_CQ_RX_ENTRIES * HFI_CQ_RX_ENTRY_SIZE)
+/* RX CSR spacing is same as for TX CSRs (even though RX CQ is smaller) */
+#define HFI_CQ_RX_OFFSET        HFI_CQ_TX_OFFSET
+#define HFI_CQ_TX_IDX_ADDR(addr, idx)	((addr) + (HFI_CQ_TX_OFFSET * idx))
+#define HFI_CQ_RX_IDX_ADDR(addr, idx)	((addr) + (HFI_CQ_RX_OFFSET * idx))
+#define HFI_CQ_HEAD_OFFSET      64 /* put CQ heads on separate cachelines */
+#define HFI_CQ_HEAD_ADDR(addr, idx)	((addr) + (HFI_CQ_HEAD_OFFSET * idx))
+
 #endif /* _FXR_H */
