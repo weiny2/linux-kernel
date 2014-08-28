@@ -106,6 +106,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_userdata *ud;
 	const struct hfi_cmd __user *ucmd;
 	struct hfi_cmd cmd;
+	struct hfi_cq_assign_args cq_assign;
+	struct hfi_cq_release_args cq_release;
 	struct hfi_ptl_attach_args ptl_attach;
 	struct hfi_ptl_detach_args ptl_detach;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
@@ -129,6 +131,15 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	user_data = (void __user *)cmd.context;
 
 	switch (cmd.type) {
+	case HFI_CMD_CQ_ASSIGN:
+		copy_in = sizeof(cq_assign);
+		copy_out = copy_in;
+		dest = &cq_assign;
+		break;
+	case HFI_CMD_CQ_RELEASE:
+		copy_in = sizeof(cq_release);
+		dest = &cq_release;
+		break;
 	case HFI_CMD_PTL_ATTACH:
 		copy_in = sizeof(ptl_attach);
 		copy_out = copy_in;
@@ -161,6 +172,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	}
 
 	switch (cmd.type) {
+	case HFI_CMD_CQ_ASSIGN:
+		ret = hfi_cq_assign(ud, &cq_assign);
+		break;
+	case HFI_CMD_CQ_RELEASE:
+		ret = hfi_cq_release(ud, cq_release.cq_idx);
+		break;
 	case HFI_CMD_PTL_ATTACH:
 		ret = hfi_ptl_attach(ud, &ptl_attach);
 		break;
@@ -199,7 +216,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	void *kvaddr = NULL;
 	u64 token = vma->vm_pgoff << PAGE_SHIFT;
 	u64 memaddr = 0;
-	int high = 0, mapio = 0, vm_fault = 0, type;
+	int high = 0, mapio = 0, vm_fault = 0, vm_ro = 0, type;
 	ssize_t memlen = 0;
 	int ret = 0;
 	u16 ctxt;
@@ -232,22 +249,58 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 
 	/* handle errors before we attempt the mapping */
 	switch (type) {
+	case TOK_CQ_TX:
+	case TOK_CQ_RX:
+	case TOK_CQ_HEAD:
+		if (ctxt >= HFI_CQ_COUNT) {
+			ret = -EINVAL;
+			goto done;
+		}
+		if (ud->ptl_pid != dd->cq_pair[ctxt]) {
+			ret = -EINVAL;
+			goto done;
+		}
+		if (type == TOK_CQ_HEAD)
+			vm_ro = 1;
+		break;
 	case TOK_CONTROL_BLOCK:
 	case TOK_EVENTS_CT:
 	case TOK_EVENTS_EQ_DESC:
 	case TOK_PORTALS_TABLE:
+		vm_ro = 1;
+		break;
+	case TOK_EVENTS_EQ_HEAD:
+	default:
+		break;
+	}
+
+	if (vm_ro) {
 		/* enforce no write access to RO mappings */
 		if (flags & VM_WRITE) {
 			ret = -EPERM;
 			goto done;
 		}
 		flags &= ~VM_MAYWRITE;
-		break;
-	default:
-		break;
 	}
 
 	switch (type) {
+	case TOK_CQ_TX:
+		/* mmio - RW */
+		memaddr = (u64)HFI_CQ_TX_IDX_ADDR(dd->cq_tx_base, ctxt);
+		memlen = HFI_CQ_TX_SIZE;
+		mapio = 1;
+		break;
+	case TOK_CQ_RX:
+		/* mmio - RW */
+		memaddr = (u64)HFI_CQ_RX_IDX_ADDR(dd->cq_rx_base, ctxt);
+		memlen = HFI_CQ_RX_SIZE;
+		mapio = 1;
+		break;
+	case TOK_CQ_HEAD:
+		/* kmalloc - RO */
+		kvaddr = HFI_CQ_HEAD_ADDR(dd->cq_head_base, ctxt);
+		memlen = PAGE_SIZE;
+		break;
 	case TOK_CONTROL_BLOCK:
 		/* kmalloc - RO (debug) */
 		/* TODO - this was requested but there are security concerns */

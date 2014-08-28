@@ -36,6 +36,108 @@
 
 static void hfi_ptl_pid_free(struct hfi_devdata *dd, hfi_ptl_pid_t ptl_pid);
 
+static int hfi_cq_assign_next(struct hfi_userdata *ud,
+			      hfi_ptl_pid_t ptl_pid, int *out_cq_idx)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	unsigned cq_idx, num_cqs = HFI_CQ_COUNT;
+
+	/* TODO - for now allow just one CQ pair.
+	 * We can introduce HFI limits later.
+	 */
+	if (ud->cq_pair_num_assigned > 0)
+		return -ENOSPC;
+
+	/* search the whole CQ array, starting with next_unused */
+	while (num_cqs > 0) {
+		cq_idx = dd->cq_pair_next_unused++ % HFI_CQ_COUNT;
+		if (dd->cq_pair[cq_idx] == HFI_PTL_PID_NONE)
+			break;
+		num_cqs--;
+	}
+	if (num_cqs == 0) {
+		/* all CQs are assigned */
+		return -EBUSY;
+	}
+
+	*out_cq_idx = cq_idx;
+	dd->cq_pair[cq_idx] = ptl_pid;
+	ud->cq_pair_num_assigned++;
+	return 0;
+}
+
+int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	u64 addr;
+	int cq_idx, ret;
+	unsigned long flags;
+
+	/* verify we are attached to Portals */
+	if (ud->ptl_pid == HFI_PTL_PID_NONE)
+		return -EPERM;
+
+	spin_lock_irqsave(&dd->cq_lock, flags);
+	ret = hfi_cq_assign_next(ud, ud->ptl_pid, &cq_idx);
+	spin_unlock_irqrestore(&dd->cq_lock, flags);
+	if (ret)
+		return ret;
+
+	dd_dev_info(dd, "CQ pair %u assigned\n", cq_idx);
+	cq_assign->cq_idx = cq_idx;
+	addr = 0; /* segment address only needed if not page-aligned */
+	cq_assign->cq_tx_token = HFI_MMAP_TOKEN(TOK_CQ_TX, cq_idx, addr,
+						HFI_CQ_TX_SIZE);
+	cq_assign->cq_rx_token = HFI_MMAP_TOKEN(TOK_CQ_RX, cq_idx, addr,
+						HFI_CQ_RX_SIZE);
+	addr = (u64)HFI_CQ_HEAD_ADDR(dd->cq_head_base, cq_idx);
+	cq_assign->cq_head_token = HFI_MMAP_TOKEN(TOK_CQ_HEAD, cq_idx, addr,
+						  PAGE_SIZE);
+
+	/* write CQ config in HFI CSRs */
+	hfi_cq_config(ud, cq_idx, dd->cq_head_base, &cq_assign->auth_idx);
+
+	return 0;
+}
+
+int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	int ret = 0;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->cq_lock, flags);
+	if (ud->ptl_pid != dd->cq_pair[cq_idx]) {
+		ret = -EINVAL;
+	} else {
+		hfi_cq_disable(dd, cq_idx);
+		dd->cq_pair[cq_idx] = HFI_PTL_PID_NONE;
+		ud->cq_pair_num_assigned--;
+		/* TODO - remove any CQ head mappings */
+	}
+	spin_unlock_irqrestore(&dd->cq_lock, flags);
+
+	return ret;
+}
+
+static void hfi_cq_cleanup(struct hfi_userdata *ud)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	u64 ptl_pid = ud->ptl_pid;
+	int i;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->cq_lock, flags);
+	for (i = 0; i < HFI_CQ_COUNT; i++) {
+		if (ptl_pid == dd->cq_pair[i]) {
+			hfi_cq_disable(dd, i);
+			dd->cq_pair[i] = HFI_PTL_PID_NONE;
+		}
+	}
+	ud->cq_pair_num_assigned = 0;
+	spin_unlock_irqrestore(&dd->cq_lock, flags);
+}
+
 /*
  * Associate this process with a Portals PID.
  * Note, hfi_open() sets:
@@ -54,7 +156,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 
 	/* only one Portals PID allowed */
 	if (ud->ptl_pid != HFI_PTL_PID_NONE)
-		return -EINVAL;
+		return -EPERM;
 
 	/* PID is user-specified, validate and acquire */
 	/* TODO - will likely change when we understand Resource Manager */
@@ -133,9 +235,13 @@ void hfi_ptl_cleanup(struct hfi_userdata *ud)
 	/* verify PID is in correct state */
 	BUG_ON(dd->ptl_pid_user[ptl_pid] != ud);
 
+	/* first release any assigned CQs */
+	hfi_cq_cleanup(ud);
+
 	/* release assigned PID */
 	hfi_ptl_pid_free(dd, ptl_pid);
 
 	if (ud->ptl_state_base)
 		vfree(ud->ptl_state_base);
+	ud->ptl_state_base = NULL;
 }

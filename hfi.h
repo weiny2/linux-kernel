@@ -119,6 +119,15 @@ struct hfi_devdata {
 	size_t ptl_pid_user_size;
 	size_t ptl_state_min_size;
 	u16 trig_op_min_entries;
+
+	/* Command Queue State */
+	hfi_ptl_pid_t cq_pair[HFI_CQ_COUNT];
+	spinlock_t cq_lock;
+	u16 cq_pair_next_unused;
+	void *cq_tx_base;
+	void *cq_rx_base;
+	void *cq_head_base;
+	size_t cq_head_size;
 };
 
 /* Private data for file operations, created at open(). */
@@ -134,7 +143,10 @@ struct hfi_userdata {
 	hfi_ptl_pid_t ptl_pid;
 	u16 srank;
 	u16 pasid;
-	hfi_ptl_uid_t ptl_uid;
+	u16 cq_pair_num_assigned;
+	u8 auth_mask;
+	hfi_ptl_uid_t auth_table[HFI_NUM_PTL_AUTH_TUPLES];
+	hfi_ptl_uid_t ptl_uid; /* UID if auth_tuples not used */
 };
 
 int hfi_pci_init(struct pci_dev *, const struct pci_device_id *);
@@ -154,6 +166,10 @@ int hfi_ui_add(struct hfi_devdata *);
 void hfi_ui_remove(struct hfi_devdata *);
 int hfi_user_cleanup(struct hfi_userdata *);
 
+void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *, u8 *auth_idx);
+void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
+int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *);
+int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx);
 int hfi_ptl_attach(struct hfi_userdata *ud, struct hfi_ptl_attach_args *);
 void hfi_ptl_cleanup(struct hfi_userdata *ud);
 
