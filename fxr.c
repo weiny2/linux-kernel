@@ -35,6 +35,8 @@
 #include <linux/module.h>
 #include "hfi.h"
 #include "fxr.h"
+#include "include/fxr/fxr_rx_hiarb_defs.h"
+#include "include/fxr/fxr_rx_hiarb_csrs.h"
 
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -56,6 +58,14 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
 	cleanup_interrupts(dd);
+
+	/* free host memory for FXR and Portals resources */
+	if (dd->ptl_pid_user)
+		free_pages((unsigned long)dd->ptl_pid_user,
+			   get_order(dd->ptl_pid_user_size));
+	if (dd->ptl_control)
+		free_pages((unsigned long)dd->ptl_control,
+			   get_order(dd->ptl_control_size));
 
 	if (dd->kregbase)
 		iounmap((void __iomem *)dd->kregbase);
@@ -83,6 +93,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	unsigned long len;
 	resource_size_t addr;
 	int ret;
+	rx_cfg_hiarb_pcb_base_t pcb_base = {.val = 0};
 
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
@@ -113,7 +124,40 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->pcibar1 = 0;
 	dd->physaddr = addr;		/* used for io_remap, etc. */
 
-	ret = setup_interrupts(dd, FXR_NUM_INTERRUPTS, 0);
+	/* Host Memory allocations -- */
+
+	/* Portals Control Block (PCB) - 128 KB */
+	dd->ptl_control_size = HFI_PCB_TOTAL_MEM;
+	dd->ptl_control = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
+					   get_order(dd->ptl_control_size));
+	if (!dd->ptl_control) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
+	spin_lock_init(&dd->ptl_control_lock);
+
+	/* Portals PID assignments - 32 KB */
+	dd->ptl_pid_user_size = (HFI_NUM_PTL_PIDS * 8);
+	dd->ptl_pid_user = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
+					get_order(dd->ptl_pid_user_size));
+	if (!dd->ptl_pid_user) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
+
+	/* write PCB address in FXR */
+	pcb_base.base_address = virt_to_phys(dd->ptl_control);
+	pcb_base.physical = 1;
+	/* TODO - RX_CFG_HIARB defines are broken in FXR header */
+	//write_csr(dd, FXR_RX_CFG_HIARB_PCB_BASE, pcb_base.val);
+
+	/* PSB is per PID and so allocated later,
+	 * this is the minimum allocated.
+	 */
+	dd->trig_op_min_entries = HFI_PSB_TRIG_MIN_COUNT;
+	dd->ptl_state_min_size = HFI_PSB_MIN_TOTAL_MEM;
+
+	ret = setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
 	if (ret)
 		goto err_post_alloc;
 
