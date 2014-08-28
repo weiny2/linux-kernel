@@ -525,6 +525,7 @@ static inline void sdma_txinit_ahg(
 {
 	tx->desc_limit = ARRAY_SIZE(tx->descs);
 	tx->descp = &tx->descs[0];
+	INIT_LIST_HEAD(&tx->list);
 	tx->num_desc = 0;
 	tx->flags = flags;
 	tx->complete = cb;
