@@ -144,7 +144,8 @@ config EXTRA_FIRMWARE_DIR
 	  some other directory containing the firmware files.
 
 config FW_LOADER_USER_HELPER
-	bool
+	bool "Support usermode helper for firmware loading"
+	depends on FW_LOADER
 
 config FW_LOADER_USER_HELPER_FALLBACK
 	bool "Fallback user-helper invocation for firmware loading"
