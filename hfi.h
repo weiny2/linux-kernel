@@ -47,6 +47,8 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/cdev.h>
+#include "fxr.h"
+#include "hfi_cmd.h"
 
 #define DRIVER_NAME		"hfi2"
 #define DRIVER_CLASS_NAME	DRIVER_NAME
@@ -68,6 +70,11 @@ struct hfi_msix_entry {
 	void *arg;
 	cpumask_var_t mask;
 };
+
+/* FXR Portals Control Block
+ * This is a HW-defined structure.
+ */
+typedef union PCB hfi_ptl_control_t;
 
 /* device data struct contains only per-HFI info. */
 struct hfi_devdata {
@@ -102,6 +109,16 @@ struct hfi_devdata {
 	/* MSI-X information */
 	struct hfi_msix_entry *msix_entries;
 	u32 num_msix_entries;
+
+	/* Device Portals State */
+	hfi_ptl_control_t *ptl_control;
+	struct hfi_userdata  **ptl_pid_user;
+	//unsigned long ptl_pid_map[HFI_NUM_PTL_PIDS / BITS_PER_LONG];
+	spinlock_t ptl_control_lock;
+	size_t ptl_control_size;
+	size_t ptl_pid_user_size;
+	size_t ptl_state_min_size;
+	u16 trig_op_min_entries;
 };
 
 /* Private data for file operations, created at open(). */
@@ -109,6 +126,15 @@ struct hfi_userdata {
 	struct hfi_devdata *devdata;
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
+	pid_t pid;
+
+	/* Per PID Portals State */
+	void *ptl_state_base;
+	u16 ptl_state_size;
+	hfi_ptl_pid_t ptl_pid;
+	u16 srank;
+	u16 pasid;
+	hfi_ptl_uid_t ptl_uid;
 };
 
 int hfi_pci_init(struct pci_dev *, const struct pci_device_id *);
@@ -128,6 +154,9 @@ int hfi_ui_add(struct hfi_devdata *);
 void hfi_ui_remove(struct hfi_devdata *);
 int hfi_user_cleanup(struct hfi_userdata *);
 
+int hfi_ptl_attach(struct hfi_userdata *ud, struct hfi_ptl_attach_args *);
+void hfi_ptl_cleanup(struct hfi_userdata *ud);
+
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
@@ -146,4 +175,4 @@ int hfi_user_cleanup(struct hfi_userdata *);
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
 
-#endif                          /* _HFI_KERNEL_H */
+#endif /* _HFI_KERNEL_H */

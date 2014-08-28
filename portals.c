@@ -1,0 +1,141 @@
+/*
+ * Copyright (c) 2014 Intel Corporation.  All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * OpenIB.org BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#include "hfi.h"
+#include "hfi_token.h"
+#include "fxr.h"
+
+static void hfi_ptl_pid_free(struct hfi_devdata *dd, hfi_ptl_pid_t ptl_pid);
+
+/*
+ * Associate this process with a Portals PID.
+ * Note, hfi_open() sets:
+ *   ud->pid = current->pid
+ *   ud->ptl_pid = HFI_PTL_PID_NONE
+ *   ud->ptl_uid = current_uid()
+ */
+int hfi_ptl_attach(struct hfi_userdata *ud,
+		   struct hfi_ptl_attach_args *ptl_attach)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	hfi_ptl_pid_t ptl_pid;
+	size_t psb_size;
+	u16 trig_op_entries;
+	unsigned long flags;
+
+	/* only one Portals PID allowed */
+	if (ud->ptl_pid != HFI_PTL_PID_NONE)
+		return -EINVAL;
+
+	/* PID is user-specified, validate and acquire */
+	/* TODO - will likely change when we understand Resource Manager */
+	ptl_pid = ptl_attach->pid;
+	if (ptl_pid >= HFI_NUM_PTL_PIDS)
+		return -EINVAL;
+
+	spin_lock_irqsave(&dd->ptl_control_lock, flags);
+	if (dd->ptl_pid_user[ptl_pid] != 0) {
+		spin_unlock_irqrestore(&dd->ptl_control_lock, flags);
+		return -EBUSY;
+	}
+	dd->ptl_pid_user[ptl_pid] = ud;
+	spin_unlock_irqrestore(&dd->ptl_control_lock, flags);
+
+	/* TODO - init IOMMU PASID <-> PID mapping */
+	ud->pasid = ptl_pid;
+	ud->ptl_pid = ptl_pid;
+	ud->srank = ptl_attach->srank;
+	dd_dev_info(dd, "Portals PID %u assigned\n", ptl_pid);
+
+	/* TODO compute Portals State Base size, for now use a minimum */
+	trig_op_entries = dd->trig_op_min_entries;
+	psb_size = dd->ptl_state_min_size;
+
+	/* vmalloc Portals State memory, store in PCB */
+	ud->ptl_state_base = vmalloc_user(psb_size);
+	if (!ud->ptl_state_base) {
+		hfi_ptl_pid_free(dd, ptl_pid);
+		return -ENOMEM;
+	}
+	ud->ptl_state_size = psb_size;
+
+	/* write PCB (host memory) */
+	/* TODO PCB overflow for LE/MEs */
+	dd->ptl_control[ptl_pid].trig_op_size = trig_op_entries;
+	dd->ptl_control[ptl_pid].le_me_base = 0;
+	dd->ptl_control[ptl_pid].le_me_size = 0;
+	dd->ptl_control[ptl_pid].unexpected_base = 0;
+	dd->ptl_control[ptl_pid].unexpected_size = 0;
+	dd->ptl_control[ptl_pid].portals_base = ((u64)ud->ptl_state_base >> PAGE_SHIFT);
+	dd->ptl_control[ptl_pid].v = 1;
+
+	/* return mmap tokens of PSB items */
+	ptl_attach->ct_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_CT,
+						ptl_pid, HFI_PSB_CT_SIZE);
+	ptl_attach->eq_desc_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_DESC,
+						ptl_pid, HFI_PSB_EQ_DESC_SIZE);
+	ptl_attach->eq_head_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_HEAD,
+						ptl_pid, HFI_PSB_EQ_HEAD_SIZE);
+	ptl_attach->pt_token = HFI_MMAP_PSB_TOKEN(TOK_PORTALS_TABLE,
+						ptl_pid, HFI_PSB_PT_SIZE);
+
+	return 0;
+}
+
+static void hfi_ptl_pid_free(struct hfi_devdata *dd, hfi_ptl_pid_t ptl_pid)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->ptl_control_lock, flags);
+	memset(&dd->ptl_control[ptl_pid], 0, sizeof(hfi_ptl_control_t));
+	dd->ptl_pid_user[ptl_pid] = 0;
+	spin_unlock_irqrestore(&dd->ptl_control_lock, flags);
+	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
+}
+
+void hfi_ptl_cleanup(struct hfi_userdata *ud)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	u64 ptl_pid = ud->ptl_pid;
+
+	if (ud->ptl_pid == HFI_PTL_PID_NONE)
+		return;
+
+	/* verify PID is in correct state */
+	BUG_ON(dd->ptl_pid_user[ptl_pid] != ud);
+
+	/* release assigned PID */
+	hfi_ptl_pid_free(dd, ptl_pid);
+
+	if (ud->ptl_state_base)
+		vfree(ud->ptl_state_base);
+}

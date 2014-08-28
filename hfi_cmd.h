@@ -89,6 +89,11 @@
 #define HFI_CMD_ACK_EVENT         11
 #define HFI_CMD_SET_PKEY          12
 #define HFI_CMD_CTXT_RESET        13
+/* Gen 2: */
+#define HFI_CMD_PTL_ATTACH        20
+#define HFI_CMD_PTL_DETACH        21
+#define HFI_CMD_CQ_ASSIGN         22
+#define HFI_CMD_CQ_RELEASE        23
 
 struct hfi_cmd {
 	__u32 type;		/* command type */
@@ -96,4 +101,33 @@ struct hfi_cmd {
 	__u64 context;		/* context data for this command */
 };
 
+#define HFI_PTL_PID_ANY (__u16)(-1)
+#define HFI_PTL_PID_NONE (__u16)(-1)
+typedef __u16 hfi_ptl_pid_t;
+typedef __u32 hfi_ptl_uid_t;
+
+#define IN  /* input argument */
+#define OUT /* output argument */
+
+struct hfi_ptl_attach_args {
+	IN  __u32 api_version;  /* HFI_USER_SWVERSION */
+	IN  hfi_ptl_pid_t pid;
+	IN  __u16 srank;        /* for logical matching */
+	IN  __u16 flags;        /* PID assignment flags */
+	IN  __u16 le_me_count;
+	IN  __u16 unexpected_count;
+	IN  __u16 trig_op_count;
+
+	OUT __u64 ct_token;       /* mmap: Counting Events */
+	OUT __u64 eq_desc_token;  /* mmap: EQ descriptors */
+	OUT __u64 eq_head_token;  /* mmap: EQ read pointer */
+	OUT __u64 pt_token;       /* mmap: Portals Table */
+	OUT __u64 le_me_token;    /* mmap: LE/ME list */
+	OUT __u64 le_me_unlink_token;  /* mmap: freed LE/MEs */
+	OUT __u64 unexpected_token;    /* mmap: unexpected list */
+};
+
+struct hfi_ptl_detach_args {
+	IN  hfi_ptl_pid_t pid;
+};
 #endif /* _HFI_CMD_H */

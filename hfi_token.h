@@ -35,30 +35,47 @@
 #define _HFI_MMAP_H
 
 /*
+ * Types of memories mapped into user processes' space
+ */
+enum mmap_token_types {
+	TOK_CONTROL_BLOCK = 1,
+	TOK_PORTALS_TABLE,
+	TOK_CQ_TX,
+	TOK_CQ_RX,
+	TOK_CQ_HEAD,
+	TOK_EVENTS_CT,
+	TOK_EVENTS_EQ_DESC,
+	TOK_EVENTS_EQ_HEAD,
+};
+
+/*
  * Masks and offsets defining the mmap tokens
  */
 #define HFI_MMAP_OFFSET_MASK   0xfffULL
 #define HFI_MMAP_OFFSET_SHIFT  0
-#define HFI_MMAP_SUBCTXT_MASK  0xfULL
-#define HFI_MMAP_SUBCTXT_SHIFT 12
-#define HFI_MMAP_CTXT_MASK     0xffULL
-#define HFI_MMAP_CTXT_SHIFT    16
+#define HFI_MMAP_CTXT_MASK     0xfffULL
+#define HFI_MMAP_CTXT_SHIFT    12
 #define HFI_MMAP_TYPE_MASK     0xfULL
 #define HFI_MMAP_TYPE_SHIFT    24
-#define HFI_MMAP_MAGIC_MASK    0xffffffffULL
-#define HFI_MMAP_MAGIC_SHIFT   32
-
-#define HFI_MMAP_MAGIC         0xdabbad00
+#define HFI_MMAP_NPAGES_MASK   0xfffULL
+#define HFI_MMAP_NPAGES_SHIFT  32
+#define HFI_MMAP_MAGIC_MASK    0xfffffULL
+#define HFI_MMAP_MAGIC_SHIFT   44
+#define HFI_MMAP_MAGIC         0xdabba
 
 #define HFI_MMAP_TOKEN_SET(field, val)	\
 	(((val) & HFI_MMAP_##field##_MASK) << HFI_MMAP_##field##_SHIFT)
 #define HFI_MMAP_TOKEN_GET(field, token) \
 	(((token) >> HFI_MMAP_##field##_SHIFT) & HFI_MMAP_##field##_MASK)
-#define HFI_MMAP_TOKEN(type, ctxt, subctxt, addr)   \
+#define HFI_MMAP_TOKEN(type, ctxt, addr, size)   \
 	(HFI_MMAP_TOKEN_SET(MAGIC, HFI_MMAP_MAGIC) | \
 	 HFI_MMAP_TOKEN_SET(TYPE, type) | \
 	 HFI_MMAP_TOKEN_SET(CTXT, ctxt) | \
-	 HFI_MMAP_TOKEN_SET(SUBCTXT, subctxt) | \
+	 HFI_MMAP_TOKEN_SET(NPAGES, (size >> PAGE_SHIFT)) | \
 	 HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & ~PAGE_MASK)))
 
+#define HFI_MMAP_TOKEN_GET_SIZE(token) \
+	(HFI_MMAP_TOKEN_GET(NPAGES, token) << PAGE_SHIFT)
+#define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
+	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
 #endif

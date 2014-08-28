@@ -35,6 +35,7 @@
 #include <linux/uio.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
+#include <linux/cred.h>
 #include "hfi.h"
 #include "hfi_cmd.h"
 #include "hfi_token.h"
@@ -91,9 +92,13 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	/* no cpu affinity by default */
 	ud->rec_cpu_num = -1;
 
+	ud->pid = task_pid_nr(current);
+	/* default Portals PID and UID */
+	ud->ptl_pid = HFI_PTL_PID_NONE;
+	ud->ptl_uid = current_uid();
+
 	return 0;
 }
-
 
 static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 			 loff_t *offset)
@@ -101,8 +106,11 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_userdata *ud;
 	const struct hfi_cmd __user *ucmd;
 	struct hfi_cmd cmd;
-	ssize_t consumed = 0, copy = 0, ret = 0;
+	struct hfi_ptl_attach_args ptl_attach;
+	struct hfi_ptl_detach_args ptl_detach;
+	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *dest = NULL;
+	void __user *user_data = NULL;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
@@ -118,30 +126,61 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	}
 
 	consumed = sizeof(cmd);
+	user_data = (void __user *)cmd.context;
 
 	switch (cmd.type) {
+	case HFI_CMD_PTL_ATTACH:
+		copy_in = sizeof(ptl_attach);
+		copy_out = copy_in;
+		dest = &ptl_attach;
+		break;
+	case HFI_CMD_PTL_DETACH:
+		copy_in = sizeof(ptl_detach);
+		dest = &ptl_detach;
+		break;
 	default:
 		ret = -EINVAL;
 		goto err_cmd;
 	}
 
-	/* If the command comes with user data, copy it. */
-	if (copy) {
-		if (copy_from_user(dest, (void __user *)ucmd->context, copy)) {
+	/* if need copy_to_user, verify we have WRITE access upfront */
+	if (copy_out) {
+		if (!access_ok(VERIFY_WRITE, user_data, copy_out)) {
 			ret = -EFAULT;
 			goto err_cmd;
 		}
-		consumed += copy;
+	}
+
+	/* If the command comes with user data, copy it. */
+	if (copy_in) {
+		if (copy_from_user(dest, user_data, copy_in)) {
+			ret = -EFAULT;
+			goto err_cmd;
+		}
+		consumed += copy_in;
 	}
 
 	switch (cmd.type) {
+	case HFI_CMD_PTL_ATTACH:
+		ret = hfi_ptl_attach(ud, &ptl_attach);
+		break;
+	case HFI_CMD_PTL_DETACH:
+		/* release our assigned PID */
+		hfi_ptl_cleanup(ud);
+		break;
 	default:
 		ret = -EINVAL;
 		goto err_cmd;
 	}
 
-	if (ret == 0)
+	if (ret == 0) {
 		ret = consumed;
+		if (copy_out && copy_to_user(user_data, dest, copy_out)) {
+			/* tested WRITE access above, so this shouldn't fail */
+			ret = -EFAULT;
+		}
+	}
+
 err_cmd:
 	return ret;
 }
@@ -164,6 +203,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	ssize_t memlen = 0;
 	int ret = 0;
 	u16 ctxt;
+	void *psb_base;
 
 	ud = fp->private_data;
 	BUG_ON(!ud || !ud->devdata);
@@ -175,11 +215,64 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		goto done;
 	}
 
+	/* validate we have an assigned Portals PID */
+	if (ud->ptl_pid == HFI_PTL_PID_NONE) {
+		ret = -EINVAL;
+		goto done;
+	}
+	psb_base = ud->ptl_state_base;
+	BUG_ON(psb_base == NULL);
+
 	ctxt = HFI_MMAP_TOKEN_GET(CTXT, token);
 	type = HFI_MMAP_TOKEN_GET(TYPE, token);
 	flags = vma->vm_flags;
 
+	/* these mmaps don't need to litter the MM of forked children */
+	flags |= VM_DONTCOPY;
+
+	/* handle errors before we attempt the mapping */
 	switch (type) {
+	case TOK_CONTROL_BLOCK:
+	case TOK_EVENTS_CT:
+	case TOK_EVENTS_EQ_DESC:
+	case TOK_PORTALS_TABLE:
+		/* enforce no write access to RO mappings */
+		if (flags & VM_WRITE) {
+			ret = -EPERM;
+			goto done;
+		}
+		flags &= ~VM_MAYWRITE;
+		break;
+	default:
+		break;
+	}
+
+	switch (type) {
+	case TOK_CONTROL_BLOCK:
+		/* kmalloc - RO (debug) */
+		/* TODO - this was requested but there are security concerns */
+		ret = -ENOSYS;
+		goto done;
+	case TOK_EVENTS_CT:
+		/* vmalloc - RO */
+		kvaddr = (psb_base + HFI_PSB_CT_OFFSET);
+		memlen = HFI_PSB_CT_SIZE;
+		break;
+	case TOK_EVENTS_EQ_DESC:
+		/* vmalloc - RO */
+		kvaddr = (psb_base + HFI_PSB_EQ_DESC_OFFSET);
+		memlen = HFI_PSB_EQ_DESC_SIZE;
+		break;
+	case TOK_EVENTS_EQ_HEAD:
+		/* vmalloc - RW */
+		kvaddr = (psb_base + HFI_PSB_EQ_HEAD_OFFSET);
+		memlen = HFI_PSB_EQ_HEAD_SIZE;
+		break;
+	case TOK_PORTALS_TABLE:
+		/* vmalloc - RO */
+		kvaddr = (psb_base + HFI_PSB_PT_OFFSET);
+		memlen = HFI_PSB_PT_SIZE;
+		break;
 	default:
 		ret = -EINVAL;
 		goto done;
@@ -190,6 +283,13 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		goto done;
 	}
 
+	if (mapio) {
+		BUG_ON(!memaddr);
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	} else {
+		memaddr = kvirt_to_phys(kvaddr, &high);
+	}
+
 	vma->vm_flags = flags;
 	dd_dev_info(dd,
 		    "%s: %u type:%u io/vf/h:%d/%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
@@ -198,6 +298,8 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		    vma->vm_flags);
 	pfn = (unsigned long)(memaddr >> PAGE_SHIFT);
 	if (vm_fault) {
+		/* the fault handler only supports vmalloc */
+		BUG_ON(!high);
 		vma->vm_pgoff = pfn;
 		vma->vm_ops = &vm_ops;
 		ret = 0;
@@ -217,6 +319,8 @@ done:
 
 int hfi_user_cleanup(struct hfi_userdata *ud)
 {
+	/* release Portals resources acquired by the HFI user */
+	hfi_ptl_cleanup(ud);
 	return 0;
 }
 
