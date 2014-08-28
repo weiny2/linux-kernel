@@ -101,6 +101,36 @@ static void kgr_refs_dec(void)
 		p->refs--;
 }
 
+static int kgr_ftrace_enable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
+{
+	int ret;
+
+	ret = ftrace_set_filter_ip(fops, pf->loc_name, 0, 0);
+	if (ret)
+		return ret;
+
+	ret = register_ftrace_function(fops);
+	if (ret)
+		ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
+
+	return ret;
+}
+
+static int kgr_ftrace_disable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
+{
+	int ret;
+
+	ret = unregister_ftrace_function(fops);
+	if (ret)
+		return ret;
+
+	ret = ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
+	if (ret)
+		register_ftrace_function(fops);
+
+	return ret;
+}
+
 static bool kgr_still_patching(void)
 {
 	struct task_struct *p;
@@ -147,7 +177,7 @@ static void kgr_replace_all(void)
 			}
 
 			pr_info("UNREG %s -> %s\n", p->name, pf->name);
-			err = unregister_ftrace_function(&pf->ftrace_ops_fast);
+			err = kgr_ftrace_disable(pf, &pf->ftrace_ops_fast);
 			if (err) {
 				pr_warning("kgr: unregistering ftrace function for %s failed with %d\n",
 						pf->name, err);
@@ -381,36 +411,6 @@ static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
 	fops->flags = FTRACE_OPS_FL_SAVE_REGS;
 
 	return 0;
-}
-
-static int kgr_ftrace_enable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
-{
-	int ret;
-
-	ret = ftrace_set_filter_ip(fops, pf->loc_name, 0, 0);
-	if (ret)
-		return ret;
-
-	ret = register_ftrace_function(fops);
-	if (ret)
-		ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
-
-	return ret;
-}
-
-static int kgr_ftrace_disable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
-{
-	int ret;
-
-	ret = unregister_ftrace_function(fops);
-	if (ret)
-		return ret;
-
-	ret = ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
-	if (ret)
-		register_ftrace_function(fops);
-
-	return ret;
 }
 
 static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
