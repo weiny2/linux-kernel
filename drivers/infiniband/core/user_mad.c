@@ -450,7 +450,7 @@ static int is_duplicate(struct ib_umad_file *file,
 			continue;
 
 		if (same_destination(&packet->mad.hdr, &sent_packet->mad.hdr)) {
-			printk(KERN_ERR "user_mad: duplicate packet: same distination\n");
+			printk(KERN_ERR "user_mad: duplicate packet: same destination\n");
 			return 1;
 		}
 	}
