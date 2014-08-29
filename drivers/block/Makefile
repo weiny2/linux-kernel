@@ -26,6 +26,8 @@ obj-$(CONFIG_SUNVDC)		+= sunvdc.o
 obj-$(CONFIG_BLK_DEV_NVME)	+= nvme.o
 obj-$(CONFIG_BLK_DEV_SKD)	+= skd.o
 obj-$(CONFIG_BLK_DEV_OSD)	+= osdblk.o
+obj-$(CONFIG_BLK_DEV_GEN_NVDIMM) += gen_nvdimm.o
+obj-$(CONFIG_BLK_DEV_CR)	+= crbd.o
 
 obj-$(CONFIG_BLK_DEV_UMEM)	+= umem.o
 obj-$(CONFIG_BLK_DEV_NBD)	+= nbd.o
@@ -48,3 +50,5 @@ obj-$(CONFIG_ZRAM) += zram/
 nvme-y		:= nvme-core.o nvme-scsi.o
 skd-y		:= skd_main.o
 swim_mod-y	:= swim.o swim_asm.o
+gen_nvdimm-y := nvdimm_core.o nvdimm_acpi.o gen_nvm_volumes.o gen_nvdimm_core.o
+crbd-y		:= cr_core.o crbd_dimm.o

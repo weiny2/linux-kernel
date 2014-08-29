@@ -347,6 +347,35 @@ config BLK_DEV_OSD
 
 	  If unsure, say N.
 
+config BLK_DEV_GEN_NVDIMM
+	tristate "Generic NVDIMM Support"
+	default m
+	---help---
+	  Saying Y or M here will enable the generic NVDIMM driver.
+
+	  Vendor drivers can then register with this.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gen_nvdimm_mod.
+
+	  If unsure, say N.
+
+config BLK_DEV_CR
+	tristate "Crystal Ridge block device"
+	depends on BLK_DEV_GEN_NVDIMM
+	default m
+	---help---
+	  Saying Y or M here will enable the Crystal Ridge block
+	  device. This is a Persistent memory device with block
+	  support provided by this module.
+
+	  This module will register with gen_nvdimm.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called crbd.
+
+	  If unsure, say N.
+
 config BLK_DEV_SX8
 	tristate "Promise SATA SX8 support"
 	depends on PCI
