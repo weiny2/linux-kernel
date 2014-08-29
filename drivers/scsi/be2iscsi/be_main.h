@@ -822,6 +822,8 @@ void beiscsi_process_all_cqs(struct work_struct *work);
 void beiscsi_free_mgmt_task_handles(struct beiscsi_conn *beiscsi_conn,
 				     struct iscsi_task *task);
 
+unsigned int beiscsi_process_cq(struct be_eq_obj *pbe_eq);
+
 static inline bool beiscsi_error(struct beiscsi_hba *phba)
 {
 	return phba->ue_detected || phba->fw_timeout;
