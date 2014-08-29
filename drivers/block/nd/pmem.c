@@ -25,6 +25,9 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
+#include <linux/nd.h>
+
+static DEFINE_IDA(pmem_ida);
 
 #define SECTOR_SHIFT		9
 #define PAGE_SECTORS_SHIFT	(PAGE_SHIFT - SECTOR_SHIFT)
@@ -33,12 +36,15 @@
 struct pmem_device {
 	struct request_queue	*pmem_queue;
 	struct gendisk		*pmem_disk;
+#if !IS_ENABLED(CONFIG_NFIT_PMEM)
 	struct list_head	pmem_list;
+#endif
 
 	/* One contiguous memory region per device */
 	phys_addr_t		phys_addr;
 	void			*virt_addr;
 	size_t			size;
+	int id;
 };
 
 static int pmem_getgeo(struct block_device *bd, struct hd_geometry *geo)
@@ -214,6 +220,136 @@ static const struct block_device_operations pmem_fops = {
 	.getgeo =		pmem_getgeo,
 };
 
+#if IS_ENABLED(CONFIG_NFIT_PMEM)
+static int pmem_major;
+
+static int nd_pmem_probe(struct device *dev)
+{
+	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
+	size_t disk_sectors = resource_size(&nsio->res) / 512;
+	struct pmem_device *pmem;
+	struct gendisk *disk;
+	struct resource *res;
+	int err;
+
+	pmem = kzalloc(sizeof(*pmem), GFP_KERNEL);
+	if (!pmem)
+		return -ENOMEM;
+
+	pmem->id = ida_simple_get(&pmem_ida, 0, 0, GFP_KERNEL);
+	if (pmem->id < 0) {
+		err = pmem->id;
+		goto err_ida;
+	}
+
+	res = request_mem_region(nsio->res.start, resource_size(&nsio->res),
+			KBUILD_MODNAME);
+	if (!res) {
+		err = -EBUSY;
+		goto err_request_mem_region;
+	}
+
+	pmem->virt_addr = ioremap_cache(res->start, resource_size(res));
+	if (!pmem->virt_addr) {
+		err = -ENXIO;
+		goto err_ioremap;
+	}
+	pmem->phys_addr = res->start;
+	pmem->size = resource_size(res);
+	pmem->pmem_queue = blk_alloc_queue(GFP_KERNEL);
+	if (!pmem->pmem_queue) {
+		err = -ENOMEM;
+		goto err_alloc_queue;
+	}
+
+	blk_queue_make_request(pmem->pmem_queue, pmem_make_request);
+	blk_queue_max_hw_sectors(pmem->pmem_queue, 1024);
+	blk_queue_bounce_limit(pmem->pmem_queue, BLK_BOUNCE_ANY);
+
+	disk = pmem->pmem_disk = alloc_disk(0);
+	if (!disk) {
+		err = -ENOMEM;
+		goto err_alloc_disk;
+	}
+
+	disk->driverfs_dev	= dev;
+	disk->major		= pmem_major;
+	disk->first_minor	= 0;
+	disk->fops		= &pmem_fops;
+	disk->private_data	= pmem;
+	disk->queue		= pmem->pmem_queue;
+	disk->flags		= GENHD_FL_EXT_DEVT;
+	sprintf(disk->disk_name, "pmem%d", pmem->id);
+	set_capacity(disk, disk_sectors);
+
+	add_disk(disk);
+	dev_set_drvdata(dev, pmem);
+
+	return 0;
+
+ err_alloc_disk:
+	blk_cleanup_queue(pmem->pmem_queue);
+ err_alloc_queue:
+	iounmap(pmem->virt_addr);
+ err_ioremap:
+	release_mem_region(res->start, resource_size(res));
+ err_request_mem_region:
+	ida_simple_remove(&pmem_ida, pmem->id);
+ err_ida:
+	kfree(pmem);
+	return err;
+}
+
+static int nd_pmem_remove(struct device *dev)
+{
+	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
+	struct pmem_device *pmem = dev_get_drvdata(dev);
+
+	del_gendisk(pmem->pmem_disk);
+	blk_cleanup_queue(pmem->pmem_queue);
+	iounmap(pmem->virt_addr);
+	release_mem_region(nsio->res.start, resource_size(&nsio->res));
+	put_disk(pmem->pmem_disk);
+	ida_simple_remove(&pmem_ida, pmem->id);
+	kfree(pmem);
+
+	return 0;
+}
+
+MODULE_ALIAS("pmem");
+MODULE_ALIAS_ND_DEVICE(ND_DEVICE_NAMESPACE_IO);
+static struct nd_device_driver nd_pmem_driver = {
+	.drv = {
+		.name = "pmem",
+		.probe = nd_pmem_probe,
+		.remove = nd_pmem_remove,
+	},
+	.type = ND_DRIVER_NAMESPACE_IO,
+};
+
+static int __init pmem_init(void)
+{
+	int rc;
+
+	rc = register_blkdev(0, "pmem");
+	if (rc < 0)
+		return rc;
+
+	pmem_major = rc;
+	rc = nd_driver_register(&nd_pmem_driver);
+
+	if (rc < 0)
+		unregister_blkdev(pmem_major, "pmem");
+
+	return rc;
+}
+
+static void __exit pmem_exit(void)
+{
+	driver_unregister(&nd_pmem_driver.drv);
+	unregister_blkdev(pmem_major, "pmem");
+}
+#else
 /* Kernel module stuff */
 static int pmem_start_gb = CONFIG_BLK_DEV_PMEM_START;
 module_param(pmem_start_gb, int, S_IRUGO);
@@ -394,6 +530,7 @@ static void __exit pmem_exit(void)
 	unregister_blkdev(pmem_major, "pmem");
 	pr_info("pmem: module unloaded\n");
 }
+#endif
 
 MODULE_AUTHOR("Ross Zwisler <ross.zwisler@linux.intel.com>");
 MODULE_LICENSE("GPL");

@@ -75,4 +75,60 @@ config NFIT_REGION
 
 	  Say Y if you want to use a NVDIMM described by NFIT
 
+config NFIT_PMEM
+	bool "Use NFIT for PMEM"
+	depends on ND_CORE
+	default ND_CORE
+	help
+	  Say Y: Use the platform provided NVDIMM Firmware Interface
+	         Table for pmem device discovery.
+
+	  Say N: Use the kernel command line and config options to a
+	         memory range for pmem.
+
+config BLK_DEV_PMEM
+	tristate "Persistent memory block device support"
+	default ND_CORE
+	help
+	  Saying Y here will allow you to use a contiguous range of reserved
+	  memory as one or more block devices.  Memory for PMEM should be
+	  reserved using the "memmap" kernel parameter.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called pmem.
+
+	  Most normal users won't need this functionality, and can thus say N
+	  here.
+
+config BLK_DEV_PMEM_START
+	int "Offset in GiB of where to start claiming space"
+	default "0"
+	depends on BLK_DEV_PMEM
+	depends on !NFIT_PMEM
+	help
+	  Starting offset in GiB that PMEM should use when claiming memory.  This
+	  memory needs to be reserved from the OS at boot time using the
+	  "memmap" kernel parameter.
+
+	  If you provide PMEM with volatile memory it will act as a volatile
+	  RAM disk and your data will not be persistent.
+
+config BLK_DEV_PMEM_COUNT
+	int "Default number of PMEM disks"
+	default "4"
+	depends on BLK_DEV_PMEM
+	depends on !NFIT_PMEM
+	help
+	  Number of equal sized block devices that PMEM should create.
+
+config BLK_DEV_PMEM_SIZE
+	int "Size in GiB of space to claim"
+	depends on BLK_DEV_PMEM
+	depends on !NFIT_PMEM
+	default "0"
+	help
+	  Amount of memory in GiB that PMEM should use when creating block
+	  devices.  This memory needs to be reserved from the OS at
+	  boot time using the "memmap" kernel parameter.
+
 endif
