@@ -2295,8 +2295,8 @@ int _pad_sdma_tx_descs(struct hfi_devdata *dd, struct sdma_txreq *tx)
 	/* finish the one just added  */
 	tx->num_desc++;
 	make_tx_sdma_desc(
+		tx,
 		SDMA_MAP_NONE,
-		&tx->descp[tx->num_desc],
 		dd->sdma_pad_phys,
 		sizeof(u32) - (tx->packet_len & (sizeof(u32) - 1)));
 	_sdma_close_tx(dd, tx);

@@ -532,7 +532,6 @@ static inline void sdma_txinit_ahg(
 	tx->coalesce_buf = NULL;
 	BUG_ON(tlen == 0);
 	tx->tlen = tx->packet_len = tlen;
-	tx->descs[0].qw[0] = SDMA_DESC0_FIRST_DESC_FLAG;
 }
 
 /**
@@ -595,14 +594,17 @@ static inline dma_addr_t sdma_mapping_addr(struct sdma_desc *d)
 }
 
 static inline void make_tx_sdma_desc(
+	struct sdma_txreq *tx,
 	int type,
-	struct sdma_desc *desc,
 	dma_addr_t addr,
 	size_t len)
 {
-	if (desc->qw[0] & SDMA_DESC0_FIRST_DESC_FLAG)
-		desc->qw[0] |= ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
-				<< SDMA_DESC0_BYTE_COUNT_SHIFT;
+	struct sdma_desc *desc = &tx->descp[tx->num_desc];
+
+	if (!tx->num_desc)
+		desc->qw[0] = (((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
+				<< SDMA_DESC0_BYTE_COUNT_SHIFT)|
+				SDMA_DESC0_FIRST_DESC_FLAG;
 	else
 		desc->qw[0] = ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
 				<< SDMA_DESC0_BYTE_COUNT_SHIFT;
@@ -645,8 +647,8 @@ static inline int _sdma_txadd_daddr(
 			return rval;
 	}
 	make_tx_sdma_desc(
+		tx,
 		type,
-		&tx->descp[tx->num_desc],
 		addr, len);
 	BUG_ON(len > tx->tlen);
 	tx->tlen -= len;
