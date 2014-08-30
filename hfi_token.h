@@ -46,6 +46,9 @@ enum mmap_token_types {
 	TOK_EVENTS_CT,
 	TOK_EVENTS_EQ_DESC,
 	TOK_EVENTS_EQ_HEAD,
+	TOK_TRIG_OP,
+	TOK_LE_ME,
+	TOK_UNEXPECTED,
 };
 
 /*

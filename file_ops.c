@@ -267,6 +267,9 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	case TOK_EVENTS_CT:
 	case TOK_EVENTS_EQ_DESC:
 	case TOK_PORTALS_TABLE:
+	case TOK_TRIG_OP:
+	case TOK_LE_ME:
+	case TOK_UNEXPECTED:
 		vm_ro = 1;
 		break;
 	case TOK_EVENTS_EQ_HEAD:
@@ -325,6 +328,21 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		/* vmalloc - RO */
 		kvaddr = (psb_base + HFI_PSB_PT_OFFSET);
 		memlen = HFI_PSB_PT_SIZE;
+		break;
+	case TOK_TRIG_OP:
+		/* vmalloc - RO */
+		kvaddr = (psb_base + HFI_PSB_TRIG_OFFSET);
+		memlen = ud->ptl_trig_op_size;
+		break;
+	case TOK_LE_ME:
+		/* vmalloc - RO */
+		kvaddr = ud->ptl_le_me_base;
+		memlen = ud->ptl_le_me_size;
+		break;
+	case TOK_UNEXPECTED:
+		/* vmalloc - RO */
+		kvaddr = ud->ptl_le_me_base + ud->ptl_le_me_size;
+		memlen = ud->ptl_unexpected_size;
 		break;
 	default:
 		ret = -EINVAL;

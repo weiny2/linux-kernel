@@ -172,12 +172,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* TODO - RX_CFG_HIARB defines are broken in FXR header */
 	//write_csr(dd, FXR_RX_CFG_HIARB_PCB_BASE, pcb_base.val);
 
-	/* PSB is per PID and so allocated later,
-	 * this is the minimum allocated.
-	 */
-	dd->trig_op_min_entries = HFI_PSB_TRIG_MIN_COUNT;
-	dd->ptl_state_min_size = HFI_PSB_MIN_TOTAL_MEM;
-
 	/* TX and RX command queues */
 	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_ENTRY;
 	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_ENTRY;

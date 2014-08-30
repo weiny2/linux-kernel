@@ -42,11 +42,13 @@ static int hfi_cq_assign_next(struct hfi_userdata *ud,
 	struct hfi_devdata *dd = ud->devdata;
 	unsigned cq_idx, num_cqs = HFI_CQ_COUNT;
 
+#if 0
 	/* TODO - for now allow just one CQ pair.
 	 * We can introduce HFI limits later.
 	 */
 	if (ud->cq_pair_num_assigned > 0)
 		return -ENOSPC;
+#endif
 
 	/* search the whole CQ array, starting with next_unused */
 	while (num_cqs > 0) {
@@ -150,8 +152,8 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 {
 	struct hfi_devdata *dd = ud->devdata;
 	hfi_ptl_pid_t ptl_pid;
-	size_t psb_size;
-	u16 trig_op_entries;
+	u32 psb_size, trig_op_size, le_me_size, unexp_size;
+	u64 ptl_unexpected_base;
 	unsigned long flags;
 
 	/* only one Portals PID allowed */
@@ -172,31 +174,57 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	dd->ptl_pid_user[ptl_pid] = ud;
 	spin_unlock_irqrestore(&dd->ptl_control_lock, flags);
 
-	/* TODO - init IOMMU PASID <-> PID mapping */
-	ud->pasid = ptl_pid;
-	ud->ptl_pid = ptl_pid;
-	ud->srank = ptl_attach->srank;
-	dd_dev_info(dd, "Portals PID %u assigned\n", ptl_pid);
+	/* verify range of inputs */
+	if (ptl_attach->trig_op_count > HFI_TRIG_OP_MAX_COUNT)
+		ptl_attach->trig_op_count = HFI_TRIG_OP_MAX_COUNT;
+	if (ptl_attach->le_me_count > HFI_LE_ME_MAX_COUNT)
+		ptl_attach->le_me_count = HFI_LE_ME_MAX_COUNT;
+	if (ptl_attach->unexpected_count > HFI_UNEXP_MAX_COUNT)
+		ptl_attach->unexpected_count = HFI_UNEXP_MAX_COUNT;
 
-	/* TODO compute Portals State Base size, for now use a minimum */
-	trig_op_entries = dd->trig_op_min_entries;
-	psb_size = dd->ptl_state_min_size;
+	/* compute total Portals State Base size */
+	trig_op_size = PAGE_ALIGN(ptl_attach->trig_op_count * HFI_TRIG_OP_SIZE);
+	psb_size = HFI_PSB_FIXED_TOTAL_MEM + trig_op_size;
 
-	/* vmalloc Portals State memory, store in PCB */
+	/* vmalloc Portals State memory, will store in PCB */
 	ud->ptl_state_base = vmalloc_user(psb_size);
 	if (!ud->ptl_state_base) {
 		hfi_ptl_pid_free(dd, ptl_pid);
 		return -ENOMEM;
 	}
+
+	/* vmalloc Portals LE/ME and unexpected lists, will store in PCB */
+	le_me_size = PAGE_ALIGN(ptl_attach->le_me_count * HFI_LE_ME_SIZE);
+	unexp_size = PAGE_ALIGN(ptl_attach->unexpected_count * HFI_UNEXP_SIZE);
+	if (le_me_size + unexp_size > 0) {
+		ud->ptl_le_me_base = vmalloc_user(le_me_size + unexp_size);
+		if (!ud->ptl_le_me_base) {
+			vfree(ud->ptl_state_base);
+			hfi_ptl_pid_free(dd, ptl_pid);
+			return -ENOMEM;
+		}
+	}
+
 	ud->ptl_state_size = psb_size;
+	ud->ptl_trig_op_size = trig_op_size;
+	ud->ptl_le_me_size = le_me_size;
+	ud->ptl_unexpected_size = unexp_size;
+	ptl_unexpected_base = (u64)ud->ptl_le_me_base + le_me_size;
+
+	/* TODO - init IOMMU PASID <-> PID mapping */
+	ud->pasid = ptl_pid;
+	/* don't set ud->ptl_pid until passed all possible error conditions */
+	ud->ptl_pid = ptl_pid;
+	ud->srank = ptl_attach->srank;
+	dd_dev_info(dd, "Portals PID %u assigned PCB:[%d, %d, %d, %d]\n", ptl_pid,
+		    psb_size, trig_op_size, le_me_size, unexp_size);
 
 	/* write PCB (host memory) */
-	/* TODO PCB overflow for LE/MEs */
-	dd->ptl_control[ptl_pid].trig_op_size = trig_op_entries;
-	dd->ptl_control[ptl_pid].le_me_base = 0;
-	dd->ptl_control[ptl_pid].le_me_size = 0;
-	dd->ptl_control[ptl_pid].unexpected_base = 0;
-	dd->ptl_control[ptl_pid].unexpected_size = 0;
+	dd->ptl_control[ptl_pid].trig_op_size = ptl_attach->trig_op_count;
+	dd->ptl_control[ptl_pid].le_me_base = ((u64)ud->ptl_le_me_base >> PAGE_SHIFT);
+	dd->ptl_control[ptl_pid].le_me_size = ptl_attach->le_me_count;
+	dd->ptl_control[ptl_pid].unexpected_base = ((u64)ptl_unexpected_base >> PAGE_SHIFT);
+	dd->ptl_control[ptl_pid].unexpected_size = ptl_attach->unexpected_count;
 	dd->ptl_control[ptl_pid].portals_base = ((u64)ud->ptl_state_base >> PAGE_SHIFT);
 	dd->ptl_control[ptl_pid].v = 1;
 
@@ -209,6 +237,12 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 						ptl_pid, HFI_PSB_EQ_HEAD_SIZE);
 	ptl_attach->pt_token = HFI_MMAP_PSB_TOKEN(TOK_PORTALS_TABLE,
 						ptl_pid, HFI_PSB_PT_SIZE);
+	ptl_attach->le_me_token = HFI_MMAP_PSB_TOKEN(TOK_LE_ME,
+						ptl_pid, ud->ptl_le_me_size);
+	ptl_attach->unexpected_token = HFI_MMAP_PSB_TOKEN(TOK_UNEXPECTED,
+						ptl_pid, ud->ptl_unexpected_size);
+	ptl_attach->trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
+						ptl_pid, ud->ptl_trig_op_size);
 
 	return 0;
 }
@@ -241,7 +275,10 @@ void hfi_ptl_cleanup(struct hfi_userdata *ud)
 	/* release assigned PID */
 	hfi_ptl_pid_free(dd, ptl_pid);
 
+	if (ud->ptl_le_me_base)
+		vfree(ud->ptl_le_me_base);
 	if (ud->ptl_state_base)
 		vfree(ud->ptl_state_base);
 	ud->ptl_state_base = NULL;
+	ud->ptl_le_me_base = NULL;
 }
