@@ -117,8 +117,6 @@ struct hfi_devdata {
 	spinlock_t ptl_control_lock;
 	size_t ptl_control_size;
 	size_t ptl_pid_user_size;
-	size_t ptl_state_min_size;
-	u16 trig_op_min_entries;
 
 	/* Command Queue State */
 	hfi_ptl_pid_t cq_pair[HFI_CQ_COUNT];
@@ -139,7 +137,11 @@ struct hfi_userdata {
 
 	/* Per PID Portals State */
 	void *ptl_state_base;
-	u16 ptl_state_size;
+	void *ptl_le_me_base;
+	u32 ptl_state_size;
+	u32 ptl_le_me_size;
+	u32 ptl_unexpected_size;
+	u32 ptl_trig_op_size;
 	hfi_ptl_pid_t ptl_pid;
 	u16 srank;
 	u16 pasid;

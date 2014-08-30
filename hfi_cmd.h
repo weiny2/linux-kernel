@@ -140,6 +140,7 @@ struct hfi_ptl_attach_args {
 	OUT __u64 le_me_token;    /* mmap: LE/ME list */
 	OUT __u64 le_me_unlink_token;  /* mmap: freed LE/MEs */
 	OUT __u64 unexpected_token;    /* mmap: unexpected list */
+	OUT __u64 trig_op_token;       /* mmap: trig op list */
 };
 
 struct hfi_ptl_detach_args {
