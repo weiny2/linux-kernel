@@ -356,6 +356,7 @@ static int drm_fb_helper_panic(struct notifier_block *n, unsigned long ununsed,
 
 static struct notifier_block paniced = {
 	.notifier_call = drm_fb_helper_panic,
+	.priority = INT_MIN,
 };
 
 static bool drm_fb_helper_is_bound(struct drm_fb_helper *fb_helper)
