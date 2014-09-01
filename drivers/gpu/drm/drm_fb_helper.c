@@ -339,15 +339,24 @@ static bool drm_fb_helper_force_kernel_mode(void)
 	return error;
 }
 
+static int drm_fb_panic_mode = -1;
+module_param_named(panic, drm_fb_panic_mode, int, 0644);
+
 static int drm_fb_helper_panic(struct notifier_block *n, unsigned long ununsed,
 			void *panic_str)
 {
 	/*
 	 * It's a waste of time and effort to switch back to text console
-	 * if the kernel should reboot - since the fb_panic code may hang
-	 * it may even prevent rebooting.
+	 * if the kernel should reboot  before panic messages can be seen.
+	 * Since the fb_panic code may hang and may even prevent rebooting
+	 * we add an option to set the behavior:
+	 * drm:panic < 0 - default: don't switch when system is set to reboot.
+	 * drm:panic == 0: don't switch ever.
+	 * drm:panic > 0: switch when no immediate reboot is requested
+	 *                (original behavior)
 	 */
-	if (panic_timeout != 0)
+	if (drm_fb_panic_mode == 0 || panic_timeout < 0 ||
+	    (drm_fb_panic_mode < 0 && panic_timeout != 0))
 		return 0;
 
 	pr_err("panic occurred, switching back to text console\n");
