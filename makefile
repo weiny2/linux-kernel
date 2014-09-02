@@ -87,15 +87,18 @@ ifneq (,$(BASEVERSION))
 endif
 
 dist: distclean specfile
-	rm -rf /tmp/hfi-$(VERSION)
-	mkdir -p /tmp/hfi-$(VERSION)
-	cp -r . /tmp/hfi-$(VERSION)
-	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/hfi-$(VERSION).tgz ./hfi-$(VERSION)
-	rm -rf /tmp/hfi-$(VERSION)
+	rm -rf /tmp/$(NAME)-$(VERSION)
+	mkdir -p /tmp/$(NAME)-$(VERSION)
+	cp -r . /tmp/$(NAME)-$(VERSION)
+	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/$(NAME)-$(VERSION).tgz ./$(NAME)-$(VERSION)
+	rm -rf /tmp/$(NAME)-$(VERSION)
 
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install $(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+
+rpm: dist
+	rpmbuild --define 'require_kver $(KVER)' -ta $(NAME)-$(VERSION).tgz
 
 version:
 	echo $(NAME) $(MVERSION)
