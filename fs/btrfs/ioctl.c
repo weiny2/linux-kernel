@@ -2384,15 +2384,8 @@ static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
 
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFDIR:
-		if (!capable(CAP_SYS_ADMIN)) {
-			ret = -EPERM;
-			goto out;
-		}
-		ret = btrfs_defrag_root(root);
-		if (ret)
-			goto out;
-		ret = btrfs_defrag_root(root->fs_info->extent_root);
-		break;
+		ret = 0;
+		goto out;
 	case S_IFREG:
 		if (!(file->f_mode & FMODE_WRITE)) {
 			ret = -EINVAL;
