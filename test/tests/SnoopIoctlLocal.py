@@ -72,12 +72,6 @@ def is_armed(link, phys):
     else:
         return False
 
-def is_down(link, phys):
-    if (link == "IB_PORT_DOWN") and (phys == "IB_PORTPHYSSTATE_LINKUP"):
-        return True
-    else:
-        return False
-
 def is_polling(link, phys):
     if phys == "IB_PORTPHYSSTATE_POLL":
         return True
@@ -229,34 +223,30 @@ def make_active(file_obj):
         RegLib.test_fail("Failed to bring to active state")
     check_sanity(file_obj, link, phys)
 
-def bring_down(file_obj):
-    ioctl = IOCTL_SET_LINK_STATE_EXTRA
-    RegLib.test_log(0, "Bringing port down...")
-    (link, phys) = change_port_state(file_obj, int(IOCTL_SET_LINK_STATE_EXTRA), "IB_PORT_DOWN", "IB_PORTPHYSSTATE_POLL")
-    RegLib.test_log(0, "After sending port down ioctl: link %s phys %s" % (link, phys))
-    attempts = 0
-    while attempts < 60:
-        if not is_init(link, phys):
-            RegLib.test_log(0, "Not in init: %s | %s" % (link, phys))
-            if is_polling(link, phys) or is_training(link, phys):
-                RegLib.test_log(0, "Down but polling or training, check again in 1 second")
-                time.sleep(1)
-                attempts += 1
-                (link, phys) = get_link_phys_state_extra(file_obj)
-            else:
-                RegLib.test_fail("Not down or polling.")
-        else:
-            break
-    if attempts == 60 - 1:
-        RegLib.test_fail("Failed to bring port it down after 60 seconds")
-
-    check_sanity(file_obj, link, phys)
-
 def disable(file_obj):
     ioctl = IOCTL_SET_LINK_STATE_EXTRA
     RegLib.test_log(0, "Disabling...")
     (link, phys) = change_port_state(file_obj, ioctl, "IB_PORT_NOP", "IB_PORTPHYSSTATE_DISABLED")
     check_sanity(file_obj, link, phys)
+
+def set_polling(file_obj):
+    ioctl = IOCTL_SET_LINK_STATE_EXTRA
+    RegLib.test_log(0, "Setting to polling and waiting for link to come up...")
+    (link, phys) = change_port_state(file_obj, ioctl, "IB_PORT_NOP", "IB_PORTPHYSSTATE_POLL")
+    attempts = 0
+    while attempts < 60:
+        if is_polling(link, phys) or is_training(link, phys):
+            RegLib.test_log(0, "Polling or training, check again in 1 second")
+            time.sleep(1)
+            attempts += 1
+            (link, phys) = get_link_phys_state_extra(file_obj)
+            (link_check, phys_check) = get_link_phys_state(file_obj)
+            if phys_check == "IB_PORT_PHYSSTATE_LINKUP":
+                break
+        else:
+            break
+
+    check_sanity(file_obj, link, "IB_PORTPHYSSTATE_LINKUP")
 
 def show_sys_state():
     RegLib.test_log(0, "----------------------------")
@@ -266,9 +256,10 @@ def show_sys_state():
     os.system("cat /sys/class/infiniband/hfi0/ports/1/phys_state")
     RegLib.test_log(0, "----------------------------")
 
+# Not using but leave here in case we need to add it back in for debugging
+# later.
 def get_crc_errors(hfidiags):
     # adapted from Dean's script
-
     RegLib.test_log(0, "Dumping CRC error count")
     os.system("%s -t -e \"w DC8051_CFG_HOST_CMD_0 0x0100000000000500\"" % hfidiags)
     os.system("%s -t -e \"w DC8051_CFG_HOST_CMD_0 0x0100000000000501\"" % hfidiags)
@@ -299,59 +290,26 @@ def main():
     if diags_path != "DEFAULT":
         hfidiags = diags_path + "/hfidiags/hfidiags"
     RegLib.test_log(0, "Using %s for hfidiags" % hfidiags)
-    
 
     show_sys_state()
-    get_crc_errors(hfidiags)
 
-    # Make sure link is physically up not disabled but in init state
-    (link, phys) = get_link_phys_state(file_obj)
-
-    # First make sure we can go from init to active. If not in init bring it down
-    if not is_init(link,phys):
-        RegLib.test_log(0,"Not in init state bringing down to polling")
-        bring_down(file_obj) 
-        get_crc_errors(hfidiags)
-        show_sys_state()
-    RegLib.test_log(0, "Bringing port up")
-    arm(file_obj)
-    get_crc_errors(hfidiags)
-    show_sys_state()
-    make_active(file_obj)
-    get_crc_errors(hfidiags)
-    show_sys_state()
-    
-    # Now make sure we can bounce the port, sort of redundant with the above
-    RegLib.test_log(0, "Bouncing port")
-    bring_down(file_obj)
-    get_crc_errors(hfidiags)
-    show_sys_state()
-    arm(file_obj)
-    get_crc_errors(hfidiags)
-    show_sys_state()
-    make_active(file_obj)
-    get_crc_errors(hfidiags)
-    show_sys_state()
-
-    # Now do something more sinister and disable the port
-    RegLib.test_log(0, "Disabling the port")
+    # Should be able to go to disabled from any state
     disable(file_obj)
-    get_crc_errors(hfidiags)
     show_sys_state()
 
-    # Ok port is disabled now lets bring it back to sanity land
-    RegLib.test_log(0, "Bringing port back up")
-    bring_down(file_obj)
-    get_crc_errors(hfidiags)
+    # Go to polling
+    set_polling(file_obj)
     show_sys_state()
+
+    # now arm
     arm(file_obj)
-    get_crc_errors(hfidiags)
-    show_sys_state()
-    make_active(file_obj)
-    get_crc_errors(hfidiags)
     show_sys_state()
 
-    RegLib.test_pass("Completed!")
+    # finally we can go active
+    make_active(file_obj)
+    show_sys_state()
+
+    RegLib.test_pass("Completed")
 
 if __name__ == "__main__":
     main()

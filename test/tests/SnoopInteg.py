@@ -36,7 +36,7 @@ def snoop_enabled(host):
 
 def enable_snoop(host1, host2, directory, mod_parms):
     host = host1.get_name() + "," + host2.get_name() 
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
+    os.system(directory + "/LoadModule.py --nodelist " + host + " --modparm \"" + params + "\"")
     if (snoop_enabled(host1) == False or snoop_enabled(host2) == False):
         error("Could not enable snoop and snoop_drop_send on all hosts")
 
