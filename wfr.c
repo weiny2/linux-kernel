@@ -1715,6 +1715,43 @@ void handle_link_down(struct work_struct *work)
 }
 
 /*
+ * Mask conversion: Capability exchange to Port LTP.  The capability
+ * exchange has an implicit 16b CRC that is mandatory.
+ */
+static int cap_to_port_ltp(int cap)
+{
+	int port_ltp = PORT_LTP_CRC_MODE_16; /* this mode is mandatory */
+
+	if (cap & CAP_CRC_14B)
+		port_ltp |= PORT_LTP_CRC_MODE_14;
+	if (cap & CAP_CRC_48B)
+		port_ltp |= PORT_LTP_CRC_MODE_48;
+	if (cap & CAP_CRC_12B_16B_PER_LANE)
+		port_ltp |= PORT_LTP_CRC_MODE_PER_LANE;
+
+	return port_ltp;
+}
+
+/*
+ * Convert a single DC LCB CRC mode to an STL Port LTP mask.
+ */
+static int lcb_to_port_ltp(int lcb_crc)
+{
+	int port_ltp = 0;
+
+	if (lcb_crc & LCB_CRC_16B)
+		port_ltp = PORT_LTP_CRC_MODE_16;
+	else if (lcb_crc & LCB_CRC_14B)
+		port_ltp = PORT_LTP_CRC_MODE_14;
+	else if (lcb_crc & LCB_CRC_48B)
+		port_ltp = PORT_LTP_CRC_MODE_48;
+	else if (lcb_crc & LCB_CRC_12B_16B_PER_LANE)
+		port_ltp = PORT_LTP_CRC_MODE_PER_LANE;
+
+	return port_ltp;
+}
+
+/*
  * Handle a verify capabilities interrupt from the 8051.
  *
  * This is a work-queue function outside of the interrupt.
@@ -1787,11 +1824,11 @@ void handle_verify_cap(struct work_struct *work)
 	/* set up the LCB CRC mode */
 	crc_mask = link_crc_mask & crc_sizes;
 	/* order is important: use the highest bit in common */
-	if (crc_mask & CRC_12B_16B_PER_LANE)
+	if (crc_mask & CAP_CRC_12B_16B_PER_LANE)
 		crc_val = LCB_CRC_12B_16B_PER_LANE;
-	else if (crc_mask & CRC_48B)
+	else if (crc_mask & CAP_CRC_48B)
 		crc_val = LCB_CRC_48B;
-	else if (crc_mask & CRC_14B)
+	else if (crc_mask & CAP_CRC_14B)
 		crc_val = LCB_CRC_14B;
 	else
 		crc_val = LCB_CRC_16B;
@@ -1809,10 +1846,20 @@ void handle_verify_cap(struct work_struct *work)
 			reg & ~WFR_SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
 	}
 
+	/*
+	 * Cache the values of the supported, enabled, and active
+	 * LTP CRC modes to return in 'portinfo' queries. But the bit
+	 * flags that are returned in the portinfo query differ from
+	 * what's in the link_crc_mask, crc_sizes, and crc_val
+	 * variables. Convert these here.
+	 */
 	ppd->port_ltp_crc_mode =
-		link_crc_mask << 8; /* supported crc modes */
-	ppd->port_ltp_crc_mode |= crc_sizes << 4; /* enabled crc modes */
-	ppd->port_ltp_crc_mode |= crc_val; /* active crc mode */
+		cap_to_port_ltp(link_crc_mask) << 8;
+		/* supported crc modes */
+	ppd->port_ltp_crc_mode |= cap_to_port_ltp(crc_sizes) << 4;
+		/* enabled crc modes */
+	ppd->port_ltp_crc_mode |= lcb_to_port_ltp(crc_val);
+		/* active crc mode */
 
 	/* set up the remote credit return table */
 	assign_remote_cm_au_table(dd, vcu);

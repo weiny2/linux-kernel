@@ -346,17 +346,32 @@
 #define PWRM_DEEP_SLEEP		0x8
 
 /* verify capability fabric CRC size bits */
-#define CRC_14B			0x1	/* 14b CRC */
-#define CRC_48B			0x2	/* 48b CRC */
-#define CRC_12B_16B_PER_LANE	0x4	/* 12b-16b per lane CRC */
+enum {
+	CAP_CRC_14B = (1 << 0), /* 14b CRC */
+	CAP_CRC_48B = (1 << 1), /* 48b CRC */
+	CAP_CRC_12B_16B_PER_LANE = (1 << 2) /* 12b-16b per lane CRC */
+};
 
-#define WFR_SUPPORTED_CRCS (CRC_14B | CRC_48B | CRC_12B_16B_PER_LANE)
+#define WFR_SUPPORTED_CRCS (CAP_CRC_14B | CAP_CRC_48B | \
+			    CAP_CRC_12B_16B_PER_LANE)
 
 /* LCB_CFG_CRC_MODE TX_VAL and RX_VAL CRC mode values */
 #define LCB_CRC_16B			0x0	/* 16b CRC */
 #define LCB_CRC_14B			0x1	/* 14b CRC */
 #define LCB_CRC_48B			0x2	/* 48b CRC */
 #define LCB_CRC_12B_16B_PER_LANE	0x3	/* 12b-16b per lane CRC */
+
+/* the following enum is (almost) a copy/paste of the definition
+ * in the STL spec, section 20.2.2.6.8 (PortInfo) */
+enum {
+	PORT_LTP_CRC_MODE_NONE = 0,
+	PORT_LTP_CRC_MODE_14 = 1, /* 14-bit LTP CRC mode (optional) */
+	PORT_LTP_CRC_MODE_16 = 2, /* 16-bit LTP CRC mode */
+	PORT_LTP_CRC_MODE_48 = 4,
+		/* 48-bit overlapping LTP CRC mode (optional) */
+	PORT_LTP_CRC_MODE_PER_LANE = 8
+		/* 12 to 16 bit per lane LTP CRC mode (optional) */
+};
 
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
