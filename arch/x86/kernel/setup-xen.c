@@ -1229,6 +1229,10 @@ void __init setup_arch(char **cmdline_p)
 #ifndef CONFIG_XEN
 	if (mtrr_trim_uncached_memory(max_pfn))
 		max_pfn = e820_end_of_ram_pfn();
+#else
+	if (max_pfn > xen_start_info->nr_pages)
+		memblock_reserve(PFN_PHYS(xen_start_info->nr_pages),
+				 PFN_PHYS(max_pfn - xen_start_info->nr_pages));
 #endif
 
 #ifdef CONFIG_X86_32

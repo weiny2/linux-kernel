@@ -566,8 +566,6 @@ static int msix_capability_init(struct pci_dev *dev,
 	if (!msi_dev_entry)
 		return -ENOMEM;
 
-	msix_set_enable(dev, 0);/* Ensure msix is disabled as I set it up */
-
 	pci_read_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS, &control);
 
 	/* Ensure MSI-X is disabled while it is set up */

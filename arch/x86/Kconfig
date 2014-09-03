@@ -1035,11 +1035,11 @@ config X86_16BIT
 
 config X86_ESPFIX32
 	def_bool y
-	depends on X86_16BIT && X86_32
+	depends on X86_16BIT && X86_32 && !XEN
 
 config X86_ESPFIX64
 	def_bool y
-	depends on X86_16BIT && X86_64
+	depends on X86_16BIT && X86_64 && !XEN
 
 config TOSHIBA
 	tristate "Toshiba Laptop support"

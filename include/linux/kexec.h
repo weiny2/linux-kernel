@@ -2,6 +2,10 @@
 #define LINUX_KEXEC_H
 
 #include <uapi/linux/kexec.h>
+#ifdef CONFIG_XEN
+#include <asm/hypervisor.h>
+#include <xen/interface/kexec.h>
+#endif
 
 #ifdef CONFIG_KEXEC
 #include <linux/list.h>
@@ -234,7 +238,15 @@ void crash_free_reserved_phys_range(unsigned long begin, unsigned long end);
 #else /* !CONFIG_KEXEC */
 struct pt_regs;
 struct task_struct;
-static inline void crash_kexec(struct pt_regs *regs) { }
+static inline void crash_kexec(struct pt_regs *regs) {
+#ifdef CONFIG_XEN
+	if (is_initial_xendomain()) {
+		xen_kexec_exec_t xke = { .type = KEXEC_TYPE_CRASH };
+
+		VOID(HYPERVISOR_kexec_op(KEXEC_CMD_kexec, &xke));
+	}
+#endif
+}
 static inline int kexec_should_crash(struct task_struct *p) { return 0; }
 #endif /* CONFIG_KEXEC */
 #endif /* LINUX_KEXEC_H */

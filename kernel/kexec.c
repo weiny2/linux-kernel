@@ -1148,6 +1148,12 @@ void crash_kexec(struct pt_regs *regs)
 			crash_save_vmcoreinfo();
 			machine_crash_shutdown(&fixed_regs);
 			machine_kexec(kexec_crash_image);
+#ifdef CONFIG_XEN
+		} else if (is_initial_xendomain()) {
+			xen_kexec_exec_t xke = { .type = KEXEC_TYPE_CRASH };
+
+			VOID(HYPERVISOR_kexec_op(KEXEC_CMD_kexec, &xke));
+#endif
 		}
 		mutex_unlock(&kexec_mutex);
 	}
