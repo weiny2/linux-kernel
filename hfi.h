@@ -730,6 +730,8 @@ struct hfi_devdata {
 	/* send context numbers and sizes for each type */
 	struct sc_config_sizes sc_sizes[SC_MAX];
 
+	u32 lcb_access_count;		/* count of LCB users */
+
 	/* device-specific implementations of functions needed by
 	 * common code. Contrary to previous consensus, we can't
 	 * really just point to a device-specific table, because we

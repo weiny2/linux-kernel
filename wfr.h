@@ -255,6 +255,10 @@
 #define WFR_HREQ_REQUEST_REJECTED	0xfe
 #define WFR_HREQ_EXECUTION_ONGOING	0xff
 
+/* MISC host command functions */
+#define HCMD_MISC_REQUEST_LCB_ACCESS 0x1
+#define HCMD_MISC_GRANT_LCB_ACCESS   0x2
+
 /* DC_DC8051_CFG_MODE.GENERAL bits */
 #define DISABLE_SELF_GUID_CHECK 0x2
 
@@ -373,12 +377,14 @@ enum {
 		/* 12 to 16 bit per lane LTP CRC mode (optional) */
 };
 
+/* timeouts */
+#define LINK_RESTART_DELAY 10000	/* link restart delay, in ms */
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);
 
 /*
- *
  * The *_kctxt_* flavor of the CSR read/write functions are for
  * per-context or per-SDMA CSRs that are not mappable to user-space.
  * Their spacing is not a PAGE_SIZE multiple.
@@ -396,6 +402,7 @@ static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
 	/* kernel per-context CSRs are separated by 0x100 */
 	write_csr(dd, offset0 + (0x100 * ctxt), value);
 } 
+
 /*
  * The *_uctxt_* flavor of the CSR read/write functions are for
  * per-context CSRs that are mappable to user space. All these CSRs
@@ -455,6 +462,16 @@ void handle_verify_cap(struct work_struct *work);
 void handle_link_up(struct work_struct *work);
 void handle_link_down(struct work_struct *work);
 void link_restart_worker(struct work_struct *work);
+void schedule_link_restart(struct qib_pportdata *ppd);
+
+int acquire_lcb_access(struct hfi_devdata *dd);
+int release_lcb_access(struct hfi_devdata *dd);
+#define LCB_START DC_LCB_CSRS
+#define LCB_END   DC_8051_CSRS /* next block is 8051 */
+static inline int is_lcb_offset(u32 offset)
+{
+	return (offset >= LCB_START && offset < LCB_END);
+}
 
 extern uint num_vls;
 

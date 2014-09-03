@@ -710,9 +710,15 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	pi->replay_depth.buffer = 0x80;
 	/* WFR supports a replay buffer 128 LTPs in size */
-	tmp = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
-	tmp >>= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_SHIFT;
-	tmp &= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_MASK;
+	if (acquire_lcb_access(dd) == 0) {
+		tmp = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
+		tmp >>= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_SHIFT;
+		tmp &= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_MASK;
+		release_lcb_access(dd);
+	} else {
+		/* TODO: return an error? */
+		tmp = 0;
+	}
 	/* this counter is 16 bits wide, but the replay_depth.wire
 	 * variable is only 8 bits */
 	if (tmp > 0xff)
@@ -2489,8 +2495,11 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	rsp->local_link_integrity_errors =
-		cpu_to_be64(read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
+	if (acquire_lcb_access(dd) == 0) {
+		rsp->local_link_integrity_errors = cpu_to_be64(
+			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
+		release_lcb_access(dd);
+	}
 	rsp->port_rcv_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
 	/* rsp->excessive_buffer_overruns - SPC RXE block
@@ -2576,8 +2585,11 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	error_counter_summary +=
-		cpu_to_be64(read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
+	if (acquire_lcb_access(dd) == 0) {
+		error_counter_summary += cpu_to_be64(
+			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
+		release_lcb_access(dd);
+	}
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
 	/* excessive_buffer_overruns - SPC RXE block
@@ -2820,8 +2832,11 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	/* rsp->port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	rsp->local_link_integrity_errors =
-		cpu_to_be64(read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
+	if (acquire_lcb_access(dd) == 0) {
+		rsp->local_link_integrity_errors = cpu_to_be64(
+			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
+		release_lcb_access(dd);
+	}
 	/* rsp->excessive_buffer_overruns - SPC RXE block
 	 * (table 13-11 WFR spec) */
 	rsp->fm_config_errors =
@@ -2998,8 +3013,13 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	/* ignore cs_port_xmit_constraint_errors for now */
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT, 0);
-	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS)
-		write_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
+	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS) {
+		if (acquire_lcb_access(dd) == 0) {
+			write_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
+			release_lcb_access(dd);
+		}
+		/* else return an error? ??? */
+	}
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		write_csr(dd, DCC_ERR_PORTRCV_ERR_CNT, 0);
 	/* ignore cs_excessive_buffer_overruns for now */

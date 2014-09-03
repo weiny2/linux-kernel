@@ -155,8 +155,7 @@ dd_dev_info(dd, "%s: linkup %u\n", __func__, linkup);
 		qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
 
 		/* restart the link after a delay */
-		schedule_delayed_work(&ppd->link_restart_work,
-						msecs_to_jiffies(1000));
+		schedule_link_restart(ppd);
 	}
 
 	/* notify IB of the link change */

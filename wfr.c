@@ -733,6 +733,9 @@ static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void set_partition_keys(struct qib_pportdata *);
+static const char *link_state_name(u32 state);
+static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
+				u64 *out_data);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -1304,19 +1307,8 @@ static void interrupt_clear_down(struct hfi_devdata *dd,
 				 u32 context,
 				 const struct err_reg_info *eri)
 {
-	u64 lcb_sel = 0;
 	u64 reg;
 	u32 count;
-	int restore_sel = 0;
-
-	if (eri->handler == handle_lcb_err) {
-		lcb_sel = read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL);
-		if (!(lcb_sel & DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK)) {
-			restore_sel = 1;
-			write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL, lcb_sel
-				| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
-		}
-	}
 
 	/* read in a loop until no more errors are seen */
 	count = 0;
@@ -1356,9 +1348,6 @@ static void interrupt_clear_down(struct hfi_devdata *dd,
 				&& dd->irev < 36)
 			break;
 	}
-
-	if (restore_sel)
-		write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL, lcb_sel);
 }
 
 /*
@@ -1473,6 +1462,185 @@ static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 {
 	/* TODO: actually do something */
 	printk("%s: int%u - unimplemented\n", __func__ , source);
+}
+
+/*
+ * Wait until all LCB users leave.  Assumes that the caller has cut off
+ * all new LCB accessors (by setting the link state) and is now waiting
+ * for all current users to finish.
+ */
+static int wait_lcb_access_done(struct hfi_devdata *dd)
+{
+	unsigned long timeout;
+	u32 count;
+
+	timeout = jiffies + msecs_to_jiffies(20);
+	while (1) {
+		count = ACCESS_ONCE(dd->lcb_access_count);
+		if (count == 0)
+			return 0;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd, "%s: timed out waiting for LCB access to be released, access count %u\n",
+				__func__, count);
+			return -ETIMEDOUT;
+		}
+		usleep_range(100, 200);
+	}
+}
+
+static int request_host_lcb_access(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = do_8051_command(dd, WFR_HCMD_MISC,
+		(u64)HCMD_MISC_REQUEST_LCB_ACCESS << LOAD_DATA_FIELD_ID_SHIFT,
+		NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "%s: command failed with error %d\n",
+			__func__, ret);
+	}
+	return ret == WFR_HCMD_SUCCESS ? 0 : -EBUSY;
+}
+
+static int request_8051_lcb_access(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = do_8051_command(dd, WFR_HCMD_MISC,
+		(u64)HCMD_MISC_GRANT_LCB_ACCESS << LOAD_DATA_FIELD_ID_SHIFT,
+		NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "%s: command failed with error %d\n",
+			__func__, ret);
+	}
+	return ret == WFR_HCMD_SUCCESS ? 0 : -EBUSY;
+}
+
+/*
+ * Set the LCB selector - allow host access.  The DCC selector always
+ * pionts to the host.
+ */
+static inline void set_host_lcb_access(struct hfi_devdata *dd)
+{
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+				DC_DC8051_CFG_CSR_ACCESS_SEL_DCC_SMASK
+				| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+}
+
+/*
+ * Clear the LCB selector - allow 8051 access.  The DCC selector always
+ * pionts to the host.
+ */
+static inline void set_8051_lcb_access(struct hfi_devdata *dd)
+{
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+				DC_DC8051_CFG_CSR_ACCESS_SEL_DCC_SMASK);
+}
+
+/*
+ * Acquire LCB access from the 8051.  If the host already has access,
+ * just increment a counter.  Otherwise, inform the 8051 that the
+ * host is taking access.
+ *
+ * Returns:
+ *	0 on success
+ *	-EBUSY if the 8051 has control and cannot be disburbed
+ *	-errno if unable to acquire access from the 8051
+ */
+int acquire_lcb_access(struct hfi_devdata *dd)
+{
+	int ret = 0;
+	u32 state;
+
+	/*
+	 * Use the host link state lock so the operation of this routine
+	 * { link state check, selector change, count increment } can occur
+	 * as a unit against a link state change.  Otherwise there is a
+	 * race between the state change and the count increment.
+	 */
+	mutex_lock(&dd->pport->hls_lock);
+
+	/* can not use the LCB when the 8051 is using it */
+	state = dd->pport->host_link_state;
+	if (state == HLS_DN_POLL || state == HLS_VERIFY_CAP ||
+			state == HLS_GOING_UP || state == HLS_GOING_DOWN) {
+		dd_dev_info(dd, "%s: link state %s disallows LCB access\n",
+			__func__, link_state_name(state));
+		ret = -EBUSY;
+		goto done;
+	}
+
+	if (dd->lcb_access_count == 0) {
+		ret = request_host_lcb_access(dd);
+		if (ret) {
+			dd_dev_err(dd,
+				"%s: unable to acquire LCB access, err %d\n",
+				__func__, ret);
+			goto done;
+		}
+		set_host_lcb_access(dd);
+	}
+	dd->lcb_access_count++;
+done:
+	mutex_unlock(&dd->pport->hls_lock);
+	return ret;
+}
+
+/*
+ * Release LCB access by decrementing the use count.  If the count is moving
+ * from 1 to 0, inform 8051 that it has control back.
+ *
+ * Returns:
+ *	0 on success
+ *	-errno if unable to release access to the 8051
+ */
+int release_lcb_access(struct hfi_devdata *dd)
+{
+	int ret = 0;
+
+	/*
+	 * Use the host link state lock because the acquire needed it.
+	 * Here, we only need to keep { selector change, count decrement }
+	 * as a unit.
+	 */
+	mutex_lock(&dd->pport->hls_lock);
+	if (dd->lcb_access_count == 0) {
+		dd_dev_err(dd, "%s: LCB accsess count is zero.  Skipping.\n",
+			__func__);
+		goto done;
+	}
+
+	if (dd->lcb_access_count == 1) {
+		set_8051_lcb_access(dd);
+		ret = request_8051_lcb_access(dd);
+		if (ret) {
+			dd_dev_err(dd,
+				"%s: unable to release LCB access, err %d\n",
+				__func__, ret);
+			/* restore host access if the grant didn't work */
+			set_host_lcb_access(dd);
+			goto done;
+		}
+	}
+	dd->lcb_access_count--;
+done:
+	mutex_unlock(&dd->pport->hls_lock);
+	return ret;
+}
+
+/*
+ * Initialize LCB access variables and state.  Called during driver load,
+ * after most of the initialization is finished.
+ *
+ * The DC default is LCB access on for the host.  The driver defaults to
+ * leaving access to the 8051.  Assign access now - this contrains the call
+ * to this routine to be after all LCB set-up is done.  In particular, after
+ * qib_init_wfr_funcs() -> set_up_interrupts() -> clear_all_interrupts()
+ */
+static void init_lcb_access(struct hfi_devdata *dd)
+{
+	dd->lcb_access_count = 0;
+	set_8051_lcb_access(dd);
 }
 
 /*
@@ -1775,10 +1943,8 @@ void handle_verify_cap(struct work_struct *work)
 
 	set_link_state(ppd, HLS_VERIFY_CAP);
 
-	/* give host access to the LCB CSRs */
-	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
-		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
-		| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+	/* set host access to the LCB CSRs */
+	set_host_lcb_access(dd);
 	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
 	lcb_shutdown(dd);
@@ -1869,9 +2035,7 @@ void handle_verify_cap(struct work_struct *work)
 
 	/* give 8051 access to the LCB CSRs */
 	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
-	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
-		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
-		& ~DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+	set_8051_lcb_access(dd);
 
 	ppd->neighbor_guid =
 		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
@@ -1947,15 +2111,37 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			 * information _on the next 8051 command_.
 			 * Therefore, when linkup is achieved,
 			 * this flag will still be set.
+			 *
+			 * TODO: Tell the 8051 not to interrupt the host
+			 * for this.
 			 */
-			dd_dev_info(dd, "8051: host request done\n");
+			/*dd_dev_info(dd, "8051: host request done\n");*/
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_HOST_REQ_DONE;
 		}
 		if (host_msg & WFR_LINKUP_ACHIEVED) {
-			dd_dev_info(dd, "8051: LinkUp achieved\n");
-			queue_work(ppd->qib_wq, &ppd->link_up_work);
+			if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
+				&& (ppd->host_link_state == HLS_UP_INIT
+				   || ppd->host_link_state == HLS_UP_ARMED
+				   || ppd->host_link_state == HLS_UP_ACTIVE)) {
+				/*
+				 * FIXME: In simulators before release 46
+				 * linkup was not cleared after the real
+				 * link up event.  The driver would then
+				 * receive a linkup notificiation whenever
+				 * anything generated an 8051 interrupt,
+				 * e.g. LCB access 8051 commands.
+				 *
+				 * Work around that by ignoring the
+				 * link up notificaiton here.  We know
+				 * it is a "repeat" because the link is
+				 * already up.
+				 */
+			} else {
+				dd_dev_info(dd, "8051: LinkUp achieved\n");
+				queue_work(ppd->qib_wq, &ppd->link_up_work);
+			}
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
@@ -2157,6 +2343,16 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 		/* strip so we don't see in the generic unhandled */
 		reg &= ~DCC_ERR_FLG_RCVPORT_ERR_SMASK;
+	}
+	if (reg & DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_UC_SMASK) {
+		/* informative only */
+		dd_dev_info(dd, "8051 access to LCB blocked\n");
+		reg &= ~DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_UC_SMASK;
+	}
+	if (reg & DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_HOST_SMASK) {
+		/* informative only */
+		dd_dev_info(dd, "host access to LCB blocked\n");
+		reg &= ~DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_HOST_SMASK;
 	}
 
 	if (reg)
@@ -2553,8 +2749,9 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 	unsigned long flags;
 	unsigned long timeout;
 
-	dd_dev_info(dd, "%s: type %d, data 0x%012llx\n", __func__, type,
-		in_data);
+	if (type != WFR_HCMD_MISC) /* do not want to see LCB accesses */
+		dd_dev_info(dd, "%s: type %d, data 0x%012llx\n", __func__,
+			type, in_data);
 	/*
 	 * TODO: Do we want to hold the lock for this long?
 	 * Alternatives:
@@ -2786,10 +2983,22 @@ int simulator_loopback_quick_linkup(struct hfi_devdata *dd)
 	unsigned long timeout;
 	int ret;
 
-	/* give host access to the LCB CSRs */
-	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
-		read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
-		| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+	/*
+	 * Set host access to the LCB CSRs.  We grab and release access
+	 * in this routine.
+	 *
+	 * It is OK to grab and release LCB access here because:
+	 * - We are called from the routine that is moving the state
+	 *   to Poll.
+	 * - At the time of this call, the driver state has been changed
+	 *   to Poll, but the 8051 has not bee requested to do anything.
+	 *   Meaning that the link is Offline, and 8051 is not using the
+	 *   LCB CSRs.
+	 * - After setting the link state to Poll, the driver waited
+	 *   until all outside LCB accessors finished.  There is no
+	 *   one else adjusting the LCB access settings.
+	 */
+	set_host_lcb_access(dd);
 	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
 	lcb_shutdown(dd);
@@ -2826,9 +3035,7 @@ int simulator_loopback_quick_linkup(struct hfi_devdata *dd)
 		1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
 
 	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
-	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
-			read_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL)
-				& ~DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+	set_8051_lcb_access(dd);
 
 	/*
 	 * State "quick" LinkUp request sets the physical link state to
@@ -2917,6 +3124,13 @@ static int start_polling(struct hfi_devdata *dd)
 	return set_link_state(dd->pport, HLS_DN_POLL);
 }
 
+/* schedule a link restart */
+void schedule_link_restart(struct qib_pportdata *ppd)
+{
+	schedule_delayed_work(&ppd->link_restart_work,
+					msecs_to_jiffies(LINK_RESTART_DELAY));
+}
+
 static void restart_link(struct qib_pportdata *ppd)
 {
 	int ret;
@@ -2929,10 +3143,7 @@ static void restart_link(struct qib_pportdata *ppd)
 		dd_dev_err(ppd->dd,
 			"Unable to restart polling on the link, err %d, restarting in 10 seconds\n",
 			ret);
-		/* for now, just try to restart in 10s */
-		/* TODO: lump timeouts in a header somewhere? */
-		schedule_delayed_work(&ppd->link_restart_work,
-						msecs_to_jiffies(10000));
+		schedule_link_restart(ppd);
 	}
 }
 
@@ -2968,6 +3179,9 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 
 	/* the link defaults to enabled */
 	ppd->link_enabled = 1;
+
+	/* assign LCB access to the 8051 */
+	set_8051_lcb_access(dd);
 
 	if (loopback) {
 		ret = init_loopback(dd);
@@ -3515,14 +3729,18 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		if (ppd->host_link_state != HLS_DN_OFFLINE)
 			goto unexpected;
 
+		/* link is enabled */
+		ppd->link_enabled = 1;
+		/* set link state first so LCB access starts bouncing off */
+		ppd->host_link_state = HLS_DN_POLL;
+		wait_lcb_access_done(dd);
+
 		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && loopback) {
 			/*
 			 * The simulator loopback does not go into polling.
 			 * Rather, it does a "quick" linkup.
 			 */
 			ret = simulator_loopback_quick_linkup(dd);
-			if (ret)
-				break;
 		} else {
 			ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
 			if (ret1 != WFR_HCMD_SUCCESS) {
@@ -3530,13 +3748,14 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 					"Failed to transition to Polling link state, return 0x%x\n",
 					ret1);
 				ret = -EINVAL;
-				break;
 			}
 		}
-
-		/* link is enabled */
-		ppd->link_enabled = 1;
-		ppd->host_link_state = HLS_DN_POLL;
+		/*
+		 * If an error occured above, go back to offline.  The
+		 * caller may reschedule another attempt.
+		 */
+		if (ret)
+			goto_offline(ppd);
 		break;
 	case HLS_DN_DISABLE:
 		/* link is disabled */
@@ -6294,9 +6513,8 @@ void init_other(struct hfi_devdata *dd)
 	write_csr(dd, WFR_CCE_ERR_MASK, ~0ull);
 	/* enable all Misc errors */
 	write_csr(dd, WFR_MISC_ERR_MASK, ~0ull);
-	/* enable all DC errors */
+	/* enable all DC errors, except LCB */
 	write_csr(dd, DCC_ERR_FLG_EN, ~0ull);
-	write_csr(dd, DC_LCB_ERR_EN, ~0ull);
 	write_csr(dd, DC_DC8051_ERR_EN, ~0ull);
 }
 
@@ -6829,6 +7047,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 
+	/* set up LCB access - must be after set_up_interrupts() */
+	init_lcb_access(dd);
 	read_guid(dd);
 	ret = load_firmware(dd); /* asymmetric with dispose_firmware() */
 	if (ret)

@@ -1716,7 +1716,8 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 {
 	struct hfi_devdata *dd = filp->private_data;
 	void *base;
-	unsigned long total, data;
+	unsigned long total, data, csr_off;
+	int in_lcb;
 
 	/* only read 8 byte quantities */
 	if ((count % 8) != 0)
@@ -1731,11 +1732,29 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 	if (*f_pos + count > dd->kregend - dd->kregbase)
 		return -EINVAL;
 	base = (void *)dd->kregbase + *f_pos;
-	for (total = 0; total < count; total += 8) {
+	csr_off = *f_pos;
+	in_lcb = 0;
+	for (total = 0; total < count; total += 8, csr_off += 8) {
+		/* accessing LCB CSRs requires a special procuedure */
+		if (is_lcb_offset(csr_off)) {
+			if (!in_lcb) {
+				int ret = acquire_lcb_access(dd);
+				if (ret)
+					break;
+				in_lcb = 1;
+			}
+		} else {
+			if (in_lcb) {
+				release_lcb_access(dd);
+				in_lcb = 0;
+			}
+		}
 		data = readq(base + total);
 		if (put_user(data, (unsigned long *)(buf + total)))
 			break;
 	}
+	if (in_lcb)
+		release_lcb_access(dd);
 	*f_pos += total;
 	return total;
 }
@@ -1746,7 +1765,8 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 {
 	struct hfi_devdata *dd = filp->private_data;
 	void *base;
-	unsigned long total, data;
+	unsigned long total, data, csr_off;
+	int in_lcb;
 
 	/* only write 8 byte quantities */
 	if ((count % 8) != 0)
@@ -1762,11 +1782,29 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 		return -EINVAL;
 
 	base = (void *)dd->kregbase + *f_pos;
-	for (total = 0; total < count; total += 8) {
+	csr_off = *f_pos;
+	in_lcb = 0;
+	for (total = 0; total < count; total += 8, csr_off += 8) {
 		if (get_user(data, (unsigned long *)(buf + total)))
 			break;
+		/* accessing LCB CSRs requires a special procuedure */
+		if (is_lcb_offset(csr_off)) {
+			if (!in_lcb) {
+				int ret = acquire_lcb_access(dd);
+				if (ret)
+					break;
+				in_lcb = 1;
+			}
+		} else {
+			if (in_lcb) {
+				release_lcb_access(dd);
+				in_lcb = 0;
+			}
+		}
 		writeq(data, base + total);
 	}
+	if (in_lcb)
+		release_lcb_access(dd);
 	*f_pos += total;
 	return total;
 }
