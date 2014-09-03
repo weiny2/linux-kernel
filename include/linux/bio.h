@@ -192,6 +192,9 @@ struct bio_integrity_payload {
 	struct work_struct	bip_work;	/* I/O completion */
 
 	struct bio_vec		*bip_vec;
+#ifndef __GENKSYMS__
+	unsigned short		bip_max_vcnt;	/* integrity bio_vec slots */
+#endif
 	struct bio_vec		bip_inline_vecs[0];/* embedded bvec array */
 };
 #endif /* CONFIG_BLK_DEV_INTEGRITY */
