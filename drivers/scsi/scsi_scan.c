@@ -1198,11 +1198,13 @@ static int scsi_probe_and_add_lun(struct scsi_target *starget,
 		goto out_free_result;
 	}
 
-	res = scsi_test_lun(sdev);
-	if (res == SCSI_SCAN_TARGET_PRESENT) {
-		SCSI_LOG_SCAN_BUS(1, sdev_printk(KERN_INFO, sdev,
-			"scsi scan: device not ready\n"));
-		goto out_free_result;
+	if (bflags & BLIST_TESTLUN) {
+		res = scsi_test_lun(sdev);
+		if (res == SCSI_SCAN_TARGET_PRESENT) {
+			SCSI_LOG_SCAN_BUS(1, sdev_printk(KERN_INFO, sdev,
+				"scsi scan: device not ready\n"));
+			goto out_free_result;
+		}
 	}
 
 	res = scsi_add_lun(sdev, result, &bflags, shost->async_scan);

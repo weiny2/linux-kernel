@@ -22,7 +22,7 @@
 #define BLIST_USE_10_BYTE_MS	0x8000	/* use 10 byte ms before 6 byte ms */
 #define BLIST_MS_192_BYTES_FOR_3F	0x10000	/*  192 byte ms page 0x3f request */
 #define BLIST_REPORTLUN2	0x20000	/* try REPORT_LUNS even for SCSI-2 devs
- 					   (if HBA supports more than 8 LUNs) */
+					   (if HBA supports more than 8 LUNs) */
 #define BLIST_NOREPORTLUN	0x40000	/* don't try REPORT_LUNS scan (SCSI-3 devs) */
 #define BLIST_NOT_LOCKABLE	0x80000	/* don't use PREVENT-ALLOW commands */
 #define BLIST_NO_ULD_ATTACH	0x100000 /* device is actually for RAID config */
@@ -33,4 +33,5 @@
 #define BLIST_NO_DIF		0x2000000 /* Disable T10 PI (DIF) */
 #define BLIST_SKIP_VPD_PAGES	0x4000000 /* Ignore SBC-3 VPD pages */
 #define BLIST_TRY_VPD_PAGES	0x10000000 /* Attempt to read VPD pages */
+#define BLIST_TESTLUN		0x20000000 /* Sent TEST UNIT READY before scanning */
 #endif
