@@ -1669,14 +1669,13 @@ static int __subn_get_stl_sl_to_sc(struct stl_smp *smp, u32 am, u8 *data,
 				   u32 *resp_len)
 {
 	struct qib_ibport *ibp = to_iport(ibdev, port);
-	u32 n_blocks = STL_AM_NPORT(am);
 	u8 *p = (u8 *)data;
 	size_t size = ARRAY_SIZE(ibp->sl_to_sc); /* == 32 */
 	unsigned i;
 
 	memset(data, 0, size);
 
-	if (n_blocks != 1 || am & 0x00ffffff) {
+	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
@@ -1695,11 +1694,10 @@ static int __subn_set_stl_sl_to_sc(struct stl_smp *smp, u32 am, u8 *data,
 				   u32 *resp_len)
 {
 	struct qib_ibport *ibp = to_iport(ibdev, port);
-	u32 n_blocks = STL_AM_NPORT(am);
 	u8 *p = (u8 *)data;
 	int i;
 
-	if (n_blocks != 1 || am & 0x00ffffff) {
+	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
