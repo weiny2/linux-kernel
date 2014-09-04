@@ -95,9 +95,17 @@ unsigned hfi_egrbuf_alloc_size = 0x8000;
 module_param_named(egrbuf_alloc_size, hfi_egrbuf_alloc_size, uint, S_IRUGO);
 MODULE_PARM_DESC(egrbuf_alloc_size, "Chunk size for Eager buffer allocation");
 
-unsigned hfi_one_pkt_egr = 1;
+unsigned hfi_one_pkt_egr = 0;
 module_param_named(one_pkt_per_egr, hfi_one_pkt_egr, uint, S_IRUGO);
-MODULE_PARM_DESC(one_pkt_per_egr, "Use one packet per eager buffer (default: 1)");
+MODULE_PARM_DESC(one_pkt_per_egr, "Use one packet per eager buffer (default: 0)");
+
+unsigned dont_drop_rhq_full = 1;
+module_param_named(dont_drop_rhq_full, dont_drop_rhq_full, uint, S_IRUGO);
+MODULE_PARM_DESC(dont_drop_rhq_full, "Do not drop packets when the receive header is full (default: 1)");
+
+unsigned dont_drop_egr_full = 1;
+module_param_named(dont_drop_egr_full, dont_drop_egr_full, uint, S_IRUGO);
+MODULE_PARM_DESC(dont_drop_egr_full, "Do not drop packets when all eager buffers are in use (default: 1)");
 
 /* interrupt testing */
 unsigned int test_interrupts;
@@ -139,15 +147,20 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			goto nomem;
 		}
 		/*
-		 * We can setup the kernel contexts here and now because they use
-		 * default values for all receive side memories. User contexts will
-		 * be handled differently.
+		 * Set up the kernel context flags here and now because they
+		 * use default values for all receive side memories.  User
+		 * contexts will be handled as they are created.
 		 */
 		if (hfi_one_pkt_egr)
 			rcd->flags |= HFI_CTXTFLAG_ONEPKTPEREGRBUF;
-		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry size
-		 * as DWords. However, hfi_setup_ctxt takes bytes from PSM and
-		 * converts to DWords. Should we just use bytes in hfi_devdata? */
+		if (dont_drop_rhq_full)
+			rcd->flags |= HFI_CTXTFLAG_DONTDROPHDRQFULL;
+		if (dont_drop_egr_full)
+			rcd->flags |= HFI_CTXTFLAG_DONTDROPEGRFULL;
+		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry
+		 * size as DWords. However, hfi_setup_ctxt takes bytes from
+		 * PSM and converts to DWords. Should we just use bytes in
+		 * hfi_devdata? */
 		ret = hfi_setup_ctxt(rcd, ((dd->rcv_entries.ngroups / 2) *
 					   dd->rcv_entries.group_size),
 				     dd->rcvegrbufsize, dd->rcvhdrcnt,
@@ -571,6 +584,10 @@ static void enable_chip(struct hfi_devdata *dd)
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
 		if (dd->rcd[i]->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF)
 			rcvmask |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
+		if (dd->rcd[i]->flags & HFI_CTXTFLAG_DONTDROPHDRQFULL)
+			rcvmask |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
+		if (dd->rcd[i]->flags & HFI_CTXTFLAG_DONTDROPEGRFULL)
+			rcvmask |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
 		dd->f_rcvctrl(dd, rcvmask, i);
 		/* XXX (Mitko): Do we care about the result of this?
 		 * sc_enable() will display an error message. */

@@ -95,7 +95,7 @@ uint disable_bcc = 0;
 module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
 MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
 
-uint nodma_rtail;
+uint nodma_rtail = 1;
 module_param(nodma_rtail, uint, S_IRUGO);
 MODULE_PARM_DESC(nodma_rtail, "1 for no DMA of hdr tail, 0 to DMA the hdr tail");
 
@@ -107,6 +107,10 @@ MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when c
 static uint use_sdma = 1;
 module_param(use_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(use_sdma, "enable sdma traffic");
+
+static uint rcvhdrcnt = 2048; /* 2x the max eager buffer count */
+module_param_named(rcvhdrcnt, rcvhdrcnt, uint, S_IRUGO);
+MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
 
 /* TODO: temporary */
 #define EASY_LINKUP_UNSET 100
@@ -6983,8 +6987,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* TODO: RcvHdrEntSize, RcvHdrCnt, and RcvHdrSize are now
 	   per context, rather than global. */
-	/* FIXME: arbitrary/old values */
-	dd->rcvhdrcnt = 64;
+	dd->rcvhdrcnt = rcvhdrcnt;	/* checked in hfi_setup_ctxt() */
 	/* TODO: make rcvhdrentsize and rcvhdrsize adjustable? */
 	dd->rcvhdrentsize = DEFAULT_RCVHDR_ENTSIZE;
 	dd->rcvhdrsize = DEFAULT_RCVHDRSIZE;
