@@ -2202,9 +2202,8 @@ static int subn_get_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 {
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
-	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
 
-	if (wfr_strict_am_processing && num_ports != 1) {
+	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply_stl(smp);
 	}
@@ -2224,9 +2223,8 @@ static int subn_set_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 {
 	u8 *p = stl_get_smp_data(smp);
 	unsigned i;
-	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
 
-	if (wfr_strict_am_processing && num_ports != 1) {
+	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply_stl(smp);
 	}
