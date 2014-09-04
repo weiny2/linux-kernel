@@ -860,7 +860,7 @@ static int super_load(struct md_rdev *rdev, struct md_rdev *refdev)
 	rdev->sb_start = 0;
 	rdev->sb_size = sizeof(*sb);
 
-	ret = read_disk_sb(rdev, rdev->sb_size);
+	ret = read_disk_sb(rdev, 4096);
 	if (ret)
 		return ret;
 
