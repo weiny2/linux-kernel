@@ -315,11 +315,11 @@ static void kgr_handle_irqs(void)
 	schedule_on_each_cpu(kgr_handle_irq_cpu);
 }
 
-static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
+static struct kgr_patch_fun *
+kgr_get_last_pf(const struct kgr_patch_fun *patch_fun)
 {
 	const char *name = patch_fun->name;
-	unsigned long last_new_fun = 0;
-	struct kgr_patch_fun *pf;
+	struct kgr_patch_fun *pf, *last_pf = NULL;
 	struct kgr_patch *p;
 
 	list_for_each_entry(p, &patches, list) {
@@ -328,12 +328,19 @@ static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
 				continue;
 
 			if (!strcmp(pf->name, name))
-				last_new_fun = (unsigned long)pf->new_fun;
+				last_pf = pf;
 		}
 	}
 
-	if (last_new_fun)
-		return ftrace_function_to_fentry(last_new_fun);
+	return last_pf;
+}
+
+static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
+{
+	struct kgr_patch_fun *pf = kgr_get_last_pf(patch_fun);
+
+	if (pf)
+		return ftrace_function_to_fentry((unsigned long)pf->new_fun);
 
 	return patch_fun->loc_name;
 }
@@ -342,24 +349,12 @@ static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
  * Obtain the "previous" (in the sense of patch stacking) value of ftrace_ops
  * so that it can be put back properly in case of reverting the patch
  */
-static struct ftrace_ops *kgr_get_old_fops(const struct kgr_patch_fun *patch_fun)
+static struct ftrace_ops *
+kgr_get_old_fops(const struct kgr_patch_fun *patch_fun)
 {
-	const char *name = patch_fun->name;
-	struct ftrace_ops *last_new_fops = NULL;
-	struct kgr_patch_fun *pf;
-	struct kgr_patch *p;
+	struct kgr_patch_fun *pf = kgr_get_last_pf(patch_fun);
 
-	list_for_each_entry(p, &patches, list) {
-		kgr_for_each_patch_fun(p, pf) {
-			if (pf->state != KGR_PATCH_APPLIED)
-				continue;
-
-			if (!strcmp(pf->name, name))
-				last_new_fops = &pf->ftrace_ops_fast;
-		}
-	}
-
-	return last_new_fops;
+	return pf ? &pf->ftrace_ops_fast : NULL;
 }
 
 static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
