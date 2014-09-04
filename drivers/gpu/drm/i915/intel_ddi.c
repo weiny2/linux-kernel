@@ -960,6 +960,24 @@ void intel_ddi_setup_hw_pll_state(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	enum pipe pipe;
 	struct intel_crtc *intel_crtc;
+	unsigned int val;
+
+	/* XXX we need to clear enable bits at resume (bnc#894993) */
+	if (dev_priv->ddi_plls.spll_refcount > 0) {
+		val = I915_READ(SPLL_CTL);
+		if (val & SPLL_PLL_ENABLE)
+			I915_WRITE(SPLL_CTL, val & ~SPLL_PLL_ENABLE);
+	}
+	if (dev_priv->ddi_plls.wrpll1_refcount > 0) {
+		val = I915_READ(WRPLL_CTL1);
+		if (val & WRPLL_PLL_ENABLE)
+			I915_WRITE(WRPLL_CTL1, val & ~WRPLL_PLL_ENABLE);
+	}
+	if (dev_priv->ddi_plls.wrpll2_refcount > 0) {
+		val = I915_READ(WRPLL_CTL2);
+		if (val & WRPLL_PLL_ENABLE)
+			I915_WRITE(WRPLL_CTL2, val & ~WRPLL_PLL_ENABLE);
+	}
 
 	dev_priv->ddi_plls.spll_refcount = 0;
 	dev_priv->ddi_plls.wrpll1_refcount = 0;
