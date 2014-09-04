@@ -3833,6 +3833,21 @@ struct stl_congestion_info_attr {
 	u8 congestion_log_length;
 } __packed;
 
+/*
+ * All CCA structures:
+ *   ppd->cc_supported_table_entries
+ *   ppd->ccti_entries
+ *   ppd->congestion_entries
+ *   ppd->ccti_entries_shadow
+ *   ppd->congestion_entries_shadow
+ * are either allocated, or NULL. So we can test any of these to
+ * determine whether CCA is initialized.
+ */
+static inline int cca_initialized(struct qib_pportdata *ppd)
+{
+	return !!ppd->congestion_entries_shadow;
+}
+
 static int __subn_get_stl_cong_info(struct stl_smp *smp, u32 am, u8 *data,
 				    struct ib_device *ibdev, u8 port,
 				    u32 *resp_len)
@@ -3869,7 +3884,7 @@ static int __subn_get_stl_cong_setting(struct stl_smp *smp, u32 am,
 
 	spin_lock(&ppd->cc_shadow_lock);
 
-	if (!ppd->congestion_entries_shadow) {
+	if (!cca_initialized(ppd)) {
 		spin_unlock(&ppd->cc_shadow_lock);
 		return reply(smp);
 	}
@@ -3905,6 +3920,9 @@ static int __subn_set_stl_cong_setting(struct stl_smp *smp, u32 am, u8 *data,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int i;
 
+	if (!cca_initialized(ppd))
+		goto no_cca;
+
 	ppd->cc_sl_control_map = be32_to_cpu(p->control_map);
 
 	for (i = 0; i < STL_MAX_SLS; i++) {
@@ -3921,6 +3939,7 @@ static int __subn_set_stl_cong_setting(struct stl_smp *smp, u32 am, u8 *data,
 			p->entries[i].ccti_min;
 	}
 
+no_cca:
 	return __subn_get_stl_cong_setting(smp, am, data, ibdev, port,
 					   resp_len);
 }
@@ -3947,7 +3966,7 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 		return reply_failure(smp);
 	}
 
-	if (!ppd->congestion_entries_shadow)
+	if (!cca_initialized(ppd))
 		return reply(smp);
 
 	spin_lock(&ppd->cc_shadow_lock);
@@ -3999,7 +4018,7 @@ static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	if (cct_block_index > ppd->cc_max_table_entries)
 		goto bail;
 
-	if (!ppd->congestion_entries_shadow)
+	if (!cca_initialized(ppd))
 		return reply(smp);
 
 	/* If this packet is the first in the sequence then
