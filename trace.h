@@ -258,6 +258,7 @@ __print_symbolic(opcode,                                   \
 	ib_opcode_name(RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE), \
 	ib_opcode_name(RC_RDMA_READ_REQUEST),              \
 	ib_opcode_name(RC_RDMA_READ_RESPONSE_FIRST),       \
+	ib_opcode_name(RC_RDMA_READ_RESPONSE_MIDDLE),      \
 	ib_opcode_name(RC_RDMA_READ_RESPONSE_LAST),        \
 	ib_opcode_name(RC_RDMA_READ_RESPONSE_ONLY),        \
 	ib_opcode_name(RC_ACKNOWLEDGE),                    \
