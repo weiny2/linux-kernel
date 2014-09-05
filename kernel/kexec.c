@@ -1291,7 +1291,8 @@ static int __init crash_notes_memory_init(void)
 {
 #ifndef CONFIG_XEN
 	/* Allocate memory for saving cpu registers. */
-	crash_notes = alloc_percpu(note_buf_t);
+	crash_notes = __alloc_percpu(sizeof(note_buf_t),
+				     roundup_pow_of_two(sizeof(note_buf_t)));
 	if (!crash_notes) {
 		printk("Kexec: Memory allocation for saving cpu register"
 		" states failed\n");
