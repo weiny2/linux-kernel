@@ -91,7 +91,7 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 	cq_assign->cq_tx_token = HFI_MMAP_TOKEN(TOK_CQ_TX, cq_idx, addr,
 						HFI_CQ_TX_SIZE);
 	cq_assign->cq_rx_token = HFI_MMAP_TOKEN(TOK_CQ_RX, cq_idx, addr,
-						HFI_CQ_RX_SIZE);
+						PAGE_ALIGN(HFI_CQ_RX_SIZE));
 	addr = (u64)HFI_CQ_HEAD_ADDR(dd->cq_head_base, cq_idx);
 	cq_assign->cq_head_token = HFI_MMAP_TOKEN(TOK_CQ_HEAD, cq_idx, addr,
 						  PAGE_SIZE);
