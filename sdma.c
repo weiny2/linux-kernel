@@ -883,9 +883,9 @@ void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 {
 	struct iowait *wait, *nw;
 	struct iowait *waits[SDMA_WAIT_BATCH_SIZE];
-	unsigned i, n;
+	unsigned i, n = 0;
 	struct sdma_txreq *stx;
-	struct qib_ibdev *dev;
+	struct qib_ibdev *dev = &sde->dd->verbs_dev;
 
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA %s:%d %s()\n", slashstrip(__FILE__),
@@ -893,20 +893,24 @@ void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 	dd_dev_err(sde->dd, "avail: %u\n", avail);
 #endif
 
-	n = 0;
-
-	dev = &sde->dd->verbs_dev;
 	spin_lock(&dev->pending_lock);
 	/* Search wait list for first QP wanting DMA descriptors. */
 	list_for_each_entry_safe(wait, nw, &sde->dmawait, list) {
+		u16 num_desc = 0;
 		if (!wait->wakeup)
 			continue;
 		if (n == ARRAY_SIZE(waits))
 			break;
-		stx = list_first_entry(&wait->tx_head, struct sdma_txreq, list);
-		if (stx->num_desc > avail)
+		if (!list_empty(&wait->tx_head)) {
+			stx = list_first_entry(
+				&wait->tx_head,
+				struct sdma_txreq,
+				list);
+			num_desc = stx->num_desc;
+		}
+		if (num_desc > avail)
 			break;
-		avail -= stx->num_desc;
+		avail -= num_desc;
 		list_del_init(&wait->list);
 		waits[n++] = wait;
 	}
