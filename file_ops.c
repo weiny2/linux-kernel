@@ -296,7 +296,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	case TOK_CQ_RX:
 		/* mmio - RW */
 		memaddr = (u64)HFI_CQ_RX_IDX_ADDR(dd->cq_rx_base, ctxt);
-		memlen = HFI_CQ_RX_SIZE;
+		memlen = PAGE_ALIGN(HFI_CQ_RX_SIZE);
 		mapio = 1;
 		break;
 	case TOK_CQ_HEAD:
