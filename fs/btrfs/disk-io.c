@@ -344,10 +344,10 @@ static int verify_parent_transid(struct extent_io_tree *io_tree,
 		ret = 0;
 		goto out;
 	}
-	printk_ratelimited(KERN_WARNING
-			"parent transid verify failed on %llu wanted %llu "
-		       "found %llu\n",
-		       eb->start, parent_transid, btrfs_header_generation(eb));
+	printk_ratelimited(KERN_ERR
+		"BTRFS (dev %s): parent transid verify failed on %llu wanted %llu found %llu\n",
+		eb->fs_info->sb->s_id, eb->start, parent_transid,
+		btrfs_header_generation(eb));
 	ret = 1;
 	clear_extent_buffer_uptodate(eb);
 out:
@@ -604,15 +604,15 @@ static int btree_readpage_end_io_hook(struct btrfs_io_bio *io_bio,
 
 	found_start = btrfs_header_bytenr(eb);
 	if (found_start != eb->start) {
-		printk_ratelimited(KERN_WARNING "BTRFS: bad tree block start "
+		printk_ratelimited(KERN_WARNING "BTRFS (dev %s): bad tree block start "
 			       "%llu %llu\n",
-			       found_start, eb->start);
+			       eb->fs_info->sb->s_id, found_start, eb->start);
 		ret = -EIO;
 		goto err;
 	}
 	if (check_tree_block_fsid(root, eb)) {
-		printk_ratelimited(KERN_WARNING "BTRFS: bad fsid on block %llu\n",
-			       eb->start);
+		printk_ratelimited(KERN_WARNING "BTRFS (devi %s): bad fsid on block %llu\n",
+			       eb->fs_info->sb->s_id, eb->start);
 		ret = -EIO;
 		goto err;
 	}
