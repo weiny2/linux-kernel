@@ -36,13 +36,22 @@ static void kgr_work_fn(struct work_struct *work);
 static struct workqueue_struct *kgr_wq;
 static DECLARE_DELAYED_WORK(kgr_work, kgr_work_fn);
 static DEFINE_MUTEX(kgr_in_progress_lock);
-static LIST_HEAD(patches);
-static LIST_HEAD(to_revert);
-static DECLARE_BITMAP(kgr_immutable, 1);
+static LIST_HEAD(kgr_patches);
+static LIST_HEAD(kgr_to_revert);
 bool kgr_in_progress;
 static bool kgr_initialized;
 static struct kgr_patch *kgr_patch;
 static bool kgr_revert;
+/*
+ * Setting the per-process flag and stub instantiation has to be performed
+ * "atomically", otherwise the flag might get cleared and old function called
+ * during the race window.
+ *
+ * kgr_immutable is an atomic flag which signals whether we are in the
+ * actual race window and lets the stub take a proper action (reset the
+ * 'in progress' state)
+ */
+static DECLARE_BITMAP(kgr_immutable, 1);
 
 /*
  * The stub needs to modify the RIP value stored in struct pt_regs
@@ -89,7 +98,7 @@ static void kgr_refs_inc(void)
 {
 	struct kgr_patch *p;
 
-	list_for_each_entry(p, &patches, list)
+	list_for_each_entry(p, &kgr_patches, list)
 		p->refs++;
 }
 
@@ -97,7 +106,7 @@ static void kgr_refs_dec(void)
 {
 	struct kgr_patch *p;
 
-	list_for_each_entry(p, &patches, list)
+	list_for_each_entry(p, &kgr_patches, list)
 		p->refs--;
 }
 
@@ -161,10 +170,9 @@ static bool kgr_patch_contains(const struct kgr_patch *p, const char *name)
 static void kgr_replace_all(void)
 {
 	struct kgr_patch_fun *pf;
-	struct kgr_patch *p;
-	int err;
+	struct kgr_patch *p, *tmp;
 
-	list_for_each_entry(p, &patches, list) {
+	list_for_each_entry_safe(p, tmp, &kgr_patches, list) {
 		bool needs_revert = false;
 
 		kgr_for_each_patch_fun(p, pf) {
@@ -176,18 +184,15 @@ static void kgr_replace_all(void)
 				continue;
 			}
 
-			pr_info("UNREG %s -> %s\n", p->name, pf->name);
-			err = kgr_ftrace_disable(pf, &pf->ftrace_ops_fast);
-			if (err) {
-				pr_warning("kgr: unregistering ftrace function for %s failed with %d\n",
-						pf->name, err);
-				continue;
-			}
+			/* the fast ftrace fops were disabled during patching */
 			pf->state = KGR_PATCH_REVERTED;
 		}
 
+		/* decrease the reference this patch increased earlier */
+		p->refs--;
+
 		if (needs_revert)
-			list_move(&p->list, &to_revert);
+			list_move(&p->list, &kgr_to_revert);
 		else
 			module_put(p->owner);
 	}
@@ -196,6 +201,7 @@ static void kgr_replace_all(void)
 static void kgr_finalize(void)
 {
 	struct kgr_patch_fun *patch_fun;
+	struct kgr_patch *p_to_revert = NULL;
 
 	mutex_lock(&kgr_in_progress_lock);
 
@@ -215,13 +221,29 @@ static void kgr_finalize(void)
 	} else {
 		if (kgr_patch->replace_all)
 			kgr_replace_all();
-		list_add_tail(&kgr_patch->list, &patches);
+		list_add_tail(&kgr_patch->list, &kgr_patches);
 	}
 
 	kgr_patch = NULL;
-	kgr_in_progress = false;
+	if (list_empty(&kgr_to_revert)) {
+		kgr_in_progress = false;
+	} else {
+		/*
+		 * kgr_in_progress is not cleared to avoid races after the
+		 * unlock below. The force flag is set instead.
+		 */
+		p_to_revert = list_first_entry(&kgr_to_revert, struct kgr_patch,
+				list);
+	}
 
 	mutex_unlock(&kgr_in_progress_lock);
+
+	if (p_to_revert) {
+		int ret = kgr_modify_kernel(p_to_revert, true, true);
+		if (ret)
+			pr_err("kgr: continual revert of %s failedwith %d, but continuing\n",
+					p_to_revert->name, ret);
+	}
 }
 
 static void kgr_work_fn(struct work_struct *work)
@@ -322,7 +344,7 @@ kgr_get_last_pf(const struct kgr_patch_fun *patch_fun)
 	struct kgr_patch_fun *pf, *last_pf = NULL;
 	struct kgr_patch *p;
 
-	list_for_each_entry(p, &patches, list) {
+	list_for_each_entry(p, &kgr_patches, list) {
 		kgr_for_each_patch_fun(p, pf) {
 			if (pf->state != KGR_PATCH_APPLIED)
 				continue;
@@ -462,6 +484,10 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 		 */
 		new_ops = kgr_get_old_fops(patch_fun);
 		break;
+	case KGR_PATCH_REVERTED:
+		if (!revert || final)
+			return -EINVAL;
+		return 0;
 	case KGR_PATCH_SKIPPED:
 		return 0;
 	case KGR_PATCH_APPLIED_NON_FINALIZED:
@@ -505,7 +531,13 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 	return 0;
 }
 
-int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
+/**
+ * kgr_modify_kernel -- apply or revert a patch
+ * @patch: patch to deal with
+ * @revert: if @patch should be reverted, set to true
+ * @force: if kgr_in_progress should be ignored, set to true (internal use)
+ */
+int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 {
 	struct kgr_patch_fun *patch_fun;
 	int ret;
@@ -522,7 +554,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		goto err_unlock;
 	}
 
-	if (kgr_in_progress || !list_empty(&to_revert)) {
+	if (!force && (kgr_in_progress || !list_empty(&kgr_to_revert))) {
 		pr_err("kgr: can't patch, another patching not yet finalized\n");
 		ret = -EAGAIN;
 		goto err_unlock;
@@ -618,7 +650,7 @@ int kgr_patch_kernel(struct kgr_patch *patch)
 	if (ret)
 		goto err_put;
 
-	ret = kgr_modify_kernel(patch, false);
+	ret = kgr_modify_kernel(patch, false, false);
 	if (ret)
 		goto err_dir_del;
 
@@ -716,7 +748,7 @@ void kgr_module_init(const struct module *mod)
 	 * more patches we want to set them all. They need to be in place when
 	 * we remove some patch.
 	 */
-	list_for_each_entry(p, &patches, list)
+	list_for_each_entry(p, &kgr_patches, list)
 		kgr_handle_patch_for_loaded_module(p, mod);
 
 	/* also check the patch in progress that is being applied */
@@ -809,7 +841,7 @@ static void kgr_handle_going_module(const struct module *mod)
 
 	mutex_lock(&kgr_in_progress_lock);
 
-	list_for_each_entry(p, &patches, list)
+	list_for_each_entry(p, &kgr_patches, list)
 		kgr_handle_patch_for_going_module(p, mod);
 
 	/* also check the patch in progress for removed functions */

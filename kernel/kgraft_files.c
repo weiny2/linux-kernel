@@ -97,7 +97,7 @@ static ssize_t revert_store(struct kobject *kobj,
 
 	kgr_taint_kernel(p);
 
-	ret = kgr_modify_kernel(p, true);
+	ret = kgr_modify_kernel(p, true, false);
 
 	return ret < 0 ? ret : count;
 }
