@@ -3883,6 +3883,7 @@ static int btrfs_log_inode(struct btrfs_trans_handle *trans,
 	int ins_nr;
 	bool fast_search = false;
 	u64 ino = btrfs_ino(inode);
+	struct extent_map_tree *em_tree = &BTRFS_I(inode)->extent_tree;
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -4056,10 +4057,9 @@ log_extents:
 			goto out_unlock;
 		}
 	} else if (inode_only == LOG_INODE_ALL) {
-		struct extent_map_tree *tree = &BTRFS_I(inode)->extent_tree;
 		struct extent_map *em, *n;
 
-		write_lock(&tree->lock);
+		write_lock(&em_tree->lock);
 		/*
 		 * We can't just remove every em if we're called for a ranged
 		 * fsync - that is, one that doesn't cover the whole possible
@@ -4078,14 +4078,17 @@ log_extents:
 		 * the next fast fsync not log their matching file extent items,
 		 * therefore making us lose data after a log replay.
 		 */
-		list_for_each_entry_safe(em, n, &tree->modified_extents, list) {
-			if (em->mod_start > end)
+		list_for_each_entry_safe(em, n, &em_tree->modified_extents,
+					 list) {
+			const u64 mod_end = em->mod_start + em->mod_len;
+
+			if (em->mod_start > end ||
+			    mod_end <= start || mod_end > end)
 				continue;
-			if (em->mod_start + em->mod_len <= start)
-				continue;
+
 			list_del_init(&em->list);
 		}
-		write_unlock(&tree->lock);
+		write_unlock(&em_tree->lock);
 	}
 
 	if (inode_only == LOG_INODE_ALL && S_ISDIR(inode->i_mode)) {
@@ -4095,8 +4098,19 @@ log_extents:
 			goto out_unlock;
 		}
 	}
-	BTRFS_I(inode)->logged_trans = trans->transid;
-	BTRFS_I(inode)->last_log_commit = BTRFS_I(inode)->last_sub_trans;
+
+	write_lock(&em_tree->lock);
+	/*
+	 * If we're doing a ranged fsync and there are still modified extents
+	 * in the list, we must run on the next fsync call as it might cover
+	 * those extents (a full fsync or an fsync for other range).
+	 */
+	if (list_empty(&em_tree->modified_extents)) {
+		BTRFS_I(inode)->logged_trans = trans->transid;
+		BTRFS_I(inode)->last_log_commit =
+			BTRFS_I(inode)->last_sub_trans;
+	}
+	write_unlock(&em_tree->lock);
 out_unlock:
 	if (unlikely(err))
 		btrfs_put_logged_extents(&logged_list);
