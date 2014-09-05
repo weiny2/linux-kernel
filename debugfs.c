@@ -204,6 +204,7 @@ static void *_qp_stats_seq_start(struct seq_file *s, loff_t *pos)
 	struct qp_iter *iter;
 	loff_t n = *pos;
 
+	rcu_read_lock();
 	iter = qp_iter_init(s->private);
 	if (!iter)
 		return NULL;
@@ -235,7 +236,7 @@ static void *_qp_stats_seq_next(struct seq_file *s, void *iter_ptr,
 
 static void _qp_stats_seq_stop(struct seq_file *s, void *iter_ptr)
 {
-	/* nothing for now */
+	rcu_read_unlock();
 }
 
 static int _qp_stats_seq_show(struct seq_file *s, void *iter_ptr)

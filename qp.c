@@ -1532,7 +1532,6 @@ int qp_iter_next(struct qp_iter *iter)
 	struct qib_qp *pqp = iter->qp;
 	struct qib_qp *qp;
 
-	rcu_read_lock();
 	/*
 	 * The approach is to consider the special qps
 	 * as an additional table entries before the
@@ -1572,18 +1571,11 @@ int qp_iter_next(struct qp_iter *iter)
 		}
 		pqp = qp;
 		if (qp) {
-			if (iter->qp)
-				atomic_dec(&iter->qp->refcount);
-			atomic_inc(&qp->refcount);
-			rcu_read_unlock();
 			iter->qp = qp;
 			iter->n = n;
 			return 0;
 		}
 	}
-	rcu_read_unlock();
-	if (iter->qp)
-		atomic_dec(&iter->qp->refcount);
 	return ret;
 }
 
