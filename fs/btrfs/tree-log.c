@@ -4080,13 +4080,10 @@ log_extents:
 		 */
 		list_for_each_entry_safe(em, n, &em_tree->modified_extents,
 					 list) {
-			const u64 mod_end = em->mod_start + em->mod_len;
+			const u64 mod_end = em->mod_start + em->mod_len - 1;
 
-			if (em->mod_start > end ||
-			    mod_end <= start || mod_end > end)
-				continue;
-
-			list_del_init(&em->list);
+			if (em->mod_start >= start && mod_end <= end)
+				list_del_init(&em->list);
 		}
 		write_unlock(&em_tree->lock);
 	}
