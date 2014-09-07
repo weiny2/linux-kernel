@@ -536,16 +536,23 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	if (!dd->sdma_map)
 		goto nomem;
 
-	/* 1240 is 1.24 ns (805MHZ) * 1000 */
-	idle_cnt = (idle_cnt*1000)/1240;
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
-		if (dd->irev < 46)
-			idle_cnt = 0;
-			/* pick ASIC cclocks? */
-	}
-	if (dd->icode == WFR_ICODE_FPGA_EMULATION)
+	switch (dd->icode) {
+	case WFR_ICODE_FPGA_EMULATION:
 		/* 30303 is 30.303 ns (33 MHZ) * 1000 */
 		idle_cnt = (idle_cnt*1000)/30303;
+		break;
+	case WFR_ICODE_FUNCTIONAL_SIMULATOR:
+		if (dd->irev < 46) {
+			/* wfr-event bug */
+			idle_cnt = 0;
+			break;
+		}
+		/* FALLTHROUGH and pick ASIC cclocks */
+	default:
+		/* 1240 is 1.24 ns (805MHZ) * 1000 */
+		idle_cnt = (idle_cnt*1000)/1240;
+		break;
+	}
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
@@ -1399,7 +1406,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 }
 /* TODO augment this to dump slid check register */
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx\n"
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1429,7 +1436,9 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD),
 		head,
 		(unsigned long long)*sde->head_dma,
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_MEMORY));
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_MEMORY),
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_LEN_GEN),
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT));
 
 	/* print info for each entry in the descriptor queue */
 	while (head != tail) {
