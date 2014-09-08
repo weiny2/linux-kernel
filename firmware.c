@@ -612,6 +612,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 {
 	u64 reg;
 	int ret;
+	u8 ver_a, ver_b;
 
 	/*
 	 * DC Reset sequence as described in the DC HAS, steps 1-5.
@@ -698,6 +699,10 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 			get_firmware_state(dd));
 		return -ETIMEDOUT;
 	}
+
+	read_misc_status(dd, &ver_a, &ver_b);
+	dd_dev_info(dd, "8051 firmware version %d.%d\n",
+		(int)ver_b, (int)ver_a);
 
 	return 0;
 }

@@ -295,6 +295,7 @@
 #define VERIFY_CAP_LOCAL_PHY	     0x07
 #define VERIFY_CAP_LOCAL_FABRIC	     0x08
 #define VERIFY_CAP_LOCAL_LINK_WIDTH  0x09
+#define MISC_STATUS		     0x0e
 #define VERIFY_CAP_REMOTE_PHY	     0x0f
 #define VERIFY_CAP_REMOTE_FABRIC     0x10
 #define VERIFY_CAP_REMOTE_LINK_WIDTH 0x11
@@ -358,6 +359,12 @@ enum {
 
 #define WFR_SUPPORTED_CRCS (CAP_CRC_14B | CAP_CRC_48B | \
 			    CAP_CRC_12B_16B_PER_LANE)
+
+/* misc status version fields */
+#define STS_FM_VERSION_A_SHIFT 16
+#define STS_FM_VERSION_A_MASK  0xff
+#define STS_FM_VERSION_B_SHIFT 24
+#define STS_FM_VERSION_B_MASK  0xff
 
 /* LCB_CFG_CRC_MODE TX_VAL and RX_VAL CRC mode values */
 #define LCB_CRC_16B			0x0	/* 16b CRC */
@@ -454,6 +461,7 @@ static inline int stl_width_to_ib(u16 in)
 
 int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
+void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
 void read_guid(struct hfi_devdata *dd);
 int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
 void check_fifos(unsigned long opaque);

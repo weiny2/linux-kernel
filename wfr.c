@@ -2939,6 +2939,15 @@ static void write_vc_local_link_width(struct hfi_devdata *dd,
 		frame);
 }
 
+void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b)
+{
+	u32 frame;
+
+	read_8051_config(dd, MISC_STATUS, GENERAL_CONFIG, &frame);
+	*ver_a = (frame >> STS_FM_VERSION_A_SHIFT) & STS_FM_VERSION_A_MASK;
+	*ver_b = (frame >> STS_FM_VERSION_B_SHIFT) & STS_FM_VERSION_B_MASK;
+}
+
 static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 					u8 *continous)
 {
