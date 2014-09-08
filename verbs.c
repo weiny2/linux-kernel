@@ -1561,6 +1561,7 @@ static int stl_rate_to_mult(int rate)
 		return ret;
 
 	switch (rate) {
+	case IB_RATE_25_GBPS:   return 10;
 	case IB_RATE_100_GBPS:	return 40;
 	default:		return -1;
 	}
