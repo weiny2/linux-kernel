@@ -694,8 +694,11 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->overall_buffer_space = cpu_to_be16(dd->link_credits);
 
 	pi->neigh_node_guid = ppd->neighbor_guid;
-	pi->port_neigh_mode = ppd->neighbor_type & STL_PI_MASK_NEIGH_NODE_TYPE;
-	if (pi->port_neigh_mode == 1)
+	pi->port_neigh_mode =
+		ppd->neighbor_type & STL_PI_MASK_NEIGH_NODE_TYPE;
+	if (ppd->mgmt_allowed)
+		pi->port_neigh_mode |= STL_PI_MASK_NEIGH_MGMT_ALLOWED;
+	if ((pi->port_neigh_mode & STL_PI_MASK_NEIGH_NODE_TYPE) == 1)
 		credit_rate = 0;
 	else
 		credit_rate = 18;

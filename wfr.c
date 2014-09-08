@@ -722,6 +722,7 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 				u16 *vl15buf, u8 *crc_sizes);
 static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 				u16 *link_widths);
+static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
 static void handle_dcc_err(struct hfi_devdata *dd,
@@ -1924,6 +1925,26 @@ static int lcb_to_port_ltp(int lcb_crc)
 }
 
 /*
+ * Our neighbor has indicated that we are allowed to act as a fabric
+ * manager, so place the full management partition key in the second
+ * (0-based) pkey array position (see STLv1, section 20.2.2.6.8). Note
+ * that we should already have the limited management partition key in
+ * array element 1, and also that the port is not yet up when
+ * add_full_mgmt_pkey() is invoked.
+ */
+static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+
+	/* Sanity check - ppd->pkeys[2] should be 0 */
+	if (ppd->pkeys[2] != 0)
+		dd_dev_err(dd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
+			   __func__, ppd->pkeys[2], WFR_FULL_MGMT_P_KEY);
+	ppd->pkeys[2] = WFR_FULL_MGMT_P_KEY;
+	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
+}
+
+/*
  * Handle a verify capabilities interrupt from the 8051.
  *
  * This is a work-queue function outside of the interrupt.
@@ -1964,6 +1985,11 @@ void handle_verify_cap(struct work_struct *work)
 	read_vc_remote_phy(dd, &power_management, &continious);
 	read_vc_remote_fabric(dd, &vau, &vcu, &vl15buf, &crc_sizes);
 	read_vc_remote_link_width(dd, &flag_bits, &link_widths);
+	/*
+	 * And the 'MgmtAllowed' information, which is exchanged during
+	 * LNI, is also be available at this point.
+	 */
+	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
 	dd_dev_info(dd,
 		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
 		(int)power_management, (int)continious);
@@ -2045,8 +2071,11 @@ void handle_verify_cap(struct work_struct *work)
 		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
 	ppd->neighbor_type =
 		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE);
-	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d\n",
-		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type);
+	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d\n",
+		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
+		ppd->mgmt_allowed);
+	if (ppd->mgmt_allowed)
+		add_full_mgmt_pkey(ppd);
 
 	/* tell the 8051 to go to LinkUp */
 	set_link_state(ppd, HLS_GOING_UP);
@@ -2981,6 +3010,14 @@ static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 				&frame);
 	*flag_bits = (frame >> FLAG_BITS_SHIFT) & FLAG_BITS_MASK;
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
+}
+
+static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed)
+{
+	u32 frame;
+
+	read_8051_config(dd, REMOTE_LNI_INFO, GENERAL_CONFIG, &frame);
+	*mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT) & MGMT_ALLOWED_MASK;
 }
 
 /*

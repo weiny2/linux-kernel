@@ -602,6 +602,8 @@ struct qib_pportdata {
 	u32 link_downed;
 	/* port_ltp_crc_mode is returned in 'portinfo' MADs */
 	u16 port_ltp_crc_mode;
+	/* mgmt_allowed is also returned in 'portinfo' MADs */
+	u8 mgmt_allowed;
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */

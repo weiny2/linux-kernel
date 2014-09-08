@@ -295,6 +295,7 @@
 #define VERIFY_CAP_LOCAL_PHY	     0x07
 #define VERIFY_CAP_LOCAL_FABRIC	     0x08
 #define VERIFY_CAP_LOCAL_LINK_WIDTH  0x09
+#define REMOTE_LNI_INFO              0x0d
 #define MISC_STATUS		     0x0e
 #define VERIFY_CAP_REMOTE_PHY	     0x0f
 #define VERIFY_CAP_REMOTE_FABRIC     0x10
@@ -340,6 +341,10 @@
 #define LINK_WIDTH_MASK 0xffff
 #define FLAG_BITS_SHIFT 16
 #define FLAG_BITS_MASK 0xffff
+
+/* mask, shift for reading 'mgmt_enabled' value from REMOTE_LNI_INFO field */
+#define MGMT_ALLOWED_SHIFT 23
+#define MGMT_ALLOWED_MASK 0x1
 
 /* verify capability link width values */
 #define WFR_SUPPORTED_LINK_WIDTHS 0xb	/* 4,2,1 widths */
