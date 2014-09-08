@@ -21,6 +21,8 @@
 /*
  * Generate an NFIT table to describe the following topology:
  *
+ * BUS0: Interleaved PMEM regions, and aliasing with BLOCK regions
+ *
  *                              (a)               (b)           DIMM   BLK-REGION
  *           +-------------------+--------+--------+--------+
  * +------+  |       pm0.0       | blk2.0 | pm1.0  | blk2.1 |    0      region2
@@ -62,6 +64,17 @@
  *    namespaces.  Note, that this example shows that "bdw" namespaces
  *    don't need to be contiguous in DPA-space.
  *
+ * BUS1: Legacy NVDIMM (single contiguous range)
+ *
+ *  region2
+ * +---------------------+
+ * |---------------------|
+ * ||       pm2.0       ||
+ * |---------------------|
+ * +---------------------+
+ *
+ * *) A NFIT-table may describe a simple system-physical-address range
+ *    with no backing dimm or interleave description.
  */
 enum {
 	NUM_PM  = 2,
@@ -73,9 +86,10 @@ enum {
 	LABEL_SIZE = 128*SZ_1K,
 	SPA0_SIZE = DIMM_SIZE,
 	SPA1_SIZE = DIMM_SIZE*2,
+	SPA2_SIZE = DIMM_SIZE,
 	BDW_SIZE = 64 << 8,
 	DCR_SIZE = 12,
-	NUM_NFITS = 1, /* permit testing multiple NFITs per system */
+	NUM_NFITS = 2, /* permit testing multiple NFITs per system */
 };
 
 struct nfit_test_dcr {
@@ -280,6 +294,23 @@ static u8 nfit_checksum(void *buf, size_t size)
 	for (sum = 0, i = 0; i < size; i++)
 		sum += data[i];
 	return 0 - sum;
+}
+
+static int nfit_test1_alloc(struct nfit_test *t)
+{
+	size_t nfit_size = sizeof(struct nfit) + sizeof(struct nfit_spa);
+	struct device *dev = &t->pdev.dev;
+
+	t->nfit_buf = alloc_coherent_res(dev, nfit_size, &t->nfit_dma);
+	if (!t->nfit_buf)
+		return -ENOMEM;
+	t->nfit_size = nfit_size;
+
+	t->spa_set[0] = alloc_coherent_res(dev, SPA2_SIZE, &t->spa_set_dma[0]);
+	if (!t->spa_set[0])
+		return -ENOMEM;
+
+	return 0;
 }
 
 static void nfit_test0_setup(struct nfit_test *t)
@@ -671,6 +702,36 @@ static void nfit_test0_setup(struct nfit_test *t)
 	set_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags);
 }
 
+static void nfit_test1_setup(struct nfit_test *t)
+{
+	void __iomem *nfit_buf = t->nfit_buf;
+	struct nfit_spa __iomem *nfit_spa;
+	size_t size = t->nfit_size;
+	struct nfit __iomem *nfit;
+
+	/* nfit header */
+	nfit = nfit_buf;
+	memcpy_toio(nfit->signature, "NFIT", 4);
+	writel(size, &nfit->length);
+	writeb(1, &nfit->revision);
+	memcpy_toio(nfit->oemid, "NDTEST", 6);
+	writew(0x1234, &nfit->oem_tbl_id);
+	writel(1, &nfit->oem_revision);
+	writel(0x80860000, &nfit->creator_id);
+	writel(1, &nfit->creator_revision);
+
+	/* spa0 (flat range with no bdw aliasing) */
+	nfit_spa = nfit_buf + sizeof(*nfit);
+	writew(NFIT_TABLE_SPA, &nfit_spa->type);
+	writew(sizeof(*nfit_spa), &nfit_spa->length);
+	writew(NFIT_SPA_PM, &nfit_spa->spa_type);
+	writew(0+1, &nfit_spa->spa_index);
+	writeq(t->spa_set_dma[0], &nfit_spa->spa_base);
+	writeq(SPA2_SIZE, &nfit_spa->spa_length);
+
+	writeb(nfit_checksum(nfit_buf, size), &nfit->checksum);
+}
+
 static int nfit_test_probe(struct platform_device *pdev)
 {
 	struct nfit_bus_descriptor *nfit_desc;
@@ -789,6 +850,11 @@ static __init int nfit_test_init(void)
 			nfit_test->num_dcr = NUM_DCR;
 			nfit_test->alloc = nfit_test0_alloc;
 			nfit_test->setup = nfit_test0_setup;
+			break;
+		case 1:
+			nfit_test->num_pm = 1;
+			nfit_test->alloc = nfit_test1_alloc;
+			nfit_test->setup = nfit_test1_setup;
 			break;
 		default:
 			rc = -EINVAL;
