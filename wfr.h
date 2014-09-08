@@ -210,12 +210,13 @@
 #define WFR_PLS_QUICK_LINKUP			   0xe2
 
 /* DC_DC8051_CFG_HOST_CMD_0.REQ_TYPE - 8051 host commands */
-#define WFR_HCMD_LOAD_CONFIG_DATA 0x01
-#define WFR_HCMD_READ_CONFIG_DATA 0x02
-#define WFR_HCMD_CHANGE_PHY_STATE 0x03
-#define WFR_HCMD_SEND_BCC_MSG	  0x04
-#define WFR_HCMD_MISC		  0x05
-#define WFR_HCMD_INTERFACE_TEST	  0xff
+#define WFR_HCMD_LOAD_CONFIG_DATA  0x01
+#define WFR_HCMD_READ_CONFIG_DATA  0x02
+#define WFR_HCMD_CHANGE_PHY_STATE  0x03
+#define WFR_HCMD_SEND_LCB_IDLE_MSG 0x04
+#define WFR_HCMD_MISC		   0x05
+#define WFR_HCMD_READ_LCB_IDLE_MSG 0x06
+#define WFR_HCMD_INTERFACE_TEST	   0xff
 
 /* DC_DC8051_CFG_HOST_CMD_1.RETURN_CODE - 8051 host command return */
 #define WFR_HCMD_SUCCESS 2
@@ -227,15 +228,15 @@
 #define WFR_LOOPBACK_FAIL  0x08
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG - host message flags */
-#define WFR_HOST_REQ_DONE	   0x0001
-#define WFR_BC_LCB_IDLE_FRAME_MSG  0x0002
-#define WFR_BC_BCC_FRAME_MSG	   0x0004
-#define WFR_BC_LCB_IDLE_UNKOWN_MSG 0x0008
-#define WFR_BC_BCC_UNKNOWN_MSG	   0x0010
-#define WFR_EXT_DEVICE_CFG_REQ	   0x0020
-#define WFR_VERIFY_CAP_FRAME	   0x0040
-#define WFR_LINKUP_ACHIEVED	   0x0080
-#define WFR_LINK_GOING_DOWN	   0x0100
+#define WFR_HOST_REQ_DONE	   (1 << 0)
+#define WFR_BC_PWR_MGM_MSG	   (1 << 1)
+#define WFR_BC_SMA_MSG		   (1 << 2)
+#define WFR_BC_BCC_UNKOWN_MSG	   (1 << 3)
+#define WFR_BC_IDLE_UNKNOWN_MSG	   (1 << 4)
+#define WFR_EXT_DEVICE_CFG_REQ	   (1 << 5)
+#define WFR_VERIFY_CAP_FRAME	   (1 << 6)
+#define WFR_LINKUP_ACHIEVED	   (1 << 7)
+#define WFR_LINK_GOING_DOWN	   (1 << 8)
 
 /* DC_DC8051_CFG_EXT_DEV_1.REQ_TYPE - 8051 host requests */
 #define WFR_HREQ_LOAD_CONFIG	0x01
@@ -258,6 +259,26 @@
 /* MISC host command functions */
 #define HCMD_MISC_REQUEST_LCB_ACCESS 0x1
 #define HCMD_MISC_GRANT_LCB_ACCESS   0x2
+
+/* idle flit message types */
+#define WFR_IDLE_PHYSICAL_LINK_MGMT 0x1
+#define WFR_IDLE_CRU		    0x2
+#define WFR_IDLE_SMA		    0x3
+#define WFR_IDLE_POWER_MGMT	    0x4
+
+/* idle flit message send fields (both send and read) */
+#define IDLE_PAYLOAD_MASK 0xffffffffffull /* 40 bits */
+#define IDLE_PAYLOAD_SHIFT 8
+#define IDLE_MSG_TYPE_MASK 0xf
+#define IDLE_MSG_TYPE_SHIFT 0
+
+/* idle flit message read fields */
+#define READ_IDLE_MSG_TYPE_MASK 0xf
+#define READ_IDLE_MSG_TYPE_SHIFT 0
+
+/* SMA idle flit payload commands */
+#define SMA_IDLE_ARM	1
+#define SMA_IDLE_ACTIVE 2
 
 /* DC_DC8051_CFG_MODE.GENERAL bits */
 #define DISABLE_SELF_GUID_CHECK 0x2
@@ -474,6 +495,8 @@ int set_link_state(struct qib_pportdata *, u32 state);
 void handle_verify_cap(struct work_struct *work);
 void handle_link_up(struct work_struct *work);
 void handle_link_down(struct work_struct *work);
+void handle_sma_message(struct work_struct *work);
+int send_idle_sma(struct hfi_devdata *dd, u64 message);
 void link_restart_worker(struct work_struct *work);
 void schedule_link_restart(struct qib_pportdata *ppd);
 

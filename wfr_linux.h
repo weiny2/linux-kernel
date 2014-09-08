@@ -57,5 +57,12 @@
 /* STL status codes */
 #define STL_PM_STATUS_REQUEST_TOO_LARGE		cpu_to_be16(0x100)
 
+/* missing from stl_port_info.h:enum port_info_field_masks */
+enum missing_port_info_field_masks {
+	/* rename field to port_states.neighbor_normal_offline_reason? */
+	/* port_states.offline_reason */
+	STL_PI_MASK_NEIGHBOR_NORMAL = 0x10
+};
+
 #endif /* CONFIG_STL_MGMT */
 #endif /* _WFR_LINUX_H */

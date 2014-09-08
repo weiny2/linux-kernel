@@ -43,6 +43,12 @@
 #include "mad.h"
 #include "trace.h"
 
+/* TODO: temporary until all PRR respond correctly, build 137 and later */
+#include <linux/module.h>
+static uint skip_nn_check = 1;
+module_param(skip_nn_check, uint, S_IRUGO);
+MODULE_PARM_DESC(skip_nn_check, "Skip check of NeighborNormal at ARMED->ACTIVE transition");
+
 static int reply(void *arg)
 {
 	/* XXX change all callers so that they all pass a
@@ -610,7 +616,7 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
 
 	/* FIXME make sure that this default state matches */
-	pi->port_states.offline_reason = 0;
+	pi->port_states.offline_reason = ppd->neighbor_normal << 4;
 	pi->port_states.unsleepstate_downdefstate =
 		(get_linkdowndefaultstate(ppd) ? 1 : 2);
 
@@ -656,6 +662,11 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->port_link_mode = cpu_to_be16(pi->port_link_mode);
 
 	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
+
+	/* TODO: other modes */
+	pi->port_mode = cpu_to_be16(
+				ppd->is_active_optimize_enabled ?
+					STL_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
 
 	pi->port_packet_format.supported =
 		cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
@@ -1190,6 +1201,11 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	ibp->subnet_timeout = pi->clientrereg_subnettimeout & STL_PI_MASK_SUBNET_TIMEOUT;
 
+	/* TODO: other modes */
+	ppd->is_active_optimize_enabled =
+			!!(be16_to_cpu(pi->port_mode)
+					& STL_PI_MASK_PORT_ACTIVE_OPTOMIZE);
+
 	/*
 	 * Do the port state change now that the other link parameters
 	 * have been set.
@@ -1239,10 +1255,19 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 		/* XXX ??? qib_wait_linkstate(ppd, QIBL_LINKV, 10); */
 		break;
 	case IB_PORT_ARMED:
-		set_link_state(ppd, HLS_UP_ARMED);
+		ret = set_link_state(ppd, HLS_UP_ARMED);
+		if (ret == 0)
+			send_idle_sma(dd, SMA_IDLE_ARM);
 		break;
 	case IB_PORT_ACTIVE:
-		set_link_state(ppd, HLS_UP_ACTIVE);
+		if (ppd->neighbor_normal || skip_nn_check) {
+			ret = set_link_state(ppd, HLS_UP_ACTIVE);
+			if (ret == 0)
+				send_idle_sma(dd, SMA_IDLE_ACTIVE);
+		} else {
+			pr_warn("SubnSet(STL_PortInfo) Cannot move to Active with NeighborNormal 0\n");
+			smp->status |= IB_SMP_INVALID_FIELD;
+		}
 		break;
 	default:
 		pr_warn("SubnSet(STL_PortInfo) invalid state 0x%x\n", state);

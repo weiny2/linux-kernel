@@ -741,6 +741,7 @@ static void set_partition_keys(struct qib_pportdata *);
 static const char *link_state_name(u32 state);
 static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 				u64 *out_data);
+static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -1864,6 +1865,61 @@ void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 }
 
 /*
+ * Handle a SMA idle message
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_sma_message(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+							sma_message_work);
+	struct hfi_devdata *dd = ppd->dd;
+	u64 msg;
+	int ret;
+
+	/* msg is bytes 1-4 of the 40-bit idle message - the command code
+	   is stripped off */
+	ret = read_idle_sma(dd, &msg);
+	if (ret)
+		return;
+	dd_dev_info(dd, "%s: SMA message 0x%llx\n", __func__, msg);
+	/*
+	 * React to the SMA message.  Byte[1] (0 for us) is the command.
+	 */
+	switch (msg & 0xff) {
+	case SMA_IDLE_ARM:
+		/*
+		 * See STLv1 table 9-14 - HFI and External Switch Ports Key
+		 * State Transitions
+		 *
+		 * Only expected in INIT or ARMED, discard otherwise.
+		 */
+		if (ppd->host_link_state == HLS_UP_INIT
+				|| ppd->host_link_state == HLS_UP_ARMED)
+			ppd->neighbor_normal = 1;
+		break;
+	case SMA_IDLE_ACTIVE:
+		/*
+		 * See STLv1 table 9-14 - HFI and External Switch Ports Key
+		 * State Transitions
+		 *
+		 * Can activate the node.  Discard otherwise.
+		 */
+		if (ppd->host_link_state == HLS_UP_ARMED
+					&& ppd->is_active_optimize_enabled) {
+			ppd->neighbor_normal = 1;
+			set_link_state(ppd, HLS_UP_ACTIVE);
+		}
+		break;
+	default:
+		dd_dev_err(dd,
+			"%s: received unexpected SMA idle message 0x%llx\n",
+			__func__, msg);
+		break;
+	}
+}
+
+/*
  * Handle a link up interrupt from the 8051.
  *
  * This is a work-queue function outside of the interrupt.
@@ -2152,6 +2208,12 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_HOST_REQ_DONE;
+		}
+		if (host_msg & WFR_BC_SMA_MSG) {
+			queue_work(ppd->qib_wq, &ppd->sma_message_work);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_BC_SMA_MSG;
 		}
 		if (host_msg & WFR_LINKUP_ACHIEVED) {
 			if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
@@ -3018,6 +3080,73 @@ static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed)
 
 	read_8051_config(dd, REMOTE_LNI_INFO, GENERAL_CONFIG, &frame);
 	*mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT) & MGMT_ALLOWED_MASK;
+}
+
+/*
+ * Read an idle LCB message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int read_idle_message(struct hfi_devdata *dd, u64 type, u64 *data_out)
+{
+	int ret;
+
+	ret = do_8051_command(dd, WFR_HCMD_READ_LCB_IDLE_MSG,
+		type, data_out);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "read idle message: type %d, err %d\n",
+			(u32)type, ret);
+		return -EINVAL;
+	}
+	dd_dev_info(dd, "%s: read idle message 0x%llx\n", __func__, *data_out);
+	/* return only the payload as we alrady know the type */
+	*data_out >>= IDLE_PAYLOAD_SHIFT;
+	return 0;
+}
+
+/*
+ * Read an idle SMA message.  To be done in response to a notification from
+ * the 8051.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int read_idle_sma(struct hfi_devdata *dd, u64 *data)
+{
+	return read_idle_message(dd,
+			(u64)WFR_IDLE_SMA << IDLE_MSG_TYPE_SHIFT, data);
+}
+
+/*
+ * Send an idle LCB message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int send_idle_message(struct hfi_devdata *dd, u64 data)
+{
+	int ret;
+
+	dd_dev_info(dd, "%s: sending idle message 0x%llx\n", __func__, data);
+	ret = do_8051_command(dd, WFR_HCMD_SEND_LCB_IDLE_MSG, data, NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "send idle message: data 0x%llx, err %d\n",
+			data, ret);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/*
+ * Send an idle SMA message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+int send_idle_sma(struct hfi_devdata *dd, u64 message)
+{
+	u64 data;
+
+	data = ((message & IDLE_PAYLOAD_MASK) << IDLE_PAYLOAD_SHIFT)
+		| ((u64)WFR_IDLE_SMA << IDLE_MSG_TYPE_SHIFT);
+	return send_idle_message(dd, data);
 }
 
 /*

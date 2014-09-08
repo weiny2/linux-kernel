@@ -495,6 +495,7 @@ struct qib_pportdata {
 	struct work_struct link_vc_work;
 	struct work_struct link_up_work;
 	struct work_struct link_down_work;
+	struct work_struct sma_message_work;
 	struct delayed_work link_restart_work;
 	/* host link state variables */
 	struct mutex hls_lock;
@@ -533,6 +534,8 @@ struct qib_pportdata {
 	u8 port;        /* IB port number and index into dd->pports - 1 */
 	/* type of neighbor node */
 	u8 neighbor_type;
+	u8 neighbor_normal;
+	u8 is_active_optimize_enabled;
 	u8 link_enabled;	/* link enabled? */
 
 	u8 delay_mult;

@@ -400,6 +400,7 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
 	INIT_WORK(&ppd->link_up_work, handle_link_up);
 	INIT_WORK(&ppd->link_down_work, handle_link_down);
+	INIT_WORK(&ppd->sma_message_work, handle_sma_message);
 	INIT_DELAYED_WORK(&ppd->link_restart_work, link_restart_worker);
 	mutex_init(&ppd->hls_lock);
 	spin_lock_init(&ppd->sdma_alllock);

@@ -97,8 +97,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 	struct qib_pportdata *ppd = &dd->pport[0];
 	enum ib_event_type ev;
 
-/* see when we are called */
-dd_dev_info(dd, "%s: linkup %u\n", __func__, linkup);
 	if (!(ppd->linkup ^ !!linkup))
 		return;	/* no change, nothing to do */
 
@@ -153,6 +151,9 @@ dd_dev_info(dd, "%s: linkup %u\n", __func__, linkup);
 		ev = IB_EVENT_PORT_ERR;
 
 		qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
+
+		/* if we are down, the neighbor is down */
+		ppd->neighbor_normal = 0;
 
 		/* restart the link after a delay */
 		schedule_link_restart(ppd);
