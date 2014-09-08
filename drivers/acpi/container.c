@@ -43,6 +43,21 @@ static const struct acpi_device_id container_device_ids[] = {
 	{"", 0},
 };
 
+void notify_container_device(struct acpi_device *adev)
+{
+	struct device *dev = acpi_driver_data(adev);
+
+	kobject_uevent(&dev->kobj, KOBJ_ONLINE);
+}
+
+int is_container_device(struct acpi_device *adev)
+{
+	if (acpi_match_device_ids(adev, container_device_ids))
+		return 0;
+
+	return 1;
+}
+
 static int acpi_container_offline(struct container_dev *cdev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&cdev->dev);

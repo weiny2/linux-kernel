@@ -46,6 +46,13 @@ void acpi_memory_hotplug_init(void);
 #else
 static inline void acpi_memory_hotplug_init(void) {}
 #endif
+#if CONFIG_ACPI_CONTAINER
+int is_container_device(struct acpi_device *adev);
+void notify_container_device(struct acpi_device *adev);
+#else
+static inline int is_container_device(struct acpi_device *adev) { return 0; }
+static inline void notify_container_device(struct acpi_device *adev) {}
+#endif
 #ifdef CONFIG_X86
 void acpi_cmos_rtc_init(void);
 #else

@@ -1970,6 +1970,9 @@ static void acpi_bus_attach(struct acpi_device *device)
  ok:
 	list_for_each_entry(child, &device->children, node)
 		acpi_bus_attach(child);
+
+	if (is_container_device(device))
+		notify_container_device(device);
 }
 
 /**
