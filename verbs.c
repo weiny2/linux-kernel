@@ -1579,6 +1579,11 @@ u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah)
 
 int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
+	struct qib_ibport *ibp;
+	struct qib_pportdata *ppd;
+	struct hfi_devdata *dd;
+	u8 sc5;
+
 	/* A multicast address requires a GRH (see ch. 8.4.1). */
 	if (ah_attr->dlid >= QIB_MULTICAST_LID_BASE &&
 	    ah_attr->dlid != QIB_PERMISSIVE_LID &&
@@ -1596,6 +1601,13 @@ int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	    stl_rate_to_mult(ah_attr->static_rate) < 0)
 		goto bail;
 	if (ah_attr->sl >= STL_MAX_SLS)
+		goto bail;
+	/* test the mapping for validity */
+	ibp = to_iport(ibdev, ah_attr->port_num);
+	ppd = ppd_from_ibp(ibp);
+	sc5 = ibp->sl_to_sc[ah_attr->sl];
+	dd = dd_from_ppd(ppd);
+	if (sc_to_vlt(dd, sc5) > num_vls)
 		goto bail;
 	return 0;
 bail:
