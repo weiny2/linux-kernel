@@ -2623,7 +2623,8 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* link_error_recovery - DC (table 13-11 WFR spec) */
-	error_counter_summary += cpu_to_be32(ppd->link_downed);
+	/* ppd->link_downed is a 32-bit value */
+	error_counter_summary += cpu_to_be64((u64)ppd->link_downed);
 	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
 	/* this is an 8-bit quantity */
 	error_counter_summary += tmp < 0x100 ? (tmp & 0xff) : 0xff;
