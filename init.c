@@ -220,10 +220,11 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
 	unsigned kctxt_ngroups = 0;
+	u32 base;
 
 	if (dd->rcv_entries.nctxt_extra >
 	    dd->num_rcv_contexts - dd->first_user_ctxt)
-		kctxt_ngroups = (dd->rcv_entries.nctxt_extra %
+		kctxt_ngroups = (dd->rcv_entries.nctxt_extra -
 				 (dd->num_rcv_contexts - dd->first_user_ctxt));
 	rcd = kzalloc(sizeof(*rcd), GFP_KERNEL);
 	if (rcd) {
@@ -238,17 +239,32 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 
 		spin_lock_init(&rcd->exp_lock);
 
-		if (ctxt >= dd->first_user_ctxt && (ctxt - dd->first_user_ctxt)
-		    < dd->rcv_entries.nctxt_extra)
-			rcd->rcv_array_groups += (dd->rcv_entries.nctxt_extra /
-				 (dd->num_rcv_contexts - dd->first_user_ctxt));;
 		/*
-		 * It is possible for nctxt_extra to be larger than the number
-		 * of user contexts. In that case, give the difference to the
-		 * kernel contexts.
+		 * Calculate the context's RcvArray entry starting point.
+		 * We do this here because we have to take into account all
+		 * the RcvArray entries that previous context would have
+		 * taken and we have to account for any extra groups
+		 * assigned to the kernel or user contexts.
 		 */
-		if (kctxt_ngroups && ctxt < kctxt_ngroups)
-			rcd->rcv_array_groups++;
+		if (ctxt < dd->first_user_ctxt) {
+			if (ctxt < kctxt_ngroups) {
+				base = ctxt * (dd->rcv_entries.ngroups + 1);
+				rcd->rcv_array_groups++;
+			} else
+				base = kctxt_ngroups +
+					(ctxt * dd->rcv_entries.ngroups);
+		} else {
+			u16 ct = ctxt - dd->first_user_ctxt;
+			base = ((dd->n_krcv_queues * dd->rcv_entries.ngroups) +
+				kctxt_ngroups);
+			if (ct < dd->rcv_entries.nctxt_extra) {
+				base += ct * (dd->rcv_entries.ngroups + 1);
+				rcd->rcv_array_groups++;
+			} else
+				base += dd->rcv_entries.nctxt_extra +
+					(ct * dd->rcv_entries.ngroups);
+		}
+		rcd->eager_base = base * dd->rcv_entries.group_size;
 #ifdef CONFIG_DEBUG_FS
 		if (ctxt < dd->first_user_ctxt) { /* N/A for PSM contexts */
 			rcd->opstats = kzalloc(sizeof(*rcd->opstats),

@@ -5276,8 +5276,7 @@ static void set_cntr_sample(struct qib_pportdata *ppd, u32 intv,
 static int init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	u32 context = rcd->ctxt, max_entries, eager_base;
-	u16 ngroups = rcd->rcv_array_groups;
+	u32 context = rcd->ctxt, max_entries;
 	int ret = 0;
 
 	/*
@@ -5290,17 +5289,10 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 	 *
 	 * The expected entry count is what is left after assigning eager.
 	 */
-	eager_base = context * ngroups * dd->rcv_entries.group_size;
-	if (context >= dd->first_user_ctxt &&
-	    (context - dd->first_user_ctxt) <
-	    dd->rcv_entries.nctxt_extra) {
-		eager_base += (context - dd->first_user_ctxt) *
-			dd->rcv_entries.group_size;
-	}
 	dd_dev_info(dd, "ctxt%u: total ctxt ngroups %u\n",
-		    context, ngroups);
+		    context, rcd->rcv_array_groups);
 
-	max_entries = ngroups * dd->rcv_entries.group_size;
+	max_entries = rcd->rcv_array_groups * dd->rcv_entries.group_size;
 
 	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES) {
 		dd_dev_err(dd,
@@ -5319,7 +5311,6 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
 		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
 
-	rcd->eager_base = eager_base;
 	rcd->expected_base = rcd->eager_base + rcd->eager_count;
 	dd_dev_info(dd, "ctxt%u: eager:%u, exp:%u, egrbase:%u, expbase:%u\n",
 		    context, rcd->eager_count, rcd->expected_count,
