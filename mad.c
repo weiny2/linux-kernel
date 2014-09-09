@@ -2517,7 +2517,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));
 	/* rsp->port_rcv_constraint_errors ??? */
 	/* rsp->port_rcv_switch_relay_errors is 0 for HFIs */
-	/* rsp->port_xmit_discards ??? */
+	rsp->port_xmit_discards = cpu_to_be64(ppd->port_xmit_discards);
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
@@ -2607,7 +2607,7 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 
 	/* port_rcv_constraint_errors ??? */
 	/* port_rcv_switch_relay_errors is 0 for HFIs */
-	/* port_xmit_discards ??? */
+	error_counter_summary += cpu_to_be64(ppd->port_xmit_discards);
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	error_counter_summary +=
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
@@ -2855,7 +2855,7 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 
 	/* rsp->port_rcv_constraint_errors = ??? */
 	/* port_rcv_switch_relay_errors is 0 for HFIs */
-	/* rsp->port_xmit_discards = ??? */
+	rsp->port_xmit_discards = cpu_to_be64(ppd->port_xmit_discards);
 	/* rsp->port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
@@ -3036,7 +3036,8 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);
 	/* ignore cs_port_rcv_constraint_errors for now */
 	/* ignore cs_port_rcv_switch_relay_errors for HFIs */
-	/* ignore cs_port_xmit_discards for now */
+	if (counter_select & CS_PORT_XMIT_DISCARDS)
+		ppd->port_xmit_discards = 0;
 	/* ignore cs_port_xmit_constraint_errors for now */
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT, 0);

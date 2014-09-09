@@ -601,6 +601,8 @@ struct qib_pportdata {
 
 	/* port relative counter buffer */
 	u64 *cntrs;
+	/* we synthesize port_xmit_discards from several egress errors */
+	u64 port_xmit_discards;
 	/* count of 'link_err' interrupts from DC */
 	u32 link_downed;
 	/* port_ltp_crc_mode is returned in 'portinfo' MADs */

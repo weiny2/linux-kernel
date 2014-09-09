@@ -1277,13 +1277,83 @@ static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	dd_dev_info(dd, "SDMA Error: 0x%llx (unhandled)\n", reg);
 }
 
-/* TODO */
+static void count_port_inactive(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd = dd->pport;
+
+	if (ppd->port_xmit_discards < ~(u64)0)
+		ppd->port_xmit_discards++;
+}
+
+/*
+ * We have had a "disallowed packet" error during egress. Determine the
+ * integrity check which failed, and update relevant error counter, etc.
+ *
+ * Note that the WFR_SEND_EGRESS_ERR_INFO register has only a single
+ * bit of state per integrity check, and so we can miss the reason for an
+ * egress error if more than one packet fails the same integrity check
+ * since we cleared the corresponding bit in WFR_SEND_EGRESS_ERR_INFO.
+ */
+static void count_disallowed_pkt(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd = dd->pport;
+	u64 info = read_csr(dd, WFR_SEND_EGRESS_ERR_INFO);
+
+	if (info & WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK) {
+		if (ppd->port_xmit_discards < ~(u64)0)
+			ppd->port_xmit_discards++;
+		write_csr(dd, WFR_SEND_EGRESS_ERR_INFO,
+			WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK);
+	}
+}
+
+/*
+ * Input value is a bit position within the WFR_SEND_EGRESS_ERR_STATUS
+ * register. Does it represent a 'port inactive' error?
+ */
+static inline int port_inactive_err(u64 posn)
+{
+	return (posn >= WFR_SEND_EGRESS_ERR_STATUS_TX_LINKDOWN_ERR_SHIFT &&
+		posn <= WFR_SEND_EGRESS_ERR_MASK_TX_INCORRECT_LINK_STATE_ERR_SHIFT);
+}
+
+/*
+ * Input value is a bit position within the WFR_SEND_EGRESS_ERR_STATUS
+ * register. Does it represent a 'disallowed packet' error?
+ */
+static inline int disallowed_pkt_err(u64 posn)
+{
+	return (posn >=  WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA0_DISALLOWED_PACKET_ERR_SHIFT &&
+		posn <= WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA15_DISALLOWED_PACKET_ERR_SHIFT);
+}
+
 static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
+	u64 reg_copy = reg, handled = 0;
 	char buf[96];
 
-	dd_dev_info(dd, "Egress Error: %s (unhandled)\n",
-		egress_err_status_string(buf, sizeof(buf), reg));
+	while (reg_copy) {
+		int posn = fls(reg_copy);
+		/*
+		 * fls() returns a 1-based offset, but we generally
+		 * want 0-based offsets.
+		 */
+		int shift = posn - 1;
+		if (port_inactive_err(shift)) {
+			count_port_inactive(dd);
+			handled |= (1ULL << shift);
+		} else if (disallowed_pkt_err(shift)) {
+			count_disallowed_pkt(dd);
+			handled |= (1ULL << shift);
+		}
+		clear_bit(shift, (unsigned long *)&reg_copy);
+	}
+
+	reg &= ~handled;
+
+	if (reg)
+		dd_dev_info(dd, "Egress Error: %s (unhandled)\n",
+			egress_err_status_string(buf, sizeof(buf), reg));
 }
 
 /* TODO */
@@ -1400,6 +1470,7 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
 	struct send_context_info *sci;
 	struct send_context *sc;
 	char flags[96];
+	u64 status;
 
 	if (context >= dd->num_send_contexts) {
 		dd_dev_err(dd,
@@ -1417,9 +1488,13 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
 	/* tell the software that a halt has begun */
 	sc_halting(sc);
 
+	status = read_kctxt_csr(dd, context, WFR_SEND_CTXT_ERR_STATUS);
+
 	dd_dev_info(dd, "Send Context %u Error: %s\n", context,
-		send_err_status_string(flags, sizeof(flags),
-			read_kctxt_csr(dd, context, WFR_SEND_CTXT_ERR_STATUS)));
+		send_err_status_string(flags, sizeof(flags), status));
+
+	if (status & WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK)
+		count_disallowed_pkt(dd);
 
 	/*
 	 * Automatically restart halted kernel contexts out of interrupt
