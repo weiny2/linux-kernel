@@ -22,7 +22,7 @@ def main():
     #############################
     test_info = RegLib.TestInfo()
 
-    RegLib.test_log(0, "Test: LoadModule.py started")
+    RegLib.test_log(0, "Test: IbSendLat.py started")
     RegLib.test_log(0, "Dumping test parameters")
 
     # Dump out the test and host info. We need 2 hosts for this test
@@ -55,8 +55,9 @@ def main():
             print RegLib.chomp(line)
         sys.exit(err)
 
-    RegLib.test_log(5, "Sleeping for 5 seconds to let server start")
-    time.sleep(5)
+    RegLib.test_log(0, "Waiting for socket to be listening")
+    if host1.wait_for_socket(test_port, "LISTEN") == False:
+        RegLib.test_fail("Coudl not get socket listening")
 
     # Start ib_send_lat on host2 (client)
     server_name = host1.get_name()

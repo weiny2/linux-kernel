@@ -19,7 +19,7 @@ def main():
     test_info = RegLib.TestInfo()
     test_port = RegLib.get_test_port()
 
-    RegLib.test_log(0, "Test: LoadModule.py started")
+    RegLib.test_log(0, "Test: IbSendBwRC-a.py started")
     RegLib.test_log(0, "Dumping test parameters")
 
     # Dump out the test and host info. We need 2 hosts for this test
@@ -55,8 +55,10 @@ def main():
         if err:
             RegLib.test_log(0, "Child SSH exit status bad")
         sys.exit(err)
-
-    time.sleep(5)
+    
+    RegLib.test_log(0, "Waiting for socket to be listening")
+    if host1.wait_for_socket(test_port, "LISTEN") == False:
+        RegLib.test_fail("Coudl not get socket listening")
 
     server_name = host1.get_name()
     cmd = "ib_send_bw -d hfi0 -n 16 -u 21 -p %d -a %s 2>&1" % (test_port, server_name)

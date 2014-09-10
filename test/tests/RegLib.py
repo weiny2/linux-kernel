@@ -235,6 +235,22 @@ class HostInfo:
 
         return None #error if we got to here
 
+    def wait_for_socket(self, port, state, timeout=1, attempts=60):
+        """ Waits for the socket at the given port to reach a specific state"""
+        
+        while attempts > 0:
+            attempts -= 1
+            cmd = "/bin/netstat -vatn | /bin/grep %s" % port
+            test_log(0, "Running %s" %cmd)
+            (err, out) = self.send_ssh(cmd)
+            for line in out:
+                if state in line:
+                    return True
+            test_log(5, "Socket was not listening, will try %d more times" % attempts)
+            test_log(5, "Sleeping for %d seconds" % timeout)
+            time.sleep(timeout)
+        return False #if we get to here it is an error
+
     def send_ssh(self, cmd, buffered=1, timeout=0):
         """ Send an SSH command. We may need to add a timeout mechanism
             buffered mode will save output and return it. Non buffered mode
