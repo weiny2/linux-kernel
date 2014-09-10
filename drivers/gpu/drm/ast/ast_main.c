@@ -68,6 +68,8 @@ static int ast_detect_chip(struct drm_device *dev)
 	struct ast_private *ast = dev->dev_private;
 	u32 jreg;
 
+	ast_open_key(ast);
+
 	if (dev->pdev->device == PCI_CHIP_AST1180) {
 		ast->chip = AST1100;
 		DRM_INFO("AST 1180 detected\n");
@@ -104,7 +106,7 @@ static int ast_detect_chip(struct drm_device *dev)
 			}
 			ast->vga2_clone = false;
 		} else {
-			ast->chip = 2000;
+			ast->chip = AST2000;
 			DRM_INFO("AST 2000 detected\n");
 		}
 	}

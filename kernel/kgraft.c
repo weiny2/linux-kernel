@@ -281,7 +281,7 @@ static void kgr_handle_processes(void)
 	read_lock(&tasklist_lock);
 	for_each_process(p) {
 		/* wake up kthreads, they will clean the progress flag */
-		if (!p->mm) {
+		if (p->flags & PF_KTHREAD) {
 			/*
 			 * this is incorrect for kthreads waiting still for
 			 * their first wake_up.
