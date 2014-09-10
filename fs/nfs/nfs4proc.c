@@ -2149,7 +2149,7 @@ static int _nfs4_open_and_get_state(struct nfs4_opendata *opendata,
 
 	ret = _nfs4_proc_open(opendata);
 	if (ret != 0) {
-		if (ret == -ENOENT) {
+		if (ret == -ENOENT && opendata->dentry->d_inode == NULL) {
 			d_drop(opendata->dentry);
 			d_add(opendata->dentry, NULL);
 			nfs_set_verifier(opendata->dentry,
