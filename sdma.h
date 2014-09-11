@@ -397,6 +397,8 @@ struct sdma_engine {
 	/* private: */
 	u64                   descq_removed;
 	/* private: */
+	u64                   last_status;
+	/* private: */
 	u16                   descq_tail;
 	/* private: */
 	u16                   descq_head;

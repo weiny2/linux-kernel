@@ -54,6 +54,10 @@ static uint sdma_idle_cnt = 250;
 module_param(sdma_idle_cnt, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_idle_cnt, "sdma interrupt idle delay (ns,default 250)");
 
+static uint use_dma_head;
+module_param(use_dma_head, uint, S_IRUGO);
+MODULE_PARM_DESC(use_dma_head, "Read CSR vs. DMA for hardware head");
+
 uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
@@ -166,7 +170,7 @@ static void __sdma_process_event(
 	struct sdma_engine *sde,
 	enum sdma_events event);
 static void dump_sdma_state(struct sdma_engine *sde);
-static int sdma_make_progress(struct sdma_engine *sde);
+static int sdma_make_progress(struct sdma_engine *sde, u64 status);
 
 /**
  * sdma_event_name() - return event string from enum
@@ -298,7 +302,7 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 	spin_lock(&sde->dd->pport->sdma_alllock);
 
 	/* Process all retired requests. */
-	sdma_make_progress(sde);
+	sdma_make_progress(sde, 0);
 
 	clear_sdma_activelist(sde);
 
@@ -840,8 +844,8 @@ static u16 sdma_gethead(struct sdma_engine *sde)
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
-	use_dmahead = __sdma_running(sde) &&
-		(dd->flags & QIB_HAS_SDMA_TIMEOUT);
+	use_dmahead = use_dma_head && __sdma_running(sde)
+			&& (dd->flags & QIB_HAS_SDMA_TIMEOUT);
 retry:
 	hwhead = use_dmahead ?
 		(u16) le64_to_cpu(*sde->head_dma) :
@@ -929,7 +933,7 @@ void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 
 /* sdma_lock must be held */
 /* FIXME - convert to new routine */
-static int sdma_make_progress(struct sdma_engine *sde)
+static int sdma_make_progress(struct sdma_engine *sde, u64 status)
 {
 	struct sdma_txreq *txp = NULL;
 	int progress = 0;
@@ -988,6 +992,7 @@ static int sdma_make_progress(struct sdma_engine *sde)
 		}
 		progress++;
 	}
+	sde->last_status = status;
 	if (progress)
 		sdma_desc_avail(sde, sdma_descq_freecnt(sde));
 	return progress;
@@ -997,7 +1002,7 @@ static int sdma_make_progress(struct sdma_engine *sde)
 /* Old API - delete */
 int qib_sdma_make_progress(struct sdma_engine *sde)
 {
-	return sdma_make_progress(sde);
+	return sdma_make_progress(sde, 0);
 }
 
 /**
@@ -1015,7 +1020,7 @@ void sdma_engine_interrupt(struct sdma_engine *sde, u64 status)
 
 	trace_hfi_sdma_engine_interrupt(sde, status);
 	spin_lock_irqsave(&sde->lock, flags);
-	sdma_make_progress(sde);
+	sdma_make_progress(sde, status);
 	spin_unlock_irqrestore(&sde->lock, flags);
 }
 
@@ -1406,7 +1411,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 }
 /* TODO augment this to dump slid check register */
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx\n"
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1438,7 +1443,8 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		(unsigned long long)*sde->head_dma,
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_MEMORY),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_LEN_GEN),
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT));
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT),
+		(unsigned long long)sde->last_status);
 
 	/* print info for each entry in the descriptor queue */
 	while (head != tail) {
@@ -1565,7 +1571,7 @@ unlock_noconn:
 	ret = -ECOMM;
 	goto unlock;
 nodesc:
-	if (sdma_make_progress(sde))
+	if (sdma_make_progress(sde, 0))
 		goto retry;
 	if (sde->dd->flags & QIB_HAS_SDMA_TIMEOUT)
 		sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
@@ -1656,7 +1662,7 @@ unlock_noconn:
 	ret = -ECOMM;
 	goto unlock;
 nodesc:
-	if (sdma_make_progress(sde))
+	if (sdma_make_progress(sde, 0))
 		goto retry;
 	if (sde->dd->flags & QIB_HAS_SDMA_TIMEOUT)
 		sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
