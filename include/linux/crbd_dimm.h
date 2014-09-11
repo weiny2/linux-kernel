@@ -57,8 +57,9 @@
 #define STATUS_MASK 0xFF00
 #define STATUS_SHIFT 8
 
-#define DB_SHIFT 16
-#define SUB_OP_SHIFT 8
+#define DB_SHIFT 48
+#define SUB_OP_SHIFT 40
+#define OP_SHIFT 32
 
 /* Real HW Offsets */
 /* Offset from the start of the OS mailbox */

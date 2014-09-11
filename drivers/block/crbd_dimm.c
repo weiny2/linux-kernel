@@ -69,22 +69,6 @@ static void cr_poll_fw_cmd_completion(struct cr_mailbox *mb)
 }
 
 /**
- * cr_set_mb_door_bell() - Set Mailbox Door Bell
- * @mb: The mailbox to initiate a fw command
- *
- * Set the door bell bit of the command register to inform
- * FW to begin processing the FW command
- */
-static void cr_set_mb_door_bell(struct cr_mailbox *mb)
-{
-	__u64 command = readq(mb->command) | (1 << DB_SHIFT);
-
-	__raw_writeq(command, mb->command);
-	__builtin_ia32_pcommit();/*TODO: May not be needed*/
-	cr_write_barrier();
-}
-
-/**
  * cr_write_cmd_op() - Write Command Op Codes
  * @mb: mailbox to write the command op codes to
  * @fw_cmd: Firmware command to execute
@@ -96,7 +80,9 @@ void cr_write_cmd_op(struct cr_mailbox *mb, struct fv_fw_cmd *fw_cmd)
 {
 	__u64 command = 0;
 
-	command = fw_cmd->opcode | (fw_cmd->sub_opcode << SUB_OP_SHIFT);
+	command = ((__u64) 1 << DB_SHIFT
+		| (__u64) fw_cmd->opcode << OP_SHIFT)
+		| ((__u64) fw_cmd->sub_opcode << SUB_OP_SHIFT);
 
 	__raw_writeq(command, mb->command);
 }
@@ -305,14 +291,12 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 	if (fw_cmd->large_input_payload_size > 0)
 		cr_memcopy_large_inpayload(mb, fw_cmd);
 
-	cr_write_cmd_op(mb, fw_cmd);
-
-	cr_write_barrier();
-
 	/* BUG: Simics MB bug never resets status code */
 	memset_io(mb->status, 0, CR_REG_SIZE);
 
-	cr_set_mb_door_bell(mb);
+	cr_write_cmd_op(mb, fw_cmd);
+
+	cr_write_barrier();
 
 	cr_poll_fw_cmd_completion(mb);
 
