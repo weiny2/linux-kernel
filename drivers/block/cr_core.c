@@ -426,7 +426,7 @@ static struct nvdimm_ioctl_ops crbd_ioctl_ops = {
 
 #define CR_VENDOR_ID 32902
 #define CR_DEVICE_ID 8215
-#define CR_REVISION_ID 0
+#define CR_REVISION_ID 43981
 
 static const struct nvdimm_ids cr_ids = { CR_VENDOR_ID, CR_DEVICE_ID,
 		CR_REVISION_ID, AEP_DIMM };
