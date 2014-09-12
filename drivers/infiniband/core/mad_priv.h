@@ -41,6 +41,7 @@
 #include <linux/workqueue.h>
 #include <rdma/ib_mad.h>
 #include <rdma/ib_smi.h>
+#include <rdma/opa_smi.h>
 
 #define IB_MAD_QPS_CORE		2 /* Always QP0 and QP1 as a minimum */
 
@@ -82,6 +83,7 @@ struct ib_mad_private {
 		struct ib_smp smp;
 		struct opa_mad opa_mad;
 		struct opa_rmpp_mad opa_rmpp_mad;
+		struct opa_smp opa_smp;
 	} mad;
 } __attribute__ ((packed));
 
