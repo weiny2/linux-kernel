@@ -139,6 +139,8 @@ struct qib_ctxtdata {
 	/* this receive context's assigned PIO ACK send context */
 	struct send_context *sc;
 
+	/* dynamic receive available interrupt timeout */
+	u32 rcvavail_timeout;
 	/*
 	 * number of opens (including slave sub-contexts) on this instance
 	 * (ignoring forks, dup, etc. for now)
@@ -788,7 +790,6 @@ struct hfi_devdata {
 	/* FIXME - get rid of this */
 	void (*f_sdma_update_tail)(struct sdma_engine *, u16);
 	void (*f_set_cntr_sample)(struct qib_pportdata *, u32, u32);
-	void (*f_update_usrhead)(struct qib_ctxtdata *, u64, u32, u32, u32);
 	u32 (*f_hdrqempty)(struct qib_ctxtdata *);
 	u64 (*f_portcntr)(struct qib_pportdata *, u32);
 	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
@@ -822,6 +823,8 @@ struct hfi_devdata {
 	 * number of ctxts available for PSM open
 	 */
 	u32 freectxts;
+	/* base receive interrupt timeout, in CSR units */
+	u32 rcv_intr_timeout_csr;
 
 	/*
 	 * hint that we should update pioavailshadow before
@@ -914,7 +917,6 @@ struct hfi_devdata {
 	u32 pcibar0;
 	/* so we can rewrite it after a chip reset */
 	u32 pcibar1;
-	u64 rhdrhead_intr_off;
 
 	/*
 	 * ASCII serial number, from flash, large enough for original
@@ -1408,6 +1410,7 @@ extern uint kdeth_qp;
 extern uint loopback;
 extern uint rcv_intr_timeout;
 extern uint rcv_intr_count;
+extern uint rcv_intr_dynamic;
 extern uint fifo_check;
 extern uint fifo_stalled_count;
 extern ushort link_crc_mask;

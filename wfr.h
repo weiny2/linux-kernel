@@ -418,6 +418,10 @@ enum {
 /* timeouts */
 #define LINK_RESTART_DELAY 10000	/* link restart delay, in ms */
 
+/* cclock tick time, in picoseconds per tick: 1/speed * 10^12  */
+#define ASIC_CCLOCK_PS  1242	/* 805 MHz */
+#define FPGA_CCLOCK_PS 30300	/*  33 MHz */
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);
@@ -504,6 +508,8 @@ void handle_sma_message(struct work_struct *work);
 int send_idle_sma(struct hfi_devdata *dd, u64 message);
 void link_restart_worker(struct work_struct *work);
 void schedule_link_restart(struct qib_pportdata *ppd);
+void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
+u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 
 int acquire_lcb_access(struct hfi_devdata *dd);
 int release_lcb_access(struct hfi_devdata *dd);

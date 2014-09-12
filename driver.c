@@ -388,7 +388,6 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	struct qib_message_header *hdr;
 	u32 etype, hlen, tlen, i = 0, updegr = 0;
 	int last;
-	u64 lval;
 	struct qib_qp *qp, *nqp;
 	struct hfi_packet packet;
 
@@ -474,9 +473,8 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		 * are processed and queue is nearly full.
 		 * Don't request an interrupt for intermediate updates.
 		 */
-		lval = l;
 		if (!last && !(i & 0xf)) {
-			dd->f_update_usrhead(rcd, lval, updegr, etail, i);
+			update_usrhead(rcd, l, updegr, etail, 0, 0);
 			updegr = 0;
 		}
 	}
@@ -521,8 +519,7 @@ bail:
 	 * Always write head at end, and setup rcv interrupt, even
 	 * if no packets were processed.
 	 */
-	lval = (u64)rcd->head | dd->rhdrhead_intr_off;
-	dd->f_update_usrhead(rcd, lval, updegr, etail, i);
+	update_usrhead(rcd, rcd->head, updegr, etail, rcv_intr_dynamic, i);
 }
 
 /*

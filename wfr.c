@@ -62,11 +62,15 @@ MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`
 
 uint rcv_intr_timeout;
 module_param(rcv_intr_timeout, uint, S_IRUGO);
-MODULE_PARM_DESC(rcv_intr_timeout, "Receive interrupt mitigation timeout");
+MODULE_PARM_DESC(rcv_intr_timeout, "Receive interrupt mitigation timeout in ns");
 
 uint rcv_intr_count = 1;
 module_param(rcv_intr_count, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_count, "Receive interrupt mitigation count");
+
+uint rcv_intr_dynamic = 0;
+module_param(rcv_intr_dynamic, uint, S_IRUGO);
+MODULE_PARM_DESC(rcv_intr_dynamic, "Enable dynamic receive interrupt mitigation adjustments: note rcv_intr_timeout is now a max value");
 
 ushort link_crc_mask = WFR_SUPPORTED_CRCS;
 module_param(link_crc_mask, ushort, S_IRUGO);
@@ -4727,23 +4731,82 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 	return ret;
 }
 
-static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
-				    u32 updegr, u32 egrhd, u32 npkts)
+/*
+ * Convert a nanosecond time to a cclock count.  No matter how slow
+ * the cclock, a non-zero ns will always have a non-zero result.
+ */
+u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns)
+{
+	u32 cclocks;
+
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION)
+		cclocks = (ns * 1000) / FPGA_CCLOCK_PS;
+	else  /* simulation pretends to be ASIC */
+		cclocks = (ns * 1000) / ASIC_CCLOCK_PS;
+	if (ns && !cclocks)	/* if ns nonzero, must be at least 1 */
+		cclocks = 1;
+	return cclocks;
+}
+
+/*
+ * Dynamically adjust the receive interrupt timeout for a context based on
+ * incoming packet rate.
+ *
+ * NOTE: Dynamic adjustment does not allow rcv_intr_count to be zero.
+ */
+static void adjust_rcv_timeout(struct qib_ctxtdata *rcd, u32 npkts)
+{
+	struct hfi_devdata *dd = rcd->dd;
+	u32 timeout = rcd->rcvavail_timeout;
+
+	/*
+	 * TODO: This algorithm is derived from the QIB source.  It doubles
+	 * or halves the timeout depending on whether the number of
+	 * packets received in this interrupt were less than or greater
+	 * equal the interrupt count.  It should be properly tested.
+	 *
+	 * The calculations below do not allow a steady state to be achieved.
+	 * Only at the endpoints it is possible to have an unchanging
+	 * timeout.
+	 */
+	if (npkts < rcv_intr_count) {
+		/*
+		 * Not enough packets arrived before the timeout, adjust
+		 * timeout downward.
+		 */
+		if (timeout < 2) /* already at mininum? */
+			return;
+		timeout >>= 1;
+	} else {
+		/*
+		 * More than enough packets arrived before the timeout, adjust
+		 * timeout upward.
+		 */
+		if (timeout >= dd->rcv_intr_timeout_csr) /* already at max? */
+			return;
+		timeout = min(timeout << 1, dd->rcv_intr_timeout_csr);
+	}
+
+	rcd->rcvavail_timeout = timeout;
+	/* timeout cannot be larger than rcv_intr_timeout_csr which has already
+	   been verified to be in range */
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_AVAIL_TIME_OUT,
+		(u64)timeout << WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
+}
+
+void update_usrhead(struct qib_ctxtdata *rcd, u32 hd, u32 updegr, u32 egrhd,
+			u32 intr_adjust, u32 npkts)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u64 reg;
 	u32 ctxt = rcd->ctxt;
 
-//FIXME: no timeout adjustment code yet
-//	+ not that great that we mix in the update flag with hd
-#if 0
 	/*
-	 * Need to write timeout register before updating rcvhdrhead to ensure
-	 * that the timer is enabled on reception of a packet.
+	 * Need to write timeout register before updating RcvHdrHead to ensure
+	 * that a new value is used when the HW decides to restart counting.
 	 */
-	if (hd >> IBA7322_HDRHEAD_PKTINT_SHIFT)
+	if (intr_adjust)
 		adjust_rcv_timeout(rcd, npkts);
-#endif
 	if (updegr) {
 		reg = (egrhd & WFR_RCV_EGR_INDEX_HEAD_HEAD_MASK)
 			<< WFR_RCV_EGR_INDEX_HEAD_HEAD_SHIFT;
@@ -4751,11 +4814,10 @@ static void update_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 	}
 	mmiowb();
 	reg = ((u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT) |
-		((hd & WFR_RCV_HDR_HEAD_HEAD_MASK)
+		(((u64)hd & WFR_RCV_HDR_HEAD_HEAD_MASK)
 			<< WFR_RCV_HDR_HEAD_HEAD_SHIFT);
 	write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
 	mmiowb();
-
 }
 
 static u32 hdrqempty(struct qib_ctxtdata *rcd)
@@ -4859,6 +4921,8 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 					rcd->rcvhdrqtailaddr_phys);
 		}
 		rcd->seq_cnt = 1;
+		/* starting timeout */
+		rcd->rcvavail_timeout = dd->rcv_intr_timeout_csr;
 
 		/* enable the context */
 		rcvctrl |= WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
@@ -4866,9 +4930,6 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		rcvctrl |= ((u64)encoded_size(rcd->rcvegrbuf_chunksize)
 				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
 					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
-
-		/* zero interrupt timeout - set after enable */
-		write_kctxt_csr(dd, ctxt, WFR_RCV_AVAIL_TIME_OUT, 0);
 
 		/* zero RcvHdrHead - set RcvHdrHead.Counter after enable */
 		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, 0);
@@ -4943,7 +5004,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		 */
 		/* set interrupt timeout */
 		write_kctxt_csr(dd, ctxt, WFR_RCV_AVAIL_TIME_OUT,
-			(u64)rcv_intr_timeout <<
+			(u64)rcd->rcvavail_timeout <<
 				WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
 
 		/* set RcvHdrHead.Counter, zero RcvHdrHead.Head (again) */
@@ -7130,7 +7191,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_set_ib_loopback   = set_ib_loopback;
 	dd->f_set_intr_state    = set_intr_state;
 	dd->f_setextled         = setextled;
-	dd->f_update_usrhead    = update_usrhead;
 	dd->f_wantpiobuf_intr   = sc_wantpiobuf_intr;
 	dd->f_xgxs_reset        = xgxs_reset;
 	dd->f_tempsense_rd	= tempsense_rd;
@@ -7189,6 +7249,21 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		goto bail_cleanup;
 	}
 
+	/*
+	 * Convert the ns parameter to the 64 * cclocks used in the CSR.
+	 * Limit the max if larger than the field holds.  If timeout is
+	 * non-zero, then the calculated field will be at least 1.
+	 *
+	 * Must be after icode is set up - the cclock rate depends
+	 * on knowing the hardware being used.
+	 */
+	dd->rcv_intr_timeout_csr = ns_to_cclock(dd, rcv_intr_timeout) / 64;
+	if (dd->rcv_intr_timeout_csr >
+			WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_MASK)
+		dd->rcv_intr_timeout_csr =
+			WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_MASK;
+	else if (dd->rcv_intr_timeout_csr == 0 && rcv_intr_timeout)
+		dd->rcv_intr_timeout_csr = 1;
 
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);

@@ -540,23 +540,10 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	if (!dd->sdma_map)
 		goto nomem;
 
-	switch (dd->icode) {
-	case WFR_ICODE_FPGA_EMULATION:
-		/* 30303 is 30.303 ns (33 MHZ) * 1000 */
-		idle_cnt = (idle_cnt*1000)/30303;
-		break;
-	case WFR_ICODE_FUNCTIONAL_SIMULATOR:
-		if (dd->irev < 46) {
-			/* wfr-event bug */
-			idle_cnt = 0;
-			break;
-		}
-		/* FALLTHROUGH and pick ASIC cclocks */
-	default:
-		/* 1240 is 1.24 ns (805MHZ) * 1000 */
-		idle_cnt = (idle_cnt*1000)/1240;
-		break;
-	}
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 46)
+		idle_cnt = 0; /* work around a wfr-event bug */
+	else
+		idle_cnt = ns_to_cclock(dd, idle_cnt);
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];

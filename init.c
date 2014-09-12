@@ -1285,13 +1285,32 @@ static int __init qlogic_ib_init(void)
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
 		hfi_cu = 1;
-	/* sanitize receive interrupt parameters, both cannot be zero */
-	rcv_intr_timeout &= WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_MASK;
-	rcv_intr_count &= WFR_RCV_HDR_HEAD_COUNTER_MASK;
+	/* sanitize receive interrupt count, time must wait until after
+	   the hardware type is known */
+	if (rcv_intr_count > WFR_RCV_HDR_HEAD_COUNTER_MASK)
+		rcv_intr_count = WFR_RCV_HDR_HEAD_COUNTER_MASK;
+	/* reject invalid combinations */
 	if (rcv_intr_count == 0 && rcv_intr_timeout == 0) {
 		pr_err("Invalid mode: both receive interrupt count and available timeout are zero - setting interrupt count to 1\n");
 		rcv_intr_count = 1;
 	}
+	if (rcv_intr_count > 1 && rcv_intr_timeout == 0) {
+		/*
+		 * Avoid indefinite packet delivery by requiring a timeout
+		 * if count is > 1.
+		 */
+		pr_err("Invalid mode: receive interrupt count greater than 1 and available timeout is zero - setting available timeout to 1\n");
+		rcv_intr_timeout = 1;
+	}
+	if (rcv_intr_dynamic && !(rcv_intr_count > 1 && rcv_intr_timeout > 0)) {
+		/*
+		 * The dynamic algorithm expects a non-zero timeout
+		 * and a count > 1.
+		 */
+		pr_err("Invalid mode: dynamic receive interrupt mitigation with invalid count and timeout - turning dyanmic off\n");
+		rcv_intr_dynamic = 0;
+	}
+
 	/* sanitize link CRC options */
 	link_crc_mask &= WFR_SUPPORTED_CRCS;
 
