@@ -569,8 +569,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 
 	/*
 	 * If the patch has immediate flag set, avoid the lazy-switching
-	 * between universes completely, and just flip the switch as soon
-	 * as possible
+	 * between universes completely.
 	 */
 	if (!patch->immediate) {
 		kgr_mark_processes();
@@ -609,15 +608,9 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 	kgr_handle_processes();
 
 	/*
-	 * Give everyone time to exit kernel, and check after a while.
-	 *
-	 * When applying the patch with 'immediate' flag set, it makes
-	 * sense to check immediately; in case there was no other patching
-	 * running in parallel, we will claim victory right away.
+	 * give everyone time to exit kernel, and check after a while
 	 */
-	if (patch->immediate)
-		queue_work(kgr_wq, &kgr_work.work);
-	else
+	if (!patch->immediate)
 		queue_delayed_work(kgr_wq, &kgr_work, 10 * HZ);
 
 	return 0;
