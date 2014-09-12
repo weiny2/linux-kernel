@@ -321,6 +321,7 @@
 #define VERIFY_CAP_REMOTE_PHY	     0x0f
 #define VERIFY_CAP_REMOTE_FABRIC     0x10
 #define VERIFY_CAP_REMOTE_LINK_WIDTH 0x11
+#define LINK_QUALITY_INFO            0x14
 
 /* Lane ID for general configuration registers */
 #define GENERAL_CONFIG 4
@@ -366,6 +367,10 @@
 /* mask, shift for reading 'mgmt_enabled' value from REMOTE_LNI_INFO field */
 #define MGMT_ALLOWED_SHIFT 23
 #define MGMT_ALLOWED_MASK 0x1
+
+/* mask, shift for 'link_quality' within LINK_QUALITY_INFO field */
+#define LINK_QUALITY_SHIFT 0
+#define LINK_QUALITY_MASK  0x7
 
 /* verify capability link width values */
 #define WFR_SUPPORTED_LINK_WIDTHS 0xb	/* 4,2,1 widths */

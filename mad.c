@@ -2180,7 +2180,7 @@ struct stl_port_status_rsp {
 	__be32 link_downed;
 	u8 uncorrectable_errors;
 
-	u8 link_quality_indicator; /* 4res, 4bit */
+	u8 link_quality_indicator; /* 5res, 3bit */
 	u8 res2[6];
 	struct _vls_pctrs {
 		/* per-VL Data counters */
@@ -2253,7 +2253,7 @@ struct stl_port_data_counters_msg {
 	struct _port_dctrs {
 		u8 port_number;
 		u8 reserved2[3];
-		__be32 link_quality_indicator; /* 4res, 4bit */
+		__be32 link_quality_indicator; /* 29res, 3bit */
 
 		/* Data counters */
 		__be64 port_xmit_data;
@@ -2537,7 +2537,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	/* rsp->uncorrectable_errors is 8 bits wide, and it pegs at 0xff */
 	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
 	rsp->uncorrectable_errors = tmp < 0x100 ? (tmp & 0xff) : 0xff;
-	/* rsp->link_quality_indicator ??? */
+	rsp->link_quality_indicator = ppd->link_quality;
 	vlinfo = &(rsp->vls[0]);
 	vfi = 0;
 	/* The vl_select_mask has been checked above, and we know
@@ -2628,7 +2628,6 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
 	/* this is an 8-bit quantity */
 	error_counter_summary += tmp < 0x100 ? (tmp & 0xff) : 0xff;
-	/* link_quality_indicator ??? */
 
 	return error_counter_summary;
 }
@@ -2639,6 +2638,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	struct stl_port_data_counters_msg *req =
 		(struct stl_port_data_counters_msg *)pmp->data;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct _port_dctrs *rsp;
 	struct _vls_dctrs *vlinfo;
 	size_t response_data_size;
@@ -2687,7 +2688,12 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	memset(rsp, 0, sizeof(*rsp));
 
 	rsp->port_number = port;
-	rsp->link_quality_indicator = 0; /* FIXME */
+	/*
+	 * Note that link_quality_indicator is a 32 bit quantity in
+	 * 'datacounters' queries (as opposed to 'portinfo' queries,
+	 * where it's a byte).
+	 */
+	rsp->link_quality_indicator = cpu_to_be32(ppd->link_quality);
 
 	/* FIXME
 	 * some of the counters are not implemented. if the WFR spec

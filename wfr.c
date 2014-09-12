@@ -723,6 +723,7 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 				u16 *link_widths);
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
+static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
 static void handle_dcc_err(struct hfi_devdata *dd,
@@ -2121,6 +2122,7 @@ void handle_verify_cap(struct work_struct *work)
 	 * LNI, is also be available at this point.
 	 */
 	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
+	read_link_quality(dd, &ppd->link_quality);
 	dd_dev_info(dd,
 		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
 		(int)power_management, (int)continious);
@@ -3157,6 +3159,13 @@ static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed)
 	*mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT) & MGMT_ALLOWED_MASK;
 }
 
+static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
+{
+	u32 frame;
+
+	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
+	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
+}
 /*
  * Read an idle LCB message.
  *

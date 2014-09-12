@@ -617,6 +617,7 @@ struct qib_pportdata {
 	u16 port_ltp_crc_mode;
 	/* mgmt_allowed is also returned in 'portinfo' MADs */
 	u8 mgmt_allowed;
+	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */
