@@ -50,7 +50,9 @@
  * Intel(R) Omni-Path Gen2 HFI PCIe Driver
  */
 
+#include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/utsname.h>
 #if 1 /* TODO: should be __SIMICS__ instead of 1 */
 #include <linux/delay.h>
@@ -302,6 +304,20 @@ int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message)
 	return -EINVAL;
 }
 
+static irqreturn_t irq_eq_handler(int irq, void *dev_id)
+{
+	struct hfi_msix_entry *me = dev_id;
+	struct hfi_event_queue *eq;
+
+	/* wake head waiter for each EQ using this IRQ */
+	read_lock(&me->irq_wait_lock);
+	list_for_each_entry(eq, &me->irq_wait_head, irq_wait_chain)
+		wake_up_interruptible(&(eq->wq));
+	read_unlock(&me->irq_wait_lock);
+
+	return IRQ_HANDLED;
+}
+
 /*
  * Do HFI chip-specific and PCIe cleanup. Free dd memory.
  * This is called in error cleanup from hfi_pci_dd_init().
@@ -378,6 +394,7 @@ static struct opa_core_ops opa_core_ops = {
 	.cq_unmap = hfi_cq_unmap,
 	.ev_assign = hfi_cteq_assign,
 	.ev_release = hfi_cteq_release,
+	.ev_wait_single = hfi_cteq_wait_single,
 	.dlid_assign = hfi_dlid_assign,
 	.dlid_release = hfi_dlid_release,
 	.e2e_ctrl = hfi_e2e_ctrl,
@@ -405,7 +422,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	struct hfi_devdata *dd;
 	unsigned long len;
 	resource_size_t addr;
-	int i, ret;
+	int i, n_irqs, ret;
 	struct opa_core_device_id bus_id;
 	struct hfi_ctx *ctx;
 	u16 priv_cq_idx;
@@ -513,6 +530,31 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = setup_interrupts(dd, /* HFI_NUM_INTERRUPTS */ 64, 0);
 	if (ret)
 		goto err_post_alloc;
+
+	/* configure IRQs for EQ groups */
+	n_irqs = min_t(int, dd->num_msix_entries, HFI_NUM_EQ_INTERRUPTS);
+	for (i = 0; i < n_irqs; i++) {
+		struct hfi_msix_entry *me = &dd->msix_entries[i];
+
+		BUG_ON(me->arg != NULL);
+		INIT_LIST_HEAD(&me->irq_wait_head);
+		rwlock_init(&me->irq_wait_lock);
+
+		dd_dev_dbg(dd, "request for IRQ %d:%d\n", i, me->msix.vector);
+		ret = request_irq(me->msix.vector, irq_eq_handler, 0,
+				  "hfi_irq_eq", me);
+		if (ret) {
+			dd_dev_err(dd, "IRQ[%d] request failed %d\n", i, ret);
+			/* IRQ cleanup done in hfi_pci_dd_free() */
+			goto err_post_alloc;
+		}
+		/* mark as in use */
+		me->arg = me;
+	}
+	dd->num_eq_irqs = i;
+	atomic_set(&dd->msix_eq_next, 0);
+	/* TODO - remove or change to debug later */
+	dd_dev_info(dd, "%d IRQs assigned to EQs\n", i);
 
 	bus_id.vendor = ent->vendor;
 	bus_id.device = ent->device;

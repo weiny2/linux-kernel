@@ -297,6 +297,7 @@ struct opa_dev_desc {
  * @cq_unmap: unmap Command Queues
  * @ev_assign: Assign an Event Completion Queue or Event Counter
  * @ev_release: Release an Event Completion Queue or Event Counter
+ * @ev_wait_single: Block on WaitQueue for associated Event Completion resource
  * @dlid_assign: Assign entries from the DLID relocation table
  * @dlid_release: Release entries from the DLID relocation table
  * @e2e_ctrl: Initiate E2E control messages
@@ -324,6 +325,8 @@ struct opa_core_ops {
 	int (*ev_assign)(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
 	int (*ev_release)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx,
 			  u64 user_data);
+	int (*ev_wait_single)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx,
+			      long timeout);
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_ctx *ctx, u32 dlid_base, u32 count);

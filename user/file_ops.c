@@ -143,6 +143,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_ct_release_args ct_release;
 	struct hfi_eq_assign_args eq_assign;
 	struct hfi_eq_release_args eq_release;
+	struct hfi_eq_wait_single_args eq_wait_single;
 	struct hfi_dlid_assign_args dlid_assign;
 	struct hfi_ctxt_attach_args ctxt_attach;
 	struct hfi_job_info_args job_info;
@@ -223,6 +224,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_EQ_RELEASE:
 		copy_in = sizeof(eq_release);
 		copy_ptr = &eq_release;
+		break;
+	case HFI_CMD_EQ_WAIT_SINGLE:
+		copy_in = sizeof(eq_wait_single);
+		copy_ptr = &eq_wait_single;
 		break;
 	case HFI_CMD_JOB_INFO:
 		copy_out = sizeof(job_info);
@@ -327,6 +332,11 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_EQ_RELEASE:
 		ret = ops->ev_release(&ud->ctx, 0, eq_release.eq_idx,
 				      eq_release.user_data);
+		break;
+	case HFI_CMD_EQ_WAIT_SINGLE:
+		/* TODO - we might want software threshold for blocking EQs? */
+		ret = ops->ev_wait_single(&ud->ctx, 0, eq_wait_single.eq_idx,
+					  eq_wait_single.timeout);
 		break;
 	case HFI_CMD_DLID_ASSIGN:
 		/* must be called after JOB_SETUP and match total LIDs */
