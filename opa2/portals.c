@@ -51,11 +51,13 @@
  */
 
 #include <linux/bitmap.h>
+#include <linux/interrupt.h>
 #include <linux/log2.h>
 #include <linux/sched.h>
 #include <rdma/opa_core.h>
 #include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
+#include <rdma/hfi_eq.h>
 
 static uint cq_alloc_cyclic = 0;
 
@@ -309,7 +311,6 @@ static int hfi_ct_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 {
 	union ptl_ct_event *ct_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_CT_OFFSET);
 	union ptl_ct_event ct_desc = {.val = {0}};
-	unsigned long flags;
 	u16 ct_base;
 	int ct_idx;
 	int num_cts = HFI_NUM_CT_ENTRIES;
@@ -323,7 +324,7 @@ static int hfi_ct_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 		return -EINVAL;
 
 	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&ctx->cteq_lock, flags);
+	spin_lock(&ctx->cteq_lock);
 	ct_idx = idr_alloc(&ctx->ct_used, ctx, ct_base, ct_base + num_cts, GFP_NOWAIT);
 	if (ct_idx < 0) {
 		/* all EQs are assigned */
@@ -350,7 +351,7 @@ static int hfi_ct_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 	ev_assign->ev_idx = ct_idx;
 
 idr_end:
-	spin_unlock_irqrestore(&ctx->cteq_lock, flags);
+	spin_unlock(&ctx->cteq_lock);
 	idr_preload_end();
 
 	return ret;
@@ -360,10 +361,9 @@ static int hfi_ct_release(struct hfi_ctx *ctx, u16 ct_idx)
 {
 	union ptl_ct_event *ct_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_CT_OFFSET);
 	void *ct_present;
-	unsigned long flags;
 	int ret = 0;
 
-	spin_lock_irqsave(&ctx->cteq_lock, flags);
+	spin_lock(&ctx->cteq_lock);
 	ct_present = idr_find(&ctx->ct_used, ct_idx);
 	if (!ct_present) {
 		ret = -EINVAL;
@@ -375,7 +375,7 @@ static int hfi_ct_release(struct hfi_ctx *ctx, u16 ct_idx)
 
 	idr_remove(&ctx->ct_used, ct_idx);
 idr_end:
-	spin_unlock_irqrestore(&ctx->cteq_lock, flags);
+	spin_unlock(&ctx->cteq_lock);
 
 	return ret;
 }
@@ -383,21 +383,21 @@ idr_end:
 static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_EQ_DESC_OFFSET);
+	struct hfi_event_queue *eq = NULL;
+	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base +
+				  HFI_PSB_EQ_DESC_OFFSET);
 	union eqd eq_desc;
-	unsigned long flags;
 	u16 eq_base;
-	int order, eq_idx;
+	int order, eq_idx, msix_idx = 0;
 	int num_eqs = HFI_NUM_EVENT_HANDLES;
 	int ret = 0;
 
 	if (eq_assign->ni >= HFI_NUM_NIS)
 		return -EINVAL;
-	/* TODO blocking mode coming soon... */
-	if (eq_assign->mode & OPA_EV_MODE_BLOCKING)
-		return -EINVAL;
-	/* TODO also validate queue base+count is mapped to user */
 	if (eq_assign->base & (HFI_EQ_ALIGNMENT - 1))
+		return -EFAULT;
+	if (!access_ok(VERIFY_WRITE, eq_assign->base,
+		       eq_assign->size * HFI_EQ_ENTRY_SIZE))
 		return -EFAULT;
 
 	/* FXR requires EQ size as power of 2 */
@@ -408,6 +408,12 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	if (order > HFI_MAX_EVENT_ORDER)
 		return -EINVAL;
 
+	if (eq_assign->mode & OPA_EV_MODE_BLOCKING) {
+		eq = kzalloc(sizeof(*eq), GFP_KERNEL);
+		if (!eq)
+			return -ENOMEM;
+	}
+
 	eq_base = eq_assign->ni * num_eqs;
 	/*
 	 * TODO - first EQ is reserved for result of EQ_DESC_WRITE.
@@ -417,12 +423,34 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		eq_base += 1;
 
 	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&ctx->cteq_lock, flags);
-	eq_idx = idr_alloc(&ctx->eq_used, ctx, eq_base, eq_base + num_eqs, GFP_NOWAIT);
+	spin_lock(&ctx->cteq_lock);
+	/* IDR contents differ based on blocking or non-blocking */
+	eq_idx = idr_alloc(&ctx->eq_used, eq ? (void *)eq : (void *)ctx,
+			   eq_base, eq_base + num_eqs, GFP_NOWAIT);
 	if (eq_idx < 0) {
 		/* all EQs are assigned */
 		ret = eq_idx;
+		kfree(eq);
 		goto idr_end;
+	}
+
+	if (eq) {
+		struct hfi_msix_entry *me;
+		unsigned long flags;
+
+		/* initialize EQ IRQ state */
+		INIT_LIST_HEAD(&eq->irq_wait_chain);
+		init_waitqueue_head(&eq->wq);
+
+		/* for now just do round-robin assignment */
+		msix_idx = atomic_inc_return(&dd->msix_eq_next) %
+			   dd->num_eq_irqs;
+		me = &dd->msix_entries[msix_idx];
+		eq->irq_vector = msix_idx;
+		/* add EQ to list of IRQ waiters */
+		write_lock_irqsave(&me->irq_wait_lock, flags);
+		list_add(&eq->irq_wait_chain, &me->irq_wait_head);
+		write_unlock_irqrestore(&me->irq_wait_lock, flags);
 	}
 
 	/* set EQ descriptor in host memory */
@@ -430,7 +458,7 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	eq_desc.order = order;
 	eq_desc.start = (eq_assign->base >> 6);
 	eq_desc.ni = eq_assign->ni;
-	eq_desc.irq = 0;
+	eq_desc.irq = msix_idx;
 	eq_desc.i = (eq_assign->mode & OPA_EV_MODE_BLOCKING);
 	eq_desc.v = 1;
 	eq_desc_base[eq_idx].val[1] = eq_desc.val[1];
@@ -454,27 +482,56 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	eq_assign->ev_idx = eq_idx;
 
 idr_end:
-	spin_unlock_irqrestore(&ctx->cteq_lock, flags);
+	spin_unlock(&ctx->cteq_lock);
 	idr_preload_end();
 
 	return ret;
 }
 
+/*
+ * This function is called via EQ cleanup as a idr_for_each function, hence
+ * the curious looking arguments.
+ */
+static int hfi_eq_irq_remove(int eq_idx, void *idr_ptr, void *idr_ctx)
+{
+	struct hfi_ctx *ctx = (struct hfi_ctx *)idr_ctx;
+
+	/* test if blocking mode EQ */
+	if (ctx != idr_ptr) {
+		struct hfi_msix_entry *me;
+		struct hfi_event_queue *eq = (struct hfi_event_queue *)idr_ptr;
+		unsigned long flags;
+
+		me = &ctx->devdata->msix_entries[eq->irq_vector];
+		write_lock_irqsave(&me->irq_wait_lock, flags);
+		if (!list_empty(&eq->irq_wait_chain))
+			list_del(&eq->irq_wait_chain);
+		write_unlock_irqrestore(&me->irq_wait_lock, flags);
+
+		kfree(eq);
+	}
+
+	return 0;
+}
+
 static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_EQ_DESC_OFFSET);
+	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base +
+				  HFI_PSB_EQ_DESC_OFFSET);
 	union eqd eq_desc;
 	void *eq_present;
-	unsigned long flags;
 	int ret = 0;
 
-	spin_lock_irqsave(&ctx->cteq_lock, flags);
+	spin_lock(&ctx->cteq_lock);
 	eq_present = idr_find(&ctx->eq_used, eq_idx);
 	if (!eq_present) {
 		ret = -EINVAL;
 		goto idr_end;
 	}
+
+	/* remove any IRQ assignment */
+	hfi_eq_irq_remove(eq_idx, eq_present, ctx);
 
 	/* need cleared EQ desc to send via RX CQ */
 	eq_desc.val[0] = 0;
@@ -492,7 +549,57 @@ static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 
 	idr_remove(&ctx->eq_used, eq_idx);
 idr_end:
-	spin_unlock_irqrestore(&ctx->cteq_lock, flags);
+	spin_unlock(&ctx->cteq_lock);
+
+	return ret;
+}
+
+static int __hfi_eq_wait_condition(struct hfi_ctx *ctx, u16 eq_idx)
+{
+	/*
+	 * TODO - using refactored hfi_eq.h to test for event.
+	 * We should pin this page to prevent potential page fault here?
+	 */
+	u64 *eq_entry = NULL;
+	eq_entry = _hfi_eq_next_entry(ctx, eq_idx);
+	return (*eq_entry & TARGET_EQENTRY_V_MASK);
+}
+
+static int hfi_eq_wait_single(struct hfi_ctx *ctx, u16 eq_idx, long timeout)
+{
+	struct hfi_event_queue *eq = NULL;
+	void *eq_present;
+	int ret = 0;
+
+	if (timeout < 0)
+		timeout = MAX_SCHEDULE_TIMEOUT;
+	else
+		timeout = msecs_to_jiffies(timeout);
+
+	spin_lock(&ctx->cteq_lock);
+	eq_present = idr_find(&ctx->eq_used, eq_idx);
+	if (!eq_present || eq_present == ctx) {
+		ret = -EINVAL;
+		goto idr_end;
+	}
+
+	eq = (struct hfi_event_queue *)eq_present;
+idr_end:
+	spin_unlock(&ctx->cteq_lock);
+
+	if (eq) {
+		/* TODO - increment waiter count? */
+		ret = wait_event_interruptible_timeout(eq->wq,
+					__hfi_eq_wait_condition(ctx, eq_idx),
+					timeout);
+		dd_dev_dbg(ctx->devdata, "wait_event returned %d\n", ret);
+		if (ret == 0)	/* timeout */
+			ret = -EAGAIN;
+		else if (ret < 0)  /* interrupt, TODO - restartable? */
+			ret = (timeout > 0) ? -EINTR : -ERESTARTSYS;
+		else		/* success */
+			ret = 0;
+	}
 
 	return ret;
 }
@@ -513,14 +620,22 @@ int hfi_cteq_release(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx, u64 user_data
 		return hfi_eq_release(ctx, ev_idx, user_data);
 }
 
+int hfi_cteq_wait_single(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx,
+			 long timeout)
+{
+	if (ev_mode & OPA_EV_MODE_COUNTER)
+		return -ENOSYS;
+	else
+		return hfi_eq_wait_single(ctx, ev_idx, timeout);
+}
+
 static void hfi_cteq_cleanup(struct hfi_ctx *ctx)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&ctx->cteq_lock, flags);
+	spin_lock(&ctx->cteq_lock);
 	idr_destroy(&ctx->ct_used);
+	idr_for_each(&ctx->eq_used, hfi_eq_irq_remove, ctx);
 	idr_destroy(&ctx->eq_used);
-	spin_unlock_irqrestore(&ctx->cteq_lock, flags);
+	spin_unlock(&ctx->cteq_lock);
 }
 
 /*

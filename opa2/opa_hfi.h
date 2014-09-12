@@ -143,6 +143,14 @@ struct hfi_msix_entry {
 	struct msix_entry msix;
 	void *arg;
 	cpumask_var_t mask;
+	struct list_head irq_wait_head;
+	rwlock_t irq_wait_lock;
+};
+
+struct hfi_event_queue {
+	struct list_head irq_wait_chain;
+	wait_queue_head_t wq;
+	u32 irq_vector;
 };
 
 /*
@@ -206,6 +214,8 @@ struct hfi_devdata {
 	/* MSI-X information */
 	struct hfi_msix_entry *msix_entries;
 	u32 num_msix_entries;
+	u32 num_eq_irqs;
+	atomic_t msix_eq_next;
 
 	/* Device Portals State */
 	struct idr ptl_user;
@@ -295,6 +305,8 @@ int hfi_dlid_release(struct hfi_ctx *ctx, u32 dlid_base, u32 count);
 int hfi_cteq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
 int hfi_cteq_release(struct hfi_ctx *ctx, u16 eq_mode, u16 eq_idx,
 		     u64 user_data);
+int hfi_cteq_wait_single(struct hfi_ctx *ctx, u16 eq_mode, u16 ev_idx,
+			 long timeout);
 int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
 void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
 int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);
@@ -346,6 +358,10 @@ u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 
 #define dd_dev_info(dd, fmt, ...) \
 	dev_info(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
+		 (dd)->unit, ##__VA_ARGS__)
+
+#define dd_dev_dbg(dd, fmt, ...) \
+	dev_dbg(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
 
 /* printk wrappers (pr_warn, etc) can also be used for general debugging. */
