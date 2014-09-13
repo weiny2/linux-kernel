@@ -61,7 +61,8 @@ static inline bool try_to_freeze_unsafe(void)
 
 static inline bool try_to_freeze(void)
 {
-	kgr_task_safe(current);
+	if (current->flags & PF_KTHREAD)
+		kgr_task_safe(current);
 
 	if (!(current->flags & PF_NOFREEZE))
 		debug_check_no_locks_held();
@@ -318,7 +319,13 @@ static inline void thaw_processes(void) {}
 static inline void thaw_kernel_threads(void) {}
 
 static inline bool try_to_freeze_nowarn(void) { return false; }
-static inline bool try_to_freeze(void) { kgr_task_safe(current); return false; }
+static inline bool try_to_freeze(void)
+{
+	if (current->flags & PF_KTHREAD)
+		kgr_task_safe(current);
+
+	return false;
+}
 
 static inline void freezer_do_not_count(void) {}
 static inline void freezer_count(void) {}
