@@ -442,6 +442,9 @@ class TestInfo:
                           default="")
         parser.add_option("--testlist", dest="test_list",
                           help="List of tests to execute. Can be used with '--type' to further filter the test list.")
+        parser.add_option("--psmopts", dest="psm_opts",
+                          help="String of options to pass to PSM tests.",
+                          default="-x PSM_SDMA=0 -x PSM_TID=0")
 
         (options, args) = parser.parse_args()
 
@@ -567,6 +570,8 @@ class TestInfo:
         if options.sm:
             self.sm = options.sm
 
+        self.psm_opts = options.psm_opts
+
     def get_host_list(self):
         host_list = []
         for host in self.nodelist:
@@ -619,39 +624,36 @@ class TestInfo:
         return "\tNodeList: %s\n\tHFI: %s\n\tkbuild: %s\n\tsimics: %s\n\tmpiverbs: %s" % (
                ret, self.hfi_src, self.kbuild_dir, self.simics, self.mpiverbs)
 
-    # For now just hard code the MPI paths since MPI is installed in the craff
-    # file for simics. If we need to pass a custom MPI path we can add an option
-    # later.
+    def is_mpiverbs(self):
+        return self.mpiverbs
+
+    def get_psm_opts(self):
+        return "\"%s\"" % self.psm_opts
+
     def get_mpi_lib_path(self):
-        return "/usr/mpi/gcc/openmpi-1.6.5-qlc/lib64"
+        if self.mpiverbs:
+            return "/usr/mpi/gcc/openmpi-1.8.2a1/lib64"
+        else:
+            return "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/lib64"
 
     def get_mpi_bin_path(self):
-        return "/usr/mpi/gcc/openmpi-1.6.5-qlc/bin"
+        if self.mpiverbs:
+            return "/usr/mpi/gcc/openmpi-1.8.2a1/bin"
+        else:
+            return "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/bin"
 
     def get_mpi_opts(self):
-        # This part is different depending on if we use verbs or PSM
-	if not self.mpiverbs:
-             ret = " --mca mtl psm --mca mtl_psm_ib_pkey 0x8001 -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_TID=0 -x PSM_SDMA=0 -x"
-	else:
-             ret = " --mca btl sm,openib,self --mca mtl ^psm -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params_found 0 -x"
+        if not self.mpiverbs:
+             ret = " --mca pml cm --mca mtl psm2 -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_PKEY=0x8001 %s --allow-run-as-root -x" % self.psm_opts
+        else:
+             ret = " --mca btl sm,openib,self --mca mtl ^psm,psm2 -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params_found 0 --allow-run-as-root -x"
         return ret
 
     def get_osu_benchmark_dir(self):
-        # Look on one of the target nodes for the benchmark location.
-        # Use buffered send_ssh() so we don't see the annoying
-        # "Warning: Permanently added ..." message on the output.
-        node = self.nodelist[0]
-        # current simualtion disk images
-        (err, out) = node.send_ssh(
-                          "test -d /usr/local/libexec/osu-micro-benchmarks")
-        if err == 0:
-            return "/usr/local/libexec/osu-micro-benchmarks/mpi/pt2pt/"
-        # FPGA machiines
-        (err, out) = node.send_ssh("test -d /usr/lib64/openmpi/bin")
-        if err == 0:
-            return "/usr/lib64/openmpi/bin/mpitests-"
-        # no identifiable path, return no prefix
-        return ""
+        if self.mpiverbs:
+            return "/usr/mpi/gcc/openmpi-1.8.2a1/tests/osu_benchmarks-3.1.1/"
+        else:
+            return "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/tests/osu_benchmarks-3.1.1/"
 
     def get_mod_parms(self):
         return self.module_params

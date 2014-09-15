@@ -53,7 +53,10 @@ def main():
 
     base_dir = test_info.get_base_dir()
     if base_dir == "":
-        base_dir = "/usr/mpi/gcc/openmpi-1.6.5/tests/IMB-3.2"
+        if test_info.is_mpiverbs():
+            base_dir = "/usr/mpi/gcc/openmpi-1.8.2a1/tests/IMB-3.2"
+        else:
+            base_dir = "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/tests/IMB-3.2"
         print "Using default base_dir of", base_dir
     else:
         print "Using user defined base_dir of", base_dir

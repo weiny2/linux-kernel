@@ -110,14 +110,14 @@ test_list = [
    # OSU MPI tests
     { "test_name" : "OSU-MPI-Psm",
       "test_exe" : "OsuMpi.py",
-      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS%",
       "type" : "mpi,mpipsm,default",
       "desc" : "Run OSU MPI benchmarks with PSM",
     },
 
     { "test_name" : "OSU-MPI-Psm-One-node",
       "test_exe" : "OsuMpi.py",
-      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB%",
+      "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --psmopts %PSM_OPTS%",
       "type" : "mpi,mpipsm,default",
       "desc" : "Run OSU MPI benchmarks on one node with PSM",
     },
@@ -139,7 +139,7 @@ test_list = [
     # IMB (Intel MPI Benchmark) tests
     { "test_name" : "IMB-Psm",
       "test_exe" : "IMB.py",
-      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --args \"-time 1 -iter 10\"",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-time 1 -iter 10\"",
       "type" : "default,mpi,mpipsm",
       "desc" : "Run full IMB suite with PSM",
     },
@@ -219,7 +219,7 @@ test_list = [
     # Fast MPI tests
     { "test_name" : "MPI-Stress-Psm",
       "test_exe" : "MpiStress.py",
-      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
       "type" : "mpi,mpipsm,quick",
       "desc" : "Run quick MPI stress with PSM",
     },
@@ -233,7 +233,7 @@ test_list = [
 
     { "test_name" : "MPI-Stress-PSM-Long",
       "test_exe" : "MpiStress.py",
-      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --args \"-L 10 -M 10 -w 20 -z\"",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 10 -M 10 -w 20 -z\"",
       "type" : "mpi,mpipsm,default,integrity",
       "desc" : "Run MPI stress with PSM",
     },
@@ -258,6 +258,7 @@ variable_map = {
     "PSM_LIB" : test_info.get_psm_lib,
     "TEST_PKT_DIR" : test_info.get_test_pkt_dir,
     "DIAG_LIB" : test_info.get_diag_lib,
+    "PSM_OPTS" : test_info.get_psm_opts,
 }
 
 # Build a list of all test types. This will be used when the user
