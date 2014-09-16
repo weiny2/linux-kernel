@@ -64,13 +64,17 @@ def main():
      filter_value,
      corrupt_dlid,
      drop_packet,
-     flip_lids) = test_info.parse_extra_args()
+     flip_lids,
+     lid1,
+     lid2) = test_info.parse_extra_args()
 
     print "Filter By:", filter_by
     print "Filter Val:", filter_value
     print "Corrupt Dlid:", corrupt_dlid
     print "Drop packet:", drop_packet
     print "Flip Lids:", flip_lids
+    print "lid 1:", lid1
+    print "lid 2:", lid2
 
     dev = "/dev/hfi_diagpkt0"
 
@@ -150,7 +154,7 @@ def main():
             outpacket = outpacket + "B" #[lower DLID = 66 or 0x42]
             outpacket = outpacket + packet[4:-4]
         elif flip_lids == "1":
-            if dlid == 1:
+            if "0x" + str(dlid) == lid1:
                 outpacket = packet[:2]
                 outpacket = outpacket + packet[6] + packet[7]
                 outpacket = outpacket + packet[4] + packet[5]

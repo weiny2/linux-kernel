@@ -98,13 +98,10 @@ def snoop_drop_send_enabled(host):
     RegLib.test_log(0, "Snoop_drop_send is enabled")
     return True
 
-
-
-
-def snoop_do_not_intercept_outgoing(host):
+def snoop_do_not_intercept_outgoing(host, lid1, lid2):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,0x2,0,1,0\""
+    cmd = snoop_path + " --args=\"0x1,%s,0,1,0,%s,%s\"" % (lid2,lid1,lid2)
 
     pid = os.fork()
     if pid == 0:
@@ -127,10 +124,14 @@ def snoop_do_not_intercept_outgoing(host):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    if (dlid == "1") and (slid == "2"):
+                    dlid = "0x" + dlid
+                    slid = "0x" + slid
+                    if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
-                    elif (dlid == "2") and (slid == "1"):
+                    elif (dlid == lid2) and (slid == lid1):
                         pong = pong + 1
+                    else:
+                        RegLib.test_log(0, "Looking for Lid %s, %s" % (lid1,lid2))
                 print "Size:", size, "Dlid", dlid, "Slid", slid
         print "Snoop Ping:", ping, "Pong", pong
         if ping != 0 or pong != 5:
@@ -141,10 +142,10 @@ def snoop_do_not_intercept_outgoing(host):
 
     return pid
 
-def snoop_intercept_outgoing(host):
+def snoop_intercept_outgoing(host, lid1, lid2):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,0x2,0,0,0\""
+    cmd = snoop_path + " --args=\"0x1,%s,0,0,0,%s,%s\"" % (lid2, lid1,lid2)
 
     pid = os.fork()
     if pid == 0:
@@ -166,9 +167,11 @@ def snoop_intercept_outgoing(host):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    if (dlid == "1") and (slid == "2"):
+                    dlid = "0x" + dlid
+                    slid = "0x" + slid
+                    if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
-                    elif (dlid == "2") and (slid == "1"):
+                    elif (dlid == lid2) and (slid == lid1):
                         pong = pong + 1
                 print "Size:", size, "Dlid", dlid, "Slid", slid
         print "Snoop Ping:", ping, "Pong", pong
@@ -180,10 +183,10 @@ def snoop_intercept_outgoing(host):
 
     return pid
 
-def snoop_intercept_outgoing_2(host):
+def snoop_intercept_outgoing_2(host, lid1, lid2):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,0x1,0,0,1\""
+    cmd = snoop_path + " --args=\"0x1,%s,0,0,1,%s,%s\"" % (lid1, lid1, lid2)
 
     pid = os.fork()
     if pid == 0:
@@ -205,9 +208,11 @@ def snoop_intercept_outgoing_2(host):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    if (dlid == "1") and (slid == "2"):
+                    dlid = "0x" + dlid
+                    slid = "0x" + slid
+                    if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
-                    elif (dlid == "2") and (slid == "1"):
+                    elif (dlid == lid2) and (slid == lid1):
                         pong = pong + 1
                 print "Size:", size, "Dlid", dlid, "Slid", slid
         print "Snoop Ping:", ping, "Pong", pong
@@ -220,14 +225,15 @@ def snoop_intercept_outgoing_2(host):
     return pid
 
 
-def snoop_intercept_outgoing_3(host):
+def snoop_intercept_outgoing_3(host,lid1, lid2):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,0x2,1,0,0\""
+    cmd = snoop_path + " --args=\"0x1,%s,1,0,0,%s,%s\"" % (lid2, lid1, lid2)
 
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting SnoopLocal.py on %s" % host.get_name())
+        print "CMD:", cmd
         (res, output) = host.send_ssh(cmd, 1)
         ping = 0;
         pong = 0;
@@ -245,9 +251,11 @@ def snoop_intercept_outgoing_3(host):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    if (dlid == "1") and (slid == "2"):
+                    dlid = "0x" + dlid
+                    slid = "0x" + slid
+                    if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
-                    elif (dlid == "2") and (slid == "1"):
+                    elif (dlid == lid2) and (slid == lid1):
                         pong = pong + 1
                 print "Size:", size, "Dlid", dlid, "Slid", slid
         print "Snoop Ping:", ping, "Pong", pong
@@ -259,7 +267,7 @@ def snoop_intercept_outgoing_3(host):
 
     return pid
 
-def capture_do_not_intercept_outgoing(host):
+def capture_do_not_intercept_outgoing(host, lid1, lid2):
     global capture_path;
 
     pid = os.fork()
@@ -282,9 +290,11 @@ def capture_do_not_intercept_outgoing(host):
                     # byte ICRC = 36 or 9 Dwords. There is a 16 byte header
                     # for Pcap metadata but it is not included in PacketBytes.
                     # The test does a 5x ping pong
-                    if (dlid == "1") and (slid == "2"):
+                    dlid = "0x" + dlid
+                    slid = "0x" + slid
+                    if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
-                    elif (dlid == "2") and (slid == "1"):
+                    elif (dlid == lid2) and (slid == lid1):
                         pong = pong + 1
                 print "Size:", size, "Dlid", dlid, "Slid", slid
         print "Capture: Ping:", ping, "Pong", pong
@@ -296,7 +306,7 @@ def capture_do_not_intercept_outgoing(host):
 
     return pid
 
-def capture_do_not_intercept_outgoing_2(host):
+def capture_do_not_intercept_outgoing_2(host, lid1, lid2):
     global capture_path;
 
     pid = os.fork()
@@ -316,11 +326,13 @@ def capture_do_not_intercept_outgoing_2(host):
                 dlid = matchObj.group(3)
                 if size == "36":
                     # Why 36? See previous function
-                    if (dlid == "1") and (slid == "2"):
+                    dlid = "0x" + dlid
+                    slid = "0x" + slid
+                    if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
-                    elif (dlid == "2") and (slid == "1"):
+                    elif (dlid == lid2) and (slid == lid1):
                         pong = pong + 1
-                    elif (slid == "1"):
+                    elif (slid == lid1):
                         foreign_lid = foreign_lid + 1
                         print "Landed foreign lid"
                 print "Size:", size, "Dlid", dlid, "Slid", slid
@@ -499,6 +511,10 @@ def main():
     print "snoop path is", snoop_path
     print "capture path is", capture_path
 
+    unit_test = test_info.parse_extra_args()
+    if unit_test[0] == '':
+        unit_test = None
+
     host1 = test_info.get_host_record(0)
     host2 = test_info.get_host_record(1)
 
@@ -527,8 +543,8 @@ def main():
     if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
         enable_snoop(nodes, snoop_parms)
 
-    snoop_pid = snoop_do_not_intercept_outgoing(host1)
-    capture_pid = capture_do_not_intercept_outgoing(host2)
+    snoop_pid = snoop_do_not_intercept_outgoing(host1, host1.get_lid(),host2.get_lid())
+    capture_pid = capture_do_not_intercept_outgoing(host2, host1.get_lid(), host2.get_lid())
 
     run_ib_send_lat()
 
@@ -548,40 +564,42 @@ def main():
     print "Starting Test 2"
     print "XXXXXXXXXXXXXXX"
 
-    if (snoop_enabled(host1) == False or snoop_enabled(host2) == False or
-        snoop_drop_send_enabled(host1) == False or
-        snoop_drop_send_enabled(host2) == False):
-            enable_snoop_drop_send(nodes, snoop_drop_send_parms)
+    if unit_test:
+        if (snoop_enabled(host1) == False or snoop_enabled(host2) == False or
+            snoop_drop_send_enabled(host1) == False or
+            snoop_drop_send_enabled(host2) == False):
+                enable_snoop_drop_send(nodes, snoop_drop_send_parms)
 
-    snoop_pid = snoop_intercept_outgoing(host1)
-    capture_pid = capture_do_not_intercept_outgoing(host2)
+        snoop_pid = snoop_intercept_outgoing(host1)
+        capture_pid = capture_do_not_intercept_outgoing(host2)
 
-    run_ib_send_lat()
+        run_ib_send_lat()
 
-    RegLib.test_log(0, "Waiting for snoop pid to stop and validate")
-    (waited, status) = os.waitpid(snoop_pid, 0)
-    RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-    if status:
-        error("Snoop Proc Test 2 failed")
+        RegLib.test_log(0, "Waiting for snoop pid to stop and validate")
+        (waited, status) = os.waitpid(snoop_pid, 0)
+        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
+        if status:
+            error("Snoop Proc Test 2 failed")
 
-    RegLib.test_log(0, "Waiting for capture pid to stop and validate")
-    (waited, status) = os.waitpid(capture_pid, 0)
-    RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-    if status:
-        error("Cpature Proc Test 2 failed")
+        RegLib.test_log(0, "Waiting for capture pid to stop and validate")
+        (waited, status) = os.waitpid(capture_pid, 0)
+        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
+        if status:
+            error("Cpature Proc Test 2 failed")
+    else:
+        RegLib.test_log(0, "Skipping test 2 for regression suite")
 
     print "XXXXXXXXXXXXXXX"
     print "Starting Test 3"
     print "XXXXXXXXXXXXXXX"
-
     if snoop_enabled(host1) == False or snoop_enabled(host2) == False:
         enable_snoop(nodes, snoop_parms)
 
     if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
         enable_snoop(nodes, snoop_parms)
 
-    snoop_pid = snoop_intercept_outgoing_2(host1)
-    capture_pid = capture_do_not_intercept_outgoing(host2)
+    snoop_pid = snoop_intercept_outgoing_2(host1, host1.get_lid(), host2.get_lid())
+    capture_pid = capture_do_not_intercept_outgoing(host2, host1.get_lid(), host2.get_lid())
 
     run_ib_send_lat_2()
 
@@ -600,59 +618,60 @@ def main():
     print "XXXXXXXXXXXXXXX"
     print "Starting Test 4"
     print "XXXXXXXXXXXXXXX"
+    if unit_test:
+        if (snoop_enabled(host1) == False or snoop_enabled(host2) == False):
+            enable_snoop(nodes, snoop_parms)
 
-    if (snoop_enabled(host1) == False or snoop_enabled(host2) == False):
-        enable_snoop(nodes, snoop_parms)
+        if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
+            enable_snoop(nodes, snoop_parms)
 
-    if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
-        enable_snoop(nodes, snoop_parms)
+        snoop_pid = snoop_intercept_outgoing_3(host1, host1.get_lid(), host2.get_lid())
+        capture_pid = capture_do_not_intercept_outgoing_2(host2, host1.get_lid(), host2.get_lid())
 
-    snoop_pid = snoop_intercept_outgoing_3(host1)
-    capture_pid = capture_do_not_intercept_outgoing_2(host2)
+        run_ib_send_lat_2()
 
-    run_ib_send_lat_2()
+        RegLib.test_log(0, "Waiting for snoop pid to stop and validate")
+        (waited, status) = os.waitpid(snoop_pid, 0)
+        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
+        if status:
+            error("Snoop Proc Test 4 failed")
 
-    RegLib.test_log(0, "Waiting for snoop pid to stop and validate")
-    (waited, status) = os.waitpid(snoop_pid, 0)
-    RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-    if status:
-        error("Snoop Proc Test 4 failed")
+        RegLib.test_log(0, "Waiting for capture pid to stop and validate")
+        (waited, status) = os.waitpid(capture_pid, 0)
+        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
+        if status:
+            error("Cpature Proc Test 4 failed")
 
-    RegLib.test_log(0, "Waiting for capture pid to stop and validate")
-    (waited, status) = os.waitpid(capture_pid, 0)
-    RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-    if status:
-        error("Cpature Proc Test 4 failed")
+        print "XXXXXXXXXXXXXXX"
+        print "Starting Test 5"
+        print "XXXXXXXXXXXXXXX"
+        RegLib.test_log(0, "Enabling snoop for bypass");
 
-    print "XXXXXXXXXXXXXXX"
-    print "Starting Test 5"
-    print "XXXXXXXXXXXXXXX"
-    RegLib.test_log(0, "Enabling snoop for bypass");
+        if (snoop_enabled(host1) == True or snoop_enabled(host2) == False or
+           snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2)):
+            enable_snoop_for_bypass(nodes, snoop_bypass_parms)
 
-    if (snoop_enabled(host1) == True or snoop_enabled(host2) == False or
-       snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2)):
-        enable_snoop_for_bypass(nodes, snoop_bypass_parms)
+        RegLib.test_log(0, "Starting packet capture on host2")
+        capture_pid = capture_bypass(host2)
 
-    RegLib.test_log(0, "Starting packet capture on host2")
-    capture_pid = capture_bypass(host2)
+        RegLib.test_log(0, "Sleeping 5 seconds to let capture start up")
+        time.sleep(5)
 
-    RegLib.test_log(0, "Sleeping 5 seconds to let capture start up")
-    time.sleep(5)
+        lid = host2.get_lid()
+        RegLib.test_log(0, "Sending bypass packets from host1 to lid %s" %lid);
+        send_bypass(host1, lid, diag_path, pkt_dir)
 
-    lid = host2.get_lid()
-    RegLib.test_log(0, "Sending bypass packets from host1 to lid %s" %lid);
-    send_bypass(host1, lid, diag_path, pkt_dir)
+        RegLib.test_log(0, "Stopping PCAP and checking results")
+        stop_pcap(host2)
+        (waited, success) = os.waitpid(capture_pid, 0)
 
-    RegLib.test_log(0, "Stopping PCAP and checking results")
-    stop_pcap(host2)
-    (waited, success) = os.waitpid(capture_pid, 0)
-
-    if success == 0:
-        RegLib.test_log(0, "Successfully got 10 bypass packets")
-    else:
-        error("Wrong number of bypass packets.")
-
-    restore_default_params(nodes, default_parms)
+        if success == 0:
+            RegLib.test_log(0, "Successfully got 10 bypass packets")
+        else:
+            error("Wrong number of bypass packets.")
+    else: 
+        RegLib.test_log(0, "Skipping test 4 for regression suite")
+        RegLib.test_log(0, "Skipping test 5 for regression suite")
 
     done_check_error()
 

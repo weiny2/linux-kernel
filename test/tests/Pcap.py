@@ -45,7 +45,7 @@ def snoop_enabled():
 
     return True
 
-def start_pcap(host):
+def start_pcap(host, lid1, lid2):
     # Start packet capture and when done check its output. This is done in a
     # child process.
     pid = os.fork()
@@ -67,9 +67,11 @@ def start_pcap(host):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    if (dlid == "1") and (slid == "2"):
+                    dlid = "0x" + dlid
+                    slid = "0x" + slid
+                    if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
-                    elif (dlid == "2") and (slid == "1"):
+                    elif (dlid == lid2) and (slid == lid1):
                         pong = pong + 1
                 print "Size:", size, "Dlid", dlid, "Slid", slid
         print "Ping:", ping, "Pong", pong
@@ -108,13 +110,12 @@ def main():
         if not snoop_enabled():
             RegLib.test_fail("Couild not enable capture")
 
-    pid1 = start_pcap(host1)
-    pid2 = start_pcap(host2)
+    pid1 = start_pcap(host1, host1.get_lid(), host2.get_lid())
+    pid2 = start_pcap(host2, host2.get_lid(), host1.get_lid())
 
     RegLib.test_log(0, "Waiting for 5 seconds for Pcap pid %d, %d to get ready" % (pid1, pid2))
     time.sleep(5)
     RegLib.test_log(0, "Running IbSendLat, be patient")
-
 
     cmd = directory + "/IbSendLat.py --nodelist %s" % nodes
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
