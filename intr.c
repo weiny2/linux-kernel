@@ -154,9 +154,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		/* if we are down, the neighbor is down */
 		ppd->neighbor_normal = 0;
-
-		/* restart the link after a delay */
-		schedule_link_restart(ppd);
 	}
 
 	/* notify IB of the link change */

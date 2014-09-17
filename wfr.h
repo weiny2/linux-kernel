@@ -220,10 +220,24 @@
 #define WFR_HCMD_SUCCESS 2
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.ERROR - error flags */
-#define WFR_SPICO_ROM_FAIL 0x01
-#define WFR_UNKOWN_FRAME   0x02
-#define WFR_BER_NOT_MET	   0x04
-#define WFR_LOOPBACK_FAIL  0x08
+#define WFR_SPICO_ROM_FAILED		    (1 <<  0)
+#define WFR_UNKNOWN_FRAME		    (1 <<  1)
+#define WFR_TARGET_BER_NOT_MET		    (1 <<  2)
+#define WFR_FAILED_SERDES_INTERNAL_LOOPBACK (1 <<  3)
+#define WFR_FAILED_SERDES_INIT		    (1 <<  4)
+#define WFR_FAILED_LNI_POLLING		    (1 <<  5)
+#define WFR_FAILED_LNI_DEBOUNCE		    (1 <<  6)
+#define WFR_FAILED_LNI_ESTBCOMM		    (1 <<  7)
+#define WFR_FAILED_LNI_OPTEQ		    (1 <<  8)
+#define WFR_FAILED_LNI_VERIFY_CAP1	    (1 <<  9)
+#define WFR_FAILED_LNI_VERIFY_CAP2	    (1 << 10)
+#define WFR_FAILED_LNI_CONFIGLT		    (1 << 11)
+
+#define FAILED_LNI (WFR_FAILED_LNI_POLLING | WFR_FAILED_LNI_DEBOUNCE \
+			| WFR_FAILED_LNI_ESTBCOMM | WFR_FAILED_LNI_OPTEQ \
+			| WFR_FAILED_LNI_VERIFY_CAP1 \
+			| WFR_FAILED_LNI_VERIFY_CAP2 \
+			| WFR_FAILED_LNI_CONFIGLT)
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG - host message flags */
 #define WFR_HOST_REQ_DONE	   (1 << 0)
@@ -415,6 +429,7 @@ enum {
 
 /* timeouts */
 #define LINK_RESTART_DELAY 10000	/* link restart delay, in ms */
+#define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
 
 /* cclock tick time, in picoseconds per tick: 1/speed * 10^12  */
 #define ASIC_CCLOCK_PS  1242	/* 805 MHz */

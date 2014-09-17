@@ -142,6 +142,7 @@ struct flag_table {
 
 /* str must be a string constant */
 #define FLAG_ENTRY(str, extra, flag) {flag, str, extra}
+#define FLAG_ENTRY0(str, flag) {flag, str, 0}
 
 /* Send Error Consequences */
 #define SEC_WRITE_DROPPED	0x1
@@ -685,18 +686,19 @@ static struct flag_table dc8051_err_flags[] = {
  * Flags in DC8051_DBG_ERR_INFO_SET_BY_8051.ERROR field.
  */
 static struct flag_table dc8051_info_err_flags[] = {
-	FLAG_ENTRY("Spico ROM check failed",		0, 0x0001),
-	FLAG_ENTRY("UNKNOWN_FRAME type",		0, 0x0002),
-	FLAG_ENTRY("Target BER not met",		0, 0x0004),
-	FLAG_ENTRY("Serdes internal looopback failure", 0, 0x0008),
-	FLAG_ENTRY("Failed SerDes Init",		0, 0x0010),
-	FLAG_ENTRY("Failed LNI(Polling)",		0, 0x0020),
-	FLAG_ENTRY("Failed LNI(Debounce)",		0, 0x0040),
-	FLAG_ENTRY("Failed LNI(EstbComm)",		0, 0x0080),
-	FLAG_ENTRY("Failed LNI(OptEq)",			0, 0x0100),
-	FLAG_ENTRY("Failed LNI(VerifyCap_1)",		0, 0x0200),
-	FLAG_ENTRY("Failed LNI(VerifyCap_2)",		0, 0x0400),
-	FLAG_ENTRY("Failed LNI(ConfigLT)",		0, 0x0800)
+	FLAG_ENTRY0("Spico ROM check failed",  WFR_SPICO_ROM_FAILED),
+	FLAG_ENTRY0("UNKNOWN_FRAME type",      WFR_UNKNOWN_FRAME),
+	FLAG_ENTRY0("Target BER not met",      WFR_TARGET_BER_NOT_MET),
+	FLAG_ENTRY0("Serdes internal looopback failure",
+					WFR_FAILED_SERDES_INTERNAL_LOOPBACK),
+	FLAG_ENTRY0("Failed SerDes init",      WFR_FAILED_SERDES_INIT),
+	FLAG_ENTRY0("Failed LNI(Polling)",     WFR_FAILED_LNI_POLLING),
+	FLAG_ENTRY0("Failed LNI(Debounce)",    WFR_FAILED_LNI_DEBOUNCE),
+	FLAG_ENTRY0("Failed LNI(EstbComm)",    WFR_FAILED_LNI_ESTBCOMM),
+	FLAG_ENTRY0("Failed LNI(OptEq)",       WFR_FAILED_LNI_OPTEQ),
+	FLAG_ENTRY0("Failed LNI(VerifyCap_1)", WFR_FAILED_LNI_VERIFY_CAP1),
+	FLAG_ENTRY0("Failed LNI(VerifyCap_2)", WFR_FAILED_LNI_VERIFY_CAP2),
+	FLAG_ENTRY0("Failed LNI(ConfigLT)",    WFR_FAILED_LNI_CONFIGLT)
 };
 
 /*
@@ -2246,6 +2248,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	struct qib_pportdata *ppd = dd->pport;
 	u64 info, err, host_msg;
+	int queue_link_down = 0;
 	char buf[96];
 
 	/* look at the flags */
@@ -2262,8 +2265,32 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		/*
 		 * Handle error flags.
 		 */
+		if (err & WFR_UNKNOWN_FRAME) {
+			/* informational only */
+			dd_dev_info(dd,
+				"Unkown frame idle message received\n");
+			err &= ~(u64)WFR_UNKNOWN_FRAME;
+		}
+		if (err & FAILED_LNI) {
+			/*
+			 * LNI error indications are cleared by the 8051
+			 * only when starting polling.  Only pay attention
+			 * to them when in the states that occur during
+			 * LNI.
+			 */
+			if (ppd->host_link_state == HLS_DN_POLL
+				|| ppd->host_link_state == HLS_VERIFY_CAP
+				|| ppd->host_link_state == HLS_GOING_UP) {
+				queue_link_down = 1;
+				dd_dev_info(dd, "Link error: %s\n",
+					dc8051_info_err_string(buf,
+						sizeof(buf),
+						err & FAILED_LNI));
+			}
+			err &= ~(u64)FAILED_LNI;
+		}
 		if (err) {
-			/* TODO: implement 8051 error handling */
+			/* TODO: implement all 8051 error handling */
 			dd_dev_info(dd, "8051 info error: %s (unhandled)\n",
 				dc8051_info_err_string(buf, sizeof(buf), err));
 		}
@@ -2336,7 +2363,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		}
 		if (host_msg & WFR_LINK_GOING_DOWN) {
 			dd_dev_info(dd, "8051: Link down\n");
-			queue_work(ppd->qib_wq, &ppd->link_down_work);
+			queue_link_down = 1;
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINK_GOING_DOWN;
@@ -2373,6 +2400,16 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		/* TODO: implement all other flags here */
 		dd_dev_info(dd, "%s: 8051 Error: %s (unhandled)\n", __func__,
 			dc8051_err_string(buf, sizeof(buf), reg));
+	}
+
+	if (queue_link_down) {
+		/* if the link is going down, don't queue another */
+		if (ppd->host_link_state == HLS_GOING_DOWN) {
+			dd_dev_info(dd, "%s: not queueing link down\n",
+				__func__);
+		} else {
+			queue_work(ppd->qib_wq, &ppd->link_down_work);
+		}
 	}
 }
 
@@ -2975,7 +3012,7 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *o
 	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, reg);
 
 	/* wait for completion, alternate: interrupt */
-	timeout = jiffies + msecs_to_jiffies(100);
+	timeout = jiffies + msecs_to_jiffies(DC8051_COMMAND_TIMEOUT);
 	while (1) {
 		reg = read_csr(dd, DC_DC8051_CFG_HOST_CMD_1);
 		completed = reg & DC_DC8051_CFG_HOST_CMD_1_COMPLETED_SMASK;
@@ -3363,11 +3400,8 @@ int init_loopback(struct hfi_devdata *dd)
 	return set_serdes_loopback_mode(dd);
 }
 
-static int start_polling(struct hfi_devdata *dd)
+static int set_local_link_attributes(struct hfi_devdata *dd)
 {
-	/* TODO: only start Polling if we have verified that media is
-	   present */
-
 	/*
 	 * Write link verify capability frames before moving the
 	 * link to polling for the first time.
@@ -3388,24 +3422,38 @@ static int start_polling(struct hfi_devdata *dd)
 	write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
 		WFR_SUPPORTED_LINK_WIDTHS);
 
-	return set_link_state(dd->pport, HLS_DN_POLL);
+	/* FIXME: the above calls should return error status, Bug 125337 */
+	return 0;
 }
 
 /* schedule a link restart */
 void schedule_link_restart(struct qib_pportdata *ppd)
 {
-	schedule_delayed_work(&ppd->link_restart_work,
+	/* only schedule a restart if the link is enabled */
+	if (ppd->link_enabled)
+		schedule_delayed_work(&ppd->link_restart_work,
 					msecs_to_jiffies(LINK_RESTART_DELAY));
+}
+
+/* cancel any pending link restart */
+void cancel_link_restart(struct qib_pportdata *ppd)
+{
+	cancel_delayed_work(&ppd->link_restart_work);
 }
 
 static void restart_link(struct qib_pportdata *ppd)
 {
 	int ret;
 
-	if (!ppd->link_enabled)
+	/* don't try to restart if the link is not enabled */
+	if (!ppd->link_enabled) {
+		dd_dev_info(ppd->dd,
+			"%s: stopping link restart because link is disabled\n",
+			__func__);
 		return;
+	}
 
-	ret = start_polling(ppd->dd);
+	ret = set_link_state(ppd, HLS_DN_POLL);
 	if (ret) {
 		dd_dev_err(ppd->dd,
 			"Unable to restart polling on the link, err %d, restarting in 10 seconds\n",
@@ -3445,6 +3493,7 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	}
 
 	/* the link defaults to enabled */
+	ppd->driver_link_ready = 1;
 	ppd->link_enabled = 1;
 
 	/* assign LCB access to the 8051 */
@@ -3457,7 +3506,7 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 		/* otherwise, proceed to polling */
 	}
 
-	return start_polling(dd);
+	return set_link_state(ppd, HLS_DN_POLL);
 }
 
 static void quiet_serdes(struct qib_pportdata *ppd)
@@ -3465,9 +3514,16 @@ static void quiet_serdes(struct qib_pportdata *ppd)
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
 
-	/* link is now disabled */
+	/*
+	 * Shut down the link and keep it down.   First turn off that the
+	 * driver wants to allow the link to be up (driver_link_ready).
+	 * Then make sure the link is not automatically restarted
+	 * (link_enabled).  Cancel any pending restart.  And finally
+	 * go offline.
+	 */
+	ppd->driver_link_ready = 0;
 	ppd->link_enabled = 0;
-
+	cancel_link_restart(ppd);
 	set_link_state(ppd, HLS_DN_OFFLINE);
 
 	/* disable the port */
@@ -3881,7 +3937,16 @@ static int goto_offline(struct qib_pportdata *ppd)
 	ppd->host_link_state = HLS_DN_OFFLINE;
 	if (previous_state == HLS_UP_INIT || previous_state == HLS_UP_ARMED
 					|| previous_state == HLS_UP_ACTIVE) {
+		/* went down while link was up */
 		handle_linkup_change(dd, 0);
+		/* our only downdefault is to restart polling */
+		schedule_link_restart(ppd);
+	} else if (previous_state == HLS_DN_POLL
+			|| previous_state == HLS_VERIFY_CAP
+			|| previous_state == HLS_GOING_UP) {
+		/* went down while attempting link up */
+		/* our only downdefault is to restart polling */
+		schedule_link_restart(ppd);
 	}
 
 	return 0;
@@ -3988,18 +4053,38 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		}
 		break;
 	case HLS_DN_POLL:
+		/* TODO: only start Polling if we have verified that media is
+		   present */
+		/*
+		 * If a restart is scheduled, cancel it, as we are
+		 * going up.  Even so, there is still a race between
+		 * a scheduled restart and an external agent turning
+		 * on the poll.  This will result in the restart deciding
+		 * to stop since is already in a desired state or the
+		 * external agent failing because the link is already
+		 * up.
+		 */
+		cancel_link_restart(ppd);
+
 		/* OK to move from disabled to polling, via offline */
 		if (ppd->host_link_state == HLS_DN_DISABLE) {
 			ret = goto_offline(ppd);
 			if (ret)
 				break;
+			/* if not shutting down, enable the link */
+			if (ppd->driver_link_ready)
+				ppd->link_enabled = 1;
 		}
 
 		if (ppd->host_link_state != HLS_DN_OFFLINE)
 			goto unexpected;
 
-		/* link is enabled */
-		ppd->link_enabled = 1;
+		ret = set_local_link_attributes(dd);
+		if (ret) {
+			schedule_link_restart(ppd);
+			break;
+		}
+
 		/* set link state first so LCB access starts bouncing off */
 		ppd->host_link_state = HLS_DN_POLL;
 		wait_lcb_access_done(dd);
