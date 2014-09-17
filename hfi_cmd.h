@@ -101,10 +101,14 @@ struct hfi_cmd {
 	__u64 context;		/* context data for this command */
 };
 
-#define HFI_PTL_PID_ANY (__u16)(-1)
-#define HFI_PTL_PID_NONE (__u16)(-1)
-typedef __u16 hfi_ptl_pid_t;
-typedef __u32 hfi_ptl_uid_t;
+#define HFI_LID_ANY (__u32)(-1)
+#define HFI_NID_ANY (__u32)(-1)
+#define HFI_PID_ANY (__u16)(-1)
+#define HFI_PID_NONE (__u16)(-1)
+#define HFI_UID_ANY (__u32)(-1)
+typedef __u32 hfi_lid_t;
+typedef __u16 hfi_pid_t;
+typedef __u32 hfi_uid_t;
 
 #define IN  /* input argument */
 #define OUT /* output argument */
@@ -126,7 +130,7 @@ struct hfi_cq_release_args {
 
 struct hfi_ptl_attach_args {
 	IN  __u32 api_version;  /* HFI_USER_SWVERSION */
-	IN  hfi_ptl_pid_t pid;
+	IN  hfi_pid_t pid;
 	IN  __u16 srank;        /* for logical matching */
 	IN  __u16 flags;        /* PID assignment flags */
 	IN  __u16 le_me_count;
@@ -144,6 +148,6 @@ struct hfi_ptl_attach_args {
 };
 
 struct hfi_ptl_detach_args {
-	IN  hfi_ptl_pid_t pid;
+	IN  hfi_pid_t pid;
 };
 #endif /* _HFI_CMD_H */

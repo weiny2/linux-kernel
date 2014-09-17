@@ -69,9 +69,9 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	if (dd->cq_head_base)
 		free_pages((unsigned long)dd->cq_head_base,
 			   get_order(dd->cq_head_size));
-	if (dd->ptl_pid_user)
-		free_pages((unsigned long)dd->ptl_pid_user,
-			   get_order(dd->ptl_pid_user_size));
+	if (dd->ptl_user)
+		free_pages((unsigned long)dd->ptl_user,
+			   get_order(dd->ptl_user_size));
 	if (dd->ptl_control)
 		free_pages((unsigned long)dd->ptl_control,
 			   get_order(dd->ptl_control_size));
@@ -138,18 +138,18 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* Portals Control Block (PCB) - 128 KB */
 	dd->ptl_control_size = HFI_PCB_TOTAL_MEM;
 	dd->ptl_control = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-					   get_order(dd->ptl_control_size));
+					get_order(dd->ptl_control_size));
 	if (!dd->ptl_control) {
 		ret = -ENOMEM;
 		goto err_post_alloc;
 	}
-	spin_lock_init(&dd->ptl_control_lock);
+	spin_lock_init(&dd->ptl_lock);
 
 	/* Portals PID assignments - 32 KB */
-	dd->ptl_pid_user_size = (HFI_NUM_PTL_PIDS * 8);
-	dd->ptl_pid_user = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-					get_order(dd->ptl_pid_user_size));
-	if (!dd->ptl_pid_user) {
+	dd->ptl_user_size = (HFI_NUM_PIDS * 8);
+	dd->ptl_user = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
+					get_order(dd->ptl_user_size));
+	if (!dd->ptl_user) {
 		ret = -ENOMEM;
 		goto err_post_alloc;
 	}
@@ -157,7 +157,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* CQ head (read) indices - 16 KB */
 	dd->cq_head_size = (HFI_CQ_COUNT * HFI_CQ_HEAD_OFFSET);
 	dd->cq_head_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-						    get_order(dd->cq_head_size));
+					get_order(dd->cq_head_size));
 	if (!dd->cq_head_base) {
 		ret = -ENOMEM;
 		goto err_post_alloc;
@@ -175,8 +175,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* TX and RX command queues */
 	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_ENTRY;
 	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_ENTRY;
-	memset(&dd->cq_pair, HFI_PTL_PID_NONE,
-	       sizeof(hfi_ptl_pid_t) * HFI_CQ_COUNT);
+	memset(&dd->cq_pair, HFI_PID_NONE,
+	       sizeof(hfi_pid_t) * HFI_CQ_COUNT);
 	spin_lock_init(&dd->cq_lock);
 
 	ret = setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
@@ -235,7 +235,7 @@ void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 	offset = FXR_TX_CQ_AUTHENTICATION_CSR + (cq_idx * 8);
 	cq_auth.SRANK = ud->srank;
 	if (ud->auth_mask != 0) {
-		for (i = 0; i < HFI_NUM_PTL_AUTH_TUPLES; i++) {
+		for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 			if (ud->auth_mask & (1 << i)) {
 				cq_auth.USER_ID = ud->auth_table[i];
 				write_csr(dd, offset, cq_auth.val);

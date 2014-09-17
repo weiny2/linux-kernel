@@ -94,7 +94,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 
 	ud->pid = task_pid_nr(current);
 	/* default Portals PID and UID */
-	ud->ptl_pid = HFI_PTL_PID_NONE;
+	ud->ptl_pid = HFI_PID_NONE;
 	ud->ptl_uid = current_uid();
 
 	return 0;
@@ -233,7 +233,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	/* validate we have an assigned Portals PID */
-	if (ud->ptl_pid == HFI_PTL_PID_NONE) {
+	if (ud->ptl_pid == HFI_PID_NONE) {
 		ret = -EINVAL;
 		goto done;
 	}

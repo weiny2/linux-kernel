@@ -34,10 +34,10 @@
 #include "hfi_token.h"
 #include "fxr.h"
 
-static void hfi_ptl_pid_free(struct hfi_devdata *dd, hfi_ptl_pid_t ptl_pid);
+static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid);
 
 static int hfi_cq_assign_next(struct hfi_userdata *ud,
-			      hfi_ptl_pid_t ptl_pid, int *out_cq_idx)
+			      hfi_pid_t ptl_pid, int *out_cq_idx)
 {
 	struct hfi_devdata *dd = ud->devdata;
 	unsigned cq_idx, num_cqs = HFI_CQ_COUNT;
@@ -53,7 +53,7 @@ static int hfi_cq_assign_next(struct hfi_userdata *ud,
 	/* search the whole CQ array, starting with next_unused */
 	while (num_cqs > 0) {
 		cq_idx = dd->cq_pair_next_unused++ % HFI_CQ_COUNT;
-		if (dd->cq_pair[cq_idx] == HFI_PTL_PID_NONE)
+		if (dd->cq_pair[cq_idx] == HFI_PID_NONE)
 			break;
 		num_cqs--;
 	}
@@ -76,7 +76,7 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 	unsigned long flags;
 
 	/* verify we are attached to Portals */
-	if (ud->ptl_pid == HFI_PTL_PID_NONE)
+	if (ud->ptl_pid == HFI_PID_NONE)
 		return -EPERM;
 
 	spin_lock_irqsave(&dd->cq_lock, flags);
@@ -113,7 +113,7 @@ int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx)
 		ret = -EINVAL;
 	} else {
 		hfi_cq_disable(dd, cq_idx);
-		dd->cq_pair[cq_idx] = HFI_PTL_PID_NONE;
+		dd->cq_pair[cq_idx] = HFI_PID_NONE;
 		ud->cq_pair_num_assigned--;
 		/* TODO - remove any CQ head mappings */
 	}
@@ -133,7 +133,7 @@ static void hfi_cq_cleanup(struct hfi_userdata *ud)
 	for (i = 0; i < HFI_CQ_COUNT; i++) {
 		if (ptl_pid == dd->cq_pair[i]) {
 			hfi_cq_disable(dd, i);
-			dd->cq_pair[i] = HFI_PTL_PID_NONE;
+			dd->cq_pair[i] = HFI_PID_NONE;
 		}
 	}
 	ud->cq_pair_num_assigned = 0;
@@ -144,35 +144,35 @@ static void hfi_cq_cleanup(struct hfi_userdata *ud)
  * Associate this process with a Portals PID.
  * Note, hfi_open() sets:
  *   ud->pid = current->pid
- *   ud->ptl_pid = HFI_PTL_PID_NONE
+ *   ud->ptl_pid = HFI_PID_NONE
  *   ud->ptl_uid = current_uid()
  */
 int hfi_ptl_attach(struct hfi_userdata *ud,
 		   struct hfi_ptl_attach_args *ptl_attach)
 {
 	struct hfi_devdata *dd = ud->devdata;
-	hfi_ptl_pid_t ptl_pid;
+	hfi_pid_t ptl_pid;
 	u32 psb_size, trig_op_size, le_me_size, unexp_size;
 	u64 ptl_unexpected_base;
 	unsigned long flags;
 
 	/* only one Portals PID allowed */
-	if (ud->ptl_pid != HFI_PTL_PID_NONE)
+	if (ud->ptl_pid != HFI_PID_NONE)
 		return -EPERM;
 
 	/* PID is user-specified, validate and acquire */
 	/* TODO - will likely change when we understand Resource Manager */
 	ptl_pid = ptl_attach->pid;
-	if (ptl_pid >= HFI_NUM_PTL_PIDS)
+	if (ptl_pid >= HFI_NUM_PIDS)
 		return -EINVAL;
 
-	spin_lock_irqsave(&dd->ptl_control_lock, flags);
-	if (dd->ptl_pid_user[ptl_pid] != 0) {
-		spin_unlock_irqrestore(&dd->ptl_control_lock, flags);
+	spin_lock_irqsave(&dd->ptl_lock, flags);
+	if (dd->ptl_user[ptl_pid] != 0) {
+		spin_unlock_irqrestore(&dd->ptl_lock, flags);
 		return -EBUSY;
 	}
-	dd->ptl_pid_user[ptl_pid] = ud;
-	spin_unlock_irqrestore(&dd->ptl_control_lock, flags);
+	dd->ptl_user[ptl_pid] = ud;
+	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 
 	/* verify range of inputs */
 	if (ptl_attach->trig_op_count > HFI_TRIG_OP_MAX_COUNT)
@@ -189,7 +189,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	/* vmalloc Portals State memory, will store in PCB */
 	ud->ptl_state_base = vmalloc_user(psb_size);
 	if (!ud->ptl_state_base) {
-		hfi_ptl_pid_free(dd, ptl_pid);
+		hfi_pid_free(dd, ptl_pid);
 		return -ENOMEM;
 	}
 
@@ -200,7 +200,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 		ud->ptl_le_me_base = vmalloc_user(le_me_size + unexp_size);
 		if (!ud->ptl_le_me_base) {
 			vfree(ud->ptl_state_base);
-			hfi_ptl_pid_free(dd, ptl_pid);
+			hfi_pid_free(dd, ptl_pid);
 			return -ENOMEM;
 		}
 	}
@@ -247,14 +247,14 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	return 0;
 }
 
-static void hfi_ptl_pid_free(struct hfi_devdata *dd, hfi_ptl_pid_t ptl_pid)
+static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&dd->ptl_control_lock, flags);
+	spin_lock_irqsave(&dd->ptl_lock, flags);
 	memset(&dd->ptl_control[ptl_pid], 0, sizeof(hfi_ptl_control_t));
-	dd->ptl_pid_user[ptl_pid] = 0;
-	spin_unlock_irqrestore(&dd->ptl_control_lock, flags);
+	dd->ptl_user[ptl_pid] = 0;
+	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
 }
 
@@ -263,17 +263,17 @@ void hfi_ptl_cleanup(struct hfi_userdata *ud)
 	struct hfi_devdata *dd = ud->devdata;
 	u64 ptl_pid = ud->ptl_pid;
 
-	if (ud->ptl_pid == HFI_PTL_PID_NONE)
+	if (ud->ptl_pid == HFI_PID_NONE)
 		return;
 
 	/* verify PID is in correct state */
-	BUG_ON(dd->ptl_pid_user[ptl_pid] != ud);
+	BUG_ON(dd->ptl_user[ptl_pid] != ud);
 
 	/* first release any assigned CQs */
 	hfi_cq_cleanup(ud);
 
 	/* release assigned PID */
-	hfi_ptl_pid_free(dd, ptl_pid);
+	hfi_pid_free(dd, ptl_pid);
 
 	if (ud->ptl_le_me_base)
 		vfree(ud->ptl_le_me_base);
