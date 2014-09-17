@@ -112,14 +112,14 @@ struct hfi_devdata {
 
 	/* Device Portals State */
 	hfi_ptl_control_t *ptl_control;
-	struct hfi_userdata  **ptl_pid_user;
-	//unsigned long ptl_pid_map[HFI_NUM_PTL_PIDS / BITS_PER_LONG];
-	spinlock_t ptl_control_lock;
+	struct hfi_userdata  **ptl_user;
 	size_t ptl_control_size;
-	size_t ptl_pid_user_size;
+	size_t ptl_user_size;
+	//unsigned long ptl_pid_map[HFI_NUM_PIDS / BITS_PER_LONG];
+	spinlock_t ptl_lock;
 
 	/* Command Queue State */
-	hfi_ptl_pid_t cq_pair[HFI_CQ_COUNT];
+	hfi_pid_t cq_pair[HFI_CQ_COUNT];
 	spinlock_t cq_lock;
 	u16 cq_pair_next_unused;
 	void *cq_tx_base;
@@ -142,13 +142,13 @@ struct hfi_userdata {
 	u32 ptl_le_me_size;
 	u32 ptl_unexpected_size;
 	u32 ptl_trig_op_size;
-	hfi_ptl_pid_t ptl_pid;
+	hfi_pid_t ptl_pid;
 	u16 srank;
 	u16 pasid;
 	u16 cq_pair_num_assigned;
 	u8 auth_mask;
-	hfi_ptl_uid_t auth_table[HFI_NUM_PTL_AUTH_TUPLES];
-	hfi_ptl_uid_t ptl_uid; /* UID if auth_tuples not used */
+	hfi_uid_t auth_table[HFI_NUM_AUTH_TUPLES];
+	hfi_uid_t ptl_uid; /* UID if auth_tuples not used */
 };
 
 int hfi_pci_init(struct pci_dev *, const struct pci_device_id *);
