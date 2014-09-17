@@ -268,6 +268,12 @@ void perf_sample_event_took(u64 sample_len_ns)
 			atomic_read(&perf_sample_allowed_ns),
 			sysctl_perf_event_sample_rate);
 
+	if (sysctl_perf_event_sample_rate < 4000) {
+		printk_ratelimited(KERN_WARNING
+			"Subsequent perf sampling commands (record) will fail unless frequency <= %d is specified (via -F). "
+			"To disable this warning 'echo 0 > /proc/sys/kernel/perf_cpu_time_max_percent'\n", sysctl_perf_event_sample_rate);
+	}
+
 	update_perf_cpu_limits();
 }
 
