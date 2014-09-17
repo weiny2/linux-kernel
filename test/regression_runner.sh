@@ -3,17 +3,7 @@
 #-------------
 # User defined
 #-------------
-#test_dir="/nfs/site/proj/fabric/mirror/scratch/wfr_reg_test"
 test_dir=$PWD
-update_driver=0
-update_diags=0
-update_psm=0
-copy_driver=0
-copy_diags=0
-copy_psm=0
-driver="/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-driver"
-psm="/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-psm"
-diags="/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-diagtools-sw"
 mode=$1
 rpm_test=0
 quick_test=1
@@ -47,7 +37,7 @@ fpga_args="--nodelist \"fpga2,fpga3\" --modparm \"fw_8051_load=1\""
 #------------------------
 # Internal test variables
 #------------------------
-logdir=$test_dir/"full-reg-test"`date +%Y%m%d`
+logdir=$test_dir/"full-reg-test-$mode-"`date +%Y%m%d`
 host1_ssh=""
 host2_ssh=""
 host1_scp=""
@@ -55,10 +45,6 @@ host2_scp=""
 host1=""
 host2=""
 std_args=""
-local_repo_dir="/root/wfr-reg-repos"
-local_driver="$local_repo_dir/wfr-driver"
-local_diags="$local_repo_dir/wfr-diags"
-local_psm="$local_repo_dir/wfr-psm"
 
 #-----------------
 # Helper functions
@@ -78,70 +64,6 @@ function run_cmd {
 	if [ $? -ne 0 ]; then
 		echo "FULL-REG-STATUS :: CMD FAIL: $@"
 	fi
-}
-
-function update_repos {
-	echo ""
-	echo "--------------"
-	echo "Updating Repos"
-	echo "--------------"
-	if [ $update_driver -eq 1 ]; then
-		echo "Updating driver"
-		update_repo $driver
-	else
-		echo "Skipping driver update"
-	fi
-
-	echo ""
-	if [ $update_diags -eq 1 ]; then
-		echo "Updating sw diags"
-		update_repo $diags
-	else
-		echo "Skipping sw diags update"
-	fi
-	
-	echo ""
-	if [ $update_psm -eq 1 ]; then
-		echo "Updating psm"
-		update_repo $psm
-	else
-		echo "Skipping psm update"
-	fi
-
-	echo ""
-}
-
-function dump_change_levels {
-	echo "---------------------"
-	echo "Getting change levels"
-	echo "---------------------"
-	echo "Driver:"
-	dump_change_level $driver
-	echo ""
-	echo "Diags:"
-	dump_change_level $diags
-	echo ""
-	echo "PSM:"
-	dump_change_level $psm
-	echo ""
-}
-
-function dump_change_level {
-	repo=$1
-	run_cmd_fatal cd $repo
-	echo "Checking repo: $repo"
-	run_cmd_fatal "git describe --tags --long --match='v*' HEAD"
-	run_cmd_fatal "git log -1 HEAD --pretty=\"%cd <%ae>%n- %s%n\""
-	run_cmd_fatal cd $test_dir
-}
-
-function update_repo {
-	repo=$1
-	echo "Going to update $repo"
-	run_cmd_fatal cd $repo
-	run_cmd_fatal git remote update
-	run_cmd_fatal git pull --rebase
-	run_cmd_fatal cd $test_dir
 }
 
 function drop_tag {
@@ -169,27 +91,12 @@ function dump_config {
 	echo "Default Test? = $default_test"
 	echo "Mgmt Test? = $mgmt_test"
 	echo "Snoop Test? = $snoop_test"
-	echo "Update flags"
-	echo -e "\tDriver = $update_driver"
-	echo -e "\tDiags = $update_diags"
-	echo -e "\tPsm = $update_psm"
-	echo "Copy flags"
-	echo -e "\tDriver = $copy_driver"
-	echo -e "\tDiags = $copy_diags"
-	echo -e "\tPsm = $copy_psm"
-	echo "Repo locations"
-	echo -e "\tDriver = $driver"
-	echo -e "\tDiags = $diags"
-	echo -e "\tPsm = $psm"
-	echo -e "\tLocal Driver = $local_driver"
-	echo -e "\tLocal Diags = $local_diags"
-	echo -e "\tLocal Psm = $local_psm"
 	echo "Log directory = $logdir"
 	echo "SSH/SCP"
 	echo -e "\tHost 1 SSH = $host1_ssh"
 	echo -e "\tHost 2 SSH = $host2_ssh"
 	echo -e "\tHost 1 SCP = $host1_scp"
-	echo -3 "\tHost 2 SCP = $host2_scp"
+	echo -e "\tHost 2 SCP = $host2_scp"
 
 	if [[ $mode == "simics" ]]; then
 		dump_simics_config
@@ -199,6 +106,29 @@ function dump_config {
 		echo "Unsupported mode"
 		exit 1
 	fi
+	echo ""
+
+	echo "Host 1 software versions":
+	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi-psm"
+	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi-diagtools"
+	run_cmd_fatal $host1_ssh "rpm -qa | grep 2a1"
+
+	echo ""
+
+	echo "Host 2 software versions":
+	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi-psm"
+	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi-diagtools"
+	run_cmd_fatal $host2_ssh "rpm -qa | grep 2a1"
+
+	echo ""
+
+	echo "Current driver software version:"
+	run_cmd_fatal "git describe --tags --long --match='v*' HEAD"
+	
+	echo ""
+
+	echo "Last 10 commits:"
+	run_cmd_fatal "git log -10 HEAD --pretty=\"%cd <%ae>%n- %s%n\""	
 	echo ""
 }
 
@@ -326,76 +256,17 @@ function do_fpga_posttest {
 	echo "FPGA - Nothing to do post test."
 }
 
-function copy_repos {
-	echo ""
-	echo "----------------------------------"
-	echo "Copying needed repos to local disk"
-	echo "----------------------------------"
-	run_cmd_fatal "$host1_ssh \"mkdir -p $local_repo_dir\""
-	run_cmd_fatal "$host2_ssh \"mkdir -p $local_repo_dir\""
-
-	echo "Copying driver"
-	copy_repo $driver $local_driver $copy_driver
-	echo "Copying diags"
-	copy_repo $diags $local_diags $copy_diags
-	echo "Copying psm"
-	copy_repo $psm $local_psm $copy_psm
-}
-
-function copy_repo {
-	from_dir=$1
-	to_dir=$2
-	copy=$3
-
-	if [[ $mode == "simics" ]]; then
-		from_dir="/host"$from_dir
-	fi
-
-	if [ $copy -eq 0 ]; then
-		echo "Skipping copy of $from_dir to $to_dir"
-	else
-		echo "Copying $from_dir to $to_dir"
-		run_cmd_fatal "$host1_ssh \"rm -rf $to_dir\""
-		run_cmd_fatal "$host2_ssh \"rm -rf $to_dir\""
-		run_cmd_fatal "$host1_ssh \"cp -r $from_dir $to_dir\""
-		run_cmd_fatal "$host2_ssh \"cp -r $from_dir $to_dir\""
-	fi
-
-}
-
-function do_rpm_test {
-	echo ""
-	echo "----------------------"
-	echo "Running RPM build test"
-	echo "----------------------"
-	if [ $rpm_test -eq 1 ]; then
-		run_cmd_fatal "$host1_ssh \"cd $local_driver/test/tests && ./RpmTest.py --nodelist $host1 --psm $local_psm --sw-diags $local_diags\""
-		run_cmd_fatal "$host2_ssh \"cd $local_driver/test/tests && ./RpmTest.py --nodelist $host2 --psm $local_psm --sw-diags $local_diags\""
-	else
-		echo "Skipping RPM Test"
-	fi
-
-	echo ""
-	echo "Checking RPM verions for $host1:"
-	run_cmd_fatal "$host1_ssh \"rpm -qa | grep hfi-\""
-
-	echo ""
-	echo "Checking RPM verions for $host2:"
-	run_cmd_fatal "$host2_ssh \"rpm -qa | grep hfi-\""
-	
-}
-
 function do_hipri_tests {
 	echo ""
 	echo "---------------------------------------------"
 	echo "Running high priority tests. If failure abort."
 	echo "---------------------------------------------"
 
-	run_cmd_fatal cd $driver/test/tests
+	run_cmd_fatal cd $test_dir/tests
 	run_cmd_fatal ./build.sh
 	run_cmd_fatal ./LoadModule.py $std_args
 	dump_modparms
-	run_cmd_fatal cd $driver/test
+	run_cmd_fatal cd $test_dir
 	if [ $quick_test -eq 1 ]; then
 		run_cmd_fatal ./harness.py --type quick $std_args
 	else
@@ -410,7 +281,7 @@ function do_lopri_tests {
 	echo "-----------------------------------------------"
 	echo "Running low priority tests. Continue if failure"
 	echo "-----------------------------------------------"
-	run_cmd_fatal cd $driver/test
+	run_cmd_fatal cd $test_dir
 	
 	if [ $default_test -eq 1 ]; then
 		run_cmd ./harness.py --type default $std_args
@@ -422,12 +293,6 @@ function do_lopri_tests {
 		run_cmd ./harness.py --type mgmt $std_args
 	else
 		echo "Skipping mgmt tetss"
-	fi
-
-	if [ $snoop_test -eq 1 ]; then
-		run_cmd ./harness.py --type snoop $std_args
-	else
-		echo "Skipping snoop tests"
 	fi
 
 	run_cmd_fatal cd $test_dir
@@ -453,21 +318,11 @@ exec 2>&1
 echo "Starting test: in $logdir saving output in test_output.txt"
 echo "Starting full regression test at " `date`
 
-# The first thing we need to do is update the repos
-update_repos
-dump_change_levels
-
 # Mode specific things like setting time and copying repos
 do_mode_specific_pretest
 
 # Dump our test knobs
 dump_config
-
-# Need some of the repos on the local host depending on the test type
-copy_repos
-
-# Now build and install PSM and sw diags fail if can't
-do_rpm_test
 
 # Require a sub set of tests to pass before continuing
 # If any of these fail the test aborts
