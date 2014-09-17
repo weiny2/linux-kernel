@@ -2277,6 +2277,21 @@ static void set_vls(struct qib_pportdata *ppd)
  */
 static int serdes_7322_init(struct qib_pportdata *ppd);
 
+u64 ib2osf_portguid(u64 ib_guid, u8 port)
+{
+	if (wfr_vl15_ovl0) {
+		ib_guid &= ~((u64)0x7 << 32);
+		if (port & ~(0x7)) {
+			/* marking as CRIT as this should never happen */
+			printk(KERN_CRIT "port > 7 in IB to OSF guid conversion\n");
+			port = 0x7;
+		}
+		return (ib_guid | ((u64)port << 32));
+	} else {
+		return (ib_guid);
+	}
+}
+
 /**
  * qib_7322_bringup_serdes - bring up the serdes
  * @ppd: physical port on the qlogic_ib device
@@ -2385,6 +2400,7 @@ static int qib_7322_bringup_serdes(struct qib_pportdata *ppd)
 	if (!guid) {
 		if (dd->base_guid)
 			guid = be64_to_cpu(dd->base_guid) + ppd->port - 1;
+		guid = ib2osf_portguid(guid, ppd->port);
 		ppd->guid = cpu_to_be64(guid);
 	}
 

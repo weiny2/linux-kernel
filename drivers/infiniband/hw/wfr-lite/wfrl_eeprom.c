@@ -134,6 +134,16 @@ static u8 flash_csum(struct qib_flash *ifp, int adjust)
 	return csum;
 }
 
+static inline __be64 ib2osf_nodeguid(__be64 ib_guid)
+{
+	if (wfr_vl15_ovl0) {
+		ib_guid = be64_to_cpu(ib_guid);
+		ib_guid &= ~((u64)0x7 << 32);
+		return cpu_to_be64(ib_guid | ((u64)1 << 32));
+	} else
+		return ib_guid;
+}
+
 /**
  * qib_get_eeprom_info- get the GUID et al. from the TSWI EEPROM device
  * @dd: the qlogic_ib device
@@ -153,7 +163,7 @@ void qib_get_eeprom_info(struct qib_devdata *dd)
 
 	if (t && dd0->nguid > 1 && t <= dd0->nguid) {
 		u8 oguid;
-		dd->base_guid = dd0->base_guid;
+		dd->base_guid = ib2osf_nodeguid(dd0->base_guid);
 		bguid = (u8 *) &dd->base_guid;
 
 		oguid = bguid[7];
@@ -236,7 +246,7 @@ void qib_get_eeprom_info(struct qib_devdata *dd)
 		guid = *(__be64 *) ifp->if_guid;
 	} else
 		guid = *(__be64 *) ifp->if_guid;
-	dd->base_guid = guid;
+	dd->base_guid = ib2osf_nodeguid(guid);
 	dd->nguid = ifp->if_numguid;
 	/*
 	 * Things are slightly complicated by the desire to transparently
