@@ -99,9 +99,12 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	ud->rec_cpu_num = -1;
 
 	ud->pid = task_pid_nr(current);
+	ud->sid = task_session_vnr(current);
 	/* default Portals PID and UID */
 	ud->ptl_pid = HFI_PID_NONE;
 	ud->ptl_uid = current_uid();
+
+	hfi_job_init(ud);
 
 	return 0;
 }
@@ -114,8 +117,11 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_cmd cmd;
 	struct hfi_cq_assign_args cq_assign;
 	struct hfi_cq_release_args cq_release;
+	struct hfi_dlid_assign_args dlid_assign;
 	struct hfi_ptl_attach_args ptl_attach;
-	struct hfi_ptl_detach_args ptl_detach;
+	struct hfi_job_info_args job_info;
+	struct hfi_job_setup_args job_setup;
+	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *dest = NULL;
 	void __user *user_data = NULL;
@@ -152,11 +158,33 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		dest = &ptl_attach;
 		break;
 	case HFI_CMD_PTL_DETACH:
-		copy_in = sizeof(ptl_detach);
-		dest = &ptl_detach;
+		copy_in = 0;
+		break;
+	case HFI_CMD_DLID_ASSIGN:
+		copy_in = sizeof(dlid_assign);
+		dest = &dlid_assign;
+		need_admin = 1;
+		break;
+	case HFI_CMD_DLID_RELEASE:
+		copy_in = 0;
+		need_admin = 1;
+		break;
+	case HFI_CMD_JOB_INFO:
+		copy_out = sizeof(job_info);
+		dest = &job_info;
+		break;
+	case HFI_CMD_JOB_SETUP:
+		copy_in = sizeof(job_setup);
+		dest = &job_setup;
+		need_admin = 1;
 		break;
 	default:
 		ret = -EINVAL;
+		goto err_cmd;
+	}
+
+	if (need_admin && !capable(CAP_SYS_ADMIN)) {
+		ret = -EACCES;
 		goto err_cmd;
 	}
 
@@ -184,12 +212,24 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_CQ_RELEASE:
 		ret = hfi_cq_release(ud, cq_release.cq_idx);
 		break;
+	case HFI_CMD_DLID_ASSIGN:
+		ret = hfi_dlid_assign(ud, &dlid_assign);
+		break;
+	case HFI_CMD_DLID_RELEASE:
+		ret = hfi_dlid_release(ud);
+		break;
 	case HFI_CMD_PTL_ATTACH:
 		ret = hfi_ptl_attach(ud, &ptl_attach);
 		break;
 	case HFI_CMD_PTL_DETACH:
 		/* release our assigned PID */
 		hfi_ptl_cleanup(ud);
+		break;
+	case HFI_CMD_JOB_INFO:
+		ret = hfi_job_info(ud, &job_info);
+		break;
+	case HFI_CMD_JOB_SETUP:
+		ret = hfi_job_setup(ud, &job_setup);
 		break;
 	default:
 		ret = -EINVAL;
@@ -401,6 +441,8 @@ int hfi_user_cleanup(struct hfi_userdata *ud)
 {
 	/* release Portals resources acquired by the HFI user */
 	hfi_ptl_cleanup(ud);
+	/* release any held PID reservations */
+	hfi_job_free(ud);
 	return 0;
 }
 

@@ -94,6 +94,12 @@
 #define HFI_CMD_PTL_DETACH        21
 #define HFI_CMD_CQ_ASSIGN         22
 #define HFI_CMD_CQ_RELEASE        23
+#define HFI_CMD_EQ_ASSIGN         24
+#define HFI_CMD_EQ_RELEASE        25
+#define HFI_CMD_DLID_ASSIGN       26
+#define HFI_CMD_DLID_RELEASE      27
+#define HFI_CMD_JOB_INFO          28
+#define HFI_CMD_JOB_SETUP         29
 
 struct hfi_cmd {
 	__u32 type;		/* command type */
@@ -130,6 +136,13 @@ struct hfi_cq_release_args {
 	IN  __u16 cq_idx;
 };
 
+/* TODO - dlid granularity?, implicit in count? */
+struct hfi_dlid_assign_args {
+	IN __u32 dlid_base;
+	IN __u32 count;
+	IN __u32 *dlid_entries_ptr;
+};
+
 struct hfi_ptl_attach_args {
 	IN  __u32 api_version;  /* HFI_USER_SWVERSION */
 	IN  hfi_pid_t pid;
@@ -139,6 +152,9 @@ struct hfi_ptl_attach_args {
 	IN  __u16 unexpected_count;
 	IN  __u16 trig_op_count;
 
+	OUT hfi_pid_t pid_base;
+	OUT __u16 pid_count;
+	OUT __u16 pid_mode;	  /* tells if LIDs/PIDs virtualized */
 	OUT __u64 ct_token;       /* mmap: Counting Events */
 	OUT __u64 eq_desc_token;  /* mmap: EQ descriptors */
 	OUT __u64 eq_head_token;  /* mmap: EQ read pointer */
@@ -149,7 +165,31 @@ struct hfi_ptl_attach_args {
 	OUT __u64 trig_op_token;       /* mmap: trig op list */
 };
 
-struct hfi_ptl_detach_args {
-	IN  hfi_pid_t pid;
+struct hfi_job_info_args {
+	IN  __u32 api_version;  /* HFI_USER_SWVERSION */
+	OUT hfi_pid_t pid_base;
+	OUT __u16 pid_count;
+	OUT __u16 pid_mode;
+	OUT hfi_lid_t dlid_base;
+	OUT __u32 lid_offset;
+	OUT __u32 lid_count;
+	OUT __u32 sl_mask;
+	OUT hfi_uid_t auth_table[HFI_NUM_AUTH_TUPLES];
 };
+
+#define HFI_JOB_RES_SESSION 0x1
+#define HFI_JOB_RES_CGROUP  0x2
+
+struct hfi_job_setup_args {
+	IN __u32 api_version;  /* HFI_USER_SWVERSION */
+	IN hfi_pid_t pid_base;
+	IN __u16 pid_count;
+	IN __u16 pid_mode;
+	IN __u16 res_mode;
+	IN __u32 lid_offset;
+	IN __u32 lid_count;
+	IN __u32 sl_mask;
+	IN hfi_uid_t auth_table[HFI_NUM_AUTH_TUPLES];
+};
+
 #endif /* _HFI_CMD_H */

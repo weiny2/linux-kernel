@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <linux/bitmap.h>
 #include "hfi.h"
 #include "hfi_token.h"
 #include "fxr.h"
@@ -140,6 +141,42 @@ static void hfi_cq_cleanup(struct hfi_userdata *ud)
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 }
 
+int hfi_ptl_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
+{
+	u16 start, n;
+	int ret = 0;
+	unsigned long flags;
+
+	start = (*base == HFI_PID_ANY) ? 0 : *base;
+
+	spin_lock_irqsave(&dd->ptl_lock, flags);
+	n = bitmap_find_next_zero_area(dd->ptl_map, HFI_NUM_PIDS,
+				       start, count, 0);
+	if (n == -1)
+		ret = -EBUSY;
+	if (*base != HFI_PID_ANY && n != *base)
+		ret = -EBUSY;
+	if (ret) {
+		spin_unlock_irqrestore(&dd->ptl_lock, flags);
+		return ret;
+	}
+	bitmap_set(dd->ptl_map, n, count);
+	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+
+	*base = n;
+	return 0;
+}
+
+void hfi_ptl_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->ptl_lock, flags);
+	bitmap_clear(dd->ptl_map, base, count);
+	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	return;
+}
+
 /*
  * Associate this process with a Portals PID.
  * Note, hfi_open() sets:
@@ -154,25 +191,54 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	hfi_pid_t ptl_pid;
 	u32 psb_size, trig_op_size, le_me_size, unexp_size;
 	u64 ptl_unexpected_base;
+	int ret;
 	unsigned long flags;
 
 	/* only one Portals PID allowed */
 	if (ud->ptl_pid != HFI_PID_NONE)
 		return -EPERM;
 
-	/* PID is user-specified, validate and acquire */
-	/* TODO - will likely change when we understand Resource Manager */
-	ptl_pid = ptl_attach->pid;
-	if (ptl_pid >= HFI_NUM_PIDS)
-		return -EINVAL;
+	if (ud->pid_count) {
+		/* assign PID from Portals PID reservation */
+		ptl_pid = ptl_attach->pid;
+#if 0
+		/* TODO - HFI_PID_ANY support? */
+		if (ptl_pid == HFI_PID_ANY) {
+			/* extend below to search ptl_user[base..count] */
+		}
+#endif
+		if (ptl_pid >= ud->pid_count)
+			return -EINVAL;
+		ptl_pid += ud->pid_base;
 
-	spin_lock_irqsave(&dd->ptl_lock, flags);
-	if (dd->ptl_user[ptl_pid] != 0) {
+		/* store PID hfi_userdata pointer */
+		spin_lock_irqsave(&dd->ptl_lock, flags);
+		if (dd->ptl_user[ptl_pid] != NULL) {
+			spin_unlock_irqrestore(&dd->ptl_lock, flags);
+			return -EBUSY;
+		}
+		dd->ptl_user[ptl_pid] = ud;
 		spin_unlock_irqrestore(&dd->ptl_lock, flags);
-		return -EBUSY;
+	} else {
+		/* PID is user-specified, validate and acquire */
+		ptl_pid = ptl_attach->pid;
+		if ((ptl_pid != HFI_PID_ANY) &&
+		    (ptl_pid >= HFI_NUM_PIDS))
+			return -EINVAL;
+
+		ret = hfi_ptl_reserve(ud->devdata, &ptl_pid, 1);
+		if (ret)
+			return ret;
+		dd_dev_info(ud->devdata,
+			    "acquired PID orphan [%u]\n", ptl_pid);
+
+		/* store PID hfi_userdata pointer */
+		BUG_ON(dd->ptl_user[ptl_pid] != 0);
+		dd->ptl_user[ptl_pid] = ud;
 	}
-	dd->ptl_user[ptl_pid] = ud;
-	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+
+	/* set ptl_pid, hfi_ptl_cleanup() can handle all errors below */
+	ud->ptl_pid = ptl_pid;
 
 	/* verify range of inputs */
 	if (ptl_attach->trig_op_count > HFI_TRIG_OP_MAX_COUNT)
@@ -189,9 +255,10 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	/* vmalloc Portals State memory, will store in PCB */
 	ud->ptl_state_base = vmalloc_user(psb_size);
 	if (!ud->ptl_state_base) {
-		hfi_pid_free(dd, ptl_pid);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_vmalloc;
 	}
+	ud->ptl_state_size = psb_size;
 
 	/* vmalloc Portals LE/ME and unexpected lists, will store in PCB */
 	le_me_size = PAGE_ALIGN(ptl_attach->le_me_count * HFI_LE_ME_SIZE);
@@ -199,13 +266,10 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	if (le_me_size + unexp_size > 0) {
 		ud->ptl_le_me_base = vmalloc_user(le_me_size + unexp_size);
 		if (!ud->ptl_le_me_base) {
-			vfree(ud->ptl_state_base);
-			hfi_pid_free(dd, ptl_pid);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto err_vmalloc;
 		}
 	}
-
-	ud->ptl_state_size = psb_size;
 	ud->ptl_trig_op_size = trig_op_size;
 	ud->ptl_le_me_size = le_me_size;
 	ud->ptl_unexpected_size = unexp_size;
@@ -213,8 +277,6 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 
 	/* TODO - init IOMMU PASID <-> PID mapping */
 	ud->pasid = ptl_pid;
-	/* don't set ud->ptl_pid until passed all possible error conditions */
-	ud->ptl_pid = ptl_pid;
 	ud->srank = ptl_attach->srank;
 	dd_dev_info(dd, "Portals PID %u assigned PCB:[%d, %d, %d, %d]\n", ptl_pid,
 		    psb_size, trig_op_size, le_me_size, unexp_size);
@@ -243,8 +305,15 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 						ptl_pid, ud->ptl_unexpected_size);
 	ptl_attach->trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
 						ptl_pid, ud->ptl_trig_op_size);
+	ptl_attach->pid_base = ud->pid_base;
+	ptl_attach->pid_count = ud->pid_count;
+	ptl_attach->pid_mode = ud->pid_mode;
 
 	return 0;
+
+err_vmalloc:
+	hfi_ptl_cleanup(ud);
+	return ret;
 }
 
 static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid)
@@ -258,12 +327,16 @@ static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid)
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
 }
 
+/* Release Portals PID resources.
+ * Called during close() or explicitly via CMD_PTL_DETACH.
+ */
 void hfi_ptl_cleanup(struct hfi_userdata *ud)
 {
 	struct hfi_devdata *dd = ud->devdata;
-	u64 ptl_pid = ud->ptl_pid;
+	hfi_pid_t ptl_pid = ud->ptl_pid;
 
-	if (ud->ptl_pid == HFI_PID_NONE)
+	if (ptl_pid == HFI_PID_NONE)
+		/* no assigned PID */
 		return;
 
 	/* verify PID is in correct state */
@@ -281,4 +354,13 @@ void hfi_ptl_cleanup(struct hfi_userdata *ud)
 		vfree(ud->ptl_state_base);
 	ud->ptl_state_base = NULL;
 	ud->ptl_le_me_base = NULL;
+
+	if (ud->pid_count == 0) {
+		dd_dev_info(ud->devdata,
+			    "release PID orphan [%u]\n", ptl_pid);
+		hfi_ptl_unreserve(ud->devdata, ptl_pid, 1);
+	}
+
+	/* clear last */
+	ud->ptl_pid = HFI_PID_NONE;
 }

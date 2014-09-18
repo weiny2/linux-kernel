@@ -250,7 +250,9 @@ void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 	tx_cq_config.ENABLE = 1;
 	tx_cq_config.PID = ud->ptl_pid;
 	tx_cq_config.PRIV_LEVEL = 1;
-	tx_cq_config.SL_ENABLE = -1;
+	tx_cq_config.DLID_BASE = ud->dlid_base;
+	tx_cq_config.PHYS_DLID = ud->allow_phys_dlid;
+	tx_cq_config.SL_ENABLE = ud->sl_mask;
 	offset = FXR_TX_CQ_CONFIG_CSR + (cq_idx * 8);
 	write_csr(dd, offset, tx_cq_config.val);
 
