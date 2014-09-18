@@ -112,10 +112,10 @@ struct hfi_devdata {
 
 	/* Device Portals State */
 	hfi_ptl_control_t *ptl_control;
-	struct hfi_userdata  **ptl_user;
+	struct hfi_userdata **ptl_user;
 	size_t ptl_control_size;
 	size_t ptl_user_size;
-	//unsigned long ptl_pid_map[HFI_NUM_PIDS / BITS_PER_LONG];
+	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
 	spinlock_t ptl_lock;
 
 	/* Command Queue State */
@@ -134,6 +134,7 @@ struct hfi_userdata {
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
 	pid_t pid;
+	pid_t sid;
 
 	/* Per PID Portals State */
 	void *ptl_state_base;
@@ -146,9 +147,20 @@ struct hfi_userdata {
 	u16 srank;
 	u16 pasid;
 	u16 cq_pair_num_assigned;
+	u8 allow_phys_dlid;
 	u8 auth_mask;
 	hfi_uid_t auth_table[HFI_NUM_AUTH_TUPLES];
 	hfi_uid_t ptl_uid; /* UID if auth_tuples not used */
+
+	u32 dlid_base;
+	u32 lid_offset;
+	u32 lid_count;
+	u16 pid_base;
+	u16 pid_count;
+	u16 pid_mode;
+	u16 res_mode;
+	u32 sl_mask;
+	struct list_head job_list;
 };
 
 int hfi_pci_init(struct pci_dev *, const struct pci_device_id *);
@@ -172,8 +184,16 @@ void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *, u8 *auth_idx);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
 int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *);
 int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx);
+int hfi_dlid_assign(struct hfi_userdata *ud, struct hfi_dlid_assign_args *);
+int hfi_dlid_release(struct hfi_userdata *ud);
 int hfi_ptl_attach(struct hfi_userdata *ud, struct hfi_ptl_attach_args *);
 void hfi_ptl_cleanup(struct hfi_userdata *ud);
+int hfi_ptl_reserve(struct hfi_devdata *dd, u16 *base, u16 count);
+void hfi_ptl_unreserve(struct hfi_devdata *dd, u16 base, u16 count);
+void hfi_job_init(struct hfi_userdata *ud);
+int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
+int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
+void hfi_job_free(struct hfi_userdata *ud);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is
