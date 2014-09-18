@@ -511,6 +511,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	u8 pcount = initial_pkt_count;
 	struct sdma_req_info info;
 	struct user_sdma_request *req;
+	u8 opcode;
 
 	if (iovec[idx].iov_len < sizeof(info) + sizeof(req->hdr)) {
 		hfi_cdbg(SDMA,
@@ -562,7 +563,6 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		ret = -EINVAL;
 		goto done;
 	}
-
 	/* Copy the header from the user buffer */
 	ret = copy_from_user(&req->hdr, iovec[idx].iov_base + sizeof(info),
 			     sizeof(req->hdr));
@@ -571,6 +571,16 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		ret = -EFAULT;
 		goto free_req;
 	}
+
+	/* Validate the opcode. Do not trust packets from user space blindly. */
+	opcode = (be32_to_cpu(req->hdr.bth[0]) >> 24) & 0xff;
+	if ((opcode & WFR_USER_OPCODE_CHECK_MASK) !=
+	     WFR_USER_OPCODE_CHECK_VAL) {
+		SDMA_DBG(req, "Invalid opcode (%d)", opcode);
+		ret = -EINVAL;
+		goto free_req;
+	}
+
 	req->koffset = le32_to_cpu(req->hdr.kdeth.offset);
 	/* The KDETH.OM flag in the first packed (and header template) is
 	 * always 0. */

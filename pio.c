@@ -340,6 +340,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 int init_send_contexts(struct hfi_devdata *dd)
 {
 	u64 reg, all;
+	u8 opval, opmask;
 	u16 base;
 	int ret, i, j, context;
 
@@ -393,8 +394,12 @@ int init_send_contexts(struct hfi_devdata *dd)
 		if (dd->send_contexts[i].type == SC_USER) {
 			reg =  all | WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_NON_KDETH_PACKETS_SMASK
 					| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_SMASK;
+			opval = WFR_USER_OPCODE_CHECK_VAL;
+			opmask = WFR_USER_OPCODE_CHECK_MASK;
 		} else {
 			reg = all | WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETH_PACKETS_SMASK;
+			opval = WFR_OPCODE_CHECK_VAL_DISABLED;
+			opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
 		}
 
 		if (likely(!disable_integrity))
@@ -408,6 +413,11 @@ int init_send_contexts(struct hfi_devdata *dd)
 			(DEFAULT_PKEY &
 				WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_MASK)
 			    << WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_SHIFT);
+
+		/* set the send context check opcode mask and value */
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_OPCODE,
+			((u64)opmask << WFR_SEND_CTXT_CHECK_OPCODE_MASK_SHIFT) |
+			((u64)opval << WFR_SEND_CTXT_CHECK_OPCODE_VALUE_SHIFT));
 	}
 
 	return 0;

@@ -1487,4 +1487,10 @@ struct qib_hwerror_msgs {
 void qib_format_hwerrors(u64 hwerrs,
 			 const struct qib_hwerror_msgs *hwerrmsgs,
 			 size_t nhwerrmsgs, char *msg, size_t lmsg);
+
+#define WFR_USER_OPCODE_CHECK_VAL 0xC0
+#define WFR_USER_OPCODE_CHECK_MASK 0xC0
+#define WFR_OPCODE_CHECK_VAL_DISABLED 0x0
+#define WFR_OPCODE_CHECK_MASK_DISABLED 0x0
+
 #endif                          /* _QIB_KERNEL_H */

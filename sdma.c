@@ -1250,6 +1250,8 @@ static void init_sdma_regs(
 	u32 credits,
 	uint idle_cnt)
 {
+	u8 opval, opmask;
+
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
@@ -1270,6 +1272,11 @@ static void init_sdma_regs(
 	if (likely(!disable_integrity))
 		write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE,
 				HFI_PKT_BASE_SDMA_INTEGRITY);
+	opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
+	opval = WFR_OPCODE_CHECK_VAL_DISABLED;
+	write_sde_csr(sde, WFR_SEND_DMA_CHECK_OPCODE,
+		(opmask << WFR_SEND_CTXT_CHECK_OPCODE_MASK_SHIFT) |
+		(opval << WFR_SEND_CTXT_CHECK_OPCODE_VALUE_SHIFT));
 }
 
 #ifdef JAG_SDMA_VERBOSITY
