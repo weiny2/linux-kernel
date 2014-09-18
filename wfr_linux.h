@@ -39,9 +39,6 @@
  * the kernel when that's convenient.
  */
 
-/* Unless CONFIG_STL_MGMT is defined, this file is empty */
-#ifdef CONFIG_STL_MGMT
-
 /* STL SMA attribute IDs */
 #define STL_ATTRIB_ID_CONGESTION_INFO		cpu_to_be16(0x008b)
 #define STL_ATTRIB_ID_HFI_CONGESTION_SETTING	cpu_to_be16(0x0090)
@@ -64,5 +61,4 @@ enum missing_port_info_field_masks {
 	STL_PI_MASK_NEIGHBOR_NORMAL = 0x10
 };
 
-#endif /* CONFIG_STL_MGMT */
 #endif /* _WFR_LINUX_H */

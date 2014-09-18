@@ -1337,9 +1337,7 @@ static int qib_query_device(struct ib_device *ibdev,
 		IB_DEVICE_BAD_QKEY_CNTR | IB_DEVICE_SHUTDOWN_PORT |
 		IB_DEVICE_SYS_IMAGE_GUID | IB_DEVICE_RC_RNR_NAK_GEN |
 		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE 
-#ifdef CONFIG_STL_MGMT
 		| IB_DEVICE_JUMBO_MAD_SUPPORT
-#endif /* CONFIG_STL_MGMT */
 		;
 	props->page_size_cap = PAGE_SIZE;
 	props->vendor_id =
@@ -1800,11 +1798,7 @@ static void init_ibport(struct qib_pportdata *ppd)
 {
 	struct qib_verbs_counters cntrs;
 	struct qib_ibport *ibp = &ppd->ibport_data;
-#ifdef CONFIG_STL_MGMT
 	size_t sz = ARRAY_SIZE(ibp->sl_to_sc);
-#else
-	size_t sz = ARRAY_SIZE(ibp->sl_to_sc)/2;
-#endif /* CONFIG_STL_MGMT */
 	int i;
 
 	for (i = 0; i < sz; i++) {

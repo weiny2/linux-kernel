@@ -389,7 +389,6 @@ struct ib_cc_congestion_setting_attr_shadow {
 	struct ib_cc_congestion_entry_shadow entries[IB_CC_CCS_ENTRIES];
 } __packed;
 
-#ifdef CONFIG_STL_MGMT
 struct stl_congestion_setting_entry {
 	u8 ccti_increase;
 	u8 reserved;
@@ -417,7 +416,6 @@ struct stl_congestion_setting_attr_shadow {
 	u16 port_control;
 	struct stl_congestion_setting_entry_shadow entries[STL_MAX_SLS];
 } __packed;
-#endif /* CONFIG_STL_MGMT */
 
 #define IB_CC_TABLE_ENTRY_INCREASE_DEFAULT 1
 #define IB_CC_TABLE_ENTRY_TIMER_DEFAULT 1
@@ -455,14 +453,8 @@ struct cc_table_shadow {
 /*
  * STL BufferControl MAD
  */
-#ifdef CONFIG_STL_MGMT
 #include <rdma/stl_smi.h>
 #include <rdma/stl_port_info.h>
-#else
-#define STL_MAX_VLS 32	/* STL defines 32 VLs */
-#define STL_MAX_SLS 32
-#define STL_MAX_SCS 32
-#endif
 
 /* attribute modifier macros */
 #define STL_AM_NPORT_SHIFT	(24)

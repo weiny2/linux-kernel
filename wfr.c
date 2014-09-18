@@ -7107,11 +7107,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		int vl;
 		/* init common fields */
 		qib_init_pportdata(ppd, dd, 0, 1);
-		/* chip specific */
-#ifndef CONFIG_STL_MGMT
-		ppd->link_speed_supported = IB_SPEED_EDR;
-		ppd->link_width_supported = IB_WIDTH_1X | IB_WIDTH_4X;
-#else
 		/* from DC HAS */
 		ppd->link_speed_supported =
 			STL_LINK_SPEED_25G | STL_LINK_SPEED_12_5G;
@@ -7119,7 +7114,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd->link_width_supported =
 			IB_WIDTH_1X | IB_WIDTH_4X |
 			STL_LINK_WIDTH_2X | STL_LINK_WIDTH_3X;
-#endif
 		ppd->link_speed_enabled = ppd[i].link_speed_supported;
 
 		switch (num_vls) {
@@ -7151,11 +7145,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
 		 */
-#ifndef CONFIG_STL_MGMT
-		ppd->link_speed_active = IB_SPEED_EDR;
-#else
 		ppd->link_speed_active = STL_LINK_SPEED_25G;
-#endif
 		ppd->link_width_active = IB_WIDTH_4X;
 		ppd->lstate = IB_PORT_DOWN;
 		ppd->overrun_threshold = 0x4;

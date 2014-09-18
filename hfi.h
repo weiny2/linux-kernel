@@ -474,12 +474,8 @@ struct qib_pportdata {
 	struct hfi_devdata *dd;
 	struct kobject pport_kobj;
 	struct kobject pport_cc_kobj;
-#ifdef CONFIG_STL_MGMT
 	struct kobject sc2vl_kobj;
 	struct kobject sl2sc_kobj;
-#else
-	struct kobject sl2vl_kobj;
-#endif
 	struct kobject vl2mtu_kobj;
 	struct kobject diagc_kobj;
 
@@ -572,21 +568,13 @@ struct qib_pportdata {
 	struct cc_table_shadow *ccti_entries_shadow;
 
 	/* Shadow copy of the congestion control entries */
-#ifdef CONFIG_STL_MGMT
 	struct stl_congestion_setting_attr_shadow *congestion_entries_shadow;
-#else
-	struct ib_cc_congestion_setting_attr_shadow *congestion_entries_shadow;
-#endif
 
 	/* List of congestion control table entries */
 	struct ib_cc_table_entry_shadow *ccti_entries;
 
 	/* 16 congestion entries with each entry corresponding to a SL */
-#ifdef CONFIG_STL_MGMT
 	struct stl_congestion_setting_entry_shadow *congestion_entries;
-#else
-	struct ib_cc_congestion_entry_shadow *congestion_entries;
-#endif
 
 	/* Maximum number of congestion control entries that the agent expects
 	 * the manager to send.
@@ -597,11 +585,7 @@ struct qib_pportdata {
 	u16 total_cct_entry;
 
 	/* Bit map identifying service level */
-#ifdef CONFIG_STL_MGMT
 	u32 cc_sl_control_map;
-#else
-	u16 cc_sl_control_map;
-#endif
 
 	/* maximum congestion control table index */
 	u16 ccti_limit;
@@ -1121,13 +1105,8 @@ static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
 #define STL_MTU_1024  3
 #define STL_MTU_2048  4
 #define STL_MTU_4096  5
-#ifndef CONFIG_STL_MGMT
-#define STL_MTU_8192  8
-#define STL_MTU_10240 9
-#else
 #include <rdma/stl_smi.h>
 #include <rdma/stl_port_info.h>
-#endif
 
 u32 lrh_max_header_bytes(struct hfi_devdata *dd);
 int mtu_to_enum(u32 mtu, int default_if_bad);

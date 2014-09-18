@@ -268,11 +268,7 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 
 	if (!qib_cc_table_size || !ppd->congestion_entries_shadow)
 		return -EINVAL;
-#ifdef CONFIG_STL_MGMT
 	ret = sizeof(struct stl_congestion_setting_attr_shadow);
-#else
-	ret = sizeof(struct ib_cc_congestion_setting_attr_shadow);
-#endif
 
 	if (pos > ret)
 		return -EINVAL;
@@ -330,7 +326,6 @@ static struct kobj_type qib_port_ktype = {
 	.default_attrs = port_default_attributes
 };
 
-#ifdef CONFIG_STL_MGMT
 /* Start sc2vl */
 #define HFI_SC2VL_ATTR(N)				    \
 	static struct hfi_sc2vl_attr hfi_sc2vl_attr_##N = { \
@@ -542,81 +537,6 @@ static struct kobj_type hfi_sl2sc_ktype = {
 };
 
 /* End sl2sc */
-#else
-/* Start non-STL sl2vl */
-
-#define QIB_SL2VL_ATTR(N) \
-	static struct qib_sl2vl_attr qib_sl2vl_attr_##N = { \
-		.attr = { .name = __stringify(N), .mode = 0444 }, \
-		.sl = N \
-	}
-
-struct qib_sl2vl_attr {
-	struct attribute attr;
-	int sl;
-};
-
-QIB_SL2VL_ATTR(0);
-QIB_SL2VL_ATTR(1);
-QIB_SL2VL_ATTR(2);
-QIB_SL2VL_ATTR(3);
-QIB_SL2VL_ATTR(4);
-QIB_SL2VL_ATTR(5);
-QIB_SL2VL_ATTR(6);
-QIB_SL2VL_ATTR(7);
-QIB_SL2VL_ATTR(8);
-QIB_SL2VL_ATTR(9);
-QIB_SL2VL_ATTR(10);
-QIB_SL2VL_ATTR(11);
-QIB_SL2VL_ATTR(12);
-QIB_SL2VL_ATTR(13);
-QIB_SL2VL_ATTR(14);
-QIB_SL2VL_ATTR(15);
-
-static struct attribute *sl2vl_default_attributes[] = {
-	&qib_sl2vl_attr_0.attr,
-	&qib_sl2vl_attr_1.attr,
-	&qib_sl2vl_attr_2.attr,
-	&qib_sl2vl_attr_3.attr,
-	&qib_sl2vl_attr_4.attr,
-	&qib_sl2vl_attr_5.attr,
-	&qib_sl2vl_attr_6.attr,
-	&qib_sl2vl_attr_7.attr,
-	&qib_sl2vl_attr_8.attr,
-	&qib_sl2vl_attr_9.attr,
-	&qib_sl2vl_attr_10.attr,
-	&qib_sl2vl_attr_11.attr,
-	&qib_sl2vl_attr_12.attr,
-	&qib_sl2vl_attr_13.attr,
-	&qib_sl2vl_attr_14.attr,
-	&qib_sl2vl_attr_15.attr,
-	NULL
-};
-
-static ssize_t sl2vl_attr_show(struct kobject *kobj, struct attribute *attr,
-			       char *buf)
-{
-	struct qib_sl2vl_attr *sattr =
-		container_of(attr, struct qib_sl2vl_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, sl2vl_kobj);
-	struct qib_ibport *qibp = &ppd->ibport_data;
-
-	return sprintf(buf, "%u\n", qibp->sl_to_sc[sattr->sl]);
-}
-
-static const struct sysfs_ops qib_sl2vl_ops = {
-	.show = sl2vl_attr_show,
-};
-
-static struct kobj_type qib_sl2vl_ktype = {
-	.release = qib_port_release,
-	.sysfs_ops = &qib_sl2vl_ops,
-	.default_attrs = sl2vl_default_attributes
-};
-
-/* End sl2vl */
-#endif
 
 /* Start vl2mtu */
 
@@ -987,7 +907,6 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->pport_kobj, KOBJ_ADD);
 
-#ifdef CONFIG_STL_MGMT
 	ret = kobject_init_and_add(&ppd->sc2vl_kobj, &hfi_sc2vl_ktype, kobj,
 				   "sc2vl");
 	if (ret) {
@@ -1006,17 +925,6 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 		goto bail_link;
 	}
 	kobject_uevent(&ppd->sl2sc_kobj, KOBJ_ADD);
-#else
-	ret = kobject_init_and_add(&ppd->sl2vl_kobj, &qib_sl2vl_ktype, kobj,
-				   "sl2vl");
-	if (ret) {
-		dd_dev_err(dd,
-			"Skipping sl2vl sysfs info, (err %d) port %u\n",
-			ret, port_num);
-		goto bail_link;
-	}
-	kobject_uevent(&ppd->sl2vl_kobj, KOBJ_ADD);
-#endif
 
 	ret = kobject_init_and_add(&ppd->vl2mtu_kobj, &hfi_vl2mtu_ktype, kobj,
 				   "vl2mtu");
@@ -1085,11 +993,7 @@ bail_diagc:
 bail_mtu:
 	kobject_put(&ppd->vl2mtu_kobj);
 bail_sl:
-#ifdef CONFIG_STL_MGMT
 	kobject_put(&ppd->sc2vl_kobj);
-#else
-	kobject_put(&ppd->sl2vl_kobj);
-#endif
 bail_link:
 	kobject_put(&ppd->pport_kobj);
 bail:
@@ -1132,11 +1036,7 @@ void qib_verbs_unregister_sysfs(struct hfi_devdata *dd)
 			kobject_put(&ppd->pport_cc_kobj);
 		}
 		kobject_put(&ppd->vl2mtu_kobj);
-#ifdef CONFIG_STL_MGMT
 		kobject_put(&ppd->sc2vl_kobj);
-#else
-		kobject_put(&ppd->sl2vl_kobj);
-#endif
 		kobject_put(&ppd->pport_kobj);
 	}
 }

@@ -78,10 +78,8 @@
 #include "include/wfr/dcc_csrs_defs.h"
 #include "include/wfr/dc_lcb_csrs_defs.h"
 
-#ifdef CONFIG_STL_MGMT
 #include "rdma/stl_smi.h"
 #include "rdma/stl_port_info.h"
-#endif
 
 /* not defined in wfr_core.h */
 #define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000
@@ -470,7 +468,6 @@ u64 create_pbc(u64, u32, u32, u32);
 
 static inline int stl_speed_to_ib(u16 in)
 {
-#ifdef CONFIG_STL_MGMT
 	if (in & STL_LINK_SPEED_25G) {
 		in &= ~STL_LINK_SPEED_25G;
 		in |= IB_SPEED_EDR;
@@ -480,16 +477,15 @@ static inline int stl_speed_to_ib(u16 in)
 		in &= ~STL_LINK_SPEED_12_5G;
 		in |= IB_SPEED_QDR;
 	}
-#endif
+
 	BUG_ON(!in);
 	return in;
 }
 
 static inline int stl_width_to_ib(u16 in)
 {
-#ifdef CONFIG_STL_MGMT
 	in &= ~(STL_LINK_WIDTH_2X | STL_LINK_WIDTH_3X);
-#endif
+
 	BUG_ON(!in);
 	return in;
 }
