@@ -26,14 +26,19 @@ struct acpi_nfit {
 	struct nd_bus *nd_bus;
 	acpi_handle handle;
 	struct kref kref;
+	resource_size_t start;
+	int do_unmap;
 };
 
 static void nd_acpi_nfit_release(struct kref *kref)
 {
 	struct acpi_nfit *nfit = container_of(kref, typeof(*nfit), kref);
+	struct nfit_bus_descriptor *nfit_desc = &nfit->nfit_desc;
 
 	nfit_bus_unregister(nfit->nd_bus);
 	list_del(&nfit->list);
+	if (nfit->do_unmap)
+		iounmap(nfit_desc->nfit_base);
 	kfree(nfit);
 }
 
@@ -157,6 +162,90 @@ static int __nd_acpi_add(struct acpi_device *dev)
 	return rc;
 }
 
+static struct acpi_nfit *legacy_nd_acpi_get_nfit(resource_size_t start)
+{
+	struct acpi_nfit *nfit;
+
+	list_for_each_entry(nfit, &nfits, list) {
+		if (nfit->start == start) {
+			kref_get(&nfit->kref);
+			return nfit;
+		}
+	}
+	return NULL;
+}
+
+static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
+		void *_h)
+{
+	struct acpi_resource_address64 address64;
+	struct nfit_bus_descriptor *nfit_desc;
+	struct acpi_nfit *nfit;
+	resource_size_t start;
+	acpi_status status;
+	acpi_handle handle = _h;
+
+	status = acpi_resource_to_address64(resource, &address64);
+	if (ACPI_FAILURE(status))
+		return AE_CTRL_TERMINATE;
+
+	start = address64.minimum;
+	mutex_lock(&nd_acpi_lock);
+	nfit = legacy_nd_acpi_get_nfit(start);
+	if (nfit)
+		goto out;
+
+	nfit = kzalloc(sizeof(*nfit), GFP_KERNEL);
+	if (!nfit) {
+		status = AE_ERROR;
+		goto out;
+	}
+	kref_init(&nfit->kref);
+	INIT_LIST_HEAD(&nfit->list);
+	nfit->handle = handle;
+	nfit->start = start;
+	nfit_desc = &nfit->nfit_desc;
+	nfit_desc->nfit_size = address64.address_length;
+	nfit_desc->nfit_base = ioremap_cache(start, nfit_desc->nfit_size);
+	if (!nfit_desc->nfit_base) {
+		status = AE_ERROR;
+		kfree(nfit);
+		goto out;
+	} else {
+		nfit->do_unmap = 1;
+	}
+	nfit_desc->provider_name = "ACPI.NFIT";
+	nfit_desc->nfit_ctl = nd_acpi_ctl;
+	/* declare support for "format interface code 1" messages */
+	set_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags);
+
+	/* ACPI references one global NFIT for all devices, i.e. no parent */
+	nfit->nd_bus = nfit_bus_register(NULL, nfit_desc);
+	if (!nfit->nd_bus) {
+		kref_put(&nfit->kref, nd_acpi_nfit_release);
+		status = AE_ERROR;
+	} else {
+		list_add(&nfit->list, &nfits);
+		status = AE_OK;
+	}
+ out:
+	mutex_unlock(&nd_acpi_lock);
+
+	return status;
+}
+
+static int legacy_nd_acpi_add(struct acpi_device *dev)
+{
+	acpi_status status;
+
+	status = acpi_walk_resources(dev->handle, METHOD_NAME__CRS,
+				     legacy_nd_acpi_add_nfit, dev->handle);
+	if (ACPI_FAILURE(status))
+		return -EINVAL;
+
+	return 0;
+}
+
 static int nd_acpi_add(struct acpi_device *dev)
 {
 	int rc;
@@ -165,7 +254,46 @@ static int nd_acpi_add(struct acpi_device *dev)
 	rc = __nd_acpi_add(dev);
 	mutex_unlock(&nd_acpi_lock);
 
-	return rc < 0 ? rc : 0;
+	if (rc >= 0)
+		return 0;
+
+	rc = legacy_nd_acpi_add(dev);
+	WARN_TAINT_ONCE(rc == 0, TAINT_FIRMWARE_WORKAROUND,
+			"%s: discovering NFIT by _CRS is deprecated, update bios.\n",
+			dev_name(&dev->dev));
+	return rc;
+}
+
+static acpi_status legacy_nd_acpi_remove_nfit(struct acpi_resource *resource, void *n)
+{
+	struct acpi_resource_address64 address64;
+	struct acpi_nfit *nfit;
+	resource_size_t start;
+	acpi_status status;
+
+	status = acpi_resource_to_address64(resource, &address64);
+	if (ACPI_FAILURE(status))
+		return AE_OK; /* sarcastic "ok", nothing we can do */
+
+	start = address64.minimum;
+	mutex_lock(&nd_acpi_lock);
+	nfit = legacy_nd_acpi_get_nfit(start);
+	if (nfit) {
+		/* undo legacy_nd_acpi_get_nfit() */
+		kref_put(&nfit->kref, nd_acpi_nfit_release);
+		/* drop initial ref */
+		kref_put(&nfit->kref, nd_acpi_nfit_release);
+	}
+	mutex_unlock(&nd_acpi_lock);
+
+	return AE_OK;
+}
+
+static int legacy_nd_acpi_remove(struct acpi_device *dev)
+{
+	acpi_walk_resources(dev->handle, METHOD_NAME__CRS,
+			legacy_nd_acpi_remove_nfit, NULL);
+	return 0;
 }
 
 static int nd_acpi_remove(struct acpi_device *dev)
@@ -179,6 +307,9 @@ static int nd_acpi_remove(struct acpi_device *dev)
 			kref_put(&nfit->kref, nd_acpi_nfit_release);
 	}
 	mutex_unlock(&nd_acpi_lock);
+
+	legacy_nd_acpi_remove(dev);
+
 	return 0;
 }
 
