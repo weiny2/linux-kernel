@@ -259,6 +259,9 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 			dd_dev_err(dd, "%s send context invalid count wildcard %d\n", sc_type_name(i), count);
 			return -EINVAL;
 		}
+		if (total_contexts + count > dd->chip_send_contexts)
+			count = dd->chip_send_contexts - total_contexts;
+
 		total_contexts += count;
 
 		/*

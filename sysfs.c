@@ -769,9 +769,15 @@ static ssize_t show_nctxts(struct device *device,
 		container_of(device, struct qib_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 
-	/* Return the number of user ports (contexts) available. */
+	/*
+	 * Return the smaller of send and receive contexts.
+	 * Normally, user level applications would require both a send
+	 * and a receive context, so returning the smaller of the two counts
+	 * give a more accurate picture of total contexts available.
+	 */
 	return scnprintf(buf, PAGE_SIZE, "%u\n",
-			dd->num_rcv_contexts - dd->first_user_ctxt);
+			 min(dd->num_rcv_contexts - dd->first_user_ctxt,
+			     (u32)dd->sc_sizes[SC_USER].count));
 }
 
 static ssize_t show_nfreectxts(struct device *device,
