@@ -633,12 +633,12 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	struct hfi_devdata *dd;
 	unsigned long flags;
 
-	hfi_cdbg(PROC, "freeing ctxt %u:%u\n", uctxt->ctxt, fdata->subctxt);
 	fp->private_data = NULL;
 
 	if (!uctxt)
 		goto done;
 
+	hfi_cdbg(PROC, "freeing ctxt %u:%u\n", uctxt->ctxt, fdata->subctxt);
 	dd = uctxt->dd;
 	mutex_lock(&qib_mutex);
 
