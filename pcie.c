@@ -197,10 +197,12 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 				     dd->chip_rcv_array_count * 8);
 	dd_dev_info(dd, "WC Remapped RcvArray: %p\n", dd->rcvarray_wc);
 	/*
-	 * Save BARs to rewrite after device reset.
+	 * Save BARs and command to rewrite after device reset.
 	 */
 	dd->pcibar0 = addr;
 	dd->pcibar1 = addr >> 32;
+	pci_read_config_dword(dd->pcidev, PCI_ROM_ADDRESS, &dd->pci_rom);
+	pci_read_config_word(dd->pcidev, PCI_COMMAND, &dd->pci_command);
 	dd->deviceid = ent->device; /* save for later use */
 	dd->vendorid = ent->vendor;
 

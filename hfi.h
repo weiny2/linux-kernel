@@ -898,10 +898,11 @@ struct hfi_devdata {
 	int unit; /* unit # of this chip */
 	int node; /* home node of this chip */
 
-	/* so we can rewrite it after a chip reset */
+	/* save these BARs and command to rewrite after a reset */
 	u32 pcibar0;
-	/* so we can rewrite it after a chip reset */
 	u32 pcibar1;
+	u32 pci_rom;
+	u16 pci_command;
 
 	/*
 	 * ASCII serial number, from flash, large enough for original

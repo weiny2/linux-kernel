@@ -6752,14 +6752,22 @@ static void init_chip(struct hfi_devdata *dd)
 	if (use_flr) {
 		/*
 		 * A FLR will reset the SPC core and part of the PCIe.
-		 * TODO: This wipes out the PCIe BARs - anything else
-		 *`	in PCIe?
+		 * The parts that need to be restored have already been
+		 * saved.
 		 */
 		dd_dev_info(dd, "Resetting CSRs with FLR\n");
 
 		/* do the FLR, the DC reset will remain */
 		hfi_pcie_flr(dd);
 
+		/* restore command and BARs */
+		pci_write_config_word(dd->pcidev, PCI_COMMAND, dd->pci_command);
+		pci_write_config_dword(dd->pcidev,
+					PCI_BASE_ADDRESS_0, dd->pcibar0);
+		pci_write_config_dword(dd->pcidev,
+					PCI_BASE_ADDRESS_1, dd->pcibar1);
+		pci_write_config_dword(dd->pcidev,
+					PCI_ROM_ADDRESS, dd->pci_rom);
 	} else {
 		dd_dev_info(dd, "Resetting CSRs with writes\n");
 		reset_cce_csrs(dd);
