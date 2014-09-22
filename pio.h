@@ -108,6 +108,7 @@ struct send_context {
 	u64 credit_ctrl;		/* cache for credit control */
 	u32 credit_intr_count;		/* count of credit intr users */
 	atomic_t buffers_allocated;	/* count of buffers allocated */
+	wait_queue_head_t halt_wait;    /* wait until kernel sees interrupt */
 };
 
 /* send context flags */
@@ -152,7 +153,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa);
 void sc_free(struct send_context *sc);
 int sc_enable(struct send_context *sc);
 void sc_disable(struct send_context *sc);
-void sc_restart(struct send_context *sc);
+int sc_restart(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
 void sc_flush(struct send_context *sc);
 void sc_drop(struct send_context *sc);

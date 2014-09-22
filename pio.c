@@ -35,9 +35,11 @@
 #include "qp.h"
 #include "trace.h"
 
+#define SC_CTXT_PACKET_EGRESS_TIMEOUT 350 /* in chip cycles */
 /*
  * Send Context functions
  */
+static void sc_wait_for_packet_egress(struct send_context *);
 
 /*
  * Set the CM reset bit and wait for it to clear.  Use the provided
@@ -540,6 +542,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	INIT_LIST_HEAD(&sc->piowait);
 	INIT_WORK(&sc->halt_work, sc_halted);
 	atomic_set(&sc->buffers_allocated, 0);
+	init_waitqueue_head(&sc->halt_wait);
 
 	/* TBD: group set-up.  Make it always 0 for now. */
 	sc->group = 0;
@@ -660,6 +663,7 @@ void sc_disable(struct send_context *sc)
 	reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
 	spin_lock_irqsave(&sc->alloc_lock, flags);
 	sc->flags &= ~SCF_ENABLED;
+	sc_wait_for_packet_egress(sc);
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
@@ -698,8 +702,8 @@ static void sc_wait_for_packet_egress(struct send_context *sc)
 	u32 loop = 0;
 
 	while (1) {
-		reg = read_kctxt_csr(dd, sc->context,
-						WFR_SEND_EGRESS_CTXT_STATUS);
+		reg = read_csr(dd, sc->context * 8 +
+			       WFR_SEND_EGRESS_CTXT_STATUS);
 		reg = packet_occupancy(reg);
 		if (reg == 0)
 			break;
@@ -712,6 +716,14 @@ static void sc_wait_for_packet_egress(struct send_context *sc)
 		loop++;
 		udelay(1);
 	}
+	/*
+	 * Add additional delay (at least, 1us) to ensure chip returns all
+	 * credits
+	 */
+	/* TODO: The cclock_to_ns conversion only makes sense on FPGA since
+	 * 350cclock on ASIC is less than 1us. */
+	loop = cclock_to_ns(dd, SC_CTXT_PACKET_EGRESS_TIMEOUT) / 1000;
+	udelay(loop ? loop : 1);
 }
 
 /*
@@ -724,7 +736,7 @@ static void sc_wait_for_packet_egress(struct send_context *sc)
  * It is expected that allocations (enabled flag bit) have been shut off
  * already (only applies to kernel contexts).
  */
-void sc_restart(struct send_context *sc)
+int sc_restart(struct send_context *sc)
 {
 	struct hfi_devdata *dd = sc->dd;
 	u64 reg;
@@ -733,7 +745,7 @@ void sc_restart(struct send_context *sc)
 
 	/* bounce off if not halted, or being free'd */
 	if (!(sc->flags & SCF_HALTED) || (sc->flags & SCF_IN_FREE))
-		return;
+		return -EINVAL;
 
 	dd_dev_info(dd, "restarting context %u\n", sc->context);
 
@@ -751,19 +763,14 @@ void sc_restart(struct send_context *sc)
 		if (loop > 100) {
 			dd_dev_err(dd, "%s: context %d not halting, skipping\n",
 				__func__, sc->context);
-			return;
+			return -ETIME;
 		}
 		loop++;
 		udelay(1);
 	}
 
 	/*
-	 * Step 2: Wait for all packets to egress.
-	 */
-	sc_wait_for_packet_egress(sc);
-
-	/*
-	 * Step 3: Ensure no users are still trying to write to PIO.
+	 * Step 2: Ensure no users are still trying to write to PIO.
 	 *
 	 * For kernel contexts, we have already turned off buffer allocation.
 	 * Now wait for the buffer count to go to zero.
@@ -790,6 +797,9 @@ void sc_restart(struct send_context *sc)
 	}
 
 	/*
+	 * Step 3: Wait for all packets to egress.
+	 * This is done while disabling the send context
+	 *
 	 * Step 4: Disable the context
 	 *
 	 * This is a superset of the halt.  After the disable, the
@@ -803,7 +813,7 @@ void sc_restart(struct send_context *sc)
 	 * This enable will clear the halted flag and per-send context
 	 * error flags.
 	 */
-	sc_enable(sc);
+	return sc_enable(sc);
 }
 
 /*
@@ -1003,6 +1013,11 @@ void sc_return_credits(struct send_context *sc)
 	/* a 0->1 transition schedules a credit return */
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE,
 		WFR_SEND_CTXT_CREDIT_FORCE_FORCE_RETURN_SMASK);
+	/*
+	 * Ensure that the write is flushed and the credit return is
+	 * schedule. We care more about the 0 -> 1 transition.
+	 */
+	read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE);
 	/* set back to 0 for next time */
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_FORCE, 0);
 }
@@ -1046,6 +1061,7 @@ void sc_stop(struct send_context *sc, int flag)
 	spin_lock_irqsave(&sc->alloc_lock, flags);
 	sc->flags &= ~SCF_ENABLED;
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
+	wake_up(&sc->halt_wait);
 }
 
 #define BLOCK_DWORDS (WFR_PIO_BLOCK_SIZE/sizeof(u32))

@@ -5955,6 +5955,23 @@ u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns)
 }
 
 /*
+ * Convert a cclock count to nanoseconds. Not matter how slow
+ * the cclock, a non-zero cclocks will always have a non-zero result.
+ */
+u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclocks)
+{
+	u32 ns;
+
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION)
+		ns = (cclocks * FPGA_CCLOCK_PS) / 1000;
+	else  /* simulation pretends to be ASIC */
+		ns = (cclocks * ASIC_CCLOCK_PS) / 1000;
+	if (cclocks && !ns)
+		ns = 1;
+	return ns;
+}
+
+/*
  * Dynamically adjust the receive interrupt timeout for a context based on
  * incoming packet rate.
  *

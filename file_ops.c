@@ -60,6 +60,8 @@ static uint hdrsup_enable = 1;
 module_param(hdrsup_enable, uint, S_IRUGO);
 MODULE_PARM_DESC(hdrsup_enable, "Enable/disable header suppression");
 
+#define SEND_CTXT_HALT_TIMEOUT 1000 /* msecs */
+
 /*
  * File operation functions
  */
@@ -238,6 +240,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_ACK_EVENT:
 	case HFI_CMD_CTXT_INFO:
 	case HFI_CMD_SET_PKEY:
+	case HFI_CMD_CTXT_RESET:
 		copy = 0;
 		user_val = cmd.addr;
 		break;
@@ -341,6 +344,33 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_SET_PKEY:
 		ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
+		break;
+	case HFI_CMD_CTXT_RESET:
+		if (uctxt && uctxt->sc) {
+			/*
+			 * There is no protection here. User level has to
+			 * guarantee that no one will be writing to the send
+			 * context while it is being re-initialized.
+			 * If user level breaks that guarantee, it will break
+			 * it's own context and no one else's.
+			 */
+			struct send_context *sc = uctxt->sc;
+			/*
+			 * Wait until the interrupt handler has marked the
+			 * context as halted. Report error if we time out.
+			 */
+			wait_event_interruptible_timeout(sc->halt_wait,
+				   (sc->flags & SCF_HALTED),
+				   msecs_to_jiffies(SEND_CTXT_HALT_TIMEOUT));
+			if (!(sc->flags & SCF_HALTED)) {
+				ret = -ENOLCK;
+				break;
+			}
+			ret = sc_restart(sc);
+			if (!ret)
+				sc_return_credits(sc);
+		} else
+			ret = -EINVAL;
 		break;
 	case HFI_CMD_EP_INFO:
 	case HFI_CMD_EP_ERASE_CHIP:
