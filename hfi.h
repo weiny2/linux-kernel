@@ -311,6 +311,7 @@ struct qib_sge_state;
  * config interfaces
  */
 #define QIB_IB_CFG_LIDLMC 0 /* LID (LS16b) and Mask (MS16b) */
+#define QIB_IB_CFG_LWID_DG_ENB 1 /* allowed Link-width downgrade */
 #define QIB_IB_CFG_LWID_ENB 2 /* allowed Link-width */
 #define QIB_IB_CFG_LWID 3 /* currently active Link-width */
 #define QIB_IB_CFG_SPD_ENB 4 /* allowed Link speeds */
@@ -524,10 +525,13 @@ struct qib_pportdata {
 	/* list of pkeys programmed; 0 if not set */
 	u16 pkeys[WFR_MAX_PKEY_VALUES];
 	u16 link_width_supported;
+	u16 link_width_downgrade_supported;
 	u16 link_speed_supported;
 	u16 link_width_enabled;
+	u16 link_width_downgrade_enabled;
 	u16 link_speed_enabled;
 	u16 link_width_active;
+	u16 link_width_downgrade_active;
 	u16 link_speed_active;
 	u8 vls_supported;
 	u8 vls_operational;

@@ -130,6 +130,9 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* physical link went up */
 		ppd->linkup = 1;
 
+		/* link width is not avaiable until the link is fully up */
+		get_link_width(ppd);
+
 		ev = IB_EVENT_PORT_ACTIVE;
 
 		/* start a 75msec timer to clear symbol errors */

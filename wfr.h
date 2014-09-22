@@ -325,6 +325,7 @@
 #define WFR_ICODE_FUNCTIONAL_SIMULATOR	0x03
 
 /* 8051 general register Field IDs */
+#define TX_SETTINGS		     0x06
 #define VERIFY_CAP_LOCAL_PHY	     0x07
 #define VERIFY_CAP_LOCAL_FABRIC	     0x08
 #define VERIFY_CAP_LOCAL_LINK_WIDTH  0x09
@@ -354,6 +355,16 @@
 #define READ_DATA_DATA_SHIFT   0x0
 #define READ_DATA_DATA_MASK   0xffffffffull
 
+/* TX settings fields */
+#define ENABLE_LINE_TX_SHIFT		0
+#define ENABLE_LANE_TX_MASK		0xff
+#define TX_POLARITY_INVERSION_SHIFT	8
+#define TX_POLARITY_INVERSION_MASK	0xff
+#define RX_POLARITY_INVERSION_SHIFT	16
+#define RX_POLARITY_INVERSION_MASK	0xff
+#define MAX_RATE_SHIFT			24
+#define MAX_RATE_MASK			0xff
+
 /* verify capibility PHY fields */
 #define CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT	0x4
 #define CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK	0x1
@@ -373,8 +384,10 @@
 /* verify capability link width fields */
 #define LINK_WIDTH_SHIFT 0
 #define LINK_WIDTH_MASK 0xffff
-#define FLAG_BITS_SHIFT 16
-#define FLAG_BITS_MASK 0xffff
+#define LOCAL_FLAG_BITS_SHIFT 16
+#define LOCAL_FLAG_BITS_MASK 0xff
+#define REMOTE_TX_RATE_SHIFT 16
+#define REMOTE_TX_RATE_MASK 0xff
 
 /* mask, shift for reading 'mgmt_enabled' value from REMOTE_LNI_INFO field */
 #define MGMT_ALLOWED_SHIFT 23
@@ -383,9 +396,6 @@
 /* mask, shift for 'link_quality' within LINK_QUALITY_INFO field */
 #define LINK_QUALITY_SHIFT 0
 #define LINK_QUALITY_MASK  0x7
-
-/* verify capability link width values */
-#define WFR_SUPPORTED_LINK_WIDTHS 0xb	/* 4,2,1 widths */
 
 /* verify capability PHY power management bits */
 #define PWRM_BER_CONTROL	0x1
@@ -521,6 +531,7 @@ void link_restart_worker(struct work_struct *work);
 void schedule_link_restart(struct qib_pportdata *ppd);
 void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
+void get_link_width(struct qib_pportdata *ppd);
 
 int acquire_lcb_access(struct hfi_devdata *dd);
 int release_lcb_access(struct hfi_devdata *dd);

@@ -726,7 +726,9 @@ static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 				u8 *continous);
 static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 				u16 *vl15buf, u8 *crc_sizes);
-static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
+static void read_vc_remote_link_width(struct hfi_devdata *dd,
+				u8 *remote_tx_rate, u16 *link_widths);
+static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 				u16 *link_widths);
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
 static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
@@ -2083,6 +2085,57 @@ static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
 }
 
 /*
+ * Set ppd->link_width_active and ppd->link_width_downgrade_active using
+ * hardware information when the link first comes up.
+ *
+ * The link width is not available until after VerifyCap.AllFramesReceived
+ * (the trigger for handle_verify_cap), so this is outside that routine
+ * and should be called when the 8051 signals linkup.
+ */
+void get_link_width(struct qib_pportdata *ppd)
+{
+	u16 flags, widths, tx_width;
+
+	/*
+	 * At the end of VerifyCap, after the interrupt, the 8501 updates
+	 * verify_cap_local_fm_link_width[1] with:
+	 *	+ bits [7:4] contain the number of active transmitters
+	 *	+ bits [3:0] contain the number of active receivers
+	 * These are numbers 1 through 4 and can be different values
+	 * if the link is asymmetric.  NOTE: asymmetric links are
+	 * supporte by DC but not STL.
+	 *
+	 * verify_cap_local_fm_link_width[0] retains its original value.
+	 */
+	read_vc_local_link_width(ppd->dd, &flags, &widths);
+	tx_width = widths >> 12;
+	dd_dev_info(ppd->dd, "%s: active tx %d, active rx %d\n",
+		__func__, tx_width, (widths >> 8) & 0xf);
+
+	/* use the tx width as tx and rx are supposed to be symmetric */
+	switch (tx_width) {
+	case 1:
+		ppd->link_width_active = IB_WIDTH_1X;
+		break;
+	case 2:
+		ppd->link_width_active = STL_LINK_WIDTH_2X;
+		break;
+	case 3:
+		ppd->link_width_active = STL_LINK_WIDTH_3X;
+		break;
+	default:
+		dd_dev_info(ppd->dd, "%s: invalid width %d, using 4\n",
+			__func__, tx_width);
+		/* fall through */
+	case 4:
+		ppd->link_width_active = IB_WIDTH_4X;
+		break;
+	}
+	/* the downgrade width starts out matching the width */
+	ppd->link_width_downgrade_active = ppd->link_width_active;
+}
+
+/*
  * Handle a verify capabilities interrupt from the 8051.
  *
  * This is a work-queue function outside of the interrupt.
@@ -2098,11 +2151,11 @@ void handle_verify_cap(struct work_struct *work)
 	u8 vcu;
 	u8 vau;
 	u16 vl15buf;
-	u16 flag_bits;
 	u16 link_widths;
 	u16 crc_mask;
 	u16 crc_val;
 	u8 crc_sizes;
+	u8 remote_tx_rate;
 
 	set_link_state(ppd, HLS_VERIFY_CAP);
 
@@ -2122,7 +2175,7 @@ void handle_verify_cap(struct work_struct *work)
 	 */
 	read_vc_remote_phy(dd, &power_management, &continious);
 	read_vc_remote_fabric(dd, &vau, &vcu, &vl15buf, &crc_sizes);
-	read_vc_remote_link_width(dd, &flag_bits, &link_widths);
+	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
 	/*
 	 * And the 'MgmtAllowed' information, which is exchanged during
 	 * LNI, is also be available at this point.
@@ -2135,8 +2188,8 @@ void handle_verify_cap(struct work_struct *work)
 	dd_dev_info(dd,
 		"Peer Fabric: vAU %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
 		(int)vau, (int)vcu, (int)vl15buf, (int)crc_sizes);
-	dd_dev_info(dd, "Peer Link Width: flags 0x%x, widths 0x%x\n",
-		(u32)flag_bits, (u32)link_widths);
+	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
+		(u32)remote_tx_rate, (u32)link_widths);
 	if (disable_bcc) {
 		/*
 		 * TODO:
@@ -2179,6 +2232,20 @@ void handle_verify_cap(struct work_struct *work)
 	} else {
 		write_csr(dd, WFR_SEND_CM_CTRL,
 			reg & ~WFR_SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
+	}
+
+	/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
+	switch (remote_tx_rate) {
+	case 0:
+		ppd->link_speed_active = STL_LINK_SPEED_12_5G;
+		break;
+	default:
+		dd_dev_err(dd, "%s: unexpected remote tx rate %d, using 25Gb\n",
+			__func__, (int)remote_tx_rate);
+		/* fall through */
+	case 1:
+		ppd->link_speed_active = STL_LINK_SPEED_25G;
+		break;
 	}
 
 	/*
@@ -3136,13 +3203,24 @@ static void write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
 	load_8051_config(dd, VERIFY_CAP_LOCAL_FABRIC, GENERAL_CONFIG, frame);
 }
 
+static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
+					u16 *link_widths)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
+				&frame);
+	*flag_bits = (frame >> LOCAL_FLAG_BITS_SHIFT) & LOCAL_FLAG_BITS_MASK;
+	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
+}
+
 static void write_vc_local_link_width(struct hfi_devdata *dd,
 				u16 flag_bits,
 				u16 link_widths)
 {
 	u32 frame;
 
-	frame = (u32)flag_bits << FLAG_BITS_SHIFT
+	frame = (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
 		| (u32)link_widths << LINK_WIDTH_SHIFT;
 	load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
 		frame);
@@ -3181,14 +3259,16 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
 	*crc_sizes = (frame >> CRC_SIZES_SHIFT) & CRC_SIZES_MASK;
 }
 
-static void read_vc_remote_link_width(struct hfi_devdata *dd, u16 *flag_bits,
+static void read_vc_remote_link_width(struct hfi_devdata *dd,
+					u8 *remote_tx_rate,
 					u16 *link_widths)
 {
 	u32 frame;
 
 	read_8051_config(dd, VERIFY_CAP_REMOTE_LINK_WIDTH, GENERAL_CONFIG,
 				&frame);
-	*flag_bits = (frame >> FLAG_BITS_SHIFT) & FLAG_BITS_MASK;
+	*remote_tx_rate = (frame >> REMOTE_TX_RATE_SHIFT)
+				& REMOTE_TX_RATE_MASK;
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
 }
 
@@ -3207,6 +3287,41 @@ static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
 	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
 	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
 }
+
+static void read_tx_settings(struct hfi_devdata *dd,
+				u8 *enable_lane_tx,
+				u8 *tx_polarity_inversion,
+				u8 *rx_polarity_inversion,
+				u8 *max_rate)
+{
+	u32 frame;
+
+	read_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, &frame);
+	*enable_lane_tx = (frame >> ENABLE_LINE_TX_SHIFT)
+				& ENABLE_LANE_TX_MASK;
+	*tx_polarity_inversion = (frame >> TX_POLARITY_INVERSION_SHIFT)
+				& TX_POLARITY_INVERSION_MASK;
+	*rx_polarity_inversion = (frame >> RX_POLARITY_INVERSION_SHIFT)
+				& RX_POLARITY_INVERSION_MASK;
+	*max_rate = (frame >> MAX_RATE_SHIFT) & MAX_RATE_MASK;
+}
+
+static void write_tx_settings(struct hfi_devdata *dd,
+				u8 enable_lane_tx,
+				u8 tx_polarity_inversion,
+				u8 rx_polarity_inversion,
+				u8 max_rate)
+{
+	u32 frame;
+
+	/* no need to mask, all variable sizes match field widths */
+	frame = enable_lane_tx << ENABLE_LINE_TX_SHIFT
+		| tx_polarity_inversion << TX_POLARITY_INVERSION_SHIFT
+		| rx_polarity_inversion << RX_POLARITY_INVERSION_SHIFT
+		| max_rate << MAX_RATE_SHIFT;
+	load_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, frame);
+}
+
 /*
  * Read an idle LCB message.
  *
@@ -3400,15 +3515,64 @@ int init_loopback(struct hfi_devdata *dd)
 	return set_serdes_loopback_mode(dd);
 }
 
-static int set_local_link_attributes(struct hfi_devdata *dd)
+/*
+ * Translate from the STL_LINK_WIDTH handed to us by the FM to bits
+ * used in the Verify Capability link width attribute.
+ */
+static u16 stl_to_vc_link_widths(u16 stl_widths)
 {
+	int i;
+	u16 result = 0;
+	static const struct link_bits {
+		u16 from;
+		u16 to;
+	} stl_link_xlate[] = {
+		{ IB_WIDTH_1X,	      1 << (1-1)  },
+		{ IB_WIDTH_4X,	      1 << (4-1)  },
+		{ IB_WIDTH_8X,	      1 << (8-1)  },
+		{ IB_WIDTH_12X,	      1 << (12-1) },
+		{ STL_LINK_WIDTH_2X,  1 << (2-1)  },
+		{ STL_LINK_WIDTH_3X,  1 << (3-1)  },
+		{ STL_LINK_WIDTH_6X,  1 << (6-1)  },
+		{ STL_LINK_WIDTH_9X,  1 << (9-1)  },
+		{ STL_LINK_WIDTH_16X, 1 << (16-1) },
+	};
+
+	for (i = 0; i < ARRAY_SIZE(stl_link_xlate); i++) {
+		if (stl_widths & stl_link_xlate[i].from)
+			result |= stl_link_xlate[i].to;
+	}
+	return result;
+}
+
+/*
+ * Set link attributes before moving to polling.
+ */
+static int set_local_link_attributes(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u8 enable_lane_tx;
+	u8 tx_polarity_inversion;
+	u8 rx_polarity_inversion;
+	u8 max_rate;
+
+	/* set the max rate - need to read-modify-write */
+	read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
+		&rx_polarity_inversion, &max_rate);
+	/* set the max rate to the fastest enabled */
+	if (ppd->link_speed_enabled & STL_LINK_SPEED_25G)
+		max_rate = 1;
+	else
+		max_rate = 0;
+	write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
+		rx_polarity_inversion, max_rate);
+
 	/*
-	 * Write link verify capability frames before moving the
-	 * link to polling for the first time.
+	 * Storm Lake generateion 1 has no power management.
+	 * DC supports continous updates.
 	 */
-	/* TODO: Does WFR support Bandwidth control? */
-	/* TODO: Does WFR support continuous update? */
-	write_vc_local_phy(dd, PWRM_BER_CONTROL, 0);
+	write_vc_local_phy(dd, 0 /* no power management */,
+				1 /* continous updates */);
 
 	write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
 		link_crc_mask);
@@ -3420,7 +3584,7 @@ static int set_local_link_attributes(struct hfi_devdata *dd)
 	 * for back-to-back operation (doesn't matter for loopback).
 	 */
 	write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
-		WFR_SUPPORTED_LINK_WIDTHS);
+		stl_to_vc_link_widths(ppd->link_width_enabled));
 
 	/* FIXME: the above calls should return error status, Bug 125337 */
 	return 0;
@@ -3646,7 +3810,7 @@ static struct qib_message_header *get_msgheader(
 
 static const char *ib_cfg_name_strings[] = {
 	"QIB_IB_CFG_LIDLMC",
-	"unused1",
+	"QIB_IB_CFG_LWID_DG_ENB",
 	"QIB_IB_CFG_LWID_ENB",
 	"QIB_IB_CFG_LWID",
 	"QIB_IB_CFG_SPD_ENB",
@@ -4079,7 +4243,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		if (ppd->host_link_state != HLS_DN_OFFLINE)
 			goto unexpected;
 
-		ret = set_local_link_attributes(dd);
+		ret = set_local_link_attributes(ppd);
 		if (ret) {
 			schedule_link_restart(ppd);
 			break;
@@ -4212,9 +4376,23 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 			/* set_vls(ppd) */
 		}
 		break;
+	/*
+	 * For link width, link widht downgrade, and speed enable, always AND
+	 * the setting with what is actually supported.  This has two benefits.
+	 * First, enabled can't have unsupported values, no matter what the
+	 * SM or FM might want.  Second, the ALL_SUPPORTED wildcards that mean
+	 * "fill in with your supported value" have all the bits in the
+	 * field set, so simply ANDing with supported has the desired result.
+	 */
 	case QIB_IB_CFG_LWID_ENB: /* set allowed Link-width */
-		ppd->link_width_enabled = val;
-		//FIXME: actually set the value
+		ppd->link_width_enabled = val & ppd->link_width_supported;
+		break;
+	case QIB_IB_CFG_LWID_DG_ENB: /* set allowed link width downgrade */
+		ppd->link_width_downgrade_enabled =
+				val & ppd->link_width_downgrade_supported;
+		break;
+	case QIB_IB_CFG_SPD_ENB: /* allowed Link speeds */
+		ppd->link_speed_enabled = val & ppd->link_speed_supported;
 		break;
         case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
 		/*
@@ -7182,7 +7360,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 {
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
-	u64 rev2;
+	u64 reg;
 	int i, ret;
 	static const char *inames[] = { /* implementation names */
 		"RTL silicon",
@@ -7200,14 +7378,16 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		int vl;
 		/* init common fields */
 		qib_init_pportdata(ppd, dd, 0, 1);
-		/* from DC HAS */
-		ppd->link_speed_supported =
-			STL_LINK_SPEED_25G | STL_LINK_SPEED_12_5G;
-		/* widths build on IB - adds 2,3 */
+		/* DC supports 4 link widths */
 		ppd->link_width_supported =
 			IB_WIDTH_1X | IB_WIDTH_4X |
 			STL_LINK_WIDTH_2X | STL_LINK_WIDTH_3X;
-		ppd->link_speed_enabled = ppd[i].link_speed_supported;
+		ppd->link_width_downgrade_supported =
+					ppd->link_width_supported;
+		/* start out enabling all supported values */
+		ppd->link_width_enabled = ppd->link_width_supported;
+		ppd->link_width_downgrade_enabled =
+					ppd->link_width_enabled;
 
 		switch (num_vls) {
 		case 1:
@@ -7238,8 +7418,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
 		 */
-		ppd->link_speed_active = STL_LINK_SPEED_25G;
 		ppd->link_width_active = IB_WIDTH_4X;
+		ppd->link_width_downgrade_active = ppd->link_width_active;
 		ppd->lstate = IB_PORT_DOWN;
 		ppd->overrun_threshold = 0x4;
 		ppd->phy_error_threshold = 0xf;
@@ -7310,12 +7490,12 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* obtain the hardware ID - NOT related to unit, which is a
 	   software enumeration */
-	rev2 = read_csr(dd, WFR_CCE_REVISION2);
-	dd->hfi_id = (rev2 >> WFR_CCE_REVISION2_HFI_ID_SHIFT)
+	reg = read_csr(dd, WFR_CCE_REVISION2);
+	dd->hfi_id = (reg >> WFR_CCE_REVISION2_HFI_ID_SHIFT)
 					& WFR_CCE_REVISION2_HFI_ID_MASK;
 	/* the variable size will remove unwanted bits */
-	dd->icode = rev2 >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
-	dd->irev = rev2 >> WFR_CCE_REVISION2_IMPL_REVISION_SHIFT;
+	dd->icode = reg >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
+	dd->irev = reg >> WFR_CCE_REVISION2_IMPL_REVISION_SHIFT;
 	dd_dev_info(dd, "Implementation: %s, revision 0x%x\n",
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
@@ -7330,6 +7510,40 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		dd_dev_err(dd, "Version mismatch: This driver requires emulation version 0x15 or higher\n");
 		ret = -EINVAL;
 		goto bail_cleanup;
+	}
+
+	/*
+	 * Set link speed values.  The max active rate is set in the EFUSE
+	 * DC settings, bit 0.
+	 */
+	reg = read_csr(dd, WFR_ASIC_WFR_EFUSE_REGS6);
+	if (dd->hfi_id)
+		reg = (reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_SHIFT)
+				& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_MASK;
+	else
+		reg = (reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_SHIFT)
+				& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_MASK;
+	if ((reg & 0x1) == 0)	/* full speed */
+		dd->pport->link_speed_supported =
+			STL_LINK_SPEED_25G | STL_LINK_SPEED_12_5G;
+	else			/* half speed */
+		dd->pport->link_speed_supported = STL_LINK_SPEED_12_5G;
+	dd->pport->link_speed_enabled = dd->pport->link_speed_supported;
+	/* give a reasonable active value, will be set on link up */
+	if (dd->pport->link_speed_supported & STL_LINK_SPEED_25G)
+		dd->pport->link_speed_active = STL_LINK_SPEED_25G;
+	else
+		dd->pport->link_speed_active = STL_LINK_SPEED_12_5G;
+
+	/* fix up link widths for emulation */
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
+		dd->pport->link_width_supported =
+			dd->pport->link_width_enabled =
+			dd->pport->link_width_active =
+			dd->pport->link_width_downgrade_supported =
+			dd->pport->link_width_downgrade_enabled =
+			dd->pport->link_width_downgrade_active =
+				IB_WIDTH_1X;
 	}
 
 	/*

@@ -382,6 +382,11 @@ static void set_link_width_enabled(struct qib_pportdata *ppd, u32 w)
 	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LWID_ENB, w);
 }
 
+static void set_link_width_downgrade_enabled(struct qib_pportdata *ppd, u32 w)
+{
+	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LWID_DG_ENB, w);
+}
+
 static void set_link_speed_enabled(struct qib_pportdata *ppd, u32 s)
 {
 	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_SPD_ENB, s);
@@ -553,6 +558,13 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
 	pi->link_width.active = cpu_to_be16(ppd->link_width_active);
 
+	pi->link_width_downgrade.supported =
+			cpu_to_be16(ppd->link_width_downgrade_supported);
+	pi->link_width_downgrade.enabled =
+			cpu_to_be16(ppd->link_width_downgrade_enabled);
+	pi->link_width_downgrade.active =
+			cpu_to_be16(ppd->link_width_downgrade_active);
+
 	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
@@ -631,10 +643,6 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->flit_control.interleave = cpu_to_be16(0x1400);
 
 	pi->link_down_reason = STL_LINKDOWN_REASON_NONE;
-
-	pi->link_width_downgrade.supported = 0;
-	pi->link_width_downgrade.enabled = 0;
-	pi->link_width_downgrade.active = 0;
 
 	pi->mtucap = mtu_to_enum(max_mtu, IB_MTU_4096);
 
@@ -876,6 +884,18 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 			set_link_width_enabled(ppd, STL_LINK_WIDTH_ALL_SUPPORTED);
 		} else if (lwe & be16_to_cpu(pi->link_width.supported)) {
 			set_link_width_enabled(ppd, lwe);
+		} else
+			smp->status |= IB_SMP_INVALID_FIELD;
+	}
+	lwe = be16_to_cpu(pi->link_width_downgrade.enabled);
+	if (lwe) {
+		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED)
+					== STL_LINK_WIDTH_ALL_SUPPORTED) {
+			set_link_width_downgrade_enabled(ppd,
+					STL_LINK_WIDTH_ALL_SUPPORTED);
+		} else if (lwe
+			    & be16_to_cpu(pi->link_width_downgrade.supported)) {
+			set_link_width_downgrade_enabled(ppd, lwe);
 		} else
 			smp->status |= IB_SMP_INVALID_FIELD;
 	}
