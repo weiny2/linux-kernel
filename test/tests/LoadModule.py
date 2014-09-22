@@ -11,7 +11,7 @@ import re
 
 def do_ssh(host, cmd):
     RegLib.test_log(5, "Running " + cmd)
-    (err, out) = host.send_ssh(cmd)
+    (err, out) = host.send_ssh(cmd, run_as_root=True)
     if err:
         RegLib.test_log(10, "SSH ERROR (may be expected!)")
     return out
@@ -39,7 +39,7 @@ def load_driver(host, driver_name, driver_path, driver_opts):
 
 def is_sm_active(host, sm):
     cmd = "/sbin/service %s status" % sm
-    ret = host.send_ssh(cmd, 0)
+    ret = host.send_ssh(cmd, 0, run_as_root=True)
     if ret != 0:
         RegLib.test_log(0, "%s is not running" % sm)
     else:

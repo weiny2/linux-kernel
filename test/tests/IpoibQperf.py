@@ -11,9 +11,9 @@ import re
 import os
 import time
 
-def do_ssh(host, cmd):
+def do_ssh(host, cmd, run_as_root=True):
     RegLib.test_log(5, "Running " + cmd)
-    return (host.send_ssh(cmd))
+    return (host.send_ssh(cmd, run_as_root=run_as_root))
 
 def main():
 
@@ -57,15 +57,15 @@ def main():
 
     # insure not running on either host
     cmd = "pkill qperf"
-    err = do_ssh(host1, "pkill qperf")
+    err = do_ssh(host1, "pkill qperf", run_as_root=False)
     cmd = "pkill qperf"
-    err = do_ssh(host2, "pkill qperf")
+    err = do_ssh(host2, "pkill qperf", run_as_root=False)
 
     # Start qperf on host1 (server)
     child_pid = os.fork()
     if child_pid == 0:
         cmd = "qperf"
-        (err, out) = do_ssh(host2, cmd)
+        (err, out) = do_ssh(host2, cmd, run_as_root=False)
         if err:
             test_fail = 1
             RegLib.test_log(0, "Child SSH exit status bad")
@@ -76,13 +76,13 @@ def main():
     # Start ib_send_lat on host2 (client)
     server_name = host2.get_name()
     cmd = "qperf " + server_name + "-ib --wait_server 5 -oo msg_size:8:64:*2 -vu tcp_bw"
-    (err, out) = do_ssh(host1, cmd)
+    (err, out) = do_ssh(host1, cmd, run_as_root=False)
     if err:
         RegLib.test_log(0, "Error on client")
         test_fail = 1
 
     cmd = "pkill qperf"
-    err = do_ssh(host2, "pkill qperf")
+    err = do_ssh(host2, "pkill qperf", run_as_root=False)
     (pid, status) = os.waitpid(child_pid, 0)
 
     for line in out:

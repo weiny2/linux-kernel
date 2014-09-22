@@ -30,7 +30,7 @@ def snoop_enabled():
         RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
         snoop_on = 0
         cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-        (res,output) = host.send_ssh(cmd)
+        (res,output) = host.send_ssh(cmd,run_as_root=True)
         if res:
             RegLib.test_fail("Could not get status for host %s" %
                              host.get_name())
@@ -51,7 +51,7 @@ def start_pcap(host, lid1, lid2):
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting Pcap.py on %s" % host.get_name())
-        (res, output) = host.send_ssh(test_path, 1)
+        (res, output) = host.send_ssh(test_path, 1, run_as_root=True)
         ping = 0;
         pong = 0;
         for line in output:
@@ -130,11 +130,11 @@ def main():
 
     RegLib.test_log(0, "Killing off Pcap")
     cmd = "killall -2 PcapLocal.py"
-    status = host1.send_ssh(cmd, 0)
+    status = host1.send_ssh(cmd, 0, run_as_root=True)
     if status:
         RegLib.test_fail("Could not stop Pcap on remote")
 
-    status = host2.send_ssh(cmd, 0)
+    status = host2.send_ssh(cmd, 0, run_as_root=True)
     if status:
         RegLib.test_fail("Could not stop Pcap on remote")
 

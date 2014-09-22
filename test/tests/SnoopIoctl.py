@@ -17,7 +17,7 @@ def snoop_enabled(hosts):
         RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
         snoop_on = 0
         cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-        (res,output) = host.send_ssh(cmd)
+        (res,output) = host.send_ssh(cmd, run_as_root=True)
         if res:
             RegLib.test_fail("Could not get status for host %s" %
                              host.get_name())
@@ -51,20 +51,20 @@ def main():
     if snoop_enabled([host1, host2]):
         RegLib.test_log(0, "Making sure fm is stopped")
         cmd = "service ifs_fm stop"
-        ret = host1.send_ssh(cmd, 0)
+        ret = host1.send_ssh(cmd, 0, run_as_root=True)
         restart_fm = 1
     else:
         RegLib.test_log(0, "Loading module with snoop on making sure no SM running")
         os.system(directory + "/LoadModule.py --nodelist=\"" + hosts + "\" --modparm \"" + snoop_parms + "\" --sm none")
 
-    ret = host1.send_ssh(path, 0)
+    ret = host1.send_ssh(path, 0, run_as_root=True)
     if ret:
         RegLib.test_fail("IOCTL test failed")
 
     if restart_fm:
         cmd = "service ifs_fm start"
         RegLib.test_log(0, "Restarting ifs_fm")
-        ret = host1.send_ssh(cmd, 0)
+        ret = host1.send_ssh(cmd, 0, run_as_root=True)
 
     RegLib.test_pass("Success!")
 

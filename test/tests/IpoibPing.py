@@ -11,9 +11,9 @@ import re
 import os
 import time
 
-def do_ssh(host, cmd):
+def do_ssh(host, cmd, run_as_root=True):
     RegLib.test_log(5, "Running " + cmd)
-    return (host.send_ssh(cmd))
+    return (host.send_ssh(cmd, run_as_root=run_as_root))
 
 def main():
 
@@ -57,7 +57,7 @@ def main():
     test_fail = 0
     # Run ping from host 1
     cmd = "ping -c 5 -W 10 " + host2.get_name() + "-ib"
-    (err, out) = do_ssh(host1, cmd)
+    (err, out) = do_ssh(host1, cmd, run_as_root=False)
     if err:
         test_fail = 1
         RegLib.test_log(0, "Child SSH exit status bad")

@@ -58,7 +58,7 @@ def snoop_enabled(host):
     RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
     snoop_on = 0
     cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-    (res,output) = host.send_ssh(cmd)
+    (res,output) = host.send_ssh(cmd, run_as_root=True)
     if res:
         RegLib.test_log(0, "SSH failed")
         return False
@@ -80,7 +80,7 @@ def snoop_drop_send_enabled(host):
     RegLib.test_log(0, "Checking snoop_drop_send enablement for %s" % host.get_name())
     snoop_on = 0
     cmd = "echo snoop_drop_send = `cat /sys/module/hfi/parameters/snoop_drop_send`"
-    (res,output) = host.send_ssh(cmd)
+    (res,output) = host.send_ssh(cmd, run_as_root=True)
     if res:
         RegLib.test_log(0, "SSH failed")
         return False
@@ -107,7 +107,7 @@ def snoop_do_not_intercept_outgoing(host, lid1, lid2):
     if pid == 0:
         RegLib.test_log(0, "Starting SnoopLocal.py on %s" % host.get_name())
         print "Cmd", cmd
-        (res, output) = host.send_ssh(cmd, 1)
+        (res, output) = host.send_ssh(cmd, 1, run_as_root=True)
         ping = 0;
         pong = 0;
         for line in output:
@@ -150,7 +150,7 @@ def snoop_intercept_outgoing(host, lid1, lid2):
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting SnoopLocal.py on %s" % host.get_name())
-        (res, output) = host.send_ssh(cmd, 1)
+        (res, output) = host.send_ssh(cmd, 1, run_as_root=True)
         ping = 0;
         pong = 0;
         for line in output:
@@ -191,7 +191,7 @@ def snoop_intercept_outgoing_2(host, lid1, lid2):
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting SnoopLocal.py on %s" % host.get_name())
-        (res, output) = host.send_ssh(cmd, 1)
+        (res, output) = host.send_ssh(cmd, 1, run_as_root=True)
         ping = 0;
         pong = 0;
         for line in output:
@@ -234,7 +234,7 @@ def snoop_intercept_outgoing_3(host,lid1, lid2):
     if pid == 0:
         RegLib.test_log(0, "Starting SnoopLocal.py on %s" % host.get_name())
         print "CMD:", cmd
-        (res, output) = host.send_ssh(cmd, 1)
+        (res, output) = host.send_ssh(cmd, 1, run_as_root=True)
         ping = 0;
         pong = 0;
         for line in output:
@@ -273,7 +273,7 @@ def capture_do_not_intercept_outgoing(host, lid1, lid2):
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting PcapLocal.py on %s" % host.get_name())
-        (res, output) = host.send_ssh(capture_path, 1)
+        (res, output) = host.send_ssh(capture_path, 1, run_as_root=True)
         ping = 0;
         pong = 0;
         for line in output:
@@ -312,7 +312,7 @@ def capture_do_not_intercept_outgoing_2(host, lid1, lid2):
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting PcapLocal.py on %s" % host.get_name())
-        (res, output) = host.send_ssh(capture_path, 1)
+        (res, output) = host.send_ssh(capture_path, 1, run_as_root=True)
         ping = 0
         pong = 0
         foreign_lid = 0
@@ -369,13 +369,13 @@ def run_ib_send_lat():
 
     RegLib.test_log(0, "Killing off Snoop")
     cmd = "killall -2 SnoopLocal.py"
-    status = host1.send_ssh(cmd, 0)
+    status = host1.send_ssh(cmd, 0, run_as_root=True)
     if status:
         error("Could not stop Snoop on remote")
 
     RegLib.test_log(0, "Killing off Pcap")
     cmd = "killall -2 PcapLocal.py"
-    status = host2.send_ssh(cmd, 0)
+    status = host2.send_ssh(cmd, 0, run_as_root=True)
     if status:
         error("Could not stop Pcap on remote")
 
@@ -404,24 +404,24 @@ def run_ib_send_lat_2():
 
     RegLib.test_log(0, "Killing off IbSendLat")
     cmd = "killall -9 ib_send_lat"
-    status = host1.send_ssh(cmd, 0)
+    status = host1.send_ssh(cmd, 0, run_as_root=False)
     if status:
         RegLib.test_log(5,"Could not stop ib_send_lat on 1")
 
     cmd = "killall -9 ib_send_lat"
-    status = host2.send_ssh(cmd, 0)
+    status = host2.send_ssh(cmd, 0, run_as_root=False)
     if status:
         RegLib.test_log(5,"Could not stop ib_send_lat on 2")
 
     RegLib.test_log(0, "Killing off Snoop")
     cmd = "killall -2 SnoopLocal.py"
-    status = host1.send_ssh(cmd, 0)
+    status = host1.send_ssh(cmd, 0, run_as_root=True)
     if status:
         error("Could not stop Snoop on remote")
 
     RegLib.test_log(0, "Killing off Pcap")
     cmd = "killall -2 PcapLocal.py"
-    status = host2.send_ssh(cmd, 0)
+    status = host2.send_ssh(cmd, 0, run_as_root=True)
     if status:
         error("Could not stop Pcap on remote")
 
@@ -436,7 +436,7 @@ def capture_bypass(host):
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting PcapLocal.py on %s" % host.get_name())
-        (res, output) = host.send_ssh(capture_path, 1)
+        (res, output) = host.send_ssh(capture_path, 1, run_as_root=True)
         for line in output:
             # SLID and DLID are wonky because the bypass packets are in big endian mode
             # we can use the known values here to find them because normally SLID/DLID are
@@ -461,7 +461,7 @@ def capture_bypass(host):
 def stop_pcap(host):
     RegLib.test_log(0, "Killing off Pcap")
     cmd = "killall -2 PcapLocal.py"
-    status = host.send_ssh(cmd, 0)
+    status = host.send_ssh(cmd, 0, run_as_root=True)
     if status:
         error("Could not stop Pcap on remote")
 
@@ -473,7 +473,7 @@ def send_bypass(host, lid, diag_path, pkt_dir):
     cmd = cmd_pattern % (diag_path, lid, count, pkt_dir, "bypass10")
     RegLib.test_log(0, "Going to run %s" % cmd)
 
-    status = host.send_ssh(cmd, 0)
+    status = host.send_ssh(cmd, 0, run_as_root=True)
     if status:
         error("Could not send bypass packets")
 
