@@ -142,6 +142,15 @@ void btrfs_inherit_iflags(struct inode *inode, struct inode *dir)
 
 	flags = BTRFS_I(dir)->flags;
 
+	/*
+	 * This should not happen, but just in case
+	 */
+	if (!allow_unsupported && (flags & BTRFS_INODE_COMPRESS)) {
+		printk_once(KERN_WARNING
+			"btrfs: detected directory with compression bit set, not inherited, load module with allow_unsupported=1\n");
+		flags &= ~BTRFS_INODE_COMPRESS;
+	}
+
 	if (flags & BTRFS_INODE_NOCOMPRESS) {
 		BTRFS_I(inode)->flags &= ~BTRFS_INODE_COMPRESS;
 		BTRFS_I(inode)->flags |= BTRFS_INODE_NOCOMPRESS;
@@ -204,6 +213,12 @@ static int btrfs_ioctl_setflags(struct file *file, void __user *arg)
 
 	if (copy_from_user(&flags, arg, sizeof(flags)))
 		return -EFAULT;
+
+	if (!allow_unsupported && (flags & FS_COMPR_FL)) {
+		printk_ratelimited(KERN_WARNING
+			"btrfs: IOC_SETFLAGS: enabling compression is not supported, load module with allow_unsupported=1\n");
+		return -EOPNOTSUPP;
+	}
 
 	ret = check_flags(flags);
 	if (ret)
