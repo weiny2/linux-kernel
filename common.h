@@ -629,7 +629,6 @@ struct hfi_pio_hdr {
 #define QIB_BECN_SHIFT 30
 #define QIB_BECN_MASK 0x1
 #define QIB_MULTICAST_LID_BASE 0xC000
-#define QIB_MULTICAST_QPN 0xFFFFFF
 
 static inline __u64 rhf_to_cpu(const __le32 *rbuf)
 {

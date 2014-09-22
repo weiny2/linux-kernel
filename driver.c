@@ -258,12 +258,6 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		if (tlen < 24)
 			goto drop;
 
-		if (lid < QIB_MULTICAST_LID_BASE) {
-			lid &= ~((1 << ppd->lmc) - 1);
-			if (unlikely(lid != ppd->lid))
-				goto drop;
-		}
-
 		/* Check for GRH */
 		if (lnh == QIB_LRH_BTH)
 			ohdr = &hdr->u.oth;
@@ -286,7 +280,8 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 
 		/* Get the destination QP number. */
 		qp_num = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
-		if (qp_num != QIB_MULTICAST_QPN) {
+		if ((lid >= QIB_MULTICAST_LID_BASE) &&
+		    (lid != QIB_PERMISSIVE_LID)) {
 			int ruc_res;
 			qp = qib_lookup_qpn(ibp, qp_num);
 			if (!qp)

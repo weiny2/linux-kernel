@@ -3968,28 +3968,21 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	u64 sreg = 0;
 	struct hfi_devdata *dd = ppd->dd;
 	u32 mask = ~((1U << ppd->lmc) - 1);
+	u32 dcmask = mask; /* TODO: Remove when rid of the version check */
 	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
 
 	/*
-	 * TODO Use the correct value here for LMC this is setting number of
-	 * bits not the maks as it should be
+	 * TODO: Remove once everyone is beyond version 46 of the sim
 	 */
-#ifdef DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK
-/* TODO HAS 0.76 - field names changed, same meaning */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev <= 0x2E)
+		dcmask = 0;
+
 	c1 &= ~(DCC_CFG_PORT_CONFIG1_TARGET_DLID_SMASK
 		| DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK);
 	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_TARGET_DLID_MASK)
 			<< DCC_CFG_PORT_CONFIG1_TARGET_DLID_SHIFT)|
-	      ((ppd->lmc & DCC_CFG_PORT_CONFIG1_DLID_MASK_MASK)
+	      ((dcmask & DCC_CFG_PORT_CONFIG1_DLID_MASK_MASK)
 			<< DCC_CFG_PORT_CONFIG1_DLID_MASK_SHIFT);
-#else
-	c1 &= ~(DCC_CFG_PORT_CONFIG1_LID_SMASK|
-	       DCC_CFG_PORT_CONFIG1_LMC_SMASK);
-	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_LID_MASK)
-			<< DCC_CFG_PORT_CONFIG1_LID_SHIFT)|
-	      ((ppd->lmc & DCC_CFG_PORT_CONFIG1_LMC_MASK)
-			<< DCC_CFG_PORT_CONFIG1_LMC_SHIFT);
-#endif
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
 
 	/*

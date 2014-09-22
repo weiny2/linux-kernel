@@ -373,13 +373,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 	else
 		bth0 |= qib_get_pkey(ibp, qp->s_pkey_index);
 	ohdr->bth[0] = cpu_to_be32(bth0);
-	/*
-	 * Use the multicast QP if the destination LID is a multicast LID.
-	 */
-	ohdr->bth[1] = ah_attr->dlid >= QIB_MULTICAST_LID_BASE &&
-		ah_attr->dlid != QIB_PERMISSIVE_LID ?
-		cpu_to_be32(QIB_MULTICAST_QPN) :
-		cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
+	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
 	ohdr->bth[2] = cpu_to_be32(qp->s_next_psn++ & QIB_PSN_MASK);
 	/*
 	 * Qkeys with the high order bit set mean use the

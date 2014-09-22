@@ -643,11 +643,6 @@ void qib_ib_rcv(struct hfi_packet *packet)
 
 	/* Check for a valid destination LID (see ch. 7.11.1). */
 	lid = be16_to_cpu(hdr->lrh[1]);
-	if (lid < QIB_MULTICAST_LID_BASE) {
-		lid &= ~((1 << ppd->lmc) - 1);
-		if (unlikely(lid != ppd->lid))
-			goto drop;
-	}
 
 	/* Check for GRH */
 	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
@@ -675,7 +670,8 @@ void qib_ib_rcv(struct hfi_packet *packet)
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
-	if (qp_num == QIB_MULTICAST_QPN) {
+	if ((lid >= QIB_MULTICAST_LID_BASE) &&
+	    (lid != QIB_PERMISSIVE_LID)) {
 		struct qib_mcast *mcast;
 		struct qib_mcast_qp *p;
 
