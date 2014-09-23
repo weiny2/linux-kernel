@@ -16,7 +16,7 @@ def snoop_enabled(host):
     RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
     snoop_on = 0
     cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-    (res,output) = host.send_ssh(cmd)
+    (res,output) = host.send_ssh(cmd, run_as_root=True)
     if res:
         RegLib.test_log(0, "SSH failed")
         return False
@@ -44,21 +44,21 @@ def start_pcap(host, cmd):
     RegLib.test_log(0, "Starting pcap process [%s] on %s" % (cmd, host.get_name())) 
     pid = os.fork()
     if pid == 0:
-        sys.exit(host.send_ssh(cmd, False))  
+        sys.exit(host.send_ssh(cmd, False, run_as_root=True))  
     return pid
 
 def kill_pcap(host1, host2):
     cmd = "killall -2 PcapLocal.py"
-    ret = host1.send_ssh(cmd, False)
+    ret = host1.send_ssh(cmd, False, run_as_root=True)
     if ret:
         RegLib.test_log(0, "WARNING: Coudld not stop PcapLocal")
-    ret = host2.send_ssh(cmd, False)
+    ret = host2.send_ssh(cmd, False, run_as_root=True)
     if ret:
         RegLib.test_log(0, "WARNING: Coudld not stop PcapLocal")
 
 def is_sm_active(host, sm):
     cmd = "/sbin/service %s status" % sm
-    ret = host.send_ssh(cmd, 0)
+    ret = host.send_ssh(cmd, 0, run_as_root=True)
     if ret != 0:
         RegLib.test_log(0, "%s is not running" % sm)
     else:
@@ -114,7 +114,7 @@ def main():
     
     RegLib.test_log(0, "Waiting 5 seconds for Pcap procs to get started")
     time.sleep(5)
-    ret = ifs_fm_host.send_ssh("service ifs_fm sweep", False)
+    ret = ifs_fm_host.send_ssh("service ifs_fm sweep", False, run_as_root=True)
     if ret:
         kill_pcap(host1, host2)
         RegLib.test_fail("Could not sweep fabric")
@@ -139,11 +139,11 @@ def main():
     # can deal with it later by inspecing and looking for only packets
     # that we care about
 
-    (ret, checksums1) = host1.send_ssh("grep MD5 /tmp/snoop_integ.log", True)
+    (ret, checksums1) = host1.send_ssh("grep MD5 /tmp/snoop_integ.log", True, run_as_root=True)
     if ret:
         RegLib.test_fail("Could not retrieve checksums for host1")
 
-    (ret, checksums2) = host1.send_ssh("grep MD5 /tmp/snoop_integ.log", True)
+    (ret, checksums2) = host1.send_ssh("grep MD5 /tmp/snoop_integ.log", True, run_as_root=True)
     if ret:
         RegLib.test_fail("Could not retrieve checksums for host2")
 

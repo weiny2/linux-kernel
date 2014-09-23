@@ -25,7 +25,7 @@ def snoop_enabled(hosts):
         RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
         snoop_on = 0
         cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-        (res,output) = host.send_ssh(cmd)
+        (res,output) = host.send_ssh(cmd, run_as_root=True)
         if res:
             RegLib.test_fail("Could not get status for host %s" %
                              host.get_name())
@@ -48,7 +48,7 @@ def run_filter_test(host1, host2, path, filter):
         # Run the client
         cmd = cmd + "client\""
         RegLib.test_log(0,"Running: %s" % cmd)
-        (ret, output) = host2.send_ssh(cmd)
+        (ret, output) = host2.send_ssh(cmd, run_as_root=True)
         for line in output:
             print RegLib.chomp(line)
         sys.exit(ret)
@@ -59,7 +59,7 @@ def run_filter_test(host1, host2, path, filter):
     # Run the server
     cmd = cmd + "server\""
     RegLib.test_log(0, "Running: %s" % cmd)
-    (ret, output) = host1.send_ssh(cmd)
+    (ret, output) = host1.send_ssh(cmd, run_as_root=True)
 
     # Now wait for client to get done. It may hang and if so that is a test
     # failure.
@@ -78,7 +78,7 @@ def run_filter_test(host1, host2, path, filter):
         RegLib.test_log(0, "Client done and returned success")
         break
 
-    if attempts == 30:
+    if attempts > 30:
         RegLib.test_fail("Client proc never finished")
 
     if ret:

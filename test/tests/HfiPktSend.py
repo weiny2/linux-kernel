@@ -14,7 +14,7 @@ import time
 
 def do_ssh(host, cmd):
     RegLib.test_log(5, "Running " + cmd)
-    return (host.send_ssh(cmd, 0))
+    return (host.send_ssh(cmd, 0, run_as_root=True))
 
 def do_pkt_send(diag_path, host, packet_file, dest_lid = None, dest_ctxt = 1, count = 1, use_diagpkt = False, psm_libs = None):
     RegLib.test_log(0, "Starting hfi_pkt_send test with packet file %s" % packet_file)

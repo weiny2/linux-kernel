@@ -209,11 +209,12 @@ def parse_packet(packet, has_metadata=False):
 class HostInfo:
     """Holds information on a host under test"""
 
-    def __init__(self, name, dns_name, port, opts):
+    def __init__(self, name, dns_name, port, opts, force_root):
         self.name = name
         self.dns_name = dns_name
         self.port = port
         self.opts = opts
+        self.force_root = force_root
 
     def __repr__(self):
         return "Name: %s DNS: %s Port %s Opts: %s" % (self.name,
@@ -251,7 +252,7 @@ class HostInfo:
             time.sleep(timeout)
         return False #if we get to here it is an error
 
-    def send_ssh(self, cmd, buffered=1, timeout=0):
+    def send_ssh(self, cmd, buffered=1, timeout=0, run_as_root=False):
         """ Send an SSH command. We may need to add a timeout mechanism
             buffered mode will save output and return it. Non buffered mode
             will display the output on the screen and only return a status.
@@ -286,7 +287,15 @@ class HostInfo:
             opts = opts.replace("SIMICS_KEY_FILE", key_file.name)
 
         # Build up the command line and parse it into tokens using shlex
-        cmdline = "ssh -l root " + self.dns_name + " "
+        if self.force_root == True:
+            run_as_root = True
+
+        cmdline = ""
+        if run_as_root == True:
+            cmdline = "ssh -l root " + self.dns_name + " "
+        else:
+            cmdline = "ssh " + self.dns_name + " "
+
         cmdline = cmdline + " -p " + self.port
         cmdline = cmdline + " " + opts + " " + cmd;
         test_log(10, "Command line is " + cmdline)
@@ -445,6 +454,8 @@ class TestInfo:
         parser.add_option("--psmopts", dest="psm_opts",
                           help="String of options to pass to PSM tests.",
                           default="-x PSM_SDMA=0 -x PSM_TID=0")
+        parser.add_option("--forceroot", action="store_true", dest="force_root",
+                          help="Force all commands to run as root.")
 
         (options, args) = parser.parse_args()
 
@@ -452,9 +463,15 @@ class TestInfo:
         self.simics = options.simics
         if self.simics == None:
             self.simics = False
+        else:
+            self.force_root = True
 
         if options.mpiverbs:
             self.mpiverbs = True
+
+        self.force_root = options.force_root
+        if self.force_root == None:
+            self.force_root = False;
 
         # Listing?
         self.list_only = options.list_only
@@ -484,16 +501,16 @@ class TestInfo:
                     iopts = "-i SIMICS_KEY_FILE"
                     if node == "viper0":
                         host = HostInfo(node, "localhost", "4022", oopts + " " +
-                                        iopts)
+                                        iopts, True)
                     elif node == "viper1":
                         host = HostInfo(node, "localhost", "5022", oopts + " " +
-                                        iopts)
+                                        iopts, True)
                     elif node == "localhost":
-                        host = HostInfo(node, node, "22", oopts)
+                        host = HostInfo(node, node, "22", oopts, True)
                     else:
                         test_fail("Simics specified but did not find vipers")
                 else:
-                    host = HostInfo(node, node, "22", oopts)
+                    host = HostInfo(node, node, "22", oopts, self.force_root)
 
                 self.nodelist.append(host)
 
