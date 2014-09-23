@@ -61,7 +61,7 @@
 #define SDMA_MAP_SINGLE        1
 #define SDMA_MAP_PAGE          2
 
-#define SDMA_AHG_VALUE_MASK          0xff
+#define SDMA_AHG_VALUE_MASK          0xffff
 #define SDMA_AHG_VALUE_SHIFT         0
 #define SDMA_AHG_INDEX_MASK          0xf
 #define SDMA_AHG_INDEX_SHIFT         16
@@ -478,6 +478,7 @@ static inline int sdma_running(struct sdma_engine *engine)
  * @ahg_entry: ahg entry to use  (0 - 31)
  * @num_ahg: ahg descriptor for first descriptor (0 - 9)
  * @ahg: array of AHG descriptors (up to 9 entries)
+ * @ahg_hlen: number of bytes from ASIC entry to use
  * @cb: callback
  *
  * The allocation of the sdma_txreq and it enclosing structure is user
@@ -514,6 +515,12 @@ static inline int sdma_running(struct sdma_engine *engine)
  * will pad with a descriptor references 1 - 3 bytes when the number of bytes
  * specified in tlen have been supplied to the sdma_txreq.
  *
+ * ahg_hlen is used to determine the number of onchip entry bytes to
+ * use as the header.   This is for cases where the stored header is
+ * larger than the header to be used in a packet.  This is typical
+ * for verbs where an RDMA_WRITE_FIRST is larger than the packet in
+ * and RDMA_WRITE_MIDDLE.
+ *
  */
 static inline void sdma_txinit_ahg(
 	struct sdma_txreq *tx,
@@ -522,6 +529,7 @@ static inline void sdma_txinit_ahg(
 	u8 ahg_entry,
 	u8 num_ahg,
 	u32 *ahg,
+	u8 ahg_hlen,
 	void (*cb)(struct sdma_txreq *, int, int))
 {
 	tx->desc_limit = ARRAY_SIZE(tx->descs);
@@ -573,7 +581,7 @@ static inline void sdma_txinit(
 	u16 tlen,
 	void (*cb)(struct sdma_txreq *, int, int))
 {
-	sdma_txinit_ahg(tx, flags, tlen, 0, 0, NULL, cb);
+	sdma_txinit_ahg(tx, flags, tlen, 0, 0, NULL, 0, cb);
 }
 
 /* helpers - don't use */

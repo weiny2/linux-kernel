@@ -885,7 +885,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				sdma_txinit_ahg(&tx->txreq,
 						SDMA_TXREQ_F_AHG_COPY,
 						sizeof(req->hdr) + datalen,
-						req->ahg_idx, 0, NULL,
+						req->ahg_idx, 0, NULL, 0,
 						user_sdma_txreq_cb);
 			else {
 				int changes = 0;
@@ -898,6 +898,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 						sizeof(req->hdr) + datalen,
 						req->ahg_idx, changes,
 						req->ahg,
+						sizeof(req->hdr),
 						user_sdma_txreq_cb);
 			}
 		} else {
