@@ -452,14 +452,8 @@ static umode_t ibft_check_nic_for(void *data, int type)
 			rc = S_IRUGO;
 		break;
 	case ISCSI_BOOT_ETH_PREFIX_LEN:
-		if (nic->subnet_mask_prefix)
-			rc = S_IRUGO;
-		break;
 	case ISCSI_BOOT_ETH_SUBNET_MASK:
-		if (!memcmp(nic->ip_addr, nulls, 10) &&
-		    (nic->ip_addr[10] == 0xff) &&
-		    (nic->ip_addr[11] == 0xff) &&
-		    nic->subnet_mask_prefix)
+		if (nic->subnet_mask_prefix)
 			rc = S_IRUGO;
 		break;
 	case ISCSI_BOOT_ETH_ORIGIN:
