@@ -457,13 +457,24 @@ struct cc_table_shadow {
 #include <rdma/stl_port_info.h>
 
 /* attribute modifier macros */
-#define STL_AM_NPORT_SHIFT	(24)
-#define STL_AM_NPORT_SMASK	(0xff000000)
-#define STL_AM_NPORT(am)	((am & STL_AM_NPORT_SMASK) >> \
+#define STL_AM_NPORT_SHIFT	24
+#define STL_AM_NPORT_SMASK	0xff000000
+#define STL_AM_NPORT(am)	(((am) & STL_AM_NPORT_SMASK) >> \
 					STL_AM_NPORT_SHIFT)
-#define STL_AM_ASYNC_SHIFT	(12)
-#define STL_AM_ASYNC_SMASK	(0x00001000)
-#define STL_AM_ASYNC(am)	((am & STL_AM_ASYNC_SMASK) >> \
+
+#define STL_AM_NBLK_SHIFT	24
+#define STL_AM_NBLK_SMASK	0xff000000
+#define STL_AM_NBLK(am)		(((am) & STL_AM_NBLK_SMASK) >> \
+					STL_AM_NBLK_SHIFT)
+
+#define STL_AM_START_BLK_SHIFT	0
+#define STL_AM_START_BLK_SMASK	0xff
+#define STL_AM_START_BLK(am)	(((am) & STL_AM_START_BLK_SMASK) >> \
+					STL_AM_START_BLK_SHIFT)
+
+#define STL_AM_ASYNC_SHIFT	12
+#define STL_AM_ASYNC_SMASK	0x00001000
+#define STL_AM_ASYNC(am)	(((am) & STL_AM_ASYNC_SMASK) >> \
 					STL_AM_ASYNC_SHIFT)
 
 /* error info macros */

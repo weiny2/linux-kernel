@@ -62,21 +62,6 @@ static int reply(void *arg)
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
 }
 
-static int reply_failure(void *arg)
-{
-	/* XXX change all callers so that they all pass a
-	 * struct ib_mad_hdr * */
-	struct ib_mad_hdr *smp = (struct ib_mad_hdr *)arg;
-	/*
-	 * The verbs framework will handle the directed/LID route
-	 * packet changes.
-	 */
-	smp->method = IB_MGMT_METHOD_GET_RESP;
-	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
-		smp->status |= IB_SMP_DIRECTION;
-	return IB_MAD_RESULT_FAILURE | IB_MAD_RESULT_REPLY;
-}
-
 static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 {
 	struct ib_mad_send_buf *send_buf;
@@ -2768,55 +2753,46 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 				   struct ib_device *ibdev, u8 port,
 				   u32 *resp_len)
 {
-	struct ib_cc_table_attr *p =
+	struct ib_cc_table_attr *cc_table_attr =
 		(struct ib_cc_table_attr *) data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	u32 cct_block_index = am & 0xff;
-	u32 n_blocks_req = (am & 0xff000000) >> 24;
-	u32 max_cct_block;
-	u32 cct_entry;
+	u32 start_block = STL_AM_START_BLK(am);
+	u32 n_blocks = STL_AM_NBLK(am);
 	struct ib_cc_table_entry_shadow *entries;
-	int i;
+	int i, j;
+	u32 sentry, eentry;
 
-	memset(p, 0, sizeof(*p));
-
-	if (cct_block_index > ppd->cc_max_table_entries) {
-		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply_failure(smp);
-	}
+	memset(cc_table_attr, 0, sizeof(*cc_table_attr));
 
 	if (!cca_initialized(ppd))
 		return reply(smp);
 
-	spin_lock(&ppd->cc_shadow_lock);
-
-	max_cct_block =
-		(ppd->ccti_entries_shadow->ccti_last_entry + 1)/IB_CCT_ENTRIES;
-	max_cct_block = max_cct_block ? max_cct_block - 1 : 0;
-
-	if (cct_block_index + n_blocks_req - 1 > max_cct_block) {
+	/* sanity check n_blocks, start_block */
+	if (n_blocks == 0 ||
+	    start_block + n_blocks > ppd->cc_max_table_entries) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		spin_unlock(&ppd->cc_shadow_lock);
-		return reply_failure(smp);
+		return reply(smp);
 	}
 
-	cct_entry = IB_CCT_ENTRIES * n_blocks_req;
+	spin_lock(&ppd->cc_shadow_lock);
 
-	cct_entry--;
+	sentry = start_block * IB_CCT_ENTRIES;
+	eentry = sentry + (IB_CCT_ENTRIES * n_blocks) - 1;
 
-	p->ccti_limit = cpu_to_be16(cct_entry);
+	cc_table_attr->ccti_limit = cpu_to_be16(ppd->ccti_limit);
 
-	entries = &ppd->ccti_entries_shadow->
-		entries[IB_CCT_ENTRIES * cct_block_index];
+	entries = ppd->ccti_entries_shadow->entries;
 
-	for (i = 0; i <= cct_entry; i++)
-		p->ccti_entries[i].entry = cpu_to_be16(entries[i].entry);
+	/* return n_blocks, though the last block may not be full */
+	for (j = 0, i = sentry; i <= eentry; j++, i++)
+		cc_table_attr->ccti_entries[j].entry =
+			cpu_to_be16(entries[i].entry);
 
 	spin_unlock(&ppd->cc_shadow_lock);
 
 	if (resp_len)
-		*resp_len += sizeof(u16)*(IB_CCT_ENTRIES * n_blocks_req + 1);
+		*resp_len += sizeof(u16)*(IB_CCT_ENTRIES * n_blocks + 1);
 
 	return reply(smp);
 }
@@ -2828,57 +2804,54 @@ static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	struct ib_cc_table_attr *p = (struct ib_cc_table_attr *) data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	u32 cct_block_index = am & 0xff;
-	u32 n_blocks_req = (am & 0xff000000) >> 24;
-	u32 cct_entry;
+	u32 start_block = STL_AM_START_BLK(am);
+	u32 n_blocks = STL_AM_NBLK(am);
 	struct ib_cc_table_entry_shadow *entries;
-	int i;
-
-	/* Is the table index more than what is supported? */
-	if (cct_block_index > ppd->cc_max_table_entries)
-		goto bail;
+	int i, j;
+	u32 sentry, eentry;
+	u16 ccti_limit;
 
 	if (!cca_initialized(ppd))
+		goto getit;
+
+	/* sanity check n_blocks, start_block */
+	if (n_blocks == 0 ||
+	    start_block + n_blocks > ppd->cc_max_table_entries) {
+		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
+	}
 
-	/* If this packet is the first in the sequence then
-	 * zero the total table entry count.
-	 */
-	if (be16_to_cpu(p->ccti_limit) < IB_CCT_ENTRIES)
-		ppd->total_cct_entry = 0;
+	sentry = start_block * IB_CCT_ENTRIES;
+	eentry = sentry + ((n_blocks - 1) * IB_CCT_ENTRIES) +
+		 (be16_to_cpu(p->ccti_limit)) % IB_CCT_ENTRIES;
 
-	cct_entry = ((n_blocks_req - 1) * IB_CCT_ENTRIES) +
-		    (be16_to_cpu(p->ccti_limit))%IB_CCT_ENTRIES;
+	/* sanity check ccti_limit */
+	ccti_limit = be16_to_cpu(p->ccti_limit);
+	if (ccti_limit > eentry) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
 
-	if (ppd->total_cct_entry + (cct_entry + 1) >
-	    ppd->cc_supported_table_entries)
-		goto bail;
+	ppd->ccti_limit = ccti_limit;
 
-	ppd->total_cct_entry += (cct_entry + 1);
+	entries = ppd->ccti_entries;
 
-	ppd->ccti_limit = be16_to_cpu(p->ccti_limit);
-
-	entries = ppd->ccti_entries + (IB_CCT_ENTRIES * cct_block_index);
-
-	for (i = 0; i <= cct_entry; i++)
-		entries[i].entry = be16_to_cpu(p->ccti_entries[i].entry);
+	for (j = 0, i = sentry; i <= eentry; j++, i++)
+		entries[i].entry = be16_to_cpu(p->ccti_entries[j].entry);
 
 	spin_lock(&ppd->cc_shadow_lock);
 
-	ppd->ccti_entries_shadow->ccti_last_entry = ppd->total_cct_entry - 1;
-	memcpy(ppd->ccti_entries_shadow->entries, ppd->ccti_entries,
-	       (ppd->total_cct_entry * sizeof(struct ib_cc_table_entry)));
+	memcpy(ppd->ccti_entries_shadow->entries, entries,
+	       (eentry + 1) * sizeof(struct ib_cc_table_entry));
 
 	ppd->congestion_entries_shadow->port_control = IB_CC_CCS_PC_SL_BASED;
 	ppd->congestion_entries_shadow->control_map = ppd->cc_sl_control_map;
 	memcpy(ppd->congestion_entries_shadow->entries, ppd->congestion_entries,
-	       STL_MAX_SLS * sizeof(struct ib_cc_congestion_entry));
+	       STL_MAX_SLS * sizeof(struct stl_congestion_setting_entry));
 	spin_unlock(&ppd->cc_shadow_lock);
 
+getit:
 	return __subn_get_stl_cc_table(smp, am, data, ibdev, port, resp_len);
-
-bail:
-	return reply_failure(smp);
 }
 
 static int subn_get_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
