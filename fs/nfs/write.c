@@ -1458,15 +1458,18 @@ void nfs_writeback_done(struct rpc_task *task, struct nfs_write_data *data)
 
 static int _wait_bit_connected(struct rpc_clnt *cl)
 {
+	unsigned long *commit_start = current->journal_info;
+	unsigned long waited = jiffies - *commit_start;
+
 	if (fatal_signal_pending(current))
 		return -ERESTARTSYS;
 	if (!cl || rpc_is_foreign(cl)) {
 		/* it might not stay foreign forever */
-		freezable_schedule_timeout_unsafe(HZ);
+		if (waited >= HZ/2)
+			/* Too long, give up */
+			return -EAGAIN;
+		freezable_schedule_timeout_unsafe(HZ/2);
 	} else {
-		unsigned long *commit_start = current->journal_info;
-		unsigned long waited = jiffies - *commit_start;
-
 		/* we could block forever here ... */
 		if (waited >= HZ/10)
 			/* Too long, give up */
