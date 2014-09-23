@@ -2824,8 +2824,6 @@ static int add_waiting_dir_move(struct send_ctx *sctx, u64 ino)
 	return 0;
 }
 
-#ifdef CONFIG_BTRFS_ASSERT
-
 static int del_waiting_dir_move(struct send_ctx *sctx, u64 ino)
 {
 	struct rb_node *n = sctx->waiting_dir_moves.rb_node;
@@ -2845,8 +2843,6 @@ static int del_waiting_dir_move(struct send_ctx *sctx, u64 ino)
 	}
 	return -ENOENT;
 }
-
-#endif
 
 static int add_pending_dir_move(struct send_ctx *sctx, u64 parent_ino)
 {
@@ -2952,7 +2948,9 @@ static int apply_dir_move(struct send_ctx *sctx, struct pending_dir_move *pm)
 	}
 
 	sctx->send_progress = sctx->cur_ino + 1;
-	ASSERT(del_waiting_dir_move(sctx, pm->ino) == 0);
+	ret = del_waiting_dir_move(sctx, pm->ino);
+	ASSERT(ret == 0);
+
 	ret = get_cur_path(sctx, pm->ino, pm->gen, to_path);
 	if (ret < 0)
 		goto out;
