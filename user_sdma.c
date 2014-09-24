@@ -112,6 +112,15 @@
 		dw = cpu_to_le32(dwval);				\
 	} while (0)
 
+#define AHG_HEADER_SET(arr, idx, dw, bit, width, value)			\
+	do {								\
+		if ((idx) < ARRAY_SIZE((arr)))				\
+			(arr)[(idx++)] = sdma_build_ahg_descriptor(	\
+				(value), (dw), (bit), (width));		\
+		else							\
+			return -ERANGE;					\
+	} while (0)
+
 /* KDETH OM multipliers and switch over point */
 #define KDETH_OM_SMALL     4
 #define KDETH_OM_LARGE     64
@@ -147,7 +156,6 @@ enum sdma_req_opcode {
 	EXPECTED
 };
 
-unsigned user_sdma_use_ahg = 0;
 unsigned initial_pkt_count = 8;
 
 #define SDMA_IOWAIT_TIMEOUT 1000 /* in milliseconds */
@@ -207,7 +215,7 @@ struct user_sdma_request {
 	 */
 	struct sdma_engine *sde;
 	u8 ahg_idx;
-	u32 ahg[10];
+	u32 ahg[9];
 	/*
 	 * KDETH.Offset (Eager) field
 	 * We need to remember the initial value so the headers
@@ -268,7 +276,7 @@ struct user_sdma_request {
 
 struct user_sdma_txreq {
 	/* Packet header for the txreq */
-	struct hfi_pio_hdr hdr ____cacheline_aligned_in_smp;
+	struct hfi_pio_hdr hdr;
 	struct list_head list;
 	struct sdma_txreq txreq;
 	struct user_sdma_request *req;
@@ -667,12 +675,15 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		goto free_req;
 	}
 
-	if (user_sdma_use_ahg) {
-		req->ahg_idx = sdma_ahg_alloc(req->sde);
-		if (req->ahg_idx < 0)
-			SDMA_DBG(req, "Failed to allocate AHG entry");
-		else
+	/* We don't need an AHG entry if the request contains only one packet */
+	if (req->info.npkts > 1) {
+		int ahg = sdma_ahg_alloc(req->sde);
+
+		if (likely(ahg >= 0)) {
+			req->ahg_idx = (u8)ahg;
 			set_bit(SDMA_REQ_HAVE_AHG, &req->flags);
+		} else
+			SDMA_DBG(req, "Failed to allocate AHG entry %d", ahg);
 	}
 
 	set_comp_state(req, QUEUED, 0);
@@ -903,24 +914,36 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 
 		if (test_bit(SDMA_REQ_HAVE_AHG, &req->flags)) {
 			tx->flags |= USER_SDMA_TXREQ_FLAGS_USE_AHG;
-			if (tx->flags & USER_SDMA_TXREQ_FLAGS_FIRST_PKT)
+			if (!req->txreqs_sent) {
+				/*
+				 * Copy the request header into the tx header
+				 * because the HW needs a cacheline-aligned
+				 * address.
+				 * This copy can be optimized out if the hdr
+				 * member of user_sdma_request were also
+				 * cachline aligned.
+				 */
+				memcpy(&tx->hdr, &req->hdr, sizeof(tx->hdr));
 				sdma_txinit_ahg(&tx->txreq,
 						SDMA_TXREQ_F_AHG_COPY,
-						sizeof(req->hdr) + datalen,
+						sizeof(tx->hdr) + datalen,
 						req->ahg_idx, 0, NULL, 0,
 						user_sdma_txreq_cb);
-			else {
-				int changes = 0;
+				ret = sdma_txadd_kvaddr(pq->dd, &tx->txreq,
+							&tx->hdr,
+							sizeof(tx->hdr));
+				if (ret)
+					goto free_tx;
+			} else {
+				int changes;
 				changes = set_txreq_header_ahg(req, tx,
 							       datalen);
 				if (changes < 0)
 					goto free_tx;
 				sdma_txinit_ahg(&tx->txreq,
 						SDMA_TXREQ_F_USE_AHG,
-						sizeof(req->hdr) + datalen,
-						req->ahg_idx, changes,
-						req->ahg,
-						sizeof(req->hdr),
+						datalen, req->ahg_idx, changes,
+						req->ahg, sizeof(req->hdr),
 						user_sdma_txreq_cb);
 			}
 		} else {
@@ -1018,8 +1041,17 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		 * outside of the loop.
 		 */
 		req->txreqs_sent++;
-		if (req->txreqs_sent == req->info.npkts)
+		if (req->txreqs_sent == req->info.npkts) {
 			set_bit(SDMA_REQ_SEND_DONE, &req->flags);
+			/*
+			 * The txreq has already been submitted to the HW queue
+			 * so we can free the AHG entry now. Corruption will not
+			 * happen due to the sequential manner in which
+			 * descriptors are processed.
+			 */
+			if (tx->flags & USER_SDMA_TXREQ_FLAGS_USE_AHG)
+				sdma_ahg_free(req->sde, req->ahg_idx);
+		}
 		list_add_tail(&tx->list, &req->txps);
 		spin_unlock_irqrestore(&tx->lock, flags);
 		npkts++;
@@ -1305,78 +1337,80 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 {
 	int diff = 0;
 	struct hfi_user_sdma_pkt_q *pq = req->pq;
-	u16 flags = tx->flags & ~(USER_SDMA_TXREQ_FLAGS_LAST_FRAG |
-				  USER_SDMA_TXREQ_FLAGS_USE_AHG);
-	struct hfi_pio_hdr *hdr = &tx->hdr;
-	u32 val32, lrhlen = ((sizeof(*hdr) - sizeof(hdr->pbc)) + 4 + len) >> 2;
+	struct hfi_pio_hdr *hdr = &req->hdr;
+	u16 pbclen = le16_to_cpu(hdr->pbc[0]);
+	u32 val32, lrhlen = (((sizeof(*hdr) - sizeof(hdr->pbc)) + 4 + len)
+			     >> 2) & 0xfff;
 
-	memcpy(hdr, &req->hdr, sizeof(*hdr));
-	if (unlikely(flags)) {
-		if (flags & USER_SDMA_TXREQ_FLAGS_FIRST_PKT) {
-			int ret;
-			ret = check_header_template(req, hdr, lrhlen, len);
-			if (ret)
-				return ret;
-		}
-		if (flags & (USER_SDMA_TXREQ_FLAGS_SECOND_PKT |
-			     USER_SDMA_TXREQ_FLAGS_THIRD_PKT |
-			     USER_SDMA_TXREQ_FLAGS_LAST_PKT)) {
-			u16 pbclen = le16_to_cpu(hdr->pbc[0]);
-			if (((pbclen & 0xfff) - 1) != lrhlen) {
-				/* PBC.PbcLengthDWs */
-				req->ahg[diff++] = sdma_build_ahg_descriptor(
-					cpu_to_le16(lrhlen + 1) & 0xfff, 0, 0,
-					12);
-				/* LRH.PktLen */
-				req->ahg[diff++] = sdma_build_ahg_descriptor(
-					cpu_to_le16(lrhlen), 3, 4, 12);
-			}
-			/* BTH.A */
-			req->ahg[diff++] = sdma_build_ahg_descriptor(6, 0, 1,
-								     1);
-			/* KDETH.SH */
-			if (req_opcode(req->info.ctrl) == EXPECTED)
-				req->ahg[diff++] =
-					sdma_build_ahg_descriptor(7, 29, 1, 1);
-		}
+	if (((pbclen & 0xfff) - 1) != lrhlen) {
+		/* PBC.PbcLengthDWs */
+		AHG_HEADER_SET(req->ahg, diff, 0, 0, 12,
+			       cpu_to_le16(lrhlen + 1) & 0xfff);
+		/* LRH.PktLen (we need the full 16 bits due to byteswap) */
+		AHG_HEADER_SET(req->ahg, diff, 3, 0, 16,
+			       cpu_to_be16(lrhlen));
 	}
+
 	/*
 	 * Do the common updates
 	 */
-	/* BTH.PSN */
+	/* BTH.PSN and BTH.A */
 	val32 = (be32_to_cpu(hdr->bth[2]) + req->txreqs_sent) &
 		(extended_psn ? 0x7fffffff : 0xffffff);
-	req->ahg[diff++] = sdma_build_ahg_descriptor(cpu_to_be16(val32 &
-								 0xffff),
-						     6, 8, 16);
-	req->ahg[diff++] = sdma_build_ahg_descriptor(
-		cpu_to_be16((val32 >> 16) & (extended_psn ? 0x7fff : 0xff)),
-		6, 24, 8);
+	if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
+		val32 |= 1UL << 31;
+	AHG_HEADER_SET(req->ahg, diff, 6, 0, 16, cpu_to_be16(val32 >> 16));
+	AHG_HEADER_SET(req->ahg, diff, 6, 16, 16, cpu_to_be16(val32 & 0xffff));
 	/* KDETH.Offset */
-	req->ahg[diff++] = sdma_build_ahg_descriptor(
-		cpu_to_le16(req->koffset & 0xffff),
-		15, 0, 16);
-	req->ahg[diff++] = sdma_build_ahg_descriptor(
-		cpu_to_le16((req->koffset >> 16) & 0xffff), 15, 16, 16);
-
+	AHG_HEADER_SET(req->ahg, diff, 15, 0, 16,
+		       cpu_to_le16(req->koffset & 0xffff));
+	AHG_HEADER_SET(req->ahg, diff, 15, 16, 16,
+		       cpu_to_le16(req->koffset >> 16));
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u32 tidval;
+		u16 val;
 		if (req->tididx > req->n_tids - 1 ||
 		    !req->tids[req->tididx])
 			return -EINVAL;
 		tidval = req->tids[req->tididx];
-		/* TIDCtrl */
-		req->ahg[diff++] = sdma_build_ahg_descriptor(
-			cpu_to_le16(EXP_TID_GET(tidval, CTRL)), 7, 26, 2);
-		/* TIDIdx */
-		req->ahg[diff++] = sdma_build_ahg_descriptor(
-			cpu_to_le16(EXP_TID_GET(tidval, IDX)), 7, 16, 10);
-		/* Offset */
-		/* XXX (MITKO): Set the TID offset here */
+		/*
+		 * If the offset puts us at the end of the current TID,
+		 * advance everything.
+		 */
+		if ((req->tidoffset) == (EXP_TID_GET(tidval, LEN) *
+					 PAGE_SIZE)) {
+			req->tidoffset = 0;
+			/* Since we don't copy all the TIDs, all at once,
+			 * we have to check again. */
+			if (++req->tididx > req->n_tids - 1 ||
+			    !req->tids[req->tididx]) {
+				SDMA_DBG(req, "new tididx=%u, n_tids=%u, %#x",
+					 req->tididx, req->n_tids,
+					 req->tids[req->tididx]);
+				return -EINVAL;
+			}
+			tidval = req->tids[req->tididx];
+		}
+		req->omfactor = ((EXP_TID_GET(tidval, LEN) *
+				  PAGE_SIZE) >=
+				 KDETH_OM_MAX_SIZE) ? KDETH_OM_LARGE :
+			KDETH_OM_SMALL;
+		/* KDETH.OM and KDETH.OFFSET (TID) */
+		AHG_HEADER_SET(req->ahg, diff, 7, 0, 16,
+			       ((!!(req->omfactor - KDETH_OM_SMALL)) << 15 |
+				((req->tidoffset / req->omfactor) & 0x7fff)));
+		/* KDETH.TIDCtrl, KDETH.TID */
+		val = (cpu_to_le16(EXP_TID_GET(tidval, CTRL) & 0x3) << 10) |
+			cpu_to_le16(EXP_TID_GET(tidval, IDX) & 0x3ff);
+		/* Clear KDETH.SH on last packet */
+		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
+			val &= ~(1U << 13);
+		AHG_HEADER_SET(req->ahg, diff, 7, 16, 14, val);
 	}
 
 	trace_hfi_sdma_user_header_ahg(pq->dd, pq->ctxt, pq->subctxt,
-				       req->info.comp_idx, req->ahg);
+				       req->info.comp_idx, req->sde->this_idx,
+				       req->ahg_idx, req->ahg, diff);
 	return diff;
 }
 
@@ -1436,8 +1470,6 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 	} else
 		goto done;
 free:
-	if (txflags & USER_SDMA_TXREQ_FLAGS_USE_AHG)
-		sdma_ahg_free(req->sde, req->ahg_idx);
 	user_sdma_free_request(req);
 done:
 	if (!atomic_read(&pq->n_reqs))

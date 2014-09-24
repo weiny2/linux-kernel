@@ -185,6 +185,8 @@ struct sdma_state {
 	enum sdma_events last_event;
 };
 
+extern uint use_sdma_ahg;
+
 /**
  * DOC: sdma exported routines
  *

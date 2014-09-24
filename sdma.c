@@ -63,6 +63,10 @@ uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 
+uint use_sdma_ahg;
+module_param(use_sdma_ahg, uint, S_IRUGO);
+MODULE_PARM_DESC(use_sdma_ahg, "Turn on/off use of AHG");
+
 #define SDMA_WAIT_BATCH_SIZE 20
 
 static const char * const sdma_state_names[] = {
@@ -2177,13 +2181,16 @@ void _sdma_txreq_ahgadd(
  * @sde: engine to allocate from
  *
  * Return:
- * 0-31 when succesfull, -ENOSPC otherwise
+ * 0-31 when succesfull, -EOPNOTSUPP if AHG is not enabled,
+ * -ENOSPC if an entry is not available
  */
 int sdma_ahg_alloc(struct sdma_engine *sde)
 {
 	int nr;
 	int oldbit;
 
+	if (!use_sdma_ahg)
+		return -EOPNOTSUPP;
 	while (1) {
 		nr = ffz(ACCESS_ONCE(sde->ahg_bits));
 		if (nr > 31)

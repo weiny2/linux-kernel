@@ -874,13 +874,16 @@ const char *print_u32_array(struct trace_seq *, u32 *, int);
 
 TRACE_EVENT(hfi_sdma_user_header_ahg,
 	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
-		     u32 *ahg),
-	    TP_ARGS(dd, ctxt, subctxt, req, ahg),
+		     u8 sde, u8 ahgidx, u32 *ahg, int len),
+	    TP_ARGS(dd, ctxt, subctxt, req, sde, ahgidx, ahg, len),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
 		    __field(u16, ctxt)
 		    __field(u8, subctxt)
 		    __field(u16, req)
+		    __field(u8, sde)
+		    __field(u8, idx)
+		    __field(int, len)
 		    __array(u32, ahg, 10)
 		    ),
 	    TP_fast_assign(
@@ -888,14 +891,20 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 		    __entry->ctxt = ctxt;
 		    __entry->subctxt = subctxt;
 		    __entry->req = req;
-		    memcpy(__entry->ahg, ahg, 10 * sizeof(u32));
+		    __entry->sde = sde;
+		    __entry->idx = ahgidx;
+		    __entry->len = len;
+		    memcpy(__entry->ahg, ahg, len * sizeof(u32));
 		    ),
-	    TP_printk("[%s:%u:%u:%u] ahg[0-9]=(%s)",
+	    TP_printk("[%s:%u:%u:%u] (SDE%u/AHG%u) ahg[0-%d]=(%s)",
 		      __get_str(dev),
 		      __entry->ctxt,
 		      __entry->subctxt,
 		      __entry->req,
-		      __print_u32_hex(__entry->ahg, 10)
+		      __entry->sde,
+		      __entry->idx,
+		      __entry->len - 1,
+		      __print_u32_hex(__entry->ahg, __entry->len)
 		    )
 	);
 

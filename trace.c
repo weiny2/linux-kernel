@@ -158,13 +158,13 @@ const char *parse_sdma_flags(
 
 const char *print_u32_array(
 	struct trace_seq *p,
-	u32 *ahg, int len)
+	u32 *arr, int len)
 {
 	int i;
 	const char *ret = p->buffer + p->len;
 
 	for (i = 0; i < len ; i++)
-		trace_seq_printf(p, "%s%#x", i == 0 ? "" : " ", ahg[i]);
+		trace_seq_printf(p, "%s%#x", i == 0 ? "" : " ", arr[i]);
 	trace_seq_putc(p, 0);
 	return ret;
 }
