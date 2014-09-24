@@ -101,6 +101,7 @@ struct hfi_cmd {
 	__u64 context;		/* context data for this command */
 };
 
+#ifdef __KERNEL__
 #define HFI_LID_ANY (__u32)(-1)
 #define HFI_NID_ANY (__u32)(-1)
 #define HFI_PID_ANY (__u16)(-1)
@@ -109,6 +110,7 @@ struct hfi_cmd {
 typedef __u32 hfi_lid_t;
 typedef __u16 hfi_pid_t;
 typedef __u32 hfi_uid_t;
+#endif
 
 #define IN  /* input argument */
 #define OUT /* output argument */
