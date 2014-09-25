@@ -9,6 +9,10 @@ obj-$(CONFIG_ND_CORE) += nd_core.o
 obj-$(CONFIG_NFIT_ACPI) += nd_acpi.o
 obj-$(CONFIG_NFIT_TEST) += nfit_test.o
 obj-$(CONFIG_NFIT_TEST) += nfit_test_mem.o
+obj-$(CONFIG_NFIT_LOCAL_DEV) += local_dev.o
+obj-$(CONFIG_NFIT_LOCAL) += local_nfit.o
+
+local_nfit-y := local.o
 
 nd_acpi-y := acpi.o
 
