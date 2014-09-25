@@ -2724,7 +2724,10 @@ static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
 	if (likely(source < dd->num_rcv_contexts)) {
 		rcd = dd->rcd[source];
 		if (rcd) {
-			handle_receive_interrupt(rcd);
+			if (source < dd->first_user_ctxt)
+				handle_receive_interrupt(rcd);
+			else
+				handle_user_interrupt(rcd);
 			return;	/* OK */
 		}
 		/* received an interrupt, but no rcd */
@@ -2733,7 +2736,8 @@ static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
 		/* received an interrupt, but are not using that context */
 		err_detail = "out of range";
 	}
-	dd_dev_err(dd, "unexpected %s receive available context interrupt %u\n", err_detail, source);
+	dd_dev_err(dd, "unexpected %s receive available context interrupt %u\n",
+		err_detail, source);
 }
 
 /*
@@ -2747,8 +2751,9 @@ static void is_rcv_urgent_int(struct hfi_devdata *dd, unsigned int source)
 	if (likely(source < dd->num_rcv_contexts)) {
 		rcd = dd->rcd[source];
 		if (rcd) {
-			/* TODO: implement a handler */
-			dd_dev_err(dd, "%s: urgent context %u interrupt - unimplemented\n", __func__, rcd->ctxt);
+			/* only pay attention to user urgent interrupts */
+			if (source >= dd->first_user_ctxt)
+				handle_user_interrupt(rcd);
 			return;	/* OK */
 		}
 		/* received an interrupt, but no rcd */
@@ -2757,7 +2762,8 @@ static void is_rcv_urgent_int(struct hfi_devdata *dd, unsigned int source)
 		/* received an interrupt, but are not using that context */
 		err_detail = "out of range";
 	}
-	dd_dev_err(dd, "unexpected %s receive urgent context interrupt %u\n", err_detail, source);
+	dd_dev_err(dd, "unexpected %s receive urgent context interrupt %u\n",
+		err_detail, source);
 }
 
 /*
@@ -5076,11 +5082,19 @@ void update_usrhead(struct qib_ctxtdata *rcd, u32 hd, u32 updegr, u32 egrhd,
 	mmiowb();
 }
 
-static u32 hdrqempty(struct qib_ctxtdata *rcd)
+u32 hdrqempty(struct qib_ctxtdata *rcd)
 {
-	if (print_unimplemented)
-		dd_dev_info(rcd->dd, "%s: not implemented\n", __func__);
-	return 0; /* not empty */
+	u32 head, tail;
+
+	head = (read_uctxt_csr(rcd->dd, rcd->ctxt, WFR_RCV_HDR_HEAD)
+		& WFR_RCV_HDR_HEAD_HEAD_SMASK) >> WFR_RCV_HDR_HEAD_HEAD_SHIFT;
+
+	if (rcd->rcvhdrtail_kvaddr)
+		tail = qib_get_rcvhdrtail(rcd);
+	else
+		tail = read_uctxt_csr(rcd->dd, rcd->ctxt, WFR_RCV_HDR_TAIL);
+
+	return head == tail;
 }
 
 /*
@@ -7427,7 +7441,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_get_base_info     = get_base_info;
 	dd->f_get_msgheader     = get_msgheader;
 	dd->f_gpio_mod          = gpio_mod;
-	dd->f_hdrqempty         = hdrqempty;
 	dd->f_init_ctxt         = init_ctxt;
 	dd->f_intr_fallback     = intr_fallback;
 	dd->f_portcntr          = portcntr;

@@ -175,34 +175,27 @@ void qib_clear_symerror_on_linkup(unsigned long opaque)
 }
 
 /*
- * Handle receive interrupts for user ctxts; this means a user
- * process was waiting for a packet to arrive, and didn't want
- * to poll.
+ * Handle receive or urgent interrupts for user contexts.  This means a user
+ * process was waiting for a packet to arrive, and didn't want to poll.
  */
-void qib_handle_urcv(struct hfi_devdata *dd, u64 ctxtr)
+void handle_user_interrupt(struct qib_ctxtdata *rcd)
 {
-	struct qib_ctxtdata *rcd;
+	struct hfi_devdata *dd = rcd->dd;
 	unsigned long flags;
-	int i;
 
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
-	for (i = dd->first_user_ctxt; dd->rcd && i < dd->num_rcv_contexts; i++) {
-		if (!(ctxtr & (1ULL << i)))
-			continue;
-		rcd = dd->rcd[i];
-		if (!rcd || !rcd->cnt)
-			continue;
+	if (!rcd->cnt)
+		goto done;
 
-		if (test_and_clear_bit(QIB_CTXT_WAITING_RCV,
-				       &rcd->event_flags)) {
-			wake_up_interruptible(&rcd->wait);
-			dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_DIS, rcd->ctxt);
-		} else if (test_and_clear_bit(QIB_CTXT_WAITING_URG,
-					      &rcd->event_flags)) {
-			rcd->urgent++;
-			wake_up_interruptible(&rcd->wait);
-		}
+	if (test_and_clear_bit(QIB_CTXT_WAITING_RCV, &rcd->event_flags)) {
+		wake_up_interruptible(&rcd->wait);
+		dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_DIS, rcd->ctxt);
+	} else if (test_and_clear_bit(QIB_CTXT_WAITING_URG,
+							&rcd->event_flags)) {
+		rcd->urgent++;
+		wake_up_interruptible(&rcd->wait);
 	}
+done:
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 }
 

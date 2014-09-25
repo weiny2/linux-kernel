@@ -779,7 +779,6 @@ struct hfi_devdata {
 	/* FIXME - get rid of this */
 	void (*f_sdma_update_tail)(struct sdma_engine *, u16);
 	void (*f_set_cntr_sample)(struct qib_pportdata *, u32, u32);
-	u32 (*f_hdrqempty)(struct qib_ctxtdata *);
 	u64 (*f_portcntr)(struct qib_pportdata *, u32);
 	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
 		u64 **);
@@ -1062,7 +1061,7 @@ void qib_sdma_update_tail(struct qib_pportdata *, u16); /* hold sdma_lock */
 
 int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
 void qib_bad_intrstatus(struct hfi_devdata *);
-void qib_handle_urcv(struct hfi_devdata *, u64);
+void handle_user_interrupt(struct qib_ctxtdata *rcd);
 
 /* clean up any per-chip chip-specific stuff */
 void qib_chip_cleanup(struct hfi_devdata *);

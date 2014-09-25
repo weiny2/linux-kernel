@@ -1261,7 +1261,7 @@ static unsigned int poll_next(struct file *fp,
 	poll_wait(fp, &uctxt->wait, pt);
 
 	spin_lock_irq(&dd->uctxt_lock);
-	if (dd->f_hdrqempty(uctxt)) {
+	if (hdrqempty(uctxt)) {
 		set_bit(QIB_CTXT_WAITING_RCV, &uctxt->event_flags);
 		dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_ENB, uctxt->ctxt);
 		pollflag = 0;

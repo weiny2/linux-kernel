@@ -532,6 +532,7 @@ void schedule_link_restart(struct qib_pportdata *ppd);
 void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 void get_link_width(struct qib_pportdata *ppd);
+u32 hdrqempty(struct qib_ctxtdata *rcd);
 
 int acquire_lcb_access(struct hfi_devdata *dd);
 int release_lcb_access(struct hfi_devdata *dd);
