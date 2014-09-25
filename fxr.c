@@ -169,8 +169,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* write PCB address in FXR */
 	pcb_base.base_address = virt_to_phys(dd->ptl_control);
 	pcb_base.physical = 1;
-	/* TODO - RX_CFG_HIARB defines are broken in FXR header */
-	//write_csr(dd, FXR_RX_CFG_HIARB_PCB_BASE, pcb_base.val);
+	write_csr(dd, FXR_RX_CFG_HIARB_PCB_BASE, pcb_base.val);
 
 	/* TX and RX command queues */
 	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_ENTRY;
@@ -200,7 +199,7 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 	RX_CQ_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
 
 	paddr = virt_to_phys(HFI_CQ_HEAD_ADDR(head_base, cq_idx));
-	cq_head.VALID = 1;
+	cq_head.Valid = 1;
 	cq_head.PA = 1;
 	cq_head.HD_PTR_HOST_ADDR = paddr;
 	offset = FXR_RX_CQ_HEAD_UPDATE_ADDR + (cq_idx * 8);

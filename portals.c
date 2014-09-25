@@ -223,8 +223,8 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	dd->ptl_control[ptl_pid].trig_op_size = ptl_attach->trig_op_count;
 	dd->ptl_control[ptl_pid].le_me_base = ((u64)ud->ptl_le_me_base >> PAGE_SHIFT);
 	dd->ptl_control[ptl_pid].le_me_size = ptl_attach->le_me_count;
-	dd->ptl_control[ptl_pid].unexpected_base = ((u64)ptl_unexpected_base >> PAGE_SHIFT);
-	dd->ptl_control[ptl_pid].unexpected_size = ptl_attach->unexpected_count;
+	dd->ptl_control[ptl_pid].unex_base = ((u64)ptl_unexpected_base >> PAGE_SHIFT);
+	dd->ptl_control[ptl_pid].unex_size = ptl_attach->unexpected_count;
 	dd->ptl_control[ptl_pid].portals_base = ((u64)ud->ptl_state_base >> PAGE_SHIFT);
 	dd->ptl_control[ptl_pid].v = 1;
 
