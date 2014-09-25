@@ -35,6 +35,7 @@
 #include "hfi_token.h"
 #include "fxr.h"
 
+static int hfi_pid_alloc(struct hfi_userdata *ud, hfi_pid_t *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid);
 
 static int hfi_cq_assign_next(struct hfi_userdata *ud,
@@ -192,50 +193,15 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	u32 psb_size, trig_op_size, le_me_size, unexp_size;
 	u64 ptl_unexpected_base;
 	int ret;
-	unsigned long flags;
 
 	/* only one Portals PID allowed */
 	if (ud->ptl_pid != HFI_PID_NONE)
 		return -EPERM;
 
-	if (ud->pid_count) {
-		/* assign PID from Portals PID reservation */
-		ptl_pid = ptl_attach->pid;
-#if 0
-		/* TODO - HFI_PID_ANY support? */
-		if (ptl_pid == HFI_PID_ANY) {
-			/* extend below to search ptl_user[base..count] */
-		}
-#endif
-		if (ptl_pid >= ud->pid_count)
-			return -EINVAL;
-		ptl_pid += ud->pid_base;
-
-		/* store PID hfi_userdata pointer */
-		spin_lock_irqsave(&dd->ptl_lock, flags);
-		if (dd->ptl_user[ptl_pid] != NULL) {
-			spin_unlock_irqrestore(&dd->ptl_lock, flags);
-			return -EBUSY;
-		}
-		dd->ptl_user[ptl_pid] = ud;
-		spin_unlock_irqrestore(&dd->ptl_lock, flags);
-	} else {
-		/* PID is user-specified, validate and acquire */
-		ptl_pid = ptl_attach->pid;
-		if ((ptl_pid != HFI_PID_ANY) &&
-		    (ptl_pid >= HFI_NUM_PIDS))
-			return -EINVAL;
-
-		ret = hfi_ptl_reserve(ud->devdata, &ptl_pid, 1);
-		if (ret)
-			return ret;
-		dd_dev_info(ud->devdata,
-			    "acquired PID orphan [%u]\n", ptl_pid);
-
-		/* store PID hfi_userdata pointer */
-		BUG_ON(dd->ptl_user[ptl_pid] != 0);
-		dd->ptl_user[ptl_pid] = ud;
-	}
+	ptl_pid = ptl_attach->pid;
+	ret = hfi_pid_alloc(ud, &ptl_pid);
+	if (ret)
+		return ret;
 
 	/* set ptl_pid, hfi_ptl_cleanup() can handle all errors below */
 	ud->ptl_pid = ptl_pid;
@@ -314,6 +280,63 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 err_vmalloc:
 	hfi_ptl_cleanup(ud);
 	return ret;
+}
+
+static int hfi_pid_alloc(struct hfi_userdata *ud, hfi_pid_t *assigned_pid)
+{
+	unsigned long flags;
+	int ret;
+	struct hfi_devdata *dd = ud->devdata;
+	hfi_pid_t ptl_pid = *assigned_pid;
+
+	if (ud->pid_count) {
+		/* assign PID from Portals PID reservation */
+		if ((ptl_pid != HFI_PID_ANY) &&
+		    (ptl_pid >= ud->pid_count))
+			return -EINVAL;
+
+		spin_lock_irqsave(&dd->ptl_lock, flags);
+		if (ptl_pid == HFI_PID_ANY) {
+			/* if PID_ANY, search reserved PIDs for unused one */
+			for (ptl_pid = 0; ptl_pid < ud->pid_count; ptl_pid++) {
+				if (dd->ptl_user[ud->pid_base + ptl_pid] == NULL)
+					break;
+			}
+			if (ptl_pid >= ud->pid_count) {
+				spin_unlock_irqrestore(&dd->ptl_lock, flags);
+				return -EBUSY;
+			}
+			ptl_pid += ud->pid_base;
+		} else {
+			ptl_pid += ud->pid_base;
+			if (dd->ptl_user[ptl_pid] != NULL) {
+				spin_unlock_irqrestore(&dd->ptl_lock, flags);
+				return -EBUSY;
+			}
+		}
+
+		/* store PID hfi_userdata pointer */
+		dd->ptl_user[ptl_pid] = ud;
+		spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	} else {
+		/* PID is user-specified, validate and acquire */
+		if ((ptl_pid != HFI_PID_ANY) &&
+		    (ptl_pid >= HFI_NUM_PIDS))
+			return -EINVAL;
+
+		ret = hfi_ptl_reserve(ud->devdata, &ptl_pid, 1);
+		if (ret)
+			return ret;
+		dd_dev_info(ud->devdata,
+			    "acquired PID orphan [%u]\n", ptl_pid);
+
+		/* store PID hfi_userdata pointer */
+		BUG_ON(dd->ptl_user[ptl_pid] != 0);
+		dd->ptl_user[ptl_pid] = ud;
+	}
+
+	*assigned_pid = ptl_pid;
+	return 0;
 }
 
 static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid)
