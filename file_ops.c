@@ -34,12 +34,18 @@
 #include <linux/io.h>
 #include <linux/uio.h>
 #include <linux/fs.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/cred.h>
 #include "hfi.h"
 #include "hfi_cmd.h"
 #include "hfi_token.h"
 #include "device.h"
+
+/* TODO - turn off when RX unit is implemented in simulation */
+static uint psb_rw = 1;
+module_param(psb_rw, uint, S_IRUGO);
+MODULE_PARM_DESC(psb_rw, "PSB mmaps allow RW");
 
 /*
  * File operation functions
@@ -264,13 +270,16 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 			vm_ro = 1;
 		break;
 	case TOK_CONTROL_BLOCK:
+		vm_ro = 1;
+		break;
 	case TOK_EVENTS_CT:
 	case TOK_EVENTS_EQ_DESC:
 	case TOK_PORTALS_TABLE:
 	case TOK_TRIG_OP:
 	case TOK_LE_ME:
 	case TOK_UNEXPECTED:
-		vm_ro = 1;
+		if (!psb_rw)
+			vm_ro = 1;
 		break;
 	case TOK_EVENTS_EQ_HEAD:
 	default:
