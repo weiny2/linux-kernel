@@ -36,10 +36,31 @@ config NFIT_ACPI
 	  enables the core to craft ACPI._DSM messages for platform/dimm
 	  configuration.
 
+config NFIT_LOCAL_DEV
+	bool
+
+config NFIT_LOCAL
+	tristate "NFIT LOCAL: Enable user-defined NFIT loading"
+	select ND_CORE
+	select NFIT_LOCAL_DEV
+	help
+	  Enable this option and create an NFIT with the 'ndctl
+	  create-nfit' utility.   Use this facility for cases where platform
+	  firmware does not describe persistent memory ranges, or
+	  otherwise need to custom-define persistent memory ranges.
+
+	  Say 'm' here and a module named "local_nfit" will be created
+	  that will load a firmware file named "local_nfit.bin" in to the nd
+	  subsystem.
+
+	  Say 'y' here to build "local_nfit" into the kernel
+	  and consider also using the CONFIG_EXTRA_FIRMWARE facility to
+	  provide "local_nfit.bin" in the kernel image directly.
+
 config NFIT_TEST
 	tristate "NFIT TEST: Manufactured NFIT for interface testing"
 	select ND_CORE
-	depends on !(NFIT_ACPI=y || NFIT_ACPI=m)
+	depends on !(NFIT_ACPI=y || NFIT_ACPI=m || NFIT_LOCAL_DEV)
 	depends on DMA_CMA
 	help
 	  For development purposes register a manufactured
