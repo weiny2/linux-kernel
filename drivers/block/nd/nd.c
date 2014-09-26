@@ -29,6 +29,10 @@ module_param(wait_probe, bool, 0);
 MODULE_PARM_DESC(wait_probe,
 		"Wait for nd devices to be probed (default: async probing)");
 
+static bool warn_checksum;
+module_param(warn_checksum, bool, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(warn_checksum, "Turn checksum errors into warnings");
+
 static void nd_bus_release(struct device *dev)
 {
 	struct nd_bus *nd_bus = container_of(dev, struct nd_bus, dev);
@@ -254,10 +258,12 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 	data = (u8 *) base;
 	for (i = 0, sum = 0; i < size; i++)
 		sum += readb(&data[i]);
-	if (sum != 0) {
+	if (sum != 0 && !warn_checksum) {
 		dev_dbg(&nd_bus->dev, "%s: nfit checksum failure\n", __func__);
 		goto err;
 	}
+	WARN_TAINT_ONCE(sum != 0, TAINT_FIRMWARE_WORKAROUND,
+			"nfit checksum failure, continuing...\n");
 
 	memcpy_fromio(signature, &nfit->signature, sizeof(signature));
 	if (memcmp(signature, "NFIT", 4) != 0) {
