@@ -82,7 +82,7 @@ struct nd_bus *walk_to_nd_bus(struct device *nd_dev)
 }
 
 static void *nd_bus_new(struct device *parent,
-		struct nfit_bus_descriptor *nfit_desc)
+		struct nfit_bus_descriptor *nfit_desc, struct module *module)
 {
 	struct nd_bus *nd_bus = kzalloc(sizeof(*nd_bus), GFP_KERNEL);
 	int rc;
@@ -105,6 +105,7 @@ static void *nd_bus_new(struct device *parent,
 		return NULL;
 	}
 	nd_bus->nfit_desc = nfit_desc;
+	nd_bus->module = module;
 	nd_bus->dev.parent = parent;
 	nd_bus->dev.release = nd_bus_release;
 	dev_set_name(&nd_bus->dev, "ndbus%d", nd_bus->id);
@@ -308,15 +309,16 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 
 }
 
-struct nd_bus *nfit_bus_register(struct device *parent,
-		struct nfit_bus_descriptor *nfit_desc)
+struct nd_bus *__nfit_bus_register(struct device *parent,
+		struct nfit_bus_descriptor *nfit_desc,
+		struct module *module)
 {
 	static DEFINE_MUTEX(mutex);
 	struct nd_bus *nd_bus;
 
 	/* enforce single bus at a time registration */
 	mutex_lock(&mutex);
-	nd_bus = nd_bus_new(parent, nfit_desc);
+	nd_bus = nd_bus_new(parent, nfit_desc, module);
 	nd_bus = nd_bus_probe(nd_bus);
 	mutex_unlock(&mutex);
 
@@ -325,7 +327,7 @@ struct nd_bus *nfit_bus_register(struct device *parent,
 
 	return nd_bus;
 }
-EXPORT_SYMBOL(nfit_bus_register);
+EXPORT_SYMBOL(__nfit_bus_register);
 
 void nfit_bus_unregister(struct nd_bus *nd_bus)
 {
