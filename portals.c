@@ -271,6 +271,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 						ptl_pid, ud->ptl_unexpected_size);
 	ptl_attach->trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
 						ptl_pid, ud->ptl_trig_op_size);
+	ptl_attach->pid = ptl_pid;
 	ptl_attach->pid_base = ud->pid_base;
 	ptl_attach->pid_count = ud->pid_count;
 	ptl_attach->pid_mode = ud->pid_mode;
