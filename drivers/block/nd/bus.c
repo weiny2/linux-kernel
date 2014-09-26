@@ -12,6 +12,7 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/uaccess.h>
+#include <linux/module.h>
 #include <linux/fcntl.h>
 #include <linux/ndctl.h>
 #include <linux/sched.h>
@@ -105,11 +106,26 @@ static void del_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
 	mutex_unlock(&nd_bus_list_mutex);
 }
 
+static struct module *to_bus_provider(struct device *dev)
+{
+	/* pin bus providers while regions are enabled */
+	if (is_nd_pmem(dev) || is_nd_blk(dev)) {
+		struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+		return nd_bus->module;
+	}
+	return NULL;
+}
+
 static int nd_bus_probe(struct device *dev)
 {
 	struct nd_device_driver *nd_drv = to_nd_device_driver(dev->driver);
+	struct module *provider = to_bus_provider(dev);
 	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 	int rc;
+
+	if (!try_module_get(provider))
+		return -ENXIO;
 
 	rc = nd_drv->probe(dev);
 	if (rc == -EPROBE_DEFER)
@@ -117,16 +133,20 @@ static int nd_bus_probe(struct device *dev)
 	else if (rc == 0)
 		del_deferred_tracker(nd_bus, dev);
 	dev_dbg(dev, "%pf returned: %d\n", nd_drv->probe, rc);
+	if (rc != 0)
+		module_put(provider);
 	return rc;
 }
 
 static int nd_bus_remove(struct device *dev)
 {
 	struct nd_device_driver *nd_drv = to_nd_device_driver(dev->driver);
+	struct module *provider = to_bus_provider(dev);
 	int rc;
 
 	rc = nd_drv->remove(dev);
 	dev_dbg(dev, "%pf returned: %d\n", nd_drv->remove, rc);
+	module_put(provider);
 	return rc;
 }
 
