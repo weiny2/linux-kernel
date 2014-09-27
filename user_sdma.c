@@ -554,6 +554,13 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		ret = -EBADSLT;
 		goto done;
 	}
+	if (!info.fragsize) {
+		hfi_cdbg(SDMA,
+			 "[%u:%u:%u:%u] Request does not specify fragsize",
+			 dd->unit, uctxt->ctxt, subctxt_fp(fp), info.comp_idx);
+		ret = -EINVAL;
+		goto done;
+	}
 	/*
 	 * We've done all the safety checks that we can up to this point,
 	 * "allocate" the request entry.
