@@ -260,6 +260,7 @@ header-y += ncp.h
 header-y += ncp_fs.h
 header-y += ncp_mount.h
 header-y += ncp_no.h
+header-y += ndctl.h
 header-y += neighbour.h
 header-y += net.h
 header-y += net_dropmon.h
