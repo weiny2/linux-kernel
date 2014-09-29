@@ -132,6 +132,7 @@ scmd_eh_abort_handler(struct work_struct *work)
 		rtn = scsi_try_to_abort_cmd(sdev->host->hostt, scmd);
 		if (rtn == SUCCESS) {
 			scmd->result |= DID_TIME_OUT << 16;
+			scmd->host_scribble = NULL;
 			if (scsi_host_eh_past_deadline(sdev->host)) {
 				SCSI_LOG_ERROR_RECOVERY(3,
 					scmd_printk(KERN_INFO, scmd,
