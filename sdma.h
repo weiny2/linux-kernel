@@ -72,6 +72,13 @@
 #define SDMA_AHG_UPDATE_ENABLE_MASK  0x1
 #define SDMA_AHG_UPDATE_ENABLE_SHIFT 31
 
+/* modes */
+#define SDMA_AHG_NO_AHG              0
+#define SDMA_AHG_COPY                1
+#define SDMA_AHG_APPLY_UPDATE1       2
+#define SDMA_AHG_APPLY_UPDATE2       3
+#define SDMA_AHG_APPLY_UPDATE3       4
+
 /*
  * Bits defined in the send DMA descriptor.
  */
@@ -405,6 +412,8 @@ struct sdma_engine {
 	/* private: */
 	struct list_head      dmawait;
 
+	unsigned long         ahg_bits;
+
 	/* JAG SDMA for now, just blindly duplicate */
 	/* private: */
 	struct tasklet_struct sdma_hw_clean_up_task
@@ -447,6 +456,7 @@ static inline int __sdma_running(struct sdma_engine *engine)
 	return engine->state.current_state == sdma_state_s99_running;
 }
 
+
 /**
  * sdma_running() - state suitability test
  * @engine: sdma engine
@@ -468,6 +478,12 @@ static inline int sdma_running(struct sdma_engine *engine)
 	spin_unlock_irqrestore(&engine->lock, flags);
 	return ret;
 }
+
+void _sdma_txreq_ahgadd(
+	struct sdma_txreq *tx,
+	u8 num_ahg,
+	u32 *ahg,
+	u8 ahg_hlen);
 
 
 /**
@@ -542,6 +558,14 @@ static inline void sdma_txinit_ahg(
 	tx->wait = NULL;
 	BUG_ON(tlen == 0);
 	tx->tlen = tx->packet_len = tlen;
+	tx->descs[0].qw[0] = SDMA_DESC0_FIRST_DESC_FLAG;
+	tx->descs[0].qw[1] = 0;
+	if (flags & SDMA_TXREQ_F_AHG_COPY)
+		tx->descs[0].qw[1] |=
+			(((u64)SDMA_AHG_COPY & SDMA_DESC1_HEADER_MODE_MASK)
+				<< SDMA_DESC1_HEADER_MODE_SHIFT);
+	else if (flags & SDMA_TXREQ_F_USE_AHG && num_ahg)
+		_sdma_txreq_ahgadd(tx, num_ahg, ahg, ahg_hlen);
 }
 
 /**
@@ -611,17 +635,19 @@ static inline void make_tx_sdma_desc(
 {
 	struct sdma_desc *desc = &tx->descp[tx->num_desc];
 
-	if (!tx->num_desc)
-		desc->qw[0] = (((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
-				<< SDMA_DESC0_BYTE_COUNT_SHIFT)|
-				SDMA_DESC0_FIRST_DESC_FLAG;
-	else
-		desc->qw[0] = ((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
-				<< SDMA_DESC0_BYTE_COUNT_SHIFT;
-	desc->qw[0] |= ((u64)addr & SDMA_DESC0_PHY_ADDR_MASK)
-				<< SDMA_DESC0_PHY_ADDR_SHIFT;
-	desc->qw[1] = ((u64)type & SDMA_DESC1_GENERATION_MASK)
+	if (!tx->num_desc) {
+		/* qw[0] zero; qw[1] first, ahg mode already in from init */
+		desc->qw[1] |= ((u64)type & SDMA_DESC1_GENERATION_MASK)
 				<< SDMA_DESC1_GENERATION_SHIFT;
+	} else {
+		desc->qw[0] = 0;
+		desc->qw[1] = ((u64)type & SDMA_DESC1_GENERATION_MASK)
+				<< SDMA_DESC1_GENERATION_SHIFT;
+	}
+	desc->qw[0] |= (((u64)addr & SDMA_DESC0_PHY_ADDR_MASK)
+				<< SDMA_DESC0_PHY_ADDR_SHIFT) |
+			(((u64)len & SDMA_DESC0_BYTE_COUNT_MASK)
+				<< SDMA_DESC0_BYTE_COUNT_SHIFT);
 }
 
 /* helper to extend txreq */
@@ -781,36 +807,13 @@ struct iowait;
  */
 typedef void (*busycb_t)(struct sdma_txreq *tx, struct iowait *wait);
 
-int sdma_send_txreq(struct sdma_engine *engine,
+int sdma_send_txreq(struct sdma_engine *sde,
 		    struct iowait *wait,
 		    busycb_t busycb,
 		    struct sdma_txreq *tx);
 
-/**
- * sdma_ahg_alloc - allocate an AHG entry
- * @engine: engine to allocate from
- *
- * Return:
- * 0-31 when succesfull, -ENOSPC otherwise
- */
-static inline u8 sdma_ahg_alloc(struct sdma_engine *engine)
-{
-	/* FIXME stub for now */
-	return -ENOSPC;
-}
-
-/**
- * sdma_ahg_free - free an AHG entry
- * @engine: engine to return AHG entry
- * @ahg_index: index to free
- *
- * This routine frees the indicate AHG entry.
- */
-static inline void sdma_ahg_free(struct sdma_engine *engine, u8 ahg_index)
-{
-	/* FIXME stub for now */
-	return;
-}
+int sdma_ahg_alloc(struct sdma_engine *sde);
+void sdma_ahg_free(struct sdma_engine *sde, int ahg_index);
 
 /**
  * sdma_build_ahg - build ahg descriptor

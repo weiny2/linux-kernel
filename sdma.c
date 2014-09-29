@@ -34,6 +34,7 @@
 #include <linux/spinlock.h>
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
+#include <linux/bitops.h>
 
 #include "hfi.h"
 #include "common.h"
@@ -554,6 +555,8 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 
 		spin_lock_init(&sde->lock);
 		spin_lock_init(&sde->senddmactrl_lock);
+		/* insure there is always a zero bit */
+		sde->ahg_bits = 0xfffffffe00000000;
 
 		spin_lock_irqsave(&sde->lock, flags);
 		sdma_set_state(sde, sdma_state_s00_hw_down);
@@ -2065,4 +2068,98 @@ int _pad_sdma_tx_descs(struct hfi_devdata *dd, struct sdma_txreq *tx)
 		sizeof(u32) - (tx->packet_len & (sizeof(u32) - 1)));
 	_sdma_close_tx(dd, tx);
 	return rval;
+}
+
+/*
+ * Add ahg to the sdma_txreq
+ *
+ * The logic will consume up to 3
+ * descriptors at the beginning of
+ * sdma_txreq.
+ */
+void _sdma_txreq_ahgadd(
+	struct sdma_txreq *tx,
+	u8 num_ahg,
+	u32 *ahg,
+	u8 ahg_hlen)
+{
+	u32 i, shift = 0, desc = 0;
+	u8 mode;
+
+	BUG_ON(num_ahg > 9 || (ahg_hlen & 3) || ahg_hlen == 4);
+	/* compute mode */
+	if (num_ahg == 1)
+		mode = SDMA_AHG_APPLY_UPDATE1;
+	else if (num_ahg <= 5)
+		mode = SDMA_AHG_APPLY_UPDATE2;
+	else
+		mode = SDMA_AHG_APPLY_UPDATE3;
+	tx->num_desc++;
+	/* initialize to consumed descriptors to zero */
+	switch (mode) {
+	case SDMA_AHG_APPLY_UPDATE3:
+		tx->num_desc++;
+		tx->descs[2].qw[0] = 0;
+		tx->descs[2].qw[1] = 0;
+		/* FALLTHROUGH */
+	case SDMA_AHG_APPLY_UPDATE2:
+		tx->num_desc++;
+		tx->descs[1].qw[0] = 0;
+		tx->descs[1].qw[1] = 0;
+		break;
+	}
+	ahg_hlen >>= 2;
+	tx->descs[0].qw[1] |=
+		(((u64)ahg_hlen & SDMA_DESC1_HEADER_DWS_MASK)
+			<< SDMA_DESC1_HEADER_DWS_SHIFT) |
+		(((u64)mode & SDMA_DESC1_HEADER_MODE_MASK)
+			<< SDMA_DESC1_HEADER_MODE_SHIFT) |
+		(((u64)ahg[0] & SDMA_DESC1_HEADER_UPDATE1_MASK)
+			<< SDMA_DESC1_HEADER_UPDATE1_SHIFT);
+	for (i = 0; i < (num_ahg - 1); i++) {
+		if (!shift)
+			desc++;
+		tx->descs[desc].qw[i & 1] |=
+			(((u64)ahg[i + 1])
+				<< shift);
+		shift = (shift + 32) & 63;
+	}
+}
+
+/**
+ * sdma_ahg_alloc - allocate an AHG entry
+ * @sde: engine to allocate from
+ *
+ * Return:
+ * 0-31 when succesfull, -ENOSPC otherwise
+ */
+int sdma_ahg_alloc(struct sdma_engine *sde)
+{
+	int nr;
+	int oldbit;
+
+	while (1) {
+		nr = ffz(ACCESS_ONCE(sde->ahg_bits));
+		if (nr > 31)
+			return -ENOSPC;
+		oldbit = test_and_set_bit(nr, &sde->ahg_bits);
+		if (!oldbit)
+			break;
+		cpu_relax();
+	}
+	return nr;
+}
+
+/**
+ * sdma_ahg_free - free an AHG entry
+ * @sde: engine to return AHG entry
+ * @ahg_index: index to free
+ *
+ * This routine frees the indicate AHG entry.
+ */
+void sdma_ahg_free(struct sdma_engine *sde, int ahg_index)
+{
+	if (ahg_index < 0)
+		return;
+	clear_bit(ahg_index, &sde->ahg_bits);
 }
