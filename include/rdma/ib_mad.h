@@ -434,6 +434,7 @@ struct ib_mad_recv_buf {
  * @recv_buf: Specifies the location of the received data buffer(s).
  * @rmpp_list: Specifies a list of RMPP reassembled received MAD buffers.
  * @mad_len: The length of the received MAD, without duplicated headers.
+ * @mad_seg_size: The size of individual MAD segments
  *
  * For received response, the wr_id contains a pointer to the ib_mad_send_buf
  *   for the corresponding send request.
@@ -443,6 +444,7 @@ struct ib_mad_recv_wc {
 	struct ib_mad_recv_buf	recv_buf;
 	struct list_head	rmpp_list;
 	int			mad_len;
+	size_t			mad_seg_size;
 };
 
 /**

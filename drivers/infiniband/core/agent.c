@@ -80,13 +80,17 @@ ib_get_agent_port(struct ib_device *device, int port_num)
 
 void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 			 struct ib_wc *wc, struct ib_device *device,
-			 int port_num, int qpn)
+			 int port_num, int qpn, u32 resp_mad_len,
+			 int opa)
 {
 	struct ib_agent_port_private *port_priv;
 	struct ib_mad_agent *agent;
 	struct ib_mad_send_buf *send_buf;
 	struct ib_ah *ah;
+	size_t data_len;
+	size_t hdr_len;
 	struct ib_mad_send_wr_private *mad_send_wr;
+	u8 base_version;
 
 	if (device->node_type == RDMA_NODE_IB_SWITCH)
 		port_priv = ib_get_agent_port(device, 0);
@@ -106,16 +110,29 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 		return;
 	}
 
+	/* base version determines MAD size */
+	base_version = mad->mad_hdr.base_version;
+	if (opa && base_version == OPA_MGMT_BASE_VERSION) {
+		data_len = resp_mad_len - IB_MGMT_MAD_HDR;
+		hdr_len = IB_MGMT_MAD_HDR;
+	} else {
+		data_len = IB_MGMT_MAD_DATA;
+		hdr_len = IB_MGMT_MAD_HDR;
+	}
+
 	send_buf = ib_create_send_mad(agent, wc->src_qp, wc->pkey_index, 0,
-				      IB_MGMT_MAD_HDR, IB_MGMT_MAD_DATA,
-				      GFP_KERNEL,
-				      IB_MGMT_BASE_VERSION);
+				      hdr_len, data_len, GFP_KERNEL,
+				      base_version);
 	if (IS_ERR(send_buf)) {
 		dev_err(&device->dev, "ib_create_send_mad error\n");
 		goto err1;
 	}
 
-	memcpy(send_buf->mad, mad, sizeof *mad);
+	if (opa && base_version == OPA_MGMT_BASE_VERSION)
+		memcpy(send_buf->mad, mad, IB_MGMT_MAD_HDR + data_len);
+	else
+		memcpy(send_buf->mad, mad, sizeof(*mad));
+
 	send_buf->ah = ah;
 
 	if (device->node_type == RDMA_NODE_IB_SWITCH) {

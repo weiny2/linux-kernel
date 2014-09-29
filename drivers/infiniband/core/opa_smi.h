@@ -51,7 +51,7 @@ extern enum smi_action opa_smi_handle_dr_smp_send(struct opa_smp *smp,
  * via process_mad
  */
 static inline enum smi_action opa_smi_check_local_smp(struct opa_smp *smp,
-						  struct ib_device *device)
+						      struct ib_device *device)
 {
 	/* C14-9:3 -- We're at the end of the DR segment of path */
 	/* C14-9:4 -- Hop Pointer = Hop Count + 1 -> give to SMA/SM */
@@ -66,7 +66,7 @@ static inline enum smi_action opa_smi_check_local_smp(struct opa_smp *smp,
  * via process_mad
  */
 static inline enum smi_action opa_smi_check_local_returning_smp(struct opa_smp *smp,
-						   struct ib_device *device)
+								struct ib_device *device)
 {
 	/* C14-13:3 -- We're at the end of the DR segment of path */
 	/* C14-13:4 -- Hop Pointer == 0 -> give to SM */
