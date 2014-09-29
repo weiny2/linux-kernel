@@ -15,3 +15,4 @@ nd_acpi-y := acpi.o
 nd_core-y := nd.o
 nd_core-y += bus.o
 nd_core-y += dimm_devs.o
+nd_core-y += dimm.o

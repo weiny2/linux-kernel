@@ -18,10 +18,16 @@
 #include <linux/slab.h>
 #include "nd-private.h"
 #include "nfit.h"
+#include "nd.h"
 
 LIST_HEAD(nd_bus_list);
 DEFINE_MUTEX(nd_bus_list_mutex);
 static DEFINE_IDA(nd_ida);
+
+static bool wait_probe;
+module_param(wait_probe, bool, 0);
+MODULE_PARM_DESC(wait_probe,
+		"Wait for nd devices to be probed (default: async probing)");
 
 static void nd_bus_release(struct device *dev)
 {
@@ -63,6 +69,18 @@ struct nd_bus *to_nd_bus(struct device *dev)
 	return nd_bus;
 }
 
+struct nd_bus *walk_to_nd_bus(struct device *nd_dev)
+{
+	struct device *dev = nd_dev;
+
+	while (dev && dev->release != nd_bus_release)
+		dev = dev->parent;
+	dev_WARN_ONCE(nd_dev, !dev, "invalid dev, not on nd bus\n");
+	if (dev)
+		return to_nd_bus(dev);
+	return NULL;
+}
+
 static void *nd_bus_new(struct device *parent,
 		struct nfit_bus_descriptor *nfit_desc)
 {
@@ -75,7 +93,10 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->dcrs);
 	INIT_LIST_HEAD(&nd_bus->bdws);
 	INIT_LIST_HEAD(&nd_bus->memdevs);
+	INIT_LIST_HEAD(&nd_bus->deferred);
 	INIT_LIST_HEAD(&nd_bus->list);
+	init_completion(&nd_bus->registration);
+	init_waitqueue_head(&nd_bus->deferq);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
 	if (test_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags))
 		nd_bus->format_interface_code = 1;
@@ -207,7 +228,7 @@ static int child_unregister(struct device *dev, void *data)
 	if (dev->class)
 		/* pass */;
 	else
-		device_unregister(dev);
+		nd_device_unregister(dev, ND_SYNC);
 	return 0;
 }
 
@@ -267,9 +288,14 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 	mutex_lock(&nd_bus_list_mutex);
 	list_add_tail(&nd_bus->list, &nd_bus_list);
 	mutex_unlock(&nd_bus_list_mutex);
+	complete_all(&nd_bus->registration);
+	if (wait_probe)
+		nd_bus_wait_probe(nd_bus);
 
 	return nd_bus;
  err_child:
+	complete_all(&nd_bus->registration);
+	nd_bus_wait_probe(nd_bus);
 	device_for_each_child(&nd_bus->dev, NULL, child_unregister);
 	nd_bus_destroy_ndctl(nd_bus);
  err:
@@ -306,6 +332,7 @@ void nfit_bus_unregister(struct nd_bus *nd_bus)
 	list_del_init(&nd_bus->list);
 	mutex_unlock(&nd_bus_list_mutex);
 
+	nd_bus_wait_probe(nd_bus);
 	device_for_each_child(&nd_bus->dev, NULL, child_unregister);
 	nd_bus_destroy_ndctl(nd_bus);
 
@@ -315,6 +342,8 @@ EXPORT_SYMBOL(nfit_bus_unregister);
 
 static __init int nd_core_init(void)
 {
+	int rc;
+
 	BUILD_BUG_ON(sizeof(struct nfit) != 40);
 	BUILD_BUG_ON(sizeof(struct nfit_spa) != 32);
 	BUILD_BUG_ON(sizeof(struct nfit_mem) != 48);
@@ -324,12 +353,23 @@ static __init int nd_core_init(void)
 	BUILD_BUG_ON(sizeof(struct nfit_bdw) != 40);
 	BUILD_BUG_ON(sizeof(struct nfit_flush) != 24);
 
-	return nd_bus_init();
+	rc = nd_bus_init();
+	if (rc)
+		return rc;
+	rc = nd_dimm_init();
+	if (rc)
+		goto err_dimm;
+	return 0;
+ err_dimm:
+	nd_bus_exit();
+	return rc;
+
 }
 
 static __exit void nd_core_exit(void)
 {
 	WARN_ON(!list_empty(&nd_bus_list));
+	nd_dimm_exit();
 	nd_bus_exit();
 }
 MODULE_LICENSE("GPL v2");

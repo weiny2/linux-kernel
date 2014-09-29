@@ -17,8 +17,85 @@
 #include <linux/mm.h>
 #include "nd-private.h"
 #include "nfit.h"
+#include "nd.h"
 
 static DEFINE_IDA(dimm_ida);
+
+/*
+ * Retrieve bus and dimm handle and return if this bus supports format
+ * interface code1 commands
+ */
+static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
+		u32 *nfit_handle)
+{
+	struct nfit_bus_descriptor *nfit_desc;
+	struct nfit_mem __iomem *nfit_mem;
+
+	if (!nd_dimm)
+		return -EINVAL;
+
+	*nd_bus = walk_to_nd_bus(&nd_dimm->dev);
+	if (*nd_bus == NULL)
+		return -EINVAL;
+	if ((*nd_bus)->format_interface_code != 1)
+		return -ENXIO;
+	nfit_desc = (*nd_bus)->nfit_desc;
+	if (!nfit_desc->nfit_ctl)
+		return -ENXIO;
+
+	nfit_mem = nd_dimm->nfit_mem;
+	*nfit_handle = readl(&nfit_mem->nfit_handle);
+	return 0;
+}
+
+static noinline int validate_dimm(struct nd_dimm *nd_dimm,
+		struct nd_bus **nd_bus, u32 *nfit_handle)
+{
+	int rc = __validate_dimm(nd_dimm, nd_bus, nfit_handle);
+
+	if (rc)
+		dev_dbg(&nd_dimm->dev, "%pf: %s error: %d\n",
+				__builtin_return_address(1), __func__, rc);
+	return rc;
+}
+
+int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
+		struct nfit_cmd_get_config_size *cmd)
+{
+	u32 nfit_handle;
+	struct nd_bus *nd_bus;
+	struct nfit_bus_descriptor *nfit_desc;
+	int rc = validate_dimm(nd_dimm, &nd_bus, &nfit_handle);
+
+	if (rc)
+		return rc;
+
+	nfit_desc = nd_bus->nfit_desc;
+	memset(cmd, 0, sizeof(*cmd));
+	cmd->nfit_handle = nfit_handle;
+	return nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_GET_CONFIG_SIZE, cmd,
+			sizeof(*cmd));
+}
+EXPORT_SYMBOL(nd_dimm_get_config_size);
+
+int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
+		struct nfit_cmd_get_config_data *cmd, size_t len)
+{
+	u32 nfit_handle;
+	struct nd_bus *nd_bus;
+	struct nfit_bus_descriptor *nfit_desc;
+	int rc = validate_dimm(nd_dimm, &nd_bus, &nfit_handle);
+
+	if (rc)
+		return rc;
+
+	nfit_desc = nd_bus->nfit_desc;
+	memset(cmd, 0, sizeof(*cmd));
+	cmd->nfit_handle = nfit_handle;
+	return nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_GET_CONFIG_DATA, cmd,
+			len);
+}
+EXPORT_SYMBOL(nd_dimm_get_config_data);
 
 static void nd_dimm_release(struct device *dev)
 {
@@ -33,7 +110,7 @@ static struct device_type nd_dimm_device_type = {
 	.release = nd_dimm_release,
 };
 
-static bool is_nd_dimm(struct device *dev)
+bool is_nd_dimm(struct device *dev)
 {
 	return dev->type == &nd_dimm_device_type;
 }
@@ -45,6 +122,7 @@ struct nd_dimm *to_nd_dimm(struct device *dev)
 	WARN_ON(!is_nd_dimm(dev));
 	return nd_dimm;
 }
+EXPORT_SYMBOL(to_nd_dimm);
 
 static struct nfit_mem __iomem *to_nfit_mem(struct device *dev)
 {
@@ -145,6 +223,7 @@ static struct attribute_group nd_dimm_attribute_group = {
 
 static const struct attribute_group *nd_dimm_attribute_groups[] = {
 	&nd_dimm_attribute_group,
+	&nd_device_attribute_group,
 	NULL,
 };
 
@@ -169,13 +248,13 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	dev_set_name(dev, "dimm%d", nd_dimm->id);
 	dev->parent = &nd_bus->dev;
 	dev->type = &nd_dimm_device_type;
-	dev->bus = &nd_bus_type;
 	dev->groups = nd_dimm_attribute_groups;
-	if (device_register(dev) != 0) {
-		put_device(dev);
+	/*
+	 * 'nd_dimm's are registered 'sync' as 'nd_region' registration
+	 * depends on finding 'nd_dimm's on the bus.
+	 */
+	if (nd_device_register(dev, ND_SYNC) != 0)
 		return NULL;
-	}
-
 	return nd_dimm;
 }
 
