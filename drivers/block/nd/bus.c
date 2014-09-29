@@ -14,18 +14,228 @@
 #include <linux/uaccess.h>
 #include <linux/fcntl.h>
 #include <linux/ndctl.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/nd.h>
 #include "nd-private.h"
 #include "nfit.h"
+#include "nd.h"
 
 static int nd_major;
 static struct class *nd_class;
 
-struct bus_type nd_bus_type = {
-	.name = "nd",
+static int to_nd_device_type(struct device *dev)
+{
+	if (is_nd_dimm(dev))
+		return ND_DEVICE_DIMM;
+
+	return 0;
+}
+
+static int nd_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	add_uevent_var(env, "MODALIAS=" ND_DEVICE_MODALIAS_FMT,
+			to_nd_device_type(dev));
+	return 0;
+}
+
+static int nd_bus_match(struct device *dev, struct device_driver *drv)
+{
+	struct nd_device_driver *nd_drv = to_nd_device_driver(drv);
+
+	return test_bit(to_nd_device_type(dev), &nd_drv->type);
+}
+
+struct nd_defer_tracker {
+	struct list_head list;
+	struct device *dev;
 };
+
+static struct nd_defer_tracker *__find_deferred_tracker(struct nd_bus *nd_bus,
+		struct device *dev)
+{
+	struct nd_defer_tracker *nd_defer;
+
+	list_for_each_entry(nd_defer, &nd_bus->deferred, list)
+		if (dev == nd_defer->dev)
+			return nd_defer;
+	return NULL;
+}
+
+static int add_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
+{
+	struct nd_defer_tracker *nd_defer;
+
+	mutex_lock(&nd_bus_list_mutex);
+	nd_defer = __find_deferred_tracker(nd_bus, dev);
+	while (!nd_defer) {
+		nd_defer = kmalloc(sizeof(*nd_defer), GFP_KERNEL);
+		if (!nd_defer)
+			break;
+		INIT_LIST_HEAD(&nd_defer->list);
+		nd_defer->dev = dev;
+		list_add_tail(&nd_defer->list, &nd_bus->deferred);
+		dev_dbg(dev, "add to defer queue\n");
+	}
+	mutex_unlock(&nd_bus_list_mutex);
+
+	return nd_defer ? 0 : -ENOMEM;
+}
+
+static void del_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
+{
+	struct nd_defer_tracker *nd_defer;
+
+	mutex_lock(&nd_bus_list_mutex);
+	nd_defer = __find_deferred_tracker(nd_bus, dev);
+	if (nd_defer) {
+		list_del_init(&nd_defer->list);
+		kfree(nd_defer);
+		wake_up_all(&nd_bus->deferq);
+		dev_dbg(dev, "del from defer queue\n");
+	}
+	mutex_unlock(&nd_bus_list_mutex);
+}
+
+static int nd_bus_probe(struct device *dev)
+{
+	struct nd_device_driver *nd_drv = to_nd_device_driver(dev->driver);
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	int rc;
+
+	rc = nd_drv->probe(dev);
+	if (rc == -EPROBE_DEFER)
+		rc = add_deferred_tracker(nd_bus, dev);
+	else if (rc == 0)
+		del_deferred_tracker(nd_bus, dev);
+	dev_dbg(dev, "%pf returned: %d\n", nd_drv->probe, rc);
+	return rc;
+}
+
+static int nd_bus_remove(struct device *dev)
+{
+	struct nd_device_driver *nd_drv = to_nd_device_driver(dev->driver);
+	int rc;
+
+	rc = nd_drv->remove(dev);
+	dev_dbg(dev, "%pf returned: %d\n", nd_drv->remove, rc);
+	return rc;
+}
+
+static struct bus_type nd_bus_type = {
+	.name = "nd",
+	.uevent = nd_bus_uevent,
+	.match = nd_bus_match,
+	.probe = nd_bus_probe,
+	.remove = nd_bus_remove,
+};
+
+static ASYNC_DOMAIN_EXCLUSIVE(nd_async_register);
+
+static void nd_async_device_register(void *d, async_cookie_t cookie)
+{
+	struct device *dev = d;
+
+	if (device_add(dev) != 0)
+		put_device(dev);
+	put_device(dev);
+}
+
+static void nd_async_device_unregister(void *d, async_cookie_t cookie)
+{
+	struct device *dev = d;
+
+	device_unregister(dev);
+	put_device(dev);
+}
+
+int nd_device_register(struct device *dev, enum nd_async_mode mode)
+{
+	int rc;
+
+	dev->bus = &nd_bus_type;
+	switch (mode) {
+	case ND_ASYNC:
+		device_initialize(dev);
+		get_device(dev);
+		async_schedule_domain(nd_async_device_register, dev,
+				&nd_async_register);
+		return 0;
+	case ND_SYNC:
+		rc = device_register(dev);
+		if (rc != 0)
+			put_device(dev);
+		return rc;
+	default:
+		return 0;
+	}
+}
+EXPORT_SYMBOL(nd_device_register);
+
+static bool is_deferred_queue_empty(struct nd_bus *nd_bus)
+{
+	/* flush the wake up path */
+	mutex_lock(&nd_bus_list_mutex);
+	mutex_unlock(&nd_bus_list_mutex);
+	return list_empty(&nd_bus->deferred);
+}
+
+void nd_bus_wait_probe(struct nd_bus *nd_bus)
+{
+	wait_for_completion(&nd_bus->registration);
+	async_synchronize_full_domain(&nd_async_register);
+	wait_event(nd_bus->deferq, is_deferred_queue_empty(nd_bus));
+}
+
+void nd_device_unregister(struct device *dev, enum nd_async_mode mode)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+	switch (mode) {
+	case ND_ASYNC:
+		get_device(dev);
+		async_schedule_domain(nd_async_device_unregister, dev,
+				&nd_async_register);
+		break;
+	case ND_SYNC:
+		nd_bus_wait_probe(nd_bus);
+		device_unregister(dev);
+		break;
+	}
+}
+EXPORT_SYMBOL(nd_device_unregister);
+
+/**
+ * __nd_driver_register() - register a region or a namespace driver
+ * @nd_drv: driver to register
+ * @owner: automatically set by nd_driver_register() macro
+ * @mod_name: automatically set by nd_driver_register() macro
+ */
+int __nd_driver_register(struct nd_device_driver *nd_drv, struct module *owner,
+		const char *mod_name)
+{
+	struct device_driver *drv = &nd_drv->drv;
+
+	if (!nd_drv->type) {
+		pr_debug("driver type bitmask not set (%pf)\n",
+				__builtin_return_address(0));
+		return -EINVAL;
+	}
+
+	if (!nd_drv->probe || !nd_drv->remove) {
+		pr_debug("->probe() and ->remove() must be specified\n");
+		return -EINVAL;
+	}
+
+	drv->bus = &nd_bus_type;
+	drv->owner = owner;
+	drv->mod_name = mod_name;
+
+	return driver_register(drv);
+}
+EXPORT_SYMBOL(__nd_driver_register);
 
 static const char *nfit_desc_provider(struct device *parent,
 		struct nfit_bus_descriptor *nfit_desc)
@@ -67,7 +277,16 @@ static ssize_t revision_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(revision);
 
+static ssize_t wait_probe_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	nd_bus_wait_probe(to_nd_bus(dev->parent));
+	return sprintf(buf, "1\n");
+}
+static DEVICE_ATTR_RO(wait_probe);
+
 static struct attribute *nd_bus_attributes[] = {
+	&dev_attr_wait_probe.attr,
 	&dev_attr_provider.attr,
 	&dev_attr_format.attr,
 	&dev_attr_revision.attr,
@@ -97,6 +316,34 @@ static struct attribute_group nd_bus_attribute_group = {
 static const struct attribute_group *nd_bus_attribute_groups[] = {
 	&nd_bus_attribute_group,
 	NULL,
+};
+
+static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	return sprintf(buf, ND_DEVICE_MODALIAS_FMT "\n",
+			to_nd_device_type(dev));
+}
+static DEVICE_ATTR_RO(modalias);
+
+static ssize_t devtype_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	return sprintf(buf, "%s\n", dev->type->name);
+}
+DEVICE_ATTR_RO(devtype);
+
+static struct attribute *nd_device_attributes[] = {
+	&dev_attr_modalias.attr,
+	&dev_attr_devtype.attr,
+	NULL,
+};
+
+/**
+ * nd_device_attribute_group - generic attributes for all devices on an nd bus
+ */
+struct attribute_group nd_device_attribute_group = {
+	.attrs = nd_device_attributes,
 };
 
 int nd_bus_create_ndctl(struct nd_bus *nd_bus)
@@ -311,7 +558,7 @@ int __init nd_bus_init(void)
 	return rc;
 }
 
-void __exit nd_bus_exit(void)
+void nd_bus_exit(void)
 {
 	class_destroy(nd_class);
 	unregister_chrdev(nd_major, "ndctl");
