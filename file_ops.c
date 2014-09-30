@@ -38,7 +38,6 @@
 #include <linux/sched.h>
 #include <linux/cred.h>
 #include "hfi.h"
-#include "hfi_cmd.h"
 #include "hfi_token.h"
 #include "device.h"
 

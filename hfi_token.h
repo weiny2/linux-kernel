@@ -77,8 +77,6 @@ enum mmap_token_types {
 	 HFI_MMAP_TOKEN_SET(NPAGES, (size >> PAGE_SHIFT)) | \
 	 HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & ~PAGE_MASK)))
 
-#define HFI_MMAP_TOKEN_GET_SIZE(token) \
-	(HFI_MMAP_TOKEN_GET(NPAGES, token) << PAGE_SHIFT)
 #define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
 	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
 #endif

@@ -47,8 +47,8 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/cdev.h>
-#include "fxr.h"
-#include "hfi_cmd.h"
+#include "include/hfi_defs.h"
+#include "include/hfi_cmd.h"
 
 #define DRIVER_NAME		"hfi2"
 #define DRIVER_CLASS_NAME	DRIVER_NAME
