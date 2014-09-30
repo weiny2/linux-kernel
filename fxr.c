@@ -34,7 +34,6 @@
 #include <linux/pci.h>
 #include <linux/module.h>
 #include "hfi.h"
-#include "fxr.h"
 #include "include/fxr/fxr_fast_path_defs.h"
 #include "include/fxr/fxr_tx_ci_csrs.h"
 #include "include/fxr/fxr_rx_ci_csrs.h"

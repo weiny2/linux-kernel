@@ -33,7 +33,6 @@
 #include <linux/bitmap.h>
 #include "hfi.h"
 #include "hfi_token.h"
-#include "fxr.h"
 
 static int hfi_pid_alloc(struct hfi_userdata *ud, hfi_pid_t *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid);

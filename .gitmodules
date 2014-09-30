@@ -1,0 +1,3 @@
+[submodule "include.git"]
+	path = include.git
+	url = ssh://git-amr-1.devtools.intel.com:29418/fxr-fxr-headers
