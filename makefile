@@ -61,8 +61,11 @@ KBUILD ?= /lib/modules/$(KVER)/build
 PWD := $(shell pwd)
 VERBOSE := 0
 
-driver:
+driver: headers
 	make -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION)
+
+headers:
+	@git submodule update --init include.git
 
 clean:
 	make -C $(KBUILD) M=${PWD} clean
@@ -86,7 +89,7 @@ ifneq (,$(BASEVERSION))
 	fi
 endif
 
-dist: distclean specfile
+dist: distclean specfile headers
 	rm -rf /tmp/$(NAME)-$(VERSION)
 	mkdir -p /tmp/$(NAME)-$(VERSION)
 	cp -r . /tmp/$(NAME)-$(VERSION)
