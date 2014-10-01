@@ -392,7 +392,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__entry->qpn =
 			be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
 		__entry->a =
-			be32_to_cpu(ohdr->bth[2] >> 31) & 1;
+			(be32_to_cpu(ohdr->bth[2]) >> 31) & 1;
 		/* allow for larger PSN */
 		__entry->psn =
 			be32_to_cpu(ohdr->bth[2]) & 0x7fffffff;

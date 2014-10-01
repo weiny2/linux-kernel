@@ -80,7 +80,6 @@ const char *parse_everbs_hdrs(
 	case OP(UC, RDMA_WRITE_LAST_WITH_IMMEDIATE):
 		trace_seq_printf(p, IMM_PRN,
 			be32_to_cpu(eh->imm_data));
-		trace_seq_putc(p, 0);
 		break;
 	/* reth + imm */
 	case OP(RC, RDMA_WRITE_ONLY_WITH_IMMEDIATE):
@@ -91,7 +90,6 @@ const char *parse_everbs_hdrs(
 			be32_to_cpu(eh->rc.reth.rkey),
 			be32_to_cpu(eh->rc.reth.length),
 			be32_to_cpu(eh->rc.imm_data));
-		trace_seq_putc(p, 0);
 		break;
 	/* reth */
 	case OP(RC, RDMA_READ_REQUEST):
@@ -104,7 +102,6 @@ const char *parse_everbs_hdrs(
 				(__be32 *)&eh->rc.reth.vaddr),
 			be32_to_cpu(eh->rc.reth.rkey),
 			be32_to_cpu(eh->rc.reth.length));
-		trace_seq_putc(p, 0);
 		break;
 	case OP(RC, RDMA_READ_RESPONSE_FIRST):
 	case OP(RC, RDMA_READ_RESPONSE_LAST):
@@ -113,7 +110,6 @@ const char *parse_everbs_hdrs(
 		trace_seq_printf(p, AETH_PRN,
 			be32_to_cpu(eh->aeth) >> 24,
 			be32_to_cpu(eh->aeth) & QIB_QPN_MASK);
-		trace_seq_putc(p, 0);
 		break;
 	/* aeth + atomicacketh */
 	case OP(RC, ATOMIC_ACKNOWLEDGE):
@@ -132,7 +128,6 @@ const char *parse_everbs_hdrs(
 				(__be32 *)&eh->atomic_eth.swap_data),
 			(unsigned long long) ib_u64_get(
 				 (__be32 *)&eh->atomic_eth.compare_data));
-		trace_seq_putc(p, 0);
 		break;
 	/* deth */
 	case OP(UD, SEND_ONLY):
@@ -140,9 +135,9 @@ const char *parse_everbs_hdrs(
 		trace_seq_printf(p, DETH_PRN,
 			be32_to_cpu(eh->ud.deth[0]),
 			be32_to_cpu(eh->ud.deth[1]) & QIB_QPN_MASK);
-		trace_seq_putc(p, 0);
 		break;
 	}
+	trace_seq_putc(p, 0);
 	return ret;
 }
 
