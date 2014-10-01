@@ -63,12 +63,8 @@
 #define HFI_PORT_SNOOP_MODE     1U
 #define HFI_PORT_CAPTURE_MODE   2U
 
-unsigned int snoop_enable = 0; /* By default (0) snooping is disabled */
 unsigned int snoop_drop_send = 0; /* Drop outgoing PIO/SDMA requests */
 unsigned int snoop_force_capture = 0; /* Force into capture */
-
-module_param_named(snoop_enable, snoop_enable , int, 0644);
-MODULE_PARM_DESC(snoop_enable, "snooping mode ");
 
 module_param_named(snoop_drop_send, snoop_drop_send , int, 0644);
 MODULE_PARM_DESC(snoop_drop_send, "drop outgoing snooped PIO/DMA packets ");
@@ -272,8 +268,6 @@ static unsigned int hfi_snoop_poll(struct file *fp,
 					struct poll_table_struct *wait);
 static int hfi_snoop_release(struct inode *in, struct file *fp);
 
-static void dump_ioctl_table(void);
-
 struct hfi_packet_filter_command {
 	int opcode;
 	int length;
@@ -335,27 +329,22 @@ int qib_diag_add(struct hfi_devdata *dd)
 	char name[16];
 	int ret = 0;
 
+	snprintf(name, sizeof(name), "%s_diagpkt%d", class_name(),
+		 dd->unit);
 	/*
-	 * When snoop/capture is on, hijack the diagpkt device
+	 * Do this for each device as opposed to the normal diagpkt
+	 * interface which is one per host
 	 */
+	ret = hfi_snoop_add(dd, name);
+	if (ret)
+		dd_dev_err(dd, "Unable to init snoop/capture device");
 
-	if (snoop_enable) {
-		snprintf(name, sizeof(name), "%s_diagpkt%d", class_name(),
-			 dd->unit);
-		/*
-		 * Do this for each device as opposed to the normal diagpkt
-		 * interface which is one per host
-		 */
-		ret = hfi_snoop_add(dd, name);
-	} else {
-		snprintf(name, sizeof(name), "%s_diagpkt", class_name());
-		if (atomic_inc_return(&diagpkt_count) == 1) {
-			ret = hfi_cdev_init(HFI_DIAGPKT_MINOR, name,
-				    &diagpkt_file_ops, &diagpkt_cdev,
-				    &diagpkt_device);
-		}
+	snprintf(name, sizeof(name), "%s_diagpkt", class_name());
+	if (atomic_inc_return(&diagpkt_count) == 1) {
+		ret = hfi_cdev_init(HFI_DIAGPKT_MINOR, name,
+			    &diagpkt_file_ops, &diagpkt_cdev,
+			    &diagpkt_device);
 	}
-
 	if (ret)
 		goto done;
 
@@ -396,12 +385,9 @@ void qib_diag_remove(struct hfi_devdata *dd)
 {
 	struct diag_client *dc;
 
-	if (snoop_enable) {
-		hfi_snoop_remove(dd);
-	} else {
-		if (atomic_dec_and_test(&diagpkt_count))
-			hfi_cdev_cleanup(&diagpkt_cdev, &diagpkt_device);
-	}
+	hfi_snoop_remove(dd);
+	if (atomic_dec_and_test(&diagpkt_count))
+		hfi_cdev_cleanup(&diagpkt_cdev, &diagpkt_device);
 	hfi_cdev_cleanup(&dd->diag_cdev, &dd->diag_device);
 
 	/*
@@ -919,6 +905,38 @@ bail:
  * In qib this was per port per device. For hfi we are making this per device
  * only.
  */
+#ifdef SNOOP_DEBUG
+/*
+ * This is just for making development and debugging easy. Remove this before
+ * submitting code.
+ */
+static void dump_ioctl_table(void)
+{
+	pr_alert("\nIOCTL Table\n");
+	pr_alert("-----------\n");
+	pr_alert("Get Link State: %d\n", HFI_SNOOP_IOCGETLINKSTATE);
+	pr_alert("Set Link State: %d\n", HFI_SNOOP_IOCSETLINKSTATE);
+	pr_alert("Snoop Clear Queue: %d\n", HFI_SNOOP_IOCCLEARQUEUE);
+	pr_alert("Snoop Clear Filter: %d\n", HFI_SNOOP_IOCCLEARFILTER);
+	pr_alert("Snoop Set Filter: %d\n", HFI_SNOOP_IOCSETFILTER);
+	pr_alert("Get Snoop/Capture Version: %d\n", HFI_SNOOP_IOCGETVERSION);
+	pr_alert("Get link state extra: %lu\n",
+					HFI_SNOOP_IOCGETLINKSTATE_EXTRA);
+	pr_alert("Set link state extra: %lu\n",
+					HFI_SNOOP_IOCSETLINKSTATE_EXTRA);
+
+	pr_alert("\nSnoop/Capture Filters\n");
+	pr_alert("---------------------\n");
+	pr_alert("LID %d\n", FILTER_BY_LID);
+	pr_alert("DLID %d\n", FILTER_BY_DLID);
+	pr_alert("MAD Mgmt Class %d\n", FILTER_BY_MAD_MGMT_CLASS);
+	pr_alert("QP Num %d\n", FILTER_BY_QP_NUMBER);
+	pr_alert("Packet Type %d\n", FILTER_BY_PKT_TYPE);
+	pr_alert("Service Level %d\n", FILTER_BY_SERVICE_LEVEL);
+	pr_alert("PKey %d\n", FILTER_BY_PKEY);
+}
+#endif
+
 static int hfi_snoop_add(struct hfi_devdata *dd, const char *name)
 {
 	int ret = 0;
@@ -937,7 +955,9 @@ static int hfi_snoop_add(struct hfi_devdata *dd, const char *name)
 		hfi_cdev_cleanup(&dd->hfi_snoop.cdev,
 				 &dd->hfi_snoop.class_dev);
 	} else {
+#ifdef SNOOP_DEBUG
 		dump_ioctl_table();
+#endif
 	}
 
 	return ret;
@@ -1637,36 +1657,6 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 		return HFI_FILTER_HIT;
 
 	return HFI_FILTER_MISS;
-}
-
-/*
- * This is just for making development and debugging easy. Remove this before
- * submitting code.
- */
-static void dump_ioctl_table(void)
-{
-	pr_alert("\nIOCTL Table\n");
-	pr_alert("-----------\n");
-	pr_alert("Get Link State: %d\n", HFI_SNOOP_IOCGETLINKSTATE);
-	pr_alert("Set Link State: %d\n", HFI_SNOOP_IOCSETLINKSTATE);
-	pr_alert("Snoop Clear Queue: %d\n", HFI_SNOOP_IOCCLEARQUEUE);
-	pr_alert("Snoop Clear Filter: %d\n", HFI_SNOOP_IOCCLEARFILTER);
-	pr_alert("Snoop Set Filter: %d\n", HFI_SNOOP_IOCSETFILTER);
-	pr_alert("Get Snoop/Capture Version: %d\n", HFI_SNOOP_IOCGETVERSION);
-	pr_alert("Get link state extra: %lu\n",
-					HFI_SNOOP_IOCGETLINKSTATE_EXTRA);
-	pr_alert("Set link state extra: %lu\n",
-					HFI_SNOOP_IOCSETLINKSTATE_EXTRA);
-
-	pr_alert("\nSnoop/Capture Filters\n");
-	pr_alert("---------------------\n");
-	pr_alert("LID %d\n", FILTER_BY_LID);
-	pr_alert("DLID %d\n", FILTER_BY_DLID);
-	pr_alert("MAD Mgmt Class %d\n", FILTER_BY_MAD_MGMT_CLASS);
-	pr_alert("QP Num %d\n", FILTER_BY_QP_NUMBER);
-	pr_alert("Packet Type %d\n", FILTER_BY_PKT_TYPE);
-	pr_alert("Service Level %d\n", FILTER_BY_SERVICE_LEVEL);
-	pr_alert("PKey %d\n", FILTER_BY_PKEY);
 }
 
 /*

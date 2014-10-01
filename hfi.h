@@ -1047,7 +1047,6 @@ extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
 
 extern unsigned qib_cc_table_size;
-extern unsigned int snoop_enable;
 extern unsigned int snoop_drop_send;
 extern unsigned int snoop_force_capture;
 int qib_init(struct hfi_devdata *, int);
