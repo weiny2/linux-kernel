@@ -14,6 +14,7 @@
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <linux/fcntl.h>
+#include <linux/genhd.h>
 #include <linux/ndctl.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -37,6 +38,8 @@ static int to_nd_device_type(struct device *dev)
 		return ND_DEVICE_REGION_BLOCK;
 	else if (is_nd_pmem(dev->parent) || is_nd_blk(dev->parent))
 		return nd_region_to_namespace_type(to_nd_region(dev->parent));
+	else if (is_nd_btt(dev))
+		return ND_DEVICE_BTT;
 
 	return 0;
 }
@@ -133,6 +136,21 @@ static int nd_bus_probe(struct device *dev)
 	else if (rc == 0)
 		del_deferred_tracker(nd_bus, dev);
 	dev_dbg(dev, "%pf returned: %d\n", nd_drv->probe, rc);
+
+	/* check if our btt-seed has sprouted, and plant another */
+	if (rc == 0 && is_nd_btt(dev) && dev == &nd_bus->nd_btt->dev) {
+		const char *sep = "", *name = "", *status = "failed";
+
+		nd_bus->nd_btt = nd_btt_create(nd_bus, NULL, NULL, 0, NULL);
+		if (nd_bus->nd_btt) {
+			status = "succeeded";
+			sep = ": ";
+			name = dev_name(&nd_bus->nd_btt->dev);
+		}
+		dev_dbg(&nd_bus->dev, "btt seed creation %s%s%s\n",
+				status, sep, name);
+	}
+
 	if (rc != 0)
 		module_put(provider);
 	return rc;
@@ -262,6 +280,117 @@ int __nd_driver_register(struct nd_device_driver *nd_drv, struct module *owner,
 	return driver_register(drv);
 }
 EXPORT_SYMBOL(__nd_driver_register);
+
+/**
+ * nd_register_ndio() - register byte-aligned access capability for an nd-bdev
+ * @disk: child gendisk of the ndio namepace device
+ * @ndio: initialized ndio instance to register
+ *
+ * LOCKING: hold nd_bus_lock() over the creation of ndio->disk and the
+ * subsequent nd_region_ndio event
+ */
+int nd_register_ndio(struct nd_io *ndio)
+{
+	struct nd_bus *nd_bus;
+	struct device *dev;
+
+	if (!ndio || !ndio->dev || !ndio->disk || !list_empty(&ndio->list)
+			|| !ndio->rw_bytes || ndio->holder
+			|| ndio->notify_remove) {
+		pr_debug("%s bad parameters from %pf\n", __func__,
+				__builtin_return_address(0));
+		return -EINVAL;
+	}
+
+	dev = ndio->dev;
+	nd_bus = walk_to_nd_bus(dev);
+	if (!nd_bus)
+		return -EINVAL;
+
+	mutex_lock(&nd_bus_list_mutex);
+	list_add(&ndio->list, &nd_bus->ndios);
+	mutex_unlock(&nd_bus_list_mutex);
+
+	/* TODO: Autodetect BTT */
+
+	return 0;
+}
+EXPORT_SYMBOL(nd_register_ndio);
+
+/**
+ * __nd_unregister_ndio() - try to remove an ndio interface
+ * @ndio: interface to remove
+ */
+static int __nd_unregister_ndio(struct nd_io *ndio)
+{
+	struct nd_bus *nd_bus;
+	struct nd_io *n, *_n;
+
+	if (ndio->holder || ndio->notify_remove) {
+		dev_WARN_ONCE(ndio->dev, 1, "%s: ndio busy\n", __func__);
+		return -EBUSY;
+	}
+
+	nd_bus = walk_to_nd_bus(ndio->dev);
+	if (!nd_bus || list_empty(&ndio->list))
+		return -ENXIO;
+
+	list_for_each_entry_safe(n, _n, &nd_bus->ndios, list)
+		if (n == ndio) {
+			list_del_init(&ndio->list);
+			break;
+		}
+	if (!list_empty(&ndio->list))
+		return -ENXIO;
+
+	return 0;
+}
+
+int nd_unregister_ndio(struct nd_io *ndio)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(ndio->dev);
+	struct device *dev = ndio->dev;
+	int rc;
+
+	nd_bus_lock(dev);
+	if (ndio->holder)
+		ndio->notify_remove(ndio);
+	mutex_lock(&nd_bus_list_mutex);
+	rc = __nd_unregister_ndio(ndio);
+	mutex_unlock(&nd_bus_list_mutex);
+	nd_bus_unlock(dev);
+
+	/*
+	 * Flush in case ->notify_remove() kicked off asynchronous device
+	 * unregistration
+	 */
+	nd_bus_wait_probe(nd_bus);
+
+	return rc;
+}
+EXPORT_SYMBOL(nd_unregister_ndio);
+
+static struct nd_io *__ndio_lookup(struct nd_bus *nd_bus, const char *diskname)
+{
+	struct nd_io *ndio;
+
+	list_for_each_entry(ndio, &nd_bus->ndios, list)
+		if (strcmp(diskname, ndio->disk->disk_name) == 0)
+			return ndio;
+
+	return NULL;
+}
+
+struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname)
+{
+	struct nd_io *ndio;
+
+	mutex_lock(&nd_bus_list_mutex);
+	ndio = __ndio_lookup(nd_bus, diskname);
+	mutex_unlock(&nd_bus_list_mutex);
+
+	return ndio;
+}
 
 static const char *nfit_desc_provider(struct device *parent,
 		struct nfit_bus_descriptor *nfit_desc)
