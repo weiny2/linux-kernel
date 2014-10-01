@@ -14,6 +14,7 @@
 #define __ND_PRIVATE_H__
 #include <linux/device.h>
 #include <linux/sizes.h>
+#include <linux/mutex.h>
 
 extern struct list_head nd_bus_list;
 extern struct mutex nd_bus_list_mutex;
@@ -22,6 +23,10 @@ enum {
 	/* need to set a limit somewhere, but yes, this is ludicrously big */
 	ND_IOCTL_MAX_BUFLEN = SZ_4M,
 };
+
+struct block_device;
+struct nd_btt;
+struct nd_io;
 
 struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;
@@ -34,9 +39,12 @@ struct nd_bus {
 	struct list_head spas;
 	struct list_head dcrs;
 	struct list_head bdws;
+	struct list_head ndios;
 	struct list_head list;
 	struct device dev;
 	int id;
+	struct mutex reconfig_mutex;
+	struct nd_btt *nd_btt;
 };
 
 struct nd_spa {
@@ -60,10 +68,27 @@ struct nd_mem {
 	struct list_head list;
 };
 
+struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname);
 void nd_bus_wait_probe(struct nd_bus *nd_bus);
 bool is_nd_dimm(struct device *dev);
 bool is_nd_blk(struct device *dev);
 bool is_nd_pmem(struct device *dev);
+#if IS_ENABLED(CONFIG_ND_BTT_DEVS)
+bool is_nd_btt(struct device *dev);
+struct nd_btt *nd_btt_create(struct nd_bus *nd_bus, struct block_device *bdev,
+		struct nd_io *ndio, unsigned long lbasize, u8 uuid[16]);
+#else
+static inline bool is_nd_btt(struct device *dev)
+{
+	return false;
+}
+static inline struct nd_btt *nd_btt_create(struct nd_bus *nd_bus,
+		struct block_device *bdev, struct nd_io *ndio,
+		unsigned long lbasize, u8 uuid[16])
+{
+	return NULL;
+}
+#endif
 struct nd_bus *to_nd_bus(struct device *dev);
 struct nd_bus *walk_to_nd_bus(struct device *nd_dev);
 int __init nd_bus_init(void);

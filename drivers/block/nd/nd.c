@@ -33,6 +33,50 @@ static bool warn_checksum;
 module_param(warn_checksum, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(warn_checksum, "Turn checksum errors into warnings");
 
+void nd_bus_lock(struct device *dev)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+	if (!nd_bus)
+		return;
+	mutex_lock(&nd_bus->reconfig_mutex);
+}
+EXPORT_SYMBOL(nd_bus_lock);
+
+void nd_bus_unlock(struct device *dev)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+	if (!nd_bus)
+		return;
+	mutex_unlock(&nd_bus->reconfig_mutex);
+}
+EXPORT_SYMBOL(nd_bus_unlock);
+
+bool is_nd_bus_locked(struct device *dev)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+	if (!nd_bus)
+		return false;
+	return mutex_is_locked(&nd_bus->reconfig_mutex);
+}
+EXPORT_SYMBOL(is_nd_bus_locked);
+
+void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
+		struct device *dev, struct gendisk *disk, int num_lanes,
+		unsigned long align)
+{
+	memset(ndio, 0, sizeof(*ndio));
+	INIT_LIST_HEAD(&ndio->list);
+	ndio->dev = dev;
+	ndio->disk = disk;
+	ndio->align = align;
+	ndio->num_lanes = num_lanes;
+	ndio->rw_bytes = rw_bytes;
+}
+EXPORT_SYMBOL(nd_init_ndio);
+
 static void nd_bus_release(struct device *dev)
 {
 	struct nd_bus *nd_bus = container_of(dev, struct nd_bus, dev);
@@ -60,6 +104,8 @@ static void nd_bus_release(struct device *dev)
 		list_del_init(&nd_mem->list);
 		kfree(nd_mem);
 	}
+
+	WARN_ON(!list_empty(&nd_bus->ndios));
 
 	ida_simple_remove(&nd_ida, nd_bus->id);
 	kfree(nd_bus);
@@ -98,10 +144,12 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->bdws);
 	INIT_LIST_HEAD(&nd_bus->memdevs);
 	INIT_LIST_HEAD(&nd_bus->deferred);
+	INIT_LIST_HEAD(&nd_bus->ndios);
 	INIT_LIST_HEAD(&nd_bus->list);
 	init_completion(&nd_bus->registration);
 	init_waitqueue_head(&nd_bus->deferq);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
+	mutex_init(&nd_bus->reconfig_mutex);
 	if (test_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags))
 		nd_bus->format_interface_code = 1;
 	if (nd_bus->id < 0) {
@@ -295,6 +343,8 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 	rc = nd_bus_register_regions(nd_bus);
 	if (rc)
 		goto err_child;
+
+	nd_bus->nd_btt = nd_btt_create(nd_bus, NULL, NULL, 0, NULL);
 
 	mutex_lock(&nd_bus_list_mutex);
 	list_add_tail(&nd_bus->list, &nd_bus_list);

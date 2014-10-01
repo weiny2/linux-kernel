@@ -76,4 +76,7 @@ config NFIT_TEST
 
 	  Say N unless you are doing development of the 'nd' subsystem.
 
+config ND_BTT_DEVS
+	def_bool y
+
 endif

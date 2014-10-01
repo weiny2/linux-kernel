@@ -103,6 +103,7 @@ enum {
 #define ND_DEVICE_NAMESPACE_IO 4    /* legacy persistent memory */
 #define ND_DEVICE_NAMESPACE_PMEM 5  /* persistent memory namespace (may alias) */
 #define ND_DEVICE_NAMESPACE_BLOCK 6 /* block-data-window namespace (may alias) */
+#define ND_DEVICE_BTT 7		    /* block-translation table device */
 
 enum nd_driver_flags {
 	ND_DRIVER_DIMM            = 1 << ND_DEVICE_DIMM,
@@ -111,5 +112,6 @@ enum nd_driver_flags {
 	ND_DRIVER_NAMESPACE_IO    = 1 << ND_DEVICE_NAMESPACE_IO,
 	ND_DRIVER_NAMESPACE_PMEM  = 1 << ND_DEVICE_NAMESPACE_PMEM,
 	ND_DRIVER_NAMESPACE_BLOCK = 1 << ND_DEVICE_NAMESPACE_BLOCK,
+	ND_DRIVER_BTT		  = 1 << ND_DEVICE_BTT,
 };
 #endif /* __NDCTL_H__ */
