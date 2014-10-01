@@ -19,85 +19,6 @@ capture_path = directory + "/PcapLocal.py"
 err_cnt = 0
 captured = 0
 
-def enable_snoop(hosts, params):
-    global host1
-    global host2
-
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-    if snoop_enabled(host1) == False:
-        error("Could not enable snoop on host1")
-
-    if snoop_enabled(host2) == False:
-        error("Could not enable snoop on host2")
-
-def enable_snoop_for_bypass(hosts, params):
-    global host1
-    global host2
-
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-    if snoop_enabled(host1) == True:
-        error("Snoop should not be on for host1")
-
-    if snoop_enabled(host2) == False:
-        error("Snoop should be on for host2")
-
-def enable_snoop_drop_send(hosts, params):
-    global host1
-    global host2
-
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-    if (snoop_enabled(host1) == False or snoop_enabled(host2) == False or
-        snoop_drop_send_enabled(host1) == False or snoop_drop_send_enabled(host2) == False):
-        error("Could not enable snoop and snoop_drop_send on all hosts")
-
-def restore_default_params(hosts, params):
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-
-def snoop_enabled(host):
-    # First check and see if snoop is enabled.
-    RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
-    snoop_on = 0
-    cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-    (res,output) = host.send_ssh(cmd, run_as_root=True)
-    if res:
-        RegLib.test_log(0, "SSH failed")
-        return False
-
-    for line in output:
-        matchObj = re.match(r"snoop_enable = 1", line)
-        if matchObj:
-            snoop_on = 1
-            print RegLib.chomp(line)
-
-    if snoop_on != 1:
-        RegLib.test_log(0, "Snoop is not enabled")
-        return False
-
-    RegLib.test_log(0, "Snoop is enabled")
-    return True
-
-def snoop_drop_send_enabled(host):
-    RegLib.test_log(0, "Checking snoop_drop_send enablement for %s" % host.get_name())
-    snoop_on = 0
-    cmd = "echo snoop_drop_send = `cat /sys/module/hfi/parameters/snoop_drop_send`"
-    (res,output) = host.send_ssh(cmd, run_as_root=True)
-    if res:
-        RegLib.test_log(0, "SSH failed")
-        return False
-
-    for line in output:
-        matchObj = re.match(r"snoop_drop_send = 1", line)
-        if matchObj:
-            snoop_on = 1
-            print RegLib.chomp(line)
-
-    if snoop_on != 1:
-        RegLib.test_log(0, "Snoop_drop_send is not enabled")
-        return False
-
-    RegLib.test_log(0, "Snoop_drop_send is enabled")
-    return True
-
 def snoop_do_not_intercept_outgoing(host, lid1, lid2):
     global snoop_path
 
@@ -519,11 +440,6 @@ def main():
     host2 = test_info.get_host_record(1)
 
     nodes = host1.get_name() + "," + host2.get_name()
-    default_parms = test_info.get_mod_parms()
-    snoop_parms = default_parms + " snoop_enable=1"
-    snoop_bypass_parms = default_parms + " : " + default_parms + " snoop_enable=1"
-    snoop_drop_send_parms = default_parms + " snoop_enable=1 snoop_drop_send=1"
-    RegLib.test_log(0, "Default parms [%s] Snoop parms [%s]" % (default_parms, snoop_parms))
 
     diag_path = test_info.get_diag_lib()
     if diag_path == "DEFAULT":
@@ -537,12 +453,6 @@ def main():
     print "XXXXXXXXXXXXXXX"
     print "Starting Test 1"
     print "XXXXXXXXXXXXXXX"
-    if snoop_enabled(host1) == False or snoop_enabled(host2) == False:
-        enable_snoop(nodes, snoop_parms)
-
-    if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
-        enable_snoop(nodes, snoop_parms)
-
     snoop_pid = snoop_do_not_intercept_outgoing(host1, host1.get_lid(),host2.get_lid())
     capture_pid = capture_do_not_intercept_outgoing(host2, host1.get_lid(), host2.get_lid())
 
@@ -563,41 +473,6 @@ def main():
     print "XXXXXXXXXXXXXXX"
     print "Starting Test 2"
     print "XXXXXXXXXXXXXXX"
-
-    if unit_test:
-        if (snoop_enabled(host1) == False or snoop_enabled(host2) == False or
-            snoop_drop_send_enabled(host1) == False or
-            snoop_drop_send_enabled(host2) == False):
-                enable_snoop_drop_send(nodes, snoop_drop_send_parms)
-
-        snoop_pid = snoop_intercept_outgoing(host1)
-        capture_pid = capture_do_not_intercept_outgoing(host2)
-
-        run_ib_send_lat()
-
-        RegLib.test_log(0, "Waiting for snoop pid to stop and validate")
-        (waited, status) = os.waitpid(snoop_pid, 0)
-        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-        if status:
-            error("Snoop Proc Test 2 failed")
-
-        RegLib.test_log(0, "Waiting for capture pid to stop and validate")
-        (waited, status) = os.waitpid(capture_pid, 0)
-        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-        if status:
-            error("Cpature Proc Test 2 failed")
-    else:
-        RegLib.test_log(0, "Skipping test 2 for regression suite")
-
-    print "XXXXXXXXXXXXXXX"
-    print "Starting Test 3"
-    print "XXXXXXXXXXXXXXX"
-    if snoop_enabled(host1) == False or snoop_enabled(host2) == False:
-        enable_snoop(nodes, snoop_parms)
-
-    if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
-        enable_snoop(nodes, snoop_parms)
-
     snoop_pid = snoop_intercept_outgoing_2(host1, host1.get_lid(), host2.get_lid())
     capture_pid = capture_do_not_intercept_outgoing(host2, host1.get_lid(), host2.get_lid())
 
@@ -607,49 +482,19 @@ def main():
     (waited, status) = os.waitpid(snoop_pid, 0)
     RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
     if status:
-        error("Snoop Proc Test 3 failed")
+        error("Snoop Proc Test 2 failed")
 
     RegLib.test_log(0, "Waiting for capture pid to stop and validate")
     (waited, status) = os.waitpid(capture_pid, 0)
     RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
     if status:
-        error("Cpature Proc Test 3 failed")
+        error("Cpature Proc Test 2 failed")
 
-    print "XXXXXXXXXXXXXXX"
-    print "Starting Test 4"
-    print "XXXXXXXXXXXXXXX"
     if unit_test:
-        if (snoop_enabled(host1) == False or snoop_enabled(host2) == False):
-            enable_snoop(nodes, snoop_parms)
-
-        if snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2) == True:
-            enable_snoop(nodes, snoop_parms)
-
-        snoop_pid = snoop_intercept_outgoing_3(host1, host1.get_lid(), host2.get_lid())
-        capture_pid = capture_do_not_intercept_outgoing_2(host2, host1.get_lid(), host2.get_lid())
-
-        run_ib_send_lat_2()
-
-        RegLib.test_log(0, "Waiting for snoop pid to stop and validate")
-        (waited, status) = os.waitpid(snoop_pid, 0)
-        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-        if status:
-            error("Snoop Proc Test 4 failed")
-
-        RegLib.test_log(0, "Waiting for capture pid to stop and validate")
-        (waited, status) = os.waitpid(capture_pid, 0)
-        RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-        if status:
-            error("Cpature Proc Test 4 failed")
-
         print "XXXXXXXXXXXXXXX"
-        print "Starting Test 5"
+        print "Starting Test 3"
         print "XXXXXXXXXXXXXXX"
         RegLib.test_log(0, "Enabling snoop for bypass");
-
-        if (snoop_enabled(host1) == True or snoop_enabled(host2) == False or
-           snoop_drop_send_enabled(host1) == True or snoop_drop_send_enabled(host2)):
-            enable_snoop_for_bypass(nodes, snoop_bypass_parms)
 
         RegLib.test_log(0, "Starting packet capture on host2")
         capture_pid = capture_bypass(host2)
@@ -669,9 +514,6 @@ def main():
             RegLib.test_log(0, "Successfully got 10 bypass packets")
         else:
             error("Wrong number of bypass packets.")
-    else: 
-        RegLib.test_log(0, "Skipping test 4 for regression suite")
-        RegLib.test_log(0, "Skipping test 5 for regression suite")
 
     done_check_error()
 

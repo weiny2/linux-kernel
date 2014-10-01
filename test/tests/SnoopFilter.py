@@ -13,32 +13,6 @@ import subprocess
 
 
 directory = os.path.dirname(os.path.realpath(__file__))
-def enable_snoop(hosts, params):
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-
-def restore_default_params(hosts, params):
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-
-def snoop_enabled(hosts):
-    # Firs check and see if snoop is enabled.
-    for host in hosts:
-        RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
-        snoop_on = 0
-        cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-        (res,output) = host.send_ssh(cmd, run_as_root=True)
-        if res:
-            RegLib.test_fail("Could not get status for host %s" %
-                             host.get_name())
-        for line in output:
-            matchObj = re.match(r"snoop_enable = 1", line)
-            if matchObj:
-                snoop_on = 1
-                print RegLib.chomp(line)
-
-        if snoop_on != 1:
-            return False
-
-    return True
 
 def run_filter_test(host1, host2, path, filter):
 
@@ -102,25 +76,9 @@ def main():
     host2 = test_info.get_host_record(1)
     nodes = host1.get_name() + "," + host2.get_name()
     
-    disable_snoop = 0
-
-    default_parms = test_info.get_mod_parms()
-    snoop_parms = default_parms + " snoop_enable=1"
-    RegLib.test_log(0, "Default parms [%s] Snoop parms [%s]" % (default_parms, snoop_parms))
-
-    if not snoop_enabled([host1,host2]):
-        enable_snoop(nodes, snoop_parms)
-        disable_snoop = 1
-        if not snoop_enabled([host1,host2]):
-            RegLib.test_fail("Could not enable snoop")
-
-
     for filter in ["0x0", "0x1", "0x2", "0x3", "0x4", "0x5", "0x6"]:
         RegLib.test_log(0, "Running filter test %s" % filter)
         run_filter_test(host1, host2, path, filter)
-
-    if disable_snoop:
-        restore_default_params(nodes, default_parms)
 
     RegLib.test_pass("Success!")
 

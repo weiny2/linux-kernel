@@ -16,35 +16,6 @@ host2 = None
 directory = os.path.dirname(os.path.realpath(__file__))
 test_path = directory + "/PcapLocal.py"
 
-def enable_snoop(hosts, params):
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-
-def restore_default_params(hosts, params):
-    os.system(directory + "/LoadModule.py --nodelist " + hosts + " --modparm \"" + params + "\"")
-
-def snoop_enabled():
-    # Firs check and see if snoop is enabled.
-    global host1
-    global host2
-    for host in [host1, host2]:
-        RegLib.test_log(0, "Checking snoop enablement for %s" % host.get_name())
-        snoop_on = 0
-        cmd = "echo snoop_enable = `cat /sys/module/hfi/parameters/snoop_enable`"
-        (res,output) = host.send_ssh(cmd,run_as_root=True)
-        if res:
-            RegLib.test_fail("Could not get status for host %s" %
-                             host.get_name())
-        for line in output:
-            matchObj = re.match(r"snoop_enable = 1", line)
-            if matchObj:
-                snoop_on = 1
-                print RegLib.chomp(line)
-
-        if snoop_on != 1:
-            return False
-
-    return True
-
 def start_pcap(host, lid1, lid2):
     # Start packet capture and when done check its output. This is done in a
     # child process.
@@ -97,19 +68,6 @@ def main():
     host2 = test_info.get_host_record(1)
     nodes = host1.get_name() + "," + host2.get_name()
     
-    disable_snoop = 1
-
-    default_parms = test_info.get_mod_parms()
-    snoop_parms = default_parms + " snoop_enable=1"
-    RegLib.test_log(0, "Default parms [%s] Snoop parms [%s]" % (default_parms, snoop_parms))
-
-    if snoop_enabled():
-        disable_snoop = 0
-    else:
-        enable_snoop(nodes, snoop_parms)
-        if not snoop_enabled():
-            RegLib.test_fail("Couild not enable capture")
-
     pid1 = start_pcap(host1, host1.get_lid(), host2.get_lid())
     pid2 = start_pcap(host2, host2.get_lid(), host1.get_lid())
 
@@ -149,9 +107,6 @@ def main():
     if status:
         RegLib.test_fail("Test Failed")
     RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
-
-    if disable_snoop:
-        restore_default_params(nodes, default_parms)
 
     if status:
         RegLib.test_fail("Failed!")

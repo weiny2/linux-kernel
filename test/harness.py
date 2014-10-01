@@ -173,6 +173,35 @@ test_list = [
       "desc" : "Run hfi_pkt_send tests.",
     },
 
+    # Fast MPI tests
+    { "test_name" : "MPI-Stress-Psm",
+      "test_exe" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "type" : "mpi,mpipsm,quick",
+      "desc" : "Run quick MPI stress with PSM",
+    },
+
+    { "test_name" : "MPI-Stress-Verbs",
+      "test_exe" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "type" : "mpi,mpiverbs,verbs,quick",
+      "desc" : "Run quick MPI stress with verbs",
+    },
+
+    { "test_name" : "MPI-Stress-PSM-Long",
+      "test_exe" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 10 -M 10 -w 20 -z\"",
+      "type" : "mpi,mpipsm,default,integrity",
+      "desc" : "Run MPI stress with PSM",
+    },
+
+    { "test_name" : "MPI-Stress-Verbs-Long",
+      "test_exe" : "MpiStress.py",
+      "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 10 -M 10 -w 20 -z\"",
+      "type" : "default,mpi,mpiverbs,verbs,default,integrity",
+      "desc" : "Run MPI stress with verbs",
+    },
+
     # Snoop/Capture tests
     { "test_name" : "SnoopHijack",
       "test_exe" : "Snoop.py",
@@ -209,13 +238,6 @@ test_list = [
       "desc" : "Run snoop IOCTL tests (modifies HFI state and kills SM.",
     },
 
-    { "test_name" : "SnoopCleanup",
-      "test_exe" : "LoadModule.py",
-      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
-      "type" : "default,",
-      "desc" : "Runs after snoop tests to reload the driver and re-enable fm"
-    },
-
     { "test_name" : "8K-MTU-Verbs",
       "test_exe" : "MTUTest.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
@@ -223,33 +245,11 @@ test_list = [
       "desc" : "Test 4K and 8K MTU with verbs traffic"
     },
 
-    # Fast MPI tests
-    { "test_name" : "MPI-Stress-Psm",
-      "test_exe" : "MpiStress.py",
-      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "mpi,mpipsm,quick",
-      "desc" : "Run quick MPI stress with PSM",
-    },
-
-    { "test_name" : "MPI-Stress-Verbs",
-      "test_exe" : "MpiStress.py",
-      "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "mpi,mpiverbs,verbs,quick",
-      "desc" : "Run quick MPI stress with verbs",
-    },
-
-    { "test_name" : "MPI-Stress-PSM-Long",
-      "test_exe" : "MpiStress.py",
-      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 10 -M 10 -w 20 -z\"",
-      "type" : "mpi,mpipsm,default,integrity",
-      "desc" : "Run MPI stress with PSM",
-    },
-
-    { "test_name" : "MPI-Stress-Verbs-Long",
-      "test_exe" : "MpiStress.py",
-      "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 10 -M 10 -w 20 -z\"",
-      "type" : "default,mpi,mpiverbs,verbs,default,integrity",
-      "desc" : "Run MPI stress with verbs",
+    { "test_name" : "RestoreSanity",
+      "test_exe" : "LoadModule.py",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
+      "type" : "default,",
+      "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 ]
 
