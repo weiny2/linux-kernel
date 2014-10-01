@@ -1873,9 +1873,8 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 
 	md.u.pbc = 0;
 
-	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u ss->total_len %u tlen %u/n",
-		  hdrwords, len, plen, dwords, ss->total_len, tlen);
-
+	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u tlen %u/n",
+		  hdrwords, len, plen, dwords, tlen);
 	if (ppd->dd->hfi_snoop.mode_flag & HFI_PORT_SNOOP_MODE)
 		snoop_mode = 1;
 	else
@@ -1926,15 +1925,15 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		 * and it won't impact PIO.
 		 */
 		temp_ss = *ss;
+		length = len;
 
-		length = ss->total_len;
 		snoop_dbg("Need to copy %d bytes\n", length);
 		while (length) {
 			void *addr = temp_ss.sge.vaddr;
 			u32 slen = temp_ss.sge.length;
-			if (slen > len) {
-				slen = len;
-				snoop_dbg("slen %d > len %d", slen, len);
+			if (slen > length) {
+				slen = length;
+				snoop_dbg("slen %d > len %d", slen, length);
 			}
 			snoop_dbg("copy %d to %p", slen, addr);
 			memcpy(data, addr, slen);
@@ -1944,10 +1943,6 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			snoop_dbg("data is now %p bytes left %d", data, length);
 		}
 		snoop_dbg("Completed SGE copy");
-
-		/* This gets the header and payload */
-		trace_snoop_capture(ppd->dd, hdr_len, ibhdr, ss->total_len,
-				    data_start);
 	}
 
 	/*
