@@ -283,6 +283,14 @@ def main():
     if num_loaded != 2:
         RegLib.test_fail(name + " Unable to get active state on at least 1 node")
 
+    # Before bailing out dump the kmod load address in case we need to do some
+    # debugging later.
+    for host in host1,host2:
+        print host.get_name(), "module load address is:"
+        cmd = "cat /sys/module/hfi/sections/.init.text"
+        (err, out) = do_ssh(host, cmd)
+        print out
+
     RegLib.test_pass("Driver loaded, adapters up SM running.")
 
 if __name__ == "__main__":
