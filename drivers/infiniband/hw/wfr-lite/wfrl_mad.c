@@ -139,7 +139,7 @@ struct stl_vlarb_entry
 #define STL_VLARB_HIGH_ELEMENTS      1
 #define STL_VLARB_PREEMPT_ELEMENTS   2
 #define STL_VLARB_PREEMPT_MATRIX     3
-struct stl_vlarb_data
+union stl_vlarb_data
 {
 	struct stl_vlarb_entry low_pri_table[128];
 	struct stl_vlarb_entry high_pri_table[128];
@@ -184,7 +184,10 @@ static struct {
 	u8 sc_to_sl[STL_MAX_SCS];
 	u8 sc_to_vlt[STL_MAX_SCS];
 	u8 sc_to_vlnt[STL_MAX_SCS];
-	struct stl_vlarb_data vlarb_data;
+	union stl_vlarb_data vlarb_low;
+	union stl_vlarb_data vlarb_high;
+	union stl_vlarb_data vlarb_pre_table;
+	union stl_vlarb_data vlarb_pre_matrix;
 	struct stl_buffer_control_table buffer_control_table;
 	int member_full_mgmt; /* flag if this port is a member of the full management partition */
 	u8 cable_info[CABLE_INFO_SIZE];
@@ -323,7 +326,10 @@ static void init_virtual_port_info(u8 port)
 {
 	unsigned i;
 	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
-	struct stl_vlarb_data *vlarb_data = &virtual_stl[port-1].vlarb_data;
+	union stl_vlarb_data *virt_low = &virtual_stl[port-1].vlarb_low;
+	union stl_vlarb_data *virt_high = &virtual_stl[port-1].vlarb_high;
+	union stl_vlarb_data *virt_pre_table = &virtual_stl[port-1].vlarb_pre_table;
+	union stl_vlarb_data *virt_pre_matrix = &virtual_stl[port-1].vlarb_pre_matrix;
 
 	virtual_port_linkup_init(port);
 	vpi->link_speed.supported = WFR_LITE_LINK_SPEED_ALL_SUP;
@@ -341,20 +347,22 @@ static void init_virtual_port_info(u8 port)
 	linkup_default(port);
 
 	/* VLARB */
+	memset(virt_low, 0, sizeof(*virt_low));
 	for (i = 0; i < qib_num_cfg_vls; i++) {
-		vlarb_data->low_pri_table[i].vl = i & 0x1f;
-		vlarb_data->low_pri_table[i].weight = 1;
+		virt_low->low_pri_table[i].vl = i & 0x1f;
+		virt_low->low_pri_table[i].weight = 1;
 	}
-	for (i = 0; i < ARRAY_SIZE(vlarb_data->high_pri_table); i++) {
-		vlarb_data->high_pri_table[i].vl = 15;
-		vlarb_data->high_pri_table[i].weight = 0;
+	memset(virt_high, 0, sizeof(*virt_high));
+	for (i = 0; i < ARRAY_SIZE(virt_high->high_pri_table); i++) {
+		virt_high->high_pri_table[i].vl = 15;
+		virt_high->high_pri_table[i].weight = 0;
 	}
-	for (i = 0; i < ARRAY_SIZE(vlarb_data->preempting_table); i++) {
-		vlarb_data->preempting_table[i].vl = 15;
-		vlarb_data->preempting_table[i].weight = 0;
+	memset(virt_pre_table, 0, sizeof(*virt_pre_table));
+	for (i = 0; i < ARRAY_SIZE(virt_pre_table->preempting_table); i++) {
+		virt_pre_table->preempting_table[i].vl = 15;
+		virt_pre_table->preempting_table[i].weight = 0;
 	}
-	memset(vlarb_data->preemption_matrix, 0,
-	       sizeof(vlarb_data->preemption_matrix));
+	memset(virt_pre_matrix, 0, sizeof(*virt_pre_matrix));
 }
 
 static void reset_virtual_port(u8 port)
@@ -2414,7 +2422,11 @@ error:
 static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	struct stl_vlarb_data *virt_data = &virtual_stl[port-1].vlarb_data;
+	union stl_vlarb_data *virt_low = &virtual_stl[port-1].vlarb_low;
+	union stl_vlarb_data *virt_high = &virtual_stl[port-1].vlarb_high;
+	union stl_vlarb_data *virt_pre_table = &virtual_stl[port-1].vlarb_pre_table;
+	union stl_vlarb_data *virt_pre_matrix = &virtual_stl[port-1].vlarb_pre_matrix;
+
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
@@ -2430,24 +2442,20 @@ static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 
 	switch (section) {
 		case STL_VLARB_LOW_ELEMENTS:
-			memcpy(p, virt_data->low_pri_table,
-				sizeof(virt_data->low_pri_table));
-				*resp_len += sizeof(virt_data->low_pri_table);
+			memcpy(p, virt_low, sizeof(*virt_low));
+			*resp_len += sizeof(*virt_low);
 			break;
 		case STL_VLARB_HIGH_ELEMENTS:
-			memcpy(p, virt_data->high_pri_table,
-				sizeof(virt_data->high_pri_table));
-				*resp_len += sizeof(virt_data->high_pri_table);
+			memcpy(p, virt_high, sizeof(*virt_high));
+			*resp_len += sizeof(*virt_high);
 			break;
 		case STL_VLARB_PREEMPT_ELEMENTS:
-			memcpy(p, virt_data->preempting_table,
-				sizeof(virt_data->preempting_table));
-				*resp_len += sizeof(virt_data->preempting_table);
+			memcpy(p, virt_pre_table, sizeof(*virt_pre_table));
+			*resp_len += sizeof(*virt_pre_table);
 			break;
 		case STL_VLARB_PREEMPT_MATRIX:
-			memcpy(p, virt_data->preemption_matrix,
-				sizeof(virt_data->preemption_matrix));
-				*resp_len += sizeof(virt_data->preempting_table);
+			memcpy(p, virt_pre_matrix, sizeof(*virt_pre_matrix));
+			*resp_len += sizeof(*virt_pre_matrix);
 			break;
 		default:
 			printk(KERN_WARNING PFX
@@ -2462,7 +2470,11 @@ static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	struct stl_vlarb_data *virt_data = &virtual_stl[port-1].vlarb_data;
+	union stl_vlarb_data *virt_low = &virtual_stl[port-1].vlarb_low;
+	union stl_vlarb_data *virt_high = &virtual_stl[port-1].vlarb_high;
+	union stl_vlarb_data *virt_pre_table = &virtual_stl[port-1].vlarb_pre_table;
+	union stl_vlarb_data *virt_pre_matrix = &virtual_stl[port-1].vlarb_pre_matrix;
+
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
@@ -2478,20 +2490,16 @@ static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 
 	switch (section) {
 		case STL_VLARB_LOW_ELEMENTS:
-			memcpy(virt_data->low_pri_table, p,
-				sizeof(virt_data->low_pri_table));
+			memcpy(virt_low, p, sizeof(*virt_low));
 			break;
 		case STL_VLARB_HIGH_ELEMENTS:
-			memcpy(virt_data->high_pri_table, p,
-				sizeof(virt_data->high_pri_table));
+			memcpy(virt_high, p, sizeof(*virt_high));
 			break;
 		case STL_VLARB_PREEMPT_ELEMENTS:
-			memcpy(virt_data->preempting_table, p,
-				sizeof(virt_data->preempting_table));
+			memcpy(virt_pre_table, p, sizeof(*virt_pre_table));
 			break;
 		case STL_VLARB_PREEMPT_MATRIX:
-			memcpy(virt_data->preemption_matrix, p,
-				sizeof(virt_data->preemption_matrix));
+			memcpy(virt_pre_matrix, p, sizeof(*virt_pre_matrix));
 			break;
 		default:
 			printk(KERN_WARNING PFX
