@@ -47,7 +47,7 @@
 #undef pr_fmt
 #define pr_fmt(fmt) WFR_DRV_NAME ": " fmt
 
-unsigned int snoop_enable; /* By default (0) snooping is disabled */
+unsigned int snoop_enable = 1; /* default snooping enabled */
 
 module_param_named(snoop_enable, snoop_enable , int, 0644);
 MODULE_PARM_DESC(snoop_enable, "snooping mode ");
