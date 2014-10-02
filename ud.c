@@ -211,8 +211,15 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	wc.opcode = IB_WC_RECV;
 	wc.qp = &qp->ibqp;
 	wc.src_qp = sqp->ibqp.qp_num;
-	wc.pkey_index = qp->ibqp.qp_type == IB_QPT_GSI ?
-		swqe->wr.wr.ud.pkey_index : 0;
+	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI) {
+		if (sqp->ibqp.qp_type == IB_QPT_GSI ||
+		    sqp->ibqp.qp_type == IB_QPT_SMI)
+			wc.pkey_index = swqe->wr.wr.ud.pkey_index;
+		else
+			wc.pkey_index = sqp->s_pkey_index;
+	} else {
+		wc.pkey_index = 0;
+	}
 	wc.slid = ppd->lid | (ah_attr->src_path_bits & ((1 << ppd->lmc) - 1));
 	wc.sl = ah_attr->sl;
 	wc.dlid_path_bits = ah_attr->dlid & ((1 << ppd->lmc) - 1);
