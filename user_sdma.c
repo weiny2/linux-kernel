@@ -297,23 +297,39 @@ static _hfi_inline void set_comp_state(struct user_sdma_request *,
 				       enum hfi_sdma_comp_state, int);
 #if 0
 static int user_sdma_progress(void *);
-static int defer_packet_queue(struct iowait *, struct sdma_txreq *);
 #endif
+static int defer_packet_queue(struct iowait *, struct sdma_txreq *);
 static void activate_packet_queue(struct iowait *, int);
 
-#if 0
 static int defer_packet_queue(struct iowait *wait, struct sdma_txreq *txreq)
 {
 	struct hfi_user_sdma_pkt_q *pq =
 		container_of(wait, struct hfi_user_sdma_pkt_q, busy);
+	struct qib_ibdev *dev = &pq->dd->verbs_dev;
+	struct user_sdma_txreq *utx =
+		container_of(txreq, struct user_sdma_txreq, txreq);
+	struct sdma_engine *sde = utx->req->sde;
 
+#if 0
 	SDMA_Q_DBG(pq, "Putting queue to sleep");
 	if (cmpxchg(&pq->state, SDMA_PKT_Q_ACTIVE, SDMA_PKT_Q_DEFERRED) ==
 	    SDMA_PKT_Q_ACTIVE)
-		return -EBUSY;
-	return -EINVAL;
-}
 #endif
+		xchg(&pq->state, SDMA_PKT_Q_DEFERRED);
+	spin_lock(&dev->pending_lock);
+	/*
+	 * We are assuming that if the list is enqueued somewhere, it
+	 * is to the dmawait list since that is the only place where
+	 * it is supposed to be enqueued.
+	 */
+	if (list_empty(&pq->busy.list))
+		list_add_tail(&pq->busy.list, &sde->dmawait);
+	spin_unlock(&dev->pending_lock);
+	return -EBUSY;
+#if 0
+	return -EINVAL;
+#endif
+}
 
 static void activate_packet_queue(struct iowait *wait, int reason)
 {
@@ -386,7 +402,8 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp,
 		    defer_packet_queue,
 		    activate_packet_queue);
 #endif
-	iowait_init(&pq->busy, 0, NULL, NULL, activate_packet_queue);
+	iowait_init(&pq->busy, 0, NULL, defer_packet_queue,
+		    activate_packet_queue);
 	pq->reqidx = 0;
 	snprintf(buf, 64, "txreq-kmem-cache-%u-%u-%u", dd->unit, uctxt->ctxt,
 		 subctxt_fp(fp));
@@ -703,20 +720,12 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 			if (ret < 0) {
 				if (ret != -EBUSY)
 					goto send_err;
-				else {
+				else
 					/*
 					 * Work around the fact that the
 					 * SDMA API does not add us to the
 					 * dmawait queue.
 					 */
-					struct sdma_engine *sde = req->sde;
-					struct qib_ibdev *dev =
-						&sde->dd->verbs_dev;
-					xchg(&pq->state, SDMA_PKT_Q_DEFERRED);
-					spin_lock(&dev->pending_lock);
-					list_add_tail(&pq->busy.list,
-						      &sde->dmawait);
-					spin_unlock(&dev->pending_lock);
 					/*
 					 * There seems to be an issue with
 					 * getting woken up in that we are not
@@ -730,7 +739,6 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 						 SDMA_PKT_Q_ACTIVE),
 						msecs_to_jiffies(
 							SDMA_IOWAIT_TIMEOUT));
-				}
 			}
 		}
 
