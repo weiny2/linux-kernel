@@ -80,6 +80,9 @@
 #define req_version(x) (((x) >> REQ_VERSION_SHIFT) & REQ_OPCODE_MASK)
 #define req_iovcnt(x) (((x) >> REQ_IOVCNT_SHIFT) & REQ_IOVCNT_MASK)
 
+/* Number of BTH.PSN bits used for sequence number in expected rcvs */
+#define BTH_SEQ_MASK 0x7ffull
+
 /*
  * Define fields in the KDETH header so we can update the header
  * template.
@@ -92,6 +95,8 @@
 #define KDETH_TID_MASK            0x3ff
 #define KDETH_TIDCTRL_SHIFT       26
 #define KDETH_TIDCTRL_MASK        0x3
+#define KDETH_SH_SHIFT            29
+#define KDETH_SH_MASK             0x1
 #define KDETH_HCRC_UPPER_SHIFT    16
 #define KDETH_HCRC_UPPER_MASK     0xff
 #define KDETH_HCRC_LOWER_SHIFT    24
@@ -295,6 +300,8 @@ static int set_txreq_header_ahg(struct user_sdma_request *,
 			       struct user_sdma_txreq *, u32);
 static _hfi_inline void set_comp_state(struct user_sdma_request *,
 				       enum hfi_sdma_comp_state, int);
+static _hfi_inline u32 set_pkt_bth_psn(__be32, u8, u32);
+
 #if 0
 static int user_sdma_progress(void *);
 #endif
@@ -1138,6 +1145,24 @@ static int check_header_template(struct user_sdma_request *req,
 	return 0;
 }
 
+/*
+ * Correctly set the BTH.PSN field based on type of
+ * transfer - eager packets can just increment the PSN but
+ * expected packets encode generation and sequence in the
+ * BTH.PSN field so just incrementing will result in errors.
+ */
+static _hfi_inline u32 set_pkt_bth_psn(__be32 bthpsn, u8 expct, u32 frags)
+{
+	u32 val = be32_to_cpu(bthpsn),
+		mask = (extended_psn ? 0x7fffffffull : 0xffffffull),
+		psn = val & mask;
+	if (expct)
+		psn = (psn & ~BTH_SEQ_MASK) | ((psn + frags) & BTH_SEQ_MASK);
+	else
+		psn = psn + frags;
+	return psn & mask;
+}
+
 static int set_txreq_header(struct user_sdma_request *req,
 			    struct user_sdma_txreq *tx, u32 datalen)
 {
@@ -1146,7 +1171,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 	u16 pbclen;
 	int ret;
 	/* (Size of complete header - size of PBC) + 4B ICRC + data length */
-	u32 val, lrhlen = ((sizeof(*hdr) - sizeof(hdr->pbc)) + 4 + datalen);
+	u32 lrhlen = ((sizeof(*hdr) - sizeof(hdr->pbc)) + 4 + datalen);
 
 	/* Copy the header template to the request before modification */
 	memcpy(hdr, &req->hdr, sizeof(*hdr));
@@ -1175,13 +1200,10 @@ static int set_txreq_header(struct user_sdma_request *req,
 
 	}
 	pbclen = le16_to_cpu(hdr->pbc[0]);
-	/*
-	 * Set the BTH PSN sequence number. Do it here, before we
-	 * set the ACK bit so we don't have to clear the PSN bit field.
-	 */
-	val = (be32_to_cpu(hdr->bth[2]) + req->txreqs_sent) &
-		(extended_psn ? 0x7fffffff : 0xffffff);
-	hdr->bth[2] = cpu_to_be32(val);
+	hdr->bth[2] = cpu_to_be32(
+		set_pkt_bth_psn(hdr->bth[2],
+				(req_opcode(req->info.ctrl) == EXPECTED),
+				req->txreqs_sent));
 
 	if (unlikely(tx->flags &
 		     (USER_SDMA_TXREQ_FLAGS_SECOND_PKT |
@@ -1260,6 +1282,9 @@ static int set_txreq_header(struct user_sdma_request *req,
 		KDETH_SET(hdr->kdeth.ver_tid_offset, TID,
 			  EXP_TID_GET(tidval, IDX));
 		SDMA_DBG(req, "Setting TIDOff %u", req->tidoffset);
+		/* Clear KDETH.SH only on the last packet */
+		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
+			KDETH_SET(hdr->kdeth.ver_tid_offset, SH, 0);
 		/*
 		 * Set the KDETH.OFFSET and KDETH.OM based on size of
 		 * transfer.
