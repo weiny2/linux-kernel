@@ -4199,6 +4199,13 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 				"%s: logical state did not change to ARMED\n",
 				__func__);
 		}
+		/*
+		 * The simulator does not currently implement SMA messages,
+		 * so neigbor_normal is not set.  Set it here when we first
+		 * move to Armed.
+		 */
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+			ppd->neighbor_normal = 1;
 		break;
 	case HLS_UP_ACTIVE:
 		if (ppd->host_link_state != HLS_UP_ARMED)

@@ -41,12 +41,6 @@
 #include "mad.h"
 #include "trace.h"
 
-/* TODO: temporary until all PRR respond correctly, build 137 and later */
-#include <linux/module.h>
-static uint skip_nn_check = 1;
-module_param(skip_nn_check, uint, S_IRUGO);
-MODULE_PARM_DESC(skip_nn_check, "Skip check of NeighborNormal at ARMED->ACTIVE transition");
-
 static int reply(void *arg)
 {
 	/* XXX change all callers so that they all pass a
@@ -1037,7 +1031,7 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 			send_idle_sma(dd, SMA_IDLE_ARM);
 		break;
 	case IB_PORT_ACTIVE:
-		if (ppd->neighbor_normal || skip_nn_check) {
+		if (ppd->neighbor_normal) {
 			ret = set_link_state(ppd, HLS_UP_ACTIVE);
 			if (ret == 0)
 				send_idle_sma(dd, SMA_IDLE_ACTIVE);
