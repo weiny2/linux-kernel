@@ -135,14 +135,15 @@ struct stl_vlarb_entry
 };
 
 #define STL_MAX_PREEMPT_CAP         32
+#define STL_NUM_VLARB_TABLE_ELEM   128
 #define STL_VLARB_LOW_ELEMENTS       0
 #define STL_VLARB_HIGH_ELEMENTS      1
 #define STL_VLARB_PREEMPT_ELEMENTS   2
 #define STL_VLARB_PREEMPT_MATRIX     3
 union stl_vlarb_data
 {
-	struct stl_vlarb_entry low_pri_table[128];
-	struct stl_vlarb_entry high_pri_table[128];
+	struct stl_vlarb_entry low_pri_table[STL_NUM_VLARB_TABLE_ELEM];
+	struct stl_vlarb_entry high_pri_table[STL_NUM_VLARB_TABLE_ELEM];
 	struct stl_vlarb_entry preempting_table[STL_MAX_PREEMPT_CAP];
 	__be32 preemption_matrix[STL_MAX_VLS];
 };
