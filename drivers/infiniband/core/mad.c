@@ -740,6 +740,8 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	u8 port_num;
 	struct ib_wc mad_wc;
 	struct ib_send_wr *send_wr = &mad_send_wr->send_wr;
+	size_t in_mad_size = mad_agent_priv->qp_info->port_priv->max_mad_size;
+	size_t out_mad_size;
 
 	if (device->node_type == RDMA_NODE_IB_SWITCH &&
 	    smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
@@ -776,8 +778,8 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	local->mad_priv = NULL;
 	local->recv_mad_agent = NULL;
 
-	mad_priv = alloc_mad_priv(mad_agent_priv->qp_info->port_priv->max_mad_size,
-				  GFP_ATOMIC);
+	out_mad_size = mad_agent_priv->qp_info->port_priv->max_mad_size;
+	mad_priv = alloc_mad_priv(out_mad_size, GFP_ATOMIC);
 	if (!mad_priv) {
 		ret = -ENOMEM;
 		dev_err(&device->dev, "No memory for local response MAD\n");
@@ -792,8 +794,9 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 
 	/* No GRH for DR SMP */
 	ret = device->process_mad(device, 0, port_num, &mad_wc, NULL,
-				  (struct ib_mad *)smp,
-				  (struct ib_mad *)&mad_priv->mad);
+				  (struct ib_mad_hdr *)smp, in_mad_size,
+				  (struct ib_mad_hdr *)&mad_priv->mad,
+				  &out_mad_size);
 	switch (ret)
 	{
 	case IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY:
@@ -2011,6 +2014,7 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 	struct ib_mad_agent_private *mad_agent;
 	int port_num;
 	int ret = IB_MAD_RESULT_SUCCESS;
+	size_t resp_mad_size;
 
 	mad_list = (struct ib_mad_list_head *)(unsigned long)wc->wr_id;
 	qp_info = mad_list->mad_queue->qp_info;
@@ -2038,7 +2042,8 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 	if (!validate_mad(&recv->mad.mad.mad_hdr, qp_info->qp->qp_num))
 		goto out;
 
-	response = alloc_mad_priv(port_priv->max_mad_size, GFP_KERNEL);
+	resp_mad_size = port_priv->max_mad_size;
+	response = alloc_mad_priv(resp_mad_size, GFP_KERNEL);
 	if (!response) {
 		dev_err(&port_priv->device->dev,
 			"ib_mad_recv_done_handler no memory for response buffer\n");
@@ -2063,8 +2068,10 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 		ret = port_priv->device->process_mad(port_priv->device, 0,
 						     port_priv->port_num,
 						     wc, &recv->grh,
-						     &recv->mad.mad,
-						     &response->mad.mad);
+						     (struct ib_mad_hdr *)&recv->mad.mad,
+						     port_priv->max_mad_size,
+						     (struct ib_mad_hdr *)&response->mad.mad,
+						     &resp_mad_size);
 		if (ret & IB_MAD_RESULT_SUCCESS) {
 			if (ret & IB_MAD_RESULT_CONSUMED)
 				goto out;
@@ -2687,8 +2694,9 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 			mad_priv = mad;
 			mad = NULL;
 		} else {
-			mad_priv =
-			alloc_mad_priv(qp_info->port_priv->max_mad_size, GFP_KERNEL);
+			size_t mad_size = qp_info->port_priv->max_mad_size;
+
+			mad_priv = alloc_mad_priv(mad_size, GFP_KERNEL);
 			if (!mad_priv) {
 				dev_err(&qp_info->port_priv->device->dev,
 					"No memory for receive buffer\n");

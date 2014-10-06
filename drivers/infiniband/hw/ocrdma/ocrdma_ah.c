@@ -198,10 +198,17 @@ int ocrdma_process_mad(struct ib_device *ibdev,
 		       u8 port_num,
 		       struct ib_wc *in_wc,
 		       struct ib_grh *in_grh,
-		       struct ib_mad *in_mad, struct ib_mad *out_mad)
+		       struct ib_mad_hdr *in, size_t in_mad_size,
+		       struct ib_mad_hdr *out, size_t *out_mad_size)
 {
 	int status;
 	struct ocrdma_dev *dev;
+	struct ib_mad *in_mad = (struct ib_mad *)in;
+	struct ib_mad *out_mad = (struct ib_mad *)out;
+
+	if (WARN_ON(in_mad_size != sizeof(*in_mad) ||
+		    *out_mad_size != sizeof(*out_mad)))
+		return IB_MAD_RESULT_FAILURE;
 
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_PERF_MGMT:

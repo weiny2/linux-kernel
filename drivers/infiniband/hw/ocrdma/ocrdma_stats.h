@@ -29,6 +29,7 @@
 #define __OCRDMA_STATS_H__
 
 #include <linux/debugfs.h>
+#include <rdma/ib_mad.h>
 #include "ocrdma.h"
 #include "ocrdma_hw.h"
 
