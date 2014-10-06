@@ -216,7 +216,7 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 	struct qib_pportdata *ppd =
 		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
 
-	if (!qib_cc_table_size || !ppd->ccti_entries_shadow)
+	if (!cca_initialized(ppd))
 		return -EINVAL;
 
 	ret = ppd->total_cct_entry * sizeof(struct ib_cc_table_entry_shadow)
@@ -266,7 +266,7 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 	struct qib_pportdata *ppd =
 		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
 
-	if (!qib_cc_table_size || !ppd->congestion_entries_shadow)
+	if (!cca_initialized(ppd))
 		return -EINVAL;
 	ret = sizeof(struct stl_congestion_setting_attr_shadow);
 
@@ -952,7 +952,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->diagc_kobj, KOBJ_ADD);
 
-	if (!qib_cc_table_size || !ppd->congestion_entries_shadow)
+	if (!cca_initialized(ppd))
 		return 0;
 
 	ret = kobject_init_and_add(&ppd->pport_cc_kobj, &qib_port_cc_ktype,
@@ -1033,8 +1033,7 @@ void qib_verbs_unregister_sysfs(struct hfi_devdata *dd)
 
 	for (i = 0; i < dd->num_pports; i++) {
 		ppd = &dd->pport[i];
-		if (qib_cc_table_size &&
-			ppd->congestion_entries_shadow) {
+		if (ppd->congestion_entries_shadow) {
 			sysfs_remove_bin_file(&ppd->pport_cc_kobj,
 				&cc_setting_bin_attr);
 			sysfs_remove_bin_file(&ppd->pport_cc_kobj,

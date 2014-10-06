@@ -87,10 +87,6 @@ uint fifo_stalled_count;
 module_param(fifo_stalled_count, uint, S_IRUGO);
 MODULE_PARM_DESC(fifo_stalled_count, "How many times have the receive FIFOs been stalled?");
 
-unsigned qib_cc_table_size;
-module_param_named(cc_table_size, qib_cc_table_size, uint, S_IRUGO);
-MODULE_PARM_DESC(cc_table_size, "Congestion control table entries 0 (CCA disabled - default), min = 128, max = 1984");
-
 unsigned hfi_egrbuf_alloc_size = 0x8000;
 module_param_named(egrbuf_alloc_size, hfi_egrbuf_alloc_size, uint, S_IRUGO);
 MODULE_PARM_DESC(egrbuf_alloc_size, "Chunk size for Eager buffer allocation");
@@ -426,14 +422,8 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 
 	spin_lock_init(&ppd->cc_shadow_lock);
 
-	if (qib_cc_table_size < IB_CCT_MIN_ENTRIES)
-		goto bail;
 
-	ppd->cc_supported_table_entries = min(max_t(int, qib_cc_table_size,
-		IB_CCT_MIN_ENTRIES), IB_CCT_ENTRIES*IB_CC_TABLE_CAP_DEFAULT);
-
-	ppd->cc_max_table_entries =
-		ppd->cc_supported_table_entries/IB_CCT_ENTRIES;
+	ppd->cc_max_table_entries = IB_CC_TABLE_CAP_DEFAULT;
 
 	size = IB_CC_TABLE_CAP_DEFAULT * sizeof(struct ib_cc_table_entry)
 		* IB_CCT_ENTRIES;
@@ -485,16 +475,6 @@ bail_1:
 	kfree(ppd->ccti_entries);
 	ppd->ccti_entries = NULL;
 bail:
-	/* User is intentionally disabling the congestion control agent */
-	if (!qib_cc_table_size)
-		return;
-
-	if (qib_cc_table_size < IB_CCT_MIN_ENTRIES) {
-		qib_cc_table_size = 0;
-		dd_dev_err(dd,
-		 "Congestion Control table size %d less than minimum %d for port %d\n",
-		 qib_cc_table_size, IB_CCT_MIN_ENTRIES, port);
-	}
 
 	dd_dev_err(dd, "Congestion Control Agent disabled for port %d\n",
 		port);

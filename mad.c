@@ -2632,21 +2632,6 @@ struct stl_congestion_info_attr {
 	u8 congestion_log_length;
 } __packed;
 
-/*
- * All CCA structures:
- *   ppd->cc_supported_table_entries
- *   ppd->ccti_entries
- *   ppd->congestion_entries
- *   ppd->ccti_entries_shadow
- *   ppd->congestion_entries_shadow
- * are either allocated, or NULL. So we can test any of these to
- * determine whether CCA is initialized.
- */
-static inline int cca_initialized(struct qib_pportdata *ppd)
-{
-	return !!ppd->congestion_entries_shadow;
-}
-
 static int __subn_get_stl_cong_info(struct stl_smp *smp, u32 am, u8 *data,
 				    struct ib_device *ibdev, u8 port,
 				    u32 *resp_len)
@@ -3389,17 +3374,6 @@ static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
 				       &resp_len);
 		goto bail;
 
-#if 0
-	case IB_MGMT_CLASS_CONG_MGMT:
-		if (!ppd->congestion_entries_shadow ||
-			 !qib_cc_table_size) {
-			ret = IB_MAD_RESULT_SUCCESS;
-			goto bail;
-		}
-		ret = process_cc(ibdev, mad_flags, port, in_mad, out_mad);
-		goto bail;
-
-#endif /* 0 */
 	default:
 		ret = IB_MAD_RESULT_SUCCESS;
 	}

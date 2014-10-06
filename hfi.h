@@ -611,6 +611,21 @@ struct qib_pportdata {
 	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 };
 
+/*
+ *  * All CCA structures:
+ *   ppd->cc_supported_table_entries
+ *   ppd->ccti_entries
+ *   ppd->congestion_entries
+ *   ppd->ccti_entries_shadow
+ *   ppd->congestion_entries_shadow
+ * are either allocated, or NULL. So we can test any of these to
+ * determine whether CCA is initialized.
+ */
+static inline int cca_initialized(struct qib_pportdata *ppd)
+{
+	return !!ppd->congestion_entries_shadow;
+}
+
 /* Observers. Not to be taken lightly, possibly not to ship. */
 /*
  * If a diag read or write is to (bottom <= offset <= top),
@@ -1046,7 +1061,6 @@ extern struct hfi_devdata *qib_lookup(int unit);
 extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
 
-extern unsigned qib_cc_table_size;
 extern unsigned int snoop_drop_send;
 extern unsigned int snoop_force_capture;
 int qib_init(struct hfi_devdata *, int);

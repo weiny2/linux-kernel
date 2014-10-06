@@ -363,32 +363,6 @@ struct ib_cc_log_event {
 /* Port control flags */
 #define IB_CC_CCS_PC_SL_BASED 0x01
 
-struct ib_cc_congestion_entry {
-	u8 ccti_increase;
-	__be16 ccti_timer;
-	u8 trigger_threshold;
-	u8 ccti_min; /* min CCTI for cc table */
-} __packed;
-
-struct ib_cc_congestion_entry_shadow {
-	u8 ccti_increase;
-	u16 ccti_timer;
-	u8 trigger_threshold;
-	u8 ccti_min; /* min CCTI for cc table */
-} __packed;
-
-struct ib_cc_congestion_setting_attr {
-	__be16 port_control;
-	__be16 control_map;
-	struct ib_cc_congestion_entry entries[IB_CC_CCS_ENTRIES];
-} __packed;
-
-struct ib_cc_congestion_setting_attr_shadow {
-	u16 port_control;
-	u16 control_map;
-	struct ib_cc_congestion_entry_shadow entries[IB_CC_CCS_ENTRIES];
-} __packed;
-
 struct stl_congestion_setting_entry {
 	u8 ccti_increase;
 	u8 reserved;
