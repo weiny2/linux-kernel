@@ -461,6 +461,139 @@ int dax_fault(struct vm_area_struct *vma, struct vm_fault *vmf,
 }
 EXPORT_SYMBOL_GPL(dax_fault);
 
+/*
+ * The 'colour' (ie low bits) within a PMD of a page offset.  This comes up
+ * more often than one might expect in the below function.
+ */
+#define PG_PMD_COLOUR	((PMD_SIZE >> PAGE_SHIFT) - 1)
+
+static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
+			pmd_t *pmd, unsigned int flags, get_block_t get_block)
+{
+	struct file *file = vma->vm_file;
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	struct buffer_head bh;
+	unsigned blkbits = inode->i_blkbits;
+	long length;
+	void *kaddr;
+	pgoff_t size, pgoff;
+	sector_t block, sector;
+	unsigned long pfn;
+	int major = 0;
+
+	/* Fall back to PTEs if we're going to COW */
+	if ((flags & FAULT_FLAG_WRITE) && !(vma->vm_flags & VM_SHARED))
+		return VM_FAULT_FALLBACK;
+	/* If the PMD would extend outside the VMA */
+	if ((address & PMD_MASK) < vma->vm_start)
+		return VM_FAULT_FALLBACK;
+	if (((address & PMD_MASK) + PMD_SIZE) > vma->vm_end)
+		return VM_FAULT_FALLBACK;
+
+	pgoff = ((address - vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
+	size = (i_size_read(inode) + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	if (pgoff >= size)
+		return VM_FAULT_SIGBUS;
+	/* If the PMD would cover blocks out of the file */
+	if ((pgoff | PG_PMD_COLOUR) >= size)
+		return VM_FAULT_FALLBACK;
+
+	memset(&bh, 0, sizeof(bh));
+	block = ((sector_t)pgoff & ~PG_PMD_COLOUR) << (PAGE_SHIFT - blkbits);
+
+	/* Start by seeing if we already have an allocated block */
+	bh.b_size = PMD_SIZE;
+	length = get_block(inode, block, &bh, 0);
+	if (length)
+		return VM_FAULT_SIGBUS;
+
+	if ((!buffer_mapped(&bh) && !buffer_unwritten(&bh)) ||
+						bh.b_size != PMD_SIZE) {
+		bh.b_size = PMD_SIZE;
+		length = get_block(inode, block, &bh, 1);
+		count_vm_event(PGMAJFAULT);
+		mem_cgroup_count_vm_event(vma->vm_mm, PGMAJFAULT);
+		major = VM_FAULT_MAJOR;
+		if (length)
+			return VM_FAULT_SIGBUS;
+		if (bh.b_size != PMD_SIZE)
+			return VM_FAULT_FALLBACK;
+	}
+
+	mutex_lock(&mapping->i_mmap_mutex);
+
+	/* Guard against a race with truncate */
+	size = (i_size_read(inode) + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	if (pgoff >= size)
+		goto sigbus;
+	if ((pgoff | PG_PMD_COLOUR) >= size)
+		goto fallback;
+
+	sector = bh.b_blocknr << (blkbits - 9);
+	length = bdev_direct_access(bh.b_bdev, sector, &kaddr, &pfn, bh.b_size);
+	if (length < 0)
+		goto sigbus;
+	if (length < PMD_SIZE)
+		goto fallback;
+	if (pfn & PG_PMD_COLOUR)
+		goto fallback;	/* not aligned */
+
+	if (buffer_unwritten(&bh) || buffer_new(&bh)) {
+		int i;
+		for (i = 0; i < PTRS_PER_PMD; i++)
+			clear_page(kaddr + i * PAGE_SIZE);
+	}
+
+	length = vm_insert_pfn_pmd(vma, address, pmd, pfn);
+	mutex_unlock(&mapping->i_mmap_mutex);
+
+	if (bh.b_end_io)
+		bh.b_end_io(&bh, 1);
+
+	if (length == -ENOMEM)
+		return VM_FAULT_OOM | major;
+	/* -EBUSY is fine, somebody else faulted on the same PMD */
+	if ((length < 0) && (length != -EBUSY))
+		return VM_FAULT_SIGBUS | major;
+	return VM_FAULT_NOPAGE | major;
+
+ fallback:
+	mutex_unlock(&mapping->i_mmap_mutex);
+	return VM_FAULT_FALLBACK | major;
+
+ sigbus:
+	mutex_unlock(&mapping->i_mmap_mutex);
+	return VM_FAULT_SIGBUS | major;
+}
+
+/**
+ * dax_pmd_fault - handle a PMD fault on a DAX file
+ * @vma: The virtual memory area where the fault occurred
+ * @vmf: The description of the fault
+ * @get_block: The filesystem method used to translate file offsets to blocks
+ *
+ * When a page fault occurs, filesystems may call this helper in their
+ * pmd_fault handler for DAX files.
+ */
+int dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
+			pmd_t *pmd, unsigned int flags, get_block_t get_block)
+{
+	int result;
+	struct super_block *sb = file_inode(vma->vm_file)->i_sb;
+
+	if (flags & FAULT_FLAG_WRITE) {
+		sb_start_pagefault(sb);
+		file_update_time(vma->vm_file);
+	}
+	result = do_dax_pmd_fault(vma, address, pmd, flags, get_block);
+	if (flags & FAULT_FLAG_WRITE)
+		sb_end_pagefault(sb);
+
+	return result;
+}
+EXPORT_SYMBOL_GPL(dax_pmd_fault);
+
 /**
  * dax_zero_page_range - zero a range within a page of a DAX file
  * @inode: The file being truncated
