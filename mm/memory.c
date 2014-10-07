@@ -1648,6 +1648,54 @@ int vm_insert_mixed(struct vm_area_struct *vma, unsigned long addr,
 }
 EXPORT_SYMBOL(vm_insert_mixed);
 
+static int insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
+			pmd_t *pmd, unsigned long pfn, pgprot_t prot)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	int retval;
+	pmd_t entry;
+	spinlock_t *ptl;
+
+	ptl = pmd_lock(mm, pmd);
+	retval = -EBUSY;
+	if (!pmd_none(*pmd))
+		goto out_unlock;
+
+	/* Ok, finally just insert the thing.. */
+	entry = pmd_mkspecial(pmd_mkhuge(pfn_pmd(pfn, prot)));
+	set_pmd_at(mm, addr, pmd, entry);
+	update_mmu_cache_pmd(vma, addr, pmd);
+
+	retval = 0;
+ out_unlock:
+	spin_unlock(ptl);
+	return retval;
+}
+
+int vm_insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
+					pmd_t *pmd, unsigned long pfn)
+{
+	pgprot_t pgprot = vma->vm_page_prot;
+	/*
+	 * Technically, architectures with pte_special can avoid all these
+	 * restrictions (same for remap_pfn_range).  However we would like
+	 * consistency in testing and feature parity among all, so we should
+	 * try to keep these invariants in place for everybody.
+	 */
+	BUG_ON(!(vma->vm_flags & (VM_PFNMAP|VM_MIXEDMAP)));
+	BUG_ON((vma->vm_flags & (VM_PFNMAP|VM_MIXEDMAP)) ==
+						(VM_PFNMAP|VM_MIXEDMAP));
+	BUG_ON((vma->vm_flags & VM_PFNMAP) && is_cow_mapping(vma->vm_flags));
+	BUG_ON((vma->vm_flags & VM_MIXEDMAP) && pfn_valid(pfn));
+
+	if (addr < vma->vm_start || addr >= vma->vm_end)
+		return -EFAULT;
+	if (track_pfn_insert(vma, &pgprot, pfn))
+		return -EINVAL;
+	return insert_pfn_pmd(vma, addr, pmd, pfn, pgprot);
+}
+EXPORT_SYMBOL(vm_insert_pfn_pmd);
+
 /*
  * maps a range of physical memory into the requested pages. the old
  * mappings are removed. any references to nonexistent pages results
