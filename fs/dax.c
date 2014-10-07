@@ -327,8 +327,8 @@ static int do_dax_fault(struct vm_area_struct *vma, struct vm_fault *vmf,
 			get_block_t get_block)
 {
 	struct file *file = vma->vm_file;
-	struct inode *inode = file_inode(file);
 	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
 	struct page *page;
 	struct buffer_head bh;
 	unsigned long vaddr = (unsigned long)vmf->virtual_address;

@@ -171,6 +171,9 @@ blkdev_direct_IO(int rw, struct kiocb *iocb, struct iov_iter *iter,
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
 
+	if (IS_DAX(inode))
+		return dax_do_io(rw, iocb, inode, iter, offset,
+				blkdev_get_block, NULL, 0);
 	return __blockdev_direct_IO(rw, iocb, inode, I_BDEV(inode), iter,
 				    offset, blkdev_get_block,
 				    NULL, NULL, 0);
@@ -340,7 +343,39 @@ static loff_t block_llseek(struct file *file, loff_t offset, int whence)
 	mutex_unlock(&bd_inode->i_mutex);
 	return retval;
 }
-	
+
+#ifdef CONFIG_FS_DAX
+static int blkdev_dax_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	return dax_fault(vma, vmf, blkdev_get_block);
+}
+
+static int blkdev_dax_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	return dax_mkwrite(vma, vmf, blkdev_get_block);
+}
+
+static const struct vm_operations_struct blkdev_dax_vm_ops = {
+	.fault		= blkdev_dax_fault,
+	.page_mkwrite	= blkdev_dax_mkwrite,
+	.remap_pages	= generic_file_remap_pages,
+};
+#else
+#define blkdev_dax_vm_ops	generic_file_vm_ops
+#endif
+
+static int blkdev_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct inode *bd_inode = file->f_mapping->host;
+
+	if (!IS_DAX(bd_inode))
+		return generic_file_mmap(file, vma);
+	file_accessed(file);
+	vma->vm_ops = &blkdev_dax_vm_ops;
+	vma->vm_flags |= VM_MIXEDMAP;
+	return 0;
+}
+
 int blkdev_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 {
 	struct inode *bd_inode = filp->f_mapping->host;
@@ -1182,6 +1217,7 @@ static int __blkdev_get(struct block_device *bdev, fmode_t mode, int for_part)
 		bdev->bd_disk = disk;
 		bdev->bd_queue = disk->queue;
 		bdev->bd_contains = bdev;
+		bdev->bd_inode->i_flags = disk->fops->direct_access ? S_DAX : 0;
 		if (!partno) {
 			struct backing_dev_info *bdi;
 
@@ -1679,7 +1715,7 @@ const struct file_operations def_blk_fops = {
 	.write		= new_sync_write,
 	.read_iter	= blkdev_read_iter,
 	.write_iter	= blkdev_write_iter,
-	.mmap		= generic_file_mmap,
+	.mmap		= blkdev_mmap,
 	.fsync		= blkdev_fsync,
 	.unlocked_ioctl	= block_ioctl,
 #ifdef CONFIG_COMPAT
