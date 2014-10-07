@@ -302,6 +302,11 @@ static inline pmd_t pmd_mknotpresent(pmd_t pmd)
 	return pmd_clear_flags(pmd, _PAGE_PRESENT);
 }
 
+static inline pmd_t pmd_mkspecial(pmd_t pmd)
+{
+	return pmd_set_flags(pmd, _PAGE_SPECIAL);
+}
+
 #ifdef CONFIG_HAVE_ARCH_SOFT_DIRTY
 static inline int pte_soft_dirty(pte_t pte)
 {
@@ -502,6 +507,11 @@ static inline int pmd_none(pmd_t pmd)
 	/* Only check low word on 32-bit platforms, since it might be
 	   out of sync with upper half. */
 	return (unsigned long)native_pmd_val(pmd) == 0;
+}
+
+static inline int pmd_special(pmd_t pmd)
+{
+	return (pmd_flags(pmd) & _PAGE_SPECIAL) && pmd_present(pmd);
 }
 
 static inline unsigned long pmd_page_vaddr(pmd_t pmd)
