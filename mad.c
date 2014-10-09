@@ -56,6 +56,13 @@ static int reply(void *arg)
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
 }
 
+static inline void clear_stl_smp_data(struct stl_smp *smp)
+{
+	void *data = stl_get_smp_data(smp);
+	size_t size = stl_get_smp_data_size(smp);
+	memset(data, 0, size);
+}
+
 static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 {
 	struct ib_mad_send_buf *send_buf;
@@ -262,6 +269,8 @@ static int __subn_get_stl_nodedesc(struct stl_smp *smp, u32 am,
 {
 	struct stl_node_description *nd;
 
+	clear_stl_smp_data(smp);
+
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
@@ -287,7 +296,7 @@ static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 	ni = (struct stl_node_info *)data;
 
-	memset(ni, 0, sizeof(*ni));
+	clear_stl_smp_data(smp);
 
 	/* GUID 0 is illegal */
 	if (am || pidx >= dd->num_pports || dd->pport[pidx].guid == 0) {
@@ -489,7 +498,7 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u64 tmp;
 
 	/* Clear all fields.  Only set the non-zero fields. */
-	memset(pi, 0, sizeof(*pi));
+	clear_stl_smp_data(smp);
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -703,6 +712,8 @@ static int __subn_get_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 	unsigned npkeys = qib_get_npkeys(dd);
 	size_t size;
 
+	clear_stl_smp_data(smp);
+
 	if (am_port == 0)
 		am_port = port;
 
@@ -717,7 +728,6 @@ static int __subn_get_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 	n_blocks_avail = (u16) (npkeys/STL_PARTITION_TABLE_BLK_SIZE) + 1;
 
 	size = (n_blocks_req * STL_PARTITION_TABLE_BLK_SIZE) * sizeof(u16);
-	memset(data, 0, size);
 
 	if (start_block + n_blocks_req > n_blocks_avail ||
 	    n_blocks_req > STL_NUM_PKEY_BLOCKS_PER_SMP) {
@@ -1198,7 +1208,7 @@ static int __subn_get_stl_sl_to_sc(struct stl_smp *smp, u32 am, u8 *data,
 	size_t size = ARRAY_SIZE(ibp->sl_to_sc); /* == 32 */
 	unsigned i;
 
-	memset(data, 0, size);
+	clear_stl_smp_data(smp);
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1242,7 +1252,7 @@ static int __subn_get_stl_sc_to_sl(struct stl_smp *smp, u32 am, u8 *data,
 	size_t size = ARRAY_SIZE(ibp->sc_to_sl); /* == 32 */
 	unsigned i;
 
-	memset(data, 0, size);
+	clear_stl_smp_data(smp);
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1287,7 +1297,7 @@ static int __subn_get_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	size_t size = 4 * sizeof(u64);
 
-	memset(vp, 0, size);
+	clear_stl_smp_data(smp);
 
 	if (am_port != port || port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1345,7 +1355,7 @@ static int __subn_get_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	int size;
 
-	memset(vp, 0, sizeof(struct sc2vlnt));
+	clear_stl_smp_data(smp);
 
 	if (port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1403,7 +1413,7 @@ static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 	struct buffer_control *p = (struct buffer_control *) data;
 	int size;
 
-	memset(p, 0, sizeof(*p));
+	clear_stl_smp_data(smp);
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1452,6 +1462,8 @@ static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 	u32 port_num = am & 0x000000ff;
 	u8 *p = data;
 	int size = 0;
+
+	clear_stl_smp_data(smp);
 
 	if (port_num == 0)
 		port_num = port;
@@ -2640,7 +2652,8 @@ static int __subn_get_stl_cong_info(struct stl_smp *smp, u32 am, u8 *data,
 		(struct stl_congestion_info_attr *)data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	memset(p, 0, sizeof(*p));
+
+	clear_stl_smp_data(smp);
 
 	p->congestion_info = 0;
 	p->control_table_cap = ppd->cc_max_table_entries;
@@ -2664,7 +2677,7 @@ static int __subn_get_stl_cong_setting(struct stl_smp *smp, u32 am,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct stl_congestion_setting_entry_shadow *entries;
 
-	memset(p, 0, sizeof(*p));
+	clear_stl_smp_data(smp);
 
 	spin_lock(&ppd->cc_shadow_lock);
 
@@ -2742,7 +2755,7 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	int i, j;
 	u32 sentry, eentry;
 
-	memset(cc_table_attr, 0, sizeof(*cc_table_attr));
+	clear_stl_smp_data(smp);
 
 	if (!cca_initialized(ppd))
 		return reply(smp);
@@ -3077,6 +3090,7 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 
 	*out_mad = *in_mad;
 	data = stl_get_smp_data(smp);
+
 	am = be32_to_cpu(smp->attr_mod);
 	attr_id = smp->attr_id;
 	if (smp->class_version != STL_SMI_CLASS_VERSION) {

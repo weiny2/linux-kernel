@@ -4450,7 +4450,7 @@ static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
 	return 0;
 }
 
-static int get_vl_weights(struct hfi_devdata *dd, u32 target,
+static void get_vl_weights(struct hfi_devdata *dd, u32 target,
 			   u32 size, struct ib_vl_weight_elem *vl)
 {
 	u64 reg;
@@ -4468,7 +4468,6 @@ static int get_vl_weights(struct hfi_devdata *dd, u32 target,
 		vl->weight = (reg >> WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT)
 				& WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_MASK;
 	}
-	return WFR_VL_ARB_LOW_PRIO_TABLE_SIZE * 2;
 }
 
 static void set_vl_weights(struct hfi_devdata *dd, u32 target,
@@ -4563,6 +4562,7 @@ static int get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 {
 	u64 reg;
 	int i;
+
 	/* each register contains 16 SC->VLnt mappings, 4 bits each */
 	reg = read_csr(dd, DCC_CFG_SC_VL_TABLE_15_0);
 	for (i = 0; i < sizeof(u64); i++) {
@@ -4580,7 +4580,7 @@ static int get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 	return sizeof(struct sc2vlnt);
 }
 
-static int get_vlarb_preempt(struct hfi_devdata *dd, u32 nelems,
+static void get_vlarb_preempt(struct hfi_devdata *dd, u32 nelems,
 			     struct ib_vl_weight_elem *vl)
 {
 	unsigned int i;
@@ -4589,15 +4589,6 @@ static int get_vlarb_preempt(struct hfi_devdata *dd, u32 nelems,
 		vl->vl = 0xf;
 		vl->weight = 0;
 	}
-	return nelems * sizeof(struct ib_vl_weight_elem);
-}
-
-static int get_vlarb_matrix(struct hfi_devdata *dd, u32 *m)
-{
-	int size = STL_MAX_VLS * sizeof(u32);
-	memset(m, 0, size);
-
-	return size;
 }
 
 static void set_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
@@ -4953,32 +4944,48 @@ static int set_buffer_control(struct hfi_devdata *dd,
  */
 int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 {
-	int ret;
+	int size;
 	switch (which) {
 	case FM_TBL_VL_HIGH_ARB:
-		ret = get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
-				     WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
+		size = 256;
+		/*
+		 * STL specifies 128 elements (of 2 bytes each), though
+		 * WFR supports only 16 elements in h/w.
+		 */
+		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
+			       WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_VL_LOW_ARB:
-		ret = get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
-				     WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		size = 256;
+		/*
+		 * STL specifies 128 elements (of 2 bytes each), though
+		 * WFR supports only 16 elements in h/w.
+		 */
+		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
+			       WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
-		ret = get_buffer_control(ppd->dd, t, NULL);
+		size = get_buffer_control(ppd->dd, t, NULL);
 		break;
 	case FM_TBL_SC2VLNT:
-		ret = get_sc2vlnt(ppd->dd, t);
+		size = get_sc2vlnt(ppd->dd, t);
 		break;
 	case FM_TBL_VL_PREEMPT_ELEMS:
-		ret = get_vlarb_preempt(ppd->dd, STL_MAX_VLS, t);
+		size = 256;
+		/* STL specifies 128 elements, of 2 bytes each */
+		get_vlarb_preempt(ppd->dd, STL_MAX_VLS, t);
 		break;
 	case FM_TBL_VL_PREEMPT_MATRIX:
-		ret = get_vlarb_matrix(ppd->dd, t);
+		size = 256;
+		/*
+		 * STL specifies that this is the same size as the VL
+		 * arbitration tables (i.e., 256 bytes).
+		 */
 		break;
 	default:
 		return -EINVAL;
 	}
-	return ret;
+	return size;
 }
 
 /*
