@@ -92,15 +92,12 @@
 #define STL_LINK_SPEED_RESERVED3        0x0400  /*  Reserved (>25G) */
 #define STL_LINK_SPEED_ALL_SUPPORTED    0x03FF  /*  valid only for STL LinkSpeedEnabled */
 
-/*  STL Link width, continued from IB_LINK_WIDTH and indicated as follows:
- * values are additive for Supported and Enabled fields
+/*  STL Link width
  */
-#define STL_LINK_WIDTH_2X            0x0010
-#define STL_LINK_WIDTH_3X            0x0020
-#define STL_LINK_WIDTH_6X            0x0040
-#define STL_LINK_WIDTH_9X            0x0080
-#define STL_LINK_WIDTH_16X           0x0100
-#define STL_LINK_WIDTH_ALL_SUPPORTED 0x0FFF /*  valid only for LinkWidthEnabled */
+#define STL_LINK_WIDTH_1X            0x0001
+#define STL_LINK_WIDTH_2X            0x0002
+#define STL_LINK_WIDTH_3X            0x0004
+#define STL_LINK_WIDTH_4X            0x0008
 
 /**
  * STL Cap Mask 3 values
