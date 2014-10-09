@@ -288,20 +288,20 @@ void virtual_port_linkup_init(u8 port)
 		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
 
 	/* go to the widest width enabled. */
-	if (IB_WIDTH_4X & width_enabled)
-		vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
+	if (STL_LINK_WIDTH_4X & width_enabled)
+		vpi->link_width.active = cpu_to_be16(STL_LINK_WIDTH_4X);
 	else {
-		if (!(IB_WIDTH_1X & vpi->link_width_downgrade.enabled)) {
+		if (!(STL_LINK_WIDTH_1X & vpi->link_width_downgrade.enabled)) {
 			printk(KERN_WARNING PFX
 				"STL Port link width going to 1X but "
 				"LinkWidthDowgrade.Enable != 1X "
 				"port should drop link but SusieQ does "
 				"not support this; letting link go to 1X\n");
 		}
-		vpi->link_width.active = cpu_to_be16(IB_WIDTH_1X);
+		vpi->link_width.active = cpu_to_be16(STL_LINK_WIDTH_1X);
 	}
 
-	vpi->link_width_downgrade.active = cpu_to_be16(IB_WIDTH_4X);
+	vpi->link_width_downgrade.active = cpu_to_be16(STL_LINK_WIDTH_4X);
 
 	vbct->vl[15].tx_dedicated_limit = cpu_to_be16(get_vl15_init());
 
@@ -321,7 +321,7 @@ void virtual_port_linkup_init(u8 port)
 
 #define WFR_LITE_LINK_SPEED_ALL_SUP (cpu_to_be16(STL_LINK_SPEED_12_5G | \
 						STL_LINK_SPEED_25G))
-#define WFR_LITE_LINK_WIDTH_ALL_SUP (cpu_to_be16(IB_WIDTH_1X | IB_WIDTH_4X))
+#define WFR_LITE_LINK_WIDTH_ALL_SUP (cpu_to_be16(STL_LINK_WIDTH_1X | STL_LINK_WIDTH_4X))
 
 static void init_virtual_port_info(u8 port)
 {
@@ -338,12 +338,12 @@ static void init_virtual_port_info(u8 port)
 	vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
 
 	vpi->link_width.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
-	vpi->link_width.active = cpu_to_be16(IB_WIDTH_4X);
-	vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
+	vpi->link_width.active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width.enabled = WFR_LITE_LINK_WIDTH_ALL_SUP;
 
 	vpi->link_width_downgrade.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
-	vpi->link_width_downgrade.active = cpu_to_be16(IB_WIDTH_4X);
-	vpi->link_width_downgrade.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
+	vpi->link_width_downgrade.active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.enabled = WFR_LITE_LINK_WIDTH_ALL_SUP;
 
 	linkup_default(port);
 
@@ -1749,11 +1749,10 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	lwe = be16_to_cpu(pi->link_width.enabled);
 	if (lwe) {
-		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED) == STL_LINK_WIDTH_ALL_SUPPORTED) {
-			vpi->link_width.enabled = cpu_to_be16(STL_LINK_WIDTH_ALL_SUPPORTED);
-		} else if (lwe & be16_to_cpu(vpi->link_width.supported)) {
-			vpi->link_width.enabled = pi->link_width.enabled;
-		} else
+		u16 new_val = lwe & be16_to_cpu(vpi->link_width.supported);
+		if (new_val)
+			vpi->link_width.enabled = cpu_to_be16(new_val);
+		else
 			smp->status |= IB_SMP_INVALID_FIELD;
 	}
 	lse = be16_to_cpu(pi->link_speed.enabled);
