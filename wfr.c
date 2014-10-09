@@ -904,7 +904,21 @@ CNTR_ELEM("RcvHdrOvr" #ctx, \
 	  (WFR_RCV_HDR_OVFL_CNT + ctx*0x100), \
 	  0, port_read_u64_csr)
 
-
+/*
+ * TODO: Remove these when ifs-kernel-updates/src/include/rdma/stl_port_info.h
+ * is updated with the new values.
+ * See Bug 125707 for details.
+ */
+#ifndef STL_LINK_WIDTH_1X
+/* remove old defines */
+#undef STL_LINK_WIDTH_2X
+#undef STL_LINK_WIDTH_3X
+/* add new defines */
+#define STL_LINK_WIDTH_1X  (1 << 0)
+#define STL_LINK_WIDTH_2X  (1 << 1)
+#define STL_LINK_WIDTH_3X  (1 << 2)
+#define STL_LINK_WIDTH_4X  (1 << 3)
+#endif
 
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -2115,7 +2129,7 @@ void get_link_width(struct qib_pportdata *ppd)
 	/* use the tx width as tx and rx are supposed to be symmetric */
 	switch (tx_width) {
 	case 1:
-		ppd->link_width_active = IB_WIDTH_1X;
+		ppd->link_width_active = STL_LINK_WIDTH_1X;
 		break;
 	case 2:
 		ppd->link_width_active = STL_LINK_WIDTH_2X;
@@ -2128,7 +2142,7 @@ void get_link_width(struct qib_pportdata *ppd)
 			__func__, tx_width);
 		/* fall through */
 	case 4:
-		ppd->link_width_active = IB_WIDTH_4X;
+		ppd->link_width_active = STL_LINK_WIDTH_4X;
 		break;
 	}
 	/* the downgrade width starts out matching the width */
@@ -3533,15 +3547,10 @@ static u16 stl_to_vc_link_widths(u16 stl_widths)
 		u16 from;
 		u16 to;
 	} stl_link_xlate[] = {
-		{ IB_WIDTH_1X,	      1 << (1-1)  },
-		{ IB_WIDTH_4X,	      1 << (4-1)  },
-		{ IB_WIDTH_8X,	      1 << (8-1)  },
-		{ IB_WIDTH_12X,	      1 << (12-1) },
-		{ STL_LINK_WIDTH_2X,  1 << (2-1)  },
-		{ STL_LINK_WIDTH_3X,  1 << (3-1)  },
-		{ STL_LINK_WIDTH_6X,  1 << (6-1)  },
-		{ STL_LINK_WIDTH_9X,  1 << (9-1)  },
-		{ STL_LINK_WIDTH_16X, 1 << (16-1) },
+		{ STL_LINK_WIDTH_1X, 1 << (1-1)  },
+		{ STL_LINK_WIDTH_2X, 1 << (2-1)  },
+		{ STL_LINK_WIDTH_3X, 1 << (3-1)  },
+		{ STL_LINK_WIDTH_4X, 1 << (4-1)  },
 	};
 
 	for (i = 0; i < ARRAY_SIZE(stl_link_xlate); i++) {
@@ -7394,8 +7403,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		qib_init_pportdata(ppd, dd, 0, 1);
 		/* DC supports 4 link widths */
 		ppd->link_width_supported =
-			IB_WIDTH_1X | IB_WIDTH_4X |
-			STL_LINK_WIDTH_2X | STL_LINK_WIDTH_3X;
+			STL_LINK_WIDTH_1X | STL_LINK_WIDTH_2X |
+			STL_LINK_WIDTH_3X | STL_LINK_WIDTH_4X;
 		ppd->link_width_downgrade_supported =
 					ppd->link_width_supported;
 		/* start out enabling all supported values */
@@ -7432,7 +7441,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
 		 */
-		ppd->link_width_active = IB_WIDTH_4X;
+		ppd->link_width_active = STL_LINK_WIDTH_4X;
 		ppd->link_width_downgrade_active = ppd->link_width_active;
 		ppd->lstate = IB_PORT_DOWN;
 		ppd->overrun_threshold = 0x4;
@@ -7556,7 +7565,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			dd->pport->link_width_downgrade_supported =
 			dd->pport->link_width_downgrade_enabled =
 			dd->pport->link_width_downgrade_active =
-				IB_WIDTH_1X;
+				STL_LINK_WIDTH_1X;
 	}
 
 	/*
