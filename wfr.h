@@ -445,6 +445,14 @@ enum {
 #define ASIC_CCLOCK_PS  1242	/* 805 MHz */
 #define FPGA_CCLOCK_PS 30300	/*  33 MHz */
 
+/*
+ * Mask of enabled MISC errors.  Do not enable the two RSA engine errors -
+ * see firmware.c:run_rsa() for details.
+ */
+#define DRIVER_MISC_MASK \
+	(~(WFR_MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK \
+		| WFR_MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK))
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);

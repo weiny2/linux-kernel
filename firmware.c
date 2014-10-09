@@ -110,19 +110,36 @@ struct firmware_file {
 	u8 modulus[KEY_SIZE];
 	u8 exponent[EXPONENT_SIZE];
 	u8 signature[KEY_SIZE];
+	u8 firmware[];
+};
+
+struct augmented_firmware_file {
+	struct css_header css_header;
+	u8 modulus[KEY_SIZE];
+	u8 exponent[EXPONENT_SIZE];
+	u8 signature[KEY_SIZE];
 	u8 r2[KEY_SIZE];
 	u8 mu[MU_SIZE];
 	u8 firmware[];
 };
 
+/* augmented file size difference */
+#define AUGMENT_SIZE (sizeof(struct augmented_firmware_file) - \
+						sizeof(struct firmware_file))
+
 struct firmware_details {
 	/* linux core piece */
 	const struct firmware *fw;
 
-	struct firmware_file *firmware;
+	struct css_header *css_header;
 	u8 *firmware_ptr;		/* pointer to binary data */
 	u32 firmware_len;		/* length in bytes */
-	struct firmware_file dummy_header;
+	u8 *modulus;			/* pointer to the moduls */
+	u8 *exponent;			/* pointer to the exponent */
+	u8 *signature;			/* ponter to the signature */
+	u8 *r2;				/* pointer to r2 */
+	u8 *mu;				/* pointer to mu */
+	struct augmented_firmware_file dummy_header;
 };
 
 /*
@@ -152,14 +169,11 @@ static struct firmware_details fw_sbus;
 #define RSA_STATUS_DONE   0x2
 #define RSA_STATUS_FAILED 0x3
 
-/* firmware download timeouts, in ms */
-#define FW_TIMEOUT_8051		 10 /* ms */
-#define FW_TIMEOUT_FABRIC_SERDES 10 /* ms */
-#define FW_TIMEOUT_SBUS		 10 /* ms */
-#define FW_TIMEOUT_PCIE_SERDES	 10 /* ms */
+/* RSA engine timeout, in ms */
+#define RSA_ENGINE_TIMEOUT 100 /* ms */
 
 /* 8051 start timeout, in ms */
-#define TIMEOUT_8051_START 10 /* ms */
+#define TIMEOUT_8051_START 5000 /* ms */
 
 /* hardware mutex timeout, in ms */
 #define HM_TIMEOUT 20 /* ms */
@@ -269,6 +283,47 @@ static int invalid_header(struct hfi_devdata *dd, const char *what,
 }
 
 /*
+ * Verify that the static fields in the CSS header match.
+ */
+static int verify_css_header(struct hfi_devdata *dd, struct css_header *css)
+{
+	/* verify CSS header fields (most sizes are in DW, so add /4) */
+	if (invalid_header(dd, "module_type", css->module_type, CSS_MODULE_TYPE)
+			|| invalid_header(dd, "header_len", css->header_len,
+					(sizeof(struct firmware_file)/4))
+			|| invalid_header(dd, "header_version",
+					css->header_version, CSS_HEADER_VERSION)
+			|| invalid_header(dd, "module_vendor",
+					css->module_vendor, CSS_MODULE_VENDOR)
+			|| invalid_header(dd, "key_size",
+					css->key_size, KEY_SIZE/4)
+			|| invalid_header(dd, "modulus_size",
+					css->modulus_size, KEY_SIZE/4)
+			|| invalid_header(dd, "exponent_size",
+					css->exponent_size, EXPONENT_SIZE/4)) {
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/*
+ * Make sure there are at least some bytes after the prefix.
+ */
+static int payload_check(struct hfi_devdata *dd, const char *name,
+					long file_size, long prefix_size)
+{
+	/* make sure we have some payload */
+	if (prefix_size >= file_size) {
+		dd_dev_err(dd,
+			"firmware \"%s\", size %ld, must be larger than %ld bytes\n",
+			name, file_size, prefix_size);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/*
  * Request the firmware from the system.  Extract the pieces and fill in
  * fdet.  If succsessful, the caller will need to call dispose_one_firmware().
  * Returns 0 on success, -ERRNO on error.
@@ -277,7 +332,6 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 				struct firmware_details *fdet)
 {
 	struct css_header *css;
-	u32 inserted;
 	int ret;
 
 	memset(fdet, 0, sizeof(*fdet));
@@ -322,60 +376,91 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 			dd_dev_info(dd, "firmware size: ? header too long\n");
 	}
 
-	if (css->module_vendor != CSS_MODULE_VENDOR) {
+	/*
+	 * If the file does not have a valid CSS header, assume it is
+	 * a raw binary.  Otherwise, check the CSS size field for an
+	 * expected size.  The augmented file has r2 and mu inserted
+	 * after the header was genereated, so there will be a known
+	 * difference between the CSS header size and the actual file
+	 * size.  Use this difference to identify an augmented file.
+	 *
+	 * Note: css->size is in DWORDs, multiply by 4 to get bytes.
+	 */
+	ret = verify_css_header(dd, css);
+	if (ret) {
 		/* assume this is a raw binary, with no CSS header */
 		dd_dev_info(dd,
-			"Invalid module vendor for \"%s\"- assuming raw binary, turning off validation",
+			"Invalid CSS header for \"%s\" - assuming raw binary, turning off validation",
 			name);
+		ret = 0; /* now OK */
 		fw_validate = 0;
-		/* assign a dummy header in case we go down an incorect path */
-		fdet->firmware = &fdet->dummy_header;
+		/*
+		 * Assign fields from the dummy header in case we go down the
+		 * wrong path.
+		 */
+		fdet->css_header = css;
+		fdet->modulus = fdet->dummy_header.modulus;
+		fdet->exponent = fdet->dummy_header.exponent;
+		fdet->signature = fdet->dummy_header.signature;
+		fdet->r2 = fdet->dummy_header.r2;
+		fdet->mu = fdet->dummy_header.mu;
 		fdet->firmware_ptr = (u8 *)fdet->fw->data;
 		fdet->firmware_len = fdet->fw->size;
-		goto done;
-	}
+	} else if ((css->size*4) == fdet->fw->size) {
+		/* non-agumented firmware file */
+		struct firmware_file *ff = (struct firmware_file *)
+							fdet->fw->data;
 
-	fdet->firmware = (struct firmware_file *)fdet->fw->data;
+		/* make sure there are bytes in the payload */
+		ret = payload_check(dd, name, fdet->fw->size,
+						sizeof(struct firmware_file));
+		if (ret == 0) {
+			fdet->css_header = css;
+			fdet->modulus = ff->modulus;
+			fdet->exponent = ff->exponent;
+			fdet->signature = ff->signature;
+			fdet->r2 = fdet->dummy_header.r2; /* use dummy space */
+			fdet->mu = fdet->dummy_header.mu; /* use dummy space */
+			fdet->firmware_ptr = ff->firmware;
+			fdet->firmware_len = fdet->fw->size -
+						sizeof(struct firmware_file);
+			/*
+			 * TODO: header does not include r2 and mu -
+			 * generate here.  For now, fail if validating.
+			 */
+			if (fw_validate) {
+				dd_dev_err(dd, "driver is unable to validate firmware without r2 and mu (not in firmware file)\n");
+				ret = -EINVAL;
+			}
+		}
+	} else if ((css->size*4) + AUGMENT_SIZE == fdet->fw->size) {
+		/* agumented firmware file */
+		struct augmented_firmware_file *aff =
+			(struct augmented_firmware_file *)fdet->fw->data;
 
-	/*
-	 * The r2 and mu fields were inserted after the CSS header was
-	 * generated - it does not know about them.  When checking
-	 * header lengths, adjust some sizes by the bytes inserted.
-	 */
-	inserted = sizeof(fdet->firmware->r2) + sizeof(fdet->firmware->mu);
-
-	/* verify CSS header fields (most sizes are in DW, so add /4) */
-	if (invalid_header(dd, "module_type", css->module_type, CSS_MODULE_TYPE)
-			|| invalid_header(dd, "header_len", css->header_len,
-					(sizeof(struct firmware_file)
-						- inserted)/4)
-			|| invalid_header(dd, "header_version",
-					css->header_version, CSS_HEADER_VERSION)
-			|| invalid_header(dd, "module_vendor",
-					css->module_vendor, CSS_MODULE_VENDOR)
-			|| invalid_header(dd, "size", css->size,
-					((u32)fdet->fw->size-inserted)/4)
-			|| invalid_header(dd, "key_size",
-					css->key_size, KEY_SIZE/4)
-			|| invalid_header(dd, "modulus_size",
-					css->modulus_size, KEY_SIZE/4)
-			|| invalid_header(dd, "exponent_size",
-					css->exponent_size, EXPONENT_SIZE/4)) {
-		ret = -EINVAL;
-		goto done;
-	}
-
-	/* make sure we have some payload */
-	if (sizeof(struct firmware_file) >= fdet->fw->size) {
+		/* make sure there are bytes in the payload */
+		ret = payload_check(dd, name, fdet->fw->size,
+					sizeof(struct augmented_firmware_file));
+		if (ret == 0) {
+			fdet->css_header = css;
+			fdet->modulus = aff->modulus;
+			fdet->exponent = aff->exponent;
+			fdet->signature = aff->signature;
+			fdet->r2 = aff->r2;
+			fdet->mu = aff->mu;
+			fdet->firmware_ptr = aff->firmware;
+			fdet->firmware_len = fdet->fw->size -
+					sizeof(struct augmented_firmware_file);
+		}
+	} else {
+		/* css->size check failed */
 		dd_dev_err(dd,
-			"firmware \"%s\", size %ld, must be larger than %ld bytes\n",
-			name, fdet->fw->size, sizeof(struct firmware_file));
-		ret = -EINVAL;
-		goto done;
-	}
+			"invalid firmware header field size: expected 0x%lx or 0x%lx, actual 0x%x\n",
+			fdet->fw->size/4, (fdet->fw->size - AUGMENT_SIZE)/4,
+			css->size);
 
-	fdet->firmware_ptr = fdet->firmware->firmware;
-	fdet->firmware_len = fdet->fw->size - sizeof(struct firmware_file);
+		ret = -EINVAL;
+	}
 
 done:
 	/* if returning an error, clean up after ourselves */
@@ -474,12 +559,13 @@ void dispose_firmware(void)
 }
 
 /*
- * Write a block of data to a given array CSR.
+ * Write a block of data to a given array CSR.  All calls will be in
+ * multiples of 8 bytes.
  */
 static void write_rsa_data(struct hfi_devdata *dd, int what,
 				const u8 *data, int nbytes)
 {
-	int qw_size = nbytes/64;
+	int qw_size = nbytes/8;
 	int i;
 
 	if (((unsigned long)data & 0x7) == 0) {
@@ -499,14 +585,29 @@ static void write_rsa_data(struct hfi_devdata *dd, int what,
 }
 
 /*
- * Download the signature and start the RSA mechanism.  Wait for ms_timeout
- * before giving up.
+ * Write a block of data to a given CSR as a stream of writes.  All calls will
+ * be in multiples of 8 bytes.
  */
-static int run_rsa(struct hfi_devdata *dd, unsigned long ms_timeout,
-			const char *who, const u8 *signature)
+static void write_streamed_rsa_data(struct hfi_devdata *dd, int what,
+					const u8 *data, int nbytes)
+{
+	u64 *ptr = (u64 *)data;
+	int qw_size = nbytes/8;
+
+	for (; qw_size > 0; qw_size--, ptr++)
+		write_csr(dd, what, *ptr);
+}
+
+/*
+ * Download the signature and start the RSA mechanism.  Wait for
+ * RSA_ENGINE_TIMEOUT before giving up.
+ */
+static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 {
 	unsigned long timeout;
+	u64 reg;
 	u32 status;
+	int ret = 0;
 
 	if (!fw_validate)
 		return 0;	/* done with no error if not validating */
@@ -517,43 +618,102 @@ static int run_rsa(struct hfi_devdata *dd, unsigned long ms_timeout,
 	/* init RSA */
 	write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_INIT);
 
+	/*
+	 * Make sure the engine is idle and insert a delay between the two
+	 * writes to MISC_CFG_RSA_CMD.
+	 */
+	status = (read_csr(dd, WFR_MISC_CFG_FW_CTRL)
+			   & WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SMASK)
+			     >> WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT;
+	if (status != RSA_STATUS_IDLE) {
+		dd_dev_err(dd, "%s security engine not idle - giving up\n",
+			who);
+		return -EBUSY;
+	}
+
 	/* start RSA */
 	write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_START);
 
-	/* look for result */
-	timeout = msecs_to_jiffies(ms_timeout) + jiffies;
+	/*
+	 * Look for the result.
+	 *
+	 * The RSA engine is hooked up to two MISC errors.  The driver
+	 * masks these errors as they do not respond to the standard
+	 * error "clear down" mechanism.  Look for these errors here and
+	 * clear them when possible.  This routine will exit with the
+	 * errors of the current run still set.
+	 *
+	 * MISC_FW_AUTH_FAILED_ERR
+	 *	Firmware authorization failed.  This can be cleared by
+	 *	re-initializing the RSA engine, then clearing the status bit.
+	 *	Do not re-init the RSA angine immediately after a successful
+	 *	run - this will reset the current authorization.
+	 *
+	 * MISC_KEY_MISMATCH_ERR
+	 *	Key does not match.  The only way to clear this is to load
+	 *	a matching key then clear the status bit.  If this error
+	 *	is raised, it will persist outside of this routine until a
+	 *	matching key is loaded.
+	 */
+	timeout = msecs_to_jiffies(RSA_ENGINE_TIMEOUT) + jiffies;
 	while (1) {
 		status = (read_csr(dd, WFR_MISC_CFG_FW_CTRL)
 			   & WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SMASK)
 			     >> WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT;
 
-		switch (status) {
-		case RSA_STATUS_IDLE:
+		if (status == RSA_STATUS_IDLE) {
 			/* should not happen */
 			dd_dev_err(dd, "%s firmwre security bad idle state\n",
 				who);
-			return -EINVAL;
-		case RSA_STATUS_ACTIVE:
-			/* still working */
+			ret = -EINVAL;
 			break;
-		case RSA_STATUS_DONE:
+		} else if (status == RSA_STATUS_DONE) {
 			/* finished successfully */
-			return 0;
-		case RSA_STATUS_FAILED:
+			break;
+		} else if (status == RSA_STATUS_FAILED) {
 			/* finished unsuccessfully */
-			dd_dev_err(dd, "%s firmwre security failure\n", who);
-			return -EINVAL;
-		};
+			ret = -EINVAL;
+			break;
+		}
+		/* else still active */
 
-		if (time_after(jiffies, timeout))
-			break; /* timed out */
+		if (time_after(jiffies, timeout)) {
+			/*
+			 * Timed out while active.  We can't reset the engine
+			 * if it is stuck active, but run through the
+			 * error code to see what error bits are set.
+			 */
+			dd_dev_err(dd, "%s firmware security time out\n", who);
+			ret = -ETIMEDOUT;
+			break;
+		}
+
 		msleep(1);
 	}
 
-	/* timed out */
-	dd_dev_err(dd, "%s firmware security timeout, current status 0x%x\n",
-		who, status);
-	return -ETIMEDOUT;
+	/*
+	 * Arrive here on success or failure.  Clear all RSA engine
+	 * errors.  All current errors will stick - the RSA logic is keeping
+	 * error high.  All previous errors will clear - the RSA logic
+	 * is not keeping the error high.
+	 */
+	write_csr(dd, WFR_MISC_ERR_CLEAR,
+			WFR_MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK
+			| WFR_MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK);
+	/*
+	 * All that is left are the current errors.  Print failure details,
+	 * if any.
+	 */
+	reg = read_csr(dd, WFR_MISC_ERR_STATUS);
+	if (ret) {
+		if (reg & WFR_MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK)
+			dd_dev_err(dd, "%s firmware authorization failed\n",
+				who);
+		if (reg & WFR_MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK)
+			dd_dev_err(dd, "%s firmware key mismatch\n", who);
+	}
+
+	return ret;
 }
 
 static void load_security_variables(struct hfi_devdata *dd,
@@ -563,22 +723,17 @@ static void load_security_variables(struct hfi_devdata *dd,
 		return;	/* nothing to do */
 
 	/* Security variables a.  Write the modulus */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS,
-			fdet->firmware->modulus, KEY_SIZE);
+	write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS, fdet->modulus, KEY_SIZE);
 	/* Security variables b.  Write the r2 */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_R2, fdet->firmware->r2, KEY_SIZE);
+	write_rsa_data(dd, WFR_MISC_CFG_RSA_R2, fdet->r2, KEY_SIZE);
 	/* Security variables c.  Write the mu */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_MU, fdet->firmware->mu, MU_SIZE);
-/* TODO: HAS 0.76 */
-#ifdef WFR_MISC_CFG_SHA_PRELOAD
+	write_rsa_data(dd, WFR_MISC_CFG_RSA_MU, fdet->mu, MU_SIZE);
 	/* Security variables d.  Write the header */
-	write_rsa_data(dd, WFR_MISC_CFG_SHA_PRELOAD,
-			(u8 *)&fdet->firmware->css_header,
-			sizeof(struct css_header));
-#endif
+	write_streamed_rsa_data(dd, WFR_MISC_CFG_SHA_PRELOAD,
+			(u8 *)fdet->css_header, sizeof(struct css_header));
 }
 
-/* return the 8051 firmware statte */
+/* return the 8051 firmware state */
 static inline u32 get_firmware_state(struct hfi_devdata *dd)
 {
 	u64 reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
@@ -645,10 +800,10 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 
 	/*
 	 * Firmware load step 2.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
-	 * Assumes we are entering this routine with MISC_CFG_FW_CTRL
-	 * reset.  This means that MISC_CFG_FW_CTRL.FW_8051_LOADED is
-	 * alreay clear and we have nothing to do.
 	 */
+	write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+			(fw_validate ? 0 :
+			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
 
 	/* Firmware load steps 3-5 */
 	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware_ptr,
@@ -673,7 +828,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
 
 	/* Firmware load steps 7-10 */
-	ret = run_rsa(dd, FW_TIMEOUT_8051, "8051", fdet->firmware->signature);
+	ret = run_rsa(dd, "8051", fdet->signature);
 	if (ret)
 		return ret;
 
@@ -756,8 +911,7 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	sbus_request(dd, ra, 0x0b, WRITE_SBUS_RECEIVER, 0x000c0000);
 
 	/* steps 8-11: run the RSA engine */
-	err = run_rsa(dd, FW_TIMEOUT_FABRIC_SERDES, "fabric serdes",
-						fdet->firmware->signature);
+	err = run_rsa(dd, "fabric serdes", fdet->signature);
 	if (err)
 		return err;
 
@@ -794,7 +948,7 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	sbus_request(dd, ra, 0x16, WRITE_SBUS_RECEIVER, 0x000c0000);
 
 	/* steps 8-11: run the RSA engine */
-	err = run_rsa(dd, FW_TIMEOUT_SBUS, "SBUS", fdet->firmware->signature);
+	err = run_rsa(dd, "SBUS", fdet->signature);
 	if (err)
 		return err;
 
@@ -830,8 +984,7 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	sbus_request(dd, ra, 0x05, WRITE_SBUS_RECEIVER, 0x00000000);
 
 	/* steps 7-10: run RSA */
-	err = run_rsa(dd, FW_TIMEOUT_PCIE_SERDES, "PCIe serdes",
-						fdet->firmware->signature);
+	err = run_rsa(dd, "PCIe serdes", fdet->signature);
 	if (err)
 		return err;
 

@@ -6557,15 +6557,12 @@ static void reset_misc_csrs(struct hfi_devdata *dd)
 	for (i = 0; i < 32; i++) {
 		write_csr(dd, WFR_MISC_CFG_RSA_R2 + (8 * i), 0);
 		write_csr(dd, WFR_MISC_CFG_RSA_SIGNATURE + (8 * i), 0);
-		/*
-		 * TODO: Writing this causes the PCIe to fail in emulation.
-		 * Note: It is not required that these RSA arrays be zeroed
-		 * as they all need to be completely written to work correctly.
-		 */
-		/*write_csr(dd, WFR_MISC_CFG_RSA_MODULUS + (8 * i), 0);*/
+		write_csr(dd, WFR_MISC_CFG_RSA_MODULUS + (8 * i), 0);
 	}
-	write_csr(dd, WFR_MISC_CFG_SHA_PRELOAD, 0);
-	write_csr(dd, WFR_MISC_CFG_RSA_CMD, 0);
+	/* WFR_MISC_CFG_SHA_PRELOAD leave alone - always reads 0 and can
+	   only be written 128-byte chunks */
+	/* init RSA engine to clear lingering errors */
+	write_csr(dd, WFR_MISC_CFG_RSA_CMD, 1);
 	write_csr(dd, WFR_MISC_CFG_RSA_MU, 0);
 	write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
 	/* WFR_MISC_STS_8051_DIGEST read-only */
@@ -7129,8 +7126,8 @@ void init_other(struct hfi_devdata *dd)
 {
 	/* enable all CCE errors */
 	write_csr(dd, WFR_CCE_ERR_MASK, ~0ull);
-	/* enable all Misc errors */
-	write_csr(dd, WFR_MISC_ERR_MASK, ~0ull);
+	/* enable *some* Misc errors */
+	write_csr(dd, WFR_MISC_ERR_MASK, DRIVER_MISC_MASK);
 	/* enable all DC errors, except LCB */
 	write_csr(dd, DCC_ERR_FLG_EN, ~0ull);
 	write_csr(dd, DC_DC8051_ERR_EN, ~0ull);
