@@ -144,13 +144,12 @@ struct hfi_userdata {
 	u32 ptl_unexpected_size;
 	u32 ptl_trig_op_size;
 	u16 ptl_pid;
-	u16 srank;
 	u16 pasid;
 	u16 cq_pair_num_assigned;
 	u8 allow_phys_dlid;
 	u8 auth_mask;
-	u32 auth_table[HFI_NUM_AUTH_TUPLES];
-	u32 ptl_uid; /* UID if auth_tuples not used */
+	u32 auth_uid[HFI_NUM_AUTH_TUPLES];
+	u32 ptl_uid; /* default UID if auth_tuples not used */
 
 	u32 dlid_base;
 	u32 lid_offset;
@@ -163,30 +162,32 @@ struct hfi_userdata {
 	struct list_head job_list;
 };
 
-int hfi_pci_init(struct pci_dev *, const struct pci_device_id *);
-void hfi_pci_cleanup(struct pci_dev *);
-struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *,
-				    const struct pci_device_id *);
-void hfi_pci_dd_free(struct hfi_devdata *);
-int hfi_pcie_params(struct hfi_devdata *, u32, u32 *, struct hfi_msix_entry *);
-void hfi_disable_msix(struct hfi_devdata *);
-int setup_interrupts(struct hfi_devdata *dd, int, int);
+int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent);
+void hfi_pci_cleanup(struct pci_dev *pdev);
+struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
+				    const struct pci_device_id *ent);
+void hfi_pci_dd_free(struct hfi_devdata *dd);
+int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
+		    struct hfi_msix_entry *entry);
+void hfi_disable_msix(struct hfi_devdata * dd);
+int setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void cleanup_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
-int hfi_user_add(struct hfi_devdata *);
-void hfi_user_remove(struct hfi_devdata *);
-int hfi_ui_add(struct hfi_devdata *);
-void hfi_ui_remove(struct hfi_devdata *);
-int hfi_user_cleanup(struct hfi_userdata *);
+int hfi_user_add(struct hfi_devdata * dd);
+void hfi_user_remove(struct hfi_devdata *dd);
+int hfi_ui_add(struct hfi_devdata *dd);
+void hfi_ui_remove(struct hfi_devdata *dd);
+int hfi_user_cleanup(struct hfi_userdata *dd);
 
-void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *, u8 *auth_idx);
+void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
+		   struct hfi_auth_tuple *auth_table);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
-int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *);
+int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
 int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx);
-int hfi_dlid_assign(struct hfi_userdata *ud, struct hfi_dlid_assign_args *);
+int hfi_dlid_assign(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign);
 int hfi_dlid_release(struct hfi_userdata *ud);
-int hfi_ptl_attach(struct hfi_userdata *ud, struct hfi_ptl_attach_args *);
+int hfi_ptl_attach(struct hfi_userdata *ud, struct hfi_ptl_attach_args *ptl_attach);
 void hfi_ptl_cleanup(struct hfi_userdata *ud);
 int hfi_ptl_reserve(struct hfi_devdata *dd, u16 *base, u16 count);
 void hfi_ptl_unreserve(struct hfi_devdata *dd, u16 base, u16 count);

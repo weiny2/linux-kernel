@@ -204,7 +204,8 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 	write_csr(dd, offset, cq_head.val);
 }
 
-/* Disable pair of CQs and reset flow control.
+/* 
+ * Disable pair of CQs and reset flow control.
  * Reset of flow control is needed since CQ might have only had
  * a partial command or slot written by errant user.
  */
@@ -217,9 +218,12 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 	/* TODO - Drain or Reset CQ */
 }
 
-/* Write CSRs to configure a TX and RX Command Queue */
+/* 
+ * Write CSRs to configure a TX and RX Command Queue.
+ * Authentication Tuple UIDs have been pre-validated by caller.
+ */
 void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
-		   u8 *auth_idx)
+		   struct hfi_auth_tuple *auth_table)
 {
 	struct hfi_devdata *dd = ud->devdata;
 	int i;
@@ -229,20 +233,16 @@ void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 	RX_CQ_CONFIG_CSR_t rx_cq_config = {.val = 0};
 
 	/* write AUTH tuples */
-	offset = FXR_TX_CQ_AUTHENTICATION_CSR + (cq_idx * 8);
-	cq_auth.SRANK = ud->srank;
-	if (ud->auth_mask != 0) {
-		for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-			if (ud->auth_mask & (1 << i)) {
-				cq_auth.USER_ID = ud->auth_table[i];
-				write_csr(dd, offset, cq_auth.val);
-			}
-		}
-	} else {
-		cq_auth.USER_ID = ud->ptl_uid;
+	offset = FXR_TX_CQ_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
+	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
+		if (ud->auth_mask == 0)
+			cq_auth.USER_ID = ud->ptl_uid;
+		else
+			cq_auth.USER_ID = auth_table[i].uid;
+		cq_auth.SRANK = auth_table[i].srank;
 		write_csr(dd, offset, cq_auth.val);
+		offset += 8;
 	}
-	*auth_idx = 0;
 
 	/* set TX CQ config, enable */
 	tx_cq_config.ENABLE = 1;

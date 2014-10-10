@@ -73,12 +73,45 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 {
 	struct hfi_devdata *dd = ud->devdata;
 	u64 addr;
-	int cq_idx, ret;
+	int cq_idx, i, j, ret;
 	unsigned long flags;
+	u32 auth_uid, last_job_uid = HFI_UID_ANY;
 
 	/* verify we are attached to Portals */
 	if (ud->ptl_pid == HFI_PID_NONE)
 		return -EPERM;
+
+	/* validate auth_tuples */
+	/* TODO - some rework here when we fully understand UID management */
+	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
+		auth_uid = cq_assign->auth_table[i].uid;
+
+		/* user may request to let driver select UID */
+		if (auth_uid == HFI_UID_ANY || auth_uid == 0)
+			auth_uid = cq_assign->auth_table[i].uid = ud->ptl_uid;
+
+		/* if job_launcher didn't set UIDs, this must match default */
+		if (ud->auth_mask == 0) {
+			if (auth_uid != ud->ptl_uid)
+				return -EINVAL;
+			else
+				continue;
+		}
+
+		/* else look for match in job_launcher set UIDs, 
+		 * but try to short-circuit this search.
+		 */
+		if (auth_uid == last_job_uid)
+			continue;
+		for (j = 0; j < HFI_NUM_AUTH_TUPLES; j++) {
+			if (auth_uid == ud->auth_uid[j]) {
+				last_job_uid = auth_uid;
+				break;
+			}
+		}
+		if (j == HFI_NUM_AUTH_TUPLES)
+			return -EINVAL;
+	}
 
 	spin_lock_irqsave(&dd->cq_lock, flags);
 	ret = hfi_cq_assign_next(ud, ud->ptl_pid, &cq_idx);
@@ -98,7 +131,7 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 						  PAGE_SIZE);
 
 	/* write CQ config in HFI CSRs */
-	hfi_cq_config(ud, cq_idx, dd->cq_head_base, &cq_assign->auth_idx);
+	hfi_cq_config(ud, cq_idx, dd->cq_head_base, cq_assign->auth_table);
 
 	return 0;
 }
@@ -242,7 +275,6 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 
 	/* TODO - init IOMMU PASID <-> PID mapping */
 	ud->pasid = ptl_pid;
-	ud->srank = ptl_attach->srank;
 	dd_dev_info(dd, "Portals PID %u assigned PCB:[%d, %d, %d, %d]\n", ptl_pid,
 		    psb_size, trig_op_size, le_me_size, unexp_size);
 
