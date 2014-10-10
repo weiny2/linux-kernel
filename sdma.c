@@ -1470,6 +1470,28 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 }
 
 /*
+ * return the mode as indicated by the first
+ * descriptor in the tx.
+ */
+static inline u8 ahg_mode(struct sdma_txreq *tx)
+{
+	return (tx->descp[0].qw[1] & SDMA_DESC1_HEADER_MODE_SMASK)
+		>> SDMA_DESC1_HEADER_MODE_SHIFT;
+}
+
+/*
+ * add the generation number into
+ * the qw1 and return
+ */
+static inline u64 add_gen(struct sdma_engine *sde, u64 qw1)
+{
+	qw1 &= ~SDMA_DESC1_GENERATION_SMASK;
+	qw1 |= (sde->generation & SDMA_DESC1_GENERATION_MASK)
+			<< SDMA_DESC1_GENERATION_SHIFT;
+	return qw1;
+}
+
+/*
  * This routine submits the indicated tx
  *
  * Space has already been guaranteed and
@@ -1479,23 +1501,44 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
  * in the caller and that is facilitated
  * by returning the new tail.
  *
+ * There is special case logic for ahg
+ * to not add the generation number for
+ * up to 2 descriptors that follow the
+ * first descriptor.
+ *
  */
 static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
 {
 	int i;
 	u16 tail;
 	struct sdma_desc *descp = tx->descp;
+	u8 skip = 0, mode = ahg_mode(tx);
 
 	tail = sde->descq_tail;
-	for (i = 0; i < tx->num_desc; i++, descp++) {
-		sde->descq[tail].qw[0] = descp->qw[0];
-		/* replace generation with real one */
-		descp->qw[1] &= ~(3ULL << SDMA_DESC1_GENERATION_SHIFT);
-		descp->qw[1] |=
-			(sde->generation & SDMA_DESC1_GENERATION_MASK)
-			<< SDMA_DESC1_GENERATION_SHIFT;
-		sde->descq[tail].qw[1] = descp->qw[1];
-		trace_hfi_sdma_descriptor(sde, descp->qw[0], descp->qw[1],
+	sde->descq[tail].qw[0] = cpu_to_le64(descp->qw[0]);
+	sde->descq[tail].qw[1] = cpu_to_le64(add_gen(sde, descp->qw[1]));
+	trace_hfi_sdma_descriptor(sde, descp->qw[0], descp->qw[1],
+		tail, &sde->descq[tail]);
+	if (++tail == sde->descq_cnt) {
+		tail = 0;
+		++sde->generation;
+	}
+	descp++;
+	if (mode > SDMA_AHG_APPLY_UPDATE1)
+		skip = mode >> 1;
+	for (i = 1; i < tx->num_desc; i++, descp++) {
+		u64 qw1;
+		sde->descq[tail].qw[0] = cpu_to_le64(descp->qw[0]);
+		if (skip) {
+			/* edits don't have generation */
+			qw1 = descp->qw[1];
+			skip--;
+		} else {
+			/* replace generation with real one for non-edits */
+			qw1 = add_gen(sde, descp->qw[1]);
+		}
+		sde->descq[tail].qw[1] = cpu_to_le64(qw1);
+		trace_hfi_sdma_descriptor(sde, descp->qw[0], qw1,
 			tail, &sde->descq[tail]);
 		if (++tail == sde->descq_cnt) {
 			tail = 0;
@@ -2117,11 +2160,11 @@ void _sdma_txreq_ahgadd(
 		(((u64)ahg[0] & SDMA_DESC1_HEADER_UPDATE1_MASK)
 			<< SDMA_DESC1_HEADER_UPDATE1_SHIFT);
 	for (i = 0; i < (num_ahg - 1); i++) {
-		if (!shift)
+		if (!shift && !(i & 2))
 			desc++;
-		tx->descs[desc].qw[i & 1] |=
-			(((u64)ahg[i + 1])
-				<< shift);
+		tx->descs[desc].qw[!!(i & 2)] |=
+			cpu_to_le64((((u64)ahg[i + 1])
+				<< shift));
 		shift = (shift + 32) & 63;
 	}
 }

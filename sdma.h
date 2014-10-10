@@ -72,7 +72,14 @@
 #define SDMA_AHG_UPDATE_ENABLE_MASK  0x1
 #define SDMA_AHG_UPDATE_ENABLE_SHIFT 31
 
-/* modes */
+/* AHG modes */
+
+/*
+ * Be aware the ordering and values
+ * for SDMA_AHG_APPLY_UPDATE[123]
+ * are assumed in generating a skip
+ * count in submit_tx() in sdma.c
+ */
 #define SDMA_AHG_NO_AHG              0
 #define SDMA_AHG_COPY                1
 #define SDMA_AHG_APPLY_UPDATE1       2
