@@ -77,8 +77,10 @@ static void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	else if (test_bit(0, kgr_immutable)) {
 		kgr_mark_task_in_progress(current);
 		go_old = true;
-	} else
+	} else {
+		rmb(); /* test_bit before kgr_mark_task_in_progress */
 		go_old = kgr_task_in_progress(current);
+	}
 
 	if (p->state == KGR_PATCH_REVERT_SLOW)
 		go_old = !go_old;
@@ -203,6 +205,8 @@ static void kgr_finalize(void)
 	struct kgr_patch_fun *patch_fun;
 	struct kgr_patch *p_to_revert = NULL;
 
+	pr_info("kgr succeeded\n");
+
 	mutex_lock(&kgr_in_progress_lock);
 
 	kgr_for_each_patch_fun(kgr_patch, patch_fun) {
@@ -260,18 +264,7 @@ static void kgr_work_fn(struct work_struct *work)
 	 * victory, patching finished, put everything back in shape
 	 * with as less performance impact as possible again
 	 */
-	pr_info("kgr succeeded\n");
 	kgr_finalize();
-}
-
-static void kgr_mark_processes(void)
-{
-	struct task_struct *p;
-
-	read_lock(&tasklist_lock);
-	for_each_process(p)
-		kgr_mark_task_in_progress(p);
-	read_unlock(&tasklist_lock);
 }
 
 static void kgr_handle_processes(void)
@@ -280,6 +273,9 @@ static void kgr_handle_processes(void)
 
 	read_lock(&tasklist_lock);
 	for_each_process(p) {
+		/* skip tasks wandering in userspace as already migrated */
+		if (kgr_needs_lazy_migration(p))
+			kgr_mark_task_in_progress(p);
 		/* wake up kthreads, they will clean the progress flag */
 		if (p->flags & PF_KTHREAD) {
 			/*
@@ -288,9 +284,6 @@ static void kgr_handle_processes(void)
 			 */
 			wake_up_process(p);
 		}
-		/* mark tasks wandering in userspace as already migrated */
-		if (!kgr_needs_lazy_migration(p))
-			kgr_task_safe(p);
 	}
 	read_unlock(&tasklist_lock);
 }
@@ -572,8 +565,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 	 * between universes completely.
 	 */
 	if (!patch->immediate) {
-		kgr_mark_processes();
 		set_bit(0, kgr_immutable);
+		wmb(); /* set_bit before kgr_handle_processes */
 	}
 
 	kgr_for_each_patch_fun(patch, patch_fun) {
@@ -603,15 +596,19 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 		kgr_refs_inc();
 	mutex_unlock(&kgr_in_progress_lock);
 
-	clear_bit(0, kgr_immutable);
 	kgr_handle_irqs();
-	kgr_handle_processes();
 
-	/*
-	 * give everyone time to exit kernel, and check after a while
-	 */
-	if (!patch->immediate)
+	if (patch->immediate) {
+		kgr_finalize();
+	} else {
+		kgr_handle_processes();
+		wmb(); /* clear_bit after kgr_handle_processes */
+		clear_bit(0, kgr_immutable);
+		/*
+		 * give everyone time to exit kernel, and check after a while
+		 */
 		queue_delayed_work(kgr_wq, &kgr_work, 10 * HZ);
+	}
 
 	return 0;
 err_free:

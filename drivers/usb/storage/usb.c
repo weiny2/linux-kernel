@@ -307,11 +307,20 @@ static int usb_stor_control_thread(void * __us)
 	struct Scsi_Host *host = us_to_host(us);
 
 	for (;;) {
+		long to;
+
 		usb_stor_dbg(us, "*** thread sleeping\n");
-		if (wait_for_completion_interruptible(&us->cmnd_ready))
+		to = wait_for_completion_interruptible_timeout(&us->cmnd_ready,
+				HZ * 3);
+		if (to < 0)
 			break;
 
 		usb_stor_dbg(us, "*** thread awakened\n");
+
+		if (!to) {
+			kgr_task_safe(current);
+			continue;
+		}
 
 		/* lock the device pointers */
 		mutex_lock(&(us->dev_mutex));
