@@ -100,8 +100,8 @@ void hfi_job_init(struct hfi_userdata *ud)
 			ud->pid_mode = job_info->pid_mode;
 			ud->sl_mask = job_info->sl_mask;
 			ud->auth_mask = job_info->auth_mask;
-			memcpy(ud->auth_table, job_info->auth_table,
-			       sizeof(ud->auth_table));
+			memcpy(ud->auth_uid, job_info->auth_uid,
+			       sizeof(ud->auth_uid));
 			dd_dev_info(ud->devdata,
 				    "joined PID group [%u - %u] tag (%u)\n",
 				    ud->pid_base, ud->pid_base + ud->pid_count - 1,
@@ -126,7 +126,7 @@ int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info)
 	job_info->pid_count = ud->pid_count;
 	job_info->pid_mode = ud->pid_mode;
 	job_info->sl_mask = ud->sl_mask;
-	memcpy(job_info->auth_table, ud->auth_table, sizeof(ud->auth_table));
+	memcpy(job_info->auth_uid, ud->auth_uid, sizeof(ud->auth_uid));
 	return 0;
 }
 
@@ -158,9 +158,9 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 	ud->sl_mask = job_setup->sl_mask;
 
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		if (job_setup->auth_table[i]) {
+		if (job_setup->auth_uid[i]) {
 			ud->auth_mask |= (1 << i);
-			ud->auth_table[i] = job_setup->auth_table[i];
+			ud->auth_uid[i] = job_setup->auth_uid[i];
 		}
 	}
 
@@ -173,7 +173,7 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 	dd_dev_info(ud->devdata,
 		    "created PID group [%u - %u] UID [%u] tag (%u:%u,%u)\n",
 		    ud->pid_base, ud->pid_base + ud->pid_count - 1,
-		    (ud->auth_mask & 0x1) ? ud->auth_table[0] : ud->ptl_uid,
+		    (ud->auth_mask & 0x1) ? ud->auth_uid[0] : ud->ptl_uid,
 		    ud->res_mode, ud->sid, ud->pid);
 
 	return ret;
