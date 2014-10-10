@@ -1937,8 +1937,9 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	}
 	rsp->port_rcv_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
-	/* rsp->excessive_buffer_overruns - SPC RXE block
-	 * (table 13-11 WFR spec) */
+	rsp->excessive_buffer_overruns =
+		cpu_to_be64(read_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
+			    8 * RCV_BUF_OVFL_CNT));
 	rsp->fm_config_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
@@ -2016,24 +2017,21 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 
 	/* port_rcv_constraint_errors ??? */
 	/* port_rcv_switch_relay_errors is 0 for HFIs */
-	error_counter_summary += cpu_to_be64(ppd->port_xmit_discards);
+	error_counter_summary += ppd->port_xmit_discards;
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
-	error_counter_summary +=
-		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
+	error_counter_summary += read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT);
 	if (acquire_lcb_access(dd) == 0) {
-		error_counter_summary += cpu_to_be64(
-			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
+		error_counter_summary +=
+			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT);
 		release_lcb_access(dd);
 	}
-	error_counter_summary +=
-		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
-	/* excessive_buffer_overruns - SPC RXE block
-	 * (table 13-11 WFR spec) */
-	error_counter_summary +=
-		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
+	error_counter_summary += read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT);
+	error_counter_summary += read_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
+					  8 * RCV_BUF_OVFL_CNT);
+	error_counter_summary += read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT);
 	/* link_error_recovery - DC (table 13-11 WFR spec) */
 	/* ppd->link_downed is a 32-bit value */
-	error_counter_summary += cpu_to_be64((u64)ppd->link_downed);
+	error_counter_summary += (u64)ppd->link_downed;
 	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
 	/* this is an 8-bit quantity */
 	error_counter_summary += tmp < 0x100 ? (tmp & 0xff) : 0xff;
@@ -2140,7 +2138,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));
 
 	rsp->port_error_counter_summary =
-		get_error_counter_summary(ibdev, port);
+		cpu_to_be64(get_error_counter_summary(ibdev, port));
 
 	vlinfo = &(rsp->vls[0]);
 	vfi = 0;
@@ -2279,8 +2277,9 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
 		release_lcb_access(dd);
 	}
-	/* rsp->excessive_buffer_overruns - SPC RXE block
-	 * (table 13-11 WFR spec) */
+	rsp->excessive_buffer_overruns =
+		cpu_to_be64(read_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
+			    8 * RCV_BUF_OVFL_CNT));
 	rsp->fm_config_errors =
 		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
@@ -2465,7 +2464,9 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	}
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		write_csr(dd, DCC_ERR_PORTRCV_ERR_CNT, 0);
-	/* ignore cs_excessive_buffer_overruns for now */
+	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS)
+		write_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
+			  8 * RCV_BUF_OVFL_CNT, 0);
 	if (counter_select & CS_FM_CONFIG_ERRORS)
 		write_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT, 0);
 	/* ignore cs_link_error_recovery for now */
