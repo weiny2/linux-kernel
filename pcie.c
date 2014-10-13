@@ -179,7 +179,10 @@ int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 		hfi_msix_setup(dd, pos, nent, entry);
 		/* did it, either MSI-X or INTx */
 	} else {
+		if (!pos)
+			dd_dev_err(dd, "Can't find PCI MSI-X capability!\n");
 		hfi_enable_intx(dd->pcidev);
+		if (nent) *nent = 0;
 	}
 
 	if (!pci_is_pcie(dd->pcidev)) {
