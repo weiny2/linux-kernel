@@ -19,6 +19,60 @@
 
 #define BTT_SIG_LEN 16
 #define BTT_SIG "BTT_ARENA_INFO\0"
+#define MAP_ENT_SIZE 4
+#define MAP_TRIM_SHIFT 31
+#define MAP_TRIM_MASK 0x1
+#define MAP_ERR_SHIFT 30
+#define MAP_ERR_MASK 0x1
+#define MAP_LBA_MASK (~((1 << MAP_TRIM_SHIFT) | (1 << MAP_ERR_SHIFT)))
+#define LOG_ENT_SIZE sizeof(struct log_entry)
+#define ARENA_MIN_SIZE ((size_t)(1 << 29))	/* 512 MB */
+#define ARENA_MAX_SIZE ((size_t)(1ULL << 39))	/* 512 GB */
+#define RTT_VALID (1U << 31)
+#define RTT_INVALID 0
+#define INT_LBASIZE_ALIGNMENT 256
+#define BTT_PG_SIZE 4096
+#define BTT_DEFAULT_NFREE 256
+#define LOG_SEQ_INIT 1
+
+#define IB_FLAG_ERROR 0x00000001
+#define IB_FLAG_ERROR_MASK 0x00000001
+
+#define SECTOR_SHIFT		9
+
+enum btt_init_state {
+	INIT_UNCHECKED = 0,
+	INIT_NOTFOUND,
+	INIT_READY
+};
+
+struct log_entry {
+	__le32 lba;
+	__le32 old_map;
+	__le32 new_map;
+	__le32 seq;
+};
+
+struct btt_sb {
+	u8 signature[BTT_SIG_LEN];
+	u8 uuid[16];
+	__le32 flags;
+	__le16 version_major;
+	__le16 version_minor;
+	__le32 external_lbasize;
+	__le32 external_nlba;
+	__le32 internal_lbasize;
+	__le32 internal_nlba;
+	__le32 nfree;
+	__le32 infosize;
+	__le64 nextoff;
+	__le64 dataoff;
+	__le64 mapoff;
+	__le64 logoff;
+	__le64 info2off;
+	u8 padding[3984];
+	__le64 checksum;
+};
 
 struct free_entry {
 	u32 block;

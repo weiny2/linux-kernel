@@ -12,6 +12,7 @@ obj-$(CONFIG_NFIT_TEST) += nfit_test_mem.o
 obj-$(CONFIG_NFIT_LOCAL_DEV) += local_dev.o
 obj-$(CONFIG_NFIT_LOCAL) += local_nfit.o
 obj-$(CONFIG_BLK_DEV_PMEM) += nd_pmem.o
+obj-$(CONFIG_ND_BTT) += nd_btt.o
 
 local_nfit-y := local.o
 
@@ -27,3 +28,4 @@ nd_core-y += region.o
 nd_core-$(CONFIG_ND_BTT_DEVS) += btt_devs.o
 
 nd_pmem-y := pmem.o
+nd_btt-y := btt.o
