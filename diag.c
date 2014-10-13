@@ -1743,6 +1743,7 @@ void snoop_recv_handler(struct hfi_packet *packet)
 		}
 
 		if (!snoop_mode) {
+			memset(&md, 0, sizeof(struct capture_md));
 			md.port = 1;
 			md.dir = PKT_DIR_INGRESS;
 			md.u.rhf = packet->rhf;
@@ -1880,6 +1881,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	}
 
 	if (!snoop_mode) {
+		memset(&md, 0, sizeof(struct capture_md));
 		md.port = 1;
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
