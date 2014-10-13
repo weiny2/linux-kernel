@@ -509,12 +509,6 @@ config OID_REGISTRY
 config UCS2_STRING
         tristate
 
-#
-# btt support is selected if needed
-#
-config BTT
-	tristate
-
 source "lib/fonts/Kconfig"
 
 #
