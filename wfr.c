@@ -45,6 +45,7 @@
 #include "mad.h"
 #include "pio.h"
 #include "sdma.h"
+#include "eprom.h"
 
 #define NUM_IB_PORTS 1
 
@@ -7711,8 +7712,14 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_clear_intr;
 
+	ret = eprom_init(dd);
+	if (ret)
+		goto bail_free_cntrs;
+
 	goto bail;
 
+bail_free_cntrs:
+	free_cntrs(dd);
 bail_clear_intr:
 	clean_up_interrupts(dd);
 bail_cleanup:

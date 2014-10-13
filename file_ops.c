@@ -51,6 +51,7 @@
 #include "common.h"
 #include "trace.h"
 #include "user_sdma.h"
+#include "eprom.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
@@ -196,6 +197,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	ssize_t consumed = 0, copy = 0, ret = 0;
 	void *dest = NULL;
 	__u64 user_val = 0;
+	int uctxt_required = 1;
+	int must_be_root = 0;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
@@ -212,6 +215,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 	switch (cmd.type) {
 	case HFI_CMD_ASSIGN_CTXT:
+		uctxt_required = 0;	/* assigned user context not required */
 		copy = sizeof(uinfo);
 		dest = &uinfo;
 		break;
@@ -237,6 +241,18 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy = 0;
 		user_val = ucmd->addr;
 		break;
+	case HFI_CMD_EP_INFO:
+	case HFI_CMD_EP_ERASE_CHIP:
+	case HFI_CMD_EP_ERASE_P0:
+	case HFI_CMD_EP_ERASE_P1:
+	case HFI_CMD_EP_READ_P0:
+	case HFI_CMD_EP_READ_P1:
+	case HFI_CMD_EP_WRITE_P0:
+	case HFI_CMD_EP_WRITE_P1:
+		uctxt_required = 0;	/* assigned user context not required */
+		must_be_root = 1;	/* validate user */
+		copy = 0;
+		break;
 	default:
 		ret = -EINVAL;
 		goto bail;
@@ -252,11 +268,16 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	}
 
 	/*
-	 * There is only one case where it is OK not to have
-	 * a qib_ctxtdata structure yet.
+	 * Make sure there is a uctxt when needed.
 	 */
-	if (!uctxt && cmd.type != HFI_CMD_ASSIGN_CTXT) {
+	if (uctxt_required && !uctxt) {
 		ret = -EINVAL;
+		goto bail;
+	}
+
+	/* only root can do these operations */
+	if (must_be_root && current_uid() != 0) {
+		ret = -EPERM;
 		goto bail;
 	}
 
@@ -320,6 +341,17 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_SET_PKEY:
 		ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
+		break;
+	case HFI_CMD_EP_INFO:
+	case HFI_CMD_EP_ERASE_CHIP:
+	case HFI_CMD_EP_ERASE_P0:
+	case HFI_CMD_EP_ERASE_P1:
+	case HFI_CMD_EP_READ_P0:
+	case HFI_CMD_EP_READ_P1:
+	case HFI_CMD_EP_WRITE_P0:
+	case HFI_CMD_EP_WRITE_P1:
+		ret = handle_eprom_command(&cmd, ucmd);
+		break;
 	}
 
 	if (ret >= 0)

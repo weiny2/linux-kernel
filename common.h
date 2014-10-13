@@ -312,6 +312,15 @@ struct hfi_user_info {
 #define HFI_CMD_ACK_EVENT       11	/* ack & clear bits *spi_sendbuf_status */
 #define HFI_CMD_SET_PKEY        12      /* set context's pkey */
 #define HFI_CMD_CTXT_RESET      13      /* reset context's HW send context */
+/* separate EPROM commands from normal PSM commands */
+#define HFI_CMD_EP_INFO		64      /* read EPROM device ID */
+#define HFI_CMD_EP_ERASE_CHIP	65      /* erase whole EPROM */
+#define HFI_CMD_EP_ERASE_P0	66      /* erase EPROM partition 0 */
+#define HFI_CMD_EP_ERASE_P1	67      /* erase EPROM partition 1 */
+#define HFI_CMD_EP_READ_P0	68      /* read EPROM partition 0 */
+#define HFI_CMD_EP_READ_P1	69      /* read EPROM partition 1 */
+#define HFI_CMD_EP_WRITE_P0	70      /* write EPROM partition 0 */
+#define HFI_CMD_EP_WRITE_P1	71      /* write EPROM partition 1 */
 
 /*
  * HFI_CMD_ACK_EVENT obsoletes HFI_CMD_DISARM_BUFS, but we keep it for

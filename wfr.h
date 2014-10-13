@@ -523,8 +523,13 @@ static inline int stl_width_to_ib(u16 in)
 	return in;
 }
 
+/* firmware.c */
 int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
+int acquire_hw_mutex(struct hfi_devdata *dd);
+void release_hw_mutex(struct hfi_devdata *dd);
+
+/* wfr.c */
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
 void read_guid(struct hfi_devdata *dd);
 int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);

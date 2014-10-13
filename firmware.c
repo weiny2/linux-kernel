@@ -1053,7 +1053,7 @@ static void set_serdes_broadcast(struct hfi_devdata *dd, u8 bg1, u8 bg2,
 	}
 }
 
-static int acquire_hw_mutex(struct hfi_devdata *dd)
+int acquire_hw_mutex(struct hfi_devdata *dd)
 {
 	unsigned long timeout;
 	u8 mask = 1 << dd->hfi_id;
@@ -1079,7 +1079,7 @@ static int acquire_hw_mutex(struct hfi_devdata *dd)
 	return -EBUSY;
 }
 
-static void release_hw_mutex(struct hfi_devdata *dd)
+void release_hw_mutex(struct hfi_devdata *dd)
 {
 	write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);
 }
