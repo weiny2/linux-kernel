@@ -65,7 +65,9 @@ driver: headers
 	make -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION)
 
 headers:
-	@git submodule update --init include.git
+	@if [ -d .git ]; then \
+		git submodule update --init include.git; \
+	fi
 
 clean:
 	make -C $(KBUILD) M=${PWD} clean
