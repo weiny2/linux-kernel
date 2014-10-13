@@ -34,11 +34,11 @@
 #include "hfi.h"
 #include "hfi_token.h"
 
-static int hfi_pid_alloc(struct hfi_userdata *ud, hfi_pid_t *ptl_pid);
-static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid);
+static int hfi_pid_alloc(struct hfi_userdata *ud, u16 *ptl_pid);
+static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
 
 static int hfi_cq_assign_next(struct hfi_userdata *ud,
-			      hfi_pid_t ptl_pid, int *out_cq_idx)
+			      u16 ptl_pid, int *out_cq_idx)
 {
 	struct hfi_devdata *dd = ud->devdata;
 	unsigned cq_idx, num_cqs = HFI_CQ_COUNT;
@@ -188,7 +188,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 		   struct hfi_ptl_attach_args *ptl_attach)
 {
 	struct hfi_devdata *dd = ud->devdata;
-	hfi_pid_t ptl_pid;
+	u16 ptl_pid;
 	u32 psb_size, trig_op_size, le_me_size, unexp_size;
 	u64 ptl_unexpected_base;
 	int ret;
@@ -282,12 +282,12 @@ err_vmalloc:
 	return ret;
 }
 
-static int hfi_pid_alloc(struct hfi_userdata *ud, hfi_pid_t *assigned_pid)
+static int hfi_pid_alloc(struct hfi_userdata *ud, u16 *assigned_pid)
 {
 	unsigned long flags;
 	int ret;
 	struct hfi_devdata *dd = ud->devdata;
-	hfi_pid_t ptl_pid = *assigned_pid;
+	u16 ptl_pid = *assigned_pid;
 
 	if (ud->pid_count) {
 		/* assign PID from Portals PID reservation */
@@ -339,7 +339,7 @@ static int hfi_pid_alloc(struct hfi_userdata *ud, hfi_pid_t *assigned_pid)
 	return 0;
 }
 
-static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid)
+static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 {
 	unsigned long flags;
 
@@ -356,7 +356,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, hfi_pid_t ptl_pid)
 void hfi_ptl_cleanup(struct hfi_userdata *ud)
 {
 	struct hfi_devdata *dd = ud->devdata;
-	hfi_pid_t ptl_pid = ud->ptl_pid;
+	u16 ptl_pid = ud->ptl_pid;
 
 	if (ptl_pid == HFI_PID_NONE)
 		/* no assigned PID */

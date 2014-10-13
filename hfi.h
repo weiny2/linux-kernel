@@ -119,7 +119,7 @@ struct hfi_devdata {
 	spinlock_t ptl_lock;
 
 	/* Command Queue State */
-	hfi_pid_t cq_pair[HFI_CQ_COUNT];
+	u16 cq_pair[HFI_CQ_COUNT];
 	spinlock_t cq_lock;
 	u16 cq_pair_next_unused;
 	void *cq_tx_base;
@@ -143,14 +143,14 @@ struct hfi_userdata {
 	u32 ptl_le_me_size;
 	u32 ptl_unexpected_size;
 	u32 ptl_trig_op_size;
-	hfi_pid_t ptl_pid;
+	u16 ptl_pid;
 	u16 srank;
 	u16 pasid;
 	u16 cq_pair_num_assigned;
 	u8 allow_phys_dlid;
 	u8 auth_mask;
-	hfi_uid_t auth_table[HFI_NUM_AUTH_TUPLES];
-	hfi_uid_t ptl_uid; /* UID if auth_tuples not used */
+	u32 auth_table[HFI_NUM_AUTH_TUPLES];
+	u32 ptl_uid; /* UID if auth_tuples not used */
 
 	u32 dlid_base;
 	u32 lid_offset;
