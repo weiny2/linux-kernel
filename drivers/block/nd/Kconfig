@@ -26,6 +26,15 @@ config ND_CORE
 	  instance.  A userspace library "ndctl" provides an API to
 	  enumerate/manage this subsystem.
 
+config ND_MANUAL_DSM
+	bool "ND Manual DSM: Manually run vendor specific _DSM commands"
+	help
+	  Manually run vendor specific _DSM commands by directly interacting
+	  with the Falcon Valley mailbox registers, as opposed to using the
+	  ACPI _DSM method via the BIOS.  This is meant to be a stopgap while
+	  _DSM support is being implemented in the BIOS, and should eventually
+	  be removed from our driver.
+
 config NFIT_ACPI
 	tristate "NFIT ACPI: Discover ACPI-Namespace NFIT Devices"
 	select ND_CORE
