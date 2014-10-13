@@ -130,7 +130,12 @@ static int __nd_acpi_add(struct acpi_device *dev)
 		nfit_desc->nfit_base = (void __iomem *) tbl;
 		nfit_desc->nfit_size = sz;
 		nfit_desc->provider_name = "ACPI.NFIT";
-		nfit_desc->nfit_ctl = nd_acpi_ctl;
+
+		if (nd_manual_dsm)
+			nfit_desc->nfit_ctl = nd_dsm_ctl;
+		else
+			nfit_desc->nfit_ctl = nd_acpi_ctl;
+
 		/* declare support for "format interface code 1" messages */
 		set_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags);
 		list_add(&nfit->list, &nfits);

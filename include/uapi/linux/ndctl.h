@@ -66,6 +66,21 @@ struct nfit_cmd_scrub {
 	__u64 out_buf[0];
 } __packed;
 
+/*
+ * The struct defining the passthrough command and payloads to be operated
+ * upon by the FNV firmware.  This is wrapped inside of a struct
+ * nfit_cmd_vendor_hdr, which provides the total size of the cmd including the
+ * payload.
+ */
+struct fnv_passthru_cmd {
+	__u8 data_format_revision;
+	__u8 opcode;
+	__u8 sub_opcode;
+	__u8 flags;
+	__u32 reserved;
+	__u8 in_buf[0];
+} __packed;
+
 enum {
 	NFIT_CMD_SMART = 1,
 	NFIT_CMD_GET_CONFIG_SIZE = 2,
