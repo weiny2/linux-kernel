@@ -11,23 +11,18 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  */
-
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
-#include <linux/bio.h>
-#include <linux/blkdev.h>
+#include <linux/highmem.h>
 #include <linux/debugfs.h>
-#include <linux/export.h>
-#include <linux/fs.h>
-#include <linux/hdreg.h>
-#include <linux/idr.h>
-#include <linux/kernel.h>
-#include <linux/list.h>
+#include <linux/blkdev.h>
 #include <linux/module.h>
-#include <linux/slab.h>
-#include <linux/spinlock.h>
-#include <linux/types.h>
+#include <linux/device.h>
+#include <linux/hdreg.h>
+#include <linux/genhd.h>
+#include <linux/ndctl.h>
+#include <linux/fs.h>
+#include <linux/nd.h>
 #include "btt.h"
+#include "nd.h"
 
 /*
  * Lookup table and macro for looking up sequence numbers.  These are
@@ -80,22 +75,41 @@ static u64 btt_sb_checksum(struct btt_sb *btt_sb)
 	return ((u64)hi32 << 32) | (u64)lo32;
 }
 
+static int nd_btt_rw_bytes(struct nd_btt *nd_btt, void *buf, size_t offset,
+		size_t n, unsigned long flags)
+{
+	struct nd_io *ndio = nd_btt->ndio;
+
+	if (unlikely(nd_data_dir(flags) == WRITE)
+			&& bdev_read_only(nd_btt->backing_dev))
+		return -EACCES;
+
+	return ndio->rw_bytes(ndio, buf, offset + nd_btt->offset, n, flags);
+}
+
+static int arena_rw_bytes(struct arena_info *arena, void *buf, size_t n,
+		size_t offset, unsigned long flags)
+{
+	/* yes, FIXME,  'offset' and 'n' are swapped */
+	return nd_btt_rw_bytes(arena->nd_btt, buf, offset, n, flags);
+}
+
 static int btt_info_write(struct arena_info *arena, struct btt_sb *super)
 {
 	int ret;
-	ret = arena->rw_bytes(arena->raw_bdev, super, sizeof(struct btt_sb),
+	ret = arena_rw_bytes(arena, super, sizeof(struct btt_sb),
 			arena->info2off, WRITE);
 	if (ret)
 		return ret;
 
-	return arena->rw_bytes(arena->raw_bdev, super, sizeof(struct btt_sb),
+	return arena_rw_bytes(arena, super, sizeof(struct btt_sb),
 			arena->infooff, WRITE);
 }
 
 static int btt_info_read(struct arena_info *arena, struct btt_sb *super)
 {
 	WARN_ON(!super);
-	return arena->rw_bytes(arena->raw_bdev, super, sizeof(struct btt_sb),
+	return arena_rw_bytes(arena, super, sizeof(struct btt_sb),
 			arena->infooff, READ);
 
 }
@@ -104,7 +118,7 @@ static int btt_map_write(struct arena_info *arena, u32 lba, u32 mapping)
 {
 	__le32 out = cpu_to_le32(mapping);
 	WARN_ON(lba >= arena->external_nlba);
-	return arena->rw_bytes(arena->raw_bdev, &out, MAP_ENT_SIZE,
+	return arena_rw_bytes(arena, &out, MAP_ENT_SIZE,
 			arena->mapoff + (lba * MAP_ENT_SIZE), WRITE);
 }
 
@@ -117,7 +131,7 @@ static int btt_map_read(struct arena_info *arena, u32 lba, u32 *mapping,
 
 	WARN_ON(lba >= arena->external_nlba);
 
-	ret = arena->rw_bytes(arena->raw_bdev, &in, MAP_ENT_SIZE,
+	ret = arena_rw_bytes(arena, &in, MAP_ENT_SIZE,
 			arena->mapoff + (lba * MAP_ENT_SIZE), READ);
 	if (ret)
 		return ret;
@@ -137,7 +151,7 @@ static int btt_log_read_pair(struct arena_info *arena, u32 lane,
 			struct log_entry *ent)
 {
 	WARN_ON(!ent);
-	return arena->rw_bytes(arena->raw_bdev, ent, 2 * LOG_ENT_SIZE,
+	return arena_rw_bytes(arena, ent, 2 * LOG_ENT_SIZE,
 			arena->logoff + (2 * lane * LOG_ENT_SIZE), READ);
 }
 
@@ -185,7 +199,7 @@ static void btt_debugfs_init(struct btt *btt)
 	int i = 0;
 	struct arena_info *arena;
 
-	btt->debugfs_dir = debugfs_create_dir(btt->btt_disk->disk_name,
+	btt->debugfs_dir = debugfs_create_dir(dev_name(&btt->nd_btt->dev),
 						debugfs_root);
 	if (IS_ERR_OR_NULL(btt->debugfs_dir))
 		return;
@@ -239,6 +253,11 @@ static int btt_log_get_old(struct log_entry *ent)
 	return old;
 }
 
+struct device *to_dev(struct arena_info *arena)
+{
+	return &arena->nd_btt->dev;
+}
+
 /*
  * This function copies the desired (old/new) log entry into ent if
  * it is not NULL. It returns the sub-slot number (0 or 1)
@@ -258,7 +277,8 @@ static int btt_log_read(struct arena_info *arena, u32 lane,
 
 	old_ent = btt_log_get_old(log);
 	if (old_ent < 0 || old_ent > 1) {
-		pr_info("log corruption (%d): lane %d seq [%d, %d]\n",
+		dev_info(to_dev(arena),
+				"log corruption (%d): lane %d seq [%d, %d]\n",
 			old_ent, lane, log[0].seq, log[1].seq);
 		/* TODO set error state? */
 		return -EIO;
@@ -286,13 +306,13 @@ static int __btt_log_write(struct arena_info *arena, u32 lane,
 	void *src = ent;
 
 	/* split the 16B write into atomic, durable halves */
-	ret = arena->rw_bytes(arena->raw_bdev, src, log_half, ns_off, WRITE);
+	ret = arena_rw_bytes(arena, src, log_half, ns_off, WRITE);
 	if (ret)
 		return ret;
 
 	ns_off += log_half;
 	src += log_half;
-	return arena->rw_bytes(arena->raw_bdev, src, log_half, ns_off, WRITE);
+	return arena_rw_bytes(arena, src, log_half, ns_off, WRITE);
 }
 
 static int btt_flog_write(struct arena_info *arena, u32 lane, u32 sub,
@@ -362,8 +382,8 @@ static int btt_log_init(struct arena_info *arena)
 
 static int btt_freelist_init(struct arena_info *arena)
 {
-	int old, new;
-	u32 i;
+	int old, new, ret;
+	u32 i, map_entry;
 	struct log_entry log_new, log_old;
 
 	arena->freelist = kzalloc(arena->nfree * sizeof(struct free_entry),
@@ -380,10 +400,32 @@ static int btt_freelist_init(struct arena_info *arena)
 		if (new < 0)
 			return new;
 
-		arena->freelist[i].block = log_new.old_map;
 		/* sub points to the next one to be overwritten */
 		arena->freelist[i].sub = 1 - new;
 		arena->freelist[i].seq = NSEQ(log_new.seq);
+		arena->freelist[i].block = log_new.old_map;
+
+		/* This implies a newly created or untouched flog entry */
+		if (log_new.old_map == log_new.new_map)
+			continue;
+
+		/* Check if map recovery is needed */
+		ret = btt_map_read(arena, log_new.lba, &map_entry,
+				NULL, NULL);
+		if (ret)
+			return ret;
+		if ((log_new.new_map != map_entry) &&
+				(log_new.old_map == map_entry)) {
+			/*
+			 * Last transaction wrote the flog, but wasn't able
+			 * to complete the map write. So fix up the map.
+			 */
+			ret = btt_map_write(arena, log_new.lba,
+					log_new.new_map);
+			if (ret)
+				return ret;
+		}
+
 	}
 
 	return 0;
@@ -423,9 +465,7 @@ static struct arena_info *alloc_arena(struct btt *btt, size_t size,
 	arena = kzalloc(sizeof(struct arena_info), GFP_KERNEL);
 	if (!arena)
 		return NULL;
-
-	arena->raw_bdev = btt->raw_bdev;
-	arena->rw_bytes = btt->raw_bdev->bd_disk->fops->rw_bytes;
+	arena->nd_btt = btt->nd_btt;
 
 	if (!size)
 		return arena;
@@ -500,7 +540,7 @@ static int arena_is_valid(struct arena_info *arena, struct btt_sb *super,
 
 	/* TODO: figure out action for this */
 	if ((le32_to_cpu(super->flags) & IB_FLAG_ERROR_MASK) != 0)
-		pr_info("Found arena with an error flag\n");
+		dev_info(to_dev(arena), "Found arena with an error flag\n");
 
 	return 1;
 }
@@ -563,11 +603,12 @@ static int discover_arenas(struct btt *btt)
 		if (!arena_is_valid(arena, super, btt->uuid)) {
 			if (remaining == btt->rawsize) {
 				btt->init_state = INIT_NOTFOUND;
-				pr_info("No existing arenas\n");
+				dev_info(to_dev(arena), "No existing arenas\n");
 				kfree(arena);
 				goto out;
 			} else {
-				pr_err("Found corrupted metadata!\n");
+				dev_info(to_dev(arena),
+						"Found corrupted metadata!\n");
 				goto out;
 			}
 		}
@@ -803,7 +844,7 @@ static int btt_data_read(struct arena_info *arena, struct page *page,
 	u64 nsoff = arena->dataoff + (sector * arena->internal_lbasize);
 	void *mem = kmap_atomic(page);
 
-	ret = arena->rw_bytes(arena->raw_bdev, mem + off, len, nsoff, READ);
+	ret = arena_rw_bytes(arena, mem + off, len, nsoff, READ);
 	kunmap_atomic(mem);
 
 	return ret;
@@ -816,7 +857,7 @@ static int btt_data_write(struct arena_info *arena, sector_t sector,
 	u64 nsoff = arena->dataoff + (sector * arena->internal_lbasize);
 	void *mem = kmap_atomic(page);
 
-	ret = arena->rw_bytes(arena->raw_bdev, mem + off, len, nsoff, WRITE);
+	ret = arena_rw_bytes(arena, mem + off, len, nsoff, WRITE);
 	kunmap_atomic(mem);
 
 	return ret;
@@ -1044,7 +1085,8 @@ static void btt_make_request(struct request_queue *q, struct bio *bio)
 		err = btt_do_bvec(btt, bvec.bv_page, len, bvec.bv_offset,
 				rw, sector);
 		if (err) {
-			pr_info("io error in %s sector %ld, len %d,\n",
+			dev_info(&btt->nd_btt->dev,
+					"io error in %s sector %ld, len %d,\n",
 				(rw == READ) ? "READ" : "WRITE", sector, len);
 			goto out;
 		}
@@ -1095,8 +1137,6 @@ static const struct block_device_operations btt_fops = {
 	.getgeo =		btt_getgeo,
 };
 
-static DEFINE_IDA(btt_ida);
-
 static int btt_blk_init(struct btt *btt)
 {
 	int ret;
@@ -1112,8 +1152,7 @@ static int btt_blk_init(struct btt *btt)
 		goto out_free_queue;
 	}
 
-	btt->disk_id = ida_simple_get(&btt_ida, 0, 0, GFP_KERNEL);
-	sprintf(btt->btt_disk->disk_name, "btt%d", btt->disk_id);
+	sprintf(btt->btt_disk->disk_name, "%s", dev_name(&btt->nd_btt->dev));
 	btt->btt_disk->major = btt_major;
 	btt->btt_disk->first_minor = 0;
 	btt->btt_disk->fops = &btt_fops;
@@ -1143,13 +1182,11 @@ static void btt_blk_cleanup(struct btt *btt)
 	del_gendisk(btt->btt_disk);
 	put_disk(btt->btt_disk);
 	blk_cleanup_queue(btt->btt_queue);
-	blkdev_put(btt->raw_bdev, FMODE_EXCL);
-	ida_simple_remove(&btt_ida, btt->disk_id);
 }
 
 /**
  * btt_init - initialize a block translation table for the given device
- * @bdev:	block_device to initialize the BTT on
+ * @nd_btt:	device with BTT geometry and backing device info
  * @rawsize:	raw size in bytes of the backing device
  * @lbasize:	lba size of the backing device
  * @uuid:	A uuid for the backing device - this is stored on media
@@ -1164,12 +1201,13 @@ static void btt_blk_cleanup(struct btt *btt)
  * Returns:
  * Pointer to a new struct btt on success, NULL on failure.
  */
-struct btt *btt_init(struct block_device *bdev, size_t rawsize, u32 lbasize,
-			u8 *uuid, int maxlane)
+static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
+		u32 lbasize, u8 *uuid, int maxlane)
 {
 	int ret;
 	struct btt *btt;
 	char uuid_str[33];
+	struct device *dev = &nd_btt->dev;
 
 	__to_string(uuid_str, uuid, 16);
 
@@ -1177,9 +1215,7 @@ struct btt *btt_init(struct block_device *bdev, size_t rawsize, u32 lbasize,
 	if (!btt)
 		return NULL;
 
-	BUG_ON(!bdev->bd_disk->fops->rw_bytes);
-
-	btt->raw_bdev = bdev;
+	btt->nd_btt = nd_btt;
 	btt->rawsize = rawsize;
 	btt->lbasize = lbasize;
 	btt->num_lanes = maxlane;
@@ -1187,35 +1223,34 @@ struct btt *btt_init(struct block_device *bdev, size_t rawsize, u32 lbasize,
 	INIT_LIST_HEAD(&btt->arena_list);
 	spin_lock_init(&btt->init_lock);
 
-
 	ret = discover_arenas(btt);
 	if (ret) {
-		pr_info("init: error in arena_discover: %d\n", ret);
+		dev_info(dev, "init: error in arena_discover: %d\n", ret);
 		return NULL;
 	}
 
 	if (btt->init_state != INIT_READY) {
 		btt->num_arenas = (rawsize / ARENA_MAX_SIZE) +
 			((rawsize % ARENA_MAX_SIZE) ? 1 : 0);
-		pr_info("init uuid %s: %d arenas for %lu rawsize\n",
+		dev_info(dev, "init uuid %s: %d arenas for %lu rawsize\n",
 				uuid_str, btt->num_arenas, rawsize);
 
 		ret = create_arenas(btt);
 		if (ret) {
-			pr_info("init: create_arenas: %d\n", ret);
+			dev_info(dev, "init: create_arenas: %d\n", ret);
 			return NULL;
 		}
 	}
 
 	ret = lane_locks_init(btt);
 	if (ret) {
-		pr_info("init: lane_locks_init: %d\n", ret);
+		dev_info(dev, "init: lane_locks_init: %d\n", ret);
 		return NULL;
 	}
 
 	ret = btt_blk_init(btt);
 	if (ret) {
-		pr_info("init: error in blk_init: %d\n", ret);
+		dev_info(dev, "init: error in blk_init: %d\n", ret);
 		return NULL;
 	}
 
@@ -1223,7 +1258,6 @@ struct btt *btt_init(struct block_device *bdev, size_t rawsize, u32 lbasize,
 
 	return btt;
 }
-EXPORT_SYMBOL(btt_init);
 
 /**
  * btt_fini - de-initialize a BTT
@@ -1234,7 +1268,7 @@ EXPORT_SYMBOL(btt_init);
  * Context:
  * Might sleep.
  */
-void btt_fini(struct btt *btt)
+static void btt_fini(struct btt *btt)
 {
 	if (btt) {
 		btt_blk_cleanup(btt);
@@ -1244,67 +1278,156 @@ void btt_fini(struct btt *btt)
 		kfree(btt);
 	}
 }
-EXPORT_SYMBOL(btt_fini);
 
-/* Kernel module stuff */
-static int major = 259;
-module_param(major, int, S_IRUGO);
-MODULE_PARM_DESC(major, "Major number of the backing device");
-
-static int minor;
-module_param(minor, int, S_IRUGO);
-MODULE_PARM_DESC(minor, "Minor number of the backing device");
-
-static struct btt *btt_handle;
-
-static int __init btt_module_init(void)
+static bool is_lbasize_supported(unsigned long lbasize)
 {
-	int ret;
+	switch (lbasize) {
+	case 512:
+	case 4096:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static u64 partition_offset(struct block_device *bdev)
+{
+	struct hd_struct *p;
+
+	if (bdev == bdev->bd_contains)
+		return 0;
+
+	p = bdev->bd_part;
+	return ((u64) p->start_sect) << SECTOR_SHIFT;
+}
+
+static int link_btt(struct nd_btt *nd_btt)
+{
+	struct block_device *bdev = nd_btt->backing_dev;
+	struct kobject *dir = &part_to_dev(bdev->bd_part)->kobj;
+
+	return sysfs_create_link(dir, &nd_btt->dev.kobj, "nd_btt");
+}
+
+static void unlink_btt(struct nd_btt *nd_btt)
+{
+	struct block_device *bdev = nd_btt->backing_dev;
+	struct kobject *dir;
+
+	/* if backing_dev was deleted first we may have nothing to unlink */
+	if (!nd_btt->backing_dev)
+		return;
+
+	dir = &part_to_dev(bdev->bd_part)->kobj;
+	sysfs_remove_link(dir, "nd_btt");
+}
+
+static const fmode_t nd_btt_mode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
+
+static int nd_btt_probe(struct device *dev)
+{
+	struct nd_btt *nd_btt = to_nd_btt(dev);
+	struct nd_io *ndio = nd_btt->ndio;
 	struct block_device *bdev;
-	u8 uuid[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+	struct btt *btt;
 	size_t rawsize;
+	int rc;
 
-	ret = register_blkdev(0, "btt");
-	if (ret < 0)
-		return -EIO;
-	else
-		btt_major = ret;
+	if (!ndio || !nd_btt->uuid || !nd_btt->backing_dev
+			|| !is_lbasize_supported(nd_btt->lbasize))
+		return -EINVAL;
 
-	/* XXX this probably moves into btt_blk_init later */
-	bdev = blkdev_get_by_dev(MKDEV(major, minor),
-			FMODE_EXCL, KBUILD_MODNAME);
-	if (IS_ERR(bdev)) {
-		ret = PTR_ERR(bdev);
-		pr_err("failed to open backing device : %d\n", ret);
-		return ret;
+	bdev = nd_btt->backing_dev;
+	rc = blkdev_get(bdev, nd_btt_mode, nd_btt);
+	if (rc)
+		return rc;
+
+	rc = link_btt(nd_btt);
+	if (rc)
+		goto err_link;
+
+	nd_btt->offset = partition_offset(bdev);
+	rawsize = bdev->bd_part->nr_sects << SECTOR_SHIFT;
+	btt = btt_init(nd_btt, rawsize, nd_btt->lbasize, nd_btt->uuid,
+			ndio->num_lanes);
+	if (!btt) {
+		rc = -ENOMEM;
+		goto err_btt;
 	}
-
-	debugfs_root = debugfs_create_dir("btt", NULL);
-	if (IS_ERR_OR_NULL(debugfs_root))
-		goto release;
-
-	rawsize = get_capacity(bdev->bd_disk) << SECTOR_SHIFT;
-	btt_handle = btt_init(bdev, rawsize, 512, uuid, 256);
-	if (!btt_handle) {
-		ret = -ENOMEM;
-		goto release;
-	}
+	btt->backing_dev = bdev;
+	dev_set_drvdata(dev, btt);
 
 	return 0;
-
-release:
-	blkdev_put(bdev, FMODE_EXCL);
-	return ret;
+ err_btt:
+	unlink_btt(nd_btt);
+ err_link:
+	blkdev_put(nd_btt->backing_dev, nd_btt_mode);
+	return rc;
 }
 
-static void __exit btt_module_exit(void)
+static int nd_btt_remove(struct device *dev)
 {
-	unregister_blkdev(btt_major, "btt");
-	btt_fini(btt_handle);
-	debugfs_remove_recursive(debugfs_root);
+	struct nd_btt *nd_btt = to_nd_btt(dev);
+	struct btt *btt = dev_get_drvdata(dev);
+
+	btt_fini(btt);
+	unlink_btt(nd_btt);
+
+	/*
+	 * Note, nd_btt may have already dropped its backing device reference
+	 * (cleared nd_btt->backing_dev) at this point.  Here we drop the
+	 * btt-driver backing device reference.
+	 */
+	blkdev_put(btt->backing_dev, nd_btt_mode);
+
+	return 0;
 }
 
+static struct nd_device_driver nd_btt_driver = {
+	.probe = nd_btt_probe,
+	.remove = nd_btt_remove,
+	.drv = {
+		.name = "nd_btt",
+	},
+	.type = ND_DRIVER_BTT,
+};
+
+static int __init nd_btt_init(void)
+{
+	int rc;
+
+	btt_major = register_blkdev(0, "btt");
+	if (btt_major < 0)
+		return btt_major;
+
+	debugfs_root = debugfs_create_dir("btt", NULL);
+	if (IS_ERR_OR_NULL(debugfs_root)) {
+		rc = -ENXIO;
+		goto err_debugfs;
+	}
+
+	rc = nd_driver_register(&nd_btt_driver);
+	if (rc < 0)
+		goto err_driver;
+	return 0;
+
+ err_driver:
+	debugfs_remove_recursive(debugfs_root);
+ err_debugfs:
+	unregister_blkdev(btt_major, "btt");
+
+	return rc;
+}
+
+static void __exit nd_btt_exit(void)
+{
+	driver_unregister(&nd_btt_driver.drv);
+	debugfs_remove_recursive(debugfs_root);
+	unregister_blkdev(btt_major, "btt");
+}
+
+MODULE_ALIAS_ND_DEVICE(ND_DEVICE_BTT);
 MODULE_AUTHOR("Vishal Verma <vishal.l.verma@linux.intel.com>");
 MODULE_LICENSE("GPL v2");
-module_init(btt_module_init);
-module_exit(btt_module_exit);
+module_init(nd_btt_init);
+module_exit(nd_btt_exit);
