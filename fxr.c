@@ -173,8 +173,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* TX and RX command queues */
 	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_ENTRY;
 	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_ENTRY;
-	memset(&dd->cq_pair, HFI_PID_NONE,
-	       sizeof(hfi_pid_t) * HFI_CQ_COUNT);
+	memset(&dd->cq_pair, HFI_PID_NONE, sizeof(dd->cq_pair));
 	spin_lock_init(&dd->cq_lock);
 
 	ret = setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
