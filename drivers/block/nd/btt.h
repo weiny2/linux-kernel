@@ -101,20 +101,20 @@ struct arena_info {
 	struct free_entry *freelist;
 	u32 *rtt;			/* Read Tracking Table */
 	spinlock_t *map_lock;		/* Array of map locks */
+	struct nd_btt *nd_btt;
 	struct list_head list;
 	struct dentry *debugfs_dir;
 	/* Arena flags */
 	u32 flags;
-	struct block_device *raw_bdev;
-	int (*rw_bytes)(struct block_device *, void *, size_t, off_t, int rw);
 };
 
 struct btt {
 	struct gendisk *btt_disk;
-	struct block_device *raw_bdev;
 	struct request_queue *btt_queue;
 	struct list_head arena_list;
 	struct dentry *debugfs_dir;
+	struct block_device *backing_dev;
+	struct nd_btt *nd_btt;
 	u8 uuid[16];
 	size_t nlba;
 	size_t rawsize;
@@ -125,11 +125,5 @@ struct btt {
 	int init_state;
 	int num_arenas;
 	int num_lanes;
-	int disk_id;
 };
-
-struct btt *btt_init(struct block_device *bdev, size_t rawsize, u32 lbasize,
-			u8 *uuid, int maxlane);
-void btt_fini(struct btt *btt);
-
 #endif
