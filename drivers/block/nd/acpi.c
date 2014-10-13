@@ -16,6 +16,7 @@
 #include <linux/ndctl.h>
 #include <linux/module.h>
 #include "nfit.h"
+#include "dsm.h"
 
 static bool old_acpi;
 module_param(old_acpi, bool, 0);
@@ -314,12 +315,18 @@ static int nd_acpi_add(struct acpi_device *dev)
 	nfit_desc->nfit_base = (void __iomem *) tbl;
 	nfit_desc->nfit_size = sz;
 	nfit_desc->provider_name = "ACPI.NFIT";
-	nfit_desc->nfit_ctl = nd_acpi_ctl;
 
-	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
-		if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
+	if (nd_manual_dsm) {
+		nfit_desc->nfit_ctl = nd_dsm_ctl;
+		set_bit(NFIT_CMD_VENDOR, &nfit_desc->dsm_mask);
+	} else {
+		nfit_desc->nfit_ctl = nd_acpi_ctl;
+
+		for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
+			if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
 					NFIT_CMD_IMPLEMENTED, 1ULL << i))
-			set_bit(i, &nfit_desc->dsm_mask);
+				set_bit(i, &nfit_desc->dsm_mask);
+		}
 	}
 
 	/* ACPI references one global NFIT for all devices, i.e. no parent */
@@ -396,12 +403,18 @@ static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
 	if (!nfit_desc->nfit_base)
 		return AE_ERROR;
 	nfit_desc->provider_name = "ACPI.NFIT";
-	nfit_desc->nfit_ctl = nd_acpi_ctl;
 
-	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
-		if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
+	if (nd_manual_dsm) {
+		nfit_desc->nfit_ctl = nd_dsm_ctl;
+		set_bit(NFIT_CMD_VENDOR, &nfit_desc->dsm_mask);
+	} else {
+		nfit_desc->nfit_ctl = nd_acpi_ctl;
+
+		for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
+			if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
 					NFIT_CMD_IMPLEMENTED, 1ULL << i))
-			set_bit(i, &nfit_desc->dsm_mask);
+				set_bit(i, &nfit_desc->dsm_mask);
+		}
 	}
 
 	/* ACPI references one global NFIT for all devices, i.e. no parent */
