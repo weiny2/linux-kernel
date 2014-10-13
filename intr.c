@@ -76,14 +76,14 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw)
 	for (i = 0; i < total; i++)
 		entries[i].msix.entry = i;
 
-	/* ask for MSI-X interrupts; expect a PCIe width of 16 */
+	/* ask for MSI-X interrupts */
 	request = total;
 	ret = hfi_pcie_params(dd, minw, &request, entries);
 	if (ret)
 		goto fail;
 
 	if (request == 0) {
-		/* using INTx */
+		/* INTx not supported */
 		/* dd->num_msix_entries already zero */
 		kfree(entries);
 		ret = -ENXIO;
@@ -93,8 +93,7 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw)
 		dd->num_msix_entries = request;
 		dd->msix_entries = entries;
 
-		/* TODO: Handle reduced interrupt case.  Need scheme to
-		   decide who shares. */
+		/* TODO: Consider handling reduced interrupt case? */
 		dd_dev_err(dd,
 			   "cannot handle reduced interrupt case, %u < %u\n",
 			   request, total);
@@ -107,18 +106,6 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw)
 		dd_dev_info(dd, "%u MSI-X interrupts allocated\n", total);
 	}
 
-	/* TODO */
-#if 0
-	/* mask all interrupts */
-	set_intr_state(dd, 0);
-	/* clear all pending interrupts */
-	clear_all_interrupts(dd);
-
-	/* reset general handler mask, chip MSI-X mappings */
-	reset_interrupts(dd);
-
-	ret = request_msix_irqs(dd);
-#endif
 	return 0;
 fail:
 	cleanup_interrupts(dd);
