@@ -202,6 +202,20 @@ test_list = [
       "desc" : "Run MPI stress with verbs",
     },
 
+    { "test_name" : "Hpcc-Verbs",
+      "test_exe" : "Hpcc.py",
+      "args" : "--nodelist %HOST[2]% --mpiverbs",
+      "type" : "default,mpi,mpiverbs,verbs",
+      "desc" : "Run Hpcc with verbs",
+    },
+
+    { "test_name" : "Hpcc-Psm",
+      "test_exe" : "Hpcc.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "default,mpi,mpipsm",
+      "desc" : "Run Hpcc with psm",
+    },
+
     # Snoop/Capture tests
     { "test_name" : "SnoopHijack",
       "test_exe" : "Snoop.py",
