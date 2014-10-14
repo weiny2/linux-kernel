@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include "nfit.h"
+#include "dsm.h"
 
 static LIST_HEAD(nfits);
 static DEFINE_MUTEX(nd_acpi_lock);
