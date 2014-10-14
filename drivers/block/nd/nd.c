@@ -19,6 +19,7 @@
 #include "nd-private.h"
 #include "nfit.h"
 #include "nd.h"
+#include "dsm.h"
 
 LIST_HEAD(nd_bus_list);
 DEFINE_MUTEX(nd_bus_list_mutex);
@@ -424,7 +425,12 @@ static __init int nd_core_init(void)
 	rc = nd_region_init();
 	if (rc)
 		goto err_region;
+	rc = nd_dsm_init();
+	if (rc)
+		goto err_dsm;
 	return 0;
+ err_dsm:
+	nd_region_exit();
  err_region:
 	nd_dimm_exit();
  err_dimm:
@@ -436,6 +442,7 @@ static __init int nd_core_init(void)
 static __exit void nd_core_exit(void)
 {
 	WARN_ON(!list_empty(&nd_bus_list));
+	nd_dsm_exit();
 	nd_region_exit();
 	nd_dimm_exit();
 	nd_bus_exit();
