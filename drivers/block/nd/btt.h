@@ -120,7 +120,7 @@ struct btt {
 	size_t rawsize;
 	u32 lbasize;
 	spinlock_t *lane_lock;		/* Array of lane locks */
-	spinlock_t init_lock;
+	struct mutex init_lock;
 	atomic_t last_lane;
 	int init_state;
 	int num_arenas;

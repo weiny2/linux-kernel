@@ -25,6 +25,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include "btt.h"
@@ -659,7 +660,7 @@ static int btt_arena_write_layout(struct arena_info *arena, u8 *uuid)
 	if (ret)
 		return ret;
 
-	super = kzalloc(sizeof(struct btt_sb), GFP_KERNEL);
+	super = kzalloc(sizeof(struct btt_sb), GFP_NOIO);
 	if (!super)
 		return -ENOMEM;
 
@@ -705,7 +706,7 @@ static int btt_meta_init(struct btt *btt)
 	int ret = 0;
 	struct arena_info *arena;
 
-	spin_lock(&btt->init_lock);
+	mutex_lock(&btt->init_lock);
 	if (btt->init_state == INIT_READY)
 		goto unlock;
 
@@ -731,7 +732,7 @@ static int btt_meta_init(struct btt *btt)
 	btt->init_state = INIT_READY;
 
  unlock:
-	spin_unlock(&btt->init_lock);
+	mutex_unlock(&btt->init_lock);
 	return ret;
 }
 
@@ -1185,8 +1186,7 @@ struct btt *btt_init(struct block_device *bdev, size_t rawsize, u32 lbasize,
 	btt->num_lanes = maxlane;
 	memcpy(btt->uuid, uuid, 16);
 	INIT_LIST_HEAD(&btt->arena_list);
-	spin_lock_init(&btt->init_lock);
-
+	mutex_init(&btt->init_lock);
 
 	ret = discover_arenas(btt);
 	if (ret) {
