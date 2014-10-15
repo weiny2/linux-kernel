@@ -7405,7 +7405,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		int vl;
 		/* init common fields */
-		qib_init_pportdata(ppd, dd, 0, 1);
+		qib_init_pportdata(pdev, ppd, dd, 0, 1);
 		/* DC supports 4 link widths */
 		ppd->link_width_supported =
 			STL_LINK_WIDTH_1X | STL_LINK_WIDTH_2X |

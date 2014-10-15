@@ -388,8 +388,8 @@ done:
 /*
  * Common code for initializing the physical port structure.
  */
-void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
-			u8 hw_pidx, u8 port)
+void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
+			struct hfi_devdata *dd, u8 hw_pidx, u8 port)
 {
 	int size;
 	uint default_pkey_idx;
@@ -400,9 +400,9 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 
 	ppd->pkeys[default_pkey_idx] = WFR_DEFAULT_P_KEY;
 	if (loopback == 1) {
-		/* Can't use any other info/err print function */
-		pr_err("Faking data partition 0x8001 in idx %u\n",
-			!default_pkey_idx);
+		qib_early_err(&pdev->dev,
+		 	      "Faking data partition 0x8001 in idx %u\n",
+			      !default_pkey_idx);
 		ppd->pkeys[!default_pkey_idx] = 0x8001;
 	}
 
@@ -429,16 +429,16 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 		* IB_CCT_ENTRIES;
 	ppd->ccti_entries = kzalloc(size, GFP_KERNEL);
 	if (!ppd->ccti_entries) {
-		dd_dev_err(dd,
-		  "failed to allocate congestion control table for port %d!\n",
-		  port);
+		qib_early_err(&pdev->dev,
+		 "failed to allocate congestion control table for port %d!\n",
+		 port);
 		goto bail;
 	}
 	size = STL_MAX_SLS * sizeof(struct stl_congestion_setting_entry);
 
 	ppd->congestion_entries = kzalloc(size, GFP_KERNEL);
 	if (!ppd->congestion_entries) {
-		dd_dev_err(dd,
+		qib_early_err(&pdev->dev,
 		 "failed to allocate congestion setting list for port %d!\n",
 		 port);
 		goto bail_1;
@@ -447,9 +447,9 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 	size = sizeof(struct cc_table_shadow);
 	ppd->ccti_entries_shadow = kzalloc(size, GFP_KERNEL);
 	if (!ppd->ccti_entries_shadow) {
-		dd_dev_err(dd,
-		 "failed to allocate shadow ccti list for port %d!\n",
-		 port);
+		qib_early_err(&pdev->dev,
+		 	"failed to allocate shadow ccti list for port %d!\n",
+		 	port);
 		goto bail_2;
 	}
 
@@ -457,7 +457,7 @@ void qib_init_pportdata(struct qib_pportdata *ppd, struct hfi_devdata *dd,
 
 	ppd->congestion_entries_shadow = kzalloc(size, GFP_KERNEL);
 	if (!ppd->congestion_entries_shadow) {
-		dd_dev_err(dd,
+		qib_early_err(&pdev->dev,
 		 "failed to allocate shadow congestion setting list for port %d!\n",
 		 port);
 		goto bail_3;
@@ -476,8 +476,8 @@ bail_1:
 	ppd->ccti_entries = NULL;
 bail:
 
-	dd_dev_err(dd, "Congestion Control Agent disabled for port %d\n",
-		port);
+	qib_early_err(&pdev->dev,
+	 	      "Congestion Control Agent disabled for port %d\n", port);
 	return;
 }
 

@@ -1087,7 +1087,8 @@ int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
 int qib_create_ctxts(struct hfi_devdata *dd);
 struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
-void qib_init_pportdata(struct qib_pportdata *, struct hfi_devdata *, u8, u8);
+void qib_init_pportdata(struct pci_dev *, struct qib_pportdata *,
+			struct hfi_devdata *, u8, u8);
 void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
 int hfi_setup_ctxt(struct qib_ctxtdata *, u16, u16, u16, u16);
 
