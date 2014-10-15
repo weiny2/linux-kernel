@@ -733,7 +733,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &hdr);
 
 	/* write the pbc and data */
-	pio_copy(pbuf, pbc, &hdr, hwords);
+	ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
 
 	ibp->n_unicast_xmit++;
 	goto done;

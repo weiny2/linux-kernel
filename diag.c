@@ -658,7 +658,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 		goto bail;
 	}
 
-	pio_copy(pbuf, dp->pbc, tmpbuf, pkt_len);
+	pio_copy(dd, pbuf, dp->pbc, tmpbuf, pkt_len);
 	/* no flush needed as the HW knows the packet size */
 
 	ret = sizeof(*dp);
@@ -1051,6 +1051,7 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 
 	dd->process_pio_send = snoop_send_pio_handler;
 	dd->process_dma_send = snoop_send_pio_handler;
+	dd->pio_inline_send = snoop_inline_pio_send;
 
 	spin_unlock_irqrestore(&dd->hfi_snoop.snoop_lock, flags);
 	ret = 0;
@@ -1103,6 +1104,7 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 
 	dd->process_pio_send = qib_verbs_send_pio;
 	dd->process_dma_send = qib_verbs_send_dma;
+	dd->pio_inline_send = pio_copy;
 
 	spin_unlock_irqrestore(&dd->hfi_snoop.snoop_lock, flags);
 
@@ -1473,8 +1475,10 @@ static void qib_snoop_list_add_tail(struct snoop_packet *packet,
 
 	spin_lock_irqsave(&dd->hfi_snoop.snoop_lock, flags);
 	if (likely((dd->hfi_snoop.mode_flag & HFI_PORT_SNOOP_MODE) ||
-	    (dd->hfi_snoop.mode_flag & HFI_PORT_CAPTURE_MODE)))
+	    (dd->hfi_snoop.mode_flag & HFI_PORT_CAPTURE_MODE))) {
 		list_add_tail(&(packet->list), &dd->hfi_snoop.queue);
+		snoop_dbg("Added packet to list");
+	}
 
 	/*
 	 * Technically we can could have closed the snoop device while waiting
@@ -1989,3 +1993,84 @@ out:
 				  md.u.pbc);
 }
 
+/*
+ * Callers of this must pass a qib_ib_header type for the from ptr. Currently
+ * this can be used anywhere, but the intention is for inline ACKs for RC and
+ * CCA packets. We don't restrict this useage though.
+ */
+void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,
+			   u64 pbc, const void *from, size_t count)
+{
+	int snoop_mode = 0;
+	int md_len = 0;
+	struct capture_md md;
+	struct snoop_packet *s_packet = NULL;
+
+	/*
+	 * count is in dwords so we need to convert to bytes.
+	 * We also need to account for CRC which would be tacked on by hardware.
+	 */
+	int packet_len = (count << 2) + 4;
+	int ret;
+
+	snoop_dbg("ACK OUT: len %d", packet_len);
+
+	if (!dd->hfi_snoop.filter_callback) {
+		snoop_dbg("filter not set\n");
+		ret = HFI_FILTER_HIT;
+	} else {
+		ret = dd->hfi_snoop.filter_callback(
+				(struct qib_ib_header *)from,
+				NULL,
+				dd->hfi_snoop.filter_value);
+	}
+
+	switch (ret) {
+	case HFI_FILTER_ERR:
+		snoop_dbg("Error in filter call\n");
+		/* fall through */
+	case HFI_FILTER_MISS:
+		snoop_dbg("Filter Miss\n");
+		break;
+	case HFI_FILTER_HIT:
+		snoop_dbg("Capturing packet\n");
+		if (dd->hfi_snoop.mode_flag & HFI_PORT_SNOOP_MODE)
+			snoop_mode = 1;
+		else
+			md_len = sizeof(struct capture_md);
+
+		s_packet = allocate_snoop_packet(packet_len, 0, md_len);
+		s_packet->total_len = packet_len + md_len;
+		if (unlikely(s_packet == NULL)) {
+			dd_dev_err(dd,
+			   "Unable to allocate snoop/capture packet\n");
+			goto inline_pio_out;
+		}
+
+		/* Fill in the metadata for the packet */
+		if (!snoop_mode) {
+			memset(&md, 0, sizeof(struct capture_md));
+			md.port = 1;
+			md.dir = PKT_DIR_EGRESS;
+			md.u.pbc = pbc;
+			memcpy(s_packet->data, &md, md_len);
+		}
+
+		/* Add the packet data which is a single buffer */
+		memcpy(s_packet->data + md_len, from, packet_len);
+
+		qib_snoop_list_add_tail(s_packet, dd);
+
+		if (unlikely(snoop_drop_send && snoop_mode)) {
+			snoop_dbg("Dropping packet\n");
+			return;
+		}
+		break;
+	default:
+		break;
+	}
+
+inline_pio_out:
+	pio_copy(dd, pbuf, pbc, from, count);
+
+}

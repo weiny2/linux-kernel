@@ -1033,6 +1033,8 @@ struct hfi_devdata {
 	int (*process_dma_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 				u32 hdrwords, struct qib_sge_state *ss, u32 len,
 				u32 plen, u32 dwords, u64 pbc);
+	void (*pio_inline_send)(struct hfi_devdata *dd, struct pio_buf *pbuf,
+				u64 pbc, const void *from, size_t count);
 };
 
 /* f_put_tid types */
@@ -1161,6 +1163,8 @@ int snoop_send_dma_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc);
+void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,
+			   u64 pbc, const void *from, size_t count);
 
 /* for use in system calls, where we want to know device type, etc. */
 #define ctxt_fp(fp) \

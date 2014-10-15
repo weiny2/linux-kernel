@@ -670,6 +670,7 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	/* Set up send low level handlers */
 	dd->process_pio_send = qib_verbs_send_pio;
 	dd->process_dma_send = qib_verbs_send_dma;
+	dd->pio_inline_send = pio_copy;
 
 	/* make sure the link is not "up" */
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
@@ -1050,7 +1051,7 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 				" skipping\n", lcnt);
 			goto done;
 		}
-		pio_copy(pbuf, pbc, addr, cnt >> 2);
+		pio_copy(dd, pbuf, pbc, addr, cnt >> 2);
 		emsecs = jiffies_to_msecs(jiffies) - msecs;
 	}
 	preempt_enable();

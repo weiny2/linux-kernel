@@ -164,7 +164,8 @@ void pio_send_control(struct hfi_devdata *dd, int op);
 
 
 /* PIO copy routines */
-void pio_copy(struct pio_buf *pbuf, u64 pbc, const void *from, size_t count);
+void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
+	      const void *from, size_t count);
 void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
 					const void *from, size_t nbytes);
 void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t nbytes);

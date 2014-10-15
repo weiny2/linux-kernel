@@ -1125,6 +1125,8 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc)
 {
+	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	u32 *hdr = (u32 *) ibhdr;
 	u64 pbc_flags = 0;
 	u32 sc5;
@@ -1148,7 +1150,7 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		return no_bufs_available(qp, sc);
 
 	if (len == 0) {
-		pio_copy(pbuf, pbc, hdr, hdrwords);
+		pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
 	} else {
 		seg_pio_copy_start(pbuf, pbc, hdr, hdrwords*4);
 		while (len) {

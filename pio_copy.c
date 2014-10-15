@@ -54,7 +54,8 @@
  * o pbuf->start always starts on a block boundary
  * o pbuf can wrap only at a block boundary
  */ 
-void pio_copy(struct pio_buf *pbuf, u64 pbc, const void *from, size_t count)
+void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
+	      const void *from, size_t count)
 {
 	void __iomem *dest = pbuf->start + WFR_SOP_DISTANCE;
 	void __iomem *send = dest + WFR_PIO_BLOCK_SIZE;
