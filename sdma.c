@@ -2123,6 +2123,7 @@ int _pad_sdma_tx_descs(struct hfi_devdata *dd, struct sdma_txreq *tx)
 void _sdma_txreq_ahgadd(
 	struct sdma_txreq *tx,
 	u8 num_ahg,
+	u8 ahg_entry,
 	u32 *ahg,
 	u8 ahg_hlen)
 {
@@ -2153,6 +2154,8 @@ void _sdma_txreq_ahgadd(
 	}
 	ahg_hlen >>= 2;
 	tx->descs[0].qw[1] |=
+		(((u64)ahg_entry & SDMA_DESC1_HEADER_INDEX_MASK)
+			<< SDMA_DESC1_HEADER_INDEX_SHIFT) |
 		(((u64)ahg_hlen & SDMA_DESC1_HEADER_DWS_MASK)
 			<< SDMA_DESC1_HEADER_DWS_SHIFT) |
 		(((u64)mode & SDMA_DESC1_HEADER_MODE_MASK)

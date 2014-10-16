@@ -489,6 +489,7 @@ static inline int sdma_running(struct sdma_engine *engine)
 void _sdma_txreq_ahgadd(
 	struct sdma_txreq *tx,
 	u8 num_ahg,
+	u8 ahg_entry,
 	u32 *ahg,
 	u8 ahg_hlen);
 
@@ -569,10 +570,12 @@ static inline void sdma_txinit_ahg(
 	tx->descs[0].qw[1] = 0;
 	if (flags & SDMA_TXREQ_F_AHG_COPY)
 		tx->descs[0].qw[1] |=
+			(((u64)ahg_entry & SDMA_DESC1_HEADER_INDEX_MASK)
+				<< SDMA_DESC1_HEADER_INDEX_SHIFT) |
 			(((u64)SDMA_AHG_COPY & SDMA_DESC1_HEADER_MODE_MASK)
 				<< SDMA_DESC1_HEADER_MODE_SHIFT);
 	else if (flags & SDMA_TXREQ_F_USE_AHG && num_ahg)
-		_sdma_txreq_ahgadd(tx, num_ahg, ahg, ahg_hlen);
+		_sdma_txreq_ahgadd(tx, num_ahg, ahg_entry, ahg, ahg_hlen);
 }
 
 /**
