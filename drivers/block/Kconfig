@@ -358,6 +358,11 @@ config BLK_DEV_SX8
 
 	  Use devices /dev/sx8/$N and /dev/sx8/$Np$M.
 
+config BLK_DEV_ND_BLOCK
+	tristate "NVDIMM block window support"
+	---help---
+	  .. TBD ..
+
 config BLK_DEV_RAM
 	tristate "RAM block device support"
 	---help---
