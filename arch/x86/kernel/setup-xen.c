@@ -1491,7 +1491,7 @@ void __init setup_arch(char **cmdline_p)
 							  & PAGE_MASK),
 						     PAGE_SIZE);
 				}
-			} while (pud_index(va));
+			} while (pud_index(va) | pmd_index(va));
 			ClearPagePinned(virt_to_page(pud_page));
 			make_page_writable(pud_page,
 					   XENFEAT_writable_page_tables);
