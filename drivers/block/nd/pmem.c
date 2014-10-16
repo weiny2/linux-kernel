@@ -24,7 +24,12 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/cpumask.h>
 #include <linux/slab.h>
+#include <linux/nd.h>
+#include "nd.h"
+
+static DEFINE_IDA(pmem_ida);
 
 #define SECTOR_SHIFT		9
 #define PAGE_SECTORS_SHIFT	(PAGE_SHIFT - SECTOR_SHIFT)
@@ -33,12 +38,13 @@
 struct pmem_device {
 	struct request_queue	*pmem_queue;
 	struct gendisk		*pmem_disk;
-	struct list_head	pmem_list;
+	struct nd_io		ndio;
 
 	/* One contiguous memory region per device */
 	phys_addr_t		phys_addr;
 	void			*virt_addr;
 	size_t			size;
+	int id;
 };
 
 static int pmem_getgeo(struct block_device *bd, struct hd_geometry *geo)
@@ -214,185 +220,159 @@ static const struct block_device_operations pmem_fops = {
 	.getgeo =		pmem_getgeo,
 };
 
-/* Kernel module stuff */
-static int pmem_start_gb = CONFIG_BLK_DEV_PMEM_START;
-module_param(pmem_start_gb, int, S_IRUGO);
-MODULE_PARM_DESC(pmem_start_gb, "Offset in GB of where to start claiming space");
-
-static int pmem_size_gb = CONFIG_BLK_DEV_PMEM_SIZE;
-module_param(pmem_size_gb,  int, S_IRUGO);
-MODULE_PARM_DESC(pmem_size_gb,  "Total size in GB of space to claim for all disks");
-
-static int pmem_count = CONFIG_BLK_DEV_PMEM_COUNT;
-module_param(pmem_count, int, S_IRUGO);
-MODULE_PARM_DESC(pmem_count, "Number of pmem devices to evenly split allocated space");
-
-static LIST_HEAD(pmem_devices);
 static int pmem_major;
 
-/* pmem->phys_addr and pmem->size need to be set.
- * Will then set virt_addr if successful.
- */
-int pmem_mapmem(struct pmem_device *pmem)
+static int pmem_rw_bytes(struct nd_io *ndio, void *buf, size_t offset,
+		size_t n, unsigned long flags)
 {
-	struct resource *res_mem;
-	int err;
+	struct pmem_device *pmem = container_of(ndio, typeof(*pmem), ndio);
+	int rw = nd_data_dir(flags);
 
-	res_mem = request_mem_region_exclusive(pmem->phys_addr, pmem->size,
-					       "pmem");
-	if (!res_mem) {
-		pr_warn("pmem: request_mem_region_exclusive phys=0x%llx size=0x%zx failed\n",
-			   pmem->phys_addr, pmem->size);
-		return -EINVAL;
+	if (unlikely(offset + n > pmem->size)) {
+		dev_WARN_ONCE(ndio->dev, 1, "%s: request out of range\n",
+				__func__);
+		return -EFAULT;
 	}
 
-	pmem->virt_addr = ioremap_cache(pmem->phys_addr, pmem->size);
-	if (unlikely(!pmem->virt_addr)) {
-		err = -ENXIO;
-		goto out_release;
-	}
+	if (rw == READ)
+		memcpy(buf, pmem->virt_addr + offset, n);
+	else
+		memcpy(pmem->virt_addr + offset, buf, n);
+
 	return 0;
-
-out_release:
-	release_mem_region(pmem->phys_addr, pmem->size);
-	return err;
 }
 
-void pmem_unmapmem(struct pmem_device *pmem)
+static int nd_pmem_probe(struct device *dev)
 {
-	if (unlikely(!pmem->virt_addr))
-		return;
-
-	iounmap(pmem->virt_addr);
-	release_mem_region(pmem->phys_addr, pmem->size);
-	pmem->virt_addr = NULL;
-}
-
-static struct pmem_device *pmem_alloc(phys_addr_t phys_addr, size_t disk_size,
-				      int i)
-{
+	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
+	size_t disk_sectors = resource_size(&nsio->res) / 512;
 	struct pmem_device *pmem;
 	struct gendisk *disk;
+	struct resource *res;
 	int err;
 
 	pmem = kzalloc(sizeof(*pmem), GFP_KERNEL);
-	if (unlikely(!pmem)) {
-		err = -ENOMEM;
-		goto out;
+	if (!pmem)
+		return -ENOMEM;
+
+	pmem->id = ida_simple_get(&pmem_ida, 0, 0, GFP_KERNEL);
+	if (pmem->id < 0) {
+		err = pmem->id;
+		goto err_ida;
 	}
 
-	pmem->phys_addr = phys_addr;
-	pmem->size = disk_size;
+	res = request_mem_region(nsio->res.start, resource_size(&nsio->res),
+			KBUILD_MODNAME);
+	if (!res) {
+		err = -EBUSY;
+		goto err_request_mem_region;
+	}
 
-	err = pmem_mapmem(pmem);
-	if (unlikely(err))
-		goto out_free_dev;
-
+	pmem->virt_addr = ioremap_cache(res->start, resource_size(res));
+	if (!pmem->virt_addr) {
+		err = -ENXIO;
+		goto err_ioremap;
+	}
+	pmem->phys_addr = res->start;
+	pmem->size = resource_size(res);
 	pmem->pmem_queue = blk_alloc_queue(GFP_KERNEL);
-	if (unlikely(!pmem->pmem_queue)) {
+	if (!pmem->pmem_queue) {
 		err = -ENOMEM;
-		goto out_unmap;
+		goto err_alloc_queue;
 	}
 
 	blk_queue_make_request(pmem->pmem_queue, pmem_make_request);
 	blk_queue_max_hw_sectors(pmem->pmem_queue, 1024);
 	blk_queue_bounce_limit(pmem->pmem_queue, BLK_BOUNCE_ANY);
 
-	disk = alloc_disk(0);
-	if (unlikely(!disk)) {
+	disk = pmem->pmem_disk = alloc_disk(0);
+	if (!disk) {
 		err = -ENOMEM;
-		goto out_free_queue;
+		goto err_alloc_disk;
 	}
 
+	disk->driverfs_dev	= dev;
 	disk->major		= pmem_major;
 	disk->first_minor	= 0;
 	disk->fops		= &pmem_fops;
 	disk->private_data	= pmem;
 	disk->queue		= pmem->pmem_queue;
 	disk->flags		= GENHD_FL_EXT_DEVT;
-	sprintf(disk->disk_name, "pmem%d", i);
-	set_capacity(disk, disk_size >> SECTOR_SHIFT);
-	pmem->pmem_disk = disk;
+	sprintf(disk->disk_name, "pmem%d", pmem->id);
+	set_capacity(disk, disk_sectors);
 
-	return pmem;
+	nd_bus_lock(dev);
+	add_disk(disk);
+	dev_set_drvdata(dev, pmem);
+	nd_init_ndio(&pmem->ndio, pmem_rw_bytes, dev, disk,
+			num_possible_cpus(), 0);
+	nd_register_ndio(&pmem->ndio);
+	nd_bus_unlock(dev);
 
-out_free_queue:
+	return 0;
+
+ err_alloc_disk:
 	blk_cleanup_queue(pmem->pmem_queue);
-out_unmap:
-	pmem_unmapmem(pmem);
-out_free_dev:
+ err_alloc_queue:
+	iounmap(pmem->virt_addr);
+ err_ioremap:
+	release_mem_region(res->start, resource_size(res));
+ err_request_mem_region:
+	ida_simple_remove(&pmem_ida, pmem->id);
+ err_ida:
 	kfree(pmem);
-out:
-	return ERR_PTR(err);
+	return err;
 }
 
-static void pmem_free(struct pmem_device *pmem)
+static int nd_pmem_remove(struct device *dev)
 {
-	put_disk(pmem->pmem_disk);
-	blk_cleanup_queue(pmem->pmem_queue);
-	pmem_unmapmem(pmem);
-	kfree(pmem);
-}
+	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
+	struct pmem_device *pmem = dev_get_drvdata(dev);
 
-static void pmem_del_one(struct pmem_device *pmem)
-{
-	list_del(&pmem->pmem_list);
+	nd_unregister_ndio(&pmem->ndio);
 	del_gendisk(pmem->pmem_disk);
-	pmem_free(pmem);
+	blk_cleanup_queue(pmem->pmem_queue);
+	iounmap(pmem->virt_addr);
+	release_mem_region(nsio->res.start, resource_size(&nsio->res));
+	put_disk(pmem->pmem_disk);
+	ida_simple_remove(&pmem_ida, pmem->id);
+	kfree(pmem);
+
+	return 0;
 }
+
+MODULE_ALIAS("pmem");
+MODULE_ALIAS_ND_DEVICE(ND_DEVICE_NAMESPACE_IO);
+static struct nd_device_driver nd_pmem_driver = {
+	.probe = nd_pmem_probe,
+	.remove = nd_pmem_remove,
+	.drv = {
+		.name = "pmem",
+	},
+	.type = ND_DRIVER_NAMESPACE_IO,
+};
 
 static int __init pmem_init(void)
 {
-	int result, i;
-	struct pmem_device *pmem, *next;
-	phys_addr_t phys_addr;
-	size_t total_size, disk_size;
+	int rc;
 
-	phys_addr  = (phys_addr_t) pmem_start_gb * 1024 * 1024 * 1024;
-	total_size = (size_t)	   pmem_size_gb  * 1024 * 1024 * 1024;
-	disk_size = total_size / pmem_count;
+	rc = register_blkdev(0, "pmem");
+	if (rc < 0)
+		return rc;
 
-	result = register_blkdev(0, "pmem");
-	if (result < 0)
-		return -EIO;
-	else
-		pmem_major = result;
+	pmem_major = rc;
+	rc = nd_driver_register(&nd_pmem_driver);
 
-	for (i = 0; i < pmem_count; i++) {
-		pmem = pmem_alloc(phys_addr, disk_size, i);
-		if (IS_ERR(pmem)) {
-			result = PTR_ERR(pmem);
-			goto out_free;
-		}
-		list_add_tail(&pmem->pmem_list, &pmem_devices);
-		phys_addr += disk_size;
-	}
+	if (rc < 0)
+		unregister_blkdev(pmem_major, "pmem");
 
-	list_for_each_entry(pmem, &pmem_devices, pmem_list)
-		add_disk(pmem->pmem_disk);
-
-	pr_info("pmem: module loaded\n");
-	return 0;
-
-out_free:
-	list_for_each_entry_safe(pmem, next, &pmem_devices, pmem_list) {
-		list_del(&pmem->pmem_list);
-		pmem_free(pmem);
-	}
-	unregister_blkdev(pmem_major, "pmem");
-
-	return result;
+	return rc;
 }
 
 static void __exit pmem_exit(void)
 {
-	struct pmem_device *pmem, *next;
-
-	list_for_each_entry_safe(pmem, next, &pmem_devices, pmem_list)
-		pmem_del_one(pmem);
-
+	driver_unregister(&nd_pmem_driver.drv);
 	unregister_blkdev(pmem_major, "pmem");
-	pr_info("pmem: module unloaded\n");
 }
 
 MODULE_AUTHOR("Ross Zwisler <ross.zwisler@linux.intel.com>");
