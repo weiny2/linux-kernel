@@ -231,10 +231,11 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 
 	input_payload_size = in->in_length - sizeof(*cmd);
 
-	if (input_payload_size == CR_IN_PAYLOAD_SIZE) {
+	if (input_payload_size <= CR_IN_PAYLOAD_SIZE &&
+	    fw_cmd.opcode != CR_PT_UPDATE_FW) {
 		fw_cmd.input_payload_size 		= input_payload_size;
 		fw_cmd.input_payload			= cmd->in_buf;
-	} else if (input_payload_size == CR_IN_MB_SIZE) {
+	} else if (input_payload_size <= CR_IN_MB_SIZE) {
 		fw_cmd.large_input_payload_size		= input_payload_size;
 		fw_cmd.large_input_payload		= cmd->in_buf;
 	} else if (input_payload_size) {
@@ -243,10 +244,10 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 		return -EINVAL;
 	}
 
-	if (out->out_length == CR_OUT_PAYLOAD_SIZE) {
+	if (out->out_length <= CR_OUT_PAYLOAD_SIZE) {
 		fw_cmd.output_payload_size 		= out->out_length;
 		fw_cmd.output_payload			= out->out_buf;
-	} else if (out->out_length == CR_OUT_MB_SIZE) {
+	} else if (out->out_length <= CR_OUT_MB_SIZE) {
 		fw_cmd.large_output_payload_size	= out->out_length;
 		fw_cmd.large_output_payload		= out->out_buf;
 	} else if (out->out_length) {
