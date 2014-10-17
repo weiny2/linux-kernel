@@ -565,35 +565,26 @@ struct qib_pportdata {
 	struct xmit_wait cong_stats;
 	struct timer_list symerr_clear_timer;
 
-	/* Synchronize access between driver writes and sysfs reads */
-	spinlock_t cc_shadow_lock
-		____cacheline_aligned_in_smp;
-
-	/* Shadow copy of the congestion control table */
-	struct cc_table_shadow *ccti_entries_shadow;
-
-	/* Shadow copy of the congestion control entries */
-	struct stl_congestion_setting_attr_shadow *congestion_entries_shadow;
-
 	/* List of congestion control table entries */
-	struct ib_cc_table_entry_shadow *ccti_entries;
+	struct ib_cc_table_entry_shadow ccti_entries[CC_TABLE_SHADOW_MAX];
 
-	/* 16 congestion entries with each entry corresponding to a SL */
-	struct stl_congestion_setting_entry_shadow *congestion_entries;
+	/* congestion entries, each entry corresponding to a SL */
+	struct stl_congestion_setting_entry_shadow
+		congestion_entries[STL_MAX_SLS];
 
-	/* Maximum number of congestion control entries that the agent expects
-	 * the manager to send.
+	/*
+	 * cc_state_lock protects (write) access to the per-port
+	 * struct cc_state.
 	 */
-	u16 cc_supported_table_entries;
+	spinlock_t cc_state_lock ____cacheline_aligned_in_smp;
+
+	struct cc_state __rcu *cc_state;
 
 	/* Total number of congestion control table entries */
 	u16 total_cct_entry;
 
 	/* Bit map identifying service level */
 	u32 cc_sl_control_map;
-
-	/* maximum congestion control table index */
-	u16 ccti_limit;
 
 	/* CA's max number of 64 entry units in the congestion control table */
 	u8 cc_max_table_entries;
@@ -610,21 +601,6 @@ struct qib_pportdata {
 	u8 mgmt_allowed;
 	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 };
-
-/*
- *  * All CCA structures:
- *   ppd->cc_supported_table_entries
- *   ppd->ccti_entries
- *   ppd->congestion_entries
- *   ppd->ccti_entries_shadow
- *   ppd->congestion_entries_shadow
- * are either allocated, or NULL. So we can test any of these to
- * determine whether CCA is initialized.
- */
-static inline int cca_initialized(struct qib_pportdata *ppd)
-{
-	return !!ppd->congestion_entries_shadow;
-}
 
 /* Observers. Not to be taken lightly, possibly not to ship. */
 /*
@@ -1206,6 +1182,15 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
 
 	WARN_ON(pidx >= dd->num_pports);
 	return &dd->pport[pidx].ibport_data;
+}
+
+/*
+ * Readers of cc_state must call get_cc_state() under rcu_read_lock().
+ * Writers of cc_state must call get_cc_state() under cc_state_lock.
+ */
+static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
+{
+	return rcu_dereference(ppd->cc_state);
 }
 
 /*

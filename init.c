@@ -420,60 +420,17 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 
 	ppd->qib_wq = NULL;
 
-	spin_lock_init(&ppd->cc_shadow_lock);
-
+	spin_lock_init(&ppd->cc_state_lock);
 
 	ppd->cc_max_table_entries = IB_CC_TABLE_CAP_DEFAULT;
 
-	size = IB_CC_TABLE_CAP_DEFAULT * sizeof(struct ib_cc_table_entry)
-		* IB_CCT_ENTRIES;
-	ppd->ccti_entries = kzalloc(size, GFP_KERNEL);
-	if (!ppd->ccti_entries) {
-		qib_early_err(&pdev->dev,
-		 "failed to allocate congestion control table for port %d!\n",
-		 port);
+	size = sizeof(struct cc_state);
+	ppd->cc_state = kzalloc(size, GFP_KERNEL);
+	if (!ppd->cc_state)
 		goto bail;
-	}
-	size = STL_MAX_SLS * sizeof(struct stl_congestion_setting_entry);
-
-	ppd->congestion_entries = kzalloc(size, GFP_KERNEL);
-	if (!ppd->congestion_entries) {
-		qib_early_err(&pdev->dev,
-		 "failed to allocate congestion setting list for port %d!\n",
-		 port);
-		goto bail_1;
-	}
-
-	size = sizeof(struct cc_table_shadow);
-	ppd->ccti_entries_shadow = kzalloc(size, GFP_KERNEL);
-	if (!ppd->ccti_entries_shadow) {
-		qib_early_err(&pdev->dev,
-		 	"failed to allocate shadow ccti list for port %d!\n",
-		 	port);
-		goto bail_2;
-	}
-
-	size = sizeof(struct stl_congestion_setting_attr);
-
-	ppd->congestion_entries_shadow = kzalloc(size, GFP_KERNEL);
-	if (!ppd->congestion_entries_shadow) {
-		qib_early_err(&pdev->dev,
-		 "failed to allocate shadow congestion setting list for port %d!\n",
-		 port);
-		goto bail_3;
-	}
 
 	return;
 
-bail_3:
-	kfree(ppd->ccti_entries_shadow);
-	ppd->ccti_entries_shadow = NULL;
-bail_2:
-	kfree(ppd->congestion_entries);
-	ppd->congestion_entries = NULL;
-bail_1:
-	kfree(ppd->ccti_entries);
-	ppd->ccti_entries = NULL;
 bail:
 
 	qib_early_err(&pdev->dev,
@@ -1355,19 +1312,6 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		if (dd->pport[pidx].statusp)
 			*dd->pport[pidx].statusp &= ~QIB_STATUS_CHIP_PRESENT;
-
-		spin_lock(&dd->pport[pidx].cc_shadow_lock);
-
-		kfree(dd->pport[pidx].congestion_entries);
-		dd->pport[pidx].congestion_entries = NULL;
-		kfree(dd->pport[pidx].ccti_entries);
-		dd->pport[pidx].ccti_entries = NULL;
-		kfree(dd->pport[pidx].ccti_entries_shadow);
-		dd->pport[pidx].ccti_entries_shadow = NULL;
-		kfree(dd->pport[pidx].congestion_entries_shadow);
-		dd->pport[pidx].congestion_entries_shadow = NULL;
-
-		spin_unlock(&dd->pport[pidx].cc_shadow_lock);
 	}
 
 	free_credit_return(dd);

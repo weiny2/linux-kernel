@@ -215,9 +215,7 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 	int ret;
 	struct qib_pportdata *ppd =
 		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
-
-	if (!cca_initialized(ppd))
-		return -EINVAL;
+	struct cc_state *cc_state;
 
 	ret = ppd->total_cct_entry * sizeof(struct ib_cc_table_entry_shadow)
 		 + sizeof(__be16);
@@ -231,9 +229,14 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 	if (!count)
 		return count;
 
-	spin_lock(&ppd->cc_shadow_lock);
-	memcpy(buf, ppd->ccti_entries_shadow, count);
-	spin_unlock(&ppd->cc_shadow_lock);
+	rcu_read_lock();
+	cc_state = get_cc_state(ppd);
+	if (cc_state == NULL) {
+		rcu_read_unlock();
+		return -EINVAL;
+	}
+	memcpy(buf, &cc_state->cct, count);
+	rcu_read_unlock();
 
 	return count;
 }
@@ -265,9 +268,8 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 	int ret;
 	struct qib_pportdata *ppd =
 		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
+	struct cc_state *cc_state;
 
-	if (!cca_initialized(ppd))
-		return -EINVAL;
 	ret = sizeof(struct stl_congestion_setting_attr_shadow);
 
 	if (pos > ret)
@@ -278,9 +280,14 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 	if (!count)
 		return count;
 
-	spin_lock(&ppd->cc_shadow_lock);
-	memcpy(buf, ppd->congestion_entries_shadow, count);
-	spin_unlock(&ppd->cc_shadow_lock);
+	rcu_read_lock();
+	cc_state = get_cc_state(ppd);
+	if (cc_state == NULL) {
+		rcu_read_unlock();
+		return -EINVAL;
+	}
+	memcpy(buf, &cc_state->cong_setting, count);
+	rcu_read_unlock();
 
 	return count;
 }
@@ -952,9 +959,6 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->diagc_kobj, KOBJ_ADD);
 
-	if (!cca_initialized(ppd))
-		return 0;
-
 	ret = kobject_init_and_add(&ppd->pport_cc_kobj, &qib_port_cc_ktype,
 				kobj, "CCMgtA");
 	if (ret) {
@@ -1033,13 +1037,12 @@ void qib_verbs_unregister_sysfs(struct hfi_devdata *dd)
 
 	for (i = 0; i < dd->num_pports; i++) {
 		ppd = &dd->pport[i];
-		if (ppd->congestion_entries_shadow) {
-			sysfs_remove_bin_file(&ppd->pport_cc_kobj,
-				&cc_setting_bin_attr);
-			sysfs_remove_bin_file(&ppd->pport_cc_kobj,
-				&cc_table_bin_attr);
-			kobject_put(&ppd->pport_cc_kobj);
-		}
+
+		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+			&cc_setting_bin_attr);
+		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+			&cc_table_bin_attr);
+		kobject_put(&ppd->pport_cc_kobj);
 		kobject_put(&ppd->vl2mtu_kobj);
 		kobject_put(&ppd->sc2vl_kobj);
 		kobject_put(&ppd->pport_kobj);

@@ -2677,21 +2677,22 @@ static int __subn_get_stl_cong_setting(struct stl_smp *smp, u32 am,
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct stl_congestion_setting_entry_shadow *entries;
+	struct cc_state *cc_state;
 
 	clear_stl_smp_data(smp);
 
-	spin_lock(&ppd->cc_shadow_lock);
+	rcu_read_lock();
 
-	if (!cca_initialized(ppd)) {
-		spin_unlock(&ppd->cc_shadow_lock);
+	cc_state = get_cc_state(ppd);
+
+	if (cc_state == NULL) {
+		rcu_read_unlock();
 		return reply(smp);
 	}
 
-	entries = ppd->congestion_entries_shadow->entries;
-	p->port_control = cpu_to_be16(
-		ppd->congestion_entries_shadow->port_control);
-	p->control_map = cpu_to_be32(
-		ppd->congestion_entries_shadow->control_map);
+	entries = cc_state->cong_setting.entries;
+	p->port_control = cpu_to_be16(cc_state->cong_setting.port_control);
+	p->control_map = cpu_to_be32(cc_state->cong_setting.control_map);
 	for (i = 0; i < STL_MAX_SLS; i++) {
 		p->entries[i].ccti_increase = entries[i].ccti_increase;
 		p->entries[i].ccti_timer = cpu_to_be16(entries[i].ccti_timer);
@@ -2700,7 +2701,7 @@ static int __subn_get_stl_cong_setting(struct stl_smp *smp, u32 am,
 		p->entries[i].ccti_min = entries[i].ccti_min;
 	}
 
-	spin_unlock(&ppd->cc_shadow_lock);
+	rcu_read_unlock();
 
 	if (resp_len)
 		*resp_len += sizeof(*p);
@@ -2716,28 +2717,20 @@ static int __subn_set_stl_cong_setting(struct stl_smp *smp, u32 am, u8 *data,
 		(struct stl_congestion_setting_attr *) data;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct stl_congestion_setting_entry_shadow *entries;
 	int i;
-
-	if (!cca_initialized(ppd))
-		goto no_cca;
 
 	ppd->cc_sl_control_map = be32_to_cpu(p->control_map);
 
+	entries = ppd->congestion_entries;
 	for (i = 0; i < STL_MAX_SLS; i++) {
-		ppd->congestion_entries[i].ccti_increase =
-			p->entries[i].ccti_increase;
-
-		ppd->congestion_entries[i].ccti_timer =
-			be16_to_cpu(p->entries[i].ccti_timer);
-
-		ppd->congestion_entries[i].trigger_threshold =
+		entries[i].ccti_increase = p->entries[i].ccti_increase;
+		entries[i].ccti_timer = be16_to_cpu(p->entries[i].ccti_timer);
+		entries[i].trigger_threshold =
 			p->entries[i].trigger_threshold;
-
-		ppd->congestion_entries[i].ccti_min =
-			p->entries[i].ccti_min;
+		entries[i].ccti_min = p->entries[i].ccti_min;
 	}
 
-no_cca:
 	return __subn_get_stl_cong_setting(smp, am, data, ibdev, port,
 					   resp_len);
 }
@@ -2755,11 +2748,9 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	struct ib_cc_table_entry_shadow *entries;
 	int i, j;
 	u32 sentry, eentry;
+	struct cc_state *cc_state;
 
 	clear_stl_smp_data(smp);
-
-	if (!cca_initialized(ppd))
-		return reply(smp);
 
 	/* sanity check n_blocks, start_block */
 	if (n_blocks == 0 ||
@@ -2768,26 +2759,39 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 		return reply(smp);
 	}
 
-	spin_lock(&ppd->cc_shadow_lock);
+	rcu_read_lock();
+
+	cc_state = get_cc_state(ppd);
+
+	if (cc_state == NULL) {
+		rcu_read_unlock();
+		return reply(smp);
+	}
 
 	sentry = start_block * IB_CCT_ENTRIES;
-	eentry = sentry + (IB_CCT_ENTRIES * n_blocks) - 1;
+	eentry = sentry + (IB_CCT_ENTRIES * n_blocks);
 
-	cc_table_attr->ccti_limit = cpu_to_be16(ppd->ccti_limit);
+	cc_table_attr->ccti_limit = cpu_to_be16(cc_state->cct.ccti_limit);
 
-	entries = ppd->ccti_entries_shadow->entries;
+	entries = cc_state->cct.entries;
 
 	/* return n_blocks, though the last block may not be full */
-	for (j = 0, i = sentry; i <= eentry; j++, i++)
+	for (j = 0, i = sentry; i < eentry; j++, i++)
 		cc_table_attr->ccti_entries[j].entry =
 			cpu_to_be16(entries[i].entry);
 
-	spin_unlock(&ppd->cc_shadow_lock);
+	rcu_read_unlock();
 
 	if (resp_len)
 		*resp_len += sizeof(u16)*(IB_CCT_ENTRIES * n_blocks + 1);
 
 	return reply(smp);
+}
+
+static void cc_state_reclaim(struct rcu_head *rcu)
+{
+	struct cc_state *cc_state = container_of(rcu, struct cc_state, rcu);
+	kfree(cc_state);
 }
 
 static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
@@ -2803,9 +2807,7 @@ static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	int i, j;
 	u32 sentry, eentry;
 	u16 ccti_limit;
-
-	if (!cca_initialized(ppd))
-		goto getit;
+	struct cc_state *old_cc_state, *new_cc_state;
 
 	/* sanity check n_blocks, start_block */
 	if (n_blocks == 0 ||
@@ -2816,32 +2818,50 @@ static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 
 	sentry = start_block * IB_CCT_ENTRIES;
 	eentry = sentry + ((n_blocks - 1) * IB_CCT_ENTRIES) +
-		 (be16_to_cpu(p->ccti_limit)) % IB_CCT_ENTRIES;
+		 (be16_to_cpu(p->ccti_limit)) % IB_CCT_ENTRIES + 1;
 
 	/* sanity check ccti_limit */
 	ccti_limit = be16_to_cpu(p->ccti_limit);
-	if (ccti_limit > eentry) {
+	if (ccti_limit + 1 > eentry) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
 
-	ppd->ccti_limit = ccti_limit;
+	new_cc_state = kzalloc(sizeof(*new_cc_state), GFP_KERNEL);
+	if (new_cc_state == NULL)
+		goto getit;
+
+	spin_lock(&ppd->cc_state_lock);
+
+	old_cc_state = get_cc_state(ppd);
+
+	if (old_cc_state == NULL) {
+		spin_unlock(&ppd->cc_state_lock);
+		return reply(smp);
+	}
+
+	*new_cc_state = *old_cc_state;
+
+	new_cc_state->cct.ccti_limit = ccti_limit;
 
 	entries = ppd->ccti_entries;
 
-	for (j = 0, i = sentry; i <= eentry; j++, i++)
+	for (j = 0, i = sentry; i < eentry; j++, i++)
 		entries[i].entry = be16_to_cpu(p->ccti_entries[j].entry);
 
-	spin_lock(&ppd->cc_shadow_lock);
+	memcpy(new_cc_state->cct.entries, entries,
+	       eentry * sizeof(struct ib_cc_table_entry));
 
-	memcpy(ppd->ccti_entries_shadow->entries, entries,
-	       (eentry + 1) * sizeof(struct ib_cc_table_entry));
-
-	ppd->congestion_entries_shadow->port_control = IB_CC_CCS_PC_SL_BASED;
-	ppd->congestion_entries_shadow->control_map = ppd->cc_sl_control_map;
-	memcpy(ppd->congestion_entries_shadow->entries, ppd->congestion_entries,
+	new_cc_state->cong_setting.port_control = IB_CC_CCS_PC_SL_BASED;
+	new_cc_state->cong_setting.control_map = ppd->cc_sl_control_map;
+	memcpy(new_cc_state->cong_setting.entries, ppd->congestion_entries,
 	       STL_MAX_SLS * sizeof(struct stl_congestion_setting_entry));
-	spin_unlock(&ppd->cc_shadow_lock);
+
+	rcu_assign_pointer(ppd->cc_state, new_cc_state);
+
+	spin_unlock(&ppd->cc_state_lock);
+
+	call_rcu(&old_cc_state->rcu, cc_state_reclaim);
 
 getit:
 	return __subn_get_stl_cc_table(smp, am, data, ibdev, port, resp_len);

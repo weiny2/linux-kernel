@@ -254,25 +254,6 @@ struct ib_pma_portcounters_cong {
 #define IB_CC_MAD_LOGDATA_LEN 32
 #define IB_CC_MAD_MGMTDATA_LEN 192
 
-struct ib_cc_mad {
-	u8	base_version;
-	u8	mgmt_class;
-	u8	class_version;
-	u8	method;
-	__be16	status;
-	__be16	class_specific;
-	__be64	tid;
-	__be16	attr_id;
-	__be16	resv;
-	__be32	attr_mod;
-	__be64 cckey;
-
-	/* For CongestionLog attribute only */
-	u8 log_data[IB_CC_MAD_LOGDATA_LEN];
-
-	u8 mgmt_data[IB_CC_MAD_MGMTDATA_LEN];
-} __packed;
-
 /*
  * Congestion Control class portinfo capability mask bits
  */
@@ -281,56 +262,9 @@ struct ib_cc_mad {
 #define IB_CC_CPI_CM_CAP2		cpu_to_be16(1 << 2)
 #define IB_CC_CPI_CM_ENHANCEDPORT0_CC	cpu_to_be16(1 << 8)
 
-struct ib_cc_classportinfo_attr {
-	u8 base_version;
-	u8 class_version;
-	__be16 cap_mask;
-	u8 reserved[3];
-	u8 resp_time_value;     /* only lower 5 bits */
-	union ib_gid redirect_gid;
-	__be32 redirect_tc_sl_fl;       /* 8, 4, 20 bits respectively */
-	__be16 redirect_lid;
-	__be16 redirect_pkey;
-	__be32 redirect_qp;     /* only lower 24 bits */
-	__be32 redirect_qkey;
-	union ib_gid trap_gid;
-	__be32 trap_tc_sl_fl;   /* 8, 4, 20 bits respectively */
-	__be16 trap_lid;
-	__be16 trap_pkey;
-	__be32 trap_hl_qp;      /* 8, 24 bits respectively */
-	__be32 trap_qkey;
-} __packed;
-
-/* Congestion control traps */
-#define IB_CC_TRAP_KEY_VIOLATION 0x0000
-
-struct ib_cc_trap_key_violation_attr {
-	__be16 source_lid;
-	u8 method;
-	u8 reserved1;
-	__be16 attrib_id;
-	__be32 attrib_mod;
-	__be32 qp;
-	__be64 cckey;
-	u8 sgid[16];
-	u8 padding[24];
-} __packed;
-
 /* Congestion info flags */
 #define IB_CC_CI_FLAGS_CREDIT_STARVATION 0x1
 #define IB_CC_TABLE_CAP_DEFAULT 31
-
-struct ib_cc_info_attr {
-	__be16 congestion_info;
-	u8  control_table_cap; /* Multiple of 64 entry unit CCTs */
-} __packed;
-
-struct ib_cc_key_info_attr {
-	__be64 cckey;
-	u8  protect;
-	__be16 lease_period;
-	__be16 violations;
-} __packed;
 
 #define IB_CC_CL_CA_LOGEVENTS_LEN 208
 
@@ -420,9 +354,21 @@ struct ib_cc_table_attr_shadow {
 	(IB_CC_TABLE_CAP_DEFAULT * IB_CCT_ENTRIES)
 
 struct cc_table_shadow {
-	u16 ccti_last_entry;
+	u16 ccti_limit; /* max CCTI for cc table */
 	struct ib_cc_table_entry_shadow entries[CC_TABLE_SHADOW_MAX];
 } __packed;
+
+/*
+ * struct cc_state combines the (active) per-port congestion control
+ * table, and the (active) per-SL congestion settings. cc_state data
+ * may need to be read in code paths that we want to be fast, so it
+ * is an RCU protected structure.
+ */
+struct cc_state {
+	struct rcu_head rcu;
+	struct cc_table_shadow cct;
+	struct stl_congestion_setting_attr_shadow cong_setting;
+};
 
 /*
  * STL BufferControl MAD
