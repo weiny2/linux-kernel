@@ -56,7 +56,8 @@ int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	if (ret)
 		newattrs.ia_valid |= ret | ATTR_FORCE;
 
-	mutex_lock(&dentry->d_inode->i_mutex);
+	if (mutex_lock_killable(&dentry->d_inode->i_mutex))
+		return -EINTR;
 	/* Note any delegations or leases have already been broken: */
 	ret = notify_change(dentry, &newattrs, NULL);
 	mutex_unlock(&dentry->d_inode->i_mutex);
@@ -492,7 +493,8 @@ static int chmod_common(struct path *path, umode_t mode)
 	if (error)
 		return error;
 retry_deleg:
-	mutex_lock(&inode->i_mutex);
+	if (mutex_lock_killable(&inode->i_mutex))
+		return -EINTR;
 	error = security_path_chmod(path, mode);
 	if (error)
 		goto out_unlock;
@@ -575,7 +577,8 @@ static int chown_common(struct path *path, uid_t user, gid_t group)
 		newattrs.ia_valid |=
 			ATTR_KILL_SUID | ATTR_KILL_SGID | ATTR_KILL_PRIV;
 retry_deleg:
-	mutex_lock(&inode->i_mutex);
+	if (mutex_lock_killable(&inode->i_mutex))
+		return -EINTR;
 	error = security_path_chown(path, uid, gid);
 	if (!error)
 		error = notify_change(path->dentry, &newattrs, &delegated_inode);
@@ -655,11 +658,8 @@ int open_check_o_direct(struct file *f)
 {
 	/* NB: we're sure to have correct a_ops only after f_op->open */
 	if (f->f_flags & O_DIRECT) {
-		if (!f->f_mapping->a_ops ||
-		    ((!f->f_mapping->a_ops->direct_IO) &&
-		    (!f->f_mapping->a_ops->get_xip_mem))) {
+		if (!f->f_mapping->a_ops || !f->f_mapping->a_ops->direct_IO)
 			return -EINVAL;
-		}
 	}
 	return 0;
 }
