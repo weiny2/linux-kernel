@@ -1812,7 +1812,7 @@ static void init_ibport(struct qib_pportdata *ppd)
 		IB_PORT_CLIENT_REG_SUP | IB_PORT_SL_MAP_SUP |
 		IB_PORT_TRAP_SUP | IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_DR_NOTICE_SUP | IB_PORT_CAP_MASK_NOTICE_SUP |
-		IB_PORT_OTHER_LOCAL_CHANGES_SUP;
+		IB_PORT_LED_INFO_SUP | IB_PORT_OTHER_LOCAL_CHANGES_SUP;
 	if (ppd->dd->flags & QIB_HAS_LINK_LATENCY)
 		ibp->port_cap_flags |= IB_PORT_LINK_LATENCY_SUP;
 	ibp->pma_counter_select[0] = IB_PMA_PORT_XMIT_DATA;

@@ -492,8 +492,8 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u8 credit_rate;
 	int ret;
 	u32 state;
-	u32 port_num = am & 0xff;
-	u32 num_ports = am >> 24;
+	u32 port_num = STL_AM_PORTNUM(am);
+	u32 num_ports = STL_AM_NPORT(am);
 	u32 buffer_units;
 	u64 tmp;
 
@@ -703,7 +703,7 @@ static int __subn_get_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 				    u32 *resp_len)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	u32 n_blocks_req = (am & 0xff000000) >> 24;
+	u32 n_blocks_req = STL_AM_NBLK(am);
 	u32 am_port = (am & 0x00ff0000) >> 16;
 	u32 start_block = am & 0x7ff;
 	__be16 *p;
@@ -779,8 +779,8 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u16 lse, lwe, mtu;
 	u16 lstate;
 	int ret, ore, i;
-	u32 port_num = am & 0xff;
-	u32 num_ports = am >> 24;
+	u32 port_num = STL_AM_PORTNUM(am);
+	u32 num_ports = STL_AM_NPORT(am);
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1137,7 +1137,7 @@ static int __subn_set_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 				    u32 *resp_len)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	u32 n_blocks_sent = (am & 0xff000000) >> 24;
+	u32 n_blocks_sent = STL_AM_NBLK(am);
 	u32 am_port = (am & 0x00ff0000) >> 16;
 	u32 start_block = am & 0x7ff;
 	u16 *p = (u16 *) data;
@@ -1291,8 +1291,8 @@ static int __subn_get_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
 				    struct ib_device *ibdev, u8 port,
 				    u32 *resp_len)
 {
-	u32 n_blocks = (am & 0xff000000) >> 24;
-	u32 am_port = (am & 0x000000ff);
+	u32 n_blocks = STL_AM_NBLK(am);
+	u32 am_port = STL_AM_PORTNUM(am);
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	void *vp = (void *) data;
 	size_t size = 4 * sizeof(u64);
@@ -1316,8 +1316,8 @@ static int __subn_set_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
 				    struct ib_device *ibdev, u8 port,
 				    u32 *resp_len)
 {
-	u32 n_blocks = (am & 0xff000000) >> 24;
-	u32 am_port = (am & 0x000000ff);
+	u32 n_blocks = STL_AM_NBLK(am);
+	u32 am_port = STL_AM_PORTNUM(am);
 	int async_update = STL_AM_ASYNC(am);
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	void *vp = (void *) data;
@@ -1406,8 +1406,8 @@ static int __subn_set_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
 static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 			      struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
-	u32 num_ports = (am & 0xff000000) >> 24;
-	u32 port_num = am & 0x000000ff;
+	u32 num_ports = STL_AM_NPORT(am);
+	u32 port_num = STL_AM_PORTNUM(am);
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
 	struct buffer_control *p = (struct buffer_control *) data;
@@ -1432,8 +1432,8 @@ static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 static int __subn_set_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 			      struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
-	u32 num_ports = (am & 0xff000000) >> 24;
-	u32 port_num = am & 0x000000ff;
+	u32 num_ports = STL_AM_NPORT(am);
+	u32 port_num = STL_AM_PORTNUM(am);
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_pportdata *ppd;
 	struct buffer_control *p = (struct buffer_control *) data;
@@ -1457,9 +1457,9 @@ static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 				 u32 *resp_len)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(to_iport(ibdev, port));
-	u32 num_ports = (am & 0xff000000) >> 24;
+	u32 num_ports = STL_AM_NPORT(am);
 	u8 section = (am & 0x00ff0000) >> 16;
-	u32 port_num = am & 0x000000ff;
+	u32 port_num = STL_AM_PORTNUM(am);
 	u8 *p = data;
 	int size = 0;
 
@@ -1504,9 +1504,9 @@ static int __subn_set_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 				 u32 *resp_len)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(to_iport(ibdev, port));
-	u32 num_ports = (am & 0xff000000) >> 24;
+	u32 num_ports = STL_AM_NPORT(am);
 	u8 section = (am & 0x00ff0000) >> 16;
-	u32 port_num = am & 0x000000ff;
+	u32 port_num = STL_AM_PORTNUM(am);
 	u8 *p = data;
 
 	if (port_num == 0)
@@ -2847,6 +2847,66 @@ getit:
 	return __subn_get_stl_cc_table(smp, am, data, ibdev, port, resp_len);
 }
 
+struct stl_led_info {
+	__be32 rsvd_led_mask;
+};
+
+#define STL_LED_SHIFT	31
+#define STL_LED_MASK	(1 << STL_LED_SHIFT)
+
+static int __subn_get_stl_led_info(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct stl_led_info *p = (struct stl_led_info *) data;
+	u32 nport = STL_AM_NPORT(am);
+	u64 reg;
+
+	clear_stl_smp_data(smp);
+
+	if (port != 1 || nport != 1 || STL_AM_PORTNUM(am)) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	reg = cpu_to_be64(read_csr(dd, DCC_CFG_LED_CNTRL));
+	if ((reg & DCC_CFG_LED_CNTRL_LED_CNTRL_SMASK) &&
+		((reg & DCC_CFG_LED_CNTRL_LED_SW_BLINK_RATE_SMASK) == 0xf))
+			p->rsvd_led_mask = cpu_to_be32(STL_LED_MASK);
+
+	if (resp_len)
+		*resp_len += sizeof(struct stl_led_info);
+
+	return reply(smp);
+}
+
+static int __subn_set_stl_led_info(struct stl_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct stl_led_info *p = (struct stl_led_info *) data;
+	u32 nport = STL_AM_NPORT(am);
+	int on = !!(be32_to_cpu(p->rsvd_led_mask) & STL_LED_MASK);
+	u64 reg, rate = 0;
+
+	if (port != 1 || nport != 1 || STL_AM_PORTNUM(am)) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	if (on)
+		rate = 0xf;
+
+	reg = DCC_CFG_LED_CNTRL_LED_CNTRL_SMASK |
+		rate << DCC_CFG_LED_CNTRL_LED_SW_BLINK_RATE_SHIFT;
+
+	write_csr(dd, DCC_CFG_LED_CNTRL, reg);
+
+	return __subn_get_stl_led_info(smp, am, data, ibdev, port, resp_len);
+}
+
 static int subn_get_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
 			    u32 *resp_len)
@@ -2905,6 +2965,10 @@ static int subn_get_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 		break;
 	case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
 		ret = __subn_get_stl_cc_table(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_LED_INFO:
+		ret = __subn_get_stl_led_info(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
 	case IB_SMP_ATTR_SM_INFO:
@@ -2967,6 +3031,10 @@ static int subn_set_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 		break;
 	case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
 		ret = __subn_set_stl_cc_table(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_LED_INFO:
+		ret = __subn_set_stl_led_info(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
 	case IB_SMP_ATTR_SM_INFO:

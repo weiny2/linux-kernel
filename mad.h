@@ -446,6 +446,11 @@ struct cc_table_shadow {
 #define STL_AM_START_BLK(am)	(((am) & STL_AM_START_BLK_SMASK) >> \
 					STL_AM_START_BLK_SHIFT)
 
+#define STL_AM_PORTNUM_SHIFT	0
+#define STL_AM_PORTNUM_SMASK	0xff
+#define STL_AM_PORTNUM(am)	(((am) & STL_AM_PORTNUM_SMASK) >> \
+					STL_AM_PORTNUM_SHIFT)
+
 #define STL_AM_ASYNC_SHIFT	12
 #define STL_AM_ASYNC_SMASK	0x00001000
 #define STL_AM_ASYNC(am)	(((am) & STL_AM_ASYNC_SMASK) >> \
