@@ -1336,9 +1336,13 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				break;
 			case IB_PORT_ARMED:
 				ret = set_link_state(ppd, HLS_UP_ARMED);
+				if (!ret)
+					send_idle_sma(dd, SMA_IDLE_ARM);
 				break;
 			case IB_PORT_ACTIVE:
 				ret = set_link_state(ppd, HLS_UP_ACTIVE);
+				if (!ret)
+					send_idle_sma(dd, SMA_IDLE_ACTIVE);
 				break;
 			default:
 				ret = -EINVAL;
