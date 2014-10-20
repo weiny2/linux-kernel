@@ -1766,9 +1766,9 @@ static ssize_t ntfs_perform_write(struct file *file, struct iov_iter *i,
 	 * fails again.
 	 */
 	if (unlikely(NInoTruncateFailed(ni))) {
-		int err;
-
-		inode_dio_wait(vi);
+		int err = inode_dio_wait(vi);
+		if (err)
+			return err;
 		err = ntfs_truncate(vi);
 		if (err || NInoTruncateFailed(ni)) {
 			if (!err)
