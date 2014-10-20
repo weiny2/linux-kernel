@@ -446,15 +446,21 @@ struct __qib_sendpkt {
  * This allows a custom PBC qword, so that special modes and deliberate
  * changes to CRCs can be used.
  */
-#define _DIAG_PKT_VERS 0
+#define _DIAG_PKT_VERS 1
 struct diag_pkt {
 	__u16 version;		/* structure version */
 	__u16 unit;		/* which device */
 	__u16 context;		/* send context to use */
 	__u16 len;		/* data length, in bytes */
+	__u16 port;		/* port number */
+	__u16 unused;
+	__u32 flags;		/* call flags */
 	__u64 data;		/* user data pointer */
 	__u64 pbc;		/* PBC for the packet */
 };
+
+/* diag_pkt flags */
+#define F_DIAGPKT_WAIT 0x1	/* wait until packet is sent */
 
 /*
  * Data layout in I2C flash (for GUID, etc.)

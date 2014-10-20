@@ -566,6 +566,39 @@ bail:
 	return ret;
 }
 
+/*
+ * Allocated structure shared between the credit return mechanism and
+ * diagpkt_send().
+ */
+struct diagpkt_wait {
+	struct completion credits_returned;
+	int code;
+	atomic_t count;
+};
+
+/*
+ * When each side is finished with the structure, they call this.
+ * The last user frees the structure.
+ */
+static void put_diagpkt_wait(struct diagpkt_wait *wait)
+{
+	if (atomic_dec_and_test(&wait->count))
+		kfree(wait);
+}
+
+/*
+ * Callback from the credit return code.  Set the complete, which
+ * will let diapkt_send() continue.
+ */
+static void diagpkt_complete(void *arg, int code)
+{
+	struct diagpkt_wait *wait = (struct diagpkt_wait *)arg;
+
+	wait->code = code;
+	complete(&wait->credits_returned);
+	put_diagpkt_wait(wait);	/* finished with the structure */
+}
+
 /**
  * diagpkt_write - write an IB packet
  * @fp: the diag data device file pointer
@@ -581,6 +614,9 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	u32 *tmpbuf = NULL;
 	ssize_t ret = 0;
 	u32 pkt_len, total_len;
+	pio_release_cb credit_cb = NULL;
+	void *credit_arg = NULL;
+	struct diagpkt_wait *wait = NULL;
 
 	dd = qib_lookup(dp->unit);
 	if (!dd || !(dd->flags & QIB_PRESENT) || !dd->kregbase) {
@@ -602,6 +638,12 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 
 	/* send count must be an exact number of dwords */
 	if (dp->len & 3) {
+		ret = -EINVAL;
+		goto bail;
+	}
+
+	/* there is only port 1 */
+	if (dp->port != 1) {
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -652,8 +694,46 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	if (dp->pbc == 0)
 		dp->pbc = create_pbc(0, 0, 0, total_len);
 
-	pbuf = sc_buffer_alloc(sc, total_len, NULL, 0);
+	/*
+	 * The caller wants to wait until the packet is sent and to
+	 * check for errors.  The best we can do is wait until
+	 * the buffer credits are returned and check if any packet
+	 * error has occured.  If there are any late errors, this
+	 * could miss it.  If there are other senders who generate
+	 * an error, this may find it.  However, in general, it
+	 * should catch most.
+	 */
+	if (dp->flags & F_DIAGPKT_WAIT) {
+		/* always force a credit return */
+		dp->pbc |= WFR_PBC_CREDIT_RETURN;
+		/* turn on credit return interrupts */
+		sc_add_credit_return_intr(sc);
+
+		wait = kmalloc(sizeof(*wait), GFP_KERNEL);
+		if (!wait) {
+			ret = -ENOMEM;
+			goto bail;
+		}
+		init_completion(&wait->credits_returned);
+		atomic_set(&wait->count, 2);
+		wait->code = PRC_OK;
+
+		credit_cb = diagpkt_complete;
+		credit_arg = wait;
+	}
+
+	pbuf = sc_buffer_alloc(sc, total_len, credit_cb, credit_arg);
 	if (!pbuf) {
+		/*
+		 * No send buffer means no credit callback.  Undo
+		 * the wait set-up that was done above.  We free wait
+		 * because the callback will never be called.
+		 */
+		if (dp->flags & F_DIAGPKT_WAIT) {
+			sc_del_credit_return_intr(sc);
+			kfree(wait);
+			wait = NULL;
+		}
 		ret = -ENOSPC;
 		goto bail;
 	}
@@ -662,6 +742,31 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	/* no flush needed as the HW knows the packet size */
 
 	ret = sizeof(*dp);
+
+	if (dp->flags & F_DIAGPKT_WAIT) {
+		/* wait for credit return */
+		ret = wait_for_completion_interruptible(
+						&wait->credits_returned);
+		/*
+		 * If the wait returns an error, the wait was interrupted,
+		 * e.g. with a ^C in the user program.  The callback is
+		 * still pending.  This is OK as the wait structure is
+		 * kmalloc'ed and the structure will free itself when
+		 * all users are done with it.
+		 *
+		 * A context disable occurs on a send context restart, so
+		 * include that in the list of errors below to check for.
+		 * NOTE: PRC_FILL_ERR is at best informational and cannot
+		 * be depended on.
+		 */
+		if (!ret && (((wait->code & PRC_STATUS_ERR)
+				|| (wait->code & PRC_FILL_ERR)
+				|| (wait->code & PRC_SC_DISABLE))))
+			ret = -EIO;
+
+		put_diagpkt_wait(wait);	/* finished with the structure */
+		sc_del_credit_return_intr(sc);
+	}
 
 bail:
 	vfree(tmpbuf);
@@ -1152,11 +1257,13 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 
 	snoop_dbg("received %lu bytes from user\n", count);
 
+	memset(&dpkt, 0, sizeof(struct diag_pkt));
 	dpkt.context = 0; /* throw everything out send context 0 for now */
 	dpkt.version = _DIAG_PKT_VERS;
 	dpkt.unit = dd->unit;
 	dpkt.len = count;
 	dpkt.data = (unsigned long)data;
+	dpkt.port = 1;
 
 	/*
 	 * We need to generate the PBC and not let diagpkt_send do it,

@@ -531,6 +531,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	sc->type = type;
 	spin_lock_init(&sc->alloc_lock);
 	spin_lock_init(&sc->release_lock);
+	spin_lock_init(&sc->credit_ctrl_lock);
 	INIT_LIST_HEAD(&sc->piowait);
 	INIT_WORK(&sc->halt_work, sc_halted);
 	atomic_set(&sc->buffers_allocated, 0);
@@ -644,6 +645,7 @@ void sc_disable(struct send_context *sc)
 {
 	u64 reg;
 	unsigned long flags;
+	struct pio_buf *pbuf;
 
 	if (!sc)
 		return;
@@ -655,6 +657,27 @@ void sc_disable(struct send_context *sc)
 	sc->enabled = 0;
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
+
+	/*
+	 * Flush any waiters.  Once the context is disabled,
+	 * credit return interrupts are stopped (although there
+	 * could be one in-process when the context is disabled).
+	 * Wait one microsecond for any lingering interrupts, then
+	 * proceed with the flush.
+	 */
+	udelay(1);
+	spin_lock_irqsave(&sc->release_lock, flags);
+	if (sc->sr) {	/* this context has a shadow ring */
+		while (sc->sr_tail != sc->sr_head) {
+			pbuf = &sc->sr[sc->sr_tail].pbuf;
+			if (pbuf->cb)
+				(*pbuf->cb)(pbuf->arg, PRC_SC_DISABLE);
+			sc->sr_tail++;
+			if (sc->sr_tail >= sc->sr_size)
+				sc->sr_tail = 0;
+		}
+	}
+	spin_unlock_irqrestore(&sc->release_lock, flags);
 }
 
 /* return SendEgressCtxtStatus.PacketOccupancy */
@@ -1083,17 +1106,64 @@ done:
 	return pbuf;
 }
 
+/*
+ * There are at least two entities that can turn on credit return
+ * interrupts and they can overlap.  Avoid problems by implementing
+ * a count scheme that is enforced by a lock.  The lock is needed because
+ * the count and CSR write must be paired.
+ */
+
+/*
+ * Start credit return interrupts.  This is managed by a count.  If already
+ * on, just increment the count.
+ */
+void sc_add_credit_return_intr(struct send_context *sc)
+{
+	unsigned long flags;
+
+	/* lock must surround both the count change and the CSR update */
+	spin_lock_irqsave(&sc->credit_ctrl_lock, flags);
+	if (sc->credit_intr_count == 0) {
+		sc->credit_ctrl |= WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_CTRL,
+			sc->credit_ctrl);
+	}
+	sc->credit_intr_count++;
+	spin_unlock_irqrestore(&sc->credit_ctrl_lock, flags);
+}
+
+/*
+ * Stop credit return interrupts.  This is managed by a count.  Decrement the
+ * count, if the last user, then turn the credit interrupts off.
+ */
+void sc_del_credit_return_intr(struct send_context *sc)
+{
+	unsigned long flags;
+
+	BUG_ON(sc->credit_intr_count == 0);
+
+	/* lock must surround both the count change and the CSR update */
+	spin_lock_irqsave(&sc->credit_ctrl_lock, flags);
+	sc->credit_intr_count--;
+	if (sc->credit_intr_count == 0) {
+		sc->credit_ctrl &= ~WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_CTRL,
+			sc->credit_ctrl);
+	}
+	spin_unlock_irqrestore(&sc->credit_ctrl_lock, flags);
+}
+
+/*
+ * The caller must be careful when calling this.  All needint calls
+ * must be paried with !needint.
+ */
 void sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 {
-	struct hfi_devdata *dd = sc->dd;
-
 	if (needint)
-		sc->credit_ctrl |= WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+		sc_add_credit_return_intr(sc);
 	else
-		sc->credit_ctrl &= ~WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+		sc_del_credit_return_intr(sc);
 	trace_hfi_wantpiointr(sc, needint, sc->credit_ctrl);
-	write_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CREDIT_CTRL,
-		sc->credit_ctrl);
 	if (needint) {
 		mmiowb();
 		sc_return_credits(sc);
@@ -1139,12 +1209,35 @@ static void sc_piobufavail(struct send_context *sc)
 		/* refcount held until actual wakeup */
 		qps[n++] = qp;
 	}
-	dd->f_wantpiobuf_intr(sc, 0);
+	/*
+	 * Counting: only call wantpiobuf_intr() if there were waiters and they
+	 * are now all gone.
+	 */
+	if (n)
+		dd->f_wantpiobuf_intr(sc, 0);
 full:
 	spin_unlock_irqrestore(&dev->pending_lock, flags);
 
 	for (i = 0; i < n; i++)
 		qib_qp_wakeup(qps[i], QIB_S_WAIT_PIO);
+}
+
+/* translate a send credit update to a bit code of reasons */
+static inline int fill_code(u64 hw_free)
+{
+	int code = 0;
+
+	if (hw_free & WFR_CR_STATUS_SMASK)
+		code |= PRC_STATUS_ERR;
+	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK)
+		code |= PRC_PBC;
+	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK)
+		code |= PRC_THRESHOLD;
+	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SMASK)
+		code |= PRC_FILL_ERR;
+	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
+		code |= PRC_SC_DISABLE;
+	return code;
 }
 
 /* use the jiffies compare to get the wrap right */
@@ -1161,6 +1254,7 @@ void sc_release_update(struct send_context *sc)
 	unsigned long old_free;
 	unsigned long extra;
 	unsigned long flags;
+	int code;
 
 	if (!sc)
 		return;
@@ -1176,6 +1270,7 @@ void sc_release_update(struct send_context *sc)
 	trace_hfi_piofree(sc, extra);
 
 	/* call sent buffer callbacks */
+	code = -1;				/* code not yet set */
 	head = ACCESS_ONCE(sc->sr_head);	/* snapshot the head */
 	tail = sc->sr_tail;
 	while (head != tail) {
@@ -1185,8 +1280,11 @@ void sc_release_update(struct send_context *sc)
 			/* not sent yet */
 			break;
 		}
-		if (pbuf->cb)
-			(*pbuf->cb)(pbuf->arg);
+		if (pbuf->cb) {
+			if (code < 0) /* fill in code on first user */
+				code = fill_code(hw_free);
+			(*pbuf->cb)(pbuf->arg, code);
+		}
 
 		tail++;
 		if (tail >= sc->sr_size)

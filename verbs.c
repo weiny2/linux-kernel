@@ -1094,12 +1094,17 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 		spin_lock(&dev->pending_lock);
 		if (list_empty(&qp->s_iowait.list)) {
 			struct qib_ibdev *dev = &dd->verbs_dev;
+			int was_empty;
+
 			dev->n_piowait++;
 			qp->s_flags |= QIB_S_WAIT_PIO;
+			was_empty = list_empty(&sc->piowait);
 			list_add_tail(&qp->s_iowait.list, &sc->piowait);
 			trace_hfi_qpsleep(qp, QIB_S_WAIT_PIO);
 			atomic_inc(&qp->refcount);
-			dd->f_wantpiobuf_intr(sc, 1);
+			/* counting: only call wantpiobuf_intr if first user */
+			if (was_empty)
+				dd->f_wantpiobuf_intr(sc, 1);
 		}
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;

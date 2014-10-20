@@ -40,7 +40,16 @@
 #define SC_MAX    3
 
 /* PIO buffer release callback function */
-typedef void (*pio_release_cb)(void *arg);
+typedef void (*pio_release_cb)(void *arg, int code);
+
+/* PIO release codes - in bits, as there could more than one that apply */
+#define PRC_OK		0	/* no known error */
+#define PRC_STATUS_ERR	0x01	/* credit return due to status error */
+#define PRC_PBC		0x02	/* credit return due to PBC */
+#define PRC_THRESHOLD	0x04	/* credit return due to threshold */
+#define PRC_FILL_ERR	0x08	/* credit return due fill error */
+#define PRC_FORCE	0x10	/* credit return due credit force */
+#define PRC_SC_DISABLE	0x20	/* clean-up after a context disable */
 
 /* byte helper */
 union mix {
@@ -97,7 +106,9 @@ struct send_context {
 	unsigned long free;		/* official free count */
 	u32 sr_tail;			/* shadow ring tail */
 	struct list_head piowait  ____cacheline_aligned_in_smp;       /* list for PIO waiters */
+	spinlock_t credit_ctrl_lock ____cacheline_aligned_in_smp;
 	u64 credit_ctrl;		/* cache for credit control */
+	u32 credit_intr_count;		/* count of credit intr users */
 	atomic_t buffers_allocated;	/* count of buffers allocated */
 };
 
@@ -147,6 +158,8 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 void sc_release_update(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
 void sc_group_release_update(struct send_context *sc);
+void sc_add_credit_return_intr(struct send_context *sc);
+void sc_del_credit_return_intr(struct send_context *sc);
 void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
 
 /* support functions */
