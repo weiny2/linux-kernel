@@ -48,9 +48,14 @@ NAME = hfi
 KVER=$(shell uname -r)
 KBUILD  ?= /lib/modules/$(KVER)/build
 
-#NOSTDINC_FLAGS := -DJAG_SDMA_VERBOSITY
-NOSTDINC_FLAGS += -I$(KBUILD)/include-ifs-kernel
+# Enable extra SDMA debugging
+#NOSTDINC_FLAGS += -DJAG_SDMA_VERBOSITY
+# Disable compatibility module parameters
+#NOSTDINC_FLAGS += -DHFI_COMPAT_MODPARAMS=0
+NOSTDINC_FLAGS += -I$(KBUILD)/include-ifs-kernel -I$(PWD)
 KBUILD_EXTRA_SYMBOLS := $(KBUILD)/include-ifs-kernel/Module.symvers
+HFI_HEADER_DIR := $(dir $(shell find . -name "hfi_user.h" | sed -e 's%^\./%%'))
+HFI_HEADER_INSTALL_DIR := /usr/include/$(HFI_HEADER_DIR)
 
 PWD:=$(shell pwd)
 
@@ -69,7 +74,9 @@ specfile: hfi.spec.in
 	sed \
 		-e 's/@VERSION@/'${VERSION}'/g' \
 		-e 's/@RELEASE@/'${RELEASE}'/g' \
-		-e 's/@NAME@/'${NAME}'/g' hfi.spec.in > hfi.spec
+		-e 's/@NAME@/'${NAME}'/g' \
+		-e 's%@USER_INC_DIR@%'$(HFI_HEADER_INSTALL_DIR)'%g' \
+		hfi.spec.in > hfi.spec
 	if [ -d .git ]; then \
 		echo '%changelog' >> hfi.spec; \
 		git log --no-merges v$(BASEVERSION)..HEAD --format="* %cd <%ae>%n- %s%n" \
@@ -88,6 +95,9 @@ dist: distclean specfile
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-
+	mkdir -p $(RPM_BUILD_ROOT)$(HFI_HEADER_INSTALL_DIR) && \
+		(cd $(KBUILD) && sh scripts/headers_install.sh \
+			$(RPM_BUILD_ROOT)$(HFI_HEADER_INSTALL_DIR) \
+			$(PWD) $(HFI_HEADER_DIR)hfi_user.h)
 test:
 	echo $(NAME) $(RELEASE)

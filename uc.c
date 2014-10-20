@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
  * All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
@@ -168,7 +169,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = use_sdma_ahg;
+			middle = HFI_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_SEND)
@@ -193,7 +194,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = use_sdma_ahg;
+			middle = HFI_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_RDMA_WRITE)

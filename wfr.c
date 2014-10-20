@@ -100,15 +100,6 @@ uint disable_bcc = 0;
 module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
 MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
 
-uint nodma_rtail = 1;
-module_param(nodma_rtail, uint, S_IRUGO);
-MODULE_PARM_DESC(nodma_rtail, "1 for no DMA of hdr tail, 0 to DMA the hdr tail");
-
-/* TODO: temporary */
-uint print_unimplemented = 1;
-module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
-MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
-
 static uint rcvhdrcnt = 2048; /* 2x the max eager buffer count */
 module_param_named(rcvhdrcnt, rcvhdrcnt, uint, S_IRUGO);
 MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
@@ -116,18 +107,6 @@ MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
 /* TODO: temporary */
 #define EASY_LINKUP_UNSET 100
 static uint sim_easy_linkup = EASY_LINKUP_UNSET;
-
-uint extended_psn = 0;
-module_param(extended_psn, uint, S_IRUGO);
-MODULE_PARM_DESC(extended_psn, "Use 24 or 31 bit PSN");
-
-static uint enable_pkeys = 1;
-module_param(enable_pkeys, uint, S_IRUGO);
-MODULE_PARM_DESC(enable_pkeys, "Enable PKey checking on receive");
-
-uint disable_integrity = 0;
-module_param(disable_integrity, uint, S_IRUGO);
-MODULE_PARM_DESC(disable_integrity, "Disablep HW packet integrity checks");
 
 struct flag_table {
 	u64 flag;	/* the flag */
@@ -3928,7 +3907,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 
 static void set_armlaunch(struct hfi_devdata *dd, u32 enable)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
@@ -4691,7 +4670,7 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	reg = read_csr(dd, WFR_RCV_CTRL);
 	reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
 	/* XXX (Mitko): This should have a better place than here! */
-	if (extended_psn)
+	if (HFI_CAP_IS_KSET(EXTENDED_PSN))
 		reg |= WFR_RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK;
 	write_csr(dd, WFR_RCV_CTRL, reg);
 
@@ -4751,19 +4730,19 @@ static void quiet_serdes(struct qib_pportdata *ppd)
 
 static void setextled(struct qib_pportdata *ppd, u32 on)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
 static void stop_irq(struct hfi_devdata *dd)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
 static int reset(struct hfi_devdata *dd)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 	dd->z_int_counter = hfi_int_counter(dd);
 	return 0;
@@ -4842,12 +4821,8 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 static int get_base_info(struct qib_ctxtdata *rcd,
 				  struct hfi_base_info *kinfo)
 {
-	if (rcd->dd->flags & QIB_NODMA_RTAIL)
-		kinfo->runtime_flags |= HFI_RUNTIME_NODMA_RTAIL;
-	if (extended_psn)
-		kinfo->runtime_flags |= HFI_RUNTIME_EXTENDED_PSN;
-	if (use_sdma)
-		kinfo->runtime_flags |= HFI_RUNTIME_SDMA;
+	kinfo->runtime_flags = (HFI_MISC_GET() << HFI_CAP_USER_SHIFT) |
+		HFI_CAP_UGET(MASK) | HFI_CAP_KGET(K2U);
 	return 0;
 }
 
@@ -4939,7 +4914,7 @@ static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 	case QIB_IB_CFG_PMA_TICKS:
 	default:
 unimplemented:
-		if (print_unimplemented)
+		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 			dd_dev_info(dd, "%s: which %s: not implemented\n", __func__, ib_cfg_name(which));
 		break;
 	}
@@ -5489,12 +5464,12 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		break;
 
 	case QIB_IB_CFG_PKEYS:
-		if (enable_pkeys)
+		if (HFI_CAP_IS_KSET(PKEY_CHECK))
 			set_partition_keys(ppd);
 		break;
 
 	default:
-		if (print_unimplemented)
+		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 			dd_dev_info(ppd->dd,
 			  "%s: which %s, val 0x%x: not implemented\n",
 			  __func__, ib_cfg_name(which), val);
@@ -5505,7 +5480,7 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 
 static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 	return 0;
 }
@@ -6304,10 +6279,9 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		/* reset the tail and hdr addresses, and sequence count */
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR,
 				rcd->rcvhdrq_phys);
-		if (!(dd->flags & QIB_NODMA_RTAIL)) {
+		if (HFI_CAP_KGET_MASK(rcd->flags, DMA_RTAIL))
 			write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR,
 					rcd->rcvhdrqtailaddr_phys);
-		}
 		rcd->seq_cnt = 1;
 
 		/* reset the cached receive header queue head value */
@@ -6339,8 +6313,8 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, 0);
 
 		/* set eager count and base index */
-		reg = ((((u64)(rcd->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF ?
-			       rcd->eager_count : rcd->rcvegrbuf_chunks)
+		reg = ((((u64)(HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR) ?
+			       rcd->rcvegrbuf_chunks : rcd->eager_count)
 			 >> WFR_RCV_SHIFT)
 					& WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
 				<< WFR_RCV_EGR_CTRL_EGR_CNT_SHIFT) |
@@ -6373,7 +6347,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
 	if (op & QIB_RCVCTRL_INTRAVAIL_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
-	if (op & QIB_RCVCTRL_TAILUPD_ENB)
+	if (op & QIB_RCVCTRL_TAILUPD_ENB && rcd->rcvhdrqtailaddr_phys)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
 	if (op & QIB_RCVCTRL_TAILUPD_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
@@ -6432,6 +6406,14 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		reg = (u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
 		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
 	}
+
+	if (op & (QIB_RCVCTRL_TAILUPD_DIS | QIB_RCVCTRL_CTXT_DIS))
+		/*
+		 * If the context has been disabled and the Tail Update has
+		 * been cleared, clear the WFR_RCV_HDR_TAIL_ADDR CSR so
+		 * it doesn't contain an address that is invalid.
+		 */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR, 0);
 }
 
 static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
@@ -6440,7 +6422,7 @@ static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
 
 	if (!called) {
 		called = 1;
-		if (print_unimplemented)
+		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 			dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 	}
 	return 0;
@@ -7039,7 +7021,7 @@ bail:
 
 static void xgxs_reset(struct qib_pportdata *ppd)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
@@ -7146,14 +7128,14 @@ static u32 iblink_state(struct qib_pportdata *ppd)
 		switch(ppd->lstate) {
 		case IB_PORT_DOWN:
 		case IB_PORT_INIT:
-			*ppd->statusp &= ~(QIB_STATUS_IB_CONF |
-					   QIB_STATUS_IB_READY);
+			*ppd->statusp &= ~(HFI_STATUS_IB_CONF |
+					   HFI_STATUS_IB_READY);
 			break;
 		case IB_PORT_ARMED:
-			*ppd->statusp |= QIB_STATUS_IB_CONF;
+			*ppd->statusp |= HFI_STATUS_IB_CONF;
 			break;
 		case IB_PORT_ACTIVE:
-			*ppd->statusp |= QIB_STATUS_IB_READY;
+			*ppd->statusp |= HFI_STATUS_IB_READY;
 			break;
 		}
 	}
@@ -7180,7 +7162,7 @@ static u8 ibphys_portstate(struct qib_pportdata *ppd)
 
 static int gpio_mod(struct hfi_devdata *dd, u32 out, u32 dir, u32 mask)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 	/* return non-zero to indicate positive progress */
 	return 1;
@@ -7239,7 +7221,7 @@ done:
 
 static int tempsense_rd(struct hfi_devdata *dd, int regnum)
 {
-	if (print_unimplemented)
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 	return -ENXIO;
 }
@@ -8594,7 +8576,7 @@ static void init_early_variables(struct hfi_devdata *dd)
 
 	write_uninitialized_csrs_and_memories(dd);
 
-	if (enable_pkeys)
+	if (HFI_CAP_IS_KSET(PKEY_CHECK))
 		for (i = 0; i < dd->num_pports; i++) {
 			struct qib_pportdata *ppd = &dd->pport[i];
 
@@ -8898,7 +8880,7 @@ int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 		((jkey & WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_MASK) <<
 		 WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_SHIFT);
 	/* JOB_KEY_ALLOW_PERMISSIVE is not allowed by default */
-	if (rcd->flags & HFI_CTXTFLAG_ALLOWPERMJKEY)
+	if (HFI_CAP_KGET_MASK(rcd->flags, ALLOW_PERM_JKEY))
 		reg |= WFR_SEND_CTXT_CHECK_JOB_KEY_ALLOW_PERMISSIVE_SMASK;
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, reg);
 	/* Turn on the J_KEY check */
@@ -9267,7 +9249,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 				STL_LINK_WIDTH_1X;
 	}
 	/* insure num_vls isn't larger than number of sdma engines */
-	if (use_sdma && num_vls > dd->chip_sdma_engines) {
+	if (HFI_CAP_IS_KSET(SDMA) && num_vls > dd->chip_sdma_engines) {
 		num_vls = 4;
 		dd_dev_err(dd, "num_vls %u too large, using 4 VLs\n",
 				num_vls);
@@ -9321,9 +9303,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* start setting dd values and adjusting CSRs */
 	init_early_variables(dd);
-
-	if (nodma_rtail)
-		dd->flags |= QIB_NODMA_RTAIL;
 
 	dd->palign = 0x1000;	// TODO: is there a WFR value for this?
 

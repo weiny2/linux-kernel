@@ -36,6 +36,8 @@
 #ifndef _COMMON_H
 #define _COMMON_H
 
+#include <rdma/hfi/hfi_user.h>
+
 /*
  * This file contains defines, structures, etc. that are used
  * to communicate between kernel and user code.
@@ -75,147 +77,96 @@
  */
 #define DEFAULT_KDETH_QP 0x80
 
+/* driver/hw feature set bitmask */
+#define HFI_CAP_USER_SHIFT      24
+#define HFI_CAP_MASK            ((1UL << HFI_CAP_USER_SHIFT) - 1)
+/* locked flag - if set, only HFI_CAP_WRITABLE_MASK bits can be set */
+#define HFI_CAP_LOCKED_SHIFT    63
+#define HFI_CAP_LOCKED_MASK     0x1ULL
+#define HFI_CAP_LOCKED_SMASK    (HFI_CAP_LOCKED_MASK << HFI_CAP_LOCKED_SHIFT)
+/* extra bits used between kernel and user processes */
+#define HFI_CAP_MISC_SHIFT      (HFI_CAP_USER_SHIFT * 2)
+#define HFI_CAP_MISC_MASK       ((1ULL << (HFI_CAP_LOCKED_SHIFT - \
+					   HFI_CAP_MISC_SHIFT)) - 1)
+
+#define HFI_CAP_KSET(cap) ({ hfi_cap_mask |= HFI_CAP_##cap; hfi_cap_mask; })
+#define HFI_CAP_KCLEAR(cap) ({ hfi_cap_mask &= ~HFI_CAP_##cap; hfi_cap_mask; })
+#define HFI_CAP_USET(cap)						\
+	({								\
+		hfi_cap_mask |= (HFI_CAP_##cap << HFI_CAP_USER_SHIFT);	\
+		hfi_cap_mask;						\
+		})
+#define HFI_CAP_UCLEAR(cap)						\
+	({								\
+		hfi_cap_mask &= ~(HFI_CAP_##cap << HFI_CAP_USER_SHIFT);	\
+		hfi_cap_mask;						\
+	})
+#define HFI_CAP_SET(cap)						\
+	({								\
+		hfi_cap_mask |= (HFI_CAP_##cap | (HFI_CAP_##cap <<	\
+						  HFI_CAP_USER_SHIFT));	\
+		hfi_cap_mask;						\
+	})
+#define HFI_CAP_CLEAR(cap)						\
+	({								\
+		hfi_cap_mask &= ~(HFI_CAP_##cap |			\
+				  (HFI_CAP_##cap << HFI_CAP_USER_SHIFT)); \
+		hfi_cap_mask;						\
+	})
+#define HFI_CAP_LOCK()							\
+	({ hfi_cap_mask |= HFI_CAP_LOCKED_SMASK; hfi_cap_mask; })
+#define HFI_CAP_LOCKED() (!!(hfi_cap_mask & HFI_CAP_LOCKED_SMASK))
 /*
- * These are the status bits readable (in ascii form, 64bit value)
- * from the "status" sysfs file.  For binary compatibility, values
- * must remain as is; removed states can be reused for different
- * purposes.
+ * The set of capability bits that can be changed after initial load
+ * This set is the same for kernel and user contexts. However, for
+ * user contexts, the set can be further filtered by using the
+ * HFI_CAP_RESERVED_MASK bits.
  */
-#define QIB_STATUS_INITTED       0x1    /* basic initialization done */
-/* Chip has been found and initted */
-#define QIB_STATUS_CHIP_PRESENT 0x20
-/* IB link is at ACTIVE, usable for data traffic */
-#define QIB_STATUS_IB_READY     0x40
-/* link is configured, LID, MTU, etc. have been set */
-#define QIB_STATUS_IB_CONF      0x80
-/* A Fatal hardware error has occurred. */
-#define QIB_STATUS_HWERROR     0x200
-
+#define HFI_CAP_WRITABLE_MASK   (HFI_CAP_ENABLE_SMA |			\
+				 HFI_CAP_SDMA_AHG |			\
+				 HFI_CAP_HDRSUPP |			\
+				 HFI_CAP_MULTI_PKT_EGR |		\
+				 HFI_CAP_NODROP_RHQ_FULL |		\
+				 HFI_CAP_NODROP_EGR_FULL |		\
+				 HFI_CAP_ALLOW_PERM_JKEY |		\
+				 HFI_CAP_PRINT_UNIMPL)
 /*
- * The list of usermode accessible registers.
+ * A set of capability bits that are "global" and are not allowed to be
+ * set in the user bitmask.
  */
-enum hfi_ureg {
-	/* (RO)  DMA RcvHdr to be used next. */
-	ur_rcvhdrtail,
-	/* (RW)  RcvHdr entry to be processed next by host. */
-	ur_rcvhdrhead,
-	/* (RO)  Index of next Eager index to use. */
-	ur_rcvegrindextail,
-	/* (RW)  Eager TID to be processed next */
-	ur_rcvegrindexhead,
-	/* (RW)  Receive TID flow table */
-	ur_rcvtidflowtable,
-	/* For internal use only; max register number. */
-	ur_maxreg
-};
-
-/* bit values for spi_runtime_flags */
-#define HFI_RUNTIME_NODMA_RTAIL         0x01
-#define HFI_RUNTIME_SDMA                0x02
-#define HFI_RUNTIME_FORCE_PIOAVAIL      0x04
-#define HFI_RUNTIME_HDRSUPP             0x08
-#define HFI_RUNTIME_EXTENDED_PSN        0x10
-#define HFI_RUNTIME_TID_UNMAP           0x20
-
+#define HFI_CAP_RESERVED_MASK   ((HFI_CAP_SDMA |			\
+				  HFI_CAP_ENABLE_SMA |			\
+				  HFI_CAP_USE_DMA_HEAD |		\
+				  HFI_CAP_EXTENDED_PSN |		\
+				  HFI_CAP_PRINT_UNIMPL |		\
+				  HFI_CAP_NO_INTEGRITY |		\
+				  HFI_CAP_PKEY_CHECK) <<		\
+				 HFI_CAP_USER_SHIFT)
+/* Default enabled capabilities (both kernel and user) */
+#define HFI_CAP_MASK_DEFAULT    (HFI_CAP_HDRSUPP |			\
+				 HFI_CAP_NODROP_RHQ_FULL |		\
+				 HFI_CAP_NODROP_EGR_FULL |		\
+				 HFI_CAP_SDMA |				\
+				 HFI_CAP_ENABLE_SMA |			\
+				 HFI_CAP_PRINT_UNIMPL |			\
+				 HFI_CAP_PKEY_CHECK |			\
+				 ((HFI_CAP_HDRSUPP |			\
+				   HFI_CAP_NODROP_RHQ_FULL |		\
+				   HFI_CAP_NODROP_EGR_FULL) <<		\
+				  HFI_CAP_USER_SHIFT))
 /*
- * This structure is returned by qib_userinit() immediately after
- * open to get implementation-specific info, and info specific to this
- * instance.
- *
- * This struct must have explict pad fields where type sizes
- * may result in different alignments between 32 and 64 bit
- * programs, since the 64 bit * bit kernel requires the user code
- * to have matching offsets
+ * A bitmask of kernel/global capabilities that should be communicated
+ * to user level processes.
  */
-struct hfi_base_info {
-	/* per-chip and other runtime features bitmap (HFI_RUNTIME_*) */
-	__u32 runtime_flags;
-	/* version of hardware, for feature checking. */
-	__u32 hw_version;
-	/* version of software, for feature checking. */
-	__u32 sw_version;
-	/*
-	 * IB MTU, packets IB data must be less than this.
-	 * The MTU is in bytes, and will be a multiple of 4 bytes.
-	 */
-	__u16 mtu;
-	/*
-	 * Job key
-	 */
-	__u16 jkey;
-	/*
-	 * The special QP (queue pair) value that identifies PSM
-	 * protocol packet from standard IB packets.
-	 */
-	__u32 bthqp;
-	/* PIO credit return address, */
-	__u64 sc_credits_addr;
-	/*
-	 * Base address of writeonly pio buffers for this process.
-	 * Each buffer has sendpio_credits*64 bytes.
-	 */
-	__u64 pio_bufbase_sop;
-	/*
-	 * Base address of writeonly pio buffers for this process.
-	 * Each buffer has sendpio_credits*64 bytes.
-	 */
-	__u64 pio_bufbase;
-	/* address where receive buffer queue is mapped into */
-	__u64 rcvhdr_bufbase;
-	/* base address of Eager receive buffers. */
-	__u64 rcvegr_bufbase;
-	/* base address of SDMA completion ring */
-	__u64 sdma_comp_bufbase;
-	/*
-	 * User register base for init code, not to be used directly by
-	 * protocol or applications.  Always maps real chip register space.
-	 * the register addresses are:
-	 * ur_rcvhdrhead, ur_rcvhdrtail, ur_rcvegrhead, ur_rcvegrtail,
-	 * ur_rcvtidflow
-	 */
-	__u64 user_regbase;
-	/* notification events */
-	__u64 events_bufbase;
-	/* status page */
-	__u64 status_bufbase;
-	/* rcvhdrtail updata */
-	__u64 rcvhdrtail_base;
-	/*
-	 * shared memory pages for subctxts if ctxt is shared; these cover
-	 * all the processes in the group sharing a single context.
-	 * all have enough space for the num_subcontexts value on this job.
-	 */
-	__u64 subctxt_uregbase;
-	__u64 subctxt_rcvegrbuf;
-	__u64 subctxt_rcvhdrbuf;
-};
+#define HFI_CAP_K2U (HFI_CAP_SDMA |			\
+		     HFI_CAP_EXTENDED_PSN |		\
+		     HFI_CAP_PKEY_CHECK |		\
+		     HFI_CAP_NO_INTEGRITY)
 
-/*
- * This version number is given to the driver by the user code during
- * initialization in the spu_userversion field of hfi_user_info, so
- * the driver can check for compatibility with user code.
- *
- * The major version changes when data structures
- * change in an incompatible way.  The driver must be the same or higher
- * for initialization to succeed.  In some cases, a higher version
- * driver will not interoperate with older software, and initialization
- * will return an error.
- */
-#define QIB_USER_SWMAJOR 2
+#define HFI_USER_SWVERSION ((HFI_USER_SWMAJOR << 16) | HFI_USER_SWMINOR)
 
-/*
- * Minor version differences are always compatible
- * a within a major version, however if user software is larger
- * than driver software, some new features and/or structure fields
- * may not be implemented; the user code must deal with this if it
- * cares, or it must abort after initialization reports the difference.
- */
-#define QIB_USER_SWMINOR 11
-
-#define QIB_USER_SWVERSION ((QIB_USER_SWMAJOR << 16) | QIB_USER_SWMINOR)
-
-#ifndef QIB_KERN_TYPE
-#define QIB_KERN_TYPE 0
+#ifndef HFI_KERN_TYPE
+#define HFI_KERN_TYPE 0
 #endif
 
 /*
@@ -229,7 +180,7 @@ struct hfi_base_info {
  * spi_sw_version field of hfi_base_info, so the user code can in turn
  * check for compatibility with the kernel.
 */
-#define QIB_KERN_SWVERSION ((QIB_KERN_TYPE << 31) | QIB_USER_SWVERSION)
+#define HFI_KERN_SWVERSION ((HFI_KERN_TYPE << 31) | HFI_USER_SWVERSION)
 
 /*
  * Define the driver version number.  This is something that refers only
@@ -245,175 +196,6 @@ struct hfi_base_info {
 #else
 #define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
 #endif
-
-/*
- * If the unit is specified via open, HCA choice is fixed.  If port is
- * specified, it's also fixed.  Otherwise we try to spread contexts
- * across ports and HCAs, using different algorithims.  WITHIN is
- * the old default, prior to this mechanism.
- */
-#define HFI_ALG_ACROSS 0 /* round robin contexts across HCAs, then
-			  * ports; this is the default */
-#define HFI_ALG_WITHIN 1 /* use all contexts on an HCA (round robin
-			  * active ports within), then next HCA */
-#define HFI_ALG_COUNT  2 /* number of algorithm choices */
-
-/*
- * PSM can set any of these bits in the flags field of the
- * hfi_user_info structure to alter the benavior of the HW on
- * a per-context level.
- */
-#define HFI_CTXTFLAG_ONEPKTPEREGRBUF  (1<<0)
-#define HFI_CTXTFLAG_DONTDROPEGRFULL  (1<<1)
-#define HFI_CTXTFLAG_DONTDROPHDRQFULL (1<<2)
-#define HFI_CTXTFLAG_TIDFLOWENABLE    (1<<3)
-#define HFI_CTXTFLAG_ALLOWPERMJKEY    (1<<4)
-
-/*
- * This structure is passed to qib_userinit() to tell the driver where
- * user code buffers are, sizes, etc.   The offsets and sizes of the
- * fields must remain unchanged, for binary compatibility.  It can
- * be extended, if userversion is changed so user code can tell, if needed
- */
-struct hfi_user_info {
-	/*
-	 * version of user software, to detect compatibility issues.
-	 * Should be set to HFI_USER_SWVERSION.
-	 */
-	__u32 userversion;
-	/* various context setup flags. See HFI_CTXTFLAG_* */
-	__u16 flags;
-	/* HFI selection algorithm, if unit has not selected */
-	__u16 hfi_alg;
-	/*
-	 * If two or more processes wish to share a context, each process
-	 * must set the subcontext_cnt and subcontext_id to the same
-	 * values.  The only restriction on the subcontext_id is that
-	 * it be unique for a given node.
-	 */
-	__u16 subctxt_cnt;
-	__u16 subctxt_id;
-	/* 128bit UUID passed in by PSM. */
-	__u8 uuid[16];
-};
-
-/* User commands. */
-#define HFI_CMD_ASSIGN_CTXT     1	/* allocate HCA and context */
-#define HFI_CMD_CTXT_INFO       2	/* find out what resources we got */
-#define HFI_CMD_CTXT_SETUP      3
-#define HFI_CMD_USER_INFO       4	/* set up userspace */
-#define HFI_CMD_TID_UPDATE      5	/* update expected TID entries */
-#define HFI_CMD_TID_FREE        6	/* free expected TID entries */
-#define HFI_CMD_CREDIT_UPD      7	/* force an update of PIO credit */
-#define HFI_CMD_SDMA_STATUS_UPD 8	/* force update of SDMA status ring */
-
-#define HFI_CMD_RECV_CTRL       9	/* control receipt of packets */
-#define HFI_CMD_POLL_TYPE       10	/* set the kind of polling we want */
-#define HFI_CMD_ACK_EVENT       11	/* ack & clear bits *spi_sendbuf_status */
-#define HFI_CMD_SET_PKEY        12      /* set context's pkey */
-#define HFI_CMD_CTXT_RESET      13      /* reset context's HW send context */
-/* separate EPROM commands from normal PSM commands */
-#define HFI_CMD_EP_INFO         64      /* read EPROM device ID */
-#define HFI_CMD_EP_ERASE_CHIP   65      /* erase whole EPROM */
-#define HFI_CMD_EP_ERASE_P0     66      /* erase EPROM partition 0 */
-#define HFI_CMD_EP_ERASE_P1     67      /* erase EPROM partition 1 */
-#define HFI_CMD_EP_READ_P0      68      /* read EPROM partition 0 */
-#define HFI_CMD_EP_READ_P1      69      /* read EPROM partition 1 */
-#define HFI_CMD_EP_WRITE_P0     70      /* write EPROM partition 0 */
-#define HFI_CMD_EP_WRITE_P1     71      /* write EPROM partition 1 */
-
-/*
- * HFI_CMD_ACK_EVENT obsoletes HFI_CMD_DISARM_BUFS, but we keep it for
- * compatibility with libraries from previous release.   The ACK_EVENT
- * will take appropriate driver action (if any, just DISARM for now),
- * then clear the bits passed in as part of the mask.  These bits are
- * in the first 64bit word at spi_sendbuf_status, and are passed to
- * the driver in the event_mask union as well.
- */
-#define _QIB_EVENT_DISARM_BUFS_BIT	0
-#define _QIB_EVENT_LINKDOWN_BIT		1
-#define _QIB_EVENT_LID_CHANGE_BIT	2
-#define _QIB_EVENT_LMC_CHANGE_BIT	3
-#define _QIB_EVENT_SL2VL_CHANGE_BIT	4
-#define _QIB_MAX_EVENT_BIT _QIB_EVENT_SL2VL_CHANGE_BIT
-
-#define QIB_EVENT_DISARM_BUFS_BIT	(1UL << _QIB_EVENT_DISARM_BUFS_BIT)
-#define QIB_EVENT_LINKDOWN_BIT		(1UL << _QIB_EVENT_LINKDOWN_BIT)
-#define QIB_EVENT_LID_CHANGE_BIT	(1UL << _QIB_EVENT_LID_CHANGE_BIT)
-#define QIB_EVENT_LMC_CHANGE_BIT	(1UL << _QIB_EVENT_LMC_CHANGE_BIT)
-#define QIB_EVENT_SL2VL_CHANGE_BIT	(1UL << _QIB_EVENT_SL2VL_CHANGE_BIT)
-
-
-/*
- * Poll types
- */
-#define QIB_POLL_TYPE_ANYRCV     0x0
-#define QIB_POLL_TYPE_URGENT     0x1
-
-struct hfi_ctxt_info {
-	__u16 num_active;       /* number of active units */
-	__u16 unit;             /* unit (chip) assigned to caller */
-	__u16 ctxt;             /* ctxt on unit assigned to caller */
-	__u16 subctxt;          /* subctxt on unit assigned to caller */
-	__u16 rcvtids;          /* number of Rcv TIDs for this context */
-	__u16 credits;          /* number of PIO credits for this context */
-	__u16 numa_node;        /* NUMA node of the assigned device */
-	__u16 rec_cpu;          /* cpu # for affinity (ffff if none) */
-};
-
-struct hfi_ctxt_setup {
-	__u16 egrtids;          /* number of RcvArray entries for Eager Rcvs */
-	__u16 rcvhdrq_cnt;      /* number of RcvHdrQ entries */
-	__u16 rcvhdrq_entsize;  /* size (in bytes) for each RcvHdrQ entry */
-	__u16 sdma_ring_size;   /* number of entries in SDMA request ring */
-	__u32 rcvegr_size;      /* size of Eager buffers */
-};
-
-struct hfi_tid_info {
-	/* virtual address of first page in transfer */
-	__u64 vaddr;
-	/* pointer to tid array. this array is big enough */
-	__u64 tidlist;
-	/* number of tids programmed by this request */
-	__u32 tidcnt;
-	/* length of transfer buffer programmed by this request */
-	__u32 length;
-	/*
-	 * pointer to bitmap of TIDs used for this call;
-	 * checked for being large enough at open
-	 */
-	__u64 tidmap;
-};
-
-struct hfi_cmd {
-	__u32 type;        /* command type */
-	__u32 len;         /* length of struct pointed to by add */
-	__u64 addr;        /* pointer to user structure */
-};
-
-enum hfi_sdma_comp_state {
-	FREE = 0,
-	QUEUED,
-	COMPLETE,
-	ERROR
-};
-
-/*
- * SDMA completion ring entry
- */
-struct hfi_sdma_comp_entry {
-	u32 status;
-	u32 errno;
-};
-
-/*
- * Device status and notifications from driver to user-space.
- */
-struct hfi_status {
-	__u64 dev;      /* device/hw status bits */
-	__u64 port;     /* port state and status bits */
-	char freezemsg[0];
-};
 
 struct qib_iovec {
 	/* Pointer to data, but same size 32 and 64 bit */
@@ -594,29 +376,6 @@ struct qib_flash {
 struct qib_message_header {
 	__be16 lrh[4];
 };
-
-struct hfi_header {
-	__le32 ver_tid_offset;
-	__le16 hcrc;
-	__le16 jkey;
-	__le32 ackpsn;
-	__le32 flags_connidx;
-	__le32 tag2;
-	__le64 tag;
-	__le32 msglen;
-	__le32 offset;
-} __packed;
-
-/*
- * Structure describing the headers that User space uses. The
- * structure above is a subset of this one.
- */
-struct hfi_pio_hdr {
-	__le16 pbc[4];
-	__be16 lrh[4];
-	__be32 bth[3];
-	struct hfi_header kdeth;
-} __packed;
 
 /* IB - LRH header consts */
 #define QIB_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */

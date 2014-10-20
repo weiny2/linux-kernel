@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012,2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2006 PathScale, Inc. All rights reserved.
  *
@@ -118,7 +118,7 @@ static ssize_t show_status(struct qib_pportdata *ppd, char *buf)
 
 /*
  * For userland compatibility, these offsets must remain fixed.
- * They are strings for QIB_STATUS_*
+ * They are strings for HFI_STATUS_*
  */
 static const char * const qib_status_str[] = {
 	"Initted",

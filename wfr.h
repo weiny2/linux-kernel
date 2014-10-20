@@ -579,8 +579,6 @@ static inline int is_lcb_offset(u32 offset)
 
 extern uint num_vls;
 
-extern uint print_unimplemented;
-
 extern uint disable_integrity;
 u64 read_dev_cntr(struct hfi_devdata *dd, int index, int vl);
 u64 write_dev_cntr(struct hfi_devdata *dd, int index, int vl, u64 data);

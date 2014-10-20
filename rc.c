@@ -181,7 +181,7 @@ static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
 		len = qp->s_ack_rdma_sge.sge.sge_length;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = use_sdma_ahg;
+			middle = HFI_CAP_IS_KSET(SDMA_AHG);
 		} else {
 			ohdr->u.aeth = qib_compute_aeth(qp);
 			hwords++;
@@ -535,7 +535,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = use_sdma_ahg;
+			middle = HFI_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_SEND)
@@ -577,7 +577,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = use_sdma_ahg;
+			middle = HFI_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_RDMA_WRITE)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012,2014 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -966,9 +966,9 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	} else if (ppd->lid != lid ||
 		 ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC)) {
 		if (ppd->lid != lid)
-			qib_set_uevent_bits(ppd, _QIB_EVENT_LID_CHANGE_BIT);
+			qib_set_uevent_bits(ppd, _HFI_EVENT_LID_CHANGE_BIT);
 		if (ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC))
-			qib_set_uevent_bits(ppd, _QIB_EVENT_LMC_CHANGE_BIT);
+			qib_set_uevent_bits(ppd, _HFI_EVENT_LMC_CHANGE_BIT);
 		qib_set_lid(ppd, lid, pi->mkeyprotect_lmc & STL_PI_MASK_LMC);
 		event.event = IB_EVENT_LID_CHANGE;
 		ib_dispatch_event(&event);

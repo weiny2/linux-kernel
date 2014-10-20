@@ -69,6 +69,17 @@
 #define QIB_OUI 0x001175
 #define QIB_OUI_LSB 40
 
+extern unsigned long hfi_cap_mask;
+#define HFI_CAP_KGET_MASK(mask, cap) ((mask) & HFI_CAP_##cap)
+#define HFI_CAP_UGET_MASK(mask, cap) \
+	(((mask) >> HFI_CAP_USER_SHIFT) & HFI_CAP_##cap)
+#define HFI_CAP_KGET(cap) (HFI_CAP_KGET_MASK(hfi_cap_mask, cap))
+#define HFI_CAP_UGET(cap) (HFI_CAP_UGET_MASK(hfi_cap_mask, cap))
+#define HFI_CAP_IS_KSET(cap) (!!HFI_CAP_KGET(cap))
+#define HFI_CAP_IS_USET(cap) (!!HFI_CAP_UGET(cap))
+#define HFI_MISC_GET() ((hfi_cap_mask >> HFI_CAP_MISC_SHIFT) & \
+			HFI_CAP_MISC_MASK)
+
 /*
  * per driver stats, either not device nor port-specific, or
  * summed over all of the devices and ports.
@@ -1237,7 +1248,7 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 #define QIB_HAS_THRESH_UPDATE 0x40
 #define QIB_HAS_SDMA_TIMEOUT  0x80
 /* unused		      0x100 */
-#define QIB_NODMA_RTAIL       0x200 /* rcvhdrtail register DMA enabled */
+/* unused                     0x200 */
 #define QIB_HAS_INTX          0x800 /* Supports INTx interrupts */
 #define QIB_HAS_SEND_DMA      0x1000 /* Supports Send DMA */
 #define QIB_HAS_VLSUPP        0x2000 /* Supports multiple VLs; PBC different */
@@ -1346,7 +1357,7 @@ static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
 	const struct hfi_devdata *dd = rcd->dd;
 	u32 hdrqtail;
 
-	if (dd->flags & QIB_NODMA_RTAIL) {
+	if (!HFI_CAP_IS_KSET(DMA_RTAIL)) {
 		__le32 *rhf_addr;
 		u32 seq;
 

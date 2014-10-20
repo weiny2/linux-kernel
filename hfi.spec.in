@@ -60,8 +60,15 @@ Url: http://openfabrics.org
 %define arch %(uname -p)
 Requires: kernel = %(echo %{kver} | sed -e 's/\(.*\)\.%{arch}/\1/g' | sed -e 's/-/_/g')
 
+%package devel
+Summary: Development headers for Intel HFI driver interface
+Group: System Environment/Development
+
 %description
 hfi provides the driver for Intel HFI gen1 cards
+
+%description devel
+Development header files for Intel HFI driver interface
 
 %prep
 %setup -q
@@ -78,6 +85,10 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root)
 /lib/modules/*
+
+%files devel
+%defattr(-,root,root,-)
+@USER_INC_DIR@/hfi_user.h
 
 %post
 depmod -a %{kver}

@@ -93,18 +93,6 @@ unsigned hfi_egrbuf_alloc_size = 0x8000;
 module_param_named(egrbuf_alloc_size, hfi_egrbuf_alloc_size, uint, S_IRUGO);
 MODULE_PARM_DESC(egrbuf_alloc_size, "Chunk size for Eager buffer allocation");
 
-unsigned hfi_one_pkt_egr = 0;
-module_param_named(one_pkt_per_egr, hfi_one_pkt_egr, uint, S_IRUGO);
-MODULE_PARM_DESC(one_pkt_per_egr, "Use one packet per eager buffer (default: 0)");
-
-unsigned dont_drop_rhq_full = 1;
-module_param_named(dont_drop_rhq_full, dont_drop_rhq_full, uint, S_IRUGO);
-MODULE_PARM_DESC(dont_drop_rhq_full, "Do not drop packets when the receive header is full (default: 1)");
-
-unsigned dont_drop_egr_full = 1;
-module_param_named(dont_drop_egr_full, dont_drop_egr_full, uint, S_IRUGO);
-MODULE_PARM_DESC(dont_drop_egr_full, "Do not drop packets when all eager buffers are in use (default: 1)");
-
 /* interrupt testing */
 unsigned int test_interrupts;
 module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
@@ -149,12 +137,10 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		 * use default values for all receive side memories.  User
 		 * contexts will be handled as they are created.
 		 */
-		if (hfi_one_pkt_egr)
-			rcd->flags |= HFI_CTXTFLAG_ONEPKTPEREGRBUF;
-		if (dont_drop_rhq_full)
-			rcd->flags |= HFI_CTXTFLAG_DONTDROPHDRQFULL;
-		if (dont_drop_egr_full)
-			rcd->flags |= HFI_CTXTFLAG_DONTDROPEGRFULL;
+		rcd->flags = HFI_CAP_KGET(MULTI_PKT_EGR) |
+			HFI_CAP_KGET(NODROP_RHQ_FULL) |
+			HFI_CAP_KGET(NODROP_EGR_FULL) |
+			HFI_CAP_KGET(DMA_RTAIL);
 		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry
 		 * size as DWords. However, hfi_setup_ctxt takes bytes from
 		 * PSM and converts to DWords. Should we just use bytes in
@@ -356,7 +342,7 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 	}
 	cd->rcvegrbuf_chunks = (cd->rcvegrbuf_size * cd->eager_count) /
 		cd->rcvegrbuf_chunksize;
-	if (cd->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF) {
+	if (!HFI_CAP_KGET_MASK(cd->flags, MULTI_PKT_EGR)) {
 		cd->rcvegrbufs_idx_mask = (u32)cd->rcvegrbufs_perchunk - 1;
 		cd->rcvegrbufs_perchunk_shift = ilog2(cd->rcvegrbufs_perchunk);
 	} else {
@@ -670,14 +656,14 @@ static void enable_chip(struct hfi_devdata *dd)
 	 * Other ctxts done as user opens and inits them.
 	 */
 	rcvmask = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_INTRAVAIL_ENB;
-	rcvmask |= (dd->flags & QIB_NODMA_RTAIL) ?
-		  QIB_RCVCTRL_TAILUPD_DIS : QIB_RCVCTRL_TAILUPD_ENB;
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
-		if (dd->rcd[i]->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF)
+		rcvmask |= HFI_CAP_KGET_MASK(dd->rcd[i]->flags, DMA_RTAIL) ?
+			QIB_RCVCTRL_TAILUPD_ENB : QIB_RCVCTRL_TAILUPD_DIS;
+		if (!HFI_CAP_KGET_MASK(dd->rcd[i]->flags, MULTI_PKT_EGR))
 			rcvmask |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
-		if (dd->rcd[i]->flags & HFI_CTXTFLAG_DONTDROPHDRQFULL)
+		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_RHQ_FULL))
 			rcvmask |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
-		if (dd->rcd[i]->flags & HFI_CTXTFLAG_DONTDROPEGRFULL)
+		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_EGR_FULL))
 			rcvmask |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
 		dd->f_rcvctrl(dd, rcvmask, i);
 		/* XXX (Mitko): Do we care about the result of this?
@@ -851,8 +837,8 @@ done:
 	 * so that diags will work.
 	 */
 	if (dd->status)
-		dd->status->dev |= QIB_STATUS_CHIP_PRESENT |
-			QIB_STATUS_INITTED;
+		dd->status->dev |= HFI_STATUS_CHIP_PRESENT |
+			HFI_STATUS_INITTED;
 	if (!ret) {
 		/* enable all interrupts from the chip */
 		dd->f_set_intr_state(dd, 1);
@@ -874,8 +860,8 @@ done:
 			 * so that diags will work.
 			 */
 			if (ppd->statusp)
-				*ppd->statusp |= QIB_STATUS_CHIP_PRESENT |
-							QIB_STATUS_INITTED;
+				*ppd->statusp |= HFI_STATUS_CHIP_PRESENT |
+							HFI_STATUS_INITTED;
 			if (!ppd->link_speed_enabled)
 				continue;
 		}
@@ -952,7 +938,8 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 
 		ppd->linkup = 0;
 		if (ppd->statusp)
-			*ppd->statusp &= ~(QIB_STATUS_IB_CONF | QIB_STATUS_IB_READY);
+			*ppd->statusp &= ~(HFI_STATUS_IB_CONF |
+					   HFI_STATUS_IB_READY);
 	}
 	dd->flags &= ~QIB_INITTED;
 
@@ -1316,7 +1303,7 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 					dd->f_setextled(ppd, 0);
 				}
 				if (ppd->statusp)
-					*ppd->statusp &= ~QIB_STATUS_IB_READY;
+					*ppd->statusp &= ~HFI_STATUS_IB_READY;
 			}
 	}
 
@@ -1326,7 +1313,7 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 	 * This marks unit as not usable, until reset.
 	 */
 	if (dd->status)
-		dd->status->dev |= QIB_STATUS_HWERROR;
+		dd->status->dev |= HFI_STATUS_HWERROR;
 }
 
 static void qib_remove_one(struct pci_dev *);
@@ -1477,7 +1464,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 		int i;
 
 		if (ppd->statusp)
-			*ppd->statusp &= ~QIB_STATUS_CHIP_PRESENT;
+			*ppd->statusp &= ~HFI_STATUS_CHIP_PRESENT;
 
 		for (i = 0; i < STL_MAX_SLS; i++)
 			hrtimer_cancel(&ppd->cca_timer[i].hrtimer);
@@ -1558,6 +1545,9 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int ret, j, pidx, initfail;
 	struct hfi_devdata *dd = NULL;
+
+	/* First, lock the non-writable module parameters */
+	HFI_CAP_LOCK();
 
 	ret = qib_pcie_init(pdev, ent);
 	if (ret)
@@ -1713,7 +1703,7 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 				goto bail_free_hdrq;
 				}*/
 
-		if (!(dd->flags & QIB_NODMA_RTAIL)) {
+		if (HFI_CAP_KGET_MASK(rcd->flags, DMA_RTAIL)) {
 			rcd->rcvhdrtail_kvaddr = dma_alloc_coherent(
 				&dd->pcidev->dev, PAGE_SIZE, &phys_hdrqtail,
 				gfp_flags);
@@ -1795,7 +1785,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	 * the context's RcvCtrl register, use one RcvArray TID
 	 * per chunk.
 	 */
-	if (rcd->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF) {
+	if (!HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR)) {
 		egrperchunk = rcd->rcvegrbufs_perchunk;
 		egrsize = rcd->rcvegrbuf_size;
 	} else {

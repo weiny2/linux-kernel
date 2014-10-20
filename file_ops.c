@@ -56,10 +56,6 @@
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
 
-static uint hdrsup_enable = 1;
-module_param(hdrsup_enable, uint, S_IRUGO);
-MODULE_PARM_DESC(hdrsup_enable, "Enable/disable header suppression");
-
 #define SEND_CTXT_HALT_TIMEOUT 1000 /* msecs */
 
 /*
@@ -579,6 +575,14 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		flags |= VM_IO | VM_DONTEXPAND;
 		break;
 	case RTAIL:
+		if (!HFI_CAP_IS_USET(DMA_RTAIL)) {
+			/*
+			 * If the memory allocation failed, the context alloc
+			 * also would have failed, so we would never get here
+			 */
+			ret = -EINVAL;
+			goto done;
+		}
 		if (flags & VM_WRITE) {
 			ret = -EPERM;
 			goto done;
@@ -681,9 +685,9 @@ static unsigned int hfi_poll(struct file *fp, struct poll_table_struct *pt)
 	uctxt = ctxt_fp(fp);
 	if (!uctxt)
 		pollflag = POLLERR;
-	else if (uctxt->poll_type == QIB_POLL_TYPE_URGENT)
+	else if (uctxt->poll_type == HFI_POLL_TYPE_URGENT)
 		pollflag = poll_urgent(fp, pt);
-	else  if (uctxt->poll_type == QIB_POLL_TYPE_ANYRCV)
+	else  if (uctxt->poll_type == HFI_POLL_TYPE_ANYRCV)
 		pollflag = poll_next(fp, pt);
 	else /* invalid */
 		pollflag = POLLERR;
@@ -783,7 +787,7 @@ static int assign_ctxt(struct file *fp, struct hfi_user_info *uinfo)
 	unsigned swmajor, swminor, alg = HFI_ALG_ACROSS;
 
 	swmajor = uinfo->userversion >> 16;
-	if (swmajor != QIB_USER_SWMAJOR) {
+	if (swmajor != HFI_USER_SWMAJOR) {
 		ret = -ENODEV;
 		goto done;
 	}
@@ -964,7 +968,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	}
 	uctxt->userversion = uinfo->userversion;
 	uctxt->pid = current->pid;
-	uctxt->flags = uinfo->flags;
+	uctxt->flags = HFI_CAP_UGET(MASK);
 	init_waitqueue_head(&uctxt->wait);
 	strlcpy(uctxt->comm, current->comm, sizeof(uctxt->comm));
 	memcpy(uctxt->uuid, uinfo->uuid, sizeof(uctxt->uuid));
@@ -1078,20 +1082,20 @@ static int user_init(struct file *fp)
 	uctxt->dd->f_set_ctxt_jkey(uctxt->dd, uctxt->ctxt, uctxt->jkey);
 
 	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB;
-	if (hdrsup_enable && (uctxt->flags & HFI_CTXTFLAG_TIDFLOWENABLE))
+	if (HFI_CAP_KGET_MASK(uctxt->flags, HDRSUPP))
 		rcvctrl_ops |= QIB_RCVCTRL_TIDFLOW_ENB;
 	/*
 	 * Ignore the bit in the flags for now until proper
 	 * support for multiple packet per rcv array entry is
 	 * added.
 	 */
-	if (uctxt->flags & HFI_CTXTFLAG_ONEPKTPEREGRBUF)
+	if (!HFI_CAP_KGET_MASK(uctxt->flags, MULTI_PKT_EGR))
 		rcvctrl_ops |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
-	if (uctxt->flags & HFI_CTXTFLAG_DONTDROPEGRFULL)
+	if (HFI_CAP_KGET_MASK(uctxt->flags, NODROP_EGR_FULL))
 		rcvctrl_ops |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
-	if (uctxt->flags & HFI_CTXTFLAG_DONTDROPHDRQFULL)
+	if (HFI_CAP_KGET_MASK(uctxt->flags, NODROP_RHQ_FULL))
 		rcvctrl_ops |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
-	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
+	if (HFI_CAP_KGET_MASK(uctxt->flags, DMA_RTAIL))
 		rcvctrl_ops |= QIB_RCVCTRL_TAILUPD_ENB;
 	uctxt->dd->f_rcvctrl(uctxt->dd, rcvctrl_ops, uctxt->ctxt);
 
@@ -1123,6 +1127,7 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 	/* FIXME: set proper numa node */
 	cinfo.numa_node = uctxt->numa_id;
 	cinfo.rec_cpu = fd->rec_cpu_num;
+	cinfo.send_ctxt = uctxt->sc->context;
 
 	if (copy_to_user(ubase, &cinfo, sizeof(cinfo)))
 		ret = -EFAULT;
@@ -1226,23 +1231,10 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	ret = dd->f_get_base_info(uctxt, &binfo);
 	if (ret < 0)
 		goto done;
-	/* XXX MITKO: This runtime flag should be set in
-	 * wfr.c:get_base_info(). However, for now set it here
-	 * in accordance with the hdrsup_enable flag */
-	if (hdrsup_enable)
-		binfo.runtime_flags |= HFI_RUNTIME_HDRSUPP;
-	/* XXX MITKO: When expTID caching is implemented, properly,
-	 * handle this flag. */
-	binfo.runtime_flags |= HFI_RUNTIME_TID_UNMAP;
 	binfo.hw_version = dd->revision;
-	binfo.sw_version = QIB_KERN_SWVERSION;
+	binfo.sw_version = HFI_KERN_SWVERSION;
 	binfo.bthqp = kdeth_qp;
 	binfo.jkey = uctxt->jkey;
-	/* XXX (Mitko): We are hard-coding the pport index since WFR
-	 * has only one port and the expectation is that ppd will go
-	 * away. */
-	binfo.mtu = dd->pport[0].ibmtu;
-
 	/*
 	 * If more than 64 contexts are enabled the allocated credit
 	 * return will span two or three contiguous pages. Since we only
@@ -1283,7 +1275,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	binfo.status_bufbase = HFI_MMAP_TOKEN(STATUS, uctxt->ctxt,
 					      subctxt_fp(fp),
 					      dd->status);
-	if (!(uctxt->dd->flags & QIB_NODMA_RTAIL))
+	if (HFI_CAP_IS_USET(DMA_RTAIL))
 		binfo.rcvhdrtail_base = HFI_MMAP_TOKEN(RTAIL, uctxt->ctxt,
 						       subctxt_fp(fp), 0);
 	if (uctxt->subctxt_cnt) {
@@ -1445,7 +1437,7 @@ static int user_event_ack(struct qib_ctxtdata *uctxt, int subctxt,
 			    QLOGIC_IB_MAX_SUBCTXT) +
 		subctxt;
 
-	for (i = 0; i <= _QIB_MAX_EVENT_BIT; i++) {
+	for (i = 0; i <= _HFI_MAX_EVENT_BIT; i++) {
 		if (!test_bit(i, &events))
 			continue;
 		clear_bit(i, evs);

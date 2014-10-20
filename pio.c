@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013,2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -407,7 +407,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 			opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
 		}
 
-		if (likely(!disable_integrity))
+		if (likely(!HFI_CAP_IS_KSET(NO_INTEGRITY)))
 			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg);
 
 		/* unmask all errors */

@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
  * All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
@@ -160,7 +161,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		ev = IB_EVENT_PORT_ERR;
 
-		qib_set_uevent_bits(ppd, _QIB_EVENT_LINKDOWN_BIT);
+		qib_set_uevent_bits(ppd, _HFI_EVENT_LINKDOWN_BIT);
 
 		/* if we are down, the neighbor is down */
 		ppd->neighbor_normal = 0;

@@ -70,15 +70,12 @@
 
 #define num_pages(x) (1 + ((((x) - 1) & PAGE_MASK) >> PAGE_SHIFT))
 
-#define REQ_VERSION_MASK 0xF
-#define REQ_VERSION_SHIFT 0x0
-#define REQ_OPCODE_MASK 0xF
-#define REQ_OPCODE_SHIFT 0x4
-#define REQ_IOVCNT_MASK 0xFF
-#define REQ_IOVCNT_SHIFT 0x8
-#define req_opcode(x) (((x) >> REQ_OPCODE_SHIFT) & REQ_OPCODE_MASK)
-#define req_version(x) (((x) >> REQ_VERSION_SHIFT) & REQ_OPCODE_MASK)
-#define req_iovcnt(x) (((x) >> REQ_IOVCNT_SHIFT) & REQ_IOVCNT_MASK)
+#define req_opcode(x) \
+	(((x) >> HFI_SDMA_REQ_OPCODE_SHIFT) & HFI_SDMA_REQ_OPCODE_MASK)
+#define req_version(x) \
+	(((x) >> HFI_SDMA_REQ_VERSION_SHIFT) & HFI_SDMA_REQ_OPCODE_MASK)
+#define req_iovcnt(x) \
+	(((x) >> HFI_SDMA_REQ_IOVCNT_SHIFT) & HFI_SDMA_REQ_IOVCNT_MASK)
 
 /* Number of BTH.PSN bits used for sequence number in expected rcvs */
 #define BTH_SEQ_MASK 0x7ffull
@@ -153,41 +150,9 @@
 #define SDMA_PKT_Q_ACTIVE   (1 << 1)
 #define SDMA_PKT_Q_DEFERRED (1 << 2)
 
-enum sdma_req_opcode {
-	EAGER = 0,
-	EXPECTED
-};
-
 unsigned initial_pkt_count = 8;
 
 #define SDMA_IOWAIT_TIMEOUT 1000 /* in milliseconds */
-
-struct sdma_req_info {
-	/*
-	 * bits 0-3 - version (currently unused)
-	 * bits 4-7 - opcode (enum sdma_req_opcode)
-	 * bits 8-15 - io vector count
-	 */
-	u16 ctrl;
-	/*
-	 * Number of fragments contained in this request.
-	 * User-space has already computed how many
-	 * fragment-sized packet the user buffer will be
-	 * split into.
-	 */
-	u16 npkts;
-	/*
-	 * Size of each fragment the user buffer will be
-	 * split into.
-	 */
-	u16 fragsize;
-	/*
-	 * Index of the slot in the SDMA completion ring
-	 * this request should be using. User-space is
-	 * in charge of managing its own ring.
-	 */
-	u16 comp_idx;
-} __packed;
 
 struct user_sdma_iovec {
 	struct iovec iov;
@@ -209,7 +174,7 @@ struct user_sdma_request {
 	struct hfi_user_sdma_pkt_q *pq;
 	struct hfi_user_sdma_comp_q *cq;
 	/* This is the original header from user space */
-	struct hfi_pio_hdr hdr;
+	struct hfi_pkt_header hdr;
 	/*
 	 * Pointer to the SDMA engine for this request.
 	 * Since different request could be on different VLs,
@@ -278,7 +243,7 @@ struct user_sdma_request {
 
 struct user_sdma_txreq {
 	/* Packet header for the txreq */
-	struct hfi_pio_hdr hdr;
+	struct hfi_pkt_header hdr;
 	struct list_head list;
 	struct sdma_txreq txreq;
 	struct user_sdma_request *req;
@@ -303,7 +268,7 @@ static int pin_vector_pages(struct user_sdma_request *,
 			    struct user_sdma_iovec *);
 static _hfi_inline void unpin_vector_pages(struct user_sdma_iovec *);
 static int check_header_template(struct user_sdma_request *,
-				 struct hfi_pio_hdr *, u32, u32);
+				 struct hfi_pkt_header *, u32, u32);
 static int set_txreq_header(struct user_sdma_request *,
 			    struct user_sdma_txreq *, u32);
 static int set_txreq_header_ahg(struct user_sdma_request *,
@@ -642,7 +607,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		goto free_req;
 	}
 
-	req->koffset = le32_to_cpu(req->hdr.kdeth.offset);
+	req->koffset = le32_to_cpu(req->hdr.kdeth.swdata[6]);
 	/* The KDETH.OM flag in the first packed (and header template) is
 	 * always 0. */
 	req->tidoffset = KDETH_GET(req->hdr.kdeth.ver_tid_offset, OFFSET) *
@@ -698,7 +663,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	}
 
 	/* We don't need an AHG entry if the request contains only one packet */
-	if (req->info.npkts > 1) {
+	if (req->info.npkts > 1 && HFI_CAP_IS_USET(SDMA_AHG)) {
 		int ahg = sdma_ahg_alloc(req->sde);
 
 		if (likely(ahg >= 0)) {
@@ -1156,7 +1121,7 @@ static _hfi_inline void unpin_vector_pages(struct user_sdma_iovec *iovec)
 }
 
 static int check_header_template(struct user_sdma_request *req,
-				 struct hfi_pio_hdr *hdr, u32 lrhlen,
+				 struct hfi_pkt_header *hdr, u32 lrhlen,
 				 u32 datalen)
 {
 	/*
@@ -1210,7 +1175,8 @@ static int check_header_template(struct user_sdma_request *req,
 static _hfi_inline u32 set_pkt_bth_psn(__be32 bthpsn, u8 expct, u32 frags)
 {
 	u32 val = be32_to_cpu(bthpsn),
-		mask = (extended_psn ? 0x7fffffffull : 0xffffffull),
+		mask = (HFI_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffffull :
+			0xffffffull),
 		psn = val & mask;
 	if (expct)
 		psn = (psn & ~BTH_SEQ_MASK) | ((psn + frags) & BTH_SEQ_MASK);
@@ -1223,7 +1189,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 			    struct user_sdma_txreq *tx, u32 datalen)
 {
 	struct hfi_user_sdma_pkt_q *pq = req->pq;
-	struct hfi_pio_hdr *hdr = &tx->hdr;
+	struct hfi_pkt_header *hdr = &tx->hdr;
 	u16 pbclen;
 	int ret;
 	/* (Size of complete header - size of PBC) + 4B ICRC + data length */
@@ -1295,7 +1261,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 	}
 
 	/* Set the new offset */
-	hdr->kdeth.offset = cpu_to_le32(req->koffset);
+	hdr->kdeth.swdata[6] = cpu_to_le32(req->koffset);
 	/* Expected packets have to fill in the new TID information */
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u32 tidval;
@@ -1362,7 +1328,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 {
 	int diff = 0;
 	struct hfi_user_sdma_pkt_q *pq = req->pq;
-	struct hfi_pio_hdr *hdr = &req->hdr;
+	struct hfi_pkt_header *hdr = &req->hdr;
 	u16 pbclen = le16_to_cpu(hdr->pbc[0]);
 	u32 val32, lrhlen = (((sizeof(*hdr) - sizeof(hdr->pbc)) + 4 + len)
 			     >> 2) & 0xfff;
@@ -1381,7 +1347,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	 */
 	/* BTH.PSN and BTH.A */
 	val32 = (be32_to_cpu(hdr->bth[2]) + req->txreqs_sent) &
-		(extended_psn ? 0x7fffffff : 0xffffff);
+		(HFI_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffff : 0xffffff);
 	if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
 		val32 |= 1UL << 31;
 	AHG_HEADER_SET(req->ahg, diff, 6, 0, 16, cpu_to_be16(val32 >> 16));
@@ -1544,7 +1510,7 @@ static _hfi_inline void set_comp_state(struct user_sdma_request *req,
 	SDMA_DBG(req, "Setting completion status %u %d", state, ret);
 	req->cq->comps[req->info.comp_idx].status = state;
 	if (state == ERROR)
-		req->cq->comps[req->info.comp_idx].errno = -ret;
+		req->cq->comps[req->info.comp_idx].errcode = -ret;
 }
 
 #if 0

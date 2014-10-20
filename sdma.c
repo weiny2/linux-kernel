@@ -47,11 +47,6 @@
 #define SDMA_DESCQ_CNT 1024
 #define INVALID_TAIL 0xffff
 
-/* default pio off, sdma on */
-uint use_sdma = 1;
-module_param(use_sdma, uint, S_IRUGO);
-MODULE_PARM_DESC(use_sdma, "enable sdma traffic");
-
 static uint sdma_descq_cnt = SDMA_DESCQ_CNT;
 module_param(sdma_descq_cnt, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_descq_cnt, "Number of SDMA descq entries");
@@ -60,17 +55,9 @@ static uint sdma_idle_cnt = 250;
 module_param(sdma_idle_cnt, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_idle_cnt, "sdma interrupt idle delay (ns,default 250)");
 
-static uint use_dma_head;
-module_param(use_dma_head, uint, S_IRUGO);
-MODULE_PARM_DESC(use_dma_head, "Read CSR vs. DMA for hardware head");
-
 uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
-
-uint use_sdma_ahg;
-module_param(use_sdma_ahg, uint, S_IRUGO);
-MODULE_PARM_DESC(use_sdma_ahg, "Turn on/off use of AHG");
 
 #define SDMA_WAIT_BATCH_SIZE 20
 /* max wait time for a SDMA engine to indicate it has halted */
@@ -717,8 +704,8 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 	uint idle_cnt = sdma_idle_cnt;
 	size_t num_engines = dd->chip_sdma_engines;
 
-	if (!use_sdma) {
-		use_sdma_ahg = 0;
+	if (!HFI_CAP_IS_KSET(SDMA)) {
+		HFI_CAP_CLEAR(SDMA_AHG);
 		return 0;
 	}
 	if (mod_num_sdma &&
@@ -751,7 +738,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 	else
 		idle_cnt = ns_to_cclock(dd, idle_cnt);
 	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 47)
-		use_sdma_ahg = 0;
+		HFI_CAP_CLEAR(SDMA_AHG);
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
@@ -1093,7 +1080,7 @@ static u16 sdma_gethead(struct sdma_engine *sde)
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
-	use_dmahead = use_dma_head && __sdma_running(sde)
+	use_dmahead = HFI_CAP_IS_KSET(USE_DMA_HEAD) && __sdma_running(sde)
 			&& (dd->flags & QIB_HAS_SDMA_TIMEOUT);
 retry:
 	hwhead = use_dmahead ?
@@ -1434,7 +1421,7 @@ static void init_sdma_regs(
 		((u64)(credits * sde->this_idx) <<
 			WFR_SEND_DMA_MEMORY_SDMA_MEMORY_INDEX_SHIFT));
 	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
-	if (likely(!disable_integrity))
+	if (likely(!HFI_CAP_IS_KSET(NO_INTEGRITY)))
 		write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE,
 				HFI_PKT_BASE_SDMA_INTEGRITY);
 	opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
@@ -2461,7 +2448,7 @@ int sdma_ahg_alloc(struct sdma_engine *sde)
 		trace_hfi_ahg_allocate(sde, -EINVAL);
 		return -EINVAL;
 	}
-	if (!use_sdma_ahg) {
+	if (!HFI_CAP_IS_KSET(SDMA_AHG)) {
 		trace_hfi_ahg_allocate(sde, -EOPNOTSUPP);
 		return -EOPNOTSUPP;
 	}

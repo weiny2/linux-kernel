@@ -46,6 +46,9 @@
 #include "qp.h"
 #include "sdma.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) DRIVER_NAME ": " fmt
+
 /*
  * The size has to be longer than this string, so we can append
  * board/chip information to it in the init code.
@@ -68,6 +71,95 @@ unsigned int hfi_cu = 1;
 module_param_named(cu, hfi_cu, uint, S_IRUGO);
 MODULE_PARM_DESC(cu, "Credit return units");
 
+unsigned long hfi_cap_mask = HFI_CAP_MASK_DEFAULT;
+static int hfi_caps_set(const char *, const struct kernel_param *);
+static const struct kernel_param_ops cap_ops = {
+	.flags = 0,
+	.set = hfi_caps_set,
+	.get = param_get_ulong,
+};
+module_param_cb(cap_mask, &cap_ops, &hfi_cap_mask, S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(cap_mask, "Bit mask of enabled/disabled HW features");
+
+/*
+ * Start parameter backward compatibility code (will be removed)
+ *
+ * The definitions below add module parameters which get converted
+ * into the appropriate bits in hfi_cap_mask. These module parameters
+ * will eventually be removed once module users have become
+ * familiar with the hfi_cap_mask parameter.
+ */
+#ifndef HFI_COMPAT_MODPARAMS
+#define HFI_COMPAT_MODPARAMS 1
+#endif
+
+#if HFI_COMPAT_MODPARAMS
+#include <linux/stringify.h>
+struct hfi_comp_param_t {
+	const char *pname;
+	unsigned long equiv;
+	u8 inverted;
+	unsigned long *caps;
+};
+static int hfi_comp_param_set(const char *, const struct kernel_param *);
+static int hfi_comp_param_get(char *, const struct kernel_param *);
+static const struct kernel_param_ops k_pops_comp = {
+	.set = hfi_comp_param_set,
+	.get = hfi_comp_param_get
+};
+/**
+ * HFI_DEFINE_COMP_PARAM - define a backward-compatible module parameter
+ * @name - name of the module parameter
+ * @bit  - the bit in the set of HFI_CAP_* bits that this module parameter
+ *         corresponds to
+ * @invrt - 1 if the value of this module parameter is the inverted value
+ *          of the bit - value of 1 turns the bit off
+ * @desc - the description string for this module parameter
+ *
+ * This macro defines a backward-compatible module parameter, which can
+ * be used instead of the matching bit in the HFI_CAP_* set.
+ * Modifying/using the module parameter will manipulate the hfi_cap_mask
+ * bitmask. Therefore, the module parameter does not hold a value - the
+ * hfi_cap_mask bits should be used through-out the code.
+ */
+#define HFI_DEFINE_COMP_PARAM(name, bit, invrt, desc)			\
+	static const struct hfi_comp_param_t c_param_##name = {		\
+		.pname = __stringify(name), .equiv = HFI_CAP_##bit,	\
+		.inverted = (unsigned)invrt, .caps = &hfi_cap_mask,	\
+	};								\
+	module_param_cb(name, &k_pops_comp, (void *)&c_param_##name,	\
+			(S_IRUGO |					\
+			 (HFI_CAP_##bit & HFI_CAP_WRITABLE_MASK ?	\
+			  S_IWUSR : 0)));				\
+	MODULE_PARM_DESC(name, desc " (DEPRECATED)")
+
+/* Define all the depricated module parameters */
+HFI_DEFINE_COMP_PARAM(hdrsup_enable, HDRSUPP, 0,
+		      "Enable/disable header suppression");
+HFI_DEFINE_COMP_PARAM(dont_drop_rhq_full, NODROP_RHQ_FULL, 0,
+		      "Do not drop packets when the receive header is full");
+HFI_DEFINE_COMP_PARAM(dont_drop_egr_full, NODROP_EGR_FULL, 0,
+		      "Do not drop packets when all eager buffers are in use");
+HFI_DEFINE_COMP_PARAM(use_dma_head, USE_DMA_HEAD, 0,
+		      "Read CSR vs. DMA for hardware head");
+HFI_DEFINE_COMP_PARAM(use_sdma_ahg, SDMA_AHG, 0, "Turn on/off use of AHG");
+HFI_DEFINE_COMP_PARAM(disable_sma, ENABLE_SMA, 1, "Disable the SMA");
+HFI_DEFINE_COMP_PARAM(nodma_rtail, DMA_RTAIL, 1,
+		      "1 for no DMA of hdr tail, 0 to DMA the hdr tail");
+HFI_DEFINE_COMP_PARAM(use_sdma, SDMA, 0, "enable sdma traffic");
+HFI_DEFINE_COMP_PARAM(extended_psn, EXTENDED_PSN, 0,
+		      "Use 24 or 31 bit PSN");
+HFI_DEFINE_COMP_PARAM(print_unimplemented, PRINT_UNIMPL, 0,
+		      "Have unimplemented functions print when called");
+HFI_DEFINE_COMP_PARAM(one_pkt_per_egr, MULTI_PKT_EGR, 1,
+		      "Use one packet per eager buffer (default: 0)");
+HFI_DEFINE_COMP_PARAM(enable_pkeys, PKEY_CHECK, 0,
+		      "Enable PKey checking on receive");
+HFI_DEFINE_COMP_PARAM(disable_integrity, NO_INTEGRITY, 0,
+		      "Disablep HW packet integrity checks");
+#endif /* HFI_COMPAT_MODPARAMS */
+/* End parameter backward compatibility code */
+
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
@@ -83,6 +175,79 @@ void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 #define WFR_EGR_HEAD_UPDATE_THRESHOLD 16
 
 struct qlogic_ib_stats qib_stats;
+
+static int hfi_caps_set(const char *val, const struct kernel_param *kp)
+{
+	int ret = 0;
+	unsigned long *cap_mask = (unsigned long *)kp->arg,
+		value, diff, write_mask =
+		((HFI_CAP_WRITABLE_MASK << HFI_CAP_USER_SHIFT) |
+		 HFI_CAP_WRITABLE_MASK);
+
+	ret = kstrtoul(val, 0, &value);
+	if (ret) {
+		pr_warn("Invalid module parameter value for 'cap_mask'\n");
+		goto done;
+	}
+	/* Get the changed bits (except the locked bit) */
+	diff = value ^ (*cap_mask & ~HFI_CAP_LOCKED_SMASK);
+
+	/* Remove any bits that are not allowed to change after driver load */
+	if (HFI_CAP_LOCKED() && (diff & ~write_mask)) {
+		pr_warn("Ignoring non-writable capability bits %#lx\n",
+			diff & ~write_mask);
+		diff &= write_mask;
+	}
+
+	/* Mask off any reserved bits */
+	diff &= ~HFI_CAP_RESERVED_MASK;
+	/* Clear any previously set and changing bits */
+	*cap_mask &= ~diff;
+	/* Set the new capability bits */
+	*cap_mask |= (value & diff);
+done:
+	return ret;
+}
+
+#if HFI_COMPAT_MODPARAMS
+static int hfi_comp_param_set(const char *val, const struct kernel_param *kp)
+{
+	struct hfi_comp_param_t *param =
+		(struct hfi_comp_param_t *)kp->arg;
+	unsigned long value;
+	int ret = 0;
+
+	pr_warn("Module parameter '%s' is depricated in favor of 'cap_mask'\n",
+		param->pname);
+	ret = kstrtoul(val, 0, &value);
+	if (ret) {
+		pr_warn("Invalid parameter value '%s'\n", val);
+		goto done;
+	}
+
+	value = (value & 0x1U) ^ param->inverted;
+	if (value)
+		*param->caps |= (param->equiv |
+				 ((param->equiv & HFI_CAP_WRITABLE_MASK) <<
+				  HFI_CAP_USER_SHIFT));
+	else
+		*param->caps &= ~(param->equiv |
+				  ((param->equiv & HFI_CAP_WRITABLE_MASK) <<
+				   HFI_CAP_USER_SHIFT));
+done:
+	return ret;
+}
+
+static int hfi_comp_param_get(char *buffer, const struct kernel_param *kp)
+{
+	struct hfi_comp_param_t *param =
+		(struct hfi_comp_param_t *)kp->arg;
+	unsigned long value = *param->caps & param->equiv;
+
+	return scnprintf(buffer, PAGE_SIZE, "%d",
+			 !!(param->inverted ? !value : value));
+}
+#endif
 
 const char *get_unit_name(int unit)
 {
@@ -457,9 +622,8 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
 	rhf = rhf_to_cpu(rhf_addr);
 
-	if (dd->flags & QIB_NODMA_RTAIL) {
+	if (!HFI_CAP_IS_KSET(DMA_RTAIL)) {
 		u32 seq = rhf_rcv_seq(rhf);
-
 		if (seq != rcd->seq_cnt)
 			goto bail;
 		hdrqtail = 0;
@@ -520,7 +684,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
 		rhf = rhf_to_cpu(rhf_addr);
 
-		if (dd->flags & QIB_NODMA_RTAIL) {
+		if (!HFI_CAP_IS_KSET(DMA_RTAIL)) {
 			u32 seq = rhf_rcv_seq(rhf);
 
 			if (++rcd->seq_cnt > 13)

@@ -792,7 +792,7 @@ DEFINE_EVENT(hfi_sdma_ahg_ad, hfi_ahg_deallocate,
 
 TRACE_EVENT(hfi_sdma_user_header,
 	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
-		     struct hfi_pio_hdr *hdr),
+		     struct hfi_pkt_header *hdr),
 	    TP_ARGS(dd, ctxt, subctxt, req, hdr),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
