@@ -39,6 +39,9 @@
 
 #include "hfi.h"
 
+/* link speed vector for Gen3 speed - not in Linux headers */
+#define GEN3_SPEED_VECTOR 0x3
+
 /*
  * This file contains PCIe utility routines.
  */
@@ -305,64 +308,108 @@ do_intx:
 
 }
 
-int qib_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
-		    struct qib_msix_entry *entry)
+/* return the PCIe link speed from the given link status */
+static u32 extract_speed(u16 linkstat)
 {
-	u16 linkstat, speed;
-	int pos, ret = 0;
+	u32 speed;
+
+	switch (linkstat & PCI_EXP_LNKSTA_CLS) {
+	default: /* not defined, assume Gen1 */
+	case PCI_EXP_LNKSTA_CLS_2_5GB:
+		speed = 2500; /* Gen 1, 2.5GHz */
+		break;
+	case PCI_EXP_LNKSTA_CLS_5_0GB:
+		speed = 5000; /* Gen 2, 5GHz */
+		break;
+	case GEN3_SPEED_VECTOR:
+		speed = 8000; /* Gen 3, 8GHz */
+		break;
+	}
+	return speed;
+}
+
+/* return the PCIe link speed from the given link status */
+static u32 extract_width(u16 linkstat)
+{
+	return (linkstat & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
+}
+
+/* read the link status and set dd->{lbus_width,lbus_speed,lbus_info} */
+static void update_lbus_info(struct hfi_devdata *dd)
+{
+	u16 linkstat;
+
+	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKSTA, &linkstat);
+	dd->lbus_width = extract_width(linkstat);
+	dd->lbus_speed = extract_speed(linkstat);
+	snprintf(dd->lbus_info, sizeof(dd->lbus_info),
+		 "PCIe,%uMHz,x%u", dd->lbus_speed, dd->lbus_width);
+}
+
+/*
+ * Read in the current PCIe link width and speed.  Find if the link is
+ * Gen3 capable.
+ */
+int pcie_speeds(struct hfi_devdata *dd)
+{
+	u32 linkcap;
 
 	if (!pci_is_pcie(dd->pcidev)) {
 		dd_dev_err(dd, "Can't find PCI Express capability!\n");
-		/* set up something... */
-		dd->lbus_width = 1;
-		dd->lbus_speed = 2500; /* Gen1, 2.5GHz */
-		ret = -EINVAL;
-		goto bail;
+		return -EINVAL;
 	}
 
-	pos = pci_find_capability(dd->pcidev, PCI_CAP_ID_MSIX);
-	if (nent && *nent && pos) {
-		qib_msix_setup(dd, pos, nent, entry);
-		/* did it, either MSI-X or INTx */
-	} else {
-		qib_enable_intx(dd->pcidev);
-	}
+	/* find if our max speed is Gen3 and parent supports Gen3 speeds */
+	dd->link_gen3_capable = 1;
 
-	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKSTA, &linkstat);
-	speed = linkstat & PCI_EXP_LNKSTA_CLS;
-	dd->lbus_width = (linkstat & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
-
-	switch (speed) {
-	default: /* not defined, assume Gen1 */
-	case PCI_EXP_LNKSTA_CLS_2_5GB:
-		dd->lbus_speed = 2500; /* Gen 1, 2.5GHz */
-		break;
-	case PCI_EXP_LNKSTA_CLS_5_0GB:
-		dd->lbus_speed = 5000; /* Gen 2, 5GHz */
-		break;
-	case 0x4: /* not defined in a kernel header */
-		dd->lbus_speed = 8000; /* Gen 3, 8GHz */
-		break;
+	pcie_capability_read_dword(dd->pcidev, PCI_EXP_LNKCAP, &linkcap);
+	if ((linkcap & PCI_EXP_LNKCAP_SLS) != GEN3_SPEED_VECTOR) {
+		dd_dev_info(dd,
+			"This HFI is not Gen3 capable, max speed 0x%x, need 0x3\n",
+			linkcap & PCI_EXP_LNKCAP_SLS);
+		dd->link_gen3_capable = 0;
 	}
 
 	/*
-	 * Check against expected pcie width and complain if "wrong"
-	 * on first initialization, not afterwards (i.e., reset).
+	 * bus->max_bus_speed is set from the bridge's linkcap Max Link Speed
 	 */
-	if (minw && linkstat < minw)
-		dd_dev_err(dd,
-			    "PCIe width %u (x%u HCA), performance reduced\n",
-			    linkstat, minw);
+	if (dd->pcidev->bus->max_bus_speed != PCIE_SPEED_8_0GT) {
+		dd_dev_info(dd, "Parent PCIe bridge does not support Gen3\n");
+		dd->link_gen3_capable = 0;
+	}
+
+	/* obtain the link width and current speed */
+	update_lbus_info(dd);
+
+	/* check against expected pcie width and complain if "wrong" */
+	if (dd->lbus_width < 16)
+		dd_dev_err(dd, "PCIe width %u (x16 HCA), performance reduced\n",
+			dd->lbus_width);
+
+	return 0;
+}
+
+/*
+ * Returns in *nent:
+ *	- actual number of interrupts allocated
+ *	- 0 if fell back to INTx.
+ */
+void request_msix(struct hfi_devdata *dd, u32 *nent,
+			struct qib_msix_entry *entry)
+{
+	int pos;
+
+	pos = pci_find_capability(dd->pcidev, PCI_CAP_ID_MSIX);
+	if (*nent && pos) {
+		qib_msix_setup(dd, pos, nent, entry);
+		/* did it, either MSI-X or INTx */
+	} else {
+		*nent = 0;
+		qib_enable_intx(dd->pcidev);
+	}
 
 	qib_tune_pcie_caps(dd);
-
 	qib_tune_pcie_coalesce(dd);
-
-bail:
-	/* fill in string, even on errors */
-	snprintf(dd->lbus_info, sizeof(dd->lbus_info),
-		 "PCIe,%uMHz,x%u\n", dd->lbus_speed, dd->lbus_width);
-	return ret;
 }
 
 /*
@@ -381,37 +428,18 @@ void qib_enable_intx(struct pci_dev *pdev)
 	pci_disable_msix(pdev);
 }
 
-/*
- * These two routines are helper routines for the device reset code
- * to move all the pcie code out of the chip-specific driver code.
- */
-void qib_pcie_getcmd(struct hfi_devdata *dd, u16 *cmd, u8 *iline, u8 *cline)
+/* restore command and BARs after a reset has wiped them out */
+void restore_pci_variables(struct hfi_devdata *dd)
 {
-	pci_read_config_word(dd->pcidev, PCI_COMMAND, cmd);
-	pci_read_config_byte(dd->pcidev, PCI_INTERRUPT_LINE, iline);
-	pci_read_config_byte(dd->pcidev, PCI_CACHE_LINE_SIZE, cline);
+	pci_write_config_word(dd->pcidev, PCI_COMMAND, dd->pci_command);
+	pci_write_config_dword(dd->pcidev,
+				PCI_BASE_ADDRESS_0, dd->pcibar0);
+	pci_write_config_dword(dd->pcidev,
+				PCI_BASE_ADDRESS_1, dd->pcibar1);
+	pci_write_config_dword(dd->pcidev,
+				PCI_ROM_ADDRESS, dd->pci_rom);
 }
 
-void qib_pcie_reenable(struct hfi_devdata *dd, u16 cmd, u8 iline, u8 cline)
-{
-	int r;
-	r = pci_write_config_dword(dd->pcidev, PCI_BASE_ADDRESS_0,
-				   dd->pcibar0);
-	if (r)
-		dd_dev_err(dd, "rewrite of BAR0 failed: %d\n", r);
-	r = pci_write_config_dword(dd->pcidev, PCI_BASE_ADDRESS_1,
-				   dd->pcibar1);
-	if (r)
-		dd_dev_err(dd, "rewrite of BAR1 failed: %d\n", r);
-	/* now re-enable memory access, and restore cosmetic settings */
-	pci_write_config_word(dd->pcidev, PCI_COMMAND, cmd);
-	pci_write_config_byte(dd->pcidev, PCI_INTERRUPT_LINE, iline);
-	pci_write_config_byte(dd->pcidev, PCI_CACHE_LINE_SIZE, cline);
-	r = pci_enable_device(dd->pcidev);
-	if (r)
-		dd_dev_err(dd,
-			"pci_enable_device failed after reset: %d\n", r);
-}
 
 /* code to adjust PCIe capabilities. */
 
@@ -691,3 +719,493 @@ const struct pci_error_handlers qib_pci_err_handler = {
 	.slot_reset = qib_pci_slot_reset,
 	.resume = qib_pci_resume,
 };
+
+/*============================================================================*/
+/* PCIe Gen3 support */
+
+/*
+ * This code is separated out because it is expected to be removed in the
+ * final shipping product.  If not, then it will be revisited and items
+ * will be moved to more standard locations.
+ */
+
+#include "include/wfr/wfr_pcie_defs.h"
+
+/* ASIC_PCI_SD_HOST_STATUS.FW_DNLD_STS field values */
+#define WFR_DL_STATUS_HFI0 0x1	/* hfi0 firmware download complete */
+#define WFR_DL_STATUS_HFI1 0x2	/* hfi1 firmware download complete */
+#define WFR_DL_STATUS_BOTH 0x3	/* hfi0 and hfi1 firmware download complete */
+
+/* ASIC_PCI_SD_HOST_STATUS.FW_DNLD_ERR field values */
+#define WFR_DL_ERR_NONE		0x0	/* no error */
+#define WFR_DL_ERR_SWAP_PARITY	0x1	/* parity error in SerDes interrupt */
+					/*   or response data */
+#define WFR_DL_ERR_DISABLED	0x2	/* hfi disabled */
+#define WFR_DL_ERR_SECURITY	0x3	/* security check failed */
+#define WFR_DL_ERR_SBUS		0x4	/* SBUS status error */
+#define WFR_DL_ERR_XFR_PARITY	0x5	/* parity error during ROM transfer*/
+
+/* gasket block secondary bus reset delay */
+#define SBR_DELAY_US 20000	/* 20ms */
+
+/* mask for PCIe capability regiser lnkctl2 target link speed */
+#define LNKCTL2_TARGET_LINK_SPEED_MASK 0xf
+
+static uint pcie_gen3_transition;
+module_param(pcie_gen3_transition, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_gen3_transition, "Driver will attempt the transition to PCIe Gen3 speed");
+
+static uint pcie_gen3_required;
+module_param(pcie_gen3_required, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_gen3_required, "Driver will fail to load if unable to raech PCie Gen3 speed");
+
+/* for testing */
+static uint pcie_gen3_ignore_speed_check;
+module_param(pcie_gen3_ignore_speed_check, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_gen3_ignore_speed_check, "Ignore check whether links are gen3 capable (test only)");
+
+/* discrete silicon preliminary equalization values */
+static const u8 discrete_preliminary_eq[11][3] = {
+	/* prec   attn   post */
+	{  0x00,  0x00,  0x00 },	/* p0 */
+	{  0x00,  0x00,  0x0c },	/* p1 */
+	{  0x00,  0x00,  0x0f },	/* p2 */
+	{  0x00,  0x00,  0x09 },	/* p3 */
+	{  0x00,  0x00,  0x00 },	/* p4 */
+	{  0x06,  0x00,  0x00 },	/* p5 */
+	{  0x09,  0x00,  0x00 },	/* p6 */
+	{  0x06,  0x00,  0x0f },	/* p7 */
+	{  0x09,  0x00,  0x09 },	/* p8 */
+	{  0x0c,  0x00,  0x09 },	/* p9 */
+	{  0x0c,  0x00,  0x18 },	/* p10 */
+};
+
+/* integrated silicon preliminary equalization values */
+static const u8 integrated_preliminary_eq[11][3] = {
+	/* prec   attn   post */
+	{  0x00,  0x1e,  0x07 },	/* p0 */
+	{  0x00,  0x1e,  0x05 },	/* p1 */
+	{  0x00,  0x1e,  0x06 },	/* p2 */
+	{  0x00,  0x1e,  0x04 },	/* p3 */
+	{  0x00,  0x1e,  0x00 },	/* p4 */
+	{  0x03,  0x1e,  0x00 },	/* p5 */
+	{  0x04,  0x1e,  0x00 },	/* p6 */
+	{  0x03,  0x1e,  0x06 },	/* p7 */
+	{  0x03,  0x1e,  0x04 },	/* p8 */
+	{  0x05,  0x1e,  0x00 },	/* p9 */
+	{  0x00,  0x1e,  0x0a },	/* p10 */
+};
+
+/* helper to format the value to write to hardware */
+#define eq_value(pre, curr, post) \
+	(((u32)(pre) << WFR_PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_SHIFT) \
+	| ((u32)(curr) << WFR_PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_SHIFT) \
+	| ((u32)(post) << \
+		WFR_PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_SHIFT))
+
+/*
+ * Load the given EQ preset table into the PCIe hardware.
+ */
+static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3])
+{
+	struct pci_dev *pdev = dd->pcidev;
+	u32 hit_error = 0;
+	u32 violation;
+	u32 i;
+
+	for (i = 0; i < 11; i++) {
+		/* set index */
+		pci_write_config_dword(pdev, WFR_PCIE_CFG_REG_PL103, i);
+		/* write the value */
+		pci_write_config_dword(pdev, WFR_PCIE_CFG_REG_PL102,
+			eq_value(eq[i][0], eq[i][1], eq[i][2]));
+		/* check if these coefficients violate EQ rules */
+		pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL105,
+								&violation);
+		if (violation) {
+			if (hit_error == 0) {
+				dd_dev_err(dd,
+					"Gen3 EQ Table Coefficient rule violations\n");
+				dd_dev_err(dd, "         prec   attn   post\n");
+			}
+			dd_dev_err(dd, "   p%02d:   %02x     %02x     %02x\n",
+				i, (u32)eq[i][0], (u32)eq[i][1], (u32)eq[i][2]);
+			hit_error = 1;
+		}
+	}
+	if (hit_error)
+		return -EINVAL;
+	return 0;
+}
+
+/*
+ * Trigger a secondary bus reset (SBR) on ourself using our parent.
+ *
+ * Based on pci_parent_bus_reset() which is not exported by the
+ * kernel core.
+ */
+static int trigger_sbr(struct hfi_devdata *dd)
+{
+	struct pci_dev *dev = dd->pcidev;
+	struct pci_dev *pdev;
+
+	/* need a parent */
+	if (!dev->bus->self) {
+		dd_dev_err(dd, "%s: no parent device\n", __func__);
+		return -ENOTTY;
+	}
+
+	/* should not be anyone else on the bus */
+	list_for_each_entry(pdev, &dev->bus->devices, bus_list)
+		if (pdev != dev) {
+			dd_dev_err(dd,
+				"%s: another device is on the same bus\n",
+				__func__);
+			return -ENOTTY;
+		}
+
+	/*
+	 * A secondary bus reset (SBR) issues a hot reset to our device.
+	 * The following routine does a 1s wait after the reset is dropped
+	 * per PCI Trhfa (recovery time).  PCIe 3.0 section 6.6.1 -
+	 * Conventional Reset, paragraph 3, line 35 also says that a 1s
+	 * delay after a reset is required.  Per spec requirements,
+	 * the link is either working or not after that point.
+	 */
+	pci_reset_bridge_secondary_bus(dev->bus->self);
+
+	return 0;
+}
+
+/*
+ * Tell the gasket logic how to react to the reset.
+ */
+static void arm_gasket_logic(struct hfi_devdata *dd)
+{
+	u64 reg;
+
+	reg = (((u64)1 << dd->hfi_id)
+			<< WFR_ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
+		| ((u64)pcie_serdes_broadcast[dd->hfi_id]
+			<< WFR_ASIC_PCIE_SD_HOST_CMD_SBUS_RCVR_ADDR_SHIFT
+		| WFR_ASIC_PCIE_SD_HOST_CMD_SBR_MODE_SMASK
+		| ((u64)SBR_DELAY_US & WFR_ASIC_PCIE_SD_HOST_CMD_TIMER_MASK)
+			<< WFR_ASIC_PCIE_SD_HOST_CMD_TIMER_SHIFT
+		);
+	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
+}
+
+/*
+ * Do all the steps needed to transition the PCIe link to Gen3 speed.
+ */
+int do_pcie_gen3_transition(struct hfi_devdata *dd)
+{
+	u64 reg;
+	u32 reg32, fs, lf;
+	int ret, return_error = 0;
+	u16 lnkctl, lnkctl2, vendor;
+
+	/* if already at Gen3, done */
+	if (dd->lbus_speed == 8000) /* Gen3, 8GHz */
+		return 0;
+
+	/* told not to do the transition */
+	if (!pcie_gen3_transition)
+		return 0;
+
+	/*
+	 * Emulation has no SBUS and the PCIe SerDes is different.  The only
+	 * thing we can to is try a SBR to see if we can recover.
+	 */
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
+		/* hold DC in reset */
+		write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
+		(void) read_csr(dd, WFR_CCE_DC_CTRL); /* DC reset hold */
+
+		dd_dev_info(dd, "%s: Setting CceScratch[0] to 0xdeadbeef\n",
+			__func__);
+		write_csr(dd, WFR_CCE_SCRATCH, 0xdeadbeefull);
+
+		dd_dev_info(dd, "%s: calling trigger_sbr\n", __func__);
+		ret = trigger_sbr(dd);
+		if (ret)
+			goto done_no_mutex;
+
+		/* restore PCI space registers we know were reset */
+		dd_dev_info(dd,
+			"%s: calling restore_pci_variables\n", __func__);
+		restore_pci_variables(dd);
+
+		/*
+		 * Read the CCE scratch register we set above to see if:
+		 * a) the link works
+		 * b) if the reset was applied and our CCE scratch is
+		 *    zeroed
+		 */
+		reg = read_csr(dd, WFR_CCE_SCRATCH);
+		if (reg == ~0ull) {
+			dd_dev_info(dd, "%s: cannot read CSRs\n", __func__);
+			return_error = 1; /* override !pcie_gen3_required */
+			goto done_no_mutex;
+		}
+		dd_dev_info(dd, "%s: CceScratch[0] 0x%llx\n", __func__, reg);
+
+		/* clear the DC reset */
+		write_csr(dd, WFR_CCE_DC_CTRL, 0);
+
+		/* update our link information cache */
+		update_lbus_info(dd);
+		dd_dev_info(dd, "%s: new speed and width: %s\n", __func__,
+			dd->lbus_info);
+
+		/* finished */
+		goto done_no_mutex;
+	}
+
+	/*
+	 * Do the Gen3 transition.  Steps are those of the PCIe Gen3
+	 * recipe, Table 5-6 in the WFR HAS.
+	 */
+
+	/* step 1: pcie link working in gen1/gen2 */
+
+	/* step 2: if either side is not capable of Gen3, done */
+	if (!dd->link_gen3_capable && !pcie_gen3_ignore_speed_check) {
+		dd_dev_err(dd, "The PCIe link is not Gen3 capable\n");
+		ret = -ENOSYS;
+		goto done_no_mutex;
+	}
+
+	/* hold the HW mutex across the firmware download and SBR */
+	ret = acquire_hw_mutex(dd);
+	if (ret)
+		return ret;
+
+	/* step 3: download SBUS Master firmware */
+	/* step 4: download PCIe Gen3 SerDes firmware */
+	dd_dev_info(dd, "%s: downloading firmware\n", __func__);
+	ret = load_pcie_firmware(dd);
+	if (ret)
+		goto done;
+
+	/* step 5: set up device parameter settings */
+	dd_dev_info(dd, "%s: setting PCIe registers\n", __func__);
+
+	/*
+	 * PcieCfgSpcie1 - Link Control 3
+	 * Leave at reset value.  No need to set PerfEq - link equalization
+	 * will be performced automatically after the SBR when the target
+	 * speed is 8GT/s.
+	 */
+
+	/* clear all 16 per-lane error bits (PCIe: Lane Error Status) */
+	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE2, 0xffff);
+
+	/* step 5a: Set Synopsys Port Logic registers */
+
+	/*
+	 * PcieCfgRegPl2 - Port Force Link
+	 *
+	 * Set the low power field to 0x10 to avoid unnecessary power
+	 * management messages.  All other fields are zero.
+	 */
+	reg32 = 0x10ul << WFR_PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_SHIFT;
+	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL2, reg32);
+
+	/*
+	 * PcieCfgRegPl100 - Gen3 Control
+	 *
+	 * turn off PcieCfgRegPl100.Gen3ZRxDcNonCompl (erratum)
+	 * turn on PcieCfgRegPl100.EqEieosCnt (erratum)
+	 * Everything else zero.
+	 */
+	reg32 = WFR_PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_SMASK;
+	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL100, reg32);
+
+	/*
+	 * PcieCfgRegPl101 - Gen3 EQ FS and LF
+	 * PcieCfgRegPl102 - Gen3 EQ Presets to Coefficients Mapping
+	 * PcieCfgRegPl103 - Gen3 EQ Preset Index
+	 * PcieCfgRegPl105 - Gen3 EQ Status
+	 *
+	 * Give initial EQ settings.
+	 */
+	if (dd->deviceid == PCI_DEVICE_ID_INTEL_WFR0) { /* discrete */
+		/* 1000mV, FS=24, LF = 8 */
+		ret = load_eq_table(dd, discrete_preliminary_eq);
+		fs = 24;
+		lf = 8;
+	} else {
+		/* 400mV, FS=29, LF = 9 */
+		ret = load_eq_table(dd, integrated_preliminary_eq);
+		fs = 29;
+		lf = 9;
+	}
+	if (ret)
+		goto done;
+	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL101,
+		(fs << WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT)
+		| (lf << WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT));
+
+	/*
+	 * PcieCfgRegPl106 - Gen3 EQ Control
+	 *
+	 * Leave at default of all zero.
+	 */
+
+	/*
+	 * step 5b: program XMT margin
+	 * Right now, leave the default alone.  To change, do a
+	 * read-modify-write of:
+	 *	CcePcieCtrl.XmtMargin
+	 *	CcePcieCtrl.XmitMarginOverwriteEnable
+	 */
+
+	/* step 5c: disable active state power management (ASPM) */
+	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL, &lnkctl);
+	lnkctl &= ~PCI_EXP_LNKCTL_ASPMC;
+	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL, lnkctl);
+
+	/*
+	 * step 5d: clear DirectSpeedChange
+	 * PcieCfgRegPl67.DirectSpeedChange must be zero to prevent the
+	 * change in the speed target from starting before we are ready.
+	 * This field defaults to 0 and we are not changing it, so nothing
+	 * needs to be done.
+	 */
+
+	/* step 5e: arm gasket logic */
+	dd_dev_info(dd, "%s: arming gasket logic\n", __func__);
+	arm_gasket_logic(dd);
+
+	/* step 5f: Set target link speed */
+	/* set target link speed to be Gen3 */
+	dd_dev_info(dd, "%s: setting target link speed\n", __func__);
+	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL2, &lnkctl2);
+	dd_dev_info(dd, "%s: ..old link control2: 0x%x\n", __func__,
+		(u32)lnkctl2);
+	lnkctl2 &= ~LNKCTL2_TARGET_LINK_SPEED_MASK;
+	lnkctl2 |= GEN3_SPEED_VECTOR;
+	dd_dev_info(dd, "%s: ..new link control2: 0x%x\n", __func__,
+		(u32)lnkctl2);
+	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL2, lnkctl2);
+
+	/* hold DC in reset across the SBR */
+	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
+	(void) read_csr(dd, WFR_CCE_DC_CTRL); /* DC reset hold */
+
+	/*
+	 * step 6: quiesce PCIe link
+	 * The chip has already been reset, so there will be no traffic
+	 * from the chip.  Linux has no easy way to enforce that it will
+	 * not try to access the device, so we just need to hope it doesn't
+	 * do it while we are doing the reset.
+	 */
+
+	/*
+	 * step 7: initiate the secondary bus reset (SBR)
+	 * step 8: hardware brings the links back up
+	 * step 9: wait for link speed transition to be complete
+	 */
+	dd_dev_info(dd, "%s: calling trigger_sbr\n", __func__);
+	ret = trigger_sbr(dd);
+	if (ret)
+		goto done;
+
+	/* step 10: decide what to do next */
+
+	/* check if we can read PCI space */
+	ret = pci_read_config_word(dd->pcidev, PCI_VENDOR_ID, &vendor);
+	if (ret) {
+		dd_dev_info(dd,
+			"%s: read of VendorID failed after SBR, err %d\n",
+			__func__, ret);
+		return_error = 1;	/* override !pcie_gen3_required */
+		goto done;
+	}
+	if (vendor == 0xffff) {
+		dd_dev_info(dd, "%s: VendorID is all 1s after SBR\n", __func__);
+		return_error = 1;	/* override !pcie_gen3_required */
+		ret = -EIO;
+		goto done;
+	}
+
+	/* restore PCI space registers we know were reset */
+	dd_dev_info(dd, "%s: calling restore_pci_variables\n", __func__);
+	restore_pci_variables(dd);
+
+	/*
+	 * Check the gasket block status.
+	 *
+	 * If the read returns all 1s (fails), the link did not make it back.
+	 *
+	 * If ASIC_PCIE_SD_HOST_STATUS is non-zero then the gasket block
+	 * failed.  Read the status for more details.
+	 *
+	 * If ASIC_PCIE_SD_HOST_STATUS is zero then the reset occured,
+	 * the link is back, and (presumably) everything is OK.
+	 */
+	reg = read_csr(dd, WFR_ASIC_PCIE_SD_HOST_STATUS);
+	dd_dev_info(dd, "%s: gasket block status: 0x%llx\n", __func__, reg);
+	if (reg == ~0ull) {	/* PCIe read failed/timeout */
+		dd_dev_err(dd, "SBR failed - unable to read from device\n");
+		return_error = 1;	/* override !pcie_gen3_required */
+		ret = -ENOSYS;
+		goto done;
+	}
+
+	/* clear the DC reset */
+	write_csr(dd, WFR_CCE_DC_CTRL, 0);
+
+	pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE2, &reg32);
+	dd_dev_info(dd, "%s: per-lane errors: 0x%x\n", __func__, reg32);
+
+	/*
+	 * If ASIC_PCIE_SD_HOST_STATUS is zero then the reset occured.
+	 * Otherwise the gasket block failed.  Read the status for
+	 * more information.
+	 */
+	if (reg != 0) {
+		u32 status, err;
+
+		status = (reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_SHIFT)
+				& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
+		if (status != (1 << dd->hfi_id)) {
+			dd_dev_err(dd,
+				"%s: gasket status 0x%x, expecting 0x%x\n",
+				__func__, status, (int)dd->hfi_id);
+		}
+		err = (reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_SHIFT)
+			& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_MASK;
+		dd_dev_err(dd, "%s: gasket error %d\n", __func__, err);
+		ret = -EIO;
+		goto done;
+	}
+
+	/* update our link information cache */
+	update_lbus_info(dd);
+	dd_dev_info(dd, "%s: new speed and width: %s\n", __func__,
+		dd->lbus_info);
+
+	if (dd->lbus_speed != 8000) {	/* not Gen3 */
+		/*
+		 * At this point we could try again with different
+		 * parameters in the hopes of success.  For now, just
+		 * report an error.
+		 */
+		dd_dev_err(dd, "PCIe link speed did not switch to Gen3\n");
+		ret = -EIO;
+	}
+
+done:
+	release_hw_mutex(dd);
+done_no_mutex:
+	/* return no error if it is OK to be in Gen1/2 */
+	if (ret && !return_error && !pcie_gen3_required) {
+		dd_dev_err(dd, "Proceeding at current speed PCIe speed\n");
+		ret = 0;
+	}
+
+	dd_dev_info(dd, "%s: done\n", __func__);
+	return ret;
+}

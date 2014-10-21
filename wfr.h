@@ -524,6 +524,9 @@ static inline int stl_width_to_ib(u16 in)
 }
 
 /* firmware.c */
+extern const u8 pcie_serdes_broadcast[];
+int firmware_init(struct hfi_devdata *dd);
+int load_pcie_firmware(struct hfi_devdata *dd);
 int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
 int acquire_hw_mutex(struct hfi_devdata *dd);

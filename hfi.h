@@ -885,6 +885,8 @@ struct hfi_devdata {
 	u32 rcvegrbufsize;
 	/* log2 of above */
 	u16 rcvegrbufsize_shift;
+	/* both sides of the PCIe link are gen3 capable */
+	u8 link_gen3_capable;
 	/* localbus width (1, 2,4,8,16,32) from config space  */
 	u32 lbus_width;
 	/* localbus speed in MHz */
@@ -1350,11 +1352,12 @@ int qib_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
 		    const struct pci_device_id *);
 void qib_pcie_ddcleanup(struct hfi_devdata *);
 void hfi_pcie_flr(struct hfi_devdata *);
-int qib_pcie_params(struct hfi_devdata *, u32, u32 *, struct qib_msix_entry *);
+int pcie_speeds(struct hfi_devdata *);
+void request_msix(struct hfi_devdata *, u32 *, struct qib_msix_entry *);
 void qib_enable_intx(struct pci_dev *);
 void qib_nomsix(struct hfi_devdata *);
-void qib_pcie_getcmd(struct hfi_devdata *, u16 *, u8 *, u8 *);
-void qib_pcie_reenable(struct hfi_devdata *, u16, u8, u8);
+void restore_pci_variables(struct hfi_devdata *dd);
+int do_pcie_gen3_transition(struct hfi_devdata *dd);
 /* interrupts for device */
 u64 hfi_int_counter(struct hfi_devdata *);
 

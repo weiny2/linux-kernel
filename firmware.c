@@ -206,7 +206,7 @@ static const u8 fabric_serdes_broadcast[2] = { 0xe4, 0xe5 };
 static const u8 all_fabric_serdes_broadcast = 0xe1;
 
 /* SBUS PCIe SerDes broadcast addresses, one per HFI */
-static const u8 pcie_serdes_broadcast[2] = { 0xe2, 0xe3 };
+const u8 pcie_serdes_broadcast[2] = { 0xe2, 0xe3 };
 static const u8 all_pcie_serdes_broadcast = 0xe0;
 
 /* forwards */
@@ -961,7 +961,6 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 					struct firmware_details *fdet)
 {
-	u64 reg;
 	int i, err;
 	const u8 ra = SBUS_MASTER_BROADCAST; /* receiver address */
 
@@ -988,43 +987,7 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 	if (err)
 		return err;
 
-	/* step 11: trigger the gasket block */
-	reg = (((u64)1 << dd->hfi_id)
-			<< WFR_ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
-		| ((u64)pcie_serdes_broadcast[dd->hfi_id]
-			<< WFR_ASIC_PCIE_SD_HOST_CMD_SBUS_RCVR_ADDR_SHIFT);
-	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
-
-
-/*
-FIXME: Once we swap the PCIe firmware, does that immediately
-start gen3 negotiations and/or interrupt the link?
-
-If so, we can't touch the chip until the parent says it has renegotiated
-the link. (code below)
-
-If not, then we'll need to manually trigger it.
-*/
-#if 0
-	err = wait_for_parent_link_up(dd);
-	if (err)
-		return err;
-
-/* PCIE firmware download status */
-#define WFR_PCIE_FW_DL_STATUS_SUCCESS 0x1
-
-	/* check the status - if we can read the CSR, its done, either way */
-	reg = read_csr(dd, WFR_ASIC_PCIE_SD_HOST_STATUS);
-	if (reg == ~0ull) {	/* PCIe read failed/timeout */
-		do some thing drastic here
-	}
-	status = (reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_SHIFT)
-				& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
-	if (status != WFR_PCIE_FW_STATUS_SUCCESS)
-		return -EFAIL;
-	err = ((reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_SHIFT)
-		& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_MASK)
-#endif
+	/* step 11: firmware is available to be swapped */
 
 	return 0;
 }
@@ -1090,7 +1053,57 @@ static void set_sbus_fast_mode(struct hfi_devdata *dd)
 				WFR_ASIC_CFG_SBUS_EXECUTE_FAST_MODE_SMASK);
 }
 
+static void clear_sbus_fast_mode(struct hfi_devdata *dd)
+{
+	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
+}
+
 int load_firmware(struct hfi_devdata *dd)
+{
+	int ret;
+
+	if (fw_sbus_load || fw_fabric_serdes_load) {
+		ret = acquire_hw_mutex(dd);
+		if (ret)
+			return ret;
+
+		set_sbus_fast_mode(dd);
+
+		/*
+		 * The SBUS contains part of the fabric firmware and so must
+		 * also be downloaded.
+		 */
+		if (fw_sbus_load) {
+			ret = load_sbus_firmware(dd, &fw_sbus);
+			if (ret)
+				goto clear;
+		}
+
+		if (fw_fabric_serdes_load) {
+			set_serdes_broadcast(dd, all_fabric_serdes_broadcast,
+					fabric_serdes_broadcast[dd->hfi_id],
+					fabric_serdes_addrs[dd->hfi_id],
+					NUM_FABRIC_SERDES);
+			ret = load_fabric_serdes_firmware(dd, &fw_fabric);
+		}
+
+clear:
+		clear_sbus_fast_mode(dd);
+		release_hw_mutex(dd);
+		if (ret)
+			return ret;
+	}
+
+	if (fw_8051_load) {
+		ret = load_8051_firmware(dd, &fw_8051);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int firmware_init(struct hfi_devdata *dd)
 {
 	int ret;
 
@@ -1100,13 +1113,6 @@ int load_firmware(struct hfi_devdata *dd)
 	ret = obtain_firmware(dd);
 	if (ret)
 		return ret;
-
-	ret = acquire_hw_mutex(dd);
-	if (ret)
-		return ret;
-
-	/* set the SBUS master to fast mode, we do not need to set it back */
-	set_sbus_fast_mode(dd);
 
 	/*
 	 * Expect that we enter this routine with MISC_CFG_FW_CTRL reset:
@@ -1118,40 +1124,43 @@ int load_firmware(struct hfi_devdata *dd)
 		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
 			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
 
+	return 0;
+}
+
+/*
+ * Download the firmware needed for the Gen3 PCIe SerDes.  An update
+ * to the SBUS firmware is needed before updating the PCIe firmware.
+ *
+ * Note: caller must be holding the HW mutex.
+ */
+int load_pcie_firmware(struct hfi_devdata *dd)
+{
+	int ret;
+
+	/* both firmware loads below use the SBUS */
+	set_sbus_fast_mode(dd);
+
 	if (fw_sbus_load) {
+		dd_dev_info(dd, "Downloading SBUS firmware\n");
 		ret = load_sbus_firmware(dd, &fw_sbus);
 		if (ret)
 			goto done;
 	}
 
 	if (fw_pcie_serdes_load) {
+		dd_dev_info(dd, "Setting PCIe SerDes broadcast\n");
 		set_serdes_broadcast(dd, all_pcie_serdes_broadcast,
 					pcie_serdes_broadcast[dd->hfi_id],
 					pcie_serdes_addrs[dd->hfi_id],
 					NUM_PCIE_SERDES);
+		dd_dev_info(dd, "Downloading PCIe firmware\n");
 		ret = load_pcie_serdes_firmware(dd, &fw_pcie);
 		if (ret)
 			goto done;
 	}
 
-	if (fw_fabric_serdes_load) {
-		set_serdes_broadcast(dd, all_fabric_serdes_broadcast,
-					fabric_serdes_broadcast[dd->hfi_id],
-					fabric_serdes_addrs[dd->hfi_id],
-					NUM_FABRIC_SERDES);
-		ret = load_fabric_serdes_firmware(dd, &fw_fabric);
-		if (ret)
-			goto done;
-	}
-
-	if (fw_8051_load) {
-		ret = load_8051_firmware(dd, &fw_8051);
-		if (ret)
-			goto done;
-	}
-
 done:
-	release_hw_mutex(dd);
+	clear_sbus_fast_mode(dd);
 
 	return ret;
 }

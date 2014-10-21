@@ -4073,7 +4073,7 @@ static int goto_offline(struct qib_pportdata *ppd)
 		ret = set_physical_link_state(dd, WFR_PLS_OFFLINE);
 		if (ret != WFR_HCMD_SUCCESS) {
 			dd_dev_err(dd,
-				"Failed to transition to Offline link state, return 0x%x\n",
+				"Failed to transition to Offline link state, return %d\n",
 				ret);
 			return -EINVAL;
 		}
@@ -6076,11 +6076,9 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 	for (i = 0; i < total; i++)
 		entries[i].msix.entry = i;
 
-	/* ask for MSI-X interrupts; expect a PCIe width of 16 */
+	/* ask for MSI-X interrupts */
 	request = total;
-	ret = qib_pcie_params(dd, 16, &request, entries);
-	if (ret)
-		goto fail;
+	request_msix(dd, &request, entries);
 
 	if (request == 0) {
 		/* using INTx */
@@ -6899,8 +6897,11 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
 
 /*
  * Read chip sizes and then reset parts to sane, disabled, values.  We cannot
- * depend on the chip just being reset - a driver may be loaded and
- * unloaded many times.
+ * depend on the chip going through a power-on reset - a driver may be loaded
+ * and unloaded many times.
+ *
+ * Do not write any CSR values to the chip in this routine - there may be
+ * a reset following the (possible) FLR in this routine.
  *
  * Sets:
  * dd->chip_rcv_contexts  - number of receive contexts supported by the chip
@@ -6908,8 +6909,6 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
  * dd->chip_send_contexts - number PIO send contexts supported by the chip
  * dd->chip_pio_mem_size  - size of PIO send memory, in blocks
  * dd->chip_sdma_engines  - number of SDMA engines supported by the chip
- * dd->vau		  - encoding of AU as AU = 8 * 2^vAU
- * dd->link_credits	  - number of link credits available
  */
 static void init_chip(struct hfi_devdata *dd)
 {
@@ -6967,13 +6966,7 @@ static void init_chip(struct hfi_devdata *dd)
 		hfi_pcie_flr(dd);
 
 		/* restore command and BARs */
-		pci_write_config_word(dd->pcidev, PCI_COMMAND, dd->pci_command);
-		pci_write_config_dword(dd->pcidev,
-					PCI_BASE_ADDRESS_0, dd->pcibar0);
-		pci_write_config_dword(dd->pcidev,
-					PCI_BASE_ADDRESS_1, dd->pcibar1);
-		pci_write_config_dword(dd->pcidev,
-					PCI_ROM_ADDRESS, dd->pci_rom);
+		restore_pci_variables(dd);
 	} else {
 		dd_dev_info(dd, "Resetting CSRs with writes\n");
 		reset_cce_csrs(dd);
@@ -6984,25 +6977,6 @@ static void init_chip(struct hfi_devdata *dd)
 	}
 	/* clear the DC reset */
 	write_csr(dd, WFR_CCE_DC_CTRL, 0);
-
-	/* assign link credit variables */
-	dd->vau = WFR_CM_VAU;
-	dd->link_credits = WFR_CM_GLOBAL_CREDITS;
-	dd->vcu = cu_to_vcu(hfi_cu);
-	/* TODO: Make initial VL15 credit size a parameter? */
-	/* enough room for 8 MAD packets plus header - 17K */
-	dd->vl15_init = (8 * (2048 + 128)) / vau_to_au(dd->vau);
-	if (dd->vl15_init > dd->link_credits)
-		dd->vl15_init = dd->link_credits;
-
-	write_uninitialized_csrs_and_memories(dd);
-
-	if (enable_pkeys)
-		for (i = 0; i < dd->num_pports; i++) {
-			struct qib_pportdata *ppd = &dd->pport[i];
-			set_partition_keys(ppd);
-		}
-	init_sc2vl_tables(dd);
 
 	/*
 	 * TODO: The following block is strictly for the simulator.
@@ -7042,6 +7016,30 @@ static void init_chip(struct hfi_devdata *dd)
 	} else {
 		sim_easy_linkup = 0;
 	}
+}
+
+static void init_early_variables(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* assign link credit variables */
+	dd->vau = WFR_CM_VAU;
+	dd->link_credits = WFR_CM_GLOBAL_CREDITS;
+	dd->vcu = cu_to_vcu(hfi_cu);
+	/* TODO: Make initial VL15 credit size a parameter? */
+	/* enough room for 8 MAD packets plus header - 17K */
+	dd->vl15_init = (8 * (2048 + 128)) / vau_to_au(dd->vau);
+	if (dd->vl15_init > dd->link_credits)
+		dd->vl15_init = dd->link_credits;
+
+	write_uninitialized_csrs_and_memories(dd);
+
+	if (enable_pkeys)
+		for (i = 0; i < dd->num_pports; i++) {
+			struct qib_pportdata *ppd = &dd->pport[i];
+			set_partition_keys(ppd);
+		}
+	init_sc2vl_tables(dd);
 }
 
 static void init_kdeth_qp(struct hfi_devdata *dd)
@@ -7592,17 +7590,33 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
 
-#if 0
-	//TODO: What should be done, if anything, about this?
-	// SL Select: - only used for 9B packets
-	// Values:
-	//	0 = SC (service channel)
-	//	1 = SL (service level) - SC lookup based on the SL of
-	//				 the packet header
-	write_csr(dd, DCC_DCC_CFG_PORT_CONFIG,
-			read_csr(dd, DCC_DCC_CFG_PORT_CONFIG)
-				| DCC_DCC_CFG_PORT_CONFIG_SL_SELECT_MODE_SMASK);
-#endif
+	/* read in the PCIe link speed information */
+	ret = pcie_speeds(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* read in firmware */
+	ret = firmware_init(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/*
+	 * In general, the PCIe Gen3 transition must occur after the
+	 * chip has been idled (so it won't initiate any PCIe transactions
+	 * e.g. an interrupt) and before the driver changes any registers
+	 * (the transition will reset the registers).
+	 *
+	 * In particular, place this call after:
+	 * - init_chip()     - the chip will not initiate any PCIe transactions
+	 * - pcie_speeds()   - reads the current link speed
+	 * - firmware_init() - the needed firmware is ready to be downloaded
+	 */
+	ret = do_pcie_gen3_transition(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* start setting dd values and adjusting CSRs */
+	init_early_variables(dd);
 
 	if (nodma_rtail)
 		dd->flags |= QIB_NODMA_RTAIL;

@@ -13,12 +13,12 @@
 #ifndef DEF_WFR_PCIE_SW_DEF
 #define DEF_WFR_PCIE_SW_DEF
 
-#define PCI_DEVICE_ID						0x24F0
-#define PCI_VENDOR_ID						0x8086
-#define PCI_REVISION_ID						0x00
-#define PCI_CLASS_CODE						0x028000
-#define PCI_SUBSYSTEM_ID					0x24F0
-#define PCI_SUBSYSTEM_VENDOR_ID					0x8086
+#define WFR_PCI_DEVICE_ID					0x24F0
+#define WFR_PCI_VENDOR_ID					0x8086
+#define WFR_PCI_REVISION_ID					0x00
+#define WFR_PCI_CLASS_CODE					0x028000
+#define WFR_PCI_SUBSYSTEM_ID					0x24F0
+#define WFR_PCI_SUBSYSTEM_VENDOR_ID				0x8086
 /*
 * Table #6 of 260_PCI_Registers.xml - PciCfgReg0
 * PCI configuration register 0 (Device ID and Vendor ID).

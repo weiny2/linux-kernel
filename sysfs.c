@@ -764,8 +764,7 @@ static ssize_t show_localbus_info(struct device *device,
 		container_of(device, struct qib_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 
-	/* The string printed here is already newline-terminated. */
-	return scnprintf(buf, PAGE_SIZE, "%s", dd->lbus_info);
+	return scnprintf(buf, PAGE_SIZE, "%s\n", dd->lbus_info);
 }
 
 
