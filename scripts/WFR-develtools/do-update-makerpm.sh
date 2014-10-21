@@ -267,7 +267,6 @@ echo "Kernel source directory is \"%kbuild\""
 make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_mad.ko
 make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_umad.ko
 make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_sa.ko
-make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_usa.ko
 
 # NOTE: the following not are required for STL but we are carrying patches for them
 #       which require a rebuild
@@ -310,7 +309,6 @@ cp scripts/WFR-develtools/umad-trace.stp \$RPM_BUILD_ROOT/sbin
 cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
-cp drivers/infiniband/core/ib_usa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/hw/wfr-lite/ib_wfr_lite.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 # See NOTE above

@@ -74,7 +74,6 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe -r rdma_ucm"
 	ssh root@$remote_node "modprobe -r ib_ipoib"
 	ssh root@$remote_node "modprobe -r ib_umad"
-	ssh root@$remote_node "modprobe -r ib_usa"
 	ssh root@$remote_node "modprobe -r ib_ucm"
 	ssh root@$remote_node "modprobe -r ib_uverbs"
 	ssh root@$remote_node "modprobe -r ib_qib"
@@ -84,7 +83,6 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe ib_wfr_lite fake_mtu=$fake_mtu"
 	ssh root@$remote_node "modprobe ib_umad"
 	ssh root@$remote_node "modprobe ib_uverbs"
-	ssh root@$remote_node "modprobe ib_usa"
 	ssh root@$remote_node "modprobe ib_ipoib"
 	ssh root@$remote_node "modprobe rdma_ucm"
 	sleep 5
@@ -98,7 +96,6 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe -r rdma_ucm
 	modprobe -r ib_ipoib
 	modprobe -r ib_umad
-	modprobe -r ib_usa
 	modprobe -r ib_ucm
 	modprobe -r ib_uverbs
 	modprobe -r ib_qib
@@ -108,7 +105,6 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe ib_wfr_lite fake_mtu=$fake_mtu
 	modprobe ib_umad
 	modprobe ib_uverbs
-	modprobe ib_usa
 	modprobe ib_ipoib
 	modprobe rdma_ucm
 fi
