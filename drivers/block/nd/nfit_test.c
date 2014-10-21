@@ -18,6 +18,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include "nfit.h"
+#include "dsm.h"
 
 /*
  * Generate an NFIT table to describe the following topology:
@@ -699,7 +700,12 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writeb(nfit_checksum(nfit_buf, size), &nfit->checksum);
 
 	nfit_desc = &t->nfit_desc;
-	nfit_desc->nfit_ctl = nfit_test_ctl;
+	
+	if (nd_manual_dsm)
+		nfit_desc->nfit_ctl = nd_dsm_ctl;
+	else
+		nfit_desc->nfit_ctl = nfit_test_ctl;
+
 	set_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags);
 }
 
