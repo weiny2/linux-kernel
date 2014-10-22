@@ -388,8 +388,8 @@ static int netvsc_start_xmit(struct sk_buff *skb, struct net_device *net)
 	struct ndis_tcp_lso_info *lso_info;
 	int  hdr_offset;
 	u32 net_trans_info;
-	u32 hash;
 	u32 skb_length = skb->len;
+	u32 hash;
 
 
 	/* We will atmost need two pages to describe the rndis

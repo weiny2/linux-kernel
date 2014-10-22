@@ -126,11 +126,6 @@ static inline bool vlan_do_receive(struct sk_buff **skb)
 	return false;
 }
 
-static inline struct sk_buff *vlan_untag(struct sk_buff *skb)
-{
-	return skb;
-}
-
 static inline int vlan_vid_add(struct net_device *dev, __be16 proto, u16 vid)
 {
 	return 0;
