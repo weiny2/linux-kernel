@@ -37,7 +37,7 @@
 
 #include "hfi.h"
 
-static uint fw_8051_load;
+static uint fw_8051_load = 1;
 module_param_named(fw_8051_load, fw_8051_load, uint, S_IRUGO);
 MODULE_PARM_DESC(fw_8051_load, "Load the 8051 firmware");
 
