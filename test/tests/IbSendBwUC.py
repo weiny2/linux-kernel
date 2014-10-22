@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
-# Test IbSendBwRC
-# Author: Denny Dalessandro (dennis.dalessandro@intel.com)
+# Test IbSendBwUC
+# Author: Mike Marciniszyn (mike.marciniszyn@intel.com)
 #
 
 import RegLib
@@ -22,7 +22,7 @@ def main():
     #############################
     test_info = RegLib.TestInfo()
 
-    RegLib.test_log(0, "Test: IbSendBwRC.py started")
+    RegLib.test_log(0, "Test: IbSendBwUC.py started")
     RegLib.test_log(0, "Dumping test parameters")
 
     # Dump out the test and host info. We need 2 hosts for this test
@@ -51,7 +51,7 @@ def main():
         # Start ib_send_bw on host1 (server)
         child_pid = os.fork()
         if child_pid == 0:
-            cmd = "ib_send_bw -m 4096 -d hfi0 -n 5 -u 21 -p %d -s %s" % (test_port, size)
+            cmd = "ib_send_bw -m 4096 -d hfi0 -n 5 -c UC -p %d -s %s" % (test_port, size)
             (err, out) = do_ssh(host1, cmd)
             if err:
                 RegLib.test_log(0, "Child SSH exit status bad")
@@ -65,7 +65,7 @@ def main():
 
         # Start ib_send_bw on host2 (client)
         server_name = host1.get_name()
-        cmd = "ib_send_bw -m 4096 -d hfi0 -n 5 -u 21 -p %d -s %s %s" % (test_port, size,
+        cmd = "ib_send_bw -m 4096 -d hfi0 -n 5 -c UC -p %d -s %s %s" % (test_port, size,
                                                                 server_name)
         (err, out) = do_ssh(host2, cmd)
         if err:
