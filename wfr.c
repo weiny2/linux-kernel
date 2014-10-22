@@ -342,7 +342,7 @@ static struct flag_table egress_err_status_flags[] = {
 		0,
 		WFR_SEND_EGRESS_ERR_STATUS_TX_INCORRECT_LINK_STATE_ERR_SMASK),
 /* 6 reserved */
-/* 7*/	FLAG_ENTRY("TxLaunchIntfParityErr",
+/* 7*/	FLAG_ENTRY("TxPioLaunchIntfParityErr",
 		0,
 		WFR_SEND_EGRESS_ERR_STATUS_TX_PIO_LAUNCH_INTF_PARITY_ERR_SMASK),
 /* 8*/	FLAG_ENTRY("TxSdmaLaunchIntfParityErr",
