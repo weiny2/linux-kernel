@@ -4756,7 +4756,7 @@ static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask)
  * how the hardware is actually implemented.  In particular, 
  * Return_Credit_Status[] is the only correct status check.
  * 
- * if (reducing Global_Shared_Credit_Limit)
+ * if (reducing Global_Shared_Credit_Limit or any shared limit changing)
  *     set Global_Shared_Credit_Limit = 0
  *     use_all_vl = 1
  * mask0 = all VLs that are changing either dedicated or shared limits
@@ -4780,6 +4780,15 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	u64 changing_mask, ld_mask, stat_mask;
 	int change_count;
 	int i, use_all_mask;
+	/*
+	 * TODO: Erratum 291241 - the variables {any,this}_shared_changing,
+	 * their use below and the description above.  This erratum may or
+	 * may not be fixed in B0.  When the decision is made:
+	 * If no fix: remove this coment.
+	 * If fix for B0: add a A0 vs B0 conditional. Possibly update the
+	 *   algorithm above.
+	 */
+	int any_shared_changing, this_shared_changing;
 	struct buffer_control cur_bc;
 	u8 changing[STL_MAX_VLS];
 	u8 lowering_dedicated[STL_MAX_VLS];
@@ -4830,27 +4839,17 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	changing_mask = 0;
 	ld_mask = 0;
 	change_count = 0;
+	any_shared_changing = 0;
 	for (i = 0; i < NUM_USABLE_VLS; i++, stat_mask <<= 1) {
 		if (!valid_vl(i))
 			continue;
-		if (
-/* TODO: real code for HAS 0.76, workaround for before */
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
-		    new_bc->vl[i].dedicated
+		this_shared_changing = new_bc->vl[i].shared
+						!= cur_bc.vl[i].shared;
+		if (this_shared_changing)
+			any_shared_changing = 1;
+		if (new_bc->vl[i].dedicated
 					!= cur_bc.vl[i].dedicated
-				|| new_bc->vl[i].shared
-					!= cur_bc.vl[i].shared
-#else
-/*
- * Hack: if the sim does not have a shared limit, we can't easily reduce it
- * to zero to force "using shared credits bits" to go to zero, so do the
- * next best thing: say all the VLs are changing, which will zero the
- * shared credit limit on all VLs, removing all use of shared space
- * and allowing the wait so succeed.
- */  
-		    1
-#endif
-					) {
+				|| this_shared_changing) {
 			changing[i] = 1;
 			changing_mask |= stat_mask;
 			change_count++;
@@ -4870,8 +4869,9 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	 * Start the credit change algorithm.
 	 */
 	use_all_mask = 0;
-	if (be16_to_cpu(new_bc->overall_shared_limit) <
-			be16_to_cpu(cur_bc.overall_shared_limit)) {
+	if ((be16_to_cpu(new_bc->overall_shared_limit) <
+				be16_to_cpu(cur_bc.overall_shared_limit))
+			|| any_shared_changing) {
 		set_global_shared(dd, 0);
 		cur_bc.overall_shared_limit = 0;
 		use_all_mask = 1;
