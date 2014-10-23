@@ -1933,7 +1933,7 @@ static int qib_user_add(struct hfi_devdata *dd)
 
 	if (create_ui) {
 		snprintf(name, sizeof(name),
-			 "%s%d_ui", class_name(), dd->unit);
+			 "%s_ui%d", class_name(), dd->unit);
 		ret = hfi_cdev_init(dd->unit + UI_OFFSET, name, &ui_file_ops,
 				    &dd->ui_cdev, &dd->ui_device);
 		if (ret)
