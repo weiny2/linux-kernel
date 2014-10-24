@@ -115,6 +115,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	const struct hfi_cmd __user *ucmd;
 	struct hfi_cmd cmd;
 	struct hfi_cq_assign_args cq_assign;
+	struct hfi_cq_update_args cq_update;
 	struct hfi_cq_release_args cq_release;
 	struct hfi_dlid_assign_args dlid_assign;
 	struct hfi_ptl_attach_args ptl_attach;
@@ -146,6 +147,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy_in = sizeof(cq_assign);
 		copy_out = copy_in;
 		dest = &cq_assign;
+		break;
+	case HFI_CMD_CQ_UPDATE:
+		copy_in = sizeof(cq_update);
+		dest = &cq_update;
 		break;
 	case HFI_CMD_CQ_RELEASE:
 		copy_in = sizeof(cq_release);
@@ -207,6 +212,9 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	switch (cmd.type) {
 	case HFI_CMD_CQ_ASSIGN:
 		ret = hfi_cq_assign(ud, &cq_assign);
+		break;
+	case HFI_CMD_CQ_UPDATE:
+		ret = hfi_cq_update(ud, &cq_update);
 		break;
 	case HFI_CMD_CQ_RELEASE:
 		ret = hfi_cq_release(ud, cq_release.cq_idx);

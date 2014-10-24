@@ -220,19 +220,13 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 	/* TODO - Drain or Reset CQ */
 }
 
-/* 
- * Write CSRs to configure a TX and RX Command Queue.
- * Authentication Tuple UIDs have been pre-validated by caller.
- */
-void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
-		   struct hfi_auth_tuple *auth_table)
+void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
+			  struct hfi_auth_tuple *auth_table)
 {
 	struct hfi_devdata *dd = ud->devdata;
 	int i;
 	u32 offset;
 	TX_CQ_AUTHENTICATION_CSR_t cq_auth = {.val = 0};
-	TX_CQ_CONFIG_CSR_t tx_cq_config = {.val = 0};
-	RX_CQ_CONFIG_CSR_t rx_cq_config = {.val = 0};
 
 	/* write AUTH tuples */
 	offset = FXR_TX_CQ_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
@@ -245,6 +239,21 @@ void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 		write_csr(dd, offset, cq_auth.val);
 		offset += 8;
 	}
+}
+
+/* 
+ * Write CSRs to configure a TX and RX Command Queue.
+ * Authentication Tuple UIDs have been pre-validated by caller.
+ */
+void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
+		   struct hfi_auth_tuple *auth_table)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	u32 offset;
+	TX_CQ_CONFIG_CSR_t tx_cq_config = {.val = 0};
+	RX_CQ_CONFIG_CSR_t rx_cq_config = {.val = 0};
+
+	hfi_cq_config_tuples(ud, cq_idx, auth_table);
 
 	/* set TX CQ config, enable */
 	tx_cq_config.ENABLE = 1;

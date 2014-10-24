@@ -182,8 +182,11 @@ int hfi_user_cleanup(struct hfi_userdata *dd);
 
 void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 		   struct hfi_auth_tuple *auth_table);
+void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
+			  struct hfi_auth_tuple *auth_table);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
 int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
+int hfi_cq_update(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update);
 int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx);
 int hfi_dlid_assign(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign);
 int hfi_dlid_release(struct hfi_userdata *ud);

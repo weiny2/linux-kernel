@@ -69,33 +69,26 @@ static int hfi_cq_assign_next(struct hfi_userdata *ud,
 	return 0;
 }
 
-int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
+static int hfi_cq_validate_tuples(struct hfi_userdata *ud,
+				  struct hfi_auth_tuple *auth_table)
 {
-	struct hfi_devdata *dd = ud->devdata;
-	u64 addr;
-	int cq_idx, i, j, ret;
-	unsigned long flags;
+	int i, j;
 	u32 auth_uid, last_job_uid = HFI_UID_ANY;
-
-	/* verify we are attached to Portals */
-	if (ud->ptl_pid == HFI_PID_NONE)
-		return -EPERM;
 
 	/* validate auth_tuples */
 	/* TODO - some rework here when we fully understand UID management */
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		auth_uid = cq_assign->auth_table[i].uid;
+		auth_uid = auth_table[i].uid;
 
 		/* user may request to let driver select UID */
 		if (auth_uid == HFI_UID_ANY || auth_uid == 0)
-			auth_uid = cq_assign->auth_table[i].uid = ud->ptl_uid;
+			auth_uid = auth_table[i].uid = ud->ptl_uid;
 
 		/* if job_launcher didn't set UIDs, this must match default */
 		if (ud->auth_mask == 0) {
 			if (auth_uid != ud->ptl_uid)
 				return -EINVAL;
-			else
-				continue;
+			continue;
 		}
 
 		/* else look for match in job_launcher set UIDs, 
@@ -112,6 +105,24 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 		if (j == HFI_NUM_AUTH_TUPLES)
 			return -EINVAL;
 	}
+
+	return 0;
+}
+
+int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	u64 addr;
+	int cq_idx, ret;
+	unsigned long flags;
+
+	/* verify we are attached to Portals */
+	if (ud->ptl_pid == HFI_PID_NONE)
+		return -EPERM;
+
+	ret = hfi_cq_validate_tuples(ud, cq_assign->auth_table);
+	if (ret)
+		return ret;
 
 	spin_lock_irqsave(&dd->cq_lock, flags);
 	ret = hfi_cq_assign_next(ud, ud->ptl_pid, &cq_idx);
@@ -132,6 +143,29 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 
 	/* write CQ config in HFI CSRs */
 	hfi_cq_config(ud, cq_idx, dd->cq_head_base, cq_assign->auth_table);
+
+	return 0;
+}
+
+int hfi_cq_update(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	int ret = 0;
+
+	/* verify we are attached to Portals */
+	if (ud->ptl_pid == HFI_PID_NONE)
+		return -EPERM;
+
+	/* verify we own specified CQ */
+	if (ud->ptl_pid != dd->cq_pair[cq_update->cq_idx])
+		return -EINVAL;
+
+	ret = hfi_cq_validate_tuples(ud, cq_update->auth_table);
+	if (ret)
+		return ret;
+
+	/* write CQ tuple config in HFI CSRs */
+	hfi_cq_config_tuples(ud, cq_update->cq_idx, cq_update->auth_table);
 
 	return 0;
 }
