@@ -95,6 +95,8 @@
 #define KDETH_TID_MASK            0x3ff
 #define KDETH_TIDCTRL_SHIFT       26
 #define KDETH_TIDCTRL_MASK        0x3
+#define KDETH_INTR_SHIFT          28
+#define KDETH_INTR_MASK           0x1
 #define KDETH_SH_SHIFT            29
 #define KDETH_SH_MASK             0x1
 #define KDETH_HCRC_UPPER_SHIFT    16
@@ -1403,9 +1405,12 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 		val = (cpu_to_le16(EXP_TID_GET(tidval, CTRL) & 0x3) << 10) |
 			cpu_to_le16(EXP_TID_GET(tidval, IDX) & 0x3ff);
 		/* Clear KDETH.SH on last packet */
-		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
+		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT)) {
+			val |= KDETH_GET(hdr->kdeth.ver_tid_offset, INTR) >> 16;
 			val &= ~(1U << 13);
-		AHG_HEADER_SET(req->ahg, diff, 7, 16, 14, val);
+			AHG_HEADER_SET(req->ahg, diff, 7, 16, 14, val);
+		} else
+			AHG_HEADER_SET(req->ahg, diff, 7, 16, 12, val);
 	}
 
 	trace_hfi_sdma_user_header_ahg(pq->dd, pq->ctxt, pq->subctxt,
