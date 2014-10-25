@@ -24,8 +24,10 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/cpumask.h>
 #include <linux/slab.h>
 #include <linux/nd.h>
+#include "nd.h"
 
 static DEFINE_IDA(pmem_ida);
 
@@ -36,6 +38,7 @@ static DEFINE_IDA(pmem_ida);
 struct pmem_device {
 	struct request_queue	*pmem_queue;
 	struct gendisk		*pmem_disk;
+	struct nd_io		ndio;
 
 	/* One contiguous memory region per device */
 	phys_addr_t		phys_addr;
@@ -195,6 +198,26 @@ static const struct block_device_operations pmem_fops = {
 
 static int pmem_major;
 
+static int pmem_rw_bytes(struct nd_io *ndio, void *buf, size_t offset,
+		size_t n, unsigned long flags)
+{
+	struct pmem_device *pmem = container_of(ndio, typeof(*pmem), ndio);
+	int rw = nd_data_dir(flags);
+
+	if (unlikely(offset + n > pmem->size)) {
+		dev_WARN_ONCE(ndio->dev, 1, "%s: request out of range\n",
+				__func__);
+		return -EFAULT;
+	}
+
+	if (rw == READ)
+		memcpy(buf, pmem->virt_addr + offset, n);
+	else
+		memcpy(pmem->virt_addr + offset, buf, n);
+
+	return 0;
+}
+
 static int nd_pmem_probe(struct device *dev)
 {
 	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
@@ -254,8 +277,13 @@ static int nd_pmem_probe(struct device *dev)
 	sprintf(disk->disk_name, "pmem%d", pmem->id);
 	set_capacity(disk, disk_sectors);
 
+	nd_bus_lock(dev);
 	add_disk(disk);
 	dev_set_drvdata(dev, pmem);
+	nd_init_ndio(&pmem->ndio, pmem_rw_bytes, dev, disk,
+			num_possible_cpus(), 0);
+	nd_register_ndio(&pmem->ndio);
+	nd_bus_unlock(dev);
 
 	return 0;
 
@@ -277,6 +305,7 @@ static int nd_pmem_remove(struct device *dev)
 	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
 	struct pmem_device *pmem = dev_get_drvdata(dev);
 
+	nd_unregister_ndio(&pmem->ndio);
 	del_gendisk(pmem->pmem_disk);
 	blk_cleanup_queue(pmem->pmem_queue);
 	iounmap(pmem->virt_addr);
