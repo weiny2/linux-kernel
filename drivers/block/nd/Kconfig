@@ -76,6 +76,22 @@ config NFIT_TEST
 
 	  Say N unless you are doing development of the 'nd' subsystem.
 
+config BLK_DEV_PMEM
+	tristate "PMEM: Persistent memory block device support"
+	depends on ND_CORE
+	default ND_CORE
+	help
+	  Memory for PMEM is described by an NFIT (NVDIMM Firmware
+	  Interface Table).  This table is either furnished by the
+	  platform (see CONFIG_NFIT_ACPI), or it is custom defined by
+	  the ndctl utility (see CONFIG_NFIT_LOCAL).  This driver
+	  converts these persistent memory ranges into block devices
+	  that are capable of support DAX (direct-access) file system
+	  extensions.  See Documentation/blockdev/nd.txt for more
+	  details.
+
+	  Say Y if you want to use a NVDIMM described by NFIT
+
 config ND_BTT_DEVS
 	def_bool y
 
