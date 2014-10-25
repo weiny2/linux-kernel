@@ -22,8 +22,8 @@
 static DEFINE_IDA(dimm_ida);
 
 /*
- * Retrieve bus and dimm handle and return if this bus supports format
- * interface code1 commands
+ * Retrieve bus and dimm handle and return if this bus supports
+ * get_config_data commands
  */
 static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
 		u32 *nfit_handle)
@@ -37,10 +37,9 @@ static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
 	*nd_bus = walk_to_nd_bus(&nd_dimm->dev);
 	if (*nd_bus == NULL)
 		return -EINVAL;
-	if ((*nd_bus)->format_interface_code != 1)
-		return -ENXIO;
 	nfit_desc = (*nd_bus)->nfit_desc;
-	if (!nfit_desc->nfit_ctl)
+	if (!test_bit(NFIT_CMD_GET_CONFIG_DATA, &nfit_desc->dsm_mask)
+			|| !nfit_desc->nfit_ctl)
 		return -ENXIO;
 
 	nfit_mem = nd_dimm->nfit_mem;

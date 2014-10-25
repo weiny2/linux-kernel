@@ -150,8 +150,6 @@ static void *nd_bus_new(struct device *parent,
 	init_waitqueue_head(&nd_bus->deferq);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
 	mutex_init(&nd_bus->reconfig_mutex);
-	if (test_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags))
-		nd_bus->format_interface_code = 1;
 	if (nd_bus->id < 0) {
 		kfree(nd_bus);
 		return NULL;
@@ -411,7 +409,7 @@ static __init int nd_core_init(void)
 	BUILD_BUG_ON(sizeof(struct nfit_mem) != 48);
 	BUILD_BUG_ON(sizeof(struct nfit_idt) != 20);
 	BUILD_BUG_ON(sizeof(struct nfit_smbios) != 8);
-	BUILD_BUG_ON(sizeof(struct nfit_dcr) != 56);
+	BUILD_BUG_ON(sizeof(struct nfit_dcr) != 72);
 	BUILD_BUG_ON(sizeof(struct nfit_bdw) != 40);
 	BUILD_BUG_ON(sizeof(struct nfit_flush) != 24);
 

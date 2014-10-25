@@ -32,7 +32,6 @@ struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;
 	struct completion registration;
 	struct module *module;
-	int format_interface_code;
 	wait_queue_head_t deferq;
 	struct list_head deferred;
 	struct list_head memdevs;

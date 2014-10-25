@@ -1,5 +1,5 @@
 /*
- * NVDIMM Firmware Interface Table (v0.8s)
+ * NVDIMM Firmware Interface Table (v0.8s8)
  *
  * Copyright(c) 2013-2014 Intel Corporation. All rights reserved.
  *
@@ -30,7 +30,15 @@ enum {
 	NFIT_SPA_PM = 1,
 	NFIT_SPA_DCR = 2,
 	NFIT_SPA_BDW = 3,
-	NFIT_FLAG_FIC1_CAP = 0,
+	NFIT_SPAF_HOT_ADD = 1 << 0,
+	NFIT_SPAF_PDVALID = 1 << 1,
+	NFIT_MEMF_SAVE_FAIL = 1 << 0,
+	NFIT_MEMF_RESTORE_FAIL = 1 << 1,
+	NFIT_MEMF_FLUSH_FAIL = 1 << 2,
+	NFIT_MEMF_ARM_READY = 1 << 3,
+	NFIT_MEMF_SMART_READY = 1 << 4,
+	NFIT_DCRF_BUFFERED = 1 << 0,
+	NFIT_DCRF_NOTIFY = 1 << 1,
 };
 
 /**
@@ -59,9 +67,9 @@ struct nfit_spa {
 	__le16 type;
 	__le16 length;
 	__le16 spa_type;
+	__le16 mem_attr;
 	__le16 spa_index;
-	__u8 flags;
-	__u8 reserved[3];
+	__le16 flags;
 	__le32 proximity_domain;
 	__le64 spa_base;
 	__le64 spa_length;
@@ -83,7 +91,8 @@ struct nfit_mem {
 	__le64 region_spa;
 	__le16 idt_index;
 	__le16 interleave_ways;
-	__le32 reserved;
+	__le16 flags;
+	__le16 reserved;
 } __packed;
 
 #define NFIT_DIMM_HANDLE(node, socket, imc, chan, dimm) \
@@ -132,6 +141,10 @@ struct nfit_dcr {
 	__le16 vendor_id;
 	__le16 device_id;
 	__le16 revision_id;
+	__le16 sub_vendor_id;
+	__le16 sub_device_id;
+	__u8 sub_revision_id;
+	__u8 reserved[3];
 	__le16 fic;
 	__le16 num_bdw;
 	__le64 dcr_size;
@@ -139,6 +152,8 @@ struct nfit_dcr {
 	__le64 cmd_size;
 	__le64 status_offset;
 	__le64 status_size;
+	__le16 flags;
+	__u8 reserved2[6];
 } __packed;
 
 /**
@@ -166,7 +181,7 @@ struct nfit_flush {
 	__le32 nfit_dev;
 	__le32 nfit_mask;
 	__le16 num_flush;
-	__le16 num_flush_valid;
+	__le16 reserved;
 	__le64 flush_addr[1];
 } __packed;
 
@@ -174,7 +189,7 @@ struct nfit_bus_descriptor;
 typedef int (*nfit_ctl_fn)(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int cmd, void *buf, unsigned int buf_len);
 struct nfit_bus_descriptor {
-	unsigned long flags;
+	unsigned long dsm_mask;
 	void __iomem *nfit_base;
 	size_t nfit_size;
 	char *provider_name;

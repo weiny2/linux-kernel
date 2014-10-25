@@ -413,15 +413,6 @@ static ssize_t provider_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(provider);
 
-static ssize_t format_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct nd_bus *nd_bus = to_nd_bus(dev->parent);
-
-	return sprintf(buf, "%d\n", nd_bus->format_interface_code);
-}
-static DEVICE_ATTR_RO(format);
-
 static ssize_t revision_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -443,28 +434,11 @@ static DEVICE_ATTR_RO(wait_probe);
 static struct attribute *nd_bus_attributes[] = {
 	&dev_attr_wait_probe.attr,
 	&dev_attr_provider.attr,
-	&dev_attr_format.attr,
 	&dev_attr_revision.attr,
 	NULL,
 };
 
-static umode_t nd_bus_attr_visible(struct kobject *kobj, struct attribute *a, int n)
-{
-	struct device *dev = container_of(kobj, struct device, kobj);
-	struct nd_bus *nd_bus = to_nd_bus(dev->parent);
-
-	/*
-	 * if core and the bus descriptor don't agree on a format
-	 * interface, hide the 'format' attribute, control messages will
-	 * be disabled.
-	 */
-	if (a == &dev_attr_format.attr && !nd_bus->format_interface_code)
-		return 0;
-	return a->mode;
-}
-
 static struct attribute_group nd_bus_attribute_group = {
-	.is_visible = nd_bus_attr_visible,
 	.attrs = nd_bus_attributes,
 };
 
@@ -531,11 +505,8 @@ static int __nd_ioctl(struct nd_bus *nd_bus, int read_only, unsigned int cmd,
 	void *buf = NULL;
 	int rc;
 
-	/*
-	 * validate the command buffer according to
-	 * format-interface-code1 expectations
-	 */
-	if (nd_bus->format_interface_code != 1)
+	/* check if the command is supported */
+	if (!test_bit(_IOC_NR(cmd), &nfit_desc->dsm_mask))
 		return -ENXIO;
 
 	/* fail write commands (when read-only), or unknown commands */
