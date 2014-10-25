@@ -15,6 +15,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/radix-tree.h>
 #include <linux/module.h>
+#include <linux/ndctl.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include "nfit.h"
@@ -137,7 +138,83 @@ static struct nfit_test *to_nfit_test(struct device *dev)
 static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int cmd, void *buf, unsigned int buf_len)
 {
-	return -EOPNOTSUPP;
+	struct nfit_test *t = container_of(nfit_desc, typeof(*t), nfit_desc);
+	struct device *dev = &t->pdev.dev;
+	u32 nfit_handle;
+	int i, rc;
+
+	dev_dbg(dev, "%s: cmd: %d buf_len: %d\n", __func__, cmd, buf_len);
+	switch (cmd) {
+        case NFIT_CMD_GET_CONFIG_SIZE:
+        case NFIT_CMD_GET_CONFIG_DATA:
+        case NFIT_CMD_SET_CONFIG_DATA:
+		if (buf_len < sizeof(u32))
+			return -EINVAL;
+		nfit_handle = *((u32 *) buf);
+		break;
+	default:
+		return -ENOTTY;
+	};
+
+	for (i = 0; i < ARRAY_SIZE(handle); i++)
+		if (nfit_handle == handle[i])
+			break;
+	if (i >= ARRAY_SIZE(handle))
+		return -EINVAL;
+
+	switch (cmd) {
+        case NFIT_CMD_GET_CONFIG_SIZE: {
+		struct nfit_cmd_get_config_size *nfit_cmd = buf;
+
+		if (buf_len < sizeof(*nfit_cmd))
+			return -EINVAL;
+		nfit_cmd->status = 0;
+		nfit_cmd->config_size = LABEL_SIZE;
+		nfit_cmd->optimal_io_size = LABEL_SIZE;
+		rc = 0;
+		break;
+        }
+	case NFIT_CMD_GET_CONFIG_DATA: {
+		struct nfit_cmd_get_config_data_hdr *nfit_cmd = buf;
+		unsigned int len, offset = nfit_cmd->in_offset;
+
+		if (buf_len < sizeof(*nfit_cmd))
+			return -EINVAL;
+		if (offset >= LABEL_SIZE)
+			return -EINVAL;
+		if (nfit_cmd->in_length + sizeof(*nfit_cmd) > buf_len)
+			return -EINVAL;
+
+		nfit_cmd->status = 0;
+		len = min(nfit_cmd->in_length, LABEL_SIZE - offset);
+		memcpy(nfit_cmd->out_buf, t->label[i] + offset, len);
+		rc = buf_len - sizeof(*nfit_cmd) - len;
+		break;
+	}
+        case NFIT_CMD_SET_CONFIG_DATA: {
+		struct nfit_cmd_set_config_hdr *nfit_cmd = buf;
+		unsigned int len, offset = nfit_cmd->in_offset;
+		u32 *status;
+
+		if (buf_len < sizeof(*nfit_cmd))
+			return -EINVAL;
+		if (offset >= LABEL_SIZE)
+			return -EINVAL;
+		if (nfit_cmd->in_length + sizeof(*nfit_cmd) + 4 > buf_len)
+			return -EINVAL;
+
+		status = buf + nfit_cmd->in_length + sizeof(*nfit_cmd);
+		*status = 0;
+		len = min(nfit_cmd->in_length, LABEL_SIZE - offset);
+		memcpy(t->label[i] + offset, nfit_cmd->in_buf, len);
+		rc = buf_len - sizeof(*nfit_cmd) - len;
+		break;
+	}
+	default:
+		return -ENOTTY;
+	}
+
+	return rc;
 }
 
 static RADIX_TREE(nfit_radix, GFP_KERNEL);
@@ -276,6 +353,7 @@ static int nfit_test0_alloc(struct nfit_test *t)
 		t->label[i] = alloc_coherent(dev, LABEL_SIZE, &t->label_dma[i]);
 		if (!t->label[i])
 			return -ENOMEM;
+		sprintf(t->label[i], "label%d", i);
 	}
 
 	for (i = 0; i < NUM_DCR; i++) {
@@ -700,7 +778,9 @@ static void nfit_test0_setup(struct nfit_test *t)
 
 	nfit_desc = &t->nfit_desc;
 	nfit_desc->nfit_ctl = nfit_test_ctl;
-	set_bit(NFIT_FLAG_FIC1_CAP, &nfit_desc->flags);
+	set_bit(NFIT_CMD_GET_CONFIG_SIZE, &nfit_desc->dsm_mask);
+	set_bit(NFIT_CMD_GET_CONFIG_DATA, &nfit_desc->dsm_mask);
+	set_bit(NFIT_CMD_SET_CONFIG_DATA, &nfit_desc->dsm_mask);
 }
 
 static void nfit_test1_setup(struct nfit_test *t)

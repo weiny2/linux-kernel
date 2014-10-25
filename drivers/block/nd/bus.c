@@ -403,6 +403,20 @@ static const char *nfit_desc_provider(struct device *parent,
 		return "unknown";
 }
 
+static ssize_t commands_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int cmd, len = 0;
+	struct nd_bus *nd_bus = to_nd_bus(dev->parent);
+	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
+
+	for_each_set_bit(cmd, &nfit_desc->dsm_mask, BITS_PER_LONG)
+		len += sprintf(buf + len, "%s ", nfit_cmd_name(cmd));
+	len += sprintf(buf + len, "\n");
+	return len;
+}
+static DEVICE_ATTR_RO(commands);
+
 static ssize_t provider_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -432,6 +446,7 @@ static ssize_t wait_probe_show(struct device *dev,
 static DEVICE_ATTR_RO(wait_probe);
 
 static struct attribute *nd_bus_attributes[] = {
+	&dev_attr_commands.attr,
 	&dev_attr_wait_probe.attr,
 	&dev_attr_provider.attr,
 	&dev_attr_revision.attr,
@@ -511,54 +526,30 @@ static int __nd_ioctl(struct nd_bus *nd_bus, int read_only, unsigned int cmd,
 
 	/* fail write commands (when read-only), or unknown commands */
 	switch (cmd) {
-	case NFIT_IOCTL_SCRUB: {
-		struct nfit_cmd_scrub nfit_scrub;
-
-		if (!access_ok(VERIFY_WRITE, p, sizeof(nfit_scrub)))
-			return -EFAULT;
-		if (copy_from_user(&nfit_scrub, p, sizeof(nfit_scrub)))
-			return -EFAULT;
-		/* might as well calculate the buf_len here */
-		buf_len = sizeof(nfit_scrub) + nfit_scrub.out_length;
-
-		if (read_only && nfit_scrub.cmd == NFIT_ARS_START)
-			return -EPERM;
-		else if (nfit_scrub.cmd == NFIT_ARS_QUERY)
-			break;
-		else
-			return -EPERM;
-		break;
-	}
-	case NFIT_IOCTL_SET_CONFIG_DATA:
+	case NFIT_IOCTL_SMART:
 	case NFIT_IOCTL_VENDOR:
+	case NFIT_IOCTL_SET_CONFIG_DATA:
+	case NFIT_IOCTL_ARS_START:
+	case NFIT_IOCTL_ARM:
 		if (read_only)
 			return -EPERM;
 		/* fallthrough */
-	case NFIT_IOCTL_SMART:
 	case NFIT_IOCTL_GET_CONFIG_SIZE:
 	case NFIT_IOCTL_GET_CONFIG_DATA:
+	case NFIT_IOCTL_ARS_CAP:
+	case NFIT_IOCTL_ARS_QUERY:
+	case NFIT_IOCTL_SMART_THRESHOLD:
 		break;
 	default:
-		return -EPERM;
+		pr_debug("%s: unknown cmd: %d\n", __func__, _IOC_NR(cmd));
+		return -ENOTTY;
 	}
 
 	/* validate input buffer / determine size */
 	switch (cmd) {
-	case NFIT_IOCTL_SCRUB:
-		if (WARN_ON(buf_len == 0))
-			return -EPERM;
+	case NFIT_IOCTL_SMART:
+		buf_len = sizeof(struct nfit_cmd_smart);
 		break;
-	case NFIT_IOCTL_SET_CONFIG_DATA: {
-		struct nfit_cmd_set_config_hdr nfit_cmd_set;
-
-		if (!access_ok(VERIFY_WRITE, p, sizeof(nfit_cmd_set)))
-			return -EFAULT;
-		if (copy_from_user(&nfit_cmd_set, p, sizeof(nfit_cmd_set)))
-			return -EFAULT;
-		/* include input buffer size and trailing status */
-		buf_len = sizeof(nfit_cmd_set) + nfit_cmd_set.in_length + 4;
-		break;
-	}
 	case NFIT_IOCTL_VENDOR: {
 		struct nfit_cmd_vendor_hdr nfit_cmd_v;
 		struct nfit_cmd_vendor_tail nfit_cmd_vt;
@@ -576,24 +567,66 @@ static int __nd_ioctl(struct nd_bus *nd_bus, int read_only, unsigned int cmd,
 		buf_len += sizeof(nfit_cmd_vt) + nfit_cmd_vt.out_length;
 		break;
 	}
-	case NFIT_IOCTL_SMART:
-		buf_len = sizeof(struct nfit_cmd_smart);
+	case NFIT_IOCTL_SET_CONFIG_DATA: {
+		struct nfit_cmd_set_config_hdr nfit_cmd_set;
+
+		if (!access_ok(VERIFY_WRITE, p, sizeof(nfit_cmd_set)))
+			return -EFAULT;
+		if (copy_from_user(&nfit_cmd_set, p, sizeof(nfit_cmd_set)))
+			return -EFAULT;
+		/* include input buffer size and trailing status */
+		buf_len = sizeof(nfit_cmd_set) + nfit_cmd_set.in_length + 4;
+		break;
+	}
+	case NFIT_IOCTL_ARS_START:
+		buf_len = sizeof(struct nfit_cmd_ars_start);
+		break;
+	case NFIT_IOCTL_ARM:
+		buf_len = sizeof(struct nfit_cmd_arm);
 		break;
 	case NFIT_IOCTL_GET_CONFIG_SIZE:
 		buf_len = sizeof(struct nfit_cmd_get_config_size);
 		break;
-	case NFIT_IOCTL_GET_CONFIG_DATA:
-		buf_len = sizeof(struct nfit_cmd_get_config_data);
+	case NFIT_IOCTL_GET_CONFIG_DATA: {
+		struct nfit_cmd_get_config_data_hdr nfit_cmd_get;
+
+		if (!access_ok(VERIFY_WRITE, p, sizeof(nfit_cmd_get)))
+			return -EFAULT;
+		if (copy_from_user(&nfit_cmd_get, p, sizeof(nfit_cmd_get)))
+			return -EFAULT;
+		buf_len = sizeof(nfit_cmd_get) + nfit_cmd_get.in_length;
+		break;
+	}
+	case NFIT_IOCTL_ARS_CAP:
+		buf_len = sizeof(struct nfit_cmd_ars_cap);
+		break;
+	case NFIT_IOCTL_ARS_QUERY: {
+		struct nfit_cmd_ars_query nfit_cmd_query;
+
+		if (!access_ok(VERIFY_WRITE, p, sizeof(nfit_cmd_query)))
+			return -EFAULT;
+		if (copy_from_user(&nfit_cmd_query, p, sizeof(nfit_cmd_query)))
+			return -EFAULT;
+		buf_len = sizeof(nfit_cmd_query) + nfit_cmd_query.out_length
+			- offsetof(struct nfit_cmd_ars_query, out_length);
+		break;
+	}
+	case NFIT_IOCTL_SMART_THRESHOLD:
+		buf_len = sizeof(struct nfit_cmd_smart_threshold);
 		break;
 	default:
-		return -EPERM;
+		pr_debug("%s: unknown cmd: %d\n", __func__, _IOC_NR(cmd));
+		return -ENOTTY;
 	}
 
 	if (!access_ok(VERIFY_WRITE, p, sizeof(buf_len)))
 		return -EFAULT;
 
-	if (buf_len > ND_IOCTL_MAX_BUFLEN)
+	if (buf_len > ND_IOCTL_MAX_BUFLEN) {
+		pr_debug("%s: buf_len: %zd > %d\n",
+				__func__, buf_len, ND_IOCTL_MAX_BUFLEN);
 		return -EINVAL;
+	}
 
 	if (buf_len < KMALLOC_MAX_SIZE)
 		buf = kmalloc(buf_len, GFP_KERNEL);

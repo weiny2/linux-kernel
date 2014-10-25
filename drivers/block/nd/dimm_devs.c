@@ -78,7 +78,7 @@ int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 EXPORT_SYMBOL(nd_dimm_get_config_size);
 
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
-		struct nfit_cmd_get_config_data *cmd, size_t len)
+		struct nfit_cmd_get_config_data_hdr *cmd, size_t len)
 {
 	u32 nfit_handle;
 	struct nd_bus *nd_bus;

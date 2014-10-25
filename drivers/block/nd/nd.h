@@ -25,7 +25,7 @@ struct nd_dimm {
 	struct device dev;
 	int config_size;
 	int id;
-	struct nfit_cmd_get_config_data *data;
+	struct nfit_cmd_get_config_data_hdr *data;
 };
 
 struct nd_mapping {
@@ -115,7 +115,7 @@ struct nd_region *to_nd_region(struct device *dev);
 int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_size *cmd);
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
-		struct nfit_cmd_get_config_data *cmd, size_t len);
+		struct nfit_cmd_get_config_data_hdr *cmd, size_t len);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
 void nd_bus_lock(struct device *dev);
 void nd_bus_unlock(struct device *dev);

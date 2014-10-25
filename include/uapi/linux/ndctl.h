@@ -18,8 +18,7 @@
 struct nfit_cmd_smart {
 	__u32 nfit_handle;
 	__u32 status;
-	__u32 out_length;
-	__u8 out_buf[0];
+	__u8 data[8];
 } __packed;
 
 struct nfit_cmd_get_config_size {
@@ -29,12 +28,11 @@ struct nfit_cmd_get_config_size {
 	__u32 optimal_io_size;
 } __packed;
 
-struct nfit_cmd_get_config_data {
+struct nfit_cmd_get_config_data_hdr {
 	__u32 nfit_handle;
 	__u32 in_offset;
 	__u32 in_length;
 	__u32 status;
-	__u32 out_length;
 	__u8 out_buf[0];
 } __packed;
 
@@ -57,25 +55,78 @@ struct nfit_cmd_vendor_tail {
 	__u8 out_buf[0];
 } __packed;
 
-struct nfit_cmd_scrub {
-	__u32 cmd;
-	__u64 start_addr;
+struct nfit_cmd_ars_cap {
+	__u64 address;
 	__u64 length;
 	__u32 status;
+} __packed;
+
+struct nfit_cmd_ars_start {
+	__u64 address;
+	__u64 length;
+	__u16 type;
+	__u32 status;
+} __packed;
+
+struct nfit_cmd_ars_query {
+	__u32 status;
 	__u16 out_length;
-	__u64 out_buf[0];
+	__u64 address;
+	__u64 length;
+	__u16 type;
+	__u32 num_records;
+	struct nfit_ars_record {
+		__u32 nfit_handle;
+		__u32 flags;
+		__u64 err_address;
+		__u64 mask;
+	} __packed records[0];
+} __packed;
+
+struct nfit_cmd_arm {
+	__u32 nfit_handle;
+	__u32 status;
+} __packed;
+
+struct nfit_cmd_smart_threshold {
+	__u32 nfit_handle;
+	__u32 status;
+	__u8 data[8];
 } __packed;
 
 enum {
+	NFIT_CMD_IMPLEMENTED = 0,
 	NFIT_CMD_SMART = 1,
 	NFIT_CMD_GET_CONFIG_SIZE = 2,
 	NFIT_CMD_GET_CONFIG_DATA = 3,
 	NFIT_CMD_SET_CONFIG_DATA = 4,
 	NFIT_CMD_VENDOR = 5,
-	NFIT_CMD_SCRUB = 6,
-	NFIT_ARS_START = 1,
-	NFIT_ARS_QUERY = 2,
+	NFIT_CMD_ARS_CAP = 6,
+	NFIT_CMD_ARS_START = 7,
+	NFIT_CMD_ARS_QUERY = 8,
+	NFIT_CMD_ARM = 9,
+	NFIT_CMD_SMART_THRESHOLD = 10,
 };
+
+static inline const char *nfit_cmd_name(int cmd)
+{
+	static const char *names[] = {
+		[NFIT_CMD_SMART] = "smart",
+		[NFIT_CMD_GET_CONFIG_SIZE] = "get_size",
+		[NFIT_CMD_GET_CONFIG_DATA] = "get_data",
+		[NFIT_CMD_SET_CONFIG_DATA] = "set_data",
+		[NFIT_CMD_VENDOR] = "vendor",
+		[NFIT_CMD_ARS_CAP] = "ars_cap",
+		[NFIT_CMD_ARS_START] = "ars_start",
+		[NFIT_CMD_ARS_QUERY] = "ars_query",
+		[NFIT_CMD_ARM] = "arm",
+		[NFIT_CMD_SMART_THRESHOLD] = "smart_t",
+	};
+
+	if (cmd >= NFIT_CMD_SMART && cmd <= NFIT_CMD_SMART_THRESHOLD)
+		return names[cmd];
+	return "unknown";
+}
 
 #define ND_IOCTL 'N'
 
@@ -86,7 +137,7 @@ enum {
 					struct nfit_cmd_get_config_size)
 
 #define NFIT_IOCTL_GET_CONFIG_DATA	_IOWR(ND_IOCTL, NFIT_CMD_GET_CONFIG_DATA,\
-					struct nfit_cmd_get_config_data)
+					struct nfit_cmd_get_config_data_hdr)
 
 #define NFIT_IOCTL_SET_CONFIG_DATA	_IOWR(ND_IOCTL, NFIT_CMD_SET_CONFIG_DATA,\
 					struct nfit_cmd_set_config_hdr)
@@ -94,8 +145,21 @@ enum {
 #define NFIT_IOCTL_VENDOR		_IOWR(ND_IOCTL, NFIT_CMD_VENDOR,\
 					struct nfit_cmd_vendor_hdr)
 
-#define NFIT_IOCTL_SCRUB		_IOWR(ND_IOCTL, NFIT_CMD_SCRUB,\
-					struct nfit_cmd_scrub)
+#define NFIT_IOCTL_ARS_CAP		_IOWR(ND_IOCTL, NFIT_CMD_ARS_CAP,\
+					struct nfit_cmd_ars_cap)
+
+#define NFIT_IOCTL_ARS_START		_IOWR(ND_IOCTL, NFIT_CMD_ARS_START,\
+					struct nfit_cmd_ars_start)
+
+#define NFIT_IOCTL_ARS_QUERY		_IOWR(ND_IOCTL, NFIT_CMD_ARS_QUERY,\
+					struct nfit_cmd_ars_query)
+
+#define NFIT_IOCTL_ARM			_IOWR(ND_IOCTL, NFIT_CMD_ARM,\
+					struct nfit_cmd_arm)
+
+#define NFIT_IOCTL_SMART_THRESHOLD	_IOWR(ND_IOCTL, NFIT_CMD_SMART_THRESHOLD,\
+					struct nfit_cmd_smart_threshold)
+
 
 #define ND_DEVICE_DIMM 1            /* nd_dimm: container for "config data" */
 #define ND_DEVICE_REGION_PMEM 2     /* nd_region: (parent of pmem namespaces) */
