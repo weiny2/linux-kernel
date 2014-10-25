@@ -356,7 +356,7 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 		struct nd_spa *nd_spa)
 {
-	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa);
 	u16 spa_type = readw(&nd_spa->nfit_spa->spa_type);
 	struct nd_region *nd_region;
 	struct device *dev;
@@ -409,7 +409,7 @@ int nd_bus_register_regions(struct nd_bus *nd_bus)
 		struct nd_region *nd_region;
 
 		spa_type = readw(&nd_spa->nfit_spa->spa_type);
-		spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		spa_index = nfit_spa_spa_index(nd_spa->nfit_spa);
 		if (spa_index == 0) {
 			dev_dbg(&nd_bus->dev, "detected invalid spa index\n");
 			continue;

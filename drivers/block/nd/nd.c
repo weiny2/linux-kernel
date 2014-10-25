@@ -33,6 +33,10 @@ static bool warn_checksum;
 module_param(warn_checksum, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(warn_checksum, "Turn checksum errors into warnings");
 
+bool old_nfit;
+module_param(old_nfit, bool, 0);
+MODULE_PARM_DESC(old_nfit, "Use 0.8s2 NFIT table format");
+
 void nd_bus_lock(struct device *dev)
 {
 	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
@@ -204,7 +208,7 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		nd_spa->nfit_spa = nfit_spa;
 		list_add_tail(&nd_spa->list, &nd_bus->spas);
 		dev_dbg(&nd_bus->dev, "%s: spa index: %d type: %s\n", __func__,
-				readw(&nfit_spa->spa_index),
+				nfit_spa_spa_index(nfit_spa),
 				spa_type_name(readw(&nfit_spa->spa_type)));
 		break;
 	}
@@ -234,7 +238,7 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		list_add_tail(&nd_dcr->list, &nd_bus->dcrs);
 		dev_dbg(&nd_bus->dev, "%s: dcr index: %d num_bdw: %d\n",
 				__func__, readw(&nfit_dcr->dcr_index),
-				readw(&nfit_dcr->num_bdw));
+				nfit_dcr_num_bdw(nfit_dcr));
 		break;
 	}
 	case NFIT_TABLE_BDW: {

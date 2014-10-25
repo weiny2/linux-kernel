@@ -17,6 +17,10 @@
 #include <linux/module.h>
 #include "nfit.h"
 
+static bool old_acpi;
+module_param(old_acpi, bool, 0);
+MODULE_PARM_DESC(old_acpi, "Search for NFIT by _CRS on _HID(ACPI0010)");
+
 enum {
 	NFIT_ACPI_NOTIFY_TABLE = 0x80,
 };
@@ -366,11 +370,81 @@ static const struct acpi_device_id nd_acpi_dimm_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, nd_acpi_dimm_ids);
 
+static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
+		void *_dev)
+{
+	struct acpi_resource_address64 address64;
+	struct nfit_bus_descriptor *nfit_desc;
+	struct acpi_device *dev = _dev;
+	struct acpi_nfit *nfit;
+	resource_size_t start;
+	acpi_status status;
+	int i;
+
+	status = acpi_resource_to_address64(resource, &address64);
+	if (ACPI_FAILURE(status))
+		return AE_CTRL_TERMINATE;
+
+	start = address64.minimum;
+	nfit = devm_kzalloc(&dev->dev, sizeof(*nfit), GFP_KERNEL);
+	if (!nfit)
+		return AE_ERROR;
+	nfit->dev = dev;
+	nfit_desc = &nfit->nfit_desc;
+	nfit_desc->nfit_size = address64.address_length;
+	nfit_desc->nfit_base = ioremap_cache(start, nfit_desc->nfit_size);
+	if (!nfit_desc->nfit_base)
+		return AE_ERROR;
+	nfit_desc->provider_name = "ACPI.NFIT";
+	nfit_desc->nfit_ctl = nd_acpi_ctl;
+
+	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
+		if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
+					NFIT_CMD_IMPLEMENTED, 1ULL << i))
+			set_bit(i, &nfit_desc->dsm_mask);
+	}
+
+	/* ACPI references one global NFIT for all devices, i.e. no parent */
+	nfit->nd_bus = nfit_bus_register(NULL, nfit_desc);
+	if (!nfit->nd_bus)
+		return AE_ERROR;
+	else {
+		dev_set_drvdata(&dev->dev, nfit);
+		return AE_OK;
+	}
+}
+
+static int legacy_nd_acpi_add(struct acpi_device *dev)
+{
+	acpi_status status;
+
+	status = acpi_walk_resources(dev->handle, METHOD_NAME__CRS,
+				     legacy_nd_acpi_add_nfit, dev);
+	if (ACPI_FAILURE(status))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int try_legacy_discovery(struct acpi_device *dev)
+{
+	int rc = legacy_nd_acpi_add(dev);
+
+	WARN_TAINT_ONCE(rc == 0, TAINT_FIRMWARE_WORKAROUND,
+			"%s: discovering NFIT by _CRS is deprecated, update bios.\n",
+			dev_name(&dev->dev));
+
+	return rc;
+}
+
 static int nd_acpi_dimm_add(struct acpi_device *dev)
 {
 	if (!nd_acpi_root) {
 		dev_err(&dev->dev, "missing ACPI.NFIT root device\n");
-		return -ENXIO;
+		if (!old_acpi)
+			return -ENXIO;
+		else
+			return try_legacy_discovery(dev);
 	}
 
 	/* TODO: add _FIT parsing */
@@ -380,6 +454,14 @@ static int nd_acpi_dimm_add(struct acpi_device *dev)
 
 static int nd_acpi_dimm_remove(struct acpi_device *dev)
 {
+	if (old_acpi) {
+		struct acpi_nfit *nfit = dev_get_drvdata(&dev->dev);
+		struct nfit_bus_descriptor *nfit_desc = &nfit->nfit_desc;
+
+		nfit_bus_unregister(nfit->nd_bus);
+		iounmap(nfit_desc->nfit_base);
+	}
+
 	return 0;
 }
 

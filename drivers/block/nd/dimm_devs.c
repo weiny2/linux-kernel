@@ -190,7 +190,7 @@ static ssize_t format_show(struct device *dev,
 {
 	struct nfit_dcr __iomem *nfit_dcr = to_nfit_dcr(dev);
 
-	return sprintf(buf, "%#x\n", readw(&nfit_dcr->fic));
+	return sprintf(buf, "%#x\n", nfit_dcr_fic(nfit_dcr));
 }
 static DEVICE_ATTR_RO(format);
 

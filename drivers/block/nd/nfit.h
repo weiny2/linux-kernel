@@ -75,6 +75,31 @@ struct nfit_spa {
 	__le64 spa_length;
 } __packed;
 
+struct nfit_spa_old {
+	__le16 type;
+	__le16 length;
+	__le16 spa_type;
+	__le16 spa_index;
+	__u8 flags;
+	__u8 reserved[3];
+	__le32 proximity_domain;
+	__le64 spa_base;
+	__le64 spa_length;
+} __packed;
+
+extern bool old_nfit;
+
+static inline u16 nfit_spa_spa_index(struct nfit_spa __iomem *nfit_spa)
+{
+	if (old_nfit && !IS_ENABLED(CONFIG_NFIT_TEST)) {
+		struct nfit_spa_old __iomem *nfit_spa_old;
+
+		nfit_spa_old = (void __iomem *) nfit_spa;
+		return readw(&nfit_spa_old->spa_index);
+	} else
+		return readw(&nfit_spa->spa_index);
+}
+
 /**
  * struct nfit_mem - Memory Device to SPA Mapping Table
  */
@@ -155,6 +180,44 @@ struct nfit_dcr {
 	__le16 flags;
 	__u8 reserved2[6];
 } __packed;
+
+struct nfit_dcr_old {
+	__le16 type;
+	__le16 length;
+	__le16 dcr_index;
+	__le16 vendor_id;
+	__le16 device_id;
+	__le16 revision_id;
+	__le16 fic;
+	__le16 num_bdw;
+	__le64 dcr_size;
+	__le64 cmd_offset;
+	__le64 cmd_size;
+	__le64 status_offset;
+	__le64 status_size;
+} __packed;
+
+static inline u16 nfit_dcr_num_bdw(struct nfit_dcr __iomem *nfit_dcr)
+{
+	if (old_nfit && !IS_ENABLED(CONFIG_NFIT_TEST)) {
+		struct nfit_dcr_old __iomem *nfit_dcr_old;
+
+		nfit_dcr_old = (void __iomem *) nfit_dcr;
+		return readw(&nfit_dcr_old->num_bdw);
+	} else
+		return readw(&nfit_dcr->num_bdw);
+}
+
+static inline u16 nfit_dcr_fic(struct nfit_dcr __iomem *nfit_dcr)
+{
+	if (old_nfit && !IS_ENABLED(CONFIG_NFIT_TEST)) {
+		struct nfit_dcr_old __iomem *nfit_dcr_old;
+
+		nfit_dcr_old = (void __iomem *) nfit_dcr;
+		return readw(&nfit_dcr_old->fic);
+	} else
+		return readw(&nfit_dcr->fic);
+}
 
 /**
  * struct nfit_bdw - NVDIMM Block Data Window Region Table
