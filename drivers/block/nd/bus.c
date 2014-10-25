@@ -78,7 +78,7 @@ static int add_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
 {
 	struct nd_defer_tracker *nd_defer;
 
-	mutex_lock(&nd_bus_list_mutex);
+	spin_lock(&nd_bus->deferred_lock);
 	nd_defer = __find_deferred_tracker(nd_bus, dev);
 	while (!nd_defer) {
 		nd_defer = kmalloc(sizeof(*nd_defer), GFP_KERNEL);
@@ -89,7 +89,7 @@ static int add_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
 		list_add_tail(&nd_defer->list, &nd_bus->deferred);
 		dev_dbg(dev, "add to defer queue\n");
 	}
-	mutex_unlock(&nd_bus_list_mutex);
+	spin_unlock(&nd_bus->deferred_lock);
 
 	return nd_defer ? 0 : -ENOMEM;
 }
@@ -98,7 +98,7 @@ static void del_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
 {
 	struct nd_defer_tracker *nd_defer;
 
-	mutex_lock(&nd_bus_list_mutex);
+	spin_lock(&nd_bus->deferred_lock);
 	nd_defer = __find_deferred_tracker(nd_bus, dev);
 	if (nd_defer) {
 		list_del_init(&nd_defer->list);
@@ -106,7 +106,7 @@ static void del_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
 		wake_up_all(&nd_bus->deferq);
 		dev_dbg(dev, "del from defer queue\n");
 	}
-	mutex_unlock(&nd_bus_list_mutex);
+	spin_unlock(&nd_bus->deferred_lock);
 }
 
 static struct module *to_bus_provider(struct device *dev)
@@ -221,8 +221,8 @@ EXPORT_SYMBOL(nd_device_register);
 static bool is_deferred_queue_empty(struct nd_bus *nd_bus)
 {
 	/* flush the wake up path */
-	mutex_lock(&nd_bus_list_mutex);
-	mutex_unlock(&nd_bus_list_mutex);
+	spin_lock(&nd_bus->deferred_lock);
+	spin_unlock(&nd_bus->deferred_lock);
 	return list_empty(&nd_bus->deferred);
 }
 

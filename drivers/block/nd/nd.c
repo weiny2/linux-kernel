@@ -146,6 +146,7 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->deferred);
 	INIT_LIST_HEAD(&nd_bus->ndios);
 	INIT_LIST_HEAD(&nd_bus->list);
+	spin_lock_init(&nd_bus->deferred_lock);
 	init_completion(&nd_bus->registration);
 	init_waitqueue_head(&nd_bus->deferq);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);

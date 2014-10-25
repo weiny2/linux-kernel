@@ -28,11 +28,17 @@ struct block_device;
 struct nd_btt;
 struct nd_io;
 
+/*
+ * List manipulation is protected by nd_bus_list_mutex, except for the
+ * deferred probe tracking list which nests under instances where
+ * nd_bus_list_mutex is locked
+ */
 struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;
 	struct completion registration;
 	struct module *module;
 	wait_queue_head_t deferq;
+	spinlock_t deferred_lock;
 	struct list_head deferred;
 	struct list_head memdevs;
 	struct list_head spas;
