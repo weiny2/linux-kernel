@@ -34,37 +34,31 @@ static void free_data(struct nd_dimm *nd_dimm)
 
 static int nd_dimm_probe(struct device *dev)
 {
+	int header_size = sizeof(struct nfit_cmd_get_config_data_hdr);
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
 	struct nfit_cmd_get_config_size cmd_size;
-	int rc;
+	int rc, config_size;
 
+	nd_dimm->config_size = -EINVAL;
 	rc = nd_dimm_get_config_size(nd_dimm, &cmd_size);
-	if (rc < 0) {
-		nd_dimm->config_size = rc;
-		return rc;
-	}
-	dev_dbg(&nd_dimm->dev, "config_size: %d\n", cmd_size.config_size);
-	if (cmd_size.config_size < SZ_256K)
+	if (rc || cmd_size.config_size + header_size > INT_MAX)
 		return -ENXIO;
 
-	/*
-	 * The label spec lists 128K as a recommended size, 256K should be enough
-	 * for the forseeable future.
-	 */
-	cmd_size.config_size = min(cmd_size.config_size, (u32) SZ_256K);
-	nd_dimm->data = kmalloc(cmd_size.config_size, GFP_KERNEL);
+	config_size = cmd_size.config_size + header_size;
+	dev_dbg(&nd_dimm->dev, "config_size: %d\n", config_size);
+	nd_dimm->data = kmalloc(config_size, GFP_KERNEL);
 	if (!nd_dimm->data)
-		nd_dimm->data = vmalloc(cmd_size.config_size);
+		nd_dimm->data = vmalloc(config_size);
 
-	if (!nd_dimm->data) {
-		nd_dimm->config_size = -ENOMEM;
-		return rc;
-	}
+	if (!nd_dimm->data)
+		return -ENOMEM;
 
-	rc = nd_dimm_get_config_data(nd_dimm, nd_dimm->data,
-			cmd_size.config_size);
-	if (rc < 0)
+	rc = nd_dimm_get_config_data(nd_dimm, nd_dimm->data, config_size);
+	if (rc) {
 		free_data(nd_dimm);
+		return rc < 0 ? rc : -ENXIO;
+	}
+	nd_dimm->config_size = config_size;
 
 	return 0;
 }

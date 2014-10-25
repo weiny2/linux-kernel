@@ -89,8 +89,9 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 		return rc;
 
 	nfit_desc = nd_bus->nfit_desc;
-	memset(cmd, 0, sizeof(*cmd));
+	memset(cmd, 0, len);
 	cmd->nfit_handle = nfit_handle;
+	cmd->in_length = len - sizeof(*cmd);
 	return nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_GET_CONFIG_DATA, cmd,
 			len);
 }
