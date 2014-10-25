@@ -10,7 +10,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/list.h>
 #include <linux/acpi.h>
 #include <linux/mutex.h>
@@ -22,9 +21,9 @@ static DEFINE_MUTEX(nd_acpi_lock);
 
 struct acpi_nfit {
 	struct nfit_bus_descriptor nfit_desc;
+	struct acpi_device *dev;
 	struct list_head list;
 	struct nd_bus *nd_bus;
-	acpi_handle handle;
 	struct kref kref;
 };
 
@@ -46,6 +45,8 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int cmd, void *buf, unsigned int buf_len)
 {
 	struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
+	acpi_handle handle = nfit->dev->handle;
+	struct device *dev = &nfit->dev->dev;
 	static const u8 uuid[] = {
 		0x66, 0x9A, 0x0C, 0x20,
 		0x00, 0x08, 0x91, 0x91,
@@ -64,9 +65,9 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	 * FIXME is the _DSM handle duplicated per DIMM or is there a
 	 * global handle we should be using?
 	 */
-	obj = acpi_evaluate_dsm(nfit->handle, uuid, 1, cmd, &argv4);
+	obj = acpi_evaluate_dsm(handle, uuid, 1, cmd, &argv4);
 	if (!obj) {
-		pr_debug("%s: _DSM failed cmd: %d\n", __func__, cmd);
+		dev_dbg(dev, "%s: _DSM failed cmd: %d\n", __func__, cmd);
 		return -EINVAL;
 	}
 
@@ -79,7 +80,8 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		else
 			rc = len;
 	} else {
-		pr_debug("%s: unknown _DSM return cmd: %d\n", __func__, cmd);
+		dev_dbg(dev, "%s: unknown _DSM return cmd: %d\n",
+				__func__, cmd);
 		rc = -EINVAL;
 	}
 	ACPI_FREE(obj);
@@ -124,7 +126,7 @@ static int __nd_acpi_add(struct acpi_device *dev)
 			break;
 		}
 		kref_init(&nfit->kref);
-		nfit->handle = dev->handle;
+		nfit->dev = dev;
 		INIT_LIST_HEAD(&nfit->list);
 		nfit_desc = &nfit->nfit_desc;
 		nfit_desc->nfit_base = (void __iomem *) tbl;
