@@ -403,7 +403,7 @@ for test in tests_to_run:
             # We may need to pass on some module parameters too
             modparms = test_info.get_mod_parms()
             if modparms != "":
-                processed_args += " --modparm " + modparms
+                processed_args += " --modparm \"" + modparms + "\""
 
             RegLib.test_log(5, "Running test: " + curr_name)
             RegLib.test_log(5, "Raw Test args: " + curr_args)
