@@ -20,7 +20,7 @@ extern struct list_head nd_bus_list;
 extern struct mutex nd_bus_list_mutex;
 
 enum {
-	/* need to set a limit somewhere, but yes, this is ludicrously big */
+	/* need to set a limit somewhere, but yes, this is likely overkill */
 	ND_IOCTL_MAX_BUFLEN = SZ_4M,
 };
 
