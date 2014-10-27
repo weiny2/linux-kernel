@@ -10,7 +10,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/device.h>
@@ -266,7 +265,8 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		dev_dbg(&nd_bus->dev, "%s: smbios\n", __func__);
 		break;
 	default:
-		pr_err("unknown table '%d' parsing nfit\n", readw(&hdr->type));
+		dev_err(&nd_bus->dev, "unknown table '%d' parsing nfit\n",
+				readw(&hdr->type));
 		return ERR_PTR(-EINVAL);
 	}
 
