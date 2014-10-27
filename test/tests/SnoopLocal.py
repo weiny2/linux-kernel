@@ -155,11 +155,30 @@ def main():
             outpacket = outpacket + packet[4:-4]
         elif flip_lids == "1":
             if "0x" + str(dlid) == lid1:
-                outpacket = packet[:2]
-                outpacket = outpacket + packet[6] + packet[7]
-                outpacket = outpacket + packet[4] + packet[5]
-                outpacket = outpacket + packet[2] + packet[3]
-                outpacket = outpacket + packet[8:-4]
+                outpacket = packet[:2] #[VL|LVER] [SL|Res|LNH]
+                outpacket = outpacket + packet[6] + packet[7] #[DLID]
+                outpacket = outpacket + packet[4] + packet[5] #[RES|PktLen]
+                outpacket = outpacket + packet[2] + packet[3] #[SLID]
+                outpacket = outpacket + packet[8] + packet[9] #[Opcode][SE..Tver]
+                outpacket = outpacket + packet[10] + packet[11] #[Pkey]
+                outpacket = outpacket + packet[12] #[F|B|Res]
+
+                # Get DestQP from DETH of the incoming packet
+                outpacket = outpacket + packet[25] + packet[26] + packet[27]
+
+                # Ack | Res | PSN
+                outpacket = outpacket + packet[16] + packet[17] + packet[18] + packet[19]
+
+                # Build the DETH
+                outpacket = outpacket + packet[20] + packet[21] + packet[22] + packet[23]
+                outpacket = outpacket + packet[24]
+
+                #Add in the correct source QP
+                outpacket = outpacket + packet[13] + packet[14] + packet[15]
+
+                # Now fill in the rest of the packet tossing the CRC
+                outpacket = outpacket + packet[28:-4]
+
                 bytes = bytearray(outpacket)
                 vl = bytes[0] >> 4
                 dlid_upper = bytes[2] << 8

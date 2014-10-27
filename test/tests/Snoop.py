@@ -314,14 +314,14 @@ def run_ib_send_lat_2():
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
 
-    # IbSendLat will not finish this is by design so give it 30 seconds
-    # before killing it off
-    RegLib.test_log(0, "Sleeping 30 seconds for packets to move")
-    time.sleep(10)
-    RegLib.test_log(0, "...20 more")
-    time.sleep(10)
+    # IbSendLat will not finish this is by design so give it 15 seconds
+    # before killing it off. That is more than enough time even on simics.
+    RegLib.test_log(0, "Sleeping 15 seconds for packets to move")
+    time.sleep(5)
     RegLib.test_log(0, "...10 more")
-    time.sleep(10)
+    time.sleep(5)
+    RegLib.test_log(0, "...5 more")
+    time.sleep(5)
 
     RegLib.test_log(0, "Killing off IbSendLat")
     cmd = "killall -9 ib_send_lat"
