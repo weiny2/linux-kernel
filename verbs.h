@@ -875,12 +875,50 @@ int qib_create_agents(struct qib_ibdev *dev);
 void qib_free_agents(struct qib_ibdev *dev);
 
 /*
+ * The PSN_MASK and PSN_SHIFT allow for
+ * 1) comparing two PSNs
+ * 2) returning the PSN with any upper bits masked
+ * 3) returning the difference between to PSNs
+ *
+ * The number of signficant bits in the PSN must
+ * necessarily be at least one bit less than
+ * the container holding the PSN.
+ */
+#define PSN_MASK 0xFFFFFF
+#define PSN_SHIFT 8
+
+/*
  * Compare the lower 24 bits of the two values.
  * Returns an integer <, ==, or > than zero.
  */
 static inline int qib_cmp24(u32 a, u32 b)
 {
 	return (((int) a) - ((int) b)) << 8;
+}
+
+/*
+ * Compare two PSNs
+ * Returns an integer <, ==, or > than zero.
+ */
+static inline int cmp_psn(u32 a, u32 b)
+{
+	return (((int) a) - ((int) b)) << PSN_SHIFT;
+}
+
+/*
+ * Return masked PSN
+ */
+static inline u32 mask_psn(u32 a)
+{
+	return a & PSN_MASK;
+}
+
+/*
+ * Return delta between two PSNs
+ */
+static inline u32 delta_psn(u32 a, u32 b)
+{
+	return (((int)a - (int)b) << PSN_SHIFT) >> PSN_SHIFT;
 }
 
 struct qib_mcast *qib_mcast_find(struct qib_ibport *ibp, union ib_gid *mgid);

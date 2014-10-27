@@ -49,7 +49,7 @@ static u32 restart_sge(struct qib_sge_state *ss, struct qib_swqe *wqe,
 {
 	u32 len;
 
-	len = ((psn - wqe->psn) & QIB_PSN_MASK) * pmtu;
+	len = delta_psn(psn, wqe->psn) * pmtu;
 	ss->sge = wqe->sg_list[0];
 	ss->sg_list = wqe->sg_list + 1;
 	ss->num_sge = wqe->wr.num_sge;
@@ -151,7 +151,7 @@ static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
 			ohdr->u.aeth = qib_compute_aeth(qp);
 			hwords++;
 			qp->s_ack_rdma_psn = e->psn;
-			bth2 = qp->s_ack_rdma_psn++ & QIB_PSN_MASK;
+			bth2 = mask_psn(qp->s_ack_rdma_psn++);
 		} else {
 			/* COMPARE_SWAP or FETCH_ADD */
 			qp->s_cur_sge = NULL;
@@ -163,7 +163,7 @@ static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
 			ohdr->u.at.atomic_ack_eth[1] =
 				cpu_to_be32(e->atomic_data);
 			hwords += sizeof(ohdr->u.at) / sizeof(u32);
-			bth2 = e->psn & QIB_PSN_MASK;
+			bth2 = mask_psn(e->psn);
 			e->sent = 1;
 		}
 		bth0 = qp->s_ack_state << 24;
@@ -188,7 +188,7 @@ static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
 			e->sent = 1;
 		}
 		bth0 = qp->s_ack_state << 24;
-		bth2 = qp->s_ack_rdma_psn++ & QIB_PSN_MASK;
+		bth2 = mask_psn(qp->s_ack_rdma_psn++);
 		break;
 
 	default:
@@ -212,7 +212,7 @@ normal:
 		hwords++;
 		len = 0;
 		bth0 = OP(ACKNOWLEDGE) << 24;
-		bth2 = qp->s_ack_psn & QIB_PSN_MASK;
+		bth2 = mask_psn(qp->s_ack_psn);
 	}
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
@@ -334,7 +334,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		 */
 		len = wqe->length;
 		ss = &qp->s_sge;
-		bth2 = qp->s_psn & QIB_PSN_MASK;
+		bth2 = mask_psn(qp->s_psn);
 		switch (wqe->wr.opcode) {
 		case IB_WR_SEND:
 		case IB_WR_SEND_WITH_IMM:
@@ -523,7 +523,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		qp->s_state = OP(SEND_MIDDLE);
 		/* FALLTHROUGH */
 	case OP(SEND_MIDDLE):
-		bth2 = qp->s_psn++ & QIB_PSN_MASK;
+		bth2 = mask_psn(qp->s_psn++);
 		if (qib_cmp24(qp->s_psn, qp->s_next_psn) > 0)
 			qp->s_next_psn = qp->s_psn;
 		ss = &qp->s_sge;
@@ -564,7 +564,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		qp->s_state = OP(RDMA_WRITE_MIDDLE);
 		/* FALLTHROUGH */
 	case OP(RDMA_WRITE_MIDDLE):
-		bth2 = qp->s_psn++ & QIB_PSN_MASK;
+		bth2 = mask_psn(qp->s_psn++);
 		if (qib_cmp24(qp->s_psn, qp->s_next_psn) > 0)
 			qp->s_next_psn = qp->s_psn;
 		ss = &qp->s_sge;
@@ -599,7 +599,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		 * an earlier PSN without interferring with the sending thread.
 		 * See qib_restart_rc().
 		 */
-		len = ((qp->s_psn - wqe->psn) & QIB_PSN_MASK) * pmtu;
+		len = (delta_psn(qp->s_psn, wqe->psn)) * pmtu;
 		ohdr->u.rc.reth.vaddr =
 			cpu_to_be64(wqe->wr.wr.rdma.remote_addr + len);
 		ohdr->u.rc.reth.rkey =
@@ -607,7 +607,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		ohdr->u.rc.reth.length = cpu_to_be32(wqe->length - len);
 		qp->s_state = OP(RDMA_READ_REQUEST);
 		hwords += sizeof(ohdr->u.rc.reth) / sizeof(u32);
-		bth2 = (qp->s_psn & QIB_PSN_MASK) | IB_BTH_REQ_ACK;
+		bth2 = mask_psn(qp->s_psn) | IB_BTH_REQ_ACK;
 		qp->s_psn = wqe->lpsn + 1;
 		ss = NULL;
 		len = 0;
@@ -617,7 +617,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		break;
 	}
 	qp->s_sending_hpsn = bth2;
-	delta = (((int) bth2 - (int) wqe->psn) << 8) >> 8;
+	delta = delta_psn(bth2, wqe->psn);
 	if (delta && delta % QIB_PSN_CREDIT == 0)
 		bth2 |= IB_BTH_REQ_ACK;
 	if (qp->s_flags & QIB_S_SEND_ONE) {
@@ -706,7 +706,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 	hdr.lrh[3] = cpu_to_be16(ppd->lid | qp->remote_ah_attr.src_path_bits);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
-	ohdr->bth[2] = cpu_to_be32(qp->r_ack_psn & QIB_PSN_MASK);
+	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->r_ack_psn));
 
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
@@ -870,7 +870,7 @@ static void qib_restart_rc(struct qib_qp *qp, u32 psn, int wait)
 	if (wqe->wr.opcode == IB_WR_RDMA_READ)
 		ibp->n_rc_resends++;
 	else
-		ibp->n_rc_resends += (qp->s_psn - psn) & QIB_PSN_MASK;
+		ibp->n_rc_resends += delta_psn(qp->s_psn, psn);
 
 	qp->s_flags &= ~(QIB_S_WAIT_FENCE | QIB_S_WAIT_RDMAR |
 			 QIB_S_WAIT_SSN_CREDIT | QIB_S_WAIT_PSN |
@@ -1256,7 +1256,7 @@ static int do_rc_ack(struct qib_qp *qp, u32 aeth, u32 psn, int opcode,
 		/* The last valid PSN is the previous PSN. */
 		update_last_psn(qp, psn - 1);
 
-		ibp->n_rc_resends += (qp->s_psn - psn) & QIB_PSN_MASK;
+		ibp->n_rc_resends += delta_psn(qp->s_psn, psn);
 
 		reset_psn(qp, psn);
 
@@ -1710,8 +1710,7 @@ static int qib_rc_rcv_error(struct qib_other_headers *ohdr,
 		 * should not back up and request an earlier PSN for the
 		 * same request.
 		 */
-		offset = ((psn - e->psn) & QIB_PSN_MASK) *
-			qp->pmtu;
+		offset = delta_psn(psn, e->psn) * qp->pmtu;
 		len = be32_to_cpu(reth->length);
 		if (unlikely(offset + len != e->rdma_sge.sge_length))
 			goto unlock_done;

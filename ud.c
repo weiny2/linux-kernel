@@ -381,7 +381,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 		bth0 |= qib_get_pkey(ibp, qp->s_pkey_index);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
-	ohdr->bth[2] = cpu_to_be32(qp->s_next_psn++ & QIB_PSN_MASK);
+	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
 	/*
 	 * Qkeys with the high order bit set mean use the
 	 * qkey from the QP context instead of the WR (see 10.2.5).

@@ -214,7 +214,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
 	qib_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-			    qp->s_next_psn++ & QIB_PSN_MASK);
+			    mask_psn(qp->s_next_psn++));
 done:
 	ret = 1;
 	goto unlock;

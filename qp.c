@@ -792,7 +792,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		qp->remote_qpn = attr->dest_qp_num;
 
 	if (attr_mask & IB_QP_SQ_PSN) {
-		qp->s_next_psn = attr->sq_psn & QIB_PSN_MASK;
+		qp->s_next_psn = mask_psn(attr->sq_psn);
 		qp->s_psn = qp->s_next_psn;
 		qp->s_sending_psn = qp->s_next_psn;
 		qp->s_last_psn = qp->s_next_psn - 1;
@@ -800,7 +800,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_RQ_PSN)
-		qp->r_psn = attr->rq_psn & QIB_PSN_MASK;
+		qp->r_psn = mask_psn(attr->rq_psn);
 
 	if (attr_mask & IB_QP_ACCESS_FLAGS)
 		qp->qp_access_flags = attr->qp_access_flags;
@@ -898,8 +898,8 @@ int qib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	attr->path_mtu = qp->path_mtu;
 	attr->path_mig_state = qp->s_mig_state;
 	attr->qkey = qp->qkey;
-	attr->rq_psn = qp->r_psn & QIB_PSN_MASK;
-	attr->sq_psn = qp->s_next_psn & QIB_PSN_MASK;
+	attr->rq_psn = mask_psn(qp->r_psn);
+	attr->sq_psn = mask_psn(qp->s_next_psn);
 	attr->dest_qp_num = qp->remote_qpn;
 	attr->qp_access_flags = qp->qp_access_flags;
 	attr->cap.max_send_wr = qp->s_size - 1;
