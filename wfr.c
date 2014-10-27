@@ -7708,6 +7708,9 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			dd_dev_info(dd, "SDMA num_sdma: %u\n",
 				dd->num_sdma);
 		}
+	} else {
+		/* override */
+		use_sdma_ahg = 0;
 	}
 
 	/* use contexts created by qib_create_ctxts */

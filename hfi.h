@@ -1005,10 +1005,10 @@ struct hfi_devdata {
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path
 	 */
-	int (*process_pio_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+	int (*process_pio_send)(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
 				u32 hdrwords, struct qib_sge_state *ss, u32 len,
 				u32 plen, u32 dwords, u64 pbc);
-	int (*process_dma_send)(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+	int (*process_dma_send)(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
 				u32 hdrwords, struct qib_sge_state *ss, u32 len,
 				u32 plen, u32 dwords, u64 pbc);
 	void (*pio_inline_send)(struct hfi_devdata *dd, struct pio_buf *pbuf,
@@ -1136,10 +1136,10 @@ void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu);
 void assign_link_credits(struct hfi_devdata *dd);
 
 void snoop_recv_handler(struct hfi_packet *packet);
-int snoop_send_dma_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc);
-int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc);
 void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,

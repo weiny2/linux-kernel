@@ -86,6 +86,7 @@ static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
 	u32 len;
 	u32 bth0;
 	u32 bth2;
+	int middle = 0;
 
 	/* Don't send an ACK if we aren't supposed to. */
 	if (!(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK))
@@ -178,9 +179,10 @@ static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
 		if (qp->s_rdma_mr)
 			qib_get_mr(qp->s_rdma_mr);
 		len = qp->s_ack_rdma_sge.sge.sge_length;
-		if (len > pmtu)
+		if (len > pmtu) {
 			len = pmtu;
-		else {
+			middle = use_sdma_ahg;
+		} else {
 			ohdr->u.aeth = qib_compute_aeth(qp);
 			hwords++;
 			qp->s_ack_state = OP(RDMA_READ_RESPONSE_LAST);
@@ -217,12 +219,14 @@ normal:
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
 	qp->s_cur_size = len;
-	qib_make_ruc_header(qp, ohdr, bth0, bth2);
+	qib_make_ruc_header(qp, ohdr, bth0, bth2, middle);
 	return 1;
 
 bail:
 	qp->s_ack_state = OP(ACKNOWLEDGE);
-	qp->s_flags &= ~(QIB_S_RESP_PENDING | QIB_S_ACK_PENDING);
+	qp->s_flags &= ~(QIB_S_RESP_PENDING
+				| QIB_S_ACK_PENDING
+				| QIB_S_AHG_VALID);
 	return 0;
 }
 
@@ -238,19 +242,21 @@ int qib_make_rc_req(struct qib_qp *qp)
 	struct qib_other_headers *ohdr;
 	struct qib_sge_state *ss;
 	struct qib_swqe *wqe;
-	u32 hwords;
+	/* header size in 32-bit words LRH+BTH = (8+12)/4. */
+	u32 hwords = 5;
 	u32 len;
-	u32 bth0;
+	u32 bth0 = 0;
 	u32 bth2;
 	u32 pmtu = qp->pmtu;
 	char newreq;
 	unsigned long flags;
 	int ret = 0;
+	int middle = 0;
 	int delta;
 
-	ohdr = &qp->s_hdr->u.oth;
+	ohdr = &qp->s_hdr->ibh.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->u.l.oth;
+		ohdr = &qp->s_hdr->ibh.u.l.oth;
 
 	/*
 	 * The lock is needed to synchronize between the sending tasklet,
@@ -274,6 +280,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 			qp->s_flags |= QIB_S_WAIT_DMA;
 			goto bail;
 		}
+		clear_ahg(qp);
 		wqe = get_swqe_ptr(qp, qp->s_last);
 		qib_send_complete(qp, wqe, qp->s_last != qp->s_acked ?
 			IB_WC_SUCCESS : IB_WC_WR_FLUSH_ERR);
@@ -293,10 +300,6 @@ int qib_make_rc_req(struct qib_qp *qp)
 		qp->s_sending_hpsn = qp->s_psn - 1;
 	}
 
-	/* header size in 32-bit words LRH+BTH = (8+12)/4. */
-	hwords = 5;
-	bth0 = 0;
-
 	/* Send a request. */
 	wqe = get_swqe_ptr(qp, qp->s_cur);
 	switch (qp->s_state) {
@@ -313,8 +316,10 @@ int qib_make_rc_req(struct qib_qp *qp)
 		newreq = 0;
 		if (qp->s_cur == qp->s_tail) {
 			/* Check if send work queue is empty. */
-			if (qp->s_tail == qp->s_head)
+			if (qp->s_tail == qp->s_head) {
+				clear_ahg(qp);
 				goto bail;
+			}
 			/*
 			 * If a fence is requested, wait for previous
 			 * RDMA read and atomic operations to finish.
@@ -530,6 +535,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
+			middle = use_sdma_ahg;
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_SEND)
@@ -571,6 +577,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
+			middle = use_sdma_ahg;
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_RDMA_WRITE)
@@ -629,7 +636,12 @@ int qib_make_rc_req(struct qib_qp *qp)
 	qp->s_hdrwords = hwords;
 	qp->s_cur_sge = ss;
 	qp->s_cur_size = len;
-	qib_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24), bth2);
+	qib_make_ruc_header(
+		qp,
+		ohdr,
+		bth0 | (qp->s_state << 24),
+		bth2,
+		middle);
 done:
 	ret = 1;
 	goto unlock;
@@ -842,6 +854,7 @@ done:
 	if ((qib_cmp24(qp->s_psn, qp->s_sending_hpsn) <= 0) &&
 	    (qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) <= 0))
 		qp->s_flags |= QIB_S_WAIT_PSN;
+	qp->s_flags &= ~QIB_S_AHG_VALID;
 }
 
 /*

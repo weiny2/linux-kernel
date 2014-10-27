@@ -33,6 +33,7 @@
  */
 
 #include "hfi.h"
+#include "sdma.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_UC_##x
@@ -48,11 +49,12 @@ int qib_make_uc_req(struct qib_qp *qp)
 	struct qib_other_headers *ohdr;
 	struct qib_swqe *wqe;
 	unsigned long flags;
-	u32 hwords;
-	u32 bth0;
+	u32 hwords = 5;
+	u32 bth0 = 0;
 	u32 len;
 	u32 pmtu = qp->pmtu;
 	int ret = 0;
+	int middle = 0;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -67,18 +69,15 @@ int qib_make_uc_req(struct qib_qp *qp)
 			qp->s_flags |= QIB_S_WAIT_DMA;
 			goto bail;
 		}
+		clear_ahg(qp);
 		wqe = get_swqe_ptr(qp, qp->s_last);
 		qib_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
 
-	ohdr = &qp->s_hdr->u.oth;
+	ohdr = &qp->s_hdr->ibh.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->u.l.oth;
-
-	/* header size in 32-bit words LRH+BTH = (8+12)/4. */
-	hwords = 5;
-	bth0 = 0;
+		ohdr = &qp->s_hdr->ibh.u.l.oth;
 
 	/* Get the next send request. */
 	wqe = get_swqe_ptr(qp, qp->s_cur);
@@ -89,8 +88,10 @@ int qib_make_uc_req(struct qib_qp *qp)
 		    QIB_PROCESS_NEXT_SEND_OK))
 			goto bail;
 		/* Check if send work queue is empty. */
-		if (qp->s_cur == qp->s_head)
+		if (qp->s_cur == qp->s_head) {
+			clear_ahg(qp);
 			goto bail;
+		}
 		/*
 		 * Start a new request.
 		 */
@@ -167,6 +168,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
+			middle = use_sdma_ahg;
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_SEND)
@@ -191,6 +193,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
+			middle = use_sdma_ahg;
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_RDMA_WRITE)
@@ -214,7 +217,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
 	qib_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-			    mask_psn(qp->s_next_psn++));
+			    mask_psn(qp->s_next_psn++), middle);
 done:
 	ret = 1;
 	goto unlock;

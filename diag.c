@@ -1942,7 +1942,7 @@ void snoop_recv_handler(struct hfi_packet *packet)
 /*
  * Handle snooping and capturing packets when sdma is being used.
  */
-int snoop_send_dma_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc)
 {
@@ -1957,14 +1957,14 @@ int snoop_send_dma_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
  * bypass packets. The only way to send a bypass packet currently is to use the
  * diagpkt interface. When that interface is enable snoop/capture is not.
  */
-int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc)
 {
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct snoop_packet *s_packet = NULL;
-	u32 *hdr = (u32 *) ibhdr;
+	u32 *hdr = (u32 *)&ahdr->ibh;
 	u32 length = 0;
 	struct qib_sge_state temp_ss;
 	void *data = NULL;
@@ -1975,7 +1975,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	struct capture_md md;
 	u32 vl;
 	u32 hdr_len = hdrwords << 2;
-	u32 tlen = HFI_GET_PKT_LEN(ibhdr);
+	u32 tlen = HFI_GET_PKT_LEN(&ahdr->ibh);
 
 	md.u.pbc = 0;
 
@@ -2000,7 +2000,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		md.port = 1;
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
-			vl = be16_to_cpu(ibhdr->lrh[0]) >> 12;
+			vl = be16_to_cpu(ahdr->ibh.lrh[0]) >> 12;
 			md.u.pbc = create_pbc(0, qp->s_srate, vl, plen);
 		} else {
 			md.u.pbc = 0;
@@ -2061,7 +2061,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		ret = HFI_FILTER_HIT;
 	} else {
 		ret = ppd->dd->hfi_snoop.filter_callback(
-					ibhdr,
+					&ahdr->ibh,
 					NULL,
 					ppd->dd->hfi_snoop.filter_value);
 	}
@@ -2089,7 +2089,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 				spin_unlock_irqrestore(&qp->s_lock, flags);
 			} else if (qp->ibqp.qp_type == IB_QPT_RC) {
 				spin_lock_irqsave(&qp->s_lock, flags);
-				qib_rc_send_complete(qp, ibhdr);
+				qib_rc_send_complete(qp, &ahdr->ibh);
 				spin_unlock_irqrestore(&qp->s_lock, flags);
 			}
 			return 0;
@@ -2100,7 +2100,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		break;
 	}
 out:
-	return qib_verbs_send_pio(qp, ibhdr, hdrwords, ss, len, plen, dwords,
+	return qib_verbs_send_pio(qp, ahdr, hdrwords, ss, len, plen, dwords,
 				  md.u.pbc);
 }
 

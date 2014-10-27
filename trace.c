@@ -153,6 +153,14 @@ const char *parse_sdma_flags(
 	flags[2] = (desc0 & SDMA_DESC0_FIRST_DESC_FLAG) ? 'F' : '-';
 	flags[3] = (desc0 & SDMA_DESC0_LAST_DESC_FLAG) ? 'L' : '-';
 	trace_seq_printf(p, "%s", flags);
+	if (desc0 & SDMA_DESC0_FIRST_DESC_FLAG)
+		trace_seq_printf(p, " amode:%u aidx:%u alen:%u",
+			(u8)((desc1 >> SDMA_DESC1_HEADER_MODE_SHIFT)
+				& SDMA_DESC1_HEADER_MODE_MASK),
+			(u8)((desc1 >> SDMA_DESC1_HEADER_INDEX_SHIFT)
+				& SDMA_DESC1_HEADER_INDEX_MASK),
+			(u8)((desc1 >> SDMA_DESC1_HEADER_DWS_SHIFT)
+				& SDMA_DESC1_HEADER_DWS_MASK));
 	return ret;
 }
 

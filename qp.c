@@ -422,6 +422,7 @@ static void qib_reset_qp(struct qib_qp *qp, enum ib_qp_type type)
 	qp->s_last = 0;
 	qp->s_ssn = 1;
 	qp->s_lsn = 0;
+	clear_ahg(qp);
 	qp->s_mig_state = IB_MIG_MIGRATED;
 	memset(qp->s_ack_queue, 0, sizeof(qp->s_ack_queue));
 	qp->r_head_ack_queue = 0;
@@ -752,6 +753,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			spin_lock_irq(&qp->r_lock);
 			spin_lock(&qp->s_lock);
 			clear_mr_refs(qp, 1);
+			clear_ahg(qp);
 			qib_reset_qp(qp, ibqp->qp_type);
 		}
 		break;
@@ -821,6 +823,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			qp->remote_ah_attr = qp->alt_ah_attr;
 			qp->port_num = qp->alt_ah_attr.port_num;
 			qp->s_pkey_index = qp->s_alt_pkey_index;
+			qp->s_flags |= QIB_S_AHG_CLEAR;
 		}
 	}
 
@@ -1238,6 +1241,7 @@ int qib_destroy_qp(struct ib_qp *ibqp)
 		remove_qp(dev, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
 		clear_mr_refs(qp, 1);
+		clear_ahg(qp);
 	} else
 		spin_unlock_irq(&qp->s_lock);
 

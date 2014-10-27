@@ -753,6 +753,44 @@ TRACE_EVENT(hfi_sdma_engine_interrupt,
 	)
 );
 
+DECLARE_EVENT_CLASS(hfi_sdma_ahg_ad,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		int aidx
+	),
+	TP_ARGS(sde, aidx),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sde->dd)
+		__field(int, aidx)
+		__field(u8, idx)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sde->dd);
+		__entry->idx = sde->this_idx;
+		__entry->aidx = aidx;
+	),
+	TP_printk(
+		"[%s] SDE(%u) aidx %d",
+		__get_str(dev),
+		__entry->idx,
+		__entry->aidx
+	)
+);
+
+DEFINE_EVENT(hfi_sdma_ahg_ad, hfi_ahg_allocate,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		int aidx
+	),
+	TP_ARGS(sde, aidx));
+
+DEFINE_EVENT(hfi_sdma_ahg_ad, hfi_ahg_deallocate,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		int aidx
+	),
+	TP_ARGS(sde, aidx));
+
 #define USDMA_HDR_FORMAT \
 	"[%s:%u:%u:%u] PBC=(%#x %#x) LRH=(%#x %#x) BTH=(%#x %#x %#x) KDETH=(%#x %#x %#x %#x %#x %#x %#x %#x %#x)"
 

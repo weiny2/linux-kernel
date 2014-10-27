@@ -223,10 +223,26 @@ struct qib_ib_header {
 	} u;
 } __packed;
 
+struct ahg_ib_header {
+	struct sdma_engine *sde;
+	u32 ahgdesc[2];
+	u16 tx_flags;
+	u8 ahgcount;
+	u8 ahgidx;
+	struct qib_ib_header ibh;
+};
+
 struct qib_pio_header {
 	__le64 pbc;
 	struct qib_ib_header hdr;
 } __packed;
+
+/*
+ * used for force cacheline alignment for AHG
+ */
+struct tx_pio_header {
+	struct qib_pio_header phdr;
+} ____cacheline_aligned;
 
 /*
  * There is one struct qib_mcast for each multicast GID.
@@ -450,7 +466,7 @@ struct qib_qp {
 	struct qib_qp __rcu *next;            /* link list for QPN hash table */
 	struct qib_swqe *s_wq;  /* send work queue */
 	struct qib_mmap_info *ip;
-	struct qib_ib_header *s_hdr;     /* next packet header to send */
+	struct ahg_ib_header *s_hdr;     /* next packet header to send */
 	u8 s_sc;			/* SC[0..4] for next packet */
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
@@ -460,6 +476,7 @@ struct qib_qp {
 	u32 qkey;               /* QKEY for this QP (for UD or RD) */
 	u32 s_size;             /* send work queue size */
 	u32 s_rnr_timeout;      /* number of milliseconds for RNR timeout */
+	u32 s_ahgpsn;           /* set to the psn in the copy of the header */
 
 	u8 state;               /* QP state */
 	u8 qp_access_flags;
@@ -512,6 +529,7 @@ struct qib_qp {
 	struct qib_swqe *s_wqe;
 	struct qib_sge_state s_sge;     /* current send request data */
 	struct qib_mregion *s_rdma_mr;
+	struct sdma_engine *s_sde; /* current sde */
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
 	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
@@ -531,6 +549,7 @@ struct qib_qp {
 	u32 s_lsn;              /* limit sequence number (credit) */
 	u16 s_hdrwords;         /* size of s_hdr in 32 bit words */
 	u16 s_rdma_ack_cnt;
+	s8 s_ahgidx;
 	u8 s_state;             /* opcode of last packet sent */
 	u8 s_ack_state;         /* opcode of packet to ACK */
 	u8 s_nak_state;         /* non-zero if NAK is pending */
@@ -605,6 +624,8 @@ struct qib_qp {
 #define QIB_S_WAIT_ACK		0x8000
 #define QIB_S_SEND_ONE		0x10000
 #define QIB_S_UNLIMITED_CREDIT	0x20000
+#define QIB_S_AHG_VALID		0x40000
+#define QIB_S_AHG_CLEAR		0x80000
 
 /*
  * Wait flags that would prevent any packet type from being sent.
@@ -753,7 +774,7 @@ struct qib_ibdev {
 	struct list_head memwait;       /* list for wait kernel memory */
 	struct list_head txreq_free;
 	struct timer_list mem_timer;
-	struct qib_pio_header *pio_hdrs;
+	struct tx_pio_header *pio_hdrs;
 	size_t pio_hdr_bytes;
 	dma_addr_t pio_hdrs_phys;
 	/* list of QPs waiting for RNR timer */
@@ -944,7 +965,7 @@ void qib_verbs_sdma_desc_avail(struct sdma_engine *engine, unsigned avail);
 struct verbs_txreq;
 void qib_put_txreq(struct verbs_txreq *tx);
 
-int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
+int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len);
 
 void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length,
@@ -1091,8 +1112,10 @@ int qib_ruc_check_hdr(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 u32 qib_make_grh(struct qib_ibport *ibp, struct ib_grh *hdr,
 		 struct ib_global_route *grh, u32 hwords, u32 nwords);
 
+void clear_ahg(struct qib_qp *qp);
+
 void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
-			 u32 bth0, u32 bth2);
+			 u32 bth0, u32 bth2, int middle);
 
 void qib_do_send(struct work_struct *work);
 
@@ -1117,11 +1140,11 @@ unsigned qib_get_npkeys(struct hfi_devdata *);
 
 unsigned qib_get_pkey(struct qib_ibport *, unsigned);
 
-int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
+int qib_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc);
 
-int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *hdr,
+int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc);
 

@@ -334,11 +334,11 @@ int qib_make_ud_req(struct qib_qp *qp)
 
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* Header size in 32-bit words. */
-		qp->s_hdrwords += qib_make_grh(ibp, &qp->s_hdr->u.l.grh,
+		qp->s_hdrwords += qib_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
 					       &ah_attr->grh,
 					       qp->s_hdrwords, nwords);
 		lrh0 = QIB_LRH_GRH;
-		ohdr = &qp->s_hdr->u.l.oth;
+		ohdr = &qp->s_hdr->ibh.u.l.oth;
 		/*
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
@@ -346,7 +346,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 	} else {
 		/* Header size in 32-bit words. */
 		lrh0 = QIB_LRH_BTH;
-		ohdr = &qp->s_hdr->u.oth;
+		ohdr = &qp->s_hdr->ibh.u.oth;
 	}
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {
 		qp->s_hdrwords++;
@@ -363,15 +363,16 @@ int qib_make_ud_req(struct qib_qp *qp)
 		lrh0 |= (sc5 & 0xf) << 12;
 		qp->s_sc = sc5;
 	}
-	qp->s_hdr->lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
-	qp->s_hdr->lrh[2] = cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
+	qp->s_hdr->ibh.lrh[0] = cpu_to_be16(lrh0);
+	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
+	qp->s_hdr->ibh.lrh[2] =
+		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
 	lid = ppd->lid;
 	if (lid) {
 		lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-		qp->s_hdr->lrh[3] = cpu_to_be16(lid);
+		qp->s_hdr->ibh.lrh[3] = cpu_to_be16(lid);
 	} else
-		qp->s_hdr->lrh[3] = IB_LID_PERMISSIVE;
+		qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
@@ -389,6 +390,11 @@ int qib_make_ud_req(struct qib_qp *qp)
 	ohdr->u.ud.deth[0] = cpu_to_be32((int)wqe->wr.wr.ud.remote_qkey < 0 ?
 					 qp->qkey : wqe->wr.wr.ud.remote_qkey);
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
+	/* disarm any ahg */
+	qp->s_hdr->ahgcount = 0;
+	qp->s_hdr->ahgidx = 0;
+	qp->s_hdr->tx_flags = 0;
+	qp->s_hdr->sde = NULL;
 
 done:
 	ret = 1;

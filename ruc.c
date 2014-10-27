@@ -36,6 +36,7 @@
 #include "hfi.h"
 #include "mad.h"
 #include "qp.h"
+#include "sdma.h"
 
 /*
  * Convert the AETH RNR timeout code into the number of microseconds.
@@ -235,6 +236,7 @@ void qib_migrate_qp(struct qib_qp *qp)
 	qp->remote_ah_attr = qp->alt_ah_attr;
 	qp->port_num = qp->alt_ah_attr.port_num;
 	qp->s_pkey_index = qp->s_alt_pkey_index;
+	qp->s_flags |= QIB_S_AHG_CLEAR;
 
 	ev.device = qp->ibqp.device;
 	ev.element.qp = &qp->ibqp;
@@ -672,8 +674,80 @@ u32 qib_make_grh(struct qib_ibport *ibp, struct ib_grh *hdr,
 	return sizeof(struct ib_grh) / sizeof(u32);
 }
 
+/*
+ * free_ahg - clear ahg from QP
+ */
+void clear_ahg(struct qib_qp *qp)
+{
+	qp->s_hdr->ahgcount = 0;
+	qp->s_flags &= ~(QIB_S_AHG_VALID|QIB_S_AHG_CLEAR);
+	if (qp->s_sde)
+		sdma_ahg_free(qp->s_sde, qp->s_ahgidx);
+	qp->s_ahgidx = -1;
+	qp->s_sde = NULL;
+}
+
+#define BTH2_OFFSET (offsetof(struct qib_pio_header, hdr.u.oth.bth[2])/4)
+
+/**
+ * build_ahg - create ahg in s_hdr
+ * @qp: a pointer to QP
+ * @npsn: the next PSN for the request/response
+ *
+ * This routine handles the AHG by allocating an ahg entry and causing the
+ * copy of the first middle.
+ *
+ * Subsequent middles use the copied entry, editing the
+ * PSN with 1 or 2 edits.
+ */
+static inline void build_ahg(struct qib_qp *qp, u32 npsn)
+{
+	if (unlikely(qp->s_flags & QIB_S_AHG_CLEAR))
+		clear_ahg(qp);
+	if (!(qp->s_flags & QIB_S_AHG_VALID)) {
+		/* first middle that needs copy  */
+		if (qp->s_ahgidx < 0) {
+			if (!qp->s_sde)
+				qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
+			qp->s_ahgidx = sdma_ahg_alloc(qp->s_sde);
+		}
+		if (qp->s_ahgidx >= 0) {
+			qp->s_ahgpsn = npsn;
+			qp->s_hdr->tx_flags |= SDMA_TXREQ_F_AHG_COPY;
+			/* save to protect a change in another thread */
+			qp->s_hdr->sde = qp->s_sde;
+			qp->s_hdr->ahgidx = qp->s_ahgidx;
+			qp->s_flags |= QIB_S_AHG_VALID;
+		}
+	} else {
+		/* subsequent middle after valid */
+		if (qp->s_ahgidx >= 0) {
+			qp->s_hdr->tx_flags |= SDMA_TXREQ_F_USE_AHG;
+			qp->s_hdr->ahgidx = qp->s_ahgidx;
+			qp->s_hdr->ahgcount++;
+			qp->s_hdr->ahgdesc[0] =
+				sdma_build_ahg_descriptor(
+					(u16)cpu_to_be16((u16)npsn),
+					BTH2_OFFSET,
+					16,
+					16);
+			if ((npsn & 0xffff0000) !=
+					(qp->s_ahgpsn & 0xffff0000)) {
+				qp->s_hdr->ahgcount++;
+				qp->s_hdr->ahgdesc[1] =
+					sdma_build_ahg_descriptor(
+						(u16)cpu_to_be16(
+							(u16)(npsn >> 16)),
+						BTH2_OFFSET,
+						0,
+						16);
+			}
+		}
+	}
+}
+
 void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
-			 u32 bth0, u32 bth2)
+			 u32 bth0, u32 bth2, int middle)
 {
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	u16 lrh0;
@@ -686,23 +760,46 @@ void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
 	nwords = (qp->s_cur_size + extra_bytes) >> 2;
 	lrh0 = QIB_LRH_BTH;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
-		qp->s_hdrwords += qib_make_grh(ibp, &qp->s_hdr->u.l.grh,
+		qp->s_hdrwords += qib_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
 					       &qp->remote_ah_attr.grh,
 					       qp->s_hdrwords, nwords);
 		lrh0 = QIB_LRH_GRH;
+		middle = 0;
 	}
 	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	lrh0 |= (sc5 & 0xf) << 12 | (sc5 & 0xf) << 4;
 	qp->s_sc = sc5;
-	qp->s_hdr->lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
-	qp->s_hdr->lrh[2] = cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	qp->s_hdr->lrh[3] = cpu_to_be16(ppd_from_ibp(ibp)->lid |
+	/*
+	 * reset s_hdr/AHG fields
+	 *
+	 * This insures that the ahgentry/ahgcount
+	 * are at a non-AHG default to protect
+	 * build_verbs_tx_desc() from using
+	 * an include ahgidx.
+	 *
+	 * build_ahg() will modify as appropriate
+	 * to use the AHG feature.
+	 */
+	qp->s_hdr->tx_flags = 0;
+	qp->s_hdr->ahgcount = 0;
+	qp->s_hdr->ahgidx = 0;
+	qp->s_hdr->sde = NULL;
+	if (qp->s_mig_state == IB_MIG_MIGRATED)
+		bth0 |= IB_BTH_MIG_REQ;
+	else
+		middle = 0;
+	if (middle)
+		build_ahg(qp, bth2);
+	else
+		qp->s_flags &= ~QIB_S_AHG_VALID;
+	qp->s_hdr->ibh.lrh[0] = cpu_to_be16(lrh0);
+	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
+	qp->s_hdr->ibh.lrh[2] =
+		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
+	qp->s_hdr->ibh.lrh[3] = cpu_to_be16(ppd_from_ibp(ibp)->lid |
 				       qp->remote_ah_attr.src_path_bits);
 	bth0 |= qib_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
-	if (qp->s_mig_state == IB_MIG_MIGRATED)
-		bth0 |= IB_BTH_MIG_REQ;
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
 	ohdr->bth[2] = cpu_to_be32(bth2);

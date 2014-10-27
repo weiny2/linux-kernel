@@ -549,6 +549,8 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 		idle_cnt = 0; /* work around a wfr-event bug */
 	else
 		idle_cnt = ns_to_cclock(dd, idle_cnt);
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 47)
+		use_sdma_ahg = 0;
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
@@ -1399,6 +1401,18 @@ static void dump_sdma_state(struct sdma_engine *sde)
 		dd_dev_err(sde->dd,
 			"SDMA sdmadesc[%u]: flags:%s addr:0x%016llx gen:%u len:%u bytes\n",
 			 head, flags, addr, gen, len);
+		dd_dev_err(sde->dd,
+			"\tdesc0:0x%016llx desc1 0x%016llx\n",
+			 desc[0], desc[1]);
+		if (desc[0] & SDMA_DESC0_FIRST_DESC_FLAG)
+			dd_dev_err(sde->dd,
+				"\taidx: %u amode: %u alen: %u\n",
+				(u8)((desc[1] & SDMA_DESC1_HEADER_INDEX_SMASK)
+					>> SDMA_DESC1_HEADER_INDEX_MASK),
+				(u8)((desc[1] & SDMA_DESC1_HEADER_MODE_SMASK)
+					>> SDMA_DESC1_HEADER_MODE_SHIFT),
+				(u8)((desc[1] & SDMA_DESC1_HEADER_DWS_SMASK)
+					>> SDMA_DESC1_HEADER_DWS_SHIFT));
 		if (++head == sde->descq_cnt)
 			head = 0;
 	}
@@ -1412,7 +1426,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 }
 /* TODO augment this to dump slid check register */
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx\n"
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1445,7 +1459,8 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_MEMORY),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_LEN_GEN),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT),
-		(unsigned long long)sde->last_status);
+		(unsigned long long)sde->last_status,
+		(unsigned long long)sde->ahg_bits);
 
 	/* print info for each entry in the descriptor queue */
 	while (head != tail) {
@@ -1468,6 +1483,13 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		seq_printf(s,
 			"\tdesc[%u]: flags:%s addr:0x%016llx gen:%u len:%u bytes\n",
 			head, flags, addr, gen, len);
+		if (desc[0] & SDMA_DESC0_FIRST_DESC_FLAG)
+			seq_printf(s,
+				"\t\tahgidx: %u ahgmode: %u\n",
+				(u8)((desc[1] & SDMA_DESC1_HEADER_INDEX_SMASK)
+					>> SDMA_DESC1_HEADER_INDEX_MASK),
+				(u8)((desc[1] & SDMA_DESC1_HEADER_MODE_SMASK)
+					>> SDMA_DESC1_HEADER_MODE_SHIFT));
 		if (++head == sde->descq_cnt)
 			head = 0;
 	}
@@ -2189,17 +2211,26 @@ int sdma_ahg_alloc(struct sdma_engine *sde)
 	int nr;
 	int oldbit;
 
-	if (!use_sdma_ahg)
+	if (!sde) {
+		trace_hfi_ahg_allocate(sde, -EINVAL);
+		return -EINVAL;
+	}
+	if (!use_sdma_ahg) {
+		trace_hfi_ahg_allocate(sde, -EOPNOTSUPP);
 		return -EOPNOTSUPP;
+	}
 	while (1) {
 		nr = ffz(ACCESS_ONCE(sde->ahg_bits));
-		if (nr > 31)
+		if (nr > 31) {
+			trace_hfi_ahg_allocate(sde, -ENOSPC);
 			return -ENOSPC;
+		}
 		oldbit = test_and_set_bit(nr, &sde->ahg_bits);
 		if (!oldbit)
 			break;
 		cpu_relax();
 	}
+	trace_hfi_ahg_allocate(sde, nr);
 	return nr;
 }
 
@@ -2212,7 +2243,10 @@ int sdma_ahg_alloc(struct sdma_engine *sde)
  */
 void sdma_ahg_free(struct sdma_engine *sde, int ahg_index)
 {
-	if (ahg_index < 0)
+	if (!sde)
+		return;
+	trace_hfi_ahg_deallocate(sde, ahg_index);
+	if (ahg_index < 0 || ahg_index > 31 )
 		return;
 	clear_bit(ahg_index, &sde->ahg_bits);
 }

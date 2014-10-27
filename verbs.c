@@ -886,7 +886,7 @@ static void verbs_sdma_complete(
 		struct qib_ib_header *hdr;
 		struct qib_ibdev *dev = to_idev(qp->ibqp.device);
 
-		hdr = &dev->pio_hdrs[tx->hdr_inx].hdr;
+		hdr = &dev->pio_hdrs[tx->hdr_inx].phdr.hdr;
 		qib_rc_send_complete(qp, hdr);
 	}
 	if (drained) {
@@ -988,44 +988,80 @@ static int build_verbs_tx_desc(
 	struct sdma_engine *sde,
 	struct qib_sge_state *ss,
 	u32 length,
-	struct verbs_txreq *tx)
+	struct verbs_txreq *tx,
+	struct ahg_ib_header *ahdr,
+	u64 pbc)
 {
 	struct qib_ibdev *dev = to_idev(tx->qp->ibqp.device);
 	int ret = 0;
+	struct qib_pio_header *phdr;
+	u16 hdrbytes = tx->hdr_dwords << 2;
 
-	sdma_txinit(
-		&tx->txreq,
-		0,
-		(tx->hdr_dwords<<2) + length,
-		verbs_sdma_complete);
 
-	/* add the header */
-	ret = sdma_txadd_daddr(
-		sde->dd,
-		&tx->txreq,
-		dev->pio_hdrs_phys + tx->hdr_inx *
-			sizeof(struct qib_pio_header),
-		tx->hdr_dwords << 2);
-	if (ret)
-		goto bail_txadd;
+	phdr = &dev->pio_hdrs[tx->hdr_inx].phdr;
+	if (!ahdr->ahgcount) {
+		sdma_txinit_ahg(
+			&tx->txreq,
+			ahdr->tx_flags,
+			hdrbytes + length,
+			ahdr->ahgidx,
+			0,
+			NULL,
+			0,
+			verbs_sdma_complete);
+		phdr->pbc = cpu_to_le64(pbc);
+		memcpy(&phdr->hdr, &ahdr->ibh, hdrbytes - sizeof(phdr->pbc));
+		/* add the header */
+		ret = sdma_txadd_daddr(
+			sde->dd,
+			&tx->txreq,
+			dev->pio_hdrs_phys + tx->hdr_inx *
+				sizeof(struct tx_pio_header),
+			tx->hdr_dwords << 2);
+		if (ret)
+			goto bail_txadd;
+	} else {
+		struct qib_other_headers *sohdr = &ahdr->ibh.u.oth;
+		struct qib_other_headers *dohdr = &phdr->hdr.u.oth;
+
+		/* needed in rc_send_complete() */
+		phdr->hdr.lrh[0] = ahdr->ibh.lrh[0];
+		if ((be16_to_cpu(phdr->hdr.lrh[0]) & 3) == QIB_LRH_GRH) {
+			sohdr = &ahdr->ibh.u.l.oth;
+			dohdr = &phdr->hdr.u.l.oth;
+		}
+		/* opcode */
+		dohdr->bth[0] = sohdr->bth[0];
+		/* PSN/ACK  */
+		dohdr->bth[2] = sohdr->bth[2];
+		sdma_txinit_ahg(
+			&tx->txreq,
+			ahdr->tx_flags,
+			length,
+			ahdr->ahgidx,
+			ahdr->ahgcount,
+			ahdr->ahgdesc,
+			hdrbytes,
+			verbs_sdma_complete);
+	}
+
 	/* add the ulp payload - if any.  ss can be NULL for acks */
 	if (ss)
-		build_verbs_ulp_payload(sde, ss, length, tx);
+		ret = build_verbs_ulp_payload(sde, ss, length, tx);
 bail_txadd:
 	return ret;
 }
 
-int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
+int qib_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc)
 {
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
-	struct qib_pio_header *phdr;
 	struct verbs_txreq *tx;
 	struct sdma_txreq *stx;
 	u64 pbc_flags = 0;
 	struct sdma_engine *sde;
-	u8 sc5;
+	u8 sc5 = qp->s_sc;
 	int ret;
 
 	if (!list_empty(&qp->s_iowait.tx_head)) {
@@ -1042,8 +1078,11 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
-	sc5 = qp->s_sc;
-	tx->sde = sde = qp_to_sdma_engine(qp, sc5);
+	if (!qp->s_hdr->sde)
+		tx->sde = sde = qp_to_sdma_engine(qp, sc5);
+	else
+		tx->sde = sde = qp->s_hdr->sde;
+
 	if (likely(pbc == 0)) {
 		/* No vl15 here */
 		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
@@ -1055,14 +1094,11 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	tx->mr = qp->s_rdma_mr;
 	if (qp->s_rdma_mr)
 		qp->s_rdma_mr = NULL;
-	phdr = &dev->pio_hdrs[tx->hdr_inx];
-	phdr->pbc = cpu_to_le64(pbc);
-	memcpy(&phdr->hdr, hdr, hdrwords << 2);
 	tx->hdr_dwords = hdrwords + 2;
-	ret = build_verbs_tx_desc(sde, ss, len, tx);
+	ret = build_verbs_tx_desc(sde, ss, len, tx, ahdr, pbc);
 	if (unlikely(ret))
 		goto bail_build;
-	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), hdr);
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &ahdr->ibh);
 	return sdma_send_txreq(sde, &qp->s_iowait, NULL, &tx->txreq);
 bail_build:
 	/* kmalloc or mapping fail */
@@ -1126,13 +1162,13 @@ struct send_context *qp_to_send_context(struct qib_qp *qp, u8 sc5)
 	return dd->vld[vl].sc;
 }
 
-int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
+int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc)
 {
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	u32 *hdr = (u32 *) ibhdr;
+	u32 *hdr = (u32 *)&ahdr->ibh;
 	u64 pbc_flags = 0;
 	u32 sc5;
 	unsigned long flags;
@@ -1171,7 +1207,7 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		seg_pio_copy_end(pbuf);
 	}
 
-	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), ibhdr);
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &ahdr->ibh);
 
 	if (qp->s_rdma_mr) {
 		qib_put_mr(qp->s_rdma_mr);
@@ -1183,7 +1219,7 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	} else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		spin_lock_irqsave(&qp->s_lock, flags);
-		qib_rc_send_complete(qp, ibhdr);
+		qib_rc_send_complete(qp, &ahdr->ibh);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	}
 	return 0;
@@ -1200,7 +1236,7 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
  * Return zero if packet is sent or queued OK.
  * Return non-zero and clear qp->s_flags QIB_S_BUSY otherwise.
  */
-int qib_verbs_send(struct qib_qp *qp, struct qib_ib_header *hdr,
+int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *hdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
@@ -1911,9 +1947,12 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	 * - this one doesn't scale for multiple sdma engines
 	 */
 	descq_cnt = sdma_get_descq_cnt();
-	dev->pio_hdr_bytes = descq_cnt * sizeof(struct qib_pio_header);
+	/*
+	 * AHG mode copy requires header be on cache line
+	 */
+	dev->pio_hdr_bytes = descq_cnt * sizeof(struct tx_pio_header);
 	if (descq_cnt) {
-		dev->pio_hdrs = dma_alloc_coherent(&dd->pcidev->dev,
+		dev->pio_hdrs = dma_zalloc_coherent(&dd->pcidev->dev,
 						dev->pio_hdr_bytes,
 						&dev->pio_hdrs_phys,
 						GFP_KERNEL);
