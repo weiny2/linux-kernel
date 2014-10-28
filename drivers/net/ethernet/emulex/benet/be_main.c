@@ -2671,6 +2671,12 @@ static int be_close(struct net_device *netdev)
 	struct be_eq_obj *eqo;
 	int i;
 
+	/* This protection is needed as be_close() may be called even when the
+	 * adapter is in cleared state (after eeh perm failure)
+	 */
+	if (!(adapter->flags & BE_FLAGS_SETUP_DONE))
+		return 0;
+
 	be_roce_dev_close(adapter);
 
 	if (adapter->flags & BE_FLAGS_NAPI_ENABLED) {
@@ -2977,6 +2983,7 @@ static int be_clear(struct be_adapter *adapter)
 	be_clear_queues(adapter);
 
 	be_msix_disable(adapter);
+	adapter->flags &= ~BE_FLAGS_SETUP_DONE;
 	return 0;
 }
 
@@ -3440,6 +3447,7 @@ static int be_setup(struct be_adapter *adapter)
 		adapter->phy.fc_autoneg = 1;
 
 	be_schedule_worker(adapter);
+	adapter->flags |= BE_FLAGS_SETUP_DONE;
 	return 0;
 err:
 	be_clear(adapter);
