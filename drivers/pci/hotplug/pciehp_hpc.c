@@ -937,7 +937,10 @@ struct controller *pcie_init(struct pcie_device *dev)
         }
 
 	/* Clear all remaining event bits in Slot Status register */
-	if (pciehp_writew(ctrl, PCI_EXP_SLTSTA, 0x1f))
+	if (pciehp_writew(ctrl, PCI_EXP_SLTSTA,
+		PCI_EXP_SLTSTA_ABP | PCI_EXP_SLTSTA_PFD |
+		PCI_EXP_SLTSTA_MRLSC | PCI_EXP_SLTSTA_PDC |
+		PCI_EXP_SLTSTA_CC))
 		goto abort_ctrl;
 
 	/* Disable sotfware notification */
