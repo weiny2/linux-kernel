@@ -940,7 +940,7 @@ struct controller *pcie_init(struct pcie_device *dev)
 	if (pciehp_writew(ctrl, PCI_EXP_SLTSTA,
 		PCI_EXP_SLTSTA_ABP | PCI_EXP_SLTSTA_PFD |
 		PCI_EXP_SLTSTA_MRLSC | PCI_EXP_SLTSTA_PDC |
-		PCI_EXP_SLTSTA_CC))
+		PCI_EXP_SLTSTA_CC | PCI_EXP_SLTSTA_DLLSC))
 		goto abort_ctrl;
 
 	/* Disable sotfware notification */
