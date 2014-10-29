@@ -41,11 +41,9 @@
 #include "mad.h"
 #include "trace.h"
 
-#ifndef STL_LINK_WIDTH_ALL_SUPPORTED
 #define STL_LINK_WIDTH_ALL_SUPPORTED \
 		(STL_LINK_WIDTH_1X | STL_LINK_WIDTH_2X \
 		| STL_LINK_WIDTH_3X | STL_LINK_WIDTH_4X)
-#endif
 
 static int reply(void *arg)
 {

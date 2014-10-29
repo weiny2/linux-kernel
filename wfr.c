@@ -994,22 +994,6 @@ CNTR_ELEM("RcvHdrOvr" #ctx, \
 	  (WFR_RCV_HDR_OVFL_CNT + ctx*0x100), \
 	  0, port_read_u64_csr)
 
-/*
- * TODO: Remove these when ifs-kernel-updates/src/include/rdma/stl_port_info.h
- * is updated with the new values.
- * See Bug 125707 for details.
- */
-#ifndef STL_LINK_WIDTH_1X
-/* remove old defines */
-#undef STL_LINK_WIDTH_2X
-#undef STL_LINK_WIDTH_3X
-/* add new defines */
-#define STL_LINK_WIDTH_1X  (1 << 0)
-#define STL_LINK_WIDTH_2X  (1 << 1)
-#define STL_LINK_WIDTH_3X  (1 << 2)
-#define STL_LINK_WIDTH_4X  (1 << 3)
-#endif
-
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
