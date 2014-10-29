@@ -171,7 +171,19 @@ static ssize_t in_progress_show(struct kobject *kobj,
 	return snprintf(buf, PAGE_SIZE, "%d\n", kgr_in_progress);
 }
 
-static struct kobj_attribute kgr_attr_in_progress = __ATTR_RO(in_progress);
+static ssize_t in_progress_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	if (count == 0 || buf[0] != '0')
+		return -EINVAL;
+
+	WARN(!kgr_unmark_processes(),
+		"kgr: all processes marked migrated on admin's request\n");
+
+	return count;
+}
+
+static struct kobj_attribute kgr_attr_in_progress = __ATTR_RW(in_progress);
 
 static struct attribute *kgr_sysfs_entries[] = {
 	&kgr_attr_in_progress.attr,
