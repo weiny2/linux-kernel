@@ -4279,6 +4279,14 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 	dd_dev_info(dd, "%s: current %s, new %s\n", __func__,
 		link_state_name(ppd->host_link_state), link_state_name(state));
 
+	/*
+	 * If we're going to a (HLS_*) link state that implies the logical
+	 * link state is neither of (IB_PORT_ARMED, IB_PORT_ACTIVE), then
+	 * reset is_sm_config_started to 0.
+	 */
+	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE))
+		ppd->is_sm_config_started = 0;
+
 	if (state == HLS_DN_DOWNDEF)
 		state = dd->link_default;
 

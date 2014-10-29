@@ -402,6 +402,11 @@ struct cc_state {
 #define STL_AM_ASYNC(am)	(((am) & STL_AM_ASYNC_SMASK) >> \
 					STL_AM_ASYNC_SHIFT)
 
+#define STL_AM_START_SM_CONF_SHIFT	9
+#define STL_AM_START_SM_CONF_SMASK	0x00000200
+#define STL_AM_START_SM_CONF(am)	(((am) & STL_AM_START_SM_CONF_SMASK) \
+						 >> STL_AM_ASYNC_SHIFT)
+
 /* error info macros */
 #define STL_EI_STATUS_SMASK	0x80
 #define STL_EI_CODE_SMASK	0x0f

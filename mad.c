@@ -500,6 +500,7 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u32 state;
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
+	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
 	u32 buffer_units;
 	u64 tmp;
 
@@ -563,12 +564,16 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
 
-	/* FIXME make sure that this default state matches */
+	state = dd->f_iblink_state(ppd);
+
+	if (start_of_sm_config && (state == IB_PORT_INIT))
+		ppd->is_sm_config_started = 1;
+
 	pi->port_states.offline_reason = ppd->neighbor_normal << 4;
+	pi->port_states.offline_reason |= ppd->is_sm_config_started << 5;
 	pi->port_states.unsleepstate_downdefstate =
 		(get_linkdowndefaultstate(ppd) ? 1 : 2);
 
-	state = dd->f_iblink_state(ppd);
 	pi->port_states.portphysstate_portstate =
 		(dd->f_ibphys_portstate(ppd) << 4) | state;
 
@@ -759,6 +764,73 @@ static int __subn_get_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 	return reply(smp);
 }
 
+static int set_port_states(struct qib_pportdata *ppd, struct stl_smp *smp,
+			   u32 state, u32 lstate, int suppress_idle_sma)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int ret;
+
+	if (lstate && !(state == IB_PORT_DOWN || state == IB_PORT_NOP)) {
+		pr_warn("SubnSet(STL_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
+			state, lstate);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	/*
+	 * Only state changes of DOWN, ARM, and ACTIVE are valid
+	 * and must be in the correct state to take effect (see 7.2.6).
+	 */
+	switch (state) {
+	case IB_PORT_NOP:
+		if (lstate == 0)
+			break;
+		/* FALLTHROUGH */
+	case IB_PORT_DOWN:
+		if (lstate == 0)
+			lstate = HLS_DN_DOWNDEF;
+		else if (lstate == 2)
+			lstate = HLS_DN_POLL;
+		else if (lstate == 3)
+			lstate = HLS_DN_DISABLE;
+		else {
+			pr_warn("SubnSet(STL_PortInfo) invalid Physical state 0x%x\n",
+				lstate);
+			smp->status |= IB_SMP_INVALID_FIELD;
+			break;
+		}
+
+		set_link_state(ppd, lstate);
+		/*
+		 * Don't send a reply if the response would be sent
+		 * through the disabled port.
+		 */
+		if (lstate == HLS_DN_DISABLE && smp->hop_cnt)
+			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		/* XXX ??? qib_wait_linkstate(ppd, QIBL_LINKV, 10); */
+		break;
+	case IB_PORT_ARMED:
+		ret = set_link_state(ppd, HLS_UP_ARMED);
+		if ((ret == 0) && (suppress_idle_sma == 0))
+			send_idle_sma(dd, SMA_IDLE_ARM);
+		break;
+	case IB_PORT_ACTIVE:
+		if (ppd->neighbor_normal) {
+			ret = set_link_state(ppd, HLS_UP_ACTIVE);
+			if (ret == 0)
+				send_idle_sma(dd, SMA_IDLE_ACTIVE);
+		} else {
+			pr_warn("SubnSet(STL_PortInfo) Cannot move to Active with NeighborNormal 0\n");
+			smp->status |= IB_SMP_INVALID_FIELD;
+		}
+		break;
+	default:
+		pr_warn("SubnSet(STL_PortInfo) invalid state 0x%x\n", state);
+		smp->status |= IB_SMP_INVALID_FIELD;
+	}
+
+	return 0;
+}
+
 /**
  * subn_set_stl_portinfo - set port information
  * @smp: the incoming SM packet
@@ -779,14 +851,14 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	unsigned long flags;
 	u32 stl_lid; /* Temp to hold STL LID values */
 	u16 lid, smlid;
-	u8 state;
+	u8 ls_old, ls_new, ps_new;
 	u8 vls;
 	u8 msl;
 	u16 lse, lwe, mtu;
-	u16 lstate;
-	int ret, ore, i;
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
+	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
+	int ret, ore, i, invalid;
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -904,30 +976,6 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 			smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
-	/* Set link down default state. */
-	/* Again make this virtual.  Only IB PortInfo controls the actual port
-	 * states */
-	switch (pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE) {
-	case 0: /* NOP */
-		break;
-	case 1: /* SLEEP */
-	/*
-		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					IB_LINKINITCMD_SLEEP);
-					*/
-		break;
-	case 2: /* POLL */
-	/*
-		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					IB_LINKINITCMD_POLL);
-					*/
-		break;
-	default:
-		pr_warn("SubnSet(STL_PortInfo) Default state invalid 0x%x\n",
-			pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	}
-
 	ibp->mkeyprot = (pi->mkeyprotect_lmc & STL_PI_MASK_MKEY_PROT_BIT) >> 6;
 	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
 	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
@@ -993,73 +1041,33 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 			!!(be16_to_cpu(pi->port_mode)
 					& STL_PI_MASK_PORT_ACTIVE_OPTOMIZE);
 
+	ls_old = dd->f_iblink_state(ppd);
+
+	ls_new = pi->port_states.portphysstate_portstate &
+			STL_PI_MASK_PORT_STATE;
+	ps_new = (pi->port_states.portphysstate_portstate &
+			STL_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
+
+	if (ls_old == IB_PORT_INIT) {
+		if (start_of_sm_config) {
+			if (ls_new == ls_old || (ls_new == IB_PORT_ARMED))
+				ppd->is_sm_config_started = 1;
+		} else if (ls_new == IB_PORT_ARMED) {
+			if (ppd->is_sm_config_started == 0)
+				invalid = 1;
+		}
+	}
+
 	/*
 	 * Do the port state change now that the other link parameters
 	 * have been set.
 	 * Changing the port physical state only makes sense if the link
 	 * is down or is being set to down.
 	 */
-	state = pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_STATE;
-	lstate = (pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
-	if (lstate && !(state == IB_PORT_DOWN || state == IB_PORT_NOP)) {
-		pr_warn("SubnSet(STL_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
-			state, lstate);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	}
 
-	/*
-	 * Only state changes of DOWN, ARM, and ACTIVE are valid
-	 * and must be in the correct state to take effect (see 7.2.6).
-	 */
-	switch (state) {
-	case IB_PORT_NOP:
-		if (lstate == 0)
-			break;
-		/* FALLTHROUGH */
-	case IB_PORT_DOWN:
-		if (lstate == 0)
-			lstate = HLS_DN_DOWNDEF;
-		else if (lstate == 2)
-			lstate = HLS_DN_POLL;
-		else if (lstate == 3)
-			lstate = HLS_DN_DISABLE;
-		else {
-			pr_warn("SubnSet(STL_PortInfo) invalid Physical state 0x%x\n",
-				lstate);
-			smp->status |= IB_SMP_INVALID_FIELD;
-			break;
-		}
-
-		set_link_state(ppd, lstate);
-		/*
-		 * Don't send a reply if the response would be sent
-		 * through the disabled port.
-		 */
-		if (lstate == HLS_DN_DISABLE && smp->hop_cnt) {
-			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
-			return ret;
-		}
-		/* XXX ??? qib_wait_linkstate(ppd, QIBL_LINKV, 10); */
-		break;
-	case IB_PORT_ARMED:
-		ret = set_link_state(ppd, HLS_UP_ARMED);
-		if (ret == 0)
-			send_idle_sma(dd, SMA_IDLE_ARM);
-		break;
-	case IB_PORT_ACTIVE:
-		if (ppd->neighbor_normal) {
-			ret = set_link_state(ppd, HLS_UP_ACTIVE);
-			if (ret == 0)
-				send_idle_sma(dd, SMA_IDLE_ACTIVE);
-		} else {
-			pr_warn("SubnSet(STL_PortInfo) Cannot move to Active with NeighborNormal 0\n");
-			smp->status |= IB_SMP_INVALID_FIELD;
-		}
-		break;
-	default:
-		pr_warn("SubnSet(STL_PortInfo) invalid state 0x%x\n", state);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	}
+	ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
+	if (ret)
+		return ret;
 
 	if (clientrereg) {
 		event.event = IB_EVENT_CLIENT_REREGISTER;
@@ -1407,6 +1415,102 @@ static int __subn_set_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
 
 	return __subn_get_stl_sc_to_vlnt(smp, am, data, ibdev, port,
 					 resp_len);
+}
+
+static int __subn_get_stl_psi(struct stl_smp *smp, u32 am, u8 *data,
+			      struct ib_device *ibdev, u8 port,
+			      u32 *resp_len)
+{
+	u32 nports = STL_AM_NPORT(am);
+	u32 port_num = STL_AM_PORTNUM(am);
+	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
+	u32 lstate;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_ibport *ibp;
+	struct qib_pportdata *ppd;
+	struct stl_port_states *psi = (struct stl_port_states *) data;
+
+	clear_stl_smp_data(smp);
+
+	if (port_num == 0)
+		port_num = port;
+
+	if (nports != 1 || port_num != port) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	ibp = to_iport(ibdev, port);
+	ppd = ppd_from_ibp(ibp);
+
+	lstate = dd->f_iblink_state(ppd);
+
+	if (start_of_sm_config && (lstate == IB_PORT_INIT))
+		ppd->is_sm_config_started = 1;
+
+	psi->offline_reason = ppd->neighbor_normal << 4;
+	psi->offline_reason |= ppd->is_sm_config_started << 5;
+	psi->unsleepstate_downdefstate =
+		(get_linkdowndefaultstate(ppd) ? 1 : 2);
+
+	psi->portphysstate_portstate =
+		(dd->f_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
+
+	if (resp_len)
+		*resp_len += sizeof(struct stl_port_states);
+
+	return reply(smp);
+}
+
+static int __subn_set_stl_psi(struct stl_smp *smp, u32 am, u8 *data,
+			      struct ib_device *ibdev, u8 port,
+			      u32 *resp_len)
+{
+	u32 nports = STL_AM_NPORT(am);
+	u32 port_num = STL_AM_PORTNUM(am);
+	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
+	u32 ls_old;
+	u8 ls_new, ps_new;
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct qib_ibport *ibp;
+	struct qib_pportdata *ppd;
+	struct stl_port_states *psi = (struct stl_port_states *) data;
+	int ret, invalid = 0;
+
+	if (port_num == 0)
+		port_num = port;
+
+	if (nports != 1 || port_num != port) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	ibp = to_iport(ibdev, port);
+	ppd = ppd_from_ibp(ibp);
+
+	ls_old = dd->f_iblink_state(ppd);
+
+	ls_new = port_states_to_logical_state(psi);
+	ps_new = port_states_to_phys_state(psi);
+
+	if (ls_old == IB_PORT_INIT) {
+		if (start_of_sm_config) {
+			if (ls_new == ls_old || (ls_new == IB_PORT_ARMED))
+				ppd->is_sm_config_started = 1;
+		} else if (ls_new == IB_PORT_ARMED) {
+			if (ppd->is_sm_config_started == 0)
+				invalid = 1;
+		}
+	}
+
+	ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
+	if (ret)
+		return ret;
+
+	if (invalid)
+		smp->status |= IB_SMP_INVALID_FIELD;
+
+	return __subn_get_stl_psi(smp, am, data, ibdev, port, resp_len);
 }
 
 static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
@@ -2974,6 +3078,10 @@ static int subn_get_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 		ret = __subn_get_stl_sc_to_vlnt(smp, am, data, ibdev, port,
 					       resp_len);
 		break;
+	case STL_ATTRIB_ID_PORT_STATE_INFO:
+		ret = __subn_get_stl_psi(smp, am, data, ibdev, port,
+					 resp_len);
+		break;
 	case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
 		ret = __subn_get_stl_bct(smp, am, data, ibdev, port,
 					 resp_len);
@@ -3043,6 +3151,10 @@ static int subn_set_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 	case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
 		ret = __subn_set_stl_sc_to_vlnt(smp, am, data, ibdev, port,
 					       resp_len);
+		break;
+	case STL_ATTRIB_ID_PORT_STATE_INFO:
+		ret = __subn_set_stl_psi(smp, am, data, ibdev, port,
+					 resp_len);
 		break;
 	case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
 		ret = __subn_set_stl_bct(smp, am, data, ibdev, port,
