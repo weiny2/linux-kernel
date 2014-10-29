@@ -29,11 +29,11 @@ module_param(wait_probe, bool, 0);
 MODULE_PARM_DESC(wait_probe,
 		"Wait for nd devices to be probed (default: async probing)");
 
-static bool warn_checksum;
+static bool warn_checksum = true;
 module_param(warn_checksum, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(warn_checksum, "Turn checksum errors into warnings");
 
-bool old_nfit;
+bool old_nfit = true;
 module_param(old_nfit, bool, 0);
 MODULE_PARM_DESC(old_nfit, "Use 0.8s2 NFIT table format");
 

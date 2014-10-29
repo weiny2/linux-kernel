@@ -18,7 +18,7 @@
 #include "nfit.h"
 #include "dsm.h"
 
-static bool old_acpi;
+static bool old_acpi = true;
 module_param(old_acpi, bool, 0);
 MODULE_PARM_DESC(old_acpi, "Search for NFIT by _CRS on _HID(ACPI0010)");
 
