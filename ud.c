@@ -452,6 +452,55 @@ int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey)
 	return -1;
 }
 
+void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
+		u32 pkey, u32 slid, u32 dlid, u8 sc5,
+		const struct ib_grh *old_grh)
+{
+	u64 pbc, pbc_flags = 0;
+	u32 bth0, plen, hwords = 5;
+	u16 lrh0;
+	u8 sl = ibp->sc_to_sl[sc5];
+	struct qib_ib_header hdr;
+	struct qib_other_headers *ohdr;
+	struct pio_buf *pbuf;
+	struct send_context *ctxt = qp_to_send_context(qp, sc5);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+
+	if (old_grh) {
+		struct ib_grh *grh = &hdr.u.l.grh;
+		grh->version_tclass_flow = old_grh->version_tclass_flow;
+		grh->paylen = cpu_to_be16((hwords - 2 + SIZE_OF_CRC) << 2);
+		grh->hop_limit = 0xff;
+		grh->sgid = old_grh->dgid;
+		grh->dgid = old_grh->sgid;
+		ohdr = &hdr.u.l.oth;
+		lrh0 = QIB_LRH_GRH;
+		hwords += sizeof(struct ib_grh) / sizeof(u32);
+	} else {
+		ohdr = &hdr.u.oth;
+		lrh0 = QIB_LRH_BTH;
+	}
+
+	lrh0 |= (sc5 & 0xf) << 12 | sl << 4;
+
+	bth0 = pkey | (CNP_OPCODE << 24);
+	ohdr->bth[0] = cpu_to_be32(bth0);
+
+	ohdr->bth[1] = cpu_to_be32(remote_qpn | (1 << QIB_BECN_SHIFT));
+	ohdr->bth[2] = 0; /* PSN 0 */
+
+	hdr.lrh[0] = cpu_to_be16(lrh0);
+	hdr.lrh[1] = cpu_to_be16(dlid);
+	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
+	hdr.lrh[3] = cpu_to_be16(slid);
+
+	plen = 2 /* PBC */ + hwords;
+	pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
+	pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
+	pbuf = sc_buffer_alloc(ctxt, plen, NULL, 0);
+	if (pbuf)
+		ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
+}
 
 /**
  * qib_ud_rcv - receive an incoming UD packet
@@ -481,6 +530,8 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
 	int sc4_bit = (!!(rcv_flags & QIB_SC4_BIT)) << 4;
 	u8 sc;
+	int is_fecn, is_mcast;
+	struct ib_grh *grh = NULL;
 
 	/* Check for GRH */
 	if (!has_grh) {
@@ -489,10 +540,31 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	} else {
 		ohdr = &hdr->u.l.oth;
 		hdrsize = 8 + 40 + 12 + 8; /* LRH + GRH + BTH + DETH */
+		grh = &hdr->u.l.grh;
 	}
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
 	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & QIB_QPN_MASK;
+	dlid = be16_to_cpu(hdr->lrh[1]);
+	is_mcast = (dlid > QIB_MULTICAST_LID_BASE) &&
+			(dlid != QIB_PERMISSIVE_LID);
+	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
+		& QIB_FECN_MASK;
 
+	/*
+	 * We don't return a CNP in response to a CNP, and so you might
+	 * expect a check for the CNP opcode here. However, that'd be
+	 * pointless, since packets with the CNP opcode are delivered
+	 * as 'error packets' to context 0.
+	 */
+	if (!is_mcast && is_fecn) {
+		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		u16 slid = be16_to_cpu(hdr->lrh[3]);
+		u8 sc5;
+		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
+		sc5 |= sc4_bit;
+
+		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
+	}
 	/*
 	 * Get the number of bytes the message was padded by
 	 * and drop incomplete packets.
@@ -648,7 +720,6 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	sc |= sc4_bit;
 	wc.sl = ibp->sc_to_sl[sc];
 
-	dlid = be16_to_cpu(hdr->lrh[1]);
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.
 	 */

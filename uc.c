@@ -254,7 +254,8 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	u32 pmtu = qp->pmtu;
 	struct ib_reth *reth;
 	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
-	int ret;
+	int is_fecn, ret;
+	struct ib_grh *grh = NULL;
 
 	/* Check for GRH */
 	if (!has_grh) {
@@ -263,11 +264,26 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	} else {
 		ohdr = &hdr->u.l.oth;
 		hdrsize = 8 + 40 + 12;  /* LRH + GRH + BTH */
+		grh = &hdr->u.l.grh;
 	}
 
 	opcode = be32_to_cpu(ohdr->bth[0]);
 	if (qib_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
 		return;
+
+	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
+		& QIB_FECN_MASK;
+
+	if (is_fecn) {
+		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		u16 slid = be16_to_cpu(hdr->lrh[3]);
+		u16 dlid = be16_to_cpu(hdr->lrh[1]);
+		u32 src_qp = qp->remote_qpn;
+		u8 sc5;
+		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+
+		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
+	}
 
 	psn = be32_to_cpu(ohdr->bth[2]);
 	opcode >>= 24;

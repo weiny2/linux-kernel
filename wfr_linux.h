@@ -61,4 +61,7 @@ enum missing_port_info_field_masks {
 	STL_PI_MASK_NEIGHBOR_NORMAL = 0x10
 };
 
+/* where best to put this opcode? */
+#define CNP_OPCODE 0x80
+
 #endif /* _WFR_LINUX_H */

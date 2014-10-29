@@ -524,6 +524,7 @@ struct qib_qp {
 	struct qib_rq r_rq;             /* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
+	unsigned long s_aflags;
 	struct qib_sge_state *s_cur_sge;
 	u32 s_flags;
 	struct qib_swqe *s_wqe;
@@ -573,6 +574,11 @@ struct qib_qp {
  */
 #define QIB_R_WRID_VALID        0
 #define QIB_R_REWIND_SGE        1
+
+/*
+ * Atomic bit definitions for s_aflags.
+ */
+#define QIB_S_ECN		0
 
 /*
  * Bit definitions for r_flags.
@@ -1122,7 +1128,7 @@ void qib_do_send(struct work_struct *work);
 void qib_send_complete(struct qib_qp *qp, struct qib_swqe *wqe,
 		       enum ib_wc_status status);
 
-void qib_send_rc_ack(struct qib_ctxtdata *, struct qib_qp *qp);
+void qib_send_rc_ack(struct qib_ctxtdata *, struct qib_qp *qp, int is_fecn);
 
 int qib_make_rc_req(struct qib_qp *qp);
 

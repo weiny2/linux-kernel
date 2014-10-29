@@ -463,6 +463,14 @@ struct xmit_wait {
 	} counter_cache;
 };
 
+/* per-SL CCA information */
+struct cca_timer {
+	struct hrtimer hrtimer;
+	struct qib_pportdata *ppd; /* read-only */
+	int sl; /* read-only */
+	u16 ccti; /* read/write - current value of CCTI */
+};
+
 /*
  * The structure below encapsulates data relevant to a physical IB Port.
  * Current chips support only one such port, but the separation
@@ -564,6 +572,13 @@ struct qib_pportdata {
 	struct timer_list led_override_timer;
 	struct xmit_wait cong_stats;
 	struct timer_list symerr_clear_timer;
+
+	/*
+	 * cca_timer_lock protects access to the per-SL cca_timer
+	 * structures (specifically the ccti member).
+	 */
+	spinlock_t cca_timer_lock ____cacheline_aligned_in_smp;
+	struct cca_timer cca_timer[STL_MAX_SLS];
 
 	/* List of congestion control table entries */
 	struct ib_cc_table_entry_shadow ccti_entries[CC_TABLE_SHADOW_MAX];
@@ -1074,6 +1089,11 @@ void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 inline u16 generate_jkey(unsigned int);
+void set_link_ipg(struct qib_pportdata *ppd);
+void process_becn(struct qib_pportdata *ppd, u8 sl);
+void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
+		u32 pkey, u32 slid, u32 dlid, u8 sc5,
+		const struct ib_grh *old_grh);
 
 /**
  * sc_to_vlt() reverse lookup sc to vl

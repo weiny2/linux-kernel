@@ -661,7 +661,7 @@ unlock:
  * Note that RDMA reads and atomics are handled in the
  * send side QP state and tasklet.
  */
-void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
+void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 {
 	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
@@ -718,6 +718,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp)
 	hdr.lrh[3] = cpu_to_be16(ppd->lid | qp->remote_ah_attr.src_path_bits);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
+	ohdr->bth[1] |= cpu_to_be32((!!is_fecn) << QIB_BECN_SHIFT);
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->r_ack_psn));
 
 	spin_unlock_irqrestore(&qp->s_lock, flags);
@@ -756,6 +757,8 @@ queue_ack:
 		qp->s_flags |= QIB_S_ACK_PENDING | QIB_S_RESP_PENDING;
 		qp->s_nak_state = qp->r_nak_state;
 		qp->s_ack_psn = qp->r_ack_psn;
+		if (is_fecn)
+			set_bit(QIB_S_ECN, &qp->s_aflags);
 
 		/* Schedule the send tasklet. */
 		qib_schedule_send(qp);
@@ -1844,6 +1847,58 @@ static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
 	qp->s_ack_state = OP(ACKNOWLEDGE);
 }
 
+void process_becn(struct qib_pportdata *ppd, u8 sl)
+{
+	struct cca_timer *cca_timer;
+	u16 ccti_incr, ccti_timer;
+	u16 ccti_limit;
+	unsigned long nsec;
+	struct cc_state *cc_state;
+
+	if (sl > STL_MAX_SLS)
+		return;
+
+	cca_timer = &ppd->cca_timer[sl];
+
+	rcu_read_lock();
+
+	cc_state = get_cc_state(ppd);
+
+	if (cc_state == NULL) {
+		rcu_read_unlock();
+		return;
+	}
+
+	/*
+	 * 1) increase CCTI (for this SL)
+	 * 2) select IPG (i.e., call set_link_ipg())
+	 * 3) start timer
+	 */
+	ccti_limit = cc_state->cct.ccti_limit;
+	ccti_incr = cc_state->cong_setting.entries[sl].ccti_increase;
+	ccti_timer = cc_state->cong_setting.entries[sl].ccti_timer;
+
+	spin_lock(&ppd->cca_timer_lock);
+
+	if (cca_timer->ccti < ccti_limit) {
+		if (cca_timer->ccti + ccti_incr <= ccti_limit)
+			cca_timer->ccti += ccti_incr;
+		else
+			cca_timer->ccti = ccti_limit;
+		set_link_ipg(ppd);
+	}
+
+	spin_unlock(&ppd->cca_timer_lock);
+
+	rcu_read_unlock();
+
+	nsec = 1024 * ccti_timer;
+	/* ccti_timer is in units of 1.024 usec */
+
+	hrtimer_start(&cca_timer->hrtimer, ns_to_ktime(nsec),
+		      HRTIMER_MODE_REL);
+}
+
 /**
  * qib_rc_rcv - process an incoming RC packet
  * @rcd: the context pointer
@@ -1860,19 +1915,21 @@ static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
 void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
 {
-	struct qib_ibport *ibp = &rcd->ppd->ibport_data;
+	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct qib_other_headers *ohdr;
 	u32 opcode;
 	u32 hdrsize;
 	u32 psn;
 	u32 pad;
+	u8 sl;
 	struct ib_wc wc;
 	u32 pmtu = qp->pmtu;
 	int diff;
 	struct ib_reth *reth;
 	unsigned long flags;
 	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
-	int ret;
+	int ret, is_becn, is_fecn;
 
 	/* Check for GRH */
 	if (!has_grh) {
@@ -1883,9 +1940,19 @@ void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 		hdrsize = 8 + 40 + 12;  /* LRH + GRH + BTH */
 	}
 
+	sl = qp->remote_ah_attr.sl;
+
 	opcode = be32_to_cpu(ohdr->bth[0]);
 	if (qib_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
 		return;
+
+	is_becn = (be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT) &
+			QIB_BECN_MASK;
+	if (is_becn)
+		process_becn(ppd, sl);
+
+	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT) &
+			QIB_FECN_MASK;
 
 	psn = be32_to_cpu(ohdr->bth[2]);
 	opcode >>= 24;
@@ -2292,7 +2359,7 @@ nack_acc:
 	qp->r_nak_state = IB_NAK_REMOTE_ACCESS_ERROR;
 	qp->r_ack_psn = qp->r_psn;
 send_ack:
-	qib_send_rc_ack(rcd, qp);
+	qib_send_rc_ack(rcd, qp, is_fecn);
 	return;
 
 sunlock:

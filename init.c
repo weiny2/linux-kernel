@@ -39,6 +39,7 @@
 #include <linux/idr.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/hrtimer.h>
 
 #include "hfi.h"
 #include "device.h"
@@ -384,6 +385,144 @@ done:
 	return ret;
 }
 
+/*
+ * Select the largest ccti value over all SLs to determine the intra-
+ * packet gap for the link.
+ *
+ * called with cca_timer_lock held (to protect access to cca_timer
+ * array), and rcu_read_lock() (to protect access to cc_state).
+ */
+void set_link_ipg(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	struct cc_state *cc_state;
+	int i;
+	u16 cce, ccti_limit, max_ccti = 0;
+	u16 shift, mult;
+	u64 src;
+	u16 link_speed = ppd->link_speed_active;
+	u16 link_width = ppd->link_width_active;
+	u32 pkt_egress_rate; /* Mbits /sec */
+	u32 max_pkt_time;
+	/*
+	 * max_pkt_time is the maximum packet egress time in units
+	 * of the fabric clock period 1/(805 MHz).
+	 */
+
+	cc_state = get_cc_state(ppd);
+
+	if (cc_state == NULL)
+		/*
+		 * This should _never_ happen - rcu_read_lock() is held,
+		 * and set_link_ipg() should not be called if cc_state
+		 * is NULL.
+		 */
+		return;
+
+	for (i = 0; i < STL_MAX_SLS; i++) {
+		u16 ccti = ppd->cca_timer[i].ccti;
+		if (ccti > max_ccti)
+			max_ccti = ccti;
+	}
+
+	ccti_limit = cc_state->cct.ccti_limit;
+	if (max_ccti > ccti_limit)
+		max_ccti = ccti_limit;
+
+	cce = cc_state->cct.entries[max_ccti].entry;
+	shift = (cce & 0xc000) >> 14;
+	mult = (cce & 0x3fff);
+
+	if (link_speed == STL_LINK_SPEED_25G)
+		pkt_egress_rate = 25000;
+	else /* assume STL_LINK_SPEED_12_5G */
+		pkt_egress_rate = 12500;
+
+	switch (link_width) {
+	case STL_LINK_WIDTH_4X:
+		pkt_egress_rate *= 4;
+		break;
+	case STL_LINK_WIDTH_3X:
+		pkt_egress_rate *= 3;
+		break;
+	case STL_LINK_WIDTH_2X:
+		pkt_egress_rate *= 2;
+		break;
+	default:
+		/* assume IB_WIDTH_1X */
+		break;
+	}
+
+	/*
+	 * max_pkt_time is:
+	 *
+	 *  (max_packet_length) [bits] / (pkt_egress_rate) [bits/sec]
+	 *  ---------------------------------------------------------
+	 *    fabric_clock_period == (1 / 805 * 10^6) [1/sec]
+	 */
+	max_pkt_time = (ppd->ibmaxlen * 8);
+	max_pkt_time *= 805;
+	max_pkt_time /= pkt_egress_rate;
+
+	src = (max_pkt_time >> shift) * mult;
+
+	src &= WFR_SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SMASK;
+	src <<= WFR_SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SHIFT;
+
+	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, src);
+}
+
+static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
+{
+	struct cca_timer *cca_timer;
+	struct qib_pportdata *ppd;
+	int sl;
+	u16 ccti, ccti_timer, ccti_min;
+	struct cc_state *cc_state;
+
+	cca_timer = container_of(t, struct cca_timer, hrtimer);
+	ppd = cca_timer->ppd;
+	sl = cca_timer->sl;
+
+	rcu_read_lock();
+
+	cc_state = get_cc_state(ppd);
+
+	if (cc_state == NULL) {
+		rcu_read_unlock();
+		return HRTIMER_NORESTART;
+	}
+
+	/*
+	 * 1) decrement ccti for SL
+	 * 2) calculate IPG for link (set_link_ipg())
+	 * 3) restart timer, unless ccti is at min value
+	 */
+
+	ccti_min = cc_state->cong_setting.entries[sl].ccti_min;
+	ccti_timer = cc_state->cong_setting.entries[sl].ccti_timer;
+
+	spin_lock(&ppd->cca_timer_lock);
+
+	ccti = cca_timer->ccti;
+
+	if (ccti > ccti_min) {
+		cca_timer->ccti--;
+		set_link_ipg(ppd);
+	}
+
+	spin_unlock(&ppd->cca_timer_lock);
+
+	rcu_read_unlock();
+
+	if (ccti > ccti_min) {
+		unsigned long nsec = 1024 * ccti_timer;
+		/* ccti_timer is in units of 1.024 usec */
+		hrtimer_forward_now(t, ns_to_ktime(nsec));
+		return HRTIMER_RESTART;
+	}
+	return HRTIMER_NORESTART;
+}
 
 /*
  * Common code for initializing the physical port structure.
@@ -391,7 +530,7 @@ done:
 void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 			struct hfi_devdata *dd, u8 hw_pidx, u8 port)
 {
-	int size;
+	int i, size;
 	uint default_pkey_idx;
 	ppd->dd = dd;
 	ppd->hw_pidx = hw_pidx;
@@ -420,10 +559,20 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 
 	ppd->qib_wq = NULL;
 
-	spin_lock_init(&ppd->cc_state_lock);
+	spin_lock_init(&ppd->cca_timer_lock);
+
+	for (i = 0; i < STL_MAX_SLS; i++) {
+		hrtimer_init(&ppd->cca_timer[i].hrtimer, CLOCK_MONOTONIC,
+			     HRTIMER_MODE_REL);
+		ppd->cca_timer[i].ppd = ppd;
+		ppd->cca_timer[i].sl = i;
+		ppd->cca_timer[i].ccti = 0;
+		ppd->cca_timer[i].hrtimer.function = cca_timer_fn;
+	}
 
 	ppd->cc_max_table_entries = IB_CC_TABLE_CAP_DEFAULT;
 
+	spin_lock_init(&ppd->cc_state_lock);
 	size = sizeof(struct cc_state);
 	ppd->cc_state = kzalloc(size, GFP_KERNEL);
 	if (!ppd->cc_state)
@@ -1310,8 +1459,13 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 
 	/* users can't do anything more with chip */
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
-		if (dd->pport[pidx].statusp)
-			*dd->pport[pidx].statusp &= ~QIB_STATUS_CHIP_PRESENT;
+		struct qib_pportdata *ppd = &dd->pport[pidx];
+		int i;
+		if (ppd->statusp)
+			*ppd->statusp &= ~QIB_STATUS_CHIP_PRESENT;
+
+		for (i = 0; i < STL_MAX_SLS; i++)
+			hrtimer_cancel(&ppd->cca_timer[i].hrtimer);
 	}
 
 	free_credit_return(dd);

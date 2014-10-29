@@ -221,13 +221,15 @@ inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 	return 1;
 }
 
-/*
- */
 static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
-		       __le32 *rhf_addr, struct qib_message_header *rhdr)
+		       struct hfi_packet *packet)
 {
-	/*u32 rcv_type = rhf_rcv_type(rhf_addr);*/
+	__le32 *rhf_addr = packet->rhf_addr;
+	struct qib_message_header *rhdr = packet->hdr;
 	u32 eflags = rhf_err_flags(rhf_addr);
+	u32 rte = rhf_rcv_type_err(rhf_addr);
+	int lnh = be16_to_cpu(rhdr->lrh[0]) & 3;
+	struct qib_ibport *ibp = &ppd->ibport_data;
 
 	if (eflags & (RHF1_VCRC_ERR | RHF1_ICRC_ERR))
 		return;
@@ -244,11 +246,9 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		/* For TIDERR and RC QPs premptively schedule a NAK */
 		struct qib_ib_header *hdr = (struct qib_ib_header *) rhdr;
 		struct qib_other_headers *ohdr = NULL;
-		struct qib_ibport *ibp = &ppd->ibport_data;
 		struct qib_qp *qp = NULL;
 		u32 tlen = rhf_pkt_len(rhf_addr); /* in bytes */
 		u16 lid  = be16_to_cpu(hdr->lrh[1]);
-		int lnh = be16_to_cpu(hdr->lrh[0]) & 3;
 		u32 qp_num;
 		u32 opcode;
 		u32 psn;
@@ -360,6 +360,49 @@ unlock:
 				wake_up(&qp->wait);
 		} /* Unicast QP */
 	} /* Valid packet with TIDErr */
+	/* handle "RcvTypeErr" flags */
+	switch (rte) {
+	case RHF_RTE_ERROR_OP_CODE_ERR:
+	{
+		u32 opcode;
+		void *ebuf = NULL;
+		__be32 *bth = NULL;
+		u8 sl, sc5 = be16_to_cpu(rhdr->lrh[0] >> 4) & 0xf;
+
+		if (le32_to_cpu(*rhf_addr) & RHF0_DC_INFO_SMASK)
+			sc5 |= 0x10;
+		sl = ibp->sc_to_sl[sc5];
+
+		if (rhf_use_egr_bfr(rhf_addr))
+			ebuf = packet->ebuf;
+
+		if (ebuf == NULL)
+			goto drop; /* this should never happen */
+
+		if (lnh == QIB_LRH_BTH)
+			bth = (__be32 *)ebuf;
+		else if (lnh == QIB_LRH_GRH)
+			bth = (__be32 *)((char *)ebuf + sizeof(struct ib_grh));
+		else
+			goto drop;
+
+		opcode = be32_to_cpu(bth[0]) >> 24;
+		opcode &= 0xff;
+
+		/*
+		 * TODO: later h/w revisions should recognize the CNP_OPCODE.
+		 * When that changes, CNP_OPCODE will not be handled in an
+		 * error path.
+		 */
+		if (opcode == CNP_OPCODE)
+			process_becn(ppd, sl);
+
+		rhf_addr[1] &= ~RHF1_RCV_TYPE_ERR_SMASK;
+		break;
+	}
+	default:
+		break;
+	}
 
 drop:
 	return;
@@ -493,7 +536,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		list_del_init(&qp->rspwait);
 		if (qp->r_flags & QIB_R_RSP_NAK) {
 			qp->r_flags &= ~QIB_R_RSP_NAK;
-			qib_send_rc_ack(rcd, qp);
+			qib_send_rc_ack(rcd, qp, 0);
 		}
 		if (qp->r_flags & QIB_R_RSP_SEND) {
 			unsigned long flags;
@@ -746,9 +789,10 @@ void handle_eflags(struct hfi_packet *packet)
 {
 	struct qib_ctxtdata *rcd = packet->rcd;
 	u32 eflags = rhf_err_flags(packet->rhf_addr);
+	u32 rte = rhf_rcv_type_err(packet->rhf_addr);
 
 	dd_dev_err(rcd->dd,
-		"receive context %d: rhf 0x%016llx, errs [ %s%s%s%s%s%s%s%s]\n",
+		"receive context %d: rhf 0x%016llx, errs [ %s%s%s%s%s%s%s%s] rte 0x%x\n",
 		rcd->ctxt, packet->rhf,
 		eflags & RHF1_K_HDR_LEN_ERR ? "k_hdr_len " : "",
 		eflags & RHF1_DC_UNC_ERR ? "dc_unc " : "",
@@ -757,9 +801,10 @@ void handle_eflags(struct hfi_packet *packet)
 		eflags & RHF1_LEN_ERR ? "len " : "",
 		eflags & RHF1_ECC_ERR ? "ecc " : "",
 		eflags & RHF1_VCRC_ERR ? "vcrc " : "",
-		eflags & RHF1_ICRC_ERR ? "icrc " : "");
+		eflags & RHF1_ICRC_ERR ? "icrc " : "",
+		rte);
 
-	rcv_hdrerr(rcd, rcd->ppd, packet->rhf_addr, packet->hdr);
+	rcv_hdrerr(rcd, rcd->ppd, packet);
 }
 
 /*
@@ -800,8 +845,9 @@ void process_receive_error(struct hfi_packet *packet)
 	if (unlikely(rhf_err_flags(packet->rhf_addr)))
 		handle_eflags(packet);
 
-	dd_dev_err(packet->rcd->ppd->dd,
-		   "Unahndled error packet received. Dropping.\n");
+	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+		dd_dev_err(packet->rcd->ppd->dd,
+			   "Unhandled error packet received. Dropping.\n");
 }
 
 void process_receive_expected(struct hfi_packet *packet)

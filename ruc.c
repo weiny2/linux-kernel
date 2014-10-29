@@ -802,6 +802,9 @@ void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
+	if (test_and_clear_bit(QIB_S_ECN, &qp->s_aflags))
+		/* we recently received a FECN, so return a BECN */
+		ohdr->bth[1] |= cpu_to_be32(QIB_BECN_MASK << QIB_BECN_SHIFT);
 	ohdr->bth[2] = cpu_to_be32(bth2);
 }
 
