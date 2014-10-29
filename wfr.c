@@ -211,6 +211,95 @@ struct flag_table {
 )
 
 /*
+ * CCE Error flags.
+ */
+static struct flag_table cce_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("CceCsrParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_PARITY_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("CceCsrReadBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_READ_BAD_ADDR_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("CceCsrWriteBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_WRITE_BAD_ADDR_ERR_SMASK),
+/* 3*/	FLAG_ENTRY0("CceTrgtAsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_TRGT_ASYNC_FIFO_PARITY_ERR_SMASK),
+/* 4*/	FLAG_ENTRY0("CceTrgtAccessErr",
+		WFR_CCE_ERR_STATUS_CCE_TRGT_ACCESS_ERR_SMASK),
+/* 5*/	FLAG_ENTRY0("CceRspdDataParityErr",
+		WFR_CCE_ERR_STATUS_CCE_RSPD_DATA_PARITY_ERR_SMASK),
+/* 6*/	FLAG_ENTRY0("CceCli0AsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CLI0_ASYNC_FIFO_PARITY_ERR_SMASK),
+/* 7*/	FLAG_ENTRY0("CceCsrCfgBusParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_CFG_BUS_PARITY_ERR_SMASK),
+/* 8*/	FLAG_ENTRY0("CceCli2AsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CLI2_ASYNC_FIFO_PARITY_ERR_SMASK),
+/* 9*/	FLAG_ENTRY0("CceCli1AsyncFifoPioCrdtParityErr",
+	    WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_PIO_CRDT_PARITY_ERR_SMASK),
+/*10*/	FLAG_ENTRY0("CceCli1AsyncFifoPioCrdtParityErr",
+	    WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_SDMA_HD_PARITY_ERR_SMASK),
+/*11*/	FLAG_ENTRY0("CceCli1AsyncFifoRxdmaParityError",
+	    WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_RXDMA_PARITY_ERROR_SMASK),
+/*12*/	FLAG_ENTRY0("CceCli1AsyncFifoDbgParityError",
+		WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_DBG_PARITY_ERROR_SMASK),
+/*13*/	FLAG_ENTRY0("PcicRetryMemCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_MEM_COR_ERR_SMASK),
+/*14*/	FLAG_ENTRY0("PcicRetryMemCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_SOT_MEM_COR_ERR_SMASK),
+/*15*/	FLAG_ENTRY0("PcicPostHdQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_HD_QCOR_ERR_SMASK),
+/*16*/	FLAG_ENTRY0("PcicPostHdQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_DAT_QCOR_ERR_SMASK),
+/*17*/	FLAG_ENTRY0("PcicPostHdQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_HD_QCOR_ERR_SMASK),
+/*18*/	FLAG_ENTRY0("PcicCplDatQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_DAT_QCOR_ERR_SMASK),
+/*19*/	FLAG_ENTRY0("PcicNPostHQParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_NPOST_HQ_PARITY_ERR_SMASK),
+/*20*/	FLAG_ENTRY0("PcicNPostDatQParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_NPOST_DAT_QPARITY_ERR_SMASK),
+/*21*/	FLAG_ENTRY0("PcicRetryMemUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_MEM_UNC_ERR_SMASK),
+/*22*/	FLAG_ENTRY0("PcicRetrySotMemUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_SOT_MEM_UNC_ERR_SMASK),
+/*23*/	FLAG_ENTRY0("PcicPostHdQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_HD_QUNC_ERR_SMASK),
+/*24*/	FLAG_ENTRY0("PcicPostDatQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_DAT_QUNC_ERR_SMASK),
+/*25*/	FLAG_ENTRY0("PcicCplHdQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_HD_QUNC_ERR_SMASK),
+/*26*/	FLAG_ENTRY0("PcicCplDatQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_DAT_QUNC_ERR_SMASK),
+/*27*/	FLAG_ENTRY0("PcicTransmitFrontParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_TRANSMIT_FRONT_PARITY_ERR_SMASK),
+/*28*/	FLAG_ENTRY0("PcicTransmitBackParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_TRANSMIT_BACK_PARITY_ERR_SMASK),
+/*29*/	FLAG_ENTRY0("PcicReceiveParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_RECEIVE_PARITY_ERR_SMASK),
+/*30*/	FLAG_ENTRY0("CceTrgtCplTimeoutErr",
+		WFR_CCE_ERR_STATUS_CCE_TRGT_CPL_TIMEOUT_ERR_SMASK),
+/*31*/	FLAG_ENTRY0("LATriggered",
+		WFR_CCE_ERR_STATUS_LA_TRIGGERED_SMASK),
+/*32*/	FLAG_ENTRY0("CceSegReadBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_SEG_READ_BAD_ADDR_ERR_SMASK),
+/*33*/	FLAG_ENTRY0("CceSegWriteBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_SEG_WRITE_BAD_ADDR_ERR_SMASK),
+/*34*/	FLAG_ENTRY0("CceRcplAsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_RCPL_ASYNC_FIFO_PARITY_ERR_SMASK),
+/*35*/	FLAG_ENTRY0("CceRxdmaConvFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_RXDMA_CONV_FIFO_PARITY_ERR_SMASK),
+/*36*/	FLAG_ENTRY0("CceMsixTableCorErr",
+		WFR_CCE_ERR_STATUS_CCE_MSIX_TABLE_COR_ERR_SMASK),
+/*37*/	FLAG_ENTRY0("CceMsixTableUncErr",
+		WFR_CCE_ERR_STATUS_CCE_MSIX_TABLE_UNC_ERR_SMASK),
+/*38*/	FLAG_ENTRY0("CceIntMapCorErr",
+		WFR_CCE_ERR_STATUS_CCE_INT_MAP_COR_ERR_SMASK),
+/*39*/	FLAG_ENTRY0("CceIntMapUncErr",
+		WFR_CCE_ERR_STATUS_CCE_INT_MAP_UNC_ERR_SMASK),
+/*40*/	FLAG_ENTRY0("CceMsixCsrParityErr",
+		WFR_CCE_ERR_STATUS_CCE_MSIX_CSR_PARITY_ERR_SMASK),
+/*41-63 reserved*/
+};
+
+/*
  * TXE PIO Error flags and consequences
  */
 static struct flag_table pio_err_status_flags[] = {
@@ -1062,6 +1151,13 @@ OVERFLOW_ELEM(156), OVERFLOW_ELEM(157), OVERFLOW_ELEM(158), OVERFLOW_ELEM(159),
 
 /* ======================================================================== */
 
+/* return true if this is chip revision revision a0 */
+static inline int is_a0(struct hfi_devdata *dd)
+{
+	return ((dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT)
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK) == 0;
+}
+
 /*
  * Using the given flag table, print a comma separated string into
  * the buffer.  End in '*' if the buffer is too short.
@@ -1256,6 +1352,12 @@ static char *is_reserved_name(char *buf, size_t bsize, unsigned int source)
 	return buf;
 }
 
+static char *cce_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			cce_err_status_flags, ARRAY_SIZE(cce_err_status_flags));
+}
+
 static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags,
@@ -1268,10 +1370,25 @@ static char *egress_err_status_string(char *buf, int buf_len, u64 flags)
 		egress_err_status_flags, ARRAY_SIZE(egress_err_status_flags));
 }
 
-/* TODO */
 static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	dd_dev_info(dd, "CCE Error: 0x%llx (unhandled)\n", reg);
+	char buf[96];
+
+	/*
+	 * For most these errors, there is nothing that can be done except
+	 * report or record it.
+	 */
+	dd_dev_info(dd, "CCE Error: %s\n",
+		cce_err_status_string(buf, sizeof(buf), reg));
+
+	if ((reg & WFR_CCE_ERR_STATUS_CCE_CLI2_ASYNC_FIFO_PARITY_ERR_SMASK)
+			&& is_a0(dd)
+			&& (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR)) {
+		/* this error requires a manual drop into SPC freeze mode */
+		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
+		/* then a fixup */
+		/* FIXME: call unfreeze when implemented */
+	}
 }
 
 /* TODO */
