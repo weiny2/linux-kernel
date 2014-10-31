@@ -619,13 +619,6 @@ static int loadtime_init(struct hfi_devdata *dd)
 	if (dd->revision & QLOGIC_IB_R_EMULATOR_MASK)
 		dd_dev_info(dd, "%s", dd->boardversion);
 
-	spin_lock_init(&dd->sendctrl_lock);
-	spin_lock_init(&dd->uctxt_lock);
-	spin_lock_init(&dd->dc8051_lock);
-	spin_lock_init(&dd->qib_diag_trans_lock);
-	seqlock_init(&dd->sc2vl_lock);
-	mutex_init(&dd->qsfp_lock);
-
 	/* set up worker (don't start yet) to verify interrupts are working */
 	INIT_DELAYED_WORK(&dd->interrupt_check_worker, verify_interrupt);
 	/* set this flag so we know we can clean up */
@@ -1261,6 +1254,20 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 			      "Could not allocate unit ID: error %d\n", -ret);
 		goto bail;
 	}
+	/*
+	 * Initialize all locks for the device. This needs to be as early as
+	 * possible so locks are usable.
+	 */
+	spin_lock_init(&dd->sendctrl_lock);
+	spin_lock_init(&dd->uctxt_lock);
+	spin_lock_init(&dd->qib_diag_trans_lock);
+	spin_lock_init(&dd->sc_init_lock);
+	spin_lock_init(&dd->dc8051_lock);
+	mutex_init(&dd->qsfp_lock);
+	seqlock_init(&dd->sc2vl_lock);
+	seqlock_init(&dd->sde_map_lock);
+
+
 	dd->int_counter = alloc_percpu(u64);
 	if (!dd->int_counter) {
 		ret = -ENOMEM;

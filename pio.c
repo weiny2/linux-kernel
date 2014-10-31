@@ -347,7 +347,6 @@ int init_send_contexts(struct hfi_devdata *dd)
 	u16 base;
 	int ret, i, j, context;
 
-	spin_lock_init(&dd->sc_init_lock);
 
 	ret = init_credit_return(dd);
 	if (ret)
@@ -815,7 +814,7 @@ static int pio_init_wait_progress(struct hfi_devdata *dd)
 		reg = read_csr(dd, WFR_SEND_PIO_INIT_CTXT);
 		if (!(reg & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SMASK))
 			break;
-		msleep(20);
+		mdelay(20);
 		if (count++ > 10)
 			return -ETIMEDOUT;
 	}

@@ -1020,8 +1020,8 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		 */
 		ret = sdma_send_txreq(req->sde, &pq->busy, NULL, &tx->txreq);
 		if (unlikely(ret)) {
-			if (iovec)
-				unpin_vector_pages(iovec);
+			if (tx->iovec)
+				unpin_vector_pages(tx->iovec);
 			spin_unlock_irqrestore(&tx->lock, flags);
 			goto free_tx;
 		}
@@ -1033,9 +1033,9 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		if (req_opcode(req->info.ctrl) == EXPECTED)
 			req->tidoffset += datalen;
 		req->sent += data_sent;
-		if (req->data_len && iovec) {
-			iovec->frags_sent++;
-			iovec->offset += iov_offset;
+		if (req->data_len && tx->iovec) {
+			tx->iovec->frags_sent++;
+			tx->iovec->offset += iov_offset;
 		}
 		/*
 		 * It is important to increment this here as it is used to
@@ -1090,8 +1090,7 @@ static int pin_vector_pages(struct user_sdma_request *req,
 
 	iovec->npages = num_user_pages(&iovec->iov);
 	iovec->num_frags = (iovec->iov.iov_len / req->info.fragsize) +
-		!!(iovec->iov.iov_len % req->info.fragsize) +
-		(req_opcode(req->info.ctrl) == EXPECTED && req->tidoffset);
+		!!(iovec->iov.iov_len % req->info.fragsize);
 	iovec->pages = kzalloc(sizeof(*iovec->pages) *
 			       iovec->npages, GFP_KERNEL);
 	if (!iovec->pages) {
@@ -1456,7 +1455,6 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 			SDMA_DBG(req, "TxReq has data but no vector");
 	}
 
-	sdma_txclean(pq->dd, &tx->txreq);
 	kmem_cache_free(pq->txreq_cache, tx);
 	req->txreqs_completed++;
 
@@ -1496,6 +1494,15 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 		}
 	}
 	spin_unlock_irqrestore(&req->list_lock, flags);
+	if (req->data_iovs) {
+		int i;
+		for (i = 0; i < req->data_iovs; i++)
+			if (req->iovs[i].npages && req->iovs[i].pages) {
+				SDMA_DBG(req, "left over iovec pages %d\n",
+					 req->iovs[i].npages);
+				unpin_vector_pages(&req->iovs[i]);
+			}
+	}
 	/* Remove number of outstanding packets from packet queue count */
 	atomic64_sub((req->info.npkts - req->txreqs_sent), &req->pq->npkts);
 	if (req->user_proc)

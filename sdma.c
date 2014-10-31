@@ -642,7 +642,6 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	dd->flags |= QIB_HAS_SEND_DMA;
 	dd->flags |= idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
 	dd->num_sdma = num_engines;
-	seqlock_init(&dd->sde_map_lock);
 	sdma_map_init(dd, port, hfi_num_vls(ppd->vls_operational));
 	return 0;
 
