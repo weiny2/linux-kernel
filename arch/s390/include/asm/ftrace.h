@@ -4,7 +4,6 @@
 #ifndef __ASSEMBLY__
 
 extern void _mcount(void);
-extern void ftrace_regs_graph_caller(void);
 
 struct dyn_arch_ftrace { };
 
@@ -17,10 +16,6 @@ static inline unsigned long ftrace_call_adjust(unsigned long addr)
 }
 
 #endif /* __ASSEMBLY__ */
-
-#ifdef CONFIG_DYNAMIC_FTRACE
-#define ARCH_SUPPORTS_FTRACE_OPS 1
-#endif
 
 #ifdef CONFIG_64BIT
 #define MCOUNT_INSN_SIZE  12
