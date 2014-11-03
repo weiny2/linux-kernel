@@ -24,9 +24,11 @@ nd_core-y += dimm_devs.o
 nd_core-y += dimm.o
 nd_core-y += region_devs.o
 nd_core-y += region.o
-nd_core-y += dsm.o
 
 nd_core-$(CONFIG_ND_BTT_DEVS) += btt_devs.o
 
 nd_pmem-y := pmem.o
 nd_btt-y := btt.o
+
+obj-$(CONFIG_ND_MANUAL_DSM) += nd_dsm.o
+nd_dsm-y := dsm.o

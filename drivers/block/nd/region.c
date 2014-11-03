@@ -141,12 +141,12 @@ static struct nd_device_driver nd_region_driver = {
 	.type = ND_DRIVER_REGION_BLOCK | ND_DRIVER_REGION_PMEM,
 };
 
-int nd_region_init(void)
+int __init nd_region_init(void)
 {
 	return nd_driver_register(&nd_region_driver);
 }
 
-void nd_region_exit(void)
+void __exit nd_region_exit(void)
 {
 	driver_unregister(&nd_region_driver.drv);
 }

@@ -207,14 +207,11 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 	return 0;
 }
 
-#ifdef CONFIG_ND_MANUAL_DSM
-bool nd_manual_dsm = true;
-#else
-bool nd_manual_dsm = false;
-#endif
+unsigned long nd_manual_dsm = (!!IS_ENABLED(CONFIG_ND_MANUAL_DSM) << NFIT_CMD_VENDOR);
 EXPORT_SYMBOL(nd_manual_dsm);
-module_param(nd_manual_dsm, bool, S_IRUGO);
-MODULE_PARM_DESC(nd_manual_dsm, "Manually run _DSM commands instead of using BIOS");
+module_param(nd_manual_dsm, ulong, S_IRUGO);
+MODULE_PARM_DESC(nd_manual_dsm,
+		"Manually override _DSM commands instead of bus provided routines");
 
 int nd_dsm_passthru(void *buf, unsigned int buf_len)
 {
@@ -265,7 +262,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 	return ret;
 }
 
-int nd_dsm_init(void)
+static __init int nd_dsm_init(void)
 {
 	if (!nd_manual_dsm)
 		return 0;
@@ -327,7 +324,7 @@ int nd_dsm_init(void)
 	return 0;
 }
 
-void nd_dsm_exit(void)
+static __exit void nd_dsm_exit(void)
 {
 	if (!nd_manual_dsm)
 		return;
@@ -341,11 +338,25 @@ void nd_dsm_exit(void)
 int nd_dsm_ctl(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int cmd, void *buf, unsigned int buf_len)
 {
+	int rc;
+
 	switch (cmd) {
 	case NFIT_CMD_VENDOR:
-		return nd_dsm_passthru(buf, buf_len);
+		rc = nd_dsm_passthru(buf, buf_len);
+		break;
 	default:
-		return -EOPNOTSUPP;
+		rc = -EOPNOTSUPP;
+		break;
 	}
+	pr_debug("%s: %s cmd: %d buf_len: %d rc: %d\n",
+			nfit_desc->provider_name ? nfit_desc->provider_name
+			: "nd_dsm", __func__, cmd, buf_len, rc);
+	return rc;
+
 }
 EXPORT_SYMBOL(nd_dsm_ctl);
+
+MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("Intel Corporation");
+module_init(nd_dsm_init);
+module_exit(nd_dsm_exit);

@@ -16,11 +16,19 @@
 
 #include "nfit.h"
 
-int nd_dsm_init(void);
-void nd_dsm_exit(void);
+#if IS_ENABLED(CONFIG_ND_MANUAL_DSM)
 int nd_dsm_ctl(struct nfit_bus_descriptor *nfit_desc, unsigned int cmd,
 		void *buf, unsigned int buf_len);
 
-extern bool nd_manual_dsm;
+extern unsigned long nd_manual_dsm;
+#else
+static inline int nd_dsm_ctl(struct nfit_bus_descriptor *nfit_desc,
+		unsigned int cmd, void *buf, unsigned int buf_len)
+{
+	return -ENOTTY;
+}
+
+static unsigned long nd_manual_dsm;
+#endif
 
 #endif /* __DSM_H__ */

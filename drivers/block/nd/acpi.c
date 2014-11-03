@@ -16,7 +16,7 @@
 #include <linux/ndctl.h>
 #include <linux/module.h>
 #include "nfit.h"
-#include "dsm.h"
+#include "dsm.h" /* nd_manual_dsm */
 
 static bool old_acpi = true;
 module_param(old_acpi, bool, 0);
@@ -178,6 +178,9 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	union acpi_object in_obj, *out_obj;
 	int rc = 0, i, offset;
 
+	if (test_bit(cmd, &nd_manual_dsm))
+		return nd_dsm_ctl(nfit_desc, cmd, buf, buf_len);
+
 	if (!desc)
 		return -ENOTTY;
 
@@ -315,18 +318,12 @@ static int nd_acpi_add(struct acpi_device *dev)
 	nfit_desc->nfit_base = (void __iomem *) tbl;
 	nfit_desc->nfit_size = sz;
 	nfit_desc->provider_name = "ACPI.NFIT";
+	nfit_desc->nfit_ctl = nd_acpi_ctl;
 
-	if (nd_manual_dsm) {
-		nfit_desc->nfit_ctl = nd_dsm_ctl;
-		set_bit(NFIT_CMD_VENDOR, &nfit_desc->dsm_mask);
-	} else {
-		nfit_desc->nfit_ctl = nd_acpi_ctl;
-
-		for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
-			if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
+	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
+		if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
 					NFIT_CMD_IMPLEMENTED, 1ULL << i))
-				set_bit(i, &nfit_desc->dsm_mask);
-		}
+			set_bit(i, &nfit_desc->dsm_mask);
 	}
 
 	/* ACPI references one global NFIT for all devices, i.e. no parent */
@@ -403,19 +400,14 @@ static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
 	if (!nfit_desc->nfit_base)
 		return AE_ERROR;
 	nfit_desc->provider_name = "ACPI.NFIT";
+	nfit_desc->nfit_ctl = nd_acpi_ctl;
 
-	if (nd_manual_dsm) {
-		nfit_desc->nfit_ctl = nd_dsm_ctl;
-		set_bit(NFIT_CMD_VENDOR, &nfit_desc->dsm_mask);
-	} else {
-		nfit_desc->nfit_ctl = nd_acpi_ctl;
-
-		for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
-			if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
+	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
+		if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
 					NFIT_CMD_IMPLEMENTED, 1ULL << i))
-				set_bit(i, &nfit_desc->dsm_mask);
-		}
+			set_bit(i, &nfit_desc->dsm_mask);
 	}
+	nfit_desc->dsm_mask |= nd_manual_dsm;
 
 	/* ACPI references one global NFIT for all devices, i.e. no parent */
 	nfit->nd_bus = nfit_bus_register(NULL, nfit_desc);

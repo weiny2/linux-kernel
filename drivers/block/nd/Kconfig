@@ -27,7 +27,9 @@ config ND_CORE
 	  enumerate/manage this subsystem.
 
 config ND_MANUAL_DSM
-	bool "ND Manual DSM: Manually run vendor specific _DSM commands"
+	tristate "ND Manual DSM: Manually run vendor specific _DSM commands"
+	depends on NFIT_ACPI
+	default NFIT_ACPI
 	help
 	  Manually run vendor specific _DSM commands by directly interacting
 	  with the Falcon Valley mailbox registers, as opposed to using the
