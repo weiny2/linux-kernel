@@ -135,7 +135,8 @@ static int nd_bus_probe(struct device *dev)
 		rc = add_deferred_tracker(nd_bus, dev);
 	else if (rc == 0)
 		del_deferred_tracker(nd_bus, dev);
-	dev_dbg(dev, "%pf returned: %d\n", nd_drv->probe, rc);
+	dev_dbg(&nd_bus->dev, "%s.probe(%s) = %d\n", dev->driver->name,
+			dev_name(dev), rc);
 
 	/* check if our btt-seed has sprouted, and plant another */
 	if (rc == 0 && is_nd_btt(dev) && dev == &nd_bus->nd_btt->dev) {
@@ -160,10 +161,12 @@ static int nd_bus_remove(struct device *dev)
 {
 	struct nd_device_driver *nd_drv = to_nd_device_driver(dev->driver);
 	struct module *provider = to_bus_provider(dev);
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 	int rc;
 
 	rc = nd_drv->remove(dev);
-	dev_dbg(dev, "%pf returned: %d\n", nd_drv->remove, rc);
+	dev_dbg(&nd_bus->dev, "%s.remove(%s) = %d\n", dev->driver->name,
+			dev_name(dev), rc);
 	module_put(provider);
 	return rc;
 }
