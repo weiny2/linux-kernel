@@ -1324,34 +1324,29 @@ static void unlink_btt(struct nd_btt *nd_btt)
 	sysfs_remove_link(dir, "nd_btt");
 }
 
-static const fmode_t nd_btt_mode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
-
 static int nd_btt_probe(struct device *dev)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
-	struct nd_io *ndio = nd_btt->ndio;
+	struct nd_io_claim *ndio_claim = nd_btt->ndio_claim;
 	struct block_device *bdev;
 	struct btt *btt;
 	size_t rawsize;
 	int rc;
 
-	if (!ndio || !nd_btt->uuid || !nd_btt->backing_dev
+	if (!ndio_claim || !nd_btt->uuid || !nd_btt->backing_dev
 			|| !is_lbasize_supported(nd_btt->lbasize))
 		return -ENODEV;
 
-	bdev = nd_btt->backing_dev;
-	rc = blkdev_get(bdev, nd_btt_mode, nd_btt);
+	rc = link_btt(nd_btt);
 	if (rc)
 		return rc;
 
-	rc = link_btt(nd_btt);
-	if (rc)
-		goto err_link;
-
+	bdev = nd_btt->backing_dev;
 	nd_btt->offset = partition_offset(bdev);
 	rawsize = bdev->bd_part->nr_sects << SECTOR_SHIFT;
+	nd_btt->ndio = nd_btt->ndio_claim->parent;
 	btt = btt_init(nd_btt, rawsize, nd_btt->lbasize, nd_btt->uuid,
-			ndio->num_lanes);
+			nd_btt->ndio->num_lanes);
 	if (!btt) {
 		rc = -ENOMEM;
 		goto err_btt;
@@ -1362,8 +1357,6 @@ static int nd_btt_probe(struct device *dev)
 	return 0;
  err_btt:
 	unlink_btt(nd_btt);
- err_link:
-	blkdev_put(nd_btt->backing_dev, nd_btt_mode);
 	return rc;
 }
 
@@ -1374,13 +1367,6 @@ static int nd_btt_remove(struct device *dev)
 
 	btt_fini(btt);
 	unlink_btt(nd_btt);
-
-	/*
-	 * Note, nd_btt may have already dropped its backing device reference
-	 * (cleared nd_btt->backing_dev) at this point.  Here we drop the
-	 * btt-driver backing device reference.
-	 */
-	blkdev_put(btt->backing_dev, nd_btt_mode);
 
 	return 0;
 }

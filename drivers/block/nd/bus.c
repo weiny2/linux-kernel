@@ -295,8 +295,7 @@ int nd_register_ndio(struct nd_io *ndio)
 	struct device *dev;
 
 	if (!ndio || !ndio->dev || !ndio->disk || !list_empty(&ndio->list)
-			|| !ndio->rw_bytes || ndio->holder
-			|| ndio->notify_remove) {
+			|| !ndio->rw_bytes || !list_empty(&ndio->claims)) {
 		pr_debug("%s bad parameters from %pf\n", __func__,
 				__builtin_return_address(0));
 		return -EINVAL;
@@ -323,25 +322,22 @@ EXPORT_SYMBOL(nd_register_ndio);
  */
 static int __nd_unregister_ndio(struct nd_io *ndio)
 {
+	struct nd_io_claim *ndio_claim, *_n;
 	struct nd_bus *nd_bus;
-	struct nd_io *n, *_n;
-
-	if (ndio->holder || ndio->notify_remove) {
-		dev_WARN_ONCE(ndio->dev, 1, "%s: ndio busy\n", __func__);
-		return -EBUSY;
-	}
+	LIST_HEAD(claims);
 
 	nd_bus = walk_to_nd_bus(ndio->dev);
 	if (!nd_bus || list_empty(&ndio->list))
 		return -ENXIO;
 
-	list_for_each_entry_safe(n, _n, &nd_bus->ndios, list)
-		if (n == ndio) {
-			list_del_init(&ndio->list);
-			break;
-		}
-	if (!list_empty(&ndio->list))
-		return -ENXIO;
+	spin_lock(&ndio->lock);
+	list_splice_init(&ndio->claims, &claims);
+	spin_unlock(&ndio->lock);
+
+	list_for_each_entry_safe(ndio_claim, _n, &claims, list)
+		ndio_claim->notify_remove(ndio_claim);
+
+	list_del_init(&ndio->list);
 
 	return 0;
 }
@@ -353,8 +349,6 @@ int nd_unregister_ndio(struct nd_io *ndio)
 	int rc;
 
 	nd_bus_lock(dev);
-	if (ndio->holder)
-		ndio->notify_remove(ndio);
 	mutex_lock(&nd_bus_list_mutex);
 	rc = __nd_unregister_ndio(ndio);
 	mutex_unlock(&nd_bus_list_mutex);

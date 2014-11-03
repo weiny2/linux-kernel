@@ -25,6 +25,7 @@ enum {
 };
 
 struct block_device;
+struct nd_io_claim;
 struct nd_btt;
 struct nd_io;
 
@@ -81,14 +82,16 @@ bool is_nd_pmem(struct device *dev);
 #if IS_ENABLED(CONFIG_ND_BTT_DEVS)
 bool is_nd_btt(struct device *dev);
 struct nd_btt *nd_btt_create(struct nd_bus *nd_bus, struct block_device *bdev,
-		struct nd_io *ndio, unsigned long lbasize, u8 uuid[16]);
+		struct nd_io_claim *ndio_claim, unsigned long lbasize,
+		u8 uuid[16]);
 #else
 static inline bool is_nd_btt(struct device *dev)
 {
 	return false;
 }
+
 static inline struct nd_btt *nd_btt_create(struct nd_bus *nd_bus,
-		struct block_device *bdev, struct nd_io *ndio,
+		struct block_device *bdev, struct nd_io_claim *ndio_claim,
 		unsigned long lbasize, u8 uuid[16])
 {
 	return NULL;

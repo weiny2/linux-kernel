@@ -24,7 +24,8 @@ void nd_btt_release(struct device *dev)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 
-	WARN_ON(nd_btt->backing_dev || nd_btt->ndio);
+	WARN_ON(nd_btt->backing_dev);
+	ndio_del_claim(nd_btt->ndio_claim);
 	ida_simple_remove(&btt_ida, nd_btt->id);
 	kfree(nd_btt->uuid);
 	kfree(nd_btt);
@@ -216,23 +217,21 @@ static ssize_t backing_dev_show(struct device *dev,
 
 static const fmode_t nd_btt_devs_mode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 
-static void nd_btt_ndio_notify_remove(struct nd_io *ndio)
+static void nd_btt_ndio_notify_remove(struct nd_io_claim *ndio_claim)
 {
-	struct nd_btt *nd_btt = ndio->holder;
 	char bdev_name[BDEVNAME_SIZE];
+	struct nd_btt *nd_btt;
 
-	if (!nd_btt)
+	if (!ndio_claim || !ndio_claim->holder)
 		return;
 
+	nd_btt = to_nd_btt(ndio_claim->holder);
 	WARN_ON_ONCE(!is_nd_bus_locked(&nd_btt->dev));
-	dev_dbg(&nd_btt->dev, "%s: release /dev/%s\n", __func__,
+	dev_dbg(&nd_btt->dev, "%pf: %s: release /dev/%s\n",
+			__builtin_return_address(0), __func__,
 			bdevname(nd_btt->backing_dev, bdev_name));
 	blkdev_put(nd_btt->backing_dev, nd_btt_devs_mode);
-	ndio->notify_remove = NULL;
-	ndio->holder = NULL;
-
 	nd_btt->backing_dev = NULL;
-	nd_btt->ndio = NULL;
 
 	/*
 	 * Once we've had our backing device removed we need to be fully
@@ -242,6 +241,8 @@ static void nd_btt_ndio_notify_remove(struct nd_io *ndio)
 	 */
 	if (nd_btt->dev.driver)
 		nd_device_unregister(&nd_btt->dev, ND_ASYNC);
+	else
+		ndio_del_claim(ndio_claim);
 }
 
 static ssize_t __backing_dev_store(struct device *dev,
@@ -267,7 +268,7 @@ static ssize_t __backing_dev_store(struct device *dev,
 	if (strcmp(strim(path), "") == 0) {
 		if (!nd_btt->backing_dev)
 			goto out;
-		nd_btt_ndio_notify_remove(nd_btt->ndio);
+		nd_btt_ndio_notify_remove(nd_btt->ndio_claim);
 		goto out;
 	} else if (nd_btt->backing_dev) {
 		dev_dbg(dev, "backing_dev already set\n");
@@ -292,13 +293,16 @@ static ssize_t __backing_dev_store(struct device *dev,
 		goto out;
 	}
 
+	nd_btt->ndio_claim = ndio_add_claim(ndio, &nd_btt->dev,
+			nd_btt_ndio_notify_remove);
+	if (!nd_btt->ndio_claim) {
+		blkdev_put(bdev, nd_btt_devs_mode);
+		len = -ENOMEM;
+		goto out;
+	}
+
 	WARN_ON_ONCE(!is_nd_bus_locked(&nd_btt->dev));
-
-	ndio->notify_remove = nd_btt_ndio_notify_remove;
-	ndio->holder = nd_btt;
-
 	nd_btt->backing_dev = bdev;
-	nd_btt->ndio = ndio;
 
  out:
 	kfree(path);
@@ -379,7 +383,8 @@ static const struct attribute_group *nd_btt_attribute_groups[] = {
 };
 
 struct nd_btt *nd_btt_create(struct nd_bus *nd_bus, struct block_device *bdev,
-		struct nd_io *ndio, unsigned long lbasize, u8 uuid[16])
+		struct nd_io_claim *ndio_claim, unsigned long lbasize,
+		u8 uuid[16])
 {
 	struct nd_btt *nd_btt = kzalloc(sizeof(*nd_btt), GFP_KERNEL);
 	struct device *dev;
@@ -392,7 +397,7 @@ struct nd_btt *nd_btt_create(struct nd_bus *nd_bus, struct block_device *bdev,
 		return NULL;
 	}
 
-	nd_btt->ndio = ndio;
+	nd_btt->ndio_claim = ndio_claim;
 	nd_btt->lbasize = lbasize;
 	nd_btt->backing_dev = bdev;
 	if (uuid)

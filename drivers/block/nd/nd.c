@@ -71,7 +71,9 @@ void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
 		unsigned long align)
 {
 	memset(ndio, 0, sizeof(*ndio));
+	INIT_LIST_HEAD(&ndio->claims);
 	INIT_LIST_HEAD(&ndio->list);
+	spin_lock_init(&ndio->lock);
 	ndio->dev = dev;
 	ndio->disk = disk;
 	ndio->align = align;
@@ -79,6 +81,47 @@ void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
 	ndio->rw_bytes = rw_bytes;
 }
 EXPORT_SYMBOL(nd_init_ndio);
+
+void ndio_del_claim(struct nd_io_claim *ndio_claim)
+{
+	struct nd_io *ndio;
+	struct device *holder;
+
+	if (!ndio_claim)
+		return;
+	ndio = ndio_claim->parent;
+	holder = ndio_claim->holder;
+
+	spin_lock(&ndio->lock);
+	list_del(&ndio_claim->list);
+	spin_unlock(&ndio->lock);
+	put_device(ndio->dev);
+	kfree(ndio_claim);
+	put_device(holder);
+}
+
+struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
+		ndio_notify_remove_fn notify_remove)
+{
+	struct nd_io_claim *ndio_claim = kzalloc(sizeof(*ndio_claim), GFP_KERNEL);
+
+	if (!ndio_claim)
+		return NULL;
+
+	INIT_LIST_HEAD(&ndio_claim->list);
+	ndio_claim->parent = ndio;
+	get_device(ndio->dev);
+
+	spin_lock(&ndio->lock);
+	list_add(&ndio_claim->list, &ndio->claims);
+	spin_unlock(&ndio->lock);
+
+	ndio_claim->holder = holder;
+	ndio_claim->notify_remove = notify_remove;
+	get_device(holder);
+
+	return ndio_claim;
+}
 
 static void nd_bus_release(struct device *dev)
 {
@@ -124,10 +167,11 @@ struct nd_bus *to_nd_bus(struct device *dev)
 
 struct nd_bus *walk_to_nd_bus(struct device *nd_dev)
 {
-	struct device *dev = nd_dev;
+	struct device *dev;
 
-	while (dev && dev->release != nd_bus_release)
-		dev = dev->parent;
+	for (dev = nd_dev; dev; dev = dev->parent)
+		if (dev->release == nd_bus_release)
+			break;
 	dev_WARN_ONCE(nd_dev, !dev, "invalid dev, not on nd bus\n");
 	if (dev)
 		return to_nd_bus(dev);
