@@ -85,7 +85,7 @@ static int nd_region_probe(struct device *dev)
 {
 	struct nd_region *nd_region = to_nd_region(dev);
 	struct device **devs = NULL;
-	int i, rc = -ENXIO;
+	int i;
 
 	switch (nd_region_to_namespace_type(nd_region)) {
 	case ND_DEVICE_NAMESPACE_IO:
@@ -100,24 +100,12 @@ static int nd_region_probe(struct device *dev)
 
 		dev_set_name(dev, "namespace%d.%d", nd_region->id, i);
 		dev->parent = &nd_region->dev;
-		dev->bus = nd_region->dev.bus;
 		dev->groups = nd_namespace_attribute_groups;
-		rc = device_register(dev);
-		if (rc) {
-			dev_err(&nd_region->dev, "failed to register %s: %d\n",
-					dev_name(dev), rc);
-			put_device(dev);
-			break;
-		}
+		nd_device_register(dev, ND_ASYNC);
 	}
 	kfree(devs);
 
-	/*
-	 * If we found no children to register, or failed to register a
-	 * child, disable the region (fail probe).  Note, driver release
-	 * will unregister all child namespaces
-	 */
-	return rc;
+	return devs ? 0 : -ENODEV;
 }
 
 static int child_unregister(struct device *dev, void *data)
