@@ -184,8 +184,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	if (!desc)
 		return -ENOTTY;
 
-	if (!acpi_check_dsm(handle, nd_acpi_uuid, NFIT_CMD_IMPLEMENTED,
-				1ULL << cmd))
+	if (!acpi_check_dsm(handle, nd_acpi_uuid, 1, 1ULL << cmd))
 		return -ENOTTY;
 
 	in_obj.package.type = ACPI_TYPE_PACKAGE;
@@ -321,8 +320,7 @@ static int nd_acpi_add(struct acpi_device *dev)
 	nfit_desc->nfit_ctl = nd_acpi_ctl;
 
 	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
-		if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
-					NFIT_CMD_IMPLEMENTED, 1ULL << i))
+		if (acpi_check_dsm(dev->handle, nd_acpi_uuid, 1, 1ULL << i))
 			set_bit(i, &nfit_desc->dsm_mask);
 	}
 
@@ -403,8 +401,7 @@ static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
 	nfit_desc->nfit_ctl = nd_acpi_ctl;
 
 	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
-		if (acpi_check_dsm(dev->handle, nd_acpi_uuid,
-					NFIT_CMD_IMPLEMENTED, 1ULL << i))
+		if (acpi_check_dsm(dev->handle, nd_acpi_uuid, 1, 1ULL << i))
 			set_bit(i, &nfit_desc->dsm_mask);
 	}
 	nfit_desc->dsm_mask |= nd_manual_dsm;
