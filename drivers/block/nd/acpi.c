@@ -395,6 +395,7 @@ static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
 	nfit_desc = &nfit->nfit_desc;
 	nfit_desc->nfit_size = address64.address_length;
 	nfit_desc->nfit_base = ioremap_cache(start, nfit_desc->nfit_size);
+	nfit_desc->old_nfit = true;
 	if (!nfit_desc->nfit_base)
 		return AE_ERROR;
 	nfit_desc->provider_name = "ACPI.NFIT";

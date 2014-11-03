@@ -251,7 +251,8 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		nd_spa->nfit_spa = nfit_spa;
 		list_add_tail(&nd_spa->list, &nd_bus->spas);
 		dev_dbg(&nd_bus->dev, "%s: spa index: %d type: %s\n", __func__,
-				nfit_spa_spa_index(nfit_spa),
+				nfit_spa_spa_index(nfit_spa,
+					nd_bus->nfit_desc->old_nfit),
 				spa_type_name(readw(&nfit_spa->spa_type)));
 		break;
 	}
@@ -281,7 +282,8 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		list_add_tail(&nd_dcr->list, &nd_bus->dcrs);
 		dev_dbg(&nd_bus->dev, "%s: dcr index: %d num_bdw: %d\n",
 				__func__, readw(&nfit_dcr->dcr_index),
-				nfit_dcr_num_bdw(nfit_dcr));
+				nfit_dcr_num_bdw(nfit_dcr,
+					nd_bus->nfit_desc->old_nfit));
 		break;
 	}
 	case NFIT_TABLE_BDW: {

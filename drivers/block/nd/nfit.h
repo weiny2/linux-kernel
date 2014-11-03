@@ -87,11 +87,10 @@ struct nfit_spa_old {
 	__le64 spa_length;
 } __packed;
 
-extern bool old_nfit;
-
-static inline u16 nfit_spa_spa_index(struct nfit_spa __iomem *nfit_spa)
+static inline u16 nfit_spa_spa_index(struct nfit_spa __iomem *nfit_spa,
+		bool old_nfit)
 {
-	if (old_nfit && !IS_ENABLED(CONFIG_NFIT_TEST)) {
+	if (old_nfit) {
 		struct nfit_spa_old __iomem *nfit_spa_old;
 
 		nfit_spa_old = (void __iomem *) nfit_spa;
@@ -197,9 +196,10 @@ struct nfit_dcr_old {
 	__le64 status_size;
 } __packed;
 
-static inline u16 nfit_dcr_num_bdw(struct nfit_dcr __iomem *nfit_dcr)
+static inline u16 nfit_dcr_num_bdw(struct nfit_dcr __iomem *nfit_dcr,
+		bool old_nfit)
 {
-	if (old_nfit && !IS_ENABLED(CONFIG_NFIT_TEST)) {
+	if (old_nfit) {
 		struct nfit_dcr_old __iomem *nfit_dcr_old;
 
 		nfit_dcr_old = (void __iomem *) nfit_dcr;
@@ -208,9 +208,10 @@ static inline u16 nfit_dcr_num_bdw(struct nfit_dcr __iomem *nfit_dcr)
 		return readw(&nfit_dcr->num_bdw);
 }
 
-static inline u16 nfit_dcr_fic(struct nfit_dcr __iomem *nfit_dcr)
+static inline u16 nfit_dcr_fic(struct nfit_dcr __iomem *nfit_dcr,
+		bool old_nfit)
 {
-	if (old_nfit && !IS_ENABLED(CONFIG_NFIT_TEST)) {
+	if (old_nfit) {
 		struct nfit_dcr_old __iomem *nfit_dcr_old;
 
 		nfit_dcr_old = (void __iomem *) nfit_dcr;
@@ -257,6 +258,7 @@ struct nfit_bus_descriptor {
 	size_t nfit_size;
 	char *provider_name;
 	nfit_ctl_fn nfit_ctl;
+	bool old_nfit;
 };
 
 struct nd_bus;
