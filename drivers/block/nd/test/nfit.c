@@ -13,12 +13,12 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
-#include <linux/radix-tree.h>
 #include <linux/module.h>
 #include <linux/ndctl.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
-#include "nfit.h"
+#include "nfit_test.h"
+#include "../nfit.h"
 
 /*
  * Generate an NFIT table to describe the following topology:
@@ -110,6 +110,7 @@ static u32 handle[NUM_DCR] = {
 struct nfit_test {
 	struct nfit_bus_descriptor nfit_desc;
 	struct platform_device pdev;
+	struct list_head resources;
 	void __iomem *nfit_buf;
 	struct nd_bus *nd_bus;
 	dma_addr_t nfit_dma;
@@ -217,109 +218,58 @@ static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 	return rc;
 }
 
-static RADIX_TREE(nfit_radix, GFP_KERNEL);
+static DEFINE_SPINLOCK(nfit_test_lock);
+static struct nfit_test *instances[NUM_NFITS];
 
-struct nfit_test_resource {
-	struct resource *res;
-	void *buf;
-};
-
-static void free_coherent(dma_addr_t dma)
+static void *alloc_coherent(struct nfit_test *t, size_t size, dma_addr_t *dma)
 {
-	void *v = radix_tree_delete(&nfit_radix, dma >> PAGE_SHIFT);
-
-	WARN(v == NULL, "%s: unknown dma address %pad\n", __func__, &dma);
-}
-
-static struct nfit_test_resource *__alloc_coherent(struct device *dev,
-		size_t size, dma_addr_t *dma)
-{
-	void *buf = dmam_alloc_coherent(dev, size, dma, GFP_KERNEL);
-	struct nfit_test_resource *nfit_res;
-
-	if (!buf)
-		return NULL;
-	nfit_res = devm_kzalloc(dev, sizeof(*nfit_res), GFP_KERNEL);
-	if (!nfit_res)
-		return NULL;
-	memset(buf, 0, size);
-	WARN(*dma & ~PAGE_MASK, "%pad not page aligned\n", dma);
-	if (radix_tree_insert(&nfit_radix, *dma >> PAGE_SHIFT, nfit_res))
-		return NULL;
-	nfit_res->buf = buf;
-
-	return nfit_res;
-}
-
-static void *alloc_coherent(struct device *dev, size_t size, dma_addr_t *dma)
-{
-	struct nfit_test_resource *nfit_res = __alloc_coherent(dev, size, dma);
-
-	return nfit_res ? nfit_res->buf : NULL;
-}
-
-static void *alloc_coherent_res(struct device *dev, size_t size, dma_addr_t *dma)
-{
+	struct device *dev = &t->pdev.dev;
 	struct resource *res = devm_kzalloc(dev, sizeof(*res), GFP_KERNEL);
-	struct nfit_test_resource *nfit_res;
+	void *buf = dmam_alloc_coherent(dev, size, dma, GFP_KERNEL);
+	struct nfit_test_resource *nfit_res = devm_kzalloc(dev,
+			sizeof(*nfit_res), GFP_KERNEL);
 
-	if (!res)
+	if (!res || !buf || !nfit_res)
 		return NULL;
-	nfit_res = __alloc_coherent(dev, size, dma);
-	if (!nfit_res)
-		return NULL;
-
+	INIT_LIST_HEAD(&nfit_res->list);
+	memset(buf, 0, size);
+	nfit_res->buf = buf;
 	nfit_res->res = res;
 	res->start = *dma;
 	res->end = *dma + size - 1;
 	res->name = "NFIT";
+	spin_lock(&nfit_test_lock);
+	list_add(&nfit_res->list, &t->resources);
+	spin_unlock(&nfit_test_lock);
 
 	return nfit_res->buf;
 }
 
-static void __iomem *__nfit_test_ioremap(resource_size_t addr, unsigned long size)
-{
-	unsigned long key = addr >> PAGE_SHIFT;
-	struct nfit_test_resource *nfit_res;
-
-	nfit_res = radix_tree_lookup(&nfit_radix, key);
-	return nfit_res->buf;
-}
-
-static struct resource *__nfit_test_request_region(resource_size_t addr,
-		resource_size_t n)
-{
-	unsigned long key = addr >> PAGE_SHIFT;
-	struct nfit_test_resource *nfit_res;
-	struct resource *res;
-
-	nfit_res = radix_tree_lookup(&nfit_radix, key);
-	res = nfit_res ? nfit_res->res : NULL;
-	if (res)
-		res->end = res->start + n;
-	return res;
-}
-
-static void free_resources(struct nfit_test *t)
+static struct nfit_test_resource *__nfit_test_lookup(resource_size_t addr)
 {
 	int i;
 
-	if (t->nfit_buf)
-		free_coherent(t->nfit_dma);
-	for (i = 0; i < t->num_dcr; i++) {
-		if (t->dimm_dma)
-			free_coherent(t->dimm_dma[i]);
-		if (t->label_dma)
-			free_coherent(t->label_dma[i]);
+	for (i = 0; i < ARRAY_SIZE(instances); i++) {
+		struct nfit_test_resource *n, *nfit_res = NULL;
+		struct nfit_test *t = instances[i];
+
+		if (!t)
+			continue;
+		spin_lock(&nfit_test_lock);
+		list_for_each_entry(n, &t->resources, list) {
+			resource_size_t kaddr = (resource_size_t) n->buf;
+
+			if (n->res->start == addr || kaddr == addr) {
+				nfit_res = n;
+				break;
+			}
+		}
+		spin_unlock(&nfit_test_lock);
+		if (nfit_res)
+			return nfit_res;
 	}
 
-	for (i = 0; i < t->num_pm; i++)
-		if (t->spa_set_dma)
-			free_coherent(t->spa_set_dma[i]);
-
-	for (i = 0; i < t->num_dcr; i++)
-		if (t->dcr_dma)
-			free_coherent(t->dcr_dma[i]);
+	return NULL;
 }
 
 static int nfit_test0_alloc(struct nfit_test *t)
@@ -329,35 +279,34 @@ static int nfit_test0_alloc(struct nfit_test *t)
 			+ sizeof(struct nfit_mem) * NUM_MEM
 			+ sizeof(struct nfit_dcr) * NUM_DCR
 			+ sizeof(struct nfit_bdw) * NUM_BDW;
-	struct device *dev = &t->pdev.dev;
 	int i;
 
-	t->nfit_buf = alloc_coherent_res(dev, nfit_size, &t->nfit_dma);
+	t->nfit_buf = alloc_coherent(t, nfit_size, &t->nfit_dma);
 	if (!t->nfit_buf)
 		return -ENOMEM;
 	t->nfit_size = nfit_size;
 
-	t->spa_set[0] = alloc_coherent(dev, SPA0_SIZE, &t->spa_set_dma[0]);
+	t->spa_set[0] = alloc_coherent(t, SPA0_SIZE, &t->spa_set_dma[0]);
 	if (!t->spa_set[0])
 		return -ENOMEM;
 
-	t->spa_set[1] = alloc_coherent(dev, SPA1_SIZE, &t->spa_set_dma[1]);
+	t->spa_set[1] = alloc_coherent(t, SPA1_SIZE, &t->spa_set_dma[1]);
 	if (!t->spa_set[1])
 		return -ENOMEM;
 
 	for (i = 0; i < NUM_DCR; i++) {
-		t->dimm[i] = alloc_coherent(dev, DIMM_SIZE, &t->dimm_dma[i]);
+		t->dimm[i] = alloc_coherent(t, DIMM_SIZE, &t->dimm_dma[i]);
 		if (!t->dimm[i])
 			return -ENOMEM;
 
-		t->label[i] = alloc_coherent(dev, LABEL_SIZE, &t->label_dma[i]);
+		t->label[i] = alloc_coherent(t, LABEL_SIZE, &t->label_dma[i]);
 		if (!t->label[i])
 			return -ENOMEM;
 		sprintf(t->label[i], "label%d", i);
 	}
 
 	for (i = 0; i < NUM_DCR; i++) {
-		t->dcr[i] = alloc_coherent(dev, LABEL_SIZE, &t->dcr_dma[i]);
+		t->dcr[i] = alloc_coherent(t, LABEL_SIZE, &t->dcr_dma[i]);
 		if (!t->dcr[i])
 			return -ENOMEM;
 	}
@@ -378,14 +327,13 @@ static u8 nfit_checksum(void *buf, size_t size)
 static int nfit_test1_alloc(struct nfit_test *t)
 {
 	size_t nfit_size = sizeof(struct nfit) + sizeof(struct nfit_spa);
-	struct device *dev = &t->pdev.dev;
 
-	t->nfit_buf = alloc_coherent_res(dev, nfit_size, &t->nfit_dma);
+	t->nfit_buf = alloc_coherent(t, nfit_size, &t->nfit_dma);
 	if (!t->nfit_buf)
 		return -ENOMEM;
 	t->nfit_size = nfit_size;
 
-	t->spa_set[0] = alloc_coherent_res(dev, SPA2_SIZE, &t->spa_set_dma[0]);
+	t->spa_set[0] = alloc_coherent(t, SPA2_SIZE, &t->spa_set_dma[0]);
 	if (!t->spa_set[0])
 		return -ENOMEM;
 
@@ -885,7 +833,6 @@ static void nfit_test_release(struct device *dev)
 {
 	struct nfit_test *nfit_test = to_nfit_test(dev);
 
-	free_resources(nfit_test);
 	kfree(nfit_test);
 }
 
@@ -904,12 +851,6 @@ static struct platform_driver nfit_test_driver = {
 	.id_table = nfit_test_id,
 };
 
-static struct nfit_test *instances[NUM_NFITS];
-
-extern void __iomem *(*nfit_test_ioremap)(resource_size_t, unsigned long);
-extern struct resource *(*nfit_test_request_region)(resource_size_t start,
-		resource_size_t n);
-
 #ifdef CONFIG_CMA_SIZE_MBYTES
 #define CMA_SIZE_MBYTES CONFIG_CMA_SIZE_MBYTES
 #else
@@ -925,8 +866,7 @@ static __init int nfit_test_init(void)
 		return -EINVAL;
 	}
 
-	nfit_test_ioremap = __nfit_test_ioremap;
-	nfit_test_request_region = __nfit_test_request_region;
+	nfit_test_lookup = __nfit_test_lookup;
 
 	for (i = 0; i < NUM_NFITS; i++) {
 		struct nfit_test *nfit_test;
@@ -937,6 +877,7 @@ static __init int nfit_test_init(void)
 			rc = -ENOMEM;
 			goto err_register;
 		}
+		INIT_LIST_HEAD(&nfit_test->resources);
 		switch (i) {
 		case 0:
 			nfit_test->num_pm = NUM_PM;
@@ -981,7 +922,7 @@ static __exit void nfit_test_exit(void)
 {
 	int i;
 
-	nfit_test_ioremap = NULL;
+	nfit_test_lookup = NULL;
 	for (i = 0; i < NUM_NFITS; i++)
 		platform_device_unregister(&instances[i]->pdev);
 	platform_driver_unregister(&nfit_test_driver);

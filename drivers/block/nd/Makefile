@@ -1,3 +1,5 @@
+obj-$(CONFIG_NFIT_TEST) += test/
+
 ifdef CONFIG_NFIT_TEST
 ldflags-y += --wrap=ioremap_cache
 ldflags-y += --wrap=iounmap
@@ -7,8 +9,6 @@ endif
 
 obj-$(CONFIG_ND_CORE) += nd_core.o
 obj-$(CONFIG_NFIT_ACPI) += nd_acpi.o
-obj-$(CONFIG_NFIT_TEST) += nfit_test.o
-obj-$(CONFIG_NFIT_TEST) += nfit_test_mem.o
 obj-$(CONFIG_NFIT_LOCAL_DEV) += local_dev.o
 obj-$(CONFIG_NFIT_LOCAL) += local_nfit.o
 obj-$(CONFIG_BLK_DEV_PMEM) += nd_pmem.o

@@ -71,8 +71,8 @@ config NFIT_LOCAL
 config NFIT_TEST
 	tristate "NFIT TEST: Manufactured NFIT for interface testing"
 	select ND_CORE
-	depends on !(NFIT_ACPI=y || NFIT_ACPI=m || NFIT_LOCAL_DEV)
 	depends on DMA_CMA
+	depends on m
 	help
 	  For development purposes register a manufactured
 	  NFIT table to verify the resulting device model topology.
