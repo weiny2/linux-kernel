@@ -405,6 +405,7 @@ static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
 			set_bit(i, &nfit_desc->dsm_mask);
 	}
 	nfit_desc->dsm_mask |= nd_manual_dsm;
+	set_bit(NFIT_CMD_VENDOR, &nfit_desc->dsm_mask);
 
 	/* ACPI references one global NFIT for all devices, i.e. no parent */
 	nfit->nd_bus = nfit_bus_register(NULL, nfit_desc);
