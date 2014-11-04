@@ -179,9 +179,7 @@ static ssize_t __uuid_store(struct device *dev,
 	if (rc)
 		return -EINVAL;
 
-	if (nd_btt->uuid)
-		kfree(nd_btt->uuid);
-
+	kfree(nd_btt->uuid);
 	nd_btt->uuid = kmemdup(uuid, 16, GFP_KERNEL);
 	if (!nd_btt->uuid)
 		return -ENOMEM;
