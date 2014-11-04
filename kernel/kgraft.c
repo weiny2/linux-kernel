@@ -112,6 +112,18 @@ static void kgr_refs_dec(void)
 		p->refs--;
 }
 
+/* decrease reference for all older patches */
+static void kgr_refs_dec_limited(struct kgr_patch *limit)
+{
+	struct kgr_patch *p;
+
+	list_for_each_entry(p, &kgr_patches, list) {
+		if (p == limit)
+			return;
+		p->refs--;
+	}
+}
+
 static int kgr_ftrace_enable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
 {
 	int ret;
@@ -169,6 +181,22 @@ static bool kgr_patch_contains(const struct kgr_patch *p, const char *name)
 	return false;
 }
 
+/*
+ * The patch is not longer used and can be removed immediately.
+ * This function does the same as kgr_finalize() for reverted patches.
+ * It just does not need to update the state of functions.
+ */
+static void kgr_remove_patch_fast(struct kgr_patch *patch)
+{
+	kgr_refs_dec_limited(patch);
+	list_del(&patch->list);
+	module_put(patch->owner);
+}
+
+/*
+ * All patches from kgr_patches are obsoleted and will get replaced
+ * by kgr_patch.
+ */
 static void kgr_replace_all(void)
 {
 	struct kgr_patch_fun *pf;
@@ -190,13 +218,10 @@ static void kgr_replace_all(void)
 			pf->state = KGR_PATCH_REVERTED;
 		}
 
-		/* decrease the reference this patch increased earlier */
-		p->refs--;
-
 		if (needs_revert)
 			list_move(&p->list, &kgr_to_revert);
 		else
-			module_put(p->owner);
+			kgr_remove_patch_fast(p);
 	}
 }
 
@@ -603,6 +628,12 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 		goto err_unlock;
 	}
 
+	if (revert && list_empty(&patch->list)) {
+		pr_err("kgr: can't patch, this one was already reverted\n");
+		ret = -EINVAL;
+		goto err_unlock;
+	}
+
 	patch->irq_use_new = alloc_percpu(bool);
 	if (!patch->irq_use_new) {
 		pr_err("kgr: can't patch, cannot allocate percpu data\n");
@@ -641,8 +672,9 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 	kgr_patch = patch;
 	kgr_revert = revert;
 	if (revert)
-		list_del(&kgr_patch->list);
-	else
+		list_del_init(&patch->list); /* init for list_empty() above */
+	else if (!patch->replace_all)
+		/* block all older patches if they are not replaced */
 		kgr_refs_inc();
 	mutex_unlock(&kgr_in_progress_lock);
 
