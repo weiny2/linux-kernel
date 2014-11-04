@@ -462,7 +462,6 @@ static __init int nd_core_init(void)
 	BUILD_BUG_ON(sizeof(struct nfit_smbios) != 8);
 	BUILD_BUG_ON(sizeof(struct nfit_dcr) != 72);
 	BUILD_BUG_ON(sizeof(struct nfit_bdw) != 40);
-	BUILD_BUG_ON(sizeof(struct nfit_flush) != 24);
 
 	rc = nd_bus_init();
 	if (rc)

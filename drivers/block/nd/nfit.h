@@ -234,21 +234,6 @@ struct nfit_bdw {
 	__le64 dimm_block_offset;
 } __packed;
 
-/**
- * struct nfit_flush - Flush Hint Address Table
- * @num_flush: max number of flush hint addresses (architectural)
- * @num_flush_valid: number of consecutive valid flush hints in table
- */
-struct nfit_flush {
-	__le16 type;
-	__le16 length;
-	__le32 nfit_dev;
-	__le32 nfit_mask;
-	__le16 num_flush;
-	__le16 reserved;
-	__le64 flush_addr[1];
-} __packed;
-
 struct nfit_bus_descriptor;
 typedef int (*nfit_ctl_fn)(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int cmd, void *buf, unsigned int buf_len);
