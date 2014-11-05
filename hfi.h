@@ -450,19 +450,6 @@ struct qib_msix_entry {
 	cpumask_var_t mask;
 };
 
-struct xmit_wait {
-	struct timer_list timer;
-	u64 counter;
-	u8 flags;
-	struct cache {
-		u64 psxmitdata;
-		u64 psrcvdata;
-		u64 psxmitpkts;
-		u64 psrcvpkts;
-		u64 psxmitwait;
-	} counter_cache;
-};
-
 /* per-SL CCA information */
 struct cca_timer {
 	struct hrtimer hrtimer;
@@ -571,7 +558,6 @@ struct qib_pportdata {
 	atomic_t led_override_timer_active;
 	/* Used to flash LEDs in override mode */
 	struct timer_list led_override_timer;
-	struct xmit_wait cong_stats;
 	struct timer_list symerr_clear_timer;
 
 	/*
@@ -785,7 +771,6 @@ struct hfi_devdata {
 	void (*f_wantpiobuf_intr)(struct send_context *, u32);
 	/* FIXME - get rid of this */
 	void (*f_sdma_update_tail)(struct sdma_engine *, u16);
-	void (*f_set_cntr_sample)(struct qib_pportdata *, u32, u32);
 	u64 (*f_portcntr)(struct qib_pportdata *, u32);
 	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
 		u64 **);

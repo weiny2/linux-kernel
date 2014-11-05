@@ -5721,17 +5721,6 @@ static int gpio_mod(struct hfi_devdata *dd, u32 out, u32 dir, u32 mask)
 	return 1;
 }
 
-static void set_cntr_sample(struct qib_pportdata *ppd, u32 intv,
-				     u32 start)
-{
-	static int called;
-	if (!called) {
-		called = 1;
-		if (print_unimplemented)
-			dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-	}
-}
-
 /*
  * QIB sets these rcd fields in this function:
  *	rcvegrcnt	 (now eager_count)
@@ -7580,7 +7569,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_reset             = reset;
 	dd->f_sdma_update_tail  = sdma_update_tail;
 	dd->f_set_armlaunch     = set_armlaunch;
-	dd->f_set_cntr_sample   = set_cntr_sample;
 	dd->f_iblink_state      = iblink_state;
 	dd->f_ibphys_portstate  = ibphys_portstate;
 	dd->f_get_ib_cfg        = get_ib_cfg;

@@ -2693,60 +2693,6 @@ static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
 	return reply(pmp);
 }
 
-static u64 get_counter(struct qib_ibport *ibp, struct qib_pportdata *ppd,
-		       __be16 sel)
-{
-	u64 ret;
-
-	switch (sel) {
-	case IB_PMA_PORT_XMIT_DATA:
-		ret = ppd->dd->f_portcntr(ppd, QIBPORTCNTR_PSXMITDATA);
-		break;
-	case IB_PMA_PORT_RCV_DATA:
-		ret = ppd->dd->f_portcntr(ppd, QIBPORTCNTR_PSRCVDATA);
-		break;
-	case IB_PMA_PORT_XMIT_PKTS:
-		ret = ppd->dd->f_portcntr(ppd, QIBPORTCNTR_PSXMITPKTS);
-		break;
-	case IB_PMA_PORT_RCV_PKTS:
-		ret = ppd->dd->f_portcntr(ppd, QIBPORTCNTR_PSRCVPKTS);
-		break;
-	case IB_PMA_PORT_XMIT_WAIT:
-		ret = ppd->dd->f_portcntr(ppd, QIBPORTCNTR_PSXMITWAIT);
-		break;
-	default:
-		ret = 0;
-	}
-
-	return ret;
-}
-
-/* This function assumes that the xmit_wait lock is already held */
-static u64 xmit_wait_get_value_delta(struct qib_pportdata *ppd)
-{
-	u32 delta;
-
-	delta = get_counter(&ppd->ibport_data, ppd,
-			    IB_PMA_PORT_XMIT_WAIT);
-	return ppd->cong_stats.counter + delta;
-}
-
-static void cache_hw_sample_counters(struct qib_pportdata *ppd)
-{
-	struct qib_ibport *ibp = &ppd->ibport_data;
-
-	ppd->cong_stats.counter_cache.psxmitdata =
-		get_counter(ibp, ppd, IB_PMA_PORT_XMIT_DATA);
-	ppd->cong_stats.counter_cache.psrcvdata =
-		get_counter(ibp, ppd, IB_PMA_PORT_RCV_DATA);
-	ppd->cong_stats.counter_cache.psxmitpkts =
-		get_counter(ibp, ppd, IB_PMA_PORT_XMIT_PKTS);
-	ppd->cong_stats.counter_cache.psrcvpkts =
-		get_counter(ibp, ppd, IB_PMA_PORT_RCV_PKTS);
-	ppd->cong_stats.counter_cache.psxmitwait =
-		get_counter(ibp, ppd, IB_PMA_PORT_XMIT_WAIT);
-}
-
 struct stl_congestion_info_attr {
 	__be16 congestion_info;
 	u8 control_table_cap;	/* Multiple of 64 entry unit CCTs */
@@ -3671,30 +3617,6 @@ static void send_handler(struct ib_mad_agent *agent,
 	ib_free_send_mad(mad_send_wc->send_buf);
 }
 
-static void xmit_wait_timer_func(unsigned long opaque)
-{
-	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
-	struct hfi_devdata *dd = dd_from_ppd(ppd);
-	unsigned long flags;
-	u8 status;
-
-	spin_lock_irqsave(&ppd->ibport_data.lock, flags);
-	if (ppd->cong_stats.flags == IB_PMA_CONG_HW_CONTROL_SAMPLE) {
-		status = dd->f_portcntr(ppd, QIBPORTCNTR_PSSTAT);
-		if (status == IB_PMA_SAMPLE_STATUS_DONE) {
-			/* save counter cache */
-			cache_hw_sample_counters(ppd);
-			ppd->cong_stats.flags = IB_PMA_CONG_HW_CONTROL_TIMER;
-		} else
-			goto done;
-	}
-	ppd->cong_stats.counter = xmit_wait_get_value_delta(ppd);
-	dd->f_set_cntr_sample(ppd, QIB_CONG_TIMER_PSINTERVAL, 0x0);
-done:
-	spin_unlock_irqrestore(&ppd->ibport_data.lock, flags);
-	mod_timer(&ppd->cong_stats.timer, jiffies + HZ);
-}
-
 int qib_create_agents(struct qib_ibdev *dev)
 {
 	struct hfi_devdata *dd = dd_from_dev(dev);
@@ -3712,15 +3634,6 @@ int qib_create_agents(struct qib_ibdev *dev)
 			ret = PTR_ERR(agent);
 			goto err;
 		}
-
-		/* Initialize xmit_wait structure */
-		dd->pport[p].cong_stats.counter = 0;
-		init_timer(&dd->pport[p].cong_stats.timer);
-		dd->pport[p].cong_stats.timer.function = xmit_wait_timer_func;
-		dd->pport[p].cong_stats.timer.data =
-			(unsigned long)(&dd->pport[p]);
-		dd->pport[p].cong_stats.timer.expires = 0;
-		add_timer(&dd->pport[p].cong_stats.timer);
 
 		ibp->send_agent = agent;
 	}
@@ -3758,7 +3671,5 @@ void qib_free_agents(struct qib_ibdev *dev)
 			ib_destroy_ah(&ibp->sm_ah->ibah);
 			ibp->sm_ah = NULL;
 		}
-		if (dd->pport[p].cong_stats.timer.data)
-			del_timer_sync(&dd->pport[p].cong_stats.timer);
 	}
 }
