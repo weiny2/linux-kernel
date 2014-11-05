@@ -225,10 +225,14 @@ static void kgr_replace_all(void)
 	}
 }
 
-static struct kgr_patch *__kgr_finalize(void)
+static void kgr_finalize(void)
 {
 	struct kgr_patch_fun *patch_fun;
 	struct kgr_patch *p_to_revert = NULL;
+
+	pr_info("kgr succeeded\n");
+
+	mutex_lock(&kgr_in_progress_lock);
 
 	kgr_for_each_patch_fun(kgr_patch, patch_fun) {
 		int ret = kgr_patch_code(patch_fun, true, kgr_revert);
@@ -255,25 +259,11 @@ static struct kgr_patch *__kgr_finalize(void)
 	} else {
 		/*
 		 * kgr_in_progress is not cleared to avoid races after the
-		 * unlock in kgr_finalize() below. The force flag is set
-		 * instead.
+		 * unlock below. The force flag is set instead.
 		 */
 		p_to_revert = list_first_entry(&kgr_to_revert, struct kgr_patch,
 				list);
 	}
-
-	return p_to_revert;
-}
-
-static void kgr_finalize(void)
-{
-	struct kgr_patch *p_to_revert;
-
-	pr_info("kgr succeeded\n");
-
-	mutex_lock(&kgr_in_progress_lock);
-
-	p_to_revert = __kgr_finalize();
 
 	mutex_unlock(&kgr_in_progress_lock);
 
@@ -302,44 +292,14 @@ static void kgr_work_fn(struct work_struct *work)
 	kgr_finalize();
 }
 
-int kgr_unmark_processes(void)
+void kgr_unmark_processes(void)
 {
 	struct task_struct *p;
-	struct kgr_patch *p_to_revert;
-
-	mutex_lock(&kgr_in_progress_lock);
-
-	if (!kgr_in_progress) {
-		pr_info("kgr: no patching is in progress\n");
-		mutex_unlock(&kgr_in_progress_lock);
-		return -1;
-	}
 
 	read_lock(&tasklist_lock);
-
 	for_each_process(p)
 		kgr_task_safe(p);
-
 	read_unlock(&tasklist_lock);
-
-	p_to_revert = __kgr_finalize();
-	mutex_unlock(&kgr_in_progress_lock);
-
-	if (p_to_revert) {
-		int ret = kgr_modify_kernel(p_to_revert, true, true);
-		if (ret)
-			pr_err("kgr: continual revert of %s failedwith %d, but continuing\n",
-					p_to_revert->name, ret);
-	}
-
-	/*
-	 * Patching was forced to finish, everything is back in shape via
-	 * kgr_finalize. Last thing is to cancel the workqueue, otherwise
-	 * kgr_finalize would be called again.
-	 */
-	cancel_delayed_work_sync(&kgr_work);
-
-	return 0;
 }
 
 static void kgr_handle_processes(void)

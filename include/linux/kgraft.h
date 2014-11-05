@@ -125,7 +125,7 @@ extern bool kgr_in_progress;
 extern int kgr_patch_kernel(struct kgr_patch *);
 extern void kgr_patch_remove(struct kgr_patch *);
 
-extern int kgr_unmark_processes(void);
+extern void kgr_unmark_processes(void);
 extern int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force);
 extern void kgr_module_init(const struct module *mod);
 extern int kgr_patch_dir_add(struct kgr_patch *patch);

@@ -177,8 +177,8 @@ static ssize_t in_progress_store(struct kobject *kobj,
 	if (count == 0 || buf[0] != '0')
 		return -EINVAL;
 
-	WARN(!kgr_unmark_processes(),
-		"kgr: all processes marked migrated on admin's request\n");
+	kgr_unmark_processes();
+	WARN(1, "kgr: all processes marked as migrated on admin's request\n");
 
 	return count;
 }
