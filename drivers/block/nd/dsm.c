@@ -17,8 +17,6 @@
 #include <linux/uaccess.h>
 #include "dsm.h"
 #include "nfit.h"
-#include <linux/nvdimm_acpi.h>
-#include <linux/crbd_dimm.h>
 
 /* the mailbox is at 0xf000100000, the large input payload is at 0xf00020000
  * (1MB later), and the large output payload is at 0xf00030000 (another 1MB
@@ -228,8 +226,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 
 	input_payload_size = in->in_length - sizeof(*cmd);
 
-	if (input_payload_size <= CR_IN_PAYLOAD_SIZE &&
-	    fw_cmd.opcode != CR_PT_UPDATE_FW) {
+	if (input_payload_size <= CR_IN_PAYLOAD_SIZE) {
 		fw_cmd.input_payload_size	= input_payload_size;
 		fw_cmd.input_payload		= cmd->in_buf;
 	} else if (input_payload_size <= CR_IN_MB_SIZE) {
