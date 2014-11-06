@@ -193,14 +193,18 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 
 	status = (readq(mb->status) & STATUS_MASK) >> STATUS_SHIFT;
 
-	/* TODO: MB Error handling logic needs to be defined */
-	if (status)
-		return status;
-
+	/*
+	 * even if we have bad mailbox status, copy the out payloads so that
+	 * the user can look at the embedded firmware status for more
+	 * information
+	 */
 	if (fw_cmd->output_payload_size > 0)
 		cr_memcopy_outpayload(mb, fw_cmd);
 	if (fw_cmd->large_output_payload_size > 0)
 		cr_memcopy_large_outpayload(mb, fw_cmd);
+
+	if (status)
+		return -EINVAL;
 
 	return 0;
 }
