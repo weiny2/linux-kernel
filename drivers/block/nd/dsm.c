@@ -33,12 +33,16 @@ static void print_fw_cmd(struct fv_fw_cmd *fw_cmd)
 	pr_debug("***FW_CMD***\n"
 		"OpCode: %#hhx\n"
 		"SubOPcode: %#hhx\n"
+		"flags: %#x\n"
+		"Large Payload Offset:%u\n"
 		"Input Payload Size: %u\n"
 		"Large Input Payload Size: %u\n"
 		"Output Payload Size: %u\n"
 		"Large Output Payload Size: %u\n",
 		fw_cmd->opcode,
 		fw_cmd->sub_opcode,
+		fw_cmd->flags,
+		fw_cmd->large_payload_offset,
 		fw_cmd->input_payload_size,
 		fw_cmd->large_input_payload_size,
 		fw_cmd->output_payload_size,
@@ -101,26 +105,20 @@ static void cr_poll_fw_cmd_completion(struct cr_mailbox *mb)
 	} while (!(status & MB_COMPLETE));
 }
 
-void cr_memcopy_large_outpayload(struct cr_mailbox *mb,
+void cr_read_large_outpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd)
 {
-	unsigned char *to;
-	size_t remain = fw_cmd->large_output_payload_size
-		& (mb->mb_out_line_size - 1);
-	int segments;
-	int i;
+	memcpy_fromio(fw_cmd->large_output_payload,
+			mb->mb_out[0] + fw_cmd->large_payload_offset,
+			fw_cmd->large_output_payload_size);
+}
 
-	to = fw_cmd->large_output_payload;
-
-	segments = fw_cmd->large_output_payload_size / mb->mb_out_line_size;
-
-	for (i = 0; i < segments; i++) {
-		memcpy_fromio(to, mb->mb_out[i], mb->mb_out_line_size);
-		to += mb->mb_out_line_size;
-	}
-
-	if (remain)
-		memcpy_fromio(to, mb->mb_out[i], remain);
+void cr_read_large_inpayload(struct cr_mailbox *mb,
+	struct fv_fw_cmd *fw_cmd)
+{
+	memcpy_fromio(fw_cmd->large_output_payload,
+			mb->mb_in[0] + fw_cmd->large_payload_offset,
+			fw_cmd->large_output_payload_size);
 }
 
 void cr_memcopy_inpayload(struct cr_mailbox *mb,
@@ -147,34 +145,17 @@ void cr_memcopy_inpayload(struct cr_mailbox *mb,
 		memcpy_toio(mb->in_payload[i], from, remain);
 }
 
-void cr_memcopy_large_inpayload(struct cr_mailbox *mb,
+void cr_write_large_inpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd)
 {
-	unsigned char *from;
-	size_t remain = fw_cmd->large_input_payload_size
-		& (mb->mb_in_line_size - 1);
-	int segments;
-	int i;
-
-	for (i = 0; i < mb->num_mb_in_segments; i++)
-		memset_io(mb->mb_in[i], 0, mb->mb_in_line_size);
-
-	from = fw_cmd->large_input_payload;
-
-	segments = fw_cmd->large_input_payload_size / mb->mb_in_line_size;
-
-	for (i = 0; i < segments; i++) {
-		memcpy_toio(mb->mb_in[i], from, mb->mb_in_line_size);
-		from += mb->mb_in_line_size;
-	}
-
-	if (remain)
-		memcpy_toio(mb->mb_in[i], from, remain);
+	memcpy_toio(mb->mb_in[0] + fw_cmd->large_payload_offset,
+			fw_cmd->large_input_payload,
+			fw_cmd->large_input_payload_size);
 }
 
 int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 {
-	u8 status;
+	u8 status = 0;
 
 	if (cr_verify_fw_cmd(fw_cmd))
 		return -EINVAL;
@@ -182,16 +163,18 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 	if (fw_cmd->input_payload_size > 0)
 		cr_memcopy_inpayload(mb, fw_cmd);
 	if (fw_cmd->large_input_payload_size > 0)
-		cr_memcopy_large_inpayload(mb, fw_cmd);
+		cr_write_large_inpayload(mb, fw_cmd);
 
-	/* BUG: Simics MB bug never resets status code */
-	memset_io(mb->status, 0, CR_REG_SIZE);
+	if (fw_cmd->flags != FNV_BIOS_FLAG) {
+		/* BUG: Simics MB bug never resets status code */
+		memset_io(mb->status, 0, CR_REG_SIZE);
 
-	cr_write_cmd_op(mb, fw_cmd);
+		cr_write_cmd_op(mb, fw_cmd);
 
-	cr_poll_fw_cmd_completion(mb);
+		cr_poll_fw_cmd_completion(mb);
 
-	status = (readq(mb->status) & STATUS_MASK) >> STATUS_SHIFT;
+		status = (readq(mb->status) & STATUS_MASK) >> STATUS_SHIFT;
+	}
 
 	/*
 	 * even if we have bad mailbox status, copy the out payloads so that
@@ -200,8 +183,12 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 	 */
 	if (fw_cmd->output_payload_size > 0)
 		cr_memcopy_outpayload(mb, fw_cmd);
-	if (fw_cmd->large_output_payload_size > 0)
-		cr_memcopy_large_outpayload(mb, fw_cmd);
+	if (fw_cmd->large_output_payload_size > 0) {
+		if (fw_cmd->sub_opcode == FNV_BIOS_SUBOP_READ_OUTPUT)
+			cr_read_large_outpayload(mb, fw_cmd);
+		else /* sub_opcode == FNV_BIOS_SUBOP_READ_INPUT */
+			cr_read_large_inpayload(mb, fw_cmd);
+	}
 
 	if (status)
 		return -EINVAL;
@@ -223,35 +210,73 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 	struct fv_fw_cmd fw_cmd;
 	int ret, input_payload_size;
 
-	memset(&fw_cmd, 0, sizeof(fw_cmd));
+	if ((cmd->flags == FNV_BIOS_FLAG) && cmd->opcode == FNV_BIOS_OPCODE &&
+	    cmd->sub_opcode == FNV_BIOS_SUBOP_GET_SIZE) {
+		struct fnv_bios_get_size *fnv_size =
+			(struct fnv_bios_get_size *)out->out_buf;
 
-	fw_cmd.opcode = cmd->opcode;
-	fw_cmd.sub_opcode = cmd->sub_opcode;
-
-	input_payload_size = in->in_length - sizeof(*cmd);
-
-	if (input_payload_size <= CR_IN_PAYLOAD_SIZE) {
-		fw_cmd.input_payload_size	= input_payload_size;
-		fw_cmd.input_payload		= cmd->in_buf;
-	} else if (input_payload_size <= CR_IN_MB_SIZE) {
-		fw_cmd.large_input_payload_size	= input_payload_size;
-		fw_cmd.large_input_payload	= cmd->in_buf;
-	} else if (input_payload_size) {
-		pr_err("%s invalid input payload size %d\n",
-				__func__, input_payload_size);
-		return -EINVAL;
+		fnv_size->input_size = CR_IN_MB_SIZE;
+		fnv_size->output_size = CR_OUT_MB_SIZE;
+		return 0;
 	}
 
-	if (out->out_length <= CR_OUT_PAYLOAD_SIZE) {
-		fw_cmd.output_payload_size	= out->out_length;
-		fw_cmd.output_payload		= out->out_buf;
-	} else if (out->out_length <= CR_OUT_MB_SIZE) {
-		fw_cmd.large_output_payload_size = out->out_length;
-		fw_cmd.large_output_payload	 = out->out_buf;
-	} else if (out->out_length) {
-		pr_err("%s invalid input payload size %d\n",
-				__func__, out->out_length);
-		return -EINVAL;
+	memset(&fw_cmd, 0, sizeof(fw_cmd));
+
+	fw_cmd.opcode     = cmd->opcode;
+	fw_cmd.sub_opcode = cmd->sub_opcode;
+	fw_cmd.flags	  = cmd->flags;
+
+	if (fw_cmd.flags == FNV_BIOS_FLAG) {
+		struct fnv_bios_input *bios_input;
+
+		bios_input = (struct fnv_bios_input *)cmd->in_buf;
+		input_payload_size = in->in_length - sizeof(*cmd) -
+					sizeof(*bios_input);
+
+		if (fw_cmd.opcode == FNV_BIOS_OPCODE &&
+		    fw_cmd.sub_opcode == FNV_BIOS_SUBOP_WRITE_INPUT &&
+		    input_payload_size + bios_input->offset <= CR_IN_MB_SIZE) {
+			fw_cmd.large_input_payload_size	= input_payload_size;
+			fw_cmd.large_input_payload	= bios_input->buffer;
+			fw_cmd.large_payload_offset	= bios_input->offset;
+		} else if (input_payload_size) {
+			pr_err("%s invalid input payload size %d\n",
+					__func__, input_payload_size);
+			return -EINVAL;
+		}
+
+		if (fw_cmd.opcode == FNV_BIOS_OPCODE &&
+		    (fw_cmd.sub_opcode == FNV_BIOS_SUBOP_READ_INPUT ||
+		     fw_cmd.sub_opcode == FNV_BIOS_SUBOP_READ_OUTPUT) &&
+		    out->out_length + bios_input->offset <= CR_OUT_MB_SIZE) {
+			fw_cmd.large_output_payload_size = out->out_length;
+			fw_cmd.large_output_payload	 = out->out_buf;
+			fw_cmd.large_payload_offset	 = bios_input->offset;
+		} else if (out->out_length) {
+			pr_err("%s invalid output payload size %d\n",
+					__func__, out->out_length);
+			return -EINVAL;
+		}
+	} else {
+		input_payload_size = in->in_length - sizeof(*cmd);
+
+		if (input_payload_size <= CR_IN_PAYLOAD_SIZE) {
+			fw_cmd.input_payload_size = input_payload_size;
+			fw_cmd.input_payload	  = cmd->in_buf;
+		} else {
+			pr_err("%s invalid input payload size %d\n",
+					__func__, input_payload_size);
+			return -EINVAL;
+		}
+
+		if (out->out_length <= CR_OUT_PAYLOAD_SIZE) {
+			fw_cmd.output_payload_size = out->out_length;
+			fw_cmd.output_payload	   = out->out_buf;
+		} else {
+			pr_err("%s invalid output payload size %d\n",
+					__func__, out->out_length);
+			return -EINVAL;
+		}
 	}
 
 	print_fw_cmd(&fw_cmd);

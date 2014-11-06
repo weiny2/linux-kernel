@@ -98,10 +98,12 @@ struct fv_fw_cmd {
 	unsigned int id; /* The physical ID of the memory module */
 	unsigned char opcode; /* The command opcode. */
 	unsigned char sub_opcode; /* The command sub-opcode. */
+	unsigned char flags;
 	unsigned int input_payload_size; /* The size of the input payload */
 	void *input_payload; /* A pointer to the input payload buffer */
 	unsigned int output_payload_size; /* The size of the output payload */
 	void *output_payload; /* A pointer to the output payload buffer */
+	unsigned int large_payload_offset;
 	unsigned int large_input_payload_size; /* Size large input payload */
 	void *large_input_payload; /* A pointer to the large input buffer */
 	unsigned int large_output_payload_size;/* Size large output payload */

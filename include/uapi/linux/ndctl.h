@@ -109,6 +109,30 @@ struct fnv_passthru_cmd {
 	__u8 in_buf[0];
 } __packed;
 
+/* flags for fnv_passthru_cmd */
+enum {
+	FNV_BIOS_FLAG = 1,
+};
+
+enum {
+	FNV_BIOS_OPCODE			= 1,
+	FNV_BIOS_SUBOP_GET_SIZE		= 0,
+	FNV_BIOS_SUBOP_READ_INPUT	= 1,
+	FNV_BIOS_SUBOP_WRITE_INPUT	= 2,
+	FNV_BIOS_SUBOP_READ_OUTPUT	= 3,
+};
+
+struct fnv_bios_get_size {
+	__u32	input_size;
+	__u32	output_size;
+} __packed;
+
+struct fnv_bios_input {
+	__u32	unused_size;
+	__u32	offset;
+	__u8	buffer[0];
+} __packed;
+
 enum {
 	NFIT_CMD_IMPLEMENTED = 0,
 	NFIT_CMD_SMART = 1,
