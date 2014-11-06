@@ -199,6 +199,16 @@ static inline void clflushopt(volatile void *__p)
 		       "+m" (*(volatile char __force *)__p));
 }
 
+static inline void clwb(volatile void *__p)
+{
+	alternative_io_2(".byte " __stringify(NOP_DS_PREFIX) "; clflush %P0",
+			 ".byte 0x66; clflush %P0",
+			 X86_FEATURE_CLFLUSHOPT,
+			 ".byte 0x66; xsaveopt %P0",
+			 X86_FEATURE_CLWB,
+			 "+m" (*(volatile char __force *)__p));
+}
+
 static inline void pcommit(void)
 {
 	alternative(ASM_NOP4, ".byte 0x66, 0x0f, 0xae, 0xf8",
