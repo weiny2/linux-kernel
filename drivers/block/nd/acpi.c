@@ -430,17 +430,6 @@ static int legacy_nd_acpi_add(struct acpi_device *dev)
 	return 0;
 }
 
-static int try_legacy_discovery(struct acpi_device *dev)
-{
-	int rc = legacy_nd_acpi_add(dev);
-
-	WARN_TAINT_ONCE(rc == 0, TAINT_FIRMWARE_WORKAROUND,
-			"%s: discovering NFIT by _CRS is deprecated, update bios.\n",
-			dev_name(&dev->dev));
-
-	return rc;
-}
-
 static int nd_acpi_dimm_add(struct acpi_device *dev)
 {
 	if (!nd_acpi_root) {
@@ -448,7 +437,7 @@ static int nd_acpi_dimm_add(struct acpi_device *dev)
 		if (!old_acpi)
 			return -ENXIO;
 		else
-			return try_legacy_discovery(dev);
+			return legacy_nd_acpi_add(dev);
 	}
 
 	/* TODO: add _FIT parsing */
