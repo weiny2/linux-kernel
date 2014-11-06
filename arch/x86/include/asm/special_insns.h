@@ -199,6 +199,12 @@ static inline void clflushopt(volatile void *__p)
 		       "+m" (*(volatile char __force *)__p));
 }
 
+static inline void pcommit(void)
+{
+	alternative(ASM_NOP4, ".byte 0x66, 0x0f, 0xae, 0xf8",
+		    X86_FEATURE_PCOMMIT);
+}
+
 #define nop() asm volatile ("nop")
 
 
