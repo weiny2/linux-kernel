@@ -126,8 +126,8 @@ within(unsigned long addr, unsigned long start, unsigned long end)
  * @vaddr:	virtual start address
  * @size:	number of bytes to flush
  *
- * clflushopt is an unordered instruction which needs fencing with mfence or
- * sfence to avoid ordering issues.
+ * clflushopt and clwb are unordered instructions which need fencing with
+ * mfence or sfence to avoid ordering issues.
  */
 void clflush_cache_range(void *vaddr, unsigned int size)
 {
@@ -136,11 +136,11 @@ void clflush_cache_range(void *vaddr, unsigned int size)
 	mb();
 
 	for (; vaddr < vend; vaddr += boot_cpu_data.x86_clflush_size)
-		clflushopt(vaddr);
+		clwb(vaddr);
 	/*
 	 * Flush any possible final partial cacheline:
 	 */
-	clflushopt(vend);
+	clwb(vend);
 
 	mb();
 }
