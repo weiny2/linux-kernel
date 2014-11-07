@@ -1601,6 +1601,8 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 			goto fail;
 		}
 		area->pages[i] = page;
+		if (gfp_mask & __GFP_WAIT)
+			cond_resched();
 #ifdef CONFIG_XEN
 		if (dma_mask) {
 			if (xen_limit_pages_to_max_mfn(page, 0, 32)) {
