@@ -498,7 +498,7 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u32 state;
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
-	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
+	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
 	u32 buffer_units;
 	u64 tmp;
 
@@ -855,8 +855,8 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u16 lse, lwe, mtu;
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
-	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
-	int ret, ore, i, invalid;
+	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
+	int ret, ore, i, invalid = 0;
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1421,7 +1421,7 @@ static int __subn_get_stl_psi(struct stl_smp *smp, u32 am, u8 *data,
 {
 	u32 nports = STL_AM_NPORT(am);
 	u32 port_num = STL_AM_PORTNUM(am);
-	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
+	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
 	u32 lstate;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp;
@@ -1466,7 +1466,7 @@ static int __subn_set_stl_psi(struct stl_smp *smp, u32 am, u8 *data,
 {
 	u32 nports = STL_AM_NPORT(am);
 	u32 port_num = STL_AM_PORTNUM(am);
-	u32 start_of_sm_config = STL_AM_START_SM_CONF(am);
+	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
 	u32 ls_old;
 	u8 ls_new, ps_new;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
