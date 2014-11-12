@@ -1885,6 +1885,7 @@ retry:
 			spin_unlock_bh(&p->fcoe_rx_list.lock);
 			schedule();
 			set_current_state(TASK_RUNNING);
+			kgr_task_safe(current);
 			goto retry;
 		}
 

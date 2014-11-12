@@ -28,7 +28,7 @@
 
 #include <asm/kgraft.h>
 
-#define KGR_TIMEOUT 30
+#define KGR_TIMEOUT 2
 
 struct kgr_patch;
 

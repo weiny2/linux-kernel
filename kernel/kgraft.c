@@ -277,9 +277,15 @@ static void kgr_finalize(void)
 
 static void kgr_work_fn(struct work_struct *work)
 {
+	static bool printed = false;
+
 	if (kgr_still_patching()) {
-		pr_info("kgr still in progress after timeout (%d)\n",
-			KGR_TIMEOUT);
+		if (!printed) {
+			pr_info("kgr still in progress after timeout, will keep"
+					" trying every %d seconds\n",
+				KGR_TIMEOUT);
+			printed = true;
+		}
 		/* recheck again later */
 		queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
 		return;
@@ -290,6 +296,7 @@ static void kgr_work_fn(struct work_struct *work)
 	 * with as less performance impact as possible again
 	 */
 	kgr_finalize();
+	printed = false;
 }
 
 void kgr_unmark_processes(void)
@@ -649,7 +656,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force)
 		/*
 		 * give everyone time to exit kernel, and check after a while
 		 */
-		queue_delayed_work(kgr_wq, &kgr_work, 10 * HZ);
+		queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
 	}
 
 	return 0;
