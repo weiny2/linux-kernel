@@ -670,7 +670,7 @@ sysret_check:
 	/* edx:	work, edi: workmask */
 sysret_careful:
 #if IS_ENABLED(CONFIG_KGRAFT)
-	andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
+	LOCK_PREFIX ; andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
 #endif
 	bt $TIF_NEED_RESCHED,%edx
 	jnc sysret_signal
@@ -736,7 +736,7 @@ sysret_audit:
 	/* Do syscall tracing */
 tracesys:
 #if IS_ENABLED(CONFIG_KGRAFT)
-	andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
+	LOCK_PREFIX ; andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
 #endif
 #ifdef CONFIG_AUDITSYSCALL
 	testl $(_TIF_WORK_SYSCALL_ENTRY & ~_TIF_SYSCALL_AUDIT),TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
@@ -789,7 +789,7 @@ GLOBAL(int_with_check)
 	/* edx:	work, edi: workmask */
 int_careful:
 #if IS_ENABLED(CONFIG_KGRAFT)
-	andl $~_TIF_KGR_IN_PROGRESS,TI_flags(%rcx)
+	LOCK_PREFIX ; andl $~_TIF_KGR_IN_PROGRESS,TI_flags(%rcx)
 #endif
 	bt $TIF_NEED_RESCHED,%edx
 	jnc  int_very_careful
