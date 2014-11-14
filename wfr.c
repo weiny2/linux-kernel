@@ -5400,6 +5400,23 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	dd_dev_info(dd, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
 	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);
 
+	/* work around sticky RcvCtxtStatus.BlockedRHQFull */
+	if (did_enable
+	    && (rcvctrl & WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK)) {
+		reg = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_STATUS);
+		if (reg != 0) {
+			dd_dev_info(dd, "ctxt %d status %lld (blocked)\n",
+				ctxt, reg);
+			read_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD);
+			write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, 0x10);
+			write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, 0x00);
+			read_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD);
+			reg = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_STATUS);
+			dd_dev_info(dd, "ctxt %d status %lld (%s blocked)\n",
+				ctxt, reg, reg == 0 ? "not" : "still");
+		}
+	}
+
 	if (did_enable) {
 		/*
 		 * The interrupt timeout and count must be set after
