@@ -245,54 +245,48 @@ struct ib_pma_portcounters_cong {
 #define IB_CC_ATTR_CONGESTION_CONTROL_TABLE		cpu_to_be16(0x0017)
 #define IB_CC_ATTR_TIME_STAMP				cpu_to_be16(0x0018)
 
-/* generalizations for threshold values */
-#define IB_CC_THRESHOLD_NONE 0x0
-#define IB_CC_THRESHOLD_MIN  0x1
-#define IB_CC_THRESHOLD_MAX  0xf
+#define IB_CC_SVCTYPE_RC 0x0
+#define IB_CC_SVCTYPE_UC 0x1
+#define IB_CC_SVCTYPE_RD 0x2
+#define IB_CC_SVCTYPE_UD 0x3
 
-/* CCA MAD header constants */
-#define IB_CC_MAD_LOGDATA_LEN 32
-#define IB_CC_MAD_MGMTDATA_LEN 192
 
 /*
- * Congestion Control class portinfo capability mask bits
+ * There should be an equivalent IB #define for the following, but
+ * I cannot find it.
  */
-#define IB_CC_CPI_CM_TRAP_GEN		cpu_to_be16(1 << 0)
-#define IB_CC_CPI_CM_GET_SET_NOTICE	cpu_to_be16(1 << 1)
-#define IB_CC_CPI_CM_CAP2		cpu_to_be16(1 << 2)
-#define IB_CC_CPI_CM_ENHANCEDPORT0_CC	cpu_to_be16(1 << 8)
+#define STL_CC_LOG_TYPE_HFI	2
 
-/* Congestion info flags */
-#define IB_CC_CI_FLAGS_CREDIT_STARVATION 0x1
-#define IB_CC_TABLE_CAP_DEFAULT 31
+struct stl_hfi_cong_log_event_internal {
+	u32 lqpn;
+	u32 rqpn;
+	u8 sl;
+	u8 svc_type;
+	u32 rlid;
+	s64 timestamp; /* wider than 32 bits to detect 32 bit rollover */
+};
 
-#define IB_CC_CL_CA_LOGEVENTS_LEN 208
-
-struct ib_cc_log_attr {
-	u8 log_type;
-	u8 congestion_flags;
-	__be16 threshold_event_counter;
-	__be16 threshold_congestion_event_map;
-	__be16 current_time_stamp;
-	u8 log_events[IB_CC_CL_CA_LOGEVENTS_LEN];
-} __packed;
-
-#define IB_CC_CLEC_SERVICETYPE_RC 0x0
-#define IB_CC_CLEC_SERVICETYPE_UC 0x1
-#define IB_CC_CLEC_SERVICETYPE_RD 0x2
-#define IB_CC_CLEC_SERVICETYPE_UD 0x3
-
-struct ib_cc_log_event {
-	u8 local_qp_cn_entry;
+struct stl_hfi_cong_log_event {
+	u8 local_qp_cn_entry[3];
 	u8 remote_qp_number_cn_entry[3];
-	u8  sl_cn_entry:4;
-	u8  service_type_cn_entry:4;
+	u8 sl_svc_type_cn_entry; /* 5 bits SL, 3 bits svc type */
+	u8 reserved;
 	__be32 remote_lid_cn_entry;
 	__be32 timestamp_cn_entry;
 } __packed;
 
-/* Sixteen congestion entries */
-#define IB_CC_CCS_ENTRIES 16
+#define STL_CONG_LOG_ELEMS	96
+
+struct stl_hfi_cong_log {
+	u8 log_type;
+	u8 congestion_flags;
+	__be16 threshold_event_counter;
+	__be32 current_time_stamp;
+	u8 threshold_cong_event_map[STL_MAX_SLS/8];
+	struct stl_hfi_cong_log_event events[STL_CONG_LOG_ELEMS];
+} __packed;
+
+#define IB_CC_TABLE_CAP_DEFAULT 31
 
 /* Port control flags */
 #define IB_CC_CCS_PC_SL_BASED 0x01

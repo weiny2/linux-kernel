@@ -591,6 +591,16 @@ struct qib_pportdata {
 	/* CA's max number of 64 entry units in the congestion control table */
 	u8 cc_max_table_entries;
 
+	/* begin congestion log related entries
+	 * cc_log_lock protects all congestion log related data */
+	spinlock_t cc_log_lock ____cacheline_aligned_in_smp;
+	u8 threshold_cong_event_map[STL_MAX_SLS/8];
+	u16 threshold_event_counter;
+	struct stl_hfi_cong_log_event_internal cc_events[STL_CONG_LOG_ELEMS];
+	int cc_log_idx; /* index for logging events */
+	int cc_mad_idx; /* index for reporting events */
+	/* end congestion log related entries */
+
 	/* port relative counter buffer */
 	u64 *cntrs;
 	/* we synthesize port_xmit_discards from several egress errors */
@@ -1076,7 +1086,8 @@ int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
 inline u16 generate_jkey(unsigned int);
 void set_link_ipg(struct qib_pportdata *ppd);
-void process_becn(struct qib_pportdata *ppd, u8 sl);
+void process_becn(struct qib_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,
+		  u32 rqpn, u8 svc_type);
 void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 		u32 pkey, u32 slid, u32 dlid, u8 sc5,
 		const struct ib_grh *old_grh);

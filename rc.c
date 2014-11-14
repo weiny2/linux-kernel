@@ -1847,15 +1847,43 @@ static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
 	qp->s_ack_state = OP(ACKNOWLEDGE);
 }
 
-void process_becn(struct qib_pportdata *ppd, u8 sl)
+static void log_cca_event(struct qib_pportdata *ppd, u8 sl, u32 rlid,
+			  u32 lqpn, u32 rqpn, u8 svc_type)
+{
+	struct stl_hfi_cong_log_event_internal *cc_event;
+
+	if (sl >= STL_MAX_SLS)
+		return;
+
+	spin_lock(&ppd->cc_log_lock);
+
+	ppd->threshold_cong_event_map[sl/8] |= 1 << (sl % 8);
+	ppd->threshold_event_counter++;
+
+	cc_event = &ppd->cc_events[ppd->cc_log_idx++];
+	if (ppd->cc_log_idx == STL_CONG_LOG_ELEMS)
+		ppd->cc_log_idx = 0;
+	cc_event->lqpn = lqpn & QIB_QPN_MASK;
+	cc_event->rqpn = rqpn & QIB_QPN_MASK;
+	cc_event->sl = sl;
+	cc_event->svc_type = svc_type;
+	cc_event->rlid = rlid;
+	/* keep timestamp in units of 1.024 usec */
+	cc_event->timestamp = ktime_to_ns(ktime_get()) / 1024;
+
+	spin_unlock(&ppd->cc_log_lock);
+}
+
+void process_becn(struct qib_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
+		  u32 rqpn, u8 svc_type)
 {
 	struct cca_timer *cca_timer;
-	u16 ccti_incr, ccti_timer;
-	u16 ccti_limit;
+	u16 ccti, ccti_incr, ccti_timer, ccti_limit;
+	u8 trigger_threshold;
 	unsigned long nsec;
 	struct cc_state *cc_state;
 
-	if (sl > STL_MAX_SLS)
+	if (sl >= STL_MAX_SLS)
 		return;
 
 	cca_timer = &ppd->cca_timer[sl];
@@ -1877,6 +1905,8 @@ void process_becn(struct qib_pportdata *ppd, u8 sl)
 	ccti_limit = cc_state->cct.ccti_limit;
 	ccti_incr = cc_state->cong_setting.entries[sl].ccti_increase;
 	ccti_timer = cc_state->cong_setting.entries[sl].ccti_timer;
+	trigger_threshold =
+		cc_state->cong_setting.entries[sl].trigger_threshold;
 
 	spin_lock(&ppd->cca_timer_lock);
 
@@ -1888,9 +1918,14 @@ void process_becn(struct qib_pportdata *ppd, u8 sl)
 		set_link_ipg(ppd);
 	}
 
+	ccti = cca_timer->ccti;
+
 	spin_unlock(&ppd->cca_timer_lock);
 
 	rcu_read_unlock();
+
+	if ((trigger_threshold != 0) && (ccti >= trigger_threshold))
+		log_cca_event(ppd, sl, rlid, lqpn, rqpn, svc_type);
 
 	nsec = 1024 * ccti_timer;
 	/* ccti_timer is in units of 1.024 usec */
@@ -1948,8 +1983,13 @@ void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 
 	is_becn = (be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT) &
 			QIB_BECN_MASK;
-	if (is_becn)
-		process_becn(ppd, sl);
+	if (is_becn) {
+		u16 rlid = qp->remote_ah_attr.dlid;
+		u32 lqpn, rqpn;
+		lqpn = qp->ibqp.qp_num;
+		rqpn = qp->remote_qpn;
+		process_becn(ppd, sl, rlid, lqpn, rqpn, IB_CC_SVCTYPE_RC);
+	}
 
 	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT) &
 			QIB_FECN_MASK;

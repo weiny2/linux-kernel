@@ -394,8 +394,33 @@ unlock:
 		 * When that changes, CNP_OPCODE will not be handled in an
 		 * error path.
 		 */
-		if (opcode == CNP_OPCODE)
-			process_becn(ppd, sl);
+		if (opcode == CNP_OPCODE) {
+			struct qib_qp *qp = NULL;
+			u32 lqpn, rqpn;
+			u16 rlid;
+			u8 svc_type;
+
+			lqpn = be32_to_cpu(bth[1]) & QIB_QPN_MASK;
+			qp = qib_lookup_qpn(ibp, lqpn);
+			if (qp == NULL)
+				goto drop;
+
+			switch (qp->ibqp.qp_type) {
+			case IB_QPT_UD:
+				rlid = 0;
+				rqpn = 0;
+				svc_type = IB_CC_SVCTYPE_UD;
+				break;
+			case IB_QPT_UC:
+				rlid = be16_to_cpu(rhdr->lrh[3]);
+				rqpn = qp->remote_qpn;
+				svc_type = IB_CC_SVCTYPE_UC;
+				break;
+			default:
+				goto drop;
+			}
+			process_becn(ppd, sl, rlid, lqpn, rqpn, svc_type);
+		}
 
 		rhf_addr[1] &= ~RHF1_RCV_TYPE_ERR_SMASK;
 		break;

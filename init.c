@@ -578,6 +578,7 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 	if (!ppd->cc_state)
 		goto bail;
 
+	spin_lock_init(&ppd->cc_log_lock);
 	return;
 
 bail:

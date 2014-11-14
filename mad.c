@@ -2712,7 +2712,7 @@ static int __subn_get_stl_cong_info(struct stl_smp *smp, u32 am, u8 *data,
 
 	p->congestion_info = 0;
 	p->control_table_cap = ppd->cc_max_table_entries;
-	p->congestion_log_length = 0; /* FIXME */
+	p->congestion_log_length = STL_CONG_LOG_ELEMS;
 
 	if (resp_len)
 		*resp_len += sizeof(*p);
@@ -2787,6 +2787,74 @@ static int __subn_set_stl_cong_setting(struct stl_smp *smp, u32 am, u8 *data,
 
 	return __subn_get_stl_cong_setting(smp, am, data, ibdev, port,
 					   resp_len);
+}
+
+static int __subn_get_stl_hfi_cong_log(struct stl_smp *smp, u32 am,
+				       u8 *data, struct ib_device *ibdev,
+				       u8 port, u32 *resp_len)
+{
+	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct stl_hfi_cong_log *cong_log = (struct stl_hfi_cong_log *)data;
+	s64 ts;
+	int i;
+
+	clear_stl_smp_data(smp);
+
+	if (am != 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	spin_lock(&ppd->cc_log_lock);
+
+	cong_log->log_type = STL_CC_LOG_TYPE_HFI;
+	cong_log->congestion_flags = 0;
+	cong_log->threshold_event_counter =
+		cpu_to_be16(ppd->threshold_event_counter);
+	memcpy(cong_log->threshold_cong_event_map,
+	       ppd->threshold_cong_event_map,
+	       sizeof(cong_log->threshold_cong_event_map));
+	/* keep timestamp in units of 1.024 usec */
+	ts = ktime_to_ns(ktime_get()) / 1024;
+	cong_log->current_time_stamp = cpu_to_be32(ts);
+	for (i = 0; i < STL_CONG_LOG_ELEMS; i++) {
+		struct stl_hfi_cong_log_event_internal *cce =
+			&ppd->cc_events[ppd->cc_mad_idx++];
+		if (ppd->cc_mad_idx == STL_CONG_LOG_ELEMS)
+			ppd->cc_mad_idx = 0;
+		/*
+		 * Entries which are older than twice the time
+		 * required to wrap the counter are supposed to
+		 * be zeroed (CA10-49 IBTA, release 1.2.1, V1).
+		 */
+		if ((u64)(ts - cce->timestamp) > (2 * UINT_MAX))
+			continue;
+		memcpy(cong_log->events[i].local_qp_cn_entry, &cce->lqpn, 3);
+		memcpy(cong_log->events[i].remote_qp_number_cn_entry,
+			&cce->rqpn, 3);
+		cong_log->events[i].sl_svc_type_cn_entry =
+			((cce->sl & 0x1f) << 3) | (cce->svc_type & 0x7);
+		cong_log->events[i].remote_lid_cn_entry =
+			cpu_to_be32(cce->rlid);
+		cong_log->events[i].timestamp_cn_entry =
+			cpu_to_be32(cce->timestamp);
+	}
+
+	/*
+	 * Reset threshold_cong_event_map, and threshold_event_counter
+	 * to 0 when log is read.
+	 */
+	memset(ppd->threshold_cong_event_map, 0x0,
+	       sizeof(ppd->threshold_cong_event_map));
+	ppd->threshold_event_counter = 0;
+
+	spin_unlock(&ppd->cc_log_lock);
+
+	if (resp_len)
+		*resp_len += sizeof(struct stl_hfi_cong_log);
+
+	return reply(smp);
 }
 
 static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
@@ -3040,6 +3108,10 @@ static int subn_get_stl_sma(u16 attr_id, struct stl_smp *smp, u32 am,
 		break;
 	case STL_ATTRIB_ID_HFI_CONGESTION_SETTING:
 		ret = __subn_get_stl_cong_setting(smp, am, data, ibdev,
+						  port, resp_len);
+		break;
+	case STL_ATTRIB_ID_HFI_CONGESTION_LOG:
+		ret = __subn_get_stl_hfi_cong_log(smp, am, data, ibdev,
 						  port, resp_len);
 		break;
 	case STL_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
