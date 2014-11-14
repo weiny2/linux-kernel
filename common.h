@@ -506,53 +506,50 @@ struct qib_flash {
 
 /*
  * Receive Header Flags
- * These bits are split into 2 4-byte quantities.
  */
-/* first DWORD flags */
-#define RHF0_PKT_LEN_SHIFT 0
-#define RHF0_PKT_LEN_MASK 0xfff
-#define RHF0_PKT_LEN_SMASK (RHF0_PKT_LEN_MASK << RHF0_PKT_LEN_SHIFT)
+#define RHF_PKT_LEN_SHIFT	0
+#define RHF_PKT_LEN_MASK	0xfffull
+#define RHF_PKT_LEN_SMASK (RHF_PKT_LEN_MASK << RHF_PKT_LEN_SHIFT)
 
-#define RHF0_RCV_TYPE_SHIFT 12
-#define RHF0_RCV_TYPE_MASK 0x7
-#define RHF0_RCV_TYPE_SMASK (RHF0_RCV_TYPE_MASK << RHF0_RCV_TYPE_SHIFT)
+#define RHF_RCV_TYPE_SHIFT	12
+#define RHF_RCV_TYPE_MASK	0x7ull
+#define RHF_RCV_TYPE_SMASK (RHF_RCV_TYPE_MASK << RHF_RCV_TYPE_SHIFT)
 
-#define RHF0_USE_EGR_BFR_SHIFT 15
-#define RHF0_USE_EGR_BFR_MASK 0x1
-#define RHF0_USE_EGR_BFR_SMASK (RHF0_USE_EGR_BFR_MASK << RHF0_USE_EGR_BFR_SHIFT)
+#define RHF_USE_EGR_BFR_SHIFT	15
+#define RHF_USE_EGR_BFR_MASK	0x1ull
+#define RHF_USE_EGR_BFR_SMASK (RHF_USE_EGR_BFR_MASK << RHF_USE_EGR_BFR_SHIFT)
 
-#define RHF0_EGR_INDEX_SHIFT 16
-#define RHF0_EGR_INDEX_MASK 0x7ff
-#define RHF0_EGR_INDEX_SMASK (RHF0_EGR_INDEX_MASK << RHF0_EGR_INDEX_SHIFT)
+#define RHF_EGR_INDEX_SHIFT	16
+#define RHF_EGR_INDEX_MASK	0x7ffull
+#define RHF_EGR_INDEX_SMASK (RHF_EGR_INDEX_MASK << RHF_EGR_INDEX_SHIFT)
 
-#define RHF0_DC_INFO_SHIFT 27
-#define RHF0_DC_INFO_MASK 0x1
-#define RHF0_DC_INFO_SMASK (RHF0_DC_INFO_MASK << RHF0_DC_INFO_SHIFT)
+#define RHF_DC_INFO_SHIFT	27
+#define RHF_DC_INFO_MASK	0x1ull
+#define RHF_DC_INFO_SMASK (RHF_DC_INFO_MASK << RHF_DC_INFO_SHIFT)
 
-#define RHF0_RCV_SEQ_SHIFT 28
-#define RHF0_RCV_SEQ_MASK 0xf
-#define RHF0_RCV_SEQ_SMASK (RHF0_RCV_SEQ_MASK << RHF0_RCV_SEQ_SHIFT)
+#define RHF_RCV_SEQ_SHIFT	28
+#define RHF_RCV_SEQ_MASK	0xfull
+#define RHF_RCV_SEQ_SMASK (RHF_RCV_SEQ_MASK << RHF_RCV_SEQ_SHIFT)
 
-/* second DWORD flags */
-#define RHF1_EGR_OFFSET_SHIFT           (32-32)
-#define RHF1_EGR_OFFSET_MASK 0xfff
-#define RHF1_EGR_OFFSET_SMASK (RHF1_EGR_OFFSET_MASK << RHF1_EGR_OFFSET_SHIFT)
-#define RHF1_HDRQ_OFFSET_SHIFT          (44-32)
-#define RHF1_HDRQ_OFFSET_MASK 0x1ff
-#define RHF1_HDRQ_OFFSET_SMASK (RHF1_HDRQ_OFFSET_MASK << RHF1_HDRQ_OFFSET_SHIFT)
-#define RHF1_K_HDR_LEN_ERR	(0x1 << (53-32))
-#define RHF1_DC_UNC_ERR		(0x1 << (54-32))
-#define RHF1_DC_ERR	        (0x1 << (55-32))
-#define RHF1_RCV_TYPE_ERR_SHIFT         (56-32)
-#define RHF1_RCV_TYPE_ERR_MASK  0x7
-#define RHF1_RCV_TYPE_ERR_SMASK (RHF1_RCV_TYPE_ERR_MASK << RHF1_RCV_TYPE_ERR_SHIFT)
-#define RHF1_TID_ERR		(0x1 << (59-32))
-#define RHF1_LEN_ERR		(0x1 << (60-32))
-#define RHF1_ECC_ERR		(0x1 << (61-32))
-#define RHF1_VCRC_ERR		(0x1 << (62-32))
-#define RHF1_ICRC_ERR		(0x1 << (63-32))
+#define RHF_EGR_OFFSET_SHIFT	32
+#define RHF_EGR_OFFSET_MASK	0xfffull
+#define RHF_EGR_OFFSET_SMASK (RHF_EGR_OFFSET_MASK << RHF_EGR_OFFSET_SHIFT)
+#define RHF_HDRQ_OFFSET_SHIFT	44
+#define RHF_HDRQ_OFFSET_MASK	0x1ffull
+#define RHF_HDRQ_OFFSET_SMASK (RHF_HDRQ_OFFSET_MASK << RHF_HDRQ_OFFSET_SHIFT)
+#define RHF_K_HDR_LEN_ERR	(0x1ull << 53)
+#define RHF_DC_UNC_ERR		(0x1ull << 54)
+#define RHF_DC_ERR		(0x1ull << 55)
+#define RHF_RCV_TYPE_ERR_SHIFT	56
+#define RHF_RCV_TYPE_ERR_MASK	0x7ul
+#define RHF_RCV_TYPE_ERR_SMASK (RHF_RCV_TYPE_ERR_MASK << RHF_RCV_TYPE_ERR_SHIFT)
+#define RHF_TID_ERR		(0x1ull << 59)
+#define RHF_LEN_ERR		(0x1ull << 60)
+#define RHF_ECC_ERR		(0x1ull << 61)
+#define RHF_VCRC_ERR		(0x1ull << 62)
+#define RHF_ICRC_ERR		(0x1ull << 63)
 
-#define RHF1_ERROR_SMASK 0xffe00000			/* bits 63:53 */
+#define RHF_ERROR_SMASK 0xffe0000000000000ull		/* bits 63:53 */
 
 /* RHF receive types */
 #define RHF_RCV_TYPE_EXPECTED 0
@@ -649,58 +646,55 @@ static inline __u64 rhf_to_cpu(const __le32 *rbuf)
 	return __le64_to_cpu(*((__le64 *)rbuf));
 }
 
-static inline __u32 rhf_err_flags(const __le32 *rbuf)
+static inline u64 rhf_err_flags(u64 rhf)
 {
-	return __le32_to_cpu(rbuf[1]) & RHF1_ERROR_SMASK;
+	return rhf & RHF_ERROR_SMASK;
 }
 
-static inline __u32 rhf_rcv_type(const __le32 *rbuf)
+static inline u32 rhf_rcv_type(u64 rhf)
 {
-	return (__le32_to_cpu(rbuf[0]) >> RHF0_RCV_TYPE_SHIFT) &
-		RHF0_RCV_TYPE_MASK;
+	return (rhf >> RHF_RCV_TYPE_SHIFT) & RHF_RCV_TYPE_MASK;
 }
 
-static inline __u32 rhf_rcv_type_err(const __le32 *rbuf)
+static inline u32 rhf_rcv_type_err(u64 rhf)
 {
-	return (__le32_to_cpu(rbuf[1]) >> RHF1_RCV_TYPE_ERR_SHIFT) &
-		RHF1_RCV_TYPE_ERR_MASK;
+	return (rhf >> RHF_RCV_TYPE_ERR_SHIFT) & RHF_RCV_TYPE_ERR_MASK;
 }
 
 /* return size is in bytes, not DWORDs */
-static inline __u32 rhf_pkt_len(const __le32 *rbuf)
+static inline u32 rhf_pkt_len(u64 rhf)
 {
-	/* ordered so the shiftc can combine */
-	return ((__le32_to_cpu(rbuf[0]) & RHF0_PKT_LEN_SMASK) >>
-		RHF0_PKT_LEN_SHIFT) << 2;
+	return ((rhf & RHF_PKT_LEN_SMASK) >> RHF_PKT_LEN_SHIFT) << 2;
 }
 
-static inline __u32 rhf_egr_index(const __le32 *rbuf)
+static inline u32 rhf_egr_index(u64 rhf)
 {
-	return (__le32_to_cpu(rbuf[0]) >> RHF0_EGR_INDEX_SHIFT) &
-		RHF0_EGR_INDEX_MASK;
+	return (rhf >> RHF_EGR_INDEX_SHIFT) & RHF_EGR_INDEX_MASK;
 }
 
-static inline __u32 rhf_rcv_seq(const __le32 *rbuf)
+static inline u32 rhf_rcv_seq(u64 rhf)
 {
-	return (__le32_to_cpu(rbuf[0]) >> RHF0_RCV_SEQ_SHIFT) &
-		RHF0_RCV_SEQ_MASK;
+	return (rhf >> RHF_RCV_SEQ_SHIFT) & RHF_RCV_SEQ_MASK;
 }
 
 /* returned offset is in DWORDS */
-static inline __u32 rhf_hdrq_offset(const __le32 *rbuf)
+static inline u32 rhf_hdrq_offset(u64 rhf)
 {
-	return (__le32_to_cpu(rbuf[1]) >> RHF1_HDRQ_OFFSET_SHIFT) &
-		RHF1_HDRQ_OFFSET_MASK;
+	return (rhf >> RHF_HDRQ_OFFSET_SHIFT) & RHF_HDRQ_OFFSET_MASK;
 }
 
-static inline __u32 rhf_use_egr_bfr(const __le32 *rbuf)
+static inline u64 rhf_use_egr_bfr(u64 rhf)
 {
-	return __le32_to_cpu(rbuf[0]) & RHF0_USE_EGR_BFR_SMASK;
+	return rhf & RHF_USE_EGR_BFR_SMASK;
 }
 
-static inline __u32 rhf_egr_buf_offset(const __le32 *rbuf)
+static inline u64 rhf_dc_info(u64 rhf)
 {
-	return (__le32_to_cpu(rbuf[1]) >> RHF1_EGR_OFFSET_SHIFT) &
-		RHF1_EGR_OFFSET_MASK;
+	return rhf & RHF_DC_INFO_SMASK;
+}
+
+static inline u32 rhf_egr_buf_offset(u64 rhf)
+{
+	return (rhf >> RHF_EGR_OFFSET_SHIFT) & RHF_EGR_OFFSET_MASK;
 }
 #endif /* _COMMON_H */

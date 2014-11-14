@@ -3919,7 +3919,7 @@ static int get_base_info(struct qib_ctxtdata *rcd,
 static struct qib_message_header *get_msgheader(
 				struct hfi_devdata *dd, __le32 *rhf_addr)
 {
-	u32 offset = rhf_hdrq_offset(rhf_addr);
+	u32 offset = rhf_hdrq_offset(rhf_to_cpu(rhf_addr));
 
 	return (struct qib_message_header *)
 		(rhf_addr - dd->rhf_offset + offset);

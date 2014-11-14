@@ -185,7 +185,7 @@ int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
  * Get address of eager buffer from it's index (allocated in chunks, not
  * contiguous).
  */
-static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, __le32 *rhf,
+static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u64 rhf,
 				   u32 *update)
 {
 	u32 idx = rhf_egr_index(rhf),
@@ -224,14 +224,12 @@ inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		       struct hfi_packet *packet)
 {
-	__le32 *rhf_addr = packet->rhf_addr;
 	struct qib_message_header *rhdr = packet->hdr;
-	u32 eflags = rhf_err_flags(rhf_addr);
-	u32 rte = rhf_rcv_type_err(rhf_addr);
+	u32 rte = rhf_rcv_type_err(packet->rhf);
 	int lnh = be16_to_cpu(rhdr->lrh[0]) & 3;
 	struct qib_ibport *ibp = &ppd->ibport_data;
 
-	if (eflags & (RHF1_VCRC_ERR | RHF1_ICRC_ERR))
+	if (packet->rhf & (RHF_VCRC_ERR | RHF_ICRC_ERR))
 		return;
 
 	/*
@@ -242,12 +240,12 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 	 * For non-type 0 packets (not expected receive) see the section
 	 * 8.5.7.3 Eager TIDErr, in HAS snapshots on or later than 2013-07-12.
 	 */
-	if (eflags & RHF1_TID_ERR) {
+	if (packet->rhf & RHF_TID_ERR) {
 		/* For TIDERR and RC QPs premptively schedule a NAK */
 		struct qib_ib_header *hdr = (struct qib_ib_header *) rhdr;
 		struct qib_other_headers *ohdr = NULL;
 		struct qib_qp *qp = NULL;
-		u32 tlen = rhf_pkt_len(rhf_addr); /* in bytes */
+		u32 tlen = rhf_pkt_len(packet->rhf); /* in bytes */
 		u16 lid  = be16_to_cpu(hdr->lrh[1]);
 		u32 qp_num;
 		u32 opcode;
@@ -369,11 +367,11 @@ unlock:
 		__be32 *bth = NULL;
 		u8 sl, sc5 = be16_to_cpu(rhdr->lrh[0] >> 4) & 0xf;
 
-		if (le32_to_cpu(*rhf_addr) & RHF0_DC_INFO_SMASK)
+		if (rhf_dc_info(packet->rhf))
 			sc5 |= 0x10;
 		sl = ibp->sc_to_sl[sc5];
 
-		if (rhf_use_egr_bfr(rhf_addr))
+		if (rhf_use_egr_bfr(packet->rhf))
 			ebuf = packet->ebuf;
 
 		if (ebuf == NULL)
@@ -422,7 +420,7 @@ unlock:
 			process_becn(ppd, sl, rlid, lqpn, rqpn, svc_type);
 		}
 
-		rhf_addr[1] &= ~RHF1_RCV_TYPE_ERR_SMASK;
+		packet->rhf &= ~RHF_RCV_TYPE_ERR_SMASK;
 		break;
 	}
 	default:
@@ -459,7 +457,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	rhf = rhf_to_cpu(rhf_addr);
 
 	if (dd->flags & QIB_NODMA_RTAIL) {
-		u32 seq = rhf_rcv_seq(rhf_addr);
+		u32 seq = rhf_rcv_seq(rhf);
 		if (seq != rcd->seq_cnt)
 			goto bail;
 		hdrqtail = 0;
@@ -473,14 +471,14 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	for (last = 0, i = 1; !last; i += !last) {
 		hdr = dd->f_get_msgheader(dd, rhf_addr);
 		hlen = (u8 *)rhf_addr - (u8 *)hdr;
-		etype = rhf_rcv_type(rhf_addr);
+		etype = rhf_rcv_type(rhf);
 		/* total length */
-		tlen = rhf_pkt_len(rhf_addr);	/* in bytes */
+		tlen = rhf_pkt_len(rhf);	/* in bytes */
 		ebuf = NULL;
 		/* retreive eager buffer details */
-		if (rhf_use_egr_bfr(rhf_addr)) {
-			etail = rhf_egr_index(rhf_addr);
-			ebuf = qib_get_egrbuf(rcd, rhf_addr, &updegr);
+		if (rhf_use_egr_bfr(rhf)) {
+			etail = rhf_egr_index(rhf);
+			ebuf = qib_get_egrbuf(rcd, rhf, &updegr);
 			/* TODO: Keep the prefetch?  Why are we doing it? */
 			/*
 			 * Prefetch the contents of the eager buffer.  It is
@@ -489,13 +487,12 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 			 */
 			prefetch_range(ebuf,
 				tlen - ((dd->rcvhdrentsize -
-					  (rhf_hdrq_offset(rhf_addr)+2)) * 4));
+					  (rhf_hdrq_offset(rhf)+2)) * 4));
 		}
 
 		packet.tlen = tlen;
 		packet.hlen = hlen;
 		packet.rhf = rhf;
-		packet.rhf_addr = rhf_addr; /* TODO: Get rid of this */
 		packet.ebuf = ebuf;
 		packet.hdr = hdr;
 		packet.rcd = rcd;
@@ -522,7 +519,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		rhf = rhf_to_cpu(rhf_addr);
 
 		if (dd->flags & QIB_NODMA_RTAIL) {
-			u32 seq = rhf_rcv_seq(rhf_addr);
+			u32 seq = rhf_rcv_seq(rhf);
 
 			if (++rcd->seq_cnt > 13)
 				rcd->seq_cnt = 1;
@@ -813,20 +810,19 @@ inline u16 generate_jkey(unsigned int uid)
 void handle_eflags(struct hfi_packet *packet)
 {
 	struct qib_ctxtdata *rcd = packet->rcd;
-	u32 eflags = rhf_err_flags(packet->rhf_addr);
-	u32 rte = rhf_rcv_type_err(packet->rhf_addr);
+	u32 rte = rhf_rcv_type_err(packet->rhf);
 
 	dd_dev_err(rcd->dd,
 		"receive context %d: rhf 0x%016llx, errs [ %s%s%s%s%s%s%s%s] rte 0x%x\n",
 		rcd->ctxt, packet->rhf,
-		eflags & RHF1_K_HDR_LEN_ERR ? "k_hdr_len " : "",
-		eflags & RHF1_DC_UNC_ERR ? "dc_unc " : "",
-		eflags & RHF1_DC_ERR ? "dc " : "",
-		eflags & RHF1_TID_ERR ? "tid " : "",
-		eflags & RHF1_LEN_ERR ? "len " : "",
-		eflags & RHF1_ECC_ERR ? "ecc " : "",
-		eflags & RHF1_VCRC_ERR ? "vcrc " : "",
-		eflags & RHF1_ICRC_ERR ? "icrc " : "",
+		packet->rhf & RHF_K_HDR_LEN_ERR ? "k_hdr_len " : "",
+		packet->rhf & RHF_DC_UNC_ERR ? "dc_unc " : "",
+		packet->rhf & RHF_DC_ERR ? "dc " : "",
+		packet->rhf & RHF_TID_ERR ? "tid " : "",
+		packet->rhf & RHF_LEN_ERR ? "len " : "",
+		packet->rhf & RHF_ECC_ERR ? "ecc " : "",
+		packet->rhf & RHF_VCRC_ERR ? "vcrc " : "",
+		packet->rhf & RHF_ICRC_ERR ? "icrc " : "",
 		rte);
 
 	rcv_hdrerr(rcd, rcd->ppd, packet);
@@ -838,17 +834,16 @@ void handle_eflags(struct hfi_packet *packet)
  */
 void process_receive_ib(struct hfi_packet *packet)
 {
-
 	trace_hfi_rcvhdr(packet->rcd->ppd->dd,
 			 packet->rcd->ctxt,
-			 rhf_err_flags(packet->rhf_addr),
+			 rhf_err_flags(packet->rhf),
 			 RHF_RCV_TYPE_IB,
 			 packet->hlen,
 			 packet->tlen,
 			 packet->updegr,
-			 rhf_egr_index(packet->rhf_addr));
+			 rhf_egr_index(packet->rhf));
 
-	if (unlikely(rhf_err_flags(packet->rhf_addr))) {
+	if (unlikely(rhf_err_flags(packet->rhf))) {
 		handle_eflags(packet);
 		return;
 	}
@@ -858,38 +853,35 @@ void process_receive_ib(struct hfi_packet *packet)
 
 void process_receive_bypass(struct hfi_packet *packet)
 {
-	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
 
-	dd_dev_err(packet->rcd->ppd->dd,
+	dd_dev_err(packet->rcd->dd,
 	   "Bypass packets are not supported in normal operation. Dropping\n");
 }
 
 void process_receive_error(struct hfi_packet *packet)
 {
-	if (unlikely(rhf_err_flags(packet->rhf_addr)))
-		handle_eflags(packet);
-
-	if (unlikely(rhf_err_flags(packet->rhf_addr)))
-		dd_dev_err(packet->rcd->ppd->dd,
-			   "Unhandled error packet received. Dropping.\n");
+	handle_eflags(packet);
+	dd_dev_err(packet->rcd->dd,
+		   "Unhandled error packet received. Dropping.\n");
 }
 
 void process_receive_expected(struct hfi_packet *packet)
 {
-	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
 
-	dd_dev_err(packet->rcd->ppd->dd,
+	dd_dev_err(packet->rcd->dd,
 		   "Unhandled expected packet received. Dropping.\n");
 }
 
 void process_receive_eager(struct hfi_packet *packet)
 {
-	if (unlikely(rhf_err_flags(packet->rhf_addr)))
+	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
 
-	dd_dev_err(packet->rcd->ppd->dd,
+	dd_dev_err(packet->rcd->dd,
 		   "Unhandled eager packet received. Dropping.\n");
 }
 

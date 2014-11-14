@@ -609,24 +609,20 @@ unlock:
 
 /**
  * qib_ib_rcv - process an incoming packet
- * @rcd: the context pointer
- * @rhdr: the header of the packet
- * @data: the packet payload
- * @tlen: the packet length
+ * @packet: data packet information
  *
- * This is called from qib_kreceive() to process an incoming packet at
- * interrupt level. Tlen is the length of the header + data + CRC in bytes.
+ * This is called to process an incoming packet at interrupt level.
+ *
+ * Tlen is the length of the header + data + CRC in bytes.
  */
 void qib_ib_rcv(struct hfi_packet *packet)
 {
 	struct qib_ctxtdata *rcd = packet->rcd;
-	void *rhdr = packet->hdr;
+	struct qib_ib_header *hdr = packet->hdr;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
-	__le32 *rhf_addr = packet->rhf_addr;
 	struct qib_pportdata *ppd = rcd->ppd;
 	struct qib_ibport *ibp = &ppd->ibport_data;
-	struct qib_ib_header *hdr = rhdr;
 	struct qib_other_headers *ohdr;
 	struct qib_qp *qp;
 	u32 qp_num;
@@ -682,7 +678,7 @@ void qib_ib_rcv(struct hfi_packet *packet)
 			goto drop;
 		ibp->n_multicast_rcv++;
 		rcv_flags |= QIB_HAS_GRH;
-		if (le32_to_cpu(*rhf_addr) & RHF0_DC_INFO_SMASK)
+		if (rhf_dc_info(packet->rhf))
 			rcv_flags |= QIB_SC4_BIT;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list)
 			qib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, p->qp);
@@ -713,7 +709,7 @@ void qib_ib_rcv(struct hfi_packet *packet)
 		ibp->n_unicast_rcv++;
 		if (lnh == QIB_LRH_GRH)
 			rcv_flags |= QIB_HAS_GRH;
-		if (le32_to_cpu(*rhf_addr) & RHF0_DC_INFO_SMASK)
+		if (rhf_dc_info(packet->rhf))
 			rcv_flags |= QIB_SC4_BIT;
 		qib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
 	}

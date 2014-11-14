@@ -282,11 +282,10 @@ struct hfi_packet {
 	void *ebuf;
 	void *hdr;
 	struct qib_ctxtdata *rcd;
+	u64 rhf;
 	u16 tlen;
 	u16 hlen;
-	u64 rhf;
 	u32 updegr;
-	__le32 *rhf_addr;
 };
 
 /*
@@ -1337,7 +1336,7 @@ static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
 
 		rhf_addr = (__le32 *) rcd->rcvhdrq +
 			rcd->head + dd->rhf_offset;
-		seq = rhf_rcv_seq(rhf_addr);
+		seq = rhf_rcv_seq(rhf_to_cpu(rhf_addr));
 		hdrqtail = rcd->head;
 		if (seq == rcd->seq_cnt)
 			hdrqtail++;

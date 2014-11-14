@@ -56,8 +56,8 @@ __print_symbolic(etype,                         \
 
 TRACE_EVENT(hfi_rcvhdr,
 	TP_PROTO(struct hfi_devdata *dd,
+		 u64 eflags,
 		 u32 ctxt,
-		 u32 eflags,
 		 u32 etype,
 		 u32 hlen,
 		 u32 tlen,
@@ -66,8 +66,8 @@ TRACE_EVENT(hfi_rcvhdr,
 	TP_ARGS(dd, ctxt, eflags, etype, hlen, tlen, updegr, etail),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
+		__field(u64, eflags)
 		__field(u32, ctxt)
-		__field(u32, eflags)
 		__field(u32, etype)
 		__field(u32, hlen)
 		__field(u32, tlen)
@@ -76,8 +76,8 @@ TRACE_EVENT(hfi_rcvhdr,
 	),
 	TP_fast_assign(
 		DD_DEV_ASSIGN(dd);
-		__entry->ctxt = ctxt;
 		__entry->eflags = eflags;
+		__entry->ctxt = ctxt;
 		__entry->etype = etype;
 		__entry->hlen = hlen;
 		__entry->tlen = tlen;
@@ -85,7 +85,7 @@ TRACE_EVENT(hfi_rcvhdr,
 		__entry->etail = etail;
 	),
 	TP_printk(
-"[%s] ctxt %d eflags 0x%x etype %d,%s hlen %d tlen %d updegr %d etail %d",
+"[%s] ctxt %d eflags 0x%llx etype %d,%s hlen %d tlen %d updegr %d etail %d",
 		__get_str(dev),
 		__entry->ctxt,
 		__entry->eflags,

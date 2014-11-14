@@ -1901,7 +1901,7 @@ void snoop_recv_handler(struct hfi_packet *packet)
 			 * normally done by the type specific handler but that
 			 * won't be called in this case.
 			 */
-			if (unlikely(rhf_err_flags(packet->rhf_addr)))
+			if (unlikely(rhf_err_flags(packet->rhf)))
 				handle_eflags(packet);
 
 			return; /* throw the packet on the floor */
@@ -1918,7 +1918,7 @@ void snoop_recv_handler(struct hfi_packet *packet)
 	 * call the IB type specific handler we will be calling ourself
 	 * recursively.
 	 */
-	switch (rhf_rcv_type(packet->rhf_addr)) {
+	switch (rhf_rcv_type(packet->rhf)) {
 	case RHF_RCV_TYPE_IB:
 		process_receive_ib(packet);
 		break;
