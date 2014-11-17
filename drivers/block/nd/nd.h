@@ -124,6 +124,7 @@ void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
 void ndio_del_claim(struct nd_io_claim *ndio_claim);
 struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove);
+u64 nd_fletcher64(void __iomem *addr, size_t len);
 int nd_unregister_ndio(struct nd_io *ndio);
 extern struct attribute_group nd_device_attribute_group;
 struct nd_dimm *to_nd_dimm(struct device *dev);

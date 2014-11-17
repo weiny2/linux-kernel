@@ -142,6 +142,21 @@ struct nd_dimm *nd_dimm_by_handle(struct nd_bus *nd_bus, u32 nfit_handle)
 	return nd_dimm;
 }
 
+u64 nd_fletcher64(void __iomem *addr, size_t len)
+{
+	u32 lo32 = 0;
+	u64 hi32 = 0;
+	int i;
+
+	for (i = 0; i < len; i += 4) {
+		lo32 = readl(addr + i);
+		hi32 += lo32;
+	}
+
+	return hi32 << 32 | lo32;
+}
+EXPORT_SYMBOL(nd_fletcher64);
+
 static void nd_bus_release(struct device *dev)
 {
 	struct nd_bus *nd_bus = container_of(dev, struct nd_bus, dev);

@@ -59,21 +59,15 @@ static void __to_string(char *dst, u8 *src, u32 len)
  * Returns a fletcher64 checksum of everything in the given info block
  * except the last field (since that's where the checksum lives).
  */
-
 static u64 btt_sb_checksum(struct btt_sb *btt_sb)
 {
-	u32 *p32 = (u32 *)btt_sb;
-	u32 *p32end = (u32 *)((void *)btt_sb + sizeof(struct btt_sb));
-	u32 lo32 = 0;
-	u32 hi32 = 0;
+	u64 sum, sum_save;
 
-	while (p32 < p32end) {
-		lo32 += *p32;
-		hi32 += lo32;
-		p32++;
-	}
-
-	return ((u64)hi32 << 32) | (u64)lo32;
+	sum_save = btt_sb->checksum;
+	btt_sb->checksum = 0;
+	sum = nd_fletcher64(btt_sb, sizeof(*btt_sb));
+	btt_sb->checksum = sum_save;
+	return sum;
 }
 
 static int nd_btt_rw_bytes(struct nd_btt *nd_btt, void *buf, size_t offset,
