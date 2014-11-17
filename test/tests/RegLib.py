@@ -370,6 +370,7 @@ class TestInfo:
     simics = False
     mpiverbs = False
     paramdict = None
+    np = "6"
 
     def get_hfi_src(self):
         return self.hfi_src
@@ -456,6 +457,9 @@ class TestInfo:
                           default="-x PSM_SDMA=0 -x PSM_TID=0")
         parser.add_option("--forceroot", action="store_true", dest="force_root",
                           help="Force all commands to run as root.")
+        parser.add_option("--np", dest="np",
+                          help="Number of processes.",
+                          default="6")
 
         (options, args) = parser.parse_args()
 
@@ -589,6 +593,9 @@ class TestInfo:
 
         self.psm_opts = options.psm_opts
 
+        if options.np:
+            self.np = options.np
+
     def get_host_list(self):
         host_list = []
         for host in self.nodelist:
@@ -707,3 +714,7 @@ class TestInfo:
 
     def which_sm(self):
         return self.sm
+
+    def get_np(self):
+        return self.np
+

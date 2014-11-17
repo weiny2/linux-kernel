@@ -293,6 +293,21 @@ test_list = [
       "type" : "default,",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
+
+    { "test_name" : "MPI-Test-PSM",
+      "test_exe" : "MpiTest.py",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --np %NP%",
+      "type" : "mpipsm",
+      "desc" : "Run the Intel MPI Test Suite"
+    },
+
+    { "test_name" : "MPI-Test-Verbs",
+      "test_exe" : "MpiTest.py",
+      "args" : "--nodelist %HOST[2]% --mpiverbs --np %NP%",
+      "type" : "mpiverbs",
+      "desc" : "Run the Intel MPI Test Suite"
+    },
+
 ]
 
 
@@ -308,6 +323,7 @@ variable_map = {
     "TEST_PKT_DIR" : test_info.get_test_pkt_dir,
     "DIAG_LIB" : test_info.get_diag_lib,
     "PSM_OPTS" : test_info.get_psm_opts,
+    "NP" : test_info.get_np,
 }
 
 # Build a list of all test types. This will be used when the user
