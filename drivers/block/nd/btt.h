@@ -115,7 +115,6 @@ struct btt {
 	struct dentry *debugfs_dir;
 	struct block_device *backing_dev;
 	struct nd_btt *nd_btt;
-	u8 uuid[16];
 	size_t nlba;
 	size_t rawsize;
 	u32 lbasize;

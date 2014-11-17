@@ -316,7 +316,7 @@ static const struct attribute_group *nd_btt_attribute_groups[] = {
 
 struct nd_btt *nd_btt_create(struct nd_bus *nd_bus, struct block_device *bdev,
 		struct nd_io_claim *ndio_claim, unsigned long lbasize,
-		u8 uuid[16])
+		u8 *uuid)
 {
 	struct nd_btt *nd_btt = kzalloc(sizeof(*nd_btt), GFP_KERNEL);
 	struct device *dev;

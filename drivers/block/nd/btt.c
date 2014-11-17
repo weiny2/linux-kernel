@@ -42,17 +42,6 @@ enum log_ent_request {
 
 static int btt_major;
 
-static void __to_string(char *dst, u8 *src, u32 len)
-{
-	u32 i;
-	char *dptr = dst;
-
-	for (i = 0; i <= len; i++)
-		dptr += sprintf(dptr, "%02x", src[i]);
-
-	dst[2 * len] = 0;
-}
-
 /*
  * btt_sb_checksum: compute checksum for btt info block
  *
@@ -595,7 +584,7 @@ static int discover_arenas(struct btt *btt)
 		if (ret)
 			goto out;
 
-		if (!arena_is_valid(arena, super, btt->uuid)) {
+		if (!arena_is_valid(arena, super, btt->nd_btt->uuid)) {
 			if (remaining == btt->rawsize) {
 				btt->init_state = INIT_NOTFOUND;
 				dev_info(to_dev(arena), "No existing arenas\n");
@@ -747,7 +736,7 @@ static int btt_meta_init(struct btt *btt)
 
 
 	list_for_each_entry(arena, &btt->arena_list, list) {
-		ret = btt_arena_write_layout(arena, btt->uuid);
+		ret = btt_arena_write_layout(arena, btt->nd_btt->uuid);
 		if (ret)
 			goto unlock;
 
@@ -1202,10 +1191,7 @@ static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
 {
 	int ret;
 	struct btt *btt;
-	char uuid_str[33];
 	struct device *dev = &nd_btt->dev;
-
-	__to_string(uuid_str, uuid, 16);
 
 	btt = kzalloc(sizeof(struct btt), GFP_KERNEL);
 	if (!btt)
@@ -1215,21 +1201,20 @@ static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
 	btt->rawsize = rawsize;
 	btt->lbasize = lbasize;
 	btt->num_lanes = maxlane;
-	memcpy(btt->uuid, uuid, 16);
 	INIT_LIST_HEAD(&btt->arena_list);
 	mutex_init(&btt->init_lock);
 
 	ret = discover_arenas(btt);
 	if (ret) {
-		dev_info(dev, "init: error in arena_discover: %d\n", ret);
+		dev_err(dev, "init: error in arena_discover: %d\n", ret);
 		return NULL;
 	}
 
 	if (btt->init_state != INIT_READY) {
 		btt->num_arenas = (rawsize / ARENA_MAX_SIZE) +
 			((rawsize % ARENA_MAX_SIZE) ? 1 : 0);
-		dev_info(dev, "init uuid %s: %d arenas for %lu rawsize\n",
-				uuid_str, btt->num_arenas, rawsize);
+		dev_dbg(dev, "init: %d arenas for %lu rawsize\n",
+				btt->num_arenas, rawsize);
 
 		ret = create_arenas(btt);
 		if (ret) {
@@ -1240,13 +1225,13 @@ static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
 
 	ret = lane_locks_init(btt);
 	if (ret) {
-		dev_info(dev, "init: lane_locks_init: %d\n", ret);
+		dev_err(dev, "init: lane_locks_init: %d\n", ret);
 		return NULL;
 	}
 
 	ret = btt_blk_init(btt);
 	if (ret) {
-		dev_info(dev, "init: error in blk_init: %d\n", ret);
+		dev_err(dev, "init: error in blk_init: %d\n", ret);
 		return NULL;
 	}
 
