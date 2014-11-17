@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/io.h>
 #include "nd-private.h"
 #include "nfit.h"
 #include "nd.h"
