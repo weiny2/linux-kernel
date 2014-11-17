@@ -11,7 +11,6 @@
  * General Public License for more details.
  */
 #include <linux/device.h>
-#include <linux/ctype.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
@@ -77,10 +76,8 @@ static ssize_t __sector_size_store(struct device *dev,
 	unsigned long lbasize;
 	int rc, i;
 
-	if (dev->driver) {
-		dev_dbg(dev, "%s: -EBUSY\n", __func__);
+	if (dev->driver)
 		return -EBUSY;
-	}
 
 	rc = kstrtoul(buf, 0, &lbasize);
 	if (rc)
@@ -105,6 +102,8 @@ static ssize_t sector_size_store(struct device *dev,
 
 	device_lock(dev);
 	rc = __sector_size_store(dev, attr, buf, len);
+	dev_dbg(dev, "%s: result: %zd wrote: %s%s", __func__,
+			rc, buf, buf[len - 1] == '\n' ? "" : "\n");
 	device_unlock(dev);
 
 	return rc;
@@ -115,88 +114,23 @@ static ssize_t uuid_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
-	unsigned short field3, field2, field1;
-	unsigned long long field0 = 0;
-	unsigned long field4;
 
-	if (!nd_btt->uuid)
-		return sprintf(buf, "\n");
-
-	memcpy(&field0, nd_btt->uuid, 6);
-	memcpy(&field1, &nd_btt->uuid[6], 2);
-	memcpy(&field2, &nd_btt->uuid[8], 2);
-	memcpy(&field3, &nd_btt->uuid[10], 2);
-	memcpy(&field4, &nd_btt->uuid[12], 4);
-
-	return sprintf(buf, "%.4lx-%.2x-%.2x-%.2x-%.6llx\n",
-			field4, field3, field2, field1, field0);
-}
-
-static bool is_uuid_sep(char sep)
-{
-	if (sep == '\n' || sep == '-' || sep == ':' || sep == '\0')
-		return true;
-	return false;
-}
-
-static ssize_t __uuid_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t len)
-{
-	struct nd_btt *nd_btt = to_nd_btt(dev);
-	unsigned long long uuid[2];
-	char field_str[2][17];
-	char uuid_str[32];
-	int rc, pos;
-	size_t i;
-
-	if (dev->driver) {
-		dev_dbg(dev, "%s: -EBUSY\n", __func__);
-		return -EBUSY;
-	}
-
-	for (pos = 0, i = 0; i < len && pos < sizeof(uuid_str); i++) {
-		if (isxdigit(buf[i]))
-			uuid_str[pos++] = buf[i];
-		else if (!is_uuid_sep(buf[i]))
-			break;
-	}
-
-	if (pos < sizeof(uuid_str) || !is_uuid_sep(buf[i])) {
-		dev_dbg(dev, "%s: pos: %d buf[%zd]: %c\n",
-				__func__, pos, i, buf[i]);
-		return -EINVAL;
-	}
-
-	memcpy(field_str[1], uuid_str, 16);
-	field_str[1][16] = '\0';
-	memcpy(field_str[0], &uuid_str[16], 16);
-	field_str[0][16] = '\0';
-
-	rc = kstrtoull(field_str[1], 16, &uuid[1]);
-	if (rc)
-		return -EINVAL;
-	rc = kstrtoull(field_str[0], 16, &uuid[0]);
-	if (rc)
-		return -EINVAL;
-
-	kfree(nd_btt->uuid);
-	nd_btt->uuid = kmemdup(uuid, 16, GFP_KERNEL);
-	if (!nd_btt->uuid)
-		return -ENOMEM;
-
-	return len;
+	return nd_uuid_show(nd_btt->uuid, buf);
 }
 
 static ssize_t uuid_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
+	struct nd_btt *nd_btt = to_nd_btt(dev);
 	ssize_t rc;
 
 	device_lock(dev);
-	rc = __uuid_store(dev, attr, buf, len);
+	rc = nd_uuid_store(dev, &nd_btt->uuid, buf, len);
+	dev_dbg(dev, "%s: result: %zd wrote: %s%s", __func__,
+			rc, buf, buf[len - 1] == '\n' ? "" : "\n");
 	device_unlock(dev);
 
-	return rc;
+	return rc ? rc : len;
 }
 static DEVICE_ATTR_RW(uuid);
 
