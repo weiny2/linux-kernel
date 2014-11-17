@@ -244,6 +244,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 			dev_err(dev, "%s: unknown output type, cmd: %d field: %d\n",
 					__func__, cmd, desc->in_num + i);
 			rc = -ENXIO;
+			goto out;
 		}
 
 		if (out_size == UINT_MAX) {
