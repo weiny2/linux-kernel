@@ -2967,7 +2967,7 @@ static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	new_cc_state->cct.ccti_limit = ccti_limit;
 
 	entries = ppd->ccti_entries;
-	ppd->total_cct_entry = (ccti_limit % IB_CCT_ENTRIES) + 1;
+	ppd->total_cct_entry = ccti_limit + 1;
 
 	for (j = 0, i = sentry; i < eentry; j++, i++)
 		entries[i].entry = be16_to_cpu(p->ccti_entries[j].entry);
