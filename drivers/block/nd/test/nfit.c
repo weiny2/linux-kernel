@@ -472,8 +472,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_offset);
 	writeq(t->spa_set_dma[0], &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(2, &nfit_mem->interleave_ways);
 
@@ -487,8 +487,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0+1, &nfit_mem->spa_index);
 	writew(1+1, &nfit_mem->dcr_index);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_offset);
 	writeq(t->spa_set_dma[0] + SPA0_SIZE/2, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(2, &nfit_mem->interleave_ways);
 
@@ -502,8 +502,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(SPA0_SIZE/2, &nfit_mem->region_offset);
 	writeq(t->spa_set_dma[1], &nfit_mem->region_spa);
+	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
 
@@ -517,8 +517,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(1+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(SPA0_SIZE/2, &nfit_mem->region_offset);
 	writeq(t->spa_set_dma[1] + SPA1_SIZE/4, &nfit_mem->region_spa);
+	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
 
@@ -532,8 +532,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(2+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(SPA0_SIZE/2, &nfit_mem->region_offset);
 	writeq(t->spa_set_dma[1] + 2*SPA1_SIZE/4, &nfit_mem->region_spa);
+	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
 
@@ -547,8 +547,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(3+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(SPA0_SIZE/2, &nfit_mem->region_offset);
 	writeq(t->spa_set_dma[1] + 3*SPA1_SIZE/4, &nfit_mem->region_spa);
+	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
 
@@ -562,8 +562,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(2+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_offset);
 	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
 
@@ -577,8 +577,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(3+1, &nfit_mem->spa_index);
 	writew(1+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_offset);
 	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
 
@@ -592,8 +592,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(4+1, &nfit_mem->spa_index);
 	writew(2+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_offset);
 	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
 
@@ -607,8 +607,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(5+1, &nfit_mem->spa_index);
 	writew(3+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_offset);
 	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
 

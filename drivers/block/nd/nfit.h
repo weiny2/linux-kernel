@@ -111,8 +111,8 @@ struct nfit_mem {
 	__le16 spa_index;
 	__le16 dcr_index;
 	__le64 region_len;
-	__le64 region_offset;
 	__le64 region_spa;
+	__le64 region_dpa;
 	__le16 idt_index;
 	__le16 interleave_ways;
 	__le16 flags;

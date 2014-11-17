@@ -329,7 +329,7 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 		nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, i);
 		nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 		nd_mapping->nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
-		nd_mapping->start = readq(&nd_mem->nfit_mem->region_offset);
+		nd_mapping->start = readq(&nd_mem->nfit_mem->region_dpa);
 		nd_mapping->size = readq(&nd_mem->nfit_mem->region_len);
 	}
 }
