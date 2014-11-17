@@ -173,7 +173,7 @@ static ssize_t mappingN(struct device *dev, char *buf, int n)
 		return -ENXIO;
 	nd_mapping = &nd_region->mapping[n];
 	nd_dimm = nd_mapping->nd_dimm;
-	nfit_mem = nd_dimm->nfit_mem;
+	nfit_mem = nd_dimm->nd_mem->nfit_mem;
 
 	return sprintf(buf, "%#x,%llu,%llu\n", readl(&nfit_mem->nfit_handle),
 			nd_mapping->start, nd_mapping->size);

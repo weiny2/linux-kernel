@@ -17,11 +17,8 @@
 #include <linux/ndctl.h>
 
 struct gendisk;
-struct nfit_mem;
-struct nfit_dcr;
 struct nd_dimm {
-	struct nfit_mem __iomem *nfit_mem;
-	struct nfit_dcr __iomem *nfit_dcr;
+	struct nd_mem *nd_mem;
 	struct device dev;
 	int config_size;
 	int id;

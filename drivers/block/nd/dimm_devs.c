@@ -42,7 +42,7 @@ static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
 			|| !nfit_desc->nfit_ctl)
 		return -ENXIO;
 
-	nfit_mem = nd_dimm->nfit_mem;
+	nfit_mem = nd_dimm->nd_mem->nfit_mem;
 	*nfit_handle = readl(&nfit_mem->nfit_handle);
 	return 0;
 }
@@ -101,9 +101,10 @@ static void nd_dimm_release(struct device *dev)
 {
 	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+	struct nd_mem *nd_mem = nd_dimm->nd_mem;
 	u32 nfit_handle;
 
-	nfit_handle = readl(&nd_dimm->nfit_mem->nfit_handle);
+	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 	radix_tree_delete(&nd_bus->dimm_radix, nfit_handle);
 	ida_simple_remove(&dimm_ida, nd_dimm->id);
 	kfree(nd_dimm);
@@ -131,7 +132,8 @@ EXPORT_SYMBOL(to_nd_dimm);
 static struct nfit_mem __iomem *to_nfit_mem(struct device *dev)
 {
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
-	struct nfit_mem __iomem *nfit_mem = nd_dimm->nfit_mem;
+	struct nd_mem *nd_mem = nd_dimm->nd_mem;
+	struct nfit_mem __iomem *nfit_mem = nd_mem->nfit_mem;
 
 	return nfit_mem;
 }
@@ -139,7 +141,8 @@ static struct nfit_mem __iomem *to_nfit_mem(struct device *dev)
 static struct nfit_dcr __iomem *to_nfit_dcr(struct device *dev)
 {
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
-	struct nfit_dcr __iomem *nfit_dcr = nd_dimm->nfit_dcr;
+	struct nd_mem *nd_mem = nd_dimm->nd_mem;
+	struct nfit_dcr __iomem *nfit_dcr = nd_mem->nfit_dcr;
 
 	return nfit_dcr;
 }
@@ -216,7 +219,7 @@ static umode_t nd_dimm_attr_visible(struct kobject *kobj, struct attribute *a, i
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
 
 	if (a == &dev_attr_handle.attr || a == &dev_attr_phys_id.attr
-			|| nd_dimm->nfit_dcr)
+			|| to_nfit_dcr(&nd_dimm->dev))
 		return a->mode;
 	else
 		return 0;
@@ -234,8 +237,7 @@ static const struct attribute_group *nd_dimm_attribute_groups[] = {
 };
 
 static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
-		struct nfit_mem __iomem *nfit_mem,
-		struct nfit_dcr __iomem *nfit_dcr)
+		struct nd_mem *nd_mem)
 {
 	struct nd_dimm *nd_dimm = kzalloc(sizeof(*nd_dimm), GFP_KERNEL);
 	struct device *dev;
@@ -244,7 +246,7 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	if (!nd_dimm)
 		return NULL;
 
-	nfit_handle = readl(&nfit_mem->nfit_handle);
+	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 	if (radix_tree_insert(&nd_bus->dimm_radix, nfit_handle, nd_dimm) != 0)
 		goto err_radix;
 
@@ -252,8 +254,7 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	if (nd_dimm->id < 0)
 		goto err_ida;
 
-	nd_dimm->nfit_mem = nfit_mem;
-	nd_dimm->nfit_dcr = nfit_dcr;
+	nd_dimm->nd_mem = nd_mem;
 	dev = &nd_dimm->dev;
 	dev_set_name(dev, "dimm%d", nd_dimm->id);
 	dev->parent = &nd_bus->dev;
@@ -277,7 +278,6 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 
 	mutex_lock(&nd_bus_list_mutex);
 	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
-		struct nfit_dcr __iomem *nfit_dcr = NULL;
 		struct nd_dimm *nd_dimm;
 		struct nd_dcr *nd_dcr;
 		u32 nfit_handle;
@@ -293,12 +293,12 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 		dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
 		list_for_each_entry(nd_dcr, &nd_bus->dcrs, list) {
 			if (readw(&nd_dcr->nfit_dcr->dcr_index) == dcr_index) {
-				nfit_dcr = nd_dcr->nfit_dcr;
+				nd_mem->nfit_dcr = nd_dcr->nfit_dcr;
 				break;
 			}
 		}
 
-		if (!nd_dimm_create(nd_bus, nd_mem->nfit_mem, nfit_dcr)) {
+		if (!nd_dimm_create(nd_bus, nd_mem)) {
 			rc = -ENOMEM;
 			break;
 		}
