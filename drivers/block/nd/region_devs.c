@@ -437,5 +437,3 @@ int nd_bus_register_regions(struct nd_bus *nd_bus)
 
 	return rc;
 }
-
-

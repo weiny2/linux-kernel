@@ -130,7 +130,6 @@ struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove);
 int nd_unregister_ndio(struct nd_io *ndio);
 extern struct attribute_group nd_device_attribute_group;
-struct nd_region *to_nd_region(struct device *dev);
 struct nd_dimm *to_nd_dimm(struct device *dev);
 struct nd_btt *to_nd_btt(struct device *dev);
 struct nd_region *to_nd_region(struct device *dev);

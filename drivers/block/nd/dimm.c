@@ -12,7 +12,6 @@
  */
 #include <linux/module.h>
 #include <linux/device.h>
-#include <linux/async.h>
 #include <linux/sizes.h>
 #include <linux/ndctl.h>
 #include <linux/slab.h>
