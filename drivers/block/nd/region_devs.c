@@ -105,15 +105,6 @@ static ssize_t mappings_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(mappings);
 
-static ssize_t interleave_ways_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct nd_region *nd_region = to_nd_region(dev);
-
-	return sprintf(buf, "%d\n", nd_region->interleave_ways);
-}
-static DEVICE_ATTR_RO(interleave_ways);
-
 static ssize_t spa_index_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -137,7 +128,6 @@ static struct attribute *nd_region_attributes[] = {
 	&dev_attr_nstype.attr,
 	&dev_attr_mappings.attr,
 	&dev_attr_spa_index.attr,
-	&dev_attr_interleave_ways.attr,
 	NULL,
 };
 
@@ -320,7 +310,6 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	}
 
 	handle = readl(&nd_mem->nfit_mem->nfit_handle);
-	nd_region->interleave_ways = 1;
 	nd_mapping = &nd_region->mapping[0];
 	dev = device_find_child(&nd_bus->dev, &handle, nd_match_dimm);
 	nd_mapping->nd_dimm = to_nd_dimm(dev);
@@ -332,13 +321,9 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 		struct device_type *type)
 {
 	struct nd_mem *nd_mem;
-	u16 i, ways;
+	u16 i;
 
 	nd_region->dev.type = type;
-	nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, 0);
-	ways = nd_mem ? readw(&nd_mem->nfit_mem->interleave_ways) : 0;
-	nd_region->interleave_ways = ways;
-
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 		struct device *dev;

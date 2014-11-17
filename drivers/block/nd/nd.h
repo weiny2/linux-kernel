@@ -37,7 +37,6 @@ struct nd_mapping {
 struct nd_region {
 	struct device dev;
 	u16 spa_index;
-	u16 interleave_ways;
 	u16 ndr_mappings;
 	u64 ndr_size;
 	u64 ndr_start;
