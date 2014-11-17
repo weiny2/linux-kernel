@@ -68,11 +68,14 @@ config NFIT_LOCAL
 	  and consider also using the CONFIG_EXTRA_FIRMWARE facility to
 	  provide "local_nfit.bin" in the kernel image directly.
 
+config NFIT_TEST_CORE
+	bool
+
 config NFIT_TEST
 	tristate "NFIT TEST: Manufactured NFIT for interface testing"
 	select ND_CORE
+	select NFIT_TEST_CORE
 	depends on DMA_CMA
-	depends on m
 	help
 	  For development purposes register a manufactured
 	  NFIT table to verify the resulting device model topology.
