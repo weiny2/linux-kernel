@@ -100,7 +100,7 @@ static int nd_region_probe(struct device *dev)
 		dev_set_name(dev, "namespace%d.%d", nd_region->id, i);
 		dev->parent = &nd_region->dev;
 		dev->groups = nd_namespace_attribute_groups;
-		nd_device_register(dev, ND_ASYNC);
+		nd_device_register(dev);
 	}
 	kfree(devs);
 

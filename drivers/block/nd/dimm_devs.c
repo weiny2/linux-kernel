@@ -99,8 +99,12 @@ EXPORT_SYMBOL(nd_dimm_get_config_data);
 
 static void nd_dimm_release(struct device *dev)
 {
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+	u32 nfit_handle;
 
+	nfit_handle = readl(&nd_dimm->nfit_mem->nfit_handle);
+	radix_tree_delete(&nd_bus->dimm_radix, nfit_handle);
 	ida_simple_remove(&dimm_ida, nd_dimm->id);
 	kfree(nd_dimm);
 }
@@ -235,14 +239,18 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 {
 	struct nd_dimm *nd_dimm = kzalloc(sizeof(*nd_dimm), GFP_KERNEL);
 	struct device *dev;
+	u32 nfit_handle;
 
 	if (!nd_dimm)
 		return NULL;
+
+	nfit_handle = readl(&nfit_mem->nfit_handle);
+	if (radix_tree_insert(&nd_bus->dimm_radix, nfit_handle, nd_dimm) != 0)
+		goto err_radix;
+
 	nd_dimm->id = ida_simple_get(&dimm_ida, 0, 0, GFP_KERNEL);
-	if (nd_dimm->id < 0) {
-		kfree(nd_dimm);
-		return NULL;
-	}
+	if (nd_dimm->id < 0)
+		goto err_ida;
 
 	nd_dimm->nfit_mem = nfit_mem;
 	nd_dimm->nfit_dcr = nfit_dcr;
@@ -251,47 +259,34 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	dev->parent = &nd_bus->dev;
 	dev->type = &nd_dimm_device_type;
 	dev->groups = nd_dimm_attribute_groups;
-	/*
-	 * 'nd_dimm's are registered 'sync' as 'nd_region' registration
-	 * depends on finding 'nd_dimm's on the bus.
-	 */
-	if (nd_device_register(dev, ND_SYNC) != 0)
-		return NULL;
+	nd_device_register(dev);
+
 	return nd_dimm;
-}
 
-int nd_match_dimm(struct device *dev, void *data)
-{
-	struct nfit_mem __iomem *nfit_mem;
-	u32 handle = *(u32 *) data;
-
-	if (!is_nd_dimm(dev))
-		return 0;
-	nfit_mem = to_nfit_mem(dev);
-	if (handle == readl(&nfit_mem->nfit_handle))
-		return 1;
-
-	return 0;
+ err_ida:
+	radix_tree_delete(&nd_bus->dimm_radix, nfit_handle);
+ err_radix:
+	kfree(nd_dimm);
+	return NULL;
 }
 
 int nd_bus_register_dimms(struct nd_bus *nd_bus)
 {
 	struct nd_mem *nd_mem;
-	struct nd_dimm *dimm;
-	u32 handle;
 	int rc = 0;
 
 	mutex_lock(&nd_bus_list_mutex);
 	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
 		struct nfit_dcr __iomem *nfit_dcr = NULL;
+		struct nd_dimm *nd_dimm;
 		struct nd_dcr *nd_dcr;
-		struct device *dev;
+		u32 nfit_handle;
 		u16 dcr_index;
 
-		handle = readl(&nd_mem->nfit_mem->nfit_handle);
-		dev = device_find_child(&nd_bus->dev, &handle, nd_match_dimm);
-		if (dev) {
-			put_device(dev);
+		nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+		nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
+		if (nd_dimm) {
+			put_device(&nd_dimm->dev);
 			continue;
 		}
 
@@ -303,13 +298,18 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 			}
 		}
 
-		dimm = nd_dimm_create(nd_bus, nd_mem->nfit_mem, nfit_dcr);
-		if (!dimm) {
+		if (!nd_dimm_create(nd_bus, nd_mem->nfit_mem, nfit_dcr)) {
 			rc = -ENOMEM;
 			break;
 		}
 	}
 	mutex_unlock(&nd_bus_list_mutex);
+
+	/*
+	 * Flush dimm registration as 'nd_region' registration depends on
+	 * finding 'nd_dimm's on the bus.
+	 */
+	nd_synchronize();
 
 	return rc;
 }

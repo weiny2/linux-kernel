@@ -118,7 +118,7 @@ enum nd_async_mode {
 	ND_ASYNC,
 };
 
-int nd_device_register(struct device *dev, enum nd_async_mode mode);
+void nd_device_register(struct device *dev);
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode);
 int nd_register_ndio(struct nd_io *ndio);
 void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,

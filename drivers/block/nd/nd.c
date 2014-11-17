@@ -124,6 +124,24 @@ struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 	return ndio_claim;
 }
 
+/**
+ * nd_dimm_by_handle - lookup an nd_dimm by its corresponding nfit_handle
+ * @nd_bus: parent bus of the dimm
+ * @nfit_handle: handle from the memory-device-to-spa (nfit_mem) structure
+ *
+ * LOCKING: expect nd_bus_list_mutex() held at entry
+ */
+struct nd_dimm *nd_dimm_by_handle(struct nd_bus *nd_bus, u32 nfit_handle)
+{
+	struct nd_dimm *nd_dimm;
+
+	WARN_ON_ONCE(!mutex_is_locked(&nd_bus_list_mutex));
+	nd_dimm = radix_tree_lookup(&nd_bus->dimm_radix, nfit_handle);
+	if (nd_dimm)
+		get_device(&nd_dimm->dev);
+	return nd_dimm;
+}
+
 static void nd_bus_release(struct device *dev)
 {
 	struct nd_bus *nd_bus = container_of(dev, struct nd_bus, dev);
@@ -194,6 +212,7 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->deferred);
 	INIT_LIST_HEAD(&nd_bus->ndios);
 	INIT_LIST_HEAD(&nd_bus->list);
+	INIT_RADIX_TREE(&nd_bus->dimm_radix, GFP_KERNEL);
 	spin_lock_init(&nd_bus->deferred_lock);
 	init_completion(&nd_bus->registration);
 	init_waitqueue_head(&nd_bus->deferq);

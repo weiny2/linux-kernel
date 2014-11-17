@@ -406,7 +406,7 @@ struct nd_btt *nd_btt_create(struct nd_bus *nd_bus, struct block_device *bdev,
 	dev->parent = &nd_bus->dev;
 	dev->type = &nd_btt_device_type;
 	dev->groups = nd_btt_attribute_groups;
-	nd_device_register(dev, ND_ASYNC);
+	nd_device_register(dev);
 
 	return nd_btt;
 }

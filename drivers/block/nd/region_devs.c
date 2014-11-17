@@ -287,9 +287,8 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	struct nd_bdw *iter, *nd_bdw = NULL;
 	struct nd_mapping *nd_mapping;
 	struct nd_mem *nd_mem;
-	struct device *dev;
+	u32 nfit_handle;
 	u16 dcr_index;
-	u32 handle;
 
 	nd_region->dev.type = &nd_block_device_type;
 
@@ -309,10 +308,9 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 		return;
 	}
 
-	handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 	nd_mapping = &nd_region->mapping[0];
-	dev = device_find_child(&nd_bus->dev, &handle, nd_match_dimm);
-	nd_mapping->nd_dimm = to_nd_dimm(dev);
+	nd_mapping->nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
 	nd_mapping->size = readq(&nd_bdw->nfit_bdw->dimm_capacity);
 	nd_mapping->start = readq(&nd_bdw->nfit_bdw->dimm_block_offset);
 }
@@ -326,13 +324,11 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 	nd_region->dev.type = type;
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct device *dev;
-		u32 handle;
+		u32 nfit_handle;
 
 		nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, i);
-		handle = readl(&nd_mem->nfit_mem->nfit_handle);
-		dev = device_find_child(&nd_bus->dev, &handle, nd_match_dimm);
-		nd_mapping->nd_dimm = to_nd_dimm(dev);
+		nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+		nd_mapping->nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
 		nd_mapping->start = readq(&nd_mem->nfit_mem->region_offset);
 		nd_mapping->size = readq(&nd_mem->nfit_mem->region_len);
 	}
@@ -379,7 +375,7 @@ static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 	default:
 		break;
 	}
-	nd_device_register(dev, ND_ASYNC);
+	nd_device_register(dev);
 
 	return nd_region;
 }

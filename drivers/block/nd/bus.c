@@ -198,26 +198,13 @@ static void nd_async_device_unregister(void *d, async_cookie_t cookie)
 	put_device(dev);
 }
 
-int nd_device_register(struct device *dev, enum nd_async_mode mode)
+void nd_device_register(struct device *dev)
 {
-	int rc;
-
 	dev->bus = &nd_bus_type;
-	switch (mode) {
-	case ND_ASYNC:
-		device_initialize(dev);
-		get_device(dev);
-		async_schedule_domain(nd_async_device_register, dev,
-				&nd_async_register);
-		return 0;
-	case ND_SYNC:
-		rc = device_register(dev);
-		if (rc != 0)
-			put_device(dev);
-		return rc;
-	default:
-		return 0;
-	}
+	device_initialize(dev);
+	get_device(dev);
+	async_schedule_domain(nd_async_device_register, dev,
+			&nd_async_register);
 }
 EXPORT_SYMBOL(nd_device_register);
 
@@ -229,10 +216,15 @@ static bool is_deferred_queue_empty(struct nd_bus *nd_bus)
 	return list_empty(&nd_bus->deferred);
 }
 
+void nd_synchronize(void)
+{
+	async_synchronize_full_domain(&nd_async_register);
+}
+
 void nd_bus_wait_probe(struct nd_bus *nd_bus)
 {
 	wait_for_completion(&nd_bus->registration);
-	async_synchronize_full_domain(&nd_async_register);
+	nd_synchronize();
 	wait_event(nd_bus->deferq, is_deferred_queue_empty(nd_bus));
 }
 

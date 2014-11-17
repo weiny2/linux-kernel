@@ -12,6 +12,7 @@
  */
 #ifndef __ND_PRIVATE_H__
 #define __ND_PRIVATE_H__
+#include <linux/radix-tree.h>
 #include <linux/device.h>
 #include <linux/sizes.h>
 #include <linux/mutex.h>
@@ -36,6 +37,7 @@ struct nd_io;
  */
 struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;
+	struct radix_tree_root dimm_radix;
 	struct completion registration;
 	struct module *module;
 	wait_queue_head_t deferq;
@@ -76,6 +78,7 @@ struct nd_mem {
 
 struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname);
 void nd_bus_wait_probe(struct nd_bus *nd_bus);
+struct nd_dimm *nd_dimm_by_handle(struct nd_bus *nd_bus, u32 nfit_handle);
 bool is_nd_dimm(struct device *dev);
 bool is_nd_blk(struct device *dev);
 bool is_nd_pmem(struct device *dev);
@@ -99,6 +102,7 @@ static inline struct nd_btt *nd_btt_create(struct nd_bus *nd_bus,
 #endif
 struct nd_bus *to_nd_bus(struct device *dev);
 struct nd_bus *walk_to_nd_bus(struct device *nd_dev);
+void nd_synchronize(void);
 int __init nd_bus_init(void);
 void nd_bus_exit(void);
 int __init nd_dimm_init(void);
