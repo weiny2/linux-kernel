@@ -166,9 +166,6 @@ static void nd_bus_release(struct device *dev)
 	struct nd_bdw *nd_bdw, *_bdw;
 	struct nd_mem *nd_mem, *_mem;
 
-	if (!nd_bus)
-		return;
-
 	list_for_each_entry_safe(nd_spa, _spa, &nd_bus->spas, list) {
 		list_del_init(&nd_spa->list);
 		kfree(nd_spa);
@@ -481,9 +478,6 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 	const void __iomem *end;
 	size_t size, i;
 	int rc;
-
-	if (!nd_bus)
-		return NULL;
 
 	size = nd_bus->nfit_desc->nfit_size;
 	if (size < sizeof(struct nfit))
