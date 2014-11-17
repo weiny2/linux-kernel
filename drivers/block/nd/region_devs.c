@@ -426,5 +426,7 @@ int nd_bus_register_regions(struct nd_bus *nd_bus)
 	}
 	mutex_unlock(&nd_bus_list_mutex);
 
+	nd_synchronize();
+
 	return rc;
 }

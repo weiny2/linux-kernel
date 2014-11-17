@@ -25,11 +25,6 @@ LIST_HEAD(nd_bus_list);
 DEFINE_MUTEX(nd_bus_list_mutex);
 static DEFINE_IDA(nd_ida);
 
-static bool wait_probe;
-module_param(wait_probe, bool, 0);
-MODULE_PARM_DESC(wait_probe,
-		"Wait for nd devices to be probed (default: async probing)");
-
 static bool warn_checksum = true;
 module_param(warn_checksum, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(warn_checksum, "Turn checksum errors into warnings");
@@ -324,13 +319,9 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->dcrs);
 	INIT_LIST_HEAD(&nd_bus->bdws);
 	INIT_LIST_HEAD(&nd_bus->memdevs);
-	INIT_LIST_HEAD(&nd_bus->deferred);
 	INIT_LIST_HEAD(&nd_bus->ndios);
 	INIT_LIST_HEAD(&nd_bus->list);
 	INIT_RADIX_TREE(&nd_bus->dimm_radix, GFP_KERNEL);
-	spin_lock_init(&nd_bus->deferred_lock);
-	init_completion(&nd_bus->registration);
-	init_waitqueue_head(&nd_bus->deferq);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
 	mutex_init(&nd_bus->reconfig_mutex);
 	if (nd_bus->id < 0) {
@@ -526,18 +517,14 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 		goto err_child;
 
 	nd_bus->nd_btt = nd_btt_create(nd_bus, NULL, NULL, 0, NULL);
+	nd_synchronize();
 
 	mutex_lock(&nd_bus_list_mutex);
 	list_add_tail(&nd_bus->list, &nd_bus_list);
 	mutex_unlock(&nd_bus_list_mutex);
-	complete_all(&nd_bus->registration);
-	if (wait_probe)
-		nd_bus_wait_probe(nd_bus);
 
 	return nd_bus;
  err_child:
-	complete_all(&nd_bus->registration);
-	nd_bus_wait_probe(nd_bus);
 	device_for_each_child(&nd_bus->dev, NULL, child_unregister);
 	nd_bus_destroy_ndctl(nd_bus);
  err:
@@ -575,7 +562,7 @@ void nfit_bus_unregister(struct nd_bus *nd_bus)
 	list_del_init(&nd_bus->list);
 	mutex_unlock(&nd_bus_list_mutex);
 
-	nd_bus_wait_probe(nd_bus);
+	nd_synchronize();
 	device_for_each_child(&nd_bus->dev, NULL, child_unregister);
 	nd_bus_destroy_ndctl(nd_bus);
 

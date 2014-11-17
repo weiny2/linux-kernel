@@ -38,11 +38,7 @@ struct nd_io;
 struct nd_bus {
 	struct nfit_bus_descriptor *nfit_desc;
 	struct radix_tree_root dimm_radix;
-	struct completion registration;
 	struct module *module;
-	wait_queue_head_t deferq;
-	spinlock_t deferred_lock;
-	struct list_head deferred;
 	struct list_head memdevs;
 	struct list_head spas;
 	struct list_head dcrs;
@@ -77,7 +73,6 @@ struct nd_mem {
 };
 
 struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname);
-void nd_bus_wait_probe(struct nd_bus *nd_bus);
 struct nd_dimm *nd_dimm_by_handle(struct nd_bus *nd_bus, u32 nfit_handle);
 bool is_nd_dimm(struct device *dev);
 bool is_nd_blk(struct device *dev);

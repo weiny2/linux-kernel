@@ -58,57 +58,6 @@ static int nd_bus_match(struct device *dev, struct device_driver *drv)
 	return test_bit(to_nd_device_type(dev), &nd_drv->type);
 }
 
-struct nd_defer_tracker {
-	struct list_head list;
-	struct device *dev;
-};
-
-static struct nd_defer_tracker *__find_deferred_tracker(struct nd_bus *nd_bus,
-		struct device *dev)
-{
-	struct nd_defer_tracker *nd_defer;
-
-	list_for_each_entry(nd_defer, &nd_bus->deferred, list)
-		if (dev == nd_defer->dev)
-			return nd_defer;
-	return NULL;
-}
-
-static int add_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
-{
-	struct nd_defer_tracker *nd_defer;
-
-	spin_lock(&nd_bus->deferred_lock);
-	nd_defer = __find_deferred_tracker(nd_bus, dev);
-	while (!nd_defer) {
-		nd_defer = kmalloc(sizeof(*nd_defer), GFP_KERNEL);
-		if (!nd_defer)
-			break;
-		INIT_LIST_HEAD(&nd_defer->list);
-		nd_defer->dev = dev;
-		list_add_tail(&nd_defer->list, &nd_bus->deferred);
-		dev_dbg(dev, "add to defer queue\n");
-	}
-	spin_unlock(&nd_bus->deferred_lock);
-
-	return nd_defer ? 0 : -ENOMEM;
-}
-
-static void del_deferred_tracker(struct nd_bus *nd_bus, struct device *dev)
-{
-	struct nd_defer_tracker *nd_defer;
-
-	spin_lock(&nd_bus->deferred_lock);
-	nd_defer = __find_deferred_tracker(nd_bus, dev);
-	if (nd_defer) {
-		list_del_init(&nd_defer->list);
-		kfree(nd_defer);
-		wake_up_all(&nd_bus->deferq);
-		dev_dbg(dev, "del from defer queue\n");
-	}
-	spin_unlock(&nd_bus->deferred_lock);
-}
-
 static struct module *to_bus_provider(struct device *dev)
 {
 	/* pin bus providers while regions are enabled */
@@ -131,10 +80,6 @@ static int nd_bus_probe(struct device *dev)
 		return -ENXIO;
 
 	rc = nd_drv->probe(dev);
-	if (rc == -EPROBE_DEFER)
-		rc = add_deferred_tracker(nd_bus, dev);
-	else if (rc == 0)
-		del_deferred_tracker(nd_bus, dev);
 	dev_dbg(&nd_bus->dev, "%s.probe(%s) = %d\n", dev->driver->name,
 			dev_name(dev), rc);
 
@@ -208,30 +153,13 @@ void nd_device_register(struct device *dev)
 }
 EXPORT_SYMBOL(nd_device_register);
 
-static bool is_deferred_queue_empty(struct nd_bus *nd_bus)
-{
-	/* flush the wake up path */
-	spin_lock(&nd_bus->deferred_lock);
-	spin_unlock(&nd_bus->deferred_lock);
-	return list_empty(&nd_bus->deferred);
-}
-
 void nd_synchronize(void)
 {
 	async_synchronize_full_domain(&nd_async_register);
 }
 
-void nd_bus_wait_probe(struct nd_bus *nd_bus)
-{
-	wait_for_completion(&nd_bus->registration);
-	nd_synchronize();
-	wait_event(nd_bus->deferq, is_deferred_queue_empty(nd_bus));
-}
-
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
-
 	switch (mode) {
 	case ND_ASYNC:
 		get_device(dev);
@@ -239,7 +167,7 @@ void nd_device_unregister(struct device *dev, enum nd_async_mode mode)
 				&nd_async_register);
 		break;
 	case ND_SYNC:
-		nd_bus_wait_probe(nd_bus);
+		nd_synchronize();
 		device_unregister(dev);
 		break;
 	}
@@ -339,7 +267,6 @@ static int __nd_unregister_ndio(struct nd_io *ndio)
 
 int nd_unregister_ndio(struct nd_io *ndio)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(ndio->dev);
 	struct device *dev = ndio->dev;
 	int rc;
 
@@ -353,7 +280,7 @@ int nd_unregister_ndio(struct nd_io *ndio)
 	 * Flush in case ->notify_remove() kicked off asynchronous device
 	 * unregistration
 	 */
-	nd_bus_wait_probe(nd_bus);
+	nd_synchronize();
 
 	return rc;
 }
@@ -426,10 +353,26 @@ static ssize_t revision_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(revision);
 
+static int flush_namespaces(struct device *dev, void *data)
+{
+	device_lock(dev);
+	device_unlock(dev);
+	return 0;
+}
+
+static int flush_regions_dimms(struct device *dev, void *data)
+{
+	device_lock(dev);
+	device_unlock(dev);
+	device_for_each_child(dev, NULL, flush_namespaces);
+	return 0;
+}
+
 static ssize_t wait_probe_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	nd_bus_wait_probe(to_nd_bus(dev->parent));
+	nd_synchronize();
+	device_for_each_child(dev, NULL, flush_regions_dimms);
 	return sprintf(buf, "1\n");
 }
 static DEVICE_ATTR_RO(wait_probe);
