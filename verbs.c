@@ -1080,11 +1080,12 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		tx->sde = sde = qp->s_hdr->sde;
 
 	if (likely(pbc == 0)) {
+		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 		/* No vl15 here */
 		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
 
-		pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
+		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	}
 	tx->wqe = qp->s_wqe;
 	tx->mr = qp->s_rdma_mr;
@@ -1178,9 +1179,10 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	if (!sc)
 		return -EINVAL;
 	if (likely(pbc == 0)) {
+		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
-		pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
+		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	}
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (unlikely(pbuf == NULL))

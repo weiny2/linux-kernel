@@ -670,7 +670,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 	u16 sc5;
 	u32 bth0;
 	u32 hwords;
-	u32 plen;
+	u32 vl, plen;
 	struct send_context *sc;
 	struct pio_buf *pbuf;
 	struct qib_ib_header hdr;
@@ -729,7 +729,8 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 
 	sc = rcd->sc;
 	plen = 2 /* PBC */ + hwords;
-	pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
+	vl = sc_to_vlt(ppd->dd, sc5);
+	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
 	if (!pbuf) {

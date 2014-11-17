@@ -457,7 +457,7 @@ void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 		const struct ib_grh *old_grh)
 {
 	u64 pbc, pbc_flags = 0;
-	u32 bth0, plen, hwords = 5;
+	u32 bth0, plen, vl, hwords = 5;
 	u16 lrh0;
 	u8 sl = ibp->sc_to_sl[sc5];
 	struct qib_ib_header hdr;
@@ -496,7 +496,8 @@ void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 
 	plen = 2 /* PBC */ + hwords;
 	pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
-	pbc = create_pbc(pbc_flags, qp->s_srate, sc5, plen);
+	vl = sc_to_vlt(ppd->dd, sc5);
+	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	pbuf = sc_buffer_alloc(ctxt, plen, NULL, 0);
 	if (pbuf)
 		ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
