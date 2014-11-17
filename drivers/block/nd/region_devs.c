@@ -109,8 +109,12 @@ static ssize_t spa_index_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct nd_region *nd_region = to_nd_region(dev);
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	struct nd_spa *nd_spa = nd_region->nd_spa;
+	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
+			nd_bus->nfit_desc->old_nfit);
 
-	return sprintf(buf, "%d\n", nd_region->spa_index);
+	return sprintf(buf, "%d\n", spa_index);
 }
 DEVICE_ATTR_RO(spa_index);
 
@@ -284,6 +288,9 @@ static const struct attribute_group *nd_region_attribute_groups[] = {
 
 static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 {
+	struct nd_spa *nd_spa = nd_region->nd_spa;
+	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
+			nd_bus->nfit_desc->old_nfit);
 	struct nd_bdw *iter, *nd_bdw = NULL;
 	struct nd_mapping *nd_mapping;
 	struct nd_mem *nd_mem;
@@ -292,7 +299,7 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 
 	nd_region->dev.type = &nd_block_device_type;
 
-	nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, 0);
+	nd_mem = nd_mem_from_spa(nd_bus, spa_index, 0);
 	dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
 	list_for_each_entry(iter, &nd_bus->bdws, list) {
 		if (readw(&iter->nfit_bdw->dcr_index) == dcr_index) {
@@ -318,15 +325,18 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region,
 		struct device_type *type)
 {
-	struct nd_mem *nd_mem;
 	u16 i;
+	struct nd_mem *nd_mem;
+	struct nd_spa *nd_spa = nd_region->nd_spa;
+	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
+			nd_bus->nfit_desc->old_nfit);
 
 	nd_region->dev.type = type;
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 		u32 nfit_handle;
 
-		nd_mem = nd_mem_from_spa(nd_bus, nd_region->spa_index, i);
+		nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
 		nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 		nd_mapping->nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
 		nd_mapping->start = readq(&nd_mem->nfit_mem->region_dpa);
@@ -354,7 +364,7 @@ static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 		kfree(nd_region);
 		return NULL;
 	}
-	nd_region->spa_index = spa_index;
+	nd_region->nd_spa = nd_spa;
 	nd_region->ndr_mappings = num_mappings;
 	dev = &nd_region->dev;
 	dev_set_name(dev, "region%d", nd_region->id);
