@@ -862,11 +862,11 @@ done:
 			/* start the serdes - must be after interrupts are
 			   enabled so we are notified when the link goes up */
 			lastfail = dd->f_bringup_serdes(ppd);
-			if (lastfail) {
+			if (lastfail)
 				dd_dev_info(dd,
-					"Failed to bring up IB port %u\n",
+					"Failed to bring up port %u\n",
 					ppd->port);
-			}
+
 			/*
 			 * Set status even if port serdes is not initialized
 			 * so that diags will work.

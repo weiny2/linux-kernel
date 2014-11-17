@@ -2143,7 +2143,12 @@ void handle_sma_message(struct work_struct *work)
 		if (ppd->host_link_state == HLS_UP_ARMED
 					&& ppd->is_active_optimize_enabled) {
 			ppd->neighbor_normal = 1;
-			set_link_state(ppd, HLS_UP_ACTIVE);
+			ret = set_link_state(ppd, HLS_UP_ACTIVE);
+			if (ret)
+				dd_dev_err(dd,
+					"%s: received Active SMA idle"
+					"message, couldn't set link to Active\n",
+					__func__);
 		}
 		break;
 	default:
@@ -3300,7 +3305,7 @@ static int set_physical_link_state(struct hfi_devdata *dd, u64 state)
 	return do_8051_command(dd, WFR_HCMD_CHANGE_PHY_STATE, state, NULL);
 }
 
-static void load_8051_config(struct hfi_devdata *dd, u8 field_id,
+static int load_8051_config(struct hfi_devdata *dd, u8 field_id,
 				u8 lane_id, u32 config_data)
 {
 	u64 data;
@@ -3315,10 +3320,10 @@ static void load_8051_config(struct hfi_devdata *dd, u8 field_id,
 			"load 8051 config: field id %d, lane %d, err %d\n",
 			(int)field_id, (int)lane_id, ret);
 	}
-
+	return ret;
 }
 
-static void read_8051_config(struct hfi_devdata *dd, u8 field_id,
+static int read_8051_config(struct hfi_devdata *dd, u8 field_id,
 				u8 lane_id, u32 *config_data)
 {
 	u64 in_data;
@@ -3331,24 +3336,26 @@ static void read_8051_config(struct hfi_devdata *dd, u8 field_id,
 				&out_data);
 	if (ret != WFR_HCMD_SUCCESS) {
 		dd_dev_err(dd,
-			"read 8051 config: field id %d, lane %d, err %d\n",
+			"read 8051 config: field id %d, lane %d, err %d failed\n",
 			(int)field_id, (int)lane_id, ret);
 		out_data = 0;
 	}
 	*config_data = (out_data >> READ_DATA_DATA_SHIFT) & READ_DATA_DATA_MASK;
+	return ret;
 }
 
-static void write_vc_local_phy(struct hfi_devdata *dd, u8 power_management,
+static int write_vc_local_phy(struct hfi_devdata *dd, u8 power_management,
 				u8 continous)
 {
 	u32 frame;
 
 	frame = continous << CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT
 		| power_management << POWER_MANAGEMENT_SHIFT;
-	load_8051_config(dd, VERIFY_CAP_LOCAL_PHY, GENERAL_CONFIG, frame);
+	return load_8051_config(dd, VERIFY_CAP_LOCAL_PHY,
+				GENERAL_CONFIG, frame);
 }
 
-static void write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
+static int write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
 					u16 vl15buf, u8 crc_sizes)
 {
 	u32 frame;
@@ -3357,7 +3364,8 @@ static void write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
 		| (u32)vcu << VCU_SHIFT
 		| (u32)vl15buf << VL15BUF_SHIFT
 		| (u32)crc_sizes << CRC_SIZES_SHIFT;
-	load_8051_config(dd, VERIFY_CAP_LOCAL_FABRIC, GENERAL_CONFIG, frame);
+	return load_8051_config(dd, VERIFY_CAP_LOCAL_FABRIC,
+				GENERAL_CONFIG, frame);
 }
 
 static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
@@ -3371,7 +3379,7 @@ static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
 }
 
-static void write_vc_local_link_width(struct hfi_devdata *dd,
+static int write_vc_local_link_width(struct hfi_devdata *dd,
 				u16 flag_bits,
 				u16 link_widths)
 {
@@ -3379,8 +3387,8 @@ static void write_vc_local_link_width(struct hfi_devdata *dd,
 
 	frame = (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
 		| (u32)link_widths << LINK_WIDTH_SHIFT;
-	load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
-		frame);
+	return load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
+		     frame);
 }
 
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b)
@@ -3445,15 +3453,16 @@ static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
 	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
 }
 
-static void read_tx_settings(struct hfi_devdata *dd,
+static int read_tx_settings(struct hfi_devdata *dd,
 				u8 *enable_lane_tx,
 				u8 *tx_polarity_inversion,
 				u8 *rx_polarity_inversion,
 				u8 *max_rate)
 {
 	u32 frame;
+	int ret;
 
-	read_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, &frame);
+	ret = read_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, &frame);
 	*enable_lane_tx = (frame >> ENABLE_LINE_TX_SHIFT)
 				& ENABLE_LANE_TX_MASK;
 	*tx_polarity_inversion = (frame >> TX_POLARITY_INVERSION_SHIFT)
@@ -3461,9 +3470,10 @@ static void read_tx_settings(struct hfi_devdata *dd,
 	*rx_polarity_inversion = (frame >> RX_POLARITY_INVERSION_SHIFT)
 				& RX_POLARITY_INVERSION_MASK;
 	*max_rate = (frame >> MAX_RATE_SHIFT) & MAX_RATE_MASK;
+	return ret;
 }
 
-static void write_tx_settings(struct hfi_devdata *dd,
+static int write_tx_settings(struct hfi_devdata *dd,
 				u8 enable_lane_tx,
 				u8 tx_polarity_inversion,
 				u8 rx_polarity_inversion,
@@ -3476,7 +3486,7 @@ static void write_tx_settings(struct hfi_devdata *dd,
 		| tx_polarity_inversion << TX_POLARITY_INVERSION_SHIFT
 		| rx_polarity_inversion << RX_POLARITY_INVERSION_SHIFT
 		| max_rate << MAX_RATE_SHIFT;
-	load_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, frame);
+	return load_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, frame);
 }
 
 /*
@@ -3707,27 +3717,38 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 	u8 tx_polarity_inversion;
 	u8 rx_polarity_inversion;
 	u8 max_rate;
+	int ret;
 
 	/* set the max rate - need to read-modify-write */
-	read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
+	ret = read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
 		&rx_polarity_inversion, &max_rate);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
+
 	/* set the max rate to the fastest enabled */
 	if (ppd->link_speed_enabled & STL_LINK_SPEED_25G)
 		max_rate = 1;
 	else
 		max_rate = 0;
-	write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
-		rx_polarity_inversion, max_rate);
+	ret = write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
+		     rx_polarity_inversion, max_rate);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
 
 	/*
-	 * Storm Lake generateion 1 has no power management.
+	 * Storm Lake generation 1 has no power management.
 	 * DC supports continous updates.
 	 */
-	write_vc_local_phy(dd, 0 /* no power management */,
-				1 /* continous updates */);
+	ret = write_vc_local_phy(dd, 0 /* no power management */,
+				     1 /* continous updates */);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
 
-	write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
-		link_crc_mask);
+
+	ret = write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
+				    link_crc_mask);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
 
 	/*
 	 * TODO: 0x2f00 are undocumented flags co-located with the
@@ -3735,11 +3756,16 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 	 * off some BCC steps during LinkUp, currently necessary
 	 * for back-to-back operation (doesn't matter for loopback).
 	 */
-	write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
-		stl_to_vc_link_widths(ppd->link_width_enabled));
+	ret = write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
+		     stl_to_vc_link_widths(ppd->link_width_enabled));
+	if (ret == WFR_HCMD_SUCCESS)
+		return 0;
 
-	/* FIXME: the above calls should return error status, Bug 125337 */
-	return 0;
+set_local_link_attributes_fail:
+	dd_dev_err(dd,
+		"Failed to set local link attributes, return 0x%x\n",
+		ret);
+	return ret;
 }
 
 /* schedule a link restart */
@@ -4404,10 +4430,8 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 			goto unexpected;
 
 		ret = set_local_link_attributes(ppd);
-		if (ret) {
-			schedule_link_restart(ppd);
+		if (ret)
 			break;
-		}
 
 		/* set link state first so LCB access starts bouncing off */
 		ppd->host_link_state = HLS_DN_POLL;

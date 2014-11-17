@@ -1494,16 +1494,17 @@ static int qib_modify_port(struct ib_device *ibdev, u8 port,
 {
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	int ret = 0;
 
 	ibp->port_cap_flags |= props->set_port_cap_mask;
 	ibp->port_cap_flags &= ~props->clr_port_cap_mask;
 	if (props->set_port_cap_mask || props->clr_port_cap_mask)
 		qib_cap_mask_chg(ibp);
 	if (port_modify_mask & IB_PORT_SHUTDOWN)
-		set_link_state(ppd, HLS_DN_DOWNDEF);
+		ret = set_link_state(ppd, HLS_DN_DOWNDEF);
 	if (port_modify_mask & IB_PORT_RESET_QKEY_CNTR)
 		ibp->qkey_violations = 0;
-	return 0;
+	return ret;
 }
 
 static int qib_query_gid(struct ib_device *ibdev, u8 port,
