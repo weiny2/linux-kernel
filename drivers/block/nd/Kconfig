@@ -84,7 +84,7 @@ config NFIT_TEST
 	  io-memory-resource.
 
 	  Note, this test expects to be able to find at least
-	  584MB of CMA space (CONFIG_CMA_SIZE_MBYTES) or it will fail to
+	  256MB of CMA space (CONFIG_CMA_SIZE_MBYTES) or it will fail to
 	  load.  Kconfig does not allow for numerical value
 	  dependencies, so we can only warn at runtime.
 
