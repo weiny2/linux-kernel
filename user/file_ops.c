@@ -34,6 +34,7 @@
 #include <linux/io.h>
 #include <linux/uio.h>
 #include <linux/fs.h>
+#include <linux/device.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/cred.h>
@@ -79,8 +80,8 @@ static inline int is_valid_mmap(u64 token)
 
 static int hfi_open(struct inode *inode, struct file *fp)
 {
-	struct hfi_devdata *dd;
 	struct hfi_userdata *ud;
+	struct hfi_bus_driver *drv;
 	unsigned i_minor = iminor(inode);
 
 	BUG_ON(!i_minor);
@@ -91,8 +92,11 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	fp->private_data = ud;
 
 	/* lookup and store pointer to HFI device data */
-	dd = container_of(inode->i_cdev, struct hfi_devdata, user_cdev);
-	ud->devdata = dd;
+	/* TODO */
+	drv = container_of(inode->i_cdev, struct hfi_bus_driver, cdev);
+	ud->bus_drv = drv;
+	ud->bus_ops = drv->bus_dev->bus_ops;
+	ud->devdata = drv->bus_dev->dd;
 
 	/* no cpu affinity by default */
 	ud->rec_cpu_num = -1;
@@ -103,7 +107,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	ud->ptl_pid = HFI_PID_NONE;
 	ud->ptl_uid = current_uid();
 
-	hfi_job_init(ud);
+	ud->bus_ops->job_init(ud);
 
 	return 0;
 }
@@ -125,13 +129,15 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *dest = NULL;
 	void __user *user_data = NULL;
+	struct hfi_bus_ops *ops;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
 		goto err_cmd;
 	}
 	ud = fp->private_data;
-	BUG_ON(!ud || !ud->devdata);
+	BUG_ON(!ud || !ud->bus_ops);
+	ops = ud->bus_ops;
 
 	ucmd = (const struct hfi_cmd __user *)data;
 	if (copy_from_user(&cmd, ucmd, sizeof(cmd))) {
@@ -211,32 +217,32 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 	switch (cmd.type) {
 	case HFI_CMD_CQ_ASSIGN:
-		ret = hfi_cq_assign(ud, &cq_assign);
+		ret = ops->cq_assign(ud, &cq_assign);
 		break;
 	case HFI_CMD_CQ_UPDATE:
-		ret = hfi_cq_update(ud, &cq_update);
+		ret = ops->cq_update(ud, &cq_update);
 		break;
 	case HFI_CMD_CQ_RELEASE:
-		ret = hfi_cq_release(ud, cq_release.cq_idx);
+		ret = ops->cq_release(ud, cq_release.cq_idx);
 		break;
 	case HFI_CMD_DLID_ASSIGN:
-		ret = hfi_dlid_assign(ud, &dlid_assign);
+		ret = ops->dlid_assign(ud, &dlid_assign);
 		break;
 	case HFI_CMD_DLID_RELEASE:
-		ret = hfi_dlid_release(ud);
+		ret = ops->dlid_release(ud);
 		break;
 	case HFI_CMD_PTL_ATTACH:
-		ret = hfi_ptl_attach(ud, &ptl_attach);
+		ret = ops->ctxt_assign(ud, &ptl_attach);
 		break;
 	case HFI_CMD_PTL_DETACH:
 		/* release our assigned PID */
-		hfi_ptl_cleanup(ud);
+		ops->ctxt_release(ud);
 		break;
 	case HFI_CMD_JOB_INFO:
-		ret = hfi_job_info(ud, &job_info);
+		ret = ops->job_info(ud, &job_info);
 		break;
 	case HFI_CMD_JOB_SETUP:
-		ret = hfi_job_setup(ud, &job_setup);
+		ret = ops->job_setup(ud, &job_setup);
 		break;
 	default:
 		ret = -EINVAL;
@@ -446,10 +452,12 @@ done:
 
 int hfi_user_cleanup(struct hfi_userdata *ud)
 {
+	struct hfi_bus_ops *ops = ud->bus_ops;
+
 	/* release Portals resources acquired by the HFI user */
-	hfi_ptl_cleanup(ud);
+	ops->ctxt_release(ud);
 	/* release any held PID reservations */
-	hfi_job_free(ud);
+	ops->job_free(ud);
 	return 0;
 }
 
@@ -503,21 +511,21 @@ static u64 kvirt_to_phys(void *addr, int *high)
 	return paddr;
 }
 
-void hfi_user_remove(struct hfi_devdata *dd)
+void hfi_user_remove(struct hfi_bus_driver *drv)
 {
-	hfi_cdev_cleanup(&dd->user_cdev, &dd->user_device);
+	hfi_cdev_cleanup(&drv->cdev, &drv->dev);
 }
 
-int hfi_user_add(struct hfi_devdata *dd)
+int hfi_user_add(struct hfi_bus_driver *drv, int unit)
 {
 	char name[10];
 	int ret;
 
 	/* Note minor=0 is reserved; hence we use unit+1 */
-	snprintf(name, sizeof(name), "%s%d", DRIVER_DEVICE_PREFIX, dd->unit);
-	ret = hfi_cdev_init(dd->unit + 1, name, &hfi_file_ops,
-			    &dd->user_cdev, &dd->user_device);
+	snprintf(name, sizeof(name), "%s%d", DRIVER_DEVICE_PREFIX, unit);
+	ret = hfi_cdev_init(unit + 1, name, &hfi_file_ops,
+			    drv->class, &drv->cdev, &drv->dev);
 	if (!ret)
-		dev_set_drvdata(dd->user_device, dd);
+		dev_set_drvdata(drv->dev, drv);
 	return ret;
 }

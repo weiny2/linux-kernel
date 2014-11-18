@@ -37,11 +37,28 @@
 #include "../hfi.h"
 #include "device.h"
 
-static struct class *class;
+static struct hfi_bus_device_id id_table[] = {
+	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_FXR0 },
+	{ 0 },
+};
+MODULE_DEVICE_TABLE(hfi_bus, id_table);
+
+static int hfi_portals_probe(struct hfi_bus_device *hdev);
+static void hfi_portals_remove(struct hfi_bus_device *hdev);
+
+static struct hfi_bus_driver hfi_portals_driver = {
+	.driver.name = KBUILD_MODNAME,
+	.driver.owner = THIS_MODULE,
+	.id_table = id_table,
+	.probe = hfi_portals_probe,
+	.remove = hfi_portals_remove,
+};
+
 static dev_t hfi_dev;
 
 int hfi_cdev_init(int minor, const char *name,
 		  const struct file_operations *fops,
+		  struct class *class,
 		  struct cdev *cdev, struct device **devp)
 {
 	const dev_t dev = MKDEV(MAJOR(hfi_dev), minor);
@@ -84,6 +101,30 @@ void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp)
 	}
 }
 
+/*
+ * Device initialization, called from PCI probe.
+ */
+static int hfi_portals_probe(struct hfi_bus_device *hdev)
+{
+	int ret;
+
+	hfi_portals_driver.bus_dev = hdev;
+	ret = hfi_user_add(&hfi_portals_driver, hdev->unit);
+	if (ret)
+		pr_err("Failed to create /dev devices: %d\n", -ret);
+
+	return 0;
+}
+
+/*
+ * Perform required device shutdown logic, also remove /dev entries.
+ * Called when unloading the driver.
+ */
+static void hfi_portals_remove(struct hfi_bus_device *hdev)
+{
+	hfi_user_remove(&hfi_portals_driver);
+}
+
 int __init hfi_init(void)
 {
 	int ret;
@@ -94,24 +135,9 @@ int __init hfi_init(void)
 		goto done;
 	}
 
-	class = class_create(THIS_MODULE, DRIVER_CLASS_NAME);
-	if (IS_ERR(class)) {
-		ret = PTR_ERR(class);
-		pr_err("Could not create device class (err %d)\n", -ret);
-		goto err_class;
-	}
-
-	ret = pci_register_driver(&hfi_driver);
-	if (ret < 0) {
-		pr_err("Unable to register driver: error %d\n", -ret);
-		goto err_unit;
-	}
-	goto done;
-
-err_unit:
-	class_destroy(class);
-err_class:
-	unregister_chrdev_region(hfi_dev, HFI_NMINORS);
+	ret = hfi_bus_register_driver(&hfi_portals_driver);
+	if (ret < 0)
+		unregister_chrdev_region(hfi_dev, HFI_NMINORS);
 done:
 	return ret;
 }
@@ -119,11 +145,12 @@ module_init(hfi_init);
 
 void hfi_cleanup(void)
 {
-	pci_unregister_driver(&hfi_driver);
-	if (class) {
-		class_destroy(class);
-		class = NULL;
-	}
+	hfi_bus_unregister_driver(&hfi_portals_driver);
 	unregister_chrdev_region(hfi_dev, HFI_NMINORS);
 }
 module_exit(hfi_cleanup);
+
+MODULE_LICENSE("Dual BSD/GPL");
+MODULE_AUTHOR("Intel Corporation");
+MODULE_DESCRIPTION("Intel(R) STL Gen2 Portals Driver");
+MODULE_VERSION(HFI_DRIVER_VERSION);

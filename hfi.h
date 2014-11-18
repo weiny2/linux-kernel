@@ -49,11 +49,30 @@
 #include <linux/cdev.h>
 #include "include/hfi_defs.h"
 #include "include/hfi_cmd.h"
+#include "hfi_bus.h"
 
 #define DRIVER_NAME		"hfi2"
 #define DRIVER_CLASS_NAME	DRIVER_NAME
 /* device naming has leading zero to prevent /dev name collisions */
 #define DRIVER_DEVICE_PREFIX	"hfi02"
+
+#define PCI_VENDOR_ID_INTEL       0x8086
+#define PCI_DEVICE_ID_INTEL_FXR0  0x26d0
+
+/*
+ * Define the driver version number.  This is something that refers only
+ * to the driver itself, not the software interfaces it supports.
+ */
+#ifndef HFI_DRIVER_VERSION_BASE
+#define HFI_DRIVER_VERSION_BASE "0.0"
+#endif
+
+/* create the final driver version string */
+#ifdef HFI_IDSTR
+#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE " " HFI_IDSTR
+#else
+#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
+#endif
 
 #define HFI_USER_MINOR_BASE     0
 #define HFI_TRACE_MINOR         127
@@ -62,8 +81,6 @@
 #define HFI_UI_MINOR_BASE       192
 #define HFI_SNOOP_CAPTURE_BASE  200
 #define HFI_NMINORS             255
-
-extern struct pci_driver hfi_driver;
 
 struct hfi_msix_entry {
 	struct msix_entry msix;
@@ -80,13 +97,7 @@ typedef union PCB hfi_ptl_control_t;
 struct hfi_devdata {
 	/* pci access data structure */
 	struct pci_dev *pcidev;
-	/* pointers to related structs for this device */
-	struct cdev user_cdev;
-	struct cdev diag_cdev;
-	struct cdev ui_cdev;
-	struct device *user_device;
-	struct device *diag_device;
-	struct device *ui_device;
+	struct hfi_bus_device *bus_dev;
 
 	/* localbus width (1, 2,4,8,16,32) from config space  */
 	u32 lbus_width;
@@ -130,6 +141,8 @@ struct hfi_devdata {
 
 /* Private data for file operations, created at open(). */
 struct hfi_userdata {
+	struct hfi_bus_driver *bus_drv;
+	struct hfi_bus_ops *bus_ops;
 	struct hfi_devdata *devdata;
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
@@ -174,10 +187,8 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void cleanup_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
-int hfi_user_add(struct hfi_devdata * dd);
-void hfi_user_remove(struct hfi_devdata *dd);
-int hfi_ui_add(struct hfi_devdata *dd);
-void hfi_ui_remove(struct hfi_devdata *dd);
+int hfi_user_add(struct hfi_bus_driver *drv, int unit);
+void hfi_user_remove(struct hfi_bus_driver *drv);
 int hfi_user_cleanup(struct hfi_userdata *dd);
 
 void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
@@ -198,6 +209,45 @@ void hfi_job_init(struct hfi_userdata *ud);
 int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
 int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
 void hfi_job_free(struct hfi_userdata *ud);
+
+/**
+ * hfi_bus_ops - Hardware operations for accessing a FXR device on the FXR bus.
+ */
+struct hfi_bus_ops {
+	/* Resource Allocation ops */
+	int (*ctxt_assign)(struct hfi_userdata *ud, struct hfi_ptl_attach_args *ptl_attach);
+	void (*ctxt_release)(struct hfi_userdata *ud);
+	//int (*ctxt_kaddr)(struct hfi_userdata *ud, struct hfi_ctxt_kaddr_args *ctxt_kaddr);
+
+	/* FXR specific Resource Allocation ops */
+	int (*cq_assign)(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
+	int (*cq_update)(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update);
+	int (*cq_release)(struct hfi_userdata *ud, u16 cq_idx);
+	//int (*cq_kaddr)(struct hfi_userdata *ud, struct hfi_cq_kaddr_args *cq_kaddr);
+	int (*eq_assign)(struct hfi_userdata *ud, struct hfi_eq_assign_args *eq_assign);
+	int (*eq_release)(struct hfi_userdata *ud, u16 eq_type, u16 eq_idx);
+	int (*dlid_assign)(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign);
+	int (*dlid_release)(struct hfi_userdata *ud);
+	int (*job_info)(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
+	void (*job_init)(struct hfi_userdata *ud);
+	void (*job_free)(struct hfi_userdata *ud);
+	int (*job_setup)(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
+
+#if 0
+	/* TODO - below is starting attempt at 'kernel provider' operations */
+	/* critical functions would be inlined instead of bus operation */
+	/* RX and completion ops */
+	int (*rx_alloc)(struct hfi_ctx *ctx, struct hfi_rx_alloc_args *rx_alloc);
+	int (*rx_free)(struct hfi_ctx *ctx, u16 rx_type, u32 rx_idx);
+	int (*rx_enable)(struct hfi_ctx *ctx, u16 rx_type, u32 rx_idx);
+	int (*rx_disable)(struct hfi_ctx *ctx, u16 rx_type, u32 rx_idx);
+	int (*eq_alloc)(struct hfi_ctx *ctx, struct hfi_eq_alloc_args *eq_alloc);
+	int (*eq_free)(struct hfi_ctx *ctx, u16 eq_type, u16 eq_idx);
+	int (*eq_get)(struct hfi_ctx *ctx, u16 eq_type, u16 eq_idx);
+	/* TX ops */
+	int (*tx_command)(struct hfi_ctx *ctx, u64 cmd, void *header, void *payload);
+#endif
+};
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is
