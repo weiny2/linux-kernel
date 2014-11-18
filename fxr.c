@@ -62,6 +62,8 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
  */
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
+	hfi_bus_unregister_device(dd->bus_dev);
+
 	cleanup_interrupts(dd);
 
 	/* free host memory for FXR and Portals resources */
@@ -81,6 +83,20 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	pci_set_drvdata(dd->pcidev, NULL);
 	kfree(dd);
 }
+
+static struct hfi_bus_ops hfi_bus_ops = {
+	.ctxt_assign = hfi_ptl_attach,
+	.ctxt_release = hfi_ptl_cleanup,
+	.cq_assign = hfi_cq_assign,
+	.cq_update = hfi_cq_update,
+	.cq_release = hfi_cq_release,
+	.dlid_assign = hfi_dlid_assign,
+	.dlid_release = hfi_dlid_release,
+	.job_info = hfi_job_info,
+	.job_init = hfi_job_init,
+	.job_free = hfi_job_free,
+	.job_setup = hfi_job_setup,
+};
 
 /**
  * hfi_pci_dd_init - chip-specific initialization
@@ -102,6 +118,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	resource_size_t addr;
 	int i, ret;
 	rx_cfg_hiarb_pcb_base_t pcb_base = {.val = 0};
+	struct hfi_bus_device_id bus_id;
 
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
@@ -181,6 +198,12 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = 0;
 	if (ret)
 		goto err_post_alloc;
+
+	/* TODO - bus support */
+	bus_id.vendor = ent->vendor; //PCI_VENDOR_ID_INTEL;
+	bus_id.device = ent->device; //PCI_DEVICE_ID_INTEL_FXR0;
+	/* bus agent can be probed immediately, no writing dd->bus_dev after this */
+	dd->bus_dev = hfi_bus_register_device(&pdev->dev, &bus_id, dd, &hfi_bus_ops);
 
 	return dd;
 

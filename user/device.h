@@ -35,6 +35,7 @@
 
 int hfi_cdev_init(int minor, const char *name,
 		  const struct file_operations *fops,
+		  struct class *class,
 		  struct cdev *cdev, struct device **devp);
 void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp);
 const char *class_name(void);
