@@ -304,12 +304,12 @@ static int alua_check_tpgs(struct scsi_device *sdev, struct alua_dh_data *h)
 			    ALUA_DH_NAME);
 		return SCSI_DH_DEV_UNSUPP;
 	}
-	if (sdev->type == TYPE_RAID ||
-	    sdev->type == TYPE_ENCLOSURE ||
-	    sdev->type == 0x1F) {
+	if (sdev->type != TYPE_DISK &&
+	    sdev->type != TYPE_RBC &&
+	    sdev->type != TYPE_OSD) {
 		h->tpgs = TPGS_MODE_NONE;
 		sdev_printk(KERN_INFO, sdev,
-			    "%s: disable for enclosure devices\n",
+			    "%s: disable for non-disk devices\n",
 			    ALUA_DH_NAME);
 		return SCSI_DH_DEV_UNSUPP;
 	}
