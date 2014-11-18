@@ -31,7 +31,7 @@
  */
 
 #include <linux/fs.h>
-#include "hfi.h"
+#include "../hfi.h"
 #include "device.h"
 
 static int ui_open(struct inode *inode, struct file *filp)

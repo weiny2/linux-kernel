@@ -36,7 +36,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include "hfi.h"
-#include "device.h"
+#include "user/device.h"
 #include "debugfs.h"
 
 /* TODO - multiple HFI support... */
