@@ -23,7 +23,7 @@
  * later).  For simplicity we just ioremap the whole 3MB at once, and set the
  * pointers up manually.
  */
-#define CR_MB_TOTAL_SIZE (3 * CR_IN_MB_SIZE)
+#define CR_MB_TOTAL_SIZE (3 * CR_MB_SIZE)
 phys_addr_t	mb_phys_addr = 0xf000100000; /* single simics dimm config */
 void		*mb_addr;
 struct cr_mailbox cr_mb;
@@ -52,10 +52,10 @@ static void print_fw_cmd(struct fv_fw_cmd *fw_cmd)
 /* Offset from the start of the CTRL region to the start of the OS mailbox */
 int cr_verify_fw_cmd(struct fv_fw_cmd *fw_cmd)
 {
-	if (fw_cmd->input_payload_size > CR_IN_PAYLOAD_SIZE ||
-		fw_cmd->output_payload_size > CR_OUT_PAYLOAD_SIZE ||
-		fw_cmd->large_input_payload_size > CR_IN_MB_SIZE ||
-		fw_cmd->large_output_payload_size > CR_OUT_MB_SIZE)
+	if (fw_cmd->input_payload_size > CR_PAYLOAD_SIZE ||
+		fw_cmd->output_payload_size > CR_PAYLOAD_SIZE ||
+		fw_cmd->large_input_payload_size > CR_MB_SIZE ||
+		fw_cmd->large_output_payload_size > CR_MB_SIZE)
 		return -EINVAL;
 
 	return 0;
@@ -215,9 +215,9 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 		struct fnv_bios_get_size *fnv_size =
 			(struct fnv_bios_get_size *)out->out_buf;
 
-		fnv_size->input_size = CR_IN_MB_SIZE;
-		fnv_size->output_size = CR_OUT_MB_SIZE;
-		fnv_size->rw_size = CR_OUT_MB_SIZE;
+		fnv_size->input_size = CR_MB_SIZE;
+		fnv_size->output_size = CR_MB_SIZE;
+		fnv_size->rw_size = CR_MB_SIZE;
 		return 0;
 	}
 
@@ -237,7 +237,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 
 		if (fw_cmd.opcode == FNV_BIOS_OPCODE &&
 		    fw_cmd.sub_opcode == FNV_BIOS_SUBOP_WRITE_INPUT &&
-		    input_payload_size + bios_input->offset <= CR_IN_MB_SIZE) {
+		    input_payload_size + bios_input->offset <= CR_MB_SIZE) {
 			fw_cmd.large_input_payload_size	= input_payload_size;
 			fw_cmd.large_input_payload	= bios_input->buffer;
 			fw_cmd.large_payload_offset	= bios_input->offset;
@@ -250,7 +250,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 		if (fw_cmd.opcode == FNV_BIOS_OPCODE &&
 		    (fw_cmd.sub_opcode == FNV_BIOS_SUBOP_READ_INPUT ||
 		     fw_cmd.sub_opcode == FNV_BIOS_SUBOP_READ_OUTPUT) &&
-		    out->out_length + bios_input->offset <= CR_OUT_MB_SIZE) {
+		    out->out_length + bios_input->offset <= CR_MB_SIZE) {
 			fw_cmd.large_output_payload_size = out->out_length;
 			fw_cmd.large_output_payload	 = out->out_buf;
 			fw_cmd.large_payload_offset	 = bios_input->offset;
@@ -262,7 +262,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 	} else {
 		input_payload_size = in->in_length - sizeof(*cmd);
 
-		if (input_payload_size <= CR_IN_PAYLOAD_SIZE) {
+		if (input_payload_size <= CR_PAYLOAD_SIZE) {
 			fw_cmd.input_payload_size = input_payload_size;
 			fw_cmd.input_payload	  = cmd->in_buf;
 		} else {
@@ -271,7 +271,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 			return -EINVAL;
 		}
 
-		if (out->out_length <= CR_OUT_PAYLOAD_SIZE) {
+		if (out->out_length <= CR_PAYLOAD_SIZE) {
 			fw_cmd.output_payload_size = out->out_length;
 			fw_cmd.output_payload	   = out->out_buf;
 		} else {
@@ -336,16 +336,16 @@ static __init int nd_dsm_init(void)
 	cr_mb.out_payload[14]	= mb_addr + CR_MB_OUT_PAYLOAD14_OFFSET;
 	cr_mb.out_payload[15]	= mb_addr + CR_MB_OUT_PAYLOAD15_OFFSET;
 
-	cr_mb.mb_in_line_size		= CR_IN_MB_SIZE;
-	cr_mb.mb_out_line_size		= CR_OUT_MB_SIZE;
+	cr_mb.mb_in_line_size		= CR_MB_SIZE;
+	cr_mb.mb_out_line_size		= CR_MB_SIZE;
 	cr_mb.num_mb_in_segments	= 1;
 	cr_mb.num_mb_out_segments	= 1;
 
 	cr_mb.mb_in  = kmalloc(sizeof(void *), GFP_KERNEL);
 	cr_mb.mb_out = kmalloc(sizeof(void *), GFP_KERNEL);
 
-	cr_mb.mb_in[0]  = mb_addr + CR_IN_MB_SIZE;
-	cr_mb.mb_out[0] = mb_addr + CR_OUT_MB_SIZE * 2;
+	cr_mb.mb_in[0]  = mb_addr + CR_MB_SIZE;
+	cr_mb.mb_out[0] = mb_addr + CR_MB_SIZE * 2;
 
 	mutex_init(&cr_mb.mb_lock);
 

@@ -111,10 +111,8 @@ struct fv_fw_cmd {
 	u32 *status;
 };
 
-#define CR_IN_PAYLOAD_SIZE (128)
-#define CR_OUT_PAYLOAD_SIZE (128)
-#define CR_IN_MB_SIZE (1 << 20)
-#define CR_OUT_MB_SIZE (1 << 20)
+#define CR_PAYLOAD_SIZE (128)
+#define CR_MB_SIZE (1 << 20)
 #define CR_REG_SIZE 8
 #define DB_SHIFT 48
 #define SUB_OP_SHIFT 40
