@@ -217,6 +217,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 
 		fnv_size->input_size = CR_IN_MB_SIZE;
 		fnv_size->output_size = CR_OUT_MB_SIZE;
+		fnv_size->rw_size = CR_OUT_MB_SIZE;
 		return 0;
 	}
 

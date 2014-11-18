@@ -125,6 +125,7 @@ enum {
 struct fnv_bios_get_size {
 	__u32	input_size;
 	__u32	output_size;
+	__u32	rw_size;
 } __packed;
 
 struct fnv_bios_input {
