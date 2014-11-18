@@ -26,7 +26,7 @@
 #define MAP_ERR_MASK 0x1
 #define MAP_LBA_MASK (~((1 << MAP_TRIM_SHIFT) | (1 << MAP_ERR_SHIFT)))
 #define LOG_ENT_SIZE sizeof(struct log_entry)
-#define ARENA_MIN_SIZE ((size_t)(1 << 29))	/* 512 MB */
+#define ARENA_MIN_SIZE ((size_t)(1 << 24))	/* 16 MB */
 #define ARENA_MAX_SIZE ((size_t)(1ULL << 39))	/* 512 GB */
 #define RTT_VALID (1U << 31)
 #define RTT_INVALID 0
