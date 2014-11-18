@@ -155,8 +155,6 @@ void cr_write_large_inpayload(struct cr_mailbox *mb,
 
 int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 {
-	u8 status = 0;
-
 	if (cr_verify_fw_cmd(fw_cmd))
 		return -EINVAL;
 
@@ -166,6 +164,8 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 		cr_write_large_inpayload(mb, fw_cmd);
 
 	if (fw_cmd->flags != FNV_BIOS_FLAG) {
+		u8 status = 0;
+
 		/* BUG: Simics MB bug never resets status code */
 		memset_io(mb->status, 0, CR_REG_SIZE);
 
@@ -174,6 +174,9 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 		cr_poll_fw_cmd_completion(mb);
 
 		status = (readq(mb->status) & STATUS_MASK) >> STATUS_SHIFT;
+
+		if (status)
+			*(fw_cmd->status) = (status << 16) | EXTENDED_STATUS;
 	}
 
 	/*
@@ -189,9 +192,6 @@ int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 		else /* sub_opcode == FNV_BIOS_SUBOP_READ_INPUT */
 			cr_read_large_inpayload(mb, fw_cmd);
 	}
-
-	if (status)
-		return -EINVAL;
 
 	return 0;
 }
@@ -225,6 +225,7 @@ int nd_dsm_passthru(void *buf, unsigned int buf_len)
 	fw_cmd.opcode     = cmd->opcode;
 	fw_cmd.sub_opcode = cmd->sub_opcode;
 	fw_cmd.flags	  = cmd->flags;
+	fw_cmd.status	  = &out->status;
 
 	if (fw_cmd.flags == FNV_BIOS_FLAG) {
 		struct fnv_bios_input *bios_input;

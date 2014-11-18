@@ -108,6 +108,7 @@ struct fv_fw_cmd {
 	void *large_input_payload; /* A pointer to the large input buffer */
 	unsigned int large_output_payload_size;/* Size large output payload */
 	void *large_output_payload; /* A pointer to the large output buffer */
+	u32 *status;
 };
 
 #define CR_IN_PAYLOAD_SIZE (128)
@@ -120,5 +121,5 @@ struct fv_fw_cmd {
 #define OP_SHIFT 32
 #define STATUS_MASK 0xFF00
 #define STATUS_SHIFT 8
-
+#define EXTENDED_STATUS 4
 #endif /* __DSM_H__ */
