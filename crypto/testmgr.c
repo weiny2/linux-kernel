@@ -2127,6 +2127,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		.alg = "cmac(des3_ede)",
 		.test = alg_test_hash,
+		.fips_allowed = 1,
 		.suite = {
 			.hash = {
 				.vecs = des3_ede_cmac64_tv_template,
