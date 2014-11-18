@@ -126,6 +126,35 @@ static struct bus_type nd_bus_type = {
 
 static ASYNC_DOMAIN_EXCLUSIVE(nd_async_register);
 
+static void nd_async_dimm_delete(void *d, async_cookie_t cookie)
+{
+	u32 nfit_handle;
+	struct nd_dimm_delete *del_info = d;
+	struct nd_bus *nd_bus = del_info->nd_bus;
+	struct nd_mem *nd_mem = del_info->nd_mem;
+
+	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+
+	mutex_lock(&nd_bus_list_mutex);
+	radix_tree_delete(&nd_bus->dimm_radix, nfit_handle);
+	mutex_unlock(&nd_bus_list_mutex);
+
+	put_device(&nd_bus->dev);
+	kfree(del_info);
+}
+
+void nd_dimm_delete(struct nd_dimm *nd_dimm)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
+	struct nd_dimm_delete *del_info = nd_dimm->del_info;
+
+	del_info->nd_bus = nd_bus;
+	get_device(&nd_bus->dev);
+	del_info->nd_mem = nd_dimm->nd_mem;
+	async_schedule_domain(nd_async_dimm_delete, del_info,
+			&nd_async_register);
+}
+
 static void nd_async_device_register(void *d, async_cookie_t cookie)
 {
 	struct device *dev = d;

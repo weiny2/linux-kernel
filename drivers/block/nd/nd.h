@@ -22,6 +22,10 @@ struct nd_dimm {
 	struct device dev;
 	int config_size;
 	int id;
+	struct nd_dimm_delete {
+		struct nd_bus *nd_bus;
+		struct nd_mem *nd_mem;
+	} *del_info;
 	struct nfit_cmd_get_config_data_hdr *data;
 };
 

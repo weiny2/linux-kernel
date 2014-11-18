@@ -104,6 +104,7 @@ int __init nd_dimm_init(void);
 int __init nd_region_init(void);
 void nd_dimm_exit(void);
 int nd_region_exit(void);
+void nd_dimm_delete(struct nd_dimm *nd_dimm);
 int nd_bus_create_ndctl(struct nd_bus *nd_bus);
 void nd_bus_destroy_ndctl(struct nd_bus *nd_bus);
 int nd_bus_register_dimms(struct nd_bus *nd_bus);

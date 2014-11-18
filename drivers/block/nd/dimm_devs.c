@@ -99,14 +99,10 @@ EXPORT_SYMBOL(nd_dimm_get_config_data);
 
 static void nd_dimm_release(struct device *dev)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
-	struct nd_mem *nd_mem = nd_dimm->nd_mem;
-	u32 nfit_handle;
 
-	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
-	radix_tree_delete(&nd_bus->dimm_radix, nfit_handle);
 	ida_simple_remove(&dimm_ida, nd_dimm->id);
+	nd_dimm_delete(nd_dimm);
 	kfree(nd_dimm);
 }
 
@@ -246,6 +242,12 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	if (!nd_dimm)
 		return NULL;
 
+	nd_dimm->del_info = kzalloc(sizeof(struct nd_dimm_delete), GFP_KERNEL);
+	if (!nd_dimm->del_info)
+		goto err_del_info;
+	nd_dimm->del_info->nd_bus = nd_bus;
+	nd_dimm->del_info->nd_mem = nd_mem;
+
 	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 	if (radix_tree_insert(&nd_bus->dimm_radix, nfit_handle, nd_dimm) != 0)
 		goto err_radix;
@@ -263,18 +265,28 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	nd_device_register(dev);
 
 	return nd_dimm;
-
  err_ida:
 	radix_tree_delete(&nd_bus->dimm_radix, nfit_handle);
  err_radix:
+	kfree(nd_dimm->del_info);
+ err_del_info:
 	kfree(nd_dimm);
 	return NULL;
 }
 
+static int count_dimms(struct device *dev, void *c)
+{
+	int *count = c;
+
+	if (is_nd_dimm(dev))
+		(*count)++;
+	return 0;
+}
+
 int nd_bus_register_dimms(struct nd_bus *nd_bus)
 {
+	int rc = 0, dimm_count = 0;
 	struct nd_mem *nd_mem;
-	int rc = 0;
 
 	mutex_lock(&nd_bus_list_mutex);
 	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
@@ -302,6 +314,7 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 			rc = -ENOMEM;
 			break;
 		}
+		dimm_count++;
 	}
 	mutex_unlock(&nd_bus_list_mutex);
 
@@ -310,6 +323,13 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 	 * finding 'nd_dimm's on the bus.
 	 */
 	nd_synchronize();
+	if (rc)
+		return rc;
 
-	return rc;
+	rc = 0;
+	device_for_each_child(&nd_bus->dev, &rc, count_dimms);
+	dev_dbg(&nd_bus->dev, "%s: count: %d\n", __func__, rc);
+	if (rc != dimm_count)
+		return -ENXIO;
+	return 0;
 }
