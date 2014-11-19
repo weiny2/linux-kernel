@@ -431,6 +431,19 @@ static int legacy_nd_acpi_add(struct acpi_device *dev)
 	return 0;
 }
 
+static int try_legacy_discovery(struct acpi_device *dev)
+{
+	int rc = legacy_nd_acpi_add(dev);
+
+	if (rc == 0) {
+		dev_err(&dev->dev, "%s: discovering NFIT by _CRS is deprecated\n",
+				__func__);
+		add_taint(TAINT_FIRMWARE_WORKAROUND, LOCKDEP_STILL_OK);
+	}
+
+	return rc;
+}
+
 static int nd_acpi_dimm_add(struct acpi_device *dev)
 {
 	if (!nd_acpi_root) {
@@ -438,7 +451,7 @@ static int nd_acpi_dimm_add(struct acpi_device *dev)
 		if (!old_acpi)
 			return -ENXIO;
 		else
-			return legacy_nd_acpi_add(dev);
+			return try_legacy_discovery(dev);
 	}
 
 	/* TODO: add _FIT parsing */
