@@ -52,7 +52,7 @@ struct hfi_qpn_table {
 	u32 last;               /* last QP number allocated */
 	u32 nmaps;              /* size of the map table */
 	u16 limit;
-	u16 mask;
+	u8  incr;
 	/* bit map of free QP numbers other than 0/1 */
 	struct qpn_map map[QPNMAP_ENTRIES];
 };

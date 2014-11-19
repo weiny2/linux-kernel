@@ -943,6 +943,7 @@ struct hfi_devdata {
 	/* Lowest context number which can be used by user processes */
 	u8 first_user_ctxt;
 	u8 n_krcv_queues;
+	u8 qos_shift;
 	u8 qpn_mask;
 
 	u16 rhf_offset; /* offset of RHF within receive header entry */
@@ -1411,7 +1412,9 @@ extern unsigned int default_mtu;
 extern unsigned int hfi_cu;
 extern unsigned int set_link_credits;
 extern uint num_rcv_contexts;
-extern unsigned qib_n_krcv_queues;
+extern unsigned n_krcvqs;
+extern u8 krcvqs[];
+extern int krcvqsset;
 extern uint kdeth_qp;
 extern uint loopback;
 extern uint rcv_intr_timeout;

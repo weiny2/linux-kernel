@@ -151,6 +151,41 @@ struct flag_table {
 #define SEC_SC_HALTED		0x4	/* per-context only */
 #define SEC_SPC_FREEZE		0x8	/* per-HFI only */
 
+#define VL15CTXT                  1
+#define MIN_KERNEL_KCTXTS         2
+#define NUM_MAP_REGS             32
+
+/* RSM fields */
+
+/* packet type */
+#define IB_PACKET_TYPE         2ull
+#define QW_SHIFT               6ull
+/* QPN[7..1] */
+#define QPN_WIDTH              7ull
+
+/* LRH.BTH: QW 0, OFFSET 48 - for match */
+#define LRH_BTH_QW             0ull
+#define LRH_BTH_BIT_OFFSET     48ull
+#define LRH_BTH_OFFSET(off)    ((LRH_BTH_QW << QW_SHIFT) | (off))
+#define LRH_BTH_MATCH_OFFSET   LRH_BTH_OFFSET(LRH_BTH_BIT_OFFSET)
+#define LRH_BTH_SELECT
+#define LRH_BTH_MASK           3ull
+#define LRH_BTH_VALUE          2ull
+
+/* LRH.SC[3..0] QW 0, OFFSET 56 - for match */
+#define LRH_SC_QW              0ull
+#define LRH_SC_BIT_OFFSET      56ull
+#define LRH_SC_OFFSET(off)     ((LRH_SC_QW << QW_SHIFT) | (off))
+#define LRH_SC_MATCH_OFFSET    LRH_SC_OFFSET(LRH_SC_BIT_OFFSET)
+#define LRH_SC_MASK            128ull
+#define LRH_SC_VALUE           0ull
+
+/* SC[n..0] QW 0, OFFSET 60 - for select */
+#define LRH_SC_SELECT_OFFSET  ((LRH_SC_QW << QW_SHIFT) | (60ull))
+
+/* QPN[m+n:1] QW 1, OFFSET 1 */
+#define QPN_SELECT_OFFSET      ((1ull << QW_SHIFT) | (1ull))
+
 /* defines to build power on SC2VL table */
 #define SC2VL_VAL( \
 	num, \
@@ -3547,7 +3582,7 @@ int simulator_loopback_quick_linkup(struct hfi_devdata *dd)
 	/* LCB_CFG_LOOPBACK.VAL = 2 */
 	/* LCB_CFG_LANE_WIDTH.VAL = 0 */
 	write_csr(dd, DC_LCB_CFG_LOOPBACK,
-		2ull << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
+		IB_PACKET_TYPE << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
 	write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
 
 	/* start the LCBs */
@@ -5365,9 +5400,13 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 					& WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
 				<< WFR_RCV_TID_CTRL_TID_BASE_INDEX_SHIFT);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_TID_CTRL, reg);
+		if (ctxt == VL15CTXT)
+			write_csr(dd, WFR_RCV_VL15, VL15CTXT);
 	}
-	if (op & QIB_RCVCTRL_CTXT_DIS)
+	if (op & QIB_RCVCTRL_CTXT_DIS) {
+		write_csr(dd, WFR_RCV_VL15, 0);
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
+	}
 	if (op & QIB_RCVCTRL_INTRAVAIL_ENB)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
 	if (op & QIB_RCVCTRL_INTRAVAIL_DIS)
@@ -6337,13 +6376,16 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 
 	/*
 	 * Kernel contexts: (to be fixed later):
-	 * 	- default to 1 kernel context per NUMA
+	 * - min or 2 or 1 context/numa
+	 * - Context 0 - default/errors
+	 * - Context 1 - VL15
 	 */
-	if (qib_n_krcv_queues) {
-		num_kernel_contexts = qib_n_krcv_queues;
-	} else {
+	if (n_krcvqs)
+		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS;
+	else
 		num_kernel_contexts = num_online_nodes();
-	}
+	num_kernel_contexts =
+		max_t(int, MIN_KERNEL_KCTXTS, num_kernel_contexts);
 
 	/*
 	 * User contexts: (to be fixed later)
@@ -7182,12 +7224,11 @@ static void init_kdeth_qp(struct hfi_devdata *dd)
 /**
  * init_qpmap_table
  * @dd - device data
- * @regno - first register in 32 register series
  * @first_ctxt - first context
  * @last_ctxt - first context
  *
  * This return sets the qpn mapping table that
- * sitting being qpn[8:1].
+ * is indexed by qpn[8:1].
  *
  * The routine will round robin the 256 settings
  * from first_ctxt to last_ctxt.
@@ -7206,7 +7247,13 @@ static void init_qpmap_table(struct hfi_devdata *dd,
 	int i;
 	u64 ctxt = first_ctxt;
 
-	for (i = 0; i < 256; ) {
+	for (i = 0; i < 256;) {
+		if (ctxt == VL15CTXT) {
+			ctxt++;
+			if (ctxt > last_ctxt)
+				ctxt = first_ctxt;
+			continue;
+		}
 		reg |= ctxt << (8 * (i % 8));
 		i++;
 		ctxt++;
@@ -7220,21 +7267,129 @@ static void init_qpmap_table(struct hfi_devdata *dd,
 	}
 	if (i % 8)
 		write_csr(dd, regno, reg);
-}
-
-void init_rxe(struct hfi_devdata *dd)
-{
-	u64 reg;
-	/* enable all receive errors */
-	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
-	/* setup QPN map table */
-	init_qpmap_table(dd, 0, dd->n_krcv_queues - 1);
-	/* enable map table */
 	reg = read_csr(dd, WFR_RCV_CTRL);
 	reg |= WFR_RCV_CTRL_RCV_QP_MAP_ENABLE_SMASK;
 	reg |= WFR_RCV_CTRL_RCV_BYPASS_ENABLE_SMASK;
 	write_csr(dd, WFR_RCV_CTRL, reg);
+}
 
+/**
+ * init_qos - init RX qos
+ * @dd - device data
+ * @first_context
+ *
+ * This routine initializes Rule 0 and the
+ * RSM map table to implement qos.
+ *
+ * If all of the limit tests succeed,
+ * qos is applied based on the array
+ * interpretation of krcvqs where
+ * entry 0 is VL0.
+ *
+ * The number of vl bits (n) and the number of qpn
+ * bits (m) are computed to feed both the RSM map table
+ * and the single rule.
+ *
+ */
+static void init_qos(struct hfi_devdata *dd, u32 first_ctxt)
+{
+	u8 max_by_vl = 0;
+	unsigned qpns_per_vl, ctxt, i, qpn, n = 1, m;
+	u64 *rsmmap;
+	u64 reg;
+
+	/* validate */
+	if (dd->n_krcv_queues <= MIN_KERNEL_KCTXTS ||
+	    num_vls == 1 ||
+	    krcvqsset <= 1)
+		goto bail;
+	for (i = 0; i < min_t(unsigned, num_vls, krcvqsset); i++)
+		if (krcvqs[i] > max_by_vl)
+			max_by_vl = krcvqs[i];
+	if (max_by_vl > 32)
+		goto bail;
+	qpns_per_vl = __roundup_pow_of_two(max_by_vl);
+	/* determine bits vl */
+	n = ilog2(num_vls);
+	/* determine bits for qpn */
+	m = ilog2(qpns_per_vl);
+	if ((m + n) > 7)
+		goto bail;
+	if (num_vls * qpns_per_vl > dd->chip_rcv_contexts)
+		goto bail;
+	rsmmap = kmalloc(NUM_MAP_REGS * sizeof(u64), GFP_KERNEL);
+	memset(rsmmap, 0xff, NUM_MAP_REGS * sizeof(u64));
+	/* init the local copy of the table */
+	for (i = 0, ctxt = first_ctxt; i < num_vls; i++) {
+		unsigned tctxt;
+		for (qpn = 0, tctxt = ctxt;
+		     krcvqs[i] && qpn < qpns_per_vl; qpn++) {
+			unsigned idx, regoff, regidx;
+
+			/* generate index <= 128 */
+			idx = (qpn << n) ^ i;
+			regoff = (idx % 8) * 8;
+			regidx = idx / 8;
+			reg = rsmmap[regidx];
+			/* replace 0xff with context number */
+			reg &= ~(WFR_RCV_RSM_MAP_TABLE_RCV_CONTEXT_A_MASK
+				<< regoff);
+			reg |= (u64)(tctxt++) << regoff;
+			rsmmap[regidx] = reg;
+			if (tctxt == ctxt + krcvqs[i])
+				tctxt = ctxt;
+		}
+		ctxt += krcvqs[i];
+	}
+	/* flush cached copies to chip */
+	for (i = 0; i < NUM_MAP_REGS; i++)
+		write_csr(dd, WFR_RCV_RSM_MAP_TABLE + (8 * i), rsmmap[i]);
+	/* add rule0 */
+	write_csr(dd, WFR_RCV_RSM_CFG /* + (8 * 0) */,
+		WFR_RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_MASK
+			<< WFR_RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_SHIFT |
+		2ull << WFR_RCV_RSM_CFG_PACKET_TYPE_SHIFT);
+	write_csr(dd, WFR_RCV_RSM_SELECT /* + (8 * 0) */,
+		LRH_BTH_MATCH_OFFSET
+			<< WFR_RCV_RSM_SELECT_FIELD1_OFFSET_SHIFT |
+		LRH_SC_MATCH_OFFSET << WFR_RCV_RSM_SELECT_FIELD2_OFFSET_SHIFT |
+		LRH_SC_SELECT_OFFSET << WFR_RCV_RSM_SELECT_INDEX1_OFFSET_SHIFT |
+		((u64)n) << WFR_RCV_RSM_SELECT_INDEX1_WIDTH_SHIFT |
+		QPN_SELECT_OFFSET << WFR_RCV_RSM_SELECT_INDEX2_OFFSET_SHIFT |
+		((u64)m + (u64)n) << WFR_RCV_RSM_SELECT_INDEX2_WIDTH_SHIFT);
+	write_csr(dd, WFR_RCV_RSM_MATCH /* + (8 * 0) */,
+		LRH_BTH_MASK << WFR_RCV_RSM_MATCH_MASK1_SHIFT |
+		LRH_BTH_VALUE << WFR_RCV_RSM_MATCH_VALUE1_SHIFT |
+		LRH_SC_MASK << WFR_RCV_RSM_MATCH_MASK2_SHIFT |
+		LRH_SC_VALUE << WFR_RCV_RSM_MATCH_VALUE2_SHIFT);
+	/* Enable RSM */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_RSM_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+	kfree(rsmmap);
+	/* map everything else (non-VL15) to context 0 */
+	init_qpmap_table(
+		dd,
+		0,
+		0);
+	dd->qos_shift = n + 1;
+	return;
+bail:
+	dd->qos_shift = 1;
+	init_qpmap_table(
+		dd,
+		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0,
+		dd->n_krcv_queues - 1);
+}
+
+void init_rxe(struct hfi_devdata *dd)
+{
+	/* enable all receive errors */
+	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
+	/* setup QPN map table - start where VL15 context leaves off */
+	init_qos(
+		dd,
+		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0);
 	/* TODO: others...? */
 }
 

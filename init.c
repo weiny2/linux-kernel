@@ -73,9 +73,13 @@ uint num_rcv_contexts;
 module_param_named(num_rcv_contexts, num_rcv_contexts, uint, S_IRUGO);
 MODULE_PARM_DESC(num_rcv_contexts, "Set max number of receive contexts to use");
 
-unsigned qib_n_krcv_queues;
-module_param_named(krcvqs, qib_n_krcv_queues, uint, S_IRUGO);
-MODULE_PARM_DESC(krcvqs, "number of kernel receive queues per IB port");
+u8 krcvqs[WFR_RXE_NUM_DATA_VL];
+int krcvqsset;
+module_param_array(krcvqs, byte, &krcvqsset, S_IRUGO);
+MODULE_PARM_DESC(krcvqs, "Array of the number of kernel receive queues by VL");
+
+/* computed based on above array */
+unsigned n_krcvqs;
 
 /* TODO: temporary code for missing interrupts, HSD 291041 */
 uint fifo_check;	/* off by default */
@@ -1344,6 +1348,14 @@ struct pci_driver qib_driver = {
 	.err_handler = &qib_pci_err_handler,
 };
 
+void __init compute_krcvqs(void)
+{
+	int i;
+
+	for (i = 0; i < krcvqsset; i++)
+		n_krcvqs += krcvqs[i];
+}
+
 /*
  * Do all the generic driver unit- and chip-independent memory
  * allocation and initialization.
@@ -1364,6 +1376,8 @@ static int __init qlogic_ib_init(void)
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
 		hfi_cu = 1;
+
+	compute_krcvqs();
 	/* sanitize receive interrupt count, time must wait until after
 	   the hardware type is known */
 	if (rcv_intr_count > WFR_RCV_HDR_HEAD_COUNTER_MASK)

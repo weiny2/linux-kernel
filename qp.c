@@ -63,19 +63,6 @@ static inline unsigned mk_qpn(struct hfi_qpn_table *qpt,
 	return (map - qpt->map) * BITS_PER_PAGE + off;
 }
 
-static inline unsigned find_next_offset(struct hfi_qpn_table *qpt,
-					struct qpn_map *map, unsigned off,
-					unsigned n)
-{
-	if (qpt->mask) {
-		off++;
-		if (((off & qpt->mask) >> 1) >= n)
-			off = (off | qpt->mask) + 2;
-	} else
-		off = find_next_zero_bit(map->page, BITS_PER_PAGE, off);
-	return off;
-}
-
 /*
  * Convert the AETH credit code into the number of credits.
  */
@@ -154,11 +141,10 @@ static int alloc_qpn(struct hfi_devdata *dd, struct hfi_qpn_table *qpt,
 		goto bail;
 	}
 
-	qpn = qpt->last + 2;
+	qpn = qpt->last + qpt->incr;
 	if (qpn >= QPN_MAX)
-		qpn = 2 | ((qpt->last & 1) ^ 1);
-	if (qpt->mask && ((qpn & qpt->mask) >> 1) >= dd->n_krcv_queues)
-		qpn = (qpn | qpt->mask) + 2;
+		qpn = qpt->incr | ((qpt->last & 1) ^ 1);
+	/* offset carries bit 0 */
 	offset = qpn & BITS_PER_PAGE_MASK;
 	map = &qpt->map[qpn / BITS_PER_PAGE];
 	max_scan = qpt->nmaps - !offset;
@@ -174,17 +160,12 @@ static int alloc_qpn(struct hfi_devdata *dd, struct hfi_qpn_table *qpt,
 				ret = qpn;
 				goto bail;
 			}
-			offset = find_next_offset(qpt, map, offset,
-				dd->n_krcv_queues);
-			qpn = mk_qpn(qpt, map, offset);
+			offset += qpt->incr;
 			/*
-			 * This test differs from alloc_pidmap().
-			 * If find_next_offset() does find a zero
-			 * bit, we don't need to check for QPN
-			 * wrapping around past our starting QPN.
-			 * We just need to be sure we don't loop
-			 * forever.
+			 * This qpn might be bogus if offset >= BITS_PER_PAGE.
+			 * Thats is ok.   It gets re-assigned below
 			 */
+			qpn = mk_qpn(qpt, map, offset);
 		} while (offset < BITS_PER_PAGE && qpn < QPN_MAX);
 		/*
 		 * In order to keep the number of pages allocated to a
@@ -195,14 +176,19 @@ static int alloc_qpn(struct hfi_devdata *dd, struct hfi_qpn_table *qpt,
 			if (qpt->nmaps == QPNMAP_ENTRIES)
 				break;
 			map = &qpt->map[qpt->nmaps++];
-			offset = 0;
+			/* start at incr with current bit 0 */
+			offset = qpt->incr | (offset & 1);
 		} else if (map < &qpt->map[qpt->nmaps]) {
 			++map;
-			offset = 0;
+			/* start at incr with current bit 0 */
+			offset = qpt->incr | (offset & 1);
 		} else {
 			map = &qpt->map[0];
-			offset = 2;
+			/* wrap to first map page, invert bit 0 */
+			offset = qpt->incr | ((offset & 1) ^ 1);
 		}
+		/* there can be no bits at shift and below */
+		BUG_ON(offset & (dd->qos_shift - 1));
 		qpn = mk_qpn(qpt, map, offset);
 	}
 
@@ -1272,9 +1258,9 @@ static int init_qpn_table(struct hfi_devdata *dd, struct hfi_qpn_table *qpt)
 	int ret = 0;
 
 	spin_lock_init(&qpt->lock);
-	/* start with QPN 2 - qpt->last + 2 in alloc_qpn() */
+
 	qpt->last = 0;
-	qpt->mask = dd->qpn_mask;
+	qpt->incr = 1 << dd->qos_shift;
 
 	/* insure we don't assign QPs from KDETH 64K window */
 	qpn = kdeth_qp << 16;
