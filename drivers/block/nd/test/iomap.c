@@ -5,14 +5,37 @@
 #include <linux/io.h>
 #include "nfit_test.h"
 
-struct nfit_test_resource *(*nfit_test_lookup)(resource_size_t);
-EXPORT_SYMBOL(nfit_test_lookup);
+static struct nfit_test_resource *null_lookup(resource_size_t offset)
+{
+	return NULL;
+}
+
+static nfit_test_lookup_fn nfit_test_lookup = null_lookup;
+static DEFINE_SPINLOCK(nfit_test_lock);
+
+void nfit_test_set_lookup_fn(nfit_test_lookup_fn fn)
+{
+	spin_lock(&nfit_test_lock);
+	nfit_test_lookup = fn;
+	spin_unlock(&nfit_test_lock);
+}
+EXPORT_SYMBOL(nfit_test_set_lookup_fn);
+
+void nfit_test_clear_lookup_fn(void)
+{
+	spin_lock(&nfit_test_lock);
+	nfit_test_lookup = null_lookup;
+	spin_unlock(&nfit_test_lock);
+}
+EXPORT_SYMBOL(nfit_test_clear_lookup_fn);
 
 void __iomem *__wrap_ioremap_cache(resource_size_t offset, unsigned long size)
 {
 	struct nfit_test_resource *nfit_res;
 
-	nfit_res = nfit_test_lookup ? nfit_test_lookup(offset) : NULL;
+	spin_lock(&nfit_test_lock);
+	nfit_res = nfit_test_lookup(offset);
+	spin_unlock(&nfit_test_lock);
 	if (nfit_res)
 		return nfit_res->buf;
 	return ioremap_cache(offset, size);
@@ -23,8 +46,9 @@ void __wrap_iounmap(volatile void __iomem *addr)
 {
 	struct nfit_test_resource *nfit_res;
 
-	nfit_res = nfit_test_lookup ?
-		nfit_test_lookup((resource_size_t) addr) : NULL;
+	spin_lock(&nfit_test_lock);
+	nfit_res = nfit_test_lookup((resource_size_t) addr);
+	spin_unlock(&nfit_test_lock);
 	if (nfit_res)
 		return;
 	return iounmap(addr);
@@ -37,7 +61,9 @@ struct resource * __wrap___request_region(struct resource *parent,
 {
 	struct nfit_test_resource *nfit_res;
 
-	nfit_res = nfit_test_lookup ? nfit_test_lookup(start) : NULL;
+	spin_lock(&nfit_test_lock);
+	nfit_res = nfit_test_lookup(start);
+	spin_unlock(&nfit_test_lock);
 	if (nfit_res) {
 		struct resource *res;
 
@@ -55,7 +81,9 @@ void __wrap___release_region(struct resource *parent, resource_size_t start,
 {
 	struct nfit_test_resource *nfit_res;
 
-	nfit_res = nfit_test_lookup ? nfit_test_lookup(start) : NULL;
+	spin_lock(&nfit_test_lock);
+	nfit_res = nfit_test_lookup(start);
+	spin_unlock(&nfit_test_lock);
 	if (nfit_res)
 		return;
 	return __release_region(parent, start, n);

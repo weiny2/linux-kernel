@@ -7,5 +7,7 @@ struct nfit_test_resource {
 	void *buf;
 };
 
-extern struct nfit_test_resource *(*nfit_test_lookup)(resource_size_t);
+typedef struct nfit_test_resource *(*nfit_test_lookup_fn)(resource_size_t);
+void nfit_test_set_lookup_fn(nfit_test_lookup_fn fn);
+void nfit_test_clear_lookup_fn(void);
 #endif

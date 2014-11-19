@@ -245,7 +245,7 @@ static void *alloc_coherent(struct nfit_test *t, size_t size, dma_addr_t *dma)
 	return nfit_res->buf;
 }
 
-static struct nfit_test_resource *__nfit_test_lookup(resource_size_t addr)
+static struct nfit_test_resource *nfit_test_lookup(resource_size_t addr)
 {
 	int i;
 
@@ -866,7 +866,7 @@ static __init int nfit_test_init(void)
 		return -EINVAL;
 	}
 
-	nfit_test_lookup = __nfit_test_lookup;
+	nfit_test_set_lookup_fn(nfit_test_lookup);
 
 	for (i = 0; i < NUM_NFITS; i++) {
 		struct nfit_test *nfit_test;
@@ -922,7 +922,7 @@ static __exit void nfit_test_exit(void)
 {
 	int i;
 
-	nfit_test_lookup = NULL;
+	nfit_test_clear_lookup_fn();
 	for (i = 0; i < NUM_NFITS; i++)
 		platform_device_unregister(&instances[i]->pdev);
 	platform_driver_unregister(&nfit_test_driver);

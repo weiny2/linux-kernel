@@ -1,6 +1,6 @@
-obj-$(CONFIG_NFIT_TEST_CORE) += test/
+obj-$(CONFIG_NFIT_TEST) += test/
 
-ifdef CONFIG_NFIT_TEST_CORE
+ifdef CONFIG_NFIT_TEST
 # This obviously will cause symbol collisions if another
 # driver/sub-system attempts a similar mocked io-memory implementation.
 # When that happens we can either add a 'choice' kconfig option to
