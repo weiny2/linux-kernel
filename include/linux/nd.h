@@ -13,7 +13,6 @@
 #ifndef __LINUX_ND_H__
 #define __LINUX_ND_H__
 #include <linux/ndctl.h>
-#include <linux/async.h>
 #include <linux/device.h>
 
 struct nd_device_driver {

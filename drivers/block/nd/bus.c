@@ -14,6 +14,7 @@
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <linux/fcntl.h>
+#include <linux/async.h>
 #include <linux/genhd.h>
 #include <linux/ndctl.h>
 #include <linux/sched.h>
@@ -124,7 +125,7 @@ static struct bus_type nd_bus_type = {
 	.remove = nd_bus_remove,
 };
 
-static ASYNC_DOMAIN_EXCLUSIVE(nd_async_register);
+static ASYNC_DOMAIN_EXCLUSIVE(nd_async_domain);
 
 static void nd_async_dimm_delete(void *d, async_cookie_t cookie)
 {
@@ -152,7 +153,12 @@ void nd_dimm_delete(struct nd_dimm *nd_dimm)
 	get_device(&nd_bus->dev);
 	del_info->nd_mem = nd_dimm->nd_mem;
 	async_schedule_domain(nd_async_dimm_delete, del_info,
-			&nd_async_register);
+			&nd_async_domain);
+}
+
+void nd_synchronize(void)
+{
+	async_synchronize_full_domain(&nd_async_domain);
 }
 
 static void nd_async_device_register(void *d, async_cookie_t cookie)
@@ -178,14 +184,9 @@ void nd_device_register(struct device *dev)
 	device_initialize(dev);
 	get_device(dev);
 	async_schedule_domain(nd_async_device_register, dev,
-			&nd_async_register);
+			&nd_async_domain);
 }
 EXPORT_SYMBOL(nd_device_register);
-
-void nd_synchronize(void)
-{
-	async_synchronize_full_domain(&nd_async_register);
-}
 
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode)
 {
@@ -193,7 +194,7 @@ void nd_device_unregister(struct device *dev, enum nd_async_mode mode)
 	case ND_ASYNC:
 		get_device(dev);
 		async_schedule_domain(nd_async_device_unregister, dev,
-				&nd_async_register);
+				&nd_async_domain);
 		break;
 	case ND_SYNC:
 		nd_synchronize();
