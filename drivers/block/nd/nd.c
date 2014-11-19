@@ -377,8 +377,7 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		nd_spa->nfit_spa = nfit_spa;
 		list_add_tail(&nd_spa->list, &nd_bus->spas);
 		dev_dbg(&nd_bus->dev, "%s: spa index: %d type: %s\n", __func__,
-				nfit_spa_spa_index(nfit_spa,
-					nd_bus->nfit_desc->old_nfit),
+				readw(&nfit_spa->spa_index),
 				spa_type_name(readw(&nfit_spa->spa_type)));
 		break;
 	}
@@ -575,7 +574,7 @@ static __init int nd_core_init(void)
 	int rc;
 
 	BUILD_BUG_ON(sizeof(struct nfit) != 40);
-	BUILD_BUG_ON(sizeof(struct nfit_spa) != 32);
+	BUILD_BUG_ON(sizeof(struct nfit_spa) != 40);
 	BUILD_BUG_ON(sizeof(struct nfit_mem) != 48);
 	BUILD_BUG_ON(sizeof(struct nfit_idt) != 20);
 	BUILD_BUG_ON(sizeof(struct nfit_smbios) != 8);

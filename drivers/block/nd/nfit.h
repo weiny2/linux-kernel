@@ -1,5 +1,5 @@
 /*
- * NVDIMM Firmware Interface Table (v0.8s8)
+ * NVDIMM Firmware Interface Table (v0.8s10)
  *
  * Copyright(c) 2013-2014 Intel Corporation. All rights reserved.
  *
@@ -67,37 +67,14 @@ struct nfit_spa {
 	__le16 type;
 	__le16 length;
 	__le16 spa_type;
-	__le16 mem_attr;
 	__le16 spa_index;
 	__le16 flags;
+	__le16 reserved;
 	__le32 proximity_domain;
 	__le64 spa_base;
 	__le64 spa_length;
+	__le64 mem_attr;
 } __packed;
-
-struct nfit_spa_old {
-	__le16 type;
-	__le16 length;
-	__le16 spa_type;
-	__le16 spa_index;
-	__u8 flags;
-	__u8 reserved[3];
-	__le32 proximity_domain;
-	__le64 spa_base;
-	__le64 spa_length;
-} __packed;
-
-static inline u16 nfit_spa_spa_index(struct nfit_spa __iomem *nfit_spa,
-		bool old_nfit)
-{
-	if (old_nfit) {
-		struct nfit_spa_old __iomem *nfit_spa_old;
-
-		nfit_spa_old = (void __iomem *) nfit_spa;
-		return readw(&nfit_spa_old->spa_index);
-	} else
-		return readw(&nfit_spa->spa_index);
-}
 
 /**
  * struct nfit_mem - Memory Device to SPA Mapping Table
@@ -167,8 +144,8 @@ struct nfit_dcr {
 	__le16 revision_id;
 	__le16 sub_vendor_id;
 	__le16 sub_device_id;
-	__u8 sub_revision_id;
-	__u8 reserved[3];
+	__le16 sub_revision_id;
+	__le16 reserved;
 	__le16 fic;
 	__le16 num_bdw;
 	__le64 dcr_size;

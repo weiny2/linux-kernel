@@ -109,10 +109,8 @@ static ssize_t spa_index_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct nd_region *nd_region = to_nd_region(dev);
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
-			nd_bus->nfit_desc->old_nfit);
+	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
 
 	return sprintf(buf, "%d\n", spa_index);
 }
@@ -289,8 +287,7 @@ static const struct attribute_group *nd_region_attribute_groups[] = {
 static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 {
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
-			nd_bus->nfit_desc->old_nfit);
+	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
 	struct nd_bdw *iter, *nd_bdw = NULL;
 	struct nd_mapping *nd_mapping;
 	struct nd_mem *nd_mem;
@@ -328,8 +325,7 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 	u16 i;
 	struct nd_mem *nd_mem;
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
-			nd_bus->nfit_desc->old_nfit);
+	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
 
 	nd_region->dev.type = type;
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
@@ -347,8 +343,7 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 		struct nd_spa *nd_spa)
 {
-	u16 spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
-			nd_bus->nfit_desc->old_nfit);
+	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
 	u16 spa_type = readw(&nd_spa->nfit_spa->spa_type);
 	struct nd_region *nd_region;
 	struct device *dev;
@@ -401,8 +396,7 @@ int nd_bus_register_regions(struct nd_bus *nd_bus)
 		struct nd_region *nd_region;
 
 		spa_type = readw(&nd_spa->nfit_spa->spa_type);
-		spa_index = nfit_spa_spa_index(nd_spa->nfit_spa,
-				nd_bus->nfit_desc->old_nfit);
+		spa_index = readw(&nd_spa->nfit_spa->spa_index);
 		if (spa_index == 0) {
 			dev_dbg(&nd_bus->dev, "detected invalid spa index\n");
 			continue;
