@@ -87,7 +87,7 @@ if [ "$reload_drivers" == "true" ]; then
 	ssh root@$remote_node "modprobe rdma_ucm"
 	sleep 5
 fi
-ssh root@$remote_node "iba_portconfig --ib -w2 -s4 -p $remote_port enable" || exit 1
+ssh root@$remote_node "opaportconfig --ib -w2 -s4 -p $remote_port enable" || exit 1
 
 if [ "$reload_drivers" == "true" ]; then
 	printf "${BOLD}Reloading ib_wfr_lite on \"localhost\"\n"
@@ -109,7 +109,7 @@ if [ "$reload_drivers" == "true" ]; then
 	modprobe rdma_ucm
 fi
 
-iba_portconfig --ib -w2 -s4 -p $local_port enable || exit 1
+opaportconfig --ib -w2 -s4 -p $local_port enable || exit 1
 
 if [ "$ibmode" == "true" ]; then
 	exit 0
@@ -139,7 +139,7 @@ sleep 1
 
 printf "${BOLD}Arming local port.\n"
 printf "${NORMAL}"
-iba_portconfig --ib -L ${local_lid} -S3 -p $local_port
+opaportconfig --ib -L ${local_lid} -S3 -p $local_port
 state=""
 while [ "$state" != "3: ARMED" ]; do
 	echo "Waiting for local port to arm..."
@@ -152,7 +152,7 @@ sleep 1
 
 printf "${BOLD}Arming Remote port.\n"
 printf "${NORMAL}"
-ssh root@$remote_node "iba_portconfig --ib -L ${remote_lid} -S3 -p $remote_port"
+ssh root@$remote_node "opaportconfig --ib -L ${remote_lid} -S3 -p $remote_port"
 state=""
 while [ "$state" != "3: ARMED" ]; do
 	echo "Waiting for remote port to arm..."
@@ -165,7 +165,7 @@ sleep 1
 
 printf "${BOLD}Activating local port.\n"
 printf "${NORMAL}"
-iba_portconfig --ib -S4 -p $local_port
+opaportconfig --ib -S4 -p $local_port
 state=""
 while [ "$state" != "4: ACTIVE" ]; do
 	echo "Waiting for local port to go active..."
@@ -178,7 +178,7 @@ sleep 1
 
 printf "${BOLD}Activating Remote port.\n"
 printf "${NORMAL}"
-ssh root@$remote_node "iba_portconfig --ib -S4 -p $remote_port"
+ssh root@$remote_node "opaportconfig --ib -S4 -p $remote_port"
 state=""
 while [ "$state" != "4: ACTIVE" ]; do
 	echo "Waiting for remote port to go active..."
