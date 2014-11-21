@@ -444,6 +444,19 @@ static inline int of_property_read_string_helper(struct device_node *np,
 	return -ENOSYS;
 }
 
+static inline int of_property_read_string_index(struct device_node *np,
+						const char *propname, int index,
+						const char **out_string)
+{
+	return -ENOSYS;
+}
+
+static inline int of_property_count_strings(struct device_node *np,
+					    const char *propname)
+{
+	return -ENOSYS;
+}
+
 static inline const void *of_get_property(const struct device_node *node,
 				const char *name,
 				int *lenp)
