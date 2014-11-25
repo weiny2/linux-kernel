@@ -68,6 +68,8 @@ module_param(use_sdma_ahg, uint, S_IRUGO);
 MODULE_PARM_DESC(use_sdma_ahg, "Turn on/off use of AHG");
 
 #define SDMA_WAIT_BATCH_SIZE 20
+/* max wait time for a SDMA engine to indicate it has halted */
+#define SDMA_ERR_HALT_TIMEOUT 10 /* ms */
 
 static const char * const sdma_state_names[] = {
 	[sdma_state_s00_hw_down]                = "s00_HwDown",
@@ -83,7 +85,7 @@ static const char * const sdma_state_names[] = {
 static const char * const sdma_event_names[] = {
 	[sdma_event_e00_go_hw_down]   = "e00_GoHwDown",
 	[sdma_event_e10_go_hw_start]  = "e10_GoHwStart",
-	[sdma_event_e15_hw_started1]  = "e15_HwStarted1",
+	[sdma_event_e15_hw_halt_done] = "e15_HwHaltDone",
 	[sdma_event_e25_hw_started2]  = "e25_HwStarted2",
 	[sdma_event_e30_go_running]   = "e30_GoRunning",
 	[sdma_event_e40_sw_cleaned]   = "e40_SwCleaned",
@@ -106,7 +108,7 @@ static const struct sdma_set_state_action sdma_action_table[] = {
 	},
 	[sdma_state_s10_hw_start_up_halt_wait] = {
 		.op_enable = 0,
-		.op_intenable = 1,
+		.op_intenable = 0,
 		.op_halt = 1,
 		.op_cleanup = 0,
 		.op_drain = 0,
@@ -266,6 +268,40 @@ static void clear_sdma_activelist(struct sdma_engine *sde)
 		if (drained)
 			iowait_drain_wakeup(wait);
 	}
+}
+
+void sdma_err_halt_wait(struct work_struct *work)
+{
+	struct sdma_engine *sde = container_of(work, struct sdma_engine,
+						err_halt_worker);
+	u64 statuscsr;
+	unsigned long timeout;
+
+	timeout = jiffies + msecs_to_jiffies(SDMA_ERR_HALT_TIMEOUT);
+	while (1) {
+		statuscsr = read_sde_csr(sde, WFR_SEND_DMA_STATUS);
+		statuscsr &= WFR_SEND_DMA_STATUS_ENG_HALTED_SMASK;
+		if (statuscsr)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(sde->dd,
+				"SDMA engine %d - timeout waiting for engine to halt\n",
+				sde->this_idx);
+			/*
+			 * Continue anyway.  This could happen if there was
+			 * an uncorrectable error in the wrong spot.
+			 */
+			break;
+		}
+		usleep_range(80, 120);
+	}
+
+	sdma_process_event(sde, sdma_event_e15_hw_halt_done);
+}
+
+void sdma_start_err_halt_wait(struct sdma_engine *sde)
+{
+	queue_work(sde->ppd->qib_wq, &sde->err_halt_worker);
 }
 
 static void sdma_hw_clean_up_task(unsigned long opaque)
@@ -587,6 +623,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 
 		tasklet_init(&sde->sdma_sw_clean_up_task, sdma_sw_clean_up_task,
 			(unsigned long)sde);
+		INIT_WORK(&sde->err_halt_worker, sdma_err_halt_wait);
 
 		sde->descq = dma_alloc_coherent(
 			&dd->pcidev->dev,
@@ -1059,8 +1096,6 @@ void sdma_engine_interrupt(struct sdma_engine *sde, u64 status)
  */
 void sdma_engine_error(struct sdma_engine *sde, u64 status)
 {
-	unsigned long flags;
-
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
 		sde->this_idx,
@@ -1069,7 +1104,6 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 		sde->this_idx,
 		(unsigned long long)status,
 		sdma_state_names[sde->state.current_state]);
-	sdma_dumpstate(sde);
 #endif
 	/* FIXME : need to determine level of error, perhaps recovery */
 	if (status & ~WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK) {
@@ -1080,37 +1114,6 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 			sdma_state_names[sde->state.current_state]);
 		dump_sdma_state(sde);
 	}
-	spin_lock_irqsave(&sde->lock, flags);
-
-	switch (sde->state.current_state) {
-	case sdma_state_s00_hw_down:
-		break;
-
-	case sdma_state_s10_hw_start_up_halt_wait:
-		if (status & WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK)
-			__sdma_process_event(sde, sdma_event_e15_hw_started1);
-		break;
-
-	case sdma_state_s15_hw_start_up_clean_wait:
-		break;
-
-	case sdma_state_s20_idle:
-		break;
-
-	case sdma_state_s30_sw_clean_up_wait:
-		break;
-
-	case sdma_state_s40_hw_clean_up_wait:
-		break;
-
-	case sdma_state_s50_hw_halt_wait:
-		break;
-
-	case sdma_state_s99_running:
-		break;
-	}
-
-	spin_unlock_irqrestore(&sde->lock, flags);
 }
 
 static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
@@ -1456,6 +1459,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 			txp->next_descq_idx);
 	}
 }
+
 /* TODO augment this to dump slid check register */
 #define SDE_FMT \
 	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx\n"
@@ -1822,8 +1826,9 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			sdma_get(&sde->state);
 			sdma_set_state(sde,
 				sdma_state_s10_hw_start_up_halt_wait);
+			sdma_start_err_halt_wait(sde);
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			break;
 		case sdma_event_e25_hw_started2:
 			break;
@@ -1853,7 +1858,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			sdma_set_state(sde,
 				sdma_state_s15_hw_start_up_clean_wait);
 			sdma_start_hw_clean_up(sde);
@@ -1889,7 +1894,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			break;
 		case sdma_event_e25_hw_started2:
 			sdma_hw_start_up(sde);
@@ -1926,7 +1931,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			break;
 		case sdma_event_e25_hw_started2:
 			break;
@@ -1958,7 +1963,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			break;
 		case sdma_event_e25_hw_started2:
 			break;
@@ -1994,7 +1999,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			break;
 		case sdma_event_e25_hw_started2:
 			break;
@@ -2030,7 +2035,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			break;
 		case sdma_event_e25_hw_started2:
 			break;
@@ -2066,7 +2071,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
-		case sdma_event_e15_hw_started1:
+		case sdma_event_e15_hw_halt_done:
 			break;
 		case sdma_event_e25_hw_started2:
 			break;

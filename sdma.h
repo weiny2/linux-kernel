@@ -151,7 +151,7 @@ enum sdma_states {
 enum sdma_events {
 	sdma_event_e00_go_hw_down,
 	sdma_event_e10_go_hw_start,
-	sdma_event_e15_hw_started1,
+	sdma_event_e15_hw_halt_done,
 	sdma_event_e25_hw_started2,
 	sdma_event_e30_go_running,
 	sdma_event_e40_sw_cleaned,
@@ -431,6 +431,8 @@ struct sdma_engine {
 	/* private: */
 	struct tasklet_struct sdma_sw_clean_up_task
 		____cacheline_aligned_in_smp;
+	/* private: */
+	struct work_struct err_halt_worker;
 };
 
 
