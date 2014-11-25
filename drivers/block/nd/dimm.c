@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/nd.h>
+#include "label.h"
 #include "nd.h"
 
 static void free_data(struct nd_dimm *nd_dimm)
@@ -36,11 +37,13 @@ static int nd_dimm_probe(struct device *dev)
 	int header_size = sizeof(struct nfit_cmd_get_config_data_hdr);
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
 	struct nfit_cmd_get_config_size cmd_size;
+	struct nd_namespace_index *nsindex;
 	int rc, config_size;
 
 	nd_dimm->config_size = -EINVAL;
 	rc = nd_dimm_get_config_size(nd_dimm, &cmd_size);
-	if (rc || cmd_size.config_size + header_size > INT_MAX)
+	if (rc || cmd_size.config_size + header_size > INT_MAX
+			|| cmd_size.config_size < ND_LABEL_MIN_SIZE)
 		return -ENXIO;
 
 	config_size = cmd_size.config_size + header_size;
@@ -58,6 +61,14 @@ static int nd_dimm_probe(struct device *dev)
 		return rc < 0 ? rc : -ENXIO;
 	}
 	nd_dimm->config_size = config_size;
+	nsindex = to_namespace_index(nd_dimm, 0);
+
+	nd_bus_lock(dev);
+	nd_dimm->ns_current = nd_label_validate(nd_dimm);
+	nd_dimm->ns_next = nd_label_next_nsindex(nd_dimm->ns_current);
+	nd_label_copy(nd_dimm, to_next_namespace_index(nd_dimm),
+			to_current_namespace_index(nd_dimm));
+	nd_bus_unlock(dev);
 
 	return 0;
 }

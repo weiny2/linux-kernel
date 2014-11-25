@@ -244,6 +244,8 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 		goto err_del_info;
 	nd_dimm->del_info->nd_bus = nd_bus;
 	nd_dimm->del_info->nd_mem = nd_mem;
+	nd_dimm->ns_current = -1;
+	nd_dimm->ns_next = -1;
 
 	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 	if (radix_tree_insert(&nd_bus->dimm_radix, nfit_handle, nd_dimm) != 0)

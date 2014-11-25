@@ -31,6 +31,7 @@ nd_core-y += dimm_devs.o
 nd_core-y += dimm.o
 nd_core-y += region_devs.o
 nd_core-y += region.o
+nd_core-y += label.o
 
 nd_core-$(CONFIG_ND_BTT_DEVS) += btt_devs.o
 

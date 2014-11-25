@@ -15,19 +15,44 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
+#include "label.h"
 
 struct gendisk;
 struct nd_dimm {
 	struct nd_mem *nd_mem;
 	struct device dev;
 	int config_size;
+	int nsindex_size;
 	int id;
 	struct nd_dimm_delete {
 		struct nd_bus *nd_bus;
 		struct nd_mem *nd_mem;
 	} *del_info;
 	struct nfit_cmd_get_config_data_hdr *data;
+	int ns_current, ns_next;
 };
+
+static inline struct nd_namespace_index __iomem *to_namespace_index(
+		struct nd_dimm *nd_dimm, int i)
+{
+	if (i < 0)
+		return NULL;
+
+	return ((void *) nd_dimm->data->out_buf
+			+ sizeof_namespace_index(nd_dimm) * i);
+}
+
+static inline struct nd_namespace_index __iomem *to_current_namespace_index(
+		struct nd_dimm *nd_dimm)
+{
+	return to_namespace_index(nd_dimm, nd_dimm->ns_current);
+}
+
+static inline struct nd_namespace_index __iomem *to_next_namespace_index(
+		struct nd_dimm *nd_dimm)
+{
+	return to_namespace_index(nd_dimm, nd_dimm->ns_next);
+}
 
 struct nd_mapping {
 	struct nd_dimm *nd_dimm;
