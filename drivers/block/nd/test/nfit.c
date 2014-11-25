@@ -208,7 +208,7 @@ static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 		*status = 0;
 		len = min(nfit_cmd->in_length, LABEL_SIZE - offset);
 		memcpy(t->label[i] + offset, nfit_cmd->in_buf, len);
-		rc = buf_len - sizeof(*nfit_cmd) - len;
+		rc = buf_len - sizeof(*nfit_cmd) - (len + 4);
 		break;
 	}
 	default:
