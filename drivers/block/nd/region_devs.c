@@ -10,6 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include "nd-private.h"
 #include "nfit.h"
@@ -125,16 +126,52 @@ static ssize_t nstype_show(struct device *dev,
 }
 DEVICE_ATTR_RO(nstype);
 
+static ssize_t set_state_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+	struct nd_spa *nd_spa = nd_region->nd_spa;
+
+	if (is_nd_pmem(dev) && nd_spa->nd_set)
+		/* pass, should be precluded by nd_region_visible */;
+	else
+		return -ENXIO;
+
+	/*
+	 * The state may be in the process of changing, userspace should quiesce
+	 * probing if it wants a static answer
+	 */
+	return sprintf(buf, "%s\n", nd_spa->nd_set->busy ? "active" : "idle");
+}
+DEVICE_ATTR_RO(set_state);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
 	&dev_attr_nstype.attr,
 	&dev_attr_mappings.attr,
 	&dev_attr_spa_index.attr,
+	&dev_attr_set_state.attr,
 	NULL,
 };
 
+static umode_t nd_region_visible(struct kobject *kobj, struct attribute *a, int n)
+{
+	struct device *dev = container_of(kobj, typeof(*dev), kobj);
+	struct nd_region *nd_region = to_nd_region(dev);
+	struct nd_spa *nd_spa = nd_region->nd_spa;
+
+	if (a != &dev_attr_set_state.attr)
+		return a->mode;
+
+	if (is_nd_pmem(dev) && nd_spa->nd_set)
+		return a->mode;
+
+	return 0;
+}
+
 static struct attribute_group nd_region_attribute_group = {
 	.attrs = nd_region_attributes,
+	.is_visible = nd_region_visible,
 };
 
 /*
@@ -162,6 +199,131 @@ static int num_nd_mem(struct nd_bus *nd_bus, u16 spa_index)
 		if (readw(&nd_mem->nfit_mem->spa_index) == spa_index)
 			count++;
 	return count;
+}
+
+static int init_interleave_set(struct nd_bus *nd_bus,
+		struct nd_interleave_set *nd_set, struct nd_spa *nd_spa)
+{
+	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	int num_mappings = num_nd_mem(nd_bus, spa_index);
+	int i, rc = -ENXIO;
+
+	for (i = 0; i < num_mappings; i++) {
+		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
+		u32 key = to_interleave_set_key(nd_mem);
+
+		if (radix_tree_lookup(&nd_bus->interleave_sets, key)) {
+			dev_err(&nd_bus->dev, "%s: duplicate mapping (set: %d key: %#x)\n",
+					__func__, spa_index, key);
+			rc = -EBUSY;
+			break;
+		}
+
+		rc = radix_tree_insert(&nd_bus->interleave_sets, key, nd_set);
+		if (rc) {
+			dev_err(&nd_bus->dev, "%s: failed to add set: %d key: %#x\n",
+					__func__, spa_index, key);
+			break;
+		}
+		dev_dbg(&nd_bus->dev, "%s: set: %d key: %#x\n",
+				__func__, spa_index, key);
+	}
+
+	return rc;
+}
+
+int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
+{
+	struct nd_spa *nd_spa;
+	int rc = 0;
+
+	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
+		u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		u16 spa_type = readw(&nd_spa->nfit_spa->spa_type);
+		struct nd_interleave_set *nd_set;
+
+		if (spa_type != NFIT_SPA_PM)
+			continue;
+		if (nd_mem_from_spa(nd_bus, spa_index, 0) == NULL)
+			continue;
+		nd_set = kzalloc(sizeof(*nd_set), GFP_KERNEL);
+		if (!nd_set) {
+			rc = -ENOMEM;
+			break;
+		}
+		nd_set->spa_index = spa_index;
+		nd_spa->nd_set = nd_set;
+
+		rc = init_interleave_set(nd_bus, nd_set, nd_spa);
+		if (rc)
+			break;
+	}
+	return rc;
+}
+
+
+/*
+ * Upon successful probe/remove, take/release a reference on the
+ * associated interleave set (if present)
+ */
+static void nd_region_notify_driver_action(struct nd_bus *nd_bus,
+		struct device *dev, int rc, bool probe)
+{
+	struct nd_interleave_set *nd_set = NULL;
+
+	if (rc)
+		return;
+
+	if (is_nd_pmem(dev)) {
+		struct nd_region *nd_region = to_nd_region(dev);
+
+		nd_set = nd_region->nd_spa->nd_set;
+	} else if (is_nd_blk(dev)) {
+		struct nd_region *nd_region = to_nd_region(dev);
+		struct nd_mapping *nd_mapping;
+		struct nd_mem *nd_mem;
+
+		nd_region = to_nd_region(dev);
+		nd_mapping = &nd_region->mapping[0];
+		nd_mem = nd_mapping->nd_dimm->nd_mem;
+		nd_set = radix_tree_lookup(&nd_bus->interleave_sets,
+				to_interleave_set_key(nd_mem));
+	}
+
+	if (!nd_set)
+		return;
+
+	if (probe)
+		nd_set->busy++;
+	else
+		nd_set->busy--;
+
+	dev_dbg(dev, "%s: action: %s set: %d busy: %d\n", __func__,
+		probe ? "probe" : "remove", nd_set->spa_index,
+		nd_set->busy);
+}
+
+void nd_region_probe_start(struct nd_bus *nd_bus, struct device *dev)
+{
+	nd_bus_lock(&nd_bus->dev);
+	nd_bus->probe_active++;
+	nd_bus_unlock(&nd_bus->dev);
+}
+
+void nd_region_probe_end(struct nd_bus *nd_bus, struct device *dev, int rc)
+{
+	nd_bus_lock(&nd_bus->dev);
+	nd_region_notify_driver_action(nd_bus, dev, rc, true);
+	if (--nd_bus->probe_active == 0)
+		wake_up(&nd_bus->probe_wait);
+	nd_bus_unlock(&nd_bus->dev);
+}
+
+void nd_region_notify_remove(struct nd_bus *nd_bus, struct device *dev, int rc)
+{
+	nd_bus_lock(dev);
+	nd_region_notify_driver_action(nd_bus, dev, rc, false);
+	nd_bus_unlock(dev);
 }
 
 static ssize_t mappingN(struct device *dev, char *buf, int n)

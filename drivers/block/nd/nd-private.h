@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/sizes.h>
 #include <linux/mutex.h>
+#include "nfit.h"
 
 extern struct list_head nd_bus_list;
 extern struct mutex nd_bus_list_mutex;
@@ -36,8 +37,10 @@ struct nd_io;
  * nd_bus_list_mutex is locked
  */
 struct nd_bus {
+	struct radix_tree_root interleave_sets;
 	struct nfit_bus_descriptor *nfit_desc;
 	struct radix_tree_root dimm_radix;
+	wait_queue_head_t probe_wait;
 	struct module *module;
 	struct list_head memdevs;
 	struct list_head spas;
@@ -46,13 +49,19 @@ struct nd_bus {
 	struct list_head ndios;
 	struct list_head list;
 	struct device dev;
-	int id;
+	int id, probe_active;
 	struct mutex reconfig_mutex;
 	struct nd_btt *nd_btt;
 };
 
+struct nd_interleave_set {
+	u16 spa_index;
+	int busy;
+};
+
 struct nd_spa {
 	struct nfit_spa __iomem *nfit_spa;
+	struct nd_interleave_set *nd_set;
 	struct list_head list;
 };
 
@@ -71,6 +80,19 @@ struct nd_mem {
 	struct nfit_dcr __iomem *nfit_dcr;
 	struct list_head list;
 };
+
+/* uniquely identify a mapping */
+static inline u32 to_interleave_set_key(struct nd_mem *nd_mem)
+{
+	u16 dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
+	u16 spa_index = readw(&nd_mem->nfit_mem->spa_index);
+	u32 key;
+
+	key = spa_index;
+	key <<= 16;
+	key |= dcr_index;
+	return key;
+}
 
 struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname);
 struct nd_dimm *nd_dimm_by_handle(struct nd_bus *nd_bus, u32 nfit_handle);
@@ -105,10 +127,14 @@ int __init nd_dimm_init(void);
 int __init nd_region_init(void);
 void nd_dimm_exit(void);
 int nd_region_exit(void);
+void nd_region_probe_start(struct nd_bus *nd_bus, struct device *dev);
+void nd_region_probe_end(struct nd_bus *nd_bus, struct device *dev, int rc);
+void nd_region_notify_remove(struct nd_bus *nd_bus, struct device *dev, int rc);
 int nd_bus_create_ndctl(struct nd_bus *nd_bus);
 void nd_bus_destroy_ndctl(struct nd_bus *nd_bus);
 int nd_bus_register_dimms(struct nd_bus *nd_bus);
 int nd_bus_register_regions(struct nd_bus *nd_bus);
+int nd_bus_init_interleave_sets(struct nd_bus *nd_bus);
 int nd_match_dimm(struct device *dev, void *data);
 bool is_nd_dimm(struct device *dev);
 #endif /* __ND_PRIVATE_H__ */
