@@ -75,7 +75,6 @@ int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 	return nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_GET_CONFIG_SIZE, cmd,
 			sizeof(*cmd));
 }
-EXPORT_SYMBOL(nd_dimm_get_config_size);
 
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_data_hdr *cmd, size_t len)
@@ -95,7 +94,6 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 	return nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_GET_CONFIG_DATA, cmd,
 			len);
 }
-EXPORT_SYMBOL(nd_dimm_get_config_data);
 
 static void nd_dimm_release(struct device *dev)
 {
@@ -123,7 +121,6 @@ struct nd_dimm *to_nd_dimm(struct device *dev)
 	WARN_ON(!is_nd_dimm(dev));
 	return nd_dimm;
 }
-EXPORT_SYMBOL(to_nd_dimm);
 
 static struct nfit_mem __iomem *to_nfit_mem(struct device *dev)
 {
