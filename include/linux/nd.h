@@ -70,4 +70,5 @@ int __must_check __nd_driver_register(struct nd_device_driver *nd_drv,
 		struct module *module, const char *mod_name);
 #define nd_driver_register(driver) \
 	__nd_driver_register(driver, THIS_MODULE, KBUILD_MODNAME)
+int nd_namespace_pmem_request_dpa(struct nd_namespace_pmem *nspm);
 #endif /* __LINUX_ND_H__ */

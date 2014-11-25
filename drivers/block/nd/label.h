@@ -32,7 +32,8 @@ enum {
 	BTTINFO_UUID_LEN = 16,
 	BTTINFO_FLAG_ERROR = 0x1,    /* error state (read-only) */
 	BTTINFO_MAJOR_VERSION = 1,
-	ND_LABEL_MIN_SIZE = 512 * 129 /* see sizeof_namespace_index() */
+	ND_LABEL_MIN_SIZE = 512 * 129, /* see sizeof_namespace_index() */
+	ND_NSINDEX_INIT = 0x1,
 };
 
 static const char NSINDEX_SIGNATURE[] = "NAMESPACE_INDEX\0";
@@ -120,4 +121,13 @@ size_t sizeof_namespace_index(struct nd_dimm *nd_dimm);
 int nd_label_active_count(struct nd_dimm *nd_dimm);
 struct nd_namespace_label __iomem *nd_label_active(
 		struct nd_dimm *nd_dimm, int n);
+u32 nd_label_alloc_slot(struct nd_dimm *nd_dimm);
+bool nd_label_free_slot(struct nd_dimm *nd_dimm, u32 slot);
+int to_nd_label_slot(struct nd_dimm *nd_dimm,
+                struct nd_namespace_label __iomem *nd_label);
+u32 nd_label_nfree(struct nd_dimm *nd_dimm);
+struct nd_region;
+struct nd_namespace_pmem;
+int nd_pmem_namespace_label_update(struct nd_region *nd_region,
+		struct nd_namespace_pmem *nspm);
 #endif /* __LABEL_H__ */

@@ -60,7 +60,7 @@ static int nd_dimm_probe(struct device *dev)
 		free_data(nd_dimm);
 		return rc < 0 ? rc : -ENXIO;
 	}
-	nd_dimm->config_size = config_size;
+	nd_dimm->config_size = cmd_size.config_size;
 	nsindex = to_namespace_index(nd_dimm, 0);
 
 	nd_bus_lock(dev);

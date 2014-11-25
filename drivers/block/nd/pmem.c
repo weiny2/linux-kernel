@@ -267,6 +267,11 @@ static int nd_pmem_probe(struct device *dev)
 			dev_dbg(dev, "%s: uuid not set\n", __func__);
 			return -ENODEV;
 		}
+		nd_bus_lock(dev);
+		err = nd_namespace_pmem_request_dpa(nspm);
+		nd_bus_unlock(dev);
+		if (err)
+			return err;
 	}
 
 	pmem = kzalloc(sizeof(*pmem), GFP_KERNEL);

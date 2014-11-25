@@ -95,6 +95,50 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 			len);
 }
 
+int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
+		void *buf, size_t len)
+{
+	u32 nfit_handle;
+	struct nd_bus *nd_bus;
+	struct nfit_cmd_set_config_hdr *cmd;
+	struct nfit_bus_descriptor *nfit_desc;
+	size_t size = sizeof(*cmd) + len + sizeof(u32);
+	int rc = validate_dimm(nd_dimm, &nd_bus, &nfit_handle);
+
+	if (rc)
+		return rc;
+
+	cmd = kmalloc(size, GFP_KERNEL);
+	if (!cmd)
+		cmd = vmalloc(size);
+	if (!cmd)
+		return -ENOMEM;
+
+	nfit_desc = nd_bus->nfit_desc;
+	memset(cmd, 0, size);
+	cmd->nfit_handle = nfit_handle;
+	cmd->in_offset = offset;
+	cmd->in_length = len;
+	memcpy(cmd->in_buf, buf, len);
+	rc = nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_SET_CONFIG_DATA, cmd,
+			size);
+	if (rc == 0) {
+		/* rc == 0 == status valid */
+		u32 *status = ((void *) cmd) + size - sizeof(u32);
+
+		if (*status != 0)
+			rc = -ENXIO;
+	}
+	dev_dbg(&nd_dimm->dev, "%s: offset: %zd len: %zd rc: %d\n",
+			__func__, offset, len, rc);
+
+	if (is_vmalloc_addr(cmd))
+		vfree(cmd);
+	else
+		kfree(cmd);
+	return rc;
+}
+
 static void nd_dimm_release(struct device *dev)
 {
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);

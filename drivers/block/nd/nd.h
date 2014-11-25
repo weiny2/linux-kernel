@@ -170,6 +170,8 @@ int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_size *cmd);
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_data_hdr *cmd, size_t len);
+int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
+		void *buf, size_t len);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nd_bus_lock(struct device *dev);
