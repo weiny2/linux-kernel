@@ -259,9 +259,8 @@ int nd_register_ndio(struct nd_io *ndio)
 	if (!nd_bus)
 		return -EINVAL;
 
-	mutex_lock(&nd_bus_list_mutex);
+	WARN_ON_ONCE(!is_nd_bus_locked(&nd_bus->dev));
 	list_add(&ndio->list, &nd_bus->ndios);
-	mutex_unlock(&nd_bus_list_mutex);
 
 	/* TODO: Autodetect BTT */
 
@@ -301,9 +300,7 @@ int nd_unregister_ndio(struct nd_io *ndio)
 	int rc;
 
 	nd_bus_lock(dev);
-	mutex_lock(&nd_bus_list_mutex);
 	rc = __nd_unregister_ndio(ndio);
-	mutex_unlock(&nd_bus_list_mutex);
 	nd_bus_unlock(dev);
 
 	/*
@@ -331,9 +328,8 @@ struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname)
 {
 	struct nd_io *ndio;
 
-	mutex_lock(&nd_bus_list_mutex);
+	WARN_ON_ONCE(!is_nd_bus_locked(&nd_bus->dev));
 	ndio = __ndio_lookup(nd_bus, diskname);
-	mutex_unlock(&nd_bus_list_mutex);
 
 	return ndio;
 }
