@@ -437,6 +437,8 @@ struct sdma_engine {
 int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines);
 void sdma_start(struct hfi_devdata *dd);
 void sdma_exit(struct hfi_devdata *dd);
+void sdma_link_up(struct hfi_devdata *dd);
+void sdma_link_down(struct hfi_devdata *dd);
 
 /**
  * sdma_empty() - idle engine test

@@ -676,6 +676,42 @@ nomem:
 	return -ENOMEM;
 }
 
+/*
+ * sdma_link_up() - called when the link goes up
+ * @dd: hfi_devdata
+ *
+ * This routine moves all engines to the running state.
+ */
+void sdma_link_up(struct hfi_devdata *dd)
+{
+	struct sdma_engine *sde;
+	unsigned int i;
+
+	/* move all engines to running */
+	for (i = 0; i < dd->num_sdma; ++i) {
+		sde = &dd->per_sdma[i];
+		sdma_process_event(sde, sdma_event_e30_go_running);
+	}
+}
+
+/*
+ * sdma_link_down() - called when the link goes down
+ * @dd: hfi_devdata
+ *
+ * This routine moves all engines to the idle state.
+ */
+void sdma_link_down(struct hfi_devdata *dd)
+{
+	struct sdma_engine *sde;
+	unsigned int i;
+
+	/* idle all engines */
+	for (i = 0; i < dd->num_sdma; ++i) {
+		sde = &dd->per_sdma[i];
+		sdma_process_event(sde, sdma_event_e70_go_idle);
+	}
+}
+
 /**
  * sdma_start() - called to kick off state processing for all engines
  * @dd: hfi_devdata
@@ -691,11 +727,8 @@ void sdma_start(struct hfi_devdata *dd)
 
 	/* kick off the engines state processing */
 	for (i = 0; i < dd->num_sdma; ++i) {
-
 		sde = &dd->per_sdma[i];
 		sdma_process_event(sde, sdma_event_e10_go_hw_start);
-		/* FIXME - need a better way to do this */
-		sdma_process_event(sde, sdma_event_e30_go_running);
 	}
 }
 

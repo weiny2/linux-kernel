@@ -37,6 +37,7 @@
 
 #include "hfi.h"
 #include "common.h"
+#include "sdma.h"
 
 /**
  * qib_format_hwmsg - format a single hwerror message
@@ -133,6 +134,9 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* link width is not avaiable until the link is fully up */
 		get_link_width(ppd);
 
+		/* tell all engines to go running */
+		sdma_link_up(dd);
+
 		ev = IB_EVENT_PORT_ACTIVE;
 
 		/* start a 75msec timer to clear symbol errors */
@@ -150,6 +154,9 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		/* clear HW details of the prevoius connection */
 		reset_link_credits(dd);
+
+		/* tell all engines to go idle */
+		sdma_link_down(dd);
 
 		ev = IB_EVENT_PORT_ERR;
 
