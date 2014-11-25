@@ -7060,22 +7060,10 @@ void init_sc2vl_tables(struct hfi_devdata *dd)
  * Do not write any CSR values to the chip in this routine - there may be
  * a reset following the (possible) FLR in this routine.
  *
- * Sets:
- * dd->chip_rcv_contexts  - number of receive contexts supported by the chip
- * dd->chip_rcv_array_count - number of entries in the Receive Array
- * dd->chip_send_contexts - number PIO send contexts supported by the chip
- * dd->chip_pio_mem_size  - size of PIO send memory, in blocks
- * dd->chip_sdma_engines  - number of SDMA engines supported by the chip
  */
 static void init_chip(struct hfi_devdata *dd)
 {
 	int i;
-
-	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
-	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
-	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
-	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
-	dd->chip_sdma_mem_size = read_csr(dd, WFR_SEND_DMA_MEM_SIZE);
 
 	/*
 	 * Put the WFR CSRs in a known state.
@@ -7838,15 +7826,29 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	else
 		dd->pport->link_speed_active = STL_LINK_SPEED_12_5G;
 
+	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
+	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
+	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
+	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
+	dd->chip_sdma_mem_size = read_csr(dd, WFR_SEND_DMA_MEM_SIZE);
 	/* fix up link widths for emulation */
+	ppd = dd->pport;
 	if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
-		dd->pport->link_width_supported =
-			dd->pport->link_width_enabled =
-			dd->pport->link_width_active =
-			dd->pport->link_width_downgrade_supported =
-			dd->pport->link_width_downgrade_enabled =
-			dd->pport->link_width_downgrade_active =
+		ppd->link_width_supported =
+			ppd->link_width_enabled =
+			ppd->link_width_active =
+			ppd->link_width_downgrade_supported =
+			ppd->link_width_downgrade_enabled =
+			ppd->link_width_downgrade_active =
 				STL_LINK_WIDTH_1X;
+	}
+	/* insure num_vls isn't larger than number of sdma engines */
+	if (use_sdma && num_vls > dd->chip_sdma_engines) {
+		num_vls = 4;
+		dd_dev_err(dd, "num_vls %u too large, using 4 VLs\n",
+				num_vls);
+		ppd->vls_supported = IB_VL_VL0_3;
+		ppd->vls_operational = ppd->vls_supported;
 	}
 
 	/*
