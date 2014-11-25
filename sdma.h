@@ -145,6 +145,7 @@ enum sdma_states {
 	sdma_state_s30_sw_clean_up_wait,
 	sdma_state_s40_hw_clean_up_wait,
 	sdma_state_s50_hw_halt_wait,
+	sdma_state_s60_idle_halt_wait,
 	sdma_state_s99_running,
 };
 
@@ -152,15 +153,12 @@ enum sdma_events {
 	sdma_event_e00_go_hw_down,
 	sdma_event_e10_go_hw_start,
 	sdma_event_e15_hw_halt_done,
-	sdma_event_e25_hw_started2,
+	sdma_event_e25_hw_clean_up_done,
 	sdma_event_e30_go_running,
 	sdma_event_e40_sw_cleaned,
 	sdma_event_e50_hw_cleaned,
 	sdma_event_e60_hw_halted,
 	sdma_event_e70_go_idle,
-	sdma_event_e7220_err_halted,
-	sdma_event_e7322_err_halted,
-	sdma_event_e90_timer_tick,
 };
 
 struct sdma_set_state_action {
