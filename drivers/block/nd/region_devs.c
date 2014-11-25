@@ -10,8 +10,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/scatterlist.h>
+#include <linux/crypto.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sort.h>
 #include "nd-private.h"
 #include "nfit.h"
 #include "nd.h"
@@ -145,12 +148,28 @@ static ssize_t set_state_show(struct device *dev,
 }
 DEVICE_ATTR_RO(set_state);
 
+static ssize_t set_cookie_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+	struct nd_spa *nd_spa = nd_region->nd_spa;
+
+	if (is_nd_pmem(dev) && nd_spa->nd_set)
+		/* pass, should be precluded by nd_region_visible */;
+	else
+		return -ENXIO;
+
+	return sprintf(buf, "%#llx\n", nd_spa->nd_set->cookie);
+}
+DEVICE_ATTR_RO(set_cookie);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
 	&dev_attr_nstype.attr,
 	&dev_attr_mappings.attr,
 	&dev_attr_spa_index.attr,
 	&dev_attr_set_state.attr,
+	&dev_attr_set_cookie.attr,
 	NULL,
 };
 
@@ -160,11 +179,11 @@ static umode_t nd_region_visible(struct kobject *kobj, struct attribute *a, int 
 	struct nd_region *nd_region = to_nd_region(dev);
 	struct nd_spa *nd_spa = nd_region->nd_spa;
 
-	if (a != &dev_attr_set_state.attr)
+	if (a != &dev_attr_set_state.attr && a != &dev_attr_set_cookie.attr)
 		return a->mode;
 
 	if (is_nd_pmem(dev) && nd_spa->nd_set)
-		return a->mode;
+			return a->mode;
 
 	return 0;
 }
@@ -201,16 +220,49 @@ static int num_nd_mem(struct nd_bus *nd_bus, u16 spa_index)
 	return count;
 }
 
+/* enough info to uniquely specify an interleave set */
+struct nd_set_info {
+	u64 spa_base;
+	u64 spa_length;
+	struct nd_set_info_map {
+		u32 nfit_handle;
+		u32 region_id;
+		u64 region_dpa;
+		u64 region_len;
+	} mapping[0];
+};
+
+static size_t sizeof_nd_set_info(int num_mappings)
+{
+	return sizeof(struct nd_set_info)
+		+ num_mappings * sizeof(struct nd_set_info_map);
+}
+
+static int cmp_map(const void *m0, const void *m1)
+{
+	const struct nd_set_info_map *map0 = m0;
+	const struct nd_set_info_map *map1 = m1;
+
+	return memcmp(&map0->nfit_handle, &map1->nfit_handle, sizeof(u32));
+}
+
 static int init_interleave_set(struct nd_bus *nd_bus,
 		struct nd_interleave_set *nd_set, struct nd_spa *nd_spa)
 {
 	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
 	int num_mappings = num_nd_mem(nd_bus, spa_index);
+	struct nd_set_info *info;
 	int i, rc = -ENXIO;
 
+	info = kzalloc(sizeof_nd_set_info(num_mappings), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+	info->spa_base = readq(&nd_spa->nfit_spa->spa_base);
+	info->spa_length = readq(&nd_spa->nfit_spa->spa_length);
 	for (i = 0; i < num_mappings; i++) {
 		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
 		u32 key = to_interleave_set_key(nd_mem);
+		struct nd_set_info_map *map = &info->mapping[i];
 
 		if (radix_tree_lookup(&nd_bus->interleave_sets, key)) {
 			dev_err(&nd_bus->dev, "%s: duplicate mapping (set: %d key: %#x)\n",
@@ -227,7 +279,17 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 		}
 		dev_dbg(&nd_bus->dev, "%s: set: %d key: %#x\n",
 				__func__, spa_index, key);
+		map->nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+		map->region_id = readw(&nd_mem->nfit_mem->region_id);
+		map->region_dpa = readq(&nd_mem->nfit_mem->region_dpa);
+		map->region_len = readq(&nd_mem->nfit_mem->region_len);
 	}
+
+	sort(&info->mapping[0], num_mappings, sizeof(struct nd_set_info_map),
+			cmp_map, NULL);
+	nd_set->cookie = nd_fletcher64(info, sizeof_nd_set_info(num_mappings));
+
+	kfree(info);
 
 	return rc;
 }
