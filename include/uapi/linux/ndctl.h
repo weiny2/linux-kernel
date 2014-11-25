@@ -218,4 +218,8 @@ enum nd_driver_flags {
 	ND_DRIVER_NAMESPACE_BLOCK = 1 << ND_DEVICE_NAMESPACE_BLOCK,
 	ND_DRIVER_BTT		  = 1 << ND_DEVICE_BTT,
 };
+
+enum {
+	ND_MIN_NAMESPACE_SIZE = 0x01000000,
+};
 #endif /* __NDCTL_H__ */

@@ -30,6 +30,7 @@ struct nd_dimm {
 	} *del_info;
 	struct nfit_cmd_get_config_data_hdr *data;
 	int ns_current, ns_next;
+	struct resource dpa;
 };
 
 static inline struct nd_namespace_index __iomem *to_namespace_index(
@@ -56,6 +57,7 @@ static inline struct nd_namespace_index __iomem *to_next_namespace_index(
 
 struct nd_mapping {
 	struct nd_dimm *nd_dimm;
+	struct nd_namespace_label * __iomem *labels;
 	u64 start;
 	u64 size;
 };
@@ -63,6 +65,7 @@ struct nd_mapping {
 struct nd_region {
 	struct device dev;
 	struct nd_spa *nd_spa;
+	unsigned long long available_size;
 	u16 ndr_mappings;
 	u64 ndr_size;
 	u64 ndr_start;
@@ -144,6 +147,7 @@ enum nd_async_mode {
 	ND_ASYNC,
 };
 
+void wait_nd_bus_probe_idle(struct device *dev);
 void nd_device_register(struct device *dev);
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode);
 int nd_register_ndio(struct nd_io *ndio);
@@ -167,6 +171,7 @@ int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_data_hdr *cmd, size_t len);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
+u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nd_bus_lock(struct device *dev);
 void nd_bus_unlock(struct device *dev);
 bool is_nd_bus_locked(struct device *dev);

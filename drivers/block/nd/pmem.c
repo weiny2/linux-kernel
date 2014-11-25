@@ -244,12 +244,30 @@ static int pmem_rw_bytes(struct nd_io *ndio, void *buf, size_t offset,
 
 static int nd_pmem_probe(struct device *dev)
 {
+	struct nd_region *nd_region = to_nd_region(dev->parent);
 	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
 	size_t disk_sectors = resource_size(&nsio->res) / 512;
 	struct pmem_device *pmem;
 	struct gendisk *disk;
 	struct resource *res;
 	int err;
+
+	if (resource_size(&nsio->res) < ND_MIN_NAMESPACE_SIZE) {
+		resource_size_t size = resource_size(&nsio->res);
+
+		dev_dbg(dev, "%s: size: %pa, too small must be at least %#x\n",
+				__func__, &size, ND_MIN_NAMESPACE_SIZE);
+		return -ENODEV;
+	}
+
+	if (nd_region_to_namespace_type(nd_region) == ND_DEVICE_NAMESPACE_PMEM) {
+		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
+
+		if (!nspm->uuid) {
+			dev_dbg(dev, "%s: uuid not set\n", __func__);
+			return -ENODEV;
+		}
+	}
 
 	pmem = kzalloc(sizeof(*pmem), GFP_KERNEL);
 	if (!pmem)
@@ -343,13 +361,14 @@ static int nd_pmem_remove(struct device *dev)
 
 MODULE_ALIAS("pmem");
 MODULE_ALIAS_ND_DEVICE(ND_DEVICE_NAMESPACE_IO);
+MODULE_ALIAS_ND_DEVICE(ND_DEVICE_NAMESPACE_PMEM);
 static struct nd_device_driver nd_pmem_driver = {
 	.probe = nd_pmem_probe,
 	.remove = nd_pmem_remove,
 	.drv = {
 		.name = "pmem",
 	},
-	.type = ND_DRIVER_NAMESPACE_IO,
+	.type = ND_DRIVER_NAMESPACE_IO | ND_DRIVER_NAMESPACE_PMEM,
 };
 
 static int __init pmem_init(void)

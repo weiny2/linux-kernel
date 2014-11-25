@@ -117,4 +117,7 @@ void nd_label_copy(struct nd_dimm *nd_dimm,
 		struct nd_namespace_index *dst,
 		struct nd_namespace_index *src);
 size_t sizeof_namespace_index(struct nd_dimm *nd_dimm);
+int nd_label_active_count(struct nd_dimm *nd_dimm);
+struct nd_namespace_label __iomem *nd_label_active(
+		struct nd_dimm *nd_dimm, int n);
 #endif /* __LABEL_H__ */

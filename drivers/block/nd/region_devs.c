@@ -68,6 +68,7 @@ struct nd_region *to_nd_region(struct device *dev)
 	WARN_ON(dev->type->release != nd_region_release);
 	return nd_region;
 }
+EXPORT_SYMBOL(to_nd_region);
 
 /**
  * nd_region_to_namespace_type() - region to an integer namespace type
@@ -90,6 +91,7 @@ int nd_region_to_namespace_type(struct nd_region *nd_region)
 
 	return 0;
 }
+EXPORT_SYMBOL(nd_region_to_namespace_type);
 
 static ssize_t size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -163,6 +165,20 @@ static ssize_t set_cookie_show(struct device *dev,
 }
 DEVICE_ATTR_RO(set_cookie);
 
+static ssize_t available_size_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	/* flush in-flight updates */
+	nd_bus_lock(dev);
+	wait_nd_bus_probe_idle(dev);
+	nd_bus_unlock(dev);
+
+	return sprintf(buf, "%lld\n", nd_region->available_size);
+}
+DEVICE_ATTR_RO(available_size);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
 	&dev_attr_nstype.attr,
@@ -170,6 +186,7 @@ static struct attribute *nd_region_attributes[] = {
 	&dev_attr_spa_index.attr,
 	&dev_attr_set_state.attr,
 	&dev_attr_set_cookie.attr,
+	&dev_attr_available_size.attr,
 	NULL,
 };
 
@@ -179,11 +196,15 @@ static umode_t nd_region_visible(struct kobject *kobj, struct attribute *a, int 
 	struct nd_region *nd_region = to_nd_region(dev);
 	struct nd_spa *nd_spa = nd_region->nd_spa;
 
-	if (a != &dev_attr_set_state.attr && a != &dev_attr_set_cookie.attr)
+	if (a != &dev_attr_set_state.attr && a != &dev_attr_set_cookie.attr
+			&& a != &dev_attr_available_size.attr)
 		return a->mode;
 
-	if (is_nd_pmem(dev) && nd_spa->nd_set)
-			return a->mode;
+	if (nd_region_to_namespace_type(nd_region) == ND_DEVICE_NAMESPACE_PMEM
+			&& a == &dev_attr_available_size.attr)
+		return a->mode;
+	else if (is_nd_pmem(dev) && nd_spa->nd_set)
+		return a->mode;
 
 	return 0;
 }
@@ -323,6 +344,15 @@ int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
 	return rc;
 }
 
+u64 nd_region_interleave_set_cookie(struct nd_region *nd_region)
+{
+	struct nd_spa *nd_spa = nd_region->nd_spa;
+	struct nd_interleave_set *nd_set = nd_spa ? nd_spa->nd_set : NULL;
+
+	if (nd_set)
+		return nd_set->cookie;
+	return 0;
+}
 
 /*
  * Upon successful probe/remove, take/release a reference on the

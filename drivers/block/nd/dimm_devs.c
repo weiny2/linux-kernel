@@ -261,6 +261,10 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	dev->parent = &nd_bus->dev;
 	dev->type = &nd_dimm_device_type;
 	dev->groups = nd_dimm_attribute_groups;
+	nd_dimm->dpa.name = dev_name(dev);
+	nd_dimm->dpa.start = 0,
+	nd_dimm->dpa.end = -1,
+	nd_dimm->dpa.flags = IORESOURCE_REG;
 	nd_device_register(dev);
 
 	return nd_dimm;

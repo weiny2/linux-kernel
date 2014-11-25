@@ -13,6 +13,7 @@
 #include <linux/device.h>
 #include <linux/ndctl.h>
 #include <linux/io.h>
+#include <linux/nd.h>
 #include "label.h"
 #include "nd.h"
 
@@ -198,4 +199,88 @@ void nd_label_copy(struct nd_dimm *nd_dimm,
 	d = (void * __force) dst;
 	s = (void * __force) src;
 	memcpy(d, s, sizeof_namespace_index(nd_dimm));
+}
+
+static struct nd_namespace_label __iomem *nd_label_base(struct nd_dimm *nd_dimm)
+{
+	void *base = to_namespace_index(nd_dimm, 0);
+
+	return base + 2 * sizeof_namespace_index(nd_dimm);
+}
+
+#define for_each_clear_bit_le(bit, addr, size) \
+	for ((bit) = find_next_zero_bit_le((addr), (size), 0);	\
+	     (bit) < (size);					\
+	     (bit) = find_next_zero_bit_le((addr), (size), (bit) + 1))
+
+/**
+ * preamble_current - common variable initialization for nd_label_* routines
+ * @nd_dimm: dimm container for the relevant label set
+ * @nsindex: on return set to the currently active namespace index
+ * @free: on return set to the free label bitmap in the index
+ * @nslot: on return set to the number of slots in the label space
+ */
+static bool preamble_current(struct nd_dimm *nd_dimm,
+		struct nd_namespace_index **nsindex,
+		unsigned long **free, u32 *nslot)
+{
+	*nsindex = to_current_namespace_index(nd_dimm);
+	if (*nsindex == NULL)
+		return false;
+
+	*free = (unsigned long __force *) (*nsindex)->free;
+	*nslot = readl(&(*nsindex)->nslot);
+
+	return true;
+}
+
+int nd_label_active_count(struct nd_dimm *nd_dimm)
+{
+	struct nd_namespace_index __iomem *nsindex;
+	unsigned long *free;
+	u32 nslot, slot;
+	int count = 0;
+
+	if (!preamble_current(nd_dimm, &nsindex, &free, &nslot))
+		return 0;
+
+	for_each_clear_bit_le(slot, free, nslot) {
+		struct nd_namespace_label __iomem *nd_label;
+
+		nd_label = nd_label_base(nd_dimm) + slot;
+
+		/* check for invalid slots */
+		if (slot != readl(&nd_label->slot)) {
+			dev_dbg(&nd_dimm->dev,
+					"%s: slot%d invalid 'slot' (%d)\n",
+					__func__, slot, readl(&nd_label->slot));
+			continue;
+		}
+		count++;
+	}
+	return count;
+}
+
+struct nd_namespace_label __iomem *nd_label_active(
+		struct nd_dimm *nd_dimm, int n)
+{
+	struct nd_namespace_index __iomem *nsindex;
+	unsigned long *free;
+	u32 nslot, slot;
+
+	if (!preamble_current(nd_dimm, &nsindex, &free, &nslot))
+		return NULL;
+
+	for_each_clear_bit_le(slot, free, nslot) {
+		struct nd_namespace_label __iomem *nd_label;
+
+		nd_label = nd_label_base(nd_dimm) + slot;
+		if (slot != readl(&nd_label->slot))
+			continue;
+
+		if (n-- == 0)
+			return nd_label_base(nd_dimm) + slot;
+	}
+
+	return NULL;
 }
