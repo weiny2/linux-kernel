@@ -249,6 +249,8 @@ static ssize_t backing_dev_store(struct device *dev,
 	nd_bus_lock(dev);
 	device_lock(dev);
 	rc = __backing_dev_store(dev, attr, buf, len);
+	dev_dbg(dev, "%s: result: %zd wrote: %s%s", __func__,
+			rc, buf, buf[len - 1] == '\n' ? "" : "\n");
 	device_unlock(dev);
 	nd_bus_unlock(dev);
 
