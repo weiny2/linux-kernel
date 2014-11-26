@@ -5131,11 +5131,21 @@ static void restart_link(struct qib_pportdata *ppd)
 {
 	int ret;
 
-	/* don't try to restart if the link is not enabled */
+	/*
+	 * don't try to restart if the link is not enabled or
+	 * if there is no cable present
+	 */
 	if (!ppd->link_enabled) {
 		dd_dev_info(ppd->dd,
 			"%s: stopping link restart because link is disabled\n",
 			__func__);
+		return;
+	}
+	if (!qsfp_mod_present(ppd)) {
+		dd_dev_info(ppd->dd,
+			"%s: stopping link restart because cable is missing\n",
+			__func__);
+		schedule_link_restart(ppd);
 		return;
 	}
 	ret = set_link_state(ppd, HLS_DN_POLL);
@@ -5189,9 +5199,16 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 		ret = init_loopback(dd);
 		if (ret < 0)
 			return ret;
-		/* otherwise, proceed to polling */
 	}
-	return set_link_state(ppd, HLS_DN_POLL);
+	if (qsfp_mod_present(ppd))
+		return set_link_state(ppd, HLS_DN_POLL);
+
+	dd_dev_err(ppd->dd, "Cable not present, attempting link restart in 10 seconds\n");
+	/* Placing schedule_link_restart here assumes that restart_link(..) sets
+	 * link state to HLS_DN_POLL
+	 */
+	schedule_link_restart(ppd);
+	return -EINVAL;
 }
 
 static void quiet_serdes(struct qib_pportdata *ppd)
@@ -5648,7 +5665,6 @@ static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
 	ppd->link_width_active = 0;
 	ppd->link_width_downgrade_tx_active = 0;
 	ppd->link_width_downgrade_rx_active = 0;
-
 	schedule_link_restart(ppd);
 	return 0;
 }

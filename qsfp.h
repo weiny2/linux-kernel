@@ -184,7 +184,7 @@ struct qib_qsfp_data {
 
 extern int qib_refresh_qsfp_cache(struct qib_pportdata *ppd,
 				  struct qib_qsfp_cache *cp);
-extern int qib_qsfp_mod_present(struct qib_pportdata *ppd);
+extern int qsfp_mod_present(struct qib_pportdata *ppd);
 extern void qib_qsfp_init(struct qib_pportdata *ppd);
 
 extern int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,

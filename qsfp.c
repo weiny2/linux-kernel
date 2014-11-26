@@ -289,7 +289,7 @@ int qib_refresh_qsfp_cache(struct qib_pportdata *ppd, struct qib_qsfp_cache *cp)
 	/* ensure sane contents on invalid reads, for cable swaps */
 	memset(cp, 0, sizeof(*cp));
 
-	if (!qib_qsfp_mod_present(ppd)) {
+	if (!qsfp_mod_present(ppd)) {
 		ret = -ENODEV;
 		goto bail;
 	}
@@ -438,12 +438,18 @@ const char * const qib_qsfp_devtech[16] = {
 
 static const char *pwr_codes = "1.5W2.0W2.5W3.5W";
 
-int qib_qsfp_mod_present(struct qib_pportdata *ppd)
+int qsfp_mod_present(struct qib_pportdata *ppd)
 {
-	int ret;
+	if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
+		struct hfi_devdata *dd = ppd->dd;
+		u64 reg;
 
-	ret = ppd->dd->f_gpio_mod(ppd->dd, ppd->dd->hfi_id, 0, 0, 0);
-	return !(ret & QSFP_HFI0_MODPRST_N);
+		reg = read_csr(dd,
+			dd->hfi_id ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
+		return !(reg & QSFP_HFI0_MODPRST_N);
+	}
+	/* always return cable present */
+	return 1;
 }
 
 /*
