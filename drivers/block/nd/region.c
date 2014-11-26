@@ -530,7 +530,11 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 	 * with any mapping as the reference label
 	 */
 	for_each_label(nd_label, &nd_region->mapping[0]) {
+		u64 isetcookie = readq(&(*nd_label)->isetcookie);
 		u8 *uuid = (*nd_label)->uuid;
+
+		if (isetcookie != cookie)
+			continue;
 
 		for (i = 0; nd_region->ndr_mappings; i++)
 			if (!has_uuid_at_pos(nd_region, uuid, cookie, i))
