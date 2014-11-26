@@ -282,7 +282,8 @@ static ssize_t uuid_store(struct device *dev,
 		rc = nd_uuid_store(dev, &nspm->uuid, buf, len);
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
-	dev_dbg(dev, "%s: %s (%zd)\n", __func__, rc < 0 ? "fail" : "success", rc);
+	dev_dbg(dev, "%s: result: %zd wrote: %s%s", __func__,
+			rc, buf, buf[len - 1] == '\n' ? "" : "\n");
 	nd_bus_unlock(dev);
 	device_unlock(dev);
 
