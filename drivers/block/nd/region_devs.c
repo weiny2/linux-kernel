@@ -11,7 +11,6 @@
  * General Public License for more details.
  */
 #include <linux/scatterlist.h>
-#include <linux/crypto.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
