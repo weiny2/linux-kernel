@@ -224,7 +224,7 @@ int nd_uuid_show(u8 *uuid, char *buf)
 {
 	unsigned short field3, field2, field1;
 	unsigned long long field0 = 0;
-	unsigned long field4;
+	unsigned int field4;
 
 	if (!uuid)
 		return sprintf(buf, "\n");
@@ -235,7 +235,7 @@ int nd_uuid_show(u8 *uuid, char *buf)
 	memcpy(&field3, &uuid[10], 2);
 	memcpy(&field4, &uuid[12], 4);
 
-	return sprintf(buf, "%.4lx-%.2x-%.2x-%.2x-%.6llx\n",
+	return sprintf(buf, "%.8x-%.4x-%.4x-%.4x-%.12llx\n",
 			field4, field3, field2, field1, field0);
 }
 EXPORT_SYMBOL(nd_uuid_show);
