@@ -433,6 +433,9 @@ enum {
 #define LCB_CRC_48B			0x2	/* 48b CRC */
 #define LCB_CRC_12B_16B_PER_LANE	0x3	/* 12b-16b per lane CRC */
 
+/* WFR_ASIC_QSFP(1,2)_IN field masks */
+#define WFR_ASIC_MODPRST_N 0x10
+
 /* the following enum is (almost) a copy/paste of the definition
  * in the STL spec, section 20.2.2.6.8 (PortInfo) */
 enum {
@@ -571,6 +574,7 @@ void handle_sma_message(struct work_struct *work);
 int send_idle_sma(struct hfi_devdata *dd, u64 message);
 void link_restart_worker(struct work_struct *work);
 void schedule_link_restart(struct qib_pportdata *ppd);
+int check_cable(struct qib_pportdata *);
 void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclock);

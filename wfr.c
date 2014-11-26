@@ -4531,14 +4531,23 @@ static void restart_link(struct qib_pportdata *ppd)
 {
 	int ret;
 
-	/* don't try to restart if the link is not enabled */
+	/*
+	 * don't try to restart if the link is not enabled or
+	 * if there is no cable present
+	 */
 	if (!ppd->link_enabled) {
 		dd_dev_info(ppd->dd,
 			"%s: stopping link restart because link is disabled\n",
 			__func__);
 		return;
 	}
-
+	if (!check_cable(ppd)) {
+		dd_dev_info(ppd->dd,
+			"%s: stopping link restart because cable is missing\n",
+			__func__);
+		schedule_link_restart(ppd);
+		return;
+	}
 	ret = set_link_state(ppd, HLS_DN_POLL);
 	if (ret) {
 		dd_dev_err(ppd->dd,
@@ -4554,6 +4563,19 @@ void link_restart_worker(struct work_struct *work)
 	struct qib_pportdata *ppd = container_of(dwork, struct qib_pportdata,
 							link_restart_work);
 	restart_link(ppd);
+}
+
+/* Returns 1 if QSFP cable module is present */
+int check_cable(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg;
+
+	reg = read_csr(dd, dd->hfi_id ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
+	if ((reg & WFR_ASIC_MODPRST_N) == 0)
+		return 1;
+
+	return 0;
 }
 
 static int bringup_serdes(struct qib_pportdata *ppd)
@@ -4589,10 +4611,16 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 		ret = init_loopback(dd);
 		if (ret < 0)
 			return ret;
-		/* otherwise, proceed to polling */
 	}
+	if (check_cable(ppd))
+		return set_link_state(ppd, HLS_DN_POLL);
 
-	return set_link_state(ppd, HLS_DN_POLL);
+	dd_dev_err(ppd->dd, "Cable not present, attempting link restart in 10 seconds\n");
+	/* Placing schedule_link_restart here assumes that restart_link(..) sets
+	 * link state to HLS_DN_POLL
+	 */
+	schedule_link_restart(ppd);
+	return -EINVAL;
 }
 
 static void quiet_serdes(struct qib_pportdata *ppd)
@@ -5020,16 +5048,8 @@ static int goto_offline(struct qib_pportdata *ppd)
 					|| previous_state == HLS_UP_ACTIVE) {
 		/* went down while link was up */
 		handle_linkup_change(dd, 0);
-		/* our only downdefault is to restart polling */
-		schedule_link_restart(ppd);
-	} else if (previous_state == HLS_DN_POLL
-			|| previous_state == HLS_VERIFY_CAP
-			|| previous_state == HLS_GOING_UP) {
-		/* went down while attempting link up */
-		/* our only downdefault is to restart polling */
-		schedule_link_restart(ppd);
 	}
-
+	schedule_link_restart(ppd);
 	return 0;
 }
 
