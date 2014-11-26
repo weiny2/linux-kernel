@@ -257,9 +257,6 @@ static void clear_sdma_activelist(struct sdma_engine *sde)
 		struct iowait *wait = txp->wait;
 
 		list_del_init(&txp->list);
-		if (wait)
-			drained = atomic_dec_and_test(
-					&txp->wait->sdma_busy);
 		sdma_txclean(sde->dd, txp);
 		if (wait)
 			drained = atomic_dec_and_test(&wait->sdma_busy);
