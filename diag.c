@@ -1134,10 +1134,22 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	 * Send side packet integrity checks are not helpful when snooping so
 	 * disable and re-enable when we stop snooping.
 	 */
-	for (i = 0; i < dd->num_send_contexts; i++) {
-		reg_cur = read_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE);
-		reg_new = ~(HFI_PKT_BASE_SC_INTEGRITY) & reg_cur;
-		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg_new);
+	if (mode_flag == HFI_PORT_SNOOP_MODE) {
+		for (i = 0; i < dd->num_send_contexts; i++) {
+			reg_cur = read_kctxt_csr(dd, i,
+						WFR_SEND_CTXT_CHECK_ENABLE);
+			reg_new = ~(HFI_PKT_BASE_SC_INTEGRITY) & reg_cur;
+			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE,
+					reg_new);
+		}
+
+		/*
+		 * We also do not want to be doing the DLID LMC check for
+		 * ingressed packets.
+		 */
+		dd->hfi_snoop.dcc_cfg = read_csr(dd, DCC_CFG_PORT_CONFIG1);
+		write_csr(dd, DCC_CFG_PORT_CONFIG1,
+			  (dd->hfi_snoop.dcc_cfg >> 32) << 32);
 	}
 
 	/*
@@ -1185,10 +1197,21 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	 * forget to restore the packet integrity checks
 	 */
 	drain_snoop_list(&dd->hfi_snoop.queue);
-	for (i = 0; i < dd->num_send_contexts; i++) {
-		reg_cur = read_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE);
-		reg_new = HFI_PKT_BASE_SC_INTEGRITY | reg_cur;
-		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, reg_new);
+	if (dd->hfi_snoop.mode_flag == HFI_PORT_SNOOP_MODE) {
+		for (i = 0; i < dd->num_send_contexts; i++) {
+			reg_cur = read_kctxt_csr(dd, i,
+						WFR_SEND_CTXT_CHECK_ENABLE);
+			reg_new = HFI_PKT_BASE_SC_INTEGRITY | reg_cur;
+			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE,
+						reg_new);
+		}
+
+		/*
+		 * Also should probably reset the DCC_CONFIG1 register for  DLID
+		 * checking on incoming packets again. Use the value saved when
+		 * opening the snoop device.
+		 */
+		write_csr(dd, DCC_CFG_PORT_CONFIG1, dd->hfi_snoop.dcc_cfg);
 	}
 
 	dd->hfi_snoop.filter_callback = NULL;

@@ -300,6 +300,7 @@ struct hfi_snoop_data {
 	wait_queue_head_t waitq;
 	void *filter_value;
 	int (*filter_callback)(void *hdr, void *data, void *value);
+	u64 dcc_cfg; /* saved value of DCC Cfg register */
 };
 
 struct qib_sge_state;

@@ -4383,6 +4383,8 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	u32 dcmask = mask; /* TODO: Remove when rid of the version check */
 	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
 
+	BUG_ON(dd->hfi_snoop.mode_flag != 0);
+
 	/*
 	 * TODO: Remove once everyone is beyond version 46 of the sim
 	 */
