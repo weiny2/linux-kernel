@@ -288,8 +288,9 @@ cfs_wi_scheduler (void *arg)
 		}
 
 		cfs_wi_sched_unlock(sched);
-		cfs_wait_event_interruptible_exclusive(sched->ws_waitq,
-				!cfs_wi_sched_cansleep(sched), rc);
+		cfs_wait_event_interruptible_exclusive(sched->ws_waitq, ({
+				kgr_task_safe(current);
+				!cfs_wi_sched_cansleep(sched); }), rc);
 		cfs_wi_sched_lock(sched);
 	}
 

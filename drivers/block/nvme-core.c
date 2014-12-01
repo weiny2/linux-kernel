@@ -1891,6 +1891,7 @@ static int nvme_kthread(void *data)
 	struct nvme_dev *dev, *next;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		set_current_state(TASK_INTERRUPTIBLE);
 		spin_lock(&dev_list_lock);
 		list_for_each_entry_safe(dev, next, &dev_list, node) {

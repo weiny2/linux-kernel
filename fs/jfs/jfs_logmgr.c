@@ -2343,6 +2343,7 @@ int jfsIOWait(void *arg)
 	struct lbuf *bp;
 
 	do {
+		kgr_task_safe(current);
 		spin_lock_irq(&log_redrive_lock);
 		while ((bp = log_redrive_list)) {
 			log_redrive_list = bp->l_redrive_next;

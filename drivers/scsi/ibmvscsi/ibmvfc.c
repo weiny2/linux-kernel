@@ -4525,8 +4525,9 @@ static int ibmvfc_work(void *data)
 	set_user_nice(current, -20);
 
 	while (1) {
-		rc = wait_event_interruptible(vhost->work_wait_q,
-					      ibmvfc_work_to_do(vhost));
+		rc = wait_event_interruptible(vhost->work_wait_q, ({
+					      kgr_task_safe(current);
+					      ibmvfc_work_to_do(vhost); }));
 
 		BUG_ON(rc);
 

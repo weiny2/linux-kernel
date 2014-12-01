@@ -317,8 +317,9 @@ static int dlm_recovery_thread(void *data)
 				mlog_errno(status);
 		}
 
-		wait_event_interruptible_timeout(dlm->dlm_reco_thread_wq,
-						 kthread_should_stop(),
+		wait_event_interruptible_timeout(dlm->dlm_reco_thread_wq, ({
+						 kgr_task_safe(current);
+						 kthread_should_stop(); }),
 						 timeout);
 	}
 
@@ -732,8 +733,9 @@ static int dlm_remaster_locks(struct dlm_ctxt *dlm, u8 dead_node)
 		}
 		/* wait to be signalled, with periodic timeout
 		 * to check for node death */
-		wait_event_interruptible_timeout(dlm->dlm_reco_thread_wq,
-					 kthread_should_stop(),
+		wait_event_interruptible_timeout(dlm->dlm_reco_thread_wq, ({
+					 kgr_task_safe(current);
+					 kthread_should_stop(); }),
 					 msecs_to_jiffies(DLM_RECO_THREAD_TIMEOUT_MS));
 
 	}

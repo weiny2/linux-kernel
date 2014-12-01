@@ -1012,6 +1012,7 @@ static int spusched_thread(void *unused)
 	while (!kthread_should_stop()) {
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
+		kgr_task_safe(current);
 		for (node = 0; node < MAX_NUMNODES; node++) {
 			struct mutex *mtx = &cbe_spu_info[node].list_mutex;
 

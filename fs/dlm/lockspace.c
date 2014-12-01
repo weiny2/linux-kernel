@@ -265,6 +265,7 @@ static int dlm_scand(void *data)
 	struct dlm_ls *ls;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		ls = find_ls_to_scan();
 		if (ls) {
 			if (dlm_lock_recovery_try(ls)) {

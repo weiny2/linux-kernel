@@ -300,6 +300,8 @@ static int adt7470_update_thread(void *p)
 	struct adt7470_data *data = i2c_get_clientdata(client);
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		mutex_lock(&data->lock);
 		adt7470_read_temperatures(client, data);
 		mutex_unlock(&data->lock);

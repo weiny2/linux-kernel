@@ -1749,6 +1749,7 @@ static int event_thread(void* data)
 		dbg("!!!!event_thread sleeping\n");
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
+		kgr_task_safe(current);
 
 		if (kthread_should_stop())
 			break;

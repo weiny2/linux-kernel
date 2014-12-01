@@ -76,9 +76,10 @@ static int pvr2_dvb_feed_func(struct pvr2_dvb_adapter *adap)
 		/* Wait until more buffers become available or we're
 		   told not to wait any longer. */
 		ret = wait_event_interruptible(
-		    adap->buffer_wait_data,
+		    adap->buffer_wait_data, ({
+		    kgr_task_safe(current);
 		    (pvr2_stream_get_ready_count(stream) > 0) ||
-		    kthread_should_stop());
+		    kthread_should_stop(); }));
 		if (ret < 0) break;
 	}
 

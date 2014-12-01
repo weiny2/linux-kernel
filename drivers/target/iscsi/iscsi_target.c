@@ -3962,9 +3962,11 @@ restart:
 		 */
 		iscsit_thread_check_cpumask(conn, current, 1);
 
-		wait_event_interruptible(conn->queues_wq,
+		wait_event_interruptible(conn->queues_wq, ({
+					 kgr_task_safe(current);
 					 !iscsit_conn_all_queues_empty(conn) ||
-					 ts->status == ISCSI_THREAD_SET_RESET);
+					 ts->status == ISCSI_THREAD_SET_RESET;
+					 }));
 
 		if ((ts->status == ISCSI_THREAD_SET_RESET) ||
 		     signal_pending(current))
@@ -4102,6 +4104,7 @@ restart:
 	}
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		/*
 		 * Ensure that both TX and RX per connection kthreads
 		 * are scheduled to run on the same CPU.

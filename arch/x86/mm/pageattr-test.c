@@ -236,6 +236,7 @@ static int do_pageattr_test(void *__unused)
 {
 	while (!kthread_should_stop()) {
 		schedule_timeout_interruptible(HZ*30);
+		kgr_task_safe(current);
 		if (pageattr_test() < 0)
 			break;
 		if (print)

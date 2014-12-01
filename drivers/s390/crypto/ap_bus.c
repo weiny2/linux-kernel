@@ -1841,6 +1841,7 @@ static int ap_poll_thread(void *data)
 			schedule();
 			continue;
 		}
+		kgr_task_safe(current);
 		add_wait_queue(&ap_poll_wait, &wait);
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (kthread_should_stop())

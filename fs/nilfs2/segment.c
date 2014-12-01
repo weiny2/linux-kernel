@@ -2462,6 +2462,7 @@ static int nilfs_segctor_thread(void *arg)
 
 	spin_lock(&sci->sc_state_lock);
  loop:
+	kgr_task_safe(current);
 	for (;;) {
 		int mode;
 

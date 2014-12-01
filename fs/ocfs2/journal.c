@@ -2180,9 +2180,10 @@ static int ocfs2_commit_thread(void *arg)
 	while (!(kthread_should_stop() &&
 		 atomic_read(&journal->j_num_trans) == 0)) {
 
-		wait_event_interruptible(osb->checkpoint_event,
+		wait_event_interruptible(osb->checkpoint_event, ({
+					 kgr_task_safe(current);
 					 atomic_read(&journal->j_num_trans)
-					 || kthread_should_stop());
+					 || kthread_should_stop(); }));
 
 		status = ocfs2_commit_cache(osb);
 		if (status < 0)

@@ -2066,6 +2066,7 @@ static int srpt_compl_thread(void *arg)
 	while (!kthread_should_stop()) {
 		wait_event_interruptible(ch->wait_queue,
 			(srpt_process_completion(ch->cq, ch),
+			 kgr_task_safe(current),
 			 kthread_should_stop()));
 	}
 	printk(KERN_INFO "Session %s: kernel thread %s (PID %d) stopped\n",

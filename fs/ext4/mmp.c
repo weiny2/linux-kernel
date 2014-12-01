@@ -153,6 +153,7 @@ static int kmmpd(void *data)
 	       sizeof(mmp->mmp_nodename));
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		if (++seq > EXT4_MMP_SEQ_MAX)
 			seq = 1;
 
