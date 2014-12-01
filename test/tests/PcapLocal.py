@@ -96,17 +96,20 @@ def main():
     test_info = RegLib.TestInfo()
 
     dump = 0
+    open_mode = CAPTURE_MODE
     args = test_info.parse_extra_args()
-    verbose = args[0]
-    print "verbose parm is", verbose
-    if verbose != None:
-        if verbose == "verbose":
+    for arg in args:
+        if arg == "verbose":
             dump = 1
+            print "Using verbose mode"
+        if arg == "snoop":
+            open_mode = SNOOP_MODE
+            print "Using snoop mode"
 
     # Open the device and create a file object.
     # Need a file object for sending ioctl
     RegLib.test_log(0, "Opening device")
-    fd = os.open(dev, CAPTURE_MODE)
+    fd = os.open(dev, open_mode)
     if fd <= 0:
         RegLib.test_fail("Could not open device")
     else:
