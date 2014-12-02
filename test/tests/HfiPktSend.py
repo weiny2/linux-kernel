@@ -86,6 +86,8 @@ def main():
 	# Assume the diagtools are already installed somewhere in $PATH.
 	diag_path = ""
     else:
+	if test_info.is_simics():
+		diag_path = "/host" + diag_path;
 	diag_path += "/build/targ-x86_64/tests/"
 
     pkt_dir = test_info.get_test_pkt_dir() + "/"
