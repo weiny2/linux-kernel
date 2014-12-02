@@ -627,7 +627,7 @@ void sc_free(struct send_context *sc)
 	if (!sc)
 		return;
 
-	sc->in_free = 1;	/* ensure no restarts */
+	sc->flags |= SCF_IN_FREE;	/* ensure no restarts */
 	dd = sc->dd;
 	if (!list_empty(&sc->piowait))
 		dd_dev_err(dd, "piowait list not empty!\n");
@@ -655,7 +655,7 @@ void sc_disable(struct send_context *sc)
 	reg = read_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL);
 	reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
 	spin_lock_irqsave(&sc->alloc_lock, flags);
-	sc->enabled = 0;
+	sc->flags &= ~SCF_ENABLED;
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
@@ -717,8 +717,8 @@ static void sc_wait_for_packet_egress(struct send_context *sc)
  * - wait for the halt to be asserted, return early.  Otherwise complain
  * about timeouts but keep going.
  *
- * It is expected that allocations (sc->enabled) have been shut off already
- * (only applies to kernel contexts).
+ * It is expected that allocations (enabled flag bit) have been shut off
+ * already (only applies to kernel contexts).
  */
 void sc_restart(struct send_context *sc)
 {
@@ -728,7 +728,7 @@ void sc_restart(struct send_context *sc)
 	int count;
 
 	/* bounce off if not halted, or being free'd */
-	if (!sc->halted || sc->in_free)
+	if (!(sc->flags & SCF_HALTED) || (sc->flags & SCF_IN_FREE))
 		return;
 
 	dd_dev_info(dd, "restarting context %u\n", sc->context);
@@ -796,7 +796,8 @@ void sc_restart(struct send_context *sc)
 	/*
 	 * Step 5: Enable the context
 	 *
-	 * This enable will clear sc->halted and per-send context error flags.
+	 * This enable will clear the halted flag and per-send context
+	 * error flags.
 	 */
 	sc_enable(sc);
 }
@@ -883,7 +884,7 @@ int sc_enable(struct send_context *sc)
 	sc->fill = 0;
 	sc->sr_head = 0;
 	sc->sr_tail = 0;
-	sc->halted = 0;
+	sc->flags = 0;
 	atomic_set(&sc->buffers_allocated, 0);
 
 	/*
@@ -942,7 +943,7 @@ int sc_enable(struct send_context *sc)
 	 * hazard where a PIO write may reach the context before the enable.
 	 */
 	read_kctxt_csr(dd, sc->context, WFR_SEND_CTXT_CTRL);
-	sc->enabled = 1;
+	sc->flags |= SCF_ENABLED;
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
 	return 0;
@@ -994,11 +995,11 @@ void sc_halting(struct send_context *sc)
 	unsigned long flags;
 
 	/* this context has been halted */
-	sc->halted = 1;
+	sc->flags |= SCF_HALTED;
 
 	/* stop buffer allocations */
 	spin_lock_irqsave(&sc->alloc_lock, flags);
-	sc->enabled = 0;
+	sc->flags &= ~SCF_ENABLED;
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 }
 
@@ -1027,7 +1028,7 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 	u32 head, next;
 
 	spin_lock_irqsave(&sc->alloc_lock, flags);
-	if (!sc->enabled) {
+	if (!(sc->flags & SCF_ENABLED)) {
 		spin_unlock_irqrestore(&sc->alloc_lock, flags);
 		goto done;
 	}

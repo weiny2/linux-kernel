@@ -87,15 +87,13 @@ struct send_context {
 	union pio_shadow_ring *sr;	/* shadow ring */
 	volatile __le64 *hw_free;	/* HW free counter */
 	struct work_struct halt_work;	/* halted context work queue entry */
+	unsigned long flags;		/* flags */
 	int node;			/* context home node */
 	int type;			/* context type */
 	u32 context;			/* context number */
 	u32 credits;			/* number of blocks in context */
 	u32 sr_size;			/* size of the shadow ring */
 	u32 group;			/* credit return group */
-	u16 enabled;                    /* is the context enabled? */
-	u16 halted;			/* is the context halted? */
-	u16 in_free;			/* is this structure being free'd? */
 	/* allocator fields */
 	spinlock_t alloc_lock ____cacheline_aligned_in_smp;
 	unsigned long fill;		/* official alloc count */
@@ -111,6 +109,12 @@ struct send_context {
 	u32 credit_intr_count;		/* count of credit intr users */
 	atomic_t buffers_allocated;	/* count of buffers allocated */
 };
+
+/* send context flags */
+#define SCF_ENABLED 0x01
+#define SCF_IN_FREE 0x02
+#define SCF_HALTED  0x04
+#define SCF_FROZEN  0x08
 
 struct send_context_info {
 	struct send_context *sc;	/* allocated working context */
