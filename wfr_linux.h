@@ -88,6 +88,33 @@ enum missing_port_info_field_masks {
 	STL_PI_MASK_IS_SM_CONFIG_STARTED = 0x20
 };
 
+/*
+ * STL port physical states
+ * IB Volume 1, Table 146 PortInfo/IB Volume 2 Section 5.4.2(1) PortPhysState
+ * values.
+ *
+ * When writing, only values 0-3 are valid, other values are ignored.
+ * When reading, 0 is reserved.
+ *
+ * Returned by the ibphys_portstate() routine.
+ */
+enum stl_port_phys_state {
+	IB_PORTPHYSSTATE_NOP = 0,
+	/* 1 is reserved */
+	IB_PORTPHYSSTATE_POLLING = 2,
+	IB_PORTPHYSSTATE_DISABLED = 3,
+	IB_PORTPHYSSTATE_TRAINING = 4,
+	IB_PORTPHYSSTATE_LINKUP = 5,
+	IB_PORTPHYSSTATE_LINK_ERROR_RECOVERY = 6,
+	IB_PORTPHYSSTATE_PHY_TEST = 7,
+	/* 8 is reserved */
+	STL_PORTPHYSSTATE_OFFLINE = 9,
+	STL_PORTPHYSSTATE_GANGED = 10,
+	STL_PORTPHYSSTATE_TEST = 11,
+	STL_PORTPHYSSTATE_MAX = 11,
+	/* values 12-15 are reserved/ignored */
+};
+
 /* where best to put this opcode? */
 #define CNP_OPCODE 0x80
 

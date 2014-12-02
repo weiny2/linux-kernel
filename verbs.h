@@ -1176,25 +1176,6 @@ extern const enum ib_wc_opcode ib_qib_wc_opcode[];
 
 extern const u8 hdr_len_by_opcode[];
 
-/*
- * IB Volume 1, Table 146 PortInfo/IB Volume 2 Section 5.4.2(1) PortPhysState
- * values.
- *
- * When writing, only values 0-3 are valid, other values are ignored.
- * When reading, 0 is reserved.
- *
- * Returned by the ibphys_portstate() routine.
- */
-#define IB_PORTPHYSSTATE_NO_CHANGE	  0
-#define IB_PORTPHYSSTATE_SLEEP		  1
-#define IB_PORTPHYSSTATE_POLL		  2
-#define IB_PORTPHYSSTATE_DISABLED	  3
-#define IB_PORTPHYSSTATE_CFG_TRAIN	  4
-#define IB_PORTPHYSSTATE_LINKUP		  5
-#define IB_PORTPHYSSTATE_LINK_ERR_RECOVER 6
-#define IB_PORTPHYSSTATE_PHY_TEST	  7
-/* values 8-15 are reserved */
-
 extern const int ib_qib_state_ops[];
 
 extern __be64 ib_qib_sys_image_guid;    /* in network order */

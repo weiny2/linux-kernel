@@ -1109,7 +1109,7 @@ static struct flag_table dc8051_info_host_msg_flags[] = {
 
 
 static u32 encoded_size(u32 size);
-static u32 chip_to_ib_lstate(struct hfi_devdata *dd, u32 chip_lstate);
+static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate);
 static int set_physical_link_state(struct hfi_devdata *dd, u64 state);
 static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 				u8 *continous);
@@ -3870,7 +3870,7 @@ static void set_logical_state(struct hfi_devdata *dd, u32 chip_lstate)
 
 	if (sim_easy_linkup) {
 		/* set the cached state directly */
-		dd->pport[0].lstate = chip_to_ib_lstate(dd, chip_lstate);
+		dd->pport[0].lstate = chip_to_stl_lstate(dd, chip_lstate);
 		return;
 	}
 
@@ -6839,11 +6839,13 @@ static void xgxs_reset(struct qib_pportdata *ppd)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
-static u32 chip_to_ib_lstate(struct hfi_devdata *dd, u32 chip_lstate)
+static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate)
 {
 	switch (chip_lstate) {
 	default:
-		dd_dev_err(dd, "Unknown chip logical state 0x%x, reporting IB_PORT_DOWN\n", chip_lstate);
+		dd_dev_err(dd,
+			 "Unknown logical state 0x%x, reporting IB_PORT_DOWN\n",
+			 chip_lstate);
 		/* fall through */
 	case WFR_LSTATE_DOWN:
 		return IB_PORT_DOWN;
@@ -6856,7 +6858,7 @@ static u32 chip_to_ib_lstate(struct hfi_devdata *dd, u32 chip_lstate)
 	}
 }
 
-static u32 chip_to_ib_pstate(struct hfi_devdata *dd, u32 chip_pstate)
+static u32 chip_to_stl_pstate(struct hfi_devdata *dd, u32 chip_pstate)
 {
 	/* look at the WFR meta-states only */
 	switch (chip_pstate & 0xf0) {
@@ -6867,15 +6869,11 @@ static u32 chip_to_ib_pstate(struct hfi_devdata *dd, u32 chip_pstate)
 	case WFR_PLS_DISABLED:
 		return IB_PORTPHYSSTATE_DISABLED;
 	case WFR_PLS_OFFLINE:
-		/*
-		 * There is no IB equivalent for Offline.  The closest
-		 * is Disabled, so use that.
-		 */
-		return IB_PORTPHYSSTATE_DISABLED;
+		return STL_PORTPHYSSTATE_OFFLINE;
 	case WFR_PLS_POLLING:
-		return IB_PORTPHYSSTATE_POLL;
+		return IB_PORTPHYSSTATE_POLLING;
 	case WFR_PLS_CONFIGPHY:
-		return IB_PORTPHYSSTATE_CFG_TRAIN;
+		return IB_PORTPHYSSTATE_TRAINING;
 	case WFR_PLS_LINKUP:
 		return IB_PORTPHYSSTATE_LINKUP;
 	case WFR_PLS_PHYTEST:
@@ -6883,49 +6881,53 @@ static u32 chip_to_ib_pstate(struct hfi_devdata *dd, u32 chip_pstate)
 	}
 }
 
-/* return the IB port logical state name */
-static const char *ib_lstate_name(u32 lstate)
+/* return the STL port logical state name */
+static const char *stl_lstate_name(u32 lstate)
 {
-	static const char *ib_port_logical_names[] = {
-		"IB_PORT_NOP",
-		"IB_PORT_DOWN",
-		"IB_PORT_INIT",
-		"IB_PORT_ARMED",
-		"IB_PORT_ACTIVE",
-		"IB_PORT_ACTIVE_DEFER",
+	static const char * const port_logical_names[] = {
+		"PORT_NOP",
+		"PORT_DOWN",
+		"PORT_INIT",
+		"PORT_ARMED",
+		"PORT_ACTIVE",
+		"PORT_ACTIVE_DEFER",
 	};
-	if (lstate < ARRAY_SIZE(ib_port_logical_names))
-		return ib_port_logical_names[lstate];
+	if (lstate < ARRAY_SIZE(port_logical_names))
+		return port_logical_names[lstate];
 	return "unknown";
 }
 
-/* return the IB port physical state name */
-static const char *ib_pstate_name(u32 pstate)
+/* return the STL port physical state name */
+static const char *stl_pstate_name(u32 pstate)
 {
-	static const char *ib_port_physical_names[] = {
-		"IB_PHYS_NOP",
-		"IB_PHYS_SLEEP",
-		"IB_PHYS_POLL",
-		"IB_PHYS_DISABLED",
-		"IB_PHYS_CFG_TRAIN",
-		"IB_PHYS_LINKUP",
-		"IB_PHYS_LINK_ERR_RECOVER",
-		"IB_PHYS_PHY_TEST",
+	static const char * const port_physical_names[] = {
+		"PHYS_NOP",
+		"PHYS_SLEEP",
+		"PHYS_POLL",
+		"PHYS_DISABLED",
+		"PHYS_TRAINING",
+		"PHYS_LINKUP",
+		"PHYS_LINK_ERR_RECOVER",
+		"PHYS_PHY_TEST",
+		"unknown",
+		"PHYS_OFFLINE",
+		"PHYS_GANGED",
+		"PHYS_TEST",
 	};
-	if (pstate < ARRAY_SIZE(ib_port_physical_names))
-		return ib_port_physical_names[pstate];
+	if (pstate < ARRAY_SIZE(port_physical_names))
+		return port_physical_names[pstate];
 	return "unknown";
 }
 
-/* read and return the logical IB port state */
+/* read and return the logical STL port state */
 static u32 iblink_state(struct qib_pportdata *ppd)
 {
 	u32 new_state;
 
-	new_state = chip_to_ib_lstate(ppd->dd, read_logical_state(ppd->dd));
+	new_state = chip_to_stl_lstate(ppd->dd, read_logical_state(ppd->dd));
 	if (new_state != ppd->lstate) {
 		dd_dev_info(ppd->dd, "%s: logical state changed to %s (0x%x)\n",
-			__func__, ib_lstate_name(new_state), new_state);
+			__func__, stl_lstate_name(new_state), new_state);
 		ppd->lstate = new_state;
 	}
 	/*
@@ -6961,11 +6963,12 @@ static u8 ibphys_portstate(struct qib_pportdata *ppd)
 	u32 ib_pstate;
 
 	pstate = read_physical_state(ppd->dd);
-	ib_pstate = chip_to_ib_pstate(ppd->dd, pstate);
+	ib_pstate = chip_to_stl_pstate(ppd->dd, pstate);
 	if (remembered_state != ib_pstate) {
 		dd_dev_info(ppd->dd,
 			"%s: physical state changed to %s (0x%x), phy 0x%x\n",
-			__func__, ib_pstate_name(ib_pstate), ib_pstate, pstate);
+			__func__, stl_pstate_name(ib_pstate), ib_pstate,
+			pstate);
 		remembered_state = ib_pstate;
 	}
 	return ib_pstate;
@@ -7363,8 +7366,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 		if (ret) {
 			dd_dev_err(dd,
 				"unable to allocate %s interrupt, vector %d, index %d, err %d\n",
-				err_info, me->msix.vector, idx, ret);
-
+				 err_info, me->msix.vector, idx, ret);
 			return ret;
 		}
 		/*
