@@ -445,201 +445,220 @@ static struct flag_table pio_err_status_flags[] = {
 };
 
 /*
- * TXE Egress Error flags and consequences
- * TODO: Add consequences
+ * TXE SDMA Error flags
  */
+static struct flag_table sdma_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("SDmaRpyTagErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_RPY_TAG_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("SDmaCsrParityErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_CSR_PARITY_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("SDmaPcieReqTrackingUncErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_UNC_ERR_SMASK),
+/* 3*/	FLAG_ENTRY0("SDmaPcieReqTrackingCorErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_COR_ERR_SMASK),
+/*04-63 reserved*/
+};
+
+/*
+ * TXE Egress Error flags and consequences
+ */
+#define SEES(text) WFR_SEND_EGRESS_ERR_STATUS_##text##_SMASK
 static struct flag_table egress_err_status_flags[] = {
 /* 0*/	FLAG_ENTRY("TxPktIntegrityMemCorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_PKT_INTEGRITY_MEM_COR_ERR_SMASK),
+		SEES(TX_PKT_INTEGRITY_MEM_COR_ERR)),
 /* 1*/	FLAG_ENTRY("TxPktIntegrityMemUncErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_PKT_INTEGRITY_MEM_UNC_ERR_SMASK),
+		SEES(TX_PKT_INTEGRITY_MEM_UNC_ERR)),
 /* 2 reserved */
 /* 3*/	FLAG_ENTRY("TxEgressFifoUnderrunOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_EGRESS_FIFO_UNDERRUN_OR_PARITY_ERR_SMASK),
+		SEES(TX_EGRESS_FIFO_UNDERRUN_OR_PARITY_ERR)),
 /* 4*/	FLAG_ENTRY("TxLinkdownErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LINKDOWN_ERR_SMASK),
+		SEES(TX_LINKDOWN_ERR)),
 /* 5*/	FLAG_ENTRY("TxIncorrectLinkStateErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_INCORRECT_LINK_STATE_ERR_SMASK),
+		SEES(TX_INCORRECT_LINK_STATE_ERR)),
 /* 6 reserved */
 /* 7*/	FLAG_ENTRY("TxPioLaunchIntfParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_PIO_LAUNCH_INTF_PARITY_ERR_SMASK),
+		SEES(TX_PIO_LAUNCH_INTF_PARITY_ERR)),
 /* 8*/	FLAG_ENTRY("TxSdmaLaunchIntfParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA_LAUNCH_INTF_PARITY_ERR_SMASK),
+		SEES(TX_SDMA_LAUNCH_INTF_PARITY_ERR)),
 /* 9-10 reserved */
 /*11*/	FLAG_ENTRY("TxSbrdCtlStateMachineParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SBRD_CTL_STATE_MACHINE_PARITY_ERR_SMASK),
-#ifdef WFR_SEND_EGRESS_ERR_STATUS_TX_DC_PARITY_ERR_SMASK
-/* TODO: sim v33 */
-/*12*/	FLAG_ENTRY("TxDcParityErr",
-		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_DC_PARITY_ERR_SMASK),
-#else
-/* TODO: sim v34 and higher */
+		SEES(TX_SBRD_CTL_STATE_MACHINE_PARITY_ERR)),
 /*12*/	FLAG_ENTRY("TxIllegalVLErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_ILLEGAL_VL_ERR_SMASK),
-#endif
+		SEES(TX_ILLEGAL_VL_ERR)),
 /*13*/	FLAG_ENTRY("TxLaunchCsrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_CSR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_CSR_PARITY_ERR)),
 /*14*/	FLAG_ENTRY("TxSbrdCtlCsrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SBRD_CTL_CSR_PARITY_ERR_SMASK),
+		SEES(TX_SBRD_CTL_CSR_PARITY_ERR)),
 /*15*/	FLAG_ENTRY("TxConfigParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_CONFIG_PARITY_ERR_SMASK),
+		SEES(TX_CONFIG_PARITY_ERR)),
 /*16*/	FLAG_ENTRY("TxSdma0DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA0_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA0_DISALLOWED_PACKET_ERR)),
 /*17*/	FLAG_ENTRY("TxSdma1DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA1_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA1_DISALLOWED_PACKET_ERR)),
 /*18*/	FLAG_ENTRY("TxSdma2DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA2_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA2_DISALLOWED_PACKET_ERR)),
 /*19*/	FLAG_ENTRY("TxSdma3DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA3_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA3_DISALLOWED_PACKET_ERR)),
 /*20*/	FLAG_ENTRY("TxSdma4DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA4_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA4_DISALLOWED_PACKET_ERR)),
 /*21*/	FLAG_ENTRY("TxSdma5DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA5_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA5_DISALLOWED_PACKET_ERR)),
 /*22*/	FLAG_ENTRY("TxSdma6DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA6_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA6_DISALLOWED_PACKET_ERR)),
 /*23*/	FLAG_ENTRY("TxSdma7DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA7_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA7_DISALLOWED_PACKET_ERR)),
 /*24*/	FLAG_ENTRY("TxSdma8DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA8_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA8_DISALLOWED_PACKET_ERR)),
 /*25*/	FLAG_ENTRY("TxSdma9DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA9_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA9_DISALLOWED_PACKET_ERR)),
 /*26*/	FLAG_ENTRY("TxSdma10DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA10_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA10_DISALLOWED_PACKET_ERR)),
 /*27*/	FLAG_ENTRY("TxSdma11DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA11_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA11_DISALLOWED_PACKET_ERR)),
 /*28*/	FLAG_ENTRY("TxSdma12DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA12_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA12_DISALLOWED_PACKET_ERR)),
 /*29*/	FLAG_ENTRY("TxSdma13DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA13_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA13_DISALLOWED_PACKET_ERR)),
 /*30*/	FLAG_ENTRY("TxSdma14DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA14_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA14_DISALLOWED_PACKET_ERR)),
 /*31*/	FLAG_ENTRY("TxSdma15DisallowedPacketErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA15_DISALLOWED_PACKET_ERR_SMASK),
+		SEES(TX_SDMA15_DISALLOWED_PACKET_ERR)),
 /*32*/	FLAG_ENTRY("TxLaunchFifo0UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO0_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO0_UNC_OR_PARITY_ERR)),
 /*33*/	FLAG_ENTRY("TxLaunchFifo1UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO1_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO1_UNC_OR_PARITY_ERR)),
 /*34*/	FLAG_ENTRY("TxLaunchFifo2UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO2_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO2_UNC_OR_PARITY_ERR)),
 /*35*/	FLAG_ENTRY("TxLaunchFifo3UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO3_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO3_UNC_OR_PARITY_ERR)),
 /*36*/	FLAG_ENTRY("TxLaunchFifo4UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO4_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO4_UNC_OR_PARITY_ERR)),
 /*37*/	FLAG_ENTRY("TxLaunchFifo5UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO5_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO5_UNC_OR_PARITY_ERR)),
 /*38*/	FLAG_ENTRY("TxLaunchFifo6UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO6_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO6_UNC_OR_PARITY_ERR)),
 /*39*/	FLAG_ENTRY("TxLaunchFifo7UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO7_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO7_UNC_OR_PARITY_ERR)),
 /*40*/	FLAG_ENTRY("TxLaunchFifo8UncOrParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO8_UNC_OR_PARITY_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO8_UNC_OR_PARITY_ERR)),
 /*41*/	FLAG_ENTRY("TxCreditReturnParityErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_PARITY_ERR_SMASK),
+		SEES(TX_CREDIT_RETURN_PARITY_ERR)),
 /*42*/	FLAG_ENTRY("TxSbHdrUncErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SB_HDR_UNC_ERR_SMASK),
+		SEES(TX_SB_HDR_UNC_ERR)),
 /*43*/	FLAG_ENTRY("TxReadSdmaMemoryUncErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_SDMA_MEMORY_UNC_ERR_SMASK),
+		SEES(TX_READ_SDMA_MEMORY_UNC_ERR)),
 /*44*/	FLAG_ENTRY("TxReadPioMemoryUncErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_PIO_MEMORY_UNC_ERR_SMASK),
+		SEES(TX_READ_PIO_MEMORY_UNC_ERR)),
 /*45*/	FLAG_ENTRY("TxEgressFifoUncErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_EGRESS_FIFO_UNC_ERR_SMASK),
+		SEES(TX_EGRESS_FIFO_UNC_ERR)),
 /*46*/	FLAG_ENTRY("TxHcrcInsertionErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_HCRC_INSERTION_ERR_SMASK),
+		SEES(TX_HCRC_INSERTION_ERR)),
 /*47*/	FLAG_ENTRY("TxCreditReturnVLErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_VL_ERR_SMASK),
+		SEES(TX_CREDIT_RETURN_VL_ERR)),
 /*48*/	FLAG_ENTRY("TxLaunchFifo0CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO0_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO0_COR_ERR)),
 /*49*/	FLAG_ENTRY("TxLaunchFifo1CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO1_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO1_COR_ERR)),
 /*50*/	FLAG_ENTRY("TxLaunchFifo2CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO2_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO2_COR_ERR)),
 /*51*/	FLAG_ENTRY("TxLaunchFifo3CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO3_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO3_COR_ERR)),
 /*52*/	FLAG_ENTRY("TxLaunchFifo4CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO4_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO4_COR_ERR)),
 /*53*/	FLAG_ENTRY("TxLaunchFifo5CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO5_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO5_COR_ERR)),
 /*54*/	FLAG_ENTRY("TxLaunchFifo6CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO6_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO6_COR_ERR)),
 /*55*/	FLAG_ENTRY("TxLaunchFifo7CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO7_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO7_COR_ERR)),
 /*56*/	FLAG_ENTRY("TxLaunchFifo8CorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_LAUNCH_FIFO8_COR_ERR_SMASK),
+		SEES(TX_LAUNCH_FIFO8_COR_ERR)),
 /*57*/	FLAG_ENTRY("TxCreditOverrunErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_OVERRUN_ERR_SMASK),
+		SEES(TX_CREDIT_OVERRUN_ERR)),
 /*58*/	FLAG_ENTRY("TxSbHdrCorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_SB_HDR_COR_ERR_SMASK),
+		SEES(TX_SB_HDR_COR_ERR)),
 /*59*/	FLAG_ENTRY("TxReadSdmaMemoryCorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_SDMA_MEMORY_COR_ERR_SMASK),
+		SEES(TX_READ_SDMA_MEMORY_COR_ERR)),
 /*60*/	FLAG_ENTRY("TxReadPioMemoryCorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_PIO_MEMORY_COR_ERR_SMASK),
+		SEES(TX_READ_PIO_MEMORY_COR_ERR)),
 /*61*/	FLAG_ENTRY("TxEgressFifoCorErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_EGRESS_FIFO_COR_ERR_SMASK),
+		SEES(TX_EGRESS_FIFO_COR_ERR)),
 /*62*/	FLAG_ENTRY("TxReadSdmaMemoryCsrUncErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_SDMA_MEMORY_CSR_UNC_ERR_SMASK),
+		SEES(TX_READ_SDMA_MEMORY_CSR_UNC_ERR)),
 /*63*/	FLAG_ENTRY("TxReadPioMemoryCsrUncErr",
 		0,
-		WFR_SEND_EGRESS_ERR_STATUS_TX_READ_PIO_MEMORY_CSR_UNC_ERR_SMASK),
+		SEES(TX_READ_PIO_MEMORY_CSR_UNC_ERR)),
+};
+
+/*
+ * TXE Send error flags
+ */
+static struct flag_table send_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("SDmaRpyTagErr",
+		WFR_SEND_ERR_STATUS_SEND_CSR_PARITY_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("SendCsrReadBadAddrErr",
+		WFR_SEND_ERR_STATUS_SEND_CSR_READ_BAD_ADDR_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("SendCsrWriteBadAddrErr",
+		WFR_SEND_ERR_STATUS_SEND_CSR_WRITE_BAD_ADDR_ERR_SMASK)
 };
 
 /*
@@ -662,6 +681,140 @@ static struct flag_table sc_err_status_flags[] = {
 		SEC_WRITE_DROPPED | SEC_SC_HALTED,
 		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_OUT_OF_BOUNDS_ERR_SMASK),
 /* 5-63 reserved*/
+};
+
+/*
+ * RXE Receive Error flags
+ */
+static struct flag_table rxe_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("RxDmaCsrCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_CSR_COR_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("RxDcIntfParityErr",
+		WFR_RCV_ERR_STATUS_RX_DC_INTF_PARITY_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("RxRcvHdrUncErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_HDR_UNC_ERR_SMASK),
+/* 3*/	FLAG_ENTRY0("RxRcvHdrCorErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_HDR_COR_ERR_SMASK),
+/* 4*/	FLAG_ENTRY0("RxRcvDataUncErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_DATA_UNC_ERR_SMASK),
+/* 5*/	FLAG_ENTRY0("RxRcvDataCorErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_DATA_COR_ERR_SMASK),
+/* 6*/	FLAG_ENTRY0("RxRcvQpMapTableUncErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_QP_MAP_TABLE_UNC_ERR_SMASK),
+/* 7*/	FLAG_ENTRY0("RxRcvQpMapTableCorErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_QP_MAP_TABLE_COR_ERR_SMASK),
+/* 8*/	FLAG_ENTRY0("RxRcvCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_CSR_PARITY_ERR_SMASK),
+/* 9*/	FLAG_ENTRY0("RxDcSopEopParityErr",
+		WFR_RCV_ERR_STATUS_RX_DC_SOP_EOP_PARITY_ERR_SMASK),
+/*10*/	FLAG_ENTRY0("RxDmaFlagUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_FLAG_UNC_ERR_SMASK),
+/*11*/	FLAG_ENTRY0("RxDmaFlagCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_FLAG_COR_ERR_SMASK),
+/*12*/	FLAG_ENTRY0("RxRcvFsmEncodingErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_FSM_ENCODING_ERR_SMASK),
+/*13*/	FLAG_ENTRY0("RxRbufFreeListUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FREE_LIST_UNC_ERR_SMASK),
+/*14*/	FLAG_ENTRY0("RxRbufFreeListCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FREE_LIST_COR_ERR_SMASK),
+/*15*/	FLAG_ENTRY0("RxRbufLookupDesRegUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_ERR_SMASK),
+/*16*/	FLAG_ENTRY0("RxRbufLookupDesRegUncCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_COR_ERR_SMASK),
+/*17*/	FLAG_ENTRY0("RxRbufLookupDesUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_UNC_ERR_SMASK),
+/*18*/	FLAG_ENTRY0("RxRbufLookupDesCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_COR_ERR_SMASK),
+/*19*/	FLAG_ENTRY0("RxRbufBlockListReadUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_BLOCK_LIST_READ_UNC_ERR_SMASK),
+/*20*/	FLAG_ENTRY0("RxRbufBlockListReadCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_BLOCK_LIST_READ_COR_ERR_SMASK),
+/*21*/	FLAG_ENTRY0("RxRbufCsrQHeadBufNumParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHEAD_BUF_NUM_PARITY_ERR_SMASK),
+/*22*/	FLAG_ENTRY0("RxRbufCsrQEntCntParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QENT_CNT_PARITY_ERR_SMASK),
+/*23*/	FLAG_ENTRY0("RxRbufCsrQNextBufParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNEXT_BUF_PARITY_ERR_SMASK),
+/*24*/	FLAG_ENTRY0("RxRbufCsrQVldBitParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QVLD_BIT_PARITY_ERR_SMASK),
+/*25*/	FLAG_ENTRY0("RxRbufCsrQHdPtrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHD_PTR_PARITY_ERR_SMASK),
+/*26*/	FLAG_ENTRY0("RxRbufCsrQTlPtrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QTL_PTR_PARITY_ERR_SMASK),
+/*27*/	FLAG_ENTRY0("RxRbufCsrQNumOfPktParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNUM_OF_PKT_PARITY_ERR_SMASK),
+/*28*/	FLAG_ENTRY0("RxRbufCsrQEOPDWParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QEOPDW_PARITY_ERR_SMASK),
+/*29*/	FLAG_ENTRY0("RxRbufCtxIdParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CTX_ID_PARITY_ERR_SMASK),
+/*30*/	FLAG_ENTRY0("RxRBufBadLookupErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_BAD_LOOKUP_ERR_SMASK),
+/*31*/	FLAG_ENTRY0("RxRbufFullErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FULL_ERR_SMASK),
+/*32*/	FLAG_ENTRY0("RxRbufEmptyErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_EMPTY_ERR_SMASK),
+/*33*/	FLAG_ENTRY0("RxRbufFlRdAddrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_RD_ADDR_PARITY_ERR_SMASK),
+/*34*/	FLAG_ENTRY0("RxRbufFlWrAddrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_WR_ADDR_PARITY_ERR_SMASK),
+/*35*/	FLAG_ENTRY0("RxRbufFlInitdoneParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_INITDONE_PARITY_ERR_SMASK),
+/*36*/	FLAG_ENTRY0("RxRbufFlInitWrAddrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_INIT_WR_ADDR_PARITY_ERR_SMASK),
+/*37*/	FLAG_ENTRY0("RxRbufNextFreeBufUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_NEXT_FREE_BUF_UNC_ERR_SMASK),
+/*38*/	FLAG_ENTRY0("RxRbufNextFreeBufCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_NEXT_FREE_BUF_COR_ERR_SMASK),
+/*39*/	FLAG_ENTRY0("RxLookupDesPart1UncErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_ERR_SMASK),
+/*40*/	FLAG_ENTRY0("RxLookupDesPart1UncCorErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_COR_ERR_SMASK),
+/*41*/	FLAG_ENTRY0("RxLookupDesPart2ParityErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART2_PARITY_ERR_SMASK),
+/*42*/	FLAG_ENTRY0("RxLookupRcvArrayUncErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_RCV_ARRAY_UNC_ERR_SMASK),
+/*43*/	FLAG_ENTRY0("RxLookupRcvArrayCorErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_RCV_ARRAY_COR_ERR_SMASK),
+/*44*/	FLAG_ENTRY0("RxLookupCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_CSR_PARITY_ERR_SMASK),
+/*45*/	FLAG_ENTRY0("RxHqIntrCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_HQ_INTR_CSR_PARITY_ERR_SMASK),
+/*46*/	FLAG_ENTRY0("RxHqIntrFsmErr",
+		WFR_RCV_ERR_STATUS_RX_HQ_INTR_FSM_ERR_SMASK),
+/*47*/	FLAG_ENTRY0("RxRbufDescPart1UncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_UNC_ERR_SMASK),
+/*48*/	FLAG_ENTRY0("RxRbufDescPart1CorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_COR_ERR_SMASK),
+/*49*/	FLAG_ENTRY0("RxRbufDescPart2UncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART2_UNC_ERR_SMASK),
+/*50*/	FLAG_ENTRY0("RxRbufDescPart2CorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART2_COR_ERR_SMASK),
+/*51*/	FLAG_ENTRY0("RxDmaHdrFifoRdUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK),
+/*52*/	FLAG_ENTRY0("RxDmaHdrFifoRdCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_COR_ERR_SMASK),
+/*53*/	FLAG_ENTRY0("RxDmaDataFifoRdUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK),
+/*54*/	FLAG_ENTRY0("RxDmaDataFifoRdCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_COR_ERR_SMASK),
+/*55*/	FLAG_ENTRY0("RxRbufDataUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DATA_UNC_ERR_SMASK),
+/*56*/	FLAG_ENTRY0("RxRbufDataCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DATA_COR_ERR_SMASK),
+/*57*/	FLAG_ENTRY0("RxDmaCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_CSR_PARITY_ERR_SMASK),
+/*58*/	FLAG_ENTRY0("RxDmaEqFsmEncodingErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_EQ_FSM_ENCODING_ERR_SMASK),
+/*59*/	FLAG_ENTRY0("RxDmaDqFsmEncodingErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_DQ_FSM_ENCODING_ERR_SMASK),
+/*60*/	FLAG_ENTRY0("RxDmaCsrUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK),
+/*61*/	FLAG_ENTRY0("RxCsrReadBadAddrErr",
+		WFR_RCV_ERR_STATUS_RX_CSR_READ_BAD_ADDR_ERR_SMASK),
+/*62*/	FLAG_ENTRY0("RxCsrWriteBadAddrErr",
+		WFR_RCV_ERR_STATUS_RX_CSR_WRITE_BAD_ADDR_ERR_SMASK),
+/*63*/	FLAG_ENTRY0("RxCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK),
 };
 
 #if 0 /* no users at present */
@@ -1608,16 +1761,36 @@ static char *cce_err_status_string(char *buf, int buf_len, u64 flags)
 			cce_err_status_flags, ARRAY_SIZE(cce_err_status_flags));
 }
 
+static char *rxe_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			rxe_err_status_flags, ARRAY_SIZE(rxe_err_status_flags));
+}
+
 static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags,
 			pio_err_status_flags, ARRAY_SIZE(pio_err_status_flags));
 }
 
+static char *sdma_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			sdma_err_status_flags,
+			ARRAY_SIZE(sdma_err_status_flags));
+}
+
 static char *egress_err_status_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags,
 		egress_err_status_flags, ARRAY_SIZE(egress_err_status_flags));
+}
+
+static char *send_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			send_err_status_flags,
+			ARRAY_SIZE(send_err_status_flags));
 }
 
 static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -1641,10 +1814,12 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 }
 
-/* TODO */
 static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	dd_dev_info(dd, "Receive Error: 0x%llx (unhandled)\n", reg);
+	char buf[96];
+
+	dd_dev_info(dd, "Receive Error: %s\n",
+		rxe_err_status_string(buf, sizeof(buf), reg));
 }
 
 /* TODO */
@@ -1653,19 +1828,20 @@ static void handle_misc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	dd_dev_info(dd, "Misc Error: 0x%llx (unhandled)\n", reg);
 }
 
-/* TODO */
 static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	char buf[96];
 
-	dd_dev_info(dd, "PIO Error: %s (unhandled)\n",
+	dd_dev_info(dd, "PIO Error: %s\n",
 		pio_err_status_string(buf, sizeof(buf), reg));
 }
 
-/* TODO */
 static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	dd_dev_info(dd, "SDMA Error: 0x%llx (unhandled)\n", reg);
+	char buf[96];
+
+	dd_dev_info(dd, "SDMA Error: %s\n",
+		sdma_err_status_string(buf, sizeof(buf), reg));
 }
 
 static void count_port_inactive(struct hfi_devdata *dd)
@@ -1704,8 +1880,8 @@ static void count_disallowed_pkt(struct hfi_devdata *dd)
  */
 static inline int port_inactive_err(u64 posn)
 {
-	return (posn >= WFR_SEND_EGRESS_ERR_STATUS_TX_LINKDOWN_ERR_SHIFT &&
-		posn <= WFR_SEND_EGRESS_ERR_MASK_TX_INCORRECT_LINK_STATE_ERR_SHIFT);
+	return (posn >= SEES(TX_LINKDOWN_ERR) &&
+		posn <= SEES(TX_INCORRECT_LINK_STATE_ERR));
 }
 
 /*
@@ -1714,8 +1890,8 @@ static inline int port_inactive_err(u64 posn)
  */
 static inline int disallowed_pkt_err(u64 posn)
 {
-	return (posn >=  WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA0_DISALLOWED_PACKET_ERR_SHIFT &&
-		posn <= WFR_SEND_EGRESS_ERR_STATUS_TX_SDMA15_DISALLOWED_PACKET_ERR_SHIFT);
+	return (posn >= SEES(TX_SDMA0_DISALLOWED_PACKET_ERR) &&
+		posn <= SEES(TX_SDMA15_DISALLOWED_PACKET_ERR));
 }
 
 static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -1744,14 +1920,17 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	reg &= ~handled;
 
 	if (reg)
-		dd_dev_info(dd, "Egress Error: %s (unhandled)\n",
+		dd_dev_info(dd, "Egress Error: %s\n",
 			egress_err_status_string(buf, sizeof(buf), reg));
 }
 
-/* TODO */
 static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	dd_dev_info(dd, "Send Error: 0x%llx (unhandled)\n", reg);
+	char buf[96];
+
+	dd_dev_info(dd, "Send Error: %s\n",
+		send_err_status_string(buf, sizeof(buf), reg));
+
 }
 
 /*
@@ -1833,7 +2012,7 @@ static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
 	}
 }
 
-static char *send_err_status_string(char *buf, int buf_len, u64 flags)
+static char *send_context_err_status_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags,
 			sc_err_status_flags, ARRAY_SIZE(sc_err_status_flags));
@@ -1883,7 +2062,7 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
 	status = read_kctxt_csr(dd, context, WFR_SEND_CTXT_ERR_STATUS);
 
 	dd_dev_info(dd, "Send Context %u Error: %s\n", context,
-		send_err_status_string(flags, sizeof(flags), status));
+		send_context_err_status_string(flags, sizeof(flags), status));
 
 	if (status & WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK)
 		count_disallowed_pkt(dd);
