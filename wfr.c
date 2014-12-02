@@ -2023,6 +2023,10 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 	if (reg & ALL_TXE_EGRESS_FREEZE_ERR)
 		start_freeze_handling(dd->pport);
+	if (is_a0(dd) && (reg &
+		    WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_VL_ERR_SMASK)
+		    && (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR))
+		start_freeze_handling(dd->pport);
 
 	while (reg_copy) {
 		int posn = fls(reg_copy);
