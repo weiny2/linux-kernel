@@ -137,20 +137,11 @@ def main():
     RegLib.test_log(5, "host1 parms: %s" %host1_parms)
     RegLib.test_log(5, "host2 parms: %s" %host2_parms)
       
-    opensm_host = None
     ifs_fm_host = None
     
     if sm != "none":
-        RegLib.test_log(0, "Trying to determine sm")
-
+        RegLib.test_log(0, "Trying to determine which node the fm is running on")
         for host in host1, host2:
-            active = is_sm_active(host, "opensm")
-            if active == 0:
-                if opensm_host == None:
-                    opensm_host = host
-                else:
-                    RegLib.test_fail("OpenSM detected on both nodes")
-
             active = is_sm_active(host, "ifs_fm")
             if active == 0:
                 if ifs_fm_host == None:
@@ -158,30 +149,19 @@ def main():
                 else:
                     RegLib.test_fail("ifs_fm detected on both nodes")
 
-        if opensm_host != None and ifs_fm_host != None:
-            RegLib.test_fail("Both ifs_fm and open_sm detected")
-        
-        if opensm_host == None and ifs_fm_host == None:
-            RegLib.test_log(0, "Neither ifs_fm nor open sm detected will try after loading driver")
-
-        if opensm_host != None:
-            RegLib.test_log(0, "Using %s as the open sm host" % opensm_host.get_name())
-
         if ifs_fm_host != None:
             RegLib.test_log(0, "Using %s as the ifs_fm host" % ifs_fm_host.get_name())
 
-    # Make sure no fm/sm is running now
-    RegLib.test_log(0, "Stopping all sm on all hosts")
-    for host in host1, host2:
-        for my_sm in "opensm", "ifs_fm":
-            stop_sm(host, my_sm)
-            active = is_sm_active(host, my_sm)
+            # Make sure no fm is running now
+            RegLib.test_log(0, "Stopping fm on all hosts")
+            stop_sm(ifs_fm_host, "ifs_fm")
+            active = is_sm_active(host, "ifs_fm")
             if active == 0:
-                RegLib.test_fail("%s is still running on host" % my_sm)
-            RegLib.test_log(0, "%s not found to be running" % my_sm)
+                RegLib.test_fail("fm is still running on host")
+            RegLib.test_log(0, "fm not found to be running")
 
-    RegLib.test_log(0, "Waiting 15 seconds for ifs_fm to quiesce")
-    time.sleep(15)
+            #RegLib.test_log(0, "Waiting 15 seconds for ifs_fm to quiesce")
+            #time.sleep(15)
 
     # Go ahead and get the driver loaded or reloaded on both hosts
     for host in host1,host2:
@@ -193,8 +173,8 @@ def main():
             if removed == False:
                 RegLib.test_fail(name + " Could not remove HFI driver")
         
-        RegLib.test_log(0, "Sleeping 10 seconds after removing driver to let things settle")
-        time.sleep(10)
+        #RegLib.test_log(0, "Sleeping 10 seconds after removing driver to let things settle")
+        #time.sleep(10)
 
         RegLib.test_log(0, name + " Loading Driver")
         if host == host1:
@@ -208,65 +188,19 @@ def main():
         else:
             RegLib.test_fail(name + " Could not load driver")
 
-        RegLib.test_log(0, "Sleeping 10 seconds after loading driver to let things settle")
-        time.sleep(10)
+        #RegLib.test_log(0, "Sleeping 10 seconds after loading driver to let things settle")
+        #time.sleep(10)
 
     if sm == "none":
         RegLib.test_pass("Driver loaded sm/fm not running")
 
-    if sm == "ifs_fm":
-        if ifs_fm_host == None:
-            ifs_fm_host = host1
-        RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
-        start_sm(ifs_fm_host, "ifs_fm")
-        active = is_sm_active(ifs_fm_host, "ifs_fm")
-        if active != 0:
-            RegLib.test_fail("Could not start ifs_fm")
-
-    if sm == "opensm":
-        if opensm_host == None:
-            opensm_host = host1
-        RegLib.test_log(0, "Starting opensm on %s" % opensm_host.get_name())
-        start_sm(opensm_host, "opensm")
-        active = is_sm_active(opensm_host, "opensm")
-        if active != 0:
-            RegLib.test_fail("Could not start opensm")
-
-    if sm == "detect":
-        RegLib.test_log(0, "Determining where to start SM")
-        if opensm_host != None:
-            RegLib.test_log(0, "Starting opensm on %s" % opensm_host.get_name())
-            start_sm(opensm_host, "opensm")
-            active = is_sm_active(opensm_host, "opensm")
-            if active == 0:
-                RegLib.test_log(0, "opensm running on %s" % opensm_host.get_name())
-            else:
-                RegLib.test_fail("Could not start opensm")
-        elif ifs_fm_host != None:
-            RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
-            start_sm(ifs_fm_host, "ifs_fm")
-            active = is_sm_active(ifs_fm_host, "ifs_fm")
-            if active == 0:
-                RegLib.test_log(0, "ifs_fm running on %s" % ifs_fm_host.get_name())
-            else:
-                RegLib.test_fail("Could not start ifs_fm")
-        else:
-            ifs_fm_host = host1
-            RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
-            start_sm(ifs_fm_host, "ifs_fm")
-            active = is_sm_active(ifs_fm_host, "ifs_fm")
-            if active == 0:
-                RegLib.test_log(0, "ifs_fm running on %s" % ifs_fm_host.get_name())
-            else:
-                opensm_host = host1
-                ifs_fm_host = None
-                RegLib.test_log(0, "Starting opensm on %s" % opensm_host.get_name())
-                start_sm(opensm_host, "opensm")
-                active = is_sm_active(opensm_host, "opensm")
-                if active == 0:
-                    RegLib.test_log(0, "opensm running on %s" % opensm_host.get_name())
-                else:
-                    RegLib.test_fail("Could not start any sm")
+    if ifs_fm_host == None: #chose host1 by default
+        ifs_fm_host = host1
+    RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
+    start_sm(ifs_fm_host, "ifs_fm")
+    active = is_sm_active(ifs_fm_host, "ifs_fm")
+    if active != 0:
+        RegLib.test_fail("Could not start ifs_fm")
 
     # Driver loaded and sm ready now wait till links are active on both
     # nodes.
