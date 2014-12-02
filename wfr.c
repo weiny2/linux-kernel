@@ -3574,7 +3574,7 @@ static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
 #endif
 
 	if (likely(what < 3 && which < dd->num_sdma)) {
-		sdma_engine_interrupt(&dd->per_sdma[which], 1ull << what);
+		sdma_engine_interrupt(&dd->per_sdma[which], 1ull << source);
 	} else {
 		/* should not happen */
 		dd_dev_err(dd, "Invalid SDMA interrupt 0x%x\n", source);
