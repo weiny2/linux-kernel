@@ -440,6 +440,7 @@ enum {
 /* timeouts */
 #define LINK_RESTART_DELAY 10000	/* link restart delay, in ms */
 #define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
+#define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
 
 /* cclock tick time, in picoseconds per tick: 1/speed * 10^12  */
 #define ASIC_CCLOCK_PS  1242	/* 805 MHz */
@@ -554,6 +555,7 @@ int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
 void check_fifos(unsigned long opaque);
 int set_link_state(struct qib_pportdata *, u32 state);
 void handle_verify_cap(struct work_struct *work);
+void handle_freeze(struct work_struct *work);
 void handle_link_up(struct work_struct *work);
 void handle_link_down(struct work_struct *work);
 void handle_sma_message(struct work_struct *work);

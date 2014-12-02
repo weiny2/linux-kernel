@@ -245,6 +245,12 @@ struct flag_table {
 	((u64)(e15val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e15##_SHIFT) \
 )
 
+/* all CceStatus sub-block freeze bits */
+#define ALL_FROZE (WFR_CCE_STATUS_SDMA_FROZE_SMASK \
+			| WFR_CCE_STATUS_RXE_FROZE_SMASK \
+			| WFR_CCE_STATUS_TXE_FROZE_SMASK \
+			| WFR_CCE_STATUS_TXE_PIO_FROZE_SMASK)
+
 /*
  * CCE Error flags.
  */
@@ -444,6 +450,38 @@ static struct flag_table pio_err_status_flags[] = {
 /*36-63 reserved*/
 };
 
+/* TXE PIO errors that cause an SPC freeze */
+#define ALL_PIO_FREEZE_ERR \
+	(WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_ADDR_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_CSR_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO0_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO1_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PCC_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PEC_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTL_CRREL_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTRL_CRREL_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SM_PKT_RESET_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_UNC_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_UNC_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_CREDIT_RET_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_PBL_FIFO_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_SM_OR_ARB_SM_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_UNC_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VLF_VL_LEN_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VLF_SOP_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VL_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_BQC_MEM_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_SOP_LEN_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_CURRENT_FREE_CNT_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_LAST_RETURNED_CNT_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PCC_SOP_HEAD_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PEC_SOP_HEAD_PARITY_ERR_SMASK)
+
 /*
  * TXE SDMA Error flags
  */
@@ -458,6 +496,12 @@ static struct flag_table sdma_err_status_flags[] = {
 		WFR_SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_COR_ERR_SMASK),
 /*04-63 reserved*/
 };
+
+/* TXE SDMA errors that cause an SPC freeze */
+#define ALL_SDMA_FREEZE_ERR  \
+		(WFR_SEND_DMA_ERR_STATUS_SDMA_RPY_TAG_ERR_SMASK \
+		| WFR_SEND_DMA_ERR_STATUS_SDMA_CSR_PARITY_ERR_SMASK \
+		| WFR_SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_UNC_ERR_SMASK)
 
 /*
  * TXE Egress Error flags and consequences
@@ -649,6 +693,26 @@ static struct flag_table egress_err_status_flags[] = {
 		SEES(TX_READ_PIO_MEMORY_CSR_UNC_ERR)),
 };
 
+/* TXE Egress errors that cause an SPC freeze */
+#define ALL_TXE_EGRESS_FREEZE_ERR \
+	(SEES(TX_EGRESS_FIFO_UNDERRUN_OR_PARITY_ERR) \
+	| SEES(TX_PIO_LAUNCH_INTF_PARITY_ERR) \
+	| SEES(TX_SDMA_LAUNCH_INTF_PARITY_ERR) \
+	| SEES(TX_SBRD_CTL_STATE_MACHINE_PARITY_ERR) \
+	| SEES(TX_LAUNCH_CSR_PARITY_ERR) \
+	| SEES(TX_SBRD_CTL_CSR_PARITY_ERR) \
+	| SEES(TX_CONFIG_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO0_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO1_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO2_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO3_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO4_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO5_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO6_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO7_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO8_UNC_OR_PARITY_ERR) \
+	| SEES(TX_CREDIT_RETURN_PARITY_ERR))
+
 /*
  * TXE Send error flags
  */
@@ -816,6 +880,53 @@ static struct flag_table rxe_err_status_flags[] = {
 /*63*/	FLAG_ENTRY0("RxCsrParityErr",
 		WFR_RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK),
 };
+
+/* RXE errors that will trigger an SPC freeze */
+#define ALL_RXE_FREEZE_ERR  \
+	(WFR_RCV_ERR_STATUS_RX_RCV_QP_MAP_TABLE_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RCV_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_FLAG_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RCV_FSM_ENCODING_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FREE_LIST_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_COR_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_BLOCK_LIST_READ_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHEAD_BUF_NUM_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QENT_CNT_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNEXT_BUF_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QVLD_BIT_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHD_PTR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QTL_PTR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNUM_OF_PKT_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QEOPDW_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CTX_ID_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_BAD_LOOKUP_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FULL_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_EMPTY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_RD_ADDR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_WR_ADDR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_INITDONE_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_INIT_WR_ADDR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_NEXT_FREE_BUF_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_COR_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART2_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_RCV_ARRAY_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_HQ_INTR_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_HQ_INTR_FSM_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_COR_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART2_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DATA_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_EQ_FSM_ENCODING_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_DQ_FSM_ENCODING_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK)
 
 #if 0 /* no users at present */
 /*
@@ -1029,6 +1140,8 @@ static const char *link_state_name(u32 state);
 static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 				u64 *out_data);
 static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
+static void start_freeze_handling(struct qib_pportdata *ppd);
+static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -1820,6 +1933,9 @@ static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 	dd_dev_info(dd, "Receive Error: %s\n",
 		rxe_err_status_string(buf, sizeof(buf), reg));
+
+	if (reg & ALL_RXE_FREEZE_ERR)
+		start_freeze_handling(dd->pport);
 }
 
 /* TODO */
@@ -1834,6 +1950,9 @@ static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 	dd_dev_info(dd, "PIO Error: %s\n",
 		pio_err_status_string(buf, sizeof(buf), reg));
+
+	if (reg & ALL_PIO_FREEZE_ERR)
+		start_freeze_handling(dd->pport);
 }
 
 static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -1842,6 +1961,9 @@ static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 	dd_dev_info(dd, "SDMA Error: %s\n",
 		sdma_err_status_string(buf, sizeof(buf), reg));
+
+	if (reg & ALL_SDMA_FREEZE_ERR)
+		start_freeze_handling(dd->pport);
 }
 
 static void count_port_inactive(struct hfi_devdata *dd)
@@ -1898,6 +2020,9 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	u64 reg_copy = reg, handled = 0;
 	char buf[96];
+
+	if (reg & ALL_TXE_EGRESS_FREEZE_ERR)
+		start_freeze_handling(dd->pport);
 
 	while (reg_copy) {
 		int posn = fls(reg_copy);
@@ -2586,6 +2711,160 @@ void handle_sma_message(struct work_struct *work)
 			__func__, msg);
 		break;
 	}
+}
+
+/*
+ * Called from all interrupt handlers to start handling an SPC freeze.
+ */
+static void start_freeze_handling(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	struct send_context *sc;
+	int i;
+
+	/* enter frozen mode */
+	dd->flags |= HFI_FROZEN;
+
+	/* notify all SDMA engines that they are going into a freeze */
+	sdma_freeze_notify(dd);
+
+	/* do halt pre-handling on all enabled send contexts */
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		sc = dd->send_contexts[i].sc;
+		if (sc && (sc->flags & SCF_ENABLED))
+			sc_stop(sc, SCF_FROZEN);
+	}
+
+	/* TODO: mark/notify all user rcv contexts */
+
+	/* queue non-interrupt handler */
+	queue_work(ppd->qib_wq, &ppd->freeze_work);
+}
+
+/*
+ * Wait until all 4 sub-blocks indicate that they have frozen or unfrozen,
+ * depending on the "freeze" parameter.
+ *
+ * No need to return an error if it times out, our only option
+ * is to proceed anyway.
+ */
+static void wait_for_freeze_status(struct hfi_devdata *dd, int freeze)
+{
+	unsigned long timeout;
+	u64 reg;
+
+	timeout = jiffies + msecs_to_jiffies(FREEZE_STATUS_TIMEOUT);
+	while (1) {
+		reg = read_csr(dd, WFR_CCE_STATUS);
+		if (freeze) {
+			/* waiting until all indicators are set */
+			if ((reg & ALL_FROZE) == ALL_FROZE)
+				return;	/* all done */
+		} else {
+			/* waiting until all indicators are clear */
+			if ((reg & ALL_FROZE) == 0)
+				return; /* all done */
+		}
+
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"Time out waiting for SPC %sfreeze, continuing",
+				freeze ? "" : "un");
+			return;
+		}
+		usleep_range(80, 120);
+	}
+}
+
+/*
+ * Do all freeze handling for the RXE block.
+ */
+static void rxe_freeze(struct hfi_devdata *dd)
+{
+	u64 reg;
+	int i;
+
+	/* disable port */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg &= ~WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+
+	/* disable all receive contexts */
+	for (i = 0; i < dd->num_rcv_contexts; i++)
+		rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS, i);
+}
+
+/*
+ * Unfreeze handling for the RXE block - kernel contexts only.
+ * This will also enable the port.  User contexts will do unfreeze
+ * handling on a per-context basis as they call into the driver.
+ *
+ */
+static void rxe_kernel_unfreeze(struct hfi_devdata *dd)
+{
+	u64 reg;
+	int i;
+
+	/* enable all kernel contexts */
+	for (i = 0; i < dd->n_krcv_queues; i++)
+		rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB, i);
+
+	/* enable port */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+}
+
+/*
+ * Non-interrupt SPC freeze handling.
+ *
+ * This is a work-queue function outside of the triggering interrupt.
+ */
+void handle_freeze(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								freeze_work);
+	struct hfi_devdata *dd = ppd->dd;
+
+	/* wait for freeze indicators on all affected blocks */
+	dd_dev_info(dd, "Entering SPC freeze\n");
+	wait_for_freeze_status(dd, 1);
+
+	/* SPC is now frozen */
+
+	/* do send PIO freeze steps */
+	pio_freeze(dd);
+
+	/* do send DMA freeze steps - nothing to do */
+
+	/* do send egress freeze steps - nothing to do */
+
+	/* do receive freeze steps */
+	rxe_freeze(dd);
+
+	/*
+	 * Unfreeze the hardware - clear the freeze, wait for each
+	 * block's frozen bit to clear, then clear the frozen flag.
+	 */
+	write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_UNFREEZE_SMASK);
+	wait_for_freeze_status(dd, 0);
+	dd->flags &= ~HFI_FROZEN;
+
+	/* SPC is now unfrozen */
+
+	/* do send PIO unfreeze steps for kernel contexts */
+	pio_kernel_unfreeze(dd);
+
+	/* do send DMA unfreeze steps */
+	sdma_unfreeze(dd);
+
+	/* do send egress unfreeze steps - nothing to do */
+
+	/* do receive unfreeze steps for kernel contexts */
+	rxe_kernel_unfreeze(dd);
+
+	/* no longer frozen */
+	dd_dev_err(dd, "Exiting SPC freeze\n");
 }
 
 /*
@@ -5822,6 +6101,18 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 					rcd->rcvhdrqtailaddr_phys);
 		}
 		rcd->seq_cnt = 1;
+
+		/* reset the cached receive header queue head value */
+		rcd->head = 0;
+
+		/*
+		 * Zero the receive header queue so we don't get false
+		 * positives when checking the sequence number.  The
+		 * sequence numbers could land exactly on the same spot.
+		 * E.g. a rcd restart before the receive header wrapped.
+		 */
+		memset(rcd->rcvhdrq, 0, rcd->rcvhdrq_size);
+
 		/* starting timeout */
 		rcd->rcvavail_timeout = dd->rcv_intr_timeout_csr;
 

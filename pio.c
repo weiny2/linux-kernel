@@ -514,6 +514,10 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	u32 context;
 	int ret;
 
+	/* do not allocate while frozen */
+	if (dd->flags & HFI_FROZEN)
+		return NULL;
+
 	sc = kzalloc_node(sizeof(struct send_context), GFP_KERNEL, numa);
 	if (!sc) {
 		dd_dev_err(dd, "Cannot allocate send context structure\n");

@@ -880,33 +880,41 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 {
 	struct qib_ctxtdata *uctxt;
 	unsigned ctxt;
-	int ret = 0;
+	int ret;
+
+	if (dd->flags & HFI_FROZEN) {
+		/*
+		 * Pick an error that is unique from all other errors
+		 * that are returned so the user process knows that
+		 * it tried to allocate while the SPC was frozen.  It
+		 * it should be able to retry with success in a short
+		 * while.
+		 */
+		return -EIO;
+	}
 
 	for (ctxt = dd->first_user_ctxt;
 	     ctxt < dd->num_rcv_contexts && dd->rcd[ctxt]; ctxt++);
-	if (ctxt == dd->num_rcv_contexts) {
-		ret = -EBUSY;
-		goto done;
-	}
+	if (ctxt == dd->num_rcv_contexts)
+		return -EBUSY;
+
 	uctxt = qib_create_ctxtdata(dd->pport, ctxt);
 	if (!uctxt) {
 		dd_dev_err(dd,
 			   "Unable to allocate ctxtdata memory, failing open\n");
-		ret = -ENOMEM;
-		goto done;
+		return -ENOMEM;
 	}
 	/*
 	 * Allocate and enable a PIO send context.
 	 */
 	uctxt->sc = sc_alloc(dd, SC_USER, uctxt->numa_id);
-	if (!uctxt->sc) {
-		ret = -ENOMEM;
-		goto done;
-	}
+	if (!uctxt->sc)
+		return -ENOMEM;
+
 	dbg("allocated send context %d\n", uctxt->sc->context);
 	ret = sc_enable(uctxt->sc);
 	if (ret)
-		goto done;
+		return ret;
 	/*
 	 * Setup shared context resources if the user-level has requested
 	 * shared contexts and this is the 'master' process.
@@ -920,7 +928,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 		 * send context because it will be done during file close
 		 */
 		if (ret)
-			goto done;
+			return ret;
 	}
 	uctxt->userversion = uinfo->userversion;
 	uctxt->pid = current->pid;
@@ -934,9 +942,8 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	qib_stats.sps_ctxts++;
 	dd->freectxts--;
 	ctxt_fp(fp) = uctxt;
-	ret = 0;
-done:
-	return ret;
+
+	return 0;
 }
 
 static int init_subctxts(struct qib_ctxtdata *uctxt,

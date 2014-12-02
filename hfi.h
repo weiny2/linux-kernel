@@ -508,6 +508,7 @@ struct qib_pportdata {
 	struct work_struct link_up_work;
 	struct work_struct link_down_work;
 	struct work_struct sma_message_work;
+	struct work_struct freeze_work;
 	struct delayed_work link_restart_work;
 	/* host link state variables */
 	struct mutex hls_lock;
@@ -1238,7 +1239,7 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 #define QIB_INITTED           0x2 /* chip and driver up and initted */
 #define QIB_DOING_RESET       0x4  /* in the middle of doing chip reset */
 #define QIB_PRESENT           0x8  /* chip accesses can be done */
-/* unused		      0x10 */
+#define HFI_FROZEN	      0x10 /* chip in SPC freeze */
 #define QIB_HAS_THRESH_UPDATE 0x40
 #define QIB_HAS_SDMA_TIMEOUT  0x80
 /* unused		      0x100 */
