@@ -438,8 +438,18 @@ struct qib_sge_state;
 #define QIBPORTCNTR_PSSTART         32U
 #define QIBPORTCNTR_PSSTAT          33U
 
-/* how often we check for packet activity for "power on hours (in seconds) */
-#define ACTIVITY_TIMER 5
+/* how often we check for synthetic counter wrap around */
+#define SYNTH_CNT_TIME 2
+
+/* Counter flags */
+#define CNTR_NORMAL		0x0 /* Normal counters, just read register */
+#define CNTR_SYNTH		0x1 /* Synthetic counters, saturate at all 1s */
+#define CNTR_DISABLED		0x2 /* Disable this counter */
+#define CNTR_32BIT		0x4 /* Simulate 64 bits for this counter */
+#define CNTR_VL			0x8 /* Per VL counter */
+#define CNTR_INVALID_VL		-1  /* Specifies invalid VL */
+#define CNTR_MODE_W		0x0
+#define CNTR_MODE_R		0x1
 
 #define MAX_NAME_SIZE 64
 struct qib_msix_entry {
@@ -602,10 +612,14 @@ struct qib_pportdata {
 
 	/* port relative counter buffer */
 	u64 *cntrs;
+	/* port relatvie synthetic counter buffer */
+	u64 *scntrs;
 	/* we synthesize port_xmit_discards from several egress errors */
 	u64 port_xmit_discards;
 	/* count of 'link_err' interrupts from DC */
-	u32 link_downed;
+	u64 link_downed;
+	/* number of times link retrained successfully */
+	u64 link_up;
 	/* port_ltp_crc_mode is returned in 'portinfo' MADs */
 	u16 port_ltp_crc_mode;
 	/* mgmt_allowed is also returned in 'portinfo' MADs */
@@ -982,31 +996,37 @@ struct hfi_devdata {
 
 	struct rcv_array_data rcv_entries;
 
-	/* timer used for 64 bit counter emulation  */
-	/* See HAS section 13.2 */
-	struct timer_list stats_timer;
+	/*
+	 * 64 bit synthetic counters
+	 */
+	struct timer_list synth_stats_timer;
+
+	/*
+	 * device counters
+	 */
+	char *cntrnames;
+	size_t cntrnameslen;
+	size_t ndevcntrs;
+	u64 *cntrs;
+	u64 *scntrs;
+
+	/*
+	 * remembered values for synthetic counters
+	 */
+	u64 last_tx;
+	u64 last_rx;
+
+	/*
+	 * per-port counters
+	 */
+	size_t nportcntrs;
+	char *portcntrnames;
+	size_t portcntrnameslen;
+
 	/* TODO: temporary code for missing interrupts, HSD 291041 */
 	struct timer_list fifo_timer;	/* interval timer for FIFO check */
 	u32 *last_krcv_fifo_head;	/* last read FIFO head value */
 
-	/*
-	 * per device 64 bit counters
-	 */
-	u64 *cntrs;
-	/*
-	 * per device counters names
-	 */
-	char *cntrnames;
-	size_t cntrnameslen;
-	/*
-	 * number of port counters
-	 */
-	size_t nportcntrs;
-	/*
-	 * port cntr names
-	 */
-	char *portcntrnames;
-	size_t portcntrnameslen;
 	struct hfi_snoop_data hfi_snoop;
 
 	struct err_info_rcvport err_info_rcvport;

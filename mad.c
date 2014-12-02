@@ -671,11 +671,11 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	pi->replay_depth.buffer = 0x80;
 	/* WFR supports a replay buffer 128 LTPs in size */
-	if (acquire_lcb_access(dd) == 0) {
+	if (acquire_lcb_access(dd, 1) == 0) {
 		tmp = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
 		tmp >>= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_SHIFT;
 		tmp &= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_MASK;
-		release_lcb_access(dd);
+		release_lcb_access(dd, 1);
 	} else {
 		/* TODO: return an error? */
 		tmp = 0;
@@ -1976,12 +1976,6 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	int vfi;
 	u64 tmp;
 
-	/* FIXME
-	 * some of the counters are not implemented. if the WFR spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
 	response_data_size = sizeof(struct stl_port_status_rsp) +
 				num_vls * sizeof(struct _vls_pctrs);
 	if (response_data_size > sizeof(pmp->data)) {
@@ -2003,59 +1997,73 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	else
 		rsp->port_num = port;
 
-	rsp->vl_select_mask = cpu_to_be32(vl_select_mask);
-
-	rsp->port_xmit_data =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_DATA_CNT));
-	rsp->port_rcv_data =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_DATA_CNT));
-	rsp->port_xmit_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_PKTS_CNT));
-	rsp->port_rcv_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_PKTS_CNT));
-	rsp->port_multicast_xmit_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_MULTICAST_CNT));
-	rsp->port_multicast_rcv_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT));
-	rsp->port_xmit_wait =
-		cpu_to_be64(read_csr(dd,
-			(SEND_WAIT_CNT * 8 + WFR_SEND_COUNTER_ARRAY64)));
+	/* FIXME
+	 * some of the counters are not implemented. if the WFR spec
+	 * indicates the source of the value (e.g., driver, DC, etc.)
+	 * that's noted. If I don't have a clue how to get the counter,
+	 * a '???' appears.
+	 */
 	/* rsp->sw_port_congestion is 0 for HFIs */
-	rsp->port_rcv_fecn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_FECN_CNT));
-	rsp->port_rcv_becn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_BECN_CNT));
 	/* rsp->port_xmit_time_cong is 0 for HFIs */
 	/* rsp->port_xmit_wasted_bw ??? */
 	/* rsp->port_xmit_wait_data ??? */
-	rsp->port_rcv_bubble =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_BUBBLE_CNT));
-	rsp->port_mark_fecn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));
+	/* FECN marking is only relevant for swich not HFI */
+	/*rsp->port_mark_fecn =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));*/
 	/* rsp->port_rcv_constraint_errors ??? */
 	/* rsp->port_rcv_switch_relay_errors is 0 for HFIs */
-	rsp->port_xmit_discards = cpu_to_be64(ppd->port_xmit_discards);
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
-	rsp->port_rcv_remote_physical_errors =
-		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	if (acquire_lcb_access(dd) == 0) {
-		rsp->local_link_integrity_errors = cpu_to_be64(
-			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
-		release_lcb_access(dd);
-	}
-	rsp->port_rcv_errors =
-		cpu_to_be64(read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT));
-	rsp->excessive_buffer_overruns =
-		cpu_to_be64(read_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
-			    8 * RCV_BUF_OVFL_CNT));
-	rsp->fm_config_errors =
-		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
-	rsp->link_downed = cpu_to_be32(ppd->link_downed);
-	/* rsp->uncorrectable_errors is 8 bits wide, and it pegs at 0xff */
-	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
-	rsp->uncorrectable_errors = tmp < 0x100 ? (tmp & 0xff) : 0xff;
+
+	/* FIXME: Should this be included with the rest of the counters? */
 	rsp->link_quality_indicator = ppd->link_quality;
+
+	rsp->vl_select_mask = cpu_to_be32(vl_select_mask);
+	rsp->port_xmit_data = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_FLITS,
+					  CNTR_INVALID_VL));
+	rsp->port_rcv_data = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FLITS,
+					 CNTR_INVALID_VL));
+	rsp->port_xmit_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_PKTS,
+					  CNTR_INVALID_VL));
+	rsp->port_rcv_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_PKTS,
+					 CNTR_INVALID_VL));
+	rsp->port_multicast_xmit_pkts =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_MC_XMIT_PKTS,
+					CNTR_INVALID_VL));
+	rsp->port_multicast_rcv_pkts =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_MC_RCV_PKTS,
+					  CNTR_INVALID_VL));
+	rsp->port_xmit_wait =
+		cpu_to_be64(read_port_cntr(ppd, C_TX_WAIT, CNTR_INVALID_VL));
+	rsp->port_rcv_fecn =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FCN, CNTR_INVALID_VL));
+	rsp->port_rcv_becn =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN, CNTR_INVALID_VL));
+	rsp->port_rcv_bubble =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL));
+	rsp->port_xmit_discards =
+		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_DSCD,
+					   CNTR_INVALID_VL));
+	rsp->port_rcv_remote_physical_errors =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
+					  CNTR_INVALID_VL));
+	rsp->local_link_integrity_errors =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_LINK_INTEG,
+					  CNTR_INVALID_VL));
+	rsp->port_rcv_errors =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL));
+	rsp->excessive_buffer_overruns =
+		cpu_to_be64(read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL));
+	rsp->fm_config_errors =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_FM_CFG_ERR,
+					  CNTR_INVALID_VL));
+	rsp->link_downed = cpu_to_be32(read_port_cntr(ppd, C_SW_LINK_DOWN,
+					  CNTR_INVALID_VL));
+
+	/* rsp->uncorrectable_errors is 8 bits wide, and it pegs at 0xff */
+	tmp = read_dev_cntr(dd, C_DC_UNC_ERR, CNTR_INVALID_VL);
+	rsp->uncorrectable_errors = tmp < 0x100 ? (tmp & 0xff) : 0xff;
+
 	vlinfo = &(rsp->vls[0]);
 	vfi = 0;
 	/* The vl_select_mask has been checked above, and we know
@@ -2065,43 +2073,50 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	 */
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			 8 * sizeof(vl_select_mask)) {
-		unsigned offset;
 		memset(vlinfo, 0, sizeof(*vlinfo));
-		/* for data VLs, the byte offset from the associated VL0
-		 * register is 8 * vl, but for VL15 it's 8 * 8 */
-		offset = 8 * (unsigned)((vl == 15) ? 8 : vl);
-		rsp->vls[vfi].port_vl_xmit_data =
-			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * SEND_DATA_VL0_CNT + offset));
-		rsp->vls[vfi].port_vl_rcv_data =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
-					+ offset));
-		rsp->vls[vfi].port_vl_xmit_pkts =
-			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * SEND_DATA_PKT_VL0_CNT + offset));
+
+		tmp = read_dev_cntr(dd, C_DC_RX_FLIT_VL, idx_from_vl(vl));
+		rsp->vls[vfi].port_vl_rcv_data = cpu_to_be64(tmp);
+
 		rsp->vls[vfi].port_vl_rcv_pkts =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_PKTS_CNT
-					+ offset));
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RX_PKT_VL,
+					idx_from_vl(vl)));
+
+		rsp->vls[vfi].port_vl_xmit_data =
+			cpu_to_be64(read_port_cntr(ppd, C_TX_FLIT_VL,
+					idx_from_vl(vl)));
+
+		rsp->vls[vfi].port_vl_xmit_pkts =
+			cpu_to_be64(read_port_cntr(ppd, C_TX_PKT_VL,
+					idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_xmit_wait =
-			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * SEND_WAIT_VL0_CNT + offset));
-		/* rsp->vls[vfi].sw_port_vl_congestion is 0 for HFIs */
+			cpu_to_be64(read_port_cntr(ppd, C_TX_WAIT_VL,
+					idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_rcv_fecn =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
-					+ offset));
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FCN_VL,
+					idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_rcv_becn =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT
-					+ offset));
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN_VL,
+					idx_from_vl(vl)));
+
+		rsp->vls[vfi].port_vl_rcv_bubble =
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL_VL,
+					idx_from_vl(vl)));
+
+		/* FIXME */
+		/* rsp->vls[vfi].sw_port_vl_congestion is 0 for HFIs */
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
 		 * does this differ from rsp->vls[vfi].port_vl_xmit_wait */
-		rsp->vls[vfi].port_vl_rcv_bubble =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT
-					+ offset));
-		rsp->vls[vfi].port_vl_mark_fecn =
+		/* Like above, marking fecn is a switch thing
+		 * rsp->vls[vfi].port_vl_mark_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
 					 + offset));
+					*/
 		/* rsp->vls[vfi].port_vl_xmit_discards ??? */
 		vlinfo++;
 		vfi++;
@@ -2125,22 +2140,23 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 
 	/* port_rcv_constraint_errors ??? */
 	/* port_rcv_switch_relay_errors is 0 for HFIs */
-	error_counter_summary += ppd->port_xmit_discards;
+	error_counter_summary += read_port_cntr(ppd, C_SW_XMIT_DSCD,
+						CNTR_INVALID_VL);
 	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
-	error_counter_summary += read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT);
-	if (acquire_lcb_access(dd) == 0) {
-		error_counter_summary +=
-			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT);
-		release_lcb_access(dd);
-	}
-	error_counter_summary += read_csr(dd, DCC_ERR_PORTRCV_ERR_CNT);
-	error_counter_summary += read_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
-					  8 * RCV_BUF_OVFL_CNT);
-	error_counter_summary += read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT);
+	error_counter_summary += read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
+						CNTR_INVALID_VL);
+	error_counter_summary += read_dev_cntr(dd, C_DC_LINK_INTEG,
+						CNTR_INVALID_VL);
+	error_counter_summary += read_dev_cntr(dd, C_DC_RCV_ERR,
+						CNTR_INVALID_VL);
+	error_counter_summary += read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL);
+	error_counter_summary += read_dev_cntr(dd, C_DC_FM_CFG_ERR,
+						CNTR_INVALID_VL);
 	/* link_error_recovery - DC (table 13-11 WFR spec) */
 	/* ppd->link_downed is a 32-bit value */
-	error_counter_summary += (u64)ppd->link_downed;
-	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
+	error_counter_summary += read_port_cntr(ppd, C_SW_LINK_DOWN,
+						CNTR_INVALID_VL);
+	tmp = read_dev_cntr(dd, C_DC_UNC_ERR, CNTR_INVALID_VL);
 	/* this is an 8-bit quantity */
 	error_counter_summary += tmp < 0x100 ? (tmp & 0xff) : 0xff;
 
@@ -2217,33 +2233,36 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	 * a '???' appears.
 	 */
 
-	rsp->port_xmit_data =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_DATA_CNT));
-	rsp->port_rcv_data =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_DATA_CNT));
-	rsp->port_xmit_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_PKTS_CNT));
-	rsp->port_rcv_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_PKTS_CNT));
-	rsp->port_multicast_xmit_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_XMIT_MULTICAST_CNT));
-	rsp->port_multicast_rcv_pkts =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT));
-	rsp->port_xmit_wait =
-		cpu_to_be64(read_csr(dd,
-			    (SEND_WAIT_CNT * 8 + WFR_SEND_COUNTER_ARRAY64)));
 	/* rsp->sw_port_congestion is 0 for HFIs */
-	rsp->port_rcv_fecn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_FECN_CNT));
-	rsp->port_rcv_becn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_BECN_CNT));
 	/* rsp->port_xmit_time_cong is 0 for HFIs */
 	/* rsp->port_xmit_wasted_bw ??? */
 	/* rsp->port_xmit_wait_data ??? */
+	/* FECN markins is only relevant for swich not HFI */
+	/*rsp->port_mark_fecn =
+		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK*/
+
+	rsp->port_xmit_data = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_FLITS,
+						CNTR_INVALID_VL));
+	rsp->port_rcv_data = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FLITS,
+						CNTR_INVALID_VL));
+	rsp->port_xmit_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_PKTS,
+						CNTR_INVALID_VL));
+	rsp->port_rcv_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_PKTS,
+						CNTR_INVALID_VL));
+	rsp->port_multicast_xmit_pkts =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_MC_XMIT_PKTS,
+						CNTR_INVALID_VL));
+	rsp->port_multicast_rcv_pkts =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_MC_RCV_PKTS,
+						CNTR_INVALID_VL));
+	rsp->port_xmit_wait =
+		cpu_to_be64(read_port_cntr(ppd, C_TX_WAIT, CNTR_INVALID_VL));
+	rsp->port_rcv_fecn =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FCN, CNTR_INVALID_VL));
+	rsp->port_rcv_becn =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN, CNTR_INVALID_VL));
 	rsp->port_rcv_bubble =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_RCV_BUBBLE_CNT));
-	rsp->port_mark_fecn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL));
 
 	rsp->port_error_counter_summary =
 		cpu_to_be64(get_error_counter_summary(ibdev, port));
@@ -2257,43 +2276,47 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	 */
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 		 8 * sizeof(req->vl_select_mask)) {
-		unsigned offset;
 		memset(vlinfo, 0, sizeof(*vlinfo));
-		/* for data VLs, the byte offset from the associated VL0
-		 * register is 8 * vl, but for VL15 it's 8 * 8 */
-		offset = 8 * (unsigned)((vl == 15) ? 8 :  vl);
+
 		rsp->vls[vfi].port_vl_xmit_data =
-			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-				8 * SEND_DATA_VL0_CNT + offset));
+			cpu_to_be64(read_port_cntr(ppd, C_TX_FLIT_VL,
+							idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_rcv_data =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT
-				+ offset));
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RX_FLIT_VL,
+							idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_xmit_pkts =
-			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * SEND_DATA_PKT_VL0_CNT + offset));
+			cpu_to_be64(read_port_cntr(ppd, C_TX_PKT_VL,
+							idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_rcv_pkts =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_PKTS_CNT
-					+ offset));
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RX_PKT_VL,
+							idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_xmit_wait =
-			cpu_to_be64(read_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-				8 * SEND_WAIT_VL0_CNT + offset));
-		/* rsp->vls[vfi].sw_port_vl_congestion is 0 for HFIs */
+			cpu_to_be64(read_port_cntr(ppd, C_TX_WAIT_VL,
+							idx_from_vl(vl)));
+
 		rsp->vls[vfi].port_vl_rcv_fecn =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT
-				+ offset));
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FCN_VL,
+							idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_becn =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT
-				+ offset));
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN_VL,
+							idx_from_vl(vl)));
+
+		rsp->vls[vfi].port_vl_rcv_bubble =
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL_VL,
+							idx_from_vl(vl)));
+
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
 		 * does this differ from rsp->vls[vfi].port_vl_xmit_wait */
-		rsp->vls[vfi].port_vl_rcv_bubble =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT
-				+ offset));
-		rsp->vls[vfi].port_vl_mark_fecn =
+		/*rsp->vls[vfi].port_vl_mark_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
 				+ offset));
+		*/
 		vlinfo++;
 		vfi++;
 	}
@@ -2376,23 +2399,25 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 
 	/* rsp->port_rcv_constraint_errors = ??? */
 	/* port_rcv_switch_relay_errors is 0 for HFIs */
-	rsp->port_xmit_discards = cpu_to_be64(ppd->port_xmit_discards);
-	/* rsp->port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
+	rsp->port_xmit_discards =
+		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_DSCD,
+						CNTR_INVALID_VL));
 	rsp->port_rcv_remote_physical_errors =
-		cpu_to_be64(read_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT));
-	if (acquire_lcb_access(dd) == 0) {
-		rsp->local_link_integrity_errors = cpu_to_be64(
-			read_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT));
-		release_lcb_access(dd);
-	}
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
+						CNTR_INVALID_VL));
+	rsp->local_link_integrity_errors =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_LINK_INTEG,
+						CNTR_INVALID_VL));
+	/* rsp->port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	rsp->excessive_buffer_overruns =
-		cpu_to_be64(read_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
-			    8 * RCV_BUF_OVFL_CNT));
+		cpu_to_be64(read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL));
 	rsp->fm_config_errors =
-		cpu_to_be64(read_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT));
+		cpu_to_be64(read_dev_cntr(dd, C_DC_FM_CFG_ERR,
+						CNTR_INVALID_VL));
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
-	rsp->link_downed = cpu_to_be32(ppd->link_downed);
-	tmp = read_csr(dd, DCC_ERR_UNCORRECTABLE_CNT);
+	rsp->link_downed = cpu_to_be32(read_port_cntr(ppd, C_SW_LINK_DOWN,
+						CNTR_INVALID_VL));
+	tmp = read_dev_cntr(dd, C_DC_UNC_ERR, CNTR_INVALID_VL);
 	rsp->uncorrectable_errors = tmp < 0x100 ? (tmp & 0xff) : 0xff;
 
 	vlinfo = (struct _vls_ectrs *)&(rsp->vls[0]);
@@ -2508,7 +2533,6 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	u32 counter_select = be32_to_cpu(req->counter_select_mask);
 	u32 vl_select_mask = WFR_VL_MASK_ALL; /* clear all per-vl cnts */
 	unsigned long vl;
-	u32 offset;
 
 	if ((nports != 1) || (portn != 1 << port)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
@@ -2519,100 +2543,109 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	 * handled, so when pma_get_stl_portstatus() gets a fix,
 	 * the corresponding change should be made here as well.
 	 */
+
+
 	if (counter_select & CS_PORT_XMIT_DATA)
-		write_csr(dd, DCC_PRF_PORT_XMIT_DATA_CNT, 0);
+		write_dev_cntr(dd, C_DC_XMIT_FLITS, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_RCV_DATA)
-		write_csr(dd, DCC_PRF_PORT_RCV_DATA_CNT, 0);
+		write_dev_cntr(dd, C_DC_RCV_FLITS, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_XMIT_PKTS)
-		write_csr(dd, DCC_PRF_PORT_XMIT_PKTS_CNT, 0);
+		write_dev_cntr(dd, C_DC_XMIT_PKTS, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_RCV_PKTS)
-		write_csr(dd, DCC_PRF_PORT_RCV_PKTS_CNT, 0);
+		write_dev_cntr(dd, C_DC_RCV_PKTS, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_MCAST_XMIT_PKTS)
-		write_csr(dd, DCC_PRF_PORT_XMIT_MULTICAST_CNT, 0);
+		write_dev_cntr(dd, C_DC_MC_XMIT_PKTS, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_MCAST_RCV_PKTS)
-		write_csr(dd, DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT, 0);
+		write_dev_cntr(dd, C_DC_MC_RCV_PKTS, CNTR_INVALID_VL, 0);
 
-	if (counter_select & CS_PORT_XMIT_WAIT) {
-		offset = SEND_WAIT_CNT * 8 + WFR_SEND_COUNTER_ARRAY64;
-		write_csr(dd, offset, 0);
-	}
+	if (counter_select & CS_PORT_XMIT_WAIT)
+		write_port_cntr(ppd, C_TX_WAIT, CNTR_INVALID_VL, 0);
 
 	/* ignore cs_sw_portCongestion for HFIs */
 
 	if (counter_select & CS_PORT_RCV_FECN)
-		write_csr(dd, DCC_PRF_PORT_RCV_FECN_CNT, 0);
+		write_dev_cntr(dd, C_DC_RCV_FCN, CNTR_INVALID_VL, 0);
+
 	if (counter_select & CS_PORT_RCV_BECN)
-		write_csr(dd, DCC_PRF_PORT_RCV_BECN_CNT, 0);
+		write_dev_cntr(dd, C_DC_RCV_BCN, CNTR_INVALID_VL, 0);
 
 	/* ignore cs_port_xmit_time_cong for HFIs */
 	/* ignore cs_port_xmit_wasted_bw for now */
 	/* ignore cs_port_xmit_wait_data for now */
 	if (counter_select & CS_PORT_RCV_BUBBLE)
-		write_csr(dd, DCC_PRF_PORT_RCV_BUBBLE_CNT, 0);
-	if (counter_select & CS_PORT_MARK_FECN)
-		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);
+		write_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL, 0);
+
+	/* Only applicable for switch */
+	/*if (counter_select & CS_PORT_MARK_FECN)
+		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);*/
+
 	/* ignore cs_port_rcv_constraint_errors for now */
 	/* ignore cs_port_rcv_switch_relay_errors for HFIs */
 	if (counter_select & CS_PORT_XMIT_DISCARDS)
-		ppd->port_xmit_discards = 0;
+		write_port_cntr(ppd, C_SW_XMIT_DSCD, CNTR_INVALID_VL, 0);
+
 	/* ignore cs_port_xmit_constraint_errors for now */
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
-		write_csr(dd, DCC_ERR_RCVREMOTE_PHY_ERR_CNT, 0);
-	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS) {
-		if (acquire_lcb_access(dd) == 0) {
-			write_csr(dd, DC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
-			release_lcb_access(dd);
-		}
-		/* else return an error? ??? */
-	}
+		write_dev_cntr(dd, C_DC_RMT_PHY_ERR, CNTR_INVALID_VL, 0);
+
+	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS)
+		write_dev_cntr(dd, C_DC_LINK_INTEG, CNTR_INVALID_VL, 0);
+
 	if (counter_select & CS_PORT_RCV_ERRORS)
-		write_csr(dd, DCC_ERR_PORTRCV_ERR_CNT, 0);
+		write_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL, 0);
+
 	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS)
-		write_csr(dd, WFR_RCV_COUNTER_ARRAY32 +
-			  8 * RCV_BUF_OVFL_CNT, 0);
+		write_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL, 0);
+
 	if (counter_select & CS_FM_CONFIG_ERRORS)
-		write_csr(dd, DCC_ERR_FMCONFIG_ERR_CNT, 0);
+		write_dev_cntr(dd, C_DC_FM_CFG_ERR, CNTR_INVALID_VL, 0);
+
 	/* ignore cs_link_error_recovery for now */
 	if (counter_select & CS_LINK_DOWNED)
-		ppd->link_downed = 0;
+		write_port_cntr(ppd, C_SW_LINK_DOWN, CNTR_INVALID_VL, 0);
+
 	if (counter_select & CS_UNCORRECTABLE_ERRORS)
-		write_csr(dd, DCC_ERR_UNCORRECTABLE_CNT, 0);
+		write_dev_cntr(dd, C_DC_UNC_ERR, CNTR_INVALID_VL, 0);
 
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			 8 * sizeof(vl_select_mask)) {
-		/* for data VLs, the byte offset from the associated VL0
-		 * register is 8 * vl, but for VL15 it's 8 * 8 */
-		offset = 8 * (unsigned)((vl == 15) ? 8 : vl);
+
 		if (counter_select & CS_PORT_XMIT_DATA)
-			write_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * SEND_DATA_VL0_CNT + offset, 0);
+			write_port_cntr(ppd, C_TX_FLIT_VL, idx_from_vl(vl), 0);
+
 		if (counter_select & CS_PORT_RCV_DATA)
-			write_csr(dd, DCC_PRF_PORT_VL_RCV_DATA_CNT + offset, 0);
+			write_dev_cntr(dd, C_DC_RX_FLIT_VL, idx_from_vl(vl), 0);
+
 		if (counter_select & CS_PORT_XMIT_PKTS)
-			write_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * SEND_DATA_PKT_VL0_CNT + offset, 0);
+			write_port_cntr(ppd, C_TX_PKT_VL, idx_from_vl(vl), 0);
+
 		if (counter_select & CS_PORT_RCV_PKTS)
-			write_csr(dd, DCC_PRF_PORT_VL_RCV_PKTS_CNT + offset, 0);
+			write_dev_cntr(dd, C_DC_RX_PKT_VL, idx_from_vl(vl), 0);
+
 		if (counter_select & CS_PORT_XMIT_WAIT)
-			write_csr(dd, WFR_SEND_COUNTER_ARRAY64 +
-					8 * SEND_WAIT_VL0_CNT + offset, 0);
+			write_port_cntr(ppd, C_TX_WAIT_VL, idx_from_vl(vl), 0);
+
 		/* sw_port_vl_congestion is 0 for HFIs */
 		if (counter_select & CS_PORT_RCV_FECN)
-			write_csr(dd, DCC_PRF_PORT_VL_RCV_FECN_CNT + offset, 0);
+			write_dev_cntr(dd, C_DC_RCV_FCN_VL, idx_from_vl(vl), 0);
+
 		if (counter_select & CS_PORT_RCV_BECN)
-			write_csr(dd, DCC_PRF_PORT_VL_RCV_BECN_CNT + offset, 0);
+			write_dev_cntr(dd, C_DC_RCV_BCN_VL, idx_from_vl(vl), 0);
+
 		/* port_vl_xmit_time_cong is 0 for HFIs */
 		/* port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ??? */
 		if (counter_select & CS_PORT_RCV_BUBBLE)
-			write_csr(dd, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT + offset, 0);
-		if (counter_select & CS_PORT_MARK_FECN)
-			write_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT + offset, 0);
+			write_dev_cntr(dd, C_DC_RCV_BBL_VL, idx_from_vl(vl), 0);
+
+		/*if (counter_select & CS_PORT_MARK_FECN)
+		     write_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT + offset, 0);
+		*/
 		/* port_vl_xmit_discards ??? */
 	}
 

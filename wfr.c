@@ -951,83 +951,126 @@ static const struct err_reg_info dc_errs[NUM_DC_ERRS] = {
 
 struct cntr_entry {
 	/*
-	 * stat name
+	 * counter name
 	 */
 	char *name;
+
 	/*
-	 * csr for name
+	 * csr to read for name (if applicable)
 	 */
 	u64 csr;
+
 	/*
-	 * offset synthetic counter into dd or ppd
+	 * offset into dd or ppd to store the counter's value
 	 */
-	size_t offset;
+	int offset;
+
 	/*
-	 * reader for stat element, context either dd or ppd
+	 * flags
 	 */
-	u64 (*read_cntr)(const struct cntr_entry *, void *context);
+	u8 flags;
+
+	/*
+	 * accessor for stat element, context either dd or ppd
+	 */
+	u64 (*rw_cntr)(const struct cntr_entry *,
+			       void *context,
+			       int vl,
+			       int mode,
+			       u64 data);
 };
 
-#define CNTR_ELEM(name, csr, offset, read) \
+#define C_RCV_HDR_OVF_FIRST C_RCV_HDR_OVF_0
+#define C_RCV_HDR_OVF_LAST C_RCV_HDR_OVF_159
+
+#define CNTR_ELEM(name, csr, offset, flags, accessor) \
 { \
 	name, \
 	csr, \
 	offset, \
-	read \
+	flags, \
+	accessor \
 }
 
-#define RXE64_DEV_CNTR_ELEM(name, counter) \
-CNTR_ELEM(#name , \
-	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
-	  0 , \
-	  dev_read_u64_csr)
-
-#define RXE64_PORT_CNTR_ELEM(name, counter) \
-CNTR_ELEM(#name , \
-	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
-	  0 , \
-	  port_read_u64_csr)
-
-#define RXE32_DEV_CNTR_ELEM(name, counter) \
+/* 32bit RXE */
+#define RXE32_PORT_CNTR_ELEM(name, counter, flags) \
 CNTR_ELEM(#name , \
 	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
-	  0 , \
-	  dev_read_u32_csr)
+	  0, flags | CNTR_32BIT, \
+	  port_access_u32_csr)
 
-#define CCE_PERF_DEV_CNTR_ELEM(name, counter) \
-CNTR_ELEM(#name , \
-	  (counter * 8 + WFR_CCE_COUNTER_ARRAY32), \
-	  0 , \
-	  dev_read_u32_csr)
-
-#define CCE_INT_DEV_CNTR_ELEM(name, counter) \
-CNTR_ELEM(#name , \
-	  (counter * 8 + WFR_CCE_INT_COUNTER_ARRAY32), \
-	  0 , \
-	  dev_read_u32_csr)
-
-#define RXE32_PORT_CNTR_ELEM(name, counter) \
+#define RXE32_DEV_CNTR_ELEM(name, counter, flags) \
 CNTR_ELEM(#name , \
 	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
-	  0 , \
-	  port_read_u32_csr)
+	  0, flags | CNTR_32BIT, \
+	  dev_access_u32_csr)
 
-#define TXE32_PORT_CNTR_ELEM(name, counter) \
+/* 64bit RXE */
+#define RXE64_PORT_CNTR_ELEM(name, counter, flags) \
 CNTR_ELEM(#name , \
-	  (counter * 8 + WFR_SEND_COUNTER_ARRAY32), \
-	  0 , \
-	  port_read_u32_csr)
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
+	  0, flags , \
+	  port_access_u64_csr)
 
-#define TXE64_PORT_CNTR_ELEM(name, counter) \
+#define RXE64_DEV_CNTR_ELEM(name, counter, flags) \
 CNTR_ELEM(#name , \
-	  (counter * 8 + WFR_SEND_COUNTER_ARRAY64), \
-	  0 , \
-	  port_read_u64_csr)
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
+	  0, flags \
+	  dev_access_u64_csr)
 
 #define OVERFLOW_ELEM(ctx) \
-CNTR_ELEM("RcvHdrOvr" #ctx, \
+[C_RCV_HDR_OVF_ ## ctx] = CNTR_ELEM("RcvHdrOvr" #ctx, \
 	  (WFR_RCV_HDR_OVFL_CNT + ctx*0x100), \
-	  0, port_read_u64_csr)
+	  0, CNTR_NORMAL, port_access_u64_csr)
+
+/* 32bit TXE */
+#define TXE32_PORT_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_SEND_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT, \
+	  port_access_u32_csr)
+
+/* 64bit TXE */
+#define TXE64_PORT_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_SEND_COUNTER_ARRAY64), \
+	  0, flags, \
+	  port_access_u64_csr)
+
+# define TX64_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name ,\
+	  counter * 8 + WFR_SEND_COUNTER_ARRAY64, \
+	  0, \
+	  flags, \
+	  dev_access_u64_csr)
+
+/* CCE */
+#define CCE_PERF_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_CCE_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT , \
+	  dev_access_u32_csr)
+
+#define CCE_INT_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name , \
+	  (counter * 8 + WFR_CCE_INT_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT , \
+	  dev_access_u32_csr)
+
+/* DC */
+#define DC_PERF_CNTR(name, counter, flags) \
+CNTR_ELEM(#name ,\
+	  counter, \
+	  0, \
+	  flags, \
+	  dev_access_u64_csr)
+
+#define DC_PERF_CNTR_LCB(name, counter, flags) \
+CNTR_ELEM(#name ,\
+	  counter, \
+	  0, \
+	  flags, \
+	  dc_access_lcb_cntr)
 
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -1046,86 +1089,259 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
 
-static u64 dev_read_u32_csr(const struct cntr_entry *entry, void *context)
+static inline u64 read_write_csr(const struct hfi_devdata *dd, u32 csr,
+				 int mode, u64 value)
+{
+	u64 ret;
+
+
+	if (mode == CNTR_MODE_R) {
+		ret = read_csr(dd, csr);
+	} else if (mode == CNTR_MODE_W) {
+		write_csr(dd, csr, value);
+		ret = value;
+	} else {
+		dd_dev_err(dd, "Invalid cntr register access mode");
+		return 0;
+	}
+
+	hfi_cdbg(CNTR, "csr 0x%x val 0x%llx mode %d", csr, ret, mode);
+	return ret;
+}
+
+/* Dev Access */
+static u64 dev_access_u32_csr(const struct cntr_entry *entry,
+			    void *context, int vl, int mode, u64 data)
 {
 	struct hfi_devdata *dd = (struct hfi_devdata *)context;
-
-	return read_csr(dd, entry->csr);
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_csr(dd, entry->csr, mode, data);
 }
 
-static u64 port_read_u64_csr(const struct cntr_entry *entry, void *context)
+static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
+			    int vl, int mode, u64 data)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+	u64 val = 0;
+	u64 csr = entry->csr;
+	if (entry->flags & CNTR_VL) {
+		BUG_ON(vl == CNTR_INVALID_VL);
+		csr += 8 * vl;
+	} else {
+		BUG_ON(vl != CNTR_INVALID_VL);
+	}
+
+	val = read_write_csr(dd, csr, mode, data);
+	return val;
+}
+
+static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
+			    int vl, int mode, u64 data)
+{
+	u64 reg;
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+	BUG_ON(vl != CNTR_INVALID_VL);
+	if (acquire_lcb_access(dd, 0) == 0) {
+		reg = read_write_csr(dd, entry->csr, mode, data);
+		release_lcb_access(dd, 0);
+		return reg;
+	} else {
+		dd_dev_err(dd, "Could not aquire LCB");
+		return 0;
+	}
+}
+
+/* Port Access */
+static u64 port_access_u32_csr(const struct cntr_entry *entry, void *context,
+			     int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_csr(ppd->dd, entry->csr, mode, data);
+}
+
+static u64 port_access_u64_csr(const struct cntr_entry *entry,
+			     void *context, int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	u64 val;
+	u64 csr = entry->csr;
+	if (entry->flags & CNTR_VL) {
+		BUG_ON(vl == CNTR_INVALID_VL);
+		csr += 8 * vl;
+	} else {
+		BUG_ON(vl != CNTR_INVALID_VL);
+	}
+	val = read_write_csr(ppd->dd, csr, mode, data);
+	return val;
+}
+
+/* Software defined */
+static inline u64 read_write_sw(struct hfi_devdata *dd, u64 *cntr, int mode,
+			       u64 data)
+{
+	u64 ret;
+
+	if (mode == CNTR_MODE_R) {
+		ret = *cntr;
+	} else if (mode == CNTR_MODE_W) {
+		*cntr = data;
+		ret = data;
+	} else {
+		dd_dev_err(dd, "Invalid cntr sw access mode");
+		return 0;
+	}
+
+	hfi_cdbg(CNTR, "val 0x%llx mode %d", ret, mode);
+
+	return ret;
+
+}
+
+static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
+			       int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_sw(ppd->dd, &ppd->link_downed, mode, data);
+}
+
+static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
+			       int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_sw(ppd->dd, &ppd->link_up, mode, data);
+}
+
+static u64 access_sw_xmit_discards(const struct cntr_entry *entry,
+				    void *context, int vl, int mode, u64 data)
 {
 	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
 
-	return read_csr(ppd->dd, entry->csr);
+	if (vl != CNTR_INVALID_VL)
+		return 0; /* FIXME Do the right thing when implemented */
+
+	return read_write_sw(ppd->dd, &ppd->port_xmit_discards, mode, data);
 }
 
-static u64 port_read_u32_csr(const struct cntr_entry *entry, void *context)
+static u64 access_xmit_constraint_errs(const struct cntr_entry *entry,
+				     void *context, int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
-
-	return read_csr(ppd->dd, entry->csr);
+	/* FIXME: Need to do the right thing here */
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return 0;
 }
 
-static const struct cntr_entry dev_cntrs[] = {
-RXE32_DEV_CNTR_ELEM(RxTIDFullEr, RCV_TID_FULL_ERR_CNT),
-RXE32_DEV_CNTR_ELEM(RxTIDInvalid, RCV_TID_VALID_ERR_CNT),
-RXE32_DEV_CNTR_ELEM(RxTidFLGMs, RCV_TID_FLOW_GEN_MISMATCH_CNT),
-RXE32_DEV_CNTR_ELEM(RxCtxRHQS, RCV_CONTEXT_RHQ_STALL),
-RXE32_DEV_CNTR_ELEM(RxCtxEgrS, RCV_CONTEXT_EGR_STALL),
-RXE32_DEV_CNTR_ELEM(RxTidFLSMs, RCV_TID_FLOW_SEQ_MISMATCH_CNT),
-CCE_PERF_DEV_CNTR_ELEM(CcePciCrSt, CCE_PCIE_POSTED_CRDT_STALL_CNT),
-CCE_PERF_DEV_CNTR_ELEM(CcePciTrSt, CCE_PCIE_TRGT_STALL_CNT),
-CCE_PERF_DEV_CNTR_ELEM(CcePioWrSt, CCE_PIO_WR_STALL_CNT),
-CCE_INT_DEV_CNTR_ELEM(CceErrInt, CCE_ERR_INT_CNT),
-CCE_INT_DEV_CNTR_ELEM(CceSdmaInt, CCE_SDMA_INT_CNT),
-CCE_INT_DEV_CNTR_ELEM(CceMiscInt, CCE_MISC_INT_CNT),
-CCE_INT_DEV_CNTR_ELEM(CceRcvAvInt, CCE_RCV_AVAIL_INT_CNT),
-CCE_INT_DEV_CNTR_ELEM(CceRcvUrgInt, CCE_RCV_URGENT_INT_CNT),
-CCE_INT_DEV_CNTR_ELEM(CceSndCrInt, CCE_SEND_CREDIT_INT_CNT),
+static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
+[C_RX_TID_FULL] = RXE32_DEV_CNTR_ELEM(RxTIDFullEr, RCV_TID_FULL_ERR_CNT,
+			CNTR_NORMAL),
+[C_RX_TID_INVALID] = RXE32_DEV_CNTR_ELEM(RxTIDInvalid, RCV_TID_VALID_ERR_CNT,
+			CNTR_NORMAL),
+[C_RX_TID_FLGMS] = RXE32_DEV_CNTR_ELEM(RxTidFLGMs,
+			RCV_TID_FLOW_GEN_MISMATCH_CNT,
+			CNTR_NORMAL),
+[C_RX_CTX_RHQS] = RXE32_DEV_CNTR_ELEM(RxCtxRHQS, RCV_CONTEXT_RHQ_STALL,
+			CNTR_NORMAL),
+[C_RX_CTX_EGRS] = RXE32_DEV_CNTR_ELEM(RxCtxEgrS, RCV_CONTEXT_EGR_STALL,
+			CNTR_NORMAL),
+[C_RCV_TID_FLSMS] = RXE32_DEV_CNTR_ELEM(RxTidFLSMs,
+			RCV_TID_FLOW_SEQ_MISMATCH_CNT, CNTR_NORMAL),
+[C_CCE_PCI_CR_ST] = CCE_PERF_DEV_CNTR_ELEM(CcePciCrSt,
+			CCE_PCIE_POSTED_CRDT_STALL_CNT, CNTR_NORMAL),
+[C_CCE_PCI_TR_ST] = CCE_PERF_DEV_CNTR_ELEM(CcePciTrSt, CCE_PCIE_TRGT_STALL_CNT,
+			CNTR_NORMAL),
+[C_CCE_PIO_WR_ST] = CCE_PERF_DEV_CNTR_ELEM(CcePioWrSt, CCE_PIO_WR_STALL_CNT,
+			CNTR_NORMAL),
+[C_CCE_ERR_INT] = CCE_INT_DEV_CNTR_ELEM(CceErrInt, CCE_ERR_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_SDMA_INT] = CCE_INT_DEV_CNTR_ELEM(CceSdmaInt, CCE_SDMA_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_MISC_INT] = CCE_INT_DEV_CNTR_ELEM(CceMiscInt, CCE_MISC_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_RCV_AV_INT] = CCE_INT_DEV_CNTR_ELEM(CceRcvAvInt, CCE_RCV_AVAIL_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_RCV_URG_INT] = CCE_INT_DEV_CNTR_ELEM(CceRcvUrgInt,
+			CCE_RCV_URGENT_INT_CNT,	CNTR_NORMAL),
+[C_CCE_SEND_CR_INT] = CCE_INT_DEV_CNTR_ELEM(CceSndCrInt,
+			CCE_SEND_CREDIT_INT_CNT, CNTR_NORMAL),
+[C_DC_XMIT_FLITS] = DC_PERF_CNTR(DcXmitFlits, DCC_PRF_PORT_XMIT_DATA_CNT,
+			CNTR_SYNTH),
+[C_DC_RCV_FLITS] = DC_PERF_CNTR(DcRcvFlits, DCC_PRF_PORT_RCV_DATA_CNT,
+			CNTR_SYNTH),
+[C_DC_XMIT_PKTS] = DC_PERF_CNTR(DcXmitPkts, DCC_PRF_PORT_XMIT_PKTS_CNT,
+			CNTR_SYNTH),
+[C_DC_RCV_PKTS] = DC_PERF_CNTR(DcRcvPkts, DCC_PRF_PORT_RCV_PKTS_CNT,
+			CNTR_SYNTH),
+[C_DC_MC_RCV_PKTS] = DC_PERF_CNTR(DcMcRcvPkts,
+			DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT, CNTR_SYNTH),
+[C_DC_MC_XMIT_PKTS] = DC_PERF_CNTR(DcMcXmitPkts,
+			DCC_PRF_PORT_XMIT_MULTICAST_CNT, CNTR_SYNTH),
+[C_DC_RX_FLIT_VL] = DC_PERF_CNTR(DcRxFlitVl,
+			DCC_PRF_PORT_VL_RCV_DATA_CNT, CNTR_SYNTH | CNTR_VL),
+[C_DC_RX_PKT_VL] = DC_PERF_CNTR(DcRxPktVl, DCC_PRF_PORT_VL_RCV_PKTS_CNT,
+			CNTR_SYNTH | CNTR_VL),
+[C_DC_RCV_FCN] = DC_PERF_CNTR(DcRcvFcn, DCC_PRF_PORT_RCV_FECN_CNT, CNTR_SYNTH),
+[C_DC_RCV_BCN] = DC_PERF_CNTR(DcRcvBcn, DCC_PRF_PORT_RCV_BECN_CNT, CNTR_SYNTH),
+[C_DC_RCV_FCN_VL] = DC_PERF_CNTR(DcRcvFcnVl,
+			DCC_PRF_PORT_VL_RCV_FECN_CNT, CNTR_SYNTH | CNTR_VL),
+[C_DC_RCV_BCN_VL] = DC_PERF_CNTR(DcRcvBcnVl,
+			DCC_PRF_PORT_VL_RCV_BECN_CNT, CNTR_SYNTH | CNTR_VL),
+[C_DC_RCV_BBL] = DC_PERF_CNTR(DcRcvBbl, DCC_PRF_PORT_RCV_BUBBLE_CNT,
+			CNTR_SYNTH),
+[C_DC_RCV_BBL_VL] = DC_PERF_CNTR(DcRcvBblVl,
+			DCC_PRF_PORT_VL_RCV_BUBBLE_CNT, CNTR_SYNTH | CNTR_VL),
+[C_DC_RCV_ERR] = DC_PERF_CNTR(DcRecvErr, DCC_ERR_PORTRCV_ERR_CNT, CNTR_SYNTH),
+[C_DC_LINK_INTEG] = DC_PERF_CNTR_LCB(DcLinkInteg, DC_LCB_ERR_INFO_TX_REPLAY_CNT,
+			CNTR_SYNTH),
+[C_DC_RMT_PHY_ERR] = DC_PERF_CNTR(DcRmtPhyErr, DCC_ERR_RCVREMOTE_PHY_ERR_CNT,
+			CNTR_SYNTH),
+[C_DC_FM_CFG_ERR] = DC_PERF_CNTR(DcFmCfgErr, DCC_ERR_FMCONFIG_ERR_CNT,
+			CNTR_SYNTH),
+[C_RCV_CSTR_ERR] = RXE32_DEV_CNTR_ELEM(RcvCstrErr, RCV_PKEY_MISMATCH_CNT,
+			CNTR_SYNTH),
+[C_RCV_OVF] = RXE32_DEV_CNTR_ELEM(RcvOverflow, RCV_BUF_OVFL_CNT, CNTR_SYNTH),
+[C_DC_UNC_ERR] = DC_PERF_CNTR(DcUnctblErr, DCC_ERR_UNCORRECTABLE_CNT,
+			CNTR_SYNTH),
 };
 
-static const struct cntr_entry port_cntrs[] = {
-TXE32_PORT_CNTR_ELEM(TxUnVLErr, SEND_UNSUP_VL_ERR_CNT),
-TXE32_PORT_CNTR_ELEM(TxInvalLen, SEND_LEN_ERR_CNT),
-TXE32_PORT_CNTR_ELEM(TxMMLenErr, SEND_MAX_MIN_LEN_ERR_CNT),
-TXE32_PORT_CNTR_ELEM(TxUnderrun, SEND_UNDERRUN_CNT),
-TXE32_PORT_CNTR_ELEM(TxFlowStall, SEND_FLOW_STALL_CNT),
-TXE32_PORT_CNTR_ELEM(TxDropped, SEND_DROPPED_PKT_CNT),
-TXE32_PORT_CNTR_ELEM(TxHdrErr, SEND_HEADERS_ERR_CNT),
-TXE64_PORT_CNTR_ELEM(TxPkt, SEND_DATA_PKT_CNT),
-TXE64_PORT_CNTR_ELEM(TxWords, SEND_DWORD_CNT),
-TXE64_PORT_CNTR_ELEM(TxWait, SEND_WAIT_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL0, SEND_DATA_VL0_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL1, SEND_DATA_VL1_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL2, SEND_DATA_VL2_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL3, SEND_DATA_VL3_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL4, SEND_DATA_VL4_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL5, SEND_DATA_VL5_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL6, SEND_DATA_VL6_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL7, SEND_DATA_VL7_CNT),
-TXE64_PORT_CNTR_ELEM(TxFlitVL15, SEND_DATA_VL15_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL0, SEND_DATA_PKT_VL0_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL1, SEND_DATA_PKT_VL1_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL2, SEND_DATA_PKT_VL2_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL3, SEND_DATA_PKT_VL3_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL4, SEND_DATA_PKT_VL4_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL5, SEND_DATA_PKT_VL5_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL6, SEND_DATA_PKT_VL6_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL7, SEND_DATA_PKT_VL7_CNT),
-TXE64_PORT_CNTR_ELEM(TxPktVL15, SEND_DATA_PKT_VL15_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL0, SEND_WAIT_VL0_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL1, SEND_WAIT_VL1_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL2, SEND_WAIT_VL2_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL3, SEND_WAIT_VL3_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL4, SEND_WAIT_VL4_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL5, SEND_WAIT_VL5_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL6, SEND_WAIT_VL6_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL7, SEND_WAIT_VL7_CNT),
-TXE64_PORT_CNTR_ELEM(TxWaitVL15, SEND_WAIT_VL15_CNT),
-RXE64_PORT_CNTR_ELEM(RxPkt, RCV_DATA_PKT_CNT),
-RXE64_PORT_CNTR_ELEM(RxWords, RCV_DWORD_CNT),
-/* assumed to be last in array for sizing */
+static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
+[C_TX_UNSUP_VL] = TXE32_PORT_CNTR_ELEM(TxUnVLErr, SEND_UNSUP_VL_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_INVAL_LEN] = TXE32_PORT_CNTR_ELEM(TxInvalLen, SEND_LEN_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_MM_LEN_ERR] = TXE32_PORT_CNTR_ELEM(TxMMLenErr, SEND_MAX_MIN_LEN_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_UNDERRUN] = TXE32_PORT_CNTR_ELEM(TxUnderrun, SEND_UNDERRUN_CNT,
+			CNTR_NORMAL),
+[C_TX_FLOW_STALL] = TXE32_PORT_CNTR_ELEM(TxFlowStall, SEND_FLOW_STALL_CNT,
+			CNTR_NORMAL),
+[C_TX_DROPPED] = TXE32_PORT_CNTR_ELEM(TxDropped, SEND_DROPPED_PKT_CNT,
+			CNTR_NORMAL),
+[C_TX_HDR_ERR] = TXE32_PORT_CNTR_ELEM(TxHdrErr, SEND_HEADERS_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_PKT] = TXE64_PORT_CNTR_ELEM(TxPkt, SEND_DATA_PKT_CNT, CNTR_NORMAL),
+[C_TX_WORDS] = TXE64_PORT_CNTR_ELEM(TxWords, SEND_DWORD_CNT, CNTR_NORMAL),
+[C_TX_WAIT] = TXE64_PORT_CNTR_ELEM(TxWait, SEND_WAIT_CNT, CNTR_SYNTH),
+[C_TX_FLIT_VL] = TXE64_PORT_CNTR_ELEM(TxFlitVL, SEND_DATA_VL0_CNT,
+			CNTR_SYNTH | CNTR_VL),
+[C_TX_PKT_VL] = TXE64_PORT_CNTR_ELEM(TxPktVL, SEND_DATA_PKT_VL0_CNT,
+			CNTR_SYNTH | CNTR_VL),
+[C_TX_WAIT_VL] = TXE64_PORT_CNTR_ELEM(TxWaitVL, SEND_WAIT_VL0_CNT,
+			CNTR_SYNTH | CNTR_VL),
+[C_RX_PKT] = RXE64_PORT_CNTR_ELEM(RxPkt, RCV_DATA_PKT_CNT, CNTR_NORMAL),
+[C_RX_WORDS] = RXE64_PORT_CNTR_ELEM(RxWords, RCV_DWORD_CNT, CNTR_NORMAL),
+[C_SW_LINK_DOWN] = CNTR_ELEM("SwLinkDown", 0, 0, CNTR_SYNTH | CNTR_32BIT,
+			access_sw_link_dn_cnt),
+[C_SW_LINK_UP] = CNTR_ELEM("SwLinkUp", 0, 0, CNTR_SYNTH | CNTR_32BIT,
+			access_sw_link_up_cnt),
+[C_SW_XMIT_DSCD] = CNTR_ELEM("XmitDscd", 0, 0, CNTR_SYNTH | CNTR_32BIT,
+			access_sw_xmit_discards),
+[C_SW_XMIT_DSCD_VL] = CNTR_ELEM("XmitDscdVl", 0, 0,
+			CNTR_SYNTH | CNTR_32BIT | CNTR_VL,
+			access_sw_xmit_discards),
+[C_XMIT_CSTR_ERR] = CNTR_ELEM("XmitCstrErr", 0, 0, CNTR_SYNTH,
+			access_xmit_constraint_errs),
 OVERFLOW_ELEM(0),   OVERFLOW_ELEM(1),   OVERFLOW_ELEM(2),   OVERFLOW_ELEM(3),
 OVERFLOW_ELEM(4),   OVERFLOW_ELEM(5),   OVERFLOW_ELEM(6),   OVERFLOW_ELEM(7),
 OVERFLOW_ELEM(8),   OVERFLOW_ELEM(9),   OVERFLOW_ELEM(10),  OVERFLOW_ELEM(11),
@@ -1788,7 +2004,7 @@ static inline void set_8051_lcb_access(struct hfi_devdata *dd)
  *	-EBUSY if the 8051 has control and cannot be disburbed
  *	-errno if unable to acquire access from the 8051
  */
-int acquire_lcb_access(struct hfi_devdata *dd)
+int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 {
 	int ret = 0;
 	u32 state;
@@ -1799,7 +2015,12 @@ int acquire_lcb_access(struct hfi_devdata *dd)
 	 * as a unit against a link state change.  Otherwise there is a
 	 * race between the state change and the count increment.
 	 */
-	mutex_lock(&dd->pport->hls_lock);
+	if (sleep_ok) {
+		mutex_lock(&dd->pport->hls_lock);
+	} else {
+		while (mutex_trylock(&dd->pport->hls_lock) == EBUSY)
+			udelay(1);
+	}
 
 	/* can not use the LCB when the 8051 is using it */
 	state = dd->pport->host_link_state;
@@ -1835,7 +2056,7 @@ done:
  *	0 on success
  *	-errno if unable to release access to the 8051
  */
-int release_lcb_access(struct hfi_devdata *dd)
+int release_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 {
 	int ret = 0;
 
@@ -1844,7 +2065,13 @@ int release_lcb_access(struct hfi_devdata *dd)
 	 * Here, we only need to keep { selector change, count decrement }
 	 * as a unit.
 	 */
-	mutex_lock(&dd->pport->hls_lock);
+	if (sleep_ok) {
+		mutex_lock(&dd->pport->hls_lock);
+	} else {
+		while (mutex_trylock(&dd->pport->hls_lock) == EBUSY)
+			udelay(1);
+	}
+
 	if (dd->lcb_access_count == 0) {
 		dd_dev_err(dd, "%s: LCB accsess count is zero.  Skipping.\n",
 			__func__);
@@ -5511,55 +5738,124 @@ static u32 read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp)
 {
 	int ret;
+	u64 val = 0;
 
 	if (namep) {
 		ret = dd->cntrnameslen;
-		if (pos >= ret)
+		if (pos != 0) {
+			dd_dev_err(dd, "read_cntrs does not support indexing");
 			return 0;
+		}
 		*namep = dd->cntrnames;
 	} else {
 		const struct cntr_entry *entry;
-		u64 *cntr;
-		int i;
+		int i, j;
 
-		ret = ARRAY_SIZE(dev_cntrs) * sizeof(u64);
-		if (pos >= ret)
+		ret = (dd->ndevcntrs) * sizeof(u64);
+		if (pos != 0) {
+			dd_dev_err(dd, "read_cntrs does not support indexing");
 			return 0;
+		}
 
-		cntr = *cntrp = dd->cntrs;
-		for (entry = &dev_cntrs[0], i = 0;
-		     i < ARRAY_SIZE(dev_cntrs); i++, entry++)
-			*cntr++ = entry->read_cntr(entry, dd);
+		/* Get the start of the block of counters */
+		*cntrp = dd->cntrs;
+
+		/*
+		 * Now go and fill in each counter in the block.
+		 */
+		for (i = 0; i < DEV_CNTR_LAST; i++) {
+			entry = &dev_cntrs[i];
+			hfi_cdbg(CNTR, "reading %s", entry->name);
+			if (entry->flags & CNTR_DISABLED) {
+				/* Nothing */
+				hfi_cdbg(CNTR, "\tDisabled\n");
+			} else {
+				if (entry->flags & CNTR_VL) {
+					hfi_cdbg(CNTR, "\tPer VL\n");
+					for (j = 0; j < C_VL_COUNT; j++) {
+						val = entry->rw_cntr(entry,
+								  dd, j,
+								  CNTR_MODE_R,
+								  0);
+						hfi_cdbg(CNTR,
+						     "\t\tRead 0x%llx for %d\n",
+						     val, j);
+						dd->cntrs[entry->offset + j] =
+									    val;
+					}
+				} else {
+					val = entry->rw_cntr(entry, dd,
+							CNTR_INVALID_VL,
+							CNTR_MODE_R, 0);
+					dd->cntrs[entry->offset] = val;
+					hfi_cdbg(CNTR, "\tRead 0x%llx", val);
+				}
+			}
+		}
 	}
 	return ret;
 }
 
+/*
+ * Used by sys fs to create files for hfi stats to read
+ */
 static u32 read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 				  char **namep, u64 **cntrp)
 {
 	int ret;
+	u64 val = 0;
 
 	if (namep) {
 		ret = dd->portcntrnameslen;
-		if (pos >= ret)
+		if (pos != 0) {
+			dd_dev_err(dd, "index not supported");
 			return 0;
+		}
 		*namep = dd->portcntrnames;
 	} else {
 		const struct cntr_entry *entry;
 		struct qib_pportdata *ppd;
-		u64 *cntr;
-		int i;
+		int i, j;
 
 		ret = (dd->nportcntrs) * sizeof(u64);
-		if (pos >= ret)
+		if (pos != 0) {
+			dd_dev_err(dd, "indexing not supported");
 			return 0;
+		}
 		ppd = (struct qib_pportdata *)(dd + 1 + port);
-		cntr = *cntrp = ppd->cntrs;
-		for (entry = &port_cntrs[0], i = 0;
-		     i < dd->nportcntrs; i++, entry++)
-			*cntr++ = entry->read_cntr(entry, ppd);
+		*cntrp = ppd->cntrs;
+
+		for (i = 0; i < PORT_CNTR_LAST; i++) {
+			entry = &port_cntrs[i];
+			hfi_cdbg(CNTR, "reading %s", entry->name);
+			if (entry->flags & CNTR_DISABLED) {
+				/* Nothing */
+				hfi_cdbg(CNTR, "\tDisabled\n");
+				continue;
+			}
+
+			if (entry->flags & CNTR_VL) {
+				hfi_cdbg(CNTR, "\tPer VL\n");
+				for (j = 0; j < C_VL_COUNT; j++) {
+					val = entry->rw_cntr(entry, ppd, j,
+							       CNTR_MODE_R,
+							       0);
+					hfi_cdbg(CNTR,
+						 "\t\tRead 0x%llx for %d\n",
+						 val, j);
+					ppd->cntrs[entry->offset + j] = val;
+				}
+			} else {
+				val = entry->rw_cntr(entry, ppd,
+						       CNTR_INVALID_VL,
+						       CNTR_MODE_R,
+						       0);
+				ppd->cntrs[entry->offset] = val;
+				hfi_cdbg(CNTR, "\tRead 0x%llx", val);
+			}
+		}
 	}
-	return ret; /* final read after getting everything */
+	return ret;
 }
 
 static void free_cntrs(struct hfi_devdata *dd)
@@ -5567,88 +5863,462 @@ static void free_cntrs(struct hfi_devdata *dd)
 	struct qib_pportdata *ppd;
 	int i;
 
-	if (dd->stats_timer.data)
-		del_timer_sync(&dd->stats_timer);
-	dd->stats_timer.data = 0;
+	if (dd->synth_stats_timer.data)
+		del_timer_sync(&dd->synth_stats_timer);
+	dd->synth_stats_timer.data = 0;
 	ppd = (struct qib_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		kfree(ppd->cntrs);
+		kfree(ppd->scntrs);
 		ppd->cntrs = NULL;
+		ppd->scntrs = NULL;
 	}
 	kfree(dd->portcntrnames);
 	dd->portcntrnames = NULL;
 	kfree(dd->cntrs);
 	dd->cntrs = NULL;
+	kfree(dd->scntrs);
+	dd->scntrs = NULL;
 	kfree(dd->cntrnames);
 	dd->cntrnames = NULL;
 }
 
-static void get_faststats(unsigned long opaque)
+#define CNTR_MAX 0xFFFFFFFFFFFFFFFF
+#define CNTR_32BIT_MAX 0x00000000FFFFFFFF
+
+static u64 read_dev_port_cntr(struct hfi_devdata *dd, struct cntr_entry *entry,
+			      u64 *psval, void *context, int vl)
 {
-	static int called;
-	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
-	if (!called) {
-		called = 1;
-		if (print_unimplemented)
-			dd_dev_info(dd, "%s: not implemented\n", __func__);
+	u64 val;
+	u64 sval = *psval;
+
+	if (entry->flags & CNTR_DISABLED) {
+		dd_dev_err(dd, "Counter %s not enabled", entry->name);
+		return 0;
 	}
-	mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
+
+	hfi_cdbg(CNTR, "cntr: %s vl %d psval 0x%llx", entry->name, vl, *psval);
+
+	val = entry->rw_cntr(entry, context, vl, CNTR_MODE_R, 0);
+
+	/* If its a synthetic counter there is more work we need to do */
+	if (entry->flags & CNTR_SYNTH) {
+		if (sval == CNTR_MAX) {
+			/* No need to read already saturated */
+			return CNTR_MAX;
+		}
+
+		if (entry->flags & CNTR_32BIT) {
+			/* 32bit counters can wrap multiple times */
+			u64 upper = sval >> 32;
+			u64 lower = (sval << 32) >> 32;
+
+			if (lower > val) { /* hw wrapped */
+				if (upper == CNTR_32BIT_MAX)
+					val = CNTR_MAX;
+				else
+					upper++;
+			}
+
+			if (val != CNTR_MAX)
+				val = (upper << 32) | val;
+
+		} else {
+			/* If we rolled we are saturated */
+			if ((val < sval) || (val > CNTR_MAX))
+				val = CNTR_MAX;
+		}
+	}
+
+	*psval = val;
+
+	hfi_cdbg(CNTR, "\tNew val=0x%llx", val);
+
+	return val;
 }
 
+static u64 write_dev_port_cntr(struct hfi_devdata *dd, struct cntr_entry *entry,
+			      u64 *psval, void *context, int vl, u64 data)
+{
+	u64 val;
+
+	if (entry->flags & CNTR_DISABLED) {
+		dd_dev_err(dd, "Counter %s not enabled", entry->name);
+		return 0;
+	}
+
+	hfi_cdbg(CNTR, "cntr: %s vl %d psval 0x%llx", entry->name, vl, *psval);
+
+	if (entry->flags & CNTR_SYNTH) {
+		*psval = data;
+		if (entry->flags & CNTR_32BIT) {
+			val = entry->rw_cntr(entry, context, vl, CNTR_MODE_W,
+					     (data << 32) >> 32);
+			val = data; /* return the full 64bit value */
+		} else {
+			val = entry->rw_cntr(entry, context, vl, CNTR_MODE_W,
+					     data);
+		}
+	} else {
+		val = entry->rw_cntr(entry, context, vl, CNTR_MODE_W, data);
+	}
+
+	*psval = val;
+
+	hfi_cdbg(CNTR, "\tNew val=0x%llx", val);
+
+	return val;
+}
+
+u64 read_dev_cntr(struct hfi_devdata *dd, int index, int vl)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &dev_cntrs[index];
+	sval = dd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	return read_dev_port_cntr(dd, entry, sval, dd, vl);
+}
+
+u64 write_dev_cntr(struct hfi_devdata *dd, int index, int vl, u64 data)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &dev_cntrs[index];
+	sval = dd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	return write_dev_port_cntr(dd, entry, sval, dd, vl, data);
+}
+
+u64 read_port_cntr(struct qib_pportdata *ppd, int index, int vl)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &port_cntrs[index];
+	sval = ppd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	if ((index >= C_RCV_HDR_OVF_FIRST + ppd->dd->num_rcv_contexts) &&
+	    (index <= C_RCV_HDR_OVF_LAST)) {
+		/* We do not want to bother for disabled contexts */
+		return 0;
+	}
+
+	return read_dev_port_cntr(ppd->dd, entry, sval, ppd, vl);
+}
+
+u64 write_port_cntr(struct qib_pportdata *ppd, int index, int vl, u64 data)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &port_cntrs[index];
+	sval = ppd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	if ((index >= C_RCV_HDR_OVF_FIRST + ppd->dd->num_rcv_contexts) &&
+	    (index <= C_RCV_HDR_OVF_LAST)) {
+		/* We do not want to bother for disabled contexts */
+		return 0;
+	}
+
+	return write_dev_port_cntr(ppd->dd, entry, sval, ppd, vl, data);
+}
+
+static void update_synth_timer(unsigned long opaque)
+{
+	u64 cur_tx;
+	u64 cur_rx;
+	u64 total_flits;
+	u8 update = 0;
+	int i, j, vl;
+	struct qib_pportdata *ppd;
+	struct cntr_entry *entry;
+
+	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
+
+	/*
+	 * Rather than keep beating on the CSRs pick a minimal set that we can
+	 * check to watch for potential roll over. We can do this by looking at
+	 * the number of flits sent/recv. If the total flits exceeds 32bits then
+	 * we have to iterate all the counters and update.
+	 */
+	entry = &dev_cntrs[C_DC_RCV_FLITS];
+	cur_rx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL, CNTR_MODE_R, 0);
+
+	entry = &dev_cntrs[C_DC_XMIT_FLITS];
+	cur_tx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL, CNTR_MODE_R, 0);
+
+	hfi_cdbg(CNTR,
+		"[%d] curr tx=0x%llx rx=0x%llx :: last tx=0x%llx rx=0x%llx\n",
+		 dd->unit, cur_tx, cur_rx, dd->last_tx, dd->last_rx);
+
+	if ((cur_tx < dd->last_tx) || (cur_rx < dd->last_rx)) {
+		/*
+		 * May not be strictly necessary to update but it won't hurt and
+		 * simplifies the logic here.
+		 */
+		update = 1;
+		hfi_cdbg(CNTR, "[%d] Tripwire counter rolled, updating",
+			 dd->unit);
+	} else {
+		total_flits = (cur_tx - dd->last_tx) + (cur_rx - dd->last_rx);
+		hfi_cdbg(CNTR,
+			"[%d] total flits 0x%llx limit 0x%llx\n", dd->unit,
+			total_flits, (u64)CNTR_32BIT_MAX);
+		if (total_flits >= CNTR_32BIT_MAX) {
+			hfi_cdbg(CNTR, "[%d] 32bit limit hit, updating",
+				 dd->unit);
+			update = 1;
+		}
+	}
+
+	if (update) {
+		hfi_cdbg(CNTR, "[%d] Updating dd and ppd counters", dd->unit);
+		for (i = 0; i < DEV_CNTR_LAST; i++) {
+			entry = &dev_cntrs[i];
+			if (entry->flags & CNTR_VL) {
+				for (vl = 0; vl < C_VL_COUNT; vl++)
+					read_dev_cntr(dd, i, vl);
+			} else {
+				read_dev_cntr(dd, i, CNTR_INVALID_VL);
+			}
+		}
+		ppd = (struct qib_pportdata *)(dd + 1);
+		for (i = 0; i < dd->num_pports; i++, ppd++) {
+			for (j = 0; j < PORT_CNTR_LAST; j++) {
+				entry = &port_cntrs[j];
+				if (entry->flags & CNTR_VL) {
+					for (vl = 0; vl < C_VL_COUNT; vl++)
+						read_port_cntr(ppd, j, vl);
+				} else {
+					read_port_cntr(ppd, j, CNTR_INVALID_VL);
+				}
+			}
+		}
+
+		/*
+		 * We want the value in the register. The goal is to keep track
+		 * of the number of "ticks" not the counter value. In other
+		 * words if the register rolls we want to notice it and go ahead
+		 * and force an update.
+		 */
+		entry = &dev_cntrs[C_DC_XMIT_FLITS];
+		dd->last_tx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL,
+						CNTR_MODE_R, 0);
+
+		entry = &dev_cntrs[C_DC_RCV_FLITS];
+		dd->last_rx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL,
+						CNTR_MODE_R, 0);
+
+		hfi_cdbg(CNTR, "[%d] setting last tx/rx to 0x%llx 0x%llx\n",
+			 dd->unit, dd->last_tx, dd->last_rx);
+
+	} else {
+		hfi_cdbg(CNTR, "[%d] No update necessary", dd->unit);
+	}
+
+mod_timer(&dd->synth_stats_timer, jiffies + HZ * SYNTH_CNT_TIME);
+}
+
+#define C_MAX_NAME 13 /* 12 chars + one for /0 */
 static int init_cntrs(struct hfi_devdata *dd)
 {
-	int i;
+	int i, rcv_ctxts, index, j;
 	size_t sz;
 	char *p;
+	char name[C_MAX_NAME];
 	struct qib_pportdata *ppd;
 
-	/* set up the stats timer; the add_timer is done at end of init */
-	init_timer(&dd->stats_timer);
-	dd->stats_timer.function = get_faststats;
-	dd->stats_timer.data = (unsigned long) dd;
+	/* set up the stats timer; the add_timer is done at the end */
+	init_timer(&dd->synth_stats_timer);
+	dd->synth_stats_timer.function = update_synth_timer;
+	dd->synth_stats_timer.data = (unsigned long) dd;
 
-	/* per device */
-	dd->cntrs = kzalloc(sizeof(u64) * ARRAY_SIZE(dev_cntrs), GFP_KERNEL);
+	/***********************/
+	/* per device counters */
+	/***********************/
+
+	/* size names and determine how many we have*/
+	dd->ndevcntrs = 0;
+	sz = 0;
+	index = 0;
+
+	for (i = 0; i < DEV_CNTR_LAST; i++) {
+		hfi_dbg_early("Init cntr %s\n", dev_cntrs[i].name);
+		if (dev_cntrs[i].flags & CNTR_DISABLED) {
+			hfi_dbg_early("\tSkipping %s\n", dev_cntrs[i].name);
+			continue;
+		}
+
+		if (dev_cntrs[i].flags & CNTR_VL) {
+			hfi_dbg_early("\tProcessing VL cntr\n");
+			dev_cntrs[i].offset = index;
+			for (j = 0; j < C_VL_COUNT; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					dev_cntrs[i].name,
+					vl_from_idx(j));
+				sz += strlen(name);
+				sz++;
+				hfi_dbg_early("\t\t%s\n", name);
+				dd->ndevcntrs++;
+				index++;
+			}
+		} else {
+			/* +1 for newline  */
+			sz += strlen(dev_cntrs[i].name) + 1;
+			dd->ndevcntrs++;
+			dev_cntrs[i].offset = index;
+			index++;
+			hfi_dbg_early("\tAdding %s\n", dev_cntrs[i].name);
+		}
+	}
+
+	/* allocate space for the counter values */
+	dd->cntrs = kzalloc(sizeof(u64) * index, GFP_KERNEL);
 	if (!dd->cntrs)
 		goto bail;
-	/* size cntrnames */
-	for (sz = 0, i = 0; i < ARRAY_SIZE(dev_cntrs); i++)
-		/* +1 for newline  */
-		sz += strlen(dev_cntrs[i].name) + 1;
+
+	dd->scntrs = kzalloc(sizeof(u64) * index, GFP_KERNEL);
+	if (!dd->scntrs)
+		goto bail;
+
+
+	/* allocate space for the counter names */
 	dd->cntrnameslen = sz;
 	dd->cntrnames = kmalloc(sz, GFP_KERNEL);
 	if (!dd->cntrnames)
 		goto bail;
-	/* fill in cntrnames */
-	for (p = dd->cntrnames, i = 0; i < ARRAY_SIZE(dev_cntrs); i++) {
-		memcpy(p, dev_cntrs[i].name, strlen(dev_cntrs[i].name));
-		p += strlen(dev_cntrs[i].name);
-		*p++ = '\n';
+
+	/* fill in the names */
+	for (p = dd->cntrnames, i = 0, index = 0; i < DEV_CNTR_LAST; i++) {
+		if (dev_cntrs[i].flags & CNTR_DISABLED) {
+			/* Nothing */
+		} else {
+			if (dev_cntrs[i].flags & CNTR_VL) {
+				for (j = 0; j < C_VL_COUNT; j++) {
+					memset(name, '\0', C_MAX_NAME);
+					snprintf(name, C_MAX_NAME, "%s%d",
+						dev_cntrs[i].name,
+						vl_from_idx(j));
+					memcpy(p, name, strlen(name));
+					p += strlen(name);
+					*p++ = '\n';
+				}
+			} else {
+				memcpy(p, dev_cntrs[i].name,
+				       strlen(dev_cntrs[i].name));
+				p += strlen(dev_cntrs[i].name);
+				*p++ = '\n';
+			}
+			index++;
+		}
 	}
-	/* size port counter names */
-	/* assume context overflows are last and adjust */
-	dd->nportcntrs = ARRAY_SIZE(port_cntrs) + dd->num_rcv_contexts - 160;
-	for (sz = 0, i = 0; i < dd->nportcntrs; i++)
-		/* +1 for newline  */
-		sz += strlen(port_cntrs[i].name) + 1;
+
+	/*********************/
+	/* per port counters */
+	/*********************/
+
+	/*
+	 * Go through the counters for the overflows and disable the ones we
+	 * don't need. This varies based on platform so we need to do it
+	 * dynamically here.
+	 */
+	rcv_ctxts = dd->num_rcv_contexts;
+	for (i = C_RCV_HDR_OVF_FIRST + rcv_ctxts;
+	     i <= C_RCV_HDR_OVF_LAST; i++) {
+		port_cntrs[i].flags |= CNTR_DISABLED;
+	}
+
+	/* size port counter names and determine how many we have*/
+	sz = 0;
+	dd->nportcntrs = 0;
+	for (i = 0; i < PORT_CNTR_LAST; i++) {
+		hfi_dbg_early("Init pcntr %s\n", port_cntrs[i].name);
+		if (port_cntrs[i].flags & CNTR_DISABLED) {
+			hfi_dbg_early("\tSkipping %s\n", port_cntrs[i].name);
+			continue;
+		}
+
+		if (port_cntrs[i].flags & CNTR_VL) {
+			hfi_dbg_early("\tProcessing VL cntr\n");
+			port_cntrs[i].offset = dd->nportcntrs;
+			for (j = 0; j < C_VL_COUNT; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					port_cntrs[i].name,
+					vl_from_idx(j));
+				sz += strlen(name);
+				sz++;
+				hfi_dbg_early("\t\t%s\n", name);
+				dd->nportcntrs++;
+			}
+		} else {
+			/* +1 for newline  */
+			sz += strlen(port_cntrs[i].name) + 1;
+			port_cntrs[i].offset = dd->nportcntrs;
+			dd->nportcntrs++;
+			hfi_dbg_early("\tAdding %s\n", port_cntrs[i].name);
+		}
+	}
+
+	/* allocate space for the counter names */
 	dd->portcntrnameslen = sz;
 	dd->portcntrnames = kmalloc(sz, GFP_KERNEL);
 	if (!dd->portcntrnames)
 		goto bail;
-	for (p = dd->portcntrnames, i = 0; i < dd->nportcntrs; i++) {
-		memcpy(p, port_cntrs[i].name, strlen(port_cntrs[i].name));
-		p += strlen(port_cntrs[i].name);
-		*p++ = '\n';
+
+	/* fill in port cntr names */
+	for (p = dd->portcntrnames, i = 0; i < PORT_CNTR_LAST; i++) {
+		if (port_cntrs[i].flags & CNTR_DISABLED)
+			continue;
+
+		if (port_cntrs[i].flags & CNTR_VL) {
+			for (j = 0; j < C_VL_COUNT; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					port_cntrs[i].name,
+					vl_from_idx(j));
+				memcpy(p, name, strlen(name));
+				p += strlen(name);
+				*p++ = '\n';
+			}
+		} else {
+			memcpy(p, port_cntrs[i].name,
+			       strlen(port_cntrs[i].name));
+			p += strlen(port_cntrs[i].name);
+			*p++ = '\n';
+		}
 	}
-	/* per port */
+
+	/* allocate per port storage for counter values */
 	ppd = (struct qib_pportdata *)(dd + 1);
-	for (i = 0; i < dd->num_pports; i++, ppd++) {
+	for (i = 0; i < dd->num_pports; i++, ppd++) { /* FIXME. ppd++? */
 		ppd->cntrs = kzalloc(sizeof(u64) * dd->nportcntrs,
 				     GFP_KERNEL);
 		if (!ppd->cntrs)
 			goto bail;
+
+		ppd->scntrs = kzalloc(sizeof(u64) * dd->nportcntrs,
+				     GFP_KERNEL);
+		if (!ppd->scntrs)
+			goto bail;
 	}
-	mod_timer(&dd->stats_timer, jiffies + HZ * ACTIVITY_TIMER);
+	mod_timer(&dd->synth_stats_timer, jiffies + HZ * SYNTH_CNT_TIME);
 	return 0;
 bail:
 	free_cntrs(dd);

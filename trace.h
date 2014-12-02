@@ -1032,6 +1032,7 @@ __hfi_trace_fn(LINKVERB)
 __hfi_trace_fn(VERBOSE)
 __hfi_trace_fn(DEBUG)
 __hfi_trace_fn(SNOOP)
+__hfi_trace_fn(CNTR)
 
 /*
  * Carry the qib name forward to make porting code from QIB easier. Can be
@@ -1042,6 +1043,18 @@ __hfi_trace_fn(SNOOP)
 
 #define hfi_dbg(fmt, ...) \
 	hfi_cdbg(DEBUG, fmt, ##__VA_ARGS__)
+
+/*
+ * Define HFI_EARLY_DBG at compile time or here to enable early trace
+ * messages. Do not check in an enablement for this.
+ */
+
+#ifdef HFI_EARLY_DBG
+#define hfi_dbg_early(fmt, ...) \
+	trace_printk(fmt, ##__VA_ARGS__)
+#else
+#define hfi_dbg_early(fmt, ...)
+#endif
 
 #endif /* __HFI_TRACE_H */
 

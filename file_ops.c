@@ -1817,14 +1817,14 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		/* accessing LCB CSRs requires a special procuedure */
 		if (is_lcb_offset(csr_off)) {
 			if (!in_lcb) {
-				int ret = acquire_lcb_access(dd);
+				int ret = acquire_lcb_access(dd, 1);
 				if (ret)
 					break;
 				in_lcb = 1;
 			}
 		} else {
 			if (in_lcb) {
-				release_lcb_access(dd);
+				release_lcb_access(dd, 1);
 				in_lcb = 0;
 			}
 		}
@@ -1833,7 +1833,7 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			break;
 	}
 	if (in_lcb)
-		release_lcb_access(dd);
+		release_lcb_access(dd, 1);
 	*f_pos += total;
 	return total;
 }
@@ -1869,21 +1869,21 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 		/* accessing LCB CSRs requires a special procuedure */
 		if (is_lcb_offset(csr_off)) {
 			if (!in_lcb) {
-				int ret = acquire_lcb_access(dd);
+				int ret = acquire_lcb_access(dd, 1);
 				if (ret)
 					break;
 				in_lcb = 1;
 			}
 		} else {
 			if (in_lcb) {
-				release_lcb_access(dd);
+				release_lcb_access(dd, 1);
 				in_lcb = 0;
 			}
 		}
 		writeq(data, base + total);
 	}
 	if (in_lcb)
-		release_lcb_access(dd);
+		release_lcb_access(dd, 1);
 	*f_pos += total;
 	return total;
 }
