@@ -1923,7 +1923,7 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		/* this error requires a manual drop into SPC freeze mode */
 		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
 		/* then a fixup */
-		/* FIXME: call unfreeze when implemented */
+		start_freeze_handling(dd->pport);
 	}
 }
 
