@@ -14,6 +14,7 @@
 #ifndef __DSM_H__
 #define __DSM_H__
 
+#include <linux/sizes.h>
 #include "nfit.h"
 
 #if IS_ENABLED(CONFIG_ND_MANUAL_DSM)
@@ -111,8 +112,7 @@ struct fv_fw_cmd {
 	u32 *status;
 };
 
-#define CR_PAYLOAD_SIZE (128)
-#define CR_MB_SIZE (1 << 20)
+#define CR_PAYLOAD_SIZE SZ_128
 #define CR_REG_SIZE 8
 #define DB_SHIFT 48
 #define SUB_OP_SHIFT 40
