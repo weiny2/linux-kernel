@@ -176,7 +176,7 @@ static ssize_t alt_name_show(struct device *dev,
 
 	return sprintf(buf, "%s\n", nspm->alt_name ? nspm->alt_name : "");
 }
-DEVICE_ATTR_RW(alt_name);
+static DEVICE_ATTR_RW(alt_name);
 
 static ssize_t __size_store(struct device *dev, const char *buf)
 {

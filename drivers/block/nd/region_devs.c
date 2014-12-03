@@ -177,7 +177,7 @@ static ssize_t available_size_show(struct device *dev,
 
 	return sprintf(buf, "%lld\n", nd_region->available_size);
 }
-DEVICE_ATTR_RO(available_size);
+static DEVICE_ATTR_RO(available_size);
 
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
