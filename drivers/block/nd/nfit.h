@@ -16,7 +16,6 @@
 #define __NFIT_H__
 
 #include <linux/types.h>
-#include <linux/ioport.h>
 
 enum {
 	NFIT_TABLE_SPA = 0,
