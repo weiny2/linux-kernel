@@ -37,7 +37,7 @@ void __iomem *__wrap_ioremap_cache(resource_size_t offset, unsigned long size)
 	nfit_res = nfit_test_lookup(offset);
 	spin_unlock(&nfit_test_lock);
 	if (nfit_res)
-		return nfit_res->buf;
+		return (void __iomem *) nfit_res->buf;
 	return ioremap_cache(offset, size);
 }
 EXPORT_SYMBOL(__wrap_ioremap_cache);

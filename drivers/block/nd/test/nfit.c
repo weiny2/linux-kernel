@@ -281,7 +281,8 @@ static int nfit_test0_alloc(struct nfit_test *t)
 			+ sizeof(struct nfit_bdw) * NUM_BDW;
 	int i;
 
-	t->nfit_buf = alloc_coherent(t, nfit_size, &t->nfit_dma);
+	t->nfit_buf = (void __iomem *) alloc_coherent(t, nfit_size,
+			&t->nfit_dma);
 	if (!t->nfit_buf)
 		return -ENOMEM;
 	t->nfit_size = nfit_size;
@@ -328,7 +329,8 @@ static int nfit_test1_alloc(struct nfit_test *t)
 {
 	size_t nfit_size = sizeof(struct nfit) + sizeof(struct nfit_spa);
 
-	t->nfit_buf = alloc_coherent(t, nfit_size, &t->nfit_dma);
+	t->nfit_buf = (void __iomem *) alloc_coherent(t, nfit_size,
+			&t->nfit_dma);
 	if (!t->nfit_buf)
 		return -ENOMEM;
 	t->nfit_size = nfit_size;
