@@ -70,6 +70,7 @@ config NFIT_LOCAL
 
 config NFIT_TEST
 	tristate "NFIT TEST: Manufactured NFIT for interface testing"
+	depends on ACPI
 	depends on DMA_CMA
 	depends on ND_CORE=m
 	depends on m
