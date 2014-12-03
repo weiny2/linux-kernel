@@ -87,7 +87,7 @@ static unsigned long pmem_lookup_pfn(struct pmem_device *pmem, sector_t sector)
 static void copy_to_pmem(struct pmem_device *pmem, const void *src,
 			sector_t sector, size_t n)
 {
-	void *dst;
+	void __iomem *dst;
 	unsigned int offset = (sector & (PAGE_SECTORS - 1)) << SECTOR_SHIFT;
 	size_t copy;
 
@@ -113,7 +113,7 @@ static void copy_to_pmem(struct pmem_device *pmem, const void *src,
 static void copy_from_pmem(void *dst, struct pmem_device *pmem,
 			  sector_t sector, size_t n)
 {
-	void *src;
+	void __iomem *src;
 	unsigned int offset = (sector & (PAGE_SECTORS - 1)) << SECTOR_SHIFT;
 	size_t copy;
 
