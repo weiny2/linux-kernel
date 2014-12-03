@@ -792,8 +792,6 @@ struct hfi_devdata {
 	void (*f_set_intr_state)(struct hfi_devdata *, u32);
 	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
 	void (*f_wantpiobuf_intr)(struct send_context *, u32);
-	/* FIXME - get rid of this */
-	void (*f_sdma_update_tail)(struct sdma_engine *, u16);
 	u64 (*f_portcntr)(struct qib_pportdata *, u32);
 	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
 		u64 **);

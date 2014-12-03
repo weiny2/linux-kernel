@@ -377,28 +377,30 @@ struct sdma_engine {
 	u64 imask;			/* clear interrupt mask */
 	/* private: */
 	struct workqueue_struct *wq;
-	/* add sdma fields here... */
-	/* private: */
-	/* protect changes to senddmactrl shadow */
-	spinlock_t senddmactrl_lock;
-	/* private: */
-	u64 p_senddmactrl;		/* shadow per-engine SendDmaCtrl */
-	/* private: */
-	u16 descq_cnt;
-
-	/* JAG SDMA Im Bau - everything above this line suspect */
-	/* private: */
-	u8              this_idx; /* zero relative engine */
-	/* private: */
-	struct hw_sdma_desc *descq;
-	/* private: */
-	dma_addr_t            descq_phys;
 	/* private: */
 	volatile __le64      *head_dma;
 	/* private: */
 	dma_addr_t            head_phys;
 	/* private: */
+	struct hw_sdma_desc *descq;
+	/* private: */
+	dma_addr_t            descq_phys;
+	/* private */
+	u32 sdma_mask;
+	/* private */
 	struct sdma_state state;
+	/* private: */
+	u16 descq_cnt;
+	/* private: */
+	u8 sdma_shift;
+	/* private: */
+	u8 this_idx; /* zero relative engine */
+	/* protect changes to senddmactrl shadow */
+	spinlock_t senddmactrl_lock;
+	/* private: */
+	u64 p_senddmactrl;		/* shadow per-engine SendDmaCtrl */
+	/* private: */
+	void __iomem *tail_csr;
 	/* private: */
 	u8                    generation;
 	/* read/write using lock */
@@ -407,15 +409,13 @@ struct sdma_engine {
 	/* private: */
 	struct list_head      activelist;
 	/* private: */
-	u64                   descq_added;
-	/* private: */
-	u64                   descq_removed;
-	/* private: */
 	u64                   last_status;
 	/* private: */
-	u16                   descq_tail;
+	u32                   descq_tail;
 	/* private: */
-	u16                   descq_head;
+	u32                   descq_head;
+	/* private: */
+	u16                   desc_avail;
 	/* private: */
 	struct list_head      dmawait;
 
@@ -451,15 +451,15 @@ void sdma_link_down(struct hfi_devdata *dd);
  */
 static inline int sdma_empty(struct sdma_engine *engine)
 {
-	return engine->descq_added == engine->descq_removed;
+	return engine->descq_tail == engine->descq_head;
 }
 
 /* must be called under lock */
 static inline u16 sdma_descq_freecnt(struct sdma_engine *engine)
 {
 	return engine->descq_cnt -
-		(engine->descq_added -
-		 ACCESS_ONCE(engine->descq_removed)) - 1;
+		(engine->descq_tail -
+		 ACCESS_ONCE(engine->descq_head)) - 1;
 }
 
 static inline int __sdma_running(struct sdma_engine *engine)
@@ -905,7 +905,6 @@ struct sdma_engine *sdma_select_engine_vl(
 
 /* deprecated for now */
 int qib_sdma_make_progress(struct sdma_engine *);
-void sdma_update_tail(struct sdma_engine *, u16);
 
 void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *);
 

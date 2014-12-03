@@ -1089,6 +1089,13 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
 
+void __iomem *get_csr_addr(
+	struct hfi_devdata *dd,
+	u32 offset)
+{
+	return (void *)dd->kregbase + offset;
+}
+
 static inline u64 read_write_csr(const struct hfi_devdata *dd, u32 csr,
 				 int mode, u64 value)
 {
@@ -8429,7 +8436,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_read_cntrs        = read_cntrs;
 	dd->f_read_portcntrs    = read_portcntrs;
 	dd->f_reset             = reset;
-	dd->f_sdma_update_tail  = sdma_update_tail;
 	dd->f_set_armlaunch     = set_armlaunch;
 	dd->f_iblink_state      = iblink_state;
 	dd->f_ibphys_portstate  = ibphys_portstate;

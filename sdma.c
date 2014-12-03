@@ -374,20 +374,14 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 	spin_unlock(&sde->dd->pport->sdma_alllock);
 
 	/*
-	 * Resync count of added and removed.  It is VERY important that
-	 * sdma_descq_removed NEVER decrement - user_sdma depends on it.
-	 */
-	sde->descq_removed = sde->descq_added;
-
-	/*
 	 * Reset our notion of head and tail.
 	 * Note that the HW registers have been reset via an earlier
 	 * clean up.
 	 */
 	sde->descq_tail = 0;
 	sde->descq_head = 0;
+	sde->desc_avail = sdma_descq_freecnt(sde);
 	*sde->head_dma = 0;
-	sde->generation = 0;
 
 	__sdma_process_event(sde, sdma_event_e40_sw_cleaned);
 
@@ -618,6 +612,9 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 		sde->ppd = ppd;
 		sde->this_idx = this_idx;
 		sde->descq_cnt = descq_cnt;
+		sde->desc_avail = sdma_descq_freecnt(sde);
+		sde->sdma_shift = ilog2(descq_cnt);
+		sde->sdma_mask = (1 << sde->sdma_shift) - 1;
 
 		spin_lock_init(&sde->lock);
 		spin_lock_init(&sde->senddmactrl_lock);
@@ -634,6 +631,9 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 
 		INIT_LIST_HEAD(&sde->activelist);
 		INIT_LIST_HEAD(&sde->dmawait);
+
+		sde->tail_csr =
+			get_kctxt_csr_addr(dd, this_idx, WFR_SEND_DMA_TAIL);
 
 		if (idle_cnt)
 			dd->default_desc1 =
@@ -902,22 +902,6 @@ void sdma_txclean(
 	}
 }
 
-static inline void make_sdma_desc(struct sdma_engine *sde,
-				  u64 *sdmadesc, u64 addr, u64 dwlen)
-{
-	u64 bytelen = dwlen * 4ULL;
-	u64 generation = sde->generation;
-
-	WARN_ON(addr & 3);
-
-	/* SDmaByteCount[61:48] */
-	sdmadesc[0] = (bytelen & SDMA_DESC0_BYTE_COUNT_MASK) << SDMA_DESC0_BYTE_COUNT_SHIFT;
-	/* SDmaPhyAddr[47:0] */
-	sdmadesc[0] |= (addr & SDMA_DESC0_PHY_ADDR_MASK) << SDMA_DESC0_PHY_ADDR_SHIFT;
-
-	sdmadesc[1] = (generation & SDMA_DESC1_GENERATION_MASK) << SDMA_DESC1_GENERATION_SHIFT;
-}
-
 static u16 sdma_gethead(struct sdma_engine *sde)
 {
 	struct hfi_devdata *dd = sde->dd;
@@ -940,9 +924,9 @@ retry:
 		(u16) le64_to_cpu(*sde->head_dma) :
 		(u16) read_sde_csr(sde, WFR_SEND_DMA_HEAD);
 
-	swhead = sde->descq_head;
+	swhead = sde->descq_head & sde->sdma_mask;
 	/* this code is really bad for cache line trading */
-	swtail = sde->descq_tail;
+	swtail = sde->descq_tail & sde->sdma_mask;
 	cnt = sde->descq_cnt;
 
 	if (swhead < swtail)
@@ -1026,7 +1010,7 @@ static int sdma_make_progress(struct sdma_engine *sde, u64 status)
 {
 	struct sdma_txreq *txp = NULL;
 	int progress = 0;
-	u16 hwhead;
+	u16 hwhead, swhead;
 
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
@@ -1044,17 +1028,14 @@ static int sdma_make_progress(struct sdma_engine *sde, u64 status)
 	if (!list_empty(&sde->activelist))
 		txp = list_first_entry(&sde->activelist,
 			struct sdma_txreq, list);
-	while (sde->descq_head != hwhead) {
-		/* increment dequed desc count */
-		sde->descq_removed++;
-
+	swhead = sde->descq_head & sde->sdma_mask;
+	while (swhead != hwhead) {
 		/* advance head, wrap if needed */
-		if (++sde->descq_head == sde->descq_cnt)
-			sde->descq_head = 0;
+		swhead = ++sde->descq_head & sde->sdma_mask;
 
 		/* if now past this txp's descs, do the callback */
 		/* FIXME - old api code fragment */
-		if (txp && txp->next_descq_idx == sde->descq_head) {
+		if (txp && txp->next_descq_idx == swhead) {
 			int drained = 0;
 			/* protect against complete modifying */
 			struct iowait *wait = txp->wait;
@@ -1215,50 +1196,11 @@ static void sdma_setlengen(struct sdma_engine *sde)
 	);
 }
 
-void sdma_update_tail(struct sdma_engine *sde, u16 tail)
+static inline void sdma_update_tail(struct sdma_engine *sde, u16 tail)
 {
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
-		slashstrip(__FILE__), __LINE__, __func__);
-	dd_dev_err(sde->dd, "tail: 0x%x --> 0x%x\n", sde->descq_tail, tail);
-
-	do {
-		u16 i, start, end;
-		start = sde->descq_tail;
-		end = tail;
-		if (start < end) {
-			for (i = start; i < end; ++i) {
-				dd_dev_err(sde->dd, "desc[%d] = %016llx %016llx\n",
-					i,
-					le64_to_cpu(sde->descq[i].qw[0]),
-					le64_to_cpu(sde->descq[i].qw[1])
-				);
-			}
-		} else if (end < start) {
-			for (i = start; i < sde->descq_cnt; ++i) {
-				dd_dev_err(sde->dd, "desc[%d] = %016llx %016llx\n",
-					i,
-					le64_to_cpu(sde->descq[i].qw[0]),
-					le64_to_cpu(sde->descq[i].qw[1])
-				);
-			}
-			for (i = 0; i < end; ++i) {
-				dd_dev_err(sde->dd, "desc[%d] = %016llx %016llx\n",
-					i,
-					le64_to_cpu(sde->descq[i].qw[0]),
-					le64_to_cpu(sde->descq[i].qw[1])
-				);
-			}
-		} else {
-			dd_dev_err(sde->dd, "Empty!???\n");
-		}
-	} while (0);
-#endif
-
-	sde->descq_tail = tail;
 	/* Commit writes to memory and advance the tail on the chip */
 	smp_wmb();
-	write_sde_csr(sde, WFR_SEND_DMA_TAIL, tail);
+	writeq(tail, sde->tail_csr);
 }
 
 /*
@@ -1399,20 +1341,20 @@ static void dump_sdma_state(struct sdma_engine *sde)
 	u16 len;
 	u16 head, tail, cnt;
 
-	head = sde->descq_head;
-	tail = sde->descq_tail;
+	head = sde->descq_head & sde->sdma_mask;
+	tail = sde->descq_tail & sde->sdma_mask;
 	cnt = sdma_descq_freecnt(sde);
 	descq = sde->descq;
 
-	dd_dev_err(sde->dd, 
+	dd_dev_err(sde->dd,
 		"SDMA (%u) descq_head: %u\n",
 		sde->this_idx,
 		head);
-	dd_dev_err(sde->dd, 
+	dd_dev_err(sde->dd,
 		"SDMA (%u) descq_tail: %u\n",
 		sde->this_idx,
 		tail);
-	dd_dev_err(sde->dd, 
+	dd_dev_err(sde->dd,
 		"SDMA (%u) freecnt: %u\n",
 		sde->this_idx,
 		cnt);
@@ -1481,8 +1423,8 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 	u8 gen;
 	u16 len;
 
-	head = sde->descq_head;
-	tail = sde->descq_tail;
+	head = sde->descq_head & sde->sdma_mask;
+	tail = sde->descq_tail & sde->sdma_mask;
 	seq_printf(s, SDE_FMT, sde->this_idx,
 		sdma_state_name(sde->state.current_state),
 		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CTRL),
@@ -1522,8 +1464,7 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 			"\tdesc[%u]: flags:%s addr:0x%016llx gen:%u len:%u bytes\n",
 			head, flags, addr, gen, len);
 		if (desc[0] & SDMA_DESC0_FIRST_DESC_FLAG)
-			seq_printf(s,
-				"\t\tahgidx: %u ahgmode: %u\n",
+			seq_printf(s, "\t\tahgidx: %u ahgmode: %u\n",
 				(u8)((desc[1] & SDMA_DESC1_HEADER_INDEX_SMASK)
 					>> SDMA_DESC1_HEADER_INDEX_MASK),
 				(u8)((desc[1] & SDMA_DESC1_HEADER_MODE_SMASK)
@@ -1549,8 +1490,9 @@ static inline u8 ahg_mode(struct sdma_txreq *tx)
  */
 static inline u64 add_gen(struct sdma_engine *sde, u64 qw1)
 {
+	u8 generation = (sde->descq_tail >> sde->sdma_shift) & 3;
 	qw1 &= ~SDMA_DESC1_GENERATION_SMASK;
-	qw1 |= (sde->generation & SDMA_DESC1_GENERATION_MASK)
+	qw1 |= ((u64)generation & SDMA_DESC1_GENERATION_MASK)
 			<< SDMA_DESC1_GENERATION_SHIFT;
 	return qw1;
 }
@@ -1578,15 +1520,12 @@ static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
 	struct sdma_desc *descp = tx->descp;
 	u8 skip = 0, mode = ahg_mode(tx);
 
-	tail = sde->descq_tail;
+	tail = sde->descq_tail & sde->sdma_mask;
 	sde->descq[tail].qw[0] = cpu_to_le64(descp->qw[0]);
 	sde->descq[tail].qw[1] = cpu_to_le64(add_gen(sde, descp->qw[1]));
 	trace_hfi_sdma_descriptor(sde, descp->qw[0], descp->qw[1],
 		tail, &sde->descq[tail]);
-	if (++tail == sde->descq_cnt) {
-		tail = 0;
-		++sde->generation;
-	}
+	tail = ++sde->descq_tail & sde->sdma_mask;
 	descp++;
 	if (mode > SDMA_AHG_APPLY_UPDATE1)
 		skip = mode >> 1;
@@ -1604,14 +1543,11 @@ static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
 		sde->descq[tail].qw[1] = cpu_to_le64(qw1);
 		trace_hfi_sdma_descriptor(sde, descp->qw[0], qw1,
 			tail, &sde->descq[tail]);
-		if (++tail == sde->descq_cnt) {
-			tail = 0;
-			++sde->generation;
-		}
+		tail = ++sde->descq_tail & sde->sdma_mask;
 	}
-	sde->descq_added += tx->num_desc;
 	tx->next_descq_idx = tail;
 	list_add_tail(&tx->list, &sde->activelist);
+	sde->desc_avail -= tx->num_desc;
 	return tail;
 }
 
@@ -1651,7 +1587,7 @@ int sdma_send_txreq(struct sdma_engine *sde,
 retry:
 	if (unlikely(!__sdma_running(sde)))
 		goto unlock_noconn;
-	if (unlikely(tx->num_desc > sdma_descq_freecnt(sde)))
+	if (unlikely(tx->num_desc > sde->desc_avail))
 		goto nodesc;
 	tail = submit_tx(sde, tx);
 	tx->wait = wait;
@@ -1675,8 +1611,13 @@ unlock_noconn:
 	ret = -ECOMM;
 	goto unlock;
 nodesc:
-	if (sdma_make_progress(sde, 0))
+	sde->desc_avail = sdma_descq_freecnt(sde);
+	if (tx->num_desc <= sde->desc_avail)
 		goto retry;
+	if (sdma_make_progress(sde, 0)) {
+		sde->desc_avail = sdma_descq_freecnt(sde);
+		goto retry;
+	}
 	if (sde->dd->flags & QIB_HAS_SDMA_TIMEOUT)
 		sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
 	if (busycb && wait)
@@ -1734,7 +1675,7 @@ retry:
 	list_for_each_entry_safe(tx, tx_next, tx_list, list) {
 		if (unlikely(!__sdma_running(sde)))
 			goto unlock_noconn;
-		if (unlikely(tx->num_desc > freecnt))
+		if (unlikely(tx->num_desc > sde->desc_avail))
 			goto nodesc;
 		if (unlikely(tx->tlen)) {
 			ret = -EINVAL;
@@ -1766,8 +1707,13 @@ unlock_noconn:
 	ret = -ECOMM;
 	goto unlock;
 nodesc:
-	if (sdma_make_progress(sde, 0))
+	sde->desc_avail = sdma_descq_freecnt(sde);
+	if (tx->num_desc <= sde->desc_avail)
 		goto retry;
+	if (sdma_make_progress(sde, 0)) {
+		sde->desc_avail = sdma_descq_freecnt(sde);
+		goto retry;
+	}
 	if (sde->dd->flags & QIB_HAS_SDMA_TIMEOUT)
 		sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
 	if (busycb && wait)
@@ -2258,7 +2204,7 @@ void sdma_ahg_free(struct sdma_engine *sde, int ahg_index)
 	if (!sde)
 		return;
 	trace_hfi_ahg_deallocate(sde, ahg_index);
-	if (ahg_index < 0 || ahg_index > 31 )
+	if (ahg_index < 0 || ahg_index > 31)
 		return;
 	clear_bit(ahg_index, &sde->ahg_bits);
 }

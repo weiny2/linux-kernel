@@ -466,7 +466,7 @@ static inline u64 read_kctxt_csr(const struct hfi_devdata *dd, int ctxt,
 					u32 offset0)
 {
 	/* kernel per-context CSRs are separated by 0x100 */
-	return read_csr(dd, offset0 + (0x100* ctxt));
+	return read_csr(dd, offset0 + (0x100 * ctxt));
 }
 
 static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
@@ -475,6 +475,18 @@ static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
 	/* kernel per-context CSRs are separated by 0x100 */
 	write_csr(dd, offset0 + (0x100 * ctxt), value);
 } 
+
+void __iomem *get_csr_addr(
+	struct hfi_devdata *dd,
+	u32 offset);
+
+static inline void __iomem *get_kctxt_csr_addr(
+	struct hfi_devdata *dd,
+	int ctxt,
+	u32 offset0)
+{
+	return get_csr_addr(dd, offset0 + (0x100 * ctxt));
+}
 
 /*
  * The *_uctxt_* flavor of the CSR read/write functions are for
