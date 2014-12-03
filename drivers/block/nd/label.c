@@ -18,6 +18,8 @@
 #include "label.h"
 #include "nd.h"
 
+#include <asm-generic/io-64-nonatomic-lo-hi.h>
+
 static u32 inc_seq(u32 seq)
 {
 	seq = (seq + 1) & NSINDEX_SEQ_MASK;
