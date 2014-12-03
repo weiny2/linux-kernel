@@ -1406,8 +1406,10 @@ static inline int check_kprobe_rereg(struct kprobe *p)
 	return ret;
 }
 
-int __weak arch_check_ftrace_location(struct kprobe *p)
+static __kprobes int check_kprobe_address_safe(struct kprobe *p,
+					       struct module **probed_mod)
 {
+	int ret = 0;
 	unsigned long ftrace_addr;
 
 	/*
@@ -1425,17 +1427,7 @@ int __weak arch_check_ftrace_location(struct kprobe *p)
 		return -EINVAL;
 #endif
 	}
-	return 0;
-}
 
-static __kprobes int check_kprobe_address_safe(struct kprobe *p,
-					       struct module **probed_mod)
-{
-	int ret;
-
-	ret = arch_check_ftrace_location(p);
-	if (ret)
-		return ret;
 	jump_label_lock();
 	preempt_disable();
 
