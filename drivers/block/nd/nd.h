@@ -39,7 +39,7 @@ static inline struct nd_namespace_index __iomem *to_namespace_index(
 	if (i < 0)
 		return NULL;
 
-	return ((void *) nd_dimm->data->out_buf
+	return ((void __iomem *) nd_dimm->data->out_buf
 			+ sizeof_namespace_index(nd_dimm) * i);
 }
 
