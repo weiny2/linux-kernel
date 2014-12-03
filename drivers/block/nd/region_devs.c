@@ -147,7 +147,7 @@ static ssize_t set_state_show(struct device *dev,
 	 */
 	return sprintf(buf, "%s\n", nd_spa->nd_set->busy ? "active" : "idle");
 }
-DEVICE_ATTR_RO(set_state);
+static DEVICE_ATTR_RO(set_state);
 
 static ssize_t set_cookie_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
