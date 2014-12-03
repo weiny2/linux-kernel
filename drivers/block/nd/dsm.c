@@ -26,7 +26,7 @@
  */
 #define CR_MB_TOTAL_SIZE (3 * SZ_1M)
 static phys_addr_t mb_phys_addr = 0xf000100000ULL; /* simics 1 dimm config */
-static void	   *mb_addr;
+static void __iomem *mb_addr;
 static struct cr_mailbox cr_mb;
 
 static void print_fw_cmd(struct fv_fw_cmd *fw_cmd)
