@@ -19,7 +19,7 @@
 
 static DEFINE_IDA(btt_ida);
 
-void nd_btt_release(struct device *dev)
+static void nd_btt_release(struct device *dev)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 
