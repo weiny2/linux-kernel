@@ -24,9 +24,9 @@
  * pointers up manually.
  */
 #define CR_MB_TOTAL_SIZE (3 * CR_MB_SIZE)
-phys_addr_t	mb_phys_addr = 0xf000100000; /* single simics dimm config */
-void		*mb_addr;
-struct cr_mailbox cr_mb;
+static phys_addr_t mb_phys_addr = 0xf000100000; /* single simics dimm config */
+static void	   *mb_addr;
+static struct cr_mailbox cr_mb;
 
 static void print_fw_cmd(struct fv_fw_cmd *fw_cmd)
 {
@@ -50,7 +50,7 @@ static void print_fw_cmd(struct fv_fw_cmd *fw_cmd)
 }
 
 /* Offset from the start of the CTRL region to the start of the OS mailbox */
-int cr_verify_fw_cmd(struct fv_fw_cmd *fw_cmd)
+static int cr_verify_fw_cmd(struct fv_fw_cmd *fw_cmd)
 {
 	if (fw_cmd->input_payload_size > CR_PAYLOAD_SIZE ||
 		fw_cmd->output_payload_size > CR_PAYLOAD_SIZE ||
@@ -62,7 +62,7 @@ int cr_verify_fw_cmd(struct fv_fw_cmd *fw_cmd)
 }
 
 
-void cr_write_cmd_op(struct cr_mailbox *mb, struct fv_fw_cmd *fw_cmd)
+static void cr_write_cmd_op(struct cr_mailbox *mb, struct fv_fw_cmd *fw_cmd)
 {
 	__u64 command = 0;
 
@@ -73,7 +73,7 @@ void cr_write_cmd_op(struct cr_mailbox *mb, struct fv_fw_cmd *fw_cmd)
 	__raw_writeq(command, mb->command);
 }
 
-void cr_memcopy_outpayload(struct cr_mailbox *mb,
+static void cr_memcopy_outpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd)
 {
 	unsigned char *to;
@@ -105,7 +105,7 @@ static void cr_poll_fw_cmd_completion(struct cr_mailbox *mb)
 	} while (!(status & MB_COMPLETE));
 }
 
-void cr_read_large_outpayload(struct cr_mailbox *mb,
+static void cr_read_large_outpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd)
 {
 	memcpy_fromio(fw_cmd->large_output_payload,
@@ -113,7 +113,7 @@ void cr_read_large_outpayload(struct cr_mailbox *mb,
 			fw_cmd->large_output_payload_size);
 }
 
-void cr_read_large_inpayload(struct cr_mailbox *mb,
+static void cr_read_large_inpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd)
 {
 	memcpy_fromio(fw_cmd->large_output_payload,
@@ -121,7 +121,7 @@ void cr_read_large_inpayload(struct cr_mailbox *mb,
 			fw_cmd->large_output_payload_size);
 }
 
-void cr_memcopy_inpayload(struct cr_mailbox *mb,
+static void cr_memcopy_inpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd)
 {
 	unsigned char *from;
@@ -145,7 +145,7 @@ void cr_memcopy_inpayload(struct cr_mailbox *mb,
 		memcpy_toio(mb->in_payload[i], from, remain);
 }
 
-void cr_write_large_inpayload(struct cr_mailbox *mb,
+static void cr_write_large_inpayload(struct cr_mailbox *mb,
 	struct fv_fw_cmd *fw_cmd)
 {
 	memcpy_toio(mb->mb_in[0] + fw_cmd->large_payload_offset,
@@ -153,7 +153,7 @@ void cr_write_large_inpayload(struct cr_mailbox *mb,
 			fw_cmd->large_input_payload_size);
 }
 
-int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
+static int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 {
 	if (cr_verify_fw_cmd(fw_cmd))
 		return -EINVAL;
@@ -202,7 +202,7 @@ module_param(nd_manual_dsm, ulong, S_IRUGO);
 MODULE_PARM_DESC(nd_manual_dsm,
 		"Manually override _DSM commands instead of bus provided routines");
 
-int nd_dsm_passthru(void *buf, unsigned int buf_len)
+static int nd_dsm_passthru(void *buf, unsigned int buf_len)
 {
 	struct nfit_cmd_vendor_hdr *in = buf;
 	struct nfit_cmd_vendor_tail *out = buf + sizeof(*in) + in->in_length;
