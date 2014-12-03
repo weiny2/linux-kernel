@@ -366,10 +366,12 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		const void __iomem *end)
 {
 	struct nfit_table_header __iomem *hdr;
+	void *ret = NULL;
 
 	if (table >= end)
-		return NULL;
+		goto err;
 
+	ret = ERR_PTR(-ENOMEM);
 	hdr = (struct nfit_table_header __iomem *) table;
 	switch (readw(&hdr->type)) {
 	case NFIT_TABLE_SPA: {
@@ -377,7 +379,7 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		struct nfit_spa __iomem *nfit_spa = table;
 
 		if (!nd_spa)
-			return ERR_PTR(-ENOMEM);
+			goto err;
 		INIT_LIST_HEAD(&nd_spa->list);
 		nd_spa->nfit_spa = nfit_spa;
 		list_add_tail(&nd_spa->list, &nd_bus->spas);
@@ -391,7 +393,7 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		struct nfit_mem __iomem *nfit_mem = table;
 
 		if (!nd_mem)
-			return ERR_PTR(-ENOMEM);
+			goto err;
 		INIT_LIST_HEAD(&nd_mem->list);
 		nd_mem->nfit_mem = nfit_mem;
 		list_add_tail(&nd_mem->list, &nd_bus->memdevs);
@@ -406,7 +408,7 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		struct nfit_dcr __iomem *nfit_dcr = table;
 
 		if (!nd_dcr)
-			return ERR_PTR(-ENOMEM);
+			goto err;
 		INIT_LIST_HEAD(&nd_dcr->list);
 		nd_dcr->nfit_dcr = nfit_dcr;
 		list_add_tail(&nd_dcr->list, &nd_bus->dcrs);
@@ -421,7 +423,7 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		struct nfit_bdw __iomem *nfit_bdw = table;
 
 		if (!nd_bdw)
-			return ERR_PTR(-ENOMEM);
+			goto err;
 		INIT_LIST_HEAD(&nd_bdw->list);
 		nd_bdw->nfit_bdw = nfit_bdw;
 		list_add_tail(&nd_bdw->list, &nd_bus->bdws);
@@ -443,10 +445,13 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 	default:
 		dev_err(&nd_bus->dev, "unknown table '%d' parsing nfit\n",
 				readw(&hdr->type));
-		return ERR_PTR(-EINVAL);
+		ret = ERR_PTR(-EINVAL);
+		goto err;
 	}
 
 	return table + readw(&hdr->length);
+ err:
+	return (void __iomem *) ret;
 }
 
 static int child_unregister(struct device *dev, void *data)
@@ -479,7 +484,7 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 		goto err;
 
 	size = min_t(u32, size, readl(&nfit->length));
-	data = (u8 *) base;
+	data = (u8 __iomem *) base;
 	for (i = 0, sum = 0; i < size; i++)
 		sum += readb(&data[i]);
 	if (sum != 0 && !warn_checksum) {
