@@ -13,6 +13,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/device.h>
 #include <linux/slab.h>
+#include <linux/io.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include "nd-private.h"
@@ -47,14 +48,14 @@ static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
 	return 0;
 }
 
-static noinline int validate_dimm(struct nd_dimm *nd_dimm,
+static int validate_dimm(struct nd_dimm *nd_dimm,
 		struct nd_bus **nd_bus, u32 *nfit_handle)
 {
 	int rc = __validate_dimm(nd_dimm, nd_bus, nfit_handle);
 
 	if (rc)
 		dev_dbg(&nd_dimm->dev, "%pf: %s error: %d\n",
-				__builtin_return_address(1), __func__, rc);
+				__builtin_return_address(0), __func__, rc);
 	return rc;
 }
 

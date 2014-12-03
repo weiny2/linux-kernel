@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/sizes.h>
 #include <linux/mutex.h>
+#include <linux/io.h>
 #include "nfit.h"
 
 extern struct list_head nd_bus_list;

@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/io.h>
 #include "nd-private.h"
 #include "nfit.h"
 #include "nd.h"
