@@ -42,7 +42,7 @@ struct pmem_device {
 
 	/* One contiguous memory region per device */
 	phys_addr_t		phys_addr;
-	void			*virt_addr;
+	void __iomem		*virt_addr;
 	size_t			size;
 	int id;
 };
@@ -62,7 +62,7 @@ static int pmem_getgeo(struct block_device *bd, struct hd_geometry *geo)
  * The return value will point to the beginning of the page containing the
  * given sector, not to the sector itself.
  */
-static void *pmem_lookup_pg_addr(struct pmem_device *pmem, sector_t sector)
+static void __iomem *pmem_lookup_pg_addr(struct pmem_device *pmem, sector_t sector)
 {
 	size_t page_offset = sector >> PAGE_SECTORS_SHIFT;
 	size_t offset = page_offset << PAGE_SHIFT;
@@ -95,14 +95,14 @@ static void copy_to_pmem(struct pmem_device *pmem, const void *src,
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	dst = pmem_lookup_pg_addr(pmem, sector);
-	memcpy(dst + offset, src, copy);
+	memcpy_toio(dst + offset, src, copy);
 
 	if (copy < n) {
 		src += copy;
 		sector += copy >> SECTOR_SHIFT;
 		copy = n - copy;
 		dst = pmem_lookup_pg_addr(pmem, sector);
-		memcpy(dst, src, copy);
+		memcpy_toio(dst, src, copy);
 	}
 }
 
@@ -121,15 +121,14 @@ static void copy_from_pmem(void *dst, struct pmem_device *pmem,
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	src = pmem_lookup_pg_addr(pmem, sector);
-
-	memcpy(dst, src + offset, copy);
+	memcpy_fromio(dst, src + offset, copy);
 
 	if (copy < n) {
 		dst += copy;
 		sector += copy >> SECTOR_SHIFT;
 		copy = n - copy;
 		src = pmem_lookup_pg_addr(pmem, sector);
-		memcpy(dst, src, copy);
+		memcpy_fromio(dst, src, copy);
 	}
 }
 
@@ -235,9 +234,9 @@ static int pmem_rw_bytes(struct nd_io *ndio, void *buf, size_t offset,
 	}
 
 	if (rw == READ)
-		memcpy(buf, pmem->virt_addr + offset, n);
+		memcpy_fromio(buf, pmem->virt_addr + offset, n);
 	else
-		memcpy(pmem->virt_addr + offset, buf, n);
+		memcpy_toio(pmem->virt_addr + offset, buf, n);
 
 	return 0;
 }
