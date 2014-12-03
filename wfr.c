@@ -2029,9 +2029,9 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		start_freeze_handling(dd->pport);
 
 	while (reg_copy) {
-		int posn = fls(reg_copy);
+		int posn = fls64(reg_copy);
 		/*
-		 * fls() returns a 1-based offset, but we generally
+		 * fls64() returns a 1-based offset, but we generally
 		 * want 0-based offsets.
 		 */
 		int shift = posn - 1;
