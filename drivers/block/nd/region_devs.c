@@ -119,7 +119,7 @@ static ssize_t spa_index_show(struct device *dev,
 
 	return sprintf(buf, "%d\n", spa_index);
 }
-DEVICE_ATTR_RO(spa_index);
+static DEVICE_ATTR_RO(spa_index);
 
 static ssize_t nstype_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
@@ -128,7 +128,7 @@ static ssize_t nstype_show(struct device *dev,
 
 	return sprintf(buf, "%d\n", nd_region_to_namespace_type(nd_region));
 }
-DEVICE_ATTR_RO(nstype);
+static DEVICE_ATTR_RO(nstype);
 
 static ssize_t set_state_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
