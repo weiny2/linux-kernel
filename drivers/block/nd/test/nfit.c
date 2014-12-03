@@ -155,7 +155,7 @@ static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 		break;
 	default:
 		return -ENOTTY;
-	};
+	}
 
 	for (i = 0; i < ARRAY_SIZE(handle); i++)
 		if (nfit_handle == handle[i])
