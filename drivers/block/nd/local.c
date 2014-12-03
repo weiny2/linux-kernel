@@ -37,8 +37,8 @@ static int local_nfit_probe(struct platform_device *pdev)
 		return rc;
 
 	nfit_desc = &data->nfit_desc;
-	nfit_desc->nfit_base = devm_kmemdup(&pdev->dev, fw->data, fw->size,
-			GFP_KERNEL);
+	nfit_desc->nfit_base = (void __iomem *) devm_kmemdup(&pdev->dev,
+			fw->data, fw->size, GFP_KERNEL);
 	nfit_desc->nfit_size = fw->size;
 	release_firmware(fw);
 
