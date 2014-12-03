@@ -163,7 +163,7 @@ static ssize_t set_cookie_show(struct device *dev,
 
 	return sprintf(buf, "%#llx\n", nd_spa->nd_set->cookie);
 }
-DEVICE_ATTR_RO(set_cookie);
+static DEVICE_ATTR_RO(set_cookie);
 
 static ssize_t available_size_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
