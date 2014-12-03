@@ -16,6 +16,8 @@
 #include <linux/nd.h>
 #include "nd.h"
 
+#include <asm-generic/io-64-nonatomic-lo-hi.h>
+
 static void namespace_io_release(struct device *dev)
 {
 	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
