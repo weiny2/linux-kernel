@@ -356,8 +356,8 @@ static struct device **create_namespace_io(struct nd_region *nd_region)
 	return devs;
 }
 
-#define for_each_label(label, mapping) \
-	for ((label) = (mapping)->labels; (label) && *(label); (label)++)
+#define for_each_label(l, label, mapping) \
+	for (l = 0; (label = nd_mapping_get_label(mapping, l)); l++)
 
 static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u16 pos)
 {
@@ -366,14 +366,15 @@ static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_namespace_label * __iomem *nd_label;
+		struct nd_namespace_label __iomem *nd_label;
 		u8 *found_uuid = NULL;
+		int l;
 
-		for_each_label(nd_label, nd_mapping) {
-			u64 isetcookie = readq(&(*nd_label)->isetcookie);
-			u16 position = readw(&(*nd_label)->position);
-			u16 nlabel = readw(&(*nd_label)->nlabel);
-			u8 *label_uuid = (*nd_label)->uuid;
+		for_each_label(l, nd_label, nd_mapping) {
+			u64 isetcookie = readq(&nd_label->isetcookie);
+			u16 position = readw(&nd_label->position);
+			u16 nlabel = readw(&nd_label->nlabel);
+			u8 *label_uuid = nd_label->uuid;
 
 			if (isetcookie != cookie)
 				continue;
@@ -392,7 +393,7 @@ static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u
 				continue;
 			if (position != pos)
 				continue;
-			found = *nd_label;
+			found = nd_label;
 			break;
 		}
 		if (found)
@@ -412,18 +413,19 @@ static int check_blk_overlap(struct nd_mapping *nd_mapping,
 		u64 pmem_start, u64 pmem_end, u64 *blk_start_min_out)
 {
 	u64 blk_start_min, blk_start, blk_end, hw_start, hw_end;
-	struct nd_namespace_label * __iomem *nd_label;
+	struct nd_namespace_label __iomem *nd_label;
+	int l;
 
 	hw_start = nd_mapping->start;
 	hw_end = hw_start + nd_mapping->size;
 	blk_start_min = hw_end;
-	for_each_label(nd_label, nd_mapping) {
-		unsigned long flags = readl(&(*nd_label)->flags);
+	for_each_label(l, nd_label, nd_mapping) {
+		unsigned long flags = readl(&nd_label->flags);
 
 		if ((flags & NSLABEL_FLAG_LOCAL) == 0)
 			continue;
-		blk_start = readq(&(*nd_label)->dpa);
-		blk_end = blk_start + readq(&(*nd_label)->rawsize);
+		blk_start = readq(&nd_label->dpa);
+		blk_end = blk_start + readq(&nd_label->rawsize);
 		if (blk_start >= hw_start && blk_start < hw_end) {
 			if (blk_start_min == hw_end)
 				blk_start_min = blk_start;
@@ -459,21 +461,22 @@ static int select_pmem_uuid(struct nd_region *nd_region, u8 *pmem_uuid)
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		u64 hw_start, hw_end, pmem_start, pmem_end, blk_start_min;
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_namespace_label * __iomem *nd_label;
+		struct nd_namespace_label __iomem *nd_label;
+		int l;
 
-		for_each_label(nd_label, nd_mapping) {
-			u8 *uuid = (*nd_label)->uuid;
+		for_each_label(l, nd_label, nd_mapping) {
+			u8 *uuid = nd_label->uuid;
 
 			if (memcmp(uuid, pmem_uuid, NSLABEL_UUID_LEN) == 0)
 				break;
 		}
 
-		if (!nd_label || !(*nd_label)) {
+		if (!nd_label) {
 			WARN_ON(1);
 			return -EINVAL;
 		}
 
-		select = *nd_label;
+		select = nd_label;
 		/*
 		 * Check that this label is compliant with the dpa
 		 * range published in NFIT and does not overlap a BLK
@@ -501,8 +504,8 @@ static int select_pmem_uuid(struct nd_region *nd_region, u8 *pmem_uuid)
 					__func__);
 			available_size = 0;
 		}
-		nd_mapping->labels[0] = select;
-		nd_mapping->labels[1] = NULL;
+		nd_mapping_set_label(nd_mapping, select, 0);
+		nd_mapping_set_label(nd_mapping, (void __iomem *) NULL, 1);
 	}
 
 	nd_region->available_size = available_size;
@@ -517,11 +520,11 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 		struct nd_namespace_pmem *nspm)
 {
 	u64 cookie = nd_region_interleave_set_cookie(nd_region);
-	struct nd_namespace_label * __iomem *nd_label;
+	struct nd_namespace_label __iomem *nd_label;
 	struct resource *res = &nspm->nsio.res;
 	resource_size_t size = 0;
 	u8 *pmem_uuid = NULL;
-	int rc = -ENODEV;
+	int rc = -ENODEV, l;
 	u16 i;
 
 	if (cookie == 0)
@@ -531,9 +534,9 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 	 * Find a complete set of labels by uuid.  By definition we can start
 	 * with any mapping as the reference label
 	 */
-	for_each_label(nd_label, &nd_region->mapping[0]) {
-		u64 isetcookie = readq(&(*nd_label)->isetcookie);
-		u8 *uuid = (*nd_label)->uuid;
+	for_each_label(l, nd_label, &nd_region->mapping[0]) {
+		u64 isetcookie = readq(&nd_label->isetcookie);
+		u8 *uuid = nd_label->uuid;
 
 		if (isetcookie != cookie)
 			continue;
@@ -576,7 +579,7 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 		struct nd_namespace_label __iomem *label0;
 
-		label0 = nd_mapping->labels[0];
+		label0 = nd_mapping_get_label(nd_mapping, 0);
 		size += readq(&label0->rawsize);
 		if (readl(&label0->position) != 0)
 			continue;
@@ -631,7 +634,7 @@ int nd_namespace_pmem_request_dpa(struct nd_namespace_pmem *nspm)
 		struct nd_namespace_label __iomem *nd_label;
 		struct resource *res;
 
-		nd_label = nd_mapping->labels[0];
+		nd_label = nd_mapping_get_label(nd_mapping, 0);
 		if (!nd_label)
 			return -ENXIO;
 

@@ -57,10 +57,29 @@ static inline struct nd_namespace_index __iomem *to_next_namespace_index(
 
 struct nd_mapping {
 	struct nd_dimm *nd_dimm;
-	struct nd_namespace_label * __iomem *labels;
+	struct nd_namespace_label **labels;
 	u64 start;
 	u64 size;
 };
+
+/* sparse helpers */
+static inline void nd_mapping_set_label(struct nd_mapping *nd_mapping,
+		struct nd_namespace_label __iomem *label, int idx)
+{
+	nd_mapping->labels[idx] = (void __force *) label;
+}
+
+static inline struct nd_namespace_label __iomem *nd_mapping_get_label(
+		struct nd_mapping *nd_mapping, int idx)
+{
+	struct nd_namespace_label __iomem *label = NULL;
+
+	if (nd_mapping->labels)
+		label = (struct nd_namespace_label __iomem *)
+			nd_mapping->labels[idx];
+
+	return label;
+}
 
 struct nd_region {
 	struct device dev;
