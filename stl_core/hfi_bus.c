@@ -33,7 +33,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/idr.h>
-#include "hfi_bus.h"
+#include "../common/hfi_bus.h"
 
 static struct class *dev_class;
 

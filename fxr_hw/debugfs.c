@@ -32,7 +32,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/kernel.h>
-#include "hfi.h"
+#include "../common/hfi.h"
 #include "debugfs.h"
 
 #ifdef CONFIG_DEBUG_FS

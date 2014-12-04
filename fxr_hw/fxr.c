@@ -33,12 +33,12 @@
 
 #include <linux/pci.h>
 #include <linux/module.h>
-#include "hfi.h"
-#include "include/fxr/fxr_fast_path_defs.h"
-#include "include/fxr/fxr_tx_ci_csrs.h"
-#include "include/fxr/fxr_rx_ci_csrs.h"
-#include "include/fxr/fxr_rx_hiarb_defs.h"
-#include "include/fxr/fxr_rx_hiarb_csrs.h"
+#include "../common/hfi.h"
+#include "../include/fxr/fxr_fast_path_defs.h"
+#include "../include/fxr/fxr_tx_ci_csrs.h"
+#include "../include/fxr/fxr_rx_ci_csrs.h"
+#include "../include/fxr/fxr_rx_hiarb_defs.h"
+#include "../include/fxr/fxr_rx_hiarb_csrs.h"
 
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
