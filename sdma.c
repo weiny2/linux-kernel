@@ -855,6 +855,41 @@ void sdma_exit(struct hfi_devdata *dd)
 	dd->per_sdma = NULL;
 }
 
+/*
+ * unmap the indicated descriptor
+ */
+static inline void sdma_unmap_desc(
+	struct hfi_devdata *dd,
+	struct sdma_desc *descp)
+{
+	switch (sdma_mapping_type(descp)) {
+	case SDMA_MAP_SINGLE:
+		dma_unmap_single(
+			&dd->pcidev->dev,
+			sdma_mapping_addr(descp),
+			sdma_mapping_len(descp),
+			DMA_TO_DEVICE);
+		break;
+	case SDMA_MAP_PAGE:
+		dma_unmap_page(
+			&dd->pcidev->dev,
+			sdma_mapping_addr(descp),
+			sdma_mapping_len(descp),
+			DMA_TO_DEVICE);
+		break;
+	}
+}
+
+/*
+ * return the mode as indicated by the first
+ * descriptor in the tx.
+ */
+static inline u8 ahg_mode(struct sdma_txreq *tx)
+{
+	return (tx->descp[0].qw[1] & SDMA_DESC1_HEADER_MODE_SMASK)
+		>> SDMA_DESC1_HEADER_MODE_SHIFT;
+}
+
 /**
  * sdma_txclean() - clean tx of mappings, descp *kmalloc's
  * @dd: hfi_devdata for unmapping
@@ -871,28 +906,18 @@ void sdma_txclean(
 	struct sdma_txreq *tx)
 {
 	u16 i;
+	if (tx->num_desc) {
+		u8 skip = 0, mode = ahg_mode(tx);
 
-	/* free mappings */
-	for (i = 0; i < tx->num_desc; i++) {
-		/* TODO - skip over AHG descriptors */
-		switch (sdma_mapping_type(&tx->descp[i])) {
-		case SDMA_MAP_SINGLE:
-			dma_unmap_single(
-				&dd->pcidev->dev,
-				sdma_mapping_addr(&tx->descp[i]),
-				sdma_mapping_len(&tx->descp[i]),
-				DMA_TO_DEVICE);
-			break;
-		case SDMA_MAP_PAGE:
-			dma_unmap_page(
-				&dd->pcidev->dev,
-				sdma_mapping_addr(&tx->descp[i]),
-				sdma_mapping_len(&tx->descp[i]),
-				DMA_TO_DEVICE);
-			break;
-		}
+		/* unmap first */
+		sdma_unmap_desc(dd, &tx->descp[0]);
+		/* determine number of AHG descriptors to skip */
+		if (mode > SDMA_AHG_APPLY_UPDATE1)
+			skip = mode >> 1;
+		for (i = 1 + skip; i < tx->num_desc; i++)
+			sdma_unmap_desc(dd, &tx->descp[i]);
+		tx->num_desc = 0;
 	}
-	tx->num_desc = 0;
 	kfree(tx->coalesce_buf);
 	tx->coalesce_buf = NULL;
 	/* kmalloc'ed descp */
@@ -1472,16 +1497,6 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		if (++head == sde->descq_cnt)
 			head = 0;
 	}
-}
-
-/*
- * return the mode as indicated by the first
- * descriptor in the tx.
- */
-static inline u8 ahg_mode(struct sdma_txreq *tx)
-{
-	return (tx->descp[0].qw[1] & SDMA_DESC1_HEADER_MODE_SMASK)
-		>> SDMA_DESC1_HEADER_MODE_SHIFT;
 }
 
 /*
