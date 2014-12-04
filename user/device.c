@@ -34,7 +34,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/fs.h>
-#include "../hfi.h"
+#include "../common/hfi.h"
 #include "device.h"
 
 static struct hfi_bus_device_id id_table[] = {

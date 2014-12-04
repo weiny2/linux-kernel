@@ -35,7 +35,7 @@
 #include <linux/pci.h>
 #include <linux/module.h>
 #include <linux/printk.h>
-#include "hfi.h"
+#include "../common/hfi.h"
 #include "debugfs.h"
 
 /* TODO - multiple HFI support... */

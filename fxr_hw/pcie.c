@@ -35,7 +35,7 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/module.h>
-#include "hfi.h"
+#include "../common/hfi.h"
 
 /*
  * This file contains PCIe utility routines.

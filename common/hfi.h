@@ -47,8 +47,8 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/cdev.h>
-#include "include/hfi_defs.h"
-#include "include/hfi_cmd.h"
+#include "../include/hfi_defs.h"
+#include "../include/hfi_cmd.h"
 #include "hfi_bus.h"
 
 #define DRIVER_NAME		"hfi2"

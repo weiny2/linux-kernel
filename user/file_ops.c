@@ -39,8 +39,8 @@
 #include <linux/sched.h>
 #include <linux/cred.h>
 #include <linux/version.h>
-#include "../hfi.h"
-#include "../hfi_token.h"
+#include "../common/hfi.h"
+#include "../common/hfi_token.h"
 #include "device.h"
 
 /* TODO - turn off when RX unit is implemented in simulation */
