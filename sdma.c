@@ -1790,7 +1790,6 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			sdma_get(&sde->state);
 			sdma_set_state(sde,
 				sdma_state_s10_hw_start_up_halt_wait);
-			sdma_start_err_halt_wait(sde);
 			break;
 		case sdma_event_e15_hw_halt_done:
 			break;
@@ -1831,6 +1830,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e50_hw_cleaned:
 			break;
 		case sdma_event_e60_hw_halted:
+			sdma_start_err_halt_wait(sde);
 			break;
 		case sdma_event_e70_go_idle:
 			ss->go_s99_running = 0;
@@ -2008,6 +2008,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e50_hw_cleaned:
 			break;
 		case sdma_event_e60_hw_halted:
+			sdma_start_err_halt_wait(sde);
 			break;
 		case sdma_event_e70_go_idle:
 			ss->go_s99_running = 0;
@@ -2039,7 +2040,6 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e70_go_idle:
 			sdma_set_state(sde, sdma_state_s60_idle_halt_wait);
-			sdma_start_err_halt_wait(sde);
 			break;
 		}
 		break;
