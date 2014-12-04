@@ -38,6 +38,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/cred.h>
+#include <linux/version.h>
 #include "../hfi.h"
 #include "../hfi_token.h"
 #include "device.h"
@@ -105,7 +106,11 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	ud->sid = task_session_vnr(current);
 	/* default Portals PID and UID */
 	ud->ptl_pid = HFI_PID_NONE;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 	ud->ptl_uid = current_uid();
+#else
+	ud->ptl_uid = current_uid().val;
+#endif
 
 	ud->bus_ops->job_init(ud);
 
