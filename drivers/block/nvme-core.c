@@ -612,10 +612,11 @@ static int nvme_split_and_submit(struct bio *bio, struct nvme_queue *nvmeq,
 	if (!bp)
 		return -ENOMEM;
 
-	if (bio_list_empty(&nvmeq->sq_cong))
+	if (!waitqueue_active(&nvmeq->sq_full))
 		add_wait_queue(&nvmeq->sq_full, &nvmeq->sq_cong_wait);
 	bio_list_add(&nvmeq->sq_cong, &bp->b1);
 	bio_list_add(&nvmeq->sq_cong, &bp->b2);
+	wake_up(&nvmeq->sq_full);
 
 	return 0;
 }
