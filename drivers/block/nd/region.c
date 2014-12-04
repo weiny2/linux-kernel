@@ -374,11 +374,13 @@ static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u
 			u64 isetcookie = readq(&nd_label->isetcookie);
 			u16 position = readw(&nd_label->position);
 			u16 nlabel = readw(&nd_label->nlabel);
-			u8 *label_uuid = nd_label->uuid;
+			u8 label_uuid[NSLABEL_UUID_LEN];
 
 			if (isetcookie != cookie)
 				continue;
 
+			memcpy_fromio(label_uuid, nd_label->uuid,
+					NSLABEL_UUID_LEN);
 			if (memcmp(label_uuid, uuid, NSLABEL_UUID_LEN) != 0)
 				continue;
 
@@ -465,9 +467,11 @@ static int select_pmem_uuid(struct nd_region *nd_region, u8 *pmem_uuid)
 		int l;
 
 		for_each_label(l, nd_label, nd_mapping) {
-			u8 *uuid = nd_label->uuid;
+			u8 label_uuid[NSLABEL_UUID_LEN];
 
-			if (memcmp(uuid, pmem_uuid, NSLABEL_UUID_LEN) == 0)
+			memcpy_fromio(label_uuid, nd_label->uuid,
+					NSLABEL_UUID_LEN);
+			if (memcmp(label_uuid, pmem_uuid, NSLABEL_UUID_LEN) == 0)
 				break;
 		}
 
@@ -522,6 +526,7 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 	u64 cookie = nd_region_interleave_set_cookie(nd_region);
 	struct nd_namespace_label __iomem *nd_label;
 	struct resource *res = &nspm->nsio.res;
+	u8 select_uuid[NSLABEL_UUID_LEN];
 	resource_size_t size = 0;
 	u8 *pmem_uuid = NULL;
 	int rc = -ENODEV, l;
@@ -536,13 +541,15 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 	 */
 	for_each_label(l, nd_label, &nd_region->mapping[0]) {
 		u64 isetcookie = readq(&nd_label->isetcookie);
-		u8 *uuid = nd_label->uuid;
+		u8 label_uuid[NSLABEL_UUID_LEN];
 
 		if (isetcookie != cookie)
 			continue;
 
+		memcpy_fromio(label_uuid, nd_label->uuid,
+				NSLABEL_UUID_LEN);
 		for (i = 0; nd_region->ndr_mappings; i++)
-			if (!has_uuid_at_pos(nd_region, uuid, cookie, i))
+			if (!has_uuid_at_pos(nd_region, label_uuid, cookie, i))
 				break;
 		if (i < nd_region->ndr_mappings) {
 			/*
@@ -561,7 +568,8 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 			rc = -EBUSY;
 			goto err;
 		}
-		pmem_uuid = uuid;
+		memcpy(select_uuid, label_uuid, NSLABEL_UUID_LEN);
+		pmem_uuid = select_uuid;
 	}
 
 	/*
@@ -584,10 +592,10 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 		if (readl(&label0->position) != 0)
 			continue;
 		WARN_ON(nspm->alt_name || nspm->uuid);
-		nspm->alt_name = kmemdup(label0->name, NSLABEL_NAME_LEN,
-				GFP_KERNEL);
-		nspm->uuid = kmemdup(label0->uuid, NSLABEL_UUID_LEN,
-				GFP_KERNEL);
+		nspm->alt_name = kmemdup((void __force *) label0->name,
+				NSLABEL_NAME_LEN, GFP_KERNEL);
+		nspm->uuid = kmemdup((void __force *) label0->uuid,
+				NSLABEL_UUID_LEN, GFP_KERNEL);
 	}
 
 	if (!nspm->alt_name || !nspm->uuid) {
