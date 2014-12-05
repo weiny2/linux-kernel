@@ -49,7 +49,7 @@
 #include <linux/cdev.h>
 #include "../include/hfi_defs.h"
 #include "../include/hfi_cmd.h"
-#include "hfi_bus.h"
+#include "stl_core.h"
 
 #define DRIVER_NAME		"hfi2"
 #define DRIVER_CLASS_NAME	DRIVER_NAME
@@ -97,7 +97,7 @@ typedef union PCB hfi_ptl_control_t;
 struct hfi_devdata {
 	/* pci access data structure */
 	struct pci_dev *pcidev;
-	struct hfi_bus_device *bus_dev;
+	struct stl_core_device *bus_dev;
 
 	/* localbus width (1, 2,4,8,16,32) from config space  */
 	u32 lbus_width;
@@ -141,8 +141,8 @@ struct hfi_devdata {
 
 /* Private data for file operations, created at open(). */
 struct hfi_userdata {
-	struct hfi_bus_driver *bus_drv;
-	struct hfi_bus_ops *bus_ops;
+	struct stl_core_driver *bus_drv;
+	struct stl_core_ops *bus_ops;
 	struct hfi_devdata *devdata;
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
@@ -187,8 +187,8 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void cleanup_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
-int hfi_user_add(struct hfi_bus_driver *drv, int unit);
-void hfi_user_remove(struct hfi_bus_driver *drv);
+int hfi_user_add(struct stl_core_driver *drv, int unit);
+void hfi_user_remove(struct stl_core_driver *drv);
 int hfi_user_cleanup(struct hfi_userdata *dd);
 
 void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
@@ -211,9 +211,9 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 void hfi_job_free(struct hfi_userdata *ud);
 
 /**
- * hfi_bus_ops - Hardware operations for accessing a FXR device on the FXR bus.
+ * stl_core_ops - Hardware operations for accessing a FXR device on the FXR bus.
  */
-struct hfi_bus_ops {
+struct stl_core_ops {
 	/* Resource Allocation ops */
 	int (*ctxt_assign)(struct hfi_userdata *ud, struct hfi_ptl_attach_args *ptl_attach);
 	void (*ctxt_release)(struct hfi_userdata *ud);

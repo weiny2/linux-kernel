@@ -33,17 +33,17 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/idr.h>
-#include "../common/hfi_bus.h"
+#include "../common/stl_core.h"
 
 static struct class *dev_class;
 
-/* Unique numbering for hfi_bus devices. */
-static DEFINE_IDA(hfi_bus_index_ida);
+/* Unique numbering for stl_core devices. */
+static DEFINE_IDA(stl_core_index_ida);
 
 static ssize_t device_show(struct device *d,
 			   struct device_attribute *attr, char *buf)
 {
-	struct hfi_bus_device *dev = dev_to_hfi_bus(d);
+	struct stl_core_device *dev = dev_to_stl_core(d);
 	return sprintf(buf, "0x%04x\n", dev->id.device);
 }
 static DEVICE_ATTR_RO(device);
@@ -51,7 +51,7 @@ static DEVICE_ATTR_RO(device);
 static ssize_t vendor_show(struct device *d,
 			   struct device_attribute *attr, char *buf)
 {
-	struct hfi_bus_device *dev = dev_to_hfi_bus(d);
+	struct stl_core_device *dev = dev_to_stl_core(d);
 	return sprintf(buf, "0x%04x\n", dev->id.vendor);
 }
 static DEVICE_ATTR_RO(vendor);
@@ -59,55 +59,55 @@ static DEVICE_ATTR_RO(vendor);
 static ssize_t modalias_show(struct device *d,
 			     struct device_attribute *attr, char *buf)
 {
-	struct hfi_bus_device *dev = dev_to_hfi_bus(d);
-	return sprintf(buf, "hfi_bus:d%08Xv%08X\n",
+	struct stl_core_device *dev = dev_to_stl_core(d);
+	return sprintf(buf, "stl_core:d%08Xv%08X\n",
 		       dev->id.device, dev->id.vendor);
 }
 static DEVICE_ATTR_RO(modalias);
 
-static struct attribute *hfi_bus_dev_attrs[] = {
+static struct attribute *stl_core_dev_attrs[] = {
 	&dev_attr_device.attr,
 	&dev_attr_vendor.attr,
 	&dev_attr_modalias.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(hfi_bus_dev);
+ATTRIBUTE_GROUPS(stl_core_dev);
 
-static inline int hfi_bus_id_match(const struct hfi_bus_device *dev,
-				  const struct hfi_bus_device_id *id)
+static inline int stl_core_id_match(const struct stl_core_device *dev,
+				  const struct stl_core_device_id *id)
 {
 	return (id->vendor == dev->id.vendor) &&
 	       (id->device == dev->id.device);
 }
 
 /* This looks through all the IDs a driver claims to support.  If any of them
- * match, we return 1 and the kernel will call hfi_bus_dev_probe(). */
-static int hfi_bus_dev_match(struct device *d, struct device_driver *dr)
+ * match, we return 1 and the kernel will call stl_core_dev_probe(). */
+static int stl_core_dev_match(struct device *d, struct device_driver *dr)
 {
 	unsigned int i;
-	struct hfi_bus_device *dev = dev_to_hfi_bus(d);
-	const struct hfi_bus_device_id *ids;
+	struct stl_core_device *dev = dev_to_stl_core(d);
+	const struct stl_core_device_id *ids;
 
-	ids = drv_to_hfi_bus(dr)->id_table;
+	ids = drv_to_stl_core(dr)->id_table;
 	for (i = 0; ids[i].device; i++)
-		if (hfi_bus_id_match(dev, &ids[i]))
+		if (stl_core_id_match(dev, &ids[i]))
 			return 1;
 	return 0;
 }
 
-static int hfi_bus_uevent(struct device *d, struct kobj_uevent_env *env)
+static int stl_core_uevent(struct device *d, struct kobj_uevent_env *env)
 {
-	struct hfi_bus_device *dev = dev_to_hfi_bus(d);
+	struct stl_core_device *dev = dev_to_stl_core(d);
 
-	return add_uevent_var(env, "MODALIAS=hfi_bus:d%08Xv%08X",
+	return add_uevent_var(env, "MODALIAS=stl_core:d%08Xv%08X",
 			      dev->id.device, dev->id.vendor);
 }
 
-static int hfi_bus_dev_probe(struct device *d)
+static int stl_core_dev_probe(struct device *d)
 {
 	int err;
-	struct hfi_bus_device *dev = dev_to_hfi_bus(d);
-	struct hfi_bus_driver *drv = drv_to_hfi_bus(dev->dev.driver);
+	struct stl_core_device *dev = dev_to_stl_core(d);
+	struct stl_core_driver *drv = drv_to_stl_core(dev->dev.driver);
 
 	pr_info("bus_probe dev[%d] and drv %s\n",
 		dev->index, drv->driver.name);
@@ -120,10 +120,10 @@ static int hfi_bus_dev_probe(struct device *d)
 	return err;
 }
 
-static int hfi_bus_dev_remove(struct device *d)
+static int stl_core_dev_remove(struct device *d)
 {
-	struct hfi_bus_device *dev = dev_to_hfi_bus(d);
-	struct hfi_bus_driver *drv = drv_to_hfi_bus(dev->dev.driver);
+	struct stl_core_device *dev = dev_to_stl_core(d);
+	struct stl_core_driver *drv = drv_to_stl_core(dev->dev.driver);
 
 	drv->remove(dev);
 
@@ -132,58 +132,58 @@ static int hfi_bus_dev_remove(struct device *d)
 	return 0;
 }
 
-static struct bus_type hfi_bus = {
-	.name  = "hfi_bus",
-	.match = hfi_bus_dev_match,
-	.dev_groups = hfi_bus_dev_groups,
-	.uevent = hfi_bus_uevent,
-	.probe = hfi_bus_dev_probe,
-	.remove = hfi_bus_dev_remove,
+static struct bus_type stl_core = {
+	.name  = "stl_core",
+	.match = stl_core_dev_match,
+	.dev_groups = stl_core_dev_groups,
+	.uevent = stl_core_uevent,
+	.probe = stl_core_dev_probe,
+	.remove = stl_core_dev_remove,
 };
 
-int hfi_bus_register_driver(struct hfi_bus_driver *driver)
+int stl_core_register_driver(struct stl_core_driver *driver)
 {
 	driver->class = dev_class;
-	driver->driver.bus = &hfi_bus;
+	driver->driver.bus = &stl_core;
 	return driver_register(&driver->driver);
 }
-EXPORT_SYMBOL(hfi_bus_register_driver);
+EXPORT_SYMBOL(stl_core_register_driver);
 
-void hfi_bus_unregister_driver(struct hfi_bus_driver *driver)
+void stl_core_unregister_driver(struct stl_core_driver *driver)
 {
 	driver_unregister(&driver->driver);
 }
-EXPORT_SYMBOL(hfi_bus_unregister_driver);
+EXPORT_SYMBOL(stl_core_unregister_driver);
 
-static void hfi_bus_release_device(struct device *d)
+static void stl_core_release_device(struct device *d)
 {
-	struct hfi_bus_device *hdev = dev_to_hfi_bus(d);
+	struct stl_core_device *hdev = dev_to_stl_core(d);
 	kfree(hdev);
 }
 
-struct hfi_bus_device *
-hfi_bus_register_device(struct device *dev, struct hfi_bus_device_id *bus_id,
-			struct hfi_devdata *dd, struct hfi_bus_ops *bus_ops)
+struct stl_core_device *
+stl_core_register_device(struct device *dev, struct stl_core_device_id *bus_id,
+			struct hfi_devdata *dd, struct stl_core_ops *bus_ops)
 {
 	int ret;
-	struct hfi_bus_device *hfi_dev;
+	struct stl_core_device *hfi_dev;
 
 	hfi_dev = kzalloc(sizeof(*hfi_dev), GFP_KERNEL);
 	if (!hfi_dev)
 		return ERR_PTR(-ENOMEM);
 
 	/* Assign a unique device index and hence name. */
-	ret = ida_simple_get(&hfi_bus_index_ida, 0, 0, GFP_KERNEL);
+	ret = ida_simple_get(&stl_core_index_ida, 0, 0, GFP_KERNEL);
 	if (ret < 0)
 		goto out;
 	pr_info("bus_register_dev [%d] %x %x\n", ret, bus_id->vendor, bus_id->device);
 
 	hfi_dev->index = ret;
 	/* TODO - should set name, id, bus, bus_id */
-	dev_set_name(&hfi_dev->dev, "hfi_bus%u", hfi_dev->index);
-	hfi_dev->dev.bus = &hfi_bus;
+	dev_set_name(&hfi_dev->dev, "stl_core%u", hfi_dev->index);
+	hfi_dev->dev.bus = &stl_core;
 	hfi_dev->dev.parent = dev;
-	hfi_dev->dev.release = hfi_bus_release_device;
+	hfi_dev->dev.release = stl_core_release_device;
 	hfi_dev->id = *bus_id;
 	hfi_dev->dd = dd;
 	hfi_dev->unit = dd->unit;
@@ -203,22 +203,22 @@ hfi_bus_register_device(struct device *dev, struct hfi_bus_device_id *bus_id,
 	return hfi_dev;
 
 ida_remove:
-	ida_simple_remove(&hfi_bus_index_ida, hfi_dev->index);
+	ida_simple_remove(&stl_core_index_ida, hfi_dev->index);
 out:
 	return ERR_PTR(ret);
 }
-EXPORT_SYMBOL(hfi_bus_register_device);
+EXPORT_SYMBOL(stl_core_register_device);
 
-void hfi_bus_unregister_device(struct hfi_bus_device *hfi_dev)
+void stl_core_unregister_device(struct stl_core_device *hfi_dev)
 {
 	int index = hfi_dev->index; /* save for after device release */
 
 	device_unregister(&hfi_dev->dev);
-	ida_simple_remove(&hfi_bus_index_ida, index);
+	ida_simple_remove(&stl_core_index_ida, index);
 }
-EXPORT_SYMBOL(hfi_bus_unregister_device);
+EXPORT_SYMBOL(stl_core_unregister_device);
 
-static int __init hfi_bus_init(void)
+static int __init stl_core_init(void)
 {
 	int ret;
 
@@ -229,7 +229,7 @@ static int __init hfi_bus_init(void)
 		goto err_dev_class;
 	}
 
-	ret = bus_register(&hfi_bus);
+	ret = bus_register(&stl_core);
 	if (ret)
 		class_destroy(dev_class);
 
@@ -237,13 +237,13 @@ err_dev_class:
 	return ret;
 }
 
-static void __exit hfi_bus_exit(void)
+static void __exit stl_core_exit(void)
 {
-	bus_unregister(&hfi_bus);
+	bus_unregister(&stl_core);
 	class_destroy(dev_class);
 }
-core_initcall(hfi_bus_init);
-module_exit(hfi_bus_exit);
+core_initcall(stl_core_init);
+module_exit(stl_core_exit);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel Corporation");

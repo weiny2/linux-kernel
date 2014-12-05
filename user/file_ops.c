@@ -82,7 +82,7 @@ static inline int is_valid_mmap(u64 token)
 static int hfi_open(struct inode *inode, struct file *fp)
 {
 	struct hfi_userdata *ud;
-	struct hfi_bus_driver *drv;
+	struct stl_core_driver *drv;
 	unsigned i_minor = iminor(inode);
 
 	BUG_ON(!i_minor);
@@ -94,7 +94,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 
 	/* lookup and store pointer to HFI device data */
 	/* TODO */
-	drv = container_of(inode->i_cdev, struct hfi_bus_driver, cdev);
+	drv = container_of(inode->i_cdev, struct stl_core_driver, cdev);
 	ud->bus_drv = drv;
 	ud->bus_ops = drv->bus_dev->bus_ops;
 	ud->devdata = drv->bus_dev->dd;
@@ -134,7 +134,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *dest = NULL;
 	void __user *user_data = NULL;
-	struct hfi_bus_ops *ops;
+	struct stl_core_ops *ops;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
@@ -457,7 +457,7 @@ done:
 
 int hfi_user_cleanup(struct hfi_userdata *ud)
 {
-	struct hfi_bus_ops *ops = ud->bus_ops;
+	struct stl_core_ops *ops = ud->bus_ops;
 
 	/* release Portals resources acquired by the HFI user */
 	ops->ctxt_release(ud);
@@ -516,12 +516,12 @@ static u64 kvirt_to_phys(void *addr, int *high)
 	return paddr;
 }
 
-void hfi_user_remove(struct hfi_bus_driver *drv)
+void hfi_user_remove(struct stl_core_driver *drv)
 {
 	hfi_cdev_cleanup(&drv->cdev, &drv->dev);
 }
 
-int hfi_user_add(struct hfi_bus_driver *drv, int unit)
+int hfi_user_add(struct stl_core_driver *drv, int unit)
 {
 	char name[10];
 	int ret;
