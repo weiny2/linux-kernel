@@ -2270,11 +2270,17 @@ void lcb_shutdown(struct hfi_devdata *dd)
 void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 {
 	u64 rx_radr, tx_radr;
+	u32 version;
 
 	if (dd->icode != WFR_ICODE_FPGA_EMULATION)
 		return;
 
-	if ((dd->irev >> 8) <= 0x12) {
+	if (is_a0(dd))
+		version = dd->irev >> 8;
+	else
+		version = 0x2d;	/* all B0 revision are 0x2d or higher */
+
+	if (version <= 0x12) {
 		/* release 0x12 and below */
 
 		/*
@@ -2291,7 +2297,7 @@ void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 		 * LCB_CFG_TX_FIFOS_RADR.RST_VAL = 6
 		 */
 		tx_radr = 6ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
-	} else if ((dd->irev >> 8) <= 0x18) {
+	} else if (version <= 0x18) {
 		/* release 0x13 up to 0x18 */
 		/* LCB_CFG_RX_FIFOS_RADR = 0x988 */
 		rx_radr =
@@ -2299,7 +2305,7 @@ void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
 		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT;
 		tx_radr = 7ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
-	} else if ((dd->irev >> 8) == 0x19) {
+	} else if (version == 0x19) {
 		/* release 0x19 */
 		/* LCB_CFG_RX_FIFOS_RADR = 0xa99 */
 		rx_radr =
@@ -2307,7 +2313,7 @@ void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
 		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT;
 		tx_radr = 3ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
-	} else if ((dd->irev >> 8) == 0x1a) {
+	} else if (version == 0x1a) {
 		/* release 0x1a */
 		/* LCB_CFG_RX_FIFOS_RADR = 0x988 */
 		rx_radr =
@@ -8499,7 +8505,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ret = -EINVAL;
 		goto bail_cleanup;
 	}
-	if (dd->icode == WFR_ICODE_FPGA_EMULATION && dd->irev < 0x1503) {
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION && is_a0(dd)
+						  && dd->irev < 0x1503) {
 		dd_dev_err(dd, "Version mismatch: This driver requires emulation version 0x15 or higher\n");
 		ret = -EINVAL;
 		goto bail_cleanup;
