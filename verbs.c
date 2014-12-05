@@ -628,9 +628,7 @@ void qib_ib_rcv(struct hfi_packet *packet)
 	u32 qp_num;
 	u32 rcv_flags = 0;
 	int lnh;
-#ifdef CONFIG_DEBUG_FS
 	u8 opcode;
-#endif
 	u16 lid;
 
 	/* 24 == LRH+BTH+CRC */
@@ -658,11 +656,8 @@ void qib_ib_rcv(struct hfi_packet *packet)
 
 	trace_input_ibhdr(rcd->dd, hdr);
 
-#ifdef CONFIG_DEBUG_FS
 	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
-	rcd->opstats->stats[opcode].n_bytes += tlen;
-	rcd->opstats->stats[opcode].n_packets++;
-#endif
+	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;

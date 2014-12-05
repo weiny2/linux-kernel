@@ -692,6 +692,22 @@ struct hfi_opcode_stats {
 struct hfi_opcode_stats_perctx {
 	struct hfi_opcode_stats stats[128];
 };
+
+static inline void inc_opstats(
+	u32 tlen,
+	struct hfi_opcode_stats *stats)
+{
+	stats->n_bytes += tlen;
+	stats->n_packets++;
+}
+
+#else
+
+static inline void inc_opstats(
+	u32 tlen,
+	struct hfi_opcode_stats_perctx *stats)
+{
+}
 #endif
 
 struct qib_ibport {

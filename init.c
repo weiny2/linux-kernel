@@ -46,11 +46,8 @@
 #include "common.h"
 #include "mad.h"
 #include "sdma.h"
-#ifdef CONFIG_DEBUG_FS
 #include "debugfs.h"
 #include "verbs.h"
-#endif
-
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
@@ -266,7 +263,6 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 					(ct * dd->rcv_entries.ngroups);
 		}
 		rcd->eager_base = base * dd->rcv_entries.group_size;
-#ifdef CONFIG_DEBUG_FS
 		if (ctxt < dd->first_user_ctxt) { /* N/A for PSM contexts */
 			rcd->opstats = kzalloc(sizeof(*rcd->opstats),
 				GFP_KERNEL);
@@ -277,7 +273,6 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 				return NULL;
 			}
 		}
-#endif
 	}
 	return rcd;
 }
@@ -1058,9 +1053,7 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 	vfree(rcd->subctxt_rcvegrbuf);
 	vfree(rcd->subctxt_rcvhdr_base);
 	kfree(rcd->tidusemap);
-#ifdef CONFIG_DEBUG_FS
 	kfree(rcd->opstats);
-#endif
 	kfree(rcd);
 }
 
@@ -1180,10 +1173,7 @@ void qib_free_devdata(struct hfi_devdata *dd)
 	idr_remove(&qib_unit_table, dd->unit);
 	list_del(&dd->list);
 	spin_unlock_irqrestore(&qib_devs_lock, flags);
-#ifdef CONFIG_DEBUG_FS
 	hfi_dbg_ibdev_exit(&dd->verbs_dev);
-	synchronize_rcu();
-#endif
 	free_percpu(dd->int_counter);
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
 }
@@ -1286,9 +1276,7 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 			qib_early_err(&pdev->dev,
 				"Could not alloc cpulist info, cpu affinity might be wrong\n");
 	}
-#ifdef CONFIG_DEBUG_FS
 	hfi_dbg_ibdev_init(&dd->verbs_dev);
-#endif
 	return dd;
 
 bail:
@@ -1426,9 +1414,7 @@ static int __init qlogic_ib_init(void)
 	 */
 	idr_init(&qib_unit_table);
 
-#ifdef CONFIG_DEBUG_FS
 	hfi_dbg_init();
-#endif
 	ret = pci_register_driver(&qib_driver);
 	if (ret < 0) {
 		pr_err("Unable to register driver: error %d\n", -ret);
@@ -1438,9 +1424,7 @@ static int __init qlogic_ib_init(void)
 
 bail_unit:
 
-#ifdef CONFIG_DEBUG_FS
 	hfi_dbg_exit();
-#endif
 	idr_destroy(&qib_unit_table);
 	destroy_workqueue(qib_cq_wq);
 bail_dev:
@@ -1457,9 +1441,7 @@ module_init(qlogic_ib_init);
 static void __exit qlogic_ib_cleanup(void)
 {
 	pci_unregister_driver(&qib_driver);
-#ifdef CONFIG_DEBUG_FS
 	hfi_dbg_exit();
-#endif
 	qib_cpulist_count = 0;
 	kfree(qib_cpulist);
 

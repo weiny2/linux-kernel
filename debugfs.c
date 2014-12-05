@@ -478,6 +478,7 @@ void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd)
 	debugfs_remove_recursive(ibd->hfi_ibdev_dbg);
 out:
 	ibd->hfi_ibdev_dbg = NULL;
+	synchronize_rcu();
 }
 
 /*

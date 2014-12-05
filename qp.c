@@ -37,9 +37,7 @@
 #include <linux/jhash.h>
 #include <linux/module.h>
 #include <linux/random.h>
-#ifdef CONFIG_DEBUG_FS
 #include <linux/seq_file.h>
-#endif
 
 #include "hfi.h"
 #include "qp.h"
@@ -1487,8 +1485,6 @@ struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5)
 	return sde;
 }
 
-#ifdef CONFIG_DEBUG_FS
-
 struct qp_iter {
 	struct qib_ibdev *dev;
 	struct qib_qp *qp;
@@ -1602,5 +1598,3 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->remote_qpn,
 		   qp->remote_ah_attr.dlid);
 }
-
-#endif

@@ -1,7 +1,5 @@
 #ifndef _HFI_DEBUGFS_H
 #define _HFI_DEBUGFS_H
-
-#ifdef CONFIG_DEBUG_FS
 /*
  * Copyright (c) 2014 Intel Corporation.  All rights reserved.
  *
@@ -35,10 +33,27 @@
  */
 
 struct qib_ibdev;
+#ifdef CONFIG_DEBUG_FS
 void hfi_dbg_ibdev_init(struct qib_ibdev *ibd);
 void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd);
 void hfi_dbg_init(void);
 void hfi_dbg_exit(void);
+#else
+static inline void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
+{
+}
+
+void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd)
+{
+}
+
+void hfi_dbg_init(void)
+{
+}
+
+void hfi_dbg_exit(void)
+{
+}
 
 #endif
 
