@@ -72,7 +72,6 @@ struct stl_core_driver {
 	/* TODO - can derive from driver(?) - yes */
 	struct stl_core_device *bus_dev;
 	int (*probe)(struct stl_core_device *dev);
-	void (*scan)(struct stl_core_device *dev);
 	void (*remove)(struct stl_core_device *dev);
 	/* for character devices */
 	struct class *class;
