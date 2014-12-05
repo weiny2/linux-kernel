@@ -105,19 +105,13 @@ static int stl_core_uevent(struct device *d, struct kobj_uevent_env *env)
 
 static int stl_core_dev_probe(struct device *d)
 {
-	int err;
 	struct stl_core_device *dev = dev_to_stl_core(d);
 	struct stl_core_driver *drv = drv_to_stl_core(dev->dev.driver);
 
 	pr_info("bus_probe dev[%d] and drv %s\n",
 		dev->index, drv->driver.name);
 
-	err = drv->probe(dev);
-	if (!err)
-		if (drv->scan)
-			drv->scan(dev);
-
-	return err;
+	return drv->probe(dev);
 }
 
 static int stl_core_dev_remove(struct device *d)
@@ -127,8 +121,6 @@ static int stl_core_dev_remove(struct device *d)
 
 	drv->remove(dev);
 
-	/* Driver should have reset device. */
-	//WARN_ON_ONCE(dev->config->get_status(dev));
 	return 0;
 }
 
@@ -188,10 +180,6 @@ stl_core_register_device(struct device *dev, struct stl_core_device_id *bus_id,
 	hfi_dev->dd = dd;
 	hfi_dev->unit = dd->unit;
 	hfi_dev->bus_ops = bus_ops;
-
-	/* We always start by resetting the device, in case a previous
-	 * driver messed it up.  This also tests that code path a little. */
-	//hfi_dev->config->reset(hfi_dev);
 
 	/*
 	 * device_register() causes the bus infrastructure to look for a
