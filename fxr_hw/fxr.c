@@ -62,7 +62,7 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
  */
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
-	hfi_bus_unregister_device(dd->bus_dev);
+	stl_core_unregister_device(dd->bus_dev);
 
 	cleanup_interrupts(dd);
 
@@ -84,7 +84,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	kfree(dd);
 }
 
-static struct hfi_bus_ops hfi_bus_ops = {
+static struct stl_core_ops stl_core_ops = {
 	.ctxt_assign = hfi_ptl_attach,
 	.ctxt_release = hfi_ptl_cleanup,
 	.cq_assign = hfi_cq_assign,
@@ -118,7 +118,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	resource_size_t addr;
 	int i, ret;
 	rx_cfg_hiarb_pcb_base_t pcb_base = {.val = 0};
-	struct hfi_bus_device_id bus_id;
+	struct stl_core_device_id bus_id;
 
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
@@ -203,7 +203,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	bus_id.vendor = ent->vendor; //PCI_VENDOR_ID_INTEL;
 	bus_id.device = ent->device; //PCI_DEVICE_ID_INTEL_FXR0;
 	/* bus agent can be probed immediately, no writing dd->bus_dev after this */
-	dd->bus_dev = hfi_bus_register_device(&pdev->dev, &bus_id, dd, &hfi_bus_ops);
+	dd->bus_dev = stl_core_register_device(&pdev->dev, &bus_id, dd, &stl_core_ops);
 
 	return dd;
 

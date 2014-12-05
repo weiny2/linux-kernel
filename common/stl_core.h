@@ -33,26 +33,26 @@
 #ifndef _HFI_BUS_H_
 #define _HFI_BUS_H_
 /*
- * Everything a hfi_bus driver needs to work with any particular hfi_bus
+ * Everything a stl_core driver needs to work with any particular stl_core
  * implementation.
  */
 #include "hfi.h"
 
-struct hfi_bus_device_id {
+struct stl_core_device_id {
 	__u32 vendor;
 	__u32 device;
 };
 
 /**
- * hfi_bus_device - representation of a device using hfi_bus
+ * stl_core_device - representation of a device using stl_core
  * @bus_ops: the hardware ops supported by this device.
  * @id: the device type identification (used to match it with a driver).
  * @dev: underlying device.
- * @index: unique position on the hfi_bus bus
+ * @index: unique position on the stl_core bus
  */
-struct hfi_bus_device {
-	struct hfi_bus_ops *bus_ops;
-	struct hfi_bus_device_id id;
+struct stl_core_device {
+	struct stl_core_ops *bus_ops;
+	struct stl_core_device_id id;
 	struct device dev;
 	int index;
 	int unit;
@@ -60,42 +60,42 @@ struct hfi_bus_device {
 };
 
 /**
- * hfi_bus_driver - operations for a hfi_bus I/O driver
+ * stl_core_driver - operations for a stl_core I/O driver
  * @driver: underlying device driver (populate name and owner).
  * @id_table: the ids serviced by this driver.
  * @probe: the function to call when a device is found.  Returns 0 or -errno.
  * @remove: the function to call when a device is removed.
  */
-struct hfi_bus_driver {
+struct stl_core_driver {
 	struct device_driver driver;
-	const struct hfi_bus_device_id *id_table;
+	const struct stl_core_device_id *id_table;
 	/* TODO - can derive from driver(?) - yes */
-	struct hfi_bus_device *bus_dev;
-	int (*probe)(struct hfi_bus_device *dev);
-	void (*scan)(struct hfi_bus_device *dev);
-	void (*remove)(struct hfi_bus_device *dev);
+	struct stl_core_device *bus_dev;
+	int (*probe)(struct stl_core_device *dev);
+	void (*scan)(struct stl_core_device *dev);
+	void (*remove)(struct stl_core_device *dev);
 	/* for character devices */
 	struct class *class;
 	struct cdev cdev;
 	struct device *dev;
 };
 
-struct hfi_bus_device *
-hfi_bus_register_device(struct device *dev, struct hfi_bus_device_id *id,
-			struct hfi_devdata *dd, struct hfi_bus_ops *bus_ops);
-void hfi_bus_unregister_device(struct hfi_bus_device *hfi_dev);
+struct stl_core_device *
+stl_core_register_device(struct device *dev, struct stl_core_device_id *id,
+			struct hfi_devdata *dd, struct stl_core_ops *bus_ops);
+void stl_core_unregister_device(struct stl_core_device *hfi_dev);
 
-int hfi_bus_register_driver(struct hfi_bus_driver *drv);
-void hfi_bus_unregister_driver(struct hfi_bus_driver *drv);
+int stl_core_register_driver(struct stl_core_driver *drv);
+void stl_core_unregister_driver(struct stl_core_driver *drv);
 
-static inline struct hfi_bus_device *dev_to_hfi_bus(struct device *dev)
+static inline struct stl_core_device *dev_to_stl_core(struct device *dev)
 {
-	return container_of(dev, struct hfi_bus_device, dev);
+	return container_of(dev, struct stl_core_device, dev);
 }
 
-static inline struct hfi_bus_driver *drv_to_hfi_bus(struct device_driver *drv)
+static inline struct stl_core_driver *drv_to_stl_core(struct device_driver *drv)
 {
-	return container_of(drv, struct hfi_bus_driver, driver);
+	return container_of(drv, struct stl_core_driver, driver);
 }
 
 #endif /* _HFI_BUS_H */
