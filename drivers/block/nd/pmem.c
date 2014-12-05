@@ -42,7 +42,7 @@ struct pmem_device {
 
 	/* One contiguous memory region per device */
 	phys_addr_t		phys_addr;
-	void __iomem		*virt_addr;
+	void			*virt_addr;
 	size_t			size;
 	int id;
 };
@@ -62,7 +62,7 @@ static int pmem_getgeo(struct block_device *bd, struct hd_geometry *geo)
  * The return value will point to the beginning of the page containing the
  * given sector, not to the sector itself.
  */
-static void __iomem *pmem_lookup_pg_addr(struct pmem_device *pmem, sector_t sector)
+static void *pmem_lookup_pg_addr(struct pmem_device *pmem, sector_t sector)
 {
 	size_t page_offset = sector >> PAGE_SECTORS_SHIFT;
 	size_t offset = page_offset << PAGE_SHIFT;
@@ -87,7 +87,7 @@ static unsigned long pmem_lookup_pfn(struct pmem_device *pmem, sector_t sector)
 static void copy_to_pmem(struct pmem_device *pmem, const void *src,
 			sector_t sector, size_t n)
 {
-	void __iomem *dst;
+	void *dst;
 	unsigned int offset = (sector & (PAGE_SECTORS - 1)) << SECTOR_SHIFT;
 	size_t copy;
 
@@ -95,14 +95,14 @@ static void copy_to_pmem(struct pmem_device *pmem, const void *src,
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	dst = pmem_lookup_pg_addr(pmem, sector);
-	memcpy_toio(dst + offset, src, copy);
+	memcpy(dst + offset, src, copy);
 
 	if (copy < n) {
 		src += copy;
 		sector += copy >> SECTOR_SHIFT;
 		copy = n - copy;
 		dst = pmem_lookup_pg_addr(pmem, sector);
-		memcpy_toio(dst, src, copy);
+		memcpy(dst, src, copy);
 	}
 }
 
@@ -113,7 +113,7 @@ static void copy_to_pmem(struct pmem_device *pmem, const void *src,
 static void copy_from_pmem(void *dst, struct pmem_device *pmem,
 			  sector_t sector, size_t n)
 {
-	void __iomem *src;
+	void *src;
 	unsigned int offset = (sector & (PAGE_SECTORS - 1)) << SECTOR_SHIFT;
 	size_t copy;
 
@@ -121,14 +121,15 @@ static void copy_from_pmem(void *dst, struct pmem_device *pmem,
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	src = pmem_lookup_pg_addr(pmem, sector);
-	memcpy_fromio(dst, src + offset, copy);
+
+	memcpy(dst, src + offset, copy);
 
 	if (copy < n) {
 		dst += copy;
 		sector += copy >> SECTOR_SHIFT;
 		copy = n - copy;
 		src = pmem_lookup_pg_addr(pmem, sector);
-		memcpy_fromio(dst, src, copy);
+		memcpy(dst, src, copy);
 	}
 }
 
@@ -234,9 +235,9 @@ static int pmem_rw_bytes(struct nd_io *ndio, void *buf, size_t offset,
 	}
 
 	if (rw == READ)
-		memcpy_fromio(buf, pmem->virt_addr + offset, n);
+		memcpy(buf, pmem->virt_addr + offset, n);
 	else
-		memcpy_toio(pmem->virt_addr + offset, buf, n);
+		memcpy(pmem->virt_addr + offset, buf, n);
 
 	return 0;
 }
@@ -290,7 +291,14 @@ static int nd_pmem_probe(struct device *dev)
 		goto err_request_mem_region;
 	}
 
-	pmem->virt_addr = ioremap_cache(res->start, resource_size(res));
+	/*
+	 * TODO: update ioremap_cache() to drop the __iomem annotation on its
+	 * return value.  All other usages in the kernel either mishandle the
+	 * annotation or force cast it.  pmem assumes it is backed by normal
+	 * memory that is suitable for DAX.
+	 */
+	pmem->virt_addr = (__force void *)ioremap_cache(res->start,
+						resource_size(res));
 	if (!pmem->virt_addr) {
 		err = -ENXIO;
 		goto err_ioremap;
@@ -336,7 +344,7 @@ static int nd_pmem_probe(struct device *dev)
  err_alloc_disk:
 	blk_cleanup_queue(pmem->pmem_queue);
  err_alloc_queue:
-	iounmap(pmem->virt_addr);
+	iounmap((__force void __iomem *)pmem->virt_addr);
  err_ioremap:
 	release_mem_region(res->start, resource_size(res));
  err_request_mem_region:
@@ -354,7 +362,7 @@ static int nd_pmem_remove(struct device *dev)
 	nd_unregister_ndio(&pmem->ndio);
 	del_gendisk(pmem->pmem_disk);
 	blk_cleanup_queue(pmem->pmem_queue);
-	iounmap(pmem->virt_addr);
+	iounmap((__force void __iomem *)pmem->virt_addr);
 	release_mem_region(nsio->res.start, resource_size(&nsio->res));
 	put_disk(pmem->pmem_disk);
 	ida_simple_remove(&pmem_ida, pmem->id);
