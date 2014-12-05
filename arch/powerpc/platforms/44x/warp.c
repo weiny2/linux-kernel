@@ -267,6 +267,7 @@ static int pika_dtm_thread(void __iomem *fpga)
 
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(HZ);
+		kgr_task_safe(current);
 	}
 
 	return 0;

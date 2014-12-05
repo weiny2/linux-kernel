@@ -285,8 +285,10 @@ mISDNStackd(void *data)
 		st->sleep_cnt++;
 #endif
 		test_and_clear_bit(mISDN_STACK_ACTIVE, &st->status);
-		wait_event_interruptible(st->workq, (st->status &
-						     mISDN_STACK_ACTION_MASK));
+		wait_event_interruptible(st->workq, ({
+					kgr_task_safe(current);
+					(st->status &
+						     mISDN_STACK_ACTION_MASK); }));
 		if (*debug & DEBUG_MSG_THREAD)
 			printk(KERN_DEBUG "%s: %s wake status %08lx\n",
 			       __func__, dev_name(&st->dev->dev), st->status);

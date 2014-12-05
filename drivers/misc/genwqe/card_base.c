@@ -787,6 +787,8 @@ static int genwqe_health_thread(void *data)
 	u64 gfir, gfir_masked, slu_unitcfg, app_unitcfg;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		rc = wait_event_interruptible_timeout(cd->health_waitq,
 			 (genwqe_health_check_cond(cd, &gfir) ||
 			  (should_stop = kthread_should_stop())),

@@ -737,10 +737,11 @@ lpfc_do_work(void *p)
 
 	while (!kthread_should_stop()) {
 		/* wait and check worker queue activities */
-		rc = wait_event_interruptible(phba->work_waitq,
+		rc = wait_event_interruptible(phba->work_waitq, ({
+					kgr_task_safe(current);
 					(test_and_clear_bit(LPFC_DATA_READY,
 							    &phba->data_flags)
-					 || kthread_should_stop()));
+					 || kthread_should_stop()); }));
 		/* Signal wakeup shall terminate the worker thread */
 		if (rc) {
 			lpfc_printf_log(phba, KERN_ERR, LOG_ELS,

@@ -1649,6 +1649,7 @@ static int mvumi_rescan_bus(void *data)
 	struct mvumi_device *mv_dev = NULL , *dev_next;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (!atomic_read(&mhba->pnp_count))

@@ -56,17 +56,18 @@ static DECLARE_BITMAP(kgr_immutable, 1);
 /*
  * The stub needs to modify the RIP value stored in struct pt_regs
  * so that ftrace redirects the execution properly.
+ *
+ * Stubs have to be labeled with notrace to prevent recursion loop in ftrace.
  */
-static void kgr_stub_fast(unsigned long ip, unsigned long parent_ip,
+static notrace void kgr_stub_fast(unsigned long ip, unsigned long parent_ip,
 		struct ftrace_ops *ops, struct pt_regs *regs)
 {
 	struct kgr_patch_fun *p = ops->private;
 
-	pr_debug("kgr: fast stub: calling new code at %lx\n", p->loc_new);
 	kgr_set_regs_ip(regs, p->loc_new);
 }
 
-static void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
+static notrace void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 		struct ftrace_ops *ops, struct pt_regs *regs)
 {
 	struct kgr_patch_fun *p = ops->private;
@@ -85,15 +86,10 @@ static void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	if (p->state == KGR_PATCH_REVERT_SLOW)
 		go_old = !go_old;
 
-	if (go_old) {
-		pr_debug("kgr: slow stub: calling old code at %lx\n",
-				p->loc_old);
+	if (go_old)
 		kgr_set_regs_ip(regs, p->loc_old + MCOUNT_INSN_SIZE);
-	} else {
-		pr_debug("kgr: slow stub: calling new code at %lx\n",
-				p->loc_new);
+	else
 		kgr_set_regs_ip(regs, p->loc_new);
-	}
 }
 
 static void kgr_refs_inc(void)

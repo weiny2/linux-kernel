@@ -13,6 +13,7 @@
 
 static void simple_thread_func(int cnt)
 {
+	kgr_task_safe(current);
 	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout(HZ);
 	trace_foo_bar("hello", cnt);

@@ -332,6 +332,7 @@ static int hwrng_fillfn(void *unused)
 	long rc;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		if (!current_rng)
 			break;
 		rc = rng_get_data(current_rng, rng_fillbuf,

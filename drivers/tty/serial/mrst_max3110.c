@@ -410,8 +410,9 @@ static int max3110_main_thread(void *_max)
 	pr_info(PR_FMT "start main thread\n");
 
 	do {
-		wait_event_interruptible(*wq,
-				max->uart_flags || kthread_should_stop());
+		wait_event_interruptible(*wq, ({
+				kgr_task_safe(current);
+				max->uart_flags || kthread_should_stop(); }));
 
 		mutex_lock(&max->thread_mutex);
 
@@ -453,6 +454,7 @@ static int max3110_read_thread(void *_max)
 
 	pr_info(PR_FMT "start read thread\n");
 	do {
+		kgr_task_safe(current);
 		/*
 		 * If can't acquire the mutex, it means the main thread
 		 * is running which will also perform the rx job

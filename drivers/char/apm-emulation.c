@@ -488,8 +488,8 @@ static int kapmd(void *arg)
 	do {
 		apm_event_t event;
 
-		wait_event_interruptible(kapmd_wait,
-				!queue_empty(&kapmd_queue) || kthread_should_stop());
+		wait_event_interruptible(kapmd_wait, ({ kgr_task_safe(current);
+				!queue_empty(&kapmd_queue) || kthread_should_stop(); }));
 
 		if (kthread_should_stop())
 			break;

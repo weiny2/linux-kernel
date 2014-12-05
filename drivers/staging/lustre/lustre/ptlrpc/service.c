@@ -2236,12 +2236,13 @@ ptlrpc_wait_event(struct ptlrpc_service_part *svcpt,
 
 	cond_resched();
 
-	l_wait_event_exclusive_head(svcpt->scp_waitq,
+	l_wait_event_exclusive_head(svcpt->scp_waitq, ({
+				kgr_task_safe(current);
 				ptlrpc_thread_stopping(thread) ||
 				ptlrpc_server_request_incoming(svcpt) ||
 				ptlrpc_server_request_pending(svcpt, false) ||
 				ptlrpc_rqbd_pending(svcpt) ||
-				ptlrpc_at_check(svcpt), &lwi);
+				ptlrpc_at_check(svcpt); }), &lwi);
 
 	if (ptlrpc_thread_stopping(thread))
 		return -EINTR;
@@ -2487,7 +2488,8 @@ static int ptlrpc_hr_main(void *arg)
 	wake_up(&ptlrpc_hr.hr_waitq);
 
 	while (!ptlrpc_hr.hr_stopping) {
-		l_wait_condition(hrt->hrt_waitq, hrt_dont_sleep(hrt, &replies));
+		l_wait_condition(hrt->hrt_waitq, ({ kgr_task_safe(current);
+					hrt_dont_sleep(hrt, &replies); }));
 
 		while (!list_empty(&replies)) {
 			struct ptlrpc_reply_state *rs;

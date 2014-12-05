@@ -812,6 +812,7 @@ static int ips_adjust(void *data)
 			ips_gpu_lower(ips);
 
 sleep:
+		kgr_task_safe(current);
 		schedule_timeout_interruptible(msecs_to_jiffies(IPS_ADJUST_PERIOD));
 	} while (!kthread_should_stop());
 
@@ -1018,6 +1019,7 @@ static int ips_monitor(void *data)
 			mchp_samples[i] = mchp;
 		}
 
+		kgr_task_safe(current);
 		schedule_timeout_interruptible(msecs_to_jiffies(IPS_SAMPLE_PERIOD));
 		if (kthread_should_stop())
 			break;
@@ -1107,6 +1109,7 @@ static int ips_monitor(void *data)
 
 		__set_current_state(TASK_INTERRUPTIBLE);
 		mod_timer(&timer, expire);
+		kgr_task_safe(current);
 		schedule();
 
 		/* Calculate actual sample period for power averaging */

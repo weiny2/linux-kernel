@@ -821,9 +821,9 @@ static int xenwatch_thread(void *unused)
 
 	current->flags |= PF_NOFREEZE;
 	for (;;) {
-		wait_event_interruptible(watch_events_waitq,
-					 (kgr_task_safe(current),
-					  !list_empty(&watch_events)));
+		wait_event_interruptible(watch_events_waitq, ({
+					 kgr_task_safe(current);
+					 !list_empty(&watch_events); }));
 
 		if (kthread_should_stop())
 			break;

@@ -544,6 +544,8 @@ static int media_bay_task(void *x)
 	int	i;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		for (i = 0; i < media_bay_count; ++i) {
 			mutex_lock(&media_bays[i].lock);
 			if (!media_bays[i].sleeping)

@@ -1004,6 +1004,7 @@ static int kenvctrld(void *__unused)
 
 	printk(KERN_INFO PFX "%s starting...\n", current->comm);
 	for (;;) {
+		kgr_task_safe(current);
 		msleep_interruptible(poll_interval);
 
 		if (kthread_should_stop())

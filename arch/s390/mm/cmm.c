@@ -148,10 +148,11 @@ static int cmm_thread(void *dummy)
 	int rc;
 
 	while (1) {
-		rc = wait_event_interruptible(cmm_thread_wait,
+		rc = wait_event_interruptible(cmm_thread_wait, ({
+			kgr_task_safe(current);
 			(!cmm_suspended && (cmm_pages != cmm_pages_target ||
 			 cmm_timed_pages != cmm_timed_pages_target)) ||
-			 kthread_should_stop());
+			 kthread_should_stop(); }));
 		if (kthread_should_stop() || rc == -ERESTARTSYS) {
 			cmm_pages_target = cmm_pages;
 			cmm_timed_pages_target = cmm_timed_pages;

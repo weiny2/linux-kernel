@@ -370,6 +370,7 @@ static void wait_to_die(void)
 static int ring_buffer_consumer_thread(void *arg)
 {
 	while (!kthread_should_stop() && !kill_test) {
+		kgr_task_safe(current);
 		complete(&read_start);
 
 		ring_buffer_consumer();
@@ -394,6 +395,7 @@ static int ring_buffer_producer_thread(void *arg)
 	init_completion(&read_start);
 
 	while (!kthread_should_stop() && !kill_test) {
+		kgr_task_safe(current);
 		ring_buffer_reset(buffer);
 
 		if (consumer) {

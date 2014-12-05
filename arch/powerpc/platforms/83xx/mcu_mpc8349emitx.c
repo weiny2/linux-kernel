@@ -66,6 +66,7 @@ static int shutdown_thread_fn(void *data)
 
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(HZ);
+		kgr_task_safe(current);
 	}
 
 	return 0;

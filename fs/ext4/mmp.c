@@ -20,8 +20,7 @@ static __le32 ext4_mmp_csum(struct super_block *sb, struct mmp_struct *mmp)
 
 int ext4_mmp_csum_verify(struct super_block *sb, struct mmp_struct *mmp)
 {
-	if (!EXT4_HAS_RO_COMPAT_FEATURE(sb,
-				       EXT4_FEATURE_RO_COMPAT_METADATA_CSUM))
+	if (!ext4_has_metadata_csum(sb))
 		return 1;
 
 	return mmp->mmp_checksum == ext4_mmp_csum(sb, mmp);
@@ -29,8 +28,7 @@ int ext4_mmp_csum_verify(struct super_block *sb, struct mmp_struct *mmp)
 
 void ext4_mmp_csum_set(struct super_block *sb, struct mmp_struct *mmp)
 {
-	if (!EXT4_HAS_RO_COMPAT_FEATURE(sb,
-				       EXT4_FEATURE_RO_COMPAT_METADATA_CSUM))
+	if (!ext4_has_metadata_csum(sb))
 		return;
 
 	mmp->mmp_checksum = ext4_mmp_csum(sb, mmp);
@@ -155,6 +153,7 @@ static int kmmpd(void *data)
 	       sizeof(mmp->mmp_nodename));
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		if (++seq > EXT4_MMP_SEQ_MAX)
 			seq = 1;
 

@@ -1194,6 +1194,8 @@ static int dm_thread_func(void *dm_dev)
 	int t;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		t = wait_for_completion_interruptible_timeout(
 						&dm_device.config_event, 1*HZ);
 		/*

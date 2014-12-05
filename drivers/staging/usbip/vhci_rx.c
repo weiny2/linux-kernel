@@ -260,6 +260,7 @@ int vhci_rx_loop(void *data)
 	struct usbip_device *ud = data;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		if (usbip_event_happened(ud))
 			break;
 

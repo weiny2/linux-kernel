@@ -1068,6 +1068,7 @@ end_loop:
 				break;
 			}
 		}
+		kgr_task_safe(current);
 		init_waitqueue_entry_current(&__wait);
 		add_wait_queue(&tctl->tctl_waitq, &__wait);
 		set_current_state(TASK_INTERRUPTIBLE);

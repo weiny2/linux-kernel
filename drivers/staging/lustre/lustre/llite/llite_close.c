@@ -341,8 +341,9 @@ static int ll_close_thread(void *arg)
 		struct ll_inode_info *lli;
 		struct inode *inode;
 
-		l_wait_event_exclusive(lcq->lcq_waitq,
-				       (lli = ll_close_next_lli(lcq)) != NULL,
+		l_wait_event_exclusive(lcq->lcq_waitq, ({
+				       kgr_task_safe(current);
+				       (lli = ll_close_next_lli(lcq)) != NULL; }),
 				       &lwi);
 		if (IS_ERR(lli))
 			break;
