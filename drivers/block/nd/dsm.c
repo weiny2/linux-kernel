@@ -16,6 +16,9 @@
 #include <linux/ndctl.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+
+#include <asm-generic/io-64-nonatomic-lo-hi.h>
+
 #include "dsm.h"
 #include "nfit.h"
 
