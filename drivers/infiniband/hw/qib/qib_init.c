@@ -964,9 +964,6 @@ static void qib_shutdown_device(struct qib_devdata *dd)
 			ppd->qib_wq = NULL;
 		}
 	}
-
-	qib_cdbg(VERBOSE, "Flush time and errors to EEPROM\n");
-	qib_update_eeprom_log(dd);
 }
 
 /**
