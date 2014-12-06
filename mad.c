@@ -64,6 +64,7 @@ static inline void clear_stl_smp_data(struct stl_smp *smp)
 {
 	void *data = stl_get_smp_data(smp);
 	size_t size = stl_get_smp_data_size(smp);
+
 	memset(data, 0, size);
 }
 
@@ -298,6 +299,7 @@ static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	u32 vendor, majrev, minrev;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
+
 	ni = (struct stl_node_info *)data;
 
 	clear_stl_smp_data(smp);
@@ -1001,6 +1003,7 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	vls = pi->operational_vls & STL_PI_MASK_OPERATIONAL_VL;
 	if (vls) {
 		int vl_enum = hfi_vls_to_ib_enum(vls);
+
 		if (vls > hfi_num_vls(ppd->vls_supported) || vl_enum < 0) {
 			pr_warn("SubnSet(STL_PortInfo) VL's supported invalid %d\n",
 				pi->operational_vls);
@@ -1156,6 +1159,7 @@ static int __subn_set_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 	int i;
 	u16 n_blocks_avail;
 	unsigned npkeys = qib_get_npkeys(dd);
+
 	if (am_port == 0)
 		am_port = port;
 
@@ -1191,6 +1195,7 @@ static int __subn_set_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 static int get_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 {
 	u64 *val = (u64 *)data;
+
 	*val++ = read_csr(dd, WFR_SEND_SC2VLT0);
 	*val++ = read_csr(dd, WFR_SEND_SC2VLT1);
 	*val++ = read_csr(dd, WFR_SEND_SC2VLT2);
@@ -1201,6 +1206,7 @@ static int get_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 static int set_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 {
 	u64 *val = (u64 *)data;
+
 	write_csr(dd, WFR_SEND_SC2VLT0, *val++);
 	write_csr(dd, WFR_SEND_SC2VLT1, *val++);
 	write_csr(dd, WFR_SEND_SC2VLT2, *val++);
@@ -2495,6 +2501,7 @@ static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
 		/* if the RcvExcessBufferOverrun bit is set, save SC of
 		 * first pkt that encountered an excess buffer overrun */
 		u8 tmp = (u8)reg;
+
 		tmp &=  WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SC_SMASK;
 		tmp <<= 2;
 		rsp->excessive_buffer_overrun_ei.status_and_sc = tmp;
@@ -2946,6 +2953,7 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 static void cc_state_reclaim(struct rcu_head *rcu)
 {
 	struct cc_state *cc_state = container_of(rcu, struct cc_state, rcu);
+
 	kfree(cc_state);
 }
 

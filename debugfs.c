@@ -529,6 +529,7 @@ static void _driver_stats_names_seq_stop(struct seq_file *s, void *v)
 static int _driver_stats_names_seq_show(struct seq_file *s, void *v)
 {
 	loff_t *spos = v;
+
 	seq_printf(s, "%s\n", hfi_statnames[*spos]);
 	return 0;
 }

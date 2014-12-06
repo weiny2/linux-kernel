@@ -502,6 +502,7 @@ int hfi_user_sdma_free_queues(struct hfi_filedata *fd)
 	pq = fd->pq;
 	if (pq) {
 		u16 i, j;
+
 		spin_lock_irqsave(&uctxt->sdma_qlock, flags);
 		if (!list_empty(&pq->list))
 			list_del_init(&pq->list);
@@ -511,6 +512,7 @@ int hfi_user_sdma_free_queues(struct hfi_filedata *fd)
 			for (i = 0, j = 0; i < atomic_read(&pq->n_reqs) &&
 				     j < pq->n_max_reqs; j++) {
 				struct user_sdma_request *req = &pq->reqs[j];
+
 				if (test_bit(SDMA_REQ_IN_USE, &req->flags)) {
 					set_comp_state(req, ERROR, -ECOMM);
 					user_sdma_free_request(req);
@@ -793,6 +795,7 @@ static _hfi_inline u32 compute_data_length(struct user_sdma_request *req,
 	 * size (MTU) or remaining data in the request.
 	 */
 	u32 len;
+
 	if (tx->flags & USER_SDMA_TXREQ_FLAGS_FIRST_PKT) {
 		len = ((be16_to_cpu(req->hdr.lrh[2]) << 2) -
 		       (sizeof(tx->hdr) - 4));
@@ -938,6 +941,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 					goto free_tx;
 			} else {
 				int changes;
+
 				changes = set_txreq_header_ahg(req, tx,
 							       datalen);
 				if (changes < 0)
@@ -1123,6 +1127,7 @@ done:
 static _hfi_inline void unpin_vector_pages(struct user_sdma_iovec *iovec)
 {
 	unsigned i;
+
 	for (i = 0; i < iovec->npages; i++)
 		if (iovec->pages[i])
 			put_page(iovec->pages[i]);
@@ -1292,6 +1297,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 		if ((req->tidoffset) == (EXP_TID_GET(tidval, LEN) *
 					 PAGE_SIZE)) {
 			u32 tidlen;
+
 			req->tidoffset = 0;
 			/* Since we don't copy all the TIDs, all at once,
 			 * we have to check again. */
@@ -1370,6 +1376,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u32 tidval;
 		u16 val;
+
 		if (req->tididx > req->n_tids - 1 ||
 		    !req->tids[req->tididx])
 			return -EINVAL;
@@ -1483,9 +1490,11 @@ done:
 static void user_sdma_free_request(struct user_sdma_request *req)
 {
 	unsigned long flags;
+
 	spin_lock_irqsave(&req->list_lock, flags);
 	if (!list_empty(&req->txps)) {
 		struct user_sdma_txreq *t, *p;
+
 		SDMA_DBG(req, "Request still has tx requests");
 		list_for_each_entry_safe(t, p, &req->txps, list) {
 			list_del_init(&t->list);
@@ -1496,6 +1505,7 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 	spin_unlock_irqrestore(&req->list_lock, flags);
 	if (req->data_iovs) {
 		int i;
+
 		for (i = 0; i < req->data_iovs; i++)
 			if (req->iovs[i].npages && req->iovs[i].pages) {
 				SDMA_DBG(req, "left over iovec pages %d\n",

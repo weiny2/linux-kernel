@@ -1987,6 +1987,7 @@ void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 	if (is_becn) {
 		u16 rlid = qp->remote_ah_attr.dlid;
 		u32 lqpn, rqpn;
+
 		lqpn = qp->ibqp.qp_num;
 		rqpn = qp->remote_qpn;
 		process_becn(ppd, sl, rlid, lqpn, rqpn, IB_CC_SVCTYPE_RC);

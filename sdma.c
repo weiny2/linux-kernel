@@ -460,6 +460,7 @@ static void sdma_set_state(struct sdma_engine *sde,
 u16 sdma_get_descq_cnt(void)
 {
 	u16 count = sdma_descq_cnt;
+
 	if (!count)
 		return SDMA_DESCQ_CNT;
 	/* count must be a power of 2 greater than 64 and less than
@@ -516,6 +517,7 @@ struct sdma_engine *sdma_select_engine_sc(
 	u8 sc5)
 {
 	u8 vl = sc_to_vlt(dd, sc5);
+
 	return sdma_select_engine_vl(dd, selector, vl);
 }
 
@@ -1006,6 +1008,7 @@ void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 	/* Search wait list for first QP wanting DMA descriptors. */
 	list_for_each_entry_safe(wait, nw, &sde->dmawait, list) {
 		u16 num_desc = 0;
+
 		if (!wait->wakeup)
 			continue;
 		if (n == ARRAY_SIZE(waits))
@@ -1506,6 +1509,7 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 static inline u64 add_gen(struct sdma_engine *sde, u64 qw1)
 {
 	u8 generation = (sde->descq_tail >> sde->sdma_shift) & 3;
+
 	qw1 &= ~SDMA_DESC1_GENERATION_SMASK;
 	qw1 |= ((u64)generation & SDMA_DESC1_GENERATION_MASK)
 			<< SDMA_DESC1_GENERATION_SHIFT;
@@ -1546,6 +1550,7 @@ static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
 		skip = mode >> 1;
 	for (i = 1; i < tx->num_desc; i++, descp++) {
 		u64 qw1;
+
 		sde->descq[tail].qw[0] = cpu_to_le64(descp->qw[0]);
 		if (skip) {
 			/* edits don't have generation */

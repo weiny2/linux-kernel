@@ -281,6 +281,7 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		if ((lid >= QIB_MULTICAST_LID_BASE) &&
 		    (lid != QIB_PERMISSIVE_LID)) {
 			int ruc_res;
+
 			qp = qib_lookup_qpn(ibp, qp_num);
 			if (!qp)
 				goto drop;
@@ -458,6 +459,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 
 	if (dd->flags & QIB_NODMA_RTAIL) {
 		u32 seq = rhf_rcv_seq(rhf);
+
 		if (seq != rcd->seq_cnt)
 			goto bail;
 		hdrqtail = 0;

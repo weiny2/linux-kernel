@@ -238,6 +238,7 @@ static int write_8051(struct hfi_devdata *dd, int code, u32 start,
 	/* write */
 	for (offset = 0; offset < len; offset += 8) {
 		int bytes = len - offset;
+
 		if (bytes < 8) {
 			reg = 0;
 			memcpy(&reg, &data[offset], bytes);
@@ -578,6 +579,7 @@ static void write_rsa_data(struct hfi_devdata *dd, int what,
 		/* not aligned */
 		for (i = 0; i < qw_size; i++, data += 8) {
 			u64 value;
+
 			memcpy(&value, data, 8);
 			write_csr(dd, what + (8*i), value);
 		}
@@ -737,6 +739,7 @@ static void load_security_variables(struct hfi_devdata *dd,
 static inline u32 get_firmware_state(struct hfi_devdata *dd)
 {
 	u64 reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
+
 	return (reg >> DC_DC8051_STS_CUR_STATE_FIRMWARE_SHIFT)
 				& DC_DC8051_STS_CUR_STATE_FIRMWARE_MASK;
 }

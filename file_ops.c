@@ -391,6 +391,7 @@ static ssize_t hfi_aio_write(struct kiocb *kiocb, const struct iovec *iovec,
 
 	while (dim) {
 		unsigned long count = 0;
+
 		ret = hfi_user_sdma_process_request(
 			kiocb->ki_filp,	(struct iovec *)(iovec + done),
 			dim, &count);
@@ -801,8 +802,10 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 			ret = -EBUSY;
 	} else {
 		struct hfi_devdata *pdd;
+
 		if (alg == HFI_ALG_ACROSS) {
 			unsigned free = 0U;
+
 			for (dev = 0; dev < devmax; dev++) {
 				pdd = qib_lookup(dev);
 				if (pdd && pdd->freectxts &&
@@ -1662,6 +1665,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 	}
 	for (idx = 0; idx < uctxt->tidmapcnt; idx++) {
 		unsigned long map;
+
 		bitidx = 0;
 		if (!tidmap[idx])
 			continue;
@@ -1669,6 +1673,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 		while ((bitidx = tzcnt(map)) < BITS_PER_LONG) {
 			int i;
 			unsigned offset = ((idx * BITS_PER_LONG) + bitidx);
+
 			pages = uctxt->tid_pg_list +
 				(offset * dd->rcv_entries.group_size);
 			phys = uctxt->physshadow +
@@ -1818,6 +1823,7 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		if (is_lcb_offset(csr_off)) {
 			if (!in_lcb) {
 				int ret = acquire_lcb_access(dd, 1);
+
 				if (ret)
 					break;
 				in_lcb = 1;
@@ -1870,6 +1876,7 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 		if (is_lcb_offset(csr_off)) {
 			if (!in_lcb) {
 				int ret = acquire_lcb_access(dd, 1);
+
 				if (ret)
 					break;
 				in_lcb = 1;

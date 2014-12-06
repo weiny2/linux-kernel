@@ -468,6 +468,7 @@ void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 
 	if (old_grh) {
 		struct ib_grh *grh = &hdr.u.l.grh;
+
 		grh->version_tclass_flow = old_grh->version_tclass_flow;
 		grh->paylen = cpu_to_be16((hwords - 2 + SIZE_OF_CRC) << 2);
 		grh->hop_limit = 0xff;
@@ -561,6 +562,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 		u16 slid = be16_to_cpu(hdr->lrh[3]);
 		u8 sc5;
+
 		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
 		sc5 |= sc4_bit;
 
@@ -601,6 +603,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		} else {
 			/* lookup GSI pkey */
 			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+
 			mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
 			if (mgmt_pkey_idx < 0)
 				goto drop;
@@ -707,6 +710,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			if (net_ratelimit()) {
 				struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 				struct hfi_devdata *dd = ppd->dd;
+
 				dd_dev_err(dd, "QP type %d mgmt_pkey_idx < 0 and packet not dropped???\n",
 					   qp->ibqp.qp_type);
 				mgmt_pkey_idx = 0;

@@ -349,6 +349,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 	),
 	TP_fast_assign(
 		struct qib_other_headers *ohdr;
+
 		DD_DEV_ASSIGN(dd);
 		/* LRH */
 		__entry->vl =
@@ -471,6 +472,7 @@ TRACE_EVENT(snoop_capture,
 	),
 	TP_fast_assign(
 		struct qib_other_headers *ohdr;
+
 		__entry->lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 		if (__entry->lnh == QIB_LRH_BTH)
 			ohdr = &hdr->u.oth;
@@ -825,6 +827,7 @@ TRACE_EVENT(hfi_sdma_user_header,
 		    __be32 *lrh = (__be32 *)hdr->lrh;
 		    __be32 *bth = (__be32 *)hdr->bth;
 		    __le32 *kdeth = (__le32 *)&hdr->kdeth;
+
 		    DD_DEV_ASSIGN(dd);
 		    __entry->ctxt = ctxt;
 		    __entry->subctxt = subctxt;

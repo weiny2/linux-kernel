@@ -297,8 +297,10 @@ void qib_skip_sge(struct qib_sge_state *ss, u32 length, int release)
 void qib_copy_from_sge(void *data, struct qib_sge_state *ss, u32 length)
 {
 	struct qib_sge *sge = &ss->sge;
+
 	while (length) {
 		u32 len = sge->length;
+
 		if (len > length)
 			len = length;
 		if (len > sge->sge_length)
@@ -432,6 +434,7 @@ static int qib_post_one_send(struct qib_qp *qp, struct ib_send_wr *wr,
 		goto bail_inval_free;
 	else {
 		struct qib_ah *ah = to_iah(wr->wr.ud.ah);
+
 		atomic_inc(&ah->refcount);
 		sc5 = ibp->sl_to_sc[ah->attr.sl];
 	}

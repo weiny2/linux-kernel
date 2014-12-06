@@ -520,6 +520,7 @@ static int write_umem64(struct hfi_devdata *dd, u32 regoffs,
 	/* not very efficient, but it works for now */
 	while (reg_addr < reg_end) {
 		u64 data;
+
 		if (copy_from_user(&data, uaddr, sizeof(data))) {
 			ret = -EFAULT;
 			goto bail;
@@ -914,6 +915,7 @@ static ssize_t diag_read(struct file *fp, char __user *data,
 		op = diag_get_observer(dd, *off);
 		if (op) {
 			u32 offset = *off;
+
 			ret = op->hook(dd, op, offset, &data64, 0, 0);
 		}
 		/*
@@ -977,6 +979,7 @@ static ssize_t diag_write(struct file *fp, const char __user *data,
 		if (count == 8) {
 			u64 data64;
 			u32 offset = *off;
+
 			ret = copy_from_user(&data64, data, count);
 			if (ret) {
 				ret = -EFAULT;
@@ -2061,6 +2064,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		while (length) {
 			void *addr = temp_ss.sge.vaddr;
 			u32 slen = temp_ss.sge.length;
+
 			if (slen > length) {
 				slen = length;
 				snoop_dbg("slen %d > len %d", slen, length);
@@ -2105,6 +2109,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			     (ppd->dd->hfi_snoop.mode_flag &
 			      HFI_PORT_SNOOP_MODE))) {
 			unsigned long flags;
+
 			snoop_dbg("Dropping packet\n");
 			if (qp->s_wqe) {
 				spin_lock_irqsave(&qp->s_lock, flags);

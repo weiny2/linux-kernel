@@ -915,6 +915,7 @@ void sdma_dumpstate(struct sdma_engine *);
 static inline char *slashstrip(char *s)
 {
 	char *r = s;
+
 	while (*s)
 		if (*s++ == '/')
 			r = s;

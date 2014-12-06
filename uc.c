@@ -280,6 +280,7 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		u16 dlid = be16_to_cpu(hdr->lrh[1]);
 		u32 src_qp = qp->remote_qpn;
 		u8 sc5;
+
 		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 
 		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);

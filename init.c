@@ -253,6 +253,7 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 					(ctxt * dd->rcv_entries.ngroups);
 		} else {
 			u16 ct = ctxt - dd->first_user_ctxt;
+
 			base = ((dd->n_krcv_queues * dd->rcv_entries.ngroups) +
 				kctxt_ngroups);
 			if (ct < dd->rcv_entries.nctxt_extra) {
@@ -324,6 +325,7 @@ int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
 	 */
 	if (max_mtu > egrsize) {
 		u32 bufsize = __roundup_pow_of_two(max_mtu);
+
 		dd_dev_info(dd,
 			    "Eager buffer size changed from %u to %u\n",
 			    egrsize, bufsize);
@@ -420,6 +422,7 @@ void set_link_ipg(struct qib_pportdata *ppd)
 
 	for (i = 0; i < STL_MAX_SLS; i++) {
 		u16 ccti = ppd->cca_timer[i].ccti;
+
 		if (ccti > max_ccti)
 			max_ccti = ccti;
 	}
@@ -531,9 +534,11 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 {
 	int i, size;
 	uint default_pkey_idx;
+
 	ppd->dd = dd;
 	ppd->hw_pidx = hw_pidx;
 	ppd->port = port; /* IB port number, not index */
+
 	default_pkey_idx = 1;
 
 	ppd->pkeys[default_pkey_idx] = WFR_DEFAULT_P_KEY;
@@ -715,6 +720,7 @@ static int qib_create_workqueues(struct hfi_devdata *dd)
 		ppd = dd->pport + pidx;
 		if (!ppd->qib_wq) {
 			char wq_name[8]; /* 3 + 2 + 1 + 1 + 1 */
+
 			snprintf(wq_name, sizeof(wq_name), "qib%d_%d",
 				dd->unit, pidx);
 			ppd->qib_wq =
@@ -1268,6 +1274,7 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 
 	if (!qib_cpulist_count) {
 		u32 count = num_online_cpus();
+
 		qib_cpulist = kzalloc(BITS_TO_LONGS(count) *
 				      sizeof(long), GFP_KERNEL);
 		if (qib_cpulist)
@@ -1465,6 +1472,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		struct qib_pportdata *ppd = &dd->pport[pidx];
 		int i;
+
 		if (ppd->statusp)
 			*ppd->statusp &= ~QIB_STATUS_CHIP_PRESENT;
 

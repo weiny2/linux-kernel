@@ -323,6 +323,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 	for (i = 0; i < SC_MAX; i++) {
 		if (dd->sc_sizes[i].size < 0) {
 			int pool = wildcard_to_pool(dd->sc_sizes[i].size);
+
 			dd->sc_sizes[i].size = mem_pool_info[pool].size;
 		}
 		/* make sure we are not larger than what is allowed by the HW */
@@ -370,6 +371,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	base = 0;
 	for (i = 0; i < SC_MAX; i++) {
 		struct sc_config_sizes *scs = &dd->sc_sizes[i];
+
 		for (j = 0; j < scs->count; j++) {
 			struct send_context_info *sci =
 						&dd->send_contexts[context];

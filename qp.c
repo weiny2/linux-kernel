@@ -1399,6 +1399,7 @@ static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx)
 static void iowait_wakeup(struct iowait *wait, int reason)
 {
 	struct qib_qp *qp = container_of(wait, struct qib_qp, s_iowait);
+
 	BUG_ON(reason != SDMA_AVAIL_REASON);
 	qib_qp_wakeup(qp, QIB_S_WAIT_DMA_DESC);
 }

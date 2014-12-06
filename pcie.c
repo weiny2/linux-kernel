@@ -686,6 +686,7 @@ static pci_ers_result_t
 qib_pci_slot_reset(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+
 	dd_dev_info(dd, "QIB slot_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
@@ -694,6 +695,7 @@ static pci_ers_result_t
 qib_pci_link_reset(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+
 	dd_dev_info(dd, "QIB link_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
@@ -702,6 +704,7 @@ static void
 qib_pci_resume(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+
 	dd_dev_info(dd, "QIB resume function called\n");
 	pci_cleanup_aer_uncorrect_error_status(pdev);
 	/*

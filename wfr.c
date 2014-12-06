@@ -1121,6 +1121,7 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 			    void *context, int vl, int mode, u64 data)
 {
 	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
 	BUG_ON(vl != CNTR_INVALID_VL);
 	return read_write_csr(dd, entry->csr, mode, data);
 }
@@ -1129,8 +1130,10 @@ static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 			    int vl, int mode, u64 data)
 {
 	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
 	u64 val = 0;
 	u64 csr = entry->csr;
+
 	if (entry->flags & CNTR_VL) {
 		BUG_ON(vl == CNTR_INVALID_VL);
 		csr += 8 * vl;
@@ -1147,6 +1150,7 @@ static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
 {
 	u64 reg;
 	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
 	BUG_ON(vl != CNTR_INVALID_VL);
 	if (acquire_lcb_access(dd, 0) == 0) {
 		reg = read_write_csr(dd, entry->csr, mode, data);
@@ -1163,6 +1167,7 @@ static u64 port_access_u32_csr(const struct cntr_entry *entry, void *context,
 			     int vl, int mode, u64 data)
 {
 	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
 	BUG_ON(vl != CNTR_INVALID_VL);
 	return read_write_csr(ppd->dd, entry->csr, mode, data);
 }
@@ -1173,6 +1178,7 @@ static u64 port_access_u64_csr(const struct cntr_entry *entry,
 	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
 	u64 val;
 	u64 csr = entry->csr;
+
 	if (entry->flags & CNTR_VL) {
 		BUG_ON(vl == CNTR_INVALID_VL);
 		csr += 8 * vl;
@@ -1209,6 +1215,7 @@ static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
 			       int vl, int mode, u64 data)
 {
 	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
 	BUG_ON(vl != CNTR_INVALID_VL);
 	return read_write_sw(ppd->dd, &ppd->link_downed, mode, data);
 }
@@ -1217,6 +1224,7 @@ static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
 			       int vl, int mode, u64 data)
 {
 	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
 	BUG_ON(vl != CNTR_INVALID_VL);
 	return read_write_sw(ppd->dd, &ppd->link_up, mode, data);
 }
@@ -1722,6 +1730,7 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		 * want 0-based offsets.
 		 */
 		int shift = posn - 1;
+
 		if (port_inactive_err(shift)) {
 			count_port_inactive(dd);
 			handled |= (1ULL << shift);
@@ -1910,6 +1919,7 @@ static void is_sdma_eng_err_int(struct hfi_devdata *dd, unsigned int source)
 {
 #ifdef JAG_SDMA_VERBOSITY
 	struct sdma_engine *sde = &dd->per_sdma[source];
+
 	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
 		slashstrip(__FILE__), __LINE__, __func__);
 	dd_dev_err(dd, "JAG SDMA(%u) source: %u\n", sde->this_idx,
@@ -3282,6 +3292,7 @@ static irqreturn_t general_interrupt(int irq, void *data)
 #if 0
 		/* TODO: the print is temporary */
 		char buf[64];
+
 		printk(DRIVER_NAME"%d: interrupt %d: %s\n", dd->unit, bit,
 			is_name(buf, sizeof(buf), bit));
 		/* TODO implement trace down in is_interrupt() */
@@ -3930,6 +3941,7 @@ static u16 stl_to_vc_link_widths(u16 stl_widths)
 {
 	int i;
 	u16 result = 0;
+
 	static const struct link_bits {
 		u16 from;
 		u16 to;
@@ -4910,6 +4922,7 @@ static void read_one_cm_vl(struct hfi_devdata *dd, u32 csr,
 			   struct vl_limit *vll)
 {
 	u64 reg = read_csr(dd, csr);
+
 	vll->dedicated = cpu_to_be16(
 		(reg >> WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT)
 		& WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK);
@@ -4978,6 +4991,7 @@ static int get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 	reg = read_csr(dd, DCC_CFG_SC_VL_TABLE_15_0);
 	for (i = 0; i < sizeof(u64); i++) {
 		u8 byte = *(((u8 *)&reg) + i);
+
 		dp->vlnt[2 * i] = byte & 0xf;
 		dp->vlnt[(2 * i) + 1] = (byte & 0xf0) >> 4;
 	}
@@ -4985,6 +4999,7 @@ static int get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 	reg = read_csr(dd, DCC_CFG_SC_VL_TABLE_31_16);
 	for (i = 0; i < sizeof(u64); i++) {
 		u8 byte = *(((u8 *)&reg) + i);
+
 		dp->vlnt[16 + (2 * i)] = byte & 0xf;
 		dp->vlnt[16 + (2 * i) + 1] = (byte & 0xf0) >> 4;
 	}
@@ -5153,6 +5168,7 @@ static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask)
 	/* TODO: time out if too long? */
 	while (1) {
 		reg = read_csr(dd, WFR_SEND_CM_CREDIT_USED_STATUS) & mask;
+
 		if (reg == 0)
 			break;
 		/* TODO: how long to delay before checking again? */
@@ -5354,8 +5370,10 @@ static int set_buffer_control(struct hfi_devdata *dd,
  * failure.
  */
 int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
+
 {
 	int size;
+
 	switch (which) {
 	case FM_TBL_VL_HIGH_ARB:
 		size = 256;
@@ -5741,6 +5759,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
 {
 	static int called;
+
 	if (!called) {
 		called = 1;
 		if (print_unimplemented)
@@ -6622,6 +6641,7 @@ static void clean_up_interrupts(struct hfi_devdata *dd)
 	if (dd->num_msix_entries) {
 		/* MSI-X */
 		struct qib_msix_entry *me = dd->msix_entries;
+
 		for (i = 0; i < dd->num_msix_entries; i++, me++) {
 			if (me->arg == NULL) /* => no irq, no affinity */
 				break;
@@ -6814,6 +6834,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			err_info = "general";
 		} else if (first_sdma <= i && i < last_sdma) {
 			struct sdma_engine *per_sdma;
+
 			idx = i - first_sdma;
 			per_sdma = &dd->per_sdma[idx];
 			/*
@@ -6832,6 +6853,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			remap_sdma_interrupts(dd, idx, i);
 		} else if (first_rx <= i && i < last_rx) {
 			struct qib_ctxtdata *rcd;
+
 			idx = i - first_rx;
 			rcd = dd->rcd[idx];
 			/* no interrupt if no rcd */
@@ -7205,6 +7227,7 @@ static void set_partition_keys(struct qib_pportdata *ppd)
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg = 0;
 	int i;
+
 	dd_dev_info(dd, "Setting partition keys\n");
 	for (i = 0; i < qib_get_npkeys(dd); i++) {
 		reg |= (ppd->pkeys[i] &
@@ -7842,6 +7865,7 @@ static void init_chip(struct hfi_devdata *dd)
 	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
 		u32 ps = read_physical_state(dd);
 		u32 ls = __read_logical_state(dd);
+
 		if (ps == WFR_PLS_LINKUP && ls == WFR_LSTATE_ACTIVE) {
 			/* assume we're in the simulator's easy linkup mode */
 			if (sim_easy_linkup == EASY_LINKUP_UNSET
@@ -7893,6 +7917,7 @@ static void init_early_variables(struct hfi_devdata *dd)
 	if (enable_pkeys)
 		for (i = 0; i < dd->num_pports; i++) {
 			struct qib_pportdata *ppd = &dd->pport[i];
+
 			set_partition_keys(ppd);
 		}
 	init_sc2vl_tables(dd);
@@ -8019,6 +8044,7 @@ static void init_qos(struct hfi_devdata *dd, u32 first_ctxt)
 	/* init the local copy of the table */
 	for (i = 0, ctxt = first_ctxt; i < num_vls; i++) {
 		unsigned tctxt;
+
 		for (qpn = 0, tctxt = ctxt;
 		     krcvqs[i] && qpn < qpns_per_vl; qpn++) {
 			unsigned idx, regoff, regidx;
