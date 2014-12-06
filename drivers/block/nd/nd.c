@@ -473,9 +473,10 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 {
 	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
 	struct nfit __iomem *nfit = nfit_desc->nfit_base;
-	u8 *data, sum, signature[4];
 	void __iomem *base = nfit;
 	const void __iomem *end;
+	u8 sum, signature[4];
+	u8 __iomem *data;
 	size_t size, i;
 	int rc;
 
@@ -486,7 +487,7 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 	size = min_t(u32, size, readl(&nfit->length));
 	data = (u8 __iomem *) base;
 	for (i = 0, sum = 0; i < size; i++)
-		sum += readb(&data[i]);
+		sum += readb(data + i);
 	if (sum != 0 && !warn_checksum) {
 		dev_dbg(&nd_bus->dev, "%s: nfit checksum failure\n", __func__);
 		goto err;
