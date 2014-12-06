@@ -136,7 +136,7 @@ static struct diag_client *get_client(struct hfi_devdata *dd)
 		client_pool = dc->next;
 	else
 		/* None in pool, alloc and init */
-		dc = kmalloc(sizeof *dc, GFP_KERNEL);
+		dc = kmalloc(sizeof(*dc), GFP_KERNEL);
 
 	if (dc) {
 		dc->next = NULL;
@@ -814,7 +814,7 @@ int qib_register_observer(struct hfi_devdata *dd,
 	if (!dd || !op)
 		goto bail;
 	ret = -ENOMEM;
-	olp = vmalloc(sizeof *olp);
+	olp = vmalloc(sizeof(*olp));
 	if (!olp) {
 		pr_err("vmalloc for observer failed\n");
 		goto bail;

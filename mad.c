@@ -158,14 +158,14 @@ void qib_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 	data.trap_num = trap_num;
 	data.issuer_lid = cpu_to_be16(ppd_from_ibp(ibp)->lid);
 	data.toggle_count = 0;
-	memset(&data.details, 0, sizeof data.details);
+	memset(&data.details, 0, sizeof(data.details));
 	data.details.ntc_257_258.lid1 = lid1;
 	data.details.ntc_257_258.lid2 = lid2;
 	data.details.ntc_257_258.key = cpu_to_be32(key);
 	data.details.ntc_257_258.sl_qp1 = cpu_to_be32((sl << 28) | qp1);
 	data.details.ntc_257_258.qp2 = cpu_to_be32(qp2);
 
-	qib_send_trap(ibp, &data, sizeof data);
+	qib_send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -183,7 +183,7 @@ static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
 	data.trap_num = IB_NOTICE_TRAP_BAD_MKEY;
 	data.issuer_lid = cpu_to_be16(ppd_from_ibp(ibp)->lid);
 	data.toggle_count = 0;
-	memset(&data.details, 0, sizeof data.details);
+	memset(&data.details, 0, sizeof(data.details));
 	data.details.ntc_256.lid = data.issuer_lid;
 	data.details.ntc_256.method = mad->method;
 	data.details.ntc_256.attr_id = mad->attr_id;
@@ -203,7 +203,7 @@ static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
 		       hop_cnt);
 	}
 
-	qib_send_trap(ibp, &data, sizeof data);
+	qib_send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -219,11 +219,11 @@ void qib_cap_mask_chg(struct qib_ibport *ibp)
 	data.trap_num = IB_NOTICE_TRAP_CAP_MASK_CHG;
 	data.issuer_lid = cpu_to_be16(ppd_from_ibp(ibp)->lid);
 	data.toggle_count = 0;
-	memset(&data.details, 0, sizeof data.details);
+	memset(&data.details, 0, sizeof(data.details));
 	data.details.ntc_144.lid = data.issuer_lid;
 	data.details.ntc_144.new_cap_mask = cpu_to_be32(ibp->port_cap_flags);
 
-	qib_send_trap(ibp, &data, sizeof data);
+	qib_send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -239,11 +239,11 @@ void qib_sys_guid_chg(struct qib_ibport *ibp)
 	data.trap_num = IB_NOTICE_TRAP_SYS_GUID_CHG;
 	data.issuer_lid = cpu_to_be16(ppd_from_ibp(ibp)->lid);
 	data.toggle_count = 0;
-	memset(&data.details, 0, sizeof data.details);
+	memset(&data.details, 0, sizeof(data.details));
 	data.details.ntc_145.lid = data.issuer_lid;
 	data.details.ntc_145.new_sys_guid = ib_qib_sys_image_guid;
 
-	qib_send_trap(ibp, &data, sizeof data);
+	qib_send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -259,12 +259,12 @@ void qib_node_desc_chg(struct qib_ibport *ibp)
 	data.trap_num = IB_NOTICE_TRAP_CAP_MASK_CHG;
 	data.issuer_lid = cpu_to_be16(ppd_from_ibp(ibp)->lid);
 	data.toggle_count = 0;
-	memset(&data.details, 0, sizeof data.details);
+	memset(&data.details, 0, sizeof(data.details));
 	data.details.ntc_144.lid = data.issuer_lid;
 	data.details.ntc_144.local_changes = 1;
 	data.details.ntc_144.change_flags = IB_NOTICE_TRAP_NODE_DESC_CHG;
 
-	qib_send_trap(ibp, &data, sizeof data);
+	qib_send_trap(ibp, &data, sizeof(data));
 }
 
 static int __subn_get_stl_nodedesc(struct stl_smp *smp, u32 am,
