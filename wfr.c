@@ -1878,7 +1878,7 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
 	}
 
 	/* tell the software that a halt has begun */
-	sc_halting(sc);
+	sc_stop(sc, SCF_HALTED);
 
 	status = read_kctxt_csr(dd, context, WFR_SEND_CTXT_ERR_STATUS);
 

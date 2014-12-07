@@ -156,7 +156,7 @@ void sc_restart(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
 void sc_flush(struct send_context *sc);
 void sc_drop(struct send_context *sc);
-void sc_halting(struct send_context *sc);
+void sc_stop(struct send_context *sc, int bit);
 struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 			pio_release_cb cb, void *arg);
 void sc_release_update(struct send_context *sc);
@@ -168,6 +168,8 @@ void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
 
 /* support functions */
 void pio_reset_all(struct hfi_devdata *dd);
+void pio_freeze(struct hfi_devdata *dd);
+void pio_kernel_unfreeze(struct hfi_devdata *dd);
 
 /* global PIO send control operations */
 #define PSC_GLOBAL_ENABLE 0

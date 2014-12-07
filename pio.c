@@ -803,6 +803,47 @@ void sc_restart(struct send_context *sc)
 }
 
 /*
+ * PIO freeze processing.  To be called after the TXE block is fully frozen.
+ * Go through all frozen send contexts and disable them.  The contexts are
+ * already stopped by the freeze.
+ */
+void pio_freeze(struct hfi_devdata *dd)
+{
+	struct send_context *sc;
+	int i;
+
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		sc = dd->send_contexts[i].sc;
+		if (!sc || !(sc->flags & SCF_FROZEN))
+			continue;
+
+		/* only need to disable, the context is already stopped */
+		sc_disable(sc);
+	}
+}
+
+/*
+ * Unfreeze PIO for kernel send contexts.  The precondtion for calling this
+ * is that all PIO send contexts have been disabled and the SPC freeze has
+ * been cleared.  Now perform the last step and re-enable each kernel conext.
+ * User (PSM) processing will occur when PSM calls into the kernel to
+ * acknowledge the freeze.
+ */
+void pio_kernel_unfreeze(struct hfi_devdata *dd)
+{
+	struct send_context *sc;
+	int i;
+
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		sc = dd->send_contexts[i].sc;
+		if (!sc || !(sc->flags & SCF_FROZEN) || sc->type == SC_USER)
+			continue;
+
+		sc_enable(sc);	/* will clear the sc frozen flag */
+	}
+}
+
+/*
  * Wait for the SendPioInitCtxt.PioInitInProgress bit to clear.
  * Returns:
  *	-ETIMEDOUT - if we wait too long
@@ -983,19 +1024,19 @@ void sc_drop(struct send_context *sc)
 }
 
 /*
- * Start the software reaction to a context halt:
- *	- mark the context as halted
+ * Start the software reaction to a context halt or SPC freeze:
+ *	- mark the context as halted or frozen
  *	- stop buffer allocations
  *
  * Called from the error interrupt.  Other work is deferred until
- * out of the interrupt, see sc_restart().
+ * out of the interrupt.
  */
-void sc_halting(struct send_context *sc)
+void sc_stop(struct send_context *sc, int flag)
 {
 	unsigned long flags;
 
-	/* this context has been halted */
-	sc->flags |= SCF_HALTED;
+	/* mark the context */
+	sc->flags |= flag;
 
 	/* stop buffer allocations */
 	spin_lock_irqsave(&sc->alloc_lock, flags);
