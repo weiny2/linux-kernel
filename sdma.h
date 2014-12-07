@@ -146,6 +146,8 @@ enum sdma_states {
 	sdma_state_s40_hw_clean_up_wait,
 	sdma_state_s50_hw_halt_wait,
 	sdma_state_s60_idle_halt_wait,
+	sdma_state_s80_hw_freeze,
+	sdma_state_s82_freeze_sw_clean,
 	sdma_state_s99_running,
 };
 
@@ -159,6 +161,8 @@ enum sdma_events {
 	sdma_event_e50_hw_cleaned,
 	sdma_event_e60_hw_halted,
 	sdma_event_e70_go_idle,
+	sdma_event_e80_hw_freeze,
+	sdma_event_e82_hw_unfreeze,
 };
 
 struct sdma_set_state_action {
@@ -363,9 +367,9 @@ struct verbs_txreq {
  * struct sdma_engine - Data pertaining to each SDMA engine.
  * @dd: a backpointer to the device data
  * @ppd: per port backpointer
- * @imask: make for irq manipulation
+ * @imask: mask for irq manipulation
  *
- * This structure has the start for each sdma_engine.
+ * This structure has the state for each sdma_engine.
  *
  * Accessing to non public fields are not supported
  * since the private members are subject to change.
@@ -381,6 +385,8 @@ struct sdma_engine {
 	volatile __le64      *head_dma;
 	/* private: */
 	dma_addr_t            head_phys;
+	/* private: */
+	u8		      invalid_hwhead; /* true in freeze */
 	/* private: */
 	struct hw_sdma_desc *descq;
 	/* private: */
@@ -439,6 +445,8 @@ void sdma_start(struct hfi_devdata *dd);
 void sdma_exit(struct hfi_devdata *dd);
 void sdma_link_up(struct hfi_devdata *dd);
 void sdma_link_down(struct hfi_devdata *dd);
+void sdma_freeze_notify(struct hfi_devdata *dd);
+void sdma_unfreeze(struct hfi_devdata *dd);
 
 /**
  * sdma_empty() - idle engine test

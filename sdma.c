@@ -100,6 +100,8 @@ static const char * const sdma_state_names[] = {
 	[sdma_state_s40_hw_clean_up_wait]       = "s40_HwCleanUpWait",
 	[sdma_state_s50_hw_halt_wait]           = "s50_HwHaltWait",
 	[sdma_state_s60_idle_halt_wait]         = "s60_IdleHaltWait",
+	[sdma_state_s80_hw_freeze]		= "s80_HwFreeze",
+	[sdma_state_s82_freeze_sw_clean]	= "s82_FreezeSwClean",
 	[sdma_state_s99_running]                = "s99_Running",
 };
 
@@ -113,6 +115,8 @@ static const char * const sdma_event_names[] = {
 	[sdma_event_e50_hw_cleaned]   = "e50_HwCleaned",
 	[sdma_event_e60_hw_halted]    = "e60_HwHalted",
 	[sdma_event_e70_go_idle]      = "e70_GoIdle",
+	[sdma_event_e80_hw_freeze]    = "e80_HwFreeze",
+	[sdma_event_e82_hw_unfreeze]  = "e82_HwUnfreeze",
 };
 
 static const struct sdma_set_state_action sdma_action_table[] = {
@@ -173,6 +177,20 @@ static const struct sdma_set_state_action sdma_action_table[] = {
 		.op_halt = 1,
 		.op_cleanup = 0,
 		.op_drain = 1,
+	},
+	[sdma_state_s80_hw_freeze] = {
+		.op_enable = 0,
+		.op_intenable = 0,
+		.op_halt = 0,
+		.op_cleanup = 0,
+		.op_drain = 0,
+	},
+	[sdma_state_s82_freeze_sw_clean] = {
+		.op_enable = 0,
+		.op_intenable = 0,
+		.op_halt = 0,
+		.op_cleanup = 0,
+		.op_drain = 0,
 	},
 	[sdma_state_s99_running] = {
 		.op_enable = 1,
@@ -366,8 +384,20 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 
 	spin_lock(&sde->dd->pport->sdma_alllock);
 
-	/* Process all retired requests. */
-	sdma_make_progress(sde, 0);
+	/*
+	 * In the error clean up sequence, software clean must be called
+	 * before the hardware clean so we can use the hardware head in
+	 * the progress routine.  A hardware clean will reset the hardware
+	 * head.
+	 *
+	 * Process all retired requests. The progress routine will use
+	 * the latest physical hardware head - we are in an error or end
+	 * condition so speed does not matter.  If we are in a freeze,
+	 * the hardware head is invalid so there is no point in trying to
+	 * retire ("make progress") anything.
+	 */
+	if (!sde->invalid_hwhead)
+		sdma_make_progress(sde, 0);
 
 	clear_sdma_activelist(sde);
 
@@ -382,6 +412,7 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 	sde->descq_head = 0;
 	sde->desc_avail = sdma_descq_freecnt(sde);
 	*sde->head_dma = 0;
+	sde->invalid_hwhead = 0; /* not in freeze */
 
 	__sdma_process_event(sde, sdma_event_e40_sw_cleaned);
 
@@ -968,9 +999,9 @@ retry:
 		sane = (hwhead == swhead);
 
 	if (unlikely(!sane)) {
-		dd_dev_err(dd, "IB%u:%u bad head %s hwhd=%hu swhd=%hu swtl=%hu cnt=%hu\n",
-			dd->unit, sde->ppd->port,
-			use_dmahead ? "(dma)" : "(kreg)",
+		dd_dev_err(dd, "SDMA(%u) bad head (%s) hwhd=%hu swhd=%hu swtl=%hu cnt=%hu\n",
+			sde->this_idx,
+			use_dmahead ? "dma" : "kreg",
 			hwhead, swhead, swtail, cnt);
 		if (use_dmahead) {
 			/* try one more time, directly from the register */
@@ -1804,6 +1835,10 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e70_go_idle:
 			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			break;
 		}
 		break;
 
@@ -1834,6 +1869,10 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e70_go_idle:
 			ss->go_s99_running = 0;
+			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
 			break;
 		}
 		break;
@@ -1866,6 +1905,10 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e70_go_idle:
 			ss->go_s99_running = 0;
 			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			break;
 		}
 		break;
 
@@ -1895,6 +1938,11 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e70_go_idle:
 			break;
+		case sdma_event_e80_hw_freeze:
+			sdma_set_state(sde, sdma_state_s80_hw_freeze);
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			break;
 		}
 		break;
 
@@ -1902,6 +1950,187 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		switch (event) {
 		case sdma_event_e00_go_hw_down:
 			sdma_set_state(sde, sdma_state_s00_hw_down);
+			break;
+		case sdma_event_e10_go_hw_start:
+			break;
+		case sdma_event_e15_hw_halt_done:
+			break;
+		case sdma_event_e25_hw_clean_up_done:
+			break;
+		case sdma_event_e30_go_running:
+			ss->go_s99_running = 1;
+			break;
+		case sdma_event_e40_sw_cleaned:
+			sdma_set_state(sde, sdma_state_s40_hw_clean_up_wait);
+			sdma_start_hw_clean_up(sde);
+			break;
+		case sdma_event_e50_hw_cleaned:
+			break;
+		case sdma_event_e60_hw_halted:
+			break;
+		case sdma_event_e70_go_idle:
+			ss->go_s99_running = 0;
+			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			break;
+		}
+		break;
+
+	case sdma_state_s40_hw_clean_up_wait:
+		switch (event) {
+		case sdma_event_e00_go_hw_down:
+			sdma_set_state(sde, sdma_state_s00_hw_down);
+			sdma_start_sw_clean_up(sde);
+			break;
+		case sdma_event_e10_go_hw_start:
+			break;
+		case sdma_event_e15_hw_halt_done:
+			break;
+		case sdma_event_e25_hw_clean_up_done:
+			sdma_hw_start_up(sde);
+			sdma_set_state(sde, ss->go_s99_running ?
+				       sdma_state_s99_running :
+				       sdma_state_s20_idle);
+			break;
+		case sdma_event_e30_go_running:
+			ss->go_s99_running = 1;
+			break;
+		case sdma_event_e40_sw_cleaned:
+			break;
+		case sdma_event_e50_hw_cleaned:
+			break;
+		case sdma_event_e60_hw_halted:
+			break;
+		case sdma_event_e70_go_idle:
+			ss->go_s99_running = 0;
+			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			break;
+		}
+		break;
+
+	case sdma_state_s50_hw_halt_wait:
+		switch (event) {
+		case sdma_event_e00_go_hw_down:
+			sdma_set_state(sde, sdma_state_s00_hw_down);
+			sdma_start_sw_clean_up(sde);
+			break;
+		case sdma_event_e10_go_hw_start:
+			break;
+		case sdma_event_e15_hw_halt_done:
+			sdma_set_state(sde, sdma_state_s30_sw_clean_up_wait);
+			sdma_start_sw_clean_up(sde);
+			break;
+		case sdma_event_e25_hw_clean_up_done:
+			break;
+		case sdma_event_e30_go_running:
+			ss->go_s99_running = 1;
+			break;
+		case sdma_event_e40_sw_cleaned:
+			break;
+		case sdma_event_e50_hw_cleaned:
+			break;
+		case sdma_event_e60_hw_halted:
+			sdma_start_err_halt_wait(sde);
+			break;
+		case sdma_event_e70_go_idle:
+			ss->go_s99_running = 0;
+			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			break;
+		}
+		break;
+
+	case sdma_state_s60_idle_halt_wait:
+		switch (event) {
+		case sdma_event_e00_go_hw_down:
+			sdma_set_state(sde, sdma_state_s00_hw_down);
+			sdma_start_sw_clean_up(sde);
+			break;
+		case sdma_event_e10_go_hw_start:
+			break;
+		case sdma_event_e15_hw_halt_done:
+			sdma_set_state(sde, sdma_state_s30_sw_clean_up_wait);
+			sdma_start_sw_clean_up(sde);
+			break;
+		case sdma_event_e25_hw_clean_up_done:
+			break;
+		case sdma_event_e30_go_running:
+			ss->go_s99_running = 1;
+			break;
+		case sdma_event_e40_sw_cleaned:
+			break;
+		case sdma_event_e50_hw_cleaned:
+			break;
+		case sdma_event_e60_hw_halted:
+			sdma_start_err_halt_wait(sde);
+			break;
+		case sdma_event_e70_go_idle:
+			ss->go_s99_running = 0;
+			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			break;
+		}
+		break;
+
+	case sdma_state_s80_hw_freeze:
+		switch (event) {
+		case sdma_event_e00_go_hw_down:
+			sdma_set_state(sde, sdma_state_s00_hw_down);
+			sdma_start_sw_clean_up(sde);
+			break;
+		case sdma_event_e10_go_hw_start:
+			break;
+		case sdma_event_e15_hw_halt_done:
+			break;
+		case sdma_event_e25_hw_clean_up_done:
+			break;
+		case sdma_event_e30_go_running:
+			ss->go_s99_running = 1;
+			break;
+		case sdma_event_e40_sw_cleaned:
+			break;
+		case sdma_event_e50_hw_cleaned:
+			break;
+		case sdma_event_e60_hw_halted:
+			break;
+		case sdma_event_e70_go_idle:
+			ss->go_s99_running = 0;
+			break;
+		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e82_hw_unfreeze:
+			/*
+			 * This event is sent after the SPC freeze has been
+			 * cleared.  This means that the hardware head has
+			 * been reset.  Mark the hwhead as inalid so we do
+			 * not try to retire completed descriptors usint it.
+			 * Alternative: Another event indicating that the
+			 * hardware has been frozen so the software clean
+			 * can be used then.  That requires more coordination
+			 * as all engines must complete their software clean
+			 * before the SPC freeze is cleared.
+			 */
+			sde->invalid_hwhead = 1;
+			sdma_set_state(sde, sdma_state_s82_freeze_sw_clean);
+			sdma_start_sw_clean_up(sde);
+			break;
+		}
+		break;
+
+	case sdma_state_s82_freeze_sw_clean:
+		switch (event) {
+		case sdma_event_e00_go_hw_down:
+			sdma_set_state(sde, sdma_state_s00_hw_down);
+			sdma_start_sw_clean_up(sde);
 			break;
 		case sdma_event_e10_go_hw_start:
 			break;
@@ -1925,93 +2154,9 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e70_go_idle:
 			ss->go_s99_running = 0;
 			break;
-		}
-		break;
-
-	case sdma_state_s40_hw_clean_up_wait:
-		switch (event) {
-		case sdma_event_e00_go_hw_down:
-			sdma_set_state(sde, sdma_state_s00_hw_down);
-			sdma_start_sw_clean_up(sde);
+		case sdma_event_e80_hw_freeze:
 			break;
-		case sdma_event_e10_go_hw_start:
-			break;
-		case sdma_event_e15_hw_halt_done:
-			break;
-		case sdma_event_e25_hw_clean_up_done:
-			sdma_set_state(sde, sdma_state_s30_sw_clean_up_wait);
-			sdma_start_sw_clean_up(sde);
-			break;
-		case sdma_event_e30_go_running:
-			ss->go_s99_running = 1;
-			break;
-		case sdma_event_e40_sw_cleaned:
-			break;
-		case sdma_event_e50_hw_cleaned:
-			break;
-		case sdma_event_e60_hw_halted:
-			break;
-		case sdma_event_e70_go_idle:
-			ss->go_s99_running = 0;
-			break;
-		}
-		break;
-
-	case sdma_state_s50_hw_halt_wait:
-		switch (event) {
-		case sdma_event_e00_go_hw_down:
-			sdma_set_state(sde, sdma_state_s00_hw_down);
-			sdma_start_sw_clean_up(sde);
-			break;
-		case sdma_event_e10_go_hw_start:
-			break;
-		case sdma_event_e15_hw_halt_done:
-			sdma_set_state(sde, sdma_state_s40_hw_clean_up_wait);
-			sdma_start_hw_clean_up(sde);
-			break;
-		case sdma_event_e25_hw_clean_up_done:
-			break;
-		case sdma_event_e30_go_running:
-			ss->go_s99_running = 1;
-			break;
-		case sdma_event_e40_sw_cleaned:
-			break;
-		case sdma_event_e50_hw_cleaned:
-			break;
-		case sdma_event_e60_hw_halted:
-			break;
-		case sdma_event_e70_go_idle:
-			ss->go_s99_running = 0;
-			break;
-		}
-		break;
-
-	case sdma_state_s60_idle_halt_wait:
-		switch (event) {
-		case sdma_event_e00_go_hw_down:
-			sdma_set_state(sde, sdma_state_s00_hw_down);
-			sdma_start_sw_clean_up(sde);
-			break;
-		case sdma_event_e10_go_hw_start:
-			break;
-		case sdma_event_e15_hw_halt_done:
-			sdma_set_state(sde, sdma_state_s40_hw_clean_up_wait);
-			sdma_start_hw_clean_up(sde);
-			break;
-		case sdma_event_e25_hw_clean_up_done:
-			break;
-		case sdma_event_e30_go_running:
-			ss->go_s99_running = 1;
-			break;
-		case sdma_event_e40_sw_cleaned:
-			break;
-		case sdma_event_e50_hw_cleaned:
-			break;
-		case sdma_event_e60_hw_halted:
-			sdma_start_err_halt_wait(sde);
-			break;
-		case sdma_event_e70_go_idle:
-			ss->go_s99_running = 0;
+		case sdma_event_e82_hw_unfreeze:
 			break;
 		}
 		break;
@@ -2040,6 +2185,11 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e70_go_idle:
 			sdma_set_state(sde, sdma_state_s60_idle_halt_wait);
+			break;
+		case sdma_event_e80_hw_freeze:
+			sdma_set_state(sde, sdma_state_s80_hw_freeze);
+			break;
+		case sdma_event_e82_hw_unfreeze:
 			break;
 		}
 		break;
@@ -2227,4 +2377,39 @@ void sdma_ahg_free(struct sdma_engine *sde, int ahg_index)
 	if (ahg_index < 0 || ahg_index > 31)
 		return;
 	clear_bit(ahg_index, &sde->ahg_bits);
+}
+
+/*
+ * SPC freeze handling for SDMA engines.  Called when the driver knows
+ * the SPC is going into a freeze but before the freeze is fully
+ * settled.  Generally an error interrupt.
+ *
+ * This event will pull the engine out of running so no more entries can be
+ * added to the engine's queue.
+ */
+void sdma_freeze_notify(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* tell all engines to stop running and wait */
+	for (i = 0; i < dd->num_sdma; i++)
+		sdma_process_event(&dd->per_sdma[i], sdma_event_e80_hw_freeze);
+}
+
+/*
+ * SPC freeze handling for the SDMA engines.  Called after the SPC is unfrozen.
+ *
+ * The SPC freeze acts like a SDMA halt and a hardware clean combined.  All
+ * that is left is a software clean.  We could do it after the SPC is fully
+ * frozen, but then we'd have to add another state to wait for the unfreeze.
+ * Instead, just defer the software clean until the unfreeze step.
+ */
+void sdma_unfreeze(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* tell all engines start freeze clean up */
+	for (i = 0; i < dd->num_sdma; i++)
+		sdma_process_event(&dd->per_sdma[i],
+					sdma_event_e82_hw_unfreeze);
 }
