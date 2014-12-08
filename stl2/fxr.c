@@ -73,9 +73,6 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	if (dd->ptl_user)
 		free_pages((unsigned long)dd->ptl_user,
 			   get_order(dd->ptl_user_size));
-	if (dd->ptl_control)
-		free_pages((unsigned long)dd->ptl_control,
-			   get_order(dd->ptl_control_size));
 
 	if (dd->kregbase)
 		iounmap((void __iomem *)dd->kregbase);
@@ -117,7 +114,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	unsigned long len;
 	resource_size_t addr;
 	int i, ret;
-	rx_cfg_hiarb_pcb_base_t pcb_base = {.val = 0};
 	struct stl_core_device_id bus_id;
 
 	dd = hfi_alloc_devdata(pdev);
@@ -151,16 +147,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	/* Host Memory allocations -- */
 
-	/* Portals Control Block (PCB) - 128 KB */
-	dd->ptl_control_size = HFI_PCB_TOTAL_MEM;
-	dd->ptl_control = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-					get_order(dd->ptl_control_size));
-	if (!dd->ptl_control) {
-		ret = -ENOMEM;
-		goto err_post_alloc;
-	}
-	spin_lock_init(&dd->ptl_lock);
-
 	/* Portals PID assignments - 32 KB */
 	dd->ptl_user_size = (HFI_NUM_PIDS * 8);
 	dd->ptl_user = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
@@ -169,6 +155,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		ret = -ENOMEM;
 		goto err_post_alloc;
 	}
+	spin_lock_init(&dd->ptl_lock);
 
 	/* CQ head (read) indices - 16 KB */
 	dd->cq_head_size = (HFI_CQ_COUNT * HFI_CQ_HEAD_OFFSET);
@@ -182,14 +169,9 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	for (i = 0; i < HFI_CQ_COUNT; i++)
 		hfi_cq_head_config(dd, i, dd->cq_head_base);
 
-	/* write PCB address in FXR */
-	pcb_base.base_address = virt_to_phys(dd->ptl_control);
-	pcb_base.physical = 1;
-	write_csr(dd, FXR_RX_CFG_HIARB_PCB_BASE, pcb_base.val);
-
 	/* TX and RX command queues */
-	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_ENTRY;
-	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_ENTRY;
+	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_CSR;
+	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_CSR;
 	memset(&dd->cq_pair, HFI_PID_NONE, sizeof(dd->cq_pair));
 	spin_lock_init(&dd->cq_lock);
 
@@ -211,6 +193,40 @@ err_post_alloc:
 	hfi_pci_dd_free(dd);
 
 	return ERR_PTR(ret);
+}
+
+void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
+{
+	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
+	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
+
+	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
+	/* TODO - write fake FXR simics CSR to invalidate cached PT */
+	#define HFI_HP_PT_CACHE_CTRL 0x2210000
+	write_csr(dd, HFI_HP_PT_CACHE_CTRL, 1);
+}
+
+void hfi_pcb_write(struct hfi_userdata *ud, u16 ptl_pid, int phys)
+{
+	struct hfi_devdata *dd = ud->devdata;
+	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
+	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
+	u64 psb_addr;
+
+	psb_addr = (phys) ? virt_to_phys(ud->ptl_state_base) :
+			    (u64)ud->ptl_state_base;
+
+	/* write PCB in FXR */
+	pcb_low.valid = 1;
+	pcb_low.physical = phys;
+	pcb_low.portals_state_base = psb_addr >> PAGE_SHIFT;
+	pcb_high.triggered_op_size = (ud->ptl_trig_op_size >> PAGE_SHIFT);
+	pcb_high.unexpected_size = (ud->ptl_unexpected_size >> PAGE_SHIFT);
+	pcb_high.le_me_size = (ud->ptl_le_me_size >> PAGE_SHIFT);
+
+	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
 }
 
 /* Write CSR address for CQ head index, maintained by FXR */

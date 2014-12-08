@@ -88,11 +88,6 @@ struct hfi_msix_entry {
 	cpumask_var_t mask;
 };
 
-/* FXR Portals Control Block
- * This is a HW-defined structure.
- */
-typedef union PCB hfi_ptl_control_t;
-
 /* device data struct contains only per-HFI info. */
 struct hfi_devdata {
 	/* pci access data structure */
@@ -122,9 +117,7 @@ struct hfi_devdata {
 	u32 num_msix_entries;
 
 	/* Device Portals State */
-	hfi_ptl_control_t *ptl_control;
 	struct hfi_userdata **ptl_user;
-	size_t ptl_control_size;
 	size_t ptl_user_size;
 	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
 	spinlock_t ptl_lock;
@@ -191,11 +184,16 @@ int hfi_user_add(struct stl_core_driver *drv, int unit);
 void hfi_user_remove(struct stl_core_driver *drv);
 int hfi_user_cleanup(struct hfi_userdata *dd);
 
+/* HFI specific functions */
 void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 		   struct hfi_auth_tuple *auth_table);
 void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
+void hfi_pcb_write(struct hfi_userdata *ud, u16 ptl_pid, int phys);
+void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
+
+/* STL core functions */
 int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
 int hfi_cq_update(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update);
 int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx);

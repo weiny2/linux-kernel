@@ -259,8 +259,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 {
 	struct hfi_devdata *dd = ud->devdata;
 	u16 ptl_pid;
-	u32 psb_size, trig_op_size, le_me_size, unexp_size;
-	u64 ptl_unexpected_base;
+	u32 psb_size, trig_op_size, le_me_off, le_me_size, unexp_size;
 	int ret;
 
 	/* only one Portals PID allowed */
@@ -285,7 +284,10 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 
 	/* compute total Portals State Base size */
 	trig_op_size = PAGE_ALIGN(ptl_attach->trig_op_count * HFI_TRIG_OP_SIZE);
-	psb_size = HFI_PSB_FIXED_TOTAL_MEM + trig_op_size;
+	le_me_size = PAGE_ALIGN(ptl_attach->le_me_count * HFI_LE_ME_SIZE);
+	unexp_size = PAGE_ALIGN(ptl_attach->unexpected_count * HFI_UNEXP_SIZE);
+	le_me_off = HFI_PSB_FIXED_TOTAL_MEM + trig_op_size;
+	psb_size = le_me_off + le_me_size + unexp_size;
 
 	/* vmalloc Portals State memory, will store in PCB */
 	if (!ptl_phys_pages)
@@ -299,26 +301,10 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 		goto err_vmalloc;
 	}
 	ud->ptl_state_size = psb_size;
-
-	/* vmalloc Portals LE/ME and unexpected lists, will store in PCB */
-	le_me_size = PAGE_ALIGN(ptl_attach->le_me_count * HFI_LE_ME_SIZE);
-	unexp_size = PAGE_ALIGN(ptl_attach->unexpected_count * HFI_UNEXP_SIZE);
-	if (le_me_size + unexp_size > 0) {
-		if (!ptl_phys_pages)
-			ud->ptl_le_me_base = vmalloc_user(le_me_size + unexp_size);
-		else
-			ud->ptl_le_me_base = (void *)__get_free_pages(
-							GFP_KERNEL | __GFP_ZERO,
-							get_order(le_me_size + unexp_size));
-		if (!ud->ptl_le_me_base) {
-			ret = -ENOMEM;
-			goto err_vmalloc;
-		}
-	}
 	ud->ptl_trig_op_size = trig_op_size;
+	ud->ptl_le_me_base = ud->ptl_state_base + le_me_off;
 	ud->ptl_le_me_size = le_me_size;
 	ud->ptl_unexpected_size = unexp_size;
-	ptl_unexpected_base = (u64)ud->ptl_le_me_base + le_me_size;
 
 	/* TODO - init IOMMU PASID <-> PID mapping */
 	ud->pasid = ptl_pid;
@@ -326,16 +312,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 		    psb_size, trig_op_size, le_me_size, unexp_size);
 
 	/* write PCB (host memory) */
-	dd->ptl_control[ptl_pid].trig_op_size = ptl_attach->trig_op_count;
-	dd->ptl_control[ptl_pid].le_me_base = ((u64)ud->ptl_le_me_base >> PAGE_SHIFT);
-	dd->ptl_control[ptl_pid].le_me_pa = ptl_phys_pages;
-	dd->ptl_control[ptl_pid].le_me_size = ptl_attach->le_me_count;
-	dd->ptl_control[ptl_pid].unex_base = ((u64)ptl_unexpected_base >> PAGE_SHIFT);
-	dd->ptl_control[ptl_pid].unex_pa = ptl_phys_pages;
-	dd->ptl_control[ptl_pid].unex_size = ptl_attach->unexpected_count;
-	dd->ptl_control[ptl_pid].portals_base = ((u64)ud->ptl_state_base >> PAGE_SHIFT);
-	dd->ptl_control[ptl_pid].base_pa = ptl_phys_pages;
-	dd->ptl_control[ptl_pid].v = 1;
+	hfi_pcb_write(ud, ptl_pid, ptl_phys_pages);
 
 	/* return mmap tokens of PSB items */
 	ptl_attach->ct_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_CT,
@@ -426,7 +403,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
-	memset(&dd->ptl_control[ptl_pid], 0, sizeof(hfi_ptl_control_t));
+	hfi_pcb_reset(dd, ptl_pid);
 	dd->ptl_user[ptl_pid] = 0;
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
@@ -453,16 +430,6 @@ void hfi_ptl_cleanup(struct hfi_userdata *ud)
 	/* release assigned PID */
 	hfi_pid_free(dd, ptl_pid);
 
-	if (ud->ptl_le_me_base) {
-		if (!ptl_phys_pages)
-			vfree(ud->ptl_le_me_base);
-		else
-			free_pages((unsigned long)ud->ptl_le_me_base,
-				   get_order(ud->ptl_le_me_size +
-					     ud->ptl_unexpected_size));
-	}
-	ud->ptl_le_me_base = NULL;
-
 	if (ud->ptl_state_base) {
 		if (!ptl_phys_pages)
 			vfree(ud->ptl_state_base);
@@ -471,6 +438,7 @@ void hfi_ptl_cleanup(struct hfi_userdata *ud)
 				   get_order(ud->ptl_state_size));
 	}
 	ud->ptl_state_base = NULL;
+	ud->ptl_le_me_base = NULL;
 
 	if (ud->pid_count == 0) {
 		dd_dev_info(ud->devdata,
