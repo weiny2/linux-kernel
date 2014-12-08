@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+# Bring up/down the Omni-Path Gen2 drivers
+#
+# description: Loads/Unloads Omni-Path Gen2 kernel modules
+#
+
+. /etc/rc.d/init.d/functions
+
+start ()
+{
+    local RC=0
+
+    modprobe hfi2
+    modprobe hfi2_user
+
+    touch /var/lock/subsys/hfi2
+    [ $RC -eq 0 ] && echo_success || echo_failure
+    echo
+    return $RC
+}
+
+stop ()
+{
+    local RC=0
+
+    modprobe -r hfi2_user
+    modprobe -r hfi2
+    modprobe -r hfi2_core
+
+    rm -f /var/lock/subsys/hfi2
+    [ $RC -eq 0 ] && echo_success || echo_failure
+    echo
+    return $RC
+}
+
+restart ()
+{
+    stop
+    start
+}
+
+condrestart ()
+{
+    [ -e /var/lock/subsys/hfi2 ] && restart || return 0
+}
+
+usage ()
+{
+    echo
+    echo "Usage: `basename $0` {start|stop|restart|condrestart|try-restart|force-reload|status}"
+    echo
+    return 2
+}
+
+case $1 in
+    start|stop|restart|condrestart|try-restart|force-reload)
+        [ `id -u` != "0" ] && exit 4 ;;
+esac
+
+case $1 in
+    start) start; RC=$? ;;
+    stop) stop; RC=$? ;;
+    restart) restart; RC=$? ;;
+    condrestart) condrestart; RC=$? ;;
+    try-restart) condrestart; RC=$? ;;
+    force-reload) condrestart; RC=$? ;;
+    *) usage; RC=$? ;;
+esac
+
+exit $RC
