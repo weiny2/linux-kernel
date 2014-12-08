@@ -537,6 +537,9 @@ static inline int stl_width_to_ib(u16 in)
 
 /* firmware.c */
 extern const u8 pcie_serdes_broadcast[];
+#define WRITE_SBUS_RECEIVER 0x21	/* SBUS command */
+void sbus_request(struct hfi_devdata *dd,
+		u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
 int firmware_init(struct hfi_devdata *dd);
 int load_pcie_firmware(struct hfi_devdata *dd);
 int load_firmware(struct hfi_devdata *dd);

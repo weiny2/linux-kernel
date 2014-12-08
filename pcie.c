@@ -731,6 +731,10 @@ const struct pci_error_handlers qib_pci_err_handler = {
 
 #include "include/wfr/wfr_pcie_defs.h"
 
+/* this CSR definition does not appear in the pcie_defs headers */
+#define WFR_PCIE_CFG_REG_PL106 (WFR_PCIE + 0x0000000008A8)
+#define WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT 8
+
 /* ASIC_PCI_SD_HOST_STATUS.FW_DNLD_STS field values */
 #define WFR_DL_STATUS_HFI0 0x1	/* hfi0 firmware download complete */
 #define WFR_DL_STATUS_HFI1 0x2	/* hfi1 firmware download complete */
@@ -896,6 +900,17 @@ static void arm_gasket_logic(struct hfi_devdata *dd)
 }
 
 /*
+ * Tell the PCIe SerDes to ignore the first EQ presset value.
+ */
+static void sbus_ignore_first_eq_preset(struct hfi_devdata *dd)
+{
+	u8 ra;				/* receiver address */
+
+	ra = pcie_serdes_broadcast[dd->hfi_id];
+	sbus_request(dd, ra, 0x03, WRITE_SBUS_RECEIVER, 0x00265202);
+}
+
+/*
  * Do all the steps needed to transition the PCIe link to Gen3 speed.
  */
 int do_pcie_gen3_transition(struct hfi_devdata *dd)
@@ -1050,35 +1065,42 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	/*
 	 * PcieCfgRegPl106 - Gen3 EQ Control
 	 *
-	 * Leave at default of all zero.
+	 * Gen3EqPsetReqVec=0x4
 	 */
+	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL106,
+		0x4 << WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
 
 	/*
-	 * step 5b: program XMT margin
+	 * step 5b: Tell the serdes to ignore first EQ preset.
+	 */
+	sbus_ignore_first_eq_preset(dd);
+
+	/*
+	 * step 5c: program XMT margin
 	 * Right now, leave the default alone.  To change, do a
 	 * read-modify-write of:
 	 *	CcePcieCtrl.XmtMargin
 	 *	CcePcieCtrl.XmitMarginOverwriteEnable
 	 */
 
-	/* step 5c: disable active state power management (ASPM) */
+	/* step 5d: disable active state power management (ASPM) */
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL, &lnkctl);
 	lnkctl &= ~PCI_EXP_LNKCTL_ASPMC;
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL, lnkctl);
 
 	/*
-	 * step 5d: clear DirectSpeedChange
+	 * step 5e: clear DirectSpeedChange
 	 * PcieCfgRegPl67.DirectSpeedChange must be zero to prevent the
 	 * change in the speed target from starting before we are ready.
 	 * This field defaults to 0 and we are not changing it, so nothing
 	 * needs to be done.
 	 */
 
-	/* step 5e: arm gasket logic */
+	/* step 5f: arm gasket logic */
 	dd_dev_info(dd, "%s: arming gasket logic\n", __func__);
 	arm_gasket_logic(dd);
 
-	/* step 5f: Set target link speed */
+	/* step 5g: Set target link speed */
 	/* set target link speed to be Gen3 */
 	dd_dev_info(dd, "%s: setting target link speed\n", __func__);
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL2, &lnkctl2);

@@ -865,15 +865,12 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 /* SBUS Master broadcast address */
 #define SBUS_MASTER_BROADCAST 0xfd
 
-/* SBUS commands */
-#define WRITE_SBUS_RECEIVER 0x21
-
 /*
  * Write the SBUS request register
  *
  * No need for masking - the arguments are sized exactly.
  */
-static inline void sbus_request(struct hfi_devdata *dd,
+void sbus_request(struct hfi_devdata *dd,
 		u8 receiver_addr, u8 data_addr, u8 command, u32 data_in)
 {
 	write_csr(dd, WFR_ASIC_CFG_SBUS_REQUEST,
