@@ -82,7 +82,7 @@ module_param(crc_14b_sideband, ushort, S_IRUGO);
 MODULE_PARM_DESC(crc_14b_sideband, "Use sideband credit return (14b CRC only)");
 
 /* TODO: temporary */
-static uint use_flr;
+static uint use_flr = 1;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
 
