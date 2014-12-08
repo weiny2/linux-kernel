@@ -61,7 +61,7 @@ Url: http://openfabrics.org
 Requires: kernel = %(echo %{kver} | sed -e 's/\(.*\)\.%{arch}/\1/g' | sed -e 's/-/_/g')
 
 %description
-hfi provides the driver for Intel OmniScale HFI cards
+hfi provides the driver for Intel Omni-Path HFI cards
 
 %prep
 %setup -q
@@ -78,6 +78,7 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root)
 /lib/modules/*
+/etc/init.d/hfi2
 
 %post
 depmod -a %{kver}

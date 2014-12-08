@@ -52,7 +52,7 @@ MVERSION = $(VERSION)-$(RELEASE)
 # This is for changelog in specfile
 BASEVERSION :=
 
-EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp' --exclude='series' --exclude='*.orig' --exclude=hfi.spec.in
+EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp' --exclude='series' --exclude='*.orig' --exclude=$(NAME).spec.in
 
 #BUILD_KERNEL ?= 3.12.18-wfr+
 BUILD_KERNEL ?= $(shell uname -r)
@@ -73,21 +73,21 @@ clean:
 	make -C $(KBUILD) M=${PWD} clean
 
 distclean: clean
-	rm -f hfi.spec
+	rm -f $(NAME).spec
 	rm -f *.tgz
 
-specfile: hfi.spec.in
+specfile: $(NAME).spec.in
 	sed \
 		-e 's/@VERSION@/'${VERSION}'/g' \
 		-e 's/@RELEASE@/'${RELEASE}'/g' \
-		-e 's/@NAME@/'${NAME}'/g' hfi.spec.in > hfi.spec
+		-e 's/@NAME@/'${NAME}'/g' $(NAME).spec.in > $(NAME).spec
 ifneq (,$(BASEVERSION))
 	if [ -d .git ]; then \
-		echo '%changelog' >> hfi.spec; \
+		echo '%changelog' >> $(NAME).spec; \
 		git log --no-merges v$(BASEVERSION)..HEAD --format="* %cd <%ae>%n- %s%n" \
 		| sed 's/-[0-9][0-9][0-9][0-9] //' \
 		| sed 's/ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]//' \
-		>> hfi.spec; \
+		>> $(NAME).spec; \
 	fi
 endif
 
@@ -100,9 +100,11 @@ dist: distclean specfile headers
 
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	mkdir -p $(RPM_BUILD_ROOT)/etc/init.d
 	install $(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME)_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME)_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 
 rpm: dist
 	rpmbuild --define 'require_kver $(KVER)' -ta $(NAME)-$(VERSION).tgz
