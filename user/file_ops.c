@@ -111,6 +111,8 @@ static int hfi_open(struct inode *inode, struct file *fp)
 #else
 	ud->ptl_uid = current_uid().val;
 #endif
+	INIT_LIST_HEAD(&ud->mpin_head);
+	spin_lock_init(&ud->mpin_lock);
 
 	ud->bus_ops->job_init(ud);
 
@@ -130,6 +132,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_ptl_attach_args ptl_attach;
 	struct hfi_job_info_args job_info;
 	struct hfi_job_setup_args job_setup;
+	struct hfi_mpin_args mpin;
+	struct hfi_munpin_args munpin;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *dest = NULL;
@@ -193,6 +197,15 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		dest = &job_setup;
 		need_admin = 1;
 		break;
+	case HFI_CMD_MPIN:
+		copy_in = sizeof(mpin);
+		copy_out = copy_in;
+		dest = &mpin;
+		break;
+	case HFI_CMD_MUNPIN:
+		copy_in = sizeof(munpin);
+		dest = &munpin;
+		break;
 	default:
 		ret = -EINVAL;
 		goto err_cmd;
@@ -248,6 +261,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_JOB_SETUP:
 		ret = ops->job_setup(ud, &job_setup);
+		break;
+	case HFI_CMD_MPIN:
+		ret = hfi_mpin(ud, &mpin);
+		break;
+	case HFI_CMD_MUNPIN:
+		ret = hfi_munpin(ud, &munpin);
 		break;
 	default:
 		ret = -EINVAL;
@@ -463,6 +482,10 @@ int hfi_user_cleanup(struct hfi_userdata *ud)
 	ops->ctxt_release(ud);
 	/* release any held PID reservations */
 	ops->job_free(ud);
+
+	/* unpin memory that user didn't clean up */
+	hfi_munpin_all(ud);
+
 	return 0;
 }
 
