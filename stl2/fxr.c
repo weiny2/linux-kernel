@@ -39,6 +39,13 @@
 #include "../include/fxr/fxr_rx_ci_csrs.h"
 #include "../include/fxr/fxr_rx_hiarb_defs.h"
 #include "../include/fxr/fxr_rx_hiarb_csrs.h"
+#include "../include/fxr/fxr_linkmux_defs.h"
+#include "../include/fxr/fxr_lm_csrs.h"
+
+/* TODO - for now, start FXR in loopback */
+static uint force_loopback = 1;
+module_param(force_loopback, uint, S_IRUGO);
+MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
@@ -55,6 +62,14 @@ void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
 	BUG_ON(dd->kregbase == NULL);
 	writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
+}
+
+void set_loopback(const struct hfi_devdata *dd)
+{
+	LM_CONFIG_t lm_config = {.val = 0};
+
+	lm_config.FORCE_LOOPBACK = 1;
+	write_csr(dd, FXR_LM_CONFIG, lm_config.val);
 }
 
 /*
@@ -144,6 +159,9 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->pcibar0 = addr;
 	dd->pcibar1 = 0;
 	dd->physaddr = addr;		/* used for io_remap, etc. */
+
+	if (force_loopback)
+		set_loopback(dd);
 
 	/* Host Memory allocations -- */
 
