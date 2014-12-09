@@ -492,8 +492,10 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 		dev_dbg(&nd_bus->dev, "%s: nfit checksum failure\n", __func__);
 		goto err;
 	}
-	WARN_TAINT_ONCE(sum != 0, TAINT_FIRMWARE_WORKAROUND,
-			"nfit checksum failure, continuing...\n");
+	if (sum != 0) {
+		dev_err(&nd_bus->dev, "nfit checksum failure, continuing...\n");
+		add_taint(TAINT_FIRMWARE_WORKAROUND, LOCKDEP_STILL_OK);
+	}
 
 	memcpy_fromio(signature, &nfit->signature, sizeof(signature));
 	if (memcmp(signature, "NFIT", 4) != 0) {
