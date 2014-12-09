@@ -101,7 +101,7 @@ dist: distclean specfile headers
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install $(NAME)_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install $(NAME)_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME)_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 
 rpm: dist
