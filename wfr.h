@@ -372,14 +372,16 @@
 #define POWER_MANAGEMENT_MASK			0xf
 
 /* verify capibility fabric fields */
-#define VAU_SHIFT 0x0
-#define VAU_MASK 0xf
-#define VCU_SHIFT 0x4
-#define VCU_MASK 0xf
-#define VL15BUF_SHIFT 8
-#define VL15BUF_MASK 0xfff
+#define VAU_SHIFT	0
+#define VAU_MASK	0x0007
+#define Z_SHIFT		3
+#define Z_MASK		0x0001
+#define VCU_SHIFT	4
+#define VCU_MASK	0x0007
+#define VL15BUF_SHIFT	8
+#define VL15BUF_MASK	0x0fff
 #define CRC_SIZES_SHIFT 20
-#define CRC_SIZES_MASK 0x7
+#define CRC_SIZES_MASK	0x7
 
 /* verify capability link width fields */
 #define LINK_WIDTH_SHIFT 0

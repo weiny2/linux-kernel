@@ -1113,8 +1113,8 @@ static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate);
 static int set_physical_link_state(struct hfi_devdata *dd, u64 state);
 static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 				u8 *continous);
-static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
-				u16 *vl15buf, u8 *crc_sizes);
+static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *z,
+				u8 *vcu, u16 *vl15buf, u8 *crc_sizes);
 static void read_vc_remote_link_width(struct hfi_devdata *dd,
 				u8 *remote_tx_rate, u16 *link_widths);
 static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
@@ -3018,6 +3018,7 @@ void handle_verify_cap(struct work_struct *work)
 	u8 continious;
 	u8 vcu;
 	u8 vau;
+	u8 z;
 	u16 vl15buf;
 	u16 link_widths;
 	u16 crc_mask;
@@ -3042,7 +3043,7 @@ void handle_verify_cap(struct work_struct *work)
 	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
 	 */
 	read_vc_remote_phy(dd, &power_management, &continious);
-	read_vc_remote_fabric(dd, &vau, &vcu, &vl15buf, &crc_sizes);
+	read_vc_remote_fabric(dd, &vau, &z, &vcu, &vl15buf, &crc_sizes);
 	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
 	/*
 	 * And the 'MgmtAllowed' information, which is exchanged during
@@ -3054,8 +3055,8 @@ void handle_verify_cap(struct work_struct *work)
 		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
 		(int)power_management, (int)continious);
 	dd_dev_info(dd,
-		"Peer Fabric: vAU %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
-		(int)vau, (int)vcu, (int)vl15buf, (int)crc_sizes);
+		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
+		(int)vau, (int)z, (int)vcu, (int)vl15buf, (int)crc_sizes);
 	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
 		(u32)remote_tx_rate, (u32)link_widths);
 	if (disable_bcc) {
@@ -3075,6 +3076,17 @@ void handle_verify_cap(struct work_struct *work)
 		vl15buf = dd->vl15_init;
 		vcu = dd->vcu;
 	}
+	/*
+	 * The peer vAU value just read is the peer receiver value.  WFR does
+	 * not support a transmit vAU of 0 (AU == 8).  We advertised that
+	 * with Z=1 in the fabric capabilities sent to the peer.  The peer
+	 * will see our Z=1, and, if it advertised a vAU of 0, will move its
+	 * receive to vAU of 1 (AU == 16).  Do the same here.  We do not care
+	 * about the peer Z value - our sent vAU is 3 (hardwired) and is not
+	 * subject to the Z value exception.
+	 */
+	if (vau == 0)
+		vau = 1;
 	set_up_vl15(dd, vau, vl15buf);
 
 	/* set up the LCB CRC mode */
@@ -4084,12 +4096,13 @@ static int write_vc_local_phy(struct hfi_devdata *dd, u8 power_management,
 				GENERAL_CONFIG, frame);
 }
 
-static int write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 vcu,
+static int write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 z, u8 vcu,
 					u16 vl15buf, u8 crc_sizes)
 {
 	u32 frame;
 
 	frame = (u32)vau << VAU_SHIFT
+		| (u32)z << Z_SHIFT
 		| (u32)vcu << VCU_SHIFT
 		| (u32)vl15buf << VL15BUF_SHIFT
 		| (u32)crc_sizes << CRC_SIZES_SHIFT;
@@ -4141,13 +4154,14 @@ static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 					& CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK;
 }
 
-static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *vcu,
-					u16 *vl15buf, u8 *crc_sizes)
+static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *z,
+					u8 *vcu, u16 *vl15buf, u8 *crc_sizes)
 {
 	u32 frame;
 
 	read_8051_config(dd, VERIFY_CAP_REMOTE_FABRIC, GENERAL_CONFIG, &frame);
 	*vau = (frame >> VAU_SHIFT) & VAU_MASK;
+	*z = (frame >> Z_SHIFT) & Z_MASK;
 	*vcu = (frame >> VCU_SHIFT) & VCU_MASK;
 	*vl15buf = (frame >> VL15BUF_SHIFT) & VL15BUF_MASK;
 	*crc_sizes = (frame >> CRC_SIZES_SHIFT) & CRC_SIZES_MASK;
@@ -4474,8 +4488,8 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 	if (ret != WFR_HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
-
-	ret = write_vc_local_fabric(dd, dd->vau, dd->vcu, dd->vl15_init,
+	/* z=1 in the next call: AU of 0 is not supported by the hardware */
+	ret = write_vc_local_fabric(dd, dd->vau, 1, dd->vcu, dd->vl15_init,
 				    link_crc_mask);
 	if (ret != WFR_HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
