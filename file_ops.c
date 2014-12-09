@@ -1841,7 +1841,21 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 				in_lcb = 0;
 			}
 		}
-		data = readq(base + total);
+		/*
+		 * HSD 290361 - cannot read ASIC GPIO/QSFP* clear and force
+		 * CSRs without a false parity error.  Avoid the whole issue
+		 * by not reading them.  These registers are defined as
+		 * having a read value of 0.
+		 */
+		if (csr_off == WFR_ASIC_GPIO_CLEAR
+				|| csr_off == WFR_ASIC_GPIO_FORCE
+				|| csr_off == WFR_ASIC_QSFP1_CLEAR
+				|| csr_off == WFR_ASIC_QSFP1_FORCE
+				|| csr_off == WFR_ASIC_QSFP2_CLEAR
+				|| csr_off == WFR_ASIC_QSFP2_FORCE)
+			data = 0;
+		else
+			data = readq(base + total);
 		if (put_user(data, (unsigned long *)(buf + total)))
 			break;
 	}
