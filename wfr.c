@@ -8605,6 +8605,17 @@ void init_rxe(struct hfi_devdata *dd)
 	init_qos(
 		dd,
 		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0);
+	/*
+	 * HSD 290512 - make sure RcvCtrl.RcvWcb <= PCIe Device Control
+	 * Register Max_Payload_Size (PCI_EXP_DEVCTL in Linux PCIe config
+	 * space, PciCfgCap2.MaxPayloadSize in WFR).  There is only one
+	 * invalid configuration: RcvCtrl.RcvWcb set to its max of 256 and
+	 * Max_PayLoad_Size set to its minimum of 128.
+	 *
+	 * Presently, RcvCtrl.RcvWcb is not modified from its default of 0
+	 * (64 bytes).  Max_Payload_Size is possibly modified upward in
+	 * qib_tune_pcie_caps() which is called after this routine.
+	 */
 	/* TODO: others...? */
 }
 
