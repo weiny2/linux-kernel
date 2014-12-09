@@ -3134,6 +3134,22 @@ void handle_verify_cap(struct work_struct *work)
 	/* set up the remote credit return table */
 	assign_remote_cm_au_table(dd, vcu);
 
+	/*
+	 * The LCB is reset on entry to handle_verify_cap(), so this must
+	 * be applied on every link up.
+	 *
+	 * TODO: Decision to fix for B0 is deferred.  Add A0 check if fixed.
+	 *
+	 * HSD 291201: Adjust LCB error kill enable to kill the link if
+	 * these RBUF errors are seen:
+	 *	REPLAY_BUF_MBE_SMASK
+	 *	FLIT_INPUT_BUF_MBE_SMASK
+	 */
+	reg = read_csr(dd, DC_LCB_CFG_LINK_KILL_EN);
+	reg |= DC_LCB_CFG_LINK_KILL_EN_REPLAY_BUF_MBE_SMASK
+		| DC_LCB_CFG_LINK_KILL_EN_FLIT_INPUT_BUF_MBE_SMASK;
+	write_csr(dd, DC_LCB_CFG_LINK_KILL_EN, reg);
+
 	/* pull LCB fifos out of reset - all fifo clocks must be stable */
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
 
