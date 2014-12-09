@@ -88,6 +88,11 @@ struct hfi_msix_entry {
 	cpumask_var_t mask;
 };
 
+struct hfi_mpin_entry {
+	u64 pfn;
+	struct list_head list;
+};
+
 /* device data struct contains only per-HFI info. */
 struct hfi_devdata {
 	/* pci access data structure */
@@ -156,6 +161,8 @@ struct hfi_userdata {
 	u8 auth_mask;
 	u32 auth_uid[HFI_NUM_AUTH_TUPLES];
 	u32 ptl_uid; /* default UID if auth_tuples not used */
+	struct list_head mpin_head;
+	spinlock_t mpin_lock;
 
 	u32 dlid_base;
 	u32 lid_offset;
@@ -207,6 +214,9 @@ void hfi_job_init(struct hfi_userdata *ud);
 int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
 int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
 void hfi_job_free(struct hfi_userdata *ud);
+int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin);
+int hfi_munpin(struct hfi_userdata *ud, struct hfi_munpin_args *munpin);
+int hfi_munpin_all(struct hfi_userdata *ud);
 
 /**
  * stl_core_ops - Hardware operations for accessing a FXR device on the FXR bus.
