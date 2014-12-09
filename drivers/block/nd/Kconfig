@@ -1,5 +1,9 @@
+config ND_ARCH_HAS_IOREMAP_CACHE
+	def_bool (X86 || IA64 || ARM || ARM64 || SH || XTENSA)
+
 menuconfig NFIT_DEVICES
 	bool "NVDIMM (NFIT) Support"
+	depends on ND_ARCH_HAS_IOREMAP_CACHE
 	help
 	  Support for non-volatile memory devices defined by the NVDIMM
 	  Firmware Interface Table. (NFIT)  On platforms that define an
@@ -70,7 +74,6 @@ config NFIT_LOCAL
 
 config NFIT_TEST
 	tristate "NFIT TEST: Manufactured NFIT for interface testing"
-	depends on ACPI
 	depends on DMA_CMA
 	depends on ND_CORE=m
 	depends on m
