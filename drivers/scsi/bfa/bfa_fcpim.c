@@ -2125,13 +2125,15 @@ static void
 __bfa_cb_ioim_good_comp(void *cbarg, bfa_boolean_t complete)
 {
 	struct bfa_ioim_s *ioim = cbarg;
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)ioim->dio;
 
 	if (!complete) {
 		bfa_sm_send_event(ioim, BFA_IOIM_SM_HCB);
 		return;
 	}
 
-	bfa_cb_ioim_good_comp(ioim->bfa->bfad, ioim->dio);
+	if (scmd && scmd->host_scribble == (void *)ioim)
+		bfa_cb_ioim_good_comp(ioim->bfa->bfad, ioim->dio);
 }
 
 static void
@@ -2139,6 +2141,7 @@ __bfa_cb_ioim_comp(void *cbarg, bfa_boolean_t complete)
 {
 	struct bfa_ioim_s	*ioim = cbarg;
 	struct bfi_ioim_rsp_s *m;
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)ioim->dio;
 	u8	*snsinfo = NULL;
 	u8	sns_len = 0;
 	s32	residue = 0;
@@ -2174,8 +2177,9 @@ __bfa_cb_ioim_comp(void *cbarg, bfa_boolean_t complete)
 		}
 	}
 
-	bfa_cb_ioim_done(ioim->bfa->bfad, ioim->dio, m->io_status,
-			  m->scsi_status, sns_len, snsinfo, residue);
+	if (scmd && scmd->host_scribble == (void *)ioim)
+		bfa_cb_ioim_done(ioim->bfa->bfad, ioim->dio, m->io_status,
+				 m->scsi_status, sns_len, snsinfo, residue);
 }
 
 void
@@ -2400,20 +2404,23 @@ static void
 __bfa_cb_ioim_failed(void *cbarg, bfa_boolean_t complete)
 {
 	struct bfa_ioim_s *ioim = cbarg;
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)ioim->dio;
 
 	if (!complete) {
 		bfa_sm_send_event(ioim, BFA_IOIM_SM_HCB);
 		return;
 	}
 
-	bfa_cb_ioim_done(ioim->bfa->bfad, ioim->dio, BFI_IOIM_STS_ABORTED,
-			  0, 0, NULL, 0);
+	if (scmd && scmd->host_scribble == (void *)ioim)
+		bfa_cb_ioim_done(ioim->bfa->bfad, ioim->dio,
+				 BFI_IOIM_STS_ABORTED, 0, 0, NULL, 0);
 }
 
 static void
 __bfa_cb_ioim_pathtov(void *cbarg, bfa_boolean_t complete)
 {
 	struct bfa_ioim_s *ioim = cbarg;
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)ioim->dio;
 
 	bfa_stats(ioim->itnim, path_tov_expired);
 	if (!complete) {
@@ -2421,21 +2428,24 @@ __bfa_cb_ioim_pathtov(void *cbarg, bfa_boolean_t complete)
 		return;
 	}
 
-	bfa_cb_ioim_done(ioim->bfa->bfad, ioim->dio, BFI_IOIM_STS_PATHTOV,
-			  0, 0, NULL, 0);
+	if (scmd && scmd->host_scribble == (void *)ioim)
+		bfa_cb_ioim_done(ioim->bfa->bfad, ioim->dio,
+				 BFI_IOIM_STS_PATHTOV, 0, 0, NULL, 0);
 }
 
 static void
 __bfa_cb_ioim_abort(void *cbarg, bfa_boolean_t complete)
 {
 	struct bfa_ioim_s *ioim = cbarg;
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)ioim->dio;
 
 	if (!complete) {
 		bfa_sm_send_event(ioim, BFA_IOIM_SM_HCB);
 		return;
 	}
 
-	bfa_cb_ioim_abort(ioim->bfa->bfad, ioim->dio);
+	if (scmd && scmd->host_scribble == (void *)ioim)
+		bfa_cb_ioim_abort(ioim->bfa->bfad, ioim->dio);
 }
 
 static void
