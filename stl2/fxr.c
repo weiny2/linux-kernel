@@ -254,6 +254,8 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 	u32 offset;
 	u64 paddr;
 	RX_CQ_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
+	TX_CQ_RESET_t tx_cq_reset = {.val = 0};
+	RX_CQ_RESET_t rx_cq_reset = {.val = 0};
 
 	paddr = virt_to_phys(HFI_CQ_HEAD_ADDR(head_base, cq_idx));
 	cq_head.Valid = 1;
@@ -261,6 +263,12 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 	cq_head.HD_PTR_HOST_ADDR = paddr;
 	offset = FXR_RX_CQ_HEAD_UPDATE_ADDR + (cq_idx * 8);
 	write_csr(dd, offset, cq_head.val);
+
+	/* reset CQ state, as CQ head starts at 0 */
+	tx_cq_reset.RESET_CQ = cq_idx;
+	rx_cq_reset.RESET_CQ = cq_idx;
+	write_csr(dd, FXR_TX_CQ_RESET, tx_cq_reset.val);
+	write_csr(dd, FXR_RX_CQ_RESET, rx_cq_reset.val);
 }
 
 /* 
