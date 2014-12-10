@@ -863,7 +863,7 @@ static int super_load(struct md_rdev *rdev, struct md_rdev *refdev)
 		return -EINVAL;
 	}
 
-	ret = read_disk_sb(rdev, 4096);
+	ret = read_disk_sb(rdev, rdev->sb_size);
 	if (ret)
 		return ret;
 
