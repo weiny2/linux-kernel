@@ -34,5 +34,4 @@ struct hfi_cmd;
 struct hfi_devdata;
 
 int eprom_init(struct hfi_devdata *dd);
-int handle_eprom_command(const struct hfi_cmd *cmd,
-					const struct hfi_cmd __user *ucmd);
+int handle_eprom_command(const struct hfi_cmd *cmd);

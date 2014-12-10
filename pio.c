@@ -435,7 +435,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 #define release_hw_context(ap) (cmpxchg(ap, 1, 0) == 1)
 
 /* allocate a hardware context of the given type */
-int sc_hw_alloc(struct hfi_devdata *dd, int type, u32 *contextp)
+static int sc_hw_alloc(struct hfi_devdata *dd, int type, u32 *contextp)
 {
 	struct send_context_info *sci;
 	u32 context;
@@ -454,7 +454,7 @@ int sc_hw_alloc(struct hfi_devdata *dd, int type, u32 *contextp)
 }
 
 /* free the given hardware context */
-void sc_hw_free(struct hfi_devdata *dd, u32 context)
+static void sc_hw_free(struct hfi_devdata *dd, u32 context)
 {
 	struct send_context_info *sci = &dd->send_contexts[context];
 

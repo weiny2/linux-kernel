@@ -51,7 +51,7 @@ static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
-static inline void flush_tx_list(struct qib_qp *qp);
+static void flush_tx_list(struct qib_qp *qp);
 static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx);
 static void iowait_wakeup(struct iowait *wait, int reason);
 

@@ -56,7 +56,7 @@
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
 
-uint hdrsup_enable = 1;
+static uint hdrsup_enable = 1;
 module_param(hdrsup_enable, uint, S_IRUGO);
 MODULE_PARM_DESC(hdrsup_enable, "Enable/disable header suppression");
 
@@ -239,7 +239,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_CTXT_INFO:
 	case HFI_CMD_SET_PKEY:
 		copy = 0;
-		user_val = ucmd->addr;
+		user_val = cmd.addr;
 		break;
 	case HFI_CMD_EP_INFO:
 	case HFI_CMD_EP_ERASE_CHIP:
@@ -260,7 +260,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 	/* If the command comes with user data, copy it. */
 	if (copy) {
-		if (copy_from_user(dest, (void __user *)ucmd->addr, copy)) {
+		if (copy_from_user(dest, (void __user *)cmd.addr, copy)) {
 			ret = -EFAULT;
 			goto bail;
 		}
@@ -312,7 +312,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		if (!ret) {
 			unsigned long addr;
 			/* Copy the mapped length back to user space */
-			addr = (unsigned long)ucmd->addr +
+			addr = (unsigned long)cmd.addr +
 				offsetof(struct hfi_tid_info, length);
 			if (copy_to_user((void __user *)addr, &tinfo.length,
 					 sizeof(tinfo.length))) {
@@ -320,7 +320,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 				goto bail;
 			}
 			/* Now, copy the number of tidlist entries we used */
-			addr = (unsigned long)ucmd->addr +
+			addr = (unsigned long)cmd.addr +
 				offsetof(struct hfi_tid_info, tidcnt);
 			if (copy_to_user((void __user *)addr, &tinfo.tidcnt,
 					 sizeof(tinfo.tidcnt)))
@@ -350,7 +350,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_EP_READ_P1:
 	case HFI_CMD_EP_WRITE_P0:
 	case HFI_CMD_EP_WRITE_P1:
-		ret = handle_eprom_command(&cmd, ucmd);
+		ret = handle_eprom_command(&cmd);
 		break;
 	}
 
@@ -1453,8 +1453,8 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		ret = -EFAULT;
 		goto done;
 	}
-	memset(tidmap, 0, sizeof(tidmap));
-	memset(tidlist, 0, sizeof(tidlist));
+	memset(tidmap, 0, sizeof(tidmap[0]) * uctxt->tidmapcnt);
+	memset(tidlist, 0, sizeof(tidlist[0]) * tidpairs);
 
 	exp_groups = uctxt->expected_count / dd->rcv_entries.group_size;
 	/*
@@ -1649,7 +1649,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	}
 	/* copy TID info to user */
 	if (copy_to_user((void __user *)(unsigned long)tinfo->tidmap,
-			 tidmap, sizeof(tidmap)))
+			 tidmap, sizeof(tidmap[0]) * uctxt->tidmapcnt))
 		ret = -EFAULT;
 done:
 	return ret;
@@ -1666,7 +1666,8 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 	int ret = 0;
 
 	if (copy_from_user(&tidmap, (void __user *)(unsigned long)
-			   tinfo->tidmap, sizeof(tidmap))) {
+			   tinfo->tidmap,
+			   sizeof(tidmap[0]) * uctxt->tidmapcnt)) {
 		ret = -EFAULT;
 		goto done;
 	}
@@ -1806,7 +1807,7 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			loff_t *f_pos)
 {
 	struct hfi_devdata *dd = filp->private_data;
-	void *base;
+	void __iomem *base;
 	unsigned long total, data, csr_off;
 	int in_lcb;
 
@@ -1822,7 +1823,7 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 	/* must be in range */
 	if (*f_pos + count > dd->kregend - dd->kregbase)
 		return -EINVAL;
-	base = (void *)dd->kregbase + *f_pos;
+	base = (void __iomem *)(dd->kregbase + *f_pos);
 	csr_off = *f_pos;
 	in_lcb = 0;
 	for (total = 0; total < count; total += 8, csr_off += 8) {
@@ -1856,7 +1857,7 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			data = 0;
 		else
 			data = readq(base + total);
-		if (put_user(data, (unsigned long *)(buf + total)))
+		if (put_user(data, (unsigned long __user *)(buf + total)))
 			break;
 	}
 	if (in_lcb)
@@ -1870,7 +1871,7 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 			size_t count, loff_t *f_pos)
 {
 	struct hfi_devdata *dd = filp->private_data;
-	void *base;
+	void __iomem *base;
 	unsigned long total, data, csr_off;
 	int in_lcb;
 
@@ -1887,11 +1888,11 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 	if (*f_pos + count > dd->kregend - dd->kregbase)
 		return -EINVAL;
 
-	base = (void *)dd->kregbase + *f_pos;
+	base = (void __iomem *)dd->kregbase + *f_pos;
 	csr_off = *f_pos;
 	in_lcb = 0;
 	for (total = 0; total < count; total += 8, csr_off += 8) {
-		if (get_user(data, (unsigned long *)(buf + total)))
+		if (get_user(data, (unsigned long __user *)(buf + total)))
 			break;
 		/* accessing LCB CSRs requires a special procuedure */
 		if (is_lcb_offset(csr_off)) {
@@ -1925,7 +1926,7 @@ static const struct file_operations ui_file_ops = {
 	.release = ui_release,
 };
 #define UI_OFFSET 192	/* device minor offset for UI devices */
-int create_ui = 1;
+static int create_ui = 1;
 
 static struct cdev wildcard_cdev;
 static struct device *wildcard_device;

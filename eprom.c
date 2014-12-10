@@ -297,8 +297,7 @@ done:
  *
  * Return 0 on success, -ERRNO on error
  */
-int handle_eprom_command(const struct hfi_cmd *cmd,
-					const struct hfi_cmd __user *ucmd)
+int handle_eprom_command(const struct hfi_cmd *cmd)
 {
 	struct hfi_devdata *dd;
 	u32 dev_id;
@@ -343,7 +342,7 @@ int handle_eprom_command(const struct hfi_cmd *cmd,
 		}
 		dev_id = read_device_id(dd);
 		/* addr points to a u32 user buffer */
-		if (copy_to_user((void __user *)ucmd->addr, &dev_id,
+		if (copy_to_user((void __user *)cmd->addr, &dev_id,
 								sizeof(u32)))
 			ret = -EFAULT;
 		break;

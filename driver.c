@@ -804,11 +804,6 @@ bail:
 	return ret;
 }
 
-inline u16 generate_jkey(unsigned int uid)
-{
-	return uid & 0xffff;
-}
-
 void handle_eflags(struct hfi_packet *packet)
 {
 	struct qib_ctxtdata *rcd = packet->rcd;

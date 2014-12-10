@@ -1087,11 +1087,6 @@ int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
 void qib_bad_intrstatus(struct hfi_devdata *);
 void handle_user_interrupt(struct qib_ctxtdata *rcd);
 
-/* clean up any per-chip chip-specific stuff */
-void qib_chip_cleanup(struct hfi_devdata *);
-/* clean up any chip type-specific stuff */
-void qib_chip_done(void);
-
 int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
 int qib_create_ctxts(struct hfi_devdata *dd);
@@ -1104,7 +1099,10 @@ int hfi_setup_ctxt(struct qib_ctxtdata *, u16, u16, u16, u16);
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
-inline u16 generate_jkey(unsigned int);
+static inline u16 generate_jkey(unsigned int uid)
+{
+	return uid & 0xffff;
+}
 void set_link_ipg(struct qib_pportdata *ppd);
 void process_becn(struct qib_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,
 		  u32 rqpn, u8 svc_type);
