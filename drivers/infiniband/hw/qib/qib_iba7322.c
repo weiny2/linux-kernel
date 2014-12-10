@@ -3797,8 +3797,9 @@ static unsigned qib_7322_boardname(struct qib_devdata *dd)
 		dd->flags |= QIB_HAS_QSFP;
 		break;
 	case BOARD_QMH7360:
-		n = "Intel IB QDR 1P FLR-QSFP Adptr";
+		n = "Intel_IB_QDR_1P_FLR_QSFP_Adptr";
 		dd->flags |= QIB_HAS_QSFP;
+		features = PORT_SPD_CAP;
 		break;
 	case 15:
 		n = "InfiniPath_QLE7342_TEST";
