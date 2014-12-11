@@ -840,8 +840,10 @@ struct hfi_devdata {
 
 	/* PCI Vendor ID (here for NodeInfo) */
 	u16 vendorid;
+	u16 subvendorid;
 	/* PCI Device ID (here for NodeInfo) */
 	u16 deviceid;
+	u16 subdeviceid;
 	/* for write combining settings */
 	unsigned long wc_cookie;
 	unsigned long wc_base;

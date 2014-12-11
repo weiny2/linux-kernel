@@ -38,6 +38,7 @@
 #include <linux/module.h>
 
 #include "hfi.h"
+#include "include/wfr/wfr_pcie_defs.h"
 
 /* link speed vector for Gen3 speed - not in Linux headers */
 #define GEN3_SPEED_VECTOR 0x3
@@ -208,6 +209,15 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	pci_read_config_word(dd->pcidev, PCI_COMMAND, &dd->pci_command);
 	dd->deviceid = ent->device; /* save for later use */
 	dd->vendorid = ent->vendor;
+	/*
+	 * Read the subsystem values directly rather than use ent->sub*.
+	 * The ent->sub* values are -1 (wildcard) rather than the actual
+	 * values because the device table match uses a wildcard for those
+	 * values.
+	 */
+	pci_read_config_word(dd->pcidev, PCI_SUBSYSTEM_VENDOR_ID,
+		&dd->subvendorid);
+	pci_read_config_word(dd->pcidev, PCI_SUBSYSTEM_ID, &dd->subdeviceid);
 
 	return 0;
 }
@@ -428,6 +438,97 @@ void qib_enable_intx(struct pci_dev *pdev)
 	pci_disable_msix(pdev);
 }
 
+static inline u32 read_dbi_status(struct hfi_devdata *dd)
+{
+	return (u32)((read_csr(dd, WFR_CCE_DBI_CTRL)
+					& WFR_CCE_DBI_CTRL_STATUS_SMASK)
+				>> WFR_CCE_DBI_CTRL_STATUS_SHIFT);
+}
+
+/*
+ * Wait for DBI to go idle.  Return
+ *   0 on success
+ *   -ETIMEDOUT on timeout
+ */
+static int wait_dbi_idle(struct hfi_devdata *dd)
+{
+	unsigned long timeout;
+	u32 status;
+
+	timeout = jiffies + msecs_to_jiffies(DBI_TIMEOUT);
+	while (1) {
+		status = read_dbi_status(dd);
+		if (status == DBI_CTL_IDLE)
+			return 0;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd, "Timeout waiting for DBI to go idle\n");
+			return -ETIMEDOUT;
+		}
+		/* keep trying to go to idle */
+		write_csr(dd, WFR_CCE_DBI_CTRL, 0);
+	}
+}
+
+/*
+ * Wait for DBI to finish.  Return
+ *   0 on success
+ *   -ETIMEDOUT on timeout
+ *   -EIO on error
+ */
+static int wait_dbi_done(struct hfi_devdata *dd)
+{
+	unsigned long timeout;
+	u32 status;
+
+	timeout = jiffies + msecs_to_jiffies(DBI_TIMEOUT);
+	while (1) {
+		status = read_dbi_status(dd);
+		if (status == DBI_CTL_SUCCESS)
+			return 0;
+		if (status == DBI_CTL_ERROR) {
+			dd_dev_err(dd, "DBI error\n");
+			return -EIO;
+		}
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"Timeout waiting for DBI to finish, status %d\n",
+				status);
+			return -ETIMEDOUT;
+		}
+		udelay(1);
+	}
+}
+
+static int adjust_pci(struct hfi_devdata *dd, u32 address, u32 data)
+{
+	int ret;
+
+	/* simulator does not implement DBI */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+		return 0;
+
+	/* make sure DBI is idle */
+	ret = wait_dbi_idle(dd);
+	if (ret)
+		return ret;
+
+	write_csr(dd, WFR_CCE_DBI_ADDR, address);
+	write_csr(dd, WFR_CCE_DBI_DATA, data);
+	/* must set WriteEnables, then CS, in two writes */
+	write_csr(dd, WFR_CCE_DBI_CTRL,
+		(u32)0xf << WFR_CCE_DBI_CTRL_WRITE_ENABLES_SHIFT);
+	write_csr(dd, WFR_CCE_DBI_CTRL,
+		((u32)0xf << WFR_CCE_DBI_CTRL_WRITE_ENABLES_SHIFT)
+		| ((u32)1 << WFR_CCE_DBI_CTRL_CS_SHIFT));
+
+	/* wait for DBI to finish */
+	ret = wait_dbi_done(dd);
+	/* (try to) go idle no matter what happened */
+	write_csr(dd, WFR_CCE_DBI_CTRL, 0);
+
+	return ret;
+}
+
 /* restore command and BARs after a reset has wiped them out */
 void restore_pci_variables(struct hfi_devdata *dd)
 {
@@ -438,8 +539,23 @@ void restore_pci_variables(struct hfi_devdata *dd)
 				PCI_BASE_ADDRESS_1, dd->pcibar1);
 	pci_write_config_dword(dd->pcidev,
 				PCI_ROM_ADDRESS, dd->pci_rom);
-}
+	/*
+	 * TODO: Use of DBI back-door is undesirable but the only way to
+	 *       restore the subsystem IDs.
+	 * TODO: This is an _expected_ B0 fix.  A new PCIe is being tested
+	 *	 now that has this fixed.  Adding the A0 check for now.
+	 * HSD 290390 - Need to restore subsystem ids after a reset.
+	 */
+	if (is_a0(dd)) {
+		int ret;
 
+		ret = adjust_pci(dd, WFR_PCI_CFG_REG11,
+			(u32)dd->subdeviceid << 16 | (u32)dd->subvendorid);
+		if (ret)
+			dd_dev_err(dd,
+				"Unable to restore PCI subsystem settings\n");
+	}
+}
 
 /* code to adjust PCIe capabilities. */
 
@@ -731,8 +847,6 @@ const struct pci_error_handlers qib_pci_err_handler = {
  * final shipping product.  If not, then it will be revisited and items
  * will be moved to more standard locations.
  */
-
-#include "include/wfr/wfr_pcie_defs.h"
 
 /* this CSR definition does not appear in the pcie_defs headers */
 #define WFR_PCIE_CFG_REG_PL106 (WFR_PCIE + 0x0000000008A8)

@@ -1668,7 +1668,7 @@ OVERFLOW_ELEM(156), OVERFLOW_ELEM(157), OVERFLOW_ELEM(158), OVERFLOW_ELEM(159),
 /* ======================================================================== */
 
 /* return true if this is chip revision revision a0 */
-static inline int is_a0(struct hfi_devdata *dd)
+int is_a0(struct hfi_devdata *dd)
 {
 	return ((dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT)
 			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK) == 0;

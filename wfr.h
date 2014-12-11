@@ -309,6 +309,12 @@
 #define WFR_RCV_SHIFT 3
 #define WFR_RCV_INCREMENT (1 << WFR_RCV_SHIFT)
 
+/* CceDbiCtrl.Status values */
+#define DBI_CTL_IDLE	0
+#define DBI_CTL_BUSY	1
+#define DBI_CTL_SUCCESS	2
+#define DBI_CTL_ERROR	3
+
 /*
  * Receive header queue entry increment - the CSR holds multiples of
  * this value.
@@ -443,6 +449,7 @@ enum {
 #define LINK_RESTART_DELAY 10000	/* link restart delay, in ms */
 #define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
 #define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
+#define DBI_TIMEOUT 1			/* DBI hardare access timeout, in ms */
 
 /* cclock tick time, in picoseconds per tick: 1/speed * 10^12  */
 #define ASIC_CCLOCK_PS  1242	/* 805 MHz */
@@ -568,6 +575,7 @@ void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 void get_link_width(struct qib_pportdata *ppd);
 u32 hdrqempty(struct qib_ctxtdata *rcd);
+int is_a0(struct hfi_devdata *dd);
 
 int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok);
 int release_lcb_access(struct hfi_devdata *dd, int sleep_ok);
