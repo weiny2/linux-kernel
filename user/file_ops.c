@@ -82,22 +82,19 @@ static inline int is_valid_mmap(u64 token)
 static int hfi_open(struct inode *inode, struct file *fp)
 {
 	struct hfi_userdata *ud;
-	struct stl_core_driver *drv;
-	unsigned i_minor = iminor(inode);
-
-	BUG_ON(!i_minor);
+	struct hfi_info *hi = container_of(fp->private_data,
+					   struct hfi_info, miscdev);
 
 	ud = kzalloc(sizeof(struct hfi_userdata), GFP_KERNEL);
 	if (!ud)
 		return -ENOMEM;
 	fp->private_data = ud;
+	ud->hi = hi;
 
 	/* lookup and store pointer to HFI device data */
 	/* TODO */
-	drv = container_of(inode->i_cdev, struct stl_core_driver, cdev);
-	ud->bus_drv = drv;
-	ud->bus_ops = drv->bus_dev->bus_ops;
-	ud->devdata = drv->bus_dev->dd;
+	ud->bus_ops = hi->sdev->bus_ops;
+	ud->devdata = hi->sdev->dd;
 
 	/* no cpu affinity by default */
 	ud->rec_cpu_num = -1;
@@ -539,21 +536,27 @@ static u64 kvirt_to_phys(void *addr, int *high)
 	return paddr;
 }
 
-void hfi_user_remove(struct stl_core_driver *drv)
+int hfi_user_add(struct hfi_info *hi)
 {
-	hfi_cdev_cleanup(&drv->cdev, &drv->dev);
+	int rc;
+	struct miscdevice *mdev;
+	struct stl_core_device *sdev = hi->sdev;
+
+	mdev = &hi->miscdev;
+	mdev->minor = MISC_DYNAMIC_MINOR;
+	snprintf(hi->name, sizeof(hi->name), "%s%d",
+		 DRIVER_DEVICE_PREFIX, sdev->index);
+	mdev->name = hi->name;
+	mdev->fops = &hfi_file_ops;
+	mdev->parent = &sdev->dev;
+
+	rc = misc_register(mdev);
+	if (rc)
+		dev_err(&sdev->dev, "%s failed rc %d\n", __func__, rc);
+	return rc;
 }
 
-int hfi_user_add(struct stl_core_driver *drv, int unit)
+void hfi_user_remove(struct hfi_info *hi)
 {
-	char name[10];
-	int ret;
-
-	/* Note minor=0 is reserved; hence we use unit+1 */
-	snprintf(name, sizeof(name), "%s%d", DRIVER_DEVICE_PREFIX, unit);
-	ret = hfi_cdev_init(unit + 1, name, &hfi_file_ops,
-			    drv->class, &drv->cdev, &drv->dev);
-	if (!ret)
-		dev_set_drvdata(drv->dev, drv);
-	return ret;
+	misc_deregister(&hi->miscdev);
 }

@@ -104,49 +104,50 @@ void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp)
 /*
  * Device initialization, called from PCI probe.
  */
-static int hfi_portals_probe(struct stl_core_device *hdev)
+static int hfi_portals_probe(struct stl_core_device *sdev)
 {
 	int ret;
+	struct hfi_info *hi;
 
-	hfi_portals_driver.bus_dev = hdev;
-	ret = hfi_user_add(&hfi_portals_driver, hdev->unit);
-	if (ret)
-		pr_err("Failed to create /dev devices: %d\n", -ret);
-
-	return 0;
+	hi = kzalloc(sizeof(*hi), GFP_KERNEL);
+	if (!hi) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+	hi->sdev = sdev;
+	dev_set_drvdata(&sdev->dev, hi);
+	ret = hfi_user_add(hi);
+	if (ret) {
+		dev_err(&sdev->dev, "Failed to create /dev devices: %d\n", ret);
+		goto kfree;
+	}
+	return ret;
+kfree:
+	kfree(hi);
+exit:
+	return ret;
 }
 
 /*
  * Perform required device shutdown logic, also remove /dev entries.
  * Called when unloading the driver.
  */
-static void hfi_portals_remove(struct stl_core_device *hdev)
+static void hfi_portals_remove(struct stl_core_device *sdev)
 {
-	hfi_user_remove(&hfi_portals_driver);
+	struct hfi_info *hi = dev_get_drvdata(&sdev->dev);
+
+	hfi_user_remove(hi);
 }
 
 int __init hfi_init(void)
 {
-	int ret;
-
-	ret = alloc_chrdev_region(&hfi_dev, 0, HFI_NMINORS, DRIVER_NAME);
-	if (ret < 0) {
-		pr_err("Could not allocate chrdev region (err %d)\n", -ret);
-		goto done;
-	}
-
-	ret = stl_core_register_driver(&hfi_portals_driver);
-	if (ret < 0)
-		unregister_chrdev_region(hfi_dev, HFI_NMINORS);
-done:
-	return ret;
+	return stl_core_register_driver(&hfi_portals_driver);
 }
 module_init(hfi_init);
 
 void hfi_cleanup(void)
 {
 	stl_core_unregister_driver(&hfi_portals_driver);
-	unregister_chrdev_region(hfi_dev, HFI_NMINORS);
 }
 module_exit(hfi_cleanup);
 

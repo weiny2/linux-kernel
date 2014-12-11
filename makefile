@@ -105,6 +105,7 @@ install:
 	install $(NAME)_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME)_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
+	depmod -a
 
 rpm: dist
 	rpmbuild --define 'require_kver $(KVER)' -ta $(NAME)-$(VERSION).tgz
