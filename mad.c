@@ -274,8 +274,6 @@ static int __subn_get_stl_nodedesc(struct stl_smp *smp, u32 am,
 {
 	struct stl_node_description *nd;
 
-	clear_stl_smp_data(smp);
-
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
@@ -301,8 +299,6 @@ static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 
 	ni = (struct stl_node_info *)data;
-
-	clear_stl_smp_data(smp);
 
 	/* GUID 0 is illegal */
 	if (am || pidx >= dd->num_pports || dd->pport[pidx].guid == 0) {
@@ -503,9 +499,6 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
 	u32 buffer_units;
 	u64 tmp;
-
-	/* Clear all fields.  Only set the non-zero fields. */
-	clear_stl_smp_data(smp);
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -722,8 +715,6 @@ static int __subn_get_stl_pkeytable(struct stl_smp *smp, u32 am, u8 *data,
 	u16 n_blocks_avail;
 	unsigned npkeys = qib_get_npkeys(dd);
 	size_t size;
-
-	clear_stl_smp_data(smp);
 
 	if (am_port == 0)
 		am_port = port;
@@ -1226,8 +1217,6 @@ static int __subn_get_stl_sl_to_sc(struct stl_smp *smp, u32 am, u8 *data,
 	size_t size = ARRAY_SIZE(ibp->sl_to_sc); /* == 32 */
 	unsigned i;
 
-	clear_stl_smp_data(smp);
-
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
@@ -1269,8 +1258,6 @@ static int __subn_get_stl_sc_to_sl(struct stl_smp *smp, u32 am, u8 *data,
 	u8 *p = (u8 *)data;
 	size_t size = ARRAY_SIZE(ibp->sc_to_sl); /* == 32 */
 	unsigned i;
-
-	clear_stl_smp_data(smp);
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1314,8 +1301,6 @@ static int __subn_get_stl_sc_to_vlt(struct stl_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	void *vp = (void *) data;
 	size_t size = 4 * sizeof(u64);
-
-	clear_stl_smp_data(smp);
 
 	if (am_port != port || port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1372,8 +1357,6 @@ static int __subn_get_stl_sc_to_vlnt(struct stl_smp *smp, u32 am, u8 *data,
 	struct qib_pportdata *ppd;
 	void *vp = (void *) data;
 	int size;
-
-	clear_stl_smp_data(smp);
 
 	if (port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -1433,8 +1416,6 @@ static int __subn_get_stl_psi(struct stl_smp *smp, u32 am, u8 *data,
 	struct qib_ibport *ibp;
 	struct qib_pportdata *ppd;
 	struct stl_port_states *psi = (struct stl_port_states *) data;
-
-	clear_stl_smp_data(smp);
 
 	if (port_num == 0)
 		port_num = port;
@@ -1527,8 +1508,6 @@ static int __subn_get_stl_bct(struct stl_smp *smp, u32 am, u8 *data,
 	struct buffer_control *p = (struct buffer_control *) data;
 	int size;
 
-	clear_stl_smp_data(smp);
-
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
@@ -1576,8 +1555,6 @@ static int __subn_get_stl_vl_arb(struct stl_smp *smp, u32 am, u8 *data,
 	u32 port_num = STL_AM_PORTNUM(am);
 	u8 *p = data;
 	int size = 0;
-
-	clear_stl_smp_data(smp);
 
 	if (port_num == 0)
 		port_num = port;
@@ -2748,8 +2725,6 @@ static int __subn_get_stl_cong_info(struct stl_smp *smp, u32 am, u8 *data,
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 
-	clear_stl_smp_data(smp);
-
 	p->congestion_info = 0;
 	p->control_table_cap = ppd->cc_max_table_entries;
 	p->congestion_log_length = STL_CONG_LOG_ELEMS;
@@ -2772,8 +2747,6 @@ static int __subn_get_stl_cong_setting(struct stl_smp *smp, u32 am,
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	struct stl_congestion_setting_entry_shadow *entries;
 	struct cc_state *cc_state;
-
-	clear_stl_smp_data(smp);
 
 	rcu_read_lock();
 
@@ -2838,8 +2811,6 @@ static int __subn_get_stl_hfi_cong_log(struct stl_smp *smp, u32 am,
 	struct stl_hfi_cong_log *cong_log = (struct stl_hfi_cong_log *)data;
 	s64 ts;
 	int i;
-
-	clear_stl_smp_data(smp);
 
 	if (am != 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -2911,8 +2882,6 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	int i, j;
 	u32 sentry, eentry;
 	struct cc_state *cc_state;
-
-	clear_stl_smp_data(smp);
 
 	/* sanity check n_blocks, start_block */
 	if (n_blocks == 0 ||
@@ -3046,8 +3015,6 @@ static int __subn_get_stl_led_info(struct stl_smp *smp, u32 am, u8 *data,
 	struct stl_led_info *p = (struct stl_led_info *) data;
 	u32 nport = STL_AM_NPORT(am);
 	u64 reg;
-
-	clear_stl_smp_data(smp);
 
 	if (port != 1 || nport != 1 || STL_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -3283,6 +3250,9 @@ static int subn_get_stl_aggregate(struct stl_smp *smp,
 			return reply(smp);
 		}
 
+		/* zero the payload for this segment */
+		memset(next_smp + sizeof(*agg), 0, agg_data_len);
+
 		(void) subn_get_stl_sma(agg->attr_id, smp, am, agg->data,
 					ibdev, port, NULL);
 		if (smp->status & ~IB_SMP_DIRECTION) {
@@ -3396,6 +3366,7 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 	case IB_MGMT_METHOD_GET:
 		switch (attr_id) {
 		default:
+			clear_stl_smp_data(smp);
 			ret = subn_get_stl_sma(attr_id, smp, am, data,
 					       ibdev, port, resp_len);
 			goto bail;
