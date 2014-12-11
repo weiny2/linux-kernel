@@ -139,7 +139,7 @@ struct hfi_devdata {
 
 /* Private data for file operations, created at open(). */
 struct hfi_userdata {
-	struct stl_core_driver *bus_drv;
+	struct hfi_info *hi;
 	struct stl_core_ops *bus_ops;
 	struct hfi_devdata *devdata;
 	/* for cpu affinity; -1 if none */
@@ -187,8 +187,6 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void cleanup_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
-int hfi_user_add(struct stl_core_driver *drv, int unit);
-void hfi_user_remove(struct stl_core_driver *drv);
 int hfi_user_cleanup(struct hfi_userdata *dd);
 
 /* HFI specific functions */

@@ -35,8 +35,6 @@
 #include <linux/idr.h>
 #include "../common/stl_core.h"
 
-static struct class *dev_class;
-
 /* Unique numbering for stl_core devices. */
 static DEFINE_IDA(stl_core_index_ida);
 
@@ -135,7 +133,6 @@ static struct bus_type stl_core = {
 
 int stl_core_register_driver(struct stl_core_driver *driver)
 {
-	driver->class = dev_class;
 	driver->driver.bus = &stl_core;
 	return driver_register(&driver->driver);
 }
@@ -178,7 +175,6 @@ stl_core_register_device(struct device *dev, struct stl_core_device_id *bus_id,
 	hfi_dev->dev.release = stl_core_release_device;
 	hfi_dev->id = *bus_id;
 	hfi_dev->dd = dd;
-	hfi_dev->unit = dd->unit;
 	hfi_dev->bus_ops = bus_ops;
 
 	/*
@@ -208,27 +204,13 @@ EXPORT_SYMBOL(stl_core_unregister_device);
 
 static int __init stl_core_init(void)
 {
-	int ret;
-
-	dev_class = class_create(THIS_MODULE, DRIVER_CLASS_NAME);
-	if (IS_ERR(dev_class)) {
-		ret = PTR_ERR(dev_class);
-		pr_err("Could not create device dev_class (err %d)\n", -ret);
-		goto err_dev_class;
-	}
-
-	ret = bus_register(&stl_core);
-	if (ret)
-		class_destroy(dev_class);
-
-err_dev_class:
-	return ret;
+	return bus_register(&stl_core);
 }
 
 static void __exit stl_core_exit(void)
 {
 	bus_unregister(&stl_core);
-	class_destroy(dev_class);
+	ida_destroy(&stl_core_index_ida);
 }
 core_initcall(stl_core_init);
 module_exit(stl_core_exit);

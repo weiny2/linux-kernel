@@ -147,11 +147,13 @@ static const struct file_operations ui_file_ops = {
 	.release = ui_release,
 };
 
+/* TODO: No one is calling these functions. Do we need them? */
 void hfi_ui_remove(struct hfi_devdata *dd)
 {
 	hfi_cdev_cleanup(&dd->ui_cdev, &dd->ui_device);
 }
 
+/* TODO: No one is calling these functions. Do we need them? */
 int hfi_ui_add(struct hfi_devdata *dd)
 {
 	char name[10];

@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _HFI_BUS_H_
-#define _HFI_BUS_H_
+#ifndef _STL_CORE_H_
+#define _STL_CORE_H_
 /*
  * Everything a stl_core driver needs to work with any particular stl_core
  * implementation.
@@ -55,7 +55,6 @@ struct stl_core_device {
 	struct stl_core_device_id id;
 	struct device dev;
 	int index;
-	int unit;
 	struct hfi_devdata *dd;
 };
 
@@ -69,16 +68,11 @@ struct stl_core_device {
 struct stl_core_driver {
 	struct device_driver driver;
 	const struct stl_core_device_id *id_table;
-	/* TODO - can derive from driver(?) - yes */
-	struct stl_core_device *bus_dev;
 	int (*probe)(struct stl_core_device *dev);
 	void (*remove)(struct stl_core_device *dev);
-	/* for character devices */
-	struct class *class;
-	struct cdev cdev;
-	struct device *dev;
 };
 
+struct hfi_devdata;
 struct stl_core_device *
 stl_core_register_device(struct device *dev, struct stl_core_device_id *id,
 			struct hfi_devdata *dd, struct stl_core_ops *bus_ops);
@@ -97,4 +91,4 @@ static inline struct stl_core_driver *drv_to_stl_core(struct device_driver *drv)
 	return container_of(drv, struct stl_core_driver, driver);
 }
 
-#endif /* _HFI_BUS_H */
+#endif /* _STL_CORE_H_ */
