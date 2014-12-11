@@ -2950,7 +2950,7 @@ static int __subn_get_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 	return reply(smp);
 }
 
-static void cc_state_reclaim(struct rcu_head *rcu)
+void cc_state_reclaim(struct rcu_head *rcu)
 {
 	struct cc_state *cc_state = container_of(rcu, struct cc_state, rcu);
 

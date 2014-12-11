@@ -1268,6 +1268,7 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 void qib_free_data(struct qib_ctxtdata *dd);
 struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *, const struct pci_device_id *);
 void qib_free_devdata(struct hfi_devdata *);
+void cc_state_reclaim(struct rcu_head *rcu);
 struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 void qib_dump_lookup_output_queue(struct hfi_devdata *);

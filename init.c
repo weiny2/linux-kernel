@@ -1181,6 +1181,7 @@ void qib_free_devdata(struct hfi_devdata *dd)
 	list_del(&dd->list);
 	spin_unlock_irqrestore(&qib_devs_lock, flags);
 	hfi_dbg_ibdev_exit(&dd->verbs_dev);
+	rcu_barrier(); /* wait for rcu callbacks to complete */
 	free_percpu(dd->int_counter);
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
 }
@@ -1472,6 +1473,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	/* users can't do anything more with chip */
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		struct qib_pportdata *ppd = &dd->pport[pidx];
+		struct cc_state *cc_state;
 		int i;
 
 		if (ppd->statusp)
@@ -1479,6 +1481,14 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 
 		for (i = 0; i < STL_MAX_SLS; i++)
 			hrtimer_cancel(&ppd->cca_timer[i].hrtimer);
+
+		spin_lock(&ppd->cc_state_lock);
+		cc_state = get_cc_state(ppd);
+		rcu_assign_pointer(ppd->cc_state, NULL);
+		spin_unlock(&ppd->cc_state_lock);
+
+		if (cc_state)
+			call_rcu(&cc_state->rcu, cc_state_reclaim);
 	}
 
 	free_credit_return(dd);
