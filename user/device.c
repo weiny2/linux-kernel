@@ -137,6 +137,7 @@ static void hfi_portals_remove(struct stl_core_device *sdev)
 	struct hfi_info *hi = dev_get_drvdata(&sdev->dev);
 
 	hfi_user_remove(hi);
+	kfree(hi);
 }
 
 int __init hfi_init(void)
