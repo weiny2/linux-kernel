@@ -40,7 +40,7 @@
 
 /* TODO - multiple HFI support... */
 #define HFI_MAX_DEVICES 1
-static struct hfi_devdata *hfi_dev_tbl[HFI_MAX_DEVICES] = {0};
+static struct hfi_devdata *hfi_dev_tbl[HFI_MAX_DEVICES];
 
 static struct pci_device_id hfi_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_FXR0) },
@@ -51,7 +51,7 @@ MODULE_DEVICE_TABLE(pci, hfi_pci_tbl);
 static void hfi_pci_remove(struct pci_dev *);
 static int hfi_pci_probe(struct pci_dev *, const struct pci_device_id *);
 
-struct pci_driver hfi_driver = {
+static struct pci_driver hfi_driver = {
 	.name = DRIVER_NAME,
 	.probe = hfi_pci_probe,
 	.remove = hfi_pci_remove,
@@ -136,7 +136,7 @@ static void hfi_pci_remove(struct pci_dev *pdev)
 	hfi_pci_cleanup(pdev);
 }
 
-int __init hfi_init(void)
+static int __init hfi_init(void)
 {
 	int ret;
 
@@ -149,7 +149,7 @@ int __init hfi_init(void)
 }
 module_init(hfi_init);
 
-void hfi_cleanup(void)
+static void hfi_cleanup(void)
 {
 	pci_unregister_driver(&hfi_driver);
 }

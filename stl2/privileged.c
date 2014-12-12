@@ -34,8 +34,8 @@
 #include <linux/sched.h>
 #include "../common/hfi.h"
 
-LIST_HEAD(hfi_job_list);
-DECLARE_RWSEM(hfi_job_sem);
+static LIST_HEAD(hfi_job_list);
+static DECLARE_RWSEM(hfi_job_sem);
 
 int hfi_dlid_assign(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign)
 {

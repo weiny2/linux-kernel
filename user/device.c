@@ -140,13 +140,13 @@ static void hfi_portals_remove(struct stl_core_device *sdev)
 	kfree(hi);
 }
 
-int __init hfi_init(void)
+static int __init hfi_init(void)
 {
 	return stl_core_register_driver(&hfi_portals_driver);
 }
 module_init(hfi_init);
 
-void hfi_cleanup(void)
+static void hfi_cleanup(void)
 {
 	stl_core_unregister_driver(&hfi_portals_driver);
 }
