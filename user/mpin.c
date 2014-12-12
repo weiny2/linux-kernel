@@ -75,7 +75,7 @@ int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin)
 	return ret;
 }
 
-void __hfi_mpin_free(struct hfi_mpin_entry *mpin_entry)
+static void __hfi_mpin_free(struct hfi_mpin_entry *mpin_entry)
 {
 	list_del(&mpin_entry->list);
 	put_page(pfn_to_page(mpin_entry->pfn));

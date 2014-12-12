@@ -390,7 +390,7 @@ static int hfi_pid_alloc(struct hfi_userdata *ud, u16 *assigned_pid)
 			    "acquired PID orphan [%u]\n", ptl_pid);
 
 		/* store PID hfi_userdata pointer */
-		BUG_ON(dd->ptl_user[ptl_pid] != 0);
+		BUG_ON(dd->ptl_user[ptl_pid]);
 		dd->ptl_user[ptl_pid] = ud;
 	}
 
@@ -404,7 +404,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	hfi_pcb_reset(dd, ptl_pid);
-	dd->ptl_user[ptl_pid] = 0;
+	dd->ptl_user[ptl_pid] = NULL;
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
 }
