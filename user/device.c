@@ -54,53 +54,6 @@ static struct stl_core_driver hfi_portals_driver = {
 	.remove = hfi_portals_remove,
 };
 
-static dev_t hfi_dev;
-
-int hfi_cdev_init(int minor, const char *name,
-		  const struct file_operations *fops,
-		  struct class *class,
-		  struct cdev *cdev, struct device **devp)
-{
-	const dev_t dev = MKDEV(MAJOR(hfi_dev), minor);
-	struct device *device = NULL;
-	int ret;
-
-	cdev_init(cdev, fops);
-	cdev->owner = THIS_MODULE;
-	kobject_set_name(&cdev->kobj, name);
-
-	ret = cdev_add(cdev, dev, 1);
-	if (ret < 0) {
-		pr_err("Could not add cdev for minor %d, %s (err %d)\n",
-		       minor, name, -ret);
-		goto done;
-	}
-
-	device = device_create(class, NULL, dev, NULL, name);
-	if (!IS_ERR(device))
-		goto done;
-	ret = PTR_ERR(device);
-	device = NULL;
-	pr_err("Could not create device for minor %d, %s (err %d)\n",
-	       minor, name, -ret);
-	cdev_del(cdev);
-done:
-	*devp = device;
-	return ret;
-}
-
-void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp)
-{
-	struct device *device = *devp;
-
-	if (device) {
-		device_unregister(device);
-		*devp = NULL;
-
-		cdev_del(cdev);
-	}
-}
-
 /*
  * Device initialization, called from PCI probe.
  */
