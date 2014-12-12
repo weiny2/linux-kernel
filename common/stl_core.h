@@ -49,6 +49,7 @@ struct stl_core_device_id {
  * @id: the device type identification (used to match it with a driver).
  * @dev: underlying device.
  * @index: unique position on the stl_core bus
+ * @dd: device specific information
  */
 struct stl_core_device {
 	struct stl_core_ops *bus_ops;
@@ -59,17 +60,18 @@ struct stl_core_device {
 };
 
 /**
- * stl_core_driver - operations for a stl_core I/O driver
- * @driver: underlying device driver (populate name and owner).
- * @id_table: the ids serviced by this driver.
- * @probe: the function to call when a device is found.  Returns 0 or -errno.
- * @remove: the function to call when a device is removed.
+ * stl_core_client - representation of a stl_core client
+ *
+ * @name: STL client name
+ * @add: the function to call when a device is discovered
+ * @remove: the function to call when a device is removed
+ * @si: underlying subsystem interface (filled in by stl_core)
  */
-struct stl_core_driver {
-	struct device_driver driver;
-	const struct stl_core_device_id *id_table;
-	int (*probe)(struct stl_core_device *dev);
+struct stl_core_client {
+	const char *name;
+	int (*add)(struct stl_core_device *dev);
 	void (*remove)(struct stl_core_device *dev);
+	struct subsys_interface si;
 };
 
 struct hfi_devdata;
@@ -78,17 +80,11 @@ stl_core_register_device(struct device *dev, struct stl_core_device_id *id,
 			struct hfi_devdata *dd, struct stl_core_ops *bus_ops);
 void stl_core_unregister_device(struct stl_core_device *hfi_dev);
 
-int stl_core_register_driver(struct stl_core_driver *drv);
-void stl_core_unregister_driver(struct stl_core_driver *drv);
+int stl_core_client_register(struct stl_core_client *drv);
+void stl_core_client_unregister(struct stl_core_client *drv);
 
 static inline struct stl_core_device *dev_to_stl_core(struct device *dev)
 {
 	return container_of(dev, struct stl_core_device, dev);
 }
-
-static inline struct stl_core_driver *drv_to_stl_core(struct device_driver *drv)
-{
-	return container_of(drv, struct stl_core_driver, driver);
-}
-
 #endif /* _STL_CORE_H_ */

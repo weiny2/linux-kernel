@@ -42,6 +42,7 @@ static ssize_t device_show(struct device *d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct stl_core_device *dev = dev_to_stl_core(d);
+
 	return sprintf(buf, "0x%04x\n", dev->id.device);
 }
 static DEVICE_ATTR_RO(device);
@@ -50,6 +51,7 @@ static ssize_t vendor_show(struct device *d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct stl_core_device *dev = dev_to_stl_core(d);
+
 	return sprintf(buf, "0x%04x\n", dev->id.vendor);
 }
 static DEVICE_ATTR_RO(vendor);
@@ -58,6 +60,7 @@ static ssize_t modalias_show(struct device *d,
 			     struct device_attribute *attr, char *buf)
 {
 	struct stl_core_device *dev = dev_to_stl_core(d);
+
 	return sprintf(buf, "stl_core:d%08Xv%08X\n",
 		       dev->id.device, dev->id.vendor);
 }
@@ -71,133 +74,105 @@ static struct attribute *stl_core_dev_attrs[] = {
 };
 ATTRIBUTE_GROUPS(stl_core_dev);
 
-static inline int stl_core_id_match(const struct stl_core_device *dev,
-				  const struct stl_core_device_id *id)
+static int stl_add_dev(struct device *dev, struct subsys_interface *si)
 {
-	return (id->vendor == dev->id.vendor) &&
-	       (id->device == dev->id.device);
+	struct stl_core_client *client =
+		container_of(si, struct stl_core_client, si);
+	struct stl_core_device *sdev = dev_to_stl_core(dev);
+
+	return client->add(sdev);
 }
 
-/* This looks through all the IDs a driver claims to support.  If any of them
- * match, we return 1 and the kernel will call stl_core_dev_probe(). */
-static int stl_core_dev_match(struct device *d, struct device_driver *dr)
+static int stl_remove_dev(struct device *dev, struct subsys_interface *si)
 {
-	unsigned int i;
-	struct stl_core_device *dev = dev_to_stl_core(d);
-	const struct stl_core_device_id *ids;
+	struct stl_core_client *client =
+		container_of(si, struct stl_core_client, si);
+	struct stl_core_device *sdev = dev_to_stl_core(dev);
 
-	ids = drv_to_stl_core(dr)->id_table;
-	for (i = 0; ids[i].device; i++)
-		if (stl_core_id_match(dev, &ids[i]))
-			return 1;
-	return 0;
-}
-
-static int stl_core_uevent(struct device *d, struct kobj_uevent_env *env)
-{
-	struct stl_core_device *dev = dev_to_stl_core(d);
-
-	return add_uevent_var(env, "MODALIAS=stl_core:d%08Xv%08X",
-			      dev->id.device, dev->id.vendor);
-}
-
-static int stl_core_dev_probe(struct device *d)
-{
-	struct stl_core_device *dev = dev_to_stl_core(d);
-	struct stl_core_driver *drv = drv_to_stl_core(dev->dev.driver);
-
-	pr_info("bus_probe dev[%d] and drv %s\n",
-		dev->index, drv->driver.name);
-
-	return drv->probe(dev);
-}
-
-static int stl_core_dev_remove(struct device *d)
-{
-	struct stl_core_device *dev = dev_to_stl_core(d);
-	struct stl_core_driver *drv = drv_to_stl_core(dev->dev.driver);
-
-	drv->remove(dev);
-
+	client->remove(sdev);
 	return 0;
 }
 
 static struct bus_type stl_core = {
 	.name  = "stl_core",
-	.match = stl_core_dev_match,
 	.dev_groups = stl_core_dev_groups,
-	.uevent = stl_core_uevent,
-	.probe = stl_core_dev_probe,
-	.remove = stl_core_dev_remove,
 };
 
-int stl_core_register_driver(struct stl_core_driver *driver)
+int stl_core_client_register(struct stl_core_client *client)
 {
-	driver->driver.bus = &stl_core;
-	return driver_register(&driver->driver);
-}
-EXPORT_SYMBOL(stl_core_register_driver);
+	struct subsys_interface *si = &client->si;
 
-void stl_core_unregister_driver(struct stl_core_driver *driver)
-{
-	driver_unregister(&driver->driver);
+	si->name = client->name;
+	si->subsys = &stl_core;
+	si->add_dev = stl_add_dev;
+	si->remove_dev = stl_remove_dev;
+
+	return subsys_interface_register(&client->si);
 }
-EXPORT_SYMBOL(stl_core_unregister_driver);
+EXPORT_SYMBOL(stl_core_client_register);
+
+void stl_core_client_unregister(struct stl_core_client *client)
+{
+	subsys_interface_unregister(&client->si);
+}
+EXPORT_SYMBOL(stl_core_client_unregister);
 
 static void stl_core_release_device(struct device *d)
 {
 	struct stl_core_device *hdev = dev_to_stl_core(d);
+
 	kfree(hdev);
 }
 
 struct stl_core_device *
 stl_core_register_device(struct device *dev, struct stl_core_device_id *bus_id,
-			struct hfi_devdata *dd, struct stl_core_ops *bus_ops)
+			 struct hfi_devdata *dd, struct stl_core_ops *bus_ops)
 {
 	int ret;
-	struct stl_core_device *hfi_dev;
+	struct stl_core_device *sdev;
 
-	hfi_dev = kzalloc(sizeof(*hfi_dev), GFP_KERNEL);
-	if (!hfi_dev)
+	sdev = kzalloc(sizeof(*sdev), GFP_KERNEL);
+	if (!sdev)
 		return ERR_PTR(-ENOMEM);
 
 	/* Assign a unique device index and hence name. */
 	ret = ida_simple_get(&stl_core_index_ida, 0, 0, GFP_KERNEL);
 	if (ret < 0)
 		goto out;
-	pr_info("bus_register_dev [%d] %x %x\n", ret, bus_id->vendor, bus_id->device);
+	pr_info("bus_register_dev [%d] %x %x\n",
+		ret, bus_id->vendor, bus_id->device);
 
-	hfi_dev->index = ret;
+	sdev->index = ret;
 	/* TODO - should set name, id, bus, bus_id */
-	dev_set_name(&hfi_dev->dev, "stl_core%u", hfi_dev->index);
-	hfi_dev->dev.bus = &stl_core;
-	hfi_dev->dev.parent = dev;
-	hfi_dev->dev.release = stl_core_release_device;
-	hfi_dev->id = *bus_id;
-	hfi_dev->dd = dd;
-	hfi_dev->bus_ops = bus_ops;
+	dev_set_name(&sdev->dev, "stl_core%u", sdev->index);
+	sdev->dev.bus = &stl_core;
+	sdev->dev.parent = dev;
+	sdev->dev.release = stl_core_release_device;
+	sdev->id = *bus_id;
+	sdev->dd = dd;
+	sdev->bus_ops = bus_ops;
 
 	/*
 	 * device_register() causes the bus infrastructure to look for a
 	 * matching driver.
 	 */
-	ret = device_register(&hfi_dev->dev);
+	ret = device_register(&sdev->dev);
 	if (ret)
 		goto ida_remove;
-	return hfi_dev;
+	return sdev;
 
 ida_remove:
-	ida_simple_remove(&stl_core_index_ida, hfi_dev->index);
+	ida_simple_remove(&stl_core_index_ida, sdev->index);
 out:
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(stl_core_register_device);
 
-void stl_core_unregister_device(struct stl_core_device *hfi_dev)
+void stl_core_unregister_device(struct stl_core_device *sdev)
 {
-	int index = hfi_dev->index; /* save for after device release */
+	int index = sdev->index; /* save for after device release */
 
-	device_unregister(&hfi_dev->dev);
+	device_unregister(&sdev->dev);
 	ida_simple_remove(&stl_core_index_ida, index);
 }
 EXPORT_SYMBOL(stl_core_unregister_device);
