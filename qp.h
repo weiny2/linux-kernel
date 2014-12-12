@@ -164,8 +164,6 @@ void qib_qp_wakeup(struct qib_qp *qp, u32 flag);
 
 struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5);
 
-#ifdef CONFIG_DEBUG_FS
-
 struct qp_iter;
 
 /**
@@ -186,7 +184,5 @@ int qp_iter_next(struct qp_iter *iter);
  * @iter: the iterator for the qp hash list
  */
 void qp_iter_print(struct seq_file *s, struct qp_iter *iter);
-
-#endif
 
 #endif /* _PIO_H */

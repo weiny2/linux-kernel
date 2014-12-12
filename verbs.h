@@ -683,7 +683,6 @@ struct qib_lkey_table {
 	struct qib_mregion __rcu **table;
 };
 
-#ifdef CONFIG_DEBUG_FS
 struct hfi_opcode_stats {
 	u64 n_packets;          /* number of packets */
 	u64 n_bytes;            /* total number of bytes */
@@ -697,18 +696,11 @@ static inline void inc_opstats(
 	u32 tlen,
 	struct hfi_opcode_stats *stats)
 {
+#ifdef CONFIG_DEBUG_FS
 	stats->n_bytes += tlen;
 	stats->n_packets++;
-}
-
-#else
-
-static inline void inc_opstats(
-	u32 tlen,
-	struct hfi_opcode_stats_perctx *stats)
-{
-}
 #endif
+}
 
 struct qib_ibport {
 	struct qib_qp __rcu *qp0;
