@@ -93,9 +93,18 @@ static int stl_remove_dev(struct device *dev, struct subsys_interface *si)
 	return 0;
 }
 
+static int stl_core_uevent(struct device *d, struct kobj_uevent_env *env)
+{
+	struct stl_core_device *dev = dev_to_stl_core(d);
+
+	return add_uevent_var(env, "MODALIAS=stl_core:d%08Xv%08X",
+			      dev->id.device, dev->id.vendor);
+}
+
 static struct bus_type stl_core = {
 	.name  = "stl_core",
 	.dev_groups = stl_core_dev_groups,
+	.uevent = stl_core_uevent,
 };
 
 int stl_core_client_register(struct stl_core_client *client)
