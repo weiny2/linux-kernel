@@ -101,9 +101,9 @@ dist: distclean specfile headers
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	mkdir -p $(RPM_BUILD_ROOT)/etc/init.d
-	install $(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install $(NAME)_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install $(NAME)_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install stl2/$(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install stl_core/$(NAME)_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install user/$(NAME)_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 	depmod -a
 
