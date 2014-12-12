@@ -219,7 +219,7 @@ static void __kprobes copy_instruction(struct kprobe *p)
 		ftrace_generate_nop_insn((struct ftrace_insn *)p->ainsn.insn);
 		p->ainsn.is_ftrace_insn = 1;
 	} else
-		memcpy(p->ainsn.insn, p->addr, ((p->opcode >> 14) + 3) & -2);
+		memcpy(p->ainsn.insn, p->addr, ((*p->addr >> 14) + 3) & -2);
 	p->opcode = p->ainsn.insn[0];
 	if (!is_insn_relative_long(p->ainsn.insn))
 		return;
