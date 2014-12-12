@@ -77,7 +77,7 @@ static void hfi_portals_remove(struct stl_core_device *sdev)
 }
 
 static struct stl_core_client hfi_portals = {
-	.name = "stl2_cdev_driver",
+	.name = KBUILD_MODNAME,
 	.add = hfi_portals_add,
 	.remove = hfi_portals_remove,
 };

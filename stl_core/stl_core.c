@@ -102,7 +102,7 @@ static int stl_core_uevent(struct device *d, struct kobj_uevent_env *env)
 }
 
 static struct bus_type stl_core = {
-	.name  = "stl_core",
+	.name  = KBUILD_MODNAME,
 	.dev_groups = stl_core_dev_groups,
 	.uevent = stl_core_uevent,
 };
