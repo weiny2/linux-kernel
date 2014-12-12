@@ -262,38 +262,69 @@ struct stl_port_error_info_msg {
 	__be32 reserved1;
 	struct _port_ei {
 
-		u8 port_Number;
+		u8 port_number;
 		u8 reserved2[7];
 
-		u8 status_and_code;
-		u8 packet_flit1[8]; /* EI1to12 format */
-		u8 packet_flit2[8];
-		u8 remaining_flit_bits12;
-		u8 reserved3[6];
+		/* PortRcvErrorInfo */
+		struct {
+			u8 status_and_code;
+			union {
+				u8 raw[17];
+				struct {
+					/* EI1to12 format */
+					u8 packet_flit1[8];
+					u8 packet_flit2[8];
+					u8 remaining_flit_bits12;
+				} ei1to12;
+				struct {
+					u8 packet_bytes[8];
+					u8 remaining_flit_bits;
+				} ei13;
+			} ei;
+			u8 reserved3[6];
+		} port_rcv_ei;
 
-		u8 excessive_buffer_overrun_info;
-		u8 reserved4[7];
+		/* ExcessiveBufferOverrunInfo */
+		struct {
+			u8 status_and_sc;
+			u8 reserved4[7];
+		} excessive_buffer_overrun_ei;
 
-		u8 port_xmit_constraint_error_info_status;
-		u8 reserved5;
-		__be16 port_xmit_constraint_error_info_pkey;
-		__be32 port_xmit_constraint_error_info_slid;
+		/* PortXmitConstraintErrorInfo */
+		struct {
+			u8 status;
+			u8 reserved5;
+			__be16 pkey;
+			__be32 slid;
+		} port_xmit_constraint_ei;
 
-		u8 port_rcv_constraint_error_info_status;
-		u8 reserved6;
-		__be16 port_rcv_constraint_error_info_pkey;
-		__be32 port_rcv_constraint_error_info_slid;
+		/* PortRcvConstraintErrorInfo */
+		struct {
+			u8 status;
+			u8 reserved6;
+			__be16 pkey;
+			__be32 slid;
+		} port_rcv_constraint_ei;
 
-		u8 port_rcv_switch_relay_error_info_status;
-		u8 reserved7[3];
-		__u32 relay_error_code_info;
+		/* PortRcvSwitchRelayErrorInfo */
+		struct {
+			u8 status_and_code;
+			u8 reserved7[3];
+			__be32 error_info;
+		} port_rcv_switch_relay_ei;
 
-		u8 uncorrectable_error_info_status;
-		u8 reserved8;
+		/* UncorrectableErrorInfo */
+		struct {
+			u8 status_and_code;
+			u8 reserved8;
+		} uncorrectable_ei;
 
-		u8 fm_config_error_info_status;
-		u8 config_error_info;
-		__u32 reserved9;
+		/* FMConfigErrorInfo */
+		struct {
+			u8 status_and_code;
+			u8 error_info;
+			__be32 reserved9;
+		} fm_config_ei;
 	} port[1]; 	/* actual array size defined by number of ports in attribute modifier */
 };
 
@@ -821,48 +852,15 @@ static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
 
 	/* for testing, populate some non-zeros on first get */
 	if (static_test_error_info.reserved1 != 0xbabeface) {
-		u8 i;
 		memset(&static_test_error_info, 0, sizeof(static_test_error_info));
 		static_test_error_info.reserved1 = 0xbabeface;
 
-		static_test_error_info.port[0].port_Number = port;
-
-		static_test_error_info.port[0].status_and_code = 0x83;
-		for (i=0; i<8; i++) {
-			static_test_error_info.port[0].packet_flit1[i] = i;
-			static_test_error_info.port[0].packet_flit2[i] = i;
-		}
-
-		static_test_error_info.port[0].excessive_buffer_overrun_info = 0xFF - 3;
-
-		static_test_error_info.port[0].port_xmit_constraint_error_info_status = 
-			0x80;
-		static_test_error_info.port[0].port_xmit_constraint_error_info_pkey = 
-			be16_to_cpu(0x1234);
-		static_test_error_info.port[0].port_xmit_constraint_error_info_slid = 
-			be32_to_cpu(0x55667788);
-
-		static_test_error_info.port[0].port_rcv_constraint_error_info_status = 
-			0x80;
-		static_test_error_info.port[0].port_rcv_constraint_error_info_pkey = 
-			be16_to_cpu(0x5678);
-		static_test_error_info.port[0].port_rcv_constraint_error_info_slid = 
-			be32_to_cpu(0x99001122);
-
-		static_test_error_info.port[0].port_rcv_switch_relay_error_info_status =
-			0x83;
-		static_test_error_info.port[0].relay_error_code_info = 
-			be32_to_cpu(0x19181716);
-
-		static_test_error_info.port[0].uncorrectable_error_info_status = 0x81;
-
-		static_test_error_info.port[0].fm_config_error_info_status = 0x82;
-		static_test_error_info.port[0].config_error_info = 0x34;
+		static_test_error_info.port[0].port_number = port;
 	}
 
 	/* for testing purposes, provide some recognizable test data */
 	memcpy(rsp, &static_test_error_info.port[0], sizeof(*rsp));
-	rsp->port_Number = (u8)port_num;
+	rsp->port_number = (u8)port_num;
 
 	/* TODO - FIXME May need to change the size of the reply, as it will
 	 * not match request
@@ -882,7 +880,6 @@ static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
 	u32 num_ports;
 	unsigned long port_num;
 	u8 num_pslm;
-	u32 error_select_mask;
 
 	req = (struct stl_port_error_info_msg *)pmp->data;
 	rsp = (struct _port_ei *)&(req->port[0]);
@@ -926,45 +923,7 @@ static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
 		return reply_stl_pma(pmp);
 	}
 
-	/* for testing, clear the requested static_test_error_info */
-	error_select_mask = be32_to_cpu(req->error_info_select_mask);
-
-	if (error_select_mask & PM_EIS_PortRcvErrorInfo) {
-		u8 i;
-		static_test_error_info.port[0].status_and_code = 0;
-		for (i=0; i<8; i++) {
-			static_test_error_info.port[0].packet_flit1[i] = 0;
-			static_test_error_info.port[0].packet_flit2[i] = 0;
-		}
-	}
-
-	if (error_select_mask & PM_EIS_ExcessiveBufferOverrunInfo) 
-		static_test_error_info.port[0].excessive_buffer_overrun_info = 0;
-
-	if (error_select_mask & PM_EIS_PortXmitConstraintErrorInfo) {
-		static_test_error_info.port[0].port_xmit_constraint_error_info_status = 0;
-		static_test_error_info.port[0].port_xmit_constraint_error_info_pkey = 0;
-		static_test_error_info.port[0].port_xmit_constraint_error_info_slid = 0;
-	}
-
-	if (error_select_mask & PM_EIS_PortRcvConstraintErrorInfo) {
-		static_test_error_info.port[0].port_rcv_constraint_error_info_status = 0;
-		static_test_error_info.port[0].port_rcv_constraint_error_info_pkey = 0;
-		static_test_error_info.port[0].port_rcv_constraint_error_info_slid = 0;
-	}
-
-	if (error_select_mask & PM_EIS_PortRcvSwitchRelayErrorInfo) {
-		static_test_error_info.port[0].port_rcv_switch_relay_error_info_status = 0;
-		static_test_error_info.port[0].relay_error_code_info = 0;
-	}
-
-	if (error_select_mask & PM_EIS_UncorrectableErrorInfo) 
-		static_test_error_info.port[0].uncorrectable_error_info_status = 0;
-
-	if (error_select_mask & PM_EIS_FMConfigErrorInfo) 
-		static_test_error_info.port[0].fm_config_error_info_status = 0;
-
-	rsp->port_Number = (u8)port_num;
+	rsp->port_number = (u8)port_num;
 
 	/* TODO - FIXME May need to change the size of the reply, as it will
 	 * not match request
