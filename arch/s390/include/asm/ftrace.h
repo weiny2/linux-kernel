@@ -6,6 +6,18 @@
 #define MCOUNT_INSN_SIZE	24
 #define MCOUNT_RETURN_FIXUP	18
 
+/*
+ * This is a SLES12 GA hack only:
+ * After GA the ftrace code got changed to convert the first instead of
+ * the second instruction. However we cannot change the recorded offsets
+ * within the __mcount_loc section, due to out of tree built modules.
+ * Therefore all (struct dyn_ftrace *) rec->ip passed instruction
+ * addresses do not point to the instruction being changed, but six bytes
+ * further.
+ * The MCOUNT_IP_FIXUP define must be used everywhere to fixup the address.
+ */
+#define MCOUNT_IP_FIXUP		6
+
 #ifndef __ASSEMBLY__
 
 void _mcount(void);

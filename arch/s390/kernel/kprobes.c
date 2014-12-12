@@ -210,7 +210,7 @@ static void __kprobes copy_instruction(struct kprobe *p)
 	s64 disp, new_disp;
 	u64 addr, new_addr;
 
-	if (ftrace_location(ip) == ip) {
+	if (ftrace_location(ip + MCOUNT_IP_FIXUP) == ip + MCOUNT_IP_FIXUP) {
 		/*
 		 * If kprobes patches the instruction that is morphed by
 		 * ftrace make sure that kprobes always sees the branch

@@ -34,12 +34,12 @@ ENTRY(ftrace_caller)
 	stg	%r0,(STACK_PTREGS_PSW+8)(%r15)
 	stmg	%r2,%r14,(STACK_PTREGS_GPRS+2*8)(%r15)
 #ifdef CONFIG_HAVE_MARCH_Z196_FEATURES
-	aghik	%r2,%r0,-MCOUNT_INSN_SIZE
+	aghik	%r2,%r0,-(MCOUNT_INSN_SIZE-MCOUNT_IP_FIXUP)
 	lgrl	%r4,function_trace_op
 	lgrl	%r1,ftrace_trace_function
 #else
 	lgr	%r2,%r0
-	aghi	%r2,-MCOUNT_INSN_SIZE
+	aghi	%r2,-(MCOUNT_INSN_SIZE-MCOUNT_IP_FIXUP)
 	larl	%r4,function_trace_op
 	lg	%r4,0(%r4)
 	larl	%r1,ftrace_trace_function
