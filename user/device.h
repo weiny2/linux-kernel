@@ -40,12 +40,6 @@ struct hfi_info {
 	struct miscdevice miscdev;
 	char name[16];
 };
-
-int hfi_cdev_init(int minor, const char *name,
-		  const struct file_operations *fops,
-		  struct class *class,
-		  struct cdev *cdev, struct device **devp);
-void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp);
 int hfi_user_add(struct hfi_info *hi);
 void hfi_user_remove(struct hfi_info *hi);
 #endif /* _HFI_DEVICE_H */
