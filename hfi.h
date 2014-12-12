@@ -860,7 +860,7 @@ struct hfi_devdata {
 	 * A page that will hold event notification bitmaps for all
 	 * contexts. This page will be mapped into all processes.
 	 */
-	u64 *events;
+	unsigned long *events;
 	/*
 	 * per unit status, see also portdata statusp
 	 * mapped readonly into user processes so they can get unit and

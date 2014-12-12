@@ -529,10 +529,12 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		break;
 	case EVENTS:
 		/*
-		 * One page containing events for all ctxts. User level
-		 * knows where it's own bitmap is.
+		 * Use the page where this context's flags are. User level
+		 * knows where it's own bitmap is within the page.
 		 */
-		memaddr = (u64)dd->events;
+		memaddr = ((unsigned long)dd->events +
+			   ((uctxt->ctxt - dd->first_user_ctxt) *
+			    QLOGIC_IB_MAX_SUBCTXT)) & PAGE_MASK;
 		memlen = PAGE_SIZE;
 		/*
 		 * v3.7 removes VM_RESERVED but the effect is kept by
@@ -1242,8 +1244,9 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	//   ((char *)dd->uregbase + (ctxt * dd->ureg_align))
 	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
 					    subctxt_fp(fp), 0);
-	offset = ((uctxt->ctxt * QLOGIC_IB_MAX_SUBCTXT) +
-		  subctxt_fp(fp)) * sizeof(*dd->events);
+	offset = ((((uctxt->ctxt - dd->first_user_ctxt) *
+		    QLOGIC_IB_MAX_SUBCTXT) +
+		   subctxt_fp(fp)) * sizeof(*dd->events)) & ~PAGE_MASK;
 	binfo.events_bufbase = HFI_MMAP_TOKEN(EVENTS, uctxt->ctxt,
 					      subctxt_fp(fp),
 					      offset);
@@ -1322,30 +1325,34 @@ static unsigned int poll_next(struct file *fp,
 int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 {
 	struct qib_ctxtdata *uctxt;
+	struct hfi_devdata *dd = ppd->dd;
 	unsigned ctxt;
 	int ret = 0;
 	unsigned long flags;
 
-	spin_lock_irqsave(&ppd->dd->uctxt_lock, flags);
-	for (ctxt = ppd->dd->first_user_ctxt; ctxt < ppd->dd->num_rcv_contexts;
+	spin_lock_irqsave(&dd->uctxt_lock, flags);
+	for (ctxt = dd->first_user_ctxt; ctxt < dd->num_rcv_contexts;
 	     ctxt++) {
-		uctxt = ppd->dd->rcd[ctxt];
+		uctxt = dd->rcd[ctxt];
 		if (!uctxt)
 			continue;
-		if (uctxt->user_event_mask) {
+		if (dd->events) {
+			unsigned long *evs = dd->events +
+				(uctxt->ctxt - dd->first_user_ctxt) *
+				QLOGIC_IB_MAX_SUBCTXT;
 			int i;
 			/*
 			 * subctxt_cnt is 0 if not shared, so do base
 			 * separately, first, then remaining subctxt, if any
 			 */
-			set_bit(evtbit, &uctxt->user_event_mask[0]);
+			set_bit(evtbit, evs);
 			for (i = 1; i < uctxt->subctxt_cnt; i++)
-				set_bit(evtbit, &uctxt->user_event_mask[i]);
+				set_bit(evtbit, evs + i);
 		}
 		ret = 1;
 		break;
 	}
-	spin_unlock_irqrestore(&ppd->dd->uctxt_lock, flags);
+	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 
 	return ret;
 }
@@ -1398,11 +1405,20 @@ static int user_event_ack(struct qib_ctxtdata *uctxt, int subctxt,
 			      unsigned long events)
 {
 	int ret = 0, i;
+	struct hfi_devdata *dd = uctxt->dd;
+	unsigned long *evs;
+
+	if (!dd->events)
+		return ret;
+
+	evs = dd->events + ((uctxt->ctxt - dd->first_user_ctxt) *
+			    QLOGIC_IB_MAX_SUBCTXT) +
+		subctxt;
 
 	for (i = 0; i <= _QIB_MAX_EVENT_BIT; i++) {
 		if (!test_bit(i, &events))
 			continue;
-		clear_bit(i, &uctxt->user_event_mask[subctxt]);
+		clear_bit(i, evs);
 	}
 	return ret;
 }

@@ -762,7 +762,7 @@ wq_error:
 int qib_init(struct hfi_devdata *dd, int reinit)
 {
 	int ret = 0, pidx, lastfail = 0;
-	unsigned i;
+	unsigned i, len;
 	struct qib_ctxtdata *rcd;
 	struct qib_pportdata *ppd;
 
@@ -815,12 +815,14 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	if (lastfail)
 		ret = lastfail;
 
-	/* Allocate a page for event notifiction. */
-	dd->events = vmalloc_user(PAGE_SIZE);
+	/* Allocate enough memory for user event notifiction. */
+	len = ALIGN(dd->chip_rcv_contexts * QLOGIC_IB_MAX_SUBCTXT *
+		    sizeof(*dd->events), PAGE_SIZE);
+	dd->events = vmalloc_user(len);
 	if (!dd->events)
 		dd_dev_err(dd, "Failed to allocate user events page\n");
 	else
-		memset(dd->events, 0, PAGE_SIZE);
+		memset(dd->events, 0, len);
 	/*
 	 * Allocate a page for device and port status.
 	 * Page will be shared amongst all user proceses.
