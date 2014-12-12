@@ -37,27 +37,10 @@
 #include "../common/hfi.h"
 #include "device.h"
 
-static struct stl_core_device_id id_table[] = {
-	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_FXR0 },
-	{ 0 },
-};
-MODULE_DEVICE_TABLE(stl_core, id_table);
-
-static int hfi_portals_probe(struct stl_core_device *hdev);
-static void hfi_portals_remove(struct stl_core_device *hdev);
-
-static struct stl_core_driver hfi_portals_driver = {
-	.driver.name = KBUILD_MODNAME,
-	.driver.owner = THIS_MODULE,
-	.id_table = id_table,
-	.probe = hfi_portals_probe,
-	.remove = hfi_portals_remove,
-};
-
 /*
- * Device initialization, called from PCI probe.
+ * Device initialization, called by STL core when a STL device is discovered
  */
-static int hfi_portals_probe(struct stl_core_device *sdev)
+static int hfi_portals_add(struct stl_core_device *sdev)
 {
 	int ret;
 	struct hfi_info *hi;
@@ -83,7 +66,7 @@ exit:
 
 /*
  * Perform required device shutdown logic, also remove /dev entries.
- * Called when unloading the driver.
+ * Called by STL core when a STL device is removed
  */
 static void hfi_portals_remove(struct stl_core_device *sdev)
 {
@@ -93,15 +76,21 @@ static void hfi_portals_remove(struct stl_core_device *sdev)
 	kfree(hi);
 }
 
+static struct stl_core_client hfi_portals = {
+	.name = "stl2_cdev_driver",
+	.add = hfi_portals_add,
+	.remove = hfi_portals_remove,
+};
+
 static int __init hfi_init(void)
 {
-	return stl_core_register_driver(&hfi_portals_driver);
+	return stl_core_client_register(&hfi_portals);
 }
 module_init(hfi_init);
 
 static void hfi_cleanup(void)
 {
-	stl_core_unregister_driver(&hfi_portals_driver);
+	stl_core_client_unregister(&hfi_portals);
 }
 module_exit(hfi_cleanup);
 
