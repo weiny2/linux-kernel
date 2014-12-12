@@ -32,6 +32,7 @@
  * SOFTWARE.
  */
 
+#include <linux/net.h>
 #include <rdma/ib_smi.h>
 #include <rdma/stl_smi.h>
 #define STL_NUM_PKEY_BLOCKS_PER_SMP (STL_SMP_DR_DATA_SIZE \
@@ -481,6 +482,53 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
 	return ret;
 }
 
+/*
+ * The SMA caches reads from LCB registers in case the LCB is unavailable.
+ * (The LCB is unavailable in certain link states, for example.)
+ */
+struct lcb_datum {
+	u32 off;
+	u64 val;
+};
+
+static struct lcb_datum lcb_cache[] = {
+	{ DC_LCB_STS_ROUND_TRIP_LTP_CNT, 0 },
+};
+
+static int write_lcb_cache(u32 off, u64 val)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(lcb_cache); i++) {
+		if (lcb_cache[i].off == off) {
+			lcb_cache[i].val = val;
+			return 0;
+		}
+	}
+
+	pr_warn("%s bad offset 0x%x\n", __func__, off);
+	return -1;
+}
+
+static int read_lcb_cache(u32 off, u64 *val)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(lcb_cache); i++) {
+		if (lcb_cache[i].off == off) {
+			*val = lcb_cache[i].val;
+			if (net_ratelimit()) {
+				pr_warn("reading LCB cache (offset 0x%x)\n",
+					off);
+			}
+			return 0;
+		}
+	}
+
+	pr_warn("%s bad offset 0x%x\n", __func__, off);
+	return -1;
+}
+
 static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 				   struct ib_device *ibdev, u8 port,
 				   u32 *resp_len)
@@ -498,7 +546,7 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u32 num_ports = STL_AM_NPORT(am);
 	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
 	u32 buffer_units;
-	u64 tmp;
+	u64 tmp = 0;
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -671,9 +719,11 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 		tmp >>= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_SHIFT;
 		tmp &= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_MASK;
 		release_lcb_access(dd, 1);
+		/* cache the data from the LCB */
+		write_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, tmp);
 	} else {
-		/* TODO: return an error? */
-		tmp = 0;
+		/* cannot access LCB, so read from cache */
+		read_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, &tmp);
 	}
 	/* this counter is 16 bits wide, but the replay_depth.wire
 	 * variable is only 8 bits */
