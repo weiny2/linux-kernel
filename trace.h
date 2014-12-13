@@ -961,19 +961,19 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 #define MAX_MSG_LEN 512
 
 DECLARE_EVENT_CLASS(hfi_trace_template,
-        TP_PROTO( const char *function, struct va_format *vaf),
-        TP_ARGS( function, vaf),
-        TP_STRUCT__entry(
-                __string(function, function)
-                __dynamic_array(char, msg, MAX_MSG_LEN)
-        ),
-        TP_fast_assign(
+	TP_PROTO(const char *function, struct va_format *vaf),
+	TP_ARGS(function, vaf),
+	TP_STRUCT__entry(
+		__string(function, function)
+		__dynamic_array(char, msg, MAX_MSG_LEN)
+	),
+	TP_fast_assign(
 		__assign_str(function, function);
-                WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
-                                       MAX_MSG_LEN, vaf->fmt,
-                                       *vaf->va) >= MAX_MSG_LEN);
-        ),
-        TP_printk("(%s) %s",
+			     WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
+			     MAX_MSG_LEN, vaf->fmt,
+			     *vaf->va) >= MAX_MSG_LEN);
+	),
+	TP_printk("(%s) %s",
 		  __get_str(function),
 		  __get_str(msg))
 );
@@ -986,16 +986,16 @@ DECLARE_EVENT_CLASS(hfi_trace_template,
  */
 #define __hfi_trace_event(lvl) \
 DEFINE_EVENT(hfi_trace_template, hfi_ ##lvl,				\
-        TP_PROTO( const char *function, struct va_format *vaf),		\
-        TP_ARGS( function, vaf))
+	TP_PROTO(const char *function, struct va_format *vaf),		\
+	TP_ARGS(function, vaf))
 
 #ifdef HFI_TRACE_DO_NOT_CREATE_INLINES
-#define __hfi_trace_fn(fn) __hfi_trace_event(fn);
+#define __hfi_trace_fn(fn) __hfi_trace_event(fn)
 #else
 #define __hfi_trace_fn(fn) \
 __hfi_trace_event(fn); \
 __printf(2, 3) \
-static inline void __hfi_trace_ ##fn(const char *func, char *fmt, ...)	\
+static inline void __hfi_trace_##fn(const char *func, char *fmt, ...)	\
 {									\
 	struct va_format vaf = {					\
 		.fmt = fmt,						\
@@ -1008,7 +1008,7 @@ static inline void __hfi_trace_ ##fn(const char *func, char *fmt, ...)	\
 		if (*c == '\n') {					\
 			*c = '\0';					\
 		}							\
-		va_start(args, fmt);  		     		        \
+		va_start(args, fmt);					\
 		vaf.va = &args;						\
 		trace_hfi_ ##fn(func, &vaf);				\
 		va_end(args);						\
@@ -1022,27 +1022,27 @@ static inline void __hfi_trace_ ##fn(const char *func, char *fmt, ...)	\
  * the hooks for calling qib_cdb(LVL, fmt, ...); as well as take care of all
  * the debugfs stuff.
  */
-__hfi_trace_fn(RVPKT)
-__hfi_trace_fn(INIT)
-__hfi_trace_fn(VERB)
-__hfi_trace_fn(PKT)
-__hfi_trace_fn(PROC)
-__hfi_trace_fn(MM)
-__hfi_trace_fn(ERRPKT)
-__hfi_trace_fn(SDMA)
-__hfi_trace_fn(VPKT)
-__hfi_trace_fn(LINKVERB)
-__hfi_trace_fn(VERBOSE)
-__hfi_trace_fn(DEBUG)
-__hfi_trace_fn(SNOOP)
-__hfi_trace_fn(CNTR)
+__hfi_trace_fn(RVPKT);
+__hfi_trace_fn(INIT);
+__hfi_trace_fn(VERB);
+__hfi_trace_fn(PKT);
+__hfi_trace_fn(PROC);
+__hfi_trace_fn(MM);
+__hfi_trace_fn(ERRPKT);
+__hfi_trace_fn(SDMA);
+__hfi_trace_fn(VPKT);
+__hfi_trace_fn(LINKVERB);
+__hfi_trace_fn(VERBOSE);
+__hfi_trace_fn(DEBUG);
+__hfi_trace_fn(SNOOP);
+__hfi_trace_fn(CNTR);
 
 /*
  * Carry the qib name forward to make porting code from QIB easier. Can be
  * cleaned up and converted to hfi_cdbg/hfi_dbg at a later time.
  */
 #define hfi_cdbg(which, fmt, ...) \
-        __hfi_trace_ ##which( __func__, fmt, ##__VA_ARGS__)
+	__hfi_trace_##which(__func__, fmt, ##__VA_ARGS__)
 
 #define hfi_dbg(fmt, ...) \
 	hfi_cdbg(DEBUG, fmt, ##__VA_ARGS__)
