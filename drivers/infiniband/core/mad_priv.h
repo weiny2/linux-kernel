@@ -208,6 +208,7 @@ struct ib_mad_port_private {
 	struct workqueue_struct *wq;
 	struct work_struct work;
 	struct ib_mad_qp_info qp_info[IB_MAD_QPS_CORE];
+	size_t max_mad_size;
 };
 
 int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr);
