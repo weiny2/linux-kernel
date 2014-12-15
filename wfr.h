@@ -484,7 +484,7 @@ static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
 {
 	/* kernel per-context CSRs are separated by 0x100 */
 	write_csr(dd, offset0 + (0x100 * ctxt), value);
-} 
+}
 
 void __iomem *get_csr_addr(
 	struct hfi_devdata *dd,

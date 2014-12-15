@@ -127,7 +127,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 
 	dd->rcd = kzalloc(sizeof(*dd->rcd) * dd->num_rcv_contexts, GFP_KERNEL);
 	if (!dd->rcd) {
-		dd_dev_err(dd, 
+		dd_dev_err(dd,
 			"Unable to allocate receive context array, failing\n");
 		goto nomem;
 	}

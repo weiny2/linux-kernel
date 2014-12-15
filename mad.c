@@ -279,14 +279,14 @@ static int __subn_get_stl_nodedesc(struct stl_smp *smp, u32 am,
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
- 
+
 	nd = (struct stl_node_description *)data;
- 
+
 	memcpy(nd->data, ibdev->node_desc, sizeof(nd->data));
 
 	if (resp_len)
 		*resp_len += sizeof(*nd);
- 
+
 	return reply(smp);
 }
 
@@ -566,9 +566,8 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 					 smp->route.dr.dr_slid,
 					 smp->route.dr.return_path,
 					 smp->hop_cnt);
-			if (ret) {
+			if (ret)
 				return IB_MAD_RESULT_FAILURE;
-			}
 		}
 	}
 
@@ -988,11 +987,11 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	lwe = be16_to_cpu(pi->link_width.enabled);
 	if (lwe) {
-		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED) == STL_LINK_WIDTH_ALL_SUPPORTED) {
+		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED) == STL_LINK_WIDTH_ALL_SUPPORTED)
 			set_link_width_enabled(ppd, STL_LINK_WIDTH_ALL_SUPPORTED);
-		} else if (lwe & be16_to_cpu(pi->link_width.supported)) {
+		else if (lwe & be16_to_cpu(pi->link_width.supported))
 			set_link_width_enabled(ppd, lwe);
-		} else
+		else
 			smp->status |= IB_SMP_INVALID_FIELD;
 	}
 	lwe = be16_to_cpu(pi->link_width_downgrade.enabled);

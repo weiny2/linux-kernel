@@ -182,7 +182,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	fp->private_data = kzalloc(sizeof(struct hfi_filedata), GFP_KERNEL);
 	if (fp->private_data) /* no cpu affinity by default */
 		((struct hfi_filedata *)fp->private_data)->rec_cpu_num = -1;
-	return fp->private_data ? 0 : -ENOMEM;	
+	return fp->private_data ? 0 : -ENOMEM;
 }
 
 static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
@@ -434,7 +434,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 
 	flags = vma->vm_flags;
 
-	switch(type) {
+	switch (type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
 		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) + /* chip pio base */

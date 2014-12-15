@@ -2455,7 +2455,7 @@ static void handle_8051_request(struct hfi_devdata *dd)
 	u64 reg;
 	u16 data;
 	u8 type;
-	
+
 	reg = read_csr(dd, DC_DC8051_CFG_EXT_DEV_1);
 	if ((reg & DC_DC8051_CFG_EXT_DEV_1_REQ_NEW_SMASK) == 0)
 		return;	/* no request */
@@ -3859,7 +3859,7 @@ static void set_armlaunch(struct hfi_devdata *dd, u32 enable)
 static u32 read_physical_state(struct hfi_devdata *dd)
 {
 	u64 reg;
-	
+
 	reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
 	return (reg >> DC_DC8051_STS_CUR_STATE_PORT_SHIFT)
 				& DC_DC8051_STS_CUR_STATE_PORT_MASK;
@@ -4833,7 +4833,7 @@ u32 lrh_max_header_bytes(struct hfi_devdata *dd)
 	/*
 	 * The maximum non-payload (MTU) bytes in LRH.PktLen are
 	 * the Receive Header Entry Size minus the PBC (or RHF) size.
-	 * 
+	 *
 	 * dd->rcvhdrentsize is in DW.
 	 */
 	return (dd->rcvhdrentsize - 2/*PBC/RHF*/) << 2;
@@ -5407,7 +5407,7 @@ static void set_vl_weights(struct hfi_devdata *dd, u32 target,
 	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
 }
 
-/* 
+/*
  * Read one credit merge VL register.
  */
 static void read_one_cm_vl(struct hfi_devdata *dd, u32 csr,
@@ -5671,9 +5671,9 @@ static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask)
 /*
  * The number of credits on the VLs may be changed while everything
  * is "live", but the following algorithm must be followed due to
- * how the hardware is actually implemented.  In particular, 
+ * how the hardware is actually implemented.  In particular,
  * Return_Credit_Status[] is the only correct status check.
- * 
+ *
  * if (reducing Global_Shared_Credit_Limit or any shared limit changing)
  *     set Global_Shared_Credit_Limit = 0
  *     use_all_vl = 1
@@ -5687,10 +5687,10 @@ static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask)
  *     raise Dedicated_Limits
  * raise Shared_Limits
  * raise Global_Shared_Credit_Limit
- * 
+ *
  * lower = if the new limit is lower, set the limit to the new value
  * raise = if the new limit is higher than the current value (may be changed
- * 	earlier in the algorithm), set the new limit to the new value
+ *	earlier in the algorithm), set the new limit to the new value
  */
 static int set_buffer_control(struct hfi_devdata *dd,
 			       struct buffer_control *new_bc)
@@ -5813,7 +5813,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 				continue;
 
 			if (lowering_dedicated[i]) {
-				set_vl_dedicated(dd, i, 
+				set_vl_dedicated(dd, i,
 					be16_to_cpu(new_bc->vl[i].dedicated));
 				cur_bc.vl[i].dedicated =
 						new_bc->vl[i].dedicated;
@@ -5829,7 +5829,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 
 			if (be16_to_cpu(new_bc->vl[i].dedicated) >
 					be16_to_cpu(cur_bc.vl[i].dedicated))
-				set_vl_dedicated(dd, i, 
+				set_vl_dedicated(dd, i,
 					be16_to_cpu(new_bc->vl[i].dedicated));
 		}
 	}
@@ -6056,7 +6056,7 @@ u32 hdrqempty(struct qib_ctxtdata *rcd)
  *	0xa   2 MB (Receive Array only)
  *
  *	0xB-0xF - reserved (Receive Array only)
- *	
+ *
  *
  * This routine assumes that the value has already been sanity checked.
  */
@@ -8378,7 +8378,7 @@ static void init_chip(struct hfi_devdata *dd)
 							|| sim_easy_linkup == 1) {
 				sim_easy_linkup = 1;
 				dd_dev_info(dd, "Assuming simulation EasyLinkup mode\n");
-			} else { 
+			} else {
 				dd_dev_info(dd, "This HFI is in EasyLinkup mode, but the other is not?\n");
 			}
 		} else {
@@ -8386,7 +8386,7 @@ static void init_chip(struct hfi_devdata *dd)
 			if (sim_easy_linkup == EASY_LINKUP_UNSET
 							|| sim_easy_linkup == 0) {
 				sim_easy_linkup = 0;
-			} else { 
+			} else {
 				dd_dev_info(dd, "This HFI is in normal link mode, but the other is not?\n");
 			}
 			/* otherwise the link should be offline with port down */
@@ -8826,7 +8826,7 @@ done:
  * an STL compliant FM running.
  *
  * Assumptions:
- * 	- the link partner has same credits as WFR 
+ *	- the link partner has same credits as WFR
  *
  * The assignment methodology is arbitrary.  Details:
  * o place half of the credits into the per-VL dedicated limit slots

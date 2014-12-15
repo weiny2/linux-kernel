@@ -173,14 +173,14 @@ struct hfi_base_info {
 	 * ur_rcvhdrhead, ur_rcvhdrtail, ur_rcvegrhead, ur_rcvegrtail,
 	 * ur_rcvtidflow
 	 */
-        __u64 user_regbase;
+	__u64 user_regbase;
 	/* notification events */
 	__u64 events_bufbase;
 	/* status page */
 	__u64 status_bufbase;
 	/* rcvhdrtail updata */
 	__u64 rcvhdrtail_base;
-        /*
+	/*
 	 * shared memory pages for subctxts if ctxt is shared; these cover
 	 * all the processes in the group sharing a single context.
 	 * all have enough space for the num_subcontexts value on this job.
@@ -299,28 +299,28 @@ struct hfi_user_info {
 
 /* User commands. */
 #define HFI_CMD_ASSIGN_CTXT     1	/* allocate HCA and context */
-#define HFI_CMD_CTXT_INFO	2	/* find out what resources we got */
+#define HFI_CMD_CTXT_INFO       2	/* find out what resources we got */
 #define HFI_CMD_CTXT_SETUP      3
-#define HFI_CMD_USER_INFO 	4	/* set up userspace */
-#define HFI_CMD_TID_UPDATE	5	/* update expected TID entries */
-#define HFI_CMD_TID_FREE	6	/* free expected TID entries */
-#define HFI_CMD_CREDIT_UPD	7	/* force an update of PIO credit */
-#define HFI_CMD_SDMA_STATUS_UPD 8       /* force update of SDMA status ring */
+#define HFI_CMD_USER_INFO       4	/* set up userspace */
+#define HFI_CMD_TID_UPDATE      5	/* update expected TID entries */
+#define HFI_CMD_TID_FREE        6	/* free expected TID entries */
+#define HFI_CMD_CREDIT_UPD      7	/* force an update of PIO credit */
+#define HFI_CMD_SDMA_STATUS_UPD 8	/* force update of SDMA status ring */
 
-#define HFI_CMD_RECV_CTRL	9	/* control receipt of packets */
-#define HFI_CMD_POLL_TYPE	10	/* set the kind of polling we want */
+#define HFI_CMD_RECV_CTRL       9	/* control receipt of packets */
+#define HFI_CMD_POLL_TYPE       10	/* set the kind of polling we want */
 #define HFI_CMD_ACK_EVENT       11	/* ack & clear bits *spi_sendbuf_status */
 #define HFI_CMD_SET_PKEY        12      /* set context's pkey */
 #define HFI_CMD_CTXT_RESET      13      /* reset context's HW send context */
 /* separate EPROM commands from normal PSM commands */
-#define HFI_CMD_EP_INFO		64      /* read EPROM device ID */
-#define HFI_CMD_EP_ERASE_CHIP	65      /* erase whole EPROM */
-#define HFI_CMD_EP_ERASE_P0	66      /* erase EPROM partition 0 */
-#define HFI_CMD_EP_ERASE_P1	67      /* erase EPROM partition 1 */
-#define HFI_CMD_EP_READ_P0	68      /* read EPROM partition 0 */
-#define HFI_CMD_EP_READ_P1	69      /* read EPROM partition 1 */
-#define HFI_CMD_EP_WRITE_P0	70      /* write EPROM partition 0 */
-#define HFI_CMD_EP_WRITE_P1	71      /* write EPROM partition 1 */
+#define HFI_CMD_EP_INFO         64      /* read EPROM device ID */
+#define HFI_CMD_EP_ERASE_CHIP   65      /* erase whole EPROM */
+#define HFI_CMD_EP_ERASE_P0     66      /* erase EPROM partition 0 */
+#define HFI_CMD_EP_ERASE_P1     67      /* erase EPROM partition 1 */
+#define HFI_CMD_EP_READ_P0      68      /* read EPROM partition 0 */
+#define HFI_CMD_EP_READ_P1      69      /* read EPROM partition 1 */
+#define HFI_CMD_EP_WRITE_P0     70      /* write EPROM partition 0 */
+#define HFI_CMD_EP_WRITE_P1     71      /* write EPROM partition 1 */
 
 /*
  * HFI_CMD_ACK_EVENT obsoletes HFI_CMD_DISARM_BUFS, but we keep it for

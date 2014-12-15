@@ -53,7 +53,7 @@
  * Known:
  * o pbuf->start always starts on a block boundary
  * o pbuf can wrap only at a block boundary
- */ 
+ */
 void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
 	      const void *from, size_t count)
 {
@@ -424,7 +424,7 @@ static inline int carry_write8(struct pio_buf *pbuf, void *dest)
 /*
  * Segmented PIO Copy - start
  *
- * Start a PIO copy.  
+ * Start a PIO copy.
  *
  * @pbuf: destination buffer
  * @pbc: the PBC for the PIO buffer
@@ -617,7 +617,7 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t nbytes)
  *
  * Must handle nbytes < 8.
  */
-static void mid_copy_straight(struct pio_buf *pbuf, 
+static void mid_copy_straight(struct pio_buf *pbuf,
 						const void *from, size_t nbytes)
 {
 	void __iomem *dest = pbuf->start + (pbuf->qw_written * sizeof(u64));

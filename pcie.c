@@ -433,7 +433,7 @@ void qib_nomsix(struct hfi_devdata *dd)
 void qib_enable_intx(struct pci_dev *pdev)
 {
 	/* first, turn on INTx */
- 	pci_intx(pdev, 1);
+	pci_intx(pdev, 1);
 	/* then turn off MSI-X */
 	pci_disable_msix(pdev);
 }
