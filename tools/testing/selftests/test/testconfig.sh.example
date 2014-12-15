@@ -1,0 +1,4 @@
+#
+# src/test/testconfig.sh -- local configuration for unit tests
+#
+xfstests_dir=/opt/xfstests

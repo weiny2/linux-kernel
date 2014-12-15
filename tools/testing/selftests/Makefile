@@ -9,6 +9,7 @@ TARGETS += mount
 TARGETS += net
 TARGETS += ptrace
 TARGETS += timers
+TARGETS += test
 TARGETS += vm
 TARGETS += powerpc
 TARGETS += user
