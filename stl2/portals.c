@@ -115,7 +115,8 @@ static int hfi_cq_validate_tuples(struct hfi_userdata *ud,
 int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 {
 	struct hfi_devdata *dd = ud->devdata;
-	u64 addr;
+	void *addr;
+	ssize_t len;
 	int cq_idx, ret;
 	unsigned long flags;
 
@@ -135,14 +136,18 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 
 	dd_dev_info(dd, "CQ pair %u assigned\n", cq_idx);
 	cq_assign->cq_idx = cq_idx;
-	addr = 0; /* segment address only needed if not page-aligned */
-	cq_assign->cq_tx_token = HFI_MMAP_TOKEN(TOK_CQ_TX, cq_idx, addr,
-						HFI_CQ_TX_SIZE);
-	cq_assign->cq_rx_token = HFI_MMAP_TOKEN(TOK_CQ_RX, cq_idx, addr,
-						PAGE_ALIGN(HFI_CQ_RX_SIZE));
-	addr = (u64)HFI_CQ_HEAD_ADDR(dd->cq_head_base, cq_idx);
-	cq_assign->cq_head_token = HFI_MMAP_TOKEN(TOK_CQ_HEAD, cq_idx, addr,
-						  PAGE_SIZE);
+
+	ret = hfi_ptl_addr(ud, TOK_CQ_TX, cq_idx, &addr, &len);
+	BUG_ON(ret);  /* can't fail unless CQ assignment above is broken */
+	cq_assign->cq_tx_token = HFI_MMAP_TOKEN(TOK_CQ_TX, cq_idx, addr, len);
+
+	ret = hfi_ptl_addr(ud, TOK_CQ_RX, cq_idx, &addr, &len);
+	BUG_ON(ret);  /* can't fail unless CQ assignment above is broken */
+	cq_assign->cq_rx_token = HFI_MMAP_TOKEN(TOK_CQ_RX, cq_idx, addr, len);
+
+	ret = hfi_ptl_addr(ud, TOK_CQ_HEAD, cq_idx, &addr, &len);
+	BUG_ON(ret);  /* can't fail unless CQ assignment above is broken */
+	cq_assign->cq_head_token = HFI_MMAP_TOKEN(TOK_CQ_HEAD, cq_idx, addr, len);
 
 	/* write CQ config in HFI CSRs */
 	hfi_cq_config(ud, cq_idx, dd->cq_head_base, cq_assign->auth_table);

@@ -34,6 +34,7 @@
 #include <linux/pci.h>
 #include <linux/module.h>
 #include "../common/hfi.h"
+#include "../common/hfi_token.h"
 #include "../include/fxr/fxr_fast_path_defs.h"
 #include "../include/fxr/fxr_tx_ci_csrs.h"
 #include "../include/fxr/fxr_rx_ci_csrs.h"
@@ -102,6 +103,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 static struct stl_core_ops stl_core_ops = {
 	.ctxt_assign = hfi_ptl_attach,
 	.ctxt_release = hfi_ptl_cleanup,
+	.ctxt_addr = hfi_ptl_addr,
 	.cq_assign = hfi_cq_assign,
 	.cq_update = hfi_cq_update,
 	.cq_release = hfi_cq_release,
@@ -339,4 +341,94 @@ void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 	rx_cq_config.PRIV_LEVEL = 1;
 	offset = FXR_RX_CQ_CONFIG_CSR + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);
+}
+
+int hfi_ptl_addr(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize_t *len)
+{
+	struct hfi_devdata *dd;
+	void *psb_base;
+	int ret = 0;
+
+	BUG_ON(!ud || !ud->devdata);
+	dd = ud->devdata;
+
+	psb_base = ud->ptl_state_base;
+	BUG_ON(psb_base == NULL);
+
+	/* Validate passed in ctxt */
+	switch (type) {
+	case TOK_CQ_TX:
+	case TOK_CQ_RX:
+	case TOK_CQ_HEAD:
+		if (ud->ptl_pid != dd->cq_pair[ctxt])
+			return -EINVAL;
+		break;
+	default:
+		break;
+	}
+
+	switch (type) {
+	case TOK_CQ_TX:
+		/* mmio - RW */
+		*addr = HFI_CQ_TX_IDX_ADDR(dd->cq_tx_base, ctxt);
+		*len = HFI_CQ_TX_SIZE;
+		break;
+	case TOK_CQ_RX:
+		/* mmio - RW */
+		*addr = HFI_CQ_RX_IDX_ADDR(dd->cq_rx_base, ctxt);
+		*len = PAGE_ALIGN(HFI_CQ_RX_SIZE);
+		break;
+	case TOK_CQ_HEAD:
+		/* kmalloc - RO */
+		*addr = HFI_CQ_HEAD_ADDR(dd->cq_head_base, ctxt);
+		*len = PAGE_SIZE;
+		break;
+	case TOK_CONTROL_BLOCK:
+		/* kmalloc - RO (debug) */
+		/* TODO - this was requested but there are security concerns */
+		ret = -ENOSYS;
+		break;
+	case TOK_EVENTS_CT:
+		/* vmalloc - RO */
+		*addr = (psb_base + HFI_PSB_CT_OFFSET);
+		*len = HFI_PSB_CT_SIZE;
+		break;
+	case TOK_EVENTS_EQ_DESC:
+		/* vmalloc - RO */
+		*addr = (psb_base + HFI_PSB_EQ_DESC_OFFSET);
+		*len = HFI_PSB_EQ_DESC_SIZE;
+		break;
+	case TOK_EVENTS_EQ_HEAD:
+		/* vmalloc - RW */
+		*addr = (psb_base + HFI_PSB_EQ_HEAD_OFFSET);
+		*len = HFI_PSB_EQ_HEAD_SIZE;
+		break;
+	case TOK_PORTALS_TABLE:
+		/* vmalloc - RO */
+		*addr = (psb_base + HFI_PSB_PT_OFFSET);
+		*len = HFI_PSB_PT_SIZE;
+		break;
+	case TOK_TRIG_OP:
+		/* vmalloc - RO */
+		*addr = (psb_base + HFI_PSB_TRIG_OFFSET);
+		*len = ud->ptl_trig_op_size;
+		break;
+	case TOK_LE_ME:
+		/* vmalloc - RO */
+		*addr = ud->ptl_le_me_base;
+		*len = ud->ptl_le_me_size;
+		break;
+	case TOK_UNEXPECTED:
+		/* vmalloc - RO */
+		*addr = ud->ptl_le_me_base + ud->ptl_le_me_size;
+		*len = ud->ptl_unexpected_size;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	pr_info("Got address start 0x%lx len %lu\n", (long)*addr, *len);
+
+	return ret;
 }
