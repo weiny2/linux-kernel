@@ -208,6 +208,7 @@ int hfi_ptl_attach(struct hfi_userdata *ud, struct hfi_ptl_attach_args *ptl_atta
 void hfi_ptl_cleanup(struct hfi_userdata *ud);
 int hfi_ptl_reserve(struct hfi_devdata *dd, u16 *base, u16 count);
 void hfi_ptl_unreserve(struct hfi_devdata *dd, u16 base, u16 count);
+int hfi_ptl_addr(struct hfi_userdata *ud, int token, u16 ctxt, void **addr, ssize_t *len);
 void hfi_job_init(struct hfi_userdata *ud);
 int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
 int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
@@ -223,13 +224,12 @@ struct stl_core_ops {
 	/* Resource Allocation ops */
 	int (*ctxt_assign)(struct hfi_userdata *ud, struct hfi_ptl_attach_args *ptl_attach);
 	void (*ctxt_release)(struct hfi_userdata *ud);
-	//int (*ctxt_kaddr)(struct hfi_userdata *ud, struct hfi_ctxt_kaddr_args *ctxt_kaddr);
+	int (*ctxt_addr)(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize_t *len);
 
 	/* FXR specific Resource Allocation ops */
 	int (*cq_assign)(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
 	int (*cq_update)(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update);
 	int (*cq_release)(struct hfi_userdata *ud, u16 cq_idx);
-	//int (*cq_kaddr)(struct hfi_userdata *ud, struct hfi_cq_kaddr_args *cq_kaddr);
 	int (*eq_assign)(struct hfi_userdata *ud, struct hfi_eq_assign_args *eq_assign);
 	int (*eq_release)(struct hfi_userdata *ud, u16 eq_type, u16 eq_idx);
 	int (*dlid_assign)(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign);

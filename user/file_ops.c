@@ -291,20 +291,19 @@ static ssize_t hfi_aio_write(struct kiocb *kiocb, const struct iovec *iovec,
 static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 {
 	struct hfi_userdata *ud;
-	struct hfi_devdata *dd;
 	unsigned long flags, pfn;
-	void *kvaddr = NULL;
+	void *remap_addr, *kvaddr = NULL;
 	u64 token = vma->vm_pgoff << PAGE_SHIFT;
-	u64 memaddr = 0;
+	u64 phys_addr = 0;
 	int high = 0, mapio = 0, vm_fault = 0, vm_ro = 0, type;
 	ssize_t memlen = 0;
 	int ret = 0;
 	u16 ctxt;
-	void *psb_base;
+	struct stl_core_ops *ops;
 
 	ud = fp->private_data;
-	BUG_ON(!ud || !ud->devdata);
-	dd = ud->devdata;
+	BUG_ON(!ud || !ud->bus_ops);
+	ops = ud->bus_ops;
 
 	if (!is_valid_mmap(token) ||
 	    !(vma->vm_flags & VM_SHARED)) {
@@ -317,8 +316,6 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		ret = -EINVAL;
 		goto done;
 	}
-	psb_base = ud->ptl_state_base;
-	BUG_ON(psb_base == NULL);
 
 	ctxt = HFI_MMAP_TOKEN_GET(CTXT, token);
 	type = HFI_MMAP_TOKEN_GET(TYPE, token);
@@ -331,12 +328,9 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	switch (type) {
 	case TOK_CQ_TX:
 	case TOK_CQ_RX:
+		mapio = 1;
 	case TOK_CQ_HEAD:
 		if (ctxt >= HFI_CQ_COUNT) {
-			ret = -EINVAL;
-			goto done;
-		}
-		if (ud->ptl_pid != dd->cq_pair[ctxt]) {
 			ret = -EINVAL;
 			goto done;
 		}
@@ -369,68 +363,13 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		flags &= ~VM_MAYWRITE;
 	}
 
-	switch (type) {
-	case TOK_CQ_TX:
-		/* mmio - RW */
-		memaddr = (u64)HFI_CQ_TX_IDX_ADDR(dd->cq_tx_base, ctxt);
-		memlen = HFI_CQ_TX_SIZE;
-		mapio = 1;
-		break;
-	case TOK_CQ_RX:
-		/* mmio - RW */
-		memaddr = (u64)HFI_CQ_RX_IDX_ADDR(dd->cq_rx_base, ctxt);
-		memlen = PAGE_ALIGN(HFI_CQ_RX_SIZE);
-		mapio = 1;
-		break;
-	case TOK_CQ_HEAD:
-		/* kmalloc - RO */
-		kvaddr = HFI_CQ_HEAD_ADDR(dd->cq_head_base, ctxt);
-		memlen = PAGE_SIZE;
-		break;
-	case TOK_CONTROL_BLOCK:
-		/* kmalloc - RO (debug) */
-		/* TODO - this was requested but there are security concerns */
-		ret = -ENOSYS;
+	/*
+	 * Get address and length from HW driver.
+	 * For CQ tokens, ownership tested here.
+	 */
+	ret = ops->ctxt_addr(ud, type, ctxt, &remap_addr, &memlen);
+	if (ret)
 		goto done;
-	case TOK_EVENTS_CT:
-		/* vmalloc - RO */
-		kvaddr = (psb_base + HFI_PSB_CT_OFFSET);
-		memlen = HFI_PSB_CT_SIZE;
-		break;
-	case TOK_EVENTS_EQ_DESC:
-		/* vmalloc - RO */
-		kvaddr = (psb_base + HFI_PSB_EQ_DESC_OFFSET);
-		memlen = HFI_PSB_EQ_DESC_SIZE;
-		break;
-	case TOK_EVENTS_EQ_HEAD:
-		/* vmalloc - RW */
-		kvaddr = (psb_base + HFI_PSB_EQ_HEAD_OFFSET);
-		memlen = HFI_PSB_EQ_HEAD_SIZE;
-		break;
-	case TOK_PORTALS_TABLE:
-		/* vmalloc - RO */
-		kvaddr = (psb_base + HFI_PSB_PT_OFFSET);
-		memlen = HFI_PSB_PT_SIZE;
-		break;
-	case TOK_TRIG_OP:
-		/* vmalloc - RO */
-		kvaddr = (psb_base + HFI_PSB_TRIG_OFFSET);
-		memlen = ud->ptl_trig_op_size;
-		break;
-	case TOK_LE_ME:
-		/* vmalloc - RO */
-		kvaddr = ud->ptl_le_me_base;
-		memlen = ud->ptl_le_me_size;
-		break;
-	case TOK_UNEXPECTED:
-		/* vmalloc - RO */
-		kvaddr = ud->ptl_le_me_base + ud->ptl_le_me_size;
-		memlen = ud->ptl_unexpected_size;
-		break;
-	default:
-		ret = -EINVAL;
-		goto done;
-	}
 
 	if ((vma->vm_end - vma->vm_start) != memlen) {
 		ret = -EINVAL;
@@ -438,19 +377,19 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	if (mapio) {
-		BUG_ON(!memaddr);
+		phys_addr = (u64)remap_addr;
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	} else {
-		memaddr = kvirt_to_phys(kvaddr, &high);
+		kvaddr = remap_addr;
+		phys_addr = kvirt_to_phys(kvaddr, &high);
 	}
 
 	vma->vm_flags = flags;
-	dd_dev_info(dd,
-		    "%s: %u type:%u io/vf/h:%d/%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
-		    __func__, ctxt, type, mapio, vm_fault, high,
-		    memaddr, memlen, vma->vm_end - vma->vm_start,
-		    vma->vm_flags);
-	pfn = (unsigned long)(memaddr >> PAGE_SHIFT);
+	pr_info("%s: %u type:%u io/vf/h:%d/%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
+		__func__, ctxt, type, mapio, vm_fault, high,
+		phys_addr, memlen, vma->vm_end - vma->vm_start,
+		vma->vm_flags);
+	pfn = (unsigned long)(phys_addr >> PAGE_SHIFT);
 	if (vm_fault) {
 		/* the fault handler only supports vmalloc */
 		BUG_ON(!high);
