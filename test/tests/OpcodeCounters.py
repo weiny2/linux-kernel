@@ -8,7 +8,7 @@ import RegLib
 
 def do_ssh(host, cmd):
     RegLib.test_log(5, "Running " + cmd)
-    return (host.send_ssh(cmd))
+    return (host.send_ssh(cmd, buffered=1, timeout=0, run_as_root=True))
 
 def main():
 
