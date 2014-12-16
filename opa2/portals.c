@@ -94,7 +94,8 @@ static int hfi_cq_validate_tuples(struct hfi_userdata *ud,
 			continue;
 		}
 
-		/* else look for match in job_launcher set UIDs,
+		/*
+		 * else look for match in job_launcher set UIDs,
 		 * but try to short-circuit this search.
 		 */
 		if (auth_uid == last_job_uid)
@@ -137,15 +138,15 @@ int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign)
 	dd_dev_info(dd, "CQ pair %u assigned\n", cq_idx);
 	cq_assign->cq_idx = cq_idx;
 
-	ret = hfi_ptl_addr(ud, TOK_CQ_TX, cq_idx, &addr, &len);
+	ret = hfi_ctxt_hw_addr(ud, TOK_CQ_TX, cq_idx, &addr, &len);
 	BUG_ON(ret);  /* can't fail unless CQ assignment above is broken */
 	cq_assign->cq_tx_token = HFI_MMAP_TOKEN(TOK_CQ_TX, cq_idx, addr, len);
 
-	ret = hfi_ptl_addr(ud, TOK_CQ_RX, cq_idx, &addr, &len);
+	ret = hfi_ctxt_hw_addr(ud, TOK_CQ_RX, cq_idx, &addr, &len);
 	BUG_ON(ret);  /* can't fail unless CQ assignment above is broken */
 	cq_assign->cq_rx_token = HFI_MMAP_TOKEN(TOK_CQ_RX, cq_idx, addr, len);
 
-	ret = hfi_ptl_addr(ud, TOK_CQ_HEAD, cq_idx, &addr, &len);
+	ret = hfi_ctxt_hw_addr(ud, TOK_CQ_HEAD, cq_idx, &addr, &len);
 	BUG_ON(ret);  /* can't fail unless CQ assignment above is broken */
 	cq_assign->cq_head_token = HFI_MMAP_TOKEN(TOK_CQ_HEAD, cq_idx, addr, len);
 
@@ -216,7 +217,7 @@ static void hfi_cq_cleanup(struct hfi_userdata *ud)
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 }
 
-int hfi_ptl_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
+int hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
 {
 	u16 start, n;
 	int ret = 0;
@@ -242,7 +243,7 @@ int hfi_ptl_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
 	return 0;
 }
 
-void hfi_ptl_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
+void hfi_ctxt_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
 {
 	unsigned long flags;
 
@@ -259,8 +260,8 @@ void hfi_ptl_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
  *   ud->ptl_pid = HFI_PID_NONE
  *   ud->ptl_uid = current_uid()
  */
-int hfi_ptl_attach(struct hfi_userdata *ud,
-		   struct hfi_ptl_attach_args *ptl_attach)
+int hfi_ctxt_attach(struct hfi_userdata *ud,
+		    struct hfi_ctxt_attach_args *ctxt_attach)
 {
 	struct hfi_devdata *dd = ud->devdata;
 	u16 ptl_pid;
@@ -271,26 +272,26 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	if (ud->ptl_pid != HFI_PID_NONE)
 		return -EPERM;
 
-	ptl_pid = ptl_attach->pid;
+	ptl_pid = ctxt_attach->pid;
 	ret = hfi_pid_alloc(ud, &ptl_pid);
 	if (ret)
 		return ret;
 
-	/* set ptl_pid, hfi_ptl_cleanup() can handle all errors below */
+	/* set ptl_pid, hfi_ctxt_cleanup() can handle all errors below */
 	ud->ptl_pid = ptl_pid;
 
 	/* verify range of inputs */
-	if (ptl_attach->trig_op_count > HFI_TRIG_OP_MAX_COUNT)
-		ptl_attach->trig_op_count = HFI_TRIG_OP_MAX_COUNT;
-	if (ptl_attach->le_me_count > HFI_LE_ME_MAX_COUNT)
-		ptl_attach->le_me_count = HFI_LE_ME_MAX_COUNT;
-	if (ptl_attach->unexpected_count > HFI_UNEXP_MAX_COUNT)
-		ptl_attach->unexpected_count = HFI_UNEXP_MAX_COUNT;
+	if (ctxt_attach->trig_op_count > HFI_TRIG_OP_MAX_COUNT)
+		ctxt_attach->trig_op_count = HFI_TRIG_OP_MAX_COUNT;
+	if (ctxt_attach->le_me_count > HFI_LE_ME_MAX_COUNT)
+		ctxt_attach->le_me_count = HFI_LE_ME_MAX_COUNT;
+	if (ctxt_attach->unexpected_count > HFI_UNEXP_MAX_COUNT)
+		ctxt_attach->unexpected_count = HFI_UNEXP_MAX_COUNT;
 
 	/* compute total Portals State Base size */
-	trig_op_size = PAGE_ALIGN(ptl_attach->trig_op_count * HFI_TRIG_OP_SIZE);
-	le_me_size = PAGE_ALIGN(ptl_attach->le_me_count * HFI_LE_ME_SIZE);
-	unexp_size = PAGE_ALIGN(ptl_attach->unexpected_count * HFI_UNEXP_SIZE);
+	trig_op_size = PAGE_ALIGN(ctxt_attach->trig_op_count * HFI_TRIG_OP_SIZE);
+	le_me_size = PAGE_ALIGN(ctxt_attach->le_me_count * HFI_LE_ME_SIZE);
+	unexp_size = PAGE_ALIGN(ctxt_attach->unexpected_count * HFI_UNEXP_SIZE);
 	le_me_off = HFI_PSB_FIXED_TOTAL_MEM + trig_op_size;
 	psb_size = le_me_off + le_me_size + unexp_size;
 
@@ -320,29 +321,29 @@ int hfi_ptl_attach(struct hfi_userdata *ud,
 	hfi_pcb_write(ud, ptl_pid, ptl_phys_pages);
 
 	/* return mmap tokens of PSB items */
-	ptl_attach->ct_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_CT,
+	ctxt_attach->ct_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_CT,
 						ptl_pid, HFI_PSB_CT_SIZE);
-	ptl_attach->eq_desc_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_DESC,
+	ctxt_attach->eq_desc_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_DESC,
 						ptl_pid, HFI_PSB_EQ_DESC_SIZE);
-	ptl_attach->eq_head_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_HEAD,
+	ctxt_attach->eq_head_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_HEAD,
 						ptl_pid, HFI_PSB_EQ_HEAD_SIZE);
-	ptl_attach->pt_token = HFI_MMAP_PSB_TOKEN(TOK_PORTALS_TABLE,
+	ctxt_attach->pt_token = HFI_MMAP_PSB_TOKEN(TOK_PORTALS_TABLE,
 						ptl_pid, HFI_PSB_PT_SIZE);
-	ptl_attach->le_me_token = HFI_MMAP_PSB_TOKEN(TOK_LE_ME,
+	ctxt_attach->le_me_token = HFI_MMAP_PSB_TOKEN(TOK_LE_ME,
 						ptl_pid, ud->ptl_le_me_size);
-	ptl_attach->unexpected_token = HFI_MMAP_PSB_TOKEN(TOK_UNEXPECTED,
+	ctxt_attach->unexpected_token = HFI_MMAP_PSB_TOKEN(TOK_UNEXPECTED,
 						ptl_pid, ud->ptl_unexpected_size);
-	ptl_attach->trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
+	ctxt_attach->trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
 						ptl_pid, ud->ptl_trig_op_size);
-	ptl_attach->pid = ptl_pid;
-	ptl_attach->pid_base = ud->pid_base;
-	ptl_attach->pid_count = ud->pid_count;
-	ptl_attach->pid_mode = ud->pid_mode;
+	ctxt_attach->pid = ptl_pid;
+	ctxt_attach->pid_base = ud->pid_base;
+	ctxt_attach->pid_count = ud->pid_count;
+	ctxt_attach->pid_mode = ud->pid_mode;
 
 	return 0;
 
 err_vmalloc:
-	hfi_ptl_cleanup(ud);
+	hfi_ctxt_cleanup(ud);
 	return ret;
 }
 
@@ -388,7 +389,7 @@ static int hfi_pid_alloc(struct hfi_userdata *ud, u16 *assigned_pid)
 		    (ptl_pid >= HFI_NUM_PIDS))
 			return -EINVAL;
 
-		ret = hfi_ptl_reserve(ud->devdata, &ptl_pid, 1);
+		ret = hfi_ctxt_reserve(ud->devdata, &ptl_pid, 1);
 		if (ret)
 			return ret;
 		dd_dev_info(ud->devdata,
@@ -414,10 +415,11 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
 }
 
-/* Release Portals PID resources.
- * Called during close() or explicitly via CMD_PTL_DETACH.
+/*
+ * Release Portals PID resources.
+ * Called during close() or explicitly via CMD_CTXT_DETACH.
  */
-void hfi_ptl_cleanup(struct hfi_userdata *ud)
+void hfi_ctxt_cleanup(struct hfi_userdata *ud)
 {
 	struct hfi_devdata *dd = ud->devdata;
 	u16 ptl_pid = ud->ptl_pid;
@@ -448,9 +450,10 @@ void hfi_ptl_cleanup(struct hfi_userdata *ud)
 	if (ud->pid_count == 0) {
 		dd_dev_info(ud->devdata,
 			    "release PID orphan [%u]\n", ptl_pid);
-		hfi_ptl_unreserve(ud->devdata, ptl_pid, 1);
+		hfi_ctxt_unreserve(ud->devdata, ptl_pid, 1);
 	}
 
 	/* clear last */
 	ud->ptl_pid = HFI_PID_NONE;
 }
+

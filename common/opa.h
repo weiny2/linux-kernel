@@ -34,103 +34,21 @@
 #define _OPA_COMMON_H
 
 /*
- * This header file is the base header file for HFI kernel driver.
+ * This header file contains shared structures between OPA clients and devices.
  */
 
-#include <linux/interrupt.h>
-#include <linux/pci.h>
-#include <linux/dma-mapping.h>
-#include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/slab.h>
-#include <linux/io.h>
-#include "../include/hfi_defs.h"
 #include "../include/hfi_cmd.h"
 #include "opa_core.h"
 
-/* device naming has leading zero to prevent /dev name collisions */
-#define DRIVER_DEVICE_PREFIX	"hfi02"
-
-#define PCI_VENDOR_ID_INTEL       0x8086
-#define PCI_DEVICE_ID_INTEL_FXR0  0x26d0
-
-/*
- * Define the driver version number.  This is something that refers only
- * to the driver itself, not the software interfaces it supports.
- */
-#ifndef HFI_DRIVER_VERSION_BASE
-#define HFI_DRIVER_VERSION_BASE "0.0"
-#endif
-
-/* create the final driver version string */
-#ifdef HFI_IDSTR
-#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE " " HFI_IDSTR
-#else
-#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
-#endif
-
-struct hfi_msix_entry {
-	struct msix_entry msix;
-	void *arg;
-	cpumask_var_t mask;
-};
-
-struct hfi_mpin_entry {
-	u64 pfn;
-	struct list_head list;
-};
-
-/* device data struct contains only per-HFI info. */
-struct hfi_devdata {
-	/* pci access data structure */
-	struct pci_dev *pcidev;
-	struct opa_core_device *bus_dev;
-
-	/* localbus width (1, 2,4,8,16,32) from config space  */
-	u32 lbus_width;
-	/* localbus speed in MHz */
-	u32 lbus_speed;
-	int unit; /* unit # of this chip */
-	int node; /* home node of this chip */
-	/* so we can rewrite it after a chip reset */
-	u32 pcibar0;
-	/* so we can rewrite it after a chip reset */
-	u32 pcibar1;
-
-	/* mem-mapped pointer to base of chip regs */
-	u8 __iomem *kregbase;
-	/* end of mem-mapped chip space excluding sendbuf and user regs */
-	u8 __iomem *kregend;
-	/* physical address of chip for io_remap, etc. */
-	resource_size_t physaddr;
-
-	/* MSI-X information */
-	struct hfi_msix_entry *msix_entries;
-	u32 num_msix_entries;
-
-	/* Device Portals State */
-	struct hfi_userdata **ptl_user;
-	size_t ptl_user_size;
-	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
-	spinlock_t ptl_lock;
-
-	/* Command Queue State */
-	u16 cq_pair[HFI_CQ_COUNT];
-	spinlock_t cq_lock;
-	u16 cq_pair_next_unused;
-	void *cq_tx_base;
-	void *cq_rx_base;
-	void *cq_head_base;
-	size_t cq_head_size;
-};
+struct hfi_devdata;
 
 /* Private data for file operations, created at open(). */
 struct hfi_userdata {
 	struct hfi_info *hi;
 	struct opa_core_ops *bus_ops;
 	struct hfi_devdata *devdata;
-	/* for cpu affinity; -1 if none */
-	int rec_cpu_num;
 	pid_t pid;
 	pid_t sid;
 
@@ -162,20 +80,28 @@ struct hfi_userdata {
 	struct list_head job_list;
 };
 
-int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin);
-int hfi_munpin(struct hfi_userdata *ud, struct hfi_munpin_args *munpin);
-int hfi_munpin_all(struct hfi_userdata *ud);
-
 /**
- * opa_core_ops - Hardware operations for accessing a FXR device on the FXR bus.
+ * opa_core_ops - Hardware operations for accessing an OPA device on the OPA bus.
+ * @ctxt_assign: Assign a Send/Receive context of the HFI.
+ * @ctxt_release: Release Send/Receive context in the HFI.
+ * @ctxt_addr: Return address for HFI resources providing memory access/mapping.
+ * @cq_assign: Assign a Command Queue for HFI send/receive operations.
+ * @cq_update: Update configuration of Command Queue.
+ * @cq_release: Release Command Queue.
+ * @eq_assign: Assign an Event Completion Queue.
+ * @eq_release: Release an Event Completion Queue.
+ * @dlid_assign: Assign entries from the DLID relocation table.
+ * @dlid_release: Release entries from the DLID relocation table.
+ * @job_info: Return information of any reserved job resources.
+ * @job_init: Apply job reservation, @ctxt_assign limited to reserved resources.
+ * @job_free: Release hold on any reserved HFI resources.
+ * @job_setup: Privileged job launcher uses to reserve HFI resources.
  */
 struct opa_core_ops {
 	/* Resource Allocation ops */
-	int (*ctxt_assign)(struct hfi_userdata *ud, struct hfi_ptl_attach_args *ptl_attach);
+	int (*ctxt_assign)(struct hfi_userdata *ud, struct hfi_ctxt_attach_args *ctxt_attach);
 	void (*ctxt_release)(struct hfi_userdata *ud);
 	int (*ctxt_addr)(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize_t *len);
-
-	/* FXR specific Resource Allocation ops */
 	int (*cq_assign)(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
 	int (*cq_update)(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update);
 	int (*cq_release)(struct hfi_userdata *ud, u16 cq_idx);
@@ -183,6 +109,7 @@ struct opa_core_ops {
 	int (*eq_release)(struct hfi_userdata *ud, u16 eq_type, u16 eq_idx);
 	int (*dlid_assign)(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_userdata *ud);
+	/* TODO - look at moving these into char device */
 	int (*job_info)(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
 	void (*job_init)(struct hfi_userdata *ud);
 	void (*job_free)(struct hfi_userdata *ud);

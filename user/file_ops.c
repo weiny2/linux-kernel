@@ -29,19 +29,16 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include <linux/cdev.h>
-#include <linux/vmalloc.h>
-#include <linux/io.h>
-#include <linux/uio.h>
-#include <linux/fs.h>
 #include <linux/device.h>
+#include <linux/fs.h>
 #include <linux/module.h>
+#include <linux/pagemap.h>
 #include <linux/sched.h>
-#include <linux/cred.h>
 #include <linux/version.h>
 #include "../common/opa.h"
 #include "../common/hfi_token.h"
 #include "device.h"
+#include "mpin.h"
 
 /* TODO - turn off when RX unit is implemented in simulation */
 static uint psb_rw = 1;
@@ -91,13 +88,9 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	fp->private_data = ud;
 	ud->hi = hi;
 
-	/* lookup and store pointer to HFI device data */
-	/* TODO */
+	/* store HFI HW device pointers */
 	ud->bus_ops = hi->odev->bus_ops;
 	ud->devdata = hi->odev->dd;
-
-	/* no cpu affinity by default */
-	ud->rec_cpu_num = -1;
 
 	ud->pid = task_pid_nr(current);
 	ud->sid = task_session_vnr(current);
@@ -108,9 +101,11 @@ static int hfi_open(struct inode *inode, struct file *fp)
 #else
 	ud->ptl_uid = current_uid().val;
 #endif
+
 	INIT_LIST_HEAD(&ud->mpin_head);
 	spin_lock_init(&ud->mpin_lock);
 
+	/* inherit PID reservation if present */
 	ud->bus_ops->job_init(ud);
 
 	return 0;
@@ -126,7 +121,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_cq_update_args cq_update;
 	struct hfi_cq_release_args cq_release;
 	struct hfi_dlid_assign_args dlid_assign;
-	struct hfi_ptl_attach_args ptl_attach;
+	struct hfi_ctxt_attach_args ctxt_attach;
 	struct hfi_job_info_args job_info;
 	struct hfi_job_setup_args job_setup;
 	struct hfi_mpin_args mpin;
@@ -168,12 +163,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy_in = sizeof(cq_release);
 		dest = &cq_release;
 		break;
-	case HFI_CMD_PTL_ATTACH:
-		copy_in = sizeof(ptl_attach);
+	case HFI_CMD_CTXT_ATTACH:
+		copy_in = sizeof(ctxt_attach);
 		copy_out = copy_in;
-		dest = &ptl_attach;
+		dest = &ctxt_attach;
 		break;
-	case HFI_CMD_PTL_DETACH:
+	case HFI_CMD_CTXT_DETACH:
 		copy_in = 0;
 		break;
 	case HFI_CMD_DLID_ASSIGN:
@@ -246,10 +241,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_DLID_RELEASE:
 		ret = ops->dlid_release(ud);
 		break;
-	case HFI_CMD_PTL_ATTACH:
-		ret = ops->ctxt_assign(ud, &ptl_attach);
+	case HFI_CMD_CTXT_ATTACH:
+		ret = ops->ctxt_assign(ud, &ctxt_attach);
 		break;
-	case HFI_CMD_PTL_DETACH:
+	case HFI_CMD_CTXT_DETACH:
 		/* release our assigned PID */
 		ops->ctxt_release(ud);
 		break;

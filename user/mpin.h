@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 - 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,20 +30,12 @@
  * SOFTWARE.
  */
 
-#ifndef _HFI_DEVICE_H
-#define _HFI_DEVICE_H
+#ifndef _HFI_MPIN_H
+#define _HFI_MPIN_H
 
-#include <linux/miscdevice.h>
+#include "../common/opa.h"
 
-/* device naming has leading zero to prevent /dev name collisions */
-#define DRIVER_DEVICE_PREFIX	"hfi02"
-
-struct hfi_info {
-	struct opa_core_device *odev;
-	struct miscdevice miscdev;
-	char name[16];
-};
-
-int hfi_user_add(struct hfi_info *hi);
-void hfi_user_remove(struct hfi_info *hi);
-#endif /* _HFI_DEVICE_H */
+int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin);
+int hfi_munpin(struct hfi_userdata *ud, struct hfi_munpin_args *munpin);
+int hfi_munpin_all(struct hfi_userdata *ud);
+#endif /* _HFI_MPIN_H */
