@@ -32,7 +32,7 @@
  */
 
 #include <linux/interrupt.h>
-#include "../common/hfi.h"
+#include "opa_hfi.h"
 
 void cleanup_interrupts(struct hfi_devdata *dd)
 {
