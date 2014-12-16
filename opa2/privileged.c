@@ -146,7 +146,7 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 	if (ud->pid_count)
 		return -EPERM;
 
-	ret = hfi_ptl_reserve(ud->devdata, &pid_base, count);
+	ret = hfi_ctxt_reserve(ud->devdata, &pid_base, count);
 	if (ret)
 		return ret;
 	ud->pid_base = pid_base;
@@ -195,7 +195,7 @@ void hfi_job_free(struct hfi_userdata *ud)
 		BUG_ON(list_empty(&ud->job_list));
 		list_del(&ud->job_list);
 		up_write(&hfi_job_sem);
-		hfi_ptl_unreserve(ud->devdata, ud->pid_base, ud->pid_count);
+		hfi_ctxt_unreserve(ud->devdata, ud->pid_base, ud->pid_count);
 
 		/* clear DLID entries */
 		hfi_dlid_release(ud);

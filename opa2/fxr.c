@@ -101,9 +101,9 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 }
 
 static struct opa_core_ops opa_core_ops = {
-	.ctxt_assign = hfi_ptl_attach,
-	.ctxt_release = hfi_ptl_cleanup,
-	.ctxt_addr = hfi_ptl_addr,
+	.ctxt_assign = hfi_ctxt_attach,
+	.ctxt_release = hfi_ctxt_cleanup,
+	.ctxt_addr = hfi_ctxt_hw_addr,
 	.cq_assign = hfi_cq_assign,
 	.cq_update = hfi_cq_update,
 	.cq_release = hfi_cq_release,
@@ -343,7 +343,7 @@ void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
 	write_csr(dd, offset, rx_cq_config.val);
 }
 
-int hfi_ptl_addr(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize_t *len)
+int hfi_ctxt_hw_addr(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize_t *len)
 {
 	struct hfi_devdata *dd;
 	void *psb_base;
@@ -427,8 +427,6 @@ int hfi_ptl_addr(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize
 		ret = -EINVAL;
 		break;
 	}
-
-	pr_info("Got address start 0x%lx len %lu\n", (long)*addr, *len);
 
 	return ret;
 }

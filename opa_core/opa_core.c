@@ -74,7 +74,7 @@ static struct attribute *opa_core_dev_attrs[] = {
 };
 ATTRIBUTE_GROUPS(opa_core_dev);
 
-static int stl_add_dev(struct device *dev, struct subsys_interface *si)
+static int opa_add_dev(struct device *dev, struct subsys_interface *si)
 {
 	struct opa_core_client *client =
 		container_of(si, struct opa_core_client, si);
@@ -83,7 +83,7 @@ static int stl_add_dev(struct device *dev, struct subsys_interface *si)
 	return client->add(odev);
 }
 
-static int stl_remove_dev(struct device *dev, struct subsys_interface *si)
+static int opa_remove_dev(struct device *dev, struct subsys_interface *si)
 {
 	struct opa_core_client *client =
 		container_of(si, struct opa_core_client, si);
@@ -113,8 +113,8 @@ int opa_core_client_register(struct opa_core_client *client)
 
 	si->name = client->name;
 	si->subsys = &opa_core;
-	si->add_dev = stl_add_dev;
-	si->remove_dev = stl_remove_dev;
+	si->add_dev = opa_add_dev;
+	si->remove_dev = opa_remove_dev;
 
 	return subsys_interface_register(&client->si);
 }
@@ -201,5 +201,4 @@ module_exit(opa_core_exit);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel Corporation");
-MODULE_DESCRIPTION("Intel(R) STL Gen2 Bus Driver");
-MODULE_VERSION(HFI_DRIVER_VERSION);
+MODULE_DESCRIPTION("Intel(R) Omni-Path Core Driver");

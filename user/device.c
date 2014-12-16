@@ -30,15 +30,13 @@
  * SOFTWARE.
  */
 
-#include <linux/cdev.h>
 #include <linux/module.h>
 #include <linux/device.h>
-#include <linux/fs.h>
-#include "../common/opa.h"
+#include "../common/opa_core.h"
 #include "device.h"
 
 /*
- * Device initialization, called by STL core when a STL device is discovered
+ * Device initialization, called by OPA core when a OPA device is discovered
  */
 static int hfi_portals_add(struct opa_core_device *odev)
 {
@@ -66,7 +64,7 @@ exit:
 
 /*
  * Perform required device shutdown logic, also remove /dev entries.
- * Called by STL core when a STL device is removed
+ * Called by OPA core when a OPA device is removed
  */
 static void hfi_portals_remove(struct opa_core_device *odev)
 {
@@ -96,5 +94,4 @@ module_exit(hfi_cleanup);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel Corporation");
-MODULE_DESCRIPTION("Intel(R) STL Gen2 Portals Driver");
-MODULE_VERSION(HFI_DRIVER_VERSION);
+MODULE_DESCRIPTION("Intel(R) Omni-Path Portals Driver");

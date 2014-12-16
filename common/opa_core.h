@@ -36,6 +36,7 @@
  * Everything a opa_core driver needs to work with any particular opa_core
  * implementation.
  */
+#include <linux/device.h>
 #include "opa.h"
 
 struct opa_core_device_id {
@@ -62,7 +63,7 @@ struct opa_core_device {
 /**
  * opa_core_client - representation of a opa_core client
  *
- * @name: STL client name
+ * @name: OPA client name
  * @add: the function to call when a device is discovered
  * @remove: the function to call when a device is removed
  * @si: underlying subsystem interface (filled in by opa_core)

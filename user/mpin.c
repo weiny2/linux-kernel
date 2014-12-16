@@ -31,7 +31,12 @@
  */
 
 #include <linux/pagemap.h>
-#include "../common/opa.h"
+#include "mpin.h"
+
+struct hfi_mpin_entry {
+	u64 pfn;
+	struct list_head list;
+};
 
 /*
  * This page pinning interface is likely unneeded when we have an IOMMU.

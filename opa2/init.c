@@ -157,5 +157,4 @@ module_exit(hfi_cleanup);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel Corporation");
-MODULE_DESCRIPTION("Intel(R) STL Gen2 HFI Driver");
-MODULE_VERSION(HFI_DRIVER_VERSION);
+MODULE_DESCRIPTION("Intel(R) Omni-Path Gen2 HFI Driver");
