@@ -32,7 +32,7 @@
 
 #include <linux/rwsem.h>
 #include <linux/sched.h>
-#include "../common/hfi.h"
+#include "opa_hfi.h"
 
 static LIST_HEAD(hfi_job_list);
 static DECLARE_RWSEM(hfi_job_sem);

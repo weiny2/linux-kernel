@@ -31,7 +31,7 @@
  */
 
 #include <linux/bitmap.h>
-#include "../common/hfi.h"
+#include "opa_hfi.h"
 #include "../common/hfi_token.h"
 
 /* TODO - temporary as FXR model has no IOMMU yet */

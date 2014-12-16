@@ -33,7 +33,7 @@
 
 #include <linux/pci.h>
 #include <linux/module.h>
-#include "../common/hfi.h"
+#include "opa_hfi.h"
 #include "../common/hfi_token.h"
 #include "../include/fxr/fxr_fast_path_defs.h"
 #include "../include/fxr/fxr_tx_ci_csrs.h"
