@@ -11,10 +11,10 @@ start ()
 {
     local RC=0
 
-    modprobe hfi2
-    modprobe hfi2_user
+    modprobe opa2_hfi
+    modprobe opa2_user
 
-    touch /var/lock/subsys/hfi2
+    touch /var/lock/subsys/opa2
     [ $RC -eq 0 ] && echo_success || echo_failure
     echo
     return $RC
@@ -24,11 +24,11 @@ stop ()
 {
     local RC=0
 
-    modprobe -r hfi2_user
-    modprobe -r hfi2
-    modprobe -r hfi2_core
+    modprobe -r opa2_user
+    modprobe -r opa2_hfi
+    modprobe -r opa_core
 
-    rm -f /var/lock/subsys/hfi2
+    rm -f /var/lock/subsys/opa2
     [ $RC -eq 0 ] && echo_success || echo_failure
     echo
     return $RC
@@ -42,7 +42,7 @@ restart ()
 
 condrestart ()
 {
-    [ -e /var/lock/subsys/hfi2 ] && restart || return 0
+    [ -e /var/lock/subsys/opa2 ] && restart || return 0
 }
 
 usage ()

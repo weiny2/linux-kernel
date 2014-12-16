@@ -36,7 +36,7 @@
 #define _OPA_HFI_H
 
 #include <linux/pci.h>
-#include "../common/hfi.h"
+#include "../common/opa.h"
 
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME

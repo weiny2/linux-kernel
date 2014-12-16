@@ -30,61 +30,61 @@
  * SOFTWARE.
  */
 
-#ifndef _STL_CORE_H_
-#define _STL_CORE_H_
+#ifndef _OPA_CORE_H_
+#define _OPA_CORE_H_
 /*
- * Everything a stl_core driver needs to work with any particular stl_core
+ * Everything a opa_core driver needs to work with any particular opa_core
  * implementation.
  */
-#include "hfi.h"
+#include "opa.h"
 
-struct stl_core_device_id {
+struct opa_core_device_id {
 	__u32 vendor;
 	__u32 device;
 };
 
 /**
- * stl_core_device - representation of a device using stl_core
+ * opa_core_device - representation of a device using opa_core
  * @bus_ops: the hardware ops supported by this device.
  * @id: the device type identification (used to match it with a driver).
  * @dev: underlying device.
- * @index: unique position on the stl_core bus
+ * @index: unique position on the opa_core bus
  * @dd: device specific information
  */
-struct stl_core_device {
-	struct stl_core_ops *bus_ops;
-	struct stl_core_device_id id;
+struct opa_core_device {
+	struct opa_core_ops *bus_ops;
+	struct opa_core_device_id id;
 	struct device dev;
 	int index;
 	struct hfi_devdata *dd;
 };
 
 /**
- * stl_core_client - representation of a stl_core client
+ * opa_core_client - representation of a opa_core client
  *
  * @name: STL client name
  * @add: the function to call when a device is discovered
  * @remove: the function to call when a device is removed
- * @si: underlying subsystem interface (filled in by stl_core)
+ * @si: underlying subsystem interface (filled in by opa_core)
  */
-struct stl_core_client {
+struct opa_core_client {
 	const char *name;
-	int (*add)(struct stl_core_device *dev);
-	void (*remove)(struct stl_core_device *dev);
+	int (*add)(struct opa_core_device *odev);
+	void (*remove)(struct opa_core_device *odev);
 	struct subsys_interface si;
 };
 
 struct hfi_devdata;
-struct stl_core_device *
-stl_core_register_device(struct device *dev, struct stl_core_device_id *id,
-			struct hfi_devdata *dd, struct stl_core_ops *bus_ops);
-void stl_core_unregister_device(struct stl_core_device *hfi_dev);
+struct opa_core_device *
+opa_core_register_device(struct device *dev, struct opa_core_device_id *id,
+			struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
+void opa_core_unregister_device(struct opa_core_device *odev);
 
-int stl_core_client_register(struct stl_core_client *drv);
-void stl_core_client_unregister(struct stl_core_client *drv);
+int opa_core_client_register(struct opa_core_client *client);
+void opa_core_client_unregister(struct opa_core_client *client);
 
-static inline struct stl_core_device *dev_to_stl_core(struct device *dev)
+static inline struct opa_core_device *dev_to_opa_core(struct device *dev)
 {
-	return container_of(dev, struct stl_core_device, dev);
+	return container_of(dev, struct opa_core_device, dev);
 }
-#endif /* _STL_CORE_H_ */
+#endif /* _OPA_CORE_H_ */

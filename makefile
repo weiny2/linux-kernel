@@ -35,7 +35,7 @@
 # product whatsoever.
 #
 
-NAME := hfi2
+NAME := opa2_hfi
 
 # The desired version number comes from the most recent tag starting with "v"
 VERSION := $(shell if [ -d .git ] ; then  git describe --tags --abbrev=0 --match='v*' | sed -e 's/^v//' -e 's/-/_/'; else echo "version" ; fi)
@@ -101,9 +101,9 @@ dist: distclean specfile headers
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	mkdir -p $(RPM_BUILD_ROOT)/etc/init.d
-	install stl2/$(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install stl_core/$(NAME)_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install user/$(NAME)_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install opa2/$(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install opa_core/opa_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install user/opa2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 	depmod -a
 
