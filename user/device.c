@@ -34,13 +34,13 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/fs.h>
-#include "../common/hfi.h"
+#include "../common/opa.h"
 #include "device.h"
 
 /*
  * Device initialization, called by STL core when a STL device is discovered
  */
-static int hfi_portals_add(struct stl_core_device *sdev)
+static int hfi_portals_add(struct opa_core_device *odev)
 {
 	int ret;
 	struct hfi_info *hi;
@@ -50,11 +50,11 @@ static int hfi_portals_add(struct stl_core_device *sdev)
 		ret = -ENOMEM;
 		goto exit;
 	}
-	hi->sdev = sdev;
-	dev_set_drvdata(&sdev->dev, hi);
+	hi->odev = odev;
+	dev_set_drvdata(&odev->dev, hi);
 	ret = hfi_user_add(hi);
 	if (ret) {
-		dev_err(&sdev->dev, "Failed to create /dev devices: %d\n", ret);
+		dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
 		goto kfree;
 	}
 	return ret;
@@ -68,15 +68,15 @@ exit:
  * Perform required device shutdown logic, also remove /dev entries.
  * Called by STL core when a STL device is removed
  */
-static void hfi_portals_remove(struct stl_core_device *sdev)
+static void hfi_portals_remove(struct opa_core_device *odev)
 {
-	struct hfi_info *hi = dev_get_drvdata(&sdev->dev);
+	struct hfi_info *hi = dev_get_drvdata(&odev->dev);
 
 	hfi_user_remove(hi);
 	kfree(hi);
 }
 
-static struct stl_core_client hfi_portals = {
+static struct opa_core_client hfi_portals = {
 	.name = KBUILD_MODNAME,
 	.add = hfi_portals_add,
 	.remove = hfi_portals_remove,
@@ -84,13 +84,13 @@ static struct stl_core_client hfi_portals = {
 
 static int __init hfi_init(void)
 {
-	return stl_core_client_register(&hfi_portals);
+	return opa_core_client_register(&hfi_portals);
 }
 module_init(hfi_init);
 
 static void hfi_cleanup(void)
 {
-	stl_core_client_unregister(&hfi_portals);
+	opa_core_client_unregister(&hfi_portals);
 }
 module_exit(hfi_cleanup);
 

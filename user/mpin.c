@@ -31,7 +31,7 @@
  */
 
 #include <linux/pagemap.h>
-#include "../common/hfi.h"
+#include "../common/opa.h"
 
 /*
  * This page pinning interface is likely unneeded when we have an IOMMU.

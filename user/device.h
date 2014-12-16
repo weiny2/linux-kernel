@@ -36,7 +36,7 @@
 #include <linux/miscdevice.h>
 
 struct hfi_info {
-	struct stl_core_device *sdev;
+	struct opa_core_device *odev;
 	struct miscdevice miscdev;
 	char name[16];
 };

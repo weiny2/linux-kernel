@@ -94,7 +94,7 @@ static int hfi_cq_validate_tuples(struct hfi_userdata *ud,
 			continue;
 		}
 
-		/* else look for match in job_launcher set UIDs, 
+		/* else look for match in job_launcher set UIDs,
 		 * but try to short-circuit this search.
 		 */
 		if (auth_uid == last_job_uid)

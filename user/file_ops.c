@@ -39,7 +39,7 @@
 #include <linux/sched.h>
 #include <linux/cred.h>
 #include <linux/version.h>
-#include "../common/hfi.h"
+#include "../common/opa.h"
 #include "../common/hfi_token.h"
 #include "device.h"
 
@@ -93,8 +93,8 @@ static int hfi_open(struct inode *inode, struct file *fp)
 
 	/* lookup and store pointer to HFI device data */
 	/* TODO */
-	ud->bus_ops = hi->sdev->bus_ops;
-	ud->devdata = hi->sdev->dd;
+	ud->bus_ops = hi->odev->bus_ops;
+	ud->devdata = hi->odev->dd;
 
 	/* no cpu affinity by default */
 	ud->rec_cpu_num = -1;
@@ -135,7 +135,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *dest = NULL;
 	void __user *user_data = NULL;
-	struct stl_core_ops *ops;
+	struct opa_core_ops *ops;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
@@ -299,7 +299,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	ssize_t memlen = 0;
 	int ret = 0;
 	u16 ctxt;
-	struct stl_core_ops *ops;
+	struct opa_core_ops *ops;
 
 	ud = fp->private_data;
 	BUG_ON(!ud || !ud->bus_ops);
@@ -412,7 +412,7 @@ done:
 
 int hfi_user_cleanup(struct hfi_userdata *ud)
 {
-	struct stl_core_ops *ops = ud->bus_ops;
+	struct opa_core_ops *ops = ud->bus_ops;
 
 	/* release Portals resources acquired by the HFI user */
 	ops->ctxt_release(ud);
@@ -479,19 +479,19 @@ int hfi_user_add(struct hfi_info *hi)
 {
 	int rc;
 	struct miscdevice *mdev;
-	struct stl_core_device *sdev = hi->sdev;
+	struct opa_core_device *odev = hi->odev;
 
 	mdev = &hi->miscdev;
 	mdev->minor = MISC_DYNAMIC_MINOR;
 	snprintf(hi->name, sizeof(hi->name), "%s%d",
-		 DRIVER_DEVICE_PREFIX, sdev->index);
+		 DRIVER_DEVICE_PREFIX, odev->index);
 	mdev->name = hi->name;
 	mdev->fops = &hfi_file_ops;
-	mdev->parent = &sdev->dev;
+	mdev->parent = &odev->dev;
 
 	rc = misc_register(mdev);
 	if (rc)
-		dev_err(&sdev->dev, "%s failed rc %d\n", __func__, rc);
+		dev_err(&odev->dev, "%s failed rc %d\n", __func__, rc);
 	return rc;
 }
 

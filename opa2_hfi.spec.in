@@ -78,7 +78,7 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root)
 /lib/modules/*
-/etc/init.d/hfi2
+/etc/init.d/%{name}
 
 %post
 depmod -a %{kver}

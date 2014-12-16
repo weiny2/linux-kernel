@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _HFI_KERNEL_H
-#define _HFI_KERNEL_H
+#ifndef _OPA_COMMON_H
+#define _OPA_COMMON_H
 
 /*
  * This header file is the base header file for HFI kernel driver.
@@ -46,7 +46,7 @@
 #include <linux/io.h>
 #include "../include/hfi_defs.h"
 #include "../include/hfi_cmd.h"
-#include "stl_core.h"
+#include "opa_core.h"
 
 /* device naming has leading zero to prevent /dev name collisions */
 #define DRIVER_DEVICE_PREFIX	"hfi02"
@@ -84,7 +84,7 @@ struct hfi_mpin_entry {
 struct hfi_devdata {
 	/* pci access data structure */
 	struct pci_dev *pcidev;
-	struct stl_core_device *bus_dev;
+	struct opa_core_device *bus_dev;
 
 	/* localbus width (1, 2,4,8,16,32) from config space  */
 	u32 lbus_width;
@@ -127,7 +127,7 @@ struct hfi_devdata {
 /* Private data for file operations, created at open(). */
 struct hfi_userdata {
 	struct hfi_info *hi;
-	struct stl_core_ops *bus_ops;
+	struct opa_core_ops *bus_ops;
 	struct hfi_devdata *devdata;
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
@@ -167,9 +167,9 @@ int hfi_munpin(struct hfi_userdata *ud, struct hfi_munpin_args *munpin);
 int hfi_munpin_all(struct hfi_userdata *ud);
 
 /**
- * stl_core_ops - Hardware operations for accessing a FXR device on the FXR bus.
+ * opa_core_ops - Hardware operations for accessing a FXR device on the FXR bus.
  */
-struct stl_core_ops {
+struct opa_core_ops {
 	/* Resource Allocation ops */
 	int (*ctxt_assign)(struct hfi_userdata *ud, struct hfi_ptl_attach_args *ptl_attach);
 	void (*ctxt_release)(struct hfi_userdata *ud);
@@ -208,4 +208,4 @@ struct stl_core_ops {
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#endif /* _HFI_KERNEL_H */
+#endif /* _OPA_COMMON_H */

@@ -81,7 +81,7 @@ static void set_loopback(const struct hfi_devdata *dd)
  */
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
-	stl_core_unregister_device(dd->bus_dev);
+	opa_core_unregister_device(dd->bus_dev);
 
 	cleanup_interrupts(dd);
 
@@ -100,7 +100,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	kfree(dd);
 }
 
-static struct stl_core_ops stl_core_ops = {
+static struct opa_core_ops opa_core_ops = {
 	.ctxt_assign = hfi_ptl_attach,
 	.ctxt_release = hfi_ptl_cleanup,
 	.ctxt_addr = hfi_ptl_addr,
@@ -134,7 +134,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	unsigned long len;
 	resource_size_t addr;
 	int i, ret;
-	struct stl_core_device_id bus_id;
+	struct opa_core_device_id bus_id;
 
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
@@ -208,7 +208,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	bus_id.vendor = ent->vendor; //PCI_VENDOR_ID_INTEL;
 	bus_id.device = ent->device; //PCI_DEVICE_ID_INTEL_FXR0;
 	/* bus agent can be probed immediately, no writing dd->bus_dev after this */
-	dd->bus_dev = stl_core_register_device(&pdev->dev, &bus_id, dd, &stl_core_ops);
+	dd->bus_dev = opa_core_register_device(&pdev->dev, &bus_id, dd, &opa_core_ops);
 
 	return dd;
 
@@ -276,7 +276,7 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 	write_csr(dd, FXR_RX_CQ_RESET, rx_cq_reset.val);
 }
 
-/* 
+/*
  * Disable pair of CQs and reset flow control.
  * Reset of flow control is needed since CQ might have only had
  * a partial command or slot written by errant user.
@@ -311,7 +311,7 @@ void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
 	}
 }
 
-/* 
+/*
  * Write CSRs to configure a TX and RX Command Queue.
  * Authentication Tuple UIDs have been pre-validated by caller.
  */
