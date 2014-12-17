@@ -103,16 +103,14 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 static struct opa_core_ops opa_core_ops = {
 	.ctxt_assign = hfi_ctxt_attach,
 	.ctxt_release = hfi_ctxt_cleanup,
+	.ctxt_reserve = hfi_ctxt_reserve,
+	.ctxt_unreserve = hfi_ctxt_unreserve,
 	.ctxt_addr = hfi_ctxt_hw_addr,
 	.cq_assign = hfi_cq_assign,
 	.cq_update = hfi_cq_update,
 	.cq_release = hfi_cq_release,
 	.dlid_assign = hfi_dlid_assign,
 	.dlid_release = hfi_dlid_release,
-	.job_info = hfi_job_info,
-	.job_init = hfi_job_init,
-	.job_free = hfi_job_free,
-	.job_setup = hfi_job_setup,
 };
 
 /**

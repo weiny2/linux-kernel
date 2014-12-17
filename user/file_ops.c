@@ -38,7 +38,7 @@
 #include "../common/opa.h"
 #include "../common/hfi_token.h"
 #include "device.h"
-#include "mpin.h"
+#include "opa_user.h"
 
 /* TODO - turn off when RX unit is implemented in simulation */
 static uint psb_rw = 1;
@@ -106,7 +106,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	spin_lock_init(&ud->mpin_lock);
 
 	/* inherit PID reservation if present */
-	ud->bus_ops->job_init(ud);
+	hfi_job_init(ud);
 
 	return 0;
 }
@@ -249,10 +249,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ops->ctxt_release(ud);
 		break;
 	case HFI_CMD_JOB_INFO:
-		ret = ops->job_info(ud, &job_info);
+		ret = hfi_job_info(ud, &job_info);
 		break;
 	case HFI_CMD_JOB_SETUP:
-		ret = ops->job_setup(ud, &job_setup);
+		ret = hfi_job_setup(ud, &job_setup);
 		break;
 	case HFI_CMD_MPIN:
 		ret = hfi_mpin(ud, &mpin);
@@ -412,7 +412,7 @@ int hfi_user_cleanup(struct hfi_userdata *ud)
 	/* release Portals resources acquired by the HFI user */
 	ops->ctxt_release(ud);
 	/* release any held PID reservations */
-	ops->job_free(ud);
+	hfi_job_free(ud);
 
 	/* unpin memory that user didn't clean up */
 	hfi_munpin_all(ud);

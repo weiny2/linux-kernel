@@ -37,7 +37,6 @@
  * This header file contains shared structures between OPA clients and devices.
  */
 
-#include <linux/list.h>
 #include <linux/slab.h>
 #include "../include/hfi_cmd.h"
 #include "opa_core.h"
@@ -84,6 +83,8 @@ struct hfi_userdata {
  * opa_core_ops - Hardware operations for accessing an OPA device on the OPA bus.
  * @ctxt_assign: Assign a Send/Receive context of the HFI.
  * @ctxt_release: Release Send/Receive context in the HFI.
+ * @ctxt_reserve: Reserve range of contiguous Send/Receive contexts in the HFI.
+ * @ctxt_unreserve: Release reservation from ctxt_reserve.
  * @ctxt_addr: Return address for HFI resources providing memory access/mapping.
  * @cq_assign: Assign a Command Queue for HFI send/receive operations.
  * @cq_update: Update configuration of Command Queue.
@@ -92,15 +93,13 @@ struct hfi_userdata {
  * @eq_release: Release an Event Completion Queue.
  * @dlid_assign: Assign entries from the DLID relocation table.
  * @dlid_release: Release entries from the DLID relocation table.
- * @job_info: Return information of any reserved job resources.
- * @job_init: Apply job reservation, @ctxt_assign limited to reserved resources.
- * @job_free: Release hold on any reserved HFI resources.
- * @job_setup: Privileged job launcher uses to reserve HFI resources.
  */
 struct opa_core_ops {
 	/* Resource Allocation ops */
 	int (*ctxt_assign)(struct hfi_userdata *ud, struct hfi_ctxt_attach_args *ctxt_attach);
 	void (*ctxt_release)(struct hfi_userdata *ud);
+	int (*ctxt_reserve)(struct hfi_userdata *ud, u16 *base, u16 count);
+	void (*ctxt_unreserve)(struct hfi_userdata *ud, u16 base, u16 count);
 	int (*ctxt_addr)(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize_t *len);
 	int (*cq_assign)(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
 	int (*cq_update)(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update);
@@ -109,11 +108,6 @@ struct opa_core_ops {
 	int (*eq_release)(struct hfi_userdata *ud, u16 eq_type, u16 eq_idx);
 	int (*dlid_assign)(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_userdata *ud);
-	/* TODO - look at moving these into char device */
-	int (*job_info)(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
-	void (*job_init)(struct hfi_userdata *ud);
-	void (*job_free)(struct hfi_userdata *ud);
-	int (*job_setup)(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
 
 #if 0
 	/* TODO - below is starting attempt at 'kernel provider' operations */
