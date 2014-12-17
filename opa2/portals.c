@@ -217,8 +217,9 @@ static void hfi_cq_cleanup(struct hfi_userdata *ud)
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 }
 
-int hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
+int hfi_ctxt_reserve(struct hfi_userdata *ud, u16 *base, u16 count)
 {
+	struct hfi_devdata *dd = ud->devdata;
 	u16 start, n;
 	int ret = 0;
 	unsigned long flags;
@@ -243,8 +244,9 @@ int hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
 	return 0;
 }
 
-void hfi_ctxt_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
+void hfi_ctxt_unreserve(struct hfi_userdata *ud, u16 base, u16 count)
 {
+	struct hfi_devdata *dd = ud->devdata;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
@@ -389,7 +391,7 @@ static int hfi_pid_alloc(struct hfi_userdata *ud, u16 *assigned_pid)
 		    (ptl_pid >= HFI_NUM_PIDS))
 			return -EINVAL;
 
-		ret = hfi_ctxt_reserve(ud->devdata, &ptl_pid, 1);
+		ret = hfi_ctxt_reserve(ud, &ptl_pid, 1);
 		if (ret)
 			return ret;
 		dd_dev_info(ud->devdata,
@@ -450,7 +452,7 @@ void hfi_ctxt_cleanup(struct hfi_userdata *ud)
 	if (ud->pid_count == 0) {
 		dd_dev_info(ud->devdata,
 			    "release PID orphan [%u]\n", ptl_pid);
-		hfi_ctxt_unreserve(ud->devdata, ptl_pid, 1);
+		hfi_ctxt_unreserve(ud, ptl_pid, 1);
 	}
 
 	/* clear last */

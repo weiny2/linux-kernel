@@ -31,7 +31,7 @@
  */
 
 #include <linux/pagemap.h>
-#include "mpin.h"
+#include "opa_user.h"
 
 struct hfi_mpin_entry {
 	u64 pfn;

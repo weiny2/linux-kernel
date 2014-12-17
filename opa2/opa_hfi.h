@@ -125,12 +125,8 @@ int hfi_ctxt_hw_addr(struct hfi_userdata *ud, int token, u16 ctxt, void **addr,
 		     ssize_t *len);
 int hfi_ctxt_attach(struct hfi_userdata *ud, struct hfi_ctxt_attach_args *ctxt_attach);
 void hfi_ctxt_cleanup(struct hfi_userdata *ud);
-int hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count);
-void hfi_ctxt_unreserve(struct hfi_devdata *dd, u16 base, u16 count);
-void hfi_job_init(struct hfi_userdata *ud);
-int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
-int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
-void hfi_job_free(struct hfi_userdata *ud);
+int hfi_ctxt_reserve(struct hfi_userdata *ud, u16 *base, u16 count);
+void hfi_ctxt_unreserve(struct hfi_userdata *ud, u16 base, u16 count);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is

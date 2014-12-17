@@ -30,12 +30,17 @@
  * SOFTWARE.
  */
 
-#ifndef _HFI_MPIN_H
-#define _HFI_MPIN_H
+#ifndef _OPA_USER_H
+#define _OPA_USER_H
 
+#include <linux/list.h>
 #include "../common/opa.h"
 
+void hfi_job_init(struct hfi_userdata *ud);
+int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
+int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
+void hfi_job_free(struct hfi_userdata *ud);
 int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin);
 int hfi_munpin(struct hfi_userdata *ud, struct hfi_munpin_args *munpin);
 int hfi_munpin_all(struct hfi_userdata *ud);
-#endif /* _HFI_MPIN_H */
+#endif /* _OPA_USER_H */
