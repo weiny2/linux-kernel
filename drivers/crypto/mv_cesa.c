@@ -637,6 +637,8 @@ static int queue_manag(void *data)
 
 		schedule();
 
+		kgr_task_safe(current);
+
 	} while (!kthread_should_stop());
 	return 0;
 }

@@ -4064,9 +4064,10 @@ static int ocfs2_downconvert_thread(void *arg)
 	while (!(kthread_should_stop() &&
 		ocfs2_downconvert_thread_lists_empty(osb))) {
 
-		wait_event_interruptible(osb->dc_event,
+		wait_event_interruptible(osb->dc_event, ({
+					 kgr_task_safe(current);
 					 ocfs2_downconvert_thread_should_wake(osb) ||
-					 kthread_should_stop());
+					 kthread_should_stop(); }));
 
 		mlog(0, "downconvert_thread: awoken\n");
 

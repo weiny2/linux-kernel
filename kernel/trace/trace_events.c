@@ -2442,8 +2442,10 @@ static __init int event_test_thread(void *unused)
 	kfree(test_malloc);
 
 	set_current_state(TASK_INTERRUPTIBLE);
-	while (!kthread_should_stop())
+	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		schedule();
+	}
 
 	return 0;
 }

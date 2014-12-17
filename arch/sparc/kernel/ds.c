@@ -1032,6 +1032,7 @@ static int ds_thread(void *__unused)
 		if (list_empty(&ds_work_list))
 			schedule();
 		finish_wait(&ds_wait, &wait);
+		kgr_task_safe(current);
 
 		if (kthread_should_stop())
 			break;

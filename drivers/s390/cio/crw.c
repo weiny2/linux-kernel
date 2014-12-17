@@ -65,8 +65,9 @@ static int crw_collect_info(void *unused)
 	unsigned int chain;
 
 repeat:
-	signal = wait_event_interruptible(crw_handler_wait_q,
-					  atomic_read(&crw_nr_req) > 0);
+	signal = wait_event_interruptible(crw_handler_wait_q, ({
+					  kgr_task_safe(current);
+					  atomic_read(&crw_nr_req) > 0; }));
 	if (unlikely(signal))
 		atomic_inc(&crw_nr_req);
 	chain = 0;

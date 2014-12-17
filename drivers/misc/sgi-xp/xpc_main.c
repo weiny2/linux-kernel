@@ -298,11 +298,12 @@ xpc_hb_checker(void *ignore)
 		}
 
 		/* wait for IRQ or timeout */
-		(void)wait_event_interruptible(xpc_activate_IRQ_wq,
+		(void)wait_event_interruptible(xpc_activate_IRQ_wq, ({
+					       kgr_task_safe(current);
 					       (time_is_before_eq_jiffies(
 						xpc_hb_check_timeout) ||
 						xpc_activate_IRQ_rcvd > 0 ||
-						xpc_exiting));
+						xpc_exiting); }));
 	}
 
 	xpc_stop_hb_beater();
@@ -675,9 +676,10 @@ xpc_kthread_waitmsgs(struct xpc_partition *part, struct xpc_channel *ch)
 		dev_dbg(xpc_chan, "idle kthread calling "
 			"wait_event_interruptible_exclusive()\n");
 
-		(void)wait_event_interruptible_exclusive(ch->idle_wq,
+		(void)wait_event_interruptible_exclusive(ch->idle_wq, ({
+				kgr_task_safe(current);
 				(n_of_deliverable_payloads(ch) > 0 ||
-				 (ch->flags & XPC_C_DISCONNECTING)));
+				 (ch->flags & XPC_C_DISCONNECTING)); }));
 
 		atomic_dec(&ch->kthreads_idle);
 

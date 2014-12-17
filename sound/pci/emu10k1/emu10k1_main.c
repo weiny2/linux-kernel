@@ -710,6 +710,7 @@ static int emu1010_firmware_thread(void *data)
 	int err;
 
 	for (;;) {
+		kgr_task_safe(current);
 		/* Delay to allow Audio Dock to settle */
 		msleep_interruptible(1000);
 		if (kthread_should_stop())

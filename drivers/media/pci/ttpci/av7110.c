@@ -265,6 +265,8 @@ static int arm_thread(void *data)
 			break;
 		}
 
+		kgr_task_safe(current);
+
 		if (!av7110->arm_ready)
 			continue;
 

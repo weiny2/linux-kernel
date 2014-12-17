@@ -1072,6 +1072,7 @@ static int sas_queue_thread(void *_sas_ha)
 	struct sas_ha_struct *sas_ha = _sas_ha;
 
 	while (1) {
+		kgr_task_safe(current);
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
 		sas_queue(sas_ha);

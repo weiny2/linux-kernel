@@ -179,6 +179,8 @@ static int ib_fmr_cleanup_thread(void *pool_ptr)
 	struct ib_fmr_pool *pool = pool_ptr;
 
 	do {
+		kgr_task_safe(current);
+
 		if (atomic_read(&pool->flush_ser) - atomic_read(&pool->req_ser) < 0) {
 			ib_fmr_batch_release(pool);
 

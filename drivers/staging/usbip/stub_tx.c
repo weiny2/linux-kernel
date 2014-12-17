@@ -387,10 +387,11 @@ int stub_tx_loop(void *data)
 		if (stub_send_ret_unlink(sdev) < 0)
 			break;
 
-		wait_event_interruptible(sdev->tx_waitq,
+		wait_event_interruptible(sdev->tx_waitq, ({
+					 kgr_task_safe(current);
 					 (!list_empty(&sdev->priv_tx) ||
 					  !list_empty(&sdev->unlink_tx) ||
-					  kthread_should_stop()));
+					  kthread_should_stop()); }));
 	}
 
 	return 0;

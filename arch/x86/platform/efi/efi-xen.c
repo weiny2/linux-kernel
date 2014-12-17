@@ -454,7 +454,7 @@ void __init efi_init(void)
 	ret = HYPERVISOR_platform_op(&op);
 	if (!ret)
 		efi.runtime_version = info->version;
-	else
+	else if(__test_and_clear_bit(EFI_RUNTIME_SERVICES, &efi.flags))
 		pr_warn("Could not get runtime services revision.\n");
 
 	x86_platform.get_wallclock = efi_get_time;

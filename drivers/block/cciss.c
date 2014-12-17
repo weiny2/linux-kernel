@@ -3735,6 +3735,8 @@ static int scan_thread(void *data)
 		if (kthread_should_stop())
 			break;
 
+		kgr_task_safe(current);
+
 		while (1) {
 			mutex_lock(&scan_mutex);
 			if (list_empty(&scan_q)) {

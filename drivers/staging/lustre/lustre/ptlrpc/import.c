@@ -307,8 +307,9 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
 			cfs_timeout_cap(cfs_time_seconds(timeout)),
 			(timeout > 1)?cfs_time_seconds(1):cfs_time_seconds(1)/2,
 			NULL, NULL);
-		rc = l_wait_event(imp->imp_recovery_waitq,
-				  (atomic_read(&imp->imp_inflight) == 0),
+		rc = l_wait_event(imp->imp_recovery_waitq, ({
+				  kgr_task_safe(current);
+				  (atomic_read(&imp->imp_inflight) == 0); }),
 				  &lwi);
 		if (rc) {
 			const char *cli_tgt = obd2cli_tgt(imp->imp_obd);

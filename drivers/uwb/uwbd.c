@@ -273,9 +273,10 @@ static int uwbd(void *param)
 
 	while (1) {
 		wait_event_interruptible_timeout(
-			rc->uwbd.wq,
+			rc->uwbd.wq, ({
+			kgr_task_safe(current);
 			!list_empty(&rc->uwbd.event_list)
-			  || (should_stop = kthread_should_stop()),
+			  || (should_stop = kthread_should_stop()); }),
 			HZ);
 		if (should_stop)
 			break;

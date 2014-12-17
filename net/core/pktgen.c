@@ -3424,6 +3424,7 @@ static int pktgen_thread_worker(void *arg)
 
 	/* Wait for kthread_stop */
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
 	}

@@ -42,6 +42,7 @@ static int ft1000_poll_thread(void *arg)
 	int ret;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		msleep(10);
 		if (!gPollingfailed) {
 			ret = ft1000_poll(arg);

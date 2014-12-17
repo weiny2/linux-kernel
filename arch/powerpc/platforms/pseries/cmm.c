@@ -308,6 +308,7 @@ static int cmm_thread(void *dummy)
 
 	while (1) {
 		timeleft = msleep_interruptible(delay * 1000);
+		kgr_task_safe(current);
 
 		if (kthread_should_stop() || timeleft)
 			break;

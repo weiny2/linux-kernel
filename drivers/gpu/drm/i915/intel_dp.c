@@ -2608,6 +2608,13 @@ intel_dp_get_dpcd(struct intel_dp *intel_dp)
 {
 	char dpcd_hex_dump[sizeof(intel_dp->dpcd) * 3];
 
+	/*
+	 * Sometime we just get the same incorrect byte repeated
+	 * over the entire buffer. Doing just one throw away read
+	 * initially seems to "solve" it.
+	 */
+	intel_dp_aux_native_read_retry(intel_dp, DP_DPCD_REV, intel_dp->dpcd, 1);
+
 	if (intel_dp_aux_native_read_retry(intel_dp, 0x000, intel_dp->dpcd,
 					   sizeof(intel_dp->dpcd)) == 0)
 		return false; /* aux transfer failed */
@@ -2707,13 +2714,11 @@ intel_dp_check_link_status(struct intel_dp *intel_dp)
 
 	/* Try to read receiver status if the link appears to be up */
 	if (!intel_dp_get_link_status(intel_dp, link_status)) {
-		intel_dp_link_down(intel_dp);
 		return;
 	}
 
 	/* Now read the DPCD to see if it's actually running */
 	if (!intel_dp_get_dpcd(intel_dp)) {
-		intel_dp_link_down(intel_dp);
 		return;
 	}
 

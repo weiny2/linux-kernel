@@ -1873,6 +1873,8 @@ int bnx2i_percpu_io_thread(void *arg)
 	set_user_nice(current, -20);
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		spin_lock_bh(&p->p_work_lock);
 		while (!list_empty(&p->work_list)) {
 			list_splice_init(&p->work_list, &work_list);

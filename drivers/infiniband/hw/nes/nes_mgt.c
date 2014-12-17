@@ -582,8 +582,9 @@ static int mgt_thread(void *context)
 	struct nes_rskb_cb *cb;
 
 	while (!kthread_should_stop()) {
-		wait_event_interruptible(nesvnic->mgt_wait_queue,
-					 skb_queue_len(&nesvnic->mgt_skb_list) || kthread_should_stop());
+		wait_event_interruptible(nesvnic->mgt_wait_queue, ({
+					 kgr_task_safe(current);
+					 skb_queue_len(&nesvnic->mgt_skb_list) || kthread_should_stop(); }));
 		while ((skb_queue_len(&nesvnic->mgt_skb_list)) && !kthread_should_stop()) {
 			skb = skb_dequeue(&nesvnic->mgt_skb_list);
 			cb = (struct nes_rskb_cb *)&skb->cb[0];

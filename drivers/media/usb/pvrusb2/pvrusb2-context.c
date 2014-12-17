@@ -171,9 +171,10 @@ static int pvr2_context_thread_func(void *foo)
 			pvr2_context_check(mp);
 		}
 		wait_event_interruptible(
-			pvr2_context_sync_data,
+			pvr2_context_sync_data, ({
+			kgr_task_safe(current);
 			((pvr2_context_notify_first != NULL) ||
-			 pvr2_context_shutok()));
+			 pvr2_context_shutok()); }));
 	} while (!pvr2_context_shutok());
 
 	pvr2_context_cleaned_flag = !0;

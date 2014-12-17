@@ -1652,6 +1652,8 @@ int aac_command_thread(void *data)
 	set_current_state(TASK_INTERRUPTIBLE);
 	dprintk ((KERN_INFO "aac_command_thread start\n"));
 	while (1) {
+		kgr_task_safe(current);
+
 		spin_lock_irqsave(dev->queues->queue[HostNormCmdQueue].lock, flags);
 		while(!list_empty(&(dev->queues->queue[HostNormCmdQueue].cmdq))) {
 			struct list_head *entry;

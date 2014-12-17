@@ -349,10 +349,10 @@ int i2400mu_rxd(void *_i2400mu)
 		d_printf(2, dev, "RX: waiting for messages\n");
 		pending = 0;
 		wait_event_interruptible(
-			i2400mu->rx_wq,
+			i2400mu->rx_wq, ({ kgr_task_safe(current);
 			(kthread_should_stop()	/* check this first! */
-			 || (pending = atomic_read(&i2400mu->rx_pending_count)))
-			);
+			 || (pending = atomic_read(&i2400mu->rx_pending_count)));
+			}));
 		if (kthread_should_stop())
 			break;
 		if (pending == 0)
