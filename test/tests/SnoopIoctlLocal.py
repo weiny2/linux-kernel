@@ -51,6 +51,8 @@ def get_phys_link_state(val):
         return "IB_PORTPHYSSTATE_LINK_ERR_RECOVER"
     elif val == 7:
         return "IB_PORTPHYSSTATE_PHY_TEST"
+    elif val == 9:
+        return "STL_PORTPHYSSTATE_OFFLINE"
     else:
         RegLib.test_fail("Unknown phys state %s" % val)
 
@@ -80,6 +82,12 @@ def is_polling(link, phys):
 
 def is_training(link, phys):
     if phys == "IB_PORTPHYSSTATE_CFG_TRAIN":
+        return True
+    else:
+        return False
+
+def is_offline(link, phys):
+    if phys == "STL_PORTPHYSSTATE_OFFLINE":
         return True
     else:
         return False
@@ -235,7 +243,7 @@ def set_polling(file_obj):
     (link, phys) = change_port_state(file_obj, ioctl, "IB_PORT_NOP", "IB_PORTPHYSSTATE_POLL")
     attempts = 0
     while attempts < 60:
-        if is_polling(link, phys) or is_training(link, phys):
+        if is_polling(link, phys) or is_training(link, phys) or is_offline(link, phys):
             RegLib.test_log(0, "Polling or training, check again in 1 second")
             time.sleep(1)
             attempts += 1
