@@ -2571,11 +2571,13 @@ void lcb_shutdown(struct hfi_devdata *dd)
 	/* set tx fifo reset: LCB_CFG_TX_FIFOS_RESET.VAL = 1 */
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
 		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
-	/* set dcc reset csr: DCC_CFG_RESET.reset_lcb = 1 */
+	/* set dcc reset csr: DCC_CFG_RESET.{reset_lcb,reset_rx_fpe} = 1 */
 	saved_lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
 	reg = read_csr(dd, DCC_CFG_RESET);
 	write_csr(dd, DCC_CFG_RESET,
-		reg | 1ull << DCC_CFG_RESET_RESET_LCB_SHIFT);
+		reg
+		| (1ull << DCC_CFG_RESET_RESET_LCB_SHIFT)
+		| (1ull << DCC_CFG_RESET_RESET_RX_FPE_SHIFT));
 	(void) read_csr(dd, DCC_CFG_RESET); /* make sure the write completed */
 	udelay(1);	/* must hold for the longer of 16cclks or 20ns */
 	write_csr(dd, DCC_CFG_RESET, reg);
