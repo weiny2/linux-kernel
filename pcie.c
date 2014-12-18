@@ -207,17 +207,6 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	dd->pcibar1 = addr >> 32;
 	pci_read_config_dword(dd->pcidev, PCI_ROM_ADDRESS, &dd->pci_rom);
 	pci_read_config_word(dd->pcidev, PCI_COMMAND, &dd->pci_command);
-	dd->deviceid = ent->device; /* save for later use */
-	dd->vendorid = ent->vendor;
-	/*
-	 * Read the subsystem values directly rather than use ent->sub*.
-	 * The ent->sub* values are -1 (wildcard) rather than the actual
-	 * values because the device table match uses a wildcard for those
-	 * values.
-	 */
-	pci_read_config_word(dd->pcidev, PCI_SUBSYSTEM_VENDOR_ID,
-		&dd->subvendorid);
-	pci_read_config_word(dd->pcidev, PCI_SUBSYSTEM_ID, &dd->subdeviceid);
 
 	return 0;
 }
@@ -550,7 +539,8 @@ void restore_pci_variables(struct hfi_devdata *dd)
 		int ret;
 
 		ret = adjust_pci(dd, WFR_PCI_CFG_REG11,
-			(u32)dd->subdeviceid << 16 | (u32)dd->subvendorid);
+			((u32)dd->pcidev->subsystem_device << 16)
+			| (u32)dd->pcidev->subsystem_vendor);
 		if (ret)
 			dd_dev_err(dd,
 				"Unable to restore PCI subsystem settings\n");
@@ -1162,7 +1152,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	 *
 	 * Give initial EQ settings.
 	 */
-	if (dd->deviceid == PCI_DEVICE_ID_INTEL_WFR0) { /* discrete */
+	if (dd->pcidev->device == PCI_DEVICE_ID_INTEL_WFR0) { /* discrete */
 		/* 1000mV, FS=24, LF = 8 */
 		ret = load_eq_table(dd, discrete_preliminary_eq);
 		fs = 24;

@@ -415,7 +415,7 @@ int eprom_init(struct hfi_devdata *dd)
 	int ret = 0;
 
 	/* only the discrete chip has an EPROM, nothing to do */
-	if (dd->deviceid != PCI_DEVICE_ID_INTEL_WFR0)
+	if (dd->pcidev->device != PCI_DEVICE_ID_INTEL_WFR0)
 		return 0;
 
 	/* lock against other callers */

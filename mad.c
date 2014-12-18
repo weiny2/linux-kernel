@@ -296,7 +296,7 @@ static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
 {
 	struct stl_node_info *ni;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	u32 vendor, majrev, minrev;
+	u32 majrev, minrev;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 
 	ni = (struct stl_node_info *)data;
@@ -316,12 +316,11 @@ static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
 	ni->system_image_guid = ib_qib_sys_image_guid;
 	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
 	ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
-	ni->device_id = cpu_to_be16(dd->deviceid);
+	ni->device_id = cpu_to_be16(dd->pcidev->device);
 	majrev = dd->majrev;
 	minrev = dd->minrev;
 	ni->revision = cpu_to_be32((majrev << 16) | minrev);
 	ni->local_port_num = port;
-	vendor = dd->vendorid;
 	ni->vendor_id[0] = WFR_SRC_OUI_1;
 	ni->vendor_id[1] = WFR_SRC_OUI_2;
 	ni->vendor_id[2] = WFR_SRC_OUI_3;
@@ -337,7 +336,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 {
 	struct ib_node_info *nip = (struct ib_node_info *)&smp->data;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	u32 vendor, majrev, minrev;
+	u32 majrev, minrev;
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 
 	/* GUID 0 is illegal */
@@ -355,12 +354,11 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	nip->sys_guid = ib_qib_sys_image_guid;
 	nip->node_guid = dd->pport->guid; /* Use first-port GUID as node */
 	nip->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
-	nip->device_id = cpu_to_be16(dd->deviceid);
+	nip->device_id = cpu_to_be16(dd->pcidev->device);
 	majrev = dd->majrev;
 	minrev = dd->minrev;
 	nip->revision = cpu_to_be32((majrev << 16) | minrev);
 	nip->local_port_num = port;
-	vendor = dd->vendorid;
 	nip->vendor_id[0] = QIB_SRC_OUI_1;
 	nip->vendor_id[1] = QIB_SRC_OUI_2;
 	nip->vendor_id[2] = QIB_SRC_OUI_3;
