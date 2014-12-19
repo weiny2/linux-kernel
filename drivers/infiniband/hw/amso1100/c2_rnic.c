@@ -197,6 +197,7 @@ static int c2_rnic_query(struct c2_dev *c2dev, struct ib_device_attr *props)
 	props->max_srq_sge         = 0;
 	props->max_pkeys           = 0;
 	props->local_ca_ack_delay  = 0;
+	props->max_mad_size        = IB_MGMT_MAD_SIZE;
 
  bail2:
 	vq_repbuf_free(c2dev, reply);

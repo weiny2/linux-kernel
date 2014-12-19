@@ -1592,6 +1592,7 @@ static int qib_query_device(struct ib_device *ibdev,
 	props->max_mcast_qp_attach = ib_qib_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
 		props->max_mcast_grp;
+	props->max_mad_size = IB_MGMT_MAD_SIZE;
 
 	return 0;
 }

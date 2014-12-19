@@ -40,6 +40,7 @@
  */
 
 #include <linux/gfp.h>
+#include <rdma/ib_mad.h>
 
 #include "ehca_tools.h"
 #include "ehca_iverbs.h"
@@ -132,6 +133,8 @@ int ehca_query_device(struct ib_device *ibdev, struct ib_device_attr *props)
 	for (i = 0; i < ARRAY_SIZE(cap_mapping); i += 2)
 		if (rblock->hca_cap_indicators & cap_mapping[i + 1])
 			props->device_cap_flags |= cap_mapping[i];
+
+	props->max_mad_size = IB_MGMT_MAD_SIZE;
 
 query_device1:
 	ehca_free_fw_ctrlblock(rblock);

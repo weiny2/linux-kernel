@@ -123,6 +123,8 @@ static int mthca_query_device(struct ib_device *ibdev,
 		props->max_map_per_fmr =
 			(1 << (32 - ilog2(mdev->limits.num_mpts))) - 1;
 
+	props->max_mad_size = IB_MGMT_MAD_SIZE;
+
 	err = 0;
  out:
 	kfree(in_mad);

@@ -22,6 +22,7 @@
 
 #include <rdma/ib_user_verbs.h>
 #include <rdma/ib_addr.h>
+#include <rdma/ib_mad.h>
 
 #include "usnic_abi.h"
 #include "usnic_ib.h"
@@ -296,6 +297,7 @@ int usnic_ib_query_device(struct ib_device *ibdev,
 	props->max_mcast_qp_attach = 0;
 	props->max_total_mcast_qp_attach = 0;
 	props->max_map_per_fmr = 0;
+	props->max_mad_size = IB_MGMT_MAD_SIZE;
 	/* Owned by Userspace
 	 * max_qp_wr, max_sge, max_sge_rd, max_cqe */
 	mutex_unlock(&us_ibdev->usdev_lock);

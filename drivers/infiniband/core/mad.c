@@ -2923,6 +2923,10 @@ static int ib_mad_port_open(struct ib_device *device,
 	unsigned long flags;
 	char name[sizeof "ib_mad123"];
 	int has_smi;
+	size_t max_mad_size = rdma_dev_max_mad_size(device, port_num);
+
+	if (WARN_ON(max_mad_size < IB_MGMT_MAD_SIZE))
+		return -EFAULT;
 
 	/* Create new device info */
 	port_priv = kzalloc(sizeof *port_priv, GFP_KERNEL);

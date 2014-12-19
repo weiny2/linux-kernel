@@ -217,6 +217,7 @@ struct ib_device_attr {
 	int			sig_prot_cap;
 	int			sig_guard_cap;
 	struct ib_odp_caps	odp_caps;
+	u32			max_mad_size;
 };
 
 enum ib_mtu {
@@ -1907,6 +1908,24 @@ static inline int cap_eth_ah(struct ib_device *device, u8 port_num)
 static inline int cap_read_multi_sge(struct ib_device *device, u8 port_num)
 {
 	return !rdma_protocol_iwarp(device, port_num);
+}
+
+/**
+ * rdma_dev_max_mad_size - Return the max MAD size required by this RDMA Port.
+ *
+ * @device: Device
+ * @port_num: Port number
+ *
+ * Return the max MAD size required by the Port.  May return 0 if the port does
+ * not support MADs
+ */
+static inline size_t rdma_dev_max_mad_size(struct ib_device *device,
+					   u8 port_num)
+{
+	struct ib_device_attr attr;
+
+	device->query_device(device, &attr);
+	return attr.max_mad_size;
 }
 
 int ib_query_gid(struct ib_device *device,
