@@ -34,7 +34,25 @@
 #define _OPA_USER_H
 
 #include <linux/list.h>
-#include "../common/opa.h"
+#include <linux/slab.h>
+#include "../include/hfi_cmd.h"
+#include "../common/opa_core.h"
+
+#define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
+	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
+
+/* Private data for file operations, created at open(). */
+struct hfi_userdata {
+	struct opa_core_ops *bus_ops;
+	pid_t pid;
+	pid_t sid;
+	/* Per PID Portals State */
+	struct hfi_ctx ctx;
+	u16 job_res_mode;
+	struct list_head job_list;
+	struct list_head mpin_head;
+	spinlock_t mpin_lock;
+};
 
 void hfi_job_init(struct hfi_userdata *ud);
 int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
@@ -43,4 +61,9 @@ void hfi_job_free(struct hfi_userdata *ud);
 int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin);
 int hfi_munpin(struct hfi_userdata *ud, struct hfi_munpin_args *munpin);
 int hfi_munpin_all(struct hfi_userdata *ud);
+
+/* printk wrappers (pr_warn, etc) can also be used for general debugging. */
+#undef pr_fmt
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #endif /* _OPA_USER_H */
