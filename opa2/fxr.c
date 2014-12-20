@@ -34,7 +34,6 @@
 #include <linux/pci.h>
 #include <linux/module.h>
 #include "opa_hfi.h"
-#include "../common/hfi_token.h"
 #include "../include/fxr/fxr_fast_path_defs.h"
 #include "../include/fxr/fxr_tx_ci_csrs.h"
 #include "../include/fxr/fxr_rx_ci_csrs.h"
@@ -101,11 +100,11 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 }
 
 static struct opa_core_ops opa_core_ops = {
-	.ctxt_assign = hfi_ctxt_attach,
-	.ctxt_release = hfi_ctxt_cleanup,
-	.ctxt_reserve = hfi_ctxt_reserve,
-	.ctxt_unreserve = hfi_ctxt_unreserve,
-	.ctxt_addr = hfi_ctxt_hw_addr,
+	.ctx_assign = hfi_ctxt_attach,
+	.ctx_release = hfi_ctxt_cleanup,
+	.ctx_reserve = hfi_ctxt_reserve,
+	.ctx_unreserve = hfi_ctxt_unreserve,
+	.ctx_addr = hfi_ctxt_hw_addr,
 	.cq_assign = hfi_cq_assign,
 	.cq_update = hfi_cq_update,
 	.cq_release = hfi_cq_release,
@@ -202,9 +201,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	/* TODO - bus support */
-	bus_id.vendor = ent->vendor; //PCI_VENDOR_ID_INTEL;
-	bus_id.device = ent->device; //PCI_DEVICE_ID_INTEL_FXR0;
+	bus_id.vendor = ent->vendor;
+	bus_id.device = ent->device;
 	/* bus agent can be probed immediately, no writing dd->bus_dev after this */
 	dd->bus_dev = opa_core_register_device(&pdev->dev, &bus_id, dd, &opa_core_ops);
 
@@ -228,23 +226,23 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	write_csr(dd, HFI_HP_PT_CACHE_CTRL, 1);
 }
 
-void hfi_pcb_write(struct hfi_userdata *ud, u16 ptl_pid, int phys)
+void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid, int phys)
 {
-	struct hfi_devdata *dd = ud->devdata;
+	struct hfi_devdata *dd = ctx->devdata;
 	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
 	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
 	u64 psb_addr;
 
-	psb_addr = (phys) ? virt_to_phys(ud->ptl_state_base) :
-			    (u64)ud->ptl_state_base;
+	psb_addr = (phys) ? virt_to_phys(ctx->ptl_state_base) :
+			    (u64)ctx->ptl_state_base;
 
 	/* write PCB in FXR */
 	pcb_low.valid = 1;
 	pcb_low.physical = phys;
 	pcb_low.portals_state_base = psb_addr >> PAGE_SHIFT;
-	pcb_high.triggered_op_size = (ud->ptl_trig_op_size >> PAGE_SHIFT);
-	pcb_high.unexpected_size = (ud->ptl_unexpected_size >> PAGE_SHIFT);
-	pcb_high.le_me_size = (ud->ptl_le_me_size >> PAGE_SHIFT);
+	pcb_high.triggered_op_size = (ctx->trig_op_size >> PAGE_SHIFT);
+	pcb_high.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT);
+	pcb_high.le_me_size = (ctx->le_me_size >> PAGE_SHIFT);
 
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
@@ -288,10 +286,10 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 	/* TODO - Drain or Reset CQ */
 }
 
-void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
+void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table)
 {
-	struct hfi_devdata *dd = ud->devdata;
+	struct hfi_devdata *dd = ctx->devdata;
 	int i;
 	u32 offset;
 	TX_CQ_AUTHENTICATION_CSR_t cq_auth = {.val = 0};
@@ -299,8 +297,8 @@ void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
 	/* write AUTH tuples */
 	offset = FXR_TX_CQ_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		if (ud->auth_mask == 0)
-			cq_auth.USER_ID = ud->ptl_uid;
+		if (ctx->auth_mask == 0)
+			cq_auth.USER_ID = ctx->ptl_uid;
 		else
 			cq_auth.USER_ID = auth_table[i].uid;
 		cq_auth.SRANK = auth_table[i].srank;
@@ -313,44 +311,44 @@ void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
  * Write CSRs to configure a TX and RX Command Queue.
  * Authentication Tuple UIDs have been pre-validated by caller.
  */
-void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
+void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 		   struct hfi_auth_tuple *auth_table)
 {
-	struct hfi_devdata *dd = ud->devdata;
+	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
 	TX_CQ_CONFIG_CSR_t tx_cq_config = {.val = 0};
 	RX_CQ_CONFIG_CSR_t rx_cq_config = {.val = 0};
 
-	hfi_cq_config_tuples(ud, cq_idx, auth_table);
+	hfi_cq_config_tuples(ctx, cq_idx, auth_table);
 
 	/* set TX CQ config, enable */
 	tx_cq_config.ENABLE = 1;
-	tx_cq_config.PID = ud->ptl_pid;
+	tx_cq_config.PID = ctx->ptl_pid;
 	tx_cq_config.PRIV_LEVEL = 1;
-	tx_cq_config.DLID_BASE = ud->dlid_base;
-	tx_cq_config.PHYS_DLID = ud->allow_phys_dlid;
-	tx_cq_config.SL_ENABLE = ud->sl_mask;
+	tx_cq_config.DLID_BASE = ctx->dlid_base;
+	tx_cq_config.PHYS_DLID = ctx->allow_phys_dlid;
+	tx_cq_config.SL_ENABLE = ctx->sl_mask;
 	offset = FXR_TX_CQ_CONFIG_CSR + (cq_idx * 8);
 	write_csr(dd, offset, tx_cq_config.val);
 
 	/* set RX CQ config, enable */
 	rx_cq_config.ENABLE = 1;
-	rx_cq_config.PID = ud->ptl_pid;
+	rx_cq_config.PID = ctx->ptl_pid;
 	rx_cq_config.PRIV_LEVEL = 1;
 	offset = FXR_RX_CQ_CONFIG_CSR + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);
 }
 
-int hfi_ctxt_hw_addr(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, ssize_t *len)
+int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize_t *len)
 {
 	struct hfi_devdata *dd;
 	void *psb_base;
 	int ret = 0;
 
-	BUG_ON(!ud || !ud->devdata);
-	dd = ud->devdata;
+	BUG_ON(!ctx || !ctx->devdata);
+	dd = ctx->devdata;
 
-	psb_base = ud->ptl_state_base;
+	psb_base = ctx->ptl_state_base;
 	BUG_ON(psb_base == NULL);
 
 	/* Validate passed in ctxt */
@@ -358,7 +356,7 @@ int hfi_ctxt_hw_addr(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, s
 	case TOK_CQ_TX:
 	case TOK_CQ_RX:
 	case TOK_CQ_HEAD:
-		if (ud->ptl_pid != dd->cq_pair[ctxt])
+		if (ctx->ptl_pid != dd->cq_pair[ctxt])
 			return -EINVAL;
 		break;
 	default:
@@ -409,17 +407,17 @@ int hfi_ctxt_hw_addr(struct hfi_userdata *ud, int type, u16 ctxt, void **addr, s
 	case TOK_TRIG_OP:
 		/* vmalloc - RO */
 		*addr = (psb_base + HFI_PSB_TRIG_OFFSET);
-		*len = ud->ptl_trig_op_size;
+		*len = ctx->trig_op_size;
 		break;
 	case TOK_LE_ME:
 		/* vmalloc - RO */
-		*addr = ud->ptl_le_me_base;
-		*len = ud->ptl_le_me_size;
+		*addr = ctx->le_me_addr;
+		*len = ctx->le_me_size;
 		break;
 	case TOK_UNEXPECTED:
 		/* vmalloc - RO */
-		*addr = ud->ptl_le_me_base + ud->ptl_le_me_size;
-		*len = ud->ptl_unexpected_size;
+		*addr = ctx->le_me_addr + ctx->le_me_size;
+		*len = ctx->unexpected_size;
 		break;
 	default:
 		ret = -EINVAL;

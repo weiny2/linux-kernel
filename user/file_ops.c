@@ -35,8 +35,6 @@
 #include <linux/pagemap.h>
 #include <linux/sched.h>
 #include <linux/version.h>
-#include "../common/opa.h"
-#include "../common/hfi_token.h"
 #include "device.h"
 #include "opa_user.h"
 
@@ -86,20 +84,20 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	if (!ud)
 		return -ENOMEM;
 	fp->private_data = ud;
-	ud->hi = hi;
 
 	/* store HFI HW device pointers */
 	ud->bus_ops = hi->odev->bus_ops;
-	ud->devdata = hi->odev->dd;
+	ud->ctx.devdata = hi->odev->dd;
 
 	ud->pid = task_pid_nr(current);
 	ud->sid = task_session_vnr(current);
+
 	/* default Portals PID and UID */
-	ud->ptl_pid = HFI_PID_NONE;
+	ud->ctx.ptl_pid = HFI_PID_NONE;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-	ud->ptl_uid = current_uid();
+	ud->ctx.ptl_uid = current_uid();
 #else
-	ud->ptl_uid = current_uid().val;
+	ud->ctx.ptl_uid = current_uid().val;
 #endif
 
 	INIT_LIST_HEAD(&ud->mpin_head);
@@ -126,11 +124,14 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_job_setup_args job_setup;
 	struct hfi_mpin_args mpin;
 	struct hfi_munpin_args munpin;
+	struct opa_ctx_assign ctx_assign;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
-	void *dest = NULL;
+	void *copy_ptr = NULL;
 	void __user *user_data = NULL;
 	struct opa_core_ops *ops;
+	ssize_t toff, tlen;
+	u16 tmp_cq_idx;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
@@ -153,27 +154,27 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_CQ_ASSIGN:
 		copy_in = sizeof(cq_assign);
 		copy_out = copy_in;
-		dest = &cq_assign;
+		copy_ptr = &cq_assign;
 		break;
 	case HFI_CMD_CQ_UPDATE:
 		copy_in = sizeof(cq_update);
-		dest = &cq_update;
+		copy_ptr = &cq_update;
 		break;
 	case HFI_CMD_CQ_RELEASE:
 		copy_in = sizeof(cq_release);
-		dest = &cq_release;
+		copy_ptr = &cq_release;
 		break;
 	case HFI_CMD_CTXT_ATTACH:
 		copy_in = sizeof(ctxt_attach);
 		copy_out = copy_in;
-		dest = &ctxt_attach;
+		copy_ptr = &ctxt_attach;
 		break;
 	case HFI_CMD_CTXT_DETACH:
 		copy_in = 0;
 		break;
 	case HFI_CMD_DLID_ASSIGN:
 		copy_in = sizeof(dlid_assign);
-		dest = &dlid_assign;
+		copy_ptr = &dlid_assign;
 		need_admin = 1;
 		break;
 	case HFI_CMD_DLID_RELEASE:
@@ -182,21 +183,21 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_JOB_INFO:
 		copy_out = sizeof(job_info);
-		dest = &job_info;
+		copy_ptr = &job_info;
 		break;
 	case HFI_CMD_JOB_SETUP:
 		copy_in = sizeof(job_setup);
-		dest = &job_setup;
+		copy_ptr = &job_setup;
 		need_admin = 1;
 		break;
 	case HFI_CMD_MPIN:
 		copy_in = sizeof(mpin);
 		copy_out = copy_in;
-		dest = &mpin;
+		copy_ptr = &mpin;
 		break;
 	case HFI_CMD_MUNPIN:
 		copy_in = sizeof(munpin);
-		dest = &munpin;
+		copy_ptr = &munpin;
 		break;
 	default:
 		ret = -EINVAL;
@@ -218,7 +219,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 	/* If the command comes with user data, copy it. */
 	if (copy_in) {
-		if (copy_from_user(dest, user_data, copy_in)) {
+		if (copy_from_user(copy_ptr, user_data, copy_in)) {
 			ret = -EFAULT;
 			goto err_cmd;
 		}
@@ -227,26 +228,73 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 	switch (cmd.type) {
 	case HFI_CMD_CQ_ASSIGN:
-		ret = ops->cq_assign(ud, &cq_assign);
+		ret = ops->cq_assign(&ud->ctx, cq_assign.auth_table, &tmp_cq_idx);
+		if (ret)
+			break;
+
+		/* return mmap tokens of CQ items */
+		ret = ops->ctx_addr(&ud->ctx, TOK_CQ_HEAD, tmp_cq_idx, (void *)&toff, &tlen);
+		if (ret) {
+			ops->cq_release(&ud->ctx, tmp_cq_idx);
+			break;
+		}
+		cq_assign.cq_head_token = HFI_MMAP_TOKEN(TOK_CQ_HEAD, tmp_cq_idx, toff, tlen);
+		cq_assign.cq_tx_token = HFI_MMAP_TOKEN(TOK_CQ_TX, tmp_cq_idx,
+						       0, HFI_CQ_TX_SIZE);
+		cq_assign.cq_rx_token = HFI_MMAP_TOKEN(TOK_CQ_RX, tmp_cq_idx,
+						       0, PAGE_ALIGN(HFI_CQ_RX_SIZE));
+		cq_assign.cq_idx = tmp_cq_idx;
 		break;
 	case HFI_CMD_CQ_UPDATE:
-		ret = ops->cq_update(ud, &cq_update);
+		ret = ops->cq_update(&ud->ctx, cq_update.cq_idx, cq_update.auth_table);
 		break;
 	case HFI_CMD_CQ_RELEASE:
-		ret = ops->cq_release(ud, cq_release.cq_idx);
+		ret = ops->cq_release(&ud->ctx, cq_release.cq_idx);
 		break;
 	case HFI_CMD_DLID_ASSIGN:
-		ret = ops->dlid_assign(ud, &dlid_assign);
+		/* must be called after JOB_SETUP and match total LIDs */
+		if (dlid_assign.count != ud->ctx.lid_count) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = ops->dlid_assign(&ud->ctx, &dlid_assign);
 		break;
 	case HFI_CMD_DLID_RELEASE:
-		ret = ops->dlid_release(ud);
+		ret = ops->dlid_release(&ud->ctx);
 		break;
 	case HFI_CMD_CTXT_ATTACH:
-		ret = ops->ctxt_assign(ud, &ctxt_attach);
+		ctx_assign.pid = ctxt_attach.pid;
+		ctx_assign.flags = ctxt_attach.flags;
+		ctx_assign.le_me_count = ctxt_attach.le_me_count;
+		ctx_assign.unexpected_count = ctxt_attach.unexpected_count;
+		ctx_assign.trig_op_count = ctxt_attach.trig_op_count;
+		ret = ops->ctx_assign(&ud->ctx, &ctx_assign);
+		if (ret)
+			break;
+
+		/* return mmap tokens of PSB items */
+		ctxt_attach.ct_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_CT,
+						ud->ctx.ptl_pid, HFI_PSB_CT_SIZE);
+		ctxt_attach.eq_desc_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_DESC,
+						ud->ctx.ptl_pid, HFI_PSB_EQ_DESC_SIZE);
+		ctxt_attach.eq_head_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_HEAD,
+						ud->ctx.ptl_pid, HFI_PSB_EQ_HEAD_SIZE);
+		ctxt_attach.pt_token = HFI_MMAP_PSB_TOKEN(TOK_PORTALS_TABLE,
+						ud->ctx.ptl_pid, HFI_PSB_PT_SIZE);
+		ctxt_attach.le_me_token = HFI_MMAP_PSB_TOKEN(TOK_LE_ME,
+						ud->ctx.ptl_pid, ud->ctx.le_me_size);
+		ctxt_attach.unexpected_token = HFI_MMAP_PSB_TOKEN(TOK_UNEXPECTED,
+						ud->ctx.ptl_pid, ud->ctx.unexpected_size);
+		ctxt_attach.trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
+						ud->ctx.ptl_pid, ud->ctx.trig_op_size);
+
+		ctxt_attach.pid = ud->ctx.ptl_pid;
+		ctxt_attach.pid_base = ud->ctx.pid_base;
+		ctxt_attach.pid_count = ud->ctx.pid_count;
 		break;
 	case HFI_CMD_CTXT_DETACH:
 		/* release our assigned PID */
-		ops->ctxt_release(ud);
+		ops->ctx_release(&ud->ctx);
 		break;
 	case HFI_CMD_JOB_INFO:
 		ret = hfi_job_info(ud, &job_info);
@@ -262,12 +310,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	default:
 		ret = -EINVAL;
-		goto err_cmd;
+		break;
 	}
 
 	if (ret == 0) {
 		ret = consumed;
-		if (copy_out && copy_to_user(user_data, dest, copy_out)) {
+		if (copy_out && copy_to_user(user_data, copy_ptr, copy_out)) {
 			/* tested WRITE access above, so this shouldn't fail */
 			ret = -EFAULT;
 		}
@@ -307,7 +355,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	/* validate we have an assigned Portals PID */
-	if (ud->ptl_pid == HFI_PID_NONE) {
+	if (ud->ctx.ptl_pid == HFI_PID_NONE) {
 		ret = -EINVAL;
 		goto done;
 	}
@@ -362,7 +410,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	 * Get address and length from HW driver.
 	 * For CQ tokens, ownership tested here.
 	 */
-	ret = ops->ctxt_addr(ud, type, ctxt, &remap_addr, &memlen);
+	ret = ops->ctx_addr(&ud->ctx, type, ctxt, &remap_addr, &memlen);
 	if (ret)
 		goto done;
 
@@ -410,7 +458,7 @@ int hfi_user_cleanup(struct hfi_userdata *ud)
 	struct opa_core_ops *ops = ud->bus_ops;
 
 	/* release Portals resources acquired by the HFI user */
-	ops->ctxt_release(ud);
+	ops->ctx_release(&ud->ctx);
 	/* release any held PID reservations */
 	hfi_job_free(ud);
 
@@ -450,7 +498,7 @@ static int vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 /*
  * Convert kernel *virtual* addresses to physical addresses.
- * This handles vvmalloc'ed or kmalloc'ed addresses.
+ * This handles vmalloc'ed or kmalloc'ed addresses.
  */
 static u64 kvirt_to_phys(void *addr, int *high)
 {

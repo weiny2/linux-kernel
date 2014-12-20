@@ -33,34 +33,29 @@
 #include <linux/sched.h>
 #include "opa_hfi.h"
 
-int hfi_dlid_assign(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign)
+int hfi_dlid_assign(struct hfi_ctx *ctx, struct hfi_dlid_assign_args *dlid_assign)
 {
-	struct hfi_devdata *dd = ud->devdata;
+	struct hfi_devdata *dd = ctx->devdata;
 	void *cq_base;
 
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
-	/* must be called after JOB_SETUP */
-	if (list_empty(&ud->job_list) ||
-	    (dlid_assign->count != ud->lid_count))
-		return -EINVAL;
-
 	/* can only write DLID mapping once */
-	if (ud->dlid_base != HFI_LID_ANY)
+	if (ctx->dlid_base != HFI_LID_ANY)
 		return -EPERM;
 
 	/* TODO - write DLID table via TX CQ */
 	cq_base = dd->cq_tx_base;
 
-	ud->dlid_base = dlid_assign->dlid_base;
+	ctx->dlid_base = dlid_assign->dlid_base;
 	return 0;
 }
 
-int hfi_dlid_release(struct hfi_userdata *ud)
+int hfi_dlid_release(struct hfi_ctx *ctx)
 {
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
-	ud->dlid_base = HFI_LID_ANY;
+	ctx->dlid_base = HFI_LID_ANY;
 	/* TODO - write DLID table via TX CQ */
 	return 0;
 }

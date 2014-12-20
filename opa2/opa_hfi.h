@@ -36,8 +36,9 @@
 #define _OPA_HFI_H
 
 #include <linux/pci.h>
-#include "../include/hfi_defs.h"
-#include "../common/opa.h"
+#include <linux/slab.h>
+#include "../include/hfi_cmd.h"
+#include "../common/opa_core.h"
 
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
@@ -77,7 +78,7 @@ struct hfi_devdata {
 	u32 num_msix_entries;
 
 	/* Device Portals State */
-	struct hfi_userdata **ptl_user;
+	struct hfi_ctx **ptl_user;
 	size_t ptl_user_size;
 	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
 	spinlock_t ptl_lock;
@@ -104,29 +105,29 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void cleanup_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
-int hfi_user_cleanup(struct hfi_userdata *dd);
+int hfi_user_cleanup(struct hfi_ctx *ud);
 
 /* HFI specific functions */
-void hfi_cq_config(struct hfi_userdata *ud, u16 cq_idx, void *head_base,
+void hfi_cq_config(struct hfi_ctx *ud, u16 cq_idx, void *head_base,
 		   struct hfi_auth_tuple *auth_table);
-void hfi_cq_config_tuples(struct hfi_userdata *ud, u16 cq_idx,
+void hfi_cq_config_tuples(struct hfi_ctx *ud, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
-void hfi_pcb_write(struct hfi_userdata *ud, u16 ptl_pid, int phys);
+void hfi_pcb_write(struct hfi_ctx *ud, u16 ptl_pid, int phys);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 
 /* OPA core functions */
-int hfi_cq_assign(struct hfi_userdata *ud, struct hfi_cq_assign_args *cq_assign);
-int hfi_cq_update(struct hfi_userdata *ud, struct hfi_cq_update_args *cq_update);
-int hfi_cq_release(struct hfi_userdata *ud, u16 cq_idx);
-int hfi_dlid_assign(struct hfi_userdata *ud, struct hfi_dlid_assign_args *dlid_assign);
-int hfi_dlid_release(struct hfi_userdata *ud);
-int hfi_ctxt_hw_addr(struct hfi_userdata *ud, int token, u16 ctxt, void **addr,
+int hfi_cq_assign(struct hfi_ctx *ud, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
+int hfi_cq_update(struct hfi_ctx *ud, u16 cq_idx, struct hfi_auth_tuple *auth_table);
+int hfi_cq_release(struct hfi_ctx *ud, u16 cq_idx);
+int hfi_dlid_assign(struct hfi_ctx *ud, struct hfi_dlid_assign_args *dlid_assign);
+int hfi_dlid_release(struct hfi_ctx *ud);
+int hfi_ctxt_attach(struct hfi_ctx *ud, struct opa_ctx_assign *ctx_assign);
+void hfi_ctxt_cleanup(struct hfi_ctx *ud);
+int hfi_ctxt_reserve(struct hfi_ctx *ud, u16 *base, u16 count);
+void hfi_ctxt_unreserve(struct hfi_ctx *ud);
+int hfi_ctxt_hw_addr(struct hfi_ctx *ud, int token, u16 ctxt, void **addr,
 		     ssize_t *len);
-int hfi_ctxt_attach(struct hfi_userdata *ud, struct hfi_ctxt_attach_args *ctxt_attach);
-void hfi_ctxt_cleanup(struct hfi_userdata *ud);
-int hfi_ctxt_reserve(struct hfi_userdata *ud, u16 *base, u16 count);
-void hfi_ctxt_unreserve(struct hfi_userdata *ud, u16 base, u16 count);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is
@@ -141,4 +142,9 @@ void hfi_ctxt_unreserve(struct hfi_userdata *ud, u16 base, u16 count);
 #define dd_dev_info(dd, fmt, ...) \
 	dev_info(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
+
+/* printk wrappers (pr_warn, etc) can also be used for general debugging. */
+#undef pr_fmt
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #endif
