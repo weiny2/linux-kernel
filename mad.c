@@ -1241,9 +1241,31 @@ static int get_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 	return 0;
 }
 
+#define WFR_ILLEGAL_VL 12
+/*
+ * filter_sc2vlt changes mappings to VL15 to WFR_ILLEGAL_VL (except
+ * for SC15, which must map to VL15). If we don't remap things this
+ * way it is possible for VL15 counters to increment when we try to
+ * send on a SC which is mapped to an invalid VL.
+ */
+static void filter_sc2vlt(void *data)
+{
+	int i;
+	u8 *pd = (u8 *)data;
+
+	for (i = 0; i < STL_MAX_SCS; i++) {
+		if (i == 15)
+			continue;
+		if ((pd[i] & 0x1f) == 0xf)
+			pd[i] = WFR_ILLEGAL_VL;
+	}
+}
+
 static int set_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 {
 	u64 *val = (u64 *)data;
+
+	filter_sc2vlt(data);
 
 	write_csr(dd, WFR_SEND_SC2VLT0, *val++);
 	write_csr(dd, WFR_SEND_SC2VLT1, *val++);
