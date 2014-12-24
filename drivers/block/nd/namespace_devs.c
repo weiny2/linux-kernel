@@ -37,7 +37,15 @@ static void namespace_pmem_release(struct device *dev)
 
 static void namespace_blk_release(struct device *dev)
 {
-	/* TODO: blk namespace support */
+	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+	struct nd_region *nd_region = to_nd_region(dev->parent);
+
+	if (nsblk->id >= 0)
+		ida_simple_remove(&nd_region->ns_ida, nsblk->id);
+	kfree(nsblk->alt_name);
+	kfree(nsblk->uuid);
+	kfree(nsblk->res);
+	kfree(nsblk);
 }
 
 static struct device_type namespace_io_device_type = {
@@ -90,8 +98,9 @@ static ssize_t __alt_name_store(struct device *dev, const char *buf,
 
 		ns_altname = &nspm->alt_name;
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		ns_altname = &nsblk->alt_name;
 	} else
 		return -ENXIO;
 
@@ -131,8 +140,9 @@ static int check_label_space(struct nd_region *nd_region, struct device *dev)
 	if (is_namespace_pmem(dev)) {
 		nlabel = 1;
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		nlabel = nsblk->num_resources;
 	} else
 		return -ENXIO;
 
@@ -174,8 +184,20 @@ static int nd_namespace_label_update(struct nd_region *nd_region, struct device 
 
 		return nd_pmem_namespace_label_update(nd_region, nspm, size);
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+		resource_size_t size = 0;
+		int i;
+
+		for (i = 0; i < nsblk->num_resources; i++)
+			size += resource_size(nsblk->res[i]);
+
+		if (size == 0)
+			/* pass */;
+		else if (size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid
+					|| !nsblk->lbasize)
+			return 0;
+
+		return nd_blk_namespace_label_update(nd_region, nsblk, size);
 	} else
 		return -ENXIO;
 }
@@ -211,8 +233,9 @@ static ssize_t alt_name_show(struct device *dev,
 
 		ns_altname = nspm->alt_name;
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		ns_altname = nsblk->alt_name;
 	} else
 		return -ENXIO;
 
@@ -434,8 +457,10 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 
 		uuid = nspm->uuid;
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		uuid = nsblk->uuid;
+		flags = NSLABEL_FLAG_LOCAL;
 	}
 
 	/*
@@ -507,6 +532,37 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 
 		res->start = nd_region->ndr_start;
 		res->end = res->start + val * nd_region->ndr_mappings - 1;
+	} else if (is_namespace_blk(dev)) {
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+		struct nd_mapping *nd_mapping = &nd_region->mapping[0];
+		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+		struct resource *res;
+
+		kfree(nsblk->res);
+		nsblk->res = NULL;
+		nsblk->num_resources = 0;
+		for_each_dpa_resource(nd_dimm, res) {
+			if (strcmp(res->name, label_id) != 0)
+				continue;
+			nsblk->res = krealloc(nsblk->res,
+					sizeof(struct resource *)
+					* (nsblk->num_resources + 1),
+					GFP_KERNEL);
+			if (!nsblk->res) {
+				nsblk->num_resources = 0;
+				return -ENOMEM;
+			}
+			nsblk->res[nsblk->num_resources++] = res;
+		}
+
+		/*
+		 * Try to delete the namespace if we deleted all of its
+		 * allocation and this is not the seed device for the
+		 * region.
+		 */
+		if (val == 0 && nsblk->num_resources == 0
+				&& nd_region->ns_seed != dev)
+			nd_device_unregister(dev, ND_ASYNC);
 	}
 
 	return rc;
@@ -536,14 +592,17 @@ static ssize_t size_store(struct device *dev,
 static ssize_t size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct nd_namespace_blk *nsblk;
+	unsigned long long size = 0;
+	int i;
+
 	if (is_namespace_pmem(dev)) {
 		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
 
 		return sprintf(buf, "%llu\n", (unsigned long long)
 				resource_size(&nspm->nsio.res));
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		nsblk = to_nd_namespace_blk(dev);
 	} else if (is_namespace_io(dev)) {
 		struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
 
@@ -551,6 +610,16 @@ static ssize_t size_show(struct device *dev,
 				resource_size(&nsio->res));
 	} else
 		return -ENXIO;
+
+	nd_bus_lock(dev);
+	for (i = 0; i < nsblk->num_resources; i++) {
+		struct resource *res = nsblk->res[i];
+
+		size += resource_size(res);
+	}
+	nd_bus_unlock(dev);
+
+	return sprintf(buf, "%llu\n", size);
 }
 static DEVICE_ATTR(size, S_IRUGO, size_show, size_store);
 
@@ -564,8 +633,9 @@ static ssize_t uuid_show(struct device *dev,
 
 		uuid = nspm->uuid;
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		uuid = nsblk->uuid;
 	} else
 		return -ENXIO;
 
@@ -636,8 +706,9 @@ static ssize_t uuid_store(struct device *dev,
 
 		ns_uuid = &nspm->uuid;
 	} else if (is_namespace_blk(dev)) {
-		/* TODO: blk namespace support */
-		return -ENXIO;
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		ns_uuid = &nsblk->uuid;
 	} else
 		return -ENXIO;
 
@@ -662,11 +733,53 @@ static ssize_t uuid_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(uuid);
 
+static const unsigned long ns_lbasize_supported[] = { 512, 0 };
+
+static ssize_t sector_size_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+	if (!is_namespace_blk(dev))
+		return -ENXIO;
+
+	return nd_sector_size_show(nsblk->lbasize, ns_lbasize_supported, buf);
+}
+
+static ssize_t sector_size_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+	struct nd_region *nd_region = to_nd_region(dev->parent);
+	ssize_t rc;
+
+	if (!is_namespace_blk(dev))
+		return -ENXIO;
+
+	device_lock(dev);
+	nd_bus_lock(dev);
+	rc = check_label_space(nd_region, dev);
+	if (rc >= 0)
+		rc = nd_sector_size_store(dev, buf, &nsblk->lbasize,
+				ns_lbasize_supported);
+	if (rc >= 0)
+		rc = nd_namespace_label_update(nd_region, dev);
+	dev_dbg(dev, "%s: result: %zd %s: %s%s", __func__,
+			rc, rc < 0 ? "tried" : "wrote", buf,
+			buf[len - 1] == '\n' ? "" : "\n");
+	nd_bus_unlock(dev);
+	device_unlock(dev);
+
+	return rc ? rc : len;
+}
+static DEVICE_ATTR_RW(sector_size);
+
 static struct attribute *nd_namespace_attributes[] = {
 	&dev_attr_type.attr,
 	&dev_attr_size.attr,
 	&dev_attr_uuid.attr,
 	&dev_attr_alt_name.attr,
+	&dev_attr_sector_size.attr,
 	NULL,
 };
 
@@ -677,6 +790,9 @@ static umode_t nd_namespace_attr_visible(struct kobject *kobj, struct attribute 
 	if (is_namespace_pmem(dev) || is_namespace_blk(dev)) {
 		if (a == &dev_attr_size.attr)
 			return S_IWUSR;
+
+		if (is_namespace_pmem(dev) && a == &dev_attr_sector_size.attr)
+			return 0;
 
 		return a->mode;
 	}
@@ -978,6 +1094,171 @@ static struct device **create_namespace_pmem(struct nd_region *nd_region)
 	return NULL;
 }
 
+static int nsblk_add_resource(struct nd_namespace_blk *nsblk,
+		struct nd_dimm *nd_dimm, u8 *uuid, resource_size_t start)
+{
+	char label_id[ND_LABEL_ID_SIZE];
+	struct resource *res;
+
+	nd_label_gen_id(label_id, uuid, NSLABEL_FLAG_LOCAL);
+	nsblk->res = krealloc(nsblk->res,
+			sizeof(void *) * (nsblk->num_resources + 1),
+			GFP_KERNEL);
+	if (!nsblk->res)
+		return -ENOMEM;
+	for_each_dpa_resource(nd_dimm, res)
+		if (strcmp(res->name, label_id) == 0 && res->start == start) {
+			nsblk->res[nsblk->num_resources++] = res;
+			dev_dbg(&nd_dimm->dev, "%s: %s %#llx@%#llx",
+					__func__, res->name,
+					(unsigned long long) resource_size(res),
+					(unsigned long long) res->start);
+			return 0;
+		}
+	return -ENODEV;
+}
+
+static struct device *nd_namespace_blk_create(struct nd_region *nd_region)
+{
+	struct nd_namespace_blk *nsblk;
+	struct device *dev;
+
+	if (!is_nd_blk(&nd_region->dev))
+		return NULL;
+
+	nsblk = kzalloc(sizeof(*nsblk), GFP_KERNEL);
+	if (!nsblk)
+		return NULL;
+
+	dev = &nsblk->dev;
+	dev->type = &namespace_blk_device_type;
+	nsblk->id = ida_simple_get(&nd_region->ns_ida, 0, 0, GFP_KERNEL);
+	if (nsblk->id < 0) {
+		kfree(nsblk);
+		return NULL;
+	}
+	dev_set_name(dev, "namespace%d.%d", nd_region->id, nsblk->id);
+	dev->parent = &nd_region->dev;
+	dev->groups = nd_namespace_attribute_groups;
+
+	return &nsblk->dev;
+}
+
+void nd_region_create_blk_seed(struct nd_region *nd_region)
+{
+	WARN_ON(!is_nd_bus_locked(&nd_region->dev));
+	nd_region->ns_seed = nd_namespace_blk_create(nd_region);
+	/*
+	 * Seed creation failures are not fatal, provisioning is simply
+	 * disabled until memory becomes available
+	 */
+	if (!nd_region->ns_seed)
+		dev_err(&nd_region->dev, "failed to create blk namespace\n");
+	else
+		nd_device_register(nd_region->ns_seed);
+}
+
+static struct device **create_namespace_blk(struct nd_region *nd_region)
+{
+	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
+	struct nd_namespace_label __iomem *nd_label;
+	struct device *dev, **devs = NULL;
+	u8 label_uuid[NSLABEL_UUID_LEN];
+	struct nd_namespace_blk *nsblk;
+	int i, rc, l, count = 0;
+
+	if (nd_region->ndr_mappings == 0)
+		return NULL;
+
+	for_each_label(l, nd_label, nd_mapping->labels) {
+		u32 flags = readl(&nd_label->flags);
+		char *name[NSLABEL_NAME_LEN];
+		struct device **__devs;
+
+		if (flags & NSLABEL_FLAG_LOCAL)
+			/* pass */;
+		else
+			continue;
+
+		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
+		for (i = 0; i < count; i++) {
+			nsblk = to_nd_namespace_blk(devs[i]);
+			if (memcmp(nsblk->uuid, label_uuid,
+						NSLABEL_UUID_LEN) == 0) {
+				rc = nsblk_add_resource(nsblk,
+						nd_mapping->nd_dimm, label_uuid,
+						readq(&nd_label->dpa));
+				if (rc)
+					goto err;
+				break;
+			}
+		}
+		if (i < count)
+			continue;
+		__devs = kcalloc(count + 2, sizeof(dev), GFP_KERNEL);
+		if (!__devs)
+			goto err;
+		memcpy(__devs, devs, sizeof(dev) * count);
+		kfree(devs);
+		devs = __devs;
+
+		nsblk = kzalloc(sizeof(*nsblk), GFP_KERNEL);
+		if (!nsblk)
+			goto err;
+		dev = &nsblk->dev;
+		dev->type = &namespace_blk_device_type;
+		devs[count++] = dev;
+		nsblk->id = -1;
+		nsblk->lbasize = readq(&nd_label->lbasize);
+		nsblk->uuid = kmemdup(label_uuid, NSLABEL_UUID_LEN, GFP_KERNEL);
+		if (!nsblk->uuid)
+			goto err;
+		memcpy_fromio(name, nd_label->name, NSLABEL_NAME_LEN);
+		if (name[0])
+			nsblk->alt_name = kmemdup(name, NSLABEL_NAME_LEN,
+					GFP_KERNEL);
+		rc = nsblk_add_resource(nsblk, nd_mapping->nd_dimm, label_uuid,
+				readq(&nd_label->dpa));
+		if (rc)
+			goto err;
+	}
+
+	dev_dbg(&nd_region->dev, "%s: discovered %d blk namespace%s\n",
+			__func__, count, count == 1 ? "" : "s");
+
+	if (count == 0) {
+		/* Publish a zero-sized namespace for userspace to configure. */
+		for (i = 0; i < nd_region->ndr_mappings; i++) {
+			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+
+			if (!nd_mapping->labels)
+				continue;
+			devm_kfree(&nd_region->dev, nd_mapping->labels);
+			nd_mapping->labels = NULL;
+		}
+
+		devs = kcalloc(2, sizeof(dev), GFP_KERNEL);
+		if (!devs)
+			goto err;
+		nsblk = kzalloc(sizeof(*nsblk), GFP_KERNEL);
+		if (!nsblk)
+			goto err;
+		dev = &nsblk->dev;
+		dev->type = &namespace_blk_device_type;
+		devs[count++] = dev;
+	}
+
+	return devs;
+
+err:
+	for (i = 0; i < count; count++) {
+		nsblk = to_nd_namespace_blk(devs[i]);
+		namespace_blk_release(&nsblk->dev);
+	}
+	kfree(devs);
+	return NULL;
+}
+
 static int init_active_labels(struct nd_region *nd_region)
 {
 	int i;
@@ -1033,7 +1314,8 @@ int nd_region_register_namespaces(struct nd_region *nd_region)
 		devs = create_namespace_pmem(nd_region);
 		break;
 	case ND_DEVICE_NAMESPACE_BLOCK:
-		/* TODO: blk namespace support */
+		devs = create_namespace_blk(nd_region);
+		break;
 	default:
 		break;
 	}
@@ -1042,13 +1324,37 @@ int nd_region_register_namespaces(struct nd_region *nd_region)
 	if (!devs)
 		return -ENODEV;
 
+	nd_region->ns_seed = devs[0];
 	for (i = 0; devs[i]; i++) {
 		struct device *dev = devs[i];
+		int id;
 
-		dev_set_name(dev, "namespace%d.%d", nd_region->id, i);
+		if (type == ND_DEVICE_NAMESPACE_BLOCK) {
+			struct nd_namespace_blk *nsblk;
+
+			nsblk = to_nd_namespace_blk(dev);
+			id = ida_simple_get(&nd_region->ns_ida, 0, 0,
+					GFP_KERNEL);
+			nsblk->id = id;
+		} else
+			id = i;
+
+		if (id < 0)
+			break;
+		dev_set_name(dev, "namespace%d.%d", nd_region->id, id);
 		dev->parent = &nd_region->dev;
 		dev->groups = nd_namespace_attribute_groups;
 		nd_device_register(dev);
+	}
+
+	if (devs[i]) {
+		for (; devs[i]; i++) {
+			struct device *dev = devs[i];
+
+			device_initialize(dev);
+			put_device(dev);
+		}
+		rc = -ENODEV;
 	}
 	kfree(devs);
 

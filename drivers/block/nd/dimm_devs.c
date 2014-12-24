@@ -326,6 +326,33 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	return NULL;
 }
 
+static resource_size_t blk_available_dpa(struct nd_mapping *nd_mapping)
+{
+	resource_size_t map_end, res_end, busy = 0, available;
+	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct resource *res;
+
+	map_end = nd_mapping->start + nd_mapping->size;
+	for_each_dpa_resource(nd_dimm, res) {
+		res_end = res->start + resource_size(res);
+		if (res->start >= nd_mapping->start && res->start < map_end) {
+			resource_size_t end = min(map_end, res_end);
+
+			busy += end - res->start;
+		} else if (res_end >= nd_mapping->start && res_end < map_end) {
+			resource_size_t start;
+
+			start = max(nd_mapping->start, res->start);
+			busy += res_end - start;
+		}
+	}
+
+	available = map_end - nd_mapping->start;
+	if (busy < available)
+		return available - busy;
+	return 0;
+}
+
 static resource_size_t pmem_available_dpa(struct nd_mapping *nd_mapping)
 {
 	resource_size_t map_end, res_end, busy = 0, available;
@@ -400,7 +427,13 @@ resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
 		return pmem_available_dpa(nd_mapping);
 	}
 	case ND_DEVICE_NAMESPACE_BLOCK:
-		/* TODO: blk namespace support */
+		nd_mapping = &nd_region->mapping[0];
+		if (nd_mapping->nd_dimm != nd_dimm) {
+			dev_WARN_ONCE(&nd_dimm->dev, 1, "not mapped by %s\n",
+					dev_name(&nd_region->dev));
+			return 0;
+		}
+		return blk_available_dpa(nd_mapping);
 	default:
 		return 0;
 	}

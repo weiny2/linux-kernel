@@ -109,8 +109,15 @@ static int is_uuid_busy(struct device *dev, void *data)
 			return -EBUSY;
 		break;
 	}
-	case ND_DEVICE_NAMESPACE_BLOCK:
-		/* TODO: blk namespace support */
+	case ND_DEVICE_NAMESPACE_BLOCK: {
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		if (!nsblk->uuid)
+			break;
+		if (memcmp(uuid, nsblk->uuid, NSLABEL_UUID_LEN) == 0)
+			return -EBUSY;
+		break;
+	}
 	default:
 		break;
 	}
@@ -445,6 +452,11 @@ static void nd_region_notify_driver_action(struct nd_bus *nd_bus,
 		nd_mem = nd_mapping->nd_dimm->nd_mem;
 		nd_set = radix_tree_lookup(&nd_bus->interleave_sets,
 				to_interleave_set_key(nd_mem));
+	} else if (dev->parent && is_nd_blk(dev->parent) && probe && rc == 0) {
+		struct nd_region *nd_region = to_nd_region(dev->parent);
+
+		if (nd_region->ns_seed == dev)
+			nd_region_create_blk_seed(nd_region);
 	}
 
 	if (!nd_set)

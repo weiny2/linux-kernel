@@ -555,6 +555,88 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	return 0;
 }
 
+static int __blk_label_update(struct nd_region *nd_region,
+		struct nd_mapping *nd_mapping, struct nd_namespace_blk *nsblk)
+{
+	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct nd_namespace_label __iomem *nd_label;
+	struct nd_namespace_index __iomem *nsindex;
+	unsigned long *free;
+	u32 nslot, slot;
+	int i, l;
+
+	if (!preamble_next(nd_dimm, &nsindex, &free, &nslot))
+		return -ENXIO;
+
+	/* allocate and write the label to the staging (next) index */
+	for (i = 0; i < nsblk->num_resources; i++) {
+		struct resource *res = nsblk->res[i];
+		size_t offset;
+		int rc;
+
+		slot = nd_label_alloc_slot(nd_dimm);
+		if (slot == UINT_MAX)
+			return -ENXIO;
+		dev_dbg(&nd_dimm->dev, "%s: allocated: %d\n", __func__, slot);
+
+		nd_label = nd_label_base(nd_dimm) + slot;
+		memset_io(nd_label, 0, sizeof(struct nd_namespace_label));
+		memcpy_toio(nd_label->uuid, nsblk->uuid, NSLABEL_UUID_LEN);
+		if (nsblk->alt_name)
+			memcpy_toio(nd_label->name, nsblk->alt_name,
+					NSLABEL_NAME_LEN);
+		writel(NSLABEL_FLAG_LOCAL, &nd_label->flags);
+		writew(nsblk->num_resources, &nd_label->nlabel);
+		writew(i, &nd_label->position);
+		writeq(0, &nd_label->isetcookie);
+		writeq(res->start, &nd_label->dpa);
+		writeq(resource_size(res), &nd_label->rawsize);
+		writeq(nsblk->lbasize, &nd_label->lbasize);
+		writel(slot, &nd_label->slot);
+
+		/* update label */
+		offset = nd_label_offset(nd_dimm, nd_label);
+		rc = nd_dimm_set_config_data(nd_dimm, offset, nd_label,
+				sizeof(struct nd_namespace_label));
+		if (rc < 0)
+			return rc;
+	}
+
+	/* Garbage collect the previous labels */
+	for_each_label(l, nd_label, nd_mapping->labels) {
+		u32 victim_slot = to_slot(nd_dimm, nd_label);
+
+		nd_label_free_slot(nd_dimm, victim_slot);
+		dev_dbg(&nd_dimm->dev, "%s: free: %d\n", __func__, victim_slot);
+	}
+
+	i = 0;
+	for_each_clear_bit_le(slot, free, nslot) {
+		u8 label_uuid[NSLABEL_UUID_LEN];
+
+		nd_label = nd_label_base(nd_dimm) + slot;
+		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
+		if (memcmp(label_uuid, nsblk->uuid, NSLABEL_UUID_LEN) == 0) {
+			if (i + 1 > nsblk->num_resources) {
+				/*
+				 * Sanity check that we aren't walking off the
+				 * end of the alloation for nd_mapping->labels.
+				 */
+				dev_err(&nsblk->dev, "%s, label set overrun\n",
+						__func__);
+				return -ENXIO;
+			}
+			dev_dbg(&nd_region->dev, "%s: add label%d\n",
+					__func__, i);
+			nd_set_label(nd_mapping->labels, nd_label, i++);
+		}
+	}
+
+	/* update index */
+	return nd_label_write_index(nd_dimm, nd_dimm->ns_next,
+			inc_seq(readl(&nsindex->seq)), 0);
+}
+
 static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 {
 	int i, l, old_num_labels = 0;
@@ -670,6 +752,26 @@ int nd_pmem_namespace_label_update(struct nd_region *nd_region,
 		if (rc)
 			return rc;
 	}
+
+	return 0;
+}
+
+int nd_blk_namespace_label_update(struct nd_region *nd_region,
+		struct nd_namespace_blk *nsblk, resource_size_t size)
+{
+	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
+	int rc;
+
+	if (size == 0)
+		return del_labels(nd_mapping, nsblk->uuid);
+
+	rc = init_labels(nd_mapping, nsblk->num_resources);
+	if (rc)
+		return rc;
+
+	rc = __blk_label_update(nd_region, nd_mapping, nsblk);
+	if (rc)
+		return rc;
 
 	return 0;
 }
