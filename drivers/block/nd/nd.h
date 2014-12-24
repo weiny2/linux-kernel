@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
+#include <linux/types.h>
 #include "label.h"
 
 struct gendisk;
@@ -63,28 +64,34 @@ struct nd_mapping {
 };
 
 /* sparse helpers */
-static inline void nd_mapping_set_label(struct nd_mapping *nd_mapping,
+static inline void nd_set_label(struct nd_namespace_label **labels,
 		struct nd_namespace_label __iomem *label, int idx)
 {
-	nd_mapping->labels[idx] = (void __force *) label;
+	labels[idx] = (void __force *) label;
 }
 
-static inline struct nd_namespace_label __iomem *nd_mapping_get_label(
-		struct nd_mapping *nd_mapping, int idx)
+static inline struct nd_namespace_label __iomem *nd_get_label(
+		struct nd_namespace_label **labels, int idx)
 {
 	struct nd_namespace_label __iomem *label = NULL;
 
-	if (nd_mapping->labels)
-		label = (struct nd_namespace_label __iomem *)
-			nd_mapping->labels[idx];
+	if (labels)
+		label = (struct nd_namespace_label __iomem *) labels[idx];
 
 	return label;
 }
 
+#define for_each_label(l, label, labels) \
+	for (l = 0; (label = nd_get_label(labels, l)); l++)
+
+#define for_each_dpa_resource(dimm, res) \
+	for (res = dimm->dpa.child; res; res = res->sibling)
+
 struct nd_region {
 	struct device dev;
 	struct nd_spa *nd_spa;
-	unsigned long long available_size;
+	struct ida ns_ida;
+	struct device *ns_seed;
 	u16 ndr_mappings;
 	u64 ndr_size;
 	u64 ndr_start;
@@ -196,8 +203,10 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
 		void *buf, size_t len);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
+int nd_region_register_namespaces(struct nd_region *nd_region);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nd_bus_lock(struct device *dev);
 void nd_bus_unlock(struct device *dev);
 bool is_nd_bus_locked(struct device *dev);
+int nd_label_reserve_dpa(struct nd_dimm *nd_dimm);
 #endif /* __ND_H__ */

@@ -39,7 +39,7 @@ struct nd_namespace_io {
 };
 
 /**
- * struct nd_namespace_pmem - namespace device for dimm-backed persistent memory
+ * struct nd_namespace_pmem - namespace device for dimm-backed interleaved memory
  * @nsio: device and system physical address range to drive
  * @alt_name: namespace name supplied in the dimm label
  * @uuid: namespace name supplied in the dimm label
@@ -70,5 +70,4 @@ int __must_check __nd_driver_register(struct nd_device_driver *nd_drv,
 		struct module *module, const char *mod_name);
 #define nd_driver_register(driver) \
 	__nd_driver_register(driver, THIS_MODULE, KBUILD_MODNAME)
-int nd_namespace_pmem_request_dpa(struct nd_namespace_pmem *nspm);
 #endif /* __LINUX_ND_H__ */

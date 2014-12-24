@@ -37,8 +37,7 @@ static int nd_dimm_probe(struct device *dev)
 	int header_size = sizeof(struct nfit_cmd_get_config_data_hdr);
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
 	struct nfit_cmd_get_config_size cmd_size;
-	struct nd_namespace_index *nsindex;
-	int rc, config_size;
+	int rc, cmd_get_config_size;
 
 	nd_dimm->config_size = -EINVAL;
 	rc = nd_dimm_get_config_size(nd_dimm, &cmd_size);
@@ -46,31 +45,32 @@ static int nd_dimm_probe(struct device *dev)
 			|| cmd_size.config_size < ND_LABEL_MIN_SIZE)
 		return -ENXIO;
 
-	config_size = cmd_size.config_size + header_size;
-	dev_dbg(&nd_dimm->dev, "config_size: %d\n", config_size);
-	nd_dimm->data = kmalloc(config_size, GFP_KERNEL);
+	nd_dimm->config_size = cmd_size.config_size;
+	dev_dbg(&nd_dimm->dev, "config data size: %d\n", nd_dimm->config_size);
+	cmd_get_config_size = cmd_size.config_size + header_size;
+	nd_dimm->data = kmalloc(cmd_get_config_size, GFP_KERNEL);
 	if (!nd_dimm->data)
-		nd_dimm->data = vmalloc(config_size);
+		nd_dimm->data = vmalloc(cmd_get_config_size);
 
 	if (!nd_dimm->data)
 		return -ENOMEM;
 
-	rc = nd_dimm_get_config_data(nd_dimm, nd_dimm->data, config_size);
+	rc = nd_dimm_get_config_data(nd_dimm, nd_dimm->data,
+			cmd_get_config_size);
 	if (rc) {
 		free_data(nd_dimm);
 		return rc < 0 ? rc : -ENXIO;
 	}
-	nd_dimm->config_size = cmd_size.config_size;
-	nsindex = to_namespace_index(nd_dimm, 0);
 
 	nd_bus_lock(dev);
 	nd_dimm->ns_current = nd_label_validate(nd_dimm);
 	nd_dimm->ns_next = nd_label_next_nsindex(nd_dimm->ns_current);
 	nd_label_copy(nd_dimm, to_next_namespace_index(nd_dimm),
 			to_current_namespace_index(nd_dimm));
+	rc = nd_label_reserve_dpa(nd_dimm);
 	nd_bus_unlock(dev);
 
-	return 0;
+	return rc;
 }
 
 static int nd_dimm_remove(struct device *dev)

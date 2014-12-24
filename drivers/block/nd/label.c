@@ -216,15 +216,15 @@ static struct nd_namespace_label __iomem *nd_label_base(struct nd_dimm *nd_dimm)
 	return base + 2 * sizeof_namespace_index(nd_dimm);
 }
 
-int to_nd_label_slot(struct nd_dimm *nd_dimm,
+static int to_slot(struct nd_dimm *nd_dimm,
 		struct nd_namespace_label __iomem *nd_label)
 {
 	return nd_label - nd_label_base(nd_dimm);
 }
 
 #define for_each_clear_bit_le(bit, addr, size) \
-	for ((bit) = find_next_zero_bit_le((addr), (size), 0);	\
-	     (bit) < (size);					\
+	for ((bit) = find_next_zero_bit_le((addr), (size), 0);  \
+	     (bit) < (size);                                    \
 	     (bit) = find_next_zero_bit_le((addr), (size), (bit) + 1))
 
 /**
@@ -249,6 +249,22 @@ static bool preamble_index(struct nd_dimm *nd_dimm, int idx,
 	return true;
 }
 
+char *nd_label_gen_id(char *label_id, u8 *uuid, u32 flags)
+{
+	char *pos;
+	int n;
+
+	if (!label_id)
+		return NULL;
+	n = sprintf(label_id, "%s-", flags & NSLABEL_FLAG_LOCAL ?
+			"blk" : "pmem");
+	nd_uuid_show(uuid, label_id + n);
+	pos = strchr(label_id, '\n');
+	if (pos)
+		*pos = '\0';
+	return label_id;
+}
+
 static bool preamble_current(struct nd_dimm *nd_dimm,
 		struct nd_namespace_index **nsindex,
 		unsigned long **free, u32 *nslot)
@@ -263,6 +279,46 @@ static bool preamble_next(struct nd_dimm *nd_dimm,
 {
 	return preamble_index(nd_dimm, nd_dimm->ns_next, nsindex,
 			free, nslot);
+}
+
+int nd_label_reserve_dpa(struct nd_dimm *nd_dimm)
+{
+	struct nd_namespace_index __iomem *nsindex;
+	unsigned long *free;
+	u32 nslot, slot;
+
+	if (!preamble_current(nd_dimm, &nsindex, &free, &nslot))
+		return 0; /* no label, nothing to reserve */
+
+	for_each_clear_bit_le(slot, free, nslot) {
+		struct nd_namespace_label __iomem *nd_label;
+		u8 label_uuid[NSLABEL_UUID_LEN];
+		struct resource *res;
+		char *label_id;
+		u32 flags;
+
+		nd_label = nd_label_base(nd_dimm) + slot;
+
+		/* basic check for invalid slots */
+		if (slot != readl(&nd_label->slot))
+			continue;
+
+		label_id = devm_kzalloc(&nd_dimm->dev, ND_LABEL_ID_SIZE,
+				GFP_KERNEL);
+		if (!label_id)
+			return -ENOMEM;
+		memcpy_fromio(label_uuid, nd_label->uuid,
+				NSLABEL_UUID_LEN);
+		flags = readl(&nd_label->flags);
+		res = __devm_request_region(&nd_dimm->dev, &nd_dimm->dpa,
+				readq(&nd_label->dpa),
+				readq(&nd_label->rawsize),
+				nd_label_gen_id(label_id, label_uuid, flags));
+		if (!res)
+			return -ENXIO;
+	}
+
+	return 0;
 }
 
 int nd_label_active_count(struct nd_dimm *nd_dimm)
@@ -429,11 +485,19 @@ static int nd_label_write_index(struct nd_dimm *nd_dimm, int index, u32 seq,
 	return 0;
 }
 
+static unsigned long nd_label_offset(struct nd_dimm *nd_dimm,
+		struct nd_namespace_label __iomem *nd_label)
+{
+	return (unsigned long) nd_label
+		- (unsigned long) to_namespace_index(nd_dimm, 0);
+}
+
 static int __pmem_label_update(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, struct nd_namespace_pmem *nspm,
 		int pos)
 {
 	u64 cookie = nd_region_interleave_set_cookie(nd_region), rawsize;
+	struct nd_namespace_label __iomem *victim_label;
 	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
 	struct nd_namespace_label __iomem *nd_label;
 	struct nd_namespace_index __iomem *nsindex;
@@ -444,22 +508,6 @@ static int __pmem_label_update(struct nd_region *nd_region,
 
 	if (!preamble_next(nd_dimm, &nsindex, &free, &nslot))
 		return -ENXIO;
-
-	/*
-	 * Now is a good time to garbage collect any stale slots, and
-	 * the newly invalidated slots that previously defined this
-	 * namespace
-	 */
-	for_each_clear_bit_le(slot, free, nslot) {
-		unsigned long flags;
-
-		nd_label = nd_label_base(nd_dimm) + slot;
-		flags = readl(&nd_label->flags);
-		if (flags & NSLABEL_FLAG_LOCAL)
-			continue; /* skip blk namespaces */
-		dev_dbg(&nd_dimm->dev, "%s: free %d\n", __func__, slot);
-		nd_label_free_slot(nd_dimm, slot);
-	}
 
 	/* allocate and write the label to the staging (next) index */
 	slot = nd_label_alloc_slot(nd_dimm);
@@ -482,35 +530,60 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	writel(slot, &nd_label->slot);
 
 	/* update label */
-	offset = (unsigned long) nd_label
-		- (unsigned long) to_namespace_index(nd_dimm, 0);
+	offset = nd_label_offset(nd_dimm, nd_label);
 	rc = nd_dimm_set_config_data(nd_dimm, offset, nd_label,
-			sizeof(struct nd_namespace_index));
+			sizeof(struct nd_namespace_label));
 	if (rc < 0)
 		return rc;
+
+	/* Garbage collect the previous label */
+	victim_label = nd_get_label(nd_mapping->labels, 0);
+	if (victim_label) {
+		slot = to_slot(nd_dimm, victim_label);
+		nd_label_free_slot(nd_dimm, slot);
+		dev_dbg(&nd_dimm->dev, "%s: free: %d\n", __func__, slot);
+	}
+
 	/* update index */
 	rc = nd_label_write_index(nd_dimm, nd_dimm->ns_next,
 			inc_seq(readl(&nsindex->seq)), 0);
 	if (rc < 0)
 		return rc;
-	return slot;
+
+	nd_set_label(nd_mapping->labels, nd_label, 0);
+
+	return 0;
 }
 
-static int init_labels(struct nd_mapping *nd_mapping)
+static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 {
-	int i;
+	int i, l, old_num_labels = 0;
 	struct nd_namespace_index __iomem *nsindex;
+	struct nd_namespace_label __iomem *nd_label;
 	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	size_t size = (num_labels + 1) * sizeof(struct nd_namespace_label *);
+
+	for_each_label(l, nd_label, nd_mapping->labels)
+		old_num_labels++;
+
+	/*
+	 * We need to preserve all the old labels for the namespace so
+	 * they can be garbage collected after writing the new labels.
+	 */
+	if (num_labels > old_num_labels)
+		nd_mapping->labels = krealloc(nd_mapping->labels, size,
+				GFP_KERNEL);
+	if (!nd_mapping->labels)
+		return -ENOMEM;
+	if (old_num_labels == 0)
+		memset(nd_mapping->labels, 0, size);
+	else
+		nd_mapping->labels[max(old_num_labels, num_labels) - 1] = NULL;
 
 	if (nd_dimm->ns_current == -1 || nd_dimm->ns_next == -1)
 		/* pass */;
 	else
 		return 0;
-
-	nd_mapping->labels = kcalloc(2, sizeof(struct nd_namespace_label *),
-			GFP_KERNEL);
-	if (!nd_mapping->labels)
-		return -ENOMEM;
 
 	nsindex = to_namespace_index(nd_dimm, 0);
 	memset_io(nsindex, 0, nd_dimm->config_size);
@@ -526,28 +599,76 @@ static int init_labels(struct nd_mapping *nd_mapping)
 	return 0;
 }
 
+static int del_labels(struct nd_mapping *nd_mapping, u8 *uuid)
+{
+	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct nd_namespace_label __iomem *nd_label;
+	struct nd_namespace_index __iomem *nsindex;
+	u8 label_uuid[NSLABEL_UUID_LEN];
+	int l, num_freed = 0;
+	unsigned long *free;
+	u32 nslot, slot;
+
+	if (!uuid)
+		return 0;
+
+	/* no index || no labels == nothing to delete */
+	if (!preamble_next(nd_dimm, &nsindex, &free, &nslot)
+			|| !nd_mapping->labels)
+		return 0;
+
+	for_each_label(l, nd_label, nd_mapping->labels) {
+		int j;
+
+		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
+		if (memcmp(label_uuid, uuid, NSLABEL_UUID_LEN) != 0)
+			continue;
+		slot = to_slot(nd_dimm, nd_label);
+		nd_label_free_slot(nd_dimm, slot);
+		dev_dbg(&nd_dimm->dev, "%s: free: %d\n", __func__, slot);
+		for (j = l; nd_get_label(nd_mapping->labels, j + 1); j++) {
+			struct nd_namespace_label __iomem *next_label;
+
+			next_label = nd_get_label(nd_mapping->labels, j + 1);
+			nd_set_label(nd_mapping->labels, next_label, j);
+		}
+		nd_set_label(nd_mapping->labels, NULL, j);
+		num_freed++;
+	}
+
+	if (num_freed >= l) {
+		kfree(nd_mapping->labels);
+		nd_mapping->labels = NULL;
+		dev_dbg(&nd_dimm->dev, "%s: no more labels\n", __func__);
+	}
+
+	return nd_label_write_index(nd_dimm, nd_dimm->ns_next,
+			inc_seq(readl(&nsindex->seq)), 0);
+}
+
 int nd_pmem_namespace_label_update(struct nd_region *nd_region,
-		struct nd_namespace_pmem *nspm)
+		struct nd_namespace_pmem *nspm, resource_size_t size)
 {
 	int i;
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
 		int rc;
 
-		rc = init_labels(nd_mapping);
+		if (size == 0) {
+			rc = del_labels(nd_mapping, nspm->uuid);
+			if (rc)
+				return rc;
+			continue;
+		}
+
+		rc = init_labels(nd_mapping, 1);
 		if (rc)
 			return rc;
 
-		/*
-		 * On success __pmem_label_update() returns the slot that
-		 * was written or a negative error code.
-		 */
 		rc = __pmem_label_update(nd_region, nd_mapping, nspm, i);
-		if (rc < 0)
+		if (rc)
 			return rc;
-		nd_mapping->labels[0] = nd_label_base(nd_dimm) + rc;
 	}
 
 	return 0;

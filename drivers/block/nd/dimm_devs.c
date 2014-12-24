@@ -31,6 +31,7 @@ static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
 {
 	struct nfit_bus_descriptor *nfit_desc;
 	struct nfit_mem __iomem *nfit_mem;
+	struct nfit_dcr __iomem *nfit_dcr;
 
 	if (!nd_dimm)
 		return -EINVAL;
@@ -43,6 +44,9 @@ static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
 			|| !nfit_desc->nfit_ctl)
 		return -ENXIO;
 
+	nfit_dcr = nd_dimm->nd_mem->nfit_dcr;
+	if (!nfit_dcr || readw(&nfit_dcr->fic) != 1)
+		return -ENODEV;
 	nfit_mem = nd_dimm->nd_mem->nfit_mem;
 	*nfit_handle = readl(&nfit_mem->nfit_handle);
 	return 0;
@@ -320,6 +324,133 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
  err_del_info:
 	kfree(nd_dimm);
 	return NULL;
+}
+
+static resource_size_t pmem_available_dpa(struct nd_mapping *nd_mapping)
+{
+	resource_size_t map_end, res_end, busy = 0, available;
+	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct resource *res;
+
+	map_end = nd_mapping->start + nd_mapping->size;
+	for_each_dpa_resource(nd_dimm, res) {
+		res_end = res->start + resource_size(res);
+		if (res->start >= nd_mapping->start && res->start < map_end) {
+			if (strncmp(res->name, "blk", 3) == 0) {
+				/* this is the pmem offset boundary */
+				busy += map_end - res->start;
+				break;
+			} else if (res->start != nd_mapping->start) {
+				/*
+				 * Something is wrong pmem must align
+				 * with the start of the interleave set
+				 */
+				return 0;
+			} else {
+				resource_size_t end = min(map_end, res_end);
+
+				busy += end - res->start;
+				continue;
+			}
+		} else if (res_end >= nd_mapping->start && res_end < map_end) {
+			/*
+			 * If a namespace ends in an interleave set range
+			 * the pmem offset is 0
+			 */
+			return 0;
+		}
+	}
+
+	available = map_end - nd_mapping->start;
+	if (busy < available)
+		return available - busy;
+	return 0;
+}
+
+/**
+ * nd_dimm_available_dpa - for the given dimm+region account unallocated dpa
+ * @nd_dimm: container of dpa-resource-root + labels
+ * @nd_region: constrain available space check to this reference region
+ *
+ * This routine operates in either blk or pmem mode as determined by the
+ * region type.  In pmem mode it validates that labels align with the
+ * interleave set and truncates the available size at the lowest blk
+ * overlap point.  In comparsion blk mode any hole in the region is
+ * counted as free space.
+ */
+resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
+		struct nd_region *nd_region)
+{
+	struct nd_mapping *nd_mapping;
+
+	switch (nd_region_to_namespace_type(nd_region)) {
+	case ND_DEVICE_NAMESPACE_PMEM: {
+		int i, ndr_mappings = nd_region->ndr_mappings;
+
+		for (i = 0; i < ndr_mappings; i++) {
+			nd_mapping = &nd_region->mapping[i];
+			if (nd_mapping->nd_dimm == nd_dimm)
+				break;
+		}
+		if (i >= ndr_mappings) {
+			dev_WARN_ONCE(&nd_dimm->dev, 1, "not mapped by %s\n",
+					dev_name(&nd_region->dev));
+			return 0;
+		}
+		return pmem_available_dpa(nd_mapping);
+	}
+	case ND_DEVICE_NAMESPACE_BLOCK:
+		/* TODO: blk namespace support */
+	default:
+		return 0;
+	}
+}
+
+struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm, char *label_id,
+		resource_size_t start, resource_size_t n)
+{
+	char *name = devm_kmemdup(&nd_dimm->dev, label_id,
+			ND_LABEL_ID_SIZE, GFP_KERNEL);
+	struct resource *res;
+
+	if (!name)
+		return NULL;
+
+	res = __devm_request_region(&nd_dimm->dev, &nd_dimm->dpa,
+			start, n, name);
+	if (!res)
+		devm_kfree(&nd_dimm->dev, name);
+	return res;
+}
+
+void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, char *label_id)
+{
+	struct resource *res;
+
+	for_each_dpa_resource(nd_dimm, res)
+		if (strcmp(res->name, label_id) == 0) {
+			__devm_release_region(&nd_dimm->dev, &nd_dimm->dpa,
+					res->start, resource_size(res));
+			devm_kfree(&nd_dimm->dev, (void *) res->name);
+		}
+}
+
+
+/**
+ * nd_dimm_allocated_dpa - sum up the dpa currently allocated to this label_id
+ * @nd_dimm: container of dpa-resource-root + labels
+ * @label_id: dpa resource name of the form {pmem|blk}-<human readable uuid>
+ */
+resource_size_t nd_dimm_allocated_dpa(struct nd_dimm *nd_dimm, char *label_id)
+{
+	resource_size_t allocated = 0;
+	struct resource *res;
+
+	for_each_dpa_resource(nd_dimm, res)
+		if (strcmp(res->name, label_id) == 0)
+			allocated += resource_size(res);
+
+	return allocated;
 }
 
 static int count_dimms(struct device *dev, void *c)

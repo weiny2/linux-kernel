@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/sort.h>
 #include <linux/io.h>
+#include <linux/nd.h>
 #include "nd-private.h"
 #include "nfit.h"
 #include "nd.h"
@@ -93,6 +94,54 @@ int nd_region_to_namespace_type(struct nd_region *nd_region)
 }
 EXPORT_SYMBOL(nd_region_to_namespace_type);
 
+static int is_uuid_busy(struct device *dev, void *data)
+{
+	struct nd_region *nd_region = to_nd_region(dev->parent);
+	u8 *uuid = data;
+
+	switch (nd_region_to_namespace_type(nd_region)) {
+	case ND_DEVICE_NAMESPACE_PMEM: {
+		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
+
+		if (!nspm->uuid)
+			break;
+		if (memcmp(uuid, nspm->uuid, NSLABEL_UUID_LEN) == 0)
+			return -EBUSY;
+		break;
+	}
+	case ND_DEVICE_NAMESPACE_BLOCK:
+		/* TODO: blk namespace support */
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int for_each_namespace(struct device *dev, void *data)
+{
+	if (is_nd_pmem(dev) || is_nd_blk(dev))
+		return device_for_each_child(dev, data, is_uuid_busy);
+	return 0;
+}
+
+/**
+ * nd_is_uuid_unique - verify that no other namespace has @uuid
+ * @dev: any device on a nd_bus
+ * @uuid: uuid to check
+ */
+bool nd_is_uuid_unique(struct device *dev, u8 *uuid)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+	if (!nd_bus)
+		return false;
+	WARN_ON_ONCE(!is_nd_bus_locked(&nd_bus->dev));
+	if (device_for_each_child(&nd_bus->dev, uuid, for_each_namespace) != 0)
+		return false;
+	return true;
+}
+
 static ssize_t size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -169,13 +218,27 @@ static ssize_t available_size_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
 {
 	struct nd_region *nd_region = to_nd_region(dev);
+	unsigned long long available = 0;
+	int i;
 
-	/* flush in-flight updates */
+	/*
+	 * Flush in-flight updates and grab a snapshot of the available
+	 * size.  Of course, this value is potentially invalidated the
+	 * memory nd_bus_lock() is dropped, but that's userspace's
+	 * problem to not race itself.
+	 */
 	nd_bus_lock(dev);
 	wait_nd_bus_probe_idle(dev);
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+
+		available += nd_dimm_available_dpa(nd_dimm, nd_region);
+	}
 	nd_bus_unlock(dev);
 
-	return sprintf(buf, "%lld\n", nd_region->available_size);
+	return sprintf(buf, "%llu\n", available);
 }
 static DEVICE_ATTR_RO(available_size);
 
@@ -194,13 +257,15 @@ static umode_t nd_region_visible(struct kobject *kobj, struct attribute *a, int 
 {
 	struct device *dev = container_of(kobj, typeof(*dev), kobj);
 	struct nd_region *nd_region = to_nd_region(dev);
+	int type = nd_region_to_namespace_type(nd_region);
 	struct nd_spa *nd_spa = nd_region->nd_spa;
 
 	if (a != &dev_attr_set_state.attr && a != &dev_attr_set_cookie.attr
 			&& a != &dev_attr_available_size.attr)
 		return a->mode;
 
-	if (nd_region_to_namespace_type(nd_region) == ND_DEVICE_NAMESPACE_PMEM
+	if ((type == ND_DEVICE_NAMESPACE_PMEM
+				|| type == ND_DEVICE_NAMESPACE_BLOCK)
 			&& a == &dev_attr_available_size.attr)
 		return a->mode;
 	else if (is_nd_pmem(dev) && nd_spa->nd_set)
@@ -389,10 +454,6 @@ static void nd_region_notify_driver_action(struct nd_bus *nd_bus,
 		nd_set->busy++;
 	else
 		nd_set->busy--;
-
-	dev_dbg(dev, "%s: action: %s set: %d busy: %d\n", __func__,
-		probe ? "probe" : "remove", nd_set->spa_index,
-		nd_set->busy);
 }
 
 void nd_region_probe_start(struct nd_bus *nd_bus, struct device *dev)
@@ -621,6 +682,7 @@ static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 	dev->groups = nd_region_attribute_groups;
 	nd_region->ndr_size = readq(&nd_spa->nfit_spa->spa_length);
 	nd_region->ndr_start = readq(&nd_spa->nfit_spa->spa_base);
+	ida_init(&nd_region->ns_ida);
 	switch (spa_type) {
 	case NFIT_SPA_PM:
 		nd_spa_range_init(nd_bus, nd_region, &nd_pmem_device_type);
