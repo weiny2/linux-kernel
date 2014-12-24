@@ -11,6 +11,8 @@
  * General Public License for more details.
  */
 #include <linux/device.h>
+#include <linux/genhd.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
@@ -49,64 +51,32 @@ struct nd_btt *to_nd_btt(struct device *dev)
 }
 EXPORT_SYMBOL(to_nd_btt);
 
-static const unsigned long lbasize_supported[] = { 512, };
+static const unsigned long btt_lbasize_supported[] = { 512, 0 };
 
 static ssize_t sector_size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
-	ssize_t len = 0;
-	int i;
 
-	for (i = 0; i < ARRAY_SIZE(lbasize_supported); i++)
-		if (nd_btt->lbasize == lbasize_supported[i])
-			len += sprintf(buf + len, "[%ld] ",
-					lbasize_supported[i]);
-		else
-			len += sprintf(buf + len, "%ld ",
-					lbasize_supported[i]);
-	len += sprintf(buf + len, "\n");
-	return len;
-}
-
-static ssize_t __sector_size_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t len)
-{
-	struct nd_btt *nd_btt = to_nd_btt(dev);
-	unsigned long lbasize;
-	int rc, i;
-
-	if (dev->driver)
-		return -EBUSY;
-
-	rc = kstrtoul(buf, 0, &lbasize);
-	if (rc)
-		return rc;
-
-	for (i = 0; i < ARRAY_SIZE(lbasize_supported); i++)
-		if (lbasize == lbasize_supported[i])
-			break;
-
-	if (i < ARRAY_SIZE(lbasize_supported)) {
-		nd_btt->lbasize = lbasize;
-		return len;
-	}
-
-	return -EINVAL;
+	return nd_sector_size_show(nd_btt->lbasize, btt_lbasize_supported, buf);
 }
 
 static ssize_t sector_size_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
+	struct nd_btt *nd_btt = to_nd_btt(dev);
 	ssize_t rc;
 
 	device_lock(dev);
-	rc = __sector_size_store(dev, attr, buf, len);
+	nd_bus_lock(dev);
+	rc = nd_sector_size_store(dev, buf, &nd_btt->lbasize,
+			btt_lbasize_supported);
 	dev_dbg(dev, "%s: result: %zd wrote: %s%s", __func__,
 			rc, buf, buf[len - 1] == '\n' ? "" : "\n");
+	nd_bus_unlock(dev);
 	device_unlock(dev);
 
-	return rc;
+	return rc ? rc : len;
 }
 static DEVICE_ATTR_RW(sector_size);
 
@@ -213,6 +183,12 @@ static ssize_t __backing_dev_store(struct device *dev,
 		dev_dbg(dev, "open '%s' failed: %ld\n", strim(path),
 				PTR_ERR(bdev));
 		len = PTR_ERR(bdev);
+		goto out;
+	}
+
+	if (get_capacity(bdev->bd_disk) < SZ_16M / 512) {
+		blkdev_put(bdev, nd_btt_devs_mode);
+		len = -ENXIO;
 		goto out;
 	}
 

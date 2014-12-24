@@ -1260,17 +1260,6 @@ static void btt_fini(struct btt *btt)
 	}
 }
 
-static bool is_lbasize_supported(unsigned long lbasize)
-{
-	switch (lbasize) {
-	case 512:
-	case 4096:
-		return true;
-	default:
-		return false;
-	}
-}
-
 static u64 partition_offset(struct block_device *bdev)
 {
 	struct hd_struct *p;
@@ -1313,7 +1302,7 @@ static int nd_btt_probe(struct device *dev)
 	int rc;
 
 	if (!ndio_claim || !nd_btt->uuid || !nd_btt->backing_dev
-			|| !is_lbasize_supported(nd_btt->lbasize))
+			|| !nd_btt->lbasize)
 		return -ENODEV;
 
 	rc = link_btt(nd_btt);

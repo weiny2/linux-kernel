@@ -220,6 +220,6 @@ enum nd_driver_flags {
 };
 
 enum {
-	ND_MIN_NAMESPACE_SIZE = 0x01000000,
+	ND_MIN_NAMESPACE_SIZE = 0x00400000,
 };
 #endif /* __NDCTL_H__ */

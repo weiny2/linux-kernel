@@ -238,10 +238,9 @@ int nd_uuid_show(u8 *uuid, char *buf)
 	return sprintf(buf, "%.8x-%.4x-%.4x-%.4x-%.12llx\n",
 			field4, field3, field2, field1, field0);
 }
-EXPORT_SYMBOL(nd_uuid_show);
 
 static int nd_uuid_parse(struct device *dev, u8 *uuid_out, const char *buf,
-	size_t len)
+		size_t len)
 {
 	unsigned long long uuid[2];
 	char field_str[2][17];
@@ -308,7 +307,46 @@ int nd_uuid_store(struct device *dev, u8 **uuid_out, const char *buf,
 
 	return 0;
 }
-EXPORT_SYMBOL(nd_uuid_store);
+
+ssize_t nd_sector_size_show(unsigned long current_lbasize,
+		const unsigned long *supported, char *buf)
+{
+	ssize_t len = 0;
+	int i;
+
+	for (i = 0; supported[i]; i++)
+		if (current_lbasize == supported[i])
+			len += sprintf(buf + len, "[%ld] ", supported[i]);
+		else
+			len += sprintf(buf + len, "%ld ", supported[i]);
+	len += sprintf(buf + len, "\n");
+	return len;
+}
+
+ssize_t nd_sector_size_store(struct device *dev, const char *buf,
+		unsigned long *current_lbasize, const unsigned long *supported)
+{
+	unsigned long lbasize;
+	int rc, i;
+
+	if (dev->driver)
+		return -EBUSY;
+
+	rc = kstrtoul(buf, 0, &lbasize);
+	if (rc)
+		return rc;
+
+	for (i = 0; supported[i]; i++)
+		if (lbasize == supported[i])
+			break;
+
+	if (supported[i]) {
+		*current_lbasize = lbasize;
+		return 0;
+	} else {
+		return -EINVAL;
+	}
+}
 
 static void *nd_bus_new(struct device *parent,
 		struct nfit_bus_descriptor *nfit_desc, struct module *module)
