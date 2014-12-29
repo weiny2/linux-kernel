@@ -19,6 +19,8 @@
 #include <linux/moduleparam.h>
 #include <linux/sizes.h>
 
+#include <asm-generic/io-64-nonatomic-lo-hi.h>
+
 #define SECTOR_SHIFT		9
 #define CL_SHIFT		6
 
@@ -70,7 +72,7 @@ static void ndbw_write_blk_ctl(struct ndbw_device *ndbw, sector_t sector,
 	if (write)
 		cmd |= 1UL << BCW_CMD_SHIFT;
 
-	*(ndbw->bw_ctl_virt) = cmd;
+	writeq(cmd, ndbw->bw_ctl_virt);
 	clflushopt(ndbw->bw_ctl_virt);
 }
 
@@ -85,7 +87,7 @@ static void ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
 	
 	// FIXME: check status.  Do I need to clflushopt before I/O or
 	// something?
-	status = *(ndbw->bw_stat_virt);
+	status = readl(ndbw->bw_stat_virt);
 
 	if (status)
 		printk("REZ %s:  status:%08x\n", __func__, status);
@@ -100,7 +102,7 @@ static void ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
 	// FIXME: NT
 	memcpy(ndbw->bw_apt_virt, src, len);
 
-	status = *(ndbw->bw_stat_virt);
+	status = readl(ndbw->bw_stat_virt);
 
 	if (status)
 		printk("REZ %s:  status:%08x\n", __func__, status);
