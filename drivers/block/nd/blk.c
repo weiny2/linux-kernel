@@ -228,46 +228,19 @@ static void ndbw_del_one(struct ndbw_device *ndbw)
 
 static int __init ndbw_init(void)
 {
-	int result, i;
-	struct resource *res_mem;
+	int rc, i;
 	struct ndbw_device *ndbw, *next;
 
-	/* map block aperture memory */
-	res_mem = request_mem_region_exclusive(bw_apt_phys, bw_size, "nd_blk");
-	if (!res_mem)
-		return -ENOMEM;
+	rc = register_blkdev(ndbw_major, "nd_blk");
+	if (rc < 0)
+		return rc;
 
-	bw_apt_virt = ioremap_cache(bw_apt_phys, bw_size);
-	if (!bw_apt_virt) {
-		result = -ENOMEM;
-		goto out_release;
-	}
+	ndbw_major = rc;
 
-	/* map block control memory */
-	res_mem = request_mem_region_exclusive(bw_ctl_phys, bw_size, "nd_blk");
-	if (!res_mem)
-		return -ENOMEM; // FIXME
-
-	bw_ctl_virt = ioremap_cache(bw_ctl_phys, bw_size);
-	if (!bw_ctl_virt) {
-		result = -ENOMEM;
-		goto out_release; // FIXME
-	}
-	bw_stat_virt = (void*)bw_ctl_virt + 0x1000;
-
-	/* get a major */
-	result = register_blkdev(ndbw_major, "ndbw");
-	if (result < 0) {
-		result = -EIO;
-		goto out_unmap;
-	} else if (result > 0)
-		ndbw_major = result;
-
-	/* initialize our device structures */
 	for (i = 0; i < ndbw_count; i++) {
 		ndbw = ndbw_alloc(i);
 		if (!ndbw) {
-			result = -ENOMEM;
+			rc = -ENOMEM;
 			goto out_free;
 		}
 		list_add_tail(&ndbw->ndbw_list, &ndbw_devices);
@@ -276,23 +249,15 @@ static int __init ndbw_init(void)
 	list_for_each_entry(ndbw, &ndbw_devices, ndbw_list)
 		add_disk(ndbw->ndbw_disk);
 
-	pr_info("nd_blk: module loaded\n");
 	return 0;
 
-	// FIXME: enhance error handling for all the exit cases
 out_free:
 	list_for_each_entry_safe(ndbw, next, &ndbw_devices, ndbw_list) {
 		list_del(&ndbw->ndbw_list);
 		ndbw_free(ndbw);
 	}
 	unregister_blkdev(ndbw_major, "ndbw");
-
-out_unmap:
-//	iounmap(virt_addr);
-
-out_release:
-	release_mem_region(bw_apt_phys, bw_size);
-	return result;
+	return rc;
 }
 
 static void __exit ndbw_exit(void)
@@ -302,20 +267,85 @@ static void __exit ndbw_exit(void)
 	list_for_each_entry_safe(ndbw, next, &ndbw_devices, ndbw_list)
 		ndbw_del_one(ndbw);
 
-	unregister_blkdev(ndbw_major, "ndbw");
+	unregister_blkdev(ndbw_major, "nd_blk");
+}
 
-	/* free block aperture memory */
+/* BEGIN HELPER FUNCTIONS - EVENTUALLY IN ND */
+
+/* This code should do things that will eventually be moved into the rest of
+ * ND.  This includes things like
+ * 	- ioremapping and iounmapping the BDWs and DCRs
+ * 	- initializing instances of the driver with proper parameters
+ * 	- when we do interleaving, implementing a generic interleaving method
+ */
+static int __init ndbw_wrapper_init(void)
+{
+	struct resource *res;
+	int err;
+
+	pr_info("nd_blk: module loaded via wrapper\n");
+
+	/* map block aperture memory */
+	res = request_mem_region_exclusive(bw_apt_phys, bw_size, "nd_blk");
+	if (!res)
+		return -EBUSY;
+
+	bw_apt_virt = ioremap_cache(bw_apt_phys, bw_size);
+	if (!bw_apt_virt) {
+		err = -ENXIO;
+		goto err_apt_ioremap;
+	}
+
+	/* map block control memory */
+	res = request_mem_region_exclusive(bw_ctl_phys, bw_size, "nd_blk");
+	if (!res) {
+		err = -EBUSY;
+		goto err_ctl_reserve;
+	}
+
+	bw_ctl_virt = ioremap_cache(bw_ctl_phys, bw_size);
+	if (!bw_ctl_virt) {
+		err = -ENXIO;
+		goto err_ctl_ioremap;
+	}
+
+	bw_stat_virt = (void*)bw_ctl_virt + 0x1000;
+
+	err = ndbw_init();
+	if (err < 0)
+		goto err_init;
+
+	return 0;
+
+err_init:
+	iounmap(bw_ctl_virt);
+err_ctl_ioremap:
+	release_mem_region(bw_ctl_phys, bw_size);
+err_ctl_reserve:
 	iounmap(bw_apt_virt);
+err_apt_ioremap:
 	release_mem_region(bw_apt_phys, bw_size);
+	return err;
+}
+
+static void __exit ndbw_wrapper_exit(void)
+{
+	ndbw_exit();
 
 	/* free block control memory */
 	iounmap(bw_ctl_virt);
 	release_mem_region(bw_ctl_phys, bw_size);
 
-	pr_info("nd_blk: module unloaded\n");
+	/* free block aperture memory */
+	iounmap(bw_apt_virt);
+	release_mem_region(bw_apt_phys, bw_size);
+
+	pr_info("nd_blk: module unloaded via wrapper\n");
 }
+
+/* END HELPER FUNCTIONS - EVENTUALLY IN ND */
 
 MODULE_AUTHOR("Ross Zwisler <ross.zwisler@linux.intel.com>");
 MODULE_LICENSE("GPL v2");
-module_init(ndbw_init);
-module_exit(ndbw_exit);
+module_init(ndbw_wrapper_init);
+module_exit(ndbw_wrapper_exit);
