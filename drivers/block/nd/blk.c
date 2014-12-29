@@ -60,7 +60,7 @@ static DEFINE_IDA(ndbw_ida);
 
 /* for now, hard code index 0 */
 // for NT stores, check out __copy_user_nocache()
-static void ndbw_write_blk_ctl(struct ndbw_device *ndbw, sector_t sector,
+static void ndbw_write_blk_ctl(struct ndbw_device *bw_dev, sector_t sector,
 		unsigned int len, bool write)
 {
 	u64 cmd 	= 0;
@@ -72,20 +72,20 @@ static void ndbw_write_blk_ctl(struct ndbw_device *ndbw, sector_t sector,
 	if (write)
 		cmd |= 1UL << BCW_CMD_SHIFT;
 
-	writeq(cmd, ndbw->bw[255].bw_ctl_virt);
-	clflushopt(ndbw->bw[255].bw_ctl_virt);
+	writeq(cmd, bw_dev->bw[255].bw_ctl_virt);
+	clflushopt(bw_dev->bw[255].bw_ctl_virt);
 }
 
-static int ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
+static int ndbw_read_blk_win(struct ndbw_device *bw_dev, void *dst,
 		unsigned int len)
 {
 	u32 status;
 
 	// FIXME: NT
-	memcpy(dst, ndbw->bw[255].bw_apt_virt, len);
-	clflushopt(ndbw->bw[255].bw_apt_virt);
+	memcpy(dst, bw_dev->bw[255].bw_apt_virt, len);
+	clflushopt(bw_dev->bw[255].bw_apt_virt);
 	
-	status = readl(ndbw->bw[255].bw_stat_virt);
+	status = readl(bw_dev->bw[255].bw_stat_virt);
 
 	if (status) {
 		/* FIXME: return more precise error values at some point */
@@ -95,16 +95,16 @@ static int ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
 	return 0;
 }
 
-static int ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
+static int ndbw_write_blk_win(struct ndbw_device *bw_dev, void *src,
 		unsigned int len)
 {
 	// non-temporal writes, need to flush via flush hints, yada yada.
 	u32 status;
 
 	// FIXME: NT
-	memcpy(ndbw->bw[255].bw_apt_virt, src, len);
+	memcpy(bw_dev->bw[255].bw_apt_virt, src, len);
 
-	status = readl(ndbw->bw[255].bw_stat_virt);
+	status = readl(bw_dev->bw[255].bw_stat_virt);
 
 	if (status) {
 		/* FIXME: return more precise error values at some point */
@@ -114,20 +114,20 @@ static int ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
 	return 0;
 }
 
-static int ndbw_read(struct ndbw_device *ndbw, void *dst, sector_t sector, unsigned int len)
+static int ndbw_read(struct ndbw_device *bw_dev, void *dst, sector_t sector, unsigned int len)
 {
-	ndbw_write_blk_ctl(ndbw, sector, len, false);
-	return ndbw_read_blk_win(ndbw, dst, len);
+	ndbw_write_blk_ctl(bw_dev, sector, len, false);
+	return ndbw_read_blk_win(bw_dev, dst, len);
 }
 
-static int ndbw_write(struct ndbw_device *ndbw, void *src, sector_t sector, unsigned int len)
+static int ndbw_write(struct ndbw_device *bw_dev, void *src, sector_t sector, unsigned int len)
 {
-	ndbw_write_blk_ctl(ndbw, sector, len, true);
-	return ndbw_write_blk_win(ndbw, src, len);
+	ndbw_write_blk_ctl(bw_dev, sector, len, true);
+	return ndbw_write_blk_win(bw_dev, src, len);
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static int ndbw_do_bvec(struct ndbw_device *ndbw, struct page *page,
+static int ndbw_do_bvec(struct ndbw_device *bw_dev, struct page *page,
 			unsigned int len, unsigned int off, int rw,
 			sector_t sector)
 {
@@ -135,9 +135,9 @@ static int ndbw_do_bvec(struct ndbw_device *ndbw, struct page *page,
 	int rc;
 
 	if (rw == READ)
-		rc = ndbw_read(ndbw, mem + off, sector, len);
+		rc = ndbw_read(bw_dev, mem + off, sector, len);
 	else
-		rc = ndbw_write(ndbw, mem + off, sector, len);
+		rc = ndbw_write(bw_dev, mem + off, sector, len);
 
 	kunmap_atomic(mem);
 
@@ -147,7 +147,7 @@ static int ndbw_do_bvec(struct ndbw_device *ndbw, struct page *page,
 static void ndbw_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
-	struct ndbw_device *ndbw = bdev->bd_disk->private_data;
+	struct ndbw_device *bw_dev = bdev->bd_disk->private_data;
 	int rw;
 	struct bio_vec bvec;
 	sector_t sector;
@@ -171,7 +171,7 @@ static void ndbw_make_request(struct request_queue *q, struct bio *bio)
 		unsigned int len = bvec.bv_len;
 		BUG_ON(len > PAGE_SIZE);
 
-		err = ndbw_do_bvec(ndbw, bvec.bv_page, len,
+		err = ndbw_do_bvec(bw_dev, bvec.bv_page, len,
 			    bvec.bv_offset, rw, sector);
 		if (err)
 			goto out;
@@ -194,35 +194,35 @@ static int ndbw_probe(struct block_window *bw, int num_bw,
 {
 	//FIXME: need to get all those params via struct device eventually
 	size_t disk_sectors =  disk_size >> SECTOR_SHIFT;
-	struct ndbw_device *ndbw;
+	struct ndbw_device *bw_dev;
 	struct gendisk *disk;
 	int err;
 
-	ndbw = kzalloc(sizeof(*ndbw), GFP_KERNEL);
-	if (!ndbw)
+	bw_dev = kzalloc(sizeof(*bw_dev), GFP_KERNEL);
+	if (!bw_dev)
 		return -ENOMEM;
 
-	ndbw->id = ida_simple_get(&ndbw_ida, 0, 0, GFP_KERNEL);
-	if (ndbw->id < 0) {
-		err = ndbw->id;
+	bw_dev->id = ida_simple_get(&ndbw_ida, 0, 0, GFP_KERNEL);
+	if (bw_dev->id < 0) {
+		err = bw_dev->id;
 		goto err_ida;
 	}
 
-	ndbw->bw            = bw;
-	ndbw->num_bw 	    = num_bw;
-	ndbw->disk_size     = disk_size;
+	bw_dev->bw            = bw;
+	bw_dev->num_bw 	    = num_bw;
+	bw_dev->disk_size     = disk_size;
 
-	ndbw->ndbw_queue = blk_alloc_queue(GFP_KERNEL);
-	if (!ndbw->ndbw_queue) {
+	bw_dev->ndbw_queue = blk_alloc_queue(GFP_KERNEL);
+	if (!bw_dev->ndbw_queue) {
 		err = -ENOMEM;
 		goto err_alloc_queue;
 	}
 
-	blk_queue_make_request(ndbw->ndbw_queue, ndbw_make_request);
-	blk_queue_max_hw_sectors(ndbw->ndbw_queue, 1024);
-	blk_queue_bounce_limit(ndbw->ndbw_queue, BLK_BOUNCE_ANY);
+	blk_queue_make_request(bw_dev->ndbw_queue, ndbw_make_request);
+	blk_queue_max_hw_sectors(bw_dev->ndbw_queue, 1024);
+	blk_queue_bounce_limit(bw_dev->ndbw_queue, BLK_BOUNCE_ANY);
 
-	disk = ndbw->ndbw_disk = alloc_disk(0);
+	disk = bw_dev->ndbw_disk = alloc_disk(0);
 	if (!disk) {
 		err = -ENOMEM;
 		goto err_alloc_disk;
@@ -232,41 +232,41 @@ static int ndbw_probe(struct block_window *bw, int num_bw,
 	disk->major		= ndbw_major;
 	disk->first_minor	= 0;
 	disk->fops		= &ndbw_fops;
-	disk->private_data	= ndbw;
-	disk->queue		= ndbw->ndbw_queue;
+	disk->private_data	= bw_dev;
+	disk->queue		= bw_dev->ndbw_queue;
 	disk->flags		= GENHD_FL_EXT_DEVT;
-	sprintf(disk->disk_name, "nd%d", ndbw->id);
+	sprintf(disk->disk_name, "nd%d", bw_dev->id);
 	set_capacity(disk, disk_sectors);
 
 	add_disk(disk);
-//	dev_set_drvdata(dev, ndbw);
+//	dev_set_drvdata(dev, bw_dev);
 
-	ndbw_singleton = ndbw;
+	ndbw_singleton = bw_dev;
 
 	return 0;
 
 err_alloc_disk:
-	blk_cleanup_queue(ndbw->ndbw_queue);
+	blk_cleanup_queue(bw_dev->ndbw_queue);
 err_alloc_queue:
-	ida_simple_remove(&ndbw_ida, ndbw->id);
+	ida_simple_remove(&ndbw_ida, bw_dev->id);
 err_ida:
-	kfree(ndbw);
+	kfree(bw_dev);
 	return err;
 }
 
 //static int ndbw_remove(struct device *dev)
 //called once per device before ndbw_exit is called
-static int ndbw_remove(struct ndbw_device *ndbw)
+static int ndbw_remove(struct ndbw_device *bw_dev)
 {
 	// FIXME: eventually need to get to ndbw_device from struct device.
 //	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
 //	struct pmem_device *pmem = dev_get_drvdata(dev);
 
-	del_gendisk(ndbw->ndbw_disk);
-	put_disk(ndbw->ndbw_disk);
-	blk_cleanup_queue(ndbw->ndbw_queue);
-	ida_simple_remove(&ndbw_ida, ndbw->id);
-	kfree(ndbw);
+	del_gendisk(bw_dev->ndbw_disk);
+	put_disk(bw_dev->ndbw_disk);
+	blk_cleanup_queue(bw_dev->ndbw_queue);
+	ida_simple_remove(&ndbw_ida, bw_dev->id);
+	kfree(bw_dev);
 
 	return 0;
 }
