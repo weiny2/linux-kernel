@@ -24,8 +24,6 @@
 #define SECTOR_SHIFT		9
 #define CL_SHIFT		6
 
-static DEFINE_IDA(ndbw_ida);
-
 enum {
 	/* FIXME: should be (1 << 48)-1, once Simics is updated to match NFIT 0.8s2 */
 	BCW_OFFSET_MASK		= (1UL << 37)-1,
@@ -36,10 +34,6 @@ enum {
 	/* FIXME: should be 56 once Simics is updated to match NFIT 0.8s2 */
 	BCW_CMD_SHIFT		= 45,
 };
-
-static int ndbw_major;
-static DEFINE_MUTEX(ndbw_mutex); // temporary until we get lanes for mutual exclusion.
-struct ndbw_device *ndbw_singleton;
 
 struct ndbw_device {
 	struct request_queue	*ndbw_queue;
@@ -57,6 +51,11 @@ struct ndbw_device {
 	size_t		disk_size;
 	int 		id;
 };
+
+static int ndbw_major;
+static DEFINE_MUTEX(ndbw_mutex); // temporary until we get lanes for mutual exclusion.
+struct ndbw_device *ndbw_singleton;
+static DEFINE_IDA(ndbw_ida);
 
 /* for now, hard code index 0 */
 // for NT stores, check out __copy_user_nocache()
