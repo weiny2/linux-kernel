@@ -76,7 +76,7 @@ static void ndbw_write_blk_ctl(struct ndbw_device *ndbw, sector_t sector,
 	clflushopt(ndbw->bw_ctl_virt);
 }
 
-static void ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
+static int ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
 		unsigned int len)
 {
 	u32 status;
@@ -85,15 +85,17 @@ static void ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
 	memcpy(dst, ndbw->bw_apt_virt, len);
 	clflushopt(ndbw->bw_apt_virt);
 	
-	// FIXME: check status.  Do I need to clflushopt before I/O or
-	// something?
 	status = readl(ndbw->bw_stat_virt);
 
-	if (status)
-		printk("REZ %s:  status:%08x\n", __func__, status);
+	if (status) {
+		/* FIXME: return more precise error values at some point */
+		return -EIO;
+	}
+
+	return 0;
 }
 
-static void ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
+static int ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
 		unsigned int len)
 {
 	// non-temporal writes, need to flush via flush hints, yada yada.
@@ -104,35 +106,42 @@ static void ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
 
 	status = readl(ndbw->bw_stat_virt);
 
-	if (status)
-		printk("REZ %s:  status:%08x\n", __func__, status);
+	if (status) {
+		/* FIXME: return more precise error values at some point */
+		return -EIO;
+	}
+
+	return 0;
 }
 
-static void ndbw_read(struct ndbw_device *ndbw, void *dst, sector_t sector, unsigned int len)
+static int ndbw_read(struct ndbw_device *ndbw, void *dst, sector_t sector, unsigned int len)
 {
 	ndbw_write_blk_ctl(ndbw, sector, len, false);
-	ndbw_read_blk_win(ndbw, dst, len);
+	return ndbw_read_blk_win(ndbw, dst, len);
 }
 
-static void ndbw_write(struct ndbw_device *ndbw, void *src, sector_t sector, unsigned int len)
+static int ndbw_write(struct ndbw_device *ndbw, void *src, sector_t sector, unsigned int len)
 {
 	ndbw_write_blk_ctl(ndbw, sector, len, true);
-	ndbw_write_blk_win(ndbw, src, len);
+	return ndbw_write_blk_win(ndbw, src, len);
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static void ndbw_do_bvec(struct ndbw_device *ndbw, struct page *page,
+static int ndbw_do_bvec(struct ndbw_device *ndbw, struct page *page,
 			unsigned int len, unsigned int off, int rw,
 			sector_t sector)
 {
 	void *mem = kmap_atomic(page);
+	int rc;
 
 	if (rw == READ)
-		ndbw_read(ndbw, mem + off, sector, len);
+		rc = ndbw_read(ndbw, mem + off, sector, len);
 	else
-		ndbw_write(ndbw, mem + off, sector, len);
+		rc = ndbw_write(ndbw, mem + off, sector, len);
 
 	kunmap_atomic(mem);
+
+	return rc;
 }
 
 static void ndbw_make_request(struct request_queue *q, struct bio *bio)
@@ -161,8 +170,12 @@ static void ndbw_make_request(struct request_queue *q, struct bio *bio)
 	bio_for_each_segment(bvec, bio, iter) {
 		unsigned int len = bvec.bv_len;
 		BUG_ON(len > PAGE_SIZE);
-		ndbw_do_bvec(ndbw, bvec.bv_page, len,
+
+		err = ndbw_do_bvec(ndbw, bvec.bv_page, len,
 			    bvec.bv_offset, rw, sector);
+		if (err)
+			goto out;
+
 		sector += len >> SECTOR_SHIFT;
 	}
 
