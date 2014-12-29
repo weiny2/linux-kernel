@@ -33,7 +33,7 @@ enum {
 };
 
 
-// FIXME: move this stuff into the ndb_device
+// FIXME: move this stuff into the ndbw_device
 phys_addr_t	bw_apt_phys 	= 0xf008000000; 	// FIXME: hard coded to match simics
 phys_addr_t	bw_ctl_phys 	= 0xf000800000; 	// FIXME: hard coded to match simics
 void		*bw_apt_virt;
@@ -42,21 +42,21 @@ u32 		*bw_stat_virt;
 size_t		bw_size = 8096;				// FIXME: hard coded for now
 size_t		disk_size = (size_t)64  * 1024 * 1024 * 1024; 	// 64 GiB
 
-static int ndb_major;
-static DEFINE_MUTEX(ndb_mutex); // temporary until we get lanes for mutual exclusion.
+static int ndbw_major;
+static DEFINE_MUTEX(ndbw_mutex); // temporary until we get lanes for mutual exclusion.
 
-struct ndb_device {
-	struct request_queue	*ndb_queue;
-	struct gendisk		*ndb_disk;
-	struct list_head	ndb_list;
+struct ndbw_device {
+	struct request_queue	*ndbw_queue;
+	struct gendisk		*ndbw_disk;
+	struct list_head	ndbw_list;
 };
 
-static LIST_HEAD(ndb_devices);
-static int ndb_count = 1;
+static LIST_HEAD(ndbw_devices);
+static int ndbw_count = 1;
 
 /* for now, hard code index 0 */
 // for NT stores, check out __copy_user_nocache()
-static void ndb_write_blk_ctl(sector_t sector, unsigned int len, bool write)
+static void ndbw_write_blk_ctl(sector_t sector, unsigned int len, bool write)
 {
 	u64 cmd 	= 0;
 	u64 cl_offset 	= sector << (SECTOR_SHIFT - CL_SHIFT);
@@ -71,7 +71,7 @@ static void ndb_write_blk_ctl(sector_t sector, unsigned int len, bool write)
 	clflushopt(bw_ctl_virt);
 }
 
-static void ndb_read_blk_win(void *dst, unsigned int len)
+static void ndbw_read_blk_win(void *dst, unsigned int len)
 {
 	u32 status;
 
@@ -90,7 +90,7 @@ static void ndb_read_blk_win(void *dst, unsigned int len)
 // FIXME: track an I/O all the way through the stack to make sure it's being
 // written in the right place
 // FIXME: use direct I/O to test non-4096 I/Os
-static void ndb_write_blk_win(void *src, unsigned int len)
+static void ndbw_write_blk_win(void *src, unsigned int len)
 {
 	// non-temporal writes, need to flush via flush hints, yada yada.
 	u32 status;
@@ -104,44 +104,44 @@ static void ndb_write_blk_win(void *src, unsigned int len)
 		printk("REZ %s:  status:%08x\n", __func__, status);
 }
 
-static void ndb_read(struct ndb_device *ndb, void *dst, sector_t sector, unsigned int len)
+static void ndbw_read(struct ndbw_device *ndbw, void *dst, sector_t sector, unsigned int len)
 {
-	ndb_write_blk_ctl(sector, len, false);
-	ndb_read_blk_win(dst, len);
+	ndbw_write_blk_ctl(sector, len, false);
+	ndbw_read_blk_win(dst, len);
 }
 
-static void ndb_write(struct ndb_device *ndb, void *src, sector_t sector, unsigned int len)
+static void ndbw_write(struct ndbw_device *ndbw, void *src, sector_t sector, unsigned int len)
 {
-	ndb_write_blk_ctl(sector, len, true);
-	ndb_write_blk_win(src, len);
+	ndbw_write_blk_ctl(sector, len, true);
+	ndbw_write_blk_win(src, len);
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static void ndb_do_bvec(struct ndb_device *ndb, struct page *page,
+static void ndbw_do_bvec(struct ndbw_device *ndbw, struct page *page,
 			unsigned int len, unsigned int off, int rw,
 			sector_t sector)
 {
 	void *mem = kmap_atomic(page);
 
 	if (rw == READ)
-		ndb_read(ndb, mem + off, sector, len);
+		ndbw_read(ndbw, mem + off, sector, len);
 	else
-		ndb_write(ndb, mem + off, sector, len);
+		ndbw_write(ndbw, mem + off, sector, len);
 
 	kunmap_atomic(mem);
 }
 
-static void ndb_make_request(struct request_queue *q, struct bio *bio)
+static void ndbw_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
-	struct ndb_device *ndb = bdev->bd_disk->private_data;
+	struct ndbw_device *ndbw = bdev->bd_disk->private_data;
 	int rw;
 	struct bio_vec bvec;
 	sector_t sector;
 	struct bvec_iter iter;
 	int err = 0;
 
-	mutex_lock(&ndb_mutex);
+	mutex_lock(&ndbw_mutex);
 	sector = bio->bi_iter.bi_sector;
 	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
 		err = -EIO;
@@ -157,82 +157,82 @@ static void ndb_make_request(struct request_queue *q, struct bio *bio)
 	bio_for_each_segment(bvec, bio, iter) {
 		unsigned int len = bvec.bv_len;
 		BUG_ON(len > PAGE_SIZE);
-		ndb_do_bvec(ndb, bvec.bv_page, len,
+		ndbw_do_bvec(ndbw, bvec.bv_page, len,
 			    bvec.bv_offset, rw, sector);
 		sector += len >> SECTOR_SHIFT;
 	}
 
 out:
 	bio_endio(bio, err);
-	mutex_unlock(&ndb_mutex);
+	mutex_unlock(&ndbw_mutex);
 }
 
-static const struct block_device_operations ndb_fops = {
+static const struct block_device_operations ndbw_fops = {
 	.owner =		THIS_MODULE,
 };
 
-static struct ndb_device *ndb_alloc(int i)
+static struct ndbw_device *ndbw_alloc(int i)
 {
-	struct ndb_device *ndb;
+	struct ndbw_device *ndbw;
 	struct gendisk *disk;
 	size_t disk_sectors =  disk_size >> SECTOR_SHIFT;
 
-	ndb = kzalloc(sizeof(*ndb), GFP_KERNEL);
-	if (!ndb)
+	ndbw = kzalloc(sizeof(*ndbw), GFP_KERNEL);
+	if (!ndbw)
 		goto out;
 
-	ndb->ndb_queue = blk_alloc_queue(GFP_KERNEL);
-	if (!ndb->ndb_queue)
+	ndbw->ndbw_queue = blk_alloc_queue(GFP_KERNEL);
+	if (!ndbw->ndbw_queue)
 		goto out_free_dev;
 
-	blk_queue_make_request(ndb->ndb_queue, ndb_make_request);
-	blk_queue_max_hw_sectors(ndb->ndb_queue, 1024);
-	blk_queue_bounce_limit(ndb->ndb_queue, BLK_BOUNCE_ANY);
+	blk_queue_make_request(ndbw->ndbw_queue, ndbw_make_request);
+	blk_queue_max_hw_sectors(ndbw->ndbw_queue, 1024);
+	blk_queue_bounce_limit(ndbw->ndbw_queue, BLK_BOUNCE_ANY);
 
-	disk = ndb->ndb_disk = alloc_disk(0);
+	disk = ndbw->ndbw_disk = alloc_disk(0);
 	if (!disk)
 		goto out_free_queue;
-	disk->major		= ndb_major;
+	disk->major		= ndbw_major;
 	disk->first_minor	= 0;
-	disk->fops		= &ndb_fops;
-	disk->private_data	= ndb;
-	disk->queue		= ndb->ndb_queue;
+	disk->fops		= &ndbw_fops;
+	disk->private_data	= ndbw;
+	disk->queue		= ndbw->ndbw_queue;
 	disk->flags		= GENHD_FL_EXT_DEVT;
 	sprintf(disk->disk_name, "nd%d", i);
 	set_capacity(disk, disk_sectors);
 
-	return ndb;
+	return ndbw;
 
 out_free_queue:
-	blk_cleanup_queue(ndb->ndb_queue);
+	blk_cleanup_queue(ndbw->ndbw_queue);
 out_free_dev:
-	kfree(ndb);
+	kfree(ndbw);
 out:
 	return NULL;
 }
 
-static void ndb_free(struct ndb_device *ndb)
+static void ndbw_free(struct ndbw_device *ndbw)
 {
-	put_disk(ndb->ndb_disk);
-	blk_cleanup_queue(ndb->ndb_queue);
-	kfree(ndb);
+	put_disk(ndbw->ndbw_disk);
+	blk_cleanup_queue(ndbw->ndbw_queue);
+	kfree(ndbw);
 }
 
-static void ndb_del_one(struct ndb_device *ndb)
+static void ndbw_del_one(struct ndbw_device *ndbw)
 {
-	list_del(&ndb->ndb_list);
-	del_gendisk(ndb->ndb_disk);
-	ndb_free(ndb);
+	list_del(&ndbw->ndbw_list);
+	del_gendisk(ndbw->ndbw_disk);
+	ndbw_free(ndbw);
 }
 
-static int __init ndb_init(void)
+static int __init ndbw_init(void)
 {
 	int result, i;
 	struct resource *res_mem;
-	struct ndb_device *ndb, *next;
+	struct ndbw_device *ndbw, *next;
 
 	/* map block aperture memory */
-	res_mem = request_mem_region_exclusive(bw_apt_phys, bw_size, "nd-block");
+	res_mem = request_mem_region_exclusive(bw_apt_phys, bw_size, "nd_blk");
 	if (!res_mem)
 		return -ENOMEM;
 
@@ -243,7 +243,7 @@ static int __init ndb_init(void)
 	}
 
 	/* map block control memory */
-	res_mem = request_mem_region_exclusive(bw_ctl_phys, bw_size, "nd-block");
+	res_mem = request_mem_region_exclusive(bw_ctl_phys, bw_size, "nd_blk");
 	if (!res_mem)
 		return -ENOMEM; // FIXME
 
@@ -255,36 +255,36 @@ static int __init ndb_init(void)
 	bw_stat_virt = (void*)bw_ctl_virt + 0x1000;
 
 	/* get a major */
-	result = register_blkdev(ndb_major, "ndb");
+	result = register_blkdev(ndbw_major, "ndbw");
 	if (result < 0) {
 		result = -EIO;
 		goto out_unmap;
 	} else if (result > 0)
-		ndb_major = result;
+		ndbw_major = result;
 
 	/* initialize our device structures */
-	for (i = 0; i < ndb_count; i++) {
-		ndb = ndb_alloc(i);
-		if (!ndb) {
+	for (i = 0; i < ndbw_count; i++) {
+		ndbw = ndbw_alloc(i);
+		if (!ndbw) {
 			result = -ENOMEM;
 			goto out_free;
 		}
-		list_add_tail(&ndb->ndb_list, &ndb_devices);
+		list_add_tail(&ndbw->ndbw_list, &ndbw_devices);
 	}
 
-	list_for_each_entry(ndb, &ndb_devices, ndb_list)
-		add_disk(ndb->ndb_disk);
+	list_for_each_entry(ndbw, &ndbw_devices, ndbw_list)
+		add_disk(ndbw->ndbw_disk);
 
-	pr_info("nd-block: module loaded\n");
+	pr_info("nd_blk: module loaded\n");
 	return 0;
 
 	// FIXME: enhance error handling for all the exit cases
 out_free:
-	list_for_each_entry_safe(ndb, next, &ndb_devices, ndb_list) {
-		list_del(&ndb->ndb_list);
-		ndb_free(ndb);
+	list_for_each_entry_safe(ndbw, next, &ndbw_devices, ndbw_list) {
+		list_del(&ndbw->ndbw_list);
+		ndbw_free(ndbw);
 	}
-	unregister_blkdev(ndb_major, "ndb");
+	unregister_blkdev(ndbw_major, "ndbw");
 
 out_unmap:
 //	iounmap(virt_addr);
@@ -294,14 +294,14 @@ out_release:
 	return result;
 }
 
-static void __exit ndb_exit(void)
+static void __exit ndbw_exit(void)
 {
-	struct ndb_device *ndb, *next;
+	struct ndbw_device *ndbw, *next;
 
-	list_for_each_entry_safe(ndb, next, &ndb_devices, ndb_list)
-		ndb_del_one(ndb);
+	list_for_each_entry_safe(ndbw, next, &ndbw_devices, ndbw_list)
+		ndbw_del_one(ndbw);
 
-	unregister_blkdev(ndb_major, "ndb");
+	unregister_blkdev(ndbw_major, "ndbw");
 
 	/* free block aperture memory */
 	iounmap(bw_apt_virt);
@@ -311,10 +311,10 @@ static void __exit ndb_exit(void)
 	iounmap(bw_ctl_virt);
 	release_mem_region(bw_ctl_phys, bw_size);
 
-	pr_info("nd-block: module unloaded\n");
+	pr_info("nd_blk: module unloaded\n");
 }
 
 MODULE_AUTHOR("Ross Zwisler <ross.zwisler@linux.intel.com>");
 MODULE_LICENSE("GPL v2");
-module_init(ndb_init);
-module_exit(ndb_exit);
+module_init(ndbw_init);
+module_exit(ndbw_exit);
