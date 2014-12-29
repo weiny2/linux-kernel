@@ -315,6 +315,6 @@ static void __exit ndb_exit(void)
 }
 
 MODULE_AUTHOR("Ross Zwisler <ross.zwisler@linux.intel.com>");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");
 module_init(ndb_init);
 module_exit(ndb_exit);
