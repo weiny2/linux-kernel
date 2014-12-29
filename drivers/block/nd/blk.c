@@ -22,6 +22,8 @@
 #define SECTOR_SHIFT		9
 #define CL_SHIFT		6
 
+static DEFINE_IDA(ndbw_ida);
+
 enum {
 	/* FIXME: should be (1 << 48)-1, once Simics is updated to match NFIT 0.8s2 */
 	BCW_OFFSET_MASK		= (1UL << 37)-1,
@@ -33,31 +35,31 @@ enum {
 	BCW_CMD_SHIFT		= 45,
 };
 
-
-// FIXME: move this stuff into the ndbw_device
-phys_addr_t	bw_apt_phys 	= 0xf008000000; 	// FIXME: hard coded to match simics
-phys_addr_t	bw_ctl_phys 	= 0xf000800000; 	// FIXME: hard coded to match simics
-void		*bw_apt_virt;
-u64 		*bw_ctl_virt;
-u32 		*bw_stat_virt;
-size_t		bw_size 	= SZ_8K;
-size_t		disk_size 	= SZ_64G;
-
 static int ndbw_major;
 static DEFINE_MUTEX(ndbw_mutex); // temporary until we get lanes for mutual exclusion.
+struct ndbw_device *ndbw_singleton;
 
 struct ndbw_device {
 	struct request_queue	*ndbw_queue;
 	struct gendisk		*ndbw_disk;
-	struct list_head	ndbw_list;
-};
+//	struct nd_io		ndio;
 
-static LIST_HEAD(ndbw_devices);
-static int ndbw_count = 1;
+	phys_addr_t	bw_apt_phys;
+	phys_addr_t	bw_ctl_phys;
+
+	void		*bw_apt_virt;
+	u64 		*bw_ctl_virt;
+	u32 		*bw_stat_virt;
+
+	size_t		bw_size;
+	size_t		disk_size;
+	int 		id;
+};
 
 /* for now, hard code index 0 */
 // for NT stores, check out __copy_user_nocache()
-static void ndbw_write_blk_ctl(sector_t sector, unsigned int len, bool write)
+static void ndbw_write_blk_ctl(struct ndbw_device *ndbw, sector_t sector,
+		unsigned int len, bool write)
 {
 	u64 cmd 	= 0;
 	u64 cl_offset 	= sector << (SECTOR_SHIFT - CL_SHIFT);
@@ -68,38 +70,37 @@ static void ndbw_write_blk_ctl(sector_t sector, unsigned int len, bool write)
 	if (write)
 		cmd |= 1UL << BCW_CMD_SHIFT;
 
-	*bw_ctl_virt = cmd;
-	clflushopt(bw_ctl_virt);
+	*(ndbw->bw_ctl_virt) = cmd;
+	clflushopt(ndbw->bw_ctl_virt);
 }
 
-static void ndbw_read_blk_win(void *dst, unsigned int len)
+static void ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
+		unsigned int len)
 {
 	u32 status;
 
 	// FIXME: NT
-	memcpy(dst, bw_apt_virt, len);
-	clflushopt(bw_apt_virt);
+	memcpy(dst, ndbw->bw_apt_virt, len);
+	clflushopt(ndbw->bw_apt_virt);
 	
 	// FIXME: check status.  Do I need to clflushopt before I/O or
 	// something?
-	status = *bw_stat_virt;
+	status = *(ndbw->bw_stat_virt);
 
 	if (status)
 		printk("REZ %s:  status:%08x\n", __func__, status);
 }
 
-// FIXME: track an I/O all the way through the stack to make sure it's being
-// written in the right place
-// FIXME: use direct I/O to test non-4096 I/Os
-static void ndbw_write_blk_win(void *src, unsigned int len)
+static void ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
+		unsigned int len)
 {
 	// non-temporal writes, need to flush via flush hints, yada yada.
 	u32 status;
 
 	// FIXME: NT
-	memcpy(bw_apt_virt, src, len);
+	memcpy(ndbw->bw_apt_virt, src, len);
 
-	status = *bw_stat_virt;
+	status = *(ndbw->bw_stat_virt);
 
 	if (status)
 		printk("REZ %s:  status:%08x\n", __func__, status);
@@ -107,14 +108,14 @@ static void ndbw_write_blk_win(void *src, unsigned int len)
 
 static void ndbw_read(struct ndbw_device *ndbw, void *dst, sector_t sector, unsigned int len)
 {
-	ndbw_write_blk_ctl(sector, len, false);
-	ndbw_read_blk_win(dst, len);
+	ndbw_write_blk_ctl(ndbw, sector, len, false);
+	ndbw_read_blk_win(ndbw, dst, len);
 }
 
 static void ndbw_write(struct ndbw_device *ndbw, void *src, sector_t sector, unsigned int len)
 {
-	ndbw_write_blk_ctl(sector, len, true);
-	ndbw_write_blk_win(src, len);
+	ndbw_write_blk_ctl(ndbw, sector, len, true);
+	ndbw_write_blk_win(ndbw, src, len);
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
@@ -172,105 +173,126 @@ static const struct block_device_operations ndbw_fops = {
 	.owner =		THIS_MODULE,
 };
 
-static struct ndbw_device *ndbw_alloc(int i)
+//static int ndbw_probe(struct device *dev)
+static int ndbw_probe(void *bw_apt_virt, u64 *bw_ctl_virt, u32 *bw_stat_virt,
+		size_t bw_size, size_t disk_size, struct device *dev)
 {
+	//FIXME: need to get all those params via struct device eventually
+	size_t disk_sectors =  disk_size >> SECTOR_SHIFT;
 	struct ndbw_device *ndbw;
 	struct gendisk *disk;
-	size_t disk_sectors =  disk_size >> SECTOR_SHIFT;
+	int err;
 
 	ndbw = kzalloc(sizeof(*ndbw), GFP_KERNEL);
 	if (!ndbw)
-		goto out;
+		return -ENOMEM;
+
+	ndbw->id = ida_simple_get(&ndbw_ida, 0, 0, GFP_KERNEL);
+	if (ndbw->id < 0) {
+		err = ndbw->id;
+		goto err_ida;
+	}
+
+	ndbw->bw_apt_virt  = bw_apt_virt;
+	ndbw->bw_ctl_virt  = bw_ctl_virt;
+	ndbw->bw_stat_virt = bw_stat_virt;
+	ndbw->bw_size      = bw_size;
+	ndbw->disk_size    = disk_size;
 
 	ndbw->ndbw_queue = blk_alloc_queue(GFP_KERNEL);
-	if (!ndbw->ndbw_queue)
-		goto out_free_dev;
+	if (!ndbw->ndbw_queue) {
+		err = -ENOMEM;
+		goto err_alloc_queue;
+	}
 
 	blk_queue_make_request(ndbw->ndbw_queue, ndbw_make_request);
 	blk_queue_max_hw_sectors(ndbw->ndbw_queue, 1024);
 	blk_queue_bounce_limit(ndbw->ndbw_queue, BLK_BOUNCE_ANY);
 
 	disk = ndbw->ndbw_disk = alloc_disk(0);
-	if (!disk)
-		goto out_free_queue;
+	if (!disk) {
+		err = -ENOMEM;
+		goto err_alloc_disk;
+	}
+
+//	disk->driverfs_dev	= dev;
 	disk->major		= ndbw_major;
 	disk->first_minor	= 0;
 	disk->fops		= &ndbw_fops;
 	disk->private_data	= ndbw;
 	disk->queue		= ndbw->ndbw_queue;
 	disk->flags		= GENHD_FL_EXT_DEVT;
-	sprintf(disk->disk_name, "nd%d", i);
+	sprintf(disk->disk_name, "nd%d", ndbw->id);
 	set_capacity(disk, disk_sectors);
 
-	return ndbw;
+	add_disk(disk);
+//	dev_set_drvdata(dev, ndbw);
 
-out_free_queue:
+	ndbw_singleton = ndbw;
+
+	return 0;
+
+err_alloc_disk:
 	blk_cleanup_queue(ndbw->ndbw_queue);
-out_free_dev:
+err_alloc_queue:
+	ida_simple_remove(&ndbw_ida, ndbw->id);
+err_ida:
 	kfree(ndbw);
-out:
-	return NULL;
+	return err;
 }
 
-static void ndbw_free(struct ndbw_device *ndbw)
+//static int ndbw_remove(struct device *dev)
+//called once per device before ndbw_exit is called
+static int ndbw_remove(struct ndbw_device *ndbw)
 {
+	// FIXME: eventually need to get to ndbw_device from struct device.
+//	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
+//	struct pmem_device *pmem = dev_get_drvdata(dev);
+
+	del_gendisk(ndbw->ndbw_disk);
 	put_disk(ndbw->ndbw_disk);
 	blk_cleanup_queue(ndbw->ndbw_queue);
+	ida_simple_remove(&ndbw_ida, ndbw->id);
 	kfree(ndbw);
-}
 
-static void ndbw_del_one(struct ndbw_device *ndbw)
-{
-	list_del(&ndbw->ndbw_list);
-	del_gendisk(ndbw->ndbw_disk);
-	ndbw_free(ndbw);
+	return 0;
 }
 
 static int __init ndbw_init(void)
 {
-	int rc, i;
-	struct ndbw_device *ndbw, *next;
+	int rc;
 
-	rc = register_blkdev(ndbw_major, "nd_blk");
+	rc = register_blkdev(0, "nd_blk");
 	if (rc < 0)
 		return rc;
 
 	ndbw_major = rc;
+	// FIXME: nd_driver registration & error handling
+	/*
+	rc = nd_driver_register(&nd_ndbw_driver);
 
-	for (i = 0; i < ndbw_count; i++) {
-		ndbw = ndbw_alloc(i);
-		if (!ndbw) {
-			rc = -ENOMEM;
-			goto out_free;
-		}
-		list_add_tail(&ndbw->ndbw_list, &ndbw_devices);
-	}
-
-	list_for_each_entry(ndbw, &ndbw_devices, ndbw_list)
-		add_disk(ndbw->ndbw_disk);
+	if (rc < 0)
+		unregister_blkdev(ndbw_major, "ndbw");
+	*/
 
 	return 0;
-
-out_free:
-	list_for_each_entry_safe(ndbw, next, &ndbw_devices, ndbw_list) {
-		list_del(&ndbw->ndbw_list);
-		ndbw_free(ndbw);
-	}
-	unregister_blkdev(ndbw_major, "ndbw");
-	return rc;
 }
 
 static void __exit ndbw_exit(void)
 {
-	struct ndbw_device *ndbw, *next;
-
-	list_for_each_entry_safe(ndbw, next, &ndbw_devices, ndbw_list)
-		ndbw_del_one(ndbw);
-
+	// FIXME: nd driver unregister
 	unregister_blkdev(ndbw_major, "nd_blk");
 }
 
 /* BEGIN HELPER FUNCTIONS - EVENTUALLY IN ND */
+
+static phys_addr_t	bw_apt_phys 	= 0xf008000000;
+static phys_addr_t	bw_ctl_phys 	= 0xf000800000;
+static void		*bw_apt_virt;
+static u64 		*bw_ctl_virt;
+static u32 		*bw_stat_virt;
+static size_t		bw_size 	= SZ_8K;
+static size_t		disk_size 	= SZ_64G;
 
 /* This code should do things that will eventually be moved into the rest of
  * ND.  This includes things like
@@ -315,6 +337,9 @@ static int __init ndbw_wrapper_init(void)
 	if (err < 0)
 		goto err_init;
 
+	ndbw_probe(bw_apt_virt, bw_ctl_virt, bw_stat_virt, bw_size,
+			disk_size, NULL);
+
 	return 0;
 
 err_init:
@@ -330,6 +355,8 @@ err_apt_ioremap:
 
 static void __exit ndbw_wrapper_exit(void)
 {
+	ndbw_remove(ndbw_singleton);
+
 	ndbw_exit();
 
 	/* free block control memory */
