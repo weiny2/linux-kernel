@@ -35,21 +35,22 @@ enum {
 	BCW_CMD_SHIFT		= 45,
 };
 
+struct block_window {
+	void			*bw_apt_virt;
+	u64 			*bw_ctl_virt;
+	u32 			*bw_stat_virt;
+};
+
 struct ndbw_device {
 	struct request_queue	*ndbw_queue;
 	struct gendisk		*ndbw_disk;
 //	struct nd_io		ndio;
 
-	phys_addr_t	bw_apt_phys;
-	phys_addr_t	bw_ctl_phys;
+	struct block_window	*bw;
+	int 			num_bw;
 
-	void		*bw_apt_virt;
-	u64 		*bw_ctl_virt;
-	u32 		*bw_stat_virt;
-
-	size_t		bw_size;
-	size_t		disk_size;
-	int 		id;
+	size_t			disk_size;
+	int 			id;
 };
 
 static int ndbw_major;
@@ -71,8 +72,8 @@ static void ndbw_write_blk_ctl(struct ndbw_device *ndbw, sector_t sector,
 	if (write)
 		cmd |= 1UL << BCW_CMD_SHIFT;
 
-	writeq(cmd, ndbw->bw_ctl_virt);
-	clflushopt(ndbw->bw_ctl_virt);
+	writeq(cmd, ndbw->bw[255].bw_ctl_virt);
+	clflushopt(ndbw->bw[255].bw_ctl_virt);
 }
 
 static int ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
@@ -81,10 +82,10 @@ static int ndbw_read_blk_win(struct ndbw_device *ndbw, void *dst,
 	u32 status;
 
 	// FIXME: NT
-	memcpy(dst, ndbw->bw_apt_virt, len);
-	clflushopt(ndbw->bw_apt_virt);
+	memcpy(dst, ndbw->bw[255].bw_apt_virt, len);
+	clflushopt(ndbw->bw[255].bw_apt_virt);
 	
-	status = readl(ndbw->bw_stat_virt);
+	status = readl(ndbw->bw[255].bw_stat_virt);
 
 	if (status) {
 		/* FIXME: return more precise error values at some point */
@@ -101,9 +102,9 @@ static int ndbw_write_blk_win(struct ndbw_device *ndbw, void *src,
 	u32 status;
 
 	// FIXME: NT
-	memcpy(ndbw->bw_apt_virt, src, len);
+	memcpy(ndbw->bw[255].bw_apt_virt, src, len);
 
-	status = readl(ndbw->bw_stat_virt);
+	status = readl(ndbw->bw[255].bw_stat_virt);
 
 	if (status) {
 		/* FIXME: return more precise error values at some point */
@@ -188,8 +189,8 @@ static const struct block_device_operations ndbw_fops = {
 };
 
 //static int ndbw_probe(struct device *dev)
-static int ndbw_probe(void *bw_apt_virt, u64 *bw_ctl_virt, u32 *bw_stat_virt,
-		size_t bw_size, size_t disk_size, struct device *dev)
+static int ndbw_probe(struct block_window *bw, int num_bw,
+		size_t disk_size, struct device *dev)
 {
 	//FIXME: need to get all those params via struct device eventually
 	size_t disk_sectors =  disk_size >> SECTOR_SHIFT;
@@ -207,11 +208,9 @@ static int ndbw_probe(void *bw_apt_virt, u64 *bw_ctl_virt, u32 *bw_stat_virt,
 		goto err_ida;
 	}
 
-	ndbw->bw_apt_virt  = bw_apt_virt;
-	ndbw->bw_ctl_virt  = bw_ctl_virt;
-	ndbw->bw_stat_virt = bw_stat_virt;
-	ndbw->bw_size      = bw_size;
-	ndbw->disk_size    = disk_size;
+	ndbw->bw            = bw;
+	ndbw->num_bw 	    = num_bw;
+	ndbw->disk_size     = disk_size;
 
 	ndbw->ndbw_queue = blk_alloc_queue(GFP_KERNEL);
 	if (!ndbw->ndbw_queue) {
@@ -300,12 +299,13 @@ static void __exit ndbw_exit(void)
 
 /* BEGIN HELPER FUNCTIONS - EVENTUALLY IN ND */
 
+struct block_window 	*bw;
+#define NUM_BW	 	256
 static phys_addr_t	bw_apt_phys 	= 0xf008000000;
 static phys_addr_t	bw_ctl_phys 	= 0xf000800000;
 static void		*bw_apt_virt;
 static u64 		*bw_ctl_virt;
-static u32 		*bw_stat_virt;
-static size_t		bw_size 	= SZ_8K;
+static size_t		bw_size 	= SZ_8K * NUM_BW;
 static size_t		disk_size 	= SZ_64G;
 
 /* This code should do things that will eventually be moved into the rest of
@@ -317,7 +317,7 @@ static size_t		disk_size 	= SZ_64G;
 static int __init ndbw_wrapper_init(void)
 {
 	struct resource *res;
-	int err;
+	int err, i;
 
 	pr_info("nd_blk: module loaded via wrapper\n");
 
@@ -345,18 +345,30 @@ static int __init ndbw_wrapper_init(void)
 		goto err_ctl_ioremap;
 	}
 
-	bw_stat_virt = (void*)bw_ctl_virt + 0x1000;
+	/* set up block windows */
+	bw = kmalloc(sizeof(*bw) * NUM_BW, GFP_KERNEL);
+	if (!bw) {
+		err = -ENOMEM;
+		goto err_bw;
+	}
+
+	for (i = 0; i < NUM_BW; i++) {
+		bw[i].bw_apt_virt = (void*)bw_apt_virt + i*0x2000;
+		bw[i].bw_ctl_virt = (void*)bw_ctl_virt + i*0x2000;
+		bw[i].bw_stat_virt = (void*)bw[i].bw_ctl_virt + 0x1000;
+	}
 
 	err = ndbw_init();
 	if (err < 0)
 		goto err_init;
 
-	ndbw_probe(bw_apt_virt, bw_ctl_virt, bw_stat_virt, bw_size,
-			disk_size, NULL);
+	ndbw_probe(bw, NUM_BW, disk_size, NULL);
 
 	return 0;
 
 err_init:
+	kfree(bw);
+err_bw:
 	iounmap(bw_ctl_virt);
 err_ctl_ioremap:
 	release_mem_region(bw_ctl_phys, bw_size);
@@ -372,6 +384,8 @@ static void __exit ndbw_wrapper_exit(void)
 	ndbw_remove(ndbw_singleton);
 
 	ndbw_exit();
+
+	kfree(bw);
 
 	/* free block control memory */
 	iounmap(bw_ctl_virt);
