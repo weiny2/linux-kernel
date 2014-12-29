@@ -17,6 +17,7 @@
 #include <linux/genhd.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/sizes.h>
 
 #define SECTOR_SHIFT		9
 #define CL_SHIFT		6
@@ -39,8 +40,8 @@ phys_addr_t	bw_ctl_phys 	= 0xf000800000; 	// FIXME: hard coded to match simics
 void		*bw_apt_virt;
 u64 		*bw_ctl_virt;
 u32 		*bw_stat_virt;
-size_t		bw_size = 8096;				// FIXME: hard coded for now
-size_t		disk_size = (size_t)64  * 1024 * 1024 * 1024; 	// 64 GiB
+size_t		bw_size 	= SZ_8K;
+size_t		disk_size 	= SZ_64G;
 
 static int ndbw_major;
 static DEFINE_MUTEX(ndbw_mutex); // temporary until we get lanes for mutual exclusion.
