@@ -48,19 +48,20 @@ struct ndbw_device {
 
 	struct block_window	*bw;
 	int 			num_bw;
+	atomic_t 		last_bw;
+	spinlock_t 		*bw_lock; /* Array of 'num_bw' locks */
 
 	size_t			disk_size;
 	int 			id;
 };
 
 static int ndbw_major;
-static DEFINE_MUTEX(ndbw_mutex); // temporary until we get lanes for mutual exclusion.
 struct ndbw_device *ndbw_singleton;
 static DEFINE_IDA(ndbw_ida);
 
 /* for now, hard code index 0 */
 // for NT stores, check out __copy_user_nocache()
-static void ndbw_write_blk_ctl(struct ndbw_device *bw_dev, sector_t sector,
+static void ndbw_write_blk_ctl(struct block_window *bw, sector_t sector,
 		unsigned int len, bool write)
 {
 	u64 cmd 	= 0;
@@ -72,20 +73,20 @@ static void ndbw_write_blk_ctl(struct ndbw_device *bw_dev, sector_t sector,
 	if (write)
 		cmd |= 1UL << BCW_CMD_SHIFT;
 
-	writeq(cmd, bw_dev->bw[255].bw_ctl_virt);
-	clflushopt(bw_dev->bw[255].bw_ctl_virt);
+	writeq(cmd, bw->bw_ctl_virt);
+	clflushopt(bw->bw_ctl_virt);
 }
 
-static int ndbw_read_blk_win(struct ndbw_device *bw_dev, void *dst,
+static int ndbw_read_blk_win(struct block_window *bw, void *dst,
 		unsigned int len)
 {
 	u32 status;
 
 	// FIXME: NT
-	memcpy(dst, bw_dev->bw[255].bw_apt_virt, len);
-	clflushopt(bw_dev->bw[255].bw_apt_virt);
+	memcpy(dst, bw->bw_apt_virt, len);
+	clflushopt(bw->bw_apt_virt);
 	
-	status = readl(bw_dev->bw[255].bw_stat_virt);
+	status = readl(bw->bw_stat_virt);
 
 	if (status) {
 		/* FIXME: return more precise error values at some point */
@@ -95,16 +96,16 @@ static int ndbw_read_blk_win(struct ndbw_device *bw_dev, void *dst,
 	return 0;
 }
 
-static int ndbw_write_blk_win(struct ndbw_device *bw_dev, void *src,
+static int ndbw_write_blk_win(struct block_window *bw, void *src,
 		unsigned int len)
 {
 	// non-temporal writes, need to flush via flush hints, yada yada.
 	u32 status;
 
 	// FIXME: NT
-	memcpy(bw_dev->bw[255].bw_apt_virt, src, len);
+	memcpy(bw->bw_apt_virt, src, len);
 
-	status = readl(bw_dev->bw[255].bw_stat_virt);
+	status = readl(bw->bw_stat_virt);
 
 	if (status) {
 		/* FIXME: return more precise error values at some point */
@@ -114,34 +115,46 @@ static int ndbw_write_blk_win(struct ndbw_device *bw_dev, void *src,
 	return 0;
 }
 
-static int ndbw_read(struct ndbw_device *bw_dev, void *dst, sector_t sector, unsigned int len)
+static int ndbw_read(struct block_window *bw, void *dst, sector_t sector,
+		unsigned int len)
 {
-	ndbw_write_blk_ctl(bw_dev, sector, len, false);
-	return ndbw_read_blk_win(bw_dev, dst, len);
+	ndbw_write_blk_ctl(bw, sector, len, false);
+	return ndbw_read_blk_win(bw, dst, len);
 }
 
-static int ndbw_write(struct ndbw_device *bw_dev, void *src, sector_t sector, unsigned int len)
+static int ndbw_write(struct block_window *bw, void *src, sector_t sector,
+		unsigned int len)
 {
-	ndbw_write_blk_ctl(bw_dev, sector, len, true);
-	return ndbw_write_blk_win(bw_dev, src, len);
+	ndbw_write_blk_ctl(bw, sector, len, true);
+	return ndbw_write_blk_win(bw, src, len);
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static int ndbw_do_bvec(struct ndbw_device *bw_dev, struct page *page,
-			unsigned int len, unsigned int off, int rw,
-			sector_t sector)
+static int ndbw_do_bvec(struct block_window *bw, struct page *page,
+		unsigned int len, unsigned int off, int rw, sector_t sector)
 {
 	void *mem = kmap_atomic(page);
 	int rc;
 
 	if (rw == READ)
-		rc = ndbw_read(bw_dev, mem + off, sector, len);
+		rc = ndbw_read(bw, mem + off, sector, len);
 	else
-		rc = ndbw_write(bw_dev, mem + off, sector, len);
+		rc = ndbw_write(bw, mem + off, sector, len);
 
 	kunmap_atomic(mem);
 
 	return rc;
+}
+
+static void acquire_bw(struct ndbw_device *bw_dev, int *bw_index)
+{
+	*bw_index = atomic_inc_return(&(bw_dev->last_bw)) % bw_dev->num_bw;
+	spin_lock(&(bw_dev->bw_lock[*bw_index]));
+}
+
+static void release_bw(struct ndbw_device *bw_dev, int bw_index)
+{
+	spin_unlock(&(bw_dev->bw_lock[bw_index]));
 }
 
 static void ndbw_make_request(struct request_queue *q, struct bio *bio)
@@ -153,8 +166,10 @@ static void ndbw_make_request(struct request_queue *q, struct bio *bio)
 	sector_t sector;
 	struct bvec_iter iter;
 	int err = 0;
+	int bw_index;
 
-	mutex_lock(&ndbw_mutex);
+	acquire_bw(bw_dev, &bw_index);
+
 	sector = bio->bi_iter.bi_sector;
 	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
 		err = -EIO;
@@ -171,8 +186,8 @@ static void ndbw_make_request(struct request_queue *q, struct bio *bio)
 		unsigned int len = bvec.bv_len;
 		BUG_ON(len > PAGE_SIZE);
 
-		err = ndbw_do_bvec(bw_dev, bvec.bv_page, len,
-			    bvec.bv_offset, rw, sector);
+		err = ndbw_do_bvec(&bw_dev->bw[bw_index], bvec.bv_page, len,
+				bvec.bv_offset, rw, sector);
 		if (err)
 			goto out;
 
@@ -181,12 +196,27 @@ static void ndbw_make_request(struct request_queue *q, struct bio *bio)
 
 out:
 	bio_endio(bio, err);
-	mutex_unlock(&ndbw_mutex);
+	release_bw(bw_dev, bw_index);
 }
 
 static const struct block_device_operations ndbw_fops = {
 	.owner =		THIS_MODULE,
 };
+
+static int ndbw_init_locks(struct ndbw_device *bw_dev)
+{
+	int i;
+
+	bw_dev->bw_lock = kmalloc(bw_dev->num_bw * sizeof(spinlock_t),
+				GFP_KERNEL);
+	if (!bw_dev->bw_lock)
+		return -ENOMEM;
+
+	for (i = 0; i < bw_dev->num_bw; i++)
+		spin_lock_init(&bw_dev->bw_lock[i]);
+
+	return 0;
+}
 
 //static int ndbw_probe(struct device *dev)
 static int ndbw_probe(struct block_window *bw, int num_bw,
@@ -208,9 +238,13 @@ static int ndbw_probe(struct block_window *bw, int num_bw,
 		goto err_ida;
 	}
 
-	bw_dev->bw            = bw;
-	bw_dev->num_bw 	    = num_bw;
-	bw_dev->disk_size     = disk_size;
+	bw_dev->bw		= bw;
+	bw_dev->num_bw		= num_bw;
+	bw_dev->disk_size	= disk_size;
+
+	err = ndbw_init_locks(bw_dev);
+	if (err)
+		goto err_init_locks;
 
 	bw_dev->ndbw_queue = blk_alloc_queue(GFP_KERNEL);
 	if (!bw_dev->ndbw_queue) {
@@ -248,6 +282,8 @@ static int ndbw_probe(struct block_window *bw, int num_bw,
 err_alloc_disk:
 	blk_cleanup_queue(bw_dev->ndbw_queue);
 err_alloc_queue:
+	kfree(bw_dev->bw_lock);
+err_init_locks:
 	ida_simple_remove(&ndbw_ida, bw_dev->id);
 err_ida:
 	kfree(bw_dev);
@@ -265,6 +301,7 @@ static int ndbw_remove(struct ndbw_device *bw_dev)
 	del_gendisk(bw_dev->ndbw_disk);
 	put_disk(bw_dev->ndbw_disk);
 	blk_cleanup_queue(bw_dev->ndbw_queue);
+	kfree(bw_dev->bw_lock);
 	ida_simple_remove(&ndbw_ida, bw_dev->id);
 	kfree(bw_dev);
 
