@@ -301,7 +301,8 @@ void virtual_port_linkup_init(u8 port)
 		vpi->link_width.active = cpu_to_be16(STL_LINK_WIDTH_1X);
 	}
 
-	vpi->link_width_downgrade.active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.tx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.rx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
 
 	vbct->vl[15].tx_dedicated_limit = cpu_to_be16(get_vl15_init());
 
@@ -342,7 +343,8 @@ static void init_virtual_port_info(u8 port)
 	vpi->link_width.enabled = WFR_LITE_LINK_WIDTH_ALL_SUP;
 
 	vpi->link_width_downgrade.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
-	vpi->link_width_downgrade.active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.tx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.rx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
 	vpi->link_width_downgrade.enabled = WFR_LITE_LINK_WIDTH_ALL_SUP;
 
 	linkup_default(port);
@@ -1564,7 +1566,8 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	// now picked up from the simulated port info
 	//pi->link_width_downgrade.supported = 0;
-	//pi->link_width_downgrade.active = 0;
+	//pi->link_width_downgrade.tx_active = 0;
+	//pi->link_width_downgrade.rx_active = 0;
 	//pi->link_width_downgrade.enabled = 0;
 
 	// these are RO and only set at linkup time
