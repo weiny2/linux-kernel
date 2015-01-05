@@ -542,7 +542,7 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 	default_pkey_idx = 1;
 
 	ppd->pkeys[default_pkey_idx] = WFR_DEFAULT_P_KEY;
-	if (loopback == 1) {
+	if (loopback) {
 		qib_early_err(&pdev->dev,
 		 	      "Faking data partition 0x8001 in idx %u\n",
 			      !default_pkey_idx);

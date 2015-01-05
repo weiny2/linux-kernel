@@ -469,6 +469,12 @@ enum {
 	(~(WFR_MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK \
 		| WFR_MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK))
 
+/* valid values for the loopback module parameter */
+#define LOOPBACK_NONE	0	/* no loopback - default */
+#define LOOPBACK_SERDES 1
+#define LOOPBACK_LCB	2
+#define LOOPBACK_CABLE	3	/* external cable */
+
 /* read and write hardware registers */
 u64 read_csr(const struct hfi_devdata *dd, u32 offset);
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);

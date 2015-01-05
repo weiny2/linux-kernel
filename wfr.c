@@ -93,7 +93,7 @@ MODULE_PARM_DESC(set_link_credits, "Set per-VL link credits so traffic will flow
 
 uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
-MODULE_PARM_DESC(loopback, "Put into LCB loopback mode");
+MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cable");
 
 /* TODO: temporary; skip BCC steps */
 uint disable_bcc = 0;
@@ -4428,13 +4428,29 @@ int init_loopback(struct hfi_devdata *dd)
 		(read_csr(dd, DC_DC8051_CFG_MODE) | DISABLE_SELF_GUID_CHECK));
 
 	/*
-	 * The simulator has LCB loopback, not serdes loopback.  Skip
-	 * setting serdes loopback.
+	 * The simulator has only one loopback option - LCB.  This is
+	 * handled as a special case at poll time.  Accept all valid
+	 * loopback values.
 	 */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+	if ((dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+		&& (loopback == LOOPBACK_SERDES
+			|| loopback == LOOPBACK_LCB
+			|| loopback == LOOPBACK_CABLE))
 		return 0;
 
-	return set_serdes_loopback_mode(dd);
+	/* handle serdes loopback */
+	if (loopback == LOOPBACK_SERDES)
+		return set_serdes_loopback_mode(dd);
+
+	/* TODO: LCB loopback - unclear if 8051 firmware will support it */
+	/* NOTE: NOT supported in emulation due to emulation RTL changes */
+
+	/* external cable loopback requires no extra steps */
+	if (loopback == LOOPBACK_CABLE)
+		return 0;
+
+	dd_dev_err(dd, "Invalid loopback mode %d\n", loopback);
+	return -EINVAL;
 }
 
 /*
