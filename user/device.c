@@ -33,7 +33,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include "../common/opa_core.h"
+#include <rdma/opa_core.h>
 #include "device.h"
 
 /*

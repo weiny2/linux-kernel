@@ -35,8 +35,8 @@
 
 #include <linux/list.h>
 #include <linux/slab.h>
-#include "../include/hfi_cmd.h"
-#include "../common/opa_core.h"
+#include <rdma/hfi_cmd.h>
+#include <rdma/opa_core.h>
 
 #define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
 	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)

@@ -33,7 +33,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/idr.h>
-#include "../common/opa_core.h"
+#include <rdma/opa_core.h>
 
 /* Unique numbering for opa_core devices. */
 static DEFINE_IDA(opa_core_index_ida);
