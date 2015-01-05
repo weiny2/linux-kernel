@@ -66,7 +66,8 @@ driver: headers
 
 headers:
 	@if [ -d .git ]; then \
-		git submodule update --init include.git; \
+		git submodule update --init opa-headers.git; \
+		git submodule status; \
 	fi
 
 clean:

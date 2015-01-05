@@ -33,14 +33,14 @@
 
 #include <linux/pci.h>
 #include <linux/module.h>
+#include <rdma/fxr/fxr_fast_path_defs.h>
+#include <rdma/fxr/fxr_tx_ci_csrs.h>
+#include <rdma/fxr/fxr_rx_ci_csrs.h>
+#include <rdma/fxr/fxr_rx_hiarb_defs.h>
+#include <rdma/fxr/fxr_rx_hiarb_csrs.h>
+#include <rdma/fxr/fxr_linkmux_defs.h>
+#include <rdma/fxr/fxr_lm_csrs.h>
 #include "opa_hfi.h"
-#include "../include/fxr/fxr_fast_path_defs.h"
-#include "../include/fxr/fxr_tx_ci_csrs.h"
-#include "../include/fxr/fxr_rx_ci_csrs.h"
-#include "../include/fxr/fxr_rx_hiarb_defs.h"
-#include "../include/fxr/fxr_rx_hiarb_csrs.h"
-#include "../include/fxr/fxr_linkmux_defs.h"
-#include "../include/fxr/fxr_lm_csrs.h"
 
 /* TODO - for now, start FXR in loopback */
 static uint force_loopback = 1;

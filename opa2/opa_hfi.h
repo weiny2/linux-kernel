@@ -37,8 +37,8 @@
 
 #include <linux/pci.h>
 #include <linux/slab.h>
-#include "../include/hfi_cmd.h"
-#include "../common/opa_core.h"
+#include <rdma/hfi_cmd.h>
+#include <rdma/opa_core.h>
 
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME

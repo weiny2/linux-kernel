@@ -37,7 +37,7 @@
  * implementation.
  */
 #include <linux/device.h>
-#include "../include/hfi_defs.h"
+#include <rdma/hfi_types.h>
 
 /*
  * HFI API data types
