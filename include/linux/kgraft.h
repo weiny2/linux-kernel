@@ -59,6 +59,7 @@ struct kgr_patch_fun {
 		KGR_PATCH_REVERTED,
 
 		KGR_PATCH_SKIPPED,
+		KGR_PATCH_APPLIED_NON_FINALIZED, /* unused, kabi */
 	} state;
 
 	unsigned long loc_name;
