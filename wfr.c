@@ -4190,6 +4190,16 @@ static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed)
 	*mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT) & MGMT_ALLOWED_MASK;
 }
 
+static void read_last_local_state(struct hfi_devdata *dd, u32 *lls)
+{
+	read_8051_config(dd, LAST_LOCAL_STATE_COMPLETE, GENERAL_CONFIG, lls);
+}
+
+static void read_last_remote_state(struct hfi_devdata *dd, u32 *lrs)
+{
+	read_8051_config(dd, LAST_LOCAL_STATE_COMPLETE, GENERAL_CONFIG, lrs);
+}
+
 static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
 {
 	u32 frame;
@@ -4988,6 +4998,8 @@ static int goto_offline(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u32 pstate, previous_state;
+	u32 last_local_state;
+	u32 last_remote_state;
 	int ret;
 	int do_transition;
 	int do_wait;
@@ -5050,6 +5062,17 @@ static int goto_offline(struct qib_pportdata *ppd)
 					|| previous_state == HLS_UP_ACTIVE) {
 		/* went down while link was up */
 		handle_linkup_change(dd, 0);
+	} else if (previous_state == HLS_DN_POLL
+			|| previous_state == HLS_VERIFY_CAP
+			|| previous_state == HLS_GOING_UP) {
+		/* went down while attempting link up */
+		/* byte 1 of last_*_state is the failure reason */
+		read_last_local_state(dd, &last_local_state);
+		read_last_remote_state(dd, &last_remote_state);
+		dd_dev_err(dd,
+			"LNI failure reason: local 0x%x, remote 0x%x\n",
+			(last_local_state >> 8) & 0xff,
+			(last_remote_state >> 8) & 0xff);
 	}
 	schedule_link_restart(ppd);
 	return 0;

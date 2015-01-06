@@ -340,6 +340,8 @@
 #define VERIFY_CAP_REMOTE_PHY	     0x0f
 #define VERIFY_CAP_REMOTE_FABRIC     0x10
 #define VERIFY_CAP_REMOTE_LINK_WIDTH 0x11
+#define LAST_LOCAL_STATE_COMPLETE    0x12
+#define LAST_REMOTE_STATE_COMPLETE   0x13
 #define LINK_QUALITY_INFO            0x14
 
 /* Lane ID for general configuration registers */
