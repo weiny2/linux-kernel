@@ -547,7 +547,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	u8 pcount = initial_pkt_count;
 	struct sdma_req_info info;
 	struct user_sdma_request *req;
-	u8 opcode;
+	u8 opcode, vl;
 
 	if (iovec[idx].iov_len < sizeof(info) + sizeof(req->hdr)) {
 		hfi_cdbg(SDMA,
@@ -623,6 +623,13 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		ret = -EINVAL;
 		goto free_req;
 	}
+	/* Validate the vl. Do not trust packets from user space blindly. */
+	vl = (be16_to_cpu(req->hdr.lrh[0]) >> 12) & 0xF;
+	if (vl >= hfi_num_vls(dd->pport->vls_operational)) {
+		SDMA_DBG(req, "Invalid vl (%d)", vl);
+		ret = -EINVAL;
+		goto free_req;
+	}
 
 	/*
 	 * Also should check the BTH.lnh. If it says the next header is GRH then
@@ -684,7 +691,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	/* Have to select the engine */
 	req->sde = sdma_select_engine_vl(dd,
 					 (u32)(uctxt->ctxt + subctxt_fp(fp)),
-					 (be16_to_cpu(req->hdr.lrh[0]) & 0xF));
+					 vl);
 	if (!sdma_running(req->sde)) {
 		ret = -ECOMM;
 		goto free_req;

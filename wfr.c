@@ -109,10 +109,6 @@ uint print_unimplemented = 1;
 module_param_named(print_unimplemented, print_unimplemented, uint, S_IRUGO);
 MODULE_PARM_DESC(print_unimplemented, "Have unimplemented functions print when called");
 
-static uint use_sdma = 1;
-module_param(use_sdma, uint, S_IRUGO);
-MODULE_PARM_DESC(use_sdma, "enable sdma traffic");
-
 static uint rcvhdrcnt = 2048; /* 2x the max eager buffer count */
 module_param_named(rcvhdrcnt, rcvhdrcnt, uint, S_IRUGO);
 MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
@@ -5362,7 +5358,11 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		if (ppd->vls_operational != val) {
 			ppd->vls_operational = val;
 			BUG_ON(!ppd->port);
-			sdma_map_init(ppd->dd, ppd->port - 1, hfi_num_vls(val));
+			ret = sdma_map_init(
+				ppd->dd,
+				ppd->port - 1,
+				hfi_num_vls(val),
+				NULL);
 			/* FIXME: implement this */
 			/* set_vls(ppd) */
 		}
@@ -9306,33 +9306,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 	/* sdma init */
-	if (use_sdma) {
-		size_t num_sdma;
-
-		num_sdma = dd->chip_sdma_engines;
-		if (mod_num_sdma &&
-		    mod_num_sdma < dd->chip_sdma_engines &&
-		    mod_num_sdma >= num_vls &&
-		    is_power_of_2(mod_num_sdma))
-			num_sdma = mod_num_sdma;
-		dd_dev_info(dd, "SDMA mod_num_sdma: %u\n",
-			mod_num_sdma);
-		dd_dev_info(dd, "SDMA chip_sdma_engines: %u\n",
-			dd->chip_sdma_engines);
-		dd_dev_info(dd, "SDMA chip_sdma_mem_size: %u\n",
-			dd->chip_sdma_mem_size);
-		for (i = 0; i < dd->num_pports; ++i) {
-			ret = sdma_init(dd, i, num_sdma);
-			if (ret)
-				goto bail_cleanup;
-		}
-		if (!ret) {
-			dd_dev_info(dd, "SDMA num_sdma: %u\n",
-				dd->num_sdma);
-		}
-	} else {
-		/* override */
-		use_sdma_ahg = 0;
+	for (i = 0; i < dd->num_pports; ++i) {
+		ret = sdma_init(dd, i);
+		if (ret)
+			goto bail_cleanup;
 	}
 
 	/* use contexts created by qib_create_ctxts */

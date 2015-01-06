@@ -707,26 +707,20 @@ TRACE_EVENT(hfi_sdma_engine_select,
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__field(u32, sel)
-		__field(u32, mask)
-		__field(u32, shift)
 		__field(u8, vl)
 		__field(u8, idx)
 	),
 	TP_fast_assign(
 		DD_DEV_ASSIGN(dd);
 		__entry->sel = sel;
-		__entry->mask = dd->selector_sdma_mask;
-		__entry->shift = dd->selector_sdma_shift;
 		__entry->vl = vl;
 		__entry->idx = idx;
 	),
 	TP_printk(
-		"[%s] selecting SDE %u sel 0x%x mask 0x%x shift %u vl %u",
+		"[%s] selecting SDE %u sel 0x%x vl %u",
 		__get_str(dev),
 		__entry->idx,
 		__entry->sel,
-		__entry->mask,
-		__entry->shift,
 		__entry->vl
 	)
 );

@@ -46,8 +46,13 @@
 /* must be a power of 2 >= 64 <= 32768 */
 #define SDMA_DESCQ_CNT 1024
 #define INVALID_TAIL 0xffff
+
 /* default pio off, sdma on */
-uint sdma_descq_cnt = SDMA_DESCQ_CNT;
+uint use_sdma = 1;
+module_param(use_sdma, uint, S_IRUGO);
+MODULE_PARM_DESC(use_sdma, "enable sdma traffic");
+
+static uint sdma_descq_cnt = SDMA_DESCQ_CNT;
 module_param(sdma_descq_cnt, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_descq_cnt, "Number of SDMA descq entries");
 
@@ -511,26 +516,31 @@ u16 sdma_get_descq_cnt(void)
  *
  *
  * This function returns an engine based on the selector and a vl.  The
- * mapping fields are protected by a seqlock with sdma_map_init().
+ * mapping fields are protected by RCU.
  */
 struct sdma_engine *sdma_select_engine_vl(
 	struct hfi_devdata *dd,
 	u32 selector,
 	u8 vl)
 {
-	unsigned seq;
-	u32 idx;
+	struct sdma_vl_map *m;
+	struct sdma_map_elem *e;
+	struct sdma_engine *rval;
 
 	BUG_ON(vl > 8);
-	do {
-		seq = read_seqbegin(&dd->sde_map_lock);
-		idx = (
-			(selector & dd->selector_sdma_mask)
-				<< dd->selector_sdma_shift) +
-			vl;
-	} while (read_seqretry(&dd->sde_map_lock, seq));
-	trace_hfi_sdma_engine_select(dd, selector, vl, idx);
-	return dd->sdma_map[idx];
+
+	rcu_read_lock();
+	m = rcu_dereference(dd->sdma_map);
+	if (unlikely(!m)) {
+		rcu_read_unlock();
+		return NULL;
+	}
+	e = m->map[vl & m->mask];
+	rval = e->sde[selector & e->mask];
+	rcu_read_unlock();
+
+	trace_hfi_sdma_engine_select(dd, selector, vl, rval->this_idx);
+	return rval;
 }
 
 /**
@@ -552,49 +562,140 @@ struct sdma_engine *sdma_select_engine_sc(
 	return sdma_select_engine_vl(dd, selector, vl);
 }
 
+/*
+ * Free the indicated map struct
+ */
+static void sdma_map_free(struct sdma_vl_map *m)
+{
+	int i;
+
+	for (i = 0; m && i < m->actual_vls; i++)
+		kfree(m->map[i]);
+	kfree(m);
+}
+
+/*
+ * Handle RCU callback
+ */
+static void sdma_map_rcu_callback(struct rcu_head *list)
+{
+	struct sdma_vl_map *m = container_of(list, struct sdma_vl_map, list);
+
+	sdma_map_free(m);
+}
+
 /**
  * sdma_map_init - called when # vls change
  * @dd: hfi_devdata
  * @port: port number
  * @num_vls: number of vls
+ * @vl_engines: per vl engine mapping (optional)
  *
  * This routine changes the mapping based on the number of vls.
  *
- * A seqlock is used here to control access to the mapping fields.
+ * vl_engines is used to specify a non-uniform vl/engine loading. NULL
+ * implies auto computing the loading and giving each VLs a uniform
+ * distribution of engines per VL.
+ *
+ * The auto algorithm computes the sde_per_vl and the number of extra
+ * engines.  Any extra engines are added from the last VL on down.
+ *
+ * rcu locking is used here to control access to the mapping fields.
+ *
+ * If either the num_vls or num_sdma are non-power of 2, the array sizes
+ * in the struct sdma_vl_map and the struct sdma_map_elem are rounded
+ * up to the next highest power of 2 and the first entry is reused
+ * in a round robin fashion.
+ *
+ * If an error occurs the map change is not done and the mapping is
+ * not changed.
+ *
  */
-void sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls)
+int sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 {
-	int i;
+	int i, j;
 	struct qib_pportdata *ppd = dd->pport + port;
-	int sde_per_vl;
+	int extra, sde_per_vl;
+	int engine = 0;
+	u8 lvl_engines[STL_MAX_VLS];
+	struct sdma_vl_map *oldmap, *newmap;
 
 	if (!(dd->flags & QIB_HAS_SEND_DMA))
-		return;
+		return 0;
 	BUG_ON(num_vls > hfi_num_vls(ppd->vls_supported));
-	sde_per_vl = dd->num_sdma / num_vls;
-	write_seqlock_irq(&dd->sde_map_lock);
-	dd->selector_sdma_mask = sde_per_vl - 1;
-	dd->selector_sdma_shift = ilog2(num_vls);
-	/*
-	 * There is an opportunity here for
-	 * a more sophisticated mapping where
-	 * the loading of vl per engine is not
-	 * uniform.
-	 *
-	 * for now just 1 - 1 the per_sdma.
-	 */
-	for (i = 0; i < dd->num_sdma; i++)
-		dd->sdma_map[i] = &dd->per_sdma[i];
-	write_sequnlock_irq(&dd->sde_map_lock);
-	dd_dev_info(dd, "SDMA map mask 0x%x sde per vl %u\n",
-		    dd->selector_sdma_mask, sde_per_vl);
+	if (!vl_engines) {
+		/* truncate divide */
+		sde_per_vl = dd->num_sdma / num_vls;
+		/* extras */
+		extra = dd->num_sdma % num_vls;
+		vl_engines = lvl_engines;
+		/* add extras from last vl down */
+		for (i = num_vls - 1; i >= 0; i--, extra--)
+			vl_engines[i] = sde_per_vl + (extra > 0 ? 1 : 0);
+	}
+	/* build new map */
+	newmap = kzalloc(
+		sizeof(struct sdma_vl_map) +
+			roundup_pow_of_two(num_vls) *
+			sizeof(struct sdma_map_elem *),
+		GFP_KERNEL);
+	if (!newmap)
+		goto bail;
+	newmap->actual_vls = num_vls;
+	newmap->vls = roundup_pow_of_two(num_vls);
+	newmap->mask = (1 << ilog2(newmap->vls)) - 1;
+	for (i = 0; i < newmap->vls; i++) {
+		/* save for wrap around */
+		int first_engine = engine;
+
+		if (i < newmap->actual_vls) {
+			int sz = roundup_pow_of_two(vl_engines[i]);
+
+			/* only allocate once */
+			newmap->map[i] = kzalloc(
+				sizeof(struct sdma_map_elem) +
+					sz * sizeof(struct sdma_engine *),
+				GFP_KERNEL);
+			if (!newmap->map[i])
+				goto bail;
+			newmap->map[i]->mask = (1 << ilog2(sz)) - 1;
+			/* assign engines */
+			for (j = 0; j < sz; j++) {
+				newmap->map[i]->sde[j] =
+					&dd->per_sdma[engine];
+				if (++engine >= first_engine + vl_engines[i])
+					/* wrap back to first engine */
+					engine = first_engine;
+			}
+		} else {
+			/* just re-use entry without allocating */
+			newmap->map[i] = newmap->map[i % num_vls];
+		}
+		engine = first_engine + vl_engines[i];
+	}
+	/* newmap in hand, save old map */
+	spin_lock_irq(&dd->sde_map_lock);
+	oldmap = rcu_dereference_protected(dd->sdma_map,
+			lockdep_is_held(&dd->sde_map_lock));
+
+	/* publish newmap */
+	rcu_assign_pointer(dd->sdma_map, newmap);
+
+	spin_unlock_irq(&dd->sde_map_lock);
+	/* success, free any old map after grace period */
+	if (oldmap)
+		call_rcu(&oldmap->list, sdma_map_rcu_callback);
+	return 0;
+bail:
+	/* free any partial allocation */
+	sdma_map_free(newmap);
+	return -ENOMEM;
 }
 
 /**
  * sdma_init() - called when device probed
  * @dd: hfi_devdata
  * @port: port number (currently only zero)
- * @num_engines: number of engines to initialize
  *
  * sdma_init initializes the specified number of engines.
  *
@@ -604,7 +705,7 @@ void sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls)
  * Returns:
  * 0 - success, -errno on failure
  */
-int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
+int sdma_init(struct hfi_devdata *dd, u8 port)
 {
 	unsigned this_idx;
 	struct sdma_engine *sde;
@@ -612,25 +713,38 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	void *curr_head;
 	unsigned long flags;
 	struct qib_pportdata *ppd = dd->pport + port;
-	u32 per_sdma_credits =
-		dd->chip_sdma_mem_size/(num_engines * WFR_SDMA_BLOCK_SIZE);
+	u32 per_sdma_credits;
 	uint idle_cnt = sdma_idle_cnt;
+	size_t num_engines = dd->chip_sdma_engines;
+
+	if (!use_sdma) {
+		use_sdma_ahg = 0;
+		return 0;
+	}
+	if (mod_num_sdma &&
+		/* can't exceed chip support */
+		mod_num_sdma <= dd->chip_sdma_engines &&
+		/* count must be >= vls */
+		mod_num_sdma >= num_vls)
+		num_engines = mod_num_sdma;
+
+	dd_dev_info(dd, "SDMA mod_num_sdma: %u\n", mod_num_sdma);
+	dd_dev_info(dd, "SDMA chip_sdma_engines: %u\n", dd->chip_sdma_engines);
+	dd_dev_info(dd, "SDMA chip_sdma_mem_size: %u\n",
+		dd->chip_sdma_mem_size);
+
+	per_sdma_credits =
+		dd->chip_sdma_mem_size/(num_engines * WFR_SDMA_BLOCK_SIZE);
 
 	descq_cnt = sdma_get_descq_cnt();
 	dd_dev_info(dd, "SDMA engines %zu descq_cnt %u\n",
 		num_engines, descq_cnt);
 
-	/* alloc memory for array of send engines */
+	/* alloc memory for array of sdma engines */
 	dd->per_sdma = kzalloc(num_engines * sizeof(*dd->per_sdma),
 			       GFP_KERNEL);
 	if (!dd->per_sdma)
 		return -ENOMEM;
-
-	dd->sdma_map = kzalloc(num_engines *
-			       sizeof(struct sdma_engine **),
-			       GFP_KERNEL);
-	if (!dd->sdma_map)
-		goto nomem;
 
 	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 46)
 		idle_cnt = 0; /* work around a wfr-event bug */
@@ -736,7 +850,9 @@ int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines)
 	dd->flags |= QIB_HAS_SEND_DMA;
 	dd->flags |= idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
 	dd->num_sdma = num_engines;
-	sdma_map_init(dd, port, hfi_num_vls(ppd->vls_operational));
+	if (sdma_map_init(dd, port, hfi_num_vls(ppd->vls_operational), NULL))
+		goto pad_fail;
+	dd_dev_info(dd, "SDMA num_sdma: %u\n", dd->num_sdma);
 	return 0;
 
 pad_fail:
@@ -762,11 +878,6 @@ cleanup_descq:
 			break;
 		}
 	}
-	kfree(dd->sdma_map);
-	dd->sdma_map = NULL;
-nomem:
-	kfree(dd->per_sdma);
-	dd->per_sdma = NULL;
 	return -ENOMEM;
 }
 
@@ -834,6 +945,7 @@ void sdma_exit(struct hfi_devdata *dd)
 {
 	unsigned this_idx;
 	struct sdma_engine *sde;
+	struct sdma_vl_map *m;
 
 	for (this_idx = 0; dd->per_sdma && this_idx < dd->num_sdma;
 			++this_idx) {
@@ -882,8 +994,14 @@ void sdma_exit(struct hfi_devdata *dd)
 			sde->descq_phys = 0;
 		}
 	}
-	kfree(dd->sdma_map);
-	dd->sdma_map = NULL;
+	spin_lock_irq(&dd->sde_map_lock);
+	m = rcu_dereference_protected(dd->sdma_map,
+		lockdep_is_held(&dd->sde_map_lock));
+	rcu_assign_pointer(dd->sdma_map, NULL);
+	spin_unlock_irq(&dd->sde_map_lock);
+	rcu_barrier();
+
+	sdma_map_free(m);
 	kfree(dd->per_sdma);
 	dd->per_sdma = NULL;
 }

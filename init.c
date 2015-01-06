@@ -1265,7 +1265,7 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	spin_lock_init(&dd->dc8051_lock);
 	mutex_init(&dd->qsfp_lock);
 	seqlock_init(&dd->sc2vl_lock);
-	seqlock_init(&dd->sde_map_lock);
+	spin_lock_init(&dd->sde_map_lock);
 
 
 	dd->int_counter = alloc_percpu(u64);

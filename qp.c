@@ -1482,7 +1482,7 @@ struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5)
 	default:
 		break;
 	}
-	sde =  sdma_select_engine_sc(dd, qp->ibqp.qp_num >> 1, sc5);
+	sde =  sdma_select_engine_sc(dd, qp->ibqp.qp_num >> dd->qos_shift, sc5);
 	return sde;
 }
 

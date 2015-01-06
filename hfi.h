@@ -678,6 +678,7 @@ struct err_info_rcvport {
  * a qib_chipdata struct, whose contents are opaque to this file.
  */
 struct sdma_engine;
+struct sdma_vl_map;
 struct hfi_devdata {
 	struct qib_ibdev verbs_dev;     /* must be first */
 	struct list_head list;
@@ -723,14 +724,12 @@ struct hfi_devdata {
 	u32                                 chip_sdma_engines;
 	/* num used */
 	u32                                 num_sdma;
-	/* lock for selector_sdma_mask and sdma_map */
-	seqlock_t                           sde_map_lock;
-	u32                                 selector_sdma_mask;
-	u32                                 selector_sdma_shift;
+	/* lock for sdma_map */
+	spinlock_t                          sde_map_lock;
 	/* array of engines dimensioned by num_sdma */
 	struct sdma_engine                 *per_sdma;
-	/* array of engines to select based on vl,selector */
-	struct sdma_engine                **sdma_map;
+	/* array of vl maps */
+	struct sdma_vl_map __rcu           *sdma_map;
 
 	/* qib_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)

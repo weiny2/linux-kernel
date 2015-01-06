@@ -38,6 +38,7 @@
 #include <linux/list.h>
 #include <asm/byteorder.h>
 #include <linux/workqueue.h>
+#include <linux/rculist.h>
 
 #include "hfi.h"
 #include "verbs.h"
@@ -188,6 +189,7 @@ struct sdma_state {
 };
 
 extern uint use_sdma_ahg;
+extern uint use_sdma;
 
 /**
  * DOC: sdma exported routines
@@ -440,7 +442,7 @@ struct sdma_engine {
 };
 
 
-int sdma_init(struct hfi_devdata *dd, u8 port, size_t num_engines);
+int sdma_init(struct hfi_devdata *dd, u8 port);
 void sdma_start(struct hfi_devdata *dd);
 void sdma_exit(struct hfi_devdata *dd);
 void sdma_link_up(struct hfi_devdata *dd);
@@ -882,8 +884,108 @@ static inline void sdma_iowait_schedule(
 /* for use by interrupt handling */
 void sdma_engine_error(struct sdma_engine *sde, u64 status);
 void sdma_engine_interrupt(struct sdma_engine *sde, u64 status);
-/* for use when the number of vls is changes */
-void sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls);
+
+/*
+ *
+ * The diagram below details the relationship of the mapping structures
+ *
+ * Since the mapping now allows for non-uniform engines per vl, the
+ * number of engines for a vl is either the vl_engines[vl] or
+ * a computation based on num_sdma/num_vls:
+ *
+ * For example:
+ * nactual = vl_engines ? vl_engines[vl] : num_sdma/num_vls
+ *
+ * n = roundup to next highest power of 2 using nactual
+ *
+ * In the case where there are num_sdma/num_vls doesn't divide
+ * evenly, the extras are added from the last vl downward.
+ *
+ * For the case where n > nactual, the engines are assigned
+ * in a round robin fashion wrapping back to the first engine
+ * for a particular vl.
+ *
+ *               dd->sdma_map
+ *                    |                                   sdma_map_elem[0]
+ *                    |                                +--------------------+
+ *                    v                                |       mask         |
+ *               sdma_vl_map                           |--------------------|
+ *      +--------------------------+                   | sde[0] -> eng 1    |
+ *      |    list (RCU)            |                   |--------------------|
+ *      |--------------------------|                 ->| sde[1] -> eng 2    |
+ *      |    mask                  |              --/  |--------------------|
+ *      |--------------------------|            -/     |        *           |
+ *      |    actual_vls (max 8)    |          -/       |--------------------|
+ *      |--------------------------|       --/         | sde[n] -> eng n    |
+ *      |    vls (max 8)           |     -/            +--------------------+
+ *      |--------------------------|  --/
+ *      |    map[0]                |-/
+ *      |--------------------------|                   +--------------------+
+ *      |    map[1]                |---                |       mask         |
+ *      |--------------------------|   \----           |--------------------|
+ *      |           *              |        \--        | sde[0] -> eng 1+n  |
+ *      |           *              |           \----   |--------------------|
+ *      |           *              |                \->| sde[1] -> eng 2+n  |
+ *      |--------------------------|                   |--------------------|
+ *      |   map[vls - 1]           |-                  |         *          |
+ *      +--------------------------+ \-                |--------------------|
+ *                                     \-              | sde[m] -> eng m+n  |
+ *                                       \             +--------------------+
+ *                                        \-
+ *                                          \
+ *                                           \-        +--------------------+
+ *                                             \-      |       mask         |
+ *                                               \     |--------------------|
+ *                                                \-   | sde[0] -> eng 1+m+n|
+ *                                                  \- |--------------------|
+ *                                                    >| sde[1] -> eng 2+m+n|
+ *                                                     |--------------------|
+ *                                                     |         *          |
+ *                                                     |--------------------|
+ *                                                     | sde[o] -> eng o+m+n|
+ *                                                     +--------------------+
+ *
+ */
+
+/**
+ * struct sdma_map_elem - mapping for a vl
+ * @mask - selector mask
+ * @sde - array of engines for this vl
+ *
+ * The mask is used to "mod" the selector
+ * to produce index into the trailing
+ * array of sdes.
+ */
+struct sdma_map_elem {
+	u32 mask;
+	struct sdma_engine *sde[0];
+};
+
+/**
+ * struct sdma_map_el - mapping for a vl
+ * @list - rcu head for free callback
+ * @mask - vl mask to "mod" the vl to produce an index to map array
+ * @actual_vls - number of vls
+ * @vls - number of vls rounded to next power of 2
+ * @map - array of sdma_map_elem entries
+ *
+ * This is the parent mapping structure.  The trailing
+ * members of the struct point to sdma_map_elem entries, which
+ * in turn point to an array of sde's for that vl.
+ */
+struct sdma_vl_map {
+	struct rcu_head list;
+	u32 mask;
+	u8 actual_vls;
+	u8 vls;
+	struct sdma_map_elem *map[0];
+};
+
+int sdma_map_init(
+	struct hfi_devdata *dd,
+	u8 port,
+	u8 num_vls,
+	u8 *vl_engines);
 
 /**
  * sdma_engine_progress_schedule() - schedule progress on engine
@@ -930,10 +1032,10 @@ static inline char *slashstrip(char *s)
 	return r;
 }
 
-extern uint mod_num_sdma;
 u16 sdma_get_descq_cnt(void);
 
-extern void sdma_update_lmc(struct hfi_devdata *dd, u64 mask, u32 lid);
+extern uint mod_num_sdma;
 
+extern void sdma_update_lmc(struct hfi_devdata *dd, u64 mask, u32 lid);
 
 #endif
