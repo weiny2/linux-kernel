@@ -35,6 +35,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <rdma/ib_smi.h>
+#define USE_PI_LWD_TX_RX_ACTIVE 1
 #include <rdma/stl_smi.h>
 
 #include "wfrl.h"
