@@ -455,6 +455,7 @@ enum {
 #define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
 #define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
 #define DBI_TIMEOUT 1			/* DBI hardare access timeout, in ms */
+#define VL_STATUS_CLEAR_TIMEOUT 5000	/* per-VL status clear, in ms */
 
 /* cclock tick time, in picoseconds per tick: 1/speed * 10^12  */
 #define ASIC_CCLOCK_PS  1242	/* 805 MHz */

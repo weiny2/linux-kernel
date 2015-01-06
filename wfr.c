@@ -5698,19 +5698,30 @@ static void set_vl_dedicated(struct hfi_devdata *dd, int vl, u16 limit)
 }
 
 /* spin until the given per-VL status mask bits clear */
-static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask)
+static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask,
+					const char *which)
 {
+	unsigned long timeout;
 	u64 reg;
 
-	/* TODO: time out if too long? */
+	timeout = jiffies + msecs_to_jiffies(VL_STATUS_CLEAR_TIMEOUT);
 	while (1) {
 		reg = read_csr(dd, WFR_SEND_CM_CREDIT_USED_STATUS) & mask;
 
 		if (reg == 0)
-			break;
-		/* TODO: how long to delay before checking again? */
+			return;	/* success */
+		if (time_after(jiffies, timeout))
+			break;		/* timed out */
 		udelay(1);
 	}
+
+	dd_dev_err(dd,
+		"%s credit change status not clearing after %dms, mask 0x%llx, not clear 0x%llx\n",
+		which, VL_STATUS_CLEAR_TIMEOUT, mask, reg);
+	/*
+	 * TODO: If this occurs, it is likely there was a credit loss
+	 * on the link.  The only recovery from that is a link bounce.
+	 */
 }
 
 /*
@@ -5850,7 +5861,8 @@ static int set_buffer_control(struct hfi_devdata *dd,
 		}
 	}
 
-	wait_for_vl_status_clear(dd, use_all_mask ? all_mask : changing_mask);
+	wait_for_vl_status_clear(dd, use_all_mask ? all_mask : changing_mask,
+		"shared");
 
 	if (change_count > 0) {
 		for (i = 0; i < NUM_USABLE_VLS; i++) {
@@ -5865,7 +5877,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 			}
 		}
 
-		wait_for_vl_status_clear(dd, ld_mask);
+		wait_for_vl_status_clear(dd, ld_mask, "dedicated");
 
 		/* now raise all dedicated that are going up */
 		for (i = 0; i < NUM_USABLE_VLS; i++) {
