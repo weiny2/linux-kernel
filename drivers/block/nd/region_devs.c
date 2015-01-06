@@ -153,8 +153,17 @@ static ssize_t size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct nd_region *nd_region = to_nd_region(dev);
+	unsigned long long size = 0;
 
-	return sprintf(buf, "%llu\n", nd_region->ndr_size);
+	if (is_nd_pmem(dev)) {
+		size = nd_region->ndr_size;
+	} else if (nd_region->ndr_mappings == 1) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[0];
+
+		size = nd_mapping->size;
+	}
+
+	return sprintf(buf, "%llu\n", size);
 }
 static DEVICE_ATTR_RO(size);
 
