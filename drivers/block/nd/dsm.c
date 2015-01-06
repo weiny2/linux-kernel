@@ -202,7 +202,7 @@ static int cr_send_command(struct fv_fw_cmd *fw_cmd, struct cr_mailbox *mb)
 
 unsigned long nd_manual_dsm = (!!IS_ENABLED(CONFIG_ND_MANUAL_DSM) << NFIT_CMD_VENDOR);
 EXPORT_SYMBOL(nd_manual_dsm);
-module_param(nd_manual_dsm, ulong, S_IRUGO);
+module_param(nd_manual_dsm, ulong, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(nd_manual_dsm,
 		"Manually override _DSM commands instead of bus provided routines");
 

@@ -22,6 +22,10 @@ static bool old_acpi = true;
 module_param(old_acpi, bool, 0);
 MODULE_PARM_DESC(old_acpi, "Search for NFIT by _CRS on _HID(ACPI0010)");
 
+unsigned long force_dsm = 0;
+module_param(force_dsm, long, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_dsm, "Force enable ACPI DSMs");
+
 enum {
 	NFIT_ACPI_NOTIFY_TABLE = 0x80,
 };
@@ -137,7 +141,7 @@ static u32 to_cmd_in_size(int cmd, const struct cmd_desc *desc, int idx,
 }
 
 static u32 to_cmd_out_size(int cmd, const struct cmd_desc *desc, int idx,
-		void *buf, union acpi_object *p)
+		void *buf, u32 out_length, u32 offset)
 {
 	if (idx >= desc->out_num)
 		return UINT_MAX;
@@ -149,34 +153,29 @@ static u32 to_cmd_out_size(int cmd, const struct cmd_desc *desc, int idx,
 		struct nfit_cmd_get_config_data_hdr *hdr = buf;
 
 		return hdr->in_length;
-	} else if (cmd == NFIT_CMD_VENDOR && idx == 2) {
-		WARN_ON_ONCE(p->type != ACPI_TYPE_BUFFER);
-		return p->buffer.length;
-	} else if (cmd == NFIT_CMD_ARS_QUERY && idx == 1) {
-		WARN_ON_ONCE(p->type != ACPI_TYPE_BUFFER);
-		return p->buffer.length;
+	} else if (cmd == NFIT_CMD_VENDOR && idx == 2
+			&& offset < out_length) {
+		return out_length - offset;
+	} else if (cmd == NFIT_CMD_ARS_QUERY && idx == 1
+			&& offset < out_length) {
+		return out_length - offset;
 	}
 
 	return UINT_MAX;
 }
 
-static const u8 nd_acpi_uuid[] = {
-	0x66, 0x9A, 0x0C, 0x20,
-	0x00, 0x08, 0x91, 0x91,
-	0xE4, 0x11, 0x11, 0x0D,
-	0x30, 0xAC, 0x09, 0x43,
-};
+static u8 nd_acpi_uuid[16]; /* initialized at nd_acpi_init */
 
 static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int cmd, void *buf, unsigned int buf_len)
 {
 	struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
 	const struct cmd_desc *desc = to_cmd_desc(cmd);
+	union acpi_object in_obj, in_buf, *out_obj;
 	acpi_handle handle = nfit->dev->handle;
 	struct device *dev = &nfit->dev->dev;
-	union acpi_object params[NFIT_ACPI_MAX_ELEM];
-	union acpi_object in_obj, *out_obj;
-	int rc = 0, i, offset;
+	int rc = 0, i;
+	u32 offset;
 
 	if (test_bit(cmd, &nd_manual_dsm))
 		return nd_dsm_ctl(nfit_desc, cmd, buf, buf_len);
@@ -184,13 +183,15 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	if (!desc)
 		return -ENOTTY;
 
-	if (!acpi_check_dsm(handle, nd_acpi_uuid, 1, 1ULL << cmd))
+	if (!test_bit(cmd, &nfit_desc->dsm_mask))
 		return -ENOTTY;
 
-	in_obj.package.type = ACPI_TYPE_PACKAGE;
-	in_obj.package.count = desc->in_num;
-	in_obj.package.elements = params;
-	offset = 0;
+	in_obj.type = ACPI_TYPE_PACKAGE;
+	in_obj.package.count = 1;
+	in_obj.package.elements = &in_buf;
+	in_buf.type = ACPI_TYPE_BUFFER;
+	in_buf.buffer.pointer = buf;
+	in_buf.buffer.length = 0;
 
 	/* double check that the nfit_acpi_cmd_descs table is self consistent */
 	if (desc->in_num > NFIT_ACPI_MAX_ELEM) {
@@ -199,86 +200,76 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	}
 
 	for (i = 0; i < desc->in_num; i++) {
-		union acpi_object *p = &params[i];
+		u32 in_size;
 
-		p->buffer.type = ACPI_TYPE_BUFFER;
-		p->buffer.length = to_cmd_in_size(cmd, desc, i, buf);
-		if (p->buffer.length == UINT_MAX) {
-			dev_err(dev, "%s: unknown in field width, cmd: %d field: %d\n",
-					__func__, cmd, i);
+		in_size = to_cmd_in_size(cmd, desc, i, buf);
+		if (in_size == UINT_MAX) {
+			dev_err(dev, "%s: unknown input size cmd: %s field: %d\n",
+					__func__, nfit_cmd_name(cmd), i);
 			return -ENXIO;
 		}
-		p->buffer.pointer = buf + offset;
-		offset += p->buffer.length;
-		if (offset > buf_len) {
-			dev_err(dev, "%s: underrun cmd: %d buf_len: %d in_len: %d\n",
-					__func__, cmd, buf_len, offset);
+		in_buf.buffer.length += in_size;
+		if (in_buf.buffer.length > buf_len) {
+			dev_err(dev, "%s: input underrun cmd: %s field: %d\n",
+					__func__, nfit_cmd_name(cmd), i);
 			return -ENXIO;
 		}
 	}
 
-	/*
-	 * FIXME is the _DSM handle duplicated per DIMM or is there a
-	 * global handle we should be using?
-	 */
 	out_obj = acpi_evaluate_dsm(handle, nd_acpi_uuid, 1, cmd, &in_obj);
 	if (!out_obj) {
-		dev_dbg(dev, "%s: _DSM failed cmd: %d\n", __func__, cmd);
+		dev_dbg(dev, "%s: _DSM failed cmd: %s\n", __func__,
+				nfit_cmd_name(cmd));
 		return -EINVAL;
 	}
 
-	if (out_obj->package.type != ACPI_TYPE_PACKAGE
-			|| out_obj->package.count != desc->out_num) {
-		dev_dbg(dev, "%s: malformed _DSM return cmd: %d type: %d count: %d\n",
-				__func__, cmd, out_obj->type,
-				out_obj->package.count);
+	if (out_obj->package.type != ACPI_TYPE_BUFFER) {
+		dev_dbg(dev, "%s: unexpected output object type cmd: %s type: %d\n",
+				__func__, nfit_cmd_name(cmd), out_obj->type);
 		rc = -EINVAL;
 		goto out;
 	}
+	dev_dbg(dev, "%s: cmd: %s output length: %d\n", __func__,
+			nfit_cmd_name(cmd), out_obj->buffer.length);
+	if (IS_ENABLED(CONFIG_DYNAMIC_DEBUG))
+		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 16,
+				1, out_obj->buffer.pointer, min_t(u32, 128,
+					out_obj->buffer.length), true);
 
-	for (i = 0; i < desc->out_num; i++) {
-		union acpi_object *p = &out_obj->package.elements[i];
-		u32 out_size = to_cmd_out_size(cmd, desc, i, buf, p);
-
-		if (p->type != ACPI_TYPE_BUFFER) {
-			dev_err(dev, "%s: unknown output type, cmd: %d field: %d\n",
-					__func__, cmd, desc->in_num + i);
-			rc = -ENXIO;
-			goto out;
-		}
+	for (i = 0, offset = 0; i < desc->out_num; i++) {
+		u32 out_size = to_cmd_out_size(cmd, desc, i, buf,
+				out_obj->buffer.length, offset);
 
 		if (out_size == UINT_MAX) {
-			dev_err(dev, "%s: unknown out field width, cmd: %d field: %d\n",
-					__func__, cmd, desc->in_num + i);
+			dev_err(dev, "%s: unknown output size cmd: %s field: %d\n",
+					__func__, nfit_cmd_name(cmd), i);
 			rc = -ENXIO;
 			goto out;
 		}
 
-		if (offset + out_size > buf_len) {
-			dev_err(dev, "%s: overrun cmd: %d buf_len: %d out_len: %d\n",
-					__func__, cmd, buf_len,
-					offset + out_size);
+		if (offset + out_size > out_obj->buffer.length) {
+			dev_err(dev, "%s: output object underflow cmd: %s field: %d\n",
+					__func__, nfit_cmd_name(cmd), i);
 			rc = -ENXIO;
 			goto out;
 		}
 
-		if (out_size != p->buffer.length) {
-			dev_err(dev, "%s: expected output size of %d, got %d (cmd: %d field: %d)\n",
-					__func__, out_size, p->buffer.length,
-					cmd, desc->in_num + i);
+		if (in_buf.buffer.length + offset + out_size > buf_len) {
+			dev_err(dev, "%s: output overrun cmd: %s field: %d\n",
+					__func__, nfit_cmd_name(cmd), i);
 			rc = -ENXIO;
 			goto out;
 		}
-
-		memcpy(buf + offset, p->buffer.pointer, p->buffer.length);
-		offset += p->buffer.length;
+		memcpy(buf + in_buf.buffer.length + offset,
+				out_obj->buffer.pointer + offset, out_size);
+		offset += out_size;
 	}
-	if (offset < buf_len) {
+	if (offset + in_buf.buffer.length < buf_len) {
 		if (cmd == NFIT_CMD_VENDOR || cmd == NFIT_CMD_ARS_QUERY) {
 			rc = buf_len - offset; /* part of return buffer is invalid */
 		} else {
-			dev_err(dev, "%s: underrun cmd: %d buf_len: %d out_len: %d\n",
-					__func__, cmd, buf_len, offset);
+			dev_err(dev, "%s: underrun cmd: %s buf_len: %d out_len: %d\n",
+					__func__, nfit_cmd_name(cmd), buf_len, offset);
 			rc = -ENXIO;
 		}
 	}
@@ -382,7 +373,6 @@ static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
 	struct acpi_nfit *nfit;
 	resource_size_t start;
 	acpi_status status;
-	int i;
 
 	status = acpi_resource_to_address64(resource, &address64);
 	if (ACPI_FAILURE(status))
@@ -401,13 +391,7 @@ static acpi_status legacy_nd_acpi_add_nfit(struct acpi_resource *resource,
 		return AE_ERROR;
 	nfit_desc->provider_name = "ACPI.NFIT";
 	nfit_desc->nfit_ctl = nd_acpi_ctl;
-
-	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++) {
-		if (acpi_check_dsm(dev->handle, nd_acpi_uuid, 1, 1ULL << i))
-			set_bit(i, &nfit_desc->dsm_mask);
-	}
-	nfit_desc->dsm_mask |= nd_manual_dsm;
-	set_bit(NFIT_CMD_VENDOR, &nfit_desc->dsm_mask);
+	nfit_desc->dsm_mask |= nd_manual_dsm | force_dsm;
 
 	/* ACPI references one global NFIT for all devices, i.e. no parent */
 	nfit->nd_bus = nfit_bus_register(NULL, nfit_desc);
@@ -492,6 +476,12 @@ static struct acpi_driver nd_acpi_dimm_driver = {
 static __init int nd_acpi_init(void)
 {
 	int rc;
+
+	if (acpi_str_to_uuid("4309ac30-0d11-11e4-9191-0800200c9a66",
+				nd_acpi_uuid) != AE_OK) {
+		WARN_ON_ONCE(1);
+		return -ENXIO;
+	}
 
 	rc = acpi_bus_register_driver(&nd_acpi_driver);
 	if (rc)
