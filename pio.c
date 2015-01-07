@@ -398,12 +398,11 @@ int init_send_contexts(struct hfi_devdata *dd)
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		/* per context type checks */
 		if (dd->send_contexts[i].type == SC_USER) {
-			reg =  all | WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_NON_KDETH_PACKETS_SMASK
-					| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_SMASK;
+			reg =  all | HFI_PKT_USER_SC_INTEGRITY;
 			opval = WFR_USER_OPCODE_CHECK_VAL;
 			opmask = WFR_USER_OPCODE_CHECK_MASK;
 		} else {
-			reg = all | WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETH_PACKETS_SMASK;
+			reg = all | HFI_PKT_KERNEL_SC_INTEGRITY;
 			opval = WFR_OPCODE_CHECK_VAL_DISABLED;
 			opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
 		}

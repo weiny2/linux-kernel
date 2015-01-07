@@ -624,6 +624,17 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		goto free_req;
 	}
 
+	/*
+	 * Also should check the BTH.lnh. If it says the next header is GRH then
+	 * the RXE parsing will be off and will land in the middle of the KDETH
+	 * or miss it entirely.
+	 */
+	if ((be16_to_cpu(req->hdr.lrh[0]) & 0x3) == QIB_LRH_GRH) {
+		SDMA_DBG(req, "User tried to pass in a GRH");
+		ret = -EINVAL;
+		goto free_req;
+	}
+
 	req->koffset = le32_to_cpu(req->hdr.kdeth.offset);
 	/* The KDETH.OM flag in the first packed (and header template) is
 	 * always 0. */
