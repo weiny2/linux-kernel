@@ -1,7 +1,7 @@
 #ifndef _HFI_SDMA_H
 #define _HFI_SDMA_H
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -47,6 +47,9 @@
 #define NUM_DESC 6
 /* Hardware limit - see HAS 7.3 */
 #define MAX_DESC 64
+/* Hardware limit for SDMA packet size - see HAS Table 7-24 */
+#define MAX_SDMA_PKT_SIZE ((16 * 1024) - 1)
+
 
 #define SDMA_TXREQ_S_OK        0
 #define SDMA_TXREQ_S_SENDERROR 1
@@ -559,7 +562,7 @@ void _sdma_txreq_ahgadd(
  * and RDMA_WRITE_MIDDLE.
  *
  */
-static inline void sdma_txinit_ahg(
+static inline int sdma_txinit_ahg(
 	struct sdma_txreq *tx,
 	u16 flags,
 	u16 tlen,
@@ -569,6 +572,10 @@ static inline void sdma_txinit_ahg(
 	u8 ahg_hlen,
 	void (*cb)(struct sdma_txreq *, int, int))
 {
+	if (tlen == 0)
+		return -ENODATA;
+	if (tlen > MAX_SDMA_PKT_SIZE)
+		return -EMSGSIZE;
 	tx->desc_limit = ARRAY_SIZE(tx->descs);
 	tx->descp = &tx->descs[0];
 	INIT_LIST_HEAD(&tx->list);
@@ -577,7 +584,6 @@ static inline void sdma_txinit_ahg(
 	tx->complete = cb;
 	tx->coalesce_buf = NULL;
 	tx->wait = NULL;
-	BUG_ON(tlen == 0);
 	tx->tlen = tx->packet_len = tlen;
 	tx->descs[0].qw[0] = SDMA_DESC0_FIRST_DESC_FLAG;
 	tx->descs[0].qw[1] = 0;
@@ -589,6 +595,7 @@ static inline void sdma_txinit_ahg(
 				<< SDMA_DESC1_HEADER_MODE_SHIFT);
 	else if (flags & SDMA_TXREQ_F_USE_AHG && num_ahg)
 		_sdma_txreq_ahgadd(tx, num_ahg, ahg_entry, ahg, ahg_hlen);
+	return 0;
 }
 
 /**
@@ -622,13 +629,13 @@ static inline void sdma_txinit_ahg(
  * SDMA_TXREQ_S_ABORTED, or SDMA_TXREQ_S_SHUTDOWN.
  *
  */
-static inline void sdma_txinit(
+static inline int sdma_txinit(
 	struct sdma_txreq *tx,
 	u16 flags,
 	u16 tlen,
 	void (*cb)(struct sdma_txreq *, int, int))
 {
-	sdma_txinit_ahg(tx, flags, tlen, 0, 0, NULL, 0, cb);
+	return sdma_txinit_ahg(tx, flags, tlen, 0, 0, NULL, 0, cb);
 }
 
 /* helpers - don't use */

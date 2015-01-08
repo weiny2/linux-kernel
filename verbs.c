@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -990,7 +990,7 @@ static int build_verbs_tx_desc(
 
 	phdr = &dev->pio_hdrs[tx->hdr_inx].phdr;
 	if (!ahdr->ahgcount) {
-		sdma_txinit_ahg(
+		ret = sdma_txinit_ahg(
 			&tx->txreq,
 			ahdr->tx_flags,
 			hdrbytes + length,
@@ -999,6 +999,8 @@ static int build_verbs_tx_desc(
 			NULL,
 			0,
 			verbs_sdma_complete);
+		if (ret)
+			goto bail_txadd;
 		phdr->pbc = cpu_to_le64(pbc);
 		memcpy(&phdr->hdr, &ahdr->ibh, hdrbytes - sizeof(phdr->pbc));
 		/* add the header */
@@ -1024,7 +1026,7 @@ static int build_verbs_tx_desc(
 		dohdr->bth[0] = sohdr->bth[0];
 		/* PSN/ACK  */
 		dohdr->bth[2] = sohdr->bth[2];
-		sdma_txinit_ahg(
+		ret = sdma_txinit_ahg(
 			&tx->txreq,
 			ahdr->tx_flags,
 			length,
@@ -1033,6 +1035,8 @@ static int build_verbs_tx_desc(
 			ahdr->ahgdesc,
 			hdrbytes,
 			verbs_sdma_complete);
+		if (ret)
+			goto bail_txadd;
 	}
 
 	/* add the ulp payload - if any.  ss can be NULL for acks */

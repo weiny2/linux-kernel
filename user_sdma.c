@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -100,6 +100,9 @@
 #define KDETH_HCRC_UPPER_MASK     0xff
 #define KDETH_HCRC_LOWER_SHIFT    24
 #define KDETH_HCRC_LOWER_MASK     0xff
+
+#define PBC2LRH(x) ((((x) & 0xfff) << 2) - 4)
+#define LRH2PBC(x) ((((x) >> 2) + 1) & 0xfff)
 
 #define KDETH_GET(val, field)						\
 	(((le32_to_cpu((val))) >> KDETH_##field##_SHIFT) & KDETH_##field##_MASK)
@@ -276,6 +279,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *,
 static _hfi_inline void set_comp_state(struct user_sdma_request *,
 				       enum hfi_sdma_comp_state, int);
 static _hfi_inline u32 set_pkt_bth_psn(__be32, u8, u32);
+static _hfi_inline u32 get_lrh_len(struct hfi_pkt_header, u32 len);
 
 #if 0
 static int user_sdma_progress(void *);
@@ -800,6 +804,12 @@ static _hfi_inline u32 compute_data_length(struct user_sdma_request *req,
 	return len;
 }
 
+static _hfi_inline u32 get_lrh_len(struct hfi_pkt_header hdr, u32 len)
+{
+	/* (Size of complete header - size of PBC) + 4B ICRC + data length */
+	return ((sizeof(hdr) - sizeof(hdr.pbc)) + 4 + len);
+}
+
 static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 {
 	int ret = 0;
@@ -836,7 +846,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		tx = kmem_cache_alloc(pq->txreq_cache, GFP_KERNEL);
 		if (!tx) {
 			ret = -ENOMEM;
-			goto free_tx;
+			goto done;
 		}
 		INIT_LIST_HEAD(&tx->list);
 		tx->flags = 0;
@@ -903,6 +913,8 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		if (test_bit(SDMA_REQ_HAVE_AHG, &req->flags)) {
 			tx->flags |= USER_SDMA_TXREQ_FLAGS_USE_AHG;
 			if (!req->txreqs_sent) {
+				u16 pbclen = le16_to_cpu(req->hdr.pbc[0]);
+				u32 lrhlen = get_lrh_len(req->hdr, datalen);
 				/*
 				 * Copy the request header into the tx header
 				 * because the HW needs a cacheline-aligned
@@ -912,16 +924,23 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				 * cachline aligned.
 				 */
 				memcpy(&tx->hdr, &req->hdr, sizeof(tx->hdr));
-				sdma_txinit_ahg(&tx->txreq,
-						SDMA_TXREQ_F_AHG_COPY,
-						sizeof(tx->hdr) + datalen,
-						req->ahg_idx, 0, NULL, 0,
-						user_sdma_txreq_cb);
+				if (PBC2LRH(pbclen) != lrhlen) {
+					pbclen = (pbclen & 0xf000) |
+						LRH2PBC(lrhlen);
+					tx->hdr.pbc[0] = cpu_to_le16(pbclen);
+				}
+				ret = sdma_txinit_ahg(&tx->txreq,
+						      SDMA_TXREQ_F_AHG_COPY,
+						      sizeof(tx->hdr) + datalen,
+						      req->ahg_idx, 0, NULL, 0,
+						      user_sdma_txreq_cb);
+				if (ret)
+					goto free_tx;
 				ret = sdma_txadd_kvaddr(pq->dd, &tx->txreq,
 							&tx->hdr,
 							sizeof(tx->hdr));
 				if (ret)
-					goto free_tx;
+					goto free_txreq;
 			} else {
 				int changes;
 
@@ -936,8 +955,10 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 						user_sdma_txreq_cb);
 			}
 		} else {
-			sdma_txinit(&tx->txreq, 0, sizeof(req->hdr) + datalen,
-				    user_sdma_txreq_cb);
+			ret = sdma_txinit(&tx->txreq, 0, sizeof(req->hdr) +
+					  datalen, user_sdma_txreq_cb);
+			if (ret)
+				goto free_tx;
 			/*
 			 * Modify the header for this packet. This only needs
 			 * to be done if we are not goint to use AHG. Otherwise,
@@ -946,7 +967,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 			 */
 			ret = set_txreq_header(req, tx, datalen);
 			if (ret)
-				goto free_tx;
+				goto free_txreq;
 		}
 
 		/*
@@ -976,7 +997,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 					      offset, len);
 			if (ret) {
 				unpin_vector_pages(iovec);
-				goto free_tx;
+				goto free_txreq;
 			}
 			iov_offset += len;
 			queued += len;
@@ -989,7 +1010,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				if (!iovec->pages) {
 					ret = pin_vector_pages(req, iovec);
 					if (ret)
-						goto free_tx;
+						goto free_txreq;
 				}
 				iov_offset = 0;
 
@@ -1010,7 +1031,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 			if (tx->iovec)
 				unpin_vector_pages(tx->iovec);
 			spin_unlock_irqrestore(&tx->lock, flags);
-			goto free_tx;
+			goto free_txreq;
 		}
 		/*
 		 * The txreq was submitted successfully so we can update
@@ -1048,8 +1069,9 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 
 	ret = npkts;
 	goto done;
-free_tx:
+free_txreq:
 	sdma_txclean(pq->dd, &tx->txreq);
+free_tx:
 	kmem_cache_free(pq->txreq_cache, tx);
 done:
 	atomic64_sub(npkts, &pq->npkts);
@@ -1192,12 +1214,32 @@ static int set_txreq_header(struct user_sdma_request *req,
 	struct hfi_pkt_header *hdr = &tx->hdr;
 	u16 pbclen;
 	int ret;
-	/* (Size of complete header - size of PBC) + 4B ICRC + data length */
-	u32 lrhlen = ((sizeof(*hdr) - sizeof(hdr->pbc)) + 4 + datalen);
+	u32 lrhlen = get_lrh_len(*hdr, datalen);
 
 	/* Copy the header template to the request before modification */
 	memcpy(hdr, &req->hdr, sizeof(*hdr));
 
+	/*
+	 * Check if the PBC and LRH length are mismatched. If so
+	 * adjust both in the header.
+	 */
+	pbclen = le16_to_cpu(hdr->pbc[0]);
+	if (PBC2LRH(pbclen) != lrhlen) {
+		pbclen = (pbclen & 0xf000) | LRH2PBC(lrhlen);
+		hdr->pbc[0] = cpu_to_le16(pbclen);
+		hdr->lrh[2] = cpu_to_be16(lrhlen >> 2);
+		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_THIRD_PKT)) {
+			/*
+			 * From this point on the lengths in both the
+			 * PBC and LRH are the same until the last
+			 * packet.
+			 * Ajust the template so we don't have to update
+			 * every packet
+			 */
+			req->hdr.pbc[0] = hdr->pbc[0];
+			req->hdr.lrh[2] = hdr->lrh[2];
+		}
+	}
 	/*
 	 * We only have to modify the header if this is not the
 	 * first packet in the request. Otherwise, we use the
@@ -1221,44 +1263,15 @@ static int set_txreq_header(struct user_sdma_request *req,
 		goto done;
 
 	}
-	pbclen = le16_to_cpu(hdr->pbc[0]);
+
 	hdr->bth[2] = cpu_to_be32(
 		set_pkt_bth_psn(hdr->bth[2],
 				(req_opcode(req->info.ctrl) == EXPECTED),
 				req->txreqs_sent));
 
-	if (unlikely(tx->flags &
-		     (USER_SDMA_TXREQ_FLAGS_SECOND_PKT |
-		      USER_SDMA_TXREQ_FLAGS_THIRD_PKT |
-		      USER_SDMA_TXREQ_FLAGS_LAST_PKT))) {
-		/*
-		 * Check if the PBC and LRH length are mismatched. If so
-		 * adjust both in the header.
-		 */
-		if (((pbclen  & 0xfff) << 2) - 4 != lrhlen) {
-			/* convert to DWs */
-			lrhlen >>= 2;
-			pbclen &= ~(0xfff);
-			pbclen |= (lrhlen + 1) & 0xfff;
-			hdr->pbc[0] = cpu_to_le16(pbclen);
-			hdr->lrh[2] = cpu_to_be16(lrhlen);
-			if (tx->flags & USER_SDMA_TXREQ_FLAGS_THIRD_PKT) {
-				/*
-				 * From this point on the lengths in both the
-				 * PBC and LRH are the same until the last
-				 * packet.
-				 * Ajust the template so we don't have to update
-				 * every packet
-				 */
-				req->hdr.pbc[0] = hdr->pbc[0];
-				req->hdr.lrh[2] = hdr->lrh[2];
-			}
-		}
-		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT)) {
-			/* Set ACK request on last packet */
-			hdr->bth[2] |= cpu_to_be32(1UL<<31);
-		}
-	}
+	/* Set ACK request on last packet */
+	if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
+		hdr->bth[2] |= cpu_to_be32(1UL<<31);
 
 	/* Set the new offset */
 	hdr->kdeth.swdata[6] = cpu_to_le32(req->koffset);
@@ -1330,16 +1343,15 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	struct hfi_user_sdma_pkt_q *pq = req->pq;
 	struct hfi_pkt_header *hdr = &req->hdr;
 	u16 pbclen = le16_to_cpu(hdr->pbc[0]);
-	u32 val32, lrhlen = (((sizeof(*hdr) - sizeof(hdr->pbc)) + 4 + len)
-			     >> 2) & 0xfff;
+	u32 val32, lrhlen = get_lrh_len(*hdr, len);
 
-	if (((pbclen & 0xfff) - 1) != lrhlen) {
+	if (PBC2LRH(pbclen) != lrhlen) {
 		/* PBC.PbcLengthDWs */
 		AHG_HEADER_SET(req->ahg, diff, 0, 0, 12,
-			       cpu_to_le16(lrhlen + 1) & 0xfff);
+			       cpu_to_le16(LRH2PBC(lrhlen)));
 		/* LRH.PktLen (we need the full 16 bits due to byteswap) */
 		AHG_HEADER_SET(req->ahg, diff, 3, 0, 16,
-			       cpu_to_be16(lrhlen));
+			       cpu_to_be16(lrhlen >> 2));
 	}
 
 	/*
