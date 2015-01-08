@@ -39,15 +39,19 @@ static inline void kgr_set_regs_ip(struct pt_regs *regs, unsigned long ip)
  */
 static inline bool kgr_needs_lazy_migration(struct task_struct *p)
 {
-	unsigned long s[3];
+	unsigned long s[4];
 	struct stack_trace t = {
 		.nr_entries = 0,
 		.skip = 0,
-		.max_entries = 3,
+		.max_entries = 4,
 		.entries = s,
 	};
 
 	save_stack_trace_tsk(p, &t);
+
+	/* unwinder is crazy, it stores user addresses too */
+	if (t.nr_entries >= 2 && !__kernel_text_address(s[1]))
+		t.nr_entries--;
 
 	return t.nr_entries > 2;
 }
