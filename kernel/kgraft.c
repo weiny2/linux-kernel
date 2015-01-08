@@ -882,18 +882,24 @@ static int kgr_patch_code_delayed(struct kgr_patch_fun *patch_fun)
 		new_ops = &patch_fun->ftrace_ops_slow;
 	} else {
 		if (kgr_patch && kgr_patch->replace_all && !kgr_revert &&
-		    !kgr_patch_contains(kgr_patch, patch_fun->name) &&
-		    kgr_is_patch_fun(patch_fun, KGR_LAST_FINALIZED)) {
+		    !kgr_patch_contains(kgr_patch, patch_fun->name)) {
 			next_state = KGR_PATCH_REVERT_SLOW;
 			patch_fun->loc_old = patch_fun->loc_name;
-			new_ops = &patch_fun->ftrace_ops_slow;
+			/*
+			 * Check for the last finalized patch is enough. We are
+			 * here only when the function is not included in the
+			 * patch in progress (kgr_patch).
+			 */
+			if (kgr_is_patch_fun(patch_fun, KGR_LAST_FINALIZED))
+				new_ops = &patch_fun->ftrace_ops_slow;
 		} else {
 			next_state = KGR_PATCH_APPLIED;
 			/*
 			 * Check for the last existing and not the last
-			 * finalized patch_fun here! There might be another
-			 * patch_fun in the patch in progress that will be
-			 * handled in the next calls.
+			 * finalized patch_fun here! This function is called
+			 * for all patches. There might be another patch_fun
+			 * in the patch in progress that will need to register
+			 * the ftrace ops.
 			 */
 			if (kgr_is_patch_fun(patch_fun, KGR_LAST_EXISTING))
 				new_ops = &patch_fun->ftrace_ops_fast;
