@@ -200,7 +200,7 @@ int kgr_add_files(void)
 
 	kgr_sysfs_dir = kobject_create_and_add("kgraft", kernel_kobj);
 	if (!kgr_sysfs_dir) {
-		pr_err("kgr: cannot create kfraft directory in sysfs!\n");
+		pr_err("kgr: cannot create kgraft directory in sysfs!\n");
 		return -EIO;
 	}
 
