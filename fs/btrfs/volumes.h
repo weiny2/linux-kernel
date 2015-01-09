@@ -394,4 +394,15 @@ static inline void btrfs_dev_stat_reset(struct btrfs_device *dev,
 {
 	btrfs_dev_stat_set(dev, index, 0);
 }
+
+static inline void lock_chunks(struct btrfs_root *root)
+{
+	mutex_lock(&root->fs_info->chunk_mutex);
+}
+
+static inline void unlock_chunks(struct btrfs_root *root)
+{
+	mutex_unlock(&root->fs_info->chunk_mutex);
+}
+
 #endif
