@@ -1670,6 +1670,15 @@ int is_a0(struct hfi_devdata *dd)
 			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK) == 0;
 }
 
+/* return true if this is chip revision revision b0 or higher */
+int is_bx(struct hfi_devdata *dd)
+{
+	u8 chip_rev_minor =
+		dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
+	return !!(chip_rev_minor & 0x10);
+}
+
 /*
  * Using the given flag table, print a comma separated string into
  * the buffer.  End in '*' if the buffer is too short.

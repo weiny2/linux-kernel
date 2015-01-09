@@ -2009,6 +2009,35 @@ static int pma_get_stl_classportinfo(struct stl_pma_mad *pmp,
 	return reply(pmp);
 }
 
+static void workaround_portstatus_errata(struct hfi_devdata *dd,
+					 struct stl_port_status_rsp *rsp,
+					 u32 vl_select_mask)
+{
+	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
+		/*
+		 * Erratum 291344: Make sure that port_xmit_wait does not
+		 * exceed the sum (over all VLs) of port_vl_xmit_wait.
+		 */
+		unsigned long vl;
+		int vfi = 0;
+		u64 sum_vl_xmit_wait = 0;
+		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+				 8 * sizeof(vl_select_mask)) {
+			u64 tmp = sum_vl_xmit_wait +
+				be64_to_cpu(rsp->vls[vfi++].port_vl_xmit_wait);
+			if (tmp < sum_vl_xmit_wait) {
+				/* we wrapped */
+				sum_vl_xmit_wait = (u64) ~0;
+				break;
+			}
+			sum_vl_xmit_wait = tmp;
+		}
+		if (be64_to_cpu(rsp->port_xmit_wait) > sum_vl_xmit_wait)
+			rsp->port_xmit_wait = cpu_to_be64(sum_vl_xmit_wait);
+	}
+}
+
+
 static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 				  struct ib_device *ibdev, u8 port)
 {
@@ -2173,6 +2202,8 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		vlinfo++;
 		vfi++;
 	}
+
+	workaround_portstatus_errata(dd, rsp, vl_select_mask);
 
 	return reply(pmp);
 }

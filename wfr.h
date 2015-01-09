@@ -590,6 +590,7 @@ u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclock);
 void get_link_width(struct qib_pportdata *ppd);
 u32 hdrqempty(struct qib_ctxtdata *rcd);
 int is_a0(struct hfi_devdata *dd);
+int is_bx(struct hfi_devdata *dd);
 
 int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok);
 int release_lcb_access(struct hfi_devdata *dd, int sleep_ok);
