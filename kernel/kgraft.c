@@ -37,6 +37,7 @@ static struct workqueue_struct *kgr_wq;
 static DECLARE_DELAYED_WORK(kgr_work, kgr_work_fn);
 static DEFINE_MUTEX(kgr_in_progress_lock);
 static LIST_HEAD(kgr_patches);
+static bool __percpu *kgr_irq_use_new;
 bool kgr_in_progress;
 static bool kgr_initialized;
 static struct kgr_patch *kgr_patch;
@@ -73,7 +74,7 @@ static notrace void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	bool go_old;
 
 	if (in_interrupt())
-		go_old = !*this_cpu_ptr(p->patch->irq_use_new);
+		go_old = !*this_cpu_ptr(kgr_irq_use_new);
 	else if (test_bit(0, kgr_immutable)) {
 		kgr_mark_task_in_progress(current);
 		go_old = true;
@@ -234,7 +235,7 @@ static void kgr_finalize(void)
 		kgr_remove_patches_fast();
 	}
 
-	free_percpu(kgr_patch->irq_use_new);
+	free_percpu(kgr_irq_use_new);
 
 	if (kgr_revert) {
 		kgr_refs_dec();
@@ -337,7 +338,7 @@ static void kgr_handle_irq_cpu(struct work_struct *work)
 	unsigned long flags;
 
 	local_irq_save(flags);
-	*this_cpu_ptr(kgr_patch->irq_use_new) = true;
+	*this_cpu_ptr(kgr_irq_use_new) = true;
 	local_irq_restore(flags);
 }
 
@@ -718,8 +719,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		goto err_unlock;
 	}
 
-	patch->irq_use_new = alloc_percpu(bool);
-	if (!patch->irq_use_new) {
+	kgr_irq_use_new = alloc_percpu(bool);
+	if (!kgr_irq_use_new) {
 		pr_err("kgr: can't patch, cannot allocate percpu data\n");
 		ret = -ENOMEM;
 		goto err_unlock;
@@ -788,7 +789,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 
 	return 0;
 err_free:
-	free_percpu(patch->irq_use_new);
+	free_percpu(kgr_irq_use_new);
 err_unlock:
 	mutex_unlock(&kgr_in_progress_lock);
 
