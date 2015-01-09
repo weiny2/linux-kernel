@@ -2067,7 +2067,7 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	ibdev->dma_ops = &qib_dma_mapping_ops;
 
 	snprintf(ibdev->node_desc, sizeof(ibdev->node_desc),
-		 "Intel Infiniband HCA %s", init_utsname()->nodename);
+		 "Intel Omni-Path HFI %s", init_utsname()->nodename);
 
 	ret = ib_register_device(ibdev, qib_create_port_files);
 	if (ret)

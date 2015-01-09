@@ -9279,7 +9279,20 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	/* TODO: real board name */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
-	sprintf(dd->boardname, "fake wfr");
+	snprintf(dd->boardname, 64, "WFR_ID 0x%llx",
+		 dd->revision >> WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_SHIFT
+		    & WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_MASK);
+
+	snprintf(dd->boardversion, BOARD_VERS_MAX,
+		 "ChipABI %u.%u, %s, ChipRev %llu.%llu, SW Compat %llu\n",
+		 HFI_CHIP_VERS_MAJ, HFI_CHIP_VERS_MIN,
+		 dd->boardname,
+		 dd->revision >> WFR_CCE_REVISION_CHIP_REV_MAJOR_SHIFT
+		    & WFR_CCE_REVISION_CHIP_REV_MAJOR_MASK,
+		 dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT
+		    & WFR_CCE_REVISION_CHIP_REV_MINOR_MASK,
+		 dd->revision >> WFR_CCE_REVISION_SW_SHIFT
+		    & WFR_CCE_REVISION_SW_MASK);
 
 	/* TODO: RcvHdrEntSize, RcvHdrCnt, and RcvHdrSize are now
 	   per context, rather than global. */
@@ -9329,6 +9342,11 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* set up LCB access - must be after set_up_interrupts() */
 	init_lcb_access(dd);
 	read_guid(dd);
+
+	/* GUID is now stored in big endian by the function above, swap it */
+	snprintf(dd->serial, SERIAL_MAX, "0x%08llx\n",
+		 be64_to_cpu(dd->base_guid) & 0xFFFFFF);
+
 	ret = load_firmware(dd); /* asymmetric with dispose_firmware() */
 	if (ret)
 		goto bail_clear_intr;

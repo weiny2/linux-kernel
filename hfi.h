@@ -59,11 +59,11 @@
 #include "wfr.h"
 #include "mad.h"
 
-/* only s/w major version of QLogic_IB we can handle */
-#define QIB_CHIP_VERS_MAJ 2U
+/* bumped 1 from s/w major version of QLogic_IB */
+#define HFI_CHIP_VERS_MAJ 3U
 
 /* don't care about this except printing */
-#define QIB_CHIP_VERS_MIN 0U
+#define HFI_CHIP_VERS_MIN 0U
 
 /* The Organization Unique Identifier (Mfg code), and its position in GUID */
 #define QIB_OUI 0x001175
@@ -94,7 +94,6 @@ extern struct qlogic_ib_stats qib_stats;
 extern const struct pci_error_handlers qib_pci_err_handler;
 extern struct pci_driver qib_driver;
 
-#define QIB_CHIP_SWVERSION QIB_CHIP_VERS_MAJ
 /*
  * First-cut critierion for "device is active" is
  * two thousand dwords combined Tx, Rx traffic per
@@ -679,6 +678,10 @@ struct err_info_rcvport {
  */
 struct sdma_engine;
 struct sdma_vl_map;
+
+#define BOARD_VERS_MAX 96 /* how long the version string can be */
+#define SERIAL_MAX 16 /* length of the serial number */
+
 struct hfi_devdata {
 	struct qib_ibdev verbs_dev;     /* must be first */
 	struct list_head list;
@@ -921,9 +924,9 @@ struct hfi_devdata {
 	 * ASCII serial number, from flash, large enough for original
 	 * all digit strings, and longer QLogic serial number format
 	 */
-	u8 serial[16];
+	u8 serial[SERIAL_MAX];
 	/* human readable board version */
-	u8 boardversion[96];
+	u8 boardversion[BOARD_VERS_MAX];
 	u8 lbus_info[32]; /* human readable localbus info */
 	/* chip major rev, from qib_revision */
 	u8 majrev;

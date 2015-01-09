@@ -617,9 +617,6 @@ static int loadtime_init(struct hfi_devdata *dd)
 	}
 #endif
 
-	if (dd->revision & QLOGIC_IB_R_EMULATOR_MASK)
-		dd_dev_info(dd, "%s", dd->boardversion);
-
 	/* set up worker (don't start yet) to verify interrupts are working */
 	INIT_DELAYED_WORK(&dd->interrupt_check_worker, verify_interrupt);
 	/* set this flag so we know we can clean up */
