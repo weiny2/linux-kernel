@@ -12,6 +12,7 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/device.h>
+#include <linux/ndctl.h>
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/fs.h>
@@ -26,36 +27,29 @@ static DEFINE_IDA(dimm_ida);
  * Retrieve bus and dimm handle and return if this bus supports
  * get_config_data commands
  */
-static int __validate_dimm(struct nd_dimm *nd_dimm, struct nd_bus **nd_bus,
-		u32 *nfit_handle)
+static int __validate_dimm(struct nd_dimm *nd_dimm)
 {
-	struct nfit_bus_descriptor *nfit_desc;
+	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
 	struct nfit_mem __iomem *nfit_mem;
 	struct nfit_dcr __iomem *nfit_dcr;
+	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
 
 	if (!nd_dimm)
 		return -EINVAL;
 
-	*nd_bus = walk_to_nd_bus(&nd_dimm->dev);
-	if (*nd_bus == NULL)
-		return -EINVAL;
-	nfit_desc = (*nd_bus)->nfit_desc;
-	if (!test_bit(NFIT_CMD_GET_CONFIG_DATA, &nfit_desc->dsm_mask)
-			|| !nfit_desc->nfit_ctl)
+	if (!test_bit(NFIT_CMD_GET_CONFIG_DATA, &nd_dimm->dsm_mask))
 		return -ENXIO;
 
 	nfit_dcr = nd_dimm->nd_mem->nfit_dcr;
-	if (!nfit_dcr || readw(&nfit_dcr->fic) != 1)
+	if (!nfit_dcr || nfit_dcr_fic(nfit_desc, nfit_dcr) != 1)
 		return -ENODEV;
 	nfit_mem = nd_dimm->nd_mem->nfit_mem;
-	*nfit_handle = readl(&nfit_mem->nfit_handle);
 	return 0;
 }
 
-static int validate_dimm(struct nd_dimm *nd_dimm,
-		struct nd_bus **nd_bus, u32 *nfit_handle)
+static int validate_dimm(struct nd_dimm *nd_dimm)
 {
-	int rc = __validate_dimm(nd_dimm, nd_bus, nfit_handle);
+	int rc = __validate_dimm(nd_dimm);
 
 	if (rc)
 		dev_dbg(&nd_dimm->dev, "%pf: %s error: %d\n",
@@ -66,17 +60,15 @@ static int validate_dimm(struct nd_dimm *nd_dimm,
 int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_size *cmd)
 {
-	u32 nfit_handle;
-	struct nd_bus *nd_bus;
+	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
 	struct nfit_bus_descriptor *nfit_desc;
-	int rc = validate_dimm(nd_dimm, &nd_bus, &nfit_handle);
+	int rc = validate_dimm(nd_dimm);
 
 	if (rc)
 		return rc;
 
 	nfit_desc = nd_bus->nfit_desc;
 	memset(cmd, 0, sizeof(*cmd));
-	cmd->nfit_handle = nfit_handle;
 	return nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_GET_CONFIG_SIZE,
 			cmd, sizeof(*cmd));
 }
@@ -84,17 +76,15 @@ int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 		struct nfit_cmd_get_config_data_hdr *cmd, size_t len)
 {
-	u32 nfit_handle;
-	struct nd_bus *nd_bus;
+	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
 	struct nfit_bus_descriptor *nfit_desc;
-	int rc = validate_dimm(nd_dimm, &nd_bus, &nfit_handle);
+	int rc = validate_dimm(nd_dimm);
 
 	if (rc)
 		return rc;
 
 	nfit_desc = nd_bus->nfit_desc;
 	memset(cmd, 0, len);
-	cmd->nfit_handle = nfit_handle;
 	cmd->in_length = len - sizeof(*cmd);
 	return nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_GET_CONFIG_DATA,
 			cmd, len);
@@ -103,12 +93,11 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
 		void *buf, size_t len)
 {
-	u32 nfit_handle;
-	struct nd_bus *nd_bus;
+	int rc = validate_dimm(nd_dimm);
 	struct nfit_cmd_set_config_hdr *cmd;
 	struct nfit_bus_descriptor *nfit_desc;
 	size_t size = sizeof(*cmd) + len + sizeof(u32);
-	int rc = validate_dimm(nd_dimm, &nd_bus, &nfit_handle);
+	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
 
 	if (rc)
 		return rc;
@@ -121,7 +110,6 @@ int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
 
 	nfit_desc = nd_bus->nfit_desc;
 	memset(cmd, 0, size);
-	cmd->nfit_handle = nfit_handle;
 	cmd->in_offset = offset;
 	cmd->in_length = len;
 	memcpy(cmd->in_buf, buf, len);
@@ -189,12 +177,18 @@ static struct nfit_dcr __iomem *to_nfit_dcr(struct device *dev)
 	return nfit_dcr;
 }
 
+u32 to_nfit_handle(struct nd_dimm *nd_dimm)
+{
+	struct nfit_mem __iomem *nfit_mem = nd_dimm->nd_mem->nfit_mem;
+
+	return readl(&nfit_mem->nfit_handle);
+}
+EXPORT_SYMBOL(to_nfit_handle);
+
 static ssize_t handle_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct nfit_mem __iomem *nfit_mem = to_nfit_mem(dev);
-
-	return sprintf(buf, "%#x\n", readl(&nfit_mem->nfit_handle));
+	return sprintf(buf, "%#x\n", to_nfit_handle(to_nd_dimm(dev)));
 }
 static DEVICE_ATTR_RO(handle);
 
@@ -281,6 +275,7 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 		struct nd_mem *nd_mem)
 {
 	struct nd_dimm *nd_dimm = kzalloc(sizeof(*nd_dimm), GFP_KERNEL);
+	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
 	struct device *dev;
 	u32 nfit_handle;
 
@@ -305,10 +300,18 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 
 	nd_dimm->nd_mem = nd_mem;
 	dev = &nd_dimm->dev;
-	dev_set_name(dev, "dimm%d", nd_dimm->id);
+	dev_set_name(dev, "nvdimm%d", nd_dimm->id);
 	dev->parent = &nd_bus->dev;
 	dev->type = &nd_dimm_device_type;
 	dev->groups = nd_dimm_attribute_groups;
+	dev->devt = MKDEV(nd_dimm_major, nd_dimm->id);
+	if (nfit_desc->add_dimm)
+		if (nfit_desc->add_dimm(nfit_desc, nd_dimm) != 0) {
+			device_initialize(dev);
+			put_device(dev);
+			return NULL;
+		}
+
 	nd_dimm->dpa.name = dev_name(dev);
 	nd_dimm->dpa.start = 0,
 	nd_dimm->dpa.end = -1,

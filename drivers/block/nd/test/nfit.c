@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include "nfit_test.h"
 #include "../nfit.h"
+#include "../nd.h"
 
 /*
  * Generate an NFIT table to describe the following topology:
@@ -148,33 +149,39 @@ static struct nfit_test *to_nfit_test(struct device *dev)
 	return container_of(pdev, struct nfit_test, pdev);
 }
 
-static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
-		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
-		unsigned int buf_len)
+static int nfit_test_add_dimm(struct nfit_bus_descriptor *nfit_desc,
+		struct nd_dimm *nd_dimm)
 {
-	struct nfit_test *t = container_of(nfit_desc, typeof(*t), nfit_desc);
-	struct device *dev = &t->pdev.dev;
-	u32 nfit_handle;
-	int i, rc;
-
-	dev_dbg(dev, "%s: cmd: %d buf_len: %d\n", __func__, cmd, buf_len);
-	switch (cmd) {
-        case NFIT_CMD_GET_CONFIG_SIZE:
-        case NFIT_CMD_GET_CONFIG_DATA:
-        case NFIT_CMD_SET_CONFIG_DATA:
-		if (buf_len < sizeof(u32))
-			return -EINVAL;
-		nfit_handle = *((u32 *) buf);
-		break;
-	default:
-		return -ENOTTY;
-	}
+	u32 nfit_handle = to_nfit_handle(nd_dimm);
+	long i;
 
 	for (i = 0; i < ARRAY_SIZE(handle); i++)
 		if (nfit_handle == handle[i])
 			break;
 	if (i >= ARRAY_SIZE(handle))
 		return -EINVAL;
+
+	set_bit(NFIT_CMD_GET_CONFIG_SIZE, &nd_dimm->dsm_mask);
+	set_bit(NFIT_CMD_GET_CONFIG_DATA, &nd_dimm->dsm_mask);
+	set_bit(NFIT_CMD_SET_CONFIG_DATA, &nd_dimm->dsm_mask);
+	nd_dimm->priv_data = (void *) i;
+	return 0;
+}
+
+static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
+		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
+		unsigned int buf_len)
+{
+	struct nfit_test *t = container_of(nfit_desc, typeof(*t), nfit_desc);
+	struct device *dev = &t->pdev.dev;
+	int i, rc;
+
+	dev_dbg(dev, "%s: cmd: %d buf_len: %d\n", __func__, cmd, buf_len);
+	if (!nd_dimm || !test_bit(cmd, &nd_dimm->dsm_mask))
+		return -ENXIO;
+
+	/* lookup label space for the given dimm */
+	i = (long) nd_dimm->priv_data;
 
 	switch (cmd) {
         case NFIT_CMD_GET_CONFIG_SIZE: {
@@ -762,6 +769,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 
 	nfit_desc = &t->nfit_desc;
 	nfit_desc->nfit_ctl = nfit_test_ctl;
+	nfit_desc->add_dimm = nfit_test_add_dimm;
 }
 
 static void nfit_test1_setup(struct nfit_test *t)

@@ -245,12 +245,16 @@ typedef int (*nfit_ctl_fn)(struct nfit_bus_descriptor *nfit_desc,
 		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
 		unsigned int buf_len);
 
+typedef int (*nfit_add_dimm_fn)(struct nfit_bus_descriptor *nfit_desc,
+		struct nd_dimm *nd_dimm);
+
 struct nfit_bus_descriptor {
 	unsigned long dsm_mask;
 	void __iomem *nfit_base;
 	size_t nfit_size;
 	char *provider_name;
 	nfit_ctl_fn nfit_ctl;
+	nfit_add_dimm_fn add_dimm;
 	bool old_nfit;
 };
 

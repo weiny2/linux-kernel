@@ -196,6 +196,7 @@ struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove);
 extern struct attribute_group nd_device_attribute_group;
 struct nd_dimm *to_nd_dimm(struct device *dev);
+u32 to_nfit_handle(struct nd_dimm *nd_dimm);
 struct nd_btt *to_nd_btt(struct device *dev);
 struct nd_region *to_nd_region(struct device *dev);
 int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,

@@ -21,6 +21,7 @@
 
 extern struct list_head nd_bus_list;
 extern struct mutex nd_bus_list_mutex;
+extern int nd_dimm_major;
 
 enum {
 	/* need to set a limit somewhere, but yes, this is likely overkill */
@@ -123,6 +124,7 @@ static inline struct nd_btt *nd_btt_create(struct nd_bus *nd_bus,
 }
 #endif
 struct nd_bus *to_nd_bus(struct device *dev);
+bool is_nd_dimm(struct device *dev);
 struct nd_bus *walk_to_nd_bus(struct device *nd_dev);
 void nd_synchronize(void);
 int __init nd_bus_init(void);
