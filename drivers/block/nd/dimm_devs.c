@@ -238,13 +238,39 @@ static ssize_t format_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(format);
 
+static ssize_t serial_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nfit_dcr __iomem *nfit_dcr = to_nfit_dcr(dev);
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+	return sprintf(buf, "%#x\n",
+			nfit_dcr_serial(nd_bus->nfit_desc, nfit_dcr));
+}
+static DEVICE_ATTR_RO(serial);
+
+static ssize_t commands_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+	int cmd, len = 0;
+
+	for_each_set_bit(cmd, &nd_dimm->dsm_mask, BITS_PER_LONG)
+		len += sprintf(buf + len, "%s ", nfit_cmd_name(cmd));
+	len += sprintf(buf + len, "\n");
+	return len;
+}
+static DEVICE_ATTR_RO(commands);
+
 static struct attribute *nd_dimm_attributes[] = {
 	&dev_attr_handle.attr,
 	&dev_attr_phys_id.attr,
 	&dev_attr_vendor.attr,
 	&dev_attr_device.attr,
 	&dev_attr_format.attr,
+	&dev_attr_serial.attr,
 	&dev_attr_revision.attr,
+	&dev_attr_commands.attr,
 	NULL,
 };
 
