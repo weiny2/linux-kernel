@@ -16,6 +16,7 @@
 #include <linux/ctype.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/uuid.h>
 #include <linux/io.h>
 #include "nd-private.h"
 #include "nfit.h"
@@ -390,9 +391,10 @@ struct nfit_table_header {
 	__le16 length;
 };
 
-static const char *spa_type_name(u16 type)
+const char *spa_type_name(u16 type)
 {
 	switch (type) {
+	case NFIT_SPA_VOLATILE: return "volatile";
 	case NFIT_SPA_PM: return "pmem";
 	case NFIT_SPA_DCR: return "dimm-control-region";
 	case NFIT_SPA_BDW: return "block-data-window";
@@ -400,9 +402,48 @@ static const char *spa_type_name(u16 type)
 	}
 }
 
+int nfit_spa_type(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_spa __iomem *nfit_spa)
+{
+	struct nfit_spa_old __iomem *nfit_spa_old = (void __iomem *) nfit_spa;
+	__u8 uuid[16];
+
+	if (nfit_desc->old_nfit)
+		return readw(&nfit_spa_old->spa_type);
+
+	memcpy_fromio(uuid, &nfit_spa->type_uuid, sizeof(uuid));
+
+	if (memcmp(&nfit_spa_uuid_volatile, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_VOLATILE;
+
+	if (memcmp(&nfit_spa_uuid_pm, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_PM;
+
+	if (memcmp(&nfit_spa_uuid_dcr, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_DCR;
+
+	if (memcmp(&nfit_spa_uuid_bdw, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_BDW;
+
+	if (memcmp(&nfit_spa_uuid_vdisk, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_VDISK;
+
+	if (memcmp(&nfit_spa_uuid_vcd, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_VCD;
+
+	if (memcmp(&nfit_spa_uuid_pdisk, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_PDISK;
+
+	if (memcmp(&nfit_spa_uuid_pcd, uuid, sizeof(uuid)) == 0)
+		return NFIT_SPA_PCD;
+
+	return -1;
+}
+
 static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		const void __iomem *end)
 {
+	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
 	struct nfit_table_header __iomem *hdr;
 	void *ret = NULL;
 
@@ -422,8 +463,9 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		nd_spa->nfit_spa = nfit_spa;
 		list_add_tail(&nd_spa->list, &nd_bus->spas);
 		dev_dbg(&nd_bus->dev, "%s: spa index: %d type: %s\n", __func__,
-				readw(&nfit_spa->spa_index),
-				spa_type_name(readw(&nfit_spa->spa_type)));
+				nfit_spa_index(nfit_desc, nfit_spa),
+				spa_type_name(nfit_spa_type(nfit_desc,
+						nfit_spa)));
 		break;
 	}
 	case NFIT_TABLE_MEM: {
@@ -450,10 +492,9 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		INIT_LIST_HEAD(&nd_dcr->list);
 		nd_dcr->nfit_dcr = nfit_dcr;
 		list_add_tail(&nd_dcr->list, &nd_bus->dcrs);
-		dev_dbg(&nd_bus->dev, "%s: dcr index: %d num_bdw: %d\n",
+		dev_dbg(&nd_bus->dev, "%s: dcr index: %d num_bcw: %d\n",
 				__func__, readw(&nfit_dcr->dcr_index),
-				nfit_dcr_num_bdw(nfit_dcr,
-					nd_bus->nfit_desc->old_nfit));
+				nfit_dcr_num_bcw(nfit_desc, nfit_dcr));
 		break;
 	}
 	case NFIT_TABLE_BDW: {
@@ -629,11 +670,11 @@ static __init int nd_core_init(void)
 	int rc;
 
 	BUILD_BUG_ON(sizeof(struct nfit) != 40);
-	BUILD_BUG_ON(sizeof(struct nfit_spa) != 40);
+	BUILD_BUG_ON(sizeof(struct nfit_spa) != 56);
 	BUILD_BUG_ON(sizeof(struct nfit_mem) != 48);
-	BUILD_BUG_ON(sizeof(struct nfit_idt) != 20);
+	BUILD_BUG_ON(sizeof(struct nfit_idt) != 16);
 	BUILD_BUG_ON(sizeof(struct nfit_smbios) != 8);
-	BUILD_BUG_ON(sizeof(struct nfit_dcr) != 72);
+	BUILD_BUG_ON(sizeof(struct nfit_dcr) != 80);
 	BUILD_BUG_ON(sizeof(struct nfit_bdw) != 40);
 
 	rc = nd_bus_init();

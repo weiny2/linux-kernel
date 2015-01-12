@@ -1,5 +1,5 @@
 /*
- * NVDIMM Firmware Interface Table (v0.8s10)
+ * NVDIMM Firmware Interface Table - NFIT
  *
  * Copyright(c) 2013-2014 Intel Corporation. All rights reserved.
  *
@@ -16,6 +16,31 @@
 #define __NFIT_H__
 
 #include <linux/types.h>
+#include <linux/uuid.h>
+
+static const uuid_le nfit_spa_uuid_volatile __maybe_unused = UUID_LE(0x7305944f,
+		0xfdda, 0x44e3, 0xb1, 0x6c, 0x3f, 0x22, 0xd2, 0x52, 0xe5, 0xd0);
+
+static const uuid_le nfit_spa_uuid_pm __maybe_unused = UUID_LE(0x66f0d379,
+		0xb4f3, 0x4074, 0xac, 0x43, 0x0d, 0x33, 0x18, 0xb7, 0x8c, 0xdb);
+
+static const uuid_le nfit_spa_uuid_dcr __maybe_unused = UUID_LE(0x92f701f6,
+		0x13b4, 0x405d, 0x91, 0x0b, 0x29, 0x93, 0x67, 0xe8, 0x23, 0x4c);
+
+static const uuid_le nfit_spa_uuid_bdw __maybe_unused = UUID_LE(0x91af0530,
+		0x5d86, 0x470e, 0xa6, 0xb0, 0x0a, 0x2d, 0xb9, 0x40, 0x82, 0x49);
+
+static const uuid_le nfit_spa_uuid_vdisk __maybe_unused = UUID_LE(0x77ab535a,
+		0x45fc, 0x624b, 0x55, 0x60, 0xf7, 0xb2, 0x81, 0xd1, 0xf9, 0x6e);
+
+static const uuid_le nfit_spa_uuid_vcd __maybe_unused = UUID_LE(0x3d5abd30,
+		0x4175, 0x87ce, 0x6d, 0x64, 0xd2, 0xad, 0xe5, 0x23, 0xc4, 0xbb);
+
+static const uuid_le nfit_spa_uuid_pdisk __maybe_unused = UUID_LE(0x5cea02c9,
+		0x4d07, 0x69d3, 0x26, 0x9f, 0x44, 0x96, 0xfb, 0xe0, 0x96, 0xf9);
+
+static const uuid_le nfit_spa_uuid_pcd __maybe_unused = UUID_LE(0x08018188,
+		0x42cd, 0xbb48, 0x10, 0x0f, 0x53, 0x87, 0xd5, 0x3d, 0xed, 0x3d);
 
 enum {
 	NFIT_TABLE_SPA = 0,
@@ -29,15 +54,19 @@ enum {
 	NFIT_SPA_PM = 1,
 	NFIT_SPA_DCR = 2,
 	NFIT_SPA_BDW = 3,
-	NFIT_SPAF_HOT_ADD = 1 << 0,
+	NFIT_SPA_VDISK = 4,
+	NFIT_SPA_VCD = 5,
+	NFIT_SPA_PDISK = 6,
+	NFIT_SPA_PCD = 7,
+	NFIT_SPAF_DCR_HOT_ADD = 1 << 0,
 	NFIT_SPAF_PDVALID = 1 << 1,
 	NFIT_MEMF_SAVE_FAIL = 1 << 0,
 	NFIT_MEMF_RESTORE_FAIL = 1 << 1,
 	NFIT_MEMF_FLUSH_FAIL = 1 << 2,
-	NFIT_MEMF_ARM_READY = 1 << 3,
-	NFIT_MEMF_SMART_READY = 1 << 4,
+	NFIT_MEMF_UNARMED = 1 << 3,
+	NFIT_MEMF_NOTIFY_SMART = 1 << 4,
+	NFIT_MEMF_SMART_READY = 1 << 5,
 	NFIT_DCRF_BUFFERED = 1 << 0,
-	NFIT_DCRF_NOTIFY = 1 << 1,
 };
 
 /**
@@ -60,19 +89,31 @@ struct nfit {
 
 /**
  * struct nfit_spa - System Physical Address Range Descriptor Table
- * @spa_type: NFIT_SPA_*
  */
 struct nfit_spa {
 	__le16 type;
 	__le16 length;
-	__le16 spa_type;
 	__le16 spa_index;
 	__le16 flags;
-	__le16 reserved;
+	__le32 reserved;
 	__le32 proximity_domain;
+	__u8 type_uuid[16];
 	__le64 spa_base;
 	__le64 spa_length;
 	__le64 mem_attr;
+} __packed;
+
+struct nfit_spa_old {
+        __le16 type;
+        __le16 length;
+        __le16 spa_type;
+        __le16 spa_index;
+        __le16 flags;
+        __le16 reserved;
+        __le32 proximity_domain;
+        __le64 spa_base;
+        __le64 spa_length;
+        __le64 mem_attr;
 } __packed;
 
 /**
@@ -87,7 +128,7 @@ struct nfit_mem {
 	__le16 spa_index;
 	__le16 dcr_index;
 	__le64 region_len;
-	__le64 region_spa;
+	__le64 region_spa_offset;
 	__le64 region_dpa;
 	__le16 idt_index;
 	__le16 interleave_ways;
@@ -106,7 +147,6 @@ struct nfit_mem {
 
 /**
  * struct nfit_idt - Interleave description Table
- * @line_offset: at least 1 plus (num_lines - 1) lines
  */
 struct nfit_idt {
 	__le16 type;
@@ -115,7 +155,7 @@ struct nfit_idt {
 	__le16 reserved;
 	__le32 num_lines;
 	__le32 line_size;
-	__le32 line_offset[1];
+	__le32 line_offset[0];
 } __packed;
 
 /**
@@ -144,10 +184,11 @@ struct nfit_dcr {
 	__le16 sub_vendor_id;
 	__le16 sub_device_id;
 	__le16 sub_revision_id;
-	__le16 reserved;
+	__u8 reserved[6];
+	__le32 serial_number;
 	__le16 fic;
-	__le16 num_bdw;
-	__le64 dcr_size;
+	__le16 num_bcw;
+	__le64 bcw_size;
 	__le64 cmd_offset;
 	__le64 cmd_size;
 	__le64 status_offset;
@@ -164,37 +205,13 @@ struct nfit_dcr_old {
 	__le16 device_id;
 	__le16 revision_id;
 	__le16 fic;
-	__le16 num_bdw;
+	__le16 num_bcw;
 	__le64 dcr_size;
 	__le64 cmd_offset;
 	__le64 cmd_size;
 	__le64 status_offset;
 	__le64 status_size;
 } __packed;
-
-static inline u16 nfit_dcr_num_bdw(struct nfit_dcr __iomem *nfit_dcr,
-		bool old_nfit)
-{
-	if (old_nfit) {
-		struct nfit_dcr_old __iomem *nfit_dcr_old;
-
-		nfit_dcr_old = (void __iomem *) nfit_dcr;
-		return readw(&nfit_dcr_old->num_bdw);
-	} else
-		return readw(&nfit_dcr->num_bdw);
-}
-
-static inline u16 nfit_dcr_fic(struct nfit_dcr __iomem *nfit_dcr,
-		bool old_nfit)
-{
-	if (old_nfit) {
-		struct nfit_dcr_old __iomem *nfit_dcr_old;
-
-		nfit_dcr_old = (void __iomem *) nfit_dcr;
-		return readw(&nfit_dcr_old->fic);
-	} else
-		return readw(&nfit_dcr->fic);
-}
 
 /**
  * struct nfit_bdw - NVDIMM Block Data Window Region Table
@@ -206,13 +223,27 @@ struct nfit_bdw {
 	__le16 num_bdw;
 	__le64 bdw_offset;
 	__le64 bdw_size;
-	__le64 dimm_capacity;
-	__le64 dimm_block_offset;
+	__le64 blk_capacity;
+	__le64 blk_offset;
 } __packed;
 
+/**
+ * struct nfit_flush - Flush Hint Address Structure
+ */
+struct nfit_flush {
+	__le16 type;
+	__le16 length;
+	__le32 nfit_handle;
+	__le16 num_hints;
+	__u8 reserved[6];
+	__le64 hint_addr[0];
+};
+
+struct nd_dimm;
 struct nfit_bus_descriptor;
 typedef int (*nfit_ctl_fn)(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int cmd, void *buf, unsigned int buf_len);
+
 struct nfit_bus_descriptor {
 	unsigned long dsm_mask;
 	void __iomem *nfit_base;
@@ -221,6 +252,68 @@ struct nfit_bus_descriptor {
 	nfit_ctl_fn nfit_ctl;
 	bool old_nfit;
 };
+
+static inline u16 nfit_spa_index(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_spa __iomem *nfit_spa)
+{
+	struct nfit_spa_old __iomem *nfit_spa_old = (void __iomem *) nfit_spa;
+
+	if (nfit_desc->old_nfit)
+		return readw(&nfit_spa_old->spa_index);
+	return readw(&nfit_spa->spa_index);
+}
+
+static inline u64 nfit_spa_base(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_spa __iomem *nfit_spa)
+{
+	struct nfit_spa_old __iomem *nfit_spa_old = (void __iomem *) nfit_spa;
+
+	if (nfit_desc->old_nfit)
+		return readq(&nfit_spa_old->spa_base);
+	return readq(&nfit_spa->spa_base);
+}
+
+static inline u64 nfit_spa_length(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_spa __iomem *nfit_spa)
+{
+	struct nfit_spa_old __iomem *nfit_spa_old = (void __iomem *) nfit_spa;
+
+	if (nfit_desc->old_nfit)
+		return readq(&nfit_spa_old->spa_length);
+	return readq(&nfit_spa->spa_length);
+}
+
+static inline u16 nfit_dcr_num_bcw(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_dcr __iomem *nfit_dcr)
+{
+	if (nfit_desc->old_nfit) {
+		struct nfit_dcr_old __iomem *nfit_dcr_old;
+
+		nfit_dcr_old = (void __iomem *) nfit_dcr;
+		return readw(&nfit_dcr_old->num_bcw);
+	} else
+		return readw(&nfit_dcr->num_bcw);
+}
+
+static inline u16 nfit_dcr_fic(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_dcr __iomem *nfit_dcr)
+{
+	if (nfit_desc->old_nfit) {
+		struct nfit_dcr_old __iomem *nfit_dcr_old;
+
+		nfit_dcr_old = (void __iomem *) nfit_dcr;
+		return readw(&nfit_dcr_old->fic);
+	} else
+		return readw(&nfit_dcr->fic);
+}
+
+static inline u32 nfit_dcr_serial(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_dcr __iomem *nfit_dcr)
+{
+	if (nfit_desc->old_nfit)
+		return 0;
+	return readw(&nfit_dcr->serial_number);
+}
 
 struct nd_bus;
 #define nfit_bus_register(parent, desc) \

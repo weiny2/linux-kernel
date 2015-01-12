@@ -402,7 +402,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit);
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_PM, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_pm, 16);
 	writew(0+1, &nfit_spa->spa_index);
 	writeq(t->spa_set_dma[0], &nfit_spa->spa_base);
 	writeq(SPA0_SIZE, &nfit_spa->spa_length);
@@ -415,7 +415,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa);
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_PM, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_pm, 16);
 	writew(1+1, &nfit_spa->spa_index);
 	writeq(t->spa_set_dma[1], &nfit_spa->spa_base);
 	writeq(SPA1_SIZE, &nfit_spa->spa_length);
@@ -424,7 +424,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 2;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_DCR, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_dcr, 16);
 	writew(2+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[0], &nfit_spa->spa_base);
 	writeq(DCR_SIZE, &nfit_spa->spa_length);
@@ -433,7 +433,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 3;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_DCR, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_dcr, 16);
 	writew(3+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[1], &nfit_spa->spa_base);
 	writeq(DCR_SIZE, &nfit_spa->spa_length);
@@ -442,7 +442,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 4;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_DCR, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_dcr, 16);
 	writew(4+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[2], &nfit_spa->spa_base);
 	writeq(DCR_SIZE, &nfit_spa->spa_length);
@@ -451,7 +451,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 5;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_DCR, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_dcr, 16);
 	writew(5+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[3], &nfit_spa->spa_base);
 	writeq(DCR_SIZE, &nfit_spa->spa_length);
@@ -460,7 +460,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 6;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_BDW, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(6+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[0] + DCR_SIZE, &nfit_spa->spa_base);
 	writeq(BDW_SIZE, &nfit_spa->spa_length);
@@ -469,7 +469,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 7;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_BDW, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(7+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[1] + DCR_SIZE, &nfit_spa->spa_base);
 	writeq(BDW_SIZE, &nfit_spa->spa_length);
@@ -478,7 +478,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 8;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_BDW, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(8+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[2] + DCR_SIZE, &nfit_spa->spa_base);
 	writeq(BDW_SIZE, &nfit_spa->spa_length);
@@ -487,7 +487,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 9;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_BDW, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(9+1, &nfit_spa->spa_index);
 	writeq(t->dcr_dma[3] + DCR_SIZE, &nfit_spa->spa_base);
 	writeq(BDW_SIZE, &nfit_spa->spa_length);
@@ -503,7 +503,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_len);
-	writeq(t->spa_set_dma[0], &nfit_mem->region_spa);
+	writeq(t->spa_set_dma[0], &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(2, &nfit_mem->interleave_ways);
@@ -518,7 +518,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0+1, &nfit_mem->spa_index);
 	writew(1+1, &nfit_mem->dcr_index);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_len);
-	writeq(t->spa_set_dma[0] + SPA0_SIZE/2, &nfit_mem->region_spa);
+	writeq(t->spa_set_dma[0] + SPA0_SIZE/2, &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(2, &nfit_mem->interleave_ways);
@@ -533,7 +533,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(t->spa_set_dma[1], &nfit_mem->region_spa);
+	writeq(t->spa_set_dma[1], &nfit_mem->region_spa_offset);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
@@ -548,7 +548,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(1+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(t->spa_set_dma[1] + SPA1_SIZE/4, &nfit_mem->region_spa);
+	writeq(t->spa_set_dma[1] + SPA1_SIZE/4, &nfit_mem->region_spa_offset);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
@@ -563,7 +563,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(2+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(t->spa_set_dma[1] + 2*SPA1_SIZE/4, &nfit_mem->region_spa);
+	writeq(t->spa_set_dma[1] + 2*SPA1_SIZE/4, &nfit_mem->region_spa_offset);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
@@ -578,7 +578,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(3+1, &nfit_mem->dcr_index);
 	writeq(SPA1_SIZE/4, &nfit_mem->region_len);
-	writeq(t->spa_set_dma[1] + 3*SPA1_SIZE/4, &nfit_mem->region_spa);
+	writeq(t->spa_set_dma[1] + 3*SPA1_SIZE/4, &nfit_mem->region_spa_offset);
 	writeq(SPA0_SIZE/2, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(4, &nfit_mem->interleave_ways);
@@ -593,7 +593,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(2+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
@@ -608,7 +608,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(3+1, &nfit_mem->spa_index);
 	writew(1+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
@@ -623,7 +623,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(4+1, &nfit_mem->spa_index);
 	writew(2+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
@@ -638,7 +638,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(5+1, &nfit_mem->spa_index);
 	writew(3+1, &nfit_mem->dcr_index);
 	writeq(0, &nfit_mem->region_len);
-	writeq(0, &nfit_mem->region_spa);
+	writeq(0, &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
@@ -652,9 +652,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0x8086, &nfit_dcr->vendor_id);
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
+	writel(~handle[0], &nfit_dcr->serial_number);
 	writew(1, &nfit_dcr->fic);
-	writew(1, &nfit_dcr->num_bdw);
-	writeq(DCR_SIZE, &nfit_dcr->dcr_size);
+	writew(1, &nfit_dcr->num_bcw);
+	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
 	writeq(8, &nfit_dcr->cmd_size);
 	writeq(8, &nfit_dcr->status_offset);
@@ -668,9 +669,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0x8086, &nfit_dcr->vendor_id);
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
+	writel(~handle[1], &nfit_dcr->serial_number);
 	writew(1, &nfit_dcr->fic);
-	writew(1, &nfit_dcr->num_bdw);
-	writeq(DCR_SIZE, &nfit_dcr->dcr_size);
+	writew(1, &nfit_dcr->num_bcw);
+	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
 	writeq(8, &nfit_dcr->cmd_size);
 	writeq(8, &nfit_dcr->status_offset);
@@ -684,9 +686,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0x8086, &nfit_dcr->vendor_id);
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
+	writel(~handle[2], &nfit_dcr->serial_number);
 	writew(1, &nfit_dcr->fic);
-	writew(1, &nfit_dcr->num_bdw);
-	writeq(DCR_SIZE, &nfit_dcr->dcr_size);
+	writew(1, &nfit_dcr->num_bcw);
+	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
 	writeq(8, &nfit_dcr->cmd_size);
 	writeq(8, &nfit_dcr->status_offset);
@@ -700,9 +703,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0x8086, &nfit_dcr->vendor_id);
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
+	writel(~handle[3], &nfit_dcr->serial_number);
 	writew(1, &nfit_dcr->fic);
-	writew(1, &nfit_dcr->num_bdw);
-	writeq(DCR_SIZE, &nfit_dcr->dcr_size);
+	writew(1, &nfit_dcr->num_bcw);
+	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
 	writeq(8, &nfit_dcr->cmd_size);
 	writeq(8, &nfit_dcr->status_offset);
@@ -717,8 +721,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1, &nfit_bdw->num_bdw);
 	writeq(0, &nfit_bdw->bdw_offset);
 	writeq(BDW_SIZE, &nfit_bdw->bdw_size);
-	writeq(DIMM_SIZE, &nfit_bdw->dimm_capacity);
-	writeq(0, &nfit_bdw->dimm_block_offset);
+	writeq(DIMM_SIZE, &nfit_bdw->blk_capacity);
+	writeq(0, &nfit_bdw->blk_offset);
 
 	/* bdw1 (spa/dcr1, dimm1) */
 	nfit_bdw = nfit_buf + offset + sizeof(struct nfit_bdw);
@@ -728,8 +732,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1, &nfit_bdw->num_bdw);
 	writeq(0, &nfit_bdw->bdw_offset);
 	writeq(BDW_SIZE, &nfit_bdw->bdw_size);
-	writeq(DIMM_SIZE, &nfit_bdw->dimm_capacity);
-	writeq(0, &nfit_bdw->dimm_block_offset);
+	writeq(DIMM_SIZE, &nfit_bdw->blk_capacity);
+	writeq(0, &nfit_bdw->blk_offset);
 
 	/* bdw2 (spa/dcr2, dimm2) */
 	nfit_bdw = nfit_buf + offset + sizeof(struct nfit_bdw) * 2;
@@ -739,8 +743,8 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1, &nfit_bdw->num_bdw);
 	writeq(0, &nfit_bdw->bdw_offset);
 	writeq(BDW_SIZE, &nfit_bdw->bdw_size);
-	writeq(DIMM_SIZE, &nfit_bdw->dimm_capacity);
-	writeq(0, &nfit_bdw->dimm_block_offset);
+	writeq(DIMM_SIZE, &nfit_bdw->blk_capacity);
+	writeq(0, &nfit_bdw->blk_offset);
 
 	/* bdw3 (spa/dcr3, dimm3) */
 	nfit_bdw = nfit_buf + offset + sizeof(struct nfit_bdw) * 3;
@@ -750,16 +754,13 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(1, &nfit_bdw->num_bdw);
 	writeq(0, &nfit_bdw->bdw_offset);
 	writeq(BDW_SIZE, &nfit_bdw->bdw_size);
-	writeq(DIMM_SIZE, &nfit_bdw->dimm_capacity);
-	writeq(0, &nfit_bdw->dimm_block_offset);
+	writeq(DIMM_SIZE, &nfit_bdw->blk_capacity);
+	writeq(0, &nfit_bdw->blk_offset);
 
 	writeb(nfit_checksum(nfit_buf, size), &nfit->checksum);
 
 	nfit_desc = &t->nfit_desc;
 	nfit_desc->nfit_ctl = nfit_test_ctl;
-	set_bit(NFIT_CMD_GET_CONFIG_SIZE, &nfit_desc->dsm_mask);
-	set_bit(NFIT_CMD_GET_CONFIG_DATA, &nfit_desc->dsm_mask);
-	set_bit(NFIT_CMD_SET_CONFIG_DATA, &nfit_desc->dsm_mask);
 }
 
 static void nfit_test1_setup(struct nfit_test *t)
@@ -784,7 +785,7 @@ static void nfit_test1_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + sizeof(*nfit);
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_PM, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_pm, 16);
 	writew(0+1, &nfit_spa->spa_index);
 	writeq(t->spa_set_dma[0], &nfit_spa->spa_base);
 	writeq(SPA2_SIZE, &nfit_spa->spa_length);
@@ -820,7 +821,7 @@ static void nfit_test2_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + offset;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_DCR, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_dcr, 16);
 	writew(0+1, &nfit_spa->spa_index);
 	writeq(0xf000800000ULL, &nfit_spa->spa_base);
 	writeq(SZ_8K, &nfit_spa->spa_length);
@@ -830,7 +831,7 @@ static void nfit_test2_setup(struct nfit_test *t)
 	nfit_spa = nfit_buf + offset;
 	writew(NFIT_TABLE_SPA, &nfit_spa->type);
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	writew(NFIT_SPA_BDW, &nfit_spa->spa_type);
+	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(1+1, &nfit_spa->spa_index);
 	writeq(0xf008000000ULL, &nfit_spa->spa_base);
 	writeq(SZ_8K, &nfit_spa->spa_length);
@@ -846,7 +847,7 @@ static void nfit_test2_setup(struct nfit_test *t)
 	writew(0+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(SZ_8K, &nfit_mem->region_len);
-	writeq(0xf000800000ULL, &nfit_mem->region_spa);
+	writeq(0xf000800000ULL, &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
@@ -862,7 +863,7 @@ static void nfit_test2_setup(struct nfit_test *t)
 	writew(1+1, &nfit_mem->spa_index);
 	writew(0+1, &nfit_mem->dcr_index);
 	writeq(SZ_8K, &nfit_mem->region_len);
-	writeq(0xf008000000ULL, &nfit_mem->region_spa);
+	writeq(0xf008000000ULL, &nfit_mem->region_spa_offset);
 	writeq(0, &nfit_mem->region_dpa);
 	writew(0, &nfit_mem->idt_index);
 	writew(1, &nfit_mem->interleave_ways);
@@ -877,8 +878,8 @@ static void nfit_test2_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writew(1, &nfit_dcr->fic);
-	writew(1, &nfit_dcr->num_bdw);
-	writeq(SZ_8K, &nfit_dcr->dcr_size);
+	writew(1, &nfit_dcr->num_bcw);
+	writeq(SZ_8K, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
 	writeq(8, &nfit_dcr->cmd_size);
 	writeq(SZ_4K, &nfit_dcr->status_offset);
@@ -893,8 +894,8 @@ static void nfit_test2_setup(struct nfit_test *t)
 	writew(1, &nfit_bdw->num_bdw);
 	writeq(0, &nfit_bdw->bdw_offset);
 	writeq(SZ_8K, &nfit_bdw->bdw_size);
-	writeq(SZ_64G, &nfit_bdw->dimm_capacity);
-	writeq(0, &nfit_bdw->dimm_block_offset);
+	writeq(SZ_64G, &nfit_bdw->blk_capacity);
+	writeq(0, &nfit_bdw->blk_offset);
 	offset += sizeof(*nfit_bdw);
 
 	/* finish up */

@@ -181,7 +181,8 @@ static ssize_t spa_index_show(struct device *dev,
 {
 	struct nd_region *nd_region = to_nd_region(dev);
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 
 	return sprintf(buf, "%d\n", spa_index);
 }
@@ -351,7 +352,7 @@ static int cmp_map(const void *m0, const void *m1)
 static int init_interleave_set(struct nd_bus *nd_bus,
 		struct nd_interleave_set *nd_set, struct nd_spa *nd_spa)
 {
-	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	int num_mappings = num_nd_mem(nd_bus, spa_index);
 	struct nd_set_info *info;
 	int i, rc = -ENXIO;
@@ -359,8 +360,8 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 	info = kzalloc(sizeof_nd_set_info(num_mappings), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
-	info->spa_base = readq(&nd_spa->nfit_spa->spa_base);
-	info->spa_length = readq(&nd_spa->nfit_spa->spa_length);
+	info->spa_base = nfit_spa_base(nd_bus->nfit_desc, nd_spa->nfit_spa);
+	info->spa_length = nfit_spa_length(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	for (i = 0; i < num_mappings; i++) {
 		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
 		u32 key = to_interleave_set_key(nd_mem);
@@ -402,8 +403,8 @@ int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
 	int rc = 0;
 
 	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
-		u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
-		u16 spa_type = readw(&nd_spa->nfit_spa->spa_type);
+		u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
+		int spa_type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
 		struct nd_interleave_set *nd_set;
 
 		if (spa_type != NFIT_SPA_PM)
@@ -623,7 +624,7 @@ static const struct attribute_group *nd_region_attribute_groups[] = {
 static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 {
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	struct nd_bdw *iter, *nd_bdw = NULL;
 	struct nd_mapping *nd_mapping;
 	struct nd_mem *nd_mem;
@@ -651,8 +652,8 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 	nd_mapping = &nd_region->mapping[0];
 	nd_mapping->nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
-	nd_mapping->size = readq(&nd_bdw->nfit_bdw->dimm_capacity);
-	nd_mapping->start = readq(&nd_bdw->nfit_bdw->dimm_block_offset);
+	nd_mapping->size = readq(&nd_bdw->nfit_bdw->blk_capacity);
+	nd_mapping->start = readq(&nd_bdw->nfit_bdw->blk_offset);
 }
 
 static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region,
@@ -661,7 +662,7 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 	u16 i;
 	struct nd_mem *nd_mem;
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 
 	nd_region->dev.type = type;
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
@@ -679,8 +680,8 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 		struct nd_spa *nd_spa)
 {
-	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
-	u16 spa_type = readw(&nd_spa->nfit_spa->spa_type);
+	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
+	int spa_type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	struct nd_region *nd_region;
 	struct device *dev;
 	u16 num_mappings;
@@ -701,8 +702,8 @@ static struct nd_region *nd_region_create(struct nd_bus *nd_bus,
 	dev_set_name(dev, "region%d", nd_region->id);
 	dev->parent = &nd_bus->dev;
 	dev->groups = nd_region_attribute_groups;
-	nd_region->ndr_size = readq(&nd_spa->nfit_spa->spa_length);
-	nd_region->ndr_start = readq(&nd_spa->nfit_spa->spa_base);
+	nd_region->ndr_size = nfit_spa_length(nd_bus->nfit_desc, nd_spa->nfit_spa);
+	nd_region->ndr_start = nfit_spa_base(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	ida_init(&nd_region->ns_ida);
 	switch (spa_type) {
 	case NFIT_SPA_PM:
@@ -729,11 +730,12 @@ int nd_bus_register_regions(struct nd_bus *nd_bus)
 
 	mutex_lock(&nd_bus_list_mutex);
 	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
-		u16 spa_type, spa_index;
+		int spa_type;
+		u16 spa_index;
 		struct nd_region *nd_region;
 
-		spa_type = readw(&nd_spa->nfit_spa->spa_type);
-		spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		spa_type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
+		spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 		if (spa_index == 0) {
 			dev_dbg(&nd_bus->dev, "detected invalid spa index\n");
 			continue;
@@ -750,8 +752,8 @@ int nd_bus_register_regions(struct nd_bus *nd_bus)
 			/* we'll consume this in nd_blk_register for the DCR */
 			break;
 		default:
-			dev_dbg(&nd_bus->dev, "spa[%d] unknown type: %d\n",
-					spa_index, spa_type);
+			dev_info(&nd_bus->dev, "spa[%d] unhandled type: %s\n",
+					spa_index, spa_type_name(spa_type));
 			break;
 		}
 	}

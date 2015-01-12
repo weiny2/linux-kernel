@@ -97,6 +97,9 @@ static inline u32 to_interleave_set_key(struct nd_mem *nd_mem)
 }
 
 struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname);
+const char *spa_type_name(u16 type);
+int nfit_spa_type(struct nfit_bus_descriptor *nfit_desc,
+		struct nfit_spa __iomem *nfit_spa);
 struct nd_dimm *nd_dimm_by_handle(struct nd_bus *nd_bus, u32 nfit_handle);
 bool is_nd_dimm(struct device *dev);
 bool is_nd_blk(struct device *dev);
