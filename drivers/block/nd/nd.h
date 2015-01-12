@@ -20,8 +20,10 @@
 
 struct gendisk;
 struct nd_dimm {
+	unsigned long dsm_mask;
 	struct nd_mem *nd_mem;
 	struct device dev;
+	void *priv_data;
 	int config_size;
 	int nsindex_size;
 	int id;

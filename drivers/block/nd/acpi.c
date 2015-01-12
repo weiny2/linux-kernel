@@ -167,7 +167,8 @@ static u32 to_cmd_out_size(int cmd, const struct cmd_desc *desc, int idx,
 static u8 nd_acpi_uuid[16]; /* initialized at nd_acpi_init */
 
 static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
-		unsigned int cmd, void *buf, unsigned int buf_len)
+		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
+		unsigned int buf_len)
 {
 	struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
 	const struct cmd_desc *desc = to_cmd_desc(cmd);

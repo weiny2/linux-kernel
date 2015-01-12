@@ -242,7 +242,8 @@ struct nfit_flush {
 struct nd_dimm;
 struct nfit_bus_descriptor;
 typedef int (*nfit_ctl_fn)(struct nfit_bus_descriptor *nfit_desc,
-		unsigned int cmd, void *buf, unsigned int buf_len);
+		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
+		unsigned int buf_len);
 
 struct nfit_bus_descriptor {
 	unsigned long dsm_mask;

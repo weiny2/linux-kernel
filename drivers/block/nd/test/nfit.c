@@ -149,7 +149,8 @@ static struct nfit_test *to_nfit_test(struct device *dev)
 }
 
 static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
-		unsigned int cmd, void *buf, unsigned int buf_len)
+		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
+		unsigned int buf_len)
 {
 	struct nfit_test *t = container_of(nfit_desc, typeof(*t), nfit_desc);
 	struct device *dev = &t->pdev.dev;

@@ -28,7 +28,8 @@
 #include "nfit.h"
 #include "nd.h"
 
-static int nd_major;
+int nd_dimm_major;
+static int nd_bus_major;
 static struct class *nd_class;
 
 static int to_nd_device_type(struct device *dev)
@@ -463,7 +464,7 @@ struct attribute_group nd_device_attribute_group = {
 
 int nd_bus_create_ndctl(struct nd_bus *nd_bus)
 {
-	dev_t devt = MKDEV(nd_major, nd_bus->id);
+	dev_t devt = MKDEV(nd_bus_major, nd_bus->id);
 	struct device *dev;
 
 	dev = device_create_with_groups(nd_class, &nd_bus->dev, devt, nd_bus,
@@ -479,7 +480,7 @@ int nd_bus_create_ndctl(struct nd_bus *nd_bus)
 
 void nd_bus_destroy_ndctl(struct nd_bus *nd_bus)
 {
-	device_destroy(nd_class, MKDEV(nd_major, nd_bus->id));
+	device_destroy(nd_class, MKDEV(nd_bus_major, nd_bus->id));
 }
 
 void wait_nd_bus_probe_idle(struct device *dev)
@@ -496,43 +497,37 @@ void wait_nd_bus_probe_idle(struct device *dev)
 }
 
 /* set_config requires an idle interleave set */
-static int nd_bus_clear_to_send(struct nd_bus *nd_bus, unsigned int cmd, void *buf)
+static int nd_cmd_clear_to_send(struct nd_dimm *nd_dimm, unsigned int cmd)
 {
-	struct nfit_cmd_set_config_hdr *nfit_cmd_set = buf;
-	u32 nfit_handle = nfit_cmd_set->nfit_handle;
-	struct nd_mem *nd_mem, *found = NULL;
 	struct nd_interleave_set *nd_set;
+	struct nd_bus *nd_bus;
 
-	if (cmd != NFIT_CMD_SET_CONFIG_DATA)
+	if (!nd_dimm || cmd != NFIT_CMD_SET_CONFIG_DATA)
 		return 0;
-	list_for_each_entry(nd_mem, &nd_bus->memdevs, list)
-		if (readl(&nd_mem->nfit_mem->nfit_handle) == nfit_handle) {
-			found = nd_mem;
-			break;
-		}
-	if (!found)
-		return -ENODEV;
 
+	nd_bus = walk_to_nd_bus(&nd_dimm->dev);
 	wait_nd_bus_probe_idle(&nd_bus->dev);
 
 	nd_set = radix_tree_lookup(&nd_bus->interleave_sets,
-			to_interleave_set_key(nd_mem));
+			to_interleave_set_key(nd_dimm->nd_mem));
 	if (nd_set && nd_set->busy)
 		return -EBUSY;
 	return 0;
 }
 
-static int __nd_ioctl(struct nd_bus *nd_bus, int read_only, unsigned int cmd,
-		unsigned long arg)
+static int __nd_ioctl(struct nd_bus *nd_bus, struct nd_dimm *nd_dimm,
+		int read_only, unsigned int cmd, unsigned long arg)
 {
 	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
 	void __user *p = (void __user *) arg;
+	unsigned long dsm_mask;
 	size_t buf_len = 0;
 	void *buf = NULL;
 	int rc;
 
 	/* check if the command is supported */
-	if (!test_bit(_IOC_NR(cmd), &nfit_desc->dsm_mask))
+	dsm_mask = nd_dimm ? nd_dimm->dsm_mask : nfit_desc->dsm_mask;
+	if (!test_bit(_IOC_NR(cmd), &dsm_mask))
 		return -ENXIO;
 
 	/* fail write commands (when read-only), or unknown commands */
@@ -654,11 +649,11 @@ static int __nd_ioctl(struct nd_bus *nd_bus, int read_only, unsigned int cmd,
 	}
 
 	nd_bus_lock(&nd_bus->dev);
-	rc = nd_bus_clear_to_send(nd_bus, _IOC_NR(cmd), buf);
+	rc = nd_cmd_clear_to_send(nd_dimm, _IOC_NR(cmd));
 	if (rc)
 		goto out_unlock;
 
-	rc = nfit_desc->nfit_ctl(nfit_desc, _IOC_NR(cmd), buf, buf_len);
+	rc = nfit_desc->nfit_ctl(nfit_desc, nd_dimm, _IOC_NR(cmd), buf, buf_len);
 	if (rc)
 		goto out_unlock;
 	if (copy_to_user(p, buf, buf_len))
@@ -683,9 +678,45 @@ static long nd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	mutex_lock(&nd_bus_list_mutex);
 	list_for_each_entry(nd_bus, &nd_bus_list, list) {
 		if (nd_bus->id == id) {
-			rc = __nd_ioctl(nd_bus, read_only, cmd, arg);
+			rc = __nd_ioctl(nd_bus, NULL, read_only, cmd, arg);
 			break;
 		}
+	}
+	mutex_unlock(&nd_bus_list_mutex);
+
+	return rc;
+}
+
+static int match_dimm(struct device *dev, void *data)
+{
+	long id = (long) data;
+
+	if (is_nd_dimm(dev)) {
+		struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+
+		return nd_dimm->id == id;
+	}
+
+	return 0;
+}
+
+static long nd_dimm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	int rc = -ENXIO, read_only;
+	struct nd_bus *nd_bus;
+
+	read_only = (O_RDWR != (file->f_flags & O_ACCMODE));
+	mutex_lock(&nd_bus_list_mutex);
+	list_for_each_entry(nd_bus, &nd_bus_list, list) {
+		struct device *dev = device_find_child(&nd_bus->dev,
+				file->private_data, match_dimm);
+
+		if (!dev)
+			continue;
+
+		rc = __nd_ioctl(nd_bus, to_nd_dimm(dev), read_only, cmd, arg);
+		put_device(dev);
+		break;
 	}
 	mutex_unlock(&nd_bus_list_mutex);
 
@@ -708,6 +739,14 @@ static const struct file_operations nd_bus_fops = {
 	.llseek = noop_llseek,
 };
 
+static const struct file_operations nd_dimm_fops = {
+	.owner = THIS_MODULE,
+	.open = nd_open,
+	.unlocked_ioctl = nd_dimm_ioctl,
+	.compat_ioctl = nd_dimm_ioctl,
+	.llseek = noop_llseek,
+};
+
 int __init nd_bus_init(void)
 {
 	int rc;
@@ -718,18 +757,25 @@ int __init nd_bus_init(void)
 
 	rc = register_chrdev(0, "ndctl", &nd_bus_fops);
 	if (rc < 0)
-		goto err_chrdev;
-	nd_major = rc;
+		goto err_bus_chrdev;
+	nd_bus_major = rc;
 
-	nd_class = class_create(THIS_MODULE, "nd_bus");
+	rc = register_chrdev(0, "dimmctl", &nd_dimm_fops);
+	if (rc < 0)
+		goto err_dimm_chrdev;
+	nd_dimm_major = rc;
+
+	nd_class = class_create(THIS_MODULE, "nd");
 	if (IS_ERR(nd_class))
 		goto err_class;
 
 	return 0;
 
  err_class:
-	unregister_chrdev(nd_major, "ndctl");
- err_chrdev:
+	unregister_chrdev(nd_dimm_major, "dimmctl");
+ err_dimm_chrdev:
+	unregister_chrdev(nd_bus_major, "ndctl");
+ err_bus_chrdev:
 	bus_unregister(&nd_bus_type);
 
 	return rc;
@@ -738,6 +784,7 @@ int __init nd_bus_init(void)
 void nd_bus_exit(void)
 {
 	class_destroy(nd_class);
-	unregister_chrdev(nd_major, "ndctl");
+	unregister_chrdev(nd_bus_major, "ndctl");
+	unregister_chrdev(nd_dimm_major, "dimmctl");
 	bus_unregister(&nd_bus_type);
 }

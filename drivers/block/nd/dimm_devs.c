@@ -77,8 +77,8 @@ int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
 	nfit_desc = nd_bus->nfit_desc;
 	memset(cmd, 0, sizeof(*cmd));
 	cmd->nfit_handle = nfit_handle;
-	return nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_GET_CONFIG_SIZE, cmd,
-			sizeof(*cmd));
+	return nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_GET_CONFIG_SIZE,
+			cmd, sizeof(*cmd));
 }
 
 int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
@@ -96,8 +96,8 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 	memset(cmd, 0, len);
 	cmd->nfit_handle = nfit_handle;
 	cmd->in_length = len - sizeof(*cmd);
-	return nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_GET_CONFIG_DATA, cmd,
-			len);
+	return nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_GET_CONFIG_DATA,
+			cmd, len);
 }
 
 int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
@@ -125,8 +125,8 @@ int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
 	cmd->in_offset = offset;
 	cmd->in_length = len;
 	memcpy(cmd->in_buf, buf, len);
-	rc = nfit_desc->nfit_ctl(nfit_desc, NFIT_CMD_SET_CONFIG_DATA, cmd,
-			size);
+	rc = nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_SET_CONFIG_DATA,
+			cmd, size);
 	if (rc == 0) {
 		/* rc == 0 == status valid */
 		u32 *status = ((void *) cmd) + size - sizeof(u32);
