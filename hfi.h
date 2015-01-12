@@ -1095,9 +1095,9 @@ int hfi_setup_ctxt(struct qib_ctxtdata *, u16, u16, u16, u16);
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 int qib_wait_linkstate(struct qib_pportdata *, u32, int);
-static inline u16 generate_jkey(unsigned int uid)
+static inline u16 generate_jkey(kuid_t uid)
 {
-	return uid & 0xffff;
+	return from_kuid(current_user_ns(), uid) & 0xffff;
 }
 void set_link_ipg(struct qib_pportdata *ppd);
 void process_becn(struct qib_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,

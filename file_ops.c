@@ -279,7 +279,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	}
 
 	/* only root can do these operations */
-	if (must_be_root && current_uid() != 0) {
+	if (must_be_root && uid_eq(current_uid(), GLOBAL_ROOT_UID)) {
 		ret = -EPERM;
 		goto bail;
 	}
