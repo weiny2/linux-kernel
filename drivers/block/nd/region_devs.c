@@ -329,7 +329,6 @@ struct nd_set_info {
 	u64 spa_length;
 	struct nd_set_info_map {
 		u32 nfit_handle;
-		u32 region_id;
 		u64 region_dpa;
 		u64 region_len;
 	} mapping[0];
@@ -383,7 +382,6 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 		dev_dbg(&nd_bus->dev, "%s: set: %d key: %#x\n",
 				__func__, spa_index, key);
 		map->nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
-		map->region_id = readw(&nd_mem->nfit_mem->region_id);
 		map->region_dpa = readq(&nd_mem->nfit_mem->region_dpa);
 		map->region_len = readq(&nd_mem->nfit_mem->region_len);
 	}
