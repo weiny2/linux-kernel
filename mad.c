@@ -42,9 +42,9 @@
 #include "mad.h"
 #include "trace.h"
 
-#define STL_LINK_WIDTH_ALL_SUPPORTED \
-		(STL_LINK_WIDTH_1X | STL_LINK_WIDTH_2X \
-		| STL_LINK_WIDTH_3X | STL_LINK_WIDTH_4X)
+/* the reset value from the FM is supposed to be 0xffff, handle both */
+#define STL_LINK_WIDTH_RESET_OLD 0x0fff
+#define STL_LINK_WIDTH_RESET 0xffff
 
 static int reply(void *arg)
 {
@@ -595,8 +595,23 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 			cpu_to_be16(ppd->link_width_downgrade_supported);
 	pi->link_width_downgrade.enabled =
 			cpu_to_be16(ppd->link_width_downgrade_enabled);
+#if PI_LWD_TX_RX_ACTIVE_SUP
+	pi->link_width_downgrade.tx_active =
+			cpu_to_be16(ppd->link_width_downgrade_tx_active);
+	pi->link_width_downgrade.rx_active =
+			cpu_to_be16(ppd->link_width_downgrade_rx_active);
+#else
+	/*
+	 * Old header.  Use the old field names that turned into the new
+	 * fields.  Placement in the structure did not change.
+	 *   link_width_downgrade.active -> link_width_downgrade.tx_active,
+	 *   reserved3			 -> link_widthdowngrade.rx_active
+	 */
 	pi->link_width_downgrade.active =
-			cpu_to_be16(ppd->link_width_downgrade_active);
+			cpu_to_be16(ppd->link_width_downgrade_tx_active);
+	pi->reserved3 =
+			cpu_to_be16(ppd->link_width_downgrade_rx_active);
+#endif
 
 	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
@@ -897,6 +912,7 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u32 num_ports = STL_AM_NPORT(am);
 	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
 	int ret, ore, i, invalid = 0;
+	int call_link_downgrade_policy = 0;
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -985,25 +1001,33 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	lwe = be16_to_cpu(pi->link_width.enabled);
 	if (lwe) {
-		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED) == STL_LINK_WIDTH_ALL_SUPPORTED)
-			set_link_width_enabled(ppd, STL_LINK_WIDTH_ALL_SUPPORTED);
-		else if (lwe & be16_to_cpu(pi->link_width.supported))
+		if (lwe == STL_LINK_WIDTH_RESET
+				|| lwe == STL_LINK_WIDTH_RESET_OLD)
+			set_link_width_enabled(ppd, ppd->link_width_supported);
+		else if ((lwe & ~ppd->link_width_supported) == 0)
 			set_link_width_enabled(ppd, lwe);
 		else
 			smp->status |= IB_SMP_INVALID_FIELD;
 	}
 	lwe = be16_to_cpu(pi->link_width_downgrade.enabled);
+	/*
+	 * TODO: The STL spec and discussions indicate that LWD.E is always
+	 * supposed to be valid, even when 0.  The FM does not treat it that
+	 * way and puts the driver in a situation where it will bounce
+	 * the link.  For now, treat LWD.E == 0 is a NOP like the FM does.
+	 */
 	if (lwe) {
-		if ((lwe & STL_LINK_WIDTH_ALL_SUPPORTED)
-					== STL_LINK_WIDTH_ALL_SUPPORTED) {
+		if (lwe == STL_LINK_WIDTH_RESET
+				|| lwe == STL_LINK_WIDTH_RESET_OLD) {
 			set_link_width_downgrade_enabled(ppd,
-					STL_LINK_WIDTH_ALL_SUPPORTED);
-		} else if (lwe
-			    & be16_to_cpu(pi->link_width_downgrade.supported)) {
+					ppd->link_width_downgrade_supported);
+		} else if ((lwe & ~ppd->link_width_downgrade_supported) == 0) {
 			set_link_width_downgrade_enabled(ppd, lwe);
+			call_link_downgrade_policy = 1;
 		} else
 			smp->status |= IB_SMP_INVALID_FIELD;
 	}
+
 	lse = be16_to_cpu(pi->link_speed.enabled);
 	if (lse) {
 		if ((lse & STL_LINK_SPEED_ALL_SUPPORTED) == STL_LINK_SPEED_ALL_SUPPORTED) {
@@ -1117,6 +1141,15 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	/* restore re-reg bit per o14-12.2.1 */
 	pi->clientrereg_subnettimeout |= clientrereg;
+
+	/*
+	 * Apply the new link downgrade policy.  This may result in a link
+	 * bounce.  Do this after everything else so things are settled.
+	 * Possible problem: if setting the port state above fails, then
+	 * the policy change is not applied.
+	 */
+	if (call_link_downgrade_policy)
+		apply_link_downgrade_policy(ppd);
 
 	return ret;
 

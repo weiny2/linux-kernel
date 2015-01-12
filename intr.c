@@ -90,8 +90,8 @@ static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
 }
 
 /*
- * Handle a linkup or link down notification.  This is called both inside
- * and outside an interrupt.
+ * Handle a linkup or link down notification.
+ * This is called outside an interrupt.
  */
 void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 {
@@ -131,8 +131,8 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* physical link went up */
 		ppd->linkup = 1;
 
-		/* link width is not avaiable until the link is fully up */
-		get_link_width(ppd);
+		/* link widths are not avaiable until the link is fully up */
+		get_linkup_link_widths(ppd);
 
 		/* tell all engines to go running */
 		sdma_link_up(dd);
@@ -152,7 +152,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* physical link went down */
 		ppd->linkup = 0;
 
-		/* clear HW details of the prevoius connection */
+		/* clear HW details of the previous connection */
 		reset_link_credits(dd);
 
 		/* tell all engines to go idle */

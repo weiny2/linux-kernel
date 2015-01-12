@@ -2960,6 +2960,48 @@ static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
 }
 
 /*
+ * Convert the given link width to the STL link width bitmask.
+ */
+static u16 link_width_to_bits(struct hfi_devdata *dd, u16 width)
+{
+	switch (width) {
+	case 1: return STL_LINK_WIDTH_1X;
+	case 2: return STL_LINK_WIDTH_2X;
+	case 3: return STL_LINK_WIDTH_3X;
+	default:
+		/* NOTE: 0 in simulation */
+		dd_dev_info(dd, "%s: invalid width %d, using 4\n",
+			__func__, width);
+		/* fall through */
+	case 4: return STL_LINK_WIDTH_4X;
+	}
+}
+
+/*
+ * Read verify_cap_local_fm_link_width[1] to obtain the link widths.
+ * Valid after the end of VerifyCap and during LinkUp.  Bits are:
+ *	+ bits [7:4] contain the number of active transmitters
+ *	+ bits [3:0] contain the number of active receivers
+ * These are numbers 1 through 4 and can be different values if the
+ * link is asymmetric.
+ *
+ * verify_cap_local_fm_link_width[0] retains its original value.
+ */
+static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
+				u16 *rx_width)
+{
+	u16 flags, widths, tx, rx;
+
+	read_vc_local_link_width(dd, &flags, &widths);
+	tx = widths >> 12;
+	rx = (widths >> 8) & 0xf;
+	dd_dev_info(dd, "%s: active tx %d, active rx %d\n", __func__, tx, rx);
+
+	*tx_width = link_width_to_bits(dd, tx);
+	*rx_width = link_width_to_bits(dd, rx);
+}
+
+/*
  * Set ppd->link_width_active and ppd->link_width_downgrade_active using
  * hardware information when the link first comes up.
  *
@@ -2967,47 +3009,19 @@ static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
  * (the trigger for handle_verify_cap), so this is outside that routine
  * and should be called when the 8051 signals linkup.
  */
-void get_link_width(struct qib_pportdata *ppd)
+void get_linkup_link_widths(struct qib_pportdata *ppd)
 {
-	u16 flags, widths, tx_width;
+	u16 tx_width, rx_width;
 
-	/*
-	 * At the end of VerifyCap, after the interrupt, the 8501 updates
-	 * verify_cap_local_fm_link_width[1] with:
-	 *	+ bits [7:4] contain the number of active transmitters
-	 *	+ bits [3:0] contain the number of active receivers
-	 * These are numbers 1 through 4 and can be different values
-	 * if the link is asymmetric.  NOTE: asymmetric links are
-	 * supporte by DC but not STL.
-	 *
-	 * verify_cap_local_fm_link_width[0] retains its original value.
-	 */
-	read_vc_local_link_width(ppd->dd, &flags, &widths);
-	tx_width = widths >> 12;
-	dd_dev_info(ppd->dd, "%s: active tx %d, active rx %d\n",
-		__func__, tx_width, (widths >> 8) & 0xf);
+	get_link_widths(ppd->dd, &tx_width, &rx_width);
 
-	/* use the tx width as tx and rx are supposed to be symmetric */
-	switch (tx_width) {
-	case 1:
-		ppd->link_width_active = STL_LINK_WIDTH_1X;
-		break;
-	case 2:
-		ppd->link_width_active = STL_LINK_WIDTH_2X;
-		break;
-	case 3:
-		ppd->link_width_active = STL_LINK_WIDTH_3X;
-		break;
-	default:
-		dd_dev_info(ppd->dd, "%s: invalid width %d, using 4\n",
-			__func__, tx_width);
-		/* fall through */
-	case 4:
-		ppd->link_width_active = STL_LINK_WIDTH_4X;
-		break;
-	}
-	/* the downgrade width starts out matching the width */
-	ppd->link_width_downgrade_active = ppd->link_width_active;
+	/* use tx_width as the link is supposed to be symmetric on link up */
+	ppd->link_width_active = tx_width;
+	/* link width downgrade active (LWD.A) starts out matching LW.A */
+	ppd->link_width_downgrade_tx_active = ppd->link_width_active;
+	ppd->link_width_downgrade_rx_active = ppd->link_width_active;
+	/* per STL spec, on link up LWD.E resets to LWD.S */
+	ppd->link_width_downgrade_enabled = ppd->link_width_downgrade_supported;
 }
 
 /*
@@ -3190,6 +3204,55 @@ void handle_verify_cap(struct work_struct *work)
 	set_link_state(ppd, HLS_GOING_UP);
 }
 
+/*
+ * Compare the current active Tx and Rx values against the current enabled
+ * policy.
+ *
+ * Called when the enabled policy changes or the link width changes.
+ */
+void apply_link_downgrade_policy(struct qib_pportdata *ppd)
+{
+	u16 lwde = ppd->link_width_downgrade_enabled;
+
+	/* check if either active Tx or Rx is outside the downgrade policy */
+	if ((lwde & ppd->link_width_downgrade_tx_active) == 0
+		|| (lwde & ppd->link_width_downgrade_rx_active) == 0) {
+		/*
+		 * Oops, Tx or Rx is outside the enabled policy.  Bounce the
+		 * link by setting it offline.  The link will automatically
+		 * restart a poll unless something intervenes.
+		 */
+		dd_dev_err(ppd->dd,
+			"Link is outside of downgrade allowed, downing link\n");
+		dd_dev_err(ppd->dd,
+			"  enabled 0x%x, tx active 0x%x, rx active 0x%x\n",
+			lwde,
+			ppd->link_width_downgrade_tx_active,
+			ppd->link_width_downgrade_rx_active);
+		set_link_state(ppd, HLS_DN_OFFLINE);
+	}
+}
+
+/*
+ * Handle a link downgrade interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_link_downgrade(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+							link_downgrade_work);
+	struct hfi_devdata *dd = ppd->dd;
+	u16 tx, rx;
+
+	dd_dev_info(dd, "8051: Link width downgrade\n");
+
+	get_link_widths(dd, &tx, &rx);
+	ppd->link_width_downgrade_tx_active = tx;
+	ppd->link_width_downgrade_rx_active = rx;
+	apply_link_downgrade_policy(ppd);
+}
+
 static char *dcc_err_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags, dcc_err_flags,
@@ -3337,6 +3400,12 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINK_GOING_DOWN;
+		}
+		if (host_msg & WFR_LINK_WIDTH_DOWNGRADED) {
+			queue_work(ppd->qib_wq, &ppd->link_downgrade_work);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_LINK_WIDTH_DOWNGRADED;
 		}
 		/* look for unhandled flags */
 		if (host_msg) {
@@ -5095,6 +5164,12 @@ static int goto_offline(struct qib_pportdata *ppd)
 			(last_local_state >> 8) & 0xff,
 			(last_remote_state >> 8) & 0xff);
 	}
+
+	/* the active link width (downgrade) is 0 on link down */
+	ppd->link_width_active = 0;
+	ppd->link_width_downgrade_tx_active = 0;
+	ppd->link_width_downgrade_rx_active = 0;
+
 	schedule_link_restart(ppd);
 	return 0;
 }
@@ -9030,7 +9105,9 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		/* start out enabling all supported values */
 		ppd->link_width_enabled = ppd->link_width_supported;
 		ppd->link_width_downgrade_enabled =
-					ppd->link_width_enabled;
+					ppd->link_width_downgrade_supported;
+		/* link width active is 0 when link is down */
+		/* link width downgrade active is 0 when link is down */
 
 		switch (num_vls) {
 		case 1:
@@ -9061,8 +9138,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		 * Set the initial values to reasonable default, will be set
 		 * for real when link is up.
 		 */
-		ppd->link_width_active = STL_LINK_WIDTH_4X;
-		ppd->link_width_downgrade_active = ppd->link_width_active;
 		ppd->lstate = IB_PORT_DOWN;
 		ppd->overrun_threshold = 0x4;
 		ppd->phy_error_threshold = 0xf;
@@ -9187,10 +9262,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
 		ppd->link_width_supported =
 			ppd->link_width_enabled =
-			ppd->link_width_active =
 			ppd->link_width_downgrade_supported =
 			ppd->link_width_downgrade_enabled =
-			ppd->link_width_downgrade_active =
 				STL_LINK_WIDTH_1X;
 	}
 	/* insure num_vls isn't larger than number of sdma engines */

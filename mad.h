@@ -34,8 +34,14 @@
 #ifndef _QIB_MAD_H
 #define _QIB_MAD_H
 
-#include "wfr_linux.h"
 #include <rdma/ib_pma.h>
+#include <rdma/stl_smi.h>
+#define USE_PI_LWD_TX_RX_ACTIVE 1 /* enable LWD.{Tx,Rx}Active */
+#include <rdma/stl_port_info.h>
+#ifndef PI_LWD_TX_RX_ACTIVE_SUP	  /* header does not support it */
+#define PI_LWD_TX_RX_ACTIVE_SUP 0
+#endif
+#include "wfr_linux.h"
 
 #define IB_SMP_UNSUP_VERSION    cpu_to_be16(0x0004)
 #define IB_SMP_UNSUP_METHOD     cpu_to_be16(0x0008)
@@ -367,8 +373,6 @@ struct cc_state {
 /*
  * STL BufferControl MAD
  */
-#include <rdma/stl_smi.h>
-#include <rdma/stl_port_info.h>
 
 /* attribute modifier macros */
 #define STL_AM_NPORT_SHIFT	24

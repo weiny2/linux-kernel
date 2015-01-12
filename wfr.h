@@ -78,10 +78,7 @@
 #include "include/wfr/dcc_csrs_defs.h"
 #include "include/wfr/dc_lcb_csrs_defs.h"
 
-#include "rdma/stl_smi.h"
-#include "rdma/stl_port_info.h"
-
-/* not defined in wfr_core.h */
+/* not defined in wfr_core_defs.h */
 #define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000
 #define WFR_RXE_PER_CONTEXT_USER   (WFR_RXE + WFR_RXE_PER_CONTEXT_USER_OFFSET)
 
@@ -249,6 +246,7 @@
 #define WFR_VERIFY_CAP_FRAME	   (1 << 6)
 #define WFR_LINKUP_ACHIEVED	   (1 << 7)
 #define WFR_LINK_GOING_DOWN	   (1 << 8)
+#define WFR_LINK_WIDTH_DOWNGRADED  (1 << 9)
 
 /* DC_DC8051_CFG_EXT_DEV_1.REQ_TYPE - 8051 host requests */
 #define WFR_HREQ_LOAD_CONFIG	0x01
@@ -533,30 +531,6 @@ static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
 
 u64 create_pbc(u64, u32, u32, u32);
 
-static inline int stl_speed_to_ib(u16 in)
-{
-	if (in & STL_LINK_SPEED_25G) {
-		in &= ~STL_LINK_SPEED_25G;
-		in |= IB_SPEED_EDR;
-	}
-
-	if (in & STL_LINK_SPEED_12_5G) {
-		in &= ~STL_LINK_SPEED_12_5G;
-		in |= IB_SPEED_QDR;
-	}
-
-	BUG_ON(!in);
-	return in;
-}
-
-static inline int stl_width_to_ib(u16 in)
-{
-	in &= ~(STL_LINK_WIDTH_2X | STL_LINK_WIDTH_3X);
-
-	BUG_ON(!in);
-	return in;
-}
-
 /* firmware.c */
 extern const u8 pcie_serdes_broadcast[];
 #define WRITE_SBUS_RECEIVER 0x21	/* SBUS command */
@@ -579,15 +553,17 @@ void handle_verify_cap(struct work_struct *work);
 void handle_freeze(struct work_struct *work);
 void handle_link_up(struct work_struct *work);
 void handle_link_down(struct work_struct *work);
+void handle_link_downgrade(struct work_struct *work);
 void handle_sma_message(struct work_struct *work);
 int send_idle_sma(struct hfi_devdata *dd, u64 message);
 void link_restart_worker(struct work_struct *work);
 void schedule_link_restart(struct qib_pportdata *ppd);
+void apply_link_downgrade_policy(struct qib_pportdata *ppd);
 int check_cable(struct qib_pportdata *);
 void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclock);
-void get_link_width(struct qib_pportdata *ppd);
+void get_linkup_link_widths(struct qib_pportdata *ppd);
 u32 hdrqempty(struct qib_ctxtdata *rcd);
 int is_a0(struct hfi_devdata *dd);
 int is_bx(struct hfi_devdata *dd);

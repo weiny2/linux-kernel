@@ -506,6 +506,7 @@ struct qib_pportdata {
 	struct work_struct link_down_work;
 	struct work_struct sma_message_work;
 	struct work_struct freeze_work;
+	struct work_struct link_downgrade_work;
 	struct delayed_work link_restart_work;
 	/* host link state variables */
 	struct mutex hls_lock;
@@ -534,7 +535,8 @@ struct qib_pportdata {
 	u16 link_width_downgrade_enabled;
 	u16 link_speed_enabled;
 	u16 link_width_active;
-	u16 link_width_downgrade_active;
+	u16 link_width_downgrade_tx_active;
+	u16 link_width_downgrade_rx_active;
 	u16 link_speed_active;
 	u8 vls_supported;
 	u8 vls_operational;
@@ -1135,8 +1137,6 @@ static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
 #define STL_MTU_1024  3
 #define STL_MTU_2048  4
 #define STL_MTU_4096  5
-#include <rdma/stl_smi.h>
-#include <rdma/stl_port_info.h>
 
 u32 lrh_max_header_bytes(struct hfi_devdata *dd);
 int mtu_to_enum(u32 mtu, int default_if_bad);

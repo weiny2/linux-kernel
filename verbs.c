@@ -1408,6 +1408,38 @@ static int qib_query_device(struct ib_device *ibdev,
 	return 0;
 }
 
+static inline u16 stl_speed_to_ib(u16 in)
+{
+	u16 out = 0;
+
+	if (in & STL_LINK_SPEED_25G)
+		out |= IB_SPEED_EDR;
+	if (in & STL_LINK_SPEED_12_5G)
+		out |= IB_SPEED_QDR;
+
+	BUG_ON(!out);
+	return out;
+}
+
+/*
+ * Convert a single STL link width (no multiple flags) to an IB value.
+ * A zero STL link width means link down, which means the IB width value
+ * is a don't care.
+ */
+static inline u16 stl_width_to_ib(u16 in)
+{
+	switch (in) {
+	case STL_LINK_WIDTH_1X:
+	/* map 2x and 3x to 1x as they don't exist in IB */
+	case STL_LINK_WIDTH_2X:
+	case STL_LINK_WIDTH_3X:
+		return IB_WIDTH_1X;
+	default: /* link down or unknown, return our largest width */
+	case STL_LINK_WIDTH_4X:
+		return IB_WIDTH_4X;
+	}
+}
+
 static int qib_query_port(struct ib_device *ibdev, u8 port,
 			  struct ib_port_attr *props)
 {
