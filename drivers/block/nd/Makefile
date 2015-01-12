@@ -15,6 +15,7 @@ endif
 
 obj-$(CONFIG_ND_CORE) += nd_core.o
 obj-$(CONFIG_NFIT_ACPI) += nd_acpi.o
+obj-$(CONFIG_NFIT_ACPI) += nd_old_acpi.o
 obj-$(CONFIG_NFIT_LOCAL_DEV) += local_dev.o
 obj-$(CONFIG_NFIT_LOCAL) += local_nfit.o
 obj-$(CONFIG_BLK_DEV_PMEM) += nd_pmem.o
@@ -25,6 +26,7 @@ obj-$(CONFIG_ND_BLK) += nd_blk_skeleton.o
 local_nfit-y := local.o
 
 nd_acpi-y := acpi.o
+nd_old_acpi-y := old_acpi.o
 
 nd_core-y := nd.o
 nd_core-y += bus.o

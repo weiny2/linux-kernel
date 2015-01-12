@@ -30,10 +30,6 @@ static bool warn_checksum = true;
 module_param(warn_checksum, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(warn_checksum, "Turn checksum errors into warnings");
 
-bool old_nfit = true;
-module_param(old_nfit, bool, 0);
-MODULE_PARM_DESC(old_nfit, "Use 0.8s2 NFIT table format");
-
 void nd_bus_lock(struct device *dev)
 {
 	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
