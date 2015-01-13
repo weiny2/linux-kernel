@@ -71,7 +71,6 @@ static struct platform_driver local_nfit_driver = {
 	.remove = local_nfit_remove,
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.owner = THIS_MODULE,
 	},
 	.id_table = local_nfit_id,
 };
