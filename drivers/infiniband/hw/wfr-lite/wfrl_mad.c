@@ -35,8 +35,8 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <rdma/ib_smi.h>
-#define USE_PI_LWD_TX_RX_ACTIVE 1
-#include <rdma/stl_smi.h>
+#include <rdma/opa_smi.h>
+#include <rdma/opa_port_info.h>
 
 #include "wfrl.h"
 #include "wfrl_mad.h"
@@ -125,9 +125,9 @@ MODULE_PARM_DESC(sim_pkey_tbl_block_size, "When != 0 simulate a large pkey table
 
 #define NUM_VIRT_PORTS 2
 #define IB_SMP_ATTR_PORT_INFO_STL_RESET		cpu_to_be16(0xFF15)
-#define STL_NUM_PKEYS (MAX_SIM_STL_PKEY_BLOCKS * STL_PARTITION_TABLE_BLK_SIZE)
-#define STL_NUM_PKEY_BLOCKS_PER_SMP (STL_SMP_DR_DATA_SIZE \
-					/ (STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16)))
+#define OPA_NUM_PKEYS (MAX_SIM_STL_PKEY_BLOCKS * OPA_PARTITION_TABLE_BLK_SIZE)
+#define OPA_NUM_PKEY_BLOCKS_PER_SMP (OPA_SMP_DR_DATA_SIZE \
+					/ (OPA_PARTITION_TABLE_BLK_SIZE * sizeof(u16)))
 
 struct stl_vlarb_entry
 {
@@ -146,7 +146,7 @@ union stl_vlarb_data
 	struct stl_vlarb_entry low_pri_table[STL_NUM_VLARB_TABLE_ELEM];
 	struct stl_vlarb_entry high_pri_table[STL_NUM_VLARB_TABLE_ELEM];
 	struct stl_vlarb_entry preempting_table[STL_MAX_PREEMPT_CAP];
-	__be32 preemption_matrix[STL_MAX_VLS];
+	__be32 preemption_matrix[OPA_MAX_VLS];
 };
 
 /* stored in network order to be able to pass right back to the user. */
@@ -157,7 +157,7 @@ struct stl_buffer_control_table
 	struct {
 		__be16 tx_dedicated_limit;
 		__be16 tx_shared_limit;
-	} vl[STL_MAX_VLS];
+	} vl[OPA_MAX_VLS];
 };
 
 struct stl_aggregate {
@@ -180,12 +180,12 @@ static int reply(struct ib_smp *smp); /* fwd declare */
 #define CABLE_INFO_SIZE         4096
 #define CABLE_INFO_PAGE_MASK    0x0000007f /* 128 byte page size */
 static struct {
-	struct stl_port_info port_info;
-	u16 pkeys[STL_NUM_PKEYS];
-	u8 sl_to_sc[STL_MAX_SLS];
-	u8 sc_to_sl[STL_MAX_SCS];
-	u8 sc_to_vlt[STL_MAX_SCS];
-	u8 sc_to_vlnt[STL_MAX_SCS];
+	struct opa_port_info port_info;
+	u16 pkeys[OPA_NUM_PKEYS];
+	u8 sl_to_sc[OPA_MAX_SLS];
+	u8 sc_to_sl[OPA_MAX_SCS];
+	u8 sc_to_vlt[OPA_MAX_SCS];
+	u8 sc_to_vlnt[OPA_MAX_SCS];
 	union stl_vlarb_data vlarb_low;
 	union stl_vlarb_data vlarb_high;
 	union stl_vlarb_data vlarb_pre_table;
@@ -201,17 +201,17 @@ static void linkup_default_mtu(u8 port)
 {
 	unsigned i;
 	//uint8_t mtu_set;
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	vpi->mtucap = IB_MTU_2048;
 	if (wfr_fake_mtu > 2048) {
 		vpi->mtucap = IB_MTU_4096;
 	}
 	if (wfr_fake_mtu > 4096) {
-		vpi->mtucap = STL_MTU_8192;
+		vpi->mtucap = OPA_MTU_8192;
 	}
 	if (wfr_fake_mtu > 8192) {
-		vpi->mtucap = STL_MTU_10240;
+		vpi->mtucap = OPA_MTU_10240;
 	}
 
 	for (i=0; i< ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu); i++) {
@@ -244,27 +244,27 @@ static void linkup_default(u8 port)
 {
 	u32 buffer_units;
 	u16 vl15_init = get_vl15_init();
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	linkup_default_mtu(port);
 
 	vpi->replay_depth.buffer = (u8)(wfr_replay_depth_buffer);
 	vpi->replay_depth.wire = (u8)(wfr_replay_depth_wire);
 
-	buffer_units  = (wfr_buffer_unit_buf_alloc) & STL_PI_MASK_BUF_UNIT_BUF_ALLOC;
-	buffer_units |= (wfr_buffer_unit_credit_ack << 3) & STL_PI_MASK_BUF_UNIT_CREDIT_ACK;
-	buffer_units |= (vl15_init << 11) & STL_PI_MASK_BUF_UNIT_VL15_INIT;
+	buffer_units  = (wfr_buffer_unit_buf_alloc) & OPA_PI_MASK_BUF_UNIT_BUF_ALLOC;
+	buffer_units |= (wfr_buffer_unit_credit_ack << 3) & OPA_PI_MASK_BUF_UNIT_CREDIT_ACK;
+	buffer_units |= (vl15_init << 11) & OPA_PI_MASK_BUF_UNIT_VL15_INIT;
 	vpi->buffer_units = cpu_to_be32(buffer_units);
 
 	vpi->flow_control_mask = cpu_to_be32(wfr_initial_vlflow_disable_mask);
 
 	vpi->overall_buffer_space = cpu_to_be16(wfr_overall_buffer_space / get_bytes_per_AU());
-	vpi->port_phys_conf = STL_PORT_PHYS_CONF_STANDARD;
+	vpi->port_phys_conf = OPA_PORT_PHYS_CONF_STANDARD;
 
 	if (wfr_shared_space_sup) {
-		vpi->stl_cap_mask |= cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
+		vpi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
 	} else {
-		vpi->stl_cap_mask &= ~cpu_to_be16(STL_CAP_MASK3_IsSharedSpaceSupported);
+		vpi->opa_cap_mask &= ~cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
 	}
 }
 
@@ -274,7 +274,7 @@ static void linkup_default(u8 port)
  */
 void virtual_port_linkup_init(u8 port)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	u16 speed_enabled = be16_to_cpu(vpi->link_speed.enabled);
 	u16 width_enabled = be16_to_cpu(vpi->link_width.enabled);
 	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
@@ -283,27 +283,27 @@ void virtual_port_linkup_init(u8 port)
 	vpi->port_states.portphysstate_portstate |= 2;
 
 	/* go to the fastest speed enabled. */
-	if (STL_LINK_SPEED_25G & speed_enabled)
-		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
+	if (OPA_LINK_SPEED_25G & speed_enabled)
+		vpi->link_speed.active = cpu_to_be16(OPA_LINK_SPEED_25G);
 	else
-		vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_12_5G);
+		vpi->link_speed.active = cpu_to_be16(OPA_LINK_SPEED_12_5G);
 
 	/* go to the widest width enabled. */
-	if (STL_LINK_WIDTH_4X & width_enabled)
-		vpi->link_width.active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	if (OPA_LINK_WIDTH_4X & width_enabled)
+		vpi->link_width.active = cpu_to_be16(OPA_LINK_WIDTH_4X);
 	else {
-		if (!(STL_LINK_WIDTH_1X & vpi->link_width_downgrade.enabled)) {
+		if (!(OPA_LINK_WIDTH_1X & vpi->link_width_downgrade.enabled)) {
 			printk(KERN_WARNING PFX
 				"STL Port link width going to 1X but "
 				"LinkWidthDowgrade.Enable != 1X "
 				"port should drop link but SusieQ does "
 				"not support this; letting link go to 1X\n");
 		}
-		vpi->link_width.active = cpu_to_be16(STL_LINK_WIDTH_1X);
+		vpi->link_width.active = cpu_to_be16(OPA_LINK_WIDTH_1X);
 	}
 
-	vpi->link_width_downgrade.tx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
-	vpi->link_width_downgrade.rx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.tx_active = cpu_to_be16(OPA_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.rx_active = cpu_to_be16(OPA_LINK_WIDTH_4X);
 
 	vbct->vl[15].tx_dedicated_limit = cpu_to_be16(get_vl15_init());
 
@@ -321,14 +321,14 @@ void virtual_port_linkup_init(u8 port)
 	linkup_default(port);
 }
 
-#define WFR_LITE_LINK_SPEED_ALL_SUP (cpu_to_be16(STL_LINK_SPEED_12_5G | \
-						STL_LINK_SPEED_25G))
-#define WFR_LITE_LINK_WIDTH_ALL_SUP (cpu_to_be16(STL_LINK_WIDTH_1X | STL_LINK_WIDTH_4X))
+#define WFR_LITE_LINK_SPEED_ALL_SUP (cpu_to_be16(OPA_LINK_SPEED_12_5G | \
+						OPA_LINK_SPEED_25G))
+#define WFR_LITE_LINK_WIDTH_ALL_SUP (cpu_to_be16(OPA_LINK_WIDTH_1X | OPA_LINK_WIDTH_4X))
 
 static void init_virtual_port_info(u8 port)
 {
 	unsigned i;
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	union stl_vlarb_data *virt_low = &virtual_stl[port-1].vlarb_low;
 	union stl_vlarb_data *virt_high = &virtual_stl[port-1].vlarb_high;
 	union stl_vlarb_data *virt_pre_table = &virtual_stl[port-1].vlarb_pre_table;
@@ -336,16 +336,16 @@ static void init_virtual_port_info(u8 port)
 
 	virtual_port_linkup_init(port);
 	vpi->link_speed.supported = WFR_LITE_LINK_SPEED_ALL_SUP;
-	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
-	vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
+	vpi->link_speed.active = cpu_to_be16(OPA_LINK_SPEED_25G);
+	vpi->link_speed.enabled = WFR_LITE_LINK_SPEED_ALL_SUP;
 
 	vpi->link_width.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
-	vpi->link_width.active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width.active = cpu_to_be16(OPA_LINK_WIDTH_4X);
 	vpi->link_width.enabled = WFR_LITE_LINK_WIDTH_ALL_SUP;
 
 	vpi->link_width_downgrade.supported = WFR_LITE_LINK_WIDTH_ALL_SUP;
-	vpi->link_width_downgrade.tx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
-	vpi->link_width_downgrade.rx_active = cpu_to_be16(STL_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.tx_active = cpu_to_be16(OPA_LINK_WIDTH_4X);
+	vpi->link_width_downgrade.rx_active = cpu_to_be16(OPA_LINK_WIDTH_4X);
 	vpi->link_width_downgrade.enabled = WFR_LITE_LINK_WIDTH_ALL_SUP;
 
 	linkup_default(port);
@@ -371,10 +371,10 @@ static void init_virtual_port_info(u8 port)
 
 static void reset_virtual_port(u8 port)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	virtual_port_linkup_init(port);
-	vpi->link_speed.active = cpu_to_be16(STL_LINK_SPEED_25G);
+	vpi->link_speed.active = cpu_to_be16(OPA_LINK_SPEED_25G);
 
 	printk(KERN_WARNING PFX
 		"STL Port '%d' Virtual State reset : 0x%x\n",
@@ -384,12 +384,12 @@ static void reset_virtual_port(u8 port)
 
 static inline void set_virtual_port_state(u8 port, u8 state)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	uint8_t tmp = vpi->port_states.portphysstate_portstate;
 
 	vpi->port_states.portphysstate_portstate =
-			(tmp & STL_PI_MASK_PORT_PHYSICAL_STATE) |
-			(state & STL_PI_MASK_PORT_STATE);
+			(tmp & OPA_PI_MASK_PORT_PHYSICAL_STATE) |
+			(state & OPA_PI_MASK_PORT_STATE);
 }
 
 static void down_virtual_port(struct qib_pportdata *ppd, u8 port)
@@ -410,9 +410,9 @@ static void activate_virtual_port(struct qib_pportdata *ppd, u8 port)
 	printk(KERN_WARNING PFX "Virtual Port %d Activated\n", port);
 }
 
-static void set_virtual_mtu(u8 port, struct stl_port_info *pi)
+static void set_virtual_mtu(u8 port, struct opa_port_info *pi)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	memcpy(vpi->neigh_mtu.pvlx_to_mtu, pi->neigh_mtu.pvlx_to_mtu,
 		ARRAY_SIZE(vpi->neigh_mtu.pvlx_to_mtu));
@@ -439,13 +439,13 @@ static void init_virtual_stl(struct ib_device *ibdev)
 			virtual_stl[i].cable_info[j] = 0xAB;
 		}
 	}
-	virtual_stl[0].pkeys[STL_NUM_PKEYS-1] = 0xDEAD;
-	virtual_stl[1].pkeys[STL_NUM_PKEYS-1] = 0xBEEF;
-	for (i = 0; i < STL_MAX_SLS; i++) {
+	virtual_stl[0].pkeys[OPA_NUM_PKEYS-1] = 0xDEAD;
+	virtual_stl[1].pkeys[OPA_NUM_PKEYS-1] = 0xBEEF;
+	for (i = 0; i < OPA_MAX_SLS; i++) {
 		virtual_stl[0].sl_to_sc[i] = i;
 		virtual_stl[1].sl_to_sc[i] = i;
 	}
-	for (i = 0; i < STL_MAX_SCS; i++) {
+	for (i = 0; i < OPA_MAX_SCS; i++) {
 		virtual_stl[0].sc_to_sl[i] = i;
 		virtual_stl[1].sc_to_sl[i] = i;
 	}
@@ -519,7 +519,7 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
 	struct wfr_link_info *link_info =
 					(struct wfr_link_info *)smp->data;
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
 	struct qib_pportdata *ppd = dd->pport + (port - 1);
 
@@ -569,7 +569,7 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 	} else {
 		vpi->neigh_node_guid = link_info->node_guid;
 		vpi->port_neigh_mode = link_info->port_mode;
-		if (vpi->port_neigh_mode & STL_PI_MASK_NEIGH_MGMT_ALLOWED) {
+		if (vpi->port_neigh_mode & OPA_PI_MASK_NEIGH_MGMT_ALLOWED) {
 			struct qib_pportdata *ppd = dd->pport + port - 1;
 			struct qib_ctxtdata *rcd = dd->rcd[ppd->hw_pidx];
 			rcd->pkeys[2] = 0xffff;
@@ -594,7 +594,7 @@ static int subn_set_stl_virt_link_info(struct ib_smp *smp, struct ib_device *ibd
 		link_info->node_guid = dd->pport->guid;
 
 		if (wfr_mgmt_allowed)
-			link_info->port_mode = STL_PI_MASK_NEIGH_MGMT_ALLOWED;
+			link_info->port_mode = OPA_PI_MASK_NEIGH_MGMT_ALLOWED;
 		else
 			link_info->port_mode = 0;
 
@@ -666,13 +666,13 @@ static void wfr_send_stl_virt_link_info(struct ib_device *ibdev, u8 port, uint8_
 static void wfr_send_stl_link_info(struct ib_device *ibdev, u8 port)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	u8 state = vpi->port_states.portphysstate_portstate;
 	__be64 local_node_guid = dd->pport->guid;
 
 	wfr_send_stl_virt_link_info(ibdev, port, state, local_node_guid,
 					wfr_mgmt_allowed ?
-						STL_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
+						OPA_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
 					vpi->link_speed.active,
 					vpi->link_width.active);
 }
@@ -685,7 +685,7 @@ static u8 wfrl_get_stl_virtual_port_state(u8 port)
 /* These communicate to/from the snoop port (AKA simulator) */
 void wfrl_get_stl_virtual_link_info(u8 port, struct wfr_link_info *link_info)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 
 	link_info->port_state = vpi->port_states.portphysstate_portstate;
 	link_info->node_guid = be64_to_cpu(vpi->neigh_node_guid);
@@ -696,7 +696,7 @@ void wfrl_get_stl_virtual_link_info(u8 port, struct wfr_link_info *link_info)
 void wfrl_set_stl_virtual_link_info(struct ib_device *ibdev, u8 port, uint8_t state,
 					__be64 local_node_guid, u8 local_port_mode)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	vpi->port_states.portphysstate_portstate = state;
 	wfr_send_stl_virt_link_info(ibdev, port, state, local_node_guid, local_port_mode,
 					vpi->link_speed.active,
@@ -723,7 +723,7 @@ static int reply(struct ib_smp *smp)
 		smp->status |= IB_SMP_DIRECTION;
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
 }
-static int reply_stl(struct stl_smp *smp)
+static int reply_stl(struct opa_smp *smp)
 {
 	/*
 	 * The verbs framework will handle the directed/LID route
@@ -898,7 +898,7 @@ static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_smp *smp)
 /*
  * Send a bad M_Key trap (ch. 14.3.9).
  */
-static void wfr_bad_mkey(struct qib_ibport *ibp, struct stl_smp *smp)
+static void wfr_bad_mkey(struct qib_ibport *ibp, struct opa_smp *smp)
 {
 	struct ib_mad_notice_attr data;
 
@@ -1006,7 +1006,7 @@ static int subn_get_nodedescription(struct ib_smp *smp,
 	return reply(smp);
 }
 
-static __be16 __get_stl_nodedescription(struct stl_node_description *nd, u32 am,
+static __be16 __get_stl_nodedescription(struct opa_node_description *nd, u32 am,
 				     struct ib_device *ibdev)
 {
 	if (am)
@@ -1016,16 +1016,16 @@ static __be16 __get_stl_nodedescription(struct stl_node_description *nd, u32 am,
 	return 0;
 }
 
-static int subn_get_stl_nodedescription(struct stl_smp *smp,
+static int subn_get_stl_nodedescription(struct opa_smp *smp,
 					struct ib_device *ibdev, u32 *resp_len)
 {
-	struct stl_node_description *nd = (struct stl_node_description *)stl_get_smp_data(smp);
+	struct opa_node_description *nd = (struct opa_node_description *)opa_get_smp_data(smp);
 	__be16 status = __get_stl_nodedescription(nd, smp->attr_mod, ibdev);
 
 	if (status)
 		smp->status |= status;
 	else
-		*resp_len += sizeof(struct stl_node_description);
+		*resp_len += sizeof(struct opa_node_description);
 
 	return reply_stl(smp);
 }
@@ -1047,7 +1047,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 
 	if (wfr_vl15_ovl0) {
 		nip->base_version = JUMBO_MGMT_BASE_VERSION;
-		nip->class_version = STL_SMI_CLASS_VERSION;
+		nip->class_version = OPA_SMI_CLASS_VERSION;
 	} else {
 		nip->base_version = 1;
 		nip->class_version = 1;
@@ -1210,7 +1210,7 @@ static int check_mkey(struct qib_ibport *ibp, struct ib_smp *smp, int mad_flags)
 	return ret;
 }
 
-static int check_stl_mkey(struct qib_ibport *ibp, struct stl_smp *smp, int mad_flags)
+static int check_stl_mkey(struct qib_ibport *ibp, struct opa_smp *smp, int mad_flags)
 {
 	int valid_mkey = 0;
 	int ret = 0;
@@ -1268,7 +1268,7 @@ static void dump_mad(uint8_t *mad, size_t size)
 	}
 }
 
-static __be16 __get_stl_nodeinfo(struct stl_node_info *ni, u32 am,
+static __be16 __get_stl_nodeinfo(struct opa_node_info *ni, u32 am,
 		struct ib_device *ibdev, u8 port)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
@@ -1285,7 +1285,7 @@ static __be16 __get_stl_nodeinfo(struct stl_node_info *ni, u32 am,
 		ni->port_guid = dd->pport[pidx].guid;
 
 	ni->base_version = JUMBO_MGMT_BASE_VERSION;
-	ni->class_version = STL_SMI_CLASS_VERSION;
+	ni->class_version = OPA_SMI_CLASS_VERSION;
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
@@ -1294,7 +1294,7 @@ static __be16 __get_stl_nodeinfo(struct stl_node_info *ni, u32 am,
 	if (wfr_sim_pkey_tbl_block_size) {
 		u16 n_blocks = wfrl_get_num_sim_pkey_blocks();
 		ni->partition_cap = cpu_to_be16(n_blocks *
-					STL_PARTITION_TABLE_BLK_SIZE);
+					OPA_PARTITION_TABLE_BLK_SIZE);
 	} else
 		ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
 	ni->device_id = cpu_to_be16(dd->deviceid);
@@ -1310,16 +1310,16 @@ static __be16 __get_stl_nodeinfo(struct stl_node_info *ni, u32 am,
 	return 0;
 }
 
-static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_nodeinfo(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	struct stl_node_info *ni = (struct stl_node_info *)stl_get_smp_data(smp);
+	struct opa_node_info *ni = (struct opa_node_info *)opa_get_smp_data(smp);
 	__be16 status = __get_stl_nodeinfo(ni, be32_to_cpu(smp->attr_mod), ibdev, port);
 
 	if (status)
 		smp->status |= status;
 	else
-		*resp_len += sizeof(struct stl_node_info);
+		*resp_len += sizeof(struct opa_node_info);
 
 	return reply_stl(smp);
 }
@@ -1328,20 +1328,20 @@ static int subn_get_stl_nodeinfo(struct stl_smp *smp, struct ib_device *ibdev,
  * Other values are simply stored in virtual_stl and echoed
  * back.
  */
-static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
 	//int i;
 	struct qib_devdata *dd;
 	struct qib_pportdata *ppd;
 	struct qib_ibport *ibp;
-	struct stl_port_info *pi;
+	struct opa_port_info *pi;
 	//u8 mtu;
 	int ret;
 	//u32 state;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
 	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
-	struct stl_port_info *vpi;
+	struct opa_port_info *vpi;
 
 	/* NOTE: the following checks could be optimized.
 	 *       but for testing and clarity I wanted to keep them separate. */
@@ -1399,7 +1399,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	ppd = dd->pport + (port_num - 1);
 	ibp = &ppd->ibport_data;
 
-	pi = (struct stl_port_info *)stl_get_smp_data(smp);
+	pi = (struct opa_port_info *)opa_get_smp_data(smp);
 	/* Clear all fields.  Only set the non-zero fields. */
 	memset(pi, 0, sizeof(*pi));
 
@@ -1496,7 +1496,7 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= mtu;
 #endif
 
-	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
+	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
 	//pi->partenforce_filterraw = 0;
 	pi->operational_vls = qib_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
 
@@ -1545,25 +1545,25 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	//pi->neigh_node_guid = cpu_to_be64(0);
 
-	/* FIXME supported, enabled, active all == STL */
-	pi->port_link_mode  = STL_PORT_LINK_MODE_STL << 10;
-	pi->port_link_mode |= STL_PORT_LINK_MODE_STL << 5;
-	pi->port_link_mode |= STL_PORT_LINK_MODE_STL;
+	/* FIXME supported, enabled, active all == OPA */
+	pi->port_link_mode  = OPA_PORT_LINK_MODE_OPA << 10;
+	pi->port_link_mode |= OPA_PORT_LINK_MODE_OPA << 5;
+	pi->port_link_mode |= OPA_PORT_LINK_MODE_OPA;
 	pi->port_link_mode = cpu_to_be16(pi->port_link_mode);
 
 	/* FIXME supported, enabled, active all == 16-bit */
-	pi->port_ltp_crc_mode  = STL_PORT_LTP_CRC_MODE_16 << 8;
-	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16 << 4;
-	pi->port_ltp_crc_mode |= STL_PORT_LTP_CRC_MODE_16;
+	pi->port_ltp_crc_mode  = OPA_PORT_LTP_CRC_MODE_16 << 8;
+	pi->port_ltp_crc_mode |= OPA_PORT_LTP_CRC_MODE_16 << 4;
+	pi->port_ltp_crc_mode |= OPA_PORT_LTP_CRC_MODE_16;
 	pi->port_ltp_crc_mode = cpu_to_be16(pi->port_ltp_crc_mode);
 
 	//pi->port_mode = cpu_to_be16(0);
 	//pi->port_neigh_mode = 0;
 
-	pi->port_packet_format.supported = cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
-	pi->port_packet_format.enabled = cpu_to_be16(STL_PORT_PACKET_FORMAT_9B);
+	pi->port_packet_format.supported = cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
+	pi->port_packet_format.enabled = cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
 
-	pi->link_down_reason = STL_LINKDOWN_REASON_NONE;
+	pi->link_down_reason = OPA_LINKDOWN_REASON_NONE;
 
 	// now picked up from the simulated port info
 	//pi->link_width_downgrade.supported = 0;
@@ -1594,10 +1594,10 @@ static int subn_get_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	pi->local_port_num = port;
 	//pi->ganged_port_details = 0;
-	// No longer used in STL
+	// No longer used in OPA
 	//pi->guid_cap = 1;
 
-	*resp_len += sizeof(struct stl_port_info);
+	*resp_len += sizeof(struct opa_port_info);
 
 	ret = reply_stl(smp);
 
@@ -1613,17 +1613,17 @@ bail:
  *
  * Set Portinfo (see ch. 14.2.5.6).
  */
-static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	struct stl_port_info *pi;
+	struct opa_port_info *pi;
 	struct ib_event event;
 	struct qib_devdata *dd;
 	struct qib_pportdata *ppd;
 	struct qib_ibport *ibp;
 	u8 clientrereg;
 	unsigned long flags;
-	u32 stl_lid; /* Temp to hold STL LID values */
+	u32 stl_lid; /* Temp to hold OPA LID values */
 	u16 lid, smlid;
 	u8 state;
 	u8 vls;
@@ -1633,16 +1633,16 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	int ret, ore;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
 	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
-	struct stl_port_info *vpi;
+	struct opa_port_info *vpi;
 	u8 orig_portphysstate_portstate;
 
-	printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) port (attr_mod) %d\n", port_num);
+	printk(KERN_WARNING PFX "SubnSet(OPA_PortInfo) port (attr_mod) %d\n", port_num);
 
 	/* NOTE: the following checks could be optimized.
 	 *       but for testing and clarity I wanted to keep them separate. */
 	if (wfr_strict_am_processing) {
 		if (num_ports != 1) {
-			printk(KERN_WARNING PFX "STL Set(STLPortInfo) invalid AM.N\n");
+			printk(KERN_WARNING PFX "OPA Set(OPAPortInfo) invalid AM.N\n");
 			goto err;
 		}
 
@@ -1654,7 +1654,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 		if (port_num != port) {
 			printk(KERN_WARNING PFX
-				"STL Set(STLPortInfo) invalid AM.P %d; inbound %d\n",
+				"OPA Set(OPAPortInfo) invalid AM.P %d; inbound %d\n",
 				port_num, port);
 			goto err;
 		}
@@ -1676,11 +1676,11 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	vpi = &virtual_stl[port_num-1].port_info;
 	orig_portphysstate_portstate = vpi->port_states.portphysstate_portstate;
 
-	pi = (struct stl_port_info *)stl_get_smp_data(smp);
+	pi = (struct opa_port_info *)opa_get_smp_data(smp);
 
 	stl_lid = be32_to_cpu(pi->lid);
 	if (stl_lid & 0xFFFF0000) {
-		printk(KERN_WARNING PFX "STL_PortInfo lid out of range: %X\n",
+		printk(KERN_WARNING PFX "OPA_PortInfo lid out of range: %X\n",
 			stl_lid);
 		goto err;
 	}
@@ -1688,14 +1688,14 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 
 	stl_lid = be32_to_cpu(pi->sm_lid);
 	if (stl_lid & 0xFFFF0000) {
-		printk(KERN_WARNING PFX "STL_PortInfo SM lid out of range: %X\n",
+		printk(KERN_WARNING PFX "OPA_PortInfo SM lid out of range: %X\n",
 			stl_lid);
 		goto err;
 	}
 	smlid = (u16)(stl_lid & 0x0000FFFF);
 
 	clientrereg = (pi->clientrereg_subnettimeout &
-			STL_PI_MASK_CLIENT_REREGISTER);
+			OPA_PI_MASK_CLIENT_REREGISTER);
 
 	dd = dd_from_ibdev(ibdev);
 	/* IB numbers ports from 1, hdw from 0 */
@@ -1712,29 +1712,29 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	if (lid == 0 || lid >= QIB_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) lid invalid 0x%x\n",
+			"SubnSet(OPA_PortInfo) lid invalid 0x%x\n",
 			lid);
 	} else if (ppd->lid != lid ||
-		 ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC)) {
+		 ppd->lmc != (pi->mkeyprotect_lmc & OPA_PI_MASK_LMC)) {
 		if (ppd->lid != lid)
 			qib_set_uevent_bits(ppd, _QIB_EVENT_LID_CHANGE_BIT);
-		if (ppd->lmc != (pi->mkeyprotect_lmc & STL_PI_MASK_LMC))
+		if (ppd->lmc != (pi->mkeyprotect_lmc & OPA_PI_MASK_LMC))
 			qib_set_uevent_bits(ppd, _QIB_EVENT_LMC_CHANGE_BIT);
-		qib_set_lid(ppd, lid, pi->mkeyprotect_lmc & STL_PI_MASK_LMC);
+		qib_set_lid(ppd, lid, pi->mkeyprotect_lmc & OPA_PI_MASK_LMC);
 		event.event = IB_EVENT_LID_CHANGE;
 		ib_dispatch_event(&event);
 	}
 
-	msl = pi->smsl & STL_PI_MASK_SMSL;
+	msl = pi->smsl & OPA_PI_MASK_SMSL;
 	/* Must be a valid unicast LID address. */
 	if (smlid == 0 || smlid >= QIB_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) smlid invalid 0x%x\n",
+			"SubnSet(OPA_PortInfo) smlid invalid 0x%x\n",
 			smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) smlid 0x%x\n", smlid);
+			"SubnSet(OPA_PortInfo) smlid 0x%x\n", smlid);
 		spin_lock_irqsave(&ibp->lock, flags);
 		if (ibp->sm_ah) {
 			if (smlid != ibp->sm_lid)
@@ -1761,9 +1761,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 	lse = be16_to_cpu(pi->link_speed.enabled);
 	if (lse) {
-		if ((lse & STL_LINK_SPEED_ALL_SUPPORTED) == STL_LINK_SPEED_ALL_SUPPORTED) {
-			vpi->link_speed.enabled = cpu_to_be16(STL_LINK_SPEED_ALL_SUPPORTED);
-		} else if (lse & be16_to_cpu(vpi->link_speed.supported)) {
+		if (lse & be16_to_cpu(vpi->link_speed.supported)) {
 			vpi->link_speed.enabled = pi->link_speed.enabled;
 		} else
 			smp->status |= IB_SMP_INVALID_FIELD;
@@ -1772,7 +1770,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	/* Set link down default state. */
 	/* Again make this virtual.  Only IB PortInfo controls the actual port
 	 * states */
-	switch (pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE) {
+	switch (pi->port_states.unsleepstate_downdefstate & OPA_PI_MASK_DOWNDEF_STATE) {
 	case 0: /* NOP */
 		break;
 	case 1: /* SLEEP */
@@ -1789,12 +1787,12 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		break;
 	default:
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) Default state invalid 0x%x\n",
-			pi->port_states.unsleepstate_downdefstate & STL_PI_MASK_DOWNDEF_STATE);
+			"SubnSet(OPA_PortInfo) Default state invalid 0x%x\n",
+			pi->port_states.unsleepstate_downdefstate & OPA_PI_MASK_DOWNDEF_STATE);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
-	ibp->mkeyprot = (pi->mkeyprotect_lmc & STL_PI_MASK_MKEY_PROT_BIT) >> 6;
+	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT) >> 6;
 	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
 	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
@@ -1803,11 +1801,11 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	mtu = ib_mtu_enum_to_int((pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
 	if (mtu == -1) {
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n", mtu,
+			"SubnSet(OPA_PortInfo) mtu invalid %d (0x%x)\n", mtu,
 			(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	} else {
-		printk(KERN_WARNING PFX "SubnSet(STL_PortInfo) Neigh MTU ignored %d\n", mtu);
+		printk(KERN_WARNING PFX "SubnSet(OPA_PortInfo) Neigh MTU ignored %d\n", mtu);
 		//qib_set_mtu(ppd, mtu);
 	}
 #else
@@ -1815,12 +1813,12 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 #endif
 
 	/* Set operational VLs */
-	vls = pi->operational_vls & STL_PI_MASK_OPERATIONAL_VL;
+	vls = pi->operational_vls & OPA_PI_MASK_OPERATIONAL_VL;
 	if (vls) {
 		int vl_enum = qib_vls_to_ib_enum(vls);
 		if (vls > qib_num_vls(ppd->vls_supported) || vl_enum < 0) {
 			printk(KERN_WARNING PFX
-				"SubnSet(STL_PortInfo) VL's supported invalid %d\n",
+				"SubnSet(OPA_PortInfo) VL's supported invalid %d\n",
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		} else
@@ -1839,19 +1837,19 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	ore = pi->localphy_overrun_errors;
 	if (set_phyerrthreshold(ppd, (ore >> 4) & 0xF)) {
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) phyerrthreshold invalid 0x%x\n",
+			"SubnSet(OPA_PortInfo) phyerrthreshold invalid 0x%x\n",
 			(ore >> 4) & 0xF);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
 	if (set_overrunthreshold(ppd, (ore & 0xF))) {
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) overrunthreshold invalid 0x%x\n",
+			"SubnSet(OPA_PortInfo) overrunthreshold invalid 0x%x\n",
 			ore & 0xF);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
-	ibp->subnet_timeout = pi->clientrereg_subnettimeout & STL_PI_MASK_SUBNET_TIMEOUT;
+	ibp->subnet_timeout = pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
 
 	/*
 	 * Do the port state change now that the other link parameters
@@ -1859,11 +1857,11 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 	 * Changing the port physical state only makes sense if the link
 	 * is down or is being set to down.
 	 */
-	state = pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_STATE;
-	lstate = (pi->port_states.portphysstate_portstate & STL_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
+	state = pi->port_states.portphysstate_portstate & OPA_PI_MASK_PORT_STATE;
+	lstate = (pi->port_states.portphysstate_portstate & OPA_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
 	if (lstate && !(state == IB_PORT_DOWN || state == IB_PORT_NOP)) {
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
+			"SubnSet(OPA_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
 			state, lstate);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
@@ -1889,10 +1887,10 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 			//lstate = QIB_IB_LINKDOWN_DISABLE;
 		else {
 #endif
-		/* FIXME allow other STL states */
+		/* FIXME allow other OPA states */
 		if (lstate > 3) {
 			printk(KERN_WARNING PFX
-				"SubnSet(STL_PortInfo) invalid Physical state 0x%x\n",
+				"SubnSet(OPA_PortInfo) invalid Physical state 0x%x\n",
 				lstate);
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
@@ -1926,7 +1924,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		break;
 	default:
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) invalid state 0x%x\n", state);
+			"SubnSet(OPA_PortInfo) invalid state 0x%x\n", state);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
@@ -1934,10 +1932,10 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		u8 tmp;
 		tmp = vpi->port_states.portphysstate_portstate;
 		vpi->port_states.portphysstate_portstate =
-			((lstate << 4) & STL_PI_MASK_PORT_PHYSICAL_STATE) |
-			(tmp & STL_PI_MASK_PORT_STATE);
+			((lstate << 4) & OPA_PI_MASK_PORT_PHYSICAL_STATE) |
+			(tmp & OPA_PI_MASK_PORT_STATE);
 		printk(KERN_WARNING PFX
-			"SubnSet(STL_PortInfo) Port PhyState 0x%x virtualized\n",
+			"SubnSet(OPA_PortInfo) Port PhyState 0x%x virtualized\n",
 			lstate);
 		if (lstate == 3 || lstate == 2) {
 			vpi->port_states.portphysstate_portstate = lstate << 4;
@@ -1951,7 +1949,7 @@ static int subn_set_stl_portinfo(struct stl_smp *smp, struct ib_device *ibdev,
 		wfr_send_stl_virt_link_info(ibdev, port, vpi->port_states.portphysstate_portstate,
 					dd->pport->guid,
 					wfr_mgmt_allowed ?
-						STL_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
+						OPA_PI_MASK_NEIGH_MGMT_ALLOWED : 0,
 					vpi->link_speed.active,
 					vpi->link_width.active);
 	}
@@ -2142,7 +2140,7 @@ static int subn_get_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 	return reply(smp);
 }
 
-static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_pkeytable(struct opa_smp *smp, struct ib_device *ibdev,
 				  u8 port, u32 *resp_len)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
@@ -2161,7 +2159,7 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 
 		if (am_port != port || n_blocks_req == 0) {
 			printk(KERN_WARNING PFX
-				"STL Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
+				"OPA Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
 				am_port, start_block, n_blocks_req);
 			smp->status |= IB_SMP_INVALID_FIELD;
 			return reply_stl(smp);
@@ -2175,17 +2173,17 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 	if (wfr_sim_pkey_tbl_block_size) {
 		n_blocks_avail = wfrl_get_num_sim_pkey_blocks();
 	} else {
-		n_blocks_avail = (u16)(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) +1;
+		n_blocks_avail = (u16)(qib_get_npkeys(dd)/OPA_PARTITION_TABLE_BLK_SIZE) +1;
 	}
 
-	memset(stl_get_smp_data(smp), 0, stl_get_smp_data_size(smp));
+	memset(opa_get_smp_data(smp), 0, opa_get_smp_data_size(smp));
 
 	if (start_block + n_blocks_req > n_blocks_avail ||
-	    n_blocks_req > STL_NUM_PKEY_BLOCKS_PER_SMP) {
+	    n_blocks_req > OPA_NUM_PKEY_BLOCKS_PER_SMP) {
 		printk(KERN_WARNING PFX
-			"STL Get PKey AM Invalid : s 0x%x; req 0x%x; avail 0x%x; blk/smp 0x%lx\n",
+			"OPA Get PKey AM Invalid : s 0x%x; req 0x%x; avail 0x%x; blk/smp 0x%lx\n",
 			start_block, n_blocks_req, n_blocks_avail,
-			STL_NUM_PKEY_BLOCKS_PER_SMP);
+			OPA_NUM_PKEY_BLOCKS_PER_SMP);
 		smp->status |= IB_SMP_INVALID_FIELD;
 		goto error;
 	}
@@ -2195,12 +2193,12 @@ static int subn_get_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 		get_pkeys(dd, port, virtual_stl[port-1].pkeys);
 	}
 
-	from = (u8 *)virtual_stl[port-1].pkeys + (start_block * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
-	size = n_blocks_req * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16);
-	p = (__be16 *) stl_get_smp_data(smp);
+	from = (u8 *)virtual_stl[port-1].pkeys + (start_block * OPA_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+	size = n_blocks_req * OPA_PARTITION_TABLE_BLK_SIZE * sizeof(u16);
+	p = (__be16 *) opa_get_smp_data(smp);
 	memcpy((void *)p, from, size);
 
-	for (i = 0; i < n_blocks_req * STL_PARTITION_TABLE_BLK_SIZE; i++)
+	for (i = 0; i < n_blocks_req * OPA_PARTITION_TABLE_BLK_SIZE; i++)
 		p[i] = cpu_to_be16(p[i]);
 
 	*resp_len += size;
@@ -2209,10 +2207,10 @@ error:
 	return reply_stl(smp);
 }
 
-static int subn_get_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_sl_to_sc(struct opa_smp *smp, struct ib_device *ibdev,
 				  u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 
 	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
@@ -2220,7 +2218,7 @@ static int subn_get_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 		return reply_stl(smp);
 	}
 
-	memset(p, 0, stl_get_smp_data_size(smp));
+	memset(p, 0, opa_get_smp_data_size(smp));
 
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sl_to_sc); i++)
 		*p++ = virtual_stl[port-1].sl_to_sc[i];
@@ -2230,10 +2228,10 @@ static int subn_get_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
-static int subn_set_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_sl_to_sc(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 
 	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
@@ -2250,10 +2248,10 @@ static int subn_set_stl_sl_to_sc(struct stl_smp *smp, struct ib_device *ibdev,
 	return subn_get_stl_sl_to_sc(smp, ibdev, port, resp_len);
 }
 
-static int subn_get_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_sc_to_sl(struct opa_smp *smp, struct ib_device *ibdev,
 				  u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 
 	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
@@ -2261,7 +2259,7 @@ static int subn_get_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
 		return reply_stl(smp);
 	}
 
-	memset(p, 0, stl_get_smp_data_size(smp));
+	memset(p, 0, opa_get_smp_data_size(smp));
 
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_sl); i++)
 		*p++ = virtual_stl[port-1].sc_to_sl[i];
@@ -2271,10 +2269,10 @@ static int subn_get_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
-static int subn_set_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_sc_to_sl(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 
 	if (wfr_strict_am_processing && be32_to_cpu(smp->attr_mod) != 0) {
@@ -2288,10 +2286,10 @@ static int subn_set_stl_sc_to_sl(struct stl_smp *smp, struct ib_device *ibdev,
 	return subn_get_stl_sc_to_sl(smp, ibdev, port, resp_len);
 }
 
-static int subn_get_stl_sc_to_vlt(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_sc_to_vlt(struct opa_smp *smp, struct ib_device *ibdev,
 				  u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
@@ -2306,7 +2304,7 @@ static int subn_get_stl_sc_to_vlt(struct stl_smp *smp, struct ib_device *ibdev,
 		}
 	}
 
-	memset(p, 0, stl_get_smp_data_size(smp));
+	memset(p, 0, opa_get_smp_data_size(smp));
 
 	/* FIXME We need to resolve getting the real sl to vl values set here */
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_vlt); i++)
@@ -2317,10 +2315,10 @@ static int subn_get_stl_sc_to_vlt(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
-static int subn_set_stl_sc_to_vlt(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_sc_to_vlt(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 	u8 port_state = wfrl_get_stl_virtual_port_state(port) & 0x0f;
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
@@ -2358,10 +2356,10 @@ error:
 	return subn_get_stl_sc_to_vlt(smp, ibdev, port, resp_len);
 }
 
-static int subn_get_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_sc_to_vlnt(struct opa_smp *smp, struct ib_device *ibdev,
 				  u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
@@ -2377,7 +2375,7 @@ static int subn_get_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 
-	memset(p, 0, stl_get_smp_data_size(smp));
+	memset(p, 0, opa_get_smp_data_size(smp));
 
 	/* FIXME We need to resolve getting the real sl to vl values set here */
 	for (i = 0; i < ARRAY_SIZE(virtual_stl[port-1].sc_to_vlnt); i++)
@@ -2388,10 +2386,10 @@ static int subn_get_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
-static int subn_set_stl_sc_to_vlnt(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_sc_to_vlnt(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	unsigned i;
 	u8 port_state = wfrl_get_stl_virtual_port_state(port) & 0x0f;
 
@@ -2423,7 +2421,7 @@ error:
 	return subn_get_stl_sc_to_vlnt(smp, ibdev, port, resp_len);
 }
 
-static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_vlarb(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
 	union stl_vlarb_data *virt_low = &virtual_stl[port-1].vlarb_low;
@@ -2434,7 +2432,7 @@ static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 
 	if (wfr_strict_am_processing) {
 		if (num_ports != 1 ||
@@ -2471,7 +2469,7 @@ static int subn_get_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 
 	return reply_stl(smp);
 }
-static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_vlarb(struct opa_smp *smp, struct ib_device *ibdev,
 			     u8 port, u32 *resp_len)
 {
 	union stl_vlarb_data *virt_low = &virtual_stl[port-1].vlarb_low;
@@ -2482,7 +2480,7 @@ static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u8 section = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 
 	if (wfr_strict_am_processing) {
 		if (num_ports != 1 ||
@@ -2516,13 +2514,13 @@ static int subn_set_stl_vlarb(struct stl_smp *smp, struct ib_device *ibdev,
 	return subn_get_stl_vlarb(smp, ibdev, port, resp_len);
 }
 
-static int subn_get_stl_psi(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_psi(struct opa_smp *smp, struct ib_device *ibdev,
 			u8 port, u32 *resp_len)
 {
-	struct stl_port_info *vpi = &virtual_stl[port-1].port_info;
+	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 
 	if (wfr_strict_am_processing) {
 		if (num_ports != 1 || port_num != port) {
@@ -2538,13 +2536,13 @@ static int subn_get_stl_psi(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
-static int subn_get_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_bct(struct opa_smp *smp, struct ib_device *ibdev,
 			u8 port, u32 *resp_len)
 {
 	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 
 	if (wfr_strict_am_processing) {
 		if (num_ports != 1 || port_num != port) {
@@ -2558,13 +2556,13 @@ static int subn_get_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
 	return reply_stl(smp);
 }
 
-static int subn_set_stl_bct(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_bct(struct opa_smp *smp, struct ib_device *ibdev,
 			u8 port, u32 *resp_len)
 {
 	struct stl_buffer_control_table *vbct = &virtual_stl[port-1].buffer_control_table;
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 
 	if (wfr_strict_am_processing) {
 		if (num_ports != 1 || port_num != port) {
@@ -2599,10 +2597,10 @@ static __be16 __get_stl_cable_info(u8 *ci, u32 am, struct ib_device *ibdev, u8 p
 	return 0;
 }
 
-static int subn_get_stl_cable_info(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_cable_info(struct opa_smp *smp, struct ib_device *ibdev,
 			u8 port, u32 *resp_len)
 {
-	u8 *p = stl_get_smp_data(smp);
+	u8 *p = opa_get_smp_data(smp);
 	__be16 status = __get_stl_cable_info(p, be32_to_cpu(smp->attr_mod),
 						ibdev, port);
 
@@ -2621,16 +2619,16 @@ static void set_aggr_error(struct stl_aggregate *ag)
 	ag->err_reqlength  = cpu_to_be16(ag->err_reqlength);
 }
 
-static int subn_get_stl_aggregate(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_get_stl_aggregate(struct opa_smp *smp, struct ib_device *ibdev,
 			u8 port, u32 *resp_len)
 {
 	int i;
 	u32 num_attr = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *next_smp = stl_get_smp_data(smp);
+	u8 *next_smp = opa_get_smp_data(smp);
 	struct stl_aggregate *ag;
 	union {
-		struct stl_node_info ni;
-		struct stl_node_description nd;
+		struct opa_node_info ni;
+		struct opa_node_description nd;
 		u8 cd[CABLE_INFO_ATTRIB_SIZE];
 	} data;
 
@@ -2660,21 +2658,21 @@ static int subn_get_stl_aggregate(struct stl_smp *smp, struct ib_device *ibdev,
 		}
 
 		switch (ag->attr_id) {
-			case STL_ATTRIB_ID_NODE_INFO:
+			case OPA_ATTRIB_ID_NODE_INFO:
 			{
 				status = __get_stl_nodeinfo(&data.ni, be32_to_cpu(ag->attr_mod), ibdev, port);
 				memcpy(ag->data, &data.ni,
 					min_t(size_t, ag_data_len, sizeof(data.ni)));
 				break;
 			}
-			case STL_ATTRIB_ID_NODE_DESCRIPTION:
+			case OPA_ATTRIB_ID_NODE_DESCRIPTION:
 			{
 				status = __get_stl_nodedescription(&data.nd, be32_to_cpu(ag->attr_mod), ibdev);
 				memcpy(ag->data, &data.nd,
 					min_t(size_t, ag_data_len, sizeof(data.nd)));
 				break;
 			}
-			case STL_ATTRIB_ID_CABLE_INFO:
+			case OPA_ATTRIB_ID_CABLE_INFO:
 			{
 				status = __get_stl_cable_info(data.cd, be32_to_cpu(ag->attr_mod), ibdev, port);
 				memcpy(ag->data, data.cd,
@@ -3141,14 +3139,14 @@ static int subn_set_pkeytable(struct ib_smp *smp, struct ib_device *ibdev,
 	return subn_get_pkeytable(smp, ibdev, port);
 }
 
-static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
+static int subn_set_stl_pkeytable(struct opa_smp *smp, struct ib_device *ibdev,
 			      u8 port, u32 *resp_len)
 {
 	struct qib_devdata *dd = dd_from_ibdev(ibdev);
 	u32 n_blocks_sent = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 am_port = (be32_to_cpu(smp->attr_mod) & 0x00ff0000) >> 16;
 	u32 start_block = be32_to_cpu(smp->attr_mod) & 0x7ff;
-	u16 *p = (u16 *) stl_get_smp_data(smp);
+	u16 *p = (u16 *) opa_get_smp_data(smp);
 	u16 *cur_keys;
 	int i, b;
 	int found_lim;
@@ -3175,21 +3173,21 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 	if (wfr_sim_pkey_tbl_block_size) {
 		n_blocks_avail = wfrl_get_num_sim_pkey_blocks();
 	} else {
-		n_blocks_avail = (u16)(qib_get_npkeys(dd)/STL_PARTITION_TABLE_BLK_SIZE) +1;
+		n_blocks_avail = (u16)(qib_get_npkeys(dd)/OPA_PARTITION_TABLE_BLK_SIZE) +1;
 	}
 
 	if (start_block + n_blocks_sent > n_blocks_avail ||
-	    n_blocks_sent > STL_NUM_PKEY_BLOCKS_PER_SMP) {
+	    n_blocks_sent > OPA_NUM_PKEY_BLOCKS_PER_SMP) {
 		printk(KERN_WARNING PFX
 			"STL Set PKey AM Invalid : s 0x%x; req 0x%x; avail 0x%x; blk/smp 0x%lx\n",
 			start_block, n_blocks_sent, n_blocks_avail,
-			STL_NUM_PKEY_BLOCKS_PER_SMP);
+			OPA_NUM_PKEY_BLOCKS_PER_SMP);
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply_stl(smp);
 	}
 
-	p = (u16 *) stl_get_smp_data(smp);
-	for (i = 0; i < n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE; i++)
+	p = (u16 *) opa_get_smp_data(smp);
+	for (i = 0; i < n_blocks_sent * OPA_PARTITION_TABLE_BLK_SIZE; i++)
 		p[i] = be16_to_cpu(p[i]);
 
 	/* before writing this block ensure the limited management pkey is somewhere in the table. */
@@ -3197,11 +3195,11 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 	found_lim = 0;
 	for (b = 0; b < n_blocks_avail; b++) {
 		if (start_block <= b && b < (start_block + n_blocks_sent)) {
-			cur_keys = p + ((b - start_block) * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+			cur_keys = p + ((b - start_block) * OPA_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
 		} else {
-			cur_keys = virtual_stl[port-1].pkeys + (b * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+			cur_keys = virtual_stl[port-1].pkeys + (b * OPA_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
 		}
-		for (i = 0; i < STL_PARTITION_TABLE_BLK_SIZE; i++) {
+		for (i = 0; i < OPA_PARTITION_TABLE_BLK_SIZE; i++) {
 			if (cur_keys[i] == WFR_LIM_MGMT_P_KEY)
 				found_lim++;
 			if (cur_keys[i] == WFR_FULL_MGMT_P_KEY)
@@ -3223,8 +3221,8 @@ static int subn_set_stl_pkeytable(struct stl_smp *smp, struct ib_device *ibdev,
 	}
 
 	// Set virtual pkeys for this block/port
-	cur_keys = virtual_stl[port-1].pkeys + (start_block * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
-	size = n_blocks_sent * STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16);
+	cur_keys = virtual_stl[port-1].pkeys + (start_block * OPA_PARTITION_TABLE_BLK_SIZE * sizeof(u16));
+	size = n_blocks_sent * OPA_PARTITION_TABLE_BLK_SIZE * sizeof(u16);
 	memcpy(cur_keys, (void *)p, size);
 
 	return subn_get_stl_pkeytable(smp, ibdev, port, resp_len);
@@ -4548,13 +4546,13 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			struct jumbo_mad *out_jumbo,
 			u32 *resp_len)
 {
-	struct stl_smp *smp = (struct stl_smp *)out_jumbo;
+	struct opa_smp *smp = (struct opa_smp *)out_jumbo;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int ret;
 
 	*out_jumbo = *in_jumbo;
-	if (smp->class_version != STL_SMI_CLASS_VERSION) {
+	if (smp->class_version != OPA_SMI_CLASS_VERSION) {
 		smp->status |= IB_SMP_UNSUP_VERSION;
 		ret = reply_stl(smp);
 		goto bail;
@@ -4584,65 +4582,65 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		goto bail;
 	}
 
-	*resp_len = stl_get_smp_header_size(smp);
+	*resp_len = opa_get_smp_header_size(smp);
 
 /* FIXME add other STL SMP's as we go */
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
 		switch (smp->attr_id) {
-		case STL_ATTRIB_ID_NODE_DESCRIPTION:
-			ret = subn_get_stl_nodedescription((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_NODE_DESCRIPTION:
+			ret = subn_get_stl_nodedescription((struct opa_smp *)smp,
 							   ibdev, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_NODE_INFO:
-			ret = subn_get_stl_nodeinfo((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_NODE_INFO:
+			ret = subn_get_stl_nodeinfo((struct opa_smp *)smp,
 						    ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_PORT_INFO:
-			ret = subn_get_stl_portinfo((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_PORT_INFO:
+			ret = subn_get_stl_portinfo((struct opa_smp *)smp,
 						    ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_PARTITION_TABLE:
-			ret = subn_get_stl_pkeytable((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_PARTITION_TABLE:
+			ret = subn_get_stl_pkeytable((struct opa_smp *)smp,
 						     ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SL_TO_SC_MAP:
-			ret = subn_get_stl_sl_to_sc((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SL_TO_SC_MAP:
+			ret = subn_get_stl_sl_to_sc((struct opa_smp *)smp,
 						    ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SC_TO_SL_MAP:
-			ret = subn_get_stl_sc_to_sl((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SC_TO_SL_MAP:
+			ret = subn_get_stl_sc_to_sl((struct opa_smp *)smp,
 						    ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
-			ret = subn_get_stl_sc_to_vlt((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
+			ret = subn_get_stl_sc_to_vlt((struct opa_smp *)smp,
 						     ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
-			ret = subn_get_stl_sc_to_vlnt((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SC_TO_VLNT_MAP:
+			ret = subn_get_stl_sc_to_vlnt((struct opa_smp *)smp,
 						      ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_VL_ARBITRATION:
-			ret = subn_get_stl_vlarb((struct stl_smp *)smp, ibdev,
+		case OPA_ATTRIB_ID_VL_ARBITRATION:
+			ret = subn_get_stl_vlarb((struct opa_smp *)smp, ibdev,
 						 port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_PORT_STATE_INFO:
-			ret = subn_get_stl_psi((struct stl_smp *)smp, ibdev,
+		case OPA_ATTRIB_ID_PORT_STATE_INFO:
+			ret = subn_get_stl_psi((struct opa_smp *)smp, ibdev,
 						port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
-			ret = subn_get_stl_bct((struct stl_smp *)smp, ibdev,
+		case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+			ret = subn_get_stl_bct((struct opa_smp *)smp, ibdev,
 						port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_CABLE_INFO:
-			ret = subn_get_stl_cable_info((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_CABLE_INFO:
+			ret = subn_get_stl_cable_info((struct opa_smp *)smp,
 							ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_AGGREGATE:
-			ret = subn_get_stl_aggregate((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_AGGREGATE:
+			ret = subn_get_stl_aggregate((struct opa_smp *)smp,
 							ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SM_INFO:
+		case OPA_ATTRIB_ID_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
 				ret = IB_MAD_RESULT_SUCCESS |
 					IB_MAD_RESULT_CONSUMED;
@@ -4663,39 +4661,39 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		}
 	case IB_MGMT_METHOD_SET:
 		switch (smp->attr_id) {
-		case STL_ATTRIB_ID_PORT_INFO:
-			ret = subn_set_stl_portinfo((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_PORT_INFO:
+			ret = subn_set_stl_portinfo((struct opa_smp *)smp,
 						    ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_PARTITION_TABLE:
-			ret = subn_set_stl_pkeytable((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_PARTITION_TABLE:
+			ret = subn_set_stl_pkeytable((struct opa_smp *)smp,
 						     ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SL_TO_SC_MAP:
-			ret = subn_set_stl_sl_to_sc((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SL_TO_SC_MAP:
+			ret = subn_set_stl_sl_to_sc((struct opa_smp *)smp,
 						    ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SC_TO_SL_MAP:
-			ret = subn_set_stl_sc_to_sl((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SC_TO_SL_MAP:
+			ret = subn_set_stl_sc_to_sl((struct opa_smp *)smp,
 						    ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SC_TO_VLT_MAP:
-			ret = subn_set_stl_sc_to_vlt((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
+			ret = subn_set_stl_sc_to_vlt((struct opa_smp *)smp,
 						     ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SC_TO_VLNT_MAP:
-			ret = subn_set_stl_sc_to_vlnt((struct stl_smp *)smp,
+		case OPA_ATTRIB_ID_SC_TO_VLNT_MAP:
+			ret = subn_set_stl_sc_to_vlnt((struct opa_smp *)smp,
 						      ibdev, port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_VL_ARBITRATION:
-			ret = subn_set_stl_vlarb((struct stl_smp *)smp, ibdev,
+		case OPA_ATTRIB_ID_VL_ARBITRATION:
+			ret = subn_set_stl_vlarb((struct opa_smp *)smp, ibdev,
 						 port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_BUFFER_CONTROL_TABLE:
-			ret = subn_set_stl_bct((struct stl_smp *)smp, ibdev,
+		case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+			ret = subn_set_stl_bct((struct opa_smp *)smp, ibdev,
 						port, resp_len);
 			goto bail;
-		case STL_ATTRIB_ID_SM_INFO:
+		case OPA_ATTRIB_ID_SM_INFO:
 			if (ibp->port_cap_flags & IB_PORT_SM_DISABLED) {
 				ret = IB_MAD_RESULT_SUCCESS |
 					IB_MAD_RESULT_CONSUMED;
@@ -4737,7 +4735,7 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		goto bail;
 
 	case IB_MGMT_METHOD_SEND:
-		if (stl_get_smp_direction(smp) &&
+		if (opa_get_smp_direction(smp) &&
 		    smp->attr_id == QIB_VENDOR_IPG) {
 			u32 data;
 			if (in_jumbo->mad_hdr.mgmt_class ==
@@ -4764,7 +4762,7 @@ bail:
 
 static int is_sma_mad(struct jumbo_mad *mad)
 {
-	struct stl_smp *smp = (struct stl_smp *)mad;
+	struct opa_smp *smp = (struct opa_smp *)mad;
 
 	switch (mad->mad_hdr.method) {
 	case IB_MGMT_METHOD_GET:
@@ -4783,7 +4781,7 @@ static int is_sma_mad(struct jumbo_mad *mad)
 		return IB_MAD_RESULT_SUCCESS;
 
 	case IB_MGMT_METHOD_SEND:
-		if (stl_get_smp_direction(smp) &&
+		if (opa_get_smp_direction(smp) &&
 		    smp->attr_id == QIB_VENDOR_IPG) {
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 		} else

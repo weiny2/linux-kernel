@@ -36,7 +36,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <rdma/ib_smi.h>
-#include <rdma/stl_smi.h>
+#include <rdma/opa_smi.h>
 #include <rdma/ib_pma.h>
 
 #include "wfrl.h"
@@ -437,7 +437,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 
 	memset(pmp->data, 0, sizeof(pmp->data));
 	if (num_ports != 1 || (req->port_num && req->port_num != port)
-	    || num_vls > STL_MAX_VLS) {
+	    || num_vls > OPA_MAX_VLS) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		printk(KERN_WARNING PFX "STL get stl portstatus PMA 0x%x ; Invalid AM; %d; %d; %d\n",
 			be16_to_cpu(pmp->mad_hdr.attr_id),
