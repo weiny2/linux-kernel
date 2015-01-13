@@ -442,7 +442,7 @@ static unsigned long __init get_new_step_size(unsigned long step_size)
 	 * is 0, round_down() returns 0 for start, and that turns it
 	 * into 0x100000000ULL.
 	 */
-	return step_size << 5;
+	return step_size << (PMD_SHIFT - PAGE_SHIFT - 1);
 }
 
 /**
@@ -462,7 +462,6 @@ static void __init memory_map_top_down(unsigned long map_start,
 	unsigned long step_size;
 	unsigned long addr;
 	unsigned long mapped_ram_size = 0;
-	unsigned long new_mapped_ram_size;
 
 	/* xen has big range in reserved near end of ram, skip it at first.*/
 	addr = memblock_find_in_range(map_start, map_end, PMD_SIZE, PMD_SIZE);
@@ -487,14 +486,12 @@ static void __init memory_map_top_down(unsigned long map_start,
 				start = map_start;
 		} else
 			start = map_start;
-		new_mapped_ram_size = init_range_memory_mapping(start,
+		mapped_ram_size += init_range_memory_mapping(start,
 							last_start);
 		last_start = start;
 		min_pfn_mapped = last_start >> PAGE_SHIFT;
-		/* only increase step_size after big range get mapped */
-		if (new_mapped_ram_size > mapped_ram_size)
+		if (mapped_ram_size >= step_size)
 			step_size = get_new_step_size(step_size);
-		mapped_ram_size += new_mapped_ram_size;
 	}
 
 	if (real_end < map_end)

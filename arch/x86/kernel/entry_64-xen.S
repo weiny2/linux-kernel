@@ -1106,7 +1106,7 @@ ENTRY(do_hypervisor_callback)   # do_hypervisor_callback(struct *pt_regs)
 	jnz  error_exit
 	bt   $TIF_NEED_RESCHED,TI_flags(%rdx)
 	jnc  error_exit
-	bt   $9,EFLAGS-ARGOFFSET(%rsp)
+	bt   $9,EFLAGS(%rsp)
 	jnc  error_exit
 	movb $0,PER_CPU_VAR(privcmd_hcall)
 	call preempt_schedule_irq
