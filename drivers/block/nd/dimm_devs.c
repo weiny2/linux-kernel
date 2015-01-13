@@ -370,7 +370,7 @@ static resource_size_t blk_available_dpa(struct nd_mapping *nd_mapping)
 		} else if (res_end >= nd_mapping->start && res_end < map_end) {
 			resource_size_t start;
 
-			start = max(nd_mapping->start, res->start);
+			start = max_t(u64, nd_mapping->start, res->start);
 			busy += res_end - start;
 		}
 	}
