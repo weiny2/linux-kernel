@@ -769,9 +769,5 @@ int nd_blk_namespace_label_update(struct nd_region *nd_region,
 	if (rc)
 		return rc;
 
-	rc = __blk_label_update(nd_region, nd_mapping, nsblk);
-	if (rc)
-		return rc;
-
-	return 0;
+	return __blk_label_update(nd_region, nd_mapping, nsblk);
 }
