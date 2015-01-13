@@ -443,7 +443,7 @@ class TestInfo:
                           default="")
         parser.add_option("--sm", dest="sm",
                           help="Which SM to use. Valid values are opensm, " +
-                          "ifs_fm, detect, or none. Default: detect",
+                          "opafm, detect, or none. Default: detect",
                           metavar="SM",
                           default="detect")
         parser.add_option("--basedir", dest="base_dir",
