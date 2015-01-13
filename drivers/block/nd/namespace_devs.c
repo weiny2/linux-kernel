@@ -505,7 +505,8 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 
 	if (val % nd_region->ndr_mappings)
 		dev_info(dev, "%lld truncated to %lld setting namespace size\n",
-				val, (val / nd_region->ndr_mappings)
+				val, (unsigned long long)
+				(val / nd_region->ndr_mappings)
 				* nd_region->ndr_mappings);
 	val /= nd_region->ndr_mappings;
 	allocated /= nd_region->ndr_mappings;
