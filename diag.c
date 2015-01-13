@@ -1273,9 +1273,10 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 	struct diag_pkt dpkt;
 	struct hfi_devdata *dd;
 	size_t ret;
-	u8 byte_one, vl;
+	u8 byte_two, sl, sc, vl;
 	u32 len;
 	u64 pbc;
+	struct qib_ibport *ibp;
 
 	dd = hfi_dd_from_sc_inode(fp->f_inode);
 	if (dd == NULL)
@@ -1293,12 +1294,18 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 
 	/*
 	 * We need to generate the PBC and not let diagpkt_send do it,
-	 * to do this we need the VL and the length in dwords
+	 * to do this we need the VL and the length in dwords. The VL can be
+	 * determined by using the SL and looking up the SC. Then the SC can be
+	 * converted into VL.
 	 */
-	if (copy_from_user(&byte_one, data, 1))
+	if (copy_from_user(&byte_two, data+1, 1))
 		return -EINVAL;
 
-	vl = (byte_one >> 4) & 0xf;
+	sl = (byte_two >> 4) & 0xf;
+	ibp = to_iport(&(dd->verbs_dev.ibdev), 1);
+	sc = ibp->sl_to_sc[sl];
+	vl = sc_to_vlt(dd, sc);
+
 	len = (count >> 2) + 2; /* Add in PBC */
 	pbc = create_pbc(0, 0, vl, len);
 	dpkt.pbc = pbc;
