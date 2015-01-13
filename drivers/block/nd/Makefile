@@ -13,7 +13,7 @@ ldflags-y += --wrap=__request_region
 ldflags-y += --wrap=__release_region
 endif
 
-obj-$(CONFIG_ND_CORE) += nd_core.o
+obj-$(CONFIG_ND_CORE) += nd.o
 obj-$(CONFIG_NFIT_ACPI) += nd_acpi.o
 obj-$(CONFIG_NFIT_ACPI) += nd_old_acpi.o
 obj-$(CONFIG_NFIT_LOCAL_DEV) += local_dev.o
@@ -28,16 +28,15 @@ local_nfit-y := local.o
 nd_acpi-y := acpi.o
 nd_old_acpi-y := old_acpi.o
 
-nd_core-y := nd.o
-nd_core-y += bus.o
-nd_core-y += dimm_devs.o
-nd_core-y += dimm.o
-nd_core-y += region_devs.o
-nd_core-y += region.o
-nd_core-y += namespace_devs.o
-nd_core-y += label.o
-
-nd_core-$(CONFIG_ND_BTT_DEVS) += btt_devs.o
+nd-y := core.o
+nd-y += bus.o
+nd-y += dimm_devs.o
+nd-y += dimm.o
+nd-y += region_devs.o
+nd-y += region.o
+nd-y += namespace_devs.o
+nd-y += label.o
+nd-$(CONFIG_ND_BTT_DEVS) += btt_devs.o
 
 nd_pmem-y := pmem.o
 nd_btt-y := btt.o
