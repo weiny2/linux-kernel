@@ -1286,8 +1286,12 @@ static int init_active_labels(struct nd_region *nd_region)
 				sizeof(struct nd_namespace_label *), GFP_KERNEL);
 		if (!nd_mapping->labels)
 			return -ENOMEM;
-		for (j = 0; j < count; j++)
-			nd_mapping->labels[j] = nd_label_active(nd_dimm, j);
+		for (j = 0; j < count; j++) {
+			struct nd_namespace_label __iomem *label;
+
+			label = nd_label_active(nd_dimm, j);
+			nd_set_label(nd_mapping->labels, label, j);
+		}
 	}
 
 	return 0;
