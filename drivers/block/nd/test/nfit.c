@@ -998,7 +998,6 @@ static struct platform_driver nfit_test_driver = {
 	.remove = nfit_test_remove,
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.owner = THIS_MODULE,
 	},
 	.id_table = nfit_test_id,
 };
