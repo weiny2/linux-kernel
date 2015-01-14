@@ -750,6 +750,13 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		sde->sdma_shift = ilog2(descq_cnt);
 		sde->sdma_mask = (1 << sde->sdma_shift) - 1;
 
+		/* Create a mask for all 3 chip interrupt sources */
+		sde->imask = (u64)1 << (0*WFR_TXE_NUM_SDMA_ENGINES + this_idx)
+			| (u64)1 << (1*WFR_TXE_NUM_SDMA_ENGINES + this_idx)
+			| (u64)1 << (2*WFR_TXE_NUM_SDMA_ENGINES + this_idx);
+		/* Create a mask specifically for sdma_idle */
+		sde->idle_mask =
+			(u64)1 << (2*WFR_TXE_NUM_SDMA_ENGINES + this_idx);
 		spin_lock_init(&sde->lock);
 		spin_lock_init(&sde->senddmactrl_lock);
 		/* insure there is always a zero bit */
@@ -1174,7 +1181,8 @@ static int sdma_make_progress(struct sdma_engine *sde, u64 status)
 {
 	struct sdma_txreq *txp = NULL;
 	int progress = 0;
-	u16 hwhead, swhead;
+	u16 hwhead, swhead, swtail;
+	int idle_check_done = 0;
 
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
@@ -1193,6 +1201,7 @@ static int sdma_make_progress(struct sdma_engine *sde, u64 status)
 		txp = list_first_entry(&sde->activelist,
 			struct sdma_txreq, list);
 	swhead = sde->descq_head & sde->sdma_mask;
+retry:
 	while (swhead != hwhead) {
 		/* advance head, wrap if needed */
 		swhead = ++sde->descq_head & sde->sdma_mask;
@@ -1226,6 +1235,25 @@ static int sdma_make_progress(struct sdma_engine *sde, u64 status)
 		}
 		progress++;
 	}
+
+	/*
+	 * The SDMA idle interrupt is not guaranteed to be ordered with respect
+	 * to updates to the the dma_head location in host memory. The head
+	 * value read might not be fully up to date. If there are pending
+	 * descriptors and the SDMA idle interrupt fired then read from the
+	 * CSR SDMA head instead to get the latest value from the hardware.
+	 * The hardware SDMA head should be read atmost once in this invocation
+	 * of sdma_make_progress(..) which is ensured by idle_check_done flag
+	 */
+	if (status & sde->idle_mask && !idle_check_done) {
+		swtail = sde->descq_tail & sde->sdma_mask;
+		if (swtail != hwhead) {
+			hwhead = (u16)read_sde_csr(sde, WFR_SEND_DMA_HEAD);
+			idle_check_done = 1;
+			goto retry;
+		}
+	}
+
 	sde->last_status = status;
 	if (progress)
 		sdma_desc_avail(sde, sdma_descq_freecnt(sde));

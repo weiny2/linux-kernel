@@ -7498,10 +7498,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 	 * interrupts to be in the same CSR, starting at bit 0.  Verify
 	 * that this is true by checking the bit location of the start.
 	 */
-	if ((WFR_IS_SDMA_START % 64) != 0) {
-		dd_dev_err(dd, "SDMA interrupt sources not CSR aligned");
-		return -EINVAL;
-	}
+	BUILD_BUG_ON(WFR_IS_SDMA_START % 64);
 
 	for (i = 0; i < dd->num_msix_entries; i++) {
 		struct qib_msix_entry *me = &dd->msix_entries[i];
@@ -7530,14 +7527,6 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 
 			idx = i - first_sdma;
 			per_sdma = &dd->per_sdma[idx];
-			/*
-			 * Create a mask for all 3 chip interrupt sources
-			 * mapped here.
-			 */
-			per_sdma->imask =
-				  (u64)1 << (0*WFR_TXE_NUM_SDMA_ENGINES + idx)
-				| (u64)1 << (1*WFR_TXE_NUM_SDMA_ENGINES + idx)
-				| (u64)1 << (2*WFR_TXE_NUM_SDMA_ENGINES + idx);
 			handler = sdma_interrupt;
 			arg = per_sdma;
 			snprintf(me->name, sizeof(me->name),

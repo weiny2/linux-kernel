@@ -367,6 +367,7 @@ struct verbs_txreq {
  * @dd: a backpointer to the device data
  * @ppd: per port backpointer
  * @imask: mask for irq manipulation
+ * @idle_mask: mask for determining if an interrupt is due to sdma_idle
  *
  * This structure has the state for each sdma_engine.
  *
@@ -378,6 +379,7 @@ struct sdma_engine {
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	u64 imask;			/* clear interrupt mask */
+	u64 idle_mask;
 	/* private: */
 	struct workqueue_struct *wq;
 	/* private: */
