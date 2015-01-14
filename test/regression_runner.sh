@@ -5,6 +5,8 @@
 #-------------
 test_dir=$PWD
 mode=$1
+host1=$2
+host2=$3
 rpm_test=0
 quick_test=1
 default_test=1
@@ -26,18 +28,18 @@ simics_host2="viper1"
 simics_args="--nodelist \"viper0,viper1\""
 
 # FPGA specific
-ssh_fpga_host1="ssh root@fpga2"
-ssh_fpga_host2="ssh root@fpga3"
-fpga_host1="fpga2"
-fpga_host2="fpga3"
-scp_fpga_host1="scp root@fpga2:"
-scp_fpga_host2="scp root@fpga3:"
-fpga_args="--nodelist \"fpga2,fpga3\" --modparm \"fw_8051_load=1\""
+ssh_fpga_host1="ssh root@$host1"
+ssh_fpga_host2="ssh root@$host2"
+fpga_host1="$host1"
+fpga_host2="$host2"
+scp_fpga_host1="scp root@$host1:"
+scp_fpga_host2="scp root@$host2:"
+fpga_args="--nodelist \"$host1,$host2\""
 
 #------------------------
 # Internal test variables
 #------------------------
-logdir=$test_dir/"full-reg-test-$mode-"`date +%Y%m%d`
+logdir=$test_dir/"full-reg-test-${host1}-${host2}-"`date +%Y%m%d`
 host1_ssh=""
 host2_ssh=""
 host1_scp=""
