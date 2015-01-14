@@ -57,6 +57,7 @@ struct btrfs_transaction {
 	struct list_head pending_snapshots;
 	struct list_head ordered_operations;
 	struct list_head pending_chunks;
+	struct list_head pending_ordered;
 	struct btrfs_delayed_ref_root delayed_refs;
 	int aborted;
 };
@@ -103,6 +104,7 @@ struct btrfs_trans_handle {
 	 */
 	struct btrfs_root *root;
 	struct seq_list delayed_ref_elem;
+	struct list_head ordered;
 	struct list_head qgroup_ref_list;
 	struct list_head new_bgs;
 };
