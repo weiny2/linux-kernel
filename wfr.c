@@ -225,6 +225,12 @@ struct flag_table {
 			| WFR_CCE_STATUS_RXE_FROZE_SMASK \
 			| WFR_CCE_STATUS_TXE_FROZE_SMASK \
 			| WFR_CCE_STATUS_TXE_PIO_FROZE_SMASK)
+/* all CceStatus sub-block TXE pause bits */
+#define ALL_TXE_PAUSE (WFR_CCE_STATUS_TXE_PIO_PAUSED_SMASK \
+			| WFR_CCE_STATUS_TXE_PAUSED_SMASK \
+			| WFR_CCE_STATUS_SDMA_PAUSED_SMASK)
+/* all CceStatus sub-block RXE pause bits */
+#define ALL_RXE_PAUSE WFR_CCE_STATUS_RXE_PAUSED_SMASK
 
 /*
  * CCE Error flags.
@@ -7978,6 +7984,39 @@ static void write_uninitialized_csrs_and_memories(struct hfi_devdata *dd)
 		write_csr(dd, WFR_RCV_QP_MAP_TABLE + (8 * i), 0);
 }
 
+/*
+ * Use the ctrl_bits in CceCtrl to clear the status_bits in CceStatus.
+ */
+static void clear_cce_status(struct hfi_devdata *dd, u64 status_bits,
+				u64 ctrl_bits)
+{
+	unsigned long timeout;
+	u64 reg;
+
+	/* is the condition present? */
+	reg = read_csr(dd, WFR_CCE_STATUS);
+	if ((reg & status_bits) == 0)
+		return;
+
+	/* clear the condition */
+	write_csr(dd, WFR_CCE_CTRL, ctrl_bits);
+
+	/* wait for the condition to clear */
+	timeout = jiffies + msecs_to_jiffies(CCE_STATUS_TIMEOUT);
+	while (1) {
+		reg = read_csr(dd, WFR_CCE_STATUS);
+		if ((reg & status_bits) == 0)
+			return;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"Timeout waiting for CceStatus to clear bits 0x%llx, remaining 0x%llx\n",
+				status_bits, reg & status_bits);
+			return;
+		}
+		udelay(1);
+	}
+}
+
 /* set CCE CSRs to chip reset defaults */
 static void reset_cce_csrs(struct hfi_devdata *dd)
 {
@@ -7985,8 +8024,11 @@ static void reset_cce_csrs(struct hfi_devdata *dd)
 
 	/* WFR_CCE_REVISION read-only */
 	/* WFR_CCE_REVISION2 read-only */
-	write_csr(dd, WFR_CCE_CTRL, read_csr(dd, WFR_CCE_CTRL));
-	/* WFR_CCE_STATUS read-only */
+	/* WFR_CCE_CTRL - bits clear automatically */
+	/* WFR_CCE_STATUS read-only, use CceCtrl to clear */
+	clear_cce_status(dd, ALL_FROZE, WFR_CCE_CTRL_SPC_UNFREEZE_SMASK);
+	clear_cce_status(dd, ALL_TXE_PAUSE, WFR_CCE_CTRL_TXE_RESUME_SMASK);
+	clear_cce_status(dd, ALL_RXE_PAUSE, WFR_CCE_CTRL_RXE_RESUME_SMASK);
 	for (i = 0; i < CCE_NUM_SCRATCH; i++)
 		write_csr(dd, WFR_CCE_SCRATCH + (8 * i), 0);
 	/* WFR_CCE_ERR_STATUS read-only */
