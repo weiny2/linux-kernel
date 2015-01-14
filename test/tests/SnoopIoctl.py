@@ -27,15 +27,15 @@ def main():
     hosts = host1.get_name() + "," + host2.get_name()
 
     RegLib.test_log(0, "Making sure fm is stopped")
-    cmd = "service ifs_fm stop"
+    cmd = "service opafm stop"
     ret = host1.send_ssh(cmd, 0, run_as_root=True)
 
     ret = host1.send_ssh(path, 0, run_as_root=True)
     if ret:
         RegLib.test_fail("IOCTL test failed")
 
-    cmd = "service ifs_fm start"
-    RegLib.test_log(0, "Restarting ifs_fm")
+    cmd = "service opafm start"
+    RegLib.test_log(0, "Restarting opafm")
     ret = host1.send_ssh(cmd, 0, run_as_root=True)
 
     RegLib.test_pass("Success!")

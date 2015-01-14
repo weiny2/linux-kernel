@@ -137,30 +137,30 @@ def main():
     RegLib.test_log(5, "host1 parms: %s" %host1_parms)
     RegLib.test_log(5, "host2 parms: %s" %host2_parms)
       
-    ifs_fm_host = None
+    opafm_host = None
     
     if sm != "none":
         RegLib.test_log(0, "Trying to determine which node the fm is running on")
         for host in host1, host2:
-            active = is_sm_active(host, "ifs_fm")
+            active = is_sm_active(host, "opafm")
             if active == 0:
-                if ifs_fm_host == None:
-                    ifs_fm_host = host
+                if opafm_host == None:
+                    opafm_host = host
                 else:
-                    RegLib.test_fail("ifs_fm detected on both nodes")
+                    RegLib.test_fail("opafm detected on both nodes")
 
-        if ifs_fm_host != None:
-            RegLib.test_log(0, "Using %s as the ifs_fm host" % ifs_fm_host.get_name())
+        if opafm_host != None:
+            RegLib.test_log(0, "Using %s as the opafm host" % opafm_host.get_name())
 
             # Make sure no fm is running now
             RegLib.test_log(0, "Stopping fm on all hosts")
-            stop_sm(ifs_fm_host, "ifs_fm")
-            active = is_sm_active(host, "ifs_fm")
+            stop_sm(opafm_host, "opafm")
+            active = is_sm_active(host, "opafm")
             if active == 0:
                 RegLib.test_fail("fm is still running on host")
             RegLib.test_log(0, "fm not found to be running")
 
-            #RegLib.test_log(0, "Waiting 15 seconds for ifs_fm to quiesce")
+            #RegLib.test_log(0, "Waiting 15 seconds for opafm to quiesce")
             #time.sleep(15)
 
     # Go ahead and get the driver loaded or reloaded on both hosts
@@ -194,13 +194,13 @@ def main():
     if sm == "none":
         RegLib.test_pass("Driver loaded sm/fm not running")
 
-    if ifs_fm_host == None: #chose host1 by default
-        ifs_fm_host = host1
-    RegLib.test_log(0, "Starting ifs_fm on %s" % ifs_fm_host.get_name())
-    start_sm(ifs_fm_host, "ifs_fm")
-    active = is_sm_active(ifs_fm_host, "ifs_fm")
+    if opafm_host == None: #chose host1 by default
+        opafm_host = host1
+    RegLib.test_log(0, "Starting opafm on %s" % opafm_host.get_name())
+    start_sm(opafm_host, "opafm")
+    active = is_sm_active(opafm_host, "opafm")
     if active != 0:
-        RegLib.test_fail("Could not start ifs_fm")
+        RegLib.test_fail("Could not start opafm")
 
     # Driver loaded and sm ready now wait till links are active on both
     # nodes.

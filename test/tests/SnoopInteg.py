@@ -52,22 +52,22 @@ def main():
 
     RegLib.test_log(0, "Trying to determine sm")
 
-    ifs_fm_host = None
+    opafm_host = None
     for host in host1, host2:
         active = is_sm_active(host, "opensm")
         if active == 0:
             RegLib.test_fail("OpenSM not supported!")
 
-        active = is_sm_active(host, "ifs_fm")
+        active = is_sm_active(host, "opafm")
         if active == 0:
-            if ifs_fm_host == None:
-                ifs_fm_host = host
-                RegLib.test_log(0, "Detected ifs_fm on %s" % host.get_name())
+            if opafm_host == None:
+                opafm_host = host
+                RegLib.test_log(0, "Detected opafm on %s" % host.get_name())
             else:
-                RegLib.test_fail("ifs_fm detected on both nodes")
+                RegLib.test_fail("opafm detected on both nodes")
 
-    if ifs_fm_host == None:
-        RegLib.test_fail("ifs_fm not detected on any host")
+    if opafm_host == None:
+        RegLib.test_fail("opafm not detected on any host")
 
     cmd = pcap + " --args verbose 2>&1 > /tmp/snoop_integ.log"
 
@@ -78,7 +78,7 @@ def main():
     
     RegLib.test_log(0, "Waiting 5 seconds for Pcap procs to get started")
     time.sleep(5)
-    ret = ifs_fm_host.send_ssh("service ifs_fm sweep", False, run_as_root=True)
+    ret = opafm_host.send_ssh("service opafm sweep", False, run_as_root=True)
     if ret:
         kill_pcap(host1, host2)
         RegLib.test_fail("Could not sweep fabric")
