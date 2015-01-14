@@ -35,8 +35,8 @@
 #define _QIB_MAD_H
 
 #include <rdma/ib_pma.h>
-#include <rdma/stl_smi.h>
 #define USE_PI_LWD_TX_RX_ACTIVE 1 /* enable LWD.{Tx,Rx}Active */
+#include <rdma/stl_smi.h>
 #include <rdma/stl_port_info.h>
 #ifndef PI_LWD_TX_RX_ACTIVE_SUP	  /* header does not support it */
 #define PI_LWD_TX_RX_ACTIVE_SUP 0

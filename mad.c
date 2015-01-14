@@ -33,8 +33,6 @@
  */
 
 #include <linux/net.h>
-#include <rdma/ib_smi.h>
-#include <rdma/stl_smi.h>
 #define STL_NUM_PKEY_BLOCKS_PER_SMP (STL_SMP_DR_DATA_SIZE \
 			/ (STL_PARTITION_TABLE_BLK_SIZE * sizeof(u16)))
 
