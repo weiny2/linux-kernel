@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -65,21 +65,22 @@
  * driver features. The same set of bits are communicated to user
  * space.
  */
-#define HFI_CAP_DMA_RTAIL       (1UL <<  0)   /* Use DMA'ed RTail value */
-#define HFI_CAP_SDMA            (1UL <<  1)   /* Enable SDMA support */
-#define HFI_CAP_SDMA_AHG        (1UL <<  2)   /* Enable SDMA AHG support */
-#define HFI_CAP_EXTENDED_PSN    (1UL <<  3)   /* Enable Extended PSN support */
-#define HFI_CAP_HDRSUPP         (1UL <<  4)   /* Enable Header Suppression */
-#define HFI_CAP_ENABLE_SMA      (1UL <<  5)   /* Enable driver SM Agent */
-#define HFI_CAP_USE_DMA_HEAD    (1UL <<  6)   /* DMA Hdr Q tail vs. use CSR */
-#define HFI_CAP_MULTI_PKT_EGR   (1UL <<  7)   /* Enable multipacket Egr buffs */
-#define HFI_CAP_NODROP_RHQ_FULL (1UL <<  8)   /* Don't drop on Hdr Q full */
-#define HFI_CAP_NODROP_EGR_FULL (1UL <<  9)   /* Don't drop on EGR buffs full */
-#define HFI_CAP_TID_UNMAP       (1UL << 10)   /* Enable Expected TID caching */
-#define HFI_CAP_PRINT_UNIMPL    (1UL << 11)   /* Show for unimplemented feats */
-#define HFI_CAP_ALLOW_PERM_JKEY (1UL << 12)   /* Allow use of permissive JKEY */
-#define HFI_CAP_NO_INTEGRITY    (1UL << 13)   /* Enable ctxt integrity checks */
-#define HFI_CAP_PKEY_CHECK      (1UL << 14)   /* Enable ctxt PKey checking */
+#define HFI_CAP_DMA_RTAIL        (1UL <<  0) /* Use DMA'ed RTail value */
+#define HFI_CAP_SDMA             (1UL <<  1) /* Enable SDMA support */
+#define HFI_CAP_SDMA_AHG         (1UL <<  2) /* Enable SDMA AHG support */
+#define HFI_CAP_EXTENDED_PSN     (1UL <<  3) /* Enable Extended PSN support */
+#define HFI_CAP_HDRSUPP          (1UL <<  4) /* Enable Header Suppression */
+#define HFI_CAP_ENABLE_SMA       (1UL <<  5) /* Enable driver SM Agent */
+#define HFI_CAP_USE_DMA_HEAD     (1UL <<  6) /* DMA Hdr Q tail vs. use CSR */
+#define HFI_CAP_MULTI_PKT_EGR    (1UL <<  7) /* Enable multipacket Egr buffs */
+#define HFI_CAP_NODROP_RHQ_FULL  (1UL <<  8) /* Don't drop on Hdr Q full */
+#define HFI_CAP_NODROP_EGR_FULL  (1UL <<  9) /* Don't drop on EGR buffs full */
+#define HFI_CAP_TID_UNMAP        (1UL << 10) /* Enable Expected TID caching */
+#define HFI_CAP_PRINT_UNIMPL     (1UL << 11) /* Show for unimplemented feats */
+#define HFI_CAP_ALLOW_PERM_JKEY  (1UL << 12) /* Allow use of permissive JKEY */
+#define HFI_CAP_NO_INTEGRITY     (1UL << 13) /* Enable ctxt integrity checks */
+#define HFI_CAP_PKEY_CHECK       (1UL << 14) /* Enable ctxt PKey checking */
+#define HFI_CAP_STATIC_RATE_CTRL (1UL << 15) /* Allow PBC.StaticRateControl */
 
 #define HFI_RCVHDR_ENTSIZE_2    (1UL << 0)
 #define HFI_RCVHDR_ENTSIZE_16   (1UL << 1)
