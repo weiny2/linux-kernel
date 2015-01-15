@@ -1379,6 +1379,8 @@ void sc_group_release_update(struct send_context *sc)
 int init_pervl_scs(struct hfi_devdata *dd)
 {
 	int i;
+	u64 mask, all_vl_mask = (u64) 0x80ff; /* VLs 0-7, 15 */
+	u32 ctxt;
 
 	dd->vld[15].sc = sc_alloc(dd, SC_KERNEL, dd->node);
 	if (!dd->vld[15].sc)
@@ -1389,11 +1391,18 @@ int init_pervl_scs(struct hfi_devdata *dd)
 			goto nomem;
 	}
 	sc_enable(dd->vld[15].sc);
+	ctxt = dd->vld[15].sc->context;
+	mask = all_vl_mask & ~(1LL << 15);
+	write_kctxt_csr(dd, ctxt, WFR_SEND_CTXT_CHECK_VL, mask);
 	dd_dev_info(dd,
 		    "Using send context %d for VL15\n",
 		    dd->vld[15].sc->context);
-	for (i = 0; i < num_vls; i++)
+	for (i = 0; i < num_vls; i++) {
 		sc_enable(dd->vld[i].sc);
+		ctxt = dd->vld[i].sc->context;
+		mask = all_vl_mask & ~(1LL << i);
+		write_kctxt_csr(dd, ctxt, WFR_SEND_CTXT_CHECK_VL, mask);
+	}
 	/* default to vl0 send context for others
 	for (; i < 15; i++)
 	dd->pervl_scs[i] = dd->pervl_scs[0];*/
