@@ -1015,23 +1015,16 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 			smp->status |= IB_SMP_INVALID_FIELD;
 	}
 	lwe = be16_to_cpu(pi->link_width_downgrade.enabled);
-	/*
-	 * TODO: The STL spec and discussions indicate that LWD.E is always
-	 * supposed to be valid, even when 0.  The FM does not treat it that
-	 * way and puts the driver in a situation where it will bounce
-	 * the link.  For now, treat LWD.E == 0 is a NOP like the FM does.
-	 */
-	if (lwe) {
-		if (lwe == STL_LINK_WIDTH_RESET
-				|| lwe == STL_LINK_WIDTH_RESET_OLD) {
-			set_link_width_downgrade_enabled(ppd,
-					ppd->link_width_downgrade_supported);
-		} else if ((lwe & ~ppd->link_width_downgrade_supported) == 0) {
-			set_link_width_downgrade_enabled(ppd, lwe);
-			call_link_downgrade_policy = 1;
-		} else
-			smp->status |= IB_SMP_INVALID_FIELD;
-	}
+	/* LWD.E is always applied - 0 means "disabled" */
+	if (lwe == STL_LINK_WIDTH_RESET
+			|| lwe == STL_LINK_WIDTH_RESET_OLD) {
+		set_link_width_downgrade_enabled(ppd,
+				ppd->link_width_downgrade_supported);
+	} else if ((lwe & ~ppd->link_width_downgrade_supported) == 0) {
+		set_link_width_downgrade_enabled(ppd, lwe);
+		call_link_downgrade_policy = 1;
+	} else
+		smp->status |= IB_SMP_INVALID_FIELD;
 
 	lse = be16_to_cpu(pi->link_speed.enabled);
 	if (lse) {

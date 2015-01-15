@@ -3214,23 +3214,36 @@ void handle_verify_cap(struct work_struct *work)
 }
 
 /*
- * Compare the current active Tx and Rx values against the current enabled
- * policy.
+ * Apply the link width downgrade enabled policy against the current active
+ * link widths.
  *
- * Called when the enabled policy changes or the link width changes.
+ * Called when the enabled policy changes or the active link widths change.
  */
 void apply_link_downgrade_policy(struct qib_pportdata *ppd)
 {
+	int do_bounce = 0;
 	u16 lwde = ppd->link_width_downgrade_enabled;
 
-	/* check if either active Tx or Rx is outside the downgrade policy */
-	if ((lwde & ppd->link_width_downgrade_tx_active) == 0
+	if (lwde == 0) {
+		/* downgrade is disabled */
+
+		/* bounce if not at starting active width */
+		if ((ppd->link_width_active !=
+					ppd->link_width_downgrade_tx_active)
+				|| (ppd->link_width_active !=
+					ppd->link_width_downgrade_rx_active)) {
+			dd_dev_err(ppd->dd,
+				"Link downgrade is disabled and link has downgraded, downing link\n");
+			dd_dev_err(ppd->dd,
+				"  original 0x%x, tx active 0x%x, rx active 0x%x\n",
+				ppd->link_width_active,
+				ppd->link_width_downgrade_tx_active,
+				ppd->link_width_downgrade_rx_active);
+			do_bounce = 1;
+		}
+	} else if ((lwde & ppd->link_width_downgrade_tx_active) == 0
 		|| (lwde & ppd->link_width_downgrade_rx_active) == 0) {
-		/*
-		 * Oops, Tx or Rx is outside the enabled policy.  Bounce the
-		 * link by setting it offline.  The link will automatically
-		 * restart a poll unless something intervenes.
-		 */
+		/* Tx or Rx is outside the enabled policy */
 		dd_dev_err(ppd->dd,
 			"Link is outside of downgrade allowed, downing link\n");
 		dd_dev_err(ppd->dd,
@@ -3238,6 +3251,14 @@ void apply_link_downgrade_policy(struct qib_pportdata *ppd)
 			lwde,
 			ppd->link_width_downgrade_tx_active,
 			ppd->link_width_downgrade_rx_active);
+		do_bounce = 1;
+	}
+
+	if (do_bounce) {
+		/*
+		 * Bounce the link by setting it offline.  The link will
+		 * automatically restart a poll unless something intervenes.
+		 */
 		set_link_state(ppd, HLS_DN_OFFLINE);
 	}
 }
