@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -739,6 +739,12 @@ static int hfi_close(struct inode *inode, struct file *fp)
 		      uctxt->ctxt);
 	/* Clear the context's J_KEY */
 	dd->f_clear_ctxt_jkey(dd, uctxt->ctxt);
+	/*
+	 * Reset context integrity checks to default.
+	 * (writes to CSRs probably belong in wfr.c)
+	 */
+	write_kctxt_csr(dd, uctxt->sc->context, WFR_SEND_CTXT_CHECK_ENABLE,
+			HFI_PKT_BASE_SC_INTEGRITY);
 	sc_disable(uctxt->sc);
 	uctxt->pid = 0;
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2008 - 2012 QLogic Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -7228,6 +7228,21 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 	struct hfi_devdata *dd = rcd->dd;
 	u32 context = rcd->ctxt, max_entries;
 	int ret = 0;
+
+	if (rcd->sc) {
+		u64 reg;
+		u8 set = (rcd->sc->type == SC_USER ?
+			  HFI_CAP_IS_USET(STATIC_RATE_CTRL) :
+			  HFI_CAP_IS_KSET(STATIC_RATE_CTRL));
+		reg = read_kctxt_csr(dd, rcd->sc->context,
+				     WFR_SEND_CTXT_CHECK_ENABLE);
+		if (set)
+			reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+		else
+			reg |= WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+		write_kctxt_csr(dd, rcd->sc->context,
+				WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	}
 
 	/*
 	 * Simple allocation: we have already pre-allocated the number

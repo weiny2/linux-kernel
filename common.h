@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
  * All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
@@ -129,6 +129,7 @@
 				 HFI_CAP_NODROP_RHQ_FULL |		\
 				 HFI_CAP_NODROP_EGR_FULL |		\
 				 HFI_CAP_ALLOW_PERM_JKEY |		\
+				 HFI_CAP_STATIC_RATE_CTRL |		\
 				 HFI_CAP_PRINT_UNIMPL)
 /*
  * A set of capability bits that are "global" and are not allowed to be
@@ -152,7 +153,8 @@
 				 HFI_CAP_PKEY_CHECK |			\
 				 ((HFI_CAP_HDRSUPP |			\
 				   HFI_CAP_NODROP_RHQ_FULL |		\
-				   HFI_CAP_NODROP_EGR_FULL) <<		\
+				   HFI_CAP_NODROP_EGR_FULL |		\
+				   HFI_CAP_STATIC_RATE_CTRL) <<		\
 				  HFI_CAP_USER_SHIFT))
 /*
  * A bitmask of kernel/global capabilities that should be communicated
