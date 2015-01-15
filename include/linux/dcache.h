@@ -122,8 +122,18 @@ struct dentry {
 	void *d_fsdata;			/* fs-specific data */
 
 	struct list_head d_lru;		/* LRU list */
+#ifdef __GENKSYMS__
+	union {
+		struct list_head d_child;
+	 	struct rcu_head d_rcu;
+	} d_u;
+#else
 	struct list_head d_child;	/* child of parent list */
+#endif
 	struct list_head d_subdirs;	/* our children */
+#ifdef __GENKSYMS__
+	struct hlist_node d_alias;
+#else
 	/*
 	 * d_alias and d_rcu can share memory
 	 */
@@ -131,6 +141,7 @@ struct dentry {
 		struct hlist_node d_alias;	/* inode alias list */
 	 	struct rcu_head d_rcu;
 	} d_u;
+#endif
 };
 
 /*
