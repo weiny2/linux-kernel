@@ -644,7 +644,10 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->smsl = ibp->sm_sl & STL_PI_MASK_SMSL;
 	pi->operational_vls =
 		hfi_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
-
+	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
+		pi->partenforce_filterraw |= STL_PI_MASK_PARTITION_ENFORCE_IN;
+	if (ppd->part_enforce & HFI_PART_ENFORCE_OUT)
+		pi->partenforce_filterraw |= STL_PI_MASK_PARTITION_ENFORCE_OUT;
 	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
 	/* P_KeyViolations are counted by hardware. */
 	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
@@ -975,6 +978,10 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	}
 
 	msl = pi->smsl & STL_PI_MASK_SMSL;
+	if (pi->partenforce_filterraw & STL_PI_MASK_PARTITION_ENFORCE_IN)
+		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
+	if (pi->partenforce_filterraw & STL_PI_MASK_PARTITION_ENFORCE_OUT)
+		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
 	/* Must be a valid unicast LID address. */
 	if (smlid == 0 || smlid >= QIB_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -2122,9 +2129,10 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	/* FECN marking is only relevant for swich not HFI */
 	/*rsp->port_mark_fecn =
 		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));*/
-	/* rsp->port_rcv_constraint_errors ??? */
+	rsp->port_rcv_constraint_errors =
+		cpu_to_be64(read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
+					   CNTR_INVALID_VL));
 	/* rsp->port_rcv_switch_relay_errors is 0 for HFIs */
-	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
 
 	/* FIXME: Should this be included with the rest of the counters? */
@@ -2155,6 +2163,9 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL));
 	rsp->port_xmit_discards =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_DSCD,
+					   CNTR_INVALID_VL));
+	rsp->port_xmit_constraint_errors =
+		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_CSTR_ERR,
 					   CNTR_INVALID_VL));
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
@@ -2252,11 +2263,13 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	 * a '???' appears.
 	 */
 
-	/* port_rcv_constraint_errors ??? */
+	error_counter_summary += read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
+						CNTR_INVALID_VL);
 	/* port_rcv_switch_relay_errors is 0 for HFIs */
 	error_counter_summary += read_port_cntr(ppd, C_SW_XMIT_DSCD,
 						CNTR_INVALID_VL);
-	/* port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
+	error_counter_summary += read_port_cntr(ppd, C_SW_XMIT_CSTR_ERR,
+						CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
 						CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_DC_LINK_INTEG,
@@ -2511,7 +2524,9 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	 * a '???' appears.
 	 */
 
-	/* rsp->port_rcv_constraint_errors = ??? */
+	rsp->port_rcv_constraint_errors =
+		cpu_to_be64(read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
+					   CNTR_INVALID_VL));
 	/* port_rcv_switch_relay_errors is 0 for HFIs */
 	rsp->port_xmit_discards =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_DSCD,
@@ -2522,7 +2537,9 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	rsp->local_link_integrity_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_LINK_INTEG,
 						CNTR_INVALID_VL));
-	/* rsp->port_xmit_constraint_errors - driver (table 13-11 WFR spec) */
+	rsp->port_xmit_constraint_errors =
+		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_CSTR_ERR,
+					   CNTR_INVALID_VL));
 	rsp->excessive_buffer_overruns =
 		cpu_to_be64(read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL));
 	rsp->fm_config_errors =
@@ -2617,11 +2634,19 @@ static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
 		rsp->excessive_buffer_overrun_ei.status_and_sc |= 0x80;
 	}
 
-	/* PortXmitConstraintErrorInfo */
-	/* FIXME this error counter isn't implemented yet */
+	rsp->port_xmit_constraint_ei.status =
+		dd->err_info_xmit_constraint.status;
+	rsp->port_xmit_constraint_ei.pkey =
+		dd->err_info_xmit_constraint.pkey;
+	rsp->port_xmit_constraint_ei.slid =
+		dd->err_info_xmit_constraint.slid;
 
-	/* PortRcvConstraintErrorInfo */
-	/* FIXME this error counter isn't implemented yet */
+	rsp->port_rcv_constraint_ei.status =
+		dd->err_info_rcv_constraint.status;
+	rsp->port_rcv_constraint_ei.pkey =
+		dd->err_info_rcv_constraint.pkey;
+	rsp->port_rcv_constraint_ei.slid =
+		dd->err_info_rcv_constraint.slid;
 
 	/* PortRcvSwitchRelayErrorInfo */
 	/* FIXME this error counter isn't relevant to HFIs */
@@ -2699,12 +2724,16 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	/*if (counter_select & CS_PORT_MARK_FECN)
 		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);*/
 
-	/* ignore cs_port_rcv_constraint_errors for now */
+	if (counter_select & CS_PORT_RCV_CONSTRAINT_ERRORS)
+		write_dev_cntr(dd, C_SW_RCV_CSTR_ERR, CNTR_INVALID_VL, 0);
+
 	/* ignore cs_port_rcv_switch_relay_errors for HFIs */
 	if (counter_select & CS_PORT_XMIT_DISCARDS)
 		write_port_cntr(ppd, C_SW_XMIT_DSCD, CNTR_INVALID_VL, 0);
 
-	/* ignore cs_port_xmit_constraint_errors for now */
+	if (counter_select & CS_PORT_XMIT_CONSTRAINT_ERRORS)
+		write_dev_cntr(dd, C_SW_XMIT_CSTR_ERR, CNTR_INVALID_VL, 0);
+
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_dev_cntr(dd, C_DC_RMT_PHY_ERR, CNTR_INVALID_VL, 0);
 
@@ -2810,7 +2839,7 @@ static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
 	/* PortRcvErrorInfo */
 	if (error_info_select & ES_PORT_RCV_ERROR_INFO)
 		/* turn off status bit */
-		dd->err_info_rcvport.status_and_code &= ~0x80;
+		dd->err_info_rcvport.status_and_code &= ~STL_EI_STATUS_SMASK;
 
 	/* ExcessiverBufferOverrunInfo */
 	if (error_info_select & ES_EXCESSIVE_BUFFER_OVERRUN_INFO)
@@ -2819,11 +2848,11 @@ static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
 		write_csr(dd, WFR_RCV_ERR_INFO,
 			  WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK);
 
-	/* PortXmitConstraintErrorInfo */
-	/* FIXME this error counter isn't implemented yet */
+	if (error_info_select & ES_PORT_XMIT_CONSTRAINT_ERROR_INFO)
+		dd->err_info_xmit_constraint.status &= ~STL_EI_STATUS_SMASK;
 
-	/* PortRcvConstraintErrorInfo */
-	/* FIXME this error counter isn't implemented yet */
+	if (error_info_select & ES_PORT_RCV_CONSTRAINT_ERROR_INFO)
+		dd->err_info_rcv_constraint.status &= ~STL_EI_STATUS_SMASK;
 
 	/* PortRcvSwitchRelayErrorInfo */
 	/* FIXME this error counter isn't relevant to HFIs */
@@ -2831,12 +2860,12 @@ static int pma_set_stl_errorinfo(struct stl_pma_mad *pmp,
 	/* UncorrectableErrorInfo */
 	if (error_info_select & ES_UNCORRECTABLE_ERROR_INFO)
 		/* turn off status bit */
-		dd->err_info_uncorrectable &= ~0x80;
+		dd->err_info_uncorrectable &= ~STL_EI_STATUS_SMASK;
 
 	/* FMConfigErrorInfo */
 	if (error_info_select & ES_FM_CONFIG_ERROR_INFO)
 		/* turn off status bit */
-		dd->err_info_fmconfig &= ~0x80;
+		dd->err_info_fmconfig &= ~STL_EI_STATUS_SMASK;
 
 	return reply(pmp);
 }

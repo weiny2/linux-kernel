@@ -401,6 +401,10 @@ struct qib_sge_state;
 #define QIB_RCVCTRL_NO_EGR_DROP_ENB 0x10000
 #define QIB_RCVCTRL_NO_EGR_DROP_DIS 0x20000
 
+/* partition enforcement flags */
+#define HFI_PART_ENFORCE_IN	0x1
+#define HFI_PART_ENFORCE_OUT	0x2
+
 /*
  * These are the generic indices for requesting per-port
  * counter values via the f_portcntr function.  They
@@ -459,6 +463,18 @@ struct qib_sge_state;
 #define CNTR_INVALID_VL		-1  /* Specifies invalid VL */
 #define CNTR_MODE_W		0x0
 #define CNTR_MODE_R		0x1
+
+static inline void incr_cntr64(u64 *cntr)
+{
+	if (*cntr < (u64)-1LL)
+		(*cntr)++;
+}
+
+static inline void incr_cntr32(u32 *cntr)
+{
+	if (*cntr < (u32)-1LL)
+		(*cntr)++;
+}
 
 #define MAX_NAME_SIZE 64
 struct qib_msix_entry {
@@ -628,6 +644,8 @@ struct qib_pportdata {
 	u64 *scntrs;
 	/* we synthesize port_xmit_discards from several egress errors */
 	u64 port_xmit_discards;
+	u64 port_xmit_constraint_errors;
+	u64 port_rcv_constraint_errors;
 	/* count of 'link_err' interrupts from DC */
 	u64 link_downed;
 	/* number of times link retrained successfully */
@@ -636,6 +654,7 @@ struct qib_pportdata {
 	u16 port_ltp_crc_mode;
 	/* mgmt_allowed is also returned in 'portinfo' MADs */
 	u8 mgmt_allowed;
+	u8 part_enforce; /* partition enforcement flags */
 	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 };
 
@@ -682,6 +701,12 @@ struct err_info_rcvport {
 	u8 status_and_code;
 	u64 packet_flit1;
 	u64 packet_flit2;
+};
+
+struct err_info_constraint {
+	u8 status;
+	u16 pkey;
+	u32 slid;
 };
 
 /* device data struct now contains only "general per-device" info.
@@ -1039,6 +1064,8 @@ struct hfi_devdata {
 	struct hfi_snoop_data hfi_snoop;
 
 	struct err_info_rcvport err_info_rcvport;
+	struct err_info_constraint err_info_rcv_constraint;
+	struct err_info_constraint err_info_xmit_constraint;
 	u8 err_info_uncorrectable;
 	u8 err_info_fmconfig;
 	/*
@@ -1138,6 +1165,98 @@ static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
 	} while (read_seqretry(&dd->sc2vl_lock, seq));
 
 	return rval;
+}
+
+#define PKEY_MEMBER_MASK 0x8000
+#define PKEY_LOW_15_MASK 0x7fff
+
+/*
+ * ingress_pkey_matches_entry - return 1 if the pkey matches ent (ent
+ * being an entry from the ingress partition key table), return 0
+ * otherwise. Use the matching criteria for ingress partition keys
+ * specified in the STLv1 spec., section 9.10.14.
+ */
+static inline int ingress_pkey_matches_entry(u16 pkey, u16 ent)
+{
+	u16 mkey = pkey & PKEY_LOW_15_MASK;
+	u16 ment = ent & PKEY_LOW_15_MASK;
+
+	if (mkey == ment) {
+		/*
+		 * If pkey[15] is clear (limited partition member),
+		 * is bit 15 in the corresponding table element
+		 * clear (limited member)?
+		 */
+		if (!(pkey & PKEY_MEMBER_MASK))
+			return !!(ent & PKEY_MEMBER_MASK);
+		return 1;
+	}
+	return 0;
+}
+
+/*
+ * ingress_pkey_table_search - search the entire pkey table for
+ * an entry which matches 'pkey'. return 0 if a match is found,
+ * and 1 otherwise.
+ */
+static int ingress_pkey_table_search(struct qib_pportdata *ppd, u16 pkey)
+{
+	int i;
+
+	for (i = 0; i < WFR_MAX_PKEY_VALUES; i++) {
+		if (ingress_pkey_matches_entry(pkey, ppd->pkeys[i]))
+			return 0;
+	}
+	return 1;
+}
+
+/*
+ * ingress_pkey_table_fail - record a failure of ingress pkey validation,
+ * i.e., increment port_rcv_constraint_errors for the port, and record
+ * the 'error info' for this failure.
+ */
+static void ingress_pkey_table_fail(struct qib_pportdata *ppd, u16 pkey,
+				    u16 slid)
+{
+	struct hfi_devdata *dd = ppd->dd;
+
+	incr_cntr64(&ppd->port_rcv_constraint_errors);
+	if (!(dd->err_info_rcv_constraint.status & STL_EI_STATUS_SMASK)) {
+		dd->err_info_rcv_constraint.status |= STL_EI_STATUS_SMASK;
+		dd->err_info_rcv_constraint.slid = slid;
+		dd->err_info_rcv_constraint.pkey = pkey;
+	}
+}
+
+/*
+ * ingress_pkey_check - Return 0 if the ingress pkey is valid, return 1
+ * otherwise. Use the criterea in the STLv1 spec, section 9.10.14. idx
+ * is a hint as to the best place in the partition key table to begin
+ * searching.
+ */
+static inline int ingress_pkey_check(struct qib_pportdata *ppd, u16 pkey,
+				     u8 sc5, u8 idx, u16 slid)
+{
+	if (!(ppd->part_enforce & HFI_PART_ENFORCE_IN))
+		return 0;
+
+	/* If SC15, pkey[0:14] must be 0x7fff */
+	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
+		goto bad;
+
+	/* Is the pkey = 0x0, or 0x8000? */
+	if ((pkey & PKEY_LOW_15_MASK) == 0)
+		goto bad;
+
+	/* The most likely matching pkey has index 'idx' */
+	if (!ingress_pkey_matches_entry(pkey, ppd->pkeys[idx]))
+		/* no match - try the whole table */
+		if (!ingress_pkey_table_search(ppd, pkey))
+			return 0;
+
+bad:
+	ingress_pkey_table_fail(ppd, pkey, slid);
+	return 1;
 }
 
 /* MTU handling */

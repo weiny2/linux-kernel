@@ -272,6 +272,7 @@ int qib_ruc_check_hdr(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 {
 	__be64 guid;
 	unsigned long flags;
+	u8 sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 
 	if (qp->s_mig_state == IB_MIG_ARMED && (bth0 & IB_BTH_MIG_REQ)) {
 		if (!has_grh) {
@@ -288,8 +289,9 @@ int qib_ruc_check_hdr(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			    qp->alt_ah_attr.grh.dgid.global.interface_id))
 				goto err;
 		}
-		if (!qib_pkey_ok((u16)bth0,
-				 qib_get_pkey(ibp, qp->s_alt_pkey_index))) {
+		if (unlikely(ingress_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
+						sc5, qp->s_alt_pkey_index,
+						be16_to_cpu(hdr->lrh[3])))) {
 			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
 				      (u16)bth0,
 				      (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
@@ -320,8 +322,9 @@ int qib_ruc_check_hdr(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			    qp->remote_ah_attr.grh.dgid.global.interface_id))
 				goto err;
 		}
-		if (!qib_pkey_ok((u16)bth0,
-				 qib_get_pkey(ibp, qp->s_pkey_index))) {
+		if (unlikely(ingress_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
+						sc5, qp->s_pkey_index,
+						be16_to_cpu(hdr->lrh[3])))) {
 			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
 				      (u16)bth0,
 				      (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,

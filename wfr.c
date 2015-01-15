@@ -1484,9 +1484,25 @@ static u64 access_sw_xmit_discards(const struct cntr_entry *entry,
 static u64 access_xmit_constraint_errs(const struct cntr_entry *entry,
 				     void *context, int vl, int mode, u64 data)
 {
-	/* FIXME: Need to do the right thing here */
-	BUG_ON(vl != CNTR_INVALID_VL);
-	return 0;
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0;
+
+	return read_write_sw(ppd->dd, &ppd->port_xmit_constraint_errors,
+			     mode, data);
+}
+
+static u64 access_rcv_constraint_errs(const struct cntr_entry *entry,
+				     void *context, int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0;
+
+	return read_write_sw(ppd->dd, &ppd->port_rcv_constraint_errors,
+			     mode, data);
 }
 
 static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
@@ -1554,8 +1570,6 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			CNTR_SYNTH),
 [C_DC_FM_CFG_ERR] = DC_PERF_CNTR(DcFmCfgErr, DCC_ERR_FMCONFIG_ERR_CNT,
 			CNTR_SYNTH),
-[C_RCV_CSTR_ERR] = RXE32_DEV_CNTR_ELEM(RcvCstrErr, RCV_PKEY_MISMATCH_CNT,
-			CNTR_SYNTH),
 [C_RCV_OVF] = RXE32_DEV_CNTR_ELEM(RcvOverflow, RCV_BUF_OVFL_CNT, CNTR_SYNTH),
 [C_DC_UNC_ERR] = DC_PERF_CNTR(DcUnctblErr, DCC_ERR_UNCORRECTABLE_CNT,
 			CNTR_SYNTH),
@@ -1596,8 +1610,10 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 [C_SW_XMIT_DSCD_VL] = CNTR_ELEM("XmitDscdVl", 0, 0,
 			CNTR_SYNTH | CNTR_32BIT | CNTR_VL,
 			access_sw_xmit_discards),
-[C_XMIT_CSTR_ERR] = CNTR_ELEM("XmitCstrErr", 0, 0, CNTR_SYNTH,
+[C_SW_XMIT_CSTR_ERR] = CNTR_ELEM("XmitCstrErr", 0, 0, CNTR_SYNTH,
 			access_xmit_constraint_errs),
+[C_SW_RCV_CSTR_ERR] = CNTR_ELEM("RcvCstrErr", 0, 0, CNTR_SYNTH,
+			access_rcv_constraint_errs),
 OVERFLOW_ELEM(0),   OVERFLOW_ELEM(1),   OVERFLOW_ELEM(2),   OVERFLOW_ELEM(3),
 OVERFLOW_ELEM(4),   OVERFLOW_ELEM(5),   OVERFLOW_ELEM(6),   OVERFLOW_ELEM(7),
 OVERFLOW_ELEM(8),   OVERFLOW_ELEM(9),   OVERFLOW_ELEM(10),  OVERFLOW_ELEM(11),
@@ -2918,6 +2934,11 @@ static int lcb_to_port_ltp(int lcb_crc)
 	return port_ltp;
 }
 
+static int neigh_is_hfi(struct qib_pportdata *ppd)
+{
+	return (ppd->neighbor_type & STL_PI_MASK_NEIGH_NODE_TYPE) == 0;
+}
+
 /*
  * Our neighbor has indicated that we are allowed to act as a fabric
  * manager, so place the full management partition key in the second
@@ -3176,6 +3197,9 @@ void handle_verify_cap(struct work_struct *work)
 	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d\n",
 		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
 		ppd->mgmt_allowed);
+	if (neigh_is_hfi(ppd))
+		ppd->part_enforce =
+			HFI_PART_ENFORCE_IN | HFI_PART_ENFORCE_OUT;
 	if (ppd->mgmt_allowed)
 		add_full_mgmt_pkey(ppd);
 
@@ -8920,7 +8944,7 @@ done:
 	return ret;
 }
 
-int set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
+static int set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
 {
 	struct qib_ctxtdata *rcd;
 	unsigned sctxt;

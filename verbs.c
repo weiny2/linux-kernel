@@ -1216,11 +1216,91 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	}
 	return 0;
 }
+/*
+ * egress_pkey_matches_entry - return 1 if the pkey matches ent (ent
+ * being an entry from the ingress partition key table), return 0
+ * otherwise. Use the matching criteria for egress partition keys
+ * specified in the STLv1 spec., section 9.1l.7.
+ */
+static inline int egress_pkey_matches_entry(u16 pkey, u16 ent)
+{
+	u16 mkey = pkey & PKEY_LOW_15_MASK;
+	u16 ment = ent & PKEY_LOW_15_MASK;
+
+	if (mkey == ment) {
+		/*
+		 * If pkey[15] is set (full partition member),
+		 * is bit 15 in the corresponding table element
+		 * clear (limited member)?
+		 */
+		if (pkey & PKEY_MEMBER_MASK)
+			return !!(ent & PKEY_MEMBER_MASK);
+		return 1;
+	}
+	return 0;
+}
+
+/*
+ * egress_pkey_check - return 0 if hdr's pkey matches according to the
+ * criterea in the STLv1 spec., section 9.11.7.
+ */
+static inline int egress_pkey_check(struct qib_pportdata *ppd,
+				    struct qib_ib_header *hdr,
+				    struct qib_qp *qp)
+{
+	struct qib_other_headers *ohdr;
+	struct hfi_devdata *dd;
+	int i = 0;
+	u16 pkey;
+	u8 lnh, sc5 = qp->s_sc;
+
+	if (!(ppd->part_enforce & HFI_PART_ENFORCE_OUT))
+		return 0;
+
+	/* If SC15, pkey[0:14] must be 0x7fff */
+	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
+		goto bad;
+
+	/* locate the pkey within the headers */
+	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
+	if (lnh == QIB_LRH_GRH)
+		ohdr = &hdr->u.l.oth;
+	else
+		ohdr = &hdr->u.oth;
+
+	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+
+	/* Is the pkey = 0x0, or 0x8000? */
+	if ((pkey & PKEY_LOW_15_MASK) == 0)
+		goto bad;
+
+	/* The most likely matching pkey has index qp->s_pkey_index */
+	if (!egress_pkey_matches_entry(pkey, ppd->pkeys[qp->s_pkey_index])) {
+		/* no match - try the entire table */
+		for (; i < WFR_MAX_PKEY_VALUES; i++) {
+			if (egress_pkey_matches_entry(pkey, ppd->pkeys[i]))
+				break;
+		}
+	}
+
+	if (i < WFR_MAX_PKEY_VALUES)
+		return 0;
+bad:
+	incr_cntr64(&ppd->port_xmit_constraint_errors);
+	dd = ppd->dd;
+	if (!(dd->err_info_xmit_constraint.status & STL_EI_STATUS_SMASK)) {
+		u16 slid = be16_to_cpu(hdr->lrh[3]);
+		dd->err_info_xmit_constraint.status |= STL_EI_STATUS_SMASK;
+		dd->err_info_xmit_constraint.slid = slid;
+		dd->err_info_xmit_constraint.pkey = pkey;
+	}
+	return 1;
+}
 
 /**
  * qib_verbs_send - send a packet
  * @qp: the QP to send on
- * @hdr: the packet header
+ * @ahdr: the packet header
  * @hdrwords: the number of 32-bit words in the header
  * @ss: the SGE to send
  * @len: the length of the packet in bytes
@@ -1228,13 +1308,17 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
  * Return zero if packet is sent or queued OK.
  * Return non-zero and clear qp->s_flags QIB_S_BUSY otherwise.
  */
-int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *hdr,
+int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	u32 plen;
 	int ret;
 	u32 dwords = (len + 3) >> 2;
+
+	ret = egress_pkey_check(dd->pport, &ahdr->ibh, qp);
+	if (ret)
+		return -EINVAL;
 
 	/*
 	 * Calculate the send buffer trigger address.
@@ -1250,7 +1334,7 @@ int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *hdr,
 	if (qp->ibqp.qp_type == IB_QPT_SMI
 		|| !(dd->flags & QIB_HAS_SEND_DMA)) {
 		ret = dd->process_pio_send(
-			qp, hdr, hdrwords, ss, len, plen, dwords, 0);
+			qp, ahdr, hdrwords, ss, len, plen, dwords, 0);
 	} else {
 
 #ifdef JAG_SDMA_VERBOSITY
@@ -1259,7 +1343,7 @@ int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *hdr,
 		dd_dev_err(dd, "SDMA hdrwords = %u, len = %u\n", hdrwords, len);
 #endif
 		ret = dd->process_dma_send(
-			qp, hdr, hdrwords, ss, len, plen, dwords, 0);
+			qp, ahdr, hdrwords, ss, len, plen, dwords, 0);
 	}
 
 	return ret;

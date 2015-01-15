@@ -885,19 +885,6 @@ extern struct workqueue_struct *qib_cq_wq;
  * This must be called with s_lock held.
  */
 void qib_schedule_send(struct qib_qp *qp);
-
-static inline int qib_pkey_ok(u16 pkey1, u16 pkey2)
-{
-	u16 p1 = pkey1 & 0x7FFF;
-	u16 p2 = pkey2 & 0x7FFF;
-
-	/*
-	 * Low 15 bits must be non-zero and match, and
-	 * one of the two must be a full member.
-	 */
-	return p1 && p1 == p2 && ((__s16)pkey1 < 0 || (__s16)pkey2 < 0);
-}
-
 void qib_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 		   u32 qp1, u32 qp2, __be16 lid1, __be16 lid2);
 void qib_cap_mask_chg(struct qib_ibport *ibp);

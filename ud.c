@@ -82,19 +82,19 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	ppd = ppd_from_ibp(ibp);
 
 	if (qp->ibqp.qp_num > 1) {
-		u16 pkey1;
-		u16 pkey2;
-		u16 lid;
+		u16 pkey;
+		u16 slid;
+		u8 sc5 = ibp->sl_to_sc[ah_attr->sl];
 
-		pkey1 = qib_get_pkey(ibp, sqp->s_pkey_index);
-		pkey2 = qib_get_pkey(ibp, qp->s_pkey_index);
-		if (unlikely(!qib_pkey_ok(pkey1, pkey2))) {
-			lid = ppd->lid | (ah_attr->src_path_bits &
-					  ((1 << ppd->lmc) - 1));
-			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY, pkey1,
+		pkey = qib_get_pkey(ibp, sqp->s_pkey_index);
+		slid = ppd->lid | (ah_attr->src_path_bits &
+				   ((1 << ppd->lmc) - 1));
+		if (unlikely(ingress_pkey_check(ppd, pkey, sc5,
+						qp->s_pkey_index, slid))) {
+			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY, pkey,
 				      ah_attr->sl,
 				      sqp->ibqp.qp_num, qp->ibqp.qp_num,
-				      cpu_to_be16(lid),
+				      cpu_to_be16(slid),
 				      cpu_to_be16(ah_attr->dlid));
 			goto drop;
 		}
@@ -587,13 +587,20 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			     hdr->lrh[3] == IB_LID_PERMISSIVE))
 			goto drop;
 		if (qp->ibqp.qp_num > 1) {
-			u16 pkey1, pkey2;
+			struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+			u16 pkey, slid;
+			u8 sc5;
 
-			pkey1 = be32_to_cpu(ohdr->bth[0]);
-			pkey2 = qib_get_pkey(ibp, qp->s_pkey_index);
-			if (unlikely(!qib_pkey_ok(pkey1, pkey2))) {
+			sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
+			sc5 |= sc4_bit;
+
+			pkey = be32_to_cpu(ohdr->bth[0]);
+			slid = be16_to_cpu(hdr->lrh[3]);
+			if (unlikely(ingress_pkey_check(ppd, pkey, sc5,
+							qp->s_pkey_index,
+							slid))) {
 				qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
-					      pkey1,
+					      pkey,
 					      (be16_to_cpu(hdr->lrh[0]) >> 4) &
 						0xF,
 					      src_qp, qp->ibqp.qp_num,
