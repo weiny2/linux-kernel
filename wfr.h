@@ -408,8 +408,6 @@
 /* verify capability PHY power management bits */
 #define PWRM_BER_CONTROL	0x1
 #define PWRM_BANDWIDTH_CONTROL	0x2
-#define PWRM_SHALLOW_SLEEP	0x4
-#define PWRM_DEEP_SLEEP		0x8
 
 /* verify capability fabric CRC size bits */
 enum {
