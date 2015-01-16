@@ -55,6 +55,24 @@
 /* STL status codes */
 #define STL_PM_STATUS_REQUEST_TOO_LARGE		cpu_to_be16(0x100)
 
+/* Offline Disabled Reasons */
+/* reserved 48 */
+#define STL_LINKDOWN_REASON_DISCONNECTED                        49
+#define STL_LINKDOWN_REASON_LOCAL_MEDIA_NOT_INSTALLED           50
+#define STL_LINKDOWN_REASON_NOT_INSTALLED                       51
+#define STL_LINKDOWN_REASON_CHASSIS_CONFIG                      52
+/*reserved 53 */
+#define STL_LINKDOWN_REASON_END_TO_END_NOT_INSTALLED            54
+/* reserved 55 */
+#define STL_LINKDOWN_REASON_POWER_POLICY                        56
+#define STL_LINKDOWN_REASON_LINKSPEED_POLICY                    57
+#define STL_LINKDOWN_REASON_LINKWIDTH_POLICY                    58
+/* reserved 59 */
+#define STL_LINKDOWN_REASON_SWITCH_MGMT                         60
+#define STL_LINKDOWN_REASON_SMA_DISABLED                        61
+/* reserved 62 */
+#define STL_LINKDOWN_REASON_TRANSIENT                           63
+
 /*
  * 'struct stl_port_states' is a part of SMA query results for
  * IB_SMP_ATTR_PORT_INFO, and STL_ATTRIB_ID_PORT_STATE_INFO. For now

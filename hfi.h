@@ -578,6 +578,7 @@ struct qib_pportdata {
 	u8 neighbor_type;
 	u8 neighbor_normal;
 	u8 is_sm_config_started;
+	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
 	u8 driver_link_ready;	/* driver ready for active link */
 	u8 link_enabled;	/* link enabled? */

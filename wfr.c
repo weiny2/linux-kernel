@@ -5244,6 +5244,9 @@ static int goto_offline(struct qib_pportdata *ppd)
 				ret);
 			return -EINVAL;
 		}
+		if (ppd->offline_disabled_reason == STL_LINKDOWN_REASON_NONE)
+			ppd->offline_disabled_reason =
+			STL_LINKDOWN_REASON_TRANSIENT;
 	}
 
 	if (do_wait) {
@@ -5468,6 +5471,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 				ret = -EINVAL;
 			}
 		}
+		ppd->offline_disabled_reason = STL_LINKDOWN_REASON_NONE;
 		/*
 		 * If an error occured above, go back to offline.  The
 		 * caller may reschedule another attempt.

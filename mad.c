@@ -566,6 +566,8 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	pi->port_states.offline_reason = ppd->neighbor_normal << 4;
 	pi->port_states.offline_reason |= ppd->is_sm_config_started << 5;
+	pi->port_states.offline_reason |= ppd->offline_disabled_reason &
+						STL_PI_MASK_OFFLINE_REASON;
 
 	pi->port_states.portphysstate_portstate =
 		(dd->f_ibphys_portstate(ppd) << 4) | state;
@@ -793,6 +795,11 @@ static int set_port_states(struct qib_pportdata *ppd, struct stl_smp *smp,
 		}
 
 		set_link_state(ppd, lstate);
+		if (lstate == HLS_DN_DISABLE && (ppd->offline_disabled_reason >
+		    STL_LINKDOWN_REASON_SMA_DISABLED ||
+		    ppd->offline_disabled_reason == STL_LINKDOWN_REASON_NONE))
+			ppd->offline_disabled_reason =
+			STL_LINKDOWN_REASON_SMA_DISABLED;
 		/*
 		 * Don't send a reply if the response would be sent
 		 * through the disabled port.
@@ -1463,6 +1470,8 @@ static int __subn_get_stl_psi(struct stl_smp *smp, u32 am, u8 *data,
 
 	psi->offline_reason = ppd->neighbor_normal << 4;
 	psi->offline_reason |= ppd->is_sm_config_started << 5;
+	psi->offline_reason |= ppd->offline_disabled_reason &
+				STL_PI_MASK_OFFLINE_REASON;
 
 	psi->portphysstate_portstate =
 		(dd->f_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
