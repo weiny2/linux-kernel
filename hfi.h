@@ -1249,10 +1249,12 @@ static inline int ingress_pkey_check(struct qib_pportdata *ppd, u16 pkey,
 		goto bad;
 
 	/* The most likely matching pkey has index 'idx' */
-	if (!ingress_pkey_matches_entry(pkey, ppd->pkeys[idx]))
-		/* no match - try the whole table */
-		if (!ingress_pkey_table_search(ppd, pkey))
-			return 0;
+	if (ingress_pkey_matches_entry(pkey, ppd->pkeys[idx]))
+		return 0;
+
+	/* no match - try the whole table */
+	if (!ingress_pkey_table_search(ppd, pkey))
+		return 0;
 
 bad:
 	ingress_pkey_table_fail(ppd, pkey, slid);

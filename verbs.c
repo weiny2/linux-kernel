@@ -1257,10 +1257,6 @@ static inline int egress_pkey_check(struct qib_pportdata *ppd,
 	if (!(ppd->part_enforce & HFI_PART_ENFORCE_OUT))
 		return 0;
 
-	/* If SC15, pkey[0:14] must be 0x7fff */
-	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
-		goto bad;
-
 	/* locate the pkey within the headers */
 	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
 	if (lnh == QIB_LRH_GRH)
@@ -1269,6 +1265,11 @@ static inline int egress_pkey_check(struct qib_pportdata *ppd,
 		ohdr = &hdr->u.oth;
 
 	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+
+	/* If SC15, pkey[0:14] must be 0x7fff */
+	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
+		goto bad;
+
 
 	/* Is the pkey = 0x0, or 0x8000? */
 	if ((pkey & PKEY_LOW_15_MASK) == 0)
