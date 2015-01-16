@@ -42,6 +42,7 @@
 #include <asm/trace.h>
 #include <asm/firmware.h>
 #include <asm/plpar_wrappers.h>
+#include <asm/fadump.h>
 
 #include "pseries.h"
 
@@ -248,8 +249,18 @@ static void pSeries_lpar_hptab_clear(void)
 	}
 
 #ifdef __LITTLE_ENDIAN__
-	/* Reset exceptions to big endian */
-	if (firmware_has_feature(FW_FEATURE_SET_MODE)) {
+	/*
+	 * Reset exceptions to big endian
+	 * In fadump case, after system crash phyp preserves the memory contents
+	 * and hashtable. Hence in the second kernel it is necessary to clear
+	 * the hastable during htab_initialize() to remove old mappings.
+	 * When we do that in second kernel we already booted in LE mode
+	 * and ready to take up exception in LE mode. If we enable big endian
+	 * exception in fadump case we see system crash because it tries to run
+	 * LE interrupt code in BE mode. Hence if we are coming here as part of
+	 * fadump crash we must not enable big endian exception.
+	 */
+	if (firmware_has_feature(FW_FEATURE_SET_MODE) && !is_fadump_active()) {
 		long rc;
 
 		rc = pseries_big_endian_exceptions();
