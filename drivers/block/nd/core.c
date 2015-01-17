@@ -86,6 +86,7 @@ void ndio_del_claim(struct nd_io_claim *ndio_claim)
 	ndio = ndio_claim->parent;
 	holder = ndio_claim->holder;
 
+	dev_dbg(holder, "%s: drop %s\n", __func__, dev_name(ndio->dev));
 	spin_lock(&ndio->lock);
 	list_del(&ndio_claim->list);
 	spin_unlock(&ndio->lock);

@@ -25,6 +25,7 @@ static void nd_btt_release(struct device *dev)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 
+	dev_dbg(dev, "%s\n", __func__);
 	WARN_ON(nd_btt->backing_dev);
 	ndio_del_claim(nd_btt->ndio_claim);
 	ida_simple_remove(&btt_ida, nd_btt->id);
@@ -143,8 +144,10 @@ static void nd_btt_ndio_notify_remove(struct nd_io_claim *ndio_claim)
 	 */
 	if (nd_btt->dev.driver)
 		nd_device_unregister(&nd_btt->dev, ND_ASYNC);
-	else
+	else {
 		ndio_del_claim(ndio_claim);
+		nd_btt->ndio_claim = NULL;
+	}
 }
 
 static ssize_t __backing_dev_store(struct device *dev,
