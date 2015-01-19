@@ -240,6 +240,19 @@ enum port_info_field_masks {
 	OPA_PI_MASK_MTU_CAP                       = 0x0F,
 };
 
+struct opa_port_states {
+	u8     reserved;
+	u8     offline_reason;            /* 2 res,  6 bits */
+	u8     reserved2;
+	u8     portphysstate_portstate;   /* 4 bits, 4 bits */
+};
+
+struct opa_port_state_info {
+	struct opa_port_states port_states;
+	u16 link_width_downgrade_tx_active;
+	u16 link_width_downgrade_rx_active;
+};
+
 struct opa_port_info {
 	__be32 lid;
 	__be32 flow_control_mask;
@@ -253,12 +266,7 @@ struct opa_port_info {
 		u8     arb_low_cap;
 	} vl;
 
-	struct {
-		u8     reserved;
-		u8     offline_reason;            /* 4 res,  4 bits */
-		u8     unsleepstate_downdefstate; /* 4 bits, 4 bits */
-		u8     portphysstate_portstate;   /* 4 bits, 4 bits */
-	} port_states;
+	struct opa_port_states  port_states;
 	u8     port_phys_conf;                    /* 4 res, 4 bits */
 	u8     collectivemask_multicastmask;      /* 2 res, 3, 3 */
 	u8     mkeyprotect_lmc;                   /* 2 bits, 2 res, 4 bits */
