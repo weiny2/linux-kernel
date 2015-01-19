@@ -4301,7 +4301,7 @@ static void read_last_local_state(struct hfi_devdata *dd, u32 *lls)
 
 static void read_last_remote_state(struct hfi_devdata *dd, u32 *lrs)
 {
-	read_8051_config(dd, LAST_LOCAL_STATE_COMPLETE, GENERAL_CONFIG, lrs);
+	read_8051_config(dd, LAST_REMOTE_STATE_COMPLETE, GENERAL_CONFIG, lrs);
 }
 
 static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
@@ -5186,9 +5186,8 @@ static int goto_offline(struct qib_pportdata *ppd)
 		read_last_local_state(dd, &last_local_state);
 		read_last_remote_state(dd, &last_remote_state);
 		dd_dev_err(dd,
-			"LNI failure reason: local 0x%x, remote 0x%x\n",
-			(last_local_state >> 8) & 0xff,
-			(last_remote_state >> 8) & 0xff);
+			"LNI failure last states: local 0x%08x, remote 0x%08x\n",
+			last_local_state, last_remote_state);
 	}
 
 	/* the active link width (downgrade) is 0 on link down */
