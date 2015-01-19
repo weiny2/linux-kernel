@@ -1452,7 +1452,6 @@ static int subn_get_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 
 	/* FIXME make sure that this default state matches */
 	pi->port_states.offline_reason = 0;
-	pi->port_states.unsleepstate_downdefstate = (get_linkdowndefaultstate(ppd) ? 1 : 2);
 
 	/*
 	 * Return virtual Port States in STL mode
@@ -1765,31 +1764,6 @@ static int subn_set_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 			vpi->link_speed.enabled = pi->link_speed.enabled;
 		} else
 			smp->status |= IB_SMP_INVALID_FIELD;
-	}
-
-	/* Set link down default state. */
-	/* Again make this virtual.  Only IB PortInfo controls the actual port
-	 * states */
-	switch (pi->port_states.unsleepstate_downdefstate & OPA_PI_MASK_DOWNDEF_STATE) {
-	case 0: /* NOP */
-		break;
-	case 1: /* SLEEP */
-	/*
-		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					IB_LINKINITCMD_SLEEP);
-					*/
-		break;
-	case 2: /* POLL */
-	/*
-		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT,
-					IB_LINKINITCMD_POLL);
-					*/
-		break;
-	default:
-		printk(KERN_WARNING PFX
-			"SubnSet(OPA_PortInfo) Default state invalid 0x%x\n",
-			pi->port_states.unsleepstate_downdefstate & OPA_PI_MASK_DOWNDEF_STATE);
-		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
 	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT) >> 6;
@@ -2520,7 +2494,8 @@ static int subn_get_stl_psi(struct opa_smp *smp, struct ib_device *ibdev,
 	struct opa_port_info *vpi = &virtual_stl[port-1].port_info;
 	u32 num_ports = (be32_to_cpu(smp->attr_mod) & 0xff000000) >> 24;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0x000000ff;
-	u8 *p = opa_get_smp_data(smp);
+	struct opa_port_state_info *psi =
+		(struct opa_port_state_info *)opa_get_smp_data(smp);
 
 	if (wfr_strict_am_processing) {
 		if (num_ports != 1 || port_num != port) {
@@ -2528,10 +2503,12 @@ static int subn_get_stl_psi(struct opa_smp *smp, struct ib_device *ibdev,
 			return reply_stl(smp);
 		}
 	}
-
-	memcpy(p, &vpi->port_states, sizeof(vpi->port_states));
-
-	resp_len += sizeof(vpi->port_states);
+	psi->port_states = vpi->port_states;
+	psi->link_width_downgrade_rx_active =
+		 vpi->link_width_downgrade.rx_active;
+	psi->link_width_downgrade_tx_active =
+		 vpi->link_width_downgrade.tx_active;
+	*resp_len += sizeof(*psi);
 
 	return reply_stl(smp);
 }
