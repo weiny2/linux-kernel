@@ -319,9 +319,9 @@ static int __subn_get_stl_nodeinfo(struct stl_smp *smp, u32 am, u8 *data,
 	minrev = dd->minrev;
 	ni->revision = cpu_to_be32((majrev << 16) | minrev);
 	ni->local_port_num = port;
-	ni->vendor_id[0] = WFR_SRC_OUI_1;
-	ni->vendor_id[1] = WFR_SRC_OUI_2;
-	ni->vendor_id[2] = WFR_SRC_OUI_3;
+	ni->vendor_id[0] = dd->oui1;
+	ni->vendor_id[1] = dd->oui2;
+	ni->vendor_id[2] = dd->oui3;
 
 	if (resp_len)
 		*resp_len += sizeof(*ni);
@@ -357,9 +357,9 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	minrev = dd->minrev;
 	nip->revision = cpu_to_be32((majrev << 16) | minrev);
 	nip->local_port_num = port;
-	nip->vendor_id[0] = QIB_SRC_OUI_1;
-	nip->vendor_id[1] = QIB_SRC_OUI_2;
-	nip->vendor_id[2] = QIB_SRC_OUI_3;
+	nip->vendor_id[0] = dd->oui1;
+	nip->vendor_id[1] = dd->oui2;
+	nip->vendor_id[2] = dd->oui3;
 
 	return reply(smp);
 }

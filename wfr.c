@@ -9485,9 +9485,20 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	init_lcb_access(dd);
 	read_guid(dd);
 
-	/* GUID is now stored in big endian by the function above, swap it */
+	/*
+	 * GUID is now stored in big endian by the function above, swap it.
+	 * TODO:
+	 * Despite the multiple uses here there are more uses of the GUID in big
+	 * endian format, mostly in the mad layer. At some point we should
+	 * convert to host byte order and convert to network when we want to
+	 * stuff it into a packet.
+	 */
 	snprintf(dd->serial, SERIAL_MAX, "0x%08llx\n",
 		 be64_to_cpu(dd->base_guid) & 0xFFFFFF);
+
+	dd->oui1 = be64_to_cpu(dd->base_guid) >> 56 & 0xFF;
+	dd->oui2 = be64_to_cpu(dd->base_guid) >> 48 & 0xFF;
+	dd->oui3 = be64_to_cpu(dd->base_guid) >> 40 & 0xFF;
 
 	ret = load_firmware(dd); /* asymmetric with dispose_firmware() */
 	if (ret)

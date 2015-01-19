@@ -1457,7 +1457,7 @@ static int qib_query_device(struct ib_device *ibdev,
 
 	props->page_size_cap = PAGE_SIZE;
 	props->vendor_id =
-		QIB_SRC_OUI_1 << 16 | QIB_SRC_OUI_2 << 8 | QIB_SRC_OUI_3;
+		dd->oui1 << 16 | dd->oui2 << 8 | dd->oui3;
 	props->vendor_part_id = dd->pcidev->device;
 	props->hw_ver = dd->minrev;
 	props->sys_image_guid = ib_qib_sys_image_guid;

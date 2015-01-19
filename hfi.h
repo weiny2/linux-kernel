@@ -1080,6 +1080,12 @@ struct hfi_devdata {
 				u32 plen, u32 dwords, u64 pbc);
 	void (*pio_inline_send)(struct hfi_devdata *dd, struct pio_buf *pbuf,
 				u64 pbc, const void *from, size_t count);
+
+	/* OUI comes from the HW. Used everywhere as 3 separate bytes. */
+	u8 oui1;
+	u8 oui2;
+	u8 oui3;
+
 };
 
 /* f_put_tid types */
