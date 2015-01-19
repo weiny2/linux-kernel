@@ -54,7 +54,7 @@ uint kdeth_qp;
 module_param_named(kdeth_qp, kdeth_qp, uint, S_IRUGO);
 MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
 
-uint num_vls = 4;
+uint num_vls = 8;
 module_param(num_vls, uint, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 
@@ -9383,9 +9383,9 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	}
 	/* insure num_vls isn't larger than number of sdma engines */
 	if (HFI_CAP_IS_KSET(SDMA) && num_vls > dd->chip_sdma_engines) {
-		num_vls = 4;
 		dd_dev_err(dd, "num_vls %u too large, using 4 VLs\n",
 				num_vls);
+		num_vls = 4;
 		ppd->vls_supported = IB_VL_VL0_3;
 		ppd->vls_operational = ppd->vls_supported;
 	}
