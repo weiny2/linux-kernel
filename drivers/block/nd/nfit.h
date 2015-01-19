@@ -113,7 +113,6 @@ struct nfit_spa_old {
         __le32 proximity_domain;
         __le64 spa_base;
         __le64 spa_length;
-        __le64 mem_attr;
 } __packed;
 
 /**
