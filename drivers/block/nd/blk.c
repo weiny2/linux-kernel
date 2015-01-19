@@ -25,14 +25,10 @@
 #define CL_SHIFT		6
 
 enum {
-	/* FIXME: should be (1 << 48)-1, once Simics is updated to match NFIT 0.8s2 */
-	BCW_OFFSET_MASK		= (1UL << 37)-1,
-	/* FIXME: should be 48, once Simics is updated to match NFIT 0.8s2 */
-	BCW_LEN_SHIFT		= 37,
-	/* FIXME: already correct with NFIT 0.8s */
+	BCW_OFFSET_MASK		= (1UL << 48)-1,
+	BCW_LEN_SHIFT		= 48,
 	BCW_LEN_MASK		= (1UL << 8) - 1,
-	/* FIXME: should be 56 once Simics is updated to match NFIT 0.8s2 */
-	BCW_CMD_SHIFT		= 45,
+	BCW_CMD_SHIFT		= 56,
 };
 
 struct block_window {
@@ -338,7 +334,7 @@ static void __exit ndbw_exit(void)
 
 struct block_window 	*bw;
 #define NUM_BW	 	256
-static phys_addr_t	bw_apt_phys 	= 0xf008000000;
+static phys_addr_t	bw_apt_phys	= 0xf000a00000;
 static phys_addr_t	bw_ctl_phys 	= 0xf000800000;
 static void		*bw_apt_virt;
 static u64 		*bw_ctl_virt;
