@@ -1,7 +1,7 @@
 #ifndef _PIO_H
 #define _PIO_H
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013, 2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -149,7 +149,8 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd);
 int init_send_contexts(struct hfi_devdata *dd);
 int init_credit_return(struct hfi_devdata *dd);
 int init_pervl_scs(struct hfi_devdata *dd);
-struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa);
+struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
+			      uint hdrqentsize, int numa);
 void sc_free(struct send_context *sc);
 int sc_enable(struct send_context *sc);
 void sc_disable(struct send_context *sc);

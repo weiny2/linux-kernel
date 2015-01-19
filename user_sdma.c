@@ -43,6 +43,7 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/mmu_context.h>
+#include <linux/module.h>
 
 #include "hfi.h"
 #include "sdma.h"
@@ -59,6 +60,10 @@
  * a bit easier to decode).
  */
 #define _hfi_inline inline
+
+static uint hfi_sdma_comp_ring_size = 128;
+module_param_named(sdma_comp_size, hfi_sdma_comp_ring_size, uint, S_IRUGO);
+MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 128");
 
 /* The maximum number of Data io vectors per message/request */
 #define MAX_VECTORS_PER_REQ 8
@@ -335,8 +340,7 @@ static void activate_packet_queue(struct iowait *wait, int reason)
 	wake_up(&wait->wait_dma);
 };
 
-int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp,
-			       u16 size)
+int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
 {
 	int ret = 0;
 	unsigned memsize;
@@ -351,7 +355,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp,
 		goto done;
 	}
 
-	if (!size) {
+	if (!hfi_sdma_comp_ring_size) {
 		ret = -EINVAL;
 		goto done;
 	}
@@ -366,12 +370,12 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp,
 		ret = -ENOMEM;
 		goto done;
 	}
-	memsize = sizeof(*pq->reqs) * size;
+	memsize = sizeof(*pq->reqs) * hfi_sdma_comp_ring_size;
 	pq->reqs = kmalloc(memsize, GFP_KERNEL);
 	if (!pq->reqs) {
 		dd_dev_err(dd,
-			   "[%u:%u] Failed to allocate SDMA request queue\n",
-			   uctxt->ctxt, subctxt_fp(fp));
+			   "[%u:%u] Failed to allocate SDMA request queue (%u)\n",
+			   uctxt->ctxt, subctxt_fp(fp), memsize);
 		ret = -ENOMEM;
 		goto done;
 	}
@@ -379,7 +383,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp,
 	pq->dd = dd;
 	pq->ctxt = uctxt->ctxt;
 	pq->subctxt = subctxt_fp(fp);
-	pq->n_max_reqs = size;
+	pq->n_max_reqs = hfi_sdma_comp_ring_size;
 	pq->state = SDMA_PKT_Q_INACTIVE;
 	atomic_set(&pq->n_reqs, 0);
 	atomic64_set(&pq->npkts, 0);
@@ -414,7 +418,8 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp,
 		goto done;
 	}
 
-	memsize = ALIGN(sizeof(*cq->comps) * size, PAGE_SIZE);
+	memsize = ALIGN(sizeof(*cq->comps) * hfi_sdma_comp_ring_size,
+			PAGE_SIZE);
 	cq->comps = vmalloc_user(memsize);
 	if (!cq->comps) {
 		dd_dev_err(dd,
@@ -423,7 +428,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp,
 		ret = -ENOMEM;
 		goto done;
 	}
-	cq->nentries = size;
+	cq->nentries = hfi_sdma_comp_ring_size;
 	user_sdma_comp_fp(fp) = cq;
 
 #if 0
