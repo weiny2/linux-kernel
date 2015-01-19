@@ -48,7 +48,7 @@
  * The major version changes when data structures change in an incompatible
  * way. The driver must be the same for initialization to succeed.
  */
-#define HFI_USER_SWMAJOR 3
+#define HFI_USER_SWMAJOR 4
 
 /*
  * Minor version differences are always compatible
@@ -103,18 +103,17 @@
 /* User commands. */
 #define HFI_CMD_ASSIGN_CTXT     1	/* allocate HCA and context */
 #define HFI_CMD_CTXT_INFO       2	/* find out what resources we got */
-#define HFI_CMD_CTXT_SETUP      3
-#define HFI_CMD_USER_INFO       4	/* set up userspace */
-#define HFI_CMD_TID_UPDATE      5	/* update expected TID entries */
-#define HFI_CMD_TID_FREE        6	/* free expected TID entries */
-#define HFI_CMD_CREDIT_UPD      7	/* force an update of PIO credit */
-#define HFI_CMD_SDMA_STATUS_UPD 8       /* force update of SDMA status ring */
+#define HFI_CMD_USER_INFO       3	/* set up userspace */
+#define HFI_CMD_TID_UPDATE      4	/* update expected TID entries */
+#define HFI_CMD_TID_FREE        5	/* free expected TID entries */
+#define HFI_CMD_CREDIT_UPD      6	/* force an update of PIO credit */
+#define HFI_CMD_SDMA_STATUS_UPD 7       /* force update of SDMA status ring */
 
-#define HFI_CMD_RECV_CTRL       9	/* control receipt of packets */
-#define HFI_CMD_POLL_TYPE       10	/* set the kind of polling we want */
-#define HFI_CMD_ACK_EVENT       11	/* ack & clear user status bits */
-#define HFI_CMD_SET_PKEY        12      /* set context's pkey */
-#define HFI_CMD_CTXT_RESET      13      /* reset context's HW send context */
+#define HFI_CMD_RECV_CTRL       8	/* control receipt of packets */
+#define HFI_CMD_POLL_TYPE       9	/* set the kind of polling we want */
+#define HFI_CMD_ACK_EVENT       10	/* ack & clear user status bits */
+#define HFI_CMD_SET_PKEY        11      /* set context's pkey */
+#define HFI_CMD_CTXT_RESET      12      /* reset context's HW send context */
 /* separate EPROM commands from normal PSM commands */
 #define HFI_CMD_EP_INFO         64      /* read EPROM device ID */
 #define HFI_CMD_EP_ERASE_CHIP   65      /* erase whole EPROM */
@@ -197,6 +196,8 @@ struct hfi_user_info {
 };
 
 struct hfi_ctxt_info {
+	__u64 runtime_flags;    /* chip/drv runtime flags (HFI_CAP_*) */
+	__u32 rcvegr_size;      /* size of each eager buffer */
 	__u16 num_active;       /* number of active units */
 	__u16 unit;             /* unit (chip) assigned to caller */
 	__u16 ctxt;             /* ctxt on unit assigned to caller */
@@ -206,14 +207,10 @@ struct hfi_ctxt_info {
 	__u16 numa_node;        /* NUMA node of the assigned device */
 	__u16 rec_cpu;          /* cpu # for affinity (ffff if none) */
 	__u16 send_ctxt;        /* send context in use by this user context */
-};
-
-struct hfi_ctxt_setup {
 	__u16 egrtids;          /* number of RcvArray entries for Eager Rcvs */
 	__u16 rcvhdrq_cnt;      /* number of RcvHdrQ entries */
 	__u16 rcvhdrq_entsize;  /* size (in bytes) for each RcvHdrQ entry */
 	__u16 sdma_ring_size;   /* number of entries in SDMA request ring */
-	__u32 rcvegr_size;      /* size of Eager buffers */
 };
 
 struct hfi_tid_info {
@@ -273,8 +270,6 @@ struct hfi_status {
  * to have matching offsets
  */
 struct hfi_base_info {
-	/* per-chip and other runtime features bitmap (HFI_RUNTIME_*) */
-	__u64 runtime_flags;
 	/* version of hardware, for feature checking. */
 	__u32 hw_version;
 	/* version of software, for feature checking. */
