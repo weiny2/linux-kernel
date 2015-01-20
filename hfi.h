@@ -656,6 +656,7 @@ struct qib_pportdata {
 	u8 mgmt_allowed;
 	u8 part_enforce; /* partition enforcement flags */
 	u8 link_quality; /* part of portstatus, datacounters PMA queries */
+	u8 pending_active_reregister;
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */

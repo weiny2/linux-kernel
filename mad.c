@@ -1113,6 +1113,10 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 		}
 	}
 
+	/* queue CLIENT_REREGISTER event for transition to Active */
+	if (clientrereg)
+		ppd->pending_active_reregister = 1;
+
 	/*
 	 * Do the port state change now that the other link parameters
 	 * have been set.
@@ -1123,11 +1127,6 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
 	if (ret)
 		return ret;
-
-	if (clientrereg) {
-		event.event = IB_EVENT_CLIENT_REREGISTER;
-		ib_dispatch_event(&event);
-	}
 
 	ret = __subn_get_stl_portinfo(smp, am, data, ibdev, port, resp_len);
 

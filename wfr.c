@@ -5234,6 +5234,7 @@ static const char *link_state_name(u32 state)
 int set_link_state(struct qib_pportdata *ppd, u32 state)
 {
 	struct hfi_devdata *dd = ppd->dd;
+	struct ib_event event = {.device = NULL};
 	int ret1, ret = 0;
 
 	mutex_lock(&ppd->hls_lock);
@@ -5246,8 +5247,10 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 	 * link state is neither of (IB_PORT_ARMED, IB_PORT_ACTIVE), then
 	 * reset is_sm_config_started to 0.
 	 */
-	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE))
+	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE)) {
 		ppd->is_sm_config_started = 0;
+		ppd->pending_active_reregister = 0;
+	}
 
 	if (state == HLS_DN_DOWNDEF)
 		state = dd->link_default;
@@ -5440,7 +5443,17 @@ unexpected:
 	ret = -EINVAL;
 
 done:
+	if (!ret && (state == HLS_UP_ACTIVE) && ppd->pending_active_reregister) {
+		event.device = &dd->verbs_dev.ibdev;
+		event.element.port_num = ppd->port;
+		event.event = IB_EVENT_CLIENT_REREGISTER;
+		ppd->pending_active_reregister = 0;
+	}
 	mutex_unlock(&ppd->hls_lock);
+
+	if (event.device)
+		ib_dispatch_event(&event);
+
 	return ret;
 }
 
