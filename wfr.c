@@ -3309,10 +3309,14 @@ void handle_verify_cap(struct work_struct *work)
 	ppd->neighbor_guid =
 		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
 	ppd->neighbor_type =
-		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE);
-	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d\n",
+		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
+		DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
+	ppd->neighbor_fm_security =
+		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
+		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
+	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
 		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
-		ppd->mgmt_allowed);
+		ppd->mgmt_allowed, ppd->neighbor_fm_security);
 	if (neigh_is_hfi(ppd))
 		ppd->part_enforce =
 			HFI_PART_ENFORCE_IN | HFI_PART_ENFORCE_OUT;

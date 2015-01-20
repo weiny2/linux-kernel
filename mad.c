@@ -650,9 +650,11 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	pi->neigh_node_guid = ppd->neighbor_guid;
 	pi->port_neigh_mode =
-		ppd->neighbor_type & STL_PI_MASK_NEIGH_NODE_TYPE;
-	if (ppd->mgmt_allowed)
-		pi->port_neigh_mode |= STL_PI_MASK_NEIGH_MGMT_ALLOWED;
+		(ppd->neighbor_type & STL_PI_MASK_NEIGH_NODE_TYPE) |
+		(ppd->mgmt_allowed ? STL_PI_MASK_NEIGH_MGMT_ALLOWED : 0) |
+		(ppd->neighbor_fm_security ?
+			STL_PI_MASK_NEIGH_FW_AUTH_BYPASS : 0);
+
 	if ((pi->port_neigh_mode & STL_PI_MASK_NEIGH_NODE_TYPE) == 1)
 		credit_rate = 0;
 	else

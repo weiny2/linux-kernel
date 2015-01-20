@@ -577,6 +577,7 @@ struct qib_pportdata {
 	/* type of neighbor node */
 	u8 neighbor_type;
 	u8 neighbor_normal;
+	u8 neighbor_fm_security; /* 1 if firmware checking is disabled */
 	u8 is_sm_config_started;
 	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
