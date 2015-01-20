@@ -47,7 +47,7 @@ void __wrap_iounmap(volatile void __iomem *addr)
 	struct nfit_test_resource *nfit_res;
 
 	spin_lock(&nfit_test_lock);
-	nfit_res = nfit_test_lookup((resource_size_t) addr);
+	nfit_res = nfit_test_lookup((unsigned long) addr);
 	spin_unlock(&nfit_test_lock);
 	if (nfit_res)
 		return;
