@@ -355,7 +355,7 @@ static int __init ndbw_wrapper_init(void)
 	pr_info("nd_blk: module loaded via wrapper\n");
 
 	/* map block aperture memory */
-	res = request_mem_region_exclusive(bw_apt_phys, bw_size, "nd_blk");
+	res = request_mem_region(bw_apt_phys, bw_size, "nd_blk");
 	if (!res)
 		return -EBUSY;
 
@@ -366,7 +366,7 @@ static int __init ndbw_wrapper_init(void)
 	}
 
 	/* map block control memory */
-	res = request_mem_region_exclusive(bw_ctl_phys, bw_size, "nd_blk");
+	res = request_mem_region(bw_ctl_phys, bw_size, "nd_blk");
 	if (!res) {
 		err = -EBUSY;
 		goto err_ctl_reserve;
