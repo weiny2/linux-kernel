@@ -333,6 +333,7 @@
 #define VERIFY_CAP_LOCAL_PHY	     0x07
 #define VERIFY_CAP_LOCAL_FABRIC	     0x08
 #define VERIFY_CAP_LOCAL_LINK_WIDTH  0x09
+#define LOCAL_DEVICE_ID		     0x0a
 #define REMOTE_LNI_INFO              0x0d
 #define MISC_STATUS		     0x0e
 #define VERIFY_CAP_REMOTE_PHY	     0x0f
@@ -341,6 +342,7 @@
 #define LAST_LOCAL_STATE_COMPLETE    0x12
 #define LAST_REMOTE_STATE_COMPLETE   0x13
 #define LINK_QUALITY_INFO            0x14
+#define REMOTE_DEVICE_ID	     0x15
 
 /* Lane ID for general configuration registers */
 #define GENERAL_CONFIG 4
@@ -396,6 +398,18 @@
 #define LOCAL_FLAG_BITS_MASK 0xff
 #define REMOTE_TX_RATE_SHIFT 16
 #define REMOTE_TX_RATE_MASK 0xff
+
+/* LOCAL_DEVICE_ID fields */
+#define LOCAL_DEVICE_REV_SHIFT 0
+#define LOCAL_DEVICE_REV_MASK 0xff
+#define LOCAL_DEVICE_ID_SHIFT 8
+#define LOCAL_DEVICE_ID_MASK 0xffff
+
+/* REMOTE_DEVICE_ID fields */
+#define REMOTE_DEVICE_REV_SHIFT 0
+#define REMOTE_DEVICE_REV_MASK 0xff
+#define REMOTE_DEVICE_ID_SHIFT 8
+#define REMOTE_DEVICE_ID_MASK 0xffff
 
 /* mask, shift for reading 'mgmt_enabled' value from REMOTE_LNI_INFO field */
 #define MGMT_ALLOWED_SHIFT 23

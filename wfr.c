@@ -1100,6 +1100,8 @@ static void read_vc_remote_link_width(struct hfi_devdata *dd,
 				u8 *remote_tx_rate, u16 *link_widths);
 static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 				u16 *link_widths);
+static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
+				u8 *device_rev);
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
 static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
@@ -3050,8 +3052,10 @@ void handle_verify_cap(struct work_struct *work)
 	u16 link_widths;
 	u16 crc_mask;
 	u16 crc_val;
+	u16 device_id;
 	u8 crc_sizes;
 	u8 remote_tx_rate;
+	u8 device_rev;
 
 	set_link_state(ppd, HLS_VERIFY_CAP);
 
@@ -3072,6 +3076,7 @@ void handle_verify_cap(struct work_struct *work)
 	read_vc_remote_phy(dd, &power_management, &continious);
 	read_vc_remote_fabric(dd, &vau, &z, &vcu, &vl15buf, &crc_sizes);
 	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
+	read_remote_device_id(dd, &device_id, &device_rev);
 	/*
 	 * And the 'MgmtAllowed' information, which is exchanged during
 	 * LNI, is also be available at this point.
@@ -3086,6 +3091,8 @@ void handle_verify_cap(struct work_struct *work)
 		(int)vau, (int)z, (int)vcu, (int)vl15buf, (int)crc_sizes);
 	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
 		(u32)remote_tx_rate, (u32)link_widths);
+	dd_dev_info(dd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
+		(u32)device_id, (u32)device_rev);
 	if (disable_bcc) {
 		/*
 		 * TODO:
@@ -3331,7 +3338,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		if (err & WFR_UNKNOWN_FRAME) {
 			/* informational only */
 			dd_dev_info(dd,
-				"Unkown frame idle message received\n");
+				"Unknown frame idle message received\n");
 			err &= ~(u64)WFR_UNKNOWN_FRAME;
 		}
 		if (err & FAILED_LNI) {
@@ -4239,6 +4246,27 @@ static int write_vc_local_link_width(struct hfi_devdata *dd,
 		     frame);
 }
 
+static int write_local_device_id(struct hfi_devdata *dd, u16 device_id,
+					u8 device_rev)
+{
+	u32 frame;
+
+	frame = ((u32)device_id << LOCAL_DEVICE_ID_SHIFT)
+		| ((u32)device_rev << LOCAL_DEVICE_REV_SHIFT);
+	return load_8051_config(dd, LOCAL_DEVICE_ID, GENERAL_CONFIG, frame);
+}
+
+static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
+					u8 *device_rev)
+{
+	u32 frame;
+
+	read_8051_config(dd, REMOTE_DEVICE_ID, GENERAL_CONFIG, &frame);
+	*device_id = (frame >> REMOTE_DEVICE_ID_SHIFT) & REMOTE_DEVICE_ID_MASK;
+	*device_rev = (frame >> REMOTE_DEVICE_REV_SHIFT)
+			& REMOTE_DEVICE_REV_MASK;
+}
+
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b)
 {
 	u32 frame;
@@ -4634,6 +4662,11 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 	 */
 	ret = write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
 		     stl_to_vc_link_widths(ppd->link_width_enabled));
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
+
+	/* let peer know who we are */
+	ret = write_local_device_id(dd, dd->pcidev->device, dd->minrev);
 	if (ret == WFR_HCMD_SUCCESS)
 		return 0;
 
