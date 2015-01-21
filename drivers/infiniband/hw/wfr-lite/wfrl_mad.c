@@ -1522,9 +1522,7 @@ static int subn_get_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 	/* pip->vlstallcnt_hoqlife; */
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
-	pi->localphy_overrun_errors =
-		(get_phyerrthreshold(ppd) << 4) |
-		get_overrunthreshold(ppd);
+
 	/* pip->max_credit_hint; */
 #if 0
 	/* no longer used in STL */
@@ -1629,7 +1627,7 @@ static int subn_set_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 	u8 msl;
 	u16 lse, lwe;
 	u16 lstate;
-	int ret, ore;
+	int ret;
 	u32 port_num = be32_to_cpu(smp->attr_mod) & 0xff;
 	u32 num_ports = be32_to_cpu(smp->attr_mod) >> 24;
 	struct opa_port_info *vpi;
@@ -1807,21 +1805,6 @@ static int subn_set_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 
 	if (pi->qkey_violations == 0)
 		ibp->qkey_violations = 0;
-
-	ore = pi->localphy_overrun_errors;
-	if (set_phyerrthreshold(ppd, (ore >> 4) & 0xF)) {
-		printk(KERN_WARNING PFX
-			"SubnSet(OPA_PortInfo) phyerrthreshold invalid 0x%x\n",
-			(ore >> 4) & 0xF);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	}
-
-	if (set_overrunthreshold(ppd, (ore & 0xF))) {
-		printk(KERN_WARNING PFX
-			"SubnSet(OPA_PortInfo) overrunthreshold invalid 0x%x\n",
-			ore & 0xF);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	}
 
 	ibp->subnet_timeout = pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
 
