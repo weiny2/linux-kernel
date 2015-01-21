@@ -574,6 +574,7 @@ void check_fifos(unsigned long opaque);
 void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
 	u8 neigh_reason, u8 rem_reason);
 int set_link_state(struct qib_pportdata *, u32 state);
+int port_ltp_to_cap(int port_ltp);
 void handle_verify_cap(struct work_struct *work);
 void handle_freeze(struct work_struct *work);
 void handle_link_up(struct work_struct *work);

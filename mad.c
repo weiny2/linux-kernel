@@ -850,6 +850,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	u8 ls_old, ls_new, ps_new;
 	u8 vls;
 	u8 msl;
+	u8 crc_enabled;
 	u16 lse, lwe, mtu;
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
@@ -1038,6 +1039,13 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		ibp->qkey_violations = 0;
 
 	ibp->subnet_timeout = pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
+
+	crc_enabled = be16_to_cpu(pi->port_ltp_crc_mode);
+	crc_enabled >>= 4;
+	crc_enabled &= 0xf;
+
+	if (crc_enabled != 0)
+		ppd->port_crc_mode_enabled = port_ltp_to_cap(crc_enabled);
 
 	/* TODO: other modes */
 	ppd->is_active_optimize_enabled =

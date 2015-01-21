@@ -663,6 +663,8 @@ struct qib_pportdata {
 	u64 link_up;
 	/* port_ltp_crc_mode is returned in 'portinfo' MADs */
 	u16 port_ltp_crc_mode;
+	/* port_crc_mode_enabled is the crc we support */
+	u8 port_crc_mode_enabled;
 	/* mgmt_allowed is also returned in 'portinfo' MADs */
 	u8 mgmt_allowed;
 	u8 part_enforce; /* partition enforcement flags */

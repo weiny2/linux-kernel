@@ -2989,20 +2989,37 @@ static int cap_to_port_ltp(int cap)
 }
 
 /*
+ * Convert an STL Port LTP mask to capability mask
+ */
+int port_ltp_to_cap(int port_ltp)
+{
+	int cap_mask = 0;
+
+	if (port_ltp & PORT_LTP_CRC_MODE_14)
+		cap_mask |= CAP_CRC_14B;
+	if (port_ltp & PORT_LTP_CRC_MODE_48)
+		cap_mask |= CAP_CRC_48B;
+	if (port_ltp & PORT_LTP_CRC_MODE_PER_LANE)
+		cap_mask |= CAP_CRC_12B_16B_PER_LANE;
+
+	return cap_mask;
+}
+
+/*
  * Convert a single DC LCB CRC mode to an STL Port LTP mask.
  */
 static int lcb_to_port_ltp(int lcb_crc)
 {
 	int port_ltp = 0;
 
-	if (lcb_crc & LCB_CRC_16B)
-		port_ltp = PORT_LTP_CRC_MODE_16;
-	else if (lcb_crc & LCB_CRC_14B)
-		port_ltp = PORT_LTP_CRC_MODE_14;
-	else if (lcb_crc & LCB_CRC_48B)
-		port_ltp = PORT_LTP_CRC_MODE_48;
-	else if (lcb_crc & LCB_CRC_12B_16B_PER_LANE)
+	if (lcb_crc == LCB_CRC_12B_16B_PER_LANE)
 		port_ltp = PORT_LTP_CRC_MODE_PER_LANE;
+	else if (lcb_crc == LCB_CRC_48B)
+		port_ltp = PORT_LTP_CRC_MODE_48;
+	else if (lcb_crc == LCB_CRC_14B)
+		port_ltp = PORT_LTP_CRC_MODE_14;
+	else
+		port_ltp = PORT_LTP_CRC_MODE_16;
 
 	return port_ltp;
 }
@@ -3166,7 +3183,7 @@ void handle_verify_cap(struct work_struct *work)
 	u16 crc_mask;
 	u16 crc_val;
 	u16 device_id;
-	u8 crc_sizes;
+	u8 partner_supported_crc;
 	u8 remote_tx_rate;
 	u8 device_rev;
 
@@ -3187,7 +3204,7 @@ void handle_verify_cap(struct work_struct *work)
 	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
 	 */
 	read_vc_remote_phy(dd, &power_management, &continious);
-	read_vc_remote_fabric(dd, &vau, &z, &vcu, &vl15buf, &crc_sizes);
+	read_vc_remote_fabric(dd, &vau, &z, &vcu, &vl15buf, &partner_supported_crc);
 	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
 	read_remote_device_id(dd, &device_id, &device_rev);
 	/*
@@ -3201,7 +3218,7 @@ void handle_verify_cap(struct work_struct *work)
 		(int)power_management, (int)continious);
 	dd_dev_info(dd,
 		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
-		(int)vau, (int)z, (int)vcu, (int)vl15buf, (int)crc_sizes);
+		(int)vau, (int)z, (int)vcu, (int)vl15buf, (int)partner_supported_crc);
 	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
 		(u32)remote_tx_rate, (u32)link_widths);
 	dd_dev_info(dd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
@@ -3237,7 +3254,8 @@ void handle_verify_cap(struct work_struct *work)
 	set_up_vl15(dd, vau, vl15buf);
 
 	/* set up the LCB CRC mode */
-	crc_mask = link_crc_mask & crc_sizes;
+	crc_mask = ppd->port_crc_mode_enabled & partner_supported_crc;
+
 	/* order is important: use the lowest bit in common */
 	if (crc_mask & CAP_CRC_14B)
 		crc_val = LCB_CRC_14B;
@@ -3247,9 +3265,10 @@ void handle_verify_cap(struct work_struct *work)
 		crc_val = LCB_CRC_12B_16B_PER_LANE;
 	else
 		crc_val = LCB_CRC_16B;
+
 	dd_dev_info(dd, "Final LCB CRC mode: %d\n", (int)crc_val);
 	write_csr(dd, DC_LCB_CFG_CRC_MODE,
-		(u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+		  (u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 
 	/* set (14b only) or clear sideband credit */
 	reg = read_csr(dd, WFR_SEND_CM_CTRL);
@@ -3282,10 +3301,10 @@ void handle_verify_cap(struct work_struct *work)
 	 * what's in the link_crc_mask, crc_sizes, and crc_val
 	 * variables. Convert these here.
 	 */
-	ppd->port_ltp_crc_mode =
-		cap_to_port_ltp(link_crc_mask) << 8;
+	ppd->port_ltp_crc_mode = cap_to_port_ltp(partner_supported_crc) << 8;
 		/* supported crc modes */
-	ppd->port_ltp_crc_mode |= cap_to_port_ltp(crc_sizes) << 4;
+	ppd->port_ltp_crc_mode |=
+		cap_to_port_ltp(ppd->port_crc_mode_enabled) << 4;
 		/* enabled crc modes */
 	ppd->port_ltp_crc_mode |= lcb_to_port_ltp(crc_val);
 		/* active crc mode */
@@ -4837,7 +4856,7 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 
 	/* z=1 in the next call: AU of 0 is not supported by the hardware */
 	ret = write_vc_local_fabric(dd, dd->vau, 1, dd->vcu, dd->vl15_init,
-				    link_crc_mask);
+				    ppd->port_crc_mode_enabled);
 	if (ret != WFR_HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
@@ -9488,6 +9507,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd->lstate = IB_PORT_DOWN;
 		ppd->overrun_threshold = 0x4;
 		ppd->phy_error_threshold = 0xf;
+		ppd->port_crc_mode_enabled = link_crc_mask;
 		/* start in offline */
 		ppd->host_link_state = HLS_DN_OFFLINE;
 	}
