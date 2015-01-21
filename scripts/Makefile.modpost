@@ -82,8 +82,6 @@ modpost = scripts/mod/modpost                    \
       -N $(firstword $(wildcard $(dir $(MODVERDIR))/Module.supported \
              $(if $(KBUILD_EXTMOD),,$(srctree)/Module.supported) /dev/null)))
 
-$(info MODVERDIR: $(MODVERDIR), objtree: $(objtree), srctree: $(srctree))
-$(shell pwd >&2)
 # We can go over command line length here, so be careful.
 quiet_cmd_modpost = MODPOST $(words $(filter-out vmlinux FORCE, $^)) modules
       cmd_modpost = $(MODLISTCMD) | sed 's/\.ko$$/.o/' | $(modpost) -s -T -
