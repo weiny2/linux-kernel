@@ -2012,7 +2012,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int vfi;
-	u64 tmp;
+	u64 tmp, tmp2;
 
 	response_data_size = sizeof(struct stl_port_status_rsp) +
 				num_vls * sizeof(struct _vls_pctrs);
@@ -2089,9 +2089,14 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
 					  CNTR_INVALID_VL));
-	rsp->local_link_integrity_errors =
-		cpu_to_be64(read_dev_cntr(dd, C_DC_LINK_INTEG,
-					  CNTR_INVALID_VL));
+	tmp = read_dev_cntr(dd, C_DC_RX_REPLAY, CNTR_INVALID_VL);
+	tmp2 = tmp + read_dev_cntr(dd, C_DC_TX_REPLAY, CNTR_INVALID_VL);
+	if (tmp2 < tmp) {
+		/* overflow/wrapped */
+		rsp->local_link_integrity_errors = (u64) ~0;
+	} else {
+		rsp->local_link_integrity_errors = cpu_to_be64(tmp);
+	}
 	rsp->port_rcv_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL));
 	rsp->excessive_buffer_overruns =
@@ -2191,7 +2196,9 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 						CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
 						CNTR_INVALID_VL);
-	error_counter_summary += read_dev_cntr(dd, C_DC_LINK_INTEG,
+	error_counter_summary += read_dev_cntr(dd, C_DC_TX_REPLAY,
+						CNTR_INVALID_VL);
+	error_counter_summary += read_dev_cntr(dd, C_DC_RX_REPLAY,
 						CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_DC_RCV_ERR,
 						CNTR_INVALID_VL);
@@ -2386,7 +2393,7 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	struct qib_pportdata *ppd;
 	struct _vls_ectrs *vlinfo;
 	unsigned long vl;
-	u64 port_mask, tmp;
+	u64 port_mask, tmp, tmp2;
 	u32 vl_select_mask;
 	int vfi;
 
@@ -2453,9 +2460,14 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	rsp->port_rcv_remote_physical_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RMT_PHY_ERR,
 						CNTR_INVALID_VL));
-	rsp->local_link_integrity_errors =
-		cpu_to_be64(read_dev_cntr(dd, C_DC_LINK_INTEG,
-						CNTR_INVALID_VL));
+	tmp = read_dev_cntr(dd, C_DC_RX_REPLAY, CNTR_INVALID_VL);
+	tmp2 = tmp + read_dev_cntr(dd, C_DC_TX_REPLAY, CNTR_INVALID_VL);
+	if (tmp2 < tmp) {
+		/* overflow/wrapped */
+		rsp->local_link_integrity_errors = (u64) ~0;
+	} else {
+		rsp->local_link_integrity_errors = cpu_to_be64(tmp);
+	}
 	rsp->port_xmit_constraint_errors =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_CSTR_ERR,
 					   CNTR_INVALID_VL));
@@ -2656,8 +2668,10 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_dev_cntr(dd, C_DC_RMT_PHY_ERR, CNTR_INVALID_VL, 0);
 
-	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS)
-		write_dev_cntr(dd, C_DC_LINK_INTEG, CNTR_INVALID_VL, 0);
+	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS) {
+		write_dev_cntr(dd, C_DC_TX_REPLAY, CNTR_INVALID_VL, 0);
+		write_dev_cntr(dd, C_DC_RX_REPLAY, CNTR_INVALID_VL, 0);
+	}
 
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		write_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL, 0);
