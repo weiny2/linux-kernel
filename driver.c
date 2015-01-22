@@ -531,11 +531,6 @@ unlock:
 		u32 opcode;
 		void *ebuf = NULL;
 		__be32 *bth = NULL;
-		u8 sl, sc5 = be16_to_cpu(rhdr->lrh[0] >> 4) & 0xf;
-
-		if (rhf_dc_info(packet->rhf))
-			sc5 |= 0x10;
-		sl = ibp->sc_to_sl[sc5];
 
 		if (rhf_use_egr_bfr(packet->rhf))
 			ebuf = packet->ebuf;
@@ -553,16 +548,20 @@ unlock:
 		opcode = be32_to_cpu(bth[0]) >> 24;
 		opcode &= 0xff;
 
-		/*
-		 * TODO: later h/w revisions should recognize the CNP_OPCODE.
-		 * When that changes, CNP_OPCODE will not be handled in an
-		 * error path.
-		 */
 		if (opcode == CNP_OPCODE) {
+			/*
+			 * Only in pre-B0 h/w is the CNP_OPCODE handled
+			 * via this code path (errata 291394).
+			 */
 			struct qib_qp *qp = NULL;
 			u32 lqpn, rqpn;
 			u16 rlid;
-			u8 svc_type;
+			u8 svc_type, sl, sc5;
+
+			sc5  = be16_to_cpu(rhdr->lrh[0] >> 4) & 0xf;
+			if (rhf_dc_info(packet->rhf))
+				sc5 |= 0x10;
+			sl = ibp->sc_to_sl[sc5];
 
 			lqpn = be32_to_cpu(bth[1]) & QIB_QPN_MASK;
 			qp = qib_lookup_qpn(ibp, lqpn);
@@ -583,6 +582,10 @@ unlock:
 			default:
 				goto drop;
 			}
+			/* drop qp->refcount, wake waiters if it's 0 */
+			if (atomic_dec_and_test(&qp->refcount))
+				wake_up(&qp->wait);
+
 			process_becn(ppd, sl, rlid, lqpn, rqpn, svc_type);
 		}
 

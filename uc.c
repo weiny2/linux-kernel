@@ -255,7 +255,7 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	u32 pmtu = qp->pmtu;
 	struct ib_reth *reth;
 	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
-	int is_fecn, ret;
+	int is_becn, is_fecn, ret;
 	struct ib_grh *grh = NULL;
 
 	/* Check for GRH */
@@ -272,8 +272,24 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	if (qib_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
 		return;
 
+	is_becn = (be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT)
+		& QIB_BECN_MASK;
 	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
 		& QIB_FECN_MASK;
+
+	if (is_becn) {
+		struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+		u32 rqpn, lqpn;
+		u16 rlid = be16_to_cpu(hdr->lrh[3]);
+		u8 sl, sc5;
+		lqpn = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
+		rqpn = qp->remote_qpn;
+
+		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+		sl = ibp->sc_to_sl[sc5];
+
+		process_becn(ppd, sl, rlid, lqpn, rqpn, IB_CC_SVCTYPE_UC);
+	}
 
 	if (is_fecn) {
 		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);

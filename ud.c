@@ -532,7 +532,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
 	int sc4_bit = (!!(rcv_flags & QIB_SC4_BIT)) << 4;
 	u8 sc;
-	int is_fecn, is_mcast;
+	int is_becn, is_fecn, is_mcast;
 	struct ib_grh *grh = NULL;
 
 	/* Check for GRH */
@@ -549,16 +549,35 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	dlid = be16_to_cpu(hdr->lrh[1]);
 	is_mcast = (dlid > QIB_MULTICAST_LID_BASE) &&
 			(dlid != QIB_PERMISSIVE_LID);
+	is_becn = (be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT)
+		& QIB_BECN_MASK;
 	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
 		& QIB_FECN_MASK;
 
+	if (is_becn) {
+		/*
+		 * In pre-B0 h/w the CNP_OPCODE is handled via an
+		 * error path (errata 291394).
+		 */
+		struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+		u32 lqpn =  be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
+		u8 sl, sc5;
+
+		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
+		sc5 |= sc4_bit;
+		sl = ibp->sc_to_sl[sc5];
+
+		process_becn(ppd, sl, 0, lqpn, 0, IB_CC_SVCTYPE_UD);
+	}
+
 	/*
-	 * We don't return a CNP in response to a CNP, and so you might
-	 * expect a check for the CNP opcode here. However, that'd be
-	 * pointless, since packets with the CNP opcode are delivered
-	 * as 'error packets' to context 0.
+	 * The opcode is in the low byte when its in network order
+	 * (top byte when in host order).
 	 */
-	if (!is_mcast && is_fecn) {
+	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	opcode &= 0xff;
+
+	if (!is_mcast && (opcode != CNP_OPCODE) && is_fecn) {
 		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 		u16 slid = be16_to_cpu(hdr->lrh[3]);
 		u8 sc5;
@@ -648,11 +667,6 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 
 	}
 
-	/*
-	 * The opcode is in the low byte when its in network order
-	 * (top byte when in host order).
-	 */
-	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	if (qp->ibqp.qp_num > 1 &&
 	    opcode == IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE) {
 		wc.ex.imm_data = ohdr->u.ud.imm_data;
