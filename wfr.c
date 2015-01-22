@@ -233,13 +233,6 @@ struct flag_table {
 /* all CceStatus sub-block RXE pause bits */
 #define ALL_RXE_PAUSE WFR_CCE_STATUS_RXE_PAUSED_SMASK
 
-
-/*
- * Bit positions in ASIC_QSFP* registers for qsfp devices
- */
-#define  _WFR_GPIO_SDA_NUM 1
-#define  _WFR_GPIO_SCL_NUM 0
-
 /*
  * CCE Error flags.
  */

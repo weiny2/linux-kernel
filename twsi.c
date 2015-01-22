@@ -93,7 +93,7 @@ static void scl_out(struct hfi_devdata *dd, u8 bit)
 
 	udelay(1);
 
-	mask = 1UL << dd->gpio_scl_num;
+	mask = 1UL << _WFR_GPIO_SCL_NUM;
 
 	/* SCL is meant to be bare-drain, so never set "OUT", just DIR */
 	dd->f_gpio_mod(dd, 0, bit ? 0 : mask, mask);
@@ -123,7 +123,7 @@ static void sda_out(struct hfi_devdata *dd, u8 bit)
 {
 	u32 mask;
 
-	mask = 1UL << dd->gpio_sda_num;
+	mask = 1UL << _WFR_GPIO_SDA_NUM;
 
 	/* SDA is meant to be bare-drain, so never set "OUT", just DIR */
 	dd->f_gpio_mod(dd, 0, bit ? 0 : mask, mask);
@@ -134,17 +134,15 @@ static void sda_out(struct hfi_devdata *dd, u8 bit)
 
 static u8 sda_in(struct hfi_devdata *dd, int wait)
 {
-	int bnum;
 	u32 read_val, mask;
 
-	bnum = dd->gpio_sda_num;
-	mask = (1UL << bnum);
+	mask = (1UL << _WFR_GPIO_SDA_NUM);
 	/* SDA is meant to be bare-drain, so never set "OUT", just DIR */
 	dd->f_gpio_mod(dd, 0, 0, mask);
 	read_val = dd->f_gpio_mod(dd, 0, 0, 0);
 	if (wait)
 		i2c_wait_for_writes(dd);
-	return (read_val & mask) >> bnum;
+	return (read_val & mask) >> _WFR_GPIO_SDA_NUM;
 }
 
 /**
@@ -270,7 +268,7 @@ int qib_twsi_reset(struct hfi_devdata *dd)
 	/* Both SCL and SDA should be high. If not, there
 	 * is something wrong.
 	 */
-	mask = (1UL << dd->gpio_scl_num) | (1UL << dd->gpio_sda_num);
+	mask = (1UL << _WFR_GPIO_SCL_NUM) | (1UL << _WFR_GPIO_SDA_NUM);
 
 	/*
 	 * Force pins to desired innocuous state.

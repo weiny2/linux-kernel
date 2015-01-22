@@ -130,6 +130,7 @@
 				  HFI_CAP_USE_DMA_HEAD |		\
 				  HFI_CAP_EXTENDED_PSN |		\
 				  HFI_CAP_PRINT_UNIMPL |		\
+				 HFI_CAP_QSFP_ENABLED |			\
 				  HFI_CAP_NO_INTEGRITY |		\
 				  HFI_CAP_PKEY_CHECK) <<		\
 				 HFI_CAP_USER_SHIFT)
