@@ -1853,7 +1853,7 @@ static void log_cca_event(struct qib_pportdata *ppd, u8 sl, u32 rlid,
 {
 	struct stl_hfi_cong_log_event_internal *cc_event;
 
-	if (sl >= STL_MAX_SLS)
+	if (sl >= OPA_MAX_SLS)
 		return;
 
 	spin_lock(&ppd->cc_log_lock);
@@ -1884,7 +1884,7 @@ void process_becn(struct qib_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 	unsigned long nsec;
 	struct cc_state *cc_state;
 
-	if (sl >= STL_MAX_SLS)
+	if (sl >= OPA_MAX_SLS)
 		return;
 
 	cca_timer = &ppd->cca_timer[sl];

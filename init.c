@@ -400,7 +400,7 @@ void set_link_ipg(struct qib_pportdata *ppd)
 		 */
 		return;
 
-	for (i = 0; i < STL_MAX_SLS; i++) {
+	for (i = 0; i < OPA_MAX_SLS; i++) {
 		u16 ccti = ppd->cca_timer[i].ccti;
 
 		if (ccti > max_ccti)
@@ -415,19 +415,19 @@ void set_link_ipg(struct qib_pportdata *ppd)
 	shift = (cce & 0xc000) >> 14;
 	mult = (cce & 0x3fff);
 
-	if (link_speed == STL_LINK_SPEED_25G)
+	if (link_speed == OPA_LINK_SPEED_25G)
 		pkt_egress_rate = 25000;
-	else /* assume STL_LINK_SPEED_12_5G */
+	else /* assume OPA_LINK_SPEED_12_5G */
 		pkt_egress_rate = 12500;
 
 	switch (link_width) {
-	case STL_LINK_WIDTH_4X:
+	case OPA_LINK_WIDTH_4X:
 		pkt_egress_rate *= 4;
 		break;
-	case STL_LINK_WIDTH_3X:
+	case OPA_LINK_WIDTH_3X:
 		pkt_egress_rate *= 3;
 		break;
-	case STL_LINK_WIDTH_2X:
+	case OPA_LINK_WIDTH_2X:
 		pkt_egress_rate *= 2;
 		break;
 	default:
@@ -547,7 +547,7 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 
 	spin_lock_init(&ppd->cca_timer_lock);
 
-	for (i = 0; i < STL_MAX_SLS; i++) {
+	for (i = 0; i < OPA_MAX_SLS; i++) {
 		hrtimer_init(&ppd->cca_timer[i].hrtimer, CLOCK_MONOTONIC,
 			     HRTIMER_MODE_REL);
 		ppd->cca_timer[i].ppd = ppd;
@@ -1462,7 +1462,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 		if (ppd->statusp)
 			*ppd->statusp &= ~HFI_STATUS_CHIP_PRESENT;
 
-		for (i = 0; i < STL_MAX_SLS; i++)
+		for (i = 0; i < OPA_MAX_SLS; i++)
 			hrtimer_cancel(&ppd->cca_timer[i].hrtimer);
 
 		spin_lock(&ppd->cc_state_lock);

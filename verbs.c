@@ -1497,9 +1497,9 @@ static inline u16 stl_speed_to_ib(u16 in)
 {
 	u16 out = 0;
 
-	if (in & STL_LINK_SPEED_25G)
+	if (in & OPA_LINK_SPEED_25G)
 		out |= IB_SPEED_EDR;
-	if (in & STL_LINK_SPEED_12_5G)
+	if (in & OPA_LINK_SPEED_12_5G)
 		out |= IB_SPEED_QDR;
 
 	BUG_ON(!out);
@@ -1514,13 +1514,13 @@ static inline u16 stl_speed_to_ib(u16 in)
 static inline u16 stl_width_to_ib(u16 in)
 {
 	switch (in) {
-	case STL_LINK_WIDTH_1X:
+	case OPA_LINK_WIDTH_1X:
 	/* map 2x and 3x to 1x as they don't exist in IB */
-	case STL_LINK_WIDTH_2X:
-	case STL_LINK_WIDTH_3X:
+	case OPA_LINK_WIDTH_2X:
+	case OPA_LINK_WIDTH_3X:
 		return IB_WIDTH_1X;
 	default: /* link down or unknown, return our largest width */
-	case STL_LINK_WIDTH_4X:
+	case OPA_LINK_WIDTH_4X:
 		return IB_WIDTH_4X;
 	}
 }
@@ -1746,7 +1746,7 @@ int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	if (ah_attr->static_rate != IB_RATE_PORT_CURRENT &&
 	    stl_rate_to_mbps(ah_attr->static_rate) < 0)
 		goto bail;
-	if (ah_attr->sl >= STL_MAX_SLS)
+	if (ah_attr->sl >= OPA_MAX_SLS)
 		goto bail;
 	/* test the mapping for validity */
 	ibp = to_iport(ibdev, ah_attr->port_num);

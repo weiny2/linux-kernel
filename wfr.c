@@ -2998,7 +2998,7 @@ static int lcb_to_port_ltp(int lcb_crc)
 
 static int neigh_is_hfi(struct qib_pportdata *ppd)
 {
-	return (ppd->neighbor_type & STL_PI_MASK_NEIGH_NODE_TYPE) == 0;
+	return (ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) == 0;
 }
 
 /*
@@ -3027,15 +3027,15 @@ static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
 static u16 link_width_to_bits(struct hfi_devdata *dd, u16 width)
 {
 	switch (width) {
-	case 1: return STL_LINK_WIDTH_1X;
-	case 2: return STL_LINK_WIDTH_2X;
-	case 3: return STL_LINK_WIDTH_3X;
+	case 1: return OPA_LINK_WIDTH_1X;
+	case 2: return OPA_LINK_WIDTH_2X;
+	case 3: return OPA_LINK_WIDTH_3X;
 	default:
 		/* NOTE: 0 in simulation */
 		dd_dev_info(dd, "%s: invalid width %d, using 4\n",
 			__func__, width);
 		/* fall through */
-	case 4: return STL_LINK_WIDTH_4X;
+	case 4: return OPA_LINK_WIDTH_4X;
 	}
 }
 
@@ -3253,14 +3253,14 @@ void handle_verify_cap(struct work_struct *work)
 	/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
 	switch (remote_tx_rate) {
 	case 0:
-		ppd->link_speed_active = STL_LINK_SPEED_12_5G;
+		ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
 		break;
 	default:
 		dd_dev_err(dd, "%s: unexpected remote tx rate %d, using 25Gb\n",
 			__func__, (int)remote_tx_rate);
 		/* fall through */
 	case 1:
-		ppd->link_speed_active = STL_LINK_SPEED_25G;
+		ppd->link_speed_active = OPA_LINK_SPEED_25G;
 		break;
 	}
 
@@ -4718,7 +4718,7 @@ int init_loopback(struct hfi_devdata *dd)
 }
 
 /*
- * Translate from the STL_LINK_WIDTH handed to us by the FM to bits
+ * Translate from the OPA_LINK_WIDTH handed to us by the FM to bits
  * used in the Verify Capability link width attribute.
  */
 static u16 stl_to_vc_link_widths(u16 stl_widths)
@@ -4730,10 +4730,10 @@ static u16 stl_to_vc_link_widths(u16 stl_widths)
 		u16 from;
 		u16 to;
 	} stl_link_xlate[] = {
-		{ STL_LINK_WIDTH_1X, 1 << (1-1)  },
-		{ STL_LINK_WIDTH_2X, 1 << (2-1)  },
-		{ STL_LINK_WIDTH_3X, 1 << (3-1)  },
-		{ STL_LINK_WIDTH_4X, 1 << (4-1)  },
+		{ OPA_LINK_WIDTH_1X, 1 << (1-1)  },
+		{ OPA_LINK_WIDTH_2X, 1 << (2-1)  },
+		{ OPA_LINK_WIDTH_3X, 1 << (3-1)  },
+		{ OPA_LINK_WIDTH_4X, 1 << (4-1)  },
 	};
 
 	for (i = 0; i < ARRAY_SIZE(stl_link_xlate); i++) {
@@ -4762,7 +4762,7 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 		goto set_local_link_attributes_fail;
 
 	/* set the max rate to the fastest enabled */
-	if (ppd->link_speed_enabled & STL_LINK_SPEED_25G)
+	if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
 		max_rate = 1;
 	else
 		max_rate = 0;
@@ -5287,9 +5287,9 @@ static int goto_offline(struct qib_pportdata *ppd)
 				ret);
 			return -EINVAL;
 		}
-		if (ppd->offline_disabled_reason == STL_LINKDOWN_REASON_NONE)
+		if (ppd->offline_disabled_reason == OPA_LINKDOWN_REASON_NONE)
 			ppd->offline_disabled_reason =
-			STL_LINKDOWN_REASON_TRANSIENT;
+			OPA_LINKDOWN_REASON_TRANSIENT;
 	}
 
 	if (do_wait) {
@@ -5514,7 +5514,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 				ret = -EINVAL;
 			}
 		}
-		ppd->offline_disabled_reason = STL_LINKDOWN_REASON_NONE;
+		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
 		/*
 		 * If an error occured above, go back to offline.  The
 		 * caller may reschedule another attempt.
@@ -6050,8 +6050,8 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	 */
 	int any_shared_changing, this_shared_changing;
 	struct buffer_control cur_bc;
-	u8 changing[STL_MAX_VLS];
-	u8 lowering_dedicated[STL_MAX_VLS];
+	u8 changing[OPA_MAX_VLS];
+	u8 lowering_dedicated[OPA_MAX_VLS];
 	u16 cur_total;
 	u32 new_total = 0;
 	const u64 all_mask =
@@ -6070,7 +6070,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 
 
 	/* find the new total credits, do sanity check on unused VLs */
-	for (i = 0; i < STL_MAX_VLS; i++) {
+	for (i = 0; i < OPA_MAX_VLS; i++) {
 		if (valid_vl(i)) {
 			new_total += be16_to_cpu(new_bc->vl[i].dedicated);
 			continue;
@@ -6237,7 +6237,7 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 	case FM_TBL_VL_PREEMPT_ELEMS:
 		size = 256;
 		/* STL specifies 128 elements, of 2 bytes each */
-		get_vlarb_preempt(ppd->dd, STL_MAX_VLS, t);
+		get_vlarb_preempt(ppd->dd, OPA_MAX_VLS, t);
 		break;
 	case FM_TBL_VL_PREEMPT_MATRIX:
 		size = 256;
@@ -9323,8 +9323,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		qib_init_pportdata(pdev, ppd, dd, 0, 1);
 		/* DC supports 4 link widths */
 		ppd->link_width_supported =
-			STL_LINK_WIDTH_1X | STL_LINK_WIDTH_2X |
-			STL_LINK_WIDTH_3X | STL_LINK_WIDTH_4X;
+			OPA_LINK_WIDTH_1X | OPA_LINK_WIDTH_2X |
+			OPA_LINK_WIDTH_3X | OPA_LINK_WIDTH_4X;
 		ppd->link_width_downgrade_supported =
 					ppd->link_width_supported;
 		/* start out enabling all supported values */
@@ -9468,15 +9468,15 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 				& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_MASK;
 	if ((reg & 0x1) == 0)	/* full speed */
 		dd->pport->link_speed_supported =
-			STL_LINK_SPEED_25G | STL_LINK_SPEED_12_5G;
+			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
 	else			/* half speed */
-		dd->pport->link_speed_supported = STL_LINK_SPEED_12_5G;
+		dd->pport->link_speed_supported = OPA_LINK_SPEED_12_5G;
 	dd->pport->link_speed_enabled = dd->pport->link_speed_supported;
 	/* give a reasonable active value, will be set on link up */
-	if (dd->pport->link_speed_supported & STL_LINK_SPEED_25G)
-		dd->pport->link_speed_active = STL_LINK_SPEED_25G;
+	if (dd->pport->link_speed_supported & OPA_LINK_SPEED_25G)
+		dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
 	else
-		dd->pport->link_speed_active = STL_LINK_SPEED_12_5G;
+		dd->pport->link_speed_active = OPA_LINK_SPEED_12_5G;
 
 	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
 	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
@@ -9490,7 +9490,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			ppd->link_width_enabled =
 			ppd->link_width_downgrade_supported =
 			ppd->link_width_downgrade_enabled =
-				STL_LINK_WIDTH_1X;
+				OPA_LINK_WIDTH_1X;
 	}
 	/* insure num_vls isn't larger than number of sdma engines */
 	if (HFI_CAP_IS_KSET(SDMA) && num_vls > dd->chip_sdma_engines) {

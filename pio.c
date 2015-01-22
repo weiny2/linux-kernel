@@ -595,7 +595,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	release_credits = DIV_ROUND_UP(
 			(type == SC_ACK ?
 				(SCC_ACK_CREDITS * WFR_PIO_BLOCK_SIZE)/2 :
-				enum_to_mtu(STL_MTU_10240)) +
+				enum_to_mtu(OPA_MTU_10240)) +
 			(hdrqentsize<<2), WFR_PIO_BLOCK_SIZE);
 	if (sc->credits <= release_credits)
 		thresh = 1;

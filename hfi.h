@@ -604,14 +604,14 @@ struct qib_pportdata {
 	 * structures (specifically the ccti member).
 	 */
 	spinlock_t cca_timer_lock ____cacheline_aligned_in_smp;
-	struct cca_timer cca_timer[STL_MAX_SLS];
+	struct cca_timer cca_timer[OPA_MAX_SLS];
 
 	/* List of congestion control table entries */
 	struct ib_cc_table_entry_shadow ccti_entries[CC_TABLE_SHADOW_MAX];
 
 	/* congestion entries, each entry corresponding to a SL */
 	struct stl_congestion_setting_entry_shadow
-		congestion_entries[STL_MAX_SLS];
+		congestion_entries[OPA_MAX_SLS];
 
 	/*
 	 * cc_state_lock protects (write) access to the per-port
@@ -633,7 +633,7 @@ struct qib_pportdata {
 	/* begin congestion log related entries
 	 * cc_log_lock protects all congestion log related data */
 	spinlock_t cc_log_lock ____cacheline_aligned_in_smp;
-	u8 threshold_cong_event_map[STL_MAX_SLS/8];
+	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
 	u16 threshold_event_counter;
 	struct stl_hfi_cong_log_event_internal cc_events[STL_CONG_LOG_ELEMS];
 	int cc_log_idx; /* index for logging events */
@@ -1156,7 +1156,7 @@ static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
 	unsigned seq;
 	u8 rval;
 
-	if (sc5 >= STL_MAX_SCS)
+	if (sc5 >= OPA_MAX_SCS)
 		return (u8)(0xff);
 
 	do {
@@ -1264,11 +1264,11 @@ bad:
 /* MTU handling */
 
 /* MTU enumeration, 256-4k match IB */
-#define STL_MTU_256   1
-#define STL_MTU_512   2
-#define STL_MTU_1024  3
-#define STL_MTU_2048  4
-#define STL_MTU_4096  5
+#define OPA_MTU_256   1
+#define OPA_MTU_512   2
+#define OPA_MTU_1024  3
+#define OPA_MTU_2048  4
+#define OPA_MTU_4096  5
 
 u32 lrh_max_header_bytes(struct hfi_devdata *dd);
 int mtu_to_enum(u32 mtu, int default_if_bad);

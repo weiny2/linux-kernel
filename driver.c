@@ -753,13 +753,13 @@ bail:
 int mtu_to_enum(u32 mtu, int default_if_bad)
 {
 	switch (mtu) {
-	case   256: return STL_MTU_256;
-	case   512: return STL_MTU_512;
-	case  1024: return STL_MTU_1024;
-	case  2048: return STL_MTU_2048;
-	case  4096: return STL_MTU_4096;
-	case  8192: return STL_MTU_8192;
-	case 10240: return STL_MTU_10240;
+	case   256: return OPA_MTU_256;
+	case   512: return OPA_MTU_512;
+	case  1024: return OPA_MTU_1024;
+	case  2048: return OPA_MTU_2048;
+	case  4096: return OPA_MTU_4096;
+	case  8192: return OPA_MTU_8192;
+	case 10240: return OPA_MTU_10240;
 	}
 	return default_if_bad;
 }
@@ -767,13 +767,13 @@ int mtu_to_enum(u32 mtu, int default_if_bad)
 u32 enum_to_mtu(int mtu)
 {
 	switch (mtu) {
-	case STL_MTU_256:   return 256;
-	case STL_MTU_512:   return 512;
-	case STL_MTU_1024:  return 1024;
-	case STL_MTU_2048:  return 2048;
-	case STL_MTU_4096:  return 4096;
-	case STL_MTU_8192:  return 8192;
-	case STL_MTU_10240: return 10240;
+	case OPA_MTU_256:   return 256;
+	case OPA_MTU_512:   return 512;
+	case OPA_MTU_1024:  return 1024;
+	case OPA_MTU_2048:  return 2048;
+	case OPA_MTU_4096:  return 4096;
+	case OPA_MTU_8192:  return 8192;
+	case OPA_MTU_10240: return 10240;
 	default: return -1;
 	}
 }

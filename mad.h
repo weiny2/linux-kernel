@@ -36,8 +36,8 @@
 
 #include <rdma/ib_pma.h>
 #define USE_PI_LWD_TX_RX_ACTIVE 1 /* enable LWD.{Tx,Rx}Active */
-#include <rdma/stl_smi.h>
-#include <rdma/stl_port_info.h>
+#include <rdma/opa_smi.h>
+#include <rdma/opa_port_info.h>
 #ifndef PI_LWD_TX_RX_ACTIVE_SUP	  /* header does not support it */
 #define PI_LWD_TX_RX_ACTIVE_SUP 0
 #endif
@@ -288,7 +288,7 @@ struct stl_hfi_cong_log {
 	u8 congestion_flags;
 	__be16 threshold_event_counter;
 	__be32 current_time_stamp;
-	u8 threshold_cong_event_map[STL_MAX_SLS/8];
+	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
 	struct stl_hfi_cong_log_event events[STL_CONG_LOG_ELEMS];
 } __packed;
 
@@ -316,13 +316,13 @@ struct stl_congestion_setting_entry_shadow {
 struct stl_congestion_setting_attr {
 	__be32 control_map;
 	__be16 port_control;
-	struct stl_congestion_setting_entry entries[STL_MAX_SLS];
+	struct stl_congestion_setting_entry entries[OPA_MAX_SLS];
 } __packed;
 
 struct stl_congestion_setting_attr_shadow {
 	u32 control_map;
 	u16 port_control;
-	struct stl_congestion_setting_entry_shadow entries[STL_MAX_SLS];
+	struct stl_congestion_setting_entry_shadow entries[OPA_MAX_SLS];
 } __packed;
 
 #define IB_CC_TABLE_ENTRY_INCREASE_DEFAULT 1
@@ -425,7 +425,7 @@ struct vl_limit {
 struct buffer_control {
 	__be16 reserved;
 	__be16 overall_shared_limit;
-	struct vl_limit vl[STL_MAX_VLS];
+	struct vl_limit vl[OPA_MAX_VLS];
 };
 
 struct sc2vlnt {
