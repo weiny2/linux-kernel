@@ -575,6 +575,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
 	pi->operational_vls =
 		hfi_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
+	pi->partenforce_filterraw |= (ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
 		pi->partenforce_filterraw |= OPA_PI_MASK_PARTITION_ENFORCE_IN;
 	if (ppd->part_enforce & HFI_PART_ENFORCE_OUT)
@@ -913,6 +914,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	msl = pi->smsl & OPA_PI_MASK_SMSL;
+	if (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON)
+		ppd->linkinit_reason = (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON);
 	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_IN)
 		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
 	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT)

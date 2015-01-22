@@ -1147,6 +1147,7 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void set_partition_keys(struct qib_pportdata *);
 static const char *link_state_name(u32 state);
+static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state);
 static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 				u64 *out_data);
 static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
@@ -4877,6 +4878,7 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	/* the link defaults to enabled */
 	ppd->driver_link_ready = 1;
 	ppd->link_enabled = 1;
+	ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
 
 	/* assign LCB access to the 8051 */
 	set_8051_lcb_access(dd);
@@ -5368,6 +5370,28 @@ static const char *link_state_name(u32 state)
 	return name ? name : "unkown";
 }
 
+/* return the link state reason name */
+static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state)
+{
+	if (state == HLS_UP_INIT) {
+		switch (ppd->linkinit_reason) {
+		case OPA_LINKINIT_REASON_LINKUP:
+			return "(LINKUP)";
+		case OPA_LINKINIT_REASON_FLAPPING:
+			return "(FLAPPING)";
+		case OPA_LINKINIT_OUTSIDE_POLICY:
+			return "(OUTSIDE_POLICY)";
+		case OPA_LINKINIT_QUARANTINED:
+			return "(QUARANTINED)";
+		case OPA_LINKINIT_INSUFIC_CAPABILITY:
+			return "(INSUFIC_CAPABILITY)";
+		default:
+			break;
+		}
+	}
+	return "";
+}
+
 /*
  * Change the physical and/or logical link state.
  *
@@ -5381,8 +5405,9 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 
 	mutex_lock(&ppd->hls_lock);
 
-	dd_dev_info(dd, "%s: current %s, new %s\n", __func__,
-		link_state_name(ppd->host_link_state), link_state_name(state));
+	dd_dev_info(dd, "%s: current %s, new %s %s\n", __func__,
+		link_state_name(ppd->host_link_state), link_state_name(state),
+		link_state_reason_name(ppd, state));
 
 	/*
 	 * If we're going to a (HLS_*) link state that implies the logical
@@ -5424,6 +5449,10 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 				"%s: logical state did not change to INIT\n",
 				__func__);
 		} else {
+			/* clear old transient LINKINIT_REASON code */
+			if (ppd->linkinit_reason >= OPA_LINKINIT_REASON_CLEAR)
+				ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
+
 			handle_linkup_change(dd, 1);
 		}
 		break;

@@ -583,8 +583,8 @@ struct qib_pportdata {
 	u8 is_active_optimize_enabled;
 	u8 driver_link_ready;	/* driver ready for active link */
 	u8 link_enabled;	/* link enabled? */
+	u8 linkinit_reason;
 
-	u8 delay_mult;
 	/* placeholders for IB MAD packet settings */
 	u8 overrun_threshold;
 	u8 phy_error_threshold;
