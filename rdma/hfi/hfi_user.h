@@ -81,6 +81,7 @@
 #define HFI_CAP_NO_INTEGRITY     (1UL << 13) /* Enable ctxt integrity checks */
 #define HFI_CAP_PKEY_CHECK       (1UL << 14) /* Enable ctxt PKey checking */
 #define HFI_CAP_STATIC_RATE_CTRL (1UL << 15) /* Allow PBC.StaticRateControl */
+#define HFI_CAP_QSFP_ENABLED     (1UL << 16) /* Enable QSFP check during LNI */
 
 #define HFI_RCVHDR_ENTSIZE_2    (1UL << 0)
 #define HFI_RCVHDR_ENTSIZE_16   (1UL << 1)

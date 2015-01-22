@@ -53,7 +53,7 @@ static int qsfp_read(struct qib_pportdata *ppd, int addr, void *bp, int len)
 	int stuck = 0;
 	u8 *buff = bp;
 
-	ret = mutex_lock_interruptible(&dd->qsfp_lock);
+	ret = mutex_lock_interruptible(&dd->qsfp_mutex);
 	if (ret)
 		goto no_unlock;
 
@@ -89,7 +89,7 @@ static int qsfp_read(struct qib_pportdata *ppd, int addr, void *bp, int len)
 		goto deselect;
 	}
 
-	/* All QSFP modules are at A0 */
+	/* All QSFP modules are at address A0 */
 
 	cnt = 0;
 	while (cnt < len) {
@@ -138,7 +138,7 @@ deselect:
 
 	msleep(2);
 
-	mutex_unlock(&dd->qsfp_lock);
+	mutex_unlock(&dd->qsfp_mutex);
 
 no_unlock:
 	return ret;
@@ -157,7 +157,7 @@ static int qib_qsfp_write(struct qib_pportdata *ppd, int addr, void *bp,
 	int ret, cnt;
 	u8 *buff = bp;
 
-	ret = mutex_lock_interruptible(&dd->qsfp_lock);
+	ret = mutex_lock_interruptible(&dd->qsfp_mutex);
 	if (ret)
 		goto no_unlock;
 
@@ -228,7 +228,7 @@ deselect:
 	 */
 	msleep(2);
 
-	mutex_unlock(&dd->qsfp_lock);
+	mutex_unlock(&dd->qsfp_mutex);
 
 no_unlock:
 	return ret;

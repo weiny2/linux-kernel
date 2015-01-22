@@ -46,6 +46,7 @@
 #include "pio.h"
 #include "sdma.h"
 #include "eprom.h"
+#include "qsfp.h"
 
 #define NUM_IB_PORTS 1
 
@@ -231,6 +232,13 @@ struct flag_table {
 			| WFR_CCE_STATUS_SDMA_PAUSED_SMASK)
 /* all CceStatus sub-block RXE pause bits */
 #define ALL_RXE_PAUSE WFR_CCE_STATUS_RXE_PAUSED_SMASK
+
+
+/*
+ * Bit positions in ASIC_QSFP* registers for qsfp devices
+ */
+#define  _WFR_GPIO_SDA_NUM 1
+#define  _WFR_GPIO_SCL_NUM 0
 
 /*
  * CCE Error flags.
@@ -4703,7 +4711,6 @@ static void restart_link(struct qib_pportdata *ppd)
 			__func__);
 		return;
 	}
-
 	ret = set_link_state(ppd, HLS_DN_POLL);
 	if (ret) {
 		dd_dev_err(ppd->dd,
@@ -4756,7 +4763,6 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 			return ret;
 		/* otherwise, proceed to polling */
 	}
-
 	return set_link_state(ppd, HLS_DN_POLL);
 }
 
@@ -7215,12 +7221,37 @@ static u8 ibphys_portstate(struct qib_pportdata *ppd)
 	return ib_pstate;
 }
 
-static int gpio_mod(struct hfi_devdata *dd, u32 out, u32 dir, u32 mask)
+/*
+ * Read/modify/write ASIC_QSFP register bits as selected by mask
+ * data: 0 or 1 in the positions depending on what needs to be written
+ * dir: 0 for read, 1 for write
+ * mask: select by setting
+ *      I2CCLK  (bit 0)
+ *      I2CDATA (bit 1)
+ */
+static u64 gpio_mod(struct hfi_devdata *dd, u32 data, u32 dir, u32 mask)
 {
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-	/* return non-zero to indicate positive progress */
-	return 1;
+	unsigned long flags;
+	u64 qsfp_oe, target_oe;
+
+	target_oe = dd->hfi_id ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE;
+	if (mask) {
+		/* We are writing register bits, so lock access */
+		dir &= mask;
+		data &= mask;
+		spin_lock_irqsave(&dd->qsfp_lock, flags);
+
+		qsfp_oe = read_csr(dd, target_oe);
+		qsfp_oe = (qsfp_oe & ~(u64)mask) | (u64)dir;
+		write_csr(dd, target_oe, qsfp_oe);
+		spin_unlock_irqrestore(&dd->qsfp_lock, flags);
+	}
+	/* We are exclusively reading bits here, but it is unlikely
+	 * we'll get valid data when we set the direction of the pin
+	 * in the same call, so read should call this function again
+	 * to get valid data
+	 */
+	return read_csr(dd, dd->hfi_id ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
 }
 
 /*

@@ -140,6 +140,7 @@
 				 HFI_CAP_SDMA |				\
 				 HFI_CAP_ENABLE_SMA |			\
 				 HFI_CAP_PRINT_UNIMPL |			\
+				 HFI_CAP_QSFP_ENABLED |			\
 				 HFI_CAP_PKEY_CHECK |			\
 				 ((HFI_CAP_HDRSUPP |			\
 				   HFI_CAP_NODROP_RHQ_FULL |		\
