@@ -665,6 +665,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		packet.ebuf = ebuf;
 		packet.hdr = hdr;
 		packet.rcd = rcd;
+                packet.updegr = updegr;
 
 		/*
 		 * Call a type specific handler for the packet. We
