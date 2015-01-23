@@ -669,7 +669,8 @@ u32 qib_make_grh(struct qib_ibport *ibp, struct ib_grh *hdr,
 	hdr->hop_limit = grh->hop_limit;
 	/* The SGID is 32-bit aligned. */
 	hdr->sgid.global.subnet_prefix = ibp->gid_prefix;
-	hdr->sgid.global.interface_id = grh->sgid_index ?
+	hdr->sgid.global.interface_id =
+		grh->sgid_index && grh->sgid_index < ARRAY_SIZE(ibp->guids) ?
 		ibp->guids[grh->sgid_index - 1] : ppd_from_ibp(ibp)->guid;
 	hdr->dgid = grh->dgid;
 

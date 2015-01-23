@@ -499,9 +499,12 @@ void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 	pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
 	vl = sc_to_vlt(ppd->dd, sc5);
 	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
-	pbuf = sc_buffer_alloc(ctxt, plen, NULL, 0);
-	if (pbuf)
-		ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
+	if (ctxt) {
+		pbuf = sc_buffer_alloc(ctxt, plen, NULL, 0);
+		if (pbuf)
+			ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc,
+						 &hdr, hwords);
+	}
 }
 
 /**

@@ -1434,6 +1434,7 @@ int init_credit_return(struct hfi_devdata *dd)
 	if (!dd->cr_base) {
 		dd_dev_err(dd, "Unable to allocate credit return base\n");
 		ret = -ENOMEM;
+		goto done;
 	}
 	for (i = 0; i < num_numa; i++) {
 		int bytes = dd->num_send_contexts*sizeof(struct credit_return);

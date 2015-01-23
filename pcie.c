@@ -752,8 +752,8 @@ qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 		break;
 
 	case pci_channel_io_perm_failure:
-		dd_dev_info(dd, "State Permanent Failure, disabling\n");
 		if (dd) {
+			dd_dev_info(dd, "State Permanent Failure, disabling\n");
 			/* no more register accesses! */
 			dd->flags &= ~QIB_PRESENT;
 			qib_disable_after_error(dd);
@@ -781,10 +781,10 @@ qib_pci_mmio_enabled(struct pci_dev *pdev)
 		words = dd->f_portcntr(dd->pport, QIBPORTCNTR_WORDRCV);
 		if (words == ~0ULL)
 			ret = PCI_ERS_RESULT_NEED_RESET;
+		dd_dev_info(dd,
+			    "QIB mmio_enabled function called, read wordscntr %Lx, returning %d\n",
+			    words, ret);
 	}
-	dd_dev_info(dd,
-		"QIB mmio_enabled function called, read wordscntr %Lx, returning %d\n",
-		words, ret);
 	return  ret;
 }
 

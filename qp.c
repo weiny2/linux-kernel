@@ -1589,7 +1589,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   atomic_read(&qp->s_iowait.sdma_busy),
 		   !list_empty(&qp->s_iowait.list),
 		   qp->timeout,
-		   wqe->ssn,
+		   wqe ? wqe->ssn : 0,
 		   qp->s_lsn,
 		   qp->s_last_psn,
 		   qp->s_psn, qp->s_next_psn,

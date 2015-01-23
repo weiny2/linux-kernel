@@ -1135,7 +1135,7 @@ int firmware_init(struct hfi_devdata *dd)
  */
 int load_pcie_firmware(struct hfi_devdata *dd)
 {
-	int ret;
+	int ret = 0;
 
 	/* both firmware loads below use the SBUS */
 	set_sbus_fast_mode(dd);

@@ -1159,7 +1159,7 @@ static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
 	unsigned seq;
 	u8 rval;
 
-	if (sc5 > STL_MAX_SCS)
+	if (sc5 >= STL_MAX_SCS)
 		return (u8)(0xff);
 
 	do {

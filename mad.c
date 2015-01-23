@@ -3048,6 +3048,7 @@ static int __subn_set_stl_cc_table(struct stl_smp *smp, u32 am, u8 *data,
 
 	if (old_cc_state == NULL) {
 		spin_unlock(&ppd->cc_state_lock);
+		kfree(new_cc_state);
 		return reply(smp);
 	}
 

@@ -971,7 +971,8 @@ void sdma_exit(struct hfi_devdata *dd)
 		dd->sdma_heads_dma = NULL;
 		dd->sdma_heads_phys = 0;
 	}
-	for (this_idx = 0; this_idx < dd->num_sdma; ++this_idx) {
+	for (this_idx = 0; dd->per_sdma && this_idx < dd->num_sdma;
+			++this_idx) {
 		sde = &dd->per_sdma[this_idx];
 
 		sde->head_dma = NULL;

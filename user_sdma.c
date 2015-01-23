@@ -661,7 +661,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	req->sde = sdma_select_engine_vl(dd,
 					 (u32)(uctxt->ctxt + subctxt_fp(fp)),
 					 vl);
-	if (!sdma_running(req->sde)) {
+	if (!req->sde || !sdma_running(req->sde)) {
 		ret = -ECOMM;
 		goto free_req;
 	}
@@ -1428,7 +1428,7 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 		container_of(txreq, struct user_sdma_txreq, txreq);
 	struct user_sdma_iovec *iovec = tx->iovec;
 	struct user_sdma_request *req = tx->req;
-	struct hfi_user_sdma_pkt_q *pq = req->pq;
+	struct hfi_user_sdma_pkt_q *pq = req ? req->pq : NULL;
 	u16 txflags = tx->flags;
 	unsigned long flags;
 
