@@ -342,7 +342,6 @@ rm -rf \${RPM_BUILD_ROOT}
 /lib/modules/%kver/updates/*
 
 %files scripts
-%dir /sbin
 /sbin/*
 
 %files devel
