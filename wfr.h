@@ -425,6 +425,13 @@
 #define LINK_QUALITY_SHIFT 0
 #define LINK_QUALITY_MASK  0x7
 
+/*
+ * mask, shift for reading 'planned_down_remote_reason_code'
+ * from LINK_QUALITY_INFO field
+ */
+#define DOWN_REMOTE_REASON_SHIFT 16
+#define DOWN_REMOTE_REASON_MASK  0xff
+
 /* verify capability PHY power management bits */
 #define PWRM_BER_CONTROL	0x1
 #define PWRM_BANDWIDTH_CONTROL	0x2
@@ -564,6 +571,8 @@ void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
 void read_guid(struct hfi_devdata *dd);
 int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
 void check_fifos(unsigned long opaque);
+void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
+	u8 neigh_reason, u8 rem_reason);
 int set_link_state(struct qib_pportdata *, u32 state);
 void handle_verify_cap(struct work_struct *work);
 void handle_freeze(struct work_struct *work);

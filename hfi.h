@@ -492,6 +492,15 @@ struct cca_timer {
 	u16 ccti; /* read/write - current value of CCTI */
 };
 
+struct link_down_reason {
+	/*
+	 * SMA-facing value.  Should be set from .latest when
+	 * HLS_UP_* -> HLS_DN_* transition actually occurs.
+	 */
+	u8 sma;
+	u8 latest;
+};
+
 /*
  * The structure below encapsulates data relevant to a physical IB Port.
  * Current chips support only one such port, but the separation
@@ -657,6 +666,10 @@ struct qib_pportdata {
 	/* mgmt_allowed is also returned in 'portinfo' MADs */
 	u8 mgmt_allowed;
 	u8 part_enforce; /* partition enforcement flags */
+	struct link_down_reason local_link_down_reason;
+	struct link_down_reason neigh_link_down_reason;
+	/* Value to be sent to link peer on LinkDown .*/
+	u8 remote_link_down_reason;
 	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 	u8 pending_active_reregister;
 };

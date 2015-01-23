@@ -624,7 +624,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 */
 	pi->flit_control.interleave = cpu_to_be16(0x1400);
 
-	pi->link_down_reason = OPA_LINKDOWN_REASON_NONE;
+	pi->link_down_reason = ppd->local_link_down_reason.sma;
+	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
 
 	pi->mtucap = mtu_to_enum(max_mtu, IB_MTU_4096);
 
@@ -773,8 +774,12 @@ static int set_port_states(struct qib_pportdata *ppd, struct opa_smp *smp,
 	case IB_PORT_DOWN:
 		if (lstate == 0)
 			lstate = HLS_DN_DOWNDEF;
-		else if (lstate == 2)
+		else if (lstate == 2) {
 			lstate = HLS_DN_POLL;
+			set_link_down_reason(ppd,
+			     OPA_LINKDOWN_REASON_FM_BOUNCE, 0,
+			     OPA_LINKDOWN_REASON_FM_BOUNCE);
+		}
 		else if (lstate == 3)
 			lstate = HLS_DN_DISABLE;
 		else {
@@ -940,6 +945,16 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 			ibp->sm_sl = msl;
 		event.event = IB_EVENT_SM_CHANGE;
 		ib_dispatch_event(&event);
+	}
+
+	if (pi->link_down_reason == 0) {
+		ppd->local_link_down_reason.sma = 0;
+		ppd->local_link_down_reason.latest = 0;
+	}
+
+	if (pi->neigh_link_down_reason == 0) {
+		ppd->neigh_link_down_reason.sma = 0;
+		ppd->neigh_link_down_reason.latest = 0;
 	}
 
 	lwe = be16_to_cpu(pi->link_width.enabled);

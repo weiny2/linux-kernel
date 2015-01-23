@@ -1154,6 +1154,9 @@ static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
 static void start_freeze_handling(struct qib_pportdata *ppd, int abort);
 static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
 
+static u32 read_physical_state(struct hfi_devdata *dd);
+static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc);
+
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
  * "clear down" routine used for all second tier error interrupt register.
@@ -2955,8 +2958,21 @@ void handle_link_up(struct work_struct *work)
  */
 void handle_link_down(struct work_struct *work)
 {
+	u8 lcl_reason, neigh_reason = 0;
 	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
 								link_down_work);
+	lcl_reason = 0;
+
+	read_planned_down_reason_code(ppd->dd, &neigh_reason);
+
+	/*
+	 * If no reason, assume peer-initiated but missed
+	 * LinkGoingDown idle flits.
+	 */
+	if (neigh_reason == 0)
+		lcl_reason = OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN;
+
+	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
 	set_link_state(ppd, HLS_DN_OFFLINE);
 }
 
@@ -3391,6 +3407,8 @@ void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths)
 		 * Bounce the link by setting it offline.  The link will
 		 * automatically restart a poll unless something intervenes.
 		 */
+		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_WIDTH_POLICY, 0,
+		  OPA_LINKDOWN_REASON_WIDTH_POLICY);
 		set_link_state(ppd, HLS_DN_OFFLINE);
 	}
 }
@@ -3620,6 +3638,9 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	u64 info, hdr0, hdr1;
 	char *extra;
 	char buf[96];
+	struct qib_pportdata *ppd = dd->pport;
+	u8 lcl_reason = 0;
+	int do_bounce = 0;
 
 	if (reg & DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK) {
 		if (!(dd->err_info_uncorrectable & STL_EI_STATUS_SMASK)) {
@@ -3642,6 +3663,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 
 	if (reg & DCC_ERR_FLG_FMCONFIG_ERR_SMASK) {
+		u8 reason_valid = 1;
 		info = read_csr(dd, DCC_ERR_INFO_FMCONFIG);
 		if (!(dd->err_info_fmconfig & STL_EI_STATUS_SMASK)) {
 			dd->err_info_fmconfig = info & STL_EI_CODE_SMASK;
@@ -3680,10 +3702,19 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 				"configured";
 			break;
 		default:
+			reason_valid = 0;
 			snprintf(buf, sizeof(buf), "reserved%lld", info);
 			extra = buf;
 			break;
 		}
+
+		/*
+		 * TODO check that 'info' is a bounceable reason according to
+		 * PortErrorAction before setting lcl_reason.
+		 */
+		if (reason_valid)
+			lcl_reason = info + OPA_LINKDOWN_REASON_BAD_HEAD_DIST;
+
 		/* just report this */
 		dd_dev_info(dd, "DCC Error: fmconfig error: %s\n",
 			extra);
@@ -3693,6 +3724,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 
 	if (reg & DCC_ERR_FLG_RCVPORT_ERR_SMASK) {
+		u8 reason_valid = 1;
 		info = read_csr(dd, DCC_ERR_INFO_PORTRCV);
 		hdr0 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR0);
 		hdr1 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR1);
@@ -3745,10 +3777,20 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			extra = "BadVLMarker: VL Marker for an unpreempted VL";
 			break;
 		default:
+			reason_valid = 0;
 			snprintf(buf, sizeof(buf), "reserved%lld", info);
 			extra = buf;
 			break;
 		}
+
+		/*
+		 * TODO check that 'info' is a bounceable reason according to
+		 * PortErrorAction before setting lcl_reason.
+		 */
+		if (reason_valid && lcl_reason == 0)
+			lcl_reason =
+			  (info & 0xf) + OPA_LINKDOWN_REASON_RCV_ERROR_0;
+
 		/* just report this */
 		dd_dev_info(dd, "DCC Error: PortRcv error: %s\n",
 			extra);
@@ -3758,6 +3800,15 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		/* strip so we don't see in the generic unhandled */
 		reg &= ~DCC_ERR_FLG_RCVPORT_ERR_SMASK;
 	}
+
+	if (lcl_reason == 0)
+		lcl_reason = OPA_LINKDOWN_REASON_UNKNOWN;
+
+	if (do_bounce) {
+		set_link_down_reason(ppd, lcl_reason, 0, lcl_reason);
+		/* TODO need to implement bounce due to PortErrorAction .*/
+	}
+
 	if (reg & DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_UC_SMASK) {
 		/* informative only */
 		dd_dev_info(dd, "8051 access to LCB blocked\n");
@@ -3777,6 +3828,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 /* TODO */
 static void handle_lcb_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
+	/* TODO set linkdown reason here. */
 	dd_dev_info(dd, "LCB Error: 0x%llx (unhandled)\n", reg);
 }
 
@@ -4473,6 +4525,14 @@ static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
 	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
 }
 
+static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc)
+{
+	u32 frame;
+
+	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
+	*pdrrc = (frame >> DOWN_REMOTE_REASON_SHIFT) & DOWN_REMOTE_REASON_MASK;
+}
+
 static int read_tx_settings(struct hfi_devdata *dd,
 				u8 *enable_lane_tx,
 				u8 *tx_polarity_inversion,
@@ -4907,6 +4967,9 @@ static void quiet_serdes(struct qib_pportdata *ppd)
 	ppd->driver_link_ready = 0;
 	ppd->link_enabled = 0;
 	cancel_link_restart(ppd);
+
+	set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SMA_DISABLED, 0,
+	  OPA_LINKDOWN_REASON_SMA_DISABLED);
 	set_link_state(ppd, HLS_DN_OFFLINE);
 
 	/* disable the port */
@@ -5255,8 +5318,12 @@ static int wait_phy_linkstate(struct hfi_devdata *dd, u32 state, u32 msecs)
 /*
  * Helper for set_link_state().  Do not call excecpt from that routine.
  * Expects ppd->hls_mutex to be held.
+ *
+ * @rem_reason value to be sent to the neighbor
+ *
+ * LinkDownReasons only set if transition succeeds.
  */
-static int goto_offline(struct qib_pportdata *ppd)
+static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u32 pstate, previous_state;
@@ -5282,7 +5349,9 @@ static int goto_offline(struct qib_pportdata *ppd)
 	}
 
 	if (do_transition) {
-		ret = set_physical_link_state(dd, WFR_PLS_OFFLINE);
+		ret = set_physical_link_state(dd,
+			WFR_PLS_OFFLINE | (rem_reason << 8));
+
 		if (ret != WFR_HCMD_SUCCESS) {
 			dd_dev_err(dd,
 				"Failed to transition to Offline link state, return %d\n",
@@ -5392,6 +5461,17 @@ static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state)
 	return "";
 }
 
+void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
+	u8 neigh_reason, u8 rem_reason)
+{
+	if (ppd->local_link_down_reason.latest == 0 &&
+	    ppd->neigh_link_down_reason.latest == 0) {
+		ppd->local_link_down_reason.latest = lcl_reason;
+		ppd->neigh_link_down_reason.latest = neigh_reason;
+		ppd->remote_link_down_reason = rem_reason;
+	}
+}
+
 /*
  * Change the physical and/or logical link state.
  *
@@ -5402,8 +5482,13 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 	struct hfi_devdata *dd = ppd->dd;
 	struct ib_event event = {.device = NULL};
 	int ret1, ret = 0;
+	int was_up, is_down;
 
 	mutex_lock(&ppd->hls_lock);
+
+	was_up = (ppd->host_link_state == HLS_UP_INIT ||
+		ppd->host_link_state == HLS_UP_ARMED ||
+		ppd->host_link_state == HLS_UP_ACTIVE);
 
 	dd_dev_info(dd, "%s: current %s, new %s %s\n", __func__,
 		link_state_name(ppd->host_link_state), link_state_name(state),
@@ -5511,11 +5596,12 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 			u8 tmp = ppd->link_enabled;
 			/* Prevent scheduled link restart */
 			ppd->link_enabled = 0;
-			ret = goto_offline(ppd);
+			ret = goto_offline(ppd, ppd->remote_link_down_reason);
 			if (ret) {
 				ppd->link_enabled = tmp;
 				break;
 			}
+			ppd->remote_link_down_reason = 0;
 
 			if (ppd->driver_link_ready)
 				ppd->link_enabled = 1;
@@ -5550,7 +5636,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		 * caller may reschedule another attempt.
 		 */
 		if (ret)
-			goto_offline(ppd);
+			goto_offline(ppd, 0);
 		break;
 	case HLS_DN_DISABLE:
 		/* link is disabled */
@@ -5560,9 +5646,10 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 
 		/* must transistion to offline first */
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
-			ret = goto_offline(ppd);
+			ret = goto_offline(ppd, ppd->remote_link_down_reason);
 			if (ret)
 				break;
+			ppd->remote_link_down_reason = 0;
 		}
 
 		ret1 = set_physical_link_state(dd, WFR_PLS_DISABLED);
@@ -5577,7 +5664,9 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		break;
 	case HLS_DN_OFFLINE:
 		/* allow any state to transition to offline */
-		ret = goto_offline(ppd);
+		ret = goto_offline(ppd, ppd->remote_link_down_reason);
+		if (!ret)
+			ppd->remote_link_down_reason = 0;
 		break;
 	case HLS_VERIFY_CAP:
 		if (ppd->host_link_state != HLS_DN_POLL)
@@ -5607,6 +5696,20 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		ret = -EINVAL;
 		break;
 	}
+
+	is_down = (ppd->host_link_state == HLS_DN_POLL ||
+		ppd->host_link_state == HLS_DN_SLEEP ||
+		ppd->host_link_state == HLS_DN_DISABLE ||
+		ppd->host_link_state == HLS_DN_OFFLINE);
+
+	if (was_up && is_down && ppd->local_link_down_reason.sma == 0 &&
+	    ppd->neigh_link_down_reason.sma == 0) {
+		ppd->local_link_down_reason.sma =
+		  ppd->local_link_down_reason.latest;
+		ppd->neigh_link_down_reason.sma =
+		  ppd->neigh_link_down_reason.latest;
+	}
+
 	goto done;
 
 unexpected:
