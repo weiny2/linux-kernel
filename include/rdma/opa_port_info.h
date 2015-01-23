@@ -120,10 +120,11 @@
 /* 64-255 reserved */
 
 /* OPA Link Init reason; indicated as follows: */
-/* 3-7; 11-15 reserved */
+/* 3-7; 11-15 reserved; 8-15 cleared on Polling->LinkUp */
 #define OPA_LINKINIT_REASON_NOP                 0
 #define OPA_LINKINIT_REASON_LINKUP              (1 << 4)
 #define OPA_LINKINIT_REASON_FLAPPING            (2 << 4)
+#define OPA_LINKINIT_REASON_CLEAR               (8 << 4)
 #define OPA_LINKINIT_OUTSIDE_POLICY             (8 << 4)
 #define OPA_LINKINIT_QUARANTINED                (9 << 4)
 #define OPA_LINKINIT_INSUFIC_CAPABILITY         (10 << 4)
