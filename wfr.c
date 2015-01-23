@@ -3227,10 +3227,28 @@ void handle_verify_cap(struct work_struct *work)
  *
  * Called when the enabled policy changes or the active link widths change.
  */
-void apply_link_downgrade_policy(struct qib_pportdata *ppd)
+void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths)
 {
+	int skip = 1;
 	int do_bounce = 0;
 	u16 lwde = ppd->link_width_downgrade_enabled;
+	u16 tx, rx;
+
+	mutex_lock(&ppd->hls_lock);
+	/* only apply if the link is up */
+	if (ppd->host_link_state == HLS_UP_INIT
+			|| ppd->host_link_state == HLS_UP_ARMED
+			|| ppd->host_link_state == HLS_UP_ACTIVE)
+		skip = 0;
+	mutex_unlock(&ppd->hls_lock);
+	if (skip)
+		return;
+
+	if (refresh_widths) {
+		get_link_widths(ppd->dd, &tx, &rx);
+		ppd->link_width_downgrade_tx_active = tx;
+		ppd->link_width_downgrade_rx_active = rx;
+	}
 
 	if (lwde == 0) {
 		/* downgrade is disabled */
@@ -3280,15 +3298,9 @@ void handle_link_downgrade(struct work_struct *work)
 {
 	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
 							link_downgrade_work);
-	struct hfi_devdata *dd = ppd->dd;
-	u16 tx, rx;
 
-	dd_dev_info(dd, "8051: Link width downgrade\n");
-
-	get_link_widths(dd, &tx, &rx);
-	ppd->link_width_downgrade_tx_active = tx;
-	ppd->link_width_downgrade_rx_active = rx;
-	apply_link_downgrade_policy(ppd);
+	dd_dev_info(ppd->dd, "8051: Link width downgrade\n");
+	apply_link_downgrade_policy(ppd, 1);
 }
 
 static char *dcc_err_string(char *buf, int buf_len, u64 flags)

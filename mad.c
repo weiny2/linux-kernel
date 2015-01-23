@@ -960,8 +960,11 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 		set_link_width_downgrade_enabled(ppd,
 				ppd->link_width_downgrade_supported);
 	} else if ((lwe & ~ppd->link_width_downgrade_supported) == 0) {
-		set_link_width_downgrade_enabled(ppd, lwe);
-		call_link_downgrade_policy = 1;
+		/* only set and apply if something changed */
+		if (lwe != ppd->link_width_downgrade_enabled) {
+			set_link_width_downgrade_enabled(ppd, lwe);
+			call_link_downgrade_policy = 1;
+		}
 	} else
 		smp->status |= IB_SMP_INVALID_FIELD;
 
@@ -1072,7 +1075,7 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	 * the policy change is not applied.
 	 */
 	if (call_link_downgrade_policy)
-		apply_link_downgrade_policy(ppd);
+		apply_link_downgrade_policy(ppd, 0);
 
 	return ret;
 
