@@ -373,56 +373,6 @@ static void set_link_speed_enabled(struct qib_pportdata *ppd, u32 s)
 	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_SPD_ENB, s);
 }
 
-static int get_overrunthreshold(struct qib_pportdata *ppd)
-{
-	return ppd->dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OVERRUN_THRESH);
-}
-
-/**
- * set_overrunthreshold - set the overrun threshold
- * @ppd: the physical port data
- * @n: the new threshold
- *
- * Note that this will only take effect when the link state changes.
- */
-static int set_overrunthreshold(struct qib_pportdata *ppd, unsigned n)
-{
-	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_OVERRUN_THRESH,
-					 (u32)n);
-	return 0;
-}
-
-static int get_phyerrthreshold(struct qib_pportdata *ppd)
-{
-	return ppd->dd->f_get_ib_cfg(ppd, QIB_IB_CFG_PHYERR_THRESH);
-}
-
-/**
- * set_phyerrthreshold - set the physical error threshold
- * @ppd: the physical port data
- * @n: the new threshold
- *
- * Note that this will only take effect when the link state changes.
- */
-static int set_phyerrthreshold(struct qib_pportdata *ppd, unsigned n)
-{
-	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PHYERR_THRESH,
-					 (u32)n);
-	return 0;
-}
-
-/**
- * get_linkdowndefaultstate - get the default linkdown state
- * @ppd: the physical port data
- *
- * Returns zero if the default is POLL, 1 if the default is SLEEP.
- */
-static int get_linkdowndefaultstate(struct qib_pportdata *ppd)
-{
-	return ppd->dd->f_get_ib_cfg(ppd, QIB_IB_CFG_LINKDEFAULT) ==
-		HLS_DN_SLEEP;
-}
-
 static int check_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
 		      int mad_flags, u64 mkey, u32 dr_slid,
 		      u8 return_path[], u8 hop_cnt)
@@ -616,8 +566,6 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	pi->port_states.offline_reason = ppd->neighbor_normal << 4;
 	pi->port_states.offline_reason |= ppd->is_sm_config_started << 5;
-	pi->port_states.unsleepstate_downdefstate =
-		(get_linkdowndefaultstate(ppd) ? 1 : 2);
 
 	pi->port_states.portphysstate_portstate =
 		(dd->f_ibphys_portstate(ppd) << 4) | state;
@@ -653,9 +601,6 @@ static int __subn_get_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
-	pi->localphy_overrun_errors =
-		(get_phyerrthreshold(ppd) << 4) |
-		get_overrunthreshold(ppd);
 
 	pi->port_link_mode  = STL_PORT_LINK_MODE_STL << 10;
 	pi->port_link_mode |= STL_PORT_LINK_MODE_STL << 5;
@@ -906,7 +851,7 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
 	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
-	int ret, ore, i, invalid = 0;
+	int ret, i, invalid = 0;
 	int call_link_downgrade_policy = 0;
 
 	if (num_ports != 1) {
@@ -1075,19 +1020,6 @@ static int __subn_set_stl_portinfo(struct stl_smp *smp, u32 am, u8 *data,
 
 	if (pi->qkey_violations == 0)
 		ibp->qkey_violations = 0;
-
-	ore = pi->localphy_overrun_errors;
-	if (set_phyerrthreshold(ppd, (ore >> 4) & 0xF)) {
-		pr_warn("SubnSet(STL_PortInfo) phyerrthreshold invalid 0x%x\n",
-			(ore >> 4) & 0xF);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	}
-
-	if (set_overrunthreshold(ppd, (ore & 0xF))) {
-		pr_warn("SubnSet(STL_PortInfo) overrunthreshold invalid 0x%x\n",
-			ore & 0xF);
-		smp->status |= IB_SMP_INVALID_FIELD;
-	}
 
 	ibp->subnet_timeout = pi->clientrereg_subnettimeout & STL_PI_MASK_SUBNET_TIMEOUT;
 
@@ -1528,8 +1460,6 @@ static int __subn_get_stl_psi(struct stl_smp *smp, u32 am, u8 *data,
 
 	psi->offline_reason = ppd->neighbor_normal << 4;
 	psi->offline_reason |= ppd->is_sm_config_started << 5;
-	psi->unsleepstate_downdefstate =
-		(get_linkdowndefaultstate(ppd) ? 1 : 2);
 
 	psi->portphysstate_portstate =
 		(dd->f_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
