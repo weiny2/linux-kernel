@@ -62,15 +62,20 @@ static uint eager_buffer_size;
 module_param(eager_buffer_size, uint, S_IRUGO);
 MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`");
 
-uint rcv_intr_timeout;
+/* 
+ * Default time to aggregate two 10K packets.
+ *    10 * 1024 + 64 header byte = 10304 byte
+ *    2 * 10304 byte / 12.5 GB/s = 1648.64ns
+ */
+uint rcv_intr_timeout = 1649;
 module_param(rcv_intr_timeout, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_timeout, "Receive interrupt mitigation timeout in ns");
 
-uint rcv_intr_count = 1;
+uint rcv_intr_count = 16; /* same as qib */
 module_param(rcv_intr_count, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_count, "Receive interrupt mitigation count");
 
-uint rcv_intr_dynamic = 0;
+uint rcv_intr_dynamic = 1; /* enable dynamic mode */
 module_param(rcv_intr_dynamic, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_dynamic, "Enable dynamic receive interrupt mitigation adjustments: note rcv_intr_timeout is now a max value");
 
