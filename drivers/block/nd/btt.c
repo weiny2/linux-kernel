@@ -776,10 +776,11 @@ static int check_init_meta_state(struct btt *btt)
  * we can construct a balanced binary tree of arenas at init time
  * so that this range search becomes faster.
  */
-static int lba_to_arena(struct btt *btt, __u64 lba, __u32 *premap,
+static int lba_to_arena(struct btt *btt, sector_t sector, __u32 *premap,
 				struct arena_info **arena)
 {
 	struct arena_info *arena_list;
+	__u64 lba = (sector << SECTOR_SHIFT) / btt->lbasize;
 
 	list_for_each_entry(arena_list, &btt->arena_list, list) {
 		if (lba < arena_list->external_nlba) {
@@ -821,11 +822,16 @@ static void unlock_map(struct arena_info *arena, u32 idx)
 	spin_unlock(&arena->map_lock[idx]);
 }
 
+static u64 to_namespace_offset(struct arena_info *arena, u64 lba)
+{
+	return arena->dataoff + ((u64)lba * arena->internal_lbasize);
+}
+
 static int btt_data_read(struct arena_info *arena, struct page *page,
-			unsigned int off, sector_t sector, u32 len)
+			unsigned int off, u32 lba, u32 len)
 {
 	int ret;
-	u64 nsoff = arena->dataoff + (sector * arena->internal_lbasize);
+	u64 nsoff = to_namespace_offset(arena, lba);
 	void *mem = kmap_atomic(page);
 
 	ret = arena_rw_bytes(arena, mem + off, len, nsoff, READ);
@@ -834,11 +840,11 @@ static int btt_data_read(struct arena_info *arena, struct page *page,
 	return ret;
 }
 
-static int btt_data_write(struct arena_info *arena, sector_t sector,
+static int btt_data_write(struct arena_info *arena, u32 lba,
 			struct page *page, unsigned int off, u32 len)
 {
 	int ret;
-	u64 nsoff = arena->dataoff + (sector * arena->internal_lbasize);
+	u64 nsoff = to_namespace_offset(arena, lba);
 	void *mem = kmap_atomic(page);
 
 	ret = arena_rw_bytes(arena, mem + off, len, nsoff, WRITE);
@@ -871,6 +877,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 		ret = lba_to_arena(btt, sector, &premap, &arena);
 		if (ret)
 			goto out_lane;
+
 		cur_len = min(arena->external_lbasize, len);
 
 		ret = btt_map_read(arena, premap, &postmap, &t_flag, &e_flag);
@@ -917,7 +924,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 
 		len -= cur_len;
 		off += cur_len;
-		sector++;
+		sector += arena->external_lbasize >> SECTOR_SHIFT;
 	}
 
 	return 0;
@@ -996,7 +1003,7 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
 
 		len -= cur_len;
 		off += cur_len;
-		sector++;
+		sector += arena->external_lbasize >> SECTOR_SHIFT;
 	}
 
 	return 0;
@@ -1148,11 +1155,11 @@ static int btt_blk_init(struct btt *btt)
 	blk_queue_make_request(btt->btt_queue, btt_make_request);
 	blk_queue_max_hw_sectors(btt->btt_queue, 1024);
 	blk_queue_bounce_limit(btt->btt_queue, BLK_BOUNCE_ANY);
-	blk_queue_physical_block_size(btt->btt_queue, btt->lbasize);
 	blk_queue_logical_block_size(btt->btt_queue, btt->lbasize);
 	btt->btt_queue->queuedata = btt;
 
-	set_capacity(btt->btt_disk, btt->nlba);
+	set_capacity(btt->btt_disk,
+		((u64)(btt->nlba * btt->lbasize)) >> SECTOR_SHIFT);
 	add_disk(btt->btt_disk);
 
 	return 0;

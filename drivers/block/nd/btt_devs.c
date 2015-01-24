@@ -52,7 +52,7 @@ struct nd_btt *to_nd_btt(struct device *dev)
 }
 EXPORT_SYMBOL(to_nd_btt);
 
-static const unsigned long btt_lbasize_supported[] = { 512, 0 };
+static const unsigned long btt_lbasize_supported[] = { 512, 4096, 0 };
 
 static ssize_t sector_size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
