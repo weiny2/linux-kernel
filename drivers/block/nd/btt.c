@@ -1158,8 +1158,7 @@ static int btt_blk_init(struct btt *btt)
 	blk_queue_logical_block_size(btt->btt_queue, btt->lbasize);
 	btt->btt_queue->queuedata = btt;
 
-	set_capacity(btt->btt_disk,
-		((u64)(btt->nlba * btt->lbasize)) >> SECTOR_SHIFT);
+	set_capacity(btt->btt_disk, btt->nlba * btt->lbasize >> SECTOR_SHIFT);
 	add_disk(btt->btt_disk);
 
 	return 0;
