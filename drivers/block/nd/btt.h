@@ -80,6 +80,40 @@ struct free_entry {
 	u8 seq;
 };
 
+/**
+ * struct arena_info - handle for an arena
+ * @size:		Size in bytes this arena occupies on the raw device.
+ * 			This includes arena metadata.
+ * @external_lba_start:	The first external LBA in this arena.
+ * @internal_nlba:	Number of internal blocks available in the arena
+ * 			including nfree reserved blocks
+ * @internal_lbasize:	Internal and external lba sizes may be different as
+ * 			we can round up 'odd' external lbasizes such as 520B
+ * 			to be aligned.
+ * @external_nlba:	Number of blocks contributed by the arena to the number
+ * 			reported to upper layers. (internal_nlba - nfree)
+ * @external_lbasize:	LBA size as exposed to upper layers.
+ * @nfree:		A reserve number of 'free' blocks that is used to
+ * 			handle incoming writes.
+ * @version_major:	Metadata layout version major.
+ * @version_minor:	Metadata layout version minor.
+ * @nextoff:		Offset in bytes to the start of the next arena.
+ * @infooff:		Offset in bytes to the info block of this arena.
+ * @dataoff:		Offset in bytes to the data area of this arena.
+ * @mapoff:		Offset in bytes to the map area of this arena.
+ * @logoff:		Offset in bytes to the log area of this arena.
+ * @info2off:		Offset in bytes to the backup info block of this arena.
+ * @freelist:		Pointer to in-memory list of free blocks
+ * @rtt:		Pointer to in-memory "Read Tracking Table"
+ * @map_lock:		Spinlock protecting concurrent map writes
+ * @nd_btt:		Pointer to parent nd_btt structure.
+ * @list:		List head for list of arenas
+ * @debugfs_dir:	Debugfs dentry
+ * @flags:		Arena flags - may signify error states.
+ *
+ * arena_info is a per-arena handle. Once an arena is narrowed down for an
+ * IO, this struct is passed around for the duration of the IO.
+ */
 struct arena_info {
 	u64 size;			/* Total bytes for this arena */
 	u64 external_lba_start;
@@ -99,8 +133,8 @@ struct arena_info {
 	u64 info2off;
 	/* Pointers to other in-memory structures for this arena */
 	struct free_entry *freelist;
-	u32 *rtt;			/* Read Tracking Table */
-	spinlock_t *map_lock;		/* Array of map locks */
+	u32 *rtt;
+	spinlock_t *map_lock;
 	struct nd_btt *nd_btt;
 	struct list_head list;
 	struct dentry *debugfs_dir;
@@ -108,6 +142,25 @@ struct arena_info {
 	u32 flags;
 };
 
+/**
+ * struct btt - handle for a BTT instance
+ * @btt_disk:		Pointer to the gendisk for BTT device
+ * @btt_queue:		Pointer to the request queue for the BTT device
+ * @arena_list:		Head of the list of arenas
+ * @debugfs_dir:	Debugfs dentry
+ * @backing_dev:	Backing block device for the BTT
+ * @nd_btt:		Parent nd_btt struct
+ * @nlba:		Number of logical blocks exposed to the	upper layers
+ * 			after removing the amount of space needed by metadata
+ * @rawsize:		Total size in bytes of the available backing device
+ * @lbasize:		LBA size as requested and presented to upper layers
+ * @lane_lock:		Per-lane spinlock
+ * @init_lock:		Mutex used for the BTT initialization
+ * @last_lane:		Atomic counter used to select lane
+ * @init_state:		Flag describing the initialization state for the BTT
+ * @num_arenas:		Number of arenas in the BTT instance
+ * @num_lanes:		Number of lanes available for IOs
+ */
 struct btt {
 	struct gendisk *btt_disk;
 	struct request_queue *btt_queue;
@@ -118,7 +171,7 @@ struct btt {
 	size_t nlba;
 	size_t rawsize;
 	u32 lbasize;
-	spinlock_t *lane_lock;		/* Array of lane locks */
+	spinlock_t *lane_lock;
 	struct mutex init_lock;
 	atomic_t last_lane;
 	int init_state;
