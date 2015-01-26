@@ -3515,7 +3515,13 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
 		}
 		if (host_msg & WFR_LINK_GOING_DOWN) {
-			dd_dev_info(dd, "8051: Link down\n");
+			const char *extra = "";
+			/* no downgrade action needed if going down */
+			if (host_msg & WFR_LINK_WIDTH_DOWNGRADED) {
+				host_msg &= ~(u64)WFR_LINK_WIDTH_DOWNGRADED;
+				extra = " (ignoring downgrade)";
+			}
+			dd_dev_info(dd, "8051: Link down%s\n", extra);
 			queue_link_down = 1;
 			/* clear flag so "uhnandled" message below
 			   does not include this */
