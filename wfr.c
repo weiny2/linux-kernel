@@ -131,6 +131,12 @@ struct flag_table {
 #define MIN_KERNEL_KCTXTS         2
 #define NUM_MAP_REGS             32
 
+/* extract the emulation revision */
+#define emulator_rev(dd) ((dd)->irev >> 8)
+/* parallel and serial emulation versions are 3 and 4 respectively */
+#define is_emulator_p(dd) ((((dd)->irev) & 0xf) == 3)
+#define is_emulator_s(dd) ((((dd)->irev) & 0xf) == 4)
+
 /* RSM fields */
 
 /* packet type */
@@ -2604,10 +2610,20 @@ void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 	if (dd->icode != WFR_ICODE_FPGA_EMULATION)
 		return;
 
-	if (is_a0(dd))
-		version = dd->irev >> 8;
-	else
-		version = 0x2d;	/* all B0 revision are 0x2d or higher */
+	/*
+	 * These LCB defaults on emulator _s are good, nothing to do here:
+	 *	LCB_CFG_TX_FIFOS_RADR
+	 *	LCB_CFG_RX_FIFOS_RADR
+	 *	LCB_CFG_LN_DCLK
+	 *	LCB_CFG_IGNORE_LOST_RCLK
+	 */
+	if (is_emulator_s(dd))
+		return;
+	/* else this is _p */
+
+	version = emulator_rev(dd);
+	if (!is_a0(dd))
+		version = 0x2d;	/* all B0 use 0x2d or higher settings */
 
 	if (version <= 0x12) {
 		/* release 0x12 and below */
@@ -9350,7 +9366,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		goto bail_cleanup;
 	}
 	if (dd->icode == WFR_ICODE_FPGA_EMULATION && is_a0(dd)
-						  && dd->irev < 0x1503) {
+						  && is_emulator_p(dd)
+						  && emulator_rev(dd) < 15) {
 		dd_dev_err(dd, "Version mismatch: This driver requires emulation version 0x15 or higher\n");
 		ret = -EINVAL;
 		goto bail_cleanup;
@@ -9384,9 +9401,9 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
 	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
 	dd->chip_sdma_mem_size = read_csr(dd, WFR_SEND_DMA_MEM_SIZE);
-	/* fix up link widths for emulation */
+	/* fix up link widths for emulation _p */
 	ppd = dd->pport;
-	if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION && is_emulator_p(dd)) {
 		ppd->link_width_supported =
 			ppd->link_width_enabled =
 			ppd->link_width_downgrade_supported =
