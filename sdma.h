@@ -167,6 +167,7 @@ enum sdma_events {
 	sdma_event_e70_go_idle,
 	sdma_event_e80_hw_freeze,
 	sdma_event_e82_hw_unfreeze,
+	sdma_event_e90_sw_halted,
 };
 
 struct sdma_set_state_action {
@@ -441,6 +442,10 @@ struct sdma_engine {
 		____cacheline_aligned_in_smp;
 	/* private: */
 	struct work_struct err_halt_worker;
+
+	/* private */
+	struct timer_list     err_progress_check_timer;
+	u32                   progress_check_head;
 };
 
 
