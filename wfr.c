@@ -916,6 +916,23 @@ static struct flag_table rxe_err_status_flags[] = {
 	| WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK \
 	| WFR_RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK)
 
+/*
+ * If RXDMA detects an uncorrectable error in a RcvHdrAddr or RcvHdrTailAddr
+ * CSR when delivering a packet to host memory, the error is correctly reported
+ * as RxDmaCsrUncErr and leads to SPC freeze. The problem is that a write TLP
+ * can be sent upstream to a corrupted host memory address. A multi-bit hardware
+ * data corruption on this internal state can lead to host memory corruption
+ * along with the normal error reporting and SPC freeze mode entry. The
+ * workaround for A0 is to not attempt to recover from freeze mode when the
+ * RxDmaCsrUncErr error case occurs. A host reboot is instead required to
+ * recover. This erratum is slated for a B0 fix.
+ */
+#define WFR_RXE_FREEZE_ABORT_MASK \
+	(WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK)
+
+#define WFR_FREEZE_OK 0
+#define WFR_FREEZE_ABORT 1
+
 #if 0 /* no users at present */
 /*
  * Credit Return flags
@@ -1134,7 +1151,7 @@ static const char *link_state_name(u32 state);
 static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 				u64 *out_data);
 static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
-static void start_freeze_handling(struct qib_pportdata *ppd);
+static void start_freeze_handling(struct qib_pportdata *ppd, int abort);
 static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
 
 /*
@@ -1944,7 +1961,7 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		/* this error requires a manual drop into SPC freeze mode */
 		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
 		/* then a fixup */
-		start_freeze_handling(dd->pport);
+		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
 	}
 }
 
@@ -1955,8 +1972,18 @@ static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	dd_dev_info(dd, "Receive Error: %s\n",
 		rxe_err_status_string(buf, sizeof(buf), reg));
 
-	if (reg & ALL_RXE_FREEZE_ERR)
-		start_freeze_handling(dd->pport);
+	if (reg & ALL_RXE_FREEZE_ERR) {
+		int abort = WFR_FREEZE_OK;
+
+		/*
+		 * Freeze mode recovery is disabled for the errors
+		 * in WFR_RXE_FREEZE_ABORT_MASK
+		 */
+		if (is_a0(dd) && (reg & WFR_RXE_FREEZE_ABORT_MASK))
+			abort = WFR_FREEZE_ABORT;
+
+		start_freeze_handling(dd->pport, abort);
+	}
 }
 
 /* TODO */
@@ -1973,7 +2000,7 @@ static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		pio_err_status_string(buf, sizeof(buf), reg));
 
 	if (reg & ALL_PIO_FREEZE_ERR)
-		start_freeze_handling(dd->pport);
+		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
 }
 
 static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -1984,7 +2011,7 @@ static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		sdma_err_status_string(buf, sizeof(buf), reg));
 
 	if (reg & ALL_SDMA_FREEZE_ERR)
-		start_freeze_handling(dd->pport);
+		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
 }
 
 static void count_port_inactive(struct hfi_devdata *dd)
@@ -2043,11 +2070,11 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	char buf[96];
 
 	if (reg & ALL_TXE_EGRESS_FREEZE_ERR)
-		start_freeze_handling(dd->pport);
+		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
 	if (is_a0(dd) && (reg &
 		    WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_VL_ERR_SMASK)
 		    && (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR))
-		start_freeze_handling(dd->pport);
+		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
 
 	while (reg_copy) {
 		int posn = fls64(reg_copy);
@@ -2753,7 +2780,7 @@ void handle_sma_message(struct work_struct *work)
 /*
  * Called from all interrupt handlers to start handling an SPC freeze.
  */
-static void start_freeze_handling(struct qib_pportdata *ppd)
+static void start_freeze_handling(struct qib_pportdata *ppd, int abort)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct send_context *sc;
@@ -2774,6 +2801,11 @@ static void start_freeze_handling(struct qib_pportdata *ppd)
 
 	/* TODO: mark/notify all user rcv contexts */
 
+	if (abort) {
+		dd_dev_err(dd,
+			   "Aborted freeze recovery. Please REBOOT system\n");
+		return;
+	}
 	/* queue non-interrupt handler */
 	queue_work(ppd->qib_wq, &ppd->freeze_work);
 }
