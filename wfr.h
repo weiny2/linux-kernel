@@ -334,6 +334,7 @@
 #define VERIFY_CAP_LOCAL_FABRIC	     0x08
 #define VERIFY_CAP_LOCAL_LINK_WIDTH  0x09
 #define LOCAL_DEVICE_ID		     0x0a
+#define LOCAL_LNI_INFO		     0x0c
 #define REMOTE_LNI_INFO              0x0d
 #define MISC_STATUS		     0x0e
 #define VERIFY_CAP_REMOTE_PHY	     0x0f
@@ -364,7 +365,7 @@
 #define READ_DATA_DATA_MASK   0xffffffffull
 
 /* TX settings fields */
-#define ENABLE_LINE_TX_SHIFT		0
+#define ENABLE_LANE_TX_SHIFT		0
 #define ENABLE_LANE_TX_MASK		0xff
 #define TX_POLARITY_INVERSION_SHIFT	8
 #define TX_POLARITY_INVERSION_MASK	0xff
@@ -410,6 +411,10 @@
 #define REMOTE_DEVICE_REV_MASK 0xff
 #define REMOTE_DEVICE_ID_SHIFT 8
 #define REMOTE_DEVICE_ID_MASK 0xffff
+
+/* local LNI link width fields */
+#define ENABLE_LANE_RX_SHIFT 16
+#define ENABLE_LANE_RX_MASK  0xff
 
 /* mask, shift for reading 'mgmt_enabled' value from REMOTE_LNI_INFO field */
 #define MGMT_ALLOWED_SHIFT 23

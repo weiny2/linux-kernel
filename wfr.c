@@ -1111,6 +1111,10 @@ static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
 				u8 *device_rev);
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
 static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
+static void read_local_lni(struct hfi_devdata *dd, u8 *enable_lane_rx);
+static int read_tx_settings(struct hfi_devdata *dd, u8 *enable_lane_tx,
+				u8 *tx_polarity_inversion,
+				u8 *rx_polarity_inversion, u8 *max_rate);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
 static void handle_dcc_err(struct hfi_devdata *dd,
@@ -3003,8 +3007,56 @@ static u16 link_width_to_bits(struct hfi_devdata *dd, u16 width)
 }
 
 /*
+ * Do a population count on the bottom nibble.
+ */
+static const u8 bit_counts[16] = {
+	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+};
+static inline u8 nibble_to_count(u8 nibble)
+{
+	return bit_counts[nibble & 0xf];
+}
+
+/*
+ * Read the active lane information from the 8051 registers and return
+ * their widths.
+ *
+ * Active lane information is found in these 8051 registers:
+ *	enable_lane_tx
+ *	enable_lane_rx
+ */
+static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
+				u16 *rx_width)
+{
+	u16 tx, rx;
+	u8 enable_lane_rx;
+	u8 enable_lane_tx;
+	u8 tx_polarity_inversion;
+	u8 rx_polarity_inversion;
+	u8 max_rate;
+
+	/* read the active lanes */
+	read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
+				&rx_polarity_inversion, &max_rate);
+	read_local_lni(dd, &enable_lane_rx);
+
+	/* convert to counts */
+	tx = nibble_to_count(enable_lane_tx);
+	rx = nibble_to_count(enable_lane_rx);
+
+	dd_dev_info(dd,
+		"Fabric active lanes (width): tx 0x%x (%d), rx 0x%x (%d)\n",
+		enable_lane_tx, tx, enable_lane_rx, rx);
+	*tx_width = link_width_to_bits(dd, tx);
+	*rx_width = link_width_to_bits(dd, rx);
+}
+
+/*
  * Read verify_cap_local_fm_link_width[1] to obtain the link widths.
- * Valid after the end of VerifyCap and during LinkUp.  Bits are:
+ * Valid after the end of VerifyCap and during LinkUp.  Does not change
+ * after link up.  I.e. look elsewhere for downgrade information.
+ *
+ * Bits are:
  *	+ bits [7:4] contain the number of active transmitters
  *	+ bits [3:0] contain the number of active receivers
  * These are numbers 1 through 4 and can be different values if the
@@ -3012,7 +3064,7 @@ static u16 link_width_to_bits(struct hfi_devdata *dd, u16 width)
  *
  * verify_cap_local_fm_link_width[0] retains its original value.
  */
-static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
+static void get_linkup_widths(struct hfi_devdata *dd, u16 *tx_width,
 				u16 *rx_width)
 {
 	u16 flags, widths, tx, rx;
@@ -3038,7 +3090,7 @@ void get_linkup_link_widths(struct qib_pportdata *ppd)
 {
 	u16 tx_width, rx_width;
 
-	get_link_widths(ppd->dd, &tx_width, &rx_width);
+	get_linkup_widths(ppd->dd, &tx_width, &rx_width);
 
 	/* use tx_width as the link is supposed to be symmetric on link up */
 	ppd->link_width_active = tx_width;
@@ -4343,6 +4395,14 @@ static void read_vc_remote_link_width(struct hfi_devdata *dd,
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
 }
 
+static void read_local_lni(struct hfi_devdata *dd, u8 *enable_lane_rx)
+{
+	u32 frame;
+
+	read_8051_config(dd, LOCAL_LNI_INFO, GENERAL_CONFIG, &frame);
+	*enable_lane_rx = (frame >> ENABLE_LANE_RX_SHIFT) & ENABLE_LANE_RX_MASK;
+}
+
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed)
 {
 	u32 frame;
@@ -4379,7 +4439,7 @@ static int read_tx_settings(struct hfi_devdata *dd,
 	int ret;
 
 	ret = read_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, &frame);
-	*enable_lane_tx = (frame >> ENABLE_LINE_TX_SHIFT)
+	*enable_lane_tx = (frame >> ENABLE_LANE_TX_SHIFT)
 				& ENABLE_LANE_TX_MASK;
 	*tx_polarity_inversion = (frame >> TX_POLARITY_INVERSION_SHIFT)
 				& TX_POLARITY_INVERSION_MASK;
@@ -4398,7 +4458,7 @@ static int write_tx_settings(struct hfi_devdata *dd,
 	u32 frame;
 
 	/* no need to mask, all variable sizes match field widths */
-	frame = enable_lane_tx << ENABLE_LINE_TX_SHIFT
+	frame = enable_lane_tx << ENABLE_LANE_TX_SHIFT
 		| tx_polarity_inversion << TX_POLARITY_INVERSION_SHIFT
 		| rx_polarity_inversion << RX_POLARITY_INVERSION_SHIFT
 		| max_rate << MAX_RATE_SHIFT;
