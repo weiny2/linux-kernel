@@ -9106,10 +9106,15 @@ int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 	if (HFI_CAP_KGET_MASK(rcd->flags, ALLOW_PERM_JKEY))
 		reg |= WFR_SEND_CTXT_CHECK_JOB_KEY_ALLOW_PERMISSIVE_SMASK;
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, reg);
-	/* Turn on the J_KEY check */
-	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
-	reg |= WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
-	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	/*
+	 * Enable send-side J_KEY integrity check, unless this is A0 h/w
+	 * (due to A0 erratum).
+	 */
+	if (!is_a0(dd)) {
+		reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+		reg |= WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
+		write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	}
 
 	/* Enable J_KEY check on receive context. */
 	reg = WFR_RCV_KEY_CTRL_JOB_KEY_ENABLE_SMASK |
@@ -9133,10 +9138,16 @@ int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
 	}
 	sctxt = rcd->sc->context;
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, 0);
-	/* Turn off the J_KEY check on the send context */
-	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
-	reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
-	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	/*
+	 * Disable send-side J_KEY integrity check, unless this is A0 h/w.
+	 * This check would not have been enabled for A0 h/w, see
+	 * set_ctxt_jkey().
+	 */
+	if (!is_a0(dd)) {
+		reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+		reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
+		write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	}
 	/* Turn off the J_KEY on the receive side */
 	write_kctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, 0);
 done:

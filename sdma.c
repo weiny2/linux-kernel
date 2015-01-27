@@ -1510,9 +1510,10 @@ static void init_sdma_regs(
 	uint idle_cnt)
 {
 	u8 opval, opmask;
+	struct hfi_devdata *dd = sde->dd;
 
 #ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
+	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n",
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
@@ -1530,7 +1531,7 @@ static void init_sdma_regs(
 	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
 	if (likely(!HFI_CAP_IS_KSET(NO_INTEGRITY)))
 		write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE,
-				HFI_PKT_BASE_SDMA_INTEGRITY);
+				hfi_pkt_base_sdma_integrity(dd));
 	opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
 	opval = WFR_OPCODE_CHECK_VAL_DISABLED;
 	write_sde_csr(sde, WFR_SEND_DMA_CHECK_OPCODE,
