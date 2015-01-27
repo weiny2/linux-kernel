@@ -159,7 +159,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	unsigned long dsm_mask;
 	acpi_handle handle;
 	struct device *dev;
-	int rc = 0, i;
+	int rc, i;
 	u32 offset;
 
 	if (!desc)
@@ -212,6 +212,13 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		}
 	}
 
+	dev_dbg(dev, "%s: cmd: %s input length: %d\n", __func__,
+			nfit_cmd_name(cmd), in_buf.buffer.length);
+	if (IS_ENABLED(CONFIG_DYNAMIC_DEBUG))
+		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
+				4, in_buf.buffer.pointer, min_t(u32, 128,
+					in_buf.buffer.length), true);
+
 	out_obj = acpi_evaluate_dsm(handle, nd_acpi_uuid, 1, cmd, &in_obj);
 	if (!out_obj) {
 		dev_dbg(dev, "%s: _DSM failed cmd: %s\n", __func__,
@@ -225,11 +232,12 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		rc = -EINVAL;
 		goto out;
 	}
+
 	dev_dbg(dev, "%s: cmd: %s output length: %d\n", __func__,
 			nfit_cmd_name(cmd), out_obj->buffer.length);
 	if (IS_ENABLED(CONFIG_DYNAMIC_DEBUG))
-		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 16,
-				1, out_obj->buffer.pointer, min_t(u32, 128,
+		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
+				4, out_obj->buffer.pointer, min_t(u32, 128,
 					out_obj->buffer.length), true);
 
 	for (i = 0, offset = 0; i < desc->out_num; i++) {
@@ -237,21 +245,19 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 				out_obj->buffer.length, offset);
 
 		if (out_size == UINT_MAX) {
-			dev_err(dev, "%s: unknown output size cmd: %s field: %d\n",
+			dev_dbg(dev, "%s: unknown output size cmd: %s field: %d\n",
 					__func__, nfit_cmd_name(cmd), i);
-			rc = -ENXIO;
-			goto out;
+			break;
 		}
 
 		if (offset + out_size > out_obj->buffer.length) {
-			dev_err(dev, "%s: output object underflow cmd: %s field: %d\n",
+			dev_dbg(dev, "%s: output object underflow cmd: %s field: %d\n",
 					__func__, nfit_cmd_name(cmd), i);
-			rc = -ENXIO;
-			goto out;
+			break;
 		}
 
 		if (in_buf.buffer.length + offset + out_size > buf_len) {
-			dev_err(dev, "%s: output overrun cmd: %s field: %d\n",
+			dev_dbg(dev, "%s: output overrun cmd: %s field: %d\n",
 					__func__, nfit_cmd_name(cmd), i);
 			rc = -ENXIO;
 			goto out;
@@ -261,14 +267,20 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		offset += out_size;
 	}
 	if (offset + in_buf.buffer.length < buf_len) {
-		if (cmd == NFIT_CMD_VENDOR || cmd == NFIT_CMD_ARS_QUERY) {
-			rc = buf_len - offset; /* part of return buffer is invalid */
+		if (i >= 1) {
+			/*
+			 * status valid, return the number of bytes left
+			 * unfilled in the output buffer
+			 */
+			rc = buf_len - offset;
 		} else {
 			dev_err(dev, "%s: underrun cmd: %s buf_len: %d out_len: %d\n",
 					__func__, nfit_cmd_name(cmd), buf_len, offset);
 			rc = -ENXIO;
 		}
-	}
+	} else
+		rc = 0;
+
  out:
 	ACPI_FREE(out_obj);
 
