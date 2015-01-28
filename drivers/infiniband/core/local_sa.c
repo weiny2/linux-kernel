@@ -56,7 +56,7 @@ enum {
 };
 
 static int set_paths_per_dest(const char *val, struct kernel_param *kp);
-static unsigned long paths_per_dest = SA_DB_MAX_PATHS_PER_DEST;
+static unsigned long paths_per_dest;
 module_param_call(paths_per_dest, set_paths_per_dest, param_get_ulong,
 		  &paths_per_dest, 0644);
 MODULE_PARM_DESC(paths_per_dest, "Maximum number of paths to retrieve "
