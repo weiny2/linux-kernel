@@ -938,6 +938,11 @@ static void kcopy_stats_fini(void)
 
 #endif
 
+static char *kcopy_devnode(struct device *dev, mode_t *mode)
+{
+	return kasprintf(GFP_KERNEL, "kcopy/%s", dev_name(dev));
+}
+
 static int __init kcopy_init(void)
 {
 	int ret;
@@ -970,6 +975,8 @@ static int __init kcopy_init(void)
 		goto bail_chrdev;
 	}
 
+	kcopy_dev.class->devnode = kcopy_devnode;
+
 	cdev_init(&kcopy_dev.cdev, &kcopy_fops);
 	ret = cdev_add(&kcopy_dev.cdev, kcopy_dev.dev, KCOPY_MAX_MINORS);
 	if (ret < 0) {
@@ -982,7 +989,7 @@ static int __init kcopy_init(void)
 		const int minor = MINOR(kcopy_dev.dev) + i;
 		const dev_t dev = MKDEV(MAJOR(kcopy_dev.dev), minor);
 
-		snprintf(devname, sizeof(devname), "kcopy%02d", i);
+		snprintf(devname, sizeof(devname), "%02d", i);
 		kcopy_dev.devp[i] =
 			device_create(kcopy_dev.class, NULL,
 				      dev, NULL, devname);
