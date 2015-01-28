@@ -43,6 +43,9 @@
 
 #include "qib.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) QIB_DRV_NAME " " fmt
+
 /*
  * The size has to be longer than this string, so we can append
  * board/chip information to it in the init code.
@@ -51,11 +54,21 @@ const char ib_qib_version[] = QIB_DRIVER_VERSION "\n";
 
 DEFINE_SPINLOCK(qib_devs_lock);
 LIST_HEAD(qib_dev_list);
+LIST_HEAD(qib_mod_param_list);
 DEFINE_MUTEX(qib_mutex);	/* general driver use */
 
-unsigned qib_ibmtu;
-module_param_named(ibmtu, qib_ibmtu, uint, S_IRUGO);
-MODULE_PARM_DESC(ibmtu, "Set max IB MTU (0=2KB, 1=256, 2=512, ... 5=4096");
+/* Per-unit/port module parameter value structure
+ * linked to the qib_mod_param structure - one per
+ * unit/port */
+struct qib_mod_param_pport {
+	struct list_head list;
+	u16 unit;
+	u8 port;
+	u64 value;
+};
+
+QIB_MODPARAM_PORT(ibmtu, NULL, 5, S_IRUGO,
+		  "Set max IB MTU (0=2KB, 1=256, 2=512, ... 5=4096");
 
 unsigned qib_compat_ddr_negotiate = 1;
 module_param_named(compat_ddr_negotiate, qib_compat_ddr_negotiate, uint,
@@ -88,6 +101,178 @@ const char *qib_get_unit_name(int unit)
 
 	snprintf(iname, sizeof iname, "infinipath%u", unit);
 	return iname;
+}
+
+int qib_set_mod_param(const char *str, struct kernel_param *kp)
+{
+	char *next = (char *)str, *tmp;
+	unsigned long val = 0, dft;
+	u32 unit = 0, port = 0;
+	struct qib_mod_param *param =
+		(struct qib_mod_param *)kp->arg;
+	struct qib_mod_param_pport *pport, *p;
+	int ret = 0;
+
+	if (strlen(str) >= MAX_QIB_PARAM_LEN) {
+		pr_warn("parameter value too long\n");
+		ret = -ENOSPC;
+		goto done;
+	}
+
+	/* qib_dev_list will be empty only when the driver is initially
+	 * loading. */
+	if (list_empty(&qib_dev_list) || !param->pport.next)
+		INIT_LIST_HEAD(&param->pport);
+	tmp = next;
+	dft = simple_strtoul(tmp, &next, 0);
+	if (next == tmp) {
+		pr_warn("invalid parameter value\n");
+		ret =  -EINVAL;
+		goto done;
+	}
+	/* clear any previously added port entries */
+	list_for_each_entry_safe(pport, p, &param->pport, list) {
+		list_del(&pport->list);
+		kfree(pport);
+	}
+	if (!*next || *next == '\n' || *next == ',')
+		param->dflt = dft;
+	else if (*next && *next == ':')
+		/* no default, rewind the string */
+		next = tmp;
+	else
+		pr_warn("invalid parameter value\n");
+	while (*next && next[1]) {
+		if (*next == ',')
+			tmp = ++next;
+		unit = simple_strtoul(tmp, &next, 0);
+		if (param->type == qib_mod_param_port) {
+			if (next == tmp || !*next || *next != ':') {
+				pr_warn("Invalid unit:port argument at \"%s\".\n",
+					tmp);
+				while (*next && *next++ != ',')
+					;
+				tmp = next;
+				continue;
+			}
+			tmp = ++next;
+			port = simple_strtoul(tmp, &next, 0);
+			if (!port) {
+				/* port numbers start at 1, 0 is invalid */
+				pr_warn("Invalid argument at \"%s\". Port numbers start at 1.\n",
+					tmp);
+				while (*next && *next++ != ',')
+					;
+				tmp = next;
+				continue;
+			}
+		}
+		if (next == tmp || *next != '=') {
+			pr_warn("Invalid %s argument at \"%s\".\n",
+				(param->type == qib_mod_param_port ?
+				"port" : "unit"), tmp);
+			while (*next && *next++ != ',')
+				;
+			tmp = next;
+			continue;
+		}
+		tmp = ++next;
+		val = simple_strtoul(tmp, &next, 0);
+		if (next == tmp) {
+			pr_warn("Invalid value string at \"%s\"\n", tmp);
+			while (*next && *next++ != ',')
+				;
+			tmp = next;
+			continue;
+		}
+		pport = kzalloc(sizeof(struct qib_mod_param_pport),
+				GFP_KERNEL);
+		if (!pport) {
+			pr_err("no memory for module parameter.\n");
+			ret =  -ENOMEM;
+			goto done;
+		}
+		pport->unit = unit;
+		pport->port = port;
+		pport->value = val;
+		list_add_tail(&pport->list, &param->pport);
+		if (!*next || *next == '\n')
+			break;
+		tmp = ++next;
+	}
+	/* add parameter to list so it can be cleaned up */
+	if (!param->list.next)
+		list_add(&param->list, &qib_mod_param_list);
+
+	if (param->func && qib_count_units(NULL, NULL)) {
+		struct qib_devdata *dd;
+		list_for_each_entry(pport, &param->pport, list) {
+			param_set_func_t setfunc = param->func;
+			list_for_each_entry(dd, &qib_dev_list, list)
+				if (dd->unit == pport->unit)
+					break;
+			if (!setfunc(dd, pport->port, pport->value))
+				pr_err("Error setting module parameter %s for IB%u:%u",
+				       param->name,
+				       pport->unit,
+				       pport->port);
+		}
+	}
+done:
+	return ret;
+}
+
+int qib_get_mod_param(char *buffer, struct kernel_param *kp)
+{
+	struct qib_mod_param *param =
+		(struct qib_mod_param *)kp->arg;
+	struct qib_mod_param_pport *pport;
+	char *p = buffer;
+	int s = 0;
+
+	s = scnprintf(p, PAGE_SIZE, "%lu", param->dflt);
+	p += s;
+
+	if (param->pport.next)
+		list_for_each_entry(pport, &param->pport, list) {
+			*p++ = ',';
+			if (param->type == qib_mod_param_unit)
+				s = scnprintf(p, PAGE_SIZE, "%u=%llu",
+					      pport->unit, pport->value);
+			else if (param->type == qib_mod_param_port)
+				s = scnprintf(p, PAGE_SIZE, "%u:%u=%llu",
+					      pport->unit, pport->port,
+					      pport->value);
+			p += s;
+		}
+	return strlen(buffer);
+}
+
+u64 qib_read_mod_param(struct qib_mod_param *param, u16 unit, u8 port)
+{
+	struct qib_mod_param_pport *pport;
+	u64 ret = param->dflt;
+
+	if (param->type != qib_mod_param_drv)
+		if (param->pport.next && !list_empty(&param->pport))
+			list_for_each_entry(pport, &param->pport, list)
+				if (pport->unit == unit &&
+				    pport->port == port)
+					ret = pport->value;
+	return ret;
+}
+
+void qib_clean_mod_param(void)
+{
+	struct qib_mod_param *p;
+	struct qib_mod_param_pport *pp, *pps;
+
+	list_for_each_entry(p, &qib_mod_param_list, list) {
+		list_for_each_entry_safe(pp, pps, &p->pport, list) {
+			list_del(&pp->list);
+			kfree(pp);
+		}
+	}
 }
 
 /*
@@ -619,7 +804,8 @@ int qib_set_mtu(struct qib_pportdata *ppd, u16 arg)
 		ret = -EINVAL;
 		goto bail;
 	}
-	chk = ib_mtu_enum_to_int(qib_ibmtu);
+	chk = ib_mtu_enum_to_int(
+		QIB_MODPARAM_GET(ibmtu, ppd->dd->unit, ppd->port));
 	if (chk > 0 && arg > chk) {
 		ret = -EINVAL;
 		goto bail;

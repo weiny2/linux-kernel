@@ -536,7 +536,8 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	pip->vl_arb_low_cap =
 		dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
 	/* InitTypeReply = 0 */
-	pip->inittypereply_mtucap = qib_ibmtu ? qib_ibmtu : IB_MTU_4096;
+	pip->inittypereply_mtucap =
+		QIB_MODPARAM_GET(ibmtu, dd->unit, ppd->port);
 	/* HCAs ignore VLStallCount and HOQLife */
 	/* pip->vlstallcnt_hoqlife; */
 	pip->operationalvl_pei_peo_fpi_fpo =
