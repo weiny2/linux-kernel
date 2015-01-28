@@ -975,13 +975,13 @@ static struct miscdevice usa_misc = {
 	.fops		= &usa_fops,
 };
 
-static struct class *usa_class;
-static ssize_t show_abi_version(struct class *class_dev,
-				struct class_attribute *class_attr, char *buf)
+static ssize_t show_abi_version(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
 {
 	return sprintf(buf, "%d\n", IB_USA_ABI_VERSION);
 }
-static CLASS_ATTR(abi_version, S_IRUGO, show_abi_version, NULL);
+static DEVICE_ATTR(abi_version, S_IRUGO, show_abi_version, NULL);
 
 static int __init usa_init(void)
 {
@@ -991,17 +991,10 @@ static int __init usa_init(void)
 	if (ret)
 		return ret;
 
-	usa_class = class_create(THIS_MODULE, "infiniband_usa");
-	if (IS_ERR(usa_class)) {
-		ret = PTR_ERR(usa_class);
-		pr_err("ib_usa: couldn't create class infiniband_usa\n");
-		goto err1;
-	}
-
-	ret = class_create_file(usa_class, &class_attr_abi_version);
+	ret = device_create_file(usa_misc.this_device, &dev_attr_abi_version);
 	if (ret) {
 		pr_err("ib_usa: couldn't create abi_version attr\n");
-		goto err2;
+		goto err1;
 	}
 
 	ret = ib_register_client(&usa_client);
@@ -1011,7 +1004,7 @@ static int __init usa_init(void)
 	return 0;
 
 err2:
-	class_destroy(usa_class);
+	device_remove_file(usa_misc.this_device, &dev_attr_abi_version);
 err1:
 	misc_deregister(&usa_misc);
 	return ret;
@@ -1020,7 +1013,7 @@ err1:
 static void __exit usa_cleanup(void)
 {
 	ib_unregister_client(&usa_client);
-	class_destroy(usa_class);
+	device_remove_file(usa_misc.this_device, &dev_attr_abi_version);
 	misc_deregister(&usa_misc);
 	idr_destroy(&usa_idr);
 }
