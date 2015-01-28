@@ -521,7 +521,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	u8 pcount = initial_pkt_count;
 	struct sdma_req_info info;
 	struct user_sdma_request *req;
-	u8 opcode, vl;
+	u8 opcode, sc, vl;
 
 	if (iovec[idx].iov_len < sizeof(info) + sizeof(req->hdr)) {
 		hfi_cdbg(SDMA,
@@ -597,10 +597,17 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		ret = -EINVAL;
 		goto free_req;
 	}
-	/* Validate the vl. Do not trust packets from user space blindly. */
-	vl = (be16_to_cpu(req->hdr.lrh[0]) >> 12) & 0xF;
-	if (vl >= hfi_num_vls(dd->pport->vls_operational)) {
-		SDMA_DBG(req, "Invalid vl (%d)", vl);
+	/*
+	 * Validate the vl. Do not trust packets from user space blindly.
+	 * VL comes from PBC, SC comes from LRH, and the VL needs to
+	 * match the SC lookup.
+	 */
+	vl = (le16_to_cpu(req->hdr.pbc[0]) >> 12) & 0xF;
+	sc = (((be16_to_cpu(req->hdr.lrh[0]) >> 12) & 0xF) |
+	      ((le16_to_cpu(req->hdr.pbc[1] >> 14) & 0x1) << 4));
+	if (vl >= hfi_num_vls(dd->pport->vls_operational) ||
+	    vl != sc_to_vlt(dd, sc)) {
+		SDMA_DBG(req, "Invalid SC(%u)/VL(%u)", sc, vl);
 		ret = -EINVAL;
 		goto free_req;
 	}

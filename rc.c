@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -711,7 +711,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 	pbc_flags |= ((!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT);
-	lrh0 |= (sc5 & 0xf) << 12 | (sc5 & 0xf) << 4;
+	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	hdr.lrh[0] = cpu_to_be16(lrh0);
 	hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);

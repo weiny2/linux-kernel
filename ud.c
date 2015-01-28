@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2015 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -355,7 +356,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 	} else
 		bth0 = IB_OPCODE_UD_SEND_ONLY << 24;
 	sc5 = ibp->sl_to_sc[ah_attr->sl];
-	lrh0 |= (sc5 & 0xf) << 4;
+	lrh0 |= (ah_attr->sl & 0xf) << 4;
 	if (qp->ibqp.qp_type == IB_QPT_SMI) {
 		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
 		qp->s_sc = 0xf;

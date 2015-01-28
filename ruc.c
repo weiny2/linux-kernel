@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2015 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -771,7 +772,7 @@ void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
 		middle = 0;
 	}
 	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-	lrh0 |= (sc5 & 0xf) << 12 | (sc5 & 0xf) << 4;
+	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	qp->s_sc = sc5;
 	/*
 	 * reset s_hdr/AHG fields
