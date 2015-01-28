@@ -42,6 +42,7 @@
 #include "mad_rmpp.h"
 #include "smi.h"
 #include "agent.h"
+#include "linux/utsname.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("kernel IB MAD API");
@@ -939,6 +940,23 @@ int ib_get_mad_data_offset(u8 mgmt_class)
 		return IB_MGMT_MAD_HDR;
 }
 EXPORT_SYMBOL(ib_get_mad_data_offset);
+
+void ib_build_node_desc(char *dest, char *src)
+{
+	int i;
+	for (i = 0; i < 64;) {
+		if (*src == '@') {
+			char *name = init_utsname()->nodename;
+			for (; *name && (*name != '.') && (i < 64); ++i)
+				*dest++ = *name++;
+			src++;
+		} else {
+			*dest++ = *src++;
+			i++;
+		}
+	}
+}
+EXPORT_SYMBOL(ib_build_node_desc);
 
 int ib_is_mad_class_rmpp(u8 mgmt_class)
 {

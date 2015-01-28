@@ -646,6 +646,14 @@ int ib_is_mad_class_rmpp(u8 mgmt_class);
 int ib_get_mad_data_offset(u8 mgmt_class);
 
 /**
+ * ib_build_node_desc - copies the node description and replaces
+ * any @ markers with the present system node name.
+ * @dest: destination
+ * @src: source
+ */
+void ib_build_node_desc(char *dest, char *src);
+
+/**
  * ib_get_rmpp_segment - returns the data buffer for a given RMPP segment.
  * @send_buf: Previously allocated send data buffer.
  * @seg_num: number of segment to return
