@@ -287,7 +287,7 @@ static int kcopy_get_pages(struct kcopy_file *kf, pid_t pid,
 	if (err < npages && err > 0) {
 		kcopy_put_pages(pages, err);
 		err = -ENOMEM;
-	} else
+	} else if (err == npages)
 		err = 0;
 
 	up_read(&mm->mmap_sem);
