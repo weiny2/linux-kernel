@@ -13,4 +13,9 @@ config KCOPY
 	  for MPI applications where the point-to-point nature of vmsplice
 	  and pipes can be a limiting factor in performance.
 
+config KCOPY_DEBUG
+	bool "kcopy debugging"
+	depends on KCOPY && CONFIG_DEBUG_FS
+	---help---
+	  Enables debugfs counters to analyze kcopy code paths
 endmenu
