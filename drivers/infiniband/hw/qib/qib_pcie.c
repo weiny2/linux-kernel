@@ -480,10 +480,8 @@ void qib_pcie_reenable(struct qib_devdata *dd, u16 cmd, u8 iline, u8 cline)
 			"pci_enable_device failed after reset: %d\n", r);
 }
 
-
-static int qib_pcie_coalesce;
-module_param_named(pcie_coalesce, qib_pcie_coalesce, int, S_IRUGO);
-MODULE_PARM_DESC(pcie_coalesce, "tune PCIe colescing on some Intel chipsets");
+static QIB_MODPARAM_UNIT(pcie_coalesce, NULL, 0, S_IRUGO,
+			 "tune PCIe colescing on some Intel chipsets");
 
 /*
  * Enable PCIe completion and data coalescing, on Intel 5x00 and 7300
@@ -498,8 +496,8 @@ static void qib_tune_pcie_coalesce(struct qib_devdata *dd)
 	u16 devid;
 	u32 mask, bits, val;
 
-	if (!qib_pcie_coalesce)
-		return;
+	if (!QIB_MODPARAM_GET(pcie_coalesce, dd->unit, 0))
+		return 0;
 
 	/* Find out supported and configured values for parent (root) */
 	parent = dd->pcidev->bus->self;
@@ -555,15 +553,16 @@ static void qib_tune_pcie_coalesce(struct qib_devdata *dd)
  * BIOS may not set PCIe bus-utilization parameters for best performance.
  * Check and optionally adjust them to maximize our throughput.
  */
-static int qib_pcie_caps;
-module_param_named(pcie_caps, qib_pcie_caps, int, S_IRUGO);
-MODULE_PARM_DESC(pcie_caps, "Max PCIe tuning: Payload (0..3), ReadReq (4..7)");
+
+static QIB_MODPARAM_UNIT(pcie_caps, NULL, 0, S_IRUGO,
+			 "Max PCIe tuning: Payload (4lsb), ReadReq (D4..7)");
 
 static void qib_tune_pcie_caps(struct qib_devdata *dd)
 {
 	struct pci_dev *parent;
 	u16 rc_mpss, rc_mps, ep_mpss, ep_mps;
 	u16 rc_mrrs, ep_mrrs, max_mrrs;
+	int caps = QIB_MODPARAM_GET(pcie_caps, dd->unit, 0);
 
 	/* Find out supported and configured values for parent (root) */
 	parent = dd->pcidev->bus->self;
@@ -586,8 +585,8 @@ static void qib_tune_pcie_caps(struct qib_devdata *dd)
 		rc_mpss = ep_mpss;
 
 	/* If Supported greater than limit in module param, limit it */
-	if (rc_mpss > (qib_pcie_caps & 7))
-		rc_mpss = qib_pcie_caps & 7;
+	if (rc_mpss > (caps & 7))
+		rc_mpss = caps & 7;
 	/* If less than (allowed, supported), bump root payload */
 	if (rc_mpss > rc_mps) {
 		rc_mps = rc_mpss;
@@ -605,8 +604,8 @@ static void qib_tune_pcie_caps(struct qib_devdata *dd)
 	 * which is code '5' (log2(4096) - 7)
 	 */
 	max_mrrs = 5;
-	if (max_mrrs > ((qib_pcie_caps >> 4) & 7))
-		max_mrrs = (qib_pcie_caps >> 4) & 7;
+	if (max_mrrs > ((caps >> 4) & 7))
+		max_mrrs = (caps >> 4) & 7;
 
 	max_mrrs = 128 << max_mrrs;
 	rc_mrrs = pcie_get_readrq(parent);
