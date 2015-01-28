@@ -1816,25 +1816,52 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 	if (ib_response_mad(mad_recv_wc->recv_buf.mad)) {
 		spin_lock_irqsave(&mad_agent_priv->lock, flags);
 		mad_send_wr = ib_find_send_mad(mad_agent_priv, mad_recv_wc);
-		if (!mad_send_wr) {
+		if (mad_send_wr) {
+			ib_mark_mad_done(mad_send_wr);
 			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
-			ib_free_recv_mad(mad_recv_wc);
-			deref_mad_agent(mad_agent_priv);
-			return;
+
+			/* Defined behavior is to complete response before
+			 * request
+			 */
+			mad_recv_wc->wc->wr_id = (unsigned long)
+						 &mad_send_wr->send_buf;
+			mad_agent_priv->agent.recv_handler(
+						&mad_agent_priv->agent,
+						mad_recv_wc);
+			atomic_dec(&mad_agent_priv->refcount);
+
+			mad_send_wc.status = IB_WC_SUCCESS;
+			mad_send_wc.vendor_err = 0;
+			mad_send_wc.send_buf = &mad_send_wr->send_buf;
+			ib_mad_complete_send_wr(mad_send_wr, &mad_send_wc);
+		} else {
+			if (!mad_agent_priv->agent.rmpp_version
+			   && ib_is_mad_class_rmpp(
+				mad_recv_wc->recv_buf.mad->mad_hdr.mgmt_class)
+			   && (ib_get_rmpp_flags(
+				&((struct ib_rmpp_mad *)
+				mad_recv_wc->recv_buf.mad)->rmpp_hdr) &
+				IB_MGMT_RMPP_FLAG_ACTIVE)) {
+				/* user rmpp is in effect */
+				spin_unlock_irqrestore(&mad_agent_priv->lock,
+							flags);
+
+				mad_recv_wc->wc->wr_id = 0;
+				mad_agent_priv->agent.recv_handler(
+							&mad_agent_priv->agent,
+							mad_recv_wc);
+				atomic_dec(&mad_agent_priv->refcount);
+			} else {
+				/* not user rmpp, revert to normal behavior and
+				 * drop the mad
+				 */
+				spin_unlock_irqrestore(&mad_agent_priv->lock,
+							flags);
+				ib_free_recv_mad(mad_recv_wc);
+				deref_mad_agent(mad_agent_priv);
+				return;
+			}
 		}
-		ib_mark_mad_done(mad_send_wr);
-		spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
-
-		/* Defined behavior is to complete response before request */
-		mad_recv_wc->wc->wr_id = (unsigned long) &mad_send_wr->send_buf;
-		mad_agent_priv->agent.recv_handler(&mad_agent_priv->agent,
-						   mad_recv_wc);
-		atomic_dec(&mad_agent_priv->refcount);
-
-		mad_send_wc.status = IB_WC_SUCCESS;
-		mad_send_wc.vendor_err = 0;
-		mad_send_wc.send_buf = &mad_send_wr->send_buf;
-		ib_mad_complete_send_wr(mad_send_wr, &mad_send_wc);
 	} else {
 		mad_agent_priv->agent.recv_handler(&mad_agent_priv->agent,
 						   mad_recv_wc);
