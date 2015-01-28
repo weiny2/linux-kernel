@@ -3225,13 +3225,13 @@ void handle_verify_cap(struct work_struct *work)
 
 	/* set up the LCB CRC mode */
 	crc_mask = link_crc_mask & crc_sizes;
-	/* order is important: use the highest bit in common */
-	if (crc_mask & CAP_CRC_12B_16B_PER_LANE)
-		crc_val = LCB_CRC_12B_16B_PER_LANE;
+	/* order is important: use the lowest bit in common */
+	if (crc_mask & CAP_CRC_14B)
+		crc_val = LCB_CRC_14B;
 	else if (crc_mask & CAP_CRC_48B)
 		crc_val = LCB_CRC_48B;
-	else if (crc_mask & CAP_CRC_14B)
-		crc_val = LCB_CRC_14B;
+	else if (crc_mask & CAP_CRC_12B_16B_PER_LANE)
+		crc_val = LCB_CRC_12B_16B_PER_LANE;
 	else
 		crc_val = LCB_CRC_16B;
 	dd_dev_info(dd, "Final LCB CRC mode: %d\n", (int)crc_val);
