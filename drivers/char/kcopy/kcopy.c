@@ -19,6 +19,9 @@ MODULE_DESCRIPTION("QLogic kcopy driver");
 #define KCOPY_ABI		1
 #define KCOPY_MAX_MINORS	64
 
+static unsigned cpu_vendor;
+static unsigned cpu_halfcachesize;
+
 struct kcopy_device {
 	struct cdev cdev;
 	struct class *class;
@@ -304,7 +307,9 @@ bail_unlock:
 static unsigned long kcopy_copy_pages_from_user(void __user *src,
 						struct page **dpages,
 						unsigned doff,
-						unsigned long n)
+						unsigned long n,
+						unsigned long total,
+						int streaming)
 {
 	struct page *dpage = *dpages;
 	char *daddr = kmap(dpage);
@@ -314,11 +319,35 @@ static unsigned long kcopy_copy_pages_from_user(void __user *src,
 		const unsigned long nleft = PAGE_SIZE - doff;
 		const unsigned long nc = (n < nleft) ? n : nleft;
 
+		if (total > cpu_halfcachesize) {
+			if (__copy_from_user_nocache(daddr + doff, src, nc)) {
+				ret = -EFAULT;
+				goto bail;
+			}
+		} else if (cpu_vendor == X86_VENDOR_INTEL) {
+			if (copy_from_user(daddr + doff, src, nc)) {
+				ret = -EFAULT;
+				goto bail;
+			}
+		} else if (streaming) {
+			if (copy_from_user(daddr + doff, src, nc)) {
+				ret = -EFAULT;
+				goto bail;
+			}
+		} else {
+			if (__copy_from_user_nocache(daddr + doff, src, nc)) {
+				ret = -EFAULT;
+				goto bail;
+			}
+		}
+
+#if 0
 		/* if (copy_from_user(daddr + doff, src, nc)) { */
 		if (__copy_from_user_nocache(daddr + doff, src, nc)) {
 			ret = -EFAULT;
 			goto bail;
 		}
+#endif
 
 		n -= nc;
 		if (n == 0)
@@ -435,6 +464,17 @@ static unsigned long kcopy_copy_from_user(const void __user *src,
 	struct page **pages;
 	const int pages_len = PAGE_SIZE / sizeof(struct page *);
 	int ret = 0;
+	unsigned long total = n;
+	int streaming = 0;
+	static pid_t last_dpid;
+	static pid_t last_spid;
+
+	if (last_dpid == pid && last_spid == current->pid) {
+		streaming = 1;
+	} else {
+		last_dpid = pid;
+		last_spid = current->pid;
+	}
 
 	pages = (struct page **) __get_free_page(GFP_KERNEL);
 	if (!pages) {
@@ -457,7 +497,7 @@ static unsigned long kcopy_copy_from_user(const void __user *src,
 			goto bail_free;
 
 		ret = kcopy_copy_pages_from_user((void __user *) src,
-						 pages, doff, nbytes);
+				 pages, doff, nbytes, total, streaming);
 		kcopy_put_pages(pages, dpages_cp);
 		if (ret)
 			goto bail_free;
@@ -571,6 +611,11 @@ static int __init kcopy_init(void)
 	const char *name = "kcopy";
 	int i;
 	int ninit = 0;
+
+#if defined(CONFIG_X86_64)
+	cpu_vendor = boot_cpu_data.x86_vendor;
+	cpu_halfcachesize = boot_cpu_data.x86_cache_size*1024/2;
+#endif
 
 	mutex_init(&kcopy_dev.open_lock);
 
