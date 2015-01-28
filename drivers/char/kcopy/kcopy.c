@@ -10,6 +10,7 @@
 #include <linux/rbtree.h>
 #include <linux/rcupdate.h>
 #include <linux/uaccess.h>
+#include <linux/slab.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Arthur Jones <arthur.jones@qlogic.com>");
