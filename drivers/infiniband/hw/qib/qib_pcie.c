@@ -497,7 +497,7 @@ static void qib_tune_pcie_coalesce(struct qib_devdata *dd)
 	u32 mask, bits, val;
 
 	if (!QIB_MODPARAM_GET(pcie_coalesce, dd->unit, 0))
-		return 0;
+		return;
 
 	/* Find out supported and configured values for parent (root) */
 	parent = dd->pcidev->bus->self;

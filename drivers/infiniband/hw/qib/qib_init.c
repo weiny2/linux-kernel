@@ -130,7 +130,8 @@ void qib_set_ctxtcnt(struct qib_devdata *dd)
  */
 int qib_create_ctxts(struct qib_devdata *dd)
 {
-	unsigned i;
+	unsigned i, c, p;
+	unsigned port;
 	int local_node_id = pcibus_to_node(dd->pcidev->bus);
 
 	if (local_node_id < 0)
@@ -148,15 +149,27 @@ int qib_create_ctxts(struct qib_devdata *dd)
 		return -ENOMEM;
 	}
 
+	c = dd->num_pports ? min(
+		(unsigned)dd->pport[0].n_krcv_queues,
+		(dd->num_pports > 1 ?
+		 (unsigned)dd->pport[1].n_krcv_queues : (unsigned)-1))
+		: 0;
+	p = dd->num_pports > 1 ?
+		(dd->pport[0].n_krcv_queues > dd->pport[1].n_krcv_queues ?
+		 0 : 1) : 0;
+
 	/* create (one or more) kctxt */
-	for (i = 0; i < dd->first_user_ctxt; ++i) {
+	for (port = 0, i = 0; i < dd->first_user_ctxt; ++i) {
 		struct qib_pportdata *ppd;
 		struct qib_ctxtdata *rcd;
 
 		if (dd->skip_kctxt_mask & (1 << i))
 			continue;
 
-		ppd = dd->pport + (i % dd->num_pports);
+		if (i < (c * dd->num_pports))
+			ppd = dd->pport + (i % dd->num_pports);
+		else
+			ppd = dd->pport + p;
 
 		rcd = qib_create_ctxtdata(ppd, i, dd->assigned_node_id);
 		if (!rcd) {

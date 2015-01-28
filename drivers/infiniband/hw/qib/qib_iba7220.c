@@ -1,6 +1,7 @@
 /*
- * Copyright (c) 2012 Intel Corporation.  All rights reserved.
- * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
+ * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
+ * All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -2312,7 +2313,7 @@ static void qib_7220_config_ctxts(struct qib_devdata *dd)
 	} else {
 		dd->first_user_ctxt = dd->num_pports;
 	}
-	dd->n_krcv_queues = dd->first_user_ctxt;
+	dd->pport[0].n_krcv_queues = dd->first_user_ctxt;
 
 	if (!cfgctxts) {
 		int nctxts = dd->first_user_ctxt + num_online_cpus();
