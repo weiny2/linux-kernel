@@ -336,67 +336,71 @@ void sdma_err_halt_wait(struct work_struct *work)
 
 void sdma_start_err_halt_wait(struct sdma_engine *sde)
 {
-        queue_work(sde->ppd->qib_wq, &sde->err_halt_worker);
+	queue_work(sde->ppd->qib_wq, &sde->err_halt_worker);
 }
 
 
-void sdma_err_progress_check_schedule(struct sdma_engine * sde) {
+void sdma_err_progress_check_schedule(struct sdma_engine *sde)
+{
 	if (!is_bx(sde->dd)) {
 		/*
 		* erratum 291491
-		* in a halt event schedule progress check on all other SDMA engines to avoid an erroneous hang.
+		* in a halt event schedule progress check on all other SDMA
+		* engines to avoid an erroneous hang.
 		*/
 
 		unsigned index;
-                struct hfi_devdata *dd = sde->dd;
+		struct hfi_devdata *dd = sde->dd;
 
 		/*
-		* The errata only lists that the halt is not due to header update descriptor.
+		* The errata only lists that the halt is not due to header
+		* update descriptor.
 		* Therefore all the halt events need to be processed here.
 		*/
 
-		for(index = 0; index < dd->chip_sdma_engines; index++) {
-			struct sdma_engine * curr_sdma = &dd->per_sdma[index];
-			if (curr_sdma != sde) {
-				curr_sdma->progress_check_head = curr_sdma->descq_head;
-			}
+		for (index = 0; index < dd->chip_sdma_engines; index++) {
+			struct sdma_engine *curr_sdma = &dd->per_sdma[index];
+			if (curr_sdma != sde)
+				curr_sdma->progress_check_head =
+							curr_sdma->descq_head;
 		}
 		dd_dev_err(sde->dd,
-			"SDMA engine %d - erratum 291491 check scheduled\n",
-			sde->this_idx);
+			   "SDMA engine %d - erratum 291491 check scheduled\n",
+			   sde->this_idx);
 		mod_timer(&sde->err_progress_check_timer, jiffies + 10);
 	}
 }
 
-void sdma_err_progress_check(unsigned long data) {
+void sdma_err_progress_check(unsigned long data)
+{
 	unsigned index;
 
-        struct sdma_engine *sde = (struct sdma_engine*)data;
+	struct sdma_engine *sde = (struct sdma_engine *)data;
 
-	dd_dev_err(sde->dd,
-		"SDE progress check event\n");
-	for(index = 0; index < sde->dd->chip_sdma_engines; index++) {
-		struct sdma_engine * curr_sde = &sde->dd->per_sdma[index];
+	dd_dev_err(sde->dd, "SDE progress check event\n");
+	for (index = 0; index < sde->dd->chip_sdma_engines; index++) {
+		struct sdma_engine *curr_sde = &sde->dd->per_sdma[index];
 		/* check progress on each engine except the current one */
-		if (curr_sde == sde) {
+		if (curr_sde == sde)
 			continue;
-		}
 
 		/* skip non-running queues */
-		if (curr_sde->state.current_state != sdma_state_s99_running) {
+		if (curr_sde->state.current_state != sdma_state_s99_running)
 			continue;
-		}
 
 		if ((curr_sde->descq_head != curr_sde->descq_tail) &&
-			(curr_sde->descq_head == curr_sde->progress_check_head)) {
+		    (curr_sde->descq_head ==
+				curr_sde->progress_check_head)) {
 			unsigned long flags;
 			/*
 			* We must lock interrupts when acquiring sde->lock,
-			* to avoid a deadlock if interrupt triggers and spins on the same lock on same CPU
+			* to avoid a deadlock if interrupt triggers and spins on
+			* the same lock on same CPU
 			*/
 
 			spin_lock_irqsave(&curr_sde->lock, flags);
-			__sdma_process_event(curr_sde, sdma_event_e90_sw_halted);
+			__sdma_process_event(curr_sde,
+					     sdma_event_e90_sw_halted);
 			spin_unlock_irqrestore(&curr_sde->lock, flags);
 		}
 	}
@@ -860,8 +864,9 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 			sde->progress_check_head = 0;
 
 			init_timer(&sde->err_progress_check_timer);
-			sde->err_progress_check_timer.function = sdma_err_progress_check;
-			sde->err_progress_check_timer.data = (unsigned long) sde;
+			sde->err_progress_check_timer.function =
+							sdma_err_progress_check;
+			sde->err_progress_check_timer.data = (unsigned long)sde;
 		}
 
 		sde->descq = dma_alloc_coherent(
@@ -2052,7 +2057,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2089,7 +2094,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2126,7 +2131,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2162,7 +2167,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2196,7 +2201,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2233,7 +2238,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2269,7 +2274,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2305,7 +2310,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2352,7 +2357,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			sdma_set_state(sde, sdma_state_s82_freeze_sw_clean);
 			sdma_start_sw_clean_up(sde);
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2389,7 +2394,7 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
-                case sdma_event_e90_sw_halted:
+		case sdma_event_e90_sw_halted:
 			break;
 		}
 		break;
@@ -2413,9 +2418,12 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e50_hw_cleaned:
 			break;
 		case sdma_event_e60_hw_halted:
-                        sdma_err_progress_check_schedule(sde);
+			sdma_err_progress_check_schedule(sde);
 		case sdma_event_e90_sw_halted:
-			/* SW initiated halt does not perform engines progress check */ 
+			/*
+			* SW initiated halt does not perform engines
+			* progress check
+			*/
 			sdma_set_state(sde, sdma_state_s50_hw_halt_wait);
 			sdma_start_err_halt_wait(sde);
 			break;
