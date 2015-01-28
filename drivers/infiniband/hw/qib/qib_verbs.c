@@ -160,12 +160,20 @@ const enum ib_wc_opcode ib_qib_wc_opcode[] = {
 __be64 ib_qib_sys_image_guid;
 
 /**
+ * qib_copy_sge_init - setup for fast sge copy
+ */
+void __attribute__((weak)) qib_copy_sge_init(void)
+{
+}
+
+/**
  * qib_copy_sge - copy data to SGE memory
  * @ss: the SGE state
  * @data: the data to copy
  * @length: the length of the data
  */
-void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
+void __attribute__((weak))
+qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
 {
 	struct qib_sge *sge = &ss->sge;
 
@@ -305,7 +313,7 @@ static void qib_copy_from_sge(void *data, struct qib_sge_state *ss, u32 length)
 		if (len > sge->sge_length)
 			len = sge->sge_length;
 		BUG_ON(len == 0);
-		memcpy(data, sge->vaddr, len);
+		memcpy_string_op(data, sge->vaddr, len);
 		sge->vaddr += len;
 		sge->length -= len;
 		sge->sge_length -= len;
@@ -1236,7 +1244,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		phdr = &dev->pio_hdrs[tx->hdr_inx];
 		phdr->pbc[0] = cpu_to_le32(plen);
 		phdr->pbc[1] = cpu_to_le32(control);
-		memcpy(&phdr->hdr, hdr, hdrwords << 2);
+		memcpy_string_op(&phdr->hdr, hdr, hdrwords << 2);
 		tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEDESC;
 		tx->txreq.sg_count = ndesc;
 		tx->txreq.addr = dev->pio_hdrs_phys +
@@ -1255,7 +1263,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		goto err_tx;
 	phdr->pbc[0] = cpu_to_le32(plen);
 	phdr->pbc[1] = cpu_to_le32(control);
-	memcpy(&phdr->hdr, hdr, hdrwords << 2);
+	memcpy_string_op(&phdr->hdr, hdr, hdrwords << 2);
 	qib_copy_from_sge((u32 *) &phdr->hdr + hdrwords, ss, len);
 	if (packet) {
 		memcpy(packet->data, &phdr->hdr, (hdrwords << 2));

@@ -470,8 +470,11 @@ static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u32 etail)
 {
 	const u32 chunk = etail >> rcd->rcvegrbufs_perchunk_shift;
 	const u32 idx =  etail & ((u32)rcd->rcvegrbufs_perchunk - 1);
+	void *rval;
 
-	return rcd->rcvegrbuf[chunk] + (idx << rcd->dd->rcvegrbufsize_shift);
+	rval = rcd->rcvegrbuf[chunk] + (idx << rcd->dd->rcvegrbufsize_shift);
+	qib_eager_prefetch(rval);
+	return rval;
 }
 
 /*
