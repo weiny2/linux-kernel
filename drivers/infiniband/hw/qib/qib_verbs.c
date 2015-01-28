@@ -621,6 +621,15 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 	if (unlikely(tlen < 24))
 		goto drop;
 
+	if (ppd->mode_flag & QIB_PORT_SNOOP_MODE) {
+		int nomatch = 0;
+		if (ppd->filter_callback)
+			nomatch = ppd->filter_callback(hdr, data,
+				ppd->filter_value);
+		if (nomatch == 0 &&
+			qib_snoop_rcv_queue_packet(ppd, rhdr, data, tlen))
+			goto drop;
+	}
 	/* Check for a valid destination LID (see ch. 7.11.1). */
 	lid = be16_to_cpu(hdr->lrh[1]);
 	if (lid < QIB_MULTICAST_LID_BASE) {
@@ -789,11 +798,17 @@ static inline u32 clear_upper_bytes(u32 data, u32 n, u32 off)
 #endif
 
 static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
-		    u32 length, unsigned flush_wc)
+		    u32 length, unsigned flush_wc, struct snoop_packet *packet,
+		    u8 *data_orig)
 {
 	u32 extra = 0;
 	u32 data = 0;
 	u32 last;
+	u32 *packet_data = NULL;
+
+	/* This ensures copying word at a time */
+	if (packet)
+		packet_data = (u32 *)data_orig;
 
 	while (1) {
 		u32 len = ss->sge.length;
@@ -825,6 +840,10 @@ static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
 				}
 				__raw_writel(data, piobuf);
 				piobuf++;
+				if (packet_data) {
+					*packet_data = data;
+					packet_data++;
+				}
 				extra = 0;
 				data = 0;
 			} else {
@@ -851,6 +870,10 @@ static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
 				data = get_upper_bits(v, ushift);
 				piobuf++;
 				addr++;
+				if (packet_data) {
+					*packet_data = data;
+					packet_data++;
+				}
 				l -= sizeof(u32);
 			}
 			/*
@@ -868,6 +891,10 @@ static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
 					}
 					__raw_writel(data, piobuf);
 					piobuf++;
+					if (packet_data) {
+						*packet_data = data;
+						packet_data++;
+					}
 					extra = 0;
 					data = 0;
 				} else {
@@ -894,12 +921,20 @@ static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
 			qib_pio_copy(piobuf, ss->sge.vaddr, w - 1);
 			piobuf += w - 1;
 			last = ((u32 *) ss->sge.vaddr)[w - 1];
+			if (packet_data) {
+				memcpy(packet_data, ss->sge.vaddr, len);
+				packet_data += w;
+			}
 			break;
 		} else {
 			u32 w = len >> 2;
 
 			qib_pio_copy(piobuf, ss->sge.vaddr, w);
 			piobuf += w;
+			if (packet_data) {
+				memcpy(packet_data, ss->sge.vaddr, len);
+				packet_data += w;
+			}
 
 			extra = len & (sizeof(u32) - 1);
 			if (extra) {
@@ -1144,12 +1179,13 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	u32 control;
 	u32 ndesc;
 	int ret;
+	struct snoop_packet *packet = NULL;
 
 	tx = qp->s_tx;
 	if (tx) {
 		qp->s_tx = NULL;
 		/* resend previously constructed packet */
-		ret = qib_sdma_verbs_send(ppd, tx->ss, tx->dwords, tx);
+		ret = qib_sdma_verbs_send(ppd, tx->ss, tx->dwords, tx, NULL);
 		goto bail;
 	}
 
@@ -1173,6 +1209,19 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	if (plen + 1 > dd->piosize2kmax_dwords)
 		tx->txreq.flags |= QIB_SDMA_TXREQ_F_USELARGEBUF;
 
+	if (ppd->mode_flag) {
+		int nomatch = 0;
+		if (ppd->filter_callback)
+			nomatch = ppd->filter_callback(hdr, NULL,
+				ppd->filter_value);
+		if (nomatch == 0) {
+			packet = kzalloc(sizeof(*packet)+QIB_GET_PKT_LEN(hdr),
+					GFP_ATOMIC);
+			if (packet)
+				packet->total_len = QIB_GET_PKT_LEN(hdr);
+		}
+	}
+
 	if (len) {
 		/*
 		 * Don't try to DMA if it takes more descriptors than
@@ -1193,7 +1242,9 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		tx->txreq.addr = dev->pio_hdrs_phys +
 			tx->hdr_inx * sizeof(struct qib_pio_header);
 		tx->hdr_dwords = hdrwords + 2; /* add PBC length */
-		ret = qib_sdma_verbs_send(ppd, ss, dwords, tx);
+		if (packet)
+			memcpy(packet->data, hdr, (hdrwords << 2));
+		ret = qib_sdma_verbs_send(ppd, ss, dwords, tx, packet);
 		goto bail;
 	}
 
@@ -1206,6 +1257,12 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	phdr->pbc[1] = cpu_to_le32(control);
 	memcpy(&phdr->hdr, hdr, hdrwords << 2);
 	qib_copy_from_sge((u32 *) &phdr->hdr + hdrwords, ss, len);
+	if (packet) {
+		memcpy(packet->data, &phdr->hdr, (hdrwords << 2));
+		memcpy(packet->data+(hdrwords << 2),
+			(u8 *)((u32 *) &phdr->hdr + hdrwords),
+			len);
+	}
 
 	tx->txreq.addr = dma_map_single(&dd->pcidev->dev, phdr,
 					tx->hdr_dwords << 2, DMA_TO_DEVICE);
@@ -1214,7 +1271,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 	tx->align_buf = phdr;
 	tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEBUF;
 	tx->txreq.sg_count = 1;
-	ret = qib_sdma_verbs_send(ppd, NULL, 0, tx);
+	ret = qib_sdma_verbs_send(ppd, NULL, 0, tx, NULL);
 	goto unaligned;
 
 map_err:
@@ -1222,9 +1279,24 @@ map_err:
 err_tx:
 	qib_put_txreq(tx);
 	ret = wait_kmem(dev, qp);
+	/* If wait_kmem returns 0 then
+	 * (ret==0) will hold true and we don't want
+	 * that as it will add ignored packet in list,
+	 * so free packet here.
+	 */
+	kfree(packet);
+	packet = NULL;
 unaligned:
 	ibp->n_unaligned++;
 bail:
+	if (packet) {
+		if (ret == 0)
+			qib_snoop_send_queue_packet(ppd, packet);
+		else {
+			kfree(packet);
+			packet = NULL;
+		}
+	}
 	return ret;
 bail_tx:
 	ret = PTR_ERR(tx);
@@ -1280,6 +1352,8 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	unsigned flush_wc;
 	u32 control;
 	u32 pbufn;
+	u8 *data_orig = NULL;
+	struct snoop_packet *packet = NULL;
 
 	control = dd->f_setpbc_control(ppd, plen, qp->s_srate,
 		be16_to_cpu(ibhdr->lrh[0]) >> 12);
@@ -1288,6 +1362,20 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	if (unlikely(piobuf == NULL))
 		return no_bufs_available(qp);
 
+	if (snoop_enable && ppd->mode_flag) {
+		int nomatch = 0;
+		if (ppd->filter_callback)
+			nomatch = ppd->filter_callback(ibhdr, NULL,
+							ppd->filter_value);
+		if (nomatch == 0) {
+			packet = kzalloc(sizeof(*packet)+QIB_GET_PKT_LEN(ibhdr),
+					GFP_ATOMIC);
+			if (packet) {
+				INIT_LIST_HEAD(&packet->list);
+				packet->total_len = QIB_GET_PKT_LEN(ibhdr);
+			}
+		}
+	}
 	/*
 	 * Write the pbc.
 	 * We have to flush after the PBC for correctness on some cpus
@@ -1297,6 +1385,12 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 	piobuf_orig = piobuf;
 	piobuf += 2;
 
+	if (packet) {
+		/* Copy header */
+		data_orig = packet->data;
+		memcpy(data_orig, hdr, (hdrwords << 2));
+		data_orig += (hdrwords << 2);
+	}
 	flush_wc = dd->flags & QIB_PIO_FLUSH_WC;
 	if (len == 0) {
 		/*
@@ -1336,10 +1430,19 @@ static int qib_verbs_send_pio(struct qib_qp *qp, struct qib_ib_header *ibhdr,
 			qib_flush_wc();
 		} else
 			qib_pio_copy(piobuf, addr, dwords);
+		if (packet) {
+			/* Copy data */
+			memcpy(data_orig, addr, len);
+			data_orig += len;
+		}
 		goto done;
 	}
-	copy_io(piobuf, ss, len, flush_wc);
+	copy_io(piobuf, ss, len, flush_wc, packet, data_orig);
 done:
+	if (packet) {
+			qib_snoop_send_queue_packet(ppd, packet);
+			packet = NULL;
+		}
 	if (dd->flags & QIB_USE_SPCL_TRIG) {
 		u32 spcl_off = (pbufn >= dd->piobcnt2k) ? 2047 : 1023;
 		qib_flush_wc();
