@@ -46,6 +46,7 @@
 #include "qib.h"
 #include "qib_common.h"
 #include "qib_mad.h"
+#include "qib_trace.h"
 #ifdef CONFIG_DEBUG_FS
 #include "qib_debugfs.h"
 #include "qib_verbs.h"
@@ -901,6 +902,8 @@ static void qib_shutdown_device(struct qib_devdata *dd)
 {
 	struct qib_pportdata *ppd;
 	unsigned pidx;
+
+	qib_dbg("shutting down qib device");
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;

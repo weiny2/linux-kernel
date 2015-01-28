@@ -54,7 +54,7 @@
 
 #include "qib_mad.h"
 #include "qib_verbs.h"
-
+#include "qib_trace.h"
 #undef pr_fmt
 #define pr_fmt(fmt) QIB_DRV_NAME " " fmt
 
@@ -4150,6 +4150,8 @@ static int qib_7322_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 				    val & (val >> 16) & SendIBSLIDAssignMask);
 		qib_write_kreg_port(ppd, krp_sendslidmask,
 				    (val >> 16) & SendIBSLMCMask);
+		qib_dbg("setting lmc mask/value to 0x%x", val);
+
 		break;
 
 	case QIB_IB_CFG_LWID_ENB: /* set allowed Link-width */
@@ -4265,6 +4267,8 @@ static int qib_7322_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		goto bail;
 
 	case QIB_IB_CFG_LSTATE: /* set the IB link state */
+		qib_cdbg(LINKVERB, "setting ib link state to 0x%x",
+			 (val & 0xffff0000));
 		switch (val & 0xffff0000) {
 		case IB_LINKCMD_DOWN:
 			lcmd = QLOGIC_IB_IBCC_LINKCMD_DOWN;
