@@ -636,7 +636,6 @@ static void unsubscribe_port(struct sa_db_port *port)
 static void cleanup_port(struct sa_db_port *port)
 {
 	unsubscribe_port(port);
-	flush_workqueue(sa_wq);
 
 	clean_update_list(port);
 	remove_all_attrs(&port->paths);
@@ -1180,6 +1179,7 @@ static void destroy_port(struct sa_db_port *port)
 
 	ib_unregister_mad_agent(port->agent);
 	cleanup_port(port);
+	flush_workqueue(sa_wq);
 }
 
 static void sa_db_add_dev(struct ib_device *device)
