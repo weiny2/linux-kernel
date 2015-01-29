@@ -1,7 +1,7 @@
 #ifndef _WFR_H
 #define _WFR_H
 /*
- * Copyright (c) 2013, 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -297,8 +297,9 @@
  * Eager buffer minimum and maximum sizes supported by the hardware.
  * All power-of-two sizes in between are supported as well.
  */
-#define WFR_MIN_EAGER_BUFFER (  4 * 1024)
-#define WFR_MAX_EAGER_BUFFER (256 * 1024)
+#define WFR_MIN_EAGER_BUFFER    (4 * 1024)
+#define WFR_MAX_EAGER_BUFFER    (256 * 1024)
+#define WFR_MAX_EXPECTED_BUFFER (2048 * 1024)
 
 /*
  * Receive expected base and count and eager base and count increment -

@@ -1,7 +1,7 @@
 #ifndef _QIB_KERNEL_H
 #define _QIB_KERNEL_H
 /*
- * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -121,11 +121,27 @@ extern struct pci_driver qib_driver;
 struct hfi_opcode_stats_perctx;
 #endif
 
+struct ctxt_eager_bufs {
+	ssize_t size;            /* total size of eager buffers */
+	u32 count;               /* size of buffers array */
+	u32 numbufs;             /* number of buffers allocated */
+	u32 alloced;             /* number of rcvarray entries used */
+	u32 rcvtid_size;         /* size of each eager rcv tid */
+	u32 threshold;           /* head update threshold */
+	struct eager_buffer {
+		void *addr;
+		dma_addr_t phys;
+		ssize_t len;
+	} *buffers;
+	struct {
+		void *addr;
+		dma_addr_t phys;
+	} *rcvtids;
+};
+
 struct qib_ctxtdata {
 	/* shadow the ctxt's RcvCtrl register */
 	u64 rcvctrl;
-	void **rcvegrbuf;
-	dma_addr_t *rcvegrbuf_phys;
 	/* rcvhdrq base, needs mmap before useful */
 	void *rcvhdrq;
 	/* kernel virtual address where hdrqtail is updated */
@@ -138,14 +154,16 @@ struct qib_ctxtdata {
 	unsigned long *user_event_mask;
 	/* when waiting for rcv or pioavail */
 	wait_queue_head_t wait;
-	/*
-	 * rcvegr bufs base, physical, must fit
-	 * in 44 bits so 32 bit programs mmap64 44 bit works)
-	 */
-	dma_addr_t rcvegr_phys;
+	/* rcvhdrq size (for freeing) */
+	size_t rcvhdrq_size;
+	/* number of rcvhdrq entries */
+	u16 rcvhdrq_cnt;
+	/* size of each of the rcvhdrq entries */
+	u16 rcvhdrqentsize;
 	/* mmap of hdrq, must fit in 44 bits */
 	dma_addr_t rcvhdrq_phys;
 	dma_addr_t rcvhdrqtailaddr_phys;
+	struct ctxt_eager_bufs egrbufs;
 	/* this receive context's assigned PIO ACK send context */
 	struct send_context *sc;
 
@@ -171,8 +189,6 @@ struct qib_ctxtdata {
 	u16 jkey;
 	/* number of RcvArray groups for this context. */
 	u32 rcv_array_groups;
-	/* number of eager TID entries. */
-	u32 eager_count;
 	/* index of first eager TID entry. */
 	u32 eager_base;
 	/* number of expected TID entries */
@@ -199,22 +215,6 @@ struct qib_ctxtdata {
 	u32 pio_base;
 	/* chip offset of PIO buffers for this ctxt */
 	u32 piobufs;
-	/* how many alloc_pages() chunks in rcvegrbuf_pages */
-	u32 rcvegrbuf_chunks;
-	u32 rcvegrbuf_chunksize;
-	u32 rcvegrbufs_idx_mask;
-	/* how many egrbufs per chunk */
-	u16 rcvegrbufs_perchunk;
-	/* ilog2 of above */
-	u16 rcvegrbufs_perchunk_shift;
-	/* order for rcvegrbuf_pages */
-	size_t rcvegrbuf_size;
-	/* number of rcvhdrq entries */
-	u16 rcvhdrq_cnt;
-	/* size of each of the rcvhdrq entries */
-	u16 rcvhdrqentsize;
-	/* rcvhdrq size (for freeing) */
-	size_t rcvhdrq_size;
 	/* per-context configuration flags */
 	u16 flags;
 	/* per-context event flags for fileops/intr communication */
@@ -815,7 +815,7 @@ struct hfi_devdata {
 	void (*f_cleanup)(struct hfi_devdata *);
 	void (*f_setextled)(struct qib_pportdata *, u32);
 	/* fill out chip-specific fields */
-	int (*f_get_base_info)(struct qib_ctxtdata *, struct hfi_base_info *);
+	int (*f_get_base_info)(struct qib_ctxtdata *, struct hfi_ctxt_info *);
 	/* free irq */
 	void (*f_free_irq)(struct hfi_devdata *);
 	struct qib_message_header *(*f_get_msgheader)
@@ -917,12 +917,8 @@ struct hfi_devdata {
 
 	/* these are the "32 bit" regs */
 
-	/* value we put in kr_rcvhdrcnt */
-	u32 rcvhdrcnt;
 	/* value we put in kr_rcvhdrsize */
 	u32 rcvhdrsize;
-	/* value we put in kr_rcvhdrentsize */
-	u32 rcvhdrentsize;
 	/* number of receive contexts the chip supports */
 	u32 chip_rcv_contexts;
 	/* number of receive array entries */
@@ -1135,7 +1131,6 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
 void qib_init_pportdata(struct pci_dev *, struct qib_pportdata *,
 			struct hfi_devdata *, u8, u8);
 void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
-int hfi_setup_ctxt(struct qib_ctxtdata *, u16, u16, u16, u16);
 
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
@@ -1666,6 +1661,9 @@ static inline u64 hfi_pkt_base_sdma_integrity(struct hfi_devdata *dd)
  */
 #define qib_early_err(dev, fmt, ...) \
 	dev_err(dev, fmt, ##__VA_ARGS__)
+
+#define qib_early_info(dev, fmt, ...) \
+	dev_info(dev, fmt, ##__VA_ARGS__)
 
 #define dd_dev_err(dd, fmt, ...) \
 	dev_err(&(dd)->pcidev->dev, "%s: " fmt, \

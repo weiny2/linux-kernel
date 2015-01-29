@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation. All rights reserved.
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -353,14 +353,10 @@ int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
 static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u64 rhf,
 				   u32 *update)
 {
-	u32 idx = rhf_egr_index(rhf),
-		shift = rcd->rcvegrbufs_perchunk_shift,
-		mask = rcd->rcvegrbufs_idx_mask,
-		offset = rhf_egr_buf_offset(rhf);
+	u32 idx = rhf_egr_index(rhf), offset = rhf_egr_buf_offset(rhf);
 
-	*update |= !(idx % WFR_EGR_HEAD_UPDATE_THRESHOLD) && !offset;
-	return (void *)(((u64)rcd->rcvegrbuf[(idx >> shift)]) +
-			((idx & mask) << rcd->dd->rcvegrbufsize_shift) +
+	*update |= !(idx & (rcd->egrbufs.threshold - 1)) && !offset;
+	return (void *)(((u64)(rcd->egrbufs.rcvtids[idx].addr)) +
 			(offset * WFR_RCV_BUF_BLOCK_SIZE));
 }
 
@@ -370,16 +366,14 @@ static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u64 rhf,
  * allowed size ranges for the respective type and, optionally,
  * return the proper encoding.
  */
-#define HFI_MIN_BUF_SIZE (PAGE_SIZE << 0)
-#define HFI_MAX_EGR_SIZE (PAGE_SIZE << 6)
-#define HFI_MAX_EXP_SIZE (PAGE_SIZE << 9)
 inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 {
 	if (unlikely(!IS_ALIGNED(size, PAGE_SIZE)))
 		return 0;
-	if (unlikely(size < HFI_MIN_BUF_SIZE))
+	if (unlikely(size < WFR_MIN_EAGER_BUFFER))
 		return 0;
-	if (size > (type == PT_EAGER ?  HFI_MAX_EGR_SIZE : HFI_MAX_EXP_SIZE))
+	if (size >
+	    (type == PT_EAGER ? WFR_MAX_EAGER_BUFFER : WFR_MAX_EXPECTED_BUFFER))
 		return 0;
 	if (encoded)
 		*encoded = ilog2(size / PAGE_SIZE) + 1;
@@ -612,8 +606,8 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	__le32 *rhf_addr;
 	u64 rhf;
 	void *ebuf;
-	const u32 rsize = dd->rcvhdrentsize;        /* words */
-	const u32 maxcnt = dd->rcvhdrcnt * rsize;   /* words */
+	const u32 rsize = rcd->rcvhdrqentsize;        /* words */
+	const u32 maxcnt = rcd->rcvhdrq_cnt * rsize;   /* words */
 	u32 etail = -1, l, hdrqtail;
 	struct qib_message_header *hdr;
 	u32 etype, hlen, tlen, i = 0, updegr = 0;
@@ -655,7 +649,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 			 * The +2 is the size of the RHF.
 			 */
 			prefetch_range(ebuf,
-				tlen - ((dd->rcvhdrentsize -
+				tlen - ((rcd->rcvhdrqentsize -
 					  (rhf_hdrq_offset(rhf)+2)) * 4));
 		}
 

@@ -75,7 +75,7 @@ static int init_subctxts(struct qib_ctxtdata *, const struct hfi_user_info *);
 static int user_init(struct file *);
 static int get_ctxt_info(struct file *, void __user *, __u32);
 static int get_base_info(struct file *, void __user *, __u32);
-static int setup_ctxt(struct file *, struct hfi_ctxt_setup *);
+static int setup_ctxt(struct file *);
 static int setup_subctxt(struct qib_ctxtdata *);
 static int get_user_context(struct file *, struct hfi_user_info *,
 			    int, unsigned);
@@ -191,7 +191,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_cmd cmd;
 	struct hfi_user_info uinfo;
 	struct hfi_tid_info tinfo;
-	struct hfi_ctxt_setup setup;
 	ssize_t consumed = 0, copy = 0, ret = 0;
 	void *dest = NULL;
 	__u64 user_val = 0;
@@ -216,10 +215,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		uctxt_required = 0;	/* assigned user context not required */
 		copy = sizeof(uinfo);
 		dest = &uinfo;
-		break;
-	case HFI_CMD_CTXT_SETUP:
-		copy = sizeof(setup);
-		dest = &setup;
 		break;
 	case HFI_CMD_SDMA_STATUS_UPD:
 	case HFI_CMD_CREDIT_UPD:
@@ -283,18 +278,16 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	switch (cmd.type) {
 	case HFI_CMD_ASSIGN_CTXT:
 		ret = assign_ctxt(fp, &uinfo);
+		if (ret < 0)
+			goto bail;
+		ret = setup_ctxt(fp);
 		if (ret)
 			goto bail;
+		ret = user_init(fp);
 		break;
 	case HFI_CMD_CTXT_INFO:
 		ret = get_ctxt_info(fp, (void __user *)(unsigned long)
 				    user_val, cmd.len);
-		break;
-	case HFI_CMD_CTXT_SETUP:
-		ret = setup_ctxt(fp, &setup);
-		if (ret)
-			goto bail;
-		ret = user_init(fp);
 		break;
 	case HFI_CMD_USER_INFO:
 		ret = get_base_info(fp, (void __user *)(unsigned long)
@@ -507,7 +500,6 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		memlen = uctxt->rcvhdrq_size;
 		break;
 	case RCV_EGRBUF: {
-		ssize_t size;
 		unsigned long addr;
 		int i;
 		/*
@@ -515,9 +507,10 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * as multiple non-contiguous pages need to be mapped
 		 * into the user process.
 		 */
-		size = uctxt->rcvegrbuf_chunksize;
-		memlen = uctxt->rcvegrbuf_chunks * size;
-		if ((vma->vm_end - vma->vm_start) < memlen) {
+		memlen = uctxt->egrbufs.size;
+		if ((vma->vm_end - vma->vm_start) != memlen) {
+			dd_dev_err(dd, "Eager buffer map size invalid (%lu != %lu)\n",
+				   (vma->vm_end - vma->vm_start), memlen);
 			ret = -EINVAL;
 			goto done;
 		}
@@ -527,12 +520,15 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		}
 		vma->vm_flags &= ~VM_MAYWRITE;
 		addr = vma->vm_start;
-		for (i=0 ; i < uctxt->rcvegrbuf_chunks; i++, addr += size) {
-			ret = remap_pfn_range(vma, addr,
-					 uctxt->rcvegrbuf_phys[i] >> PAGE_SHIFT,
-					 size, vma->vm_page_prot);
+		for (i = 0 ; i < uctxt->egrbufs.numbufs; i++) {
+			ret = remap_pfn_range(
+				vma, addr,
+				uctxt->egrbufs.buffers[i].phys >> PAGE_SHIFT,
+				uctxt->egrbufs.buffers[i].len,
+				vma->vm_page_prot);
 			if (ret < 0)
 				goto done;
+			addr += uctxt->egrbufs.buffers[i].len;
 		}
 		ret = 0;
 		goto done;
@@ -605,8 +601,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		break;
 	case SUBCTXT_EGRBUF:
 		memaddr = (u64)uctxt->subctxt_rcvegrbuf;
-		memlen = uctxt->rcvegrbuf_chunks * uctxt->rcvegrbuf_chunksize *
-			uctxt->subctxt_cnt;
+		memlen = uctxt->egrbufs.size * uctxt->subctxt_cnt;
 		flags |= VM_IO | VM_DONTEXPAND;
 		flags &= ~VM_MAYWRITE;
 		vmf = 1;
@@ -949,7 +944,8 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	/*
 	 * Allocate and enable a PIO send context.
 	 */
-	uctxt->sc = sc_alloc(dd, SC_USER, uctxt->numa_id);
+	uctxt->sc = sc_alloc(dd, SC_USER, uctxt->rcvhdrqentsize,
+			     uctxt->numa_id);
 	if (!uctxt->sc)
 		return -ENOMEM;
 
@@ -1027,8 +1023,7 @@ static int setup_subctxt(struct qib_ctxtdata *uctxt)
 		goto bail_ureg;
 	}
 
-	uctxt->subctxt_rcvegrbuf = vmalloc_user(uctxt->rcvegrbuf_chunks *
-						uctxt->rcvegrbuf_chunksize *
+	uctxt->subctxt_rcvegrbuf = vmalloc_user(uctxt->egrbufs.size *
 						num_subctxts);
 	if (!uctxt->subctxt_rcvegrbuf) {
 		ret = -ENOMEM;
@@ -1123,31 +1118,40 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 	struct hfi_filedata *fd = fp->private_data;
 	int ret = 0;
 
+	ret = uctxt->dd->f_get_base_info(uctxt, &cinfo);
+	if (ret < 0)
+		goto done;
 	cinfo.num_active = qib_count_active_units();
 	cinfo.unit = uctxt->dd->unit;
 	cinfo.ctxt = uctxt->ctxt;
 	cinfo.subctxt = subctxt_fp(fp);
-	cinfo.rcvtids = uctxt->rcv_array_groups *
-		uctxt->dd->rcv_entries.group_size;
+	cinfo.rcvtids = roundup(uctxt->egrbufs.alloced,
+				uctxt->dd->rcv_entries.group_size) +
+		uctxt->expected_count;
 	cinfo.credits = uctxt->sc->credits;
 	/* FIXME: set proper numa node */
 	cinfo.numa_node = uctxt->numa_id;
 	cinfo.rec_cpu = fd->rec_cpu_num;
 	cinfo.send_ctxt = uctxt->sc->context;
 
+	cinfo.egrtids = uctxt->egrbufs.alloced;
+	cinfo.rcvhdrq_cnt = uctxt->rcvhdrq_cnt;
+	cinfo.rcvhdrq_entsize = uctxt->rcvhdrqentsize << 2;
+	cinfo.sdma_ring_size = user_sdma_comp_fp(fp)->nentries;
+	cinfo.rcvegr_size = uctxt->egrbufs.rcvtid_size;
+
+	trace_hfi_ctxt_info(uctxt->dd, uctxt->ctxt, subctxt_fp(fp), cinfo);
 	if (copy_to_user(ubase, &cinfo, sizeof(cinfo)))
 		ret = -EFAULT;
+done:
 	return ret;
 }
 
-static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
+static int setup_ctxt(struct file *fp)
 {
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	int ret = 0;
-
-	trace_hfi_ctxt_setup(dd, uctxt->ctxt, subctxt_fp(fp),
-			     cinfo);
 
 	/*
 	 * Context should be set up only once (including allocation and
@@ -1155,21 +1159,7 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 	 * is not requested or by the master process.
 	 */
 	if (!uctxt->subctxt_cnt || !subctxt_fp(fp)) {
-		/*
-		 * Even though we have the safeguard in f_init_ctxt, we
-		 * error out if the Eager buffer count is too high so
-		 * user level can clean up.
-		 */
-		if (cinfo->egrtids > WFR_MAX_EAGER_ENTRIES) {
-			ret = -EINVAL;
-			goto done;
-		}
-		/*
-		 * Setup partitioning of RcvArray between Eager and Expected
-		 * receives.
-		 */
-		ret = hfi_setup_ctxt(uctxt, cinfo->egrtids, cinfo->rcvegr_size,
-				     cinfo->rcvhdrq_cnt, cinfo->rcvhdrq_entsize);
+		ret = dd->f_init_ctxt(uctxt);
 		if (ret)
 			goto done;
 
@@ -1212,8 +1202,7 @@ static int setup_ctxt(struct file *fp, struct hfi_ctxt_setup *cinfo)
 		}
 
 	}
-	ret = hfi_user_sdma_alloc_queues(uctxt, fp,
-					 cinfo->sdma_ring_size);
+	ret = hfi_user_sdma_alloc_queues(uctxt, fp);
 	if (ret)
 		goto done;
 
@@ -1234,9 +1223,6 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	trace_hfi_uctxtdata(uctxt->dd, uctxt);
 
 	memset(&binfo, 0, sizeof(binfo));
-	ret = dd->f_get_base_info(uctxt, &binfo);
-	if (ret < 0)
-		goto done;
 	binfo.hw_version = dd->revision;
 	binfo.sw_version = HFI_KERN_SWVERSION;
 	binfo.bthqp = kdeth_qp;
@@ -1263,7 +1249,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 					       uctxt->rcvhdrq);
 	binfo.rcvegr_bufbase = HFI_MMAP_TOKEN(RCV_EGRBUF, uctxt->ctxt,
 					       subctxt_fp(fp),
-					       uctxt->rcvegr_phys);
+					       uctxt->egrbufs.rcvtids[0].phys);
 	binfo.sdma_comp_bufbase = HFI_MMAP_TOKEN(SDMA_COMP, uctxt->ctxt,
 						 subctxt_fp(fp), 0);
 	// user regs are at
@@ -1298,7 +1284,6 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	sz = (len < sizeof(binfo)) ? len : sizeof(binfo);
 	if (copy_to_user(ubase, &binfo, sz))
 		ret = -EFAULT;
-done:
 	return ret;
 }
 

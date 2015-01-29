@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -534,8 +534,8 @@ TRACE_EVENT(hfi_uctxtdata,
 		    __entry->piobase = (u64)uctxt->sc->base_addr;
 		    __entry->rcvhdrq_cnt = uctxt->rcvhdrq_cnt;
 		    __entry->rcvhdrq_phys = uctxt->rcvhdrq_phys;
-		    __entry->eager_cnt = uctxt->eager_count;
-		    __entry->rcvegr_phys = uctxt->rcvegr_phys;
+		    __entry->eager_cnt = uctxt->egrbufs.alloced;
+		    __entry->rcvegr_phys = uctxt->egrbufs.rcvtids[0].phys;
 		    ),
 	    TP_printk(
 		    "[%s] ctxt %u " UCTXT_FMT,
@@ -553,9 +553,9 @@ TRACE_EVENT(hfi_uctxtdata,
 
 #define CINFO_FMT \
 	"egrtids:%u, egr_size:%u, hdrq_cnt:%u, hdrq_size:%u, sdma_ring_size:%u"
-TRACE_EVENT(hfi_ctxt_setup,
+TRACE_EVENT(hfi_ctxt_info,
 	    TP_PROTO(struct hfi_devdata *dd, unsigned ctxt, unsigned subctxt,
-		     struct hfi_ctxt_setup *cinfo),
+		     struct hfi_ctxt_info cinfo),
 	    TP_ARGS(dd, ctxt, subctxt, cinfo),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
@@ -571,11 +571,11 @@ TRACE_EVENT(hfi_ctxt_setup,
 		    DD_DEV_ASSIGN(dd);
 		    __entry->ctxt = ctxt;
 		    __entry->subctxt = subctxt;
-		    __entry->egrtids = cinfo->egrtids;
-		    __entry->rcvhdrq_cnt = cinfo->rcvhdrq_cnt;
-		    __entry->rcvhdrq_size = cinfo->rcvhdrq_entsize;
-		    __entry->sdma_ring_size = cinfo->sdma_ring_size;
-		    __entry->rcvegr_size = cinfo->rcvegr_size;
+		    __entry->egrtids = cinfo.egrtids;
+		    __entry->rcvhdrq_cnt = cinfo.rcvhdrq_cnt;
+		    __entry->rcvhdrq_size = cinfo.rcvhdrq_entsize;
+		    __entry->sdma_ring_size = cinfo.sdma_ring_size;
+		    __entry->rcvegr_size = cinfo.rcvegr_size;
 		    ),
 	    TP_printk(
 		    "[%s] ctxt %u:%u " CINFO_FMT,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -505,7 +505,8 @@ static void sc_halted(struct work_struct *work)
  * Allocate a NUMA relative send context structure of the given type along
  * with a HW context.
  */
-struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
+struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
+			      uint hdrqentsize, int numa)
 {
 	struct send_context_info *sci;
 	struct send_context *sc;
@@ -586,7 +587,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 	 * TODO: We may want a "credit return MTU factor" to change
 	 * the threshold in terms of 10ths of an MTU.  E.g.
 	release_credits = DIV_ROUND_UP((dd->pport[0].ibmtu * cr_mtu_factor)
-				+ (dd->rcvhdrentsize<<2),
+				+ (hdrqentsize<<2),
 				10 * WFR_PIO_BLOCK_SIZE);
 	 * PROBLEM: ibmtu is not yet set up when the kernel send
 	 * contexts are created.
@@ -595,7 +596,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type, int numa)
 			(type == SC_ACK ?
 				(SCC_ACK_CREDITS * WFR_PIO_BLOCK_SIZE)/2 :
 				enum_to_mtu(STL_MTU_10240)) +
-			(dd->rcvhdrentsize<<2), WFR_PIO_BLOCK_SIZE);
+			(hdrqentsize<<2), WFR_PIO_BLOCK_SIZE);
 	if (sc->credits <= release_credits)
 		thresh = 1;
 	else
@@ -1382,11 +1383,20 @@ int init_pervl_scs(struct hfi_devdata *dd)
 	u64 mask, all_vl_mask = (u64) 0x80ff; /* VLs 0-7, 15 */
 	u32 ctxt;
 
-	dd->vld[15].sc = sc_alloc(dd, SC_KERNEL, dd->node);
+	dd->vld[15].sc = sc_alloc(dd, SC_KERNEL,
+				  dd->rcd[0]->rcvhdrqentsize, dd->node);
 	if (!dd->vld[15].sc)
 		goto nomem;
 	for (i = 0; i < num_vls; i++) {
-		dd->vld[i].sc = sc_alloc(dd, SC_KERNEL, dd->node);
+		/*
+		 * Since this function does not deal with a specific
+		 * receive context but we need the RcvHdrQ entry size
+		 * use the size from rcd[0]. It is guaranteed to be
+		 * valid at this point and will the same for all
+		 * receive contexts.
+		 */
+		dd->vld[i].sc = sc_alloc(dd, SC_KERNEL,
+					 dd->rcd[0]->rcvhdrqentsize, dd->node);
 		if (!dd->vld[i].sc)
 			goto nomem;
 	}

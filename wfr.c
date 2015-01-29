@@ -58,10 +58,6 @@ uint num_vls = 8;
 module_param(num_vls, uint, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 
-static uint eager_buffer_size;
-module_param(eager_buffer_size, uint, S_IRUGO);
-MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default max MTU`");
-
 /* 
  * Default time to aggregate two 10K packets.
  *    10 * 1024 + 64 header byte = 10304 byte
@@ -105,10 +101,6 @@ MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cab
 uint disable_bcc = 0;
 module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
 MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
-
-static uint rcvhdrcnt = 2048; /* 2x the max eager buffer count */
-module_param_named(rcvhdrcnt, rcvhdrcnt, uint, S_IRUGO);
-MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
 
 /* TODO: temporary */
 #define EASY_LINKUP_UNSET 100
@@ -5002,7 +4994,8 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 	u32 i;
 
 	/* TODO: this could be optimized */
-	for (i = rcd->eager_base; i < rcd->eager_base + rcd->eager_count; i++)
+	for (i = rcd->eager_base; i < rcd->eager_base +
+		     rcd->egrbufs.alloced; i++)
 		put_tid(dd, i, PT_INVALID, 0, 0);
 
 	for (i = rcd->expected_base;
@@ -5011,7 +5004,7 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 }
 
 static int get_base_info(struct qib_ctxtdata *rcd,
-				  struct hfi_base_info *kinfo)
+				  struct hfi_ctxt_info *kinfo)
 {
 	kinfo->runtime_flags = (HFI_MISC_GET() << HFI_CAP_USER_SHIFT) |
 		HFI_CAP_UGET(MASK) | HFI_CAP_KGET(K2U);
@@ -5120,8 +5113,11 @@ unimplemented:
 #define MAX_MAD_PACKET 2048
 
 /*
- * Return the maximum header bytes for this device.  This
- * is dependent on the device's receive header entry size.
+ * Return the maximum header bytes that can go on the _wire_
+ * for this device. This count includes the ICRC which is
+ * not part of the packet held in memory but it is appended
+ * by the HW.
+ * This is dependent on the device's receive header entry size.
  * WFR allows this to be set per-receive context, but the
  * driver presently enforces a global value.
  */
@@ -5129,11 +5125,15 @@ u32 lrh_max_header_bytes(struct hfi_devdata *dd)
 {
 	/*
 	 * The maximum non-payload (MTU) bytes in LRH.PktLen are
-	 * the Receive Header Entry Size minus the PBC (or RHF) size.
+	 * the Receive Header Entry Size minus the PBC (or RHF) size
+	 * plus one DW for the ICRC appended by HW.
 	 *
-	 * dd->rcvhdrentsize is in DW.
+	 * dd->rcd[0].rcvhdrqentsize is in DW.
+	 * We use rcd[0] as all context will have the same value. Also,
+	 * the first kernel context would have been allocated by now so
+	 * we are guaranteed a valid value.
 	 */
-	return (dd->rcvhdrentsize - 2/*PBC/RHF*/) << 2;
+	return (dd->rcd[0]->rcvhdrqentsize - 2/*PBC/RHF*/ + 1/*ICRC*/) << 2;
 }
 
 /*
@@ -6510,7 +6510,9 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		/* enable the context */
 		rcvctrl |= WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
 
-		rcvctrl |= ((u64)encoded_size(rcd->rcvegrbuf_chunksize)
+		/* clean the egr buffer size first */
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
+		rcvctrl |= ((u64)encoded_size(rcd->egrbufs.rcvtid_size)
 				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
 					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
 
@@ -6522,14 +6524,12 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, 0);
 
 		/* set eager count and base index */
-		reg = ((((u64)(HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR) ?
-			       rcd->rcvegrbuf_chunks : rcd->eager_count)
-			 >> WFR_RCV_SHIFT)
-					& WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
-				<< WFR_RCV_EGR_CTRL_EGR_CNT_SHIFT) |
-		      (((rcd->eager_base >> WFR_RCV_SHIFT)
-					& WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_MASK)
-				<< WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_SHIFT);
+		reg = (((u64)(rcd->egrbufs.alloced >> WFR_RCV_SHIFT)
+			& WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
+		       << WFR_RCV_EGR_CTRL_EGR_CNT_SHIFT) |
+			(((rcd->eager_base >> WFR_RCV_SHIFT)
+			  & WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_MASK)
+			 << WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_SHIFT);
 		write_kctxt_csr(dd, ctxt, WFR_RCV_EGR_CTRL, reg);
 
 		/*
@@ -7402,15 +7402,9 @@ static u64 gpio_mod(struct hfi_devdata *dd, u32 data, u32 dir, u32 mask)
 	return read_csr(dd, dd->hfi_id ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
 }
 
-/*
- * QIB sets these rcd fields in this function:
- *	rcvegrcnt	 (now eager_count)
- *	rcvegr_tid_base  (now eager_base)
- */
 static int init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	u32 context = rcd->ctxt, max_entries;
 	int ret = 0;
 
 	if (rcd->sc) {
@@ -7427,44 +7421,6 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 		write_kctxt_csr(dd, rcd->sc->context,
 				WFR_SEND_CTXT_CHECK_ENABLE, reg);
 	}
-
-	/*
-	 * Simple allocation: we have already pre-allocated the number
-	 * of RcvArray entry groups. Each ctxtdata structure holds the
-	 * number of groups for that context.
-	 *
-	 * To follow CSR requirements and maintain cacheline alignment,
-	 * make sure all sizes and bases are multiples of group_size.
-	 *
-	 * The expected entry count is what is left after assigning eager.
-	 */
-	dd_dev_info(dd, "ctxt%u: total ctxt ngroups %u\n",
-		    context, rcd->rcv_array_groups);
-
-	max_entries = rcd->rcv_array_groups * dd->rcv_entries.group_size;
-
-	if (rcd->eager_count > WFR_MAX_EAGER_ENTRIES) {
-		dd_dev_err(dd,
-			   "ctxt%u: requested too many RcvArray entries.\n",
-			   context);
-		rcd->eager_count = WFR_MAX_EAGER_ENTRIES;
-	}
-	if (rcd->eager_count % dd->rcv_entries.group_size) {
-		/* eager_count is not a multiple of the group size */
-		dd_dev_err(dd, "Eager count not multiple of group size (%u/%u)\n",
-			   rcd->eager_count, dd->rcv_entries.group_size);
-		ret = -EINVAL;
-		goto done;
-	}
-	rcd->expected_count = max_entries - rcd->eager_count;
-	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
-		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
-
-	rcd->expected_base = rcd->eager_base + rcd->eager_count;
-	dd_dev_info(dd, "ctxt%u: eager:%u, exp:%u, egrbase:%u, expbase:%u\n",
-		    context, rcd->eager_count, rcd->expected_count,
-		    rcd->eager_base, rcd->expected_base);
-done:
 	return ret;
 }
 
@@ -9597,24 +9553,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->uregbase = WFR_RXE_PER_CONTEXT_USER;
 	dd->ureg_align = WFR_RXE_PER_CONTEXT_SIZE;
 
-	/*
-	 * The receive eager buffer size must be set before the receive
-	 * contexts are created.
-	 *
-	 * Set the eager bufer size.  Validate that it falls in a range
-	 * allowed by the hardware - all powers of 2 between the min and
-	 * max.  The maximum valid MTU is within the eager buffer range
-	 * so we do not need to cap the max_mtu by an eager buffer size
-	 * setting.
-	 */
-	dd->rcvegrbufsize = eager_buffer_size ? eager_buffer_size : max_mtu;
-	if (dd->rcvegrbufsize < WFR_MIN_EAGER_BUFFER)
-		dd->rcvegrbufsize = WFR_MIN_EAGER_BUFFER;
-	if (dd->rcvegrbufsize > WFR_MAX_EAGER_BUFFER)
-		dd->rcvegrbufsize = WFR_MAX_EAGER_BUFFER;
-	dd->rcvegrbufsize = __roundup_pow_of_two(dd->rcvegrbufsize);
-	dd->rcvegrbufsize_shift = ilog2(dd->rcvegrbufsize);
-
 	/* TODO: real board name */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
 	snprintf(dd->boardname, 64, "WFR_ID 0x%llx",
@@ -9631,14 +9569,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		    & WFR_CCE_REVISION_CHIP_REV_MINOR_MASK,
 		 dd->revision >> WFR_CCE_REVISION_SW_SHIFT
 		    & WFR_CCE_REVISION_SW_MASK);
-
-	/* TODO: RcvHdrEntSize, RcvHdrCnt, and RcvHdrSize are now
-	   per context, rather than global. */
-	dd->rcvhdrcnt = rcvhdrcnt;	/* checked in hfi_setup_ctxt() */
-	/* TODO: make rcvhdrentsize and rcvhdrsize adjustable? */
-	dd->rcvhdrentsize = DEFAULT_RCVHDR_ENTSIZE;
-	dd->rcvhdrsize = DEFAULT_RCVHDRSIZE;
-	dd->rhf_offset = dd->rcvhdrentsize - sizeof(u64) / sizeof(u32);
 
 	ret = set_up_context_variables(dd);
 	if (ret)
@@ -9658,13 +9588,21 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 
+	ret = qib_create_ctxts(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	dd->rcvhdrsize = DEFAULT_RCVHDRSIZE;
+	/*
+	 * rcd[0] is guaranteed to be valid by this point. Also, all
+	 * context are using the same value, as per the module parameter.
+	 */
+	dd->rhf_offset = dd->rcd[0]->rcvhdrqentsize - sizeof(u64) / sizeof(u32);
+
 	ret = init_pervl_scs(dd);
 	if (ret)
 		goto bail_cleanup;
 
-	ret = qib_create_ctxts(dd);
-	if (ret)
-		goto bail_cleanup;
 	/* sdma init */
 	for (i = 0; i < dd->num_pports; ++i) {
 		ret = sdma_init(dd, i);

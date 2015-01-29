@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 - 2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -62,6 +62,9 @@
 #define QLOGIC_IB_R_EMULATOR_MASK (1ULL<<62)
 
 #define HFI_MIN_HDRQ_EGRBUF_CNT 2
+#define HFI_MIN_EAGER_BUFFER_SIZE (4 * 1024) /* 4KB */
+#define HFI_MAX_EAGER_BUFFER_SIZE (256 * 1024) /* 256KB */
+
 /*
  * Number of receive contexts we are configured to use (to allow for more pio
  * buffers per ctxt, etc.)  Zero means use chip value.
@@ -89,17 +92,30 @@ uint fifo_stalled_count;
 module_param(fifo_stalled_count, uint, S_IRUGO);
 MODULE_PARM_DESC(fifo_stalled_count, "How many times have the receive FIFOs been stalled?");
 
-unsigned hfi_egrbuf_alloc_size = 0x8000;
-module_param_named(egrbuf_alloc_size, hfi_egrbuf_alloc_size, uint, S_IRUGO);
-MODULE_PARM_DESC(egrbuf_alloc_size, "Chunk size for Eager buffer allocation");
-
 /* interrupt testing */
 unsigned int test_interrupts;
 module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
 
+static unsigned hfi_rcvarr_split = 25;
+module_param_named(rcvarr_split, hfi_rcvarr_split, uint, S_IRUGO);
+MODULE_PARM_DESC(rcvarr_split, "Percent of context's RcvArray entries used for Eager buffers");
+
+static uint eager_buffer_size = (2 << 20); /* 2MB */
+module_param(eager_buffer_size, uint, S_IRUGO);
+MODULE_PARM_DESC(eager_buffer_size, "Size of the eager buffers, default: 2MB");
+
+static uint rcvhdrcnt = 2048; /* 2x the max eager buffer count */
+module_param_named(rcvhdrcnt, rcvhdrcnt, uint, S_IRUGO);
+MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
+
+static uint hfi_hdrq_entsize = 16;
+module_param_named(hdrq_entsize, hfi_hdrq_entsize, uint, S_IRUGO);
+MODULE_PARM_DESC(hdrq_entsize, "Size of header queue entries: 2 - 8B, 16 - 64B (default), 32 - 128B");
+
 struct workqueue_struct *qib_cq_wq;
 
 static void verify_interrupt(struct work_struct *work);
+static inline u64 encode_rcv_header_entry_size(u16);
 
 static struct idr qib_unit_table;
 u32 qib_cpulist_count;
@@ -141,14 +157,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			HFI_CAP_KGET(NODROP_RHQ_FULL) |
 			HFI_CAP_KGET(NODROP_EGR_FULL) |
 			HFI_CAP_KGET(DMA_RTAIL);
-		/* XXX (Mitko): the devdata structure stores the RcvHdrQ entry
-		 * size as DWords. However, hfi_setup_ctxt takes bytes from
-		 * PSM and converts to DWords. Should we just use bytes in
-		 * hfi_devdata? */
-		ret = hfi_setup_ctxt(rcd, ((dd->rcv_entries.ngroups / 2) *
-					   dd->rcv_entries.group_size),
-				     dd->rcvegrbufsize, dd->rcvhdrcnt,
-				     dd->rcvhdrentsize << 2);
+		ret = dd->f_init_ctxt(rcd);
 		if (ret < 0) {
 			dd_dev_err(dd,
 				   "Failed to setup kernel receive context, failing\n");
@@ -159,7 +168,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		}
 		rcd->seq_cnt = 1;
 
-		rcd->sc = sc_alloc(dd, SC_ACK, dd->node);
+		rcd->sc = sc_alloc(dd, SC_ACK, rcd->rcvhdrqentsize, dd->node);
 		if (!rcd->sc) {
 			dd_dev_err(dd,
 				"Unable to allocate kernel send context, failing\n");
@@ -212,6 +221,10 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 				 (dd->num_rcv_contexts - dd->first_user_ctxt));
 	rcd = kzalloc(sizeof(*rcd), GFP_KERNEL);
 	if (rcd) {
+		u32 rcvtids, max_entries;
+
+		dd_dev_info(dd, "%s: setting up context %u\n", __func__, ctxt);
+
 		INIT_LIST_HEAD(&rcd->qp_wait_list);
 		rcd->ppd = ppd;
 		rcd->dd = dd;
@@ -250,18 +263,90 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 					(ct * dd->rcv_entries.ngroups);
 		}
 		rcd->eager_base = base * dd->rcv_entries.group_size;
+
+		/* Validate and initialize Rcv Hdr Q variables */
+		if (rcvhdrcnt & WFR_HDRQ_INCREMENT) {
+			dd_dev_err(dd,
+				   "ctxt%u: header queue count %d must be divisible by %d\n",
+				   rcd->ctxt, rcvhdrcnt, WFR_HDRQ_INCREMENT);
+			goto bail;
+		}
+		rcd->rcvhdrq_cnt = rcvhdrcnt;
+		rcd->rcvhdrqentsize = hfi_hdrq_entsize;
+		/*
+		 * Simple Eager buffer allocation: we have already pre-allocated
+		 * the number of RcvArray entry groups. Each ctxtdata structure
+		 * holds the number of groups for that context.
+		 *
+		 * To follow CSR requirements and maintain cacheline alignment,
+		 * make sure all sizes and bases are multiples of group_size.
+		 *
+		 * The expected entry count is what is left after assigning
+		 * eager.
+		 */
+		max_entries = rcd->rcv_array_groups *
+			dd->rcv_entries.group_size;
+		rcvtids = ((max_entries * hfi_rcvarr_split) / 100);
+		rcd->egrbufs.count = round_down(rcvtids,
+						dd->rcv_entries.group_size);
+		if (rcd->egrbufs.count > WFR_MAX_EAGER_ENTRIES) {
+			dd_dev_err(dd, "ctxt%u: requested too many RcvArray entries.\n",
+				   rcd->ctxt);
+			rcd->egrbufs.count = WFR_MAX_EAGER_ENTRIES;
+		}
+		dd_dev_info(dd, "ctxt%u: max Eager buffer RcvArray entries: %u\n",
+			    rcd->ctxt, rcd->egrbufs.count);
+
+		/*
+		 * Allocate array that will hold the eager buffer accounting
+		 * data.
+		 * This will allocate the maximum possible buffer count based
+		 * on the value of the RcvArray split parameter.
+		 * The resulting value will be rounded down to the closest
+		 * multiple of dd->rcv_entries.group_size.
+		 */
+		rcd->egrbufs.buffers = kzalloc(sizeof(*rcd->egrbufs.buffers) *
+					       rcd->egrbufs.count, GFP_KERNEL);
+		if (!rcd->egrbufs.buffers)
+			goto bail;
+		rcd->egrbufs.rcvtids = kzalloc(sizeof(*rcd->egrbufs.rcvtids) *
+					       rcd->egrbufs.count, GFP_KERNEL);
+		if (!rcd->egrbufs.rcvtids)
+			goto free_bufs;
+		rcd->egrbufs.size = eager_buffer_size;
+		/*
+		 * The size of the buffers programmed into the RcvArray
+		 * entries needs to be big enough to handle the highest
+		 * MTU supported.
+		 */
+		if (rcd->egrbufs.size < max_mtu) {
+			rcd->egrbufs.size = __roundup_pow_of_two(max_mtu);
+			dd_dev_info(dd,
+				    "ctxt%u: eager bufs size too small. Adjusting to %zu\n",
+				    rcd->ctxt, rcd->egrbufs.size);
+		}
+		rcd->egrbufs.rcvtid_size = HFI_MAX_EAGER_BUFFER_SIZE;
+
 		if (ctxt < dd->first_user_ctxt) { /* N/A for PSM contexts */
 			rcd->opstats = kzalloc(sizeof(*rcd->opstats),
 				GFP_KERNEL);
 			if (!rcd->opstats) {
 				kfree(rcd);
 				dd_dev_err(dd,
-					"Unable to allocate per ctxt stats buffer\n");
-				return NULL;
+					   "ctxt%u: Unable to allocate per ctxt stats buffer\n",
+					   rcd->ctxt);
+				goto free_rcv_bufs;
 			}
 		}
 	}
 	return rcd;
+free_rcv_bufs:
+	kfree(rcd->egrbufs.rcvtids);
+free_bufs:
+	kfree(rcd->egrbufs.buffers);
+	kfree(rcd);
+bail:
+	return NULL;
 }
 
 /*
@@ -279,97 +364,6 @@ static inline u64 encode_rcv_header_entry_size(u16 size)
 	else if (size == 32)
 		return 4;
 	return 0; /* invalid */
-}
-
-int hfi_setup_ctxt(struct qib_ctxtdata *cd, u16 egrtids, u16 egrsize,
-		   u16 hdrqcnt, u16 hdrqentsize)
-{
-	struct hfi_devdata *dd = cd->dd;
-	int ret = 0;
-
-	dd_dev_info(dd, "%s: setting up context %u\n", __func__,
-		    cd->ctxt);
-
-	if (hdrqcnt <= HFI_MIN_HDRQ_EGRBUF_CNT ||
-	    egrtids <= HFI_MIN_HDRQ_EGRBUF_CNT) {
-		dd_dev_err(dd, "hdrq or eager buffer count too small\n");
-		ret = -EINVAL;
-		goto done;
-	}
-
-	/* checked in init_ctxt() */
-	cd->eager_count = egrtids;
-
-	ret = dd->f_init_ctxt(cd);
-	if (ret)
-		goto done;
-
-	/*
-	 * The size of the buffers programmed into the RcvArray
-	 * entries needs to be big enough to handle the highest
-	 * MTU supported.
-	 */
-	if (max_mtu > egrsize) {
-		u32 bufsize = __roundup_pow_of_two(max_mtu);
-
-		dd_dev_info(dd,
-			    "Eager buffer size changed from %u to %u\n",
-			    egrsize, bufsize);
-		egrsize = bufsize;
-	}
-	/*
-	 * To avoid wasting a lot of memory, we allocate 32KB chunks
-	 * of physically contiguous memory, advance through it until
-	 * used up and then allocate more.  Of course, we need
-	 * memory to store those extra pointers, now.  32KB seems to
-	 * be the most that is "safe" under memory pressure
-	 * (creating large files and then copying them over
-	 * NFS while doing lots of MPI jobs).  The OOM killer can
-	 * get invoked, even though we say we can sleep and this can
-	 * cause significant system problems....
-	 */
-	cd->rcvegrbuf_chunksize = hfi_egrbuf_alloc_size;
-	/*
-	 * rcvegrbuf_size is validated later in
-	 *	qib_setup_eagerbufs()->hfi_rcvbuf_validate()
-	 */
-	cd->rcvegrbuf_size = egrsize;
-	cd->rcvegrbufs_perchunk =
-		cd->rcvegrbuf_chunksize / cd->rcvegrbuf_size;
-	if (!is_power_of_2(cd->rcvegrbufs_perchunk)) {
-		ret = -EFAULT;
-		goto done;
-	}
-	cd->rcvegrbuf_chunks = (cd->rcvegrbuf_size * cd->eager_count) /
-		cd->rcvegrbuf_chunksize;
-	if (!HFI_CAP_KGET_MASK(cd->flags, MULTI_PKT_EGR)) {
-		cd->rcvegrbufs_idx_mask = (u32)cd->rcvegrbufs_perchunk - 1;
-		cd->rcvegrbufs_perchunk_shift = ilog2(cd->rcvegrbufs_perchunk);
-	} else {
-		cd->rcvegrbufs_idx_mask = 0;
-		cd->rcvegrbufs_perchunk_shift = 0;
-	}
-	if (hdrqcnt % WFR_HDRQ_INCREMENT) {
-		dd_dev_err(dd,
-			"header queue count %d must be divisible by %d\n",
-			hdrqcnt, WFR_HDRQ_INCREMENT);
-		ret = -EFAULT;
-		goto done;
-	}
-	cd->rcvhdrq_cnt = hdrqcnt;
-	/* RcvHdrQ Entry Size is in DWords */
-	hdrqentsize = hdrqentsize >> 2;
-	/* RcvHdrEntSize has only a specific set of valid values */
-	if (encode_rcv_header_entry_size(hdrqentsize) == 0) {
-		dd_dev_err(dd,
-			"header queue entry size %d must be 2, 16, or 32\n",
-			hdrqentsize);
-		ret = -EINVAL;
-		goto done;
-	}
-	cd->rcvhdrqentsize = hdrqentsize;
-done:
-	return ret;
 }
 
 /*
@@ -1019,21 +1013,22 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 			rcd->rcvhdrtail_kvaddr = NULL;
 		}
 	}
-	if (rcd->rcvegrbuf) {
+
+	if (rcd->egrbufs.rcvtids)
+		/* all the RcvArray entries should have been cleared by now */
+		kfree(rcd->egrbufs.rcvtids);
+
+	if (rcd->egrbufs.buffers) {
 		unsigned e;
 
-		for (e = 0; e < rcd->rcvegrbuf_chunks; e++) {
-			void *base = rcd->rcvegrbuf[e];
-			size_t size = rcd->rcvegrbuf_chunksize;
-
-			dma_free_coherent(&dd->pcidev->dev, size,
-					  base, rcd->rcvegrbuf_phys[e]);
+		for (e = 0; e < rcd->egrbufs.alloced; e++) {
+			if (rcd->egrbufs.buffers[e].phys)
+				dma_free_coherent(&dd->pcidev->dev,
+						  rcd->egrbufs.buffers[e].len,
+						  rcd->egrbufs.buffers[e].addr,
+						  rcd->egrbufs.buffers[e].phys);
 		}
-		kfree(rcd->rcvegrbuf);
-		rcd->rcvegrbuf = NULL;
-		kfree(rcd->rcvegrbuf_phys);
-		rcd->rcvegrbuf_phys = NULL;
-		rcd->rcvegrbuf_chunks = 0;
+		kfree(rcd->egrbufs.buffers);
 	}
 
 	if (rcd->sc) {
@@ -1504,7 +1499,10 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 		struct qib_ctxtdata *rcd = tmp[ctxt];
 
 		tmp[ctxt] = NULL; /* debugging paranoia */
-		qib_free_ctxtdata(dd, rcd);
+		if (rcd) {
+			dd->f_clear_tids(rcd);
+			qib_free_ctxtdata(dd, rcd);
+		}
 	}
 	kfree(tmp);
 	/* must follow rcv context free - need to remove rcv's hooks */
@@ -1544,11 +1542,51 @@ static void qib_postinit_cleanup(struct hfi_devdata *dd)
 
 static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	int ret, j, pidx, initfail;
+	int ret = 0, j, pidx, initfail;
 	struct hfi_devdata *dd = NULL;
 
 	/* First, lock the non-writable module parameters */
 	HFI_CAP_LOCK();
+
+	/* Validate some global module parameters */
+	if (rcvhdrcnt <= HFI_MIN_HDRQ_EGRBUF_CNT) {
+		qib_early_err(&pdev->dev, "Header queue  count too small\n");
+		ret = -EINVAL;
+		goto bail;
+	}
+	/* use the encoding function as a sanitization check */
+	if (!encode_rcv_header_entry_size(hfi_hdrq_entsize)) {
+		qib_early_err(&pdev->dev, "Invalid HdrQ Entry size %u\n",
+			     hfi_hdrq_entsize);
+		goto bail;
+	}
+
+	/* The receive eager buffer size must be set before the receive
+	 * contexts are created.
+	 *
+	 * Set the eager bufer size.  Validate that it falls in a range
+	 * allowed by the hardware - all powers of 2 between the min and
+	 * max.  The maximum valid MTU is within the eager buffer range
+	 * so we do not need to cap the max_mtu by an eager buffer size
+	 * setting.
+	 */
+	if (eager_buffer_size) {
+		if (!is_power_of_2(eager_buffer_size))
+			eager_buffer_size =
+				roundup_pow_of_two(eager_buffer_size);
+		eager_buffer_size =
+			clamp_val(eager_buffer_size, WFR_MIN_EAGER_BUFFER,
+				  WFR_MAX_EXPECTED_BUFFER);
+		qib_early_info(&pdev->dev, "Eager buffer size %u\n",
+			       eager_buffer_size);
+	} else {
+		qib_early_err(&pdev->dev, "Invalid Eager buffer size of 0\n");
+		ret = -EINVAL;
+		goto bail;
+	}
+
+	/* restrict value of hfi_rcvarr_split */
+	hfi_rcvarr_split = clamp_val(hfi_rcvarr_split, 0, 100);
 
 	ret = qib_pcie_init(pdev, ent);
 	if (ret)
@@ -1563,7 +1601,6 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	case PCI_DEVICE_ID_INTEL_WFR1:
 	case PCI_DEVICE_ID_INTEL_WFR2:
 		dd = qib_init_wfr_funcs(pdev, ent);
-
 		break;
 	default:
 		qib_early_err(&pdev->dev,
@@ -1716,8 +1753,6 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 		rcd->rcvhdrq_size = amt;
 	}
 
-	/* clear for security and sanity on each use */
-	memset(rcd->rcvhdrq, 0, rcd->rcvhdrq_size);
 	if (rcd->rcvhdrtail_kvaddr)
 		memset(rcd->rcvhdrtail_kvaddr, 0, PAGE_SIZE);
 
@@ -1765,10 +1800,10 @@ bail:
 int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	unsigned e, egrcnt, egrperchunk, chunk, egrsize, egroff;
-	size_t size;
+	u32 max_entries, egrtop, alloced_bytes = 0, idx = 0;
 	gfp_t gfp_flags;
 	u16 order;
+	int ret = 0;
 
 	/*
 	 * GFP_USER, but without GFP_FS, so buffer cache can be
@@ -1778,79 +1813,147 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	 */
 	gfp_flags = __GFP_WAIT | __GFP_IO | __GFP_COMP;
 
-	egrcnt = rcd->eager_count;
-	egroff = rcd->eager_base;
+	/*
+	 * If using one-pkt-per-egr-buffer, lower the eager buffer
+	 * size to the max MTU (page-aligned).
+	 */
+	if (!HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR))
+		rcd->egrbufs.rcvtid_size = roundup_pow_of_two(max_mtu);
+
+	while (alloced_bytes < rcd->egrbufs.size &&
+	       rcd->egrbufs.alloced < rcd->egrbufs.count) {
+		rcd->egrbufs.buffers[idx].addr =
+			dma_alloc_coherent(&dd->pcidev->dev,
+					   rcd->egrbufs.rcvtid_size,
+					   &rcd->egrbufs.buffers[idx].phys,
+					   gfp_flags);
+		if (rcd->egrbufs.buffers[idx].addr) {
+			rcd->egrbufs.buffers[idx].len =
+				rcd->egrbufs.rcvtid_size;
+			rcd->egrbufs.rcvtids[rcd->egrbufs.alloced].addr =
+				rcd->egrbufs.buffers[idx].addr;
+			rcd->egrbufs.rcvtids[rcd->egrbufs.alloced].phys =
+				rcd->egrbufs.buffers[idx].phys;
+			rcd->egrbufs.alloced++;
+			alloced_bytes += rcd->egrbufs.rcvtid_size;
+			idx++;
+		} else {
+			u32 new_size, i, j;
+			u64 offset = 0;
+
+			/*
+			 * Fail the eager buffer allocation if:
+			 *   - we are already using the lowest acceptible size
+			 *   - we are using one-pkt-per-egr-buffer (this implies
+			 *     that we are accepting only one size)
+			 */
+			if (rcd->egrbufs.rcvtid_size ==
+			    roundup_pow_of_two(max_mtu) ||
+			    !HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR)) {
+				dd_dev_err(dd, "ctxt%u: Failed to allocate eager buffers\n",
+					rcd->ctxt);
+				goto bail_rcvegrbuf_phys;
+			}
+
+			new_size = rcd->egrbufs.rcvtid_size / 2;
+
+			/*
+			 * If the first attempt to allocate memory failed, don't
+			 * fail everything but continue with the next lower
+			 * size.
+			 */
+			if (idx == 0) {
+				rcd->egrbufs.rcvtid_size = new_size;
+				continue;
+			}
+
+			/*
+			 * Re-partition already allocated buffers to a smaller
+			 * size.
+			 */
+			rcd->egrbufs.alloced = 0;
+			for (i = 0, j = 0, offset = 0; j < idx; i++) {
+				if (i >= rcd->egrbufs.count)
+					break;
+				rcd->egrbufs.rcvtids[i].phys =
+					rcd->egrbufs.buffers[j].phys + offset;
+				rcd->egrbufs.rcvtids[i].addr =
+					rcd->egrbufs.buffers[j].addr + offset;
+				rcd->egrbufs.alloced++;
+				if ((rcd->egrbufs.buffers[j].phys + offset +
+				     new_size) ==
+				    (rcd->egrbufs.buffers[j].phys +
+				     rcd->egrbufs.buffers[j].len)) {
+					j++;
+					offset = 0;
+				} else
+					offset += new_size;
+			}
+			rcd->egrbufs.rcvtid_size = new_size;
+		}
+	}
+	rcd->egrbufs.numbufs = idx;
+	rcd->egrbufs.size = alloced_bytes;
+
+	dd_dev_info(dd, "ctxt%u: Alloced %u rcv tid entries @ %uKB, total %zuKB\n",
+		rcd->ctxt, rcd->egrbufs.alloced, rcd->egrbufs.rcvtid_size,
+		rcd->egrbufs.size);
+	/*
+	 * Eager RcvArray entries need to be in multiples of 8 due to the
+	 * encoding of the RcvCtxtCtrl.EgrCnt. Check this here and scream if
+	 * it's not.
+	 */
+	BUG_ON(rcd->egrbufs.alloced % 8);
 
 	/*
-	 * If multiple packets per RcvArray buffer is enabled in
-	 * the context's RcvCtrl register, use one RcvArray TID
-	 * per chunk.
+	 * Set the contexts rcv array head update threshold to the closest
+	 * power of 2 (so we can use a mask instead of modulo) below half
+	 * the allocated entries.
 	 */
-	if (!HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR)) {
-		egrperchunk = rcd->rcvegrbufs_perchunk;
-		egrsize = rcd->rcvegrbuf_size;
-	} else {
-		egrperchunk = 1;
-		egrsize = rcd->rcvegrbuf_chunksize;
+	rcd->egrbufs.threshold =
+		rounddown_pow_of_two(rcd->egrbufs.alloced / 2);
+	/*
+	 * Compute the expecte RcvArray entry base. This is done after
+	 * allocating the eager buffers in order to maximize the
+	 * expected RcvArray entries for the context.
+	 */
+	max_entries = rcd->rcv_array_groups * dd->rcv_entries.group_size;
+	egrtop = roundup(rcd->egrbufs.alloced, dd->rcv_entries.group_size);
+	rcd->expected_count = max_entries - egrtop;
+	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
+		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
+
+	rcd->expected_base = rcd->eager_base + egrtop;
+	dd_dev_info(dd, "ctxt%u: eager:%u, exp:%u, egrbase:%u, expbase:%u\n",
+		    rcd->ctxt, rcd->egrbufs.alloced, rcd->expected_count,
+		    rcd->eager_base, rcd->expected_base);
+
+	if (!hfi_rcvbuf_validate(rcd->egrbufs.rcvtid_size, PT_EAGER, &order)) {
+		dd_dev_err(dd, "ctxt%u: current Eager buffer size is invalid %u\n",
+			   rcd->ctxt, rcd->egrbufs.rcvtid_size);
+		ret = -EINVAL;
+		goto bail;
 	}
 
-	if (!hfi_rcvbuf_validate(egrsize, PT_EAGER, &order))
-		return -EINVAL;
-
-	chunk = rcd->rcvegrbuf_chunks;
-	size = rcd->rcvegrbuf_chunksize;
-	if (!rcd->rcvegrbuf) {
-		rcd->rcvegrbuf =
-			kzalloc(chunk * sizeof(rcd->rcvegrbuf[0]),
-				GFP_KERNEL);
-		if (!rcd->rcvegrbuf)
-			goto bail;
+	for (idx = 0; idx < rcd->egrbufs.alloced; idx++) {
+		dd->f_put_tid(dd, rcd->eager_base + idx, PT_EAGER,
+			      rcd->egrbufs.rcvtids[idx].phys, order);
+		cond_resched();
 	}
-	if (!rcd->rcvegrbuf_phys) {
-		rcd->rcvegrbuf_phys =
-			kmalloc(chunk * sizeof(rcd->rcvegrbuf_phys[0]),
-				GFP_KERNEL);
-		if (!rcd->rcvegrbuf_phys)
-			goto bail_rcvegrbuf;
-	}
-	for (e = 0; e < rcd->rcvegrbuf_chunks; e++) {
-		if (rcd->rcvegrbuf[e])
-			continue;
-		rcd->rcvegrbuf[e] =
-			dma_alloc_coherent(&dd->pcidev->dev, size,
-					   &rcd->rcvegrbuf_phys[e],
-					   gfp_flags);
-		if (!rcd->rcvegrbuf[e])
-			goto bail_rcvegrbuf_phys;
-	}
-
-	rcd->rcvegr_phys = rcd->rcvegrbuf_phys[0];
-
-	for (e = chunk = 0; chunk < rcd->rcvegrbuf_chunks; chunk++) {
-		dma_addr_t pa = rcd->rcvegrbuf_phys[chunk];
-		unsigned i;
-
-		/* clear for security and sanity on each use */
-		memset(rcd->rcvegrbuf[chunk], 0, size);
-
-		for (i = 0; e < egrcnt && i < egrperchunk; e++, i++) {
-			dd->f_put_tid(dd, e + egroff, PT_EAGER, pa, order);
-			pa += egrsize;
-		}
-		cond_resched(); /* don't hog the cpu */
-	}
-
-	return 0;
+	goto bail;
 
 bail_rcvegrbuf_phys:
-	for (e = 0; e < rcd->rcvegrbuf_chunks && rcd->rcvegrbuf[e]; e++)
-		dma_free_coherent(&dd->pcidev->dev, size,
-				  rcd->rcvegrbuf[e], rcd->rcvegrbuf_phys[e]);
-	kfree(rcd->rcvegrbuf_phys);
-	rcd->rcvegrbuf_phys = NULL;
-bail_rcvegrbuf:
-	kfree(rcd->rcvegrbuf);
-	rcd->rcvegrbuf = NULL;
+	for (idx = 0; idx < rcd->egrbufs.alloced &&
+		     rcd->egrbufs.buffers[idx].addr;
+	     idx++) {
+		dma_free_coherent(&dd->pcidev->dev,
+				  rcd->egrbufs.buffers[idx].len,
+				  rcd->egrbufs.buffers[idx].addr,
+				  rcd->egrbufs.buffers[idx].phys);
+		rcd->egrbufs.buffers[idx].addr = NULL;
+		rcd->egrbufs.buffers[idx].phys = 0;
+		rcd->egrbufs.buffers[idx].len = 0;
+	}
 bail:
-	return -ENOMEM;
+	return ret;
 }
