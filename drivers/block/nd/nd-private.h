@@ -70,6 +70,7 @@ struct nd_spa {
 
 struct nd_dcr {
 	struct nfit_dcr __iomem *nfit_dcr;
+	u32 parent_handle;
 	struct list_head list;
 };
 
@@ -141,6 +142,7 @@ void nd_region_create_blk_seed(struct nd_region *nd_region);
 void nd_region_notify_remove(struct nd_bus *nd_bus, struct device *dev, int rc);
 int nd_bus_create_ndctl(struct nd_bus *nd_bus);
 void nd_bus_destroy_ndctl(struct nd_bus *nd_bus);
+const char *nd_bus_provider(struct nd_bus *nd_bus);
 int nd_bus_register_dimms(struct nd_bus *nd_bus);
 int nd_bus_register_regions(struct nd_bus *nd_bus);
 int nd_bus_init_interleave_sets(struct nd_bus *nd_bus);

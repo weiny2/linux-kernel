@@ -36,6 +36,7 @@ nd-y += region_devs.o
 nd-y += region.o
 nd-y += namespace_devs.o
 nd-y += label.o
+
 nd-$(CONFIG_ND_BTT_DEVS) += btt_devs.o
 
 nd_pmem-y := pmem.o

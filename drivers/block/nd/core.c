@@ -530,6 +530,49 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 	return (void __iomem *) ret;
 }
 
+const char *nd_bus_provider(struct nd_bus *nd_bus)
+{
+	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
+	struct device *parent = nd_bus->dev.parent;
+
+	if (nfit_desc->provider_name)
+		return nfit_desc->provider_name;
+	else if (parent)
+		return dev_name(parent);
+	else
+		return "unknown";
+}
+
+static void nd_mem_assign_dcr(struct nd_bus *nd_bus, struct nd_mem *nd_mem,
+		struct nd_dcr *nd_dcr)
+{
+	WARN_TAINT_ONCE(nd_dcr->parent_handle && nd_dcr->parent_handle
+			!= readl(&nd_mem->nfit_mem->nfit_handle),
+			TAINT_FIRMWARE_WORKAROUND,
+			"nd: %s duplicate dimm control region association?\n",
+			nd_bus_provider(nd_bus));
+	nd_dcr->parent_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	nd_mem->nfit_dcr = nd_dcr->nfit_dcr;
+}
+
+static void nd_mem_init(struct nd_bus *nd_bus)
+{
+	struct nd_mem *nd_mem;
+
+	/* find the dcr associated with a given memdev */
+	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
+		struct nd_dcr *nd_dcr;
+		u16 dcr_index;
+
+		dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
+		list_for_each_entry(nd_dcr, &nd_bus->dcrs, list)
+			if (readw(&nd_dcr->nfit_dcr->dcr_index) == dcr_index) {
+				nd_mem_assign_dcr(nd_bus, nd_mem, nd_dcr);
+				break;
+			}
+	}
+}
+
 static int child_unregister(struct device *dev, void *data)
 {
 	/*
@@ -591,6 +634,8 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 				__func__, PTR_ERR(base));
 		goto err;
 	}
+
+	nd_mem_init(nd_bus);
 
 	rc = nd_bus_init_interleave_sets(nd_bus);
 	if (rc)

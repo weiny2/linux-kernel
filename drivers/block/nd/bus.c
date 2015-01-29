@@ -348,19 +348,6 @@ struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname)
 	return ndio;
 }
 
-static const char *nd_bus_provider(struct nd_bus *nd_bus)
-{
-	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
-	struct device *parent = nd_bus->dev.parent;
-
-	if (nfit_desc->provider_name)
-		return nfit_desc->provider_name;
-	else if (parent)
-		return dev_name(parent);
-	else
-		return "unknown";
-}
-
 static ssize_t commands_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {

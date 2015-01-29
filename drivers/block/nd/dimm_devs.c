@@ -531,23 +531,13 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 	mutex_lock(&nd_bus_list_mutex);
 	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
 		struct nd_dimm *nd_dimm;
-		struct nd_dcr *nd_dcr;
 		u32 nfit_handle;
-		u16 dcr_index;
 
 		nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 		nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
 		if (nd_dimm) {
 			put_device(&nd_dimm->dev);
 			continue;
-		}
-
-		dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
-		list_for_each_entry(nd_dcr, &nd_bus->dcrs, list) {
-			if (readw(&nd_dcr->nfit_dcr->dcr_index) == dcr_index) {
-				nd_mem->nfit_dcr = nd_dcr->nfit_dcr;
-				break;
-			}
 		}
 
 		if (!nd_dimm_create(nd_bus, nd_mem)) {
