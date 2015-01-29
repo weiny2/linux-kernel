@@ -325,12 +325,9 @@ static int num_nd_mem(struct nd_bus *nd_bus, u16 spa_index)
 
 /* enough info to uniquely specify an interleave set */
 struct nd_set_info {
-	u64 spa_base;
-	u64 spa_length;
 	struct nd_set_info_map {
-		u32 nfit_handle;
-		u64 region_dpa;
-		u64 region_len;
+		u64 region_spa_offset;
+		u32 serial_number;
 	} mapping[0];
 };
 
@@ -345,7 +342,8 @@ static int cmp_map(const void *m0, const void *m1)
 	const struct nd_set_info_map *map0 = m0;
 	const struct nd_set_info_map *map1 = m1;
 
-	return memcmp(&map0->nfit_handle, &map1->nfit_handle, sizeof(u32));
+	return memcmp(&map0->region_spa_offset, &map1->region_spa_offset,
+			sizeof(u64));
 }
 
 static int init_interleave_set(struct nd_bus *nd_bus,
@@ -359,12 +357,10 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 	info = kzalloc(sizeof_nd_set_info(num_mappings), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
-	info->spa_base = nfit_spa_base(nd_bus->nfit_desc, nd_spa->nfit_spa);
-	info->spa_length = nfit_spa_length(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	for (i = 0; i < num_mappings; i++) {
 		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
-		u32 key = to_interleave_set_key(nd_mem);
 		struct nd_set_info_map *map = &info->mapping[i];
+		u32 key = to_interleave_set_key(nd_mem);
 
 		if (radix_tree_lookup(&nd_bus->interleave_sets, key)) {
 			dev_err(&nd_bus->dev, "%s: duplicate mapping (set: %d key: %#x)\n",
@@ -381,9 +377,9 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 		}
 		dev_dbg(&nd_bus->dev, "%s: set: %d key: %#x\n",
 				__func__, spa_index, key);
-		map->nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
-		map->region_dpa = readq(&nd_mem->nfit_mem->region_dpa);
-		map->region_len = readq(&nd_mem->nfit_mem->region_len);
+		map->region_spa_offset = readl(&nd_mem->nfit_mem->region_spa_offset);
+		map->serial_number = nfit_dcr_serial(nd_bus->nfit_desc,
+				nd_mem->nfit_dcr, nd_mem->nfit_mem);
 	}
 
 	sort(&info->mapping[0], num_mappings, sizeof(struct nd_set_info_map),

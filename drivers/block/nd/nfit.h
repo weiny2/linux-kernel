@@ -312,10 +312,17 @@ static inline u16 nfit_dcr_fic(struct nfit_bus_descriptor *nfit_desc,
 }
 
 static inline u32 nfit_dcr_serial(struct nfit_bus_descriptor *nfit_desc,
-		struct nfit_dcr __iomem *nfit_dcr)
+		struct nfit_dcr __iomem *nfit_dcr,
+		struct nfit_mem __iomem *nfit_mem)
 {
+	/*
+	 * Fake a unique per-dimm serial number in the old_nfit case.
+	 * Of course, deriving this from 'nfit_handle' means that
+	 * interleave-set tracking across dimm-slot moves will not work
+	 * with old_nfit implementations
+	 */
 	if (nfit_desc->old_nfit)
-		return 0;
+		return ~readl(&nfit_mem->nfit_handle);
 	return readw(&nfit_dcr->serial_number);
 }
 

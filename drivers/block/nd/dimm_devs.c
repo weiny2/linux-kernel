@@ -241,11 +241,12 @@ static DEVICE_ATTR_RO(format);
 static ssize_t serial_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct nfit_mem __iomem *nfit_mem = to_nfit_mem(dev);
 	struct nfit_dcr __iomem *nfit_dcr = to_nfit_dcr(dev);
 	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 
 	return sprintf(buf, "%#x\n",
-			nfit_dcr_serial(nd_bus->nfit_desc, nfit_dcr));
+			nfit_dcr_serial(nd_bus->nfit_desc, nfit_dcr, nfit_mem));
 }
 static DEVICE_ATTR_RO(serial);
 
