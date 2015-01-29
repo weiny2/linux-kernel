@@ -59,11 +59,13 @@ module_param(num_vls, uint, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 
 /* 
- * Default time to aggregate two 10K packets.
- *    10 * 1024 + 64 header byte = 10304 byte
- *    2 * 10304 byte / 12.5 GB/s = 1648.64ns
+ * Default time to aggregate two 10K packets from the idle state
+ * (timer not running). The timer starts at the end of the first packet,
+ * so only the time for one 10K packet and header plus a bit extra is needed.
+ * 10 * 1024 + 64 header byte = 10304 byte
+ * 10304 byte / 12.5 GB/s = 824.32ns
  */
-uint rcv_intr_timeout = 1649;
+uint rcv_intr_timeout = (824 + 16); /* 16 is for coalescing interrupt */
 module_param(rcv_intr_timeout, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_timeout, "Receive interrupt mitigation timeout in ns");
 
