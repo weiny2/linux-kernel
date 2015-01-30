@@ -1,4 +1,4 @@
-# Copyright (c) 2013, 2014. Intel Corporation. All rights reserved.
+# Copyright (c) 2013-2015. Intel Corporation. All rights reserved.
 # Copyright (c) 2007, 2008, 2009. QLogic Corp. All rights reserved.
 # Copyright (c) 2003, 2004, 2005. PathScale, Inc. All rights reserved.
 #
@@ -79,7 +79,7 @@ specfile: hfi.spec.in
 		hfi.spec.in > hfi.spec
 	if [ -d .git ]; then \
 		echo '%changelog' >> hfi.spec; \
-		git log --no-merges v$(BASEVERSION)..HEAD --format="* %cd <%ae>%n- %s%n" \
+		for x in $(git log v$(BASEVERSION)..HEAD --pretty="format:%at %H" | sort -rg | cut -d' ' -f2); do git log -1 --no-merges --format="* %cd <%ae>%n- %s%n" ${x}; done \
 		| sed 's/-[0-9][0-9][0-9][0-9] //' \
 		| sed 's/ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]//' \
 		>> hfi.spec; \
