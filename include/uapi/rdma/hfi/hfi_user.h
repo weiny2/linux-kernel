@@ -125,22 +125,14 @@
 #define HFI_CMD_EP_WRITE_P0     70      /* write EPROM partition 0 */
 #define HFI_CMD_EP_WRITE_P1     71      /* write EPROM partition 1 */
 
-/*
- * HFI_CMD_ACK_EVENT obsoletes HFI_CMD_DISARM_BUFS, but we keep it for
- * compatibility with libraries from previous release.   The ACK_EVENT
- * will take appropriate driver action (if any, just DISARM for now),
- * then clear the bits passed in as part of the mask.  These bits are
- * in the first 64bit word at spi_sendbuf_status, and are passed to
- * the driver in the event_mask union as well.
- */
-#define _HFI_EVENT_DISARM_BUFS_BIT  0
+#define _HFI_EVENT_FROZEN_BIT       0
 #define _HFI_EVENT_LINKDOWN_BIT     1
 #define _HFI_EVENT_LID_CHANGE_BIT   2
 #define _HFI_EVENT_LMC_CHANGE_BIT   3
 #define _HFI_EVENT_SL2VL_CHANGE_BIT 4
 #define _HFI_MAX_EVENT_BIT _HFI_EVENT_SL2VL_CHANGE_BIT
 
-#define HFI_EVENT_DISARM_BUFS_BIT	(1UL << _HFI_EVENT_DISARM_BUFS_BIT)
+#define HFI_EVENT_FROZEN                (1UL << _HFI_EVENT_FROZEN_BIT)
 #define HFI_EVENT_LINKDOWN_BIT		(1UL << _HFI_EVENT_LINKDOWN_BIT)
 #define HFI_EVENT_LID_CHANGE_BIT	(1UL << _HFI_EVENT_LID_CHANGE_BIT)
 #define HFI_EVENT_LMC_CHANGE_BIT	(1UL << _HFI_EVENT_LMC_CHANGE_BIT)
