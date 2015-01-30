@@ -878,7 +878,12 @@ void pio_freeze(struct hfi_devdata *dd)
 
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		sc = dd->send_contexts[i].sc;
-		if (!sc || !(sc->flags & SCF_FROZEN))
+		/*
+		 * Don't disable unallocated, unfrozen, or user send contexts.
+		 * User send contexts will be disabled when the process
+		 * calls in to driver to reset its context.
+		 */
+		if (!sc || !(sc->flags & SCF_FROZEN) || sc->type == SC_USER)
 			continue;
 
 		/* only need to disable, the context is already stopped */

@@ -332,33 +332,65 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_SET_PKEY:
 		ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
 		break;
-	case HFI_CMD_CTXT_RESET:
-		if (uctxt && uctxt->sc) {
-			/*
-			 * There is no protection here. User level has to
-			 * guarantee that no one will be writing to the send
-			 * context while it is being re-initialized.
-			 * If user level breaks that guarantee, it will break
-			 * it's own context and no one else's.
-			 */
-			struct send_context *sc = uctxt->sc;
-			/*
-			 * Wait until the interrupt handler has marked the
-			 * context as halted. Report error if we time out.
-			 */
-			wait_event_interruptible_timeout(sc->halt_wait,
-				   (sc->flags & SCF_HALTED),
-				   msecs_to_jiffies(SEND_CTXT_HALT_TIMEOUT));
-			if (!(sc->flags & SCF_HALTED)) {
+	case HFI_CMD_CTXT_RESET: {
+		struct send_context *sc;
+		struct hfi_devdata *dd;
+
+		if (!uctxt || !uctxt->dd || !uctxt->sc) {
+			ret = -EINVAL;
+			break;
+		}
+		/*
+		 * There is no protection here. User level has to
+		 * guarantee that no one will be writing to the send
+		 * context while it is being re-initialized.
+		 * If user level breaks that guarantee, it will break
+		 * it's own context and no one else's.
+		 */
+		dd = uctxt->dd;
+		sc = uctxt->sc;
+		/*
+		 * Wait until the interrupt handler has marked the
+		 * context as halted or frozen. Report error if we time
+		 * out.
+		 */
+		wait_event_interruptible_timeout(
+			sc->halt_wait, (sc->flags & SCF_HALTED),
+			msecs_to_jiffies(SEND_CTXT_HALT_TIMEOUT));
+		if (!(sc->flags & SCF_HALTED)) {
+			ret = -ENOLCK;
+			break;
+		}
+		/*
+		 * If the send context was halted due to a Freeze,
+		 * wait until the device has been "unfrozen" before
+		 * resetting the context.
+		 */
+		if (sc->flags & SCF_FROZEN) {
+			wait_event_interruptible_timeout(
+				dd->event_queue,
+				!(ACCESS_ONCE(dd->flags) & HFI_FROZEN),
+				msecs_to_jiffies(SEND_CTXT_HALT_TIMEOUT));
+			if (dd->flags & HFI_FROZEN) {
 				ret = -ENOLCK;
 				break;
 			}
-			ret = sc_restart(sc);
-			if (!ret)
-				sc_return_credits(sc);
+			if (dd->flags & HFI_FORCED_FREEZE) {
+				/* Don't allow context reset if we are into
+				 * forced freeze */
+				ret = -ENODEV;
+				break;
+			}
+			sc_disable(sc);
+			ret = sc_enable(sc);
+			dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB,
+				      uctxt->ctxt);
 		} else
-			ret = -EINVAL;
+			ret = sc_restart(sc);
+		if (!ret)
+			sc_return_credits(sc);
 		break;
+	}
 	case HFI_CMD_EP_INFO:
 	case HFI_CMD_EP_ERASE_CHIP:
 	case HFI_CMD_EP_ERASE_P0:
@@ -696,7 +728,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	struct hfi_filedata *fdata = fp->private_data;
 	struct qib_ctxtdata *uctxt = fdata->uctxt;
 	struct hfi_devdata *dd;
-	unsigned long flags;
+	unsigned long flags, *ev;
 
 	fp->private_data = NULL;
 
@@ -711,6 +743,14 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	/* drain user sdma queue */
 	if (fdata->pq)
 		hfi_user_sdma_free_queues(fdata);
+
+	/*
+	 * Clear any left over, unhandled events so the next process that
+	 * gets this context doesn't get confused.
+	 */
+	ev = dd->events + ((uctxt->ctxt - dd->first_user_ctxt) *
+			   HFI_MAX_SHARED_CTXTS) + fdata->subctxt;
+	*ev = 0;
 
 	if (--uctxt->cnt) {
 		/*
@@ -1363,13 +1403,16 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 	int ret = 0;
 	unsigned long flags;
 
+	if (!dd->events) {
+		ret = -EINVAL;
+		goto done;
+	}
+
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
 	for (ctxt = dd->first_user_ctxt; ctxt < dd->num_rcv_contexts;
 	     ctxt++) {
 		uctxt = dd->rcd[ctxt];
-		if (!uctxt)
-			continue;
-		if (dd->events) {
+		if (uctxt) {
 			unsigned long *evs = dd->events +
 				(uctxt->ctxt - dd->first_user_ctxt) *
 				HFI_MAX_SHARED_CTXTS;
@@ -1382,11 +1425,9 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 			for (i = 1; i < uctxt->subctxt_cnt; i++)
 				set_bit(evtbit, evs + i);
 		}
-		ret = 1;
-		break;
 	}
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
-
+done:
 	return ret;
 }
 

@@ -3176,10 +3176,11 @@ void start_freeze_handling(struct qib_pportdata *ppd, int flags)
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		sc = dd->send_contexts[i].sc;
 		if (sc && (sc->flags & SCF_ENABLED))
-			sc_stop(sc, SCF_FROZEN);
+			sc_stop(sc, SCF_FROZEN | SCF_HALTED);
 	}
 
-	/* TODO: mark/notify all user rcv contexts */
+	/* Send context are frozen. Notify user space */
+	qib_set_uevent_bits(ppd, _HFI_EVENT_FROZEN_BIT);
 
 	if (flags & WFR_FREEZE_ABORT) {
 		dd_dev_err(dd,
@@ -3313,10 +3314,6 @@ void handle_freeze(struct work_struct *work)
 		wait_for_freeze_status(dd, 0);
 	}
 
-	dd->flags &= ~HFI_FROZEN;
-
-	/* SPC is now unfrozen */
-
 	/* do send PIO unfreeze steps for kernel contexts */
 	pio_kernel_unfreeze(dd);
 
@@ -3327,6 +3324,22 @@ void handle_freeze(struct work_struct *work)
 
 	/* do receive unfreeze steps for kernel contexts */
 	rxe_kernel_unfreeze(dd);
+
+	/*
+	 * The unfreeze procedure touches global device registers when
+	 * it disables and re-enables RXE. Mark the device unfrozen
+	 * after all that is done so other parts of the driver waiting
+	 * for the device to unfreeze don't do things out of order.
+	 *
+	 * The above implies that the meaning of HFI_FROZEN flag is
+	 * "Device has gone into freeze mode and freeze mode handling
+	 * is still in progress."
+	 *
+	 * The flag will be removed when freeze mode processing has
+	 * completed.
+	 */
+	dd->flags &= ~HFI_FROZEN;
+	wake_up(&dd->event_queue);
 
 	/* no longer frozen */
 	dd_dev_err(dd, "Exiting SPC freeze\n");

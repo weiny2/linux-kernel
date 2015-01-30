@@ -1086,6 +1086,7 @@ struct hfi_devdata {
 	u32 rcv_ovfl_cnt;
 
 	int assigned_node_id;
+	wait_queue_head_t event_queue;
 };
 
 /* f_put_tid types */
