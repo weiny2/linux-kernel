@@ -22,7 +22,6 @@ sources_to_copy="
 	drivers/infiniband/core
 	drivers/infiniband/ulp/ipoib
 	drivers/infiniband/ulp/srpt
-	drivers/infiniband/hw/wfr-lite
 	$headers_to_copy
 	drivers/infiniband/hw/qib
 	drivers/infiniband/hw/mthca
@@ -279,8 +278,6 @@ make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_addr.ko
 
 
 # Then build drivers...
-cp \$(pwd)/drivers/infiniband/core/Module.symvers \$(pwd)/drivers/infiniband/hw/wfr-lite
-export CONFIG_INFINIBAND_WFR_LITE=m; make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/hw/wfr-lite
 
 # NOTE: the following not are required for STL but we are carrying patches for them
 #       which require a rebuild
@@ -309,7 +306,6 @@ cp scripts/WFR-develtools/umad-trace.stp \$RPM_BUILD_ROOT/sbin
 cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
-cp drivers/infiniband/hw/wfr-lite/ib_wfr_lite.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 # See NOTE above
 cp drivers/infiniband/core/ib_cm.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
