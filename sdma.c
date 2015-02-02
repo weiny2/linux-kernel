@@ -1485,6 +1485,7 @@ static inline void sdma_update_tail(struct sdma_engine *sde, u16 tail)
  */
 static void sdma_hw_start_up(struct sdma_engine *sde)
 {
+	u64 reg;
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
@@ -1493,6 +1494,18 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
 	sdma_setlengen(sde);
 	sdma_update_tail(sde, 0); /* Set SendDmaTail */
 	*sde->head_dma = 0;
+
+	/*
+	* erratum 291548 -
+	* The SDmaHeaderRequestFifoUncErr error case cannot be cleared until
+	* after the SDMA engine has been cleaned up or reset.
+	* The workaround is to clear the error bit after HW cleanup is complete.
+	* Setting a single bit in ErrClear CSR won't affect other error
+	* conditions
+	*/
+	reg = WFR_SEND_DMA_ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_MASK<<
+	      WFR_SEND_DMA_ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_SHIFT;
+	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_CLEAR, reg);
 }
 
 static void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
