@@ -2094,7 +2094,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		/* overflow/wrapped */
 		rsp->local_link_integrity_errors = (u64) ~0;
 	} else {
-		rsp->local_link_integrity_errors = cpu_to_be64(tmp);
+		rsp->local_link_integrity_errors = cpu_to_be64(tmp2);
 	}
 	rsp->port_rcv_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL));
@@ -2465,7 +2465,7 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 		/* overflow/wrapped */
 		rsp->local_link_integrity_errors = (u64) ~0;
 	} else {
-		rsp->local_link_integrity_errors = cpu_to_be64(tmp);
+		rsp->local_link_integrity_errors = cpu_to_be64(tmp2);
 	}
 	rsp->port_xmit_constraint_errors =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_CSTR_ERR,
