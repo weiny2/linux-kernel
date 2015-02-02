@@ -108,7 +108,7 @@ static uint rcvhdrcnt = 2048; /* 2x the max eager buffer count */
 module_param_named(rcvhdrcnt, rcvhdrcnt, uint, S_IRUGO);
 MODULE_PARM_DESC(rcvhdrcnt, "Receive header queue count (default 2048)");
 
-static uint hfi_hdrq_entsize = 16;
+static uint hfi_hdrq_entsize = 32;
 module_param_named(hdrq_entsize, hfi_hdrq_entsize, uint, S_IRUGO);
 MODULE_PARM_DESC(hdrq_entsize, "Size of header queue entries: 2 - 8B, 16 - 64B (default), 32 - 128B");
 
