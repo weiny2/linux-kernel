@@ -1455,7 +1455,7 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp;
 	struct qib_pportdata *ppd;
-	struct opa_port_states *psi = (struct opa_port_states *) data;
+	struct opa_port_state_info *psi = (struct opa_port_state_info *) data;
 
 	if (port_num == 0)
 		port_num = port;
@@ -1473,16 +1473,19 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	if (start_of_sm_config && (lstate == IB_PORT_INIT))
 		ppd->is_sm_config_started = 1;
 
-	psi->offline_reason = ppd->neighbor_normal << 4;
-	psi->offline_reason |= ppd->is_sm_config_started << 5;
-	psi->offline_reason |= ppd->offline_disabled_reason &
+	psi->port_states.offline_reason = ppd->neighbor_normal << 4;
+	psi->port_states.offline_reason |= ppd->is_sm_config_started << 5;
+	psi->port_states.offline_reason |= ppd->offline_disabled_reason &
 				OPA_PI_MASK_OFFLINE_REASON;
 
-	psi->portphysstate_portstate =
+	psi->port_states.portphysstate_portstate =
 		(dd->f_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
-
+	psi->link_width_downgrade_tx_active =
+	  ppd->link_width_downgrade_tx_active;
+	psi->link_width_downgrade_rx_active =
+	  ppd->link_width_downgrade_rx_active;
 	if (resp_len)
-		*resp_len += sizeof(struct opa_port_states);
+		*resp_len += sizeof(struct opa_port_state_info);
 
 	return reply(smp);
 }
@@ -1499,7 +1502,7 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp;
 	struct qib_pportdata *ppd;
-	struct opa_port_states *psi = (struct opa_port_states *) data;
+	struct opa_port_state_info *psi = (struct opa_port_state_info *) data;
 	int ret, invalid = 0;
 
 	if (port_num == 0)
@@ -1515,8 +1518,8 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 
 	ls_old = dd->f_iblink_state(ppd);
 
-	ls_new = port_states_to_logical_state(psi);
-	ps_new = port_states_to_phys_state(psi);
+	ls_new = port_states_to_logical_state(&psi->port_states);
+	ps_new = port_states_to_phys_state(&psi->port_states);
 
 	if (ls_old == IB_PORT_INIT) {
 		if (start_of_sm_config) {
