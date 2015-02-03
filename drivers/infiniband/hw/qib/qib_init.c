@@ -956,7 +956,6 @@ static void qib_shutdown_device(struct qib_devdata *dd)
 		qib_free_pportdata(ppd);
 	}
 
-	qib_update_eeprom_log(dd);
 }
 
 /**
