@@ -28,7 +28,6 @@ generic/013$(W)$(N)$(*)s
 generic/014$(W)$(N)$(*)s
 generic/015$(W)$(N)$(*)s
 generic/018$(W)$(N)$(*)s
-generic/019$(W)$(N)$(*)s
 generic/020$(W)$(N)$(*)s
 generic/023$(W)$(N)$(*)s
 generic/024$(W)$(N)$(*)s
@@ -102,7 +101,6 @@ generic/235$(W)$(N)$(*)s
 generic/236$(W)$(N)$(*)s
 generic/237$(W)$(N)$(*)s
 generic/239$(W)$(N)$(*)s
-generic/240$(W)$(N)$(*)s
 generic/241$(W)$(N)$(*)s
 generic/245$(W)$(N)$(*)s
 generic/246$(W)$(N)$(*)s
