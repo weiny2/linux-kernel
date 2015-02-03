@@ -101,6 +101,14 @@ struct nd_namespace_label {
 	__le32 unused;
 };
 
+/**
+ * struct nd_label_id - identifier string for dpa allocation
+ * @id: "{blk|pmem}-<namespace uuid>"
+ */
+struct nd_label_id {
+	char id[ND_LABEL_ID_SIZE];
+};
+
 /*
  * If the 'best' index is invalid, so is the 'next' index.  Otherwise,
  * the next index is MOD(index+1, 2)

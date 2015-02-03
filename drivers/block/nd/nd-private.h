@@ -148,12 +148,15 @@ int nd_bus_register_regions(struct nd_bus *nd_bus);
 int nd_bus_init_interleave_sets(struct nd_bus *nd_bus);
 int nd_match_dimm(struct device *dev, void *data);
 bool is_nd_dimm(struct device *dev);
-char *nd_label_gen_id(char *label_id, u8 *uuid, u32 flags);
+struct nd_label_id;
+char *nd_label_gen_id(struct nd_label_id *label_id, u8 *uuid, u32 flags);
 bool nd_is_uuid_unique(struct device *dev, u8 *uuid);
 resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
 		struct nd_region *nd_region);
-struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm, char *label_id,
-		resource_size_t start, resource_size_t n);
-void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, char *label_id);
-resource_size_t nd_dimm_allocated_dpa(struct nd_dimm *nd_dimm, char *label_id);
+struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm,
+		struct nd_label_id *label_id, resource_size_t start,
+		resource_size_t n);
+void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, struct nd_label_id *label_id);
+resource_size_t nd_dimm_allocated_dpa(struct nd_dimm *nd_dimm,
+		struct nd_label_id *label_id);
 #endif /* __ND_PRIVATE_H__ */

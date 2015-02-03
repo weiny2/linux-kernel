@@ -86,7 +86,9 @@ static ssize_t uuid_show(struct device *dev,
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 
-	return nd_uuid_show(nd_btt->uuid, buf);
+	if (nd_btt->uuid)
+		return sprintf(buf, "%pUb\n", nd_btt->uuid);
+	return sprintf(buf, "\n");
 }
 
 static ssize_t uuid_store(struct device *dev,

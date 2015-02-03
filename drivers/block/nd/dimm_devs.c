@@ -468,11 +468,12 @@ resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
 	}
 }
 
-struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm, char *label_id,
-		resource_size_t start, resource_size_t n)
+struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm,
+		struct nd_label_id *label_id, resource_size_t start,
+		resource_size_t n)
 {
-	char *name = devm_kmemdup(&nd_dimm->dev, label_id,
-			ND_LABEL_ID_SIZE, GFP_KERNEL);
+	char *name = devm_kmemdup(&nd_dimm->dev, label_id, sizeof(*label_id),
+			GFP_KERNEL);
 	struct resource *res;
 
 	if (!name)
@@ -485,12 +486,12 @@ struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm, char *label_id,
 	return res;
 }
 
-void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, char *label_id)
+void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, struct nd_label_id *label_id)
 {
 	struct resource *res;
 
 	for_each_dpa_resource(nd_dimm, res)
-		if (strcmp(res->name, label_id) == 0) {
+		if (strcmp(res->name, label_id->id) == 0) {
 			__devm_release_region(&nd_dimm->dev, &nd_dimm->dpa,
 					res->start, resource_size(res));
 			devm_kfree(&nd_dimm->dev, (void *) res->name);
@@ -503,13 +504,14 @@ void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, char *label_id)
  * @nd_dimm: container of dpa-resource-root + labels
  * @label_id: dpa resource name of the form {pmem|blk}-<human readable uuid>
  */
-resource_size_t nd_dimm_allocated_dpa(struct nd_dimm *nd_dimm, char *label_id)
+resource_size_t nd_dimm_allocated_dpa(struct nd_dimm *nd_dimm,
+		struct nd_label_id *label_id)
 {
 	resource_size_t allocated = 0;
 	struct resource *res;
 
 	for_each_dpa_resource(nd_dimm, res)
-		if (strcmp(res->name, label_id) == 0)
+		if (strcmp(res->name, label_id->id) == 0)
 			allocated += resource_size(res);
 
 	return allocated;

@@ -179,7 +179,6 @@ void wait_nd_bus_probe_idle(struct device *dev);
 void nd_device_register(struct device *dev);
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode);
 u64 nd_fletcher64(void __iomem *addr, size_t len);
-int nd_uuid_show(u8 *uuid, char *buf);
 int nd_uuid_store(struct device *dev, u8 **uuid_out, const char *buf,
 		size_t len);
 ssize_t nd_sector_size_show(unsigned long current_lbasize,

@@ -249,20 +249,13 @@ static bool preamble_index(struct nd_dimm *nd_dimm, int idx,
 	return true;
 }
 
-char *nd_label_gen_id(char *label_id, u8 *uuid, u32 flags)
+char *nd_label_gen_id(struct nd_label_id *label_id, u8 *uuid, u32 flags)
 {
-	char *pos;
-	int n;
-
-	if (!label_id)
+	if (!label_id || !uuid)
 		return NULL;
-	n = sprintf(label_id, "%s-", flags & NSLABEL_FLAG_LOCAL ?
-			"blk" : "pmem");
-	nd_uuid_show(uuid, label_id + n);
-	pos = strchr(label_id, '\n');
-	if (pos)
-		*pos = '\0';
-	return label_id;
+	snprintf(label_id->id, ND_LABEL_ID_SIZE, "%s-%pUb",
+			flags & NSLABEL_FLAG_LOCAL ? "blk" : "pmem", uuid);
+	return label_id->id;
 }
 
 static bool preamble_current(struct nd_dimm *nd_dimm,
@@ -293,8 +286,8 @@ int nd_label_reserve_dpa(struct nd_dimm *nd_dimm)
 	for_each_clear_bit_le(slot, free, nslot) {
 		struct nd_namespace_label __iomem *nd_label;
 		u8 label_uuid[NSLABEL_UUID_LEN];
+		struct nd_label_id *label_id;
 		struct resource *res;
-		char *label_id;
 		u32 flags;
 
 		nd_label = nd_label_base(nd_dimm) + slot;
@@ -303,7 +296,7 @@ int nd_label_reserve_dpa(struct nd_dimm *nd_dimm)
 		if (slot != readl(&nd_label->slot))
 			continue;
 
-		label_id = devm_kzalloc(&nd_dimm->dev, ND_LABEL_ID_SIZE,
+		label_id = devm_kzalloc(&nd_dimm->dev, sizeof(*label_id),
 				GFP_KERNEL);
 		if (!label_id)
 			return -ENOMEM;

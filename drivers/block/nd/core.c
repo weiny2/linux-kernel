@@ -213,63 +213,26 @@ static bool is_uuid_sep(char sep)
 	return false;
 }
 
-/**
- * nd_uuid_show - print a uuid in the same format as libuuid
- * @uuid: 16-byte uuid buffer
- * @buf: sysfs output buffer
- */
-int nd_uuid_show(u8 *uuid, char *buf)
-{
-	unsigned short field3, field2, field1;
-	unsigned long long field0 = 0;
-	unsigned int field4;
-
-	if (!uuid)
-		return sprintf(buf, "\n");
-
-	memcpy(&field0, &uuid[0], 6);
-	memcpy(&field1, &uuid[6], 2);
-	memcpy(&field2, &uuid[8], 2);
-	memcpy(&field3, &uuid[10], 2);
-	memcpy(&field4, &uuid[12], 4);
-
-	return sprintf(buf, "%.8x-%.4x-%.4x-%.4x-%.12llx\n",
-			field4, field3, field2, field1, field0);
-}
-
 static int nd_uuid_parse(struct device *dev, u8 *uuid_out, const char *buf,
 		size_t len)
 {
-	unsigned long long uuid[2];
-	char field_str[2][17];
-	char uuid_str[32];
-	int rc, pos;
-	size_t i;
+	const char *str = buf;
+	u8 uuid[16];
+	int i;
 
-	for (pos = 0, i = 0; i < len && pos < sizeof(uuid_str); i++) {
-		if (isxdigit(buf[i]))
-			uuid_str[pos++] = buf[i];
-		else if (!is_uuid_sep(buf[i]))
-			break;
+	for (i = 0; i < 16; i++) {
+		if (!isxdigit(str[0]) || !isxdigit(str[1])) {
+			dev_dbg(dev, "%s: pos: %d buf[%zd]: %c buf[%zd]: %c\n",
+					__func__, i, str - buf, str[0],
+					str + 1 - buf, str[1]);
+			return -EINVAL;
+		}
+
+		uuid[i] = (hex_to_bin(str[0]) << 4) | hex_to_bin(str[1]);
+		str += 2;
+		if (is_uuid_sep(*str))
+			str++;
 	}
-
-	if (pos < sizeof(uuid_str) || !is_uuid_sep(buf[i])) {
-		dev_dbg(dev, "%s: pos: %d buf[%zd]: %c\n",
-				__func__, pos, i, buf[i]);
-		return -EINVAL;
-	}
-
-	memcpy(field_str[1], uuid_str, 16);
-	field_str[1][16] = '\0';
-	memcpy(field_str[0], &uuid_str[16], 16);
-	field_str[0][16] = '\0';
-
-	rc = kstrtoull(field_str[1], 16, &uuid[1]);
-	if (rc)
-		return rc;
-	rc = kstrtoull(field_str[0], 16, &uuid[0]);
-	if (rc)
-		return rc;
 
 	memcpy(uuid_out, uuid, sizeof(uuid));
 	return 0;
