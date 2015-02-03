@@ -1500,7 +1500,7 @@ void __init setup_arch(char **cmdline_p)
 		} else if (!WARN_ON(xen_start_info->mfn_list
 				    < __START_KERNEL_map))
 #endif
-			free_bootmem(__pa(xen_start_info->mfn_list),
+			free_bootmem(__pa_symbol(xen_start_info->mfn_list),
 				     PFN_PHYS(PFN_UP(xen_start_info->nr_pages *
 						     sizeof(unsigned long))));
 

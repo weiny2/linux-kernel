@@ -761,7 +761,7 @@ RESERVE_BRK(kernel_pgt_alloc,
 
 void __init xen_init_pt(void)
 {
-	unsigned long addr, *page, end, size, pmd_pa, pte_pa;
+	unsigned long addr, *page, end, pmd_sz, pmd_pa, pte_sz, pte_pa;
 	pud_t *pud;
 	pmd_t *pmd;
 	pte_t *pte;
@@ -829,7 +829,7 @@ void __init xen_init_pt(void)
 
 	/* Construct 1:1 mapping of the initial allocation. */
 	pud = extend_brk(PAGE_SIZE, PAGE_SIZE);
-	addr = __pa(pud);
+	addr = __pa_symbol(pud);
 	printk(KERN_DEBUG "BRK [%#010lx, %#010lx] PUD\n",
 	       addr, addr + PAGE_SIZE - 1);
 	init_level4_pgt[pgd_index(PAGE_OFFSET)] = __pgd(addr | _PAGE_TABLE);
@@ -838,23 +838,23 @@ void __init xen_init_pt(void)
 		     != pgd_index(PAGE_OFFSET - __START_KERNEL_map - 1));
 	BUILD_BUG_ON(pmd_index(__START_KERNEL_map));
 
-	end = __pa(xen_start_info->pt_base)
+	end = __pa_symbol(xen_start_info->pt_base)
 	      + (xen_start_info->nr_pt_frames << PAGE_SHIFT);
-	size = ((end + PUD_SIZE - 1) >> PUD_SHIFT) << PAGE_SHIFT;
-	pmd = extend_brk(size, PAGE_SIZE);
-	pmd_pa = __pa(pmd);
+	pmd_sz = ((end + PUD_SIZE - 1) >> PUD_SHIFT) << PAGE_SHIFT;
+	pmd = extend_brk(pmd_sz, PAGE_SIZE);
+	pmd_pa = __pa_symbol(pmd);
 	printk(KERN_DEBUG "BRK [%#010lx, %#010lx] PMD\n",
-	       pmd_pa, pmd_pa + size - 1);
+	       pmd_pa, pmd_pa + pmd_sz - 1);
 	for (addr = 0; addr < end; addr += PUD_SIZE)
 		pud[pud_index(PAGE_OFFSET + addr)]
 			= __pud((pmd_pa + (addr >> (PUD_SHIFT - PAGE_SHIFT)))
 				| _PAGE_TABLE);
 
-	size = ((end + PMD_SIZE - 1) >> PMD_SHIFT) << PAGE_SHIFT;
-	pte = extend_brk(size, PAGE_SIZE);
-	pte_pa = __pa(pte);
+	pte_sz = ((end + PMD_SIZE - 1) >> PMD_SHIFT) << PAGE_SHIFT;
+	pte = extend_brk(pte_sz, PAGE_SIZE);
+	pte_pa = __pa_symbol(pte);
 	printk(KERN_DEBUG "BRK [%#010lx, %#010lx] PTE\n",
-	       pte_pa, pte_pa + size - 1);
+	       pte_pa, pte_pa + pte_sz - 1);
 	for (addr = 0; addr < end; addr += PMD_SIZE) {
 		unsigned int i;
 		unsigned long pa = pte_pa + (addr >> (PMD_SHIFT - PAGE_SHIFT));
@@ -866,8 +866,9 @@ void __init xen_init_pt(void)
 		for (i = 0; i < PTRS_PER_PTE; ++i, ++pte) {
 			pa = addr + (i << PAGE_SHIFT);
 			*pte = make_readonly(pa)
-			       || pa == __pa(pud) || pa == __pa(pmd)
-			       || (pa >= pte_pa && pa < pte_pa + size)
+			       || pa == __pa_symbol(pud)
+			       || (pa >= pmd_pa && pa < pmd_pa + pmd_sz)
+			       || (pa >= pte_pa && pa < pte_pa + pte_sz)
 			       ? pte_wrprotect(pte_k[i]) : pte_k[i];
 		}
 		early_make_page_readonly(pte - PTRS_PER_PTE,
@@ -909,7 +910,7 @@ void __init xen_finish_init_mapping(void)
 	if (!xen_feature(XENFEAT_auto_translated_physmap)
 	    && xen_start_info->mfn_list >= __START_KERNEL_map)
 		phys_to_machine_mapping =
-			__va(__pa(xen_start_info->mfn_list));
+			__va(__pa_symbol(xen_start_info->mfn_list));
 
 	/* Unpin the no longer used Xen provided page tables. */
 	mmuext.cmd = MMUEXT_UNPIN_TABLE;
