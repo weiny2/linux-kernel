@@ -675,6 +675,13 @@ static int namespace_update_uuid(struct nd_region *nd_region,
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 
+		/*
+		 * This check by itself is sufficient because old_uuid
+		 * would be NULL above if this uuid did not exist in the
+		 * currently written set.
+		 *
+		 * FIXME: can we delete uuid with zero dpa allocated?
+		 */
 		if (nd_mapping->labels)
 			return -EBUSY;
 	}
@@ -1072,9 +1079,7 @@ static struct device **create_namespace_pmem(struct nd_region *nd_region)
 		for (i = 0; i < nd_region->ndr_mappings; i++) {
 			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 
-			if (!nd_mapping->labels)
-				continue;
-			devm_kfree(&nd_region->dev, nd_mapping->labels);
+			kfree(nd_mapping->labels);
 			nd_mapping->labels = NULL;
 		}
 
@@ -1235,9 +1240,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 		for (i = 0; i < nd_region->ndr_mappings; i++) {
 			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 
-			if (!nd_mapping->labels)
-				continue;
-			devm_kfree(&nd_region->dev, nd_mapping->labels);
+			kfree(nd_mapping->labels);
 			nd_mapping->labels = NULL;
 		}
 
@@ -1286,7 +1289,7 @@ static int init_active_labels(struct nd_region *nd_region)
 		dev_dbg(&nd_dimm->dev, "%s: %d\n", __func__, count);
 		if (!count)
 			continue;
-		nd_mapping->labels = devm_kcalloc(&nd_region->dev, count + 1,
+		nd_mapping->labels = kcalloc(count + 1,
 				sizeof(struct nd_namespace_label *), GFP_KERNEL);
 		if (!nd_mapping->labels)
 			return -ENOMEM;
@@ -1304,7 +1307,7 @@ static int init_active_labels(struct nd_region *nd_region)
 int nd_region_register_namespaces(struct nd_region *nd_region)
 {
 	struct device **devs = NULL;
-	int i, rc, type;
+	int i, rc = 0, type;
 
 	nd_bus_lock(&nd_region->dev);
 	rc = init_active_labels(nd_region);
@@ -1329,8 +1332,10 @@ int nd_region_register_namespaces(struct nd_region *nd_region)
 	}
 	nd_bus_unlock(&nd_region->dev);
 
-	if (!devs)
-		return -ENODEV;
+	if (!devs) {
+		rc = -ENODEV;
+		goto err;
+	}
 
 	nd_region->ns_seed = devs[0];
 	for (i = 0; devs[i]; i++) {
@@ -1365,6 +1370,17 @@ int nd_region_register_namespaces(struct nd_region *nd_region)
 		rc = -ENODEV;
 	}
 	kfree(devs);
+
+ err:
+	if (rc) {
+		nd_region->ns_seed = NULL;
+		for (i = 0; i < nd_region->ndr_mappings; i++) {
+			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+
+			kfree(nd_mapping->labels);
+			nd_mapping->labels = NULL;
+		}
+	}
 
 	return rc;
 }
