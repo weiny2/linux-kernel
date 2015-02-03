@@ -358,7 +358,7 @@ void sdma_err_progress_check_schedule(struct sdma_engine *sde)
 		* Therefore all the halt events need to be processed here.
 		*/
 
-		for (index = 0; index < dd->chip_sdma_engines; index++) {
+		for (index = 0; index < dd->num_sdma; index++) {
 			struct sdma_engine *curr_sdma = &dd->per_sdma[index];
 			if (curr_sdma != sde)
 				curr_sdma->progress_check_head =
@@ -366,7 +366,7 @@ void sdma_err_progress_check_schedule(struct sdma_engine *sde)
 		}
 		dd_dev_err(sde->dd,
 			   "SDMA engine %d - erratum 291491 check scheduled\n",
-			   sde->this_idx);
+				sde->this_idx);
 		mod_timer(&sde->err_progress_check_timer, jiffies + 10);
 	}
 }
@@ -378,7 +378,7 @@ void sdma_err_progress_check(unsigned long data)
 	struct sdma_engine *sde = (struct sdma_engine *)data;
 
 	dd_dev_err(sde->dd, "SDE progress check event\n");
-	for (index = 0; index < sde->dd->chip_sdma_engines; index++) {
+	for (index = 0; index < sde->dd->num_sdma; index++) {
 		struct sdma_engine *curr_sde = &sde->dd->per_sdma[index];
 		/* check progress on each engine except the current one */
 		if (curr_sde == sde)
@@ -859,15 +859,13 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 			(unsigned long)sde);
 		INIT_WORK(&sde->err_halt_worker, sdma_err_halt_wait);
 
-		if (!is_bx(sde->dd)) {
-			/*  erratum 291491 */
-			sde->progress_check_head = 0;
+		/*  erratum 291491 */
+		sde->progress_check_head = 0;
 
-			init_timer(&sde->err_progress_check_timer);
-			sde->err_progress_check_timer.function =
-							sdma_err_progress_check;
-			sde->err_progress_check_timer.data = (unsigned long)sde;
-		}
+		init_timer(&sde->err_progress_check_timer);
+		sde->err_progress_check_timer.function =
+						sdma_err_progress_check;
+		sde->err_progress_check_timer.data = (unsigned long)sde;
 
 		sde->descq = dma_alloc_coherent(
 			&dd->pcidev->dev,
@@ -1029,10 +1027,9 @@ void sdma_exit(struct hfi_devdata *dd)
 				sde->this_idx);
 		sdma_process_event(sde, sdma_event_e00_go_hw_down);
 
-		if (!is_bx(dd)) {
-			/* erratum 291491 */
-			del_timer_sync(&sde->err_progress_check_timer);
-		}
+		/* erratum 291491 */
+		del_timer_sync(&sde->err_progress_check_timer);
+
 		/*
 		 * This waits for the state machine to exit so it is not
 		 * necessary to kill the sdma_sw_clean_up_task to make sure
