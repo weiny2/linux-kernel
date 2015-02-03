@@ -49,59 +49,53 @@ struct cmd_desc {
 
 static const struct cmd_desc nfit_acpi_descs[] = {
 	[NFIT_CMD_IMPLEMENTED] = { },
-	[NFIT_CMD_SMART] = {
+	[NFIT_OLD_SMART] = {
 		.in_num = 1,
 		.out_num = 2,
 		.in_sizes = { 4, },
 		.out_sizes = { 4, 8, },
 	},
-	[NFIT_CMD_GET_CONFIG_SIZE] = {
+	[NFIT_OLD_GET_CONFIG_SIZE] = {
 		.in_num = 1,
 		.in_sizes = { 4, },
 		.out_num = 3,
 		.out_sizes = { 4, 4, 4, },
 	},
-	[NFIT_CMD_GET_CONFIG_DATA] = {
+	[NFIT_OLD_GET_CONFIG_DATA] = {
 		.in_num = 3,
 		.in_sizes = { 4, 4, 4, },
 		.out_num = 2,
 		.out_sizes = { 4, UINT_MAX, },
 	},
-	[NFIT_CMD_SET_CONFIG_DATA] = {
+	[NFIT_OLD_SET_CONFIG_DATA] = {
 		.in_num = 4,
 		.in_sizes = { 4, 4, 4, UINT_MAX, },
 		.out_num = 1,
 		.out_sizes = { 4, },
 	},
-	[NFIT_CMD_VENDOR] = {
+	[NFIT_OLD_VENDOR] = {
 		.in_num = 3,
 		.in_sizes = { 4, 4, UINT_MAX, },
 		.out_num = 3,
 		.out_sizes = { 4, 4, UINT_MAX, },
 	},
-	[NFIT_CMD_ARS_CAP] = {
+	[NFIT_OLD_ARS_CAP] = {
 		.in_num = 2,
 		.in_sizes = { 8, 8, },
 		.out_num = 1,
 		.out_sizes = { 4, },
 	},
-	[NFIT_CMD_ARS_START] = {
+	[NFIT_OLD_ARS_START] = {
 		.in_num = 3,
 		.in_sizes = { 8, 8, 2, },
 		.out_num = 1,
 		.out_sizes = { 4, },
 	},
-	[NFIT_CMD_ARS_QUERY] = {
+	[NFIT_OLD_ARS_QUERY] = {
 		.out_num = 2,
 		.out_sizes = { 4, UINT_MAX, },
 	},
-	[NFIT_CMD_ARM] = {
-		.in_num = 1,
-		.in_sizes = { 4, },
-		.out_num = 1,
-		.out_sizes = { 4, },
-	},
-	[NFIT_CMD_SMART_THRESHOLD] = {
+	[NFIT_OLD_SMART_THRESHOLD] = {
 		.in_num = 1,
 		.in_sizes = { 4, },
 		.out_num = 2,
@@ -111,7 +105,7 @@ static const struct cmd_desc nfit_acpi_descs[] = {
 
 static const struct cmd_desc *to_cmd_desc(unsigned int cmd)
 {
-	if (cmd <= NFIT_CMD_ARM && cmd >= NFIT_CMD_SMART)
+	if (cmd <= NFIT_OLD_SMART_THRESHOLD && cmd >= NFIT_OLD_SMART)
 		return &nfit_acpi_descs[cmd];
 	return NULL;
 }
@@ -125,11 +119,11 @@ static u32 to_cmd_in_size(int cmd, const struct cmd_desc *desc, int idx,
 	if (desc->in_sizes[idx] < UINT_MAX)
 		return desc->in_sizes[idx];
 
-	if (cmd == NFIT_CMD_SET_CONFIG_DATA && idx == 3) {
+	if (cmd == NFIT_OLD_SET_CONFIG_DATA && idx == 3) {
 		struct nfit_cmd_set_config_hdr *hdr = buf + sizeof(u32);
 
 		return hdr->in_length;
-	} else if (cmd == NFIT_CMD_VENDOR && idx == 2) {
+	} else if (cmd == NFIT_OLD_VENDOR && idx == 2) {
 		struct nfit_cmd_vendor_hdr *hdr = buf + sizeof(u32);
 
 		return hdr->in_length;
@@ -147,19 +141,44 @@ static u32 to_cmd_out_size(int cmd, const struct cmd_desc *desc, int idx,
 	if (desc->out_sizes[idx] < UINT_MAX)
 		return desc->out_sizes[idx];
 
-	if (cmd == NFIT_CMD_GET_CONFIG_DATA && idx == 1) {
+	if (cmd == NFIT_OLD_GET_CONFIG_DATA && idx == 1) {
 		struct nfit_cmd_get_config_data_hdr *hdr = buf + sizeof(u32);
 
 		return hdr->in_length;
-	} else if (cmd == NFIT_CMD_VENDOR && idx == 2
+	} else if (cmd == NFIT_OLD_VENDOR && idx == 2
 			&& offset < out_length) {
 		return out_length - offset;
-	} else if (cmd == NFIT_CMD_ARS_QUERY && idx == 1
+	} else if (cmd == NFIT_OLD_ARS_QUERY && idx == 1
 			&& offset < out_length) {
 		return out_length - offset;
 	}
 
 	return UINT_MAX;
+}
+
+static unsigned int to_old_cmd(unsigned int cmd, struct nd_dimm *nd_dimm)
+{
+	if (!nd_dimm) {
+		switch (cmd) {
+		case NFIT_CMD_ARS_CAP:
+		case NFIT_CMD_ARS_START:
+			return UINT_MAX; /* format incompat */
+		case NFIT_CMD_ARS_QUERY: return NFIT_OLD_ARS_QUERY;
+		default:
+			return cmd;
+		}
+	}
+
+	switch (cmd) {
+	case NFIT_CMD_SMART: return NFIT_OLD_SMART;
+	case NFIT_CMD_SMART_THRESHOLD: return NFIT_OLD_SMART_THRESHOLD;
+	case NFIT_CMD_GET_CONFIG_SIZE: return NFIT_OLD_GET_CONFIG_SIZE;
+	case NFIT_CMD_GET_CONFIG_DATA: return NFIT_OLD_GET_CONFIG_DATA;
+	case NFIT_CMD_SET_CONFIG_DATA: return NFIT_OLD_SET_CONFIG_DATA;
+	case NFIT_CMD_VENDOR: return NFIT_OLD_VENDOR;
+	default:
+		return cmd;
+	}
 }
 
 static u8 nd_old_acpi_uuid[16]; /* initialized at nd_old_acpi_init */
@@ -169,12 +188,14 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int buf_len)
 {
 	struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
-	const struct cmd_desc *desc = to_cmd_desc(cmd);
 	union acpi_object in_obj, in_buf, *out_obj;
 	acpi_handle handle = nfit->dev->handle;
 	struct device *dev = &nfit->dev->dev;
+	const struct cmd_desc *desc = NULL;
 	int rc, i, old_nfit_offset;
 	unsigned long dsm_mask;
+	const char *cmd_name;
+	unsigned int old_cmd;
 	u32 nfit_handle;
 	u32 offset;
 	void *buf;
@@ -182,11 +203,24 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	if (test_bit(cmd, &nd_manual_dsm))
 		return nd_dsm_ctl(nfit_desc, cmd, __buf, buf_len);
 
-	if (!desc)
-		return -ENOTTY;
+	if (nd_dimm)
+		cmd_name = nfit_dimm_cmd_name(cmd);
+	else
+		cmd_name = nfit_bus_cmd_name(cmd);
 
 	dsm_mask = nd_dimm ? nd_dimm_get_dsm_mask(nd_dimm) : nfit_desc->dsm_mask;
 	if (!test_bit(cmd, &dsm_mask))
+		return -ENOTTY;
+
+	old_cmd = to_old_cmd(cmd, nd_dimm);
+	if (old_cmd == UINT_MAX) {
+		dev_err(dev, "%s legacy translation not supported\n", cmd_name);
+		return -ENXIO;
+	}
+	cmd = old_cmd;
+	desc = to_cmd_desc(cmd);
+
+	if (!desc)
 		return -ENOTTY;
 
 	old_nfit_offset = nd_dimm ? sizeof(nfit_handle) : 0;
@@ -221,44 +255,44 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		in_size = to_cmd_in_size(cmd, desc, i, buf);
 		if (in_size == UINT_MAX) {
 			dev_err(dev, "%s: unknown input size cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			rc = -ENXIO;
 			goto err;
 		}
 		in_buf.buffer.length += in_size;
 		if (in_buf.buffer.length > buf_len) {
 			dev_err(dev, "%s: input underrun cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			rc = -ENXIO;
 			goto err;
 		}
 	}
 
 	dev_dbg(dev, "%s: cmd: %s input length: %d\n", __func__,
-			nfit_cmd_name(cmd), in_buf.buffer.length);
+			cmd_name, in_buf.buffer.length);
 	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
-		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
+		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
 				4, in_buf.buffer.pointer, min_t(u32, 128,
 					in_buf.buffer.length), true);
 
 	out_obj = acpi_evaluate_dsm(handle, nd_old_acpi_uuid, 1, cmd, &in_obj);
 	if (!out_obj) {
 		dev_dbg(dev, "%s: _DSM failed cmd: %s\n", __func__,
-				nfit_cmd_name(cmd));
+				cmd_name);
 		rc = -EINVAL;
 		goto err;
 	}
 
 	if (out_obj->package.type != ACPI_TYPE_BUFFER) {
 		dev_dbg(dev, "%s: unexpected output object type cmd: %s type: %d\n",
-				__func__, nfit_cmd_name(cmd), out_obj->type);
+				__func__, cmd_name, out_obj->type);
 		rc = -EINVAL;
 		goto out;
 	}
 	dev_dbg(dev, "%s: cmd: %s output length: %d\n", __func__,
-			nfit_cmd_name(cmd), out_obj->buffer.length);
+			cmd_name, out_obj->buffer.length);
 	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
-		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
+		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
 				4, out_obj->buffer.pointer, min_t(u32, 128,
 					out_obj->buffer.length), true);
 
@@ -268,19 +302,19 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 
 		if (out_size == UINT_MAX) {
 			dev_dbg(dev, "%s: unknown output size cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			break;
 		}
 
 		if (offset + out_size > out_obj->buffer.length) {
 			dev_dbg(dev, "%s: output object underflow cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			break;
 		}
 
 		if (in_buf.buffer.length + offset + out_size > buf_len) {
 			dev_dbg(dev, "%s: output overrun cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			rc = -ENXIO;
 			goto out;
 		}
@@ -297,7 +331,7 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 			rc = buf_len - offset;
 		} else {
 			dev_err(dev, "%s: underrun cmd: %s buf_len: %d out_len: %d\n",
-					__func__, nfit_cmd_name(cmd), buf_len, offset);
+					__func__, cmd_name, buf_len, offset);
 			rc = -ENXIO;
 		}
 	} else
@@ -319,8 +353,9 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	| 1 << NFIT_CMD_GET_CONFIG_SIZE \
 	| 1 << NFIT_CMD_GET_CONFIG_DATA \
 	| 1 << NFIT_CMD_SET_CONFIG_DATA \
+	| 1 << NFIT_CMD_VENDOR_EFFECT_LOG_SIZE \
+	| 1 << NFIT_CMD_VENDOR_EFFECT_LOG \
 	| 1 << NFIT_CMD_VENDOR          \
-	| 1 << NFIT_CMD_ARM             \
 	| 1 << NFIT_CMD_SMART_THRESHOLD)
 
 static int nd_old_acpi_add_dimm(struct nfit_bus_descriptor *nfit_desc,

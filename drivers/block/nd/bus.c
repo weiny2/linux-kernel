@@ -446,14 +446,14 @@ static int __nd_ioctl(struct nd_bus *nd_bus, struct nd_dimm *nd_dimm,
 
 	/* fail write commands (when read-only), or unknown commands */
 	switch (cmd) {
-	case NFIT_IOCTL_SMART:
 	case NFIT_IOCTL_VENDOR:
 	case NFIT_IOCTL_SET_CONFIG_DATA:
 	case NFIT_IOCTL_ARS_START:
-	case NFIT_IOCTL_ARM:
 		if (read_only)
 			return -EPERM;
 		/* fallthrough */
+	case NFIT_IOCTL_SMART:
+	case NFIT_IOCTL_DIMM_FLAGS:
 	case NFIT_IOCTL_GET_CONFIG_SIZE:
 	case NFIT_IOCTL_GET_CONFIG_DATA:
 	case NFIT_IOCTL_ARS_CAP:
@@ -469,6 +469,9 @@ static int __nd_ioctl(struct nd_bus *nd_bus, struct nd_dimm *nd_dimm,
 	switch (cmd) {
 	case NFIT_IOCTL_SMART:
 		buf_len = sizeof(struct nfit_cmd_smart);
+		break;
+	case NFIT_IOCTL_DIMM_FLAGS:
+		buf_len = sizeof(struct nfit_cmd_dimm_flags);
 		break;
 	case NFIT_IOCTL_VENDOR: {
 		struct nfit_cmd_vendor_hdr nfit_cmd_v;
@@ -500,9 +503,6 @@ static int __nd_ioctl(struct nd_bus *nd_bus, struct nd_dimm *nd_dimm,
 	}
 	case NFIT_IOCTL_ARS_START:
 		buf_len = sizeof(struct nfit_cmd_ars_start);
-		break;
-	case NFIT_IOCTL_ARM:
-		buf_len = sizeof(struct nfit_cmd_arm);
 		break;
 	case NFIT_IOCTL_GET_CONFIG_SIZE:
 		buf_len = sizeof(struct nfit_cmd_get_config_size);

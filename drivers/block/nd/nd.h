@@ -28,9 +28,9 @@ struct block_window {
 
 struct nd_dimm_drvdata {
 	struct device *dev;
-	int config_size;
 	int nsindex_size;
-	struct nfit_cmd_get_config_data_hdr *data;
+	struct nfit_cmd_get_config_size nsarea;
+	void *data;
 	int ns_current, ns_next;
 	struct resource dpa;
 	struct nd_blk_dimm {
@@ -52,8 +52,7 @@ static inline struct nd_namespace_index __iomem *to_namespace_index(
 	if (i < 0)
 		return NULL;
 
-	return ((void __iomem *) ndd->data->out_buf
-			+ sizeof_namespace_index(ndd) * i);
+	return ((void __iomem *) ndd->data + sizeof_namespace_index(ndd) * i);
 }
 
 static inline struct nd_namespace_index __iomem *to_current_namespace_index(
@@ -243,4 +242,6 @@ int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
 		resource_size_t dev_offset);
 bool is_acpi_blk(struct device *dev);
 resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk);
+int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd);
+int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd);
 #endif /* __ND_H__ */

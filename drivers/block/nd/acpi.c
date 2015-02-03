@@ -34,18 +34,26 @@ static struct acpi_nfit *to_acpi_nfit(struct nfit_bus_descriptor *nfit_desc)
 }
 
 #define NFIT_ACPI_MAX_ELEM 4
-struct cmd_desc {
+struct nfit_cmd_desc {
 	int in_num;
 	int out_num;
 	u32 in_sizes[NFIT_ACPI_MAX_ELEM];
 	int out_sizes[NFIT_ACPI_MAX_ELEM];
 };
 
-static const struct cmd_desc nfit_acpi_descs[] = {
+static const struct nfit_cmd_desc nfit_dimm_descs[] = {
 	[NFIT_CMD_IMPLEMENTED] = { },
 	[NFIT_CMD_SMART] = {
 		.out_num = 2,
 		.out_sizes = { 4, 8, },
+	},
+	[NFIT_CMD_SMART_THRESHOLD] = {
+		.out_num = 2,
+		.out_sizes = { 4, 8, },
+	},
+	[NFIT_CMD_DIMM_FLAGS] = {
+		.out_num = 2,
+		.out_sizes = { 4, 4 },
 	},
 	[NFIT_CMD_GET_CONFIG_SIZE] = {
 		.out_num = 3,
@@ -69,15 +77,19 @@ static const struct cmd_desc nfit_acpi_descs[] = {
 		.out_num = 3,
 		.out_sizes = { 4, 4, UINT_MAX, },
 	},
+};
+
+static const struct nfit_cmd_desc nfit_acpi_descs[] = {
+	[NFIT_CMD_IMPLEMENTED] = { },
 	[NFIT_CMD_ARS_CAP] = {
 		.in_num = 2,
 		.in_sizes = { 8, 8, },
-		.out_num = 1,
-		.out_sizes = { 4, },
+		.out_num = 2,
+		.out_sizes = { 4, 4, },
 	},
 	[NFIT_CMD_ARS_START] = {
-		.in_num = 3,
-		.in_sizes = { 8, 8, 2, },
+		.in_num = 4,
+		.in_sizes = { 8, 8, 2, 6, },
 		.out_num = 1,
 		.out_sizes = { 4, },
 	},
@@ -85,24 +97,9 @@ static const struct cmd_desc nfit_acpi_descs[] = {
 		.out_num = 2,
 		.out_sizes = { 4, UINT_MAX, },
 	},
-	[NFIT_CMD_ARM] = {
-		.out_num = 1,
-		.out_sizes = { 4, },
-	},
-	[NFIT_CMD_SMART_THRESHOLD] = {
-		.out_num = 2,
-		.out_sizes = { 4, 8, },
-	},
 };
 
-static const struct cmd_desc *to_cmd_desc(unsigned int cmd)
-{
-	if (cmd <= NFIT_CMD_ARM && cmd >= NFIT_CMD_SMART)
-		return &nfit_acpi_descs[cmd];
-	return NULL;
-}
-
-static u32 to_cmd_in_size(int cmd, const struct cmd_desc *desc, int idx,
+static u32 to_cmd_in_size(int cmd, const struct nfit_cmd_desc *desc, int idx,
 		void *buf)
 {
 	if (idx >= desc->in_num)
@@ -124,7 +121,7 @@ static u32 to_cmd_in_size(int cmd, const struct cmd_desc *desc, int idx,
 	return UINT_MAX;
 }
 
-static u32 to_cmd_out_size(int cmd, const struct cmd_desc *desc, int idx,
+static u32 to_cmd_out_size(int cmd, const struct nfit_cmd_desc *desc, int idx,
 		void *buf, u32 out_length, u32 offset)
 {
 	if (idx >= desc->out_num)
@@ -148,36 +145,56 @@ static u32 to_cmd_out_size(int cmd, const struct cmd_desc *desc, int idx,
 	return UINT_MAX;
 }
 
-static u8 nd_acpi_uuid[16]; /* initialized at nd_acpi_init */
+static u8 nd_acpi_uuids[2][16]; /* initialized at nd_acpi_init */
+
+static u8 *nd_acpi_bus_uuid(void)
+{
+	return nd_acpi_uuids[0];
+}
+
+static u8 *nd_acpi_dimm_uuid(void)
+{
+	return nd_acpi_uuids[1];
+}
 
 static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
 		unsigned int buf_len)
 {
-	const struct cmd_desc *desc = to_cmd_desc(cmd);
 	union acpi_object in_obj, in_buf, *out_obj;
+	const struct nfit_cmd_desc *desc = NULL;
 	unsigned long dsm_mask;
+	const char *cmd_name;
 	acpi_handle handle;
 	struct device *dev;
-	int rc, i;
 	u32 offset;
-
-	if (!desc)
-		return -ENOTTY;
+	int rc, i;
+	u8 *uuid;
 
 	if (nd_dimm) {
 		struct acpi_device *adev = nd_dimm_get_pdata(nd_dimm);
 
+		if (cmd < ARRAY_SIZE(nfit_dimm_descs) - 1)
+			desc = &nfit_dimm_descs[cmd];
+		cmd_name = nfit_dimm_cmd_name(cmd);
 		dsm_mask = nd_dimm_get_dsm_mask(nd_dimm);
 		handle = adev->handle;
 		dev = &adev->dev;
+		uuid = nd_acpi_dimm_uuid();
 	} else {
 		struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
 
+		if (cmd < ARRAY_SIZE(nfit_acpi_descs))
+			desc = &nfit_acpi_descs[cmd];
+		cmd_name = nfit_bus_cmd_name(cmd);
 		dsm_mask = nfit_desc->dsm_mask;
 		handle = nfit->dev->handle;
 		dev = &nfit->dev->dev;
+		uuid = nd_acpi_bus_uuid();
 	}
+
+	if (!desc || (cmd && (desc->out_num + desc->in_num == 0)))
+		return -ENOTTY;
 
 	if (!test_bit(cmd, &dsm_mask))
 		return -ENOTTY;
@@ -201,42 +218,42 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		in_size = to_cmd_in_size(cmd, desc, i, buf);
 		if (in_size == UINT_MAX) {
 			dev_err(dev, "%s: unknown input size cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			return -ENXIO;
 		}
 		in_buf.buffer.length += in_size;
 		if (in_buf.buffer.length > buf_len) {
 			dev_err(dev, "%s: input underrun cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			return -ENXIO;
 		}
 	}
 
 	dev_dbg(dev, "%s: cmd: %s input length: %d\n", __func__,
-			nfit_cmd_name(cmd), in_buf.buffer.length);
+			cmd_name, in_buf.buffer.length);
 	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
-		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
+		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
 				4, in_buf.buffer.pointer, min_t(u32, 128,
 					in_buf.buffer.length), true);
 
-	out_obj = acpi_evaluate_dsm(handle, nd_acpi_uuid, 1, cmd, &in_obj);
+	out_obj = acpi_evaluate_dsm(handle, uuid, 1, cmd, &in_obj);
 	if (!out_obj) {
 		dev_dbg(dev, "%s: _DSM failed cmd: %s\n", __func__,
-				nfit_cmd_name(cmd));
+				cmd_name);
 		return -EINVAL;
 	}
 
 	if (out_obj->package.type != ACPI_TYPE_BUFFER) {
 		dev_dbg(dev, "%s: unexpected output object type cmd: %s type: %d\n",
-				__func__, nfit_cmd_name(cmd), out_obj->type);
+				__func__, cmd_name, out_obj->type);
 		rc = -EINVAL;
 		goto out;
 	}
 
 	dev_dbg(dev, "%s: cmd: %s output length: %d\n", __func__,
-			nfit_cmd_name(cmd), out_obj->buffer.length);
+			cmd_name, out_obj->buffer.length);
 	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
-		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
+		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
 				4, out_obj->buffer.pointer, min_t(u32, 128,
 					out_obj->buffer.length), true);
 
@@ -246,19 +263,19 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 
 		if (out_size == UINT_MAX) {
 			dev_dbg(dev, "%s: unknown output size cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			break;
 		}
 
 		if (offset + out_size > out_obj->buffer.length) {
 			dev_dbg(dev, "%s: output object underflow cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			break;
 		}
 
 		if (in_buf.buffer.length + offset + out_size > buf_len) {
 			dev_dbg(dev, "%s: output overrun cmd: %s field: %d\n",
-					__func__, nfit_cmd_name(cmd), i);
+					__func__, cmd_name, i);
 			rc = -ENXIO;
 			goto out;
 		}
@@ -275,7 +292,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 			rc = buf_len - offset;
 		} else {
 			dev_err(dev, "%s: underrun cmd: %s buf_len: %d out_len: %d\n",
-					__func__, nfit_cmd_name(cmd), buf_len, offset);
+					__func__, cmd_name, buf_len, offset);
 			rc = -ENXIO;
 		}
 	} else
@@ -292,16 +309,39 @@ static int nd_acpi_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 {
 	struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
 	u32 nfit_handle = to_nfit_handle(nd_dimm);
+	struct device *dev = &nfit->dev->dev;
 	struct acpi_device *acpi_dimm;
 	unsigned long dsm_mask = 0;
-	int i;
+	u8 *uuid = nd_acpi_dimm_uuid();
+	unsigned long long sta;
+	int i, rc = -ENODEV;
+	acpi_status status;
 
 	acpi_dimm = acpi_find_child_device(nfit->dev, nfit_handle, false);
-	if (!acpi_dimm)
+	if (!acpi_dimm) {
+		dev_err(dev, "no ACPI.NFIT device with _ADR %#x, disabling...\n",
+				nfit_handle);
 		return -ENODEV;
+	}
+
+	status = acpi_evaluate_integer(acpi_dimm->handle, "_STA", NULL, &sta);
+	if (status == AE_NOT_FOUND)
+		dev_err(dev, "%s missing _STA, disabling...\n",
+				dev_name(&acpi_dimm->dev));
+	else if (ACPI_FAILURE(status))
+		dev_err(dev, "%s failed to retrieve_STA, disabling...\n",
+				dev_name(&acpi_dimm->dev));
+	else if ((sta & ACPI_STA_DEVICE_ENABLED) == 0)
+		dev_info(dev, "%s disabled by firmware\n",
+				dev_name(&acpi_dimm->dev));
+	else
+		rc = 0;
+
+	if (rc)
+		return rc;
 
 	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++)
-		if (acpi_check_dsm(acpi_dimm->handle, nd_acpi_uuid, 1, 1ULL << i))
+		if (acpi_check_dsm(acpi_dimm->handle, uuid, 1, 1ULL << i))
 			set_bit(i, &dsm_mask);
 	nd_dimm_set_dsm_mask(nd_dimm, dsm_mask);
 	nd_dimm_set_pdata(nd_dimm, acpi_dimm);
@@ -312,6 +352,7 @@ static int nd_acpi_add(struct acpi_device *dev)
 {
 	struct nfit_bus_descriptor *nfit_desc;
 	struct acpi_table_header *tbl;
+	u8 *uuid = nd_acpi_bus_uuid();
 	acpi_status status = AE_OK;
 	struct acpi_nfit *nfit;
 	acpi_size sz;
@@ -334,8 +375,8 @@ static int nd_acpi_add(struct acpi_device *dev)
 	nfit_desc->nfit_ctl = nd_acpi_ctl;
 	nfit_desc->add_dimm = nd_acpi_add_dimm;
 
-	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++)
-		if (acpi_check_dsm(dev->handle, nd_acpi_uuid, 1, 1ULL << i))
+	for (i = NFIT_CMD_ARS_CAP; i <= NFIT_CMD_ARS_QUERY; i++)
+		if (acpi_check_dsm(dev->handle, uuid, 1, 1ULL << i))
 			set_bit(i, &nfit_desc->dsm_mask);
 
 	nfit->nd_bus = nfit_bus_register(&dev->dev, nfit_desc);
@@ -379,11 +420,19 @@ static struct acpi_driver nd_acpi_driver = {
 
 static __init int nd_acpi_init(void)
 {
-	if (acpi_str_to_uuid("4309ac30-0d11-11e4-9191-0800200c9a66",
-				nd_acpi_uuid) != AE_OK) {
-		WARN_ON_ONCE(1);
-		return -ENXIO;
-	}
+	char *uuids[] = {
+		/* bus interface */
+		"2f10e7a4-9e91-11e4-89d3-123b93f75cba",
+		/* per-dimm interface */
+		"4309ac30-0d11-11e4-9191-0800200c9a66",
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(uuids); i++)
+		if (acpi_str_to_uuid(uuids[i], nd_acpi_uuids[i]) != AE_OK) {
+			WARN_ON_ONCE(1);
+			return -ENXIO;
+		}
 
 	return acpi_bus_register_driver(&nd_acpi_driver);
 }

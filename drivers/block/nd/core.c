@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/ctype.h>
+#include <linux/ndctl.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/uuid.h>
@@ -317,7 +318,7 @@ static ssize_t commands_show(struct device *dev,
 	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
 
 	for_each_set_bit(cmd, &nfit_desc->dsm_mask, BITS_PER_LONG)
-		len += sprintf(buf + len, "%s ", nfit_cmd_name(cmd));
+		len += sprintf(buf + len, "%s ", nfit_bus_cmd_name(cmd));
 	len += sprintf(buf + len, "\n");
 	return len;
 }

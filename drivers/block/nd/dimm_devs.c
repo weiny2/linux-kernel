@@ -174,7 +174,7 @@ static int __validate_dimm(struct nd_dimm_drvdata *ndd)
 		return -ENXIO;
 
 	nfit_dcr = nd_dimm->nd_mem->nfit_dcr;
-	if (!nfit_dcr || nfit_dcr_fic(nfit_desc, nfit_dcr) != 1)
+	if (!nfit_dcr || nfit_dcr_fic(nfit_desc, nfit_dcr) != NFIT_FIC)
 		return -ENODEV;
 	nfit_mem = nd_dimm->nd_mem->nfit_mem;
 	return 0;
@@ -190,9 +190,13 @@ static int validate_dimm(struct nd_dimm_drvdata *ndd)
 	return rc;
 }
 
-int nd_dimm_get_config_size(struct nd_dimm_drvdata *ndd,
-		struct nfit_cmd_get_config_size *cmd)
+/**
+ * nd_dimm_init_nsarea - determine the geometry of a dimm's namespace area
+ * @nd_dimm: dimm to initialize
+ */
+int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd)
 {
+	struct nfit_cmd_get_config_size *cmd = &ndd->nsarea;
 	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
 	struct nfit_bus_descriptor *nfit_desc;
 	int rc = validate_dimm(ndd);
@@ -200,66 +204,113 @@ int nd_dimm_get_config_size(struct nd_dimm_drvdata *ndd,
 	if (rc)
 		return rc;
 
-	nfit_desc = nd_bus->nfit_desc;
+	if (cmd->config_size)
+		return 0; /* already valid */
+
 	memset(cmd, 0, sizeof(*cmd));
+	nfit_desc = nd_bus->nfit_desc;
 	return nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
 			NFIT_CMD_GET_CONFIG_SIZE, cmd, sizeof(*cmd));
 }
 
-int nd_dimm_get_config_data(struct nd_dimm_drvdata *ndd,
-		struct nfit_cmd_get_config_data_hdr *cmd, size_t len)
+int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd)
 {
 	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
+	struct nfit_cmd_get_config_data_hdr *cmd;
 	struct nfit_bus_descriptor *nfit_desc;
 	int rc = validate_dimm(ndd);
+	u32 max_cmd_size, config_size;
+	size_t offset;
 
 	if (rc)
 		return rc;
 
+	if (ndd->data)
+		return 0;
+
+	if (ndd->nsarea.status || ndd->nsarea.max_xfer == 0
+			|| ndd->nsarea.config_size < ND_LABEL_MIN_SIZE)
+		return -ENXIO;
+
+	ndd->data = kmalloc(ndd->nsarea.config_size, GFP_KERNEL);
+	if (!ndd->data)
+		ndd->data = vmalloc(ndd->nsarea.config_size);
+
+	if (!ndd->data)
+		return -ENOMEM;
+
+	max_cmd_size = min_t(u32, PAGE_SIZE, ndd->nsarea.max_xfer);
+	cmd = kzalloc(max_cmd_size + sizeof(*cmd), GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
 	nfit_desc = nd_bus->nfit_desc;
-	memset(cmd, 0, len);
-	cmd->in_length = len - sizeof(*cmd);
-	return nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
-			NFIT_CMD_GET_CONFIG_DATA, cmd, len);
+	for (config_size = ndd->nsarea.config_size, offset = 0;
+			config_size; config_size -= cmd->in_length,
+			offset += cmd->in_length) {
+		cmd->in_length = min(config_size, max_cmd_size);
+		cmd->in_offset = offset;
+		rc = nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
+				NFIT_CMD_GET_CONFIG_DATA, cmd,
+				cmd->in_length + sizeof(*cmd));
+		if (rc || cmd->status) {
+			rc = -ENXIO;
+			break;
+		}
+		memcpy(ndd->data + offset, cmd->out_buf, cmd->in_length);
+	}
+	dev_dbg(ndd->dev, "%s: len: %zd rc: %d\n", __func__, offset, rc);
+	kfree(cmd);
+
+	return rc;
 }
 
 int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
 		void *buf, size_t len)
 {
 	int rc = validate_dimm(ndd);
+	size_t max_cmd_size, buf_offset;
 	struct nfit_cmd_set_config_hdr *cmd;
-	struct nfit_bus_descriptor *nfit_desc;
-	size_t size = sizeof(*cmd) + len + sizeof(u32);
 	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
+	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
 
 	if (rc)
 		return rc;
 
-	cmd = kmalloc(size, GFP_KERNEL);
-	if (!cmd)
-		cmd = vmalloc(size);
+	if (!ndd->data)
+		return -ENXIO;
+
+	if (offset + len > ndd->nsarea.config_size)
+		return -ENXIO;
+
+	max_cmd_size = min(PAGE_SIZE, len);
+	max_cmd_size = min_t(u32, max_cmd_size, ndd->nsarea.max_xfer);
+	cmd = kzalloc(max_cmd_size + sizeof(*cmd) + sizeof(u32), GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
 
-	nfit_desc = nd_bus->nfit_desc;
-	memset(cmd, 0, size);
-	cmd->in_offset = offset;
-	cmd->in_length = len;
-	memcpy(cmd->in_buf, buf, len);
-	rc = nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
-			NFIT_CMD_SET_CONFIG_DATA, cmd, size);
-	if (rc == 0) {
-		/* rc == 0 == status valid */
-		u32 *status = ((void *) cmd) + size - sizeof(u32);
+	for (buf_offset = 0; len; len -= cmd->in_length,
+			buf_offset += cmd->in_length) {
+		size_t cmd_size;
+		u32 *status;
 
-		if (*status != 0)
-			rc = -ENXIO;
+		cmd->in_offset = offset + buf_offset;
+		cmd->in_length = min(max_cmd_size, len);
+		memcpy(cmd->in_buf, buf + buf_offset, cmd->in_length);
+
+		/* status is output in the last 4-bytes of the command buffer */
+		cmd_size = sizeof(*cmd) + cmd->in_length + sizeof(u32);
+		status = ((void *) cmd) + cmd_size - sizeof(u32);
+
+		rc = nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
+				NFIT_CMD_SET_CONFIG_DATA, cmd, cmd_size);
+		if (rc || *status) {
+			rc = rc ? rc : -ENXIO;
+			break;
+		}
 	}
+	kfree(cmd);
 
-	if (is_vmalloc_addr(cmd))
-		vfree(cmd);
-	else
-		kfree(cmd);
 	return rc;
 }
 
@@ -426,7 +477,7 @@ static ssize_t commands_show(struct device *dev,
 	int cmd, len = 0;
 
 	for_each_set_bit(cmd, &nd_dimm->dsm_mask, BITS_PER_LONG)
-		len += sprintf(buf + len, "%s ", nfit_cmd_name(cmd));
+		len += sprintf(buf + len, "%s ", nfit_dimm_cmd_name(cmd));
 	len += sprintf(buf + len, "\n");
 	return len;
 }

@@ -60,7 +60,7 @@ size_t sizeof_namespace_index(struct nd_dimm_drvdata *ndd)
 	 * starts to waste space at larger config_sizes, but it's
 	 * unlikely we'll ever see anything but 128K.
 	 */
-	index_span = ndd->config_size / 129;
+	index_span = ndd->nsarea.config_size / 129;
 	index_span /= NSINDEX_ALIGN * 2;
 	ndd->nsindex_size = index_span * NSINDEX_ALIGN;
 
@@ -69,7 +69,7 @@ size_t sizeof_namespace_index(struct nd_dimm_drvdata *ndd)
 
 int nd_dimm_num_label_slots(struct nd_dimm_drvdata *ndd)
 {
-	return ndd->config_size / 129;
+	return ndd->nsarea.config_size / 129;
 }
 
 int nd_label_validate(struct nd_dimm_drvdata *ndd)
@@ -161,10 +161,10 @@ int nd_label_validate(struct nd_dimm_drvdata *ndd)
 		}
 		if (readl(&nsindex[i]->nslot) * sizeof(struct nd_namespace_label)
 				+ 2 * sizeof_namespace_index(ndd)
-				> ndd->config_size) {
+				> ndd->nsarea.config_size) {
 			dev_dbg(dev, "%s: nsindex%d nslot: %u invalid, config_size: %#x\n",
 					__func__, i, readl(&nsindex[i]->nslot),
-					ndd->config_size);
+					ndd->nsarea.config_size);
 			continue;
 		}
 		valid[i] = true;
@@ -820,7 +820,7 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 		return max(num_labels, old_num_labels);
 
 	nsindex = to_namespace_index(ndd, 0);
-	memset_io(nsindex, 0, ndd->config_size);
+	memset_io(nsindex, 0, ndd->nsarea.config_size);
 	for (i = 0; i < 2; i++) {
 		int rc = nd_label_write_index(ndd, i, i*2, ND_NSINDEX_INIT);
 

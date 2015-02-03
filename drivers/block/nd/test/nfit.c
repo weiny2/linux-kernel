@@ -183,7 +183,7 @@ static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 			return -EINVAL;
 		nfit_cmd->status = 0;
 		nfit_cmd->config_size = LABEL_SIZE;
-		nfit_cmd->optimal_io_size = LABEL_SIZE;
+		nfit_cmd->max_xfer = SZ_4K;
 		rc = 0;
 		break;
         }
@@ -640,7 +640,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[0], &nfit_dcr->serial_number);
-	writew(1, &nfit_dcr->fic);
+	writew(NFIT_FIC, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
@@ -657,7 +657,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[1], &nfit_dcr->serial_number);
-	writew(1, &nfit_dcr->fic);
+	writew(NFIT_FIC, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
@@ -674,7 +674,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[2], &nfit_dcr->serial_number);
-	writew(1, &nfit_dcr->fic);
+	writew(NFIT_FIC, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
@@ -691,7 +691,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[3], &nfit_dcr->serial_number);
-	writew(1, &nfit_dcr->fic);
+	writew(NFIT_FIC, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
