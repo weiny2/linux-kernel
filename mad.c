@@ -1989,13 +1989,43 @@ static void workaround_portstatus_errata(struct hfi_devdata *dd,
 					 u32 vl_select_mask)
 {
 	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
+		unsigned long vl;
+		int vfi = 0;
+		u64 sum_vl_xmit_wait = 0;
+		u64 rcv_data, rcv_bubble;
+		/*
+		 * Erratum 291341 - Spurious increments of DC counters for
+		 * PortRcvBubble and PortVLRcvBubble.
+		 */
+		rcv_data = be64_to_cpu(rsp->port_rcv_data);
+		rcv_bubble = be64_to_cpu(rsp->port_rcv_bubble);
+		/* In the measured time period, calculate the total number
+		 * of flits that were received. Subtract out one false
+		 * rcv_bubble increment for every 32 received flits but
+		 * don't let the number go negative.
+		 */
+		if (rcv_bubble >= (rcv_data>>5)) {
+			rcv_bubble -= (rcv_data>>5);
+			rsp->port_rcv_bubble = cpu_to_be64(rcv_bubble);
+		}
+		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+				 8 * sizeof(vl_select_mask)) {
+			rcv_data = be64_to_cpu(rsp->vls[vfi].port_vl_rcv_data);
+			rcv_bubble =
+				be64_to_cpu(rsp->vls[vfi].port_vl_rcv_bubble);
+			if (rcv_bubble >= (rcv_data>>5)) {
+				rcv_bubble -= (rcv_data>>5);
+				rsp->vls[vfi].port_vl_rcv_bubble =
+							cpu_to_be64(rcv_bubble);
+			}
+			vfi++;
+		}
+
 		/*
 		 * Erratum 291344: Make sure that port_xmit_wait does not
 		 * exceed the sum (over all VLs) of port_vl_xmit_wait.
 		 */
-		unsigned long vl;
-		int vfi = 0;
-		u64 sum_vl_xmit_wait = 0;
+		vfi = 0;
 		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 				 8 * sizeof(vl_select_mask)) {
 			u64 tmp = sum_vl_xmit_wait +
@@ -2080,6 +2110,8 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 					  CNTR_INVALID_VL));
 	rsp->port_rcv_data = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FLITS,
 					 CNTR_INVALID_VL));
+	rsp->port_rcv_bubble =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL));
 	rsp->port_xmit_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_PKTS,
 					  CNTR_INVALID_VL));
 	rsp->port_rcv_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_PKTS,
@@ -2096,8 +2128,6 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FCN, CNTR_INVALID_VL));
 	rsp->port_rcv_becn =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN, CNTR_INVALID_VL));
-	rsp->port_rcv_bubble =
-		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL));
 	rsp->port_xmit_discards =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_DSCD,
 					   CNTR_INVALID_VL));
@@ -2142,6 +2172,9 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 
 		tmp = read_dev_cntr(dd, C_DC_RX_FLIT_VL, idx_from_vl(vl));
 		rsp->vls[vfi].port_vl_rcv_data = cpu_to_be64(tmp);
+		rsp->vls[vfi].port_vl_rcv_bubble =
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL_VL,
+					idx_from_vl(vl)));
 
 		rsp->vls[vfi].port_vl_rcv_pkts =
 			cpu_to_be64(read_dev_cntr(dd, C_DC_RX_PKT_VL,
@@ -2165,10 +2198,6 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 
 		rsp->vls[vfi].port_vl_rcv_becn =
 			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN_VL,
-					idx_from_vl(vl)));
-
-		rsp->vls[vfi].port_vl_rcv_bubble =
-			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL_VL,
 					idx_from_vl(vl)));
 
 		/* FIXME */
@@ -2232,6 +2261,44 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	error_counter_summary += tmp < 0x100 ? (tmp & 0xff) : 0xff;
 
 	return error_counter_summary;
+}
+
+static void workaround_datacounters_errata(struct hfi_devdata *dd,
+					 struct _port_dctrs *rsp,
+					 u32 vl_select_mask)
+{
+	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
+		unsigned long vl;
+		int vfi = 0;
+		u64 rcv_data, rcv_bubble;
+		/*
+		 * Erratum 291341 - Spurious increments of DC counters for
+		 * PortRcvBubble and PortVLRcvBubble.
+		 */
+		rcv_data = be64_to_cpu(rsp->port_rcv_data);
+		rcv_bubble = be64_to_cpu(rsp->port_rcv_bubble);
+		/* In the measured time period, calculate the total number
+		 * of flits that were received. Subtract out one false
+		 * rcv_bubble increment for every 32 received flits but
+		 * don't let the number go negative.
+		 */
+		if (rcv_bubble >= (rcv_data>>5)) {
+			rcv_bubble -= (rcv_data>>5);
+			rsp->port_rcv_bubble = cpu_to_be64(rcv_bubble);
+		}
+		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+				8 * sizeof(vl_select_mask)) {
+			rcv_data = be64_to_cpu(rsp->vls[vfi].port_vl_rcv_data);
+			rcv_bubble =
+				be64_to_cpu(rsp->vls[vfi].port_vl_rcv_bubble);
+			if (rcv_bubble >= (rcv_data>>5)) {
+				rcv_bubble -= (rcv_data>>5);
+				rsp->vls[vfi].port_vl_rcv_bubble =
+							cpu_to_be64(rcv_bubble);
+			}
+			vfi++;
+		}
+	}
 }
 
 static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
@@ -2316,6 +2383,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 						CNTR_INVALID_VL));
 	rsp->port_rcv_data = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FLITS,
 						CNTR_INVALID_VL));
+	rsp->port_rcv_bubble =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL));
 	rsp->port_xmit_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_PKTS,
 						CNTR_INVALID_VL));
 	rsp->port_rcv_pkts = cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_PKTS,
@@ -2332,8 +2401,6 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_FCN, CNTR_INVALID_VL));
 	rsp->port_rcv_becn =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN, CNTR_INVALID_VL));
-	rsp->port_rcv_bubble =
-		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL, CNTR_INVALID_VL));
 
 	rsp->port_error_counter_summary =
 		cpu_to_be64(get_error_counter_summary(ibdev, port));
@@ -2356,6 +2423,9 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		rsp->vls[vfi].port_vl_rcv_data =
 			cpu_to_be64(read_dev_cntr(dd, C_DC_RX_FLIT_VL,
 							idx_from_vl(vl)));
+		rsp->vls[vfi].port_vl_rcv_bubble =
+			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL_VL,
+					idx_from_vl(vl)));
 
 		rsp->vls[vfi].port_vl_xmit_pkts =
 			cpu_to_be64(read_port_cntr(ppd, C_TX_PKT_VL,
@@ -2376,10 +2446,6 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN_VL,
 							idx_from_vl(vl)));
 
-		rsp->vls[vfi].port_vl_rcv_bubble =
-			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BBL_VL,
-							idx_from_vl(vl)));
-
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
 		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
@@ -2392,6 +2458,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 		vfi++;
 	}
 
+	workaround_datacounters_errata(dd, rsp, vl_select_mask);
 	return reply(pmp);
 }
 
