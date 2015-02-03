@@ -5478,18 +5478,19 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		 */
 		cancel_link_restart(ppd);
 
-		/* OK to move from disabled to polling, via offline */
-		if (ppd->host_link_state == HLS_DN_DISABLE) {
+		if (ppd->host_link_state != HLS_DN_OFFLINE) {
+			u8 tmp = ppd->link_enabled;
+			/* Prevent scheduled link restart */
+			ppd->link_enabled = 0;
 			ret = goto_offline(ppd);
-			if (ret)
+			if (ret) {
+				ppd->link_enabled = tmp;
 				break;
-			/* if not shutting down, enable the link */
+			}
+
 			if (ppd->driver_link_ready)
 				ppd->link_enabled = 1;
 		}
-
-		if (ppd->host_link_state != HLS_DN_OFFLINE)
-			goto unexpected;
 
 		ret = set_local_link_attributes(ppd);
 		if (ret)
