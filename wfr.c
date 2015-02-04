@@ -9049,6 +9049,7 @@ static void init_qos(struct hfi_devdata *dd, u32 first_ctxt)
 	unsigned qpns_per_vl, ctxt, i, qpn, n = 1, m;
 	u64 *rsmmap;
 	u64 reg;
+	u8  rxcontext = is_a0(dd) ? 0 : 0xff;  /* 0 is default if a0 ver. */
 
 	/* validate */
 	if (dd->n_krcv_queues <= MIN_KERNEL_KCTXTS ||
@@ -9070,7 +9071,7 @@ static void init_qos(struct hfi_devdata *dd, u32 first_ctxt)
 	if (num_vls * qpns_per_vl > dd->chip_rcv_contexts)
 		goto bail;
 	rsmmap = kmalloc(NUM_MAP_REGS * sizeof(u64), GFP_KERNEL);
-	memset(rsmmap, 0xff, NUM_MAP_REGS * sizeof(u64));
+	memset(rsmmap, rxcontext, NUM_MAP_REGS * sizeof(u64));
 	/* init the local copy of the table */
 	for (i = 0, ctxt = first_ctxt; i < num_vls; i++) {
 		unsigned tctxt;
