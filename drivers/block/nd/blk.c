@@ -49,6 +49,7 @@ struct nd_blk_device {
 	struct request_queue	*queue;
 	struct gendisk		*disk;
 	struct nd_blk_dimm	*dimm;
+	struct nd_namespace_blk *nsblk;
 //	struct nd_io		ndio;
 
 	size_t			disk_size;
@@ -56,16 +57,16 @@ struct nd_blk_device {
 };
 
 static int nd_blk_major;
-struct nd_blk_device *nd_blk_singleton;
+struct nd_blk_dimm   *dimm_singleton;
 static DEFINE_IDA(nd_blk_ida);
 
 /* for now, hard code index 0 */
 // for NT stores, check out __copy_user_nocache()
-static void nd_blk_write_blk_ctl(struct block_window *bw, sector_t sector,
-		unsigned int len, bool write)
+static void nd_blk_write_blk_ctl(struct block_window *bw,
+		resource_size_t dev_offset, unsigned int len, bool write)
 {
 	u64 cmd 	= 0;
-	u64 cl_offset 	= sector << (SECTOR_SHIFT - CL_SHIFT);
+	u64 cl_offset 	= dev_offset >> CL_SHIFT;
 	u64 cl_len 	= len >> CL_SHIFT;
 
 	cmd |= cl_offset & BCW_OFFSET_MASK;
@@ -115,31 +116,43 @@ static int nd_blk_write_blk_win(struct block_window *bw, void *src,
 	return 0;
 }
 
-static int nd_blk_read(struct block_window *bw, void *dst, sector_t sector,
-		unsigned int len)
+static int nd_blk_read(struct block_window *bw, void *dst,
+		resource_size_t dev_offset, unsigned int len)
 {
-	nd_blk_write_blk_ctl(bw, sector, len, false);
+	nd_blk_write_blk_ctl(bw, dev_offset, len, false);
 	return nd_blk_read_blk_win(bw, dst, len);
 }
 
-static int nd_blk_write(struct block_window *bw, void *src, sector_t sector,
-		unsigned int len)
+static int nd_blk_write(struct block_window *bw, void *src,
+		resource_size_t dev_offset, unsigned int len)
 {
-	nd_blk_write_blk_ctl(bw, sector, len, true);
+	nd_blk_write_blk_ctl(bw, dev_offset, len, true);
 	return nd_blk_write_blk_win(bw, src, len);
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static int nd_blk_do_bvec(struct block_window *bw, struct page *page,
-		unsigned int len, unsigned int off, int rw, sector_t sector)
+static int nd_blk_do_bvec(struct nd_namespace_blk *nsblk,
+		struct block_window *bw, struct page *page, unsigned int len,
+		unsigned int off, int rw, sector_t sector)
 {
 	void *mem = kmap_atomic(page);
-	int rc;
+	resource_size_t res_offset = sector << SECTOR_SHIFT;
+	resource_size_t	dev_offset = 0;
+	int rc, i;
+
+	for (i = 0; i < nsblk->num_resources; i++) {
+		if (res_offset < resource_size(nsblk->res[i])) {
+			BUG_ON(res_offset + len > resource_size(nsblk->res[i]));
+			dev_offset = nsblk->res[i]->start + res_offset;
+			break;
+		}
+		res_offset -= resource_size(nsblk->res[i]);
+	}
 
 	if (rw == READ)
-		rc = nd_blk_read(bw, mem + off, sector, len);
+		rc = nd_blk_read(bw, mem + off, dev_offset, len);
 	else
-		rc = nd_blk_write(bw, mem + off, sector, len);
+		rc = nd_blk_write(bw, mem + off, dev_offset, len);
 
 	kunmap_atomic(mem);
 
@@ -161,6 +174,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
 	struct nd_blk_device *blk_dev = bdev->bd_disk->private_data;
+	struct nd_namespace_blk *nsblk = blk_dev->nsblk;
 	struct nd_blk_dimm *dimm = blk_dev->dimm;
 	int rw;
 	struct bio_vec bvec;
@@ -187,8 +201,8 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 		unsigned int len = bvec.bv_len;
 		BUG_ON(len > PAGE_SIZE);
 
-		err = nd_blk_do_bvec(&dimm->bw[bw_index], bvec.bv_page, len,
-				bvec.bv_offset, rw, sector);
+		err = nd_blk_do_bvec(nsblk, &dimm->bw[bw_index], bvec.bv_page,
+				len, bvec.bv_offset, rw, sector);
 		if (err)
 			goto out;
 
@@ -219,13 +233,28 @@ static int nd_blk_init_locks(struct nd_blk_dimm *dimm)
 	return 0;
 }
 
-static int nd_blk_probe_namespace(struct nd_blk_dimm *dimm, size_t disk_size)
+static int nd_blk_probe(struct device *dev)
 {
-	//FIXME: need to get all those params via struct device eventually
-	size_t disk_sectors = disk_size >> SECTOR_SHIFT;
+	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+	resource_size_t disk_size = 0;
 	struct nd_blk_device *blk_dev;
+	struct nd_blk_dimm *dimm = dimm_singleton;
 	struct gendisk *disk;
-	int err;
+	int err, i;
+
+	/* FIXME: for now we just assume the resources are contiguous and
+	   start at 0 */
+	for (i = 0; i < nsblk->num_resources; i++)
+		disk_size += resource_size(nsblk->res[i]);
+
+	if (disk_size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid ||
+			!nsblk->lbasize)
+		return -ENXIO;
+
+	if (!dimm) {
+		printk("%s: ERROR - null dimm!\n", __func__);
+		return -ENXIO;
+	}
 
 	blk_dev = kzalloc(sizeof(*blk_dev), GFP_KERNEL);
 	if (!blk_dev)
@@ -256,7 +285,8 @@ static int nd_blk_probe_namespace(struct nd_blk_dimm *dimm, size_t disk_size)
 		goto err_alloc_disk;
 	}
 
-//	disk->driverfs_dev	= dev;
+	blk_dev->nsblk = nsblk;
+
 	disk->major		= nd_blk_major;
 	disk->first_minor	= 0;
 	disk->fops		= &nd_blk_fops;
@@ -264,12 +294,11 @@ static int nd_blk_probe_namespace(struct nd_blk_dimm *dimm, size_t disk_size)
 	disk->queue		= blk_dev->queue;
 	disk->flags		= GENHD_FL_EXT_DEVT;
 	sprintf(disk->disk_name, "nd%d", blk_dev->id);
-	set_capacity(disk, disk_sectors);
+	set_capacity(disk, disk_size >> SECTOR_SHIFT);
+
+	dev_set_drvdata(dev, blk_dev);
 
 	add_disk(disk);
-//	dev_set_drvdata(dev, blk_dev);
-
-	nd_blk_singleton = blk_dev;
 
 	return 0;
 
@@ -282,11 +311,12 @@ err_ida:
 	return err;
 }
 
-static int nd_blk_remove_namespace(struct nd_blk_device *blk_dev)
+static int nd_blk_remove(struct device *dev)
 {
 	// FIXME: eventually need to get to nd_blk_device from struct device.
 //	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
-//	struct pmem_device *pmem = dev_get_drvdata(dev);
+
+	struct nd_blk_device *blk_dev = dev_get_drvdata(dev);
 
 	del_gendisk(blk_dev->disk);
 	put_disk(blk_dev->disk);
@@ -294,27 +324,8 @@ static int nd_blk_remove_namespace(struct nd_blk_device *blk_dev)
 	ida_simple_remove(&nd_blk_ida, blk_dev->id);
 	kfree(blk_dev);
 
-	return 0;
-}
+	blk_dev->nsblk = NULL;
 
-static int nd_blk_probe(struct device *dev)
-{
-	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
-	resource_size_t size = 0;
-	int i;
-
-	for (i = 0; i < nsblk->num_resources; i++)
-		size += resource_size(nsblk->res[i]);
-
-	if (size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid
-			|| !nsblk->lbasize)
-		return -ENXIO;
-
-	return 0;
-}
-
-static int nd_blk_remove(struct device *dev)
-{
 	return 0;
 }
 
@@ -344,8 +355,7 @@ static int __init nd_blk_init(void)
 	return rc;
 }
 
-/* FIXME: should have __exit annotation once we split the init paths apart */
-static void nd_blk_exit(void)
+static void __exit nd_blk_exit(void)
 {
 	driver_unregister(&nd_blk_driver.drv);
 	unregister_blkdev(nd_blk_major, "nd_blk");
@@ -360,7 +370,6 @@ static phys_addr_t	bw_ctl_phys 	= 0xf000800000;
 static void		*bw_apt_virt;
 static u64 		*bw_ctl_virt;
 static size_t		bw_size 	= SZ_8K * NUM_BW;
-static size_t		disk_size 	= SZ_64G;
 
 /* This code should do things that will eventually be moved into the rest of
  * ND.  This includes things like
@@ -413,13 +422,11 @@ static int __init nd_blk_wrapper_init(void)
 		bw[i].bw_stat_virt = (void*)bw[i].bw_ctl_virt + 0x1000;
 	}
 
-	err = nd_blk_init();
-	if (err < 0)
-		goto err_init;
-
 	dimm = kzalloc(sizeof(*dimm), GFP_KERNEL);
-	if (!dimm)
+	if (!dimm) {
+		err = -ENOMEM;
 		goto err_dimm;
+	}
 
 	dimm->num_bw		= NUM_BW;
 	atomic_set(&dimm->last_bw, 0);
@@ -429,19 +436,19 @@ static int __init nd_blk_wrapper_init(void)
 	if (err)
 		goto err_init_locks;
 
-	err = nd_blk_probe_namespace(dimm, disk_size);
-	if (err)
-		goto err_probe;
+	dimm_singleton = dimm;
+
+	err = nd_blk_init();
+	if (err < 0)
+		goto err_init;
 
 	return 0;
 
-err_probe:
-	kfree(dimm->bw_lock);
+err_init:
+	kfree(dimm_singleton->bw_lock);
 err_init_locks:
 	kfree(dimm);
 err_dimm:
-	nd_blk_exit();
-err_init:
 	kfree(bw);
 err_bw:
 	iounmap(bw_ctl_virt);
@@ -456,12 +463,12 @@ err_apt_ioremap:
 
 static void __exit nd_blk_wrapper_exit(void)
 {
-	struct nd_blk_dimm *dimm = nd_blk_singleton->dimm;
-
-	nd_blk_remove_namespace(nd_blk_singleton);
-	kfree(dimm->bw_lock);
-	kfree(dimm);
 	nd_blk_exit();
+
+	kfree(dimm_singleton->bw_lock);
+	kfree(dimm_singleton);
+	dimm_singleton = NULL;
+
 	kfree(bw);
 
 	/* free block control memory */
