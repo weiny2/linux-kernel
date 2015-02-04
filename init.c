@@ -756,6 +756,20 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	dd->process_dma_send = qib_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
 
+	/*
+	 * A0 erratum 291500: Here due to ASIC reset
+	 * power-on. The first packet to be recieved
+	 * in the future might be corrupted. Mark it
+	 * to be dropped.
+	 */
+	if (is_a0(dd)) {
+		atomic_set(&dd->drop_packet, DROP_PACKET_ON);
+		dd->do_drop = 1;
+	} else {
+		atomic_set(&dd->drop_packet, DROP_PACKET_OFF);
+		dd->do_drop = 0;
+	}
+
 	/* make sure the link is not "up" */
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;

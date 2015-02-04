@@ -653,6 +653,16 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 					  (rhf_hdrq_offset(rhf)+2)) * 4));
 		}
 
+		/*
+		 * A0 erratum 291500: Drop the first packet in HFI. It is
+		 * corrupted after power-on reset.
+		 */
+		if (unlikely(dd->do_drop && atomic_xchg(&dd->drop_packet,
+			DROP_PACKET_OFF) == DROP_PACKET_ON)) {
+			dd->do_drop = 0;
+			goto skip;
+		}
+
 		packet.tlen = tlen;
 		packet.hlen = hlen;
 		packet.rhf = rhf;
@@ -672,7 +682,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 		rhf_rcv_function_map[etype](&packet);
 
 		/* On to the next packet */
-
+skip:
 		l += rsize;
 		if (l >= maxcnt)
 			l = 0;

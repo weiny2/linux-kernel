@@ -70,6 +70,12 @@
 #define QIB_OUI 0x001175
 #define QIB_OUI_LSB 40
 
+/*
+ * A0 erratum 291500: States to keep track of corrupt packet.
+ */
+#define DROP_PACKET_OFF		0
+#define DROP_PACKET_ON		1
+
 extern unsigned long hfi_cap_mask;
 #define HFI_CAP_KGET_MASK(mask, cap) ((mask) & HFI_CAP_##cap)
 #define HFI_CAP_UGET_MASK(mask, cap) \
@@ -1079,6 +1085,14 @@ struct hfi_devdata {
 	struct err_info_constraint err_info_xmit_constraint;
 	u8 err_info_uncorrectable;
 	u8 err_info_fmconfig;
+
+	/*
+	 * A0 erratum 291500: Keeps track of conditions to drop
+	 * first packet either after power-on or ASIC reset.
+	 */
+	atomic_t drop_packet;
+	u8 do_drop;
+
 	/*
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path

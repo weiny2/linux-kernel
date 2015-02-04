@@ -925,9 +925,14 @@ static struct flag_table rxe_err_status_flags[] = {
  * workaround for A0 is to not attempt to recover from freeze mode when the
  * RxDmaCsrUncErr error case occurs. A host reboot is instead required to
  * recover. This erratum is slated for a B0 fix.
+ *
+ * A0 erratum 291500: Freeze mode exit not supported due to packet
+ * corruption for  RxDmaHdrFifoRdUncErr and RxDmaDataFifoRdUncErr
  */
 #define WFR_RXE_FREEZE_ABORT_MASK \
-	(WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK)
+	(WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK | \
+	WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK | \
+	WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK)
 
 #define WFR_FREEZE_OK 0
 #define WFR_FREEZE_ABORT 1
