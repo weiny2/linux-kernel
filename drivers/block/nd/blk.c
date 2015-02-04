@@ -34,15 +34,15 @@ enum {
 
 struct block_window {
 	void			*bw_apt_virt;
-	u64 			*bw_ctl_virt;
-	u32 			*bw_stat_virt;
+	u64			*bw_ctl_virt;
+	u32			*bw_stat_virt;
 };
 
 struct nd_blk_dimm {
-	int 			num_bw;
-	atomic_t 		last_bw;
+	int			num_bw;
+	atomic_t		last_bw;
 	struct block_window	*bw;	  /* Array of 'num_bw' block windows */
-	spinlock_t 		*bw_lock; /* Array of 'num_bw' locks */
+	spinlock_t		*bw_lock; /* Array of 'num_bw' locks */
 };
 
 struct nd_blk_device {
@@ -50,10 +50,10 @@ struct nd_blk_device {
 	struct gendisk		*disk;
 	struct nd_blk_dimm	*dimm;
 	struct nd_namespace_blk *nsblk;
-//	struct nd_io		ndio;
+/*	struct nd_io		ndio; */
 
 	size_t			disk_size;
-	int 			id;
+	int			id;
 };
 
 static int nd_blk_major;
@@ -61,13 +61,13 @@ struct nd_blk_dimm   *dimm_singleton;
 static DEFINE_IDA(nd_blk_ida);
 
 /* for now, hard code index 0 */
-// for NT stores, check out __copy_user_nocache()
+/* for NT stores, check out __copy_user_nocache() */
 static void nd_blk_write_blk_ctl(struct block_window *bw,
 		resource_size_t dev_offset, unsigned int len, bool write)
 {
-	u64 cmd 	= 0;
-	u64 cl_offset 	= dev_offset >> CL_SHIFT;
-	u64 cl_len 	= len >> CL_SHIFT;
+	u64 cmd		= 0;
+	u64 cl_offset	= dev_offset >> CL_SHIFT;
+	u64 cl_len	= len >> CL_SHIFT;
 
 	cmd |= cl_offset & BCW_OFFSET_MASK;
 	cmd |= (cl_len & BCW_LEN_MASK) << BCW_LEN_SHIFT;
@@ -83,10 +83,10 @@ static int nd_blk_read_blk_win(struct block_window *bw, void *dst,
 {
 	u32 status;
 
-	// FIXME: NT
+	/* FIXME: NT */
 	memcpy(dst, bw->bw_apt_virt, len);
 	clflushopt(bw->bw_apt_virt);
-	
+
 	status = readl(bw->bw_stat_virt);
 
 	if (status) {
@@ -100,10 +100,10 @@ static int nd_blk_read_blk_win(struct block_window *bw, void *dst,
 static int nd_blk_write_blk_win(struct block_window *bw, void *src,
 		unsigned int len)
 {
-	// non-temporal writes, need to flush via flush hints, yada yada.
+	/* non-temporal writes, need to flush via flush hints, yada yada. */
 	u32 status;
 
-	// FIXME: NT
+	/* FIXME: NT */
 	memcpy(bw->bw_apt_virt, src, len);
 
 	status = readl(bw->bw_stat_virt);
@@ -199,6 +199,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 
 	bio_for_each_segment(bvec, bio, iter) {
 		unsigned int len = bvec.bv_len;
+
 		BUG_ON(len > PAGE_SIZE);
 
 		err = nd_blk_do_bvec(nsblk, &dimm->bw[bw_index], bvec.bv_page,
@@ -222,7 +223,7 @@ static int nd_blk_init_locks(struct nd_blk_dimm *dimm)
 {
 	int i;
 
-	dimm->bw_lock = kmalloc(dimm->num_bw * sizeof(spinlock_t),
+	dimm->bw_lock = kmalloc_array(dimm->num_bw, sizeof(spinlock_t),
 				GFP_KERNEL);
 	if (!dimm->bw_lock)
 		return -ENOMEM;
@@ -252,7 +253,7 @@ static int nd_blk_probe(struct device *dev)
 		return -ENXIO;
 
 	if (!dimm) {
-		printk("%s: ERROR - null dimm!\n", __func__);
+		pr_err("%s: ERROR - null dimm!\n", __func__);
 		return -ENXIO;
 	}
 
@@ -266,7 +267,7 @@ static int nd_blk_probe(struct device *dev)
 		goto err_ida;
 	}
 
-	blk_dev->dimm 		= dimm;
+	blk_dev->dimm		= dimm;
 	blk_dev->disk_size	= disk_size;
 
 	blk_dev->queue = blk_alloc_queue(GFP_KERNEL);
@@ -313,8 +314,8 @@ err_ida:
 
 static int nd_blk_remove(struct device *dev)
 {
-	// FIXME: eventually need to get to nd_blk_device from struct device.
-//	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
+	/* FIXME: eventually need to get to nd_blk_device from struct device.
+	struct nd_namespace_io *nsio = to_nd_namespace_io(dev); */
 
 	struct nd_blk_device *blk_dev = dev_get_drvdata(dev);
 
@@ -363,19 +364,19 @@ static void __exit nd_blk_exit(void)
 
 /* BEGIN HELPER FUNCTIONS - EVENTUALLY IN ND */
 
-struct block_window 	*bw;
-#define NUM_BW	 	256
+struct block_window	*bw;
+#define NUM_BW		256
 static phys_addr_t	bw_apt_phys	= 0xf000a00000;
-static phys_addr_t	bw_ctl_phys 	= 0xf000800000;
+static phys_addr_t	bw_ctl_phys	= 0xf000800000;
 static void		*bw_apt_virt;
-static u64 		*bw_ctl_virt;
-static size_t		bw_size 	= SZ_8K * NUM_BW;
+static u64		*bw_ctl_virt;
+static size_t		bw_size		= SZ_8K * NUM_BW;
 
 /* This code should do things that will eventually be moved into the rest of
  * ND.  This includes things like
- * 	- ioremapping and iounmapping the BDWs and DCRs
- * 	- initializing instances of the driver with proper parameters
- * 	- when we do interleaving, implementing a generic interleaving method
+ *	- ioremapping and iounmapping the BDWs and DCRs
+ *	- initializing instances of the driver with proper parameters
+ *	- when we do interleaving, implementing a generic interleaving method
  */
 static int __init nd_blk_wrapper_init(void)
 {
@@ -417,9 +418,9 @@ static int __init nd_blk_wrapper_init(void)
 	}
 
 	for (i = 0; i < NUM_BW; i++) {
-		bw[i].bw_apt_virt = (void*)bw_apt_virt + i*0x2000;
-		bw[i].bw_ctl_virt = (void*)bw_ctl_virt + i*0x2000;
-		bw[i].bw_stat_virt = (void*)bw[i].bw_ctl_virt + 0x1000;
+		bw[i].bw_apt_virt = (void *)bw_apt_virt + i*0x2000;
+		bw[i].bw_ctl_virt = (void *)bw_ctl_virt + i*0x2000;
+		bw[i].bw_stat_virt = (void *)bw[i].bw_ctl_virt + 0x1000;
 	}
 
 	dimm = kzalloc(sizeof(*dimm), GFP_KERNEL);
