@@ -1420,7 +1420,18 @@ static int subn_get_stl_portinfo(struct opa_smp *smp, struct ib_device *ibdev,
 
 	pi->subnet_prefix = ibp->gid_prefix;
 	pi->sm_lid = cpu_to_be32(ibp->sm_lid);
-	pi->ib_cap_mask = cpu_to_be32(ibp->port_cap_flags);
+
+	/* only the following are supported on STL now */
+	pi->ib_cap_mask = ibp->port_cap_flags
+			  & (IB_PORT_SM |
+			     IB_PORT_AUTO_MIGR_SUP |
+			     IB_PORT_CM_SUP |
+			     IB_PORT_DEVICE_MGMT_SUP |
+			     IB_PORT_VENDOR_CLASS_SUP |
+			     IB_PORT_CAP_MASK_NOTICE_SUP);
+
+	pi->ib_cap_mask = cpu_to_be32(pi->ib_cap_mask);
+
 	/* pi->diag_code; */
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
 
