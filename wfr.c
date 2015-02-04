@@ -2165,19 +2165,6 @@ static void interrupt_clear_down(struct hfi_devdata *dd,
 			write_kctxt_csr(dd, context, eri->mask, mask);
 			break;
 		}
-		/*
-		 * TODO: This is to work around a bug in simulator
-		 * versions before v36.  In versions before v36, the
-		 * DC8051_ERR_CLR did not work, making this loop keep
-		 * going until the max count was achieved.  We don't
-		 * want to mask the DC8051 interrupt, so work around
-		 * it by always breaking here.  In the simulator,
-		 * we don't need to loop, so the first time through
-		 * will handle everything that has come in.
-		 */
-		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
-				&& dd->irev < 36)
-			break;
 	}
 }
 
@@ -5266,12 +5253,6 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 
 	if (dd->hfi_snoop.mode_flag)
 		dd_dev_info(dd, "Set lid/lmc while snooping");
-
-	/*
-	 * TODO: Remove once everyone is beyond version 46 of the sim
-	 */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev <= 0x2E)
-		dcmask = 0;
 
 	c1 &= ~(DCC_CFG_PORT_CONFIG1_TARGET_DLID_SMASK
 		| DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK);
@@ -9581,20 +9562,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd_dev_info(dd, "Implementation: %s, revision 0x%x\n",
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
-
-	/* cannot run on older revisions */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 43) {
-		dd_dev_err(dd, "Version mismatch: This driver requires simulator version 43 or higher\n");
-		ret = -EINVAL;
-		goto bail_cleanup;
-	}
-	if (dd->icode == WFR_ICODE_FPGA_EMULATION && is_a0(dd)
-						  && is_emulator_p(dd)
-						  && emulator_rev(dd) < 15) {
-		dd_dev_err(dd, "Version mismatch: This driver requires emulation version 0x15 or higher\n");
-		ret = -EINVAL;
-		goto bail_cleanup;
-	}
 
 	/*
 	 * Set link speed values.  The max active rate is set in the EFUSE

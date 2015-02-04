@@ -802,12 +802,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 	if (!dd->per_sdma)
 		return -ENOMEM;
 
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 46)
-		idle_cnt = 0; /* work around a wfr-event bug */
-	else
-		idle_cnt = ns_to_cclock(dd, idle_cnt);
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && dd->irev < 47)
-		HFI_CAP_CLEAR(SDMA_AHG);
+	idle_cnt = ns_to_cclock(dd, idle_cnt);
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
