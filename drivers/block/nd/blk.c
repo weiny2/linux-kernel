@@ -39,7 +39,7 @@ struct block_window {
 };
 
 struct nd_blk_dimm {
-	int			num_bw;
+	unsigned		num_bw;
 	atomic_t		last_bw;
 	struct block_window	*bw;	  /* Array of 'num_bw' block windows */
 	spinlock_t		*bw_lock; /* Array of 'num_bw' locks */
@@ -159,13 +159,13 @@ static int nd_blk_do_bvec(struct nd_namespace_blk *nsblk,
 	return rc;
 }
 
-static void acquire_bw(struct nd_blk_dimm *dimm, int *bw_index)
+static void acquire_bw(struct nd_blk_dimm *dimm, unsigned *bw_index)
 {
 	*bw_index = atomic_inc_return(&(dimm->last_bw)) % dimm->num_bw;
 	spin_lock(&(dimm->bw_lock[*bw_index]));
 }
 
-static void release_bw(struct nd_blk_dimm *dimm, int bw_index)
+static void release_bw(struct nd_blk_dimm *dimm, unsigned bw_index)
 {
 	spin_unlock(&(dimm->bw_lock[bw_index]));
 }
@@ -181,7 +181,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	sector_t sector;
 	struct bvec_iter iter;
 	int err = 0;
-	int bw_index;
+	unsigned bw_index;
 
 	acquire_bw(dimm, &bw_index);
 
