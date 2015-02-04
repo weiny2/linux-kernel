@@ -457,16 +457,25 @@ static int read_lcb_cache(u32 off, u64 *val)
 	for (i = 0; i < ARRAY_SIZE(lcb_cache); i++) {
 		if (lcb_cache[i].off == off) {
 			*val = lcb_cache[i].val;
-			if (net_ratelimit()) {
-				pr_warn("reading LCB cache (offset 0x%x)\n",
-					off);
-			}
 			return 0;
 		}
 	}
 
 	pr_warn("%s bad offset 0x%x\n", __func__, off);
 	return -1;
+}
+
+void read_ltp_rtt(struct hfi_devdata *dd)
+{
+	u64 reg = 0;
+
+	if (acquire_lcb_access(dd, 1) == 0) {
+		reg = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
+		release_lcb_access(dd, 1);
+		write_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, reg);
+	} else {
+		dd_dev_err(dd, "%s: unable to read LTP RTT\n", __func__);
+	}
 }
 
 static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
@@ -657,19 +666,11 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
 
-	pi->replay_depth.buffer = 0x80;
 	/* WFR supports a replay buffer 128 LTPs in size */
-	if (acquire_lcb_access(dd, 1) == 0) {
-		tmp = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
-		tmp >>= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_SHIFT;
-		tmp &= DC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_MASK;
-		release_lcb_access(dd, 1);
-		/* cache the data from the LCB */
-		write_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, tmp);
-	} else {
-		/* cannot access LCB, so read from cache */
-		read_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, &tmp);
-	}
+	pi->replay_depth.buffer = 0x80;
+	/* read the cached value of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
+	read_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, &tmp);
+
 	/* this counter is 16 bits wide, but the replay_depth.wire
 	 * variable is only 8 bits */
 	if (tmp > 0xff)

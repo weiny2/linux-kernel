@@ -588,6 +588,7 @@ void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclock);
 void get_linkup_link_widths(struct qib_pportdata *ppd);
+void read_ltp_rtt(struct hfi_devdata *dd);
 u32 hdrqempty(struct qib_ctxtdata *rcd);
 int is_a0(struct hfi_devdata *dd);
 int is_bx(struct hfi_devdata *dd);

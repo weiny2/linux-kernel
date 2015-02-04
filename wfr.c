@@ -2949,6 +2949,9 @@ void handle_link_up(struct work_struct *work)
 	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
 								link_up_work);
 	set_link_state(ppd, HLS_UP_INIT);
+
+	/* cache the read of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
+	read_ltp_rtt(ppd->dd);
 }
 
 /*
