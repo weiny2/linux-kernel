@@ -17,6 +17,7 @@
 #include <linux/genhd.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/nd.h>
 #include <linux/sizes.h>
 
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
@@ -214,8 +215,7 @@ static int nd_blk_init_locks(struct nd_blk_device *blk_dev)
 	return 0;
 }
 
-//static int nd_blk_probe(struct device *dev)
-static int nd_blk_probe(struct block_window *bw, int num_bw,
+static int nd_blk_probe_dimm(struct block_window *bw, int num_bw,
 		size_t disk_size, struct device *dev)
 {
 	//FIXME: need to get all those params via struct device eventually
@@ -286,9 +286,7 @@ err_ida:
 	return err;
 }
 
-//static int nd_blk_remove(struct device *dev)
-//called once per device before nd_blk_exit is called
-static int nd_blk_remove(struct nd_blk_device *blk_dev)
+static int nd_blk_remove_dimm(struct nd_blk_device *blk_dev)
 {
 	// FIXME: eventually need to get to nd_blk_device from struct device.
 //	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
@@ -304,6 +302,36 @@ static int nd_blk_remove(struct nd_blk_device *blk_dev)
 	return 0;
 }
 
+static int nd_blk_probe(struct device *dev)
+{
+	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+	resource_size_t size = 0;
+	int i;
+
+	for (i = 0; i < nsblk->num_resources; i++)
+		size += resource_size(nsblk->res[i]);
+
+	if (size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid
+			|| !nsblk->lbasize)
+		return -ENXIO;
+
+	return 0;
+}
+
+static int nd_blk_remove(struct device *dev)
+{
+	return 0;
+}
+
+static struct nd_device_driver nd_blk_driver = {
+	.probe = nd_blk_probe,
+	.remove = nd_blk_remove,
+	.drv = {
+		.name = "nd_blk",
+	},
+	.type = ND_DRIVER_NAMESPACE_BLOCK,
+};
+
 static int __init nd_blk_init(void)
 {
 	int rc;
@@ -313,20 +341,17 @@ static int __init nd_blk_init(void)
 		return rc;
 
 	nd_blk_major = rc;
-	// FIXME: nd_driver registration & error handling
-	/*
-	rc = nd_driver_register(&nd_nd_blk_driver);
+	rc = nd_driver_register(&nd_blk_driver);
 
 	if (rc < 0)
 		unregister_blkdev(nd_blk_major, "nd_blk");
-	*/
 
-	return 0;
+	return rc;
 }
 
 static void __exit nd_blk_exit(void)
 {
-	// FIXME: nd driver unregister
+	driver_unregister(&nd_blk_driver.drv);
 	unregister_blkdev(nd_blk_major, "nd_blk");
 }
 
@@ -395,7 +420,7 @@ static int __init nd_blk_wrapper_init(void)
 	if (err < 0)
 		goto err_init;
 
-	nd_blk_probe(bw, NUM_BW, disk_size, NULL);
+	nd_blk_probe_dimm(bw, NUM_BW, disk_size, NULL);
 
 	return 0;
 
@@ -414,7 +439,7 @@ err_apt_ioremap:
 
 static void __exit nd_blk_wrapper_exit(void)
 {
-	nd_blk_remove(nd_blk_singleton);
+	nd_blk_remove_dimm(nd_blk_singleton);
 
 	nd_blk_exit();
 
@@ -435,5 +460,6 @@ static void __exit nd_blk_wrapper_exit(void)
 
 MODULE_AUTHOR("Ross Zwisler <ross.zwisler@linux.intel.com>");
 MODULE_LICENSE("GPL v2");
+MODULE_ALIAS_ND_DEVICE(ND_DEVICE_NAMESPACE_BLOCK);
 module_init(nd_blk_wrapper_init);
 module_exit(nd_blk_wrapper_exit);
