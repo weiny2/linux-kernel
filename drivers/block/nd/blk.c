@@ -38,15 +38,18 @@ struct block_window {
 	u32 			*bw_stat_virt;
 };
 
+struct nd_blk_dimm {
+	int 			num_bw;
+	atomic_t 		last_bw;
+	struct block_window	*bw;	  /* Array of 'num_bw' block windows */
+	spinlock_t 		*bw_lock; /* Array of 'num_bw' locks */
+};
+
 struct nd_blk_device {
 	struct request_queue	*queue;
 	struct gendisk		*disk;
+	struct nd_blk_dimm	*dimm;
 //	struct nd_io		ndio;
-
-	struct block_window	*bw;
-	int 			num_bw;
-	atomic_t 		last_bw;
-	spinlock_t 		*bw_lock; /* Array of 'num_bw' locks */
 
 	size_t			disk_size;
 	int 			id;
@@ -143,21 +146,22 @@ static int nd_blk_do_bvec(struct block_window *bw, struct page *page,
 	return rc;
 }
 
-static void acquire_bw(struct nd_blk_device *blk_dev, int *bw_index)
+static void acquire_bw(struct nd_blk_dimm *dimm, int *bw_index)
 {
-	*bw_index = atomic_inc_return(&(blk_dev->last_bw)) % blk_dev->num_bw;
-	spin_lock(&(blk_dev->bw_lock[*bw_index]));
+	*bw_index = atomic_inc_return(&(dimm->last_bw)) % dimm->num_bw;
+	spin_lock(&(dimm->bw_lock[*bw_index]));
 }
 
-static void release_bw(struct nd_blk_device *blk_dev, int bw_index)
+static void release_bw(struct nd_blk_dimm *dimm, int bw_index)
 {
-	spin_unlock(&(blk_dev->bw_lock[bw_index]));
+	spin_unlock(&(dimm->bw_lock[bw_index]));
 }
 
 static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
 	struct nd_blk_device *blk_dev = bdev->bd_disk->private_data;
+	struct nd_blk_dimm *dimm = blk_dev->dimm;
 	int rw;
 	struct bio_vec bvec;
 	sector_t sector;
@@ -165,7 +169,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	int err = 0;
 	int bw_index;
 
-	acquire_bw(blk_dev, &bw_index);
+	acquire_bw(dimm, &bw_index);
 
 	sector = bio->bi_iter.bi_sector;
 	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
@@ -183,7 +187,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 		unsigned int len = bvec.bv_len;
 		BUG_ON(len > PAGE_SIZE);
 
-		err = nd_blk_do_bvec(&blk_dev->bw[bw_index], bvec.bv_page, len,
+		err = nd_blk_do_bvec(&dimm->bw[bw_index], bvec.bv_page, len,
 				bvec.bv_offset, rw, sector);
 		if (err)
 			goto out;
@@ -193,33 +197,32 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 
 out:
 	bio_endio(bio, err);
-	release_bw(blk_dev, bw_index);
+	release_bw(dimm, bw_index);
 }
 
 static const struct block_device_operations nd_blk_fops = {
 	.owner =		THIS_MODULE,
 };
 
-static int nd_blk_init_locks(struct nd_blk_device *blk_dev)
+static int nd_blk_init_locks(struct nd_blk_dimm *dimm)
 {
 	int i;
 
-	blk_dev->bw_lock = kmalloc(blk_dev->num_bw * sizeof(spinlock_t),
+	dimm->bw_lock = kmalloc(dimm->num_bw * sizeof(spinlock_t),
 				GFP_KERNEL);
-	if (!blk_dev->bw_lock)
+	if (!dimm->bw_lock)
 		return -ENOMEM;
 
-	for (i = 0; i < blk_dev->num_bw; i++)
-		spin_lock_init(&blk_dev->bw_lock[i]);
+	for (i = 0; i < dimm->num_bw; i++)
+		spin_lock_init(&dimm->bw_lock[i]);
 
 	return 0;
 }
 
-static int nd_blk_probe_dimm(struct block_window *bw, int num_bw,
-		size_t disk_size, struct device *dev)
+static int nd_blk_probe_namespace(struct nd_blk_dimm *dimm, size_t disk_size)
 {
 	//FIXME: need to get all those params via struct device eventually
-	size_t disk_sectors =  disk_size >> SECTOR_SHIFT;
+	size_t disk_sectors = disk_size >> SECTOR_SHIFT;
 	struct nd_blk_device *blk_dev;
 	struct gendisk *disk;
 	int err;
@@ -234,13 +237,8 @@ static int nd_blk_probe_dimm(struct block_window *bw, int num_bw,
 		goto err_ida;
 	}
 
-	blk_dev->bw		= bw;
-	blk_dev->num_bw		= num_bw;
+	blk_dev->dimm 		= dimm;
 	blk_dev->disk_size	= disk_size;
-
-	err = nd_blk_init_locks(blk_dev);
-	if (err)
-		goto err_init_locks;
 
 	blk_dev->queue = blk_alloc_queue(GFP_KERNEL);
 	if (!blk_dev->queue) {
@@ -278,15 +276,13 @@ static int nd_blk_probe_dimm(struct block_window *bw, int num_bw,
 err_alloc_disk:
 	blk_cleanup_queue(blk_dev->queue);
 err_alloc_queue:
-	kfree(blk_dev->bw_lock);
-err_init_locks:
 	ida_simple_remove(&nd_blk_ida, blk_dev->id);
 err_ida:
 	kfree(blk_dev);
 	return err;
 }
 
-static int nd_blk_remove_dimm(struct nd_blk_device *blk_dev)
+static int nd_blk_remove_namespace(struct nd_blk_device *blk_dev)
 {
 	// FIXME: eventually need to get to nd_blk_device from struct device.
 //	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
@@ -295,7 +291,6 @@ static int nd_blk_remove_dimm(struct nd_blk_device *blk_dev)
 	del_gendisk(blk_dev->disk);
 	put_disk(blk_dev->disk);
 	blk_cleanup_queue(blk_dev->queue);
-	kfree(blk_dev->bw_lock);
 	ida_simple_remove(&nd_blk_ida, blk_dev->id);
 	kfree(blk_dev);
 
@@ -349,7 +344,8 @@ static int __init nd_blk_init(void)
 	return rc;
 }
 
-static void __exit nd_blk_exit(void)
+/* FIXME: should have __exit annotation once we split the init paths apart */
+static void nd_blk_exit(void)
 {
 	driver_unregister(&nd_blk_driver.drv);
 	unregister_blkdev(nd_blk_major, "nd_blk");
@@ -375,6 +371,7 @@ static size_t		disk_size 	= SZ_64G;
 static int __init nd_blk_wrapper_init(void)
 {
 	struct resource *res;
+	struct nd_blk_dimm *dimm;
 	int err, i;
 
 	pr_info("nd_blk: module loaded via wrapper\n");
@@ -420,10 +417,30 @@ static int __init nd_blk_wrapper_init(void)
 	if (err < 0)
 		goto err_init;
 
-	nd_blk_probe_dimm(bw, NUM_BW, disk_size, NULL);
+	dimm = kzalloc(sizeof(*dimm), GFP_KERNEL);
+	if (!dimm)
+		goto err_dimm;
+
+	dimm->num_bw		= NUM_BW;
+	atomic_set(&dimm->last_bw, 0);
+	dimm->bw		= bw;
+
+	err = nd_blk_init_locks(dimm);
+	if (err)
+		goto err_init_locks;
+
+	err = nd_blk_probe_namespace(dimm, disk_size);
+	if (err)
+		goto err_probe;
 
 	return 0;
 
+err_probe:
+	kfree(dimm->bw_lock);
+err_init_locks:
+	kfree(dimm);
+err_dimm:
+	nd_blk_exit();
 err_init:
 	kfree(bw);
 err_bw:
@@ -439,10 +456,12 @@ err_apt_ioremap:
 
 static void __exit nd_blk_wrapper_exit(void)
 {
-	nd_blk_remove_dimm(nd_blk_singleton);
+	struct nd_blk_dimm *dimm = nd_blk_singleton->dimm;
 
+	nd_blk_remove_namespace(nd_blk_singleton);
+	kfree(dimm->bw_lock);
+	kfree(dimm);
 	nd_blk_exit();
-
 	kfree(bw);
 
 	/* free block control memory */
