@@ -359,8 +359,6 @@ struct qib_flash {
 #define RHF_RTE_BYPASS_NO_ERR		0x0
 
 
-#define QLOGIC_IB_MAX_SUBCTXT   4
-
 /* SendPIOAvail bits */
 #define QLOGIC_IB_SENDPIOAVAIL_BUSY_SHIFT 1
 #define QLOGIC_IB_SENDPIOAVAIL_CHECK_SHIFT 0

@@ -161,6 +161,12 @@
 /* A Fatal hardware error has occurred. */
 #define HFI_STATUS_HWERROR     0x200
 
+/*
+ * Number of supported shared contexts.
+ * This is the maximum number of software contexts that can share
+ * a hardware send/receive context.
+ */
+#define HFI_MAX_SHARED_CTXTS 8
 
 /*
  * Poll types

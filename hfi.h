@@ -233,7 +233,7 @@ struct qib_ctxtdata {
 	u32 urgent_poll;
 	/* pid of process using this ctxt */
 	pid_t pid;
-	pid_t subpid[QLOGIC_IB_MAX_SUBCTXT];
+	pid_t subpid[HFI_MAX_SHARED_CTXTS];
 	/* same size as task_struct .comm[], command that opened context */
 	char comm[16];
 	/* so file ops can get at unit */

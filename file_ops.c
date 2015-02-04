@@ -556,7 +556,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 */
 		memaddr = ((unsigned long)dd->events +
 			   ((uctxt->ctxt - dd->first_user_ctxt) *
-			    QLOGIC_IB_MAX_SUBCTXT)) & PAGE_MASK;
+			    HFI_MAX_SHARED_CTXTS)) & PAGE_MASK;
 		memlen = PAGE_SIZE;
 		/*
 		 * v3.7 removes VM_RESERVED but the effect is kept by
@@ -991,7 +991,7 @@ static int init_subctxts(struct qib_ctxtdata *uctxt,
 	unsigned num_subctxts;
 
 	num_subctxts = uinfo->subctxt_cnt;
-	if (num_subctxts > QLOGIC_IB_MAX_SUBCTXT) {
+	if (num_subctxts > HFI_MAX_SHARED_CTXTS) {
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -1259,8 +1259,8 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
 					    subctxt_fp(fp), 0);
 	offset = ((((uctxt->ctxt - dd->first_user_ctxt) *
-		    QLOGIC_IB_MAX_SUBCTXT) +
-		   subctxt_fp(fp)) * sizeof(*dd->events)) & ~PAGE_MASK;
+		    HFI_MAX_SHARED_CTXTS) + subctxt_fp(fp)) *
+		  sizeof(*dd->events)) & ~PAGE_MASK;
 	binfo.events_bufbase = HFI_MMAP_TOKEN(EVENTS, uctxt->ctxt,
 					      subctxt_fp(fp),
 					      offset);
@@ -1352,7 +1352,7 @@ int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 		if (dd->events) {
 			unsigned long *evs = dd->events +
 				(uctxt->ctxt - dd->first_user_ctxt) *
-				QLOGIC_IB_MAX_SUBCTXT;
+				HFI_MAX_SHARED_CTXTS;
 			int i;
 			/*
 			 * subctxt_cnt is 0 if not shared, so do base
@@ -1425,8 +1425,7 @@ static int user_event_ack(struct qib_ctxtdata *uctxt, int subctxt,
 		return ret;
 
 	evs = dd->events + ((uctxt->ctxt - dd->first_user_ctxt) *
-			    QLOGIC_IB_MAX_SUBCTXT) +
-		subctxt;
+			    HFI_MAX_SHARED_CTXTS) + subctxt;
 
 	for (i = 0; i <= _HFI_MAX_EVENT_BIT; i++) {
 		if (!test_bit(i, &events))
@@ -1489,7 +1488,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	/*
 	 * From this point on, we need exclusive access to the context's
 	 * Expected TID/RcvArray data. Since this is a per-context lock
-	 * a maximum of QLOGIC_IB_MAX_SUBCTXT processes will be contending
+	 * a maximum of HFI_MAX_SHARED_CTXTS processes will be contending
 	 * to access it at any given time.
 	 */
 	spin_lock_irqsave(&uctxt->exp_lock, flags);

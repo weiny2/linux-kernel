@@ -794,7 +794,7 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		ret = lastfail;
 
 	/* Allocate enough memory for user event notifiction. */
-	len = ALIGN(dd->chip_rcv_contexts * QLOGIC_IB_MAX_SUBCTXT *
+	len = ALIGN(dd->chip_rcv_contexts * HFI_MAX_SHARED_CTXTS *
 		    sizeof(*dd->events), PAGE_SIZE);
 	dd->events = vmalloc_user(len);
 	if (!dd->events)
