@@ -1,0 +1,14 @@
+#!/bin/bash
+
+DEBUG=
+
+pmem_base_dev=/dev/pmem
+btt_base_dev=/dev/btt
+mnt_base=/mnt/mem
+results=results
+
+################################################################################
+# make sure this script returns success
+/bin/true
+
+# vim:ft=sh

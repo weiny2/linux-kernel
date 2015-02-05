@@ -1,0 +1,270 @@
+#!/bin/bash
+
+source common/config
+
+pmem()
+{
+	local dn=
+	local dev=
+	[ -n "$1" ] && dn=$1 || dn=0
+	dev=$pmem_base_dev$dn
+	[ -b $dev ] && echo $dev || echo "-EBADDEV"
+}
+
+btt()
+{
+	local dn=
+	local dev=
+	[ -n "$1" ] && dn=$1 || dn=0
+	dev=$btt_base_dev$dn
+	[ -b $dev ] && echo $dev || echo "-EBADDEV"
+}
+
+mem()
+{
+	local dn=
+	local dir=
+	[ -n "$1" ] && dn=$1 || dn=0
+	dir=$mnt_base$dn
+	[ -e $dir ] || mkdir -p $dir
+	echo $dir
+}
+
+get_num()
+{
+	echo $(grep -Eo "[0-9]+$" <<< $1)
+}
+
+echo_d()
+{
+	[ $# -le 0 ] && return
+	[ -z "$DEBUG" ] && return
+	echo "$*"
+}
+
+printf_d()
+{
+	[ $# -le 0 ] && return
+	[ -z "$DEBUG" ] && return
+	printf "$*"
+}
+
+_notrun()
+{
+	echo "not run: $*"
+	exit
+}
+
+_fail()
+{
+	echo "failed: $*"
+	exit 1
+}
+
+_cleanup()
+{
+	rm -rf $results/*
+}
+
+_verify_blksize()
+{
+	blksize=$2
+	actual_bs=$(cat /sys/block/$(basename $1)/queue/logical_block_size)
+	[ $actual_bs -eq $blksize ] && return
+	_fail "actual and configured block sizes do not match"
+}
+
+_verify_dirs()
+{
+	[ -d $results ] || mkdir -p $results
+}
+
+_basic_checks()
+{
+	[ -n "$1" ] && [ ! -b $1 ] && _fail "$1: no such block device"
+	_verify_dirs
+	_cleanup
+}
+
+_is_mounted()
+{
+	[[ $1 == "-EBADDEV" ]] && return
+	grep -q $1 /proc/mounts
+}
+
+mnt()
+{
+	local dev=$1
+	local mpoint="/mnt/mem$(get_num $dev)"
+
+	echo "mounting $dev on $mpoint"
+	mke2fs -q -t ext4 $dev > /dev/null 2>&1
+	mount -t ext4 $dev $mpoint > /dev/null 2>&1
+
+	_is_mounted $dev || _fail "mount failed"
+}
+
+get_mpoint()
+{
+	local dev=$1
+
+	_is_mounted $dev || _fail "$dev is not mounted"
+	grep $dev /proc/mounts | awk '{ print $2 }'
+}
+
+_umnt()
+{
+	_is_mounted $1 && umount $1 > /dev/null 2>&1
+}
+
+unmount_all()
+{
+	_umnt $(mem 0)
+	_umnt $(pmem 0)
+	_umnt $(btt 0)
+	_umnt $(mem 1)
+	_umnt $(pmem 1)
+	_umnt $(btt 1)
+}
+
+# parse an option to get device name. Always use btt0 or pmem1
+get_dev()
+{
+	local arg=$1
+	local dev=
+
+	[ ! -n "$arg" ] && echo $(btt 0) && return
+	[ -b $arg ] && echo $arg && return
+
+	case $arg in
+	btt)
+		echo $(btt 0)
+		;;
+	pmem)
+		echo $(pmem 1)
+		;;
+	btt*)
+		if [[ $arg =~ btt([0-9]+) ]]; then
+			dev=$(btt ${BASH_REMATCH[1]})
+		else
+			dev="-EBADDEV"
+		fi
+		echo $dev
+		;;
+	pmem*)
+		if [[ $arg =~ pmem([0-9]+) ]]; then
+			dev=$(pmem ${BASH_REMATCH[1]})
+		else
+			dev="-EBADDEV"
+		fi
+		echo $dev
+		;;
+	*)
+		echo "-EBADDEV"
+		return 1
+	esac
+}
+
+# proc lazy init
+btt_lazy_init()
+{
+	[[ $1 =~ .*btt.* ]] || return
+	dd if=/dev/zero of=$1 bs=4K count=1 > /dev/null 2>&1
+}
+
+drop_caches()
+{
+	echo 3 > /proc/sys/vm/drop_caches
+}
+
+process_dd_files()
+{
+	count=0
+	mean_time=0
+	mean_bw=0
+
+	[ -n "$1" ] && dir=$1 || dir=$results
+	[ -d $dir ] || _fail "$dir: not found"
+
+	for file in $dir/*; do
+		line=$(grep copied $file)
+		if [[ $line =~ .*copied,\ ([0-9]+\.[0-9]+)\ s,\ ([0-9]+.[0-9]+)\ (.*) ]]; then
+			mean_time=$(echo "scale=5; $mean_time + ${BASH_REMATCH[1]}" | bc)
+			mean_bw=$(echo "scale=3; $mean_bw + ${BASH_REMATCH[2]}" | bc)
+			unit=${BASH_REMATCH[3]}
+			count=$(( $count + 1 ))
+		fi
+	done
+
+	mean_time=$(echo "scale=5; $mean_time / $count" | bc)
+	mean_bw=$(echo "scale=3; $mean_bw / $count" | bc)
+
+	echo "$count runs: Mean time = $mean_time s, Mean BW = $mean_bw $unit"
+}
+
+get_fio_groups()
+{
+	tmp=$(grep -E "^\[.*\]$" $1 | sed 's/^\[\(.*\)\]/\1/g' | grep -v global)
+	[ -n "$tmp" ] || _fail "Could not find any fio groups in $1"
+	echo $tmp
+}
+
+process_fio_files()
+{
+	f_count=0
+	g_count=0
+	unit=
+
+	[ -n "$1" ] && dir=$1 || dir=$results
+	[ -n "$2" ] && fio_cfg=$2 || _fail "$0: please provide an fio config"
+	[ -d $dir ] || _fail "$dir: not found"
+
+	fio_groups=($(get_fio_groups $fio_cfg))
+
+	for file in $dir/*; do
+		g_count=0
+		for group in ${fio_groups[@]}; do
+			tmp_bw=0
+			read_stats=$(grep -A5 -E "${group}: \(groupid=[0-9+]" $file | grep -E "^\s+read")
+			write_stats=$(grep -A5 -E "${group}: \(groupid=[0-9+]" $file | grep -E "^\s+write")
+			if [[ $read_stats =~ .*\ bw=([0-9]+\.?[0-9]*)([KMG]B/s).* ]]; then
+				tmp_bw=${BASH_REMATCH[1]}
+				r_unit=${BASH_REMATCH[2]}
+			fi
+			if [[ $write_stats =~ .*\ bw=([0-9]+\.?[0-9]*)([KMG]B/s).* ]]; then
+				if [ -n "$read_stats" ]; then
+					tmp_bw=$(echo "scale=3; ($tmp_bw + ${BASH_REMATCH[1]}) / 2" | bc)
+				else
+					tmp_bw=${BASH_REMATCH[1]}
+				fi
+				w_unit=${BASH_REMATCH[2]}
+			fi
+
+			[ -z "$tmp_bw" ] && _fail "$0: $file seems to have a formatting problem"
+			if [ -n "$r_unit" -a -n "$w_unit" ]; then
+				[[ $r_unit != $w_unit ]] && _fail "$0: can't handle differing units, sorry!"
+				[ -n "$p_unit" ] && [[ $r_unit != $p_unit ]] && _fail "$0: can't handle differing units, sorry!"
+			fi
+			unit=$r_unit
+
+			[ -z "${g_bw[$g_count]}" ] && g_bw[$g_count]=0
+			g_bw[$g_count]=$(echo "scale=3; ${g_bw[$g_count]} + $tmp_bw" | bc)
+
+			g_count=$(( $g_count + 1 ))
+			p_unit=$unit
+		done
+		f_count=$(( $f_count + 1 ))
+	done
+
+	echo "fio stats for $f_count runs:"
+	for (( i = 0; i < $g_count; i++ )); do
+		g_bw[$i]=$(echo "scale=3; ${g_bw[$i]} / $f_count" | bc)
+		echo " Mean BW (${fio_groups[$i]}) = ${g_bw[$i]} $unit"
+	done
+}
+
+################################################################################
+# make sure this script returns success
+/bin/true
+
+# vim:ft=sh

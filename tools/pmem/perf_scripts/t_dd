@@ -1,0 +1,48 @@
+#!/bin/bash
+
+source common/config
+source common/rc
+
+: "${bs:=4096}"
+: "${runs:=10}"
+: "${flags:=oflag=direct}"
+: "${perf:=0}"
+
+perfcmd=
+
+if [ $perf -ne 0 ]; then
+	echo "Using perf, setting runs=1"
+	runs=1
+	perfcmd="perf record -g"
+	rm -f /dev/shm/perf.db
+fi
+
+res=$results/$(basename $0)
+device=$(get_dev $1)
+
+[ -b $device ] || _fail "$0: $device: no such block device"
+
+_basic_checks $device
+
+btt_lazy_init $device
+
+echo "Writing $device with bs=$bs $runs times [$flags]"
+
+c=$(((2 * 1024 * 1024 * 1024) / $bs))
+
+# gather data
+for (( i=0; i<$runs; i++ )); do
+	drop_caches
+	$perfcmd dd if=/dev/zero of=$device bs=$bs count=$c $flags > ${res}_$i 2>&1
+	sleep 1
+	cat ${res}_$i | grep copied
+done
+
+# analyze
+process_dd_files $results
+
+[ -n "$perfcmd" ] && echo "perf stats: $ perf report -g"
+
+exit 0
+
+# vim:ft=sh
