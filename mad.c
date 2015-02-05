@@ -2145,6 +2145,15 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	} else {
 		rsp->local_link_integrity_errors = cpu_to_be64(tmp2);
 	}
+	tmp = read_dev_cntr(dd, C_DC_SEQ_CRC_CNT, CNTR_INVALID_VL);
+	tmp2 = tmp + read_dev_cntr(dd, C_DC_REINIT_FROM_PEER_CNT,
+					CNTR_INVALID_VL);
+	if (tmp2 > (u32)UINT_MAX || tmp2 < tmp) {
+		/* overflow/wrapped */
+		rsp->link_error_recovery = (u32) ~0;
+	} else {
+		rsp->link_error_recovery = cpu_to_be32(tmp2);
+	}
 	rsp->port_rcv_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL));
 	rsp->excessive_buffer_overruns =
@@ -2247,12 +2256,15 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 						CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_DC_RX_REPLAY,
 						CNTR_INVALID_VL);
+	error_counter_summary += read_dev_cntr(dd, C_DC_SEQ_CRC_CNT,
+						CNTR_INVALID_VL);
+	error_counter_summary += read_dev_cntr(dd, C_DC_REINIT_FROM_PEER_CNT,
+						CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_DC_RCV_ERR,
 						CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL);
 	error_counter_summary += read_dev_cntr(dd, C_DC_FM_CFG_ERR,
 						CNTR_INVALID_VL);
-	/* link_error_recovery - DC (table 13-11 WFR spec) */
 	/* ppd->link_downed is a 32-bit value */
 	error_counter_summary += read_port_cntr(ppd, C_SW_LINK_DOWN,
 						CNTR_INVALID_VL);
@@ -2553,6 +2565,15 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	} else {
 		rsp->local_link_integrity_errors = cpu_to_be64(tmp2);
 	}
+	tmp = read_dev_cntr(dd, C_DC_SEQ_CRC_CNT, CNTR_INVALID_VL);
+	tmp2 = tmp + read_dev_cntr(dd, C_DC_REINIT_FROM_PEER_CNT,
+					CNTR_INVALID_VL);
+	if (tmp2 > (u32)UINT_MAX || tmp2 < tmp) {
+		/* overflow/wrapped */
+		rsp->link_error_recovery = (u32) ~0;
+	} else {
+		rsp->link_error_recovery = cpu_to_be32(tmp2);
+	}
 	rsp->port_xmit_constraint_errors =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_CSTR_ERR,
 					   CNTR_INVALID_VL));
@@ -2561,7 +2582,6 @@ static int pma_get_stl_porterrors(struct stl_pma_mad *pmp,
 	rsp->fm_config_errors =
 		cpu_to_be64(read_dev_cntr(dd, C_DC_FM_CFG_ERR,
 						CNTR_INVALID_VL));
-	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
 	rsp->link_downed = cpu_to_be32(read_port_cntr(ppd, C_SW_LINK_DOWN,
 						CNTR_INVALID_VL));
 	tmp = read_dev_cntr(dd, C_DC_UNC_ERR, CNTR_INVALID_VL);
@@ -2758,6 +2778,12 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 		write_dev_cntr(dd, C_DC_RX_REPLAY, CNTR_INVALID_VL, 0);
 	}
 
+	if (counter_select & CS_LINK_ERROR_RECOVERY) {
+		write_dev_cntr(dd, C_DC_SEQ_CRC_CNT, CNTR_INVALID_VL, 0);
+		write_dev_cntr(dd, C_DC_REINIT_FROM_PEER_CNT,
+						CNTR_INVALID_VL, 0);
+	}
+
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		write_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL, 0);
 
@@ -2767,7 +2793,6 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	if (counter_select & CS_FM_CONFIG_ERRORS)
 		write_dev_cntr(dd, C_DC_FM_CFG_ERR, CNTR_INVALID_VL, 0);
 
-	/* ignore cs_link_error_recovery for now */
 	if (counter_select & CS_LINK_DOWNED)
 		write_port_cntr(ppd, C_SW_LINK_DOWN, CNTR_INVALID_VL, 0);
 
