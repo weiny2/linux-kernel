@@ -2282,7 +2282,7 @@ static void workaround_datacounters_errata(struct hfi_devdata *dd,
 	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
 		unsigned long vl;
 		int vfi = 0;
-		u64 rcv_data, rcv_bubble;
+		u64 rcv_data, rcv_bubble, sum_vl_xmit_wait = 0;
 		/*
 		 * Erratum 291341 - Spurious increments of DC counters for
 		 * PortRcvBubble and PortVLRcvBubble.
@@ -2310,6 +2310,24 @@ static void workaround_datacounters_errata(struct hfi_devdata *dd,
 			}
 			vfi++;
 		}
+		/*
+		 * Erratum 291344: Make sure that port_xmit_wait does not
+		 * exceed the sum (over all VLs) of port_vl_xmit_wait.
+		 */
+		vfi = 0;
+		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+				8 * sizeof(vl_select_mask)) {
+			u64 tmp = sum_vl_xmit_wait +
+				be64_to_cpu(rsp->vls[vfi++].port_vl_xmit_wait);
+			if (tmp < sum_vl_xmit_wait) {
+				/* we wrapped */
+				sum_vl_xmit_wait = (u64) ~0;
+				break;
+			}
+			sum_vl_xmit_wait = tmp;
+		}
+		if (be64_to_cpu(rsp->port_xmit_wait) > sum_vl_xmit_wait)
+			rsp->port_xmit_wait = cpu_to_be64(sum_vl_xmit_wait);
 	}
 }
 
