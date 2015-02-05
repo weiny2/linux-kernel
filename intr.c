@@ -211,7 +211,7 @@ void qib_bad_intrstatus(struct hfi_devdata *dd)
 	if (allbits++) {
 		/* disable interrupt delivery, something is very wrong */
 		if (allbits == 2)
-			dd->f_set_intr_state(dd, 0);
+			set_intr_state(dd, 0);
 		if (allbits == 3) {
 			dd_dev_err(dd,
 				"2nd bad interrupt status, unregistering interrupts\n");

@@ -112,7 +112,6 @@ static uint hfi_hdrq_entsize = 32;
 module_param_named(hdrq_entsize, hfi_hdrq_entsize, uint, S_IRUGO);
 MODULE_PARM_DESC(hdrq_entsize, "Size of header queue entries: 2 - 8B, 16 - 64B (default), 32 - 128B");
 
-static void verify_interrupt(struct work_struct *work);
 static inline u64 encode_rcv_header_entry_size(u16);
 
 static struct idr qib_unit_table;
@@ -536,9 +535,9 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 	INIT_WORK(&ppd->freeze_work, handle_freeze);
 	INIT_WORK(&ppd->link_downgrade_work, handle_link_downgrade);
 	INIT_WORK(&ppd->sma_message_work, handle_sma_message);
-	INIT_DELAYED_WORK(&ppd->link_restart_work, link_restart_worker);
 	mutex_init(&ppd->hls_lock);
 	spin_lock_init(&ppd->sdma_alllock);
+	spin_lock_init(&ppd->qsfp_info.qsfp_lock);
 
 	ppd->sm_trap_qp = 0x0;
 	ppd->sa_qp = 0x1;
@@ -595,11 +594,6 @@ static int loadtime_init(struct hfi_devdata *dd)
 		goto done;
 	}
 #endif
-
-	/* set up worker (don't start yet) to verify interrupts are working */
-	INIT_DELAYED_WORK(&dd->interrupt_check_worker, verify_interrupt);
-	/* set this flag so we know we can clean up */
-	dd->flags |= ICHECK_WORKER_INITED;
 
 #if 0
 done:
@@ -661,27 +655,6 @@ static void enable_chip(struct hfi_devdata *dd)
 		/* XXX (Mitko): Do we care about the result of this?
 		 * sc_enable() will display an error message. */
 		sc_enable(dd->rcd[i]->sc);
-	}
-}
-
-static void verify_interrupt(struct work_struct *work)
-{
-	struct hfi_devdata *dd = container_of(work, struct hfi_devdata,
-						interrupt_check_worker.work);
-	u64 int_counter;
-
-	/*
-	 * We should have interrupts by now.  If not, try falling back.
-	 */
-	int_counter = read_dev_cntr(dd, C_SW_CPU_INTR, CNTR_INVALID_VL)
-			- dd->z_int_counter;
-	if (int_counter == 0) {
-		if (!dd->f_intr_fallback(dd))
-			dev_err(&dd->pcidev->dev,
-				"No interrupts detected, not usable.\n");
-		else /* re-arm the worker to see if the fall back works */
-			mod_delayed_work(system_unbound_wq,
-					&dd->interrupt_check_worker, HZ/2);
 	}
 }
 
@@ -845,15 +818,24 @@ done:
 			HFI_STATUS_INITTED;
 	if (!ret) {
 		/* enable all interrupts from the chip */
-		dd->f_set_intr_state(dd, 1);
+		set_intr_state(dd, 1);
 
 		/* chip is OK for user apps; mark it as initialized */
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
 
+			/* initialize the qsfp if it exists
+			 * Requires interrupts to be enabled so we are notified
+			 * when the QSFP completes reset, and has
+			 * to be done before bringing up the SERDES
+			 * TODO: Call init_qsfp only if QIB_HAS_QSFP
+			 * is set in ppd->qsfp_info.flags
+			 */
+			init_qsfp(ppd);
+
 			/* start the serdes - must be after interrupts are
 			   enabled so we are notified when the link goes up */
-			lastfail = dd->f_bringup_serdes(ppd);
+			lastfail = bringup_serdes(ppd);
 			if (lastfail)
 				dd_dev_info(dd,
 					"Failed to bring up port %u\n",
@@ -869,13 +851,6 @@ done:
 			if (!ppd->link_speed_enabled)
 				continue;
 		}
-
-		/*
-		 * Verify that we get an interrupt, fall back to an alternate if
-		 * necessary and possible.
-		 */
-		mod_delayed_work(system_unbound_wq,
-					&dd->interrupt_check_worker, HZ/2);
 	}
 
 	/* if ret is non-zero, we probably should do some cleanup here... */
@@ -908,15 +883,12 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 	struct qib_pportdata *ppd;
 	int pidx;
 
-	if (dd->flags & ICHECK_WORKER_INITED)
-		cancel_delayed_work_sync(&dd->interrupt_check_worker);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (ppd->led_override_timer.data) {
 			del_timer_sync(&ppd->led_override_timer);
 			atomic_set(&ppd->led_override_timer_active, 0);
 		}
-		cancel_delayed_work_sync(&ppd->link_restart_work);
 	}
 }
 
@@ -946,7 +918,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 	dd->flags &= ~HFI_INITTED;
 
 	/* mask interrupts, but not errors */
-	dd->f_set_intr_state(dd, 0);
+	set_intr_state(dd, 0);
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
@@ -1237,7 +1209,6 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	 */
 	spin_lock_init(&dd->sendctrl_lock);
 	spin_lock_init(&dd->uctxt_lock);
-	spin_lock_init(&dd->qsfp_lock);
 	spin_lock_init(&dd->qib_diag_trans_lock);
 	spin_lock_init(&dd->sc_init_lock);
 	spin_lock_init(&dd->dc8051_lock);

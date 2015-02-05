@@ -46,7 +46,6 @@
 #include "pio.h"
 #include "sdma.h"
 #include "eprom.h"
-#include "qsfp.h"
 
 #define NUM_IB_PORTS 1
 
@@ -1173,6 +1172,7 @@ static int read_tx_settings(struct hfi_devdata *dd, u8 *enable_lane_tx,
 				u8 *rx_polarity_inversion, u8 *max_rate);
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
+static void handle_qsfp_int(struct hfi_devdata *dd, u32 source, u64 reg);
 static void handle_dcc_err(struct hfi_devdata *dd,
 				unsigned int context, u64 err_status);
 static void handle_lcb_err(struct hfi_devdata *dd,
@@ -1214,6 +1214,7 @@ struct err_reg_info {
 
 #define NUM_MISC_ERRS (WFR_IS_GENERAL_ERR_END - WFR_IS_GENERAL_ERR_START)
 #define NUM_DC_ERRS (WFR_IS_DC_END - WFR_IS_DC_START)
+#define NUM_VARIOUS (WFR_IS_VARIOUS_END - WFR_IS_VARIOUS_START)
 
 /*
  * Helpers for building WFR and DC error interrupt table entries.  Different
@@ -1255,6 +1256,15 @@ static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
  */
 static const struct err_reg_info sdma_eng_err =
 	WFR_EE(SEND_DMA_ENG_ERR, handle_sdma_eng_err, "SDmaEngErr");
+
+static const struct err_reg_info various_err[NUM_VARIOUS] = {
+/* 0*/	{ 0, 0, 0, 0 }, /* PbcInt */
+/* 1*/	{ 0, 0, 0, 0 }, /* GpioAssertInt */
+/* 2*/	WFR_EE(ASIC_QSFP1,	handle_qsfp_int,	"QSFP1"),
+/* 3*/	WFR_EE(ASIC_QSFP2,	handle_qsfp_int,	"QSFP2"),
+/* 4*/	{ 0, 0, 0, 0 }, /* TCritInt */
+	/* rest are reserved */
+};
 
 /*
  * The DC encoding of mtu_cap for 10K MTU in the DCC_CFG_PORT_CONFIG
@@ -2055,11 +2065,11 @@ static char *is_sendctxt_err_name(char *buf, size_t bsize, unsigned int source)
 }
 
 static const char * const various_names[] = {
-	"PcbInt",
+	"PbcInt",
 	"GpioAssertInt",
 	"Qsfp1Int",
 	"Qsfp2Int",
-	"TCritInt",
+	"TCritInt"
 };
 
 /*
@@ -2224,15 +2234,16 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 static void update_rcverr_timer(unsigned long opaque)
 {
 	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
+	struct qib_pportdata *ppd = dd->pport;
 	u32 cur_ovfl_cnt = read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL);
 
 	if (dd->rcv_ovfl_cnt < cur_ovfl_cnt &&
-	  dd->pport->port_error_action & OPA_PI_MASK_EX_BUFFER_OVERRUN) {
+		ppd->port_error_action & OPA_PI_MASK_EX_BUFFER_OVERRUN) {
 		dd_dev_info(dd, "%s: PortErrorAction bounce\n", __func__);
-		set_link_down_reason(dd->pport,
+		set_link_down_reason(ppd,
 		  OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN, 0,
 			OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN);
-		schedule_link_restart(dd->pport);
+		start_link(ppd);
 	}
 	dd->rcv_ovfl_cnt = (u32) cur_ovfl_cnt;
 
@@ -2574,6 +2585,8 @@ static void is_sdma_eng_err_int(struct hfi_devdata *dd, unsigned int source)
  */
 static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 {
+	const struct err_reg_info *eri = &various_err[source];
+
 	/*
 	 * TCritInt cannot go through interrupt_clear_down()
 	 * because it is not a second tier interrupt. The handler
@@ -2581,8 +2594,75 @@ static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 	 */
 	if (source == WFR_TCRIT_INT_SOURCE)
 		handle_temp_err(dd);
+	else if (eri->handler)
+		interrupt_clear_down(dd, 0, eri);
 	else
-		pr_info("%s: int%u - unimplemented\n", __func__, source);
+		dd_dev_info(dd,
+			"%s: Unimplemented/reserved interrupt %d\n",
+			__func__, source);
+}
+
+static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
+{
+	/* source is always zero */
+	struct qib_pportdata *ppd = dd->pport;
+	unsigned long flags;
+	u64 qsfp_int_mgmt = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
+
+	if (reg & QSFP_HFI0_MODPRST_N) {
+
+		dd_dev_info(dd, "%s: ModPresent triggered QSFP interrupt\n",
+				__func__);
+
+		if (!qsfp_mod_present(ppd)) {
+			ppd->driver_link_ready = 0;
+			/*
+			 * Cable removed, reset all our information about the
+			 * cache and cable capabilities
+			 */
+
+			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+			/*
+			 * We don't set cache_refresh_required here as we expect
+			 * an interrupt when a cable is inserted
+			 */
+			ppd->qsfp_info.cache_valid = 0;
+			ppd->qsfp_info.qsfp_interrupt_functional = 0;
+			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
+						flags);
+			write_csr(dd,
+					dd->hfi_id ?
+						WFR_ASIC_QSFP2_INVERT :
+						WFR_ASIC_QSFP1_INVERT,
+				qsfp_int_mgmt);
+		} else {
+
+			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+			ppd->qsfp_info.cache_valid = 0;
+			ppd->qsfp_info.cache_refresh_required = 1;
+			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
+						flags);
+
+			qsfp_int_mgmt &= ~(u64)QSFP_HFI0_MODPRST_N;
+			write_csr(dd,
+					dd->hfi_id ?
+						WFR_ASIC_QSFP2_INVERT :
+						WFR_ASIC_QSFP1_INVERT,
+				qsfp_int_mgmt);
+		}
+	}
+
+	if (reg & QSFP_HFI0_INT_N) {
+
+		dd_dev_info(dd, "%s: IntN triggered QSFP interrupt\n",
+				__func__);
+		spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+		ppd->qsfp_info.check_interrupt_flags = 1;
+		ppd->qsfp_info.qsfp_interrupt_functional = 1;
+		spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
+	}
+
+	queue_work(ppd->qib_wq, &ppd->qsfp_info.qsfp_work);
 }
 
 /*
@@ -3286,6 +3366,7 @@ void handle_link_up(struct work_struct *work)
 void handle_link_down(struct work_struct *work)
 {
 	u8 lcl_reason, neigh_reason = 0;
+	u64 reg;
 	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
 								link_down_work);
 	lcl_reason = 0;
@@ -3301,6 +3382,14 @@ void handle_link_down(struct work_struct *work)
 
 	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
 	set_link_state(ppd, HLS_DN_OFFLINE);
+
+	/* disable the port */
+	/* TODO: 7322: done within rcvmod_lock */
+	reg = read_csr(ppd->dd, WFR_RCV_CTRL);
+	reg &= ~WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(ppd->dd, WFR_RCV_CTRL, reg);
+
+	start_link(ppd);
 }
 
 /*
@@ -3797,13 +3886,10 @@ void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths)
 	}
 
 	if (do_bounce) {
-		/*
-		 * Bounce the link by setting it offline.  The link will
-		 * automatically restart a poll unless something intervenes.
-		 */
 		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_WIDTH_POLICY, 0,
 		  OPA_LINKDOWN_REASON_WIDTH_POLICY);
 		set_link_state(ppd, HLS_DN_OFFLINE);
+		start_link(ppd);
 	}
 }
 
@@ -4233,7 +4319,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	if (do_bounce) {
 		dd_dev_info(dd, "%s: PortErrorAction bounce\n", __func__);
 		set_link_down_reason(ppd, lcl_reason, 0, lcl_reason);
-		schedule_link_restart(ppd);
+		start_link(ppd);
 	}
 }
 
@@ -5367,77 +5453,333 @@ set_local_link_attributes_fail:
 	return ret;
 }
 
-/* schedule a link restart */
-void schedule_link_restart(struct qib_pportdata *ppd)
-{
-	/*
-	 * Only schedule a restart if the link is enabled.
-	 *
-	 * The link restart delay is arbitrary.  The routine goto_offline()
-	 * insures that the full LNI shutdown is complete and the driver
-	 * can immediately go to polling if it chooses.
-	 */
-	if (ppd->link_enabled)
-		schedule_delayed_work(&ppd->link_restart_work,
-					msecs_to_jiffies(LINK_RESTART_DELAY));
-}
-
-/* cancel any pending link restart */
-static void cancel_link_restart(struct qib_pportdata *ppd)
-{
-	cancel_delayed_work(&ppd->link_restart_work);
-}
-
 /*
  * Call this to start the link.  Schedule a retry if the cable is not
  * present or if unable to start polling.  Do not do anything if the
- * link is disabled.  Returns 0 if link is disabled or moved to
- * polling, -errno if a restart was scheduled.
+ * link is disabled.  Returns 0 if link is disabled or moved to polling
  */
-static int start_link(struct qib_pportdata *ppd)
+int start_link(struct qib_pportdata *ppd)
 {
-	int ret = -ENOSYS; /* no cable unless proven otherwise */
-
 	if (!ppd->link_enabled) {
 		dd_dev_info(ppd->dd,
-			"%s: stopping link restart because link is disabled\n",
+			"%s: stopping link start because link is disabled\n",
+			__func__);
+		return 0;
+	}
+	if (!ppd->driver_link_ready) {
+		dd_dev_info(ppd->dd,
+			"%s: stopping link start because driver is not ready\n",
 			__func__);
 		return 0;
 	}
 
-	if (qsfp_mod_present(ppd) ||
-	    loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB)
-		ret = set_link_state(ppd, HLS_DN_POLL);
+	if (qsfp_mod_present(ppd) || loopback == LOOPBACK_SERDES ||
+						loopback == LOOPBACK_LCB)
+		return set_link_state(ppd, HLS_DN_POLL);
 
-	/* TODO: do not poll when cable plug notification is available */
-	/* reschedule if unable to poll or no cable */
-	if (ret)
-		schedule_link_restart(ppd);
-
-	return ret;
+	dd_dev_info(ppd->dd,
+		"%s: stopping link start because no cable is present\n",
+		__func__);
+	return -EAGAIN;
 }
 
-void link_restart_worker(struct work_struct *work)
+static void reset_qsfp(struct qib_pportdata *ppd)
 {
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct qib_pportdata *ppd = container_of(dwork, struct qib_pportdata,
-							link_restart_work);
-	start_link(ppd);
+	struct hfi_devdata *dd = ppd->dd;
+	u64 mask, qsfp_mask;
+
+	mask = (u64)QSFP_HFI0_RESET_N;
+	qsfp_mask = read_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE);
+	qsfp_mask |= mask;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE,
+		qsfp_mask);
+
+	qsfp_mask = read_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OUT : WFR_ASIC_QSFP1_OUT);
+	qsfp_mask &= ~mask;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OUT : WFR_ASIC_QSFP1_OUT,
+		qsfp_mask);
+	udelay(10);
+	qsfp_mask |= mask;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OUT : WFR_ASIC_QSFP1_OUT,
+		qsfp_mask);
 }
 
-static int bringup_serdes(struct qib_pportdata *ppd)
+int handle_qsfp_error_conditions(struct qib_pportdata *ppd,
+				u8 *qsfp_interrupt_status)
+{
+	struct hfi_devdata *dd = ppd->dd;
+
+	if ((qsfp_interrupt_status[0] & QSFP_HIGH_TEMP_ALARM) ||
+		(qsfp_interrupt_status[0] & QSFP_HIGH_TEMP_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP cable on fire\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[0] & QSFP_LOW_TEMP_ALARM) ||
+		(qsfp_interrupt_status[0] & QSFP_LOW_TEMP_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP cable temperature too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[1] & QSFP_HIGH_VCC_ALARM) ||
+		(qsfp_interrupt_status[1] & QSFP_HIGH_VCC_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP supply voltage too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[1] & QSFP_LOW_VCC_ALARM) ||
+		(qsfp_interrupt_status[1] & QSFP_LOW_VCC_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP supply voltage too low\n",
+			__func__);
+
+	/* Byte 2 is vendor specific */
+
+	if ((qsfp_interrupt_status[3] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[3] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 1/2 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[3] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[3] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 1/2 power too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[4] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[4] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 3/4 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[4] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[4] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 3/4 power too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[5] & QSFP_HIGH_BIAS_ALARM) ||
+		(qsfp_interrupt_status[5] & QSFP_HIGH_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 bias too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[5] & QSFP_LOW_BIAS_ALARM) ||
+		(qsfp_interrupt_status[5] & QSFP_LOW_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 bias too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[6] & QSFP_HIGH_BIAS_ALARM) ||
+		(qsfp_interrupt_status[6] & QSFP_HIGH_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 bias too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[6] & QSFP_LOW_BIAS_ALARM) ||
+		(qsfp_interrupt_status[6] & QSFP_LOW_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 bias too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[7] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[7] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[7] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[7] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 power too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[8] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[8] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[8] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[8] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 power too low\n",
+			__func__);
+
+	/* Bytes 9-10 and 11-12 are reserved */
+	/* Bytes 13-15 are vendor specific */
+
+	return 0;
+}
+
+static int do_pre_lni_host_behaviors(struct qib_pportdata *ppd)
+{
+	refresh_qsfp_cache(ppd, &ppd->qsfp_info);
+
+	if (ppd->qsfp_info.cache_valid)
+		;/* TODO: Brent's flowchart */
+	ppd->driver_link_ready = 1;
+	return 0;
+}
+
+static int do_qsfp_intr_fallback(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u8 qsfp_interrupt_status = 0;
+
+	if (qsfp_read(ppd, dd->hfi_id, 2, &qsfp_interrupt_status, 1)
+		!= 1) {
+		dd_dev_info(dd,
+			"%s: Failed to read status of QSFP module\n",
+			__func__);
+		return -EIO;
+	}
+
+	/* We don't care about alarms & warnings with a non-functional INT_N */
+	if (!(qsfp_interrupt_status & QSFP_DATA_NOT_READY))
+		do_pre_lni_host_behaviors(ppd);
+
+	return 0;
+}
+
+static void qsfp_event(struct work_struct *work)
+{
+	struct qsfp_data *qd;
+	struct qib_pportdata *ppd;
+	struct hfi_devdata *dd;
+
+	qd = container_of(work, struct qsfp_data, qsfp_work);
+	ppd = qd->ppd;
+	dd = ppd->dd;
+
+	if (qd->cache_refresh_required && qsfp_mod_present(ppd)) {
+		msleep(3000);
+		reset_qsfp(ppd);
+
+		/* Check for QSFP interrupt after t_init (SFF 8679)
+		 * + extra
+		 */
+		msleep(3000);
+		if (!qd->qsfp_interrupt_functional) {
+			if (do_qsfp_intr_fallback(ppd) < 0)
+				dd_dev_info(dd, "%s: QSFP fallback failed\n",
+					__func__);
+			else
+				start_link(ppd);
+		}
+	}
+
+	if (qd->check_interrupt_flags && qsfp_mod_present(ppd)) {
+		u8 qsfp_interrupt_status[16] = {0,};
+
+		if (qsfp_read(ppd, dd->hfi_id, 6, &qsfp_interrupt_status[0], 16)
+			!= 16) {
+			dd_dev_info(dd,
+				"%s: Failed to read status of QSFP module\n",
+				__func__);
+		} else {
+			unsigned long flags;
+			u8 data_status;
+
+			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+			ppd->qsfp_info.check_interrupt_flags = 0;
+			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
+								flags);
+
+			if (qsfp_read(ppd, dd->hfi_id, 2, &data_status, 1)
+				 != 1) {
+				dd_dev_info(dd,
+				"%s: Failed to read status of QSFP module\n",
+					__func__);
+			}
+			if (!(data_status & QSFP_DATA_NOT_READY)) {
+				do_pre_lni_host_behaviors(ppd);
+				start_link(ppd);
+			} else
+				handle_qsfp_error_conditions(ppd,
+						qsfp_interrupt_status);
+		}
+	}
+}
+
+void init_qsfp(struct qib_pportdata *ppd)
+{
+
+	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB)
+		ppd->driver_link_ready = 1;
+	else if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
+		struct hfi_devdata *dd = ppd->dd;
+		u64 qsfp_mask;
+
+		ppd->qsfp_info.ppd = ppd;
+		INIT_WORK(&ppd->qsfp_info.qsfp_work, qsfp_event);
+
+		qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
+		/* Clear current status to avoid spurious interrupts */
+		write_csr(dd,
+				dd->hfi_id ?
+					WFR_ASIC_QSFP2_CLEAR :
+					WFR_ASIC_QSFP1_CLEAR,
+			qsfp_mask);
+
+		/* Handle active low nature of INT_N and MODPRST_N pins */
+		if (qsfp_mod_present(ppd)) {
+			qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
+			write_csr(dd,
+					dd->hfi_id ?
+						WFR_ASIC_QSFP2_INVERT :
+						WFR_ASIC_QSFP1_INVERT,
+				qsfp_mask);
+		} else {
+			write_csr(dd,
+					dd->hfi_id ?
+						WFR_ASIC_QSFP2_INVERT :
+						WFR_ASIC_QSFP1_INVERT,
+				qsfp_mask);
+		}
+
+		/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
+		qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
+		write_csr(dd,
+			dd->hfi_id ? WFR_ASIC_QSFP2_MASK : WFR_ASIC_QSFP1_MASK,
+			qsfp_mask);
+
+		if (qsfp_mod_present(ppd)) {
+			msleep(3000);
+			reset_qsfp(ppd);
+
+			/* Check for QSFP interrupt after t_init (SFF 8679)
+			 * + extra
+			 */
+			msleep(3000);
+			if (!ppd->qsfp_info.qsfp_interrupt_functional)
+				if (do_qsfp_intr_fallback(ppd) < 0)
+					dd_dev_info(dd,
+						"%s: QSFP fallback failed\n",
+						__func__);
+		}
+	}
+}
+
+int bringup_serdes(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 guid, reg;
 	int ret;
 
-	/* enable the port */
-	/* TODO: 7322: done within rcvmod_lock */
+	/* XXX (Mitko): This should have a better place than
+	 * here!
+	 */
 	reg = read_csr(dd, WFR_RCV_CTRL);
-	reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
-	/* XXX (Mitko): This should have a better place than here! */
 	if (HFI_CAP_IS_KSET(EXTENDED_PSN))
-		reg |= WFR_RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK;
+		reg |=
+		WFR_RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK;
 	write_csr(dd, WFR_RCV_CTRL, reg);
 
 	guid = be64_to_cpu(ppd->guid);
@@ -5448,8 +5790,8 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 	}
 
 	/* the link defaults to enabled */
-	ppd->driver_link_ready = 1;
 	ppd->link_enabled = 1;
+	/* XXX (Easwar): Move to where driver_link_ready is set? */
 	ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
 
 	/* assign LCB access to the 8051 */
@@ -5478,7 +5820,6 @@ static void quiet_serdes(struct qib_pportdata *ppd)
 	 */
 	ppd->driver_link_ready = 0;
 	ppd->link_enabled = 0;
-	cancel_link_restart(ppd);
 
 	set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SMA_DISABLED, 0,
 	  OPA_LINKDOWN_REASON_SMA_DISABLED);
@@ -5921,9 +6262,9 @@ static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
 	qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
 
 	/*
-	 * The LNI has a manditory wait time after the physical state
+	 * The LNI has a mandatory wait time after the physical state
 	 * moves to Offline.Quiet.  The wait time may be different
-	 * depending on how the link went down.  The 8501 firmware
+	 * depending on how the link went down.  The 8051 firmware
 	 * will observe the needed wait time and only move to ready
 	 * when that is completed.  The largest of the quiet timeouts
 	 * is 2.5s, so wait that long and then a bit more.
@@ -5962,7 +6303,6 @@ static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
 	ppd->link_width_active = 0;
 	ppd->link_width_downgrade_tx_active = 0;
 	ppd->link_width_downgrade_rx_active = 0;
-	schedule_link_restart(ppd);
 	return 0;
 }
 
@@ -6033,6 +6373,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 	int ret1, ret = 0;
 	int was_up, is_down;
 	int orig_new_state, poll_bounce;
+	u64 reg;
 
 	mutex_lock(&ppd->hls_lock);
 
@@ -6099,6 +6440,12 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 				ppd->linkinit_reason =
 					OPA_LINKINIT_REASON_LINKUP;
 
+			/* enable the port */
+			/* TODO: 7322: done within rcvmod_lock */
+			reg = read_csr(dd, WFR_RCV_CTRL);
+			reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+			write_csr(dd, WFR_RCV_CTRL, reg);
+
 			handle_linkup_change(dd, 1);
 		}
 		break;
@@ -6151,21 +6498,9 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 	case HLS_DN_POLL:
 		/* TODO: only start Polling if we have verified that media is
 		   present */
-		/*
-		 * If a restart is scheduled, cancel it, as we are
-		 * going up.  Even so, there is still a race between
-		 * a scheduled restart and an external agent turning
-		 * on the poll.  This will result in the restart deciding
-		 * to stop since is already in a desired state or the
-		 * external agent failing because the link is already
-		 * up.
-		 */
-		cancel_link_restart(ppd);
 
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			u8 tmp = ppd->link_enabled;
-			/* Prevent scheduled link restart */
-			ppd->link_enabled = 0;
 			ret = goto_offline(ppd, ppd->remote_link_down_reason);
 			if (ret) {
 				ppd->link_enabled = tmp;
@@ -8211,7 +8546,6 @@ static u8 ibphys_portstate(struct qib_pportdata *ppd)
 static u64 gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 			u32 mask)
 {
-	unsigned long flags;
 	u64 qsfp_oe, target_oe;
 
 	target_oe = target ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE;
@@ -8219,12 +8553,10 @@ static u64 gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 		/* We are writing register bits, so lock access */
 		dir &= mask;
 		data &= mask;
-		spin_lock_irqsave(&dd->qsfp_lock, flags);
 
 		qsfp_oe = read_csr(dd, target_oe);
 		qsfp_oe = (qsfp_oe & ~(u64)mask) | (u64)dir;
 		write_csr(dd, target_oe, qsfp_oe);
-		spin_unlock_irqrestore(&dd->qsfp_lock, flags);
 	}
 	/* We are exclusively reading bits here, but it is unlikely
 	 * we'll get valid data when we set the direction of the pin
@@ -8293,7 +8625,7 @@ static int tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp)
 /*
  * Enable/disable chip from delivering interrupts.
  */
-static void set_intr_state(struct hfi_devdata *dd, u32 enable)
+void set_intr_state(struct hfi_devdata *dd, u32 enable)
 {
 	int i;
 
@@ -8301,12 +8633,36 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 	 * In WFR, the mask needs to be 1 to allow interrupts.
 	 */
 	if (enable) {
+		u64 cce_int_mask;
+		const int qsfp1_int_smask = WFR_QSFP1_INT % 64;
+		const int qsfp2_int_smask = WFR_QSFP2_INT % 64;
+
 		/* TODO: HFI_BADINTR check needed? */
 		if (dd->flags & HFI_BADINTR)
 			return;
+
 		/* enable all interrupts */
 		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
 			write_csr(dd, WFR_CCE_INT_MASK + (8*i), ~(u64)0);
+
+		/*
+		 * disable QSFP1 interrupts for HFI1, QSFP2 interrupts for HFI0
+		 * Qsfp1Int and Qsfp2Int are adjacent bits in the same CSR,
+		 * therefore just one of QSFP1_INT/QSFP2_INT can be used to find
+		 * the index of the appropriate CSR in the CCEIntMask CSR array
+		 */
+		cce_int_mask = read_csr(dd, WFR_CCE_INT_MASK +
+						(8*(WFR_QSFP1_INT/64)));
+		if (dd->hfi_id) {
+			cce_int_mask &= ~((u64)1 << qsfp1_int_smask);
+			write_csr(dd, WFR_CCE_INT_MASK + (8*(WFR_QSFP1_INT/64)),
+					cce_int_mask);
+		} else {
+			cce_int_mask &= ~((u64)1 << qsfp2_int_smask);
+			write_csr(dd, WFR_CCE_INT_MASK + (8*(WFR_QSFP2_INT/64)),
+					cce_int_mask);
+		}
+
 		/*
 		 * TODO: the 7322 wrote to INTCLEAR to "cause any
 		 * pending interrupts to be redelivered".  The
@@ -9618,6 +9974,22 @@ static void init_chip(struct hfi_devdata *dd)
 	write_csr(dd, WFR_CCE_DC_CTRL, 0);
 
 	/*
+	 * Clear the QSFP reset.
+	 * A0 leaves the out lines floating on power on, then on an FLR
+	 * enforces a 0 on all out pins.  The driver does not touch
+	 * ASIC_QSFPn_OUT otherwise.  This leaves RESET_N low and
+	 * anything  plugged constantly in reset, if it pays attention
+	 * to RESET_N.
+	 * A prime example of this is SiPh. For now, set all pins high.
+	 * I2CCLK and I2CDAT will change per direction, and INT_N and
+	 * MODPRS_N are input only and their value is ignored.
+	 */
+	if (is_a0(dd)) {
+		write_csr(dd, WFR_ASIC_QSFP1_OUT, 0x1f);
+		write_csr(dd, WFR_ASIC_QSFP2_OUT, 0x1f);
+	}
+
+	/*
 	 * TODO: The following block is strictly for the simulator.
 	 * If we find that the physical and logical states are LinkUp
 	 * and Active respectively, then assume we are in the simulator's
@@ -10256,7 +10628,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd->host_link_state = HLS_DN_OFFLINE;
 	}
 
-	dd->f_bringup_serdes    = bringup_serdes;
 	dd->f_cleanup           = cleanup;
 	dd->f_clear_tids        = clear_tids;
 	dd->f_free_irq          = stop_irq;
@@ -10277,7 +10648,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_get_ib_cfg        = get_ib_cfg;
 	dd->f_set_ib_cfg        = set_ib_cfg;
 	dd->f_set_ib_loopback   = set_ib_loopback;
-	dd->f_set_intr_state    = set_intr_state;
 	dd->f_setextled         = setextled;
 	dd->f_wantpiobuf_intr   = sc_wantpiobuf_intr;
 	dd->f_xgxs_reset        = xgxs_reset;
@@ -10287,7 +10657,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_set_ctxt_pkey     = set_ctxt_pkey;
 	dd->f_clear_ctxt_pkey   = clear_ctxt_pkey;
 	dd->f_read_link_quality	= read_link_quality;
-
 
 	/*
 	 * Set other early dd values.
@@ -10460,8 +10829,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	init_other(dd);
 	/* set up KDETH QP prefix in both RX and TX CSRs */
 	init_kdeth_qp(dd);
-	/* initialize QSFP */
-	qib_qsfp_init(dd->pport);
 
 	/* send contexts must be set up before receive contexts */
 	ret = init_send_contexts(dd);
@@ -10710,7 +11077,6 @@ static void handle_temp_err(struct hfi_devdata *dd)
 	 */
 	ppd->driver_link_ready = 0;
 	ppd->link_enabled = 0;
-	cancel_link_restart(ppd);
 	set_physical_link_state(dd, WFR_PLS_OFFLINE |
 				OPA_LINKDOWN_REASON_SMA_DISABLED);
 	/*
@@ -10724,5 +11090,4 @@ static void handle_temp_err(struct hfi_devdata *dd)
 	 * Step 3: Shutdown 8051
 	 */
 	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
-
 }

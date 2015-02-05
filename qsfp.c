@@ -37,7 +37,6 @@
 #include <linux/vmalloc.h>
 
 #include "hfi.h"
-#include "qsfp.h"
 #include "twsi.h"
 
 /*
@@ -190,6 +189,7 @@ int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
 		 * and a page size of QSFP_PAGESIZE bytes.
 		 */
 		page = (u8)(addr / QSFP_PAGESIZE);
+
 		ret = __i2c_write(ppd, target, QSFP_DEV,
 					QSFP_PAGE_SELECT_BYTE_OFFS, &page, 1);
 		if (ret != 1) {
@@ -272,175 +272,100 @@ int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
 }
 
 /*
- * For validation, we want to check the checksums, even of the
- * fields we do not otherwise use. This function reads the bytes from
- * <first> to <next-1> and returns the 8lsbs of the sum, or <0 for errors
+ * This function caches the QSFP memory range in 128 byte chunks.
+ * As an example, the next byte after address 255 is byte 128 from
+ * upper page 01H (if existing) rather than byte 0 from lower page 00H.
  */
-static int qsfp_cks(struct qib_pportdata *ppd, u32 target, int first, int next)
-{
-	int ret;
-	u16 cks;
-	u8 bval;
-
-	cks = 0;
-	while (first < next) {
-		ret = qsfp_read(ppd, target, first, &bval, 1);
-		if (ret < 0)
-			goto bail;
-		cks += bval;
-		++first;
-	}
-	ret = cks & 0xFF;
-bail:
-	return ret;
-
-}
-
-int qib_refresh_qsfp_cache(struct qib_pportdata *ppd, struct qib_qsfp_cache *cp)
+int refresh_qsfp_cache(struct qib_pportdata *ppd, struct qsfp_data *cp)
 {
 	u32 target = ppd->dd->hfi_id;
 	int ret;
-	int idx;
-	u16 cks;
-	u8 byte0;
+	unsigned long flags;
+	u8 *cache = &cp->cache[0];
 
 	/* ensure sane contents on invalid reads, for cable swaps */
-	memset(cp, 0, sizeof(*cp));
-
+	memset(cache, 0, (QSFP_MAX_NUM_PAGES*128));
+	dd_dev_info(ppd->dd, "%s: called\n", __func__);
 	if (!qsfp_mod_present(ppd)) {
 		ret = -ENODEV;
 		goto bail;
 	}
 
-	ret = qsfp_read(ppd, target, 0, &byte0, 1);
-	if (ret < 0)
+	ret = qsfp_read(ppd, target, 0, cache, 256);
+	if (ret != 256) {
+		dd_dev_info(ppd->dd,
+			"%s: Read of pages 00H failed, expected 256, got %d\n",
+			__func__, ret);
 		goto bail;
-	if ((byte0 & 0xFE) != 0x0C)
-		qib_dev_porterr(ppd->dd, ppd->port,
-				"QSFP byte0 is 0x%02X, S/B 0x0C/D\n", byte0);
+	}
 
-	ret = qsfp_read(ppd, target, QSFP_MOD_ID_OFFS, &cp->id, 1);
-	if (ret < 0)
+	if (cache[0] != 0x0C && cache[0] != 0x0D)
 		goto bail;
-	if ((cp->id & 0xFE) != 0x0C)
-		qib_dev_porterr(ppd->dd, ppd->port,
-				"QSFP ID byte is 0x%02X, S/B 0x0C/D\n", cp->id);
-	cks = cp->id;
 
-	ret = qsfp_read(ppd, target, QSFP_MOD_PWR_OFFS, &cp->pwr, 1);
-	if (ret < 0)
-		goto bail;
-	cks += cp->pwr;
+	/* Is paging enabled? */
+	if (!(cache[2] & 4)) {
 
-	ret = qsfp_cks(ppd, target, QSFP_MOD_PWR_OFFS + 1, QSFP_MOD_LEN_OFFS);
-	if (ret < 0)
-		goto bail;
-	cks += ret;
+		/* Paging enabled, page 03 required */
+		if ((cache[195] & 0xC0) == 0xC0) {
+			/* all */
+			ret = qsfp_read(ppd, target, 384, cache + 256, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+			ret = qsfp_read(ppd, target, 640, cache + 384, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+		} else if ((cache[195] & 0x80) == 0x80) {
+			/* only page 2 and 3 */
+			ret = qsfp_read(ppd, target, 640, cache + 384, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+		} else if ((cache[195] & 0x40) == 0x40) {
+			/* only page 1 and 3 */
+			ret = qsfp_read(ppd, target, 384, cache + 256, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+		} else {
+			/* only page 3 */
+			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
+			if (ret <= 0 || ret != 128) {
+				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				goto bail;
+			}
+		}
+	}
 
-	ret = qsfp_read(ppd, target, QSFP_MOD_LEN_OFFS, &cp->len, 1);
-	if (ret < 0)
-		goto bail;
-	cks += cp->len;
+	spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+	ppd->qsfp_info.cache_valid = 1;
+	ppd->qsfp_info.cache_refresh_required = 0;
+	spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
 
-	ret = qsfp_read(ppd, target, QSFP_MOD_TECH_OFFS, &cp->tech, 1);
-	if (ret < 0)
-		goto bail;
-	cks += cp->tech;
-
-	ret = qsfp_read(ppd, target, QSFP_VEND_OFFS, &cp->vendor,
-			QSFP_VEND_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_VEND_LEN; ++idx)
-		cks += cp->vendor[idx];
-
-	ret = qsfp_read(ppd, target, QSFP_IBXCV_OFFS, &cp->xt_xcv, 1);
-	if (ret < 0)
-		goto bail;
-	cks += cp->xt_xcv;
-
-	ret = qsfp_read(ppd, target, QSFP_VOUI_OFFS, &cp->oui, QSFP_VOUI_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_VOUI_LEN; ++idx)
-		cks += cp->oui[idx];
-
-	ret = qsfp_read(ppd, target, QSFP_PN_OFFS, &cp->partnum, QSFP_PN_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_PN_LEN; ++idx)
-		cks += cp->partnum[idx];
-
-	ret = qsfp_read(ppd, target, QSFP_REV_OFFS, &cp->rev, QSFP_REV_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_REV_LEN; ++idx)
-		cks += cp->rev[idx];
-
-	ret = qsfp_read(ppd, target, QSFP_ATTEN_OFFS, &cp->atten,
-			QSFP_ATTEN_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_ATTEN_LEN; ++idx)
-		cks += cp->atten[idx];
-
-	ret = qsfp_cks(ppd, target, QSFP_ATTEN_OFFS + QSFP_ATTEN_LEN,
-			QSFP_CC_OFFS);
-	if (ret < 0)
-		goto bail;
-	cks += ret;
-
-	cks &= 0xFF;
-	ret = qsfp_read(ppd, target, QSFP_CC_OFFS, &cp->cks1, 1);
-	if (ret < 0)
-		goto bail;
-	if (cks != cp->cks1)
-		qib_dev_porterr(ppd->dd, ppd->port,
-				"QSFP cks1 is %02X, computed %02X\n", cp->cks1,
-				cks);
-
-	/* Second checksum covers 192 to (serial, date, lot) */
-	ret = qsfp_cks(ppd, target, QSFP_CC_OFFS + 1, QSFP_SN_OFFS);
-	if (ret < 0)
-		goto bail;
-	cks = ret;
-
-	ret = qsfp_read(ppd, target, QSFP_SN_OFFS, &cp->serial, QSFP_SN_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_SN_LEN; ++idx)
-		cks += cp->serial[idx];
-
-	ret = qsfp_read(ppd, target, QSFP_DATE_OFFS, &cp->date, QSFP_DATE_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_DATE_LEN; ++idx)
-		cks += cp->date[idx];
-
-	ret = qsfp_read(ppd, target, QSFP_LOT_OFFS, &cp->lot, QSFP_LOT_LEN);
-	if (ret < 0)
-		goto bail;
-	for (idx = 0; idx < QSFP_LOT_LEN; ++idx)
-		cks += cp->lot[idx];
-
-	ret = qsfp_cks(ppd, target, QSFP_LOT_OFFS + QSFP_LOT_LEN,
-			QSFP_CC_EXT_OFFS);
-	if (ret < 0)
-		goto bail;
-	cks += ret;
-
-	ret = qsfp_read(ppd, target, QSFP_CC_EXT_OFFS, &cp->cks2, 1);
-	if (ret < 0)
-		goto bail;
-	cks &= 0xFF;
-	if (cks != cp->cks2)
-		qib_dev_porterr(ppd->dd, ppd->port,
-				"QSFP cks2 is %02X, computed %02X\n", cp->cks2,
-				cks);
 	return 0;
 
 bail:
-	cp->id = 0;
+	memset(cache, 0, (QSFP_MAX_NUM_PAGES*128));
 	return ret;
 }
 
@@ -471,101 +396,117 @@ int qsfp_mod_present(struct qib_pportdata *ppd)
 }
 
 /*
- * Initialize structures that control access to QSFP. Called once per port.
+ * This function maps QSFP memory addresses in 128 byte chunks in the following
+ * fashion per the CableInfo SMA query definition in the IBA 1.3 spec/STL Gen 1
+ * spec
+ * For addr 000-127, lower page 00h
+ * For addr 128-255, upper page 00h
+ * For addr 256-383, upper page 01h
+ * For addr 384-511, upper page 02h
+ * For addr 512-639, upper page 03h
+ * For addresses beyond this range, it returns data buffer set to 0.
+ * For upper pages that are optional, if they are not valid, returns the
+ * particular range of bytes in the data buffer set to 0.
  */
-void qib_qsfp_init(struct qib_pportdata *ppd)
+int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr, u32 len,
+			u8 *data)
 {
-	struct hfi_devdata *dd = ppd->dd;
-	int ret;
+	struct qib_pportdata *ppd;
+	int ret = 0;
 
-	/*
-	 * A0 leaves the out lines floating on power on, then on an FLR
-	 * enforces a 0 on all out pins.  The driver does not touch
-	 * ASIC_QSFPn_OUT otherwise.  This leaves RESET_N low and anything
-	 * plugged constantly in reset, if it pays attention to RESET_N.
-	 * The prime example of this is SiPh.  For now, set all pins high.
-	 * I2CCLK and I2CDAT will change per direction, and INT_N and
-	 * MODPRS_N are input only and their value is ignored.
-	 *
-	 * We write both outputs because we allow access to both i2c chains
-	 * from each HFI.  There are possible interference issues if this
-	 * code is run while the other HFI is doing an access.  Because of
-	 * the mutex, this can only happen if the other HFI is running on
-	 * another operating system.
-	 */
-	if (is_a0(dd)) {
-		ret = mutex_lock_interruptible(&dd->qsfp_i2c_mutex);
-		if (ret) {
-			/* complain, but otherwise don't do anything */
-			dd_dev_err(dd, "Cannot set QSFP pins high\n");
-		} else {
-			write_csr(dd, WFR_ASIC_QSFP1_OUT, 0x1f);
-			write_csr(dd, WFR_ASIC_QSFP2_OUT, 0x1f);
-			mutex_unlock(&dd->qsfp_i2c_mutex);
-		}
+	if (port_num > dd->num_pports || port_num < 1) {
+		dd_dev_info(dd, "%s: Invalid port number %d\n",
+				__func__, port_num);
+		ret = -EINVAL;
+		goto bail;
 	}
+
+	ppd = dd->pport + (port_num - 1);
+	if (!qsfp_mod_present(ppd)) {
+		ret = -ENODEV;
+		goto bail;
+	}
+
+	if ((addr + len) >= (QSFP_MAX_NUM_PAGES * 128) ||
+		!ppd->qsfp_info.cache_valid) {
+		ret = -EINVAL;
+		goto bail;
+	}
+
+	memcpy(data, &ppd->qsfp_info.cache[addr], len);
+
+	return 0;
+bail:
+	memset(data, 0, len);
+	return ret;
 }
 
-int qib_qsfp_dump(struct qib_pportdata *ppd, char *buf, int len)
+int qsfp_dump(struct qib_pportdata *ppd, char *buf, int len)
 {
-	struct qib_qsfp_cache cd;
+	u8 *cache = &ppd->qsfp_info.cache[0];
 	u8 bin_buff[QSFP_DUMP_CHUNK];
 	char lenstr[6];
 	int sofar, ret;
 	int bidx = 0;
+	u8 *atten = &cache[QSFP_ATTEN_OFFS];
+	u8 *vendor_oui = &cache[QSFP_VOUI_OFFS];
 
 	sofar = 0;
-	ret = qib_refresh_qsfp_cache(ppd, &cd);
-	if (ret < 0)
-		goto bail;
-
 	lenstr[0] = ' ';
 	lenstr[1] = '\0';
-	if (QSFP_IS_CU(cd.tech))
-		sprintf(lenstr, "%dM ", cd.len);
 
-	sofar += scnprintf(buf + sofar, len - sofar, "PWR:%.3sW\n", pwr_codes +
-			   (QSFP_PWR(cd.pwr) * 4));
+	if (ppd->qsfp_info.cache_valid) {
 
-	sofar += scnprintf(buf + sofar, len - sofar, "TECH:%s%s\n", lenstr,
-			   qib_qsfp_devtech[cd.tech >> 4]);
+		if (QSFP_IS_CU(cache[QSFP_MOD_TECH_OFFS]))
+			sprintf(lenstr, "%dM ", cache[QSFP_MOD_LEN_OFFS]);
 
-	sofar += scnprintf(buf + sofar, len - sofar, "Vendor:%.*s\n",
-			   QSFP_VEND_LEN, cd.vendor);
+		sofar += scnprintf(buf + sofar, len - sofar, "PWR:%.3sW\n",
+				pwr_codes +
+				(QSFP_PWR(cache[QSFP_MOD_PWR_OFFS]) * 4));
 
-	sofar += scnprintf(buf + sofar, len - sofar, "OUI:%06X\n",
-			   QSFP_OUI(cd.oui));
+		sofar += scnprintf(buf + sofar, len - sofar, "TECH:%s%s\n",
+				lenstr,
+			qib_qsfp_devtech[(cache[QSFP_MOD_TECH_OFFS]) >> 4]);
 
-	sofar += scnprintf(buf + sofar, len - sofar, "Part#:%.*s\n",
-			   QSFP_PN_LEN, cd.partnum);
-	sofar += scnprintf(buf + sofar, len - sofar, "Rev:%.*s\n",
-			   QSFP_REV_LEN, cd.rev);
-	if (QSFP_IS_CU(cd.tech))
-		sofar += scnprintf(buf + sofar, len - sofar, "Atten:%d, %d\n",
-				   QSFP_ATTEN_SDR(cd.atten),
-				   QSFP_ATTEN_DDR(cd.atten));
-	sofar += scnprintf(buf + sofar, len - sofar, "Serial:%.*s\n",
-			   QSFP_SN_LEN, cd.serial);
-	sofar += scnprintf(buf + sofar, len - sofar, "Date:%.*s\n",
-			   QSFP_DATE_LEN, cd.date);
-	sofar += scnprintf(buf + sofar, len - sofar, "Lot:%.*s\n",
-			   QSFP_LOT_LEN, cd.date);
+		sofar += scnprintf(buf + sofar, len - sofar, "Vendor:%.*s\n",
+				   QSFP_VEND_LEN, &cache[QSFP_VEND_OFFS]);
 
-	while (bidx < QSFP_DEFAULT_HDR_CNT) {
-		int iidx;
+		sofar += scnprintf(buf + sofar, len - sofar, "OUI:%06X\n",
+				   QSFP_OUI(vendor_oui));
 
-		ret = qsfp_read(ppd, ppd->dd->hfi_id, bidx, bin_buff,
-				QSFP_DUMP_CHUNK);
-		if (ret < 0)
-			goto bail;
-		for (iidx = 0; iidx < ret; ++iidx) {
-			sofar += scnprintf(buf + sofar, len-sofar, " %02X",
-				bin_buff[iidx]);
+		sofar += scnprintf(buf + sofar, len - sofar, "Part#:%.*s\n",
+				   QSFP_PN_LEN, &cache[QSFP_PN_OFFS]);
+
+		sofar += scnprintf(buf + sofar, len - sofar, "Rev:%.*s\n",
+				   QSFP_REV_LEN, &cache[QSFP_REV_OFFS]);
+
+		if (QSFP_IS_CU(cache[QSFP_MOD_TECH_OFFS]))
+			sofar += scnprintf(buf + sofar, len - sofar,
+				"Atten:%d, %d\n",
+				QSFP_ATTEN_SDR(atten),
+				QSFP_ATTEN_DDR(atten));
+
+		sofar += scnprintf(buf + sofar, len - sofar, "Serial:%.*s\n",
+				   QSFP_SN_LEN, &cache[QSFP_SN_OFFS]);
+
+		sofar += scnprintf(buf + sofar, len - sofar, "Date:%.*s\n",
+				   QSFP_DATE_LEN, &cache[QSFP_DATE_OFFS]);
+
+		sofar += scnprintf(buf + sofar, len - sofar, "Lot:%.*s\n",
+				   QSFP_LOT_LEN, &cache[QSFP_LOT_OFFS]);
+
+		while (bidx < QSFP_DEFAULT_HDR_CNT) {
+			int iidx;
+
+			memcpy(bin_buff, &cache[bidx], QSFP_DUMP_CHUNK);
+			for (iidx = 0; iidx < QSFP_DUMP_CHUNK; ++iidx) {
+				sofar += scnprintf(buf + sofar, len-sofar,
+					" %02X", bin_buff[iidx]);
+			}
+			sofar += scnprintf(buf + sofar, len - sofar, "\n");
+			bidx += QSFP_DUMP_CHUNK;
 		}
-		sofar += scnprintf(buf + sofar, len - sofar, "\n");
-		bidx += QSFP_DUMP_CHUNK;
 	}
 	ret = sofar;
-bail:
 	return ret;
 }

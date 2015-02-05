@@ -36,6 +36,8 @@
 #define QSFP_DEV 0xA0
 #define QSFP_PWR_LAG_MSEC 2000
 #define QSFP_MODPRS_LAG_MSEC 20
+/* 128 byte pages, per SFF 8636 rev 2.4 */
+#define QSFP_MAX_NUM_PAGES	4
 
 /*
  * Below are masks for QSFP pins.  Pins are the same for HFI0 and HFI1.
@@ -136,8 +138,33 @@ extern const char *const qib_qsfp_devtech[16];
 #define QSFP_CC_EXT_OFFS 223
 
 /*
- * struct qib_qsfp_data encapsulates state of QSFP device for one port.
- * it will be part of port-chip-specific data if a board supports QSFP.
+ * Interrupt flag masks
+ */
+#define QSFP_DATA_NOT_READY		0x01
+
+#define QSFP_HIGH_TEMP_ALARM		0x80
+#define QSFP_LOW_TEMP_ALARM		0x40
+#define QSFP_HIGH_TEMP_WARNING		0x20
+#define QSFP_LOW_TEMP_WARNING		0x10
+
+#define QSFP_HIGH_VCC_ALARM		0x80
+#define QSFP_LOW_VCC_ALARM		0x40
+#define QSFP_HIGH_VCC_WARNING		0x20
+#define QSFP_LOW_VCC_WARNING		0x10
+
+#define QSFP_HIGH_POWER_ALARM		0x88
+#define QSFP_LOW_POWER_ALARM		0x44
+#define QSFP_HIGH_POWER_WARNING		0x22
+#define QSFP_LOW_POWER_WARNING		0x11
+
+#define QSFP_HIGH_BIAS_ALARM		0x88
+#define QSFP_LOW_BIAS_ALARM		0x44
+#define QSFP_HIGH_BIAS_WARNING		0x22
+#define QSFP_LOW_BIAS_WARNING		0x11
+
+/*
+ * struct qsfp_data encapsulates state of QSFP device for one port.
+ * it will be part of port-specific data if a board supports QSFP.
  *
  * Since multiple board-types use QSFP, and their pport_data structs
  * differ (in the chip-specific section), we need a pointer to its head.
@@ -147,43 +174,24 @@ extern const char *const qib_qsfp_devtech[16];
  *
  */
 
-/*
- * Hold the parts of the onboard EEPROM that we care about, so we aren't
- * constantly bit-boffing
- */
-struct qib_qsfp_cache {
-	u8 id;	/* must be 0x0C or 0x0D; 0 indicates invalid EEPROM read */
-	u8 pwr; /* in D6,7 */
-	u8 len;	/* in meters, Cu only */
-	u8 tech;
-	char vendor[QSFP_VEND_LEN];
-	u8 xt_xcv; /* Ext. tranceiver codes, 4 lsbs are IB speed supported */
-	u8 oui[QSFP_VOUI_LEN];
-	u8 partnum[QSFP_PN_LEN];
-	u8 rev[QSFP_REV_LEN];
-	u8 atten[QSFP_ATTEN_LEN];
-	u8 cks1;	/* Checksum of bytes 128..190 */
-	u8 serial[QSFP_SN_LEN];
-	u8 date[QSFP_DATE_LEN];
-	u8 lot[QSFP_LOT_LEN];
-	u8 cks2;	/* Checsum of bytes 192..222 */
-};
-
 #define QSFP_PWR(pbyte) (((pbyte) >> 6) & 3)
 #define QSFP_ATTEN_SDR(attenarray) (attenarray[0])
 #define QSFP_ATTEN_DDR(attenarray) (attenarray[1])
 
-struct qib_qsfp_data {
+struct qsfp_data {
 	/* Helps to find our way */
 	struct qib_pportdata *ppd;
-	struct work_struct work;
-	struct qib_qsfp_cache cache;
-	unsigned long t_insert;
-	u8 modpresent;
+	struct work_struct qsfp_work;
+	u8 cache[QSFP_MAX_NUM_PAGES*128];
+	spinlock_t qsfp_lock;
+	u8 check_interrupt_flags;
+	u8 qsfp_interrupt_functional;
+	u8 cache_valid;
+	u8 cache_refresh_required;
 };
 
-extern int qib_refresh_qsfp_cache(struct qib_pportdata *ppd,
-				  struct qib_qsfp_cache *cp);
+extern int refresh_qsfp_cache(struct qib_pportdata *ppd,
+				  struct qsfp_data *cp);
 extern int qsfp_mod_present(struct qib_pportdata *ppd);
 extern void qib_qsfp_init(struct qib_pportdata *ppd);
 

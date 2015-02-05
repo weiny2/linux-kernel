@@ -180,6 +180,10 @@
 #define WFR_IS_SENDCREDIT_END		WFR_IS_RESERVED_START
 #define WFR_IS_RESERVED_END		WFR_IS_MAX_SOURCES
 
+/* absolute interrupt numbers for QSFP1Int and QSFP2Int */
+#define WFR_QSFP1_INT		242
+#define WFR_QSFP2_INT		243
+
 /* DCC_CFG_PORT_CONFIG logical link states */
 #define WFR_LSTATE_DOWN    0x1
 #define WFR_LSTATE_INIT    0x2
@@ -625,8 +629,10 @@ void handle_link_downgrade(struct work_struct *work);
 void handle_sma_message(struct work_struct *work);
 void start_freeze_handling(struct qib_pportdata *ppd, int flags);
 int send_idle_sma(struct hfi_devdata *dd, u64 message);
-void link_restart_worker(struct work_struct *work);
-void schedule_link_restart(struct qib_pportdata *ppd);
+int start_link(struct qib_pportdata *ppd);
+void init_qsfp(struct qib_pportdata *ppd);
+int bringup_serdes(struct qib_pportdata *ppd);
+void set_intr_state(struct hfi_devdata *dd, u32 enable);
 void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths);
 void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
 int stop_drain_data_vls(struct hfi_devdata *dd);
