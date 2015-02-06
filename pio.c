@@ -39,7 +39,7 @@
 /*
  * Send Context functions
  */
-static void sc_wait_for_packet_egress(struct send_context *);
+static void sc_wait_for_packet_egress(struct send_context *sc, int pause);
 
 /*
  * Set the CM reset bit and wait for it to clear.  Use the provided
@@ -664,7 +664,7 @@ void sc_disable(struct send_context *sc)
 	reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
 	spin_lock_irqsave(&sc->alloc_lock, flags);
 	sc->flags &= ~SCF_ENABLED;
-	sc_wait_for_packet_egress(sc);
+	sc_wait_for_packet_egress(sc, 1);
 	write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CTRL, reg);
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
@@ -695,8 +695,8 @@ void sc_disable(struct send_context *sc)
 	(((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SMASK)\
 	>> WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SHIFT)
 
-/* wait for packet egress */
-static void sc_wait_for_packet_egress(struct send_context *sc)
+/* wait for packet egress, optionally pause for credit return  */
+static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
 {
 	struct hfi_devdata *dd = sc->dd;
 	u64 reg;
@@ -717,14 +717,23 @@ static void sc_wait_for_packet_egress(struct send_context *sc)
 		loop++;
 		udelay(1);
 	}
-	/*
-	 * Add additional delay (at least, 1us) to ensure chip returns all
-	 * credits
-	 */
-	/* TODO: The cclock_to_ns conversion only makes sense on FPGA since
-	 * 350cclock on ASIC is less than 1us. */
-	loop = cclock_to_ns(dd, SC_CTXT_PACKET_EGRESS_TIMEOUT) / 1000;
-	udelay(loop ? loop : 1);
+
+	if (pause)
+		/* Add additional delay to ensure chip returns all credits */
+		pause_for_credit_return(dd);
+}
+
+void sc_wait(struct hfi_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		struct send_context *sc = dd->send_contexts[i].sc;
+
+		if (!sc)
+			continue;
+		sc_wait_for_packet_egress(sc, 0);
+	}
 }
 
 /*

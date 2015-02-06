@@ -5856,11 +5856,34 @@ static void get_vl_weights(struct hfi_devdata *dd, u32 target,
 	}
 }
 
-static void set_vl_weights(struct hfi_devdata *dd, u32 target,
-			   u32 size, struct ib_vl_weight_elem *vl)
+static int set_vl_weights(struct qib_pportdata *ppd, u32 target,
+			  u32 size, struct ib_vl_weight_elem *vl)
 {
+	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
-	unsigned int i;
+	unsigned int i, is_up = 0;
+	int ret = 0;
+
+	mutex_lock(&ppd->hls_lock);
+
+	if (ppd->host_link_state == HLS_UP_INIT
+			|| ppd->host_link_state == HLS_UP_ARMED
+			|| ppd->host_link_state == HLS_UP_ACTIVE)
+		is_up = 1;
+
+	if (is_up)
+		/*
+		 * Before adjusting VL arbitration weights, empty per-VL
+		 * FIFOs, otherwise a packet whose VL weight is being
+		 * set to 0 could get stuck in a FIFO with no chance to
+		 * egress.
+		 */
+		ret = stop_drain_data_vls(dd);
+
+	if (ret) {
+		dd_dev_err(dd, "%s: cannot stop/drain VLs - refusing to change VL arbitration weights\n", __func__);
+		goto err;
+	}
 
 	for (i = 0; i < size; i++, vl++) {
 		/*
@@ -5874,8 +5897,16 @@ static void set_vl_weights(struct hfi_devdata *dd, u32 target,
 				<< WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT);
 		write_csr(dd, target + (i * 8), reg);
 	}
-//FIXME: Setting the weights atomatically turns this on?
+	/* FIXME: Setting the weights automatically turns this on? */
 	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
+
+	if (is_up)
+		open_fill_data_vls(dd); /* reopen all VLs */
+
+err:
+	mutex_unlock(&ppd->hls_lock);
+
+	return ret;
 }
 
 /*
@@ -6401,12 +6432,12 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 
 	switch (which) {
 	case FM_TBL_VL_HIGH_ARB:
-		set_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
-			WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
+		ret = set_vl_weights(ppd, WFR_SEND_HIGH_PRIORITY_LIST,
+				WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_VL_LOW_ARB:
-		set_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
-			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		ret = set_vl_weights(ppd, WFR_SEND_LOW_PRIORITY_LIST,
+				WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
 		ret = set_buffer_control(ppd->dd, t);
@@ -6417,6 +6448,77 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 	default:
 		ret = -EINVAL;
 	}
+	return ret;
+}
+
+static int disable_data_vls(struct hfi_devdata *dd)
+{
+	u64 reg;
+
+	if (!is_bx(dd))
+		return 1; /* XXX better error #? */
+
+	reg = read_csr(dd, WFR_SEND_CTRL);
+	reg |= (0xffLL << 3);	/* XXX - fix magic value
+				 * when headers are updated */
+	write_csr(dd, WFR_SEND_CTRL, reg);
+	reg = read_csr(dd, WFR_SEND_CTRL); /* flush write */
+
+	return 0;
+}
+
+/*
+ * open_fill_data_vls() - the counterpart to stop_drain_data_vls().
+ * Just re-enables all data VLs (the "fill" part happens
+ * automatically - the name was chosen for symmetry with
+ * stop_drain_data_vls()).
+ */
+int open_fill_data_vls(struct hfi_devdata *dd)
+{
+	u64 reg;
+
+	if (!is_bx(dd))
+		return 1; /* XXX better error #? */
+
+	reg = read_csr(dd, WFR_SEND_CTRL);
+	reg &= ~(0xffLL << 3); /* XXX - fix magic value when
+				* headers are updated */
+	write_csr(dd, WFR_SEND_CTRL, reg);
+
+	return 0;
+}
+
+/*
+ * drain_data_vls() - assumes that disable_data_vls() has been called,
+ * wait for occupancy (of per-VL FIFOs) for all contexts, and SDMA
+ * engines to drop to 0.
+ */
+static void drain_data_vls(struct hfi_devdata *dd)
+{
+	sc_wait(dd);
+
+	sdma_wait(dd);
+
+	pause_for_credit_return(dd);
+}
+/*
+ * stop_drain_data_vls() - disable, then drain all per-VL fifos.
+ * The function to resume using data VLs is open_fill_data_vls(),
+ * and  this pair is meant to be used like this:
+ *
+ * stop_drain_data_vls(dd);
+ * // do things with per-VL resources
+ * open_fill_data_vls(dd);
+ *
+ */
+int stop_drain_data_vls(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = disable_data_vls(dd);
+	if (ret == 0)
+		drain_data_vls(dd);
+
 	return ret;
 }
 

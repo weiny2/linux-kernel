@@ -274,6 +274,47 @@ static inline u64 read_sde_csr(
 	return read_kctxt_csr(sde->dd, sde->this_idx, offset0);
 }
 
+/*
+ * sdma_wait_for_packet_egress() - wait for the VL FIFO occupancy for
+ * sdma engine 'sde' to drop to 0.
+ */
+static void sdma_wait_for_packet_egress(struct sdma_engine *sde,
+					int pause)
+{
+	u64 off = 8 * sde->this_idx;
+	struct hfi_devdata *dd = sde->dd;
+	int lcnt = 0;
+
+	while (1) {
+		u64 reg = read_csr(dd, off + WFR_SEND_EGRESS_SEND_DMA_STATUS);
+
+		reg &= WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SMASK;
+		reg >>= WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT;
+		if (reg == 0)
+			break;
+		if (lcnt++ > 100) {
+			dd_dev_err(dd, "%s: engine %u timeout waiting for packets to egress, remaining count %u\n",
+				  __func__, sde->this_idx, (u32)reg);
+			break;
+		}
+		udelay(1);
+	}
+}
+
+/*
+ * sdma_wait() - wait for packet egress to complete for all SDMA engines,
+ * and pause for credit return.
+ */
+void sdma_wait(struct hfi_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < dd->num_sdma; i++) {
+		struct sdma_engine *sde = &dd->per_sdma[i];
+
+		sdma_wait_for_packet_egress(sde, 0);
+	}
+}
 
 /*
  * Complete all the sdma requests on the active list, in the correct

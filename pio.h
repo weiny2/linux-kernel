@@ -167,6 +167,7 @@ void sc_group_release_update(struct send_context *sc);
 void sc_add_credit_return_intr(struct send_context *sc);
 void sc_del_credit_return_intr(struct send_context *sc);
 void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
+void sc_wait(struct hfi_devdata *dd);
 
 /* support functions */
 void pio_reset_all(struct hfi_devdata *dd);

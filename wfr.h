@@ -586,6 +586,8 @@ void link_restart_worker(struct work_struct *work);
 void schedule_link_restart(struct qib_pportdata *ppd);
 void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths);
 void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
+int stop_drain_data_vls(struct hfi_devdata *dd);
+int open_fill_data_vls(struct hfi_devdata *dd);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclock);
 void get_linkup_link_widths(struct qib_pportdata *ppd);
