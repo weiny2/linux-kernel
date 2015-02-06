@@ -456,6 +456,7 @@ void sdma_link_up(struct hfi_devdata *dd);
 void sdma_link_down(struct hfi_devdata *dd);
 void sdma_freeze_notify(struct hfi_devdata *dd);
 void sdma_unfreeze(struct hfi_devdata *dd);
+void sdma_wait(struct hfi_devdata *dd);
 
 /**
  * sdma_empty() - idle engine test

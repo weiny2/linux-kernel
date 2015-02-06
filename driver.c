@@ -789,16 +789,43 @@ u32 enum_to_mtu(int mtu)
 int set_mtu(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	int i;
+	int i, ret = 0, is_up = 0;
 
 	ppd->ibmtu = 0;
 	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++)
 		if (ppd->ibmtu < dd->vld[i].mtu)
 			ppd->ibmtu = dd->vld[i].mtu;
 	ppd->ibmaxlen = ppd->ibmtu + lrh_max_header_bytes(ppd->dd);
+
+	mutex_lock(&ppd->hls_lock);
+	if (ppd->host_link_state == HLS_UP_INIT
+			|| ppd->host_link_state == HLS_UP_ARMED
+			|| ppd->host_link_state == HLS_UP_ACTIVE)
+		is_up = 1;
+
+	if (is_up)
+		/*
+		 * MTU is specified per-VL. To ensure that no packet gets
+		 * stuck (due, e.g., to the MTU for the packet's VL being
+		 * reduced), empty the per-VL FIFOs before adjusting MTU.
+		 */
+		ret = stop_drain_data_vls(dd);
+
+	if (ret) {
+		dd_dev_err(dd, "%s: cannot stop/drain VLs - refusing to change per-VL MTUs\n",
+			   __func__);
+		goto err;
+	}
+
 	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
 
-	return 0;
+	if (is_up)
+		open_fill_data_vls(dd); /* reopen all VLs */
+
+err:
+	mutex_unlock(&ppd->hls_lock);
+
+	return ret;
 }
 
 int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)

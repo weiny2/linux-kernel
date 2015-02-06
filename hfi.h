@@ -52,6 +52,7 @@
 #include <linux/kref.h>
 #include <linux/sched.h>
 #include <linux/cdev.h>
+#include <linux/delay.h>
 
 #include "common.h"
 #include "verbs.h"
@@ -1160,6 +1161,18 @@ void process_becn(struct qib_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,
 void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 		u32 pkey, u32 slid, u32 dlid, u8 sc5,
 		const struct ib_grh *old_grh);
+
+#define WFR_PACKET_EGRESS_TIMEOUT 350
+static inline void pause_for_credit_return(struct hfi_devdata *dd)
+{
+	/* Pause at least 1us, to ensure chip returns all credits */
+
+	/* TODO: The cclock_to_ns conversion only makes sense on FPGA since
+	 * 350cclock on ASIC is less than 1us. */
+	u32 usec = cclock_to_ns(dd, WFR_PACKET_EGRESS_TIMEOUT) / 1000;
+
+	udelay(usec ? usec : 1);
+}
 
 /**
  * sc_to_vlt() reverse lookup sc to vl
