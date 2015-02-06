@@ -1258,7 +1258,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 	return devs;
 
 err:
-	for (i = 0; i < count; count++) {
+	for (i = 0; i < count; i++) {
 		nsblk = to_nd_namespace_blk(devs[i]);
 		namespace_blk_release(&nsblk->dev);
 	}
