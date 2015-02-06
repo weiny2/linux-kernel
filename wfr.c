@@ -2920,6 +2920,19 @@ void handle_freeze(struct work_struct *work)
 	 */
 	write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_UNFREEZE_SMASK);
 	wait_for_freeze_status(dd, 0);
+
+	/*
+	 * A0 erratum 291496
+	 * additional SPC unfreeze sequence needed
+	 */
+	if (is_a0(dd)) {
+		dd_dev_info(dd, "Entering SPC freeze (A0 erratum 291496)\n");
+		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
+		wait_for_freeze_status(dd, 1);
+		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_UNFREEZE_SMASK);
+		wait_for_freeze_status(dd, 0);
+	}
+
 	dd->flags &= ~HFI_FROZEN;
 
 	/* SPC is now unfrozen */
@@ -8991,6 +9004,17 @@ static void init_chip(struct hfi_devdata *dd)
 
 		/* restore command and BARs */
 		restore_pci_variables(dd);
+
+		/*
+		 * A0 erratum 291496
+		 * additional FLR required to prevent HW in arbitrary state.
+		 */
+		if (is_a0(dd)) {
+			dd_dev_info(dd, "Resetting CSRs with FLR (A0 erratum 291496)\n");
+			hfi_pcie_flr(dd);
+			restore_pci_variables(dd);
+		}
+
 	} else {
 		dd_dev_info(dd, "Resetting CSRs with writes\n");
 		reset_cce_csrs(dd);

@@ -1026,6 +1026,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	u32 reg32, fs, lf;
 	int ret, return_error = 0;
 	u16 lnkctl, lnkctl2, vendor;
+	u8 nsbr = 1;
 
 	/* if already at Gen3, done */
 	if (dd->lbus_speed == 8000) /* Gen3, 8GHz */
@@ -1034,6 +1035,13 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	/* told not to do the transition */
 	if (!pcie_gen3_transition)
 		return 0;
+
+	/*
+	 * A0 erratum 291496
+	 * additional sbr needed.
+	 */
+	if (is_a0(dd))
+		nsbr++;
 
 	/*
 	 * Emulation has no SBUS and the PCIe SerDes is different.  The only
@@ -1048,15 +1056,21 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 			__func__);
 		write_csr(dd, WFR_CCE_SCRATCH, 0xdeadbeefull);
 
-		dd_dev_info(dd, "%s: calling trigger_sbr\n", __func__);
-		ret = trigger_sbr(dd);
-		if (ret)
-			goto done_no_mutex;
+		/*
+		 * A0 erratum 291496
+		 * additional sbr needed.
+		 */
+		while (nsbr-- > 0) {
+			dd_dev_info(dd, "%s: calling trigger_sbr\n", __func__);
+			ret = trigger_sbr(dd);
+			if (ret)
+				goto done_no_mutex;
 
-		/* restore PCI space registers we know were reset */
-		dd_dev_info(dd,
-			"%s: calling restore_pci_variables\n", __func__);
-		restore_pci_variables(dd);
+			/* restore PCI space registers we know were reset */
+			dd_dev_info(dd,
+				"%s: calling restore_pci_variables\n", __func__);
+			restore_pci_variables(dd);
+		}
 
 		/*
 		 * Read the CCE scratch register we set above to see if:
