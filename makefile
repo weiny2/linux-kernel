@@ -77,13 +77,15 @@ specfile: hfi.spec.in
 		-e 's/@NAME@/'${NAME}'/g' \
 		-e 's%@USER_INC_DIR@%'$(HFI_HEADER_INSTALL_DIR)'%g' \
 		hfi.spec.in > hfi.spec
-	if [ -d .git ]; then \
+	@if [ -d .git ]; then \
 		echo '%changelog' >> hfi.spec; \
-		for x in $(git log v$(BASEVERSION)..HEAD --pretty="format:%at %H" | sort -rg | cut -d' ' -f2); do git log -1 --no-merges --format="* %cd <%ae>%n- %s%n" ${x}; done \
-		| sed 's/-[0-9][0-9][0-9][0-9] //' \
-		| sed 's/ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]//' \
-		>> hfi.spec; \
+		for x in $(shell git log v$(BASEVERSION)..HEAD --no-merges --format="%at %H" |sort -rg | cut -d' ' -f2); do \
+			git log -1 --format="* %ad <%ae>%n- %s%n" $$x \
+			| sed -e 's/-[0-9][0-9][0-9][0-9] //' \
+				-e 's/ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]//' >> hfi.spec;\
+		done \
 	fi
+
 
 dist: distclean specfile
 	rm -rf /tmp/hfi-$(VERSION)
