@@ -594,6 +594,7 @@ void get_linkup_link_widths(struct qib_pportdata *ppd);
 void read_ltp_rtt(struct hfi_devdata *dd);
 u32 hdrqempty(struct qib_ctxtdata *rcd);
 int is_a0(struct hfi_devdata *dd);
+int is_ax(struct hfi_devdata *dd);
 int is_bx(struct hfi_devdata *dd);
 
 int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok);

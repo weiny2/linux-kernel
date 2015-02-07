@@ -789,7 +789,7 @@ u32 enum_to_mtu(int mtu)
 int set_mtu(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	int i, ret = 0, is_up = 0;
+	int i, drain, ret = 0, is_up = 0;
 
 	ppd->ibmtu = 0;
 	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++)
@@ -803,7 +803,9 @@ int set_mtu(struct qib_pportdata *ppd)
 			|| ppd->host_link_state == HLS_UP_ACTIVE)
 		is_up = 1;
 
-	if (is_up)
+	drain = !is_ax(dd) && is_up;
+
+	if (drain)
 		/*
 		 * MTU is specified per-VL. To ensure that no packet gets
 		 * stuck (due, e.g., to the MTU for the packet's VL being
@@ -819,7 +821,7 @@ int set_mtu(struct qib_pportdata *ppd)
 
 	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
 
-	if (is_up)
+	if (drain)
 		open_fill_data_vls(dd); /* reopen all VLs */
 
 err:

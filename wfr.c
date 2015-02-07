@@ -1710,7 +1710,16 @@ int is_a0(struct hfi_devdata *dd)
 			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK) == 0;
 }
 
-/* return true if this is chip revision revision b0 or higher */
+/* return true if this is chip revision revision a */
+int is_ax(struct hfi_devdata *dd)
+{
+	u8 chip_rev_minor =
+		dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
+	return (chip_rev_minor & 0xf0) == 0;
+}
+
+/* return true if this is chip revision revision b */
 int is_bx(struct hfi_devdata *dd)
 {
 	u8 chip_rev_minor =
@@ -5862,7 +5871,7 @@ static int set_vl_weights(struct qib_pportdata *ppd, u32 target,
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
 	unsigned int i, is_up = 0;
-	int ret = 0;
+	int drain, ret = 0;
 
 	mutex_lock(&ppd->hls_lock);
 
@@ -5871,7 +5880,9 @@ static int set_vl_weights(struct qib_pportdata *ppd, u32 target,
 			|| ppd->host_link_state == HLS_UP_ACTIVE)
 		is_up = 1;
 
-	if (is_up)
+	drain = !is_ax(dd) && is_up;
+
+	if (drain)
 		/*
 		 * Before adjusting VL arbitration weights, empty per-VL
 		 * FIFOs, otherwise a packet whose VL weight is being
@@ -5900,7 +5911,7 @@ static int set_vl_weights(struct qib_pportdata *ppd, u32 target,
 	/* FIXME: Setting the weights automatically turns this on? */
 	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
 
-	if (is_up)
+	if (drain)
 		open_fill_data_vls(dd); /* reopen all VLs */
 
 err:
