@@ -681,6 +681,8 @@ struct qib_pportdata {
 	u8 remote_link_down_reason;
 	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 	u8 pending_active_reregister;
+	/* Error events that will cause a port bounce. */
+	u32 port_error_action;
 };
 
 /* Observers. Not to be taken lightly, possibly not to ship. */
@@ -1110,7 +1112,9 @@ struct hfi_devdata {
 	u8 oui1;
 	u8 oui2;
 	u8 oui3;
-
+	/* Timer and counter used to detect RcvBufOvflCnt changes */
+	struct timer_list rcverr_timer;
+	u32 rcv_ovfl_cnt;
 };
 
 /* f_put_tid types */

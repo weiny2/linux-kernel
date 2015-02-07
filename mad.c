@@ -635,7 +635,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->link_down_reason = ppd->local_link_down_reason.sma;
 	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
-
+	pi->port_error_action = cpu_to_be32(ppd->port_error_action);
 	pi->mtucap = mtu_to_enum(max_mtu, IB_MTU_4096);
 
 	/* 32.768 usec. response time (guessing) */
@@ -959,6 +959,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		ppd->neigh_link_down_reason.latest = 0;
 	}
 
+	ppd->port_error_action = be32_to_cpu(pi->port_error_action);
 	lwe = be16_to_cpu(pi->link_width.enabled);
 	if (lwe) {
 		if (lwe == OPA_LINK_WIDTH_RESET
@@ -2813,8 +2814,10 @@ static int pma_set_stl_portstatus(struct stl_pma_mad *pmp,
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		write_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL, 0);
 
-	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS)
+	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS) {
 		write_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL, 0);
+		dd->rcv_ovfl_cnt = 0;
+	}
 
 	if (counter_select & CS_FM_CONFIG_ERRORS)
 		write_dev_cntr(dd, C_DC_FM_CFG_ERR, CNTR_INVALID_VL, 0);

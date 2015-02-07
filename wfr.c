@@ -2055,6 +2055,46 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 }
 
+/*
+ * Check counters for receive errors that do not have an interrupt
+ * associated with them.
+ */
+#define RCVERR_CHECK_TIME 10
+static void update_rcverr_timer(unsigned long opaque)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
+	u32 cur_ovfl_cnt = read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL);
+
+	if (dd->rcv_ovfl_cnt < cur_ovfl_cnt &&
+	  dd->pport->port_error_action & OPA_PI_MASK_EX_BUFFER_OVERRUN) {
+		dd_dev_info(dd, "%s: PortErrorAction bounce\n", __func__);
+		set_link_down_reason(dd->pport,
+		  OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN, 0,
+			OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN);
+		schedule_link_restart(dd->pport);
+	}
+	dd->rcv_ovfl_cnt = (u32) cur_ovfl_cnt;
+
+	mod_timer(&dd->rcverr_timer, jiffies + HZ * RCVERR_CHECK_TIME);
+}
+
+static int init_rcverr(struct hfi_devdata *dd)
+{
+	init_timer(&dd->rcverr_timer);
+	dd->rcverr_timer.function = update_rcverr_timer;
+	dd->rcverr_timer.data = (unsigned long) dd;
+	/* Assume the hardware counter has been reset */
+	dd->rcv_ovfl_cnt = 0;
+	return mod_timer(&dd->rcverr_timer, jiffies + HZ * RCVERR_CHECK_TIME);
+}
+
+static void free_rcverr(struct hfi_devdata *dd)
+{
+	if (dd->rcverr_timer.data)
+		del_timer_sync(&dd->rcverr_timer);
+	dd->rcverr_timer.data = 0;
+}
+
 static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	char buf[96];
@@ -3741,6 +3781,8 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 }
 
+#define OPA_LDR_FMCONFIG_OFFSET 16
+#define OPA_LDR_PORTRCV_OFFSET 0
 /* TODO */
 static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
@@ -3807,8 +3849,19 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 				"flit";
 			break;
 		case 8:
-			extra = "UnsupportedVL: Recevied VL that was not "
-				"configured";
+			extra = "UnsupportedVLMarker: Received VL Marker for "
+			  " unconfigured or disabled VL";
+			if (!do_bounce && ppd->port_error_action &
+			    OPA_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER) {
+				do_bounce = 1;
+				/*
+				 * lcl_reason cannot be derived from info
+				 * for this error
+				 */
+				lcl_reason =
+				  OPA_LINKDOWN_REASON_UNSUPPORTED_VL_MARKER;
+			}
+
 			break;
 		default:
 			reason_valid = 0;
@@ -3817,12 +3870,12 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			break;
 		}
 
-		/*
-		 * TODO check that 'info' is a bounceable reason according to
-		 * PortErrorAction before setting lcl_reason.
-		 */
-		if (reason_valid)
-			lcl_reason = info + OPA_LINKDOWN_REASON_BAD_HEAD_DIST;
+		if (reason_valid && !do_bounce) {
+			do_bounce = ppd->port_error_action &
+			(1 << (OPA_LDR_FMCONFIG_OFFSET + info));
+			lcl_reason = (lcl_reason ? lcl_reason :
+			  info + OPA_LINKDOWN_REASON_BAD_HEAD_DIST);
+		}
 
 		/* just report this */
 		dd_dev_info(dd, "DCC Error: fmconfig error: %s\n",
@@ -3892,13 +3945,12 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			break;
 		}
 
-		/*
-		 * TODO check that 'info' is a bounceable reason according to
-		 * PortErrorAction before setting lcl_reason.
-		 */
-		if (reason_valid && lcl_reason == 0)
+		if (reason_valid && !do_bounce) {
+			do_bounce = ppd->port_error_action &
+			  (1 << ((info & 0xf) + OPA_LDR_PORTRCV_OFFSET));
 			lcl_reason =
 			  (info & 0xf) + OPA_LINKDOWN_REASON_RCV_ERROR_0;
+		}
 
 		/* just report this */
 		dd_dev_info(dd, "DCC Error: PortRcv error: %s\n",
@@ -3908,14 +3960,6 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 		/* strip so we don't see in the generic unhandled */
 		reg &= ~DCC_ERR_FLG_RCVPORT_ERR_SMASK;
-	}
-
-	if (lcl_reason == 0)
-		lcl_reason = OPA_LINKDOWN_REASON_UNKNOWN;
-
-	if (do_bounce) {
-		set_link_down_reason(ppd, lcl_reason, 0, lcl_reason);
-		/* TODO need to implement bounce due to PortErrorAction .*/
 	}
 
 	if (reg & DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_UC_SMASK) {
@@ -3932,12 +3976,20 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	if (reg)
 		dd_dev_info(dd, "DCC Error: %s (unhandled)\n",
 			dcc_err_string(buf, sizeof(buf), reg));
+
+	if (lcl_reason == 0)
+		lcl_reason = OPA_LINKDOWN_REASON_UNKNOWN;
+
+	if (do_bounce) {
+		dd_dev_info(dd, "%s: PortErrorAction bounce\n", __func__);
+		set_link_down_reason(ppd, lcl_reason, 0, lcl_reason);
+		schedule_link_restart(ppd);
+	}
 }
 
 /* TODO */
 static void handle_lcb_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	/* TODO set linkdown reason here. */
 	dd_dev_info(dd, "LCB Error: 0x%llx (unhandled)\n", reg);
 }
 
@@ -5728,6 +5780,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		if (ret)
 			break;
 
+		ppd->port_error_action = 0;
 		/* set link state first so LCB access starts bouncing off */
 		ppd->host_link_state = HLS_DN_POLL;
 		wait_lcb_access_done(dd);
@@ -9653,6 +9706,7 @@ void assign_link_credits(struct hfi_devdata *dd)
 static void cleanup(struct hfi_devdata *dd)
 {
 	free_cntrs(dd);
+	free_rcverr(dd);
 	clean_up_interrupts(dd);
 }
 
@@ -10000,12 +10054,18 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_clear_intr;
 
-	ret = eprom_init(dd);
+	ret = init_rcverr(dd);
 	if (ret)
 		goto bail_free_cntrs;
 
+	ret = eprom_init(dd);
+	if (ret)
+		goto bail_free_rcverr;
+
 	goto bail;
 
+bail_free_rcverr:
+	free_rcverr(dd);
 bail_free_cntrs:
 	free_cntrs(dd);
 bail_clear_intr:
