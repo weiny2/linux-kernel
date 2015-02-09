@@ -176,6 +176,6 @@ struct btt {
 	atomic_t last_lane;
 	int init_state;
 	int num_arenas;
-	int num_lanes;
+	u32 num_lanes;
 };
 #endif
