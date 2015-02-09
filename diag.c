@@ -466,7 +466,7 @@ static int read_umem64(struct hfi_devdata *dd, void __user *uaddr,
 	int ret;
 
 	reg_addr = get_ioaddr(dd, regoffs, &limit);
-	if (reg_addr == NULL || limit == 0 || !(dd->flags & QIB_PRESENT)) {
+	if (reg_addr == NULL || limit == 0 || !(dd->flags & HFI_PRESENT)) {
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -509,7 +509,7 @@ static int write_umem64(struct hfi_devdata *dd, u32 regoffs,
 	int ret;
 
 	reg_addr = get_ioaddr(dd, regoffs, &limit);
-	if (reg_addr == NULL || limit == 0 || !(dd->flags & QIB_PRESENT)) {
+	if (reg_addr == NULL || limit == 0 || !(dd->flags & HFI_PRESENT)) {
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -546,7 +546,7 @@ static int diag_open(struct inode *in, struct file *fp)
 
 	dd = qib_lookup(unit);
 
-	if (dd == NULL || !(dd->flags & QIB_PRESENT) ||
+	if (dd == NULL || !(dd->flags & HFI_PRESENT) ||
 	    !dd->kregbase) {
 		ret = -ENODEV;
 		goto bail;
@@ -617,11 +617,11 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	struct diagpkt_wait *wait = NULL;
 
 	dd = qib_lookup(dp->unit);
-	if (!dd || !(dd->flags & QIB_PRESENT) || !dd->kregbase) {
+	if (!dd || !(dd->flags & HFI_PRESENT) || !dd->kregbase) {
 		ret = -ENODEV;
 		goto bail;
 	}
-	if (!(dd->flags & QIB_INITTED)) {
+	if (!(dd->flags & HFI_INITTED)) {
 		/* no hardware, freeze, etc. */
 		ret = -ENODEV;
 		goto bail;

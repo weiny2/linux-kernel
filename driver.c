@@ -271,7 +271,7 @@ int qib_count_active_units(void)
 
 	spin_lock_irqsave(&qib_devs_lock, flags);
 	list_for_each_entry(dd, &qib_dev_list, list) {
-		if (!(dd->flags & QIB_PRESENT) || !dd->kregbase)
+		if (!(dd->flags & HFI_PRESENT) || !dd->kregbase)
 			continue;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
@@ -302,7 +302,7 @@ int qib_count_units(int *npresentp, int *nupp)
 
 	list_for_each_entry(dd, &qib_dev_list, list) {
 		nunits++;
-		if ((dd->flags & QIB_PRESENT) && dd->kregbase)
+		if ((dd->flags & HFI_PRESENT) && dd->kregbase)
 			npresent++;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
@@ -876,7 +876,7 @@ static void qib_run_led_override(unsigned long opaque)
 	int timeoff;
 	int ph_idx;
 
-	if (!(dd->flags & QIB_INITTED))
+	if (!(dd->flags & HFI_INITTED))
 		return;
 
 	ph_idx = ppd->led_override_phase++ & 1;
@@ -897,7 +897,7 @@ void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
 	struct hfi_devdata *dd = ppd->dd;
 	int timeoff, freq;
 
-	if (!(dd->flags & QIB_INITTED))
+	if (!(dd->flags & HFI_INITTED))
 		return;
 
 	/* First check if we are blinking. If not, use 1HZ polling */
@@ -958,7 +958,7 @@ int qib_reset_device(int unit)
 
 	dd_dev_info(dd, "Reset on unit %u requested\n", unit);
 
-	if (!dd->kregbase || !(dd->flags & QIB_PRESENT)) {
+	if (!dd->kregbase || !(dd->flags & HFI_PRESENT)) {
 		dd_dev_info(dd,
 			"Invalid unit number %u or not initialized or not present\n",
 			unit);
@@ -989,7 +989,7 @@ int qib_reset_device(int unit)
 		ppd->led_override = LED_OVER_BOTH_OFF;
 		dd->f_setextled(ppd, 0);
 	}
-	if (dd->flags & QIB_HAS_SEND_DMA)
+	if (dd->flags & HFI_HAS_SEND_DMA)
 		sdma_exit(dd);
 
 	ret = dd->f_reset(dd);

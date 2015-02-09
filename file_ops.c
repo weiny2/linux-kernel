@@ -879,7 +879,7 @@ static int find_shared_ctxt(struct file *fp,
 		struct hfi_devdata *dd = qib_lookup(ndev);
 
 		/* device portion of usable() */
-		if (!(dd && (dd->flags & QIB_PRESENT) && dd->kregbase))
+		if (!(dd && (dd->flags & HFI_PRESENT) && dd->kregbase))
 			continue;
 		for (i = dd->first_user_ctxt; i < dd->num_rcv_contexts; i++) {
 			struct qib_ctxtdata *uctxt = dd->rcd[i];

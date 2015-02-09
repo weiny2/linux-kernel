@@ -949,7 +949,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 			*ppd->statusp &= ~(HFI_STATUS_IB_CONF |
 					   HFI_STATUS_IB_READY);
 	}
-	dd->flags &= ~QIB_INITTED;
+	dd->flags &= ~HFI_INITTED;
 
 	/* mask interrupts, but not errors */
 	dd->f_set_intr_state(dd, 0);
@@ -1299,16 +1299,16 @@ bail:
  */
 void qib_disable_after_error(struct hfi_devdata *dd)
 {
-	if (dd->flags & QIB_INITTED) {
+	if (dd->flags & HFI_INITTED) {
 		u32 pidx;
 
-		dd->flags &= ~QIB_INITTED;
+		dd->flags &= ~HFI_INITTED;
 		if (dd->pport)
 			for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 				struct qib_pportdata *ppd;
 
 				ppd = dd->pport + pidx;
-				if (dd->flags & QIB_PRESENT) {
+				if (dd->flags & HFI_PRESENT) {
 					set_link_state(ppd, HLS_DN_DISABLE);
 					dd->f_setextled(ppd, 0);
 				}
@@ -1644,7 +1644,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * to determine cause of problem.
 	 */
 	if (!initfail && !ret)
-		dd->flags |= QIB_INITTED;
+		dd->flags |= HFI_INITTED;
 
 	j = hfi_device_create(dd);
 	if (j)

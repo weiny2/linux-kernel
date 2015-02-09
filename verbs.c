@@ -1361,7 +1361,7 @@ int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	 * worrying about just how we got there.
 	 */
 	if (qp->ibqp.qp_type == IB_QPT_SMI
-		|| !(dd->flags & QIB_HAS_SEND_DMA))
+		|| !(dd->flags & HFI_HAS_SEND_DMA))
 		pio = 1;
 
 	ret = egress_pkey_check(dd->pport, &ahdr->ibh, qp);
@@ -1413,7 +1413,7 @@ int qib_snapshot_counters(struct qib_pportdata *ppd, u64 *swords,
 	int ret;
 	struct hfi_devdata *dd = ppd->dd;
 
-	if (!(dd->flags & QIB_PRESENT)) {
+	if (!(dd->flags & HFI_PRESENT)) {
 		/* no hardware, freeze, etc. */
 		ret = -EINVAL;
 		goto bail;
@@ -1442,7 +1442,7 @@ int qib_get_counters(struct qib_pportdata *ppd,
 {
 	int ret;
 
-	if (!(ppd->dd->flags & QIB_PRESENT)) {
+	if (!(ppd->dd->flags & HFI_PRESENT)) {
 		/* no hardware, freeze, etc. */
 		ret = -EINVAL;
 		goto bail;
@@ -2001,13 +2001,9 @@ static void init_ibport(struct qib_pportdata *ppd)
 	/* Set the prefix to the default value (see ch. 4.1.1) */
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->sm_lid = be16_to_cpu(0);
-	ibp->port_cap_flags = IB_PORT_SYS_IMAGE_GUID_SUP |
-		IB_PORT_CLIENT_REG_SUP | IB_PORT_SL_MAP_SUP |
-		IB_PORT_TRAP_SUP | IB_PORT_AUTO_MIGR_SUP |
-		IB_PORT_DR_NOTICE_SUP | IB_PORT_CAP_MASK_NOTICE_SUP |
-		IB_PORT_LED_INFO_SUP | IB_PORT_OTHER_LOCAL_CHANGES_SUP;
-	if (ppd->dd->flags & QIB_HAS_LINK_LATENCY)
-		ibp->port_cap_flags |= IB_PORT_LINK_LATENCY_SUP;
+	/* Below should only set bits defined in STL PortInfo.CapabilityMask */
+	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
+		IB_PORT_CAP_MASK_NOTICE_SUP;
 	ibp->pma_counter_select[0] = IB_PMA_PORT_XMIT_DATA;
 	ibp->pma_counter_select[1] = IB_PMA_PORT_RCV_DATA;
 	ibp->pma_counter_select[2] = IB_PMA_PORT_XMIT_PKTS;

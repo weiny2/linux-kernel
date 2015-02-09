@@ -323,7 +323,7 @@ static inline void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
 {
 	u64 reg;
 
-	if (!(sde->dd->flags & QIB_HAS_SDMA_TIMEOUT))
+	if (!(sde->dd->flags & HFI_HAS_SDMA_TIMEOUT))
 		return;
 	reg = cnt;
 	reg &= WFR_SEND_DMA_DESC_CNT_CNT_MASK;
@@ -849,7 +849,7 @@ int sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 	u8 lvl_engines[OPA_MAX_VLS];
 	struct sdma_vl_map *oldmap, *newmap;
 
-	if (!(dd->flags & QIB_HAS_SEND_DMA))
+	if (!(dd->flags & HFI_HAS_SEND_DMA))
 		return 0;
 	BUG_ON(num_vls > hfi_num_vls(ppd->vls_supported));
 	if (!vl_engines) {
@@ -1146,8 +1146,8 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		sde->head_phys = dd->sdma_heads_phys + phys_offset;
 		init_sdma_regs(sde, per_sdma_credits, idle_cnt);
 	}
-	dd->flags |= QIB_HAS_SEND_DMA;
-	dd->flags |= idle_cnt ? QIB_HAS_SDMA_TIMEOUT : 0;
+	dd->flags |= HFI_HAS_SEND_DMA;
+	dd->flags |= idle_cnt ? HFI_HAS_SDMA_TIMEOUT : 0;
 	dd->num_sdma = num_engines;
 	if (sdma_map_init(dd, port, hfi_num_vls(ppd->vls_operational), NULL))
 		goto bail;
@@ -1332,7 +1332,7 @@ static inline u16 sdma_gethead(struct sdma_engine *sde)
 
 retry:
 	use_dmahead = HFI_CAP_IS_KSET(USE_SDMA_HEAD) && __sdma_running(sde)
-			&& (dd->flags & QIB_HAS_SDMA_TIMEOUT);
+			&& (dd->flags & HFI_HAS_SDMA_TIMEOUT);
 	hwhead = use_dmahead ?
 		(u16) le64_to_cpu(*sde->head_dma) :
 		(u16) read_sde_csr(sde, WFR_SEND_DMA_HEAD);

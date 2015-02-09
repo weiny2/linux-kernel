@@ -186,7 +186,7 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 		return -ENOMEM;
 	}
 
-	dd->flags |= QIB_PRESENT;	/* now register routines work */
+	dd->flags |= HFI_PRESENT;	/* now register routines work */
 
 	dd->kregend = dd->kregbase + WFR_TXE_PIO_SEND;
 	dd->physaddr = addr;        /* used for io_remap, etc. */
@@ -229,7 +229,7 @@ void qib_pcie_ddcleanup(struct hfi_devdata *dd)
 {
 	u64 __iomem *base = (void __iomem *) dd->kregbase;
 
-	dd->flags &= ~QIB_PRESENT;
+	dd->flags &= ~HFI_PRESENT;
 	dd->kregbase = NULL;
 	iounmap(base);
 	if (dd->rcvarray_wc)
@@ -773,7 +773,7 @@ qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 		if (dd) {
 			dd_dev_info(dd, "State Permanent Failure, disabling\n");
 			/* no more register accesses! */
-			dd->flags &= ~QIB_PRESENT;
+			dd->flags &= ~HFI_PRESENT;
 			qib_disable_after_error(dd);
 		}
 		 /* else early, or other problem */

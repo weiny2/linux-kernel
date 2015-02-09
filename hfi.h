@@ -1413,24 +1413,15 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 }
 
 /*
- * values for dd->flags (_device_ related flags) and
+ * values for dd->flags (_device_ related flags)
  */
-#define QIB_HAS_LINK_LATENCY  0x1 /* supports link latency (IB 1.2) */
-#define QIB_INITTED           0x2 /* chip and driver up and initted */
-#define QIB_DOING_RESET       0x4  /* in the middle of doing chip reset */
-#define QIB_PRESENT           0x8  /* chip accesses can be done */
-#define HFI_FROZEN	      0x10 /* chip in SPC freeze */
-#define QIB_HAS_THRESH_UPDATE 0x40
-#define QIB_HAS_SDMA_TIMEOUT  0x80
-/* unused		      0x100 */
-/* unused                     0x200 */
-#define QIB_HAS_INTX          0x800 /* Supports INTx interrupts */
-#define QIB_HAS_SEND_DMA      0x1000 /* Supports Send DMA */
-#define QIB_HAS_VLSUPP        0x2000 /* Supports multiple VLs; PBC different */
-#define QIB_BADINTR           0x8000 /* severe interrupt problems */
-#define QIB_DCA_ENABLED       0x10000 /* Direct Cache Access enabled */
-#define QIB_HAS_QSFP          0x20000 /* device (card instance) has QSFP */
-#define ICHECK_WORKER_INITED  0x40000 /* initialized interrupt_check_worker */
+#define HFI_INITTED           0x1    /* chip and driver up and initted */
+#define HFI_PRESENT           0x2    /* chip accesses can be done */
+#define HFI_FROZEN            0x4    /* chip in SPC freeze */
+#define HFI_HAS_SDMA_TIMEOUT  0x8
+#define HFI_HAS_SEND_DMA      0x10   /* Supports Send DMA */
+#define HFI_BADINTR           0x20   /* severe interrupt problems */
+#define ICHECK_WORKER_INITED  0x40   /* initialized interrupt_check_worker */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
 #define QIB_PBC_LENGTH_MASK                     ((1 << 11) - 1)

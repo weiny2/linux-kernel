@@ -1412,7 +1412,7 @@ static void qib_rc_rcv_resp(struct qib_ibport *ibp,
 	u32 aeth;
 	u64 val;
 
-	if ((ppd->dd->flags & QIB_HAS_SEND_DMA) &&
+	if ((ppd->dd->flags & HFI_HAS_SEND_DMA) &&
 			opcode != OP(RDMA_READ_RESPONSE_MIDDLE)) {
 		/*
 		 * If ACK'd PSN on SDMA busy list try to make progress to

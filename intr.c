@@ -82,7 +82,7 @@ static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
 	 * has successfully registered with IB core.
 	 * TODO: Make a separate flag for registering with IB?
 	 */
-	if (!(dd->flags & QIB_INITTED))
+	if (!(dd->flags & HFI_INITTED))
 		return;
 	event.device = &dd->verbs_dev.ibdev;
 	event.element.port_num = ppd->port;
@@ -228,8 +228,8 @@ void qib_bad_intrstatus(struct hfi_devdata *dd)
 		if (allbits == 3) {
 			dd_dev_err(dd,
 				"2nd bad interrupt status, unregistering interrupts\n");
-			dd->flags |= QIB_BADINTR;
-			dd->flags &= ~QIB_INITTED;
+			dd->flags |= HFI_BADINTR;
+			dd->flags &= ~HFI_INITTED;
 			dd->f_free_irq(dd);
 		}
 	}

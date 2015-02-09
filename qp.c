@@ -1488,7 +1488,7 @@ struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5)
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct sdma_engine *sde;
 
-	if (!(dd->flags & QIB_HAS_SEND_DMA))
+	if (!(dd->flags & HFI_HAS_SEND_DMA))
 		return NULL;
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_UC:

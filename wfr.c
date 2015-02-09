@@ -1369,7 +1369,7 @@ u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
 
-	if (dd->flags & QIB_PRESENT) {
+	if (dd->flags & HFI_PRESENT) {
 		val = readq((void *)dd->kregbase + offset);
 		return le64_to_cpu(val);
 	}
@@ -1378,7 +1378,7 @@ u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
-	if (dd->flags & QIB_PRESENT)
+	if (dd->flags & HFI_PRESENT)
 		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
 }
 
@@ -5278,7 +5278,7 @@ static void put_tid(struct hfi_devdata *dd, u32 index,
 	void __iomem *base = (dd->rcvarray_wc ? dd->rcvarray_wc :
 			      (dd->kregbase + WFR_RCV_ARRAY));
 
-	if (!(dd->flags & QIB_PRESENT))
+	if (!(dd->flags & HFI_PRESENT))
 		goto done;
 
 	if (type == PT_INVALID) {
@@ -7939,8 +7939,8 @@ static void set_intr_state(struct hfi_devdata *dd, u32 enable)
 	 * In WFR, the mask needs to be 1 to allow interrupts.
 	 */
 	if (enable) {
-		/* TODO: QIB_BADINTR check needed? */
-		if (dd->flags & QIB_BADINTR)
+		/* TODO: HFI_BADINTR check needed? */
+		if (dd->flags & HFI_BADINTR)
 			return;
 		/* enable all interrupts */
 		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
