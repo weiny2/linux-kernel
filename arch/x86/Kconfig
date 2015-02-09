@@ -1395,6 +1395,17 @@ config X86_RESERVE_LOW
 
 	  Leave this to the default value of 64 if you are unsure.
 
+config E820_PMEM
+	int "E820 Memory Type for Peristent Memory"
+	default 7
+	---help---
+	  Override the memory-type that the kernel should interpret as
+	  persistent memory.  ACPI 6.0 defines type-7 as the standard.
+	  Prior to that ratification some custom BIOS implementations
+	  used type-12 to represent persistent memory.
+
+	  Leave the default of 7 if you are unsure.
+
 config MATH_EMULATION
 	bool
 	prompt "Math emulation" if X86_32

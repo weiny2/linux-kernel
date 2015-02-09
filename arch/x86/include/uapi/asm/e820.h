@@ -37,6 +37,7 @@
 #define E820_ACPI	3
 #define E820_NVS	4
 #define E820_UNUSABLE	5
+#define E820_PMEM	CONFIG_E820_PMEM
 
 
 /*

@@ -137,6 +137,7 @@ static void __init e820_print_type(u32 type)
 	case E820_RESERVED_KERN:
 		printk(KERN_CONT "usable");
 		break;
+	case E820_PMEM:
 	case E820_RESERVED:
 		printk(KERN_CONT "reserved");
 		break;
@@ -918,6 +919,7 @@ static inline const char *e820_type_to_string(int e820_type)
 	case E820_ACPI:	return "ACPI Tables";
 	case E820_NVS:	return "ACPI Non-volatile Storage";
 	case E820_UNUSABLE:	return "Unusable memory";
+	case E820_PMEM: return "Persistent memory";
 	default:	return "reserved";
 	}
 }
@@ -951,7 +953,9 @@ void __init e820_reserve_resources(void)
 		 * pci device BAR resource and insert them later in
 		 * pcibios_resource_survey()
 		 */
-		if (e820.map[i].type != E820_RESERVED || res->start < (1ULL<<20)) {
+		if ((e820.map[i].type != E820_RESERVED
+				&& e820.map[i].type != E820_PMEM)
+				|| res->start < (1ULL<<20)) {
 			res->flags |= IORESOURCE_BUSY;
 			insert_resource(&iomem_resource, res);
 		}
