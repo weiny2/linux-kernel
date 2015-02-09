@@ -506,6 +506,14 @@ const char *nd_bus_provider(struct nd_bus *nd_bus)
 		return "unknown";
 }
 
+const char *nd_blk_bus_provider(struct device *dev)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+
+	return nd_bus_provider(nd_bus);
+}
+EXPORT_SYMBOL(nd_blk_bus_provider);
+
 static void nd_mem_assign_dcr(struct nd_bus *nd_bus, struct nd_mem *nd_mem,
 		struct nd_dcr *nd_dcr)
 {

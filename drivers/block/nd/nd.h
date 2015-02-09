@@ -211,4 +211,5 @@ void nd_bus_lock(struct device *dev);
 void nd_bus_unlock(struct device *dev);
 bool is_nd_bus_locked(struct device *dev);
 int nd_label_reserve_dpa(struct nd_dimm *nd_dimm);
+const char *nd_blk_bus_provider(struct device *dev);
 #endif /* __ND_H__ */

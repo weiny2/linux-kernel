@@ -19,6 +19,8 @@
 #include <linux/moduleparam.h>
 #include <linux/nd.h>
 #include <linux/sizes.h>
+#include <linux/string.h>
+#include "nd.h"
 
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 
@@ -234,6 +236,20 @@ static int nd_blk_init_locks(struct nd_blk_dimm *dimm)
 	return 0;
 }
 
+static bool is_acpi_blk(struct device *dev)
+{
+	if (strcmp(nd_blk_bus_provider(dev), "OLD_ACPI.NFIT") == 0)
+		return true;
+	else if (strcmp(nd_blk_bus_provider(dev), "ACPI.NFIT") == 0)
+		return true;
+
+	/*
+	 * For now the temporary / hard-coded dimm_singleton only
+	 * applies to ACPI-provided NFITs
+	 */
+	return false;
+}
+
 static int nd_blk_probe(struct device *dev)
 {
 	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
@@ -251,6 +267,9 @@ static int nd_blk_probe(struct device *dev)
 	if (disk_size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid ||
 			!nsblk->lbasize)
 		return -ENXIO;
+
+	if (!is_acpi_blk(dev))
+		return 0;
 
 	if (!dimm) {
 		pr_err("%s: ERROR - null dimm!\n", __func__);
@@ -318,6 +337,9 @@ static int nd_blk_remove(struct device *dev)
 	struct nd_namespace_io *nsio = to_nd_namespace_io(dev); */
 
 	struct nd_blk_device *blk_dev = dev_get_drvdata(dev);
+
+	if (!is_acpi_blk(dev))
+		return 0;
 
 	del_gendisk(blk_dev->disk);
 	put_disk(blk_dev->disk);
