@@ -34,9 +34,9 @@
 #if defined(CONFIG_X86)
 
 /*
- * clwb and clflushopt are unordered instructions which need fencing with
- * mfence or sfence to avoid ordering issues.  For drm_clflush_page this
- * fencing happens in the caller.
+ * clflushopt is an unordered instruction which needs fencing with mfence or
+ * sfence to avoid ordering issues.  For drm_clflush_page this fencing happens
+ * in the caller.
  */
 static void
 drm_clflush_page(struct page *page)
@@ -50,7 +50,7 @@ drm_clflush_page(struct page *page)
 
 	page_virtual = kmap_atomic(page);
 	for (i = 0; i < PAGE_SIZE; i += size)
-		clwb(page_virtual + i);
+		clflushopt(page_virtual + i);
 	kunmap_atomic(page_virtual);
 }
 
@@ -138,8 +138,8 @@ drm_clflush_virt_range(void *addr, unsigned long length)
 		void *end = addr + length;
 		mb();
 		for (; addr < end; addr += boot_cpu_data.x86_clflush_size)
-			clwb(addr);
-		clwb(end - 1);
+			clflushopt(addr);
+		clflushopt(end - 1);
 		mb();
 		return;
 	}
