@@ -7,12 +7,13 @@
 
 . /etc/rc.d/init.d/functions
 
+opa2_modules="opa2_ib opa2_user opa2_hfi opa_core"
+
 start ()
 {
     local RC=0
 
-    modprobe opa2_hfi
-    modprobe opa2_user
+    modprobe -a $opa2_modules
 
     touch /var/lock/subsys/opa2
     [ $RC -eq 0 ] && echo_success || echo_failure
@@ -24,9 +25,7 @@ stop ()
 {
     local RC=0
 
-    modprobe -r opa2_user
-    modprobe -r opa2_hfi
-    modprobe -r opa_core
+    modprobe -r $opa2_modules
 
     rm -f /var/lock/subsys/opa2
     [ $RC -eq 0 ] && echo_success || echo_failure
