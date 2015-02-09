@@ -2190,8 +2190,8 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	ibdev->mmap = qib_mmap;
 	ibdev->dma_ops = &qib_dma_mapping_ops;
 
-	snprintf(ibdev->node_desc, sizeof(ibdev->node_desc),
-		 "Intel Omni-Path HFI %s", init_utsname()->nodename);
+	strncpy(ibdev->node_desc, init_utsname()->nodename,
+		sizeof(ibdev->node_desc));
 
 	ret = ib_register_device(ibdev, qib_create_port_files);
 	if (ret)
