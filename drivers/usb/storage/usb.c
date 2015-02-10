@@ -895,6 +895,12 @@ static void usb_stor_scan_dwork(struct work_struct *work)
 	if (us->protocol == USB_PR_BULK && !(us->fflags & US_FL_SINGLE_LUN)) {
 		mutex_lock(&us->dev_mutex);
 		us->max_lun = usb_stor_Bulk_max_lun(us);
+		/*
+		 * Allow proper scanning of devices that present more than 8 LUNs
+		 * While not affecting other devices that may need the previous behavior
+		 */
+		if (us->max_lun >= 8)
+			us_to_host(us)->max_lun = us->max_lun+1;
 		mutex_unlock(&us->dev_mutex);
 	}
 	scsi_scan_host(us_to_host(us));
