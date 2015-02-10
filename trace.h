@@ -226,17 +226,20 @@ DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
 		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
 		__field(u32, qpn)
 		__field(u32, flags)
+		__field(u32, s_flags)
 	),
 	TP_fast_assign(
 		DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
 		__entry->flags = flags;
 		__entry->qpn = qp->ibqp.qp_num;
+		__entry->s_flags = qp->s_flags;
 	),
 	TP_printk(
-		"[%s] qpn 0x%x flags 0x%x",
+		"[%s] qpn 0x%x flags 0x%x s_flags 0x%x",
 		__get_str(dev),
 		__entry->qpn,
-		__entry->flags
+		__entry->flags,
+		__entry->s_flags
 	)
 );
 
@@ -787,6 +790,78 @@ DEFINE_EVENT(hfi_sdma_ahg_ad, hfi_ahg_deallocate,
 	),
 	TP_ARGS(sde, aidx));
 
+TRACE_EVENT(hfi_sdma_progress,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u16 hwhead,
+		u16 swhead,
+		struct sdma_txreq *txp
+	),
+	TP_ARGS(sde, hwhead, swhead, txp),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sde->dd)
+		__field(u16, hwhead)
+		__field(u16, swhead)
+		__field(u16, txnext)
+		__field(u8, idx)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sde->dd);
+		__entry->hwhead = hwhead;
+		__entry->swhead = swhead;
+		__entry->txnext = txp ? txp->next_descq_idx : ~0;
+		__entry->idx = sde->this_idx;
+	),
+	TP_printk(
+		"[%s] SDE(%u) hwhead %u swhead %u next_descq_idx %u",
+		__get_str(dev),
+		__entry->idx,
+		__entry->hwhead,
+		__entry->swhead,
+		__entry->txnext
+	)
+);
+
+DECLARE_EVENT_CLASS(hfi_sdma_sn,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u64 sn
+	),
+	TP_ARGS(sde, sn),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sde->dd)
+		__field(u64, sn)
+		__field(u8, idx)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sde->dd);
+		__entry->sn = sn;
+		__entry->idx = sde->this_idx;
+	),
+	TP_printk(
+		"[%s] SDE(%u) sn %llu",
+		__get_str(dev),
+		__entry->idx,
+		__entry->sn
+	)
+);
+
+DEFINE_EVENT(hfi_sdma_sn, hfi_sdma_out_sn,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u64 sn
+	),
+	TP_ARGS(sde, sn)
+);
+
+DEFINE_EVENT(hfi_sdma_sn, hfi_sdma_in_sn,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u64 sn
+	),
+	TP_ARGS(sde, sn)
+);
+
 #define USDMA_HDR_FORMAT \
 	"[%s:%u:%u:%u] PBC=(%#x %#x) LRH=(%#x %#x) BTH=(%#x %#x %#x) KDETH=(%#x %#x %#x %#x %#x %#x %#x %#x %#x)"
 
@@ -943,6 +1018,68 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 		    )
 	);
 
+TRACE_EVENT(hfi_sdma_state,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		const char *curstate,
+		const char *curevent
+	),
+	TP_ARGS(sde, curstate, curevent),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sde->dd)
+		__string(state, curstate)
+		__string(event, curevent)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sde->dd);
+		__assign_str(state, curstate);
+		__assign_str(event, curevent);
+	),
+	TP_printk("[%s] state %s event %s",
+		__get_str(dev),
+		__get_str(event),
+		__get_str(state)
+	)
+);
+
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi_rc
+
+DECLARE_EVENT_CLASS(hfi_sdma_rc,
+	TP_PROTO(struct qib_qp *qp, u32 psn),
+	TP_ARGS(qp, psn),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
+		__field(u32, qpn)
+		__field(u32, flags)
+		__field(u32, psn)
+		__field(u32, sending_psn)
+		__field(u32, sending_hpsn)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
+		__entry->qpn = qp->ibqp.qp_num;
+		__entry->flags = qp->s_flags;
+		__entry->psn = psn;
+		__entry->sending_psn = qp->s_sending_psn;
+		__entry->sending_hpsn = qp->s_sending_hpsn;
+	),
+	TP_printk(
+		"[%s] qpn 0x%x flags 0x%x psn 0x%x sending_psn 0x%x sending_hpsn 0x%x",
+		__get_str(dev),
+		__entry->qpn,
+		__entry->flags,
+		__entry->psn,
+		__entry->sending_psn,
+		__entry->sending_psn
+	)
+);
+
+DEFINE_EVENT(hfi_sdma_rc, hfi_rc_sendcomplete,
+	TP_PROTO(struct qib_qp *qp, u32 psn),
+	TP_ARGS(qp, psn)
+);
+
 /*
  * Note:
  * This produces a REALLY ugly trace in the console output when the string is
@@ -963,9 +1100,9 @@ DECLARE_EVENT_CLASS(hfi_trace_template,
 	),
 	TP_fast_assign(
 		__assign_str(function, function);
-			     WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
-			     MAX_MSG_LEN, vaf->fmt,
-			     *vaf->va) >= MAX_MSG_LEN);
+		WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
+		     MAX_MSG_LEN, vaf->fmt,
+		     *vaf->va) >= MAX_MSG_LEN);
 	),
 	TP_printk("(%s) %s",
 		  __get_str(function),

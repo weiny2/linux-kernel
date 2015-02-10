@@ -1032,6 +1032,7 @@ void qib_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr)
 	 * If we were waiting for sends to complete before resending,
 	 * and they are now complete, restart sending.
 	 */
+	trace_hfi_rc_sendcomplete(qp, psn);
 	if (qp->s_flags & QIB_S_WAIT_PSN &&
 	    qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
 		qp->s_flags &= ~QIB_S_WAIT_PSN;

@@ -338,6 +338,9 @@ struct sdma_txreq {
 	struct iowait *wait;
 	/* private: */
 	callback_t                  complete;
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+	u64 sn;
+#endif
 	/* private: - used in coalesce/pad processing */
 	u16                         packet_len;
 	/* private: - downcounted to trigger last */
@@ -382,12 +385,14 @@ struct sdma_engine {
 	/* read mostly */
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
+	/* private: */
+	void __iomem *tail_csr;
 	u64 imask;			/* clear interrupt mask */
 	u64 idle_mask;
 	/* private: */
 	struct workqueue_struct *wq;
 	/* private: */
-	volatile __le64      *head_dma;
+	volatile __le64      *head_dma; /* DMA'ed by chip */
 	/* private: */
 	dma_addr_t            head_phys;
 	/* private: */
@@ -395,13 +400,13 @@ struct sdma_engine {
 	/* private: */
 	struct hw_sdma_desc *descq;
 	/* private: */
+	struct sdma_txreq **tx_ring;
+	/* private: */
 	dma_addr_t            descq_phys;
 	/* private */
 	u32 sdma_mask;
 	/* private */
 	struct sdma_state state;
-	/* private: */
-	u16 descq_cnt;
 	/* private: */
 	u8 sdma_shift;
 	/* private: */
@@ -410,27 +415,40 @@ struct sdma_engine {
 	spinlock_t senddmactrl_lock;
 	/* private: */
 	u64 p_senddmactrl;		/* shadow per-engine SendDmaCtrl */
+
+	/* read/write using tail_lock */
+	spinlock_t            tail_lock ____cacheline_aligned_in_smp;
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 	/* private: */
-	void __iomem *tail_csr;
-	/* private: */
-	u8                    generation;
-	/* read/write using lock */
-	/* private: */
-	spinlock_t            lock ____cacheline_aligned_in_smp;
-	/* private: */
-	struct list_head      activelist;
-	/* private: */
-	u64                   last_status;
+	u64                   tail_sn;
+#endif
 	/* private: */
 	u32                   descq_tail;
 	/* private: */
-	u32                   descq_head;
+	unsigned long         ahg_bits;
 	/* private: */
 	u16                   desc_avail;
 	/* private: */
-	struct list_head      dmawait;
+	u16                   tx_tail;
+	/* private: */
+	u16 descq_cnt;
 
-	unsigned long         ahg_bits;
+	/* read/write using head_lock */
+	/* private: */
+	spinlock_t            head_lock ____cacheline_aligned_in_smp;
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+	/* private: */
+	u64                   head_sn;
+#endif
+	/* private: */
+	u32                   descq_head;
+	/* private: */
+	u16                   tx_head;
+	/* private: */
+	u64                   last_status;
+
+	/* private: */
+	struct list_head      dmawait;
 
 	/* JAG SDMA for now, just blindly duplicate */
 	/* private: */
@@ -442,10 +460,13 @@ struct sdma_engine {
 		____cacheline_aligned_in_smp;
 	/* private: */
 	struct work_struct err_halt_worker;
-
 	/* private */
 	struct timer_list     err_progress_check_timer;
 	u32                   progress_check_head;
+	/* private: */
+	struct work_struct flush_worker;
+	/* private: */
+	struct list_head flushlist;
 };
 
 
@@ -472,7 +493,6 @@ static inline int sdma_empty(struct sdma_engine *engine)
 	return engine->descq_tail == engine->descq_head;
 }
 
-/* must be called under lock */
 static inline u16 sdma_descq_freecnt(struct sdma_engine *engine)
 {
 	return engine->descq_cnt -
@@ -480,6 +500,10 @@ static inline u16 sdma_descq_freecnt(struct sdma_engine *engine)
 		 ACCESS_ONCE(engine->descq_head)) - 1;
 }
 
+/*
+ * Either head_lock or tail lock required to see
+ * a steady state.
+ */
 static inline int __sdma_running(struct sdma_engine *engine)
 {
 	return engine->state.current_state == sdma_state_s99_running;
@@ -502,9 +526,9 @@ static inline int sdma_running(struct sdma_engine *engine)
 	unsigned long flags;
 	int ret;
 
-	spin_lock_irqsave(&engine->lock, flags);
+	spin_lock_irqsave(&engine->tail_lock, flags);
 	ret = __sdma_running(engine);
-	spin_unlock_irqrestore(&engine->lock, flags);
+	spin_unlock_irqrestore(&engine->tail_lock, flags);
 	return ret;
 }
 
@@ -1024,9 +1048,6 @@ struct sdma_engine *sdma_select_engine_vl(
 	struct hfi_devdata *dd,
 	u32 selector,
 	u8 vl);
-
-/* deprecated for now */
-int qib_sdma_make_progress(struct sdma_engine *);
 
 void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *);
 
