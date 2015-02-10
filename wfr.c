@@ -3323,7 +3323,7 @@ void handle_verify_cap(struct work_struct *work)
 	 * what's in the link_crc_mask, crc_sizes, and crc_val
 	 * variables. Convert these here.
 	 */
-	ppd->port_ltp_crc_mode = cap_to_port_ltp(partner_supported_crc) << 8;
+	ppd->port_ltp_crc_mode = cap_to_port_ltp(link_crc_mask) << 8;
 		/* supported crc modes */
 	ppd->port_ltp_crc_mode |=
 		cap_to_port_ltp(ppd->port_crc_mode_enabled) << 4;
