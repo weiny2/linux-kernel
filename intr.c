@@ -136,9 +136,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* link widths are not avaiable until the link is fully up */
 		get_linkup_link_widths(ppd);
 
-		/* tell all engines to go running */
-		sdma_link_up(dd);
-
 		ev = IB_EVENT_PORT_ACTIVE;
 
 		/* start a 75msec timer to clear symbol errors */
@@ -158,7 +155,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		reset_link_credits(dd);
 
 		/* tell all engines to go idle */
-		sdma_link_down(dd);
+		sdma_all_idle(dd);
 
 		ev = IB_EVENT_PORT_ERR;
 

@@ -988,13 +988,13 @@ cleanup_descq:
 	return -ENOMEM;
 }
 
-/*
- * sdma_link_up() - called when the link goes up
+/**
+ * sdma_all_running() - called when the link goes up
  * @dd: hfi_devdata
  *
  * This routine moves all engines to the running state.
  */
-void sdma_link_up(struct hfi_devdata *dd)
+void sdma_all_running(struct hfi_devdata *dd)
 {
 	struct sdma_engine *sde;
 	unsigned int i;
@@ -1006,13 +1006,13 @@ void sdma_link_up(struct hfi_devdata *dd)
 	}
 }
 
-/*
- * sdma_link_down() - called when the link goes down
+/**
+ * sdma_all_idle() - called when the link goes down
  * @dd: hfi_devdata
  *
  * This routine moves all engines to the idle state.
  */
-void sdma_link_down(struct hfi_devdata *dd)
+void sdma_all_idle(struct hfi_devdata *dd)
 {
 	struct sdma_engine *sde;
 	unsigned int i;

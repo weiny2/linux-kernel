@@ -452,8 +452,8 @@ struct sdma_engine {
 int sdma_init(struct hfi_devdata *dd, u8 port);
 void sdma_start(struct hfi_devdata *dd);
 void sdma_exit(struct hfi_devdata *dd);
-void sdma_link_up(struct hfi_devdata *dd);
-void sdma_link_down(struct hfi_devdata *dd);
+void sdma_all_running(struct hfi_devdata *dd);
+void sdma_all_idle(struct hfi_devdata *dd);
 void sdma_freeze_notify(struct hfi_devdata *dd);
 void sdma_unfreeze(struct hfi_devdata *dd);
 void sdma_wait(struct hfi_devdata *dd);

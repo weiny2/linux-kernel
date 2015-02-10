@@ -5606,6 +5606,9 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 				"%s: logical state did not change to ACTIVE\n",
 				__func__);
 		}
+
+		/* tell all engines to go running */
+		sdma_all_running(dd);
 		break;
 	case HLS_DN_POLL:
 		/* TODO: only start Polling if we have verified that media is
