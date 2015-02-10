@@ -1713,18 +1713,6 @@ static int qib_dealloc_pd(struct ib_pd *ibpd)
 	return 0;
 }
 
-static int stl_rate_to_mbps(int rate)
-{
-	int ret;
-
-	ret = ib_rate_to_mbps(rate);
-	if (ret > 0)
-		return ret;
-
-	/* TODO - what to do about STL1 2x,3x LinkWidth rates? */
-	return -1;
-}
-
 /*
  * convert ah port,sl to sc
  */
@@ -1756,7 +1744,7 @@ int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	    ah_attr->port_num > ibdev->phys_port_cnt)
 		goto bail;
 	if (ah_attr->static_rate != IB_RATE_PORT_CURRENT &&
-	    stl_rate_to_mbps(ah_attr->static_rate) < 0)
+	    ib_rate_to_mbps(ah_attr->static_rate) < 0)
 		goto bail;
 	if (ah_attr->sl >= OPA_MAX_SLS)
 		goto bail;
