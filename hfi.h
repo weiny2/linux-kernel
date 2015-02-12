@@ -1310,6 +1310,7 @@ bad:
 /* MTU handling */
 
 /* MTU enumeration, 256-4k match IB */
+#define OPA_MTU_0     0
 #define OPA_MTU_256   1
 #define OPA_MTU_512   2
 #define OPA_MTU_1024  3
@@ -1318,7 +1319,7 @@ bad:
 
 u32 lrh_max_header_bytes(struct hfi_devdata *dd);
 int mtu_to_enum(u32 mtu, int default_if_bad);
-u32 enum_to_mtu(int);
+u16 enum_to_mtu(int);
 static inline int valid_ib_mtu(unsigned int mtu)
 {
 	return mtu == 256 || mtu == 512 ||
@@ -1327,7 +1328,7 @@ static inline int valid_ib_mtu(unsigned int mtu)
 }
 static inline int valid_stl_mtu(unsigned int mtu)
 {
-	return valid_ib_mtu(mtu) || mtu == 8192	|| mtu == 10240;
+	return valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240;
 }
 int set_mtu(struct qib_pportdata *);
 

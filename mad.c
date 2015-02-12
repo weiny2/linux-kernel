@@ -1004,7 +1004,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 					  & 0xF);
 		else
 			mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[i/2] & 0xF);
-		if (mtu == -1) {
+		if (mtu == 0xffff) {
 			printk(KERN_WARNING
 			       "SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n", mtu,
 			       (pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
@@ -1012,8 +1012,13 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		}
 		dd->vld[i].mtu = mtu;
 	}
-	/* don't forget VL 15 */
-	dd->vld[15].mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15/2] & 0xF);
+	/* As per STLV1 spec: VL15 must support and be configured
+         * for operation with a 2048 or larger MTU.
+	 */
+	mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15/2] & 0xF);
+	if (mtu < 2048 || mtu == 0xffff)
+		mtu = 2048;
+	dd->vld[15].mtu = mtu;
 	set_mtu(ppd);
 
 	/* Set operational VLs */

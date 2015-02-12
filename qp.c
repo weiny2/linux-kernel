@@ -685,7 +685,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			 * STL MTUs (and, therefore, larger than max
 			 * IB-supported).
 			 */
-			if (enum_to_mtu(attr->path_mtu) != -1) {
+			if (enum_to_mtu(attr->path_mtu) != 0xffff) {
 				mtu = IB_MTU_4096;
 				/* attr->path_mtu is only used below */
 				attr->path_mtu = mtu_to_enum(mtu, IB_MTU_4096);
