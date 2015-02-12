@@ -1604,10 +1604,14 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->max_vl_num = hfi_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
-	/* FIXME (Mitko): I am not sure whether this is the correct thing
-	 * for STL1 but for now IB can't really handle IB-unsupported
-	 * MTUs. The alternative would be to add the STL MTUs to the
-	 * core IB headers. */
+	/* Once we are a "first class" citizen and have added the STL MTUs to
+	 * the core we can advertise the larger MTU enum to the ULPs, for now
+	 * advertise only 4K.
+	 *
+	 * Those applications which are either OPA aware or pass the MTU enum
+	 * from the Path Records to us will get the new 8k MTU.  Those that
+	 * attempt to process the MTU enum may fail in various ways.
+	 */
 	props->max_mtu = mtu_to_enum((!valid_ib_mtu(max_mtu) ?
 				      4096 : max_mtu), IB_MTU_4096);
 	props->active_mtu = !valid_ib_mtu(ppd->ibmtu) ? props->max_mtu :

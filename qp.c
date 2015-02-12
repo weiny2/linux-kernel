@@ -595,6 +595,32 @@ static void flush_iowait(struct qib_qp *qp)
 	spin_unlock_irqrestore(&dev->pending_lock, flags);
 }
 
+static inline int opa_mtu_enum_to_int(int mtu)
+{
+	switch (mtu) {
+	case OPA_MTU_8192:  return 8192;
+	case OPA_MTU_10240: return 10240;
+	default:            return -1;
+	}
+}
+
+/**
+ * This function is what we would push to the core layer if we wanted to be a
+ * "first class citizen".  Instead we hide this here and rely on Verbs ULPs
+ * to blindly pass the MTU enum value from the PathRecord to us.
+ *
+ * The actual flag used to determine "8k MTU" will change and is currently
+ * unknown.
+ */
+static inline int verbs_mtu_enum_to_int(struct ib_device *dev, enum ib_mtu mtu)
+{
+	int val = opa_mtu_enum_to_int((int)mtu);
+	if (val > 0)
+		return val;
+	return ib_mtu_enum_to_int(mtu);
+}
+
+
 /**
  * qib_modify_qp - modify the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we're modifying
@@ -682,25 +708,13 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		struct hfi_devdata *dd = dd_from_dev(dev);
 		int mtu, pidx = qp->port_num - 1;
 
-		mtu = ib_mtu_enum_to_int(attr->path_mtu);
-		if (mtu == -1) {
-			/*
-			 * If the ib_mtu_enum_to_int function did not
-			 * recognize the MTU but the enum_to_mtu did,
-			 * then it must be one of the IB-unsupported
-			 * STL MTUs (and, therefore, larger than max
-			 * IB-supported).
-			 */
-			if (enum_to_mtu(attr->path_mtu) != 0xffff) {
-				mtu = IB_MTU_4096;
-				/* attr->path_mtu is only used below */
-				attr->path_mtu = mtu_to_enum(mtu, IB_MTU_4096);
-			} else
-				goto inval;
-		}
-		if (mtu > dd->pport[pidx].ibmtu) {
+		mtu = verbs_mtu_enum_to_int(ibqp->device, attr->path_mtu);
+		if (mtu == -1)
+			goto inval;
+
+		if (mtu > dd->pport[pidx].ibmtu)
 			pmtu = mtu_to_enum(dd->pport[pidx].ibmtu, IB_MTU_2048);
-		} else
+		else
 			pmtu = attr->path_mtu;
 	}
 
@@ -819,7 +833,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	if (attr_mask & IB_QP_PATH_MTU) {
 		qp->path_mtu = pmtu;
-		qp->pmtu = ib_mtu_enum_to_int(pmtu);
+		qp->pmtu = verbs_mtu_enum_to_int(ibqp->device, pmtu);
 	}
 
 	if (attr_mask & IB_QP_RETRY_CNT) {
@@ -1605,7 +1619,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	sde = qp_to_sdma_engine(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x SL %u SDE %p,%u\n",
+		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x SL %u MTU %d SDE %p,%u\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1628,6 +1642,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->remote_qpn,
 		   qp->remote_ah_attr.dlid,
 		   qp->remote_ah_attr.sl,
+		   qp->pmtu,
 		   sde,
 		   sde ? sde->this_idx : 0);
 }
