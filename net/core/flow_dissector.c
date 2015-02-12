@@ -123,6 +123,19 @@ ipv6:
 			return false;
 		}
 	}
+	case htons(ETH_P_TIPC): {
+		struct {
+			__be32 pre[3];
+			__be32 srcnode;
+		} *hdr, _hdr;
+		hdr = skb_header_pointer(skb, nhoff, sizeof(_hdr), &_hdr);
+		if (!hdr)
+			return false;
+		flow->src = hdr->srcnode;
+		flow->dst = 0;
+		flow->thoff = (u16)nhoff;
+		return true;
+	}
 	default:
 		return false;
 	}
