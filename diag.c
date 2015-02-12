@@ -601,11 +601,8 @@ static void diagpkt_complete(void *arg, int code)
 }
 
 /**
- * diagpkt_write - write an IB packet
- * @fp: the diag data device file pointer
- * @data: diag_pkt structure saying where to get the packet
- * @count: size of data to write
- * @off: unused by this code
+ * diagpkt_send - send a packet
+ * @dp: diag packet descriptor
  */
 static ssize_t diagpkt_send(struct diag_pkt *dp)
 {
@@ -695,6 +692,8 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	if (dp->pbc == 0)
 		dp->pbc = create_pbc(0, 0, 0, total_len);
 
+	hfi_cdbg(PKT, "Egress PBC content is 0x%llx", dp->pbc);
+
 	/*
 	 * The caller wants to wait until the packet is sent and to
 	 * check for errors.  The best we can do is wait until
@@ -777,6 +776,10 @@ bail:
 static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 				 size_t count, loff_t *off)
 {
+	struct hfi_devdata *dd;
+	struct send_context *sc;
+	u8 vl;
+
 	struct diag_pkt dp;
 
 	if (count != sizeof(dp))
@@ -784,6 +787,22 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 
 	if (copy_from_user(&dp, data, sizeof(dp)))
 		return -EFAULT;
+
+	/*
+	* The Send Context is derived from the PbcVL value
+	* if PBC is populated
+	*/
+	if (dp.pbc) {
+		dd = qib_lookup(dp.unit);
+		if (dd == NULL)
+			return -ENODEV;
+		vl = (dp.pbc >> WFR_PBC_VL_SHIFT) & WFR_PBC_VL_MASK;
+		sc = dd->vld[vl].sc;
+		if (sc != NULL)
+			dp.context = sc->context;
+		hfi_cdbg(PKT, "Packet sent over VL %d via Send Context %d\n",
+			 vl, dp.context);
+	}
 
 	return diagpkt_send(&dp);
 }
