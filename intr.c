@@ -104,7 +104,8 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 	if (linkup) {
 		/*
-		 * The simulator does not implement:
+		 * The LCB loopback and all link up on the simulator
+		 * does not implement:
 		 *	- VerifyCap interupt
 		 *	- VerifyCap frames
 		 * But rather moves directly to LinkUp.
@@ -116,17 +117,20 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		 * NOTE: This uses this device's vAU, vCU, and vl15_init for
 		 * the remote values.  Both sides must be using the values.
 		 */
-		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		if (loopback == LOOPBACK_LCB
+			    || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
 			set_up_vl15(dd, dd->vau, dd->vl15_init);
 			assign_remote_cm_au_table(dd, dd->vcu);
 			ppd->neighbor_guid =
 				cpu_to_be64(read_csr(dd,
 					DC_DC8051_STS_REMOTE_GUID));
-			/* FIXME when simulator works */
-			ppd->neighbor_type = 0;
-			dd_dev_info(dd, "Neighbor GUID: %llx Neighbor type %d\n",
+			ppd->neighbor_type =
+				read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
+					DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
+			dd_dev_info(dd,
+				"Neighbor GUID: %llx Neighbor type %d\n",
 				be64_to_cpu(ppd->neighbor_guid),
-					ppd->neighbor_type);
+				ppd->neighbor_type);
 		}
 
 		/* physical link went up */

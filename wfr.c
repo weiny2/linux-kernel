@@ -4746,13 +4746,11 @@ int send_idle_sma(struct hfi_devdata *dd, u64 message)
 }
 
 /*
- * The simulator does an LCB loopback followed by a "quick" linkup.  A
- * "normal" linkup could be done but it not well supprted by the
- * simulator, so we stick with this method.
-
+ * An LCB loopback is the following sequence followed by a "quick" linkup.
+ *
  * return 0 on success, -errno on error
  */
-int simulator_loopback_quick_linkup(struct hfi_devdata *dd)
+int loopback_quick_linkup(struct hfi_devdata *dd)
 {
 	u64 reg;
 	unsigned long timeout;
@@ -4788,26 +4786,29 @@ int simulator_loopback_quick_linkup(struct hfi_devdata *dd)
 	/* LCB_CFG_TX_FIFOS_RESET.VAL = 0 */
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
 
-	/* LCB_CFG_RUN.EN = 1 */
-	write_csr(dd, DC_LCB_CFG_RUN,
-		1ull << DC_LCB_CFG_RUN_EN_SHIFT);
+	/* simulator only steps */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		/* LCB_CFG_RUN.EN = 1 */
+		write_csr(dd, DC_LCB_CFG_RUN,
+			1ull << DC_LCB_CFG_RUN_EN_SHIFT);
 
-	/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
-	timeout = jiffies + msecs_to_jiffies(10);
-	while (1) {
-		reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
-		if (reg)
-			break;
-		if (time_after(jiffies, timeout)) {
-			dd_dev_err(dd,
-				"timeout waiting for LINK_TRANSFER_ACTIVE\n");
-			return -ETIMEDOUT;
+		/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
+		timeout = jiffies + msecs_to_jiffies(10);
+		while (1) {
+			reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
+			if (reg)
+				break;
+			if (time_after(jiffies, timeout)) {
+				dd_dev_err(dd,
+					"timeout waiting for LINK_TRANSFER_ACTIVE\n");
+				return -ETIMEDOUT;
+			}
+			udelay(2);
 		}
-		udelay(2);
-	}
 
-	write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
-		1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
+		write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
+			1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
+	}
 
 	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
 	set_8051_lcb_access(dd);
@@ -4876,8 +4877,16 @@ int init_loopback(struct hfi_devdata *dd)
 	if (loopback == LOOPBACK_SERDES)
 		return set_serdes_loopback_mode(dd);
 
-	/* TODO: LCB loopback - unclear if 8051 firmware will support it */
-	/* NOTE: NOT supported in emulation due to emulation RTL changes */
+	/* LCB loopback - handled at poll time */
+	if (loopback == LOOPBACK_LCB) {
+		/* not supported in emulation due to emulation RTL changes */
+		if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
+			dd_dev_err(dd,
+				"LCB loopback not supported in emulation\n");
+			return -EINVAL;
+		}
+		return 0;
+	}
 
 	/* external cable loopback requires no extra steps */
 	if (loopback == LOOPBACK_CABLE)
@@ -5616,9 +5625,11 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 
 	switch (state) {
 	case HLS_UP_INIT:
-		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
-				&& ppd->host_link_state == HLS_DN_POLL) {
+		if (ppd->host_link_state == HLS_DN_POLL
+			&& (loopback == LOOPBACK_LCB
+			    || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)) {
 			/*
+			 * LCB loopback jumps from polling to here.
 			 * Whether in normal or loopback mode, the
 			 * simulator jumps from polling to link up.
 			 * Accept that here.
@@ -5721,12 +5732,15 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		ppd->host_link_state = HLS_DN_POLL;
 		wait_lcb_access_done(dd);
 
-		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR && loopback) {
+		/* all simulator loopbacks are LCB */
+		if (loopback == LOOPBACK_LCB ||
+				(dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
+					&& loopback)) {
 			/*
-			 * The simulator loopback does not go into polling.
-			 * Rather, it does a "quick" linkup.
+			 * LCB loopback does not go into polling.  Rather,
+			 * it does a "quick" linkup.
 			 */
-			ret = simulator_loopback_quick_linkup(dd);
+			ret = loopback_quick_linkup(dd);
 		} else {
 			ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
 			if (ret1 != WFR_HCMD_SUCCESS) {
