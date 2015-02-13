@@ -85,10 +85,6 @@ enum {
 	NUM_BDW = NUM_DCR,
 	NUM_SPA = NUM_PM + NUM_DCR + NUM_BDW,
 	NUM_MEM = NUM_DCR + 2 /* spa0 regions */ + 4 /* spa1 regions */,
-	NUM_AEP_DCR = 1,
-	NUM_AEP_BDW = NUM_AEP_DCR,
-	NUM_AEP_SPA = NUM_AEP_DCR + NUM_AEP_BDW,
-	NUM_AEP_MEM = NUM_AEP_SPA, /* single AEP DIMM */
 	DIMM_SIZE = SZ_32M,
 	LABEL_SIZE = SZ_128K,
 	SPA0_SIZE = DIMM_SIZE,
@@ -97,14 +93,7 @@ enum {
 	BDW_SIZE = 64 << 8,
 	DCR_SIZE = 12,
 	NUM_NFITS = 2, /* permit testing multiple NFITs per system */
-	NUM_AEP_NFITS = 1,
 };
-
-static int total_nfits = NUM_NFITS;
-
-static bool aep_nfits = true;
-module_param(aep_nfits, bool, S_IRUGO);
-MODULE_PARM_DESC(aep_nfits, "Create NFIT for simulated single AEP config in Simics");
 
 struct nfit_test_dcr {
 	__le64 bdw_addr;
@@ -112,12 +101,11 @@ struct nfit_test_dcr {
 	__u8 aperature[BDW_SIZE];
 };
 
-static u32 handle[NUM_DCR + NUM_AEP_DCR] = {
+static u32 handle[NUM_DCR] = {
 	[0] = NFIT_DIMM_HANDLE(0, 0, 0, 0, 0),
 	[1] = NFIT_DIMM_HANDLE(0, 0, 0, 0, 1),
 	[2] = NFIT_DIMM_HANDLE(0, 0, 1, 0, 0),
 	[3] = NFIT_DIMM_HANDLE(0, 0, 1, 0, 1),
-	[4] = NFIT_DIMM_HANDLE(0, 1, 0, 0, 0),
 };
 
 struct nfit_test {
@@ -242,7 +230,7 @@ static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 }
 
 static DEFINE_SPINLOCK(nfit_test_lock);
-static struct nfit_test *instances[NUM_NFITS + NUM_AEP_NFITS];
+static struct nfit_test *instances[NUM_NFITS];
 
 static void *alloc_coherent(struct nfit_test *t, size_t size, dma_addr_t *dma)
 {
@@ -361,23 +349,6 @@ static int nfit_test1_alloc(struct nfit_test *t)
 	t->spa_set[0] = alloc_coherent(t, SPA2_SIZE, &t->spa_set_dma[0]);
 	if (!t->spa_set[0])
 		return -ENOMEM;
-
-	return 0;
-}
-
-static int nfit_test2_alloc(struct nfit_test *t)
-{
-	size_t nfit_size = sizeof(struct nfit)
-			+ sizeof(struct nfit_spa) * NUM_AEP_SPA
-			+ sizeof(struct nfit_mem) * NUM_AEP_MEM
-			+ sizeof(struct nfit_dcr) * NUM_AEP_DCR
-			+ sizeof(struct nfit_bdw) * NUM_AEP_BDW;
-
-	t->nfit_buf = (void __iomem *) alloc_coherent(t, nfit_size,
-			&t->nfit_dma);
-	if (!t->nfit_buf)
-		return -ENOMEM;
-	t->nfit_size = nfit_size;
 
 	return 0;
 }
@@ -805,117 +776,6 @@ static void nfit_test1_setup(struct nfit_test *t)
 	writeb(nfit_checksum(nfit_buf, size), &nfit->checksum);
 }
 
-static void nfit_test2_setup(struct nfit_test *t)
-{
-	struct nfit_bus_descriptor *nfit_desc;
-	void __iomem *nfit_buf = t->nfit_buf;
-	struct nfit_spa __iomem *nfit_spa;
-	struct nfit_dcr __iomem *nfit_dcr;
-	struct nfit_bdw __iomem *nfit_bdw;
-	struct nfit_mem __iomem *nfit_mem;
-	size_t size = t->nfit_size;
-	struct nfit __iomem *nfit;
-	unsigned int offset;
-
-	/* nfit header */
-	nfit = nfit_buf;
-	memcpy_toio(nfit->signature, "NFIT", 4);
-	writel(size, &nfit->length);
-	writeb(1, &nfit->revision);
-	memcpy_toio(nfit->oemid, "NDTEST", 6);
-	writew(0x1234, &nfit->oem_tbl_id);
-	writel(1, &nfit->oem_revision);
-	writel(0x80860000, &nfit->creator_id);
-	writel(1, &nfit->creator_revision);
-	offset = sizeof(*nfit);
-
-	/* spa0 (dcr0) dimm0 */
-	nfit_spa = nfit_buf + offset;
-	writew(NFIT_TABLE_SPA, &nfit_spa->type);
-	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_dcr, 16);
-	writew(0+1, &nfit_spa->spa_index);
-	writeq(0xf000800000ULL, &nfit_spa->spa_base);
-	writeq(SZ_8K, &nfit_spa->spa_length);
-	offset += sizeof(*nfit_spa);
-
-	/* spa0 (bdw for dcr0) dimm0 */
-	nfit_spa = nfit_buf + offset;
-	writew(NFIT_TABLE_SPA, &nfit_spa->type);
-	writew(sizeof(*nfit_spa), &nfit_spa->length);
-	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
-	writew(1+1, &nfit_spa->spa_index);
-	writeq(0xf008000000ULL, &nfit_spa->spa_base);
-	writeq(SZ_8K, &nfit_spa->spa_length);
-	offset += sizeof(*nfit_spa);
-
-	/* mem-region0 (spa/dcr0, dimm0) */
-	nfit_mem = nfit_buf + offset;
-	writew(NFIT_TABLE_MEM, &nfit_mem->type);
-	writew(sizeof(*nfit_mem), &nfit_mem->length);
-	writel(handle[4], &nfit_mem->nfit_handle);
-	writew(0, &nfit_mem->phys_id);
-	writew(0, &nfit_mem->region_id);
-	writew(0+1, &nfit_mem->spa_index);
-	writew(0+1, &nfit_mem->dcr_index);
-	writeq(SZ_8K, &nfit_mem->region_len);
-	writeq(0xf000800000ULL, &nfit_mem->region_spa_offset);
-	writeq(0, &nfit_mem->region_dpa);
-	writew(0, &nfit_mem->idt_index);
-	writew(1, &nfit_mem->interleave_ways);
-	offset += sizeof(*nfit_mem);
-
-	/* mem-region1 (spa/bdw0, dimm0) */
-	nfit_mem = nfit_buf + offset;
-	writew(NFIT_TABLE_MEM, &nfit_mem->type);
-	writew(sizeof(*nfit_mem), &nfit_mem->length);
-	writel(handle[4], &nfit_mem->nfit_handle);
-	writew(0, &nfit_mem->phys_id);
-	writew(0, &nfit_mem->region_id);
-	writew(1+1, &nfit_mem->spa_index);
-	writew(0+1, &nfit_mem->dcr_index);
-	writeq(SZ_8K, &nfit_mem->region_len);
-	writeq(0xf008000000ULL, &nfit_mem->region_spa_offset);
-	writeq(0, &nfit_mem->region_dpa);
-	writew(0, &nfit_mem->idt_index);
-	writew(1, &nfit_mem->interleave_ways);
-	offset += sizeof(*nfit_mem);
-
-	/* dcr0 */
-	nfit_dcr = nfit_buf + offset;
-	writew(NFIT_TABLE_DCR, &nfit_dcr->type);
-	writew(sizeof(*nfit_dcr), &nfit_dcr->length);
-	writew(0+1, &nfit_dcr->dcr_index);
-	writew(0x8086, &nfit_dcr->vendor_id);
-	writew(0, &nfit_dcr->device_id);
-	writew(1, &nfit_dcr->revision_id);
-	writew(1, &nfit_dcr->fic);
-	writew(1, &nfit_dcr->num_bcw);
-	writeq(SZ_8K, &nfit_dcr->bcw_size);
-	writeq(0, &nfit_dcr->cmd_offset);
-	writeq(8, &nfit_dcr->cmd_size);
-	writeq(SZ_4K, &nfit_dcr->status_offset);
-	writeq(4, &nfit_dcr->status_size);
-	offset += sizeof(*nfit_dcr);
-
-	/* bdw0 (spa/dcr0, dimm0) */
-	nfit_bdw = nfit_buf + offset;
-	writew(NFIT_TABLE_BDW, &nfit_bdw->type);
-	writew(sizeof(*nfit_bdw), &nfit_bdw->length);
-	writew(0+1, &nfit_bdw->dcr_index);
-	writew(1, &nfit_bdw->num_bdw);
-	writeq(0, &nfit_bdw->bdw_offset);
-	writeq(SZ_8K, &nfit_bdw->bdw_size);
-	writeq(SZ_64G, &nfit_bdw->blk_capacity);
-	writeq(0, &nfit_bdw->blk_offset);
-	offset += sizeof(*nfit_bdw);
-
-	/* finish up */
-	writeb(nfit_checksum(nfit_buf, size), &nfit->checksum);
-	nfit_desc = &t->nfit_desc;
-	nfit_desc->nfit_ctl = nfit_test_ctl;
-}
-
 static int nfit_test_probe(struct platform_device *pdev)
 {
 	struct nfit_bus_descriptor *nfit_desc;
@@ -1020,14 +880,9 @@ static __init int nfit_test_init(void)
 		return -EINVAL;
 	}
 
-	if (aep_nfits && cpu_data(0).x86_model == 0x55) {
-		/* Simics simulation, include AEP nfits */
-		total_nfits = NUM_NFITS + NUM_AEP_NFITS;
-	}
-
 	nfit_test_set_lookup_fn(nfit_test_lookup);
 
-	for (i = 0; i < total_nfits; i++) {
+	for (i = 0; i < NUM_NFITS; i++) {
 		struct nfit_test *nfit_test;
 		struct platform_device *pdev;
 
@@ -1048,11 +903,6 @@ static __init int nfit_test_init(void)
 			nfit_test->num_pm = 1;
 			nfit_test->alloc = nfit_test1_alloc;
 			nfit_test->setup = nfit_test1_setup;
-			break;
-		case 2:
-			nfit_test->num_pm = 0;
-			nfit_test->alloc = nfit_test2_alloc;
-			nfit_test->setup = nfit_test2_setup;
 			break;
 		default:
 			rc = -EINVAL;
@@ -1076,7 +926,7 @@ static __init int nfit_test_init(void)
 	return 0;
 
  err_register:
-	for (i = 0; i < total_nfits; i++)
+	for (i = 0; i < NUM_NFITS; i++)
 		if (instances[i])
 			platform_device_unregister(&instances[i]->pdev);
 	return rc;
@@ -1087,7 +937,7 @@ static __exit void nfit_test_exit(void)
 	int i;
 
 	nfit_test_clear_lookup_fn();
-	for (i = 0; i < total_nfits; i++)
+	for (i = 0; i < NUM_NFITS; i++)
 		platform_device_unregister(&instances[i]->pdev);
 	platform_driver_unregister(&nfit_test_driver);
 }
