@@ -249,8 +249,6 @@ int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
 		if (*status != 0)
 			rc = -ENXIO;
 	}
-	dev_dbg(&nd_dimm->dev, "%s: offset: %zd len: %zd rc: %d\n",
-			__func__, offset, len, rc);
 
 	if (is_vmalloc_addr(cmd))
 		vfree(cmd);

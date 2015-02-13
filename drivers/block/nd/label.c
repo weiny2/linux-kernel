@@ -473,8 +473,6 @@ static int nd_label_write_index(struct nd_dimm *nd_dimm, int index, u32 seq,
 	writeq(checksum, &nsindex->checksum);
 	rc = nd_dimm_set_config_data(nd_dimm, readq(&nsindex->myoff),
 			nsindex, sizeof_namespace_index(nd_dimm));
-	dev_dbg(&nd_dimm->dev, "%s: seq: %d nslot: %d rc: %d\n",
-			__func__, seq, nslot, rc);
 	if (rc < 0)
 		return rc;
 
