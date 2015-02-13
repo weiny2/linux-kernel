@@ -1158,9 +1158,12 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	 */
 	if (mode_flag == HFI_PORT_SNOOP_MODE) {
 		for (i = 0; i < dd->num_send_contexts; i++) {
+			u64 type = dd->send_contexts[i].type;
 			reg_cur = read_kctxt_csr(dd, i,
 						WFR_SEND_CTXT_CHECK_ENABLE);
-			reg_new = ~(hfi_pkt_base_sc_integrity(dd)) & reg_cur;
+			reg_new = ~(hfi_pkt_default_send_ctxt_mask(dd,
+								   type)) &
+					reg_cur;
 			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE,
 					reg_new);
 		}
@@ -1221,9 +1224,12 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	drain_snoop_list(&dd->hfi_snoop.queue);
 	if (dd->hfi_snoop.mode_flag == HFI_PORT_SNOOP_MODE) {
 		for (i = 0; i < dd->num_send_contexts; i++) {
+			u64 type = dd->send_contexts[i].type;
 			reg_cur = read_kctxt_csr(dd, i,
 						WFR_SEND_CTXT_CHECK_ENABLE);
-			reg_new = hfi_pkt_base_sc_integrity(dd) | reg_cur;
+			reg_new = hfi_pkt_default_send_ctxt_mask(dd,
+								 type) |
+					reg_cur;
 			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE,
 						reg_new);
 		}

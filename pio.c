@@ -346,7 +346,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 
 int init_send_contexts(struct hfi_devdata *dd)
 {
-	u64 reg, all;
+	u64 reg;
 	u8 opval, opmask;
 	u16 base;
 	int ret, i, j, context;
@@ -393,17 +393,14 @@ int init_send_contexts(struct hfi_devdata *dd)
 
 	/* set up packet checking */
 
-	/* checks/disallow to set on all context types */
-	all = hfi_pkt_base_sc_integrity(dd);
-
 	for (i = 0; i < dd->num_send_contexts; i++) {
+		u16 ctxt_type = dd->send_contexts[i].type;
+		reg =  hfi_pkt_default_send_ctxt_mask(dd, ctxt_type);
 		/* per context type checks */
-		if (dd->send_contexts[i].type == SC_USER) {
-			reg =  all | HFI_PKT_USER_SC_INTEGRITY;
+		if (ctxt_type == SC_USER) {
 			opval = WFR_USER_OPCODE_CHECK_VAL;
 			opmask = WFR_USER_OPCODE_CHECK_MASK;
 		} else {
-			reg = all | HFI_PKT_KERNEL_SC_INTEGRITY;
 			opval = WFR_OPCODE_CHECK_VAL_DISABLED;
 			opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
 		}

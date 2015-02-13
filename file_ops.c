@@ -739,7 +739,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	 * (writes to CSRs probably belong in wfr.c)
 	 */
 	write_kctxt_csr(dd, uctxt->sc->context, WFR_SEND_CTXT_CHECK_ENABLE,
-			hfi_pkt_base_sc_integrity(dd));
+			hfi_pkt_default_send_ctxt_mask(dd, uctxt->sc->type));
 	sc_disable(uctxt->sc);
 	uctxt->pid = 0;
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);

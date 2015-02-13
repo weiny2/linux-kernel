@@ -1635,7 +1635,16 @@ extern struct mutex qib_mutex;
 #define PCI_DEVICE_ID_INTEL_WFR1 0x24f1
 #define PCI_DEVICE_ID_INTEL_WFR2 0x24f2
 
-static inline u64 hfi_pkt_base_sc_integrity(struct hfi_devdata *dd)
+#define HFI_PKT_USER_SC_INTEGRITY					    \
+	(WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_NON_KDETH_PACKETS_SMASK	    \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_SMASK		    \
+	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_GRH_SMASK)
+
+#define HFI_PKT_KERNEL_SC_INTEGRITY					    \
+	(WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETH_PACKETS_SMASK)
+
+static inline u64 hfi_pkt_default_send_ctxt_mask(struct hfi_devdata *dd,
+						 u16 ctxt_type)
 {
 	u64 base_sc_integrity =
 	WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_BAD_PKT_LEN_SMASK
@@ -1656,20 +1665,19 @@ static inline u64 hfi_pkt_base_sc_integrity(struct hfi_devdata *dd)
 	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_VL_SMASK
 	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_ENABLE_SMASK;
 
+	if (ctxt_type == SC_USER) {
+		base_sc_integrity = base_sc_integrity |
+			HFI_PKT_USER_SC_INTEGRITY;
+	} else {
+		base_sc_integrity = base_sc_integrity |
+			HFI_PKT_KERNEL_SC_INTEGRITY;
+	}
 	if (is_a0(dd))
 		/* turn off send-side job key checks - A0 erratum */
 		return base_sc_integrity &
 		       ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
 	return base_sc_integrity;
 }
-
-#define HFI_PKT_USER_SC_INTEGRITY					    \
-	(WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_NON_KDETH_PACKETS_SMASK	    \
-	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_SMASK		    \
-	| WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_GRH_SMASK)
-
-#define HFI_PKT_KERNEL_SC_INTEGRITY					    \
-	(WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETH_PACKETS_SMASK)
 
 static inline u64 hfi_pkt_base_sdma_integrity(struct hfi_devdata *dd)
 {
