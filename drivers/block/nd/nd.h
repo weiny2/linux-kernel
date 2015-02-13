@@ -76,6 +76,12 @@ struct nd_mapping {
 	u64 size;
 };
 
+#define nd_dbg_dpa(r, d, res, fmt, arg...) \
+	dev_dbg((r) ? &(r)->dev : (d)->dev, "%s: %.13s: %#llx @ %#llx " fmt, \
+		(r) ? dev_name((d)->dev) : "", res ? res->name : "null", \
+		(unsigned long long) res ? resource_size(res) : 0, \
+		(unsigned long long) res ? res->start : 0, ##arg)
+
 /* sparse helpers */
 static inline void nd_set_label(struct nd_namespace_label **labels,
 		struct nd_namespace_label __iomem *label, int idx)

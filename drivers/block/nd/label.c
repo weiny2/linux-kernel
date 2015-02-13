@@ -15,6 +15,8 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/nd.h>
+
+#include "nd-private.h"
 #include "label.h"
 #include "nd.h"
 
@@ -297,6 +299,7 @@ int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
 
 	for_each_clear_bit_le(slot, free, nslot) {
 		struct nd_namespace_label __iomem *nd_label;
+		struct nd_region *nd_region = NULL;
 		u8 label_uuid[NSLABEL_UUID_LEN];
 		struct nd_label_id *label_id;
 		struct resource *res;
@@ -317,8 +320,9 @@ int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
 		res = __request_region(&ndd->dpa, readq(&nd_label->dpa),
 				readq(&nd_label->rawsize),
 				nd_label_gen_id(label_id, label_uuid, flags), 0);
+		nd_dbg_dpa(nd_region, ndd, res, "reserve\n");
 		if (!res)
-			return -ENXIO;
+			return -EBUSY;
 	}
 
 	return 0;

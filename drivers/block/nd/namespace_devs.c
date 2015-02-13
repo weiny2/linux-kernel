@@ -263,10 +263,7 @@ static int scan_free(struct nd_region *nd_region,
 
 		if (n >= resource_size(res)) {
 			n -= resource_size(res);
-			dev_dbg(&nd_region->dev, "%s: %s: delete %#llx@%#llx: %d\n",
-					dev_name(ndd->dev), res->name,
-					(unsigned long long) resource_size(res),
-					(unsigned long long) res->start, rc);
+			nd_dbg_dpa(nd_region, ndd, res, "delete %d\n", rc);
 			devm_kfree(ndd->dev, (void *) res->name);
 			__release_region(&ndd->dpa, res->start,
 					resource_size(res));
@@ -275,10 +272,7 @@ static int scan_free(struct nd_region *nd_region,
 		}
 
 		rc = adjust_resource(res, res->start, resource_size(res) - n);
-		dev_dbg(&nd_region->dev, "%s: %s: shrink %#llx@%#llx: %d\n",
-				dev_name(ndd->dev), res->name,
-				(unsigned long long) resource_size(res),
-				(unsigned long long) res->start, rc);
+		nd_dbg_dpa(nd_region, ndd, res, "shrink %d\n", rc);
 		break;
 	}
 
@@ -363,10 +357,9 @@ static int scan_allocate(struct nd_region *nd_region,
 			rc = res ? 0 : -EBUSY;
 			action = "allocate";
 		}
-		dev_dbg(&nd_region->dev, "%s: %s: %s: %#llx@%#llx: %d\n",
-				dev_name(ndd->dev), label_id->id, action,
-				(unsigned long long) allocate,
-				(unsigned long long) free_start, rc);
+
+		nd_dbg_dpa(nd_region, ndd, res, "%s %d\n", action, rc);
+
 		if (rc)
 			return rc;
 
@@ -1110,8 +1103,9 @@ static struct device **create_namespace_pmem(struct nd_region *nd_region)
 	return NULL;
 }
 
-static int nsblk_add_resource(struct nd_namespace_blk *nsblk,
-		struct nd_dimm_drvdata *ndd, u8 *uuid, resource_size_t start)
+static int nsblk_add_resource(struct nd_region *nd_region,
+		struct nd_namespace_blk *nsblk, struct nd_dimm_drvdata *ndd,
+		u8 *uuid, resource_size_t start)
 {
 	struct nd_label_id label_id;
 	struct resource *res;
@@ -1125,10 +1119,8 @@ static int nsblk_add_resource(struct nd_namespace_blk *nsblk,
 	for_each_dpa_resource(ndd, res)
 		if (strcmp(res->name, label_id.id) == 0 && res->start == start) {
 			nsblk->res[nsblk->num_resources++] = res;
-			dev_dbg(ndd->dev, "%s: %s %#llx@%#llx",
-					__func__, res->name,
-					(unsigned long long) resource_size(res),
-					(unsigned long long) res->start);
+			nd_dbg_dpa(nd_region, ndd, res, "%s assign\n",
+					dev_name(&nsblk->dev));
 			return 0;
 		}
 	return -ENODEV;
@@ -1201,7 +1193,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 			nsblk = to_nd_namespace_blk(devs[i]);
 			if (memcmp(nsblk->uuid, label_uuid,
 						NSLABEL_UUID_LEN) == 0) {
-				rc = nsblk_add_resource(nsblk,
+				rc = nsblk_add_resource(nd_region, nsblk,
 						to_ndd(nd_mapping), label_uuid,
 						readq(&nd_label->dpa));
 				if (rc)
@@ -1233,8 +1225,8 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 		if (name[0])
 			nsblk->alt_name = kmemdup(name, NSLABEL_NAME_LEN,
 					GFP_KERNEL);
-		rc = nsblk_add_resource(nsblk, to_ndd(nd_mapping), label_uuid,
-				readq(&nd_label->dpa));
+		rc = nsblk_add_resource(nd_region, nsblk, to_ndd(nd_mapping),
+				label_uuid, readq(&nd_label->dpa));
 		if (rc)
 			goto err;
 	}
