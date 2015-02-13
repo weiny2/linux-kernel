@@ -280,7 +280,7 @@ static int nd_pmem_probe(struct device *dev)
 	}
 
 	res = request_mem_region(nsio->res.start, resource_size(&nsio->res),
-			KBUILD_MODNAME);
+			dev_name(dev));
 	if (!res) {
 		err = -EBUSY;
 		goto err_request_mem_region;
