@@ -895,10 +895,34 @@ static ssize_t sector_size_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(sector_size);
 
+static ssize_t resource_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct resource *res;
+
+	if (is_namespace_pmem(dev)) {
+		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
+
+		res = &nspm->nsio.res;
+	} else if (is_namespace_io(dev)) {
+		struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
+
+		res = &nsio->res;
+	} else
+		return -ENXIO;
+
+	/* no address to convey if the namespace has no allocation */
+	if (resource_size(res) == 0)
+		return -ENXIO;
+	return sprintf(buf, "%#llx\n", (unsigned long long) res->start);
+}
+static DEVICE_ATTR_RO(resource);
+
 static struct attribute *nd_namespace_attributes[] = {
 	&dev_attr_type.attr,
 	&dev_attr_size.attr,
 	&dev_attr_uuid.attr,
+	&dev_attr_resource.attr,
 	&dev_attr_alt_name.attr,
 	&dev_attr_sector_size.attr,
 	NULL,
@@ -907,6 +931,12 @@ static struct attribute *nd_namespace_attributes[] = {
 static umode_t nd_namespace_attr_visible(struct kobject *kobj, struct attribute *a, int n)
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
+
+	if (a == &dev_attr_resource.attr) {
+		if (is_namespace_blk(dev))
+			return 0;
+		return a->mode;
+	}
 
 	if (is_namespace_pmem(dev) || is_namespace_blk(dev)) {
 		if (a == &dev_attr_size.attr)
