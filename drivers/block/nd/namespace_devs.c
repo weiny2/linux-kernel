@@ -161,6 +161,23 @@ static int check_label_space(struct nd_region *nd_region, struct device *dev)
 	return 0;
 }
 
+static resource_size_t nd_namespace_blk_size(struct nd_namespace_blk *nsblk)
+{
+	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
+	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
+	struct nd_label_id label_id;
+	resource_size_t size = 0;
+	struct resource *res;
+
+	if (!nsblk->uuid)
+		return 0;
+	nd_label_gen_id(&label_id, nsblk->uuid, NSLABEL_FLAG_LOCAL);
+	for_each_dpa_resource(nd_mapping->nd_dimm, res)
+		if (strcmp(res->name, label_id.id) == 0)
+			size += resource_size(res);
+	return size;
+}
+
 static int nd_namespace_label_update(struct nd_region *nd_region, struct device *dev)
 {
 	dev_WARN_ONCE(dev, dev->driver,
@@ -174,25 +191,20 @@ static int nd_namespace_label_update(struct nd_region *nd_region, struct device 
 	 */
 	if (is_namespace_pmem(dev)) {
 		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
-		struct resource *res = &nspm->nsio.res;
-		resource_size_t size = resource_size(res);
+		resource_size_t size = resource_size(&nspm->nsio.res);
 
-		if (size == 0)
-			/* pass */;
+		if (size == 0 && nspm->uuid)
+			/* delete allocation */;
 		else if (size < ND_MIN_NAMESPACE_SIZE || !nspm->uuid)
 			return 0;
 
 		return nd_pmem_namespace_label_update(nd_region, nspm, size);
 	} else if (is_namespace_blk(dev)) {
 		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
-		resource_size_t size = 0;
-		int i;
+		resource_size_t size = nd_namespace_blk_size(nsblk);
 
-		for (i = 0; i < nsblk->num_resources; i++)
-			size += resource_size(nsblk->res[i]);
-
-		if (size == 0)
-			/* pass */;
+		if (size == 0 && nsblk->uuid)
+			/* delete allocation */;
 		else if (size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid
 					|| !nsblk->lbasize)
 			return 0;
@@ -593,30 +605,19 @@ static ssize_t size_store(struct device *dev,
 static ssize_t size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct nd_namespace_blk *nsblk;
 	unsigned long long size = 0;
-	int i;
 
+	nd_bus_lock(dev);
 	if (is_namespace_pmem(dev)) {
 		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
 
-		return sprintf(buf, "%llu\n", (unsigned long long)
-				resource_size(&nspm->nsio.res));
+		size = resource_size(&nspm->nsio.res);
 	} else if (is_namespace_blk(dev)) {
-		nsblk = to_nd_namespace_blk(dev);
+		size = nd_namespace_blk_size(to_nd_namespace_blk(dev));
 	} else if (is_namespace_io(dev)) {
 		struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
 
-		return sprintf(buf, "%llu\n", (unsigned long long)
-				resource_size(&nsio->res));
-	} else
-		return -ENXIO;
-
-	nd_bus_lock(dev);
-	for (i = 0; i < nsblk->num_resources; i++) {
-		struct resource *res = nsblk->res[i];
-
-		size += resource_size(res);
+		size = resource_size(&nsio->res);
 	}
 	nd_bus_unlock(dev);
 
