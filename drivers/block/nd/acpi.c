@@ -214,7 +214,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 
 	dev_dbg(dev, "%s: cmd: %s input length: %d\n", __func__,
 			nfit_cmd_name(cmd), in_buf.buffer.length);
-	if (IS_ENABLED(CONFIG_DYNAMIC_DEBUG))
+	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
 		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
 				4, in_buf.buffer.pointer, min_t(u32, 128,
 					in_buf.buffer.length), true);
@@ -235,7 +235,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 
 	dev_dbg(dev, "%s: cmd: %s output length: %d\n", __func__,
 			nfit_cmd_name(cmd), out_obj->buffer.length);
-	if (IS_ENABLED(CONFIG_DYNAMIC_DEBUG))
+	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
 		print_hex_dump_debug(nfit_cmd_name(cmd), DUMP_PREFIX_OFFSET, 4,
 				4, out_obj->buffer.pointer, min_t(u32, 128,
 					out_obj->buffer.length), true);
