@@ -517,7 +517,13 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	return NULL;
 }
 
-static resource_size_t blk_available_dpa(struct nd_mapping *nd_mapping)
+/**
+ * nd_blk_available_dpa - account the unused dpa of BLK region
+ * @nd_mapping: container of dpa-resource-root + labels
+ *
+ * Unlike PMEM, BLK namespaces can occupy discontiguous DPA ranges.
+ */
+resource_size_t nd_blk_available_dpa(struct nd_mapping *nd_mapping)
 {
 	resource_size_t map_end, res_end, busy = 0, available;
 	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
@@ -544,90 +550,65 @@ static resource_size_t blk_available_dpa(struct nd_mapping *nd_mapping)
 	return 0;
 }
 
-static resource_size_t pmem_available_dpa(struct nd_mapping *nd_mapping)
+/**
+ * nd_pmem_available_dpa - for the given dimm+region account unallocated dpa
+ * @nd_mapping: container of dpa-resource-root + labels
+ * @nd_region: constrain available space check to this reference region
+ * @overlap: calculate available space assuming this level of overlap
+ *
+ * Validate that a PMEM label, if present, aligns with the
+ * interleave set end boundary and truncate the available size at the
+ * highest BLK overlap point.
+ *
+ * The expectation is that this routine is called multiple times as it
+ * probes for the maximum BLK overlap point for any single member DIMM
+ * of the interleave set.  Once that value is determined the
+ * PMEM-boundary for the set can be established.
+ */
+resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
+		struct nd_mapping *nd_mapping, resource_size_t *overlap)
 {
-	resource_size_t map_end, res_end, busy = 0, available;
+	resource_size_t map_end, res_end, busy = 0, available, blk_max;
 	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct resource *res;
 
-	map_end = nd_mapping->start + nd_mapping->size;
+	blk_max = nd_mapping->start + *overlap;
+	map_end = nd_mapping->start + nd_mapping->size - 1;
 	for_each_dpa_resource(ndd, res) {
-		res_end = res->start + resource_size(res);
+		res_end = res->start + resource_size(res) - 1;
 		if (res->start >= nd_mapping->start && res->start < map_end) {
-			if (strncmp(res->name, "blk", 3) == 0) {
-				/* this is the pmem offset boundary */
-				busy += map_end - res->start;
-				break;
-			} else if (res->start != nd_mapping->start) {
-				/*
-				 * Something is wrong pmem must align
-				 * with the start of the interleave set
-				 */
-				return 0;
-			} else {
-				resource_size_t end = min(map_end, res_end);
-
-				busy += end - res->start;
+			if (strncmp(res->name, "blk", 3) == 0)
+				blk_max = min(res_end, map_end) + 1;
+			else if (res_end != map_end)
+				goto err;
+			else {
+				/* duplicate overlapping PMEM reservations? */
+				if (busy)
+					goto err;
+				busy += resource_size(res);
 				continue;
 			}
 		} else if (res_end >= nd_mapping->start && res_end < map_end) {
-			/*
-			 * If a namespace ends in an interleave set range
-			 * the pmem offset is 0
-			 */
-			return 0;
+			if (strncmp(res->name, "blk", 3) == 0)
+				blk_max = min(res_end, map_end) + 1;
+			else
+				goto err;
 		}
 	}
 
-	available = map_end - nd_mapping->start;
+	*overlap = blk_max - nd_mapping->start;
+	available = map_end + 1 - blk_max;
 	if (busy < available)
 		return available - busy;
 	return 0;
-}
 
-/**
- * nd_dimm_available_dpa - for the given dimm+region account unallocated dpa
- * @nd_dimm: container of dpa-resource-root + labels
- * @nd_region: constrain available space check to this reference region
- *
- * This routine operates in either blk or pmem mode as determined by the
- * region type.  In pmem mode it validates that labels align with the
- * interleave set and truncates the available size at the lowest blk
- * overlap point.  In comparsion blk mode any hole in the region is
- * counted as free space.
- */
-resource_size_t nd_dimm_available_dpa(struct nd_dimm_drvdata *ndd,
-		struct nd_region *nd_region)
-{
-	struct nd_mapping *nd_mapping;
-
-	switch (nd_region_to_namespace_type(nd_region)) {
-	case ND_DEVICE_NAMESPACE_PMEM: {
-		int i, ndr_mappings = nd_region->ndr_mappings;
-
-		for (i = 0; i < ndr_mappings; i++) {
-			nd_mapping = &nd_region->mapping[i];
-			if (to_ndd(nd_mapping) == ndd)
-				break;
-		}
-		if (i >= ndr_mappings) {
-			dev_WARN_ONCE(ndd->dev, 1, "not mapped by %s\n",
-					dev_name(&nd_region->dev));
-			return 0;
-		}
-		return pmem_available_dpa(nd_mapping);
-	}
-	case ND_DEVICE_NAMESPACE_BLOCK:
-		nd_mapping = &nd_region->mapping[0];
-		if (to_ndd(nd_mapping) != ndd) {
-			dev_WARN_ONCE(ndd->dev, 1, "not mapped by %s\n",
-					dev_name(&nd_region->dev));
-			return 0;
-		}
-		return blk_available_dpa(nd_mapping);
-	default:
-		return 0;
-	}
+ err:
+	/*
+	 * Something is wrong, PMEM must align with the end of the
+	 * interleave set
+	 */
+	nd_dbg_dpa(nd_region, ndd, res, "misaligned to iset\n");
+	return 0;
 }
 
 struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,

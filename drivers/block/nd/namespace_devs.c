@@ -307,11 +307,13 @@ static int scan_free(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, struct nd_label_id *label_id,
 		resource_size_t n)
 {
+	bool is_pmem = strncmp(label_id->id, "pmem", 4) == 0;
 	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	int rc = 0;
 
 	while (n) {
 		struct resource *res, *last;
+		resource_size_t new_start;
 
 		last = NULL;
 		for_each_dpa_resource(ndd, res)
@@ -331,7 +333,12 @@ static int scan_free(struct nd_region *nd_region,
 			continue;
 		}
 
-		rc = adjust_resource(res, res->start, resource_size(res) - n);
+		if (is_pmem)
+			new_start = res->start + n;
+		else
+			new_start = res->start;
+
+		rc = adjust_resource(res, new_start, resource_size(res) - n);
 		if (rc == 0)
 			res->flags |= DPA_RESOURCE_ADJUSTED;
 		nd_dbg_dpa(nd_region, ndd, res, "shrink %d\n", rc);
@@ -369,69 +376,188 @@ static int shrink_dpa_allocation(struct nd_region *nd_region,
 	return 0;
 }
 
+static int init_dpa_allocation(struct nd_label_id *label_id,
+		struct nd_region *nd_region, struct nd_mapping *nd_mapping,
+		resource_size_t n)
+{
+	bool is_pmem = strncmp(label_id->id, "pmem", 4) == 0;
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	resource_size_t first_dpa;
+	struct resource *res;
+	int rc = 0;
+
+	if (is_pmem)
+		first_dpa = nd_mapping->start + nd_mapping->size - n;
+	else
+		first_dpa = nd_mapping->start;
+	/* first resource allocation for this label-id or dimm */
+	res = nd_dimm_allocate_dpa(ndd, label_id, first_dpa, n);
+	if (!res)
+		rc = -EBUSY;
+
+	nd_dbg_dpa(nd_region, ndd, res, "init %d\n", rc);
+	return rc;
+}
+
+static bool space_valid(bool is_pmem, struct nd_label_id *label_id,
+		struct resource *res)
+{
+	/*
+	 * For BLK-space any space is valid, for PMEM-space, it must be
+	 * contiguous with an existing allocation.  Of course, initial
+	 * PMEM allocations do not use this helper.
+	 */
+	if (!is_pmem)
+		return true;
+	if (strcmp(res ? res->name : "", label_id->id) == 0)
+		return true;
+	return false;
+}
+
+enum alloc_loc {
+	ALLOC_ERR = 0, ALLOC_BEFORE, ALLOC_MID, ALLOC_AFTER,
+};
+
 static int scan_allocate(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, struct nd_label_id *label_id,
 		resource_size_t n)
 {
+	resource_size_t mapping_end = nd_mapping->start + nd_mapping->size - 1;
+	bool is_pmem = strncmp(label_id->id, "pmem", 4) == 0;
 	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	const resource_size_t to_allocate = n;
 	struct resource *res;
+	int first;
 
+ retry:
+	first = 0;
 	for_each_dpa_resource(ndd, res) {
-		resource_size_t allocate, available = 0, free_start;
-		struct resource *next = res->sibling;
+		resource_size_t allocate, available = 0, free_start, free_end;
+		struct resource *next = res->sibling, *new_res = NULL;
+		enum alloc_loc loc = ALLOC_ERR;
 		const char *action;
-		int rc;
+		int rc = 0;
+
+		/* ignore resources outside this nd_mapping */
+		if (res->start >= mapping_end)
+			continue;
+		if (res->start + resource_size(res) - 1 < nd_mapping->start)
+			continue;
 
 		/* space at the beginning of the mapping */
-		if (res == ndd->dpa.child) {
+		if (!first++ && res->start > nd_mapping->start) {
 			free_start = nd_mapping->start;
 			available = res->start - free_start;
+			if (space_valid(is_pmem, label_id, res))
+				loc = ALLOC_BEFORE;
 		}
 
 		/* space between allocations */
-		if (!available && next) {
+		if (!loc && next) {
 			free_start = res->start + resource_size(res);
-			available = next->start - free_start;
+			free_end = min(mapping_end, next->start - 1);
+			if (free_start < free_end)
+				available = free_end + 1 - free_start;
+			if (space_valid(is_pmem, label_id, next))
+				loc = ALLOC_MID;
 		}
 
 		/* space at the end of the mapping */
-		if (!available && !next) {
+		if (!loc && !next) {
 			free_start = res->start + resource_size(res);
-			available = nd_mapping->start + nd_mapping->size
-				- free_start;
+			free_end = mapping_end;
+			if (free_start < free_end)
+				available = free_end + 1 - free_start;
+			if (space_valid(is_pmem, label_id, next))
+				loc = ALLOC_AFTER;
 		}
 
-		if (available == 0)
+		if (!loc || !available)
 			continue;
 		allocate = min(available, n);
-		n -= allocate;
-		if (strcmp(res->name, label_id->id) == 0) {
+		switch (loc) {
+		case ALLOC_BEFORE:
+			if (strcmp(res->name, label_id->id) == 0) {
+				/* adjust current resource up */
+				rc = adjust_resource(res, res->start - allocate,
+						resource_size(res) + allocate);
+				action = "cur grow up";
+			} else
+				action = "allocate";
+			break;
+		case ALLOC_MID:
+			if (strcmp(next->name, label_id->id) == 0) {
+				/* adjust next resource up */
+				rc = adjust_resource(next, next->start
+						- allocate, resource_size(next)
+						+ allocate);
+				new_res = next;
+				action = "next grow up";
+			} else if (strcmp(res->name, label_id->id) == 0) {
+				action = "grow down";
+			} else
+				action = "allocate";
+			break;
+		case ALLOC_AFTER:
+			if (strcmp(res->name, label_id->id) == 0) {
+				action = "grow down";
+			} else
+				action = "allocate";
+			break;
+		default:
+			goto err;
+		}
+
+		if (strcmp(action, "allocate") == 0) {
+			/* insert new resource */
+			if (is_pmem)
+				goto err;
+			new_res = nd_dimm_allocate_dpa(ndd, label_id,
+					free_start, allocate);
+			if (!new_res)
+				rc = -EBUSY;
+		} else if (strcmp(action, "grow down") == 0) {
+			/* adjust current resource down */
+			if (is_pmem)
+				goto err;
 			rc = adjust_resource(res, res->start, resource_size(res)
 					+ allocate);
 			if (rc == 0)
 				res->flags |= DPA_RESOURCE_ADJUSTED;
-			action = "grow";
-		} else if (strncmp("pmem", label_id->id, 4) == 0
-				&& free_start != nd_mapping->start) {
-			rc = -ENXIO;
-			action = "allocate pmem";
-		} else {
-			res = nd_dimm_allocate_dpa(ndd, label_id,
-					free_start, allocate);
-			rc = res ? 0 : -EBUSY;
-			action = "allocate";
 		}
 
-		nd_dbg_dpa(nd_region, ndd, res, "%s %d\n", action, rc);
+		if (!new_res)
+			new_res = res;
+
+		nd_dbg_dpa(nd_region, ndd, new_res, "%s(%d) %d\n",
+				action, loc, rc);
 
 		if (rc)
 			return rc;
 
-		if (n == 0)
-			break;
+		n -= allocate;
+		if (n) {
+			/*
+			 * Retry scan with newly inserted resources.
+			 * For example, if we did an ALLOC_BEFORE
+			 * insertion there may also have been space
+			 * available for an ALLOC_AFTER insertion, so we
+			 * need to check this same resource again
+			 */
+			goto retry;
+		} else
+			return 0;
 	}
 
-	return 0;
+	if (n == to_allocate)
+		return init_dpa_allocation(label_id, nd_region, nd_mapping, n);
+
+ err:
+	dev_WARN_ONCE(&nd_region->dev, 1,
+			"allocation underrun: %#llx of %#llx bytes\n",
+			(unsigned long long) to_allocate - n,
+			(unsigned long long) to_allocate);
+	return -ENXIO;
 }
 
 /**
@@ -440,52 +566,19 @@ static int scan_allocate(struct nd_region *nd_region,
  * @label_id: unique identifier for the namespace consuming this dpa range
  * @n: number of bytes per-dimm to add to the existing allocation
  *
- * Assumes resources are ordered.  Starting from the beginning try to
- * adjust the resource to the next allocation boundary.  If the region
- * is pmem we're done, otherwise skip to the next free space and start a
- * new resource claim.
+ * Assumes resources are ordered.  For BLK regions, starting from the
+ * beginning try to adjust the resource to the next allocation boundary.
+ * For PMEM regions start allocations from the bottom of the interleave
+ * set.
  */
 static int grow_dpa_allocation(struct nd_region *nd_region,
 		struct nd_label_id *label_id, resource_size_t n)
 {
-	bool is_pmem = strncmp(label_id->id, "pmem", 4) == 0;
 	int i;
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
-		struct resource *res;
-		bool do_init = false;
 		int rc;
-
-		if (is_pmem) {
-			struct resource *found = NULL;
-
-			for_each_dpa_resource(ndd, res)
-				if (strcmp(res->name, label_id->id) == 0) {
-					found = res;
-					break;
-				}
-			if (!found)
-				do_init = true;
-		} else if (ndd->dpa.child == NULL) {
-			do_init = true;
-		}
-
-		if (do_init) {
-			/* first resource allocation for this dimm */
-			res = nd_dimm_allocate_dpa(ndd, label_id,
-						nd_mapping->start, n);
-			rc = res ? 0 : -EBUSY;
-			dev_dbg(&nd_region->dev, "%s: %s: init: %#llx@%#llx: %d\n",
-					dev_name(ndd->dev), label_id->id,
-					(unsigned long long) n,
-					(unsigned long long) nd_mapping->start,
-					rc);
-			if (rc)
-				return rc;
-			continue;
-		}
 
 		rc = scan_allocate(nd_region, nd_mapping, label_id, n);
 		if (rc)
@@ -500,16 +593,16 @@ static void nd_namespace_pmem_set_size(struct nd_region *nd_region,
 {
 	struct resource *res = &nspm->nsio.res;
 
-	res->start = nd_region->ndr_start;
-	res->end = res->start + size - 1;
+	res->end = nd_region->ndr_start + nd_region->ndr_size - 1;
+	res->start = res->end + 1 - size;
 }
 
 static ssize_t __size_store(struct device *dev, const char *buf)
 {
-	resource_size_t allocated = 0, available = 0, min_available = 0;
+	resource_size_t allocated = 0, available = 0;
 	struct nd_region *nd_region = to_nd_region(dev->parent);
-	struct nd_dimm_drvdata *ndd, *min_dimm = NULL;
 	struct nd_mapping *nd_mapping;
+	struct nd_dimm_drvdata *ndd;
 	struct nd_label_id label_id;
 	unsigned long long val;
 	u8 *uuid = NULL;
@@ -549,8 +642,6 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 
 	nd_label_gen_id(&label_id, uuid, flags);
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
-		resource_size_t dimm_available, min;
-
 		nd_mapping = &nd_region->mapping[i];
 		ndd = to_ndd(nd_mapping);
 
@@ -562,13 +653,8 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 			return -ENXIO;
 
 		allocated += nd_dimm_allocated_dpa(ndd, &label_id);
-		dimm_available = nd_dimm_available_dpa(ndd, nd_region);
-		available += dimm_available;
-		min = min_not_zero(dimm_available, min_available);
-		if (!min_dimm || min != min_available)
-			min_dimm = ndd;
-		min_available = min;
 	}
+	available = nd_region_available_dpa(nd_region);
 
 	if (val > available + allocated)
 		return -ENOSPC;
@@ -576,21 +662,8 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 	if (val == allocated)
 		return 0;
 
-	if (val % nd_region->ndr_mappings)
-		dev_info(dev, "%lld truncated to %lld setting namespace size\n",
-				val, (unsigned long long)
-				(val / nd_region->ndr_mappings)
-				* nd_region->ndr_mappings);
 	val /= nd_region->ndr_mappings;
 	allocated /= nd_region->ndr_mappings;
-
-	if (val > allocated && val > min_available) {
-		if (min_dimm)
-			dev_dbg(dev, "%s only has %lld bytes available\n",
-					dev_name(min_dimm->dev),
-					min_available);
-		return -ENOSPC;
-	}
 
 	if (val < allocated)
 		rc = shrink_dpa_allocation(nd_region, &label_id, allocated - val);
@@ -606,35 +679,12 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 		nd_namespace_pmem_set_size(nd_region, nspm,
 				val * nd_region->ndr_mappings);
 	} else if (is_namespace_blk(dev)) {
-		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
-		struct nd_mapping *nd_mapping = &nd_region->mapping[0];
-		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
-		struct resource *res;
-
-		kfree(nsblk->res);
-		nsblk->res = NULL;
-		nsblk->num_resources = 0;
-		for_each_dpa_resource(ndd, res) {
-			if (strcmp(res->name, label_id.id) != 0)
-				continue;
-			nsblk->res = krealloc(nsblk->res,
-					sizeof(struct resource *)
-					* (nsblk->num_resources + 1),
-					GFP_KERNEL);
-			if (!nsblk->res) {
-				nsblk->num_resources = 0;
-				return -ENOMEM;
-			}
-			nsblk->res[nsblk->num_resources++] = res;
-		}
-
 		/*
 		 * Try to delete the namespace if we deleted all of its
 		 * allocation and this is not the seed device for the
 		 * region.
 		 */
-		if (val == 0 && nsblk->num_resources == 0
-				&& nd_region->ns_seed != dev)
+		if (val == 0 && nd_region->ns_seed != dev)
 			nd_device_unregister(dev, ND_ASYNC);
 	}
 
@@ -655,7 +705,8 @@ static ssize_t size_store(struct device *dev,
 		rc = __size_store(dev, buf);
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
-	dev_dbg(dev, "%s: %s (%d)\n", __func__, rc < 0 ? "fail" : "success", rc);
+	dev_dbg(dev, "%s: %s %s (%d)\n", __func__, buf,
+			rc < 0 ? "fail" : "success", rc);
 	nd_bus_unlock(dev);
 	device_unlock(dev);
 
@@ -990,14 +1041,14 @@ static int select_pmem_uuid(struct nd_region *nd_region, u8 *pmem_uuid)
 		select = nd_label;
 		/*
 		 * Check that this label is compliant with the dpa
-		 * range published in NFIT and does not overlap a BLK
-		 * namespace
+		 * range published in NFIT
 		 */
 		hw_start = nd_mapping->start;
 		hw_end = hw_start + nd_mapping->size;
 		pmem_start = readq(&select->dpa);
 		pmem_end = pmem_start + readq(&select->rawsize);
-		if (pmem_end <= hw_end && pmem_start == hw_start)
+		if (pmem_end == hw_end && pmem_start >= hw_start
+				&& pmem_start < hw_end)
 			/* pass */;
 		else
 			return -EINVAL;
@@ -1017,7 +1068,6 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 {
 	u64 cookie = nd_region_interleave_set_cookie(nd_region);
 	struct nd_namespace_label __iomem *nd_label;
-	struct resource *res = &nspm->nsio.res;
 	u8 select_uuid[NSLABEL_UUID_LEN];
 	resource_size_t size = 0;
 	u8 *pmem_uuid = NULL;
@@ -1276,6 +1326,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 			goto err;
 		dev = &nsblk->dev;
 		dev->type = &namespace_blk_device_type;
+		dev_set_name(dev, "namespace%d.%d", nd_region->id, count);
 		devs[count++] = dev;
 		nsblk->id = -1;
 		nsblk->lbasize = readq(&nd_label->lbasize);

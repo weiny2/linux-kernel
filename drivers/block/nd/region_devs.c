@@ -231,12 +231,39 @@ static ssize_t set_cookie_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(set_cookie);
 
+resource_size_t nd_region_available_dpa(struct nd_region *nd_region)
+{
+	resource_size_t blk_max_overlap = 0, available, next_overlap;
+	int i;
+
+	WARN_ON(!is_nd_bus_locked(&nd_region->dev));
+
+ retry:
+	available = 0;
+	next_overlap = blk_max_overlap;
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+
+		if (is_nd_pmem(&nd_region->dev)) {
+			available += nd_pmem_available_dpa(nd_region,
+					nd_mapping, &next_overlap);
+			if (next_overlap > blk_max_overlap) {
+				blk_max_overlap = next_overlap;
+				goto retry;
+			}
+		} else if (is_nd_blk(&nd_region->dev)) {
+			available += nd_blk_available_dpa(nd_mapping);
+		}
+	}
+
+	return available;
+}
+
 static ssize_t available_size_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
 {
 	struct nd_region *nd_region = to_nd_region(dev);
 	unsigned long long available = 0;
-	int i;
 
 	/*
 	 * Flush in-flight updates and grab a snapshot of the available
@@ -246,13 +273,7 @@ static ssize_t available_size_show(struct device *dev,
 	 */
 	nd_bus_lock(dev);
 	wait_nd_bus_probe_idle(dev);
-
-	for (i = 0; i < nd_region->ndr_mappings; i++) {
-		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
-
-		available += nd_dimm_available_dpa(ndd, nd_region);
-	}
+	available = nd_region_available_dpa(nd_region);
 	nd_bus_unlock(dev);
 
 	return sprintf(buf, "%llu\n", available);

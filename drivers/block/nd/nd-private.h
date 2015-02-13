@@ -167,8 +167,11 @@ struct nd_label_id;
 char *nd_label_gen_id(struct nd_label_id *label_id, u8 *uuid, u32 flags);
 bool nd_is_uuid_unique(struct device *dev, u8 *uuid);
 struct nd_dimm_drvdata;
-resource_size_t nd_dimm_available_dpa(struct nd_dimm_drvdata *ndd,
-		struct nd_region *nd_region);
+struct nd_mapping;
+resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
+		struct nd_mapping *nd_mapping, resource_size_t *overlap);
+resource_size_t nd_blk_available_dpa(struct nd_mapping *nd_mapping);
+resource_size_t nd_region_available_dpa(struct nd_region *nd_region);
 struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n);

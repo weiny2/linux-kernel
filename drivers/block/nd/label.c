@@ -502,7 +502,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, struct nd_namespace_pmem *nspm,
 		int pos)
 {
-	u64 cookie = nd_region_interleave_set_cookie(nd_region), rawsize;
+	u64 cookie = nd_region_interleave_set_cookie(nd_region), rawsize, dpa;
 	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct nd_namespace_label __iomem *victim_label;
 	struct nd_namespace_label __iomem *nd_label;
@@ -530,9 +530,10 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	writew(nd_region->ndr_mappings, &nd_label->nlabel);
 	writew(pos, &nd_label->position);
 	writeq(cookie, &nd_label->isetcookie);
-	writeq(nd_mapping->start, &nd_label->dpa);
 	rawsize = resource_size(&nspm->nsio.res) / nd_region->ndr_mappings;
 	writeq(rawsize, &nd_label->rawsize);
+	dpa = nd_mapping->start + nd_mapping->size - rawsize;
+	writeq(dpa, &nd_label->dpa);
 	writel(slot, &nd_label->slot);
 
 	/* update label */
