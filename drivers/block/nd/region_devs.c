@@ -634,6 +634,7 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	struct nd_bdw *iter, *nd_bdw = NULL;
 	struct nd_mapping *nd_mapping;
+	struct nd_dimm *nd_dimm;
 	struct nd_mem *nd_mem;
 	u32 nfit_handle;
 	u16 dcr_index;
@@ -641,6 +642,8 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	nd_region->dev.type = &nd_block_device_type;
 
 	nd_mem = nd_mem_from_spa(nd_bus, spa_index, 0);
+	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
 	dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
 	list_for_each_entry(iter, &nd_bus->bdws, list) {
 		if (readw(&iter->nfit_bdw->dcr_index) == dcr_index) {
@@ -650,15 +653,21 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	}
 
 	if (!nd_bdw) {
-		dev_err(&nd_bus->dev, "%s: failed to find bdw table for dcr %d\n",
-				__func__, dcr_index);
+		dev_err(&nd_region->dev,
+				"%s: %s failed to find block-data-window descriptor\n",
+				__func__, dev_name(&nd_dimm->dev));
 		nd_region->ndr_mappings = 0;
-		return;
+	} else if (readq(&nd_bdw->nfit_bdw->blk_offset) % SZ_4K) {
+		dev_err(&nd_region->dev, "%s: %s block-capacity is not 4K aligned\n",
+				__func__, dev_name(&nd_dimm->dev));
+		nd_region->ndr_mappings = 0;
 	}
 
-	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	if (!nd_region->ndr_mappings)
+		return;
+
 	nd_mapping = &nd_region->mapping[0];
-	nd_mapping->nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
+	nd_mapping->nd_dimm = nd_dimm;
 	nd_mapping->size = readq(&nd_bdw->nfit_bdw->blk_capacity);
 	nd_mapping->start = readq(&nd_bdw->nfit_bdw->blk_offset);
 }
@@ -667,20 +676,27 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 		struct device_type *type)
 {
 	u16 i;
-	struct nd_mem *nd_mem;
 	struct nd_spa *nd_spa = nd_region->nd_spa;
 	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 
 	nd_region->dev.type = type;
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
+		u32 nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		u32 nfit_handle;
+		struct nd_dimm *nd_dimm;
 
-		nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
-		nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
-		nd_mapping->nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
+		nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
+		nd_mapping->nd_dimm = nd_dimm;
 		nd_mapping->start = readq(&nd_mem->nfit_mem->region_dpa);
 		nd_mapping->size = readq(&nd_mem->nfit_mem->region_len);
+
+		if ((nd_mapping->start | nd_mapping->size) % SZ_4K) {
+			dev_err(&nd_region->dev, "%s: %s mapping is not 4K aligned\n",
+					__func__, dev_name(&nd_dimm->dev));
+			nd_region->ndr_mappings = 0;
+			return;
+		}
 	}
 }
 

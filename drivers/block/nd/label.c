@@ -274,6 +274,19 @@ static bool preamble_next(struct nd_dimm *nd_dimm,
 			free, nslot);
 }
 
+static bool slot_valid(struct nd_namespace_label __iomem *nd_label, u32 slot)
+{
+	/* check that we are written where we expect to be written */
+	if (slot != readl(&nd_label->slot))
+		return false;
+
+	/* check that DPA allocations are page aligned */
+	if ((readq(&nd_label->dpa) | readq(&nd_label->rawsize)) % SZ_4K)
+		return false;
+
+	return true;
+}
+
 int nd_label_reserve_dpa(struct nd_dimm *nd_dimm)
 {
 	struct nd_namespace_index __iomem *nsindex;
@@ -292,8 +305,7 @@ int nd_label_reserve_dpa(struct nd_dimm *nd_dimm)
 
 		nd_label = nd_label_base(nd_dimm) + slot;
 
-		/* basic check for invalid slots */
-		if (slot != readl(&nd_label->slot))
+		if (!slot_valid(nd_label, slot))
 			continue;
 
 		label_id = devm_kzalloc(&nd_dimm->dev, sizeof(*label_id),
@@ -329,11 +341,12 @@ int nd_label_active_count(struct nd_dimm *nd_dimm)
 
 		nd_label = nd_label_base(nd_dimm) + slot;
 
-		/* check for invalid slots */
-		if (slot != readl(&nd_label->slot)) {
+		if (!slot_valid(nd_label, slot)) {
 			dev_dbg(&nd_dimm->dev,
-					"%s: slot%d invalid 'slot' (%d)\n",
-					__func__, slot, readl(&nd_label->slot));
+				"%s: slot%d invalid slot: %d dpa: %lx rawsize: %lx\n",
+					__func__, slot, readl(&nd_label->slot),
+					(unsigned long) readq(&nd_label->dpa),
+					(unsigned long) readq(&nd_label->rawsize));
 			continue;
 		}
 		count++;

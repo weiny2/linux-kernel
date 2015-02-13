@@ -474,6 +474,12 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 	if (rc)
 		return rc;
 
+	if (val % (SZ_4K * nd_region->ndr_mappings)) {
+		dev_dbg(dev, "%llu is not %dK aligned\n", val,
+				(SZ_4K * nd_region->ndr_mappings) / SZ_1K);
+		return -EINVAL;
+	}
+
 	nd_label_gen_id(&label_id, uuid, flags);
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		resource_size_t dimm_available, min;
