@@ -24,48 +24,49 @@
 /*
  * Generate an NFIT table to describe the following topology:
  *
- * BUS0: Interleaved PMEM regions, and aliasing with BLOCK regions
+ * BUS0: Interleaved PMEM regions, and aliasing with BLK regions
  *
- *                              (a)               (b)           DIMM   BLK-REGION
- *           +-------------------+--------+--------+--------+
- * +------+  |       pm0.0       | blk2.0 | pm1.0  | blk2.1 |    0      region2
- * | imc0 +--+- - - region0- - - +--------+        +--------+
- * +--+---+  |       pm0.0       | blk3.0 | pm1.0  | blk3.1 |    1      region3
- *    |      +-------------------+--------v        v--------+
- * +--+---+                               |                 |
- * | cpu0 |                                     region1
- * +--+---+                               |                 |
- *    |      +----------------------------^        ^--------+
- * +--+---+  |           blk4.0           | pm1.0  | blk4.0 |    2      region4
- * | imc1 +--+----------------------------|        +--------+
- * +------+  |           blk5.0           | pm1.0  | blk5.0 |    3      region5
- *           +----------------------------+--------+--------+
+ *                     (a)                       (b)            DIMM   BLK-REGION
+ *           +----------+--------------+----------+---------+
+ * +------+  |  blk2.0  |     pm0.0    |  blk2.1  |  pm1.0  |    0      region2
+ * | imc0 +--+- - - - - region0 - - - -+----------+         +
+ * +--+---+  |  blk3.0  |     pm0.0    |  blk3.1  |  pm1.0  |    1      region3
+ *    |      +----------+--------------v----------v         v
+ * +--+---+                            |                    |
+ * | cpu0 |                                    region1
+ * +--+---+                            |                    |
+ *    |      +-------------------------^----------^         ^
+ * +--+---+  |                 blk4.0             |  pm1.0  |    2      region4
+ * | imc1 +--+-------------------------+----------+         +
+ * +------+  |                 blk5.0             |  pm1.0  |    3      region5
+ *           +-------------------------+----------+-+-------+
  *
  * *) In this layout we have four dimms and two memory controllers in one
- *    socket.  Each unique interface ("block" or "pmem") to DPA space
+ *    socket.  Each unique interface (BLK or PMEM) to DPA space
  *    is identified by a region device with a dynamically assigned id.
  *
  * *) The first portion of dimm0 and dimm1 are interleaved as REGION0.
- *    A single "pmem" namespace is created in the REGION0-"spa"-range
- *    that spans dimm0 and dimm1 with a user-specified name of "pm0.0".
- *    Some of that interleaved "spa" range is reclaimed as "bdw"
- *    accessed space starting at offset (a) into each dimm.  In that
- *    reclaimed space we create two "bdw" "namespaces" from REGION2 and
- *    REGION3 where "blk2.0" and "blk3.0" are just human readable names
- *    that could be set to any user-desired name in the label.
+ *    A single PMEM namespace "pm0.0" is created using half of the
+ *    REGION0 SPA-range.  REGION0 spans dimm0 and dimm1.  PMEM namespace
+ *    allocate from from the bottom of a region.  The unallocated
+ *    portion of REGION0 aliases with REGION2 and REGION3.  That
+ *    unallacted capacity is reclaimed as BLK namespaces ("blk2.0" and
+ *    "blk3.0") starting at the base of each DIMM to offset (a) in those
+ *    DIMMs.  "pm0.0", "blk2.0" and "blk3.0" are free-form readable
+ *    names that can be assigned to a namespace.
  *
  * *) In the last portion of dimm0 and dimm1 we have an interleaved
- *    "spa" range, REGION1, that spans those two dimms as well as dimm2
- *    and dimm3.  Some of REGION1 allocated to a "pmem" namespace named
- *    "pm1.0" the rest is reclaimed in 4 "bdw" namespaces (for each
+ *    SPA range, REGION1, that spans those two dimms as well as dimm2
+ *    and dimm3.  Some of REGION1 allocated to a PMEM namespace named
+ *    "pm1.0" the rest is reclaimed in 4 BLK namespaces (for each
  *    dimm in the interleave set), "blk2.1", "blk3.1", "blk4.0", and
  *    "blk5.0".
  *
  * *) The portion of dimm2 and dimm3 that do not participate in the
- *    REGION1 interleaved "spa" range (i.e. the DPA address below
- *    offset (b) are also included in the "blk4.0" and "blk5.0"
- *    namespaces.  Note, that this example shows that "bdw" namespaces
- *    don't need to be contiguous in DPA-space.
+ *    REGION1 interleaved SPA range (i.e. the DPA address below offset
+ *    (b) are also included in the "blk4.0" and "blk5.0" namespaces.
+ *    Note, that BLK namespaces need not be contiguous in DPA-space, and
+ *    can consume aliased capacity from multiple interleave sets.
  *
  * BUS1: Legacy NVDIMM (single contiguous range)
  *
@@ -235,7 +236,7 @@ static struct nfit_test *instances[NUM_NFITS];
 static void *alloc_coherent(struct nfit_test *t, size_t size, dma_addr_t *dma)
 {
 	struct device *dev = &t->pdev.dev;
-	struct resource *res = devm_kzalloc(dev, sizeof(*res), GFP_KERNEL);
+	struct resource *res = devm_kzalloc(dev, sizeof(*res) * 2, GFP_KERNEL);
 	void *buf = dmam_alloc_coherent(dev, size, dma, GFP_KERNEL);
 	struct nfit_test_resource *nfit_res = devm_kzalloc(dev,
 			sizeof(*nfit_res), GFP_KERNEL);
@@ -268,9 +269,13 @@ static struct nfit_test_resource *nfit_test_lookup(resource_size_t addr)
 			continue;
 		spin_lock(&nfit_test_lock);
 		list_for_each_entry(n, &t->resources, list) {
-			resource_size_t kaddr = (resource_size_t) n->buf;
-
-			if (n->res->start == addr || kaddr == addr) {
+			if (addr >= n->res->start && (addr < n->res->start
+						+ resource_size(n->res))) {
+				nfit_res = n;
+				break;
+			} else if (addr >= (unsigned long) n->buf
+					&& (addr < (unsigned long) n->buf
+						+ resource_size(n->res))) {
 				nfit_res = n;
 				break;
 			}

@@ -37,7 +37,8 @@ void __iomem *__wrap_ioremap_cache(resource_size_t offset, unsigned long size)
 	nfit_res = nfit_test_lookup(offset);
 	spin_unlock(&nfit_test_lock);
 	if (nfit_res)
-		return (void __iomem *) nfit_res->buf;
+		return (void __iomem *) nfit_res->buf + offset
+			- nfit_res->res->start;
 	return ioremap_cache(offset, size);
 }
 EXPORT_SYMBOL(__wrap_ioremap_cache);
@@ -61,16 +62,28 @@ struct resource * __wrap___request_region(struct resource *parent,
 {
 	struct nfit_test_resource *nfit_res;
 
-	spin_lock(&nfit_test_lock);
-	nfit_res = nfit_test_lookup(start);
-	spin_unlock(&nfit_test_lock);
-	if (nfit_res) {
-		struct resource *res;
+	if (parent == &iomem_resource) {
+		spin_lock(&nfit_test_lock);
+		nfit_res = nfit_test_lookup(start);
+		spin_unlock(&nfit_test_lock);
+		if (nfit_res) {
+			struct resource *res = nfit_res->res + 1;
 
-		res = nfit_res->res;
-		if (res)
-			res->end = res->start + n;
-		return res;
+			if (start + n > nfit_res->res->start
+					+ resource_size(nfit_res->res)) {
+				pr_debug("%s: start: %llx n: %llx overflow: %pr\n",
+						__func__, start, n, nfit_res->res);
+				return NULL;
+			}
+
+			res->start = start;
+			res->end = start + n - 1;
+			res->name = name;
+			res->flags = resource_type(parent);
+			res->flags |= IORESOURCE_BUSY | flags;
+			pr_debug("%s: %pr\n", __func__, res);
+			return res;
+		}
 	}
 	return __request_region(parent, start, n, name, flags);
 }
@@ -83,10 +96,18 @@ void __wrap___release_region(struct resource *parent, resource_size_t start,
 
 	spin_lock(&nfit_test_lock);
 	nfit_res = nfit_test_lookup(start);
+	if (nfit_res) {
+		struct resource *res = nfit_res->res + 1;
+
+		if (start != res->start || resource_size(res) != n)
+			pr_info("%s: start: %llx n: %llx mismatch: %pr\n",
+					__func__, start, n, res);
+		else
+			memset(res, 0, sizeof(*res));
+	}
 	spin_unlock(&nfit_test_lock);
-	if (nfit_res)
-		return;
-	return __release_region(parent, start, n);
+	if (!nfit_res)
+		__release_region(parent, start, n);
 }
 EXPORT_SYMBOL(__wrap___release_region);
 
