@@ -208,9 +208,17 @@ static int nd_dimm_probe(struct device *dev)
 static int nd_dimm_remove(struct device *dev)
 {
 	struct nd_dimm_drvdata *ndd = dev_get_drvdata(dev);
+	struct resource *res, *_r;
 
 	nd_blk_wrapper_exit(dev);
+
+	nd_bus_lock(dev);
+	dev_set_drvdata(dev, NULL);
+	for_each_dpa_resource_safe(ndd, res, _r)
+		__release_region(&ndd->dpa, res->start, resource_size(res));
+	nd_bus_unlock(dev);
 	free_data(ndd);
+
 
 	return 0;
 }

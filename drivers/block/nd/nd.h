@@ -100,6 +100,10 @@ static inline struct nd_namespace_label __iomem *nd_get_label(
 #define for_each_dpa_resource(ndd, res) \
 	for (res = (ndd)->dpa.child; res; res = res->sibling)
 
+#define for_each_dpa_resource_safe(ndd, res, next) \
+	for (res = (ndd)->dpa.child, next = res ? res->sibling : NULL; \
+			res; res = next, next = next ? next->sibling : NULL)
+
 struct nd_region {
 	struct device dev;
 	struct nd_spa *nd_spa;

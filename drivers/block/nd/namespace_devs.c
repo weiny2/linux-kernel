@@ -267,7 +267,8 @@ static int scan_free(struct nd_region *nd_region,
 					dev_name(ndd->dev), res->name,
 					(unsigned long long) resource_size(res),
 					(unsigned long long) res->start, rc);
-			__devm_release_region(ndd->dev, &ndd->dpa, res->start,
+			devm_kfree(ndd->dev, (void *) res->name);
+			__release_region(&ndd->dpa, res->start,
 					resource_size(res));
 			/* retry with last resource deleted */
 			continue;

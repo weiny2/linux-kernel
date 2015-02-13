@@ -169,8 +169,6 @@ resource_size_t nd_dimm_available_dpa(struct nd_dimm_drvdata *ndd,
 struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n);
-void nd_dimm_release_dpa(struct nd_dimm_drvdata *ndd,
-		struct nd_label_id *label_id);
 resource_size_t nd_dimm_allocated_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id);
 #endif /* __ND_PRIVATE_H__ */

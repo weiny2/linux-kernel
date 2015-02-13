@@ -641,24 +641,12 @@ struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 	if (!name)
 		return NULL;
 
-	res = __devm_request_region(ndd->dev, &ndd->dpa, start, n, name);
+	WARN_ON_ONCE(!is_nd_bus_locked(ndd->dev));
+	res = __request_region(&ndd->dpa, start, n, name, 0);
 	if (!res)
 		devm_kfree(ndd->dev, name);
 	return res;
 }
-
-void nd_dimm_release_dpa(struct nd_dimm_drvdata *ndd, struct nd_label_id *label_id)
-{
-	struct resource *res;
-
-	for_each_dpa_resource(ndd, res)
-		if (strcmp(res->name, label_id->id) == 0) {
-			__devm_release_region(ndd->dev, &ndd->dpa,
-					res->start, resource_size(res));
-			devm_kfree(ndd->dev, (void *) res->name);
-		}
-}
-
 
 /**
  * nd_dimm_allocated_dpa - sum up the dpa currently allocated to this label_id

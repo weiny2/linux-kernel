@@ -314,10 +314,9 @@ int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
 		memcpy_fromio(label_uuid, nd_label->uuid,
 				NSLABEL_UUID_LEN);
 		flags = readl(&nd_label->flags);
-		res = __devm_request_region(ndd->dev, &ndd->dpa,
-				readq(&nd_label->dpa),
+		res = __request_region(&ndd->dpa, readq(&nd_label->dpa),
 				readq(&nd_label->rawsize),
-				nd_label_gen_id(label_id, label_uuid, flags));
+				nd_label_gen_id(label_id, label_uuid, flags), 0);
 		if (!res)
 			return -ENXIO;
 	}
