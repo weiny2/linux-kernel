@@ -469,7 +469,6 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	nd_dimm->dpa.name = dev_name(dev);
 	nd_dimm->dpa.start = 0,
 	nd_dimm->dpa.end = -1,
-	nd_dimm->dpa.flags = IORESOURCE_REG;
 	nd_device_register(dev);
 
 	return nd_dimm;
