@@ -1,5 +1,6 @@
 config ND_ARCH_HAS_IOREMAP_CACHE
-	def_bool (X86 || IA64 || ARM || ARM64 || SH || XTENSA)
+	depends on (X86 || IA64 || ARM || ARM64 || SH || XTENSA)
+	def_bool y
 
 menuconfig NFIT_DEVICES
 	bool "NVDIMM (NFIT) Support"
