@@ -54,6 +54,13 @@ def main():
 
     RegLib.test_log(0,"Waiting 10 seconds for Ipoib to get running")
     time.sleep(10)
+    (err, out) = do_ssh(host1, "ifup ib0")
+    if err:
+         RegLib.test_fail("Could not ifup ib0 on host1")
+
+    (err, out) = do_ssh(host2, "ifup ib0")
+    if err:
+        RegLib.test_fail("Could not ifup ib0 on host1")
 
     # insure not running on either host
     cmd = "pkill qperf"
