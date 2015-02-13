@@ -495,6 +495,15 @@ static int grow_dpa_allocation(struct nd_region *nd_region,
 	return 0;
 }
 
+static void nd_namespace_pmem_set_size(struct nd_region *nd_region,
+		struct nd_namespace_pmem *nspm, resource_size_t size)
+{
+	struct resource *res = &nspm->nsio.res;
+
+	res->start = nd_region->ndr_start;
+	res->end = res->start + size - 1;
+}
+
 static ssize_t __size_store(struct device *dev, const char *buf)
 {
 	resource_size_t allocated = 0, available = 0, min_available = 0;
@@ -593,10 +602,9 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 
 	if (is_namespace_pmem(dev)) {
 		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
-		struct resource *res = &nspm->nsio.res;
 
-		res->start = nd_region->ndr_start;
-		res->end = res->start + val * nd_region->ndr_mappings - 1;
+		nd_namespace_pmem_set_size(nd_region, nspm,
+				val * nd_region->ndr_mappings);
 	} else if (is_namespace_blk(dev)) {
 		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
 		struct nd_mapping *nd_mapping = &nd_region->mapping[0];
@@ -1089,8 +1097,7 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 		goto err;
 	}
 
-	res->start = nd_region->ndr_start;
-	res->end = res->start + size - 1;
+	nd_namespace_pmem_set_size(nd_region, nspm, size);
 
 	return 0;
  err:
@@ -1137,8 +1144,7 @@ static struct device **create_namespace_pmem(struct nd_region *nd_region)
 		}
 
 		/* Publish a zero-sized namespace for userspace to configure. */
-		res->start = nd_region->ndr_start;
-		res->end = nd_region->ndr_start - 1;
+		nd_namespace_pmem_set_size(nd_region, nspm, 0);
 
 		rc = 0;
 	} else if (rc)
