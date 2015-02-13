@@ -292,6 +292,22 @@ static ssize_t init_namespaces_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(init_namespaces);
 
+static ssize_t namespace_seed_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+	ssize_t rc;
+
+	nd_bus_lock(dev);
+	if (nd_region->ns_seed)
+		rc = sprintf(buf, "%s\n", dev_name(nd_region->ns_seed));
+	else
+		rc = sprintf(buf, "\n");
+	nd_bus_unlock(dev);
+	return rc;
+}
+static DEVICE_ATTR_RO(namespace_seed);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
 	&dev_attr_nstype.attr,
@@ -300,6 +316,7 @@ static struct attribute *nd_region_attributes[] = {
 	&dev_attr_set_state.attr,
 	&dev_attr_set_cookie.attr,
 	&dev_attr_available_size.attr,
+	&dev_attr_namespace_seed.attr,
 	&dev_attr_init_namespaces.attr,
 	NULL,
 };

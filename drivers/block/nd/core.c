@@ -309,6 +309,98 @@ ssize_t nd_sector_size_store(struct device *dev, const char *buf,
 	}
 }
 
+static ssize_t commands_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int cmd, len = 0;
+	struct nd_bus *nd_bus = to_nd_bus(dev);
+	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
+
+	for_each_set_bit(cmd, &nfit_desc->dsm_mask, BITS_PER_LONG)
+		len += sprintf(buf + len, "%s ", nfit_cmd_name(cmd));
+	len += sprintf(buf + len, "\n");
+	return len;
+}
+static DEVICE_ATTR_RO(commands);
+
+static ssize_t provider_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_bus *nd_bus = to_nd_bus(dev);
+
+	return sprintf(buf, "%s\n", nd_bus_provider(nd_bus));
+}
+static DEVICE_ATTR_RO(provider);
+
+static ssize_t revision_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_bus *nd_bus = to_nd_bus(dev);
+	struct nfit __iomem *nfit = nd_bus->nfit_desc->nfit_base;
+
+	return sprintf(buf, "%d\n", readb(&nfit->revision));
+}
+static DEVICE_ATTR_RO(revision);
+
+static int flush_namespaces(struct device *dev, void *data)
+{
+	device_lock(dev);
+	device_unlock(dev);
+	return 0;
+}
+
+static int flush_regions_dimms(struct device *dev, void *data)
+{
+	device_lock(dev);
+	device_unlock(dev);
+	device_for_each_child(dev, NULL, flush_namespaces);
+	return 0;
+}
+
+static ssize_t wait_probe_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	nd_synchronize();
+	device_for_each_child(dev, NULL, flush_regions_dimms);
+	return sprintf(buf, "1\n");
+}
+static DEVICE_ATTR_RO(wait_probe);
+
+static ssize_t btt_seed_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_bus *nd_bus = to_nd_bus(dev);
+	ssize_t rc;
+
+	nd_bus_lock(dev);
+	if (nd_bus->nd_btt)
+		rc = sprintf(buf, "%s\n", dev_name(&nd_bus->nd_btt->dev));
+	else
+		rc = sprintf(buf, "\n");
+	nd_bus_unlock(dev);
+
+	return rc;
+}
+static DEVICE_ATTR_RO(btt_seed);
+
+static struct attribute *nd_bus_attributes[] = {
+	&dev_attr_commands.attr,
+	&dev_attr_wait_probe.attr,
+	&dev_attr_provider.attr,
+	&dev_attr_revision.attr,
+	&dev_attr_btt_seed.attr,
+	NULL,
+};
+
+static struct attribute_group nd_bus_attribute_group = {
+	.attrs = nd_bus_attributes,
+};
+
+static const struct attribute_group *nd_bus_attribute_groups[] = {
+	&nd_bus_attribute_group,
+	NULL,
+};
+
 static void *nd_bus_new(struct device *parent,
 		struct nfit_bus_descriptor *nfit_desc, struct module *module)
 {
@@ -336,6 +428,7 @@ static void *nd_bus_new(struct device *parent,
 	nd_bus->module = module;
 	nd_bus->dev.parent = parent;
 	nd_bus->dev.release = nd_bus_release;
+	nd_bus->dev.groups = nd_bus_attribute_groups;
 	dev_set_name(&nd_bus->dev, "ndbus%d", nd_bus->id);
 	rc = device_register(&nd_bus->dev);
 	if (rc) {
