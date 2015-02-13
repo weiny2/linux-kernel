@@ -7,6 +7,7 @@ test_dir=$PWD
 mode=$1
 host1=$2
 host2=$3
+nobuild=$4
 rpm_test=0
 quick_test=1
 default_test=1
@@ -265,7 +266,11 @@ function do_hipri_tests {
 	echo "---------------------------------------------"
 
 	run_cmd_fatal cd $test_dir/tests
-	run_cmd_fatal ./build.sh
+	if [ $nobuild -eq 1 ]; then
+		echo "Skipping build test due to argument"
+	else
+		run_cmd_fatal ./build.sh
+	fi
 	run_cmd_fatal ./LoadModule.py $std_args
 	dump_modparms
 	run_cmd_fatal cd $test_dir
