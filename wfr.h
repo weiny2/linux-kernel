@@ -381,6 +381,15 @@
 #define POWER_MANAGEMENT_SHIFT			0x0
 #define POWER_MANAGEMENT_MASK			0xf
 
+/* 8051 lane register Field IDs */
+#define SPICO_FW_VERSION 0x7	/* SPICO firmware version */
+
+/* SPICO firmware version fields */
+#define SPICO_ROM_VERSION_SHIFT 0
+#define SPICO_ROM_VERSION_MASK 0xffff
+#define SPICO_ROM_PROD_ID_SHIFT 16
+#define SPICO_ROM_PROD_ID_MASK 0xffff
+
 /* verify capibility fabric fields */
 #define VAU_SHIFT	0
 #define VAU_MASK	0x0007
