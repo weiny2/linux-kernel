@@ -3265,6 +3265,7 @@ static void get_linkup_widths(struct hfi_devdata *dd, u16 *tx_width,
 				u16 *rx_width)
 {
 	u16 flags, widths, tx, rx;
+	u16 active_tx, active_rx;
 
 	read_vc_local_link_width(dd, &flags, &widths);
 	tx = widths >> 12;
@@ -3273,6 +3274,9 @@ static void get_linkup_widths(struct hfi_devdata *dd, u16 *tx_width,
 
 	*tx_width = link_width_to_bits(dd, tx);
 	*rx_width = link_width_to_bits(dd, rx);
+
+	/* print the active widths */
+	get_link_widths(dd, &active_tx, &active_rx);
 }
 
 /*
@@ -3287,6 +3291,7 @@ void get_linkup_link_widths(struct qib_pportdata *ppd)
 {
 	u16 tx_width, rx_width;
 
+	/* get end-of-LNI link widths */
 	get_linkup_widths(ppd->dd, &tx_width, &rx_width);
 
 	/* use tx_width as the link is supposed to be symmetric on link up */
@@ -3319,6 +3324,7 @@ void handle_verify_cap(struct work_struct *work)
 	u16 crc_mask;
 	u16 crc_val;
 	u16 device_id;
+	u16 active_tx, active_rx;
 	u8 partner_supported_crc;
 	u8 remote_tx_rate;
 	u8 device_rev;
@@ -3349,6 +3355,8 @@ void handle_verify_cap(struct work_struct *work)
 	 */
 	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
 	read_link_quality(dd, &ppd->link_quality);
+	/* print the active widths */
+	get_link_widths(dd, &active_tx, &active_rx);
 	dd_dev_info(dd,
 		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
 		(int)power_management, (int)continious);
