@@ -104,9 +104,9 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 	if (linkup) {
 		/*
-		 * The LCB loopback and all link up on the simulator
-		 * does not implement:
-		 *	- VerifyCap interupt
+		 * Quick linkup and all link up on the simulator does not
+		 * trigger or implement:
+		 *	- VerifyCap interrupt
 		 *	- VerifyCap frames
 		 * But rather moves directly to LinkUp.
 		 *
@@ -117,7 +117,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		 * NOTE: This uses this device's vAU, vCU, and vl15_init for
 		 * the remote values.  Both sides must be using the values.
 		 */
-		if (loopback == LOOPBACK_LCB
+		if (quick_linkup
 			    || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
 			set_up_vl15(dd, dd->vau, dd->vl15_init);
 			assign_remote_cm_au_table(dd, dd->vcu);

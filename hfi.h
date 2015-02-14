@@ -1611,6 +1611,7 @@ extern u8 krcvqs[];
 extern int krcvqsset;
 extern uint kdeth_qp;
 extern uint loopback;
+extern uint quick_linkup;
 extern uint rcv_intr_timeout;
 extern uint rcv_intr_count;
 extern uint rcv_intr_dynamic;
