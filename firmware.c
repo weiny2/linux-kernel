@@ -41,15 +41,15 @@ static uint fw_8051_load = 1;
 module_param_named(fw_8051_load, fw_8051_load, uint, S_IRUGO);
 MODULE_PARM_DESC(fw_8051_load, "Load the 8051 firmware");
 
-static uint fw_fabric_serdes_load;
+static uint fw_fabric_serdes_load = 1;
 module_param_named(fw_fabric_serdes_load, fw_fabric_serdes_load, uint, S_IRUGO);
 MODULE_PARM_DESC(fw_fabric_serdes_load, "Load the fabric SerDes firmware");
 
-static uint fw_pcie_serdes_load;
+static uint fw_pcie_serdes_load = 1;
 module_param_named(fw_pcie_serdes_load, fw_pcie_serdes_load, uint, S_IRUGO);
 MODULE_PARM_DESC(fw_pcie_serdes_load, "Load the PCIe SerDes firmware");
 
-static uint fw_sbus_load;
+static uint fw_sbus_load = 1;
 module_param_named(fw_sbus_load, fw_sbus_load, uint, S_IRUGO);
 MODULE_PARM_DESC(fw_sbus_load, "Load the SBUS firmware");
 
@@ -57,24 +57,25 @@ static uint fw_validate;
 module_param_named(fw_validate, fw_validate, uint, S_IRUGO);
 MODULE_PARM_DESC(fw_validate, "Perform firmware validation");
 
-#define DEFAULT_FW_8051_NAME "hfi_dc8051.bin"
-#define DEFAULT_FW_FABRIC_NAME "hfi_fabric_serdes.bin"
-#define DEFAULT_FW_SBUS_NAME "hfi_sbus_master.bin"
-#define DEFAULT_FW_PCIE_NAME "hfi_pcie_serdes.bin"
+#define DEFAULT_FW_8051_NAME_FPGA "hfi_dc8051.bin"
+#define DEFAULT_FW_8051_NAME_ASIC "hfi1_dc8051.fw"
+#define DEFAULT_FW_FABRIC_NAME "hfi1_fabric.fw"
+#define DEFAULT_FW_SBUS_NAME "hfi1_sbus.fw"
+#define DEFAULT_FW_PCIE_NAME "hfi1_pcie.fw"
 
-static char *fw_8051_name = DEFAULT_FW_8051_NAME;
+static char *fw_8051_name;
 module_param_named(fw_8051_name, fw_8051_name, charp, S_IRUGO);
 MODULE_PARM_DESC(fw_8051_name, "8051 firmware name");
 
-static char *fw_fabric_serdes_name = DEFAULT_FW_FABRIC_NAME;
+static char *fw_fabric_serdes_name;
 module_param_named(fw_fabric_serdes_name, fw_fabric_serdes_name, charp, S_IRUGO);
 MODULE_PARM_DESC(fw_fabric_serdes_name, "Fabric SerDes firmware name");
 
-static char *fw_sbus_name = DEFAULT_FW_SBUS_NAME;
+static char *fw_sbus_name;
 module_param_named(fw_sbus_name, fw_sbus_name, charp, S_IRUGO);
 MODULE_PARM_DESC(fw_sbus_name, "SBUS firmware name");
 
-static char *fw_pcie_serdes_name = DEFAULT_FW_PCIE_NAME;
+static char *fw_pcie_serdes_name;
 module_param_named(fw_pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
 MODULE_PARM_DESC(fw_pcie_serdes_name, "PCIe SerDes firmware name");
 
@@ -1117,6 +1118,26 @@ int firmware_init(struct hfi_devdata *dd)
 
 	/* we do not expect more than 2 HFIs */
 	BUG_ON(dd->hfi_id >= 2);
+
+	/* only RTL can use these */
+	if (dd->icode != WFR_ICODE_RTL_SILICON) {
+		fw_fabric_serdes_load = 0;
+		fw_pcie_serdes_load = 0;
+		fw_sbus_load = 0;
+	}
+
+	if (!fw_8051_name) {
+		if (dd->icode == WFR_ICODE_RTL_SILICON)
+			fw_8051_name = DEFAULT_FW_8051_NAME_ASIC;
+		else
+			fw_8051_name = DEFAULT_FW_8051_NAME_FPGA;
+	}
+	if (!fw_fabric_serdes_name)
+		fw_fabric_serdes_name = DEFAULT_FW_FABRIC_NAME;
+	if (!fw_sbus_name)
+		fw_sbus_name = DEFAULT_FW_SBUS_NAME;
+	if (!fw_pcie_serdes_name)
+		fw_pcie_serdes_name = DEFAULT_FW_PCIE_NAME;
 
 	ret = obtain_firmware(dd);
 	if (ret)
