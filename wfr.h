@@ -564,7 +564,9 @@ static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
 u64 create_pbc(u64, u32, u32, u32);
 
 /* firmware.c */
+#define NUM_PCIE_SERDES 16	/* number of PCIe serdes on the SBus */
 extern const u8 pcie_serdes_broadcast[];
+extern const u8 pcie_pcs_addrs[2][NUM_PCIE_SERDES];
 #define WRITE_SBUS_RECEIVER 0x21	/* SBUS command */
 void sbus_request(struct hfi_devdata *dd,
 		u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
