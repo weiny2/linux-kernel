@@ -99,6 +99,10 @@ uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cable");
 
+static uint link_speed_mask;
+module_param(link_speed_mask, uint, S_IRUGO);
+MODULE_PARM_DESC(link_speed_mask, "Mask of enabled link speeds (1 = 12.5G, 2 = 25G)");
+
 uint quick_linkup;
 module_param(quick_linkup, uint, S_IRUGO);
 MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
@@ -9935,6 +9939,13 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
 	else			/* half speed */
 		dd->pport->link_speed_supported = OPA_LINK_SPEED_12_5G;
+	/* apply link speed mask module parameter */
+	if (link_speed_mask) {
+		if (dd->pport->link_speed_supported & link_speed_mask)
+			dd->pport->link_speed_supported &= link_speed_mask;
+		else
+			dd_dev_err(dd, "Link speed mask invalid, ignored\n");
+	}
 	dd->pport->link_speed_enabled = dd->pport->link_speed_supported;
 	/* give a reasonable active value, will be set on link up */
 	if (dd->pport->link_speed_supported & OPA_LINK_SPEED_25G)
