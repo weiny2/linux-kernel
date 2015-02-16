@@ -1570,15 +1570,27 @@ static const char * const qp_type_str[] = {
 	"SMI", "GSI", "RC", "UC", "UD",
 };
 
+static int qp_idle(struct qib_qp *qp)
+{
+	return
+		qp->s_last == qp->s_acked &&
+		qp->s_acked == qp->s_cur &&
+		qp->s_cur == qp->s_tail &&
+		qp->s_tail == qp->s_head;
+}
+
 void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 {
 	struct qib_swqe *wqe;
 	struct qib_qp *qp = iter->qp;
+	struct sdma_engine *sde;
 
+	sde = qp_to_sdma_engine(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x\n",
+		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x SL %u SDE %p,%u\n",
 		   iter->n,
+		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
 		   atomic_read(&qp->refcount),
 		   qp_type_str[qp->ibqp.qp_type],
@@ -1597,5 +1609,8 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->s_last, qp->s_acked, qp->s_cur,
 		   qp->s_tail, qp->s_head, qp->s_size,
 		   qp->remote_qpn,
-		   qp->remote_ah_attr.dlid);
+		   qp->remote_ah_attr.dlid,
+		   qp->remote_ah_attr.sl,
+		   sde,
+		   sde ? sde->this_idx : 0);
 }
