@@ -1321,12 +1321,49 @@ static inline u16 sdma_gethead(struct sdma_engine *sde)
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
-	use_dmahead = HFI_CAP_IS_KSET(USE_DMA_HEAD) && __sdma_running(sde)
+retry:
+	use_dmahead = HFI_CAP_IS_KSET(USE_SDMA_HEAD) && __sdma_running(sde)
 			&& (dd->flags & QIB_HAS_SDMA_TIMEOUT);
 	hwhead = use_dmahead ?
 		(u16) le64_to_cpu(*sde->head_dma) :
 		(u16) read_sde_csr(sde, WFR_SEND_DMA_HEAD);
 
+	if (unlikely(HFI_CAP_IS_KSET(SDMA_HEAD_CHECK))) {
+		u16 cnt;
+		u16 swtail;
+		u16 swhead;
+		int sane;
+
+		swhead = sde->descq_head & sde->sdma_mask;
+		/* this code is really bad for cache line trading */
+		swtail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
+		cnt = sde->descq_cnt;
+
+		if (swhead < swtail)
+			/* not wrapped */
+			sane = (hwhead >= swhead) & (hwhead <= swtail);
+		else if (swhead > swtail)
+			/* wrapped around */
+			sane = ((hwhead >= swhead) && (hwhead < cnt)) ||
+				(hwhead <= swtail);
+		else
+			/* empty */
+			sane = (hwhead == swhead);
+
+		if (unlikely(!sane)) {
+			dd_dev_err(dd, "SDMA(%u) bad head (%s) hwhd=%hu swhd=%hu swtl=%hu cnt=%hu\n",
+				sde->this_idx,
+				use_dmahead ? "dma" : "kreg",
+				hwhead, swhead, swtail, cnt);
+			if (use_dmahead) {
+				/* try one more time, using csr */
+				use_dmahead = 0;
+				goto retry;
+			}
+			/* proceed as if no progress */
+			hwhead = swhead;
+		}
+	}
 	return hwhead;
 }
 
@@ -1780,7 +1817,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 
 /* TODO augment this to dump slid check register */
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u FLE %d\n"
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLE %d\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1817,6 +1854,8 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		(unsigned long long)sde->ahg_bits,
 		sde->tx_tail,
 		sde->tx_head,
+		sde->descq_tail,
+		sde->descq_head,
 		!list_empty(&sde->flushlist));
 
 	/* print info for each entry in the descriptor queue */
@@ -1955,6 +1994,7 @@ int sdma_send_txreq(struct sdma_engine *sde,
 	/* user should have supplied entire packet */
 	if (unlikely(tx->tlen))
 		return -EINVAL;
+	tx->wait = wait;
 	spin_lock_irqsave(&sde->tail_lock, flags);
 retry:
 	if (unlikely(!__sdma_running(sde)))
@@ -1962,7 +2002,6 @@ retry:
 	if (unlikely(tx->num_desc > sde->desc_avail))
 		goto nodesc;
 	tail = submit_tx(sde, tx);
-	tx->wait = wait;
 	if (wait)
 		atomic_inc(&wait->sdma_busy);
 	sdma_update_tail(sde, tail);
@@ -2050,6 +2089,7 @@ int sdma_send_txlist(struct sdma_engine *sde,
 	spin_lock_irqsave(&sde->tail_lock, flags);
 retry:
 	list_for_each_entry_safe(tx, tx_next, tx_list, list) {
+		tx->wait = wait;
 		if (unlikely(!__sdma_running(sde)))
 			goto unlock_noconn;
 		if (unlikely(tx->num_desc > sde->desc_avail))
@@ -2060,7 +2100,6 @@ retry:
 		}
 		list_del_init(&tx->list);
 		tail = submit_tx(sde, tx);
-		tx->wait = wait;
 		if (wait)
 			atomic_inc(&wait->sdma_busy);
 	}

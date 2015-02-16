@@ -9,4 +9,4 @@ config HFI1_DEBUG_SDMA_ORDER
 	default n
 	---help---
 	This is a debug flag to test for out of order
-	sdma completions
+	sdma completions for unit testing

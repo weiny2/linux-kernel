@@ -127,7 +127,7 @@
  */
 #define HFI_CAP_RESERVED_MASK   ((HFI_CAP_SDMA |			\
 				  HFI_CAP_ENABLE_SMA |			\
-				  HFI_CAP_USE_DMA_HEAD |		\
+				  HFI_CAP_USE_SDMA_HEAD |		\
 				  HFI_CAP_EXTENDED_PSN |		\
 				  HFI_CAP_PRINT_UNIMPL |		\
 				 HFI_CAP_QSFP_ENABLED |			\

@@ -71,7 +71,7 @@
 #define HFI_CAP_EXTENDED_PSN     (1UL <<  3) /* Enable Extended PSN support */
 #define HFI_CAP_HDRSUPP          (1UL <<  4) /* Enable Header Suppression */
 #define HFI_CAP_ENABLE_SMA       (1UL <<  5) /* Enable driver SM Agent */
-#define HFI_CAP_USE_DMA_HEAD     (1UL <<  6) /* DMA Hdr Q tail vs. use CSR */
+#define HFI_CAP_USE_SDMA_HEAD    (1UL <<  6) /* DMA Hdr Q tail vs. use CSR */
 #define HFI_CAP_MULTI_PKT_EGR    (1UL <<  7) /* Enable multipacket Egr buffs */
 #define HFI_CAP_NODROP_RHQ_FULL  (1UL <<  8) /* Don't drop on Hdr Q full */
 #define HFI_CAP_NODROP_EGR_FULL  (1UL <<  9) /* Don't drop on EGR buffs full */
@@ -82,6 +82,7 @@
 #define HFI_CAP_PKEY_CHECK       (1UL << 14) /* Enable ctxt PKey checking */
 #define HFI_CAP_STATIC_RATE_CTRL (1UL << 15) /* Allow PBC.StaticRateControl */
 #define HFI_CAP_QSFP_ENABLED     (1UL << 16) /* Enable QSFP check during LNI */
+#define HFI_CAP_SDMA_HEAD_CHECK  (1UL << 17) /* SDMA head checking */
 
 #define HFI_RCVHDR_ENTSIZE_2    (1UL << 0)
 #define HFI_RCVHDR_ENTSIZE_16   (1UL << 1)

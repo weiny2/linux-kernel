@@ -140,7 +140,7 @@ HFI_DEFINE_COMP_PARAM(dont_drop_rhq_full, NODROP_RHQ_FULL, 0,
 		      "Do not drop packets when the receive header is full");
 HFI_DEFINE_COMP_PARAM(dont_drop_egr_full, NODROP_EGR_FULL, 0,
 		      "Do not drop packets when all eager buffers are in use");
-HFI_DEFINE_COMP_PARAM(use_dma_head, USE_DMA_HEAD, 0,
+HFI_DEFINE_COMP_PARAM(use_sdma_head, USE_SDMA_HEAD, 1,
 		      "Read CSR vs. DMA for hardware head");
 HFI_DEFINE_COMP_PARAM(use_sdma_ahg, SDMA_AHG, 0, "Turn on/off use of AHG");
 HFI_DEFINE_COMP_PARAM(disable_sma, ENABLE_SMA, 1, "Disable the SMA");
@@ -157,6 +157,8 @@ HFI_DEFINE_COMP_PARAM(enable_pkeys, PKEY_CHECK, 0,
 		      "Enable PKey checking on receive");
 HFI_DEFINE_COMP_PARAM(disable_integrity, NO_INTEGRITY, 0,
 		      "Disablep HW packet integrity checks");
+HFI_DEFINE_COMP_PARAM(sdma_head_check, SDMA_HEAD_CHECK, 0,
+		      "Enable SDMA head check");
 #endif /* HFI_COMPAT_MODPARAMS */
 /* End parameter backward compatibility code */
 
