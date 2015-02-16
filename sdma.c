@@ -1431,9 +1431,9 @@ static void sdma_make_progress(struct sdma_engine *sde, u64 status)
 	 * the next txp on the list.
 	 */
 
+retry:
 	txp = get_txhead(sde);
 	swhead = sde->descq_head & sde->sdma_mask;
-retry:
 	while (swhead != hwhead) {
 		/* advance head, wrap if needed */
 		swhead = ++sde->descq_head & sde->sdma_mask;
@@ -1481,7 +1481,7 @@ retry:
 	 * of sdma_make_progress(..) which is ensured by idle_check_done flag
 	 */
 	if (status & sde->idle_mask && !idle_check_done) {
-		swtail = sde->descq_tail & sde->sdma_mask;
+		swtail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
 		if (swtail != hwhead) {
 			hwhead = (u16)read_sde_csr(sde, WFR_SEND_DMA_HEAD);
 			idle_check_done = 1;
