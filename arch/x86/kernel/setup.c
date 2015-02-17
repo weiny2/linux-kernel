@@ -536,8 +536,11 @@ static void __init reserve_crashkernel_low(void)
 		 *	swiotlb overflow buffer: now is hardcoded to 32k.
 		 *		We round it to 8M for other buffers that
 		 *		may need to stay low too.
+		 *		Also make sure we allocate enough extra memory
+		 *		low memory so that we don't run out of DMA
+		 *		buffers for 32bit devices.
 		 */
-		low_size = swiotlb_size_or_default() + (8UL<<20);
+		low_size = max(swiotlb_size_or_default() + (8UL<<20), 256UL<<20);
 		auto_set = true;
 	} else {
 		/* passed with crashkernel=0,low ? */
