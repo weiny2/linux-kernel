@@ -278,7 +278,8 @@ static void remove_qp(struct qib_ibdev *dev, struct qib_qp *qp)
 	spin_unlock_irqrestore(&dev->qp_dev->qpt_lock, flags);
 	if (removed) {
 		synchronize_rcu();
-		atomic_dec(&qp->refcount);
+		if (atomic_dec_and_test(&qp->refcount))
+			wake_up(&qp->wait);
 	}
 }
 
