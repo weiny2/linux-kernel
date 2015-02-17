@@ -1167,6 +1167,7 @@ __hfi_trace_fn(VERBOSE);
 __hfi_trace_fn(DEBUG);
 __hfi_trace_fn(SNOOP);
 __hfi_trace_fn(CNTR);
+__hfi_trace_fn(PIO);
 
 /*
  * Carry the qib name forward to make porting code from QIB easier. Can be
