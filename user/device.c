@@ -51,16 +51,21 @@
  */
 
 #include <linux/device.h>
+#include <linux/idr.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <rdma/opa_core.h>
 #include "device.h"
+
+static struct idr opa_device_tbl;
+DEFINE_SPINLOCK(opa_device_lock);
 
 /*
  * Device initialization, called by OPA core when a OPA device is discovered
  */
 static int hfi_portals_add(struct opa_core_device *odev)
 {
+	unsigned long flags;
 	int ret;
 	struct hfi_info *hi;
 
@@ -70,15 +75,25 @@ static int hfi_portals_add(struct opa_core_device *odev)
 		goto exit;
 	}
 	hi->odev = odev;
-	dev_set_drvdata(&odev->dev, hi);
+
+	idr_preload(GFP_KERNEL);
+	spin_lock_irqsave(&opa_device_lock, flags);
+	ret = idr_alloc(&opa_device_tbl, hi, odev->index, odev->index+1, GFP_NOWAIT);
+	if (ret < 0) {
+		kfree(hi);
+		goto idr_end;
+	}
+
 	ret = hfi_user_add(hi);
 	if (ret) {
 		dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
-		goto kfree;
+		idr_remove(&opa_device_tbl, odev->index);
+		kfree(hi);
 	}
-	return ret;
-kfree:
-	kfree(hi);
+
+idr_end:
+	spin_unlock_irqrestore(&opa_device_lock, flags);
+	idr_preload_end();
 exit:
 	return ret;
 }
@@ -89,10 +104,17 @@ exit:
  */
 static void hfi_portals_remove(struct opa_core_device *odev)
 {
-	struct hfi_info *hi = dev_get_drvdata(&odev->dev);
+	unsigned long flags;
+	struct hfi_info *hi;
 
-	hfi_user_remove(hi);
-	kfree(hi);
+	spin_lock_irqsave(&opa_device_lock, flags);
+	hi = idr_find(&opa_device_tbl, odev->index);
+	if (hi) {
+		idr_remove(&opa_device_tbl, odev->index);
+		hfi_user_remove(hi);
+		kfree(hi);
+	}
+	spin_unlock_irqrestore(&opa_device_lock, flags);
 }
 
 static struct opa_core_client hfi_portals = {
@@ -103,6 +125,7 @@ static struct opa_core_client hfi_portals = {
 
 static int __init hfi_init(void)
 {
+	idr_init(&opa_device_tbl);
 	return opa_core_client_register(&hfi_portals);
 }
 module_init(hfi_init);
@@ -110,6 +133,7 @@ module_init(hfi_init);
 static void hfi_cleanup(void)
 {
 	opa_core_client_unregister(&hfi_portals);
+	idr_destroy(&opa_device_tbl);
 }
 module_exit(hfi_cleanup);
 
