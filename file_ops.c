@@ -270,7 +270,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	}
 
 	/* only root can do these operations */
-	if (must_be_root && uid_eq(current_uid(), GLOBAL_ROOT_UID)) {
+	if (must_be_root && !capable(CAP_SYS_ADMIN)) {
 		ret = -EPERM;
 		goto bail;
 	}
