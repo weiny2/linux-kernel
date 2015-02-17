@@ -496,6 +496,11 @@ struct flash_file_hdr_g2 {
 	u8 build[24];
 };
 
+/* First letter of the build version of the image */
+#define BLD_STR_UFI_TYPE_BE2	'2'
+#define BLD_STR_UFI_TYPE_BE3	'3'
+#define BLD_STR_UFI_TYPE_SH	'4'
+
 struct flash_file_hdr_g3 {
 	u8 sign[52];
 	u8 ufi_version[4];
