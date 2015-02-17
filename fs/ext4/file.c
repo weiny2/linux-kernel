@@ -194,19 +194,18 @@ errout:
 #ifdef CONFIG_FS_DAX
 static int ext4_dax_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-	return dax_fault(vma, vmf, ext4_get_block);
-					/* Is this the right get_block? */
+	return dax_fault(vma, vmf, ext4_get_block_write);
 }
 
 static int ext4_dax_pmd_fault(struct vm_area_struct *vma, unsigned long addr,
 						pmd_t *pmd, unsigned int flags)
 {
-	return dax_pmd_fault(vma, addr, pmd, flags, ext4_get_block);
+	return dax_pmd_fault(vma, addr, pmd, flags, ext4_get_block_write);
 }
 
 static int ext4_dax_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-	return dax_mkwrite(vma, vmf, ext4_get_block);
+	return dax_mkwrite(vma, vmf, ext4_get_block_write);
 }
 
 static const struct vm_operations_struct ext4_dax_vm_ops = {
