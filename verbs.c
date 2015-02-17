@@ -1175,9 +1175,10 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	u32 *hdr = (u32 *)&ahdr->ibh;
 	u64 pbc_flags = 0;
 	u32 sc5;
-	unsigned long flags;
+	unsigned long flags = 0;
 	struct send_context *sc;
 	struct pio_buf *pbuf;
+	int wc_status = IB_WC_SUCCESS;
 
 	/* vl15 special case taken care of in ud.c */
 	sc5 = qp->s_sc;
@@ -1192,8 +1193,28 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	}
 	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
-	if (unlikely(pbuf == NULL))
-		return no_bufs_available(qp, sc);
+	if (unlikely(pbuf == NULL)) {
+		if (ppd->host_link_state != HLS_UP_ACTIVE) {
+			/*
+			 * If we have filled the PIO buffers to capacity and are
+			 * not in an active state this request is not going to
+			 * go out to so just complete it with an error or else a
+			 * ULP or the core may be stuck waiting.
+			 */
+			hfi_cdbg(PIO,
+				"alloc failed. state not active, completing");
+			wc_status = IB_WC_GENERAL_ERR;
+			goto pio_bail;
+		} else {
+			/*
+			 * This is a normal occurance. The PIO buffs are full up
+			 * but we are still happily sending, well we could be so
+			 * lets continue to queue the request.
+			 */
+			hfi_cdbg(PIO, "alloc failed. state active, queuing");
+			return no_bufs_available(qp, sc);
+		}
+	}
 
 	if (len == 0) {
 		pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
@@ -1218,9 +1239,11 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		qib_put_mr(qp->s_rdma_mr);
 		qp->s_rdma_mr = NULL;
 	}
+
+pio_bail:
 	if (qp->s_wqe) {
 		spin_lock_irqsave(&qp->s_lock, flags);
-		qib_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
+		qib_send_complete(qp, qp->s_wqe, wc_status);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	} else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		spin_lock_irqsave(&qp->s_lock, flags);
@@ -1328,17 +1351,9 @@ int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	u32 plen;
 	int ret;
+	int pio = 0;
+	unsigned long flags = 0;
 	u32 dwords = (len + 3) >> 2;
-
-	ret = egress_pkey_check(dd->pport, &ahdr->ibh, qp);
-	if (ret)
-		return -EINVAL;
-
-	/*
-	 * Calculate the send buffer trigger address.
-	 * The +2 counts for the pbc control qword
-	 */
-	plen = hdrwords + dwords + 2;
 
 	/*
 	 * VL15 packets (IB_QPT_SMI) will always use PIO, so we
@@ -1346,11 +1361,39 @@ int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	 * worrying about just how we got there.
 	 */
 	if (qp->ibqp.qp_type == IB_QPT_SMI
-		|| !(dd->flags & QIB_HAS_SEND_DMA)) {
+		|| !(dd->flags & QIB_HAS_SEND_DMA))
+		pio = 1;
+
+	ret = egress_pkey_check(dd->pport, &ahdr->ibh, qp);
+	if (unlikely(ret)) {
+		/*
+		 * The value we are returning here does not get propagated to
+		 * the verbs caller. Thus we need to complete the request with
+		 * error otherwise the caller could be sitting waiting on the
+		 * completeion event. Only do this for PIO. SDMA has its own
+		 * mechansim for handling the errors. So for SDMA we can just
+		 * return.
+		 */
+		if (pio) {
+			hfi_cdbg(PIO, "%s() Failed. Completing with err",
+				 __func__);
+			spin_lock_irqsave(&qp->s_lock, flags);
+			qib_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
+			spin_unlock_irqrestore(&qp->s_lock, flags);
+		}
+		return -EINVAL;
+	}
+
+	/*
+	 * Calculate the send buffer trigger address.
+	 * The +2 counts for the pbc control qword
+	 */
+	plen = hdrwords + dwords + 2;
+
+	if (pio) {
 		ret = dd->process_pio_send(
 			qp, ahdr, hdrwords, ss, len, plen, dwords, 0);
 	} else {
-
 #ifdef JAG_SDMA_VERBOSITY
 		dd_dev_err(dd, "JAG SDMA %s:%d %s()\n",
 			slashstrip(__FILE__), __LINE__, __func__);
