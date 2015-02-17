@@ -336,7 +336,7 @@ static inline int sem_lock(struct sem_array *sma, struct sembuf *sops,
 			smp_rmb();
 
 			/*
-			 *Now repeat the test of complex_count:
+			 * Now repeat the test of complex_count:
 			 * It can't change anymore until we drop sem->lock.
 			 * Thus: if is now 0, then it will stay 0.
 			 */

@@ -355,7 +355,6 @@ static int tcm_loop_abort_task(struct scsi_cmnd *sc)
 	 */
 	tl_hba = *(struct tcm_loop_hba **)shost_priv(sc->device->host);
 	tl_tpg = &tl_hba->tl_hba_tpgs[sc->device->id];
-
 	ret = tcm_loop_issue_tmr(tl_tpg, sc->device->lun,
 				 sc->tag, TMR_ABORT_TASK);
 	return (ret == TMR_FUNCTION_COMPLETE) ? SUCCESS : FAILED;
@@ -375,6 +374,9 @@ static int tcm_loop_device_reset(struct scsi_cmnd *sc)
 	 * Locate the tcm_loop_hba_t pointer
 	 */
 	tl_hba = *(struct tcm_loop_hba **)shost_priv(sc->device->host);
+	/*
+	 * Locate the tl_tpg pointer from TargetID in sc->device->id
+	 */
 	tl_tpg = &tl_hba->tl_hba_tpgs[sc->device->id];
 
 	ret = tcm_loop_issue_tmr(tl_tpg, sc->device->lun,

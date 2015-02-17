@@ -447,7 +447,7 @@ struct vcpu_vmx {
 #endif
 		int           gs_ldt_reload_needed;
 		int           fs_reload_needed;
-		unsigned long vmcs_host_cr4;	/* May not match real cr4 */
+		unsigned long vmcs_host_cr4;    /* May not match real cr4 */
 	} host_state;
 	struct {
 		int vm86_active;
