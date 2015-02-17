@@ -3734,6 +3734,8 @@ static void valleyview_crtc_enable(struct drm_crtc *crtc)
 	intel_enable_pipe(dev_priv, pipe, false);
 	intel_enable_plane(dev_priv, plane, pipe);
 	intel_enable_planes(crtc);
+	/* The fixup needs to happen before cursor is enabled */
+	g4x_fixup_plane(dev_priv, pipe);
 	intel_crtc_update_cursor(crtc, true);
 
 	intel_update_fbc(dev);
