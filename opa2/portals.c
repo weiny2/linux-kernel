@@ -222,6 +222,92 @@ static void hfi_cq_cleanup(struct hfi_ctx *ctx)
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 }
 
+int hfi_eq_assign(struct hfi_ctx *ctx, struct hfi_eq_assign_args *eq_assign)
+{
+	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_EQ_DESC_OFFSET);
+	union eqd *eq_desc;
+	unsigned long flags;
+	u16 eq_base;
+	int eq_idx, msix_idx = 0;
+	int num_eqs = HFI_NUM_EVENT_HANDLES;
+	int ret = 0;
+
+	eq_base = eq_assign->ni * num_eqs;
+	if (eq_assign->ni >= HFI_NUM_NIS)
+		return -EINVAL;
+	/* TODO blocking mode coming soon... */
+	if (eq_assign->mode & HFI_EQ_MODE_BLOCKING)
+		return -EINVAL;
+	/* TODO also validate queue base+count is mapped to user */
+	if (eq_assign->base & (HFI_EQ_ALIGNMENT - 1))
+		return -EFAULT;
+
+	idr_preload(GFP_KERNEL);
+	spin_lock_irqsave(&ctx->eq_lock, flags);
+	eq_idx = idr_alloc(&ctx->eq_used, ctx, eq_base, eq_base + num_eqs, GFP_NOWAIT);
+	if (eq_idx < 0) {
+		/* all EQs are assigned */
+		ret = -ENOSPC;
+		goto idr_end;
+	}
+
+	/* set EQ descriptor in host memory. */
+	eq_desc = &eq_desc_base[eq_idx];
+	eq_desc->val[1] = 0; /* clear head/tail */
+	eq_desc->order = eq_assign->order;
+	eq_desc->start = (eq_assign->base >> 6);
+	eq_desc->ni = eq_assign->ni;
+	eq_desc->irq = msix_idx;
+	eq_desc->i = (eq_assign->mode & HFI_EQ_MODE_BLOCKING);
+	eq_desc->v = 1;
+	/* TODO - need privileged CQ write to RX CmdQ to complete */
+
+	 /* return index to user */
+	eq_assign->eq_idx = eq_idx;
+
+idr_end:
+	spin_unlock_irqrestore(&ctx->eq_lock, flags);
+	idr_preload_end();
+
+	return ret;
+}
+
+int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx)
+{
+	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_EQ_DESC_OFFSET);
+	union eqd *eq_desc;
+	void *eq_present;
+	unsigned long flags;
+	int ret = 0;
+
+	spin_lock_irqsave(&ctx->eq_lock, flags);
+	eq_present = idr_find(&ctx->eq_used, eq_idx);
+	if (!eq_present) {
+		ret = -EINVAL;
+		goto idr_end;
+	}
+
+	eq_desc = &eq_desc_base[eq_idx];
+	eq_desc->val[1] = 0; /* clear head/tail */
+	eq_desc->val[0] = 0; /* clear valid */
+	/* TODO - privileged CQ write to release EQ */
+
+	idr_remove(&ctx->eq_used, eq_idx);
+idr_end:
+	spin_unlock_irqrestore(&ctx->eq_lock, flags);
+
+	return ret;
+}
+
+static void hfi_eq_cleanup(struct hfi_ctx *ctx)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ctx->eq_lock, flags);
+	idr_destroy(&ctx->eq_used);
+	spin_unlock_irqrestore(&ctx->eq_lock, flags);
+}
+
 /*
  * Reserves contiguous PIDs. Note, also used for orphan reservation which
  * do not touch ctx->[pid_base, pid_count].
@@ -345,6 +431,8 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	ctx->le_me_size = le_me_size;
 	ctx->unexpected_size = unexp_size;
 	ctx->trig_op_size = trig_op_size;
+	idr_init(&ctx->eq_used);
+	spin_lock_init(&ctx->eq_lock);
 
 	dd_dev_info(dd, "Portals PID %u assigned PCB:[%d, %d, %d, %d]\n", ptl_pid,
 		    psb_size, trig_op_size, le_me_size, unexp_size);
@@ -447,6 +535,9 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 
 	/* release assigned PID */
 	hfi_pid_free(dd, ptl_pid);
+
+	/* release per-EQ resources */
+	hfi_eq_cleanup(ctx);
 
 	if (ctx->ptl_state_base) {
 		if (!ptl_phys_pages)
