@@ -8295,8 +8295,8 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 		/* using INTx */
 		/* dd->num_msix_entries already zero */
 		kfree(entries);
-		/* qib_pcie_params() will print if using INTx */
 		single_interrupt = 1;
+		dd_dev_err(dd, "MSI-X failed, using INTx interrupts\n");
 	} else {
 		/* using MSI-X */
 		dd->num_msix_entries = request;
