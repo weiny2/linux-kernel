@@ -101,8 +101,6 @@ static const struct block_device_operations nd_blk_fops = {
 static int nd_blk_probe(struct device *dev)
 {
 	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
-	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
-	struct nd_dimm *nd_dimm = nd_region->mapping[0].nd_dimm;
 	resource_size_t disk_size = 0;
 	struct nd_blk_device *blk_dev;
 	struct gendisk *disk;
