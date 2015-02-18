@@ -259,8 +259,6 @@ static int nd_blk_probe(struct device *dev)
 	struct gendisk *disk;
 	int err, i;
 
-	/* FIXME: for now we just assume the resources are contiguous and
-	   start at 0 */
 	for (i = 0; i < nsblk->num_resources; i++)
 		disk_size += resource_size(nsblk->res[i]);
 
