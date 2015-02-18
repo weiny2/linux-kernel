@@ -50,7 +50,6 @@ struct nd_blk_dimm {
 struct nd_blk_device {
 	struct request_queue	*queue;
 	struct gendisk		*disk;
-	struct nd_blk_dimm	*dimm;
 	struct nd_namespace_blk *nsblk;
 /*	struct nd_io		ndio; */
 
@@ -132,35 +131,6 @@ static int nd_blk_write(struct block_window *bw, void *src,
 	return nd_blk_write_blk_win(bw, src, len);
 }
 
-/* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static int nd_blk_do_bvec(struct nd_namespace_blk *nsblk,
-		struct block_window *bw, struct page *page, unsigned int len,
-		unsigned int off, int rw, sector_t sector)
-{
-	void *mem = kmap_atomic(page);
-	resource_size_t res_offset = sector << SECTOR_SHIFT;
-	resource_size_t	dev_offset = 0;
-	int rc, i;
-
-	for (i = 0; i < nsblk->num_resources; i++) {
-		if (res_offset < resource_size(nsblk->res[i])) {
-			BUG_ON(res_offset + len > resource_size(nsblk->res[i]));
-			dev_offset = nsblk->res[i]->start + res_offset;
-			break;
-		}
-		res_offset -= resource_size(nsblk->res[i]);
-	}
-
-	if (rw == READ)
-		rc = nd_blk_read(bw, mem + off, dev_offset, len);
-	else
-		rc = nd_blk_write(bw, mem + off, dev_offset, len);
-
-	kunmap_atomic(mem);
-
-	return rc;
-}
-
 static void acquire_bw(struct nd_blk_dimm *dimm, unsigned *bw_index)
 {
 	*bw_index = atomic_inc_return(&(dimm->last_bw)) % dimm->num_bw;
@@ -172,20 +142,51 @@ static void release_bw(struct nd_blk_dimm *dimm, unsigned bw_index)
 	spin_unlock(&(dimm->bw_lock[bw_index]));
 }
 
+/* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
+static int nd_blk_do_bvec(struct nd_namespace_blk *nsblk, struct page *page,
+		unsigned int len, unsigned int off, int rw, sector_t sector)
+{
+	void *mem = kmap_atomic(page);
+	resource_size_t res_offset = sector << SECTOR_SHIFT;
+	resource_size_t	dev_offset = 0;
+	struct nd_blk_dimm *dimm = dimm_singleton;
+	struct block_window *bw;
+	unsigned bw_index;
+	int rc, i;
+
+	for (i = 0; i < nsblk->num_resources; i++) {
+		if (res_offset < resource_size(nsblk->res[i])) {
+			BUG_ON(res_offset + len > resource_size(nsblk->res[i]));
+			dev_offset = nsblk->res[i]->start + res_offset;
+			break;
+		}
+		res_offset -= resource_size(nsblk->res[i]);
+	}
+
+	acquire_bw(dimm, &bw_index);
+	bw = &dimm->bw[bw_index];
+
+	if (rw == READ)
+		rc = nd_blk_read(bw, mem + off, dev_offset, len);
+	else
+		rc = nd_blk_write(bw, mem + off, dev_offset, len);
+
+	release_bw(dimm, bw_index);
+	kunmap_atomic(mem);
+
+	return rc;
+}
+
 static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
 	struct nd_blk_device *blk_dev = bdev->bd_disk->private_data;
 	struct nd_namespace_blk *nsblk = blk_dev->nsblk;
-	struct nd_blk_dimm *dimm = blk_dev->dimm;
 	int rw;
 	struct bio_vec bvec;
 	sector_t sector;
 	struct bvec_iter iter;
 	int err = 0;
-	unsigned bw_index;
-
-	acquire_bw(dimm, &bw_index);
 
 	sector = bio->bi_iter.bi_sector;
 	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
@@ -204,8 +205,8 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 
 		BUG_ON(len > PAGE_SIZE);
 
-		err = nd_blk_do_bvec(nsblk, &dimm->bw[bw_index], bvec.bv_page,
-				len, bvec.bv_offset, rw, sector);
+		err = nd_blk_do_bvec(nsblk, bvec.bv_page, len, bvec.bv_offset,
+				rw, sector);
 		if (err)
 			goto out;
 
@@ -214,7 +215,6 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 
 out:
 	bio_endio(bio, err);
-	release_bw(dimm, bw_index);
 }
 
 static const struct block_device_operations nd_blk_fops = {
@@ -255,7 +255,6 @@ static int nd_blk_probe(struct device *dev)
 	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
 	resource_size_t disk_size = 0;
 	struct nd_blk_device *blk_dev;
-	struct nd_blk_dimm *dimm = dimm_singleton;
 	struct gendisk *disk;
 	int err, i;
 
@@ -269,11 +268,6 @@ static int nd_blk_probe(struct device *dev)
 	if (!is_acpi_blk(dev))
 		return 0;
 
-	if (!dimm) {
-		pr_err("%s: ERROR - null dimm!\n", __func__);
-		return -ENXIO;
-	}
-
 	blk_dev = kzalloc(sizeof(*blk_dev), GFP_KERNEL);
 	if (!blk_dev)
 		return -ENOMEM;
@@ -284,7 +278,6 @@ static int nd_blk_probe(struct device *dev)
 		goto err_ida;
 	}
 
-	blk_dev->dimm		= dimm;
 	blk_dev->disk_size	= disk_size;
 
 	blk_dev->queue = blk_alloc_queue(GFP_KERNEL);
