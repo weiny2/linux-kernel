@@ -108,25 +108,25 @@ struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
 int hfi_user_cleanup(struct hfi_ctx *ud);
 
 /* HFI specific functions */
-void hfi_cq_config(struct hfi_ctx *ud, u16 cq_idx, void *head_base,
+void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 		   struct hfi_auth_tuple *auth_table);
-void hfi_cq_config_tuples(struct hfi_ctx *ud, u16 cq_idx,
+void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
-void hfi_pcb_write(struct hfi_ctx *ud, u16 ptl_pid, int phys);
+void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid, int phys);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 
 /* OPA core functions */
-int hfi_cq_assign(struct hfi_ctx *ud, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
-int hfi_cq_update(struct hfi_ctx *ud, u16 cq_idx, struct hfi_auth_tuple *auth_table);
-int hfi_cq_release(struct hfi_ctx *ud, u16 cq_idx);
-int hfi_dlid_assign(struct hfi_ctx *ud, struct hfi_dlid_assign_args *dlid_assign);
-int hfi_dlid_release(struct hfi_ctx *ud);
-int hfi_ctxt_attach(struct hfi_ctx *ud, struct opa_ctx_assign *ctx_assign);
-void hfi_ctxt_cleanup(struct hfi_ctx *ud);
-int hfi_ctxt_reserve(struct hfi_ctx *ud, u16 *base, u16 count);
-void hfi_ctxt_unreserve(struct hfi_ctx *ud);
-int hfi_ctxt_hw_addr(struct hfi_ctx *ud, int token, u16 ctxt, void **addr,
+int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
+int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_table);
+int hfi_cq_release(struct hfi_ctx *ctx, u16 cq_idx);
+int hfi_dlid_assign(struct hfi_ctx *ctx, struct hfi_dlid_assign_args *dlid_assign);
+int hfi_dlid_release(struct hfi_ctx *ctx);
+int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
+void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
+int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);
+void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
+int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,
 		     ssize_t *len);
 
 /*

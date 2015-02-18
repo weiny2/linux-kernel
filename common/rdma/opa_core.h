@@ -117,20 +117,20 @@ struct hfi_dlid_assign_args;
  */
 struct opa_core_ops {
 	/* Resource Allocation ops */
-	int (*ctx_assign)(struct hfi_ctx *ud, struct opa_ctx_assign *ctx_assign);
-	void (*ctx_release)(struct hfi_ctx *ud);
-	int (*ctx_reserve)(struct hfi_ctx *ud, u16 *base, u16 count);
-	void (*ctx_unreserve)(struct hfi_ctx *ud);
-	int (*ctx_addr)(struct hfi_ctx *ud, int type, u16 ctxt, void **addr,
+	int (*ctx_assign)(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
+	void (*ctx_release)(struct hfi_ctx *ctx);
+	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count);
+	void (*ctx_unreserve)(struct hfi_ctx *ctx);
+	int (*ctx_addr)(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 			ssize_t *len);
-	int (*cq_assign)(struct hfi_ctx *ud, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
-	int (*cq_update)(struct hfi_ctx *ud, u16 cq_idx, struct hfi_auth_tuple *auth_table);
-	int (*cq_release)(struct hfi_ctx *ud, u16 cq_idx);
-	int (*eq_assign)(struct hfi_ctx *ud, struct hfi_eq_assign_args *eq_assign);
-	int (*eq_release)(struct hfi_ctx *ud, u16 eq_type, u16 eq_idx);
-	int (*dlid_assign)(struct hfi_ctx *ud,
+	int (*cq_assign)(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
+	int (*cq_update)(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_table);
+	int (*cq_release)(struct hfi_ctx *ctx, u16 cq_idx);
+	int (*eq_assign)(struct hfi_ctx *ctx, struct hfi_eq_assign_args *eq_assign);
+	int (*eq_release)(struct hfi_ctx *ctx, u16 eq_type, u16 eq_idx);
+	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
-	int (*dlid_release)(struct hfi_ctx *ud);
+	int (*dlid_release)(struct hfi_ctx *ctx);
 
 #if 0
 	/* TODO - below is starting attempt at 'kernel provider' operations */
