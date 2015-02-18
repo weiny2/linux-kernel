@@ -43,10 +43,10 @@ struct hfi_devdata;
 #define  _WFR_GPIO_SCL_NUM 0
 
 /* these functions must be called with qsfp_lock held */
-int qib_twsi_reset(struct hfi_devdata *dd);
-int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr, void *buffer,
-		    int len);
-int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
+int qib_twsi_reset(struct hfi_devdata *dd, u32 target);
+int qib_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
+		    void *buffer, int len);
+int qib_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		    const void *buffer, int len);
 
 

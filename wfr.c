@@ -7850,12 +7850,13 @@ static u8 ibphys_portstate(struct qib_pportdata *ppd)
  *      I2CCLK  (bit 0)
  *      I2CDATA (bit 1)
  */
-static u64 gpio_mod(struct hfi_devdata *dd, u32 data, u32 dir, u32 mask)
+static u64 gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
+			u32 mask)
 {
 	unsigned long flags;
 	u64 qsfp_oe, target_oe;
 
-	target_oe = dd->hfi_id ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE;
+	target_oe = target ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE;
 	if (mask) {
 		/* We are writing register bits, so lock access */
 		dir &= mask;
@@ -7872,7 +7873,7 @@ static u64 gpio_mod(struct hfi_devdata *dd, u32 data, u32 dir, u32 mask)
 	 * in the same call, so read should call this function again
 	 * to get valid data
 	 */
-	return read_csr(dd, dd->hfi_id ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
+	return read_csr(dd, target ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
 }
 
 static int init_ctxt(struct qib_ctxtdata *rcd)
@@ -10062,6 +10063,8 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	init_other(dd);
 	/* set up KDETH QP prefix in both RX and TX CSRs */
 	init_kdeth_qp(dd);
+	/* initialize QSFP */
+	qib_qsfp_init(dd->pport);
 
 	/* send contexts must be set up before receive contexts */
 	ret = init_send_contexts(dd);

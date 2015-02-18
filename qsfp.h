@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
+ * Copyright (c) 2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,25 +31,25 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* QSFP support common definitions, for ib_qib driver */
+/* QSFP support common definitions, for hfi driver */
 
 #define QSFP_DEV 0xA0
 #define QSFP_PWR_LAG_MSEC 2000
 #define QSFP_MODPRS_LAG_MSEC 20
 
 /*
- * Below are masks for various QSFP signals, for Port 1.
- * Port2 equivalents are shifted by QSFP_GPIO_PORT2_SHIFT.
+ * Below are masks for QSFP pins.  Pins are the same for HFI0 and HFI1.
  * _N means asserted low
  */
-#define QSFP_GPIO_MOD_SEL_N (4)
-#define QSFP_GPIO_MOD_PRS_N (8)
-#define QSFP_GPIO_INT_N (0x10)
-#define QSFP_GPIO_MOD_RST_N (0x20)
-#define QSFP_GPIO_LP_MODE (0x40)
-#define QSFP_GPIO_PORT2_SHIFT 5
+#define QSFP_HFI0_I2CCLK    (1 << 0)
+#define QSFP_HFI0_I2CDAT    (1 << 1)
+#define QSFP_HFI0_RESET_N   (1 << 2)
+#define QSFP_HFI0_INT_N	    (1 << 3)
+#define QSFP_HFI0_MODPRST_N (1 << 4)
 
-#define QSFP_PAGESIZE 128
+/* QSFP is paged at 256 bytes */
+#define QSFP_PAGESIZE 256
+
 /* Defined fields that QLogic requires of qualified cables */
 /* Byte 0 is Identifier, not checked */
 /* Byte 1 is reserved "status MSB" */
@@ -57,6 +58,7 @@
  * Rest of first 128 not used, although 127 is reserved for page select
  * if module is not "Flat memory".
  */
+#define QSFP_PAGE_SELECT_BYTE_OFFS 127
 /* Byte 128 is Identifier: must be 0x0c for QSFP, or 0x0d for QSFP+ */
 #define QSFP_MOD_ID_OFFS 128
 /*
@@ -147,7 +149,7 @@ extern const char *const qib_qsfp_devtech[16];
 
 /*
  * Hold the parts of the onboard EEPROM that we care about, so we aren't
- * coonstantly bit-boffing
+ * constantly bit-boffing
  */
 struct qib_qsfp_cache {
 	u8 id;	/* must be 0x0C or 0x0D; 0 indicates invalid EEPROM read */
@@ -183,6 +185,13 @@ struct qib_qsfp_data {
 extern int qib_refresh_qsfp_cache(struct qib_pportdata *ppd,
 				  struct qib_qsfp_cache *cp);
 extern int qib_qsfp_mod_present(struct qib_pportdata *ppd);
-extern void qib_qsfp_init(struct qib_qsfp_data *qd,
-			  void (*fevent)(struct work_struct *));
-extern void qib_qsfp_deinit(struct qib_qsfp_data *qd);
+extern void qib_qsfp_init(struct qib_pportdata *ppd);
+
+extern int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
+		     int offset, void *bp, int len);
+extern int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
+		    int offset, void *bp, int len);
+extern int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
+		      int len);
+extern int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
+		     int len);

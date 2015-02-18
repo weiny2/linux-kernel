@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
+ * Copyright (c) 2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,197 +41,215 @@
 #include "twsi.h"
 
 /*
- * QSFP support for ib_qib driver, using "Two Wire Serial Interface" driver
- * in qib_twsi.c
+ * QSFP support for hfi driver, using "Two Wire Serial Interface" driver
+ * in twsi.c
  */
-#define QSFP_MAX_RETRY 4
+#define I2C_MAX_RETRY 4
 
-static int qsfp_read(struct qib_pportdata *ppd, int addr, void *bp, int len)
+/*
+ * Unlocked i2c write.  Must hold dd->qsfp_i2c_mutex.
+ */
+static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
+		int offset, void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u32 out, mask;
-	int ret, cnt, pass = 0;
-	int stuck = 0;
+	int ret, cnt;
 	u8 *buff = bp;
 
-	ret = mutex_lock_interruptible(&dd->qsfp_mutex);
-	if (ret)
-		goto no_unlock;
-
-	/*
-	 * We presume, if we are called at all, that this board has
-	 * QSFP. This is on the same i2c chain as the legacy parts,
-	 * but only responds if the module is selected via GPIO pins.
-	 * Further, there are very long setup and hold requirements
-	 * on MODSEL.
-	 */
-	mask = QSFP_GPIO_MOD_SEL_N | QSFP_GPIO_MOD_RST_N | QSFP_GPIO_LP_MODE;
-	out = QSFP_GPIO_MOD_RST_N | QSFP_GPIO_LP_MODE;
-	if (ppd->hw_pidx) {
-		mask <<= QSFP_GPIO_PORT2_SHIFT;
-		out <<= QSFP_GPIO_PORT2_SHIFT;
-	}
-
-	dd->f_gpio_mod(dd, out, mask, mask);
-
-	/*
-	 * Module could take up to 2 Msec to respond to MOD_SEL, and there
-	 * is no way to tell if it is ready, so we must wait.
-	 */
-	msleep(2);
-
 	/* Make sure TWSI bus is in sane state. */
-	ret = qib_twsi_reset(dd);
+	ret = qib_twsi_reset(dd, target);
 	if (ret) {
 		qib_dev_porterr(dd, ppd->port,
-				"QSFP interface Reset for read failed\n");
-		ret = -EIO;
-		stuck = 1;
-		goto deselect;
+				"I2C interface Reset for write failed\n");
+		return -EIO;
 	}
-
-	/* All QSFP modules are at address A0 */
 
 	cnt = 0;
 	while (cnt < len) {
-		unsigned in_page;
 		int wlen = len - cnt;
 
-		in_page = addr % QSFP_PAGESIZE;
-		if ((in_page + wlen) > QSFP_PAGESIZE)
-			wlen = QSFP_PAGESIZE - in_page;
-		ret = qib_twsi_blk_rd(dd, QSFP_DEV, addr, buff + cnt, wlen);
-		/* Some QSFP's fail first try. Retry as experiment */
-		if (ret && cnt == 0 && ++pass < QSFP_MAX_RETRY)
-			continue;
+		ret = qib_twsi_blk_wr(dd, target, i2c_addr, offset,
+							buff + cnt, wlen);
 		if (ret) {
-			/* qib_twsi_blk_rd() 1 for error, else 0 */
-			ret = -EIO;
-			goto deselect;
+			/* qib_twsi_blk_wr() 1 for error, else 0 */
+			return -EIO;
 		}
-		addr += wlen;
+		offset += wlen;
 		cnt += wlen;
 	}
-	ret = cnt;
 
-deselect:
-	/*
-	 * Module could take up to 10 uSec after transfer before
-	 * ready to respond to MOD_SEL negation, and there is no way
-	 * to tell if it is ready, so we must wait.
-	 */
-	udelay(10);
-	/* set QSFP MODSEL, RST. LP all high */
-	dd->f_gpio_mod(dd, mask, mask, mask);
+	/* Must wait min 20us between qsfp i2c transactions */
+	udelay(20);
 
-	/*
-	 * Module could take up to 2 Msec to respond to MOD_SEL
-	 * going away, and there is no way to tell if it is ready.
-	 * so we must wait.
-	 */
-	if (stuck)
-		dd_dev_err(dd, "QSFP interface bus stuck non-idle\n");
+	return cnt;
+}
 
-	if (pass >= QSFP_MAX_RETRY && ret)
-		qib_dev_porterr(dd, ppd->port, "QSFP failed even retrying\n");
-	else if (pass)
-		qib_dev_porterr(dd, ppd->port, "QSFP retries: %d\n", pass);
+int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
+		void *bp, int len)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int ret;
 
-	msleep(2);
+	ret = mutex_lock_interruptible(&dd->qsfp_i2c_mutex);
+	if (!ret) {
+		ret = __i2c_write(ppd, target, i2c_addr, offset, bp, len);
+		mutex_unlock(&dd->qsfp_i2c_mutex);
+	}
 
-	mutex_unlock(&dd->qsfp_mutex);
-
-no_unlock:
 	return ret;
 }
 
 /*
- * qsfp_write
- * We do not ordinarily write the QSFP, but this is needed to select
- * the page on non-flat QSFPs, and possibly later unusual cases
+ * Unlocked i2c read.  Must hold dd->qsfp_i2c_mutex.
  */
-static int qib_qsfp_write(struct qib_pportdata *ppd, int addr, void *bp,
-			  int len)
+static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
+			int offset, void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u32 out, mask;
-	int ret, cnt;
+	int ret, cnt, pass = 0;
+	int stuck = 0;
 	u8 *buff = bp;
 
-	ret = mutex_lock_interruptible(&dd->qsfp_mutex);
-	if (ret)
-		goto no_unlock;
-
-	/*
-	 * We presume, if we are called at all, that this board has
-	 * QSFP. This is on the same i2c chain as the legacy parts,
-	 * but only responds if the module is selected via GPIO pins.
-	 * Further, there are very long setup and hold requirements
-	 * on MODSEL.
-	 */
-	mask = QSFP_GPIO_MOD_SEL_N | QSFP_GPIO_MOD_RST_N | QSFP_GPIO_LP_MODE;
-	out = QSFP_GPIO_MOD_RST_N | QSFP_GPIO_LP_MODE;
-	if (ppd->hw_pidx) {
-		mask <<= QSFP_GPIO_PORT2_SHIFT;
-		out <<= QSFP_GPIO_PORT2_SHIFT;
-	}
-	dd->f_gpio_mod(dd, out, mask, mask);
-
-	/*
-	 * Module could take up to 2 Msec to respond to MOD_SEL,
-	 * and there is no way to tell if it is ready, so we must wait.
-	 */
-	msleep(2);
-
 	/* Make sure TWSI bus is in sane state. */
-	ret = qib_twsi_reset(dd);
+	ret = qib_twsi_reset(dd, target);
 	if (ret) {
 		qib_dev_porterr(dd, ppd->port,
-				"QSFP interface Reset for write failed\n");
+				"I2C interface Reset for read failed\n");
 		ret = -EIO;
-		goto deselect;
+		stuck = 1;
+		goto exit;
 	}
-
-	/* All QSFP modules are at A0 */
 
 	cnt = 0;
 	while (cnt < len) {
-		unsigned in_page;
-		int wlen = len - cnt;
+		int rlen = len - cnt;
 
-		in_page = addr % QSFP_PAGESIZE;
-		if ((in_page + wlen) > QSFP_PAGESIZE)
-			wlen = QSFP_PAGESIZE - in_page;
-		ret = qib_twsi_blk_wr(dd, QSFP_DEV, addr, buff + cnt, wlen);
+		ret = qib_twsi_blk_rd(dd, target, i2c_addr, offset,
+							buff + cnt, rlen);
+		/* Some QSFP's fail first try. Retry as experiment */
+		if (ret && cnt == 0 && ++pass < I2C_MAX_RETRY)
+			continue;
 		if (ret) {
-			/* qib_twsi_blk_wr() 1 for error, else 0 */
+			/* qib_twsi_blk_rd() 1 for error, else 0 */
 			ret = -EIO;
-			goto deselect;
+			goto exit;
 		}
-		addr += wlen;
-		cnt += wlen;
+		offset += rlen;
+		cnt += rlen;
 	}
+
 	ret = cnt;
 
-deselect:
-	/*
-	 * Module could take up to 10 uSec after transfer before
-	 * ready to respond to MOD_SEL negation, and there is no way
-	 * to tell if it is ready, so we must wait.
-	 */
-	udelay(10);
-	/* set QSFP MODSEL, RST, LP high */
-	dd->f_gpio_mod(dd, mask, mask, mask);
-	/*
-	 * Module could take up to 2 Msec to respond to MOD_SEL
-	 * going away, and there is no way to tell if it is ready.
-	 * so we must wait.
-	 */
-	msleep(2);
+exit:
+	if (stuck)
+		dd_dev_err(dd, "I2C interface bus stuck non-idle\n");
 
-	mutex_unlock(&dd->qsfp_mutex);
+	if (pass >= I2C_MAX_RETRY && ret)
+		qib_dev_porterr(dd, ppd->port,
+					"I2C failed even retrying\n");
+	else if (pass)
+		qib_dev_porterr(dd, ppd->port, "I2C retries: %d\n", pass);
 
-no_unlock:
+	/* Must wait min 20us between qsfp i2c transactions */
+	udelay(20);
+
+	return ret;
+}
+
+int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
+	     void *bp, int len)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int ret;
+
+	ret = mutex_lock_interruptible(&dd->qsfp_i2c_mutex);
+	if (!ret) {
+		ret = __i2c_read(ppd, target, i2c_addr, offset, bp, len);
+		mutex_unlock(&dd->qsfp_i2c_mutex);
+	}
+
+	return ret;
+}
+
+int qsfp_write(struct qib_pportdata *ppd, u32 target, int offset, void *bp,
+		int len)
+{
+	int ret;
+	u8 page;
+
+	ret = mutex_lock_interruptible(&ppd->dd->qsfp_i2c_mutex);
+	if (ret)
+		return ret;
+
+	/*
+	 * Set the qsfp page based on a zero-based offset
+	 * and a page size of QSFP_PAGESIZE bytes.
+	 */
+	page = (u8)(offset / QSFP_PAGESIZE);
+	/* Adjusting offset to position within the selected page */
+	offset = (offset % QSFP_PAGESIZE);
+
+	if (offset > 127) {
+		ret = __i2c_write(ppd, target, QSFP_DEV,
+					QSFP_PAGE_SELECT_BYTE_OFFS, &page, 1);
+		if (ret != 1) {
+			qib_dev_porterr(ppd->dd, ppd->port,
+				"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
+			ret = -EIO;
+			goto unlock;
+		}
+	}
+
+	/* Truncate read to end of page if len would cross page boundary */
+	if ((offset + len) > QSFP_PAGESIZE)
+		len = QSFP_PAGESIZE - offset;
+
+	ret = __i2c_write(ppd, target, QSFP_DEV, offset, bp, len);
+
+unlock:
+	mutex_unlock(&ppd->dd->qsfp_i2c_mutex);
+
+	return ret;
+}
+
+int qsfp_read(struct qib_pportdata *ppd, u32 target, int offset, void *bp,
+		int len)
+{
+	int ret;
+	u8 page;
+
+	ret = mutex_lock_interruptible(&ppd->dd->qsfp_i2c_mutex);
+	if (ret)
+		return ret;
+
+	/*
+	 * Set the qsfp page based on a zero-based offset
+	 * and a page size of QSFP_PAGESIZE bytes.
+	 */
+	page = (u8)(offset / QSFP_PAGESIZE);
+	/* Adjusting offset to position within the selected page */
+	offset = (offset % QSFP_PAGESIZE);
+
+	if (offset > 127) {
+		ret = __i2c_write(ppd, target, QSFP_DEV,
+					QSFP_PAGE_SELECT_BYTE_OFFS, &page, 1);
+		if (ret != 1) {
+			qib_dev_porterr(ppd->dd, ppd->port,
+				"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
+			ret = -EIO;
+			goto unlock;
+		}
+	}
+
+	/* Truncate read to end of page if len would cross page boundary */
+	if ((offset + len) > QSFP_PAGESIZE)
+		len = QSFP_PAGESIZE - offset;
+
+	ret = __i2c_read(ppd, target, QSFP_DEV, offset, bp, len);
+
+unlock:
+	mutex_unlock(&ppd->dd->qsfp_i2c_mutex);
+
 	return ret;
 }
 
@@ -239,7 +258,7 @@ no_unlock:
  * fields we do not otherwise use. This function reads the bytes from
  * <first> to <next-1> and returns the 8lsbs of the sum, or <0 for errors
  */
-static int qsfp_cks(struct qib_pportdata *ppd, int first, int next)
+static int qsfp_cks(struct qib_pportdata *ppd, u32 target, int first, int next)
 {
 	int ret;
 	u16 cks;
@@ -247,7 +266,7 @@ static int qsfp_cks(struct qib_pportdata *ppd, int first, int next)
 
 	cks = 0;
 	while (first < next) {
-		ret = qsfp_read(ppd, first, &bval, 1);
+		ret = qsfp_read(ppd, target, first, &bval, 1);
 		if (ret < 0)
 			goto bail;
 		cks += bval;
@@ -261,10 +280,11 @@ bail:
 
 int qib_refresh_qsfp_cache(struct qib_pportdata *ppd, struct qib_qsfp_cache *cp)
 {
+	u32 target = ppd->dd->hfi_id;
 	int ret;
 	int idx;
 	u16 cks;
-	u8 peek[4];
+	u8 byte0;
 
 	/* ensure sane contents on invalid reads, for cable swaps */
 	memset(cp, 0, sizeof(*cp));
@@ -274,30 +294,14 @@ int qib_refresh_qsfp_cache(struct qib_pportdata *ppd, struct qib_qsfp_cache *cp)
 		goto bail;
 	}
 
-	ret = qsfp_read(ppd, 0, peek, 3);
+	ret = qsfp_read(ppd, target, 0, &byte0, 1);
 	if (ret < 0)
 		goto bail;
-	if ((peek[0] & 0xFE) != 0x0C)
+	if ((byte0 & 0xFE) != 0x0C)
 		qib_dev_porterr(ppd->dd, ppd->port,
-				"QSFP byte0 is 0x%02X, S/B 0x0C/D\n", peek[0]);
+				"QSFP byte0 is 0x%02X, S/B 0x0C/D\n", byte0);
 
-	if ((peek[2] & 2) == 0) {
-		/*
-		 * If cable is paged, rather than "flat memory", we need to
-		 * set the page to zero, Even if it already appears to be zero.
-		 */
-		u8 poke = 0;
-
-		ret = qib_qsfp_write(ppd, 127, &poke, 1);
-		udelay(50);
-		if (ret != 1) {
-			qib_dev_porterr(ppd->dd, ppd->port,
-					"Failed QSFP Page set\n");
-			goto bail;
-		}
-	}
-
-	ret = qsfp_read(ppd, QSFP_MOD_ID_OFFS, &cp->id, 1);
+	ret = qsfp_read(ppd, target, QSFP_MOD_ID_OFFS, &cp->id, 1);
 	if (ret < 0)
 		goto bail;
 	if ((cp->id & 0xFE) != 0x0C)
@@ -305,68 +309,71 @@ int qib_refresh_qsfp_cache(struct qib_pportdata *ppd, struct qib_qsfp_cache *cp)
 				"QSFP ID byte is 0x%02X, S/B 0x0C/D\n", cp->id);
 	cks = cp->id;
 
-	ret = qsfp_read(ppd, QSFP_MOD_PWR_OFFS, &cp->pwr, 1);
+	ret = qsfp_read(ppd, target, QSFP_MOD_PWR_OFFS, &cp->pwr, 1);
 	if (ret < 0)
 		goto bail;
 	cks += cp->pwr;
 
-	ret = qsfp_cks(ppd, QSFP_MOD_PWR_OFFS + 1, QSFP_MOD_LEN_OFFS);
+	ret = qsfp_cks(ppd, target, QSFP_MOD_PWR_OFFS + 1, QSFP_MOD_LEN_OFFS);
 	if (ret < 0)
 		goto bail;
 	cks += ret;
 
-	ret = qsfp_read(ppd, QSFP_MOD_LEN_OFFS, &cp->len, 1);
+	ret = qsfp_read(ppd, target, QSFP_MOD_LEN_OFFS, &cp->len, 1);
 	if (ret < 0)
 		goto bail;
 	cks += cp->len;
 
-	ret = qsfp_read(ppd, QSFP_MOD_TECH_OFFS, &cp->tech, 1);
+	ret = qsfp_read(ppd, target, QSFP_MOD_TECH_OFFS, &cp->tech, 1);
 	if (ret < 0)
 		goto bail;
 	cks += cp->tech;
 
-	ret = qsfp_read(ppd, QSFP_VEND_OFFS, &cp->vendor, QSFP_VEND_LEN);
+	ret = qsfp_read(ppd, target, QSFP_VEND_OFFS, &cp->vendor,
+			QSFP_VEND_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_VEND_LEN; ++idx)
 		cks += cp->vendor[idx];
 
-	ret = qsfp_read(ppd, QSFP_IBXCV_OFFS, &cp->xt_xcv, 1);
+	ret = qsfp_read(ppd, target, QSFP_IBXCV_OFFS, &cp->xt_xcv, 1);
 	if (ret < 0)
 		goto bail;
 	cks += cp->xt_xcv;
 
-	ret = qsfp_read(ppd, QSFP_VOUI_OFFS, &cp->oui, QSFP_VOUI_LEN);
+	ret = qsfp_read(ppd, target, QSFP_VOUI_OFFS, &cp->oui, QSFP_VOUI_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_VOUI_LEN; ++idx)
 		cks += cp->oui[idx];
 
-	ret = qsfp_read(ppd, QSFP_PN_OFFS, &cp->partnum, QSFP_PN_LEN);
+	ret = qsfp_read(ppd, target, QSFP_PN_OFFS, &cp->partnum, QSFP_PN_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_PN_LEN; ++idx)
 		cks += cp->partnum[idx];
 
-	ret = qsfp_read(ppd, QSFP_REV_OFFS, &cp->rev, QSFP_REV_LEN);
+	ret = qsfp_read(ppd, target, QSFP_REV_OFFS, &cp->rev, QSFP_REV_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_REV_LEN; ++idx)
 		cks += cp->rev[idx];
 
-	ret = qsfp_read(ppd, QSFP_ATTEN_OFFS, &cp->atten, QSFP_ATTEN_LEN);
+	ret = qsfp_read(ppd, target, QSFP_ATTEN_OFFS, &cp->atten,
+			QSFP_ATTEN_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_ATTEN_LEN; ++idx)
 		cks += cp->atten[idx];
 
-	ret = qsfp_cks(ppd, QSFP_ATTEN_OFFS + QSFP_ATTEN_LEN, QSFP_CC_OFFS);
+	ret = qsfp_cks(ppd, target, QSFP_ATTEN_OFFS + QSFP_ATTEN_LEN,
+			QSFP_CC_OFFS);
 	if (ret < 0)
 		goto bail;
 	cks += ret;
 
 	cks &= 0xFF;
-	ret = qsfp_read(ppd, QSFP_CC_OFFS, &cp->cks1, 1);
+	ret = qsfp_read(ppd, target, QSFP_CC_OFFS, &cp->cks1, 1);
 	if (ret < 0)
 		goto bail;
 	if (cks != cp->cks1)
@@ -375,35 +382,36 @@ int qib_refresh_qsfp_cache(struct qib_pportdata *ppd, struct qib_qsfp_cache *cp)
 				cks);
 
 	/* Second checksum covers 192 to (serial, date, lot) */
-	ret = qsfp_cks(ppd, QSFP_CC_OFFS + 1, QSFP_SN_OFFS);
+	ret = qsfp_cks(ppd, target, QSFP_CC_OFFS + 1, QSFP_SN_OFFS);
 	if (ret < 0)
 		goto bail;
 	cks = ret;
 
-	ret = qsfp_read(ppd, QSFP_SN_OFFS, &cp->serial, QSFP_SN_LEN);
+	ret = qsfp_read(ppd, target, QSFP_SN_OFFS, &cp->serial, QSFP_SN_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_SN_LEN; ++idx)
 		cks += cp->serial[idx];
 
-	ret = qsfp_read(ppd, QSFP_DATE_OFFS, &cp->date, QSFP_DATE_LEN);
+	ret = qsfp_read(ppd, target, QSFP_DATE_OFFS, &cp->date, QSFP_DATE_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_DATE_LEN; ++idx)
 		cks += cp->date[idx];
 
-	ret = qsfp_read(ppd, QSFP_LOT_OFFS, &cp->lot, QSFP_LOT_LEN);
+	ret = qsfp_read(ppd, target, QSFP_LOT_OFFS, &cp->lot, QSFP_LOT_LEN);
 	if (ret < 0)
 		goto bail;
 	for (idx = 0; idx < QSFP_LOT_LEN; ++idx)
 		cks += cp->lot[idx];
 
-	ret = qsfp_cks(ppd, QSFP_LOT_OFFS + QSFP_LOT_LEN, QSFP_CC_EXT_OFFS);
+	ret = qsfp_cks(ppd, target, QSFP_LOT_OFFS + QSFP_LOT_LEN,
+			QSFP_CC_EXT_OFFS);
 	if (ret < 0)
 		goto bail;
 	cks += ret;
 
-	ret = qsfp_read(ppd, QSFP_CC_EXT_OFFS, &cp->cks2, 1);
+	ret = qsfp_read(ppd, target, QSFP_CC_EXT_OFFS, &cp->cks2, 1);
 	if (ret < 0)
 		goto bail;
 	cks &= 0xFF;
@@ -432,57 +440,46 @@ static const char *pwr_codes = "1.5W2.0W2.5W3.5W";
 
 int qib_qsfp_mod_present(struct qib_pportdata *ppd)
 {
-	u32 mask;
 	int ret;
 
-	mask = QSFP_GPIO_MOD_PRS_N <<
-		(ppd->hw_pidx * QSFP_GPIO_PORT2_SHIFT);
-	ret = ppd->dd->f_gpio_mod(ppd->dd, 0, 0, 0);
-
-	return !((ret & mask) >>
-		 ((ppd->hw_pidx * QSFP_GPIO_PORT2_SHIFT) + 3));
+	ret = ppd->dd->f_gpio_mod(ppd->dd, ppd->dd->hfi_id, 0, 0, 0);
+	return !(ret & QSFP_HFI0_MODPRST_N);
 }
 
 /*
- * Initialize structures that control access to QSFP. Called once per port
- * on cards that support QSFP.
+ * Initialize structures that control access to QSFP. Called once per port.
  */
-void qib_qsfp_init(struct qib_qsfp_data *qd,
-		   void (*fevent)(struct work_struct *))
+void qib_qsfp_init(struct qib_pportdata *ppd)
 {
-	u32 mask, highs;
-
-	struct hfi_devdata *dd = qd->ppd->dd;
-
-	/* Initialize work struct for later QSFP events */
-	INIT_WORK(&qd->work, fevent);
+	struct hfi_devdata *dd = ppd->dd;
+	int ret;
 
 	/*
-	 * Later, we may want more validation. For now, just set up pins and
-	 * blip reset. If module is present, call qib_refresh_qsfp_cache(),
-	 * to do further init.
+	 * A0 leaves the out lines floating on power on, then on an FLR
+	 * enforces a 0 on all out pins.  The driver does not touch
+	 * ASIC_QSFPn_OUT otherwise.  This leaves RESET_N low and anything
+	 * plugged constantly in reset, if it pays attention to RESET_N.
+	 * The prime example of this is SiPh.  For now, set all pins high.
+	 * I2CCLK and I2CDAT will change per direction, and INT_N and
+	 * MODPRS_N are input only and their value is ignored.
+	 *
+	 * We write both outputs because we allow access to both i2c chains
+	 * from each HFI.  There are possible interference issues if this
+	 * code is run while the other HFI is doing an access.  Because of
+	 * the mutex, this can only happen if the other HFI is running on
+	 * another operating system.
 	 */
-	mask = QSFP_GPIO_MOD_SEL_N | QSFP_GPIO_MOD_RST_N | QSFP_GPIO_LP_MODE;
-	highs = mask - QSFP_GPIO_MOD_RST_N;
-	if (qd->ppd->hw_pidx) {
-		mask <<= QSFP_GPIO_PORT2_SHIFT;
-		highs <<= QSFP_GPIO_PORT2_SHIFT;
+	if (is_a0(dd)) {
+		ret = mutex_lock_interruptible(&dd->qsfp_i2c_mutex);
+		if (ret) {
+			/* complain, but otherwise don't do anything */
+			dd_dev_err(dd, "Cannot set QSFP pins high\n");
+		} else {
+			write_csr(dd, WFR_ASIC_QSFP1_OUT, 0x1f);
+			write_csr(dd, WFR_ASIC_QSFP2_OUT, 0x1f);
+			mutex_unlock(&dd->qsfp_i2c_mutex);
+		}
 	}
-	dd->f_gpio_mod(dd, highs, mask, mask);
-	udelay(20); /* Generous RST dwell */
-
-	dd->f_gpio_mod(dd, mask, mask, mask);
-	return;
-}
-
-void qib_qsfp_deinit(struct qib_qsfp_data *qd)
-{
-	/*
-	 * There is nothing to do here for now.  our work is scheduled
-	 * with queue_work(), and flush_workqueue() from remove_one
-	 * will block until all work setup with queue_work()
-	 * completes.
-	 */
 }
 
 int qib_qsfp_dump(struct qib_pportdata *ppd, char *buf, int len)
@@ -533,7 +530,8 @@ int qib_qsfp_dump(struct qib_pportdata *ppd, char *buf, int len)
 	while (bidx < QSFP_DEFAULT_HDR_CNT) {
 		int iidx;
 
-		ret = qsfp_read(ppd, bidx, bin_buff, QSFP_DUMP_CHUNK);
+		ret = qsfp_read(ppd, ppd->dd->hfi_id, bidx, bin_buff,
+				QSFP_DUMP_CHUNK);
 		if (ret < 0)
 			goto bail;
 		for (iidx = 0; iidx < ret; ++iidx) {

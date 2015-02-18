@@ -1258,7 +1258,7 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	spin_lock_init(&dd->qib_diag_trans_lock);
 	spin_lock_init(&dd->sc_init_lock);
 	spin_lock_init(&dd->dc8051_lock);
-	mutex_init(&dd->qsfp_mutex);
+	mutex_init(&dd->qsfp_i2c_mutex);
 	seqlock_init(&dd->sc2vl_lock);
 	spin_lock_init(&dd->sde_map_lock);
 

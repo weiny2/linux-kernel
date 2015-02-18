@@ -852,7 +852,7 @@ struct hfi_devdata {
 	u8 (*f_ibphys_portstate)(struct qib_pportdata *);
 	void (*f_xgxs_reset)(struct qib_pportdata *);
 	/* Read/modify/write of GPIO pins (potentially chip-specific */
-	u64 (*f_gpio_mod)(struct hfi_devdata *dd, u32 out, u32 dir,
+	u64 (*f_gpio_mod)(struct hfi_devdata *dd, u32 target, u32 out, u32 dir,
 		u32 mask);
 	/* modify receive context registers, see RCVCTRL_* for operations */
 	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int context);
@@ -1023,7 +1023,7 @@ struct hfi_devdata {
 	u8 board_atten;
 
 	/* control high-level access to qsfp */
-	struct mutex qsfp_mutex;
+	struct mutex qsfp_i2c_mutex;
 	spinlock_t qsfp_lock;
 
 	struct diag_client *diag_client;

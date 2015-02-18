@@ -65,14 +65,14 @@
  * to the chip.  Since we are delaying anyway, the cost doesn't
  * hurt, and makes the bit twiddling more regular
  */
-static void i2c_wait_for_writes(struct hfi_devdata *dd)
+static void i2c_wait_for_writes(struct hfi_devdata *dd, u32 target)
 {
 	/*
 	 * implicit read of EXTStatus is as good as explicit
 	 * read of scratch, if all we want to do is flush
 	 * writes.
 	 */
-	dd->f_gpio_mod(dd, 0, 0, 0);
+	dd->f_gpio_mod(dd, target, 0, 0, 0);
 	rmb(); /* inlined, so prevent compiler reordering */
 }
 
@@ -87,7 +87,7 @@ static void i2c_wait_for_writes(struct hfi_devdata *dd)
  */
 #define TWSI_BUF_WAIT_USEC 60
 
-static void scl_out(struct hfi_devdata *dd, u8 bit)
+static void scl_out(struct hfi_devdata *dd, u32 target, u8 bit)
 {
 	u32 mask;
 
@@ -96,7 +96,7 @@ static void scl_out(struct hfi_devdata *dd, u8 bit)
 	mask = 1UL << _WFR_GPIO_SCL_NUM;
 
 	/* SCL is meant to be bare-drain, so never set "OUT", just DIR */
-	dd->f_gpio_mod(dd, 0, bit ? 0 : mask, mask);
+	dd->f_gpio_mod(dd, target, 0, bit ? 0 : mask, mask);
 
 	/*
 	 * Allow for slow slaves by simple
@@ -108,7 +108,7 @@ static void scl_out(struct hfi_devdata *dd, u8 bit)
 		int rise_usec;
 
 		for (rise_usec = SCL_WAIT_USEC; rise_usec > 0; rise_usec -= 2) {
-			if (mask & dd->f_gpio_mod(dd, 0, 0, 0))
+			if (mask & dd->f_gpio_mod(dd, target, 0, 0, 0))
 				break;
 			udelay(2);
 		}
@@ -116,32 +116,32 @@ static void scl_out(struct hfi_devdata *dd, u8 bit)
 			dd_dev_err(dd, "SCL interface stuck low > %d uSec\n",
 				    SCL_WAIT_USEC);
 	}
-	i2c_wait_for_writes(dd);
+	i2c_wait_for_writes(dd, target);
 }
 
-static void sda_out(struct hfi_devdata *dd, u8 bit)
+static void sda_out(struct hfi_devdata *dd, u32 target, u8 bit)
 {
 	u32 mask;
 
 	mask = 1UL << _WFR_GPIO_SDA_NUM;
 
 	/* SDA is meant to be bare-drain, so never set "OUT", just DIR */
-	dd->f_gpio_mod(dd, 0, bit ? 0 : mask, mask);
+	dd->f_gpio_mod(dd, target, 0, bit ? 0 : mask, mask);
 
-	i2c_wait_for_writes(dd);
+	i2c_wait_for_writes(dd, target);
 	udelay(2);
 }
 
-static u8 sda_in(struct hfi_devdata *dd, int wait)
+static u8 sda_in(struct hfi_devdata *dd, u32 target, int wait)
 {
 	u32 read_val, mask;
 
 	mask = (1UL << _WFR_GPIO_SDA_NUM);
 	/* SDA is meant to be bare-drain, so never set "OUT", just DIR */
-	dd->f_gpio_mod(dd, 0, 0, mask);
-	read_val = dd->f_gpio_mod(dd, 0, 0, 0);
+	dd->f_gpio_mod(dd, target, 0, 0, mask);
+	read_val = dd->f_gpio_mod(dd, target, 0, 0, 0);
 	if (wait)
-		i2c_wait_for_writes(dd);
+		i2c_wait_for_writes(dd, target);
 	return (read_val & mask) >> _WFR_GPIO_SDA_NUM;
 }
 
@@ -149,20 +149,20 @@ static u8 sda_in(struct hfi_devdata *dd, int wait)
  * i2c_ackrcv - see if ack following write is true
  * @dd: the qlogic_ib device
  */
-static int i2c_ackrcv(struct hfi_devdata *dd)
+static int i2c_ackrcv(struct hfi_devdata *dd, u32 target)
 {
 	u8 ack_received;
 
 	/* AT ENTRY SCL = LOW */
 	/* change direction, ignore data */
-	ack_received = sda_in(dd, 1);
-	scl_out(dd, 1);
-	ack_received = sda_in(dd, 1) == 0;
-	scl_out(dd, 0);
+	ack_received = sda_in(dd, target, 1);
+	scl_out(dd, target, 1);
+	ack_received = sda_in(dd, target, 1) == 0;
+	scl_out(dd, target, 0);
 	return ack_received;
 }
 
-static void stop_cmd(struct hfi_devdata *dd);
+static void stop_cmd(struct hfi_devdata *dd, u32 target);
 
 /**
  * rd_byte - read a byte, sending STOP on last, else ACK
@@ -170,7 +170,7 @@ static void stop_cmd(struct hfi_devdata *dd);
  *
  * Returns byte shifted out of device
  */
-static int rd_byte(struct hfi_devdata *dd, int last)
+static int rd_byte(struct hfi_devdata *dd, u32 target, int last)
 {
 	int bit_cntr, data;
 
@@ -178,18 +178,18 @@ static int rd_byte(struct hfi_devdata *dd, int last)
 
 	for (bit_cntr = 7; bit_cntr >= 0; --bit_cntr) {
 		data <<= 1;
-		scl_out(dd, 1);
-		data |= sda_in(dd, 0);
-		scl_out(dd, 0);
+		scl_out(dd, target, 1);
+		data |= sda_in(dd, target, 0);
+		scl_out(dd, target, 0);
 	}
 	if (last) {
-		scl_out(dd, 1);
-		stop_cmd(dd);
+		scl_out(dd, target, 1);
+		stop_cmd(dd, target);
 	} else {
-		sda_out(dd, 0);
-		scl_out(dd, 1);
-		scl_out(dd, 0);
-		sda_out(dd, 1);
+		sda_out(dd, target, 0);
+		scl_out(dd, target, 1);
+		scl_out(dd, target, 0);
+		sda_out(dd, target, 1);
 	}
 	return data;
 }
@@ -201,31 +201,31 @@ static int rd_byte(struct hfi_devdata *dd, int last)
  *
  * Returns 0 if we got the following ack, otherwise 1
  */
-static int wr_byte(struct hfi_devdata *dd, u8 data)
+static int wr_byte(struct hfi_devdata *dd, u32 target, u8 data)
 {
 	int bit_cntr;
 	u8 bit;
 
 	for (bit_cntr = 7; bit_cntr >= 0; bit_cntr--) {
 		bit = (data >> bit_cntr) & 1;
-		sda_out(dd, bit);
-		scl_out(dd, 1);
-		scl_out(dd, 0);
+		sda_out(dd, target, bit);
+		scl_out(dd, target, 1);
+		scl_out(dd, target, 0);
 	}
-	return (!i2c_ackrcv(dd)) ? 1 : 0;
+	return (!i2c_ackrcv(dd, target)) ? 1 : 0;
 }
 
 /*
  * issue TWSI start sequence:
  * (both clock/data high, clock high, data low while clock is high)
  */
-static void start_seq(struct hfi_devdata *dd)
+static void start_seq(struct hfi_devdata *dd, u32 target)
 {
-	sda_out(dd, 1);
-	scl_out(dd, 1);
-	sda_out(dd, 0);
+	sda_out(dd, target, 1);
+	scl_out(dd, target, 1);
+	sda_out(dd, target, 0);
 	udelay(1);
-	scl_out(dd, 0);
+	scl_out(dd, target, 0);
 }
 
 /**
@@ -234,12 +234,12 @@ static void start_seq(struct hfi_devdata *dd)
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
-static void stop_seq(struct hfi_devdata *dd)
+static void stop_seq(struct hfi_devdata *dd, u32 target)
 {
-	scl_out(dd, 0);
-	sda_out(dd, 0);
-	scl_out(dd, 1);
-	sda_out(dd, 1);
+	scl_out(dd, target, 0);
+	sda_out(dd, target, 0);
+	scl_out(dd, target, 1);
+	sda_out(dd, target, 1);
 }
 
 /**
@@ -248,9 +248,9 @@ static void stop_seq(struct hfi_devdata *dd)
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
-static void stop_cmd(struct hfi_devdata *dd)
+static void stop_cmd(struct hfi_devdata *dd, u32 target)
 {
-	stop_seq(dd);
+	stop_seq(dd, target);
 	udelay(TWSI_BUF_WAIT_USEC);
 }
 
@@ -259,7 +259,7 @@ static void stop_cmd(struct hfi_devdata *dd)
  * @dd: the qlogic_ib device
  */
 
-int qib_twsi_reset(struct hfi_devdata *dd)
+int qib_twsi_reset(struct hfi_devdata *dd, u32 target)
 {
 	int clock_cycles_left = 9;
 	int was_high = 0;
@@ -275,7 +275,7 @@ int qib_twsi_reset(struct hfi_devdata *dd)
 	 * This is the default power-on state with out=0 and dir=0,
 	 * So tri-stated and should be floating high (barring HW problems)
 	 */
-	dd->f_gpio_mod(dd, 0, 0, mask);
+	dd->f_gpio_mod(dd, target, 0, 0, mask);
 
 	/*
 	 * Clock nine times to get all listeners into a sane state.
@@ -288,10 +288,10 @@ int qib_twsi_reset(struct hfi_devdata *dd)
 	 * So our START and STOP take place with SCL held high.
 	 */
 	while (clock_cycles_left--) {
-		scl_out(dd, 0);
-		scl_out(dd, 1);
+		scl_out(dd, target, 0);
+		scl_out(dd, target, 1);
 		/* Note if SDA is high, but keep clocking to sync slave */
-		was_high |= sda_in(dd, 0);
+		was_high |= sda_in(dd, target, 0);
 	}
 
 	if (was_high) {
@@ -300,16 +300,16 @@ int qib_twsi_reset(struct hfi_devdata *dd)
 		 * Issue START, STOP, pause for T_BUF.
 		 */
 
-		pins = dd->f_gpio_mod(dd, 0, 0, 0);
+		pins = dd->f_gpio_mod(dd, target, 0, 0, 0);
 		if ((pins & mask) != mask)
 			dd_dev_err(dd, "GPIO pins not at rest: %d\n",
 				    pins & mask);
 		/* Drop SDA to issue START */
 		udelay(1); /* Guarantee .6 uSec setup */
-		sda_out(dd, 0);
+		sda_out(dd, target, 0);
 		udelay(1); /* Guarantee .6 uSec hold */
 		/* At this point, SCL is high, SDA low. Raise SDA for STOP */
-		sda_out(dd, 1);
+		sda_out(dd, target, 1);
 		udelay(TWSI_BUF_WAIT_USEC);
 	}
 
@@ -323,17 +323,18 @@ int qib_twsi_reset(struct hfi_devdata *dd)
  * STOP.
  * returns 0 if OK (ACK received), else != 0
  */
-static int qib_twsi_wr(struct hfi_devdata *dd, int data, int flags)
+static int qib_twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
 {
 	int ret = 1;
 
 	if (flags & QIB_TWSI_START)
-		start_seq(dd);
+		start_seq(dd, target);
 
-	ret = wr_byte(dd, data); /* Leaves SCL low (from i2c_ackrcv()) */
+	/* Leaves SCL low (from i2c_ackrcv()) */
+	ret = wr_byte(dd, target, data);
 
 	if (flags & QIB_TWSI_STOP)
-		stop_cmd(dd);
+		stop_cmd(dd, target);
 	return ret;
 }
 
@@ -352,7 +353,7 @@ static int qib_twsi_wr(struct hfi_devdata *dd, int data, int flags)
  * the "register" or "offset" within the device from which data should
  * be read.
  */
-int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr,
+int qib_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		    void *buffer, int len)
 {
 	int ret;
@@ -363,12 +364,12 @@ int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr,
 	if (dev == QIB_TWSI_NO_DEV) {
 		/* legacy not-really-I2C */
 		addr = (addr << 1) | READ_CMD;
-		ret = qib_twsi_wr(dd, addr, QIB_TWSI_START);
+		ret = qib_twsi_wr(dd, target, addr, QIB_TWSI_START);
 	} else {
 		/* Actual I2C */
-		ret = qib_twsi_wr(dd, dev | WRITE_CMD, QIB_TWSI_START);
+		ret = qib_twsi_wr(dd, target, dev | WRITE_CMD, QIB_TWSI_START);
 		if (ret) {
-			stop_cmd(dd);
+			stop_cmd(dd, target);
 			ret = 1;
 			goto bail;
 		}
@@ -379,7 +380,7 @@ int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr,
 		 * we need t_buf (nominally 20uSec) before that start,
 		 * and cannot rely on the delay built in to the STOP
 		 */
-		ret = qib_twsi_wr(dd, addr, 0);
+		ret = qib_twsi_wr(dd, target, addr, 0);
 		udelay(TWSI_BUF_WAIT_USEC);
 
 		if (ret) {
@@ -389,10 +390,10 @@ int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr,
 			ret = 1;
 			goto bail;
 		}
-		ret = qib_twsi_wr(dd, dev | READ_CMD, QIB_TWSI_START);
+		ret = qib_twsi_wr(dd, target, dev | READ_CMD, QIB_TWSI_START);
 	}
 	if (ret) {
-		stop_cmd(dd);
+		stop_cmd(dd, target);
 		ret = 1;
 		goto bail;
 	}
@@ -409,7 +410,7 @@ int qib_twsi_blk_rd(struct hfi_devdata *dd, int dev, int addr,
 		 * Get and store data, sending ACK if length remaining,
 		 * else STOP
 		 */
-		*bp++ = rd_byte(dd, !len);
+		*bp++ = rd_byte(dd, target, !len);
 	}
 
 	ret = 0;
@@ -430,7 +431,7 @@ bail:
  * the "register" or "offset" within the device to which data should
  * be written.
  */
-int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
+int qib_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		    const void *buffer, int len)
 {
 	int sub_len;
@@ -440,15 +441,16 @@ int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
 
 	while (len > 0) {
 		if (dev == QIB_TWSI_NO_DEV) {
-			if (qib_twsi_wr(dd, (addr << 1) | WRITE_CMD,
+			if (qib_twsi_wr(dd, target, (addr << 1) | WRITE_CMD,
 					QIB_TWSI_START)) {
 				goto failed_write;
 			}
 		} else {
 			/* Real I2C */
-			if (qib_twsi_wr(dd, dev | WRITE_CMD, QIB_TWSI_START))
+			if (qib_twsi_wr(dd, target,
+					dev | WRITE_CMD, QIB_TWSI_START))
 				goto failed_write;
-			ret = qib_twsi_wr(dd, addr, 0);
+			ret = qib_twsi_wr(dd, target, addr, 0);
 			if (ret) {
 				dd_dev_err(dd,
 					"Failed to write interface write addr %02X\n",
@@ -462,10 +464,10 @@ int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
 		len -= sub_len;
 
 		for (i = 0; i < sub_len; i++)
-			if (qib_twsi_wr(dd, *bp++, 0))
+			if (qib_twsi_wr(dd, target, *bp++, 0))
 				goto failed_write;
 
-		stop_cmd(dd);
+		stop_cmd(dd, target);
 
 		/*
 		 * Wait for write complete by waiting for a successful
@@ -479,20 +481,21 @@ int qib_twsi_blk_wr(struct hfi_devdata *dd, int dev, int addr,
 		 * whether we have real eeprom_dev. Legacy likes any address.
 		 */
 		max_wait_time = 100;
-		while (qib_twsi_wr(dd, dev | READ_CMD, QIB_TWSI_START)) {
-			stop_cmd(dd);
+		while (qib_twsi_wr(dd, target,
+					dev | READ_CMD, QIB_TWSI_START)) {
+			stop_cmd(dd, target);
 			if (!--max_wait_time)
 				goto failed_write;
 		}
 		/* now read (and ignore) the resulting byte */
-		rd_byte(dd, 1);
+		rd_byte(dd, target, 1);
 	}
 
 	ret = 0;
 	goto bail;
 
 failed_write:
-	stop_cmd(dd);
+	stop_cmd(dd, target);
 	ret = 1;
 
 bail:

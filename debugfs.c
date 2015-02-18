@@ -36,11 +36,11 @@
 #include <linux/export.h>
 
 #include "hfi.h"
-#include "verbs.h"
 #include "debugfs.h"
 #include "device.h"
 #include "qp.h"
 #include "sdma.h"
+#include "qsfp.h"
 
 static struct dentry *hfi_dbg_root;
 
@@ -73,10 +73,10 @@ static const struct file_operations _##name##_file_ops = { \
 	.release = seq_release \
 };
 
-#define DEBUGFS_FILE_CREATE(name, parent, data, ops) \
+#define DEBUGFS_FILE_CREATE(name, parent, data, ops, mode)	\
 do { \
 	struct dentry *ent; \
-	ent = debugfs_create_file(name , S_IRUGO, parent, \
+	ent = debugfs_create_file(name, mode, parent, \
 		data, ops); \
 	if (!ent) \
 		pr_warn("create of %s failed\n", name); \
@@ -84,7 +84,7 @@ do { \
 
 
 #define DEBUGFS_SEQ_FILE_CREATE(name, parent, data) \
-	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops)
+	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops, S_IRUGO)
 
 static void *_opcode_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -380,7 +380,7 @@ static ssize_t portcntrs_read(struct file *file, char __user *buf,
 /*
  * read the per-port QSFP data for ppd
  */
-static ssize_t qsfp_read(struct file *file, char __user *buf,
+static ssize_t qsfp_dump(struct file *file, char __user *buf,
 			   size_t count, loff_t *ppos)
 {
 	struct qib_pportdata *ppd;
@@ -401,24 +401,269 @@ static ssize_t qsfp_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-#define DEBUGFS_OPS(nm, readroutine) \
+/* Do an i2c write operation on the chain for the given HFI. */
+static ssize_t __i2c_debugfs_write(struct file *file, const char __user *buf,
+			   size_t count, loff_t *ppos, u32 target)
+{
+	struct qib_pportdata *ppd;
+	char *buff;
+	int ret;
+	int i2c_addr;
+	int offset;
+	int total_written;
+
+	rcu_read_lock();
+	ppd = private2ppd(file);
+
+	buff = kmalloc(count, GFP_KERNEL);
+	if (!buff) {
+		ret = -ENOMEM;
+		goto _return;
+	}
+
+	ret = copy_from_user(buff, buf, count);
+	if (ret > 0) {
+		ret = -EFAULT;
+		goto _free;
+	}
+
+	i2c_addr = (*ppos >> 16) & 0xff;
+	offset = *ppos & 0xffff;
+
+	total_written = i2c_write(ppd, target, i2c_addr, offset, buff, count);
+	if (total_written < 0) {
+		ret = total_written;
+		goto _free;
+	}
+
+	*ppos += total_written;
+
+	ret = total_written;
+
+ _free:
+	kfree(buff);
+ _return:
+	rcu_read_unlock();
+	return ret;
+}
+
+/* Do an i2c write operation on chain for HFI 0. */
+static ssize_t i2c1_debugfs_write(struct file *file, const char __user *buf,
+			   size_t count, loff_t *ppos)
+{
+	return __i2c_debugfs_write(file, buf, count, ppos, 0);
+}
+
+/* Do an i2c write operation on chain for HFI 1. */
+static ssize_t i2c2_debugfs_write(struct file *file, const char __user *buf,
+			   size_t count, loff_t *ppos)
+{
+	return __i2c_debugfs_write(file, buf, count, ppos, 1);
+}
+
+/* Do an i2c read operation on the chain for the given HFI. */
+static ssize_t __i2c_debugfs_read(struct file *file, char __user *buf,
+			size_t count, loff_t *ppos, u32 target)
+{
+	struct qib_pportdata *ppd;
+	char *buff;
+	int ret;
+	int i2c_addr;
+	int offset;
+	int total_read;
+
+	rcu_read_lock();
+	ppd = private2ppd(file);
+
+	buff = kmalloc(count, GFP_KERNEL);
+	if (!buff) {
+		ret = -ENOMEM;
+		goto _return;
+	}
+
+	i2c_addr = (*ppos >> 16) & 0xff;
+	offset = *ppos & 0xffff;
+
+	total_read = i2c_read(ppd, target, i2c_addr, offset, buff, count);
+	if (total_read < 0) {
+		ret = total_read;
+		goto _free;
+	}
+
+	*ppos += total_read;
+
+	ret = copy_to_user(buf, buff, total_read);
+	if (ret > 0) {
+		ret = -EFAULT;
+		goto _free;
+	}
+
+	ret = total_read;
+
+ _free:
+	kfree(buff);
+ _return:
+	rcu_read_unlock();
+	return ret;
+}
+
+/* Do an i2c read operation on chain for HFI 0. */
+static ssize_t i2c1_debugfs_read(struct file *file, char __user *buf,
+			size_t count, loff_t *ppos)
+{
+	return __i2c_debugfs_read(file, buf, count, ppos, 0);
+}
+
+/* Do an i2c read operation on chain for HFI 1. */
+static ssize_t i2c2_debugfs_read(struct file *file, char __user *buf,
+			size_t count, loff_t *ppos)
+{
+	return __i2c_debugfs_read(file, buf, count, ppos, 1);
+}
+
+/* Do a QSFP write operation on the i2c chain for the given HFI. */
+static ssize_t __qsfp_debugfs_write(struct file *file, const char __user *buf,
+			   size_t count, loff_t *ppos, u32 target)
+{
+	struct qib_pportdata *ppd;
+	char *buff;
+	int ret;
+	int total_written;
+
+	rcu_read_lock();
+	if (*ppos + count > QSFP_PAGESIZE * 4) { /* base page + page00-page03 */
+		ret = -EINVAL;
+		goto _return;
+	}
+
+	ppd = private2ppd(file);
+
+	buff = kmalloc(count, GFP_KERNEL);
+	if (!buff) {
+		ret = -ENOMEM;
+		goto _return;
+	}
+
+	ret = copy_from_user(buff, buf, count);
+	if (ret > 0) {
+		ret = -EFAULT;
+		goto _free;
+	}
+
+	total_written = qsfp_write(ppd, target, *ppos, buff, count);
+	if (total_written < 0) {
+		ret = total_written;
+		goto _free;
+	}
+
+	*ppos += total_written;
+
+	ret = total_written;
+
+ _free:
+	kfree(buff);
+ _return:
+	rcu_read_unlock();
+	return ret;
+}
+
+/* Do a QSFP write operation on i2c chain for HFI 0. */
+static ssize_t qsfp1_debugfs_write(struct file *file, const char __user *buf,
+			   size_t count, loff_t *ppos)
+{
+	return __qsfp_debugfs_write(file, buf, count, ppos, 0);
+}
+
+/* Do a QSFP write operation on i2c chain for HFI 1. */
+static ssize_t qsfp2_debugfs_write(struct file *file, const char __user *buf,
+			   size_t count, loff_t *ppos)
+{
+	return __qsfp_debugfs_write(file, buf, count, ppos, 1);
+}
+
+/* Do a QSFP read operation on the i2c chain for the given HFI. */
+static ssize_t __qsfp_debugfs_read(struct file *file, char __user *buf,
+			size_t count, loff_t *ppos, u32 target)
+{
+	struct qib_pportdata *ppd;
+	char *buff;
+	int ret;
+	int total_read;
+
+	rcu_read_lock();
+	if (*ppos + count > QSFP_PAGESIZE * 4) { /* base page + page00-page03 */
+		ret = -EINVAL;
+		goto _return;
+	}
+
+	ppd = private2ppd(file);
+
+	buff = kmalloc(count, GFP_KERNEL);
+	if (!buff) {
+		ret = -ENOMEM;
+		goto _return;
+	}
+
+	total_read = qsfp_read(ppd, target, *ppos, buff, count);
+	if (total_read < 0) {
+		ret = total_read;
+		goto _free;
+	}
+
+	*ppos += total_read;
+
+	ret = copy_to_user(buf, buff, total_read);
+	if (ret > 0) {
+		ret = -EFAULT;
+		goto _free;
+	}
+
+	ret = total_read;
+
+ _free:
+	kfree(buff);
+ _return:
+	rcu_read_unlock();
+	return ret;
+}
+
+/* Do a QSFP read operation on i2c chain for HFI 0. */
+static ssize_t qsfp1_debugfs_read(struct file *file, char __user *buf,
+			size_t count, loff_t *ppos)
+{
+	return __qsfp_debugfs_read(file, buf, count, ppos, 0);
+}
+
+/* Do a QSFP read operation on i2c chain for HFI 1. */
+static ssize_t qsfp2_debugfs_read(struct file *file, char __user *buf,
+			size_t count, loff_t *ppos)
+{
+	return __qsfp_debugfs_read(file, buf, count, ppos, 1);
+}
+
+#define DEBUGFS_OPS(nm, readroutine, writeroutine)	\
 { \
 	.name = nm, \
 	.ops = { \
 		.read = readroutine, \
+		.write = writeroutine, \
 		.llseek = generic_file_llseek, \
 	}, \
 }
 
 static const struct counter_info cntr_ops[] = {
-	DEBUGFS_OPS("counter_names", dev_names_read),
-	DEBUGFS_OPS("counters", dev_counters_read),
-	DEBUGFS_OPS("portcounter_names", portnames_read),
+	DEBUGFS_OPS("counter_names", dev_names_read, NULL),
+	DEBUGFS_OPS("counters", dev_counters_read, NULL),
+	DEBUGFS_OPS("portcounter_names", portnames_read, NULL),
 };
 
 static const struct counter_info port_cntr_ops[] = {
-	DEBUGFS_OPS("port%dcounters", portcntrs_read),
-	DEBUGFS_OPS("qsfp%d", qsfp_read),
+	DEBUGFS_OPS("port%dcounters", portcntrs_read, NULL),
+	DEBUGFS_OPS("i2c1", i2c1_debugfs_read, i2c1_debugfs_write),
+	DEBUGFS_OPS("i2c2", i2c2_debugfs_read, i2c2_debugfs_write),
+	DEBUGFS_OPS("qsfp_dump%d", qsfp_dump, NULL),
+	DEBUGFS_OPS("qsfp1", qsfp1_debugfs_read, qsfp1_debugfs_write),
+	DEBUGFS_OPS("qsfp2", qsfp2_debugfs_read, qsfp2_debugfs_write),
 };
 
 void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
@@ -454,7 +699,7 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 		DEBUGFS_FILE_CREATE(cntr_ops[i].name,
 				    ibd->hfi_ibdev_dbg,
 				    dd,
-				    &cntr_ops[i].ops);
+				    &cntr_ops[i].ops, S_IRUGO);
 	/* per port files */
 	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
 		for (i = 0; i < ARRAY_SIZE(port_cntr_ops); i++) {
@@ -465,7 +710,9 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 			DEBUGFS_FILE_CREATE(name,
 					    ibd->hfi_ibdev_dbg,
 					    ppd,
-					    &port_cntr_ops[i].ops);
+					    &port_cntr_ops[i].ops,
+					    port_cntr_ops[i].ops.write == NULL ?
+					    S_IRUGO : S_IRUGO|S_IWUSR);
 		}
 	return;
 }
