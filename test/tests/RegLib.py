@@ -454,7 +454,7 @@ class TestInfo:
                           help="List of tests to execute. Can be used with '--type' to further filter the test list.")
         parser.add_option("--psmopts", dest="psm_opts",
                           help="String of options to pass to PSM tests.",
-                          default="-x PSM_SDMA=0 -x PSM_TID=0")
+                          default="-x PSM_SDMA=1 -x PSM_TID=1")
         parser.add_option("--forceroot", action="store_true", dest="force_root",
                           help="Force all commands to run as root.")
         parser.add_option("--np", dest="np",
