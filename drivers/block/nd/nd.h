@@ -34,6 +34,7 @@ struct nd_dimm {
 	struct nfit_cmd_get_config_data_hdr *data;
 	int ns_current, ns_next;
 	struct resource dpa;
+	struct nd_blk_dimm *blk_dimm;
 };
 
 static inline struct nd_namespace_index __iomem *to_namespace_index(
@@ -212,4 +213,7 @@ void nd_bus_unlock(struct device *dev);
 bool is_nd_bus_locked(struct device *dev);
 int nd_label_reserve_dpa(struct nd_dimm *nd_dimm);
 const char *nd_blk_bus_provider(struct device *dev);
+int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
+		unsigned int len, unsigned int off, int rw,
+		resource_size_t dev_offset);
 #endif /* __ND_H__ */

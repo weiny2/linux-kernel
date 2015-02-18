@@ -143,11 +143,11 @@ static void release_bw(struct nd_blk_dimm *dimm, unsigned bw_index)
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static int nd_blk_do_io(struct page *page, unsigned int len,
-		unsigned int off, int rw, resource_size_t dev_offset)
+int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
+		unsigned int len, unsigned int off, int rw,
+		resource_size_t dev_offset)
 {
 	void *mem = kmap_atomic(page);
-	struct nd_blk_dimm *dimm = dimm_singleton;
 	struct block_window *bw;
 	unsigned bw_index;
 	int rc;
@@ -165,12 +165,15 @@ static int nd_blk_do_io(struct page *page, unsigned int len,
 
 	return rc;
 }
+EXPORT_SYMBOL(nd_blk_do_io);
 
 static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
 	struct nd_blk_device *blk_dev = bdev->bd_disk->private_data;
 	struct nd_namespace_blk *nsblk = blk_dev->nsblk;
+	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
+	struct nd_dimm *nd_dimm = nd_region->mapping[0].nd_dimm;
 	int rw, i;
 	struct bio_vec bvec;
 	sector_t sector;
@@ -207,8 +210,8 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 			res_offset -= resource_size(nsblk->res[i]);
 		}
 
-		err = nd_blk_do_io(bvec.bv_page, len, bvec.bv_offset, rw,
-				dev_offset);
+		err = nd_blk_do_io(nd_dimm->blk_dimm, bvec.bv_page,
+				len, bvec.bv_offset, rw, dev_offset);
 		if (err)
 			goto out;
 
@@ -255,6 +258,8 @@ static bool is_acpi_blk(struct device *dev)
 static int nd_blk_probe(struct device *dev)
 {
 	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
+	struct nd_dimm *nd_dimm = nd_region->mapping[0].nd_dimm;
 	resource_size_t disk_size = 0;
 	struct nd_blk_device *blk_dev;
 	struct gendisk *disk;
@@ -310,6 +315,8 @@ static int nd_blk_probe(struct device *dev)
 	set_capacity(disk, disk_size >> SECTOR_SHIFT);
 
 	dev_set_drvdata(dev, blk_dev);
+
+	nd_dimm->blk_dimm = dimm_singleton;
 
 	add_disk(disk);
 
