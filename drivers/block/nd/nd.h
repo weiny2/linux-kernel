@@ -19,6 +19,13 @@
 #include "label.h"
 
 struct gendisk;
+
+struct block_window {
+	void			*bw_apt_virt;
+	u64			*bw_ctl_virt;
+	u32			*bw_stat_virt;
+};
+
 struct nd_dimm {
 	unsigned long dsm_mask;
 	struct nd_mem *nd_mem;
@@ -34,7 +41,12 @@ struct nd_dimm {
 	struct nfit_cmd_get_config_data_hdr *data;
 	int ns_current, ns_next;
 	struct resource dpa;
-	struct nd_blk_dimm *blk_dimm;
+	struct nd_blk_dimm {
+		unsigned		num_bw;
+		atomic_t		last_bw;
+		struct block_window	*bw;	  /* Array of 'num_bw' block windows */
+		spinlock_t		*bw_lock; /* Array of 'num_bw' locks */
+	} blk_dimm;
 };
 
 static inline struct nd_namespace_index __iomem *to_namespace_index(
@@ -216,4 +228,5 @@ const char *nd_blk_bus_provider(struct device *dev);
 int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
 		unsigned int len, unsigned int off, int rw,
 		resource_size_t dev_offset);
+bool is_acpi_blk(struct device *dev);
 #endif /* __ND_H__ */

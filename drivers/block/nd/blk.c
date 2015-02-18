@@ -25,27 +25,6 @@
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 
 #define SECTOR_SHIFT		9
-#define CL_SHIFT		6
-
-enum {
-	BCW_OFFSET_MASK		= (1UL << 48)-1,
-	BCW_LEN_SHIFT		= 48,
-	BCW_LEN_MASK		= (1UL << 8) - 1,
-	BCW_CMD_SHIFT		= 56,
-};
-
-struct block_window {
-	void			*bw_apt_virt;
-	u64			*bw_ctl_virt;
-	u32			*bw_stat_virt;
-};
-
-struct nd_blk_dimm {
-	unsigned		num_bw;
-	atomic_t		last_bw;
-	struct block_window	*bw;	  /* Array of 'num_bw' block windows */
-	spinlock_t		*bw_lock; /* Array of 'num_bw' locks */
-};
 
 struct nd_blk_device {
 	struct request_queue	*queue;
@@ -58,114 +37,7 @@ struct nd_blk_device {
 };
 
 static int nd_blk_major;
-struct nd_blk_dimm   *dimm_singleton;
 static DEFINE_IDA(nd_blk_ida);
-
-/* for now, hard code index 0 */
-/* for NT stores, check out __copy_user_nocache() */
-static void nd_blk_write_blk_ctl(struct block_window *bw,
-		resource_size_t dev_offset, unsigned int len, bool write)
-{
-	u64 cmd		= 0;
-	u64 cl_offset	= dev_offset >> CL_SHIFT;
-	u64 cl_len	= len >> CL_SHIFT;
-
-	cmd |= cl_offset & BCW_OFFSET_MASK;
-	cmd |= (cl_len & BCW_LEN_MASK) << BCW_LEN_SHIFT;
-	if (write)
-		cmd |= 1UL << BCW_CMD_SHIFT;
-
-	writeq(cmd, bw->bw_ctl_virt);
-	clflushopt(bw->bw_ctl_virt);
-}
-
-static int nd_blk_read_blk_win(struct block_window *bw, void *dst,
-		unsigned int len)
-{
-	u32 status;
-
-	/* FIXME: NT */
-	memcpy(dst, bw->bw_apt_virt, len);
-	clflushopt(bw->bw_apt_virt);
-
-	status = readl(bw->bw_stat_virt);
-
-	if (status) {
-		/* FIXME: return more precise error values at some point */
-		return -EIO;
-	}
-
-	return 0;
-}
-
-static int nd_blk_write_blk_win(struct block_window *bw, void *src,
-		unsigned int len)
-{
-	/* non-temporal writes, need to flush via flush hints, yada yada. */
-	u32 status;
-
-	/* FIXME: NT */
-	memcpy(bw->bw_apt_virt, src, len);
-
-	status = readl(bw->bw_stat_virt);
-
-	if (status) {
-		/* FIXME: return more precise error values at some point */
-		return -EIO;
-	}
-
-	return 0;
-}
-
-static int nd_blk_read(struct block_window *bw, void *dst,
-		resource_size_t dev_offset, unsigned int len)
-{
-	nd_blk_write_blk_ctl(bw, dev_offset, len, false);
-	return nd_blk_read_blk_win(bw, dst, len);
-}
-
-static int nd_blk_write(struct block_window *bw, void *src,
-		resource_size_t dev_offset, unsigned int len)
-{
-	nd_blk_write_blk_ctl(bw, dev_offset, len, true);
-	return nd_blk_write_blk_win(bw, src, len);
-}
-
-static void acquire_bw(struct nd_blk_dimm *dimm, unsigned *bw_index)
-{
-	*bw_index = atomic_inc_return(&(dimm->last_bw)) % dimm->num_bw;
-	spin_lock(&(dimm->bw_lock[*bw_index]));
-}
-
-static void release_bw(struct nd_blk_dimm *dimm, unsigned bw_index)
-{
-	spin_unlock(&(dimm->bw_lock[bw_index]));
-}
-
-/* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
-		unsigned int len, unsigned int off, int rw,
-		resource_size_t dev_offset)
-{
-	void *mem = kmap_atomic(page);
-	struct block_window *bw;
-	unsigned bw_index;
-	int rc;
-
-	acquire_bw(dimm, &bw_index);
-	bw = &dimm->bw[bw_index];
-
-	if (rw == READ)
-		rc = nd_blk_read(bw, mem + off, dev_offset, len);
-	else
-		rc = nd_blk_write(bw, mem + off, dev_offset, len);
-
-	release_bw(dimm, bw_index);
-	kunmap_atomic(mem);
-
-	return rc;
-}
-EXPORT_SYMBOL(nd_blk_do_io);
 
 static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 {
@@ -210,7 +82,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 			res_offset -= resource_size(nsblk->res[i]);
 		}
 
-		err = nd_blk_do_io(nd_dimm->blk_dimm, bvec.bv_page,
+		err = nd_blk_do_io(&nd_dimm->blk_dimm, bvec.bv_page,
 				len, bvec.bv_offset, rw, dev_offset);
 		if (err)
 			goto out;
@@ -225,35 +97,6 @@ out:
 static const struct block_device_operations nd_blk_fops = {
 	.owner =		THIS_MODULE,
 };
-
-static int nd_blk_init_locks(struct nd_blk_dimm *dimm)
-{
-	int i;
-
-	dimm->bw_lock = kmalloc_array(dimm->num_bw, sizeof(spinlock_t),
-				GFP_KERNEL);
-	if (!dimm->bw_lock)
-		return -ENOMEM;
-
-	for (i = 0; i < dimm->num_bw; i++)
-		spin_lock_init(&dimm->bw_lock[i]);
-
-	return 0;
-}
-
-static bool is_acpi_blk(struct device *dev)
-{
-	if (strcmp(nd_blk_bus_provider(dev), "OLD_ACPI.NFIT") == 0)
-		return true;
-	else if (strcmp(nd_blk_bus_provider(dev), "ACPI.NFIT") == 0)
-		return true;
-
-	/*
-	 * For now the temporary / hard-coded dimm_singleton only
-	 * applies to ACPI-provided NFITs
-	 */
-	return false;
-}
 
 static int nd_blk_probe(struct device *dev)
 {
@@ -315,8 +158,6 @@ static int nd_blk_probe(struct device *dev)
 	set_capacity(disk, disk_size >> SECTOR_SHIFT);
 
 	dev_set_drvdata(dev, blk_dev);
-
-	nd_dimm->blk_dimm = dimm_singleton;
 
 	add_disk(disk);
 
@@ -384,131 +225,8 @@ static void __exit nd_blk_exit(void)
 	unregister_blkdev(nd_blk_major, "nd_blk");
 }
 
-/* BEGIN HELPER FUNCTIONS - EVENTUALLY IN ND */
-
-struct block_window	*bw;
-#define NUM_BW		256
-static phys_addr_t	bw_apt_phys	= 0xf000a00000;
-static phys_addr_t	bw_ctl_phys	= 0xf000800000;
-static void		*bw_apt_virt;
-static u64		*bw_ctl_virt;
-static size_t		bw_size		= SZ_8K * NUM_BW;
-
-/* This code should do things that will eventually be moved into the rest of
- * ND.  This includes things like
- *	- ioremapping and iounmapping the BDWs and DCRs
- *	- initializing instances of the driver with proper parameters
- *	- when we do interleaving, implementing a generic interleaving method
- */
-static int __init nd_blk_wrapper_init(void)
-{
-	struct resource *res;
-	struct nd_blk_dimm *dimm;
-	int err, i;
-
-	pr_info("nd_blk: module loaded via wrapper\n");
-
-	/* map block aperture memory */
-	res = request_mem_region(bw_apt_phys, bw_size, "nd_blk");
-	if (!res)
-		return -EBUSY;
-
-	bw_apt_virt = ioremap_cache(bw_apt_phys, bw_size);
-	if (!bw_apt_virt) {
-		err = -ENXIO;
-		goto err_apt_ioremap;
-	}
-
-	/* map block control memory */
-	res = request_mem_region(bw_ctl_phys, bw_size, "nd_blk");
-	if (!res) {
-		err = -EBUSY;
-		goto err_ctl_reserve;
-	}
-
-	bw_ctl_virt = ioremap_cache(bw_ctl_phys, bw_size);
-	if (!bw_ctl_virt) {
-		err = -ENXIO;
-		goto err_ctl_ioremap;
-	}
-
-	/* set up block windows */
-	bw = kmalloc(sizeof(*bw) * NUM_BW, GFP_KERNEL);
-	if (!bw) {
-		err = -ENOMEM;
-		goto err_bw;
-	}
-
-	for (i = 0; i < NUM_BW; i++) {
-		bw[i].bw_apt_virt = (void *)bw_apt_virt + i*0x2000;
-		bw[i].bw_ctl_virt = (void *)bw_ctl_virt + i*0x2000;
-		bw[i].bw_stat_virt = (void *)bw[i].bw_ctl_virt + 0x1000;
-	}
-
-	dimm = kzalloc(sizeof(*dimm), GFP_KERNEL);
-	if (!dimm) {
-		err = -ENOMEM;
-		goto err_dimm;
-	}
-
-	dimm->num_bw		= NUM_BW;
-	atomic_set(&dimm->last_bw, 0);
-	dimm->bw		= bw;
-
-	err = nd_blk_init_locks(dimm);
-	if (err)
-		goto err_init_locks;
-
-	dimm_singleton = dimm;
-
-	err = nd_blk_init();
-	if (err < 0)
-		goto err_init;
-
-	return 0;
-
-err_init:
-	kfree(dimm_singleton->bw_lock);
-err_init_locks:
-	kfree(dimm);
-err_dimm:
-	kfree(bw);
-err_bw:
-	iounmap(bw_ctl_virt);
-err_ctl_ioremap:
-	release_mem_region(bw_ctl_phys, bw_size);
-err_ctl_reserve:
-	iounmap(bw_apt_virt);
-err_apt_ioremap:
-	release_mem_region(bw_apt_phys, bw_size);
-	return err;
-}
-
-static void __exit nd_blk_wrapper_exit(void)
-{
-	nd_blk_exit();
-
-	kfree(dimm_singleton->bw_lock);
-	kfree(dimm_singleton);
-	dimm_singleton = NULL;
-
-	kfree(bw);
-
-	/* free block control memory */
-	iounmap(bw_ctl_virt);
-	release_mem_region(bw_ctl_phys, bw_size);
-
-	/* free block aperture memory */
-	iounmap(bw_apt_virt);
-	release_mem_region(bw_apt_phys, bw_size);
-
-	pr_info("nd_blk: module unloaded via wrapper\n");
-}
-
-/* END HELPER FUNCTIONS - EVENTUALLY IN ND */
-
 MODULE_AUTHOR("Ross Zwisler <ross.zwisler@linux.intel.com>");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS_ND_DEVICE(ND_DEVICE_NAMESPACE_BLOCK);
-module_init(nd_blk_wrapper_init);
-module_exit(nd_blk_wrapper_exit);
+module_init(nd_blk_init);
+module_exit(nd_blk_exit);
