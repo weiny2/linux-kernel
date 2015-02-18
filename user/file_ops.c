@@ -139,6 +139,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_cq_assign_args cq_assign;
 	struct hfi_cq_update_args cq_update;
 	struct hfi_cq_release_args cq_release;
+	struct hfi_eq_assign_args eq_assign;
+	struct hfi_eq_release_args eq_release;
 	struct hfi_dlid_assign_args dlid_assign;
 	struct hfi_ctxt_attach_args ctxt_attach;
 	struct hfi_job_info_args job_info;
@@ -201,6 +203,15 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_DLID_RELEASE:
 		copy_in = 0;
 		need_admin = 1;
+		break;
+	case HFI_CMD_EQ_ASSIGN:
+		copy_in = sizeof(eq_assign);
+		copy_out = copy_in;
+		copy_ptr = &eq_assign;
+		break;
+	case HFI_CMD_EQ_RELEASE:
+		copy_in = sizeof(eq_release);
+		copy_ptr = &eq_release;
 		break;
 	case HFI_CMD_JOB_INFO:
 		copy_out = sizeof(job_info);
@@ -271,6 +282,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_CQ_RELEASE:
 		ret = ops->cq_release(&ud->ctx, cq_release.cq_idx);
+		break;
+	case HFI_CMD_EQ_ASSIGN:
+		ret = ops->eq_assign(&ud->ctx, &eq_assign);
+		break;
+	case HFI_CMD_EQ_RELEASE:
+		ret = ops->eq_release(&ud->ctx, eq_release.eq_idx);
 		break;
 	case HFI_CMD_DLID_ASSIGN:
 		/* must be called after JOB_SETUP and match total LIDs */

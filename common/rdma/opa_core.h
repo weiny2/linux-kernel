@@ -57,6 +57,7 @@
  * implementation.
  */
 #include <linux/device.h>
+#include <linux/idr.h>
 #include <rdma/hfi_types.h>
 
 /*
@@ -68,16 +69,41 @@
  */
 struct hfi_devdata;
 
+/**
+ * hfi_ctx - state for HFI resources assigned to this context.
+ * @ptl_pid: Assigned Portals Process ID
+ * @ptl_uid: Assigned Protection Domain ID
+ * @ptl_state_base: Pointer to Portals state in host memory
+ * @le_me_addr: Pointer to head of ME/LE descriptor buffer
+ * @ptl_state_size: Size of the total Portals state memory
+ * @le_me_size: Size of ME/LE buffer
+ * @unexpected_size: Size of unexpected header buffer
+ * @trig_op_size: Size of triggered ops buffer
+ * @allow_phys_dlid: Physical LIDs allowed in commands (vs virtual LIDs)
+ * @auth_mask: Mask of enabled Protection Domains in @auth_uid
+ * @auth_uid: Table of allowed Protection Domains for Command Queues
+ * @dlid_base: Base virtual DLID (if DLID table is used)
+ * @lid_count: Number of LIDs (fabric endpoints)
+ * @lid_offset: LID offset from base for this context (if contiguous LIDs)
+ * @sl_mask: Mask of allowed service levels for this context
+ * @pid_base: Base of contiguous assigned PIDs on this LID
+ * @pid_count: Number of PIDs assigned on this LID
+ * @pid_mode: Describes if PIDs or LIDs are virtualized or not
+ * @cq_pair_num_assigned: Counter of assigned Command Queues
+ * @eq_used: IDR table of allocated Events Queues
+ * @eq_lock: Lock for EQ table
+ */
+/* TODO: remove Portals naming references if possible */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
-	u16	ptl_pid;		/* PID associated with this context */
-	u32	ptl_uid;		/* UID associated with this context */
+	u16	ptl_pid;
+	u32	ptl_uid;
 	void	*ptl_state_base;
 	void    *le_me_addr;
 	u32	ptl_state_size;
-	u32	le_me_size;		/* ME/LE mmap size */
-	u32	unexpected_size;	/* unexpected mmap size */
-	u32	trig_op_size;		/* triggered_ops mmap size */
+	u32	le_me_size;
+	u32	unexpected_size;
+	u32	trig_op_size;
 	u8	allow_phys_dlid;
 	u8	auth_mask;
 	u32	auth_uid[HFI_NUM_AUTH_TUPLES];
@@ -89,6 +115,8 @@ struct hfi_ctx {
 	u16	pid_count;
 	u16	pid_mode;
 	u16	cq_pair_num_assigned;
+	struct idr eq_used;
+	spinlock_t eq_lock;
 };
 
 /*
@@ -109,6 +137,16 @@ enum mmap_token_types {
 	TOK_UNEXPECTED,
 };
 
+/**
+ * opa_ctx_assign - Used with opa_core_ops.ctx_assign operation.
+ * @pid: Requested Portals PID or -1 for driver assignment
+ * @flags: Reserved for choosing alternate PID allocation behavior
+ * @le_me_count: Requested size of LE/ME buffer
+ * @unexpected_count: Requested size of unexpected headers buffer
+ * @trig_op_count: Requested size of triggered ops buffer
+ *
+ * With @ctx_assign, assigned PID returned in ctx->ptl_pid.
+ */
 struct opa_ctx_assign {
 	u16 pid;
 	u16 flags;
@@ -147,7 +185,7 @@ struct opa_core_ops {
 	int (*cq_update)(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_table);
 	int (*cq_release)(struct hfi_ctx *ctx, u16 cq_idx);
 	int (*eq_assign)(struct hfi_ctx *ctx, struct hfi_eq_assign_args *eq_assign);
-	int (*eq_release)(struct hfi_ctx *ctx, u16 eq_type, u16 eq_idx);
+	int (*eq_release)(struct hfi_ctx *ctx, u16 eq_idx);
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_ctx *ctx);

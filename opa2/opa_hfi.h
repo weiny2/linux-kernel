@@ -140,6 +140,8 @@ int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_t
 int hfi_cq_release(struct hfi_ctx *ctx, u16 cq_idx);
 int hfi_dlid_assign(struct hfi_ctx *ctx, struct hfi_dlid_assign_args *dlid_assign);
 int hfi_dlid_release(struct hfi_ctx *ctx);
+int hfi_eq_assign(struct hfi_ctx *ctx, struct hfi_eq_assign_args *eq_assign);
+int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx);
 int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
 void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
 int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);

@@ -50,7 +50,6 @@
  * Intel(R) Omni-Path Gen2 HFI PCIe Driver
  */
 
-#include <linux/pci.h>
 #include <linux/module.h>
 #include <rdma/fxr/fxr_fast_path_defs.h>
 #include <rdma/fxr/fxr_tx_ci_csrs.h>
@@ -129,6 +128,8 @@ static struct opa_core_ops opa_core_ops = {
 	.cq_release = hfi_cq_release,
 	.dlid_assign = hfi_dlid_assign,
 	.dlid_release = hfi_dlid_release,
+	.eq_assign = hfi_eq_assign,
+	.eq_release = hfi_eq_release,
 };
 
 /**
