@@ -145,8 +145,6 @@
 				 HFI_CAP_PKEY_CHECK |			\
 				 HFI_CAP_MULTI_PKT_EGR |		\
 				 ((HFI_CAP_HDRSUPP |			\
-				   HFI_CAP_NODROP_RHQ_FULL |		\
-				   HFI_CAP_NODROP_EGR_FULL |		\
 				   HFI_CAP_STATIC_RATE_CTRL |		\
 				   HFI_CAP_MULTI_PKT_EGR) <<		\
 				  HFI_CAP_USER_SHIFT))
