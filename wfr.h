@@ -576,6 +576,7 @@ int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);
 int acquire_hw_mutex(struct hfi_devdata *dd);
 void release_hw_mutex(struct hfi_devdata *dd);
+void fabric_serdes_reset(struct hfi_devdata *dd);
 
 /* wfr.c */
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);

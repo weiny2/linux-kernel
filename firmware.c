@@ -892,6 +892,28 @@ void sbus_request(struct hfi_devdata *dd,
 			<< WFR_ASIC_CFG_SBUS_REQUEST_RECEIVER_ADDR_SHIFT));
 }
 
+/*
+ *  Reset all of the fabric serdes for our HFI.
+ */
+void fabric_serdes_reset(struct hfi_devdata *dd)
+{
+	u8 ra;
+
+	if (dd->icode != WFR_ICODE_RTL_SILICON) /* only for RTL */
+		return;
+
+	ra = fabric_serdes_broadcast[dd->hfi_id];
+
+	/* place SerDes in reset and disable SPICO */
+	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000011);
+	/* wait 100 refclk cycles @ 156.25MHz => 640ns */
+	udelay(1);
+	/* remove SerDes reset */
+	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000010);
+	/* turn SPICO enable on */
+	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000002);
+}
+
 static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 					struct firmware_details *fdet)
 {
@@ -904,6 +926,8 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 	load_security_variables(dd, fdet);
 	/* step 2: place SerDes in reset and disable SPICO */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000011);
+	/* wait 100 refclk cycles @ 156.25MHz => 640ns */
+	udelay(1);
 	/* step 3:  remove SerDes reset */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000010);
 	/* step 4: assert IMEM override */

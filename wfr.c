@@ -5050,6 +5050,9 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 	u8 max_rate;
 	int ret;
 
+	/* reset our fabric serdes to clear any lingering problems */
+	fabric_serdes_reset(dd);
+
 	/* set the max rate - need to read-modify-write */
 	ret = read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
 		&rx_polarity_inversion, &max_rate);
