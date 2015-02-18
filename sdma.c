@@ -32,6 +32,7 @@
  */
 
 #include <linux/spinlock.h>
+#include <linux/seqlock.h>
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
 #include <linux/bitops.h>
@@ -351,11 +352,16 @@ static inline void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
 static void sdma_flush(struct sdma_engine *sde)
 {
 	struct sdma_txreq *txp, *txp_next;
+	LIST_HEAD(flushlist);
 
 	/* flush from head to tail */
 	sdma_flush_descq(sde);
+	spin_lock(&sde->flushlist_lock);
+	/* copy flush list */
+	list_splice(&sde->flushlist, &flushlist);
+	spin_unlock(&sde->flushlist_lock);
 	/* flush from flush list */
-	list_for_each_entry_safe(txp, txp_next, &sde->flushlist, list) {
+	list_for_each_entry_safe(txp, txp_next, &flushlist, list) {
 		int drained = 0;
 		/* protect against complete modifying */
 		struct iowait *wait = txp->wait;
@@ -369,8 +375,7 @@ static void sdma_flush(struct sdma_engine *sde)
 		sde->head_sn++;
 #endif
 		sdma_txclean(sde->dd, txp);
-		if (wait)
-			drained = atomic_dec_and_test(&wait->sdma_busy);
+		drained = atomic_dec_and_test(&wait->sdma_busy);
 		if (txp->complete)
 			(*txp->complete)(txp, SDMA_TXREQ_S_ABORTED, drained);
 		if (drained)
@@ -394,10 +399,10 @@ static void sdma_field_flush(struct work_struct *work)
 	struct sdma_engine *sde =
 		container_of(work, struct sdma_engine, flush_worker);
 
-	spin_lock_irqsave(&sde->head_lock, flags);
+	write_seqlock_irqsave(&sde->head_lock, flags);
 	if (!__sdma_running(sde))
 		sdma_flush(sde);
-	spin_unlock_irqrestore(&sde->head_lock, flags);
+	write_sequnlock_irqrestore(&sde->head_lock, flags);
 }
 
 void sdma_err_halt_wait(struct work_struct *work)
@@ -493,10 +498,10 @@ void sdma_err_progress_check(unsigned long data)
 			*/
 
 			spin_lock_irqsave(&curr_sde->tail_lock, flags);
-			spin_lock(&curr_sde->head_lock);
+			write_seqlock(&curr_sde->head_lock);
 			__sdma_process_event(curr_sde,
 					     sdma_event_e90_sw_halted);
-			spin_unlock(&curr_sde->head_lock);
+			write_sequnlock(&curr_sde->head_lock);
 			spin_unlock_irqrestore(&curr_sde->tail_lock, flags);
 		}
 	}
@@ -557,9 +562,7 @@ static void sdma_flush_descq(struct sdma_engine *sde)
 
 			/* remove from list */
 			sde->tx_ring[sde->tx_head++ & sde->sdma_mask] = NULL;
-			if (wait)
-				drained = atomic_dec_and_test(
-						&wait->sdma_busy);
+			drained = atomic_dec_and_test(&wait->sdma_busy);
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 			trace_hfi_sdma_out_sn(sde, txp->sn);
 			if (WARN_ON_ONCE(sde->head_sn != txp->sn))
@@ -591,7 +594,7 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 	unsigned long flags;
 
 	spin_lock_irqsave(&sde->tail_lock, flags);
-	spin_lock(&sde->head_lock);
+	write_seqlock(&sde->head_lock);
 
 	/*
 	 * At this point, the following should always be true:
@@ -633,7 +636,7 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 
 	__sdma_process_event(sde, sdma_event_e40_sw_cleaned);
 
-	spin_unlock(&sde->head_lock);
+	write_sequnlock(&sde->head_lock);
 	spin_unlock_irqrestore(&sde->tail_lock, flags);
 }
 
@@ -980,7 +983,6 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 	struct sdma_engine *sde;
 	u16 descq_cnt;
 	void *curr_head;
-	unsigned long flags;
 	struct qib_pportdata *ppd = dd->pport + port;
 	u32 per_sdma_credits;
 	uint idle_cnt = sdma_idle_cnt;
@@ -1030,16 +1032,13 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		sde->idle_mask =
 			(u64)1 << (2*WFR_TXE_NUM_SDMA_ENGINES + this_idx);
 		spin_lock_init(&sde->tail_lock);
-		spin_lock_init(&sde->head_lock);
+		seqlock_init(&sde->head_lock);
 		spin_lock_init(&sde->senddmactrl_lock);
+		spin_lock_init(&sde->flushlist_lock);
 		/* insure there is always a zero bit */
 		sde->ahg_bits = 0xfffffffe00000000;
 
-		spin_lock_irqsave(&sde->tail_lock, flags);
-		spin_lock(&sde->head_lock);
 		sdma_set_state(sde, sdma_state_s00_hw_down);
-		spin_unlock(&sde->head_lock);
-		spin_unlock_irqrestore(&sde->tail_lock, flags);
 
 		/* set up reference counting */
 		kref_init(&sde->state.kref);
@@ -1442,9 +1441,7 @@ retry:
 
 			/* remove from list */
 			sde->tx_ring[sde->tx_head++ & sde->sdma_mask] = NULL;
-			if (wait)
-				drained = atomic_dec_and_test(
-						&wait->sdma_busy);
+			drained = atomic_dec_and_test(&wait->sdma_busy);
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 			trace_hfi_sdma_out_sn(sde, txp->sn);
 			if (WARN_ON_ONCE(sde->head_sn != txp->sn))
@@ -1504,10 +1501,10 @@ void sdma_engine_interrupt(struct sdma_engine *sde, u64 status)
 	unsigned long flags;
 
 	trace_hfi_sdma_engine_interrupt(sde, status);
-	spin_lock_irqsave(&sde->head_lock, flags);
+	write_seqlock_irqsave(&sde->head_lock, flags);
 	sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
 	sdma_make_progress(sde, status);
-	spin_unlock_irqrestore(&sde->head_lock, flags);
+	write_sequnlock_irqrestore(&sde->head_lock, flags);
 }
 
 /**
@@ -1526,7 +1523,7 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 		sdma_state_names[sde->state.current_state]);
 #endif
 	spin_lock_irqsave(&sde->tail_lock, flags);
-	spin_lock(&sde->head_lock);
+	write_seqlock(&sde->head_lock);
 	if (status & ALL_SDMA_ENG_HALT_ERRS)
 		__sdma_process_event(sde, sdma_event_e60_hw_halted);
 	if (status & ~WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK) {
@@ -1537,7 +1534,7 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 			sdma_state_names[sde->state.current_state]);
 		dump_sdma_state(sde);
 	}
-	spin_unlock(&sde->head_lock);
+	write_sequnlock(&sde->head_lock);
 	spin_unlock_irqrestore(&sde->tail_lock, flags);
 }
 
@@ -1545,6 +1542,7 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 {
 	u64 set_senddmactrl = 0;
 	u64 clr_senddmactrl = 0;
+	unsigned long flags;
 
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) senddmactrl E=%d I=%d H=%d C=%d\n",
@@ -1572,7 +1570,7 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 
 	/* JAG TODO: OP_DRAIN */
 
-	spin_lock(&sde->senddmactrl_lock);
+	spin_lock_irqsave(&sde->senddmactrl_lock, flags);
 
 	/* JAG TODO: OP_DRAIN */
 
@@ -1589,7 +1587,7 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 
 	/* JAG TODO: OP_DRAIN */
 
-	spin_unlock(&sde->senddmactrl_lock);
+	spin_unlock_irqrestore(&sde->senddmactrl_lock, flags);
 
 	/* JAG TODO: OP_DRAIN */
 #ifdef JAG_SDMA_VERBOSITY
@@ -1952,24 +1950,46 @@ static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 	tx->sn = sde->tail_sn++;
 	trace_hfi_sdma_in_sn(sde, tx->sn);
+	WARN_ON_ONCE(sde->tx_ring[sde->tx_tail++ & sde->sdma_mask]);
 #endif
 	sde->tx_ring[sde->tx_tail++ & sde->sdma_mask] = tx;
 	sde->desc_avail -= tx->num_desc;
 	return tail;
 }
 
+/*
+ * Check for progress
+ */
+static int sdma_check_progress(
+	struct sdma_engine *sde,
+	struct iowait *wait,
+	struct sdma_txreq *tx)
+{
+	int ret;
+
+	sde->desc_avail = sdma_descq_freecnt(sde);
+	if (tx->num_desc <= sde->desc_avail)
+		return -EAGAIN;
+	/* pulse the head_lock */
+	if (wait->sleep) {
+		unsigned seq;
+
+		seq = raw_seqcount_begin(
+			(const seqcount_t *)&sde->head_lock.seqcount);
+		ret = wait->sleep(sde, wait, tx, seq);
+	} else
+		ret = -EBUSY;
+	return ret;
+}
+
 /**
  * sdma_send_txreq() - submit a tx req to ring
  * @sde: sdma engine to use
  * @wait: wait structure to use when full (may be NULL)
- * @busycb: callback when send hits full ring (may be NULL)
  * @tx: sdma_txreq to submit
  *
  * The call submits the tx into the ring.  If a iowait struture is non-NULL
  * the packet will be queued to the list in wait.
- *
- * If the busycb is non-NULL, the routine will be called providing the caller
- * via the  callback with the capability of "waiting" via a queuing mechanism.
  *
  * Return:
  * 0 - Success, -EINVAL - sdma_txreq incomplete, -EBUSY - no space in
@@ -1978,9 +1998,6 @@ static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
  */
 int sdma_send_txreq(struct sdma_engine *sde,
 		    struct iowait *wait,
-		    void (*busycb)(
-			struct sdma_txreq *tx,
-			struct iowait *wait),
 		    struct sdma_txreq *tx)
 {
 	int ret = 0;
@@ -1998,48 +2015,32 @@ retry:
 	if (unlikely(tx->num_desc > sde->desc_avail))
 		goto nodesc;
 	tail = submit_tx(sde, tx);
-	if (wait)
-		atomic_inc(&wait->sdma_busy);
+	atomic_inc(&wait->sdma_busy);
 	sdma_update_tail(sde, tail);
 unlock:
 	spin_unlock_irqrestore(&sde->tail_lock, flags);
 	return ret;
 unlock_noconn:
-	if (wait)
-		atomic_inc(&wait->sdma_busy);
+	atomic_inc(&wait->sdma_busy);
 	tx->next_descq_idx = 0;
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 	tx->sn = sde->tail_sn++;
 	trace_hfi_sdma_in_sn(sde, tx->sn);
 #endif
-	spin_lock(&sde->head_lock);
+	spin_lock(&sde->flushlist_lock);
 	list_add_tail(&tx->list, &sde->flushlist);
-	spin_unlock(&sde->head_lock);
-	tx->wait = wait;
-	if (wait) {
-		wait->tx_count++;
-		wait->count += tx->num_desc;
-	}
+	spin_unlock(&sde->flushlist_lock);
+	wait->tx_count++;
+	wait->count += tx->num_desc;
 	schedule_work(&sde->flush_worker);
 	ret = -ECOMM;
 	goto unlock;
 nodesc:
-	sde->desc_avail = sdma_descq_freecnt(sde);
-	if (tx->num_desc <= sde->desc_avail)
-		goto retry;
-	spin_lock(&sde->head_lock);
-	sde->desc_avail = sdma_descq_freecnt(sde);
-	if (tx->num_desc <= sde->desc_avail) {
-		spin_unlock(&sde->head_lock);
+	ret = sdma_check_progress(sde, wait, tx);
+	if (ret == -EAGAIN) {
+		ret = 0;
 		goto retry;
 	}
-	if (busycb && wait)
-		busycb(tx, wait);
-	if (wait && wait->sleep)
-		ret = wait->sleep(wait, tx);
-	else
-		ret = -EBUSY;
-	spin_unlock(&sde->head_lock);
 	goto unlock;
 }
 
@@ -2047,7 +2048,6 @@ nodesc:
  * sdma_send_txlist() - submit a list of tx req to ring
  * @sde: sdma engine to use
  * @wait: wait structure to use when full (may be NULL)
- * @busycb: callback when send hits full ring (may be NULL)
  * @tx_list: list of sdma_txreqs to submit
  *
  * The call submits the list into the ring.
@@ -2057,9 +2057,6 @@ nodesc:
  *
  * In all cases, the tx_list will be updated so the head of the tx_list is
  * the list of descriptors that have yet to be transmitted.
- *
- * If the busycb is non-NULL, the routine will be called providing the caller
- * via the  callback with the capability of "waiting" via a queuing mechanism.
  *
  * The intent of this call is to provide a more efficient
  * way of submitting multiple packets to SDMA while holding the tail
@@ -2072,9 +2069,6 @@ nodesc:
  */
 int sdma_send_txlist(struct sdma_engine *sde,
 		    struct iowait *wait,
-		    void (*busycb)(
-			struct sdma_txreq *tx,
-			struct iowait *wait),
 		    struct list_head *tx_list)
 {
 	struct sdma_txreq *tx, *tx_next;
@@ -2106,9 +2100,8 @@ unlock:
 	spin_unlock_irqrestore(&sde->tail_lock, flags);
 	return ret;
 unlock_noconn:
-	spin_lock(&sde->head_lock);
+	spin_lock(&sde->flushlist_lock);
 	list_for_each_entry_safe(tx, tx_next, tx_list, list) {
-		tx->wait = wait;
 		if (wait)
 			atomic_inc(&wait->sdma_busy);
 		tx->next_descq_idx = 0;
@@ -2122,28 +2115,17 @@ unlock_noconn:
 			wait->count += tx->num_desc;
 		}
 	}
-	spin_unlock(&sde->head_lock);
+	spin_unlock(&sde->flushlist_lock);
 	schedule_work(&sde->flush_worker);
 	ret = -ECOMM;
 	goto unlock;
 nodesc:
-	sde->desc_avail = sdma_descq_freecnt(sde);
-	if (tx->num_desc <= sde->desc_avail)
-		goto retry;
-	spin_lock(&sde->head_lock);
-	sde->desc_avail = sdma_descq_freecnt(sde);
-	if (tx->num_desc <= sde->desc_avail) {
-		spin_unlock(&sde->head_lock);
+	ret = sdma_check_progress(sde, wait, tx);
+	if (ret == -EAGAIN) {
+		ret = 0;
 		goto retry;
 	}
-	if (busycb && wait)
-		busycb(tx, wait);
-	if (wait && wait->sleep)
-		ret = wait->sleep(wait, tx);
-	else
-		ret = -EBUSY;
-	spin_unlock(&sde->head_lock);
-	goto update_tail;
+	goto unlock;
 }
 
 static void sdma_process_event(struct sdma_engine *sde,
@@ -2152,14 +2134,14 @@ static void sdma_process_event(struct sdma_engine *sde,
 	unsigned long flags;
 
 	spin_lock_irqsave(&sde->tail_lock, flags);
-	spin_lock(&sde->head_lock);
+	write_seqlock(&sde->head_lock);
 
 	__sdma_process_event(sde, event);
 
 	if (sde->state.current_state == sdma_state_s99_running)
 		sdma_desc_avail(sde, sdma_descq_freecnt(sde));
 
-	spin_unlock(&sde->head_lock);
+	write_sequnlock(&sde->head_lock);
 	spin_unlock_irqrestore(&sde->tail_lock, flags);
 }
 

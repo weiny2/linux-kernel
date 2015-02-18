@@ -52,7 +52,11 @@ module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
 static void flush_tx_list(struct qib_qp *qp);
-static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx);
+static int iowait_sleep(
+	struct sdma_engine *sde,
+	struct iowait *wait,
+	struct sdma_txreq *stx,
+	unsigned seq);
 static void iowait_wakeup(struct iowait *wait, int reason);
 
 static inline unsigned mk_qpn(struct hfi_qpn_table *qpt,
@@ -1355,18 +1359,22 @@ void qib_qp_wakeup(struct qib_qp *qp, u32 flag)
 		wake_up(&qp->wait);
 }
 
-static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx)
+static int iowait_sleep(
+	struct sdma_engine *sde,
+	struct iowait *wait,
+	struct sdma_txreq *stx,
+	unsigned seq)
 {
 	struct verbs_txreq *tx = container_of(stx, struct verbs_txreq, txreq);
 	struct qib_qp *qp;
 	unsigned long flags;
 	int ret = 0;
+	struct qib_ibdev *dev;
 
 	qp = tx->qp;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) {
-		struct qib_ibdev *dev;
 
 		/*
 		 * If we couldn't queue the DMA request, save the info
@@ -1375,15 +1383,17 @@ static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx)
 		 */
 		/* FIXME - make a common routine? */
 		list_add_tail(&stx->list, &wait->tx_head);
-		dev = &tx->sde->dd->verbs_dev;
+		dev = &sde->dd->verbs_dev;
 		spin_lock(&dev->pending_lock);
+		if (sdma_progress(sde, seq))
+			goto eagain;
 		if (list_empty(&qp->s_iowait.list)) {
 			struct qib_ibport *ibp =
 				to_iport(qp->ibqp.device, qp->port_num);
 
 			ibp->n_dmawait++;
 			qp->s_flags |= QIB_S_WAIT_DMA_DESC;
-			list_add_tail(&qp->s_iowait.list, &tx->sde->dmawait);
+			list_add_tail(&qp->s_iowait.list, &sde->dmawait);
 			trace_hfi_qpsleep(qp, QIB_S_WAIT_DMA_DESC);
 			atomic_inc(&qp->refcount);
 		}
@@ -1396,6 +1406,10 @@ static int iowait_sleep(struct iowait *wait, struct sdma_txreq *stx)
 		qib_put_txreq(tx);
 	}
 	return ret;
+eagain:
+	spin_unlock(&dev->pending_lock);
+	spin_unlock_irqrestore(&qp->s_lock, flags);
+	return -EAGAIN;
 }
 
 static void iowait_wakeup(struct iowait *wait, int reason)

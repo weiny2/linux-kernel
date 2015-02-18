@@ -1065,7 +1065,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			list);
 		list_del_init(&stx->list);
 		tx = container_of(stx, struct verbs_txreq, txreq);
-		ret = sdma_send_txreq(tx->sde, &qp->s_iowait, NULL, stx);
+		ret = sdma_send_txreq(tx->sde, &qp->s_iowait, stx);
 		if (unlikely(ret == -ECOMM))
 			goto bail_ecomm;
 		return ret;
@@ -1097,7 +1097,7 @@ int qib_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	if (unlikely(ret))
 		goto bail_build;
 	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &ahdr->ibh);
-	ret =  sdma_send_txreq(sde, &qp->s_iowait, NULL, &tx->txreq);
+	ret =  sdma_send_txreq(sde, &qp->s_iowait, &tx->txreq);
 	if (unlikely(ret == -ECOMM))
 		goto bail_ecomm;
 	return ret;

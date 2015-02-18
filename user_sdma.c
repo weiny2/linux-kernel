@@ -289,17 +289,22 @@ static _hfi_inline u32 get_lrh_len(struct hfi_pkt_header, u32 len);
 #if 0
 static int user_sdma_progress(void *);
 #endif
-static int defer_packet_queue(struct iowait *, struct sdma_txreq *);
+static int defer_packet_queue(
+	struct sdma_engine *,
+	struct iowait *,
+	struct sdma_txreq *,
+	unsigned seq);
 static void activate_packet_queue(struct iowait *, int);
 
-static int defer_packet_queue(struct iowait *wait, struct sdma_txreq *txreq)
+static int defer_packet_queue(
+	struct sdma_engine *sde,
+	struct iowait *wait,
+	struct sdma_txreq *txreq,
+	unsigned seq)
 {
 	struct hfi_user_sdma_pkt_q *pq =
 		container_of(wait, struct hfi_user_sdma_pkt_q, busy);
 	struct qib_ibdev *dev = &pq->dd->verbs_dev;
-	struct user_sdma_txreq *utx =
-		container_of(txreq, struct user_sdma_txreq, txreq);
-	struct sdma_engine *sde = utx->req->sde;
 
 #if 0
 	SDMA_Q_DBG(pq, "Putting queue to sleep");
@@ -308,6 +313,8 @@ static int defer_packet_queue(struct iowait *wait, struct sdma_txreq *txreq)
 #endif
 		xchg(&pq->state, SDMA_PKT_Q_DEFERRED);
 	spin_lock(&dev->pending_lock);
+	if (sdma_progress(sde, seq))
+		goto eagain;
 	/*
 	 * We are assuming that if the list is enqueued somewhere, it
 	 * is to the dmawait list since that is the only place where
@@ -317,6 +324,9 @@ static int defer_packet_queue(struct iowait *wait, struct sdma_txreq *txreq)
 		list_add_tail(&pq->busy.list, &sde->dmawait);
 	spin_unlock(&dev->pending_lock);
 	return -EBUSY;
+eagain:
+	spin_unlock(&dev->pending_lock);
+	return -EAGAIN;
 #if 0
 	return -EINVAL;
 #endif
@@ -1038,7 +1048,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		 * We should have added all the pages to this request by now.
 		 * Send it off.
 		 */
-		ret = sdma_send_txreq(req->sde, &pq->busy, NULL, &tx->txreq);
+		ret = sdma_send_txreq(req->sde, &pq->busy, &tx->txreq);
 		if (unlikely(ret)) {
 			if (tx->iovec)
 				unpin_vector_pages(tx->iovec);

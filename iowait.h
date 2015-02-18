@@ -79,7 +79,11 @@ struct sdma_engine;
 struct iowait {
 	struct list_head list;
 	struct list_head tx_head;
-	int (*sleep)(struct iowait *wait, struct sdma_txreq *tx);
+	int (*sleep)(
+		struct sdma_engine *sde,
+		struct iowait *wait,
+		struct sdma_txreq *tx,
+		unsigned seq);
 	void (*wakeup)(struct iowait *wait, int reason);
 	struct work_struct iowork;
 	wait_queue_head_t wait_dma;
@@ -108,7 +112,11 @@ static inline void iowait_init(
 	struct iowait *wait,
 	u32 tx_limit,
 	void (*func)(struct work_struct *work),
-	int (*sleep)(struct iowait *wait, struct sdma_txreq *tx),
+	int (*sleep)(
+		struct sdma_engine *sde,
+		struct iowait *wait,
+		struct sdma_txreq *tx,
+		unsigned seq),
 	void (*wakeup)(struct iowait *wait, int reason))
 {
 	wait->count = 0;

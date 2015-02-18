@@ -435,7 +435,7 @@ struct sdma_engine {
 
 	/* read/write using head_lock */
 	/* private: */
-	spinlock_t            head_lock ____cacheline_aligned_in_smp;
+	seqlock_t            head_lock ____cacheline_aligned_in_smp;
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 	/* private: */
 	u64                   head_sn;
@@ -465,6 +465,7 @@ struct sdma_engine {
 	u32                   progress_check_head;
 	/* private: */
 	struct work_struct flush_worker;
+	spinlock_t flushlist_lock;
 	/* private: */
 	struct list_head flushlist;
 };
@@ -862,14 +863,8 @@ static inline int sdma_txadd_kvaddr(
 
 struct iowait;
 
-/*
- * typedef busycb_t - busy callback function
- */
-typedef void (*busycb_t)(struct sdma_txreq *tx, struct iowait *wait);
-
 int sdma_send_txreq(struct sdma_engine *sde,
 		    struct iowait *wait,
-		    busycb_t busycb,
 		    struct sdma_txreq *tx);
 
 int sdma_ahg_alloc(struct sdma_engine *sde);
@@ -899,6 +894,21 @@ static inline u32 sdma_build_ahg_descriptor(
 		SDMA_AHG_INDEX_SHIFT) |
 		((data & SDMA_AHG_VALUE_MASK) <<
 		SDMA_AHG_VALUE_SHIFT));
+}
+
+/**
+ * sdma_progress - use seq number of detect head progress
+ * @sde: sdma_engine to check
+ * @seq: base seq count
+ *
+ * This is used in the appropriate spot in the sleep routine
+ * to check for potential ring progress.  This routine gets the
+ * seqcount before queueing the iowait structure for progress.
+ *
+ */
+static inline unsigned sdma_progress(struct sdma_engine *sde, unsigned seq)
+{
+	return read_seqretry(&sde->head_lock, seq);
 }
 
 /**
