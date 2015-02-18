@@ -224,6 +224,7 @@ static inline void free_signal_struct(struct signal_struct *sig)
 {
 	taskstats_tgid_free(sig);
 	sched_autogroup_exit(sig);
+	kfree(sig->stats_lock);
 	kmem_cache_free(signal_cachep, sig);
 }
 
@@ -1043,6 +1044,13 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	if (!sig)
 		return -ENOMEM;
 
+	tsk->signal->stats_lock = kmalloc(sizeof(seqlock_t), GFP_KERNEL);
+	if (!tsk->signal->stats_lock) {
+		tsk->signal = NULL;
+		kmem_cache_free(signal_cachep, sig);
+		return -ENOMEM;
+	}
+
 	sig->nr_threads = 1;
 	atomic_set(&sig->live, 1);
 	atomic_set(&sig->sigcnt, 1);
@@ -1055,7 +1063,7 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	sig->curr_target = tsk;
 	init_sigpending(&sig->shared_pending);
 	INIT_LIST_HEAD(&sig->posix_timers);
-	seqlock_init(&sig->stats_lock);
+	seqlock_init(sig->stats_lock);
 
 	hrtimer_init(&sig->real_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	sig->real_timer.function = it_real_fn;
