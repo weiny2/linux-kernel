@@ -145,14 +145,13 @@ MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 12
  * in the sequence that has a "static" size that can be used
  * for the rest of the packets (besides the last one). */
 #define USER_SDMA_TXREQ_FLAGS_THIRD_PKT  (1 << 4)
-/* The TX descriptor uses AHG */
-#define USER_SDMA_TXREQ_FLAGS_USE_AHG    (1 << 5)
 
 #define SDMA_REQ_IN_USE     0
 #define SDMA_REQ_FOR_THREAD 1
 #define SDMA_REQ_SEND_DONE  2
 #define SDMA_REQ_HAVE_AHG   3
-#define SDMA_REQ_CB_DONE    4
+#define SDMA_REQ_HAS_ERROR  4
+#define SDMA_REQ_DONE_ERROR 5
 
 #define SDMA_PKT_Q_INACTIVE (1 << 0)
 #define SDMA_PKT_Q_ACTIVE   (1 << 1)
@@ -168,10 +167,6 @@ struct user_sdma_iovec {
 	unsigned npages;
 	/* array of pinned pages for this vector */
 	struct page **pages;
-	/* number of fragments (packet) in this vector */
-	unsigned num_frags;
-	/* number of fragments sent (submitted to the SDMA queue */
-	unsigned frags_sent;
 	/* offset into the virtual address space of the vector at
 	 * which we last left off. */
 	u64 offset;
@@ -232,12 +227,12 @@ struct user_sdma_request {
 	/* total length of the data in the request */
 	u32 data_len;
 	/* progress index moving along the iovs array */
-	unsigned long iov_idx;
+	unsigned iov_idx;
 	struct user_sdma_iovec iovs[MAX_VECTORS_PER_REQ];
 	/* number of elements copied to the tids array */
 	u8 n_tids;
 	/* TID array values copied from the tid_iov vector */
-	u32 tids[1024];
+	u32 *tids;
 	u8 tididx;
 	u32 sent;
 	/* number of txreqs sent to the queue */
@@ -255,8 +250,8 @@ struct user_sdma_txreq {
 	struct list_head list;
 	struct sdma_txreq txreq;
 	struct user_sdma_request *req;
-	struct user_sdma_iovec *iovec;
-	spinlock_t lock;
+	struct user_sdma_iovec *iovec1;
+	struct user_sdma_iovec *iovec2;
 	u16 flags;
 };
 
@@ -295,6 +290,21 @@ static int defer_packet_queue(
 	struct sdma_txreq *,
 	unsigned seq);
 static void activate_packet_queue(struct iowait *, int);
+
+static _hfi_inline int iovec_may_free(struct user_sdma_iovec *iovec,
+				      void (*free)(struct user_sdma_iovec *))
+{
+	if (ACCESS_ONCE(iovec->offset) == iovec->iov.iov_len) {
+		free(iovec);
+		return 1;
+	}
+	return 0;
+}
+
+static inline void iovec_set_complete(struct user_sdma_iovec *iovec)
+{
+	iovec->offset = iovec->iov.iov_len;
+}
 
 static int defer_packet_queue(
 	struct sdma_engine *sde,
@@ -661,6 +671,16 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	 * driver needs to perform safety checks.
 	 */
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
+		u16 ntids = iovec[idx].iov_len / sizeof(*req->tids);
+		if (!ntids || ntids > WFR_MAX_TID_PAIR_ENTRIES) {
+			ret = -EINVAL;
+			goto free_req;
+		}
+		req->tids = kmalloc(ntids * sizeof(*req->tids), GFP_KERNEL);
+		if (!req->tids) {
+			ret = -ENOMEM;
+			goto free_req;
+		}
 		/*
 		 * We have to copy all of the tids because they may vary
 		 * in size and, therefore, the TID count might not be
@@ -668,14 +688,14 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		 * tell at this point.
 		 */
 		ret = copy_from_user(req->tids, iovec[idx].iov_base,
-				     iovec[idx].iov_len);
+				     ntids * sizeof(*req->tids));
 		if (ret) {
 			SDMA_DBG(req, "Failed to copy %d TIDs (%d)",
-				 pcount, ret);
+				 ntids, ret);
 			ret = -EFAULT;
 			goto free_req;
 		}
-		req->n_tids = iovec[idx].iov_len / sizeof(req->tids[0]);
+		req->n_tids = ntids;
 		idx++;
 	}
 
@@ -710,21 +730,12 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		} else
 			sent = 0;
 	}
-
-	/*
-	 * If the descriptor callback for the last packet of the message
-	 * has already run by the time we get here, we are done.
-	 */
-	if (test_bit(SDMA_REQ_CB_DONE, &req->flags)) {
-		*count += idx;
-		ret = 0;
-		goto done;
-	}
-	/* Take the references to the user's task and mm_struct */
-	get_task_struct(current);
-	req->user_proc = current;
+	atomic_inc(&pq->n_reqs);
 
 	if (sent < req->info.npkts) {
+		/* Take the references to the user's task and mm_struct */
+		get_task_struct(current);
+		req->user_proc = current;
 #if 0
 		/*
 		 * It is *VERY* important that this increment does not happen
@@ -737,7 +748,6 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		 * this function is done.
 		 */
 		set_bit(SDMA_REQ_FOR_THREAD, &req->flags);
-		atomic_inc(&pq->n_reqs);
 		xchg(&pq->state, SDMA_PKT_Q_ACTIVE);
 		/*
 		 * We are done with everything here and we've indicated to the
@@ -836,7 +846,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 {
 	int ret = 0;
 	unsigned npkts = 0;
-	struct user_sdma_txreq *tx;
+	struct user_sdma_txreq *tx = NULL;
 	struct hfi_user_sdma_pkt_q *pq = NULL;
 	struct user_sdma_iovec *iovec = NULL;
 	unsigned long flags;
@@ -862,9 +872,19 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		u32 datalen = 0, queued = 0, data_sent = 0;
 		u64 iov_offset = 0;
 
+		/*
+		 * Check whether any of the completions have come back
+		 * with errors. If so, we are not going to process any
+		 * more packets from this request.
+		 */
+		if (test_bit(SDMA_REQ_HAS_ERROR, &req->flags)) {
+			set_bit(SDMA_REQ_DONE_ERROR, &req->flags);
+			ret = -EFAULT;
+			goto bail;
+		}
+
 		/* XXX (Mitko): check if the SDMA engine has any free
 		   resources */
-
 		tx = kmem_cache_alloc(pq->txreq_cache, GFP_KERNEL);
 		if (!tx) {
 			ret = -ENOMEM;
@@ -873,8 +893,8 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		INIT_LIST_HEAD(&tx->list);
 		tx->flags = 0;
 		tx->req = req;
-		tx->iovec = NULL;
-		spin_lock_init(&tx->lock);
+		tx->iovec1 = NULL;
+		tx->iovec2 = NULL;
 		switch (req->txreqs_sent) {
 		case 0:
 			tx->flags |= USER_SDMA_TXREQ_FLAGS_FIRST_PKT;
@@ -888,6 +908,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		}
 		if (req->txreqs_sent == req->info.npkts - 1)
 			tx->flags |= USER_SDMA_TXREQ_FLAGS_LAST_PKT;
+
 		SDMA_DBG(req, "tx->flags=%#x", tx->flags);
 		/*
 		 * Calculate the payload size - this is min of the fragment
@@ -896,13 +917,15 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		 */
 		if (req->data_len) {
 			iovec = &req->iovs[req->iov_idx];
-
-			if (iovec->offset == iovec->iov.iov_len) {
+			if (ACCESS_ONCE(iovec->offset) == iovec->iov.iov_len) {
 				SDMA_DBG(req, "Vector done %llu %lu\n",
 					 iovec->offset, iovec->iov.iov_len);
-				if (++req->iov_idx == req->data_iovs)
-					break;
-				continue;
+				if (++req->iov_idx == req->data_iovs) {
+					ret = -EFAULT;
+					goto free_txreq;
+				}
+				iovec = &req->iovs[req->iov_idx];
+				BUG_ON(iovec->offset);
 			}
 
 			/*
@@ -916,7 +939,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 					goto free_tx;
 			}
 
-			tx->iovec = iovec;
+			tx->iovec1 = iovec;
 			datalen = compute_data_length(req, tx);
 			if (!datalen) {
 				SDMA_DBG(req,
@@ -924,16 +947,9 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				ret = -EFAULT;
 				goto free_tx;
 			}
-			/*
-			 * Mark the last fragment in this io vector so we can
-			 * unpin the pages when we get the callback.
-			 */
-			if (unlikely(iovec->frags_sent == iovec->num_frags - 1))
-				tx->flags |= USER_SDMA_TXREQ_FLAGS_LAST_FRAG;
 		}
 
 		if (test_bit(SDMA_REQ_HAVE_AHG, &req->flags)) {
-			tx->flags |= USER_SDMA_TXREQ_FLAGS_USE_AHG;
 			if (!req->txreqs_sent) {
 				u16 pbclen = le16_to_cpu(req->hdr.pbc[0]);
 				u32 lrhlen = get_lrh_len(req->hdr, datalen);
@@ -998,27 +1014,25 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		 */
 		while (queued < datalen &&
 		       (req->sent + data_sent) < req->data_len) {
-			unsigned long base = (unsigned long)iovec->iov.iov_base,
-				offset = ((base + iovec->offset + iov_offset) &
-					  ~PAGE_MASK);
-			unsigned pageidx = (((iovec->offset + iov_offset +
-					     base) - (base & PAGE_MASK)) >>
-					    PAGE_SHIFT),
-				len = offset + req->info.fragsize > PAGE_SIZE ?
+			unsigned long base, offset;
+			unsigned pageidx, len;
+
+			base = (unsigned long)iovec->iov.iov_base;
+			offset = ((base + iovec->offset + iov_offset) &
+				  ~PAGE_MASK);
+			pageidx = (((iovec->offset + iov_offset +
+				     base) - (base & PAGE_MASK)) >> PAGE_SHIFT);
+			len = offset + req->info.fragsize > PAGE_SIZE ?
 				PAGE_SIZE - offset : req->info.fragsize;
 			len = min((datalen - queued), len);
-			SDMA_DBG(req,
-				 "iovidx=%lu offset=%#llx pageidx=%u, %p, %#lx, len=%u, offset=%lu",
-				 req->iov_idx, iovec->offset + iov_offset,
-				 pageidx, iovec->pages[pageidx],
-				 (unsigned long)iovec->iov.iov_base, len,
-				 offset);
-			BUG_ON(!iovec->pages[pageidx]);
 			ret = sdma_txadd_page(pq->dd, &tx->txreq,
 					      iovec->pages[pageidx],
 					      offset, len);
 			if (ret) {
-				unpin_vector_pages(iovec);
+				dd_dev_err(pq->dd,
+					   "SDMA txreq add page failed %d\n",
+					   ret);
+				iovec_set_complete(iovec);
 				goto free_txreq;
 			}
 			iov_offset += len;
@@ -1035,6 +1049,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 						goto free_txreq;
 				}
 				iov_offset = 0;
+				tx->iovec2 = iovec;
 
 			}
 		}
@@ -1043,16 +1058,23 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		 * This guards agains the callback running prior to that and
 		 * freeing needed data structures.
 		 */
-		spin_lock_irqsave(&tx->lock, flags);
+		spin_lock_irqsave(&req->list_lock, flags);
 		/*
 		 * We should have added all the pages to this request by now.
 		 * Send it off.
 		 */
 		ret = sdma_send_txreq(req->sde, &pq->busy, &tx->txreq);
 		if (unlikely(ret)) {
-			if (tx->iovec)
-				unpin_vector_pages(tx->iovec);
-			spin_unlock_irqrestore(&tx->lock, flags);
+			if (ret != -EBUSY) {
+				dd_dev_err(pq->dd,
+					   "SDMA txreq submit failed %d\n",
+					   ret);
+				if (tx->iovec1)
+					iovec_set_complete(tx->iovec1);
+				if (tx->iovec2)
+					iovec_set_complete(tx->iovec2);
+			}
+			spin_unlock_irqrestore(&req->list_lock, flags);
 			goto free_txreq;
 		}
 		/*
@@ -1063,9 +1085,11 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		if (req_opcode(req->info.ctrl) == EXPECTED)
 			req->tidoffset += datalen;
 		req->sent += data_sent;
-		if (req->data_len && tx->iovec) {
-			tx->iovec->frags_sent++;
-			tx->iovec->offset += iov_offset;
+		if (req->data_len) {
+			if (tx->iovec1 && !tx->iovec2)
+				tx->iovec1->offset += iov_offset;
+			else if (tx->iovec2)
+				tx->iovec2->offset += iov_offset;
 		}
 		/*
 		 * It is important to increment this here as it is used to
@@ -1081,11 +1105,11 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 			 * happen due to the sequential manner in which
 			 * descriptors are processed.
 			 */
-			if (tx->flags & USER_SDMA_TXREQ_FLAGS_USE_AHG)
+			if (test_bit(SDMA_REQ_HAVE_AHG, &req->flags))
 				sdma_ahg_free(req->sde, req->ahg_idx);
 		}
 		list_add_tail(&tx->list, &req->txps);
-		spin_unlock_irqrestore(&tx->lock, flags);
+		spin_unlock_irqrestore(&req->list_lock, flags);
 		npkts++;
 	}
 
@@ -1120,8 +1144,6 @@ static int pin_vector_pages(struct user_sdma_request *req,
 	unsigned pinned;
 
 	iovec->npages = num_user_pages(&iovec->iov);
-	iovec->num_frags = (iovec->iov.iov_len / req->info.fragsize) +
-		!!(iovec->iov.iov_len % req->info.fragsize);
 	iovec->pages = kzalloc(sizeof(*iovec->pages) *
 			       iovec->npages, GFP_KERNEL);
 	if (!iovec->pages) {
@@ -1151,17 +1173,23 @@ done:
 	return ret;
 }
 
-static _hfi_inline void unpin_vector_pages(struct user_sdma_iovec *iovec)
+static void unpin_vector_pages(struct user_sdma_iovec *iovec)
 {
 	unsigned i;
 
+	if (ACCESS_ONCE(iovec->offset) != iovec->iov.iov_len) {
+		hfi_cdbg(SDMA,
+			 "the complete vector has not been sent yet %llu %zu\n",
+			 iovec->offset, iovec->iov.iov_len);
+		return;
+	}
 	for (i = 0; i < iovec->npages; i++)
 		if (iovec->pages[i])
 			put_page(iovec->pages[i]);
 	kfree(iovec->pages);
 	iovec->pages = NULL;
 	iovec->npages = 0;
-	iovec->num_frags = 0;
+	iovec->offset = 0;
 }
 
 static int check_header_template(struct user_sdma_request *req,
@@ -1187,6 +1215,12 @@ static int check_header_template(struct user_sdma_request *req,
 		return -EINVAL;
 
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
+		/*
+		 * The header is checked only on the first packet. Furthermore,
+		 * we ensure that at least one TID entry is copied when the
+		 * request is submitted. Therefore, we don't have to verify that
+		 * tididx points to something sane.
+		 */
 		u32 tidval = req->tids[req->tididx],
 			tidlen = EXP_TID_GET(tidval, LEN) * PAGE_SIZE,
 			tididx = EXP_TID_GET(tidval, IDX),
@@ -1236,7 +1270,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 	struct hfi_pkt_header *hdr = &tx->hdr;
 	u16 pbclen;
 	int ret;
-	u32 lrhlen = get_lrh_len(*hdr, datalen);
+	u32 tidval = 0, lrhlen = get_lrh_len(*hdr, datalen);
 
 	/* Copy the header template to the request before modification */
 	memcpy(hdr, &req->hdr, sizeof(*hdr));
@@ -1299,15 +1333,6 @@ static int set_txreq_header(struct user_sdma_request *req,
 	hdr->kdeth.swdata[6] = cpu_to_le32(req->koffset);
 	/* Expected packets have to fill in the new TID information */
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
-		u32 tidval;
-
-		/* Check whether we have a valid tid */
-		if (req->tididx > req->n_tids - 1 ||
-		    !req->tids[req->tididx]) {
-			SDMA_DBG(req, "tididx=%u, n_tids=%u, %#x", req->tididx,
-				 req->n_tids, req->tids[req->tididx]);
-			return -EINVAL;
-		}
 		tidval = req->tids[req->tididx];
 		/*
 		 * If the offset puts us at the end of the current TID,
@@ -1354,7 +1379,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 	}
 done:
 	trace_hfi_sdma_user_header(pq->dd, pq->ctxt, pq->subctxt,
-				   req->info.comp_idx, hdr);
+				   req->info.comp_idx, hdr, tidval);
 	return sdma_txadd_kvaddr(pq->dd, &tx->txreq, hdr, sizeof(*hdr));
 }
 
@@ -1365,7 +1390,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	struct hfi_user_sdma_pkt_q *pq = req->pq;
 	struct hfi_pkt_header *hdr = &req->hdr;
 	u16 pbclen = le16_to_cpu(hdr->pbc[0]);
-	u32 val32, lrhlen = get_lrh_len(*hdr, len);
+	u32 val32, tidval = 0, lrhlen = get_lrh_len(*hdr, len);
 
 	if (PBC2LRH(pbclen) != lrhlen) {
 		/* PBC.PbcLengthDWs */
@@ -1392,13 +1417,9 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	AHG_HEADER_SET(req->ahg, diff, 15, 16, 16,
 		       cpu_to_le16(req->koffset >> 16));
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
-		u32 tidval;
 		u16 val;
-
-		if (req->tididx > req->n_tids - 1 ||
-		    !req->tids[req->tididx])
-			return -EINVAL;
 		tidval = req->tids[req->tididx];
+
 		/*
 		 * If the offset puts us at the end of the current TID,
 		 * advance everything.
@@ -1439,7 +1460,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 
 	trace_hfi_sdma_user_header_ahg(pq->dd, pq->ctxt, pq->subctxt,
 				       req->info.comp_idx, req->sde->this_idx,
-				       req->ahg_idx, req->ahg, diff);
+				       req->ahg_idx, req->ahg, diff, tidval);
 	return diff;
 }
 
@@ -1448,58 +1469,58 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 {
 	struct user_sdma_txreq *tx =
 		container_of(txreq, struct user_sdma_txreq, txreq);
-	struct user_sdma_iovec *iovec = tx->iovec;
 	struct user_sdma_request *req = tx->req;
 	struct hfi_user_sdma_pkt_q *pq = req ? req->pq : NULL;
-	u16 txflags = tx->flags;
 	unsigned long flags;
 
 	/* XXX (MITKO): Once we start using the SDMA drain mechanism, this
 	 * should never happen. For now, guard against it so we don't crash
 	 * the kernel. */
 	if (!req || !pq) {
-		hfi_cdbg(SDMA,
+		dd_dev_err(pq->dd,
 			 "Attempting to free txreq after queue was destroyed");
 		return;
 	}
 
-	spin_lock_irqsave(&tx->lock, flags);
+	spin_lock_irqsave(&req->list_lock, flags);
 	/* This should not happen. */
 	if (list_empty(&tx->list)) {
 		dd_dev_err(pq->dd, "Attempting to free an empty tx descriptor");
-		spin_unlock_irqrestore(&tx->lock, flags);
+		spin_unlock_irqrestore(&req->list_lock, flags);
 		return;
 	}
 	list_del_init(&tx->list);
-	spin_unlock_irqrestore(&tx->lock, flags);
 
-	if (txflags & USER_SDMA_TXREQ_FLAGS_LAST_FRAG) {
-		if (tx->iovec)
-			unpin_vector_pages(iovec);
-		else
-			SDMA_DBG(req, "TxReq has data but no vector");
-	}
+	if (tx->iovec1)
+		iovec_may_free(tx->iovec1, unpin_vector_pages);
+	if (tx->iovec2)
+		iovec_may_free(tx->iovec2, unpin_vector_pages);
+
+	spin_unlock_irqrestore(&req->list_lock, flags);
 
 	kmem_cache_free(pq->txreq_cache, tx);
+
 	req->txreqs_completed++;
-
 	if (status != SDMA_TXREQ_S_OK) {
+		dd_dev_err(pq->dd, "SDMA completion with error %d", status);
 		set_comp_state(req, ERROR, status);
-		goto free;
-	}
-
-	if (unlikely(txflags & USER_SDMA_TXREQ_FLAGS_LAST_PKT)) {
-		/* We've sent and completed all packets in this
-		 * request. Signal completion to the user */
-		if (test_and_clear_bit(SDMA_REQ_FOR_THREAD, &req->flags))
+		set_bit(SDMA_REQ_HAS_ERROR, &req->flags);
+		/* Do not free the request until the sender loop has ack'ed
+		 * the error and we've seen all txreqs. */
+		if (req->txreqs_completed == ACCESS_ONCE(req->txreqs_sent) &&
+		    test_bit(SDMA_REQ_DONE_ERROR, &req->flags)) {
 			atomic_dec(&pq->n_reqs);
-		set_bit(SDMA_REQ_CB_DONE, &req->flags);
-		set_comp_state(req, COMPLETE, 0);
-	} else
-		goto done;
-free:
-	user_sdma_free_request(req);
-done:
+			user_sdma_free_request(req);
+		}
+	} else {
+		if (req->txreqs_completed == req->info.npkts) {
+			/* We've sent and completed all packets in this
+			 * request. Signal completion to the user */
+			atomic_dec(&pq->n_reqs);
+			set_comp_state(req, COMPLETE, 0);
+			user_sdma_free_request(req);
+		}
+	}
 	if (!atomic_read(&pq->n_reqs))
 		xchg(&pq->state, SDMA_PKT_Q_INACTIVE);
 	return;
@@ -1513,7 +1534,7 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 	if (!list_empty(&req->txps)) {
 		struct user_sdma_txreq *t, *p;
 
-		SDMA_DBG(req, "Request still has tx requests");
+		SDMA_DBG(req, "Request still has tx requests\n");
 		list_for_each_entry_safe(t, p, &req->txps, list) {
 			list_del_init(&t->list);
 			sdma_txclean(req->pq->dd, &t->txreq);
@@ -1535,6 +1556,7 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 	atomic64_sub((req->info.npkts - req->txreqs_sent), &req->pq->npkts);
 	if (req->user_proc)
 		put_task_struct(req->user_proc);
+	clear_bit(SDMA_REQ_IN_USE, &req->flags);
 	return;
 }
 
@@ -1545,6 +1567,9 @@ static _hfi_inline void set_comp_state(struct user_sdma_request *req,
 	req->cq->comps[req->info.comp_idx].status = state;
 	if (state == ERROR)
 		req->cq->comps[req->info.comp_idx].errcode = -ret;
+	trace_hfi_sdma_user_completion(req->pq->dd, req->pq->ctxt,
+				       req->pq->subctxt, req->info.comp_idx,
+				       state, ret);
 }
 
 #if 0

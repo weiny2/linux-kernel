@@ -863,12 +863,12 @@ DEFINE_EVENT(hfi_sdma_sn, hfi_sdma_in_sn,
 );
 
 #define USDMA_HDR_FORMAT \
-	"[%s:%u:%u:%u] PBC=(%#x %#x) LRH=(%#x %#x) BTH=(%#x %#x %#x) KDETH=(%#x %#x %#x %#x %#x %#x %#x %#x %#x)"
+	"[%s:%u:%u:%u] PBC=(0x%x 0x%x) LRH=(0x%x 0x%x) BTH=(0x%x 0x%x 0x%x) KDETH=(0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x) TIDVal=0x%x"
 
 TRACE_EVENT(hfi_sdma_user_header,
 	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
-		     struct hfi_pkt_header *hdr),
-	    TP_ARGS(dd, ctxt, subctxt, req, hdr),
+		     struct hfi_pkt_header *hdr, u32 tidval),
+	    TP_ARGS(dd, ctxt, subctxt, req, hdr, tidval),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
 		    __field(u16, ctxt)
@@ -890,6 +890,7 @@ TRACE_EVENT(hfi_sdma_user_header,
 		    __field(__le32, kdeth6)
 		    __field(__le32, kdeth7)
 		    __field(__le32, kdeth8)
+		    __field(u32, tidval)
 		    ),
 	    TP_fast_assign(
 		    __le32 *pbc = (__le32 *)hdr->pbc;
@@ -917,6 +918,7 @@ TRACE_EVENT(hfi_sdma_user_header,
 		    __entry->kdeth6 = kdeth[6];
 		    __entry->kdeth7 = kdeth[7];
 		    __entry->kdeth8 = kdeth[8];
+		    __entry->tidval = tidval;
 		    ),
 	    TP_printk(USDMA_HDR_FORMAT,
 		      __get_str(dev),
@@ -938,12 +940,13 @@ TRACE_EVENT(hfi_sdma_user_header,
 		      __entry->kdeth5,
 		      __entry->kdeth6,
 		      __entry->kdeth7,
-		      __entry->kdeth8
+		      __entry->kdeth8,
+		      __entry->tidval
 		    )
 	);
 
 #define SDMA_UREQ_FMT \
-	"[%s:%u:%u] ver/op=%#x, iovcnt=%u, npkts=%u, frag=%u, idx=%u"
+	"[%s:%u:%u] ver/op=0x%x, iovcnt=%u, npkts=%u, frag=%u, idx=%u"
 TRACE_EVENT(hfi_sdma_user_reqinfo,
 	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 *i),
 	    TP_ARGS(dd, ctxt, subctxt, i),
@@ -979,13 +982,47 @@ TRACE_EVENT(hfi_sdma_user_reqinfo,
 		    )
 	);
 
+#define usdma_complete_name(st) { st, #st }
+#define show_usdma_complete_state(st)			\
+	__print_symbolic(st,				\
+			 usdma_complete_name(FREE),	\
+			 usdma_complete_name(QUEUED),	\
+			 usdma_complete_name(COMPLETE), \
+			 usdma_complete_name(ERROR))
+
+TRACE_EVENT(hfi_sdma_user_completion,
+	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 idx,
+		     u8 state, int code),
+	    TP_ARGS(dd, ctxt, subctxt, idx, state, code),
+	    TP_STRUCT__entry(
+		    DD_DEV_ENTRY(dd)
+		    __field(u16, ctxt)
+		    __field(u8, subctxt)
+		    __field(u16, idx)
+		    __field(u8, state)
+		    __field(int, code)
+		    ),
+	    TP_fast_assign(
+		    DD_DEV_ASSIGN(dd);
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->idx = idx;
+		    __entry->state = state;
+		    __entry->code = code;
+		    ),
+	    TP_printk("[%s:%u:%u:%u] SDMA completion state %s (%d)",
+		      __get_str(dev), __entry->ctxt, __entry->subctxt,
+		      __entry->idx, show_usdma_complete_state(__entry->state),
+		      __entry->code)
+	);
+
 const char *print_u32_array(struct trace_seq *, u32 *, int);
 #define __print_u32_hex(arr, len) print_u32_array(p, arr, len)
 
 TRACE_EVENT(hfi_sdma_user_header_ahg,
 	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
-		     u8 sde, u8 ahgidx, u32 *ahg, int len),
-	    TP_ARGS(dd, ctxt, subctxt, req, sde, ahgidx, ahg, len),
+		     u8 sde, u8 ahgidx, u32 *ahg, int len, u32 tidval),
+	    TP_ARGS(dd, ctxt, subctxt, req, sde, ahgidx, ahg, len, tidval),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
 		    __field(u16, ctxt)
@@ -994,6 +1031,7 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 		    __field(u8, sde)
 		    __field(u8, idx)
 		    __field(int, len)
+		    __field(u32, tidval)
 		    __array(u32, ahg, 10)
 		    ),
 	    TP_fast_assign(
@@ -1004,9 +1042,10 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 		    __entry->sde = sde;
 		    __entry->idx = ahgidx;
 		    __entry->len = len;
+		    __entry->tidval = tidval;
 		    memcpy(__entry->ahg, ahg, len * sizeof(u32));
 		    ),
-	    TP_printk("[%s:%u:%u:%u] (SDE%u/AHG%u) ahg[0-%d]=(%s)",
+	    TP_printk("[%s:%u:%u:%u] (SDE%u/AHG%u) ahg[0-%d]=(%s) TIDVal=0x%x",
 		      __get_str(dev),
 		      __entry->ctxt,
 		      __entry->subctxt,
@@ -1014,7 +1053,8 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 		      __entry->sde,
 		      __entry->idx,
 		      __entry->len - 1,
-		      __print_u32_hex(__entry->ahg, __entry->len)
+		      __print_u32_hex(__entry->ahg, __entry->len),
+		      __entry->tidval
 		    )
 	);
 
