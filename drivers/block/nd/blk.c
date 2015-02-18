@@ -143,25 +143,14 @@ static void release_bw(struct nd_blk_dimm *dimm, unsigned bw_index)
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static int nd_blk_do_bvec(struct nd_namespace_blk *nsblk, struct page *page,
-		unsigned int len, unsigned int off, int rw, sector_t sector)
+static int nd_blk_do_io(struct page *page, unsigned int len,
+		unsigned int off, int rw, resource_size_t dev_offset)
 {
 	void *mem = kmap_atomic(page);
-	resource_size_t res_offset = sector << SECTOR_SHIFT;
-	resource_size_t	dev_offset = 0;
 	struct nd_blk_dimm *dimm = dimm_singleton;
 	struct block_window *bw;
 	unsigned bw_index;
-	int rc, i;
-
-	for (i = 0; i < nsblk->num_resources; i++) {
-		if (res_offset < resource_size(nsblk->res[i])) {
-			BUG_ON(res_offset + len > resource_size(nsblk->res[i]));
-			dev_offset = nsblk->res[i]->start + res_offset;
-			break;
-		}
-		res_offset -= resource_size(nsblk->res[i]);
-	}
+	int rc;
 
 	acquire_bw(dimm, &bw_index);
 	bw = &dimm->bw[bw_index];
@@ -182,7 +171,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	struct block_device *bdev = bio->bi_bdev;
 	struct nd_blk_device *blk_dev = bdev->bd_disk->private_data;
 	struct nd_namespace_blk *nsblk = blk_dev->nsblk;
-	int rw;
+	int rw, i;
 	struct bio_vec bvec;
 	sector_t sector;
 	struct bvec_iter iter;
@@ -201,12 +190,25 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 		rw = READ;
 
 	bio_for_each_segment(bvec, bio, iter) {
+		resource_size_t res_offset = sector << SECTOR_SHIFT;
+		resource_size_t	dev_offset = 0;
 		unsigned int len = bvec.bv_len;
 
 		BUG_ON(len > PAGE_SIZE);
 
-		err = nd_blk_do_bvec(nsblk, bvec.bv_page, len, bvec.bv_offset,
-				rw, sector);
+		for (i = 0; i < nsblk->num_resources; i++) {
+			if (res_offset < resource_size(nsblk->res[i])) {
+				BUG_ON(res_offset + len >
+						resource_size(nsblk->res[i]));
+				dev_offset = nsblk->res[i]->start +
+					res_offset;
+				break;
+			}
+			res_offset -= resource_size(nsblk->res[i]);
+		}
+
+		err = nd_blk_do_io(bvec.bv_page, len, bvec.bv_offset, rw,
+				dev_offset);
 		if (err)
 			goto out;
 
