@@ -319,11 +319,11 @@ static unsigned free_all_qps(struct hfi_devdata *dd)
 	spin_lock_irqsave(&dev->qp_dev->qpt_lock, flags);
 	for (n = 0; n < dev->qp_dev->qp_table_size; n++) {
 		qp = rcu_dereference_protected(dev->qp_dev->qp_table[n],
-			lockdep_is_held(&dev->qpt_lock));
+			lockdep_is_held(&dev->qp_dev->qpt_lock));
 		rcu_assign_pointer(dev->qp_dev->qp_table[n], NULL);
 
 		for (; qp; qp = rcu_dereference_protected(qp->next,
-				lockdep_is_held(&dev->qpt_lock)))
+				lockdep_is_held(&dev->qp_dev->qpt_lock)))
 			qp_inuse++;
 	}
 	spin_unlock_irqrestore(&dev->qp_dev->qpt_lock, flags);
