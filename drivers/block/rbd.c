@@ -3635,8 +3635,16 @@ static struct attribute *rbd_attrs[] = {
 	NULL
 };
 
+static umode_t rbd_bus_is_visible(struct kobject *kobj,
+				  struct attribute *attr, int index)
+{
+	return attr->mode;
+}
+
+
 static struct attribute_group rbd_attr_group = {
 	.attrs = rbd_attrs,
+	.is_visible = rbd_bus_is_visible,
 };
 
 static const struct attribute_group *rbd_attr_groups[] = {
