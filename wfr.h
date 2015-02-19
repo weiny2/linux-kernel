@@ -567,9 +567,14 @@ u64 create_pbc(u64, u32, u32, u32);
 #define NUM_PCIE_SERDES 16	/* number of PCIe serdes on the SBus */
 extern const u8 pcie_serdes_broadcast[];
 extern const u8 pcie_pcs_addrs[2][NUM_PCIE_SERDES];
-#define WRITE_SBUS_RECEIVER 0x21	/* SBUS command */
+/* SBUS commands */
+#define RESET_SBUS_RECEIVER 0x20
+#define WRITE_SBUS_RECEIVER 0x21
+#define READ_SBUS_RECEIVER  0x22
 void sbus_request(struct hfi_devdata *dd,
-		u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
+		  u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
+int sbus_request_slow(struct hfi_devdata *dd,
+		      u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
 int firmware_init(struct hfi_devdata *dd);
 int load_pcie_firmware(struct hfi_devdata *dd);
 int load_firmware(struct hfi_devdata *dd);

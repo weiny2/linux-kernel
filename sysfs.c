@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012,2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012-2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2006 PathScale, Inc. All rights reserved.
  *
@@ -828,6 +828,14 @@ bail:
 }
 
 /*
+ * Convert the reported temperature from an integer (reported in
+ * units of 0.25C) to a floating point number.
+ */
+#define temp2str(temp, buf, size, idx)					\
+	scnprintf((buf) + (idx), (size) - (idx), "%u.%02u ",		\
+			      ((temp) >> 2), ((temp) & 0x3) * 25)
+
+/*
  * Dump tempsense regs. in decimal, to ease shell-scripts.
  */
 static ssize_t show_tempsense(struct device *device,
@@ -836,26 +844,22 @@ static ssize_t show_tempsense(struct device *device,
 	struct qib_ibdev *dev =
 		container_of(device, struct qib_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
-	int ret;
-	int idx;
-	u8 regvals[8];
+	struct hfi_temp temp;
+	int ret = -ENXIO;
 
-	ret = -ENXIO;
-	for (idx = 0; idx < 8; ++idx) {
-		if (idx == 6)
-			continue;
-		ret = dd->f_tempsense_rd(dd, idx);
-		if (ret < 0)
-			break;
-		regvals[idx] = ret;
+	ret = dd->f_tempsense_rd(dd, &temp);
+	if (!ret) {
+		int idx = 0;
+
+		idx += temp2str(temp.curr, buf, PAGE_SIZE, idx);
+		idx += temp2str(temp.lo_lim, buf, PAGE_SIZE, idx);
+		idx += temp2str(temp.hi_lim, buf, PAGE_SIZE, idx);
+		idx += temp2str(temp.crit_lim, buf, PAGE_SIZE, idx);
+		idx += scnprintf(buf + idx, PAGE_SIZE - idx,
+				"%u %u %u\n", temp.triggers & 0x1,
+				temp.triggers & 0x2, temp.triggers & 0x4);
+		ret = idx;
 	}
-	if (idx == 8)
-		ret = scnprintf(buf, PAGE_SIZE, "%d %d %02X %02X %d %d\n",
-				*(signed char *)(regvals),
-				*(signed char *)(regvals + 1),
-				regvals[2], regvals[3],
-				*(signed char *)(regvals + 5),
-				*(signed char *)(regvals + 7));
 	return ret;
 }
 

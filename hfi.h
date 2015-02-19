@@ -736,6 +736,14 @@ struct err_info_constraint {
 	u32 slid;
 };
 
+struct hfi_temp {
+	unsigned int curr;       /* current temperature */
+	unsigned int lo_lim;     /* low temperature limit */
+	unsigned int hi_lim;     /* high temperature limit */
+	unsigned int crit_lim;   /* critical temperature limit */
+	u8 triggers;      /* temperature triggers */
+};
+
 /* device data struct now contains only "general per-device" info.
  * fields related to a physical IB port are in a qib_pportdata struct,
  * described above) while fields only used by a particular chip-type are in
@@ -865,7 +873,7 @@ struct hfi_devdata {
 	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
 		char **, u64 **);
 	int (*f_init_ctxt)(struct qib_ctxtdata *);
-	int (*f_tempsense_rd)(struct hfi_devdata *, int regnum);
+	int (*f_tempsense_rd)(struct hfi_devdata *, struct hfi_temp *);
 	int (*f_set_ctxt_jkey)(struct hfi_devdata *, unsigned, u16);
 	int (*f_clear_ctxt_jkey)(struct hfi_devdata *, unsigned);
 	int (*f_set_ctxt_pkey)(struct hfi_devdata *, unsigned, u16);
@@ -1422,6 +1430,7 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 #define HFI_HAS_SEND_DMA      0x10   /* Supports Send DMA */
 #define HFI_BADINTR           0x20   /* severe interrupt problems */
 #define ICHECK_WORKER_INITED  0x40   /* initialized interrupt_check_worker */
+#define HFI_FORCED_FREEZE     0x80   /* driver forced freeze mode */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
 #define QIB_PBC_LENGTH_MASK                     ((1 << 11) - 1)
@@ -1719,6 +1728,9 @@ static inline u64 hfi_pkt_base_sdma_integrity(struct hfi_devdata *dd)
 #define qib_early_info(dev, fmt, ...) \
 	dev_info(dev, fmt, ##__VA_ARGS__)
 
+#define dd_dev_emerg(dd, fmt, ...) \
+	dev_emerg(&(dd)->pcidev->dev, "%s: " fmt, \
+		  get_unit_name((dd)->unit), ##__VA_ARGS__)
 #define dd_dev_err(dd, fmt, ...) \
 	dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
 			get_unit_name((dd)->unit), ##__VA_ARGS__)

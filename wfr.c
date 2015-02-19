@@ -1166,9 +1166,11 @@ static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
 static void start_freeze_handling(struct qib_pportdata *ppd, int abort);
 static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
+static int thermal_init(struct hfi_devdata *dd);
 
 static u32 read_physical_state(struct hfi_devdata *dd);
 static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc);
+static void handle_temp_err(struct hfi_devdata *);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -1214,6 +1216,12 @@ static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
 /* 7*/	WFR_EE(SEND_ERR,	handle_txe_err,    "TxeErr")
 	/* the rest are reserved */
 };
+
+/*
+ * Index into the Various section of the interrupt sources
+ * corresponding to the Critical Temperature interrupt.
+ */
+#define WFR_TCRIT_INT_SOURCE 4
 
 /*
  * SDMA error interupt entry - refers to another register containing more
@@ -1912,6 +1920,7 @@ static const char *various_names[] = {
 	"GpioAssertInt",
 	"Qsfp1Int",
 	"Qsfp2Int",
+	"TCritInt",
 };
 
 /*
@@ -2415,8 +2424,15 @@ static void is_sdma_eng_err_int(struct hfi_devdata *dd, unsigned int source)
  */
 static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 {
-	/* TODO: actually do something */
-	printk("%s: int%u - unimplemented\n", __func__ , source);
+	/*
+	 * TCritInt cannot go through interrupt_clear_down()
+	 * because it is not a second tier interrupt. The handler
+	 * should be called directly.
+	 */
+	if (source == WFR_TCRIT_INT_SOURCE)
+		handle_temp_err(dd);
+	else
+		pr_info("%s: int%u - unimplemented\n", __func__, source);
 }
 
 /*
@@ -2735,7 +2751,7 @@ static u32 vau_to_au(u8 vau)
 /*
  * Graceful LCB shutdown.  This leaves the LCB FIFOs in reset.
  */
-void lcb_shutdown(struct hfi_devdata *dd)
+static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 {
 	u64 reg, saved_lcb_err_en;
 
@@ -2752,9 +2768,11 @@ void lcb_shutdown(struct hfi_devdata *dd)
 		| (1ull << DCC_CFG_RESET_RESET_LCB_SHIFT)
 		| (1ull << DCC_CFG_RESET_RESET_RX_FPE_SHIFT));
 	(void) read_csr(dd, DCC_CFG_RESET); /* make sure the write completed */
-	udelay(1);	/* must hold for the longer of 16cclks or 20ns */
-	write_csr(dd, DCC_CFG_RESET, reg);
-	write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
+	if (!abort) {
+		udelay(1);    /* must hold for the longer of 16cclks or 20ns */
+		write_csr(dd, DCC_CFG_RESET, reg);
+		write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
+	}
 }
 
 /*
@@ -3348,7 +3366,7 @@ void handle_verify_cap(struct work_struct *work)
 	set_host_lcb_access(dd);
 	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
-	lcb_shutdown(dd);
+	lcb_shutdown(dd, 0);
 	adjust_lcb_for_fpga_serdes(dd);
 
 	/*
@@ -4214,7 +4232,7 @@ static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
 	/* avoids a double compare by walking the table in-order */
 	for (entry = &is_table[0]; entry->is_name; entry++) {
 		if (source < entry->end) {
-			entry->is_int(dd, source-entry->start);
+			entry->is_int(dd, source - entry->start);
 			return;
 		}
 	}
@@ -4871,7 +4889,7 @@ int do_quick_linkup(struct hfi_devdata *dd)
 	set_host_lcb_access(dd);
 	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
-	lcb_shutdown(dd);
+	lcb_shutdown(dd, 0);
 
 	if (loopback) {
 		/* LCB_CFG_LOOPBACK.VAL = 2 */
@@ -5128,7 +5146,7 @@ void schedule_link_restart(struct qib_pportdata *ppd)
 }
 
 /* cancel any pending link restart */
-void cancel_link_restart(struct qib_pportdata *ppd)
+static void cancel_link_restart(struct qib_pportdata *ppd)
 {
 	cancel_delayed_work(&ppd->link_restart_work);
 }
@@ -7919,11 +7937,30 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 	return ret;
 }
 
-static int tempsense_rd(struct hfi_devdata *dd, int regnum)
+static int tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp)
 {
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-	return -ENXIO;
+	int ret = 0;
+	u64 reg;
+
+	if (dd->icode != WFR_ICODE_RTL_SILICON) {
+		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+			dd_dev_info(dd, "%s: tempsense not supported by HW\n",
+				    __func__);
+		return -EINVAL;
+	}
+	reg = read_csr(dd, WFR_ASIC_STS_THERM);
+	temp->curr = ((reg >> WFR_ASIC_STS_THERM_CURR_TEMP_SHIFT) &
+		      WFR_ASIC_STS_THERM_CURR_TEMP_MASK);
+	temp->lo_lim = ((reg >> WFR_ASIC_STS_THERM_LO_TEMP_SHIFT) &
+			WFR_ASIC_STS_THERM_LO_TEMP_MASK);
+	temp->hi_lim = ((reg >> WFR_ASIC_STS_THERM_HI_TEMP_SHIFT) &
+			WFR_ASIC_STS_THERM_HI_TEMP_MASK);
+	temp->crit_lim = ((reg >> WFR_ASIC_STS_THERM_CRIT_TEMP_SHIFT) &
+			  WFR_ASIC_STS_THERM_CRIT_TEMP_MASK);
+	/* triggers is a 3-bit value - 1 bit per trigger. */
+	temp->triggers = (u8)((reg >> WFR_ASIC_STS_THERM_LOW_SHIFT) & 0x7);
+
+	return ret;
 }
 
 /* ========================================================================= */
@@ -10162,6 +10199,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (ret)
 		goto bail_free_rcverr;
 
+	thermal_init(dd);
 	goto bail;
 
 bail_free_rcverr:
@@ -10249,4 +10287,110 @@ void force_all_interrupts(struct hfi_devdata *dd)
 	force_errors(dd, WFR_SEND_DMA_ERR_FORCE, "Send DMA Err");
 	force_errors(dd, WFR_SEND_EGRESS_ERR_FORCE, "Send Egress Err");
 	force_errors(dd, WFR_SEND_ERR_FORCE, "Send Err");
+}
+
+#define SBUS_THERMAL    0x4f
+#define SBUS_THERM_MONITOR_MODE 0x1
+
+/*
+ * Initialize the Avago Thermal sensor.
+ *
+ * After initialization, enable polling of thermal sensor through
+ * SBus interface. In order for this to work, the SBus Master
+ * firmware has to be loaded due to the fact that the HW polling
+ * logic uses SBus interrupts, which are not supported with
+ * default firmware. Otherwise, no data will be returned through
+ * the ASIC_STS_THERM CSR.
+ */
+static int thermal_init(struct hfi_devdata *dd)
+{
+	int ret = 0;
+
+	if (dd->icode != WFR_ICODE_RTL_SILICON)
+		goto done;
+
+	dd_dev_info(dd, "Initializing thermal sensor\n");
+	/* Thermal Sensor Initialization */
+	/*    Step 1: Reset the Thermal SBus Receiver */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
+				RESET_SBUS_RECEIVER, 0);
+	if (ret)
+		goto fail;
+	/*    Step 2: Set Reset bit in Thermal block */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
+				WRITE_SBUS_RECEIVER, 0x1);
+	if (ret)
+		goto fail;
+	/*    Step 3: Write clock divider value (100MHz -> 2MHz) */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x1,
+				WRITE_SBUS_RECEIVER, 0x32);
+	if (ret)
+		goto fail;
+	/*    Step 4: Select temperature mode */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x3,
+				WRITE_SBUS_RECEIVER,
+				SBUS_THERM_MONITOR_MODE);
+	if (ret)
+		goto fail;
+	/*    Step 5: De-assert block reset and start conversion */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
+				WRITE_SBUS_RECEIVER, 0x2);
+	if (ret)
+		goto fail;
+	/*    Step 5.1: Wait for first conversion (21.5ms per spec) */
+	msleep(22);
+
+	dd_dev_info(dd, "Thermal sensor initialization done.\n");
+	/* Enable polling of thermal readings */
+	write_csr(dd, WFR_ASIC_CFG_THERM_POLL_EN, 0x1);
+	goto done;
+fail:
+	dd_dev_err(dd, "Thermal sensor initialization failed.\n");
+done:
+	return ret;
+}
+
+static void handle_temp_err(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd = &dd->pport[0];
+	/*
+	 * Thermal Critical Interrupt
+	 * Put the device into forced freeze mode, take link down to
+	 * offline, and put DC into reset.
+	 */
+	dd_dev_emerg(dd,
+		     "Critical temperature reached! Forcing device into freeze mode!\n");
+	write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
+	dd->flags |= HFI_FORCED_FREEZE;
+	start_freeze_handling(ppd, 1);
+	/* TODO: Adjust PowerDown recipe pending a discussion with HW team.
+	 * The goal is to turn off as much as possible in DC. */
+	/*
+	 * Shut DC down as much and as quickly as possible.
+	 *
+	 * Step 1: Take the link down to OFFLINE. This will cause the
+	 *         8051 to put the Serdes in reset. However, we don't want to
+	 *         go through the entire link state machine since we want to
+	 *         shutdown ASAP. Furthermore, this is not a graceful shutdown
+	 *         but rather an attempt to save the chip.
+	 *         Code below is almost the same as quiet_serdes() but avoids
+	 *         all the extra work and the sleeps.
+	 */
+	ppd->driver_link_ready = 0;
+	ppd->link_enabled = 0;
+	cancel_link_restart(ppd);
+	set_physical_link_state(dd, WFR_PLS_OFFLINE |
+				OPA_LINKDOWN_REASON_SMA_DISABLED);
+	/*
+	 * Step 2: Shutdown LCB
+	 *         After shutdown, do not restore DC_CFG_RESET value.
+	 */
+	set_host_lcb_access(dd);
+	lcb_shutdown(dd, 1);
+	set_8051_lcb_access(dd);
+	/*
+	 * Step 3: Shutdown 8051
+	 */
+	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
+
 }

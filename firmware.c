@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013,2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -78,6 +78,11 @@ MODULE_PARM_DESC(fw_sbus_name, "SBUS firmware name");
 static char *fw_pcie_serdes_name;
 module_param_named(fw_pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
 MODULE_PARM_DESC(fw_pcie_serdes_name, "PCIe SerDes firmware name");
+
+#define SBUS_MAX_POLL_COUNT 100
+#define SBUS_COUNTER(reg, name) \
+	(((reg) >> WFR_ASIC_STS_SBUS_COUNTERS_##name##_CNT_SHIFT) & \
+	 WFR_ASIC_STS_SBUS_COUNTERS_##name##_CNT_MASK)
 
 /*
  * Firmware security header.
@@ -918,6 +923,40 @@ void fabric_serdes_reset(struct hfi_devdata *dd)
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000002);
 }
 
+/* Access to the SBus in this routine should probably be serialized */
+int sbus_request_slow(struct hfi_devdata *dd,
+		      u8 receiver_addr, u8 data_addr, u8 command, u32 data_in)
+{
+	u64 reg, count = 0;
+	int ret = 0;
+
+	sbus_request(dd, receiver_addr, data_addr, command, data_in);
+	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE,
+		  WFR_ASIC_CFG_SBUS_EXECUTE_EXECUTE_SMASK);
+	/* Wait for both DONE and RCV_DATA_VALID to go high */
+	reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
+	while (!((reg & WFR_ASIC_STS_SBUS_RESULT_DONE_SMASK) &&
+		 (reg & WFR_ASIC_STS_SBUS_RESULT_RCV_DATA_VALID_SMASK))) {
+		if (count++ >= SBUS_MAX_POLL_COUNT)
+			/* We timed out waiting but proceed anyway */
+			break;
+		udelay(1);
+		reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
+	}
+	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
+	/* Wait for DONE to clear after EXECUTE is cleared */
+	reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
+	while (reg & WFR_ASIC_STS_SBUS_RESULT_DONE_SMASK) {
+		if (count++ >= SBUS_MAX_POLL_COUNT) {
+			ret = -ETIME;
+			break;
+		}
+		udelay(1);
+		reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
+	}
+	return ret;
+}
+
 static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 					struct firmware_details *fdet)
 {
@@ -1091,6 +1130,16 @@ static void set_sbus_fast_mode(struct hfi_devdata *dd)
 
 static void clear_sbus_fast_mode(struct hfi_devdata *dd)
 {
+	u64 reg, count = 0;
+
+	reg = read_csr(dd, WFR_ASIC_STS_SBUS_COUNTERS);
+	while (SBUS_COUNTER(reg, EXECUTE) !=
+	       SBUS_COUNTER(reg, RCV_DATA_VALID)) {
+		if (count++ >= SBUS_MAX_POLL_COUNT)
+			break;
+		udelay(1);
+		reg = read_csr(dd, WFR_ASIC_STS_SBUS_COUNTERS);
+	}
 	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
 }
 
