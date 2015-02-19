@@ -9887,6 +9887,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_clear_ctxt_jkey   = clear_ctxt_jkey;
 	dd->f_set_ctxt_pkey     = set_ctxt_pkey;
 	dd->f_clear_ctxt_pkey   = clear_ctxt_pkey;
+	dd->f_read_link_quality	= read_link_quality;
 
 
 	/*

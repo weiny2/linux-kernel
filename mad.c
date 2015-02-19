@@ -2117,7 +2117,7 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
 
 	/* FIXME: Should this be included with the rest of the counters? */
-	rsp->link_quality_indicator = ppd->link_quality;
+	dd->f_read_link_quality(dd, &rsp->link_quality_indicator);
 
 	rsp->vl_select_mask = cpu_to_be32(vl_select_mask);
 	rsp->port_xmit_data = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_FLITS,
@@ -2358,7 +2358,7 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	size_t response_data_size;
 	u32 num_ports;
 	u8 num_pslm;
-	u8 num_vls;
+	u8 lq, num_vls;
 	u64 port_mask;
 	unsigned long port_num;
 	unsigned long vl;
@@ -2406,7 +2406,8 @@ static int pma_get_stl_datacounters(struct stl_pma_mad *pmp,
 	 * 'datacounters' queries (as opposed to 'portinfo' queries,
 	 * where it's a byte).
 	 */
-	rsp->link_quality_indicator = cpu_to_be32(ppd->link_quality);
+	dd->f_read_link_quality(dd, &lq);
+	rsp->link_quality_indicator = cpu_to_be32((u32)lq);
 
 	/* FIXME
 	 * some of the counters are not implemented. if the WFR spec
