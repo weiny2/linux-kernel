@@ -592,9 +592,9 @@ static int __blk_label_update(struct nd_region *nd_region,
 			memcpy_toio(nd_label->name, nsblk->alt_name,
 					NSLABEL_NAME_LEN);
 		writel(NSLABEL_FLAG_LOCAL, &nd_label->flags);
-		writew(nsblk->num_resources, &nd_label->nlabel);
-		writew(i, &nd_label->position);
-		writeq(0, &nd_label->isetcookie);
+		writew(0, &nd_label->nlabel); /* N/A */
+		writew(0, &nd_label->position); /* N/A */
+		writeq(0, &nd_label->isetcookie); /* N/A */
 		writeq(res->start, &nd_label->dpa);
 		writeq(resource_size(res), &nd_label->rawsize);
 		writeq(nsblk->lbasize, &nd_label->lbasize);
