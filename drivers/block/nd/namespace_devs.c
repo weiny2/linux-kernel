@@ -195,7 +195,7 @@ static int nd_namespace_label_update(struct nd_region *nd_region, struct device 
 
 		if (size == 0 && nspm->uuid)
 			/* delete allocation */;
-		else if (size < ND_MIN_NAMESPACE_SIZE || !nspm->uuid)
+		else if (!nspm->uuid)
 			return 0;
 
 		return nd_pmem_namespace_label_update(nd_region, nspm, size);
@@ -205,8 +205,7 @@ static int nd_namespace_label_update(struct nd_region *nd_region, struct device 
 
 		if (size == 0 && nsblk->uuid)
 			/* delete allocation */;
-		else if (size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid
-					|| !nsblk->lbasize)
+		else if (!nsblk->uuid || !nsblk->lbasize)
 			return 0;
 
 		return nd_blk_namespace_label_update(nd_region, nsblk, size);
