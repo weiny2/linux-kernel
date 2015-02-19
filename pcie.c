@@ -41,6 +41,7 @@
 #include "include/wfr/wfr_pcie_defs.h"
 
 /* link speed vector for Gen3 speed - not in Linux headers */
+#define GEN2_SPEED_VECTOR 0x2
 #define GEN3_SPEED_VECTOR 0x3
 
 /*
@@ -864,11 +865,15 @@ const struct pci_error_handlers qib_pci_err_handler = {
 
 static uint pcie_gen3_transition;
 module_param(pcie_gen3_transition, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_transition, "Driver will attempt the transition to PCIe Gen3 speed");
+MODULE_PARM_DESC(pcie_gen3_transition, "Driver will attempt the transition to PCIe Gen3 speed (2 = remain at Gen2 speed)");
 
 static uint pcie_gen3_required;
 module_param(pcie_gen3_required, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_required, "Driver will fail to load if unable to raech PCie Gen3 speed");
+MODULE_PARM_DESC(pcie_gen3_required, "Driver will fail to load if unable to reach PCie Gen3 speed");
+
+static uint pcie_gen3_retry = 5;
+module_param(pcie_gen3_retry, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_gen3_retry, "Driver will try this many times to reach requested speed");
 
 /* for testing */
 static uint pcie_gen3_ignore_speed_check;
@@ -1084,6 +1089,8 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	u32 reg32, fs, lf;
 	u32 status, err;
 	int ret, return_error = 0;
+	int do_retry, retry_count = 0;
+	int target_gen2;
 	u16 lnkctl, lnkctl2, vendor;
 	u8 nsbr = 1;
 	const u8 (*eq)[3];
@@ -1099,6 +1106,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 		dd_dev_info(dd, "%s: Skipping PCIe transition\n", __func__);
 		return 0;
 	}
+	target_gen2 = pcie_gen3_transition == 2;	/* target Gen2 */
 
 	/*
 	 * A0 erratum 291496
@@ -1188,6 +1196,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	if (ret)
 		goto done;
 
+retry:
 	/* step 5: set up device parameter settings */
 	dd_dev_info(dd, "%s: setting PCIe registers\n", __func__);
 
@@ -1314,7 +1323,10 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	dd_dev_info(dd, "%s: ..old link control2: 0x%x\n", __func__,
 		(u32)lnkctl2);
 	lnkctl2 &= ~LNKCTL2_TARGET_LINK_SPEED_MASK;
-	lnkctl2 |= GEN3_SPEED_VECTOR;
+	if (target_gen2)
+		lnkctl2 |= GEN2_SPEED_VECTOR;
+	else
+		lnkctl2 |= GEN3_SPEED_VECTOR;
 	dd_dev_info(dd, "%s: ..new link control2: 0x%x\n", __func__,
 		(u32)lnkctl2);
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL2, lnkctl2);
@@ -1418,13 +1430,17 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	dd_dev_info(dd, "%s: new speed and width: %s\n", __func__,
 		dd->lbus_info);
 
-	if (dd->lbus_speed != 8000) {	/* not Gen3 */
-		/*
-		 * At this point we could try again with different
-		 * parameters in the hopes of success.  For now, just
-		 * report an error.
-		 */
-		dd_dev_err(dd, "PCIe link speed did not switch to Gen3\n");
+	if (dd->lbus_speed != (target_gen2 ? 5000 : 8000)) { /* not target */
+		/* maybe retry */
+		do_retry = retry_count < pcie_gen3_retry;
+		dd_dev_err(dd, "PCIe link speed did not switch to Gen%d%s\n",
+			target_gen2 ? 2 : 3,
+			do_retry ? ", retrying" : "");
+		retry_count++;
+		if (do_retry) {
+			msleep(100); /* allow time to settle */
+			goto retry;
+		}
 		ret = -EIO;
 	}
 
