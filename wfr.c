@@ -9944,6 +9944,12 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	else			/* half speed */
 		dd->pport->link_speed_supported = OPA_LINK_SPEED_12_5G;
 	/* apply link speed mask module parameter */
+	/*
+	 * TEMPORARY: set the ASIC to default to half speed until LNI supports
+	 * full speed.
+	 */
+	if ((dd->icode == WFR_ICODE_RTL_SILICON) && !link_speed_mask)
+		link_speed_mask = OPA_LINK_SPEED_12_5G;
 	if (link_speed_mask) {
 		if (dd->pport->link_speed_supported & link_speed_mask)
 			dd->pport->link_speed_supported &= link_speed_mask;
