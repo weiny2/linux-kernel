@@ -1382,8 +1382,8 @@ static int iowait_sleep(
 		 * buffer and undoing the side effects of the copy.
 		 */
 		/* FIXME - make a common routine? */
-		list_add_tail(&stx->list, &wait->tx_head);
 		dev = &sde->dd->verbs_dev;
+		list_add_tail(&stx->list, &wait->tx_head);
 		spin_lock(&dev->pending_lock);
 		if (sdma_progress(sde, seq))
 			goto eagain;
@@ -1409,6 +1409,7 @@ static int iowait_sleep(
 eagain:
 	spin_unlock(&dev->pending_lock);
 	spin_unlock_irqrestore(&qp->s_lock, flags);
+	list_del_init(&stx->list);
 	return -EAGAIN;
 }
 

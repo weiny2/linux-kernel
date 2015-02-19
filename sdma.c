@@ -1977,6 +1977,8 @@ static int sdma_check_progress(
 		seq = raw_seqcount_begin(
 			(const seqcount_t *)&sde->head_lock.seqcount);
 		ret = wait->sleep(sde, wait, tx, seq);
+		if (ret == -EAGAIN)
+			sde->desc_avail = sdma_descq_freecnt(sde);
 	} else
 		ret = -EBUSY;
 	return ret;
