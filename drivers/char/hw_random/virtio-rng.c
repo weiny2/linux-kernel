@@ -86,6 +86,7 @@ static struct hwrng virtio_hwrng = {
 	.name		= "virtio",
 	.cleanup	= virtio_cleanup,
 	.read		= virtio_read,
+	.quality	= 1000,
 };
 
 static int probe_common(struct virtio_device *vdev)
