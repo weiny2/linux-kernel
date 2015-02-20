@@ -89,7 +89,7 @@ static void set_loopback(const struct hfi_devdata *dd)
 {
 	LM_CONFIG_t lm_config = {.val = 0};
 
-	lm_config.FORCE_LOOPBACK = 1;
+	lm_config.field.FORCE_LOOPBACK = 1;
 	write_csr(dd, FXR_LM_CONFIG, lm_config.val);
 }
 
@@ -209,9 +209,9 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	for (i = 0; i < HFI_CQ_COUNT; i++)
 		hfi_cq_head_config(dd, i, dd->cq_head_base);
 
-	/* TX and RX command queues */
-	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_CSR;
-	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_CSR;
+	/* TX and RX command queues - fast path access */
+	dd->cq_tx_base = (void *)dd->physaddr + FXR_TXCQ_ENTRY;
+	dd->cq_rx_base = (void *)dd->physaddr + FXR_RXCQ_ENTRY;
 	memset(&dd->cq_pair, HFI_PID_NONE, sizeof(dd->cq_pair));
 	spin_lock_init(&dd->cq_lock);
 
@@ -241,8 +241,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
 	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
 
-	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	/* write PCB_LOW first to clear valid bit */
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
+	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 	/* TODO - write fake FXR simics CSR to invalidate cached PT */
 	#define HFI_HP_PT_CACHE_CTRL 0x2210000
 	write_csr(dd, HFI_HP_PT_CACHE_CTRL, 1);
@@ -259,12 +260,12 @@ void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid, int phys)
 			    (u64)ctx->ptl_state_base;
 
 	/* write PCB in FXR */
-	pcb_low.valid = 1;
-	pcb_low.physical = phys;
-	pcb_low.portals_state_base = psb_addr >> PAGE_SHIFT;
-	pcb_high.triggered_op_size = (ctx->trig_op_size >> PAGE_SHIFT);
-	pcb_high.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT);
-	pcb_high.le_me_size = (ctx->le_me_size >> PAGE_SHIFT);
+	pcb_low.field.valid = 1;
+	pcb_low.field.physical = phys;
+	pcb_low.field.portals_state_base = psb_addr >> PAGE_SHIFT;
+	pcb_high.field.triggered_op_size = (ctx->trig_op_size >> PAGE_SHIFT);
+	pcb_high.field.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT);
+	pcb_high.field.le_me_size = (ctx->le_me_size >> PAGE_SHIFT);
 
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
@@ -276,22 +277,22 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 {
 	u32 offset;
 	u64 paddr;
-	RX_CQ_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
-	TX_CQ_RESET_t tx_cq_reset = {.val = 0};
-	RX_CQ_RESET_t rx_cq_reset = {.val = 0};
+	RXCI_CFG_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
+	TXCI_CFG_RESET_t tx_cq_reset = {.val = 0};
+	RXCI_CFG_CQ_RESET_t rx_cq_reset = {.val = 0};
 
 	paddr = virt_to_phys(HFI_CQ_HEAD_ADDR(head_base, cq_idx));
-	cq_head.Valid = 1;
-	cq_head.PA = 1;
-	cq_head.HD_PTR_HOST_ADDR = paddr;
-	offset = FXR_RX_CQ_HEAD_UPDATE_ADDR + (cq_idx * 8);
+	cq_head.field.valid = 1;
+	cq_head.field.pa = 1;
+	cq_head.field.hd_ptr_host_addr = paddr;
+	offset = FXR_RXCI_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
 	write_csr(dd, offset, cq_head.val);
 
 	/* reset CQ state, as CQ head starts at 0 */
-	tx_cq_reset.RESET_CQ = cq_idx;
-	rx_cq_reset.RESET_CQ = cq_idx;
-	write_csr(dd, FXR_TX_CQ_RESET, tx_cq_reset.val);
-	write_csr(dd, FXR_RX_CQ_RESET, rx_cq_reset.val);
+	tx_cq_reset.field.reset_cq = cq_idx;
+	rx_cq_reset.field.reset_cq = cq_idx;
+	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
+	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
 }
 
 /*
@@ -302,8 +303,8 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 {
 	/* write 0 to disable CSR (enable=0) */
-	write_csr(dd, FXR_TX_CQ_CONFIG_CSR + (cq_idx * 8), 0);
-	write_csr(dd, FXR_RX_CQ_CONFIG_CSR + (cq_idx * 8), 0);
+	write_csr(dd, FXR_TXCI_CFG_CSR + (cq_idx * 8), 0);
+	write_csr(dd, FXR_RXCI_CFG_CNTRL + (cq_idx * 8), 0);
 
 	/* TODO - Drain or Reset CQ */
 }
@@ -314,16 +315,16 @@ void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 	struct hfi_devdata *dd = ctx->devdata;
 	int i;
 	u32 offset;
-	TX_CQ_AUTHENTICATION_CSR_t cq_auth = {.val = 0};
+	TXCI_CFG_AUTHENTICATION_CSR_t cq_auth = {.val = 0};
 
 	/* write AUTH tuples */
-	offset = FXR_TX_CQ_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
+	offset = FXR_TXCI_CFG_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 		if (ctx->auth_mask == 0)
-			cq_auth.USER_ID = ctx->ptl_uid;
+			cq_auth.field.USER_ID = ctx->ptl_uid;
 		else
-			cq_auth.USER_ID = auth_table[i].uid;
-		cq_auth.SRANK = auth_table[i].srank;
+			cq_auth.field.USER_ID = auth_table[i].uid;
+		cq_auth.field.SRANK = auth_table[i].srank;
 		write_csr(dd, offset, cq_auth.val);
 		offset += 8;
 	}
@@ -338,26 +339,26 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
-	TX_CQ_CONFIG_CSR_t tx_cq_config = {.val = 0};
-	RX_CQ_CONFIG_CSR_t rx_cq_config = {.val = 0};
+	TXCI_CFG_CSR_t tx_cq_config = {.val = 0};
+	RXCI_CFG_CNTRL_t rx_cq_config = {.val = 0};
 
 	hfi_cq_config_tuples(ctx, cq_idx, auth_table);
 
 	/* set TX CQ config, enable */
-	tx_cq_config.ENABLE = 1;
-	tx_cq_config.PID = ctx->ptl_pid;
-	tx_cq_config.PRIV_LEVEL = 1;
-	tx_cq_config.DLID_BASE = ctx->dlid_base;
-	tx_cq_config.PHYS_DLID = ctx->allow_phys_dlid;
-	tx_cq_config.SL_ENABLE = ctx->sl_mask;
-	offset = FXR_TX_CQ_CONFIG_CSR + (cq_idx * 8);
+	tx_cq_config.field.enable = 1;
+	tx_cq_config.field.pid = ctx->ptl_pid;
+	tx_cq_config.field.priv_level = 1;
+	tx_cq_config.field.dlid_base = ctx->dlid_base;
+	tx_cq_config.field.phys_dlid = ctx->allow_phys_dlid;
+	tx_cq_config.field.sl_enable = ctx->sl_mask;
+	offset = FXR_TXCI_CFG_CSR + (cq_idx * 8);
 	write_csr(dd, offset, tx_cq_config.val);
 
 	/* set RX CQ config, enable */
-	rx_cq_config.ENABLE = 1;
-	rx_cq_config.PID = ctx->ptl_pid;
-	rx_cq_config.PRIV_LEVEL = 1;
-	offset = FXR_RX_CQ_CONFIG_CSR + (cq_idx * 8);
+	rx_cq_config.field.enable = 1;
+	rx_cq_config.field.pid = ctx->ptl_pid;
+	rx_cq_config.field.priv_level = 1;
+	offset = FXR_RXCI_CFG_CNTRL + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);
 }
 
