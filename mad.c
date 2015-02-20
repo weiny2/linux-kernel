@@ -653,10 +653,10 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		(ppd->neighbor_fm_security ?
 			OPA_PI_MASK_NEIGH_FW_AUTH_BYPASS : 0);
 
-	if ((pi->port_neigh_mode & OPA_PI_MASK_NEIGH_NODE_TYPE) == 1)
-		credit_rate = 0;
-	else
-		credit_rate = 18;
+	/* HFIs shall always return VL15 credits to their
+	 * neighbor in a timely manner, without any credit return pacing.
+	 */
+	credit_rate = 0;
 	buffer_units  = (dd->vau) & OPA_PI_MASK_BUF_UNIT_BUF_ALLOC;
 	buffer_units |= (dd->vcu << 3) & OPA_PI_MASK_BUF_UNIT_CREDIT_ACK;
 	buffer_units |= (credit_rate << 6) &
