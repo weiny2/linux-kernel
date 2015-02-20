@@ -166,9 +166,9 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		return -ENOTTY;
 
 	if (nd_dimm) {
-		struct acpi_device *adev = nd_dimm->priv_data;
+		struct acpi_device *adev = nd_dimm_get_pdata(nd_dimm);
 
-		dsm_mask = nd_dimm->dsm_mask;
+		dsm_mask = nd_dimm_get_dsm_mask(nd_dimm);
 		handle = adev->handle;
 		dev = &adev->dev;
 	} else {
@@ -293,6 +293,7 @@ static int nd_acpi_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 	struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
 	u32 nfit_handle = to_nfit_handle(nd_dimm);
 	struct acpi_device *acpi_dimm;
+	unsigned long dsm_mask = 0;
 	int i;
 
 	acpi_dimm = acpi_find_child_device(nfit->dev, nfit_handle, false);
@@ -301,9 +302,9 @@ static int nd_acpi_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 
 	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++)
 		if (acpi_check_dsm(acpi_dimm->handle, nd_acpi_uuid, 1, 1ULL << i))
-			set_bit(i, &nd_dimm->dsm_mask);
-
-	nd_dimm->priv_data = acpi_dimm;
+			set_bit(i, &dsm_mask);
+	nd_dimm_set_dsm_mask(nd_dimm, dsm_mask);
+	nd_dimm_set_pdata(nd_dimm, acpi_dimm);
 	return 0;
 }
 

@@ -56,6 +56,18 @@ struct nd_bus {
 	struct nd_btt *nd_btt;
 };
 
+struct nd_dimm {
+	unsigned long dsm_mask;
+	struct nd_mem *nd_mem;
+	struct device dev;
+	void *provider_data;
+	int id;
+	struct nd_dimm_delete {
+		struct nd_bus *nd_bus;
+		struct nd_mem *nd_mem;
+	} *del_info;
+};
+
 struct nd_interleave_set {
 	u16 spa_index;
 	u64 cookie;
@@ -151,12 +163,14 @@ bool is_nd_dimm(struct device *dev);
 struct nd_label_id;
 char *nd_label_gen_id(struct nd_label_id *label_id, u8 *uuid, u32 flags);
 bool nd_is_uuid_unique(struct device *dev, u8 *uuid);
-resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
+struct nd_dimm_drvdata;
+resource_size_t nd_dimm_available_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_region *nd_region);
-struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm,
+struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n);
-void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, struct nd_label_id *label_id);
-resource_size_t nd_dimm_allocated_dpa(struct nd_dimm *nd_dimm,
+void nd_dimm_release_dpa(struct nd_dimm_drvdata *ndd,
+		struct nd_label_id *label_id);
+resource_size_t nd_dimm_allocated_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id);
 #endif /* __ND_PRIVATE_H__ */

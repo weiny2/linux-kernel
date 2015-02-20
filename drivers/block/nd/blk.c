@@ -42,10 +42,11 @@ static DEFINE_IDA(nd_blk_ida);
 static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
+	/* FIXME: reduce per I/O pointer chasing */
 	struct nd_blk_device *blk_dev = bdev->bd_disk->private_data;
 	struct nd_namespace_blk *nsblk = blk_dev->nsblk;
 	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
-	struct nd_dimm *nd_dimm = nd_region->mapping[0].nd_dimm;
+	struct nd_dimm_drvdata *ndd = to_ndd(&nd_region->mapping[0]);
 	int rw, i;
 	struct bio_vec bvec;
 	sector_t sector;
@@ -82,7 +83,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 			res_offset -= resource_size(nsblk->res[i]);
 		}
 
-		err = nd_blk_do_io(&nd_dimm->blk_dimm, bvec.bv_page,
+		err = nd_blk_do_io(&ndd->blk_dimm, bvec.bv_page,
 				len, bvec.bv_offset, rw, dev_offset);
 		if (err)
 			goto out;

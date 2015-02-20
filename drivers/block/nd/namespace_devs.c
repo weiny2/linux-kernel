@@ -148,13 +148,13 @@ static int check_label_space(struct nd_region *nd_region, struct device *dev)
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 
 		/* if there are no valid labels then all slots are free */
 		if (nd_mapping->labels == NULL)
 			return 0;
 
-		if (nd_label_nfree(nd_dimm) <= nlabel)
+		if (nd_label_nfree(ndd) <= nlabel)
 			return -ENOSPC;
 	}
 
@@ -247,14 +247,14 @@ static int scan_free(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, struct nd_label_id *label_id,
 		resource_size_t n)
 {
-	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	int rc = 0;
 
 	while (n) {
 		struct resource *res, *last;
 
 		last = NULL;
-		for_each_dpa_resource(nd_dimm, res)
+		for_each_dpa_resource(ndd, res)
 			if (strcmp(res->name, label_id->id) == 0)
 				last = res;
 		res = last;
@@ -264,18 +264,18 @@ static int scan_free(struct nd_region *nd_region,
 		if (n >= resource_size(res)) {
 			n -= resource_size(res);
 			dev_dbg(&nd_region->dev, "%s: %s: delete %#llx@%#llx: %d\n",
-					dev_name(&nd_dimm->dev), res->name,
+					dev_name(ndd->dev), res->name,
 					(unsigned long long) resource_size(res),
 					(unsigned long long) res->start, rc);
-			__devm_release_region(&nd_dimm->dev, &nd_dimm->dpa,
-					res->start, resource_size(res));
+			__devm_release_region(ndd->dev, &ndd->dpa, res->start,
+					resource_size(res));
 			/* retry with last resource deleted */
 			continue;
 		}
 
 		rc = adjust_resource(res, res->start, resource_size(res) - n);
 		dev_dbg(&nd_region->dev, "%s: %s: shrink %#llx@%#llx: %d\n",
-				dev_name(&nd_dimm->dev), res->name,
+				dev_name(ndd->dev), res->name,
 				(unsigned long long) resource_size(res),
 				(unsigned long long) res->start, rc);
 		break;
@@ -316,17 +316,17 @@ static int scan_allocate(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, struct nd_label_id *label_id,
 		resource_size_t n)
 {
-	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct resource *res;
 
-	for_each_dpa_resource(nd_dimm, res) {
+	for_each_dpa_resource(ndd, res) {
 		resource_size_t allocate, available = 0, free_start;
 		struct resource *next = res->sibling;
 		const char *action;
 		int rc;
 
 		/* space at the beginning of the mapping */
-		if (res == nd_dimm->dpa.child) {
+		if (res == ndd->dpa.child) {
 			free_start = nd_mapping->start;
 			available = res->start - free_start;
 		}
@@ -357,13 +357,13 @@ static int scan_allocate(struct nd_region *nd_region,
 			rc = -ENXIO;
 			action = "allocate pmem";
 		} else {
-			res = nd_dimm_allocate_dpa(nd_dimm, label_id,
+			res = nd_dimm_allocate_dpa(ndd, label_id,
 					free_start, allocate);
 			rc = res ? 0 : -EBUSY;
 			action = "allocate";
 		}
 		dev_dbg(&nd_region->dev, "%s: %s: %s: %#llx@%#llx: %d\n",
-				dev_name(&nd_dimm->dev), label_id->id, action,
+				dev_name(ndd->dev), label_id->id, action,
 				(unsigned long long) allocate,
 				(unsigned long long) free_start, rc);
 		if (rc)
@@ -395,7 +395,7 @@ static int grow_dpa_allocation(struct nd_region *nd_region,
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 		struct resource *res;
 		bool do_init = false;
 		int rc;
@@ -403,24 +403,24 @@ static int grow_dpa_allocation(struct nd_region *nd_region,
 		if (is_pmem) {
 			struct resource *found = NULL;
 
-			for_each_dpa_resource(nd_dimm, res)
+			for_each_dpa_resource(ndd, res)
 				if (strcmp(res->name, label_id->id) == 0) {
 					found = res;
 					break;
 				}
 			if (!found)
 				do_init = true;
-		} else if (nd_dimm->dpa.child == NULL) {
+		} else if (ndd->dpa.child == NULL) {
 			do_init = true;
 		}
 
 		if (do_init) {
 			/* first resource allocation for this dimm */
-			res = nd_dimm_allocate_dpa(nd_dimm, label_id,
+			res = nd_dimm_allocate_dpa(ndd, label_id,
 						nd_mapping->start, n);
 			rc = res ? 0 : -EBUSY;
 			dev_dbg(&nd_region->dev, "%s: %s: init: %#llx@%#llx: %d\n",
-					dev_name(&nd_dimm->dev), label_id->id,
+					dev_name(ndd->dev), label_id->id,
 					(unsigned long long) n,
 					(unsigned long long) nd_mapping->start,
 					rc);
@@ -441,7 +441,7 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 {
 	resource_size_t allocated = 0, available = 0, min_available = 0;
 	struct nd_region *nd_region = to_nd_region(dev->parent);
-	struct nd_dimm *nd_dimm, *min_dimm = NULL;
+	struct nd_dimm_drvdata *ndd, *min_dimm = NULL;
 	struct nd_mapping *nd_mapping;
 	struct nd_label_id label_id;
 	unsigned long long val;
@@ -485,21 +485,21 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 		resource_size_t dimm_available, min;
 
 		nd_mapping = &nd_region->mapping[i];
-		nd_dimm = nd_mapping->nd_dimm;
+		ndd = to_ndd(nd_mapping);
 
 		/*
 		 * All dimms in an interleave set, or the base dimm for a blk
 		 * region, need to be enabled for the size to be changed.
 		 */
-		if (!nd_dimm->dev.driver)
+		if (!ndd)
 			return -ENXIO;
 
-		allocated += nd_dimm_allocated_dpa(nd_dimm, &label_id);
-		dimm_available = nd_dimm_available_dpa(nd_dimm, nd_region);
+		allocated += nd_dimm_allocated_dpa(ndd, &label_id);
+		dimm_available = nd_dimm_available_dpa(ndd, nd_region);
 		available += dimm_available;
 		min = min_not_zero(dimm_available, min_available);
 		if (!min_dimm || min != min_available)
-			min_dimm = nd_dimm;
+			min_dimm = ndd;
 		min_available = min;
 	}
 
@@ -520,7 +520,7 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 	if (val > allocated && val > min_available) {
 		if (min_dimm)
 			dev_dbg(dev, "%s only has %lld bytes available\n",
-					dev_name(&min_dimm->dev),
+					dev_name(min_dimm->dev),
 					min_available);
 		return -ENOSPC;
 	}
@@ -542,13 +542,13 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 	} else if (is_namespace_blk(dev)) {
 		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
 		struct nd_mapping *nd_mapping = &nd_region->mapping[0];
-		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 		struct resource *res;
 
 		kfree(nsblk->res);
 		nsblk->res = NULL;
 		nsblk->num_resources = 0;
-		for_each_dpa_resource(nd_dimm, res) {
+		for_each_dpa_resource(ndd, res) {
 			if (strcmp(res->name, label_id.id) != 0)
 				continue;
 			nsblk->res = krealloc(nsblk->res,
@@ -696,10 +696,10 @@ static int namespace_update_uuid(struct nd_region *nd_region,
 	nd_label_gen_id(&new_label_id, new_uuid, flags);
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 		struct resource *res;
 
-		for_each_dpa_resource(nd_dimm, res)
+		for_each_dpa_resource(ndd, res)
 			if (strcmp(res->name, old_label_id.id) == 0)
 				sprintf((void *) res->name, "%s",
 						new_label_id.id);
@@ -885,7 +885,7 @@ static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u
 				continue;
 
 			if (found_uuid) {
-				dev_dbg(&nd_mapping->nd_dimm->dev,
+				dev_dbg(to_ndd(nd_mapping)->dev,
 						"%s duplicate entry for uuid\n",
 						__func__);
 				return false;
@@ -1110,7 +1110,7 @@ static struct device **create_namespace_pmem(struct nd_region *nd_region)
 }
 
 static int nsblk_add_resource(struct nd_namespace_blk *nsblk,
-		struct nd_dimm *nd_dimm, u8 *uuid, resource_size_t start)
+		struct nd_dimm_drvdata *ndd, u8 *uuid, resource_size_t start)
 {
 	struct nd_label_id label_id;
 	struct resource *res;
@@ -1121,10 +1121,10 @@ static int nsblk_add_resource(struct nd_namespace_blk *nsblk,
 			GFP_KERNEL);
 	if (!nsblk->res)
 		return -ENOMEM;
-	for_each_dpa_resource(nd_dimm, res)
+	for_each_dpa_resource(ndd, res)
 		if (strcmp(res->name, label_id.id) == 0 && res->start == start) {
 			nsblk->res[nsblk->num_resources++] = res;
-			dev_dbg(&nd_dimm->dev, "%s: %s %#llx@%#llx",
+			dev_dbg(ndd->dev, "%s: %s %#llx@%#llx",
 					__func__, res->name,
 					(unsigned long long) resource_size(res),
 					(unsigned long long) res->start);
@@ -1201,7 +1201,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 			if (memcmp(nsblk->uuid, label_uuid,
 						NSLABEL_UUID_LEN) == 0) {
 				rc = nsblk_add_resource(nsblk,
-						nd_mapping->nd_dimm, label_uuid,
+						to_ndd(nd_mapping), label_uuid,
 						readq(&nd_label->dpa));
 				if (rc)
 					goto err;
@@ -1232,7 +1232,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 		if (name[0])
 			nsblk->alt_name = kmemdup(name, NSLABEL_NAME_LEN,
 					GFP_KERNEL);
-		rc = nsblk_add_resource(nsblk, nd_mapping->nd_dimm, label_uuid,
+		rc = nsblk_add_resource(nsblk, to_ndd(nd_mapping), label_uuid,
 				readq(&nd_label->dpa));
 		if (rc)
 			goto err;
@@ -1278,21 +1278,21 @@ static int init_active_labels(struct nd_region *nd_region)
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 		int count, j;
 
 		/*
 		 * If the dimm is disabled then prevent the region from
 		 * being activated
 		 */
-		if (nd_dimm->dev.driver == NULL) {
+		if (!ndd) {
 			dev_dbg(&nd_region->dev, "%s: is disabled, failing probe\n",
-					dev_name(&nd_dimm->dev));
+					dev_name(&nd_mapping->nd_dimm->dev));
 			return -ENXIO;
 		}
 
-		count = nd_label_active_count(nd_dimm);
-		dev_dbg(&nd_dimm->dev, "%s: %d\n", __func__, count);
+		count = nd_label_active_count(ndd);
+		dev_dbg(ndd->dev, "%s: %d\n", __func__, count);
 		if (!count)
 			continue;
 		nd_mapping->labels = kcalloc(count + 1,
@@ -1302,7 +1302,7 @@ static int init_active_labels(struct nd_region *nd_region)
 		for (j = 0; j < count; j++) {
 			struct nd_namespace_label __iomem *label;
 
-			label = nd_label_active(nd_dimm, j);
+			label = nd_label_active(ndd, j);
 			nd_set_label(nd_mapping->labels, label, j);
 		}
 	}

@@ -26,18 +26,10 @@ struct block_window {
 	u32			*bw_stat_virt;
 };
 
-struct nd_dimm {
-	unsigned long dsm_mask;
-	struct nd_mem *nd_mem;
-	struct device dev;
-	void *priv_data;
+struct nd_dimm_drvdata {
+	struct device *dev;
 	int config_size;
 	int nsindex_size;
-	int id;
-	struct nd_dimm_delete {
-		struct nd_bus *nd_bus;
-		struct nd_mem *nd_mem;
-	} *del_info;
 	struct nfit_cmd_get_config_data_hdr *data;
 	int ns_current, ns_next;
 	struct resource dpa;
@@ -55,27 +47,28 @@ struct nd_region_namespaces {
 };
 
 static inline struct nd_namespace_index __iomem *to_namespace_index(
-		struct nd_dimm *nd_dimm, int i)
+		struct nd_dimm_drvdata *ndd, int i)
 {
 	if (i < 0)
 		return NULL;
 
-	return ((void __iomem *) nd_dimm->data->out_buf
-			+ sizeof_namespace_index(nd_dimm) * i);
+	return ((void __iomem *) ndd->data->out_buf
+			+ sizeof_namespace_index(ndd) * i);
 }
 
 static inline struct nd_namespace_index __iomem *to_current_namespace_index(
-		struct nd_dimm *nd_dimm)
+		struct nd_dimm_drvdata *ndd)
 {
-	return to_namespace_index(nd_dimm, nd_dimm->ns_current);
+	return to_namespace_index(ndd, ndd->ns_current);
 }
 
 static inline struct nd_namespace_index __iomem *to_next_namespace_index(
-		struct nd_dimm *nd_dimm)
+		struct nd_dimm_drvdata *ndd)
 {
-	return to_namespace_index(nd_dimm, nd_dimm->ns_next);
+	return to_namespace_index(ndd, ndd->ns_next);
 }
 
+struct nd_dimm;
 struct nd_mapping {
 	struct nd_dimm *nd_dimm;
 	struct nd_namespace_label **labels;
@@ -104,8 +97,8 @@ static inline struct nd_namespace_label __iomem *nd_get_label(
 #define for_each_label(l, label, labels) \
 	for (l = 0; (label = nd_get_label(labels, l)); l++)
 
-#define for_each_dpa_resource(dimm, res) \
-	for (res = dimm->dpa.child; res; res = res->sibling)
+#define for_each_dpa_resource(ndd, res) \
+	for (res = (ndd)->dpa.child; res; res = res->sibling)
 
 struct nd_region {
 	struct device dev;
@@ -213,14 +206,19 @@ struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove);
 extern struct attribute_group nd_device_attribute_group;
 struct nd_dimm *to_nd_dimm(struct device *dev);
+struct nd_dimm_drvdata *to_ndd(struct nd_mapping *nd_mapping);
 u32 to_nfit_handle(struct nd_dimm *nd_dimm);
+void *nd_dimm_get_pdata(struct nd_dimm *nd_dimm);
+void nd_dimm_set_pdata(struct nd_dimm *nd_dimm, void *data);
+unsigned long nd_dimm_get_dsm_mask(struct nd_dimm *nd_dimm);
+void nd_dimm_set_dsm_mask(struct nd_dimm *nd_dimm, unsigned long dsm_mask);
 struct nd_btt *to_nd_btt(struct device *dev);
 struct nd_region *to_nd_region(struct device *dev);
-int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
+int nd_dimm_get_config_size(struct nd_dimm_drvdata *ndd,
 		struct nfit_cmd_get_config_size *cmd);
-int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
+int nd_dimm_get_config_data(struct nd_dimm_drvdata *ndd,
 		struct nfit_cmd_get_config_data_hdr *cmd, size_t len);
-int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
+int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
 		void *buf, size_t len);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
@@ -228,7 +226,7 @@ u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nd_bus_lock(struct device *dev);
 void nd_bus_unlock(struct device *dev);
 bool is_nd_bus_locked(struct device *dev);
-int nd_label_reserve_dpa(struct nd_dimm *nd_dimm);
+int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd);
 const char *nd_blk_bus_provider(struct device *dev);
 int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
 		unsigned int len, unsigned int off, int rw,

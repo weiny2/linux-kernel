@@ -153,6 +153,7 @@ static int nfit_test_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 		struct nd_dimm *nd_dimm)
 {
 	u32 nfit_handle = to_nfit_handle(nd_dimm);
+	unsigned long dsm_mask = 0;
 	long i;
 
 	for (i = 0; i < ARRAY_SIZE(handle); i++)
@@ -161,10 +162,11 @@ static int nfit_test_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 	if (i >= ARRAY_SIZE(handle))
 		return -EINVAL;
 
-	set_bit(NFIT_CMD_GET_CONFIG_SIZE, &nd_dimm->dsm_mask);
-	set_bit(NFIT_CMD_GET_CONFIG_DATA, &nd_dimm->dsm_mask);
-	set_bit(NFIT_CMD_SET_CONFIG_DATA, &nd_dimm->dsm_mask);
-	nd_dimm->priv_data = (void *) i;
+	set_bit(NFIT_CMD_GET_CONFIG_SIZE, &dsm_mask);
+	set_bit(NFIT_CMD_GET_CONFIG_DATA, &dsm_mask);
+	set_bit(NFIT_CMD_SET_CONFIG_DATA, &dsm_mask);
+	nd_dimm_set_dsm_mask(nd_dimm, dsm_mask);
+	nd_dimm_set_pdata(nd_dimm, (void *) i);
 	return 0;
 }
 
@@ -173,15 +175,16 @@ static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 		unsigned int buf_len)
 {
 	struct nfit_test *t = container_of(nfit_desc, typeof(*t), nfit_desc);
+	unsigned long dsm_mask = nd_dimm_get_dsm_mask(nd_dimm);
 	struct device *dev = &t->pdev.dev;
 	int i, rc;
 
 	dev_dbg(dev, "%s: cmd: %d buf_len: %d\n", __func__, cmd, buf_len);
-	if (!nd_dimm || !test_bit(cmd, &nd_dimm->dsm_mask))
+	if (!nd_dimm || !test_bit(cmd, &dsm_mask))
 		return -ENXIO;
 
 	/* lookup label space for the given dimm */
-	i = (long) nd_dimm->priv_data;
+	i = (long) nd_dimm_get_pdata(nd_dimm);
 
 	switch (cmd) {
         case NFIT_CMD_GET_CONFIG_SIZE: {

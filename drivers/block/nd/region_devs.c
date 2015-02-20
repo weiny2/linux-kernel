@@ -249,9 +249,9 @@ static ssize_t available_size_show(struct device *dev,
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 
-		available += nd_dimm_available_dpa(nd_dimm, nd_region);
+		available += nd_dimm_available_dpa(ndd, nd_region);
 	}
 	nd_bus_unlock(dev);
 

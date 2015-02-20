@@ -121,18 +121,18 @@ static inline int nd_label_next_nsindex(int index)
 	return (index + 1) % 2;
 }
 
-struct nd_dimm;
-int nd_label_validate(struct nd_dimm *nd_dimm);
-void nd_label_copy(struct nd_dimm *nd_dimm,
+struct nd_dimm_drvdata;
+int nd_label_validate(struct nd_dimm_drvdata *ndd);
+void nd_label_copy(struct nd_dimm_drvdata *ndd,
 		struct nd_namespace_index *dst,
 		struct nd_namespace_index *src);
-size_t sizeof_namespace_index(struct nd_dimm *nd_dimm);
-int nd_label_active_count(struct nd_dimm *nd_dimm);
+size_t sizeof_namespace_index(struct nd_dimm_drvdata *ndd);
+int nd_label_active_count(struct nd_dimm_drvdata *ndd);
 struct nd_namespace_label __iomem *nd_label_active(
-		struct nd_dimm *nd_dimm, int n);
-u32 nd_label_alloc_slot(struct nd_dimm *nd_dimm);
-bool nd_label_free_slot(struct nd_dimm *nd_dimm, u32 slot);
-u32 nd_label_nfree(struct nd_dimm *nd_dimm);
+		struct nd_dimm_drvdata *ndd, int n);
+u32 nd_label_alloc_slot(struct nd_dimm_drvdata *ndd);
+bool nd_label_free_slot(struct nd_dimm_drvdata *ndd, u32 slot);
+u32 nd_label_nfree(struct nd_dimm_drvdata *ndd);
 struct nd_region;
 struct nd_namespace_pmem;
 struct nd_namespace_blk;

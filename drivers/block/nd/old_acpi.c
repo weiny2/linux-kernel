@@ -185,7 +185,7 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	if (!desc)
 		return -ENOTTY;
 
-	dsm_mask = nd_dimm ? nd_dimm->dsm_mask : nfit_desc->dsm_mask;
+	dsm_mask = nd_dimm ? nd_dimm_get_dsm_mask(nd_dimm) : nfit_desc->dsm_mask;
 	if (!test_bit(cmd, &dsm_mask))
 		return -ENOTTY;
 
@@ -326,7 +326,10 @@ static int nd_old_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 static int nd_old_acpi_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 		struct nd_dimm *nd_dimm)
 {
-	nd_dimm->dsm_mask |= (nd_manual_dsm | force_dsm) & DIMM_DSM_MASK;
+	unsigned long dsm_mask = 0;
+
+	dsm_mask |= (nd_manual_dsm | force_dsm) & DIMM_DSM_MASK;
+	nd_dimm_set_dsm_mask(nd_dimm, dsm_mask);
 	return 0;
 }
 

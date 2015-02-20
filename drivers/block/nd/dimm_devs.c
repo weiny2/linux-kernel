@@ -154,15 +154,20 @@ EXPORT_SYMBOL(nd_blk_do_io);
  * Retrieve bus and dimm handle and return if this bus supports
  * get_config_data commands
  */
-static int __validate_dimm(struct nd_dimm *nd_dimm)
+static int __validate_dimm(struct nd_dimm_drvdata *ndd)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
+	struct nd_bus *nd_bus;
+	struct nd_dimm *nd_dimm;
 	struct nfit_mem __iomem *nfit_mem;
 	struct nfit_dcr __iomem *nfit_dcr;
-	struct nfit_bus_descriptor *nfit_desc = nd_bus->nfit_desc;
+	struct nfit_bus_descriptor *nfit_desc;
 
-	if (!nd_dimm)
+	if (!ndd)
 		return -EINVAL;
+
+	nd_dimm = to_nd_dimm(ndd->dev);
+	nd_bus = walk_to_nd_bus(&nd_dimm->dev);
+	nfit_desc = nd_bus->nfit_desc;
 
 	if (!test_bit(NFIT_CMD_GET_CONFIG_DATA, &nd_dimm->dsm_mask))
 		return -ENXIO;
@@ -174,38 +179,38 @@ static int __validate_dimm(struct nd_dimm *nd_dimm)
 	return 0;
 }
 
-static int validate_dimm(struct nd_dimm *nd_dimm)
+static int validate_dimm(struct nd_dimm_drvdata *ndd)
 {
-	int rc = __validate_dimm(nd_dimm);
+	int rc = __validate_dimm(ndd);
 
-	if (rc)
-		dev_dbg(&nd_dimm->dev, "%pf: %s error: %d\n",
+	if (rc && ndd)
+		dev_dbg(ndd->dev, "%pf: %s error: %d\n",
 				__builtin_return_address(0), __func__, rc);
 	return rc;
 }
 
-int nd_dimm_get_config_size(struct nd_dimm *nd_dimm,
+int nd_dimm_get_config_size(struct nd_dimm_drvdata *ndd,
 		struct nfit_cmd_get_config_size *cmd)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
+	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
 	struct nfit_bus_descriptor *nfit_desc;
-	int rc = validate_dimm(nd_dimm);
+	int rc = validate_dimm(ndd);
 
 	if (rc)
 		return rc;
 
 	nfit_desc = nd_bus->nfit_desc;
 	memset(cmd, 0, sizeof(*cmd));
-	return nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_GET_CONFIG_SIZE,
-			cmd, sizeof(*cmd));
+	return nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
+			NFIT_CMD_GET_CONFIG_SIZE, cmd, sizeof(*cmd));
 }
 
-int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
+int nd_dimm_get_config_data(struct nd_dimm_drvdata *ndd,
 		struct nfit_cmd_get_config_data_hdr *cmd, size_t len)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
+	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
 	struct nfit_bus_descriptor *nfit_desc;
-	int rc = validate_dimm(nd_dimm);
+	int rc = validate_dimm(ndd);
 
 	if (rc)
 		return rc;
@@ -213,18 +218,18 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 	nfit_desc = nd_bus->nfit_desc;
 	memset(cmd, 0, len);
 	cmd->in_length = len - sizeof(*cmd);
-	return nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_GET_CONFIG_DATA,
-			cmd, len);
+	return nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
+			NFIT_CMD_GET_CONFIG_DATA, cmd, len);
 }
 
-int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
+int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
 		void *buf, size_t len)
 {
-	int rc = validate_dimm(nd_dimm);
+	int rc = validate_dimm(ndd);
 	struct nfit_cmd_set_config_hdr *cmd;
 	struct nfit_bus_descriptor *nfit_desc;
 	size_t size = sizeof(*cmd) + len + sizeof(u32);
-	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_dimm->dev);
+	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
 
 	if (rc)
 		return rc;
@@ -240,8 +245,8 @@ int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
 	cmd->in_offset = offset;
 	cmd->in_length = len;
 	memcpy(cmd->in_buf, buf, len);
-	rc = nfit_desc->nfit_ctl(nfit_desc, nd_dimm, NFIT_CMD_SET_CONFIG_DATA,
-			cmd, size);
+	rc = nfit_desc->nfit_ctl(nfit_desc, to_nd_dimm(ndd->dev),
+			NFIT_CMD_SET_CONFIG_DATA, cmd, size);
 	if (rc == 0) {
 		/* rc == 0 == status valid */
 		u32 *status = ((void *) cmd) + size - sizeof(u32);
@@ -284,6 +289,14 @@ struct nd_dimm *to_nd_dimm(struct device *dev)
 	return nd_dimm;
 }
 
+struct nd_dimm_drvdata *to_ndd(struct nd_mapping *nd_mapping)
+{
+	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+
+	return dev_get_drvdata(&nd_dimm->dev);
+}
+EXPORT_SYMBOL(to_ndd);
+
 static struct nfit_mem __iomem *to_nfit_mem(struct device *dev)
 {
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
@@ -309,6 +322,36 @@ u32 to_nfit_handle(struct nd_dimm *nd_dimm)
 	return readl(&nfit_mem->nfit_handle);
 }
 EXPORT_SYMBOL(to_nfit_handle);
+
+void *nd_dimm_get_pdata(struct nd_dimm *nd_dimm)
+{
+	if (nd_dimm)
+		return nd_dimm->provider_data;
+	return NULL;
+}
+EXPORT_SYMBOL(nd_dimm_get_pdata);
+
+void nd_dimm_set_pdata(struct nd_dimm *nd_dimm, void *data)
+{
+	if (nd_dimm)
+		nd_dimm->provider_data = data;
+}
+EXPORT_SYMBOL(nd_dimm_set_pdata);
+
+unsigned long nd_dimm_get_dsm_mask(struct nd_dimm *nd_dimm)
+{
+	if (nd_dimm)
+		return nd_dimm->dsm_mask;
+	return 0;
+}
+EXPORT_SYMBOL(nd_dimm_get_dsm_mask);
+
+void nd_dimm_set_dsm_mask(struct nd_dimm *nd_dimm, unsigned long dsm_mask)
+{
+	if (nd_dimm)
+		nd_dimm->dsm_mask = dsm_mask;
+}
+EXPORT_SYMBOL(nd_dimm_set_dsm_mask);
 
 static ssize_t handle_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -439,8 +482,6 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 		goto err_del_info;
 	nd_dimm->del_info->nd_bus = nd_bus;
 	nd_dimm->del_info->nd_mem = nd_mem;
-	nd_dimm->ns_current = -1;
-	nd_dimm->ns_next = -1;
 
 	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 	if (radix_tree_insert(&nd_bus->dimm_radix, nfit_handle, nd_dimm) != 0)
@@ -464,9 +505,6 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 			return NULL;
 		}
 
-	nd_dimm->dpa.name = dev_name(dev);
-	nd_dimm->dpa.start = 0,
-	nd_dimm->dpa.end = -1,
 	nd_device_register(dev);
 
 	return nd_dimm;
@@ -482,11 +520,11 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 static resource_size_t blk_available_dpa(struct nd_mapping *nd_mapping)
 {
 	resource_size_t map_end, res_end, busy = 0, available;
-	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct resource *res;
 
 	map_end = nd_mapping->start + nd_mapping->size;
-	for_each_dpa_resource(nd_dimm, res) {
+	for_each_dpa_resource(ndd, res) {
 		res_end = res->start + resource_size(res);
 		if (res->start >= nd_mapping->start && res->start < map_end) {
 			resource_size_t end = min(map_end, res_end);
@@ -509,11 +547,11 @@ static resource_size_t blk_available_dpa(struct nd_mapping *nd_mapping)
 static resource_size_t pmem_available_dpa(struct nd_mapping *nd_mapping)
 {
 	resource_size_t map_end, res_end, busy = 0, available;
-	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct resource *res;
 
 	map_end = nd_mapping->start + nd_mapping->size;
-	for_each_dpa_resource(nd_dimm, res) {
+	for_each_dpa_resource(ndd, res) {
 		res_end = res->start + resource_size(res);
 		if (res->start >= nd_mapping->start && res->start < map_end) {
 			if (strncmp(res->name, "blk", 3) == 0) {
@@ -558,7 +596,7 @@ static resource_size_t pmem_available_dpa(struct nd_mapping *nd_mapping)
  * overlap point.  In comparsion blk mode any hole in the region is
  * counted as free space.
  */
-resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
+resource_size_t nd_dimm_available_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_region *nd_region)
 {
 	struct nd_mapping *nd_mapping;
@@ -569,11 +607,11 @@ resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
 
 		for (i = 0; i < ndr_mappings; i++) {
 			nd_mapping = &nd_region->mapping[i];
-			if (nd_mapping->nd_dimm == nd_dimm)
+			if (to_ndd(nd_mapping) == ndd)
 				break;
 		}
 		if (i >= ndr_mappings) {
-			dev_WARN_ONCE(&nd_dimm->dev, 1, "not mapped by %s\n",
+			dev_WARN_ONCE(ndd->dev, 1, "not mapped by %s\n",
 					dev_name(&nd_region->dev));
 			return 0;
 		}
@@ -581,8 +619,8 @@ resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
 	}
 	case ND_DEVICE_NAMESPACE_BLOCK:
 		nd_mapping = &nd_region->mapping[0];
-		if (nd_mapping->nd_dimm != nd_dimm) {
-			dev_WARN_ONCE(&nd_dimm->dev, 1, "not mapped by %s\n",
+		if (to_ndd(nd_mapping) != ndd) {
+			dev_WARN_ONCE(ndd->dev, 1, "not mapped by %s\n",
 					dev_name(&nd_region->dev));
 			return 0;
 		}
@@ -592,33 +630,32 @@ resource_size_t nd_dimm_available_dpa(struct nd_dimm *nd_dimm,
 	}
 }
 
-struct resource *nd_dimm_allocate_dpa(struct nd_dimm *nd_dimm,
+struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n)
 {
-	char *name = devm_kmemdup(&nd_dimm->dev, label_id, sizeof(*label_id),
+	char *name = devm_kmemdup(ndd->dev, label_id, sizeof(*label_id),
 			GFP_KERNEL);
 	struct resource *res;
 
 	if (!name)
 		return NULL;
 
-	res = __devm_request_region(&nd_dimm->dev, &nd_dimm->dpa,
-			start, n, name);
+	res = __devm_request_region(ndd->dev, &ndd->dpa, start, n, name);
 	if (!res)
-		devm_kfree(&nd_dimm->dev, name);
+		devm_kfree(ndd->dev, name);
 	return res;
 }
 
-void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, struct nd_label_id *label_id)
+void nd_dimm_release_dpa(struct nd_dimm_drvdata *ndd, struct nd_label_id *label_id)
 {
 	struct resource *res;
 
-	for_each_dpa_resource(nd_dimm, res)
+	for_each_dpa_resource(ndd, res)
 		if (strcmp(res->name, label_id->id) == 0) {
-			__devm_release_region(&nd_dimm->dev, &nd_dimm->dpa,
+			__devm_release_region(ndd->dev, &ndd->dpa,
 					res->start, resource_size(res));
-			devm_kfree(&nd_dimm->dev, (void *) res->name);
+			devm_kfree(ndd->dev, (void *) res->name);
 		}
 }
 
@@ -628,13 +665,13 @@ void nd_dimm_release_dpa(struct nd_dimm *nd_dimm, struct nd_label_id *label_id)
  * @nd_dimm: container of dpa-resource-root + labels
  * @label_id: dpa resource name of the form {pmem|blk}-<human readable uuid>
  */
-resource_size_t nd_dimm_allocated_dpa(struct nd_dimm *nd_dimm,
+resource_size_t nd_dimm_allocated_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id)
 {
 	resource_size_t allocated = 0;
 	struct resource *res;
 
-	for_each_dpa_resource(nd_dimm, res)
+	for_each_dpa_resource(ndd, res)
 		if (strcmp(res->name, label_id->id) == 0)
 			allocated += resource_size(res);
 
