@@ -3087,6 +3087,11 @@ void handle_link_up(struct work_struct *work)
 
 	/* cache the read of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
 	read_ltp_rtt(ppd->dd);
+	/*
+	 * STL specifies that certain counters are cleared on a transition
+	 * to link up, so do that.
+	 */
+	clear_linkup_counters(ppd->dd);
 }
 
 /*

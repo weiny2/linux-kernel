@@ -2114,7 +2114,6 @@ static int pma_get_stl_portstatus(struct stl_pma_mad *pmp,
 		cpu_to_be64(read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
 					   CNTR_INVALID_VL));
 	/* rsp->port_rcv_switch_relay_errors is 0 for HFIs */
-	/* rsp->link_error_recovery - DC (table 13-11 WFR spec) */
 
 	/* FIXME: Should this be included with the rest of the counters? */
 	dd->f_read_link_quality(dd, &rsp->link_quality_indicator);
@@ -3547,6 +3546,34 @@ static int subn_set_opa_aggregate(struct opa_smp *smp,
 	}
 
 	return reply(smp);
+}
+
+/*
+ * STLv1 specifies that, on the transition to link up, these counters
+ * are cleared:
+ *   PortRcvErrors [*]
+ *   LinkErrorRecovery
+ *   LocalLinkIntegrityErrors
+ *   ExcessiveBufferOverruns [*]
+ *
+ * [*] Error info associated with these counters is retained, but the
+ * error info status is reset to 0.
+ */
+void clear_linkup_counters(struct hfi_devdata *dd)
+{
+	/* PortRcvErrors */
+	write_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL, 0);
+	dd->err_info_rcvport.status_and_code &= ~STL_EI_STATUS_SMASK;
+	/* LinkErrorRecovery */
+	write_dev_cntr(dd, C_DC_SEQ_CRC_CNT, CNTR_INVALID_VL, 0);
+	write_dev_cntr(dd, C_DC_REINIT_FROM_PEER_CNT, CNTR_INVALID_VL, 0);
+	/* LocalLinkIntegrityErrors */
+	write_dev_cntr(dd, C_DC_TX_REPLAY, CNTR_INVALID_VL, 0);
+	write_dev_cntr(dd, C_DC_RX_REPLAY, CNTR_INVALID_VL, 0);
+	/* ExcessiveBufferOverruns */
+	write_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL, 0);
+	dd->rcv_ovfl_cnt = 0;
+	dd->err_info_xmit_constraint.status &= ~STL_EI_STATUS_SMASK;
 }
 
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
