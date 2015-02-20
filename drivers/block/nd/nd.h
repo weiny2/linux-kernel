@@ -242,4 +242,5 @@ int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
 		unsigned int len, unsigned int off, int rw,
 		resource_size_t dev_offset);
 bool is_acpi_blk(struct device *dev);
+resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk);
 #endif /* __ND_H__ */

@@ -102,16 +102,13 @@ static const struct block_device_operations nd_blk_fops = {
 static int nd_blk_probe(struct device *dev)
 {
 	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
-	resource_size_t disk_size = 0;
 	struct nd_blk_device *blk_dev;
+	resource_size_t disk_size;
 	struct gendisk *disk;
-	int err, i;
+	int err;
 
-	for (i = 0; i < nsblk->num_resources; i++)
-		disk_size += resource_size(nsblk->res[i]);
-
-	if (disk_size < ND_MIN_NAMESPACE_SIZE || !nsblk->uuid ||
-			!nsblk->lbasize)
+	disk_size = nd_namespace_blk_validate(nsblk);
+	if (disk_size < ND_MIN_NAMESPACE_SIZE)
 		return -ENXIO;
 
 	if (!is_acpi_blk(dev))
