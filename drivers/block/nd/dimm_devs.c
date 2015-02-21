@@ -27,9 +27,9 @@ static DEFINE_IDA(dimm_ida);
 #define CL_SHIFT		6
 
 enum {
-	BCW_OFFSET_MASK		= (1UL << 48)-1,
+	BCW_OFFSET_MASK		= (1ULL << 48)-1,
 	BCW_LEN_SHIFT		= 48,
-	BCW_LEN_MASK		= (1UL << 8) - 1,
+	BCW_LEN_MASK		= (1ULL << 8) - 1,
 	BCW_CMD_SHIFT		= 56,
 };
 
@@ -56,7 +56,7 @@ static void nd_blk_write_blk_ctl(struct block_window *bw,
 	cmd |= cl_offset & BCW_OFFSET_MASK;
 	cmd |= (cl_len & BCW_LEN_MASK) << BCW_LEN_SHIFT;
 	if (write)
-		cmd |= 1UL << BCW_CMD_SHIFT;
+		cmd |= 1ULL << BCW_CMD_SHIFT;
 
 	writeq(cmd, bw->bw_ctl_virt);
 	clflushopt(bw->bw_ctl_virt);
