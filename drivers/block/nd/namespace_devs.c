@@ -560,6 +560,37 @@ static int scan_allocate(struct nd_region *nd_region,
 	return -ENXIO;
 }
 
+static int merge_dpa(struct nd_region *nd_region,
+		struct nd_mapping *nd_mapping, struct nd_label_id *label_id)
+{
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct resource *res;
+
+	if (strncmp("pmem", label_id->id, 4) == 0)
+		return 0;
+ retry:
+	for_each_dpa_resource(ndd, res) {
+		int rc;
+		struct resource *next = res->sibling;
+		resource_size_t end = res->start + resource_size(res);
+
+		if (!next || strcmp(res->name, label_id->id) != 0
+				|| strcmp(next->name, label_id->id) != 0
+				|| end != next->start)
+			continue;
+		end += resource_size(next);
+		__release_region(&ndd->dpa, next->start, resource_size(next));
+		rc = adjust_resource(res, res->start, end - res->start);
+		nd_dbg_dpa(nd_region, ndd, res, "merge %d\n", rc);
+		if (rc)
+			return rc;
+		res->flags |= DPA_RESOURCE_ADJUSTED;
+		goto retry;
+	}
+
+	return 0;
+}
+
 /**
  * grow_dpa_allocation - for each dimm allocate n bytes for @label_id
  * @nd_region: the set of dimms to allocate @n more bytes from
@@ -581,6 +612,9 @@ static int grow_dpa_allocation(struct nd_region *nd_region,
 		int rc;
 
 		rc = scan_allocate(nd_region, nd_mapping, label_id, n);
+		if (rc)
+			return rc;
+		rc = merge_dpa(nd_region, nd_mapping, label_id);
 		if (rc)
 			return rc;
 	}
