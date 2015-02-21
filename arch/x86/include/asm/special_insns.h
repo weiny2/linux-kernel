@@ -4,6 +4,8 @@
 
 #ifdef __KERNEL__
 
+#include <asm/nops.h>
+
 static inline void native_clts(void)
 {
 	asm volatile("clts");
