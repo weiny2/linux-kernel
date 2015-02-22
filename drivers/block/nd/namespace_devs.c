@@ -601,14 +601,13 @@ static void nd_namespace_pmem_set_size(struct nd_region *nd_region,
 	res->start = res->end + 1 - size;
 }
 
-static ssize_t __size_store(struct device *dev, const char *buf)
+static ssize_t __size_store(struct device *dev, unsigned long long val)
 {
 	resource_size_t allocated = 0, available = 0;
 	struct nd_region *nd_region = to_nd_region(dev->parent);
 	struct nd_mapping *nd_mapping;
 	struct nd_dimm_drvdata *ndd;
 	struct nd_label_id label_id;
-	unsigned long long val;
 	u8 *uuid = NULL;
 	u32 flags =  0;
 	int rc, i;
@@ -633,10 +632,6 @@ static ssize_t __size_store(struct device *dev, const char *buf)
 	 */
 	if (!uuid || nd_region->ndr_mappings == 0)
 		return -ENXIO;
-
-	rc = kstrtoull(buf, 0, &val);
-	if (rc)
-		return rc;
 
 	if (val % (SZ_4K * nd_region->ndr_mappings)) {
 		dev_dbg(dev, "%llu is not %dK aligned\n", val,
@@ -699,16 +694,39 @@ static ssize_t size_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct nd_region *nd_region = to_nd_region(dev->parent);
+	unsigned long long val;
+	u8 **uuid = NULL;
 	int rc;
+
+	rc = kstrtoull(buf, 0, &val);
+	if (rc)
+		return rc;
 
 	device_lock(dev);
 	nd_bus_lock(dev);
 	wait_nd_bus_probe_idle(dev);
-	rc = __size_store(dev, buf);
+	rc = __size_store(dev, val);
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
-	dev_dbg(dev, "%s: %s %s (%d)\n", __func__, buf,
-			rc < 0 ? "fail" : "success", rc);
+
+	if (is_namespace_pmem(dev)) {
+		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
+
+		uuid = &nspm->uuid;
+	} else if (is_namespace_blk(dev)) {
+		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+
+		uuid = &nsblk->uuid;
+	}
+
+	if (rc == 0 && val == 0 && uuid) {
+		/* setting size zero == 'delete namespace' */
+		kfree(*uuid);
+		*uuid = NULL;
+	}
+
+	dev_dbg(dev, "%s: %llx %s (%d)\n", __func__, val, rc < 0
+			? "fail" : "success", rc);
 	nd_bus_unlock(dev);
 	device_unlock(dev);
 
