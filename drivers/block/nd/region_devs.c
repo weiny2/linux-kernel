@@ -197,25 +197,6 @@ static ssize_t nstype_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(nstype);
 
-static ssize_t set_state_show(struct device *dev,
-                struct device_attribute *attr, char *buf)
-{
-	struct nd_region *nd_region = to_nd_region(dev);
-	struct nd_spa *nd_spa = nd_region->nd_spa;
-
-	if (is_nd_pmem(dev) && nd_spa->nd_set)
-		/* pass, should be precluded by nd_region_visible */;
-	else
-		return -ENXIO;
-
-	/*
-	 * The state may be in the process of changing, userspace should quiesce
-	 * probing if it wants a static answer
-	 */
-	return sprintf(buf, "%s\n", nd_spa->nd_set->busy ? "active" : "idle");
-}
-static DEVICE_ATTR_RO(set_state);
-
 static ssize_t set_cookie_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
 {
@@ -313,7 +294,6 @@ static struct attribute *nd_region_attributes[] = {
 	&dev_attr_nstype.attr,
 	&dev_attr_mappings.attr,
 	&dev_attr_spa_index.attr,
-	&dev_attr_set_state.attr,
 	&dev_attr_set_cookie.attr,
 	&dev_attr_available_size.attr,
 	&dev_attr_namespace_seed.attr,
@@ -328,8 +308,7 @@ static umode_t nd_region_visible(struct kobject *kobj, struct attribute *a, int 
 	int type = nd_region_to_namespace_type(nd_region);
 	struct nd_spa *nd_spa = nd_region->nd_spa;
 
-	if (a != &dev_attr_set_state.attr && a != &dev_attr_set_cookie.attr
-			&& a != &dev_attr_available_size.attr)
+	if (a != &dev_attr_set_cookie.attr && a != &dev_attr_available_size.attr)
 		return a->mode;
 
 	if ((type == ND_DEVICE_NAMESPACE_PMEM
@@ -445,8 +424,10 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
 {
 	struct nd_spa *nd_spa;
+	struct nd_mem *nd_mem;
 	int rc = 0;
 
+	/* PMEM interleave sets */
 	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
 		u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 		int spa_type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
@@ -461,12 +442,38 @@ int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
 			rc = -ENOMEM;
 			break;
 		}
-		nd_set->spa_index = spa_index;
 		nd_spa->nd_set = nd_set;
 
 		rc = init_interleave_set(nd_bus, nd_set, nd_spa);
 		if (rc)
 			break;
+	}
+
+	/*
+	 * Remaining BLK regions as single-dimm "interleave sets" for
+	 * the sole purpose of tracking the busy state of the dimm when
+	 * it is not associated with a PMEM interleave set.
+	 */
+	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
+		u32 key = to_interleave_set_key(nd_mem);
+		struct nd_interleave_set *nd_set;
+
+		if (radix_tree_lookup(&nd_bus->interleave_sets, key))
+			continue;
+
+		nd_set = kzalloc(sizeof(*nd_set), GFP_KERNEL);
+		if (!nd_set) {
+			rc = -ENOMEM;
+			break;
+		}
+
+		rc = radix_tree_insert(&nd_bus->interleave_sets, key, nd_set);
+		if (rc) {
+			dev_err(&nd_bus->dev, "%s: failed to add nvdimm key: %#x\n",
+					__func__, key);
+			break;
+		}
+		dev_dbg(&nd_bus->dev, "%s: set: 0 key: %#x\n", __func__, key);
 	}
 	return rc;
 }

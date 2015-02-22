@@ -72,7 +72,6 @@ struct nd_dimm {
 };
 
 struct nd_interleave_set {
-	u16 spa_index;
 	u64 cookie;
 	int busy;
 };

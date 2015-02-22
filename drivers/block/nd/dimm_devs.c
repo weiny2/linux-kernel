@@ -506,6 +506,35 @@ static ssize_t available_slots_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(available_slots);
 
+static ssize_t state_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+	struct nd_mem *nd_mem = nd_dimm->nd_mem;
+	u32 key = to_interleave_set_key(nd_mem);
+	struct nd_interleave_set *nd_set;
+	int busy;
+
+	/*
+	 * The state may be in the process of changing, userspace should
+	 * quiesce probing if it wants a static answer
+	 */
+	nd_bus_lock(dev);
+	nd_set = radix_tree_lookup(&nd_bus->interleave_sets, key);
+	if (!nd_set)
+		busy = -ENXIO;
+	else
+		busy = nd_set->busy;
+	nd_bus_unlock(dev);
+
+	if (busy < 0)
+		return busy;
+
+	return sprintf(buf, "%s\n", busy ? "active" : "idle");
+}
+static DEVICE_ATTR_RO(state);
+
 static struct attribute *nd_dimm_attributes[] = {
 	&dev_attr_handle.attr,
 	&dev_attr_phys_id.attr,
@@ -513,6 +542,7 @@ static struct attribute *nd_dimm_attributes[] = {
 	&dev_attr_device.attr,
 	&dev_attr_format.attr,
 	&dev_attr_serial.attr,
+	&dev_attr_state.attr,
 	&dev_attr_revision.attr,
 	&dev_attr_commands.attr,
 	&dev_attr_available_slots.attr,
