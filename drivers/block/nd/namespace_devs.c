@@ -134,34 +134,6 @@ out:
 	return rc;
 }
 
-static int check_label_space(struct nd_region *nd_region, struct device *dev)
-{
-	int i, nlabel;
-
-	if (is_namespace_pmem(dev)) {
-		nlabel = 1;
-	} else if (is_namespace_blk(dev)) {
-		struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
-
-		nlabel = nsblk->num_resources;
-	} else
-		return -ENXIO;
-
-	for (i = 0; i < nd_region->ndr_mappings; i++) {
-		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
-
-		/* if there are no valid labels then all slots are free */
-		if (nd_mapping->labels == NULL)
-			return 0;
-
-		if (nd_label_nfree(ndd) <= nlabel)
-			return -ENOSPC;
-	}
-
-	return 0;
-}
-
 static resource_size_t nd_namespace_blk_size(struct nd_namespace_blk *nsblk)
 {
 	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
@@ -271,9 +243,7 @@ static ssize_t alt_name_store(struct device *dev,
 	device_lock(dev);
 	nd_bus_lock(dev);
 	wait_nd_bus_probe_idle(dev);
-	rc = check_label_space(nd_region, dev);
-	if (rc >= 0)
-		rc = __alt_name_store(dev, buf, len);
+	rc = __alt_name_store(dev, buf, len);
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
 	dev_dbg(dev, "%s: %s (%zd)\n", __func__, rc < 0 ? "fail" : "success", rc);
@@ -734,9 +704,7 @@ static ssize_t size_store(struct device *dev,
 	device_lock(dev);
 	nd_bus_lock(dev);
 	wait_nd_bus_probe_idle(dev);
-	rc = check_label_space(nd_region, dev);
-	if (rc >= 0)
-		rc = __size_store(dev, buf);
+	rc = __size_store(dev, buf);
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
 	dev_dbg(dev, "%s: %s %s (%d)\n", __func__, buf,
@@ -872,9 +840,7 @@ static ssize_t uuid_store(struct device *dev,
 	device_lock(dev);
 	nd_bus_lock(dev);
 	wait_nd_bus_probe_idle(dev);
-	rc = check_label_space(nd_region, dev);
-	if (rc >= 0)
-		rc = nd_uuid_store(dev, &uuid, buf, len);
+	rc = nd_uuid_store(dev, &uuid, buf, len);
 	if (rc >= 0)
 		rc = namespace_update_uuid(nd_region, dev, uuid, ns_uuid);
 	if (rc >= 0)
@@ -915,10 +881,8 @@ static ssize_t sector_size_store(struct device *dev,
 
 	device_lock(dev);
 	nd_bus_lock(dev);
-	rc = check_label_space(nd_region, dev);
-	if (rc >= 0)
-		rc = nd_sector_size_store(dev, buf, &nsblk->lbasize,
-				ns_lbasize_supported);
+	rc = nd_sector_size_store(dev, buf, &nsblk->lbasize,
+			ns_lbasize_supported);
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
 	dev_dbg(dev, "%s: result: %zd %s: %s%s", __func__,
