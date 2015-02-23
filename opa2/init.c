@@ -56,10 +56,6 @@
 #include "opa_hfi.h"
 #include "debugfs.h"
 
-/* TODO - multiple HFI support... */
-#define HFI_MAX_DEVICES 1
-static struct hfi_devdata *hfi_dev_tbl[HFI_MAX_DEVICES];
-
 static struct pci_device_id hfi_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_FXR0) },
 	{ 0, }
@@ -82,22 +78,12 @@ static struct pci_driver hfi_driver = {
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd;
-	int unit;
 
 	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
 	if (!dd)
 		return ERR_PTR(-ENOMEM);
 
-	/* TODO, multi-device, add locking */
-	unit = 0;
-	if (hfi_dev_tbl[unit] != NULL) {
-		kfree(dd);
-		return ERR_PTR(-ENOSPC);
-	}
-	hfi_dev_tbl[unit] = dd;
-
 	dd->node = dev_to_node(&pdev->dev);
-	dd->unit = unit;
 
 	return dd;
 }
