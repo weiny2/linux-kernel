@@ -17,6 +17,7 @@
 #include <linux/sizes.h>
 #include <linux/mutex.h>
 #include <linux/io.h>
+#include <linux/nd.h>
 #include "nfit.h"
 
 extern struct list_head nd_bus_list;
@@ -26,6 +27,8 @@ extern int nd_dimm_major;
 enum {
 	/* need to set a limit somewhere, but yes, this is likely overkill */
 	ND_IOCTL_MAX_BUFLEN = SZ_4M,
+	/* mark newly adjusted resources as requiring a label update */
+	DPA_RESOURCE_ADJUSTED = 1 << 0,
 };
 
 struct block_device;
@@ -171,4 +174,8 @@ struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 		resource_size_t n);
 resource_size_t nd_dimm_allocated_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id);
+struct nd_mapping;
+struct resource *nsblk_add_resource(struct nd_region *nd_region,
+		struct nd_dimm_drvdata *ndd, struct nd_namespace_blk *nsblk,
+		resource_size_t start);
 #endif /* __ND_PRIVATE_H__ */

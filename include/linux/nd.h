@@ -59,6 +59,7 @@ struct nd_namespace_pmem {
  * @lbasize: blk namespaces have a native sector size when btt not present
  * @num_resources: number of dpa extents to claim
  * @res: discontiguous dpa extents for given dimm
+ * @bus_private_data: data needed by the core for managing BLK-namespaces
  */
 struct nd_namespace_blk {
 	struct device dev;
@@ -68,6 +69,7 @@ struct nd_namespace_blk {
 	unsigned long lbasize;
 	int num_resources;
 	struct resource **res;
+	void *bus_private_data;
 };
 
 static inline struct nd_namespace_io *to_nd_namespace_io(struct device *dev)

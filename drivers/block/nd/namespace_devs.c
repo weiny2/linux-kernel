@@ -42,6 +42,7 @@ static void namespace_blk_release(struct device *dev)
 
 	if (nsblk->id >= 0)
 		ida_simple_remove(&nd_region->ns_ida, nsblk->id);
+	kfree(nsblk->bus_private_data);
 	kfree(nsblk->alt_name);
 	kfree(nsblk->uuid);
 	kfree(nsblk->res);
@@ -165,6 +166,7 @@ static resource_size_t nd_namespace_blk_size(struct nd_namespace_blk *nsblk)
 {
 	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
 	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct nd_label_id label_id;
 	resource_size_t size = 0;
 	struct resource *res;
@@ -172,7 +174,7 @@ static resource_size_t nd_namespace_blk_size(struct nd_namespace_blk *nsblk)
 	if (!nsblk->uuid)
 		return 0;
 	nd_label_gen_id(&label_id, nsblk->uuid, NSLABEL_FLAG_LOCAL);
-	for_each_dpa_resource(nd_mapping->nd_dimm, res)
+	for_each_dpa_resource(ndd, res)
 		if (strcmp(res->name, label_id.id) == 0)
 			size += resource_size(res);
 	return size;
@@ -283,6 +285,8 @@ static int scan_free(struct nd_region *nd_region,
 		}
 
 		rc = adjust_resource(res, res->start, resource_size(res) - n);
+		if (rc == 0)
+			res->flags |= DPA_RESOURCE_ADJUSTED;
 		nd_dbg_dpa(nd_region, ndd, res, "shrink %d\n", rc);
 		break;
 	}
@@ -357,6 +361,8 @@ static int scan_allocate(struct nd_region *nd_region,
 		if (strcmp(res->name, label_id->id) == 0) {
 			rc = adjust_resource(res, res->start, resource_size(res)
 					+ allocate);
+			if (rc == 0)
+				res->flags |= DPA_RESOURCE_ADJUSTED;
 			action = "grow";
 		} else if (strncmp("pmem", label_id->id, 4) == 0
 				&& free_start != nd_mapping->start) {
@@ -1103,27 +1109,25 @@ static struct device **create_namespace_pmem(struct nd_region *nd_region)
 	return NULL;
 }
 
-static int nsblk_add_resource(struct nd_region *nd_region,
-		struct nd_namespace_blk *nsblk, struct nd_dimm_drvdata *ndd,
-		u8 *uuid, resource_size_t start)
+struct resource *nsblk_add_resource(struct nd_region *nd_region,
+		struct nd_dimm_drvdata *ndd, struct nd_namespace_blk *nsblk,
+		resource_size_t start)
 {
 	struct nd_label_id label_id;
 	struct resource *res;
 
-	nd_label_gen_id(&label_id, uuid, NSLABEL_FLAG_LOCAL);
+	nd_label_gen_id(&label_id, nsblk->uuid, NSLABEL_FLAG_LOCAL);
 	nsblk->res = krealloc(nsblk->res,
 			sizeof(void *) * (nsblk->num_resources + 1),
 			GFP_KERNEL);
 	if (!nsblk->res)
-		return -ENOMEM;
+		return NULL;
 	for_each_dpa_resource(ndd, res)
 		if (strcmp(res->name, label_id.id) == 0 && res->start == start) {
 			nsblk->res[nsblk->num_resources++] = res;
-			nd_dbg_dpa(nd_region, ndd, res, "%s assign\n",
-					dev_name(&nsblk->dev));
-			return 0;
+			return res;
 		}
-	return -ENODEV;
+	return NULL;
 }
 
 static struct device *nd_namespace_blk_create(struct nd_region *nd_region)
@@ -1173,11 +1177,14 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 	struct device *dev, **devs = NULL;
 	u8 label_uuid[NSLABEL_UUID_LEN];
 	struct nd_namespace_blk *nsblk;
-	int i, rc, l, count = 0;
+	struct nd_dimm_drvdata *ndd;
+	int i, l, count = 0;
+	struct resource *res;
 
 	if (nd_region->ndr_mappings == 0)
 		return NULL;
 
+	ndd = to_ndd(nd_mapping);
 	for_each_label(l, nd_label, nd_mapping->labels) {
 		u32 flags = readl(&nd_label->flags);
 		char *name[NSLABEL_NAME_LEN];
@@ -1193,11 +1200,12 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 			nsblk = to_nd_namespace_blk(devs[i]);
 			if (memcmp(nsblk->uuid, label_uuid,
 						NSLABEL_UUID_LEN) == 0) {
-				rc = nsblk_add_resource(nd_region, nsblk,
-						to_ndd(nd_mapping), label_uuid,
+				res = nsblk_add_resource(nd_region, ndd, nsblk,
 						readq(&nd_label->dpa));
-				if (rc)
+				if (!res)
 					goto err;
+				nd_dbg_dpa(nd_region, ndd, res, "%s assign\n",
+					dev_name(&nsblk->dev));
 				break;
 			}
 		}
@@ -1225,10 +1233,12 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 		if (name[0])
 			nsblk->alt_name = kmemdup(name, NSLABEL_NAME_LEN,
 					GFP_KERNEL);
-		rc = nsblk_add_resource(nd_region, nsblk, to_ndd(nd_mapping),
-				label_uuid, readq(&nd_label->dpa));
-		if (rc)
+		res = nsblk_add_resource(nd_region, ndd, nsblk,
+				readq(&nd_label->dpa));
+		if (!res)
 			goto err;
+		nd_dbg_dpa(nd_region, ndd, res, "%s assign\n",
+				dev_name(&nsblk->dev));
 	}
 
 	dev_dbg(&nd_region->dev, "%s: discovered %d blk namespace%s\n",

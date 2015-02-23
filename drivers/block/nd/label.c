@@ -561,28 +561,146 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	return 0;
 }
 
-static int __blk_label_update(struct nd_region *nd_region,
-		struct nd_mapping *nd_mapping, struct nd_namespace_blk *nsblk)
+static void del_label(struct nd_mapping *nd_mapping, int l)
 {
+	struct nd_namespace_label __iomem *next_label, __iomem *nd_label;
+	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	unsigned int slot;
+	int j;
+
+	nd_label = nd_get_label(nd_mapping->labels, l);
+	slot = to_slot(ndd, nd_label);
+	dev_vdbg(ndd->dev, "%s: clear: %d\n", __func__, slot);
+
+	for (j = l; (next_label = nd_get_label(nd_mapping->labels, j + 1)); j++)
+		nd_set_label(nd_mapping->labels, next_label, j);
+	nd_set_label(nd_mapping->labels, NULL, j);
+}
+
+static bool is_old_resource(struct resource *res, struct resource **list, int n)
+{
+	int i;
+
+	if (res->flags & DPA_RESOURCE_ADJUSTED)
+		return false;
+	for (i = 0; i < n; i++)
+		if (res == list[i])
+			return true;
+	return false;
+}
+
+static struct resource *to_resource(struct nd_dimm_drvdata *ndd,
+		struct nd_namespace_label __iomem *nd_label)
+{
+	struct resource *res;
+
+	for_each_dpa_resource(ndd, res) {
+		if (res->start != readq(&nd_label->dpa))
+			continue;
+		if (resource_size(res) != readq(&nd_label->rawsize))
+			continue;
+		return res;
+	}
+
+	return NULL;
+}
+
+/*
+ * 1/ Account all the labels that can be freed after this update
+ * 2/ Allocate and write the label to the staging (next) index
+ * 3/ Record the resources in the namespace device
+ */
+static int __blk_label_update(struct nd_region *nd_region,
+		struct nd_mapping *nd_mapping, struct nd_namespace_blk *nsblk,
+		int num_labels)
+{
+	int i, l, alloc, victims, nfree, old_num_resources, rc = -ENXIO;
 	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct nd_namespace_label __iomem *nd_label;
 	struct nd_namespace_index __iomem *nsindex;
-	unsigned long *free;
+	unsigned long *free, *victim_map = NULL;
+	struct resource *res, **old_res_list;
+	struct nd_label_id label_id;
+	u8 uuid[NSLABEL_UUID_LEN];
 	u32 nslot, slot;
-	int i, l;
 
 	if (!preamble_next(ndd, &nsindex, &free, &nslot))
 		return -ENXIO;
 
-	/* allocate and write the label to the staging (next) index */
-	for (i = 0; i < nsblk->num_resources; i++) {
-		struct resource *res = nsblk->res[i];
-		size_t offset;
-		int rc;
+	old_res_list = nsblk->res;
+	nfree = nd_label_nfree(ndd);
+	old_num_resources = nsblk->num_resources;
+	nd_label_gen_id(&label_id, nsblk->uuid, NSLABEL_FLAG_LOCAL);
 
+	/*
+	 * We need to loop over the old resources a few times, which seems a
+	 * bit inefficient, but we need to know that we have the label
+	 * space before we start mutating the tracking structures.
+	 * Otherwise the recovery method of last resort for userspace is
+	 * disable and re-enable the parent region.
+	 */
+	alloc = 0;
+	for_each_dpa_resource(ndd, res) {
+		if (strcmp(res->name, label_id.id) != 0)
+			continue;
+		if (!is_old_resource(res, old_res_list, old_num_resources))
+			alloc++;
+	}
+
+	victims = 0;
+	if (old_num_resources) {
+		/* convert old local-label-map to dimm-slot victim-map */
+		victim_map = kcalloc(BITS_TO_LONGS(nslot), sizeof(long),
+				GFP_KERNEL);
+		if (!victim_map)
+			return -ENOMEM;
+
+		/* mark unused labels for garbage collection */
+		for_each_clear_bit_le(slot, free, nslot) {
+			nd_label = nd_label_base(ndd) + slot;
+			memcpy_fromio(uuid, nd_label->uuid, NSLABEL_UUID_LEN);
+			if (memcmp(uuid, nsblk->uuid, NSLABEL_UUID_LEN) != 0)
+				continue;
+			res = to_resource(ndd, nd_label);
+			if (res && is_old_resource(res, old_res_list,
+						old_num_resources))
+				continue;
+			slot = to_slot(ndd, nd_label);
+			set_bit(slot, victim_map);
+			victims++;
+		}
+	}
+
+	/* don't allow updates that consume the last label */
+	if (nfree - alloc < 0 || nfree - alloc + victims < 1) {
+		dev_info(&nsblk->dev, "insufficient label space\n");
+		kfree(victim_map);
+		return -ENOSPC;
+	}
+	/* from here on we need to abort on error */
+
+
+	/* assign all resources to the namespace before writing the labels */
+	nsblk->res = NULL;
+	nsblk->num_resources = 0;
+	for_each_dpa_resource(ndd, res) {
+		if (strcmp(res->name, label_id.id) != 0)
+			continue;
+		if (!nsblk_add_resource(nd_region, ndd, nsblk, res->start)) {
+			rc = -ENOMEM;
+			goto abort;
+		}
+	}
+
+	for (i = 0; i < nsblk->num_resources; i++) {
+		size_t offset;
+
+		res = nsblk->res[i];
+		if (is_old_resource(res, old_res_list, old_num_resources))
+			continue; /* carry-over */
 		slot = nd_label_alloc_slot(ndd);
 		if (slot == UINT_MAX)
-			return -ENXIO;
+			goto abort;
 		dev_dbg(ndd->dev, "%s: allocated: %d\n", __func__, slot);
 
 		nd_label = nd_label_base(ndd) + slot;
@@ -605,42 +723,70 @@ static int __blk_label_update(struct nd_region *nd_region,
 		rc = nd_dimm_set_config_data(ndd, offset, nd_label,
 				sizeof(struct nd_namespace_label));
 		if (rc < 0)
-			return rc;
+			goto abort;
 	}
 
-	/* Garbage collect the previous labels */
-	for_each_label(l, nd_label, nd_mapping->labels) {
-		u32 victim_slot = to_slot(ndd, nd_label);
-
-		nd_label_free_slot(ndd, victim_slot);
-		dev_dbg(ndd->dev, "%s: free: %d\n", __func__, victim_slot);
-	}
-
-	i = 0;
-	for_each_clear_bit_le(slot, free, nslot) {
-		u8 label_uuid[NSLABEL_UUID_LEN];
-
-		nd_label = nd_label_base(ndd) + slot;
-		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
-		if (memcmp(label_uuid, nsblk->uuid, NSLABEL_UUID_LEN) == 0) {
-			if (i + 1 > nsblk->num_resources) {
-				/*
-				 * Sanity check that we aren't walking off the
-				 * end of the alloation for nd_mapping->labels.
-				 */
-				dev_err(&nsblk->dev, "%s, label set overrun\n",
-						__func__);
-				return -ENXIO;
-			}
-			dev_dbg(&nd_region->dev, "%s: add label%d\n",
-					__func__, i);
-			nd_set_label(nd_mapping->labels, nd_label, i++);
-		}
+	/* free up now unused slots in the new index */
+	for_each_set_bit(slot, victim_map, victim_map ? nslot : 0) {
+		dev_dbg(ndd->dev, "%s: free: %d\n", __func__, slot);
+		nd_label_free_slot(ndd, slot);
 	}
 
 	/* update index */
-	return nd_label_write_index(ndd, ndd->ns_next,
+	rc = nd_label_write_index(ndd, ndd->ns_next,
 			inc_seq(readl(&nsindex->seq)), 0);
+	if (rc)
+		goto abort;
+
+	/*
+	 * Now that the on-dimm labels are up to date, fix up the tracking
+	 * entries in nd_mapping->labels
+	 */
+	for_each_label(l, nd_label, nd_mapping->labels) {
+		memcpy_fromio(uuid, nd_label->uuid, NSLABEL_UUID_LEN);
+		if (memcmp(uuid, nsblk->uuid, NSLABEL_UUID_LEN) != 0)
+			continue;
+		del_label(nd_mapping, l);
+		l--; /* retry with the new label at this index */
+	}
+	if (l + nsblk->num_resources > num_labels) {
+		/*
+		 * Bug, we can't end up with more resources than
+		 * available labels
+		 */
+		WARN_ON_ONCE(1);
+		rc = -ENXIO;
+		goto out;
+	}
+
+	for_each_clear_bit_le(slot, free, nslot) {
+		nd_label = nd_label_base(ndd) + slot;
+		memcpy_fromio(uuid, nd_label->uuid, NSLABEL_UUID_LEN);
+		if (memcmp(uuid, nsblk->uuid, NSLABEL_UUID_LEN) != 0)
+			continue;
+		res = to_resource(ndd, nd_label);
+		res->flags &= ~DPA_RESOURCE_ADJUSTED;
+		dev_vdbg(&nsblk->dev, "assign label[%d] slot: %d\n", l, slot);
+		nd_set_label(nd_mapping->labels, nd_label, l++);
+	}
+	nd_set_label(nd_mapping->labels, NULL, l);
+
+ out:
+	kfree(old_res_list);
+	kfree(victim_map);
+	return rc;
+
+ abort:
+	/*
+	 * 1/ repair the allocated label bitmap in the index
+	 * 2/ restore the resource list
+	 */
+	nd_label_copy(ndd, nsindex, to_current_namespace_index(ndd));
+	kfree(nsblk->res);
+	nsblk->res = old_res_list;
+	nsblk->num_resources = old_num_resources;
+	old_res_list = NULL;
+	goto out;
 }
 
 static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
@@ -655,7 +801,7 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 		old_num_labels++;
 
 	/*
-	 * We need to preserve all the old labels for the namespace so
+	 * We need to preserve all the old labels for the mapping so
 	 * they can be garbage collected after writing the new labels.
 	 */
 	if (num_labels > old_num_labels)
@@ -663,15 +809,14 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 				GFP_KERNEL);
 	if (!nd_mapping->labels)
 		return -ENOMEM;
-	if (old_num_labels == 0)
-		memset(nd_mapping->labels, 0, size);
-	else
-		nd_mapping->labels[max(old_num_labels, num_labels) - 1] = NULL;
+
+	for (i = old_num_labels; i <= num_labels; i++)
+		nd_set_label(nd_mapping->labels, NULL, i);
 
 	if (ndd->ns_current == -1 || ndd->ns_next == -1)
 		/* pass */;
 	else
-		return 0;
+		return max(num_labels, old_num_labels);
 
 	nsindex = to_namespace_index(ndd, 0);
 	memset_io(nsindex, 0, ndd->config_size);
@@ -684,7 +829,7 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 	ndd->ns_next = 1;
 	ndd->ns_current = 0;
 
-	return 0;
+	return max(num_labels, old_num_labels);
 }
 
 static int del_labels(struct nd_mapping *nd_mapping, u8 *uuid)
@@ -706,22 +851,15 @@ static int del_labels(struct nd_mapping *nd_mapping, u8 *uuid)
 		return 0;
 
 	for_each_label(l, nd_label, nd_mapping->labels) {
-		int j;
-
 		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
 		if (memcmp(label_uuid, uuid, NSLABEL_UUID_LEN) != 0)
 			continue;
 		slot = to_slot(ndd, nd_label);
 		nd_label_free_slot(ndd, slot);
 		dev_dbg(ndd->dev, "%s: free: %d\n", __func__, slot);
-		for (j = l; nd_get_label(nd_mapping->labels, j + 1); j++) {
-			struct nd_namespace_label __iomem *next_label;
-
-			next_label = nd_get_label(nd_mapping->labels, j + 1);
-			nd_set_label(nd_mapping->labels, next_label, j);
-		}
-		nd_set_label(nd_mapping->labels, NULL, j);
+		del_label(nd_mapping, l);
 		num_freed++;
+		l--; /* retry with new label at this index */
 	}
 
 	if (num_freed >= l) {
@@ -751,7 +889,7 @@ int nd_pmem_namespace_label_update(struct nd_region *nd_region,
 		}
 
 		rc = init_labels(nd_mapping, 1);
-		if (rc)
+		if (rc < 0)
 			return rc;
 
 		rc = __pmem_label_update(nd_region, nd_mapping, nspm, i);
@@ -766,14 +904,18 @@ int nd_blk_namespace_label_update(struct nd_region *nd_region,
 		struct nd_namespace_blk *nsblk, resource_size_t size)
 {
 	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
-	int rc;
+	struct resource *res;
+	int count = 0;
 
 	if (size == 0)
 		return del_labels(nd_mapping, nsblk->uuid);
 
-	rc = init_labels(nd_mapping, nsblk->num_resources);
-	if (rc)
-		return rc;
+	for_each_dpa_resource(to_ndd(nd_mapping), res)
+		count++;
 
-	return __blk_label_update(nd_region, nd_mapping, nsblk);
+	count = init_labels(nd_mapping, count);
+	if (count < 0)
+		return count;
+
+	return __blk_label_update(nd_region, nd_mapping, nsblk, count);
 }
