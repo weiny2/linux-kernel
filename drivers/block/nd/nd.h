@@ -49,6 +49,11 @@ struct nd_dimm {
 	} blk_dimm;
 };
 
+struct nd_region_namespaces {
+	int count;
+	int active;
+};
+
 static inline struct nd_namespace_index __iomem *to_namespace_index(
 		struct nd_dimm *nd_dimm, int i)
 {
@@ -218,7 +223,7 @@ int nd_dimm_get_config_data(struct nd_dimm *nd_dimm,
 int nd_dimm_set_config_data(struct nd_dimm *nd_dimm, size_t offset,
 		void *buf, size_t len);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
-int nd_region_register_namespaces(struct nd_region *nd_region);
+int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nd_bus_lock(struct device *dev);
 void nd_bus_unlock(struct device *dev);

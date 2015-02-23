@@ -259,6 +259,18 @@ static ssize_t available_size_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(available_size);
 
+static ssize_t init_namespaces_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region_namespaces *num_ns = dev_get_drvdata(dev);
+
+	if (!num_ns)
+		return -ENXIO;
+
+	return sprintf(buf, "%d/%d\n", num_ns->active, num_ns->count);
+}
+static DEVICE_ATTR_RO(init_namespaces);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
 	&dev_attr_nstype.attr,
@@ -267,6 +279,7 @@ static struct attribute *nd_region_attributes[] = {
 	&dev_attr_set_state.attr,
 	&dev_attr_set_cookie.attr,
 	&dev_attr_available_size.attr,
+	&dev_attr_init_namespaces.attr,
 	NULL,
 };
 

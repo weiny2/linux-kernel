@@ -17,7 +17,40 @@
 
 static int nd_region_probe(struct device *dev)
 {
-	return nd_region_register_namespaces(to_nd_region(dev));
+	int err;
+	struct nd_region_namespaces *num_ns;
+	struct nd_region *nd_region = to_nd_region(dev);
+	int rc = nd_region_register_namespaces(nd_region, &err);
+
+	num_ns = devm_kzalloc(dev, sizeof(*num_ns), GFP_KERNEL);
+	if (!num_ns)
+		return -ENOMEM;
+
+	if (rc < 0)
+		return rc;
+
+	num_ns->active = rc;
+	num_ns->count = rc + err;
+	dev_set_drvdata(dev, num_ns);
+
+	if (err == 0)
+		return 0;
+
+	if (rc == err)
+		return -ENODEV;
+
+	/*
+	 * Given multiple namespaces per region, we do not want to
+	 * disable all the successfully registered peer namespaces upon
+	 * a single registration failure.  If userspace is missing a
+	 * namespace that it expects it can disable/re-enable the region
+	 * to retry discovery after correcting the failure.
+	 * <regionX>/namespaces returns the current
+	 * "<async-registered>/<total>" namespace count.
+	 */
+	dev_err(dev, "failed to register %d namespace%s, continuing...\n",
+			err, err == 1 ? "" : "s");
+	return 0;
 }
 
 static int child_unregister(struct device *dev, void *data)

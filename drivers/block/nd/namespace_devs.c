@@ -1304,11 +1304,12 @@ static int init_active_labels(struct nd_region *nd_region)
 	return 0;
 }
 
-int nd_region_register_namespaces(struct nd_region *nd_region)
+int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 {
 	struct device **devs = NULL;
 	int i, rc = 0, type;
 
+	*err = 0;
 	nd_bus_lock(&nd_region->dev);
 	rc = init_active_labels(nd_region);
 	if (rc) {
@@ -1361,18 +1362,26 @@ int nd_region_register_namespaces(struct nd_region *nd_region)
 	}
 
 	if (devs[i]) {
-		for (; devs[i]; i++) {
-			struct device *dev = devs[i];
+		int j;
+
+		for (j = i; devs[j]; j++) {
+			struct device *dev = devs[j];
 
 			device_initialize(dev);
 			put_device(dev);
 		}
-		rc = -ENODEV;
+		*err = j - i;
+		/*
+		 * All of the namespaces we tried to register failed, so
+		 * fail region activation.
+		 */
+		if (*err == 0)
+			rc = -ENODEV;
 	}
 	kfree(devs);
 
  err:
-	if (rc) {
+	if (rc == -ENODEV) {
 		nd_region->ns_seed = NULL;
 		for (i = 0; i < nd_region->ndr_mappings; i++) {
 			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
@@ -1380,7 +1389,8 @@ int nd_region_register_namespaces(struct nd_region *nd_region)
 			kfree(nd_mapping->labels);
 			nd_mapping->labels = NULL;
 		}
+		return rc;
 	}
 
-	return rc;
+	return i;
 }
