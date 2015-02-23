@@ -888,6 +888,10 @@ static uint pcie_gen3_required;
 module_param(pcie_gen3_required, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_gen3_required, "Driver will fail to load if unable to reach PCie Gen3 speed");
 
+static uint pcie_gen3_force;
+module_param(pcie_gen3_force, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_gen3_force, "Force driver to do a Gen3 download even if already at Gen3 speed");
+
 static uint pcie_gen3_retry = 5;
 module_param(pcie_gen3_retry, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_gen3_retry, "Driver will try this many times to reach requested speed");
@@ -1084,6 +1088,8 @@ static void arm_gasket_logic(struct hfi_devdata *dd)
 			<< WFR_ASIC_PCIE_SD_HOST_CMD_TIMER_SHIFT
 		);
 	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
+	/* read back to push the write */
+	read_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD);
 }
 
 /*
@@ -1112,18 +1118,20 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	u8 nsbr = 1;
 	const u8 (*eq)[3];
 
-	/* if already at Gen3, done */
-	if (dd->lbus_speed == 8000) { /* Gen3, 8GHz */
-		dd_dev_info(dd, "%s: PCIe already at gen3\n", __func__);
-		return 0;
-	}
-
 	/* told not to do the transition */
 	if (!pcie_gen3_transition) {
 		dd_dev_info(dd, "%s: Skipping PCIe transition\n", __func__);
 		return 0;
 	}
 	target_gen2 = pcie_gen3_transition == 2;	/* target Gen2 */
+
+	/* if already at Gen3, done (unless forced) */
+	if (dd->lbus_speed == 8000) { /* Gen3, 8GHz */
+		dd_dev_info(dd, "%s: PCIe already at gen3, %s\n", __func__,
+			pcie_gen3_force ? "re-doing anyway" : "skipping");
+		if (!pcie_gen3_force)
+			return 0;
+	}
 
 	/*
 	 * A0 erratum 291496
@@ -1349,12 +1357,12 @@ retry:
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL2, lnkctl2);
 
 	/* step 5h: arm gasket logic */
-	dd_dev_info(dd, "%s: arming gasket logic\n", __func__);
-	arm_gasket_logic(dd);
-
 	/* hold DC in reset across the SBR */
 	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
 	(void) read_csr(dd, WFR_CCE_DC_CTRL); /* DC reset hold */
+
+	dd_dev_info(dd, "%s: arming gasket logic\n", __func__);
+	arm_gasket_logic(dd);
 
 	/*
 	 * step 6: quiesce PCIe link
