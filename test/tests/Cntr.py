@@ -302,7 +302,7 @@ def main():
     diags_64limit_script = directory + "/Cntr64limit.diags"
     pma_query = "iba_pmaquery -w 0x8009" # gets VL 0, 3, 15
     pma_query_clear = "iba_pmaquery -o clearportstatus -n 0x2"
-    ifs_sweep = "service opafm sweep && sleep 5 && service opafm sweep && sleep 5"
+    ifs_sweep = "/opt/opafm/bin/fm_cmd smForceSweep && sleep 5 && /opt/opafm/bin/fm_cmd smForceSweep && sleep 5"
     hfi_stats = "hfistats -i 0"
     mpi_cmd = directory + "/MpiStress.py --mpiverbs --args \"-L 5 -M 5 -w 10 -m 65536 -z\" --nodelist "
    

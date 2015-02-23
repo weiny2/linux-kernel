@@ -78,7 +78,7 @@ def main():
     
     RegLib.test_log(0, "Waiting 5 seconds for Pcap procs to get started")
     time.sleep(5)
-    ret = opafm_host.send_ssh("service opafm sweep", False, run_as_root=True)
+    ret = opafm_host.send_ssh("/opt/opafm/bin/fm_cmd smForceSweep", False, run_as_root=True)
     if ret:
         kill_pcap(host1, host2)
         RegLib.test_fail("Could not sweep fabric")
