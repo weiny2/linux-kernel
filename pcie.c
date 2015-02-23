@@ -208,6 +208,14 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	dd->pcibar1 = addr >> 32;
 	pci_read_config_dword(dd->pcidev, PCI_ROM_ADDRESS, &dd->pci_rom);
 	pci_read_config_word(dd->pcidev, PCI_COMMAND, &dd->pci_command);
+	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCTL, &dd->pcie_devctl);
+	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL, &dd->pcie_lnkctl);
+	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCTL2,
+							&dd->pcie_devctl2);
+	pci_read_config_dword(dd->pcidev, WFR_PCI_CFG_MSIX0, &dd->pci_msix0);
+	pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE1,
+							&dd->pci_lnkctl3);
+	pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_TPH2, &dd->pci_tph2);
 
 	return 0;
 }
@@ -529,6 +537,15 @@ void restore_pci_variables(struct hfi_devdata *dd)
 				PCI_BASE_ADDRESS_1, dd->pcibar1);
 	pci_write_config_dword(dd->pcidev,
 				PCI_ROM_ADDRESS, dd->pci_rom);
+	pcie_capability_write_word(dd->pcidev, PCI_EXP_DEVCTL, dd->pcie_devctl);
+	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL, dd->pcie_lnkctl);
+	pcie_capability_write_word(dd->pcidev, PCI_EXP_DEVCTL2,
+							dd->pcie_devctl2);
+	pci_write_config_dword(dd->pcidev, WFR_PCI_CFG_MSIX0, dd->pci_msix0);
+	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE1,
+							dd->pci_lnkctl3);
+	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_TPH2, dd->pci_tph2);
+
 	/*
 	 * TODO: Use of DBI back-door is undesirable but the only way to
 	 *       restore the subsystem IDs.
