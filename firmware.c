@@ -760,6 +760,10 @@ int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout)
 {
 	unsigned long timeout;
 
+	/* in the simulator, the fake 8051 is always ready */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+		return 0;
+
 	timeout = msecs_to_jiffies(mstimeout) + jiffies;
 	while (1) {
 		if (get_firmware_state(dd) == 0xa0)	/* ready */

@@ -480,7 +480,7 @@ enum {
 };
 
 /* timeouts */
-#define LINK_RESTART_DELAY 10000	/* link restart delay, in ms */
+#define LINK_RESTART_DELAY 1000		/* link restart delay, in ms */
 #define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
 #define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
 #define DBI_TIMEOUT 1			/* DBI hardare access timeout, in ms */

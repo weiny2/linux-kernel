@@ -5115,7 +5115,13 @@ set_local_link_attributes_fail:
 /* schedule a link restart */
 void schedule_link_restart(struct qib_pportdata *ppd)
 {
-	/* only schedule a restart if the link is enabled */
+	/*
+	 * Only schedule a restart if the link is enabled.
+	 *
+	 * The link restart delay is arbitrary.  The routine goto_offline()
+	 * insures that the full LNI shutdown is complete and the driver
+	 * can immediately go to polling if it chooses.
+	 */
 	if (ppd->link_enabled)
 		schedule_delayed_work(&ppd->link_restart_work,
 					msecs_to_jiffies(LINK_RESTART_DELAY));
@@ -5127,34 +5133,32 @@ void cancel_link_restart(struct qib_pportdata *ppd)
 	cancel_delayed_work(&ppd->link_restart_work);
 }
 
-static void restart_link(struct qib_pportdata *ppd)
+/*
+ * Call this to start the link.  Schedule a retry if the cable is not
+ * present or if unable to start polling.  Do not do anything if the
+ * link is disabled.  Returns 0 if link is disabled or moved to
+ * polling, -errno if a restart was scheduled.
+ */
+static int start_link(struct qib_pportdata *ppd)
 {
-	int ret;
+	int ret = -ENOSYS; /* no cable unless proven otherwise */
 
-	/*
-	 * don't try to restart if the link is not enabled or
-	 * if there is no cable present
-	 */
 	if (!ppd->link_enabled) {
 		dd_dev_info(ppd->dd,
 			"%s: stopping link restart because link is disabled\n",
 			__func__);
-		return;
+		return 0;
 	}
-	if (!qsfp_mod_present(ppd)) {
-		dd_dev_info(ppd->dd,
-			"%s: stopping link restart because cable is missing\n",
-			__func__);
+
+	if (qsfp_mod_present(ppd))
+		ret = set_link_state(ppd, HLS_DN_POLL);
+
+	/* TODO: do not poll when cable plug notification is available */
+	/* reschedule if unable to poll or no cable */
+	if (ret)
 		schedule_link_restart(ppd);
-		return;
-	}
-	ret = set_link_state(ppd, HLS_DN_POLL);
-	if (ret) {
-		dd_dev_err(ppd->dd,
-			"Unable to restart polling on the link, err %d, restarting in 10 seconds\n",
-			ret);
-		schedule_link_restart(ppd);
-	}
+
+	return ret;
 }
 
 void link_restart_worker(struct work_struct *work)
@@ -5162,7 +5166,7 @@ void link_restart_worker(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct qib_pportdata *ppd = container_of(dwork, struct qib_pportdata,
 							link_restart_work);
-	restart_link(ppd);
+	start_link(ppd);
 }
 
 static int bringup_serdes(struct qib_pportdata *ppd)
@@ -5200,15 +5204,8 @@ static int bringup_serdes(struct qib_pportdata *ppd)
 		if (ret < 0)
 			return ret;
 	}
-	if (qsfp_mod_present(ppd))
-		return set_link_state(ppd, HLS_DN_POLL);
 
-	dd_dev_err(ppd->dd, "Cable not present, attempting link restart in 10 seconds\n");
-	/* Placing schedule_link_restart here assumes that restart_link(..) sets
-	 * link state to HLS_DN_POLL
-	 */
-	schedule_link_restart(ppd);
-	return -EINVAL;
+	return start_link(ppd);
 }
 
 static void quiet_serdes(struct qib_pportdata *ppd)
@@ -5626,15 +5623,17 @@ static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
 	qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
 
 	/*
-	 * There is a 600ms quiet time after the state goes offline before it
-	 * will accept host requests.  Wait for that (plus some extra) here.
-	 *
-	 * The simulator firmware state does not return to accepting
-	 * requests.  Ignore that.
+	 * The LNI has a manditory wait time after the physical state
+	 * moves to Offline.Quiet.  The wait time may be different
+	 * depending on how the link went down.  The 8501 firmware
+	 * will observe the needed wait time and only move to ready
+	 * when that is completed.  The largest of the quiet timeouts
+	 * is 2.5s, so wait that long and then a bit more.
 	 */
-	ret = wait_fm_ready(dd, 1000);
-	if (ret && !(dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)) {
-		dd_dev_err(dd, "After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
+	ret = wait_fm_ready(dd, 2600);
+	if (ret) {
+		dd_dev_err(dd,
+			"After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
 		return ret;
 	}
 
