@@ -988,6 +988,10 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 	uint idle_cnt = sdma_idle_cnt;
 	size_t num_engines = dd->chip_sdma_engines;
 
+	if (!HFI_CAP_IS_KSET(SDMA)) {
+		HFI_CAP_CLEAR(SDMA_AHG);
+		return 0;
+	}
 	if (mod_num_sdma &&
 		/* can't exceed chip support */
 		mod_num_sdma <= dd->chip_sdma_engines &&
@@ -2735,10 +2739,6 @@ int sdma_ahg_alloc(struct sdma_engine *sde)
 	if (!sde) {
 		trace_hfi_ahg_allocate(sde, -EINVAL);
 		return -EINVAL;
-	}
-	if (!HFI_CAP_IS_KSET(SDMA_AHG)) {
-		trace_hfi_ahg_allocate(sde, -EOPNOTSUPP);
-		return -EOPNOTSUPP;
 	}
 	while (1) {
 		nr = ffz(ACCESS_ONCE(sde->ahg_bits));
