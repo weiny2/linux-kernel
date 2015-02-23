@@ -918,6 +918,48 @@ static ssize_t resource_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(resource);
 
+static ssize_t dpa_extents_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev->parent);
+	struct nd_label_id label_id;
+	int count = 0, i;
+	u8 *uuid = NULL;
+	u32 flags = 0;
+
+	nd_bus_lock(dev);
+	if (is_namespace_pmem(dev)) {
+		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
+
+		uuid = nspm->uuid;
+		flags = 0;
+	} else if (is_namespace_blk(dev)) {
+		struct nd_namespace_blk *nsblk= to_nd_namespace_blk(dev);
+
+		uuid = nsblk->uuid;
+		flags = NSLABEL_FLAG_LOCAL;
+	}
+
+	if (!uuid)
+		goto out;
+
+	nd_label_gen_id(&label_id, uuid, flags);
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+		struct resource *res;
+
+		for_each_dpa_resource(ndd, res)
+			if (strcmp(res->name, label_id.id) == 0)
+				count++;
+	}
+ out:
+	nd_bus_unlock(dev);
+
+	return sprintf(buf, "%d\n", count);
+}
+static DEVICE_ATTR_RO(dpa_extents);
+
 static struct attribute *nd_namespace_attributes[] = {
 	&dev_attr_type.attr,
 	&dev_attr_size.attr,
@@ -925,6 +967,7 @@ static struct attribute *nd_namespace_attributes[] = {
 	&dev_attr_resource.attr,
 	&dev_attr_alt_name.attr,
 	&dev_attr_sector_size.attr,
+	&dev_attr_dpa_extents.attr,
 	NULL,
 };
 

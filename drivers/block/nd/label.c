@@ -67,7 +67,7 @@ size_t sizeof_namespace_index(struct nd_dimm_drvdata *ndd)
 	return ndd->nsindex_size;
 }
 
-static int nd_dimm_num_label_slots(struct nd_dimm_drvdata *ndd)
+int nd_dimm_num_label_slots(struct nd_dimm_drvdata *ndd)
 {
 	return ndd->config_size / 129;
 }
@@ -425,7 +425,7 @@ u32 nd_label_nfree(struct nd_dimm_drvdata *ndd)
 	WARN_ON(!is_nd_bus_locked(ndd->dev));
 
 	if (!preamble_next(ndd, &nsindex, &free, &nslot))
-		return 0;
+		return nd_dimm_num_label_slots(ndd);
 
 	return bitmap_weight(free, nslot);
 }

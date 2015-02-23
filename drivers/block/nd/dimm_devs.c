@@ -19,6 +19,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include "nd-private.h"
+#include "label.h"
 #include "nfit.h"
 #include "nd.h"
 
@@ -431,6 +432,29 @@ static ssize_t commands_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(commands);
 
+static ssize_t available_slots_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_dimm_drvdata *ndd = dev_get_drvdata(dev);
+	ssize_t rc;
+	u32 nfree;
+
+	if (!ndd)
+		return -ENXIO;
+
+	nd_bus_lock(dev);
+	nfree = nd_label_nfree(ndd);
+	if (nfree - 1 > nfree) {
+		dev_WARN_ONCE(dev, 1, "we ate our last label?\n");
+		nfree = 0;
+	} else
+		nfree--;
+	rc = sprintf(buf, "%d\n", nfree);
+	nd_bus_unlock(dev);
+	return rc;
+}
+static DEVICE_ATTR_RO(available_slots);
+
 static struct attribute *nd_dimm_attributes[] = {
 	&dev_attr_handle.attr,
 	&dev_attr_phys_id.attr,
@@ -440,6 +464,7 @@ static struct attribute *nd_dimm_attributes[] = {
 	&dev_attr_serial.attr,
 	&dev_attr_revision.attr,
 	&dev_attr_commands.attr,
+	&dev_attr_available_slots.attr,
 	NULL,
 };
 
