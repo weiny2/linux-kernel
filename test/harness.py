@@ -239,7 +239,7 @@ test_list = [
 
     { "test_name" : "Hpcc-Psm",
       "test_exe" : "Hpcc.py",
-      "args" : "--nodelist %HOST[2]%",
+      "args" : "--nodelist %HOST[2]% --psm %PSM_LIB%",
       "type" : "default,mpi,mpipsm",
       "desc" : "Run Hpcc with psm",
     },
