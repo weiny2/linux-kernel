@@ -193,6 +193,7 @@ opa_core_register_device(struct device *dev, struct opa_core_device_id *bus_id,
 ida_remove:
 	ida_simple_remove(&opa_core_index_ida, odev->index);
 out:
+	kfree(odev);
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(opa_core_register_device);
