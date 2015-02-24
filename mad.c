@@ -75,6 +75,7 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 	int ret;
 	unsigned long flags;
 	unsigned long timeout;
+	int pkey_idx;
 
 	agent = ibp->send_agent;
 	if (!agent)
@@ -88,7 +89,14 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 	if (ibp->trap_timeout && time_before(jiffies, ibp->trap_timeout))
 		return;
 
-	send_buf = ib_create_send_mad(agent, 0, 0, 0, IB_MGMT_MAD_HDR,
+	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
+	if (pkey_idx < 0) {
+		pr_warn("%s: failed to find limited mgmt pkey, defaulting 0x%x\n",
+			__func__, qib_get_pkey(ibp, 1));
+		pkey_idx = 1;
+	}
+
+	send_buf = ib_create_send_mad(agent, 0, pkey_idx, 0, IB_MGMT_MAD_HDR,
 				      IB_MGMT_MAD_DATA, GFP_ATOMIC);
 	if (IS_ERR(send_buf))
 		return;
