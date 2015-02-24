@@ -61,6 +61,15 @@
 #include <rdma/hfi_types.h>
 
 /*
+ * These macros are required for compiling against the
+ * OPA headers shared with user space.
+ */
+#define _HFI_STATIC_INLINE static inline
+#define _HFI_PRINTF(FMT,args...)
+#define _HFI_ASSERT(X)
+#define _align64 __attribute__((__aligned__(64)))
+
+/*
  * HFI API data types
  * TODO - common provider integration
  * Based on hfi_ctx in common provider.
@@ -71,6 +80,7 @@ struct hfi_devdata;
 
 /**
  * hfi_ctx - state for HFI resources assigned to this context.
+ * @pid: Assigned Portals Process ID. The user space hfi_ctx has this field
  * @ptl_pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
  * @ptl_state_base: Pointer to Portals state in host memory
@@ -92,10 +102,19 @@ struct hfi_devdata;
  * @cq_pair_num_assigned: Counter of assigned Command Queues
  * @eq_used: IDR table of allocated Events Queues
  * @eq_lock: Lock for EQ table
+ * @ct_addr - CT size
+ * @ct_size - pointer to the HFI Portal table (RO)
+ * @pt_addr - PT size
+ * @pt_size - PT size
+ * @eq_addr - pointer to the HFI EQ desc table (RO)
+ * @eq_size - EQ size
+ * @eq_head_addr - pointer to the HFI EQ head pointers table (RW)
+ * @eq_head_size - EQ head pointers size
  */
 /* TODO: remove Portals naming references if possible */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
+	u16	pid;
 	u16	ptl_pid;
 	u32	ptl_uid;
 	void	*ptl_state_base;
@@ -117,6 +136,14 @@ struct hfi_ctx {
 	u16	cq_pair_num_assigned;
 	struct idr eq_used;
 	spinlock_t eq_lock;
+	void	*ct_addr;
+	ssize_t	ct_size;
+	void	*pt_addr;
+	ssize_t	pt_size;
+	void	*eq_addr;
+	ssize_t	eq_size;
+	void	*eq_head_addr;
+	ssize_t	eq_head_size;
 };
 
 /*
