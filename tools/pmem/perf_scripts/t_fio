@@ -6,6 +6,7 @@ source common/rc
 : "${runs:=10}"
 : "${time:=30}"
 : "${perf:=0}"
+: "${invalidate:=0}"
 
 perfcmd=
 
@@ -35,7 +36,9 @@ sed $dev_sub $time_sub generic.fio > tmp.fio
 
 for (( i=0; i<$runs; i++ )); do
 	echo "running fio ($i)"
-	drop_caches
+	if [ $invalidate -ne 0 ]; then
+		drop_caches
+	fi
 	$perfcmd fio tmp.fio > ${res}_$i 2>&1
 	sleep 1
 done

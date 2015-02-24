@@ -7,6 +7,7 @@ source common/rc
 : "${runs:=10}"
 : "${flags:=oflag=direct}"
 : "${perf:=0}"
+: "${invalidate:=0}"
 
 perfcmd=
 
@@ -32,7 +33,9 @@ c=$(((2 * 1024 * 1024 * 1024) / $bs))
 
 # gather data
 for (( i=0; i<$runs; i++ )); do
-	drop_caches
+	if [ $invalidate -ne 0 ]; then
+		drop_caches
+	fi
 	$perfcmd dd if=/dev/zero of=$device bs=$bs count=$c $flags > ${res}_$i 2>&1
 	sleep 1
 	cat ${res}_$i | grep copied
