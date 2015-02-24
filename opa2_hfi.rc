@@ -7,7 +7,7 @@
 
 . /etc/rc.d/init.d/functions
 
-opa2_modules="opa2_ib opa2_user opa2_hfi opa_core"
+opa2_modules="opa2_ib opa2_netdev opa2_user opa2_hfi opa_core"
 
 start ()
 {

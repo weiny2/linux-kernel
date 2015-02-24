@@ -106,6 +106,7 @@ install:
 	install opa_core/opa_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install user/opa2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install verbs/opa2_ib.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install vnic/opa2_netdev.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 	depmod -a
 
