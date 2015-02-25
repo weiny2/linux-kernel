@@ -896,6 +896,11 @@ static uint pcie_gen3_retry = 5;
 module_param(pcie_gen3_retry, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_gen3_retry, "Driver will try this many times to reach requested speed");
 
+/* default to p0 as that allows preservation of Gen3 across a reboot */
+static uint pcie_gen3_pset; /* default to p0 */
+module_param(pcie_gen3_pset, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_gen3_pset, "Gen3 Eq Pset value to use, range is 0-10");
+
 /* for testing */
 static uint pcie_gen3_ignore_speed_check;
 module_param(pcie_gen3_ignore_speed_check, uint, S_IRUGO);
@@ -1285,10 +1290,17 @@ retry:
 	/*
 	 * PcieCfgRegPl106 - Gen3 EQ Control
 	 *
-	 * Gen3EqPsetReqVec=0x4
+	 * Set Gen3EqPsetReqVec, leave other fields 0.
 	 */
+	if (pcie_gen3_pset > 10) {	/* valid range is 0-10, inclusive */
+		dd_dev_err(dd, "%s: Invalid Gen3 Eq Pset %u, setting to 0\n",
+			__func__, pcie_gen3_pset);
+		pcie_gen3_pset = 0;
+	}
+	dd_dev_info(dd, "%s: using EQ Pset %u\n", __func__, pcie_gen3_pset);
 	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL106,
-		0x4 << WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
+		(1 << pcie_gen3_pset)
+			<< WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
 
 	/*
 	 * step 5b: Tell the serdes to ignore first EQ preset.
