@@ -853,8 +853,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	struct qib_ibport *ibp;
 	u8 clientrereg;
 	unsigned long flags;
-	u32 stl_lid; /* Temp to hold STL LID values */
-	u16 lid, smlid;
+	u32 smlid, stl_lid; /* tmp vars to hold LID values */
+	u16 lid;
 	u8 ls_old, ls_new, ps_new;
 	u8 vls;
 	u8 msl;
@@ -890,13 +890,13 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	lid = (u16)(stl_lid & 0x0000FFFF);
 
-	stl_lid = be32_to_cpu(pi->sm_lid);
-	if (stl_lid & 0xFFFF0000) {
-		pr_warn("STL_PortInfo SM lid out of range: %X\n", stl_lid);
+	smlid = be32_to_cpu(pi->sm_lid);
+	if (smlid & 0xFFFF0000) {
+		pr_warn("STL_PortInfo SM lid out of range: %X\n", smlid);
 		smp->status |= IB_SMP_INVALID_FIELD;
 		goto get_only;
 	}
-	smlid = (u16)(stl_lid & 0x0000FFFF);
+	smlid &= 0x0000FFFF;
 
 	clientrereg = (pi->clientrereg_subnettimeout &
 			OPA_PI_MASK_CLIENT_REREGISTER);
@@ -908,12 +908,15 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	event.device = ibdev;
 	event.element.port_num = port;
 
+	ls_old = dd->f_iblink_state(ppd);
+
 	ibp->mkey = pi->mkey;
 	ibp->gid_prefix = pi->subnet_prefix;
 	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
 
 	/* Must be a valid unicast LID address. */
-	if (lid == 0 || lid >= QIB_MULTICAST_LID_BASE) {
+	if ((lid == 0 && ls_old > IB_PORT_INIT) ||
+	     lid >= QIB_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		pr_warn("SubnSet(STL_PortInfo) lid invalid 0x%x\n",
 			lid);
@@ -936,7 +939,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT)
 		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
 	/* Must be a valid unicast LID address. */
-	if (smlid == 0 || smlid >= QIB_MULTICAST_LID_BASE) {
+	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
+	     smlid >= QIB_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		pr_warn("SubnSet(STL_PortInfo) smlid invalid 0x%x\n", smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
@@ -1065,8 +1069,6 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ppd->is_active_optimize_enabled =
 			!!(be16_to_cpu(pi->port_mode)
 					& OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE);
-
-	ls_old = dd->f_iblink_state(ppd);
 
 	ls_new = pi->port_states.portphysstate_portstate &
 			OPA_PI_MASK_PORT_STATE;

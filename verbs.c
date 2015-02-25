@@ -2000,7 +2000,7 @@ static void init_ibport(struct qib_pportdata *ppd)
 	spin_lock_init(&ibp->lock);
 	/* Set the prefix to the default value (see ch. 4.1.1) */
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
-	ibp->sm_lid = be16_to_cpu(IB_LID_PERMISSIVE);
+	ibp->sm_lid = be16_to_cpu(0);
 	ibp->port_cap_flags = IB_PORT_SYS_IMAGE_GUID_SUP |
 		IB_PORT_CLIENT_REG_SUP | IB_PORT_SL_MAP_SUP |
 		IB_PORT_TRAP_SUP | IB_PORT_AUTO_MIGR_SUP |
