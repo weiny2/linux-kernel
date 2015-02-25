@@ -1112,16 +1112,6 @@ static int btt_getgeo(struct block_device *bd, struct hd_geometry *geo)
 	return 0;
 }
 
-static int btt_rw_page(struct block_device *bdev, sector_t sector,
-		       struct page *page, int rw)
-{
-	struct btt *btt = bdev->bd_disk->private_data;
-
-	btt_do_bvec(btt, page, PAGE_CACHE_SIZE, 0, rw, sector);
-	page_endio(page, rw & WRITE, 0);
-	return 0;
-}
-
 static const struct block_device_operations btt_fops = {
 	.owner =		THIS_MODULE,
 	/* TODO: Disable rw_page till lazy init is reworked */
