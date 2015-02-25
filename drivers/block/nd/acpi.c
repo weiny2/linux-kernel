@@ -337,7 +337,7 @@ static int nd_acpi_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 	else
 		rc = 0;
 
-	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++)
+	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_VENDOR; i++)
 		if (acpi_check_dsm(acpi_dimm->handle, uuid, 1, 1ULL << i))
 			set_bit(i, &dsm_mask);
 	nd_dimm_set_dsm_mask(nd_dimm, dsm_mask);
