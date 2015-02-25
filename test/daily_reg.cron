@@ -1,0 +1,114 @@
+#!/bin/bash
+
+#Simple script to be run by cron to do FPGA regression runs
+
+mode=$1
+host1=$2
+host2=$3
+
+# First reboot the hosts to get rid of anything that is fouled up
+echo "Rebooting $host1 and $host2"
+ssh root@$host1 'reboot'&
+ssh root@$host2 'reboot'&
+
+echo "Giving reboot a minute to take effect"
+sleep 60
+
+# no one should be up yet if so they probably did not reboot
+ping -c 1 -t 3 $host1
+if [ $? -eq 0 ]; then
+	echo "$host1 never rebooted, power cycling"
+	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host1"
+fi
+
+ping -c 1 -t 3 $host2
+if [ $? -eq 0 ]; then
+	echo "$host1 never rebooted, power cycling"
+	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host2"
+fi
+
+echo "Waiting for $host1 to reboot"
+attempts=0
+host1_up=0
+host2_up=0
+while [ $attempts -lt 5 ]; do
+	ping -c 1 -t 3 $host1
+	if [ $? -eq 0 ]; then
+		let host1_up=1
+		break
+	fi
+	let attempts=attempts+1
+	echo "$host1 not up yet waiting 1 minute and trying again"
+	sleep 60
+done
+
+echo "Checking $host2"
+# wait a couple minutes more for host2 to come up
+while [ $attempts -lt 7 ]; do
+	ping -c 1 -t 3 $host2
+	if [ $? -eq 0 ]; then
+		let host2_up=1
+		break
+	fi
+	let attempts=attempts+1
+	echo "$host2 not up yet waiting 1 minute and trying again"
+	sleep 60
+done
+
+# if host did not come up then hammer them
+if [ $host1_up -eq 0 ]; then
+	echo "$host1 did not come up power cycling"
+	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host1"
+fi
+
+if [ $host2_up -eq 0 ]; then
+	echo "$host2 did not come up power cycling"
+	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host2"
+fi
+
+let attempts=0
+let host1_up=0
+let host2_up=0
+# check the nodes again if they are already up this will be one ping and done
+# otherwise we need to wait
+while [ $attempts -lt 5 ]; do
+	ping -c 1 -t 3 $host1
+	if [ $? -eq 0 ]; then
+		let host1_up=1
+		break
+	fi
+	let attempts=attempts+1
+	echo "$host1 not up yet waiting 1 minute and trying again"
+	sleep 60
+done
+
+echo "Checking $host2"
+# wait a couple minutes more for host2 to come up
+while [ $attempts -lt 7 ]; do
+	ping -c 1 -t 3 $host2
+	if [ $? -eq 0 ]; then
+		let host2_up=1
+		break
+	fi
+	let attempts=attempts+1
+	echo "$host2 not up yet waiting 1 minute and trying again"
+	sleep 60
+done
+
+# if host did not come up then hammer them
+if [ $host1_up -eq 0 ]; then
+	echo "$host1 never came up. Bailing"
+	exit 1
+fi
+
+if [ $host2_up -eq 0 ]; then
+	echo "$host2 never came up. Bailing"
+	exit 1
+fi
+
+./harness.py --type $mode --nodelist $host1,$host2
+
+# Reboot and hope for the best no need to wait around.
+ssh root@$host1 'reboot'&
+ssh root@$host2 'reboot'&
+
