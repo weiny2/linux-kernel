@@ -161,12 +161,13 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
 		unsigned int buf_len)
 {
+	struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
 	union acpi_object in_obj, in_buf, *out_obj;
 	const struct nfit_cmd_desc *desc = NULL;
+	struct device *dev = &nfit->dev->dev;
+	const char *cmd_name, *dimm_name;
 	unsigned long dsm_mask;
-	const char *cmd_name;
 	acpi_handle handle;
-	struct device *dev;
 	u32 offset;
 	int rc, i;
 	u8 *uuid;
@@ -179,18 +180,16 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 		cmd_name = nfit_dimm_cmd_name(cmd);
 		dsm_mask = nd_dimm_get_dsm_mask(nd_dimm);
 		handle = adev->handle;
-		dev = &adev->dev;
 		uuid = nd_acpi_dimm_uuid();
+		dimm_name = dev_name(&adev->dev);
 	} else {
-		struct acpi_nfit *nfit = to_acpi_nfit(nfit_desc);
-
 		if (cmd < ARRAY_SIZE(nfit_acpi_descs))
 			desc = &nfit_acpi_descs[cmd];
 		cmd_name = nfit_bus_cmd_name(cmd);
 		dsm_mask = nfit_desc->dsm_mask;
 		handle = nfit->dev->handle;
-		dev = &nfit->dev->dev;
 		uuid = nd_acpi_bus_uuid();
+		dimm_name = "bus";
 	}
 
 	if (!desc || (cmd && (desc->out_num + desc->in_num == 0)))
@@ -217,19 +216,19 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 
 		in_size = to_cmd_in_size(cmd, desc, i, buf);
 		if (in_size == UINT_MAX) {
-			dev_err(dev, "%s: unknown input size cmd: %s field: %d\n",
-					__func__, cmd_name, i);
+			dev_err(dev, "%s:%s unknown input size cmd: %s field: %d\n",
+					__func__, dimm_name, cmd_name, i);
 			return -ENXIO;
 		}
 		in_buf.buffer.length += in_size;
 		if (in_buf.buffer.length > buf_len) {
-			dev_err(dev, "%s: input underrun cmd: %s field: %d\n",
-					__func__, cmd_name, i);
+			dev_err(dev, "%s:%s input underrun cmd: %s field: %d\n",
+					__func__, dimm_name, cmd_name, i);
 			return -ENXIO;
 		}
 	}
 
-	dev_dbg(dev, "%s: cmd: %s input length: %d\n", __func__,
+	dev_dbg(dev, "%s:%s cmd: %s input length: %d\n", __func__, dimm_name,
 			cmd_name, in_buf.buffer.length);
 	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
 		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
@@ -238,19 +237,19 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 
 	out_obj = acpi_evaluate_dsm(handle, uuid, 1, cmd, &in_obj);
 	if (!out_obj) {
-		dev_dbg(dev, "%s: _DSM failed cmd: %s\n", __func__,
+		dev_dbg(dev, "%s:%s _DSM failed cmd: %s\n", __func__, dimm_name,
 				cmd_name);
 		return -EINVAL;
 	}
 
 	if (out_obj->package.type != ACPI_TYPE_BUFFER) {
-		dev_dbg(dev, "%s: unexpected output object type cmd: %s type: %d\n",
-				__func__, cmd_name, out_obj->type);
+		dev_dbg(dev, "%s:%s unexpected output object type cmd: %s type: %d\n",
+				__func__, dimm_name, cmd_name, out_obj->type);
 		rc = -EINVAL;
 		goto out;
 	}
 
-	dev_dbg(dev, "%s: cmd: %s output length: %d\n", __func__,
+	dev_dbg(dev, "%s:%s cmd: %s output length: %d\n", __func__, dimm_name,
 			cmd_name, out_obj->buffer.length);
 	if (IS_ENABLED(CONFIG_NFIT_ACPI_DEBUG))
 		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
@@ -262,20 +261,20 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 				out_obj->buffer.length, offset);
 
 		if (out_size == UINT_MAX) {
-			dev_dbg(dev, "%s: unknown output size cmd: %s field: %d\n",
-					__func__, cmd_name, i);
+			dev_dbg(dev, "%s:%s unknown output size cmd: %s field: %d\n",
+					__func__, dimm_name, cmd_name, i);
 			break;
 		}
 
 		if (offset + out_size > out_obj->buffer.length) {
-			dev_dbg(dev, "%s: output object underflow cmd: %s field: %d\n",
-					__func__, cmd_name, i);
+			dev_dbg(dev, "%s:%s output object underflow cmd: %s field: %d\n",
+					__func__, dimm_name, cmd_name, i);
 			break;
 		}
 
 		if (in_buf.buffer.length + offset + out_size > buf_len) {
-			dev_dbg(dev, "%s: output overrun cmd: %s field: %d\n",
-					__func__, cmd_name, i);
+			dev_dbg(dev, "%s:%s output overrun cmd: %s field: %d\n",
+					__func__, dimm_name, cmd_name, i);
 			rc = -ENXIO;
 			goto out;
 		}
@@ -291,8 +290,8 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 			 */
 			rc = buf_len - offset;
 		} else {
-			dev_err(dev, "%s: underrun cmd: %s buf_len: %d out_len: %d\n",
-					__func__, cmd_name, buf_len, offset);
+			dev_err(dev, "%s:%s underrun cmd: %s buf_len: %d out_len: %d\n",
+					__func__, dimm_name, cmd_name, buf_len, offset);
 			rc = -ENXIO;
 		}
 	} else
