@@ -572,6 +572,23 @@ static const struct attribute_group *nd_dimm_attribute_groups[] = {
 	NULL,
 };
 
+/**
+ * nd_dimm_firmware_status - retrieve NFIT-specific state of the dimm
+ * @dev: dimm device to interrogate
+ *
+ * At init time as the NFIT parsing code discovers DIMMs (memdevs) it
+ * validates the state of those devices against the NFIT provider.  It
+ * is possible that an NFIT entry exists for the DIMM but the device is
+ * disabled.  In that case we will still create an nd_dimm, but prevent
+ * it from binding to its driver.
+ */
+int nd_dimm_firmware_status(struct device *dev)
+{
+	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+
+	return nd_dimm->nfit_status;
+}
+
 static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 		struct nd_mem *nd_mem)
 {
@@ -605,11 +622,7 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	dev->groups = nd_dimm_attribute_groups;
 	dev->devt = MKDEV(nd_dimm_major, nd_dimm->id);
 	if (nfit_desc->add_dimm)
-		if (nfit_desc->add_dimm(nfit_desc, nd_dimm) != 0) {
-			device_initialize(dev);
-			put_device(dev);
-			return NULL;
-		}
+		nd_dimm->nfit_status = nfit_desc->add_dimm(nfit_desc, nd_dimm);
 
 	nd_device_register(dev);
 

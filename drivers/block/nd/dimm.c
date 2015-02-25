@@ -20,6 +20,10 @@
 #include "label.h"
 #include "nd.h"
 
+static bool force_enable_dimms;
+module_param(force_enable_dimms, bool, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(force_enable_dimms, "Ignore DIMM NFIT/firmware status");
+
 struct block_window	*bw;
 #define NUM_BW		256
 static phys_addr_t	bw_apt_phys	= 0xf000a00000;
@@ -156,6 +160,13 @@ static int nd_dimm_probe(struct device *dev)
 {
 	struct nd_dimm_drvdata *ndd;
 	int rc;
+
+	rc = nd_dimm_firmware_status(dev);
+	if (rc < 0) {
+		dev_info(dev, "disabled by firmware: %d\n", rc);
+		if (!force_enable_dimms)
+			return rc;
+	}
 
 	ndd = kzalloc(sizeof(*ndd), GFP_KERNEL);
 	if (!ndd)

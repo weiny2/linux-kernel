@@ -244,4 +244,5 @@ bool is_acpi_blk(struct device *dev);
 resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk);
 int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd);
 int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd);
+int nd_dimm_firmware_status(struct device *dev);
 #endif /* __ND_H__ */

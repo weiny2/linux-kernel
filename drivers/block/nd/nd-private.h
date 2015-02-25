@@ -64,7 +64,7 @@ struct nd_dimm {
 	struct nd_mem *nd_mem;
 	struct device dev;
 	void *provider_data;
-	int id;
+	int id, nfit_status;
 	struct nd_dimm_delete {
 		struct nd_bus *nd_bus;
 		struct nd_mem *nd_mem;

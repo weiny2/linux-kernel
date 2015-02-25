@@ -337,15 +337,12 @@ static int nd_acpi_add_dimm(struct nfit_bus_descriptor *nfit_desc,
 	else
 		rc = 0;
 
-	if (rc)
-		return rc;
-
 	for (i = NFIT_CMD_SMART; i <= NFIT_CMD_SMART_THRESHOLD; i++)
 		if (acpi_check_dsm(acpi_dimm->handle, uuid, 1, 1ULL << i))
 			set_bit(i, &dsm_mask);
 	nd_dimm_set_dsm_mask(nd_dimm, dsm_mask);
 	nd_dimm_set_pdata(nd_dimm, acpi_dimm);
-	return 0;
+	return rc;
 }
 
 static int nd_acpi_add(struct acpi_device *dev)
