@@ -689,8 +689,12 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	total_len = pkt_len + 2; /* PBC + packet */
 
 	/* if 0, fill in a default */
-	if (dp->pbc == 0)
+	if (dp->pbc == 0) {
+		hfi_cdbg(PKT, "Generating PBC");
 		dp->pbc = create_pbc(0, 0, 0, total_len);
+	} else {
+		hfi_cdbg(PKT, "Using passed in PBC");
+	}
 
 	hfi_cdbg(PKT, "Egress PBC content is 0x%llx", dp->pbc);
 
@@ -708,7 +712,6 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 		dp->pbc |= WFR_PBC_CREDIT_RETURN;
 		/* turn on credit return interrupts */
 		sc_add_credit_return_intr(sc);
-
 		wait = kmalloc(sizeof(*wait), GFP_KERNEL);
 		if (!wait) {
 			ret = -ENOMEM;
@@ -1298,7 +1301,8 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 	struct diag_pkt dpkt;
 	struct hfi_devdata *dd;
 	size_t ret;
-	u8 byte_two, sl, sc, vl;
+	u8 byte_two, sl, sc5, sc4, vl, byte_one;
+	struct send_context *sc;
 	u32 len;
 	u64 pbc;
 	struct qib_ibport *ibp;
@@ -1310,7 +1314,6 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 	snoop_dbg("received %lu bytes from user\n", count);
 
 	memset(&dpkt, 0, sizeof(struct diag_pkt));
-	dpkt.context = 0; /* throw everything out send context 0 for now */
 	dpkt.version = _DIAG_PKT_VERS;
 	dpkt.unit = dd->unit;
 	dpkt.len = count;
@@ -1321,18 +1324,47 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 	 * We need to generate the PBC and not let diagpkt_send do it,
 	 * to do this we need the VL and the length in dwords. The VL can be
 	 * determined by using the SL and looking up the SC. Then the SC can be
-	 * converted into VL.
+	 * converted into VL. The exception to this is those packets which are
+	 * from an SMI queue pair. Since we can't detect anything about the QP
+	 * here we have to rely on the SC. If its 0xF then we assume its SMI and
+	 * do not look at the SL.
 	 */
+	if (copy_from_user(&byte_one, data, 1))
+		return -EINVAL;
+
 	if (copy_from_user(&byte_two, data+1, 1))
 		return -EINVAL;
 
-	sl = (byte_two >> 4) & 0xf;
-	ibp = to_iport(&(dd->verbs_dev.ibdev), 1);
-	sc = ibp->sl_to_sc[sl];
-	vl = sc_to_vlt(dd, sc);
+	sc4 = (byte_one >> 4) & 0xf;
+	if (sc4 == 0xF) {
+		snoop_dbg("Detected VL15 packet ignoring SL in packet");
+		vl = sc4;
+	} else {
+		sl = (byte_two >> 4) & 0xf;
+		ibp = to_iport(&(dd->verbs_dev.ibdev), 1);
+		sc5 = ibp->sl_to_sc[sl];
+		vl = sc_to_vlt(dd, sc5);
+		if (vl != sc4) {
+			snoop_dbg("VL %d does not match SC %d of packet",
+				  vl, sc4);
+			return -EINVAL;
+		}
+	}
+
+	sc = dd->vld[vl].sc; /* Look up the context based on VL */
+	if (sc != NULL) {
+		dpkt.context = sc->context;
+		snoop_dbg("Sending on context %d", sc->context);
+	} else {
+		snoop_dbg("Could not find context for vl %d", vl);
+		return -EINVAL;
+	}
 
 	len = (count >> 2) + 2; /* Add in PBC */
 	pbc = create_pbc(0, 0, vl, len);
+	snoop_dbg("PBC: vl=0x%llx Length=0x%llx",
+		 (pbc >> 12) & 0xf,
+		 (pbc & 0xfff));
 	dpkt.pbc = pbc;
 	ret = diagpkt_send(&dpkt);
 	/*
