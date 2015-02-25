@@ -1124,7 +1124,8 @@ static int btt_rw_page(struct block_device *bdev, sector_t sector,
 
 static const struct block_device_operations btt_fops = {
 	.owner =		THIS_MODULE,
-	.rw_page =		btt_rw_page,
+	/* TODO: Disable rw_page till lazy init is reworked */
+	/*.rw_page =		btt_rw_page, */
 	.getgeo =		btt_getgeo,
 };
 
