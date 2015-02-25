@@ -56,9 +56,14 @@
 #include <rdma/fxr/fxr_rx_ci_csrs.h>
 #include <rdma/fxr/fxr_rx_hiarb_defs.h>
 #include <rdma/fxr/fxr_rx_hiarb_csrs.h>
+#include <rdma/fxr/fxr_rx_hp_defs.h>
+#include <rdma/fxr/fxr_rx_hp_csrs.h>
 #include <rdma/fxr/fxr_linkmux_defs.h>
 #include <rdma/fxr/fxr_lm_csrs.h>
 #include "opa_hfi.h"
+
+/* TODO - should come from HW headers */
+#define FXR_CACHE_CMD_INVALIDATE 0x8
 
 /* TODO - for now, start FXR in loopback */
 static uint force_loopback = 1;
@@ -240,13 +245,20 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 {
 	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
 	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
+	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
 
 	/* write PCB_LOW first to clear valid bit */
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
-	/* TODO - write fake FXR simics CSR to invalidate cached PT */
-	#define HFI_HP_PT_CACHE_CTRL 0x2210000
-	write_csr(dd, HFI_HP_PT_CACHE_CTRL, 1);
+
+	/* invalidate cached host memory in HFI for Portals Tables */
+	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	/* address and mask is 22 bits (PID in upper 12-bits) */
+	/* TODO - consider using pte_cache_addr_t here, when in HW headers */
+	pte_cache_access.field.address = ptl_pid << 10;
+	pte_cache_access.field.mask_address = 0x3FF;
+	write_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL, pte_cache_access.val);
+	/* TODO - above incomplete, deferred processing needs to wait for .ack bit */
 }
 
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid, int phys)
