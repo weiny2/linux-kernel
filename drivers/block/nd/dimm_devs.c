@@ -159,7 +159,6 @@ static int __validate_dimm(struct nd_dimm_drvdata *ndd)
 {
 	struct nd_bus *nd_bus;
 	struct nd_dimm *nd_dimm;
-	struct nfit_mem __iomem *nfit_mem;
 	struct nfit_dcr __iomem *nfit_dcr;
 	struct nfit_bus_descriptor *nfit_desc;
 
@@ -174,9 +173,11 @@ static int __validate_dimm(struct nd_dimm_drvdata *ndd)
 		return -ENXIO;
 
 	nfit_dcr = nd_dimm->nd_mem->nfit_dcr;
-	if (!nfit_dcr || nfit_dcr_fic(nfit_desc, nfit_dcr) != NFIT_FIC)
+	if (!nfit_dcr)
 		return -ENODEV;
-	nfit_mem = nd_dimm->nd_mem->nfit_mem;
+	else if (nfit_dcr_fic(nfit_desc, nfit_dcr) != NFIT_FIC
+			&& nfit_dcr_fic(nfit_desc, nfit_dcr) != 1)
+		return -ENODEV;
 	return 0;
 }
 
