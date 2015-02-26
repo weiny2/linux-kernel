@@ -73,10 +73,11 @@ MODULE_PARM_DESC(cu, "Credit return units");
 
 unsigned long hfi_cap_mask = HFI_CAP_MASK_DEFAULT;
 static int hfi_caps_set(const char *, const struct kernel_param *);
+static int hfi_caps_get(char *, const struct kernel_param *);
 static const struct kernel_param_ops cap_ops = {
 	.flags = 0,
 	.set = hfi_caps_set,
-	.get = param_get_ulong,
+	.get = hfi_caps_get
 };
 module_param_cb(cap_mask, &cap_ops, &hfi_cap_mask, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(cap_mask, "Bit mask of enabled/disabled HW features");
@@ -181,10 +182,10 @@ struct qlogic_ib_stats qib_stats;
 static int hfi_caps_set(const char *val, const struct kernel_param *kp)
 {
 	int ret = 0;
-	unsigned long *cap_mask = (unsigned long *)kp->arg,
-		value, diff, write_mask =
-		((HFI_CAP_WRITABLE_MASK << HFI_CAP_USER_SHIFT) |
-		 HFI_CAP_WRITABLE_MASK);
+	unsigned long *cap_mask_ptr = (unsigned long *)kp->arg,
+		cap_mask = *cap_mask_ptr, value, diff,
+		write_mask = ((HFI_CAP_WRITABLE_MASK << HFI_CAP_USER_SHIFT) |
+			      HFI_CAP_WRITABLE_MASK);
 
 	ret = kstrtoul(val, 0, &value);
 	if (ret) {
@@ -192,7 +193,7 @@ static int hfi_caps_set(const char *val, const struct kernel_param *kp)
 		goto done;
 	}
 	/* Get the changed bits (except the locked bit) */
-	diff = value ^ (*cap_mask & ~HFI_CAP_LOCKED_SMASK);
+	diff = value ^ (cap_mask & ~HFI_CAP_LOCKED_SMASK);
 
 	/* Remove any bits that are not allowed to change after driver load */
 	if (HFI_CAP_LOCKED() && (diff & ~write_mask)) {
@@ -204,11 +205,27 @@ static int hfi_caps_set(const char *val, const struct kernel_param *kp)
 	/* Mask off any reserved bits */
 	diff &= ~HFI_CAP_RESERVED_MASK;
 	/* Clear any previously set and changing bits */
-	*cap_mask &= ~diff;
-	/* Set the new capability bits */
-	*cap_mask |= (value & diff);
+	cap_mask &= ~diff;
+	/* Update the bits with the new capability */
+	cap_mask |= (value & diff);
+	/* Check for any kernel/user restrictions */
+	diff = (cap_mask & (HFI_CAP_MUST_HAVE_KERN << HFI_CAP_USER_SHIFT)) ^
+		((cap_mask & HFI_CAP_MUST_HAVE_KERN) << HFI_CAP_USER_SHIFT);
+	cap_mask &= ~diff;
+	/* Set the bitmask to the final set */
+	*cap_mask_ptr = cap_mask;
 done:
 	return ret;
+}
+
+static int hfi_caps_get(char *buffer, const struct kernel_param *kp)
+{
+	unsigned long cap_mask = *(unsigned long *)kp->arg;
+
+	cap_mask &= ~HFI_CAP_LOCKED_SMASK;
+	cap_mask |= ((cap_mask & HFI_CAP_K2U) << HFI_CAP_USER_SHIFT);
+
+	return scnprintf(buffer, PAGE_SIZE, "%lu", cap_mask);
 }
 
 #if HFI_COMPAT_MODPARAMS

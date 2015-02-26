@@ -130,10 +130,15 @@
 				  HFI_CAP_USE_SDMA_HEAD |		\
 				  HFI_CAP_EXTENDED_PSN |		\
 				  HFI_CAP_PRINT_UNIMPL |		\
-				 HFI_CAP_QSFP_ENABLED |			\
+				  HFI_CAP_QSFP_ENABLED |		\
 				  HFI_CAP_NO_INTEGRITY |		\
 				  HFI_CAP_PKEY_CHECK) <<		\
 				 HFI_CAP_USER_SHIFT)
+/*
+ * Set of capabilities that need to be enabled for kernel context in
+ * order to be allowed for user contexts, as well.
+ */
+#define HFI_CAP_MUST_HAVE_KERN (HFI_CAP_STATIC_RATE_CTRL)
 /* Default enabled capabilities (both kernel and user) */
 #define HFI_CAP_MASK_DEFAULT    (HFI_CAP_HDRSUPP |			\
 				 HFI_CAP_NODROP_RHQ_FULL |		\
@@ -145,7 +150,6 @@
 				 HFI_CAP_PKEY_CHECK |			\
 				 HFI_CAP_MULTI_PKT_EGR |		\
 				 ((HFI_CAP_HDRSUPP |			\
-				   HFI_CAP_STATIC_RATE_CTRL |		\
 				   HFI_CAP_MULTI_PKT_EGR) <<		\
 				  HFI_CAP_USER_SHIFT))
 /*
