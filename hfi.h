@@ -73,6 +73,7 @@
 #include "chip.h"
 #include "mad.h"
 #include "qsfp.h"
+#include "platform_config.h"
 
 /* bumped 1 from s/w major version of TrueScale */
 #define HFI1_CHIP_VERS_MAJ 3U
@@ -956,8 +957,7 @@ struct hfi1_devdata {
 	u16 rhf_offset; /* offset of RHF within receive header entry */
 	u16 irev;	/* implementation revision */
 
-	u8 board_atten;
-
+	struct platform_config_cache pcfg_cache;
 	/* control high-level access to qsfp */
 	struct mutex qsfp_i2c_mutex;
 
@@ -1527,6 +1527,10 @@ void hfi1_enable_intx(struct pci_dev *);
 void hfi1_nomsix(struct hfi1_devdata *);
 void restore_pci_variables(struct hfi1_devdata *dd);
 int do_pcie_gen3_transition(struct hfi1_devdata *dd);
+int parse_platform_config(struct hfi1_devdata *dd);
+int get_platform_config_field(struct hfi1_devdata *dd,
+			enum platform_config_table_type_encoding table_type,
+			int table_index, int field_index, u32 *data, u32 len);
 
 dma_addr_t hfi1_map_page(struct pci_dev *, struct page *, unsigned long,
 			 size_t, int);

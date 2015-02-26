@@ -10344,6 +10344,8 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	/* start setting dd values and adjusting CSRs */
 	init_early_variables(dd);
 
+	parse_platform_config(dd);
+
 	/* add board names as they are defined */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
 	if (!dd->boardname)
