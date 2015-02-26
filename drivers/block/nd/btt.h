@@ -80,6 +80,13 @@ struct free_entry {
 	u8 seq;
 };
 
+struct aligned_lock {
+	union {
+		spinlock_t lock;
+		u8 cacheline_padding[L1_CACHE_BYTES];
+	};
+};
+
 /**
  * struct arena_info - handle for an arena
  * @size:		Size in bytes this arena occupies on the raw device.
@@ -105,7 +112,7 @@ struct free_entry {
  * @info2off:		Offset in bytes to the backup info block of this arena.
  * @freelist:		Pointer to in-memory list of free blocks
  * @rtt:		Pointer to in-memory "Read Tracking Table"
- * @map_lock:		Spinlock protecting concurrent map writes
+ * @map_locks:		Spinlocks protecting concurrent map writes
  * @nd_btt:		Pointer to parent nd_btt structure.
  * @list:		List head for list of arenas
  * @debugfs_dir:	Debugfs dentry
@@ -134,7 +141,7 @@ struct arena_info {
 	/* Pointers to other in-memory structures for this arena */
 	struct free_entry *freelist;
 	u32 *rtt;
-	spinlock_t *map_lock;
+	struct aligned_lock *map_locks;
 	struct nd_btt *nd_btt;
 	struct list_head list;
 	struct dentry *debugfs_dir;
@@ -154,9 +161,8 @@ struct arena_info {
  * 			after removing the amount of space needed by metadata
  * @rawsize:		Total size in bytes of the available backing device
  * @lbasize:		LBA size as requested and presented to upper layers
- * @lane_lock:		Per-lane spinlock
+ * @lanes:		Per-lane spinlocks
  * @init_lock:		Mutex used for the BTT initialization
- * @last_lane:		Atomic counter used to select lane
  * @init_state:		Flag describing the initialization state for the BTT
  * @num_arenas:		Number of arenas in the BTT instance
  * @num_lanes:		Number of lanes available for IOs
@@ -171,9 +177,8 @@ struct btt {
 	u64 nlba;
 	size_t rawsize;
 	u32 lbasize;
-	spinlock_t *lane_lock;
+	struct aligned_lock *lanes;
 	struct mutex init_lock;
-	atomic_t last_lane;
 	int init_state;
 	int num_arenas;
 	u32 num_lanes;

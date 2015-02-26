@@ -428,13 +428,13 @@ static int btt_maplocks_init(struct arena_info *arena)
 {
 	u32 i;
 
-	arena->map_lock = kmalloc(arena->nfree * sizeof(spinlock_t),
+	arena->map_locks = kmalloc(arena->nfree * sizeof(struct aligned_lock),
 				GFP_KERNEL);
-	if (!arena->map_lock)
+	if (!arena->map_locks)
 		return -ENOMEM;
 
 	for (i = 0; i < arena->nfree; i++)
-		spin_lock_init(&arena->map_lock[i]);
+		spin_lock_init(&arena->map_locks[i].lock);
 
 	return 0;
 }
@@ -498,7 +498,7 @@ static void free_arenas(struct btt *btt)
 	list_for_each_entry_safe(arena, next, &btt->arena_list, list) {
 		list_del(&arena->list);
 		kfree(arena->rtt);
-		kfree(arena->map_lock);
+		kfree(arena->map_locks);
 		kfree(arena->freelist);
 		debugfs_remove_recursive(arena->debugfs_dir);
 		kfree(arena);
@@ -794,18 +794,30 @@ static int lba_to_arena(struct btt *btt, sector_t sector, __u32 *premap,
 	return -EIO;
 }
 
+static int btt_num_possible_cpus;
+
 /*
  * This function acquires a lane, and will block till one is available.
  */
-static void acquire_lane(struct btt *btt, u32 *lane)
+static unsigned int acquire_lane(struct btt *btt)
 {
-	*lane = atomic_inc_return(&(btt->last_lane)) % btt->num_lanes;
-	spin_lock(&(btt->lane_lock[*lane]));
+	unsigned int lane;
+
+	lane = get_cpu();
+
+	if (btt->num_lanes < btt_num_possible_cpus) {
+		lane = lane % btt->num_lanes;
+		spin_lock(&(btt->lanes[lane].lock));
+	}
+
+	return lane;
 }
 
-static void release_lane(struct btt *btt, u32 lane)
+static void release_lane(struct btt *btt, unsigned int lane)
 {
-	spin_unlock(&(btt->lane_lock[lane]));
+	if (btt->num_lanes < btt_num_possible_cpus)
+		spin_unlock(&(btt->lanes[lane].lock));
+	put_cpu();
 }
 
 /*
@@ -814,12 +826,12 @@ static void release_lane(struct btt *btt, u32 lane)
  */
 static void lock_map(struct arena_info *arena, u32 idx)
 {
-	spin_lock(&arena->map_lock[idx]);
+	spin_lock(&arena->map_locks[idx].lock);
 }
 
 static void unlock_map(struct arena_info *arena, u32 idx)
 {
-	spin_unlock(&arena->map_lock[idx]);
+	spin_unlock(&arena->map_locks[idx].lock);
 }
 
 static u64 to_namespace_offset(struct arena_info *arena, u64 lba)
@@ -872,7 +884,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 	while (len) {
 		u32 cur_len;
 
-		acquire_lane(btt, &lane);
+		lane = acquire_lane(btt);
 
 		ret = lba_to_arena(btt, sector, &premap, &arena);
 		if (ret)
@@ -903,6 +915,11 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 			}
 
 			arena->rtt[lane] = RTT_VALID | postmap;
+			/*
+			 * Barrier to make sure this write is not reordered
+			 * to do the verification map_read before the RTT store
+			 */
+			barrier();
 
 			ret = btt_map_read(arena, premap, &new_map, &t_flag,
 						&e_flag);
@@ -948,7 +965,7 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
 	while (len) {
 		u32 cur_len;
 
-		acquire_lane(btt, &lane);
+		lane = acquire_lane(btt);
 
 		ret = lba_to_arena(btt, sector, &premap, &arena);
 		if (ret)
@@ -965,7 +982,8 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
 		/* Wait if the new block is being read from */
 		for (i = 0; i < arena->nfree; i++)
 			while (arena->rtt[i] == (RTT_VALID | new_postmap))
-				;
+				cpu_relax();
+
 
 		if (new_postmap >= arena->internal_nlba) {
 			ret = -EIO;
@@ -1092,13 +1110,13 @@ static int lane_locks_init(struct btt *btt)
 {
 	u32 i;
 
-	btt->lane_lock = kmalloc(btt->num_lanes * sizeof(spinlock_t),
+	btt->lanes = kmalloc(btt->num_lanes * sizeof(struct aligned_lock),
 				GFP_KERNEL);
-	if (!btt->lane_lock)
+	if (!btt->lanes)
 		return -ENOMEM;
 
 	for (i = 0; i < btt->num_lanes; i++)
-		spin_lock_init(&btt->lane_lock[i]);
+		spin_lock_init(&btt->lanes[i].lock);
 
 	return 0;
 }
@@ -1200,6 +1218,7 @@ static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
 	btt->num_lanes = maxlane;
 	INIT_LIST_HEAD(&btt->arena_list);
 	mutex_init(&btt->init_lock);
+	btt_num_possible_cpus = num_possible_cpus();
 
 	ret = discover_arenas(btt);
 	if (ret) {
@@ -1250,7 +1269,7 @@ static void btt_fini(struct btt *btt)
 {
 	if (btt) {
 		btt_blk_cleanup(btt);
-		kfree(btt->lane_lock);
+		kfree(btt->lanes);
 		free_arenas(btt);
 		debugfs_remove_recursive(btt->debugfs_dir);
 		kfree(btt);
