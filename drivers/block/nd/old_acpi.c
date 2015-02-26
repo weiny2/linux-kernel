@@ -20,7 +20,7 @@
 #include "dsm.h" /* nd_manual_dsm */
 #include "nd.h"
 
-unsigned long force_dsm = 0;
+unsigned long force_dsm = 0x270;
 module_param(force_dsm, long, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_dsm, "Force enable ACPI DSMs");
 
