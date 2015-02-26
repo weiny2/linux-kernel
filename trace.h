@@ -800,25 +800,44 @@ TRACE_EVENT(hfi_sdma_progress,
 	TP_ARGS(sde, hwhead, swhead, txp),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(sde->dd)
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+		__field(u64, sn)
+#endif
 		__field(u16, hwhead)
 		__field(u16, swhead)
 		__field(u16, txnext)
+		__field(u16, tx_tail)
+		__field(u16, tx_head)
 		__field(u8, idx)
 	),
 	TP_fast_assign(
 		DD_DEV_ASSIGN(sde->dd);
 		__entry->hwhead = hwhead;
 		__entry->swhead = swhead;
+		__entry->tx_tail = sde->tx_tail;
+		__entry->tx_head = sde->tx_head;
 		__entry->txnext = txp ? txp->next_descq_idx : ~0;
 		__entry->idx = sde->this_idx;
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+		__entry->sn = txp ? txp->sn : ~0;
+#endif
 	),
 	TP_printk(
-		"[%s] SDE(%u) hwhead %u swhead %u next_descq_idx %u",
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+		"[%s] SDE(%u) sn %llu hwhead %u swhead %u next_descq_idx %u tx_head %u tx_tail %u",
+#else
+		"[%s] SDE(%u) hwhead %u swhead %u next_descq_idx %u tx_head %u tx_tail %u",
+#endif
 		__get_str(dev),
 		__entry->idx,
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+		__entry->sn,
+#endif
 		__entry->hwhead,
 		__entry->swhead,
-		__entry->txnext
+		__entry->txnext,
+		__entry->tx_head,
+		__entry->tx_tail
 	)
 );
 
@@ -1061,24 +1080,24 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 TRACE_EVENT(hfi_sdma_state,
 	TP_PROTO(
 		struct sdma_engine *sde,
-		const char *curstate,
-		const char *curevent
+		const char *cstate,
+		const char *nstate
 	),
-	TP_ARGS(sde, curstate, curevent),
+	TP_ARGS(sde, cstate, nstate),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(sde->dd)
-		__string(state, curstate)
-		__string(event, curevent)
+		__string(curstate, cstate)
+		__string(newstate, nstate)
 	),
 	TP_fast_assign(
 		DD_DEV_ASSIGN(sde->dd);
-		__assign_str(state, curstate);
-		__assign_str(event, curevent);
+		__assign_str(curstate, cstate);
+		__assign_str(newstate, nstate);
 	),
-	TP_printk("[%s] state %s event %s",
+	TP_printk("[%s] current state %s new state %s",
 		__get_str(dev),
-		__get_str(event),
-		__get_str(state)
+		__get_str(curstate),
+		__get_str(newstate)
 	)
 );
 

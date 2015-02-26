@@ -358,7 +358,10 @@ static void sdma_flush(struct sdma_engine *sde)
 	sdma_flush_descq(sde);
 	spin_lock(&sde->flushlist_lock);
 	/* copy flush list */
-	list_splice(&sde->flushlist, &flushlist);
+	list_for_each_entry_safe(txp, txp_next, &sde->flushlist, list) {
+		list_del_init(&txp->list);
+		list_add_tail(&txp->list, &flushlist);
+	}
 	spin_unlock(&sde->flushlist_lock);
 	/* flush from flush list */
 	list_for_each_entry_safe(txp, txp_next, &flushlist, list) {
@@ -460,6 +463,7 @@ void sdma_err_progress_check_schedule(struct sdma_engine *sde)
 
 		for (index = 0; index < dd->num_sdma; index++) {
 			struct sdma_engine *curr_sdma = &dd->per_sdma[index];
+
 			if (curr_sdma != sde)
 				curr_sdma->progress_check_head =
 							curr_sdma->descq_head;
@@ -479,31 +483,33 @@ void sdma_err_progress_check(unsigned long data)
 	dd_dev_err(sde->dd, "SDE progress check event\n");
 	for (index = 0; index < sde->dd->num_sdma; index++) {
 		struct sdma_engine *curr_sde = &sde->dd->per_sdma[index];
+		unsigned long flags;
+
 		/* check progress on each engine except the current one */
 		if (curr_sde == sde)
 			continue;
+		/*
+		 * We must lock interrupts when acquiring sde->lock,
+		 * to avoid a deadlock if interrupt triggers and spins on
+		 * the same lock on same CPU
+		 */
+		spin_lock_irqsave(&curr_sde->tail_lock, flags);
+		write_seqlock(&curr_sde->head_lock);
 
 		/* skip non-running queues */
-		if (curr_sde->state.current_state != sdma_state_s99_running)
+		if (curr_sde->state.current_state != sdma_state_s99_running) {
+			write_sequnlock(&curr_sde->head_lock);
+			spin_unlock_irqrestore(&curr_sde->tail_lock, flags);
 			continue;
+		}
 
 		if ((curr_sde->descq_head != curr_sde->descq_tail) &&
 		    (curr_sde->descq_head ==
-				curr_sde->progress_check_head)) {
-			unsigned long flags;
-			/*
-			* We must lock interrupts when acquiring sde->lock,
-			* to avoid a deadlock if interrupt triggers and spins on
-			* the same lock on same CPU
-			*/
-
-			spin_lock_irqsave(&curr_sde->tail_lock, flags);
-			write_seqlock(&curr_sde->head_lock);
+				curr_sde->progress_check_head))
 			__sdma_process_event(curr_sde,
 					     sdma_event_e90_sw_halted);
-			write_sequnlock(&curr_sde->head_lock);
-			spin_unlock_irqrestore(&curr_sde->tail_lock, flags);
-		}
+		write_sequnlock(&curr_sde->head_lock);
+		spin_unlock_irqrestore(&curr_sde->tail_lock, flags);
 	}
 	schedule_work(&sde->err_halt_worker);
 }
@@ -665,15 +671,19 @@ static void sdma_set_state(struct sdma_engine *sde,
 	const struct sdma_set_state_action *action = sdma_action_table;
 	unsigned op = 0;
 
+	trace_hfi_sdma_state(
+		sde,
+		sdma_state_names[ss->current_state],
+		sdma_state_names[next_state]);
+
 	/* debugging bookkeeping */
 	ss->previous_state = ss->current_state;
 	ss->previous_op = ss->current_op;
+	ss->current_state = next_state;
 
 	if (ss->previous_state != sdma_state_s99_running
 		&& next_state == sdma_state_s99_running)
 		sdma_flush(sde);
-
-	ss->current_state = next_state;
 
 	if (action[next_state].op_enable)
 		op |= QIB_SDMA_SENDCTRL_OP_ENABLE;
@@ -1433,6 +1443,7 @@ static void sdma_make_progress(struct sdma_engine *sde, u64 status)
 retry:
 	txp = get_txhead(sde);
 	swhead = sde->descq_head & sde->sdma_mask;
+	trace_hfi_sdma_progress(sde, hwhead, swhead, txp);
 	while (swhead != hwhead) {
 		/* advance head, wrap if needed */
 		swhead = ++sde->descq_head & sde->sdma_mask;
@@ -1454,7 +1465,6 @@ retry:
 			sde->head_sn++;
 #endif
 			sdma_txclean(sde->dd, txp);
-			trace_hfi_sdma_progress(sde, hwhead, swhead, txp);
 			if (txp->complete)
 				(*txp->complete)(
 					txp,
@@ -1465,6 +1475,7 @@ retry:
 			/* see if there is another txp */
 			txp = get_txhead(sde);
 		}
+		trace_hfi_sdma_progress(sde, hwhead, swhead, txp);
 		progress++;
 	}
 
@@ -1477,7 +1488,7 @@ retry:
 	 * The hardware SDMA head should be read atmost once in this invocation
 	 * of sdma_make_progress(..) which is ensured by idle_check_done flag
 	 */
-	if (status & sde->idle_mask && !idle_check_done) {
+	if ((status & sde->idle_mask) && !idle_check_done) {
 		swtail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
 		if (swtail != hwhead) {
 			hwhead = (u16)read_sde_csr(sde, WFR_SEND_DMA_HEAD);
@@ -1502,13 +1513,11 @@ retry:
  */
 void sdma_engine_interrupt(struct sdma_engine *sde, u64 status)
 {
-	unsigned long flags;
-
 	trace_hfi_sdma_engine_interrupt(sde, status);
-	write_seqlock_irqsave(&sde->head_lock, flags);
+	write_seqlock(&sde->head_lock);
 	sdma_set_desc_cnt(sde, sde->descq_cnt / 2);
 	sdma_make_progress(sde, status);
-	write_sequnlock_irqrestore(&sde->head_lock, flags);
+	write_sequnlock(&sde->head_lock);
 }
 
 /**
@@ -1815,7 +1824,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 
 /* TODO augment this to dump slid check register */
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLE %d\n"
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLNE %d\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1954,7 +1963,7 @@ static inline u16 submit_tx(struct sdma_engine *sde, struct sdma_txreq *tx)
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 	tx->sn = sde->tail_sn++;
 	trace_hfi_sdma_in_sn(sde, tx->sn);
-	WARN_ON_ONCE(sde->tx_ring[sde->tx_tail++ & sde->sdma_mask]);
+	WARN_ON_ONCE(sde->tx_ring[sde->tx_tail & sde->sdma_mask]);
 #endif
 	sde->tx_ring[sde->tx_tail++ & sde->sdma_mask] = tx;
 	sde->desc_avail -= tx->num_desc;
@@ -2108,6 +2117,7 @@ unlock:
 unlock_noconn:
 	spin_lock(&sde->flushlist_lock);
 	list_for_each_entry_safe(tx, tx_next, tx_list, list) {
+		list_del_init(&tx->list);
 		if (wait)
 			atomic_inc(&wait->sdma_busy);
 		tx->next_descq_idx = 0;
@@ -2162,10 +2172,6 @@ static void __sdma_process_event(struct sdma_engine *sde,
 	dd_dev_err(sde->dd, "JAG SDMA(%u) [%s] %s\n", sde->this_idx,
 		sdma_state_names[ss->current_state], sdma_event_names[event]);
 #endif
-	trace_hfi_sdma_state(
-		sde,
-		sdma_state_names[ss->current_state],
-		sdma_event_names[event]);
 
 	switch (ss->current_state) {
 	case sdma_state_s00_hw_down:
