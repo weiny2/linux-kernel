@@ -880,7 +880,7 @@ const struct pci_error_handlers qib_pci_err_handler = {
 /* mask for PCIe capability regiser lnkctl2 target link speed */
 #define LNKCTL2_TARGET_LINK_SPEED_MASK 0xf
 
-static uint pcie_gen3_transition;
+static uint pcie_gen3_transition = 1;
 module_param(pcie_gen3_transition, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_gen3_transition, "Driver will attempt the transition to PCIe Gen3 speed (2 = remain at Gen2 speed)");
 
@@ -1123,6 +1123,10 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	u8 nsbr = 1;
 	const u8 (*eq)[3];
 
+	/* PCIe Gen3 is for the ASIC only */
+	if (dd->icode != WFR_ICODE_RTL_SILICON)
+		return 0;
+
 	/* told not to do the transition */
 	if (!pcie_gen3_transition) {
 		dd_dev_info(dd, "%s: Skipping PCIe transition\n", __func__);
@@ -1144,61 +1148,6 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	 */
 	if (is_a0(dd))
 		nsbr++;
-
-	/*
-	 * Emulation has no SBUS and the PCIe SerDes is different.  The only
-	 * thing we can to is try a SBR to see if we can recover.
-	 */
-	if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
-		/* hold DC in reset */
-		write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
-		(void) read_csr(dd, WFR_CCE_DC_CTRL); /* DC reset hold */
-
-		dd_dev_info(dd, "%s: Setting CceScratch[0] to 0xdeadbeef\n",
-			__func__);
-		write_csr(dd, WFR_CCE_SCRATCH, 0xdeadbeefull);
-
-		/*
-		 * A0 erratum 291496
-		 * additional sbr needed.
-		 */
-		while (nsbr-- > 0) {
-			dd_dev_info(dd, "%s: calling trigger_sbr\n", __func__);
-			ret = trigger_sbr(dd);
-			if (ret)
-				goto done_no_mutex;
-
-			/* restore PCI space registers we know were reset */
-			dd_dev_info(dd,
-				"%s: calling restore_pci_variables\n", __func__);
-			restore_pci_variables(dd);
-		}
-
-		/*
-		 * Read the CCE scratch register we set above to see if:
-		 * a) the link works
-		 * b) if the reset was applied and our CCE scratch is
-		 *    zeroed
-		 */
-		reg = read_csr(dd, WFR_CCE_SCRATCH);
-		if (reg == ~0ull) {
-			dd_dev_info(dd, "%s: cannot read CSRs\n", __func__);
-			return_error = 1; /* override !pcie_gen3_required */
-			goto done_no_mutex;
-		}
-		dd_dev_info(dd, "%s: CceScratch[0] 0x%llx\n", __func__, reg);
-
-		/* clear the DC reset */
-		write_csr(dd, WFR_CCE_DC_CTRL, 0);
-
-		/* update our link information cache */
-		update_lbus_info(dd);
-		dd_dev_info(dd, "%s: new speed and width: %s\n", __func__,
-			dd->lbus_info);
-
-		/* finished */
-		goto done_no_mutex;
-	}
 
 	/*
 	 * Do the Gen3 transition.  Steps are those of the PCIe Gen3
