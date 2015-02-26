@@ -171,9 +171,12 @@ int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
 	return ret;
 }
 
-int qsfp_write(struct qib_pportdata *ppd, u32 target, int offset, void *bp,
+int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
 		int len)
 {
+	int count = 0;
+	int offset;
+	int nwrite;
 	int ret;
 	u8 page;
 
@@ -181,40 +184,49 @@ int qsfp_write(struct qib_pportdata *ppd, u32 target, int offset, void *bp,
 	if (ret)
 		return ret;
 
-	/*
-	 * Set the qsfp page based on a zero-based offset
-	 * and a page size of QSFP_PAGESIZE bytes.
-	 */
-	page = (u8)(offset / QSFP_PAGESIZE);
-	/* Adjusting offset to position within the selected page */
-	offset = (offset % QSFP_PAGESIZE);
-
-	if (offset > 127) {
+	while (count < len) {
+		/*
+		 * Set the qsfp page based on a zero-based addresss
+		 * and a page size of QSFP_PAGESIZE bytes.
+		 */
+		page = (u8)(addr / QSFP_PAGESIZE);
 		ret = __i2c_write(ppd, target, QSFP_DEV,
 					QSFP_PAGE_SELECT_BYTE_OFFS, &page, 1);
 		if (ret != 1) {
 			qib_dev_porterr(ppd->dd, ppd->port,
 				"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
 			ret = -EIO;
-			goto unlock;
+			break;
 		}
+
+		/* truncate write to end of page if crossing page boundary */
+		offset = addr % QSFP_PAGESIZE;
+		nwrite = len - count;
+		if ((offset + nwrite) > QSFP_PAGESIZE)
+			nwrite = QSFP_PAGESIZE - offset;
+
+		ret = __i2c_write(ppd, target, QSFP_DEV, offset, bp + count,
+					nwrite);
+		if (ret <= 0)	/* stop on error or nothing read */
+			break;
+
+		count += ret;
+		addr += ret;
 	}
 
-	/* Truncate read to end of page if len would cross page boundary */
-	if ((offset + len) > QSFP_PAGESIZE)
-		len = QSFP_PAGESIZE - offset;
-
-	ret = __i2c_write(ppd, target, QSFP_DEV, offset, bp, len);
-
-unlock:
 	mutex_unlock(&ppd->dd->qsfp_i2c_mutex);
 
-	return ret;
+	if (ret < 0)
+		return ret;
+	return count;
 }
 
-int qsfp_read(struct qib_pportdata *ppd, u32 target, int offset, void *bp,
+int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
 		int len)
 {
+	int count = 0;
+	int offset;
+	int nread;
 	int ret;
 	u8 page;
 
@@ -222,35 +234,41 @@ int qsfp_read(struct qib_pportdata *ppd, u32 target, int offset, void *bp,
 	if (ret)
 		return ret;
 
-	/*
-	 * Set the qsfp page based on a zero-based offset
-	 * and a page size of QSFP_PAGESIZE bytes.
-	 */
-	page = (u8)(offset / QSFP_PAGESIZE);
-	/* Adjusting offset to position within the selected page */
-	offset = (offset % QSFP_PAGESIZE);
-
-	if (offset > 127) {
+	while (count < len) {
+		/*
+		 * Set the qsfp page based on a zero-based address
+		 * and a page size of QSFP_PAGESIZE bytes.
+		 */
+		page = (u8)(addr / QSFP_PAGESIZE);
 		ret = __i2c_write(ppd, target, QSFP_DEV,
 					QSFP_PAGE_SELECT_BYTE_OFFS, &page, 1);
 		if (ret != 1) {
 			qib_dev_porterr(ppd->dd, ppd->port,
 				"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
 			ret = -EIO;
-			goto unlock;
+			break;
 		}
+
+		/* truncate read to end of page if crossing page boundary */
+		offset = addr % QSFP_PAGESIZE;
+		nread = len - count;
+		if ((offset + nread) > QSFP_PAGESIZE)
+			nread = QSFP_PAGESIZE - offset;
+
+		ret = __i2c_read(ppd, target, QSFP_DEV, offset, bp + count,
+					nread);
+		if (ret <= 0)	/* stop on error or nothing read */
+			break;
+
+		count += ret;
+		addr += ret;
 	}
 
-	/* Truncate read to end of page if len would cross page boundary */
-	if ((offset + len) > QSFP_PAGESIZE)
-		len = QSFP_PAGESIZE - offset;
-
-	ret = __i2c_read(ppd, target, QSFP_DEV, offset, bp, len);
-
-unlock:
 	mutex_unlock(&ppd->dd->qsfp_i2c_mutex);
 
-	return ret;
+	if (ret < 0)
+		return ret;
+	return count;
 }
 
 /*
