@@ -1733,16 +1733,12 @@ static int do_device_access(struct scsi_cmnd *scmd,
 
 static u16 dif_compute_csum(const void *buf, int len)
 {
-	u16 csum;
+	u16 csum = 0;
 
-	switch (scsi_debug_guard) {
-	case 1:
+	if (scsi_debug_guard)
 		csum = ip_compute_csum(buf, len);
-		break;
-	case 0:
+	else
 		csum = cpu_to_be16(crc_t10dif(buf, len));
-		break;
-	}
 	return csum;
 }
 
