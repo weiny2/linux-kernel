@@ -11,8 +11,9 @@
  * General Public License for more details.
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-#include <linux/device.h>
+#include <linux/vmalloc.h>
 #include <linux/highmem.h>
+#include <linux/device.h>
 #include <linux/ndctl.h>
 #include <linux/slab.h>
 #include <linux/io.h>

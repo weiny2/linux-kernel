@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
 #include <linux/module.h>
+#include <linux/vmalloc.h>
 #include "nfit.h"
 #include "dsm.h" /* nd_manual_dsm */
 #include "nd.h"
