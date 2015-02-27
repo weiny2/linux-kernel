@@ -81,6 +81,7 @@ static int arena_rw_bytes(struct arena_info *arena, void *buf, size_t n,
 static int btt_info_write(struct arena_info *arena, struct btt_sb *super)
 {
 	int ret;
+
 	ret = arena_rw_bytes(arena, super, sizeof(struct btt_sb),
 			arena->info2off, WRITE);
 	if (ret)
@@ -101,6 +102,7 @@ static int btt_info_read(struct arena_info *arena, struct btt_sb *super)
 static int btt_map_write(struct arena_info *arena, u32 lba, u32 mapping)
 {
 	__le32 out = cpu_to_le32(mapping);
+
 	WARN_ON(lba >= arena->external_nlba);
 	return arena_rw_bytes(arena, &out, MAP_ENT_SIZE,
 			arena->mapoff + (lba * MAP_ENT_SIZE), WRITE);
@@ -370,7 +372,7 @@ static int btt_freelist_init(struct arena_info *arena)
 	u32 i, map_entry;
 	struct log_entry log_new, log_old;
 
-	arena->freelist = kzalloc(arena->nfree * sizeof(struct free_entry),
+	arena->freelist = kcalloc(arena->nfree, sizeof(struct free_entry),
 					GFP_KERNEL);
 	if (!arena->freelist)
 		return -ENOMEM;
@@ -417,7 +419,7 @@ static int btt_freelist_init(struct arena_info *arena)
 
 static int btt_rtt_init(struct arena_info *arena)
 {
-	arena->rtt = kzalloc(arena->nfree * sizeof(u32), GFP_KERNEL);
+	arena->rtt = kcalloc(arena->nfree, sizeof(u32), GFP_KERNEL);
 	if (arena->rtt == NULL)
 		return -ENOMEM;
 
@@ -428,7 +430,7 @@ static int btt_maplocks_init(struct arena_info *arena)
 {
 	u32 i;
 
-	arena->map_locks = kmalloc(arena->nfree * sizeof(struct aligned_lock),
+	arena->map_locks = kcalloc(arena->nfree, sizeof(struct aligned_lock),
 				GFP_KERNEL);
 	if (!arena->map_locks)
 		return -ENOMEM;
@@ -928,8 +930,8 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 
 			if (postmap == new_map)
 				break;
-			else
-				postmap = new_map;
+
+			postmap = new_map;
 		}
 
 		ret = btt_data_read(arena, page, off, postmap, cur_len);
@@ -1085,6 +1087,7 @@ static void btt_make_request(struct request_queue *q, struct bio *bio)
 
 	bio_for_each_segment(bvec, bio, iter) {
 		unsigned int len = bvec.bv_len;
+
 		BUG_ON(len > PAGE_SIZE);
 		/* Make sure len is in multiples of lbasize. */
 		/* XXX is this right? */
@@ -1110,7 +1113,7 @@ static int lane_locks_init(struct btt *btt)
 {
 	u32 i;
 
-	btt->lanes = kmalloc(btt->num_lanes * sizeof(struct aligned_lock),
+	btt->lanes = kcalloc(btt->num_lanes, sizeof(struct aligned_lock),
 				GFP_KERNEL);
 	if (!btt->lanes)
 		return -ENOMEM;

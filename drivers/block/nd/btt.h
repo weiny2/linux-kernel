@@ -90,18 +90,18 @@ struct aligned_lock {
 /**
  * struct arena_info - handle for an arena
  * @size:		Size in bytes this arena occupies on the raw device.
- * 			This includes arena metadata.
+ *			This includes arena metadata.
  * @external_lba_start:	The first external LBA in this arena.
  * @internal_nlba:	Number of internal blocks available in the arena
- * 			including nfree reserved blocks
+ *			including nfree reserved blocks
  * @internal_lbasize:	Internal and external lba sizes may be different as
- * 			we can round up 'odd' external lbasizes such as 520B
- * 			to be aligned.
+ *			we can round up 'odd' external lbasizes such as 520B
+ *			to be aligned.
  * @external_nlba:	Number of blocks contributed by the arena to the number
- * 			reported to upper layers. (internal_nlba - nfree)
+ *			reported to upper layers. (internal_nlba - nfree)
  * @external_lbasize:	LBA size as exposed to upper layers.
  * @nfree:		A reserve number of 'free' blocks that is used to
- * 			handle incoming writes.
+ *			handle incoming writes.
  * @version_major:	Metadata layout version major.
  * @version_minor:	Metadata layout version minor.
  * @nextoff:		Offset in bytes to the start of the next arena.
@@ -158,7 +158,7 @@ struct arena_info {
  * @backing_dev:	Backing block device for the BTT
  * @nd_btt:		Parent nd_btt struct
  * @nlba:		Number of logical blocks exposed to the	upper layers
- * 			after removing the amount of space needed by metadata
+ *			after removing the amount of space needed by metadata
  * @rawsize:		Total size in bytes of the available backing device
  * @lbasize:		LBA size as requested and presented to upper layers
  * @lanes:		Per-lane spinlocks
