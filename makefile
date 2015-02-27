@@ -94,7 +94,7 @@ dist: distclean specfile
 	rm -rf /tmp/hfi-$(VERSION)
 	mkdir -p /tmp/hfi-$(VERSION)
 	cp -r . /tmp/hfi-$(VERSION)
-	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/hfi-$(VERSION).tgz ./hfi-$(VERSION)
+	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/hfi-$(VERSION).tgz hfi-$(VERSION)
 	rm -rf /tmp/hfi-$(VERSION)
 
 install:
