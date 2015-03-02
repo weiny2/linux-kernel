@@ -20,10 +20,10 @@
 
 struct gendisk;
 
-struct block_window {
-	void			*bw_apt_virt;
-	u64			*bw_ctl_virt;
-	u32			*bw_stat_virt;
+struct nd_blk_ctl {
+	void *bw_apt;
+	u64 __iomem *bw_ctl;
+	u32 __iomem *bw_stat;
 };
 
 struct nd_dimm_drvdata {
@@ -33,12 +33,6 @@ struct nd_dimm_drvdata {
 	void *data;
 	int ns_current, ns_next;
 	struct resource dpa;
-	struct nd_blk_dimm {
-		unsigned		num_bw;
-		atomic_t		last_bw;
-		struct block_window	*bw;	  /* Array of 'num_bw' block windows */
-		spinlock_t		*bw_lock; /* Array of 'num_bw' locks */
-	} blk_dimm;
 };
 
 struct nd_region_namespaces {
@@ -118,8 +112,20 @@ struct nd_region {
 	u64 ndr_size;
 	u64 ndr_start;
 	int id;
+	/* only valid for blk regions */
+	struct nd_blk_window {
+		unsigned num_bw;
+		atomic_t last_bw;
+		struct nd_blk_ctl *blk_ctl; /* Array of 'num_bw' block windows */
+		spinlock_t *bw_lock; /* Array of 'num_bw' locks */
+	} bw;
 	struct nd_mapping mapping[0];
 };
+
+static inline struct nd_region *ndbw_to_region(struct nd_blk_window *ndbw)
+{
+	return container_of(ndbw, struct nd_region, bw);
+}
 
 struct nd_io;
 /**
@@ -239,6 +245,7 @@ int nd_dimm_get_config_data(struct nd_dimm_drvdata *ndd,
 		struct nfit_cmd_get_config_data_hdr *cmd, size_t len);
 int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
 		void *buf, size_t len);
+int nd_blk_init_region(struct nd_region *nd_region);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
@@ -247,7 +254,7 @@ void nd_bus_unlock(struct device *dev);
 bool is_nd_bus_locked(struct device *dev);
 int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd);
 const char *nd_blk_bus_provider(struct device *dev);
-int nd_blk_do_io(struct nd_blk_dimm *dimm, struct page *page,
+int nd_blk_do_io(struct nd_blk_window *ndbw, struct page *page,
 		unsigned int len, unsigned int off, int rw,
 		resource_size_t dev_offset);
 bool is_acpi_blk(struct device *dev);

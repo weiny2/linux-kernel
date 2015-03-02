@@ -27,13 +27,12 @@
 #define SECTOR_SHIFT		9
 
 struct nd_blk_device {
-	struct request_queue	*queue;
-	struct gendisk		*disk;
-	struct nd_namespace_blk *nsblk;
-/*	struct nd_io		ndio; */
-
-	size_t			disk_size;
-	int			id;
+	struct request_queue *queue;
+	struct gendisk *disk;
+	struct nd_blk_window *ndbw;
+	/* struct nd_io ndio; */
+	size_t disk_size;
+	int id;
 };
 
 static int nd_blk_major;
@@ -42,11 +41,10 @@ static DEFINE_IDA(nd_blk_ida);
 static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
-	/* FIXME: reduce per I/O pointer chasing */
-	struct nd_blk_device *blk_dev = bdev->bd_disk->private_data;
-	struct nd_namespace_blk *nsblk = blk_dev->nsblk;
-	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
-	struct nd_dimm_drvdata *ndd = to_ndd(&nd_region->mapping[0]);
+	struct gendisk *disk = bdev->bd_disk;
+	struct nd_namespace_blk *nsblk;
+	struct nd_blk_device *blk_dev;
+	struct nd_blk_window *ndbw;
 	int rw, i;
 	struct bio_vec bvec;
 	sector_t sector;
@@ -54,7 +52,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	int err = 0;
 
 	sector = bio->bi_iter.bi_sector;
-	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
+	if (bio_end_sector(bio) > get_capacity(disk)) {
 		err = -EIO;
 		goto out;
 	}
@@ -65,6 +63,9 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	if (rw == READA)
 		rw = READ;
 
+	nsblk = to_nd_namespace_blk(disk->driverfs_dev);
+	blk_dev = disk->private_data;
+	ndbw = blk_dev->ndbw;
 	bio_for_each_segment(bvec, bio, iter) {
 		resource_size_t res_offset = sector << SECTOR_SHIFT;
 		resource_size_t	dev_offset = 0;
@@ -83,7 +84,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 			res_offset -= resource_size(nsblk->res[i]);
 		}
 
-		err = nd_blk_do_io(&ndd->blk_dimm, bvec.bv_page,
+		err = nd_blk_do_io(ndbw, bvec.bv_page,
 				len, bvec.bv_offset, rw, dev_offset);
 		if (err)
 			goto out;
@@ -142,8 +143,9 @@ static int nd_blk_probe(struct device *dev)
 		goto err_alloc_disk;
 	}
 
-	blk_dev->nsblk = nsblk;
+	blk_dev->ndbw = &to_nd_region(nsblk->dev.parent)->bw;
 
+	disk->driverfs_dev	= dev;
 	disk->major		= nd_blk_major;
 	disk->first_minor	= 0;
 	disk->fops		= &nd_blk_fops;
@@ -183,8 +185,6 @@ static int nd_blk_remove(struct device *dev)
 	blk_cleanup_queue(blk_dev->queue);
 	ida_simple_remove(&nd_blk_ida, blk_dev->id);
 	kfree(blk_dev);
-
-	blk_dev->nsblk = NULL;
 
 	return 0;
 }

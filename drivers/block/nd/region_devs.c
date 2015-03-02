@@ -11,6 +11,7 @@
  * General Public License for more details.
  */
 #include <linux/scatterlist.h>
+#include <linux/highmem.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
@@ -642,6 +643,216 @@ static const struct attribute_group *nd_region_attribute_groups[] = {
 	&nd_mapping_attribute_group,
 	NULL,
 };
+
+struct nd_blk_ctl *blk_ctl;
+#define NUM_BW 256
+#define CL_SHIFT 6
+static phys_addr_t bw_apt_phys = 0xf000a00000;
+static phys_addr_t bw_ctl_phys = 0xf000800000;
+static void *bw_apt;
+static __iomem u64 *bw_ctl;
+static size_t bw_size = SZ_8K * NUM_BW;
+
+enum {
+	BCW_OFFSET_MASK = (1ULL << 48)-1,
+	BCW_LEN_SHIFT = 48,
+	BCW_LEN_MASK = (1ULL << 8) - 1,
+	BCW_CMD_SHIFT = 56,
+};
+
+bool is_acpi_blk(struct device *dev)
+{
+	if (strcmp(nd_blk_bus_provider(dev), "OLD_ACPI.NFIT") == 0)
+		return true;
+	else if (strcmp(nd_blk_bus_provider(dev), "ACPI.NFIT") == 0)
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_acpi_blk);
+
+/* for now, hard code index 0 */
+/* for NT stores, check out __copy_user_nocache() */
+static void nd_blk_write_blk_ctl(struct nd_blk_ctl *blk_ctl,
+		resource_size_t dev_offset, unsigned int len, bool write)
+{
+	u64 cmd	= 0;
+	u64 cl_offset = dev_offset >> CL_SHIFT;
+	u64 cl_len = len >> CL_SHIFT;
+
+	cmd |= cl_offset & BCW_OFFSET_MASK;
+	cmd |= (cl_len & BCW_LEN_MASK) << BCW_LEN_SHIFT;
+	if (write)
+		cmd |= 1ULL << BCW_CMD_SHIFT;
+
+	writeq(cmd, blk_ctl->bw_ctl);
+	clflushopt(blk_ctl->bw_ctl);
+}
+
+static int nd_blk_read_blk_win(struct nd_blk_ctl *blk_ctl, void *dst,
+		unsigned int len)
+{
+	u32 status;
+
+	/* FIXME: NT */
+	memcpy(dst, blk_ctl->bw_apt, len);
+	clflushopt(blk_ctl->bw_apt);
+
+	status = readl(blk_ctl->bw_stat);
+
+	if (status) {
+		/* FIXME: return more precise error values at some point */
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int nd_blk_write_blk_win(struct nd_blk_ctl *blk_ctl, void *src,
+		unsigned int len)
+{
+	/* non-temporal writes, need to flush via flush hints, yada yada. */
+	u32 status;
+
+	/* FIXME: NT */
+	memcpy(blk_ctl->bw_apt, src, len);
+
+	status = readl(blk_ctl->bw_stat);
+
+	if (status) {
+		/* FIXME: return more precise error values at some point */
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int nd_blk_read(struct nd_blk_ctl *blk_ctl, void *dst,
+		resource_size_t dev_offset, unsigned int len)
+{
+	nd_blk_write_blk_ctl(blk_ctl, dev_offset, len, false);
+	return nd_blk_read_blk_win(blk_ctl, dst, len);
+}
+
+static int nd_blk_write(struct nd_blk_ctl *blk_ctl, void *src,
+		resource_size_t dev_offset, unsigned int len)
+{
+	nd_blk_write_blk_ctl(blk_ctl, dev_offset, len, true);
+	return nd_blk_write_blk_win(blk_ctl, src, len);
+}
+
+static void acquire_bw(struct nd_blk_window *ndbw, unsigned *bw_index)
+{
+	*bw_index = atomic_inc_return(&(ndbw->last_bw)) % ndbw->num_bw;
+	spin_lock(&(ndbw->bw_lock[*bw_index]));
+}
+
+static void release_bw(struct nd_blk_window *ndbw, unsigned bw_index)
+{
+	spin_unlock(&(ndbw->bw_lock[bw_index]));
+}
+
+/* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
+int nd_blk_do_io(struct nd_blk_window *ndbw, struct page *page,
+		unsigned int len, unsigned int off, int rw,
+		resource_size_t dev_offset)
+{
+	void *mem = kmap_atomic(page);
+	struct nd_blk_ctl *blk_ctl;
+	unsigned bw_index;
+	int rc;
+
+	acquire_bw(ndbw, &bw_index);
+	blk_ctl = &ndbw->blk_ctl[bw_index];
+
+	if (rw == READ)
+		rc = nd_blk_read(blk_ctl, mem + off, dev_offset, len);
+	else
+		rc = nd_blk_write(blk_ctl, mem + off, dev_offset, len);
+
+	release_bw(ndbw, bw_index);
+	kunmap_atomic(mem);
+
+	return rc;
+}
+EXPORT_SYMBOL(nd_blk_do_io);
+
+static int nd_blk_init_locks(struct nd_blk_window *ndbw)
+{
+	int i;
+
+	ndbw->bw_lock = kmalloc_array(ndbw->num_bw, sizeof(spinlock_t),
+				GFP_KERNEL);
+	if (!ndbw->bw_lock)
+		return -ENOMEM;
+
+	for (i = 0; i < ndbw->num_bw; i++)
+		spin_lock_init(&ndbw->bw_lock[i]);
+
+	return 0;
+}
+
+int nd_blk_init_region(struct nd_region *nd_region)
+{
+	struct nd_blk_window *ndbw = &nd_region->bw;
+	struct nd_mapping *nd_mapping;
+	struct nd_dimm *nd_dimm;
+	struct nd_mem *nd_mem;
+	struct resource res;
+	int i;
+
+	if (!is_nd_blk(&nd_region->dev))
+		return 0;
+
+	if (!is_acpi_blk(&nd_region->dev))
+		return 0;
+
+	/* FIXME: use nfit values rather than hard coded */
+	if (nd_region->ndr_mappings != 1)
+		return -ENXIO;
+
+	nd_mapping = &nd_region->mapping[0];
+	nd_dimm = nd_mapping->nd_dimm;
+	nd_mem = nd_dimm->nd_mem;
+	if (!nd_mem->nfit_dcr || !nd_mem->nfit_bdw)
+		return -ENXIO;
+
+	/* map block aperture memory */
+	res.start = bw_apt_phys;
+	res.end = res.start + bw_size - 1;
+	res.name = dev_name(&nd_region->dev);
+	res.flags = IORESOURCE_MEM | IORESOURCE_CACHEABLE;
+	/* FIXME: add devm_ioremap_cache() support */
+	bw_apt = devm_ioremap_resource(&nd_region->dev, &res);
+	if (IS_ERR(bw_apt))
+		return PTR_ERR(bw_apt);
+
+	/* map block control memory */
+	res.start = bw_ctl_phys;
+	res.end = res.start + bw_size - 1;
+	res.flags &= ~IORESOURCE_CACHEABLE;
+	bw_ctl = devm_ioremap_resource(&nd_region->dev, &res);
+	if (IS_ERR(bw_ctl))
+		return PTR_ERR(bw_ctl);
+
+	/* set up block windows */
+	blk_ctl = devm_kmalloc(&nd_region->dev, sizeof(*blk_ctl) * NUM_BW,
+			GFP_KERNEL);
+	if (!blk_ctl)
+		return -ENOMEM;
+
+	for (i = 0; i < NUM_BW; i++) {
+		blk_ctl[i].bw_apt = (void *)bw_apt + i*0x2000;
+		blk_ctl[i].bw_ctl = (void *)bw_ctl + i*0x2000;
+		blk_ctl[i].bw_stat = (void *)blk_ctl[i].bw_ctl + 0x1000;
+	}
+
+	ndbw->num_bw = NUM_BW;
+	ndbw->blk_ctl = blk_ctl;
+	atomic_set(&ndbw->last_bw, 0);
+
+	return nd_blk_init_locks(ndbw);
+}
 
 static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 {

@@ -25,126 +25,6 @@ static bool force_enable_dimms;
 module_param(force_enable_dimms, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(force_enable_dimms, "Ignore DIMM NFIT/firmware status");
 
-struct block_window	*bw;
-#define NUM_BW		256
-static phys_addr_t	bw_apt_phys	= 0xf000a00000;
-static phys_addr_t	bw_ctl_phys	= 0xf000800000;
-static void		*bw_apt_virt;
-static u64		*bw_ctl_virt;
-static size_t		bw_size		= SZ_8K * NUM_BW;
-
-static int nd_blk_init_locks(struct nd_blk_dimm *dimm)
-{
-	int i;
-
-	dimm->bw_lock = kmalloc_array(dimm->num_bw, sizeof(spinlock_t),
-				GFP_KERNEL);
-	if (!dimm->bw_lock)
-		return -ENOMEM;
-
-	for (i = 0; i < dimm->num_bw; i++)
-		spin_lock_init(&dimm->bw_lock[i]);
-
-	return 0;
-}
-
-/* This code should do things that will eventually be moved into the rest of
- * ND.  This includes things like
- *	- ioremapping and iounmapping the BDWs and DCRs
- *	- initializing instances of the driver with proper parameters
- *	- when we do interleaving, implementing a generic interleaving method
- */
-static int nd_blk_wrapper_init(struct device *dev)
-{
-	struct nd_dimm_drvdata *ndd = dev_get_drvdata(dev);
-	struct nd_blk_dimm *dimm = &ndd->blk_dimm;
-	struct resource *res;
-	int err, i;
-
-	if (!is_acpi_blk(dev))
-		return 0;
-
-	/* map block aperture memory */
-	res = request_mem_region(bw_apt_phys, bw_size, "nd_blk");
-	if (!res)
-		return -EBUSY;
-
-	bw_apt_virt = ioremap_cache(bw_apt_phys, bw_size);
-	if (!bw_apt_virt) {
-		err = -ENXIO;
-		goto err_apt_ioremap;
-	}
-
-	/* map block control memory */
-	res = request_mem_region(bw_ctl_phys, bw_size, "nd_blk");
-	if (!res) {
-		err = -EBUSY;
-		goto err_ctl_reserve;
-	}
-
-	bw_ctl_virt = ioremap_cache(bw_ctl_phys, bw_size);
-	if (!bw_ctl_virt) {
-		err = -ENXIO;
-		goto err_ctl_ioremap;
-	}
-
-	/* set up block windows */
-	bw = kmalloc(sizeof(*bw) * NUM_BW, GFP_KERNEL);
-	if (!bw) {
-		err = -ENOMEM;
-		goto err_bw;
-	}
-
-	for (i = 0; i < NUM_BW; i++) {
-		bw[i].bw_apt_virt = (void *)bw_apt_virt + i*0x2000;
-		bw[i].bw_ctl_virt = (void *)bw_ctl_virt + i*0x2000;
-		bw[i].bw_stat_virt = (void *)bw[i].bw_ctl_virt + 0x1000;
-	}
-
-
-	dimm->num_bw		= NUM_BW;
-	atomic_set(&dimm->last_bw, 0);
-	dimm->bw		= bw;
-
-	err = nd_blk_init_locks(dimm);
-	if (err)
-		goto err_init_locks;
-
-	return 0;
-
-err_init_locks:
-	kfree(bw);
-err_bw:
-	iounmap(bw_ctl_virt);
-err_ctl_ioremap:
-	release_mem_region(bw_ctl_phys, bw_size);
-err_ctl_reserve:
-	iounmap(bw_apt_virt);
-err_apt_ioremap:
-	release_mem_region(bw_apt_phys, bw_size);
-	return err;
-}
-
-static void nd_blk_wrapper_exit(struct device *dev)
-{
-	struct nd_dimm_drvdata *ndd = dev_get_drvdata(dev);
-	struct nd_blk_dimm *dimm = &ndd->blk_dimm;
-
-	if (!is_acpi_blk(dev))
-		return;
-
-	kfree(dimm->bw_lock);
-	kfree(bw);
-
-	/* free block control memory */
-	iounmap(bw_ctl_virt);
-	release_mem_region(bw_ctl_phys, bw_size);
-
-	/* free block aperture memory */
-	iounmap(bw_apt_virt);
-	release_mem_region(bw_apt_phys, bw_size);
-}
-
 static void free_data(struct nd_dimm_drvdata *ndd)
 {
 	if (!ndd)
@@ -202,10 +82,6 @@ static int nd_dimm_probe(struct device *dev)
 	if (rc)
 		goto err;
 
-	rc = nd_blk_wrapper_init(dev);
-	if (rc)
-		goto err;
-
 	return 0;
 
  err:
@@ -217,8 +93,6 @@ static int nd_dimm_remove(struct device *dev)
 {
 	struct nd_dimm_drvdata *ndd = dev_get_drvdata(dev);
 	struct resource *res, *_r;
-
-	nd_blk_wrapper_exit(dev);
 
 	nd_bus_lock(dev);
 	dev_set_drvdata(dev, NULL);
