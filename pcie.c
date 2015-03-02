@@ -954,7 +954,8 @@ static const u8 integrated_preliminary_eq[11][3] = {
 /*
  * Load the given EQ preset table into the PCIe hardware.
  */
-static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3], u8 fs)
+static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3], u8 fs,
+			u8 div)
 {
 	struct pci_dev *pdev = dd->pcidev;
 	u32 hit_error = 0;
@@ -966,9 +967,9 @@ static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3], u8 fs)
 		/* set index */
 		pci_write_config_dword(pdev, WFR_PCIE_CFG_REG_PL103, i);
 		/* write the value */
-		c_minus1 = eq[i][PREC]/3;
-		c0 = fs - eq[i][PREC]/3 - eq[i][POST]/3;
-		c_plus1 = eq[i][POST]/3;
+		c_minus1 = eq[i][PREC] / div;
+		c0 = fs - (eq[i][PREC] / div) - (eq[i][POST] / div);
+		c_plus1 = eq[i][POST] / div;
 		pci_write_config_dword(pdev, WFR_PCIE_CFG_REG_PL102,
 			eq_value(c_minus1, c0, c_plus1));
 		/* check if these coefficients violate EQ rules */
@@ -1121,6 +1122,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	int target_gen2;
 	u16 lnkctl, lnkctl2, vendor;
 	u8 nsbr = 1;
+	u8 div;
 	const u8 (*eq)[3];
 
 	/* PCIe Gen3 is for the ASIC only */
@@ -1222,17 +1224,19 @@ retry:
 		/* 1000mV, FS=24, LF = 8 */
 		fs = 24;
 		lf = 8;
+		div = 3;
 		eq = discrete_preliminary_eq;
 	} else {
 		/* 400mV, FS=29, LF = 9 */
 		fs = 29;
 		lf = 9;
+		div = 1;
 		eq = integrated_preliminary_eq;
 	}
 	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL101,
 		(fs << WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT)
 		| (lf << WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT));
-	ret = load_eq_table(dd, eq, fs);
+	ret = load_eq_table(dd, eq, fs, div);
 	if (ret)
 		goto done;
 
