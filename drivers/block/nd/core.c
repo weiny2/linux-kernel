@@ -62,8 +62,7 @@ bool is_nd_bus_locked(struct device *dev)
 EXPORT_SYMBOL(is_nd_bus_locked);
 
 void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
-		struct device *dev, struct gendisk *disk, int num_lanes,
-		unsigned long align)
+		struct device *dev, struct gendisk *disk, unsigned long align)
 {
 	memset(ndio, 0, sizeof(*ndio));
 	INIT_LIST_HEAD(&ndio->claims);
@@ -72,7 +71,6 @@ void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
 	ndio->dev = dev;
 	ndio->disk = disk;
 	ndio->align = align;
-	ndio->num_lanes = num_lanes;
 	ndio->rw_bytes = rw_bytes;
 }
 EXPORT_SYMBOL(nd_init_ndio);

@@ -786,32 +786,6 @@ static int lba_to_arena(struct btt *btt, sector_t sector, __u32 *premap,
 	return -EIO;
 }
 
-static int btt_num_possible_cpus;
-
-/*
- * This function acquires a lane, and will block till one is available.
- */
-static unsigned int acquire_lane(struct btt *btt)
-{
-	unsigned int lane;
-
-	lane = get_cpu();
-
-	if (btt->num_lanes < btt_num_possible_cpus) {
-		lane = lane % btt->num_lanes;
-		spin_lock(&(btt->lanes[lane].lock));
-	}
-
-	return lane;
-}
-
-static void release_lane(struct btt *btt, unsigned int lane)
-{
-	if (btt->num_lanes < btt_num_possible_cpus)
-		spin_unlock(&(btt->lanes[lane].lock));
-	put_cpu();
-}
-
 /*
  * The following (lock_map, unlock_map) are mostly just to improve
  * readability, since they index into an array of locks
@@ -876,7 +850,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 	while (len) {
 		u32 cur_len;
 
-		lane = acquire_lane(btt);
+		lane = nd_region_acquire_lane(btt->nd_region);
 
 		ret = lba_to_arena(btt, sector, &premap, &arena);
 		if (ret)
@@ -929,7 +903,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 			goto out_rtt;
 
 		arena->rtt[lane] = RTT_INVALID;
-		release_lane(btt, lane);
+		nd_region_release_lane(btt->nd_region, lane);
 
 		len -= cur_len;
 		off += cur_len;
@@ -941,7 +915,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
  out_rtt:
 	arena->rtt[lane] = RTT_INVALID;
  out_lane:
-	release_lane(btt, lane);
+	nd_region_release_lane(btt->nd_region, lane);
 	return ret;
 }
 
@@ -957,7 +931,7 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
 	while (len) {
 		u32 cur_len;
 
-		lane = acquire_lane(btt);
+		lane = nd_region_acquire_lane(btt->nd_region);
 
 		ret = lba_to_arena(btt, sector, &premap, &arena);
 		if (ret)
@@ -1009,7 +983,7 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
 			goto out_map;
 
 		unlock_map(arena, premap % arena->nfree);
-		release_lane(btt, lane);
+		nd_region_release_lane(btt->nd_region, lane);
 
 		len -= cur_len;
 		off += cur_len;
@@ -1021,7 +995,7 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
  out_map:
 	unlock_map(arena, premap % arena->nfree);
  out_lane:
-	release_lane(btt, lane);
+	nd_region_release_lane(btt->nd_region, lane);
 	return ret;
 }
 
@@ -1097,21 +1071,6 @@ static void btt_make_request(struct request_queue *q, struct bio *bio)
 
 out:
 	bio_endio(bio, err);
-}
-
-static int lane_locks_init(struct btt *btt)
-{
-	u32 i;
-
-	btt->lanes = kcalloc(btt->num_lanes, sizeof(struct aligned_lock),
-				GFP_KERNEL);
-	if (!btt->lanes)
-		return -ENOMEM;
-
-	for (i = 0; i < btt->num_lanes; i++)
-		spin_lock_init(&btt->lanes[i].lock);
-
-	return 0;
 }
 
 static int btt_getgeo(struct block_device *bd, struct hd_geometry *geo)
@@ -1195,7 +1154,7 @@ static void btt_blk_cleanup(struct btt *btt)
  * Pointer to a new struct btt on success, NULL on failure.
  */
 static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
-		u32 lbasize, u8 *uuid, int maxlane)
+		u32 lbasize, u8 *uuid, struct nd_region *nd_region)
 {
 	int ret;
 	struct btt *btt;
@@ -1208,10 +1167,9 @@ static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
 	btt->nd_btt = nd_btt;
 	btt->rawsize = rawsize;
 	btt->lbasize = lbasize;
-	btt->num_lanes = maxlane;
 	INIT_LIST_HEAD(&btt->arena_list);
 	mutex_init(&btt->init_lock);
-	btt_num_possible_cpus = num_possible_cpus();
+	btt->nd_region = nd_region;
 
 	ret = discover_arenas(btt);
 	if (ret) {
@@ -1230,12 +1188,6 @@ static struct btt *btt_init(struct nd_btt *nd_btt, size_t rawsize,
 			dev_info(dev, "init: create_arenas: %d\n", ret);
 			return NULL;
 		}
-	}
-
-	ret = lane_locks_init(btt);
-	if (ret) {
-		dev_err(dev, "init: lane_locks_init: %d\n", ret);
-		return NULL;
 	}
 
 	ret = btt_blk_init(btt);
@@ -1262,7 +1214,6 @@ static void btt_fini(struct btt *btt)
 {
 	if (btt) {
 		btt_blk_cleanup(btt);
-		kfree(btt->lanes);
 		free_arenas(btt);
 		debugfs_remove_recursive(btt->debugfs_dir);
 		kfree(btt);
@@ -1305,6 +1256,7 @@ static int nd_btt_probe(struct device *dev)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 	struct nd_io_claim *ndio_claim = nd_btt->ndio_claim;
+	struct nd_region *nd_region;
 	struct block_device *bdev;
 	struct btt *btt;
 	size_t rawsize;
@@ -1322,8 +1274,9 @@ static int nd_btt_probe(struct device *dev)
 	nd_btt->offset = partition_offset(bdev);
 	rawsize = bdev->bd_part->nr_sects << SECTOR_SHIFT;
 	nd_btt->ndio = nd_btt->ndio_claim->parent;
+	nd_region = to_nd_region(nd_btt->ndio->dev->parent);
 	btt = btt_init(nd_btt, rawsize, nd_btt->lbasize, nd_btt->uuid,
-			nd_btt->ndio->num_lanes);
+			nd_region);
 	if (!btt) {
 		rc = -ENOMEM;
 		goto err_btt;

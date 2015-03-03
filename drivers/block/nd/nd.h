@@ -18,6 +18,15 @@
 #include <linux/types.h>
 #include "label.h"
 
+enum {
+	/*
+	 * Limits the maximum number of block apertures a dimm can
+	 * support and is an input to the geometry/on-disk-format of a
+	 * BTT instance
+	 */
+	ND_MAX_LANES = 256,
+};
+
 struct gendisk;
 
 struct nd_blk_ctl {
@@ -112,12 +121,10 @@ struct nd_region {
 	u64 ndr_size;
 	u64 ndr_start;
 	int id;
+	int num_lanes;
 	/* only valid for blk regions */
 	struct nd_blk_window {
-		unsigned num_bw;
-		atomic_t last_bw;
 		struct nd_blk_ctl *blk_ctl; /* Array of 'num_bw' block windows */
-		spinlock_t *bw_lock; /* Array of 'num_bw' locks */
 	} bw;
 	struct nd_mapping mapping[0];
 };
@@ -159,7 +166,6 @@ static inline unsigned nd_inc_seq(unsigned seq)
  * @gendisk: whole disk block device for the namespace
  * @list: for the core to cache a list of "ndio"s for later association
  * @dev: namespace device
- * @num_lanes: number of simultaneous transactions in flight
  * @claims: list of clients using this interface
  * @lock: protect @claims mutation
  */
@@ -171,7 +177,6 @@ struct nd_io {
 	struct device *dev;
 	struct list_head claims;
 	spinlock_t lock;
-	int num_lanes;
 };
 
 struct nd_io_claim;
@@ -224,8 +229,7 @@ ssize_t nd_sector_size_store(struct device *dev, const char *buf,
 int nd_register_ndio(struct nd_io *ndio);
 int nd_unregister_ndio(struct nd_io *ndio);
 void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
-		struct device *dev, struct gendisk *disk, int num_lanes,
-		unsigned long align);
+		struct device *dev, struct gendisk *disk, unsigned long align);
 void ndio_del_claim(struct nd_io_claim *ndio_claim);
 struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove);
@@ -246,6 +250,8 @@ int nd_dimm_get_config_data(struct nd_dimm_drvdata *ndd,
 int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
 		void *buf, size_t len);
 int nd_blk_init_region(struct nd_region *nd_region);
+unsigned int nd_region_acquire_lane(struct nd_region *nd_region);
+void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);

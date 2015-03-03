@@ -32,7 +32,7 @@
 #define RTT_INVALID 0
 #define INT_LBASIZE_ALIGNMENT 256
 #define BTT_PG_SIZE 4096
-#define BTT_DEFAULT_NFREE 256
+#define BTT_DEFAULT_NFREE ND_MAX_LANES
 #define LOG_SEQ_INIT 1
 
 #define IB_FLAG_ERROR 0x00000001
@@ -165,7 +165,6 @@ struct arena_info {
  * @init_lock:		Mutex used for the BTT initialization
  * @init_state:		Flag describing the initialization state for the BTT
  * @num_arenas:		Number of arenas in the BTT instance
- * @num_lanes:		Number of lanes available for IOs
  */
 struct btt {
 	struct gendisk *btt_disk;
@@ -177,10 +176,9 @@ struct btt {
 	u64 nlba;
 	size_t rawsize;
 	u32 lbasize;
-	struct aligned_lock *lanes;
+	struct nd_region *nd_region;
 	struct mutex init_lock;
 	int init_state;
 	int num_arenas;
-	u32 num_lanes;
 };
 #endif

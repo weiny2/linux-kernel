@@ -329,8 +329,7 @@ static int nd_pmem_probe(struct device *dev)
 	nd_bus_lock(dev);
 	add_disk(disk);
 	dev_set_drvdata(dev, pmem);
-	nd_init_ndio(&pmem->ndio, pmem_rw_bytes, dev, disk,
-			num_possible_cpus(), 0);
+	nd_init_ndio(&pmem->ndio, pmem_rw_bytes, dev, disk, 0);
 	nd_register_ndio(&pmem->ndio);
 	nd_bus_unlock(dev);
 
