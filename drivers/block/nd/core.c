@@ -155,10 +155,11 @@ EXPORT_SYMBOL(nd_fletcher64);
 static void nd_bus_release(struct device *dev)
 {
 	struct nd_bus *nd_bus = container_of(dev, struct nd_bus, dev);
+	struct nd_memdev *nd_memdev, *_memdev;
 	struct nd_spa *nd_spa, *_spa;
+	struct nd_mem *nd_mem, *_mem;
 	struct nd_dcr *nd_dcr, *_dcr;
 	struct nd_bdw *nd_bdw, *_bdw;
-	struct nd_mem *nd_mem, *_mem;
 
 	list_for_each_entry_safe(nd_spa, _spa, &nd_bus->spas, list) {
 		list_del_init(&nd_spa->list);
@@ -173,8 +174,12 @@ static void nd_bus_release(struct device *dev)
 		list_del_init(&nd_bdw->list);
 		kfree(nd_bdw);
 	}
-	list_for_each_entry_safe(nd_mem, _mem, &nd_bus->memdevs, list) {
-		list_del_init(&nd_mem->list);
+	list_for_each_entry_safe(nd_memdev, _memdev, &nd_bus->memdevs, list) {
+		list_del_init(&nd_memdev->list);
+		kfree(nd_memdev);
+	}
+	list_for_each_entry_safe(nd_mem, _mem, &nd_bus->dimms, dimms) {
+		list_del_init(&nd_mem->dimms);
 		kfree(nd_mem);
 	}
 
@@ -412,6 +417,7 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->dcrs);
 	INIT_LIST_HEAD(&nd_bus->bdws);
 	INIT_LIST_HEAD(&nd_bus->memdevs);
+	INIT_LIST_HEAD(&nd_bus->dimms);
 	INIT_LIST_HEAD(&nd_bus->ndios);
 	INIT_LIST_HEAD(&nd_bus->list);
 	init_waitqueue_head(&nd_bus->probe_wait);
@@ -520,15 +526,16 @@ static void __iomem *add_table(struct nd_bus *nd_bus, void __iomem *table,
 		break;
 	}
 	case NFIT_TABLE_MEM: {
-		struct nd_mem *nd_mem = kzalloc(sizeof(*nd_mem), GFP_KERNEL);
+		struct nd_memdev *nd_memdev = kzalloc(sizeof(*nd_memdev),
+						     GFP_KERNEL);
 		struct nfit_mem __iomem *nfit_mem = table;
 
-		if (!nd_mem)
+		if (!nd_memdev)
 			goto err;
-		INIT_LIST_HEAD(&nd_mem->list);
-		nd_mem->nfit_mem = nfit_mem;
-		list_add_tail(&nd_mem->list, &nd_bus->memdevs);
-		dev_dbg(&nd_bus->dev, "%s: mem handle: %#x spa: %d dcr: %d\n",
+		INIT_LIST_HEAD(&nd_memdev->list);
+		nd_memdev->nfit_mem = nfit_mem;
+		list_add_tail(&nd_memdev->list, &nd_bus->memdevs);
+		dev_dbg(&nd_bus->dev, "%s: memdev handle: %#x spa: %d dcr: %d\n",
 				__func__, readl(&nfit_mem->nfit_handle),
 				readw(&nfit_mem->spa_index),
 				readw(&nfit_mem->dcr_index));
@@ -605,34 +612,113 @@ const char *nd_blk_bus_provider(struct device *dev)
 }
 EXPORT_SYMBOL(nd_blk_bus_provider);
 
-static void nd_mem_assign_dcr(struct nd_bus *nd_bus, struct nd_mem *nd_mem,
-		struct nd_dcr *nd_dcr)
+void nd_mem_find_spa_bdw(struct nd_bus *nd_bus, struct nd_mem *nd_mem)
 {
-	WARN_TAINT_ONCE(nd_dcr->parent_handle && nd_dcr->parent_handle
-			!= readl(&nd_mem->nfit_mem->nfit_handle),
-			TAINT_FIRMWARE_WORKAROUND,
-			"nd: %s duplicate dimm control region association?\n",
-			nd_bus_provider(nd_bus));
-	nd_dcr->parent_handle = readl(&nd_mem->nfit_mem->nfit_handle);
-	nd_mem->nfit_dcr = nd_dcr->nfit_dcr;
+	u32 nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	u16 dcr_index = readw(&nd_mem->nfit_dcr->dcr_index);
+	struct nd_spa *nd_spa;
+
+	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
+		int type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
+		u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		struct nd_memdev *nd_memdev;
+
+		if (type != NFIT_SPA_BDW)
+			continue;
+
+		list_for_each_entry(nd_memdev, &nd_bus->memdevs, list) {
+			if (readw(&nd_memdev->nfit_mem->spa_index) != spa_index)
+				continue;
+			if (readl(&nd_memdev->nfit_mem->nfit_handle) != nfit_handle)
+				continue;
+			if (readw(&nd_memdev->nfit_mem->dcr_index) != dcr_index)
+				continue;
+
+			nd_mem->nfit_spa_bdw = nd_spa->nfit_spa;
+			return;
+		}
+	}
+
+	dev_dbg(&nd_bus->dev, "SPA-BDW not found for SPA-DCR %d\n",
+			readw(&nd_mem->nfit_spa_dcr->spa_index));
+	nd_mem->nfit_bdw = NULL;
 }
 
-static void nd_mem_init(struct nd_bus *nd_bus)
+static int nd_mem_init(struct nd_bus *nd_bus)
 {
-	struct nd_mem *nd_mem;
+	struct nd_spa *nd_spa;
+	LIST_HEAD(empty);
 
-	/* find the dcr associated with a given memdev */
-	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
+	/*
+	 * For each SPA-DCR address range find its corresponding MEMDEV.
+	 * From that MEMDEV find the corresponding DCR.  Then, try to
+	 * find a SPA-BDW and a corresponding BDW that references the
+	 * DCR.  Throw it all into an nd_mem object.  Note, that BDWs
+	 * are optional.
+	 */
+	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
+		int type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
+		u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		struct list_head *dcrs = &empty;
+		struct nd_memdev *nd_memdev;
 		struct nd_dcr *nd_dcr;
-		u16 dcr_index;
+		struct nd_bdw *nd_bdw;
+		struct nd_mem *nd_mem;
+		u16 dcr_index = 0;
 
-		dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
-		list_for_each_entry(nd_dcr, &nd_bus->dcrs, list)
-			if (readw(&nd_dcr->nfit_dcr->dcr_index) == dcr_index) {
-				nd_mem_assign_dcr(nd_bus, nd_mem, nd_dcr);
-				break;
-			}
+		if (type != NFIT_SPA_DCR)
+			continue;
+
+		nd_mem = kzalloc(sizeof(*nd_mem), GFP_KERNEL);
+		if (!nd_mem)
+			return -ENOMEM;
+		INIT_LIST_HEAD(&nd_mem->dimms);
+		nd_mem->nfit_spa_dcr = nd_spa->nfit_spa;
+
+		list_for_each_entry(nd_memdev, &nd_bus->memdevs, list) {
+			if (readw(&nd_memdev->nfit_mem->spa_index) != spa_index)
+				continue;
+			dcrs = &nd_bus->dcrs;
+			nd_mem->nfit_mem = nd_memdev->nfit_mem;
+			dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
+			break;
+		}
+
+		list_for_each_entry(nd_dcr, dcrs, list) {
+			if (readw(&nd_dcr->nfit_dcr->dcr_index) != dcr_index)
+				continue;
+			nd_mem->nfit_dcr = nd_dcr->nfit_dcr;
+			break;
+		}
+
+		if (!nd_mem->nfit_mem || !nd_mem->nfit_dcr) {
+			dev_dbg(&nd_bus->dev, "SPA-DCR %d missing:%s%s\n",
+				spa_index, nd_mem->nfit_mem ? "" : " MEMDEV",
+				nd_mem->nfit_dcr ? "" : " DCR");
+			kfree(nd_mem);
+			continue;
+		}
+
+		/*
+		 * We've found enough to create an nd_dimm, optionally
+		 * find an associated BDW
+		 */
+		list_add(&nd_mem->dimms, &nd_bus->dimms);
+
+		list_for_each_entry(nd_bdw, &nd_bus->bdws, list) {
+			if (readw(&nd_bdw->nfit_bdw->dcr_index) != dcr_index)
+				continue;
+			nd_mem->nfit_bdw = nd_bdw->nfit_bdw;
+			break;
+		}
+
+		if (!nd_mem->nfit_bdw)
+			continue;
+
+		nd_mem_find_spa_bdw(nd_bus, nd_mem);
 	}
+
+	return 0;
 }
 
 static int child_unregister(struct device *dev, void *data)
@@ -697,7 +783,9 @@ static struct nd_bus *nd_bus_probe(struct nd_bus *nd_bus)
 		goto err;
 	}
 
-	nd_mem_init(nd_bus);
+	rc = nd_mem_init(nd_bus);
+	if (rc)
+		goto err;
 
 	rc = nd_bus_init_interleave_sets(nd_bus);
 	if (rc)

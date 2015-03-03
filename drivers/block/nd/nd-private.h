@@ -47,6 +47,7 @@ struct nd_bus {
 	wait_queue_head_t probe_wait;
 	struct module *module;
 	struct list_head memdevs;
+	struct list_head dimms;
 	struct list_head spas;
 	struct list_head dcrs;
 	struct list_head bdws;
@@ -83,7 +84,6 @@ struct nd_spa {
 
 struct nd_dcr {
 	struct nfit_dcr __iomem *nfit_dcr;
-	u32 parent_handle;
 	struct list_head list;
 };
 
@@ -92,10 +92,19 @@ struct nd_bdw {
 	struct list_head list;
 };
 
+struct nd_memdev {
+	struct nfit_mem __iomem *nfit_mem;
+	struct list_head list;
+};
+
+/* assembled tables for a given dimm */
 struct nd_mem {
 	struct nfit_mem __iomem *nfit_mem;
 	struct nfit_dcr __iomem *nfit_dcr;
-	struct list_head list;
+	struct nfit_bdw __iomem *nfit_bdw;
+	struct nfit_spa __iomem *nfit_spa_dcr;
+	struct nfit_spa __iomem *nfit_spa_bdw;
+	struct list_head dimms;
 };
 
 struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname);

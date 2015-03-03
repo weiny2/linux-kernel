@@ -331,24 +331,25 @@ static struct attribute_group nd_region_attribute_group = {
  * multiple per device in the interleave, but multiple per-dimm for each region
  * of the dimm that maps into the interleave.
  */
-static struct nd_mem *nd_mem_from_spa(struct nd_bus *nd_bus, u16 spa_index, int n)
+static struct nd_memdev *nd_memdev_from_spa(struct nd_bus *nd_bus,
+		u16 spa_index, int n)
 {
-	struct nd_mem *nd_mem;
+	struct nd_memdev *nd_memdev;
 
-	list_for_each_entry(nd_mem, &nd_bus->memdevs, list)
-		if (readw(&nd_mem->nfit_mem->spa_index) == spa_index)
+	list_for_each_entry(nd_memdev, &nd_bus->memdevs, list)
+		if (readw(&nd_memdev->nfit_mem->spa_index) == spa_index)
 			if (n-- == 0)
-				return nd_mem;
+				return nd_memdev;
 	return NULL;
 }
 
 static int num_nd_mem(struct nd_bus *nd_bus, u16 spa_index)
 {
-	struct nd_mem *nd_mem;
+	struct nd_memdev *nd_memdev;
 	int count = 0;
 
-	list_for_each_entry(nd_mem, &nd_bus->memdevs, list)
-		if (readw(&nd_mem->nfit_mem->spa_index) == spa_index)
+	list_for_each_entry(nd_memdev, &nd_bus->memdevs, list)
+		if (readw(&nd_memdev->nfit_mem->spa_index) == spa_index)
 			count++;
 	return count;
 }
@@ -376,6 +377,19 @@ static int cmp_map(const void *m0, const void *m1)
 			sizeof(u64));
 }
 
+/* convert and anoymous MEMDEV to its set of associated tables */
+static struct nd_mem *nd_memdev_to_mem(struct nd_bus *nd_bus,
+		struct nd_memdev *nd_memdev)
+{
+	u32 nfit_handle = readl(&nd_memdev->nfit_mem->nfit_handle);
+	struct nd_mem *nd_mem;
+
+	list_for_each_entry(nd_mem, &nd_bus->dimms, dimms)
+		if (readl(&nd_mem->nfit_mem->nfit_handle) == nfit_handle)
+			return nd_mem;
+	return NULL;
+}
+
 static int init_interleave_set(struct nd_bus *nd_bus,
 		struct nd_interleave_set *nd_set, struct nd_spa *nd_spa)
 {
@@ -388,10 +402,20 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 	if (!info)
 		return -ENOMEM;
 	for (i = 0; i < num_mappings; i++) {
-		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
 		struct nd_set_info_map *map = &info->mapping[i];
+		struct nd_memdev *nd_memdev = nd_memdev_from_spa(nd_bus,
+				spa_index, i);
+		struct nd_mem *nd_mem = nd_memdev_to_mem(nd_bus, nd_memdev);
 
-		map->region_spa_offset = readl(&nd_mem->nfit_mem->region_spa_offset);
+		if (!nd_mem) {
+			dev_err(&nd_bus->dev, "%s: failed to find DCR\n",
+					__func__);
+			kfree(info);
+			return -ENODEV;
+		}
+
+		map->region_spa_offset = readl(
+				&nd_memdev->nfit_mem->region_spa_offset);
 		map->serial_number = nfit_dcr_serial(nd_bus->nfit_desc,
 				nd_mem->nfit_dcr, nd_mem->nfit_mem);
 	}
@@ -418,7 +442,7 @@ int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
 
 		if (spa_type != NFIT_SPA_PM)
 			continue;
-		if (nd_mem_from_spa(nd_bus, spa_index, 0) == NULL)
+		if (nd_memdev_from_spa(nd_bus, spa_index, 0) == NULL)
 			continue;
 		nd_set = kzalloc(sizeof(*nd_set), GFP_KERNEL);
 		if (!nd_set) {
@@ -622,45 +646,47 @@ static const struct attribute_group *nd_region_attribute_groups[] = {
 static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 {
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
-	struct nd_bdw *iter, *nd_bdw = NULL;
+	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	struct nd_mem *nd_mem, *found = NULL;
 	struct nd_mapping *nd_mapping;
 	struct nd_dimm *nd_dimm;
-	struct nd_mem *nd_mem;
 	u32 nfit_handle;
-	u16 dcr_index;
 
 	nd_region->dev.type = &nd_block_device_type;
-
-	nd_mem = nd_mem_from_spa(nd_bus, spa_index, 0);
-	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
-	nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
-	dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
-	list_for_each_entry(iter, &nd_bus->bdws, list) {
-		if (readw(&iter->nfit_bdw->dcr_index) == dcr_index) {
-			nd_bdw = iter;
+	nd_region->ndr_mappings = 0;
+	list_for_each_entry(nd_mem, &nd_bus->dimms, dimms)
+		if (readw(&nd_mem->nfit_spa_dcr->spa_index) == spa_index) {
+			found = nd_mem;
 			break;
 		}
+
+	if (!found) {
+		dev_WARN_ONCE(&nd_region->dev, !found,
+				"BUG: missing dimm-control-region\n");
+		return;
 	}
 
-	if (!nd_bdw) {
+	nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
+	nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
+	if (!nd_mem->nfit_bdw) {
 		dev_dbg(&nd_region->dev,
 				"%s: %s no block-data-window descriptor\n",
 				__func__, dev_name(&nd_dimm->dev));
-		nd_region->ndr_mappings = 0;
-	} else if (readq(&nd_bdw->nfit_bdw->blk_offset) % SZ_4K) {
+		put_device(&nd_dimm->dev);
+		return;
+	}
+	if (readq(&nd_mem->nfit_bdw->blk_offset) % SZ_4K) {
 		dev_err(&nd_region->dev, "%s: %s block-capacity is not 4K aligned\n",
 				__func__, dev_name(&nd_dimm->dev));
-		nd_region->ndr_mappings = 0;
+		put_device(&nd_dimm->dev);
+		return;
 	}
 
-	if (!nd_region->ndr_mappings)
-		return;
-
+	nd_region->ndr_mappings = 1;
 	nd_mapping = &nd_region->mapping[0];
 	nd_mapping->nd_dimm = nd_dimm;
-	nd_mapping->size = readq(&nd_bdw->nfit_bdw->blk_capacity);
-	nd_mapping->start = readq(&nd_bdw->nfit_bdw->blk_offset);
+	nd_mapping->size = readq(&nd_mem->nfit_bdw->blk_capacity);
+	nd_mapping->start = readq(&nd_mem->nfit_bdw->blk_offset);
 }
 
 static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region,
@@ -672,15 +698,17 @@ static void nd_spa_range_init(struct nd_bus *nd_bus, struct nd_region *nd_region
 
 	nd_region->dev.type = type;
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
-		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
+		struct nd_memdev *nd_memdev = nd_memdev_from_spa(nd_bus,
+				spa_index, i);
+		struct nd_mem *nd_mem = nd_memdev_to_mem(nd_bus, nd_memdev);
 		u32 nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 		struct nd_dimm *nd_dimm;
 
 		nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
 		nd_mapping->nd_dimm = nd_dimm;
-		nd_mapping->start = readq(&nd_mem->nfit_mem->region_dpa);
-		nd_mapping->size = readq(&nd_mem->nfit_mem->region_len);
+		nd_mapping->start = readq(&nd_memdev->nfit_mem->region_dpa);
+		nd_mapping->size = readq(&nd_memdev->nfit_mem->region_len);
 
 		if ((nd_mapping->start | nd_mapping->size) % SZ_4K) {
 			dev_err(&nd_region->dev, "%s: %s mapping is not 4K aligned\n",

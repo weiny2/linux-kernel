@@ -775,13 +775,19 @@ int nd_bus_register_dimms(struct nd_bus *nd_bus)
 	struct nd_mem *nd_mem;
 
 	mutex_lock(&nd_bus_list_mutex);
-	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
+	list_for_each_entry(nd_mem, &nd_bus->dimms, dimms) {
 		struct nd_dimm *nd_dimm;
 		u32 nfit_handle;
 
 		nfit_handle = readl(&nd_mem->nfit_mem->nfit_handle);
 		nd_dimm = nd_dimm_by_handle(nd_bus, nfit_handle);
 		if (nd_dimm) {
+			/*
+			 * If for some reason we find multiple DCRs the
+			 * first one wins
+			 */
+			dev_err(&nd_bus->dev, "duplicate DCR detected: %s\n",
+				dev_name(&nd_dimm->dev));
 			put_device(&nd_dimm->dev);
 			continue;
 		}
