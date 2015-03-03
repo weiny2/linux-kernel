@@ -1590,7 +1590,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 				roundup_pow_of_two(eager_buffer_size);
 		eager_buffer_size =
 			clamp_val(eager_buffer_size, WFR_MIN_EAGER_BUFFER,
-				  WFR_MAX_EXPECTED_BUFFER);
+				  WFR_MAX_EAGER_BUFFER_TOTAL);
 		qib_early_info(&pdev->dev, "Eager buffer size %u\n",
 			       eager_buffer_size);
 	} else {

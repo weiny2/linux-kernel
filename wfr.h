@@ -296,10 +296,14 @@
 /*
  * Eager buffer minimum and maximum sizes supported by the hardware.
  * All power-of-two sizes in between are supported as well.
+ * WFR_MAX_EAGER_BUFFER_TOTAL is the maximum size of memory
+ * allocatable for Eager buffer to a single context. All others
+ * are limits for the RcvArray entries.
  */
-#define WFR_MIN_EAGER_BUFFER    (4 * 1024)
-#define WFR_MAX_EAGER_BUFFER    (256 * 1024)
-#define WFR_MAX_EXPECTED_BUFFER (2048 * 1024)
+#define WFR_MIN_EAGER_BUFFER       (4 * 1024)
+#define WFR_MAX_EAGER_BUFFER       (256 * 1024)
+#define WFR_MAX_EAGER_BUFFER_TOTAL (64 * (1 << 20)) /* max per ctxt 64MB */
+#define WFR_MAX_EXPECTED_BUFFER    (2048 * 1024)
 
 /*
  * Receive expected base and count and eager base and count increment -
