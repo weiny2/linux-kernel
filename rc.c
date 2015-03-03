@@ -1882,7 +1882,6 @@ void process_becn(struct qib_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 	struct cca_timer *cca_timer;
 	u16 ccti, ccti_incr, ccti_timer, ccti_limit;
 	u8 trigger_threshold;
-	unsigned long nsec;
 	struct cc_state *cc_state;
 
 	if (sl >= OPA_MAX_SLS)
@@ -1920,20 +1919,21 @@ void process_becn(struct qib_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 		set_link_ipg(ppd);
 	}
 
-	ccti = cca_timer->ccti;
-
 	spin_unlock(&ppd->cca_timer_lock);
 
 	rcu_read_unlock();
 
+	ccti = cca_timer->ccti;
+
+	if (!hrtimer_active(&cca_timer->hrtimer)) {
+		/* ccti_timer is in units of 1.024 usec */
+		unsigned long nsec = 1024 * ccti_timer;
+		hrtimer_start(&cca_timer->hrtimer, ns_to_ktime(nsec),
+			      HRTIMER_MODE_REL);
+	}
+
 	if ((trigger_threshold != 0) && (ccti >= trigger_threshold))
 		log_cca_event(ppd, sl, rlid, lqpn, rqpn, svc_type);
-
-	nsec = 1024 * ccti_timer;
-	/* ccti_timer is in units of 1.024 usec */
-
-	hrtimer_start(&cca_timer->hrtimer, ns_to_ktime(nsec),
-		      HRTIMER_MODE_REL);
 }
 
 /**
