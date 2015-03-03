@@ -454,54 +454,71 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 	unsigned long flags;
 	int ret;
 	struct hfi_devdata *dd = ctx->devdata;
-	u16 ptl_pid = *assigned_pid;
+	u16 start, end, ptl_pid = *assigned_pid;
 
 	if (ctx->pid_count) {
-		/* assign PID from Portals PID reservation */
+		/*
+		 * Here there is already a PID reservation set by the job
+		 * launcher (contiguous set of PIDs) with ops->ctx_reserve.
+		 * Assign PID from existing Portals PID reservation.
+		 * User can ask for driver assignment (-1) from within the
+		 * reservation or ask for a specifc (logical) PID within the
+		 * reserved set of PIDs.
+		 */
 		if ((ptl_pid != HFI_PID_ANY) &&
 		    (ptl_pid >= ctx->pid_count))
 			return -EINVAL;
 
-		spin_lock_irqsave(&dd->ptl_lock, flags);
 		if (ptl_pid == HFI_PID_ANY) {
-			/* if PID_ANY, search reserved PIDs for unused one */
-			for (ptl_pid = 0; ptl_pid < ctx->pid_count; ptl_pid++) {
-				if (dd->ptl_user[ctx->pid_base + ptl_pid] == NULL)
-					break;
-			}
-			if (ptl_pid >= ctx->pid_count) {
-				spin_unlock_irqrestore(&dd->ptl_lock, flags);
-				return -EBUSY;
-			}
-			ptl_pid += ctx->pid_base;
+			/* get first available PID within the reservation */
+			start = ctx->pid_base;
+			end = ctx->pid_base + ctx->pid_count;
 		} else {
-			ptl_pid += ctx->pid_base;
-			if (dd->ptl_user[ptl_pid] != NULL) {
-				spin_unlock_irqrestore(&dd->ptl_lock, flags);
-				return -EBUSY;
-			}
+			/* attempt to assign specific PID offset in reservation */
+			start = ctx->pid_base + ptl_pid;
+			end = ctx->pid_base + ptl_pid + 1;
 		}
-
-		/* store PID hfi_ctx pointer */
-		dd->ptl_user[ptl_pid] = ctx;
-		spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	} else {
-		/* PID is user-specified, validate and acquire */
+		/*
+		 * Here PID is user-specified, there was not a job launcher
+		 * supplied PID reservation.
+		 * User can ask for driver assignment (-1) or ask for a
+		 * specific PID.
+		 */
 		if ((ptl_pid != HFI_PID_ANY) &&
 		    (ptl_pid >= HFI_NUM_PIDS))
 			return -EINVAL;
 
+		/* No reservation, so must find unreserved PID first */
 		ret = __hfi_ctxt_reserve(dd, &ptl_pid, 1);
 		if (ret)
 			return ret;
 		dd_dev_info(dd, "acquired PID orphan [%u]\n", ptl_pid);
 
-		/* store PID hfi_ctx pointer */
-		BUG_ON(dd->ptl_user[ptl_pid]);
-		dd->ptl_user[ptl_pid] = ctx;
+		start = ptl_pid;
+		end = ptl_pid + 1;
 	}
 
-	*assigned_pid = ptl_pid;
+	/* Now assign the PID and associate with this context */
+	idr_preload(GFP_KERNEL);
+	spin_lock_irqsave(&dd->ptl_lock, flags);
+	ret = idr_alloc(&dd->ptl_user, ctx, start, end, GFP_NOWAIT);
+	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	idr_preload_end();
+
+	if (ret < 0) {
+		/*
+		 * For the case where there was not already a PID reservation,
+		 * then we reserved a single PID above and are marking assigned
+		 * with IDR. IDR allocation cannot fail in this case unless
+		 * there is PID state corruption due to a driver bug, hence
+		 * the BUG_ON here.
+		 */
+		BUG_ON(!ctx->pid_count);
+		return ret;
+	}
+
+	*assigned_pid = ret;
 	return 0;
 }
 
@@ -512,7 +529,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	hfi_pcb_reset(dd, ptl_pid);
 	hfi_iommu_clear_pasid(dd, ptl_pid);
-	dd->ptl_user[ptl_pid] = NULL;
+	idr_remove(&dd->ptl_user, ptl_pid);
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
 }
@@ -525,13 +542,16 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 ptl_pid = ctx->ptl_pid;
+	unsigned long flags;
 
 	if (ptl_pid == HFI_PID_NONE)
 		/* no assigned PID */
 		return;
 
-	/* verify PID is in correct state */
-	BUG_ON(dd->ptl_user[ptl_pid] != ctx);
+	/* verify PID state is not corrupted  */
+	spin_lock_irqsave(&dd->ptl_lock, flags);
+	BUG_ON(idr_find(&dd->ptl_user, ptl_pid) != ctx);
+	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 
 	/* first release any assigned CQs */
 	hfi_cq_cleanup(ctx);
