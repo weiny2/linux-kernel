@@ -61,6 +61,8 @@
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
 
+#define HFI_NUM_BARS		2
+
 struct hfi_msix_entry {
 	struct msix_entry msix;
 	void *arg;
@@ -79,15 +81,10 @@ struct hfi_devdata {
 	u32 lbus_speed;
 	int unit; /* unit # of this chip */
 	int node; /* home node of this chip */
-	/* so we can rewrite it after a chip reset */
-	u32 pcibar0;
-	/* so we can rewrite it after a chip reset */
-	u32 pcibar1;
-
+	u32 pcibar[HFI_NUM_BARS];
 	/* mem-mapped pointer to base of chip regs */
-	u8 __iomem *kregbase;
-	/* end of mem-mapped chip space excluding sendbuf and user regs */
-	u8 __iomem *kregend;
+	u8 __iomem *kregbase[HFI_NUM_BARS];
+	u8 __iomem *kregend[HFI_NUM_BARS];
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
 

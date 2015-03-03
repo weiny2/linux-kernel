@@ -78,16 +78,16 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 static u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
-	BUG_ON(dd->kregbase == NULL);
-	val = readq(dd->kregbase + offset);
+	BUG_ON(dd->kregbase[0] == NULL);
+	val = readq(dd->kregbase[0] + offset);
 	return le64_to_cpu(val);
 }
 #endif
 
 static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
-	BUG_ON(dd->kregbase == NULL);
-	writeq(cpu_to_le64(value), dd->kregbase + offset);
+	BUG_ON(dd->kregbase[0] == NULL);
+	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
 }
 
 static void set_loopback(const struct hfi_devdata *dd)
@@ -103,6 +103,8 @@ static void set_loopback(const struct hfi_devdata *dd)
  */
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
+	int i;
+
 	opa_core_unregister_device(dd->bus_dev);
 
 	cleanup_interrupts(dd);
@@ -111,12 +113,14 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	if (dd->cq_head_base)
 		free_pages((unsigned long)dd->cq_head_base,
 			   get_order(dd->cq_head_size));
+
 	if (dd->ptl_user)
 		free_pages((unsigned long)dd->ptl_user,
 			   get_order(dd->ptl_user_size));
 
-	if (dd->kregbase)
-		iounmap((void __iomem *)dd->kregbase);
+	for (i = 0; i < HFI_NUM_BARS; i++)
+		if (dd->kregbase[i])
+			iounmap((void __iomem *)dd->kregbase[i]);
 
 	pci_set_drvdata(dd->pcidev, NULL);
 	kfree(dd);
@@ -170,22 +174,21 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->pcidev = pdev;
 	pci_set_drvdata(pdev, dd);
 
-	/* FXR has a single 128 MB BAR. */
-	addr = pci_resource_start(pdev, 0);
-	len = pci_resource_len(pdev, 0);
-	pr_debug("BAR @ start 0x%lx len %lu\n", (long)addr, len);
+	for (i = 0; i < HFI_NUM_BARS; i++) {
+		addr = pci_resource_start(pdev, i);
+		len = pci_resource_len(pdev, i);
+		pr_debug("BAR[%d] @ start 0x%lx len %lu\n", i, (long)addr, len);
 
-	dd->kregbase = ioremap_nocache(addr, len);
-	if (!dd->kregbase) {
-		ret = -ENOMEM;
-		goto err_post_alloc;
+		dd->pcibar[i] = addr;
+		dd->kregbase[i] = ioremap_nocache(addr, len);
+		if (!dd->kregbase[i]) {
+			ret = -ENOMEM;
+			goto err_post_alloc;
+		}
+		dd->kregend[i] = dd->kregbase[i] + len;
 	}
-	dd->kregend = dd->kregbase + len;
-
-	/* Save BAR to rewrite after device reset. */
-	dd->pcibar0 = addr;
-	dd->pcibar1 = 0;
-	dd->physaddr = addr;		/* used for io_remap, etc. */
+	/* FXR resources are on BAR0 (used for io_remap, etc.) */
+	dd->physaddr = dd->pcibar[0];
 
 	if (force_loopback)
 		set_loopback(dd);
