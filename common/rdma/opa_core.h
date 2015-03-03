@@ -217,6 +217,8 @@ struct opa_core_device_id {
  * @id: the device type identification (used to match it with a driver).
  * @dev: underlying device.
  * @index: unique position on the opa_core bus
+ * @kregbase: start VA for opaX hw csrs
+ * @kregend: end VA for opaX hw csrs
  * @dd: device specific information
  */
 struct opa_core_device {
@@ -224,6 +226,8 @@ struct opa_core_device {
 	struct opa_core_device_id id;
 	struct device dev;
 	int index;
+	u8 __iomem *kregbase;
+	u8 __iomem *kregend;
 	struct hfi_devdata *dd;
 };
 

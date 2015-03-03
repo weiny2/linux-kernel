@@ -235,6 +235,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->bus_dev = opa_core_register_device(&pdev->dev, &bus_id, dd, &opa_core_ops);
 	/* All the unit management is handled by opa_core */
 	dd->unit = dd->bus_dev->index;
+	dd->bus_dev->kregbase = dd->kregbase[0];
+	dd->bus_dev->kregend = dd->kregend[0];
 
 	return dd;
 

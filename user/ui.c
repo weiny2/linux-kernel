@@ -51,15 +51,18 @@
  */
 
 #include <linux/fs.h>
-#include "../hfi.h"
+#include <linux/uaccess.h>
+#include <rdma/opa_core.h>
 #include "device.h"
+
+#define OPA_UI_SUFFIX			"_ui"
 
 static int ui_open(struct inode *inode, struct file *filp)
 {
-	struct hfi_devdata *dd;
+	struct hfi_info *hi = container_of(filp->private_data,
+					   struct hfi_info, ui_miscdev);
 
-	dd = container_of(inode->i_cdev, struct hfi_devdata, ui_cdev);
-	filp->private_data = dd; /* for other methods */
+	filp->private_data = hi->odev; /* for other methods */
 	return 0;
 }
 
@@ -71,7 +74,11 @@ static int ui_release(struct inode *inode, struct file *filp)
 
 static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 {
-	struct hfi_devdata *dd = filp->private_data;
+	struct opa_core_device *odev = filp->private_data;
+
+	/* CSR access is for root user only for security reasons */
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	switch (whence) {
 	case SEEK_SET:
@@ -80,7 +87,7 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 		offset += filp->f_pos;
 		break;
 	case SEEK_END:
-		offset = (dd->kregend - dd->kregbase) - offset;
+		offset = (odev->kregend - odev->kregbase) - offset;
 		break;
 	default:
 		return -EINVAL;
@@ -89,7 +96,7 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 	if (offset < 0)
 		return -EINVAL;
 
-	if (offset >= dd->kregend - dd->kregbase)
+	if (offset >= odev->kregend - odev->kregbase)
 		return -EINVAL;
 
 	filp->f_pos = offset;
@@ -101,9 +108,13 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			loff_t *f_pos)
 {
-	struct hfi_devdata *dd = filp->private_data;
+	struct opa_core_device *odev = filp->private_data;
 	void *base;
-	unsigned long total, data;
+	unsigned long total = 0, data;
+
+	/* CSR access is for root user only for security reasons */
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	/* only read 8 byte quantities */
 	if ((count % 8) != 0)
@@ -114,26 +125,33 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 	/* destination buffer must be 8-byte aligned */
 	if ((unsigned long)buf % 8 != 0)
 		return -EINVAL;
+
 	/* must be in range */
-	if (*f_pos + count > dd->kregend - dd->kregbase)
+	if (*f_pos + count > odev->kregend - odev->kregbase)
 		return -EINVAL;
-	base = (void *)dd->kregbase + *f_pos;
+	base = (void *)odev->kregbase + *f_pos;
 	for (total = 0; total < count; total += 8) {
 		data = readq(base + total);
 		if (put_user(data, (unsigned long *)(buf + total)))
 			break;
 	}
+
 	*f_pos += total;
 	return total;
 }
+
 
 /* NOTE: assumes unsigned long is 8 bytes */
 static ssize_t ui_write(struct file *filp, const char __user *buf,
 			size_t count, loff_t *f_pos)
 {
-	struct hfi_devdata *dd = filp->private_data;
+	struct opa_core_device *odev = filp->private_data;
 	void *base;
 	unsigned long total, data;
+
+	/* CSR access is for root user only for security reasons */
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	/* only write 8 byte quantities */
 	if ((count % 8) != 0)
@@ -145,10 +163,10 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 	if ((unsigned long)buf % 8 != 0)
 		return -EINVAL;
 	/* must be in range */
-	if (*f_pos + count > dd->kregend - dd->kregbase)
+	if (*f_pos + count > odev->kregend - odev->kregbase)
 		return -EINVAL;
 
-	base = (void *)dd->kregbase + *f_pos;
+	base = (void *)odev->kregbase + *f_pos;
 	for (total = 0; total < count; total += 8) {
 		if (get_user(data, (unsigned long *)(buf + total)))
 			break;
@@ -160,30 +178,34 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 
 static const struct file_operations ui_file_ops = {
 	.owner = THIS_MODULE,
-	.llseek = ui_lseek,
 	.read = ui_read,
+	.llseek = ui_lseek,
 	.write = ui_write,
 	.open = ui_open,
 	.release = ui_release,
 };
 
-/* TODO: No one is calling these functions. Do we need them? */
-void hfi_ui_remove(struct hfi_devdata *dd)
+int hfi_ui_add(struct hfi_info *hi)
 {
-	hfi_cdev_cleanup(&dd->ui_cdev, &dd->ui_device);
+	int rc;
+	struct miscdevice *mdev;
+	struct opa_core_device *odev = hi->odev;
+
+	mdev = &hi->ui_miscdev;
+	mdev->minor = MISC_DYNAMIC_MINOR;
+	snprintf(hi->ui_name, sizeof(hi->ui_name), "%s%d%s",
+		 DRIVER_DEVICE_PREFIX, odev->index, OPA_UI_SUFFIX);
+	mdev->name = hi->ui_name;
+	mdev->fops = &ui_file_ops;
+	mdev->parent = &odev->dev;
+
+	rc = misc_register(mdev);
+	if (rc)
+		dev_err(&odev->dev, "%s failed rc %d\n", __func__, rc);
+	return rc;
 }
 
-/* TODO: No one is calling these functions. Do we need them? */
-int hfi_ui_add(struct hfi_devdata *dd)
+void hfi_ui_remove(struct hfi_info *hi)
 {
-	char name[10];
-	int ret;
-
-	snprintf(name, sizeof(name),
-		 "%s%d_ui", DRIVER_DEVICE_PREFIX, dd->unit);
-	ret = hfi_cdev_init(dd->unit + HFI_UI_MINOR_BASE, name, &ui_file_ops,
-			    &dd->ui_cdev, &dd->ui_device);
-	if (!ret)
-		dev_set_drvdata(dd->ui_device, dd);
-	return ret;
+	misc_deregister(&hi->ui_miscdev);
 }
