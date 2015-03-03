@@ -308,6 +308,12 @@ test_list = [
       "desc" : "Run the Intel MPI Test Suite"
     },
 
+    { "test_name" : "Loopback-Test",
+      "test_exe" : "Loopback.py",
+      "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "type" : "default,quick",
+      "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
+    },
 ]
 
 

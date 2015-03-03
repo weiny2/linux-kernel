@@ -5150,7 +5150,8 @@ static int start_link(struct qib_pportdata *ppd)
 		return 0;
 	}
 
-	if (qsfp_mod_present(ppd))
+	if (qsfp_mod_present(ppd) ||
+	    loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB)
 		ret = set_link_state(ppd, HLS_DN_POLL);
 
 	/* TODO: do not poll when cable plug notification is available */

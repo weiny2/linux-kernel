@@ -97,15 +97,13 @@ def main():
     print test_info
 
     count = test_info.get_host_count()
-    if count < 2:
-        RegLib.test_fail("Not enough hosts")
 
     print "Found ", count, "hosts"
-    host1 = test_info.get_host_record(0)
-    print host1
-
-    host2 = test_info.get_host_record(1)
-    print host2
+    hostlist = []
+    for x in range(count):
+        host = test_info.get_host_record(x)
+        print host
+        hostlist.append(host)
 
     ################
     # body of test #
@@ -121,27 +119,26 @@ def main():
     sm = test_info.which_sm()
 
     matchObj = re.match(r"(.*):(.*)", driver_parms)
-    host1_parms = ""
-    host2_parms = ""
+    host_parms = ["", ""]
     if matchObj:
         RegLib.test_log(5, "Using new style modparms");
-        host1_parms = matchObj.group(1)
-        host2_parms = matchObj.group(2)
+        host_parms[0] = matchObj.group(1)
+        host_parms[1] = matchObj.group(2)
     else:
         RegLib.test_log(5, "Using old style modparms");
-        host1_parms = driver_parms
-        host2_parms = driver_parms
+        host_parms[0] = driver_parms
+        host_parms[1] = driver_parms
 
-    host1_parms = host1_parms.strip()
-    host2_parms = host2_parms.strip()
-    RegLib.test_log(5, "host1 parms: %s" %host1_parms)
-    RegLib.test_log(5, "host2 parms: %s" %host2_parms)
+
+    host_parms = [x.strip() for x in host_parms]
+    for x in range(len(host_parms)):
+        RegLib.test_log(5, "host%d parms: %s" % (x, host_parms[x]))
       
     opafm_host = None
     
     if sm != "none":
         RegLib.test_log(0, "Trying to determine which node the fm is running on")
-        for host in host1, host2:
+        for host in hostlist:
             active = is_sm_active(host, "opafm")
             if active == 0:
                 if opafm_host == None:
@@ -164,7 +161,7 @@ def main():
             #time.sleep(15)
 
     # Go ahead and get the driver loaded or reloaded on both hosts
-    for host in host1,host2:
+    for host in hostlist:
         name = host.get_name()
         loaded = is_driver_loaded(host, driver_name)
         if loaded == True:
@@ -177,10 +174,7 @@ def main():
         #time.sleep(10)
 
         RegLib.test_log(0, name + " Loading Driver")
-        if host == host1:
-            driver_parms = host1_parms
-        else:
-            driver_parms = host2_parms
+        driver_parms = host_parms[hostlist.index(host)]
 
         loaded = load_driver(host, driver_name, driver_path, driver_parms)
         if loaded == True:
@@ -195,7 +189,7 @@ def main():
         RegLib.test_pass("Driver loaded sm/fm not running")
 
     if opafm_host == None: #chose host1 by default
-        opafm_host = host1
+        opafm_host = hostlist[0]
     RegLib.test_log(0, "Starting opafm on %s" % opafm_host.get_name())
     start_sm(opafm_host, "opafm")
     active = is_sm_active(opafm_host, "opafm")
@@ -205,7 +199,7 @@ def main():
     # Driver loaded and sm ready now wait till links are active on both
     # nodes.
     num_loaded = 0
-    for host in host1,host2:
+    for host in hostlist:
         name = host.get_name()
         err = wait_for_active(host, 10, 6)
         if err:
@@ -214,12 +208,12 @@ def main():
             RegLib.test_log(0, name + " Adapter is up and running")
             num_loaded = num_loaded + 1
 
-    if num_loaded != 2:
+    if num_loaded != len(hostlist):
         RegLib.test_fail(name + " Unable to get active state on at least 1 node")
 
     # Before bailing out dump the kmod load address in case we need to do some
     # debugging later.
-    for host in host1,host2:
+    for host in hostlist:
         print host.get_name(), "module load address is:"
         cmd = "cat /sys/module/hfi/sections/.init.text"
         (err, out) = do_ssh(host, cmd)

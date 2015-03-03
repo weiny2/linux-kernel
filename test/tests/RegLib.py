@@ -368,6 +368,7 @@ class TestInfo:
     hfi_src = None
     kbuild_dir = None
     simics = False
+    fpga = False
     mpiverbs = False
     paramdict = None
     np = "6"
@@ -377,6 +378,9 @@ class TestInfo:
 
     def is_simics(self):
         return self.simics
+
+    def is_fpga(self):
+        return self.fpga
 
     def get_parse_standard_args(self):
         parser = OptionParser()
@@ -407,6 +411,10 @@ class TestInfo:
         parser.add_option("--simics", action="store_true", dest="simics",
                           help="Run on simics environment. Optional if using "
                                + "viper0,viper1 as nodelist")
+
+        parser.add_option("--fpga", action="store_true", dest="fpga",
+                          help="Run on FPGA environment. Optional if using "
+                          + "fpga* as nodelist")
 
         parser.add_option("--type", dest="test_types",
                           help="Test type(s) to run. Use 'all' for everything."
@@ -470,6 +478,10 @@ class TestInfo:
         else:
             self.force_root = True
 
+        self.fpga = options.fpga
+        if self.fpga == None:
+            self.fpga = False
+
         if options.mpiverbs:
             self.mpiverbs = True
 
@@ -492,6 +504,10 @@ class TestInfo:
             for node in nodelist:
                 if node == "viper0" or node == "viper1":
                     self.simics = True
+                    break
+                elif "fpga" in node:
+                    self.fpga = True
+                    break
 
             for node in nodelist:
                 found_localhost = 0
