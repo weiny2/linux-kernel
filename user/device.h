@@ -60,10 +60,14 @@
 
 struct hfi_info {
 	struct opa_core_device *odev;
-	struct miscdevice miscdev;
-	char name[16];
+	struct miscdevice user_miscdev;
+	struct miscdevice ui_miscdev;
+	char user_name[16];
+	char ui_name[16];
 };
 
 int hfi_user_add(struct hfi_info *hi);
 void hfi_user_remove(struct hfi_info *hi);
+int hfi_ui_add(struct hfi_info *hi);
+void hfi_ui_remove(struct hfi_info *hi);
 #endif /* _HFI_DEVICE_H */

@@ -63,7 +63,7 @@ DEFINE_SPINLOCK(opa_device_lock);
 /*
  * Device initialization, called by OPA core when a OPA device is discovered
  */
-static int hfi_portals_add(struct opa_core_device *odev)
+static int hfi_misc_add(struct opa_core_device *odev)
 {
 	unsigned long flags;
 	int ret;
@@ -84,13 +84,22 @@ static int hfi_portals_add(struct opa_core_device *odev)
 		goto idr_end;
 	}
 
+	ret = hfi_ui_add(hi);
+	if (ret)
+		goto add_error;
+
 	ret = hfi_user_add(hi);
 	if (ret) {
-		dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
-		idr_remove(&opa_device_tbl, odev->index);
-		kfree(hi);
+		hfi_ui_remove(hi);
+		goto add_error;
 	}
 
+	goto idr_end;
+
+add_error:
+	dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
+	idr_remove(&opa_device_tbl, odev->index);
+	kfree(hi);
 idr_end:
 	spin_unlock_irqrestore(&opa_device_lock, flags);
 	idr_preload_end();
@@ -102,7 +111,7 @@ exit:
  * Perform required device shutdown logic, also remove /dev entries.
  * Called by OPA core when a OPA device is removed
  */
-static void hfi_portals_remove(struct opa_core_device *odev)
+static void hfi_misc_remove(struct opa_core_device *odev)
 {
 	unsigned long flags;
 	struct hfi_info *hi;
@@ -112,29 +121,32 @@ static void hfi_portals_remove(struct opa_core_device *odev)
 	if (hi) {
 		idr_remove(&opa_device_tbl, odev->index);
 		hfi_user_remove(hi);
+		hfi_ui_remove(hi);
 		kfree(hi);
 	}
 	spin_unlock_irqrestore(&opa_device_lock, flags);
 }
 
-static struct opa_core_client hfi_portals = {
+static struct opa_core_client hfi_misc = {
 	.name = KBUILD_MODNAME,
-	.add = hfi_portals_add,
-	.remove = hfi_portals_remove,
+	.add = hfi_misc_add,
+	.remove = hfi_misc_remove,
 };
 
 static int __init hfi_init(void)
 {
 	idr_init(&opa_device_tbl);
-	return opa_core_client_register(&hfi_portals);
+	return opa_core_client_register(&hfi_misc);
 }
+
 module_init(hfi_init);
 
 static void hfi_cleanup(void)
 {
-	opa_core_client_unregister(&hfi_portals);
+	opa_core_client_unregister(&hfi_misc);
 	idr_destroy(&opa_device_tbl);
 }
+
 module_exit(hfi_cleanup);
 
 MODULE_LICENSE("Dual BSD/GPL");

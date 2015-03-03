@@ -99,7 +99,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 {
 	struct hfi_userdata *ud;
 	struct hfi_info *hi = container_of(fp->private_data,
-					   struct hfi_info, miscdev);
+					   struct hfi_info, user_miscdev);
 
 	ud = kzalloc(sizeof(struct hfi_userdata), GFP_KERNEL);
 	if (!ud)
@@ -562,11 +562,11 @@ int hfi_user_add(struct hfi_info *hi)
 	struct miscdevice *mdev;
 	struct opa_core_device *odev = hi->odev;
 
-	mdev = &hi->miscdev;
+	mdev = &hi->user_miscdev;
 	mdev->minor = MISC_DYNAMIC_MINOR;
-	snprintf(hi->name, sizeof(hi->name), "%s%d",
+	snprintf(hi->user_name, sizeof(hi->user_name), "%s%d",
 		 DRIVER_DEVICE_PREFIX, odev->index);
-	mdev->name = hi->name;
+	mdev->name = hi->user_name;
 	mdev->fops = &hfi_file_ops;
 	mdev->parent = &odev->dev;
 
@@ -578,5 +578,5 @@ int hfi_user_add(struct hfi_info *hi)
 
 void hfi_user_remove(struct hfi_info *hi)
 {
-	misc_deregister(&hi->miscdev);
+	misc_deregister(&hi->user_miscdev);
 }

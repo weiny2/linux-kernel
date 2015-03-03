@@ -11,3 +11,4 @@ opa2_user-y += device.o
 opa2_user-y += file_ops.o
 opa2_user-y += job.o
 opa2_user-y += mpin.o
+opa2_user-y += ui.o
