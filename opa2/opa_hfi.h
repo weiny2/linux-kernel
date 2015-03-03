@@ -93,8 +93,7 @@ struct hfi_devdata {
 	u32 num_msix_entries;
 
 	/* Device Portals State */
-	struct hfi_ctx **ptl_user;
-	size_t ptl_user_size;
+	struct idr ptl_user;
 	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
 	spinlock_t ptl_lock;
 	struct hfi_ctx priv_ctx;

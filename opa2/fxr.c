@@ -113,6 +113,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	hfi_cq_cleanup(&dd->priv_ctx);
 
 	idr_destroy(&dd->cq_pair);
+	idr_destroy(&dd->ptl_user);
 
 	hfi_iommu_root_clear_context(dd);
 
@@ -120,10 +121,6 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	if (dd->cq_head_base)
 		free_pages((unsigned long)dd->cq_head_base,
 			   get_order(dd->cq_head_size));
-
-	if (dd->ptl_user)
-		free_pages((unsigned long)dd->ptl_user,
-			   get_order(dd->ptl_user_size));
 
 	for (i = 0; i < HFI_NUM_BARS; i++)
 		if (dd->kregbase[i])
@@ -209,14 +206,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	/* Host Memory allocations -- */
 
-	/* Portals PID assignments - 32 KB */
-	dd->ptl_user_size = (HFI_NUM_PIDS * 8);
-	dd->ptl_user = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-					get_order(dd->ptl_user_size));
-	if (!dd->ptl_user) {
-		ret = -ENOMEM;
-		goto err_post_alloc;
-	}
+	/* Portals PID assignments */
+	idr_init(&dd->ptl_user);
 	spin_lock_init(&dd->ptl_lock);
 
 	/* CQ head (read) indices - 16 KB */
