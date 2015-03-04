@@ -3250,6 +3250,7 @@ getit:
 
 struct stl_led_info {
 	__be32 rsvd_led_mask;
+	__be32 rsvd;
 };
 
 #define STL_LED_SHIFT	31
@@ -3269,7 +3270,7 @@ static int __subn_get_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 		return reply(smp);
 	}
 
-	reg = cpu_to_be64(read_csr(dd, DCC_CFG_LED_CNTRL));
+	reg = read_csr(dd, DCC_CFG_LED_CNTRL);
 	if ((reg & DCC_CFG_LED_CNTRL_LED_CNTRL_SMASK) &&
 		((reg & DCC_CFG_LED_CNTRL_LED_SW_BLINK_RATE_SMASK) == 0xf))
 			p->rsvd_led_mask = cpu_to_be32(STL_LED_MASK);
