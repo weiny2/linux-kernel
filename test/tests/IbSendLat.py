@@ -43,7 +43,8 @@ def main():
     # body of test #
     ################
     test_fail = 0
-    test_port = RegLib.get_test_port()
+    test_port = RegLib.get_test_port(host1, host2)
+
     # Start ib_send_lat on host1 (server)
     child_pid = os.fork()
     if child_pid == 0:

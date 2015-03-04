@@ -45,7 +45,7 @@ def main():
 
     sizes = ['1', '256', '512', '1024', '2048', '4096']
     for size in sizes:
-        test_port = RegLib.get_test_port()
+        test_port = RegLib.get_test_port(host1,host2)
         test_fail = 0
         # Start ib_send_lat on host1 (server)
         child_pid = os.fork()

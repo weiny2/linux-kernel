@@ -17,7 +17,7 @@ def main():
     # create a test info object #
     #############################
     test_info = RegLib.TestInfo()
-    test_port = RegLib.get_test_port()
+
 
     RegLib.test_log(0, "Test: IbSendBwRC-a.py started")
     RegLib.test_log(0, "Dumping test parameters")
@@ -35,6 +35,8 @@ def main():
 
     host2 = test_info.get_host_record(1)
     print host2
+
+    test_port = RegLib.get_test_port(host1, host2)
 
     ################
     # body of test #

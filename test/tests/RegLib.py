@@ -80,8 +80,41 @@ def chomp_comma(str):
     else:
         return str
 
-def get_test_port():
-    return random.randrange(1025, 65535)
+def _get_test_port():
+    port = random.randrange(1025, 65535)
+    return port
+    
+
+def get_test_port(host1, host2):
+    attempts = 100
+    while attempts > 0:
+        attempts -= 1
+        port = _get_test_port()
+        cmd = "/bin/netstat -vatn"
+        test_log(0, "Running %s" %cmd)
+        (err, out) = host1.send_ssh(cmd)
+        for line in out:
+            if str(port) in line:
+                port = 0
+        
+        # Port is free on host1 now to check host2
+        if port != 0:
+            test_log(0, "Port %d should be free checking host2." % port)
+            cmd = "/bin/netstat -vatn"
+            test_log(0, "Running %s" %cmd)
+            (err, out) = host2.send_ssh(cmd)
+            for line in out:
+                if str(port) in line:
+                    port = 0
+            if port != 0:
+                return port
+            else:
+                for line in out:
+                    test_log(0, line)
+        else:
+            # Dump the output of netstat for later triage
+            for line in out:
+                test_log(0, line)
 
 def md5_from_packet(packet):
 
@@ -238,7 +271,7 @@ class HostInfo:
 
     def wait_for_socket(self, port, state, timeout=1, attempts=60):
         """ Waits for the socket at the given port to reach a specific state"""
-        
+
         while attempts > 0:
             attempts -= 1
             cmd = "/bin/netstat -vatn | /bin/grep %s" % port
