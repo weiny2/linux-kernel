@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -173,6 +173,19 @@ const char *print_u32_array(
 
 	for (i = 0; i < len ; i++)
 		trace_seq_printf(p, "%s%#x", i == 0 ? "" : " ", arr[i]);
+	trace_seq_putc(p, 0);
+	return ret;
+}
+
+const char *print_u64_array(
+	struct trace_seq *p,
+	u64 *arr, int len)
+{
+	int i;
+	const char *ret = p->buffer + p->len;
+
+	for (i = 0; i < len; i++)
+		trace_seq_printf(p, "%s0x%016llx", i == 0 ? "" : " ", arr[i]);
 	trace_seq_putc(p, 0);
 	return ret;
 }

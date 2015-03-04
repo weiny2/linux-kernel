@@ -1200,7 +1200,20 @@ static int setup_ctxt(struct file *fp)
 			ret = -ENOMEM;
 			goto done;
 		}
-
+		/*
+		 * In case that the number of groups is not a multiple of
+		 * 64 (the number of groups in a tidusemap element), mark
+		 * the extra ones as used. This will effectively make them
+		 * permanently used and should never be assigned. Otherwise,
+		 * the code which checks how many free groups we have will
+		 * get completely confused about the state of the bits.
+		 */
+		if (uctxt->numtidgroups % BITS_PER_LONG)
+			uctxt->tidusemap[uctxt->tidmapcnt - 1] =
+				~((1ULL << (uctxt->numtidgroups %
+					    BITS_PER_LONG)) - 1);
+		trace_hfi_exp_tid_map(uctxt->ctxt, subctxt_fp(fp), 0,
+				      uctxt->tidusemap, uctxt->tidmapcnt);
 	}
 	ret = hfi_user_sdma_alloc_queues(uctxt, fp);
 	if (ret)
@@ -1498,8 +1511,13 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	/*
 	 * Keep going until we've mapped all pages or we've exhausted all
 	 * RcvArray entries.
+	 * This iterates over the number of tidmaps + 1
+	 * (idx <= uctxt->tidmapcnt) so we check the bitmap which we
+	 * started from one more time for any free bits before the
+	 * starting point bit.
 	 */
-	for (mapped = 0, idx = 0; mapped < npages && idx < uctxt->tidmapcnt; ) {
+	for (mapped = 0, idx = 0;
+	     mapped < npages && idx <= uctxt->tidmapcnt;) {
 		u64 i, offset = 0;
 		unsigned free, pinned, pmapped = 0, used_groups;
 		u16 grp;
@@ -1537,24 +1555,6 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		if (bitidx > BITS_PER_LONG)
 			continue;
 		used_groups = ((useidx * BITS_PER_LONG) + bitidx);
-		/*
-		 * If the number of groups does not fit nicely into the number
-		 * of bits in the bitmap, we could get wrong impression of the
-		 * number of free groups. Check if this is the case and
-		 * adjust the count accordingly.
-		 */
-		if (used_groups + free > exp_groups) {
-			free = exp_groups - used_groups;
-			/*
-			 * We've adjusted to the "real" free. Do we have any?
-			 * Here, we break out of the loop instead of moving on
-			 * to the next bitmask because this could only happen
-			 * at the end of the range. Therefore, there is no
-			 * reason to continue.
-			 */
-			if (!free)
-				break;
-		}
 
 		/*
 		 * At this point, we know where in the map we have free bits.
@@ -1660,8 +1660,9 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		mapped += pinned;
 		uctxt->tidcursor = (uctxt->tidcursor + i) % uctxt->numtidgroups;
 		uctxt->tidusemap[useidx] |= tidmap[useidx];
-
 	}
+	trace_hfi_exp_tid_map(uctxt->ctxt, subctxt_fp(fp), 0, uctxt->tidusemap,
+			      uctxt->tidmapcnt);
 	spin_unlock_irqrestore(&uctxt->exp_lock, flags);
 	/*
 	 * Calculate mapped length. New Exp TID protocol does not "unwind" and
@@ -1738,6 +1739,8 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 			map &= ~(1ULL<<bitidx);
 		};
 	}
+	trace_hfi_exp_tid_map(uctxt->ctxt, subctxt_fp(fp), 1, uctxt->tidusemap,
+			      uctxt->tidmapcnt);
 done:
 	return ret;
 }

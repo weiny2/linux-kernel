@@ -115,6 +115,36 @@ TRACE_EVENT(hfi_receive_interrupt,
 	)
 );
 
+const char *print_u64_array(struct trace_seq *, u64 *, int);
+
+TRACE_EVENT(hfi_exp_tid_map,
+	    TP_PROTO(unsigned ctxt, u16 subctxt, int dir,
+		     unsigned long *maps, u16 count),
+	    TP_ARGS(ctxt, subctxt, dir, maps, count),
+	    TP_STRUCT__entry(
+		    __field(unsigned, ctxt)
+		    __field(u16, subctxt)
+		    __field(int, dir)
+		    __field(u16, count)
+		    __dynamic_array(unsigned long, maps, sizeof(*maps) * count)
+		    ),
+	    TP_fast_assign(
+		    __entry->ctxt = ctxt;
+		    __entry->subctxt = subctxt;
+		    __entry->dir = dir;
+		    __entry->count = count;
+		    memcpy(__get_dynamic_array(maps), maps,
+			   sizeof(*maps) * count);
+		    ),
+	    TP_printk("[%3u:%02u] %s tidmaps %s",
+		      __entry->ctxt,
+		      __entry->subctxt,
+		      (__entry->dir ? ">" : "<"),
+		      print_u64_array(p, __get_dynamic_array(maps),
+				      __entry->count)
+		    )
+	);
+
 TRACE_EVENT(hfi_exp_rcv_set,
 	    TP_PROTO(unsigned ctxt, u16 subctxt, u32 tid,
 		     unsigned long vaddr, u64 phys_addr, void *page),
