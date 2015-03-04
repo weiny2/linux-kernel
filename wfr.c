@@ -5753,16 +5753,27 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 	struct ib_event event = {.device = NULL};
 	int ret1, ret = 0;
 	int was_up, is_down;
+	int orig_new_state, poll_bounce;
 
 	mutex_lock(&ppd->hls_lock);
+
+	orig_new_state = state;
+	if (state == HLS_DN_DOWNDEF)
+		state = dd->link_default;
+
+	/* interpret poll -> poll as a link bounce */
+	poll_bounce = ppd->host_link_state == HLS_DN_POLL
+				&& state == HLS_DN_POLL;
+
+	dd_dev_info(dd, "%s: current %s, new %s %s%s\n", __func__,
+		link_state_name(ppd->host_link_state),
+		link_state_name(orig_new_state),
+		poll_bounce ? "(bounce) " : "",
+		link_state_reason_name(ppd, state));
 
 	was_up = (ppd->host_link_state == HLS_UP_INIT ||
 		ppd->host_link_state == HLS_UP_ARMED ||
 		ppd->host_link_state == HLS_UP_ACTIVE);
-
-	dd_dev_info(dd, "%s: current %s, new %s %s\n", __func__,
-		link_state_name(ppd->host_link_state), link_state_name(state),
-		link_state_reason_name(ppd, state));
 
 	/*
 	 * If we're going to a (HLS_*) link state that implies the logical
@@ -5774,11 +5785,11 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		ppd->pending_active_reregister = 0;
 	}
 
-	if (state == HLS_DN_DOWNDEF)
-		state = dd->link_default;
-
-	/* nothing to do if already in that state */
-	if (ppd->host_link_state == state)
+	/*
+	 * Do nothing if the states match.  Let a poll to poll link bounce
+	 * go through.
+	 */
+	if (ppd->host_link_state == state && !poll_bounce)
 		goto done;
 
 	switch (state) {
