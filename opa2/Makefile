@@ -11,6 +11,7 @@ opa2_hfi-y += debugfs.o
 opa2_hfi-y += init.o
 opa2_hfi-y += fxr.o
 opa2_hfi-y += intr.o
+opa2_hfi-y += iommu.o
 opa2_hfi-y += pcie.o
 opa2_hfi-y += portals.o
 opa2_hfi-y += privileged.o

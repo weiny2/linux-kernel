@@ -51,6 +51,7 @@
  */
 
 #include <linux/bitmap.h>
+#include <linux/sched.h>
 #include "opa_hfi.h"
 
 /* TODO - temporary as FXR model has no IOMMU yet */
@@ -437,6 +438,9 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	dd_dev_info(dd, "Portals PID %u assigned PCB:[%d, %d, %d, %d]\n", ptl_pid,
 		    psb_size, trig_op_size, le_me_size, unexp_size);
 
+	/* set PASID entry for w/PASID translations */
+	hfi_iommu_set_pasid(dd, current->mm, ptl_pid);
+
 	/* write PCB (host memory) */
 	hfi_pcb_write(ctx, ptl_pid, ptl_phys_pages);
 
@@ -509,6 +513,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	hfi_pcb_reset(dd, ptl_pid);
+	hfi_iommu_clear_pasid(dd, ptl_pid);
 	dd->ptl_user[ptl_pid] = NULL;
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);

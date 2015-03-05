@@ -106,6 +106,10 @@ struct hfi_devdata {
 	void *cq_rx_base;
 	void *cq_head_base;
 	size_t cq_head_size;
+
+	/* IOMMU */
+	void *iommu_excontext_tbl;
+	void *iommu_pasid_tbl;
 };
 
 int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent);
@@ -145,6 +149,13 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);
 void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,
 		     ssize_t *len);
+
+int hfi_iommu_root_alloc(void);
+void hfi_iommu_root_free(void);
+int hfi_iommu_root_set_context(struct hfi_devdata *dd);
+void hfi_iommu_root_clear_context(struct hfi_devdata *dd);
+void hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *mm, u16 pasid);
+void hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is
