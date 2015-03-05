@@ -896,7 +896,7 @@ int nd_blk_init_region(struct nd_region *nd_region)
 static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 {
 	struct nd_spa *nd_spa = nd_region->nd_spa;
-	u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	struct nd_mem *nd_mem, *found = NULL;
 	struct nd_mapping *nd_mapping;
 	struct nd_dimm *nd_dimm;
@@ -905,7 +905,8 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	nd_region->dev.type = &nd_block_device_type;
 	nd_region->ndr_mappings = 0;
 	list_for_each_entry(nd_mem, &nd_bus->dimms, dimms)
-		if (readw(&nd_mem->nfit_spa_dcr->spa_index) == spa_index) {
+		if (nfit_spa_index(nd_bus->nfit_desc, nd_mem->nfit_spa_dcr)
+				== spa_index) {
 			found = nd_mem;
 			break;
 		}

@@ -618,7 +618,7 @@ void nd_mem_find_spa_bdw(struct nd_bus *nd_bus, struct nd_mem *nd_mem)
 
 	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
 		int type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
-		u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 		struct nd_memdev *nd_memdev;
 
 		if (type != NFIT_SPA_BDW)
@@ -638,7 +638,7 @@ void nd_mem_find_spa_bdw(struct nd_bus *nd_bus, struct nd_mem *nd_mem)
 	}
 
 	dev_dbg(&nd_bus->dev, "SPA-BDW not found for SPA-DCR %d\n",
-			readw(&nd_mem->nfit_spa_dcr->spa_index));
+			nfit_spa_index(nd_bus->nfit_desc, nd_mem->nfit_spa_dcr));
 	nd_mem->nfit_bdw = NULL;
 }
 
@@ -656,7 +656,8 @@ static int nd_mem_init(struct nd_bus *nd_bus)
 	 */
 	list_for_each_entry(nd_spa, &nd_bus->spas, list) {
 		int type = nfit_spa_type(nd_bus->nfit_desc, nd_spa->nfit_spa);
-		u16 spa_index = readw(&nd_spa->nfit_spa->spa_index);
+		u16 spa_index = nfit_spa_index(nd_bus->nfit_desc,
+				nd_spa->nfit_spa);
 		struct list_head *dcrs = &empty;
 		struct nd_memdev *nd_memdev;
 		struct nd_dcr *nd_dcr;
