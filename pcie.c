@@ -1015,14 +1015,15 @@ static void pcie_post_steps(struct hfi_devdata *dd)
 	}
 
 	/*
-	 * Write to the PCIe SerDes to ignore the first EQ preset value.
-	 * Receiver address - E0 for all, E2 for HFI0, E3 for HFI1
+	 * Enable iCal for PCIe Gen3 RX equalization, and sets which
+	 * evaluation of RX_EQ_EVAL will launch the iCal procedure.
 	 */
 	sbus_request(dd, pcie_serdes_broadcast[dd->hfi_id], 0x03,
-		WRITE_SBUS_RECEIVER, 0x00022132);
+		WRITE_SBUS_RECEIVER, 0x00265202);
 
 	/*
-	 * PCIe clock ratio
+	 * Write the Rx Bit Rate to REFCLK ratio for the Gen3 clock.
+	 * The value is 80 since Gen3 is 8GHz and REFCLK is 100MHz.
 	 */
 	sbus_request(dd, pcie_serdes_broadcast[dd->hfi_id], 0x03,
 		WRITE_SBUS_RECEIVER, 0x00060050);
@@ -1096,17 +1097,6 @@ static void arm_gasket_logic(struct hfi_devdata *dd)
 	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
 	/* read back to push the write */
 	read_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD);
-}
-
-/*
- * Tell the PCIe SerDes to ignore the first EQ presset value.
- */
-static void sbus_ignore_first_eq_preset(struct hfi_devdata *dd)
-{
-	u8 ra;				/* receiver address */
-
-	ra = pcie_serdes_broadcast[dd->hfi_id];
-	sbus_request(dd, ra, 0x03, WRITE_SBUS_RECEIVER, 0x00265202);
 }
 
 /*
@@ -1257,12 +1247,8 @@ retry:
 			<< WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
 
 	/*
-	 * step 5b: Tell the serdes to ignore first EQ preset.
+	 * step 5b: Do post firmware download steps via SBus
 	 */
-	dd_dev_info(dd, "%s: telling serdes to ignore first eq preset\n",
-		__func__);
-	sbus_ignore_first_eq_preset(dd);
-
 	dd_dev_info(dd, "%s: doing pcie post steps\n", __func__);
 	pcie_post_steps(dd);
 
