@@ -59,9 +59,7 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 
 	BUG_ON(bio->bi_rw & REQ_DISCARD);
 
-	rw = bio_rw(bio);
-	if (rw == READA)
-		rw = READ;
+	rw = bio_data_dir(bio);
 
 	nsblk = to_nd_namespace_blk(disk->driverfs_dev);
 	blk_dev = disk->private_data;

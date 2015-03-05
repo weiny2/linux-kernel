@@ -740,7 +740,8 @@ EXPORT_SYMBOL(is_acpi_blk);
 /* for now, hard code index 0 */
 /* for NT stores, check out __copy_user_nocache() */
 static void nd_blk_write_blk_ctl(struct nd_blk_ctl *blk_ctl,
-		resource_size_t dev_offset, unsigned int len, bool write)
+		resource_size_t dev_offset, unsigned int len,
+		unsigned int write)
 {
 	u64 cmd	= 0;
 	u64 cl_offset = dev_offset >> CL_SHIFT;
@@ -748,63 +749,10 @@ static void nd_blk_write_blk_ctl(struct nd_blk_ctl *blk_ctl,
 
 	cmd |= cl_offset & BCW_OFFSET_MASK;
 	cmd |= (cl_len & BCW_LEN_MASK) << BCW_LEN_SHIFT;
-	if (write)
-		cmd |= 1ULL << BCW_CMD_SHIFT;
+	cmd |= ((u64) write) << BCW_CMD_SHIFT;
 
 	writeq(cmd, blk_ctl->bw_ctl);
 	clflushopt(blk_ctl->bw_ctl);
-}
-
-static int nd_blk_read_blk_win(struct nd_blk_ctl *blk_ctl, void *dst,
-		unsigned int len)
-{
-	u32 status;
-
-	/* FIXME: NT */
-	memcpy(dst, blk_ctl->bw_apt, len);
-	clflushopt(blk_ctl->bw_apt);
-
-	status = readl(blk_ctl->bw_stat);
-
-	if (status) {
-		/* FIXME: return more precise error values at some point */
-		return -EIO;
-	}
-
-	return 0;
-}
-
-static int nd_blk_write_blk_win(struct nd_blk_ctl *blk_ctl, void *src,
-		unsigned int len)
-{
-	/* non-temporal writes, need to flush via flush hints, yada yada. */
-	u32 status;
-
-	/* FIXME: NT */
-	memcpy(blk_ctl->bw_apt, src, len);
-
-	status = readl(blk_ctl->bw_stat);
-
-	if (status) {
-		/* FIXME: return more precise error values at some point */
-		return -EIO;
-	}
-
-	return 0;
-}
-
-static int nd_blk_read(struct nd_blk_ctl *blk_ctl, void *dst,
-		resource_size_t dev_offset, unsigned int len)
-{
-	nd_blk_write_blk_ctl(blk_ctl, dev_offset, len, false);
-	return nd_blk_read_blk_win(blk_ctl, dst, len);
-}
-
-static int nd_blk_write(struct nd_blk_ctl *blk_ctl, void *src,
-		resource_size_t dev_offset, unsigned int len)
-{
-	nd_blk_write_blk_ctl(blk_ctl, dev_offset, len, true);
-	return nd_blk_write_blk_win(blk_ctl, src, len);
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
@@ -821,10 +769,15 @@ int nd_blk_do_io(struct nd_blk_window *ndbw, struct page *page,
 	bw_index = nd_region_acquire_lane(nd_region);
 	blk_ctl = &ndbw->blk_ctl[bw_index];
 
-	if (rw == READ)
-		rc = nd_blk_read(blk_ctl, mem + off, dev_offset, len);
-	else
-		rc = nd_blk_write(blk_ctl, mem + off, dev_offset, len);
+	/* TODO: non-temporal access, flush hints, etc... */
+	nd_blk_write_blk_ctl(blk_ctl, dev_offset, len, rw);
+	if (rw) {
+		memcpy(blk_ctl->bw_apt, mem + off, len);
+	} else {
+		memcpy(mem + off, blk_ctl->bw_apt, len);
+		clflushopt(blk_ctl->bw_apt);
+	}
+	rc = readl(blk_ctl->bw_stat) ? -EIO : 0;
 
 	nd_region_release_lane(nd_region, bw_index);
 	kunmap_atomic(mem);
