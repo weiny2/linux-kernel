@@ -54,9 +54,6 @@
 #include <linux/sched.h>
 #include "opa_hfi.h"
 
-/* TODO - temporary as FXR model has no IOMMU yet */
-static int ptl_phys_pages = 1;
-
 static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
 
@@ -417,12 +414,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	psb_size = le_me_off + le_me_size + unexp_size;
 
 	/* vmalloc Portals State memory, will store in PCB */
-	if (!ptl_phys_pages)
-		ctx->ptl_state_base = vmalloc_user(psb_size);
-	else
-		ctx->ptl_state_base = (void *)__get_free_pages(
-							GFP_KERNEL | __GFP_ZERO,
-							get_order(psb_size));
+	ctx->ptl_state_base = vmalloc_user(psb_size);
 	if (!ctx->ptl_state_base) {
 		ret = -ENOMEM;
 		goto err_vmalloc;
@@ -442,7 +434,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	hfi_iommu_set_pasid(dd, current->mm, ptl_pid);
 
 	/* write PCB (host memory) */
-	hfi_pcb_write(ctx, ptl_pid, ptl_phys_pages);
+	hfi_pcb_write(ctx, ptl_pid);
 
 	return 0;
 
@@ -545,13 +537,9 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 	hfi_eq_cleanup(ctx);
 
 	if (ctx->ptl_state_base) {
-		if (!ptl_phys_pages)
-			vfree(ctx->ptl_state_base);
-		else
-			free_pages((unsigned long)ctx->ptl_state_base,
-				   get_order(ctx->ptl_state_size));
+		vfree(ctx->ptl_state_base);
+		ctx->ptl_state_base = NULL;
 	}
-	ctx->ptl_state_base = NULL;
 
 	if (ctx->pid_count == 0) {
 		dd_dev_info(dd, "release PID orphan [%u]\n", ptl_pid);

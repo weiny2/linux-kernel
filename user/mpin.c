@@ -87,9 +87,6 @@ int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin)
 		BUG_ON(ret != nr_pages);
 		ret = 0;
 
-		/* TODO - delete exposing phys_addrs when FXR has IOMMU */
-		mpin->phys_addr = page_to_phys(&pages[0]);
-
 		/* queue page for removal at process exit */
 		mpin_entry->pfn = page_to_pfn(&pages[0]);
 		spin_lock_irqsave(&ud->mpin_lock, flags);
