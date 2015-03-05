@@ -144,11 +144,20 @@ static int __init hfi_init(void)
 {
 	int ret;
 
+	ret = hfi_iommu_root_alloc();
+	if (ret < 0)
+		goto err;
+
 	ret = pci_register_driver(&hfi_driver);
 	if (ret < 0) {
-		pr_err("Unable to register driver: error %d\n", -ret);
+		hfi_iommu_root_free();
+		goto err;
 	}
 
+	return ret;
+
+err:
+	pr_err("Unable to register driver: error %d\n", ret);
 	return ret;
 }
 module_init(hfi_init);
@@ -156,6 +165,7 @@ module_init(hfi_init);
 static void hfi_cleanup(void)
 {
 	pci_unregister_driver(&hfi_driver);
+	hfi_iommu_root_free();
 }
 module_exit(hfi_cleanup);
 

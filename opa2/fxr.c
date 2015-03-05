@@ -109,6 +109,8 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	cleanup_interrupts(dd);
 
+	hfi_iommu_root_clear_context(dd);
+
 	/* free host memory for FXR and Portals resources */
 	if (dd->cq_head_base)
 		free_pages((unsigned long)dd->cq_head_base,
@@ -192,6 +194,11 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	/* Ensure CSRs are sane, we can't trust they haven't been manipulated */
 	init_csrs(dd);
+
+	/* set IOMMU tables for w/PASID translations */
+	ret = hfi_iommu_root_set_context(dd);
+	if (ret)
+		goto err_post_alloc;
 
 	/* Host Memory allocations -- */
 
