@@ -90,11 +90,11 @@ static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
 }
 
-static void set_loopback(const struct hfi_devdata *dd)
+static void init_csrs(const struct hfi_devdata *dd)
 {
 	LM_CONFIG_t lm_config = {.val = 0};
 
-	lm_config.field.FORCE_LOOPBACK = 1;
+	lm_config.field.FORCE_LOOPBACK = force_loopback;
 	write_csr(dd, FXR_LM_CONFIG, lm_config.val);
 }
 
@@ -190,8 +190,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* FXR resources are on BAR0 (used for io_remap, etc.) */
 	dd->physaddr = dd->pcibar[0];
 
-	if (force_loopback)
-		set_loopback(dd);
+	/* Ensure CSRs are sane, we can't trust they haven't been manipulated */
+	init_csrs(dd);
 
 	/* Host Memory allocations -- */
 
