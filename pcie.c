@@ -997,11 +997,13 @@ static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3], u8 fs,
 /*
  * Steps to be done after the PCIe firmware is downloaded and
  * before the SBR for the Pcie Gen3.
+ * The hardware mutex is already being held.
  */
 static void pcie_post_steps(struct hfi_devdata *dd)
 {
 	int i;
 
+	set_sbus_fast_mode(dd);
 	/*
 	 * Write to the PCIe PCSes to set the G3_LOCKED_NEXT bits to 1.
 	 * This avoids a spurious framing error that an otherwise be
@@ -1027,6 +1029,7 @@ static void pcie_post_steps(struct hfi_devdata *dd)
 	 */
 	sbus_request(dd, pcie_serdes_broadcast[dd->hfi_id], 0x03,
 		WRITE_SBUS_RECEIVER, 0x00060050);
+	clear_sbus_fast_mode(dd);
 }
 
 /*

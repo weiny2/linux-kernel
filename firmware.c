@@ -913,6 +913,8 @@ void fabric_serdes_reset(struct hfi_devdata *dd)
 
 	ra = fabric_serdes_broadcast[dd->hfi_id];
 
+	acquire_hw_mutex(dd);
+	set_sbus_fast_mode(dd);
 	/* place SerDes in reset and disable SPICO */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000011);
 	/* wait 100 refclk cycles @ 156.25MHz => 640ns */
@@ -921,6 +923,8 @@ void fabric_serdes_reset(struct hfi_devdata *dd)
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000010);
 	/* turn SPICO enable on */
 	sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000002);
+	clear_sbus_fast_mode(dd);
+	release_hw_mutex(dd);
 }
 
 /* Access to the SBus in this routine should probably be serialized */
@@ -1122,13 +1126,13 @@ void release_hw_mutex(struct hfi_devdata *dd)
 	write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);
 }
 
-static void set_sbus_fast_mode(struct hfi_devdata *dd)
+void set_sbus_fast_mode(struct hfi_devdata *dd)
 {
 	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE,
 				WFR_ASIC_CFG_SBUS_EXECUTE_FAST_MODE_SMASK);
 }
 
-static void clear_sbus_fast_mode(struct hfi_devdata *dd)
+void clear_sbus_fast_mode(struct hfi_devdata *dd)
 {
 	u64 reg, count = 0;
 

@@ -575,6 +575,8 @@ void sbus_request(struct hfi_devdata *dd,
 		  u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
 int sbus_request_slow(struct hfi_devdata *dd,
 		      u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
+void set_sbus_fast_mode(struct hfi_devdata *dd);
+void clear_sbus_fast_mode(struct hfi_devdata *dd);
 int firmware_init(struct hfi_devdata *dd);
 int load_pcie_firmware(struct hfi_devdata *dd);
 int load_firmware(struct hfi_devdata *dd);
