@@ -1114,6 +1114,7 @@ static void sbus_ignore_first_eq_preset(struct hfi_devdata *dd)
  */
 int do_pcie_gen3_transition(struct hfi_devdata *dd)
 {
+	u64 fw_ctrl;
 	u64 reg;
 	u32 reg32, fs, lf;
 	u32 status, err;
@@ -1325,6 +1326,8 @@ retry:
 	/* hold DC in reset across the SBR */
 	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
 	(void) read_csr(dd, WFR_CCE_DC_CTRL); /* DC reset hold */
+	/* save firwmare control across the SBR */
+	fw_ctrl = read_csr(dd, WFR_MISC_CFG_FW_CTRL);
 
 	dd_dev_info(dd, "%s: arming gasket logic\n", __func__);
 	arm_gasket_logic(dd);
@@ -1368,6 +1371,8 @@ retry:
 	/* restore PCI space registers we know were reset */
 	dd_dev_info(dd, "%s: calling restore_pci_variables\n", __func__);
 	restore_pci_variables(dd);
+	/* restore firmware control, i.e. security disable */
+	write_csr(dd, WFR_MISC_CFG_FW_CTRL, fw_ctrl);
 
 	/*
 	 * Check the gasket block status.
