@@ -68,7 +68,6 @@ def run_loopback_tests(test, hostlist, psm="DEFAULT", opts="", args=None):
 
 def main():
     global topdir
-    clean = False
 
     for test in SUBTEST_LIST + ["LoadModule"]:
         if not os.path.exists(os.path.join(topdir, test+".py")):
@@ -96,8 +95,6 @@ def main():
 
         if not reload_module([host1], module_src, [loopback_opts]):
             RegLib.test_fail("Failed to restart driver with LCB loopback")
-        else:
-            clean = True
 
         for test in SUBTEST_LIST:
             if not run_loopback_tests(test, [host1], psm_lib, psm_opts, args):
@@ -110,16 +107,11 @@ def main():
 
         if not reload_module([host1], module_src, [loopback_opts]):
             RegLib.test_fail("Failed to restart the driver with SerDes loopback")
-        else:
-            clean = True
 
         for test in SUBTEST_LIST:
             if not run_loopback_tests(test, [host1], psm_lib, psm_opts, args):
                 RegLib.test_fail("Failed to execute subtest: %s" % test)
 
-    if clean:
-        if not reload_module([host1], module_src, [opts]):
-            RegLib.test_fail("Failed to restore the driver")
 
     RegLib.test_pass("Test with LCB and SerDes loopback passed.")
     return

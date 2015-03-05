@@ -287,10 +287,17 @@ test_list = [
       "desc" : "Test 4K and 8K MTU with verbs traffic"
     },
 
+    { "test_name" : "Loopback-Test",
+      "test_exe" : "Loopback.py",
+      "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "type" : "default,quick",
+      "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
+    },
+
     { "test_name" : "RestoreSanity",
       "test_exe" : "LoadModule.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
-      "type" : "default,",
+      "type" : "default,quick",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
@@ -308,12 +315,6 @@ test_list = [
       "desc" : "Run the Intel MPI Test Suite"
     },
 
-    { "test_name" : "Loopback-Test",
-      "test_exe" : "Loopback.py",
-      "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "default,quick",
-      "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
-    },
 ]
 
 
