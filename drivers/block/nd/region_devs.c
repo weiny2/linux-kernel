@@ -752,7 +752,7 @@ static void nd_blk_write_blk_ctl(struct nd_blk_ctl *blk_ctl,
 	cmd |= ((u64) write) << BCW_CMD_SHIFT;
 
 	writeq(cmd, blk_ctl->bw_ctl);
-	clflushopt(blk_ctl->bw_ctl);
+	/* FIXME: conditionally perform read-back if mandated by firmware */
 }
 
 /* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
