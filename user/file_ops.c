@@ -461,7 +461,8 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		phys_addr = (u64)remap_addr;
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	} else {
-		kvaddr = remap_addr;
+		/* align remap_addr as may be offset into PAGE */
+		kvaddr = (void *)((u64)remap_addr & PAGE_MASK);
 		phys_addr = kvirt_to_phys(kvaddr, &high);
 	}
 

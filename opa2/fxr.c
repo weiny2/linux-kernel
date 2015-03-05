@@ -273,19 +273,17 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	/* TODO - above incomplete, deferred processing needs to wait for .ack bit */
 }
 
-void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid, int phys)
+void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
 	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
 	u64 psb_addr;
 
-	psb_addr = (phys) ? virt_to_phys(ctx->ptl_state_base) :
-			    (u64)ctx->ptl_state_base;
+	psb_addr = (u64)ctx->ptl_state_base;
 
 	/* write PCB in FXR */
 	pcb_low.field.valid = 1;
-	pcb_low.field.physical = phys;
 	pcb_low.field.portals_state_base = psb_addr >> PAGE_SHIFT;
 	pcb_high.field.triggered_op_size = (ctx->trig_op_size >> PAGE_SHIFT);
 	pcb_high.field.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT);
@@ -300,15 +298,13 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base)
 {
 	u32 offset;
-	u64 paddr;
 	RXCI_CFG_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
 	TXCI_CFG_RESET_t tx_cq_reset = {.val = 0};
 	RXCI_CFG_CQ_RESET_t rx_cq_reset = {.val = 0};
 
-	paddr = virt_to_phys(HFI_CQ_HEAD_ADDR(head_base, cq_idx));
 	cq_head.field.valid = 1;
-	cq_head.field.pa = 1;
-	cq_head.field.hd_ptr_host_addr = paddr;
+	cq_head.field.hd_ptr_host_addr =
+			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
 	offset = FXR_RXCI_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
 	write_csr(dd, offset, cq_head.val);
 

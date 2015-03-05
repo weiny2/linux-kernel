@@ -132,7 +132,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
-void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid, int phys);
+void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 
 /* OPA core functions */
