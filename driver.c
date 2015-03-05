@@ -75,7 +75,6 @@ unsigned long hfi_cap_mask = HFI_CAP_MASK_DEFAULT;
 static int hfi_caps_set(const char *, const struct kernel_param *);
 static int hfi_caps_get(char *, const struct kernel_param *);
 static const struct kernel_param_ops cap_ops = {
-	.flags = 0,
 	.set = hfi_caps_set,
 	.get = hfi_caps_get
 };
