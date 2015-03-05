@@ -382,7 +382,7 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 	u16 spa_index = nfit_spa_index(nd_bus->nfit_desc, nd_spa->nfit_spa);
 	int num_mappings = num_nd_mem(nd_bus, spa_index);
 	struct nd_set_info *info;
-	int i, rc = -ENXIO;
+	int i;
 
 	info = kzalloc(sizeof_nd_set_info(num_mappings), GFP_KERNEL);
 	if (!info)
@@ -390,23 +390,7 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 	for (i = 0; i < num_mappings; i++) {
 		struct nd_mem *nd_mem = nd_mem_from_spa(nd_bus, spa_index, i);
 		struct nd_set_info_map *map = &info->mapping[i];
-		u32 key = to_interleave_set_key(nd_mem);
 
-		if (radix_tree_lookup(&nd_bus->interleave_sets, key)) {
-			dev_err(&nd_bus->dev, "%s: duplicate mapping (set: %d key: %#x)\n",
-					__func__, spa_index, key);
-			rc = -EBUSY;
-			break;
-		}
-
-		rc = radix_tree_insert(&nd_bus->interleave_sets, key, nd_set);
-		if (rc) {
-			dev_err(&nd_bus->dev, "%s: failed to add set: %d key: %#x\n",
-					__func__, spa_index, key);
-			break;
-		}
-		dev_dbg(&nd_bus->dev, "%s: set: %d key: %#x\n",
-				__func__, spa_index, key);
 		map->region_spa_offset = readl(&nd_mem->nfit_mem->region_spa_offset);
 		map->serial_number = nfit_dcr_serial(nd_bus->nfit_desc,
 				nd_mem->nfit_dcr, nd_mem->nfit_mem);
@@ -418,13 +402,12 @@ static int init_interleave_set(struct nd_bus *nd_bus,
 
 	kfree(info);
 
-	return rc;
+	return 0;
 }
 
 int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
 {
 	struct nd_spa *nd_spa;
-	struct nd_mem *nd_mem;
 	int rc = 0;
 
 	/* PMEM interleave sets */
@@ -449,32 +432,6 @@ int nd_bus_init_interleave_sets(struct nd_bus *nd_bus)
 			break;
 	}
 
-	/*
-	 * Remaining BLK regions as single-dimm "interleave sets" for
-	 * the sole purpose of tracking the busy state of the dimm when
-	 * it is not associated with a PMEM interleave set.
-	 */
-	list_for_each_entry(nd_mem, &nd_bus->memdevs, list) {
-		u32 key = to_interleave_set_key(nd_mem);
-		struct nd_interleave_set *nd_set;
-
-		if (radix_tree_lookup(&nd_bus->interleave_sets, key))
-			continue;
-
-		nd_set = kzalloc(sizeof(*nd_set), GFP_KERNEL);
-		if (!nd_set) {
-			rc = -ENOMEM;
-			break;
-		}
-
-		rc = radix_tree_insert(&nd_bus->interleave_sets, key, nd_set);
-		if (rc) {
-			dev_err(&nd_bus->dev, "%s: failed to add nvdimm key: %#x\n",
-					__func__, key);
-			break;
-		}
-		dev_dbg(&nd_bus->dev, "%s: set: 0 key: %#x\n", __func__, key);
-	}
 	return rc;
 }
 
@@ -495,39 +452,28 @@ u64 nd_region_interleave_set_cookie(struct nd_region *nd_region)
 static void nd_region_notify_driver_action(struct nd_bus *nd_bus,
 		struct device *dev, int rc, bool probe)
 {
-	struct nd_interleave_set *nd_set = NULL;
-
 	if (rc)
 		return;
 
-	if (is_nd_pmem(dev)) {
+	if (is_nd_pmem(dev) || is_nd_blk(dev)) {
 		struct nd_region *nd_region = to_nd_region(dev);
+		int i;
 
-		nd_set = nd_region->nd_spa->nd_set;
-	} else if (is_nd_blk(dev)) {
-		struct nd_region *nd_region = to_nd_region(dev);
-		struct nd_mapping *nd_mapping;
-		struct nd_mem *nd_mem;
+		for (i = 0; i < nd_region->ndr_mappings; i++) {
+			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+			struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
 
-		nd_region = to_nd_region(dev);
-		nd_mapping = &nd_region->mapping[0];
-		nd_mem = nd_mapping->nd_dimm->nd_mem;
-		nd_set = radix_tree_lookup(&nd_bus->interleave_sets,
-				to_interleave_set_key(nd_mem));
+			if (probe)
+				atomic_inc(&nd_dimm->busy);
+			else
+				atomic_dec(&nd_dimm->busy);
+		}
 	} else if (dev->parent && is_nd_blk(dev->parent) && probe && rc == 0) {
 		struct nd_region *nd_region = to_nd_region(dev->parent);
 
 		if (nd_region->ns_seed == dev)
 			nd_region_create_blk_seed(nd_region);
 	}
-
-	if (!nd_set)
-		return;
-
-	if (probe)
-		nd_set->busy++;
-	else
-		nd_set->busy--;
 }
 
 void nd_region_probe_start(struct nd_bus *nd_bus, struct device *dev)

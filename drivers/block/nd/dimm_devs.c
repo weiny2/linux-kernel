@@ -515,29 +515,16 @@ static DEVICE_ATTR_RO(available_slots);
 static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
-	struct nd_mem *nd_mem = nd_dimm->nd_mem;
-	u32 key = to_interleave_set_key(nd_mem);
-	struct nd_interleave_set *nd_set;
-	int busy;
 
 	/*
 	 * The state may be in the process of changing, userspace should
 	 * quiesce probing if it wants a static answer
 	 */
 	nd_bus_lock(dev);
-	nd_set = radix_tree_lookup(&nd_bus->interleave_sets, key);
-	if (!nd_set)
-		busy = -ENXIO;
-	else
-		busy = nd_set->busy;
 	nd_bus_unlock(dev);
-
-	if (busy < 0)
-		return busy;
-
-	return sprintf(buf, "%s\n", busy ? "active" : "idle");
+	return sprintf(buf, "%s\n", atomic_read(&nd_dimm->busy)
+			? "active" : "idle");
 }
 static DEVICE_ATTR_RO(state);
 
@@ -620,6 +607,7 @@ static struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus,
 	if (nd_dimm->id < 0)
 		goto err_ida;
 
+	atomic_set(&nd_dimm->busy, 0);
 	nd_dimm->nd_mem = nd_mem;
 	dev = &nd_dimm->dev;
 	dev_set_name(dev, "nvdimm%d", nd_dimm->id);

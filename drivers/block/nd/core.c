@@ -175,8 +175,6 @@ static void nd_bus_release(struct device *dev)
 	}
 	list_for_each_entry_safe(nd_mem, _mem, &nd_bus->memdevs, list) {
 		list_del_init(&nd_mem->list);
-		radix_tree_delete(&nd_bus->interleave_sets,
-				to_interleave_set_key(nd_mem));
 		kfree(nd_mem);
 	}
 
@@ -418,7 +416,6 @@ static void *nd_bus_new(struct device *parent,
 	INIT_LIST_HEAD(&nd_bus->list);
 	init_waitqueue_head(&nd_bus->probe_wait);
 	INIT_RADIX_TREE(&nd_bus->dimm_radix, GFP_KERNEL);
-	INIT_RADIX_TREE(&nd_bus->interleave_sets, GFP_KERNEL);
 	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
 	mutex_init(&nd_bus->reconfig_mutex);
 	if (nd_bus->id < 0) {

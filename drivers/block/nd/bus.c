@@ -413,7 +413,6 @@ void wait_nd_bus_probe_idle(struct device *dev)
 /* set_config requires an idle interleave set */
 static int nd_cmd_clear_to_send(struct nd_dimm *nd_dimm, unsigned int cmd)
 {
-	struct nd_interleave_set *nd_set;
 	struct nd_bus *nd_bus;
 
 	if (!nd_dimm || cmd != NFIT_CMD_SET_CONFIG_DATA)
@@ -422,9 +421,7 @@ static int nd_cmd_clear_to_send(struct nd_dimm *nd_dimm, unsigned int cmd)
 	nd_bus = walk_to_nd_bus(&nd_dimm->dev);
 	wait_nd_bus_probe_idle(&nd_bus->dev);
 
-	nd_set = radix_tree_lookup(&nd_bus->interleave_sets,
-			to_interleave_set_key(nd_dimm->nd_mem));
-	if (nd_set && nd_set->busy)
+	if (atomic_read(&nd_dimm->busy))
 		return -EBUSY;
 	return 0;
 }

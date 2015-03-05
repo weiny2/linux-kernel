@@ -42,7 +42,6 @@ struct nd_io;
  * nd_bus_list_mutex is locked
  */
 struct nd_bus {
-	struct radix_tree_root interleave_sets;
 	struct nfit_bus_descriptor *nfit_desc;
 	struct radix_tree_root dimm_radix;
 	wait_queue_head_t probe_wait;
@@ -65,6 +64,7 @@ struct nd_dimm {
 	struct device dev;
 	void *provider_data;
 	int id, nfit_status;
+	atomic_t busy;
 	struct nd_dimm_delete {
 		struct nd_bus *nd_bus;
 		struct nd_mem *nd_mem;
@@ -73,7 +73,6 @@ struct nd_dimm {
 
 struct nd_interleave_set {
 	u64 cookie;
-	int busy;
 };
 
 struct nd_spa {
@@ -98,19 +97,6 @@ struct nd_mem {
 	struct nfit_dcr __iomem *nfit_dcr;
 	struct list_head list;
 };
-
-/* uniquely identify a mapping */
-static inline u32 to_interleave_set_key(struct nd_mem *nd_mem)
-{
-	u16 dcr_index = readw(&nd_mem->nfit_mem->dcr_index);
-	u16 spa_index = readw(&nd_mem->nfit_mem->spa_index);
-	u32 key;
-
-	key = spa_index;
-	key <<= 16;
-	key |= dcr_index;
-	return key;
-}
 
 struct nd_io *ndio_lookup(struct nd_bus *nd_bus, const char *diskname);
 const char *spa_type_name(u16 type);
