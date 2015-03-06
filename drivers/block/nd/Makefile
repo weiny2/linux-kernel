@@ -11,6 +11,8 @@ ldflags-y += --wrap=ioremap_cache
 ldflags-y += --wrap=iounmap
 ldflags-y += --wrap=__request_region
 ldflags-y += --wrap=__release_region
+ldflags-y += --wrap=nd_blk_do_io
+ldflags-y += --wrap=devm_ioremap_resource
 endif
 
 obj-$(CONFIG_ND_CORE) += nd.o

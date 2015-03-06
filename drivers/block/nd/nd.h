@@ -261,7 +261,6 @@ const char *nd_blk_bus_provider(struct device *dev);
 int nd_blk_do_io(struct nd_blk_window *ndbw, struct page *page,
 		unsigned int len, unsigned int off, int rw,
 		resource_size_t dev_offset);
-bool is_acpi_blk(struct device *dev);
 resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk);
 int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd);
 int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd);

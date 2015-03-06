@@ -101,6 +101,9 @@ config NFIT_TEST
 	  load.  Kconfig does not allow for numerical value
 	  dependencies, so we can only warn at runtime.
 
+	  Enabling this option will degrade the performance of other BLK
+	  namespaces.  Do not enable for production environments.
+
 	  Say N unless you are doing development of the 'nd' subsystem.
 
 config BLK_DEV_PMEM

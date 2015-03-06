@@ -110,9 +110,6 @@ static int nd_blk_probe(struct device *dev)
 	if (disk_size < ND_MIN_NAMESPACE_SIZE)
 		return -ENXIO;
 
-	if (!is_acpi_blk(dev))
-		return 0;
-
 	blk_dev = kzalloc(sizeof(*blk_dev), GFP_KERNEL);
 	if (!blk_dev)
 		return -ENOMEM;
@@ -174,9 +171,6 @@ static int nd_blk_remove(struct device *dev)
 	struct nd_namespace_io *nsio = to_nd_namespace_io(dev); */
 
 	struct nd_blk_device *blk_dev = dev_get_drvdata(dev);
-
-	if (!is_acpi_blk(dev))
-		return 0;
 
 	del_gendisk(blk_dev->disk);
 	put_disk(blk_dev->disk);

@@ -447,8 +447,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
 	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(6+1, &nfit_spa->spa_index);
-	writeq(t->dimm_dma[0] + DIMM_SIZE, &nfit_spa->spa_base);
-	writeq(BDW_SIZE, &nfit_spa->spa_length);
+	writeq(t->dimm_dma[0], &nfit_spa->spa_base);
+	writeq(DIMM_SIZE, &nfit_spa->spa_length);
+	dev_dbg(&t->pdev.dev, "%s: BDW0: %#llx:%#x\n", __func__,
+			(unsigned long long) t->dimm_dma[0], DIMM_SIZE);
 
 	/* spa7 (bdw for dcr1) dimm1 */
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 7;
@@ -456,8 +458,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
 	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(7+1, &nfit_spa->spa_index);
-	writeq(t->dimm_dma[1] + DIMM_SIZE, &nfit_spa->spa_base);
-	writeq(BDW_SIZE, &nfit_spa->spa_length);
+	writeq(t->dimm_dma[1], &nfit_spa->spa_base);
+	writeq(DIMM_SIZE, &nfit_spa->spa_length);
+	dev_dbg(&t->pdev.dev, "%s: BDW1: %#llx:%#x\n", __func__,
+			(unsigned long long) t->dimm_dma[1], DIMM_SIZE);
 
 	/* spa8 (bdw for dcr2) dimm2 */
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 8;
@@ -465,8 +469,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
 	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(8+1, &nfit_spa->spa_index);
-	writeq(t->dimm_dma[2] + DIMM_SIZE, &nfit_spa->spa_base);
-	writeq(BDW_SIZE, &nfit_spa->spa_length);
+	writeq(t->dimm_dma[2], &nfit_spa->spa_base);
+	writeq(DIMM_SIZE, &nfit_spa->spa_length);
+	dev_dbg(&t->pdev.dev, "%s: BDW2: %#llx:%#x\n", __func__,
+			(unsigned long long) t->dimm_dma[2], DIMM_SIZE);
 
 	/* spa9 (bdw for dcr3) dimm3 */
 	nfit_spa = nfit_buf + sizeof(*nfit) + sizeof(*nfit_spa) * 9;
@@ -474,8 +480,10 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(sizeof(*nfit_spa), &nfit_spa->length);
 	memcpy_toio(&nfit_spa->type_uuid, &nfit_spa_uuid_bdw, 16);
 	writew(9+1, &nfit_spa->spa_index);
-	writeq(t->dimm_dma[3] + DIMM_SIZE, &nfit_spa->spa_base);
-	writeq(BDW_SIZE, &nfit_spa->spa_length);
+	writeq(t->dimm_dma[3], &nfit_spa->spa_base);
+	writeq(DIMM_SIZE, &nfit_spa->spa_length);
+	dev_dbg(&t->pdev.dev, "%s: BDW3: %#llx:%#x\n", __func__,
+			(unsigned long long) t->dimm_dma[3], DIMM_SIZE);
 
 	offset = sizeof(*nfit) + sizeof(*nfit_spa) * 10;
 	/* mem-region0 (spa0, dimm0) */
@@ -943,7 +951,8 @@ static __init int nfit_test_init(void)
 		return -EINVAL;
 	}
 
-	nfit_test_set_lookup_fn(nfit_test_lookup);
+	nfit_test_setup(nfit_test_lookup, nd_region_acquire_lane,
+			nd_region_release_lane, nd_blk_do_io);
 
 	for (i = 0; i < NUM_NFITS; i++) {
 		struct nfit_test *nfit_test;
@@ -999,7 +1008,7 @@ static __exit void nfit_test_exit(void)
 {
 	int i;
 
-	nfit_test_clear_lookup_fn();
+	nfit_test_teardown();
 	for (i = 0; i < NUM_NFITS; i++)
 		platform_device_unregister(&instances[i]->pdev);
 	platform_driver_unregister(&nfit_test_driver);

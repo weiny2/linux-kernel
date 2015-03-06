@@ -710,17 +710,6 @@ static const struct attribute_group *nd_region_attribute_groups[] = {
 	NULL,
 };
 
-bool is_acpi_blk(struct device *dev)
-{
-	if (strcmp(nd_blk_bus_provider(dev), "OLD_ACPI.NFIT") == 0)
-		return true;
-	else if (strcmp(nd_blk_bus_provider(dev), "ACPI.NFIT") == 0)
-		return true;
-
-	return false;
-}
-EXPORT_SYMBOL(is_acpi_blk);
-
 static void write_blk_ctl(struct nd_blk_window *ndbw, unsigned int bw, u64 val)
 {
 	writeq(val, ndbw->ctl_base + (bw * ndbw->ctl_size));
@@ -802,9 +791,6 @@ int nd_blk_init_region(struct nd_region *nd_region)
 	if (!is_nd_blk(&nd_region->dev))
 		return 0;
 
-	if (!is_acpi_blk(&nd_region->dev))
-		return 0;
-
 	/* FIXME: use nfit values rather than hard coded */
 	if (nd_region->ndr_mappings != 1)
 		return -ENXIO;
@@ -824,6 +810,10 @@ int nd_blk_init_region(struct nd_region *nd_region)
 	ndbw->aperture = devm_ioremap_resource(&nd_region->dev, &res);
 	if (IS_ERR(ndbw->aperture))
 		return PTR_ERR(ndbw->aperture);
+	dev_dbg(&nd_region->dev, "%s: BDW: %#llx:%#llx -> %p\n", __func__,
+			(unsigned long long) res.start,
+			(unsigned long long) resource_size(&res),
+			ndbw->aperture);
 
 	/* map block control memory */
 	res.start = readq(&nd_mem->nfit_spa_dcr->spa_base);
