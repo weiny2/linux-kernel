@@ -157,10 +157,10 @@ static struct opa_core_ops opa_core_ops = {
 	.cq_assign = hfi_cq_assign,
 	.cq_update = hfi_cq_update,
 	.cq_release = hfi_cq_release,
+	.ev_assign = hfi_cteq_assign,
+	.ev_release = hfi_cteq_release,
 	.dlid_assign = hfi_dlid_assign,
 	.dlid_release = hfi_dlid_release,
-	.eq_assign = hfi_eq_assign,
-	.eq_release = hfi_eq_release,
 	.get_device_desc = hfi_device_desc,
 	.get_port_desc = hfi_port_desc,
 };

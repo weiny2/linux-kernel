@@ -139,6 +139,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_cq_assign_args cq_assign;
 	struct hfi_cq_update_args cq_update;
 	struct hfi_cq_release_args cq_release;
+	struct hfi_ct_assign_args ct_assign;
+	struct hfi_ct_release_args ct_release;
 	struct hfi_eq_assign_args eq_assign;
 	struct hfi_eq_release_args eq_release;
 	struct hfi_dlid_assign_args dlid_assign;
@@ -148,6 +150,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_mpin_args mpin;
 	struct hfi_munpin_args munpin;
 	struct opa_ctx_assign ctx_assign;
+	struct opa_ev_assign ev_assign;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *copy_ptr = NULL;
@@ -203,6 +206,15 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_DLID_RELEASE:
 		copy_in = 0;
 		need_admin = 1;
+		break;
+	case HFI_CMD_CT_ASSIGN:
+		copy_in = sizeof(ct_assign);
+		copy_out = copy_in;
+		copy_ptr = &ct_assign;
+		break;
+	case HFI_CMD_CT_RELEASE:
+		copy_in = sizeof(ct_release);
+		copy_ptr = &ct_release;
 		break;
 	case HFI_CMD_EQ_ASSIGN:
 		copy_in = sizeof(eq_assign);
@@ -283,11 +295,28 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_CQ_RELEASE:
 		ret = ops->cq_release(&ud->ctx, cq_release.cq_idx);
 		break;
+	case HFI_CMD_CT_ASSIGN:
+		ev_assign.ni = ct_assign.ni;
+		ev_assign.mode = ct_assign.mode | OPA_EV_MODE_COUNTER;
+		ev_assign.threshold = ct_assign.threshold;
+		ret = ops->ev_assign(&ud->ctx, &ev_assign);
+		ct_assign.ct_idx = ev_assign.ev_idx;
+		break;
+	case HFI_CMD_CT_RELEASE:
+		ret = ops->ev_release(&ud->ctx, OPA_EV_MODE_COUNTER, ct_release.ct_idx);
+		break;
 	case HFI_CMD_EQ_ASSIGN:
-		ret = ops->eq_assign(&ud->ctx, &eq_assign);
+		ev_assign.ni = eq_assign.ni;
+		ev_assign.mode = eq_assign.mode;
+		ev_assign.base = eq_assign.base;
+		ev_assign.size = (1 << eq_assign.order);
+		/* TODO - we might want software threshold for blocking EQs? */
+		ev_assign.threshold = 0;
+		ret = ops->ev_assign(&ud->ctx, &ev_assign);
+		eq_assign.eq_idx = ev_assign.ev_idx;
 		break;
 	case HFI_CMD_EQ_RELEASE:
-		ret = ops->eq_release(&ud->ctx, eq_release.eq_idx);
+		ret = ops->ev_release(&ud->ctx, 0, eq_release.eq_idx);
 		break;
 	case HFI_CMD_DLID_ASSIGN:
 		/* must be called after JOB_SETUP and match total LIDs */
