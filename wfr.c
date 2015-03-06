@@ -3272,6 +3272,36 @@ static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
 	tx = nibble_to_count(enable_lane_tx);
 	rx = nibble_to_count(enable_lane_rx);
 
+	/*
+	 * FIXME: Remove the setting of link_speed_active in this routine
+	 * when the 8051 firmware is using the "real" LNI and not the
+	 * "engineering" LNI.
+	 *
+	 * Set link_speed_active here, overriding what was set in
+	 * handle_verify_cap().  This is becaues the 8051 firmware using
+	 * the "engineering" LNI does not correctly set the max_speed field.
+	 * For now, to find the speed, look at max_rate after link up.  This
+	 * routine is called in handle_verify_cap(),after linkup, and during
+	 * a downgrade.  max_rate should not change after linkup so
+	 * re-setting link_speed_active here should not matter.
+	 */
+	if (dd->icode == WFR_ICODE_RTL_SILICON) {
+		/* max_rate: 0 = 12.5G, 1 = 25G */
+		switch (max_rate) {
+		case 0:
+			dd->pport[0].link_speed_active = OPA_LINK_SPEED_12_5G;
+			break;
+		default:
+			dd_dev_err(dd,
+				"%s: unexpected max rate %d, using 25Gb\n",
+				__func__, (int)max_rate);
+			/* fall through */
+		case 1:
+			dd->pport[0].link_speed_active = OPA_LINK_SPEED_25G;
+			break;
+		}
+	}
+
 	dd_dev_info(dd,
 		"Fabric active lanes (width): tx 0x%x (%d), rx 0x%x (%d)\n",
 		enable_lane_tx, tx, enable_lane_rx, rx);
