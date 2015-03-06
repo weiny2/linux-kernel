@@ -29,12 +29,6 @@ enum {
 
 struct gendisk;
 
-struct nd_blk_ctl {
-	void *bw_apt;
-	u64 __iomem *bw_ctl;
-	u32 __iomem *bw_stat;
-};
-
 struct nd_dimm_drvdata {
 	struct device *dev;
 	int nsindex_size;
@@ -124,7 +118,11 @@ struct nd_region {
 	int num_lanes;
 	/* only valid for blk regions */
 	struct nd_blk_window {
-		struct nd_blk_ctl *blk_ctl; /* Array of 'num_bw' block windows */
+		u64 bdw_size;
+		u64 ctl_size;
+		void *aperture;
+		u64 __iomem *ctl_base;
+		u32 __iomem *stat_base;
 	} bw;
 	struct nd_mapping mapping[0];
 };
