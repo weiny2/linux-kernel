@@ -97,8 +97,9 @@ struct hfi_devdata;
  * @pid_count: Number of PIDs assigned on this LID
  * @pid_mode: Describes if PIDs or LIDs are virtualized or not
  * @cq_pair_num_assigned: Counter of assigned Command Queues
+ * @ct_used: IDR table of allocated Event Counters (CTs)
  * @eq_used: IDR table of allocated Events Queues
- * @eq_lock: Lock for EQ table
+ * @cteq_lock: Lock for CT and EQ table
  * @ct_addr: Pointer to the counting events array
  * @ct_size: Size of counting events array
  * @pt_addr: Pointer to portal table entries
@@ -132,8 +133,9 @@ struct hfi_ctx {
 	u16	pid_count;
 	u16	pid_mode;
 	u16	cq_pair_num_assigned;
+	struct idr ct_used;
 	struct idr eq_used;
-	spinlock_t eq_lock;
+	spinlock_t cteq_lock;
 	void	*ct_addr;
 	ssize_t	ct_size;
 	void	*pt_addr;
@@ -193,6 +195,33 @@ struct opa_ctx_assign {
 };
 
 /**
+ * struct opa_ev_assign - Used with opa_core_ops.ev_assign operation
+ * @ni: Network Interface for operation
+ * @mode: Mode bits for EV assignment behavior
+ * @base: Base of event buffer in host memory
+ * @size: Size specified as number of events
+ * @threshold: Num events before blocking EV wakes user
+ * @ev_idx: Returns index of EV resource
+ */
+struct opa_ev_assign {
+	u16 ni;
+	u16 mode;
+	u64 base;
+	u64 size;
+	u64 threshold;
+	u16 ev_idx;
+};
+
+/*
+ * opa_ev_assign.mode bits, intent is upper bits for specifying EV mechanism,
+ * lower bits for controlling behavior
+ */
+#define OPA_EV_MODE_BLOCKING  0x1
+#define OPA_EV_MODE_COUNTER   0x100
+
+struct hfi_dlid_assign_args;
+
+/**
  * struct opa_pport_desc - Used for querying immutable per port
  * opa*_hfi HW  details
  * @devdata: underlying hfi* device structure
@@ -218,9 +247,6 @@ struct opa_dev_desc {
 	__be64 nguid;
 };
 
-struct hfi_eq_assign_args;
-struct hfi_dlid_assign_args;
-
 /**
  * struct opa_core_ops - HW operations for accessing an OPA device
  * @ctx_assign: Assign a Send/Receive context of the HFI
@@ -231,8 +257,8 @@ struct hfi_dlid_assign_args;
  * @cq_assign: Assign a Command Queue for HFI send/receive operations
  * @cq_update: Update configuration of Command Queue
  * @cq_release: Release Command Queue
- * @eq_assign: Assign an Event Completion Queue
- * @eq_release: Release an Event Completion Queue
+ * @ev_assign: Assign an Event Completion Queue or Event Counter
+ * @ev_release: Release an Event Completion Queue or Event Counter
  * @dlid_assign: Assign entries from the DLID relocation table
  * @dlid_release: Release entries from the DLID relocation table
  */
@@ -249,9 +275,8 @@ struct opa_core_ops {
 	int (*cq_update)(struct hfi_ctx *ctx, u16 cq_idx,
 			 struct hfi_auth_tuple *auth_table);
 	int (*cq_release)(struct hfi_ctx *ctx, u16 cq_idx);
-	int (*eq_assign)(struct hfi_ctx *ctx,
-			 struct hfi_eq_assign_args *eq_assign);
-	int (*eq_release)(struct hfi_ctx *ctx, u16 eq_idx);
+	int (*ev_assign)(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
+	int (*ev_release)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx);
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_ctx *ctx);
