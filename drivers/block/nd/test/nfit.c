@@ -165,10 +165,8 @@ static int nfit_test_ctl(struct nfit_bus_descriptor *nfit_desc,
 {
 	struct nfit_test *t = container_of(nfit_desc, typeof(*t), nfit_desc);
 	unsigned long dsm_mask = nd_dimm_get_dsm_mask(nd_dimm);
-	struct device *dev = &t->pdev.dev;
 	int i, rc;
 
-	dev_dbg(dev, "%s: cmd: %d buf_len: %d\n", __func__, cmd, buf_len);
 	if (!nd_dimm || !test_bit(cmd, &dsm_mask))
 		return -ENXIO;
 
@@ -640,7 +638,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[0], &nfit_dcr->serial_number);
-	writew(NFIT_FIC, &nfit_dcr->fic);
+	writew(NFIT_FIC1, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
@@ -657,7 +655,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[1], &nfit_dcr->serial_number);
-	writew(NFIT_FIC, &nfit_dcr->fic);
+	writew(NFIT_FIC1, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
@@ -674,7 +672,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[2], &nfit_dcr->serial_number);
-	writew(NFIT_FIC, &nfit_dcr->fic);
+	writew(NFIT_FIC1, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);
@@ -691,7 +689,7 @@ static void nfit_test0_setup(struct nfit_test *t)
 	writew(0, &nfit_dcr->device_id);
 	writew(1, &nfit_dcr->revision_id);
 	writel(~handle[3], &nfit_dcr->serial_number);
-	writew(NFIT_FIC, &nfit_dcr->fic);
+	writew(NFIT_FIC1, &nfit_dcr->fic);
 	writew(1, &nfit_dcr->num_bcw);
 	writeq(DCR_SIZE, &nfit_dcr->bcw_size);
 	writeq(0, &nfit_dcr->cmd_offset);

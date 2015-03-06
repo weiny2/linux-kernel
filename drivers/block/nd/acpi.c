@@ -72,8 +72,8 @@ static const struct nfit_cmd_desc nfit_dimm_descs[] = {
 		.out_sizes = { 4, },
 	},
 	[NFIT_CMD_VENDOR] = {
-		.in_num = 2,
-		.in_sizes = { 4, UINT_MAX, },
+		.in_num = 3,
+		.in_sizes = { 4, 4, UINT_MAX, },
 		.out_num = 3,
 		.out_sizes = { 4, 4, UINT_MAX, },
 	},
@@ -99,8 +99,8 @@ static const struct nfit_cmd_desc nfit_acpi_descs[] = {
 	},
 };
 
-static u32 to_cmd_in_size(int cmd, const struct nfit_cmd_desc *desc, int idx,
-		void *buf)
+static u32 to_cmd_in_size(struct nd_dimm *nd_dimm, int cmd,
+		const struct nfit_cmd_desc *desc, int idx, void *buf)
 {
 	if (idx >= desc->in_num)
 		return UINT_MAX;
@@ -108,11 +108,11 @@ static u32 to_cmd_in_size(int cmd, const struct nfit_cmd_desc *desc, int idx,
 	if (desc->in_sizes[idx] < UINT_MAX)
 		return desc->in_sizes[idx];
 
-	if (cmd == NFIT_CMD_SET_CONFIG_DATA && idx == 3) {
+	if (nd_dimm && cmd == NFIT_CMD_SET_CONFIG_DATA && idx == 2) {
 		struct nfit_cmd_set_config_hdr *hdr = buf;
 
 		return hdr->in_length;
-	} else if (cmd == NFIT_CMD_VENDOR && idx == 2) {
+	} else if (nd_dimm && cmd == NFIT_CMD_VENDOR && idx == 2) {
 		struct nfit_cmd_vendor_hdr *hdr = buf;
 
 		return hdr->in_length;
@@ -121,7 +121,8 @@ static u32 to_cmd_in_size(int cmd, const struct nfit_cmd_desc *desc, int idx,
 	return UINT_MAX;
 }
 
-static u32 to_cmd_out_size(int cmd, const struct nfit_cmd_desc *desc, int idx,
+static u32 to_cmd_out_size(struct nd_dimm *nd_dimm, int cmd,
+		const struct nfit_cmd_desc *desc, int idx,
 		void *buf, u32 out_length, u32 offset)
 {
 	if (idx >= desc->out_num)
@@ -130,17 +131,15 @@ static u32 to_cmd_out_size(int cmd, const struct nfit_cmd_desc *desc, int idx,
 	if (desc->out_sizes[idx] < UINT_MAX)
 		return desc->out_sizes[idx];
 
-	if (cmd == NFIT_CMD_GET_CONFIG_DATA && idx == 1) {
-		struct nfit_cmd_get_config_data_hdr *hdr = buf;
+	if (offset >= out_length)
+		return UINT_MAX;
 
-		return hdr->in_length;
-	} else if (cmd == NFIT_CMD_VENDOR && idx == 2
-			&& offset < out_length) {
+	if (nd_dimm && cmd == NFIT_CMD_GET_CONFIG_DATA && idx == 1)
 		return out_length - offset;
-	} else if (cmd == NFIT_CMD_ARS_QUERY && idx == 1
-			&& offset < out_length) {
+	else if (nd_dimm && cmd == NFIT_CMD_VENDOR && idx == 2)
 		return out_length - offset;
-	}
+	else if (!nd_dimm && cmd == NFIT_CMD_ARS_QUERY && idx == 1)
+		return out_length - offset;
 
 	return UINT_MAX;
 }
@@ -214,7 +213,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 	for (i = 0; i < desc->in_num; i++) {
 		u32 in_size;
 
-		in_size = to_cmd_in_size(cmd, desc, i, buf);
+		in_size = to_cmd_in_size(nd_dimm, cmd, desc, i, buf);
 		if (in_size == UINT_MAX) {
 			dev_err(dev, "%s:%s unknown input size cmd: %s field: %d\n",
 					__func__, dimm_name, cmd_name, i);
@@ -257,7 +256,7 @@ static int nd_acpi_ctl(struct nfit_bus_descriptor *nfit_desc,
 					out_obj->buffer.length), true);
 
 	for (i = 0, offset = 0; i < desc->out_num; i++) {
-		u32 out_size = to_cmd_out_size(cmd, desc, i, buf,
+		u32 out_size = to_cmd_out_size(nd_dimm, cmd, desc, i, buf,
 				out_obj->buffer.length, offset);
 
 		if (out_size == UINT_MAX) {

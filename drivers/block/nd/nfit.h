@@ -67,7 +67,8 @@ enum {
 	NFIT_MEMF_NOTIFY_SMART = 1 << 4,
 	NFIT_MEMF_SMART_READY = 1 << 5,
 	NFIT_DCRF_BUFFERED = 1 << 0,
-	NFIT_FIC = 0x201,
+	NFIT_FIC1 = 0x201,
+	NFIT_FIC2 = 0x301,
 };
 
 /**
@@ -309,7 +310,7 @@ static inline u16 nfit_dcr_fic(struct nfit_bus_descriptor *nfit_desc,
 		nfit_dcr_old = (void __iomem *) nfit_dcr;
 		/* initial NFIT_FIC was defined as '1' */
 		if (readw(&nfit_dcr_old->fic) == 1)
-			return NFIT_FIC;
+			return NFIT_FIC1;
 		else
 			return readw(&nfit_dcr_old->fic);
 	} else

@@ -698,8 +698,8 @@ static void nd_blk_init(struct nd_bus *nd_bus, struct nd_region *nd_region)
 	}
 
 	if (!nd_bdw) {
-		dev_err(&nd_region->dev,
-				"%s: %s failed to find block-data-window descriptor\n",
+		dev_dbg(&nd_region->dev,
+				"%s: %s no block-data-window descriptor\n",
 				__func__, dev_name(&nd_dimm->dev));
 		nd_region->ndr_mappings = 0;
 	} else if (readq(&nd_bdw->nfit_bdw->blk_offset) % SZ_4K) {
