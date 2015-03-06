@@ -269,7 +269,7 @@ static void user_sdma_txreq_cb(struct sdma_txreq *, int, int);
 static void user_sdma_free_request(struct user_sdma_request *);
 static int pin_vector_pages(struct user_sdma_request *,
 			    struct user_sdma_iovec *);
-static _hfi_inline void unpin_vector_pages(struct user_sdma_iovec *);
+static void unpin_vector_pages(struct user_sdma_iovec *);
 static int check_header_template(struct user_sdma_request *,
 				 struct hfi_pkt_header *, u32, u32);
 static int set_txreq_header(struct user_sdma_request *,
@@ -1560,6 +1560,7 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 	atomic64_sub((req->info.npkts - req->txreqs_sent), &req->pq->npkts);
 	if (req->user_proc)
 		put_task_struct(req->user_proc);
+	kfree(req->tids);
 	clear_bit(SDMA_REQ_IN_USE, &req->flags);
 	return;
 }
