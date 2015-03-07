@@ -25,16 +25,6 @@
 #include "btt.h"
 #include "nd.h"
 
-/*
- * Lookup table and macro for looking up sequence numbers.  These are
- * the 2-bit numbers that cycle between 01, 10, and 11.
- *
- * To advance a sequence number to the next number, use something like:
- *	seq = NSEQ(seq);
- */
-static const unsigned Nseq[] = { 0, 2, 3, 1 };
-#define	NSEQ(seq) (Nseq[(seq) & 3])
-
 enum log_ent_request {
 	LOG_NEW_ENT = 0,
 	LOG_OLD_ENT
@@ -388,7 +378,7 @@ static int btt_freelist_init(struct arena_info *arena)
 
 		/* sub points to the next one to be overwritten */
 		arena->freelist[i].sub = 1 - new;
-		arena->freelist[i].seq = NSEQ(log_new.seq);
+		arena->freelist[i].seq = nd_inc_seq(log_new.seq);
 		arena->freelist[i].block = log_new.old_map;
 
 		/* This implies a newly created or untouched flog entry */

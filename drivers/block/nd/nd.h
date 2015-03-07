@@ -136,6 +136,16 @@ typedef int (*nd_rw_bytes_fn)(struct nd_io *ndio, void *buf, size_t offset,
 		size_t n, unsigned long flags);
 #define nd_data_dir(flags) (flags & 1)
 
+/*
+ * Lookup next in the repeating sequence of 01, 10, and 11.
+ */
+static inline unsigned nd_inc_seq(unsigned seq)
+{
+	static const unsigned next[] = { 0, 2, 3, 1 };
+
+	return next[seq & 3];
+}
+
 /**
  * struct nd_io - info for byte-aligned access to nd devices
  * @rw_bytes: operation to perform byte-aligned access

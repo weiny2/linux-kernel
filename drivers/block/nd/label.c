@@ -22,14 +22,6 @@
 
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 
-static u32 inc_seq(u32 seq)
-{
-	seq = (seq + 1) & NSINDEX_SEQ_MASK;
-	if (!seq)
-		seq = 1;
-	return seq;
-}
-
 static u32 best_seq(u32 a, u32 b)
 {
 	a &= NSINDEX_SEQ_MASK;
@@ -39,7 +31,7 @@ static u32 best_seq(u32 a, u32 b)
 		return b;
 	else if (b == 0)
 		return a;
-	else if (inc_seq(a) == b)
+	else if (nd_inc_seq(a) == b)
 		return b;
 	else
 		return a;
@@ -553,7 +545,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 
 	/* update index */
 	rc = nd_label_write_index(ndd, ndd->ns_next,
-			inc_seq(readl(&nsindex->seq)), 0);
+			nd_inc_seq(readl(&nsindex->seq)), 0);
 	if (rc < 0)
 		return rc;
 
@@ -735,7 +727,7 @@ static int __blk_label_update(struct nd_region *nd_region,
 
 	/* update index */
 	rc = nd_label_write_index(ndd, ndd->ns_next,
-			inc_seq(readl(&nsindex->seq)), 0);
+			nd_inc_seq(readl(&nsindex->seq)), 0);
 	if (rc)
 		goto abort;
 
@@ -870,7 +862,7 @@ static int del_labels(struct nd_mapping *nd_mapping, u8 *uuid)
 	}
 
 	return nd_label_write_index(ndd, ndd->ns_next,
-			inc_seq(readl(&nsindex->seq)), 0);
+			nd_inc_seq(readl(&nsindex->seq)), 0);
 }
 
 int nd_pmem_namespace_label_update(struct nd_region *nd_region,
