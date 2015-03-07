@@ -1004,9 +1004,9 @@ struct hfi_devdata {
 	/* human readable board version */
 	u8 boardversion[BOARD_VERS_MAX];
 	u8 lbus_info[32]; /* human readable localbus info */
-	/* chip major rev, from qib_revision */
+	/* chip major rev, from CceRevision */
 	u8 majrev;
-	/* chip minor rev, from qib_revision */
+	/* chip minor rev, from CceRevision */
 	u8 minrev;
 	/* hardware ID */
 	u8 hfi_id;

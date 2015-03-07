@@ -9888,6 +9888,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
 	u64 reg;
+	u32 patch;	/* hardware patch level */
 	int i, ret;
 	static const char *inames[] = { /* implementation names */
 		"RTL silicon",
@@ -10028,10 +10029,20 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		(int)dd->irev);
 
 	/*
+	 * TODO: Eventually remove access to ASIC_WFR_EFUSE_REGS6 as that is a
+	 * restriced register.  For now, we want to look at the patch level.
+	 * Read patch level.
 	 * Set link speed values.  The max active rate is set in the EFUSE
 	 * DC settings, bit 0.
 	 */
 	reg = read_csr(dd, WFR_ASIC_WFR_EFUSE_REGS6);
+	patch = (u32)
+		((reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SHIFT)
+			& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_MASK);
+	/* All WFR A0 silicon should be at patch 3, warn if not */
+	if (patch < 3 && is_a0(dd) && dd->icode == WFR_ICODE_RTL_SILICON)
+		dd_dev_err(dd, "WARNING: WFR at patch %d, expecting >= 3",
+			patch);
 	if (dd->hfi_id)
 		reg = (reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_SHIFT)
 				& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_MASK;
@@ -10147,14 +10158,13 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		    & WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_MASK);
 
 	snprintf(dd->boardversion, BOARD_VERS_MAX,
-		 "ChipABI %u.%u, %s, ChipRev %llu.%llu, SW Compat %llu\n",
+		 "ChipABI %u.%u, %s, ChipRev %u.%u patch 0x%08x, SW Compat %llu\n",
 		 HFI_CHIP_VERS_MAJ, HFI_CHIP_VERS_MIN,
 		 dd->boardname,
-		 dd->revision >> WFR_CCE_REVISION_CHIP_REV_MAJOR_SHIFT
-		    & WFR_CCE_REVISION_CHIP_REV_MAJOR_MASK,
-		 dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT
-		    & WFR_CCE_REVISION_CHIP_REV_MINOR_MASK,
-		 dd->revision >> WFR_CCE_REVISION_SW_SHIFT
+		 (u32)dd->majrev,
+		 (u32)dd->minrev,
+		 patch,
+		 (dd->revision >> WFR_CCE_REVISION_SW_SHIFT)
 		    & WFR_CCE_REVISION_SW_MASK);
 
 	ret = set_up_context_variables(dd);
