@@ -92,6 +92,12 @@ def is_offline(link, phys):
     else:
         return False
 
+def is_phy_test(link, phys):
+    if phys == "IB_PORTPHYSSTATE_PHY_TEST":
+        return True
+    else:
+        return False
+
 def send_simple_ioctl(file_obj, ioctl):
 
     buf = array.array('i', [0])
@@ -243,7 +249,7 @@ def set_polling(file_obj):
     (link, phys) = change_port_state(file_obj, ioctl, "IB_PORT_NOP", "IB_PORTPHYSSTATE_POLL")
     attempts = 0
     while attempts < 60:
-        if is_polling(link, phys) or is_training(link, phys) or is_offline(link, phys):
+        if is_polling(link, phys) or is_training(link, phys) or is_phy_test(link, phys) or is_offline(link, phys):
             RegLib.test_log(0, "Polling or training, check again in 1 second")
             time.sleep(1)
             attempts += 1

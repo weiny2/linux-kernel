@@ -201,7 +201,7 @@ def main():
     num_loaded = 0
     for host in hostlist:
         name = host.get_name()
-        err = wait_for_active(host, 10, 6)
+        err = wait_for_active(host, 10, 20)
         if err:
             RegLib.test_log(0, name + " Could not reach active state")
         else:
