@@ -611,7 +611,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 
 	/* If Static rate control is not enabled, sanitize the header. */
 	if (!HFI_CAP_IS_USET(STATIC_RATE_CTRL))
-		req->hdr.pbc[1] = 0;
+		req->hdr.pbc[2] = 0;
 
 	/* Validate the opcode. Do not trust packets from user space blindly. */
 	opcode = (be32_to_cpu(req->hdr.bth[0]) >> 24) & 0xff;
