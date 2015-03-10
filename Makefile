@@ -5,7 +5,7 @@
 #
 # Called from the kernel module build system.
 #
-obj-m += hfi.o
+obj-$(CONFIG_INFINIBAND_HFI1) += hfi.o
 
 hfi-y := cq.o device.o diag.o dma.o driver.o eprom.o file_ops.o firmware.o \
 	init.o intr.o keys.o mad.o mmap.o mr.o pcie.o pio.o pio_copy.o \

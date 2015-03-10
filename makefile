@@ -64,9 +64,10 @@ PWD:=$(shell pwd)
 driver:
 	[ -e $(KBUILD)/include-ifs-kernel/Module.symvers ] && cp $(KBUILD)/include-ifs-kernel/Module.symvers . || :
 	make RELEASE=$(VERSION)-$(RELEASE)$(KVER) -C $(KBUILD) M=$(PWD) MVERSION=$(VERSION)-$(RELEASE) \
+		CONFIG_INFINIBAND_HFI1=m \
 		NOSTDINC_FLAGS="$(NOSTDINC_FLAGS)" KBUILD_EXTRA_SYMBOLS="$(KBUILD_EXTRA_SYMBOLS)"
 clean:
-	make -C $(KBUILD) M=$(PWD) clean
+	make -C $(KBUILD) M=$(PWD) CONFIG_INFINIBAND_HFI1=m clean
 
 distclean: clean
 	rm -f hfi.spec
