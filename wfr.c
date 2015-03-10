@@ -3693,7 +3693,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		if (err & WFR_UNKNOWN_FRAME) {
 			/* informational only */
 			dd_dev_info(dd,
-				"Unknown frame idle message received\n");
+				"Unknown frame received\n");
 			err &= ~(u64)WFR_UNKNOWN_FRAME;
 		}
 		if (err & FAILED_LNI) {
