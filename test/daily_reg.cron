@@ -11,20 +11,20 @@ echo "Rebooting $host1 and $host2"
 ssh root@$host1 'reboot'&
 ssh root@$host2 'reboot'&
 
-echo "Giving reboot a minute to take effect"
-sleep 60
+echo "Giving reboot a bit to take effect"
+sleep 120
 
 # no one should be up yet if so they probably did not reboot
 ping -c 1 -t 3 $host1
 if [ $? -eq 0 ]; then
 	echo "$host1 never rebooted, power cycling"
-	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host1"
+	ssh fabserv2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host1"
 fi
 
 ping -c 1 -t 3 $host2
 if [ $? -eq 0 ]; then
 	echo "$host1 never rebooted, power cycling"
-	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host2"
+	ssh fabserv2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host2"
 fi
 
 echo "Waiting for $host1 to reboot"
@@ -105,6 +105,10 @@ if [ $host2_up -eq 0 ]; then
 	echo "$host2 never came up. Bailing"
 	exit 1
 fi
+
+# Before we go on make sure SSH is up, just go to sleep for a bit
+echo "Giving SSH 60 seconds to come up"
+sleep 60
 
 ./harness.py --type $mode --nodelist $host1,$host2
 
