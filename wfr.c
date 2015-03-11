@@ -2980,8 +2980,10 @@ static void wait_for_freeze_status(struct hfi_devdata *dd, int freeze)
 
 		if (time_after(jiffies, timeout)) {
 			dd_dev_err(dd,
-				"Time out waiting for SPC %sfreeze, continuing",
-				freeze ? "" : "un");
+				"Time out waiting for SPC %sfreeze, bits 0x%llx, expecting 0x%llx, continuing",
+				freeze ? "" : "un",
+				reg & ALL_FROZE,
+				freeze ? ALL_FROZE : 0ull);
 			return;
 		}
 		usleep_range(80, 120);
