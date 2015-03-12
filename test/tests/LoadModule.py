@@ -83,38 +83,23 @@ def wait_for_active(host, timeout, attempts):
 
     return 1 #error if we got to here
 
-def main():
-
-    #############################
-    # create a test info object #
-    #############################
-    test_info = RegLib.TestInfo()
-
-    RegLib.test_log(0, "Test: LoadModule.py started")
-    RegLib.test_log(0, "Dumping test parameters")
-
-    # Dump out the test and host info. We need 2 hosts for this test
-    print test_info
-
-    count = test_info.get_host_count()
-
-    print "Found ", count, "hosts"
-    hostlist = []
-    for x in range(count):
-        host = test_info.get_host_record(x)
-        print host
-        hostlist.append(host)
+def test(driver_name, test_info, hostlist):
 
     ################
     # body of test #
     ################
 
-    driver_name = "hfi"
-    driver_file = "hfi.ko"
-    driver_path = test_info.get_hfi_src() + "/" + driver_file
+    drivers = {"opa_core" : "opa_core", "opa2_hfi" : "opa2", "opa2_user" : "user"}
+    driver_file = driver_name + ".ko"
+
+    if driver_name not in drivers:
+        return (False, driver_name + " Doesnt exist ")
+
+    driver_path = test_info.get_hfi_src() + "/" + drivers[driver_name] + "/" + driver_file
+
     if test_info.is_simics() == True:
         driver_path = "/host" + driver_path
-    
+
     driver_parms = test_info.get_mod_parms()
     sm = test_info.which_sm()
 
@@ -144,7 +129,7 @@ def main():
                 if opafm_host == None:
                     opafm_host = host
                 else:
-                    RegLib.test_fail("opafm detected on both nodes")
+                    return (False, "opafm detected on both nodes")
 
         if opafm_host != None:
             RegLib.test_log(0, "Using %s as the opafm host" % opafm_host.get_name())
@@ -154,7 +139,7 @@ def main():
             stop_sm(opafm_host, "opafm")
             active = is_sm_active(host, "opafm")
             if active == 0:
-                RegLib.test_fail("fm is still running on host")
+                return (False, "fm is still running on host")
             RegLib.test_log(0, "fm not found to be running")
 
             #RegLib.test_log(0, "Waiting 15 seconds for opafm to quiesce")
@@ -166,10 +151,18 @@ def main():
         loaded = is_driver_loaded(host, driver_name)
         if loaded == True:
             RegLib.test_log(0, name + " Need to remove driver first")
+	    # opa_core has dependencies on opa2_user and opa2_hfi
+	    if driver_name == "opa_core":
+                removed = unload_driver(host,"opa2_user")
+                if removed == False:
+                    return (False, name + " Could not remove opa2_user driver")
+                removed = unload_driver(host,"opa2_hfi")
+                if removed == False:
+                    return (False, name + " Could not remove opa2_hfi driver")
             removed = unload_driver(host, driver_name)
             if removed == False:
-                RegLib.test_fail(name + " Could not remove HFI driver")
-        
+                return (False, name + " Could not remove HFI driver")
+
         #RegLib.test_log(0, "Sleeping 10 seconds after removing driver to let things settle")
         #time.sleep(10)
 
@@ -180,13 +173,13 @@ def main():
         if loaded == True:
             RegLib.test_log(0, name + " Driver loaded successfully")
         else:
-            RegLib.test_fail(name + " Could not load driver")
+            return (False, name + " Could not load driver")
 
         #RegLib.test_log(0, "Sleeping 10 seconds after loading driver to let things settle")
         #time.sleep(10)
 
     if sm == "none":
-        RegLib.test_pass("Driver loaded sm/fm not running")
+	return (True, "Driver loaded sm/fm not running")
 
     if opafm_host == None: #chose host1 by default
         opafm_host = hostlist[0]
@@ -194,7 +187,7 @@ def main():
     start_sm(opafm_host, "opafm")
     active = is_sm_active(opafm_host, "opafm")
     if active != 0:
-        RegLib.test_fail("Could not start opafm")
+        return (False, "Could not start opafm")
 
     # Driver loaded and sm ready now wait till links are active on both
     # nodes.
@@ -209,7 +202,7 @@ def main():
             num_loaded = num_loaded + 1
 
     if num_loaded != len(hostlist):
-        RegLib.test_fail(name + " Unable to get active state on at least 1 node")
+        return (False, " Unable to get active state on at least 1 node")
 
     # Before bailing out dump the kmod load address in case we need to do some
     # debugging later.
@@ -219,7 +212,44 @@ def main():
         (err, out) = do_ssh(host, cmd)
         print out
 
-    RegLib.test_pass("Driver loaded, adapters up SM running.")
+    return (True, "Driver loaded, adapters up SM running.")
+
+def main():
+
+    #############################
+    # create a test info object #
+    #############################
+    test_info = RegLib.TestInfo()
+
+    RegLib.test_log(0, "Test: LoadModule.py started")
+    RegLib.test_log(0, "Dumping test parameters")
+
+    # Dump out the test and host info. We need 2 hosts for this test
+    print test_info
+
+    count = test_info.get_host_count()
+
+    print "Found ", count, "hosts"
+    hostlist = []
+    for x in range(count):
+        host = test_info.get_host_record(x)
+        print host
+        hostlist.append(host)
+
+    load_order = []
+    module = test_info.module
+
+    if module == "all":
+        load_order = ["opa_core", "opa2_hfi", "opa2_user"]
+    else:
+	load_order.append(module)
+
+    for driver in load_order:
+        (ret, msg) = test(driver, test_info, hostlist)
+        if not ret:
+            RegLib.test_fail(msg)
+
+    RegLib.test_pass(msg)
 
 if __name__ == "__main__":
     main()
