@@ -881,26 +881,26 @@ const struct pci_error_handlers qib_pci_err_handler = {
 /* mask for PCIe capability regiser lnkctl2 target link speed */
 #define LNKCTL2_TARGET_LINK_SPEED_MASK 0xf
 
-static uint pcie_gen3_transition = 1;
-module_param(pcie_gen3_transition, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_transition, "Driver will attempt the transition to PCIe Gen3 speed (2 = target Gen2, 3 = target Gen1 )");
+static uint pcie_target = 3;
+module_param(pcie_target, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_target, "PCIe target speed (0 skip, 1-3 Gen1-3)");
 
-static uint pcie_gen3_required;
-module_param(pcie_gen3_required, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_required, "Driver will fail to load if unable to reach PCie Gen3 speed");
+static uint pcie_required;
+module_param(pcie_required, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_required, "Driver will fail to load if unable to reach PCIe target speed");
 
-static uint pcie_gen3_force;
-module_param(pcie_gen3_force, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_force, "Force driver to do a Gen3 download even if already at Gen3 speed");
+static uint pcie_force;
+module_param(pcie_force, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_force, "Force driver to do a PCIe firmware download even if already at target speed");
 
-static uint pcie_gen3_retry = 5;
-module_param(pcie_gen3_retry, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_retry, "Driver will try this many times to reach requested speed");
+static uint pcie_retry = 5;
+module_param(pcie_retry, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_retry, "Driver will try this many times to reach requested speed");
 
 /* default to p0 as that allows preservation of Gen3 across a reboot */
-static uint pcie_gen3_pset; /* default to p0 */
-module_param(pcie_gen3_pset, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_pset, "Gen3 Eq Pset value to use, range is 0-10");
+static uint pcie_pset; /* default to p0 */
+module_param(pcie_pset, uint, S_IRUGO);
+MODULE_PARM_DESC(pcie_pset, "PCIe Eq Pset value to use, range is 0-10");
 
 /* for testing */
 static uint pcie_gen3_ignore_speed_check;
@@ -1107,7 +1107,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	u32 status, err;
 	int ret, return_error = 0;
 	int do_retry, retry_count = 0;
-	u16 target_vector, target_speed, target_num;
+	u16 target_vector, target_speed;
 	u16 lnkctl, lnkctl2, vendor;
 	u8 nsbr = 1;
 	u8 div;
@@ -1117,31 +1117,27 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	if (dd->icode != WFR_ICODE_RTL_SILICON)
 		return 0;
 
-	/* told not to do the transition */
-	if (!pcie_gen3_transition) {
-		dd_dev_info(dd, "%s: Skipping PCIe transition\n", __func__);
-		return 0;
-	}
-	if (pcie_gen3_transition == 3) {	/* target Gen1 */
+	if (pcie_target == 1) {			/* target Gen1 */
 		target_vector = GEN1_SPEED_VECTOR;
 		target_speed = 2500;
-		target_num = 1;
-	} else if (pcie_gen3_transition == 2) {	/* target Gen2 */
+	} else if (pcie_target == 2) {		/* target Gen2 */
 		target_vector = GEN2_SPEED_VECTOR;
 		target_speed = 5000;
-		target_num = 2;
-	} else {				/* target Gen3 */
+	} else if (pcie_target == 3) {		/* target Gen3 */
 		target_vector = GEN3_SPEED_VECTOR;
 		target_speed = 8000;
-		target_num = 3;
+	} else {
+		/* off or invalid target - skip */
+		dd_dev_info(dd, "%s: Skipping PCIe transition\n", __func__);
+		return 0;
 	}
 
 	/* if already at target speed, done (unless forced) */
 	if (dd->lbus_speed == target_speed) {
 		dd_dev_info(dd, "%s: PCIe already at gen%d, %s\n", __func__,
-			target_num,
-			pcie_gen3_force ? "re-doing anyway" : "skipping");
-		if (!pcie_gen3_force)
+			pcie_target,
+			pcie_force ? "re-doing anyway" : "skipping");
+		if (!pcie_force)
 			return 0;
 	}
 
@@ -1160,7 +1156,8 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	/* step 1: pcie link working in gen1/gen2 */
 
 	/* step 2: if either side is not capable of Gen3, done */
-	if (!dd->link_gen3_capable && !pcie_gen3_ignore_speed_check) {
+	if (pcie_target == 3 && !dd->link_gen3_capable
+					&& !pcie_gen3_ignore_speed_check) {
 		dd_dev_err(dd, "The PCIe link is not Gen3 capable\n");
 		ret = -ENOSYS;
 		goto done_no_mutex;
@@ -1246,14 +1243,14 @@ retry:
 	 *
 	 * Set Gen3EqPsetReqVec, leave other fields 0.
 	 */
-	if (pcie_gen3_pset > 10) {	/* valid range is 0-10, inclusive */
-		dd_dev_err(dd, "%s: Invalid Gen3 Eq Pset %u, setting to 0\n",
-			__func__, pcie_gen3_pset);
-		pcie_gen3_pset = 0;
+	if (pcie_pset > 10) {	/* valid range is 0-10, inclusive */
+		dd_dev_err(dd, "%s: Invalid Eq Pset %u, setting to 0\n",
+			__func__, pcie_pset);
+		pcie_pset = 0;
 	}
-	dd_dev_info(dd, "%s: using EQ Pset %u\n", __func__, pcie_gen3_pset);
+	dd_dev_info(dd, "%s: using EQ Pset %u\n", __func__, pcie_pset);
 	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL106,
-		(1 << pcie_gen3_pset)
+		(1 << pcie_pset)
 			<< WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
 
 	/*
@@ -1342,12 +1339,12 @@ retry:
 		dd_dev_info(dd,
 			"%s: read of VendorID failed after SBR, err %d\n",
 			__func__, ret);
-		return_error = 1;	/* override !pcie_gen3_required */
+		return_error = 1;	/* override !pcie_required */
 		goto done;
 	}
 	if (vendor == 0xffff) {
 		dd_dev_info(dd, "%s: VendorID is all 1s after SBR\n", __func__);
-		return_error = 1;	/* override !pcie_gen3_required */
+		return_error = 1;	/* override !pcie_required */
 		ret = -EIO;
 		goto done;
 	}
@@ -1372,7 +1369,7 @@ retry:
 	dd_dev_info(dd, "%s: gasket block status: 0x%llx\n", __func__, reg);
 	if (reg == ~0ull) {	/* PCIe read failed/timeout */
 		dd_dev_err(dd, "SBR failed - unable to read from device\n");
-		return_error = 1;	/* override !pcie_gen3_required */
+		return_error = 1;	/* override !pcie_required */
 		ret = -ENOSYS;
 		goto done;
 	}
@@ -1411,9 +1408,9 @@ retry:
 
 	if (dd->lbus_speed != target_speed) { /* not target */
 		/* maybe retry */
-		do_retry = retry_count < pcie_gen3_retry;
+		do_retry = retry_count < pcie_retry;
 		dd_dev_err(dd, "PCIe link speed did not switch to Gen%d%s\n",
-			target_num, do_retry ? ", retrying" : "");
+			pcie_target, do_retry ? ", retrying" : "");
 		retry_count++;
 		if (do_retry) {
 			msleep(100); /* allow time to settle */
@@ -1425,8 +1422,8 @@ retry:
 done:
 	release_hw_mutex(dd);
 done_no_mutex:
-	/* return no error if it is OK to be in Gen1/2 */
-	if (ret && !return_error && !pcie_gen3_required) {
+	/* return no error if it is OK to be at current speed */
+	if (ret && !return_error && !pcie_required) {
 		dd_dev_err(dd, "Proceeding at current speed PCIe speed\n");
 		ret = 0;
 	}
