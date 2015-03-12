@@ -196,10 +196,13 @@ struct hif_scatter_req {
 
 	/* bounce buffer for upper layers to copy to/from */
 	u8 *virt_dma_buf;
-
+#ifdef __GENKSYMS__
 	struct hif_scatter_item scat_list[1];
-
+#endif
 	u32 scat_q_depth;
+#ifndef __GENKSYMS__
+	struct hif_scatter_item scat_list[0];
+#endif
 };
 
 struct ath6kl_irq_proc_registers {
