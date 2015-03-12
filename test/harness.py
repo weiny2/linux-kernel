@@ -63,6 +63,14 @@ test_list = [
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
+    # Load an already built driver on single node
+    { "test_name" : "ModuleLoadSingle",
+      "test_exe" : "LoadModule.py",
+      "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --module %MODULE%",
+      "type" : "default",
+      "desc" : "Load the opa_core/opa2_hfi/opa2_user or all on 1 node"
+    },
+
     # IB Send Lat test
     { "test_name" : "IbSendLat-Verbs",
       "test_exe" : "IbSendLat.py",
@@ -327,6 +335,7 @@ variable_map = {
     "HOST" : test_info.get_host_name_by_index,
     "PSM_LIB" : test_info.get_psm_lib,
     "TEST_PKT_DIR" : test_info.get_test_pkt_dir,
+    "MODULE" : test_info.get_module,
     "DIAG_LIB" : test_info.get_diag_lib,
     "PSM_OPTS" : test_info.get_psm_opts,
     "NP" : test_info.get_np,
@@ -356,7 +365,7 @@ if test_info.list_only:
 simics = test_info.is_simics()
 fullset = True
 if test_info.get_test_list():
-    tlist = test_info.get_test_list()
+    tlist = test_info.get_test_list().split(',')
     tests_to_run = filter(lambda x: x["test_name"] in tlist, test_list)
     fullset = False
 else:

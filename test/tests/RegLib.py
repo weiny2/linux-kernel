@@ -474,6 +474,11 @@ class TestInfo:
                           + test_pkt_dir_default,
                           metavar="PATH", default=test_pkt_dir_default)
 
+        parser.add_option("--module", dest="module",
+                          help="Which module to load. Options are opa_core"
+				", opa2_user or opa2_hfi",
+                          default="all")
+
         parser.add_option("--modparm", dest="module_params",
                           help="Optional module paramters to pass "
                                + "Like: param1=X param2=Y "
@@ -485,9 +490,9 @@ class TestInfo:
                           default="")
         parser.add_option("--sm", dest="sm",
                           help="Which SM to use. Valid values are opensm, " +
-                          "opafm, detect, or none. Default: detect",
+                          "opafm, detect, or none. Default: none",
                           metavar="SM",
-                          default="detect")
+                          default="none")
         parser.add_option("--basedir", dest="base_dir",
                           help="Optional base directory to pass to a test. Used to source executables and such.",
                           metavar="PATH",
@@ -623,6 +628,8 @@ class TestInfo:
         else:
             self.test_list = None
 
+	self.module = options.module
+
         if options.module_params:
             self.module_params = options.module_params
         else:
@@ -671,6 +678,9 @@ class TestInfo:
 
     def get_kbuild_dir(self):
         return self.kbuild_dir
+
+    def get_module(self):
+        return self.module
 
     def list_only(self):
         return self.list_only
