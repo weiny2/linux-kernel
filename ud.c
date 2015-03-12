@@ -368,12 +368,16 @@ int qib_make_ud_req(struct qib_qp *qp)
 	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
 	qp->s_hdr->ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	lid = ppd->lid;
-	if (lid) {
-		lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-		qp->s_hdr->ibh.lrh[3] = cpu_to_be16(lid);
-	} else
+	if (ah_attr->dlid == IB_LID_PERMISSIVE)
 		qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
+	else {
+		lid = ppd->lid;
+		if (lid) {
+			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
+			qp->s_hdr->ibh.lrh[3] = cpu_to_be16(lid);
+		} else
+			qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
+	}
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
