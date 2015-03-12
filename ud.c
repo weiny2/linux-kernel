@@ -292,11 +292,8 @@ int qib_make_ud_req(struct qib_qp *qp)
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
 	ah_attr = &to_iah(wqe->wr.wr.ud.ah)->attr;
-	if (ah_attr->dlid >= QIB_MULTICAST_LID_BASE &&
-	    ah_attr->dlid != QIB_PERMISSIVE_LID) {
-		ibp->n_multicast_xmit++;
-	} else {
-		ibp->n_unicast_xmit++;
+	if (ah_attr->dlid < QIB_MULTICAST_LID_BASE ||
+	    ah_attr->dlid == QIB_PERMISSIVE_LID) {
 		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
 		if (unlikely(!loopback && (lid == ppd->lid ||
 		    (lid == QIB_PERMISSIVE_LID &&

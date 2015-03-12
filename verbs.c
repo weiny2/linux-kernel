@@ -670,7 +670,6 @@ void qib_ib_rcv(struct hfi_packet *packet)
 		mcast = qib_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
-		ibp->n_multicast_rcv++;
 		rcv_flags |= QIB_HAS_GRH;
 		if (rhf_dc_info(packet->rhf))
 			rcv_flags |= QIB_SC4_BIT;
@@ -700,7 +699,7 @@ void qib_ib_rcv(struct hfi_packet *packet)
 			rcd->lookaside_qpn = qp_num;
 		} else
 			qp = rcd->lookaside_qp;
-		ibp->n_unicast_rcv++;
+
 		if (lnh == QIB_LRH_GRH)
 			rcv_flags |= QIB_HAS_GRH;
 		if (rhf_dc_info(packet->rhf))

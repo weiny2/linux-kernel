@@ -718,10 +718,6 @@ struct qib_ibport {
 	__be64 mkey;
 	__be64 guids[QIB_GUIDS_PER_PORT	- 1];	/* writable GUIDs */
 	u64 tid;		/* TID for traps */
-	u64 n_unicast_xmit;     /* total unicast packets sent */
-	u64 n_unicast_rcv;      /* total unicast packets received */
-	u64 n_multicast_xmit;   /* total multicast packets sent */
-	u64 n_multicast_rcv;    /* total multicast packets received */
 	u64 z_symbol_error_counter;             /* starting count for PMA */
 	u64 z_link_error_recovery_counter;      /* starting count for PMA */
 	u64 z_link_downed_counter;              /* starting count for PMA */
@@ -735,22 +731,22 @@ struct qib_ibport {
 	u32 z_local_link_integrity_errors;      /* starting count for PMA */
 	u32 z_excessive_buffer_overrun_errors;  /* starting count for PMA */
 	u32 z_vl15_dropped;                     /* starting count for PMA */
-	u32 n_rc_resends;
-	u32 n_rc_acks;
-	u32 n_rc_qacks;
-	u32 n_rc_delayed_comp;
-	u32 n_seq_naks;
-	u32 n_rdma_seq;
-	u32 n_rnr_naks;
-	u32 n_other_naks;
-	u32 n_loop_pkts;
-	u32 n_pkt_drops;
-	u32 n_vl15_dropped;
-	u32 n_rc_timeouts;
-	u32 n_dmawait;
-	u32 n_unaligned;
-	u32 n_rc_dupreq;
-	u32 n_rc_seqnak;
+	u64 n_rc_resends;
+	u64 n_rc_acks;
+	u64 n_rc_qacks;
+	u64 n_rc_delayed_comp;
+	u64 n_seq_naks;
+	u64 n_rdma_seq;
+	u64 n_rnr_naks;
+	u64 n_other_naks;
+	u64 n_loop_pkts;
+	u64 n_pkt_drops;
+	u64 n_vl15_dropped;
+	u64 n_rc_timeouts;
+	u64 n_dmawait;
+	u64 n_unaligned;
+	u64 n_rc_dupreq;
+	u64 n_rc_seqnak;
 	u32 port_cap_flags;
 	u32 pma_sample_start;
 	u32 pma_sample_interval;

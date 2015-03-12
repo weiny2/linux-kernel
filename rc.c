@@ -749,7 +749,6 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 	/* write the pbc and data */
 	ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
 
-	ibp->n_unicast_xmit++;
 	goto done;
 
 queue_ack:

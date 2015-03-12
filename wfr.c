@@ -1373,6 +1373,14 @@ CNTR_ELEM(#name ,\
 	  flags, \
 	  dc_access_lcb_cntr)
 
+/* ibp counters */
+#define SW_IBP_CNTR(name, cntr) \
+CNTR_ELEM(#name ,\
+	  0, \
+	  0, \
+	  CNTR_SYNTH, \
+	  access_ibp_##cntr)
+
 u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
@@ -1509,7 +1517,6 @@ static inline u64 read_write_sw(struct hfi_devdata *dd, u64 *cntr, int mode,
 	hfi_cdbg(CNTR, "val 0x%llx mode %d", ret, mode);
 
 	return ret;
-
 }
 
 static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
@@ -1564,6 +1571,35 @@ static u64 access_rcv_constraint_errs(const struct cntr_entry *entry,
 	return read_write_sw(ppd->dd, &ppd->port_rcv_constraint_errors,
 			     mode, data);
 }
+
+#define def_access_ibp_counter(cntr) \
+static u64 access_ibp_##cntr(const struct cntr_entry *entry,		      \
+				void *context, int vl, int mode, u64 data)    \
+{									      \
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;	      \
+									      \
+	if (vl != CNTR_INVALID_VL)					      \
+		return 0;						      \
+									      \
+	return read_write_sw(ppd->dd, &ppd->ibport_data.n_ ##cntr,	      \
+			     mode, data);				      \
+}
+
+def_access_ibp_counter(rc_acks);
+def_access_ibp_counter(loop_pkts);
+def_access_ibp_counter(rc_resends);
+def_access_ibp_counter(rnr_naks);
+def_access_ibp_counter(other_naks);
+def_access_ibp_counter(rc_timeouts);
+def_access_ibp_counter(pkt_drops);
+def_access_ibp_counter(dmawait);
+def_access_ibp_counter(rc_seqnak);
+def_access_ibp_counter(rc_qacks);
+def_access_ibp_counter(rc_delayed_comp);
+def_access_ibp_counter(rc_dupreq);
+def_access_ibp_counter(rdma_seq);
+def_access_ibp_counter(unaligned);
+def_access_ibp_counter(seq_naks);
 
 static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 [C_RCV_OVF] = RXE32_DEV_CNTR_ELEM(RcvOverflow, RCV_BUF_OVFL_CNT, CNTR_SYNTH),
@@ -1749,6 +1785,21 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 			access_xmit_constraint_errs),
 [C_SW_RCV_CSTR_ERR] = CNTR_ELEM("RcvCstrErr", 0, 0, CNTR_SYNTH,
 			access_rcv_constraint_errs),
+[C_SW_IBP_RC_ACKS] = SW_IBP_CNTR(RcAcks, rc_acks),
+[C_SW_IBP_LOOP_PKTS] = SW_IBP_CNTR(LoopPkts, loop_pkts),
+[C_SW_IBP_RC_RESENDS] = SW_IBP_CNTR(RcResend, rc_resends),
+[C_SW_IBP_RNR_NAKS] = SW_IBP_CNTR(RnrNak, rnr_naks),
+[C_SW_IBP_OTHER_NAKS] = SW_IBP_CNTR(OtherNak, other_naks),
+[C_SW_IBP_RC_TIMEOUTS] = SW_IBP_CNTR(RcTimeOut, rc_timeouts),
+[C_SW_IBP_PKT_DROPS] = SW_IBP_CNTR(PktDrop, pkt_drops),
+[C_SW_IBP_DMA_WAIT] = SW_IBP_CNTR(DmaWait, dmawait),
+[C_SW_IBP_RC_SEQNAK] = SW_IBP_CNTR(RcSeqNak, rc_seqnak),
+[C_SW_IBP_RC_QACKS] = SW_IBP_CNTR(RcQacks, rc_qacks),
+[C_SW_IBP_RC_DELAYED_COMP] = SW_IBP_CNTR(RcDelayComp, rc_delayed_comp),
+[C_SW_IBP_RC_DUPREQ] = SW_IBP_CNTR(RcDupRew, rc_dupreq),
+[C_SW_IBP_RDMA_SEQ] = SW_IBP_CNTR(RdmaSeq, rdma_seq),
+[C_SW_IBP_UNALIGNED] = SW_IBP_CNTR(Unaligned, unaligned),
+[C_SW_IBP_SEQ_NAK] = SW_IBP_CNTR(SeqNak, seq_naks),
 OVERFLOW_ELEM(0),   OVERFLOW_ELEM(1),   OVERFLOW_ELEM(2),   OVERFLOW_ELEM(3),
 OVERFLOW_ELEM(4),   OVERFLOW_ELEM(5),   OVERFLOW_ELEM(6),   OVERFLOW_ELEM(7),
 OVERFLOW_ELEM(8),   OVERFLOW_ELEM(9),   OVERFLOW_ELEM(10),  OVERFLOW_ELEM(11),
