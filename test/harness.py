@@ -417,8 +417,8 @@ for test in tests_to_run:
                             valid = 1
                     if valid == 0:
                         WARN("Did not find a mapping for" + arg)
-
-                processed_args += arg + " "
+                if arg:
+                    processed_args += arg + " "
             if simics == True:
                 processed_args += "--simics"
 

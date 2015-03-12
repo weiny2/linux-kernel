@@ -420,6 +420,7 @@ class TestInfo:
 
         git_root = os.popen('git rev-parse --show-toplevel').read()
         git_root = chomp(git_root)
+	kbuild_def = "/lib/modules/3.12.18-wfr+/build"
 
         # Some ancient disros do not support the above git command. Or git may
         # not be in the users path. Rather than getting garbage and accepting
@@ -439,7 +440,7 @@ class TestInfo:
 
         parser.add_option("--kbuild", dest="kbuild",
                           help="Path to kbuild dir",
-                          metavar="PATH")
+                          metavar="PATH", default=kbuild_def)
 
         parser.add_option("--simics", action="store_true", dest="simics",
                           help="Run on simics environment. Optional if using "
