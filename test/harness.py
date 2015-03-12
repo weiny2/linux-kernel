@@ -59,7 +59,7 @@ test_list = [
     { "test_name" : "ModuleLoad",
       "test_exe" : "LoadModule.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
-      "type" : "default,",
+      "type" : "none",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
@@ -75,7 +75,7 @@ test_list = [
     { "test_name" : "IbSendLat-Verbs",
       "test_exe" : "IbSendLat.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_send_lat for 5 iterations.",
     },
 
@@ -83,63 +83,63 @@ test_list = [
     { "test_name" : "IbSendBwUD-Verbs",
       "test_exe" : "IbSendBwUD.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using UD.",
     },
 
     { "test_name" : "IbSendBwRC-Verbs",
       "test_exe" : "IbSendBwRC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using RC.",
     },
 
     { "test_name" : "IbWriteBwRC-Verbs",
       "test_exe" : "IbWriteBwRC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_write_bw for 5 iterations with various sizes using RC.",
     },
 
     { "test_name" : "IbWriteBwUC-Verbs",
       "test_exe" : "IbWriteBwUC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_write_bw for 5 iterations with various sizes using UC.",
     },
 
     { "test_name" : "IbReadBwRC-Verbs",
       "test_exe" : "IbReadBwRC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_read_bw for 5 iterations with various sizes using RC.",
     },
 
     { "test_name" : "IbSendBwUC-Verbs",
       "test_exe" : "IbSendBwUC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using UC.",
     },
 
     { "test_name" : "IPoIB-Verbs",
       "test_exe" : "IpoibPing.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run ping for 5 packets using ipoib.",
     },
 
     { "test_name" : "IbSendBwRC-8MB",
       "test_exe" : "IbSendBwRC-a.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,verbs",
+      "type" : "verbs",
       "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
     },
 
     { "test_name" : "IPoIB-Qperf",
       "test_exe" : "IpoibQperf.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,verbs",
+      "type" : "verbs",
       "desc" : "Run qperf/tcp_bw for 8 to 64 bytes.",
     },
 
@@ -147,28 +147,28 @@ test_list = [
     { "test_name" : "OSU-MPI-Psm",
       "test_exe" : "OsuMpi.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS%",
-      "type" : "mpi,mpipsm,default",
+      "type" : "mpi,mpipsm",
       "desc" : "Run OSU MPI benchmarks with PSM",
     },
 
     { "test_name" : "OSU-MPI-Psm-One-node",
       "test_exe" : "OsuMpi.py",
       "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --psmopts %PSM_OPTS%",
-      "type" : "mpi,mpipsm,default",
+      "type" : "mpi,mpipsm",
       "desc" : "Run OSU MPI benchmarks on one node with PSM",
     },
 
     { "test_name" : "OSU-MPI-Verbs",
       "test_exe" : "OsuMpi.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs",
-      "type" : "default,mpi,mpiverbs,verbs",
+      "type" : "mpi,mpiverbs,verbs",
       "desc" : "Run OSU MPI benchmarks with verbs",
     },
 
     { "test_name" : "OpcodeCounters",
       "test_exe" : "OpcodeCounters.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs",
+      "type" : "verbs",
       "desc" : "Run test opcode counters after quick tests have been run.",
     },
 
@@ -176,14 +176,14 @@ test_list = [
     { "test_name" : "IMB-Psm",
       "test_exe" : "IMB.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-time 1 -iter 10\"",
-      "type" : "default,mpi,mpipsm",
+      "type" : "mpi,mpipsm",
       "desc" : "Run full IMB suite with PSM",
     },
 
     { "test_name" : "IMB-Verbs",
       "test_exe" : "IMB.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-time 1 -iter 10\"",
-      "type" : "default,mpi,mpiverbs,verbs",
+      "type" : "mpi,mpiverbs,verbs",
       "desc" : "Run full IMB suite with verbs",
     },
 
@@ -191,21 +191,21 @@ test_list = [
     { "test_name" : "HfiPktTest-PIO-Buffer",
       "test_exe" : "HfiPktTest.py",
       "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --sw-diags %DIAG_LIB%",
-      "type" : "diagtools,default",
+      "type" : "diagtools",
       "desc" : "Run hfi_pkt_test PIO buffer benchmark.",
     },
 
     { "test_name" : "HfiPktTest-Ping-Pong",
       "test_exe" : "HfiPktTest.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --sw-diags %DIAG_LIB%",
-      "type" : "diagtools,default",
+      "type" : "diagtools",
       "desc" : "Run hfi_pkt_test ping-pong benchmark.",
     },
 
     { "test_name" : "HfiPktSend",
       "test_exe" : "HfiPktSend.py",
       "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --test-pkt-dir %TEST_PKT_DIR% --sw-diags %DIAG_LIB%",
-      "type" : "diagtools,default",
+      "type" : "diagtools",
       "desc" : "Run hfi_pkt_send tests.",
     },
 
@@ -213,42 +213,42 @@ test_list = [
     { "test_name" : "MPI-Stress-Psm",
       "test_exe" : "MpiStress.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "mpi,mpipsm,quick",
+      "type" : "mpi,mpipsm",
       "desc" : "Run quick MPI stress with PSM",
     },
 
     { "test_name" : "MPI-Stress-Verbs",
       "test_exe" : "MpiStress.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "mpi,mpiverbs,verbs,quick",
+      "type" : "mpi,mpiverbs,verbs",
       "desc" : "Run quick MPI stress with verbs",
     },
 
     { "test_name" : "MPI-Stress-PSM-Long",
       "test_exe" : "MpiStress.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 10 -M 10 -w 20 -z\"",
-      "type" : "mpi,mpipsm,default,integrity",
+      "type" : "mpi,mpipsm,integrity",
       "desc" : "Run MPI stress with PSM",
     },
 
     { "test_name" : "MPI-Stress-Verbs-Long",
       "test_exe" : "MpiStress.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 10 -M 10 -w 20 -z\"",
-      "type" : "default,mpi,mpiverbs,verbs,default,integrity",
+      "type" : "mpi,mpiverbs,verbs,integrity",
       "desc" : "Run MPI stress with verbs",
     },
 
     { "test_name" : "Hpcc-Verbs",
       "test_exe" : "Hpcc.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs",
-      "type" : "default,mpi,mpiverbs,verbs",
+      "type" : "mpi,mpiverbs,verbs",
       "desc" : "Run Hpcc with verbs",
     },
 
     { "test_name" : "Hpcc-Psm",
       "test_exe" : "Hpcc.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB%",
-      "type" : "default,mpi,mpipsm",
+      "type" : "mpi,mpipsm",
       "desc" : "Run Hpcc with psm",
     },
 
@@ -256,21 +256,21 @@ test_list = [
     { "test_name" : "SnoopHijack",
       "test_exe" : "Snoop.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick",
+      "type" : "snoop",
       "desc" : "Run snoop hijack tests.",
     },
 
     { "test_name" : "PacketCapture",
       "test_exe" : "Pcap.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick",
+      "type" : "snoop",
       "desc" : "Run simple packet capture tests.",
     },
 
     { "test_name" : "SnoopIntegrity",
       "test_exe" : "SnoopInteg.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick",
+      "type" : "snoop",
       "desc" : "Sweep fabric and check MD5 sums of packets *requires ifs_fm*",
     },
 
@@ -284,7 +284,7 @@ test_list = [
     { "test_name" : "SnoopIoctl",
       "test_exe" : "SnoopIoctl.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default",
+      "type" : "snoop",
       "desc" : "Run snoop IOCTL tests (modifies HFI state and kills SM.",
     },
 
@@ -298,7 +298,7 @@ test_list = [
     { "test_name" : "RestoreSanity",
       "test_exe" : "LoadModule.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
-      "type" : "default,",
+      "type" : "None",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
@@ -319,9 +319,72 @@ test_list = [
     { "test_name" : "Loopback-Test",
       "test_exe" : "Loopback.py",
       "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "default,quick",
+      "type" : "none",
       "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
     },
+
+    { "test_name" : "HFI-RING",
+      "test_exe" : "HfiRing.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_ring test"
+    },
+
+    { "test_name" : "HFI-APPEND",
+      "test_exe" : "HfiAppend.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_append test"
+    },
+
+    { "test_name" : "HFI-CMD",
+      "test_exe" : "HfiCmd.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_cmd test"
+    },
+
+    { "test_name" : "HFI-EQ",
+      "test_exe" : "HfiEq.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_eq test"
+    },
+
+    { "test_name" : "HFI-JOB",
+      "test_exe" : "HfiJob.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_job test"
+    },
+
+    { "test_name" : "HFI-ME",
+      "test_exe" : "HfiMe.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_me test"
+    },
+
+    { "test_name" : "HFI-PUT",
+      "test_exe" : "HfiPut.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_put test"
+    },
+
+    { "test_name" : "HFI-SEND-SELF",
+      "test_exe" : "HfiSendSelf.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_send_self test"
+    },
+
+    { "test_name" : "HFI-TX-AUTH",
+      "test_exe" : "HfiTxAuth.py",
+      "args" : "--nodelist %HOST[1]%",
+      "type" : "default,quick",
+      "desc" : "Run hfi_tx_auth test"
+    }
 ]
 
 
