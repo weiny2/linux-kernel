@@ -174,7 +174,6 @@ struct sdma_set_state_action {
 	unsigned op_enable:1;
 	unsigned op_intenable:1;
 	unsigned op_halt:1;
-	unsigned op_drain:1;
 	unsigned op_cleanup:1;
 	unsigned go_s99_running_tofalse:1;
 	unsigned go_s99_running_totrue:1;

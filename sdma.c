@@ -85,6 +85,12 @@ MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HEADER_STORAGE_UNC_ERR_SMASK \
 	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_SMASK)
 
+/* sdma_sendctrl operations */
+#define SDMA_SENDCTRL_OP_ENABLE    (1U << 0)
+#define SDMA_SENDCTRL_OP_INTENABLE (1U << 1)
+#define SDMA_SENDCTRL_OP_HALT      (1U << 2)
+#define SDMA_SENDCTRL_OP_CLEANUP   (1U << 3)
+
 static const char * const sdma_state_names[] = {
 	[sdma_state_s00_hw_down]                = "s00_HwDown",
 	[sdma_state_s10_hw_start_up_halt_wait]  = "s10_HwStartUpHaltWait",
@@ -121,49 +127,42 @@ static const struct sdma_set_state_action sdma_action_table[] = {
 		.op_intenable = 0,
 		.op_halt = 0,
 		.op_cleanup = 0,
-		.op_drain = 0,
 	},
 	[sdma_state_s10_hw_start_up_halt_wait] = {
 		.op_enable = 0,
 		.op_intenable = 0,
 		.op_halt = 1,
 		.op_cleanup = 0,
-		.op_drain = 0,
 	},
 	[sdma_state_s15_hw_start_up_clean_wait] = {
 		.op_enable = 0,
 		.op_intenable = 1,
 		.op_halt = 0,
 		.op_cleanup = 1,
-		.op_drain = 0,
 	},
 	[sdma_state_s20_idle] = {
 		.op_enable = 0,
 		.op_intenable = 1,
 		.op_halt = 0,
 		.op_cleanup = 0,
-		.op_drain = 0,
 	},
 	[sdma_state_s30_sw_clean_up_wait] = {
 		.op_enable = 0,
 		.op_intenable = 0,
 		.op_halt = 0,
 		.op_cleanup = 0,
-		.op_drain = 0,
 	},
 	[sdma_state_s40_hw_clean_up_wait] = {
 		.op_enable = 0,
 		.op_intenable = 0,
 		.op_halt = 0,
 		.op_cleanup = 1,
-		.op_drain = 0,
 	},
 	[sdma_state_s50_hw_halt_wait] = {
 		.op_enable = 0,
 		.op_intenable = 0,
 		.op_halt = 0,
 		.op_cleanup = 0,
-		.op_drain = 1,
 	},
 	[sdma_state_s60_idle_halt_wait] = {
 		.go_s99_running_tofalse = 1,
@@ -171,28 +170,24 @@ static const struct sdma_set_state_action sdma_action_table[] = {
 		.op_intenable = 0,
 		.op_halt = 1,
 		.op_cleanup = 0,
-		.op_drain = 1,
 	},
 	[sdma_state_s80_hw_freeze] = {
 		.op_enable = 0,
 		.op_intenable = 0,
 		.op_halt = 0,
 		.op_cleanup = 0,
-		.op_drain = 0,
 	},
 	[sdma_state_s82_freeze_sw_clean] = {
 		.op_enable = 0,
 		.op_intenable = 0,
 		.op_halt = 0,
 		.op_cleanup = 0,
-		.op_drain = 0,
 	},
 	[sdma_state_s99_running] = {
 		.op_enable = 1,
 		.op_intenable = 1,
 		.op_halt = 0,
 		.op_cleanup = 0,
-		.op_drain = 0,
 		.go_s99_running_totrue = 1,
 	},
 };
@@ -686,19 +681,16 @@ static void sdma_set_state(struct sdma_engine *sde,
 		sdma_flush(sde);
 
 	if (action[next_state].op_enable)
-		op |= QIB_SDMA_SENDCTRL_OP_ENABLE;
+		op |= SDMA_SENDCTRL_OP_ENABLE;
 
 	if (action[next_state].op_intenable)
-		op |= QIB_SDMA_SENDCTRL_OP_INTENABLE;
+		op |= SDMA_SENDCTRL_OP_INTENABLE;
 
 	if (action[next_state].op_halt)
-		op |= QIB_SDMA_SENDCTRL_OP_HALT;
+		op |= SDMA_SENDCTRL_OP_HALT;
 
 	if (action[next_state].op_cleanup)
-		op |= QIB_SDMA_SENDCTRL_OP_CLEANUP;
-
-	if (action[next_state].op_drain)
-		op |= QIB_SDMA_SENDCTRL_OP_DRAIN;
+		op |= SDMA_SENDCTRL_OP_CLEANUP;
 
 	if (action[next_state].go_s99_running_tofalse)
 		ss->go_s99_running = 0;
@@ -1560,49 +1552,41 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) senddmactrl E=%d I=%d H=%d C=%d\n",
 		sde->this_idx,
-		(op & QIB_SDMA_SENDCTRL_OP_ENABLE) ? 1 : 0,
-		(op & QIB_SDMA_SENDCTRL_OP_INTENABLE) ? 1 : 0,
-		(op & QIB_SDMA_SENDCTRL_OP_HALT) ? 1 : 0,
-		(op & QIB_SDMA_SENDCTRL_OP_CLEANUP) ? 1 : 0);
+		(op & SDMA_SENDCTRL_OP_ENABLE) ? 1 : 0,
+		(op & SDMA_SENDCTRL_OP_INTENABLE) ? 1 : 0,
+		(op & SDMA_SENDCTRL_OP_HALT) ? 1 : 0,
+		(op & SDMA_SENDCTRL_OP_CLEANUP) ? 1 : 0);
 #endif
 
-	if (op & QIB_SDMA_SENDCTRL_OP_ENABLE)
+	if (op & SDMA_SENDCTRL_OP_ENABLE)
 		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_ENABLE_SMASK;
 	else
 		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_ENABLE_SMASK;
 
-	if (op & QIB_SDMA_SENDCTRL_OP_INTENABLE)
+	if (op & SDMA_SENDCTRL_OP_INTENABLE)
 		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_INT_ENABLE_SMASK;
 	else
 		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_INT_ENABLE_SMASK;
 
-	if (op & QIB_SDMA_SENDCTRL_OP_HALT)
+	if (op & SDMA_SENDCTRL_OP_HALT)
 		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_HALT_SMASK;
 	else
 		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_HALT_SMASK;
 
-	/* JAG TODO: OP_DRAIN */
-
 	spin_lock_irqsave(&sde->senddmactrl_lock, flags);
-
-	/* JAG TODO: OP_DRAIN */
 
 	sde->p_senddmactrl |= set_senddmactrl;
 	sde->p_senddmactrl &= ~clr_senddmactrl;
 
-	if (op & QIB_SDMA_SENDCTRL_OP_CLEANUP)
+	if (op & SDMA_SENDCTRL_OP_CLEANUP)
 		write_sde_csr(sde, WFR_SEND_DMA_CTRL,
 			sde->p_senddmactrl |
 			WFR_SEND_DMA_CTRL_SDMA_CLEANUP_SMASK);
 	else
 		write_sde_csr(sde, WFR_SEND_DMA_CTRL, sde->p_senddmactrl);
-	/* JAG XXX: do we have kr_scratch need/equivalent */
-
-	/* JAG TODO: OP_DRAIN */
 
 	spin_unlock_irqrestore(&sde->senddmactrl_lock, flags);
 
-	/* JAG TODO: OP_DRAIN */
 #ifdef JAG_SDMA_VERBOSITY
 	sdma_dumpstate(sde);
 #endif

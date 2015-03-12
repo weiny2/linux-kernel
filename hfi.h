@@ -1136,12 +1136,6 @@ struct hfi_devdata {
 #define PT_EAGER    1
 #define PT_INVALID  2
 
-#define QIB_SDMA_SENDCTRL_OP_ENABLE    (1U << 0)
-#define QIB_SDMA_SENDCTRL_OP_INTENABLE (1U << 1)
-#define QIB_SDMA_SENDCTRL_OP_HALT      (1U << 2)
-#define QIB_SDMA_SENDCTRL_OP_CLEANUP   (1U << 3)
-#define QIB_SDMA_SENDCTRL_OP_DRAIN     (1U << 4)
-
 /* Private data for file operations */
 struct hfi_filedata {
 	struct qib_ctxtdata *uctxt;
