@@ -680,7 +680,6 @@ struct qib_pportdata {
 	/* Value to be sent to link peer on LinkDown .*/
 	u8 remote_link_down_reason;
 	u8 link_quality; /* part of portstatus, datacounters PMA queries */
-	u8 pending_active_reregister;
 	/* Error events that will cause a port bounce. */
 	u32 port_error_action;
 };

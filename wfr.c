@@ -5812,10 +5812,8 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 	 * link state is neither of (IB_PORT_ARMED, IB_PORT_ACTIVE), then
 	 * reset is_sm_config_started to 0.
 	 */
-	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE)) {
+	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE))
 		ppd->is_sm_config_started = 0;
-		ppd->pending_active_reregister = 0;
-	}
 
 	/*
 	 * Do nothing if the states match.  Let a poll to poll link bounce
@@ -5891,10 +5889,16 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 			dd_dev_err(dd,
 				"%s: logical state did not change to ACTIVE\n",
 				__func__);
-		}
+		} else {
 
-		/* tell all engines to go running */
-		sdma_all_running(dd);
+			/* tell all engines to go running */
+			sdma_all_running(dd);
+
+			/* Signal the IB layer that the port has went active */
+			event.device = &dd->verbs_dev.ibdev;
+			event.element.port_num = ppd->port;
+			event.event = IB_EVENT_PORT_ACTIVE;
+		}
 		break;
 	case HLS_DN_POLL:
 		/* TODO: only start Polling if we have verified that media is
@@ -6035,12 +6039,6 @@ unexpected:
 	ret = -EINVAL;
 
 done:
-	if (!ret && (state == HLS_UP_ACTIVE) && ppd->pending_active_reregister) {
-		event.device = &dd->verbs_dev.ibdev;
-		event.element.port_num = ppd->port;
-		event.event = IB_EVENT_CLIENT_REREGISTER;
-		ppd->pending_active_reregister = 0;
-	}
 	mutex_unlock(&ppd->hls_lock);
 
 	if (event.device)

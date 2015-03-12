@@ -1085,9 +1085,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		}
 	}
 
-	/* queue CLIENT_REREGISTER event for transition to Active */
-	if (clientrereg)
-		ppd->pending_active_reregister = 1;
+	/* Handle CLIENT_REREGISTER event b/c SM asked us for it */
+	if (clientrereg) {
+		event.event = IB_EVENT_CLIENT_REREGISTER;
+		ib_dispatch_event(&event);
+	}
 
 	/*
 	 * Do the port state change now that the other link parameters

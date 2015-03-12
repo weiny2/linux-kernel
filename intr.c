@@ -140,8 +140,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* link widths are not avaiable until the link is fully up */
 		get_linkup_link_widths(ppd);
 
-		ev = IB_EVENT_PORT_ACTIVE;
-
 		/* start a 75msec timer to clear symbol errors */
 		mod_timer(&ppd->symerr_clear_timer, msecs_to_jiffies(75));
 
@@ -167,10 +165,12 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		/* if we are down, the neighbor is down */
 		ppd->neighbor_normal = 0;
+
+		/* notify IB of the link change */
+		signal_ib_event(ppd, ev);
 	}
 
-	/* notify IB of the link change */
-	signal_ib_event(ppd, ev);
+
 }
 
 void qib_clear_symerror_on_linkup(unsigned long opaque)
