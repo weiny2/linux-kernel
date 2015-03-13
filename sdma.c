@@ -116,6 +116,7 @@ static const char * const sdma_event_names[] = {
 	[sdma_event_e60_hw_halted]    = "e60_HwHalted",
 	[sdma_event_e70_go_idle]      = "e70_GoIdle",
 	[sdma_event_e80_hw_freeze]    = "e80_HwFreeze",
+	[sdma_event_e81_hw_frozen]    = "e81_HwFrozen",
 	[sdma_event_e82_hw_unfreeze]  = "e82_HwUnfreeze",
 	[sdma_event_e90_sw_halted]    = "e90_SwHalted",
 };
@@ -610,17 +611,14 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 	/*
 	 * In the error clean up sequence, software clean must be called
 	 * before the hardware clean so we can use the hardware head in
-	 * the progress routine.  A hardware clean will reset the hardware
-	 * head.
+	 * the progress routine.  A hardware clean or SPC unfreeze will
+	 * reset the hardware head.
 	 *
-	 * Process all retired requests. The progress routine will use
-	 * the latest physical hardware head - we are in an error or end
-	 * condition so speed does not matter.  If we are in a freeze,
-	 * the hardware head is invalid so there is no point in trying to
-	 * retire ("make progress") anything.
+	 * Process all retired requests. The progress routine will use the
+	 * latest physical hardware head - we are not running so speed does
+	 * not matter.
 	 */
-	if (!sde->invalid_hwhead)
-		sdma_make_progress(sde, 0);
+	sdma_make_progress(sde, 0);
 
 	sdma_flush(sde);
 
@@ -633,7 +631,6 @@ static void sdma_sw_clean_up_task(unsigned long opaque)
 	sde->descq_head = 0;
 	sde->desc_avail = sdma_descq_freecnt(sde);
 	*sde->head_dma = 0;
-	sde->invalid_hwhead = 0; /* not in freeze */
 
 	__sdma_process_event(sde, sdma_event_e40_sw_cleaned);
 
@@ -647,6 +644,10 @@ static void sdma_sw_tear_down(struct sdma_engine *sde)
 
 	/* Releasing this reference means the state machine has stopped. */
 	sdma_put(ss);
+
+	/* stop waiting for all unfreeze events to complete */
+	atomic_set(&sde->dd->sdma_unfreeze_count, -1);
+	wake_up_interruptible(&sde->dd->sdma_unfreeze_wq);
 }
 
 static void sdma_start_hw_clean_up(struct sdma_engine *sde)
@@ -1008,6 +1009,10 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 
 	per_sdma_credits =
 		dd->chip_sdma_mem_size/(num_engines * WFR_SDMA_BLOCK_SIZE);
+
+	/* set up freeze waitqueue */
+	init_waitqueue_head(&dd->sdma_unfreeze_wq);
+	atomic_set(&dd->sdma_unfreeze_count, 0);
 
 	descq_cnt = sdma_get_descq_cnt();
 	dd_dev_info(dd, "SDMA engines %zu descq_cnt %u\n",
@@ -2192,6 +2197,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			break;
+		case sdma_event_e81_hw_frozen:
+			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
 		case sdma_event_e90_sw_halted:
@@ -2228,6 +2235,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			ss->go_s99_running = 0;
 			break;
 		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e81_hw_frozen:
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
@@ -2266,6 +2275,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			break;
+		case sdma_event_e81_hw_frozen:
+			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
 		case sdma_event_e90_sw_halted:
@@ -2301,6 +2312,10 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			sdma_set_state(sde, sdma_state_s80_hw_freeze);
+			atomic_dec(&sde->dd->sdma_unfreeze_count);
+			wake_up_interruptible(&sde->dd->sdma_unfreeze_wq);
+			break;
+		case sdma_event_e81_hw_frozen:
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
@@ -2335,6 +2350,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			ss->go_s99_running = 0;
 			break;
 		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e81_hw_frozen:
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
@@ -2373,6 +2390,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			break;
+		case sdma_event_e81_hw_frozen:
+			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
 		case sdma_event_e90_sw_halted:
@@ -2408,6 +2427,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			ss->go_s99_running = 0;
 			break;
 		case sdma_event_e80_hw_freeze:
+			break;
+		case sdma_event_e81_hw_frozen:
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
@@ -2445,6 +2466,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			break;
+		case sdma_event_e81_hw_frozen:
+			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
 		case sdma_event_e90_sw_halted:
@@ -2478,21 +2501,11 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			break;
-		case sdma_event_e82_hw_unfreeze:
-			/*
-			 * This event is sent after the SPC freeze has been
-			 * cleared.  This means that the hardware head has
-			 * been reset.  Mark the hwhead as inalid so we do
-			 * not try to retire completed descriptors usint it.
-			 * Alternative: Another event indicating that the
-			 * hardware has been frozen so the software clean
-			 * can be used then.  That requires more coordination
-			 * as all engines must complete their software clean
-			 * before the SPC freeze is cleared.
-			 */
-			sde->invalid_hwhead = 1;
+		case sdma_event_e81_hw_frozen:
 			sdma_set_state(sde, sdma_state_s82_freeze_sw_clean);
 			sdma_start_sw_clean_up(sde);
+			break;
+		case sdma_event_e82_hw_unfreeze:
 			break;
 		case sdma_event_e90_sw_halted:
 			break;
@@ -2515,10 +2528,9 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			ss->go_s99_running = 1;
 			break;
 		case sdma_event_e40_sw_cleaned:
-			sdma_hw_start_up(sde);
-			sdma_set_state(sde, ss->go_s99_running ?
-				       sdma_state_s99_running :
-				       sdma_state_s20_idle);
+			/* notify caller this engine is done cleaning */
+			atomic_dec(&sde->dd->sdma_unfreeze_count);
+			wake_up_interruptible(&sde->dd->sdma_unfreeze_wq);
 			break;
 		case sdma_event_e50_hw_cleaned:
 			break;
@@ -2529,7 +2541,13 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			break;
+		case sdma_event_e81_hw_frozen:
+			break;
 		case sdma_event_e82_hw_unfreeze:
+			sdma_hw_start_up(sde);
+			sdma_set_state(sde, ss->go_s99_running ?
+				       sdma_state_s99_running :
+				       sdma_state_s20_idle);
 			break;
 		case sdma_event_e90_sw_halted:
 			break;
@@ -2570,6 +2588,10 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e80_hw_freeze:
 			sdma_set_state(sde, sdma_state_s80_hw_freeze);
+			atomic_dec(&sde->dd->sdma_unfreeze_count);
+			wake_up_interruptible(&sde->dd->sdma_unfreeze_wq);
+			break;
+		case sdma_event_e81_hw_frozen:
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
@@ -2774,9 +2796,50 @@ void sdma_freeze_notify(struct hfi_devdata *dd)
 {
 	int i;
 
+	/* set up the wait but do not wait here */
+	atomic_set(&dd->sdma_unfreeze_count, dd->num_sdma);
+
 	/* tell all engines to stop running and wait */
 	for (i = 0; i < dd->num_sdma; i++)
 		sdma_process_event(&dd->per_sdma[i], sdma_event_e80_hw_freeze);
+
+	/* sdma_freeze() will wait for all engines to have stopped */
+}
+
+/*
+ * SPC freeze handling for SDMA engines.  Called when the driver knows
+ * the SPC is fully frozen.
+ */
+void sdma_freeze(struct hfi_devdata *dd)
+{
+	int i;
+	int ret;
+
+	/*
+	 * Make sure all engines have moved out of the running state before
+	 * continuing.
+	 */
+	ret = wait_event_interruptible(dd->sdma_unfreeze_wq,
+				atomic_read(&dd->sdma_unfreeze_count) <= 0);
+	/* interrupted or count is negative, then unloading - just exit */
+	if (ret || atomic_read(&dd->sdma_unfreeze_count) < 0)
+		return;
+
+	/* set up the count for the next wait */
+	atomic_set(&dd->sdma_unfreeze_count, dd->num_sdma);
+
+	/* tell all engines that the SPC is frozen, they can start cleaning */
+	for (i = 0; i < dd->num_sdma; i++)
+		sdma_process_event(&dd->per_sdma[i], sdma_event_e81_hw_frozen);
+
+	/*
+	 * Wait for everyone to finish software clean before exiting.  The
+	 * software clean will read engine CSRs, so must be completed before
+	 * the next step, which will clear the engine CSRs.
+	 */
+	(void) wait_event_interruptible(dd->sdma_unfreeze_wq,
+				atomic_read(&dd->sdma_unfreeze_count) <= 0);
+	/* no need to check results - done no matter what */
 }
 
 /*

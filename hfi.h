@@ -805,6 +805,9 @@ struct hfi_devdata {
 	struct sdma_engine                 *per_sdma;
 	/* array of vl maps */
 	struct sdma_vl_map __rcu           *sdma_map;
+	/* SPC freeze waitqueue and variable */
+	wait_queue_head_t		  sdma_unfreeze_wq;
+	atomic_t			  sdma_unfreeze_count;
 
 	/* qib_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)

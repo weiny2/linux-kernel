@@ -3100,7 +3100,8 @@ void handle_freeze(struct work_struct *work)
 	/* do send PIO freeze steps */
 	pio_freeze(dd);
 
-	/* do send DMA freeze steps - nothing to do */
+	/* do send DMA freeze steps */
+	sdma_freeze(dd);
 
 	/* do send egress freeze steps - nothing to do */
 

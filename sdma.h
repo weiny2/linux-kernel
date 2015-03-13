@@ -166,6 +166,7 @@ enum sdma_events {
 	sdma_event_e60_hw_halted,
 	sdma_event_e70_go_idle,
 	sdma_event_e80_hw_freeze,
+	sdma_event_e81_hw_frozen,
 	sdma_event_e82_hw_unfreeze,
 	sdma_event_e90_sw_halted,
 };
@@ -395,8 +396,6 @@ struct sdma_engine {
 	/* private: */
 	dma_addr_t            head_phys;
 	/* private: */
-	u8		      invalid_hwhead; /* true in freeze */
-	/* private: */
 	struct hw_sdma_desc *descq;
 	/* private: */
 	struct sdma_txreq **tx_ring;
@@ -476,6 +475,7 @@ void sdma_exit(struct hfi_devdata *dd);
 void sdma_all_running(struct hfi_devdata *dd);
 void sdma_all_idle(struct hfi_devdata *dd);
 void sdma_freeze_notify(struct hfi_devdata *dd);
+void sdma_freeze(struct hfi_devdata *dd);
 void sdma_unfreeze(struct hfi_devdata *dd);
 void sdma_wait(struct hfi_devdata *dd);
 
