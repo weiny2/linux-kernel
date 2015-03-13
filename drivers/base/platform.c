@@ -936,9 +936,6 @@ u64 dma_get_required_mask(struct device *dev)
 	}
 	return mask;
 }
-#endif
-#if !defined(ARCH_HAS_DMA_GET_REQUIRED_MASK) || \
-    (defined(__GENKSYMS__) && defined(CONFIG_X86) && defined(CONFIG_XEN))
 EXPORT_SYMBOL_GPL(dma_get_required_mask);
 #endif
 

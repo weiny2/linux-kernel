@@ -806,7 +806,6 @@ void tick_nohz_idle_enter(void)
 
 	local_irq_enable();
 }
-EXPORT_SYMBOL_GPL(tick_nohz_idle_enter);
 
 /**
  * tick_nohz_irq_exit - update next tick event from interrupt exit
@@ -825,7 +824,6 @@ void tick_nohz_irq_exit(void)
 	else
 		tick_nohz_full_stop_tick(ts);
 }
-EXPORT_SYMBOL_GPL(tick_nohz_idle_exit);
 
 /**
  * tick_nohz_get_sleep_length - return the length of the current sleep

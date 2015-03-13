@@ -921,7 +921,6 @@ EXPORT_SYMBOL(find_lock_entry);
  * @offset: the page index
  * @fgp_flags: PCG flags
  * @gfp_mask: gfp mask to use for the page cache data page allocation
- * @radix_gfp_mask: ignored (kabi)
  *
  * Looks up the page cache slot at @mapping & @offset.
  *
@@ -940,7 +939,7 @@ EXPORT_SYMBOL(find_lock_entry);
  * If there is a page cache page, it is returned with an increased refcount.
  */
 struct page *pagecache_get_page(struct address_space *mapping, pgoff_t offset,
-	int fgp_flags, gfp_t gfp_mask, gfp_t radix_gfp_mask)
+	int fgp_flags, gfp_t gfp_mask)
 {
 	struct page *page;
 
@@ -2485,7 +2484,7 @@ struct page *grab_cache_page_write_begin(struct address_space *mapping,
 		fgp_flags |= FGP_NOFS;
 
 	page = pagecache_get_page(mapping, index, fgp_flags,
-			mapping_gfp_mask(mapping), 0);
+			mapping_gfp_mask(mapping));
 	if (page)
 		wait_for_stable_page(page);
 
@@ -2745,7 +2744,7 @@ ssize_t generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	if (ret > 0) {
 		ssize_t err;
 
-		err = generic_write_sync_i(file, iocb->ki_pos - ret, ret);
+		err = generic_write_sync(file, iocb->ki_pos - ret, ret);
 		if (err < 0)
 			ret = err;
 	}

@@ -21,10 +21,8 @@
 
 #include <linux/hid.h>
 #include <linux/hid-sensor-ids.h>
-#ifndef __GENKSYMS__
 #include <linux/iio/iio.h>
 #include <linux/iio/trigger.h>
-#endif
 
 /**
  * struct hid_sensor_hub_attribute_info - Attribute info

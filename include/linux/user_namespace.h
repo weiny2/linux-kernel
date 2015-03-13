@@ -37,9 +37,7 @@ struct user_namespace {
 	struct key		*persistent_keyring_register;
 	struct rw_semaphore	persistent_keyring_register_sem;
 #endif
-#ifndef __GENKSYMS__
 	unsigned long		flags;
-#endif
 };
 
 extern struct user_namespace init_user_ns;

@@ -270,9 +270,7 @@ u64 dma_get_required_mask(struct device *dev)
 
 	return DMA_BIT_MASK(__fls(max_mfn - 1) + 1 + PAGE_SHIFT);
 }
-#ifndef __GENKSYMS__
 EXPORT_SYMBOL_GPL(dma_get_required_mask);
-#endif
 
 static int check_pages_physically_contiguous(unsigned long pfn,
 					     unsigned int offset,

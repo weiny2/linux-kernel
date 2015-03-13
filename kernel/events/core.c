@@ -39,9 +39,7 @@
 #include <linux/hw_breakpoint.h>
 #include <linux/mm_types.h>
 #include <linux/cgroup.h>
-#ifndef __GENKSYMS__
 #include <linux/compat.h>
-#endif
 
 #include "internal.h"
 

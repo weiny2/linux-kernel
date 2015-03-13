@@ -509,9 +509,7 @@ struct iwl_trans {
 	u8 rx_mpdu_cmd, rx_mpdu_cmd_hdr_size;
 
 	bool pm_support;
-#ifndef __GENKSYMS__
 	bool ltr_enabled;
-#endif
 
 	/* The following fields are internal only */
 	struct kmem_cache *dev_cmd_pool;

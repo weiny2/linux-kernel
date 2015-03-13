@@ -220,16 +220,6 @@ SYSCALL_DEFINE1(fdatasync, unsigned int, fd)
 }
 
 /*
- * Nobody should use this, it is only a kABI placeholder,
- * Use generic_write_sync_i instead
- */
-int generic_write_sync(struct file *file, loff_t pos, loff_t count)
-{
-	return generic_write_sync_i(file, pos, count);
-}
-EXPORT_SYMBOL(generic_write_sync);
-
-/*
  * sys_sync_file_range() permits finely controlled syncing over a segment of
  * a file in the range offset .. (offset+nbytes-1) inclusive.  If nbytes is
  * zero then sys_sync_file_range() will operate from offset out to EOF.

@@ -17,9 +17,7 @@
 #include <linux/idr.h>
 #include <linux/fs.h>
 
-#ifndef __GENKSYMS__
 #include <net/ipv6.h>
-#endif
 #include <net/net_namespace.h>
 #include <net/rtnetlink.h>
 #include <net/sock.h>

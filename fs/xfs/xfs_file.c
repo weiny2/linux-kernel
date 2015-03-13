@@ -926,7 +926,7 @@ start:
 		XFS_STATS_ADD(xs_write_bytes, ret);
 
 		/* Handle various SYNC-type writes */
-		err = generic_write_sync_i(file, iocb->ki_pos - ret, ret);
+		err = generic_write_sync(file, iocb->ki_pos - ret, ret);
 		if (err < 0)
 			ret = err;
 	}

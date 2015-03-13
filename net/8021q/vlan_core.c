@@ -106,12 +106,6 @@ u16 vlan_dev_vlan_id(const struct net_device *dev)
 }
 EXPORT_SYMBOL(vlan_dev_vlan_id);
 
-struct sk_buff *vlan_untag(struct sk_buff *skb)
-{
-	return skb_vlan_untag(skb);
-}
-EXPORT_SYMBOL(vlan_untag);
-
 /*
  * vlan info and vid list
  */

@@ -121,9 +121,6 @@ struct net {
 #endif
 	struct sock		*diag_nlsk;
 	atomic_t		fnhe_genid;
-#ifndef __GENKSYMS__
-	struct sock  * __percpu	*tcp_sk;
-#endif
 };
 
 /*

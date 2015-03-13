@@ -356,9 +356,7 @@ struct vb2_queue {
 	unsigned int			plane_sizes[VIDEO_MAX_PLANES];
 
 	unsigned int			streaming:1;
-#ifndef __GENKSYMS__
 	unsigned int			waiting_for_buffers:1;
-#endif
 
 	struct vb2_fileio_data		*fileio;
 };

@@ -6,9 +6,7 @@
 #include <linux/slab.h>
 #include <linux/security.h>
 #include <linux/syscalls.h>
-#ifndef __GENKSYMS__
 #include <linux/user_namespace.h>
-#endif
 #include <asm/uaccess.h>
 
 /* init to 2 - one for init_task, one to ensure it is never freed */
