@@ -1586,11 +1586,14 @@ const char *get_unit_name(int unit);
  * Flush write combining store buffers (if present) and perform a write
  * barrier.
  */
+static inline void qib_flush_wc(void)
+{
 #if defined(CONFIG_X86_64)
-#define qib_flush_wc() asm volatile("sfence" : : : "memory")
+	asm volatile("sfence" : : : "memory");
 #else
-#define qib_flush_wc() wmb() /* no reorder around wc flush */
+	wmb(); /* no reorder around wc flush */
 #endif
+}
 
 extern void handle_eflags(struct hfi_packet *packet);
 extern void process_receive_ib(struct hfi_packet *packet);
