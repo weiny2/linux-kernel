@@ -85,6 +85,12 @@ static void write_iommu_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 	writeq(cpu_to_le64(value), dd->kregbase[1] + offset);
 }
 
+static void write_iommu_csr32(const struct hfi_devdata *dd, u32 offset, u32 value)
+{
+	BUG_ON(dd->kregbase[1] == NULL);
+	writel(cpu_to_le32(value), dd->kregbase[1] + offset);
+}
+
 int
 hfi_iommu_root_alloc(void)
 {
@@ -164,7 +170,7 @@ hfi_iommu_root_set_context(struct hfi_devdata *dd)
 	write_iommu_csr(dd, RTADDR_REG_0_0_0_VTDBAR_OFFSET, rt_csr.val);
 	gcmd_csr.field.TE = 1;
 	gcmd_csr.field.SRTP = 1;
-	write_iommu_csr(dd, GCMD_REG_0_0_0_VTDBAR_OFFSET, gcmd_csr.val);
+	write_iommu_csr32(dd, GCMD_REG_0_0_0_VTDBAR_OFFSET, gcmd_csr.val);
 
 	return 0;
 }
@@ -173,7 +179,7 @@ void
 hfi_iommu_root_clear_context(struct hfi_devdata *dd)
 {
 	/* disable translation */
-	write_iommu_csr(dd, GCMD_REG_0_0_0_VTDBAR_OFFSET, 0);
+	write_iommu_csr32(dd, GCMD_REG_0_0_0_VTDBAR_OFFSET, 0);
 	/* clear RT pointer */
 	write_iommu_csr(dd, RTADDR_REG_0_0_0_VTDBAR_OFFSET, 0);
 
