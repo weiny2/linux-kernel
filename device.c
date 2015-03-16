@@ -60,7 +60,7 @@ int hfi_cdev_init(int minor, const char *name,
 		goto done;
 	}
 
-	device = device_create(class, NULL, dev, NULL, name);
+	device = device_create(class, NULL, dev, NULL, "%s", name);
 	if (!IS_ERR(device))
 		goto done;
 	ret = PTR_ERR(device);
