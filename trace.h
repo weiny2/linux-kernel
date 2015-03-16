@@ -1257,11 +1257,8 @@ __hfi_trace_fn(DEBUG);
 __hfi_trace_fn(SNOOP);
 __hfi_trace_fn(CNTR);
 __hfi_trace_fn(PIO);
+__hfi_trace_fn(DC8051);
 
-/*
- * Carry the qib name forward to make porting code from QIB easier. Can be
- * cleaned up and converted to hfi_cdbg/hfi_dbg at a later time.
- */
 #define hfi_cdbg(which, fmt, ...) \
 	__hfi_trace_##which(__func__, fmt, ##__VA_ARGS__)
 
