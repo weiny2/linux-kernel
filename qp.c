@@ -256,10 +256,10 @@ static void remove_qp(struct qib_ibdev *dev, struct qib_qp *qp)
 
 	if (rcu_dereference_protected(ibp->qp0,
 			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
-		rcu_assign_pointer(ibp->qp0, NULL);
+		RCU_INIT_POINTER(ibp->qp0, NULL);
 	} else if (rcu_dereference_protected(ibp->qp1,
 			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
-		rcu_assign_pointer(ibp->qp1, NULL);
+		RCU_INIT_POINTER(ibp->qp1, NULL);
 	} else {
 		struct qib_qp *q;
 		struct qib_qp __rcu **qpp;
@@ -271,7 +271,7 @@ static void remove_qp(struct qib_ibdev *dev, struct qib_qp *qp)
 					!= NULL;
 				qpp = &q->next)
 			if (q == qp) {
-				rcu_assign_pointer(*qpp,
+				RCU_INIT_POINTER(*qpp,
 				 rcu_dereference_protected(qp->next,
 				 lockdep_is_held(&dev->qp_dev->qpt_lock)));
 				removed = 1;
@@ -320,7 +320,7 @@ static unsigned free_all_qps(struct hfi_devdata *dd)
 	for (n = 0; n < dev->qp_dev->qp_table_size; n++) {
 		qp = rcu_dereference_protected(dev->qp_dev->qp_table[n],
 			lockdep_is_held(&dev->qp_dev->qpt_lock));
-		rcu_assign_pointer(dev->qp_dev->qp_table[n], NULL);
+		RCU_INIT_POINTER(dev->qp_dev->qp_table[n], NULL);
 
 		for (; qp; qp = rcu_dereference_protected(qp->next,
 				lockdep_is_held(&dev->qp_dev->qpt_lock)))
