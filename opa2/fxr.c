@@ -271,6 +271,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	pte_cache_access.field.mask_address = 0x3FF;
 	write_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL, pte_cache_access.val);
 	/* TODO - above incomplete, deferred processing needs to wait for .ack bit */
+
+	/* TODO - write fake simics CSR to flush mini-TLB (AT interface TBD) */
+	write_csr(dd, 0x2820000, 1);
 }
 
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
@@ -297,22 +300,27 @@ void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base)
 {
-	u32 offset;
+	u32 head_offset;
 	RXCI_CFG_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
 	TXCI_CFG_RESET_t tx_cq_reset = {.val = 0};
 	RXCI_CFG_CQ_RESET_t rx_cq_reset = {.val = 0};
 
-	cq_head.field.valid = 1;
-	cq_head.field.hd_ptr_host_addr =
-			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
-	offset = FXR_RXCI_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
-	write_csr(dd, offset, cq_head.val);
+	head_offset = FXR_RXCI_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
+
+	/* disable CQ head before reset */
+	write_csr(dd, head_offset, 0);
 
 	/* reset CQ state, as CQ head starts at 0 */
 	tx_cq_reset.field.reset_cq = cq_idx;
 	rx_cq_reset.field.reset_cq = cq_idx;
 	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
 	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
+
+	/* set CQ head */
+	cq_head.field.valid = 1;
+	cq_head.field.hd_ptr_host_addr =
+			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
+	write_csr(dd, head_offset, cq_head.val);
 }
 
 /*
