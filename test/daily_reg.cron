@@ -6,110 +6,91 @@ mode=$1
 host1=$2
 host2=$3
 
-# First reboot the hosts to get rid of anything that is fouled up
-echo "Rebooting $host1 and $host2"
-ssh root@$host1 'reboot'&
-ssh root@$host2 'reboot'&
+uptime=0
 
-echo "Giving reboot a bit to take effect"
-sleep 120
+get_uptime () {
+	host=$1
+	ssh root@$host "cat /proc/uptime" | awk '{print $1}' | awk 'BEGIN { FS="." } {print $1}'
+}
 
-# no one should be up yet if so they probably did not reboot
-ping -c 1 -t 3 $host1
-if [ $? -eq 0 ]; then
-	echo "$host1 never rebooted, power cycling"
-	ssh fabserv2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host1"
-fi
+power_cycle() {
+	host=$1
+	echo "Power cycling $host"
+	ssh fabserv2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host"
+}
 
-ping -c 1 -t 3 $host2
-if [ $? -eq 0 ]; then
-	echo "$host1 never rebooted, power cycling"
-	ssh fabserv2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host2"
-fi
+check_up() {
+	host=$1
+	uptime=$2
 
-echo "Waiting for $host1 to reboot"
-attempts=0
-host1_up=0
-host2_up=0
-while [ $attempts -lt 5 ]; do
-	ping -c 1 -t 3 $host1
+	attempts=0
+	while [ $attempts -lt 10 ]; do
+		# Try a ping
+		ping -c 1 -t 3 $host
+		if [ $? -eq 0 ]; then
+			echo "$host pings"
+			cur_uptime=$(get_uptime $host)
+			if [ $cur_uptime -eq 0 ]; then
+				echo "Cur uptime is 0 host may be booting still"
+			fi
+
+			if [ $cur_uptime -gt $uptime ]; then
+				echo "Host never rebooted after 120 seconds"
+				return 1
+			fi
+
+			if [ $cur_uptime -lt $uptime ]; then
+				echo "Host has rebooted"
+				return 0
+			fi
+		else
+			echo "$host does not ping"
+		fi
+		echo "Checking again in 30 seconds"
+		sleep 30
+	done 
+
+	return 1
+}
+
+do_reboot() {
+	host=$1
+	uptime=$(get_uptime $host)
+	echo "$host has been up for $uptime"
+	ssh root@$host 'reboot'&
+	echo "Waiting 2 minutes to give host time to shutdown and start booting"
+	sleep 120
+	check_up $host $uptime
 	if [ $? -eq 0 ]; then
-		let host1_up=1
-		break
+		return 0
+	else
+		echo "$host never came up"
+		power_cycle $host1
+	
 	fi
-	let attempts=attempts+1
-	echo "$host1 not up yet waiting 1 minute and trying again"
-	sleep 60
-done
-
-echo "Checking $host2"
-# wait a couple minutes more for host2 to come up
-while [ $attempts -lt 7 ]; do
-	ping -c 1 -t 3 $host2
-	if [ $? -eq 0 ]; then
-		let host2_up=1
-		break
+	check_up $host $uptime
+	if [ $? -eq 0]; then
+		return 0
+	else
+		echo "$host never came back after power cycle"
+		return 1
 	fi
-	let attempts=attempts+1
-	echo "$host2 not up yet waiting 1 minute and trying again"
-	sleep 60
-done
+}
 
-# if host did not come up then hammer them
-if [ $host1_up -eq 0 ]; then
-	echo "$host1 did not come up power cycling"
-	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host1"
-fi
-
-if [ $host2_up -eq 0 ]; then
-	echo "$host2 did not come up power cycling"
-	ssh fabserve2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host2"
-fi
-
-let attempts=0
-let host1_up=0
-let host2_up=0
-# check the nodes again if they are already up this will be one ping and done
-# otherwise we need to wait
-while [ $attempts -lt 5 ]; do
-	ping -c 1 -t 3 $host1
-	if [ $? -eq 0 ]; then
-		let host1_up=1
-		break
-	fi
-	let attempts=attempts+1
-	echo "$host1 not up yet waiting 1 minute and trying again"
-	sleep 60
-done
-
-echo "Checking $host2"
-# wait a couple minutes more for host2 to come up
-while [ $attempts -lt 7 ]; do
-	ping -c 1 -t 3 $host2
-	if [ $? -eq 0 ]; then
-		let host2_up=1
-		break
-	fi
-	let attempts=attempts+1
-	echo "$host2 not up yet waiting 1 minute and trying again"
-	sleep 60
-done
-
-# if host did not come up then hammer them
-if [ $host1_up -eq 0 ]; then
-	echo "$host1 never came up. Bailing"
+# Reboot the hosts to get rid of anything that is fouled up
+echo "Rebooting $host1"
+do_reboot $host1
+if [ $? -ne 0 ]; then
+	echo "$host1 never rebooted cleanlyi"
 	exit 1
 fi
 
-if [ $host2_up -eq 0 ]; then
-	echo "$host2 never came up. Bailing"
+echo "Rebooting $host2"
+do_reboot $host2
+if [ $? -ne 0 ]; then
+	echo "$host2 never rebooted cleanly"
 	exit 1
 fi
-
-# Before we go on make sure SSH is up, just go to sleep for a bit
-echo "Giving SSH 60 seconds to come up"
-sleep 60
-
 ./harness.py --type $mode --nodelist $host1,$host2
 
 # Reboot and hope for the best no need to wait around.
