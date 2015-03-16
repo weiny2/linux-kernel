@@ -149,6 +149,8 @@ static const struct net_device_ops opa_netdev_ops = {
 	.ndo_set_mac_address = eth_mac_addr,
 };
 
+#if 0
+ /* Disabling since it is resulting in crashes on rhel 7.0 */
 static void opa_get_drvinfo(struct net_device *ndev,
 			    struct ethtool_drvinfo *info)
 {
@@ -158,6 +160,7 @@ static void opa_get_drvinfo(struct net_device *ndev,
 	strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
 	strlcpy(info->bus_info, pci_name(dev->pdev), sizeof(info->bus_info));
 }
+#endif
 
 static int opa_get_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
 {
@@ -177,7 +180,10 @@ static int opa_get_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
 }
 
 static const struct ethtool_ops opa_ethtool_ops = {
+#if 0
+	 /* Disabling since it is resulting in crashes on rhel 7.0 */
 	.get_drvinfo = opa_get_drvinfo,
+#endif
 	.get_link = ethtool_op_get_link,
 	.get_settings = opa_get_settings,
 };
