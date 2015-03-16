@@ -307,20 +307,24 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 
 	head_offset = FXR_RXCI_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
 
+#if 0
 	/* disable CQ head before reset */
+	/* TODO, CQ head should be set after CQ reset, but not working in simics */
 	write_csr(dd, head_offset, 0);
+#endif
+
+	/* set CQ head */
+	/* TODO, CQ head should be set after CQ reset, but not working in simics */
+	cq_head.field.valid = 1;
+	cq_head.field.hd_ptr_host_addr =
+			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
+	write_csr(dd, head_offset, cq_head.val);
 
 	/* reset CQ state, as CQ head starts at 0 */
 	tx_cq_reset.field.reset_cq = cq_idx;
 	rx_cq_reset.field.reset_cq = cq_idx;
 	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
 	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
-
-	/* set CQ head */
-	cq_head.field.valid = 1;
-	cq_head.field.hd_ptr_host_addr =
-			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
-	write_csr(dd, head_offset, cq_head.val);
 }
 
 /*
