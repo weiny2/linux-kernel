@@ -1332,7 +1332,7 @@ static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
 #define DRIVER_LOAD_MSG "Intel " DRIVER_NAME " loaded: "
 #define PFX DRIVER_NAME ": "
 
-static DEFINE_PCI_DEVICE_TABLE(qib_pci_tbl) = {
+static const struct pci_device_id qib_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR0) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR1) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR2) },
