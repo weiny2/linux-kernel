@@ -118,6 +118,7 @@ static const char * const sdma_event_names[] = {
 	[sdma_event_e80_hw_freeze]    = "e80_HwFreeze",
 	[sdma_event_e81_hw_frozen]    = "e81_HwFrozen",
 	[sdma_event_e82_hw_unfreeze]  = "e82_HwUnfreeze",
+	[sdma_event_e85_link_down]    = "e85_LinkDown",
 	[sdma_event_e90_sw_halted]    = "e90_SwHalted",
 };
 
@@ -2201,6 +2202,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
+		case sdma_event_e85_link_down:
+			break;
 		case sdma_event_e90_sw_halted:
 			break;
 		}
@@ -2239,6 +2242,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e81_hw_frozen:
 			break;
 		case sdma_event_e82_hw_unfreeze:
+			break;
+		case sdma_event_e85_link_down:
 			break;
 		case sdma_event_e90_sw_halted:
 			break;
@@ -2279,6 +2284,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
+		case sdma_event_e85_link_down:
+			break;
 		case sdma_event_e90_sw_halted:
 			break;
 		}
@@ -2310,6 +2317,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e70_go_idle:
 			break;
+		case sdma_event_e85_link_down:
+			/* fall through */
 		case sdma_event_e80_hw_freeze:
 			sdma_set_state(sde, sdma_state_s80_hw_freeze);
 			atomic_dec(&sde->dd->sdma_unfreeze_count);
@@ -2355,6 +2364,9 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
+		case sdma_event_e85_link_down:
+			ss->go_s99_running = 0;
+			break;
 		case sdma_event_e90_sw_halted:
 			break;
 		}
@@ -2394,6 +2406,9 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
+		case sdma_event_e85_link_down:
+			ss->go_s99_running = 0;
+			break;
 		case sdma_event_e90_sw_halted:
 			break;
 		}
@@ -2431,6 +2446,9 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e81_hw_frozen:
 			break;
 		case sdma_event_e82_hw_unfreeze:
+			break;
+		case sdma_event_e85_link_down:
+			ss->go_s99_running = 0;
 			break;
 		case sdma_event_e90_sw_halted:
 			break;
@@ -2470,6 +2488,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			break;
 		case sdma_event_e82_hw_unfreeze:
 			break;
+		case sdma_event_e85_link_down:
+			break;
 		case sdma_event_e90_sw_halted:
 			break;
 		}
@@ -2506,6 +2526,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 			sdma_start_sw_clean_up(sde);
 			break;
 		case sdma_event_e82_hw_unfreeze:
+			break;
+		case sdma_event_e85_link_down:
 			break;
 		case sdma_event_e90_sw_halted:
 			break;
@@ -2549,6 +2571,8 @@ static void __sdma_process_event(struct sdma_engine *sde,
 				       sdma_state_s99_running :
 				       sdma_state_s20_idle);
 			break;
+		case sdma_event_e85_link_down:
+			break;
 		case sdma_event_e90_sw_halted:
 			break;
 		}
@@ -2586,6 +2610,9 @@ static void __sdma_process_event(struct sdma_engine *sde,
 		case sdma_event_e70_go_idle:
 			sdma_set_state(sde, sdma_state_s60_idle_halt_wait);
 			break;
+		case sdma_event_e85_link_down:
+			ss->go_s99_running = 0;
+			/* fall through */
 		case sdma_event_e80_hw_freeze:
 			sdma_set_state(sde, sdma_state_s80_hw_freeze);
 			atomic_dec(&sde->dd->sdma_unfreeze_count);
@@ -2792,16 +2819,18 @@ void sdma_ahg_free(struct sdma_engine *sde, int ahg_index)
  * This event will pull the engine out of running so no more entries can be
  * added to the engine's queue.
  */
-void sdma_freeze_notify(struct hfi_devdata *dd)
+void sdma_freeze_notify(struct hfi_devdata *dd, int link_down)
 {
 	int i;
+	enum sdma_events event = link_down ? sdma_event_e85_link_down :
+					     sdma_event_e80_hw_freeze;
 
 	/* set up the wait but do not wait here */
 	atomic_set(&dd->sdma_unfreeze_count, dd->num_sdma);
 
 	/* tell all engines to stop running and wait */
 	for (i = 0; i < dd->num_sdma; i++)
-		sdma_process_event(&dd->per_sdma[i], sdma_event_e80_hw_freeze);
+		sdma_process_event(&dd->per_sdma[i], event);
 
 	/* sdma_freeze() will wait for all engines to have stopped */
 }

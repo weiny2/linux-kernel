@@ -942,9 +942,6 @@ static struct flag_table rxe_err_status_flags[] = {
 	WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK | \
 	WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK)
 
-#define WFR_FREEZE_OK 0
-#define WFR_FREEZE_ABORT 1
-
 #if 0 /* no users at present */
 /*
  * Credit Return flags
@@ -1164,7 +1161,6 @@ static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state);
 static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 				u64 *out_data);
 static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
-static void start_freeze_handling(struct qib_pportdata *ppd, int abort);
 static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
 static int thermal_init(struct hfi_devdata *dd);
 
@@ -2117,9 +2113,8 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			&& is_a0(dd)
 			&& (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR)) {
 		/* this error requires a manual drop into SPC freeze mode */
-		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
 		/* then a fixup */
-		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
+		start_freeze_handling(dd->pport, WFR_FREEZE_SELF);
 	}
 }
 
@@ -2171,16 +2166,16 @@ static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		rxe_err_status_string(buf, sizeof(buf), reg));
 
 	if (reg & ALL_RXE_FREEZE_ERR) {
-		int abort = WFR_FREEZE_OK;
+		int flags = 0;
 
 		/*
 		 * Freeze mode recovery is disabled for the errors
 		 * in WFR_RXE_FREEZE_ABORT_MASK
 		 */
 		if (is_a0(dd) && (reg & WFR_RXE_FREEZE_ABORT_MASK))
-			abort = WFR_FREEZE_ABORT;
+			flags = WFR_FREEZE_ABORT;
 
-		start_freeze_handling(dd->pport, abort);
+		start_freeze_handling(dd->pport, flags);
 	}
 }
 
@@ -2198,7 +2193,7 @@ static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		pio_err_status_string(buf, sizeof(buf), reg));
 
 	if (reg & ALL_PIO_FREEZE_ERR)
-		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
+		start_freeze_handling(dd->pport, 0);
 }
 
 static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -2209,7 +2204,7 @@ static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		sdma_err_status_string(buf, sizeof(buf), reg));
 
 	if (reg & ALL_SDMA_FREEZE_ERR)
-		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
+		start_freeze_handling(dd->pport, 0);
 }
 
 static void count_port_inactive(struct hfi_devdata *dd)
@@ -2268,11 +2263,11 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	char buf[96];
 
 	if (reg & ALL_TXE_EGRESS_FREEZE_ERR)
-		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
+		start_freeze_handling(dd->pport, 0);
 	if (is_a0(dd) && (reg &
 		    WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_VL_ERR_SMASK)
 		    && (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR))
-		start_freeze_handling(dd->pport, WFR_FREEZE_OK);
+		start_freeze_handling(dd->pport, 0);
 
 	while (reg_copy) {
 		int posn = fls64(reg_copy);
@@ -2974,17 +2969,20 @@ void handle_sma_message(struct work_struct *work)
 /*
  * Called from all interrupt handlers to start handling an SPC freeze.
  */
-static void start_freeze_handling(struct qib_pportdata *ppd, int abort)
+void start_freeze_handling(struct qib_pportdata *ppd, int flags)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct send_context *sc;
 	int i;
 
+	if (flags & WFR_FREEZE_SELF)
+		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
+
 	/* enter frozen mode */
 	dd->flags |= HFI_FROZEN;
 
 	/* notify all SDMA engines that they are going into a freeze */
-	sdma_freeze_notify(dd);
+	sdma_freeze_notify(dd, !!(flags & WFR_FREEZE_LINK_DOWN));
 
 	/* do halt pre-handling on all enabled send contexts */
 	for (i = 0; i < dd->num_send_contexts; i++) {
@@ -2995,7 +2993,7 @@ static void start_freeze_handling(struct qib_pportdata *ppd, int abort)
 
 	/* TODO: mark/notify all user rcv contexts */
 
-	if (abort) {
+	if (flags & WFR_FREEZE_ABORT) {
 		dd_dev_err(dd,
 			   "Aborted freeze recovery. Please REBOOT system\n");
 		return;
@@ -10462,9 +10460,8 @@ static void handle_temp_err(struct hfi_devdata *dd)
 	 */
 	dd_dev_emerg(dd,
 		     "Critical temperature reached! Forcing device into freeze mode!\n");
-	write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
 	dd->flags |= HFI_FORCED_FREEZE;
-	start_freeze_handling(ppd, 1);
+	start_freeze_handling(ppd, WFR_FREEZE_SELF|WFR_FREEZE_ABORT);
 	/* TODO: Adjust PowerDown recipe pending a discussion with HW team.
 	 * The goal is to turn off as much as possible in DC. */
 	/*

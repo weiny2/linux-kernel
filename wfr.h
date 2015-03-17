@@ -326,6 +326,13 @@
 #define WFR_HDRQ_INCREMENT (1 << WFR_HDRQ_SIZE_SHIFT)
 
 /*
+ * Freeze handling flags
+ */
+#define WFR_FREEZE_ABORT     0x01	/* do not do recovery */
+#define WFR_FREEZE_SELF	     0x02	/* initiate the freeze */
+#define WFR_FREEZE_LINK_DOWN 0x04	/* link is down */
+
+/*
  * Chip implementation codes.
  */
 #define WFR_ICODE_RTL_SILICON		0x00
@@ -604,6 +611,7 @@ void handle_link_up(struct work_struct *work);
 void handle_link_down(struct work_struct *work);
 void handle_link_downgrade(struct work_struct *work);
 void handle_sma_message(struct work_struct *work);
+void start_freeze_handling(struct qib_pportdata *ppd, int flags);
 int send_idle_sma(struct hfi_devdata *dd, u64 message);
 void link_restart_worker(struct work_struct *work);
 void schedule_link_restart(struct qib_pportdata *ppd);

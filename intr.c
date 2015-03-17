@@ -156,8 +156,9 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* clear HW details of the previous connection */
 		reset_link_credits(dd);
 
-		/* tell all engines to go idle */
-		sdma_all_idle(dd);
+		/* freeze after a link down to guarantee a clean egress */
+		start_freeze_handling(ppd,
+					WFR_FREEZE_SELF|WFR_FREEZE_LINK_DOWN);
 
 		ev = IB_EVENT_PORT_ERR;
 
