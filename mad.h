@@ -431,7 +431,7 @@ struct buffer_control {
 struct sc2vlnt {
 	u8 vlnt[32]; /* 5 bit VL, 3 bits reserved */
 };
-#endif				/* _QIB_MAD_H */
+
 /*
  * The PortSamplesControl.CounterMasks field is an array of 3 bit fields
  * which specify the N'th counter's capabilities. See ch. 16.1.3.2.
@@ -444,3 +444,5 @@ struct sc2vlnt {
 		    COUNTER_MASK(1, 2) | \
 		    COUNTER_MASK(1, 3) | \
 		    COUNTER_MASK(1, 4))
+
+#endif				/* _QIB_MAD_H */
