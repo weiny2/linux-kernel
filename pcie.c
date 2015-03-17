@@ -408,7 +408,7 @@ void request_msix(struct hfi_devdata *dd, u32 *nent,
 {
 	int pos;
 
-	pos = pci_find_capability(dd->pcidev, PCI_CAP_ID_MSIX);
+	pos = dd->pcidev->msix_cap;
 	if (*nent && pos) {
 		qib_msix_setup(dd, pos, nent, entry);
 		/* did it, either MSI-X or INTx */
