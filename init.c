@@ -112,8 +112,6 @@ static uint hfi_hdrq_entsize = 32;
 module_param_named(hdrq_entsize, hfi_hdrq_entsize, uint, S_IRUGO);
 MODULE_PARM_DESC(hdrq_entsize, "Size of header queue entries: 2 - 8B, 16 - 64B (default), 32 - 128B");
 
-struct workqueue_struct *qib_cq_wq;
-
 static void verify_interrupt(struct work_struct *work);
 static inline u64 encode_rcv_header_entry_size(u16);
 
@@ -128,6 +126,11 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 {
 	unsigned i;
 	int ret;
+	int local_node_id = pcibus_to_node(dd->pcidev->bus);
+
+	if (local_node_id < 0)
+		local_node_id = numa_node_id();
+	dd->assigned_node_id = local_node_id;
 
 	dd->rcd = kcalloc(dd->num_rcv_contexts, sizeof(*dd->rcd), GFP_KERNEL);
 	if (!dd->rcd) {
@@ -839,6 +842,7 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	/* enable chip even if we have an error, so we can debug cause */
 	enable_chip(dd);
 
+	ret = qib_cq_init(dd);
 done:
 	/*
 	 * Set status even if port serdes is not initialized
@@ -1408,12 +1412,6 @@ static int __init qib_ib_init(void)
 	/* sanitize link CRC options */
 	link_crc_mask &= WFR_SUPPORTED_CRCS;
 
-	qib_cq_wq = create_singlethread_workqueue("qib_cq");
-	if (!qib_cq_wq) {
-		ret = -ENOMEM;
-		goto bail_dev;
-	}
-
 	/*
 	 * These must be called before the driver is registered with
 	 * the PCI subsystem.
@@ -1424,16 +1422,13 @@ static int __init qib_ib_init(void)
 	ret = pci_register_driver(&qib_driver);
 	if (ret < 0) {
 		pr_err("Unable to register driver: error %d\n", -ret);
-		goto bail_unit;
+		goto bail_dev;
 	}
 	goto bail; /* all OK */
 
-bail_unit:
-
+bail_dev:
 	hfi_dbg_exit();
 	idr_destroy(&qib_unit_table);
-	destroy_workqueue(qib_cq_wq);
-bail_dev:
 	dev_cleanup();
 bail:
 	return ret;
@@ -1453,7 +1448,6 @@ static void __exit qib_ib_cleanup(void)
 
 	idr_destroy(&qib_unit_table);
 	dispose_firmware();	/* asymmetric with obtain_firmware() */
-	destroy_workqueue(qib_cq_wq);
 	dev_cleanup();
 }
 
@@ -1528,6 +1522,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	kfree(dd->boardname);
 	vfree(dd->events);
 	vfree(dd->status);
+	qib_cq_exit(dd);
 }
 
 /*

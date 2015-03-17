@@ -53,6 +53,7 @@
 #include <linux/sched.h>
 #include <linux/cdev.h>
 #include <linux/delay.h>
+#include <linux/kthread.h>
 
 #include "common.h"
 #include "verbs.h"
@@ -1051,6 +1052,8 @@ struct hfi_devdata {
 	u16 psxmitwait_check_rate;
 	/* high volume overflow errors defered to tasklet */
 	struct tasklet_struct error_tasklet;
+	/* per device cq worker */
+	struct kthread_worker *worker;
 
 	/* MSI-X information */
 	struct qib_msix_entry *msix_entries;
@@ -1131,6 +1134,8 @@ struct hfi_devdata {
 	/* Timer and counter used to detect RcvBufOvflCnt changes */
 	struct timer_list rcverr_timer;
 	u32 rcv_ovfl_cnt;
+
+	int assigned_node_id;
 };
 
 /* f_put_tid types */
