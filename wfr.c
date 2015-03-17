@@ -10081,8 +10081,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	 * TODO: Eventually remove access to ASIC_WFR_EFUSE_REGS6 as that is a
 	 * restriced register.  For now, we want to look at the patch level.
 	 * Read patch level.
-	 * Set link speed values.  The max active rate is set in the EFUSE
-	 * DC settings, bit 0.
 	 */
 	reg = read_csr(dd, WFR_ASIC_WFR_EFUSE_REGS6);
 	patch = (u32)
@@ -10092,24 +10090,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	if (patch < 3 && is_a0(dd) && dd->icode == WFR_ICODE_RTL_SILICON)
 		dd_dev_err(dd, "WARNING: WFR at patch %d, expecting >= 3",
 			patch);
-	if (dd->hfi_id)
-		reg = (reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_SHIFT)
-				& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_MASK;
-	else
-		reg = (reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_SHIFT)
-				& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_MASK;
-	if ((reg & 0x1) == 0)	/* full speed */
-		dd->pport->link_speed_supported =
+	/* set supportd speed mask */
+	dd->pport->link_speed_supported =
 			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
-	else			/* half speed */
-		dd->pport->link_speed_supported = OPA_LINK_SPEED_12_5G;
 	/* apply link speed mask module parameter */
-	/*
-	 * TEMPORARY: set the ASIC to default to half speed until LNI supports
-	 * full speed.
-	 */
-	if ((dd->icode == WFR_ICODE_RTL_SILICON) && !link_speed_mask)
-		link_speed_mask = OPA_LINK_SPEED_12_5G;
 	if (link_speed_mask) {
 		if (dd->pport->link_speed_supported & link_speed_mask)
 			dd->pport->link_speed_supported &= link_speed_mask;
