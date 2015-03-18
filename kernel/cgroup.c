@@ -934,8 +934,10 @@ static void cgroup_diput(struct dentry *dentry, struct inode *inode)
 		 * per-subsystem and moved to css->id so that lookups are
 		 * successful until the target css is released.
 		 */
+		mutex_lock(&cgroup_mutex);
 		idr_remove(&cgrp->root->cgroup_idr, cgrp->id);
 		cgrp->id = -1;
+		mutex_unlock(&cgroup_mutex);
 
 		call_rcu(&cgrp->rcu_head, cgroup_free_rcu);
 	} else {
@@ -4557,9 +4559,9 @@ err_free_all:
 	}
 	idr_remove(&root->cgroup_idr, cgrp->id);
 err_unlock:
-	mutex_unlock(&cgroup_mutex);
 	/* Release the reference count that we took on the superblock */
 	deactivate_super(sb);
+	mutex_unlock(&cgroup_mutex);
 err_free_name:
 	kfree(rcu_dereference_raw(cgrp->name));
 err_free_cgrp:
