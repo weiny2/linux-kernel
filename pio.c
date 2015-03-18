@@ -692,6 +692,10 @@ void sc_disable(struct send_context *sc)
 	(((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SMASK)\
 	>> WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SHIFT)
 
+/* is egress is halted on the context? */
+#define egress_halted(r) \
+	((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_HALT_STATUS_SMASK)
+
 /* wait for packet egress, optionally pause for credit return  */
 static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
 {
@@ -702,6 +706,9 @@ static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
 	while (1) {
 		reg = read_csr(dd, sc->context * 8 +
 			       WFR_SEND_EGRESS_CTXT_STATUS);
+		/* done if egress is stopped */
+		if (egress_halted(reg))
+			break;
 		reg = packet_occupancy(reg);
 		if (reg == 0)
 			break;
@@ -1035,8 +1042,7 @@ void sc_flush(struct send_context *sc)
 	if (!sc)
 		return;
 
-	dd_dev_info(sc->dd, "%s: context %d - not implemented\n",
-			__func__, sc->context);
+	sc_wait_for_packet_egress(sc, 1);
 }
 
 /* drop all packets on the context, no waiting until they are sent */
