@@ -1585,7 +1585,7 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	u16 lid = ppd->lid;
 
 	memset(props, 0, sizeof(*props));
-	props->lid = lid ? lid : be16_to_cpu(IB_LID_PERMISSIVE);
+	props->lid = lid ? lid : 0;
 	props->lmc = ppd->lmc;
 	props->sm_lid = ibp->sm_lid;
 	props->sm_sl = ibp->sm_sl;
