@@ -399,6 +399,7 @@ struct sdma_engine {
 	/* private: */
 	struct hw_sdma_desc *descq;
 	/* private: */
+	unsigned descq_full_count;
 	struct sdma_txreq **tx_ring;
 	/* private: */
 	dma_addr_t            descq_phys;
@@ -866,6 +867,9 @@ struct iowait;
 int sdma_send_txreq(struct sdma_engine *sde,
 		    struct iowait *wait,
 		    struct sdma_txreq *tx);
+int sdma_send_txlist(struct sdma_engine *sde,
+		     struct iowait *wait,
+		     struct list_head *tx_list);
 
 int sdma_ahg_alloc(struct sdma_engine *sde);
 void sdma_ahg_free(struct sdma_engine *sde, int ahg_index);
@@ -900,15 +904,26 @@ static inline u32 sdma_build_ahg_descriptor(
  * sdma_progress - use seq number of detect head progress
  * @sde: sdma_engine to check
  * @seq: base seq count
+ * @tx: txreq for which we need to check descriptor availability
  *
  * This is used in the appropriate spot in the sleep routine
  * to check for potential ring progress.  This routine gets the
  * seqcount before queueing the iowait structure for progress.
  *
+ * If the seqcount indicates that progress needs to be checked,
+ * re-submission is detected by checking whether the descriptor
+ * queue has enough descriptor for the txreq.
  */
-static inline unsigned sdma_progress(struct sdma_engine *sde, unsigned seq)
+static inline unsigned sdma_progress(struct sdma_engine *sde, unsigned seq,
+				     struct sdma_txreq *tx)
 {
-	return read_seqretry(&sde->head_lock, seq);
+	if (read_seqretry(&sde->head_lock, seq)) {
+		sde->desc_avail = sdma_descq_freecnt(sde);
+		if (tx->num_desc > sde->desc_avail)
+			return 0;
+		return 1;
+	}
+	return 0;
 }
 
 /**

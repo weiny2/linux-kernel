@@ -1405,7 +1405,7 @@ static int iowait_sleep(
 		dev = &sde->dd->verbs_dev;
 		list_add_tail(&stx->list, &wait->tx_head);
 		spin_lock(&dev->pending_lock);
-		if (sdma_progress(sde, seq))
+		if (sdma_progress(sde, seq, stx))
 			goto eagain;
 		if (list_empty(&qp->s_iowait.list)) {
 			struct qib_ibport *ibp =

@@ -303,19 +303,17 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ret = exp_tid_setup(fp, &tinfo);
 		if (!ret) {
 			unsigned long addr;
-			/* Copy the mapped length back to user space */
-			addr = (unsigned long)cmd.addr +
-				offsetof(struct hfi_tid_info, length);
-			if (copy_to_user((void __user *)addr, &tinfo.length,
-					 sizeof(tinfo.length))) {
-				ret = -EFAULT;
-				goto bail;
-			}
-			/* Now, copy the number of tidlist entries we used */
+			/*
+			 * Copy the number of tidlist entries we used
+			 * and the length of the buffer we registered.
+			 * These fields are adjacent in the structure so
+			 * we can copy them at the same time.
+			 */
 			addr = (unsigned long)cmd.addr +
 				offsetof(struct hfi_tid_info, tidcnt);
 			if (copy_to_user((void __user *)addr, &tinfo.tidcnt,
-					 sizeof(tinfo.tidcnt)))
+					 sizeof(tinfo.tidcnt) +
+					 sizeof(tinfo.length)))
 				ret = -EFAULT;
 		}
 		break;
@@ -1189,7 +1187,7 @@ static int setup_ctxt(struct file *fp)
 			goto done;
 		}
 		/* allocate expected TID map and initialize the cursor */
-		uctxt->tidcursor = 0;
+		atomic_set(&uctxt->tidcursor, 0);
 		uctxt->numtidgroups = uctxt->expected_count /
 			dd->rcv_entries.group_size;
 		uctxt->tidmapcnt = uctxt->numtidgroups / BITS_PER_LONG +
@@ -1467,48 +1465,75 @@ static inline u8 tzcnt(u64 value)
 	return value ? __builtin_ctzl(value) : sizeof(value) * 8;
 }
 
+static inline unsigned num_free_groups(unsigned long map, u16 *start)
+{
+	unsigned free;
+	u16 bitidx = *start;
+
+	if (bitidx >= BITS_PER_LONG)
+		return 0;
+	/* "Turn off" any bits set before our bit index */
+	map &= ~((1ULL << bitidx) - 1);
+	free = tzcnt(map) - bitidx;
+	while (!free && bitidx < BITS_PER_LONG) {
+		/* Zero out the last set bit so we look at the rest */
+		map &= ~(1ULL << bitidx);
+		/*
+		 * Account for the previously checked bits and advance
+		 * the bit index. We don't have to check for bitidx
+		 * getting bigger than BITS_PER_LONG here as it would
+		 * mean extra instructions that we don't need. If it
+		 * did happen, it would push free to a negative value
+		 * which will break the loop.
+		 */
+		free = tzcnt(map) - ++bitidx;
+	}
+	*start = bitidx;
+	return free;
+}
+
 static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 {
 	int ret = 0;
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
-	unsigned tid, mapped, npages, ngroups, exp_groups,
+	unsigned tid, mapped = 0, npages, ngroups, exp_groups,
 		tidpairs = uctxt->expected_count / 2;
-	unsigned long vaddr;
 	struct page **pages;
-	unsigned long tidmap[uctxt->tidmapcnt], map, flags;
+	unsigned long vaddr, tidmap[uctxt->tidmapcnt];
 	dma_addr_t *phys;
-	u32 tidlist[tidpairs], pairidx = 0;
+	u32 tidlist[tidpairs], pairidx = 0, tidcursor;
 	u16 useidx, idx, bitidx, tidcnt = 0;
 
 	vaddr = tinfo->vaddr;
 
+	if (vaddr & ~PAGE_MASK) {
+		ret = -EINVAL;
+		goto bail;
+	}
+
 	npages = num_user_pages(vaddr, tinfo->length);
 	if (!npages) {
 		ret = -EINVAL;
-		goto done;
+		goto bail;
 	}
 	if (!access_ok(VERIFY_WRITE, (void __user *)vaddr,
 		       npages * PAGE_SIZE)) {
 		dd_dev_err(dd, "Fail vaddr %p, %u pages, !access_ok\n",
 			   (void *)vaddr, npages);
 		ret = -EFAULT;
-		goto done;
+		goto bail;
 	}
+
 	memset(tidmap, 0, sizeof(tidmap[0]) * uctxt->tidmapcnt);
 	memset(tidlist, 0, sizeof(tidlist[0]) * tidpairs);
 
 	exp_groups = uctxt->expected_count / dd->rcv_entries.group_size;
-	/*
-	 * From this point on, we need exclusive access to the context's
-	 * Expected TID/RcvArray data. Since this is a per-context lock
-	 * a maximum of HFI_MAX_SHARED_CTXTS processes will be contending
-	 * to access it at any given time.
-	 */
-	spin_lock_irqsave(&uctxt->exp_lock, flags);
 	/* which group set do we look at first? */
-	useidx = uctxt->tidcursor / BITS_PER_LONG;
-	bitidx = uctxt->tidcursor % BITS_PER_LONG;
+	tidcursor = atomic_read(&uctxt->tidcursor);
+	useidx = (tidcursor >> 16) & 0xffff;
+	bitidx = tidcursor & 0xffff;
+
 	/*
 	 * Keep going until we've mapped all pages or we've exhausted all
 	 * RcvArray entries.
@@ -1520,55 +1545,60 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	for (mapped = 0, idx = 0;
 	     mapped < npages && idx <= uctxt->tidmapcnt;) {
 		u64 i, offset = 0;
-		unsigned free, pinned, pmapped = 0, used_groups;
+		unsigned free, pinned, pmapped = 0, bits_used;
 		u16 grp;
 
+		/*
+		 * "Reserver" the needed group bits under lock so other
+		 * processes can't step in the middle of it. Once
+		 * reserved, we don't need the lock anymore since we
+		 * are guaranteed the groups.
+		 */
+		spin_lock(&uctxt->exp_lock);
 		if (uctxt->tidusemap[useidx] == -1ULL ||
 		    bitidx >= BITS_PER_LONG) {
 			/* no free groups in the set, use the next */
 			useidx = (useidx + 1) % uctxt->tidmapcnt;
 			idx++;
 			bitidx = 0;
+			spin_unlock(&uctxt->exp_lock);
 			continue;
 		}
+		ngroups = ((npages - mapped) / dd->rcv_entries.group_size) +
+			!!((npages - mapped) % dd->rcv_entries.group_size);
+
 		/*
 		 * If we've gotten here, the current set of groups does have
 		 * one or more free groups.
 		 */
-		map = uctxt->tidusemap[useidx];
-		/* "Turn off" any bits set before our bit index */
-		map &= ~((1ULL << bitidx) - 1);
-		free = tzcnt(map) - bitidx;
-		while (!free) {
-			/* Zero out the last set bit so we look at the rest */
-			map &= ~(1ULL << bitidx);
+		free = num_free_groups(uctxt->tidusemap[useidx], &bitidx);
+		if (!free) {
 			/*
-			 * Account for the previously checked bits and advance
-			 * the bit index. We don't have to check for bitidx
-			 * getting bigger than BITS_PER_LONG here as it would
-			 * mean extra instructions that we don't need. If it
-			 * did happen, it would push free to a negative value
-			 * which will break the loop.
+			 * Despite the check above, free could still come back
+			 * as 0 because we don't check the entire bitmap but
+			 * we start from bitidx.
 			 */
-			free = tzcnt(map) - ++bitidx;
-		}
-		/* If the entire map is used up, move to the next one. */
-		if (bitidx > BITS_PER_LONG)
+			spin_unlock(&uctxt->exp_lock);
 			continue;
-		used_groups = ((useidx * BITS_PER_LONG) + bitidx);
+		}
+		bits_used = min(free, ngroups);
+		tidmap[useidx] |= ((1ULL << bits_used) - 1) << bitidx;
+		uctxt->tidusemap[useidx] |= tidmap[useidx];
+		spin_unlock(&uctxt->exp_lock);
 
 		/*
 		 * At this point, we know where in the map we have free bits.
 		 * properly offset into the various "shadow" arrays and compute
 		 * the RcvArray entry index.
 		 */
-		offset = used_groups * dd->rcv_entries.group_size;
+		offset = ((useidx * BITS_PER_LONG) + bitidx) *
+			dd->rcv_entries.group_size;
 		pages = uctxt->tid_pg_list + offset;
 		phys = uctxt->physshadow + offset;
 		tid = uctxt->expected_base + offset;
 
 		/* Calculate how many pages we can pin based on free bits */
-		pinned = min((free * dd->rcv_entries.group_size),
+		pinned = min((bits_used * dd->rcv_entries.group_size),
 			     (npages - mapped));
 		/*
 		 * Now that we know how many free RcvArray entries we have,
@@ -1586,9 +1616,14 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 			dd_dev_info(dd,
 				    "Failed to lock addr %p, %u pages: errno %d\n",
 				    (void *) vaddr, pinned, -ret);
-			/* XXX Mitko: What do we do with any RcvArray entries
-			 * and pages already programmed. */
-			spin_unlock_irqrestore(&uctxt->exp_lock, flags);
+			/*
+			 * Let go of the bits that we reserved since we are not
+			 * going to use them.
+			 */
+			spin_lock(&uctxt->exp_lock);
+			uctxt->tidusemap[useidx] &=
+				~(((1ULL << bits_used) - 1) << bitidx);
+			spin_unlock(&uctxt->exp_lock);
 			goto done;
 		}
 		/*
@@ -1602,7 +1637,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		 * groups.
 		 */
 		for (i = 0, grp = 0; grp < ngroups; i++, grp++) {
-			unsigned grpidx = bitidx + i, j;
+			unsigned j;
 			u32 pair_size = 0, tidsize;
 			/*
 			 * This inner loop will program an entire group or the
@@ -1651,7 +1686,6 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 					pairidx++;
 				}
 			}
-			set_bit(grpidx, &tidmap[useidx]);
 			/*
 			 * We've programmed the entire group (or as much of the
 			 * group as we'll use. Now, it's time to push it out...
@@ -1659,12 +1693,27 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 			qib_flush_wc();
 		}
 		mapped += pinned;
-		uctxt->tidcursor = (uctxt->tidcursor + i) % uctxt->numtidgroups;
-		uctxt->tidusemap[useidx] |= tidmap[useidx];
+		atomic_set(&uctxt->tidcursor,
+			   (((useidx & 0xffffff) << 16) |
+			    ((bitidx + bits_used) & 0xffffff)));
 	}
 	trace_hfi_exp_tid_map(uctxt->ctxt, subctxt_fp(fp), 0, uctxt->tidusemap,
 			      uctxt->tidmapcnt);
-	spin_unlock_irqrestore(&uctxt->exp_lock, flags);
+
+done:
+	/* If we've mapped anything, copy relavant info to user */
+	if (mapped) {
+		if (copy_to_user((void __user *)(unsigned long)tinfo->tidlist,
+				 tidlist, sizeof(tidlist[0]) * tidcnt)) {
+			ret = -EFAULT;
+			goto done;
+		}
+		/* copy TID info to user */
+		if (copy_to_user((void __user *)(unsigned long)tinfo->tidmap,
+				 tidmap, sizeof(tidmap[0]) * uctxt->tidmapcnt))
+			ret = -EFAULT;
+	}
+bail:
 	/*
 	 * Calculate mapped length. New Exp TID protocol does not "unwind" and
 	 * report an error if it can't map the entire buffer. It just reports
@@ -1672,16 +1721,6 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 	 */
 	tinfo->length = mapped * PAGE_SIZE;
 	tinfo->tidcnt = tidcnt;
-	if (copy_to_user((void __user *)(unsigned long)tinfo->tidlist,
-			 tidlist, sizeof(tidlist[0]) * tidcnt)) {
-		ret = -EFAULT;
-		goto done;
-	}
-	/* copy TID info to user */
-	if (copy_to_user((void __user *)(unsigned long)tinfo->tidmap,
-			 tidmap, sizeof(tidmap[0]) * uctxt->tidmapcnt))
-		ret = -EFAULT;
-done:
 	return ret;
 }
 
@@ -1689,7 +1728,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 {
 	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
-	unsigned long tidmap[uctxt->tidmapcnt], flags;
+	unsigned long tidmap[uctxt->tidmapcnt];
 	struct page **pages;
 	dma_addr_t *phys;
 	u16 idx, bitidx, tid;
@@ -1709,15 +1748,14 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 			continue;
 		map = tidmap[idx];
 		while ((bitidx = tzcnt(map)) < BITS_PER_LONG) {
-			int i;
-			unsigned offset = ((idx * BITS_PER_LONG) + bitidx);
+			int i, pcount = 0;
+			struct page *pshadow[dd->rcv_entries.group_size];
+			unsigned offset = ((idx * BITS_PER_LONG) + bitidx) *
+				dd->rcv_entries.group_size;
 
-			pages = uctxt->tid_pg_list +
-				(offset * dd->rcv_entries.group_size);
-			phys = uctxt->physshadow +
-				(offset * dd->rcv_entries.group_size);
-			tid = uctxt->expected_base +
-				(offset * dd->rcv_entries.group_size);
+			pages = uctxt->tid_pg_list + offset;
+			phys = uctxt->physshadow + offset;
+			tid = uctxt->expected_base + offset;
 			for (i = 0; i < dd->rcv_entries.group_size;
 			     i++, tid++) {
 				if (pages[i]) {
@@ -1729,14 +1767,15 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 							       pages[i]);
 					pci_unmap_page(dd->pcidev, phys[i],
 					      PAGE_SIZE, PCI_DMA_FROMDEVICE);
-					qib_release_user_pages(&pages[i], 1);
+					pshadow[pcount] = pages[i];
 					pages[i] = NULL;
+					pcount++;
 					phys[i] = 0;
 				}
 			}
-			spin_lock_irqsave(&uctxt->exp_lock, flags);
+			qib_flush_wc();
+			qib_release_user_pages(pshadow, pcount);
 			clear_bit(bitidx, &uctxt->tidusemap[idx]);
-			spin_unlock_irqrestore(&uctxt->exp_lock, flags);
 			map &= ~(1ULL<<bitidx);
 		};
 	}

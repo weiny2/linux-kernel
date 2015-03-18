@@ -203,7 +203,7 @@ struct qib_ctxtdata {
 	/* index of first expected TID entry. */
 	u32 expected_base;
 	/* cursor into the exp group sets */
-	u16 tidcursor;
+	atomic_t tidcursor;
 	/* number of exp TID groups assigned to the ctxt */
 	u16 numtidgroups;
 	/* size of exp TID group fields in tidusemap */
