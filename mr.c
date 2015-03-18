@@ -313,6 +313,10 @@ int qib_dereg_mr(struct ib_mr *ibmr)
 	timeout = wait_for_completion_timeout(&mr->mr.comp,
 		5 * HZ);
 	if (!timeout) {
+		dd_dev_err(
+			dd_from_ibdev(mr->mr.pd->device),
+			"qib_dereg_mr timeout mr %p pd %p refcount %u\n",
+			mr, mr->mr.pd, atomic_read(&mr->mr.refcount));
 		qib_get_mr(&mr->mr);
 		ret = -EBUSY;
 		goto out;
@@ -526,11 +530,4 @@ int qib_dealloc_fmr(struct ib_fmr *ibfmr)
 	kfree(fmr);
 out:
 	return ret;
-}
-
-void mr_rcu_callback(struct rcu_head *list)
-{
-	struct qib_mregion *mr = container_of(list, struct qib_mregion, list);
-
-	complete(&mr->comp);
 }

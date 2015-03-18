@@ -1233,22 +1233,27 @@ int qib_destroy_qp(struct ib_qp *ibqp)
 	struct qib_ibdev *dev = to_idev(ibqp->device);
 
 	/* Make sure HW and driver activity is stopped. */
-	spin_lock_irq(&qp->s_lock);
+	spin_lock_irq(&qp->r_lock);
+	spin_lock(&qp->s_lock);
 	if (qp->state != IB_QPS_RESET) {
 		qp->state = IB_QPS_RESET;
 		flush_iowait(qp);
 		qp->s_flags &= ~(QIB_S_TIMER | QIB_S_ANY_WAIT);
-		spin_unlock_irq(&qp->s_lock);
+		spin_unlock(&qp->s_lock);
+		spin_unlock_irq(&qp->r_lock);
 		cancel_work_sync(&qp->s_iowait.iowork);
 		del_timer_sync(&qp->s_timer);
 		iowait_sdma_drain(&qp->s_iowait);
 		flush_tx_list(qp);
 		remove_qp(dev, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
+		spin_lock_irq(&qp->r_lock);
+		spin_lock(&qp->s_lock);
 		clear_mr_refs(qp, 1);
 		clear_ahg(qp);
-	} else
-		spin_unlock_irq(&qp->s_lock);
+	}
+	spin_unlock(&qp->s_lock);
+	spin_unlock_irq(&qp->r_lock);
 
 	/* all user's cleaned up, mark it available */
 	free_qpn(&dev->qp_dev->qpn_table, qp->ibqp.qp_num);

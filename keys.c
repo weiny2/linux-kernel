@@ -55,6 +55,7 @@ int qib_alloc_lkey(struct qib_mregion *mr, int dma_region)
 	struct qib_ibdev *dev = to_idev(mr->pd->device);
 	struct qib_lkey_table *rkt = &dev->lk_table;
 
+	qib_get_mr(mr);
 	spin_lock_irqsave(&rkt->lock, flags);
 
 	/* special case for dma_mr lkey == 0 */
@@ -63,9 +64,10 @@ int qib_alloc_lkey(struct qib_mregion *mr, int dma_region)
 
 		tmr = rcu_access_pointer(dev->dma_mr);
 		if (!tmr) {
-			qib_get_mr(mr);
 			rcu_assign_pointer(dev->dma_mr, mr);
 			mr->lkey_published = 1;
+		} else {
+			qib_put_mr(mr);
 		}
 		goto success;
 	}
@@ -74,7 +76,7 @@ int qib_alloc_lkey(struct qib_mregion *mr, int dma_region)
 	r = rkt->next;
 	n = r;
 	for (;;) {
-		if (rkt->table[r] == NULL)
+		if (!rcu_access_pointer(rkt->table[r]))
 			break;
 		r = (r + 1) & (rkt->max - 1);
 		if (r == n)
@@ -93,7 +95,6 @@ int qib_alloc_lkey(struct qib_mregion *mr, int dma_region)
 		mr->lkey |= 1 << 8;
 		rkt->gen++;
 	}
-	qib_get_mr(mr);
 	rcu_assign_pointer(rkt->table[r], mr);
 	mr->lkey_published = 1;
 success:
@@ -101,6 +102,7 @@ success:
 out:
 	return ret;
 bail:
+	qib_put_mr(mr);
 	spin_unlock_irqrestore(&rkt->lock, flags);
 	ret = -ENOMEM;
 	goto out;
@@ -117,6 +119,7 @@ void qib_free_lkey(struct qib_mregion *mr)
 	u32 r;
 	struct qib_ibdev *dev = to_idev(mr->pd->device);
 	struct qib_lkey_table *rkt = &dev->lk_table;
+	int freed = 0;
 
 	spin_lock_irqsave(&rkt->lock, flags);
 	if (!mr->lkey_published)
@@ -127,10 +130,14 @@ void qib_free_lkey(struct qib_mregion *mr)
 		r = lkey >> (32 - ib_qib_lkey_table_size);
 		RCU_INIT_POINTER(rkt->table[r], NULL);
 	}
-	qib_put_mr(mr);
 	mr->lkey_published = 0;
+	freed++;
 out:
 	spin_unlock_irqrestore(&rkt->lock, flags);
+	if (freed) {
+		synchronize_rcu();
+		qib_put_mr(mr);
+	}
 }
 
 /**
@@ -168,8 +175,7 @@ int qib_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
 		mr = rcu_dereference(dev->dma_mr);
 		if (!mr)
 			goto bail;
-		if (unlikely(!atomic_inc_not_zero(&mr->refcount)))
-			goto bail;
+		atomic_inc(&mr->refcount);
 		rcu_read_unlock();
 
 		isge->mr = mr;
@@ -190,8 +196,7 @@ int qib_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
 		     off + sge->length > mr->length ||
 		     (mr->access_flags & acc) != acc))
 		goto bail;
-	if (unlikely(!atomic_inc_not_zero(&mr->refcount)))
-		goto bail;
+	atomic_inc(&mr->refcount);
 	rcu_read_unlock();
 
 	off += mr->offset;
@@ -267,8 +272,7 @@ int qib_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
 		mr = rcu_dereference(dev->dma_mr);
 		if (!mr)
 			goto bail;
-		if (unlikely(!atomic_inc_not_zero(&mr->refcount)))
-			goto bail;
+		atomic_inc(&mr->refcount);
 		rcu_read_unlock();
 
 		sge->mr = mr;
@@ -289,8 +293,7 @@ int qib_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
 	if (unlikely(vaddr < mr->iova || off + len > mr->length ||
 		     (mr->access_flags & acc) == 0))
 		goto bail;
-	if (unlikely(!atomic_inc_not_zero(&mr->refcount)))
-		goto bail;
+	atomic_inc(&mr->refcount);
 	rcu_read_unlock();
 
 	off += mr->offset;
