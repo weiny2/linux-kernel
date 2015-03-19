@@ -505,7 +505,7 @@ void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 	vl = sc_to_vlt(ppd->dd, sc5);
 	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	if (ctxt) {
-		pbuf = sc_buffer_alloc(ctxt, plen, NULL, 0);
+		pbuf = sc_buffer_alloc(ctxt, plen, NULL, NULL);
 		if (pbuf)
 			ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc,
 						 &hdr, hwords);

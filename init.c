@@ -1147,7 +1147,7 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	 */
 	msecs = jiffies_to_msecs(jiffies);
 	for (emsecs = lcnt = 0; emsecs <= 5UL && lcnt < 1; lcnt++) {
-		pbuf = sc_buffer_alloc(sc, dw, NULL, 0);
+		pbuf = sc_buffer_alloc(sc, dw, NULL, NULL);
 		if (!pbuf) {
 			preempt_enable();
 			dd_dev_info(dd, "Performance check: PIO buffer "

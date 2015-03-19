@@ -732,7 +732,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 	vl = sc_to_vlt(ppd->dd, sc5);
 	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 
-	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
+	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
 	if (!pbuf) {
 		/*
 		 * We have no room to send at the moment.  Pass

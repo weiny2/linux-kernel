@@ -1191,7 +1191,7 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
 		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	}
-	pbuf = sc_buffer_alloc(sc, plen, NULL, 0);
+	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
 	if (unlikely(pbuf == NULL)) {
 		if (ppd->host_link_state != HLS_UP_ACTIVE) {
 			/*
