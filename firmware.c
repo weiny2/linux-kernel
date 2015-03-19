@@ -165,6 +165,10 @@ static struct firmware_details fw_fabric;
 static struct firmware_details fw_pcie;
 static struct firmware_details fw_sbus;
 
+/* flags for turn_off_spicos() */
+#define SPICO_SBUS   0x1
+#define SPICO_FABRIC 0x2
+
 /* security block commands */
 #define RSA_CMD_INIT  0x1
 #define RSA_CMD_START 0x2
@@ -902,6 +906,45 @@ void sbus_request(struct hfi_devdata *dd,
 }
 
 /*
+ * Turn off the SBus and fabric serdes spicos.
+ *
+ * + Must be called with Sbus fast mode turned on.
+ * + Must be called after fabric serdes broadcast is set up.
+ * + Must be called before the 8051 is loaded - assumes 8051 is not loaded
+ *   when using MISC_CFG_FW_CTRL.
+ */
+void turn_off_spicos(struct hfi_devdata *dd, int flags)
+{
+	/* only needed on A0 */
+	if (!is_a0(dd))
+		return;
+
+	/*
+	 * This step is not needed if not validating the firmware.
+	 * In addition, don't modify MISC_CFG_FW_CTRL if not validating.
+	 */
+	if (!fw_validate)
+		return;
+
+	dd_dev_info(dd, "Turning off spicos:%s%s\n",
+		flags & SPICO_SBUS ? " SBus" : "",
+		flags & SPICO_FABRIC ? " fabric" : "");
+
+	write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
+	/* disable SBus spico */
+	if (flags & SPICO_SBUS)
+		sbus_request(dd, SBUS_MASTER_BROADCAST, 0x01,
+			WRITE_SBUS_RECEIVER, 0x00000040);
+
+	/* disable the fabric serdes spicos */
+	if (flags & SPICO_FABRIC)
+		sbus_request(dd, fabric_serdes_broadcast[dd->hfi_id],
+				0x07, WRITE_SBUS_RECEIVER, 0x00000000);
+	write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
+}
+
+/*
  *  Reset all of the fabric serdes for our HFI.
  */
 void fabric_serdes_reset(struct hfi_devdata *dd)
@@ -965,9 +1008,9 @@ static int load_fabric_serdes_firmware(struct hfi_devdata *dd,
 					struct firmware_details *fdet)
 {
 	int i, err;
-	u8 ra;				/* receiver address */
+	const u8 ra = fabric_serdes_broadcast[dd->hfi_id]; /* receiver addr */
 
-	ra = fabric_serdes_broadcast[dd->hfi_id];
+	dd_dev_info(dd, "Downloading fabric firmware\n");
 
 	/* step 1: load security variables */
 	load_security_variables(dd, fdet);
@@ -1008,6 +1051,8 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	int i, err;
 	const u8 ra = SBUS_MASTER_BROADCAST; /* receiver address */
 
+	dd_dev_info(dd, "Downloading SBus firmware\n");
+
 	/* step 1: load security variables */
 	load_security_variables(dd, fdet);
 	/* step 2: place SPICO into reset and enable off */
@@ -1042,6 +1087,8 @@ static int load_pcie_serdes_firmware(struct hfi_devdata *dd,
 {
 	int i, err;
 	const u8 ra = SBUS_MASTER_BROADCAST; /* receiver address */
+
+	dd_dev_info(dd, "Downloading PCIe firmware\n");
 
 	/* step 1: load security variables */
 	load_security_variables(dd, fdet);
@@ -1163,6 +1210,7 @@ int load_firmware(struct hfi_devdata *dd)
 		 * also be downloaded.
 		 */
 		if (fw_sbus_load) {
+			turn_off_spicos(dd, SPICO_SBUS);
 			ret = load_sbus_firmware(dd, &fw_sbus);
 			if (ret)
 				goto clear;
@@ -1173,6 +1221,7 @@ int load_firmware(struct hfi_devdata *dd)
 					fabric_serdes_broadcast[dd->hfi_id],
 					fabric_serdes_addrs[dd->hfi_id],
 					NUM_FABRIC_SERDES);
+			turn_off_spicos(dd, SPICO_FABRIC);
 			ret = load_fabric_serdes_firmware(dd, &fw_fabric);
 		}
 
@@ -1250,10 +1299,11 @@ int load_pcie_firmware(struct hfi_devdata *dd)
 	set_sbus_fast_mode(dd);
 
 	if (fw_sbus_load) {
-		dd_dev_info(dd, "Downloading SBUS firmware\n");
+		turn_off_spicos(dd, SPICO_SBUS);
 		ret = load_sbus_firmware(dd, &fw_sbus);
 		if (ret)
 			goto done;
+		fw_sbus_load = 0;	/* only load it once */
 	}
 
 	if (fw_pcie_serdes_load) {
@@ -1262,7 +1312,6 @@ int load_pcie_firmware(struct hfi_devdata *dd)
 					pcie_serdes_broadcast[dd->hfi_id],
 					pcie_serdes_addrs[dd->hfi_id],
 					NUM_PCIE_SERDES);
-		dd_dev_info(dd, "Downloading PCIe firmware\n");
 		ret = load_pcie_serdes_firmware(dd, &fw_pcie);
 		if (ret)
 			goto done;
