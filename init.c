@@ -315,7 +315,7 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 		rcd->egrbufs.rcvtids = kzalloc(sizeof(*rcd->egrbufs.rcvtids) *
 					       rcd->egrbufs.count, GFP_KERNEL);
 		if (!rcd->egrbufs.rcvtids)
-			goto free_bufs;
+			goto bail;
 		rcd->egrbufs.size = eager_buffer_size;
 		/*
 		 * The size of the buffers programmed into the RcvArray
@@ -334,21 +334,19 @@ struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 			rcd->opstats = kzalloc(sizeof(*rcd->opstats),
 				GFP_KERNEL);
 			if (!rcd->opstats) {
-				kfree(rcd);
 				dd_dev_err(dd,
 					   "ctxt%u: Unable to allocate per ctxt stats buffer\n",
 					   rcd->ctxt);
-				goto free_rcv_bufs;
+				goto bail;
 			}
 		}
 	}
 	return rcd;
-free_rcv_bufs:
+bail:
+	kfree(rcd->opstats);
 	kfree(rcd->egrbufs.rcvtids);
-free_bufs:
 	kfree(rcd->egrbufs.buffers);
 	kfree(rcd);
-bail:
 	return NULL;
 }
 
