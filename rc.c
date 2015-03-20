@@ -1964,7 +1964,7 @@ void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 	int diff;
 	struct ib_reth *reth;
 	unsigned long flags;
-	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
+	int has_grh = rcv_flags & QIB_HAS_GRH;
 	int ret, is_becn, is_fecn;
 
 	/* Check for GRH */
@@ -2406,4 +2406,56 @@ send_ack:
 
 sunlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
+}
+
+void qib_rc_hdrerr(
+	struct qib_ctxtdata *rcd,
+	struct qib_ib_header *hdr,
+	u32 rcv_flags,
+	struct qib_qp *qp)
+{
+	int has_grh = rcv_flags & QIB_HAS_GRH;
+	struct qib_other_headers *ohdr;
+	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	int diff;
+	u8 opcode;
+	u32 psn;
+
+	/* Check for GRH */
+	ohdr = &hdr->u.oth;
+	if (has_grh)
+		ohdr = &hdr->u.l.oth;
+
+	opcode = be32_to_cpu(ohdr->bth[0]);
+	if (qib_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
+		return;
+
+	psn = be32_to_cpu(ohdr->bth[2]);
+	opcode >>= 24;
+
+	/* Only deal with RDMA Writes for now */
+	if (opcode < IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST) {
+		diff = qib_cmp24(psn, qp->r_psn);
+		if (!qp->r_nak_state && diff >= 0) {
+			ibp->n_rc_seqnak++;
+			qp->r_nak_state = IB_NAK_PSN_ERROR;
+			/* Use the expected PSN. */
+			qp->r_ack_psn = qp->r_psn;
+			/*
+			 * Wait to send the sequence
+			 * NAK until all packets
+			 * in the receive queue have
+			 * been processed.
+			 * Otherwise, we end up
+			 * propagating congestion.
+			 */
+			if (list_empty(&qp->rspwait)) {
+				qp->r_flags |= QIB_R_RSP_NAK;
+				atomic_inc(&qp->refcount);
+				list_add_tail(
+					&qp->rspwait,
+					&rcd->qp_wait_list);
+				}
+		} /* Out of sequence NAK */
+	} /* QP Request NAKs */
 }

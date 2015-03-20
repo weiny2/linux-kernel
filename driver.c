@@ -357,7 +357,7 @@ int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
 			return 0;
 		if (time_after(jiffies, timeout))
 			break;
-		msleep(2);
+		msleep(20);
 	}
 	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x\n", state);
 
@@ -421,13 +421,10 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		/* For TIDERR and RC QPs premptively schedule a NAK */
 		struct qib_ib_header *hdr = (struct qib_ib_header *) rhdr;
 		struct qib_other_headers *ohdr = NULL;
-		struct qib_qp *qp = NULL;
 		u32 tlen = rhf_pkt_len(packet->rhf); /* in bytes */
 		u16 lid  = be16_to_cpu(hdr->lrh[1]);
 		u32 qp_num;
-		u32 opcode;
-		u32 psn;
-		int diff;
+		u32 rcv_flags = 0;
 
 		/* Sanity check packet */
 		if (tlen < 24)
@@ -445,19 +442,14 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
 			if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 				goto drop;
+			rcv_flags |= QIB_HAS_GRH;
 		} else
 			goto drop;
 
-		/* Get opcode and PSN from packet */
-		opcode = be32_to_cpu(ohdr->bth[0]);
-		opcode >>= 24;
-		psn = be32_to_cpu(ohdr->bth[2]);
-
 		/* Get the destination QP number. */
 		qp_num = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
-		if ((lid >= QIB_MULTICAST_LID_BASE) &&
-		    (lid != QIB_PERMISSIVE_LID)) {
-			int ruc_res;
+		if (lid < QIB_MULTICAST_LID_BASE) {
+			struct qib_qp *qp;
 
 			qp = qib_lookup_qpn(ibp, qp_num);
 			if (!qp)
@@ -473,60 +465,21 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			if (!(ib_qib_state_ops[qp->state] &
 			      QIB_PROCESS_RECV_OK)) {
 				ibp->n_pkt_drops++;
-				goto unlock;
 			}
 
 			switch (qp->ibqp.qp_type) {
 			case IB_QPT_RC:
-				ruc_res =
-					qib_ruc_check_hdr(
-						ibp, hdr,
-						lnh == QIB_LRH_GRH,
-						qp,
-						be32_to_cpu(ohdr->bth[0]));
-				if (ruc_res)
-					goto unlock;
-
-				/* Only deal with RDMA Writes for now */
-				if (opcode <
-				    IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST) {
-					diff = qib_cmp24(psn, qp->r_psn);
-					if (!qp->r_nak_state && diff >= 0) {
-						ibp->n_rc_seqnak++;
-						qp->r_nak_state =
-							IB_NAK_PSN_ERROR;
-						/* Use the expected PSN. */
-						qp->r_ack_psn = qp->r_psn;
-						/*
-						 * Wait to send the sequence
-						 * NAK until all packets
-						 * in the receive queue have
-						 * been processed.
-						 * Otherwise, we end up
-						 * propagating congestion.
-						 */
-						if (list_empty(&qp->rspwait)) {
-							qp->r_flags |=
-								QIB_R_RSP_NAK;
-							atomic_inc(
-								&qp->refcount);
-							list_add_tail(
-							 &qp->rspwait,
-							 &rcd->qp_wait_list);
-						}
-					} /* Out of sequence NAK */
-				} /* QP Request NAKs */
+				qib_rc_hdrerr(
+					rcd,
+					hdr,
+					rcv_flags,
+					qp);
 				break;
-			case IB_QPT_SMI:
-			case IB_QPT_GSI:
-			case IB_QPT_UD:
-			case IB_QPT_UC:
 			default:
 				/* For now don't handle any other QP types */
 				break;
 			}
 
-unlock:
 			spin_unlock(&qp->r_lock);
 			/*
 			 * Notify qib_destroy_qp() if it is waiting
@@ -536,6 +489,7 @@ unlock:
 				wake_up(&qp->wait);
 		} /* Unicast QP */
 	} /* Valid packet with TIDErr */
+
 	/* handle "RcvTypeErr" flags */
 	switch (rte) {
 	case RHF_RTE_ERROR_OP_CODE_ERR:
@@ -639,6 +593,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 
 	if (!HFI_CAP_IS_KSET(DMA_RTAIL)) {
 		u32 seq = rhf_rcv_seq(rhf);
+
 		if (seq != rcd->seq_cnt)
 			goto bail;
 		hdrqtail = 0;

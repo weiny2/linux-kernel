@@ -975,6 +975,12 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
 
+void qib_rc_hdrerr(
+	struct qib_ctxtdata *rcd,
+	struct qib_ib_header *hdr,
+	u32 rcv_flags,
+	struct qib_qp *qp);
+
 u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 
 int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
