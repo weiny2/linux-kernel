@@ -273,7 +273,8 @@ static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
  * o result must keep unused bytes zeroed
  * o src must be u64 aligned
  */
-static inline void merge_write8(struct pio_buf *pbuf, void *dest, const void *src)
+static inline void merge_write8(struct pio_buf *pbuf, void __iomem *dest,
+				const void *src)
 {
 	u64 new, temp;
 
@@ -286,7 +287,7 @@ static inline void merge_write8(struct pio_buf *pbuf, void *dest, const void *sr
 /*
  * Write a quadword using all bytes of carry.
  */
-static inline void carry8_write8(union mix carry, void *dest)
+static inline void carry8_write8(union mix carry, void __iomem *dest)
 {
 	writeq(cpu_to_le64(carry.val64), dest);
 }
@@ -296,7 +297,7 @@ static inline void carry8_write8(union mix carry, void *dest)
  * has zero valid bytes, nothing is written.
  * Returns 0 on nothing written, non-zero on quadword written.
  */
-static inline int carry_write8(struct pio_buf *pbuf, void *dest)
+static inline int carry_write8(struct pio_buf *pbuf, void __iomem *dest)
 {
 	if (pbuf->carry_bytes) {
 		/* unused bytes are always kept zeroed, so just write */
