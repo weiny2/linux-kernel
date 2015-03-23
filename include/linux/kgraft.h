@@ -59,7 +59,6 @@ struct kgr_patch_fun {
 		KGR_PATCH_REVERTED,
 
 		KGR_PATCH_SKIPPED,
-		KGR_PATCH_APPLIED_NON_FINALIZED, /* unused, kabi */
 	} state;
 
 	unsigned long loc_name;
@@ -68,8 +67,6 @@ struct kgr_patch_fun {
 
 	struct ftrace_ops ftrace_ops_slow;
 	struct ftrace_ops ftrace_ops_fast;
-
-	unsigned long suse_kabi_padding[4];
 };
 
 /**
@@ -90,22 +87,13 @@ struct kgr_patch {
 	struct kobject kobj;
 	struct list_head list;
 	struct completion finish;
-	bool __percpu *irq_use_new; /* unused, kabi */
 	unsigned int refs;
-#ifdef __GENKSYMS__
-	unsigned long suse_kabi_padding[8];
-#else
-	union {
-		bool immediate;
-		unsigned long krtek; /* just for alignment and sizing */
-	};
-	unsigned long suse_kabi_padding[7];
-#endif
 
 	/* a patch shall set these */
 	const char *name;
 	struct module *owner;
 	bool replace_all;
+	bool immediate;
 	struct kgr_patch_fun patches[];
 };
 
