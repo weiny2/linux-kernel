@@ -78,6 +78,7 @@ struct kgr_patch_fun {
  * @refs: how many patches need to be reverted before this one
  * @name: name of the patch (to appear in sysfs)
  * @owner: module to refcount on patching
+ * @vermagic: VERMAGIC_STRING of the kernel used to build the module
  * @replace_all: revert everything applied before and apply this one instead
  * @immediate: avoid the lazy-switching mechanism and flip the switch ASAP
  * @patches: array of @kgr_patch_fun structures
@@ -92,6 +93,7 @@ struct kgr_patch {
 	/* a patch shall set these */
 	const char *name;
 	struct module *owner;
+	const char *vermagic;
 	bool replace_all;
 	bool immediate;
 	struct kgr_patch_fun patches[];
