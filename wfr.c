@@ -10001,6 +10001,10 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd->overrun_threshold = 0x4;
 		ppd->phy_error_threshold = 0xf;
 		ppd->port_crc_mode_enabled = link_crc_mask;
+		/* initialize supported LTP CRC mode */
+		ppd->port_ltp_crc_mode = cap_to_port_ltp(link_crc_mask) << 8;
+		/* initialize enabled LTP CRC mode */
+		ppd->port_ltp_crc_mode |= cap_to_port_ltp(link_crc_mask) << 4;
 		/* start in offline */
 		ppd->host_link_state = HLS_DN_OFFLINE;
 	}
