@@ -1585,7 +1585,8 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 			eager_buffer_size =
 				roundup_pow_of_two(eager_buffer_size);
 		eager_buffer_size =
-			clamp_val(eager_buffer_size, WFR_MIN_EAGER_BUFFER,
+			clamp_val(eager_buffer_size,
+				  WFR_MIN_EAGER_BUFFER * 8,
 				  WFR_MAX_EAGER_BUFFER_TOTAL);
 		qib_early_info(&pdev->dev, "Eager buffer size %u\n",
 			       eager_buffer_size);
@@ -1814,6 +1815,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	gfp_t gfp_flags;
 	u16 order;
 	int ret = 0;
+	u16 round_mtu = roundup_pow_of_two(max_mtu);
 
 	/*
 	 * GFP_USER, but without GFP_FS, so buffer cache can be
@@ -1824,11 +1826,28 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	gfp_flags = __GFP_WAIT | __GFP_IO | __GFP_COMP;
 
 	/*
+	 * The minimum size of the eager buffers is a groups of MTU-sized
+	 * buffers.
+	 * The global eager_buffer_size parameter is checked against the
+	 * theoretical lower limit of the value. Here, we check against the
+	 * MTU.
+	 */
+	if (rcd->egrbufs.size < (round_mtu * dd->rcv_entries.group_size))
+		rcd->egrbufs.size = round_mtu * dd->rcv_entries.group_size;
+	/*
 	 * If using one-pkt-per-egr-buffer, lower the eager buffer
 	 * size to the max MTU (page-aligned).
 	 */
 	if (!HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR))
-		rcd->egrbufs.rcvtid_size = roundup_pow_of_two(max_mtu);
+		rcd->egrbufs.rcvtid_size = round_mtu;
+
+	/*
+	 * Eager buffers sizes of 1MB or less require smaller TID sizes
+	 * to satisfy the "multiple of 8 RcvArray entries" requirement.
+	 */
+	if (rcd->egrbufs.size <= (1 << 20))
+		rcd->egrbufs.rcvtid_size = max((unsigned long)round_mtu,
+			rounddown_pow_of_two(rcd->egrbufs.size / 8));
 
 	while (alloced_bytes < rcd->egrbufs.size &&
 	       rcd->egrbufs.alloced < rcd->egrbufs.count) {
@@ -1857,8 +1876,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 			 *   - we are using one-pkt-per-egr-buffer (this implies
 			 *     that we are accepting only one size)
 			 */
-			if (rcd->egrbufs.rcvtid_size ==
-			    roundup_pow_of_two(max_mtu) ||
+			if (rcd->egrbufs.rcvtid_size == round_mtu ||
 			    !HFI_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR)) {
 				dd_dev_err(dd, "ctxt%u: Failed to allocate eager buffers\n",
 					rcd->ctxt);
@@ -1908,12 +1926,6 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	dd_dev_info(dd, "ctxt%u: Alloced %u rcv tid entries @ %uKB, total %zuKB\n",
 		rcd->ctxt, rcd->egrbufs.alloced, rcd->egrbufs.rcvtid_size,
 		rcd->egrbufs.size);
-	/*
-	 * Eager RcvArray entries need to be in multiples of 8 due to the
-	 * encoding of the RcvCtxtCtrl.EgrCnt. Check this here and scream if
-	 * it's not.
-	 */
-	BUG_ON(rcd->egrbufs.alloced % 8);
 
 	/*
 	 * Set the contexts rcv array head update threshold to the closest
