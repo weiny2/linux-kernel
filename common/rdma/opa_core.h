@@ -67,6 +67,8 @@
 #define _HFI_STATIC_INLINE static inline
 #define _HFI_PRINTF(FMT,args...)
 #define _HFI_ASSERT(X)
+#define HFI_TEST_ERR(x, y)
+#define assert(x)
 #define _align64 __attribute__((__aligned__(64)))
 
 /*
@@ -81,6 +83,7 @@ struct hfi_devdata;
 /**
  * hfi_ctx - state for HFI resources assigned to this context.
  * @pid: Assigned Portals Process ID. The user space hfi_ctx has this field
+ * @fd dummy file descriptor. The user space hfi_ctx has this field
  * @ptl_pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
  * @ptl_state_base: Pointer to Portals state in host memory
@@ -114,6 +117,7 @@ struct hfi_devdata;
 /* TODO: remove Portals naming references if possible */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
+	int	fd;
 	u16	pid;
 	u16	ptl_pid;
 	u32	ptl_uid;

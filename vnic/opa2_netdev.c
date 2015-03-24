@@ -62,6 +62,8 @@
 #include <rdma/hfi_tx_pio_put.h>
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_rx.h>
+#include <rdma/hfi_args.h>
+#include <rdma/hfi_ct.h>
 
 /*
  * struct opa_netdev - OPA2 net device specific fields
@@ -188,6 +190,55 @@ static const struct ethtool_ops opa_ethtool_ops = {
 	.get_settings = opa_get_settings,
 };
 
+static inline int
+hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
+	    unsigned long threshold, unsigned long *ct_val)
+{
+	unsigned long val;
+
+	while (1) {
+		if (hfi_ct_get_failure(ctx, ct_h))
+			return -EFAULT;
+		val = hfi_ct_get_success(ctx, ct_h);
+		if (val >= threshold)
+			break;
+		schedule();
+	}
+
+	if (ct_val)
+		*ct_val = val;
+
+	return 0;
+}
+
+int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
+		 hfi_ni_t ni, void *start, hfi_size_t length,
+		 hfi_process_t target_id, uint32_t pt_index,
+		 hfi_user_ptr_t user_ptr,
+		 hfi_match_bits_t match_bits, hfi_hdr_data_t hdr_data,
+		 hfi_ack_req_t ack_req, hfi_md_options_t md_options,
+		 hfi_eq_handle_t eq_handle, hfi_ct_handle_t ct_handle,
+		 hfi_size_t remote_offset, hfi_tx_handle_t tx_handle)
+{
+	union hfi_tx_cq_command cmd;
+	int cmd_slots, rc;
+
+	cmd_slots = hfi_format_put_match(ctx, ni,
+					 start, length,
+					 target_id, pt_index,
+					 user_ptr, 0, hdr_data,
+					 ack_req, md_options,
+					 eq_handle, ct_handle,
+					 remote_offset,
+					 tx_handle, &cmd);
+
+	do {
+		rc = hfi_tx_command(tx, cmd.command, start, length, cmd_slots);
+	} while (rc == -EAGAIN);
+
+	return rc;
+}
+
 static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 {
 	struct hfi_ctx *ctx = &dev->ctx;
@@ -198,9 +249,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	union ptentry_fp1 *pt_array, *ptentry;
 	union ptentry_fp0 *pt0_array, *pt0entry;
 	union fp_le_options le_opts;
-	hfi_tx_cq_command_t tx_cmd;
 	hfi_rx_cq_command_t rx_cmd;
-	int cmd_slots;
 	hfi_ni_t ni = PTL_NONMATCHING_PHYSICAL;
 	hfi_hdr_data_t hdr_data = 0x1;
 	hfi_ack_req_t ack_req = PTL_NO_ACK_REQ;
@@ -208,7 +257,6 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 					PTL_MD_EVENT_SEND_DISABLE;
 	hfi_tx_handle_t tx_handle = 0xc;
 	hfi_eq_handle_t eq_handle = 0;
-	hfi_ct_handle_t ct_tx = 0;
 	hfi_size_t remote_offset = 0;
 	hfi_process_t target_id, match_id;
 	uint64_t flags = (PTL_OP_PUT | PTL_OP_GET | PTL_EVENT_CT_COMM);
@@ -216,7 +264,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	hfi_match_bits_t ignore_bits = 0;
 	hfi_me_options_t me_options = PTL_USE_ONCE | PTL_EVENT_LINK_DISABLE |
 					PTL_ME_NO_TRUNCATE;
-	hfi_ct_handle_t ct_handle = 0;
+	hfi_ct_handle_t ct_rx, ct_tx;
+	hfi_ct_alloc_args_t ct_alloc = {0};
 	hfi_size_t min_free = 2048;
 	hfi_user_ptr_t user_ptr = (hfi_user_ptr_t)&user_ptr;
 	hfi_me_handle_t me_handle = 0xc;
@@ -235,12 +284,16 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 
 	/* Create a test RX buffer */
 	rx_base = kzalloc(PAYLOAD_SIZE, GFP_KERNEL);
-	if (!rx_base)
+	if (!rx_base) {
+		rc = -ENOMEM;
 		goto err1;
+	}
 	/* Create a test RX buffer */
 	rx_base1 = kzalloc(PAYLOAD_SIZE, GFP_KERNEL);
-	if (!rx_base1)
+	if (!rx_base1) {
+		rc = -ENOMEM;
 		goto err2;
+	}
 
 	pt_array = (union ptentry_fp1 *)ctx->pt_addr;
 	ptentry = &pt_array[HFI_PT_INDEX(PTL_NONMATCHING_PHYSICAL,
@@ -274,11 +327,19 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (flags & PTL_NO_ATOMIC)
 		le_opts.no_atomic = 1;
 
+	ct_alloc.ni = ni;
+	rc = hfi_ct_alloc(ctx, &ct_alloc, &ct_tx);
+	if (rc < 0)
+		goto err3;
+	rc = hfi_ct_alloc(ctx, &ct_alloc, &ct_rx);
+	if (rc < 0)
+		goto err3;
+
 	memset(ptentry, 0, sizeof(*ptentry));
 	/* Populate an RX buffer into a PT entry */
 	ptentry->user_id = ctx->ptl_uid;
 	ptentry->length = PAYLOAD_SIZE;
-	ptentry->ct_handle = 0;
+	ptentry->ct_handle = ct_rx;
 	ptentry->eq_handle = 0;
 	ptentry->start = (uint64_t)rx_base;
 	ptentry->le_low = le_opts.val & 0x7;
@@ -318,7 +379,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 			     match_id,
 			     0x0,
 			     match_bits, ignore_bits,
-			     me_options, ct_handle,
+			     me_options, 0,
 			     PTL_PRIORITY_LIST, min_free,
 			     user_ptr,
 			     me_handle, &rx_cmd);
@@ -326,42 +387,38 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	/* Single slot command */
 	rc = hfi_rx_command(rx, (uint64_t *)&rx_cmd);
 
-	/* Format a TX command */
-	cmd_slots = hfi_format_put_match(ctx, ni,
-					 tx_base,
-					 PAYLOAD_SIZE,
-					 target_id, /* target id */
-					 HFI_TEST_PT,
-					 0, /* user_ptr */
-					 0, hdr_data,
-					 ack_req,
-					 md_options, eq_handle, ct_tx,
-					 remote_offset,
-					 tx_handle, &tx_cmd);
+	/* TX data to the fast PTE */
+	rc = hfi_tx_write(tx, ctx, ni, tx_base,
+			  PAYLOAD_SIZE,
+			  target_id,
+			  HFI_TEST_PT, 0, 0,
+			  hdr_data, ack_req, md_options,
+			  eq_handle,
+			  ct_tx,
+			  remote_offset,
+			  tx_handle);
+	if (rc < 0)
+		goto err3;
 
-	/* Post the TX command to "put" the data */
-	rc = hfi_tx_command(tx, tx_cmd.command, tx_base,
-			    PAYLOAD_SIZE, cmd_slots);
+	/* TX data to the regular PTE */
+	rc = hfi_tx_write(tx, ctx, ni, tx_base,
+			  PAYLOAD_SIZE,
+			  target_id,
+			  HFI_TEST_PT + 1, 0, 0,
+			  hdr_data, ack_req, md_options,
+			  eq_handle,
+			  ct_tx,
+			  remote_offset,
+			  tx_handle);
+	if (rc < 0)
+		goto err3;
 
-	/* Format a TX command */
-	cmd_slots = hfi_format_put_match(ctx, ni,
-					 tx_base,
-					 PAYLOAD_SIZE,
-					 target_id, /* target id */
-					 HFI_TEST_PT + 1,
-					 0, /* user_ptr */
-					 0, hdr_data,
-					 ack_req,
-					 md_options, eq_handle, ct_tx,
-					 remote_offset,
-					 tx_handle, &tx_cmd);
-
-	/* Post the TX command to "put" the data */
-	rc = hfi_tx_command(tx, tx_cmd.command, tx_base,
-			    PAYLOAD_SIZE, cmd_slots);
-
-	/* Hook up a counting event or an event queue eventually */
-	msleep(1000);
+	/* Wait to receive from peer */
+	rc = hfi_ct_wait(ctx, ct_rx, 1, NULL);
+	if (rc < 0)
+		goto err3;
+	else
+		dev_info(&odev->dev, "RX CT success\n");
 
 	/* verify the data transfer succeeded for PTE */
 	if (!memcmp(tx_base, rx_base, PAYLOAD_SIZE))
