@@ -2794,6 +2794,12 @@ static u32 vau_to_au(u8 vau)
 	return 8 * (1 << vau);
 }
 
+static void set_linkup_defaults(struct qib_pportdata *ppd)
+{
+	ppd->sm_trap_qp = 0x0;
+	ppd->sa_qp = 0x1;
+}
+
 /*
  * Graceful LCB shutdown.  This leaves the LCB FIFOs in reset.
  */
@@ -3162,6 +3168,10 @@ void handle_link_up(struct work_struct *work)
 	 * to link up, so do that.
 	 */
 	clear_linkup_counters(ppd->dd);
+	/*
+	 * And (re)set link up default values.
+	 */
+	set_linkup_defaults(ppd);
 }
 
 /*

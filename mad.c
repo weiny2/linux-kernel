@@ -76,6 +76,7 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 	unsigned long flags;
 	unsigned long timeout;
 	int pkey_idx;
+	u32 qpn = ppd_from_ibp(ibp)->sm_trap_qp;
 
 	agent = ibp->send_agent;
 	if (!agent)
@@ -96,8 +97,9 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 		pkey_idx = 1;
 	}
 
-	send_buf = ib_create_send_mad(agent, 0, pkey_idx, 0, IB_MGMT_MAD_HDR,
-				      IB_MGMT_MAD_DATA, GFP_ATOMIC);
+	send_buf = ib_create_send_mad(agent, qpn, pkey_idx, 0,
+				      IB_MGMT_MAD_HDR, IB_MGMT_MAD_DATA,
+				      GFP_ATOMIC);
 	if (IS_ERR(send_buf))
 		return;
 
@@ -545,6 +547,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->sm_lid = cpu_to_be32(ibp->sm_lid);
 	pi->ib_cap_mask = cpu_to_be32(ibp->port_cap_flags);
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
+	pi->sm_trap_qp = cpu_to_be32(ppd->sm_trap_qp);
+	pi->sa_qp = cpu_to_be32(ppd->sa_qp);
 
 	pi->link_width.enabled = cpu_to_be16(ppd->link_width_enabled);
 	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
@@ -970,6 +974,9 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		ppd->neigh_link_down_reason.sma = 0;
 		ppd->neigh_link_down_reason.latest = 0;
 	}
+
+	ppd->sm_trap_qp = be32_to_cpu(pi->sm_trap_qp);
+	ppd->sa_qp = be32_to_cpu(pi->sa_qp);
 
 	ppd->port_error_action = be32_to_cpu(pi->port_error_action);
 	lwe = be16_to_cpu(pi->link_width.enabled);

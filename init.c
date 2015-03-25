@@ -544,6 +544,9 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 	ppd->symerr_clear_timer.function = qib_clear_symerror_on_linkup;
 	ppd->symerr_clear_timer.data = (unsigned long)ppd;
 
+	ppd->sm_trap_qp = 0x0;
+	ppd->sa_qp = 0x1;
+
 	ppd->qib_wq = NULL;
 
 	spin_lock_init(&ppd->cca_timer_lock);

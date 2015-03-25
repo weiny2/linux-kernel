@@ -614,6 +614,8 @@ struct qib_pportdata {
 	/* Used to flash LEDs in override mode */
 	struct timer_list led_override_timer;
 	struct timer_list symerr_clear_timer;
+	u32 sm_trap_qp;
+	u32 sa_qp;
 
 	/*
 	 * cca_timer_lock protects access to the per-SL cca_timer
