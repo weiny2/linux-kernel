@@ -1459,11 +1459,11 @@ iso_stream_schedule (
 	start = (stream->next_uframe - base) & (mod - 1);
 	now2 = (now - base) & (mod - 1);
 
-	/* Is the schedule already full? */
+	/* Is the schedule about to wrap around? */
 	if (unlikely(!empty && start < period)) {
-		ehci_dbg(ehci, "iso sched full %p (%u-%u < %u mod %u)\n",
+		ehci_dbg(ehci, "request %p would overflow (%u-%u < %u mod %u)\n",
 				urb, stream->next_uframe, base, period, mod);
-		status = -ENOSPC;
+		status = -EFBIG;
 		goto fail;
 	}
 
