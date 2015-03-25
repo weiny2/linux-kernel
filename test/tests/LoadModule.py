@@ -26,9 +26,19 @@ def is_driver_loaded(host, driver_name):
     return False
 
 def unload_driver(host, driver_name):
-    cmd = "/sbin/rmmod " + driver_name
-    do_ssh(host, cmd)
-    loaded = is_driver_loaded(host, driver_name)
+    attempts = 3
+    loaded = True
+    while (attempts > 0):
+        cmd = "/sbin/rmmod " + driver_name
+        do_ssh(host, cmd)
+        loaded = is_driver_loaded(host, driver_name)
+        if loaded == False:
+            RegLib.test_log(5, "Driver unloaded")
+            attempts = 0
+        else:
+            attempts = attempts - 1
+            RegLib.test_log(5, "Could not unload driver");
+            time.sleep(30)
     return not loaded
 
 def load_driver(host, driver_name, driver_path, driver_opts):
