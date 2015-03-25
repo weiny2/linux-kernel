@@ -822,18 +822,23 @@ static _hfi_inline u32 compute_data_length(struct user_sdma_request *req,
 	if (tx->flags & USER_SDMA_TXREQ_FLAGS_FIRST_PKT) {
 		len = ((be16_to_cpu(req->hdr.lrh[2]) << 2) -
 		       (sizeof(tx->hdr) - 4));
-	} else if (tx->flags & USER_SDMA_TXREQ_FLAGS_SECOND_PKT &&
-		   req_opcode(req->info.ctrl) == EXPECTED) {
-		len = (EXP_TID_GET(req->tids[req->tididx], LEN) * PAGE_SIZE) -
-			req->tidoffset;
-		if (unlikely(!len) && ++req->tididx < req->n_tids &&
-		    req->tids[req->tididx]) {
-			req->tidoffset = 0;
-			len = min((u32)(EXP_TID_GET(req->tids[req->tididx],
-						    LEN) * PAGE_SIZE),
+	} else if (req_opcode(req->info.ctrl) == EXPECTED) {
+		u32 tidlen = EXP_TID_GET(req->tids[req->tididx], LEN) *
+			PAGE_SIZE;
+		if (req->txreqs_sent <= tidlen / req->info.fragsize) {
+			len = min(tidlen - req->tidoffset,
 				  (u32)req->info.fragsize);
-		}
-		len = min(len, req->data_len - req->sent);
+			if (unlikely(!len) && ++req->tididx < req->n_tids &&
+			    req->tids[req->tididx]) {
+				tidlen = EXP_TID_GET(req->tids[req->tididx],
+						     LEN) * PAGE_SIZE;
+				req->tidoffset = 0;
+				len = min_t(u32, tidlen, req->info.fragsize);
+			}
+			len = min(len, req->data_len - req->sent);
+		} else
+			len = min(req->data_len - req->sent,
+				  (u32)req->info.fragsize);
 	} else
 		len = min(req->data_len - req->sent, (u32)req->info.fragsize);
 	SDMA_DBG(req, "Data Length = %u", len);
@@ -1094,6 +1099,9 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				tx->iovec1->offset += iov_offset;
 			else if (tx->iovec2)
 				tx->iovec2->offset += iov_offset;
+			SDMA_DBG(req, "iovec1: %llu iovec2:%llu",
+				 (tx->iovec1 ? tx->iovec1->offset : 0),
+				 (tx->iovec2 ? tx->iovec2->offset : 0));
 		}
 		/*
 		 * It is important to increment this here as it is used to
