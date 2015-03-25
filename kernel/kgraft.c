@@ -27,6 +27,7 @@
 #include <linux/sort.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <linux/vermagic.h>
 #include <linux/workqueue.h>
 
 static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
@@ -806,6 +807,11 @@ int kgr_patch_kernel(struct kgr_patch *patch)
 {
 	int ret;
 
+	if (patch->vermagic && strcmp(patch->vermagic, VERMAGIC_STRING) != 0) {
+		pr_err("kgr: kernel version mismatch: \"%s\" != \"%s\"\n",
+				patch->vermagic, VERMAGIC_STRING);
+		return -EINVAL;
+	}
 	if (!try_module_get(patch->owner)) {
 		pr_err("kgr: can't increase patch module refcount\n");
 		return -EBUSY;
