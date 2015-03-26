@@ -110,7 +110,7 @@ void qib_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
 		 * This will cause send_complete() to be called in
 		 * another thread.
 		 */
-		smp_rmb();
+		smp_read_barrier_depends(); /* see qib_cq_exit */
 		worker = cq->dd->worker;
 		if (likely(worker)) {
 			cq->notify = IB_CQ_NONE;
@@ -533,7 +533,7 @@ void qib_cq_exit(struct hfi_devdata *dd)
 		return;
 	/* blocks future queuing from send_complete() */
 	dd->worker = NULL;
-	smp_wmb();
+	smp_wmb(); /* See qib_cq_enter */
 	flush_kthread_worker(worker);
 	kthread_stop(worker->task);
 	kfree(worker);
