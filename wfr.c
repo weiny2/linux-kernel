@@ -6916,6 +6916,16 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 	return ret;
 }
 
+/* FIXME: Remove definitions when support for headers prior to 48
+ * is removed or before release of driver code. */
+/* defined in header release 48 and higher */
+#ifndef WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT 3
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_MASK 0xffull
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK (WFR_SEND_CTRL_UNSUPPORTED_VL_MASK \
+		<< WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT)
+#endif
+
 static int disable_data_vls(struct hfi_devdata *dd)
 {
 	u64 reg;
@@ -6924,8 +6934,7 @@ static int disable_data_vls(struct hfi_devdata *dd)
 		return 1; /* XXX better error #? */
 
 	reg = read_csr(dd, WFR_SEND_CTRL);
-	reg |= (0xffLL << 3);	/* XXX - fix magic value
-				 * when headers are updated */
+	reg |= WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
 	write_csr(dd, WFR_SEND_CTRL, reg);
 	reg = read_csr(dd, WFR_SEND_CTRL); /* flush write */
 
@@ -6946,8 +6955,7 @@ int open_fill_data_vls(struct hfi_devdata *dd)
 		return 1; /* XXX better error #? */
 
 	reg = read_csr(dd, WFR_SEND_CTRL);
-	reg &= ~(0xffLL << 3); /* XXX - fix magic value when
-				* headers are updated */
+	reg &= ~WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
 	write_csr(dd, WFR_SEND_CTRL, reg);
 
 	return 0;
@@ -6966,6 +6974,7 @@ static void drain_data_vls(struct hfi_devdata *dd)
 
 	pause_for_credit_return(dd);
 }
+
 /*
  * stop_drain_data_vls() - disable, then drain all per-VL fifos.
  * The function to resume using data VLs is open_fill_data_vls(),
