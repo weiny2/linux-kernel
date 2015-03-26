@@ -719,22 +719,7 @@ struct qib_ibport {
 	__be64 mkey;
 	__be64 guids[QIB_GUIDS_PER_PORT	- 1];	/* writable GUIDs */
 	u64 tid;		/* TID for traps */
-	u64 z_symbol_error_counter;             /* starting count for PMA */
-	u64 z_link_error_recovery_counter;      /* starting count for PMA */
-	u64 z_link_downed_counter;              /* starting count for PMA */
-	u64 z_port_rcv_errors;                  /* starting count for PMA */
-	u64 z_port_rcv_remphys_errors;          /* starting count for PMA */
-	u64 z_port_xmit_discards;               /* starting count for PMA */
-	u64 z_port_xmit_data;                   /* starting count for PMA */
-	u64 z_port_rcv_data;                    /* starting count for PMA */
-	u64 z_port_xmit_packets;                /* starting count for PMA */
-	u64 z_port_rcv_packets;                 /* starting count for PMA */
-	u32 z_local_link_integrity_errors;      /* starting count for PMA */
-	u32 z_excessive_buffer_overrun_errors;  /* starting count for PMA */
-	u32 z_vl15_dropped;                     /* starting count for PMA */
 	u64 n_rc_resends;
-	u64 n_rc_acks;
-	u64 n_rc_qacks;
 	u64 n_rc_delayed_comp;
 	u64 n_seq_naks;
 	u64 n_rdma_seq;
@@ -748,6 +733,13 @@ struct qib_ibport {
 	u64 n_unaligned;
 	u64 n_rc_dupreq;
 	u64 n_rc_seqnak;
+
+	/* Hot-path per CPU counters to avoid cacheline trading to update */
+	u64 z_rc_acks;
+	u64 z_rc_qacks;
+	u64 __percpu *rc_acks;
+	u64 __percpu *rc_qacks;
+
 	u32 port_cap_flags;
 	u32 pma_sample_start;
 	u32 pma_sample_interval;

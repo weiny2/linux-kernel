@@ -140,9 +140,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* link widths are not avaiable until the link is fully up */
 		get_linkup_link_widths(ppd);
 
-		/* start a 75msec timer to clear symbol errors */
-		mod_timer(&ppd->symerr_clear_timer, msecs_to_jiffies(75));
-
 		/*
 		 * The STL FM is not yet available.  Fake a BufferControlTable
 		 * MAD packet so that all VLs have credits.
@@ -172,17 +169,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 	}
 
 
-}
-
-void qib_clear_symerror_on_linkup(unsigned long opaque)
-{
-	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
-
-	if (ppd->lstate == IB_PORT_ACTIVE)
-		return;
-
-	ppd->ibport_data.z_symbol_error_counter =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_IBSYMBOLERR);
 }
 
 /*

@@ -35,6 +35,7 @@
 
 #include "hfi.h"
 #include "mad.h"
+#include "trace.h"
 
 /* start of per-port functions */
 /*
@@ -618,21 +619,35 @@ static struct kobj_type hfi_vl2mtu_ktype = {
 };
 
 /* Start diag_counters */
+#define QIB_DIAGC_NORMAL 0x0
+#define QIB_DIAGC_PCPU   0x1
 
 #define QIB_DIAGC_ATTR(N) \
 	static struct qib_diagc_attr qib_diagc_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0664 }, \
-		.counter = offsetof(struct qib_ibport, n_##N) \
+		.counter = offsetof(struct qib_ibport, n_##N), \
+		.type = QIB_DIAGC_NORMAL, \
+		.vl = CNTR_INVALID_VL \
+	}
+
+#define QIB_DIAGC_ATTR_PCPU(N, V, L) \
+	static struct qib_diagc_attr qib_diagc_attr_##N = { \
+		.attr = { .name = __stringify(N), .mode = 0664 }, \
+		.counter = V, \
+		.type = QIB_DIAGC_PCPU, \
+		.vl = L \
 	}
 
 struct qib_diagc_attr {
 	struct attribute attr;
 	size_t counter;
+	int type;
+	int vl;
 };
 
 QIB_DIAGC_ATTR(rc_resends);
-QIB_DIAGC_ATTR(rc_acks);
-QIB_DIAGC_ATTR(rc_qacks);
+QIB_DIAGC_ATTR_PCPU(rc_acks, C_SW_CPU_RC_ACKS, CNTR_INVALID_VL);
+QIB_DIAGC_ATTR_PCPU(rc_qacks, C_SW_CPU_RC_QACKS, CNTR_INVALID_VL);
 QIB_DIAGC_ATTR(rc_delayed_comp);
 QIB_DIAGC_ATTR(seq_naks);
 QIB_DIAGC_ATTR(rdma_seq);
@@ -674,7 +689,18 @@ static ssize_t diagc_attr_show(struct kobject *kobj, struct attribute *attr,
 		container_of(kobj, struct qib_pportdata, diagc_kobj);
 	struct qib_ibport *qibp = &ppd->ibport_data;
 
-	return sprintf(buf, "%u\n", *(u32 *)((char *)qibp + dattr->counter));
+	switch (dattr->type) {
+	case (QIB_DIAGC_PCPU):
+		return(sprintf(buf, "%lld\n",
+			read_port_cntr(ppd,
+				       dattr->counter,
+				       dattr->vl)));
+	case (QIB_DIAGC_NORMAL):
+		/* Fall through */
+	default:
+		return sprintf(buf, "%u\n",
+			*(u32 *)((char *)qibp + dattr->counter));
+	}
 }
 
 static ssize_t diagc_attr_store(struct kobject *kobj, struct attribute *attr,

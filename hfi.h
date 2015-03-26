@@ -412,52 +412,6 @@ struct qib_sge_state;
 #define HFI_PART_ENFORCE_IN	0x1
 #define HFI_PART_ENFORCE_OUT	0x2
 
-/*
- * These are the generic indices for requesting per-port
- * counter values via the f_portcntr function.  They
- * are always returned as 64 bit values, although most
- * are 32 bit counters.
- */
-/* send-related counters */
-#define QIBPORTCNTR_PKTSEND         0U
-#define QIBPORTCNTR_WORDSEND        1U
-#define QIBPORTCNTR_PSXMITDATA      2U
-#define QIBPORTCNTR_PSXMITPKTS      3U
-#define QIBPORTCNTR_PSXMITWAIT      4U
-#define QIBPORTCNTR_SENDSTALL       5U
-/* receive-related counters */
-#define QIBPORTCNTR_PKTRCV          6U
-#define QIBPORTCNTR_PSRCVDATA       7U
-#define QIBPORTCNTR_PSRCVPKTS       8U
-#define QIBPORTCNTR_RCVEBP          9U
-#define QIBPORTCNTR_RCVOVFL         10U
-#define QIBPORTCNTR_WORDRCV         11U
-/* IB link related error counters */
-#define QIBPORTCNTR_RXLOCALPHYERR   12U
-#define QIBPORTCNTR_RXVLERR         13U
-#define QIBPORTCNTR_ERRICRC         14U
-#define QIBPORTCNTR_ERRVCRC         15U
-#define QIBPORTCNTR_ERRLPCRC        16U
-#define QIBPORTCNTR_BADFORMAT       17U
-#define QIBPORTCNTR_ERR_RLEN        18U
-#define QIBPORTCNTR_IBSYMBOLERR     19U
-#define QIBPORTCNTR_INVALIDRLEN     20U
-#define QIBPORTCNTR_UNSUPVL         21U
-#define QIBPORTCNTR_EXCESSBUFOVFL   22U
-#define QIBPORTCNTR_ERRLINK         23U
-#define QIBPORTCNTR_IBLINKDOWN      24U
-#define QIBPORTCNTR_IBLINKERRRECOV  25U
-#define QIBPORTCNTR_LLI             26U
-/* other error counters */
-#define QIBPORTCNTR_RXDROPPKT       27U
-#define QIBPORTCNTR_VL15PKTDROP     28U
-#define QIBPORTCNTR_ERRPKEY         29U
-#define QIBPORTCNTR_KHDROVFL        30U
-/* sampling counters (these are actually control registers) */
-#define QIBPORTCNTR_PSINTERVAL      31U
-#define QIBPORTCNTR_PSSTART         32U
-#define QIBPORTCNTR_PSSTAT          33U
-
 /* how often we check for synthetic counter wrap around */
 #define SYNTH_CNT_TIME 2
 
@@ -613,7 +567,6 @@ struct qib_pportdata {
 	atomic_t led_override_timer_active;
 	/* Used to flash LEDs in override mode */
 	struct timer_list led_override_timer;
-	struct timer_list symerr_clear_timer;
 	u32 sm_trap_qp;
 	u32 sa_qp;
 
@@ -1578,8 +1531,6 @@ void qib_enable_intx(struct pci_dev *);
 void qib_nomsix(struct hfi_devdata *);
 void restore_pci_variables(struct hfi_devdata *dd);
 int do_pcie_gen3_transition(struct hfi_devdata *dd);
-/* interrupts for device */
-u64 hfi_int_counter(struct hfi_devdata *);
 
 /*
  * dma_addr wrappers - all 0's invalid for hw

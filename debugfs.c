@@ -812,7 +812,7 @@ static u64 hfi_sps_ints(void)
 
 	spin_lock_irqsave(&qib_devs_lock, flags);
 	list_for_each_entry(dd, &qib_dev_list, list) {
-		sps_ints += hfi_int_counter(dd);
+		sps_ints += get_all_cpu_total(dd->int_counter);
 	}
 	spin_unlock_irqrestore(&qib_devs_lock, flags);
 	return sps_ints;

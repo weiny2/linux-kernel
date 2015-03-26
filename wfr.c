@@ -1568,6 +1568,63 @@ static u64 access_rcv_constraint_errs(const struct cntr_entry *entry,
 			     mode, data);
 }
 
+u64 get_all_cpu_total(u64 __percpu *cntr)
+{
+	int cpu;
+	u64 counter = 0;
+
+	for_each_possible_cpu(cpu)
+		counter += *per_cpu_ptr(cntr, cpu);
+	return counter;
+}
+
+static u64 read_write_cpu(struct hfi_devdata *dd, u64 *z_val,
+			  u64 __percpu *cntr,
+			  int vl, int mode, u64 data)
+{
+
+	u64 ret = 0;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0;
+
+	if (mode == CNTR_MODE_R) {
+		ret = get_all_cpu_total(cntr) - *z_val;
+	} else if (mode == CNTR_MODE_W) {
+		/* A write can only zero the counter */
+		if (data == 0)
+			*z_val = get_all_cpu_total(cntr);
+		else
+			dd_dev_err(dd, "Per CPU cntrs can only be zeroed");
+	} else {
+		dd_dev_err(dd, "Invalid cntr sw cpu access mode");
+		return 0;
+	}
+
+	return ret;
+}
+
+static u64 access_sw_cpu_intr(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+	return read_write_cpu(dd, &dd->z_int_counter, dd->int_counter, vl,
+			      mode, data);
+}
+
+#define def_access_sw_cpu(cntr) \
+static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
+			      void *context, int vl, int mode, u64 data)      \
+{									      \
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;	      \
+	return read_write_cpu(ppd->dd, &ppd->ibport_data.z_ ##cntr,	      \
+			      ppd->ibport_data.cntr, vl,		      \
+			      mode, data);				      \
+}
+
+def_access_sw_cpu(rc_acks);
+def_access_sw_cpu(rc_qacks);
+
 #define def_access_ibp_counter(cntr) \
 static u64 access_ibp_##cntr(const struct cntr_entry *entry,		      \
 				void *context, int vl, int mode, u64 data)    \
@@ -1581,7 +1638,6 @@ static u64 access_ibp_##cntr(const struct cntr_entry *entry,		      \
 			     mode, data);				      \
 }
 
-def_access_ibp_counter(rc_acks);
 def_access_ibp_counter(loop_pkts);
 def_access_ibp_counter(rc_resends);
 def_access_ibp_counter(rnr_naks);
@@ -1590,7 +1646,6 @@ def_access_ibp_counter(rc_timeouts);
 def_access_ibp_counter(pkt_drops);
 def_access_ibp_counter(dmawait);
 def_access_ibp_counter(rc_seqnak);
-def_access_ibp_counter(rc_qacks);
 def_access_ibp_counter(rc_delayed_comp);
 def_access_ibp_counter(rc_dupreq);
 def_access_ibp_counter(rdma_seq);
@@ -1740,6 +1795,8 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 [C_DC_PG_STS_TX_MBE_CNT] =
 	DC_PERF_CNTR_LCB(DcStsTxMbe, DC_LCB_PG_STS_TX_MBE_CNT,
 			 CNTR_SYNTH),
+[C_SW_CPU_INTR] = CNTR_ELEM("Intr", 0, 0, CNTR_NORMAL,
+			    access_sw_cpu_intr),
 };
 
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
@@ -1781,7 +1838,6 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 			access_xmit_constraint_errs),
 [C_SW_RCV_CSTR_ERR] = CNTR_ELEM("RcvCstrErr", 0, 0, CNTR_SYNTH,
 			access_rcv_constraint_errs),
-[C_SW_IBP_RC_ACKS] = SW_IBP_CNTR(RcAcks, rc_acks),
 [C_SW_IBP_LOOP_PKTS] = SW_IBP_CNTR(LoopPkts, loop_pkts),
 [C_SW_IBP_RC_RESENDS] = SW_IBP_CNTR(RcResend, rc_resends),
 [C_SW_IBP_RNR_NAKS] = SW_IBP_CNTR(RnrNak, rnr_naks),
@@ -1790,12 +1846,15 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 [C_SW_IBP_PKT_DROPS] = SW_IBP_CNTR(PktDrop, pkt_drops),
 [C_SW_IBP_DMA_WAIT] = SW_IBP_CNTR(DmaWait, dmawait),
 [C_SW_IBP_RC_SEQNAK] = SW_IBP_CNTR(RcSeqNak, rc_seqnak),
-[C_SW_IBP_RC_QACKS] = SW_IBP_CNTR(RcQacks, rc_qacks),
 [C_SW_IBP_RC_DELAYED_COMP] = SW_IBP_CNTR(RcDelayComp, rc_delayed_comp),
 [C_SW_IBP_RC_DUPREQ] = SW_IBP_CNTR(RcDupRew, rc_dupreq),
 [C_SW_IBP_RDMA_SEQ] = SW_IBP_CNTR(RdmaSeq, rdma_seq),
 [C_SW_IBP_UNALIGNED] = SW_IBP_CNTR(Unaligned, unaligned),
 [C_SW_IBP_SEQ_NAK] = SW_IBP_CNTR(SeqNak, seq_naks),
+[C_SW_CPU_RC_ACKS] = CNTR_ELEM("RcAcks", 0, 0, CNTR_NORMAL,
+			       access_sw_cpu_rc_acks),
+[C_SW_CPU_RC_QACKS] = CNTR_ELEM("RcQacks", 0, 0, CNTR_NORMAL,
+			       access_sw_cpu_rc_qacks),
 OVERFLOW_ELEM(0),   OVERFLOW_ELEM(1),   OVERFLOW_ELEM(2),   OVERFLOW_ELEM(3),
 OVERFLOW_ELEM(4),   OVERFLOW_ELEM(5),   OVERFLOW_ELEM(6),   OVERFLOW_ELEM(7),
 OVERFLOW_ELEM(8),   OVERFLOW_ELEM(9),   OVERFLOW_ELEM(10),  OVERFLOW_ELEM(11),
@@ -5357,11 +5416,49 @@ static void stop_irq(struct hfi_devdata *dd)
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
 }
 
+static inline void reset_cpu_counters(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
+
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		ppd->ibport_data.z_rc_acks =
+			get_all_cpu_total(ppd->ibport_data.rc_acks);
+		ppd->ibport_data.z_rc_qacks =
+			get_all_cpu_total(ppd->ibport_data.rc_qacks);
+	}
+
+}
+
+static inline int init_cpu_counters(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		ppd->ibport_data.rc_acks = NULL;
+		ppd->ibport_data.rc_qacks = NULL;
+		ppd->ibport_data.rc_acks = alloc_percpu(u64);
+		ppd->ibport_data.rc_qacks = alloc_percpu(u64);
+		if ((ppd->ibport_data.rc_acks == NULL) ||
+		    (ppd->ibport_data.rc_qacks == NULL))
+			return -ENOMEM;
+	}
+
+	return 0;
+}
+
 static int reset(struct hfi_devdata *dd)
 {
 	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
 		dd_dev_info(dd, "%s: not implemented\n", __func__);
-	dd->z_int_counter = hfi_int_counter(dd);
+
+	reset_cpu_counters(dd);
+
 	return 0;
 }
 
@@ -7237,18 +7334,6 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR, 0);
 }
 
-static u64 portcntr(struct qib_pportdata *ppd, u32 reg)
-{
-	static int called;
-
-	if (!called) {
-		called = 1;
-		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-			dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-	}
-	return 0;
-}
-
 static u32 read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp)
 {
@@ -7385,8 +7470,12 @@ static void free_cntrs(struct hfi_devdata *dd)
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		kfree(ppd->cntrs);
 		kfree(ppd->scntrs);
+		free_percpu(ppd->ibport_data.rc_acks);
+		free_percpu(ppd->ibport_data.rc_qacks);
 		ppd->cntrs = NULL;
 		ppd->scntrs = NULL;
+		ppd->ibport_data.rc_acks = NULL;
+		ppd->ibport_data.rc_qacks = NULL;
 	}
 	kfree(dd->portcntrnames);
 	dd->portcntrnames = NULL;
@@ -7822,7 +7911,7 @@ static int init_cntrs(struct hfi_devdata *dd)
 
 	/* allocate per port storage for counter values */
 	ppd = (struct qib_pportdata *)(dd + 1);
-	for (i = 0; i < dd->num_pports; i++, ppd++) { /* FIXME. ppd++? */
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		ppd->cntrs = kzalloc(sizeof(u64) * dd->nportcntrs,
 				     GFP_KERNEL);
 		if (!ppd->cntrs)
@@ -7833,6 +7922,11 @@ static int init_cntrs(struct hfi_devdata *dd)
 		if (!ppd->scntrs)
 			goto bail;
 	}
+
+	/* CPU counters need to be allocated and zeroed */
+	if (init_cpu_counters(dd))
+		goto bail;
+
 	mod_timer(&dd->synth_stats_timer, jiffies + HZ * SYNTH_CNT_TIME);
 	return 0;
 bail:
@@ -10028,7 +10122,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_gpio_mod          = gpio_mod;
 	dd->f_init_ctxt         = init_ctxt;
 	dd->f_intr_fallback     = intr_fallback;
-	dd->f_portcntr          = portcntr;
 	dd->f_put_tid           = put_tid;
 	dd->f_quiet_serdes      = quiet_serdes;
 	dd->f_rcvctrl           = rcvctrl;

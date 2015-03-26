@@ -1405,97 +1405,6 @@ int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	return ret;
 }
 
-int qib_snapshot_counters(struct qib_pportdata *ppd, u64 *swords,
-			  u64 *rwords, u64 *spkts, u64 *rpkts,
-			  u64 *xmit_wait)
-{
-	int ret;
-	struct hfi_devdata *dd = ppd->dd;
-
-	if (!(dd->flags & HFI_PRESENT)) {
-		/* no hardware, freeze, etc. */
-		ret = -EINVAL;
-		goto bail;
-	}
-	*swords = dd->f_portcntr(ppd, QIBPORTCNTR_WORDSEND);
-	*rwords = dd->f_portcntr(ppd, QIBPORTCNTR_WORDRCV);
-	*spkts = dd->f_portcntr(ppd, QIBPORTCNTR_PKTSEND);
-	*rpkts = dd->f_portcntr(ppd, QIBPORTCNTR_PKTRCV);
-	*xmit_wait = dd->f_portcntr(ppd, QIBPORTCNTR_SENDSTALL);
-
-	ret = 0;
-
-bail:
-	return ret;
-}
-
-/**
- * qib_get_counters - get various chip counters
- * @dd: the qlogic_ib device
- * @cntrs: counters are placed here
- *
- * Return the counters needed by recv_pma_get_portcounters().
- */
-int qib_get_counters(struct qib_pportdata *ppd,
-		     struct qib_verbs_counters *cntrs)
-{
-	int ret;
-
-	if (!(ppd->dd->flags & HFI_PRESENT)) {
-		/* no hardware, freeze, etc. */
-		ret = -EINVAL;
-		goto bail;
-	}
-	cntrs->symbol_error_counter =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_IBSYMBOLERR);
-	cntrs->link_error_recovery_counter =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_IBLINKERRRECOV);
-	/*
-	 * The link downed counter counts when the other side downs the
-	 * connection.  We add in the number of times we downed the link
-	 * due to local link integrity errors to compensate.
-	 */
-	cntrs->link_downed_counter =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_IBLINKDOWN);
-	cntrs->port_rcv_errors =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_RXDROPPKT) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_RCVOVFL) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_ERR_RLEN) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_INVALIDRLEN) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_ERRLINK) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_ERRICRC) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_ERRVCRC) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_ERRLPCRC) +
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_BADFORMAT);
-	cntrs->port_rcv_errors +=
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_RXLOCALPHYERR);
-	cntrs->port_rcv_errors +=
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_RXVLERR);
-	cntrs->port_rcv_remphys_errors =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_RCVEBP);
-	cntrs->port_xmit_discards =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_UNSUPVL);
-	cntrs->port_xmit_data = ppd->dd->f_portcntr(ppd,
-			QIBPORTCNTR_WORDSEND);
-	cntrs->port_rcv_data = ppd->dd->f_portcntr(ppd,
-			QIBPORTCNTR_WORDRCV);
-	cntrs->port_xmit_packets = ppd->dd->f_portcntr(ppd,
-			QIBPORTCNTR_PKTSEND);
-	cntrs->port_rcv_packets = ppd->dd->f_portcntr(ppd,
-			QIBPORTCNTR_PKTRCV);
-	cntrs->local_link_integrity_errors =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_LLI);
-	cntrs->excessive_buffer_overrun_errors =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_EXCESSBUFOVFL);
-	cntrs->vl15_dropped =
-		ppd->dd->f_portcntr(ppd, QIBPORTCNTR_VL15PKTDROP);
-
-	ret = 0;
-
-bail:
-	return ret;
-}
-
 static int qib_query_device(struct ib_device *ibdev,
 			    struct ib_device_attr *props)
 {
@@ -1990,7 +1899,6 @@ static int qib_dealloc_ucontext(struct ib_ucontext *context)
 
 static void init_ibport(struct qib_pportdata *ppd)
 {
-	struct qib_verbs_counters cntrs;
 	struct qib_ibport *ibp = &ppd->ibport_data;
 	size_t sz = ARRAY_SIZE(ibp->sl_to_sc);
 	int i;
@@ -2013,24 +1921,6 @@ static void init_ibport(struct qib_pportdata *ppd)
 	ibp->pma_counter_select[3] = IB_PMA_PORT_RCV_PKTS;
 	ibp->pma_counter_select[4] = IB_PMA_PORT_XMIT_WAIT;
 
-	/* Snapshot current HW counters to "clear" them. */
-	qib_get_counters(ppd, &cntrs);
-	ibp->z_symbol_error_counter = cntrs.symbol_error_counter;
-	ibp->z_link_error_recovery_counter =
-		cntrs.link_error_recovery_counter;
-	ibp->z_link_downed_counter = cntrs.link_downed_counter;
-	ibp->z_port_rcv_errors = cntrs.port_rcv_errors;
-	ibp->z_port_rcv_remphys_errors = cntrs.port_rcv_remphys_errors;
-	ibp->z_port_xmit_discards = cntrs.port_xmit_discards;
-	ibp->z_port_xmit_data = cntrs.port_xmit_data;
-	ibp->z_port_rcv_data = cntrs.port_rcv_data;
-	ibp->z_port_xmit_packets = cntrs.port_xmit_packets;
-	ibp->z_port_rcv_packets = cntrs.port_rcv_packets;
-	ibp->z_local_link_integrity_errors =
-		cntrs.local_link_integrity_errors;
-	ibp->z_excessive_buffer_overrun_errors =
-		cntrs.excessive_buffer_overrun_errors;
-	ibp->z_vl15_dropped = cntrs.vl15_dropped;
 	RCU_INIT_POINTER(ibp->qp0, NULL);
 	RCU_INIT_POINTER(ibp->qp1, NULL);
 }

@@ -792,7 +792,7 @@ qib_pci_mmio_enabled(struct pci_dev *pdev)
 	pci_ers_result_t ret = PCI_ERS_RESULT_RECOVERED;
 
 	if (dd && dd->pport) {
-		words = dd->f_portcntr(dd->pport, QIBPORTCNTR_WORDRCV);
+		words = read_port_cntr(dd->pport, C_RX_WORDS, CNTR_INVALID_VL);
 		if (words == ~0ULL)
 			ret = PCI_ERS_RESULT_NEED_RESET;
 		dd_dev_info(dd,

@@ -753,7 +753,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 
 queue_ack:
 	if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) {
-		ibp->n_rc_qacks++;
+		this_cpu_inc(*ibp->rc_qacks);
 		qp->s_flags |= QIB_S_ACK_PENDING | QIB_S_RESP_PENDING;
 		qp->s_nak_state = qp->r_nak_state;
 		qp->s_ack_psn = qp->r_ack_psn;
@@ -1229,7 +1229,7 @@ static int do_rc_ack(struct qib_qp *qp, u32 aeth, u32 psn, int opcode,
 
 	switch (aeth >> 29) {
 	case 0:         /* ACK */
-		ibp->n_rc_acks++;
+		this_cpu_inc(*ibp->rc_acks);
 		if (qp->s_acked != qp->s_tail) {
 			/*
 			 * We are expecting more ACKs so

@@ -540,10 +540,6 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 	mutex_init(&ppd->hls_lock);
 	spin_lock_init(&ppd->sdma_alllock);
 
-	init_timer(&ppd->symerr_clear_timer);
-	ppd->symerr_clear_timer.function = qib_clear_symerror_on_linkup;
-	ppd->symerr_clear_timer.data = (unsigned long)ppd;
-
 	ppd->sm_trap_qp = 0x0;
 	ppd->sa_qp = 0x1;
 
@@ -679,7 +675,8 @@ static void verify_interrupt(struct work_struct *work)
 	/*
 	 * We should have interrupts by now.  If not, try falling back.
 	 */
-	int_counter = hfi_int_counter(dd) - dd->z_int_counter;
+	int_counter = read_dev_cntr(dd, C_SW_CPU_INTR, CNTR_INVALID_VL)
+			- dd->z_int_counter;
 	if (int_counter == 0) {
 		if (!dd->f_intr_fallback(dd))
 			dev_err(&dd->pcidev->dev,
@@ -925,8 +922,6 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 			del_timer_sync(&ppd->led_override_timer);
 			atomic_set(&ppd->led_override_timer_active, 0);
 		}
-		if (ppd->symerr_clear_timer.data)
-			del_timer_sync(&ppd->symerr_clear_timer);
 		cancel_delayed_work_sync(&ppd->link_restart_work);
 	}
 }
@@ -1195,20 +1190,6 @@ u64 hfi_int_counter(struct hfi_devdata *dd)
 	for_each_possible_cpu(cpu)
 		int_counter += *per_cpu_ptr(dd->int_counter, cpu);
 	return int_counter;
-}
-
-u64 qib_sps_ints(void)
-{
-	unsigned long flags;
-	struct hfi_devdata *dd;
-	u64 sps_ints = 0;
-
-	spin_lock_irqsave(&qib_devs_lock, flags);
-	list_for_each_entry(dd, &qib_dev_list, list) {
-		sps_ints += hfi_int_counter(dd);
-	}
-	spin_unlock_irqrestore(&qib_devs_lock, flags);
-	return sps_ints;
 }
 
 /*
