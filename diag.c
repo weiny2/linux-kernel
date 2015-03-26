@@ -66,7 +66,7 @@
 unsigned int snoop_drop_send = 0; /* Drop outgoing PIO/SDMA requests */
 unsigned int snoop_force_capture = 0; /* Force into capture */
 
-module_param_named(snoop_drop_send, snoop_drop_send , int, 0644);
+module_param_named(snoop_drop_send, snoop_drop_send, int, 0644);
 MODULE_PARM_DESC(snoop_drop_send, "drop outgoing snooped PIO/DMA packets ");
 
 module_param_named(snoop_force_capture, snoop_force_capture, int, 0644);
@@ -1009,16 +1009,15 @@ static ssize_t diag_write(struct file *fp, const char __user *data,
 			}
 			spin_lock_irqsave(&dd->qib_diag_trans_lock, flags);
 			op = diag_get_observer(dd, *off);
-			// FIXME: op->hook()'x last arg used to be use_32
+			/* FIXME: op->hook()'x last arg used to be use_32 */
 			if (op)
 				ret = op->hook(dd, op, offset, &data64, ~0Ull,
 					       0);
 			spin_unlock_irqrestore(&dd->qib_diag_trans_lock, flags);
 		}
 
-		if (!op) {
+		if (!op)
 			ret = write_umem64(dd, (u32) *off, data, count);
-		}
 	}
 
 	if (ret >= 0) {
@@ -1162,6 +1161,7 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	if (mode_flag == HFI_PORT_SNOOP_MODE) {
 		for (i = 0; i < dd->num_send_contexts; i++) {
 			u64 type = dd->send_contexts[i].type;
+
 			reg_cur = read_kctxt_csr(dd, i,
 						WFR_SEND_CTXT_CHECK_ENABLE);
 			reg_new = ~(hfi_pkt_default_send_ctxt_mask(dd,
@@ -1228,6 +1228,7 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	if (dd->hfi_snoop.mode_flag == HFI_PORT_SNOOP_MODE) {
 		for (i = 0; i < dd->num_send_contexts; i++) {
 			u64 type = dd->send_contexts[i].type;
+
 			reg_cur = read_kctxt_csr(dd, i,
 						WFR_SEND_CTXT_CHECK_ENABLE);
 			reg_new = hfi_pkt_default_send_ctxt_mask(dd,
@@ -1527,7 +1528,6 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				default:
 					ret = -EINVAL;
 					goto done;
-					break;
 				}
 				ret = set_link_state(ppd, devState);
 				break;
