@@ -147,11 +147,11 @@ enum mmap_types {
 #define HFI_MMAP_TOKEN_GET(field, token) \
 	(((token) >> HFI_MMAP_##field##_SHIFT) & HFI_MMAP_##field##_MASK)
 #define HFI_MMAP_TOKEN(type, ctxt, subctxt, addr)   \
-	HFI_MMAP_TOKEN_SET(MAGIC, HFI_MMAP_MAGIC) | \
+	(HFI_MMAP_TOKEN_SET(MAGIC, HFI_MMAP_MAGIC) | \
 	HFI_MMAP_TOKEN_SET(TYPE, type) | \
 	HFI_MMAP_TOKEN_SET(CTXT, ctxt) | \
 	HFI_MMAP_TOKEN_SET(SUBCTXT, subctxt) | \
-	HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & ~PAGE_MASK))
+	HFI_MMAP_TOKEN_SET(OFFSET, ((unsigned long)addr & ~PAGE_MASK)))
 
 #define EXP_TID_SET(field, value)			\
 	(((value) & EXP_TID_TID##field##_MASK) <<	\
@@ -454,9 +454,12 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	switch (type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
-		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) + /* chip pio base */
-			   (uctxt->sc->context * (1 << 16))) + /* 64K PIO space / ctxt */
-			(type == PIO_BUFS_SOP ? (WFR_TXE_PIO_SIZE / 2) : 0); /* sop? */
+		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) +
+				/* chip pio base */
+			   (uctxt->sc->context * (1 << 16))) +
+				/* 64K PIO space / ctxt */
+			(type == PIO_BUFS_SOP ?
+				(WFR_TXE_PIO_SIZE / 2) : 0); /* sop? */
 		/*
 		 * Map only the amount allocated to the context, not the
 		 * entire available context's PIO space.
@@ -465,7 +468,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 			       PAGE_SIZE);
 		flags &= ~VM_MAYREAD;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
-		// XXX (Mitko): how do we deal with write-combining?
+		/* FIXME:  how do we deal with write-combining? */
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 		mapio = 1;
 		break;
@@ -490,7 +493,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * returns and programmed it into the chip. Has that
 		 * memory been flaged as non-cached?
 		 */
-		//vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		/* vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot); */
 		mapio = 1;
 		break;
 	case RCV_HDRQ:
@@ -929,8 +932,10 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 		return -EIO;
 	}
 
-	for (ctxt = dd->first_user_ctxt;
-	     ctxt < dd->num_rcv_contexts && dd->rcd[ctxt]; ctxt++);
+	for (ctxt = dd->first_user_ctxt; ctxt < dd->num_rcv_contexts; ctxt++)
+		if (!dd->rcd[ctxt])
+			break;
+
 	if (ctxt == dd->num_rcv_contexts)
 		return -EBUSY;
 
@@ -1166,7 +1171,8 @@ static int setup_ctxt(struct file *fp)
 		ret = qib_create_rcvhdrq(dd, uctxt);
 		if (ret)
 			goto done;
-		if ((ret = qib_setup_eagerbufs(uctxt)))
+		ret = qib_setup_eagerbufs(uctxt);
+		if (ret)
 			goto done;
 		if (uctxt->subctxt_cnt && !subctxt_fp(fp)) {
 			ret = setup_subctxt(uctxt);
@@ -1264,10 +1270,12 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 					       uctxt->egrbufs.rcvtids[0].phys);
 	binfo.sdma_comp_bufbase = HFI_MMAP_TOKEN(SDMA_COMP, uctxt->ctxt,
 						 subctxt_fp(fp), 0);
-	// user regs are at
-	//   (WFR_RXE_PER_CONTEXT_USER + (ctxt * WFR_RXE_PER_CONTEXT_SIZE))
-	// or
-	//   ((char *)dd->uregbase + (ctxt * dd->ureg_align))
+	/*
+	 * user regs are at
+	 * (WFR_RXE_PER_CONTEXT_USER + (ctxt * WFR_RXE_PER_CONTEXT_SIZE))
+	 * or
+	 * ((char *)dd->uregbase + (ctxt * dd->ureg_align))
+	 */
 	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
 					    subctxt_fp(fp), 0);
 	offset = ((((uctxt->ctxt - dd->first_user_ctxt) *
@@ -1655,14 +1663,14 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 						      tid, vaddr, phys[pmapped],
 						      pages[pmapped]);
 				/*
-				 * Each RcvArray entry is programmed with one page
-				 * worth of memory. This will handle the 8K MTU
-				 * as well as anything smaller due to the fact that
-				 * both entries in the RcvTidPair are programmed
-				 * with a page.
-				 * PSM currently does not handle anything bigger
-				 * than 8K MTU, so should we even worry about 10K
-				 * here?
+				 * Each RcvArray entry is programmed with one
+				 * page * worth of memory. This will handle
+				 * the 8K MTU as well as anything smaller
+				 * due to the fact that both entries in the
+				 * RcvTidPair are programmed with a page.
+				 * PSM currently does not handle anything
+				 * bigger than 8K MTU, so should we even worry
+				 * about 10K here?
 				 */
 				/* XXX MITKO: better determine the order of the
 				 * TID */
