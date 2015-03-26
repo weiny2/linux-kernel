@@ -596,7 +596,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
 	pi->operational_vls =
 		hfi_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
-	pi->partenforce_filterraw |= (ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
+	pi->partenforce_filterraw |=
+		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
 		pi->partenforce_filterraw |= OPA_PI_MASK_PARTITION_ENFORCE_IN;
 	if (ppd->part_enforce & HFI_PART_ENFORCE_OUT)
@@ -728,9 +729,8 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 		am_port = port;
 
 	if (am_port != port || n_blocks_req == 0) {
-		pr_warn("STL Get PKey AM Invalid : "
-			"P = %d; B = 0x%x; N = 0x%x\n", am_port,
-			start_block, n_blocks_req);
+		pr_warn("STL Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
+			am_port, start_block, n_blocks_req);
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
@@ -792,8 +792,7 @@ static int set_port_states(struct qib_pportdata *ppd, struct opa_smp *smp,
 			set_link_down_reason(ppd,
 			     OPA_LINKDOWN_REASON_FM_BOUNCE, 0,
 			     OPA_LINKDOWN_REASON_FM_BOUNCE);
-		}
-		else if (lstate == 3)
+		} else if (lstate == 3)
 			lstate = HLS_DN_DISABLE;
 		else {
 			pr_warn("SubnSet(STL_PortInfo) invalid Physical state 0x%x\n",
@@ -937,7 +936,9 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	msl = pi->smsl & OPA_PI_MASK_SMSL;
 	if (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON)
-		ppd->linkinit_reason = (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON);
+		ppd->linkinit_reason =
+			(pi->partenforce_filterraw &
+			 OPA_PI_MASK_LINKINIT_REASON);
 	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_IN)
 		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
 	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT)
@@ -1024,15 +1025,15 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		else
 			mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[i/2] & 0xF);
 		if (mtu == 0xffff) {
-			printk(KERN_WARNING
-			       "SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n", mtu,
-			       (pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
+			pr_warn("SubnSet(STL_PortInfo) mtu invalid %d (0x%x)\n",
+				mtu,
+				(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		}
 		dd->vld[i].mtu = mtu;
 	}
 	/* As per STLV1 spec: VL15 must support and be configured
-         * for operation with a 2048 or larger MTU.
+	 * for operation with a 2048 or larger MTU.
 	 */
 	mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15/2] & 0xF);
 	if (mtu < 2048 || mtu == 0xffff)
@@ -1063,7 +1064,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (pi->qkey_violations == 0)
 		ibp->qkey_violations = 0;
 
-	ibp->subnet_timeout = pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
+	ibp->subnet_timeout =
+		pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
 
 	crc_enabled = be16_to_cpu(pi->port_ltp_crc_mode);
 	crc_enabled >>= 4;
