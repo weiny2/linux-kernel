@@ -47,13 +47,14 @@ static struct dentry *hfi_dbg_root;
 #define private2dd(file) (file_inode(file)->i_private)
 #define private2ppd(file) (file_inode(file)->i_private)
 
-#define DEBUGFS_SEQ_FILE(name) \
+#define DEBUGFS_SEQ_FILE_OPS(name) \
 static const struct seq_operations _##name##_seq_ops = { \
 	.start = _##name##_seq_start, \
 	.next  = _##name##_seq_next, \
 	.stop  = _##name##_seq_stop, \
 	.show  = _##name##_seq_show \
-}; \
+}
+#define DEBUGFS_SEQ_FILE_OPEN(name) \
 static int _##name##_open(struct inode *inode, struct file *s) \
 { \
 	struct seq_file *seq; \
@@ -64,14 +65,16 @@ static int _##name##_open(struct inode *inode, struct file *s) \
 	seq = s->private_data; \
 	seq->private = inode->i_private; \
 	return 0; \
-} \
+}
+
+#define DEBUGFS_FILE_OPS(name) \
 static const struct file_operations _##name##_file_ops = { \
 	.owner   = THIS_MODULE, \
 	.open    = _##name##_open, \
 	.read    = seq_read, \
 	.llseek  = seq_lseek, \
 	.release = seq_release \
-};
+}
 
 #define DEBUGFS_FILE_CREATE(name, parent, data, ops, mode)	\
 do { \
@@ -135,7 +138,9 @@ static int _opcode_stats_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-DEBUGFS_SEQ_FILE(opcode_stats)
+DEBUGFS_SEQ_FILE_OPS(opcode_stats);
+DEBUGFS_SEQ_FILE_OPEN(opcode_stats)
+DEBUGFS_FILE_OPS(opcode_stats);
 
 static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -197,7 +202,9 @@ static int _ctx_stats_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-DEBUGFS_SEQ_FILE(ctx_stats)
+DEBUGFS_SEQ_FILE_OPS(ctx_stats);
+DEBUGFS_SEQ_FILE_OPEN(ctx_stats)
+DEBUGFS_FILE_OPS(ctx_stats);
 
 static void *_qp_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -251,7 +258,9 @@ static int _qp_stats_seq_show(struct seq_file *s, void *iter_ptr)
 	return 0;
 }
 
-DEBUGFS_SEQ_FILE(qp_stats)
+DEBUGFS_SEQ_FILE_OPS(qp_stats);
+DEBUGFS_SEQ_FILE_OPEN(qp_stats)
+DEBUGFS_FILE_OPS(qp_stats);
 
 static void *_sdes_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -294,7 +303,9 @@ static int _sdes_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-DEBUGFS_SEQ_FILE(sdes)
+DEBUGFS_SEQ_FILE_OPS(sdes);
+DEBUGFS_SEQ_FILE_OPEN(sdes)
+DEBUGFS_FILE_OPS(sdes);
 
 /* read the per-device counters */
 static ssize_t dev_counters_read(struct file *file, char __user *buf,
@@ -714,7 +725,6 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 					    port_cntr_ops[i].ops.write == NULL ?
 					    S_IRUGO : S_IRUGO|S_IWUSR);
 		}
-	return;
 }
 
 void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd)
@@ -781,7 +791,9 @@ static int _driver_stats_names_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-DEBUGFS_SEQ_FILE(driver_stats_names)
+DEBUGFS_SEQ_FILE_OPS(driver_stats_names);
+DEBUGFS_SEQ_FILE_OPEN(driver_stats_names)
+DEBUGFS_FILE_OPS(driver_stats_names);
 
 static void *_driver_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
@@ -836,7 +848,9 @@ static int _driver_stats_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-DEBUGFS_SEQ_FILE(driver_stats)
+DEBUGFS_SEQ_FILE_OPS(driver_stats);
+DEBUGFS_SEQ_FILE_OPEN(driver_stats)
+DEBUGFS_FILE_OPS(driver_stats);
 
 void hfi_dbg_init(void)
 {
