@@ -1927,6 +1927,7 @@ void process_becn(struct qib_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 	if (!hrtimer_active(&cca_timer->hrtimer)) {
 		/* ccti_timer is in units of 1.024 usec */
 		unsigned long nsec = 1024 * ccti_timer;
+
 		hrtimer_start(&cca_timer->hrtimer, ns_to_ktime(nsec),
 			      HRTIMER_MODE_REL);
 	}
@@ -2152,8 +2153,8 @@ send_last:
 		 * 11.4.2 of IBTA Vol. 1).
 		 *
 		 * However, the way the SL is chosen below is consistent
-		 * with the way that IB/qib works and is trying avoid introducing
-		 * incompatabilities.
+		 * with the way that IB/qib works and is trying avoid
+		 * introducing incompatabilities.
 		 *
 		 * See also STL Vol. 1, section 9.7.6, and table 9-17.
 		 */

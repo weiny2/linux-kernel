@@ -1326,6 +1326,7 @@ bad:
 	dd = ppd->dd;
 	if (!(dd->err_info_xmit_constraint.status & STL_EI_STATUS_SMASK)) {
 		u16 slid = be16_to_cpu(hdr->lrh[3]);
+
 		dd->err_info_xmit_constraint.status |= STL_EI_STATUS_SMASK;
 		dd->err_info_xmit_constraint.slid = slid;
 		dd->err_info_xmit_constraint.pkey = pkey;

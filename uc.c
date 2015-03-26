@@ -282,6 +282,7 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		u32 rqpn, lqpn;
 		u16 rlid = be16_to_cpu(hdr->lrh[3]);
 		u8 sl, sc5;
+
 		lqpn = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
 		rqpn = qp->remote_qpn;
 
@@ -451,8 +452,8 @@ last_imm:
 		 * 11.4.2 of IBTA Vol. 1).
 		 *
 		 * However, the way the SL is chosen below is consistent
-		 * with the way that IB/qib works and is trying avoid introducing
-		 * incompatabilities.
+		 * with the way that IB/qib works and is trying avoid
+		 * introducing incompatabilities.
 		 *
 		 * See also STL Vol. 1, section 9.7.6, and table 9-17.
 		 */
