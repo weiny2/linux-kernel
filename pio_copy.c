@@ -273,8 +273,10 @@ static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
  * o result must keep unused bytes zeroed
  * o src must be u64 aligned
  */
-static inline void merge_write8(struct pio_buf *pbuf, void __iomem *dest,
-				const void *src)
+static inline void merge_write8(
+	struct pio_buf *pbuf,
+	void __iomem *dest,
+	const void *src)
 {
 	u64 new, temp;
 
@@ -321,13 +323,20 @@ static inline int carry_write8(struct pio_buf *pbuf, void __iomem *dest)
 static inline void jcopy(u8 *dest, const u8 *src, u32 n)
 {
 	switch (n) {
-	case 7: *dest++ = *src++;
-	case 6: *dest++ = *src++;
-	case 5: *dest++ = *src++;
-	case 4: *dest++ = *src++;
-	case 3: *dest++ = *src++;
-	case 2: *dest++ = *src++;
-	case 1: *dest++ = *src++;
+	case 7:
+		*dest++ = *src++;
+	case 6:
+		*dest++ = *src++;
+	case 5:
+		*dest++ = *src++;
+	case 4:
+		*dest++ = *src++;
+	case 3:
+		*dest++ = *src++;
+	case 2:
+		*dest++ = *src++;
+	case 1:
+		*dest++ = *src++;
 	};
 }
 
@@ -385,7 +394,10 @@ static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
  * Put the unused part of the next 8 bytes of src into the low bytes of
  * pbuf->carry.
  */
-static inline void merge_write8(struct pio_buf *pbuf, void *dest, const void *src)
+static inline void merge_write8(
+	struct pio_buf *pbuf,
+	void *dest,
+	const void *src)
 {
 	u32 remainder = 8 - pbuf->carry_bytes;
 

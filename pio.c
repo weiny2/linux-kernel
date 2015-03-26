@@ -174,7 +174,7 @@ static const char *sc_type_name(int index)
 int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 {
 	struct mem_pool_info mem_pool_info[NUM_SC_POOLS] = { { 0 } };
-						/* erratum 291585 - do not use PIO block 0 */
+	/* erratum 291585 - do not use PIO block 0 */
 	int total_blocks = (dd->chip_pio_mem_size / WFR_PIO_BLOCK_SIZE) - 1;
 	int total_contexts = 0;
 	int fixed_blocks;
@@ -207,7 +207,10 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		} else if (ab >= 0) {		/* absolute blocks valid */
 			ab_total += ab;
 		} else {			/* neither valid */
-			dd_dev_err(dd, "Send context memory pool %d: both the block count and centipercent are invalid\n", i);
+			dd_dev_err(
+				dd,
+				"Send context memory pool %d: both the block count and centipercent are invalid\n",
+				i);
 			return -EINVAL;
 		}
 
@@ -217,19 +220,27 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 
 	/* do not use both % and absolute blocks for different pools */
 	if (cp_total != 0 && ab_total != 0) {
-		dd_dev_err(dd, "All send context memory pools must be described as either centipercent or blocks, no mixing between pools\n");
+		dd_dev_err(
+			dd,
+			"All send context memory pools must be described as either centipercent or blocks, no mixing between pools\n");
 		return -EINVAL;
 	}
 
 	/* if any percentages are present, they must add up to 100% x 100 */
 	if (cp_total != 0 && cp_total != 10000) {
-		dd_dev_err(dd, "Send context memory pool centipercent is %d, expecting 10000\n", cp_total);
+		dd_dev_err(
+			dd,
+			"Send context memory pool centipercent is %d, expecting 10000\n",
+			cp_total);
 		return -EINVAL;
 	}
 
 	/* the absolute pool total cannot be more than the mem total */
 	if (ab_total > total_blocks) {
-		dd_dev_err(dd, "Send context memory pool absolute block count %d is larger than the memory size %d\n", ab_total, total_blocks);
+		dd_dev_err(
+			dd,
+			"Send context memory pool absolute block count %d is larger than the memory size %d\n",
+			ab_total, total_blocks);
 		return -EINVAL;
 	}
 
@@ -259,7 +270,10 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		} else if (count == SCC_PER_CPU) {
 			count = num_online_cpus();
 		} else if (count < 0) {
-			dd_dev_err(dd, "%s send context invalid count wildcard %d\n", sc_type_name(i), count);
+			dd_dev_err(
+				dd,
+				"%s send context invalid count wildcard %d\n",
+				sc_type_name(i), count);
 			return -EINVAL;
 		}
 		if (total_contexts + count > dd->chip_send_contexts)
@@ -279,7 +293,10 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		} else if (pool < NUM_SC_POOLS) {	/* valid wildcard */
 			mem_pool_info[pool].count += count;
 		} else {				/* invalid wildcard */
-			dd_dev_err(dd, "%s send context invalid pool wildcard %d\n", sc_type_name(i), size);
+			dd_dev_err(
+				dd,
+				"%s send context invalid pool wildcard %d\n",
+				sc_type_name(i), size);
 			return -EINVAL;
 		}
 
@@ -287,14 +304,20 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		dd->sc_sizes[i].size = size;
 	}
 	if (fixed_blocks > total_blocks) {
-		dd_dev_err(dd, "Send context fixed block count, %u, larger than total block count %u\n", fixed_blocks, total_blocks);
+		dd_dev_err(
+			dd,
+			"Send context fixed block count, %u, larger than total block count %u\n",
+			fixed_blocks, total_blocks);
 		return -EINVAL;
 	}
 
 	/* step 3: calculate the blocks in the pools, and pool context sizes */
 	pool_blocks = total_blocks - fixed_blocks;
 	if (ab_total > pool_blocks) {
-		dd_dev_err(dd, "Send context fixed pool sizes, %u, larger than pool block count %u\n", ab_total, pool_blocks);
+		dd_dev_err(
+			dd,
+			"Send context fixed pool sizes, %u, larger than pool block count %u\n",
+			ab_total, pool_blocks);
 		return -EINVAL;
 	}
 	/* subtract off the fixed pool blocks */
@@ -308,13 +331,19 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 			pi->blocks = (pool_blocks * pi->centipercent) / 10000;
 
 		if (pi->blocks == 0 && pi->count != 0) {
-			dd_dev_err(dd, "Send context memory pool %d has %u contexts, but no blocks\n", i, pi->count);
+			dd_dev_err(
+				dd,
+				"Send context memory pool %d has %u contexts, but no blocks\n",
+				i, pi->count);
 			return -EINVAL;
 		}
 		if (pi->count == 0) {
 			/* warn about wasted blocks */
 			if (pi->blocks != 0)
-				dd_dev_err(dd, "Send context memory pool %d has %u blocks, but zero contexts\n", i, pi->blocks);
+				dd_dev_err(
+					dd,
+					"Send context memory pool %d has %u blocks, but zero contexts\n",
+					i, pi->blocks);
 			pi->size = 0;
 		} else {
 			pi->size = pi->blocks / pi->count;
@@ -356,7 +385,10 @@ int init_send_contexts(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	dd->send_contexts = kzalloc(sizeof(struct send_context_info) * dd->num_send_contexts, GFP_KERNEL);
+	dd->send_contexts = kcalloc(
+			dd->num_send_contexts,
+			sizeof(struct send_context_info),
+			GFP_KERNEL);
 	if (!dd->send_contexts) {
 		dd_dev_err(dd, "Unable to allocate send context array\n");
 		free_credit_return(dd);
@@ -382,8 +414,11 @@ int init_send_contexts(struct hfi_devdata *dd)
 			sci->base = base;
 			sci->credits = scs->size;
 
-			reg = ((sci->credits & WFR_SEND_CTXT_CTRL_CTXT_DEPTH_MASK) << WFR_SEND_CTXT_CTRL_CTXT_DEPTH_SHIFT)
-				| ((sci->base & WFR_SEND_CTXT_CTRL_CTXT_BASE_MASK) << WFR_SEND_CTXT_CTRL_CTXT_BASE_SHIFT);
+			reg = ((sci->credits &
+					WFR_SEND_CTXT_CTRL_CTXT_DEPTH_MASK) <<
+					WFR_SEND_CTXT_CTRL_CTXT_DEPTH_SHIFT) |
+			       ((sci->base & WFR_SEND_CTXT_CTRL_CTXT_BASE_MASK)
+					<< WFR_SEND_CTXT_CTRL_CTXT_BASE_SHIFT);
 			write_kctxt_csr(dd, context, WFR_SEND_CTXT_CTRL, reg);
 
 			context++;
@@ -395,6 +430,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		u16 ctxt_type = dd->send_contexts[i].type;
+
 		reg =  hfi_pkt_default_send_ctxt_mask(dd, ctxt_type);
 		/* per context type checks */
 		if (ctxt_type == SC_USER) {
@@ -1078,7 +1114,7 @@ void sc_stop(struct send_context *sc, int flag)
 }
 
 #define BLOCK_DWORDS (WFR_PIO_BLOCK_SIZE/sizeof(u32))
-#define dwords_to_blocks(x) DIV_ROUND_UP(x,BLOCK_DWORDS)
+#define dwords_to_blocks(x) DIV_ROUND_UP(x, BLOCK_DWORDS)
 
 /*
  * The send context buffer "allocator".
@@ -1117,7 +1153,9 @@ retry:
 		}
 		/* copy from receiver cache line and recalculate */
 		sc->alloc_free = ACCESS_ONCE(sc->free);
-		avail = (unsigned long)sc->credits - (sc->fill - sc->alloc_free);
+		avail =
+			(unsigned long)sc->credits -
+			(sc->fill - sc->alloc_free);
 		if (blocks > avail) {
 			/* still no room, actively update */
 			spin_unlock_irqrestore(&sc->alloc_lock, flags);
@@ -1147,18 +1185,12 @@ retry:
 	 * cb and arg will not be looked at for a "while".  Put them
 	 * on this side of the memory barrier anyway.
 	 */
-//FIXME: I have gotten myself confused again.  Why do I need the mb?
-// If this is a cache coherent system these writes should be visible
-// once I write them. The only issue is to prevent the compiler from
-// moving the writes later than the head update.
 	pbuf = &sc->sr[head].pbuf;
 	pbuf->sent_at = sc->fill;
 	pbuf->cb = cb;
 	pbuf->arg = arg;
 	pbuf->sc = sc;	/* could be filled in at sc->sr init time */
 	/* make sure this is in memory before updating the head */
-	//FIXME: is this the right barrier call?
-	mb();
 
 	/* calculate next head index, do not store */
 	next = head + 1;
@@ -1166,6 +1198,7 @@ retry:
 		next = 0;
 	/* update the head - must be last! - the releaser can look at fields
 	   in pbuf once we move the head */
+	smp_wmb();
 	sc->sr_head = next;
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
@@ -1453,29 +1486,34 @@ int init_credit_return(struct hfi_devdata *dd)
 		}
 	}
 
-	dd->cr_base = kzalloc(sizeof(struct credit_return_base) * num_numa, GFP_KERNEL);
+	dd->cr_base = kcalloc(
+		num_numa,
+		sizeof(struct credit_return_base),
+		GFP_KERNEL);
 	if (!dd->cr_base) {
 		dd_dev_err(dd, "Unable to allocate credit return base\n");
 		ret = -ENOMEM;
 		goto done;
 	}
 	for (i = 0; i < num_numa; i++) {
-		int bytes = dd->num_send_contexts*sizeof(struct credit_return);
+		int bytes =
+			dd->num_send_contexts * sizeof(struct credit_return);
 
 		set_dev_node(&dd->pcidev->dev, i);
-		dd->cr_base[i].va = dma_alloc_coherent(
+		dd->cr_base[i].va = dma_zalloc_coherent(
 					&dd->pcidev->dev,
 					bytes,
 					&dd->cr_base[i].pa,
 					GFP_KERNEL);
 		if (dd->cr_base[i].va == NULL) {
 			set_dev_node(&dd->pcidev->dev, dd->node);
-			dd_dev_err(dd, "Unable to allocate credit return "
-				"DMA range for NUMA %d\n", i);
+			dd_dev_err(
+				dd,
+				"Unable to allocate credit return DMA range for NUMA %d\n",
+				i);
 			ret = -ENOMEM;
 			goto done;
 		}
-		memset(dd->cr_base[i].va, 0, bytes);
 	}
 	set_dev_node(&dd->pcidev->dev, dd->node);
 

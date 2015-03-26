@@ -103,7 +103,8 @@ struct send_context {
 	spinlock_t release_lock ____cacheline_aligned_in_smp;
 	unsigned long free;		/* official free count */
 	u32 sr_tail;			/* shadow ring tail */
-	struct list_head piowait  ____cacheline_aligned_in_smp;       /* list for PIO waiters */
+	/* list for PIO waiters */
+	struct list_head piowait  ____cacheline_aligned_in_smp;
 	spinlock_t credit_ctrl_lock ____cacheline_aligned_in_smp;
 	u64 credit_ctrl;		/* cache for credit control */
 	u32 credit_intr_count;		/* count of credit intr users */
