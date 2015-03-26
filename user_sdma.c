@@ -668,11 +668,12 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	 */
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u16 ntids = iovec[idx].iov_len / sizeof(*req->tids);
+
 		if (!ntids || ntids > WFR_MAX_TID_PAIR_ENTRIES) {
 			ret = -EINVAL;
 			goto free_req;
 		}
-		req->tids = kmalloc(ntids * sizeof(*req->tids), GFP_KERNEL);
+		req->tids = kcalloc(ntids, sizeof(*req->tids), GFP_KERNEL);
 		if (!req->tids) {
 			ret = -ENOMEM;
 			goto free_req;
@@ -1379,6 +1380,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 		       cpu_to_le16(req->koffset >> 16));
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u16 val;
+
 		tidval = req->tids[req->tididx];
 
 		/*
@@ -1473,7 +1475,6 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 	}
 	if (!atomic_read(&pq->n_reqs))
 		xchg(&pq->state, SDMA_PKT_Q_INACTIVE);
-	return;
 }
 
 static void user_sdma_free_request(struct user_sdma_request *req)
@@ -1504,7 +1505,6 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 		put_task_struct(req->user_proc);
 	kfree(req->tids);
 	clear_bit(SDMA_REQ_IN_USE, &req->flags);
-	return;
 }
 
 static _hfi_inline void set_comp_state(struct user_sdma_request *req,

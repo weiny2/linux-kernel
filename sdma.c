@@ -91,6 +91,12 @@ MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 #define SDMA_SENDCTRL_OP_HALT      (1U << 2)
 #define SDMA_SENDCTRL_OP_CLEANUP   (1U << 3)
 
+/* handle long defines */
+#define SDMA_EGRESS_PACKET_OCCUPANCY_SMASK \
+WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SMASK
+#define SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT \
+WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT
+
 static const char * const sdma_state_names[] = {
 	[sdma_state_s00_hw_down]                = "s00_HwDown",
 	[sdma_state_s10_hw_start_up_halt_wait]  = "s10_HwStartUpHaltWait",
@@ -288,8 +294,8 @@ static void sdma_wait_for_packet_egress(struct sdma_engine *sde,
 	while (1) {
 		u64 reg = read_csr(dd, off + WFR_SEND_EGRESS_SEND_DMA_STATUS);
 
-		reg &= WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SMASK;
-		reg >>= WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT;
+		reg &= SDMA_EGRESS_PACKET_OCCUPANCY_SMASK;
+		reg >>= SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT;
 		if (reg == 0)
 			break;
 		if (lcnt++ > 100) {
