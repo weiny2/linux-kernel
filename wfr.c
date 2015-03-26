@@ -58,7 +58,7 @@ uint num_vls = 8;
 module_param(num_vls, uint, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 
-/* 
+/*
  * Default time to aggregate two 10K packets from the idle state
  * (timer not running). The timer starts at the end of the first packet,
  * so only the time for one 10K packet and header plus a bit extra is needed.
@@ -340,108 +340,108 @@ static struct flag_table cce_err_status_flags[] = {
  */
 static struct flag_table pio_err_status_flags[] = {
 /* 0*/	FLAG_ENTRY("PioWriteBadCtxt",
-		SEC_WRITE_DROPPED,
-		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_BAD_CTXT_ERR_SMASK),
+	SEC_WRITE_DROPPED,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_BAD_CTXT_ERR_SMASK),
 /* 1*/	FLAG_ENTRY("PioWriteAddrParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_ADDR_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_ADDR_PARITY_ERR_SMASK),
 /* 2*/	FLAG_ENTRY("PioCsrParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_CSR_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_CSR_PARITY_ERR_SMASK),
 /* 3*/	FLAG_ENTRY("PioSbMemFifo0",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO0_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO0_ERR_SMASK),
 /* 4*/	FLAG_ENTRY("PioSbMemFifo1",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO1_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO1_ERR_SMASK),
 /* 5*/	FLAG_ENTRY("PioPccFifoParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PCC_FIFO_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PCC_FIFO_PARITY_ERR_SMASK),
 /* 6*/	FLAG_ENTRY("PioPecFifoParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PEC_FIFO_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PEC_FIFO_PARITY_ERR_SMASK),
 /* 7*/	FLAG_ENTRY("PioSbrdctlCrrelParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTL_CRREL_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTL_CRREL_PARITY_ERR_SMASK),
 /* 8*/	FLAG_ENTRY("PioSbrdctrlCrrelFifoParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTRL_CRREL_FIFO_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTRL_CRREL_FIFO_PARITY_ERR_SMASK),
 /* 9*/	FLAG_ENTRY("PioPktEvictFifoParityErr",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_FIFO_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_FIFO_PARITY_ERR_SMASK),
 /*10*/	FLAG_ENTRY("PioSmPktResetParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_SM_PKT_RESET_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SM_PKT_RESET_PARITY_ERR_SMASK),
 /*11*/	FLAG_ENTRY("PioVlLenMemBank0Unc",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_UNC_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_UNC_ERR_SMASK),
 /*12*/	FLAG_ENTRY("PioVlLenMemBank1Unc",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_UNC_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_UNC_ERR_SMASK),
 /*13*/	FLAG_ENTRY("PioVlLenMemBank0Cor",
-		0,
-		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_COR_ERR_SMASK),
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_COR_ERR_SMASK),
 /*14*/	FLAG_ENTRY("PioVlLenMemBank1Cor",
-		0,
-		WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_COR_ERR_SMASK),
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_COR_ERR_SMASK),
 /*15*/	FLAG_ENTRY("PioCreditRetFifoParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_CREDIT_RET_FIFO_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_CREDIT_RET_FIFO_PARITY_ERR_SMASK),
 /*16*/	FLAG_ENTRY("PioPpmcPblFifo",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_PBL_FIFO_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_PBL_FIFO_ERR_SMASK),
 /*17*/	FLAG_ENTRY("PioInitSmIn",
-		0,
-		WFR_SEND_PIO_ERR_STATUS_PIO_INIT_SM_IN_ERR_SMASK),
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_INIT_SM_IN_ERR_SMASK),
 /*18*/	FLAG_ENTRY("PioPktEvictSmOrArbSm",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_SM_OR_ARB_SM_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_SM_OR_ARB_SM_ERR_SMASK),
 /*19*/	FLAG_ENTRY("PioHostAddrMemUnc",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_UNC_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_UNC_ERR_SMASK),
 /*20*/	FLAG_ENTRY("PioHostAddrMemCor",
-		0,
-		WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_COR_ERR_SMASK),
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_COR_ERR_SMASK),
 /*21*/	FLAG_ENTRY("PioWriteDataParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK),
 /*22*/	FLAG_ENTRY("PioStateMachine",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK),
 /*23*/	FLAG_ENTRY("PioWriteQwValidParity",
-		SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK),
+	SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK),
 /*24*/	FLAG_ENTRY("PioBlockQwCountParity",
-		SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_PARITY_ERR_SMASK),
+	SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_PARITY_ERR_SMASK),
 /*25*/	FLAG_ENTRY("PioVlfVlLenParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_VLF_VL_LEN_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VLF_VL_LEN_PARITY_ERR_SMASK),
 /*26*/	FLAG_ENTRY("PioVlfSopParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_VLF_SOP_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VLF_SOP_PARITY_ERR_SMASK),
 /*27*/	FLAG_ENTRY("PioVlFifoParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_VL_FIFO_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_FIFO_PARITY_ERR_SMASK),
 /*28*/	FLAG_ENTRY("PioPpmcBqcMemParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_BQC_MEM_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_BQC_MEM_PARITY_ERR_SMASK),
 /*29*/	FLAG_ENTRY("PioPpmcSopLen",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_SOP_LEN_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_SOP_LEN_ERR_SMASK),
 /*30-31 reserved*/
 /*32*/	FLAG_ENTRY("PioCurrentFreeCntParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_CURRENT_FREE_CNT_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_CURRENT_FREE_CNT_PARITY_ERR_SMASK),
 /*33*/	FLAG_ENTRY("PioLastReturnedCntParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_LAST_RETURNED_CNT_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_LAST_RETURNED_CNT_PARITY_ERR_SMASK),
 /*34*/	FLAG_ENTRY("PioPccSopHeadParity",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PCC_SOP_HEAD_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PCC_SOP_HEAD_PARITY_ERR_SMASK),
 /*35*/	FLAG_ENTRY("PioPecSopHeadParityErr",
-		SEC_SPC_FREEZE,
-		WFR_SEND_PIO_ERR_STATUS_PIO_PEC_SOP_HEAD_PARITY_ERR_SMASK),
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PEC_SOP_HEAD_PARITY_ERR_SMASK),
 /*36-63 reserved*/
 };
 
@@ -1291,28 +1291,28 @@ struct cntr_entry {
 
 /* 32bit RXE */
 #define RXE32_PORT_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
 	  0, flags | CNTR_32BIT, \
 	  port_access_u32_csr)
 
 #define RXE32_DEV_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
 	  0, flags | CNTR_32BIT, \
 	  dev_access_u32_csr)
 
 /* 64bit RXE */
 #define RXE64_PORT_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
-	  0, flags , \
+	  0, flags, \
 	  port_access_u64_csr)
 
 #define RXE64_DEV_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
-	  0, flags \
+	  0, flags, \
 	  dev_access_u64_csr)
 
 #define OVERFLOW_ELEM(ctx) \
@@ -1322,20 +1322,20 @@ CNTR_ELEM(#name , \
 
 /* 32bit TXE */
 #define TXE32_PORT_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_SEND_COUNTER_ARRAY32), \
 	  0, flags | CNTR_32BIT, \
 	  port_access_u32_csr)
 
 /* 64bit TXE */
 #define TXE64_PORT_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_SEND_COUNTER_ARRAY64), \
 	  0, flags, \
 	  port_access_u64_csr)
 
 # define TX64_DEV_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name ,\
+CNTR_ELEM(#name,\
 	  counter * 8 + WFR_SEND_COUNTER_ARRAY64, \
 	  0, \
 	  flags, \
@@ -1343,27 +1343,27 @@ CNTR_ELEM(#name ,\
 
 /* CCE */
 #define CCE_PERF_DEV_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_CCE_COUNTER_ARRAY32), \
-	  0, flags | CNTR_32BIT , \
+	  0, flags | CNTR_32BIT, \
 	  dev_access_u32_csr)
 
 #define CCE_INT_DEV_CNTR_ELEM(name, counter, flags) \
-CNTR_ELEM(#name , \
+CNTR_ELEM(#name, \
 	  (counter * 8 + WFR_CCE_INT_COUNTER_ARRAY32), \
-	  0, flags | CNTR_32BIT , \
+	  0, flags | CNTR_32BIT, \
 	  dev_access_u32_csr)
 
 /* DC */
 #define DC_PERF_CNTR(name, counter, flags) \
-CNTR_ELEM(#name ,\
+CNTR_ELEM(#name, \
 	  counter, \
 	  0, \
 	  flags, \
 	  dev_access_u64_csr)
 
 #define DC_PERF_CNTR_LCB(name, counter, flags) \
-CNTR_ELEM(#name ,\
+CNTR_ELEM(#name, \
 	  counter, \
 	  0, \
 	  flags, \
@@ -1371,7 +1371,7 @@ CNTR_ELEM(#name ,\
 
 /* ibp counters */
 #define SW_IBP_CNTR(name, cntr) \
-CNTR_ELEM(#name ,\
+CNTR_ELEM(#name, \
 	  0, \
 	  0, \
 	  CNTR_SYNTH, \
@@ -1461,10 +1461,9 @@ static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
 		reg = read_write_csr(dd, entry->csr, mode, data);
 		release_lcb_access(dd, 0);
 		return reg;
-	} else {
-		dd_dev_err(dd, "Could not aquire LCB");
-		return 0;
 	}
+	dd_dev_err(dd, "Could not aquire LCB");
+	return 0;
 }
 
 /* Port Access */
@@ -1979,7 +1978,7 @@ static char *flag_string(char *buf, int buf_len, u64 flags,
 }
 
 /* first 8 CCE error interrupt source names */
-static const char *cce_misc_names[] = {
+static const char * const cce_misc_names[] = {
 	"CceErrInt",		/* 0 */
 	"RxeErrInt",		/* 1 */
 	"MiscErrInt",		/* 2 */
@@ -1998,7 +1997,10 @@ static char *is_misc_err_name(char *buf, size_t bsize, unsigned int source)
 	if (source < ARRAY_SIZE(cce_misc_names))
 		strncpy(buf, cce_misc_names[source], bsize);
 	else
-		snprintf(buf, bsize, "Reserved%u", source + WFR_IS_GENERAL_ERR_START);
+		snprintf(buf,
+			bsize,
+			"Reserved%u",
+			source + WFR_IS_GENERAL_ERR_START);
 
 	return buf;
 }
@@ -2021,7 +2023,7 @@ static char *is_sendctxt_err_name(char *buf, size_t bsize, unsigned int source)
 	return buf;
 }
 
-static const char *various_names[] = {
+static const char * const various_names[] = {
 	"PcbInt",
 	"GpioAssertInt",
 	"Qsfp1Int",
@@ -2046,7 +2048,7 @@ static char *is_various_name(char *buf, size_t bsize, unsigned int source)
  */
 static char *is_dc_name(char *buf, size_t bsize, unsigned int source)
 {
-	static const char *dc_int_names[] = {
+	static const char * const dc_int_names[] = {
 		"common",
 		"lcb",
 		"8051",
@@ -2060,7 +2062,7 @@ static char *is_dc_name(char *buf, size_t bsize, unsigned int source)
 	return buf;
 }
 
-static const char *sdma_int_names[] = {
+static const char * const sdma_int_names[] = {
 	"SDmaInt",
 	"SdmaIdleInt",
 	"SdmaProgressInt",
@@ -3017,9 +3019,9 @@ void handle_sma_message(struct work_struct *work)
 			ppd->neighbor_normal = 1;
 			ret = set_link_state(ppd, HLS_UP_ACTIVE);
 			if (ret)
-				dd_dev_err(dd,
-					"%s: received Active SMA idle"
-					"message, couldn't set link to Active\n",
+				dd_dev_err(
+					dd,
+					"%s: received Active SMA idlemessage, couldn't set link to Active\n",
 					__func__);
 		}
 		break;
@@ -3528,7 +3530,13 @@ void handle_verify_cap(struct work_struct *work)
 	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
 	 */
 	read_vc_remote_phy(dd, &power_management, &continious);
-	read_vc_remote_fabric(dd, &vau, &z, &vcu, &vl15buf, &partner_supported_crc);
+	read_vc_remote_fabric(
+		dd,
+		&vau,
+		&z,
+		&vcu,
+		&vl15buf,
+		&partner_supported_crc);
 	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
 	read_remote_device_id(dd, &device_id, &device_rev);
 	/*
@@ -3544,7 +3552,11 @@ void handle_verify_cap(struct work_struct *work)
 		(int)power_management, (int)continious);
 	dd_dev_info(dd,
 		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
-		(int)vau, (int)z, (int)vcu, (int)vl15buf, (int)partner_supported_crc);
+		(int)vau,
+		(int)z,
+		(int)vcu,
+		(int)vl15buf,
+		(int)partner_supported_crc);
 	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
 		(u32)remote_tx_rate, (u32)link_widths);
 	dd_dev_info(dd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
@@ -3971,13 +3983,58 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 }
 
+static const char * const fm_config_txt[] = {
+[0] =
+	"BadHeadDist: Distance violation between two head flits",
+[1] =
+	"BadTailDist: Distance violation between two tail flits",
+[2] =
+	"BadCtrlDist: Dstance violation between two credit control flits",
+[3] =
+	"BadCrdAck: Credits return for unsupported VL",
+[4] =
+	"UnsupportedVLMarker: Received VL Marker",
+[5] =
+	"BadPreempt: Exceeded the preemtion nesting level",
+[6] =
+	"BadControlFlit: Received unsupport control flit",
+/* no 7 */
+[8] =
+	"UnsupportedVLMarker: Received VL Marker for unconfigured or disabled VL",
+};
+
+static const char * const port_rcv_txt[] = {
+[1] =
+	"BadPktLen: Illegal PktLen",
+[2] =
+	"PktLenTooLong: Packet longer than PktLen",
+[3] =
+	"PktLenTooShort: Packet shorterthan PktLen",
+[4] =
+	"BadSLID: Illegal SLID (0, using multicast as SLID, does not include security validation of SLID)",
+[5] =
+	"BadDLID: Illegal DLID (0, doesn't match HFI)",
+[6] =
+	"BadL2: Illegal L2 opcode",
+[7] =
+	"BadSC: Unsupported SC",
+[9] =
+	"BadRC: Illegal RC",
+[11] =
+	"PreemptError: Preempting with same VL",
+[12] =
+	"PreemptVL15: Preempting a VL15 packet",
+[13] =
+	"BadVLMarker: VL Marker for an unpreempted VL",
+};
+
 #define OPA_LDR_FMCONFIG_OFFSET 16
 #define OPA_LDR_PORTRCV_OFFSET 0
 /* TODO */
 static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	u64 info, hdr0, hdr1;
-	char *extra;
+	const char *extra;
 	char buf[96];
 	struct qib_pportdata *ppd = dd->pport;
 	u8 lcl_reason = 0;
@@ -4005,6 +4062,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 	if (reg & DCC_ERR_FLG_FMCONFIG_ERR_SMASK) {
 		u8 reason_valid = 1;
+
 		info = read_csr(dd, DCC_ERR_INFO_FMCONFIG);
 		if (!(dd->err_info_fmconfig & STL_EI_STATUS_SMASK)) {
 			dd->err_info_fmconfig = info & STL_EI_CODE_SMASK;
@@ -4013,34 +4071,16 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		}
 		switch (info) {
 		case 0:
-			extra = "BadHeadDist: Distance violation between "
-				"two head flits";
-			break;
 		case 1:
-			extra = "BadTailDist: Distance violation between "
-				"two tail flits";
-			break;
 		case 2:
-			extra = "BadCtrlDist: Dstance violation between "
-				"two credit control flits";
-			break;
 		case 3:
-			extra = "BadCrdAck: Credits return for unsupported VL";
-			break;
 		case 4:
-			extra = "UnsupportedVLMarker: Received VL Marker";
-			break;
 		case 5:
-			extra = "BadPreempt: Exceeded the preemtion nesting "
-				"level";
-			break;
 		case 6:
-			extra = "BadControlFlit: Received unsupport control "
-				"flit";
+			extra = fm_config_txt[info];
 			break;
 		case 8:
-			extra = "UnsupportedVLMarker: Received VL Marker for "
-			  " unconfigured or disabled VL";
+			extra = fm_config_txt[info];
 			if (!do_bounce && ppd->port_error_action &
 			    OPA_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER) {
 				do_bounce = 1;
@@ -4051,7 +4091,6 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 				lcl_reason =
 				  OPA_LINKDOWN_REASON_UNSUPPORTED_VL_MARKER;
 			}
-
 			break;
 		default:
 			reason_valid = 0;
@@ -4068,8 +4107,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		}
 
 		/* just report this */
-		dd_dev_info(dd, "DCC Error: fmconfig error: %s\n",
-			extra);
+		dd_dev_info(dd, "DCC Error: fmconfig error: %s\n", extra);
 
 		/* strip so we don't see in the generic unhandled */
 		reg &= ~DCC_ERR_FLG_FMCONFIG_ERR_SMASK;
@@ -4077,6 +4115,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 	if (reg & DCC_ERR_FLG_RCVPORT_ERR_SMASK) {
 		u8 reason_valid = 1;
+
 		info = read_csr(dd, DCC_ERR_INFO_PORTRCV);
 		hdr0 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR0);
 		hdr1 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR1);
@@ -4094,39 +4133,17 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		}
 		switch (info & 0xf) {
 		case 1:
-			extra = "BadPktLen: Illegal PktLen";
-			break;
 		case 2:
-			extra = "PktLenTooLong: Packet longer than PktLen";
-			break;
 		case 3:
-			extra = "PktLenTooShort: Packet shorterthan PktLen";
-			break;
 		case 4:
-			extra = "BadSLID: Illegal SLID (0, using multicast "
-				"as SLID, does not include security "
-				"validation of SLID)";
-			break;
 		case 5:
-			extra = "BadDLID: Illegal DLID (0, doesn't match HFI)";
-			break;
 		case 6:
-			extra = "BadL2: Illegal L2 opcode";
-			break;
 		case 7:
-			extra = "BadSC: Unsupported SC";
-			break;
 		case 9:
-			extra = "BadRC: Illegal RC";
-			break;
 		case 11:
-			extra = "PreemptError: Preempting with same VL";
-			break;
 		case 12:
-			extra = "PreemptVL15: Preempting a VL15 packet";
-			break;
 		case 13:
-			extra = "BadVLMarker: VL Marker for an unpreempted VL";
+			extra = port_rcv_txt[info & 0xf];
 			break;
 		default:
 			reason_valid = 0;
@@ -4214,7 +4231,10 @@ static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 static void is_send_credit_int(struct hfi_devdata *dd, unsigned int source)
 {
 	if (unlikely(source >= dd->num_send_contexts)) {
-		dd_dev_err(dd, "unexpected out of range send context credit return interrupt %u\n", source);
+		dd_dev_err(
+			dd,
+			"unexpected out of range send context credit return interrupt %u\n",
+			source);
 		return;
 	}
 	sc_release_update(dd->send_contexts[source].sc);
@@ -4521,7 +4541,10 @@ static u32 read_logical_state(struct hfi_devdata *dd)
 		/* return the cached state back */
 		switch (dd->pport[0].lstate) {
 		default:
-			dd_dev_err(dd, "Unknown ib logical state 0x%x, reporting WFR_LSTATE_DOWN\n", dd->pport[9].lstate);
+			dd_dev_err(
+				dd,
+				"Unknown ib logical state 0x%x, reporting WFR_LSTATE_DOWN\n",
+				dd->pport[9].lstate);
 			/* fall through */
 		case IB_PORT_DOWN:   return WFR_LSTATE_DOWN;
 		case IB_PORT_INIT:   return WFR_LSTATE_INIT;
@@ -4550,12 +4573,26 @@ static void set_logical_state(struct hfi_devdata *dd, u32 chip_lstate)
 	write_csr(dd, DCC_CFG_PORT_CONFIG, reg);
 }
 
-static void __print_current_states(struct hfi_devdata *dd, const char *func, const char *extra, u32 physical_state, u32 logical_state)
+static void __print_current_states(
+	struct hfi_devdata *dd,
+	const char *func,
+	const char *extra,
+	u32 physical_state,
+	u32 logical_state)
 {
-	dd_dev_info(dd, "%s: %s: current physical state 0x%x, logical state 0x%x\n", func, extra, physical_state, logical_state);
+	dd_dev_info(
+		dd,
+		"%s: %s: current physical state 0x%x, logical state 0x%x\n",
+		func,
+		extra,
+		physical_state,
+		logical_state);
 }
 
-static void print_current_states(struct hfi_devdata *dd, const char *func, const char *extra)
+static void print_current_states(
+	struct hfi_devdata *dd,
+	const char *func,
+	const char *extra)
 {
 	__print_current_states(dd, func, extra, read_physical_state(dd),
 		read_logical_state(dd));
@@ -4564,9 +4601,13 @@ static void print_current_states(struct hfi_devdata *dd, const char *func, const
 /*
  * Returns:
  *	< 0 = Linux error, not able to get access
- * 	> 0 = 8051 command RETURN_CODE
+ *	> 0 = 8051 command RETURN_CODE
  */
-static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data, u64 *out_data)
+static int do_8051_command(
+	struct hfi_devdata *dd,
+	u32 type,
+	u64 in_data,
+	u64 *out_data)
 {
 	u64 reg, completed;
 	int return_code;
@@ -4929,7 +4970,10 @@ void check_fabric_firmware_versions(struct hfi_devdata *dd)
 	for (lane = 0; lane < 4; lane++) {
 		ret = read_8051_config(dd, SPICO_FW_VERSION, lane, &frame);
 		if (ret != WFR_HCMD_SUCCESS) {
-			dd_dev_err(dd, "Unable to read lane %d firmware details\n", lane);
+			dd_dev_err(
+				dd,
+				"Unable to read lane %d firmware details\n",
+				lane);
 			continue;
 		}
 		version = (frame >> SPICO_ROM_VERSION_SHIFT)
@@ -5463,7 +5507,7 @@ static int reset(struct hfi_devdata *dd)
 }
 
 int trace_tid;	/* TODO: hook this up with tracing */
-static const char *pt_names[] = {
+static const char * const pt_names[] = {
 	"expected",
 	"eager",
 	"invalid"
@@ -5550,7 +5594,7 @@ static struct qib_message_header *get_msgheader(
 		(rhf_addr - dd->rhf_offset + offset);
 }
 
-static const char *ib_cfg_name_strings[] = {
+static const char * const ib_cfg_name_strings[] = {
 	"QIB_IB_CFG_LIDLMC",
 	"QIB_IB_CFG_LWID_DG_ENB",
 	"QIB_IB_CFG_LWID_ENB",
@@ -5630,7 +5674,11 @@ static int get_ib_cfg(struct qib_pportdata *ppd, int which)
 	default:
 unimplemented:
 		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-			dd_dev_info(dd, "%s: which %s: not implemented\n", __func__, ib_cfg_name(which));
+			dd_dev_info(
+				dd,
+				"%s: which %s: not implemented\n",
+				__func__,
+				ib_cfg_name(which));
 		break;
 	}
 
@@ -6005,7 +6053,8 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		} else {
 			/* clear old transient LINKINIT_REASON code */
 			if (ppd->linkinit_reason >= OPA_LINKINIT_REASON_CLEAR)
-				ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
+				ppd->linkinit_reason =
+					OPA_LINKINIT_REASON_LINKUP;
 
 			handle_linkup_change(dd, 1);
 		}
@@ -6258,14 +6307,14 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 	case QIB_IB_CFG_SPD_ENB: /* allowed Link speeds */
 		ppd->link_speed_enabled = val & ppd->link_speed_supported;
 		break;
-        case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
+	case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
 		/*
 		 * WFR does not follow IB specs, save this value
 		 * so we can report it, if asked.
 		 */
 		ppd->overrun_threshold = val;
 		break;
-        case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
+	case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
 		/*
 		 * WFR does not follow IB specs, save this value
 		 * so we can report it, if asked.
@@ -6346,7 +6395,10 @@ static int set_vl_weights(struct qib_pportdata *ppd, u32 target,
 		ret = stop_drain_data_vls(dd);
 
 	if (ret) {
-		dd_dev_err(dd, "%s: cannot stop/drain VLs - refusing to change VL arbitration weights\n", __func__);
+		dd_dev_err(
+			dd,
+			"%s: cannot stop/drain VLs - refusing to change VL arbitration weights\n",
+			__func__);
 		goto err;
 	}
 
@@ -6517,7 +6569,11 @@ static void set_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 }
 
 #if 0
-static void print_bc(struct hfi_devdata *dd, const char *func, struct buffer_control *bc, const char *what)
+static void print_bc(
+	struct hfi_devdata *dd,
+	const char *func,
+	struct buffer_control *bc,
+	const char *what)
 {
 	dd_dev_info(dd, "%s: buffer control \"%s\" (hex values)\n", func, what);
 	dd_dev_info(dd, "%s:   overall_shared_limit %x\n", func,
@@ -6691,15 +6747,15 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	u16 cur_total;
 	u32 new_total = 0;
 	const u64 all_mask =
-		WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL1_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL2_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL3_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL4_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL5_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL6_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL7_RETURN_CREDIT_STATUS_SMASK
-		| WFR_SEND_CM_CREDIT_USED_STATUS_VL15_RETURN_CREDIT_STATUS_SMASK;
+	WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL1_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL2_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL3_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL4_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL5_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL6_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL7_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL15_RETURN_CREDIT_STATUS_SMASK;
 
 #define valid_vl(idx) ((idx) < WFR_TXE_NUM_DATA_VL || (idx) == 15)
 #define NUM_USABLE_VLS 16	/* look at VL15 and less */
@@ -6731,7 +6787,8 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	memset(lowering_dedicated, 0, sizeof(changing));
 	/* NOTE: Assumes that the individual VL bits are adjacent and in
 	   increasing order */
-	stat_mask = WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK;
+	stat_mask =
+		WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK;
 	changing_mask = 0;
 	ld_mask = 0;
 	change_count = 0;
@@ -7161,7 +7218,13 @@ static u32 encoded_size(u32 size)
 }
 
 /* TODO: This should go away once everythig is implemented */
-static void rcvctrl_unimplemented(struct hfi_devdata *dd, const char *func, int ctxt, unsigned int op, int *header_printed, const char *what)
+static void rcvctrl_unimplemented(
+	struct hfi_devdata *dd,
+	const char *func,
+	int ctxt,
+	unsigned int op,
+	int *header_printed,
+	const char *what)
 {
 	if (*header_printed == 0) {
 		*header_printed = 1;
@@ -7194,9 +7257,21 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	dd_dev_info(dd, "ctxt %d op 0x%x", ctxt, op);
 	// FIXME: QIB_RCVCTRL_BP_ENB/DIS
 	if (op & QIB_RCVCTRL_BP_ENB)
-		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_BP_ENB");
+		rcvctrl_unimplemented(
+			dd,
+			__func__,
+			ctxt,
+			op,
+			&hp,
+			"RCVCTRL_BP_ENB");
 	if (op & QIB_RCVCTRL_BP_DIS)
-		rcvctrl_unimplemented(dd, __func__, ctxt, op, &hp, "RCVCTRL_BP_DIS");
+		rcvctrl_unimplemented(
+			dd,
+			__func__,
+			ctxt,
+			op,
+			&hp,
+			"RCVCTRL_BP_DIS");
 
 	/* XXX (Mitko): Do we want to use the shadow value here? */
 	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
@@ -7802,11 +7877,11 @@ static int init_cntrs(struct hfi_devdata *dd)
 	}
 
 	/* allocate space for the counter values */
-	dd->cntrs = kzalloc(sizeof(u64) * index, GFP_KERNEL);
+	dd->cntrs = kcalloc(index, sizeof(u64), GFP_KERNEL);
 	if (!dd->cntrs)
 		goto bail;
 
-	dd->scntrs = kzalloc(sizeof(u64) * index, GFP_KERNEL);
+	dd->scntrs = kcalloc(index, sizeof(u64), GFP_KERNEL);
 	if (!dd->scntrs)
 		goto bail;
 
@@ -7920,14 +7995,12 @@ static int init_cntrs(struct hfi_devdata *dd)
 
 	/* allocate per port storage for counter values */
 	ppd = (struct qib_pportdata *)(dd + 1);
-	for (i = 0; i < dd->num_pports; i++, ppd++) {
-		ppd->cntrs = kzalloc(sizeof(u64) * dd->nportcntrs,
-				     GFP_KERNEL);
+	for (i = 0; i < dd->num_pports; i++, ppd++) { /* FIXME. ppd++? */
+		ppd->cntrs = kcalloc(dd->nportcntrs, sizeof(u64), GFP_KERNEL);
 		if (!ppd->cntrs)
 			goto bail;
 
-		ppd->scntrs = kzalloc(sizeof(u64) * dd->nportcntrs,
-				     GFP_KERNEL);
+		ppd->scntrs = kcalloc(dd->nportcntrs, sizeof(u64), GFP_KERNEL);
 		if (!ppd->scntrs)
 			goto bail;
 	}
@@ -8049,7 +8122,7 @@ static u32 iblink_state(struct qib_pportdata *ppd)
 	 * function.
 	 */
 	if (ppd->statusp) {
-		switch(ppd->lstate) {
+		switch (ppd->lstate) {
 		case IB_PORT_DOWN:
 		case IB_PORT_INIT:
 			*ppd->statusp &= ~(HFI_STATUS_IB_CONF |
@@ -8118,6 +8191,12 @@ static u64 gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 	return read_csr(dd, target ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
 }
 
+#define CLEAR_STATIC_RATE_CONTROL_SMASK(r) \
+(r &= ~WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
+
+#define SET_STATIC_RATE_CONTROL_SMASK(r) \
+(r |= WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
+
 static int init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
@@ -8131,9 +8210,9 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 		reg = read_kctxt_csr(dd, rcd->sc->context,
 				     WFR_SEND_CTXT_CHECK_ENABLE);
 		if (set)
-			reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+			CLEAR_STATIC_RATE_CONTROL_SMASK(reg);
 		else
-			reg |= WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+			SET_STATIC_RATE_CONTROL_SMASK(reg);
 		write_kctxt_csr(dd, rcd->sc->context,
 				WFR_SEND_CTXT_CHECK_ENABLE, reg);
 	}
@@ -8542,7 +8621,7 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 	 */
 	total = 1 + dd->num_sdma + dd->n_krcv_queues;
 
-	entries = kzalloc(sizeof(*entries) * total, GFP_KERNEL);
+	entries = kcalloc(total, sizeof(*entries), GFP_KERNEL);
 	if (!entries) {
 		dd_dev_err(dd, "cannot allocate msix table\n");
 		ret = -ENOMEM;
@@ -8571,8 +8650,9 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 			/* using MSI-X, with reduced interrupts */
 			/* TODO: Handle reduced interrupt case.  Need scheme to
 			   decide who shares. */
-			dd_dev_err(dd, "cannot handle reduced interrupt case"
-				", want %u, got %u\n",
+			dd_dev_err(
+				dd,
+				"cannot handle reduced interrupt case, want %u, got %u\n",
 				total, request);
 			ret = -EINVAL;
 			goto fail;
@@ -8795,8 +8875,9 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 	ret = init_sc_pools_and_sizes(dd);
 	if (ret >= 0) {	/* success */
 		dd->num_send_contexts = ret;
-		dd_dev_info(dd, "send contexts: chip %d, used %d "
-			"(kernel %d, ack %d, user %d)\n",
+		dd_dev_info(
+			dd,
+			"send contexts: chip %d, used %d (kernel %d, ack %d, user %d)\n",
 			dd->chip_send_contexts,
 			dd->num_send_contexts,
 			dd->sc_sizes[SC_KERNEL].count,
@@ -9507,7 +9588,7 @@ static void init_chip(struct hfi_devdata *dd)
 		if (ps == WFR_PLS_LINKUP && ls == WFR_LSTATE_ACTIVE) {
 			/* assume we're in the simulator's easy linkup mode */
 			if (sim_easy_linkup == EASY_LINKUP_UNSET
-							|| sim_easy_linkup == 1) {
+						|| sim_easy_linkup == 1) {
 				sim_easy_linkup = 1;
 				dd_dev_info(dd, "Assuming simulation EasyLinkup mode\n");
 			} else {
@@ -9516,17 +9597,27 @@ static void init_chip(struct hfi_devdata *dd)
 		} else {
 			sim_easy_linkup = 0;
 			if (sim_easy_linkup == EASY_LINKUP_UNSET
-							|| sim_easy_linkup == 0) {
+						|| sim_easy_linkup == 0) {
 				sim_easy_linkup = 0;
 			} else {
 				dd_dev_info(dd, "This HFI is in normal link mode, but the other is not?\n");
 			}
-			/* otherwise the link should be offline with port down */
+			/*
+			 * otherwise the link should be offline with port down
+			 */
 			if (!(ps == WFR_PLS_OFFLINE && ls == WFR_LSTATE_DOWN)) {
-				__print_current_states(dd, __func__, "at start", ps, ls);
+				__print_current_states(
+					dd,
+					__func__,
+					"at start",
+					ps,
+					ls);
 				set_physical_link_state(dd, WFR_PLS_OFFLINE);
 				dd_dev_err(dd, "Manually setting physical link to offline - not supposed to be necessary\n");
-				print_current_states(dd, __func__, "after force offline");
+				print_current_states(
+					dd,
+					__func__,
+					"after force offline");
 			}
 		}
 	} else {
@@ -9678,7 +9769,7 @@ static void init_qos(struct hfi_devdata *dd, u32 first_ctxt)
 		goto bail;
 	if (num_vls * qpns_per_vl > dd->chip_rcv_contexts)
 		goto bail;
-	rsmmap = kmalloc(NUM_MAP_REGS * sizeof(u64), GFP_KERNEL);
+	rsmmap = kmalloc_array(NUM_MAP_REGS, sizeof(u64), GFP_KERNEL);
 	memset(rsmmap, rxcontext, NUM_MAP_REGS * sizeof(u64));
 	/* init the local copy of the table */
 	for (i = 0, ctxt = first_ctxt; i < num_vls; i++) {
@@ -10052,7 +10143,7 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	u64 reg;
 	u32 patch;	/* hardware patch level */
 	int i, ret;
-	static const char *inames[] = { /* implementation names */
+	static const char * const inames[] = { /* implementation names */
 		"RTL silicon",
 		"RTL VCS simulation",
 		"RTL FPGA emulation",
@@ -10293,8 +10384,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	/* start setting dd values and adjusting CSRs */
 	init_early_variables(dd);
 
-	dd->palign = 0x1000;	// TODO: is there a WFR value for this?
-
 	/* TODO these are set by the chip and don't change */
 	/* per-context kernel/user CSRs */
 	dd->uregbase = WFR_RXE_PER_CONTEXT_USER;
@@ -10467,8 +10556,9 @@ void force_all_interrupts(struct hfi_devdata *dd)
 
 	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
 		for (j = 0; j < 64; j++) {
-			dd_dev_info(dd, "** Forced interrupt: "
-				"csr #%2d, bit %2d; \"%s\"\n",
+			dd_dev_info(
+				dd,
+				"** Forced interrupt: csr #%2d, bit %2d; \"%s\"\n",
 				i, j, is_name(buf, sizeof(buf), (i*64)+j));
 			write_csr(dd, WFR_CCE_INT_FORCE + (8*i), 1ull << j);
 			/*

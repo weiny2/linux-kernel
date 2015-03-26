@@ -152,7 +152,7 @@ struct qib_ctxtdata {
 	/* rcvhdrq base, needs mmap before useful */
 	void *rcvhdrq;
 	/* kernel virtual address where hdrqtail is updated */
-	void *rcvhdrtail_kvaddr;
+	volatile __le64 *rcvhdrtail_kvaddr;
 	/*
 	 * Shared page for kernel to signal user processes that send buffers
 	 * need disarming.  The process should call QIB_CMD_DISARM_BUFS
@@ -919,10 +919,6 @@ struct hfi_devdata {
 	u32 chip_pio_mem_size;
 	/* number of bytes in the SDMA memory buffer */
 	u32 chip_sdma_mem_size;
-	/* kr_pagealign value */
-	u32 palign;
-	/* max usable size in dwords of a "2KB" PIO buffer before going "4KB" */
-	u32 piosize2kmax_dwords;
 	/* kr_userregbase */
 	u32 uregbase;
 	/* shadow the control register contents */
@@ -1104,7 +1100,8 @@ struct hfi_filedata {
 	unsigned subctxt;
 	struct hfi_user_sdma_comp_q *cq;
 	struct hfi_user_sdma_pkt_q *pq;
-	int rec_cpu_num; // for cpu affinity; -1 if none
+	/* for cpu affinity; -1 if none */
+	int rec_cpu_num;
 };
 
 extern struct list_head qib_dev_list;
@@ -1392,7 +1389,7 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 
 
 /* ctxt_flag bit offsets */
-                /* context has been setup */
+		/* context has been setup */
 #define QIB_CTXT_SETUP_DONE 1
 		/* waiting for a packet to arrive */
 #define QIB_CTXT_WAITING_RCV   2
@@ -1403,7 +1400,9 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 
 /* free up any allocated data at closes */
 void qib_free_data(struct qib_ctxtdata *dd);
-struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *, const struct pci_device_id *);
+struct hfi_devdata *qib_init_wfr_funcs(
+	struct pci_dev *,
+	const struct pci_device_id *);
 void qib_free_devdata(struct hfi_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
 struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
@@ -1478,8 +1477,7 @@ static inline u32 qib_get_rcvhdrtail(const struct qib_ctxtdata *rcd)
 	 * volatile because it's a DMA target from the chip, routine is
 	 * inlined, and don't want register caching or reordering.
 	 */
-	return (u32) le64_to_cpu(
-		*((volatile __le64 *)rcd->rcvhdrtail_kvaddr)); /* DMA'ed */
+	return (u32) le64_to_cpu(*rcd->rcvhdrtail_kvaddr);
 }
 
 static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
