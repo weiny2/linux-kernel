@@ -525,7 +525,7 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 	ppd->pkeys[default_pkey_idx] = WFR_DEFAULT_P_KEY;
 	if (loopback) {
 		qib_early_err(&pdev->dev,
-		 	      "Faking data partition 0x8001 in idx %u\n",
+			      "Faking data partition 0x8001 in idx %u\n",
 			      !default_pkey_idx);
 		ppd->pkeys[!default_pkey_idx] = 0x8001;
 	}
@@ -559,19 +559,17 @@ void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 	ppd->cc_max_table_entries = IB_CC_TABLE_CAP_DEFAULT;
 
 	spin_lock_init(&ppd->cc_state_lock);
+	spin_lock_init(&ppd->cc_log_lock);
 	size = sizeof(struct cc_state);
 	ppd->cc_state = kzalloc(size, GFP_KERNEL);
 	if (!ppd->cc_state)
 		goto bail;
-
-	spin_lock_init(&ppd->cc_log_lock);
 	return;
 
 bail:
 
 	qib_early_err(&pdev->dev,
-	 	      "Congestion Control Agent disabled for port %d\n", port);
-	return;
+		      "Congestion Control Agent disabled for port %d\n", port);
 }
 
 /*
@@ -626,7 +624,7 @@ static int init_after_reset(struct hfi_devdata *dd)
 	 * pioavail updates while we re-initialize.  This is mostly
 	 * for the driver data structures, not chip registers.
 	 */
-	for (i = 0; i < dd-> num_rcv_contexts; i++)
+	for (i = 0; i < dd->num_rcv_contexts; i++)
 		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
 				  QIB_RCVCTRL_INTRAVAIL_DIS |
 				  QIB_RCVCTRL_TAILUPD_DIS, i);
@@ -668,7 +666,7 @@ static void enable_chip(struct hfi_devdata *dd)
 
 static void verify_interrupt(struct work_struct *work)
 {
-        struct hfi_devdata *dd = container_of(work, struct hfi_devdata,
+	struct hfi_devdata *dd = container_of(work, struct hfi_devdata,
 						interrupt_check_worker.work);
 	u64 int_counter;
 
@@ -814,8 +812,6 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	dd->events = vmalloc_user(len);
 	if (!dd->events)
 		dd_dev_err(dd, "Failed to allocate user events page\n");
-	else
-		memset(dd->events, 0, len);
 	/*
 	 * Allocate a page for device and port status.
 	 * Page will be shared amongst all user proceses.
@@ -823,11 +819,9 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	dd->status = vmalloc_user(PAGE_SIZE);
 	if (!dd->status)
 		dd_dev_err(dd, "Failed to allocate dev status page\n");
-	else {
-		memset(dd->status, 0, PAGE_SIZE);
+	else
 		dd->freezelen = PAGE_SIZE - (sizeof(*dd->status) -
 					     sizeof(dd->status->freezemsg));
-	}
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (dd->status)
@@ -956,7 +950,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		for (i = 0; i < dd-> num_rcv_contexts; i++)
+		for (i = 0; i < dd->num_rcv_contexts; i++)
 			dd->f_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
 					  QIB_RCVCTRL_CTXT_DIS |
 					  QIB_RCVCTRL_INTRAVAIL_DIS |
@@ -1022,7 +1016,7 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 		rcd->rcvhdrq = NULL;
 		if (rcd->rcvhdrtail_kvaddr) {
 			dma_free_coherent(&dd->pcidev->dev, PAGE_SIZE,
-					  rcd->rcvhdrtail_kvaddr,
+					  (void *)rcd->rcvhdrtail_kvaddr,
 					  rcd->rcvhdrqtailaddr_phys);
 			rcd->rcvhdrtail_kvaddr = NULL;
 		}
@@ -1071,7 +1065,10 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
  * data bandwidth to the wire).  The header of the buffer is
  * invalid and will generate an error, but we ignore it.
  */
-int fake_early_return = 0;	//FIXME: always zero so we return early
+
+/* FIXME: always zero so we return early */
+static int fake_early_return;
+
 static void qib_verify_pioperf(struct hfi_devdata *dd)
 {
 	struct send_context *sc;
@@ -1081,8 +1078,8 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	u32 *addr;
 
 	if (dd->num_send_contexts == 0) {
-		dd_dev_info(dd, "Performance check: "
-			"No contexts for checking perf, skipping\n");
+		dd_dev_info(dd,
+			"Performance check: No contexts for checking perf, skipping\n");
 		return;
 	}
 
@@ -1094,8 +1091,9 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	if (dd->unit != 0)
 		return;
 
-	// TEMPORARY: force a non-context PIO error and see what happens...
-	//write_csr(dd, WFR_SEND_PIO_ERR_FORCE, WFR_SEND_PIO_ERR_FORCE_PIO_WRITE_BAD_CTXT_ERR_SMASK);
+	/* TEMPORARY: force a non-context PIO error and see what happens... */
+	/* write_csr(dd, WFR_SEND_PIO_ERR_FORCE,
+		WFR_SEND_PIO_ERR_FORCE_PIO_WRITE_BAD_CTXT_ERR_SMASK); */
 
 	/*
 	 * Enough to give us a reasonable test, less than piobuf size, and
@@ -1115,8 +1113,7 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 	addr = kzalloc(cnt, GFP_KERNEL);
 	if (!addr) {
 		dd_dev_info(dd,
-			 "Performance check: Could not get memory for "
-			 "checking PIO perf, skipping\n");
+			 "Performance check: Could not get memory for checking PIO perf, skipping\n");
 		return;
 	}
 
@@ -1146,9 +1143,9 @@ static void qib_verify_pioperf(struct hfi_devdata *dd)
 		pbuf = sc_buffer_alloc(sc, dw, NULL, NULL);
 		if (!pbuf) {
 			preempt_enable();
-			dd_dev_info(dd, "Performance check: PIO buffer "
-				"allocation failure at count %u,"
-				" skipping\n", lcnt);
+			dd_dev_info(dd,
+				"Performance check: PIO buffer allocation failure at count %u, skipping\n",
+				lcnt);
 			goto done;
 		}
 		pio_copy(dd, pbuf, pbc, addr, cnt >> 2);
@@ -1633,9 +1630,8 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		flush_workqueue(ib_wq);
 		for (pidx = 0; pidx < dd->num_pports; ++pidx)
 			dd->f_quiet_serdes(dd->pport + pidx);
-		if (!j) {
+		if (!j)
 			hfi_device_remove(dd);
-		}
 		if (!ret)
 			qib_unregister_ib_device(dd);
 		qib_postinit_cleanup(dd);
@@ -1650,7 +1646,6 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* interrupt testing */
 	if (test_interrupts) {
-		void force_all_interrupts(struct hfi_devdata *dd);
 		static atomic_t tested;
 
 		if (atomic_inc_return(&tested) <= test_interrupts)
@@ -1715,7 +1710,7 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 
 		gfp_flags = (rcd->ctxt >= dd->first_user_ctxt) ?
 			GFP_USER : GFP_KERNEL;
-		rcd->rcvhdrq = dma_alloc_coherent(
+		rcd->rcvhdrq = dma_zalloc_coherent(
 			&dd->pcidev->dev, amt, &rcd->rcvhdrq_phys,
 			gfp_flags | __GFP_COMP);
 
@@ -1734,7 +1729,7 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 				}*/
 
 		if (HFI_CAP_KGET_MASK(rcd->flags, DMA_RTAIL)) {
-			rcd->rcvhdrtail_kvaddr = dma_alloc_coherent(
+			rcd->rcvhdrtail_kvaddr = dma_zalloc_coherent(
 				&dd->pcidev->dev, PAGE_SIZE, &phys_hdrqtail,
 				gfp_flags);
 			if (!rcd->rcvhdrtail_kvaddr)
@@ -1744,10 +1739,6 @@ int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 
 		rcd->rcvhdrq_size = amt;
 	}
-
-	if (rcd->rcvhdrtail_kvaddr)
-		memset(rcd->rcvhdrtail_kvaddr, 0, PAGE_SIZE);
-
 	/*
 	 * These values are per-context:
 	 *	RcvHdrCnt
@@ -1833,10 +1824,10 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	while (alloced_bytes < rcd->egrbufs.size &&
 	       rcd->egrbufs.alloced < rcd->egrbufs.count) {
 		rcd->egrbufs.buffers[idx].addr =
-			dma_alloc_coherent(&dd->pcidev->dev,
-					   rcd->egrbufs.rcvtid_size,
-					   &rcd->egrbufs.buffers[idx].phys,
-					   gfp_flags);
+			dma_zalloc_coherent(&dd->pcidev->dev,
+					    rcd->egrbufs.rcvtid_size,
+					    &rcd->egrbufs.buffers[idx].phys,
+					    gfp_flags);
 		if (rcd->egrbufs.buffers[idx].addr) {
 			rcd->egrbufs.buffers[idx].len =
 				rcd->egrbufs.rcvtid_size;

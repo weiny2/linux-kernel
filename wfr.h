@@ -628,6 +628,7 @@ u32 hdrqempty(struct qib_ctxtdata *rcd);
 int is_a0(struct hfi_devdata *dd);
 int is_ax(struct hfi_devdata *dd);
 int is_bx(struct hfi_devdata *dd);
+void force_all_interrupts(struct hfi_devdata *dd);
 
 int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok);
 int release_lcb_access(struct hfi_devdata *dd, int sleep_ok);
