@@ -68,7 +68,11 @@ module_param_named(fw_8051_name, fw_8051_name, charp, S_IRUGO);
 MODULE_PARM_DESC(fw_8051_name, "8051 firmware name");
 
 static char *fw_fabric_serdes_name;
-module_param_named(fw_fabric_serdes_name, fw_fabric_serdes_name, charp, S_IRUGO);
+module_param_named(
+	fw_fabric_serdes_name,
+	fw_fabric_serdes_name,
+	charp,
+	S_IRUGO);
 MODULE_PARM_DESC(fw_fabric_serdes_name, "Fabric SerDes firmware name");
 
 static char *fw_sbus_name;
@@ -707,7 +711,7 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 			break;
 		}
 
-		msleep(1);
+		msleep(20);
 	}
 
 	/*
@@ -1156,7 +1160,7 @@ int acquire_hw_mutex(struct hfi_devdata *dd)
 			return 0; /* success */
 		if (time_after(jiffies, timeout))
 			break; /* timed out */
-		msleep(1);
+		msleep(20);
 	}
 
 	/* timed out */
