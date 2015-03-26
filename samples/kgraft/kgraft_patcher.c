@@ -24,6 +24,7 @@
 #include <linux/types.h>
 #include <linux/capability.h>
 #include <linux/ptrace.h>
+#include <linux/vermagic.h>
 
 #include <asm/processor.h>
 
@@ -70,6 +71,7 @@ static void kgr_new_function(unsigned long data)
 static struct kgr_patch patch = {
 	.name = "sample_patcher",
 	.owner = THIS_MODULE,
+	.vermagic = VERMAGIC_STRING,
 	.patches = {
 #if defined(CONFIG_X86)
 		KGR_PATCH(SyS_iopl, kgr_new_sys_iopl, true),
