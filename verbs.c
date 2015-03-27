@@ -1218,18 +1218,20 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 	if (len == 0) {
 		pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
 	} else {
-		seg_pio_copy_start(pbuf, pbc, hdr, hdrwords*4);
-		while (len) {
-			void *addr = ss->sge.vaddr;
-			u32 slen = ss->sge.length;
+		if (ss) {
+			seg_pio_copy_start(pbuf, pbc, hdr, hdrwords*4);
+			while (len) {
+				void *addr = ss->sge.vaddr;
+				u32 slen = ss->sge.length;
 
-			if (slen > len)
-				slen = len;
-			update_sge(ss, slen);
-			seg_pio_copy_mid(pbuf, addr, slen);
-			len -= slen;
+				if (slen > len)
+					slen = len;
+				update_sge(ss, slen);
+				seg_pio_copy_mid(pbuf, addr, slen);
+				len -= slen;
+			}
+			seg_pio_copy_end(pbuf);
 		}
-		seg_pio_copy_end(pbuf);
 	}
 
 	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &ahdr->ibh);
