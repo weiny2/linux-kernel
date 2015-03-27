@@ -233,7 +233,8 @@ int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
 					 tx_handle, &cmd);
 
 	do {
-		rc = hfi_tx_command(tx, cmd.command, start, length, cmd_slots);
+		rc = hfi_tx_cmd_put_match(tx, cmd.command, start,
+					  length, cmd_slots);
 	} while (rc == -EAGAIN);
 
 	return rc;
