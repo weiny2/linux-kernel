@@ -46,7 +46,6 @@ struct anon_vma {
 	 */
 	struct rb_root rb_root;	/* Interval tree of private "related" vmas */
 
-#ifndef __GENKSYMS__
 	/*
 	 * Count of child anon_vmas and VMAs which points to this anon_vma.
 	 *
@@ -56,7 +55,6 @@ struct anon_vma {
 	unsigned degree;
 
 	struct anon_vma *parent;	/* Parent of this anon_vma */
-#endif
 };
 
 /*
