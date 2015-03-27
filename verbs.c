@@ -425,14 +425,16 @@ static int qib_post_one_send(struct qib_qp *qp, struct ib_send_wr *wr,
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
 		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-	} else if (wqe->length > (dd_from_ibdev(qp->ibqp.device)->pport +
-				  qp->port_num - 1)->ibmtu)
-		goto bail_inval_free;
-	else {
+	} else {
 		struct qib_ah *ah = to_iah(wr->wr.ud.ah);
+		u8 vl;
+
+		sc5 = ibp->sl_to_sc[ah->attr.sl];
+		vl = sc_to_vlt(dd, sc5);
+		if (wqe->length > dd->vld[vl].mtu)
+			goto bail_inval_free;
 
 		atomic_inc(&ah->refcount);
-		sc5 = ibp->sl_to_sc[ah->attr.sl];
 	}
 	wqe->ssn = qp->s_ssn++;
 	qp->s_head = next;

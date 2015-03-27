@@ -642,6 +642,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	int mig = 0;
 	int ret;
 	u32 pmtu = 0; /* for gcc warning only */
+	struct hfi_devdata *dd;
 
 	spin_lock_irq(&qp->r_lock);
 	spin_lock(&qp->s_lock);
@@ -706,8 +707,8 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	 * Note that the QP port has to be set in INIT and MTU in RTR.
 	 */
 	if (attr_mask & IB_QP_PATH_MTU) {
-		struct hfi_devdata *dd = dd_from_dev(dev);
 		int mtu, pidx = qp->port_num - 1;
+		dd = dd_from_dev(dev);
 
 		mtu = verbs_mtu_enum_to_int(ibqp->device, attr->path_mtu);
 		if (mtu == -1)
@@ -833,8 +834,22 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_PATH_MTU) {
+		struct qib_ibport *ibp;
+		u8 sc, vl;
+		u32 mtu;
+
+		dd = dd_from_dev(dev);
+		ibp = &dd->pport[qp->port_num - 1].ibport_data;
+
+		sc = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+		vl = sc_to_vlt(dd, sc);
+
+		mtu = verbs_mtu_enum_to_int(ibqp->device, pmtu);
+		mtu = min_t(u32, mtu, dd->vld[vl].mtu);
+		pmtu = mtu_to_enum(mtu, OPA_MTU_8192);
+
 		qp->path_mtu = pmtu;
-		qp->pmtu = verbs_mtu_enum_to_int(ibqp->device, pmtu);
+		qp->pmtu = mtu;
 	}
 
 	if (attr_mask & IB_QP_RETRY_CNT) {
