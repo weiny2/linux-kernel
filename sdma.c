@@ -1982,7 +1982,7 @@ static int sdma_check_progress(
 	if (tx->num_desc <= sde->desc_avail)
 		return -EAGAIN;
 	/* pulse the head_lock */
-	if (wait->sleep) {
+	if (wait && wait->sleep) {
 		unsigned seq;
 
 		seq = raw_seqcount_begin(
@@ -2028,13 +2028,15 @@ retry:
 	if (unlikely(tx->num_desc > sde->desc_avail))
 		goto nodesc;
 	tail = submit_tx(sde, tx);
-	atomic_inc(&wait->sdma_busy);
+	if (wait)
+		atomic_inc(&wait->sdma_busy);
 	sdma_update_tail(sde, tail);
 unlock:
 	spin_unlock_irqrestore(&sde->tail_lock, flags);
 	return ret;
 unlock_noconn:
-	atomic_inc(&wait->sdma_busy);
+	if (wait)
+		atomic_inc(&wait->sdma_busy);
 	tx->next_descq_idx = 0;
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 	tx->sn = sde->tail_sn++;
@@ -2043,8 +2045,10 @@ unlock_noconn:
 	spin_lock(&sde->flushlist_lock);
 	list_add_tail(&tx->list, &sde->flushlist);
 	spin_unlock(&sde->flushlist_lock);
-	wait->tx_count++;
-	wait->count += tx->num_desc;
+	if (wait) {
+		wait->tx_count++;
+		wait->count += tx->num_desc;
+	}
 	schedule_work(&sde->flush_worker);
 	ret = -ECOMM;
 	goto unlock;
