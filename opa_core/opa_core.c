@@ -58,6 +58,11 @@
 /* Unique numbering for opa_core devices. */
 static DEFINE_IDA(opa_core_index_ida);
 
+static inline struct opa_core_device *dev_to_opa_core(struct device *dev)
+{
+	return container_of(dev, struct opa_core_device, dev);
+}
+
 static ssize_t device_show(struct device *d,
 			   struct device_attribute *attr, char *buf)
 {
