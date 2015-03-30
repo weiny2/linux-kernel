@@ -820,6 +820,7 @@ DEFINE_EVENT(hfi_sdma_ahg_ad, hfi_ahg_deallocate,
 	),
 	TP_ARGS(sde, aidx));
 
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 TRACE_EVENT(hfi_sdma_progress,
 	TP_PROTO(
 		struct sdma_engine *sde,
@@ -830,9 +831,7 @@ TRACE_EVENT(hfi_sdma_progress,
 	TP_ARGS(sde, hwhead, swhead, txp),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(sde->dd)
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 		__field(u64, sn)
-#endif
 		__field(u16, hwhead)
 		__field(u16, swhead)
 		__field(u16, txnext)
@@ -848,21 +847,13 @@ TRACE_EVENT(hfi_sdma_progress,
 		__entry->tx_head = sde->tx_head;
 		__entry->txnext = txp ? txp->next_descq_idx : ~0;
 		__entry->idx = sde->this_idx;
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 		__entry->sn = txp ? txp->sn : ~0;
-#endif
 	),
 	TP_printk(
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 		"[%s] SDE(%u) sn %llu hwhead %u swhead %u next_descq_idx %u tx_head %u tx_tail %u",
-#else
-		"[%s] SDE(%u) hwhead %u swhead %u next_descq_idx %u tx_head %u tx_tail %u",
-#endif
 		__get_str(dev),
 		__entry->idx,
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 		__entry->sn,
-#endif
 		__entry->hwhead,
 		__entry->swhead,
 		__entry->txnext,
@@ -870,6 +861,45 @@ TRACE_EVENT(hfi_sdma_progress,
 		__entry->tx_tail
 	)
 );
+#else
+TRACE_EVENT(hfi_sdma_progress,
+	    TP_PROTO(
+		struct sdma_engine *sde,
+		u16 hwhead,
+		u16 swhead,
+		struct sdma_txreq *txp
+	    ),
+	TP_ARGS(sde, hwhead, swhead, txp),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(sde->dd)
+		__field(u16, hwhead)
+		__field(u16, swhead)
+		__field(u16, txnext)
+		__field(u16, tx_tail)
+		__field(u16, tx_head)
+		__field(u8, idx)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(sde->dd);
+		__entry->hwhead = hwhead;
+		__entry->swhead = swhead;
+		__entry->tx_tail = sde->tx_tail;
+		__entry->tx_head = sde->tx_head;
+		__entry->txnext = txp ? txp->next_descq_idx : ~0;
+		__entry->idx = sde->this_idx;
+	),
+	TP_printk(
+		"[%s] SDE(%u) hwhead %u swhead %u next_descq_idx %u tx_head %u tx_tail %u",
+		__get_str(dev),
+		__entry->idx,
+		__entry->hwhead,
+		__entry->swhead,
+		__entry->txnext,
+		__entry->tx_head,
+		__entry->tx_tail
+	)
+);
+#endif
 
 DECLARE_EVENT_CLASS(hfi_sdma_sn,
 	TP_PROTO(
