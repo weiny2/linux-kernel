@@ -417,8 +417,8 @@ struct qib_rq {
 	struct qib_rwq *wq;
 	u32 size;               /* size of RWQE array */
 	u8 max_sge;
-	spinlock_t lock /* protect changes in this struct */
-		____cacheline_aligned_in_smp;
+	/* protect changes in this struct */
+	spinlock_t lock ____cacheline_aligned_in_smp;
 };
 
 struct qib_srq {

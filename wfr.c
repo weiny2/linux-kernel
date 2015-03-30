@@ -1607,6 +1607,7 @@ static u64 access_sw_cpu_intr(const struct cntr_entry *entry,
 			      void *context, int vl, int mode, u64 data)
 {
 	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
 	return read_write_cpu(dd, &dd->z_int_counter, dd->int_counter, vl,
 			      mode, data);
 }
