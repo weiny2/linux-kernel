@@ -90,6 +90,7 @@ do { \
 	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops, S_IRUGO)
 
 static void *_opcode_stats_seq_start(struct seq_file *s, loff_t *pos)
+__acquires(RCU)
 {
 	struct hfi_opcode_stats_perctx *opstats;
 
@@ -111,6 +112,7 @@ static void *_opcode_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
 
 
 static void _opcode_stats_seq_stop(struct seq_file *s, void *v)
+__releases(RCU)
 {
 	rcu_read_unlock();
 }
@@ -207,6 +209,7 @@ DEBUGFS_SEQ_FILE_OPEN(ctx_stats)
 DEBUGFS_FILE_OPS(ctx_stats);
 
 static void *_qp_stats_seq_start(struct seq_file *s, loff_t *pos)
+__acquires(RCU)
 {
 	struct qp_iter *iter;
 	loff_t n = *pos;
@@ -242,6 +245,7 @@ static void *_qp_stats_seq_next(struct seq_file *s, void *iter_ptr,
 }
 
 static void _qp_stats_seq_stop(struct seq_file *s, void *iter_ptr)
+__releases(RCU)
 {
 	rcu_read_unlock();
 }
@@ -263,6 +267,7 @@ DEBUGFS_SEQ_FILE_OPEN(qp_stats)
 DEBUGFS_FILE_OPS(qp_stats);
 
 static void *_sdes_seq_start(struct seq_file *s, loff_t *pos)
+__acquires(RCU)
 {
 	struct qib_ibdev *ibd;
 	struct hfi_devdata *dd;
@@ -288,6 +293,7 @@ static void *_sdes_seq_next(struct seq_file *s, void *v, loff_t *pos)
 
 
 static void _sdes_seq_stop(struct seq_file *s, void *v)
+__releases(RCU)
 {
 	rcu_read_unlock();
 }
@@ -401,8 +407,10 @@ static ssize_t qsfp_dump(struct file *file, char __user *buf,
 	rcu_read_lock();
 	ppd = private2ppd(file);
 	tmp = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!tmp)
+	if (!tmp) {
+		rcu_read_unlock();
 		return -ENOMEM;
+	}
 
 	ret = qib_qsfp_dump(ppd, tmp, PAGE_SIZE);
 	if (ret > 0)
@@ -760,6 +768,7 @@ static const char * const hfi_statnames[] = {
 };
 
 static void *_driver_stats_names_seq_start(struct seq_file *s, loff_t *pos)
+__acquires(RCU)
 {
 	rcu_read_lock();
 	if (*pos >= ARRAY_SIZE(hfi_statnames))
@@ -779,6 +788,7 @@ static void *_driver_stats_names_seq_next(
 }
 
 static void _driver_stats_names_seq_stop(struct seq_file *s, void *v)
+__releases(RCU)
 {
 	rcu_read_unlock();
 }
@@ -796,6 +806,7 @@ DEBUGFS_SEQ_FILE_OPEN(driver_stats_names)
 DEBUGFS_FILE_OPS(driver_stats_names);
 
 static void *_driver_stats_seq_start(struct seq_file *s, loff_t *pos)
+__acquires(RCU)
 {
 	rcu_read_lock();
 	if (*pos >= ARRAY_SIZE(hfi_statnames))
@@ -812,6 +823,7 @@ static void *_driver_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
 }
 
 static void _driver_stats_seq_stop(struct seq_file *s, void *v)
+__releases(RCU)
 {
 	rcu_read_unlock();
 }
