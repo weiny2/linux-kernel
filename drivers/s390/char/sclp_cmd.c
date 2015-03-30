@@ -35,9 +35,7 @@ struct read_info_sccb {
 	struct	sccb_header header;	/* 0-7 */
 	u16	rnmax;			/* 8-9 */
 	u8	rnsize;			/* 10 */
-	u8	_reserved0[16 - 11];	/* 11-15 */
-	u16	ncpurl;			/* 16-17 */
-	u8	_reserved7[24 - 18];	/* 18-23 */
+	u8	_reserved0[24 - 11];	/* 11-15 */
 	u8	loadparm[8];		/* 24-31 */
 	u8	_reserved1[48 - 32];	/* 32-47 */
 	u64	facilities;		/* 48-55 */
@@ -49,15 +47,12 @@ struct read_info_sccb {
 	u8	_reserved4[100 - 92];	/* 92-99 */
 	u32	rnsize2;		/* 100-103 */
 	u64	rnmax2;			/* 104-111 */
-	u8	_reserved5[120 - 112];	/* 112-119 */
-	u16	hcpua;			/* 120-121 */
-	u8	_reserved6[4096 - 122];	/* 122-4095 */
+	u8	_reserved5[4096 - 112];	/* 112-4095 */
 } __attribute__((packed, aligned(PAGE_SIZE)));
 
 static struct init_sccb __initdata early_event_mask_sccb __aligned(PAGE_SIZE);
 static struct read_info_sccb __initdata early_read_info_sccb;
 static int __initdata early_read_info_sccb_valid;
-static unsigned int sclp_max_cpu;
 
 u64 sclp_facilities;
 static u8 sclp_fac84;
@@ -141,15 +136,6 @@ void __init sclp_facilities_detect(void)
 	rzm = sccb->rnsize ? sccb->rnsize : sccb->rnsize2;
 	rzm <<= 20;
 
-	if (!sccb->hcpua) {
-		if (MACHINE_IS_VM)
-			sclp_max_cpu = 64;
-		else
-			sclp_max_cpu = sccb->ncpurl;
-	} else {
-		sclp_max_cpu = sccb->hcpua + 1;
-	}
-
 	sclp_event_mask_early();
 }
 
@@ -185,11 +171,6 @@ unsigned long long sclp_get_rnmax(void)
 unsigned long long sclp_get_rzm(void)
 {
 	return rzm;
-}
-
-unsigned int sclp_get_max_cpu(void)
-{
-	return sclp_max_cpu;
 }
 
 /*
