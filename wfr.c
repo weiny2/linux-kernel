@@ -688,6 +688,36 @@ static struct flag_table egress_err_status_flags[] = {
 		SEES(TX_READ_PIO_MEMORY_CSR_UNC_ERR)),
 };
 
+#define SEEI(text) WFR_SEND_EGRESS_ERR_INFO_##text##_ERR_SMASK
+static struct flag_table egress_err_info_flags[] = {
+/* 0*/	FLAG_ENTRY0("Reserved", 0ull),
+/* 1*/	FLAG_ENTRY0("VLErr", SEEI(VL)),
+/* 2*/	FLAG_ENTRY0("JobKeyErr", SEEI(JOB_KEY)),
+/* 3*/	FLAG_ENTRY0("JobKeyErr", SEEI(JOB_KEY)),
+/* 4*/	FLAG_ENTRY0("PartitionKeyErr", SEEI(PARTITION_KEY)),
+/* 5*/	FLAG_ENTRY0("SLIDErr", SEEI(SLID)),
+/* 6*/	FLAG_ENTRY0("OpcodeErr", SEEI(OPCODE)),
+/* 7*/	FLAG_ENTRY0("VLMappingErr", SEEI(VL_MAPPING)),
+/* 8*/	FLAG_ENTRY0("RawErr", SEEI(RAW)),
+/* 9*/	FLAG_ENTRY0("RawIPv6Err", SEEI(RAW_IPV6)),
+/*10*/	FLAG_ENTRY0("GRHErr", SEEI(GRH)),
+/*11*/	FLAG_ENTRY0("BypassErr", SEEI(BYPASS)),
+/*12*/	FLAG_ENTRY0("KDETHPacketsErr", SEEI(KDETH_PACKETS)),
+/*13*/	FLAG_ENTRY0("NonKDETHPacketsErr", SEEI(NON_KDETH_PACKETS)),
+/*14*/	FLAG_ENTRY0("TooSmallIBPacketsErr", SEEI(TOO_SMALL_IB_PACKETS)),
+/*15*/	FLAG_ENTRY0("TooSmallBypassPacketsErr", SEEI(TOO_SMALL_BYPASS_PACKETS)),
+/*16*/	FLAG_ENTRY0("PbcTestErr", SEEI(PBC_TEST)),
+/*17*/	FLAG_ENTRY0("BadPktLenErr", SEEI(BAD_PKT_LEN)),
+/*18*/	FLAG_ENTRY0("TooLongIBPacketErr", SEEI(TOO_LONG_IB_PACKET)),
+/*19*/	FLAG_ENTRY0("TooLongBypassPacketsErr", SEEI(TOO_LONG_BYPASS_PACKETS)),
+/*20*/	FLAG_ENTRY0("PbcStaticRateControlErr", SEEI(PBC_STATIC_RATE_CONTROL)),
+/*21*/	FLAG_ENTRY0("BypassBadPktLenErr", SEEI(BAD_PKT_LEN)),
+};
+
+/*
+ * TXE Egress Error Info flags and consequences
+ */
+
 /* TXE Egress errors that cause an SPC freeze */
 #define ALL_TXE_EGRESS_FREEZE_ERR \
 	(SEES(TX_EGRESS_FIFO_UNDERRUN_OR_PARITY_ERR) \
@@ -2153,6 +2183,12 @@ static char *egress_err_status_string(char *buf, int buf_len, u64 flags)
 		egress_err_status_flags, ARRAY_SIZE(egress_err_status_flags));
 }
 
+static char *egress_err_info_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+		egress_err_info_flags, ARRAY_SIZE(egress_err_info_flags));
+}
+
 static char *send_err_status_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags,
@@ -2290,6 +2326,12 @@ static void count_disallowed_pkt(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd = dd->pport;
 	u64 info = read_csr(dd, WFR_SEND_EGRESS_ERR_INFO);
+	u64 src = read_csr(dd, WFR_SEND_EGRESS_ERR_SOURCE);
+	char buf[96];
+
+	dd_dev_info(dd,
+		"Egress Error Info: 0x%llx, %s Egress Error Src 0x%llx\n",
+		info, egress_err_info_string(buf, sizeof(buf), info), src);
 
 	if (info & WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK) {
 		if (ppd->port_xmit_discards < ~(u64)0)
