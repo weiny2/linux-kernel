@@ -7614,7 +7614,7 @@ static void free_cntrs(struct hfi_devdata *dd)
 	dd->cntrnames = NULL;
 }
 
-#define CNTR_MAX 0xFFFFFFFFFFFFFFFF
+#define CNTR_MAX 0xFFFFFFFFFFFFFFFFULL
 #define CNTR_32BIT_MAX 0x00000000FFFFFFFF
 
 static u64 read_dev_port_cntr(struct hfi_devdata *dd, struct cntr_entry *entry,

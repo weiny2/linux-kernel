@@ -1055,7 +1055,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		spin_lock_init(&sde->senddmactrl_lock);
 		spin_lock_init(&sde->flushlist_lock);
 		/* insure there is always a zero bit */
-		sde->ahg_bits = 0xfffffffe00000000;
+		sde->ahg_bits = 0xfffffffe00000000ULL;
 
 		sdma_set_state(sde, sdma_state_s00_hw_down);
 
