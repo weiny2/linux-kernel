@@ -478,6 +478,6 @@ void __init startup_init(void)
 	detect_diag44();
 	detect_machine_facilities();
 	setup_topology();
-	sclp_facilities_detect();
+	sclp_early_detect();
 	lockdep_on();
 }
