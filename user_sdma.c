@@ -384,8 +384,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
 		dd_dev_err(dd,
 			   "[%u:%u] Failed to allocate SDMA request struct\n",
 			   uctxt->ctxt, subctxt_fp(fp));
-		ret = -ENOMEM;
-		goto done;
+		goto pq_nomem;
 	}
 	memsize = sizeof(*pq->reqs) * hfi_sdma_comp_ring_size;
 	pq->reqs = kmalloc(memsize, GFP_KERNEL);
@@ -393,8 +392,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
 		dd_dev_err(dd,
 			   "[%u:%u] Failed to allocate SDMA request queue (%u)\n",
 			   uctxt->ctxt, subctxt_fp(fp), memsize);
-		ret = -ENOMEM;
-		goto done;
+		goto pq_reqs_nomem;
 	}
 	INIT_LIST_HEAD(&pq->list);
 	pq->dd = dd;
@@ -417,8 +415,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
 	if (!pq->txreq_cache) {
 		dd_dev_err(dd, "[%u] Failed to allocate TxReq cache\n",
 			   uctxt->ctxt);
-		ret = -ENOMEM;
-		goto done;
+		goto pq_txreq_nomem;
 	}
 	user_sdma_pkt_fp(fp) = pq;
 	cq = kzalloc(sizeof(*cq), GFP_KERNEL);
@@ -426,8 +423,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
 		dd_dev_err(dd,
 			   "[%u:%u] Failed to allocate SDMA completion queue\n",
 			   uctxt->ctxt, subctxt_fp(fp));
-		ret = -ENOMEM;
-		goto done;
+		goto cq_nomem;
 	}
 
 	memsize = ALIGN(sizeof(*cq->comps) * hfi_sdma_comp_ring_size,
@@ -437,8 +433,7 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
 		dd_dev_err(dd,
 		      "[%u:%u] Failed to allocate SDMA completion queue entries\n",
 		      uctxt->ctxt, subctxt_fp(fp));
-		ret = -ENOMEM;
-		goto done;
+		goto cq_comps_nomem;
 	}
 	cq->nentries = hfi_sdma_comp_ring_size;
 	user_sdma_comp_fp(fp) = cq;
@@ -469,6 +464,19 @@ int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
 	spin_lock_irqsave(&uctxt->sdma_qlock, flags);
 	list_add(&pq->list, &uctxt->sdma_queues);
 	spin_unlock_irqrestore(&uctxt->sdma_qlock, flags);
+	goto done;
+
+cq_comps_nomem:
+	kfree(cq);
+cq_nomem:
+	kmem_cache_destroy(pq->txreq_cache);
+pq_txreq_nomem:
+	kfree(pq->reqs);
+pq_reqs_nomem:
+	kfree(pq);
+	user_sdma_pkt_fp(fp) = NULL;
+pq_nomem:
+	ret = -ENOMEM;
 done:
 	return ret;
 }
@@ -1439,11 +1447,8 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 	/* XXX (MITKO): Once we start using the SDMA drain mechanism, this
 	 * should never happen. For now, guard against it so we don't crash
 	 * the kernel. */
-	if (!req || !pq) {
-		dd_dev_err(pq->dd,
-			 "Attempting to free txreq after queue was destroyed");
+	if (!req || !pq)
 		return;
-	}
 
 	if (tx->iovec1)
 		iovec_may_free(tx->iovec1, unpin_vector_pages);
