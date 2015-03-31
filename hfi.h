@@ -60,6 +60,7 @@
 #include "pio.h"
 #include "wfr.h"
 #include "mad.h"
+#include "qsfp.h"
 
 /* bumped 1 from s/w major version of QLogic_IB */
 #define HFI_CHIP_VERS_MAJ 3U
@@ -479,6 +480,9 @@ struct qib_pportdata {
 	struct kobject vl2mtu_kobj;
 	struct kobject diagc_kobj;
 
+	/* QSFP support */
+	struct qsfp_data qsfp_info;
+
 	/* GUID for this interface, in network order */
 	__be64 guid;
 	/* GUID for peer interface, in network order */
@@ -504,7 +508,6 @@ struct qib_pportdata {
 	struct work_struct sma_message_work;
 	struct work_struct freeze_work;
 	struct work_struct link_downgrade_work;
-	struct delayed_work link_restart_work;
 	/* host link state variables */
 	struct mutex hls_lock;
 	u32 host_link_state;
@@ -821,7 +824,6 @@ struct hfi_devdata {
 		u32 mask);
 	/* modify receive context registers, see RCVCTRL_* for operations */
 	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int context);
-	void (*f_set_intr_state)(struct hfi_devdata *, u32);
 	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
 	void (*f_wantpiobuf_intr)(struct send_context *, u32);
 	u64 (*f_portcntr)(struct qib_pportdata *, u32);
@@ -896,8 +898,6 @@ struct hfi_devdata {
 	struct hfi_status *status;
 	u32 freezelen; /* max length of freezemsg */
 
-	/* timer to verify interrupts work, and fall back if possible */
-	struct delayed_work interrupt_check_worker;
 	unsigned long ureg_align; /* user register alignment */
 
 	/* revision register shadow */
@@ -992,7 +992,6 @@ struct hfi_devdata {
 
 	/* control high-level access to qsfp */
 	struct mutex qsfp_i2c_mutex;
-	spinlock_t qsfp_lock;
 
 	struct diag_client *diag_client;
 	spinlock_t qib_diag_trans_lock; /* protect diag observer ops */
@@ -1515,7 +1514,7 @@ int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
 int qib_verbs_register_sysfs(struct hfi_devdata *);
 void qib_verbs_unregister_sysfs(struct hfi_devdata *);
 /* Hook for sysfs read of QSFP */
-extern int qib_qsfp_dump(struct qib_pportdata *ppd, char *buf, int len);
+extern int qsfp_dump(struct qib_pportdata *ppd, char *buf, int len);
 
 int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
 void hfi_pcie_cleanup(struct pci_dev *);

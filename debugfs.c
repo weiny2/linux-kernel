@@ -40,7 +40,6 @@
 #include "device.h"
 #include "qp.h"
 #include "sdma.h"
-#include "qsfp.h"
 
 static struct dentry *hfi_dbg_root;
 
@@ -376,7 +375,7 @@ static ssize_t portnames_read(struct file *file, char __user *buf,
 }
 
 /* read the per-port counters */
-static ssize_t portcntrs_read(struct file *file, char __user *buf,
+static ssize_t portcntrs_debugfs_read(struct file *file, char __user *buf,
 				size_t count, loff_t *ppos)
 {
 	u64 *counters;
@@ -397,7 +396,7 @@ static ssize_t portcntrs_read(struct file *file, char __user *buf,
 /*
  * read the per-port QSFP data for ppd
  */
-static ssize_t qsfp_dump(struct file *file, char __user *buf,
+static ssize_t qsfp_debugfs_dump(struct file *file, char __user *buf,
 			   size_t count, loff_t *ppos)
 {
 	struct qib_pportdata *ppd;
@@ -412,7 +411,7 @@ static ssize_t qsfp_dump(struct file *file, char __user *buf,
 		return -ENOMEM;
 	}
 
-	ret = qib_qsfp_dump(ppd, tmp, PAGE_SIZE);
+	ret = qsfp_dump(ppd, tmp, PAGE_SIZE);
 	if (ret > 0)
 		ret = simple_read_from_buffer(buf, count, ppos, tmp, ret);
 	rcu_read_unlock();
@@ -677,10 +676,10 @@ static const struct counter_info cntr_ops[] = {
 };
 
 static const struct counter_info port_cntr_ops[] = {
-	DEBUGFS_OPS("port%dcounters", portcntrs_read, NULL),
+	DEBUGFS_OPS("port%dcounters", portcntrs_debugfs_read, NULL),
 	DEBUGFS_OPS("i2c1", i2c1_debugfs_read, i2c1_debugfs_write),
 	DEBUGFS_OPS("i2c2", i2c2_debugfs_read, i2c2_debugfs_write),
-	DEBUGFS_OPS("qsfp_dump%d", qsfp_dump, NULL),
+	DEBUGFS_OPS("qsfp_dump%d", qsfp_debugfs_dump, NULL),
 	DEBUGFS_OPS("qsfp1", qsfp1_debugfs_read, qsfp1_debugfs_write),
 	DEBUGFS_OPS("qsfp2", qsfp2_debugfs_read, qsfp2_debugfs_write),
 };
