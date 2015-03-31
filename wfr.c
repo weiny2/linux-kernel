@@ -1422,7 +1422,7 @@ u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 	u64 val;
 
 	if (dd->flags & HFI_PRESENT) {
-		val = readq((void *)dd->kregbase + offset);
+		val = readq((void __iomem *)dd->kregbase + offset);
 		return le64_to_cpu(val);
 	}
 	return -1;
@@ -1431,14 +1431,15 @@ u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
 	if (dd->flags & HFI_PRESENT)
-		writeq(cpu_to_le64(value), (void *)dd->kregbase + offset);
+		writeq(cpu_to_le64(value),
+		       (void __iomem *)dd->kregbase + offset);
 }
 
 void __iomem *get_csr_addr(
 	struct hfi_devdata *dd,
 	u32 offset)
 {
-	return (void *)dd->kregbase + offset;
+	return (void __iomem *)dd->kregbase + offset;
 }
 
 static inline u64 read_write_csr(const struct hfi_devdata *dd, u32 csr,

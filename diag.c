@@ -1613,8 +1613,8 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		case HFI_SNOOP_IOCSETFILTER:
 			/* just copy command structure */
 			argp = (unsigned long *)arg;
-			ret = copy_from_user(&filter_cmd, (u8 *)argp,
-				sizeof(filter_cmd));
+			ret = copy_from_user(&filter_cmd, (void __user *)argp,
+					     sizeof(filter_cmd));
 			if (ret < 0) {
 				pr_alert("Error copying filter command\n");
 				break;
@@ -1639,7 +1639,7 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			}
 			/* copy remaining data from userspace */
 			ret = copy_from_user((u8 *)filter_value,
-					(u8 *)filter_cmd.value_ptr,
+					(void __user *)filter_cmd.value_ptr,
 					filter_cmd.length);
 			if (ret < 0) {
 				kfree(filter_value);
