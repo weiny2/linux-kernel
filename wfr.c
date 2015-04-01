@@ -5709,7 +5709,8 @@ static void qsfp_event(struct work_struct *work)
 void init_qsfp(struct qib_pportdata *ppd)
 {
 
-	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB)
+	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB ||
+			ppd->dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
 		ppd->driver_link_ready = 1;
 	else if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
 		struct hfi_devdata *dd = ppd->dd;
