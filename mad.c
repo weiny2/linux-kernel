@@ -488,6 +488,16 @@ void read_ltp_rtt(struct hfi_devdata *dd)
 	}
 }
 
+static u8 __opa_porttype(struct qib_pportdata *ppd)
+{
+	if (qsfp_mod_present(ppd)) {
+		if (ppd->qsfp_info.cache_valid)
+			return OPA_PORT_TYPE_STANDARD;
+		return OPA_PORT_TYPE_DISCONNECTED;
+	}
+	return OPA_PORT_TYPE_UNKNOWN;
+}
+
 static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				   struct ib_device *ibdev, u8 port,
 				   u32 *resp_len)
@@ -571,6 +581,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (start_of_sm_config && (state == IB_PORT_INIT))
 		ppd->is_sm_config_started = 1;
+
+	pi->port_phys_conf = __opa_porttype(ppd) & 0xf;
 
 #if PI_LED_ENABLE_SUP
 	pi->port_states.ledenable_offlinereason = ppd->neighbor_normal << 4;
