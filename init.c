@@ -93,7 +93,7 @@ module_param(fifo_stalled_count, uint, S_IRUGO);
 MODULE_PARM_DESC(fifo_stalled_count, "How many times have the receive FIFOs been stalled?");
 
 /* interrupt testing */
-unsigned int test_interrupts;
+static unsigned int test_interrupts;
 module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
 
 static unsigned hfi_rcvarr_split = 25;
@@ -1293,7 +1293,7 @@ static struct pci_driver qib_driver = {
 	.err_handler = &qib_pci_err_handler,
 };
 
-void __init compute_krcvqs(void)
+static void __init compute_krcvqs(void)
 {
 	int i;
 

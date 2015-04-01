@@ -371,7 +371,7 @@ static void drain_snoop_list(struct list_head *queue)
 	}
 }
 
-void hfi_snoop_remove(struct hfi_devdata *dd)
+static void hfi_snoop_remove(struct hfi_devdata *dd)
 {
 	unsigned long flags = 0;
 

@@ -227,7 +227,7 @@ static void sdma_flush_descq(struct sdma_engine *sde);
  * sdma_state_name() - return state string from enum
  * @state: state
  */
-const char *sdma_state_name(enum sdma_states state)
+static const char *sdma_state_name(enum sdma_states state)
 {
 	return sdma_state_names[state];
 }
@@ -402,7 +402,7 @@ static void sdma_field_flush(struct work_struct *work)
 	write_sequnlock_irqrestore(&sde->head_lock, flags);
 }
 
-void sdma_err_halt_wait(struct work_struct *work)
+static void sdma_err_halt_wait(struct work_struct *work)
 {
 	struct sdma_engine *sde = container_of(work, struct sdma_engine,
 						err_halt_worker);
@@ -431,13 +431,13 @@ void sdma_err_halt_wait(struct work_struct *work)
 	sdma_process_event(sde, sdma_event_e15_hw_halt_done);
 }
 
-void sdma_start_err_halt_wait(struct sdma_engine *sde)
+static void sdma_start_err_halt_wait(struct sdma_engine *sde)
 {
 	schedule_work(&sde->err_halt_worker);
 }
 
 
-void sdma_err_progress_check_schedule(struct sdma_engine *sde)
+static void sdma_err_progress_check_schedule(struct sdma_engine *sde)
 {
 	if (!is_bx(sde->dd) && HFI_CAP_IS_KSET(SDMA_AHG)) {
 		/*
@@ -469,7 +469,7 @@ void sdma_err_progress_check_schedule(struct sdma_engine *sde)
 	}
 }
 
-void sdma_err_progress_check(unsigned long data)
+static void sdma_err_progress_check(unsigned long data)
 {
 	unsigned index;
 	struct sdma_engine *sde = (struct sdma_engine *)data;

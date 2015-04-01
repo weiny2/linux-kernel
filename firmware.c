@@ -917,7 +917,7 @@ void sbus_request(struct hfi_devdata *dd,
  * + Must be called before the 8051 is loaded - assumes 8051 is not loaded
  *   when using MISC_CFG_FW_CTRL.
  */
-void turn_off_spicos(struct hfi_devdata *dd, int flags)
+static void turn_off_spicos(struct hfi_devdata *dd, int flags)
 {
 	/* only needed on A0 */
 	if (!is_a0(dd))

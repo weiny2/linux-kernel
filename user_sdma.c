@@ -153,7 +153,7 @@ MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 12
  */
 #define MAX_DEFER_RETRY_COUNT 1
 
-unsigned initial_pkt_count = 8;
+static unsigned initial_pkt_count = 8;
 
 #define SDMA_IOWAIT_TIMEOUT 1000 /* in milliseconds */
 

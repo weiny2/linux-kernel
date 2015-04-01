@@ -80,7 +80,7 @@ ushort link_crc_mask = WFR_SUPPORTED_CRCS;
 module_param(link_crc_mask, ushort, S_IRUGO);
 MODULE_PARM_DESC(link_crc_mask, "CRCs to use on the link");
 
-ushort crc_14b_sideband = 1;
+static ushort crc_14b_sideband = 1;
 module_param(crc_14b_sideband, ushort, S_IRUGO);
 MODULE_PARM_DESC(crc_14b_sideband, "Use sideband credit return (14b CRC only)");
 
@@ -107,7 +107,7 @@ module_param(quick_linkup, uint, S_IRUGO);
 MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
 
 /* TODO: temporary; skip BCC steps */
-uint disable_bcc = 0;
+static uint disable_bcc;
 module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
 MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
 
@@ -2913,7 +2913,8 @@ static void handle_8051_request(struct hfi_devdata *dd)
 	};
 }
 
-void write_global_credit(struct hfi_devdata *dd, u8 vau, u16 total, u16 shared)
+static void write_global_credit(struct hfi_devdata *dd,
+				u8 vau, u16 total, u16 shared)
 {
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
 /* TODO: HAS 0.76 changed names and adds a field */
@@ -3012,7 +3013,7 @@ static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 /*
  * These LCB adjustments are for the Aurora SerDes core in the FPGA.
  */
-void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
+static void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
 {
 	u64 rx_radr, tx_radr;
 	u32 version;
@@ -5101,7 +5102,7 @@ static int write_tx_settings(struct hfi_devdata *dd,
 	return load_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, frame);
 }
 
-void check_fabric_firmware_versions(struct hfi_devdata *dd)
+static void check_fabric_firmware_versions(struct hfi_devdata *dd)
 {
 	u32 frame, version, prod_id;
 	int ret, lane;
@@ -5199,7 +5200,7 @@ int send_idle_sma(struct hfi_devdata *dd, u64 message)
  *
  * return 0 on success, -errno on error
  */
-int do_quick_linkup(struct hfi_devdata *dd)
+static int do_quick_linkup(struct hfi_devdata *dd)
 {
 	u64 reg;
 	unsigned long timeout;
@@ -5321,7 +5322,7 @@ static int set_serdes_loopback_mode(struct hfi_devdata *dd)
 /*
  * Do all special steps to set up loopback.
  */
-int init_loopback(struct hfi_devdata *dd)
+static int init_loopback(struct hfi_devdata *dd)
 {
 	dd_dev_info(dd, "Entering loopback mode\n");
 
@@ -5520,8 +5521,8 @@ static void reset_qsfp(struct qib_pportdata *ppd)
 		qsfp_mask);
 }
 
-int handle_qsfp_error_conditions(struct qib_pportdata *ppd,
-				u8 *qsfp_interrupt_status)
+static int handle_qsfp_error_conditions(struct qib_pportdata *ppd,
+					u8 *qsfp_interrupt_status)
 {
 	struct hfi_devdata *dd = ppd->dd;
 
@@ -5902,7 +5903,7 @@ static int reset(struct hfi_devdata *dd)
 	return 0;
 }
 
-int trace_tid;	/* TODO: hook this up with tracing */
+static int trace_tid;	/* TODO: hook this up with tracing */
 static const char * const pt_names[] = {
 	"expected",
 	"eager",
@@ -9848,7 +9849,7 @@ static void reset_rxe_csrs(struct hfi_devdata *dd)
  * otherwize
  *        -> VL 0
  */
-void init_sc2vl_tables(struct hfi_devdata *dd)
+static void init_sc2vl_tables(struct hfi_devdata *dd)
 {
 	int i;
 	/* init per architecture spec, contrained by hardware capability */
@@ -10262,7 +10263,7 @@ bail:
 		dd->n_krcv_queues - 1);
 }
 
-void init_rxe(struct hfi_devdata *dd)
+static void init_rxe(struct hfi_devdata *dd)
 {
 	/* enable all receive errors */
 	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
@@ -10284,7 +10285,7 @@ void init_rxe(struct hfi_devdata *dd)
 	/* TODO: others...? */
 }
 
-void init_other(struct hfi_devdata *dd)
+static void init_other(struct hfi_devdata *dd)
 {
 	/* enable all CCE errors */
 	write_csr(dd, WFR_CCE_ERR_MASK, ~0ull);
@@ -10339,7 +10340,7 @@ void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu)
 					WFR_SEND_CM_REMOTE_AU_TABLE4_TO7);
 }
 
-void init_txe(struct hfi_devdata *dd)
+static void init_txe(struct hfi_devdata *dd)
 {
 	int i;
 
@@ -10359,7 +10360,7 @@ void init_txe(struct hfi_devdata *dd)
 	assign_local_cm_au_table(dd, dd->vcu);
 }
 
-int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
+static int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 {
 	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
 	unsigned sctxt;
@@ -10397,7 +10398,7 @@ done:
 	return ret;
 }
 
-int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
+static int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
 {
 	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
 	unsigned sctxt;
@@ -10454,7 +10455,7 @@ done:
 	return ret;
 }
 
-int clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
+static int clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
 {
 	struct qib_ctxtdata *rcd;
 	unsigned sctxt;
