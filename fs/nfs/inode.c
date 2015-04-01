@@ -572,14 +572,16 @@ out:
  * Note: we do this in the *proc.c in order to ensure that
  *       it works for things like exclusive creates too.
  */
-void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
+void nfs_setattr_update_inode2(struct inode *inode, struct iattr *attr,
 		struct nfs_fattr *fattr)
 {
 	/* Barrier: bump the attribute generation count. */
-	fattr->gencount = nfs_inc_attr_generation_counter();
+	if (fattr)
+		fattr->gencount = nfs_inc_attr_generation_counter();
 
 	spin_lock(&inode->i_lock);
-	NFS_I(inode)->attr_gencount = fattr->gencount;
+	if (fattr)
+		NFS_I(inode)->attr_gencount = fattr->gencount;
 	if ((attr->ia_valid & (ATTR_MODE|ATTR_UID|ATTR_GID)) != 0) {
 		if ((attr->ia_valid & ATTR_MODE) != 0) {
 			int mode = attr->ia_mode & S_IALLUGO;
@@ -596,8 +598,14 @@ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
 		nfs_inc_stats(inode, NFSIOS_SETATTRTRUNC);
 		nfs_vmtruncate(inode, attr->ia_size);
 	}
-	nfs_update_inode(inode, fattr);
+	if (fattr)
+		nfs_update_inode(inode, fattr);
 	spin_unlock(&inode->i_lock);
+}
+EXPORT_SYMBOL_GPL(nfs_setattr_update_inode2);
+void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr)
+{
+	nfs_setattr_update_inode2(inode, attr, NULL);
 }
 EXPORT_SYMBOL_GPL(nfs_setattr_update_inode);
 
