@@ -224,15 +224,6 @@ static void sdma_desc_avail(struct sdma_engine *sde, unsigned avail);
 static void sdma_flush_descq(struct sdma_engine *sde);
 
 /**
- * sdma_event_name() - return event string from enum
- * @event: event
- */
-const char *sdma_event_name(enum sdma_events event)
-{
-	return sdma_event_names[event];
-}
-
-/**
  * sdma_state_name() - return state string from enum
  * @state: state
  */

@@ -1151,16 +1151,6 @@ void qib_free_devdata(struct hfi_devdata *dd)
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
 }
 
-u64 hfi_int_counter(struct hfi_devdata *dd)
-{
-	int cpu;
-	u64 int_counter = 0;
-
-	for_each_possible_cpu(cpu)
-		int_counter += *per_cpu_ptr(dd->int_counter, cpu);
-	return int_counter;
-}
-
 /*
  * Allocate our primary per-unit data structure.  Must be done via verbs
  * allocator, because the verbs cleanup process both does cleanup and

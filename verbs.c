@@ -287,44 +287,6 @@ void qib_skip_sge(struct qib_sge_state *ss, u32 length, int release)
 	}
 }
 
-/*
- * Copy from the SGEs to the data buffer.
- */
-void qib_copy_from_sge(void *data, struct qib_sge_state *ss, u32 length)
-{
-	struct qib_sge *sge = &ss->sge;
-
-	while (length) {
-		u32 len = sge->length;
-
-		if (len > length)
-			len = length;
-		if (len > sge->sge_length)
-			len = sge->sge_length;
-		BUG_ON(len == 0);
-		memcpy(data, sge->vaddr, len);
-		sge->vaddr += len;
-		sge->length -= len;
-		sge->sge_length -= len;
-		if (sge->sge_length == 0) {
-			if (--ss->num_sge)
-				*sge = *ss->sg_list++;
-		} else if (sge->length == 0 && sge->mr->lkey) {
-			if (++sge->n >= QIB_SEGSZ) {
-				if (++sge->m >= sge->mr->mapsz)
-					break;
-				sge->n = 0;
-			}
-			sge->vaddr =
-				sge->mr->map[sge->m]->segs[sge->n].vaddr;
-			sge->length =
-				sge->mr->map[sge->m]->segs[sge->n].length;
-		}
-		data += len;
-		length -= len;
-	}
-}
-
 /**
  * qib_post_one_send - post one RC, UC, or UD send work request
  * @qp: the QP to post on
