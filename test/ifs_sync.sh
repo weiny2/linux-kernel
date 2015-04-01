@@ -6,7 +6,7 @@ yum6=/nfs/ph/proj/ftp/wfr_yum/next
 yum7=/nfs/ph/proj/ftp/wfr_yum7/next
 ifs_root=/nfs/ph/proj/stlbuilds/Integration/GA10_0_0_0/OPENIB_INSTALL
 ifs_base="$ifs_root/10_0_0_0_"
-ifs_priv="/nfs/site/disks/ph_home_disk001/$USER/work/IFS/scratch"
+ifs_priv="/nfs/site/disks/ph_home_disk001/ddalessa/work/IFS/scratch"
 cur_dir=$PWD
 
 rm -rf $ifs_priv
@@ -119,7 +119,7 @@ rsync -avh -n --ignore-existing --exclude 'hfi-*' IntelOPA-IFS.RHEL6-x86_64.10.0
 echo "Checking for RHEL 7 updates"
 echo "---------------------------"
 echo "OFED"
-rsync -avh -n --ignore-existing --exclude 'hfi-*' IntelOPA-IFS.RHEL7-x86_64.10.0.0.0.$build_num/IntelOPA-OFED.RHEL7-x86_64.10.0.0.0.*/RPMS/redhat-ES7/ $yum7
+rsync -avh -n --ignore-existing --exclude 'hfi-*' IntelOPA-IFS.RHEL7-x86_64.10.0.0.0.$build_num/IntelOPA-OFED_DELTA.RHEL7-x86_64.10.0.0.0.*/RPMS/redhat-ES7/ $yum7
 echo "FM"
 rsync -avh -n --ignore-existing --exclude 'hfi-*' IntelOPA-IFS.RHEL7-x86_64.10.0.0.0.$build_num/IntelOPA-FM.RHEL7-x86_64.10.0.0.0.*/RPMS/x86_64/ $yum7
 echo "FF"
@@ -146,7 +146,7 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
-rsync -avh --ignore-existing --exclude 'hfi-*' IntelOPA-IFS.RHEL7-x86_64.10.0.0.0.$build_num/IntelOPA-OFED.RHEL7-x86_64.10.0.0.0.*/RPMS/redhat-ES7/ $yum7
+rsync -avh --ignore-existing --exclude 'hfi-*' IntelOPA-IFS.RHEL7-x86_64.10.0.0.0.$build_num/IntelOPA-OFED_DELTA.RHEL7-x86_64.10.0.0.0.*/RPMS/redhat-ES7/ $yum7
 if [ $? -ne 0 ]; then
 	echo "Could not apply RHEL 7 - OFED"
 	exit 1
