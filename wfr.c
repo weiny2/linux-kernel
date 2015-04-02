@@ -6514,6 +6514,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			u8 tmp = ppd->link_enabled;
+
 			ret = goto_offline(ppd, ppd->remote_link_down_reason);
 			if (ret) {
 				ppd->link_enabled = tmp;

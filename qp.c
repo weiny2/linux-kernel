@@ -708,8 +708,8 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	 */
 	if (attr_mask & IB_QP_PATH_MTU) {
 		int mtu, pidx = qp->port_num - 1;
-		dd = dd_from_dev(dev);
 
+		dd = dd_from_dev(dev);
 		mtu = verbs_mtu_enum_to_int(ibqp->device, attr->path_mtu);
 		if (mtu == -1)
 			goto inval;
