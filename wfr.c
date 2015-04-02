@@ -1236,7 +1236,7 @@ static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
 /* 0*/	WFR_EE(CCE_ERR,		handle_cce_err,    "CceErr"),
 /* 1*/	WFR_EE(RCV_ERR,		handle_rxe_err,    "RxeErr"),
 /* 2*/	WFR_EE(MISC_ERR,	handle_misc_err,   "MiscErr"),
-/* 3*/	{ 0, 0, 0, 0 }, /* reserved */
+/* 3*/	{ 0, 0, 0, NULL }, /* reserved */
 /* 4*/	WFR_EE(SEND_PIO_ERR,    handle_pio_err,    "PioErr"),
 /* 5*/	WFR_EE(SEND_DMA_ERR,    handle_sdma_err,   "SDmaErr"),
 /* 6*/	WFR_EE(SEND_EGRESS_ERR, handle_egress_err, "EgressErr"),
@@ -1258,11 +1258,11 @@ static const struct err_reg_info sdma_eng_err =
 	WFR_EE(SEND_DMA_ENG_ERR, handle_sdma_eng_err, "SDmaEngErr");
 
 static const struct err_reg_info various_err[NUM_VARIOUS] = {
-/* 0*/	{ 0, 0, 0, 0 }, /* PbcInt */
-/* 1*/	{ 0, 0, 0, 0 }, /* GpioAssertInt */
+/* 0*/	{ 0, 0, 0, NULL }, /* PbcInt */
+/* 1*/	{ 0, 0, 0, NULL }, /* GpioAssertInt */
 /* 2*/	WFR_EE(ASIC_QSFP1,	handle_qsfp_int,	"QSFP1"),
 /* 3*/	WFR_EE(ASIC_QSFP2,	handle_qsfp_int,	"QSFP2"),
-/* 4*/	{ 0, 0, 0, 0 }, /* TCritInt */
+/* 4*/	{ 0, 0, 0, NULL }, /* TCritInt */
 	/* rest are reserved */
 };
 
