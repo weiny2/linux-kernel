@@ -141,6 +141,7 @@ int opa_core_client_register(struct opa_core_client *client)
 	si->add_dev = opa_add_dev;
 	si->remove_dev = opa_remove_dev;
 
+	idr_init(&client->id);
 	return subsys_interface_register(&client->si);
 }
 EXPORT_SYMBOL(opa_core_client_register);
@@ -148,6 +149,7 @@ EXPORT_SYMBOL(opa_core_client_register);
 void opa_core_client_unregister(struct opa_core_client *client)
 {
 	subsys_interface_unregister(&client->si);
+	idr_destroy(&client->id);
 }
 EXPORT_SYMBOL(opa_core_client_unregister);
 

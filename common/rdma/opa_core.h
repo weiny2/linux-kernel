@@ -53,6 +53,7 @@
 #define _OPA_CORE_H_
 #include <linux/device.h>
 #include <linux/idr.h>
+#include <linux/gfp.h>
 #include <rdma/hfi_types.h>
 
 /*
@@ -229,7 +230,7 @@ struct opa_core_ops {
 };
 
 /**
- * struct opa_core_device - device and vendor ID for an opa core device
+ * struct opa_core_device - device and vendor ID for an OPA core device
  * @vendor: OPA HFI PCIe vendor ID
  * @device: OPA HFI PCIe device ID
  */
@@ -244,8 +245,8 @@ struct opa_core_device_id {
  * @id: the device type identification (used to match it with a driver).
  * @dev: underlying device.
  * @index: unique position on the opa_core bus
- * @kregbase: start VA for opaX hw csrs
- * @kregend: end VA for opaX hw csrs
+ * @kregbase: start VA for OPA hw csrs
+ * @kregend: end VA for OPA hw csrs
  * @dd: device specific information
  */
 struct opa_core_device {
@@ -285,12 +286,14 @@ void opa_core_unregister_device(struct opa_core_device *odev);
  * @add: the function to call when a device is discovered
  * @remove: the function to call when a device is removed
  * @si: subsystem interface (private to opa_core)
+ * @id: ID allocator (private to opa_core)
  */
 struct opa_core_client {
 	const char *name;
 	int (*add)(struct opa_core_device *odev);
 	void (*remove)(struct opa_core_device *odev);
 	struct subsys_interface si;
+	struct idr id;
 };
 
 /**
@@ -314,4 +317,45 @@ int opa_core_client_register(struct opa_core_client *client);
  */
 void opa_core_client_unregister(struct opa_core_client *client);
 
+/**
+ * opa_core_set_priv_data - Set private data for a client/odev combination
+ * @client: OPA core client
+ * @odev: OPA core device
+ * @priv: private data
+ *
+ * Return: 0 on success or appropriate error
+ */
+static inline int
+opa_core_set_priv_data(struct opa_core_client *client,
+		       struct opa_core_device *odev, void *priv)
+{
+	return idr_alloc(&client->id, priv, odev->index,
+			odev->index + 1, GFP_NOWAIT);
+}
+
+/**
+ * opa_core_get_priv_data - Get private data for a client/odev combination
+ * @client: OPA core client
+ * @odev: OPA core device
+ *
+ * Return: private data pointer or NULL if private data was not set
+ */
+static inline void *opa_core_get_priv_data(struct opa_core_client *client,
+					   struct opa_core_device *odev)
+{
+	return idr_find(&client->id, odev->index);
+}
+
+/**
+ * opa_core_clear_priv_data - Clear private data for a client/odev combination
+ * @client: OPA core client
+ * @odev: OPA core device
+ *
+ * Return: none
+ */
+static inline void opa_core_clear_priv_data(struct opa_core_client *client,
+					    struct opa_core_device *odev)
+{
+	return idr_remove(&client->id, odev->index);
+}
 #endif /* _OPA_CORE_H_ */

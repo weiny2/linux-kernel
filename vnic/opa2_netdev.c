@@ -65,6 +65,15 @@
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_ct.h>
 
+static int opa_netdev_probe(struct opa_core_device *odev);
+static void opa_netdev_remove(struct opa_core_device *odev);
+
+static struct opa_core_client opa_netdev = {
+	.name = KBUILD_MODNAME,
+	.add = opa_netdev_probe,
+	.remove = opa_netdev_remove
+};
+
 /*
  * struct opa_netdev - OPA2 net device specific fields
  *
@@ -84,8 +93,6 @@ struct opa_netdev {
 	struct hfi_cq		tx;
 	struct hfi_cq		rx;
 };
-
-static struct idr opa_netdev_ids;
 
 #define OPA2_RXQ_SIZE 0
 #define OPA2_NET_ME_COUNT 256
@@ -566,12 +573,9 @@ static int opa_netdev_probe(struct opa_core_device *odev)
 		return -ENOMEM;
 
 	dev = netdev_priv(ndev);
-	/* TODO: Move stashing of private pointer to OPA core */
-	rc = idr_alloc(&opa_netdev_ids, dev, odev->index,
-		       odev->index + 1, GFP_NOWAIT);
-	if (rc < 0)
-		goto err;
-
+	rc = opa_core_set_priv_data(&opa_netdev, odev, dev);
+	if (rc)
+		goto priv_err;
 	dev->ndev = ndev;
 	ndev->features = NETIF_F_HIGHDMA;
 	ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
@@ -584,17 +588,16 @@ static int opa_netdev_probe(struct opa_core_device *odev)
 
 	rc = opa2_hw_init(odev, dev);
 	if (rc)
-		goto err1;
-
+		goto hw_err;
 	rc = register_netdev(ndev);
 	if (rc)
-		goto err2;
+		goto netdev_err;
 	return 0;
-err2:
+netdev_err:
 	opa2_hw_uninit(odev, dev);
-err1:
-	idr_remove(&opa_netdev_ids, odev->index);
-err:
+hw_err:
+	opa_core_clear_priv_data(&opa_netdev, odev);
+priv_err:
 	free_netdev(ndev);
 	dev_err(&odev->dev, "%s error rc %d\n", __func__, rc);
 	return rc;
@@ -603,27 +606,19 @@ err:
 static void opa_netdev_remove(struct opa_core_device *odev)
 {
 	struct net_device *ndev;
-	struct opa_netdev *dev;
+	struct opa_netdev *dev = opa_core_get_priv_data(&opa_netdev, odev);
 
-	/* TODO: Move retrieving the private pointer to OPA core */
-	dev = idr_find(&opa_netdev_ids, odev->index);
 	if (!dev)
 		return;
 	ndev = dev->ndev;
 	unregister_netdev(ndev);
 	opa2_hw_uninit(odev, dev);
 	free_netdev(ndev);
+	opa_core_clear_priv_data(&opa_netdev, odev);
 }
-
-static struct opa_core_client opa_netdev = {
-	.name = KBUILD_MODNAME,
-	.add = opa_netdev_probe,
-	.remove = opa_netdev_remove
-};
 
 static int __init opa_netdev_init_module(void)
 {
-	idr_init(&opa_netdev_ids);
 	return opa_core_client_register(&opa_netdev);
 }
 module_init(opa_netdev_init_module);
@@ -631,7 +626,6 @@ module_init(opa_netdev_init_module);
 static void __exit opa_netdev_exit_module(void)
 {
 	opa_core_client_unregister(&opa_netdev);
-	idr_destroy(&opa_netdev_ids);
 }
 module_exit(opa_netdev_exit_module);
 MODULE_LICENSE("Dual BSD/GPL");
