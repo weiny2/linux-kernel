@@ -57,15 +57,20 @@
 #include <rdma/opa_core.h>
 #include "device.h"
 
-static struct idr opa_device_tbl;
-DEFINE_SPINLOCK(opa_device_lock);
+static int hfi_misc_add(struct opa_core_device *odev);
+static void hfi_misc_remove(struct opa_core_device *odev);
+
+static struct opa_core_client hfi_misc = {
+	.name = KBUILD_MODNAME,
+	.add = hfi_misc_add,
+	.remove = hfi_misc_remove,
+};
 
 /*
  * Device initialization, called by OPA core when a OPA device is discovered
  */
 static int hfi_misc_add(struct opa_core_device *odev)
 {
-	unsigned long flags;
 	int ret;
 	struct hfi_info *hi;
 
@@ -76,13 +81,9 @@ static int hfi_misc_add(struct opa_core_device *odev)
 	}
 	hi->odev = odev;
 
-	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&opa_device_lock, flags);
-	ret = idr_alloc(&opa_device_tbl, hi, odev->index, odev->index+1, GFP_NOWAIT);
-	if (ret < 0) {
-		kfree(hi);
-		goto idr_end;
-	}
+	ret = opa_core_set_priv_data(&hfi_misc, odev, hi);
+	if (ret)
+		goto priv_error;
 
 	ret = hfi_ui_add(hi);
 	if (ret)
@@ -93,17 +94,13 @@ static int hfi_misc_add(struct opa_core_device *odev)
 		hfi_ui_remove(hi);
 		goto add_error;
 	}
-
-	goto idr_end;
-
+	return ret;
 add_error:
-	dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
-	idr_remove(&opa_device_tbl, odev->index);
+	opa_core_clear_priv_data(&hfi_misc, odev);
+priv_error:
 	kfree(hi);
-idr_end:
-	spin_unlock_irqrestore(&opa_device_lock, flags);
-	idr_preload_end();
 exit:
+	dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
 	return ret;
 }
 
@@ -113,40 +110,27 @@ exit:
  */
 static void hfi_misc_remove(struct opa_core_device *odev)
 {
-	unsigned long flags;
 	struct hfi_info *hi;
 
-	spin_lock_irqsave(&opa_device_lock, flags);
-	hi = idr_find(&opa_device_tbl, odev->index);
-	if (hi) {
-		idr_remove(&opa_device_tbl, odev->index);
-		hfi_user_remove(hi);
-		hfi_ui_remove(hi);
-		kfree(hi);
-	}
-	spin_unlock_irqrestore(&opa_device_lock, flags);
+	hi = opa_core_get_priv_data(&hfi_misc, odev);
+	if (!hi)
+		return;
+	hfi_user_remove(hi);
+	hfi_ui_remove(hi);
+	kfree(hi);
+	opa_core_clear_priv_data(&hfi_misc, odev);
 }
-
-static struct opa_core_client hfi_misc = {
-	.name = KBUILD_MODNAME,
-	.add = hfi_misc_add,
-	.remove = hfi_misc_remove,
-};
 
 static int __init hfi_init(void)
 {
-	idr_init(&opa_device_tbl);
 	return opa_core_client_register(&hfi_misc);
 }
-
 module_init(hfi_init);
 
 static void hfi_cleanup(void)
 {
 	opa_core_client_unregister(&hfi_misc);
-	idr_destroy(&opa_device_tbl);
 }
-
 module_exit(hfi_cleanup);
 
 MODULE_LICENSE("Dual BSD/GPL");

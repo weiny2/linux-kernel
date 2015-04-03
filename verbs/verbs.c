@@ -57,9 +57,6 @@
 #include <linux/utsname.h>
 #include "verbs.h"
 
-static struct idr opa_device_tbl;
-DEFINE_SPINLOCK(opa_device_lock);
-
 static int opa_ib_add(struct opa_core_device *odev);
 static void opa_ib_remove(struct opa_core_device *odev);
 
@@ -368,7 +365,6 @@ static void opa_ib_init_port(struct opa_ib_portdata *ibp)
 
 static int opa_ib_add(struct opa_core_device *odev)
 {
-	unsigned long flags;
 	int i, ret;
 	u8 num_ports;
 	struct opa_ib_data *ibd;
@@ -390,45 +386,36 @@ static int opa_ib_add(struct opa_core_device *odev)
 	for (i = 0; i < num_ports; i++)
 		opa_ib_init_port(&ibd->pport[i]);
 
-	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&opa_device_lock, flags);
-	ret = idr_alloc(&opa_device_tbl, ibd, odev->index, odev->index+1, GFP_NOWAIT);
-	if (ret < 0) {
-		kfree(ibd);
-		goto idr_end;
-	}
-
+	ret = opa_core_set_priv_data(&opa_ib_driver, odev, ibd);
+	if (ret)
+		goto priv_err;
 	ret = opa_ib_register_device(ibd, opa_ib_driver.name);
-	if (ret) {
-		idr_remove(&opa_device_tbl, odev->index);
-		kfree(ibd);
-	}
-
-idr_end:
-	spin_unlock_irqrestore(&opa_device_lock, flags);
-	idr_preload_end();
+	if (ret)
+		goto ib_reg_err;
+	return ret;
+ib_reg_err:
+	opa_core_clear_priv_data(&opa_ib_driver, odev);
+priv_err:
+	kfree(ibd);
 exit:
+	dev_err(&odev->dev, "%s error rc %d\n", __func__, ret);
 	return ret;
 }
 
 static void opa_ib_remove(struct opa_core_device *odev)
 {
-	unsigned long flags;
-	struct opa_ib_data *ibd = dev_get_drvdata(&odev->dev);
+	struct opa_ib_data *ibd;
 
-	spin_lock_irqsave(&opa_device_lock, flags);
-	ibd = idr_find(&opa_device_tbl, odev->index);
-	if (ibd) {
-		idr_remove(&opa_device_tbl, odev->index);
-		opa_ib_unregister_device(ibd);
-		kfree(ibd);
-	}
-	spin_unlock_irqrestore(&opa_device_lock, flags);
+	ibd = opa_core_get_priv_data(&opa_ib_driver, odev);
+	if (!ibd)
+		return;
+	opa_ib_unregister_device(ibd);
+	kfree(ibd);
+	opa_core_clear_priv_data(&opa_ib_driver, odev);
 }
 
 int __init opa_ib_init(void)
 {
-	idr_init(&opa_device_tbl);
 	return opa_core_client_register(&opa_ib_driver);
 }
 module_init(opa_ib_init);
@@ -436,7 +423,6 @@ module_init(opa_ib_init);
 void opa_ib_cleanup(void)
 {
 	opa_core_client_unregister(&opa_ib_driver);
-	idr_destroy(&opa_device_tbl);
 }
 module_exit(opa_ib_cleanup);
 
