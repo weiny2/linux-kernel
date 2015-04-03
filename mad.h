@@ -414,6 +414,18 @@ struct cc_state {
 #define STL_AM_START_SM_CFG(am)		(((am) >> STL_AM_START_SM_CFG_SHIFT) \
 						& STL_AM_START_SM_CFG_MASK)
 
+#define STL_AM_CI_ADDR_SHIFT	19
+#define STL_AM_CI_ADDR_MASK	0xfff
+#define STL_AM_CI_ADDR_SMASK	(STL_AM_CI_ADDR_MASK << STL_CI_ADDR_SHIFT)
+#define STL_AM_CI_ADDR(am)	(((am) >> STL_AM_CI_ADDR_SHIFT) & \
+					STL_AM_CI_ADDR_MASK)
+
+#define STL_AM_CI_LEN_SHIFT	13
+#define STL_AM_CI_LEN_MASK	0x3f
+#define STL_AM_CI_LEN_SMASK	(STL_AM_CI_LEN_MASK << STL_CI_LEN_SHIFT)
+#define STL_AM_CI_LEN(am)	(((am) >> STL_AM_CI_LEN_SHIFT) & \
+					STL_AM_CI_LEN_MASK)
+
 /* error info macros */
 #define STL_EI_STATUS_SMASK	0x80
 #define STL_EI_CODE_SMASK	0x0f

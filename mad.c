@@ -1605,6 +1605,43 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	return __subn_get_opa_psi(smp, am, data, ibdev, port, resp_len);
 }
 
+static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
+				     struct ib_device *ibdev, u8 port,
+				     u32 *resp_len)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u32 addr = STL_AM_CI_ADDR(am);
+	u32 len = STL_AM_CI_LEN(am);
+	int ret;
+
+	/* check that addr, (addr + len) are on the same "page" */
+#define __CI_PAGE_SIZE (1 << 7) /* 128 bytes */
+#define __CI_PAGE_MASK ~(__CI_PAGE_SIZE - 1)
+#define __CI_PAGE_NUM(a) ((a) & __CI_PAGE_MASK)
+	if (__CI_PAGE_NUM(addr) != __CI_PAGE_NUM(addr + len)) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	ret = get_cable_info(dd, port, addr, len, data);
+
+	if (ret == -ENODEV) {
+		smp->status |= IB_SMP_UNSUP_METH_ATTR;
+		return reply(smp);
+	}
+
+	/* all other errors result in IB_SMP_INVALID_FIELD status */
+	if (ret < 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	if (resp_len)
+		*resp_len += len;
+
+	return reply(smp);
+}
+
 static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
 			      struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
@@ -3393,6 +3430,10 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
 		ret = __subn_get_opa_bct(smp, am, data, ibdev, port,
 					 resp_len);
+		break;
+	case OPA_ATTRIB_ID_CABLE_INFO:
+		ret = __subn_get_opa_cable_info(smp, am, data, ibdev, port,
+						resp_len);
 		break;
 	case IB_SMP_ATTR_VL_ARB_TABLE:
 		ret = __subn_get_opa_vl_arb(smp, am, data, ibdev, port,
