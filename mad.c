@@ -2791,16 +2791,16 @@ static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
 	rsp->port_xmit_constraint_ei.status =
 		dd->err_info_xmit_constraint.status;
 	rsp->port_xmit_constraint_ei.pkey =
-		dd->err_info_xmit_constraint.pkey;
+		cpu_to_be16(dd->err_info_xmit_constraint.pkey);
 	rsp->port_xmit_constraint_ei.slid =
-		dd->err_info_xmit_constraint.slid;
+		cpu_to_be32(dd->err_info_xmit_constraint.slid);
 
 	rsp->port_rcv_constraint_ei.status =
 		dd->err_info_rcv_constraint.status;
 	rsp->port_rcv_constraint_ei.pkey =
-		dd->err_info_rcv_constraint.pkey;
+		cpu_to_be16(dd->err_info_rcv_constraint.pkey);
 	rsp->port_rcv_constraint_ei.slid =
-		dd->err_info_rcv_constraint.slid;
+		cpu_to_be32(dd->err_info_rcv_constraint.slid);
 
 	/* PortRcvSwitchRelayErrorInfo */
 	/* FIXME this error counter isn't relevant to HFIs */
