@@ -1345,7 +1345,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 		KDETH_SET(hdr->kdeth.ver_tid_offset, OFFSET,
 			  req->tidoffset / req->omfactor);
 		KDETH_SET(hdr->kdeth.ver_tid_offset, OM,
-			  !!(req->omfactor - KDETH_OM_SMALL));
+			  ((req->omfactor - KDETH_OM_SMALL) ? 1 : 0));
 	}
 done:
 	trace_hfi_sdma_user_header(pq->dd, pq->ctxt, pq->subctxt,
