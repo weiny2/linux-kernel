@@ -104,5 +104,5 @@ install:
 		(cd $(KBUILD) && sh scripts/headers_install.sh \
 			$(RPM_BUILD_ROOT)$(HFI_HEADER_INSTALL_DIR) \
 			$(PWD) $(HFI_HEADER_DIR)hfi_user.h)
-version: common.h
-	[ -e .git ] && sed -i  "/HFI_DRIVER_VERSION_BASE/s/1.11/$(VERSION)-$(RELEASE)/" common.h
+version:
+	@[ -e .git ] && echo -n $(VERSION)-$(RELEASE)
