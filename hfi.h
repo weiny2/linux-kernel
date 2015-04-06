@@ -367,10 +367,8 @@ struct qib_sge_state;
 #define HLS_GOING_DOWN	10
 
 /* use this MTU size if none other is given */
-#define HFI_DEFAULT_ACTIVE_MTU 4096
+#define HFI_DEFAULT_ACTIVE_MTU 8192
 /* use this MTU size as the default maximum */
-/* TODO: bad things may happen if 8K and 10K STL sizes used with an IB FM,
-   e.g. opensm */
 #define HFI_DEFAULT_MAX_MTU 8192
 /* default parition key */
 #define DEFAULT_PKEY 0xffff
@@ -1565,6 +1563,7 @@ extern void update_sge(struct qib_sge_state *ss, u32 length);
 extern unsigned int max_mtu;
 extern unsigned int default_mtu;
 extern unsigned int hfi_cu;
+extern unsigned int user_credit_return_threshold;
 extern unsigned int set_link_credits;
 extern uint num_rcv_contexts;
 extern unsigned n_krcvqs;

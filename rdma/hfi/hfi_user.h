@@ -83,6 +83,7 @@
 #define HFI_CAP_STATIC_RATE_CTRL (1UL << 15) /* Allow PBC.StaticRateControl */
 #define HFI_CAP_QSFP_ENABLED     (1UL << 16) /* Enable QSFP check during LNI */
 #define HFI_CAP_SDMA_HEAD_CHECK  (1UL << 17) /* SDMA head checking */
+#define HFI_CAP_EARLY_CREDIT_RETURN (1UL << 18) /* early credit return */
 
 #define HFI_RCVHDR_ENTSIZE_2    (1UL << 0)
 #define HFI_RCVHDR_ENTSIZE_16   (1UL << 1)
