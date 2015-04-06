@@ -886,7 +886,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
 	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
-	int ret, i, invalid = 0;
+	int ret, i, invalid = 0, call_set_mtu = 0;
 	int call_link_downgrade_policy = 0;
 
 	if (num_ports != 1) {
@@ -1050,7 +1050,13 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		}
-		dd->vld[i].mtu = mtu;
+		if (dd->vld[i].mtu != mtu) {
+			dd_dev_info(dd,
+				"MTU change on vl %d from %d to %d\n",
+				i, dd->vld[i].mtu, mtu);
+			dd->vld[i].mtu = mtu;
+			call_set_mtu++;
+		}
 	}
 	/* As per STLV1 spec: VL15 must support and be configured
 	 * for operation with a 2048 or larger MTU.
@@ -1058,8 +1064,15 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15/2] & 0xF);
 	if (mtu < 2048 || mtu == 0xffff)
 		mtu = 2048;
-	dd->vld[15].mtu = mtu;
-	set_mtu(ppd);
+	if (dd->vld[15].mtu != mtu) {
+		dd_dev_info(dd,
+			"MTU change on vl 15 from %d to %d\n",
+			dd->vld[15].mtu, mtu);
+		dd->vld[15].mtu = mtu;
+		call_set_mtu++;
+	}
+	if (call_set_mtu)
+		set_mtu(ppd);
 
 	/* Set operational VLs */
 	vls = pi->operational_vls & OPA_PI_MASK_OPERATIONAL_VL;
