@@ -2331,22 +2331,25 @@ static void count_port_inactive(struct hfi_devdata *dd)
  * egress error if more than one packet fails the same integrity check
  * since we cleared the corresponding bit in WFR_SEND_EGRESS_ERR_INFO.
  */
-static void count_disallowed_pkt(struct hfi_devdata *dd)
+static void handle_send_egress_err_info(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd = dd->pport;
+	u64 src = read_csr(dd, WFR_SEND_EGRESS_ERR_SOURCE); /* read first */
 	u64 info = read_csr(dd, WFR_SEND_EGRESS_ERR_INFO);
-	u64 src = read_csr(dd, WFR_SEND_EGRESS_ERR_SOURCE);
 	char buf[96];
+
+	/* clear down all observed info as quickly as possible after read */
+	write_csr(dd, WFR_SEND_EGRESS_ERR_INFO, info);
 
 	dd_dev_info(dd,
 		"Egress Error Info: 0x%llx, %s Egress Error Src 0x%llx\n",
 		info, egress_err_info_string(buf, sizeof(buf), info), src);
 
+	/* Eventually add other counters for each bit */
+
 	if (info & WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK) {
 		if (ppd->port_xmit_discards < ~(u64)0)
 			ppd->port_xmit_discards++;
-		write_csr(dd, WFR_SEND_EGRESS_ERR_INFO,
-			WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK);
 	}
 }
 
@@ -2394,7 +2397,7 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			count_port_inactive(dd);
 			handled |= (1ULL << shift);
 		} else if (disallowed_pkt_err(shift)) {
-			count_disallowed_pkt(dd);
+			handle_send_egress_err_info(dd);
 			handled |= (1ULL << shift);
 		}
 		clear_bit(shift, (unsigned long *)&reg_copy);
@@ -2535,7 +2538,7 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
 		send_context_err_status_string(flags, sizeof(flags), status));
 
 	if (status & WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK)
-		count_disallowed_pkt(dd);
+		handle_send_egress_err_info(dd);
 
 	/*
 	 * Automatically restart halted kernel contexts out of interrupt
