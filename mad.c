@@ -3667,6 +3667,69 @@ void clear_linkup_counters(struct hfi_devdata *dd)
 	dd->err_info_xmit_constraint.status &= ~STL_EI_STATUS_SMASK;
 }
 
+/*
+ * is_local_mad() returns 1 if 'mad' is sent from, and destined to the
+ * local node, 0 otherwise.
+ */
+static int is_local_mad(struct qib_ibport *ibp, struct jumbo_mad *mad,
+			struct ib_wc *in_wc)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct opa_smp *smp = (struct opa_smp *)mad;
+
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
+		return (smp->hop_cnt == 0 &&
+			smp->route.dr.dr_slid == OPA_LID_PERMISSIVE &&
+			smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE);
+	}
+
+	return (in_wc->slid == ppd->lid);
+}
+
+/*
+ * opa_local_smp_check() should only be called on MADs for which
+ * is_local_mad() returns true. It applies the SMP checks that are
+ * specific to SMPs which are sent from, and destined to this node.
+ * opa_local_smp_check() returns 0 if the SMP passes its checks, 1
+ * otherwise.
+ *
+ * SMPs which arrive from other nodes are instead checked by
+ * opa_smp_check().
+ */
+static int opa_local_smp_check(struct qib_ibport *ibp, struct ib_wc *in_wc)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	u16 slid = in_wc->slid;
+	u16 pkey;
+
+	if (in_wc->pkey_index > ARRAY_SIZE(ppd->pkeys))
+		return 1;
+
+	pkey = ppd->pkeys[in_wc->pkey_index];
+	/*
+	 * We need to do the "node-local" checks specified in STLv1,
+	 * rev 0.90, section 9.10.26, which are:
+	 *   - pkey is 0x7fff, or 0xffff
+	 *   - Source QPN == 0 || Destination QPN == 0
+	 *   - the MAD header's management class is either
+	 *     IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE or
+	 *     IB_MGMT_CLASS_SUBN_LID_ROUTED
+	 *   - SLID != 0
+	 *
+	 * However, we know (and so don't need to check again) that,
+	 * for local SMPs, the MAD stack passes MADs with:
+	 *   - Source QPN of 0
+	 *   - MAD mgmt_class is IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
+	 *   - SLID is either: STL_LID_PERMISSIVE (0xFFFFFFFF), or
+	 *     our own port's lid
+	 *
+	 */
+	if (pkey == WFR_LIM_MGMT_P_KEY || pkey == WFR_FULL_MGMT_P_KEY)
+		return 0;
+	ingress_pkey_table_fail(ppd, pkey, slid);
+	return 1;
+}
+
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			    u8 port, struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad,
@@ -3674,7 +3737,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 {
 	struct opa_smp *smp = (struct opa_smp *)out_mad;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
-	/* XXX struct qib_pportdata *ppd = ppd_from_ibp(ibp);*/
 	u8 *data;
 	u32 am;
 	__be16 attr_id;
@@ -3973,6 +4035,11 @@ static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
 	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		if (is_local_mad(ibp, in_mad, in_wc)) {
+			ret = opa_local_smp_check(ibp, in_wc);
+			if (ret)
+				return IB_MAD_RESULT_FAILURE;
+		}
 		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
 				       out_mad, &resp_len);
 		goto bail;
