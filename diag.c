@@ -1114,8 +1114,10 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	mutex_lock(&qib_mutex);
 
 	dd = hfi_dd_from_sc_inode(in);
-	if (dd == NULL)
-		return -ENODEV;
+	if (dd == NULL) {
+		ret = -ENODEV;
+		goto bail;
+	}
 
 	/*
 	 * File mode determines snoop or capture. Some exisitng user
