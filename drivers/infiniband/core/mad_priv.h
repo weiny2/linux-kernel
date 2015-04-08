@@ -80,6 +80,8 @@ struct ib_mad_private {
 		struct ib_mad mad;
 		struct ib_rmpp_mad rmpp_mad;
 		struct ib_smp smp;
+		struct opa_mad opa_mad;
+		struct opa_rmpp_mad opa_rmpp_mad;
 	} mad;
 } __attribute__ ((packed));
 

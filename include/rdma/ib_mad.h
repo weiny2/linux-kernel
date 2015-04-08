@@ -136,6 +136,9 @@ enum {
 	IB_MGMT_DEVICE_HDR = 64,
 	IB_MGMT_DEVICE_DATA = 192,
 	IB_MGMT_MAD_SIZE = IB_MGMT_MAD_HDR + IB_MGMT_MAD_DATA,
+	OPA_MGMT_MAD_DATA = 2024,
+	OPA_MGMT_RMPP_DATA = 2012,
+	OPA_MGMT_MAD_SIZE = IB_MGMT_MAD_HDR + OPA_MGMT_MAD_DATA,
 };
 
 struct ib_mad_hdr {
@@ -182,6 +185,11 @@ struct ib_mad {
 	u8			data[IB_MGMT_MAD_DATA];
 };
 
+struct opa_mad {
+	struct ib_mad_hdr	mad_hdr;
+	u8			data[OPA_MGMT_MAD_DATA];
+};
+
 struct ib_rmpp_base {
 	struct ib_mad_hdr	mad_hdr;
 	struct ib_rmpp_hdr	rmpp_hdr;
@@ -190,6 +198,11 @@ struct ib_rmpp_base {
 struct ib_rmpp_mad {
 	struct ib_rmpp_base	base;
 	u8			data[IB_MGMT_RMPP_DATA];
+};
+
+struct opa_rmpp_mad {
+	struct ib_rmpp_base	base;
+	u8			data[OPA_MGMT_RMPP_DATA];
 };
 
 struct ib_sa_mad {
@@ -406,7 +419,10 @@ struct ib_mad_send_wc {
 struct ib_mad_recv_buf {
 	struct list_head	list;
 	struct ib_grh		*grh;
-	struct ib_mad		*mad;
+	union {
+		struct ib_mad	*mad;
+		struct opa_mad	*opa_mad;
+	};
 };
 
 /**
