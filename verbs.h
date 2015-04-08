@@ -890,14 +890,19 @@ void qib_free_agents(struct qib_ibdev *dev);
  * necessarily be at least one bit less than
  * the container holding the PSN.
  */
+#ifndef CONFIG_HFI1_VERBS_31BIT_PSN
 #define PSN_MASK 0xFFFFFF
 #define PSN_SHIFT 8
+#else
+#define PSN_MASK 0x7FFFFFFF
+#define PSN_SHIFT 1
+#endif
 
 /*
- * Compare the lower 24 bits of the two values.
+ * Compare the lower 24 bits of the msn values.
  * Returns an integer <, ==, or > than zero.
  */
-static inline int qib_cmp24(u32 a, u32 b)
+static inline int cmp_msn(u32 a, u32 b)
 {
 	return (((int) a) - ((int) b)) << 8;
 }

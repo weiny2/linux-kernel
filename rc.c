@@ -291,8 +291,8 @@ int qib_make_rc_req(struct qib_qp *qp)
 	if (qp->s_flags & (QIB_S_WAIT_RNR | QIB_S_WAIT_ACK))
 		goto bail;
 
-	if (qib_cmp24(qp->s_psn, qp->s_sending_hpsn) <= 0) {
-		if (qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) <= 0) {
+	if (cmp_psn(qp->s_psn, qp->s_sending_hpsn) <= 0) {
+		if (cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0) {
 			qp->s_flags |= QIB_S_WAIT_PSN;
 			goto bail;
 		}
@@ -345,7 +345,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		case IB_WR_SEND_WITH_IMM:
 			/* If no credit, return. */
 			if (!(qp->s_flags & QIB_S_UNLIMITED_CREDIT) &&
-			    qib_cmp24(wqe->ssn, qp->s_lsn + 1) > 0) {
+			    cmp_msn(wqe->ssn, qp->s_lsn + 1) > 0) {
 				qp->s_flags |= QIB_S_WAIT_SSN_CREDIT;
 				goto bail;
 			}
@@ -378,7 +378,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		case IB_WR_RDMA_WRITE_WITH_IMM:
 			/* If no credit, return. */
 			if (!(qp->s_flags & QIB_S_UNLIMITED_CREDIT) &&
-			    qib_cmp24(wqe->ssn, qp->s_lsn + 1) > 0) {
+			    cmp_msn(wqe->ssn, qp->s_lsn + 1) > 0) {
 				qp->s_flags |= QIB_S_WAIT_SSN_CREDIT;
 				goto bail;
 			}
@@ -507,7 +507,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 			qp->s_psn = wqe->lpsn + 1;
 		else {
 			qp->s_psn++;
-			if (qib_cmp24(qp->s_psn, qp->s_next_psn) > 0)
+			if (cmp_psn(qp->s_psn, qp->s_next_psn) > 0)
 				qp->s_next_psn = qp->s_psn;
 		}
 		break;
@@ -529,7 +529,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		/* FALLTHROUGH */
 	case OP(SEND_MIDDLE):
 		bth2 = mask_psn(qp->s_psn++);
-		if (qib_cmp24(qp->s_psn, qp->s_next_psn) > 0)
+		if (cmp_psn(qp->s_psn, qp->s_next_psn) > 0)
 			qp->s_next_psn = qp->s_psn;
 		ss = &qp->s_sge;
 		len = qp->s_len;
@@ -571,7 +571,7 @@ int qib_make_rc_req(struct qib_qp *qp)
 		/* FALLTHROUGH */
 	case OP(RDMA_WRITE_MIDDLE):
 		bth2 = mask_psn(qp->s_psn++);
-		if (qib_cmp24(qp->s_psn, qp->s_next_psn) > 0)
+		if (cmp_psn(qp->s_psn, qp->s_next_psn) > 0)
 			qp->s_next_psn = qp->s_psn;
 		ss = &qp->s_sge;
 		len = qp->s_len;
@@ -790,7 +790,7 @@ static void reset_psn(struct qib_qp *qp, u32 psn)
 	 * If we are starting the request from the beginning,
 	 * let the normal send code handle initialization.
 	 */
-	if (qib_cmp24(psn, wqe->psn) <= 0) {
+	if (cmp_psn(psn, wqe->psn) <= 0) {
 		qp->s_state = OP(SEND_LAST);
 		goto done;
 	}
@@ -805,7 +805,7 @@ static void reset_psn(struct qib_qp *qp, u32 psn)
 		if (n == qp->s_tail)
 			break;
 		wqe = get_swqe_ptr(qp, n);
-		diff = qib_cmp24(psn, wqe->psn);
+		diff = cmp_psn(psn, wqe->psn);
 		if (diff < 0)
 			break;
 		qp->s_cur = n;
@@ -854,8 +854,8 @@ done:
 	 * asynchronously before the send tasklet can get scheduled.
 	 * Doing it in qib_make_rc_req() is too late.
 	 */
-	if ((qib_cmp24(qp->s_psn, qp->s_sending_hpsn) <= 0) &&
-	    (qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) <= 0))
+	if ((cmp_psn(qp->s_psn, qp->s_sending_hpsn) <= 0) &&
+	    (cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0))
 		qp->s_flags |= QIB_S_WAIT_PSN;
 	qp->s_flags &= ~QIB_S_AHG_VALID;
 }
@@ -948,7 +948,7 @@ static void reset_sending_psn(struct qib_qp *qp, u32 psn)
 	/* Find the work request corresponding to the given PSN. */
 	for (;;) {
 		wqe = get_swqe_ptr(qp, n);
-		if (qib_cmp24(psn, wqe->lpsn) <= 0) {
+		if (cmp_psn(psn, wqe->lpsn) <= 0) {
 			if (wqe->wr.opcode == IB_WR_RDMA_READ)
 				qp->s_sending_psn = wqe->lpsn + 1;
 			else
@@ -1005,8 +1005,8 @@ void qib_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr)
 
 	while (qp->s_last != qp->s_acked) {
 		wqe = get_swqe_ptr(qp, qp->s_last);
-		if (qib_cmp24(wqe->lpsn, qp->s_sending_psn) >= 0 &&
-		    qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)
+		if (cmp_psn(wqe->lpsn, qp->s_sending_psn) >= 0 &&
+		    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)
 			break;
 		for (i = 0; i < wqe->wr.num_sge; i++) {
 			struct qib_sge *sge = &wqe->sg_list[i];
@@ -1033,7 +1033,7 @@ void qib_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr)
 	 */
 	trace_hfi_rc_sendcomplete(qp, psn);
 	if (qp->s_flags & QIB_S_WAIT_PSN &&
-	    qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
+	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
 		qp->s_flags &= ~QIB_S_WAIT_PSN;
 		qp->s_sending_psn = qp->s_psn;
 		qp->s_sending_hpsn = qp->s_psn - 1;
@@ -1063,8 +1063,8 @@ static struct qib_swqe *do_rc_completion(struct qib_qp *qp,
 	 * completion if the SWQE is being resent until the send
 	 * is finished.
 	 */
-	if (qib_cmp24(wqe->lpsn, qp->s_sending_psn) < 0 ||
-	    qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
+	if (cmp_psn(wqe->lpsn, qp->s_sending_psn) < 0 ||
+	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
 		for (i = 0; i < wqe->wr.num_sge; i++) {
 			struct qib_sge *sge = &wqe->sg_list[i];
 
@@ -1156,7 +1156,7 @@ static int do_rc_ack(struct qib_qp *qp, u32 aeth, u32 psn, int opcode,
 	 * The MSN might be for a later WQE than the PSN indicates so
 	 * only complete WQEs that the PSN finishes.
 	 */
-	while ((diff = qib_cmp24(ack_psn, wqe->lpsn)) >= 0) {
+	while ((diff = delta_psn(ack_psn, wqe->lpsn)) >= 0) {
 		/*
 		 * RDMA_READ_RESPONSE_ONLY is a special case since
 		 * we want to generate completion events for everything
@@ -1240,9 +1240,9 @@ static int do_rc_ack(struct qib_qp *qp, u32 aeth, u32 psn, int opcode,
 			 * We can stop resending the earlier packets and
 			 * continue with the next packet the receiver wants.
 			 */
-			if (qib_cmp24(qp->s_psn, psn) <= 0)
+			if (cmp_psn(qp->s_psn, psn) <= 0)
 				reset_psn(qp, psn + 1);
-		} else if (qib_cmp24(qp->s_psn, psn) <= 0) {
+		} else if (cmp_psn(qp->s_psn, psn) <= 0) {
 			qp->s_state = OP(SEND_LAST);
 			qp->s_psn = psn + 1;
 		}
@@ -1360,7 +1360,7 @@ static void rdma_seq_err(struct qib_qp *qp, struct qib_ibport *ibp, u32 psn,
 
 	wqe = get_swqe_ptr(qp, qp->s_acked);
 
-	while (qib_cmp24(psn, wqe->lpsn) > 0) {
+	while (cmp_psn(psn, wqe->lpsn) > 0) {
 		if (wqe->wr.opcode == IB_WR_RDMA_READ ||
 		    wqe->wr.opcode == IB_WR_ATOMIC_CMP_AND_SWP ||
 		    wqe->wr.opcode == IB_WR_ATOMIC_FETCH_AND_ADD)
@@ -1417,8 +1417,8 @@ static void qib_rc_rcv_resp(struct qib_ibport *ibp,
 		 * If ACK'd PSN on SDMA busy list try to make progress to
 		 * reclaim SDMA credits.
 		 */
-		if ((qib_cmp24(psn, qp->s_sending_psn) >= 0) &&
-		    (qib_cmp24(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)) {
+		if ((cmp_psn(psn, qp->s_sending_psn) >= 0) &&
+		    (cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)) {
 
 			/*
 			 * If send tasklet not running attempt to progress
@@ -1442,11 +1442,11 @@ static void qib_rc_rcv_resp(struct qib_ibport *ibp,
 		goto ack_done;
 
 	/* Ignore invalid responses. */
-	if (qib_cmp24(psn, qp->s_next_psn) >= 0)
+	if (cmp_psn(psn, qp->s_next_psn) >= 0)
 		goto ack_done;
 
 	/* Ignore duplicate responses. */
-	diff = qib_cmp24(psn, qp->s_last_psn);
+	diff = cmp_psn(psn, qp->s_last_psn);
 	if (unlikely(diff <= 0)) {
 		/* Update credits for "ghost" ACKs */
 		if (diff == 0 && opcode == OP(ACKNOWLEDGE)) {
@@ -1462,7 +1462,7 @@ static void qib_rc_rcv_resp(struct qib_ibport *ibp,
 	 * for a reply to a restarted RDMA read or atomic op.
 	 */
 	if (qp->r_flags & QIB_R_RDMAR_SEQ) {
-		if (qib_cmp24(psn, qp->s_last_psn + 1) != 0)
+		if (cmp_psn(psn, qp->s_last_psn + 1) != 0)
 			goto ack_done;
 		qp->r_flags &= ~QIB_R_RDMAR_SEQ;
 	}
@@ -1502,7 +1502,7 @@ static void qib_rc_rcv_resp(struct qib_ibport *ibp,
 
 	case OP(RDMA_READ_RESPONSE_MIDDLE):
 		/* no AETH, no ACK */
-		if (unlikely(qib_cmp24(psn, qp->s_last_psn + 1)))
+		if (unlikely(cmp_psn(psn, qp->s_last_psn + 1)))
 			goto ack_seq_err;
 		if (unlikely(wqe->wr.opcode != IB_WR_RDMA_READ))
 			goto ack_op_err;
@@ -1561,7 +1561,7 @@ read_middle:
 
 	case OP(RDMA_READ_RESPONSE_LAST):
 		/* ACKs READ req. */
-		if (unlikely(qib_cmp24(psn, qp->s_last_psn + 1)))
+		if (unlikely(cmp_psn(psn, qp->s_last_psn + 1)))
 			goto ack_seq_err;
 		if (unlikely(wqe->wr.opcode != IB_WR_RDMA_READ))
 			goto ack_op_err;
@@ -1699,9 +1699,9 @@ static int qib_rc_rcv_error(struct qib_other_headers *ohdr,
 			e = NULL;
 			break;
 		}
-		if (qib_cmp24(psn, e->psn) >= 0) {
+		if (cmp_psn(psn, e->psn) >= 0) {
 			if (prev == qp->s_tail_ack_queue &&
-			    qib_cmp24(psn, e->lpsn) <= 0)
+			    cmp_psn(psn, e->lpsn) <= 0)
 				old_req = 0;
 			break;
 		}
@@ -2014,7 +2014,7 @@ void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 	}
 
 	/* Compute 24 bits worth of difference. */
-	diff = qib_cmp24(psn, qp->r_psn);
+	diff = delta_psn(psn, qp->r_psn);
 	if (unlikely(diff)) {
 		if (qib_rc_rcv_error(ohdr, data, qp, opcode, psn, diff, rcd))
 			return;
@@ -2436,7 +2436,7 @@ void qib_rc_hdrerr(
 
 	/* Only deal with RDMA Writes for now */
 	if (opcode < IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST) {
-		diff = qib_cmp24(psn, qp->r_psn);
+		diff = delta_psn(psn, qp->r_psn);
 		if (!qp->r_nak_state && diff >= 0) {
 			ibp->n_rc_seqnak++;
 			qp->r_nak_state = IB_NAK_PSN_ERROR;

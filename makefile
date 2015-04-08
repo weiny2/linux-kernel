@@ -54,6 +54,7 @@ KBUILD  ?= /lib/modules/$(KVER)/build
 #NOSTDINC_FLAGS += -DHFI_COMPAT_MODPARAMS=0
 # Debug sdma ordering
 #NOSTDINC_FLAGS += -DCONFIG_HFI1_DEBUG_SDMA_ORDER
+NOSTDINC_FLAGS += -DCONFIG_HFI1_VERBS_31BIT_PSN
 NOSTDINC_FLAGS += -I$(KBUILD)/include-ifs-kernel -I$(PWD)
 KBUILD_EXTRA_SYMBOLS := $(KBUILD)/include-ifs-kernel/Module.symvers
 HFI_HEADER_DIR := $(dir $(shell find . -name "hfi1_user.h" | sed -e 's%^\./%%'))

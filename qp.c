@@ -1369,7 +1369,7 @@ void qib_get_credit(struct qib_qp *qp, u32 aeth)
 	} else if (!(qp->s_flags & QIB_S_UNLIMITED_CREDIT)) {
 		/* Compute new LSN (i.e., MSN + credit) */
 		credit = (aeth + credit_table[credit]) & QIB_MSN_MASK;
-		if (qib_cmp24(credit, qp->s_lsn) > 0) {
+		if (cmp_msn(credit, qp->s_lsn) > 0) {
 			qp->s_lsn = credit;
 			if (qp->s_flags & QIB_S_WAIT_SSN_CREDIT) {
 				qp->s_flags &= ~QIB_S_WAIT_SSN_CREDIT;

@@ -308,7 +308,7 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	opcode >>= 24;
 
 	/* Compare the PSN verses the expected PSN. */
-	if (unlikely(qib_cmp24(psn, qp->r_psn) != 0)) {
+	if (unlikely(cmp_psn(psn, qp->r_psn) != 0)) {
 		/*
 		 * Handle a sequence error.
 		 * Silently drop any current message.
