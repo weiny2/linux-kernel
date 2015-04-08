@@ -5725,61 +5725,62 @@ static void qsfp_event(struct work_struct *work)
 
 void init_qsfp(struct qib_pportdata *ppd)
 {
+	struct hfi_devdata *dd = ppd->dd;
+	u64 qsfp_mask;
 
 	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB ||
-			ppd->dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+			ppd->dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR ||
+			!HFI_CAP_IS_KSET(QSFP_ENABLED)) {
 		ppd->driver_link_ready = 1;
-	else if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
-		struct hfi_devdata *dd = ppd->dd;
-		u64 qsfp_mask;
+		return;
+	}
 
-		ppd->qsfp_info.ppd = ppd;
-		INIT_WORK(&ppd->qsfp_info.qsfp_work, qsfp_event);
+	ppd->qsfp_info.ppd = ppd;
+	INIT_WORK(&ppd->qsfp_info.qsfp_work, qsfp_event);
 
-		qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
-		/* Clear current status to avoid spurious interrupts */
+	qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
+	/* Clear current status to avoid spurious interrupts */
+	write_csr(dd,
+			dd->hfi_id ?
+				WFR_ASIC_QSFP2_CLEAR :
+				WFR_ASIC_QSFP1_CLEAR,
+		qsfp_mask);
+
+	/* Handle active low nature of INT_N and MODPRST_N pins */
+	if (qsfp_mod_present(ppd)) {
+		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
 		write_csr(dd,
 				dd->hfi_id ?
-					WFR_ASIC_QSFP2_CLEAR :
-					WFR_ASIC_QSFP1_CLEAR,
+					WFR_ASIC_QSFP2_INVERT :
+					WFR_ASIC_QSFP1_INVERT,
 			qsfp_mask);
-
-		/* Handle active low nature of INT_N and MODPRST_N pins */
-		if (qsfp_mod_present(ppd)) {
-			qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
-			write_csr(dd,
-					dd->hfi_id ?
-						WFR_ASIC_QSFP2_INVERT :
-						WFR_ASIC_QSFP1_INVERT,
-				qsfp_mask);
-		} else {
-			write_csr(dd,
-					dd->hfi_id ?
-						WFR_ASIC_QSFP2_INVERT :
-						WFR_ASIC_QSFP1_INVERT,
-				qsfp_mask);
-		}
-
-		/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
-		qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
+	} else {
 		write_csr(dd,
-			dd->hfi_id ? WFR_ASIC_QSFP2_MASK : WFR_ASIC_QSFP1_MASK,
+				dd->hfi_id ?
+					WFR_ASIC_QSFP2_INVERT :
+					WFR_ASIC_QSFP1_INVERT,
 			qsfp_mask);
+	}
 
-		if (qsfp_mod_present(ppd)) {
-			msleep(3000);
-			reset_qsfp(ppd);
+	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
+	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_MASK : WFR_ASIC_QSFP1_MASK,
+		qsfp_mask);
 
-			/* Check for QSFP interrupt after t_init (SFF 8679)
-			 * + extra
-			 */
-			msleep(3000);
-			if (!ppd->qsfp_info.qsfp_interrupt_functional)
-				if (do_qsfp_intr_fallback(ppd) < 0)
-					dd_dev_info(dd,
-						"%s: QSFP fallback failed\n",
-						__func__);
-		}
+	if (qsfp_mod_present(ppd)) {
+		msleep(3000);
+		reset_qsfp(ppd);
+
+		/* Check for QSFP interrupt after t_init (SFF 8679)
+		 * + extra
+		 */
+		msleep(3000);
+		if (!ppd->qsfp_info.qsfp_interrupt_functional)
+			if (do_qsfp_intr_fallback(ppd) < 0)
+				dd_dev_info(dd,
+					"%s: QSFP fallback failed\n",
+					__func__);
 	}
 }
 
