@@ -882,7 +882,7 @@ static int alloc_send_rmpp_list(struct ib_mad_send_wr_private *send_wr,
 				gfp_t gfp_mask)
 {
 	struct ib_mad_send_buf *send_buf = &send_wr->send_buf;
-	struct ib_rmpp_mad *rmpp_mad = send_buf->mad;
+	struct ib_rmpp_base *rmpp_base = send_buf->mad;
 	struct ib_rmpp_segment *seg = NULL;
 	int left, seg_size, pad;
 
@@ -908,10 +908,10 @@ static int alloc_send_rmpp_list(struct ib_mad_send_wr_private *send_wr,
 	if (pad)
 		memset(seg->data + seg_size - pad, 0, pad);
 
-	rmpp_mad->rmpp_hdr.rmpp_version = send_wr->mad_agent_priv->
+	rmpp_base->rmpp_hdr.rmpp_version = send_wr->mad_agent_priv->
 					  agent.rmpp_version;
-	rmpp_mad->rmpp_hdr.rmpp_type = IB_MGMT_RMPP_TYPE_DATA;
-	ib_set_rmpp_flags(&rmpp_mad->rmpp_hdr, IB_MGMT_RMPP_FLAG_ACTIVE);
+	rmpp_base->rmpp_hdr.rmpp_type = IB_MGMT_RMPP_TYPE_DATA;
+	ib_set_rmpp_flags(&rmpp_base->rmpp_hdr, IB_MGMT_RMPP_FLAG_ACTIVE);
 
 	send_wr->cur_seg = container_of(send_wr->rmpp_list.next,
 					struct ib_rmpp_segment, list);
@@ -1747,14 +1747,14 @@ out:
 static int is_rmpp_data_mad(struct ib_mad_agent_private *mad_agent_priv,
 		       struct ib_mad_hdr *mad_hdr)
 {
-	struct ib_rmpp_mad *rmpp_mad;
+	struct ib_rmpp_base *rmpp_base;
 
-	rmpp_mad = (struct ib_rmpp_mad *)mad_hdr;
+	rmpp_base = (struct ib_rmpp_base *)mad_hdr;
 	return !mad_agent_priv->agent.rmpp_version ||
 		!ib_mad_kernel_rmpp_agent(&mad_agent_priv->agent) ||
-		!(ib_get_rmpp_flags(&rmpp_mad->rmpp_hdr) &
+		!(ib_get_rmpp_flags(&rmpp_base->rmpp_hdr) &
 				    IB_MGMT_RMPP_FLAG_ACTIVE) ||
-		(rmpp_mad->rmpp_hdr.rmpp_type == IB_MGMT_RMPP_TYPE_DATA);
+		(rmpp_base->rmpp_hdr.rmpp_type == IB_MGMT_RMPP_TYPE_DATA);
 }
 
 static inline int rcv_has_same_class(struct ib_mad_send_wr_private *wr,
@@ -1896,7 +1896,7 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 			if (!ib_mad_kernel_rmpp_agent(&mad_agent_priv->agent)
 			   && ib_is_mad_class_rmpp(mad_recv_wc->recv_buf.mad->mad_hdr.mgmt_class)
-			   && (ib_get_rmpp_flags(&((struct ib_rmpp_mad *)mad_recv_wc->recv_buf.mad)->rmpp_hdr)
+			   && (ib_get_rmpp_flags(&((struct ib_rmpp_base *)mad_recv_wc->recv_buf.mad)->rmpp_hdr)
 					& IB_MGMT_RMPP_FLAG_ACTIVE)) {
 				/* user rmpp is in effect
 				 * and this is an active RMPP MAD

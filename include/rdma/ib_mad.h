@@ -182,9 +182,13 @@ struct ib_mad {
 	u8			data[IB_MGMT_MAD_DATA];
 };
 
-struct ib_rmpp_mad {
+struct ib_rmpp_base {
 	struct ib_mad_hdr	mad_hdr;
 	struct ib_rmpp_hdr	rmpp_hdr;
+} __packed;
+
+struct ib_rmpp_mad {
+	struct ib_rmpp_base	base;
 	u8			data[IB_MGMT_RMPP_DATA];
 };
 
