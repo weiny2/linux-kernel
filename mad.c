@@ -3715,7 +3715,7 @@ static int opa_local_smp_check(struct qib_ibport *ibp, struct ib_wc *in_wc)
 	u16 slid = in_wc->slid;
 	u16 pkey;
 
-	if (in_wc->pkey_index > ARRAY_SIZE(ppd->pkeys))
+	if (in_wc->pkey_index >= ARRAY_SIZE(ppd->pkeys))
 		return 1;
 
 	pkey = ppd->pkeys[in_wc->pkey_index];
