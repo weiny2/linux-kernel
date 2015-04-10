@@ -5,7 +5,7 @@
 
 kernel_build=$1
 if [ -z $1 ]; then
-	kernel_build="."
+	kernel_build=`git rev-parse --show-toplevel`
 fi
 
 for i in \
