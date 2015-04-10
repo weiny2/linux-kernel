@@ -1627,11 +1627,14 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 	u32 len = OPA_AM_CI_LEN(am);
 	int ret;
 
-	/* check that addr, (addr + len) are on the same "page" */
 #define __CI_PAGE_SIZE (1 << 7) /* 128 bytes */
 #define __CI_PAGE_MASK ~(__CI_PAGE_SIZE - 1)
 #define __CI_PAGE_NUM(a) ((a) & __CI_PAGE_MASK)
-	if (__CI_PAGE_NUM(addr) != __CI_PAGE_NUM(addr + len)) {
+
+	/* check that addr is within spec, and
+	 * addr and (addr + len) are on the same "page" */
+	if (addr >= 4096 ||
+		(__CI_PAGE_NUM(addr) != __CI_PAGE_NUM(addr + len))) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
@@ -1643,8 +1646,12 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 		return reply(smp);
 	}
 
-	/* all other errors result in IB_SMP_INVALID_FIELD status */
-	if (ret < 0) {
+	/* The address range for the CableInfo SMA query is wider than the
+	 * memory available on the QSFP cable. We want to return a valid
+	 * response, albeit zeroed out, for address ranges beyond available
+	 * memory but that are within the CableInfo query spec
+	 */
+	if (ret < 0 && ret != -ERANGE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
 	}
