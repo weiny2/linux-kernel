@@ -85,7 +85,7 @@ void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp)
 	}
 }
 
-static const char *hfi_class_name = "hfi";
+static const char *hfi_class_name = "hfi1";
 
 const char *class_name(void)
 {

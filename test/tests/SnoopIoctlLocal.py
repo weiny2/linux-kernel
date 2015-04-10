@@ -285,7 +285,7 @@ def get_crc_errors(hfidiags):
 
 def main():
     SNOOP_MODE = os.O_RDWR
-    dev = "/dev/hfi_diagpkt0"
+    dev = "/dev/hfi1_diagpkt0"
     RegLib.test_log(0, "Opening device")
     fd = os.open(dev, SNOOP_MODE)
     if fd <= 0:

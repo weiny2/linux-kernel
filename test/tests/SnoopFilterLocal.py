@@ -220,7 +220,7 @@ def main():
     else:
         RegLib.test_fail("Did not specify server or client")
 
-    dev = "/dev/hfi_diagpkt0"
+    dev = "/dev/hfi1_diagpkt0"
 
     # Open the device and create a file object.
     # Need a file object for sending ioctl

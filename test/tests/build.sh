@@ -36,7 +36,7 @@ if [ $? -ne 0 ]; then
 	exit $?
 fi
 
-if [ -e hfi.ko ]; then
+if [ -e hfi1.ko ]; then
 	echo "Could not remove hfi.ko by clean"
 	exit 1
 fi
@@ -51,11 +51,11 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
-if [ -e hfi.ko ]; then
+if [ -e hfi1.ko ]; then
 	echo "Build sucess."
 	exit 0
 else
-	echo "Could not find hfi.ko failed!"
+	echo "Could not find hfi1.ko failed!"
 	exit 1
 fi
 

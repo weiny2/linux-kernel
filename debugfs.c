@@ -695,7 +695,7 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 
 	if (!hfi_dbg_root)
 		return;
-	snprintf(name, sizeof(name), "%s%d", class_name(), unit);
+	snprintf(name, sizeof(name), "%s_%d", class_name(), unit);
 	snprintf(link, sizeof(link), "%d", unit);
 	ibd->hfi_ibdev_dbg = debugfs_create_dir(name, hfi_dbg_root);
 	if (!ibd->hfi_ibdev_dbg) {

@@ -1584,7 +1584,7 @@ extern struct mutex qib_mutex;
 /* Number of seconds before our card status check...  */
 #define STATUS_TIMEOUT 60
 
-#define DRIVER_NAME		"hfi"
+#define DRIVER_NAME		"hfi1"
 #define HFI_USER_MINOR_BASE     0
 #define HFI_TRACE_MINOR         127
 #define HFI_DIAGPKT_MINOR       128

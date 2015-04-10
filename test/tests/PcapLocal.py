@@ -89,7 +89,7 @@ def main():
     SNOOP_MODE = os.O_RDWR
     CAPTURE_MODE = os.O_RDONLY
 
-    dev = "/dev/hfi_diagpkt0"
+    dev = "/dev/hfi1_diagpkt0"
     set_ioctl = 0
     test_fail = 0
 
