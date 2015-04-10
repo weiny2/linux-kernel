@@ -504,7 +504,7 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 		goto err;
 	/* stash pointer to CQ head */
 	rc = ops->ctx_addr(ctx, TOK_CQ_HEAD, dev->cq_idx,
-			   (void**)&tx->head_addr, &head_size);
+			   (void **)&tx->head_addr, &head_size);
 	if (rc)
 		goto err1;
 	/* stash pointer to TX CQ */
