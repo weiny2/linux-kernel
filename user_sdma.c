@@ -1143,7 +1143,7 @@ static void unpin_vector_pages(struct user_sdma_iovec *iovec)
 
 	if (ACCESS_ONCE(iovec->offset) != iovec->iov.iov_len) {
 		hfi_cdbg(SDMA,
-			 "the complete vector has not been sent yet %llu %zu\n",
+			 "the complete vector has not been sent yet %llu %zu",
 			 iovec->offset, iovec->iov.iov_len);
 		return;
 	}

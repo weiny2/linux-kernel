@@ -4758,7 +4758,7 @@ static int do_8051_command(
 	unsigned long flags;
 	unsigned long timeout;
 
-	hfi_cdbg(DC8051, "type %d, data 0x%012llx\n", type, in_data);
+	hfi_cdbg(DC8051, "type %d, data 0x%012llx", type, in_data);
 
 	/*
 	 * TODO: Do we want to hold the lock for this long?
@@ -7915,13 +7915,13 @@ static u32 read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 			}
 
 			if (entry->flags & CNTR_VL) {
-				hfi_cdbg(CNTR, "\tPer VL\n");
+				hfi_cdbg(CNTR, "\tPer VL");
 				for (j = 0; j < C_VL_COUNT; j++) {
 					val = entry->rw_cntr(entry, ppd, j,
 							       CNTR_MODE_R,
 							       0);
 					hfi_cdbg(CNTR,
-						 "\t\tRead 0x%llx for %d\n",
+						 "\t\tRead 0x%llx for %d",
 						 val, j);
 					ppd->cntrs[entry->offset + j] = val;
 				}
@@ -8208,7 +8208,7 @@ static void update_synth_timer(unsigned long opaque)
 		dd->last_rx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL,
 						CNTR_MODE_R, 0);
 
-		hfi_cdbg(CNTR, "[%d] setting last tx/rx to 0x%llx 0x%llx\n",
+		hfi_cdbg(CNTR, "[%d] setting last tx/rx to 0x%llx 0x%llx",
 			 dd->unit, dd->last_tx, dd->last_rx);
 
 	} else {
