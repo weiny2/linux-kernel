@@ -43,7 +43,7 @@ RELEASE = $(shell if [ -d .git ] ; then git describe --tags --long --match='v*' 
 
 EXCLUDES = --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp' --exclude='series' --exclude='*.orig' --exclude=hfi.spec.in
 
-NAME = hfi
+NAME = hfi1
 
 KVER=$(shell uname -r)
 KBUILD  ?= /lib/modules/$(KVER)/build
@@ -56,7 +56,7 @@ KBUILD  ?= /lib/modules/$(KVER)/build
 #NOSTDINC_FLAGS += -DCONFIG_HFI1_DEBUG_SDMA_ORDER
 NOSTDINC_FLAGS += -I$(KBUILD)/include-ifs-kernel -I$(PWD)
 KBUILD_EXTRA_SYMBOLS := $(KBUILD)/include-ifs-kernel/Module.symvers
-HFI_HEADER_DIR := $(dir $(shell find . -name "hfi_user.h" | sed -e 's%^\./%%'))
+HFI_HEADER_DIR := $(dir $(shell find . -name "hfi1_user.h" | sed -e 's%^\./%%'))
 HFI_HEADER_INSTALL_DIR := /usr/include/$(HFI_HEADER_DIR)
 
 PWD:=$(shell pwd)
@@ -91,18 +91,24 @@ specfile: hfi.spec.in
 
 
 dist: distclean specfile
-	rm -rf /tmp/hfi-$(VERSION)
-	mkdir -p /tmp/hfi-$(VERSION)
-	cp -r . /tmp/hfi-$(VERSION)
-	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/hfi-$(VERSION).tgz hfi-$(VERSION)
-	rm -rf /tmp/hfi-$(VERSION)
+	rm -rf /tmp/hfi1-$(VERSION)
+	mkdir -p /tmp/hfi1-$(VERSION)
+	cp -r . /tmp/hfi1-$(VERSION)
+	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/hfi1-$(VERSION).tgz hfi1-$(VERSION)
+	rm -rf /tmp/hfi1-$(VERSION)
 
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi1.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	mkdir -p $(RPM_BUILD_ROOT)$(HFI_HEADER_INSTALL_DIR) && \
 		(cd $(KBUILD) && sh scripts/headers_install.sh \
 			$(RPM_BUILD_ROOT)$(HFI_HEADER_INSTALL_DIR) \
-			$(PWD) $(HFI_HEADER_DIR)hfi_user.h)
+			$(PWD) $(HFI_HEADER_DIR)hfi1_user.h)
 version:
 	@[ -e .git ] && echo -n $(VERSION)-$(RELEASE)
+
+print_vers:
+	@echo $(VERSION)
+
+print_rel:
+	@echo $(RELEASE)
