@@ -40,10 +40,6 @@
 
 #include <linux/types.h>
 
-#ifndef __packed
-#define __packed      __attribute__((packed))
-#endif
-
 /*
  * This version number is given to the driver by the user code during
  * initialization in the spu_userversion field of hfi_user_info, so
