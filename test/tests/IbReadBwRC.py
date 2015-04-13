@@ -51,7 +51,7 @@ def main():
         # Start ib_read_bw on host1 (server)
         child_pid = os.fork()
         if child_pid == 0:
-            cmd = "ib_read_bw -m 4096 -d hfi0 -n 5 -u 21 -p %d -s %s" % (test_port, size)
+            cmd = "ib_read_bw -m 4096 -d hfi1_0 -n 5 -u 21 -p %d -s %s" % (test_port, size)
             (err, out) = do_ssh(host1, cmd)
             if err:
                 RegLib.test_log(0, "Child SSH exit status bad")
@@ -65,7 +65,7 @@ def main():
 
         # Start ib_read_bw on host2 (client)
         server_name = host1.get_name()
-        cmd = "ib_read_bw -m 4096 -d hfi0 -n 5 -u 21 -p %d -s %s %s" % (test_port, size,
+        cmd = "ib_read_bw -m 4096 -d hfi1_0 -n 5 -u 21 -p %d -s %s %s" % (test_port, size,
                                                                 server_name)
         (err, out) = do_ssh(host2, cmd)
         if err:

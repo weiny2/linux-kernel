@@ -37,7 +37,7 @@ def do_pkt_send(diag_path, host, packet_file, dest_lid = None, dest_ctxt = 1, co
     if use_diagpkt:
         cmd_diagpkt_arg = "-k "
 
-    cmd_pattern = "%s %shfi_pkt_send -L %d -C %d -c %d %s%s"
+    cmd_pattern = "%s %shfi1_pkt_send -L %d -C %d -c %d %s%s"
     cmd = cmd_pattern % (cmd_libs, diag_path, dest_lid, dest_ctxt,
                          count, cmd_diagpkt_arg, packet_file)
 

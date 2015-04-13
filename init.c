@@ -112,6 +112,10 @@ static uint hfi_hdrq_entsize = 32;
 module_param_named(hdrq_entsize, hfi_hdrq_entsize, uint, S_IRUGO);
 MODULE_PARM_DESC(hdrq_entsize, "Size of header queue entries: 2 - 8B, 16 - 64B (default), 32 - 128B");
 
+unsigned int user_credit_return_threshold = 33;	/* default is 33% */
+module_param(user_credit_return_threshold, uint, S_IRUGO);
+MODULE_PARM_DESC(user_credit_return_theshold, "Credit return threshold for user send contexts, return when unreturned credits passes this many blocks (in percent of allocated blocks, 0 is off)");
+
 static inline u64 encode_rcv_header_entry_size(u16);
 
 static struct idr qib_unit_table;
@@ -1319,6 +1323,9 @@ static int __init qib_ib_init(void)
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
 		hfi_cu = 1;
+	/* valid credit return threshold is 0-100, variable is unsigned */
+	if (user_credit_return_threshold > 100)
+		user_credit_return_threshold = 100;
 
 	compute_krcvqs();
 	/* sanitize receive interrupt count, time must wait until after

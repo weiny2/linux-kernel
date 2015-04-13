@@ -51,7 +51,7 @@ Version: @VERSION@
 Release: @RELEASE@
 Source: %{name}-%{version}.tgz
 
-Summary: Intel HFI driver
+Summary: Intel HFI1 driver
 Packager: Mike Marciniszyn <mike.marciniszyn@intel.com>
 License: GPLv2 or BSD
 Group: System Environment/Base
@@ -59,16 +59,19 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Url: http://openfabrics.org
 %define arch %(uname -p)
 Requires: kernel = %(echo %{kver} | sed -e 's/\(.*\)\.%{arch}/\1/g' | sed -e 's/-/_/g')
+Obsoletes: hfi
+Obsoletes: hfi-devel
+Obsoletes: hfi-debuginfo
 
 %package devel
-Summary: Development headers for Intel HFI driver interface
+Summary: Development headers for Intel HFI1 driver interface
 Group: System Environment/Development
 
 %description
-hfi provides the driver for Intel HFI gen1 cards
+hfi1 provides the driver for Intel HFI gen1 cards
 
 %description devel
-Development header files for Intel HFI driver interface
+Development header files for Intel HFI1 driver interface
 
 %prep
 %setup -q
@@ -88,7 +91,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files devel
 %defattr(-,root,root,-)
-@USER_INC_DIR@/hfi_user.h
+@USER_INC_DIR@/hfi1_user.h
 
 %post
 depmod -a %{kver}

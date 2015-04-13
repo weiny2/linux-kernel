@@ -389,7 +389,7 @@ def stop_pcap(host):
 def send_bypass(host, lid, diag_path, pkt_dir):
     RegLib.test_log(0, "Waiting for a packet")
 
-    cmd_pattern = "%shfi_pkt_send -L %s -c %d -k %s%s"
+    cmd_pattern = "%shfi1_pkt_send -L %s -c %d -k %s%s"
     count = 10
     cmd = cmd_pattern % (diag_path, lid, count, pkt_dir, "bypass10")
     RegLib.test_log(0, "Going to run %s" % cmd)

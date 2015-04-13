@@ -257,7 +257,7 @@ class HostInfo:
         return self.name
 
     def get_lid(self):
-        cmd = "cat /sys/class/infiniband/hfi0/ports/1/lid"
+        cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/lid"
         (err, out) = self.send_ssh(cmd)
         if err:
             return None

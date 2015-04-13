@@ -75,13 +75,13 @@ def stop_sm(host, sm):
 def wait_for_active(host, timeout, attempts):
     for iter in range(attempts):
         RegLib.test_log(0, "Checking for LinkUp")
-        cmd = "cat /sys/class/infiniband/hfi0/ports/1/phys_state"
+        cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/phys_state"
         out = do_ssh(host, cmd)
         for line in out:
             matchObj = re.match(r"5: LinkUp", line)
             if matchObj:
                 RegLib.test_log(0, "LinkUp")
-                cmd = "cat /sys/class/infiniband/hfi0/ports/1/state"
+                cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/state"
                 out = do_ssh(host, cmd)
                 for line in out:
                     matchObj = re.match(r"4: ACTIVE", line)
@@ -119,8 +119,8 @@ def main():
     # body of test #
     ################
 
-    driver_name = "hfi"
-    driver_file = "hfi.ko"
+    driver_name = "hfi1"
+    driver_file = "hfi1.ko"
     driver_path = test_info.get_hfi_src() + "/" + driver_file
     if test_info.is_simics() == True:
         driver_path = "/host" + driver_path
@@ -225,7 +225,7 @@ def main():
     # debugging later.
     for host in hostlist:
         print host.get_name(), "module load address is:"
-        cmd = "cat /sys/module/hfi/sections/.init.text"
+        cmd = "cat /sys/module/hfi1/sections/.init.text"
         (err, out) = do_ssh(host, cmd)
         print out
 

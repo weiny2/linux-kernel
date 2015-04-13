@@ -34,7 +34,7 @@ def do_pingpong(diag_path, host1, host2, psm_libs = None,
         return False
 
     # Start the receiver on host1; host2 will initiate ping-pongs.
-    cmd = cmd_libs + diag_path + "hfi_pkt_test -r"
+    cmd = cmd_libs + diag_path + "hfi1_pkt_test -r"
     (err, out) = host1.send_ssh(cmd, 0, 10)
 
     # Now figure out what context is being listend on look for:
@@ -51,7 +51,7 @@ def do_pingpong(diag_path, host1, host2, psm_libs = None,
 
     RegLib.test_log(0, "Using context %s" % context)
 
-    cmd_pattern = "%s %shfi_pkt_test -C %s -L %s -s %d -p -c %d"
+    cmd_pattern = "%s %shfi1_pkt_test -C %s -L %s -s %d -p -c %d"
     cmd = cmd_pattern % (cmd_libs, diag_path, context, host1_lid, payload, count)
 
     err = do_ssh(host2, cmd)
@@ -61,7 +61,7 @@ def do_pingpong(diag_path, host1, host2, psm_libs = None,
         test_pass = False
 
     # Receiver side of hfi_pkt_test never exits on its own, it must be killed.
-    do_ssh(host1, "pkill hfi_pkt_test")
+    do_ssh(host1, "pkill hfi1_pkt_test")
 
     if test_pass:
         RegLib.test_pass("Success!")
@@ -77,7 +77,7 @@ def do_piotest(diag_path, host, psm_libs):
     else:
         cmd_libs = ""
 
-    cmd = cmd_libs + diag_path + "hfi_pkt_test -B"
+    cmd = cmd_libs + diag_path + "hfi1_pkt_test -B"
     err = do_ssh(host, cmd)
 
     if err:

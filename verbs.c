@@ -1989,9 +1989,8 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	 */
 	if (!ib_qib_sys_image_guid)
 		ib_qib_sys_image_guid = ppd->guid;
-
 	lcpysz = strlcpy(ibdev->name, class_name(), lcpysz);
-	strlcpy(ibdev->name + lcpysz, "%d", lcpysz);
+	strlcpy(ibdev->name + lcpysz, "_%d", IB_DEVICE_NAME_MAX - lcpysz);
 	ibdev->owner = THIS_MODULE;
 	ibdev->node_guid = ppd->guid;
 	ibdev->uverbs_abi_ver = QIB_UVERBS_ABI_VERSION;

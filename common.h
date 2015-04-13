@@ -36,7 +36,7 @@
 #ifndef _COMMON_H
 #define _COMMON_H
 
-#include <rdma/hfi/hfi_user.h>
+#include <rdma/hfi/hfi1_user.h>
 
 /*
  * This file contains defines, structures, etc. that are used
@@ -150,7 +150,8 @@
 				 HFI_CAP_PKEY_CHECK |			\
 				 HFI_CAP_MULTI_PKT_EGR |		\
 				 ((HFI_CAP_HDRSUPP |			\
-				   HFI_CAP_MULTI_PKT_EGR) <<		\
+				   HFI_CAP_MULTI_PKT_EGR |		\
+				   HFI_CAP_EARLY_CREDIT_RETURN) <<	\
 				  HFI_CAP_USER_SHIFT))
 /*
  * A bitmask of kernel/global capabilities that should be communicated

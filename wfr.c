@@ -6149,6 +6149,16 @@ static void set_send_length(struct qib_pportdata *ppd)
 	}
 	write_csr(dd, WFR_SEND_LEN_CHECK0, len1);
 	write_csr(dd, WFR_SEND_LEN_CHECK1, len2);
+	/* adjust kernel credit return thresholds based on new MTUs */
+	/* all kernel receive contexts have the same hdrqentsize */
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
+		sc_set_cr_threshold(dd->vld[i].sc,
+			sc_mtu_to_threshold(dd->vld[i].sc, dd->vld[i].mtu,
+				dd->rcd[0]->rcvhdrqentsize));
+	}
+	sc_set_cr_threshold(dd->vld[15].sc,
+		sc_mtu_to_threshold(dd->vld[15].sc, dd->vld[15].mtu,
+			dd->rcd[0]->rcvhdrqentsize));
 
 	/* Adjust maximum MTU for the port in DC */
 	dcmtu = maxvlmtu == 10240 ? DCC_CFG_PORT_MTU_CAP_10240 :

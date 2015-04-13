@@ -2074,7 +2074,7 @@ static int qib_user_add(struct hfi_devdata *dd)
 			goto done;
 	}
 
-	snprintf(name, sizeof(name), "%s%d", class_name(), dd->unit);
+	snprintf(name, sizeof(name), "%s_%d", class_name(), dd->unit);
 	ret = hfi_cdev_init(dd->unit + 1, name, &qib_file_ops,
 			    &dd->user_cdev, &dd->user_device);
 	if (ret)

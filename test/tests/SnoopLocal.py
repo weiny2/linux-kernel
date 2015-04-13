@@ -76,7 +76,7 @@ def main():
     print "lid 1:", lid1
     print "lid 2:", lid2
 
-    dev = "/dev/hfi_diagpkt0"
+    dev = "/dev/hfi1_diagpkt0"
 
     # Open the device and create a file object.
     # Need a file object for sending ioctl

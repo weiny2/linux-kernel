@@ -536,6 +536,81 @@ static void sc_halted(struct work_struct *work)
 }
 
 /*
+ * Calculate PIO block threshold for this send context using the given MTU.
+ * Trigger a return when one MTU plus optional header of credits remain.
+ *
+ * Parameter mtu is in bytes.
+ * Parameter hdrqentsize is in DWORDs.
+ *
+ * Return value is what to write into the CSR: trigger return when
+ * unreturned credits pass this count.
+ */
+u32 sc_mtu_to_threshold(struct send_context *sc, u32 mtu, u32 hdrqentsize)
+{
+	u32 release_credits;
+	u32 threshold;
+
+	/* add in the header size, then divide by the PIO block size */
+	mtu += hdrqentsize << 2;
+	release_credits = DIV_ROUND_UP(mtu, WFR_PIO_BLOCK_SIZE);
+
+	/* check against this context's credits */
+	if (sc->credits <= release_credits)
+		threshold = 1;
+	else
+		threshold = sc->credits - release_credits;
+
+	return threshold;
+}
+
+/*
+ * Calculate credit threshold in terms of percent of the allocated credits.
+ * Trigger when unreturn credits equal or exceed the percentage of the whole.
+ *
+ * Return value is what to write into the CSR: trigger return when
+ * unreturned credits pass this count.
+ */
+static u32 sc_percent_to_threshold(struct send_context *sc, u32 percent)
+{
+	return (sc->credits * percent) / 100;
+}
+
+/*
+ * Set the credit return threshold.
+ */
+void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold)
+{
+	unsigned long flags;
+	u32 old_threshold;
+	int force_return = 0;
+
+	spin_lock_irqsave(&sc->credit_ctrl_lock, flags);
+
+	old_threshold = (sc->credit_ctrl >>
+				WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT)
+			 & WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_MASK;
+
+	if (new_threshold != old_threshold) {
+		sc->credit_ctrl =
+			(sc->credit_ctrl
+				& ~WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SMASK)
+			| ((new_threshold
+				& WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_MASK)
+			   << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT);
+		write_kctxt_csr(sc->dd, sc->context, WFR_SEND_CTXT_CREDIT_CTRL,
+			sc->credit_ctrl);
+
+		/* force a credit return on change to avoid a possible stall */
+		force_return = 1;
+	}
+
+	spin_unlock_irqrestore(&sc->credit_ctrl_lock, flags);
+
+	if (force_return)
+		sc_return_credits(sc);
+}
+
+/*
  * Allocate a NUMA relative send context structure of the given type along
  * with a HW context.
  */
@@ -546,7 +621,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	struct send_context *sc;
 	dma_addr_t pa;
 	u64 reg;
-	u32 release_credits, thresh;
+	u32 thresh;
 	u32 context;
 	int ret;
 
@@ -614,28 +689,28 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, reg);
 
 	/*
-	 * Set up a threshold credit return when one MTU of space
-	 * remains.  At the moment all VLs have the same MTU.
-	 * That will change.
+	 * Calculate the initial credit return threshold.
 	 *
-	 * TODO: We may want a "credit return MTU factor" to change
-	 * the threshold in terms of 10ths of an MTU.  E.g.
-	release_credits = DIV_ROUND_UP((dd->pport[0].ibmtu * cr_mtu_factor)
-				+ (hdrqentsize<<2),
-				10 * WFR_PIO_BLOCK_SIZE);
-	 * PROBLEM: ibmtu is not yet set up when the kernel send
-	 * contexts are created.
+	 * For Ack contexts, set a threshold for half the credits.
+	 * For User contexts use the given percentage.  This has been
+	 * sanitized on driver start-up.
+	 * For Kernel contexts, use the default MTU plus a header.
 	 */
-	release_credits = DIV_ROUND_UP(
-			(type == SC_ACK ?
-				(SCC_ACK_CREDITS * WFR_PIO_BLOCK_SIZE)/2 :
-				enum_to_mtu(OPA_MTU_10240)) +
-			(hdrqentsize<<2), WFR_PIO_BLOCK_SIZE);
-	if (sc->credits <= release_credits)
-		thresh = 1;
-	else
-		thresh = sc->credits - release_credits;
+	if (type == SC_ACK) {
+		thresh = sc_percent_to_threshold(sc, 50);
+	} else if (type == SC_USER) {
+		thresh = sc_percent_to_threshold(sc,
+				user_credit_return_threshold);
+	} else { /* kernel */
+		thresh = sc_mtu_to_threshold(sc, default_mtu, hdrqentsize);
+	}
 	reg = thresh << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT;
+	/* add in early return */
+	if (type == SC_USER && HFI_CAP_IS_USET(EARLY_CREDIT_RETURN))
+		reg |= WFR_SEND_CTXT_CREDIT_CTRL_EARLY_RETURN_SMASK;
+	else if (HFI_CAP_IS_KSET(EARLY_CREDIT_RETURN)) /* kernel, ack */
+		reg |= WFR_SEND_CTXT_CREDIT_CTRL_EARLY_RETURN_SMASK;
+
 	/* set up write-through credit_ctrl */
 	sc->credit_ctrl = reg;
 	write_kctxt_csr(dd, context, WFR_SEND_CTXT_CREDIT_CTRL, reg);
@@ -1438,6 +1513,7 @@ int init_pervl_scs(struct hfi_devdata *dd)
 				  dd->rcd[0]->rcvhdrqentsize, dd->node);
 	if (!dd->vld[15].sc)
 		goto nomem;
+	dd->vld[15].mtu = enum_to_mtu(OPA_MTU_2048);
 	for (i = 0; i < num_vls; i++) {
 		/*
 		 * Since this function does not deal with a specific
@@ -1450,6 +1526,8 @@ int init_pervl_scs(struct hfi_devdata *dd)
 					 dd->rcd[0]->rcvhdrqentsize, dd->node);
 		if (!dd->vld[i].sc)
 			goto nomem;
+		/* non VL15 start with the default MTU */
+		dd->vld[i].mtu = default_mtu;
 	}
 	sc_enable(dd->vld[15].sc);
 	ctxt = dd->vld[15].sc->context;
@@ -1464,9 +1542,6 @@ int init_pervl_scs(struct hfi_devdata *dd)
 		mask = all_vl_mask & ~(1LL << i);
 		write_kctxt_csr(dd, ctxt, WFR_SEND_CTXT_CHECK_VL, mask);
 	}
-	/* default to vl0 send context for others
-	for (; i < 15; i++)
-	dd->pervl_scs[i] = dd->pervl_scs[0];*/
 	return 0;
 nomem:
 	sc_free(dd->vld[15].sc);

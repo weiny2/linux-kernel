@@ -52,7 +52,7 @@ __print_symbolic(etype,                         \
 	packettype_name(BYPASS))
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_rx
+#define TRACE_SYSTEM hfi1_rx
 
 TRACE_EVENT(hfi_rcvhdr,
 	TP_PROTO(struct hfi_devdata *dd,
@@ -202,7 +202,7 @@ TRACE_EVENT(hfi_exp_rcv_free,
 		    )
 	);
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_tx
+#define TRACE_SYSTEM hfi1_tx
 
 TRACE_EVENT(hfi_piofree,
 	TP_PROTO(struct send_context *sc, int extra),
@@ -282,7 +282,7 @@ DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpsleep,
 	TP_ARGS(qp, flags));
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_ibhdrs
+#define TRACE_SYSTEM hfi1_ibhdrs
 
 u8 ibhdr_exhdr_len(struct qib_ib_header *hdr);
 const char *parse_everbs_hdrs(
@@ -540,7 +540,7 @@ TRACE_EVENT(snoop_capture,
 );
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_ctxts
+#define TRACE_SYSTEM hfi1_ctxts
 
 #define UCTXT_FMT \
 	"cred:%u, credaddr:0x%llx, piobase:0x%llx, rcvhdr_cnt:%u, "	\
@@ -624,7 +624,7 @@ TRACE_EVENT(hfi_ctxt_info,
 	);
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_sma
+#define TRACE_SYSTEM hfi1_sma
 
 #define BCT_FORMAT \
 	"shared_limit %x vls 0-7 [%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x] 15 [%x,%x]"
@@ -690,7 +690,7 @@ DEFINE_EVENT(hfi_bct_template, bct_get,
 	TP_ARGS(dd, bc));
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_sdma
+#define TRACE_SYSTEM hfi1_sdma
 
 TRACE_EVENT(hfi_sdma_descriptor,
 	TP_PROTO(
@@ -1162,7 +1162,7 @@ TRACE_EVENT(hfi_sdma_state,
 );
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_rc
+#define TRACE_SYSTEM hfi1_rc
 
 DECLARE_EVENT_CLASS(hfi_sdma_rc,
 	TP_PROTO(struct qib_qp *qp, u32 psn),
@@ -1206,7 +1206,7 @@ DEFINE_EVENT(hfi_sdma_rc, hfi_rc_sendcomplete,
  */
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_trace
+#define TRACE_SYSTEM hfi1_trace
 
 #define MAX_MSG_LEN 512
 
