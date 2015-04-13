@@ -59,11 +59,12 @@ static int command_read(struct pci_dev *dev, int offset, u16 *value, void *data)
 
 static int command_write(struct pci_dev *dev, int offset, u16 value, void *data)
 {
-	struct xen_pcibk_dev_data *dev_data = pci_get_drvdata(dev);
+	struct xen_pcibk_dev_data *dev_data;
 	int err;
 	u16 val;
 	struct pci_cmd_info *cmd = data;
 
+	dev_data = pci_get_drvdata(dev);
 	if (!pci_is_enabled(dev) && is_enable_cmd(value)) {
 		if (unlikely(verbose_request))
 			printk(KERN_DEBUG DRV_NAME ": %s: enable\n",
@@ -115,6 +116,7 @@ static int command_write(struct pci_dev *dev, int offset, u16 value, void *data)
 	err = pci_read_config_word(dev, offset, &val);
 	if (err || val == value)
 		return err;
+
 	value &= PCI_COMMAND_GUEST;
 	value |= val & ~PCI_COMMAND_GUEST;
 

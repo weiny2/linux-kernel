@@ -1828,6 +1828,14 @@ int btrfs_delayed_update_inode(struct btrfs_trans_handle *trans,
 	struct btrfs_delayed_node *delayed_node;
 	int ret = 0;
 
+	/*
+	 * we don't do delayed inode updates during log recovery because it
+	 * leads to enospc problems.  This means we also can't do
+	 * delayed inode refs
+	 */
+	if (BTRFS_I(inode)->root->fs_info->log_root_recovering)
+		return -EAGAIN;
+
 	delayed_node = btrfs_get_or_create_delayed_node(inode);
 	if (IS_ERR(delayed_node))
 		return PTR_ERR(delayed_node);
@@ -1856,14 +1864,6 @@ release_node:
 int btrfs_delayed_delete_inode_ref(struct inode *inode)
 {
 	struct btrfs_delayed_node *delayed_node;
-
-	/*
-	 * we don't do delayed inode updates during log recovery because it
-	 * leads to enospc problems.  This means we also can't do
-	 * delayed inode refs
-	 */
-	if (BTRFS_I(inode)->root->fs_info->log_root_recovering)
-		return -EAGAIN;
 
 	delayed_node = btrfs_get_or_create_delayed_node(inode);
 	if (IS_ERR(delayed_node))
