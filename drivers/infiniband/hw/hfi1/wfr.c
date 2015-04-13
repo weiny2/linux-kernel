@@ -1,0 +1,11121 @@
+/*
+ * Copyright (c) 2012 - 2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2008 - 2012 QLogic Corporation. All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * OpenIB.org BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+/*
+ * This file contains all of the code that is specific to the WFR chip
+ */
+
+#include <linux/pci.h>
+#include <linux/delay.h>
+#include <linux/interrupt.h>
+#include <linux/module.h>
+
+#include "hfi.h"
+#include "trace.h"
+#include "mad.h"
+#include "pio.h"
+#include "sdma.h"
+#include "eprom.h"
+
+#define NUM_IB_PORTS 1
+
+uint kdeth_qp;
+module_param_named(kdeth_qp, kdeth_qp, uint, S_IRUGO);
+MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
+
+uint num_vls = 8;
+module_param(num_vls, uint, S_IRUGO);
+MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
+
+/*
+ * Default time to aggregate two 10K packets from the idle state
+ * (timer not running). The timer starts at the end of the first packet,
+ * so only the time for one 10K packet and header plus a bit extra is needed.
+ * 10 * 1024 + 64 header byte = 10304 byte
+ * 10304 byte / 12.5 GB/s = 824.32ns
+ */
+uint rcv_intr_timeout = (824 + 16); /* 16 is for coalescing interrupt */
+module_param(rcv_intr_timeout, uint, S_IRUGO);
+MODULE_PARM_DESC(rcv_intr_timeout, "Receive interrupt mitigation timeout in ns");
+
+uint rcv_intr_count = 16; /* same as qib */
+module_param(rcv_intr_count, uint, S_IRUGO);
+MODULE_PARM_DESC(rcv_intr_count, "Receive interrupt mitigation count");
+
+uint rcv_intr_dynamic = 1; /* enable dynamic mode */
+module_param(rcv_intr_dynamic, uint, S_IRUGO);
+MODULE_PARM_DESC(rcv_intr_dynamic, "Enable dynamic receive interrupt mitigation adjustments: note rcv_intr_timeout is now a max value");
+
+ushort link_crc_mask = WFR_SUPPORTED_CRCS;
+module_param(link_crc_mask, ushort, S_IRUGO);
+MODULE_PARM_DESC(link_crc_mask, "CRCs to use on the link");
+
+static ushort crc_14b_sideband = 1;
+module_param(crc_14b_sideband, ushort, S_IRUGO);
+MODULE_PARM_DESC(crc_14b_sideband, "Use sideband credit return (14b CRC only)");
+
+/* TODO: temporary */
+static uint use_flr = 1;
+module_param_named(use_flr, use_flr, uint, S_IRUGO);
+MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
+
+/* TODO: temporary until the STL fabric manager is available to do this */
+uint set_link_credits = 1;
+module_param_named(set_link_credits, set_link_credits, uint, S_IRUGO);
+MODULE_PARM_DESC(set_link_credits, "Set per-VL link credits so traffic will flow");
+
+uint loopback;
+module_param_named(loopback, loopback, uint, S_IRUGO);
+MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cable");
+
+static uint link_speed_mask;
+module_param(link_speed_mask, uint, S_IRUGO);
+MODULE_PARM_DESC(link_speed_mask, "Mask of enabled link speeds (1 = 12.5G, 2 = 25G)");
+
+uint quick_linkup;
+module_param(quick_linkup, uint, S_IRUGO);
+MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
+
+/* TODO: temporary; skip BCC steps */
+static uint disable_bcc;
+module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
+MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
+
+/* TODO: temporary */
+#define EASY_LINKUP_UNSET 100
+static uint sim_easy_linkup = EASY_LINKUP_UNSET;
+
+struct flag_table {
+	u64 flag;	/* the flag */
+	char *str;	/* description string */
+	u16 extra;	/* extra information */
+	u16 unused0;
+	u32 unused1;
+};
+
+/* str must be a string constant */
+#define FLAG_ENTRY(str, extra, flag) {flag, str, extra}
+#define FLAG_ENTRY0(str, flag) {flag, str, 0}
+
+/* Send Error Consequences */
+#define SEC_WRITE_DROPPED	0x1
+#define SEC_PACKET_DROPPED	0x2
+#define SEC_SC_HALTED		0x4	/* per-context only */
+#define SEC_SPC_FREEZE		0x8	/* per-HFI only */
+
+#define VL15CTXT                  1
+#define MIN_KERNEL_KCTXTS         2
+#define NUM_MAP_REGS             32
+
+/* extract the emulation revision */
+#define emulator_rev(dd) ((dd)->irev >> 8)
+/* parallel and serial emulation versions are 3 and 4 respectively */
+#define is_emulator_p(dd) ((((dd)->irev) & 0xf) == 3)
+#define is_emulator_s(dd) ((((dd)->irev) & 0xf) == 4)
+
+/* RSM fields */
+
+/* packet type */
+#define IB_PACKET_TYPE         2ull
+#define QW_SHIFT               6ull
+/* QPN[7..1] */
+#define QPN_WIDTH              7ull
+
+/* LRH.BTH: QW 0, OFFSET 48 - for match */
+#define LRH_BTH_QW             0ull
+#define LRH_BTH_BIT_OFFSET     48ull
+#define LRH_BTH_OFFSET(off)    ((LRH_BTH_QW << QW_SHIFT) | (off))
+#define LRH_BTH_MATCH_OFFSET   LRH_BTH_OFFSET(LRH_BTH_BIT_OFFSET)
+#define LRH_BTH_SELECT
+#define LRH_BTH_MASK           3ull
+#define LRH_BTH_VALUE          2ull
+
+/* LRH.SC[3..0] QW 0, OFFSET 56 - for match */
+#define LRH_SC_QW              0ull
+#define LRH_SC_BIT_OFFSET      56ull
+#define LRH_SC_OFFSET(off)     ((LRH_SC_QW << QW_SHIFT) | (off))
+#define LRH_SC_MATCH_OFFSET    LRH_SC_OFFSET(LRH_SC_BIT_OFFSET)
+#define LRH_SC_MASK            128ull
+#define LRH_SC_VALUE           0ull
+
+/* SC[n..0] QW 0, OFFSET 60 - for select */
+#define LRH_SC_SELECT_OFFSET  ((LRH_SC_QW << QW_SHIFT) | (60ull))
+
+/* QPN[m+n:1] QW 1, OFFSET 1 */
+#define QPN_SELECT_OFFSET      ((1ull << QW_SHIFT) | (1ull))
+
+/* defines to build power on SC2VL table */
+#define SC2VL_VAL( \
+	num, \
+	sc0, sc0val, \
+	sc1, sc1val, \
+	sc2, sc2val, \
+	sc3, sc3val, \
+	sc4, sc4val, \
+	sc5, sc5val, \
+	sc6, sc6val, \
+	sc7, sc7val) \
+( \
+	((u64)(sc0val) << WFR_SEND_SC2VLT##num##_SC##sc0##_SHIFT) | \
+	((u64)(sc1val) << WFR_SEND_SC2VLT##num##_SC##sc1##_SHIFT) | \
+	((u64)(sc2val) << WFR_SEND_SC2VLT##num##_SC##sc2##_SHIFT) | \
+	((u64)(sc3val) << WFR_SEND_SC2VLT##num##_SC##sc3##_SHIFT) | \
+	((u64)(sc4val) << WFR_SEND_SC2VLT##num##_SC##sc4##_SHIFT) | \
+	((u64)(sc5val) << WFR_SEND_SC2VLT##num##_SC##sc5##_SHIFT) | \
+	((u64)(sc6val) << WFR_SEND_SC2VLT##num##_SC##sc6##_SHIFT) | \
+	((u64)(sc7val) << WFR_SEND_SC2VLT##num##_SC##sc7##_SHIFT)   \
+)
+
+#define DC_SC_VL_VAL( \
+	range, \
+	e0, e0val, \
+	e1, e1val, \
+	e2, e2val, \
+	e3, e3val, \
+	e4, e4val, \
+	e5, e5val, \
+	e6, e6val, \
+	e7, e7val, \
+	e8, e8val, \
+	e9, e9val, \
+	e10, e10val, \
+	e11, e11val, \
+	e12, e12val, \
+	e13, e13val, \
+	e14, e14val, \
+	e15, e15val) \
+( \
+	((u64)(e0val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e0##_SHIFT) | \
+	((u64)(e1val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e1##_SHIFT) | \
+	((u64)(e2val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e2##_SHIFT) | \
+	((u64)(e3val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e3##_SHIFT) | \
+	((u64)(e4val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e4##_SHIFT) | \
+	((u64)(e5val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e5##_SHIFT) | \
+	((u64)(e6val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e6##_SHIFT) | \
+	((u64)(e7val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e7##_SHIFT) | \
+	((u64)(e8val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e8##_SHIFT) | \
+	((u64)(e9val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e9##_SHIFT) | \
+	((u64)(e10val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e10##_SHIFT) | \
+	((u64)(e11val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e11##_SHIFT) | \
+	((u64)(e12val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e12##_SHIFT) | \
+	((u64)(e13val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e13##_SHIFT) | \
+	((u64)(e14val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e14##_SHIFT) | \
+	((u64)(e15val) << DCC_CFG_SC_VL_TABLE_##range##_ENTRY##e15##_SHIFT) \
+)
+
+/* all CceStatus sub-block freeze bits */
+#define ALL_FROZE (WFR_CCE_STATUS_SDMA_FROZE_SMASK \
+			| WFR_CCE_STATUS_RXE_FROZE_SMASK \
+			| WFR_CCE_STATUS_TXE_FROZE_SMASK \
+			| WFR_CCE_STATUS_TXE_PIO_FROZE_SMASK)
+/* all CceStatus sub-block TXE pause bits */
+#define ALL_TXE_PAUSE (WFR_CCE_STATUS_TXE_PIO_PAUSED_SMASK \
+			| WFR_CCE_STATUS_TXE_PAUSED_SMASK \
+			| WFR_CCE_STATUS_SDMA_PAUSED_SMASK)
+/* all CceStatus sub-block RXE pause bits */
+#define ALL_RXE_PAUSE WFR_CCE_STATUS_RXE_PAUSED_SMASK
+
+/*
+ * CCE Error flags.
+ */
+static struct flag_table cce_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("CceCsrParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_PARITY_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("CceCsrReadBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_READ_BAD_ADDR_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("CceCsrWriteBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_WRITE_BAD_ADDR_ERR_SMASK),
+/* 3*/	FLAG_ENTRY0("CceTrgtAsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_TRGT_ASYNC_FIFO_PARITY_ERR_SMASK),
+/* 4*/	FLAG_ENTRY0("CceTrgtAccessErr",
+		WFR_CCE_ERR_STATUS_CCE_TRGT_ACCESS_ERR_SMASK),
+/* 5*/	FLAG_ENTRY0("CceRspdDataParityErr",
+		WFR_CCE_ERR_STATUS_CCE_RSPD_DATA_PARITY_ERR_SMASK),
+/* 6*/	FLAG_ENTRY0("CceCli0AsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CLI0_ASYNC_FIFO_PARITY_ERR_SMASK),
+/* 7*/	FLAG_ENTRY0("CceCsrCfgBusParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CSR_CFG_BUS_PARITY_ERR_SMASK),
+/* 8*/	FLAG_ENTRY0("CceCli2AsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_CLI2_ASYNC_FIFO_PARITY_ERR_SMASK),
+/* 9*/	FLAG_ENTRY0("CceCli1AsyncFifoPioCrdtParityErr",
+	    WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_PIO_CRDT_PARITY_ERR_SMASK),
+/*10*/	FLAG_ENTRY0("CceCli1AsyncFifoPioCrdtParityErr",
+	    WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_SDMA_HD_PARITY_ERR_SMASK),
+/*11*/	FLAG_ENTRY0("CceCli1AsyncFifoRxdmaParityError",
+	    WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_RXDMA_PARITY_ERROR_SMASK),
+/*12*/	FLAG_ENTRY0("CceCli1AsyncFifoDbgParityError",
+		WFR_CCE_ERR_STATUS_CCE_CLI1_ASYNC_FIFO_DBG_PARITY_ERROR_SMASK),
+/*13*/	FLAG_ENTRY0("PcicRetryMemCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_MEM_COR_ERR_SMASK),
+/*14*/	FLAG_ENTRY0("PcicRetryMemCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_SOT_MEM_COR_ERR_SMASK),
+/*15*/	FLAG_ENTRY0("PcicPostHdQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_HD_QCOR_ERR_SMASK),
+/*16*/	FLAG_ENTRY0("PcicPostHdQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_DAT_QCOR_ERR_SMASK),
+/*17*/	FLAG_ENTRY0("PcicPostHdQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_HD_QCOR_ERR_SMASK),
+/*18*/	FLAG_ENTRY0("PcicCplDatQCorErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_DAT_QCOR_ERR_SMASK),
+/*19*/	FLAG_ENTRY0("PcicNPostHQParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_NPOST_HQ_PARITY_ERR_SMASK),
+/*20*/	FLAG_ENTRY0("PcicNPostDatQParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_NPOST_DAT_QPARITY_ERR_SMASK),
+/*21*/	FLAG_ENTRY0("PcicRetryMemUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_MEM_UNC_ERR_SMASK),
+/*22*/	FLAG_ENTRY0("PcicRetrySotMemUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_RETRY_SOT_MEM_UNC_ERR_SMASK),
+/*23*/	FLAG_ENTRY0("PcicPostHdQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_HD_QUNC_ERR_SMASK),
+/*24*/	FLAG_ENTRY0("PcicPostDatQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_POST_DAT_QUNC_ERR_SMASK),
+/*25*/	FLAG_ENTRY0("PcicCplHdQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_HD_QUNC_ERR_SMASK),
+/*26*/	FLAG_ENTRY0("PcicCplDatQUncErr",
+		WFR_CCE_ERR_STATUS_PCIC_CPL_DAT_QUNC_ERR_SMASK),
+/*27*/	FLAG_ENTRY0("PcicTransmitFrontParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_TRANSMIT_FRONT_PARITY_ERR_SMASK),
+/*28*/	FLAG_ENTRY0("PcicTransmitBackParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_TRANSMIT_BACK_PARITY_ERR_SMASK),
+/*29*/	FLAG_ENTRY0("PcicReceiveParityErr",
+		WFR_CCE_ERR_STATUS_PCIC_RECEIVE_PARITY_ERR_SMASK),
+/*30*/	FLAG_ENTRY0("CceTrgtCplTimeoutErr",
+		WFR_CCE_ERR_STATUS_CCE_TRGT_CPL_TIMEOUT_ERR_SMASK),
+/*31*/	FLAG_ENTRY0("LATriggered",
+		WFR_CCE_ERR_STATUS_LA_TRIGGERED_SMASK),
+/*32*/	FLAG_ENTRY0("CceSegReadBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_SEG_READ_BAD_ADDR_ERR_SMASK),
+/*33*/	FLAG_ENTRY0("CceSegWriteBadAddrErr",
+		WFR_CCE_ERR_STATUS_CCE_SEG_WRITE_BAD_ADDR_ERR_SMASK),
+/*34*/	FLAG_ENTRY0("CceRcplAsyncFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_RCPL_ASYNC_FIFO_PARITY_ERR_SMASK),
+/*35*/	FLAG_ENTRY0("CceRxdmaConvFifoParityErr",
+		WFR_CCE_ERR_STATUS_CCE_RXDMA_CONV_FIFO_PARITY_ERR_SMASK),
+/*36*/	FLAG_ENTRY0("CceMsixTableCorErr",
+		WFR_CCE_ERR_STATUS_CCE_MSIX_TABLE_COR_ERR_SMASK),
+/*37*/	FLAG_ENTRY0("CceMsixTableUncErr",
+		WFR_CCE_ERR_STATUS_CCE_MSIX_TABLE_UNC_ERR_SMASK),
+/*38*/	FLAG_ENTRY0("CceIntMapCorErr",
+		WFR_CCE_ERR_STATUS_CCE_INT_MAP_COR_ERR_SMASK),
+/*39*/	FLAG_ENTRY0("CceIntMapUncErr",
+		WFR_CCE_ERR_STATUS_CCE_INT_MAP_UNC_ERR_SMASK),
+/*40*/	FLAG_ENTRY0("CceMsixCsrParityErr",
+		WFR_CCE_ERR_STATUS_CCE_MSIX_CSR_PARITY_ERR_SMASK),
+/*41-63 reserved*/
+};
+
+/*
+ * TXE PIO Error flags and consequences
+ */
+static struct flag_table pio_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY("PioWriteBadCtxt",
+	SEC_WRITE_DROPPED,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_BAD_CTXT_ERR_SMASK),
+/* 1*/	FLAG_ENTRY("PioWriteAddrParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_ADDR_PARITY_ERR_SMASK),
+/* 2*/	FLAG_ENTRY("PioCsrParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_CSR_PARITY_ERR_SMASK),
+/* 3*/	FLAG_ENTRY("PioSbMemFifo0",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO0_ERR_SMASK),
+/* 4*/	FLAG_ENTRY("PioSbMemFifo1",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO1_ERR_SMASK),
+/* 5*/	FLAG_ENTRY("PioPccFifoParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PCC_FIFO_PARITY_ERR_SMASK),
+/* 6*/	FLAG_ENTRY("PioPecFifoParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PEC_FIFO_PARITY_ERR_SMASK),
+/* 7*/	FLAG_ENTRY("PioSbrdctlCrrelParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTL_CRREL_PARITY_ERR_SMASK),
+/* 8*/	FLAG_ENTRY("PioSbrdctrlCrrelFifoParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTRL_CRREL_FIFO_PARITY_ERR_SMASK),
+/* 9*/	FLAG_ENTRY("PioPktEvictFifoParityErr",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_FIFO_PARITY_ERR_SMASK),
+/*10*/	FLAG_ENTRY("PioSmPktResetParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_SM_PKT_RESET_PARITY_ERR_SMASK),
+/*11*/	FLAG_ENTRY("PioVlLenMemBank0Unc",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_UNC_ERR_SMASK),
+/*12*/	FLAG_ENTRY("PioVlLenMemBank1Unc",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_UNC_ERR_SMASK),
+/*13*/	FLAG_ENTRY("PioVlLenMemBank0Cor",
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_COR_ERR_SMASK),
+/*14*/	FLAG_ENTRY("PioVlLenMemBank1Cor",
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_COR_ERR_SMASK),
+/*15*/	FLAG_ENTRY("PioCreditRetFifoParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_CREDIT_RET_FIFO_PARITY_ERR_SMASK),
+/*16*/	FLAG_ENTRY("PioPpmcPblFifo",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_PBL_FIFO_ERR_SMASK),
+/*17*/	FLAG_ENTRY("PioInitSmIn",
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_INIT_SM_IN_ERR_SMASK),
+/*18*/	FLAG_ENTRY("PioPktEvictSmOrArbSm",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_SM_OR_ARB_SM_ERR_SMASK),
+/*19*/	FLAG_ENTRY("PioHostAddrMemUnc",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_UNC_ERR_SMASK),
+/*20*/	FLAG_ENTRY("PioHostAddrMemCor",
+	0,
+	WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_COR_ERR_SMASK),
+/*21*/	FLAG_ENTRY("PioWriteDataParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK),
+/*22*/	FLAG_ENTRY("PioStateMachine",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK),
+/*23*/	FLAG_ENTRY("PioWriteQwValidParity",
+	SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK),
+/*24*/	FLAG_ENTRY("PioBlockQwCountParity",
+	SEC_WRITE_DROPPED|SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_PARITY_ERR_SMASK),
+/*25*/	FLAG_ENTRY("PioVlfVlLenParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VLF_VL_LEN_PARITY_ERR_SMASK),
+/*26*/	FLAG_ENTRY("PioVlfSopParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VLF_SOP_PARITY_ERR_SMASK),
+/*27*/	FLAG_ENTRY("PioVlFifoParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_VL_FIFO_PARITY_ERR_SMASK),
+/*28*/	FLAG_ENTRY("PioPpmcBqcMemParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_BQC_MEM_PARITY_ERR_SMASK),
+/*29*/	FLAG_ENTRY("PioPpmcSopLen",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_SOP_LEN_ERR_SMASK),
+/*30-31 reserved*/
+/*32*/	FLAG_ENTRY("PioCurrentFreeCntParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_CURRENT_FREE_CNT_PARITY_ERR_SMASK),
+/*33*/	FLAG_ENTRY("PioLastReturnedCntParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_LAST_RETURNED_CNT_PARITY_ERR_SMASK),
+/*34*/	FLAG_ENTRY("PioPccSopHeadParity",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PCC_SOP_HEAD_PARITY_ERR_SMASK),
+/*35*/	FLAG_ENTRY("PioPecSopHeadParityErr",
+	SEC_SPC_FREEZE,
+	WFR_SEND_PIO_ERR_STATUS_PIO_PEC_SOP_HEAD_PARITY_ERR_SMASK),
+/*36-63 reserved*/
+};
+
+/* TXE PIO errors that cause an SPC freeze */
+#define ALL_PIO_FREEZE_ERR \
+	(WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_ADDR_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_CSR_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO0_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SB_MEM_FIFO1_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PCC_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PEC_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTL_CRREL_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SBRDCTRL_CRREL_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_SM_PKT_RESET_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK0_UNC_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VL_LEN_MEM_BANK1_UNC_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_CREDIT_RET_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_PBL_FIFO_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PKT_EVICT_SM_OR_ARB_SM_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_HOST_ADDR_MEM_UNC_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_DATA_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_STATE_MACHINE_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_WRITE_QW_VALID_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_BLOCK_QW_COUNT_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VLF_VL_LEN_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VLF_SOP_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_VL_FIFO_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_BQC_MEM_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PPMC_SOP_LEN_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_CURRENT_FREE_CNT_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_LAST_RETURNED_CNT_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PCC_SOP_HEAD_PARITY_ERR_SMASK \
+	| WFR_SEND_PIO_ERR_STATUS_PIO_PEC_SOP_HEAD_PARITY_ERR_SMASK)
+
+/*
+ * TXE SDMA Error flags
+ */
+static struct flag_table sdma_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("SDmaRpyTagErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_RPY_TAG_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("SDmaCsrParityErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_CSR_PARITY_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("SDmaPcieReqTrackingUncErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_UNC_ERR_SMASK),
+/* 3*/	FLAG_ENTRY0("SDmaPcieReqTrackingCorErr",
+		WFR_SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_COR_ERR_SMASK),
+/*04-63 reserved*/
+};
+
+/* TXE SDMA errors that cause an SPC freeze */
+#define ALL_SDMA_FREEZE_ERR  \
+		(WFR_SEND_DMA_ERR_STATUS_SDMA_RPY_TAG_ERR_SMASK \
+		| WFR_SEND_DMA_ERR_STATUS_SDMA_CSR_PARITY_ERR_SMASK \
+		| WFR_SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_UNC_ERR_SMASK)
+
+/*
+ * TXE Egress Error flags and consequences
+ */
+#define SEES(text) WFR_SEND_EGRESS_ERR_STATUS_##text##_SMASK
+static struct flag_table egress_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY("TxPktIntegrityMemCorErr",
+		0,
+		SEES(TX_PKT_INTEGRITY_MEM_COR_ERR)),
+/* 1*/	FLAG_ENTRY("TxPktIntegrityMemUncErr",
+		0,
+		SEES(TX_PKT_INTEGRITY_MEM_UNC_ERR)),
+/* 2 reserved */
+/* 3*/	FLAG_ENTRY("TxEgressFifoUnderrunOrParityErr",
+		0,
+		SEES(TX_EGRESS_FIFO_UNDERRUN_OR_PARITY_ERR)),
+/* 4*/	FLAG_ENTRY("TxLinkdownErr",
+		0,
+		SEES(TX_LINKDOWN_ERR)),
+/* 5*/	FLAG_ENTRY("TxIncorrectLinkStateErr",
+		0,
+		SEES(TX_INCORRECT_LINK_STATE_ERR)),
+/* 6 reserved */
+/* 7*/	FLAG_ENTRY("TxPioLaunchIntfParityErr",
+		0,
+		SEES(TX_PIO_LAUNCH_INTF_PARITY_ERR)),
+/* 8*/	FLAG_ENTRY("TxSdmaLaunchIntfParityErr",
+		0,
+		SEES(TX_SDMA_LAUNCH_INTF_PARITY_ERR)),
+/* 9-10 reserved */
+/*11*/	FLAG_ENTRY("TxSbrdCtlStateMachineParityErr",
+		0,
+		SEES(TX_SBRD_CTL_STATE_MACHINE_PARITY_ERR)),
+/*12*/	FLAG_ENTRY("TxIllegalVLErr",
+		0,
+		SEES(TX_ILLEGAL_VL_ERR)),
+/*13*/	FLAG_ENTRY("TxLaunchCsrParityErr",
+		0,
+		SEES(TX_LAUNCH_CSR_PARITY_ERR)),
+/*14*/	FLAG_ENTRY("TxSbrdCtlCsrParityErr",
+		0,
+		SEES(TX_SBRD_CTL_CSR_PARITY_ERR)),
+/*15*/	FLAG_ENTRY("TxConfigParityErr",
+		0,
+		SEES(TX_CONFIG_PARITY_ERR)),
+/*16*/	FLAG_ENTRY("TxSdma0DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA0_DISALLOWED_PACKET_ERR)),
+/*17*/	FLAG_ENTRY("TxSdma1DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA1_DISALLOWED_PACKET_ERR)),
+/*18*/	FLAG_ENTRY("TxSdma2DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA2_DISALLOWED_PACKET_ERR)),
+/*19*/	FLAG_ENTRY("TxSdma3DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA3_DISALLOWED_PACKET_ERR)),
+/*20*/	FLAG_ENTRY("TxSdma4DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA4_DISALLOWED_PACKET_ERR)),
+/*21*/	FLAG_ENTRY("TxSdma5DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA5_DISALLOWED_PACKET_ERR)),
+/*22*/	FLAG_ENTRY("TxSdma6DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA6_DISALLOWED_PACKET_ERR)),
+/*23*/	FLAG_ENTRY("TxSdma7DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA7_DISALLOWED_PACKET_ERR)),
+/*24*/	FLAG_ENTRY("TxSdma8DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA8_DISALLOWED_PACKET_ERR)),
+/*25*/	FLAG_ENTRY("TxSdma9DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA9_DISALLOWED_PACKET_ERR)),
+/*26*/	FLAG_ENTRY("TxSdma10DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA10_DISALLOWED_PACKET_ERR)),
+/*27*/	FLAG_ENTRY("TxSdma11DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA11_DISALLOWED_PACKET_ERR)),
+/*28*/	FLAG_ENTRY("TxSdma12DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA12_DISALLOWED_PACKET_ERR)),
+/*29*/	FLAG_ENTRY("TxSdma13DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA13_DISALLOWED_PACKET_ERR)),
+/*30*/	FLAG_ENTRY("TxSdma14DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA14_DISALLOWED_PACKET_ERR)),
+/*31*/	FLAG_ENTRY("TxSdma15DisallowedPacketErr",
+		0,
+		SEES(TX_SDMA15_DISALLOWED_PACKET_ERR)),
+/*32*/	FLAG_ENTRY("TxLaunchFifo0UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO0_UNC_OR_PARITY_ERR)),
+/*33*/	FLAG_ENTRY("TxLaunchFifo1UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO1_UNC_OR_PARITY_ERR)),
+/*34*/	FLAG_ENTRY("TxLaunchFifo2UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO2_UNC_OR_PARITY_ERR)),
+/*35*/	FLAG_ENTRY("TxLaunchFifo3UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO3_UNC_OR_PARITY_ERR)),
+/*36*/	FLAG_ENTRY("TxLaunchFifo4UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO4_UNC_OR_PARITY_ERR)),
+/*37*/	FLAG_ENTRY("TxLaunchFifo5UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO5_UNC_OR_PARITY_ERR)),
+/*38*/	FLAG_ENTRY("TxLaunchFifo6UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO6_UNC_OR_PARITY_ERR)),
+/*39*/	FLAG_ENTRY("TxLaunchFifo7UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO7_UNC_OR_PARITY_ERR)),
+/*40*/	FLAG_ENTRY("TxLaunchFifo8UncOrParityErr",
+		0,
+		SEES(TX_LAUNCH_FIFO8_UNC_OR_PARITY_ERR)),
+/*41*/	FLAG_ENTRY("TxCreditReturnParityErr",
+		0,
+		SEES(TX_CREDIT_RETURN_PARITY_ERR)),
+/*42*/	FLAG_ENTRY("TxSbHdrUncErr",
+		0,
+		SEES(TX_SB_HDR_UNC_ERR)),
+/*43*/	FLAG_ENTRY("TxReadSdmaMemoryUncErr",
+		0,
+		SEES(TX_READ_SDMA_MEMORY_UNC_ERR)),
+/*44*/	FLAG_ENTRY("TxReadPioMemoryUncErr",
+		0,
+		SEES(TX_READ_PIO_MEMORY_UNC_ERR)),
+/*45*/	FLAG_ENTRY("TxEgressFifoUncErr",
+		0,
+		SEES(TX_EGRESS_FIFO_UNC_ERR)),
+/*46*/	FLAG_ENTRY("TxHcrcInsertionErr",
+		0,
+		SEES(TX_HCRC_INSERTION_ERR)),
+/*47*/	FLAG_ENTRY("TxCreditReturnVLErr",
+		0,
+		SEES(TX_CREDIT_RETURN_VL_ERR)),
+/*48*/	FLAG_ENTRY("TxLaunchFifo0CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO0_COR_ERR)),
+/*49*/	FLAG_ENTRY("TxLaunchFifo1CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO1_COR_ERR)),
+/*50*/	FLAG_ENTRY("TxLaunchFifo2CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO2_COR_ERR)),
+/*51*/	FLAG_ENTRY("TxLaunchFifo3CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO3_COR_ERR)),
+/*52*/	FLAG_ENTRY("TxLaunchFifo4CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO4_COR_ERR)),
+/*53*/	FLAG_ENTRY("TxLaunchFifo5CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO5_COR_ERR)),
+/*54*/	FLAG_ENTRY("TxLaunchFifo6CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO6_COR_ERR)),
+/*55*/	FLAG_ENTRY("TxLaunchFifo7CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO7_COR_ERR)),
+/*56*/	FLAG_ENTRY("TxLaunchFifo8CorErr",
+		0,
+		SEES(TX_LAUNCH_FIFO8_COR_ERR)),
+/*57*/	FLAG_ENTRY("TxCreditOverrunErr",
+		0,
+		SEES(TX_CREDIT_OVERRUN_ERR)),
+/*58*/	FLAG_ENTRY("TxSbHdrCorErr",
+		0,
+		SEES(TX_SB_HDR_COR_ERR)),
+/*59*/	FLAG_ENTRY("TxReadSdmaMemoryCorErr",
+		0,
+		SEES(TX_READ_SDMA_MEMORY_COR_ERR)),
+/*60*/	FLAG_ENTRY("TxReadPioMemoryCorErr",
+		0,
+		SEES(TX_READ_PIO_MEMORY_COR_ERR)),
+/*61*/	FLAG_ENTRY("TxEgressFifoCorErr",
+		0,
+		SEES(TX_EGRESS_FIFO_COR_ERR)),
+/*62*/	FLAG_ENTRY("TxReadSdmaMemoryCsrUncErr",
+		0,
+		SEES(TX_READ_SDMA_MEMORY_CSR_UNC_ERR)),
+/*63*/	FLAG_ENTRY("TxReadPioMemoryCsrUncErr",
+		0,
+		SEES(TX_READ_PIO_MEMORY_CSR_UNC_ERR)),
+};
+
+#define SEEI(text) WFR_SEND_EGRESS_ERR_INFO_##text##_ERR_SMASK
+static struct flag_table egress_err_info_flags[] = {
+/* 0*/	FLAG_ENTRY0("Reserved", 0ull),
+/* 1*/	FLAG_ENTRY0("VLErr", SEEI(VL)),
+/* 2*/	FLAG_ENTRY0("JobKeyErr", SEEI(JOB_KEY)),
+/* 3*/	FLAG_ENTRY0("JobKeyErr", SEEI(JOB_KEY)),
+/* 4*/	FLAG_ENTRY0("PartitionKeyErr", SEEI(PARTITION_KEY)),
+/* 5*/	FLAG_ENTRY0("SLIDErr", SEEI(SLID)),
+/* 6*/	FLAG_ENTRY0("OpcodeErr", SEEI(OPCODE)),
+/* 7*/	FLAG_ENTRY0("VLMappingErr", SEEI(VL_MAPPING)),
+/* 8*/	FLAG_ENTRY0("RawErr", SEEI(RAW)),
+/* 9*/	FLAG_ENTRY0("RawIPv6Err", SEEI(RAW_IPV6)),
+/*10*/	FLAG_ENTRY0("GRHErr", SEEI(GRH)),
+/*11*/	FLAG_ENTRY0("BypassErr", SEEI(BYPASS)),
+/*12*/	FLAG_ENTRY0("KDETHPacketsErr", SEEI(KDETH_PACKETS)),
+/*13*/	FLAG_ENTRY0("NonKDETHPacketsErr", SEEI(NON_KDETH_PACKETS)),
+/*14*/	FLAG_ENTRY0("TooSmallIBPacketsErr", SEEI(TOO_SMALL_IB_PACKETS)),
+/*15*/	FLAG_ENTRY0("TooSmallBypassPacketsErr", SEEI(TOO_SMALL_BYPASS_PACKETS)),
+/*16*/	FLAG_ENTRY0("PbcTestErr", SEEI(PBC_TEST)),
+/*17*/	FLAG_ENTRY0("BadPktLenErr", SEEI(BAD_PKT_LEN)),
+/*18*/	FLAG_ENTRY0("TooLongIBPacketErr", SEEI(TOO_LONG_IB_PACKET)),
+/*19*/	FLAG_ENTRY0("TooLongBypassPacketsErr", SEEI(TOO_LONG_BYPASS_PACKETS)),
+/*20*/	FLAG_ENTRY0("PbcStaticRateControlErr", SEEI(PBC_STATIC_RATE_CONTROL)),
+/*21*/	FLAG_ENTRY0("BypassBadPktLenErr", SEEI(BAD_PKT_LEN)),
+};
+
+/*
+ * TXE Egress Error Info flags and consequences
+ */
+
+/* TXE Egress errors that cause an SPC freeze */
+#define ALL_TXE_EGRESS_FREEZE_ERR \
+	(SEES(TX_EGRESS_FIFO_UNDERRUN_OR_PARITY_ERR) \
+	| SEES(TX_PIO_LAUNCH_INTF_PARITY_ERR) \
+	| SEES(TX_SDMA_LAUNCH_INTF_PARITY_ERR) \
+	| SEES(TX_SBRD_CTL_STATE_MACHINE_PARITY_ERR) \
+	| SEES(TX_LAUNCH_CSR_PARITY_ERR) \
+	| SEES(TX_SBRD_CTL_CSR_PARITY_ERR) \
+	| SEES(TX_CONFIG_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO0_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO1_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO2_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO3_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO4_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO5_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO6_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO7_UNC_OR_PARITY_ERR) \
+	| SEES(TX_LAUNCH_FIFO8_UNC_OR_PARITY_ERR) \
+	| SEES(TX_CREDIT_RETURN_PARITY_ERR))
+
+/*
+ * TXE Send error flags
+ */
+static struct flag_table send_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("SDmaRpyTagErr",
+		WFR_SEND_ERR_STATUS_SEND_CSR_PARITY_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("SendCsrReadBadAddrErr",
+		WFR_SEND_ERR_STATUS_SEND_CSR_READ_BAD_ADDR_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("SendCsrWriteBadAddrErr",
+		WFR_SEND_ERR_STATUS_SEND_CSR_WRITE_BAD_ADDR_ERR_SMASK)
+};
+
+/*
+ * TXE Send Context Error flags and consequences
+ */
+static struct flag_table sc_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY("InconsistentSop",
+		SEC_PACKET_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_INCONSISTENT_SOP_ERR_SMASK),
+/* 1*/	FLAG_ENTRY("DisallowedPacket",
+		SEC_PACKET_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK),
+/* 2*/	FLAG_ENTRY("WriteCrossesBoundary",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_CROSSES_BOUNDARY_ERR_SMASK),
+/* 3*/	FLAG_ENTRY("WriteOverflow",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_OVERFLOW_ERR_SMASK),
+/* 4*/	FLAG_ENTRY("WriteOutOfBounds",
+		SEC_WRITE_DROPPED | SEC_SC_HALTED,
+		WFR_SEND_CTXT_ERR_STATUS_PIO_WRITE_OUT_OF_BOUNDS_ERR_SMASK),
+/* 5-63 reserved*/
+};
+
+/*
+ * RXE Receive Error flags
+ */
+static struct flag_table rxe_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("RxDmaCsrCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_CSR_COR_ERR_SMASK),
+/* 1*/	FLAG_ENTRY0("RxDcIntfParityErr",
+		WFR_RCV_ERR_STATUS_RX_DC_INTF_PARITY_ERR_SMASK),
+/* 2*/	FLAG_ENTRY0("RxRcvHdrUncErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_HDR_UNC_ERR_SMASK),
+/* 3*/	FLAG_ENTRY0("RxRcvHdrCorErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_HDR_COR_ERR_SMASK),
+/* 4*/	FLAG_ENTRY0("RxRcvDataUncErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_DATA_UNC_ERR_SMASK),
+/* 5*/	FLAG_ENTRY0("RxRcvDataCorErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_DATA_COR_ERR_SMASK),
+/* 6*/	FLAG_ENTRY0("RxRcvQpMapTableUncErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_QP_MAP_TABLE_UNC_ERR_SMASK),
+/* 7*/	FLAG_ENTRY0("RxRcvQpMapTableCorErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_QP_MAP_TABLE_COR_ERR_SMASK),
+/* 8*/	FLAG_ENTRY0("RxRcvCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_CSR_PARITY_ERR_SMASK),
+/* 9*/	FLAG_ENTRY0("RxDcSopEopParityErr",
+		WFR_RCV_ERR_STATUS_RX_DC_SOP_EOP_PARITY_ERR_SMASK),
+/*10*/	FLAG_ENTRY0("RxDmaFlagUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_FLAG_UNC_ERR_SMASK),
+/*11*/	FLAG_ENTRY0("RxDmaFlagCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_FLAG_COR_ERR_SMASK),
+/*12*/	FLAG_ENTRY0("RxRcvFsmEncodingErr",
+		WFR_RCV_ERR_STATUS_RX_RCV_FSM_ENCODING_ERR_SMASK),
+/*13*/	FLAG_ENTRY0("RxRbufFreeListUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FREE_LIST_UNC_ERR_SMASK),
+/*14*/	FLAG_ENTRY0("RxRbufFreeListCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FREE_LIST_COR_ERR_SMASK),
+/*15*/	FLAG_ENTRY0("RxRbufLookupDesRegUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_ERR_SMASK),
+/*16*/	FLAG_ENTRY0("RxRbufLookupDesRegUncCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_COR_ERR_SMASK),
+/*17*/	FLAG_ENTRY0("RxRbufLookupDesUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_UNC_ERR_SMASK),
+/*18*/	FLAG_ENTRY0("RxRbufLookupDesCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_COR_ERR_SMASK),
+/*19*/	FLAG_ENTRY0("RxRbufBlockListReadUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_BLOCK_LIST_READ_UNC_ERR_SMASK),
+/*20*/	FLAG_ENTRY0("RxRbufBlockListReadCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_BLOCK_LIST_READ_COR_ERR_SMASK),
+/*21*/	FLAG_ENTRY0("RxRbufCsrQHeadBufNumParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHEAD_BUF_NUM_PARITY_ERR_SMASK),
+/*22*/	FLAG_ENTRY0("RxRbufCsrQEntCntParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QENT_CNT_PARITY_ERR_SMASK),
+/*23*/	FLAG_ENTRY0("RxRbufCsrQNextBufParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNEXT_BUF_PARITY_ERR_SMASK),
+/*24*/	FLAG_ENTRY0("RxRbufCsrQVldBitParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QVLD_BIT_PARITY_ERR_SMASK),
+/*25*/	FLAG_ENTRY0("RxRbufCsrQHdPtrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHD_PTR_PARITY_ERR_SMASK),
+/*26*/	FLAG_ENTRY0("RxRbufCsrQTlPtrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QTL_PTR_PARITY_ERR_SMASK),
+/*27*/	FLAG_ENTRY0("RxRbufCsrQNumOfPktParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNUM_OF_PKT_PARITY_ERR_SMASK),
+/*28*/	FLAG_ENTRY0("RxRbufCsrQEOPDWParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QEOPDW_PARITY_ERR_SMASK),
+/*29*/	FLAG_ENTRY0("RxRbufCtxIdParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_CTX_ID_PARITY_ERR_SMASK),
+/*30*/	FLAG_ENTRY0("RxRBufBadLookupErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_BAD_LOOKUP_ERR_SMASK),
+/*31*/	FLAG_ENTRY0("RxRbufFullErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FULL_ERR_SMASK),
+/*32*/	FLAG_ENTRY0("RxRbufEmptyErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_EMPTY_ERR_SMASK),
+/*33*/	FLAG_ENTRY0("RxRbufFlRdAddrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_RD_ADDR_PARITY_ERR_SMASK),
+/*34*/	FLAG_ENTRY0("RxRbufFlWrAddrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_WR_ADDR_PARITY_ERR_SMASK),
+/*35*/	FLAG_ENTRY0("RxRbufFlInitdoneParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_INITDONE_PARITY_ERR_SMASK),
+/*36*/	FLAG_ENTRY0("RxRbufFlInitWrAddrParityErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_FL_INIT_WR_ADDR_PARITY_ERR_SMASK),
+/*37*/	FLAG_ENTRY0("RxRbufNextFreeBufUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_NEXT_FREE_BUF_UNC_ERR_SMASK),
+/*38*/	FLAG_ENTRY0("RxRbufNextFreeBufCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_NEXT_FREE_BUF_COR_ERR_SMASK),
+/*39*/	FLAG_ENTRY0("RxLookupDesPart1UncErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_ERR_SMASK),
+/*40*/	FLAG_ENTRY0("RxLookupDesPart1UncCorErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_COR_ERR_SMASK),
+/*41*/	FLAG_ENTRY0("RxLookupDesPart2ParityErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART2_PARITY_ERR_SMASK),
+/*42*/	FLAG_ENTRY0("RxLookupRcvArrayUncErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_RCV_ARRAY_UNC_ERR_SMASK),
+/*43*/	FLAG_ENTRY0("RxLookupRcvArrayCorErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_RCV_ARRAY_COR_ERR_SMASK),
+/*44*/	FLAG_ENTRY0("RxLookupCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_LOOKUP_CSR_PARITY_ERR_SMASK),
+/*45*/	FLAG_ENTRY0("RxHqIntrCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_HQ_INTR_CSR_PARITY_ERR_SMASK),
+/*46*/	FLAG_ENTRY0("RxHqIntrFsmErr",
+		WFR_RCV_ERR_STATUS_RX_HQ_INTR_FSM_ERR_SMASK),
+/*47*/	FLAG_ENTRY0("RxRbufDescPart1UncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_UNC_ERR_SMASK),
+/*48*/	FLAG_ENTRY0("RxRbufDescPart1CorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_COR_ERR_SMASK),
+/*49*/	FLAG_ENTRY0("RxRbufDescPart2UncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART2_UNC_ERR_SMASK),
+/*50*/	FLAG_ENTRY0("RxRbufDescPart2CorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART2_COR_ERR_SMASK),
+/*51*/	FLAG_ENTRY0("RxDmaHdrFifoRdUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK),
+/*52*/	FLAG_ENTRY0("RxDmaHdrFifoRdCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_COR_ERR_SMASK),
+/*53*/	FLAG_ENTRY0("RxDmaDataFifoRdUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK),
+/*54*/	FLAG_ENTRY0("RxDmaDataFifoRdCorErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_COR_ERR_SMASK),
+/*55*/	FLAG_ENTRY0("RxRbufDataUncErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DATA_UNC_ERR_SMASK),
+/*56*/	FLAG_ENTRY0("RxRbufDataCorErr",
+		WFR_RCV_ERR_STATUS_RX_RBUF_DATA_COR_ERR_SMASK),
+/*57*/	FLAG_ENTRY0("RxDmaCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_CSR_PARITY_ERR_SMASK),
+/*58*/	FLAG_ENTRY0("RxDmaEqFsmEncodingErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_EQ_FSM_ENCODING_ERR_SMASK),
+/*59*/	FLAG_ENTRY0("RxDmaDqFsmEncodingErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_DQ_FSM_ENCODING_ERR_SMASK),
+/*60*/	FLAG_ENTRY0("RxDmaCsrUncErr",
+		WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK),
+/*61*/	FLAG_ENTRY0("RxCsrReadBadAddrErr",
+		WFR_RCV_ERR_STATUS_RX_CSR_READ_BAD_ADDR_ERR_SMASK),
+/*62*/	FLAG_ENTRY0("RxCsrWriteBadAddrErr",
+		WFR_RCV_ERR_STATUS_RX_CSR_WRITE_BAD_ADDR_ERR_SMASK),
+/*63*/	FLAG_ENTRY0("RxCsrParityErr",
+		WFR_RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK),
+};
+
+/* RXE errors that will trigger an SPC freeze */
+#define ALL_RXE_FREEZE_ERR  \
+	(WFR_RCV_ERR_STATUS_RX_RCV_QP_MAP_TABLE_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RCV_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_FLAG_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RCV_FSM_ENCODING_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FREE_LIST_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_REG_UNC_COR_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_LOOKUP_DES_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_BLOCK_LIST_READ_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHEAD_BUF_NUM_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QENT_CNT_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNEXT_BUF_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QVLD_BIT_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QHD_PTR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QTL_PTR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QNUM_OF_PKT_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CSR_QEOPDW_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_CTX_ID_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_BAD_LOOKUP_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FULL_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_EMPTY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_RD_ADDR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_WR_ADDR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_INITDONE_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_FL_INIT_WR_ADDR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_NEXT_FREE_BUF_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART1_UNC_COR_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_DES_PART2_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_RCV_ARRAY_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_LOOKUP_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_HQ_INTR_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_HQ_INTR_FSM_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART1_COR_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DESC_PART2_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_RBUF_DATA_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_CSR_PARITY_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_EQ_FSM_ENCODING_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_DQ_FSM_ENCODING_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK \
+	| WFR_RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK)
+
+/*
+ * If RXDMA detects an uncorrectable error in a RcvHdrAddr or RcvHdrTailAddr
+ * CSR when delivering a packet to host memory, the error is correctly reported
+ * as RxDmaCsrUncErr and leads to SPC freeze. The problem is that a write TLP
+ * can be sent upstream to a corrupted host memory address. A multi-bit hardware
+ * data corruption on this internal state can lead to host memory corruption
+ * along with the normal error reporting and SPC freeze mode entry. The
+ * workaround for A0 is to not attempt to recover from freeze mode when the
+ * RxDmaCsrUncErr error case occurs. A host reboot is instead required to
+ * recover. This erratum is slated for a B0 fix.
+ *
+ * A0 erratum 291500: Freeze mode exit not supported due to packet
+ * corruption for  RxDmaHdrFifoRdUncErr and RxDmaDataFifoRdUncErr
+ */
+#define WFR_RXE_FREEZE_ABORT_MASK \
+	(WFR_RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK | \
+	WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK | \
+	WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK)
+
+#if 0 /* no users at present */
+/*
+ * Credit Return flags
+ */
+static struct flag_table credit_return_flags[] = {
+	FLAG_ENTRY("Status", 0, WFR_CR_STATUS_SMASK),
+	FLAG_ENTRY("CreditReturnDueToPbc", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK),
+	FLAG_ENTRY("CreditReturnDueToThreshold", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK),
+	FLAG_ENTRY("CreditReturnDueToErr", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SMASK),
+	FLAG_ENTRY("CreditReturnDueToForce", 0,
+		WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
+};
+#endif
+
+/*
+ * DCC Error Flags
+ */
+static struct flag_table dcc_err_flags[] = {
+	FLAG_ENTRY("bad_l2_err", 0,
+		DCC_ERR_FLG_BAD_L2_ERR_SMASK),
+	FLAG_ENTRY("bad_sc_err", 0,
+		DCC_ERR_FLG_BAD_SC_ERR_SMASK),
+	FLAG_ENTRY("bad_mid_tail_err", 0,
+		DCC_ERR_FLG_BAD_MID_TAIL_ERR_SMASK),
+	FLAG_ENTRY("bad_preemption_err", 0,
+		DCC_ERR_FLG_BAD_PREEMPTION_ERR_SMASK),
+	FLAG_ENTRY("preemption_err", 0,
+		DCC_ERR_FLG_PREEMPTION_ERR_SMASK),
+	FLAG_ENTRY("preemptionvl15_err", 0,
+		DCC_ERR_FLG_PREEMPTIONVL15_ERR_SMASK),
+	FLAG_ENTRY("bad_vl_marker_err", 0,
+		DCC_ERR_FLG_BAD_VL_MARKER_ERR_SMASK),
+	FLAG_ENTRY("bad_dlid_target_err", 0,
+		DCC_ERR_FLG_BAD_DLID_TARGET_ERR_SMASK),
+	FLAG_ENTRY("bad_lver_err", 0,
+		DCC_ERR_FLG_BAD_LVER_ERR_SMASK),
+	FLAG_ENTRY("uncorrectable_err", 0,
+		DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK),
+	FLAG_ENTRY("bad_crdt_ack_err", 0,
+		DCC_ERR_FLG_BAD_CRDT_ACK_ERR_SMASK),
+	FLAG_ENTRY("unsup_pkt_type", 0,
+		DCC_ERR_FLG_UNSUP_PKT_TYPE_SMASK),
+	FLAG_ENTRY("bad_ctrl_flit_err", 0,
+		DCC_ERR_FLG_BAD_CTRL_FLIT_ERR_SMASK),
+	FLAG_ENTRY("event_cntr_parity_err", 0,
+		DCC_ERR_FLG_EVENT_CNTR_PARITY_ERR_SMASK),
+	FLAG_ENTRY("event_cntr_rollover_err", 0,
+		DCC_ERR_FLG_EVENT_CNTR_ROLLOVER_ERR_SMASK),
+	FLAG_ENTRY("link_err", 0,
+		DCC_ERR_FLG_LINK_ERR_SMASK),
+	FLAG_ENTRY("misc_cntr_rollover_err", 0,
+		DCC_ERR_FLG_MISC_CNTR_ROLLOVER_ERR_SMASK),
+	FLAG_ENTRY("bad_ctrl_dist_err", 0,
+		DCC_ERR_FLG_BAD_CTRL_DIST_ERR_SMASK),
+	FLAG_ENTRY("bad_tail_dist_err", 0,
+		DCC_ERR_FLG_BAD_TAIL_DIST_ERR_SMASK),
+	FLAG_ENTRY("bad_head_dist_err", 0,
+		DCC_ERR_FLG_BAD_HEAD_DIST_ERR_SMASK),
+	FLAG_ENTRY("nonvl15_state_err", 0,
+		DCC_ERR_FLG_NONVL15_STATE_ERR_SMASK),
+	FLAG_ENTRY("vl15_multi_err", 0,
+		DCC_ERR_FLG_VL15_MULTI_ERR_SMASK),
+	FLAG_ENTRY("bad_pkt_length_err", 0,
+		DCC_ERR_FLG_BAD_PKT_LENGTH_ERR_SMASK),
+	FLAG_ENTRY("unsup_vl_err", 0,
+		DCC_ERR_FLG_UNSUP_VL_ERR_SMASK),
+	FLAG_ENTRY("perm_nvl15_err", 0,
+		DCC_ERR_FLG_PERM_NVL15_ERR_SMASK),
+	FLAG_ENTRY("slid_zero_err", 0,
+		DCC_ERR_FLG_SLID_ZERO_ERR_SMASK),
+	FLAG_ENTRY("dlid_zero_err", 0,
+		DCC_ERR_FLG_DLID_ZERO_ERR_SMASK),
+	FLAG_ENTRY("length_mtu_err", 0,
+		DCC_ERR_FLG_LENGTH_MTU_ERR_SMASK),
+	FLAG_ENTRY("rx_early_drop_err", 0,
+		DCC_ERR_FLG_RX_EARLY_DROP_ERR_SMASK),
+	FLAG_ENTRY("late_short_err", 0,
+		DCC_ERR_FLG_LATE_SHORT_ERR_SMASK),
+	FLAG_ENTRY("late_long_err", 0,
+		DCC_ERR_FLG_LATE_LONG_ERR_SMASK),
+	FLAG_ENTRY("late_ebp_err", 0,
+		DCC_ERR_FLG_LATE_EBP_ERR_SMASK),
+	FLAG_ENTRY("fpe_tx_fifo_ovflw_err", 0,
+		DCC_ERR_FLG_FPE_TX_FIFO_OVFLW_ERR_SMASK),
+	FLAG_ENTRY("fpe_tx_fifo_unflw_err", 0,
+		DCC_ERR_FLG_FPE_TX_FIFO_UNFLW_ERR_SMASK),
+	FLAG_ENTRY("csr_access_blocked_host", 0,
+		DCC_ERR_FLG_CSR_ACCESS_BLOCKED_HOST_SMASK),
+	FLAG_ENTRY("csr_access_blocked_uc", 0,
+		DCC_ERR_FLG_CSR_ACCESS_BLOCKED_UC_SMASK),
+	FLAG_ENTRY("tx_ctrl_parity_err", 0,
+		DCC_ERR_FLG_TX_CTRL_PARITY_ERR_SMASK),
+	FLAG_ENTRY("tx_ctrl_parity_mbe_err", 0,
+		DCC_ERR_FLG_TX_CTRL_PARITY_MBE_ERR_SMASK),
+	FLAG_ENTRY("tx_sc_parity_err", 0,
+		DCC_ERR_FLG_TX_SC_PARITY_ERR_SMASK),
+	FLAG_ENTRY("rx_ctrl_parity_mbe_err", 0,
+		DCC_ERR_FLG_RX_CTRL_PARITY_MBE_ERR_SMASK),
+	FLAG_ENTRY("csr_parity_err", 0,
+		DCC_ERR_FLG_CSR_PARITY_ERR_SMASK),
+	FLAG_ENTRY("csr_inval_addr", 0,
+		DCC_ERR_FLG_CSR_INVAL_ADDR_SMASK),
+	FLAG_ENTRY("tx_byte_shft_parity_err", 0,
+		DCC_ERR_FLG_TX_BYTE_SHFT_PARITY_ERR_SMASK),
+	FLAG_ENTRY("rx_byte_shft_parity_err", 0,
+		DCC_ERR_FLG_RX_BYTE_SHFT_PARITY_ERR_SMASK),
+	FLAG_ENTRY("fmconfig_err", 0,
+		DCC_ERR_FLG_FMCONFIG_ERR_SMASK),
+	FLAG_ENTRY("rcvport_err", 0,
+		DCC_ERR_FLG_RCVPORT_ERR_SMASK),
+};
+
+/*
+ * DC8051 Error Flags
+ */
+static struct flag_table dc8051_err_flags[] = {
+	FLAG_ENTRY("SET_BY_8051", 0,
+		DC_DC8051_ERR_FLG_SET_BY_8051_SMASK),
+	FLAG_ENTRY("LOST_8051_HEART_BEAT", 0,
+		DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK),
+	FLAG_ENTRY("CRAM_MBE", 0,
+		DC_DC8051_ERR_FLG_CRAM_MBE_SMASK),
+	FLAG_ENTRY("CRAM_SBE", 0,
+		DC_DC8051_ERR_FLG_CRAM_SBE_SMASK),
+	FLAG_ENTRY("DRAM_MBE", 0,
+		DC_DC8051_ERR_FLG_DRAM_MBE_SMASK),
+	FLAG_ENTRY("DRAM_SBE", 0,
+		DC_DC8051_ERR_FLG_DRAM_SBE_SMASK),
+	FLAG_ENTRY("IRAM_MBE", 0,
+		DC_DC8051_ERR_FLG_IRAM_MBE_SMASK),
+	FLAG_ENTRY("IRAM_SBE", 0,
+		DC_DC8051_ERR_FLG_IRAM_SBE_SMASK),
+	FLAG_ENTRY("UNMATCHED_SECURE_MSG_ACROSS_BCC_LANES", 0,
+		DC_DC8051_ERR_FLG_UNMATCHED_SECURE_MSG_ACROSS_BCC_LANES_SMASK),
+	FLAG_ENTRY("INVALID_CSR_ADDR", 0,
+		DC_DC8051_ERR_FLG_INVALID_CSR_ADDR_SMASK),
+};
+
+/*
+ * DC8051 Information Error flags
+ *
+ * Flags in DC8051_DBG_ERR_INFO_SET_BY_8051.ERROR field.
+ */
+static struct flag_table dc8051_info_err_flags[] = {
+	FLAG_ENTRY0("Spico ROM check failed",  WFR_SPICO_ROM_FAILED),
+	FLAG_ENTRY0("UNKNOWN_FRAME type",      WFR_UNKNOWN_FRAME),
+	FLAG_ENTRY0("Target BER not met",      WFR_TARGET_BER_NOT_MET),
+	FLAG_ENTRY0("Serdes internal looopback failure",
+					WFR_FAILED_SERDES_INTERNAL_LOOPBACK),
+	FLAG_ENTRY0("Failed SerDes init",      WFR_FAILED_SERDES_INIT),
+	FLAG_ENTRY0("Failed LNI(Polling)",     WFR_FAILED_LNI_POLLING),
+	FLAG_ENTRY0("Failed LNI(Debounce)",    WFR_FAILED_LNI_DEBOUNCE),
+	FLAG_ENTRY0("Failed LNI(EstbComm)",    WFR_FAILED_LNI_ESTBCOMM),
+	FLAG_ENTRY0("Failed LNI(OptEq)",       WFR_FAILED_LNI_OPTEQ),
+	FLAG_ENTRY0("Failed LNI(VerifyCap_1)", WFR_FAILED_LNI_VERIFY_CAP1),
+	FLAG_ENTRY0("Failed LNI(VerifyCap_2)", WFR_FAILED_LNI_VERIFY_CAP2),
+	FLAG_ENTRY0("Failed LNI(ConfigLT)",    WFR_FAILED_LNI_CONFIGLT)
+};
+
+/*
+ * DC8051 Information Host Information flags
+ *
+ * Flags in DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG field.
+ */
+static struct flag_table dc8051_info_host_msg_flags[] = {
+	FLAG_ENTRY("Host request done",			0, 0x0001),
+	FLAG_ENTRY("BC SMA message",			0, 0x0002),
+	FLAG_ENTRY("BC PWR_MGM message",		0, 0x0004),
+	FLAG_ENTRY("BC Unknown message (BCC)",		0, 0x0008),
+	FLAG_ENTRY("BC Unknown message (LCB)",		0, 0x0010),
+	FLAG_ENTRY("External device config request",	0, 0x0020),
+	FLAG_ENTRY("VerifyCap all frames received",	0, 0x0040),
+	FLAG_ENTRY("LinkUp achieved",			0, 0x0080),
+	FLAG_ENTRY("Link going down",			0, 0x0100),
+};
+
+
+static u32 encoded_size(u32 size);
+static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate);
+static int set_physical_link_state(struct hfi_devdata *dd, u64 state);
+static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
+				u8 *continous);
+static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *z,
+				u8 *vcu, u16 *vl15buf, u8 *crc_sizes);
+static void read_vc_remote_link_width(struct hfi_devdata *dd,
+				u8 *remote_tx_rate, u16 *link_widths);
+static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
+				u16 *link_widths);
+static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
+				u8 *device_rev);
+static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
+static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
+static void read_local_lni(struct hfi_devdata *dd, u8 *enable_lane_rx);
+static int read_tx_settings(struct hfi_devdata *dd, u8 *enable_lane_tx,
+				u8 *tx_polarity_inversion,
+				u8 *rx_polarity_inversion, u8 *max_rate);
+static void handle_sdma_eng_err(struct hfi_devdata *dd,
+				unsigned int context, u64 err_status);
+static void handle_qsfp_int(struct hfi_devdata *dd, u32 source, u64 reg);
+static void handle_dcc_err(struct hfi_devdata *dd,
+				unsigned int context, u64 err_status);
+static void handle_lcb_err(struct hfi_devdata *dd,
+				unsigned int context, u64 err_status);
+static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_misc_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
+static void set_partition_keys(struct qib_pportdata *);
+static const char *link_state_name(u32 state);
+static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state);
+static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
+				u64 *out_data);
+static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
+static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
+static int thermal_init(struct hfi_devdata *dd);
+
+static u32 read_physical_state(struct hfi_devdata *dd);
+static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc);
+static void handle_temp_err(struct hfi_devdata *);
+
+/*
+ * Error interrupt table entry.  This is used as input to the interrupt
+ * "clear down" routine used for all second tier error interrupt register.
+ * Second tier interrupt registers have a single bit representing them
+ * in the top-level CceIntStatus.
+ */
+struct err_reg_info {
+	u32 status;		/* status CSR offset */
+	u32 clear;		/* clear CSR offset */
+	u32 mask;		/* mask CSR offset */
+	void (*handler)(struct hfi_devdata *dd, u32 source, u64 reg);
+	const char *desc;
+};
+
+#define NUM_MISC_ERRS (WFR_IS_GENERAL_ERR_END - WFR_IS_GENERAL_ERR_START)
+#define NUM_DC_ERRS (WFR_IS_DC_END - WFR_IS_DC_START)
+#define NUM_VARIOUS (WFR_IS_VARIOUS_END - WFR_IS_VARIOUS_START)
+
+/*
+ * Helpers for building WFR and DC error interrupt table entries.  Different
+ * helpers are needed because of inconsistent register names.
+ */
+#define WFR_EE(reg, handler, desc) \
+	{ WFR_##reg##_STATUS, WFR_##reg##_CLEAR, WFR_##reg##_MASK, \
+		handler, desc }
+#define DC_EE1(reg, handler, desc) \
+	{ reg##_FLG, reg##_FLG_CLR, reg##_FLG_EN, handler, desc }
+#define DC_EE2(reg, handler, desc) \
+	{ reg##_FLG, reg##_CLR, reg##_EN, handler, desc }
+
+/*
+ * Table of the "misc" grouping of error interrupts.  Each entry refers to
+ * another register containing more information.
+ */
+static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
+/* 0*/	WFR_EE(CCE_ERR,		handle_cce_err,    "CceErr"),
+/* 1*/	WFR_EE(RCV_ERR,		handle_rxe_err,    "RxeErr"),
+/* 2*/	WFR_EE(MISC_ERR,	handle_misc_err,   "MiscErr"),
+/* 3*/	{ 0, 0, 0, NULL }, /* reserved */
+/* 4*/	WFR_EE(SEND_PIO_ERR,    handle_pio_err,    "PioErr"),
+/* 5*/	WFR_EE(SEND_DMA_ERR,    handle_sdma_err,   "SDmaErr"),
+/* 6*/	WFR_EE(SEND_EGRESS_ERR, handle_egress_err, "EgressErr"),
+/* 7*/	WFR_EE(SEND_ERR,	handle_txe_err,    "TxeErr")
+	/* the rest are reserved */
+};
+
+/*
+ * Index into the Various section of the interrupt sources
+ * corresponding to the Critical Temperature interrupt.
+ */
+#define WFR_TCRIT_INT_SOURCE 4
+
+/*
+ * SDMA error interupt entry - refers to another register containing more
+ * information.
+ */
+static const struct err_reg_info sdma_eng_err =
+	WFR_EE(SEND_DMA_ENG_ERR, handle_sdma_eng_err, "SDmaEngErr");
+
+static const struct err_reg_info various_err[NUM_VARIOUS] = {
+/* 0*/	{ 0, 0, 0, NULL }, /* PbcInt */
+/* 1*/	{ 0, 0, 0, NULL }, /* GpioAssertInt */
+/* 2*/	WFR_EE(ASIC_QSFP1,	handle_qsfp_int,	"QSFP1"),
+/* 3*/	WFR_EE(ASIC_QSFP2,	handle_qsfp_int,	"QSFP2"),
+/* 4*/	{ 0, 0, 0, NULL }, /* TCritInt */
+	/* rest are reserved */
+};
+
+/*
+ * The DC encoding of mtu_cap for 10K MTU in the DCC_CFG_PORT_CONFIG
+ * register can not be derived from the MTU value because 10K is not
+ * a power of 2. Therefore, we need a constant. Everything else can
+ * be calculated.
+ */
+#define DCC_CFG_PORT_MTU_CAP_10240 7
+
+/*
+ * Table of the DC grouping of error interupts.  Each entry refers to
+ * another register containing more information.
+ */
+static const struct err_reg_info dc_errs[NUM_DC_ERRS] = {
+/* 0*/	DC_EE1(DCC_ERR,		handle_dcc_err,	       "DCC Err"),
+/* 1*/	DC_EE2(DC_LCB_ERR,	handle_lcb_err,	       "LCB Err"),
+/* 2*/	DC_EE2(DC_DC8051_ERR,	handle_8051_interrupt, "DC8051 Interrupt"),
+/* 3*/	/* dc_lbm_int - special, see is_dc_int() */
+	/* the rest are reserved */
+};
+
+struct cntr_entry {
+	/*
+	 * counter name
+	 */
+	char *name;
+
+	/*
+	 * csr to read for name (if applicable)
+	 */
+	u64 csr;
+
+	/*
+	 * offset into dd or ppd to store the counter's value
+	 */
+	int offset;
+
+	/*
+	 * flags
+	 */
+	u8 flags;
+
+	/*
+	 * accessor for stat element, context either dd or ppd
+	 */
+	u64 (*rw_cntr)(const struct cntr_entry *,
+			       void *context,
+			       int vl,
+			       int mode,
+			       u64 data);
+};
+
+#define C_RCV_HDR_OVF_FIRST C_RCV_HDR_OVF_0
+#define C_RCV_HDR_OVF_LAST C_RCV_HDR_OVF_159
+
+#define CNTR_ELEM(name, csr, offset, flags, accessor) \
+{ \
+	name, \
+	csr, \
+	offset, \
+	flags, \
+	accessor \
+}
+
+/* 32bit RXE */
+#define RXE32_PORT_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT, \
+	  port_access_u32_csr)
+
+#define RXE32_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT, \
+	  dev_access_u32_csr)
+
+/* 64bit RXE */
+#define RXE64_PORT_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
+	  0, flags, \
+	  port_access_u64_csr)
+
+#define RXE64_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_RCV_COUNTER_ARRAY64), \
+	  0, flags, \
+	  dev_access_u64_csr)
+
+#define OVERFLOW_ELEM(ctx) \
+[C_RCV_HDR_OVF_ ## ctx] = CNTR_ELEM("RcvHdrOvr" #ctx, \
+	  (WFR_RCV_HDR_OVFL_CNT + ctx*0x100), \
+	  0, CNTR_NORMAL, port_access_u64_csr)
+
+/* 32bit TXE */
+#define TXE32_PORT_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_SEND_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT, \
+	  port_access_u32_csr)
+
+/* 64bit TXE */
+#define TXE64_PORT_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_SEND_COUNTER_ARRAY64), \
+	  0, flags, \
+	  port_access_u64_csr)
+
+# define TX64_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name,\
+	  counter * 8 + WFR_SEND_COUNTER_ARRAY64, \
+	  0, \
+	  flags, \
+	  dev_access_u64_csr)
+
+/* CCE */
+#define CCE_PERF_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_CCE_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT, \
+	  dev_access_u32_csr)
+
+#define CCE_INT_DEV_CNTR_ELEM(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  (counter * 8 + WFR_CCE_INT_COUNTER_ARRAY32), \
+	  0, flags | CNTR_32BIT, \
+	  dev_access_u32_csr)
+
+/* DC */
+#define DC_PERF_CNTR(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  counter, \
+	  0, \
+	  flags, \
+	  dev_access_u64_csr)
+
+#define DC_PERF_CNTR_LCB(name, counter, flags) \
+CNTR_ELEM(#name, \
+	  counter, \
+	  0, \
+	  flags, \
+	  dc_access_lcb_cntr)
+
+/* ibp counters */
+#define SW_IBP_CNTR(name, cntr) \
+CNTR_ELEM(#name, \
+	  0, \
+	  0, \
+	  CNTR_SYNTH, \
+	  access_ibp_##cntr)
+
+u64 read_csr(const struct hfi_devdata *dd, u32 offset)
+{
+	u64 val;
+
+	if (dd->flags & HFI_PRESENT) {
+		val = readq((void __iomem *)dd->kregbase + offset);
+		return le64_to_cpu(val);
+	}
+	return -1;
+}
+
+void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
+{
+	if (dd->flags & HFI_PRESENT)
+		writeq(cpu_to_le64(value),
+		       (void __iomem *)dd->kregbase + offset);
+}
+
+void __iomem *get_csr_addr(
+	struct hfi_devdata *dd,
+	u32 offset)
+{
+	return (void __iomem *)dd->kregbase + offset;
+}
+
+static inline u64 read_write_csr(const struct hfi_devdata *dd, u32 csr,
+				 int mode, u64 value)
+{
+	u64 ret;
+
+
+	if (mode == CNTR_MODE_R) {
+		ret = read_csr(dd, csr);
+	} else if (mode == CNTR_MODE_W) {
+		write_csr(dd, csr, value);
+		ret = value;
+	} else {
+		dd_dev_err(dd, "Invalid cntr register access mode");
+		return 0;
+	}
+
+	hfi_cdbg(CNTR, "csr 0x%x val 0x%llx mode %d", csr, ret, mode);
+	return ret;
+}
+
+/* Dev Access */
+static u64 dev_access_u32_csr(const struct cntr_entry *entry,
+			    void *context, int vl, int mode, u64 data)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_csr(dd, entry->csr, mode, data);
+}
+
+static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
+			    int vl, int mode, u64 data)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
+	u64 val = 0;
+	u64 csr = entry->csr;
+
+	if (entry->flags & CNTR_VL) {
+		BUG_ON(vl == CNTR_INVALID_VL);
+		csr += 8 * vl;
+	} else {
+		BUG_ON(vl != CNTR_INVALID_VL);
+	}
+
+	val = read_write_csr(dd, csr, mode, data);
+	return val;
+}
+
+static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
+			    int vl, int mode, u64 data)
+{
+	u64 reg;
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
+	BUG_ON(vl != CNTR_INVALID_VL);
+	if (acquire_lcb_access(dd, 0) == 0) {
+		reg = read_write_csr(dd, entry->csr, mode, data);
+		release_lcb_access(dd, 0);
+		return reg;
+	}
+	dd_dev_err(dd, "Could not aquire LCB");
+	return 0;
+}
+
+/* Port Access */
+static u64 port_access_u32_csr(const struct cntr_entry *entry, void *context,
+			     int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_csr(ppd->dd, entry->csr, mode, data);
+}
+
+static u64 port_access_u64_csr(const struct cntr_entry *entry,
+			     void *context, int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	u64 val;
+	u64 csr = entry->csr;
+
+	if (entry->flags & CNTR_VL) {
+		BUG_ON(vl == CNTR_INVALID_VL);
+		csr += 8 * vl;
+	} else {
+		BUG_ON(vl != CNTR_INVALID_VL);
+	}
+	val = read_write_csr(ppd->dd, csr, mode, data);
+	return val;
+}
+
+/* Software defined */
+static inline u64 read_write_sw(struct hfi_devdata *dd, u64 *cntr, int mode,
+			       u64 data)
+{
+	u64 ret;
+
+	if (mode == CNTR_MODE_R) {
+		ret = *cntr;
+	} else if (mode == CNTR_MODE_W) {
+		*cntr = data;
+		ret = data;
+	} else {
+		dd_dev_err(dd, "Invalid cntr sw access mode");
+		return 0;
+	}
+
+	hfi_cdbg(CNTR, "val 0x%llx mode %d", ret, mode);
+
+	return ret;
+}
+
+static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
+			       int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_sw(ppd->dd, &ppd->link_downed, mode, data);
+}
+
+static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
+			       int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	BUG_ON(vl != CNTR_INVALID_VL);
+	return read_write_sw(ppd->dd, &ppd->link_up, mode, data);
+}
+
+static u64 access_sw_xmit_discards(const struct cntr_entry *entry,
+				    void *context, int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0; /* FIXME Do the right thing when implemented */
+
+	return read_write_sw(ppd->dd, &ppd->port_xmit_discards, mode, data);
+}
+
+static u64 access_xmit_constraint_errs(const struct cntr_entry *entry,
+				     void *context, int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0;
+
+	return read_write_sw(ppd->dd, &ppd->port_xmit_constraint_errors,
+			     mode, data);
+}
+
+static u64 access_rcv_constraint_errs(const struct cntr_entry *entry,
+				     void *context, int vl, int mode, u64 data)
+{
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0;
+
+	return read_write_sw(ppd->dd, &ppd->port_rcv_constraint_errors,
+			     mode, data);
+}
+
+u64 get_all_cpu_total(u64 __percpu *cntr)
+{
+	int cpu;
+	u64 counter = 0;
+
+	for_each_possible_cpu(cpu)
+		counter += *per_cpu_ptr(cntr, cpu);
+	return counter;
+}
+
+static u64 read_write_cpu(struct hfi_devdata *dd, u64 *z_val,
+			  u64 __percpu *cntr,
+			  int vl, int mode, u64 data)
+{
+
+	u64 ret = 0;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0;
+
+	if (mode == CNTR_MODE_R) {
+		ret = get_all_cpu_total(cntr) - *z_val;
+	} else if (mode == CNTR_MODE_W) {
+		/* A write can only zero the counter */
+		if (data == 0)
+			*z_val = get_all_cpu_total(cntr);
+		else
+			dd_dev_err(dd, "Per CPU cntrs can only be zeroed");
+	} else {
+		dd_dev_err(dd, "Invalid cntr sw cpu access mode");
+		return 0;
+	}
+
+	return ret;
+}
+
+static u64 access_sw_cpu_intr(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+
+	return read_write_cpu(dd, &dd->z_int_counter, dd->int_counter, vl,
+			      mode, data);
+}
+
+#define def_access_sw_cpu(cntr) \
+static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
+			      void *context, int vl, int mode, u64 data)      \
+{									      \
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;	      \
+	return read_write_cpu(ppd->dd, &ppd->ibport_data.z_ ##cntr,	      \
+			      ppd->ibport_data.cntr, vl,		      \
+			      mode, data);				      \
+}
+
+def_access_sw_cpu(rc_acks);
+def_access_sw_cpu(rc_qacks);
+
+#define def_access_ibp_counter(cntr) \
+static u64 access_ibp_##cntr(const struct cntr_entry *entry,		      \
+				void *context, int vl, int mode, u64 data)    \
+{									      \
+	struct qib_pportdata *ppd = (struct qib_pportdata *)context;	      \
+									      \
+	if (vl != CNTR_INVALID_VL)					      \
+		return 0;						      \
+									      \
+	return read_write_sw(ppd->dd, &ppd->ibport_data.n_ ##cntr,	      \
+			     mode, data);				      \
+}
+
+def_access_ibp_counter(loop_pkts);
+def_access_ibp_counter(rc_resends);
+def_access_ibp_counter(rnr_naks);
+def_access_ibp_counter(other_naks);
+def_access_ibp_counter(rc_timeouts);
+def_access_ibp_counter(pkt_drops);
+def_access_ibp_counter(dmawait);
+def_access_ibp_counter(rc_seqnak);
+def_access_ibp_counter(rc_delayed_comp);
+def_access_ibp_counter(rc_dupreq);
+def_access_ibp_counter(rdma_seq);
+def_access_ibp_counter(unaligned);
+def_access_ibp_counter(seq_naks);
+
+static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
+[C_RCV_OVF] = RXE32_DEV_CNTR_ELEM(RcvOverflow, RCV_BUF_OVFL_CNT, CNTR_SYNTH),
+[C_RX_TID_FULL] = RXE32_DEV_CNTR_ELEM(RxTIDFullEr, RCV_TID_FULL_ERR_CNT,
+			CNTR_NORMAL),
+[C_RX_TID_INVALID] = RXE32_DEV_CNTR_ELEM(RxTIDInvalid, RCV_TID_VALID_ERR_CNT,
+			CNTR_NORMAL),
+[C_RX_TID_FLGMS] = RXE32_DEV_CNTR_ELEM(RxTidFLGMs,
+			RCV_TID_FLOW_GEN_MISMATCH_CNT,
+			CNTR_NORMAL),
+[C_RX_CTX_RHQS] = RXE32_DEV_CNTR_ELEM(RxCtxRHQS, RCV_CONTEXT_RHQ_STALL,
+			CNTR_NORMAL),
+[C_RX_CTX_EGRS] = RXE32_DEV_CNTR_ELEM(RxCtxEgrS, RCV_CONTEXT_EGR_STALL,
+			CNTR_NORMAL),
+[C_RCV_TID_FLSMS] = RXE32_DEV_CNTR_ELEM(RxTidFLSMs,
+			RCV_TID_FLOW_SEQ_MISMATCH_CNT, CNTR_NORMAL),
+[C_CCE_PCI_CR_ST] = CCE_PERF_DEV_CNTR_ELEM(CcePciCrSt,
+			CCE_PCIE_POSTED_CRDT_STALL_CNT, CNTR_NORMAL),
+[C_CCE_PCI_TR_ST] = CCE_PERF_DEV_CNTR_ELEM(CcePciTrSt, CCE_PCIE_TRGT_STALL_CNT,
+			CNTR_NORMAL),
+[C_CCE_PIO_WR_ST] = CCE_PERF_DEV_CNTR_ELEM(CcePioWrSt, CCE_PIO_WR_STALL_CNT,
+			CNTR_NORMAL),
+[C_CCE_ERR_INT] = CCE_INT_DEV_CNTR_ELEM(CceErrInt, CCE_ERR_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_SDMA_INT] = CCE_INT_DEV_CNTR_ELEM(CceSdmaInt, CCE_SDMA_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_MISC_INT] = CCE_INT_DEV_CNTR_ELEM(CceMiscInt, CCE_MISC_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_RCV_AV_INT] = CCE_INT_DEV_CNTR_ELEM(CceRcvAvInt, CCE_RCV_AVAIL_INT_CNT,
+			CNTR_NORMAL),
+[C_CCE_RCV_URG_INT] = CCE_INT_DEV_CNTR_ELEM(CceRcvUrgInt,
+			CCE_RCV_URGENT_INT_CNT,	CNTR_NORMAL),
+[C_CCE_SEND_CR_INT] = CCE_INT_DEV_CNTR_ELEM(CceSndCrInt,
+			CCE_SEND_CREDIT_INT_CNT, CNTR_NORMAL),
+[C_DC_UNC_ERR] = DC_PERF_CNTR(DcUnctblErr, DCC_ERR_UNCORRECTABLE_CNT,
+			      CNTR_SYNTH),
+[C_DC_RCV_ERR] = DC_PERF_CNTR(DcRecvErr, DCC_ERR_PORTRCV_ERR_CNT, CNTR_SYNTH),
+[C_DC_FM_CFG_ERR] = DC_PERF_CNTR(DcFmCfgErr, DCC_ERR_FMCONFIG_ERR_CNT,
+				 CNTR_SYNTH),
+[C_DC_RMT_PHY_ERR] = DC_PERF_CNTR(DcRmtPhyErr, DCC_ERR_RCVREMOTE_PHY_ERR_CNT,
+				  CNTR_SYNTH),
+[C_DC_DROPPED_PKT] = DC_PERF_CNTR(DcDroppedPkt, DCC_ERR_DROPPED_PKT_CNT,
+				  CNTR_SYNTH),
+[C_DC_MC_XMIT_PKTS] = DC_PERF_CNTR(DcMcXmitPkts,
+				   DCC_PRF_PORT_XMIT_MULTICAST_CNT, CNTR_SYNTH),
+[C_DC_MC_RCV_PKTS] = DC_PERF_CNTR(DcMcRcvPkts,
+				  DCC_PRF_PORT_RCV_MULTICAST_PKT_CNT,
+				  CNTR_SYNTH),
+[C_DC_XMIT_CERR] = DC_PERF_CNTR(DcXmitCorr,
+				DCC_PRF_PORT_XMIT_CORRECTABLE_CNT, CNTR_SYNTH),
+[C_DC_RCV_CERR] = DC_PERF_CNTR(DcRcvCorrCnt, DCC_PRF_PORT_RCV_CORRECTABLE_CNT,
+			       CNTR_SYNTH),
+[C_DC_RCV_FCC] = DC_PERF_CNTR(DcRxFCntl, DCC_PRF_RX_FLOW_CRTL_CNT,
+			      CNTR_SYNTH),
+[C_DC_XMIT_FCC] = DC_PERF_CNTR(DcXmitFCntl, DCC_PRF_TX_FLOW_CRTL_CNT,
+			       CNTR_SYNTH),
+[C_DC_XMIT_FLITS] = DC_PERF_CNTR(DcXmitFlits, DCC_PRF_PORT_XMIT_DATA_CNT,
+				 CNTR_SYNTH),
+[C_DC_RCV_FLITS] = DC_PERF_CNTR(DcRcvFlits, DCC_PRF_PORT_RCV_DATA_CNT,
+				CNTR_SYNTH),
+[C_DC_XMIT_PKTS] = DC_PERF_CNTR(DcXmitPkts, DCC_PRF_PORT_XMIT_PKTS_CNT,
+				CNTR_SYNTH),
+[C_DC_RCV_PKTS] = DC_PERF_CNTR(DcRcvPkts, DCC_PRF_PORT_RCV_PKTS_CNT,
+			       CNTR_SYNTH),
+[C_DC_RX_FLIT_VL] = DC_PERF_CNTR(DcRxFlitVl, DCC_PRF_PORT_VL_RCV_DATA_CNT,
+				 CNTR_SYNTH | CNTR_VL),
+[C_DC_RX_PKT_VL] = DC_PERF_CNTR(DcRxPktVl, DCC_PRF_PORT_VL_RCV_PKTS_CNT,
+				CNTR_SYNTH | CNTR_VL),
+[C_DC_RCV_FCN] = DC_PERF_CNTR(DcRcvFcn, DCC_PRF_PORT_RCV_FECN_CNT, CNTR_SYNTH),
+[C_DC_RCV_FCN_VL] = DC_PERF_CNTR(DcRcvFcnVl, DCC_PRF_PORT_VL_RCV_FECN_CNT,
+				 CNTR_SYNTH | CNTR_VL),
+[C_DC_RCV_BCN] = DC_PERF_CNTR(DcRcvBcn, DCC_PRF_PORT_RCV_BECN_CNT, CNTR_SYNTH),
+[C_DC_RCV_BCN_VL] = DC_PERF_CNTR(DcRcvBcnVl, DCC_PRF_PORT_VL_RCV_BECN_CNT,
+				 CNTR_SYNTH | CNTR_VL),
+[C_DC_RCV_BBL] = DC_PERF_CNTR(DcRcvBbl, DCC_PRF_PORT_RCV_BUBBLE_CNT,
+			      CNTR_SYNTH),
+[C_DC_RCV_BBL_VL] = DC_PERF_CNTR(DcRcvBblVl, DCC_PRF_PORT_VL_RCV_BUBBLE_CNT,
+				 CNTR_SYNTH | CNTR_VL),
+[C_DC_MARK_FECN] = DC_PERF_CNTR(DcMarkFcn, DCC_PRF_PORT_MARK_FECN_CNT,
+				CNTR_SYNTH),
+[C_DC_MARK_FECN_VL] = DC_PERF_CNTR(DcMarkFcnVl, DCC_PRF_PORT_VL_MARK_FECN_CNT,
+				   CNTR_SYNTH | CNTR_VL),
+[C_DC_TOTAL_CRC] =
+	DC_PERF_CNTR_LCB(DcTotCrc, DC_LCB_ERR_INFO_TOTAL_CRC_ERR,
+			 CNTR_SYNTH),
+[C_DC_CRC_LN0] = DC_PERF_CNTR_LCB(DcCrcLn0, DC_LCB_ERR_INFO_CRC_ERR_LN0,
+				  CNTR_SYNTH),
+[C_DC_CRC_LN1] = DC_PERF_CNTR_LCB(DcCrcLn1, DC_LCB_ERR_INFO_CRC_ERR_LN1,
+				  CNTR_SYNTH),
+[C_DC_CRC_LN2] = DC_PERF_CNTR_LCB(DcCrcLn2, DC_LCB_ERR_INFO_CRC_ERR_LN2,
+				  CNTR_SYNTH),
+[C_DC_CRC_LN3] = DC_PERF_CNTR_LCB(DcCrcLn3, DC_LCB_ERR_INFO_CRC_ERR_LN3,
+				  CNTR_SYNTH),
+[C_DC_CRC_MULT_LN] =
+	DC_PERF_CNTR_LCB(DcMultLn, DC_LCB_ERR_INFO_CRC_ERR_MULTI_LN,
+			 CNTR_SYNTH),
+[C_DC_TX_REPLAY] = DC_PERF_CNTR_LCB(DcTxReplay, DC_LCB_ERR_INFO_TX_REPLAY_CNT,
+				    CNTR_SYNTH),
+[C_DC_RX_REPLAY] = DC_PERF_CNTR_LCB(DcRxReplay, DC_LCB_ERR_INFO_RX_REPLAY_CNT,
+				    CNTR_SYNTH),
+[C_DC_SEQ_CRC_CNT] =
+	DC_PERF_CNTR_LCB(DcLinkSeqCrc, DC_LCB_ERR_INFO_SEQ_CRC_CNT,
+			 CNTR_SYNTH),
+[C_DC_ESC0_ONLY_CNT] =
+	DC_PERF_CNTR_LCB(DcEsc0, DC_LCB_ERR_INFO_ESCAPE_0_ONLY_CNT,
+			 CNTR_SYNTH),
+[C_DC_ESC0_PLUS1_CNT] =
+	DC_PERF_CNTR_LCB(DcEsc1, DC_LCB_ERR_INFO_ESCAPE_0_PLUS1_CNT,
+			 CNTR_SYNTH),
+[C_DC_ESC0_PLUS2_CNT] =
+	DC_PERF_CNTR_LCB(DcEsc0Plus2, DC_LCB_ERR_INFO_ESCAPE_0_PLUS2_CNT,
+			 CNTR_SYNTH),
+[C_DC_REINIT_FROM_PEER_CNT] =
+	DC_PERF_CNTR_LCB(DcReinitPeer, DC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT,
+			 CNTR_SYNTH),
+[C_DC_SBE_CNT] = DC_PERF_CNTR_LCB(DcSbe, DC_LCB_ERR_INFO_SBE_CNT,
+				  CNTR_SYNTH),
+[C_DC_MISC_FLG_CNT] =
+	DC_PERF_CNTR_LCB(DcMiscFlg, DC_LCB_ERR_INFO_MISC_FLG_CNT,
+			 CNTR_SYNTH),
+[C_DC_PRF_GOOD_LTP_CNT] =
+	DC_PERF_CNTR_LCB(DcGoodLTP, DC_LCB_PRF_GOOD_LTP_CNT, CNTR_SYNTH),
+[C_DC_PRF_ACCEPTED_LTP_CNT] =
+	DC_PERF_CNTR_LCB(DcAccLTP, DC_LCB_PRF_ACCEPTED_LTP_CNT,
+			 CNTR_SYNTH),
+[C_DC_PRF_RX_FLIT_CNT] =
+	DC_PERF_CNTR_LCB(DcPrfRxFlit, DC_LCB_PRF_RX_FLIT_CNT, CNTR_SYNTH),
+[C_DC_PRF_TX_FLIT_CNT] =
+	DC_PERF_CNTR_LCB(DcPrfTxFlit, DC_LCB_PRF_TX_FLIT_CNT, CNTR_SYNTH),
+[C_DC_PRF_CLK_CNTR] =
+	DC_PERF_CNTR_LCB(DcPrfClk, DC_LCB_PRF_CLK_CNTR, CNTR_SYNTH),
+[C_DC_PG_DBG_FLIT_CRDTS_CNT] =
+	DC_PERF_CNTR_LCB(DcFltCrdts, DC_LCB_PG_DBG_FLIT_CRDTS_CNT, CNTR_SYNTH),
+[C_DC_PG_STS_PAUSE_COMPLETE_CNT] =
+	DC_PERF_CNTR_LCB(DcPauseComp, DC_LCB_PG_STS_PAUSE_COMPLETE_CNT,
+			 CNTR_SYNTH),
+[C_DC_PG_STS_TX_SBE_CNT] =
+	DC_PERF_CNTR_LCB(DcStsTxSbe, DC_LCB_PG_STS_TX_SBE_CNT, CNTR_SYNTH),
+[C_DC_PG_STS_TX_MBE_CNT] =
+	DC_PERF_CNTR_LCB(DcStsTxMbe, DC_LCB_PG_STS_TX_MBE_CNT,
+			 CNTR_SYNTH),
+[C_SW_CPU_INTR] = CNTR_ELEM("Intr", 0, 0, CNTR_NORMAL,
+			    access_sw_cpu_intr),
+};
+
+static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
+[C_TX_UNSUP_VL] = TXE32_PORT_CNTR_ELEM(TxUnVLErr, SEND_UNSUP_VL_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_INVAL_LEN] = TXE32_PORT_CNTR_ELEM(TxInvalLen, SEND_LEN_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_MM_LEN_ERR] = TXE32_PORT_CNTR_ELEM(TxMMLenErr, SEND_MAX_MIN_LEN_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_UNDERRUN] = TXE32_PORT_CNTR_ELEM(TxUnderrun, SEND_UNDERRUN_CNT,
+			CNTR_NORMAL),
+[C_TX_FLOW_STALL] = TXE32_PORT_CNTR_ELEM(TxFlowStall, SEND_FLOW_STALL_CNT,
+			CNTR_NORMAL),
+[C_TX_DROPPED] = TXE32_PORT_CNTR_ELEM(TxDropped, SEND_DROPPED_PKT_CNT,
+			CNTR_NORMAL),
+[C_TX_HDR_ERR] = TXE32_PORT_CNTR_ELEM(TxHdrErr, SEND_HEADERS_ERR_CNT,
+			CNTR_NORMAL),
+[C_TX_PKT] = TXE64_PORT_CNTR_ELEM(TxPkt, SEND_DATA_PKT_CNT, CNTR_NORMAL),
+[C_TX_WORDS] = TXE64_PORT_CNTR_ELEM(TxWords, SEND_DWORD_CNT, CNTR_NORMAL),
+[C_TX_WAIT] = TXE64_PORT_CNTR_ELEM(TxWait, SEND_WAIT_CNT, CNTR_SYNTH),
+[C_TX_FLIT_VL] = TXE64_PORT_CNTR_ELEM(TxFlitVL, SEND_DATA_VL0_CNT,
+			CNTR_SYNTH | CNTR_VL),
+[C_TX_PKT_VL] = TXE64_PORT_CNTR_ELEM(TxPktVL, SEND_DATA_PKT_VL0_CNT,
+			CNTR_SYNTH | CNTR_VL),
+[C_TX_WAIT_VL] = TXE64_PORT_CNTR_ELEM(TxWaitVL, SEND_WAIT_VL0_CNT,
+			CNTR_SYNTH | CNTR_VL),
+[C_RX_PKT] = RXE64_PORT_CNTR_ELEM(RxPkt, RCV_DATA_PKT_CNT, CNTR_NORMAL),
+[C_RX_WORDS] = RXE64_PORT_CNTR_ELEM(RxWords, RCV_DWORD_CNT, CNTR_NORMAL),
+[C_SW_LINK_DOWN] = CNTR_ELEM("SwLinkDown", 0, 0, CNTR_SYNTH | CNTR_32BIT,
+			access_sw_link_dn_cnt),
+[C_SW_LINK_UP] = CNTR_ELEM("SwLinkUp", 0, 0, CNTR_SYNTH | CNTR_32BIT,
+			access_sw_link_up_cnt),
+[C_SW_XMIT_DSCD] = CNTR_ELEM("XmitDscd", 0, 0, CNTR_SYNTH | CNTR_32BIT,
+			access_sw_xmit_discards),
+[C_SW_XMIT_DSCD_VL] = CNTR_ELEM("XmitDscdVl", 0, 0,
+			CNTR_SYNTH | CNTR_32BIT | CNTR_VL,
+			access_sw_xmit_discards),
+[C_SW_XMIT_CSTR_ERR] = CNTR_ELEM("XmitCstrErr", 0, 0, CNTR_SYNTH,
+			access_xmit_constraint_errs),
+[C_SW_RCV_CSTR_ERR] = CNTR_ELEM("RcvCstrErr", 0, 0, CNTR_SYNTH,
+			access_rcv_constraint_errs),
+[C_SW_IBP_LOOP_PKTS] = SW_IBP_CNTR(LoopPkts, loop_pkts),
+[C_SW_IBP_RC_RESENDS] = SW_IBP_CNTR(RcResend, rc_resends),
+[C_SW_IBP_RNR_NAKS] = SW_IBP_CNTR(RnrNak, rnr_naks),
+[C_SW_IBP_OTHER_NAKS] = SW_IBP_CNTR(OtherNak, other_naks),
+[C_SW_IBP_RC_TIMEOUTS] = SW_IBP_CNTR(RcTimeOut, rc_timeouts),
+[C_SW_IBP_PKT_DROPS] = SW_IBP_CNTR(PktDrop, pkt_drops),
+[C_SW_IBP_DMA_WAIT] = SW_IBP_CNTR(DmaWait, dmawait),
+[C_SW_IBP_RC_SEQNAK] = SW_IBP_CNTR(RcSeqNak, rc_seqnak),
+[C_SW_IBP_RC_DELAYED_COMP] = SW_IBP_CNTR(RcDelayComp, rc_delayed_comp),
+[C_SW_IBP_RC_DUPREQ] = SW_IBP_CNTR(RcDupRew, rc_dupreq),
+[C_SW_IBP_RDMA_SEQ] = SW_IBP_CNTR(RdmaSeq, rdma_seq),
+[C_SW_IBP_UNALIGNED] = SW_IBP_CNTR(Unaligned, unaligned),
+[C_SW_IBP_SEQ_NAK] = SW_IBP_CNTR(SeqNak, seq_naks),
+[C_SW_CPU_RC_ACKS] = CNTR_ELEM("RcAcks", 0, 0, CNTR_NORMAL,
+			       access_sw_cpu_rc_acks),
+[C_SW_CPU_RC_QACKS] = CNTR_ELEM("RcQacks", 0, 0, CNTR_NORMAL,
+			       access_sw_cpu_rc_qacks),
+OVERFLOW_ELEM(0),   OVERFLOW_ELEM(1),   OVERFLOW_ELEM(2),   OVERFLOW_ELEM(3),
+OVERFLOW_ELEM(4),   OVERFLOW_ELEM(5),   OVERFLOW_ELEM(6),   OVERFLOW_ELEM(7),
+OVERFLOW_ELEM(8),   OVERFLOW_ELEM(9),   OVERFLOW_ELEM(10),  OVERFLOW_ELEM(11),
+OVERFLOW_ELEM(12),  OVERFLOW_ELEM(13),  OVERFLOW_ELEM(14),  OVERFLOW_ELEM(15),
+OVERFLOW_ELEM(16),  OVERFLOW_ELEM(17),  OVERFLOW_ELEM(18),  OVERFLOW_ELEM(19),
+OVERFLOW_ELEM(20),  OVERFLOW_ELEM(21),  OVERFLOW_ELEM(22),  OVERFLOW_ELEM(23),
+OVERFLOW_ELEM(24),  OVERFLOW_ELEM(25),  OVERFLOW_ELEM(26),  OVERFLOW_ELEM(27),
+OVERFLOW_ELEM(28),  OVERFLOW_ELEM(29),  OVERFLOW_ELEM(30),  OVERFLOW_ELEM(31),
+OVERFLOW_ELEM(32),  OVERFLOW_ELEM(33),  OVERFLOW_ELEM(34),  OVERFLOW_ELEM(35),
+OVERFLOW_ELEM(36),  OVERFLOW_ELEM(37),  OVERFLOW_ELEM(38),  OVERFLOW_ELEM(39),
+OVERFLOW_ELEM(40),  OVERFLOW_ELEM(41),  OVERFLOW_ELEM(42),  OVERFLOW_ELEM(43),
+OVERFLOW_ELEM(44),  OVERFLOW_ELEM(45),  OVERFLOW_ELEM(46),  OVERFLOW_ELEM(47),
+OVERFLOW_ELEM(48),  OVERFLOW_ELEM(49),  OVERFLOW_ELEM(50),  OVERFLOW_ELEM(51),
+OVERFLOW_ELEM(52),  OVERFLOW_ELEM(53),  OVERFLOW_ELEM(54),  OVERFLOW_ELEM(55),
+OVERFLOW_ELEM(56),  OVERFLOW_ELEM(57),  OVERFLOW_ELEM(58),  OVERFLOW_ELEM(59),
+OVERFLOW_ELEM(60),  OVERFLOW_ELEM(61),  OVERFLOW_ELEM(62),  OVERFLOW_ELEM(63),
+OVERFLOW_ELEM(64),  OVERFLOW_ELEM(65),  OVERFLOW_ELEM(66),  OVERFLOW_ELEM(67),
+OVERFLOW_ELEM(68),  OVERFLOW_ELEM(69),  OVERFLOW_ELEM(70),  OVERFLOW_ELEM(71),
+OVERFLOW_ELEM(72),  OVERFLOW_ELEM(73),  OVERFLOW_ELEM(74),  OVERFLOW_ELEM(75),
+OVERFLOW_ELEM(76),  OVERFLOW_ELEM(77),  OVERFLOW_ELEM(78),  OVERFLOW_ELEM(79),
+OVERFLOW_ELEM(80),  OVERFLOW_ELEM(81),  OVERFLOW_ELEM(82),  OVERFLOW_ELEM(83),
+OVERFLOW_ELEM(84),  OVERFLOW_ELEM(85),  OVERFLOW_ELEM(86),  OVERFLOW_ELEM(87),
+OVERFLOW_ELEM(88),  OVERFLOW_ELEM(89),  OVERFLOW_ELEM(90),  OVERFLOW_ELEM(91),
+OVERFLOW_ELEM(92),  OVERFLOW_ELEM(93),  OVERFLOW_ELEM(94),  OVERFLOW_ELEM(95),
+OVERFLOW_ELEM(96),  OVERFLOW_ELEM(97),  OVERFLOW_ELEM(98),  OVERFLOW_ELEM(99),
+OVERFLOW_ELEM(100), OVERFLOW_ELEM(101), OVERFLOW_ELEM(102), OVERFLOW_ELEM(103),
+OVERFLOW_ELEM(104), OVERFLOW_ELEM(105), OVERFLOW_ELEM(106), OVERFLOW_ELEM(107),
+OVERFLOW_ELEM(108), OVERFLOW_ELEM(109), OVERFLOW_ELEM(110), OVERFLOW_ELEM(111),
+OVERFLOW_ELEM(112), OVERFLOW_ELEM(113), OVERFLOW_ELEM(114), OVERFLOW_ELEM(115),
+OVERFLOW_ELEM(116), OVERFLOW_ELEM(117), OVERFLOW_ELEM(118), OVERFLOW_ELEM(119),
+OVERFLOW_ELEM(120), OVERFLOW_ELEM(121), OVERFLOW_ELEM(122), OVERFLOW_ELEM(123),
+OVERFLOW_ELEM(124), OVERFLOW_ELEM(125), OVERFLOW_ELEM(126), OVERFLOW_ELEM(127),
+OVERFLOW_ELEM(128), OVERFLOW_ELEM(129), OVERFLOW_ELEM(130), OVERFLOW_ELEM(131),
+OVERFLOW_ELEM(132), OVERFLOW_ELEM(133), OVERFLOW_ELEM(134), OVERFLOW_ELEM(135),
+OVERFLOW_ELEM(136), OVERFLOW_ELEM(137), OVERFLOW_ELEM(138), OVERFLOW_ELEM(139),
+OVERFLOW_ELEM(140), OVERFLOW_ELEM(141), OVERFLOW_ELEM(142), OVERFLOW_ELEM(143),
+OVERFLOW_ELEM(144), OVERFLOW_ELEM(145), OVERFLOW_ELEM(146), OVERFLOW_ELEM(147),
+OVERFLOW_ELEM(148), OVERFLOW_ELEM(149), OVERFLOW_ELEM(150), OVERFLOW_ELEM(151),
+OVERFLOW_ELEM(152), OVERFLOW_ELEM(153), OVERFLOW_ELEM(154), OVERFLOW_ELEM(155),
+OVERFLOW_ELEM(156), OVERFLOW_ELEM(157), OVERFLOW_ELEM(158), OVERFLOW_ELEM(159),
+};
+
+/* ======================================================================== */
+
+/* return true if this is chip revision revision a0 */
+int is_a0(struct hfi_devdata *dd)
+{
+	return ((dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT)
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK) == 0;
+}
+
+/* return true if this is chip revision revision a */
+int is_ax(struct hfi_devdata *dd)
+{
+	u8 chip_rev_minor =
+		dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
+	return (chip_rev_minor & 0xf0) == 0;
+}
+
+/* return true if this is chip revision revision b */
+int is_bx(struct hfi_devdata *dd)
+{
+	u8 chip_rev_minor =
+		dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
+	return !!(chip_rev_minor & 0x10);
+}
+
+/*
+ * Using the given flag table, print a comma separated string into
+ * the buffer.  End in '*' if the buffer is too short.
+ */
+static char *flag_string(char *buf, int buf_len, u64 flags,
+				struct flag_table *table, int table_size)
+{
+	const char *s;
+	char *p = buf;
+	int len = buf_len;
+	int no_room = 0;
+	int i;
+	char c;
+
+	/* make sure there is at least 2 so we can form "*" */
+	if (len < 2)
+		return "";
+
+	len--;	/* leave room for a nul */
+	for (i = 0; i < table_size; i++) {
+		if (flags & table[i].flag) {
+			/* add a comma, if not the first */
+			if (p != buf) {
+				if (len == 0) {
+					no_room = 1;
+					break;
+				}
+				*p++ = ',';
+				len--;
+			}
+			/* copy the string */
+			s = table[i].str;
+			while ((c = *s++) != 0 && len > 0) {
+				*p++ = c;
+				len--;
+			}
+			if (c != 0) {
+				no_room = 1;
+				break;
+			}
+		}
+	}
+	/* add * if ran out of room */
+	if (no_room) {
+		/* may need to back up to add space for a '*' */
+		if (len == 0)
+			--p;
+		*p++ = '*';
+	}
+	/* add final nul - space already allocated above */
+	*p = 0;
+	return buf;
+}
+
+/* first 8 CCE error interrupt source names */
+static const char * const cce_misc_names[] = {
+	"CceErrInt",		/* 0 */
+	"RxeErrInt",		/* 1 */
+	"MiscErrInt",		/* 2 */
+	"Reserved3",		/* 3 */
+	"PioErrInt",		/* 4 */
+	"SDmaErrInt",		/* 5 */
+	"EgressErrInt",		/* 6 */
+	"TxeErrInt"		/* 7 */
+};
+
+/*
+ * Return the miscellaneous error interrupt name.
+ */
+static char *is_misc_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	if (source < ARRAY_SIZE(cce_misc_names))
+		strncpy(buf, cce_misc_names[source], bsize);
+	else
+		snprintf(buf,
+			bsize,
+			"Reserved%u",
+			source + WFR_IS_GENERAL_ERR_START);
+
+	return buf;
+}
+
+/*
+ * Return the SDMA engine error interrupt name.
+ */
+static char *is_sdma_eng_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SDmaEngErrInt%u", source);
+	return buf;
+}
+
+/*
+ * Return the send context error interrupt name.
+ */
+static char *is_sendctxt_err_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SendCtxtErrInt%u", source);
+	return buf;
+}
+
+static const char * const various_names[] = {
+	"PbcInt",
+	"GpioAssertInt",
+	"Qsfp1Int",
+	"Qsfp2Int",
+	"TCritInt"
+};
+
+/*
+ * Return the various interrupt name.
+ */
+static char *is_various_name(char *buf, size_t bsize, unsigned int source)
+{
+	if (source < ARRAY_SIZE(various_names))
+		strncpy(buf, various_names[source], bsize);
+	else
+		snprintf(buf, bsize, "Reserved%u", source+WFR_IS_VARIOUS_START);
+	return buf;
+}
+
+/*
+ * Return the DC interrupt name.
+ */
+static char *is_dc_name(char *buf, size_t bsize, unsigned int source)
+{
+	static const char * const dc_int_names[] = {
+		"common",
+		"lcb",
+		"8051",
+		"lbm"	/* local blcok merge */
+	};
+
+	if (source < ARRAY_SIZE(dc_int_names))
+		snprintf(buf, bsize, "dc_%s_int", dc_int_names[source]);
+	else
+		snprintf(buf, bsize, "DCInt%u", source);
+	return buf;
+}
+
+static const char * const sdma_int_names[] = {
+	"SDmaInt",
+	"SdmaIdleInt",
+	"SdmaProgressInt",
+};
+
+/*
+ * Return the SDMA engine interrupt name.
+ */
+static char *is_sdma_eng_name(char *buf, size_t bsize, unsigned int source)
+{
+	/* what interrupt */
+	unsigned int what  = source / WFR_TXE_NUM_SDMA_ENGINES;
+	/* which engine */
+	unsigned int which = source % WFR_TXE_NUM_SDMA_ENGINES;
+
+	if (likely(what < 3))
+		snprintf(buf, bsize, "%s%u", sdma_int_names[what], which);
+	else
+		snprintf(buf, bsize, "Invalid SDMA interrupt %u", source);
+	return buf;
+}
+
+/*
+ * Return the receive available interrupt name.
+ */
+static char *is_rcv_avail_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "RcvAvailInt%u", source);
+	return buf;
+}
+
+/*
+ * Return the receive urgent interrupt name.
+ */
+static char *is_rcv_urgent_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "RcvUrgentInt%u", source);
+	return buf;
+}
+
+/*
+ * Return the send credit interrupt name.
+ */
+static char *is_send_credit_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "SendCreditInt%u", source);
+	return buf;
+}
+
+/*
+ * Return the reserved interrupt name.
+ */
+static char *is_reserved_name(char *buf, size_t bsize, unsigned int source)
+{
+	snprintf(buf, bsize, "Reserved%u", source + WFR_IS_RESERVED_START);
+	return buf;
+}
+
+static char *cce_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			cce_err_status_flags, ARRAY_SIZE(cce_err_status_flags));
+}
+
+static char *rxe_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			rxe_err_status_flags, ARRAY_SIZE(rxe_err_status_flags));
+}
+
+static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			pio_err_status_flags, ARRAY_SIZE(pio_err_status_flags));
+}
+
+static char *sdma_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			sdma_err_status_flags,
+			ARRAY_SIZE(sdma_err_status_flags));
+}
+
+static char *egress_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+		egress_err_status_flags, ARRAY_SIZE(egress_err_status_flags));
+}
+
+static char *egress_err_info_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+		egress_err_info_flags, ARRAY_SIZE(egress_err_info_flags));
+}
+
+static char *send_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			send_err_status_flags,
+			ARRAY_SIZE(send_err_status_flags));
+}
+
+static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	char buf[96];
+
+	/*
+	 * For most these errors, there is nothing that can be done except
+	 * report or record it.
+	 */
+	dd_dev_info(dd, "CCE Error: %s\n",
+		cce_err_status_string(buf, sizeof(buf), reg));
+
+	if ((reg & WFR_CCE_ERR_STATUS_CCE_CLI2_ASYNC_FIFO_PARITY_ERR_SMASK)
+			&& is_a0(dd)
+			&& (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR)) {
+		/* this error requires a manual drop into SPC freeze mode */
+		/* then a fixup */
+		start_freeze_handling(dd->pport, WFR_FREEZE_SELF);
+	}
+}
+
+/*
+ * Check counters for receive errors that do not have an interrupt
+ * associated with them.
+ */
+#define RCVERR_CHECK_TIME 10
+static void update_rcverr_timer(unsigned long opaque)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
+	struct qib_pportdata *ppd = dd->pport;
+	u32 cur_ovfl_cnt = read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL);
+
+	if (dd->rcv_ovfl_cnt < cur_ovfl_cnt &&
+		ppd->port_error_action & OPA_PI_MASK_EX_BUFFER_OVERRUN) {
+		dd_dev_info(dd, "%s: PortErrorAction bounce\n", __func__);
+		set_link_down_reason(ppd,
+		  OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN, 0,
+			OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN);
+		start_link(ppd);
+	}
+	dd->rcv_ovfl_cnt = (u32) cur_ovfl_cnt;
+
+	mod_timer(&dd->rcverr_timer, jiffies + HZ * RCVERR_CHECK_TIME);
+}
+
+static int init_rcverr(struct hfi_devdata *dd)
+{
+	init_timer(&dd->rcverr_timer);
+	dd->rcverr_timer.function = update_rcverr_timer;
+	dd->rcverr_timer.data = (unsigned long) dd;
+	/* Assume the hardware counter has been reset */
+	dd->rcv_ovfl_cnt = 0;
+	return mod_timer(&dd->rcverr_timer, jiffies + HZ * RCVERR_CHECK_TIME);
+}
+
+static void free_rcverr(struct hfi_devdata *dd)
+{
+	if (dd->rcverr_timer.data)
+		del_timer_sync(&dd->rcverr_timer);
+	dd->rcverr_timer.data = 0;
+}
+
+static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	char buf[96];
+
+	dd_dev_info(dd, "Receive Error: %s\n",
+		rxe_err_status_string(buf, sizeof(buf), reg));
+
+	if (reg & ALL_RXE_FREEZE_ERR) {
+		int flags = 0;
+
+		/*
+		 * Freeze mode recovery is disabled for the errors
+		 * in WFR_RXE_FREEZE_ABORT_MASK
+		 */
+		if (is_a0(dd) && (reg & WFR_RXE_FREEZE_ABORT_MASK))
+			flags = WFR_FREEZE_ABORT;
+
+		start_freeze_handling(dd->pport, flags);
+	}
+}
+
+/* TODO */
+static void handle_misc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "Misc Error: 0x%llx (unhandled)\n", reg);
+}
+
+static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	char buf[96];
+
+	dd_dev_info(dd, "PIO Error: %s\n",
+		pio_err_status_string(buf, sizeof(buf), reg));
+
+	if (reg & ALL_PIO_FREEZE_ERR)
+		start_freeze_handling(dd->pport, 0);
+}
+
+static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	char buf[96];
+
+	dd_dev_info(dd, "SDMA Error: %s\n",
+		sdma_err_status_string(buf, sizeof(buf), reg));
+
+	if (reg & ALL_SDMA_FREEZE_ERR)
+		start_freeze_handling(dd->pport, 0);
+}
+
+static void count_port_inactive(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd = dd->pport;
+
+	if (ppd->port_xmit_discards < ~(u64)0)
+		ppd->port_xmit_discards++;
+}
+
+/*
+ * We have had a "disallowed packet" error during egress. Determine the
+ * integrity check which failed, and update relevant error counter, etc.
+ *
+ * Note that the WFR_SEND_EGRESS_ERR_INFO register has only a single
+ * bit of state per integrity check, and so we can miss the reason for an
+ * egress error if more than one packet fails the same integrity check
+ * since we cleared the corresponding bit in WFR_SEND_EGRESS_ERR_INFO.
+ */
+static void handle_send_egress_err_info(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd = dd->pport;
+	u64 src = read_csr(dd, WFR_SEND_EGRESS_ERR_SOURCE); /* read first */
+	u64 info = read_csr(dd, WFR_SEND_EGRESS_ERR_INFO);
+	char buf[96];
+
+	/* clear down all observed info as quickly as possible after read */
+	write_csr(dd, WFR_SEND_EGRESS_ERR_INFO, info);
+
+	dd_dev_info(dd,
+		"Egress Error Info: 0x%llx, %s Egress Error Src 0x%llx\n",
+		info, egress_err_info_string(buf, sizeof(buf), info), src);
+
+	/* Eventually add other counters for each bit */
+
+	if (info & WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK) {
+		if (ppd->port_xmit_discards < ~(u64)0)
+			ppd->port_xmit_discards++;
+	}
+}
+
+/*
+ * Input value is a bit position within the WFR_SEND_EGRESS_ERR_STATUS
+ * register. Does it represent a 'port inactive' error?
+ */
+static inline int port_inactive_err(u64 posn)
+{
+	return (posn >= SEES(TX_LINKDOWN_ERR) &&
+		posn <= SEES(TX_INCORRECT_LINK_STATE_ERR));
+}
+
+/*
+ * Input value is a bit position within the WFR_SEND_EGRESS_ERR_STATUS
+ * register. Does it represent a 'disallowed packet' error?
+ */
+static inline int disallowed_pkt_err(u64 posn)
+{
+	return (posn >= SEES(TX_SDMA0_DISALLOWED_PACKET_ERR) &&
+		posn <= SEES(TX_SDMA15_DISALLOWED_PACKET_ERR));
+}
+
+static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	u64 reg_copy = reg, handled = 0;
+	char buf[96];
+
+	if (reg & ALL_TXE_EGRESS_FREEZE_ERR)
+		start_freeze_handling(dd->pport, 0);
+	if (is_a0(dd) && (reg &
+		    WFR_SEND_EGRESS_ERR_STATUS_TX_CREDIT_RETURN_VL_ERR_SMASK)
+		    && (dd->icode != WFR_ICODE_FUNCTIONAL_SIMULATOR))
+		start_freeze_handling(dd->pport, 0);
+
+	while (reg_copy) {
+		int posn = fls64(reg_copy);
+		/*
+		 * fls64() returns a 1-based offset, but we generally
+		 * want 0-based offsets.
+		 */
+		int shift = posn - 1;
+
+		if (port_inactive_err(shift)) {
+			count_port_inactive(dd);
+			handled |= (1ULL << shift);
+		} else if (disallowed_pkt_err(shift)) {
+			handle_send_egress_err_info(dd);
+			handled |= (1ULL << shift);
+		}
+		clear_bit(shift, (unsigned long *)&reg_copy);
+	}
+
+	reg &= ~handled;
+
+	if (reg)
+		dd_dev_info(dd, "Egress Error: %s\n",
+			egress_err_status_string(buf, sizeof(buf), reg));
+}
+
+static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	char buf[96];
+
+	dd_dev_info(dd, "Send Error: %s\n",
+		send_err_status_string(buf, sizeof(buf), reg));
+
+}
+
+/*
+ * The maximum number of times the error clear down will loop before
+ * blocking a repeating error.  This value is arbitrary.
+ */
+#define MAX_CLEAR_COUNT 20
+
+/*
+ * Clear and handle an error register.  All error interrupts are funneled
+ * through here to have a central location to correctly handle single-
+ * or multi-shot errors.
+ *
+ * For non per-context registers, call this routine with a context value
+ * of 0 so the per-context offset is zero.
+ *
+ * If the handler loops too many times, assume that something is wrong
+ * and can't be fixed, so mask the error bits.
+ */
+static void interrupt_clear_down(struct hfi_devdata *dd,
+				 u32 context,
+				 const struct err_reg_info *eri)
+{
+	u64 reg;
+	u32 count;
+
+	/* read in a loop until no more errors are seen */
+	count = 0;
+	while (1) {
+		reg = read_kctxt_csr(dd, context, eri->status);
+		if (reg == 0)
+			break;
+		write_kctxt_csr(dd, context, eri->clear, reg);
+		if (likely(eri->handler))
+			eri->handler(dd, context, reg);
+		count++;
+		if (count > MAX_CLEAR_COUNT) {
+			u64 mask;
+
+			dd_dev_err(dd, "Repeating %s bits 0x%llx - masking\n",
+				eri->desc, reg);
+			/*
+			 * Read-modify-write so any other masked bits
+			 * remain masked.
+			 */
+			mask = read_kctxt_csr(dd, context, eri->mask);
+			mask &= ~reg;
+			write_kctxt_csr(dd, context, eri->mask, mask);
+			break;
+		}
+	}
+}
+
+/*
+ * CCE block "misc" interrupt.  Source is < 16.
+ */
+static void is_misc_err_int(struct hfi_devdata *dd, unsigned int source)
+{
+	const struct err_reg_info *eri = &misc_errs[source];
+
+	if (eri->handler) {
+		interrupt_clear_down(dd, 0, eri);
+	} else {
+		dd_dev_err(dd, "Unexpected misc interrupt (%u) - reserved\n",
+			source);
+	}
+}
+
+static char *send_context_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			sc_err_status_flags, ARRAY_SIZE(sc_err_status_flags));
+}
+
+#if 0 /* no users at present */
+/* print credit return flag fields */
+static char *credit_return_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags,
+			credit_return_flags, ARRAY_SIZE(credit_return_flags));
+}
+#endif
+
+/*
+ * Send context error interrupt.  Source (context) is < 160.
+ *
+ * All send context errors cause the send context to halt.  The normal
+ * clear-down mechanism cannot be used because we cannot clear the
+ * error bits until several other long-running items are done first.
+ * This is OK because with the context halted, nothing else is going
+ * to happen on it anyway.
+ */
+static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
+{
+	struct send_context_info *sci;
+	struct send_context *sc;
+	char flags[96];
+	u64 status;
+
+	if (context >= dd->num_send_contexts) {
+		dd_dev_err(dd,
+			"unexpected out of range send context interrupt %u\n",
+			context);
+		return;
+	}
+	sci = &dd->send_contexts[context];
+	sc = sci->sc;
+	if (!sc) {
+		dd_dev_err(dd, "%s: context %u: no sc?\n", __func__, context);
+		return;
+	}
+
+	/* tell the software that a halt has begun */
+	sc_stop(sc, SCF_HALTED);
+
+	status = read_kctxt_csr(dd, context, WFR_SEND_CTXT_ERR_STATUS);
+
+	dd_dev_info(dd, "Send Context %u Error: %s\n", context,
+		send_context_err_status_string(flags, sizeof(flags), status));
+
+	if (status & WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK)
+		handle_send_egress_err_info(dd);
+
+	/*
+	 * Automatically restart halted kernel contexts out of interrupt
+	 * context.  User contexts must ask the driver to restart the context.
+	 */
+	if (sc->type != SC_USER)
+		queue_work(dd->pport->qib_wq, &sc->halt_work);
+}
+
+static void handle_sdma_eng_err(struct hfi_devdata *dd,
+		unsigned int source, u64 status)
+{
+	struct sdma_engine *sde;
+
+	sde = &dd->per_sdma[source];
+	/* BUG_ON(source != 0); */
+#ifdef JAG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
+		slashstrip(__FILE__), __LINE__, __func__);
+	dd_dev_err(sde->dd, "JAG SDMA(%u) source: %u status 0x%llx\n",
+		sde->this_idx, source, (unsigned long long)status);
+#endif
+	sdma_engine_error(sde, status);
+}
+
+/*
+ * CCE block SDMA error interrupt.  Source is < 16.
+ */
+static void is_sdma_eng_err_int(struct hfi_devdata *dd, unsigned int source)
+{
+#ifdef JAG_SDMA_VERBOSITY
+	struct sdma_engine *sde = &dd->per_sdma[source];
+
+	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
+		slashstrip(__FILE__), __LINE__, __func__);
+	dd_dev_err(dd, "JAG SDMA(%u) source: %u\n", sde->this_idx,
+		source);
+	sdma_dumpstate(sde);
+#endif
+	interrupt_clear_down(dd, source, &sdma_eng_err);
+}
+
+/*
+ * CCE block "various" interrupt.  Source is < 8.
+ */
+static void is_various_int(struct hfi_devdata *dd, unsigned int source)
+{
+	const struct err_reg_info *eri = &various_err[source];
+
+	/*
+	 * TCritInt cannot go through interrupt_clear_down()
+	 * because it is not a second tier interrupt. The handler
+	 * should be called directly.
+	 */
+	if (source == WFR_TCRIT_INT_SOURCE)
+		handle_temp_err(dd);
+	else if (eri->handler)
+		interrupt_clear_down(dd, 0, eri);
+	else
+		dd_dev_info(dd,
+			"%s: Unimplemented/reserved interrupt %d\n",
+			__func__, source);
+}
+
+static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
+{
+	/* source is always zero */
+	struct qib_pportdata *ppd = dd->pport;
+	unsigned long flags;
+	u64 qsfp_int_mgmt = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
+
+	if (reg & QSFP_HFI0_MODPRST_N) {
+
+		dd_dev_info(dd, "%s: ModPresent triggered QSFP interrupt\n",
+				__func__);
+
+		if (!qsfp_mod_present(ppd)) {
+			ppd->driver_link_ready = 0;
+			/*
+			 * Cable removed, reset all our information about the
+			 * cache and cable capabilities
+			 */
+
+			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+			/*
+			 * We don't set cache_refresh_required here as we expect
+			 * an interrupt when a cable is inserted
+			 */
+			ppd->qsfp_info.cache_valid = 0;
+			ppd->qsfp_info.qsfp_interrupt_functional = 0;
+			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
+						flags);
+			write_csr(dd,
+					dd->hfi_id ?
+						WFR_ASIC_QSFP2_INVERT :
+						WFR_ASIC_QSFP1_INVERT,
+				qsfp_int_mgmt);
+		} else {
+
+			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+			ppd->qsfp_info.cache_valid = 0;
+			ppd->qsfp_info.cache_refresh_required = 1;
+			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
+						flags);
+
+			qsfp_int_mgmt &= ~(u64)QSFP_HFI0_MODPRST_N;
+			write_csr(dd,
+					dd->hfi_id ?
+						WFR_ASIC_QSFP2_INVERT :
+						WFR_ASIC_QSFP1_INVERT,
+				qsfp_int_mgmt);
+		}
+	}
+
+	if (reg & QSFP_HFI0_INT_N) {
+
+		dd_dev_info(dd, "%s: IntN triggered QSFP interrupt\n",
+				__func__);
+		spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+		ppd->qsfp_info.check_interrupt_flags = 1;
+		ppd->qsfp_info.qsfp_interrupt_functional = 1;
+		spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
+	}
+
+	queue_work(ppd->qib_wq, &ppd->qsfp_info.qsfp_work);
+}
+
+/*
+ * Wait until all LCB users leave.  Assumes that the caller has cut off
+ * all new LCB accessors (by setting the link state) and is now waiting
+ * for all current users to finish.
+ */
+static int wait_lcb_access_done(struct hfi_devdata *dd)
+{
+	unsigned long timeout;
+	u32 count;
+
+	timeout = jiffies + msecs_to_jiffies(20);
+	while (1) {
+		count = ACCESS_ONCE(dd->lcb_access_count);
+		if (count == 0)
+			return 0;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd, "%s: timed out waiting for LCB access to be released, access count %u\n",
+				__func__, count);
+			return -ETIMEDOUT;
+		}
+		usleep_range(100, 200);
+	}
+}
+
+static int request_host_lcb_access(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = do_8051_command(dd, WFR_HCMD_MISC,
+		(u64)HCMD_MISC_REQUEST_LCB_ACCESS << LOAD_DATA_FIELD_ID_SHIFT,
+		NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "%s: command failed with error %d\n",
+			__func__, ret);
+	}
+	return ret == WFR_HCMD_SUCCESS ? 0 : -EBUSY;
+}
+
+static int request_8051_lcb_access(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = do_8051_command(dd, WFR_HCMD_MISC,
+		(u64)HCMD_MISC_GRANT_LCB_ACCESS << LOAD_DATA_FIELD_ID_SHIFT,
+		NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "%s: command failed with error %d\n",
+			__func__, ret);
+	}
+	return ret == WFR_HCMD_SUCCESS ? 0 : -EBUSY;
+}
+
+/*
+ * Set the LCB selector - allow host access.  The DCC selector always
+ * pionts to the host.
+ */
+static inline void set_host_lcb_access(struct hfi_devdata *dd)
+{
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+				DC_DC8051_CFG_CSR_ACCESS_SEL_DCC_SMASK
+				| DC_DC8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
+}
+
+/*
+ * Clear the LCB selector - allow 8051 access.  The DCC selector always
+ * pionts to the host.
+ */
+static inline void set_8051_lcb_access(struct hfi_devdata *dd)
+{
+	write_csr(dd, DC_DC8051_CFG_CSR_ACCESS_SEL,
+				DC_DC8051_CFG_CSR_ACCESS_SEL_DCC_SMASK);
+}
+
+/*
+ * Acquire LCB access from the 8051.  If the host already has access,
+ * just increment a counter.  Otherwise, inform the 8051 that the
+ * host is taking access.
+ *
+ * Returns:
+ *	0 on success
+ *	-EBUSY if the 8051 has control and cannot be disburbed
+ *	-errno if unable to acquire access from the 8051
+ */
+int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
+{
+	int ret = 0;
+	u32 state;
+
+	/*
+	 * Use the host link state lock so the operation of this routine
+	 * { link state check, selector change, count increment } can occur
+	 * as a unit against a link state change.  Otherwise there is a
+	 * race between the state change and the count increment.
+	 */
+	if (sleep_ok) {
+		mutex_lock(&dd->pport->hls_lock);
+	} else {
+		while (mutex_trylock(&dd->pport->hls_lock) == EBUSY)
+			udelay(1);
+	}
+
+	/* can not use the LCB when the 8051 is using it */
+	state = dd->pport->host_link_state;
+	if (state == HLS_DN_POLL || state == HLS_VERIFY_CAP ||
+			state == HLS_GOING_UP || state == HLS_GOING_DOWN) {
+		dd_dev_info(dd, "%s: link state %s disallows LCB access\n",
+			__func__, link_state_name(state));
+		ret = -EBUSY;
+		goto done;
+	}
+
+	if (dd->lcb_access_count == 0) {
+		ret = request_host_lcb_access(dd);
+		if (ret) {
+			dd_dev_err(dd,
+				"%s: unable to acquire LCB access, err %d\n",
+				__func__, ret);
+			goto done;
+		}
+		set_host_lcb_access(dd);
+	}
+	dd->lcb_access_count++;
+done:
+	mutex_unlock(&dd->pport->hls_lock);
+	return ret;
+}
+
+/*
+ * Release LCB access by decrementing the use count.  If the count is moving
+ * from 1 to 0, inform 8051 that it has control back.
+ *
+ * Returns:
+ *	0 on success
+ *	-errno if unable to release access to the 8051
+ */
+int release_lcb_access(struct hfi_devdata *dd, int sleep_ok)
+{
+	int ret = 0;
+
+	/*
+	 * Use the host link state lock because the acquire needed it.
+	 * Here, we only need to keep { selector change, count decrement }
+	 * as a unit.
+	 */
+	if (sleep_ok) {
+		mutex_lock(&dd->pport->hls_lock);
+	} else {
+		while (mutex_trylock(&dd->pport->hls_lock) == EBUSY)
+			udelay(1);
+	}
+
+	if (dd->lcb_access_count == 0) {
+		dd_dev_err(dd, "%s: LCB accsess count is zero.  Skipping.\n",
+			__func__);
+		goto done;
+	}
+
+	if (dd->lcb_access_count == 1) {
+		set_8051_lcb_access(dd);
+		ret = request_8051_lcb_access(dd);
+		if (ret) {
+			dd_dev_err(dd,
+				"%s: unable to release LCB access, err %d\n",
+				__func__, ret);
+			/* restore host access if the grant didn't work */
+			set_host_lcb_access(dd);
+			goto done;
+		}
+	}
+	dd->lcb_access_count--;
+done:
+	mutex_unlock(&dd->pport->hls_lock);
+	return ret;
+}
+
+/*
+ * Initialize LCB access variables and state.  Called during driver load,
+ * after most of the initialization is finished.
+ *
+ * The DC default is LCB access on for the host.  The driver defaults to
+ * leaving access to the 8051.  Assign access now - this contrains the call
+ * to this routine to be after all LCB set-up is done.  In particular, after
+ * qib_init_wfr_funcs() -> set_up_interrupts() -> clear_all_interrupts()
+ */
+static void init_lcb_access(struct hfi_devdata *dd)
+{
+	dd->lcb_access_count = 0;
+	set_8051_lcb_access(dd);
+}
+
+/*
+ * Write a response back to a 8051 request.
+ */
+static void hreq_response(struct hfi_devdata *dd, u8 return_code, u16 rsp_data)
+{
+	write_csr(dd, DC_DC8051_CFG_EXT_DEV_0,
+		DC_DC8051_CFG_EXT_DEV_0_COMPLETED_SMASK
+		| (u64)return_code << DC_DC8051_CFG_EXT_DEV_0_RETURN_CODE_SHIFT
+		| (u64)rsp_data << DC_DC8051_CFG_EXT_DEV_0_RSP_DATA_SHIFT);
+}
+
+/*
+ * Handle requests from the 8051.
+ */
+static void handle_8051_request(struct hfi_devdata *dd)
+{
+	u64 reg;
+	u16 data;
+	u8 type;
+
+	reg = read_csr(dd, DC_DC8051_CFG_EXT_DEV_1);
+	if ((reg & DC_DC8051_CFG_EXT_DEV_1_REQ_NEW_SMASK) == 0)
+		return;	/* no request */
+
+	/* zero out COMPLETED so the response is seen */
+	write_csr(dd, DC_DC8051_CFG_EXT_DEV_0, 0);
+
+	/* extract request details */
+	type = (reg >> DC_DC8051_CFG_EXT_DEV_1_REQ_TYPE_SHIFT)
+			& DC_DC8051_CFG_EXT_DEV_1_REQ_TYPE_MASK;
+	data = (reg >> DC_DC8051_CFG_EXT_DEV_1_REQ_DATA_SHIFT)
+			& DC_DC8051_CFG_EXT_DEV_1_REQ_DATA_MASK;
+
+	switch (type) {
+	case WFR_HREQ_LOAD_CONFIG:
+	case WFR_HREQ_SAVE_CONFIG:
+	case WFR_HREQ_READ_CONFIG:
+	case WFR_HREQ_SET_TX_EQ_ABS:
+	case WFR_HREQ_SET_TX_EQ_REL:
+	case WFR_HREQ_ENABLE:
+		dd_dev_info(dd, "8051 request: request 0x%x not supported\n",
+			type);
+		hreq_response(dd, WFR_HREQ_NOT_SUPPORTED, 0);
+		break;
+
+	case WFR_HREQ_CONFIG_DONE:
+		hreq_response(dd, WFR_HREQ_SUCCESS, 0);
+		break;
+
+	case WFR_HREQ_INTERFACE_TEST:
+		hreq_response(dd, WFR_HREQ_SUCCESS, data);
+		break;
+
+	default:
+		dd_dev_err(dd, "8051 request: unknown request 0x%x\n", type);
+		hreq_response(dd, WFR_HREQ_NOT_SUPPORTED, 0);
+		break;
+	};
+}
+
+static void write_global_credit(struct hfi_devdata *dd,
+				u8 vau, u16 total, u16 shared)
+{
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
+/* TODO: HAS 0.76 changed names and adds a field */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+		((u64)total
+			<< WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
+		| ((u64)shared
+			<< WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT)
+#else
+		((u64)total
+			<< WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
+#endif
+		| ((u64)vau << WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT));
+}
+
+/*
+ * Set up initial VL15 credits of the remote.  Assumes the rest of
+ * the CM credit registers are zero from a previous global or credit reset .
+ */
+void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf)
+{
+	/* leave shared count at zero for both global and VL15 */
+	write_global_credit(dd, vau, vl15buf, 0);
+	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, (u64)vl15buf
+		    << WFR_SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+}
+
+/*
+ * Zero all credit details from the previous connection and
+ * reset the CM manager's internal counters.
+ */
+void reset_link_credits(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* remove all previous VL credit limits */
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8*i), 0);
+	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, 0);
+	write_global_credit(dd, 0, 0, 0);
+	/* reset the CM block */
+	pio_send_control(dd, PSC_CM_RESET);
+}
+
+/* convert a vCU to a CU */
+static u32 vcu_to_cu(u8 vcu)
+{
+	return 1 << vcu;
+}
+
+/* convert a CU to a vCU */
+static u8 cu_to_vcu(u32 cu)
+{
+	return ilog2(cu);
+}
+
+/* convert a vAU to an AU */
+static u32 vau_to_au(u8 vau)
+{
+	return 8 * (1 << vau);
+}
+
+static void set_linkup_defaults(struct qib_pportdata *ppd)
+{
+	ppd->sm_trap_qp = 0x0;
+	ppd->sa_qp = 0x1;
+}
+
+/*
+ * Graceful LCB shutdown.  This leaves the LCB FIFOs in reset.
+ */
+static void lcb_shutdown(struct hfi_devdata *dd, int abort)
+{
+	u64 reg, saved_lcb_err_en;
+
+	/* clear lcb run: LCB_CFG_RUN.EN = 0 */
+	write_csr(dd, DC_LCB_CFG_RUN, 0);
+	/* set tx fifo reset: LCB_CFG_TX_FIFOS_RESET.VAL = 1 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
+		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
+	/* set dcc reset csr: DCC_CFG_RESET.{reset_lcb,reset_rx_fpe} = 1 */
+	saved_lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
+	reg = read_csr(dd, DCC_CFG_RESET);
+	write_csr(dd, DCC_CFG_RESET,
+		reg
+		| (1ull << DCC_CFG_RESET_RESET_LCB_SHIFT)
+		| (1ull << DCC_CFG_RESET_RESET_RX_FPE_SHIFT));
+	(void) read_csr(dd, DCC_CFG_RESET); /* make sure the write completed */
+	if (!abort) {
+		udelay(1);    /* must hold for the longer of 16cclks or 20ns */
+		write_csr(dd, DCC_CFG_RESET, reg);
+		write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
+	}
+}
+
+/*
+ * These LCB adjustments are for the Aurora SerDes core in the FPGA.
+ */
+static void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
+{
+	u64 rx_radr, tx_radr;
+	u32 version;
+
+	if (dd->icode != WFR_ICODE_FPGA_EMULATION)
+		return;
+
+	/*
+	 * These LCB defaults on emulator _s are good, nothing to do here:
+	 *	LCB_CFG_TX_FIFOS_RADR
+	 *	LCB_CFG_RX_FIFOS_RADR
+	 *	LCB_CFG_LN_DCLK
+	 *	LCB_CFG_IGNORE_LOST_RCLK
+	 */
+	if (is_emulator_s(dd))
+		return;
+	/* else this is _p */
+
+	version = emulator_rev(dd);
+	if (!is_a0(dd))
+		version = 0x2d;	/* all B0 use 0x2d or higher settings */
+
+	if (version <= 0x12) {
+		/* release 0x12 and below */
+
+		/*
+		 * LCB_CFG_RX_FIFOS_RADR.RST_VAL = 0x9
+		 * LCB_CFG_RX_FIFOS_RADR.OK_TO_JUMP_VAL = 0x9
+		 * LCB_CFG_RX_FIFOS_RADR.DO_NOT_JUMP_VAL = 0xa
+		 */
+		rx_radr =
+		      0xaull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT
+		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT;
+		/*
+		 * LCB_CFG_TX_FIFOS_RADR.ON_REINIT = 0 (default)
+		 * LCB_CFG_TX_FIFOS_RADR.RST_VAL = 6
+		 */
+		tx_radr = 6ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+	} else if (version <= 0x18) {
+		/* release 0x13 up to 0x18 */
+		/* LCB_CFG_RX_FIFOS_RADR = 0x988 */
+		rx_radr =
+		      0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT
+		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT;
+		tx_radr = 7ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+	} else if (version == 0x19) {
+		/* release 0x19 */
+		/* LCB_CFG_RX_FIFOS_RADR = 0xa99 */
+		rx_radr =
+		      0xAull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT
+		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT;
+		tx_radr = 3ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+	} else if (version == 0x1a) {
+		/* release 0x1a */
+		/* LCB_CFG_RX_FIFOS_RADR = 0x988 */
+		rx_radr =
+		      0x9ull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT
+		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT;
+		tx_radr = 7ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+		write_csr(dd, DC_LCB_CFG_LN_DCLK, 1ull);
+	} else {
+		/* release 0x1b and higher */
+		/* LCB_CFG_RX_FIFOS_RADR = 0x877 */
+		rx_radr =
+		      0x8ull << DC_LCB_CFG_RX_FIFOS_RADR_DO_NOT_JUMP_VAL_SHIFT
+		    | 0x7ull << DC_LCB_CFG_RX_FIFOS_RADR_OK_TO_JUMP_VAL_SHIFT
+		    | 0x7ull << DC_LCB_CFG_RX_FIFOS_RADR_RST_VAL_SHIFT;
+		tx_radr = 3ull << DC_LCB_CFG_TX_FIFOS_RADR_RST_VAL_SHIFT;
+	}
+
+	write_csr(dd, DC_LCB_CFG_RX_FIFOS_RADR, rx_radr);
+	/* LCB_CFG_IGNORE_LOST_RCLK.EN = 1 */
+	write_csr(dd, DC_LCB_CFG_IGNORE_LOST_RCLK,
+		DC_LCB_CFG_IGNORE_LOST_RCLK_EN_SMASK);
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RADR, tx_radr);
+}
+
+/*
+ * Handle a SMA idle message
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_sma_message(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+							sma_message_work);
+	struct hfi_devdata *dd = ppd->dd;
+	u64 msg;
+	int ret;
+
+	/* msg is bytes 1-4 of the 40-bit idle message - the command code
+	   is stripped off */
+	ret = read_idle_sma(dd, &msg);
+	if (ret)
+		return;
+	dd_dev_info(dd, "%s: SMA message 0x%llx\n", __func__, msg);
+	/*
+	 * React to the SMA message.  Byte[1] (0 for us) is the command.
+	 */
+	switch (msg & 0xff) {
+	case SMA_IDLE_ARM:
+		/*
+		 * See STLv1 table 9-14 - HFI and External Switch Ports Key
+		 * State Transitions
+		 *
+		 * Only expected in INIT or ARMED, discard otherwise.
+		 */
+		if (ppd->host_link_state == HLS_UP_INIT
+				|| ppd->host_link_state == HLS_UP_ARMED)
+			ppd->neighbor_normal = 1;
+		break;
+	case SMA_IDLE_ACTIVE:
+		/*
+		 * See STLv1 table 9-14 - HFI and External Switch Ports Key
+		 * State Transitions
+		 *
+		 * Can activate the node.  Discard otherwise.
+		 */
+		if (ppd->host_link_state == HLS_UP_ARMED
+					&& ppd->is_active_optimize_enabled) {
+			ppd->neighbor_normal = 1;
+			ret = set_link_state(ppd, HLS_UP_ACTIVE);
+			if (ret)
+				dd_dev_err(
+					dd,
+					"%s: received Active SMA idlemessage, couldn't set link to Active\n",
+					__func__);
+		}
+		break;
+	default:
+		dd_dev_err(dd,
+			"%s: received unexpected SMA idle message 0x%llx\n",
+			__func__, msg);
+		break;
+	}
+}
+
+/*
+ * Called from all interrupt handlers to start handling an SPC freeze.
+ */
+void start_freeze_handling(struct qib_pportdata *ppd, int flags)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	struct send_context *sc;
+	int i;
+
+	if (flags & WFR_FREEZE_SELF)
+		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
+
+	/* enter frozen mode */
+	dd->flags |= HFI_FROZEN;
+
+	/* notify all SDMA engines that they are going into a freeze */
+	sdma_freeze_notify(dd, !!(flags & WFR_FREEZE_LINK_DOWN));
+
+	/* do halt pre-handling on all enabled send contexts */
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		sc = dd->send_contexts[i].sc;
+		if (sc && (sc->flags & SCF_ENABLED))
+			sc_stop(sc, SCF_FROZEN | SCF_HALTED);
+	}
+
+	/* Send context are frozen. Notify user space */
+	qib_set_uevent_bits(ppd, _HFI_EVENT_FROZEN_BIT);
+
+	if (flags & WFR_FREEZE_ABORT) {
+		dd_dev_err(dd,
+			   "Aborted freeze recovery. Please REBOOT system\n");
+		return;
+	}
+	/* queue non-interrupt handler */
+	queue_work(ppd->qib_wq, &ppd->freeze_work);
+}
+
+/*
+ * Wait until all 4 sub-blocks indicate that they have frozen or unfrozen,
+ * depending on the "freeze" parameter.
+ *
+ * No need to return an error if it times out, our only option
+ * is to proceed anyway.
+ */
+static void wait_for_freeze_status(struct hfi_devdata *dd, int freeze)
+{
+	unsigned long timeout;
+	u64 reg;
+
+	timeout = jiffies + msecs_to_jiffies(FREEZE_STATUS_TIMEOUT);
+	while (1) {
+		reg = read_csr(dd, WFR_CCE_STATUS);
+		if (freeze) {
+			/* waiting until all indicators are set */
+			if ((reg & ALL_FROZE) == ALL_FROZE)
+				return;	/* all done */
+		} else {
+			/* waiting until all indicators are clear */
+			if ((reg & ALL_FROZE) == 0)
+				return; /* all done */
+		}
+
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"Time out waiting for SPC %sfreeze, bits 0x%llx, expecting 0x%llx, continuing",
+				freeze ? "" : "un",
+				reg & ALL_FROZE,
+				freeze ? ALL_FROZE : 0ull);
+			return;
+		}
+		usleep_range(80, 120);
+	}
+}
+
+/*
+ * Do all freeze handling for the RXE block.
+ */
+static void rxe_freeze(struct hfi_devdata *dd)
+{
+	u64 reg;
+	int i;
+
+	/* disable port */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg &= ~WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+
+	/* disable all receive contexts */
+	for (i = 0; i < dd->num_rcv_contexts; i++)
+		rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS, i);
+}
+
+/*
+ * Unfreeze handling for the RXE block - kernel contexts only.
+ * This will also enable the port.  User contexts will do unfreeze
+ * handling on a per-context basis as they call into the driver.
+ *
+ */
+static void rxe_kernel_unfreeze(struct hfi_devdata *dd)
+{
+	u64 reg;
+	int i;
+
+	/* enable all kernel contexts */
+	for (i = 0; i < dd->n_krcv_queues; i++)
+		rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB, i);
+
+	/* enable port */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+}
+
+/*
+ * Non-interrupt SPC freeze handling.
+ *
+ * This is a work-queue function outside of the triggering interrupt.
+ */
+void handle_freeze(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								freeze_work);
+	struct hfi_devdata *dd = ppd->dd;
+
+	/* wait for freeze indicators on all affected blocks */
+	dd_dev_info(dd, "Entering SPC freeze\n");
+	wait_for_freeze_status(dd, 1);
+
+	/* SPC is now frozen */
+
+	/* do send PIO freeze steps */
+	pio_freeze(dd);
+
+	/* do send DMA freeze steps */
+	sdma_freeze(dd);
+
+	/* do send egress freeze steps - nothing to do */
+
+	/* do receive freeze steps */
+	rxe_freeze(dd);
+
+	/*
+	 * Unfreeze the hardware - clear the freeze, wait for each
+	 * block's frozen bit to clear, then clear the frozen flag.
+	 */
+	write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_UNFREEZE_SMASK);
+	wait_for_freeze_status(dd, 0);
+
+	/*
+	 * A0 erratum 291496
+	 * additional SPC unfreeze sequence needed
+	 */
+	if (is_a0(dd)) {
+		dd_dev_info(dd, "Entering SPC freeze (A0 erratum 291496)\n");
+		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_FREEZE_SMASK);
+		wait_for_freeze_status(dd, 1);
+		write_csr(dd, WFR_CCE_CTRL, WFR_CCE_CTRL_SPC_UNFREEZE_SMASK);
+		wait_for_freeze_status(dd, 0);
+	}
+
+	/* do send PIO unfreeze steps for kernel contexts */
+	pio_kernel_unfreeze(dd);
+
+	/* do send DMA unfreeze steps */
+	sdma_unfreeze(dd);
+
+	/* do send egress unfreeze steps - nothing to do */
+
+	/* do receive unfreeze steps for kernel contexts */
+	rxe_kernel_unfreeze(dd);
+
+	/*
+	 * The unfreeze procedure touches global device registers when
+	 * it disables and re-enables RXE. Mark the device unfrozen
+	 * after all that is done so other parts of the driver waiting
+	 * for the device to unfreeze don't do things out of order.
+	 *
+	 * The above implies that the meaning of HFI_FROZEN flag is
+	 * "Device has gone into freeze mode and freeze mode handling
+	 * is still in progress."
+	 *
+	 * The flag will be removed when freeze mode processing has
+	 * completed.
+	 */
+	dd->flags &= ~HFI_FROZEN;
+	wake_up(&dd->event_queue);
+
+	/* no longer frozen */
+	dd_dev_err(dd, "Exiting SPC freeze\n");
+}
+
+/*
+ * Handle a link up interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_link_up(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								link_up_work);
+	set_link_state(ppd, HLS_UP_INIT);
+
+	/* cache the read of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
+	read_ltp_rtt(ppd->dd);
+	/*
+	 * STL specifies that certain counters are cleared on a transition
+	 * to link up, so do that.
+	 */
+	clear_linkup_counters(ppd->dd);
+	/*
+	 * And (re)set link up default values.
+	 */
+	set_linkup_defaults(ppd);
+}
+
+/*
+ * Handle a link down interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_link_down(struct work_struct *work)
+{
+	u8 lcl_reason, neigh_reason = 0;
+	u64 reg;
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								link_down_work);
+	lcl_reason = 0;
+
+	read_planned_down_reason_code(ppd->dd, &neigh_reason);
+
+	/*
+	 * If no reason, assume peer-initiated but missed
+	 * LinkGoingDown idle flits.
+	 */
+	if (neigh_reason == 0)
+		lcl_reason = OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN;
+
+	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
+	set_link_state(ppd, HLS_DN_OFFLINE);
+
+	/* disable the port */
+	/* TODO: 7322: done within rcvmod_lock */
+	reg = read_csr(ppd->dd, WFR_RCV_CTRL);
+	reg &= ~WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(ppd->dd, WFR_RCV_CTRL, reg);
+
+	start_link(ppd);
+}
+
+/*
+ * Mask conversion: Capability exchange to Port LTP.  The capability
+ * exchange has an implicit 16b CRC that is mandatory.
+ */
+static int cap_to_port_ltp(int cap)
+{
+	int port_ltp = PORT_LTP_CRC_MODE_16; /* this mode is mandatory */
+
+	if (cap & CAP_CRC_14B)
+		port_ltp |= PORT_LTP_CRC_MODE_14;
+	if (cap & CAP_CRC_48B)
+		port_ltp |= PORT_LTP_CRC_MODE_48;
+	if (cap & CAP_CRC_12B_16B_PER_LANE)
+		port_ltp |= PORT_LTP_CRC_MODE_PER_LANE;
+
+	return port_ltp;
+}
+
+/*
+ * Convert an STL Port LTP mask to capability mask
+ */
+int port_ltp_to_cap(int port_ltp)
+{
+	int cap_mask = 0;
+
+	if (port_ltp & PORT_LTP_CRC_MODE_14)
+		cap_mask |= CAP_CRC_14B;
+	if (port_ltp & PORT_LTP_CRC_MODE_48)
+		cap_mask |= CAP_CRC_48B;
+	if (port_ltp & PORT_LTP_CRC_MODE_PER_LANE)
+		cap_mask |= CAP_CRC_12B_16B_PER_LANE;
+
+	return cap_mask;
+}
+
+/*
+ * Convert a single DC LCB CRC mode to an STL Port LTP mask.
+ */
+static int lcb_to_port_ltp(int lcb_crc)
+{
+	int port_ltp = 0;
+
+	if (lcb_crc == LCB_CRC_12B_16B_PER_LANE)
+		port_ltp = PORT_LTP_CRC_MODE_PER_LANE;
+	else if (lcb_crc == LCB_CRC_48B)
+		port_ltp = PORT_LTP_CRC_MODE_48;
+	else if (lcb_crc == LCB_CRC_14B)
+		port_ltp = PORT_LTP_CRC_MODE_14;
+	else
+		port_ltp = PORT_LTP_CRC_MODE_16;
+
+	return port_ltp;
+}
+
+static int neigh_is_hfi(struct qib_pportdata *ppd)
+{
+	return (ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) == 0;
+}
+
+/*
+ * Our neighbor has indicated that we are allowed to act as a fabric
+ * manager, so place the full management partition key in the second
+ * (0-based) pkey array position (see STLv1, section 20.2.2.6.8). Note
+ * that we should already have the limited management partition key in
+ * array element 1, and also that the port is not yet up when
+ * add_full_mgmt_pkey() is invoked.
+ */
+static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+
+	/* Sanity check - ppd->pkeys[2] should be 0 */
+	if (ppd->pkeys[2] != 0)
+		dd_dev_err(dd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
+			   __func__, ppd->pkeys[2], WFR_FULL_MGMT_P_KEY);
+	ppd->pkeys[2] = WFR_FULL_MGMT_P_KEY;
+	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
+}
+
+/*
+ * Convert the given link width to the STL link width bitmask.
+ */
+static u16 link_width_to_bits(struct hfi_devdata *dd, u16 width)
+{
+	switch (width) {
+	case 1: return OPA_LINK_WIDTH_1X;
+	case 2: return OPA_LINK_WIDTH_2X;
+	case 3: return OPA_LINK_WIDTH_3X;
+	default:
+		/* NOTE: 0 in simulation */
+		dd_dev_info(dd, "%s: invalid width %d, using 4\n",
+			__func__, width);
+		/* fall through */
+	case 4: return OPA_LINK_WIDTH_4X;
+	}
+}
+
+/*
+ * Do a population count on the bottom nibble.
+ */
+static const u8 bit_counts[16] = {
+	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+};
+static inline u8 nibble_to_count(u8 nibble)
+{
+	return bit_counts[nibble & 0xf];
+}
+
+/*
+ * Read the active lane information from the 8051 registers and return
+ * their widths.
+ *
+ * Active lane information is found in these 8051 registers:
+ *	enable_lane_tx
+ *	enable_lane_rx
+ */
+static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
+				u16 *rx_width)
+{
+	u16 tx, rx;
+	u8 enable_lane_rx;
+	u8 enable_lane_tx;
+	u8 tx_polarity_inversion;
+	u8 rx_polarity_inversion;
+	u8 max_rate;
+
+	/* read the active lanes */
+	read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
+				&rx_polarity_inversion, &max_rate);
+	read_local_lni(dd, &enable_lane_rx);
+
+	/* convert to counts */
+	tx = nibble_to_count(enable_lane_tx);
+	rx = nibble_to_count(enable_lane_rx);
+
+	/*
+	 * FIXME: Remove the setting of link_speed_active in this routine
+	 * when the 8051 firmware is using the "real" LNI and not the
+	 * "engineering" LNI.
+	 *
+	 * Set link_speed_active here, overriding what was set in
+	 * handle_verify_cap().  This is becaues the 8051 firmware using
+	 * the "engineering" LNI does not correctly set the max_speed field.
+	 * For now, to find the speed, look at max_rate after link up.  This
+	 * routine is called in handle_verify_cap(),after linkup, and during
+	 * a downgrade.  max_rate should not change after linkup so
+	 * re-setting link_speed_active here should not matter.
+	 */
+	if (dd->icode == WFR_ICODE_RTL_SILICON) {
+		/* max_rate: 0 = 12.5G, 1 = 25G */
+		switch (max_rate) {
+		case 0:
+			dd->pport[0].link_speed_active = OPA_LINK_SPEED_12_5G;
+			break;
+		default:
+			dd_dev_err(dd,
+				"%s: unexpected max rate %d, using 25Gb\n",
+				__func__, (int)max_rate);
+			/* fall through */
+		case 1:
+			dd->pport[0].link_speed_active = OPA_LINK_SPEED_25G;
+			break;
+		}
+	}
+
+	dd_dev_info(dd,
+		"Fabric active lanes (width): tx 0x%x (%d), rx 0x%x (%d)\n",
+		enable_lane_tx, tx, enable_lane_rx, rx);
+	*tx_width = link_width_to_bits(dd, tx);
+	*rx_width = link_width_to_bits(dd, rx);
+}
+
+/*
+ * Read verify_cap_local_fm_link_width[1] to obtain the link widths.
+ * Valid after the end of VerifyCap and during LinkUp.  Does not change
+ * after link up.  I.e. look elsewhere for downgrade information.
+ *
+ * Bits are:
+ *	+ bits [7:4] contain the number of active transmitters
+ *	+ bits [3:0] contain the number of active receivers
+ * These are numbers 1 through 4 and can be different values if the
+ * link is asymmetric.
+ *
+ * verify_cap_local_fm_link_width[0] retains its original value.
+ */
+static void get_linkup_widths(struct hfi_devdata *dd, u16 *tx_width,
+				u16 *rx_width)
+{
+	u16 flags, widths, tx, rx;
+	u16 active_tx, active_rx;
+
+	read_vc_local_link_width(dd, &flags, &widths);
+	tx = widths >> 12;
+	rx = (widths >> 8) & 0xf;
+	dd_dev_info(dd, "%s: active tx %d, active rx %d\n", __func__, tx, rx);
+
+	*tx_width = link_width_to_bits(dd, tx);
+	*rx_width = link_width_to_bits(dd, rx);
+
+	/* print the active widths */
+	get_link_widths(dd, &active_tx, &active_rx);
+}
+
+/*
+ * Set ppd->link_width_active and ppd->link_width_downgrade_active using
+ * hardware information when the link first comes up.
+ *
+ * The link width is not available until after VerifyCap.AllFramesReceived
+ * (the trigger for handle_verify_cap), so this is outside that routine
+ * and should be called when the 8051 signals linkup.
+ */
+void get_linkup_link_widths(struct qib_pportdata *ppd)
+{
+	u16 tx_width, rx_width;
+
+	/* get end-of-LNI link widths */
+	get_linkup_widths(ppd->dd, &tx_width, &rx_width);
+
+	/* use tx_width as the link is supposed to be symmetric on link up */
+	ppd->link_width_active = tx_width;
+	/* link width downgrade active (LWD.A) starts out matching LW.A */
+	ppd->link_width_downgrade_tx_active = ppd->link_width_active;
+	ppd->link_width_downgrade_rx_active = ppd->link_width_active;
+	/* per STL spec, on link up LWD.E resets to LWD.S */
+	ppd->link_width_downgrade_enabled = ppd->link_width_downgrade_supported;
+}
+
+/*
+ * Handle a verify capabilities interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_verify_cap(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+								link_vc_work);
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg;
+	u8 power_management;
+	u8 continious;
+	u8 vcu;
+	u8 vau;
+	u8 z;
+	u16 vl15buf;
+	u16 link_widths;
+	u16 crc_mask;
+	u16 crc_val;
+	u16 device_id;
+	u16 active_tx, active_rx;
+	u8 partner_supported_crc;
+	u8 remote_tx_rate;
+	u8 device_rev;
+
+	set_link_state(ppd, HLS_VERIFY_CAP);
+
+	/* set host access to the LCB CSRs */
+	set_host_lcb_access(dd);
+	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
+
+	lcb_shutdown(dd, 0);
+	adjust_lcb_for_fpga_serdes(dd);
+
+	/*
+	 * These are now valid:
+	 *	remote VerifyCap fields in the general LNI config
+	 *	CSR DC8051_STS_REMOTE_GUID
+	 *	CSR DC8051_STS_REMOTE_NODE_TYPE
+	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
+	 */
+	read_vc_remote_phy(dd, &power_management, &continious);
+	read_vc_remote_fabric(
+		dd,
+		&vau,
+		&z,
+		&vcu,
+		&vl15buf,
+		&partner_supported_crc);
+	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
+	read_remote_device_id(dd, &device_id, &device_rev);
+	/*
+	 * And the 'MgmtAllowed' information, which is exchanged during
+	 * LNI, is also be available at this point.
+	 */
+	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
+	read_link_quality(dd, &ppd->link_quality);
+	/* print the active widths */
+	get_link_widths(dd, &active_tx, &active_rx);
+	dd_dev_info(dd,
+		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
+		(int)power_management, (int)continious);
+	dd_dev_info(dd,
+		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
+		(int)vau,
+		(int)z,
+		(int)vcu,
+		(int)vl15buf,
+		(int)partner_supported_crc);
+	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
+		(u32)remote_tx_rate, (u32)link_widths);
+	dd_dev_info(dd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
+		(u32)device_id, (u32)device_rev);
+	if (disable_bcc) {
+		/*
+		 * TODO:
+		 * With the BCC disabled, no Verify Cap exchange takes
+		 * place, so the above values will all be zero.
+		 * For now, use our values as we know that we are
+		 * talking back-to-back with another WFR.  If we hook up
+		 * with a PRR, we will need to revisit this.  In particular,
+		 * vl15buf and vcu, which may be different.  vau is fixed
+		 * at 3 for all Gen1 chips.
+		 */
+		dd_dev_info(dd,
+			"Overriding invalid remote details with local data\n");
+		vau = dd->vau;
+		vl15buf = dd->vl15_init;
+		vcu = dd->vcu;
+	}
+	/*
+	 * The peer vAU value just read is the peer receiver value.  WFR does
+	 * not support a transmit vAU of 0 (AU == 8).  We advertised that
+	 * with Z=1 in the fabric capabilities sent to the peer.  The peer
+	 * will see our Z=1, and, if it advertised a vAU of 0, will move its
+	 * receive to vAU of 1 (AU == 16).  Do the same here.  We do not care
+	 * about the peer Z value - our sent vAU is 3 (hardwired) and is not
+	 * subject to the Z value exception.
+	 */
+	if (vau == 0)
+		vau = 1;
+	set_up_vl15(dd, vau, vl15buf);
+
+	/* set up the LCB CRC mode */
+	crc_mask = ppd->port_crc_mode_enabled & partner_supported_crc;
+
+	/* order is important: use the lowest bit in common */
+	if (crc_mask & CAP_CRC_14B)
+		crc_val = LCB_CRC_14B;
+	else if (crc_mask & CAP_CRC_48B)
+		crc_val = LCB_CRC_48B;
+	else if (crc_mask & CAP_CRC_12B_16B_PER_LANE)
+		crc_val = LCB_CRC_12B_16B_PER_LANE;
+	else
+		crc_val = LCB_CRC_16B;
+
+	dd_dev_info(dd, "Final LCB CRC mode: %d\n", (int)crc_val);
+	write_csr(dd, DC_LCB_CFG_CRC_MODE,
+		  (u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+
+	/* set (14b only) or clear sideband credit */
+	reg = read_csr(dd, WFR_SEND_CM_CTRL);
+	if (crc_val == LCB_CRC_14B && crc_14b_sideband) {
+		write_csr(dd, WFR_SEND_CM_CTRL,
+			reg | WFR_SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
+	} else {
+		write_csr(dd, WFR_SEND_CM_CTRL,
+			reg & ~WFR_SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
+	}
+
+	/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
+	switch (remote_tx_rate) {
+	case 0:
+		ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+		break;
+	default:
+		dd_dev_err(dd, "%s: unexpected remote tx rate %d, using 25Gb\n",
+			__func__, (int)remote_tx_rate);
+		/* fall through */
+	case 1:
+		ppd->link_speed_active = OPA_LINK_SPEED_25G;
+		break;
+	}
+
+	/*
+	 * Cache the values of the supported, enabled, and active
+	 * LTP CRC modes to return in 'portinfo' queries. But the bit
+	 * flags that are returned in the portinfo query differ from
+	 * what's in the link_crc_mask, crc_sizes, and crc_val
+	 * variables. Convert these here.
+	 */
+	ppd->port_ltp_crc_mode = cap_to_port_ltp(link_crc_mask) << 8;
+		/* supported crc modes */
+	ppd->port_ltp_crc_mode |=
+		cap_to_port_ltp(ppd->port_crc_mode_enabled) << 4;
+		/* enabled crc modes */
+	ppd->port_ltp_crc_mode |= lcb_to_port_ltp(crc_val);
+		/* active crc mode */
+
+	/* set up the remote credit return table */
+	assign_remote_cm_au_table(dd, vcu);
+
+	/*
+	 * The LCB is reset on entry to handle_verify_cap(), so this must
+	 * be applied on every link up.
+	 *
+	 * HSD 291201: Adjust LCB error kill enable to kill the link if
+	 * these RBUF errors are seen:
+	 *	REPLAY_BUF_MBE_SMASK
+	 *	FLIT_INPUT_BUF_MBE_SMASK
+	 */
+	if (is_a0(dd)) {			/* fixed in B0 */
+		reg = read_csr(dd, DC_LCB_CFG_LINK_KILL_EN);
+		reg |= DC_LCB_CFG_LINK_KILL_EN_REPLAY_BUF_MBE_SMASK
+			| DC_LCB_CFG_LINK_KILL_EN_FLIT_INPUT_BUF_MBE_SMASK;
+		write_csr(dd, DC_LCB_CFG_LINK_KILL_EN, reg);
+	}
+
+	/* pull LCB fifos out of reset - all fifo clocks must be stable */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
+
+	/* give 8051 access to the LCB CSRs */
+	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
+	set_8051_lcb_access(dd);
+
+	ppd->neighbor_guid =
+		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
+	ppd->neighbor_type =
+		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
+		DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
+	ppd->neighbor_fm_security =
+		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
+		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
+	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
+		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
+		ppd->mgmt_allowed, ppd->neighbor_fm_security);
+	if (neigh_is_hfi(ppd))
+		ppd->part_enforce =
+			HFI_PART_ENFORCE_IN | HFI_PART_ENFORCE_OUT;
+	if (ppd->mgmt_allowed)
+		add_full_mgmt_pkey(ppd);
+
+	/* tell the 8051 to go to LinkUp */
+	set_link_state(ppd, HLS_GOING_UP);
+}
+
+/*
+ * Apply the link width downgrade enabled policy against the current active
+ * link widths.
+ *
+ * Called when the enabled policy changes or the active link widths change.
+ */
+void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths)
+{
+	int skip = 1;
+	int do_bounce = 0;
+	u16 lwde = ppd->link_width_downgrade_enabled;
+	u16 tx, rx;
+
+	mutex_lock(&ppd->hls_lock);
+	/* only apply if the link is up */
+	if (ppd->host_link_state == HLS_UP_INIT
+			|| ppd->host_link_state == HLS_UP_ARMED
+			|| ppd->host_link_state == HLS_UP_ACTIVE)
+		skip = 0;
+	mutex_unlock(&ppd->hls_lock);
+	if (skip)
+		return;
+
+	if (refresh_widths) {
+		get_link_widths(ppd->dd, &tx, &rx);
+		ppd->link_width_downgrade_tx_active = tx;
+		ppd->link_width_downgrade_rx_active = rx;
+	}
+
+	if (lwde == 0) {
+		/* downgrade is disabled */
+
+		/* bounce if not at starting active width */
+		if ((ppd->link_width_active !=
+					ppd->link_width_downgrade_tx_active)
+				|| (ppd->link_width_active !=
+					ppd->link_width_downgrade_rx_active)) {
+			dd_dev_err(ppd->dd,
+				"Link downgrade is disabled and link has downgraded, downing link\n");
+			dd_dev_err(ppd->dd,
+				"  original 0x%x, tx active 0x%x, rx active 0x%x\n",
+				ppd->link_width_active,
+				ppd->link_width_downgrade_tx_active,
+				ppd->link_width_downgrade_rx_active);
+			do_bounce = 1;
+		}
+	} else if ((lwde & ppd->link_width_downgrade_tx_active) == 0
+		|| (lwde & ppd->link_width_downgrade_rx_active) == 0) {
+		/* Tx or Rx is outside the enabled policy */
+		dd_dev_err(ppd->dd,
+			"Link is outside of downgrade allowed, downing link\n");
+		dd_dev_err(ppd->dd,
+			"  enabled 0x%x, tx active 0x%x, rx active 0x%x\n",
+			lwde,
+			ppd->link_width_downgrade_tx_active,
+			ppd->link_width_downgrade_rx_active);
+		do_bounce = 1;
+	}
+
+	if (do_bounce) {
+		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_WIDTH_POLICY, 0,
+		  OPA_LINKDOWN_REASON_WIDTH_POLICY);
+		set_link_state(ppd, HLS_DN_OFFLINE);
+		start_link(ppd);
+	}
+}
+
+/*
+ * Handle a link downgrade interrupt from the 8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+void handle_link_downgrade(struct work_struct *work)
+{
+	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+							link_downgrade_work);
+
+	dd_dev_info(ppd->dd, "8051: Link width downgrade\n");
+	apply_link_downgrade_policy(ppd, 1);
+}
+
+static char *dcc_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dcc_err_flags,
+		ARRAY_SIZE(dcc_err_flags));
+}
+
+static char *dc8051_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dc8051_err_flags,
+		ARRAY_SIZE(dc8051_err_flags));
+}
+
+static char *dc8051_info_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dc8051_info_err_flags,
+		ARRAY_SIZE(dc8051_info_err_flags));
+}
+
+static char *dc8051_info_host_msg_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, dc8051_info_host_msg_flags,
+		ARRAY_SIZE(dc8051_info_host_msg_flags));
+}
+
+static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	struct qib_pportdata *ppd = dd->pport;
+	u64 info, err, host_msg;
+	int queue_link_down = 0;
+	char buf[96];
+
+	/* look at the flags */
+	if (reg & DC_DC8051_ERR_FLG_SET_BY_8051_SMASK) {
+		/* 8051 information set by firmware */
+		/* read DC8051_DBG_ERR_INFO_SET_BY_8051 for details */
+		info = read_csr(dd, DC_DC8051_DBG_ERR_INFO_SET_BY_8051);
+		err = (info >> DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_SHIFT)
+			& DC_DC8051_DBG_ERR_INFO_SET_BY_8051_ERROR_MASK;
+		host_msg = (info >>
+			DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SHIFT)
+			& DC_DC8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_MASK;
+
+		/*
+		 * Handle error flags.
+		 */
+		if (err & WFR_UNKNOWN_FRAME) {
+			/* informational only */
+			dd_dev_info(dd,
+				"Unknown frame received\n");
+			err &= ~(u64)WFR_UNKNOWN_FRAME;
+		}
+		if (err & FAILED_LNI) {
+			/*
+			 * LNI error indications are cleared by the 8051
+			 * only when starting polling.  Only pay attention
+			 * to them when in the states that occur during
+			 * LNI.
+			 */
+			if (ppd->host_link_state == HLS_DN_POLL
+				|| ppd->host_link_state == HLS_VERIFY_CAP
+				|| ppd->host_link_state == HLS_GOING_UP) {
+				queue_link_down = 1;
+				dd_dev_info(dd, "Link error: %s\n",
+					dc8051_info_err_string(buf,
+						sizeof(buf),
+						err & FAILED_LNI));
+			}
+			err &= ~(u64)FAILED_LNI;
+		}
+		if (err) {
+			/* TODO: implement all 8051 error handling */
+			dd_dev_info(dd, "8051 info error: %s (unhandled)\n",
+				dc8051_info_err_string(buf, sizeof(buf), err));
+		}
+
+		/*
+		 * Handle host message flags.
+		 */
+		if (host_msg & WFR_HOST_REQ_DONE) {
+			/*
+			 * Presently, the driver does a busy wait for
+			 * host requests to complete.  This is only an
+			 * informational message that should be
+			 * moved to a trace level.
+			 * NOTE: The 8051 clears the host message
+			 * information _on the next 8051 command_.
+			 * Therefore, when linkup is achieved,
+			 * this flag will still be set.
+			 *
+			 * TODO: Tell the 8051 not to interrupt the host
+			 * for this.
+			 */
+			/*dd_dev_info(dd, "8051: host request done\n");*/
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_HOST_REQ_DONE;
+		}
+		if (host_msg & WFR_BC_SMA_MSG) {
+			queue_work(ppd->qib_wq, &ppd->sma_message_work);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_BC_SMA_MSG;
+		}
+		if (host_msg & WFR_LINKUP_ACHIEVED) {
+			if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
+				&& (ppd->host_link_state == HLS_UP_INIT
+				   || ppd->host_link_state == HLS_UP_ARMED
+				   || ppd->host_link_state == HLS_UP_ACTIVE)) {
+				/*
+				 * FIXME: In simulators before release 46
+				 * linkup was not cleared after the real
+				 * link up event.  The driver would then
+				 * receive a linkup notificiation whenever
+				 * anything generated an 8051 interrupt,
+				 * e.g. LCB access 8051 commands.
+				 *
+				 * Work around that by ignoring the
+				 * link up notificaiton here.  We know
+				 * it is a "repeat" because the link is
+				 * already up.
+				 */
+			} else {
+				dd_dev_info(dd, "8051: LinkUp achieved\n");
+				queue_work(ppd->qib_wq, &ppd->link_up_work);
+			}
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
+		}
+		if (host_msg & WFR_EXT_DEVICE_CFG_REQ) {
+			handle_8051_request(dd);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_EXT_DEVICE_CFG_REQ;
+		}
+		if (host_msg & WFR_VERIFY_CAP_FRAME) {
+			queue_work(ppd->qib_wq, &ppd->link_vc_work);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
+		}
+		if (host_msg & WFR_LINK_GOING_DOWN) {
+			const char *extra = "";
+			/* no downgrade action needed if going down */
+			if (host_msg & WFR_LINK_WIDTH_DOWNGRADED) {
+				host_msg &= ~(u64)WFR_LINK_WIDTH_DOWNGRADED;
+				extra = " (ignoring downgrade)";
+			}
+			dd_dev_info(dd, "8051: Link down%s\n", extra);
+			queue_link_down = 1;
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_LINK_GOING_DOWN;
+		}
+		if (host_msg & WFR_LINK_WIDTH_DOWNGRADED) {
+			queue_work(ppd->qib_wq, &ppd->link_downgrade_work);
+			/* clear flag so "uhnandled" message below
+			   does not include this */
+			host_msg &= ~(u64)WFR_LINK_WIDTH_DOWNGRADED;
+		}
+		/* look for unhandled flags */
+		if (host_msg) {
+			/* TODO: implement all other valid flags here */
+			dd_dev_info(dd,
+				"8051 info host message: %s (unhandled)\n",
+				dc8051_info_host_msg_string(buf, sizeof(buf),
+					host_msg));
+		}
+
+		/* clear flag so "unhandled" message below does not
+		   include this */
+		reg &= ~DC_DC8051_ERR_FLG_SET_BY_8051_SMASK;
+	}
+	if (reg & DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK) {
+		/*
+		 * Lost the 8051 heartbeat.  If this happens, we
+		 * receive constant interrupts about it.  Disable
+		 * the interrupt after the first.
+		 */
+		dd_dev_err(dd, "Lost 8051 heartbeat\n");
+		write_csr(dd, DC_DC8051_ERR_EN,
+			read_csr(dd, DC_DC8051_ERR_EN)
+			  & ~DC_DC8051_ERR_EN_LOST_8051_HEART_BEAT_SMASK);
+
+		/* clear flag so "unhandled" message below does not
+		   include this */
+		reg &= ~DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK;
+	}
+	if (reg) {
+		/* TODO: implement all other flags here */
+		dd_dev_info(dd, "%s: 8051 Error: %s (unhandled)\n", __func__,
+			dc8051_err_string(buf, sizeof(buf), reg));
+	}
+
+	if (queue_link_down) {
+		/* if the link is going down, don't queue another */
+		if (ppd->host_link_state == HLS_GOING_DOWN) {
+			dd_dev_info(dd, "%s: not queueing link down\n",
+				__func__);
+		} else {
+			queue_work(ppd->qib_wq, &ppd->link_down_work);
+		}
+	}
+}
+
+static const char * const fm_config_txt[] = {
+[0] =
+	"BadHeadDist: Distance violation between two head flits",
+[1] =
+	"BadTailDist: Distance violation between two tail flits",
+[2] =
+	"BadCtrlDist: Dstance violation between two credit control flits",
+[3] =
+	"BadCrdAck: Credits return for unsupported VL",
+[4] =
+	"UnsupportedVLMarker: Received VL Marker",
+[5] =
+	"BadPreempt: Exceeded the preemtion nesting level",
+[6] =
+	"BadControlFlit: Received unsupport control flit",
+/* no 7 */
+[8] =
+	"UnsupportedVLMarker: Received VL Marker for unconfigured or disabled VL",
+};
+
+static const char * const port_rcv_txt[] = {
+[1] =
+	"BadPktLen: Illegal PktLen",
+[2] =
+	"PktLenTooLong: Packet longer than PktLen",
+[3] =
+	"PktLenTooShort: Packet shorterthan PktLen",
+[4] =
+	"BadSLID: Illegal SLID (0, using multicast as SLID, does not include security validation of SLID)",
+[5] =
+	"BadDLID: Illegal DLID (0, doesn't match HFI)",
+[6] =
+	"BadL2: Illegal L2 opcode",
+[7] =
+	"BadSC: Unsupported SC",
+[9] =
+	"BadRC: Illegal RC",
+[11] =
+	"PreemptError: Preempting with same VL",
+[12] =
+	"PreemptVL15: Preempting a VL15 packet",
+[13] =
+	"BadVLMarker: VL Marker for an unpreempted VL",
+};
+
+#define OPA_LDR_FMCONFIG_OFFSET 16
+#define OPA_LDR_PORTRCV_OFFSET 0
+/* TODO */
+static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	u64 info, hdr0, hdr1;
+	const char *extra;
+	char buf[96];
+	struct qib_pportdata *ppd = dd->pport;
+	u8 lcl_reason = 0;
+	int do_bounce = 0;
+
+	if (reg & DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK) {
+		if (!(dd->err_info_uncorrectable & STL_EI_STATUS_SMASK)) {
+			info = read_csr(dd, DCC_ERR_INFO_UNCORRECTABLE);
+			dd->err_info_uncorrectable = info & STL_EI_CODE_SMASK;
+			/* set status bit */
+			dd->err_info_uncorrectable |= STL_EI_STATUS_SMASK;
+		}
+
+		/* strip so we don't see in the generic unhandled */
+		reg &= ~DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK;
+	}
+
+	if (reg & DCC_ERR_FLG_LINK_ERR_SMASK) {
+		struct qib_pportdata *ppd = dd->pport;
+		/* this counter saturates at (2^32) - 1 */
+		if (ppd->link_downed < (u32)UINT_MAX)
+			ppd->link_downed++;
+		reg &= ~DCC_ERR_FLG_LINK_ERR_SMASK;
+	}
+
+	if (reg & DCC_ERR_FLG_FMCONFIG_ERR_SMASK) {
+		u8 reason_valid = 1;
+
+		info = read_csr(dd, DCC_ERR_INFO_FMCONFIG);
+		if (!(dd->err_info_fmconfig & STL_EI_STATUS_SMASK)) {
+			dd->err_info_fmconfig = info & STL_EI_CODE_SMASK;
+			/* set status bit */
+			dd->err_info_fmconfig |= STL_EI_STATUS_SMASK;
+		}
+		switch (info) {
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+		case 6:
+			extra = fm_config_txt[info];
+			break;
+		case 8:
+			extra = fm_config_txt[info];
+			if (!do_bounce && ppd->port_error_action &
+			    OPA_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER) {
+				do_bounce = 1;
+				/*
+				 * lcl_reason cannot be derived from info
+				 * for this error
+				 */
+				lcl_reason =
+				  OPA_LINKDOWN_REASON_UNSUPPORTED_VL_MARKER;
+			}
+			break;
+		default:
+			reason_valid = 0;
+			snprintf(buf, sizeof(buf), "reserved%lld", info);
+			extra = buf;
+			break;
+		}
+
+		if (reason_valid && !do_bounce) {
+			do_bounce = ppd->port_error_action &
+			(1 << (OPA_LDR_FMCONFIG_OFFSET + info));
+			lcl_reason = (lcl_reason ? lcl_reason :
+			  info + OPA_LINKDOWN_REASON_BAD_HEAD_DIST);
+		}
+
+		/* just report this */
+		dd_dev_info(dd, "DCC Error: fmconfig error: %s\n", extra);
+
+		/* strip so we don't see in the generic unhandled */
+		reg &= ~DCC_ERR_FLG_FMCONFIG_ERR_SMASK;
+	}
+
+	if (reg & DCC_ERR_FLG_RCVPORT_ERR_SMASK) {
+		u8 reason_valid = 1;
+
+		info = read_csr(dd, DCC_ERR_INFO_PORTRCV);
+		hdr0 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR0);
+		hdr1 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR1);
+		if (!(dd->err_info_rcvport.status_and_code &
+		      STL_EI_STATUS_SMASK)) {
+			dd->err_info_rcvport.status_and_code =
+				info & STL_EI_CODE_SMASK;
+			/* set status bit */
+			dd->err_info_rcvport.status_and_code |=
+				STL_EI_STATUS_SMASK;
+			/* save first 2 flits in the packet that caused
+			 * the error */
+			 dd->err_info_rcvport.packet_flit1 = hdr0;
+			 dd->err_info_rcvport.packet_flit2 = hdr1;
+		}
+		switch (info & 0xf) {
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+		case 6:
+		case 7:
+		case 9:
+		case 11:
+		case 12:
+		case 13:
+			extra = port_rcv_txt[info & 0xf];
+			break;
+		default:
+			reason_valid = 0;
+			snprintf(buf, sizeof(buf), "reserved%lld", info);
+			extra = buf;
+			break;
+		}
+
+		if (reason_valid && !do_bounce) {
+			do_bounce = ppd->port_error_action &
+			  (1 << ((info & 0xf) + OPA_LDR_PORTRCV_OFFSET));
+			lcl_reason =
+			  (info & 0xf) + OPA_LINKDOWN_REASON_RCV_ERROR_0;
+		}
+
+		/* just report this */
+		dd_dev_info(dd, "DCC Error: PortRcv error: %s\n",
+			extra);
+		dd_dev_info(dd, "           hdr0 0x%llx, hdr1 0x%llx\n",
+			hdr0, hdr1);
+
+		/* strip so we don't see in the generic unhandled */
+		reg &= ~DCC_ERR_FLG_RCVPORT_ERR_SMASK;
+	}
+
+	if (reg & DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_UC_SMASK) {
+		/* informative only */
+		dd_dev_info(dd, "8051 access to LCB blocked\n");
+		reg &= ~DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_UC_SMASK;
+	}
+	if (reg & DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_HOST_SMASK) {
+		/* informative only */
+		dd_dev_info(dd, "host access to LCB blocked\n");
+		reg &= ~DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_HOST_SMASK;
+	}
+
+	if (reg)
+		dd_dev_info(dd, "DCC Error: %s (unhandled)\n",
+			dcc_err_string(buf, sizeof(buf), reg));
+
+	if (lcl_reason == 0)
+		lcl_reason = OPA_LINKDOWN_REASON_UNKNOWN;
+
+	if (do_bounce) {
+		dd_dev_info(dd, "%s: PortErrorAction bounce\n", __func__);
+		set_link_down_reason(ppd, lcl_reason, 0, lcl_reason);
+		start_link(ppd);
+	}
+}
+
+/* TODO */
+static void handle_lcb_err(struct hfi_devdata *dd, u32 unused, u64 reg)
+{
+	dd_dev_info(dd, "LCB Error: 0x%llx (unhandled)\n", reg);
+}
+
+/*
+ * CCE block DC interrupt.  Source is < 8.
+ */
+static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
+{
+	const struct err_reg_info *eri = &dc_errs[source];
+
+	if (eri->handler) {
+		interrupt_clear_down(dd, 0, eri);
+	} else if (source == 3 /* dc_lbm_int */) {
+		/*
+		 * This indicates that a parity error has occurred on the
+		 * address/control lines presented to the LBM.  The error
+		 * is a single pulse, there is no associated error flag,
+		 * and it is not maskable.  This is because if a parity
+		 * error occurs on the request the request is dropped.
+		 * This should never occur, but it is nice to know if it
+		 * ever does.
+		 */
+		dd_dev_err(dd, "Parity error in DC LBM block\n");
+	} else {
+		dd_dev_err(dd, "Invalid DC interrupt %u\n", source);
+	}
+}
+
+/*
+ * TX block send credit interrupt.  Source is < 160.
+ */
+static void is_send_credit_int(struct hfi_devdata *dd, unsigned int source)
+{
+	if (unlikely(source >= dd->num_send_contexts)) {
+		dd_dev_err(
+			dd,
+			"unexpected out of range send context credit return interrupt %u\n",
+			source);
+		return;
+	}
+	sc_release_update(dd->send_contexts[source].sc);
+}
+
+/*
+ * TX block SDMA interrupt.  Source is < 48.
+ *
+ * SDMA interrupts are grouped by type:
+ *
+ *	 0 -  N-1 = SDma
+ *	 N - 2N-1 = SDmaProgress
+ *	2N - 3N-1 = SDmaIdle
+ */
+static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
+{
+	/* what interrupt */
+	unsigned int what  = source / WFR_TXE_NUM_SDMA_ENGINES;
+	/* which engine */
+	unsigned int which = source % WFR_TXE_NUM_SDMA_ENGINES;
+
+#ifdef JAG_SDMA_VERBOSITY
+	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n", which,
+		slashstrip(__FILE__), __LINE__, __func__);
+	sdma_dumpstate(&dd->per_sdma[which]);
+#endif
+
+	if (likely(what < 3 && which < dd->num_sdma)) {
+		sdma_engine_interrupt(&dd->per_sdma[which], 1ull << source);
+	} else {
+		/* should not happen */
+		dd_dev_err(dd, "Invalid SDMA interrupt 0x%x\n", source);
+	}
+}
+
+/*
+ * RX block receive available interrupt.  Source is < 160.
+ */
+static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
+{
+	struct qib_ctxtdata *rcd;
+	char *err_detail;
+
+	if (likely(source < dd->num_rcv_contexts)) {
+		rcd = dd->rcd[source];
+		if (rcd) {
+			if (source < dd->first_user_ctxt)
+				handle_receive_interrupt(rcd);
+			else
+				handle_user_interrupt(rcd);
+			return;	/* OK */
+		}
+		/* received an interrupt, but no rcd */
+		err_detail = "dataless";
+	} else {
+		/* received an interrupt, but are not using that context */
+		err_detail = "out of range";
+	}
+	dd_dev_err(dd, "unexpected %s receive available context interrupt %u\n",
+		err_detail, source);
+}
+
+/*
+ * RX block receive urgent interrupt.  Source is < 160.
+ */
+static void is_rcv_urgent_int(struct hfi_devdata *dd, unsigned int source)
+{
+	struct qib_ctxtdata *rcd;
+	char *err_detail;
+
+	if (likely(source < dd->num_rcv_contexts)) {
+		rcd = dd->rcd[source];
+		if (rcd) {
+			/* only pay attention to user urgent interrupts */
+			if (source >= dd->first_user_ctxt)
+				handle_user_interrupt(rcd);
+			return;	/* OK */
+		}
+		/* received an interrupt, but no rcd */
+		err_detail = "dataless";
+	} else {
+		/* received an interrupt, but are not using that context */
+		err_detail = "out of range";
+	}
+	dd_dev_err(dd, "unexpected %s receive urgent context interrupt %u\n",
+		err_detail, source);
+}
+
+/*
+ * Reserved range interrupt.  Should not be called in normal operation.
+ */
+static void is_reserved_int(struct hfi_devdata *dd, unsigned int source)
+{
+	char name[64];
+
+	dd_dev_err(dd, "unexpected %s interrupt\n",
+				is_reserved_name(name, sizeof(name), source));
+}
+
+/*
+ * Interrupt source table.
+ *
+ * Each entry is an interrupt source "type".  It is ordered by increasing
+ * number.
+ */
+struct is_table {
+	int start;	 /* interrupt source type start */
+	int end;	 /* interrupt source type end */
+	/* routine that returns the name of the interrupt source */
+	char *(*is_name)(char *name, size_t size, unsigned int source);
+	/* routine to call when receiving an interrupt */
+	void (*is_int)(struct hfi_devdata *dd, unsigned int source);
+};
+
+static const struct is_table is_table[] = {
+/* start		     end
+				name func		interrupt func */
+{ WFR_IS_GENERAL_ERR_START,  WFR_IS_GENERAL_ERR_END,
+				is_misc_err_name,	is_misc_err_int },
+{ WFR_IS_SDMAENG_ERR_START,  WFR_IS_SDMAENG_ERR_END,
+				is_sdma_eng_err_name,	is_sdma_eng_err_int },
+{ WFR_IS_SENDCTXT_ERR_START, WFR_IS_SENDCTXT_ERR_END,
+				is_sendctxt_err_name,	is_sendctxt_err_int },
+{ WFR_IS_SDMA_START,	     WFR_IS_SDMA_END,
+				is_sdma_eng_name,	is_sdma_eng_int },
+{ WFR_IS_VARIOUS_START,	     WFR_IS_VARIOUS_END,
+				is_various_name,	is_various_int },
+{ WFR_IS_DC_START,	     WFR_IS_DC_END,
+				is_dc_name,		is_dc_int },
+{ WFR_IS_RCVAVAIL_START,     WFR_IS_RCVAVAIL_END,
+				is_rcv_avail_name,	is_rcv_avail_int },
+{ WFR_IS_RCVURGENT_START,    WFR_IS_RCVURGENT_END,
+				is_rcv_urgent_name,	is_rcv_urgent_int },
+{ WFR_IS_SENDCREDIT_START,   WFR_IS_SENDCREDIT_END,
+				is_send_credit_name,	is_send_credit_int},
+{ WFR_IS_RESERVED_START,     WFR_IS_RESERVED_END,
+				is_reserved_name,	is_reserved_int},
+};
+
+/*
+ * Interrupt source name - return the buffer with the text name of the
+ * interrupt source.  Source is a bit index into an array of 64-bit integers.
+ */
+static char *is_name(char *buf, size_t bsize, unsigned int source)
+{
+	const struct is_table *entry;
+
+	/* avoids a double compare by walking the table in-order */
+	for (entry = &is_table[0]; entry->is_name; entry++) {
+		if (source < entry->end)
+			return entry->is_name(buf, bsize, source-entry->start);
+	}
+	/* fell off the end */
+	snprintf(buf, bsize, "invalid interrupt source %u\n", source);
+	return buf;
+}
+
+/*
+ * Interupt source interrupt - called when the given source has an interrupt.
+ * Source is a bit index into an array of 64-bit integers.
+ */
+static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
+{
+	const struct is_table *entry;
+
+	/* avoids a double compare by walking the table in-order */
+	for (entry = &is_table[0]; entry->is_name; entry++) {
+		if (source < entry->end) {
+			entry->is_int(dd, source - entry->start);
+			return;
+		}
+	}
+	/* fell off the end */
+	dd_dev_err(dd, "invalid interrupt source %u\n", source);
+}
+
+/*
+ * General interrupt handler.  This is able to correctly handle
+ * all interrupts in case INTx is used.
+ */
+static irqreturn_t general_interrupt(int irq, void *data)
+{
+	struct hfi_devdata *dd = data;
+	u64 regs[WFR_CCE_NUM_INT_CSRS];
+	u32 bit;
+	int i;
+
+	this_cpu_inc(*dd->int_counter);
+
+	/* phase 1: scan and clear all handled interrupts */
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
+		if (dd->gi_mask[i] == 0) {
+			regs[i] = 0;	/* used later */
+			continue;
+		}
+		regs[i] = read_csr(dd, WFR_CCE_INT_STATUS + (8 * i)) &
+				dd->gi_mask[i];
+		/* only clear if anything is set */
+		if (regs[i])
+			write_csr(dd, WFR_CCE_INT_CLEAR + (8 * i), regs[i]);
+	}
+
+	/* phase 2: call the apropriate handler */
+	for_each_set_bit(bit, (unsigned long *)&regs[0],
+						WFR_CCE_NUM_INT_CSRS*64) {
+#if 0
+		/* TODO: the print is temporary */
+		char buf[64];
+
+		printk(DRIVER_NAME"%d: interrupt %d: %s\n", dd->unit, bit,
+			is_name(buf, sizeof(buf), bit));
+		/* TODO implement trace down in is_interrupt() */
+#endif
+		is_interrupt(dd, bit);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t sdma_interrupt(int irq, void *data)
+{
+	struct sdma_engine *sde = data;
+	struct hfi_devdata *dd = sde->dd;
+	u64 status;
+
+#ifdef JAG_SDMA_VERBOSITY
+	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
+		slashstrip(__FILE__), __LINE__, __func__);
+	sdma_dumpstate(sde);
+#endif
+
+	this_cpu_inc(*dd->int_counter);
+
+	/* FIXME - this read_csr is really bad in the hot path */
+	status = read_csr(dd,
+			WFR_CCE_INT_STATUS + (8*(WFR_IS_SDMA_START/64)))
+			& sde->imask;
+	if (likely(status)) {
+		/* clear the interrupt(s) */
+		write_csr(dd,
+			WFR_CCE_INT_CLEAR + (8*(WFR_IS_SDMA_START/64)),
+			status);
+
+		/* handle the interrupt(s) */
+		sdma_engine_interrupt(sde, status);
+	} else
+		dd_dev_err(dd, "SDMA engine %u interrupt, but no status bits set\n",
+			sde->this_idx);
+
+	return IRQ_HANDLED;
+}
+
+/*
+ * NOTE: this routine expects to be on its own MSI-X interrupt.  If
+ * multiple receive contexts share the same MSI-X interupt, then this
+ * routine must check for who received it.
+ */
+static irqreturn_t receive_context_interrupt(int irq, void *data)
+{
+	struct qib_ctxtdata *rcd = data;
+	struct hfi_devdata *dd = rcd->dd;
+
+	trace_hfi_receive_interrupt(dd, rcd->ctxt);
+	this_cpu_inc(*dd->int_counter);
+
+	/* clear the interrupt */
+	write_csr(rcd->dd, WFR_CCE_INT_CLEAR + (8*rcd->ireg), rcd->imask);
+
+	/* handle the interrupt */
+	handle_receive_interrupt(rcd);
+
+	return IRQ_HANDLED;
+}
+
+/* ========================================================================= */
+
+static void set_armlaunch(struct hfi_devdata *dd, u32 enable)
+{
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+		dd_dev_info(dd, "%s: not implemented\n", __func__);
+}
+
+static u32 read_physical_state(struct hfi_devdata *dd)
+{
+	u64 reg;
+
+	reg = read_csr(dd, DC_DC8051_STS_CUR_STATE);
+	return (reg >> DC_DC8051_STS_CUR_STATE_PORT_SHIFT)
+				& DC_DC8051_STS_CUR_STATE_PORT_MASK;
+}
+
+static u32 __read_logical_state(struct hfi_devdata *dd)
+{
+	u64 reg;
+
+	reg = read_csr(dd, DCC_CFG_PORT_CONFIG);
+	return (reg >> DCC_CFG_PORT_CONFIG_LINK_STATE_SHIFT)
+				& DCC_CFG_PORT_CONFIG_LINK_STATE_MASK;
+}
+
+static u32 read_logical_state(struct hfi_devdata *dd)
+{
+	if (sim_easy_linkup) {
+		/* return the cached state back */
+		switch (dd->pport[0].lstate) {
+		default:
+			dd_dev_err(
+				dd,
+				"Unknown ib logical state 0x%x, reporting WFR_LSTATE_DOWN\n",
+				dd->pport[9].lstate);
+			/* fall through */
+		case IB_PORT_DOWN:   return WFR_LSTATE_DOWN;
+		case IB_PORT_INIT:   return WFR_LSTATE_INIT;
+		case IB_PORT_ARMED:  return WFR_LSTATE_ARMED;
+		case IB_PORT_ACTIVE: return WFR_LSTATE_ACTIVE;
+		}
+	}
+
+	return __read_logical_state(dd);
+}
+
+static void set_logical_state(struct hfi_devdata *dd, u32 chip_lstate)
+{
+	u64 reg;
+
+	if (sim_easy_linkup) {
+		/* set the cached state directly */
+		dd->pport[0].lstate = chip_to_stl_lstate(dd, chip_lstate);
+		return;
+	}
+
+	reg = read_csr(dd, DCC_CFG_PORT_CONFIG);
+	/* clear current state, set new state */
+	reg &= ~DCC_CFG_PORT_CONFIG_LINK_STATE_SMASK;
+	reg |= (u64)chip_lstate << DCC_CFG_PORT_CONFIG_LINK_STATE_SHIFT;
+	write_csr(dd, DCC_CFG_PORT_CONFIG, reg);
+}
+
+static void __print_current_states(
+	struct hfi_devdata *dd,
+	const char *func,
+	const char *extra,
+	u32 physical_state,
+	u32 logical_state)
+{
+	dd_dev_info(
+		dd,
+		"%s: %s: current physical state 0x%x, logical state 0x%x\n",
+		func,
+		extra,
+		physical_state,
+		logical_state);
+}
+
+static void print_current_states(
+	struct hfi_devdata *dd,
+	const char *func,
+	const char *extra)
+{
+	__print_current_states(dd, func, extra, read_physical_state(dd),
+		read_logical_state(dd));
+}
+
+/*
+ * Returns:
+ *	< 0 = Linux error, not able to get access
+ *	> 0 = 8051 command RETURN_CODE
+ */
+static int do_8051_command(
+	struct hfi_devdata *dd,
+	u32 type,
+	u64 in_data,
+	u64 *out_data)
+{
+	u64 reg, completed;
+	int return_code;
+	unsigned long flags;
+	unsigned long timeout;
+
+	hfi_cdbg(DC8051, "type %d, data 0x%012llx", type, in_data);
+
+	/*
+	 * TODO: Do we want to hold the lock for this long?
+	 * Alternatives:
+	 * - keep busy wait - have other users bounce off
+	 */
+	spin_lock_irqsave(&dd->dc8051_lock, flags);
+
+	/*
+	 * If an 8051 host command timed out previously, then the 8051 is
+	 * stuck.  Fail this command immediately.  Handling it this way
+	 * allows the driver to properly unload.
+	 *
+	 * TODO: reset the 8051?
+	 * Alternative: Reset the 8051 at timeout time (no need to re-download
+	 * firmware).  The concern with this approach is all state, if any,
+	 * is lost. OTOH, immediately failing has no chance of recovery.
+	 */
+	if (dd->dc8051_timed_out) {
+		dd_dev_err(dd,
+			"Previous 8051 host command timed out, skipping command %u\n",
+			type);
+		return_code = -ENXIO;
+		goto fail;
+	}
+
+	/*
+	 * If there is no timeout, then the 8051 command interface is
+	 * waiting for a command.
+	 */
+
+	/*
+	 * Follow the HAS and do two writes - the first to stablize
+	 * the type and req_data, the second to activate.
+	 *
+	 * The HW has been DV'ed and is known to work with 1 write.
+	 * TODO: In the mean time, the simulator needs at least
+	 * 2 writes to operate correctly.  Do that here.
+	 */
+	reg = ((u64)type & DC_DC8051_CFG_HOST_CMD_0_REQ_TYPE_MASK)
+			<< DC_DC8051_CFG_HOST_CMD_0_REQ_TYPE_SHIFT
+		| (in_data & DC_DC8051_CFG_HOST_CMD_0_REQ_DATA_MASK)
+			<< DC_DC8051_CFG_HOST_CMD_0_REQ_DATA_SHIFT;
+	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, reg);
+	reg |= DC_DC8051_CFG_HOST_CMD_0_REQ_NEW_SMASK;
+	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, reg);
+
+	/* wait for completion, alternate: interrupt */
+	timeout = jiffies + msecs_to_jiffies(
+				quick_linkup ? 20000 : DC8051_COMMAND_TIMEOUT);
+	while (1) {
+		reg = read_csr(dd, DC_DC8051_CFG_HOST_CMD_1);
+		completed = reg & DC_DC8051_CFG_HOST_CMD_1_COMPLETED_SMASK;
+		if (completed)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd->dc8051_timed_out = 1;
+			dd_dev_err(dd, "8051 host command %u timeout\n", type);
+			if (out_data)
+				*out_data = 0;
+			return_code = -ETIMEDOUT;
+			goto fail;
+		}
+		udelay(2);
+	}
+
+	if (out_data)
+		*out_data = (reg >> DC_DC8051_CFG_HOST_CMD_1_RSP_DATA_SHIFT)
+				& DC_DC8051_CFG_HOST_CMD_1_RSP_DATA_MASK;
+	return_code = (reg >> DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_SHIFT)
+				& DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_MASK;
+	/*
+	 * Clear command for next user.
+	 */
+	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, 0);
+
+fail:
+	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+
+	return return_code;
+}
+
+static int set_physical_link_state(struct hfi_devdata *dd, u64 state)
+{
+	if (sim_easy_linkup) {
+		/*
+		 * Do not change the physical state in easy linkup mode.
+		 * But we do need to fake out the HW reaction.
+		 */
+		switch (state) {
+		case WFR_PLS_POLLING:
+			/* fake moving to link up */
+			dd->pport[0].lstate = IB_PORT_INIT;
+			break;
+		case WFR_PLS_OFFLINE:
+			/* going offline will trigger a port down */
+			dd->pport[0].lstate = IB_PORT_DOWN;
+			break;
+		case WFR_PLS_DISABLED:
+			/* we can only go to disable from offline, which
+			   already hase the lstate set */
+			break;
+		default:
+			dd_dev_err(dd, "%s: unexpected state 0x%llx\n",
+				__func__, state);
+			break;
+		}
+		return WFR_HCMD_SUCCESS;
+	}
+
+	return do_8051_command(dd, WFR_HCMD_CHANGE_PHY_STATE, state, NULL);
+}
+
+static int load_8051_config(struct hfi_devdata *dd, u8 field_id,
+				u8 lane_id, u32 config_data)
+{
+	u64 data;
+	int ret;
+
+	data = (u64)field_id << LOAD_DATA_FIELD_ID_SHIFT
+		| (u64)lane_id << LOAD_DATA_LANE_ID_SHIFT
+		| (u64)config_data << LOAD_DATA_DATA_SHIFT;
+	ret = do_8051_command(dd, WFR_HCMD_LOAD_CONFIG_DATA, data, NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd,
+			"load 8051 config: field id %d, lane %d, err %d\n",
+			(int)field_id, (int)lane_id, ret);
+	}
+	return ret;
+}
+
+static int read_8051_config(struct hfi_devdata *dd, u8 field_id,
+				u8 lane_id, u32 *config_data)
+{
+	u64 in_data;
+	u64 out_data;
+	int ret;
+
+	in_data = (u64)field_id << READ_DATA_FIELD_ID_SHIFT
+			| (u64)lane_id << READ_DATA_LANE_ID_SHIFT;
+	ret = do_8051_command(dd, WFR_HCMD_READ_CONFIG_DATA, in_data,
+				&out_data);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd,
+			"read 8051 config: field id %d, lane %d, err %d failed\n",
+			(int)field_id, (int)lane_id, ret);
+		out_data = 0;
+	}
+	*config_data = (out_data >> READ_DATA_DATA_SHIFT) & READ_DATA_DATA_MASK;
+	return ret;
+}
+
+static int write_vc_local_phy(struct hfi_devdata *dd, u8 power_management,
+				u8 continous)
+{
+	u32 frame;
+
+	frame = continous << CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT
+		| power_management << POWER_MANAGEMENT_SHIFT;
+	return load_8051_config(dd, VERIFY_CAP_LOCAL_PHY,
+				GENERAL_CONFIG, frame);
+}
+
+static int write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 z, u8 vcu,
+					u16 vl15buf, u8 crc_sizes)
+{
+	u32 frame;
+
+	frame = (u32)vau << VAU_SHIFT
+		| (u32)z << Z_SHIFT
+		| (u32)vcu << VCU_SHIFT
+		| (u32)vl15buf << VL15BUF_SHIFT
+		| (u32)crc_sizes << CRC_SIZES_SHIFT;
+	return load_8051_config(dd, VERIFY_CAP_LOCAL_FABRIC,
+				GENERAL_CONFIG, frame);
+}
+
+static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
+					u16 *link_widths)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
+				&frame);
+	*flag_bits = (frame >> LOCAL_FLAG_BITS_SHIFT) & LOCAL_FLAG_BITS_MASK;
+	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
+}
+
+static int write_vc_local_link_width(struct hfi_devdata *dd,
+				u16 flag_bits,
+				u16 link_widths)
+{
+	u32 frame;
+
+	frame = (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
+		| (u32)link_widths << LINK_WIDTH_SHIFT;
+	return load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
+		     frame);
+}
+
+static int write_local_device_id(struct hfi_devdata *dd, u16 device_id,
+					u8 device_rev)
+{
+	u32 frame;
+
+	frame = ((u32)device_id << LOCAL_DEVICE_ID_SHIFT)
+		| ((u32)device_rev << LOCAL_DEVICE_REV_SHIFT);
+	return load_8051_config(dd, LOCAL_DEVICE_ID, GENERAL_CONFIG, frame);
+}
+
+static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
+					u8 *device_rev)
+{
+	u32 frame;
+
+	read_8051_config(dd, REMOTE_DEVICE_ID, GENERAL_CONFIG, &frame);
+	*device_id = (frame >> REMOTE_DEVICE_ID_SHIFT) & REMOTE_DEVICE_ID_MASK;
+	*device_rev = (frame >> REMOTE_DEVICE_REV_SHIFT)
+			& REMOTE_DEVICE_REV_MASK;
+}
+
+void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b)
+{
+	u32 frame;
+
+	read_8051_config(dd, MISC_STATUS, GENERAL_CONFIG, &frame);
+	*ver_a = (frame >> STS_FM_VERSION_A_SHIFT) & STS_FM_VERSION_A_MASK;
+	*ver_b = (frame >> STS_FM_VERSION_B_SHIFT) & STS_FM_VERSION_B_MASK;
+}
+
+static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
+					u8 *continous)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_REMOTE_PHY, GENERAL_CONFIG, &frame);
+	*power_management = (frame >> POWER_MANAGEMENT_SHIFT)
+					& POWER_MANAGEMENT_MASK;
+	*continous = (frame >> CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT)
+					& CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK;
+}
+
+static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *z,
+					u8 *vcu, u16 *vl15buf, u8 *crc_sizes)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_REMOTE_FABRIC, GENERAL_CONFIG, &frame);
+	*vau = (frame >> VAU_SHIFT) & VAU_MASK;
+	*z = (frame >> Z_SHIFT) & Z_MASK;
+	*vcu = (frame >> VCU_SHIFT) & VCU_MASK;
+	*vl15buf = (frame >> VL15BUF_SHIFT) & VL15BUF_MASK;
+	*crc_sizes = (frame >> CRC_SIZES_SHIFT) & CRC_SIZES_MASK;
+}
+
+static void read_vc_remote_link_width(struct hfi_devdata *dd,
+					u8 *remote_tx_rate,
+					u16 *link_widths)
+{
+	u32 frame;
+
+	read_8051_config(dd, VERIFY_CAP_REMOTE_LINK_WIDTH, GENERAL_CONFIG,
+				&frame);
+	*remote_tx_rate = (frame >> REMOTE_TX_RATE_SHIFT)
+				& REMOTE_TX_RATE_MASK;
+	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
+}
+
+static void read_local_lni(struct hfi_devdata *dd, u8 *enable_lane_rx)
+{
+	u32 frame;
+
+	read_8051_config(dd, LOCAL_LNI_INFO, GENERAL_CONFIG, &frame);
+	*enable_lane_rx = (frame >> ENABLE_LANE_RX_SHIFT) & ENABLE_LANE_RX_MASK;
+}
+
+static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed)
+{
+	u32 frame;
+
+	read_8051_config(dd, REMOTE_LNI_INFO, GENERAL_CONFIG, &frame);
+	*mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT) & MGMT_ALLOWED_MASK;
+}
+
+static void read_last_local_state(struct hfi_devdata *dd, u32 *lls)
+{
+	read_8051_config(dd, LAST_LOCAL_STATE_COMPLETE, GENERAL_CONFIG, lls);
+}
+
+static void read_last_remote_state(struct hfi_devdata *dd, u32 *lrs)
+{
+	read_8051_config(dd, LAST_REMOTE_STATE_COMPLETE, GENERAL_CONFIG, lrs);
+}
+
+static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
+{
+	u32 frame;
+
+	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
+	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
+}
+
+static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc)
+{
+	u32 frame;
+
+	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
+	*pdrrc = (frame >> DOWN_REMOTE_REASON_SHIFT) & DOWN_REMOTE_REASON_MASK;
+}
+
+static int read_tx_settings(struct hfi_devdata *dd,
+				u8 *enable_lane_tx,
+				u8 *tx_polarity_inversion,
+				u8 *rx_polarity_inversion,
+				u8 *max_rate)
+{
+	u32 frame;
+	int ret;
+
+	ret = read_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, &frame);
+	*enable_lane_tx = (frame >> ENABLE_LANE_TX_SHIFT)
+				& ENABLE_LANE_TX_MASK;
+	*tx_polarity_inversion = (frame >> TX_POLARITY_INVERSION_SHIFT)
+				& TX_POLARITY_INVERSION_MASK;
+	*rx_polarity_inversion = (frame >> RX_POLARITY_INVERSION_SHIFT)
+				& RX_POLARITY_INVERSION_MASK;
+	*max_rate = (frame >> MAX_RATE_SHIFT) & MAX_RATE_MASK;
+	return ret;
+}
+
+static int write_tx_settings(struct hfi_devdata *dd,
+				u8 enable_lane_tx,
+				u8 tx_polarity_inversion,
+				u8 rx_polarity_inversion,
+				u8 max_rate)
+{
+	u32 frame;
+
+	/* no need to mask, all variable sizes match field widths */
+	frame = enable_lane_tx << ENABLE_LANE_TX_SHIFT
+		| tx_polarity_inversion << TX_POLARITY_INVERSION_SHIFT
+		| rx_polarity_inversion << RX_POLARITY_INVERSION_SHIFT
+		| max_rate << MAX_RATE_SHIFT;
+	return load_8051_config(dd, TX_SETTINGS, GENERAL_CONFIG, frame);
+}
+
+static void check_fabric_firmware_versions(struct hfi_devdata *dd)
+{
+	u32 frame, version, prod_id;
+	int ret, lane;
+
+	/* 4 lanes */
+	for (lane = 0; lane < 4; lane++) {
+		ret = read_8051_config(dd, SPICO_FW_VERSION, lane, &frame);
+		if (ret != WFR_HCMD_SUCCESS) {
+			dd_dev_err(
+				dd,
+				"Unable to read lane %d firmware details\n",
+				lane);
+			continue;
+		}
+		version = (frame >> SPICO_ROM_VERSION_SHIFT)
+					& SPICO_ROM_VERSION_MASK;
+		prod_id = (frame >> SPICO_ROM_PROD_ID_SHIFT)
+					& SPICO_ROM_PROD_ID_MASK;
+		dd_dev_info(dd,
+			"Lane %d firmware: version 0x%04x, prod_id 0x%04x\n",
+			lane, version, prod_id);
+	}
+}
+
+/*
+ * Read an idle LCB message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int read_idle_message(struct hfi_devdata *dd, u64 type, u64 *data_out)
+{
+	int ret;
+
+	ret = do_8051_command(dd, WFR_HCMD_READ_LCB_IDLE_MSG,
+		type, data_out);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "read idle message: type %d, err %d\n",
+			(u32)type, ret);
+		return -EINVAL;
+	}
+	dd_dev_info(dd, "%s: read idle message 0x%llx\n", __func__, *data_out);
+	/* return only the payload as we alrady know the type */
+	*data_out >>= IDLE_PAYLOAD_SHIFT;
+	return 0;
+}
+
+/*
+ * Read an idle SMA message.  To be done in response to a notification from
+ * the 8051.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int read_idle_sma(struct hfi_devdata *dd, u64 *data)
+{
+	return read_idle_message(dd,
+			(u64)WFR_IDLE_SMA << IDLE_MSG_TYPE_SHIFT, data);
+}
+
+/*
+ * Send an idle LCB message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int send_idle_message(struct hfi_devdata *dd, u64 data)
+{
+	int ret;
+
+	dd_dev_info(dd, "%s: sending idle message 0x%llx\n", __func__, data);
+	ret = do_8051_command(dd, WFR_HCMD_SEND_LCB_IDLE_MSG, data, NULL);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd, "send idle message: data 0x%llx, err %d\n",
+			data, ret);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/*
+ * Send an idle SMA message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+int send_idle_sma(struct hfi_devdata *dd, u64 message)
+{
+	u64 data;
+
+	data = ((message & IDLE_PAYLOAD_MASK) << IDLE_PAYLOAD_SHIFT)
+		| ((u64)WFR_IDLE_SMA << IDLE_MSG_TYPE_SHIFT);
+	return send_idle_message(dd, data);
+}
+
+/*
+ * Initialize the LCB then do a quick link up.  This may or may not be
+ * in loopback.
+ *
+ * return 0 on success, -errno on error
+ */
+static int do_quick_linkup(struct hfi_devdata *dd)
+{
+	u64 reg;
+	unsigned long timeout;
+	int ret;
+
+	/*
+	 * Set host access to the LCB CSRs.  We grab and release access
+	 * in this routine.
+	 *
+	 * It is OK to grab and release LCB access here because:
+	 * - We are called from the routine that is moving the state
+	 *   to Poll.
+	 * - At the time of this call, the driver state has been changed
+	 *   to Poll, but the 8051 has not bee requested to do anything.
+	 *   Meaning that the link is Offline, and 8051 is not using the
+	 *   LCB CSRs.
+	 * - After setting the link state to Poll, the driver waited
+	 *   until all outside LCB accessors finished.  There is no
+	 *   one else adjusting the LCB access settings.
+	 */
+	set_host_lcb_access(dd);
+	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
+
+	lcb_shutdown(dd, 0);
+
+	if (loopback) {
+		/* LCB_CFG_LOOPBACK.VAL = 2 */
+		/* LCB_CFG_LANE_WIDTH.VAL = 0 */
+		write_csr(dd, DC_LCB_CFG_LOOPBACK,
+			IB_PACKET_TYPE << DC_LCB_CFG_LOOPBACK_VAL_SHIFT);
+		write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
+	}
+
+	/* start the LCBs */
+	/* LCB_CFG_TX_FIFOS_RESET.VAL = 0 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
+
+	/* simulator only loopback steps */
+	if (loopback && dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		/* LCB_CFG_RUN.EN = 1 */
+		write_csr(dd, DC_LCB_CFG_RUN,
+			1ull << DC_LCB_CFG_RUN_EN_SHIFT);
+
+		/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
+		timeout = jiffies + msecs_to_jiffies(10);
+		while (1) {
+			reg = read_csr(dd,
+				DC_LCB_STS_LINK_TRANSFER_ACTIVE);
+			if (reg)
+				break;
+			if (time_after(jiffies, timeout)) {
+				dd_dev_err(dd,
+					"timeout waiting for LINK_TRANSFER_ACTIVE\n");
+				return -ETIMEDOUT;
+			}
+			udelay(2);
+		}
+
+		write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
+			1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
+	}
+
+	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
+	set_8051_lcb_access(dd);
+
+	if (!loopback) {
+		/*
+		 * When doing quick linkup and not in loopback, both
+		 * sides must be done with LCB set-up before either
+		 * starts the quick linkup.  Put a delay here so that
+		 * both sides can be started and have a chance to be
+		 * done with LCB set up before resuming.
+		 */
+		dd_dev_err(dd,
+			"Pausing for peer to be finished with LCB set up\n");
+		msleep(5000);
+		dd_dev_err(dd,
+			"Continuing with quick linkup\n");
+	}
+
+	/*
+	 * State "quick" LinkUp request sets the physical link state to
+	 * LinkUp without a verify capabilbity sequence.
+	 * This state is in simulator v37 and later.
+	 */
+	ret = set_physical_link_state(dd, WFR_PLS_QUICK_LINKUP);
+	if (ret != WFR_HCMD_SUCCESS) {
+		dd_dev_err(dd,
+			"%s: set phsyical link state to quick LinkUp failed with return %d\n",
+			__func__, ret);
+
+		if (ret >= 0)
+			ret = -EINVAL;
+		return ret;
+	}
+
+	return 0; /* success */
+}
+
+/*
+ * Set the SerDes to internal loopback mode.
+ * Returns 0 on success, -errno on error.
+ */
+static int set_serdes_loopback_mode(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = set_physical_link_state(dd, WFR_PLS_INTERNAL_SERDES_LOOPBACK);
+	if (ret == WFR_HCMD_SUCCESS)
+		return 0;
+	dd_dev_err(dd,
+		"Set phsyical link state to SerDes Loopback failed with return %d\n",
+		ret);
+	if (ret >= 0)
+		ret = -EINVAL;
+	return ret;
+}
+
+/*
+ * Do all special steps to set up loopback.
+ */
+static int init_loopback(struct hfi_devdata *dd)
+{
+	dd_dev_info(dd, "Entering loopback mode\n");
+
+	/* all loopbacks should disable self GUID check */
+	write_csr(dd, DC_DC8051_CFG_MODE,
+		(read_csr(dd, DC_DC8051_CFG_MODE) | DISABLE_SELF_GUID_CHECK));
+
+	/*
+	 * The simulator has only one loopback option - LCB.  Switch
+	 * to that option, which inlcudes quick link up.
+	 *
+	 * Accept all valid loopback values.
+	 */
+	if ((dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+		&& (loopback == LOOPBACK_SERDES
+			|| loopback == LOOPBACK_LCB
+			|| loopback == LOOPBACK_CABLE)) {
+		loopback = LOOPBACK_LCB;
+		quick_linkup = 1;
+		return 0;
+	}
+
+	/* handle serdes loopback */
+	if (loopback == LOOPBACK_SERDES)
+		return set_serdes_loopback_mode(dd);
+
+	/* LCB loopback - handled at poll time */
+	if (loopback == LOOPBACK_LCB) {
+		quick_linkup = 1; /* LCB is always quick linkup */
+
+		/* not supported in emulation due to emulation RTL changes */
+		if (dd->icode == WFR_ICODE_FPGA_EMULATION) {
+			dd_dev_err(dd,
+				"LCB loopback not supported in emulation\n");
+			return -EINVAL;
+		}
+		return 0;
+	}
+
+	/* external cable loopback requires no extra steps */
+	if (loopback == LOOPBACK_CABLE)
+		return 0;
+
+	dd_dev_err(dd, "Invalid loopback mode %d\n", loopback);
+	return -EINVAL;
+}
+
+/*
+ * Translate from the OPA_LINK_WIDTH handed to us by the FM to bits
+ * used in the Verify Capability link width attribute.
+ */
+static u16 stl_to_vc_link_widths(u16 stl_widths)
+{
+	int i;
+	u16 result = 0;
+
+	static const struct link_bits {
+		u16 from;
+		u16 to;
+	} stl_link_xlate[] = {
+		{ OPA_LINK_WIDTH_1X, 1 << (1-1)  },
+		{ OPA_LINK_WIDTH_2X, 1 << (2-1)  },
+		{ OPA_LINK_WIDTH_3X, 1 << (3-1)  },
+		{ OPA_LINK_WIDTH_4X, 1 << (4-1)  },
+	};
+
+	for (i = 0; i < ARRAY_SIZE(stl_link_xlate); i++) {
+		if (stl_widths & stl_link_xlate[i].from)
+			result |= stl_link_xlate[i].to;
+	}
+	return result;
+}
+
+/*
+ * Set link attributes before moving to polling.
+ */
+static int set_local_link_attributes(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u8 enable_lane_tx;
+	u8 tx_polarity_inversion;
+	u8 rx_polarity_inversion;
+	u8 max_rate;
+	int ret;
+
+	/* reset our fabric serdes to clear any lingering problems */
+	fabric_serdes_reset(dd);
+
+	/* set the max rate - need to read-modify-write */
+	ret = read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
+		&rx_polarity_inversion, &max_rate);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
+
+	/* set the max rate to the fastest enabled */
+	if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
+		max_rate = 1;
+	else
+		max_rate = 0;
+	ret = write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
+		     rx_polarity_inversion, max_rate);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
+
+	/*
+	 * Storm Lake generation 1 has no power management.
+	 * DC supports continous updates.
+	 */
+	ret = write_vc_local_phy(dd, 0 /* no power management */,
+				     1 /* continous updates */);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
+
+	/* z=1 in the next call: AU of 0 is not supported by the hardware */
+	ret = write_vc_local_fabric(dd, dd->vau, 1, dd->vcu, dd->vl15_init,
+				    ppd->port_crc_mode_enabled);
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
+
+	/*
+	 * TODO: 0x2f00 are undocumented flags co-located with the
+	 * local link width capability register.  These flags turn
+	 * off some BCC steps during LinkUp, currently necessary
+	 * for back-to-back operation (doesn't matter for loopback).
+	 */
+	ret = write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
+		     stl_to_vc_link_widths(ppd->link_width_enabled));
+	if (ret != WFR_HCMD_SUCCESS)
+		goto set_local_link_attributes_fail;
+
+	/* let peer know who we are */
+	ret = write_local_device_id(dd, dd->pcidev->device, dd->minrev);
+	if (ret == WFR_HCMD_SUCCESS)
+		return 0;
+
+set_local_link_attributes_fail:
+	dd_dev_err(dd,
+		"Failed to set local link attributes, return 0x%x\n",
+		ret);
+	return ret;
+}
+
+/*
+ * Call this to start the link.  Schedule a retry if the cable is not
+ * present or if unable to start polling.  Do not do anything if the
+ * link is disabled.  Returns 0 if link is disabled or moved to polling
+ */
+int start_link(struct qib_pportdata *ppd)
+{
+	if (!ppd->link_enabled) {
+		dd_dev_info(ppd->dd,
+			"%s: stopping link start because link is disabled\n",
+			__func__);
+		return 0;
+	}
+	if (!ppd->driver_link_ready) {
+		dd_dev_info(ppd->dd,
+			"%s: stopping link start because driver is not ready\n",
+			__func__);
+		return 0;
+	}
+
+	if (qsfp_mod_present(ppd) || loopback == LOOPBACK_SERDES ||
+						loopback == LOOPBACK_LCB)
+		return set_link_state(ppd, HLS_DN_POLL);
+
+	dd_dev_info(ppd->dd,
+		"%s: stopping link start because no cable is present\n",
+		__func__);
+	return -EAGAIN;
+}
+
+static void reset_qsfp(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 mask, qsfp_mask;
+
+	mask = (u64)QSFP_HFI0_RESET_N;
+	qsfp_mask = read_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE);
+	qsfp_mask |= mask;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE,
+		qsfp_mask);
+
+	qsfp_mask = read_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OUT : WFR_ASIC_QSFP1_OUT);
+	qsfp_mask &= ~mask;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OUT : WFR_ASIC_QSFP1_OUT,
+		qsfp_mask);
+	udelay(10);
+	qsfp_mask |= mask;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_OUT : WFR_ASIC_QSFP1_OUT,
+		qsfp_mask);
+}
+
+static int handle_qsfp_error_conditions(struct qib_pportdata *ppd,
+					u8 *qsfp_interrupt_status)
+{
+	struct hfi_devdata *dd = ppd->dd;
+
+	if ((qsfp_interrupt_status[0] & QSFP_HIGH_TEMP_ALARM) ||
+		(qsfp_interrupt_status[0] & QSFP_HIGH_TEMP_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP cable on fire\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[0] & QSFP_LOW_TEMP_ALARM) ||
+		(qsfp_interrupt_status[0] & QSFP_LOW_TEMP_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP cable temperature too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[1] & QSFP_HIGH_VCC_ALARM) ||
+		(qsfp_interrupt_status[1] & QSFP_HIGH_VCC_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP supply voltage too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[1] & QSFP_LOW_VCC_ALARM) ||
+		(qsfp_interrupt_status[1] & QSFP_LOW_VCC_WARNING))
+		dd_dev_info(dd,
+			"%s: QSFP supply voltage too low\n",
+			__func__);
+
+	/* Byte 2 is vendor specific */
+
+	if ((qsfp_interrupt_status[3] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[3] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 1/2 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[3] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[3] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 1/2 power too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[4] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[4] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 3/4 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[4] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[4] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable RX channel 3/4 power too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[5] & QSFP_HIGH_BIAS_ALARM) ||
+		(qsfp_interrupt_status[5] & QSFP_HIGH_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 bias too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[5] & QSFP_LOW_BIAS_ALARM) ||
+		(qsfp_interrupt_status[5] & QSFP_LOW_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 bias too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[6] & QSFP_HIGH_BIAS_ALARM) ||
+		(qsfp_interrupt_status[6] & QSFP_HIGH_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 bias too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[6] & QSFP_LOW_BIAS_ALARM) ||
+		(qsfp_interrupt_status[6] & QSFP_LOW_BIAS_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 bias too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[7] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[7] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[7] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[7] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 1/2 power too low\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[8] & QSFP_HIGH_POWER_ALARM) ||
+		(qsfp_interrupt_status[8] & QSFP_HIGH_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 power too high\n",
+			__func__);
+
+	if ((qsfp_interrupt_status[8] & QSFP_LOW_POWER_ALARM) ||
+		(qsfp_interrupt_status[8] & QSFP_LOW_POWER_WARNING))
+		dd_dev_info(dd,
+			"%s: Cable TX channel 3/4 power too low\n",
+			__func__);
+
+	/* Bytes 9-10 and 11-12 are reserved */
+	/* Bytes 13-15 are vendor specific */
+
+	return 0;
+}
+
+static int do_pre_lni_host_behaviors(struct qib_pportdata *ppd)
+{
+	refresh_qsfp_cache(ppd, &ppd->qsfp_info);
+
+	if (ppd->qsfp_info.cache_valid)
+		;/* TODO: Brent's flowchart */
+	ppd->driver_link_ready = 1;
+	return 0;
+}
+
+static int do_qsfp_intr_fallback(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u8 qsfp_interrupt_status = 0;
+
+	if (qsfp_read(ppd, dd->hfi_id, 2, &qsfp_interrupt_status, 1)
+		!= 1) {
+		dd_dev_info(dd,
+			"%s: Failed to read status of QSFP module\n",
+			__func__);
+		return -EIO;
+	}
+
+	/* We don't care about alarms & warnings with a non-functional INT_N */
+	if (!(qsfp_interrupt_status & QSFP_DATA_NOT_READY))
+		do_pre_lni_host_behaviors(ppd);
+
+	return 0;
+}
+
+static void qsfp_event(struct work_struct *work)
+{
+	struct qsfp_data *qd;
+	struct qib_pportdata *ppd;
+	struct hfi_devdata *dd;
+
+	qd = container_of(work, struct qsfp_data, qsfp_work);
+	ppd = qd->ppd;
+	dd = ppd->dd;
+
+	if (qd->cache_refresh_required && qsfp_mod_present(ppd)) {
+		msleep(3000);
+		reset_qsfp(ppd);
+
+		/* Check for QSFP interrupt after t_init (SFF 8679)
+		 * + extra
+		 */
+		msleep(3000);
+		if (!qd->qsfp_interrupt_functional) {
+			if (do_qsfp_intr_fallback(ppd) < 0)
+				dd_dev_info(dd, "%s: QSFP fallback failed\n",
+					__func__);
+			else
+				start_link(ppd);
+		}
+	}
+
+	if (qd->check_interrupt_flags && qsfp_mod_present(ppd)) {
+		u8 qsfp_interrupt_status[16] = {0,};
+
+		if (qsfp_read(ppd, dd->hfi_id, 6, &qsfp_interrupt_status[0], 16)
+			!= 16) {
+			dd_dev_info(dd,
+				"%s: Failed to read status of QSFP module\n",
+				__func__);
+		} else {
+			unsigned long flags;
+			u8 data_status;
+
+			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+			ppd->qsfp_info.check_interrupt_flags = 0;
+			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
+								flags);
+
+			if (qsfp_read(ppd, dd->hfi_id, 2, &data_status, 1)
+				 != 1) {
+				dd_dev_info(dd,
+				"%s: Failed to read status of QSFP module\n",
+					__func__);
+			}
+			if (!(data_status & QSFP_DATA_NOT_READY)) {
+				do_pre_lni_host_behaviors(ppd);
+				start_link(ppd);
+			} else
+				handle_qsfp_error_conditions(ppd,
+						qsfp_interrupt_status);
+		}
+	}
+}
+
+void init_qsfp(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 qsfp_mask;
+
+	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB ||
+			ppd->dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR ||
+			!HFI_CAP_IS_KSET(QSFP_ENABLED)) {
+		ppd->driver_link_ready = 1;
+		return;
+	}
+
+	ppd->qsfp_info.ppd = ppd;
+	INIT_WORK(&ppd->qsfp_info.qsfp_work, qsfp_event);
+
+	qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
+	/* Clear current status to avoid spurious interrupts */
+	write_csr(dd,
+			dd->hfi_id ?
+				WFR_ASIC_QSFP2_CLEAR :
+				WFR_ASIC_QSFP1_CLEAR,
+		qsfp_mask);
+
+	/* Handle active low nature of INT_N and MODPRST_N pins */
+	if (qsfp_mod_present(ppd)) {
+		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
+		write_csr(dd,
+				dd->hfi_id ?
+					WFR_ASIC_QSFP2_INVERT :
+					WFR_ASIC_QSFP1_INVERT,
+			qsfp_mask);
+	} else {
+		write_csr(dd,
+				dd->hfi_id ?
+					WFR_ASIC_QSFP2_INVERT :
+					WFR_ASIC_QSFP1_INVERT,
+			qsfp_mask);
+	}
+
+	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
+	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_MASK : WFR_ASIC_QSFP1_MASK,
+		qsfp_mask);
+
+	if (qsfp_mod_present(ppd)) {
+		msleep(3000);
+		reset_qsfp(ppd);
+
+		/* Check for QSFP interrupt after t_init (SFF 8679)
+		 * + extra
+		 */
+		msleep(3000);
+		if (!ppd->qsfp_info.qsfp_interrupt_functional)
+			if (do_qsfp_intr_fallback(ppd) < 0)
+				dd_dev_info(dd,
+					"%s: QSFP fallback failed\n",
+					__func__);
+	}
+}
+
+int bringup_serdes(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 guid, reg;
+	int ret;
+
+	/* XXX (Mitko): This should have a better place than
+	 * here!
+	 */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	if (HFI_CAP_IS_KSET(EXTENDED_PSN))
+		reg |=
+		WFR_RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+
+	guid = be64_to_cpu(ppd->guid);
+	if (!guid) {
+		if (dd->base_guid)
+			guid = be64_to_cpu(dd->base_guid) + ppd->port - 1;
+		ppd->guid = cpu_to_be64(guid);
+	}
+
+	/* the link defaults to enabled */
+	ppd->link_enabled = 1;
+	/* XXX (Easwar): Move to where driver_link_ready is set? */
+	ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
+
+	/* assign LCB access to the 8051 */
+	set_8051_lcb_access(dd);
+
+	if (loopback) {
+		ret = init_loopback(dd);
+		if (ret < 0)
+			return ret;
+	}
+
+	return start_link(ppd);
+}
+
+static void quiet_serdes(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg;
+
+	/*
+	 * Shut down the link and keep it down.   First turn off that the
+	 * driver wants to allow the link to be up (driver_link_ready).
+	 * Then make sure the link is not automatically restarted
+	 * (link_enabled).  Cancel any pending restart.  And finally
+	 * go offline.
+	 */
+	ppd->driver_link_ready = 0;
+	ppd->link_enabled = 0;
+
+	set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SMA_DISABLED, 0,
+	  OPA_LINKDOWN_REASON_SMA_DISABLED);
+	set_link_state(ppd, HLS_DN_OFFLINE);
+
+	/* disable the port */
+	/* TODO: 7322: done within rcvmod_lock */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg &= ~WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+}
+
+static void setextled(struct qib_pportdata *ppd, u32 on)
+{
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+}
+
+static void stop_irq(struct hfi_devdata *dd)
+{
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+		dd_dev_info(dd, "%s: not implemented\n", __func__);
+}
+
+static inline void reset_cpu_counters(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
+
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		ppd->ibport_data.z_rc_acks =
+			get_all_cpu_total(ppd->ibport_data.rc_acks);
+		ppd->ibport_data.z_rc_qacks =
+			get_all_cpu_total(ppd->ibport_data.rc_qacks);
+	}
+
+}
+
+static inline int init_cpu_counters(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		ppd->ibport_data.rc_acks = NULL;
+		ppd->ibport_data.rc_qacks = NULL;
+		ppd->ibport_data.rc_acks = alloc_percpu(u64);
+		ppd->ibport_data.rc_qacks = alloc_percpu(u64);
+		if ((ppd->ibport_data.rc_acks == NULL) ||
+		    (ppd->ibport_data.rc_qacks == NULL))
+			return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int reset(struct hfi_devdata *dd)
+{
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+		dd_dev_info(dd, "%s: not implemented\n", __func__);
+
+	reset_cpu_counters(dd);
+
+	return 0;
+}
+
+static int trace_tid;	/* TODO: hook this up with tracing */
+static const char * const pt_names[] = {
+	"expected",
+	"eager",
+	"invalid"
+};
+
+static const char *pt_name(u32 type)
+{
+	return type >= ARRAY_SIZE(pt_names) ? "unknown" : pt_names[type];
+}
+
+/*
+ * index is the index into the receive array
+ */
+static void put_tid(struct hfi_devdata *dd, u32 index,
+		    u32 type, unsigned long pa, u16 order)
+{
+	u64 reg;
+	void __iomem *base = (dd->rcvarray_wc ? dd->rcvarray_wc :
+			      (dd->kregbase + WFR_RCV_ARRAY));
+
+	if (!(dd->flags & HFI_PRESENT))
+		goto done;
+
+	if (type == PT_INVALID) {
+		pa = 0;
+	} else if (type > PT_INVALID) {
+		dd_dev_err(dd,
+			"unexpeced receive array type %u for index %u, not handled\n",
+			type, index);
+		goto done;
+	}
+
+	if (trace_tid)
+		dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
+			__func__, pt_name(type), index, pa,
+			(unsigned long)order);
+
+#define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
+	reg = WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK
+		| (u64)order << WFR_RCV_ARRAY_RT_BUF_SIZE_SHIFT
+		| ((pa >> RT_ADDR_SHIFT) & WFR_RCV_ARRAY_RT_ADDR_MASK)
+					<< WFR_RCV_ARRAY_RT_ADDR_SHIFT;
+	writeq(cpu_to_le64(reg), base + (index * 8));
+
+	if (type == PT_EAGER)
+		/*
+		 * Eager entries are written one-by-one so we have to push them
+		 * after we write the entry.
+		 */
+		qib_flush_wc();
+done:
+	return;
+}
+
+static void clear_tids(struct qib_ctxtdata *rcd)
+{
+	struct hfi_devdata *dd = rcd->dd;
+	u32 i;
+
+	/* TODO: this could be optimized */
+	for (i = rcd->eager_base; i < rcd->eager_base +
+		     rcd->egrbufs.alloced; i++)
+		put_tid(dd, i, PT_INVALID, 0, 0);
+
+	for (i = rcd->expected_base;
+			i < rcd->expected_base + rcd->expected_count; i++)
+		put_tid(dd, i, PT_INVALID, 0, 0);
+}
+
+static int get_base_info(struct qib_ctxtdata *rcd,
+				  struct hfi_ctxt_info *kinfo)
+{
+	kinfo->runtime_flags = (HFI_MISC_GET() << HFI_CAP_USER_SHIFT) |
+		HFI_CAP_UGET(MASK) | HFI_CAP_KGET(K2U);
+	return 0;
+}
+
+static struct qib_message_header *get_msgheader(
+				struct hfi_devdata *dd, __le32 *rhf_addr)
+{
+	u32 offset = rhf_hdrq_offset(rhf_to_cpu(rhf_addr));
+
+	return (struct qib_message_header *)
+		(rhf_addr - dd->rhf_offset + offset);
+}
+
+static const char * const ib_cfg_name_strings[] = {
+	"QIB_IB_CFG_LIDLMC",
+	"QIB_IB_CFG_LWID_DG_ENB",
+	"QIB_IB_CFG_LWID_ENB",
+	"QIB_IB_CFG_LWID",
+	"QIB_IB_CFG_SPD_ENB",
+	"QIB_IB_CFG_SPD",
+	"QIB_IB_CFG_RXPOL_ENB",
+	"QIB_IB_CFG_LREV_ENB",
+	"QIB_IB_CFG_LINKLATENCY",
+	"QIB_IB_CFG_HRTBT",
+	"QIB_IB_CFG_OP_VLS",
+	"QIB_IB_CFG_VL_HIGH_CAP",
+	"QIB_IB_CFG_VL_LOW_CAP",
+	"QIB_IB_CFG_OVERRUN_THRESH",
+	"QIB_IB_CFG_PHYERR_THRESH",
+	"QIB_IB_CFG_LINKDEFAULT",
+	"QIB_IB_CFG_PKEYS",
+	"QIB_IB_CFG_MTU",
+	"QIB_IB_CFG_LSTATE",
+	"QIB_IB_CFG_VL_HIGH_LIMIT",
+	"QIB_IB_CFG_PMA_TICKS",
+	"QIB_IB_CFG_PORT"
+};
+
+static const char *ib_cfg_name(int which)
+{
+	if (which < 0 || which >= ARRAY_SIZE(ib_cfg_name_strings))
+		return "invalid";
+	return ib_cfg_name_strings[which];
+}
+
+static int get_ib_cfg(struct qib_pportdata *ppd, int which)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int val = 0;
+
+	switch (which) {
+	case QIB_IB_CFG_LWID_ENB: /* allowed Link-width */
+		val = ppd->link_width_enabled;
+		break;
+	case QIB_IB_CFG_LWID: /* currently active Link-width */
+		val = ppd->link_width_active;
+		break;
+	case QIB_IB_CFG_SPD_ENB: /* allowed Link speeds */
+		val = ppd->link_speed_enabled;
+		break;
+	case QIB_IB_CFG_SPD: /* current Link speed */
+		val = ppd->link_speed_active;
+		break;
+
+	case QIB_IB_CFG_RXPOL_ENB: /* Auto-RX-polarity enable */
+	case QIB_IB_CFG_LREV_ENB: /* Auto-Lane-reversal enable */
+	case QIB_IB_CFG_LINKLATENCY:
+		goto unimplemented;
+
+	case QIB_IB_CFG_OP_VLS:
+		val = ppd->vls_operational;
+		break;
+	case QIB_IB_CFG_VL_HIGH_CAP: /* VL arb high priority table size */
+		val = WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE;
+		break;
+	case QIB_IB_CFG_VL_LOW_CAP: /* VL arb low priority table size */
+		val = WFR_VL_ARB_LOW_PRIO_TABLE_SIZE;
+		break;
+	case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
+		val = ppd->overrun_threshold;
+		break;
+	case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
+		val = ppd->phy_error_threshold;
+		break;
+	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
+		val = dd->link_default;
+		break;
+
+	case QIB_IB_CFG_HRTBT: /* Heartbeat off/enable/auto */
+	case QIB_IB_CFG_PMA_TICKS:
+	default:
+unimplemented:
+		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+			dd_dev_info(
+				dd,
+				"%s: which %s: not implemented\n",
+				__func__,
+				ib_cfg_name(which));
+		break;
+	}
+
+	return val;
+}
+
+/*
+ * The largest MAD packet size.
+ */
+#define MAX_MAD_PACKET 2048
+
+/*
+ * Return the maximum header bytes that can go on the _wire_
+ * for this device. This count includes the ICRC which is
+ * not part of the packet held in memory but it is appended
+ * by the HW.
+ * This is dependent on the device's receive header entry size.
+ * WFR allows this to be set per-receive context, but the
+ * driver presently enforces a global value.
+ */
+u32 lrh_max_header_bytes(struct hfi_devdata *dd)
+{
+	/*
+	 * The maximum non-payload (MTU) bytes in LRH.PktLen are
+	 * the Receive Header Entry Size minus the PBC (or RHF) size
+	 * plus one DW for the ICRC appended by HW.
+	 *
+	 * dd->rcd[0].rcvhdrqentsize is in DW.
+	 * We use rcd[0] as all context will have the same value. Also,
+	 * the first kernel context would have been allocated by now so
+	 * we are guaranteed a valid value.
+	 */
+	return (dd->rcd[0]->rcvhdrqentsize - 2/*PBC/RHF*/ + 1/*ICRC*/) << 2;
+}
+
+/*
+ * Set Send Length
+ * @ppd - per port data
+ *
+ * Set the MTU by limiting how many DWs may be sent.  The SendLenCheck*
+ * registers compare against LRH.PktLen, so use the max bytes included
+ * in the LRH.
+ *
+ * This routine changes all VL values except VL15, which it maintains at
+ * the same value.
+ */
+static void set_send_length(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u32 max_hb = lrh_max_header_bytes(dd), maxvlmtu = 0, dcmtu;
+	u64 len1 = 0, len2 = (((dd->vld[15].mtu + max_hb) >> 2)
+			      & WFR_SEND_LEN_CHECK1_LEN_VL15_MASK) <<
+		WFR_SEND_LEN_CHECK1_LEN_VL15_SHIFT;
+	int i;
+
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
+		if (dd->vld[i].mtu > maxvlmtu)
+			maxvlmtu = dd->vld[i].mtu;
+		if (i <= 3)
+			len1 |= (((dd->vld[i].mtu + max_hb) >> 2)
+				 & WFR_SEND_LEN_CHECK0_LEN_VL0_MASK) <<
+				((i % 4) * WFR_SEND_LEN_CHECK0_LEN_VL1_SHIFT);
+		else
+			len2 |= (((dd->vld[i].mtu + max_hb) >> 2)
+				 & WFR_SEND_LEN_CHECK1_LEN_VL4_MASK) <<
+				((i % 4) * WFR_SEND_LEN_CHECK1_LEN_VL5_SHIFT);
+	}
+	write_csr(dd, WFR_SEND_LEN_CHECK0, len1);
+	write_csr(dd, WFR_SEND_LEN_CHECK1, len2);
+	/* adjust kernel credit return thresholds based on new MTUs */
+	/* all kernel receive contexts have the same hdrqentsize */
+	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
+		sc_set_cr_threshold(dd->vld[i].sc,
+			sc_mtu_to_threshold(dd->vld[i].sc, dd->vld[i].mtu,
+				dd->rcd[0]->rcvhdrqentsize));
+	}
+	sc_set_cr_threshold(dd->vld[15].sc,
+		sc_mtu_to_threshold(dd->vld[15].sc, dd->vld[15].mtu,
+			dd->rcd[0]->rcvhdrqentsize));
+
+	/* Adjust maximum MTU for the port in DC */
+	dcmtu = maxvlmtu == 10240 ? DCC_CFG_PORT_MTU_CAP_10240 :
+		(ilog2(maxvlmtu >> 8) + 1);
+	len1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG);
+	len1 &= ~DCC_CFG_PORT_CONFIG_MTU_CAP_SMASK;
+	len1 |= ((u64)dcmtu & DCC_CFG_PORT_CONFIG_MTU_CAP_MASK) <<
+		DCC_CFG_PORT_CONFIG_MTU_CAP_SHIFT;
+	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG, len1);
+}
+
+static void set_lidlmc(struct qib_pportdata *ppd)
+{
+	int i;
+	u64 sreg = 0;
+	struct hfi_devdata *dd = ppd->dd;
+	u32 mask = ~((1U << ppd->lmc) - 1);
+	u32 dcmask = mask; /* TODO: Remove when rid of the version check */
+	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
+
+	if (dd->hfi_snoop.mode_flag)
+		dd_dev_info(dd, "Set lid/lmc while snooping");
+
+	c1 &= ~(DCC_CFG_PORT_CONFIG1_TARGET_DLID_SMASK
+		| DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK);
+	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_TARGET_DLID_MASK)
+			<< DCC_CFG_PORT_CONFIG1_TARGET_DLID_SHIFT)|
+	      ((dcmask & DCC_CFG_PORT_CONFIG1_DLID_MASK_MASK)
+			<< DCC_CFG_PORT_CONFIG1_DLID_MASK_SHIFT);
+	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
+
+	/*
+	 * Iterate over all the send contexts and set their SLID check
+	 */
+	sreg = ((mask & WFR_SEND_CTXT_CHECK_SLID_MASK_MASK) <<
+			WFR_SEND_CTXT_CHECK_SLID_MASK_SHIFT) |
+	       (((ppd->lid & mask) & WFR_SEND_CTXT_CHECK_SLID_VALUE_MASK) <<
+			WFR_SEND_CTXT_CHECK_SLID_VALUE_SHIFT);
+
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		hfi_cdbg(LINKVERB, "SendContext[%d].SLID_CHECK = 0x%x",
+			 i, (u32)sreg);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_SLID, sreg);
+	}
+
+	/* Now we have to do the same thing for the sdma engines */
+	sdma_update_lmc(dd, mask, ppd->lid);
+}
+
+/* TODO: this is almost exactly like qib_wait_linkstate() */
+static int wait_phy_linkstate(struct hfi_devdata *dd, u32 state, u32 msecs)
+{
+	unsigned long timeout;
+	u32 curr_state;
+
+	timeout = jiffies + msecs_to_jiffies(msecs);
+	while (1) {
+		curr_state = read_physical_state(dd);
+		if (curr_state == state)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"timeout waiting for phy link state 0x%x, current state is 0x%x\n",
+				state, curr_state);
+			return -ETIMEDOUT;
+		}
+		usleep_range(1950, 2050); /* sleep 2ms-ish */
+	}
+
+	return 0;
+}
+
+/*
+ * Helper for set_link_state().  Do not call excecpt from that routine.
+ * Expects ppd->hls_mutex to be held.
+ *
+ * @rem_reason value to be sent to the neighbor
+ *
+ * LinkDownReasons only set if transition succeeds.
+ */
+static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u32 pstate, previous_state;
+	u32 last_local_state;
+	u32 last_remote_state;
+	int ret;
+	int do_transition;
+	int do_wait;
+
+	previous_state = ppd->host_link_state;
+	pstate = read_physical_state(dd);
+	if (pstate == WFR_PLS_OFFLINE) {
+		do_transition = 0;	/* in right state */
+		do_wait = 0;		/* ...no need to wait */
+	} else if ((pstate & 0xff) == WFR_PLS_OFFLINE) {
+		do_transition = 0;	/* in an offline transient state */
+		do_wait = 1;		/* ...wait for it to settle */
+		ppd->host_link_state = HLS_GOING_DOWN;
+	} else {
+		do_transition = 1;	/* need to move to offline */
+		do_wait = 1;		/* ...will need to wait */
+		ppd->host_link_state = HLS_GOING_DOWN;
+	}
+
+	if (do_transition) {
+		ret = set_physical_link_state(dd,
+			WFR_PLS_OFFLINE | (rem_reason << 8));
+
+		if (ret != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to Offline link state, return %d\n",
+				ret);
+			return -EINVAL;
+		}
+		if (ppd->offline_disabled_reason == OPA_LINKDOWN_REASON_NONE)
+			ppd->offline_disabled_reason =
+			OPA_LINKDOWN_REASON_TRANSIENT;
+	}
+
+	if (do_wait) {
+		/* it can take a while for the link to go down */
+		ret = wait_phy_linkstate(dd, WFR_PLS_OFFLINE, 5000);
+		if (ret < 0)
+			return ret;
+	}
+	/* make sure the logical state is also down */
+	qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
+
+	/*
+	 * The LNI has a mandatory wait time after the physical state
+	 * moves to Offline.Quiet.  The wait time may be different
+	 * depending on how the link went down.  The 8051 firmware
+	 * will observe the needed wait time and only move to ready
+	 * when that is completed.  The largest of the quiet timeouts
+	 * is 2.5s, so wait that long and then a bit more.
+	 */
+	ret = wait_fm_ready(dd, 2600);
+	if (ret) {
+		dd_dev_err(dd,
+			"After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
+		return ret;
+	}
+
+	/*
+	 * The state is now offline and the 8051 is ready to accept host
+	 * requests.
+	 *	- change our state
+	 *	- notify others if we were previously in a linkup state
+	 */
+	ppd->host_link_state = HLS_DN_OFFLINE;
+	if (previous_state == HLS_UP_INIT || previous_state == HLS_UP_ARMED
+					|| previous_state == HLS_UP_ACTIVE) {
+		/* went down while link was up */
+		handle_linkup_change(dd, 0);
+	} else if (previous_state == HLS_DN_POLL
+			|| previous_state == HLS_VERIFY_CAP
+			|| previous_state == HLS_GOING_UP) {
+		/* went down while attempting link up */
+		/* byte 1 of last_*_state is the failure reason */
+		read_last_local_state(dd, &last_local_state);
+		read_last_remote_state(dd, &last_remote_state);
+		dd_dev_err(dd,
+			"LNI failure last states: local 0x%08x, remote 0x%08x\n",
+			last_local_state, last_remote_state);
+	}
+
+	/* the active link width (downgrade) is 0 on link down */
+	ppd->link_width_active = 0;
+	ppd->link_width_downgrade_tx_active = 0;
+	ppd->link_width_downgrade_rx_active = 0;
+	return 0;
+}
+
+/* return the link state name */
+static const char *link_state_name(u32 state)
+{
+	const char *name;
+	static const char * const names[] = {
+		[HLS_UP_INIT]	 = "INIT",
+		[HLS_UP_ARMED]	 = "ARMED",
+		[HLS_UP_ACTIVE]	 = "ACTIVE",
+		[HLS_DN_DOWNDEF] = "DOWNDEF",
+		[HLS_DN_POLL]	 = "POLL",
+		[HLS_DN_SLEEP]	 = "SLEEP",
+		[HLS_DN_DISABLE] = "DISABLE",
+		[HLS_DN_OFFLINE] = "OFFLINE",
+		[HLS_VERIFY_CAP] = "VERIFY_CAP",
+		[HLS_GOING_UP]	 = "GOING_UP",
+		[HLS_GOING_DOWN] = "GOING_DOWN"
+	};
+
+	name = state < ARRAY_SIZE(names) ? names[state] : NULL;
+	return name ? name : "unkown";
+}
+
+/* return the link state reason name */
+static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state)
+{
+	if (state == HLS_UP_INIT) {
+		switch (ppd->linkinit_reason) {
+		case OPA_LINKINIT_REASON_LINKUP:
+			return "(LINKUP)";
+		case OPA_LINKINIT_REASON_FLAPPING:
+			return "(FLAPPING)";
+		case OPA_LINKINIT_OUTSIDE_POLICY:
+			return "(OUTSIDE_POLICY)";
+		case OPA_LINKINIT_QUARANTINED:
+			return "(QUARANTINED)";
+		case OPA_LINKINIT_INSUFIC_CAPABILITY:
+			return "(INSUFIC_CAPABILITY)";
+		default:
+			break;
+		}
+	}
+	return "";
+}
+
+void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
+	u8 neigh_reason, u8 rem_reason)
+{
+	if (ppd->local_link_down_reason.latest == 0 &&
+	    ppd->neigh_link_down_reason.latest == 0) {
+		ppd->local_link_down_reason.latest = lcl_reason;
+		ppd->neigh_link_down_reason.latest = neigh_reason;
+		ppd->remote_link_down_reason = rem_reason;
+	}
+}
+
+/*
+ * Change the physical and/or logical link state.
+ *
+ * Returns 0 on success, -errno on failure.
+ */
+int set_link_state(struct qib_pportdata *ppd, u32 state)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	struct ib_event event = {.device = NULL};
+	int ret1, ret = 0;
+	int was_up, is_down;
+	int orig_new_state, poll_bounce;
+	u64 reg;
+
+	mutex_lock(&ppd->hls_lock);
+
+	orig_new_state = state;
+	if (state == HLS_DN_DOWNDEF)
+		state = dd->link_default;
+
+	/* interpret poll -> poll as a link bounce */
+	poll_bounce = ppd->host_link_state == HLS_DN_POLL
+				&& state == HLS_DN_POLL;
+
+	dd_dev_info(dd, "%s: current %s, new %s %s%s\n", __func__,
+		link_state_name(ppd->host_link_state),
+		link_state_name(orig_new_state),
+		poll_bounce ? "(bounce) " : "",
+		link_state_reason_name(ppd, state));
+
+	was_up = (ppd->host_link_state == HLS_UP_INIT ||
+		ppd->host_link_state == HLS_UP_ARMED ||
+		ppd->host_link_state == HLS_UP_ACTIVE);
+
+	/*
+	 * If we're going to a (HLS_*) link state that implies the logical
+	 * link state is neither of (IB_PORT_ARMED, IB_PORT_ACTIVE), then
+	 * reset is_sm_config_started to 0.
+	 */
+	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE))
+		ppd->is_sm_config_started = 0;
+
+	/*
+	 * Do nothing if the states match.  Let a poll to poll link bounce
+	 * go through.
+	 */
+	if (ppd->host_link_state == state && !poll_bounce)
+		goto done;
+
+	switch (state) {
+	case HLS_UP_INIT:
+		if (ppd->host_link_state == HLS_DN_POLL && (quick_linkup
+			    || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)) {
+			/*
+			 * Quick link up jumps from polling to here.
+			 *
+			 * Whether in normal or loopback mode, the
+			 * simulator jumps from polling to link up.
+			 * Accept that here.
+			 */
+			/* ok */;
+		} else if (ppd->host_link_state != HLS_GOING_UP) {
+			goto unexpected;
+		}
+
+		ppd->host_link_state = HLS_UP_INIT;
+		ret = qib_wait_linkstate(ppd, IB_PORT_INIT, 1000);
+		if (ret) {
+			/* logical state didn't change, stay at going_up */
+			ppd->host_link_state = HLS_GOING_UP;
+			dd_dev_err(dd,
+				"%s: logical state did not change to INIT\n",
+				__func__);
+		} else {
+			/* clear old transient LINKINIT_REASON code */
+			if (ppd->linkinit_reason >= OPA_LINKINIT_REASON_CLEAR)
+				ppd->linkinit_reason =
+					OPA_LINKINIT_REASON_LINKUP;
+
+			/* enable the port */
+			/* TODO: 7322: done within rcvmod_lock */
+			reg = read_csr(dd, WFR_RCV_CTRL);
+			reg |= WFR_RCV_CTRL_RCV_PORT_ENABLE_SMASK;
+			write_csr(dd, WFR_RCV_CTRL, reg);
+
+			handle_linkup_change(dd, 1);
+		}
+		break;
+	case HLS_UP_ARMED:
+		if (ppd->host_link_state != HLS_UP_INIT)
+			goto unexpected;
+
+		ppd->host_link_state = HLS_UP_ARMED;
+		set_logical_state(dd, WFR_LSTATE_ARMED);
+		ret = qib_wait_linkstate(ppd, IB_PORT_ARMED, 1000);
+		if (ret) {
+			/* logical state didn't change, stay at init */
+			ppd->host_link_state = HLS_UP_INIT;
+			dd_dev_err(dd,
+				"%s: logical state did not change to ARMED\n",
+				__func__);
+		}
+		/*
+		 * The simulator does not currently implement SMA messages,
+		 * so neigbor_normal is not set.  Set it here when we first
+		 * move to Armed.
+		 */
+		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+			ppd->neighbor_normal = 1;
+		break;
+	case HLS_UP_ACTIVE:
+		if (ppd->host_link_state != HLS_UP_ARMED)
+			goto unexpected;
+
+		ppd->host_link_state = HLS_UP_ACTIVE;
+		set_logical_state(dd, WFR_LSTATE_ACTIVE);
+		ret = qib_wait_linkstate(ppd, IB_PORT_ACTIVE, 1000);
+		if (ret) {
+			/* logical state didn't change, stay at armed */
+			ppd->host_link_state = HLS_UP_ARMED;
+			dd_dev_err(dd,
+				"%s: logical state did not change to ACTIVE\n",
+				__func__);
+		} else {
+
+			/* tell all engines to go running */
+			sdma_all_running(dd);
+
+			/* Signal the IB layer that the port has went active */
+			event.device = &dd->verbs_dev.ibdev;
+			event.element.port_num = ppd->port;
+			event.event = IB_EVENT_PORT_ACTIVE;
+		}
+		break;
+	case HLS_DN_POLL:
+		/* TODO: only start Polling if we have verified that media is
+		   present */
+
+		if (ppd->host_link_state != HLS_DN_OFFLINE) {
+			u8 tmp = ppd->link_enabled;
+
+			ret = goto_offline(ppd, ppd->remote_link_down_reason);
+			if (ret) {
+				ppd->link_enabled = tmp;
+				break;
+			}
+			ppd->remote_link_down_reason = 0;
+
+			if (ppd->driver_link_ready)
+				ppd->link_enabled = 1;
+		}
+
+		ret = set_local_link_attributes(ppd);
+		if (ret)
+			break;
+
+		ppd->port_error_action = 0;
+		/* set link state first so LCB access starts bouncing off */
+		ppd->host_link_state = HLS_DN_POLL;
+		wait_lcb_access_done(dd);
+
+		if (quick_linkup) {
+			/* quick linkup does not go into polling */
+			ret = do_quick_linkup(dd);
+		} else {
+			ret1 = set_physical_link_state(dd, WFR_PLS_POLLING);
+			if (ret1 != WFR_HCMD_SUCCESS) {
+				dd_dev_err(dd,
+					"Failed to transition to Polling link state, return 0x%x\n",
+					ret1);
+				ret = -EINVAL;
+			}
+		}
+		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
+		/*
+		 * If an error occured above, go back to offline.  The
+		 * caller may reschedule another attempt.
+		 */
+		if (ret)
+			goto_offline(ppd, 0);
+		break;
+	case HLS_DN_DISABLE:
+		/* link is disabled */
+		ppd->link_enabled = 0;
+
+		/* allow any state to transition to disabled */
+
+		/* must transistion to offline first */
+		if (ppd->host_link_state != HLS_DN_OFFLINE) {
+			ret = goto_offline(ppd, ppd->remote_link_down_reason);
+			if (ret)
+				break;
+			ppd->remote_link_down_reason = 0;
+		}
+
+		ret1 = set_physical_link_state(dd, WFR_PLS_DISABLED);
+		if (ret1 != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to Disabled link state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+			break;
+		}
+		ppd->host_link_state = HLS_DN_DISABLE;
+		break;
+	case HLS_DN_OFFLINE:
+		/* allow any state to transition to offline */
+		ret = goto_offline(ppd, ppd->remote_link_down_reason);
+		if (!ret)
+			ppd->remote_link_down_reason = 0;
+		break;
+	case HLS_VERIFY_CAP:
+		if (ppd->host_link_state != HLS_DN_POLL)
+			goto unexpected;
+		ppd->host_link_state = HLS_VERIFY_CAP;
+		break;
+	case HLS_GOING_UP:
+		if (ppd->host_link_state != HLS_VERIFY_CAP)
+			goto unexpected;
+
+		ret1 = set_physical_link_state(dd, WFR_PLS_LINKUP);
+		if (ret1 != WFR_HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to link up state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+			break;
+		}
+		ppd->host_link_state = HLS_GOING_UP;
+		break;
+
+	case HLS_DN_SLEEP:	/* not supported by the HW */
+	case HLS_GOING_DOWN:		/* transient within goto_offline() */
+	default:
+		dd_dev_info(dd, "%s: state 0x%x: not supported\n",
+			__func__, state);
+		ret = -EINVAL;
+		break;
+	}
+
+	is_down = (ppd->host_link_state == HLS_DN_POLL ||
+		ppd->host_link_state == HLS_DN_SLEEP ||
+		ppd->host_link_state == HLS_DN_DISABLE ||
+		ppd->host_link_state == HLS_DN_OFFLINE);
+
+	if (was_up && is_down && ppd->local_link_down_reason.sma == 0 &&
+	    ppd->neigh_link_down_reason.sma == 0) {
+		ppd->local_link_down_reason.sma =
+		  ppd->local_link_down_reason.latest;
+		ppd->neigh_link_down_reason.sma =
+		  ppd->neigh_link_down_reason.latest;
+	}
+
+	goto done;
+
+unexpected:
+	dd_dev_err(dd, "%s: unexpected state trasition from %s to %s\n",
+		__func__, link_state_name(ppd->host_link_state),
+		link_state_name(state));
+	ret = -EINVAL;
+
+done:
+	mutex_unlock(&ppd->hls_lock);
+
+	if (event.device)
+		ib_dispatch_event(&event);
+
+	return ret;
+}
+
+static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
+{
+	u64 reg;
+	int ret = 0;
+
+	switch (which) {
+	case QIB_IB_CFG_LIDLMC:
+		set_lidlmc(ppd);
+		break;
+	case QIB_IB_CFG_VL_HIGH_LIMIT:
+		/*
+		 * The VL Arbitrator high limit is sent in units of 4k
+		 * bytes, while WFR stores it in units of 64 bytes.
+		 */
+		val *= 4096/64;
+		reg = ((u64)val & WFR_SEND_HIGH_PRIORITY_LIMIT_LIMIT_MASK)
+			<< WFR_SEND_HIGH_PRIORITY_LIMIT_LIMIT_SHIFT;
+		write_csr(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIMIT, reg);
+		break;
+	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
+		/* WFR only supports POLL as the default link down state */
+		if (val != HLS_DN_POLL)
+			ret = -EINVAL;
+		break;
+	case QIB_IB_CFG_OP_VLS:
+		if (ppd->vls_operational != val) {
+			ppd->vls_operational = val;
+			BUG_ON(!ppd->port);
+			ret = sdma_map_init(
+				ppd->dd,
+				ppd->port - 1,
+				hfi_num_vls(val),
+				NULL);
+			/* FIXME: implement this */
+			/* set_vls(ppd) */
+		}
+		break;
+	/*
+	 * For link width, link widht downgrade, and speed enable, always AND
+	 * the setting with what is actually supported.  This has two benefits.
+	 * First, enabled can't have unsupported values, no matter what the
+	 * SM or FM might want.  Second, the ALL_SUPPORTED wildcards that mean
+	 * "fill in with your supported value" have all the bits in the
+	 * field set, so simply ANDing with supported has the desired result.
+	 */
+	case QIB_IB_CFG_LWID_ENB: /* set allowed Link-width */
+		ppd->link_width_enabled = val & ppd->link_width_supported;
+		break;
+	case QIB_IB_CFG_LWID_DG_ENB: /* set allowed link width downgrade */
+		ppd->link_width_downgrade_enabled =
+				val & ppd->link_width_downgrade_supported;
+		break;
+	case QIB_IB_CFG_SPD_ENB: /* allowed Link speeds */
+		ppd->link_speed_enabled = val & ppd->link_speed_supported;
+		break;
+	case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
+		/*
+		 * WFR does not follow IB specs, save this value
+		 * so we can report it, if asked.
+		 */
+		ppd->overrun_threshold = val;
+		break;
+	case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
+		/*
+		 * WFR does not follow IB specs, save this value
+		 * so we can report it, if asked.
+		 */
+		ppd->phy_error_threshold = val;
+		break;
+
+	case QIB_IB_CFG_MTU:
+		set_send_length(ppd);
+		break;
+
+	case QIB_IB_CFG_PKEYS:
+		if (HFI_CAP_IS_KSET(PKEY_CHECK))
+			set_partition_keys(ppd);
+		break;
+
+	default:
+		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+			dd_dev_info(ppd->dd,
+			  "%s: which %s, val 0x%x: not implemented\n",
+			  __func__, ib_cfg_name(which), val);
+		break;
+	}
+	return ret;
+}
+
+static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
+{
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+	return 0;
+}
+
+static void get_vl_weights(struct hfi_devdata *dd, u32 target,
+			   u32 size, struct ib_vl_weight_elem *vl)
+{
+	u64 reg;
+	unsigned int i;
+
+	for (i = 0; i < size; i++, vl++) {
+		reg = read_csr(dd, target + (i * 8));
+
+		/*
+		 * NOTE: We use the low pririty shift and mask here, but
+		 * they are the same for both the low and high registers.
+		 */
+		vl->vl = (reg >> WFR_SEND_LOW_PRIORITY_LIST_VL_SHIFT)
+				& WFR_SEND_LOW_PRIORITY_LIST_VL_MASK;
+		vl->weight = (reg >> WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT)
+				& WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_MASK;
+	}
+}
+
+static int set_vl_weights(struct qib_pportdata *ppd, u32 target,
+			  u32 size, struct ib_vl_weight_elem *vl)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg;
+	unsigned int i, is_up = 0;
+	int drain, ret = 0;
+
+	mutex_lock(&ppd->hls_lock);
+
+	if (ppd->host_link_state == HLS_UP_INIT
+			|| ppd->host_link_state == HLS_UP_ARMED
+			|| ppd->host_link_state == HLS_UP_ACTIVE)
+		is_up = 1;
+
+	drain = !is_ax(dd) && is_up;
+
+	if (drain)
+		/*
+		 * Before adjusting VL arbitration weights, empty per-VL
+		 * FIFOs, otherwise a packet whose VL weight is being
+		 * set to 0 could get stuck in a FIFO with no chance to
+		 * egress.
+		 */
+		ret = stop_drain_data_vls(dd);
+
+	if (ret) {
+		dd_dev_err(
+			dd,
+			"%s: cannot stop/drain VLs - refusing to change VL arbitration weights\n",
+			__func__);
+		goto err;
+	}
+
+	for (i = 0; i < size; i++, vl++) {
+		/*
+		 * NOTE: The low priority shift and mask are used here, but
+		 * they are the same for both the low and high registers.
+		 */
+		reg = (((u64)vl->vl & WFR_SEND_LOW_PRIORITY_LIST_VL_MASK)
+				<< WFR_SEND_LOW_PRIORITY_LIST_VL_SHIFT)
+		      | (((u64)vl->weight
+				& WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_MASK)
+				<< WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT);
+		write_csr(dd, target + (i * 8), reg);
+	}
+	/* FIXME: Setting the weights automatically turns this on? */
+	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
+
+	if (drain)
+		open_fill_data_vls(dd); /* reopen all VLs */
+
+err:
+	mutex_unlock(&ppd->hls_lock);
+
+	return ret;
+}
+
+/*
+ * Read one credit merge VL register.
+ */
+static void read_one_cm_vl(struct hfi_devdata *dd, u32 csr,
+			   struct vl_limit *vll)
+{
+	u64 reg = read_csr(dd, csr);
+
+	vll->dedicated = cpu_to_be16(
+		(reg >> WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT)
+		& WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK);
+	vll->shared = cpu_to_be16(
+		(reg >> WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT)
+		& WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_MASK);
+}
+
+/*
+ * Read the current credit merge limits.
+ */
+static int get_buffer_control(struct hfi_devdata *dd,
+			      struct buffer_control *bc, u16 *overall_limit)
+{
+	u64 reg;
+	int i;
+
+	/* not all entries are filled in */
+	memset(bc, 0, sizeof(*bc));
+
+	/* STL and WFR have a 1-1 mapping */
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		read_one_cm_vl(dd, WFR_SEND_CM_CREDIT_VL + (8*i), &bc->vl[i]);
+
+	/* NOTE: assumes that VL* and VL15 CSRs are bit-wise identical */
+	read_one_cm_vl(dd, WFR_SEND_CM_CREDIT_VL15, &bc->vl[15]);
+
+	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
+/* TODO: defined in future HAS 0.76 */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+	bc->overall_shared_limit = cpu_to_be16(
+		(reg >> WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT)
+		& WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_MASK);
+	if (overall_limit)
+		*overall_limit = (reg
+			>> WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
+			& WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_MASK;
+#else
+	{
+	u16 ded_total = 0;
+	u16 global_limit;
+
+	global_limit = (reg >> WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
+			& WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_MASK;
+	if (overall_limit)
+		*overall_limit = global_limit;
+
+	/* calculate the shared total by subtracting the summed
+	   dedicated limit from the overall limit */
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		ded_total += be16_to_cpu(bc->vl[i].dedicated);
+	ded_total += be16_to_cpu(bc->vl[15].dedicated);
+
+	bc->overall_shared_limit = cpu_to_be16(global_limit - ded_total);
+	}
+#endif
+	return sizeof(struct buffer_control);
+}
+
+static int get_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
+{
+	u64 reg;
+	int i;
+
+	/* each register contains 16 SC->VLnt mappings, 4 bits each */
+	reg = read_csr(dd, DCC_CFG_SC_VL_TABLE_15_0);
+	for (i = 0; i < sizeof(u64); i++) {
+		u8 byte = *(((u8 *)&reg) + i);
+
+		dp->vlnt[2 * i] = byte & 0xf;
+		dp->vlnt[(2 * i) + 1] = (byte & 0xf0) >> 4;
+	}
+
+	reg = read_csr(dd, DCC_CFG_SC_VL_TABLE_31_16);
+	for (i = 0; i < sizeof(u64); i++) {
+		u8 byte = *(((u8 *)&reg) + i);
+
+		dp->vlnt[16 + (2 * i)] = byte & 0xf;
+		dp->vlnt[16 + (2 * i) + 1] = (byte & 0xf0) >> 4;
+	}
+	return sizeof(struct sc2vlnt);
+}
+
+static void get_vlarb_preempt(struct hfi_devdata *dd, u32 nelems,
+			     struct ib_vl_weight_elem *vl)
+{
+	unsigned int i;
+
+	for (i = 0; i < nelems; i++, vl++) {
+		vl->vl = 0xf;
+		vl->weight = 0;
+	}
+}
+
+static void set_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
+{
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_15_0,
+		DC_SC_VL_VAL(15_0,
+		0, dp->vlnt[0] & 0xf,
+		1, dp->vlnt[1] & 0xf,
+		2, dp->vlnt[2] & 0xf,
+		3, dp->vlnt[3] & 0xf,
+		4, dp->vlnt[4] & 0xf,
+		5, dp->vlnt[5] & 0xf,
+		6, dp->vlnt[6] & 0xf,
+		7, dp->vlnt[7] & 0xf,
+		8, dp->vlnt[8] & 0xf,
+		9, dp->vlnt[9] & 0xf,
+		10, dp->vlnt[10] & 0xf,
+		11, dp->vlnt[11] & 0xf,
+		12, dp->vlnt[12] & 0xf,
+		13, dp->vlnt[13] & 0xf,
+		14, dp->vlnt[14] & 0xf,
+		15, dp->vlnt[15] & 0xf));
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_31_16,
+		DC_SC_VL_VAL(31_16,
+		16, dp->vlnt[16] & 0xf,
+		17, dp->vlnt[17] & 0xf,
+		18, dp->vlnt[18] & 0xf,
+		19, dp->vlnt[19] & 0xf,
+		20, dp->vlnt[20] & 0xf,
+		21, dp->vlnt[21] & 0xf,
+		22, dp->vlnt[22] & 0xf,
+		23, dp->vlnt[23] & 0xf,
+		24, dp->vlnt[24] & 0xf,
+		25, dp->vlnt[25] & 0xf,
+		26, dp->vlnt[26] & 0xf,
+		27, dp->vlnt[27] & 0xf,
+		28, dp->vlnt[28] & 0xf,
+		29, dp->vlnt[29] & 0xf,
+		30, dp->vlnt[30] & 0xf,
+		31, dp->vlnt[31] & 0xf));
+}
+
+#if 0
+static void print_bc(
+	struct hfi_devdata *dd,
+	const char *func,
+	struct buffer_control *bc,
+	const char *what)
+{
+	dd_dev_info(dd, "%s: buffer control \"%s\" (hex values)\n", func, what);
+	dd_dev_info(dd, "%s:   overall_shared_limit %x\n", func,
+		be16_to_cpu(bc->overall_shared_limit));
+	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
+		(unsigned)be16_to_cpu(bc->vl[0].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[0].shared),
+		(unsigned)be16_to_cpu(bc->vl[1].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[1].shared),
+		(unsigned)be16_to_cpu(bc->vl[2].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[2].shared),
+		(unsigned)be16_to_cpu(bc->vl[3].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[3].shared));
+	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
+		(unsigned)be16_to_cpu(bc->vl[4].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[4].shared),
+		(unsigned)be16_to_cpu(bc->vl[5].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[5].shared),
+		(unsigned)be16_to_cpu(bc->vl[6].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[6].shared),
+		(unsigned)be16_to_cpu(bc->vl[7].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[7].shared));
+	dd_dev_info(dd, "%s:   vls [%x,%x]\n", func,
+		(unsigned)be16_to_cpu(bc->vl[15].dedicated),
+		(unsigned)be16_to_cpu(bc->vl[15].shared));
+}
+#endif
+
+static void nonzero_msg(struct hfi_devdata *dd, int idx, const char *what,
+				u16 limit)
+{
+	if (limit != 0)
+		dd_dev_info(dd, "Invalid %s limit %d on VL %d, ignoring\n",
+			what, (int)limit, idx);
+}
+
+/* change only the shared limit portion of SendCmGLobalCredit */
+static void set_global_shared(struct hfi_devdata *dd, u16 limit)
+{
+/* TODO: defined in future HAS 0.76 */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+	u64 reg;
+
+	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
+	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SMASK;
+	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT;
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
+#endif
+}
+
+/* change only the total credit limit portion of SendCmGLobalCredit */
+static void set_global_limit(struct hfi_devdata *dd, u16 limit)
+{
+	u64 reg;
+
+	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
+/* TODO: name changed in HAS 0.76 */
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SMASK;
+	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT;
+#else
+	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SMASK;
+	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT;
+#endif
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
+}
+
+/* set the given per-VL shared limit */
+static void set_vl_shared(struct hfi_devdata *dd, int vl, u16 limit)
+{
+	u64 reg;
+	u32 addr;
+
+	if (vl < WFR_TXE_NUM_DATA_VL)
+		addr = WFR_SEND_CM_CREDIT_VL + (8 * vl);
+	else
+		addr = WFR_SEND_CM_CREDIT_VL15;
+
+	reg = read_csr(dd, addr);
+	reg &= ~WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SMASK;
+	reg |= (u64)limit << WFR_SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT;
+	write_csr(dd, addr, reg);
+}
+
+/* set the given per-VL dedicated limit */
+static void set_vl_dedicated(struct hfi_devdata *dd, int vl, u16 limit)
+{
+	u64 reg;
+	u32 addr;
+
+	if (vl < WFR_TXE_NUM_DATA_VL)
+		addr = WFR_SEND_CM_CREDIT_VL + (8 * vl);
+	else
+		addr = WFR_SEND_CM_CREDIT_VL15;
+
+	reg = read_csr(dd, addr);
+	reg &= ~WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SMASK;
+	reg |= (u64)limit << WFR_SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT;
+	write_csr(dd, addr, reg);
+}
+
+/* spin until the given per-VL status mask bits clear */
+static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask,
+					const char *which)
+{
+	unsigned long timeout;
+	u64 reg;
+
+	timeout = jiffies + msecs_to_jiffies(VL_STATUS_CLEAR_TIMEOUT);
+	while (1) {
+		reg = read_csr(dd, WFR_SEND_CM_CREDIT_USED_STATUS) & mask;
+
+		if (reg == 0)
+			return;	/* success */
+		if (time_after(jiffies, timeout))
+			break;		/* timed out */
+		udelay(1);
+	}
+
+	dd_dev_err(dd,
+		"%s credit change status not clearing after %dms, mask 0x%llx, not clear 0x%llx\n",
+		which, VL_STATUS_CLEAR_TIMEOUT, mask, reg);
+	/*
+	 * TODO: If this occurs, it is likely there was a credit loss
+	 * on the link.  The only recovery from that is a link bounce.
+	 */
+}
+
+/*
+ * The number of credits on the VLs may be changed while everything
+ * is "live", but the following algorithm must be followed due to
+ * how the hardware is actually implemented.  In particular,
+ * Return_Credit_Status[] is the only correct status check.
+ *
+ * if (reducing Global_Shared_Credit_Limit or any shared limit changing)
+ *     set Global_Shared_Credit_Limit = 0
+ *     use_all_vl = 1
+ * mask0 = all VLs that are changing either dedicated or shared limits
+ * set Shared_Limit[mask0] = 0
+ * spin until Return_Credit_Status[use_all_vl ? all VL : mask0] == 0
+ * if (changing any dedicated limit)
+ *     mask1 = all VLs that are lowering dedicated limits
+ *     lower Dedicated_Limit[mask1]
+ *     spin until Return_Credit_Status[mask1] == 0
+ *     raise Dedicated_Limits
+ * raise Shared_Limits
+ * raise Global_Shared_Credit_Limit
+ *
+ * lower = if the new limit is lower, set the limit to the new value
+ * raise = if the new limit is higher than the current value (may be changed
+ *	earlier in the algorithm), set the new limit to the new value
+ */
+static int set_buffer_control(struct hfi_devdata *dd,
+			       struct buffer_control *new_bc)
+{
+	u64 changing_mask, ld_mask, stat_mask;
+	int change_count;
+	int i, use_all_mask;
+	/*
+	 * TODO: Erratum 291241 - the variables {any,this}_shared_changing,
+	 * their use below and the description above.  This erratum may or
+	 * may not be fixed in B0.  When the decision is made:
+	 * If no fix: remove this coment.
+	 * If fix for B0: add a A0 vs B0 conditional. Possibly update the
+	 *   algorithm above.
+	 */
+	int any_shared_changing, this_shared_changing;
+	struct buffer_control cur_bc;
+	u8 changing[OPA_MAX_VLS];
+	u8 lowering_dedicated[OPA_MAX_VLS];
+	u16 cur_total;
+	u32 new_total = 0;
+	const u64 all_mask =
+	WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL1_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL2_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL3_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL4_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL5_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL6_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL7_RETURN_CREDIT_STATUS_SMASK
+	 | WFR_SEND_CM_CREDIT_USED_STATUS_VL15_RETURN_CREDIT_STATUS_SMASK;
+
+#define valid_vl(idx) ((idx) < WFR_TXE_NUM_DATA_VL || (idx) == 15)
+#define NUM_USABLE_VLS 16	/* look at VL15 and less */
+
+
+	/* find the new total credits, do sanity check on unused VLs */
+	for (i = 0; i < OPA_MAX_VLS; i++) {
+		if (valid_vl(i)) {
+			new_total += be16_to_cpu(new_bc->vl[i].dedicated);
+			continue;
+		}
+		nonzero_msg(dd, i, "dedicated",
+			be16_to_cpu(new_bc->vl[i].dedicated));
+		nonzero_msg(dd, i, "shared",
+			be16_to_cpu(new_bc->vl[i].shared));
+		new_bc->vl[i].dedicated = 0;
+		new_bc->vl[i].shared = 0;
+	}
+	new_total += be16_to_cpu(new_bc->overall_shared_limit);
+	if (new_total > (u32)dd->link_credits)
+		return -EINVAL;
+	/* fetch the current values */
+	get_buffer_control(dd, &cur_bc, &cur_total);
+
+	/*
+	 * Create the masks we will use.
+	 */
+	memset(changing, 0, sizeof(changing));
+	memset(lowering_dedicated, 0, sizeof(changing));
+	/* NOTE: Assumes that the individual VL bits are adjacent and in
+	   increasing order */
+	stat_mask =
+		WFR_SEND_CM_CREDIT_USED_STATUS_VL0_RETURN_CREDIT_STATUS_SMASK;
+	changing_mask = 0;
+	ld_mask = 0;
+	change_count = 0;
+	any_shared_changing = 0;
+	for (i = 0; i < NUM_USABLE_VLS; i++, stat_mask <<= 1) {
+		if (!valid_vl(i))
+			continue;
+		this_shared_changing = new_bc->vl[i].shared
+						!= cur_bc.vl[i].shared;
+		if (this_shared_changing)
+			any_shared_changing = 1;
+		if (new_bc->vl[i].dedicated
+					!= cur_bc.vl[i].dedicated
+				|| this_shared_changing) {
+			changing[i] = 1;
+			changing_mask |= stat_mask;
+			change_count++;
+		}
+		if (be16_to_cpu(new_bc->vl[i].dedicated) <
+					be16_to_cpu(cur_bc.vl[i].dedicated)) {
+			lowering_dedicated[i] = 1;
+			ld_mask |= stat_mask;
+		}
+	}
+
+	/* bracket the credit change with a total adjustment */
+	if (new_total > cur_total)
+		set_global_limit(dd, new_total);
+
+	/*
+	 * Start the credit change algorithm.
+	 */
+	use_all_mask = 0;
+	if ((be16_to_cpu(new_bc->overall_shared_limit) <
+				be16_to_cpu(cur_bc.overall_shared_limit))
+			|| any_shared_changing) {
+		set_global_shared(dd, 0);
+		cur_bc.overall_shared_limit = 0;
+		use_all_mask = 1;
+	}
+
+	for (i = 0; i < NUM_USABLE_VLS; i++) {
+		if (!valid_vl(i))
+			continue;
+
+		if (changing[i]) {
+			set_vl_shared(dd, i, 0);
+			cur_bc.vl[i].shared = 0;
+		}
+	}
+
+	wait_for_vl_status_clear(dd, use_all_mask ? all_mask : changing_mask,
+		"shared");
+
+	if (change_count > 0) {
+		for (i = 0; i < NUM_USABLE_VLS; i++) {
+			if (!valid_vl(i))
+				continue;
+
+			if (lowering_dedicated[i]) {
+				set_vl_dedicated(dd, i,
+					be16_to_cpu(new_bc->vl[i].dedicated));
+				cur_bc.vl[i].dedicated =
+						new_bc->vl[i].dedicated;
+			}
+		}
+
+		wait_for_vl_status_clear(dd, ld_mask, "dedicated");
+
+		/* now raise all dedicated that are going up */
+		for (i = 0; i < NUM_USABLE_VLS; i++) {
+			if (!valid_vl(i))
+				continue;
+
+			if (be16_to_cpu(new_bc->vl[i].dedicated) >
+					be16_to_cpu(cur_bc.vl[i].dedicated))
+				set_vl_dedicated(dd, i,
+					be16_to_cpu(new_bc->vl[i].dedicated));
+		}
+	}
+
+	/* next raise all shared that are going up */
+	for (i = 0; i < NUM_USABLE_VLS; i++) {
+		if (!valid_vl(i))
+			continue;
+
+		if (be16_to_cpu(new_bc->vl[i].shared) >
+				be16_to_cpu(cur_bc.vl[i].shared))
+			set_vl_shared(dd, i, be16_to_cpu(new_bc->vl[i].shared));
+	}
+
+	/* finally raise the global shared */
+	if (be16_to_cpu(new_bc->overall_shared_limit) >
+			be16_to_cpu(cur_bc.overall_shared_limit))
+		set_global_shared(dd,
+			be16_to_cpu(new_bc->overall_shared_limit));
+
+	/* bracket the credit change with a total adjustment */
+	if (new_total < cur_total)
+		set_global_limit(dd, new_total);
+	return 0;
+}
+
+/*
+ * Read the given fabric manager table. Return the size of the
+ * table (in bytes) on success, and a negative error code on
+ * failure.
+ */
+int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
+
+{
+	int size;
+
+	switch (which) {
+	case FM_TBL_VL_HIGH_ARB:
+		size = 256;
+		/*
+		 * STL specifies 128 elements (of 2 bytes each), though
+		 * WFR supports only 16 elements in h/w.
+		 */
+		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
+			       WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
+		break;
+	case FM_TBL_VL_LOW_ARB:
+		size = 256;
+		/*
+		 * STL specifies 128 elements (of 2 bytes each), though
+		 * WFR supports only 16 elements in h/w.
+		 */
+		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
+			       WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		break;
+	case FM_TBL_BUFFER_CONTROL:
+		size = get_buffer_control(ppd->dd, t, NULL);
+		break;
+	case FM_TBL_SC2VLNT:
+		size = get_sc2vlnt(ppd->dd, t);
+		break;
+	case FM_TBL_VL_PREEMPT_ELEMS:
+		size = 256;
+		/* STL specifies 128 elements, of 2 bytes each */
+		get_vlarb_preempt(ppd->dd, OPA_MAX_VLS, t);
+		break;
+	case FM_TBL_VL_PREEMPT_MATRIX:
+		size = 256;
+		/*
+		 * STL specifies that this is the same size as the VL
+		 * arbitration tables (i.e., 256 bytes).
+		 */
+		break;
+	default:
+		return -EINVAL;
+	}
+	return size;
+}
+
+/*
+ * Write the given fabric manager table.
+ */
+int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
+{
+	int ret = 0;
+
+	switch (which) {
+	case FM_TBL_VL_HIGH_ARB:
+		ret = set_vl_weights(ppd, WFR_SEND_HIGH_PRIORITY_LIST,
+				WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
+		break;
+	case FM_TBL_VL_LOW_ARB:
+		ret = set_vl_weights(ppd, WFR_SEND_LOW_PRIORITY_LIST,
+				WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		break;
+	case FM_TBL_BUFFER_CONTROL:
+		ret = set_buffer_control(ppd->dd, t);
+		break;
+	case FM_TBL_SC2VLNT:
+		set_sc2vlnt(ppd->dd, t);
+		break;
+	default:
+		ret = -EINVAL;
+	}
+	return ret;
+}
+
+/* FIXME: Remove definitions when support for headers prior to 48
+ * is removed or before release of driver code. */
+/* defined in header release 48 and higher */
+#ifndef WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT 3
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_MASK 0xffull
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK (WFR_SEND_CTRL_UNSUPPORTED_VL_MASK \
+		<< WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT)
+#endif
+
+static int disable_data_vls(struct hfi_devdata *dd)
+{
+	u64 reg;
+
+	if (!is_bx(dd))
+		return 1; /* XXX better error #? */
+
+	reg = read_csr(dd, WFR_SEND_CTRL);
+	reg |= WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
+	write_csr(dd, WFR_SEND_CTRL, reg);
+	reg = read_csr(dd, WFR_SEND_CTRL); /* flush write */
+
+	return 0;
+}
+
+/*
+ * open_fill_data_vls() - the counterpart to stop_drain_data_vls().
+ * Just re-enables all data VLs (the "fill" part happens
+ * automatically - the name was chosen for symmetry with
+ * stop_drain_data_vls()).
+ */
+int open_fill_data_vls(struct hfi_devdata *dd)
+{
+	u64 reg;
+
+	if (!is_bx(dd))
+		return 1; /* XXX better error #? */
+
+	reg = read_csr(dd, WFR_SEND_CTRL);
+	reg &= ~WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
+	write_csr(dd, WFR_SEND_CTRL, reg);
+
+	return 0;
+}
+
+/*
+ * drain_data_vls() - assumes that disable_data_vls() has been called,
+ * wait for occupancy (of per-VL FIFOs) for all contexts, and SDMA
+ * engines to drop to 0.
+ */
+static void drain_data_vls(struct hfi_devdata *dd)
+{
+	sc_wait(dd);
+
+	sdma_wait(dd);
+
+	pause_for_credit_return(dd);
+}
+
+/*
+ * stop_drain_data_vls() - disable, then drain all per-VL fifos.
+ * The function to resume using data VLs is open_fill_data_vls(),
+ * and  this pair is meant to be used like this:
+ *
+ * stop_drain_data_vls(dd);
+ * // do things with per-VL resources
+ * open_fill_data_vls(dd);
+ *
+ */
+int stop_drain_data_vls(struct hfi_devdata *dd)
+{
+	int ret;
+
+	ret = disable_data_vls(dd);
+	if (ret == 0)
+		drain_data_vls(dd);
+
+	return ret;
+}
+
+/*
+ * Convert a nanosecond time to a cclock count.  No matter how slow
+ * the cclock, a non-zero ns will always have a non-zero result.
+ */
+u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns)
+{
+	u32 cclocks;
+
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION)
+		cclocks = (ns * 1000) / FPGA_CCLOCK_PS;
+	else  /* simulation pretends to be ASIC */
+		cclocks = (ns * 1000) / ASIC_CCLOCK_PS;
+	if (ns && !cclocks)	/* if ns nonzero, must be at least 1 */
+		cclocks = 1;
+	return cclocks;
+}
+
+/*
+ * Convert a cclock count to nanoseconds. Not matter how slow
+ * the cclock, a non-zero cclocks will always have a non-zero result.
+ */
+u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclocks)
+{
+	u32 ns;
+
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION)
+		ns = (cclocks * FPGA_CCLOCK_PS) / 1000;
+	else  /* simulation pretends to be ASIC */
+		ns = (cclocks * ASIC_CCLOCK_PS) / 1000;
+	if (cclocks && !ns)
+		ns = 1;
+	return ns;
+}
+
+/*
+ * Dynamically adjust the receive interrupt timeout for a context based on
+ * incoming packet rate.
+ *
+ * NOTE: Dynamic adjustment does not allow rcv_intr_count to be zero.
+ */
+static void adjust_rcv_timeout(struct qib_ctxtdata *rcd, u32 npkts)
+{
+	struct hfi_devdata *dd = rcd->dd;
+	u32 timeout = rcd->rcvavail_timeout;
+
+	/*
+	 * TODO: This algorithm is derived from the QIB source.  It doubles
+	 * or halves the timeout depending on whether the number of
+	 * packets received in this interrupt were less than or greater
+	 * equal the interrupt count.  It should be properly tested.
+	 *
+	 * The calculations below do not allow a steady state to be achieved.
+	 * Only at the endpoints it is possible to have an unchanging
+	 * timeout.
+	 */
+	if (npkts < rcv_intr_count) {
+		/*
+		 * Not enough packets arrived before the timeout, adjust
+		 * timeout downward.
+		 */
+		if (timeout < 2) /* already at mininum? */
+			return;
+		timeout >>= 1;
+	} else {
+		/*
+		 * More than enough packets arrived before the timeout, adjust
+		 * timeout upward.
+		 */
+		if (timeout >= dd->rcv_intr_timeout_csr) /* already at max? */
+			return;
+		timeout = min(timeout << 1, dd->rcv_intr_timeout_csr);
+	}
+
+	rcd->rcvavail_timeout = timeout;
+	/* timeout cannot be larger than rcv_intr_timeout_csr which has already
+	   been verified to be in range */
+	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_AVAIL_TIME_OUT,
+		(u64)timeout << WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
+}
+
+void update_usrhead(struct qib_ctxtdata *rcd, u32 hd, u32 updegr, u32 egrhd,
+			u32 intr_adjust, u32 npkts)
+{
+	struct hfi_devdata *dd = rcd->dd;
+	u64 reg;
+	u32 ctxt = rcd->ctxt;
+
+	/*
+	 * Need to write timeout register before updating RcvHdrHead to ensure
+	 * that a new value is used when the HW decides to restart counting.
+	 */
+	if (intr_adjust)
+		adjust_rcv_timeout(rcd, npkts);
+	if (updegr) {
+		reg = (egrhd & WFR_RCV_EGR_INDEX_HEAD_HEAD_MASK)
+			<< WFR_RCV_EGR_INDEX_HEAD_HEAD_SHIFT;
+		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, reg);
+	}
+	mmiowb();
+	reg = ((u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT) |
+		(((u64)hd & WFR_RCV_HDR_HEAD_HEAD_MASK)
+			<< WFR_RCV_HDR_HEAD_HEAD_SHIFT);
+	write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
+	mmiowb();
+}
+
+u32 hdrqempty(struct qib_ctxtdata *rcd)
+{
+	u32 head, tail;
+
+	head = (read_uctxt_csr(rcd->dd, rcd->ctxt, WFR_RCV_HDR_HEAD)
+		& WFR_RCV_HDR_HEAD_HEAD_SMASK) >> WFR_RCV_HDR_HEAD_HEAD_SHIFT;
+
+	if (rcd->rcvhdrtail_kvaddr)
+		tail = qib_get_rcvhdrtail(rcd);
+	else
+		tail = read_uctxt_csr(rcd->dd, rcd->ctxt, WFR_RCV_HDR_TAIL);
+
+	return head == tail;
+}
+
+/*
+ * Context Control and Receive Array encoding for buffer size:
+ *	0x0 invalid
+ *	0x1   4 KB
+ *	0x2   8 KB
+ *	0x3  16 KB
+ *	0x4  32 KB
+ *	0x5  64 KB
+ *	0x6 128 KB
+ *	0x7 256 KB
+ *	0x8 512 KB (Receive Array only)
+ *	0x9   1 MB (Receive Array only)
+ *	0xa   2 MB (Receive Array only)
+ *
+ *	0xB-0xF - reserved (Receive Array only)
+ *
+ *
+ * This routine assumes that the value has already been sanity checked.
+ */
+static u32 encoded_size(u32 size)
+{
+#if 1
+	switch (size) {
+	case   4*1024: return 0x1;
+	case   8*1024: return 0x2;
+	case  16*1024: return 0x3;
+	case  32*1024: return 0x4;
+	case  64*1024: return 0x5;
+	case 128*1024: return 0x6;
+	case 256*1024: return 0x7;
+	case 512*1024: return 0x8;
+	case   1*1024*1024: return 0x9;
+	case   2*1024*1024: return 0xa;
+	}
+	return 0x1;	/* if invalid, go with the minimum size */
+#else
+	/* this should be the same, but untested and arguably slower */
+	if (size < 4*1024)
+		return 0x1;	/* shouldn't happen, but.. */
+	return ilog2(size) - 11;
+#endif
+}
+
+/* TODO: This should go away once everythig is implemented */
+static void rcvctrl_unimplemented(
+	struct hfi_devdata *dd,
+	const char *func,
+	int ctxt,
+	unsigned int op,
+	int *header_printed,
+	const char *what)
+{
+	if (*header_printed == 0) {
+		*header_printed = 1;
+		dd_dev_info(dd, "%s: context %d, op 0x%x\n", func, ctxt, op);
+	}
+	dd_dev_info(dd, "    %s ** NOT IMPLEMENTED **\n", what);
+}
+
+/*
+ * TODO: What about these fields in WFR_RCV_CTXT_CTRL?
+ *	ThHdrQueueWrites
+ *	ThEagerPayloadWrites
+ *	ThTIDPayloadWrites
+ *	ThRcvHdrTailWrite
+ *	Redirect
+ *	DontDropRHQFull
+ *	DontDropEgrFull
+ */
+static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
+{
+	struct qib_ctxtdata *rcd;
+	u64 rcvctrl, reg;
+	int hp = 0;			/* header printed? */
+	int did_enable = 0;
+
+	rcd = dd->rcd[ctxt];
+	if (!rcd)
+		return;
+
+	dd_dev_info(dd, "ctxt %d op 0x%x", ctxt, op);
+	// FIXME: QIB_RCVCTRL_BP_ENB/DIS
+	if (op & QIB_RCVCTRL_BP_ENB)
+		rcvctrl_unimplemented(
+			dd,
+			__func__,
+			ctxt,
+			op,
+			&hp,
+			"RCVCTRL_BP_ENB");
+	if (op & QIB_RCVCTRL_BP_DIS)
+		rcvctrl_unimplemented(
+			dd,
+			__func__,
+			ctxt,
+			op,
+			&hp,
+			"RCVCTRL_BP_DIS");
+
+	/* XXX (Mitko): Do we want to use the shadow value here? */
+	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
+	/* if the context already enabled, don't do the extra steps */
+	if ((op & QIB_RCVCTRL_CTXT_ENB)
+			&& !(rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK)) {
+		/* reset the tail and hdr addresses, and sequence count */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR,
+				rcd->rcvhdrq_phys);
+		if (HFI_CAP_KGET_MASK(rcd->flags, DMA_RTAIL))
+			write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR,
+					rcd->rcvhdrqtailaddr_phys);
+		rcd->seq_cnt = 1;
+
+		/* reset the cached receive header queue head value */
+		rcd->head = 0;
+
+		/*
+		 * Zero the receive header queue so we don't get false
+		 * positives when checking the sequence number.  The
+		 * sequence numbers could land exactly on the same spot.
+		 * E.g. a rcd restart before the receive header wrapped.
+		 */
+		memset(rcd->rcvhdrq, 0, rcd->rcvhdrq_size);
+
+		/* starting timeout */
+		rcd->rcvavail_timeout = dd->rcv_intr_timeout_csr;
+
+		/* enable the context */
+		rcvctrl |= WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
+
+		/* clean the egr buffer size first */
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
+		rcvctrl |= ((u64)encoded_size(rcd->egrbufs.rcvtid_size)
+				& WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_MASK)
+					<< WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SHIFT;
+
+		/* zero RcvHdrHead - set RcvHdrHead.Counter after enable */
+		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, 0);
+		did_enable = 1;
+
+		/* zero RcvEgrIndexHead */
+		write_uctxt_csr(dd, ctxt, WFR_RCV_EGR_INDEX_HEAD, 0);
+
+		/* set eager count and base index */
+		reg = (((u64)(rcd->egrbufs.alloced >> WFR_RCV_SHIFT)
+			& WFR_RCV_EGR_CTRL_EGR_CNT_MASK)
+		       << WFR_RCV_EGR_CTRL_EGR_CNT_SHIFT) |
+			(((rcd->eager_base >> WFR_RCV_SHIFT)
+			  & WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_MASK)
+			 << WFR_RCV_EGR_CTRL_EGR_BASE_INDEX_SHIFT);
+		write_kctxt_csr(dd, ctxt, WFR_RCV_EGR_CTRL, reg);
+
+		/*
+		 * Set TID (expected) count and base index.
+		 * rcd->expected_count is set to individual RcvArray entries,
+		 * not pairs, and the CSR takes a pair-count in groups of
+		 * four, so divide by 8.
+		 */
+		reg = (((rcd->expected_count >> WFR_RCV_SHIFT)
+					& WFR_RCV_TID_CTRL_TID_PAIR_CNT_MASK)
+				<< WFR_RCV_TID_CTRL_TID_PAIR_CNT_SHIFT) |
+		      (((rcd->expected_base >> WFR_RCV_SHIFT)
+					& WFR_RCV_TID_CTRL_TID_BASE_INDEX_MASK)
+				<< WFR_RCV_TID_CTRL_TID_BASE_INDEX_SHIFT);
+		write_kctxt_csr(dd, ctxt, WFR_RCV_TID_CTRL, reg);
+		if (ctxt == VL15CTXT)
+			write_csr(dd, WFR_RCV_VL15, VL15CTXT);
+	}
+	if (op & QIB_RCVCTRL_CTXT_DIS) {
+		write_csr(dd, WFR_RCV_VL15, 0);
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
+	}
+	if (op & QIB_RCVCTRL_INTRAVAIL_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
+	if (op & QIB_RCVCTRL_INTRAVAIL_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
+	if (op & QIB_RCVCTRL_TAILUPD_ENB && rcd->rcvhdrqtailaddr_phys)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
+	if (op & QIB_RCVCTRL_TAILUPD_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
+	if (op & QIB_RCVCTRL_TIDFLOW_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
+	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
+	if (op & QIB_RCVCTRL_ONE_PKT_EGR_ENB) {
+		/* In one-packet-per-eager mode, the size comes from
+		   the RcvArray entry. */
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
+		rcvctrl |= WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
+	}
+	if (op & QIB_RCVCTRL_ONE_PKT_EGR_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
+	if (op & QIB_RCVCTRL_NO_RHQ_DROP_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK;
+	if (op & QIB_RCVCTRL_NO_RHQ_DROP_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK;
+	if (op & QIB_RCVCTRL_NO_EGR_DROP_ENB)
+		rcvctrl |= WFR_RCV_CTXT_CTRL_DONT_DROP_EGR_FULL_SMASK;
+	if (op & QIB_RCVCTRL_NO_EGR_DROP_DIS)
+		rcvctrl &= ~WFR_RCV_CTXT_CTRL_DONT_DROP_EGR_FULL_SMASK;
+	rcd->rcvctrl = rcvctrl;
+	dd_dev_info(dd, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
+	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);
+
+	/* work around sticky RcvCtxtStatus.BlockedRHQFull */
+	if (did_enable
+	    && (rcvctrl & WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK)) {
+		reg = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_STATUS);
+		if (reg != 0) {
+			dd_dev_info(dd, "ctxt %d status %lld (blocked)\n",
+				ctxt, reg);
+			read_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD);
+			write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, 0x10);
+			write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, 0x00);
+			read_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD);
+			reg = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_STATUS);
+			dd_dev_info(dd, "ctxt %d status %lld (%s blocked)\n",
+				ctxt, reg, reg == 0 ? "not" : "still");
+		}
+	}
+
+	if (did_enable) {
+		/*
+		 * The interrupt timeout and count must be set after
+		 * the context is enabled to take effect.
+		 */
+		/* set interrupt timeout */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_AVAIL_TIME_OUT,
+			(u64)rcd->rcvavail_timeout <<
+				WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
+
+		/* set RcvHdrHead.Counter, zero RcvHdrHead.Head (again) */
+		reg = (u64)rcv_intr_count << WFR_RCV_HDR_HEAD_COUNTER_SHIFT;
+		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
+	}
+
+	if (op & (QIB_RCVCTRL_TAILUPD_DIS | QIB_RCVCTRL_CTXT_DIS))
+		/*
+		 * If the context has been disabled and the Tail Update has
+		 * been cleared, clear the WFR_RCV_HDR_TAIL_ADDR CSR so
+		 * it doesn't contain an address that is invalid.
+		 */
+		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR, 0);
+}
+
+static u32 read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
+			      u64 **cntrp)
+{
+	int ret;
+	u64 val = 0;
+
+	if (namep) {
+		ret = dd->cntrnameslen;
+		if (pos != 0) {
+			dd_dev_err(dd, "read_cntrs does not support indexing");
+			return 0;
+		}
+		*namep = dd->cntrnames;
+	} else {
+		const struct cntr_entry *entry;
+		int i, j;
+
+		ret = (dd->ndevcntrs) * sizeof(u64);
+		if (pos != 0) {
+			dd_dev_err(dd, "read_cntrs does not support indexing");
+			return 0;
+		}
+
+		/* Get the start of the block of counters */
+		*cntrp = dd->cntrs;
+
+		/*
+		 * Now go and fill in each counter in the block.
+		 */
+		for (i = 0; i < DEV_CNTR_LAST; i++) {
+			entry = &dev_cntrs[i];
+			hfi_cdbg(CNTR, "reading %s", entry->name);
+			if (entry->flags & CNTR_DISABLED) {
+				/* Nothing */
+				hfi_cdbg(CNTR, "\tDisabled\n");
+			} else {
+				if (entry->flags & CNTR_VL) {
+					hfi_cdbg(CNTR, "\tPer VL\n");
+					for (j = 0; j < C_VL_COUNT; j++) {
+						val = entry->rw_cntr(entry,
+								  dd, j,
+								  CNTR_MODE_R,
+								  0);
+						hfi_cdbg(CNTR,
+						     "\t\tRead 0x%llx for %d\n",
+						     val, j);
+						dd->cntrs[entry->offset + j] =
+									    val;
+					}
+				} else {
+					val = entry->rw_cntr(entry, dd,
+							CNTR_INVALID_VL,
+							CNTR_MODE_R, 0);
+					dd->cntrs[entry->offset] = val;
+					hfi_cdbg(CNTR, "\tRead 0x%llx", val);
+				}
+			}
+		}
+	}
+	return ret;
+}
+
+/*
+ * Used by sys fs to create files for hfi stats to read
+ */
+static u32 read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
+				  char **namep, u64 **cntrp)
+{
+	int ret;
+	u64 val = 0;
+
+	if (namep) {
+		ret = dd->portcntrnameslen;
+		if (pos != 0) {
+			dd_dev_err(dd, "index not supported");
+			return 0;
+		}
+		*namep = dd->portcntrnames;
+	} else {
+		const struct cntr_entry *entry;
+		struct qib_pportdata *ppd;
+		int i, j;
+
+		ret = (dd->nportcntrs) * sizeof(u64);
+		if (pos != 0) {
+			dd_dev_err(dd, "indexing not supported");
+			return 0;
+		}
+		ppd = (struct qib_pportdata *)(dd + 1 + port);
+		*cntrp = ppd->cntrs;
+
+		for (i = 0; i < PORT_CNTR_LAST; i++) {
+			entry = &port_cntrs[i];
+			hfi_cdbg(CNTR, "reading %s", entry->name);
+			if (entry->flags & CNTR_DISABLED) {
+				/* Nothing */
+				hfi_cdbg(CNTR, "\tDisabled\n");
+				continue;
+			}
+
+			if (entry->flags & CNTR_VL) {
+				hfi_cdbg(CNTR, "\tPer VL");
+				for (j = 0; j < C_VL_COUNT; j++) {
+					val = entry->rw_cntr(entry, ppd, j,
+							       CNTR_MODE_R,
+							       0);
+					hfi_cdbg(CNTR,
+						 "\t\tRead 0x%llx for %d",
+						 val, j);
+					ppd->cntrs[entry->offset + j] = val;
+				}
+			} else {
+				val = entry->rw_cntr(entry, ppd,
+						       CNTR_INVALID_VL,
+						       CNTR_MODE_R,
+						       0);
+				ppd->cntrs[entry->offset] = val;
+				hfi_cdbg(CNTR, "\tRead 0x%llx", val);
+			}
+		}
+	}
+	return ret;
+}
+
+static void free_cntrs(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	if (dd->synth_stats_timer.data)
+		del_timer_sync(&dd->synth_stats_timer);
+	dd->synth_stats_timer.data = 0;
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		kfree(ppd->cntrs);
+		kfree(ppd->scntrs);
+		free_percpu(ppd->ibport_data.rc_acks);
+		free_percpu(ppd->ibport_data.rc_qacks);
+		ppd->cntrs = NULL;
+		ppd->scntrs = NULL;
+		ppd->ibport_data.rc_acks = NULL;
+		ppd->ibport_data.rc_qacks = NULL;
+	}
+	kfree(dd->portcntrnames);
+	dd->portcntrnames = NULL;
+	kfree(dd->cntrs);
+	dd->cntrs = NULL;
+	kfree(dd->scntrs);
+	dd->scntrs = NULL;
+	kfree(dd->cntrnames);
+	dd->cntrnames = NULL;
+}
+
+#define CNTR_MAX 0xFFFFFFFFFFFFFFFFULL
+#define CNTR_32BIT_MAX 0x00000000FFFFFFFF
+
+static u64 read_dev_port_cntr(struct hfi_devdata *dd, struct cntr_entry *entry,
+			      u64 *psval, void *context, int vl)
+{
+	u64 val;
+	u64 sval = *psval;
+
+	if (entry->flags & CNTR_DISABLED) {
+		dd_dev_err(dd, "Counter %s not enabled", entry->name);
+		return 0;
+	}
+
+	hfi_cdbg(CNTR, "cntr: %s vl %d psval 0x%llx", entry->name, vl, *psval);
+
+	val = entry->rw_cntr(entry, context, vl, CNTR_MODE_R, 0);
+
+	/* If its a synthetic counter there is more work we need to do */
+	if (entry->flags & CNTR_SYNTH) {
+		if (sval == CNTR_MAX) {
+			/* No need to read already saturated */
+			return CNTR_MAX;
+		}
+
+		if (entry->flags & CNTR_32BIT) {
+			/* 32bit counters can wrap multiple times */
+			u64 upper = sval >> 32;
+			u64 lower = (sval << 32) >> 32;
+
+			if (lower > val) { /* hw wrapped */
+				if (upper == CNTR_32BIT_MAX)
+					val = CNTR_MAX;
+				else
+					upper++;
+			}
+
+			if (val != CNTR_MAX)
+				val = (upper << 32) | val;
+
+		} else {
+			/* If we rolled we are saturated */
+			if ((val < sval) || (val > CNTR_MAX))
+				val = CNTR_MAX;
+		}
+	}
+
+	*psval = val;
+
+	hfi_cdbg(CNTR, "\tNew val=0x%llx", val);
+
+	return val;
+}
+
+static u64 write_dev_port_cntr(struct hfi_devdata *dd, struct cntr_entry *entry,
+			      u64 *psval, void *context, int vl, u64 data)
+{
+	u64 val;
+
+	if (entry->flags & CNTR_DISABLED) {
+		dd_dev_err(dd, "Counter %s not enabled", entry->name);
+		return 0;
+	}
+
+	hfi_cdbg(CNTR, "cntr: %s vl %d psval 0x%llx", entry->name, vl, *psval);
+
+	if (entry->flags & CNTR_SYNTH) {
+		*psval = data;
+		if (entry->flags & CNTR_32BIT) {
+			val = entry->rw_cntr(entry, context, vl, CNTR_MODE_W,
+					     (data << 32) >> 32);
+			val = data; /* return the full 64bit value */
+		} else {
+			val = entry->rw_cntr(entry, context, vl, CNTR_MODE_W,
+					     data);
+		}
+	} else {
+		val = entry->rw_cntr(entry, context, vl, CNTR_MODE_W, data);
+	}
+
+	*psval = val;
+
+	hfi_cdbg(CNTR, "\tNew val=0x%llx", val);
+
+	return val;
+}
+
+u64 read_dev_cntr(struct hfi_devdata *dd, int index, int vl)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &dev_cntrs[index];
+	sval = dd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	return read_dev_port_cntr(dd, entry, sval, dd, vl);
+}
+
+u64 write_dev_cntr(struct hfi_devdata *dd, int index, int vl, u64 data)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &dev_cntrs[index];
+	sval = dd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	return write_dev_port_cntr(dd, entry, sval, dd, vl, data);
+}
+
+u64 read_port_cntr(struct qib_pportdata *ppd, int index, int vl)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &port_cntrs[index];
+	sval = ppd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	if ((index >= C_RCV_HDR_OVF_FIRST + ppd->dd->num_rcv_contexts) &&
+	    (index <= C_RCV_HDR_OVF_LAST)) {
+		/* We do not want to bother for disabled contexts */
+		return 0;
+	}
+
+	return read_dev_port_cntr(ppd->dd, entry, sval, ppd, vl);
+}
+
+u64 write_port_cntr(struct qib_pportdata *ppd, int index, int vl, u64 data)
+{
+	struct cntr_entry *entry;
+	u64 *sval;
+
+	entry = &port_cntrs[index];
+	sval = ppd->scntrs + entry->offset;
+
+	if (vl != CNTR_INVALID_VL)
+		sval += vl;
+
+	if ((index >= C_RCV_HDR_OVF_FIRST + ppd->dd->num_rcv_contexts) &&
+	    (index <= C_RCV_HDR_OVF_LAST)) {
+		/* We do not want to bother for disabled contexts */
+		return 0;
+	}
+
+	return write_dev_port_cntr(ppd->dd, entry, sval, ppd, vl, data);
+}
+
+static void update_synth_timer(unsigned long opaque)
+{
+	u64 cur_tx;
+	u64 cur_rx;
+	u64 total_flits;
+	u8 update = 0;
+	int i, j, vl;
+	struct qib_pportdata *ppd;
+	struct cntr_entry *entry;
+
+	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
+
+	/*
+	 * Rather than keep beating on the CSRs pick a minimal set that we can
+	 * check to watch for potential roll over. We can do this by looking at
+	 * the number of flits sent/recv. If the total flits exceeds 32bits then
+	 * we have to iterate all the counters and update.
+	 */
+	entry = &dev_cntrs[C_DC_RCV_FLITS];
+	cur_rx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL, CNTR_MODE_R, 0);
+
+	entry = &dev_cntrs[C_DC_XMIT_FLITS];
+	cur_tx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL, CNTR_MODE_R, 0);
+
+	hfi_cdbg(CNTR,
+		"[%d] curr tx=0x%llx rx=0x%llx :: last tx=0x%llx rx=0x%llx\n",
+		 dd->unit, cur_tx, cur_rx, dd->last_tx, dd->last_rx);
+
+	if ((cur_tx < dd->last_tx) || (cur_rx < dd->last_rx)) {
+		/*
+		 * May not be strictly necessary to update but it won't hurt and
+		 * simplifies the logic here.
+		 */
+		update = 1;
+		hfi_cdbg(CNTR, "[%d] Tripwire counter rolled, updating",
+			 dd->unit);
+	} else {
+		total_flits = (cur_tx - dd->last_tx) + (cur_rx - dd->last_rx);
+		hfi_cdbg(CNTR,
+			"[%d] total flits 0x%llx limit 0x%llx\n", dd->unit,
+			total_flits, (u64)CNTR_32BIT_MAX);
+		if (total_flits >= CNTR_32BIT_MAX) {
+			hfi_cdbg(CNTR, "[%d] 32bit limit hit, updating",
+				 dd->unit);
+			update = 1;
+		}
+	}
+
+	if (update) {
+		hfi_cdbg(CNTR, "[%d] Updating dd and ppd counters", dd->unit);
+		for (i = 0; i < DEV_CNTR_LAST; i++) {
+			entry = &dev_cntrs[i];
+			if (entry->flags & CNTR_VL) {
+				for (vl = 0; vl < C_VL_COUNT; vl++)
+					read_dev_cntr(dd, i, vl);
+			} else {
+				read_dev_cntr(dd, i, CNTR_INVALID_VL);
+			}
+		}
+		ppd = (struct qib_pportdata *)(dd + 1);
+		for (i = 0; i < dd->num_pports; i++, ppd++) {
+			for (j = 0; j < PORT_CNTR_LAST; j++) {
+				entry = &port_cntrs[j];
+				if (entry->flags & CNTR_VL) {
+					for (vl = 0; vl < C_VL_COUNT; vl++)
+						read_port_cntr(ppd, j, vl);
+				} else {
+					read_port_cntr(ppd, j, CNTR_INVALID_VL);
+				}
+			}
+		}
+
+		/*
+		 * We want the value in the register. The goal is to keep track
+		 * of the number of "ticks" not the counter value. In other
+		 * words if the register rolls we want to notice it and go ahead
+		 * and force an update.
+		 */
+		entry = &dev_cntrs[C_DC_XMIT_FLITS];
+		dd->last_tx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL,
+						CNTR_MODE_R, 0);
+
+		entry = &dev_cntrs[C_DC_RCV_FLITS];
+		dd->last_rx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL,
+						CNTR_MODE_R, 0);
+
+		hfi_cdbg(CNTR, "[%d] setting last tx/rx to 0x%llx 0x%llx",
+			 dd->unit, dd->last_tx, dd->last_rx);
+
+	} else {
+		hfi_cdbg(CNTR, "[%d] No update necessary", dd->unit);
+	}
+
+mod_timer(&dd->synth_stats_timer, jiffies + HZ * SYNTH_CNT_TIME);
+}
+
+#define C_MAX_NAME 13 /* 12 chars + one for /0 */
+static int init_cntrs(struct hfi_devdata *dd)
+{
+	int i, rcv_ctxts, index, j;
+	size_t sz;
+	char *p;
+	char name[C_MAX_NAME];
+	struct qib_pportdata *ppd;
+
+	/* set up the stats timer; the add_timer is done at the end */
+	init_timer(&dd->synth_stats_timer);
+	dd->synth_stats_timer.function = update_synth_timer;
+	dd->synth_stats_timer.data = (unsigned long) dd;
+
+	/***********************/
+	/* per device counters */
+	/***********************/
+
+	/* size names and determine how many we have*/
+	dd->ndevcntrs = 0;
+	sz = 0;
+	index = 0;
+
+	for (i = 0; i < DEV_CNTR_LAST; i++) {
+		hfi_dbg_early("Init cntr %s\n", dev_cntrs[i].name);
+		if (dev_cntrs[i].flags & CNTR_DISABLED) {
+			hfi_dbg_early("\tSkipping %s\n", dev_cntrs[i].name);
+			continue;
+		}
+
+		if (dev_cntrs[i].flags & CNTR_VL) {
+			hfi_dbg_early("\tProcessing VL cntr\n");
+			dev_cntrs[i].offset = index;
+			for (j = 0; j < C_VL_COUNT; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					dev_cntrs[i].name,
+					vl_from_idx(j));
+				sz += strlen(name);
+				sz++;
+				hfi_dbg_early("\t\t%s\n", name);
+				dd->ndevcntrs++;
+				index++;
+			}
+		} else {
+			/* +1 for newline  */
+			sz += strlen(dev_cntrs[i].name) + 1;
+			dd->ndevcntrs++;
+			dev_cntrs[i].offset = index;
+			index++;
+			hfi_dbg_early("\tAdding %s\n", dev_cntrs[i].name);
+		}
+	}
+
+	/* allocate space for the counter values */
+	dd->cntrs = kcalloc(index, sizeof(u64), GFP_KERNEL);
+	if (!dd->cntrs)
+		goto bail;
+
+	dd->scntrs = kcalloc(index, sizeof(u64), GFP_KERNEL);
+	if (!dd->scntrs)
+		goto bail;
+
+
+	/* allocate space for the counter names */
+	dd->cntrnameslen = sz;
+	dd->cntrnames = kmalloc(sz, GFP_KERNEL);
+	if (!dd->cntrnames)
+		goto bail;
+
+	/* fill in the names */
+	for (p = dd->cntrnames, i = 0, index = 0; i < DEV_CNTR_LAST; i++) {
+		if (dev_cntrs[i].flags & CNTR_DISABLED) {
+			/* Nothing */
+		} else {
+			if (dev_cntrs[i].flags & CNTR_VL) {
+				for (j = 0; j < C_VL_COUNT; j++) {
+					memset(name, '\0', C_MAX_NAME);
+					snprintf(name, C_MAX_NAME, "%s%d",
+						dev_cntrs[i].name,
+						vl_from_idx(j));
+					memcpy(p, name, strlen(name));
+					p += strlen(name);
+					*p++ = '\n';
+				}
+			} else {
+				memcpy(p, dev_cntrs[i].name,
+				       strlen(dev_cntrs[i].name));
+				p += strlen(dev_cntrs[i].name);
+				*p++ = '\n';
+			}
+			index++;
+		}
+	}
+
+	/*********************/
+	/* per port counters */
+	/*********************/
+
+	/*
+	 * Go through the counters for the overflows and disable the ones we
+	 * don't need. This varies based on platform so we need to do it
+	 * dynamically here.
+	 */
+	rcv_ctxts = dd->num_rcv_contexts;
+	for (i = C_RCV_HDR_OVF_FIRST + rcv_ctxts;
+	     i <= C_RCV_HDR_OVF_LAST; i++) {
+		port_cntrs[i].flags |= CNTR_DISABLED;
+	}
+
+	/* size port counter names and determine how many we have*/
+	sz = 0;
+	dd->nportcntrs = 0;
+	for (i = 0; i < PORT_CNTR_LAST; i++) {
+		hfi_dbg_early("Init pcntr %s\n", port_cntrs[i].name);
+		if (port_cntrs[i].flags & CNTR_DISABLED) {
+			hfi_dbg_early("\tSkipping %s\n", port_cntrs[i].name);
+			continue;
+		}
+
+		if (port_cntrs[i].flags & CNTR_VL) {
+			hfi_dbg_early("\tProcessing VL cntr\n");
+			port_cntrs[i].offset = dd->nportcntrs;
+			for (j = 0; j < C_VL_COUNT; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					port_cntrs[i].name,
+					vl_from_idx(j));
+				sz += strlen(name);
+				sz++;
+				hfi_dbg_early("\t\t%s\n", name);
+				dd->nportcntrs++;
+			}
+		} else {
+			/* +1 for newline  */
+			sz += strlen(port_cntrs[i].name) + 1;
+			port_cntrs[i].offset = dd->nportcntrs;
+			dd->nportcntrs++;
+			hfi_dbg_early("\tAdding %s\n", port_cntrs[i].name);
+		}
+	}
+
+	/* allocate space for the counter names */
+	dd->portcntrnameslen = sz;
+	dd->portcntrnames = kmalloc(sz, GFP_KERNEL);
+	if (!dd->portcntrnames)
+		goto bail;
+
+	/* fill in port cntr names */
+	for (p = dd->portcntrnames, i = 0; i < PORT_CNTR_LAST; i++) {
+		if (port_cntrs[i].flags & CNTR_DISABLED)
+			continue;
+
+		if (port_cntrs[i].flags & CNTR_VL) {
+			for (j = 0; j < C_VL_COUNT; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					port_cntrs[i].name,
+					vl_from_idx(j));
+				memcpy(p, name, strlen(name));
+				p += strlen(name);
+				*p++ = '\n';
+			}
+		} else {
+			memcpy(p, port_cntrs[i].name,
+			       strlen(port_cntrs[i].name));
+			p += strlen(port_cntrs[i].name);
+			*p++ = '\n';
+		}
+	}
+
+	/* allocate per port storage for counter values */
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) { /* FIXME. ppd++? */
+		ppd->cntrs = kcalloc(dd->nportcntrs, sizeof(u64), GFP_KERNEL);
+		if (!ppd->cntrs)
+			goto bail;
+
+		ppd->scntrs = kcalloc(dd->nportcntrs, sizeof(u64), GFP_KERNEL);
+		if (!ppd->scntrs)
+			goto bail;
+	}
+
+	/* CPU counters need to be allocated and zeroed */
+	if (init_cpu_counters(dd))
+		goto bail;
+
+	mod_timer(&dd->synth_stats_timer, jiffies + HZ * SYNTH_CNT_TIME);
+	return 0;
+bail:
+	free_cntrs(dd);
+	return -ENOMEM;
+}
+
+static void xgxs_reset(struct qib_pportdata *ppd)
+{
+	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
+}
+
+static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate)
+{
+	switch (chip_lstate) {
+	default:
+		dd_dev_err(dd,
+			 "Unknown logical state 0x%x, reporting IB_PORT_DOWN\n",
+			 chip_lstate);
+		/* fall through */
+	case WFR_LSTATE_DOWN:
+		return IB_PORT_DOWN;
+	case WFR_LSTATE_INIT:
+		return IB_PORT_INIT;
+	case WFR_LSTATE_ARMED:
+		return IB_PORT_ARMED;
+	case WFR_LSTATE_ACTIVE:
+		return IB_PORT_ACTIVE;
+	}
+}
+
+static u32 chip_to_stl_pstate(struct hfi_devdata *dd, u32 chip_pstate)
+{
+	/* look at the WFR meta-states only */
+	switch (chip_pstate & 0xf0) {
+	default:
+		dd_dev_err(dd, "Unexpected chip physical state of 0x%x\n",
+			chip_pstate);
+		/* fall through */
+	case WFR_PLS_DISABLED:
+		return IB_PORTPHYSSTATE_DISABLED;
+	case WFR_PLS_OFFLINE:
+		return STL_PORTPHYSSTATE_OFFLINE;
+	case WFR_PLS_POLLING:
+		return IB_PORTPHYSSTATE_POLLING;
+	case WFR_PLS_CONFIGPHY:
+		return IB_PORTPHYSSTATE_TRAINING;
+	case WFR_PLS_LINKUP:
+		return IB_PORTPHYSSTATE_LINKUP;
+	case WFR_PLS_PHYTEST:
+		return IB_PORTPHYSSTATE_PHY_TEST;
+	}
+}
+
+/* return the STL port logical state name */
+static const char *stl_lstate_name(u32 lstate)
+{
+	static const char * const port_logical_names[] = {
+		"PORT_NOP",
+		"PORT_DOWN",
+		"PORT_INIT",
+		"PORT_ARMED",
+		"PORT_ACTIVE",
+		"PORT_ACTIVE_DEFER",
+	};
+	if (lstate < ARRAY_SIZE(port_logical_names))
+		return port_logical_names[lstate];
+	return "unknown";
+}
+
+/* return the STL port physical state name */
+static const char *stl_pstate_name(u32 pstate)
+{
+	static const char * const port_physical_names[] = {
+		"PHYS_NOP",
+		"PHYS_SLEEP",
+		"PHYS_POLL",
+		"PHYS_DISABLED",
+		"PHYS_TRAINING",
+		"PHYS_LINKUP",
+		"PHYS_LINK_ERR_RECOVER",
+		"PHYS_PHY_TEST",
+		"unknown",
+		"PHYS_OFFLINE",
+		"PHYS_GANGED",
+		"PHYS_TEST",
+	};
+	if (pstate < ARRAY_SIZE(port_physical_names))
+		return port_physical_names[pstate];
+	return "unknown";
+}
+
+/* read and return the logical STL port state */
+static u32 iblink_state(struct qib_pportdata *ppd)
+{
+	u32 new_state;
+
+	new_state = chip_to_stl_lstate(ppd->dd, read_logical_state(ppd->dd));
+	if (new_state != ppd->lstate) {
+		dd_dev_info(ppd->dd, "%s: logical state changed to %s (0x%x)\n",
+			__func__, stl_lstate_name(new_state), new_state);
+		ppd->lstate = new_state;
+	}
+	/*
+	 * Set port status flags in the page mapped into userspace
+	 * memory. Do it here to ensure a reliable state - this is
+	 * the only function called by all state handling code.
+	 * Always set the flags due to the fact that the cache value
+	 * might have been changed explicitly outside of this
+	 * function.
+	 */
+	if (ppd->statusp) {
+		switch (ppd->lstate) {
+		case IB_PORT_DOWN:
+		case IB_PORT_INIT:
+			*ppd->statusp &= ~(HFI_STATUS_IB_CONF |
+					   HFI_STATUS_IB_READY);
+			break;
+		case IB_PORT_ARMED:
+			*ppd->statusp |= HFI_STATUS_IB_CONF;
+			break;
+		case IB_PORT_ACTIVE:
+			*ppd->statusp |= HFI_STATUS_IB_READY;
+			break;
+		}
+	}
+	return ppd->lstate;
+}
+
+static u8 ibphys_portstate(struct qib_pportdata *ppd)
+{
+	static u32 remembered_state = 0xff;
+	u32 pstate;
+	u32 ib_pstate;
+
+	pstate = read_physical_state(ppd->dd);
+	ib_pstate = chip_to_stl_pstate(ppd->dd, pstate);
+	if (remembered_state != ib_pstate) {
+		dd_dev_info(ppd->dd,
+			"%s: physical state changed to %s (0x%x), phy 0x%x\n",
+			__func__, stl_pstate_name(ib_pstate), ib_pstate,
+			pstate);
+		remembered_state = ib_pstate;
+	}
+	return ib_pstate;
+}
+
+/*
+ * Read/modify/write ASIC_QSFP register bits as selected by mask
+ * data: 0 or 1 in the positions depending on what needs to be written
+ * dir: 0 for read, 1 for write
+ * mask: select by setting
+ *      I2CCLK  (bit 0)
+ *      I2CDATA (bit 1)
+ */
+static u64 gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
+			u32 mask)
+{
+	u64 qsfp_oe, target_oe;
+
+	target_oe = target ? WFR_ASIC_QSFP2_OE : WFR_ASIC_QSFP1_OE;
+	if (mask) {
+		/* We are writing register bits, so lock access */
+		dir &= mask;
+		data &= mask;
+
+		qsfp_oe = read_csr(dd, target_oe);
+		qsfp_oe = (qsfp_oe & ~(u64)mask) | (u64)dir;
+		write_csr(dd, target_oe, qsfp_oe);
+	}
+	/* We are exclusively reading bits here, but it is unlikely
+	 * we'll get valid data when we set the direction of the pin
+	 * in the same call, so read should call this function again
+	 * to get valid data
+	 */
+	return read_csr(dd, target ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
+}
+
+#define CLEAR_STATIC_RATE_CONTROL_SMASK(r) \
+(r &= ~WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
+
+#define SET_STATIC_RATE_CONTROL_SMASK(r) \
+(r |= WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
+
+static int init_ctxt(struct qib_ctxtdata *rcd)
+{
+	struct hfi_devdata *dd = rcd->dd;
+	int ret = 0;
+
+	if (rcd->sc) {
+		u64 reg;
+		u8 set = (rcd->sc->type == SC_USER ?
+			  HFI_CAP_IS_USET(STATIC_RATE_CTRL) :
+			  HFI_CAP_IS_KSET(STATIC_RATE_CTRL));
+		reg = read_kctxt_csr(dd, rcd->sc->context,
+				     WFR_SEND_CTXT_CHECK_ENABLE);
+		if (set)
+			CLEAR_STATIC_RATE_CONTROL_SMASK(reg);
+		else
+			SET_STATIC_RATE_CONTROL_SMASK(reg);
+		write_kctxt_csr(dd, rcd->sc->context,
+				WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	}
+	return ret;
+}
+
+static int tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp)
+{
+	int ret = 0;
+	u64 reg;
+
+	if (dd->icode != WFR_ICODE_RTL_SILICON) {
+		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
+			dd_dev_info(dd, "%s: tempsense not supported by HW\n",
+				    __func__);
+		return -EINVAL;
+	}
+	reg = read_csr(dd, WFR_ASIC_STS_THERM);
+	temp->curr = ((reg >> WFR_ASIC_STS_THERM_CURR_TEMP_SHIFT) &
+		      WFR_ASIC_STS_THERM_CURR_TEMP_MASK);
+	temp->lo_lim = ((reg >> WFR_ASIC_STS_THERM_LO_TEMP_SHIFT) &
+			WFR_ASIC_STS_THERM_LO_TEMP_MASK);
+	temp->hi_lim = ((reg >> WFR_ASIC_STS_THERM_HI_TEMP_SHIFT) &
+			WFR_ASIC_STS_THERM_HI_TEMP_MASK);
+	temp->crit_lim = ((reg >> WFR_ASIC_STS_THERM_CRIT_TEMP_SHIFT) &
+			  WFR_ASIC_STS_THERM_CRIT_TEMP_MASK);
+	/* triggers is a 3-bit value - 1 bit per trigger. */
+	temp->triggers = (u8)((reg >> WFR_ASIC_STS_THERM_LOW_SHIFT) & 0x7);
+
+	return ret;
+}
+
+/* ========================================================================= */
+
+/*
+ * Enable/disable chip from delivering interrupts.
+ */
+void set_intr_state(struct hfi_devdata *dd, u32 enable)
+{
+	int i;
+
+	/*
+	 * In WFR, the mask needs to be 1 to allow interrupts.
+	 */
+	if (enable) {
+		u64 cce_int_mask;
+		const int qsfp1_int_smask = WFR_QSFP1_INT % 64;
+		const int qsfp2_int_smask = WFR_QSFP2_INT % 64;
+
+		/* TODO: HFI_BADINTR check needed? */
+		if (dd->flags & HFI_BADINTR)
+			return;
+
+		/* enable all interrupts */
+		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+			write_csr(dd, WFR_CCE_INT_MASK + (8*i), ~(u64)0);
+
+		/*
+		 * disable QSFP1 interrupts for HFI1, QSFP2 interrupts for HFI0
+		 * Qsfp1Int and Qsfp2Int are adjacent bits in the same CSR,
+		 * therefore just one of QSFP1_INT/QSFP2_INT can be used to find
+		 * the index of the appropriate CSR in the CCEIntMask CSR array
+		 */
+		cce_int_mask = read_csr(dd, WFR_CCE_INT_MASK +
+						(8*(WFR_QSFP1_INT/64)));
+		if (dd->hfi_id) {
+			cce_int_mask &= ~((u64)1 << qsfp1_int_smask);
+			write_csr(dd, WFR_CCE_INT_MASK + (8*(WFR_QSFP1_INT/64)),
+					cce_int_mask);
+		} else {
+			cce_int_mask &= ~((u64)1 << qsfp2_int_smask);
+			write_csr(dd, WFR_CCE_INT_MASK + (8*(WFR_QSFP2_INT/64)),
+					cce_int_mask);
+		}
+
+		/*
+		 * TODO: the 7322 wrote to INTCLEAR to "cause any
+		 * pending interrupts to be redelivered".  The
+		 * WFR HAS does not indicate that this this occurs
+		 * for WFR.
+		 *
+		 * TODO: the 7322 also does a read and write of INTGRANTED
+		 * for MSI-X interrupts.  Is there an equivalent for
+		 * WFR?
+		 * See qib_7322_set_intr_state() for details.
+		 */
+
+	} else {
+		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+			write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
+	}
+}
+
+/*
+ * Clear all interrupt sources on the chip.
+ */
+static void clear_all_interrupts(struct hfi_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_CLEAR + (8*i), ~(u64)0);
+
+	write_csr(dd, WFR_CCE_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_MISC_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_RCV_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, ~(u64)0);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, ~(u64)0);
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, ~(u64)0);
+	for (i = 0; i < dd->chip_sdma_engines; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_CLEAR, ~(u64)0);
+
+	write_csr(dd, DCC_ERR_FLG_CLR, ~(u64)0);
+	write_csr(dd, DC_LCB_ERR_CLR, ~(u64)0);
+	write_csr(dd, DC_DC8051_ERR_CLR, ~(u64)0);
+}
+
+/* TODO: Move to pcie.c? */
+static void disable_intx(struct pci_dev *pdev)
+{
+	pci_intx(pdev, 0);
+}
+
+static void clean_up_interrupts(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* remove irqs - must happen before disabling/turning off */
+	if (dd->num_msix_entries) {
+		/* MSI-X */
+		struct qib_msix_entry *me = dd->msix_entries;
+
+		for (i = 0; i < dd->num_msix_entries; i++, me++) {
+			if (me->arg == NULL) /* => no irq, no affinity */
+				break;
+			irq_set_affinity_hint(dd->msix_entries[i].msix.vector,
+					NULL);
+			free_irq(me->msix.vector, me->arg);
+		}
+	} else {
+		/* INTx */
+		if (dd->requested_intx_irq) {
+			free_irq(dd->pcidev->irq, dd);
+			dd->requested_intx_irq = 0;
+		}
+	}
+
+	/* turn off interrupts */
+	if (dd->num_msix_entries) {
+		/* MSI-X */
+		qib_nomsix(dd);
+	} else {
+		/* INTx */
+		disable_intx(dd->pcidev);
+	}
+
+	/* clean structures */
+	for (i = 0; i < dd->num_msix_entries; i++)
+		free_cpumask_var(dd->msix_entries[i].mask);
+	kfree(dd->msix_entries);
+	dd->msix_entries = NULL;
+	dd->num_msix_entries = 0;
+}
+
+/*
+ * Remap the interrupt source from the general handler to the given MSI-X
+ * interrupt.
+ */
+static void remap_intr(struct hfi_devdata *dd, int isrc, int msix_intr)
+{
+	u64 reg;
+	int m, n;
+
+	/* clear from the handled mask of the general interrupt */
+	m = isrc / 64;
+	n = isrc % 64;
+	dd->gi_mask[m] &= ~((u64)1 << n);
+
+	/* direct the chip source to the given MSI-X interrupt */
+	m = isrc / 8;
+	n = isrc % 8;
+	reg = read_csr(dd, WFR_CCE_INT_MAP + (8*m));
+	reg &= ~((u64)0xff << (8*n));
+	reg |= ((u64)msix_intr & 0xff) << (8*n);
+	write_csr(dd, WFR_CCE_INT_MAP + (8*m), reg);
+}
+
+static void remap_sdma_interrupts(struct hfi_devdata *dd,
+						int engine, int msix_intr)
+{
+	/*
+	 * SDMA engine interrupt sources grouped by type, rather than
+	 * engine.  Per-engine interrupts are as follows:
+	 *	SDMA
+	 *	SDMAProgress
+	 *	SDMAIdle
+	 */
+	remap_intr(dd, WFR_IS_SDMA_START + 0*WFR_TXE_NUM_SDMA_ENGINES + engine,
+		msix_intr);
+	remap_intr(dd, WFR_IS_SDMA_START + 1*WFR_TXE_NUM_SDMA_ENGINES + engine,
+		msix_intr);
+	remap_intr(dd, WFR_IS_SDMA_START + 2*WFR_TXE_NUM_SDMA_ENGINES + engine,
+		msix_intr);
+}
+
+static void remap_receive_available_interrupt(struct hfi_devdata *dd,
+						int rx, int msix_intr)
+{
+	remap_intr(dd, WFR_IS_RCVAVAIL_START + rx, msix_intr);
+}
+
+static int request_intx_irq(struct hfi_devdata *dd)
+{
+	int ret;
+
+	snprintf(dd->intx_name, sizeof(dd->intx_name), DRIVER_NAME"%d",
+		dd->unit);
+	ret = request_irq(dd->pcidev->irq, general_interrupt,
+				  IRQF_SHARED, dd->intx_name, dd);
+	if (ret)
+		dd_dev_err(dd, "unable to request INTx interrupt, err %d\n",
+				ret);
+	else
+		dd->requested_intx_irq = 1;
+	return ret;
+}
+
+static int request_msix_irqs(struct hfi_devdata *dd)
+{
+	const struct cpumask *local_mask;
+	int first_cpu, restart_cpu = 0, curr_cpu = 0;
+	int local_node = pcibus_to_node(dd->pcidev->bus);
+	int first_general, last_general;
+	int first_sdma, last_sdma;
+	int first_rx, last_rx;
+	int i, ret;
+
+	/* calculate the ranges we are going to use */
+	first_general = 0;
+	first_sdma = last_general = first_general + 1;
+	first_rx = last_sdma = first_sdma + dd->num_sdma;
+	last_rx = first_rx + dd->n_krcv_queues;
+
+	/*
+	 * Interrupt affinity.
+	 *
+	 * The "slow" interrupt can be shared with the rest of the
+	 * interrupts clustered on the boot processor.  After
+	 * that, distribute the rest of the "fast" interrupts
+	 * on the remaining CPUs of the NUMA closest to the
+	 * device.
+	 *
+	 * If on NUMA 0:
+	 *	- place the slow interrupt on the first CPU
+	 *	- distribute the rest, round robin, starting on
+	 *	  the second CPU, avoiding cpu 0
+	 *
+	 * If not on NUMA 0:
+	 *	- place the slow interrupt on the first CPU
+	 *	- distribute the rest, round robin, including
+	 *	  the first CPU
+	 *
+	 * Reasoning: If not on NUMA 0, then the first CPU
+	 * does not have "everything else" on it and can
+	 * be part of the interrupt distribution.
+	 */
+	local_mask = cpumask_of_pcibus(dd->pcidev->bus);
+	first_cpu = cpumask_first(local_mask);
+	/* TODO: What is the point of the cpumask_weight check? */
+	if (first_cpu >= nr_cpu_ids ||
+		cpumask_weight(local_mask) == num_online_cpus()) {
+		local_mask = topology_core_cpumask(0);
+		first_cpu = cpumask_first(local_mask);
+	}
+	if (first_cpu < nr_cpu_ids) {
+		restart_cpu = cpumask_next(first_cpu, local_mask);
+		if (restart_cpu >= nr_cpu_ids)
+			restart_cpu = first_cpu;
+	}
+	/* decide the restart point */
+	if (local_node > 0) {	/* not NUMA 0 */
+		/* restart is the first */
+		restart_cpu = first_cpu;
+	}
+	/*
+	 * Start at the first cpu - we *know* the first
+	 * interrupt is the slow interrupt.
+	 */
+	curr_cpu = first_cpu;
+
+	/*
+	 * Sanity check - the code expects all SDMA chip source
+	 * interrupts to be in the same CSR, starting at bit 0.  Verify
+	 * that this is true by checking the bit location of the start.
+	 */
+	BUILD_BUG_ON(WFR_IS_SDMA_START % 64);
+
+	for (i = 0; i < dd->num_msix_entries; i++) {
+		struct qib_msix_entry *me = &dd->msix_entries[i];
+		const char *err_info;
+		irq_handler_t handler;
+		void *arg;
+		int idx;
+
+		/*
+		 * TODO:
+		 * o Why isn't IRQF_SHARED used for the general interrupt
+		 *   here?
+		 * o Should we use IRQF_SHARED for non-NUMA 0?
+		 * o If we truly wrapped, don't we need IRQF_SHARED?
+		*/
+		/* obtain the arguments to request_irq */
+		if (first_general <= i && i < last_general) {
+			idx = i - first_general;
+			handler = general_interrupt;
+			arg = dd;
+			snprintf(me->name, sizeof(me->name),
+				DRIVER_NAME"%d", dd->unit);
+			err_info = "general";
+		} else if (first_sdma <= i && i < last_sdma) {
+			struct sdma_engine *per_sdma;
+
+			idx = i - first_sdma;
+			per_sdma = &dd->per_sdma[idx];
+			handler = sdma_interrupt;
+			arg = per_sdma;
+			snprintf(me->name, sizeof(me->name),
+				DRIVER_NAME"%d sdma%d", dd->unit, idx);
+			err_info = "sdma";
+			remap_sdma_interrupts(dd, idx, i);
+		} else if (first_rx <= i && i < last_rx) {
+			struct qib_ctxtdata *rcd;
+
+			idx = i - first_rx;
+			rcd = dd->rcd[idx];
+			/* no interrupt if no rcd */
+			if (!rcd)
+				continue;
+			/*
+			 * Set the interrupt register and mask for this
+			 * context's interrupt.
+			 */
+			rcd->ireg = (WFR_IS_RCVAVAIL_START+idx) / 64;
+			rcd->imask = ((u64)1) <<
+					((WFR_IS_RCVAVAIL_START+idx) % 64);
+			handler = receive_context_interrupt;
+			arg = rcd;
+			snprintf(me->name, sizeof(me->name),
+				DRIVER_NAME"%d kctxt%d", dd->unit, idx);
+			err_info = "receive context";
+			remap_receive_available_interrupt(dd, idx, i);
+		} else {
+			/* not in our expected range - complain, then
+			   ignore it */
+			dd_dev_err(dd,
+				"Unexpected extra MSI-X interrupt %d\n", i);
+			continue;
+		}
+		/* no argument, no interrupt */
+		if (arg == NULL)
+			continue;
+		/* make sure the name is terminated */
+		me->name[sizeof(me->name)-1] = 0;
+
+		ret = request_irq(me->msix.vector, handler, 0, me->name, arg);
+		if (ret) {
+			dd_dev_err(dd,
+				"unable to allocate %s interrupt, vector %d, index %d, err %d\n",
+				 err_info, me->msix.vector, idx, ret);
+			return ret;
+		}
+		/*
+		 * assign arg after request_irq call, so it will be
+		 * cleaned up
+		 */
+		me->arg = arg;
+
+		/* set the affinity hint */
+		if (first_cpu < nr_cpu_ids &&
+			zalloc_cpumask_var(
+				&dd->msix_entries[i].mask,
+				GFP_KERNEL)) {
+			cpumask_set_cpu(curr_cpu,
+				dd->msix_entries[i].mask);
+			curr_cpu = cpumask_next(curr_cpu, local_mask);
+			if (curr_cpu >= nr_cpu_ids)
+				curr_cpu = restart_cpu;
+			irq_set_affinity_hint(
+				dd->msix_entries[i].msix.vector,
+				dd->msix_entries[i].mask);
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Set the general handler to accept all interrupts, remap all
+ * chip interrupts back to MSI-X 0.
+ */
+static void reset_interrupts(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* all interrupts handled by the general handler */
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+		dd->gi_mask[i] = ~(u64)0;
+
+	/* all chip interrupts map to MSI-X 0 */
+	for (i = 0; i < WFR_CCE_NUM_INT_MAP_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MAP + (8*i), 0);
+}
+
+static int set_up_interrupts(struct hfi_devdata *dd)
+{
+	struct qib_msix_entry *entries;
+	u32 total, request;
+	int i, ret;
+	int single_interrupt = 0; /* we expect to have all the interrupts */
+
+	/*
+	 * Interrupt count:
+	 *	1 general, "slow path" interrupt (includes the SDMA engines
+	 *		slow source, SDMACleanupDone)
+	 *	N interrupts - one per used SDMA engine
+	 *	M interrupt - one per kernel receive context
+	 */
+	total = 1 + dd->num_sdma + dd->n_krcv_queues;
+
+	entries = kcalloc(total, sizeof(*entries), GFP_KERNEL);
+	if (!entries) {
+		dd_dev_err(dd, "cannot allocate msix table\n");
+		ret = -ENOMEM;
+		goto fail;
+	}
+	/* 1-1 MSI-X entry assignment */
+	for (i = 0; i < total; i++)
+		entries[i].msix.entry = i;
+
+	/* ask for MSI-X interrupts */
+	request = total;
+	request_msix(dd, &request, entries);
+
+	if (request == 0) {
+		/* using INTx */
+		/* dd->num_msix_entries already zero */
+		kfree(entries);
+		single_interrupt = 1;
+		dd_dev_err(dd, "MSI-X failed, using INTx interrupts\n");
+	} else {
+		/* using MSI-X */
+		dd->num_msix_entries = request;
+		dd->msix_entries = entries;
+
+		if (request != total) {
+			/* using MSI-X, with reduced interrupts */
+			/* TODO: Handle reduced interrupt case.  Need scheme to
+			   decide who shares. */
+			dd_dev_err(
+				dd,
+				"cannot handle reduced interrupt case, want %u, got %u\n",
+				total, request);
+			ret = -EINVAL;
+			goto fail;
+		}
+		dd_dev_info(dd, "%u MSI-X interrupts allocated\n", total);
+	}
+
+	/* mask all interrupts */
+	set_intr_state(dd, 0);
+	/* clear all pending interrupts */
+	clear_all_interrupts(dd);
+
+	/* reset general handler mask, chip MSI-X mappings */
+	reset_interrupts(dd);
+
+	if (single_interrupt)
+		ret = request_intx_irq(dd);
+	else
+		ret = request_msix_irqs(dd);
+	if (ret)
+		goto fail;
+
+	return 0;
+
+fail:
+	clean_up_interrupts(dd);
+	return ret;
+}
+
+/*
+ * Called from verify_interrupt() when it has detected that we have received
+ * no interrupts.
+ *
+ * NOTE: The IRQ releases in clean_up_interrupts() require non-interrupt
+ * context.  This means we can't be called from inside a timer function.
+ */
+static int intr_fallback(struct hfi_devdata *dd)
+{
+/*
+ * TODO: remove #if when the simulation supports interrupts.
+ * NOTE: the simulated HW does not support INTx yet, so we may want to
+ *  keep the #if until then.
+ */
+#if 0
+	if (dd->num_msix_entries == 0) {
+		/* already using INTx.  Return a failure */
+		 return 0;
+	}
+	/* clean our current set-up */
+	clean_up_interrupts(dd);
+	/* reset back to chip default */
+	reset_interrupts(dd);
+	/* set up INTx irq */
+	request_intx_irq(dd);
+	/* try again */
+	return 1;
+#else
+	this_cpu_inc(*dd->int_counter);
+	return 1;
+#endif
+}
+
+/*
+ * TODO: temporary code for missing interrupts, HSD 291041.
+ *
+ * Check the kernel recive FIFOs to see if they are stuck.  If a receive
+ * FIFO is stuck, force an interrupt on it.
+ */
+void check_fifos(unsigned long opaque)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)opaque;
+	u32 head, tail;
+	int i, index, bit;
+
+	for (i = 0; i < dd->n_krcv_queues; i++) {
+		if (dd->rcd[i]->rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK) {
+			head = (read_uctxt_csr(dd, i, WFR_RCV_HDR_HEAD)
+						>> WFR_RCV_HDR_HEAD_HEAD_SHIFT)
+					& WFR_RCV_HDR_HEAD_HEAD_MASK;
+			tail = (read_uctxt_csr(dd, i, WFR_RCV_HDR_TAIL)
+						>> WFR_RCV_HDR_TAIL_TAIL_SHIFT)
+					& WFR_RCV_HDR_TAIL_TAIL_MASK;
+			/* stuck if not empty and head matches last call */
+			if (head != tail
+				&& dd->last_krcv_fifo_head[i] == head) {
+				/* we appear to be stuck */
+				dd_dev_err(dd,
+					"Receive context FIFO %d appears stuck (head 0x%x, tail 0x%x), forcing an interrupt\n",
+					i, head, tail);
+				index = (WFR_IS_RCVAVAIL_START + i) / 64;
+				bit = (WFR_IS_RCVAVAIL_START + i) % 64;
+				write_csr(dd, WFR_CCE_INT_FORCE + (8*index),
+					1ull << bit);
+				fifo_stalled_count++;
+			}
+		} else {
+			head = 0;
+		}
+
+		/* save the last values */
+		dd->last_krcv_fifo_head[i] = head;
+	}
+
+	mod_timer(&dd->fifo_timer, jiffies + msecs_to_jiffies(fifo_check));
+}
+
+/*
+ * Set up context values in dd.  Sets:
+ *
+ *	num_rcv_contexts - number of contexts being used
+ *	n_krcv_queues - number of kernel contexts
+ *	first_user_ctxt - first non-kernel context in array of contexts
+ *	freectxts  - nuber of free user contexts
+ *	num_send_contexts - number of PIO send contexts being used
+ */
+static int set_up_context_variables(struct hfi_devdata *dd)
+{
+	int num_kernel_contexts;
+	int num_user_contexts;
+	int total_contexts;
+	int ret;
+	unsigned ngroups;
+
+	/*
+	 * Kernel contexts: (to be fixed later):
+	 * - min or 2 or 1 context/numa
+	 * - Context 0 - default/errors
+	 * - Context 1 - VL15
+	 */
+	if (n_krcvqs)
+		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS;
+	else
+		num_kernel_contexts = num_online_nodes();
+	num_kernel_contexts =
+		max_t(int, MIN_KERNEL_KCTXTS, num_kernel_contexts);
+
+	/*
+	 * User contexts: (to be fixed later)
+	 *	- default to 1 user context per CPU
+	 */
+	num_user_contexts = num_online_cpus();
+
+	total_contexts = num_kernel_contexts + num_user_contexts;
+
+	/*
+	 * Adjust the counts given a global max.
+	 *	- always cut out user contexts before kernel contexts
+	 *	- only extend user contexts
+	 */
+	if (num_rcv_contexts) {
+		if (num_rcv_contexts < total_contexts) {
+			/* cut back, user first */
+			if (num_rcv_contexts < num_kernel_contexts) {
+				num_kernel_contexts = num_rcv_contexts;
+				num_user_contexts = 0;
+			} else {
+				num_user_contexts = num_rcv_contexts
+							- num_kernel_contexts;
+			}
+		} else {
+			/* extend the user context count */
+			num_user_contexts = num_rcv_contexts
+							- num_kernel_contexts;
+		}
+		/* recalculate */
+		total_contexts = num_kernel_contexts + num_user_contexts;
+	}
+
+	if (total_contexts > dd->chip_rcv_contexts) {
+		/* don't silently adjust, complain and fail */
+		dd_dev_err(dd,
+			"not enough physical contexts: want %d, have %d\n",
+			(int)total_contexts, (int)dd->chip_rcv_contexts);
+		return -ENOSPC;
+	}
+
+	/* the first N are kernel contexts, the rest are user contexts */
+	dd->num_rcv_contexts = total_contexts;
+	dd->n_krcv_queues = num_kernel_contexts;
+	dd->first_user_ctxt = num_kernel_contexts;
+	dd->freectxts = num_user_contexts;
+	dd_dev_info(dd,
+		"rcv contexts: chip %d, used %d (kernel %d, user %d)\n",
+		(int)dd->chip_rcv_contexts,
+		(int)dd->num_rcv_contexts,
+		(int)dd->n_krcv_queues,
+		(int)dd->num_rcv_contexts - dd->n_krcv_queues);
+
+	/*
+	 * Recieve array allocation:
+	 *   All RcvArray entries are divided into groups of 8. This
+	 *   is required by the hardware and will speed up writes to
+	 *   consecutive entries by using write-combining of the entire
+	 *   cacheline.
+	 *
+	 *   The number of groups are evenly divided among all contexts.
+	 *   any left over groups will be given to the first N user
+	 *   contexts.
+	 */
+	dd->rcv_entries.group_size = WFR_RCV_INCREMENT;
+	ngroups = dd->chip_rcv_array_count / dd->rcv_entries.group_size;
+	dd->rcv_entries.ngroups = ngroups / dd->num_rcv_contexts;
+	dd->rcv_entries.nctxt_extra = ngroups -
+		(dd->num_rcv_contexts * dd->rcv_entries.ngroups);
+	dd_dev_info(dd, "RcvArray groups %u, ctxts extra %u\n",
+		    dd->rcv_entries.ngroups,
+		    dd->rcv_entries.nctxt_extra);
+	if (dd->rcv_entries.ngroups * dd->rcv_entries.group_size >
+	    WFR_MAX_EAGER_ENTRIES * 2) {
+		dd->rcv_entries.ngroups = (WFR_MAX_EAGER_ENTRIES * 2) /
+			dd->rcv_entries.group_size;
+		dd_dev_info(dd,
+		   "RcvArray group count too high, change to %u\n",
+		   dd->rcv_entries.ngroups);
+		dd->rcv_entries.nctxt_extra = 0;
+	}
+	/*
+	 * PIO send contexts
+	 */
+	ret = init_sc_pools_and_sizes(dd);
+	if (ret >= 0) {	/* success */
+		dd->num_send_contexts = ret;
+		dd_dev_info(
+			dd,
+			"send contexts: chip %d, used %d (kernel %d, ack %d, user %d)\n",
+			dd->chip_send_contexts,
+			dd->num_send_contexts,
+			dd->sc_sizes[SC_KERNEL].count,
+			dd->sc_sizes[SC_ACK].count,
+			dd->sc_sizes[SC_USER].count);
+		ret = 0;	/* success */
+	}
+
+	return ret;
+}
+
+/*
+ * Set the device/port partition key table. The MAD code
+ * will ensure that, at least, the partial management
+ * partition key is present in the table.
+ */
+static void set_partition_keys(struct qib_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg = 0;
+	int i;
+
+	dd_dev_info(dd, "Setting partition keys\n");
+	for (i = 0; i < qib_get_npkeys(dd); i++) {
+		reg |= (ppd->pkeys[i] &
+			WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK) <<
+			((i % 4) *
+			 WFR_RCV_PARTITION_KEY_PARTITION_KEY_B_SHIFT);
+		/* Each register holds 4 PKey values. */
+		if ((i % 4) == 3) {
+			write_csr(dd, WFR_RCV_PARTITION_KEY +
+				  ((i - 3) * 2), reg);
+			reg = 0;
+		}
+	}
+
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_PARTITION_KEY_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+}
+
+/*
+ * These CSRs and memories are uninitialized on reset and must be
+ * written before reading to set the ECC/parity bits.
+ *
+ * NOTE: All user context CSRs that are not mmaped write-only
+ * (e.g. the TID flows) must be initialized even if the driver never
+ * reads them.
+ */
+static void write_uninitialized_csrs_and_memories(struct hfi_devdata *dd)
+{
+	int i, j;
+
+	/* CceIntMap */
+	for (i = 0; i < WFR_CCE_NUM_INT_MAP_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MAP+(8*i), 0);
+
+	/* SendCtxtCreditReturnAddr */
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
+
+	/* PIO Send buffers */
+	/* SDMA Send buffers */
+	/* These are not normally read, and (presently) have no method
+	   to be read, so are not pre-initialized */
+
+	/* RcvHdrAddr */
+	/* RcvHdrTailAddr */
+	/* RcvTidFlowTable */
+	for (i = 0; i < dd->chip_rcv_contexts; i++) {
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_TAIL_ADDR, 0);
+		for (j = 0; j < WFR_RXE_NUM_TID_FLOWS; j++)
+			write_uctxt_csr(dd, i, WFR_RCV_TID_FLOW_TABLE+(8*j), 0);
+	}
+
+	/* RcvArray */
+	for (i = 0; i < dd->chip_rcv_array_count; i++)
+		write_csr(dd, WFR_RCV_ARRAY + (8*i),
+					WFR_RCV_ARRAY_RT_WRITE_ENABLE_SMASK);
+
+	/* RcvQPMapTable */
+	for (i = 0; i < 32; i++)
+		write_csr(dd, WFR_RCV_QP_MAP_TABLE + (8 * i), 0);
+}
+
+/*
+ * Use the ctrl_bits in CceCtrl to clear the status_bits in CceStatus.
+ */
+static void clear_cce_status(struct hfi_devdata *dd, u64 status_bits,
+				u64 ctrl_bits)
+{
+	unsigned long timeout;
+	u64 reg;
+
+	/* is the condition present? */
+	reg = read_csr(dd, WFR_CCE_STATUS);
+	if ((reg & status_bits) == 0)
+		return;
+
+	/* clear the condition */
+	write_csr(dd, WFR_CCE_CTRL, ctrl_bits);
+
+	/* wait for the condition to clear */
+	timeout = jiffies + msecs_to_jiffies(CCE_STATUS_TIMEOUT);
+	while (1) {
+		reg = read_csr(dd, WFR_CCE_STATUS);
+		if ((reg & status_bits) == 0)
+			return;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				"Timeout waiting for CceStatus to clear bits 0x%llx, remaining 0x%llx\n",
+				status_bits, reg & status_bits);
+			return;
+		}
+		udelay(1);
+	}
+}
+
+/* set CCE CSRs to chip reset defaults */
+static void reset_cce_csrs(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* WFR_CCE_REVISION read-only */
+	/* WFR_CCE_REVISION2 read-only */
+	/* WFR_CCE_CTRL - bits clear automatically */
+	/* WFR_CCE_STATUS read-only, use CceCtrl to clear */
+	clear_cce_status(dd, ALL_FROZE, WFR_CCE_CTRL_SPC_UNFREEZE_SMASK);
+	clear_cce_status(dd, ALL_TXE_PAUSE, WFR_CCE_CTRL_TXE_RESUME_SMASK);
+	clear_cce_status(dd, ALL_RXE_PAUSE, WFR_CCE_CTRL_RXE_RESUME_SMASK);
+	for (i = 0; i < CCE_NUM_SCRATCH; i++)
+		write_csr(dd, WFR_CCE_SCRATCH + (8 * i), 0);
+	/* WFR_CCE_ERR_STATUS read-only */
+	write_csr(dd, WFR_CCE_ERR_MASK, 0);
+	write_csr(dd, WFR_CCE_ERR_CLEAR, ~0ull);
+	/* WFR_CCE_ERR_FORCE leave alone */
+	for (i = 0; i < CCE_NUM_32_BIT_COUNTERS; i++)
+		write_csr(dd, WFR_CCE_COUNTER_ARRAY32 + (8 * i), 0);
+	/* TODO: what is the policy for CceDbiCtrl? */
+	/* TODO: WFR_CCE_DBI_CTRL */
+	/* TODO: WFR_CCE_DBI_ADDR */
+	/* TODO: WFR_CCE_DBI_DATA */
+	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_RESETCSR);
+	/* TODO: what is the policy for CcePcieCtrl? Leave alone? */
+	/* TODO: write_csr(dd, WFR_CCE_PCIE_CTRL, 0);*/
+	for (i = 0; i < CCE_NUM_MSIX_VECTORS; i++) {
+		write_csr(dd, WFR_CCE_MSIX_TABLE_LOWER + (8 * i), 0);
+		write_csr(dd, WFR_CCE_MSIX_TABLE_UPPER + (8 * i),
+					WFR_CCE_MSIX_TABLE_UPPER_RESETCSR);
+	}
+	for (i = 0; i < CCE_NUM_MSIX_PBAS; i++) {
+		/* WFR_CCE_MSIX_PBA read-only */
+		write_csr(dd, WFR_CCE_MSIX_INT_GRANTED, ~0ull);
+		write_csr(dd, WFR_CCE_MSIX_VEC_CLR_WITHOUT_INT, ~0ull);
+	}
+	for (i = 0; i < CCE_NUM_INT_MAP_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MAP, 0);
+	for (i = 0; i < CCE_NUM_INT_CSRS; i++) {
+		/* WFR_CCE_INT_STATUS read-only */
+		write_csr(dd, WFR_CCE_INT_MASK + (8 * i), 0);
+		write_csr(dd, WFR_CCE_INT_CLEAR + (8 * i), ~0ull);
+		/* WFR_CCE_INT_FORCE leave alone */
+		/* WFR_CCE_INT_BLOCKED read-only */
+	}
+	for (i = 0; i < CCE_NUM_32_BIT_INT_COUNTERS; i++)
+		write_csr(dd, WFR_CCE_INT_COUNTER_ARRAY32 + (8 * i), 0);
+}
+
+/* set ASIC CSRs to chip reset defaults */
+static void reset_asic_csrs(struct hfi_devdata *dd)
+{
+	static DEFINE_MUTEX(asic_mutex);
+	static int called;
+	int i;
+
+	/*
+	 * TODO:  If the HFIs are shared between separate nodes or VMs,
+	 * then more will need to be done here.  One idea is a module
+	 * parameter that returns early, letting the first power-on or
+	 * a known first load do the reset and blocking all others.
+	 */
+
+	/*
+	 * These CSRs should only be reset once - the first one here will
+	 * do the work.  Use a mutex so that a non-first caller waits until
+	 * the first is finished before it can proceed.
+	 */
+	mutex_lock(&asic_mutex);
+	if (called)
+		goto done;
+	called = 1;
+
+	if (dd->icode != WFR_ICODE_FPGA_EMULATION) {
+		/* emulation does not have an SBUS - leave these alone */
+		/*
+		 * TODO: All writes to ASIC_CFG_SBUS_REQUEST do something.
+		 * Do we want to write a reset here or leave it alone?
+		 * Notes:
+		 * o The reset is not zero if aimed at the core.  See the
+		 *   SBUS documentation for details.
+		 * o If the SBUS firmware has been upated (e.g. by the BIOS),
+		 *   will the reset revert that?
+		 */
+		/*write_csr(dd, WFR_ASIC_CFG_SBUS_REQUEST, 0);*/
+		write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
+	}
+	/* WFR_ASIC_SBUS_RESULT read-only */
+	write_csr(dd, WFR_ASIC_STS_SBUS_COUNTERS, 0);
+	for (i = 0; i < ASIC_NUM_SCRATCH; i++)
+		write_csr(dd, WFR_ASIC_CFG_SCRATCH + (8 * i), 0);
+	write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);	/* this will clear it */
+	write_csr(dd, WFR_ASIC_CFG_DRV_STR, 0);
+	write_csr(dd, WFR_ASIC_CFG_THERM_POLL_EN, 0);
+	/* WFR_ASIC_STS_THERM read-only */
+	/* WFR_ASIC_CFG_RESET leave alone */
+
+	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, 0);
+	/* WFR_ASIC_PCIE_SD_HOST_STATUS read-only */
+	write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_DATA_CODE, 0);
+	write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_ENABLE, 0);
+	/* WFR_ASIC_PCIE_SD_INTRPT_PROGRESS read-only */
+	write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_STATUS, ~0ull); /* clear */
+	/* WFR_ASIC_HFI0_PCIE_SD_INTRPT_RSPD_DATA read-only */
+	/* WFR_ASIC_HFI1_PCIE_SD_INTRPT_RSPD_DATA read-only */
+	for (i = 0; i < 16; i++)
+		write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_LIST + (8 * i), 0);
+
+	/* WFR_ASIC_GPIO_IN read-only */
+	write_csr(dd, WFR_ASIC_GPIO_OE, 0);
+	write_csr(dd, WFR_ASIC_GPIO_INVERT, 0);
+	write_csr(dd, WFR_ASIC_GPIO_OUT, 0);
+	write_csr(dd, WFR_ASIC_GPIO_MASK, 0);
+	/* WFR_ASIC_GPIO_STATUS read-only */
+	write_csr(dd, WFR_ASIC_GPIO_CLEAR, ~0ull);
+	/* WFR_ASIC_GPIO_FORCE leave alone */
+
+	/* WFR_ASIC_QSFP1_IN read-only */
+	write_csr(dd, WFR_ASIC_QSFP1_OE, 0);
+	write_csr(dd, WFR_ASIC_QSFP1_INVERT, 0);
+	write_csr(dd, WFR_ASIC_QSFP1_OUT, 0);
+	write_csr(dd, WFR_ASIC_QSFP1_MASK, 0);
+	/* WFR_ASIC_QSFP1_STATUS read-only */
+	write_csr(dd, WFR_ASIC_QSFP1_CLEAR, ~0ull);
+	/* WFR_ASIC_QSFP1_FORCE leave alone */
+
+	/* WFR_ASIC_QSFP2_IN read-only */
+	write_csr(dd, WFR_ASIC_QSFP2_OE, 0);
+	write_csr(dd, WFR_ASIC_QSFP2_INVERT, 0);
+	write_csr(dd, WFR_ASIC_QSFP2_OUT, 0);
+	write_csr(dd, WFR_ASIC_QSFP2_MASK, 0);
+	/* WFR_ASIC_QSFP2_STATUS read-only */
+	write_csr(dd, WFR_ASIC_QSFP2_CLEAR, ~0ull);
+	/* WFR_ASIC_QSFP2_FORCE leave alone */
+
+	write_csr(dd, WFR_ASIC_EEP_CTL_STAT, WFR_ASIC_EEP_CTL_STAT_RESETCSR);
+	/* this also writes a NOP command, clearing paging mode */
+	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, 0);
+	write_csr(dd, WFR_ASIC_EEP_DATA, 0);
+	/* WFR_ASIC_MAN_EFUSE* read-only */
+	/* WFR_ASIC_WFR_EFUSE read-only */
+	/* WFR_ASIC_WFR_EFUSE_REGS* read-only */
+
+done:
+	mutex_unlock(&asic_mutex);
+}
+
+/* set MISC CSRs to chip reset defaults */
+static void reset_misc_csrs(struct hfi_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < 32; i++) {
+		write_csr(dd, WFR_MISC_CFG_RSA_R2 + (8 * i), 0);
+		write_csr(dd, WFR_MISC_CFG_RSA_SIGNATURE + (8 * i), 0);
+		write_csr(dd, WFR_MISC_CFG_RSA_MODULUS + (8 * i), 0);
+	}
+	/* WFR_MISC_CFG_SHA_PRELOAD leave alone - always reads 0 and can
+	   only be written 128-byte chunks */
+	/* init RSA engine to clear lingering errors */
+	write_csr(dd, WFR_MISC_CFG_RSA_CMD, 1);
+	write_csr(dd, WFR_MISC_CFG_RSA_MU, 0);
+	write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
+	/* WFR_MISC_STS_8051_DIGEST read-only */
+	/* WFR_MISC_STS_SBM_DIGEST read-only */
+	/* WFR_MISC_STS_PCIE_DIGEST read-only */
+	/* WFR_MISC_STS_FAB_DIGEST read-only */
+	/* WFR_MISC_ERR_STATUS read-only */
+	write_csr(dd, WFR_MISC_ERR_MASK, 0);
+	write_csr(dd, WFR_MISC_ERR_CLEAR, ~0ull);
+	/* WFR_MISC_ERR_FORCE leave alone */
+}
+
+/* set TXE CSRs to chip reset defaults */
+static void reset_txe_csrs(struct hfi_devdata *dd)
+{
+	int i;
+
+	/*
+	 * TXE Kernel CSRs
+	 */
+	write_csr(dd, WFR_SEND_CTRL, 0);
+	__cm_reset(dd, 0);	/* reset CM internal state */
+	/* WFR_SEND_CONTEXTS read-only */
+	/* WFR_SEND_DMA_ENGINES read-only */
+	/* WFR_SEND_PIO_MEM_SIZE read-only */
+	/* WFR_SEND_DMA_MEM_SIZE read-only */
+	write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIMIT, 0);
+	pio_reset_all(dd);	/* WFR_SEND_PIO_INIT_CTXT */
+	/* WFR_SEND_PIO_ERR_STATUS read-only */
+	write_csr(dd, WFR_SEND_PIO_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_PIO_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_PIO_ERR_FORCE leave alone */
+	/* WFR_SEND_DMA_ERR_STATUS read-only */
+	write_csr(dd, WFR_SEND_DMA_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_DMA_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_DMA_ERR_FORCE leave alone */
+	/* WFR_SEND_EGRESS_ERR_STATUS read-only */
+	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_EGRESS_ERR_FORCE leave alone */
+	write_csr(dd, WFR_SEND_BTH_QP, 0);
+	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, 0);
+	write_csr(dd, WFR_SEND_SC2VLT0, 0);
+	write_csr(dd, WFR_SEND_SC2VLT1, 0);
+	write_csr(dd, WFR_SEND_SC2VLT2, 0);
+	write_csr(dd, WFR_SEND_SC2VLT3, 0);
+	write_csr(dd, WFR_SEND_LEN_CHECK0, 0);
+	write_csr(dd, WFR_SEND_LEN_CHECK1, 0);
+	/* WFR_SEND_ERR_STATUS read-only */
+	write_csr(dd, WFR_SEND_ERR_MASK, 0);
+	write_csr(dd, WFR_SEND_ERR_CLEAR, ~0ull);
+	/* WFR_SEND_ERR_FORCE read-only */
+	for (i = 0; i < WFR_VL_ARB_LOW_PRIO_TABLE_SIZE; i++)
+		write_csr(dd, WFR_SEND_LOW_PRIORITY_LIST + (8*i), 0);
+	for (i = 0; i < WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE; i++)
+		write_csr(dd, WFR_SEND_HIGH_PRIORITY_LIST + (8*i), 0);
+	for (i = 0; i < dd->chip_send_contexts/WFR_NUM_CONTEXTS_PER_SET; i++)
+		write_csr(dd, WFR_SEND_CONTEXT_SET_CTRL + (8*i), 0);
+	for (i = 0; i < WFR_TXE_NUM_32_BIT_COUNTER; i++)
+		write_csr(dd, WFR_SEND_COUNTER_ARRAY32 + (8*i), 0);
+	for (i = 0; i < WFR_TXE_NUM_64_BIT_COUNTER; i++)
+		write_csr(dd, WFR_SEND_COUNTER_ARRAY64 + (8*i), 0);
+	write_csr(dd, WFR_SEND_CM_CTRL, WFR_SEND_CM_CTRL_RESETCSR);
+	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
+					WFR_SEND_CM_GLOBAL_CREDIT_RESETCSR);
+	/* WFR_SEND_CM_CREDIT_USED_STATUS read-only */
+	write_csr(dd, WFR_SEND_CM_TIMER_CTRL, 0);
+	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE0_TO3, 0);
+	write_csr(dd, WFR_SEND_CM_LOCAL_AU_TABLE4_TO7, 0);
+	write_csr(dd, WFR_SEND_CM_REMOTE_AU_TABLE0_TO3, 0);
+	write_csr(dd, WFR_SEND_CM_REMOTE_AU_TABLE4_TO7, 0);
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
+		write_csr(dd, WFR_SEND_CM_CREDIT_VL + (8*i), 0);
+	write_csr(dd, WFR_SEND_CM_CREDIT_VL15, 0);
+	/* WFR_SEND_CM_CREDIT_USED_VL read-only */
+	/* WFR_SEND_CM_CREDIT_USED_VL15 read-only */
+	/* WFR_SEND_EGRESS_CTXT_STATUS read-only */
+	/* WFR_SEND_EGRESS_SEND_DMA_STATUS read-only */
+	write_csr(dd, WFR_SEND_EGRESS_ERR_INFO, ~0ull);
+	/* WFR_SEND_EGRESS_ERR_INFO read-only */
+	/* WFR_SEND_EGRESS_ERR_SOURCE read-only */
+
+	/*
+	 * TXE Per-Context CSRs
+	 */
+	for (i = 0; i < dd->chip_send_contexts; i++) {
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CREDIT_FORCE, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_CLEAR, ~0ull);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_VL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_JOB_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_PARTITION_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_SLID, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_OPCODE, 0);
+	}
+
+	/*
+	 * TXE Per-SDMA CSRs
+	 */
+	for (i = 0; i < dd->chip_sdma_engines; i++) {
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CTRL, 0);
+		/* WFR_SEND_DMA_STATUS read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_BASE_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_LEN_GEN, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_TAIL, 0);
+		/* WFR_SEND_DMA_HEAD read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_HEAD_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_PRIORITY_THLD, 0);
+		/* WFR_SEND_DMA_IDLE_CNT read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_RELOAD_CNT, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_DESC_CNT, 0);
+		/* WFR_SEND_DMA_DESC_FETCHED_CNT read-only */
+		/* WFR_SEND_DMA_ENG_ERR_STATUS read-only */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_MASK, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_CLEAR, ~0ull);
+		/* WFR_SEND_DMA_ENG_ERR_FORCE leave alone */
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_ENABLE, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_VL, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_JOB_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_PARTITION_KEY, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_SLID, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CHECK_OPCODE, 0);
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_MEMORY, 0);
+	}
+}
+
+/*
+ * Expect on entry:
+ * o Packet ingress is disabled, i.e. RcvCtrl.RcvPortEnable == 0
+ */
+static void init_rbufs(struct hfi_devdata *dd)
+{
+	u64 reg;
+	int count;
+
+	/*
+	 * Wait for DMA to stop: RxRbufPktPending and RxPktInProgress are
+	 * clear.
+	 */
+	count = 0;
+	while (1) {
+		reg = read_csr(dd, WFR_RCV_STATUS);
+		if ((reg & (WFR_RCV_STATUS_RX_RBUF_PKT_PENDING_SMASK
+			    | WFR_RCV_STATUS_RX_PKT_IN_PROGRESS_SMASK)) == 0)
+			break;
+		/*
+		 * Give up after 1ms - maximum wait time.
+		 *
+		 * RBuf size is 148KiB.  Slowest possible is PCIe Gen1 x1 at
+		 * 250MB/s bandwidth.  Derate that at 66% for overhead to get:
+		 *	148 KB / (66% * 250MB/s) = 920us
+		 */
+		if (count++ > 500) {
+			dd_dev_err(dd,
+				"%s: in-progress DMA not clearing: RcvStatus 0x%llx, continuing\n",
+				__func__, reg);
+			break;
+		}
+		udelay(2); /* do not busy-wait the CSR */
+	}
+
+	/* start the init */
+	write_csr(dd, WFR_RCV_CTRL,
+		read_csr(dd, WFR_RCV_CTRL) | WFR_RCV_CTRL_RX_RBUF_INIT_SMASK);
+	/*
+	 * Read to force the write of Rcvtrl.RxRbufInit.  There is a brief
+	 * period after the write before RcvStatus.RxRbufInitDone is valid.
+	 * The delay in the first run through the loop below is sufficient and
+	 * required before the first read of RcvStatus.RxRbufInintDone.
+	 */
+	read_csr(dd, WFR_RCV_CTRL);
+
+	/* wait for the init to finish */
+	count = 0;
+	while (1) {
+		/* delay is required first time through - see above */
+		udelay(2); /* do not busy-wait the CSR */
+		reg = read_csr(dd, WFR_RCV_STATUS);
+		if (reg & (WFR_RCV_STATUS_RX_RBUF_INIT_DONE_SMASK))
+			break;
+
+		/* give up after 100us - slowest possible at 33MHz is 73us */
+		if (count++ > 50) {
+			dd_dev_err(dd,
+				"%s: RcvStatus.RxRbufInit not set, continuing\n",
+				__func__);
+			break;
+		}
+	}
+}
+
+/* set RXE CSRs to chip reset defaults */
+static void reset_rxe_csrs(struct hfi_devdata *dd)
+{
+	int i, j;
+
+	/*
+	 * RXE Kernel CSRs
+	 */
+	write_csr(dd, WFR_RCV_CTRL, 0);
+	init_rbufs(dd);
+	/* WFR_RCV_STATUS read-only */
+	/* WFR_RCV_CONTEXTS read-only */
+	/* WFR_RCV_ARRAY_CNT read-only */
+	/* WFR_RCV_BUF_SIZE read-only */
+	write_csr(dd, WFR_RCV_BTH_QP, 0);
+	write_csr(dd, WFR_RCV_MULTICAST, 0);
+	write_csr(dd, WFR_RCV_BYPASS, 0);
+	write_csr(dd, WFR_RCV_VL15, 0);
+	/* this is a clear-down */
+	write_csr(dd, WFR_RCV_ERR_INFO,
+			WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK);
+	/* WFR_RCV_ERR_STATUS read-only */
+	write_csr(dd, WFR_RCV_ERR_MASK, 0);
+	write_csr(dd, WFR_RCV_ERR_CLEAR, ~0ull);
+	/* WFR_RCV_ERR_FORCE leave alone */
+	for (i = 0; i < 32; i++)
+		write_csr(dd, WFR_RCV_QP_MAP_TABLE + (8 * i), 0);
+	for (i = 0; i < 4; i++)
+		write_csr(dd, WFR_RCV_PARTITION_KEY + (8 * i), 0);
+	for (i = 0; i < RXE_NUM_32_BIT_COUNTERS; i++)
+		write_csr(dd, WFR_RCV_COUNTER_ARRAY32 + (8 * i), 0);
+	for (i = 0; i < RXE_NUM_64_BIT_COUNTERS; i++)
+		write_csr(dd, WFR_RCV_COUNTER_ARRAY64 + (8 * i), 0);
+	for (i = 0; i < RXE_NUM_RSM_INSTANCES; i++) {
+		write_csr(dd, WFR_RCV_RSM_CFG + (8 * i), 0);
+		write_csr(dd, WFR_RCV_RSM_SELECT + (8 * i), 0);
+		write_csr(dd, WFR_RCV_RSM_MATCH + (8 * i), 0);
+	}
+	for (i = 0; i < 32; i++)
+		write_csr(dd, WFR_RCV_RSM_MAP_TABLE + (8 * i), 0);
+
+	/*
+	 * RXE Kernel and User Per-Context CSRs
+	 */
+	for (i = 0; i < dd->chip_rcv_contexts; i++) {
+		/* kernel */
+		write_kctxt_csr(dd, i, WFR_RCV_CTXT_CTRL, 0);
+		/* WFR_RCV_CTXT_STATUS read-only */
+		write_kctxt_csr(dd, i, WFR_RCV_EGR_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_TID_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_KEY_CTRL, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_CNT, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_ENT_SIZE, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_SIZE, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_TAIL_ADDR, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_AVAIL_TIME_OUT, 0);
+		write_kctxt_csr(dd, i, WFR_RCV_HDR_OVFL_CNT, 0);
+
+		/* user */
+		/* WFR_RCV_HDR_TAIL read-only */
+		write_uctxt_csr(dd, i, WFR_RCV_HDR_HEAD, 0);
+		/* WFR_RCV_EGR_INDEX_TAIL read-only */
+		write_uctxt_csr(dd, i, WFR_RCV_EGR_INDEX_HEAD, 0);
+		/* WFR_RCV_EGR_OFFSET_TAIL read-only */
+		for (j = 0; j < RXE_NUM_TID_FLOWS; j++) {
+			write_uctxt_csr(dd, i, WFR_RCV_TID_FLOW_TABLE + (8 * j),
+				0);
+		}
+	}
+}
+
+/*
+ * Set sc2vl tables.
+ *
+ * They power on to zeros, so to avoid send context errors
+ * they need to be set:
+ *
+ * SC 0-7 -> VL 0-7 (respectively)
+ * SC 15  -> VL 15
+ * otherwize
+ *        -> VL 0
+ */
+static void init_sc2vl_tables(struct hfi_devdata *dd)
+{
+	int i;
+	/* init per architecture spec, contrained by hardware capability */
+
+	/* WFR maps sent packets */
+	write_csr(dd, WFR_SEND_SC2VLT0, SC2VL_VAL(
+		0,
+		0, 0, 1, 1,
+		2, 2, 3, 3,
+		4, 4, 5, 5,
+		6, 6, 7, 7));
+	write_csr(dd, WFR_SEND_SC2VLT1, SC2VL_VAL(
+		1,
+		8, 0, 9, 0,
+		10, 0, 11, 0,
+		12, 0, 13, 0,
+		14, 0, 15, 15));
+	write_csr(dd, WFR_SEND_SC2VLT2, SC2VL_VAL(
+		2,
+		16, 0, 17, 0,
+		18, 0, 19, 0,
+		20, 0, 21, 0,
+		22, 0, 23, 0));
+	write_csr(dd, WFR_SEND_SC2VLT3, SC2VL_VAL(
+		3,
+		24, 0, 25, 0,
+		26, 0, 27, 0,
+		28, 0, 29, 0,
+		30, 0, 31, 0));
+
+#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
+/* TODO: only do this with WFR HAS 0.76 (sim v33) and later, the sim changed
+   what it does with these CSRs at that time */
+	/* DC maps received packets */
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_15_0, DC_SC_VL_VAL(
+		15_0,
+		0, 0, 1, 1,  2, 2,  3, 3,  4, 4,  5, 5,  6, 6,  7,  7,
+		8, 0, 9, 0, 10, 0, 11, 0, 12, 0, 13, 0, 14, 0, 15, 15));
+	write_csr(dd, DCC_CFG_SC_VL_TABLE_31_16, DC_SC_VL_VAL(
+		31_16,
+		16, 0, 17, 0, 18, 0, 19, 0, 20, 0, 21, 0, 22, 0, 23, 0,
+		24, 0, 25, 0, 26, 0, 27, 0, 28, 0, 29, 0, 30, 0, 31, 0));
+
+	/* initialize the cached sc2vl values consistently with h/w */
+	for (i = 0; i < 32; i++) {
+		if (i < 8 || i == 15)
+			*((u8 *)(dd->sc2vl) + i) = (u8)i;
+		else
+			*((u8 *)(dd->sc2vl) + i) = 0;
+	}
+
+#endif
+}
+
+/*
+ * Read chip sizes and then reset parts to sane, disabled, values.  We cannot
+ * depend on the chip going through a power-on reset - a driver may be loaded
+ * and unloaded many times.
+ *
+ * Do not write any CSR values to the chip in this routine - there may be
+ * a reset following the (possible) FLR in this routine.
+ *
+ */
+static void init_chip(struct hfi_devdata *dd)
+{
+	int i;
+
+	/*
+	 * Put the WFR CSRs in a known state.
+	 * Combine this with a DC reset.
+	 *
+	 * Stop the device from doing anything while we do a
+	 * reset.  We know there are no other active users of
+	 * the device since we are now in charge.  Turn off
+	 * off all outbound and inbound traffic and make sure
+	 * the device does not generate any interrupts.
+	 */
+
+	/* disable send contexts and SDMA engines */
+	write_csr(dd, WFR_SEND_CTRL, 0);
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CTRL, 0);
+	for (i = 0; i < dd->chip_sdma_engines; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_CTRL, 0);
+	/* disable port (turn off RXE inbound traffic) and contexts */
+	write_csr(dd, WFR_RCV_CTRL, 0);
+	for (i = 0; i < dd->chip_rcv_contexts; i++)
+		write_csr(dd, WFR_RCV_CTXT_CTRL, 0);
+	/* mask all interrupt sources */
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
+		write_csr(dd, WFR_CCE_INT_MASK + (8*i), 0ull);
+
+	/*
+	 * DC Reset: do a full DC reset before the register clear.
+	 * A recommended length of time to hold is one CSR read,
+	 * so reread the CceDcCtrl.  Then, hold the DC in reset
+	 * across the clear.
+	 */
+	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
+	(void) read_csr(dd, WFR_CCE_DC_CTRL);
+
+	if (use_flr) {
+		/*
+		 * A FLR will reset the SPC core and part of the PCIe.
+		 * The parts that need to be restored have already been
+		 * saved.
+		 */
+		dd_dev_info(dd, "Resetting CSRs with FLR\n");
+
+		/* do the FLR, the DC reset will remain */
+		hfi_pcie_flr(dd);
+
+		/* restore command and BARs */
+		restore_pci_variables(dd);
+
+		/*
+		 * A0 erratum 291496
+		 * additional FLR required to prevent HW in arbitrary state.
+		 */
+		if (is_a0(dd)) {
+			dd_dev_info(dd, "Resetting CSRs with FLR (A0 erratum 291496)\n");
+			hfi_pcie_flr(dd);
+			restore_pci_variables(dd);
+		}
+
+	} else {
+		dd_dev_info(dd, "Resetting CSRs with writes\n");
+		reset_cce_csrs(dd);
+		reset_txe_csrs(dd);
+		reset_rxe_csrs(dd);
+		reset_asic_csrs(dd);
+		reset_misc_csrs(dd);
+	}
+	/* clear the DC reset */
+	write_csr(dd, WFR_CCE_DC_CTRL, 0);
+
+	/*
+	 * Clear the QSFP reset.
+	 * A0 leaves the out lines floating on power on, then on an FLR
+	 * enforces a 0 on all out pins.  The driver does not touch
+	 * ASIC_QSFPn_OUT otherwise.  This leaves RESET_N low and
+	 * anything  plugged constantly in reset, if it pays attention
+	 * to RESET_N.
+	 * A prime example of this is SiPh. For now, set all pins high.
+	 * I2CCLK and I2CDAT will change per direction, and INT_N and
+	 * MODPRS_N are input only and their value is ignored.
+	 */
+	if (is_a0(dd)) {
+		write_csr(dd, WFR_ASIC_QSFP1_OUT, 0x1f);
+		write_csr(dd, WFR_ASIC_QSFP2_OUT, 0x1f);
+	}
+
+	/*
+	 * TODO: The following block is strictly for the simulator.
+	 * If we find that the physical and logical states are LinkUp
+	 * and Active respectively, then assume we are in the simulator's
+	 * "EasyLinkup" mode.  When in EayLinkup mode, we don't change
+	 * the DC's physical and logical states.
+	 */
+	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+		u32 ps = read_physical_state(dd);
+		u32 ls = __read_logical_state(dd);
+
+		if (ps == WFR_PLS_LINKUP && ls == WFR_LSTATE_ACTIVE) {
+			/* assume we're in the simulator's easy linkup mode */
+			if (sim_easy_linkup == EASY_LINKUP_UNSET
+						|| sim_easy_linkup == 1) {
+				sim_easy_linkup = 1;
+				dd_dev_info(dd, "Assuming simulation EasyLinkup mode\n");
+			} else {
+				dd_dev_info(dd, "This HFI is in EasyLinkup mode, but the other is not?\n");
+			}
+		} else {
+			sim_easy_linkup = 0;
+			if (sim_easy_linkup == EASY_LINKUP_UNSET
+						|| sim_easy_linkup == 0) {
+				sim_easy_linkup = 0;
+			} else {
+				dd_dev_info(dd, "This HFI is in normal link mode, but the other is not?\n");
+			}
+			/*
+			 * otherwise the link should be offline with port down
+			 */
+			if (!(ps == WFR_PLS_OFFLINE && ls == WFR_LSTATE_DOWN)) {
+				__print_current_states(
+					dd,
+					__func__,
+					"at start",
+					ps,
+					ls);
+				set_physical_link_state(dd, WFR_PLS_OFFLINE);
+				dd_dev_err(dd, "Manually setting physical link to offline - not supposed to be necessary\n");
+				print_current_states(
+					dd,
+					__func__,
+					"after force offline");
+			}
+		}
+	} else {
+		sim_easy_linkup = 0;
+	}
+}
+
+static void init_early_variables(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* assign link credit variables */
+	dd->vau = WFR_CM_VAU;
+	dd->link_credits = WFR_CM_GLOBAL_CREDITS;
+	if (is_a0(dd))			/* HSD 291428 workaround */
+		dd->link_credits--;
+	dd->vcu = cu_to_vcu(hfi_cu);
+	/* TODO: Make initial VL15 credit size a parameter? */
+	/* enough room for 8 MAD packets plus header - 17K */
+	dd->vl15_init = (8 * (2048 + 128)) / vau_to_au(dd->vau);
+	if (dd->vl15_init > dd->link_credits)
+		dd->vl15_init = dd->link_credits;
+
+	write_uninitialized_csrs_and_memories(dd);
+
+	if (HFI_CAP_IS_KSET(PKEY_CHECK))
+		for (i = 0; i < dd->num_pports; i++) {
+			struct qib_pportdata *ppd = &dd->pport[i];
+
+			set_partition_keys(ppd);
+		}
+	init_sc2vl_tables(dd);
+}
+
+static void init_kdeth_qp(struct hfi_devdata *dd)
+{
+	/* user changed the KDETH_QP */
+	if (kdeth_qp != 0 && kdeth_qp >= 0xff) {
+		/* out of range or illegal value */
+		dd_dev_err(dd, "Invalid KDETH queue pair prefix, ignoring");
+		kdeth_qp = 0;
+	}
+	if (kdeth_qp == 0)	/* not set, or failed range check */
+		kdeth_qp = DEFAULT_KDETH_QP;
+
+	write_csr(dd, WFR_SEND_BTH_QP,
+			(kdeth_qp & WFR_SEND_BTH_QP_KDETH_QP_MASK)
+				<< WFR_SEND_BTH_QP_KDETH_QP_SHIFT);
+
+	write_csr(dd, WFR_RCV_BTH_QP,
+			(kdeth_qp & WFR_RCV_BTH_QP_KDETH_QP_MASK)
+				<< WFR_RCV_BTH_QP_KDETH_QP_SHIFT);
+}
+
+/**
+ * init_qpmap_table
+ * @dd - device data
+ * @first_ctxt - first context
+ * @last_ctxt - first context
+ *
+ * This return sets the qpn mapping table that
+ * is indexed by qpn[8:1].
+ *
+ * The routine will round robin the 256 settings
+ * from first_ctxt to last_ctxt.
+ *
+ * The first/last looks ahead to having specialized
+ * receive contexts for mgmt and bypass.  Normal
+ * verbs traffic will assumed to be on a range
+ * of receive contexts.
+ */
+static void init_qpmap_table(struct hfi_devdata *dd,
+			     u32 first_ctxt,
+			     u32 last_ctxt)
+{
+	u64 reg = 0;
+	u64 regno = WFR_RCV_QP_MAP_TABLE;
+	int i;
+	u64 ctxt = first_ctxt;
+
+	for (i = 0; i < 256;) {
+		if (ctxt == VL15CTXT) {
+			ctxt++;
+			if (ctxt > last_ctxt)
+				ctxt = first_ctxt;
+			continue;
+		}
+		reg |= ctxt << (8 * (i % 8));
+		i++;
+		ctxt++;
+		if (ctxt > last_ctxt)
+			ctxt = first_ctxt;
+		if (i % 8 == 0) {
+			write_csr(dd, regno, reg);
+			reg = 0;
+			regno += 8;
+		}
+	}
+	if (i % 8)
+		write_csr(dd, regno, reg);
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_QP_MAP_ENABLE_SMASK;
+	reg |= WFR_RCV_CTRL_RCV_BYPASS_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+}
+
+/**
+ * init_qos - init RX qos
+ * @dd - device data
+ * @first_context
+ *
+ * This routine initializes Rule 0 and the
+ * RSM map table to implement qos.
+ *
+ * If all of the limit tests succeed,
+ * qos is applied based on the array
+ * interpretation of krcvqs where
+ * entry 0 is VL0.
+ *
+ * The number of vl bits (n) and the number of qpn
+ * bits (m) are computed to feed both the RSM map table
+ * and the single rule.
+ *
+ */
+static void init_qos(struct hfi_devdata *dd, u32 first_ctxt)
+{
+	u8 max_by_vl = 0;
+	unsigned qpns_per_vl, ctxt, i, qpn, n = 1, m;
+	u64 *rsmmap;
+	u64 reg;
+	u8  rxcontext = is_a0(dd) ? 0 : 0xff;  /* 0 is default if a0 ver. */
+
+	/* validate */
+	if (dd->n_krcv_queues <= MIN_KERNEL_KCTXTS ||
+	    num_vls == 1 ||
+	    krcvqsset <= 1)
+		goto bail;
+	for (i = 0; i < min_t(unsigned, num_vls, krcvqsset); i++)
+		if (krcvqs[i] > max_by_vl)
+			max_by_vl = krcvqs[i];
+	if (max_by_vl > 32)
+		goto bail;
+	qpns_per_vl = __roundup_pow_of_two(max_by_vl);
+	/* determine bits vl */
+	n = ilog2(num_vls);
+	/* determine bits for qpn */
+	m = ilog2(qpns_per_vl);
+	if ((m + n) > 7)
+		goto bail;
+	if (num_vls * qpns_per_vl > dd->chip_rcv_contexts)
+		goto bail;
+	rsmmap = kmalloc_array(NUM_MAP_REGS, sizeof(u64), GFP_KERNEL);
+	memset(rsmmap, rxcontext, NUM_MAP_REGS * sizeof(u64));
+	/* init the local copy of the table */
+	for (i = 0, ctxt = first_ctxt; i < num_vls; i++) {
+		unsigned tctxt;
+
+		for (qpn = 0, tctxt = ctxt;
+		     krcvqs[i] && qpn < qpns_per_vl; qpn++) {
+			unsigned idx, regoff, regidx;
+
+			/* generate index <= 128 */
+			idx = (qpn << n) ^ i;
+			regoff = (idx % 8) * 8;
+			regidx = idx / 8;
+			reg = rsmmap[regidx];
+			/* replace 0xff with context number */
+			reg &= ~(WFR_RCV_RSM_MAP_TABLE_RCV_CONTEXT_A_MASK
+				<< regoff);
+			reg |= (u64)(tctxt++) << regoff;
+			rsmmap[regidx] = reg;
+			if (tctxt == ctxt + krcvqs[i])
+				tctxt = ctxt;
+		}
+		ctxt += krcvqs[i];
+	}
+	/* flush cached copies to chip */
+	for (i = 0; i < NUM_MAP_REGS; i++)
+		write_csr(dd, WFR_RCV_RSM_MAP_TABLE + (8 * i), rsmmap[i]);
+	/* add rule0 */
+	write_csr(dd, WFR_RCV_RSM_CFG /* + (8 * 0) */,
+		WFR_RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_MASK
+			<< WFR_RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_SHIFT |
+		2ull << WFR_RCV_RSM_CFG_PACKET_TYPE_SHIFT);
+	write_csr(dd, WFR_RCV_RSM_SELECT /* + (8 * 0) */,
+		LRH_BTH_MATCH_OFFSET
+			<< WFR_RCV_RSM_SELECT_FIELD1_OFFSET_SHIFT |
+		LRH_SC_MATCH_OFFSET << WFR_RCV_RSM_SELECT_FIELD2_OFFSET_SHIFT |
+		LRH_SC_SELECT_OFFSET << WFR_RCV_RSM_SELECT_INDEX1_OFFSET_SHIFT |
+		((u64)n) << WFR_RCV_RSM_SELECT_INDEX1_WIDTH_SHIFT |
+		QPN_SELECT_OFFSET << WFR_RCV_RSM_SELECT_INDEX2_OFFSET_SHIFT |
+		((u64)m + (u64)n) << WFR_RCV_RSM_SELECT_INDEX2_WIDTH_SHIFT);
+	write_csr(dd, WFR_RCV_RSM_MATCH /* + (8 * 0) */,
+		LRH_BTH_MASK << WFR_RCV_RSM_MATCH_MASK1_SHIFT |
+		LRH_BTH_VALUE << WFR_RCV_RSM_MATCH_VALUE1_SHIFT |
+		LRH_SC_MASK << WFR_RCV_RSM_MATCH_MASK2_SHIFT |
+		LRH_SC_VALUE << WFR_RCV_RSM_MATCH_VALUE2_SHIFT);
+	/* Enable RSM */
+	reg = read_csr(dd, WFR_RCV_CTRL);
+	reg |= WFR_RCV_CTRL_RCV_RSM_ENABLE_SMASK;
+	write_csr(dd, WFR_RCV_CTRL, reg);
+	kfree(rsmmap);
+	/* map everything else (non-VL15) to context 0 */
+	init_qpmap_table(
+		dd,
+		0,
+		0);
+	dd->qos_shift = n + 1;
+	return;
+bail:
+	dd->qos_shift = 1;
+	init_qpmap_table(
+		dd,
+		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0,
+		dd->n_krcv_queues - 1);
+}
+
+static void init_rxe(struct hfi_devdata *dd)
+{
+	/* enable all receive errors */
+	write_csr(dd, WFR_RCV_ERR_MASK, ~0ull);
+	/* setup QPN map table - start where VL15 context leaves off */
+	init_qos(
+		dd,
+		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0);
+	/*
+	 * HSD 290512 - make sure RcvCtrl.RcvWcb <= PCIe Device Control
+	 * Register Max_Payload_Size (PCI_EXP_DEVCTL in Linux PCIe config
+	 * space, PciCfgCap2.MaxPayloadSize in WFR).  There is only one
+	 * invalid configuration: RcvCtrl.RcvWcb set to its max of 256 and
+	 * Max_PayLoad_Size set to its minimum of 128.
+	 *
+	 * Presently, RcvCtrl.RcvWcb is not modified from its default of 0
+	 * (64 bytes).  Max_Payload_Size is possibly modified upward in
+	 * qib_tune_pcie_caps() which is called after this routine.
+	 */
+	/* TODO: others...? */
+}
+
+static void init_other(struct hfi_devdata *dd)
+{
+	/* enable all CCE errors */
+	write_csr(dd, WFR_CCE_ERR_MASK, ~0ull);
+	/* enable *some* Misc errors */
+	write_csr(dd, WFR_MISC_ERR_MASK, DRIVER_MISC_MASK);
+	/* enable all DC errors, except LCB */
+	write_csr(dd, DCC_ERR_FLG_EN, ~0ull);
+	write_csr(dd, DC_DC8051_ERR_EN, ~0ull);
+}
+
+/*
+ * Fill out the given AU table using the given CU.  A CU is defined in terms
+ * AUs.  The table is a an encoding: given the index, how many AUs does that
+ * represent?
+ *
+ * NOTE: Assumes that the register layout is the same for the
+ * local and remote tables.
+ */
+static void assign_cm_au_table(struct hfi_devdata *dd, u32 cu,
+						u32 csr0to3, u32 csr4to7)
+{
+	write_csr(dd, csr0to3,
+		   0ull <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE0_SHIFT
+		|  1ull <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE1_SHIFT
+		|  2ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE2_SHIFT
+		|  4ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE0_TO3_LOCAL_AU_TABLE3_SHIFT);
+	write_csr(dd, csr4to7,
+		   8ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE4_SHIFT
+		| 16ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE5_SHIFT
+		| 32ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE6_SHIFT
+		| 64ull * cu <<
+			WFR_SEND_CM_LOCAL_AU_TABLE4_TO7_LOCAL_AU_TABLE7_SHIFT);
+
+}
+
+static void assign_local_cm_au_table(struct hfi_devdata *dd, u8 vcu)
+{
+	assign_cm_au_table(dd, vcu_to_cu(vcu), WFR_SEND_CM_LOCAL_AU_TABLE0_TO3,
+					WFR_SEND_CM_LOCAL_AU_TABLE4_TO7);
+}
+
+void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu)
+{
+	assign_cm_au_table(dd, vcu_to_cu(vcu), WFR_SEND_CM_REMOTE_AU_TABLE0_TO3,
+					WFR_SEND_CM_REMOTE_AU_TABLE4_TO7);
+}
+
+static void init_txe(struct hfi_devdata *dd)
+{
+	int i;
+
+	/* enable all PIO, SDMA, general, and Egress errors */
+	write_csr(dd, WFR_SEND_PIO_ERR_MASK, ~0ull);
+	write_csr(dd, WFR_SEND_DMA_ERR_MASK, ~0ull);
+	write_csr(dd, WFR_SEND_ERR_MASK, ~0ull);
+	write_csr(dd, WFR_SEND_EGRESS_ERR_MASK, ~0ull);
+
+	/* enable all per-context and per-SDMA engine errors */
+	for (i = 0; i < dd->chip_send_contexts; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_CTXT_ERR_MASK, ~0ull);
+	for (i = 0; i < dd->chip_sdma_engines; i++)
+		write_kctxt_csr(dd, i, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
+
+	/* set the local CU to AU mapping */
+	assign_local_cm_au_table(dd, dd->vcu);
+}
+
+static int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
+{
+	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	reg = WFR_SEND_CTXT_CHECK_JOB_KEY_MASK_SMASK | /* mask is always 1's */
+		((jkey & WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_MASK) <<
+		 WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_SHIFT);
+	/* JOB_KEY_ALLOW_PERMISSIVE is not allowed by default */
+	if (HFI_CAP_KGET_MASK(rcd->flags, ALLOW_PERM_JKEY))
+		reg |= WFR_SEND_CTXT_CHECK_JOB_KEY_ALLOW_PERMISSIVE_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, reg);
+	/*
+	 * Enable send-side J_KEY integrity check, unless this is A0 h/w
+	 * (due to A0 erratum).
+	 */
+	if (!is_a0(dd)) {
+		reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+		reg |= WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
+		write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	}
+
+	/* Enable J_KEY check on receive context. */
+	reg = WFR_RCV_KEY_CTRL_JOB_KEY_ENABLE_SMASK |
+		((jkey & WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_MASK) <<
+		 WFR_RCV_KEY_CTRL_JOB_KEY_VALUE_SHIFT);
+	write_kctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, reg);
+done:
+	return ret;
+}
+
+static int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
+{
+	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, 0);
+	/*
+	 * Disable send-side J_KEY integrity check, unless this is A0 h/w.
+	 * This check would not have been enabled for A0 h/w, see
+	 * set_ctxt_jkey().
+	 */
+	if (!is_a0(dd)) {
+		reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+		reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_JOB_KEY_SMASK;
+		write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	}
+	/* Turn off the J_KEY on the receive side */
+	write_kctxt_csr(dd, ctxt, WFR_RCV_KEY_CTRL, 0);
+done:
+	return ret;
+}
+
+static int set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
+{
+	struct qib_ctxtdata *rcd;
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (ctxt < dd->num_rcv_contexts)
+		rcd = dd->rcd[ctxt];
+	else {
+		ret = -EINVAL;
+		goto done;
+	}
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	reg = ((u64)pkey & WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_MASK) <<
+		WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_SHIFT;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_PARTITION_KEY, reg);
+	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+	reg |= WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+done:
+	return ret;
+}
+
+static int clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
+{
+	struct qib_ctxtdata *rcd;
+	unsigned sctxt;
+	int ret = 0;
+	u64 reg;
+
+	if (ctxt < dd->num_rcv_contexts)
+		rcd = dd->rcd[ctxt];
+	else {
+		ret = -EINVAL;
+		goto done;
+	}
+	if (!rcd || !rcd->sc) {
+		ret = -EINVAL;
+		goto done;
+	}
+	sctxt = rcd->sc->context;
+	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
+	reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_PARTITION_KEY, 0);
+done:
+	return ret;
+}
+
+/*
+ * Assign link credits.
+ *
+ * This routine is called to assign per-VL link credits.  This is done
+ * when requested via module parameter, generally because there is not
+ * an STL compliant FM running.
+ *
+ * Assumptions:
+ *	- the link partner has same credits as WFR
+ *
+ * The assignment methodology is arbitrary.  Details:
+ * o place half of the credits into the per-VL dedicated limit slots
+ * o total dedicated = sum of per-VL and VL15
+ * o total shared = global - total dedicated
+ * All normal VLs will use the global shared values.  VL15 will not
+ * use any share credits.
+ */
+/* enough room for 2 full-sized MAD packets plus max headers */
+#define VL15_CREDITS (((MAX_MAD_PACKET + 128) * 2)/64)
+#define PER_VL_DEDICATED_CREDITS(total_credits) \
+	((total_credits) / (2 * WFR_TXE_NUM_DATA_VL))
+#define TOTAL_DEDICATED_CREDITS(total_credits) \
+	((PER_VL_DEDICATED_CREDITS(total_credits) * WFR_TXE_NUM_DATA_VL) \
+		+ VL15_CREDITS)
+#define TOTAL_SHARED_CREDITS(total_credits) \
+	((total_credits) - TOTAL_DEDICATED_CREDITS(total_credits))
+#define PER_VL_SHARED_CREDITS(total_credits) TOTAL_SHARED_CREDITS(total_credits)
+
+void assign_link_credits(struct hfi_devdata *dd)
+{
+	struct buffer_control t;
+	int i;
+	u16 be_dedicated;
+	u16 be_shared;
+
+	memset(&t, 0, sizeof(struct buffer_control));
+
+	BUG_ON(dd->link_credits < TOTAL_DEDICATED_CREDITS(dd->link_credits));
+	t.overall_shared_limit = cpu_to_be16(
+					TOTAL_SHARED_CREDITS(dd->link_credits));
+	be_dedicated = cpu_to_be16(PER_VL_DEDICATED_CREDITS(dd->link_credits));
+	be_shared = cpu_to_be16(PER_VL_SHARED_CREDITS(dd->link_credits));
+	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++) {
+		t.vl[i].dedicated = be_dedicated;
+		t.vl[i].shared = be_shared;
+	}
+	t.vl[15].dedicated = cpu_to_be16(VL15_CREDITS);
+
+	set_buffer_control(dd, &t);
+}
+
+/*
+ * Clean up stuff initialized in qib_init_wfr_funcs() - mostly.
+ * TODO: Cleanup of stuff done in qib_init_wfr_funcs() gets done elsewhere,
+ * so we have an asymmetric cleanup.
+ *
+ * This is f_cleanup
+ * TODO:
+ * - Remove indirect call
+ * - rename to chip_cleanup() or asic_cleanup()
+ * - rename qib_init_wfr_funcs() to chip_init() or asic_init()
+ *
+ * called from qib_postinit_cleanup()
+ */
+static void cleanup(struct hfi_devdata *dd)
+{
+	free_cntrs(dd);
+	free_rcverr(dd);
+	clean_up_interrupts(dd);
+}
+
+/**
+ * qib_init_wfr_funcs - set up the chip-specific function pointers
+ * @dev: the pci_dev for qlogic_ib device
+ * @ent: pci_device_id struct for this dev
+ *
+ * Also allocates, inits, and returns the devdata struct for this
+ * device instance
+ *
+ * This is global, and is called directly at init to set up the
+ * chip-specific function pointers for later use.
+ */
+struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
+					   const struct pci_device_id *ent)
+{
+	struct hfi_devdata *dd;
+	struct qib_pportdata *ppd;
+	u64 reg;
+	u32 patch;	/* hardware patch level */
+	int i, ret;
+	static const char * const inames[] = { /* implementation names */
+		"RTL silicon",
+		"RTL VCS simulation",
+		"RTL FPGA emulation",
+		"Functional simulator"
+	};
+
+	dd = qib_alloc_devdata(pdev,
+		NUM_IB_PORTS * sizeof(struct qib_pportdata));
+	if (IS_ERR(dd))
+		goto bail;
+	ppd = dd->pport;
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		int vl;
+		/* init common fields */
+		qib_init_pportdata(pdev, ppd, dd, 0, 1);
+		/* DC supports 4 link widths */
+		ppd->link_width_supported =
+			OPA_LINK_WIDTH_1X | OPA_LINK_WIDTH_2X |
+			OPA_LINK_WIDTH_3X | OPA_LINK_WIDTH_4X;
+		ppd->link_width_downgrade_supported =
+					ppd->link_width_supported;
+		/* start out enabling all supported values */
+		ppd->link_width_enabled = ppd->link_width_supported;
+		ppd->link_width_downgrade_enabled =
+					ppd->link_width_downgrade_supported;
+		/* link width active is 0 when link is down */
+		/* link width downgrade active is 0 when link is down */
+
+		switch (num_vls) {
+		case 1:
+			ppd->vls_supported = IB_VL_VL0;
+			break;
+		case 2:
+			ppd->vls_supported = IB_VL_VL0_1;
+			break;
+		default:
+			qib_early_err(&pdev->dev,
+				    "Invalid num_vls %u, using 4 VLs\n",
+				    num_vls);
+			num_vls = 4;
+			/* fall through */
+		case 4:
+			ppd->vls_supported = IB_VL_VL0_3;
+			break;
+		case 8:
+			ppd->vls_supported = IB_VL_VL0_7;
+			break;
+		}
+		ppd->vls_operational = ppd->vls_supported;
+		/* Set the default MTU. */
+		for (vl = 0; vl < num_vls; vl++)
+			dd->vld[vl].mtu = default_mtu;
+		dd->vld[15].mtu = MAX_MAD_PACKET;
+		/*
+		 * Set the initial values to reasonable default, will be set
+		 * for real when link is up.
+		 */
+		ppd->lstate = IB_PORT_DOWN;
+		ppd->overrun_threshold = 0x4;
+		ppd->phy_error_threshold = 0xf;
+		ppd->port_crc_mode_enabled = link_crc_mask;
+		/* initialize supported LTP CRC mode */
+		ppd->port_ltp_crc_mode = cap_to_port_ltp(link_crc_mask) << 8;
+		/* initialize enabled LTP CRC mode */
+		ppd->port_ltp_crc_mode |= cap_to_port_ltp(link_crc_mask) << 4;
+		/* start in offline */
+		ppd->host_link_state = HLS_DN_OFFLINE;
+	}
+
+	dd->f_cleanup           = cleanup;
+	dd->f_clear_tids        = clear_tids;
+	dd->f_free_irq          = stop_irq;
+	dd->f_get_base_info     = get_base_info;
+	dd->f_get_msgheader     = get_msgheader;
+	dd->f_gpio_mod          = gpio_mod;
+	dd->f_init_ctxt         = init_ctxt;
+	dd->f_intr_fallback     = intr_fallback;
+	dd->f_put_tid           = put_tid;
+	dd->f_quiet_serdes      = quiet_serdes;
+	dd->f_rcvctrl           = rcvctrl;
+	dd->f_read_cntrs        = read_cntrs;
+	dd->f_read_portcntrs    = read_portcntrs;
+	dd->f_reset             = reset;
+	dd->f_set_armlaunch     = set_armlaunch;
+	dd->f_iblink_state      = iblink_state;
+	dd->f_ibphys_portstate  = ibphys_portstate;
+	dd->f_get_ib_cfg        = get_ib_cfg;
+	dd->f_set_ib_cfg        = set_ib_cfg;
+	dd->f_set_ib_loopback   = set_ib_loopback;
+	dd->f_setextled         = setextled;
+	dd->f_wantpiobuf_intr   = sc_wantpiobuf_intr;
+	dd->f_xgxs_reset        = xgxs_reset;
+	dd->f_tempsense_rd	= tempsense_rd;
+	dd->f_set_ctxt_jkey     = set_ctxt_jkey;
+	dd->f_clear_ctxt_jkey   = clear_ctxt_jkey;
+	dd->f_set_ctxt_pkey     = set_ctxt_pkey;
+	dd->f_clear_ctxt_pkey   = clear_ctxt_pkey;
+	dd->f_read_link_quality	= read_link_quality;
+
+	/*
+	 * Set other early dd values.
+	 */
+	dd->link_default = HLS_DN_POLL;
+
+	/*
+	 * Do remaining PCIe setup and save PCIe values in dd.
+	 * Any error printing is already done by the init code.
+	 * On return, we have the chip mapped.
+	 */
+	ret = qib_pcie_ddinit(dd, pdev, ent);
+	if (ret < 0)
+		goto bail_free;
+
+	/* verify that reads actually work, save revision for reset check */
+	dd->revision = read_csr(dd, WFR_CCE_REVISION);
+	if (dd->revision == ~(u64)0) {
+		dd_dev_err(dd, "cannot read chip CSRs\n");
+		ret = -EINVAL;
+		goto bail_cleanup;
+	}
+	dd->majrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MAJOR_SHIFT)
+			& WFR_CCE_REVISION_CHIP_REV_MAJOR_MASK;
+	dd->minrev = (dd->revision >> WFR_CCE_REVISION_CHIP_REV_MINOR_SHIFT)
+			& WFR_CCE_REVISION_CHIP_REV_MINOR_MASK;
+
+	/* obtain the hardware ID - NOT related to unit, which is a
+	   software enumeration */
+	reg = read_csr(dd, WFR_CCE_REVISION2);
+	dd->hfi_id = (reg >> WFR_CCE_REVISION2_HFI_ID_SHIFT)
+					& WFR_CCE_REVISION2_HFI_ID_MASK;
+	/* the variable size will remove unwanted bits */
+	dd->icode = reg >> WFR_CCE_REVISION2_IMPL_CODE_SHIFT;
+	dd->irev = reg >> WFR_CCE_REVISION2_IMPL_REVISION_SHIFT;
+	dd_dev_info(dd, "Implementation: %s, revision 0x%x\n",
+		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
+		(int)dd->irev);
+
+	/*
+	 * TODO: Eventually remove access to ASIC_WFR_EFUSE_REGS6 as that is a
+	 * restriced register.  For now, we want to look at the patch level.
+	 * Read patch level.
+	 */
+	reg = read_csr(dd, WFR_ASIC_WFR_EFUSE_REGS6);
+	patch = (u32)
+		((reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SHIFT)
+			& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_MASK);
+	/* All WFR A0 silicon should be at patch 3, warn if not */
+	if (patch < 3 && is_a0(dd) && dd->icode == WFR_ICODE_RTL_SILICON)
+		dd_dev_err(dd, "WARNING: WFR at patch %d, expecting >= 3",
+			patch);
+	/* set supportd speed mask */
+	dd->pport->link_speed_supported =
+			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
+	/* apply link speed mask module parameter */
+	if (link_speed_mask) {
+		if (dd->pport->link_speed_supported & link_speed_mask)
+			dd->pport->link_speed_supported &= link_speed_mask;
+		else
+			dd_dev_err(dd, "Link speed mask invalid, ignored\n");
+	}
+	dd->pport->link_speed_enabled = dd->pport->link_speed_supported;
+	/* give a reasonable active value, will be set on link up */
+	if (dd->pport->link_speed_supported & OPA_LINK_SPEED_25G)
+		dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
+	else
+		dd->pport->link_speed_active = OPA_LINK_SPEED_12_5G;
+
+	dd->chip_rcv_contexts = read_csr(dd, WFR_RCV_CONTEXTS);
+	dd->chip_send_contexts = read_csr(dd, WFR_SEND_CONTEXTS);
+	dd->chip_sdma_engines = read_csr(dd, WFR_SEND_DMA_ENGINES);
+	dd->chip_pio_mem_size = read_csr(dd, WFR_SEND_PIO_MEM_SIZE);
+	dd->chip_sdma_mem_size = read_csr(dd, WFR_SEND_DMA_MEM_SIZE);
+	/* fix up link widths for emulation _p */
+	ppd = dd->pport;
+	if (dd->icode == WFR_ICODE_FPGA_EMULATION && is_emulator_p(dd)) {
+		ppd->link_width_supported =
+			ppd->link_width_enabled =
+			ppd->link_width_downgrade_supported =
+			ppd->link_width_downgrade_enabled =
+				OPA_LINK_WIDTH_1X;
+	}
+	/* insure num_vls isn't larger than number of sdma engines */
+	if (HFI_CAP_IS_KSET(SDMA) && num_vls > dd->chip_sdma_engines) {
+		dd_dev_err(dd, "num_vls %u too large, using 4 VLs\n",
+				num_vls);
+		num_vls = 4;
+		ppd->vls_supported = IB_VL_VL0_3;
+		ppd->vls_operational = ppd->vls_supported;
+	}
+
+	/*
+	 * Convert the ns parameter to the 64 * cclocks used in the CSR.
+	 * Limit the max if larger than the field holds.  If timeout is
+	 * non-zero, then the calculated field will be at least 1.
+	 *
+	 * Must be after icode is set up - the cclock rate depends
+	 * on knowing the hardware being used.
+	 */
+	dd->rcv_intr_timeout_csr = ns_to_cclock(dd, rcv_intr_timeout) / 64;
+	if (dd->rcv_intr_timeout_csr >
+			WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_MASK)
+		dd->rcv_intr_timeout_csr =
+			WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_MASK;
+	else if (dd->rcv_intr_timeout_csr == 0 && rcv_intr_timeout)
+		dd->rcv_intr_timeout_csr = 1;
+
+	/* obtain chip sizes, reset chip CSRs */
+	init_chip(dd);
+
+	/* read in the PCIe link speed information */
+	ret = pcie_speeds(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* read in firmware */
+	ret = firmware_init(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/*
+	 * In general, the PCIe Gen3 transition must occur after the
+	 * chip has been idled (so it won't initiate any PCIe transactions
+	 * e.g. an interrupt) and before the driver changes any registers
+	 * (the transition will reset the registers).
+	 *
+	 * In particular, place this call after:
+	 * - init_chip()     - the chip will not initiate any PCIe transactions
+	 * - pcie_speeds()   - reads the current link speed
+	 * - firmware_init() - the needed firmware is ready to be downloaded
+	 */
+	ret = do_pcie_gen3_transition(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* start setting dd values and adjusting CSRs */
+	init_early_variables(dd);
+
+	/* TODO these are set by the chip and don't change */
+	/* per-context kernel/user CSRs */
+	dd->uregbase = WFR_RXE_PER_CONTEXT_USER;
+	dd->ureg_align = WFR_RXE_PER_CONTEXT_SIZE;
+
+	/* TODO: real board name */
+	dd->boardname = kmalloc(64, GFP_KERNEL);
+	snprintf(dd->boardname, 64, "WFR_ID 0x%llx",
+		 dd->revision >> WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_SHIFT
+		    & WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_MASK);
+
+	snprintf(dd->boardversion, BOARD_VERS_MAX,
+		 "ChipABI %u.%u, %s, ChipRev %u.%u patch 0x%08x, SW Compat %llu\n",
+		 HFI_CHIP_VERS_MAJ, HFI_CHIP_VERS_MIN,
+		 dd->boardname,
+		 (u32)dd->majrev,
+		 (u32)dd->minrev,
+		 patch,
+		 (dd->revision >> WFR_CCE_REVISION_SW_SHIFT)
+		    & WFR_CCE_REVISION_SW_MASK);
+
+	ret = set_up_context_variables(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* set initial RXE CSRs */
+	init_rxe(dd);
+	/* set initial TXE CSRs */
+	init_txe(dd);
+	/* set initial non-RXE, non-TXE CSRs */
+	init_other(dd);
+	/* set up KDETH QP prefix in both RX and TX CSRs */
+	init_kdeth_qp(dd);
+
+	/* send contexts must be set up before receive contexts */
+	ret = init_send_contexts(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	ret = qib_create_ctxts(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	dd->rcvhdrsize = DEFAULT_RCVHDRSIZE;
+	/*
+	 * rcd[0] is guaranteed to be valid by this point. Also, all
+	 * context are using the same value, as per the module parameter.
+	 */
+	dd->rhf_offset = dd->rcd[0]->rcvhdrqentsize - sizeof(u64) / sizeof(u32);
+
+	ret = init_pervl_scs(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* sdma init */
+	for (i = 0; i < dd->num_pports; ++i) {
+		ret = sdma_init(dd, i);
+		if (ret)
+			goto bail_cleanup;
+	}
+
+	/* use contexts created by qib_create_ctxts */
+	ret = set_up_interrupts(dd);
+	if (ret)
+		goto bail_cleanup;
+
+	/* set up LCB access - must be after set_up_interrupts() */
+	init_lcb_access(dd);
+	read_guid(dd);
+
+	/*
+	 * GUID is now stored in big endian by the function above, swap it.
+	 * TODO:
+	 * Despite the multiple uses here there are more uses of the GUID in big
+	 * endian format, mostly in the mad layer. At some point we should
+	 * convert to host byte order and convert to network when we want to
+	 * stuff it into a packet.
+	 */
+	snprintf(dd->serial, SERIAL_MAX, "0x%08llx\n",
+		 be64_to_cpu(dd->base_guid) & 0xFFFFFF);
+
+	dd->oui1 = be64_to_cpu(dd->base_guid) >> 56 & 0xFF;
+	dd->oui2 = be64_to_cpu(dd->base_guid) >> 48 & 0xFF;
+	dd->oui3 = be64_to_cpu(dd->base_guid) >> 40 & 0xFF;
+
+	ret = load_firmware(dd); /* asymmetric with dispose_firmware() */
+	if (ret)
+		goto bail_clear_intr;
+	check_fabric_firmware_versions(dd);
+
+	ret = init_cntrs(dd);
+	if (ret)
+		goto bail_clear_intr;
+
+	ret = init_rcverr(dd);
+	if (ret)
+		goto bail_free_cntrs;
+
+	ret = eprom_init(dd);
+	if (ret)
+		goto bail_free_rcverr;
+
+	thermal_init(dd);
+	goto bail;
+
+bail_free_rcverr:
+	free_rcverr(dd);
+bail_free_cntrs:
+	free_cntrs(dd);
+bail_clear_intr:
+	clean_up_interrupts(dd);
+bail_cleanup:
+	qib_pcie_ddcleanup(dd);
+bail_free:
+	qib_free_devdata(dd);
+	dd = ERR_PTR(ret);
+bail:
+	return dd;
+}
+
+/**
+ * create_pbc - build a pbc for transmission
+ * @flags: special case flags or-ed in built pbc
+ * @srate: static rate
+ * @vl: vl
+ * @dwlen: dword length (header words + data words + pbc words)
+ *
+ * Create a PBC with the given flags, rate, VL, and length.
+ *
+ * NOTE: The PBC created will not insert any HCRC - all callers but one are
+ * for verbs, which does not use this PSM feature.  The lone other caller
+ * is for the diagnostic interface which calls this if the user does not
+ * supply their own PBC.
+ */
+u64 create_pbc(u64 flags, u32 srate, u32 vl, u32 dw_len)
+{
+	u64 pbc;
+	/* FIXME: calculate rate */
+	u32 rate = 0;
+
+	pbc = flags
+		| ((u64)WFR_PBC_IHCRC_NONE << WFR_PBC_INSERT_HCRC_SHIFT)
+		| (vl & WFR_PBC_VL_MASK) << WFR_PBC_VL_SHIFT
+		| (rate & WFR_PBC_STATIC_RATE_CONTROL_COUNT_MASK)
+			<< WFR_PBC_STATIC_RATE_CONTROL_COUNT_SHIFT
+		| (dw_len & WFR_PBC_LENGTH_DWS_MASK)
+			<< WFR_PBC_LENGTH_DWS_SHIFT;
+
+	return pbc;
+}
+
+/* interrupt testing */
+static void force_errors(struct hfi_devdata *dd, u32 csr, const char *what)
+{
+	int i;
+
+	for (i = 0; i < 64; i++) {
+		dd_dev_info(dd, "** Forced interrupt: %s %d\n", what, i);
+		write_csr(dd, csr, 1ull << i);
+		msleep(100);
+	}
+}
+
+void force_all_interrupts(struct hfi_devdata *dd)
+{
+	int i, j;
+	char buf[64];
+
+	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++) {
+		for (j = 0; j < 64; j++) {
+			dd_dev_info(
+				dd,
+				"** Forced interrupt: csr #%2d, bit %2d; \"%s\"\n",
+				i, j, is_name(buf, sizeof(buf), (i*64)+j));
+			write_csr(dd, WFR_CCE_INT_FORCE + (8*i), 1ull << j);
+			/*
+			 * We want this delay so it is long enough that
+			 * the interrupt prints match the print above
+			 * but no so long that it takes forever to run.
+			 */
+			/*ssleep(1);*/
+			msleep(100);
+		}
+	}
+
+	force_errors(dd, WFR_CCE_ERR_FORCE, "CCE Err");
+	force_errors(dd, WFR_RCV_ERR_FORCE, "Receive Err");
+	force_errors(dd, WFR_SEND_PIO_ERR_FORCE, "Send PIO Err");
+	force_errors(dd, WFR_SEND_DMA_ERR_FORCE, "Send DMA Err");
+	force_errors(dd, WFR_SEND_EGRESS_ERR_FORCE, "Send Egress Err");
+	force_errors(dd, WFR_SEND_ERR_FORCE, "Send Err");
+}
+
+#define SBUS_THERMAL    0x4f
+#define SBUS_THERM_MONITOR_MODE 0x1
+
+/*
+ * Initialize the Avago Thermal sensor.
+ *
+ * After initialization, enable polling of thermal sensor through
+ * SBus interface. In order for this to work, the SBus Master
+ * firmware has to be loaded due to the fact that the HW polling
+ * logic uses SBus interrupts, which are not supported with
+ * default firmware. Otherwise, no data will be returned through
+ * the ASIC_STS_THERM CSR.
+ */
+static int thermal_init(struct hfi_devdata *dd)
+{
+	int ret = 0;
+
+	if (dd->icode != WFR_ICODE_RTL_SILICON)
+		goto done;
+
+	dd_dev_info(dd, "Initializing thermal sensor\n");
+	/* Thermal Sensor Initialization */
+	/*    Step 1: Reset the Thermal SBus Receiver */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
+				RESET_SBUS_RECEIVER, 0);
+	if (ret)
+		goto fail;
+	/*    Step 2: Set Reset bit in Thermal block */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
+				WRITE_SBUS_RECEIVER, 0x1);
+	if (ret)
+		goto fail;
+	/*    Step 3: Write clock divider value (100MHz -> 2MHz) */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x1,
+				WRITE_SBUS_RECEIVER, 0x32);
+	if (ret)
+		goto fail;
+	/*    Step 4: Select temperature mode */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x3,
+				WRITE_SBUS_RECEIVER,
+				SBUS_THERM_MONITOR_MODE);
+	if (ret)
+		goto fail;
+	/*    Step 5: De-assert block reset and start conversion */
+	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
+				WRITE_SBUS_RECEIVER, 0x2);
+	if (ret)
+		goto fail;
+	/*    Step 5.1: Wait for first conversion (21.5ms per spec) */
+	msleep(22);
+
+	dd_dev_info(dd, "Thermal sensor initialization done.\n");
+	/* Enable polling of thermal readings */
+	write_csr(dd, WFR_ASIC_CFG_THERM_POLL_EN, 0x1);
+	goto done;
+fail:
+	dd_dev_err(dd, "Thermal sensor initialization failed.\n");
+done:
+	return ret;
+}
+
+static void handle_temp_err(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd = &dd->pport[0];
+	/*
+	 * Thermal Critical Interrupt
+	 * Put the device into forced freeze mode, take link down to
+	 * offline, and put DC into reset.
+	 */
+	dd_dev_emerg(dd,
+		     "Critical temperature reached! Forcing device into freeze mode!\n");
+	dd->flags |= HFI_FORCED_FREEZE;
+	start_freeze_handling(ppd, WFR_FREEZE_SELF|WFR_FREEZE_ABORT);
+	/* TODO: Adjust PowerDown recipe pending a discussion with HW team.
+	 * The goal is to turn off as much as possible in DC. */
+	/*
+	 * Shut DC down as much and as quickly as possible.
+	 *
+	 * Step 1: Take the link down to OFFLINE. This will cause the
+	 *         8051 to put the Serdes in reset. However, we don't want to
+	 *         go through the entire link state machine since we want to
+	 *         shutdown ASAP. Furthermore, this is not a graceful shutdown
+	 *         but rather an attempt to save the chip.
+	 *         Code below is almost the same as quiet_serdes() but avoids
+	 *         all the extra work and the sleeps.
+	 */
+	ppd->driver_link_ready = 0;
+	ppd->link_enabled = 0;
+	set_physical_link_state(dd, WFR_PLS_OFFLINE |
+				OPA_LINKDOWN_REASON_SMA_DISABLED);
+	/*
+	 * Step 2: Shutdown LCB
+	 *         After shutdown, do not restore DC_CFG_RESET value.
+	 */
+	set_host_lcb_access(dd);
+	lcb_shutdown(dd, 1);
+	set_8051_lcb_access(dd);
+	/*
+	 * Step 3: Shutdown 8051
+	 */
+	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
+}
