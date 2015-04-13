@@ -186,7 +186,6 @@
  */
 #ifndef HFI_DRIVER_VERSION_BASE
 #define HFI_DRIVER_VERSION_BASE "0.7-338"
-
 #endif
 
 /* create the final driver version string */
