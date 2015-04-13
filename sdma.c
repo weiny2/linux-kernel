@@ -374,10 +374,11 @@ static void sdma_flush(struct sdma_engine *sde)
 		sde->head_sn++;
 #endif
 		sdma_txclean(sde->dd, txp);
-		drained = atomic_dec_and_test(&wait->sdma_busy);
+		if (wait)
+			drained = atomic_dec_and_test(&wait->sdma_busy);
 		if (txp->complete)
 			(*txp->complete)(txp, SDMA_TXREQ_S_ABORTED, drained);
-		if (drained)
+		if (wait && drained)
 			iowait_drain_wakeup(wait);
 	}
 }
@@ -564,7 +565,8 @@ static void sdma_flush_descq(struct sdma_engine *sde)
 
 			/* remove from list */
 			sde->tx_ring[sde->tx_head++ & sde->sdma_mask] = NULL;
-			drained = atomic_dec_and_test(&wait->sdma_busy);
+			if (wait)
+				drained = atomic_dec_and_test(&wait->sdma_busy);
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 			trace_hfi_sdma_out_sn(sde, txp->sn);
 			if (WARN_ON_ONCE(sde->head_sn != txp->sn))
@@ -579,7 +581,7 @@ static void sdma_flush_descq(struct sdma_engine *sde)
 					txp,
 					SDMA_TXREQ_S_ABORTED,
 					drained);
-			if (drained)
+			if (wait && drained)
 				iowait_drain_wakeup(wait);
 			/* see if there is another txp */
 			txp = get_txhead(sde);
@@ -1454,7 +1456,8 @@ retry:
 
 			/* remove from list */
 			sde->tx_ring[sde->tx_head++ & sde->sdma_mask] = NULL;
-			drained = atomic_dec_and_test(&wait->sdma_busy);
+			if (wait)
+				drained = atomic_dec_and_test(&wait->sdma_busy);
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 			trace_hfi_sdma_out_sn(sde, txp->sn);
 			if (WARN_ON_ONCE(sde->head_sn != txp->sn))
@@ -1468,7 +1471,7 @@ retry:
 					txp,
 					SDMA_TXREQ_S_OK,
 					drained);
-			if (drained)
+			if (wait && drained)
 				iowait_drain_wakeup(wait);
 			/* see if there is another txp */
 			txp = get_txhead(sde);
@@ -2119,6 +2122,7 @@ update_tail:
 unlock_noconn:
 	spin_lock(&sde->flushlist_lock);
 	list_for_each_entry_safe(tx, tx_next, tx_list, list) {
+		tx->wait = wait;
 		list_del_init(&tx->list);
 		if (wait)
 			atomic_inc(&wait->sdma_busy);
