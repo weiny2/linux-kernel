@@ -427,7 +427,7 @@ static ssize_t hfi_aio_write(struct kiocb *kiocb, const struct iovec *iovec,
 		goto done;
 	}
 
-	hfi_cdbg(SDMA, "SDMA request from %u:%u (%lu)\n",
+	hfi_cdbg(SDMA, "SDMA request from %u:%u (%lu)",
 		 ctxt_fp(kiocb->ki_filp)->ctxt, subctxt_fp(kiocb->ki_filp),
 		 dim);
 	pq = user_sdma_pkt_fp(kiocb->ki_filp);
@@ -659,7 +659,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	if ((vma->vm_end - vma->vm_start) != memlen) {
-		hfi_cdbg(PROC, "%u:%u Memory size mismatch %lu:%lu\n",
+		hfi_cdbg(PROC, "%u:%u Memory size mismatch %lu:%lu",
 			 uctxt->ctxt, subctxt_fp(fp),
 			 (vma->vm_end - vma->vm_start), memlen);
 		ret = -EINVAL;
@@ -735,7 +735,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	if (!uctxt)
 		goto done;
 
-	hfi_cdbg(PROC, "freeing ctxt %u:%u\n", uctxt->ctxt, fdata->subctxt);
+	hfi_cdbg(PROC, "freeing ctxt %u:%u", uctxt->ctxt, fdata->subctxt);
 	dd = uctxt->dd;
 	mutex_lock(&qib_mutex);
 

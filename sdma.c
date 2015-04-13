@@ -200,6 +200,8 @@ static const struct sdma_set_state_action sdma_action_table[] = {
 	},
 };
 
+#define SDMA_TAIL_UPDATE_THRESH 0x1F
+
 /* declare all statics here rather than keep sorting */
 static void sdma_complete(struct kref *);
 static void sdma_finalput(struct sdma_state *);
@@ -2084,6 +2086,7 @@ int sdma_send_txlist(struct sdma_engine *sde,
 	int ret = 0;
 	unsigned long flags;
 	u16 tail = INVALID_TAIL;
+	int count = 0;
 
 	spin_lock_irqsave(&sde->tail_lock, flags);
 retry:
@@ -2099,13 +2102,18 @@ retry:
 		}
 		list_del_init(&tx->list);
 		tail = submit_tx(sde, tx);
-		if (wait)
-			atomic_inc(&wait->sdma_busy);
+		count++;
+		if (tail != INVALID_TAIL &&
+		    (count & SDMA_TAIL_UPDATE_THRESH) == 0) {
+			sdma_update_tail(sde, tail);
+			tail = INVALID_TAIL;
+		}
 	}
 update_tail:
+	if (wait)
+		atomic_add(count, &wait->sdma_busy);
 	if (tail != INVALID_TAIL)
 		sdma_update_tail(sde, tail);
-unlock:
 	spin_unlock_irqrestore(&sde->tail_lock, flags);
 	return ret;
 unlock_noconn:
@@ -2128,7 +2136,7 @@ unlock_noconn:
 	spin_unlock(&sde->flushlist_lock);
 	schedule_work(&sde->flush_worker);
 	ret = -ECOMM;
-	goto unlock;
+	goto update_tail;
 nodesc:
 	ret = sdma_check_progress(sde, wait, tx);
 	if (ret == -EAGAIN) {
@@ -2136,7 +2144,7 @@ nodesc:
 		goto retry;
 	}
 	sde->descq_full_count++;
-	goto unlock;
+	goto update_tail;
 }
 
 static void sdma_process_event(struct sdma_engine *sde,

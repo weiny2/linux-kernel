@@ -1236,7 +1236,7 @@ static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
 /* 0*/	WFR_EE(CCE_ERR,		handle_cce_err,    "CceErr"),
 /* 1*/	WFR_EE(RCV_ERR,		handle_rxe_err,    "RxeErr"),
 /* 2*/	WFR_EE(MISC_ERR,	handle_misc_err,   "MiscErr"),
-/* 3*/	{ 0, 0, 0, 0 }, /* reserved */
+/* 3*/	{ 0, 0, 0, NULL }, /* reserved */
 /* 4*/	WFR_EE(SEND_PIO_ERR,    handle_pio_err,    "PioErr"),
 /* 5*/	WFR_EE(SEND_DMA_ERR,    handle_sdma_err,   "SDmaErr"),
 /* 6*/	WFR_EE(SEND_EGRESS_ERR, handle_egress_err, "EgressErr"),
@@ -1258,11 +1258,11 @@ static const struct err_reg_info sdma_eng_err =
 	WFR_EE(SEND_DMA_ENG_ERR, handle_sdma_eng_err, "SDmaEngErr");
 
 static const struct err_reg_info various_err[NUM_VARIOUS] = {
-/* 0*/	{ 0, 0, 0, 0 }, /* PbcInt */
-/* 1*/	{ 0, 0, 0, 0 }, /* GpioAssertInt */
+/* 0*/	{ 0, 0, 0, NULL }, /* PbcInt */
+/* 1*/	{ 0, 0, 0, NULL }, /* GpioAssertInt */
 /* 2*/	WFR_EE(ASIC_QSFP1,	handle_qsfp_int,	"QSFP1"),
 /* 3*/	WFR_EE(ASIC_QSFP2,	handle_qsfp_int,	"QSFP2"),
-/* 4*/	{ 0, 0, 0, 0 }, /* TCritInt */
+/* 4*/	{ 0, 0, 0, NULL }, /* TCritInt */
 	/* rest are reserved */
 };
 
@@ -2331,22 +2331,25 @@ static void count_port_inactive(struct hfi_devdata *dd)
  * egress error if more than one packet fails the same integrity check
  * since we cleared the corresponding bit in WFR_SEND_EGRESS_ERR_INFO.
  */
-static void count_disallowed_pkt(struct hfi_devdata *dd)
+static void handle_send_egress_err_info(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd = dd->pport;
+	u64 src = read_csr(dd, WFR_SEND_EGRESS_ERR_SOURCE); /* read first */
 	u64 info = read_csr(dd, WFR_SEND_EGRESS_ERR_INFO);
-	u64 src = read_csr(dd, WFR_SEND_EGRESS_ERR_SOURCE);
 	char buf[96];
+
+	/* clear down all observed info as quickly as possible after read */
+	write_csr(dd, WFR_SEND_EGRESS_ERR_INFO, info);
 
 	dd_dev_info(dd,
 		"Egress Error Info: 0x%llx, %s Egress Error Src 0x%llx\n",
 		info, egress_err_info_string(buf, sizeof(buf), info), src);
 
+	/* Eventually add other counters for each bit */
+
 	if (info & WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK) {
 		if (ppd->port_xmit_discards < ~(u64)0)
 			ppd->port_xmit_discards++;
-		write_csr(dd, WFR_SEND_EGRESS_ERR_INFO,
-			WFR_SEND_EGRESS_ERR_INFO_TOO_LONG_IB_PACKET_ERR_SMASK);
 	}
 }
 
@@ -2394,7 +2397,7 @@ static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			count_port_inactive(dd);
 			handled |= (1ULL << shift);
 		} else if (disallowed_pkt_err(shift)) {
-			count_disallowed_pkt(dd);
+			handle_send_egress_err_info(dd);
 			handled |= (1ULL << shift);
 		}
 		clear_bit(shift, (unsigned long *)&reg_copy);
@@ -2535,7 +2538,7 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
 		send_context_err_status_string(flags, sizeof(flags), status));
 
 	if (status & WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK)
-		count_disallowed_pkt(dd);
+		handle_send_egress_err_info(dd);
 
 	/*
 	 * Automatically restart halted kernel contexts out of interrupt
@@ -4755,7 +4758,7 @@ static int do_8051_command(
 	unsigned long flags;
 	unsigned long timeout;
 
-	hfi_cdbg(DC8051, "type %d, data 0x%012llx\n", type, in_data);
+	hfi_cdbg(DC8051, "type %d, data 0x%012llx", type, in_data);
 
 	/*
 	 * TODO: Do we want to hold the lock for this long?
@@ -5722,61 +5725,62 @@ static void qsfp_event(struct work_struct *work)
 
 void init_qsfp(struct qib_pportdata *ppd)
 {
+	struct hfi_devdata *dd = ppd->dd;
+	u64 qsfp_mask;
 
 	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB ||
-			ppd->dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+			ppd->dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR ||
+			!HFI_CAP_IS_KSET(QSFP_ENABLED)) {
 		ppd->driver_link_ready = 1;
-	else if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
-		struct hfi_devdata *dd = ppd->dd;
-		u64 qsfp_mask;
+		return;
+	}
 
-		ppd->qsfp_info.ppd = ppd;
-		INIT_WORK(&ppd->qsfp_info.qsfp_work, qsfp_event);
+	ppd->qsfp_info.ppd = ppd;
+	INIT_WORK(&ppd->qsfp_info.qsfp_work, qsfp_event);
 
-		qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
-		/* Clear current status to avoid spurious interrupts */
+	qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
+	/* Clear current status to avoid spurious interrupts */
+	write_csr(dd,
+			dd->hfi_id ?
+				WFR_ASIC_QSFP2_CLEAR :
+				WFR_ASIC_QSFP1_CLEAR,
+		qsfp_mask);
+
+	/* Handle active low nature of INT_N and MODPRST_N pins */
+	if (qsfp_mod_present(ppd)) {
+		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
 		write_csr(dd,
 				dd->hfi_id ?
-					WFR_ASIC_QSFP2_CLEAR :
-					WFR_ASIC_QSFP1_CLEAR,
+					WFR_ASIC_QSFP2_INVERT :
+					WFR_ASIC_QSFP1_INVERT,
 			qsfp_mask);
-
-		/* Handle active low nature of INT_N and MODPRST_N pins */
-		if (qsfp_mod_present(ppd)) {
-			qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
-			write_csr(dd,
-					dd->hfi_id ?
-						WFR_ASIC_QSFP2_INVERT :
-						WFR_ASIC_QSFP1_INVERT,
-				qsfp_mask);
-		} else {
-			write_csr(dd,
-					dd->hfi_id ?
-						WFR_ASIC_QSFP2_INVERT :
-						WFR_ASIC_QSFP1_INVERT,
-				qsfp_mask);
-		}
-
-		/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
-		qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
+	} else {
 		write_csr(dd,
-			dd->hfi_id ? WFR_ASIC_QSFP2_MASK : WFR_ASIC_QSFP1_MASK,
+				dd->hfi_id ?
+					WFR_ASIC_QSFP2_INVERT :
+					WFR_ASIC_QSFP1_INVERT,
 			qsfp_mask);
+	}
 
-		if (qsfp_mod_present(ppd)) {
-			msleep(3000);
-			reset_qsfp(ppd);
+	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
+	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
+	write_csr(dd,
+		dd->hfi_id ? WFR_ASIC_QSFP2_MASK : WFR_ASIC_QSFP1_MASK,
+		qsfp_mask);
 
-			/* Check for QSFP interrupt after t_init (SFF 8679)
-			 * + extra
-			 */
-			msleep(3000);
-			if (!ppd->qsfp_info.qsfp_interrupt_functional)
-				if (do_qsfp_intr_fallback(ppd) < 0)
-					dd_dev_info(dd,
-						"%s: QSFP fallback failed\n",
-						__func__);
-		}
+	if (qsfp_mod_present(ppd)) {
+		msleep(3000);
+		reset_qsfp(ppd);
+
+		/* Check for QSFP interrupt after t_init (SFF 8679)
+		 * + extra
+		 */
+		msleep(3000);
+		if (!ppd->qsfp_info.qsfp_interrupt_functional)
+			if (do_qsfp_intr_fallback(ppd) < 0)
+				dd_dev_info(dd,
+					"%s: QSFP fallback failed\n",
+					__func__);
 	}
 }
 
@@ -7911,13 +7915,13 @@ static u32 read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 			}
 
 			if (entry->flags & CNTR_VL) {
-				hfi_cdbg(CNTR, "\tPer VL\n");
+				hfi_cdbg(CNTR, "\tPer VL");
 				for (j = 0; j < C_VL_COUNT; j++) {
 					val = entry->rw_cntr(entry, ppd, j,
 							       CNTR_MODE_R,
 							       0);
 					hfi_cdbg(CNTR,
-						 "\t\tRead 0x%llx for %d\n",
+						 "\t\tRead 0x%llx for %d",
 						 val, j);
 					ppd->cntrs[entry->offset + j] = val;
 				}
@@ -8204,7 +8208,7 @@ static void update_synth_timer(unsigned long opaque)
 		dd->last_rx = entry->rw_cntr(entry, dd, CNTR_INVALID_VL,
 						CNTR_MODE_R, 0);
 
-		hfi_cdbg(CNTR, "[%d] setting last tx/rx to 0x%llx 0x%llx\n",
+		hfi_cdbg(CNTR, "[%d] setting last tx/rx to 0x%llx 0x%llx",
 			 dd->unit, dd->last_tx, dd->last_rx);
 
 	} else {

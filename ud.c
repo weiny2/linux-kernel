@@ -512,6 +512,100 @@ void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 	}
 }
 
+/*
+ * opa_smp_check() - Do the regular pkey checking, and the additional
+ * checks for SMPs specified in STLv1 rev 0.90, section 9.10.26
+ * ("SMA Packet Checks").
+ *
+ * Note that:
+ *   - Checks are done using the pkey directly from the packet's BTH,
+ *     and specifically _not_ the pkey that we attach to the completion,
+ *     which may be different.
+ *   - These checks are specifically for "non-local" SMPs (i.e., SMPs
+ *     which originated on another node). SMPs which are sent from, and
+ *     destined to this node are checked in opa_local_smp_check().
+ *
+ * At the point where opa_smp_check() is called, we know:
+ *   - destination QP is QP0
+ *
+ * opa_smp_check() returns 0 if all checks succeed, 1 otherwise.
+ */
+static int opa_smp_check(struct qib_ibport *ibp, u16 pkey, u8 sc5,
+			 struct qib_qp *qp, u16 slid, struct opa_smp *smp)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+
+	/*
+	 * I don't think it's possible for us to get here with sc != 0xf,
+	 * but check it to be certain.
+	 */
+	if (sc5 != 0xf)
+		return 1;
+
+	if (ingress_pkey_check(ppd, pkey, sc5, qp->s_pkey_index, slid))
+		return 1;
+
+	/*
+	 * At this point we know (and so don't need to check again) that
+	 * the pkey is either WFR_LIM_MGMT_P_KEY, or WFR_FULL_MGMT_P_KEY
+	 * (see ingress_pkey_check).
+	 */
+	if (smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE &&
+	    smp->mgmt_class != IB_MGMT_CLASS_SUBN_LID_ROUTED) {
+		ingress_pkey_table_fail(ppd, pkey, slid);
+		return 1;
+	}
+
+	/*
+	 * SMPs fall into one of four (disjoint) categories:
+	 * SMA request, SMA response, trap, or trap repress.
+	 * Our response depends, in part, on which type of
+	 * SMP we're processing.
+	 *
+	 * If this is not an SMA request, or trap repress:
+	 *   - accept MAD if the port is running an SM
+	 *   - pkey == WFR_FULL_MGMT_P_KEY =>
+	 *       reply with unsupported method (i.e., just mark
+	 *       the smp's status field here, and let it be
+	 *       processed normally)
+	 *   - pkey != WFR_LIM_MGMT_P_KEY =>
+	 *       increment port recv constraint errors, drop MAD
+	 * If this is an SMA request or trap repress:
+	 *   - pkey != WFR_FULL_MGMT_P_KEY =>
+	 *       increment port recv constraint errors, drop MAD
+	 */
+	switch (smp->method) {
+	case IB_MGMT_METHOD_GET:
+	case IB_MGMT_METHOD_SET:
+	case IB_MGMT_METHOD_SEND:
+	case IB_MGMT_METHOD_TRAP:
+	case IB_MGMT_METHOD_REPORT:
+	case IB_MGMT_METHOD_TRAP_REPRESS:
+		if (pkey != WFR_FULL_MGMT_P_KEY) {
+			ingress_pkey_table_fail(ppd, pkey, slid);
+			return 1;
+		}
+		break;
+	case IB_MGMT_METHOD_GET_RESP:
+	case IB_MGMT_METHOD_REPORT_RESP:
+		if (ibp->port_cap_flags & IB_PORT_SM)
+			return 0;
+		if (pkey == WFR_FULL_MGMT_P_KEY) {
+			smp->status |= IB_SMP_UNSUP_METHOD;
+			return 0;
+		}
+		if (pkey != WFR_LIM_MGMT_P_KEY) {
+			ingress_pkey_table_fail(ppd, pkey, slid);
+			return 1;
+		}
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+
 /**
  * qib_ud_rcv - receive an incoming UD packet
  * @ibp: the port the packet came in on
@@ -535,8 +629,8 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	struct ib_wc wc;
 	u32 qkey;
 	u32 src_qp;
-	u16 dlid;
-	int mgmt_pkey_idx = 0;
+	u16 dlid, pkey;
+	int mgmt_pkey_idx = -1;
 	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
 	int sc4_bit = (!!(rcv_flags & QIB_SC4_BIT)) << 4;
 	u8 sc;
@@ -585,8 +679,9 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	opcode &= 0xff;
 
+	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+
 	if (!is_mcast && (opcode != CNP_OPCODE) && is_fecn) {
-		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 		u16 slid = be16_to_cpu(hdr->lrh[3]);
 		u8 sc5;
 
@@ -615,13 +710,12 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			goto drop;
 		if (qp->ibqp.qp_num > 1) {
 			struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-			u16 pkey, slid;
+			u16 slid;
 			u8 sc5;
 
 			sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
 			sc5 |= sc4_bit;
 
-			pkey = be32_to_cpu(ohdr->bth[0]);
 			slid = be16_to_cpu(hdr->lrh[3]);
 			if (unlikely(ingress_pkey_check(ppd, pkey, sc5,
 							qp->s_pkey_index,
@@ -635,9 +729,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 				return;
 			}
 		} else {
-			/* lookup GSI pkey */
-			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-
+			/* GSI packet */
 			mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
 			if (mgmt_pkey_idx < 0)
 				goto drop;
@@ -656,13 +748,19 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			      (be16_to_cpu(hdr->lrh[0]) >> 12) == 15)))
 			goto drop;
 	} else {
-		struct ib_smp *smp;
-		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		/* Received on QP0, and so by definition, this is an SMP */
+		struct opa_smp *smp = (struct opa_smp *)data;
+		u16 slid = be16_to_cpu(hdr->lrh[3]);
+		u8 sc5;
 
-		/* Drop invalid MAD packets (see 13.5.3.1). */
-		if (tlen > 2048 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
+		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
+		sc5 |= sc4_bit;
+
+		if (opa_smp_check(ibp, pkey, sc5, qp, slid, smp))
 			goto drop;
-		smp = (struct ib_smp *) data;
+
+		if (tlen > 2048)
+			goto drop;
 		if ((hdr->lrh[1] == IB_LID_PERMISSIVE ||
 		     hdr->lrh[3] == IB_LID_PERMISSIVE) &&
 		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)

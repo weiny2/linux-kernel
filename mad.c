@@ -488,6 +488,16 @@ void read_ltp_rtt(struct hfi_devdata *dd)
 	}
 }
 
+static u8 __opa_porttype(struct qib_pportdata *ppd)
+{
+	if (qsfp_mod_present(ppd)) {
+		if (ppd->qsfp_info.cache_valid)
+			return OPA_PORT_TYPE_STANDARD;
+		return OPA_PORT_TYPE_DISCONNECTED;
+	}
+	return OPA_PORT_TYPE_UNKNOWN;
+}
+
 static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				   struct ib_device *ibdev, u8 port,
 				   u32 *resp_len)
@@ -571,6 +581,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (start_of_sm_config && (state == IB_PORT_INIT))
 		ppd->is_sm_config_started = 1;
+
+	pi->port_phys_conf = __opa_porttype(ppd) & 0xf;
 
 #if PI_LED_ENABLE_SUP
 	pi->port_states.ledenable_offlinereason = ppd->neighbor_normal << 4;
@@ -874,7 +886,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	u32 port_num = STL_AM_PORTNUM(am);
 	u32 num_ports = STL_AM_NPORT(am);
 	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
-	int ret, i, invalid = 0;
+	int ret, i, invalid = 0, call_set_mtu = 0;
 	int call_link_downgrade_policy = 0;
 
 	if (num_ports != 1) {
@@ -1038,7 +1050,13 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		}
-		dd->vld[i].mtu = mtu;
+		if (dd->vld[i].mtu != mtu) {
+			dd_dev_info(dd,
+				"MTU change on vl %d from %d to %d\n",
+				i, dd->vld[i].mtu, mtu);
+			dd->vld[i].mtu = mtu;
+			call_set_mtu++;
+		}
 	}
 	/* As per STLV1 spec: VL15 must support and be configured
 	 * for operation with a 2048 or larger MTU.
@@ -1046,8 +1064,15 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	mtu = enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15/2] & 0xF);
 	if (mtu < 2048 || mtu == 0xffff)
 		mtu = 2048;
-	dd->vld[15].mtu = mtu;
-	set_mtu(ppd);
+	if (dd->vld[15].mtu != mtu) {
+		dd_dev_info(dd,
+			"MTU change on vl 15 from %d to %d\n",
+			dd->vld[15].mtu, mtu);
+		dd->vld[15].mtu = mtu;
+		call_set_mtu++;
+	}
+	if (call_set_mtu)
+		set_mtu(ppd);
 
 	/* Set operational VLs */
 	vls = pi->operational_vls & OPA_PI_MASK_OPERATIONAL_VL;
@@ -1591,6 +1616,43 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 		smp->status |= IB_SMP_INVALID_FIELD;
 
 	return __subn_get_opa_psi(smp, am, data, ibdev, port, resp_len);
+}
+
+static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
+				     struct ib_device *ibdev, u8 port,
+				     u32 *resp_len)
+{
+	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	u32 addr = STL_AM_CI_ADDR(am);
+	u32 len = STL_AM_CI_LEN(am);
+	int ret;
+
+	/* check that addr, (addr + len) are on the same "page" */
+#define __CI_PAGE_SIZE (1 << 7) /* 128 bytes */
+#define __CI_PAGE_MASK ~(__CI_PAGE_SIZE - 1)
+#define __CI_PAGE_NUM(a) ((a) & __CI_PAGE_MASK)
+	if (__CI_PAGE_NUM(addr) != __CI_PAGE_NUM(addr + len)) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	ret = get_cable_info(dd, port, addr, len, data);
+
+	if (ret == -ENODEV) {
+		smp->status |= IB_SMP_UNSUP_METH_ATTR;
+		return reply(smp);
+	}
+
+	/* all other errors result in IB_SMP_INVALID_FIELD status */
+	if (ret < 0) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply(smp);
+	}
+
+	if (resp_len)
+		*resp_len += len;
+
+	return reply(smp);
 }
 
 static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
@@ -2742,16 +2804,16 @@ static int pma_get_stl_errorinfo(struct stl_pma_mad *pmp,
 	rsp->port_xmit_constraint_ei.status =
 		dd->err_info_xmit_constraint.status;
 	rsp->port_xmit_constraint_ei.pkey =
-		dd->err_info_xmit_constraint.pkey;
+		cpu_to_be16(dd->err_info_xmit_constraint.pkey);
 	rsp->port_xmit_constraint_ei.slid =
-		dd->err_info_xmit_constraint.slid;
+		cpu_to_be32(dd->err_info_xmit_constraint.slid);
 
 	rsp->port_rcv_constraint_ei.status =
 		dd->err_info_rcv_constraint.status;
 	rsp->port_rcv_constraint_ei.pkey =
-		dd->err_info_rcv_constraint.pkey;
+		cpu_to_be16(dd->err_info_rcv_constraint.pkey);
 	rsp->port_rcv_constraint_ei.slid =
-		dd->err_info_rcv_constraint.slid;
+		cpu_to_be32(dd->err_info_rcv_constraint.slid);
 
 	/* PortRcvSwitchRelayErrorInfo */
 	/* FIXME this error counter isn't relevant to HFIs */
@@ -3382,6 +3444,10 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		ret = __subn_get_opa_bct(smp, am, data, ibdev, port,
 					 resp_len);
 		break;
+	case OPA_ATTRIB_ID_CABLE_INFO:
+		ret = __subn_get_opa_cable_info(smp, am, data, ibdev, port,
+						resp_len);
+		break;
 	case IB_SMP_ATTR_VL_ARB_TABLE:
 		ret = __subn_get_opa_vl_arb(smp, am, data, ibdev, port,
 					    resp_len);
@@ -3614,6 +3680,69 @@ void clear_linkup_counters(struct hfi_devdata *dd)
 	dd->err_info_xmit_constraint.status &= ~STL_EI_STATUS_SMASK;
 }
 
+/*
+ * is_local_mad() returns 1 if 'mad' is sent from, and destined to the
+ * local node, 0 otherwise.
+ */
+static int is_local_mad(struct qib_ibport *ibp, struct jumbo_mad *mad,
+			struct ib_wc *in_wc)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct opa_smp *smp = (struct opa_smp *)mad;
+
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
+		return (smp->hop_cnt == 0 &&
+			smp->route.dr.dr_slid == OPA_LID_PERMISSIVE &&
+			smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE);
+	}
+
+	return (in_wc->slid == ppd->lid);
+}
+
+/*
+ * opa_local_smp_check() should only be called on MADs for which
+ * is_local_mad() returns true. It applies the SMP checks that are
+ * specific to SMPs which are sent from, and destined to this node.
+ * opa_local_smp_check() returns 0 if the SMP passes its checks, 1
+ * otherwise.
+ *
+ * SMPs which arrive from other nodes are instead checked by
+ * opa_smp_check().
+ */
+static int opa_local_smp_check(struct qib_ibport *ibp, struct ib_wc *in_wc)
+{
+	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	u16 slid = in_wc->slid;
+	u16 pkey;
+
+	if (in_wc->pkey_index >= ARRAY_SIZE(ppd->pkeys))
+		return 1;
+
+	pkey = ppd->pkeys[in_wc->pkey_index];
+	/*
+	 * We need to do the "node-local" checks specified in STLv1,
+	 * rev 0.90, section 9.10.26, which are:
+	 *   - pkey is 0x7fff, or 0xffff
+	 *   - Source QPN == 0 || Destination QPN == 0
+	 *   - the MAD header's management class is either
+	 *     IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE or
+	 *     IB_MGMT_CLASS_SUBN_LID_ROUTED
+	 *   - SLID != 0
+	 *
+	 * However, we know (and so don't need to check again) that,
+	 * for local SMPs, the MAD stack passes MADs with:
+	 *   - Source QPN of 0
+	 *   - MAD mgmt_class is IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
+	 *   - SLID is either: STL_LID_PERMISSIVE (0xFFFFFFFF), or
+	 *     our own port's lid
+	 *
+	 */
+	if (pkey == WFR_LIM_MGMT_P_KEY || pkey == WFR_FULL_MGMT_P_KEY)
+		return 0;
+	ingress_pkey_table_fail(ppd, pkey, slid);
+	return 1;
+}
+
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			    u8 port, struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad,
@@ -3621,7 +3750,6 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 {
 	struct opa_smp *smp = (struct opa_smp *)out_mad;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
-	/* XXX struct qib_pportdata *ppd = ppd_from_ibp(ibp);*/
 	u8 *data;
 	u32 am;
 	__be16 attr_id;
@@ -3920,6 +4048,11 @@ static int hfi_process_stl_mad(struct ib_device *ibdev, int mad_flags,
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
 	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		if (is_local_mad(ibp, in_mad, in_wc)) {
+			ret = opa_local_smp_check(ibp, in_wc);
+			if (ret)
+				return IB_MAD_RESULT_FAILURE;
+		}
 		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
 				       out_mad, &resp_len);
 		goto bail;
