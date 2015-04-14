@@ -1268,7 +1268,7 @@ static inline void __hfi_trace_##fn(const char *func, char *fmt, ...)	\
 
 /*
  * To create a new trace level simply define it as below. This will create all
- * the hooks for calling qib_cdb(LVL, fmt, ...); as well as take care of all
+ * the hooks for calling hfi_cdbg(LVL, fmt, ...); as well as take care of all
  * the debugfs stuff.
  */
 __hfi_trace_fn(RVPKT);
@@ -1287,6 +1287,7 @@ __hfi_trace_fn(SNOOP);
 __hfi_trace_fn(CNTR);
 __hfi_trace_fn(PIO);
 __hfi_trace_fn(DC8051);
+__hfi_trace_fn(FIRMWARE);
 
 #define hfi_cdbg(which, fmt, ...) \
 	__hfi_trace_##which(__func__, fmt, ##__VA_ARGS__)

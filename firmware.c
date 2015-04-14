@@ -36,6 +36,7 @@
 #include <linux/delay.h>
 
 #include "hfi.h"
+#include "trace.h"
 
 static uint fw_8051_load = 1;
 module_param_named(fw_8051_load, fw_8051_load, uint, S_IRUGO);
@@ -194,8 +195,6 @@ static struct firmware_details fw_sbus;
 
 /* 8051 memory access timout, in us */
 #define DC8051_ACCESS_TIMEOUT 100 /* us */
-
-static int print_css_header = 1;	/* TODO: hook to verbosity level */
 
 /* the number of fabric SerDes on the SBUS */
 #define NUM_FABRIC_SERDES 4
@@ -372,31 +371,27 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 		goto done;
 	}
 	css = (struct css_header *)fdet->fw->data;
-	if (print_css_header) {
-		dd_dev_info(dd, "Firmware %s details:\n", name);
-		dd_dev_info(dd, "file size: 0x%lx bytes\n", fdet->fw->size);
-		dd_dev_info(dd, "CSS structure:\n");
-		dd_dev_info(dd, "  module_type    0x%x\n", css->module_type);
-		dd_dev_info(dd, "  header_len     0x%03x (0x%03x bytes)",
-			css->header_len, 4*css->header_len);
-		dd_dev_info(dd, "  header_version 0x%x\n", css->header_version);
-		dd_dev_info(dd, "  module_id      0x%x\n", css->module_id);
-		dd_dev_info(dd, "  module_vendor  0x%x\n", css->module_vendor);
-		dd_dev_info(dd, "  date           0x%x\n", css->date);
-		dd_dev_info(dd, "  size           0x%03x (0x%03x bytes)\n",
-			css->size, 4*css->size);
-		dd_dev_info(dd, "  key_size       0x%03x (0x%03x bytes)\n",
-			css->key_size, 4*css->key_size);
-		dd_dev_info(dd, "  modulus_size   0x%03x (0x%03x bytes)\n",
-			css->modulus_size, 4*css->modulus_size);
-		dd_dev_info(dd, "  exponent_size  0x%03x (0x%03x bytes)\n",
-			css->exponent_size, 4*css->exponent_size);
-		if (fdet->fw->size >= sizeof(struct firmware_file))
-			dd_dev_info(dd, "firmware size: 0x%lx bytes\n",
-				fdet->fw->size - sizeof(struct firmware_file));
-		else
-			dd_dev_info(dd, "firmware size: ? header too long\n");
-	}
+
+	hfi_cdbg(FIRMWARE, "Firmware %s details:", name);
+	hfi_cdbg(FIRMWARE, "file size: 0x%lx bytes", fdet->fw->size);
+	hfi_cdbg(FIRMWARE, "CSS structure:");
+	hfi_cdbg(FIRMWARE, "  module_type    0x%x", css->module_type);
+	hfi_cdbg(FIRMWARE, "  header_len     0x%03x (0x%03x bytes)",
+		css->header_len, 4*css->header_len);
+	hfi_cdbg(FIRMWARE, "  header_version 0x%x", css->header_version);
+	hfi_cdbg(FIRMWARE, "  module_id      0x%x", css->module_id);
+	hfi_cdbg(FIRMWARE, "  module_vendor  0x%x", css->module_vendor);
+	hfi_cdbg(FIRMWARE, "  date           0x%x", css->date);
+	hfi_cdbg(FIRMWARE, "  size           0x%03x (0x%03x bytes)",
+		css->size, 4*css->size);
+	hfi_cdbg(FIRMWARE, "  key_size       0x%03x (0x%03x bytes)",
+		css->key_size, 4*css->key_size);
+	hfi_cdbg(FIRMWARE, "  modulus_size   0x%03x (0x%03x bytes)",
+		css->modulus_size, 4*css->modulus_size);
+	hfi_cdbg(FIRMWARE, "  exponent_size  0x%03x (0x%03x bytes)",
+		css->exponent_size, 4*css->exponent_size);
+	hfi_cdbg(FIRMWARE, "firmware size: 0x%lx bytes",
+		fdet->fw->size - sizeof(struct firmware_file));
 
 	/*
 	 * If the file does not have a valid CSS header, assume it is
@@ -838,10 +833,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 							fdet->firmware_len);
 	if (ret)
 		return ret;
-
-	/* TODO: guard with verbosity level */
-	dd_dev_info(dd, "8051 firmware download stats: %u writes",
-		(fdet->firmware_len+7)/8);
 
 	/*
 	 * DC reset step 4. Host starts the DC8051 firmware
