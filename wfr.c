@@ -9495,14 +9495,14 @@ static void reset_asic_csrs(struct hfi_devdata *dd)
 	called = 1;
 
 	if (dd->icode != WFR_ICODE_FPGA_EMULATION) {
-		/* emulation does not have an SBUS - leave these alone */
+		/* emulation does not have an SBus - leave these alone */
 		/*
 		 * TODO: All writes to ASIC_CFG_SBUS_REQUEST do something.
 		 * Do we want to write a reset here or leave it alone?
 		 * Notes:
 		 * o The reset is not zero if aimed at the core.  See the
-		 *   SBUS documentation for details.
-		 * o If the SBUS firmware has been upated (e.g. by the BIOS),
+		 *   SBus documentation for details.
+		 * o If the SBus firmware has been upated (e.g. by the BIOS),
 		 *   will the reset revert that?
 		 */
 		/*write_csr(dd, WFR_ASIC_CFG_SBUS_REQUEST, 0);*/
