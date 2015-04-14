@@ -101,11 +101,6 @@ uint quick_linkup;
 module_param(quick_linkup, uint, S_IRUGO);
 MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
 
-/* TODO: temporary; skip BCC steps */
-static uint disable_bcc;
-module_param_named(disable_bcc, disable_bcc, uint, S_IRUGO);
-MODULE_PARM_DESC(disable_bcc, "Disable BCC steps in normal LinkUp");
-
 /* TODO: temporary */
 #define EASY_LINKUP_UNSET 100
 static uint sim_easy_linkup = EASY_LINKUP_UNSET;
@@ -3708,23 +3703,6 @@ void handle_verify_cap(struct work_struct *work)
 		(u32)remote_tx_rate, (u32)link_widths);
 	dd_dev_info(dd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
 		(u32)device_id, (u32)device_rev);
-	if (disable_bcc) {
-		/*
-		 * TODO:
-		 * With the BCC disabled, no Verify Cap exchange takes
-		 * place, so the above values will all be zero.
-		 * For now, use our values as we know that we are
-		 * talking back-to-back with another WFR.  If we hook up
-		 * with a PRR, we will need to revisit this.  In particular,
-		 * vl15buf and vcu, which may be different.  vau is fixed
-		 * at 3 for all Gen1 chips.
-		 */
-		dd_dev_info(dd,
-			"Overriding invalid remote details with local data\n");
-		vau = dd->vau;
-		vl15buf = dd->vl15_init;
-		vcu = dd->vcu;
-	}
 	/*
 	 * The peer vAU value just read is the peer receiver value.  WFR does
 	 * not support a transmit vAU of 0 (AU == 8).  We advertised that
@@ -5432,13 +5410,7 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 	if (ret != WFR_HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
-	/*
-	 * TODO: 0x2f00 are undocumented flags co-located with the
-	 * local link width capability register.  These flags turn
-	 * off some BCC steps during LinkUp, currently necessary
-	 * for back-to-back operation (doesn't matter for loopback).
-	 */
-	ret = write_vc_local_link_width(dd, disable_bcc ? 0x2f00 : 0,
+	ret = write_vc_local_link_width(dd, 0,
 		     stl_to_vc_link_widths(ppd->link_width_enabled));
 	if (ret != WFR_HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
