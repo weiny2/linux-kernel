@@ -2501,7 +2501,7 @@ static char *credit_return_string(char *buf, int buf_len, u64 flags)
 #endif
 
 /*
- * Send context error interrupt.  Source (context) is < 160.
+ * Send context error interrupt.  Source (hw_context) is < 160.
  *
  * All send context errors cause the send context to halt.  The normal
  * clear-down mechanism cannot be used because we cannot clear the
@@ -2509,32 +2509,35 @@ static char *credit_return_string(char *buf, int buf_len, u64 flags)
  * This is OK because with the context halted, nothing else is going
  * to happen on it anyway.
  */
-static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int context)
+static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int hw_context)
 {
 	struct send_context_info *sci;
 	struct send_context *sc;
 	char flags[96];
 	u64 status;
+	u32 sw_index;
 
-	if (context >= dd->num_send_contexts) {
+	sw_index = dd->hw_to_sw[hw_context];
+	if (sw_index >= dd->num_send_contexts) {
 		dd_dev_err(dd,
-			"unexpected out of range send context interrupt %u\n",
-			context);
+			"out of range sw index %u for send context %u\n",
+			sw_index, hw_context);
 		return;
 	}
-	sci = &dd->send_contexts[context];
+	sci = &dd->send_contexts[sw_index];
 	sc = sci->sc;
 	if (!sc) {
-		dd_dev_err(dd, "%s: context %u: no sc?\n", __func__, context);
+		dd_dev_err(dd, "%s: context %u(%u): no sc?\n", __func__,
+			sw_index, hw_context);
 		return;
 	}
 
 	/* tell the software that a halt has begun */
 	sc_stop(sc, SCF_HALTED);
 
-	status = read_kctxt_csr(dd, context, WFR_SEND_CTXT_ERR_STATUS);
+	status = read_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_ERR_STATUS);
 
-	dd_dev_info(dd, "Send Context %u Error: %s\n", context,
+	dd_dev_info(dd, "Send Context %u(%u) Error: %s\n", sw_index, hw_context,
 		send_context_err_status_string(flags, sizeof(flags), status));
 
 	if (status & WFR_SEND_CTXT_ERR_STATUS_PIO_DISALLOWED_PACKET_ERR_SMASK)
@@ -4374,14 +4377,7 @@ static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
  */
 static void is_send_credit_int(struct hfi_devdata *dd, unsigned int source)
 {
-	if (unlikely(source >= dd->num_send_contexts)) {
-		dd_dev_err(
-			dd,
-			"unexpected out of range send context credit return interrupt %u\n",
-			source);
-		return;
-	}
-	sc_release_update(dd->send_contexts[source].sc);
+	sc_group_release_update(dd, source);
 }
 
 /*
@@ -6198,7 +6194,7 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	       (((ppd->lid & mask) & WFR_SEND_CTXT_CHECK_SLID_VALUE_MASK) <<
 			WFR_SEND_CTXT_CHECK_SLID_VALUE_SHIFT);
 
-	for (i = 0; i < dd->num_send_contexts; i++) {
+	for (i = 0; i < dd->chip_send_contexts; i++) {
 		hfi_cdbg(LINKVERB, "SendContext[%d].SLID_CHECK = 0x%x",
 			 i, (u32)sreg);
 		write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_SLID, sreg);
@@ -8610,13 +8606,13 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 		u8 set = (rcd->sc->type == SC_USER ?
 			  HFI_CAP_IS_USET(STATIC_RATE_CTRL) :
 			  HFI_CAP_IS_KSET(STATIC_RATE_CTRL));
-		reg = read_kctxt_csr(dd, rcd->sc->context,
+		reg = read_kctxt_csr(dd, rcd->sc->hw_context,
 				     WFR_SEND_CTXT_CHECK_ENABLE);
 		if (set)
 			CLEAR_STATIC_RATE_CONTROL_SMASK(reg);
 		else
 			SET_STATIC_RATE_CONTROL_SMASK(reg);
-		write_kctxt_csr(dd, rcd->sc->context,
+		write_kctxt_csr(dd, rcd->sc->hw_context,
 				WFR_SEND_CTXT_CHECK_ENABLE, reg);
 	}
 	return ret;
@@ -10386,7 +10382,7 @@ static int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 		ret = -EINVAL;
 		goto done;
 	}
-	sctxt = rcd->sc->context;
+	sctxt = rcd->sc->hw_context;
 	reg = WFR_SEND_CTXT_CHECK_JOB_KEY_MASK_SMASK | /* mask is always 1's */
 		((jkey & WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_MASK) <<
 		 WFR_SEND_CTXT_CHECK_JOB_KEY_VALUE_SHIFT);
@@ -10424,7 +10420,7 @@ static int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
 		ret = -EINVAL;
 		goto done;
 	}
-	sctxt = rcd->sc->context;
+	sctxt = rcd->sc->hw_context;
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_JOB_KEY, 0);
 	/*
 	 * Disable send-side J_KEY integrity check, unless this is A0 h/w.
@@ -10459,7 +10455,7 @@ static int set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
 		ret = -EINVAL;
 		goto done;
 	}
-	sctxt = rcd->sc->context;
+	sctxt = rcd->sc->hw_context;
 	reg = ((u64)pkey & WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_MASK) <<
 		WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_SHIFT;
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_PARTITION_KEY, reg);
@@ -10487,7 +10483,7 @@ static int clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
 		ret = -EINVAL;
 		goto done;
 	}
-	sctxt = rcd->sc->context;
+	sctxt = rcd->sc->hw_context;
 	reg = read_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE);
 	reg &= ~WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_ENABLE, reg);

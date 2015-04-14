@@ -39,6 +39,9 @@
 #define SC_USER   2
 #define SC_MAX    3
 
+/* invalid send context index */
+#define INVALID_SCI 0xff
+
 /* PIO buffer release callback function */
 typedef void (*pio_release_cb)(void *arg, int code);
 
@@ -90,7 +93,8 @@ struct send_context {
 	unsigned long flags;		/* flags */
 	int node;			/* context home node */
 	int type;			/* context type */
-	u32 context;			/* context number */
+	u32 sw_index;			/* software index number */
+	u32 hw_context;			/* hardware context number */
 	u32 credits;			/* number of blocks in context */
 	u32 sr_size;			/* size of the shadow ring */
 	u32 group;			/* credit return group */
@@ -120,7 +124,7 @@ struct send_context {
 
 struct send_context_info {
 	struct send_context *sc;	/* allocated working context */
-	int allocated;			/* compare and exchange interlock */
+	u16 allocated;			/* has this been allocated? */
 	u16 type;			/* context type */
 	u16 base;			/* base in PIO array */
 	u16 credits;			/* size in PIO array */
@@ -164,7 +168,7 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 			pio_release_cb cb, void *arg);
 void sc_release_update(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
-void sc_group_release_update(struct send_context *sc);
+void sc_group_release_update(struct hfi_devdata *dd, u32 hw_context);
 void sc_add_credit_return_intr(struct send_context *sc);
 void sc_del_credit_return_intr(struct send_context *sc);
 void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold);

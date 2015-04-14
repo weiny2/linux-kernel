@@ -209,18 +209,21 @@ TRACE_EVENT(hfi_piofree,
 	TP_ARGS(sc, extra),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(sc->dd)
-		__field(u32, ctxt)
+		__field(u32, sw_index)
+		__field(u32, hw_context)
 		__field(int, extra)
 	),
 	TP_fast_assign(
 		DD_DEV_ASSIGN(sc->dd);
-		__entry->ctxt = sc->context;
+		__entry->sw_index = sc->sw_index;
+		__entry->hw_context = sc->hw_context;
 		__entry->extra = extra;
 	),
 	TP_printk(
-		"[%s] ctxt %d extra %d",
+		"[%s] ctxt %u(%u) extra %d",
 		__get_str(dev),
-		__entry->ctxt,
+		__entry->sw_index,
+		__entry->hw_context,
 		__entry->extra
 	)
 );
@@ -230,20 +233,23 @@ TRACE_EVENT(hfi_wantpiointr,
 	TP_ARGS(sc, needint, credit_ctrl),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(sc->dd)
-		__field(u32, ctxt)
+		__field(u32, sw_index)
+		__field(u32, hw_context)
 		__field(u32, needint)
 		__field(u64, credit_ctrl)
 	),
 	TP_fast_assign(
 		DD_DEV_ASSIGN(sc->dd);
-		__entry->ctxt = sc->context;
+		__entry->sw_index = sc->sw_index;
+		__entry->hw_context = sc->hw_context;
 		__entry->needint = needint;
 		__entry->credit_ctrl = credit_ctrl;
 	),
 	TP_printk(
-		"[%s] ctxt %d on %d credit_ctrl 0x%llx",
+		"[%s] ctxt %u(%u) on %d credit_ctrl 0x%llx",
 		__get_str(dev),
-		__entry->ctxt,
+		__entry->sw_index,
+		__entry->hw_context,
 		__entry->needint,
 		(unsigned long long)__entry->credit_ctrl
 	)

@@ -231,7 +231,7 @@ struct __qib_sendpkt {
 struct diag_pkt {
 	__u16 version;		/* structure version */
 	__u16 unit;		/* which device */
-	__u16 context;		/* send context to use */
+	__u16 sw_index;		/* send sw index to use */
 	__u16 len;		/* data length, in bytes */
 	__u16 port;		/* port number */
 	__u16 unused;
