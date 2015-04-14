@@ -660,8 +660,11 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 		ret = -EINVAL;
 		goto bail;
 	}
-	/* TODO: check for enabled?  Or should that be in the buffer
-	   allocator? */
+	/* must be enabled */
+	if (!(sc->flags & SCF_ENABLED)) {
+		ret = -EINVAL;
+		goto bail;
+	}
 
 	/* allocate a buffer and copy the data in */
 	tmpbuf = vmalloc(dp->len);
