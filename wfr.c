@@ -2911,16 +2911,10 @@ static void write_global_credit(struct hfi_devdata *dd,
 				u8 vau, u16 total, u16 shared)
 {
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT,
-/* TODO: HAS 0.76 changed names and adds a field */
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
 		((u64)total
 			<< WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
 		| ((u64)shared
 			<< WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT)
-#else
-		((u64)total
-			<< WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
-#endif
 		| ((u64)vau << WFR_SEND_CM_GLOBAL_CREDIT_AU_SHIFT));
 }
 
@@ -4000,27 +3994,8 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			host_msg &= ~(u64)WFR_BC_SMA_MSG;
 		}
 		if (host_msg & WFR_LINKUP_ACHIEVED) {
-			if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR
-				&& (ppd->host_link_state == HLS_UP_INIT
-				   || ppd->host_link_state == HLS_UP_ARMED
-				   || ppd->host_link_state == HLS_UP_ACTIVE)) {
-				/*
-				 * FIXME: In simulators before release 46
-				 * linkup was not cleared after the real
-				 * link up event.  The driver would then
-				 * receive a linkup notificiation whenever
-				 * anything generated an 8051 interrupt,
-				 * e.g. LCB access 8051 commands.
-				 *
-				 * Work around that by ignoring the
-				 * link up notificaiton here.  We know
-				 * it is a "repeat" because the link is
-				 * already up.
-				 */
-			} else {
-				dd_dev_info(dd, "8051: LinkUp achieved\n");
-				queue_work(ppd->qib_wq, &ppd->link_up_work);
-			}
+			dd_dev_info(dd, "8051: LinkUp achieved\n");
+			queue_work(ppd->qib_wq, &ppd->link_up_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
@@ -6744,8 +6719,6 @@ static int get_buffer_control(struct hfi_devdata *dd,
 	read_one_cm_vl(dd, WFR_SEND_CM_CREDIT_VL15, &bc->vl[15]);
 
 	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
-/* TODO: defined in future HAS 0.76 */
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
 	bc->overall_shared_limit = cpu_to_be16(
 		(reg >> WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT)
 		& WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_MASK);
@@ -6753,25 +6726,6 @@ static int get_buffer_control(struct hfi_devdata *dd,
 		*overall_limit = (reg
 			>> WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT)
 			& WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_MASK;
-#else
-	{
-	u16 ded_total = 0;
-	u16 global_limit;
-
-	global_limit = (reg >> WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT)
-			& WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_MASK;
-	if (overall_limit)
-		*overall_limit = global_limit;
-
-	/* calculate the shared total by subtracting the summed
-	   dedicated limit from the overall limit */
-	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
-		ded_total += be16_to_cpu(bc->vl[i].dedicated);
-	ded_total += be16_to_cpu(bc->vl[15].dedicated);
-
-	bc->overall_shared_limit = cpu_to_be16(global_limit - ded_total);
-	}
-#endif
 	return sizeof(struct buffer_control);
 }
 
@@ -6895,15 +6849,12 @@ static void nonzero_msg(struct hfi_devdata *dd, int idx, const char *what,
 /* change only the shared limit portion of SendCmGLobalCredit */
 static void set_global_shared(struct hfi_devdata *dd, u16 limit)
 {
-/* TODO: defined in future HAS 0.76 */
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
 	u64 reg;
 
 	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
 	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SMASK;
 	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT;
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
-#endif
 }
 
 /* change only the total credit limit portion of SendCmGLobalCredit */
@@ -6912,14 +6863,8 @@ static void set_global_limit(struct hfi_devdata *dd, u16 limit)
 	u64 reg;
 
 	reg = read_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT);
-/* TODO: name changed in HAS 0.76 */
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
 	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SMASK;
 	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_TOTAL_CREDIT_LIMIT_SHIFT;
-#else
-	reg &= ~WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SMASK;
-	reg |= (u64)limit << WFR_SEND_CM_GLOBAL_CREDIT_GLOBAL_LIMIT_SHIFT;
-#endif
 	write_csr(dd, WFR_SEND_CM_GLOBAL_CREDIT, reg);
 }
 
@@ -7255,8 +7200,6 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 	return ret;
 }
 
-/* FIXME: Remove definitions when support for headers prior to 48
- * is removed or before release of driver code. */
 /* defined in header release 48 and higher */
 #ifndef WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT
 #define WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT 3
@@ -9707,9 +9650,6 @@ static void init_sc2vl_tables(struct hfi_devdata *dd)
 		28, 0, 29, 0,
 		30, 0, 31, 0));
 
-#ifdef WFR_SEND_CM_GLOBAL_CREDIT_SHARED_LIMIT_SHIFT
-/* TODO: only do this with WFR HAS 0.76 (sim v33) and later, the sim changed
-   what it does with these CSRs at that time */
 	/* DC maps received packets */
 	write_csr(dd, DCC_CFG_SC_VL_TABLE_15_0, DC_SC_VL_VAL(
 		15_0,
@@ -9727,8 +9667,6 @@ static void init_sc2vl_tables(struct hfi_devdata *dd)
 		else
 			*((u8 *)(dd->sc2vl) + i) = 0;
 	}
-
-#endif
 }
 
 /*
