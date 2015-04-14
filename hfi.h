@@ -812,8 +812,6 @@ struct hfi_devdata {
 	void (*f_setextled)(struct qib_pportdata *, u32);
 	/* fill out chip-specific fields */
 	int (*f_get_base_info)(struct qib_ctxtdata *, struct hfi_ctxt_info *);
-	/* free irq */
-	void (*f_free_irq)(struct hfi_devdata *);
 	struct qib_message_header *(*f_get_msgheader)
 					(struct hfi_devdata *, __le32 *);
 	void (*f_config_ctxts)(struct hfi_devdata *);
@@ -1120,7 +1118,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup);
 void qib_sdma_update_tail(struct qib_pportdata *, u16); /* hold sdma_lock */
 
 int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
-void qib_bad_intrstatus(struct hfi_devdata *);
 void handle_user_interrupt(struct qib_ctxtdata *rcd);
 
 int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
@@ -1383,8 +1380,6 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 #define HFI_FROZEN            0x4    /* chip in SPC freeze */
 #define HFI_HAS_SDMA_TIMEOUT  0x8
 #define HFI_HAS_SEND_DMA      0x10   /* Supports Send DMA */
-#define HFI_BADINTR           0x20   /* severe interrupt problems */
-#define ICHECK_WORKER_INITED  0x40   /* initialized interrupt_check_worker */
 #define HFI_FORCED_FREEZE     0x80   /* driver forced freeze mode */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */

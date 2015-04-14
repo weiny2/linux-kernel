@@ -189,29 +189,3 @@ void handle_user_interrupt(struct qib_ctxtdata *rcd)
 done:
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 }
-
-void qib_bad_intrstatus(struct hfi_devdata *dd)
-{
-	static int allbits;
-
-	/* separate routine, for better optimization of qib_intr() */
-
-	/*
-	 * We print the message and disable interrupts, in hope of
-	 * having a better chance of debugging the problem.
-	 */
-	dd_dev_err(dd,
-		"Read of chip interrupt status failed disabling interrupts\n");
-	if (allbits++) {
-		/* disable interrupt delivery, something is very wrong */
-		if (allbits == 2)
-			set_intr_state(dd, 0);
-		if (allbits == 3) {
-			dd_dev_err(dd,
-				"2nd bad interrupt status, unregistering interrupts\n");
-			dd->flags |= HFI_BADINTR;
-			dd->flags &= ~HFI_INITTED;
-			dd->f_free_irq(dd);
-		}
-	}
-}

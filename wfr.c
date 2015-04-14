@@ -5707,12 +5707,6 @@ static void setextled(struct qib_pportdata *ppd, u32 on)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
-static void stop_irq(struct hfi_devdata *dd)
-{
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-}
-
 static inline void reset_cpu_counters(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd;
@@ -8464,10 +8458,6 @@ void set_intr_state(struct hfi_devdata *dd, u32 enable)
 		const int qsfp1_int_smask = WFR_QSFP1_INT % 64;
 		const int qsfp2_int_smask = WFR_QSFP2_INT % 64;
 
-		/* TODO: HFI_BADINTR check needed? */
-		if (dd->flags & HFI_BADINTR)
-			return;
-
 		/* enable all interrupts */
 		for (i = 0; i < WFR_CCE_NUM_INT_CSRS; i++)
 			write_csr(dd, WFR_CCE_INT_MASK + (8*i), ~(u64)0);
@@ -10307,7 +10297,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 
 	dd->f_cleanup           = cleanup;
 	dd->f_clear_tids        = clear_tids;
-	dd->f_free_irq          = stop_irq;
 	dd->f_get_base_info     = get_base_info;
 	dd->f_get_msgheader     = get_msgheader;
 	dd->f_gpio_mod          = gpio_mod;
