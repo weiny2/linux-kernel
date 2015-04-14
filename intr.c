@@ -140,12 +140,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* link widths are not avaiable until the link is fully up */
 		get_linkup_link_widths(ppd);
 
-		/*
-		 * The STL FM is not yet available.  Fake a BufferControlTable
-		 * MAD packet so that all VLs have credits.
-		 */
-		if (set_link_credits)
-			assign_link_credits(dd);
 	} else {
 		/* physical link went down */
 		ppd->linkup = 0;

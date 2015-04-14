@@ -89,11 +89,6 @@ static uint use_flr = 1;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
 
-/* TODO: temporary until the STL fabric manager is available to do this */
-uint set_link_credits = 1;
-module_param_named(set_link_credits, set_link_credits, uint, S_IRUGO);
-MODULE_PARM_DESC(set_link_credits, "Set per-VL link credits so traffic will flow");
-
 uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cable");
@@ -10490,57 +10485,6 @@ static int clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
 	write_kctxt_csr(dd, sctxt, WFR_SEND_CTXT_CHECK_PARTITION_KEY, 0);
 done:
 	return ret;
-}
-
-/*
- * Assign link credits.
- *
- * This routine is called to assign per-VL link credits.  This is done
- * when requested via module parameter, generally because there is not
- * an STL compliant FM running.
- *
- * Assumptions:
- *	- the link partner has same credits as WFR
- *
- * The assignment methodology is arbitrary.  Details:
- * o place half of the credits into the per-VL dedicated limit slots
- * o total dedicated = sum of per-VL and VL15
- * o total shared = global - total dedicated
- * All normal VLs will use the global shared values.  VL15 will not
- * use any share credits.
- */
-/* enough room for 2 full-sized MAD packets plus max headers */
-#define VL15_CREDITS (((MAX_MAD_PACKET + 128) * 2)/64)
-#define PER_VL_DEDICATED_CREDITS(total_credits) \
-	((total_credits) / (2 * WFR_TXE_NUM_DATA_VL))
-#define TOTAL_DEDICATED_CREDITS(total_credits) \
-	((PER_VL_DEDICATED_CREDITS(total_credits) * WFR_TXE_NUM_DATA_VL) \
-		+ VL15_CREDITS)
-#define TOTAL_SHARED_CREDITS(total_credits) \
-	((total_credits) - TOTAL_DEDICATED_CREDITS(total_credits))
-#define PER_VL_SHARED_CREDITS(total_credits) TOTAL_SHARED_CREDITS(total_credits)
-
-void assign_link_credits(struct hfi_devdata *dd)
-{
-	struct buffer_control t;
-	int i;
-	u16 be_dedicated;
-	u16 be_shared;
-
-	memset(&t, 0, sizeof(struct buffer_control));
-
-	BUG_ON(dd->link_credits < TOTAL_DEDICATED_CREDITS(dd->link_credits));
-	t.overall_shared_limit = cpu_to_be16(
-					TOTAL_SHARED_CREDITS(dd->link_credits));
-	be_dedicated = cpu_to_be16(PER_VL_DEDICATED_CREDITS(dd->link_credits));
-	be_shared = cpu_to_be16(PER_VL_SHARED_CREDITS(dd->link_credits));
-	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++) {
-		t.vl[i].dedicated = be_dedicated;
-		t.vl[i].shared = be_shared;
-	}
-	t.vl[15].dedicated = cpu_to_be16(VL15_CREDITS);
-
-	set_buffer_control(dd, &t);
 }
 
 /*

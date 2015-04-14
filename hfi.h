@@ -1316,7 +1316,6 @@ int fm_set_table(struct qib_pportdata *, int, void *);
 void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf);
 void reset_link_credits(struct hfi_devdata *dd);
 void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu);
-void assign_link_credits(struct hfi_devdata *dd);
 
 void snoop_recv_handler(struct hfi_packet *packet);
 int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
@@ -1572,7 +1571,6 @@ extern unsigned int max_mtu;
 extern unsigned int default_mtu;
 extern unsigned int hfi_cu;
 extern unsigned int user_credit_return_threshold;
-extern unsigned int set_link_credits;
 extern uint num_rcv_contexts;
 extern unsigned n_krcvqs;
 extern u8 krcvqs[];
