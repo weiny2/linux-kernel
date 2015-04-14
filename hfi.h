@@ -1051,10 +1051,6 @@ struct hfi_devdata {
 	char *portcntrnames;
 	size_t portcntrnameslen;
 
-	/* TODO: temporary code for missing interrupts, HSD 291041 */
-	struct timer_list fifo_timer;	/* interval timer for FIFO check */
-	u32 *last_krcv_fifo_head;	/* last read FIFO head value */
-
 	struct hfi_snoop_data hfi_snoop;
 
 	struct err_info_rcvport err_info_rcvport;
@@ -1581,8 +1577,6 @@ extern uint quick_linkup;
 extern uint rcv_intr_timeout;
 extern uint rcv_intr_count;
 extern uint rcv_intr_dynamic;
-extern uint fifo_check;
-extern uint fifo_stalled_count;
 extern ushort link_crc_mask;
 
 extern struct mutex qib_mutex;

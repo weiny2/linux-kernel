@@ -81,17 +81,6 @@ MODULE_PARM_DESC(krcvqs, "Array of the number of kernel receive queues by VL");
 /* computed based on above array */
 unsigned n_krcvqs;
 
-/* TODO: temporary code for missing interrupts, HSD 291041 */
-uint fifo_check;	/* off by default */
-module_param(fifo_check, uint, S_IRUGO);
-MODULE_PARM_DESC(fifo_check, "Check for stalled receive FIFOs every N milliseconds (set to 0 to disable)");
-
-/* TODO: temporary code for missing interrupts, HSD 291041 */
-/* hack: export this counter as a parameter for easy viewing */
-uint fifo_stalled_count;
-module_param(fifo_stalled_count, uint, S_IRUGO);
-MODULE_PARM_DESC(fifo_stalled_count, "How many times have the receive FIFOs been stalled?");
-
 /* interrupt testing */
 static unsigned int test_interrupts;
 module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
@@ -180,26 +169,6 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 				"Unable to allocate kernel send context, failing\n");
 			goto nomem;
 		}
-	}
-
-	/*
-	 * TODO: temporary code for missing interrupts, HSD 291041.
-	 *
-	 * If requested, start a timer to check the kernel
-	 * receive FIFOS for any stuck ones.
-	 */
-	if (dd->icode != WFR_ICODE_FPGA_EMULATION)
-		fifo_check = 0;	/* emulator only */
-	if (fifo_check) {
-		dd->last_krcv_fifo_head = kzalloc(dd->n_krcv_queues *
-						sizeof(u32), GFP_KERNEL);
-		if (!dd->last_krcv_fifo_head)
-			goto nomem;
-		init_timer(&dd->fifo_timer);
-		dd->fifo_timer.function = check_fifos;
-		dd->fifo_timer.data = (unsigned long)dd;
-		mod_timer(&dd->fifo_timer,
-				jiffies + msecs_to_jiffies(fifo_check));
 	}
 
 	return 0;
@@ -1429,14 +1398,6 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	}
 
 	free_credit_return(dd);
-
-	/* TODO: temporary code for missing interrupts, HSD 291041 */
-	/* make sure no fifo timer is running */
-	if (dd->fifo_timer.data) {
-		del_timer(&dd->fifo_timer);
-		kfree(dd->last_krcv_fifo_head);
-		dd->last_krcv_fifo_head = NULL;
-	}
 
 	/*
 	 * Free any resources still in use (usually just kernel contexts)

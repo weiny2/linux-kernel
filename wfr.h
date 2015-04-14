@@ -616,7 +616,6 @@ void fabric_serdes_reset(struct hfi_devdata *dd);
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
 void read_guid(struct hfi_devdata *dd);
 int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
-void check_fifos(unsigned long opaque);
 void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
 	u8 neigh_reason, u8 rem_reason);
 int set_link_state(struct qib_pportdata *, u32 state);
