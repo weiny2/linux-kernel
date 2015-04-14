@@ -101,10 +101,6 @@ uint quick_linkup;
 module_param(quick_linkup, uint, S_IRUGO);
 MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
 
-/* TODO: temporary */
-#define EASY_LINKUP_UNSET 100
-static uint sim_easy_linkup = EASY_LINKUP_UNSET;
-
 struct flag_table {
 	u64 flag;	/* the flag */
 	char *str;	/* description string */
@@ -4635,7 +4631,7 @@ static u32 read_physical_state(struct hfi_devdata *dd)
 				& DC_DC8051_STS_CUR_STATE_PORT_MASK;
 }
 
-static u32 __read_logical_state(struct hfi_devdata *dd)
+static u32 read_logical_state(struct hfi_devdata *dd)
 {
 	u64 reg;
 
@@ -4644,67 +4640,15 @@ static u32 __read_logical_state(struct hfi_devdata *dd)
 				& DCC_CFG_PORT_CONFIG_LINK_STATE_MASK;
 }
 
-static u32 read_logical_state(struct hfi_devdata *dd)
-{
-	if (sim_easy_linkup) {
-		/* return the cached state back */
-		switch (dd->pport[0].lstate) {
-		default:
-			dd_dev_err(
-				dd,
-				"Unknown ib logical state 0x%x, reporting WFR_LSTATE_DOWN\n",
-				dd->pport[9].lstate);
-			/* fall through */
-		case IB_PORT_DOWN:   return WFR_LSTATE_DOWN;
-		case IB_PORT_INIT:   return WFR_LSTATE_INIT;
-		case IB_PORT_ARMED:  return WFR_LSTATE_ARMED;
-		case IB_PORT_ACTIVE: return WFR_LSTATE_ACTIVE;
-		}
-	}
-
-	return __read_logical_state(dd);
-}
-
 static void set_logical_state(struct hfi_devdata *dd, u32 chip_lstate)
 {
 	u64 reg;
-
-	if (sim_easy_linkup) {
-		/* set the cached state directly */
-		dd->pport[0].lstate = chip_to_stl_lstate(dd, chip_lstate);
-		return;
-	}
 
 	reg = read_csr(dd, DCC_CFG_PORT_CONFIG);
 	/* clear current state, set new state */
 	reg &= ~DCC_CFG_PORT_CONFIG_LINK_STATE_SMASK;
 	reg |= (u64)chip_lstate << DCC_CFG_PORT_CONFIG_LINK_STATE_SHIFT;
 	write_csr(dd, DCC_CFG_PORT_CONFIG, reg);
-}
-
-static void __print_current_states(
-	struct hfi_devdata *dd,
-	const char *func,
-	const char *extra,
-	u32 physical_state,
-	u32 logical_state)
-{
-	dd_dev_info(
-		dd,
-		"%s: %s: current physical state 0x%x, logical state 0x%x\n",
-		func,
-		extra,
-		physical_state,
-		logical_state);
-}
-
-static void print_current_states(
-	struct hfi_devdata *dd,
-	const char *func,
-	const char *extra)
-{
-	__print_current_states(dd, func, extra, read_physical_state(dd),
-		read_logical_state(dd));
 }
 
 /*
@@ -4808,32 +4752,6 @@ fail:
 
 static int set_physical_link_state(struct hfi_devdata *dd, u64 state)
 {
-	if (sim_easy_linkup) {
-		/*
-		 * Do not change the physical state in easy linkup mode.
-		 * But we do need to fake out the HW reaction.
-		 */
-		switch (state) {
-		case WFR_PLS_POLLING:
-			/* fake moving to link up */
-			dd->pport[0].lstate = IB_PORT_INIT;
-			break;
-		case WFR_PLS_OFFLINE:
-			/* going offline will trigger a port down */
-			dd->pport[0].lstate = IB_PORT_DOWN;
-			break;
-		case WFR_PLS_DISABLED:
-			/* we can only go to disable from offline, which
-			   already hase the lstate set */
-			break;
-		default:
-			dd_dev_err(dd, "%s: unexpected state 0x%llx\n",
-				__func__, state);
-			break;
-		}
-		return WFR_HCMD_SUCCESS;
-	}
-
 	return do_8051_command(dd, WFR_HCMD_CHANGE_PHY_STATE, state, NULL);
 }
 
@@ -9909,56 +9827,6 @@ static void init_chip(struct hfi_devdata *dd)
 	if (is_a0(dd)) {
 		write_csr(dd, WFR_ASIC_QSFP1_OUT, 0x1f);
 		write_csr(dd, WFR_ASIC_QSFP2_OUT, 0x1f);
-	}
-
-	/*
-	 * TODO: The following block is strictly for the simulator.
-	 * If we find that the physical and logical states are LinkUp
-	 * and Active respectively, then assume we are in the simulator's
-	 * "EasyLinkup" mode.  When in EayLinkup mode, we don't change
-	 * the DC's physical and logical states.
-	 */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
-		u32 ps = read_physical_state(dd);
-		u32 ls = __read_logical_state(dd);
-
-		if (ps == WFR_PLS_LINKUP && ls == WFR_LSTATE_ACTIVE) {
-			/* assume we're in the simulator's easy linkup mode */
-			if (sim_easy_linkup == EASY_LINKUP_UNSET
-						|| sim_easy_linkup == 1) {
-				sim_easy_linkup = 1;
-				dd_dev_info(dd, "Assuming simulation EasyLinkup mode\n");
-			} else {
-				dd_dev_info(dd, "This HFI is in EasyLinkup mode, but the other is not?\n");
-			}
-		} else {
-			sim_easy_linkup = 0;
-			if (sim_easy_linkup == EASY_LINKUP_UNSET
-						|| sim_easy_linkup == 0) {
-				sim_easy_linkup = 0;
-			} else {
-				dd_dev_info(dd, "This HFI is in normal link mode, but the other is not?\n");
-			}
-			/*
-			 * otherwise the link should be offline with port down
-			 */
-			if (!(ps == WFR_PLS_OFFLINE && ls == WFR_LSTATE_DOWN)) {
-				__print_current_states(
-					dd,
-					__func__,
-					"at start",
-					ps,
-					ls);
-				set_physical_link_state(dd, WFR_PLS_OFFLINE);
-				dd_dev_err(dd, "Manually setting physical link to offline - not supposed to be necessary\n");
-				print_current_states(
-					dd,
-					__func__,
-					"after force offline");
-			}
-		}
-	} else {
-		sim_easy_linkup = 0;
 	}
 }
 
