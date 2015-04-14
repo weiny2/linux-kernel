@@ -7656,7 +7656,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	if (!rcd)
 		return;
 
-	dd_dev_info(dd, "ctxt %d op 0x%x", ctxt, op);
+	hfi_cdbg(RCVCTRL, "ctxt %d op 0x%x", ctxt, op);
 	// FIXME: QIB_RCVCTRL_BP_ENB/DIS
 	if (op & QIB_RCVCTRL_BP_ENB)
 		rcvctrl_unimplemented(
@@ -7776,7 +7776,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	if (op & QIB_RCVCTRL_NO_EGR_DROP_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_DONT_DROP_EGR_FULL_SMASK;
 	rcd->rcvctrl = rcvctrl;
-	dd_dev_info(dd, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
+	hfi_cdbg(RCVCTRL, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
 	write_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL, rcd->rcvctrl);
 
 	/* work around sticky RcvCtxtStatus.BlockedRHQFull */
