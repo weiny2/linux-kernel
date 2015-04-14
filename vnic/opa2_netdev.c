@@ -270,8 +270,10 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	uint64_t flags = (PTL_OP_PUT | PTL_OP_GET | PTL_EVENT_CT_COMM);
 	hfi_match_bits_t match_bits = 0x0;
 	hfi_match_bits_t ignore_bits = 0;
-	hfi_me_options_t me_options = PTL_USE_ONCE | PTL_EVENT_LINK_DISABLE |
-					PTL_ME_NO_TRUNCATE;
+	hfi_me_options_t me_options = (PTL_OP_PUT | PTL_USE_ONCE |
+					PTL_EVENT_LINK_DISABLE |
+					PTL_EVENT_UNLINK_DISABLE |
+					PTL_ME_NO_TRUNCATE | PTL_EVENT_CT_COMM);
 	hfi_ct_handle_t ct_rx, ct_tx;
 	hfi_ct_alloc_args_t ct_alloc = {0};
 	hfi_size_t min_free = 2048;
