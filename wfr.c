@@ -4526,14 +4526,6 @@ static irqreturn_t general_interrupt(int irq, void *data)
 	/* phase 2: call the apropriate handler */
 	for_each_set_bit(bit, (unsigned long *)&regs[0],
 						WFR_CCE_NUM_INT_CSRS*64) {
-#if 0
-		/* TODO: the print is temporary */
-		char buf[64];
-
-		printk(DRIVER_NAME"%d: interrupt %d: %s\n", dd->unit, bit,
-			is_name(buf, sizeof(buf), bit));
-		/* TODO implement trace down in is_interrupt() */
-#endif
 		is_interrupt(dd, bit);
 	}
 
@@ -5814,7 +5806,7 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 	struct hfi_devdata *dd = rcd->dd;
 	u32 i;
 
-	/* TODO: this could be optimized */
+	/* this could be optimized */
 	for (i = rcd->eager_base; i < rcd->eager_base +
 		     rcd->egrbufs.alloced; i++)
 		put_tid(dd, i, PT_INVALID, 0, 0);
@@ -6918,9 +6910,11 @@ static void wait_for_vl_status_clear(struct hfi_devdata *dd, u64 mask,
 		"%s credit change status not clearing after %dms, mask 0x%llx, not clear 0x%llx\n",
 		which, VL_STATUS_CLEAR_TIMEOUT, mask, reg);
 	/*
-	 * TODO: If this occurs, it is likely there was a credit loss
-	 * on the link.  The only recovery from that is a link bounce.
+	 * If this occurs, it is likely there was a credit loss on the link.
+	 * The only recovery from that is a link bounce.
 	 */
+	dd_dev_err(dd,
+		"Continuing anyway.  A credit loss may occur.  Suggest a link bounce\n");
 }
 
 /*
@@ -8525,7 +8519,7 @@ static void clear_all_interrupts(struct hfi_devdata *dd)
 	write_csr(dd, DC_DC8051_ERR_CLR, ~(u64)0);
 }
 
-/* TODO: Move to pcie.c? */
+/* Move to pcie.c? */
 static void disable_intx(struct pci_dev *pdev)
 {
 	pci_intx(pdev, 0);
@@ -8712,13 +8706,6 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 		void *arg;
 		int idx;
 
-		/*
-		 * TODO:
-		 * o Why isn't IRQF_SHARED used for the general interrupt
-		 *   here?
-		 * o Should we use IRQF_SHARED for non-NUMA 0?
-		 * o If we truly wrapped, don't we need IRQF_SHARED?
-		*/
 		/* obtain the arguments to request_irq */
 		if (first_general <= i && i < last_general) {
 			idx = i - first_general;
@@ -8864,8 +8851,6 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 
 		if (request != total) {
 			/* using MSI-X, with reduced interrupts */
-			/* TODO: Handle reduced interrupt case.  Need scheme to
-			   decide who shares. */
 			dd_dev_err(
 				dd,
 				"cannot handle reduced interrupt case, want %u, got %u\n",
@@ -9768,7 +9753,6 @@ static void init_early_variables(struct hfi_devdata *dd)
 	if (is_a0(dd))
 		dd->link_credits--;
 	dd->vcu = cu_to_vcu(hfi_cu);
-	/* TODO: Make initial VL15 credit size a parameter? */
 	/* enough room for 8 MAD packets plus header - 17K */
 	dd->vl15_init = (8 * (2048 + 128)) / vau_to_au(dd->vau);
 	if (dd->vl15_init > dd->link_credits)
@@ -9987,7 +9971,6 @@ static void init_rxe(struct hfi_devdata *dd)
 	 * (64 bytes).  Max_Payload_Size is possibly modified upward in
 	 * qib_tune_pcie_caps() which is called after this routine.
 	 */
-	/* TODO: others...? */
 }
 
 static void init_other(struct hfi_devdata *dd)
