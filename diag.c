@@ -1712,21 +1712,26 @@ static void qib_snoop_list_add_tail(struct snoop_packet *packet,
 	wake_up_interruptible(&dd->hfi_snoop.waitq);
 }
 
-#define HFI_FILTER_CHECK(val, msg)					\
-do {									\
-	if (val == NULL) {						\
-		snoop_dbg("Error invalid " msg " value for filter\n");	\
-		return HFI_FILTER_ERR;					\
-	}								\
-} while (0)
+static inline int hfi_filter_check(void *val, const char *msg)
+{
+	if (!val) {
+		snoop_dbg("Error invalid %s value for filter\n", msg);
+		return HFI_FILTER_ERR;
+	}
+	return 0;
+}
 
 static int hfi_filter_lid(void *ibhdr, void *packet_data, void *value)
 {
 	struct qib_ib_header *hdr;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
-
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 	hdr = (struct qib_ib_header *)ibhdr;
 
 	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[3])) /* matches slid */
@@ -1738,9 +1743,14 @@ static int hfi_filter_lid(void *ibhdr, void *packet_data, void *value)
 static int hfi_filter_dlid(void *ibhdr, void *packet_data, void *value)
 {
 	struct qib_ib_header *hdr;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1758,10 +1768,17 @@ static int hfi_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 	struct qib_other_headers *ohdr = NULL;
 	struct ib_smp *smp = NULL;
 	u32 qpn = 0;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(packet_data, "packet_data");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(packet_data, "packet_data");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1787,9 +1804,14 @@ static int hfi_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 
 	struct qib_ib_header *hdr;
 	struct qib_other_headers *ohdr = NULL;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1811,9 +1833,14 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 	u8 opcode = 0;
 	struct qib_ib_header *hdr;
 	struct qib_other_headers *ohdr = NULL;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1838,9 +1865,14 @@ static int hfi_filter_ib_service_level(void *ibhdr, void *packet_data,
 					   void *value)
 {
 	struct qib_ib_header *hdr;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1856,9 +1888,14 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	u32 lnh = 0;
 	struct qib_ib_header *hdr;
 	struct qib_other_headers *ohdr = NULL;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
