@@ -997,117 +997,6 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 	kfree(rcd);
 }
 
-/*
- * Perform a PIO buffer bandwidth write test, to verify proper system
- * configuration.  Even when all the setup calls work, occasionally
- * BIOS or other issues can prevent write combining from working, or
- * can cause other bandwidth problems to the chip.
- *
- * This test simply writes a buffer over and over again, and
- * measures close to the peak bandwidth to the chip (not testing
- * data bandwidth to the wire).  The header of the buffer is
- * invalid and will generate an error, but we ignore it.
- */
-
-/* FIXME: always zero so we return early */
-static int fake_early_return;
-
-static void qib_verify_pioperf(struct hfi_devdata *dd)
-{
-	struct send_context *sc;
-	struct pio_buf *pbuf;
-	u64 pbc, msecs, emsecs;
-	u32 cnt, lcnt, dw;
-	u32 *addr;
-
-	if (dd->num_send_contexts == 0) {
-		dd_dev_info(dd,
-			"Performance check: No contexts for checking perf, skipping\n");
-		return;
-	}
-
-	/* FIXME: not ready yet */
-	if (fake_early_return == 0)
-		return;
-
-	/* only run this on unit 0 */
-	if (dd->unit != 0)
-		return;
-
-	/* TEMPORARY: force a non-context PIO error and see what happens... */
-	/* write_csr(dd, WFR_SEND_PIO_ERR_FORCE,
-		WFR_SEND_PIO_ERR_FORCE_PIO_WRITE_BAD_CTXT_ERR_SMASK); */
-
-	/*
-	 * Enough to give us a reasonable test, less than piobuf size, and
-	 * likely multiple of store buffer length.
-	 */
-	cnt = 1024;
-	/* dword count - includes PBC */
-	dw = (cnt + sizeof(u64)) / sizeof(u32);
-
-	/* use the first context */
-	sc = dd->rcd[0]->sc;
-	if (!sc) {
-		dd_dev_info(dd, "Performance check: No send context\n");
-		return;
-	}
-
-	addr = kzalloc(cnt, GFP_KERNEL);
-	if (!addr) {
-		dd_dev_info(dd,
-			 "Performance check: Could not get memory for checking PIO perf, skipping\n");
-		return;
-	}
-
-	/* zero'ed lrh/bth above will generate an error, disable it */
-	dd->f_set_armlaunch(dd, 0);
-
-	/* minimal PBC - just the length in DW */
-	pbc = create_pbc(0, 0, 0, dw);
-
-	preempt_disable();  /* we want reasonably accurate elapsed time */
-
-	msecs = 1 + jiffies_to_msecs(jiffies);
-	for (lcnt = 0; lcnt < 10000U; lcnt++) {
-		/* wait until we cross msec boundary */
-		if (jiffies_to_msecs(jiffies) >= msecs)
-			break;
-		udelay(1);
-	}
-
-	/*
-	 * This is only roughly accurate, since even with preempt we
-	 * still take interrupts that could take a while.   Running for
-	 * >= 5 msec seems to get us "close enough" to accurate values.
-	 */
-	msecs = jiffies_to_msecs(jiffies);
-	for (emsecs = lcnt = 0; emsecs <= 5UL && lcnt < 1; lcnt++) {
-		pbuf = sc_buffer_alloc(sc, dw, NULL, NULL);
-		if (!pbuf) {
-			preempt_enable();
-			dd_dev_info(dd,
-				"Performance check: PIO buffer allocation failure at count %u, skipping\n",
-				lcnt);
-			goto done;
-		}
-		pio_copy(dd, pbuf, pbc, addr, cnt >> 2);
-		emsecs = jiffies_to_msecs(jiffies) - msecs;
-	}
-	preempt_enable();
-
-	/* 1 GiB/sec, slightly over IB SDR line rate */
-	if (lcnt < (emsecs * 1024U))
-		dd_dev_err(dd,
-			    "Performance problem: bandwidth to PIO buffers is only %u MiB/sec\n",
-			    lcnt / (u32) emsecs);
-
-done:
-	kfree(addr);
-	dd->f_set_armlaunch(dd, 1);
-}
-
-
 void qib_free_devdata(struct hfi_devdata *dd)
 {
 	unsigned long flags;
@@ -1569,8 +1458,6 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	sdma_start(dd);
-
-	qib_verify_pioperf(dd);
 
 	/* interrupt testing */
 	if (test_interrupts) {

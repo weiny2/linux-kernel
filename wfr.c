@@ -4648,12 +4648,6 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 
 /* ========================================================================= */
 
-static void set_armlaunch(struct hfi_devdata *dd, u32 enable)
-{
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-}
-
 static u32 read_physical_state(struct hfi_devdata *dd)
 {
 	u64 reg;
@@ -10598,7 +10592,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_read_cntrs        = read_cntrs;
 	dd->f_read_portcntrs    = read_portcntrs;
 	dd->f_reset             = reset;
-	dd->f_set_armlaunch     = set_armlaunch;
 	dd->f_ibphys_portstate  = ibphys_portstate;
 	dd->f_get_ib_cfg        = get_ib_cfg;
 	dd->f_set_ib_cfg        = set_ib_cfg;

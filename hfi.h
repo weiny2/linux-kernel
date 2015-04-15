@@ -829,7 +829,6 @@ struct hfi_devdata {
 		u32 mask);
 	/* modify receive context registers, see RCVCTRL_* for operations */
 	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int context);
-	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
 	void (*f_wantpiobuf_intr)(struct send_context *, u32);
 	u64 (*f_portcntr)(struct qib_pportdata *, u32);
 	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
