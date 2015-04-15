@@ -109,9 +109,6 @@ struct hfi_packet;
 #define IB_BTH_SOLICITED	(1 << 23)
 #define IB_BTH_MIG_REQ		(1 << 22)
 
-/* XXX Should be defined in ib_verbs.h enum ib_port_cap_flags */
-#define IB_PORT_OTHER_LOCAL_CHANGES_SUP (1 << 26)
-
 #define IB_GRH_VERSION		6
 #define IB_GRH_VERSION_MASK	0xF
 #define IB_GRH_VERSION_SHIFT	28
