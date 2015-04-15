@@ -7587,7 +7587,6 @@ u32 hdrqempty(struct qib_ctxtdata *rcd)
  */
 static u32 encoded_size(u32 size)
 {
-#if 1
 	switch (size) {
 	case   4*1024: return 0x1;
 	case   8*1024: return 0x2;
@@ -7601,45 +7600,12 @@ static u32 encoded_size(u32 size)
 	case   2*1024*1024: return 0xa;
 	}
 	return 0x1;	/* if invalid, go with the minimum size */
-#else
-	/* this should be the same, but untested and arguably slower */
-	if (size < 4*1024)
-		return 0x1;	/* shouldn't happen, but.. */
-	return ilog2(size) - 11;
-#endif
 }
 
-/* TODO: This should go away once everythig is implemented */
-static void rcvctrl_unimplemented(
-	struct hfi_devdata *dd,
-	const char *func,
-	int ctxt,
-	unsigned int op,
-	int *header_printed,
-	const char *what)
-{
-	if (*header_printed == 0) {
-		*header_printed = 1;
-		dd_dev_info(dd, "%s: context %d, op 0x%x\n", func, ctxt, op);
-	}
-	dd_dev_info(dd, "    %s ** NOT IMPLEMENTED **\n", what);
-}
-
-/*
- * TODO: What about these fields in WFR_RCV_CTXT_CTRL?
- *	ThHdrQueueWrites
- *	ThEagerPayloadWrites
- *	ThTIDPayloadWrites
- *	ThRcvHdrTailWrite
- *	Redirect
- *	DontDropRHQFull
- *	DontDropEgrFull
- */
 static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
-	int hp = 0;			/* header printed? */
 	int did_enable = 0;
 
 	rcd = dd->rcd[ctxt];
@@ -7647,23 +7613,6 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		return;
 
 	hfi_cdbg(RCVCTRL, "ctxt %d op 0x%x", ctxt, op);
-	// FIXME: QIB_RCVCTRL_BP_ENB/DIS
-	if (op & QIB_RCVCTRL_BP_ENB)
-		rcvctrl_unimplemented(
-			dd,
-			__func__,
-			ctxt,
-			op,
-			&hp,
-			"RCVCTRL_BP_ENB");
-	if (op & QIB_RCVCTRL_BP_DIS)
-		rcvctrl_unimplemented(
-			dd,
-			__func__,
-			ctxt,
-			op,
-			&hp,
-			"RCVCTRL_BP_DIS");
 
 	/* XXX (Mitko): Do we want to use the shadow value here? */
 	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
