@@ -488,7 +488,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	case PIO_BUFS_SOP:
 		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) +
 				/* chip pio base */
-			   (uctxt->sc->context * (1 << 16))) +
+			   (uctxt->sc->hw_context * (1 << 16))) +
 				/* 64K PIO space / ctxt */
 			(type == PIO_BUFS_SOP ?
 				(WFR_TXE_PIO_SIZE / 2) : 0); /* sop? */
@@ -779,7 +779,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	 * Reset context integrity checks to default.
 	 * (writes to CSRs probably belong in wfr.c)
 	 */
-	write_kctxt_csr(dd, uctxt->sc->context, WFR_SEND_CTXT_CHECK_ENABLE,
+	write_kctxt_csr(dd, uctxt->sc->hw_context, WFR_SEND_CTXT_CHECK_ENABLE,
 			hfi_pkt_default_send_ctxt_mask(dd, uctxt->sc->type));
 	sc_disable(uctxt->sc);
 	uctxt->pid = 0;
@@ -993,7 +993,8 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	if (!uctxt->sc)
 		return -ENOMEM;
 
-	dbg("allocated send context %d\n", uctxt->sc->context);
+	dbg("allocated send context %u(%u)\n", uctxt->sc->sw_index,
+		uctxt->sc->hw_context);
 	ret = sc_enable(uctxt->sc);
 	if (ret)
 		return ret;
@@ -1176,7 +1177,7 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 	/* FIXME: set proper numa node */
 	cinfo.numa_node = uctxt->numa_id;
 	cinfo.rec_cpu = fd->rec_cpu_num;
-	cinfo.send_ctxt = uctxt->sc->context;
+	cinfo.send_ctxt = uctxt->sc->hw_context;
 
 	cinfo.egrtids = uctxt->egrbufs.alloced;
 	cinfo.rcvhdrq_cnt = uctxt->rcvhdrq_cnt;

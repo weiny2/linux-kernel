@@ -1199,6 +1199,7 @@ struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	 * Initialize all locks for the device. This needs to be as early as
 	 * possible so locks are usable.
 	 */
+	spin_lock_init(&dd->sc_lock);
 	spin_lock_init(&dd->sendctrl_lock);
 	spin_lock_init(&dd->uctxt_lock);
 	spin_lock_init(&dd->qib_diag_trans_lock);

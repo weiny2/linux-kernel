@@ -112,15 +112,15 @@ function dump_config {
 	echo ""
 
 	echo "Host 1 software versions":
-	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi-psm"
-	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi-diagtools"
+	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi1-psm"
+	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi1-diagtools"
 	run_cmd_fatal $host1_ssh "rpm -qa | grep 2a1"
 
 	echo ""
 
 	echo "Host 2 software versions":
-	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi-psm"
-	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi-diagtools"
+	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi1-psm"
+	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi1-diagtools"
 	run_cmd_fatal $host2_ssh "rpm -qa | grep 2a1"
 
 	echo ""
@@ -140,12 +140,12 @@ function dump_modparms {
 	echo "-------------------"
 	echo "Mod Parms on $host1"
 	echo "-------------------"
-	run_cmd_fatal "$host1_ssh 'for i in \$(ls /sys/module/hfi/parameters); do echo \$i; cat /sys/module/hfi/parameters/\$i; done'"
+	run_cmd_fatal "$host1_ssh 'for i in \$(ls /sys/module/hfi1/parameters); do echo \$i; cat /sys/module/hfi1/parameters/\$i; done'"
 	echo ""
 	echo "-------------------"
 	echo "Mod Parms on $host2"
 	echo "-------------------"
-	run_cmd_fatal "$host2_ssh 'for i in \$(ls /sys/module/hfi/parameters); do echo \$i; cat /sys/module/hfi/parameters/\$i; done'"
+	run_cmd_fatal "$host2_ssh 'for i in \$(ls /sys/module/hfi1/parameters); do echo \$i; cat /sys/module/hfi1/parameters/\$i; done'"
 	echo ""
 }
 
