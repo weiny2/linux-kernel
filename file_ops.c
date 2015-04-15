@@ -1964,7 +1964,7 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			}
 		}
 		/*
-		 * HSD 290361 - cannot read ASIC GPIO/QSFP* clear and force
+		 * cannot read ASIC GPIO/QSFP* clear and force
 		 * CSRs without a false parity error.  Avoid the whole issue
 		 * by not reading them.  These registers are defined as
 		 * having a read value of 0.

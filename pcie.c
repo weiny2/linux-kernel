@@ -553,7 +553,7 @@ void restore_pci_variables(struct hfi_devdata *dd)
 	 *       restore the subsystem IDs.
 	 * TODO: This is an _expected_ B0 fix.  A new PCIe is being tested
 	 *	 now that has this fixed.  Adding the A0 check for now.
-	 * HSD 290390 - Need to restore subsystem ids after a reset.
+	 * Need to restore subsystem ids after a reset.
 	 */
 	if (is_a0(dd)) {
 		int ret;

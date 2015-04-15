@@ -3801,7 +3801,7 @@ void handle_verify_cap(struct work_struct *work)
 	 * The LCB is reset on entry to handle_verify_cap(), so this must
 	 * be applied on every link up.
 	 *
-	 * HSD 291201: Adjust LCB error kill enable to kill the link if
+	 * Adjust LCB error kill enable to kill the link if
 	 * these RBUF errors are seen:
 	 *	REPLAY_BUF_MBE_SMASK
 	 *	FLIT_INPUT_BUF_MBE_SMASK
@@ -10054,7 +10054,7 @@ static void init_early_variables(struct hfi_devdata *dd)
 	/* assign link credit variables */
 	dd->vau = WFR_CM_VAU;
 	dd->link_credits = WFR_CM_GLOBAL_CREDITS;
-	if (is_a0(dd))			/* HSD 291428 workaround */
+	if (is_a0(dd))
 		dd->link_credits--;
 	dd->vcu = cu_to_vcu(hfi_cu);
 	/* TODO: Make initial VL15 credit size a parameter? */
@@ -10266,7 +10266,7 @@ static void init_rxe(struct hfi_devdata *dd)
 		dd,
 		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0);
 	/*
-	 * HSD 290512 - make sure RcvCtrl.RcvWcb <= PCIe Device Control
+	 * make sure RcvCtrl.RcvWcb <= PCIe Device Control
 	 * Register Max_Payload_Size (PCI_EXP_DEVCTL in Linux PCIe config
 	 * space, PciCfgCap2.MaxPayloadSize in WFR).  There is only one
 	 * invalid configuration: RcvCtrl.RcvWcb set to its max of 256 and
