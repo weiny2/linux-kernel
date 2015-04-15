@@ -89,18 +89,11 @@ static inline void __qib_trace_ ##fn(const char *func, char *fmt, ...)	\
 		.fmt = fmt,						\
 	};								\
 	va_list args;							\
-	char *c;							\
-	int len = strlen(fmt);						\
-	if (len) {							\
-		c = fmt + (len - 1);					\
-		if (*c == '\n') {					\
-			*c = '\0';					\
-		}							\
-		va_start(args, fmt);					\
-		vaf.va = &args;						\
-		trace_qib_ ##fn(func, &vaf);				\
-		va_end(args);						\
-	}								\
+									\
+	va_start(args, fmt);						\
+	vaf.va = &args;							\
+	trace_qib_ ##fn(func, &vaf);					\
+	va_end(args);							\
 	return;								\
 }
 #endif
