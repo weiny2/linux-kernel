@@ -822,7 +822,6 @@ struct hfi_devdata {
 	int (*f_get_ib_cfg)(struct qib_pportdata *, int);
 	int (*f_set_ib_cfg)(struct qib_pportdata *, int, u32);
 	int (*f_set_ib_loopback)(struct qib_pportdata *, const char *);
-	u32 (*f_iblink_state)(struct qib_pportdata *);
 	u8 (*f_ibphys_portstate)(struct qib_pportdata *);
 	void (*f_xgxs_reset)(struct qib_pportdata *);
 	/* Read/modify/write of GPIO pins (potentially chip-specific */
@@ -1137,7 +1136,13 @@ void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
 
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
-int qib_wait_linkstate(struct qib_pportdata *, u32, int);
+
+/* return the driver's idea of the logical STL port state */
+static inline u32 driver_lstate(struct qib_pportdata *ppd)
+{
+	return ppd->lstate; /* use the cached value */
+}
+
 static inline u16 generate_jkey(kuid_t uid)
 {
 	return from_kuid(current_user_ns(), uid) & 0xffff;

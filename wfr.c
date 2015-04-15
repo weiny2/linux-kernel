@@ -1190,6 +1190,8 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
 static int thermal_init(struct hfi_devdata *dd);
 
 static u32 read_physical_state(struct hfi_devdata *dd);
+static int wait_logical_linkstate(struct qib_pportdata *ppd, u32 state,
+					int msecs);
 static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc);
 static void handle_temp_err(struct hfi_devdata *);
 
@@ -6199,7 +6201,6 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	sdma_update_lmc(dd, mask, ppd->lid);
 }
 
-/* TODO: this is almost exactly like qib_wait_linkstate() */
 static int wait_phy_linkstate(struct hfi_devdata *dd, u32 state, u32 msecs)
 {
 	unsigned long timeout;
@@ -6277,7 +6278,7 @@ static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
 			return ret;
 	}
 	/* make sure the logical state is also down */
-	qib_wait_linkstate(ppd, IB_PORT_DOWN, 1000);
+	wait_logical_linkstate(ppd, IB_PORT_DOWN, 1000);
 
 	/*
 	 * The LNI has a mandatory wait time after the physical state
@@ -6445,7 +6446,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 		}
 
 		ppd->host_link_state = HLS_UP_INIT;
-		ret = qib_wait_linkstate(ppd, IB_PORT_INIT, 1000);
+		ret = wait_logical_linkstate(ppd, IB_PORT_INIT, 1000);
 		if (ret) {
 			/* logical state didn't change, stay at going_up */
 			ppd->host_link_state = HLS_GOING_UP;
@@ -6473,7 +6474,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 
 		ppd->host_link_state = HLS_UP_ARMED;
 		set_logical_state(dd, WFR_LSTATE_ARMED);
-		ret = qib_wait_linkstate(ppd, IB_PORT_ARMED, 1000);
+		ret = wait_logical_linkstate(ppd, IB_PORT_ARMED, 1000);
 		if (ret) {
 			/* logical state didn't change, stay at init */
 			ppd->host_link_state = HLS_UP_INIT;
@@ -6495,7 +6496,7 @@ int set_link_state(struct qib_pportdata *ppd, u32 state)
 
 		ppd->host_link_state = HLS_UP_ACTIVE;
 		set_logical_state(dd, WFR_LSTATE_ACTIVE);
-		ret = qib_wait_linkstate(ppd, IB_PORT_ACTIVE, 1000);
+		ret = wait_logical_linkstate(ppd, IB_PORT_ACTIVE, 1000);
 		if (ret) {
 			/* logical state didn't change, stay at armed */
 			ppd->host_link_state = HLS_UP_ARMED;
@@ -8499,15 +8500,18 @@ static const char *stl_pstate_name(u32 pstate)
 	return "unknown";
 }
 
-/* read and return the logical STL port state */
-static u32 iblink_state(struct qib_pportdata *ppd)
+/*
+ * Read the hardware link state and set the driver's cached value of it.
+ * Return the (new) current value.
+ */
+static u32 get_logical_state(struct qib_pportdata *ppd)
 {
 	u32 new_state;
 
 	new_state = chip_to_stl_lstate(ppd->dd, read_logical_state(ppd->dd));
 	if (new_state != ppd->lstate) {
-		dd_dev_info(ppd->dd, "%s: logical state changed to %s (0x%x)\n",
-			__func__, stl_lstate_name(new_state), new_state);
+		dd_dev_info(ppd->dd, "logical state changed to %s (0x%x)\n",
+			stl_lstate_name(new_state), new_state);
 		ppd->lstate = new_state;
 	}
 	/*
@@ -8534,6 +8538,34 @@ static u32 iblink_state(struct qib_pportdata *ppd)
 		}
 	}
 	return ppd->lstate;
+}
+
+/**
+ * wait_logical_linkstate - wait for an IB link state change to occur
+ * @ppd: port device
+ * @state: the state to wait for
+ * @msecs: the number of milliseconds to wait
+ *
+ * Wait up to msecs milliseconds for IB link state change to occur.
+ * For now, take the easy polling route.
+ * Returns 0 if state reached, otherwise -ETIMEDOUT.
+ */
+static int wait_logical_linkstate(struct qib_pportdata *ppd, u32 state,
+					int msecs)
+{
+	unsigned long timeout;
+
+	timeout = jiffies + msecs_to_jiffies(msecs);
+	while (1) {
+		if (get_logical_state(ppd) == state)
+			return 0;
+		if (time_after(jiffies, timeout))
+			break;
+		msleep(20);
+	}
+	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x\n", state);
+
+	return -ETIMEDOUT;
 }
 
 static u8 ibphys_portstate(struct qib_pportdata *ppd)
@@ -10567,7 +10599,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 	dd->f_read_portcntrs    = read_portcntrs;
 	dd->f_reset             = reset;
 	dd->f_set_armlaunch     = set_armlaunch;
-	dd->f_iblink_state      = iblink_state;
 	dd->f_ibphys_portstate  = ibphys_portstate;
 	dd->f_get_ib_cfg        = get_ib_cfg;
 	dd->f_set_ib_cfg        = set_ib_cfg;

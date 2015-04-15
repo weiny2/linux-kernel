@@ -724,7 +724,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */
-	if (ppd->lstate != IB_PORT_ACTIVE)
+	if (driver_lstate(ppd) != IB_PORT_ACTIVE)
 		goto done;
 
 	sc = rcd->sc;

@@ -1593,7 +1593,7 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			}
 			value = dd->f_ibphys_portstate(ppd);
 			value <<= 4;
-			value |= dd->f_iblink_state(ppd);
+			value |= driver_lstate(ppd);
 
 			snoop_dbg("Link port | Link State: %d\n", value);
 

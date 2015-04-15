@@ -577,7 +577,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
 
-	state = dd->f_iblink_state(ppd);
+	state = driver_lstate(ppd);
 
 	if (start_of_sm_config && (state == IB_PORT_INIT))
 		ppd->is_sm_config_started = 1;
@@ -931,7 +931,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	event.device = ibdev;
 	event.element.port_num = port;
 
-	ls_old = dd->f_iblink_state(ppd);
+	ls_old = driver_lstate(ppd);
 
 	ibp->mkey = pi->mkey;
 	ibp->gid_prefix = pi->subnet_prefix;
@@ -1444,7 +1444,7 @@ static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 
 	/* IB numbers ports from 1, hdw from 0 */
 	ppd = dd->pport + (port - 1);
-	lstate = dd->f_iblink_state(ppd);
+	lstate = driver_lstate(ppd);
 	/* it's known that async_update is 0 by this point, but include
 	 * the explicit check for clarity */
 	if (!async_update &&
@@ -1500,7 +1500,7 @@ static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 
 	/* IB numbers ports from 1, hdw from 0 */
 	ppd = dd->pport + (port - 1);
-	lstate = dd->f_iblink_state(ppd);
+	lstate = driver_lstate(ppd);
 	if (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(smp);
@@ -1538,7 +1538,7 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	ibp = to_iport(ibdev, port);
 	ppd = ppd_from_ibp(ibp);
 
-	lstate = dd->f_iblink_state(ppd);
+	lstate = driver_lstate(ppd);
 
 	if (start_of_sm_config && (lstate == IB_PORT_INIT))
 		ppd->is_sm_config_started = 1;
@@ -1577,7 +1577,6 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	u32 start_of_sm_config = STL_AM_START_SM_CFG(am);
 	u32 ls_old;
 	u8 ls_new, ps_new;
-	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp;
 	struct qib_pportdata *ppd;
 	struct opa_port_state_info *psi = (struct opa_port_state_info *) data;
@@ -1594,7 +1593,7 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	ibp = to_iport(ibdev, port);
 	ppd = ppd_from_ibp(ibp);
 
-	ls_old = dd->f_iblink_state(ppd);
+	ls_old = driver_lstate(ppd);
 
 	ls_new = port_states_to_logical_state(&psi->port_states);
 	ps_new = port_states_to_phys_state(&psi->port_states);

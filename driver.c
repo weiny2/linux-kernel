@@ -337,33 +337,6 @@ int qib_count_units(int *npresentp, int *nupp)
 	return nunits;
 }
 
-/**
- * qib_wait_linkstate - wait for an IB link state change to occur
- * @ppd: port device
- * @state: the state to wait for
- * @msecs: the number of milliseconds to wait
- *
- * Wait up to msecs milliseconds for IB link state change to occur.
- * For now, take the easy polling route.
- * Returns 0 if state reached, otherwise -ETIMEDOUT.
- */
-int qib_wait_linkstate(struct qib_pportdata *ppd, u32 state, int msecs)
-{
-	unsigned long timeout;
-
-	timeout = jiffies + msecs_to_jiffies(msecs);
-	while (1) {
-		if (ppd->dd->f_iblink_state(ppd) == state)
-			return 0;
-		if (time_after(jiffies, timeout))
-			break;
-		msleep(20);
-	}
-	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x\n", state);
-
-	return -ETIMEDOUT;
-}
-
 /*
  * Get address of eager buffer from it's index (allocated in chunks, not
  * contiguous).
