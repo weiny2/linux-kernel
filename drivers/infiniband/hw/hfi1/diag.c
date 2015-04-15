@@ -60,8 +60,6 @@
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
 #define snoop_dbg(fmt, ...) \
 	hfi_cdbg(SNOOP, fmt, ##__VA_ARGS__)
-#define HFI_PORT_SNOOP_MODE     1U
-#define HFI_PORT_CAPTURE_MODE   2U
 
 unsigned int snoop_drop_send = 0; /* Drop outgoing PIO/SDMA requests */
 unsigned int snoop_force_capture = 0; /* Force into capture */
@@ -647,17 +645,17 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	}
 
 	/* need a valid context */
-	if (dp->context >= dd->num_send_contexts) {
+	if (dp->sw_index >= dd->num_send_contexts) {
 		ret = -EINVAL;
 		goto bail;
 	}
 	/* can only use kernel contexts */
-	if (dd->send_contexts[dp->context].type != SC_KERNEL) {
+	if (dd->send_contexts[dp->sw_index].type != SC_KERNEL) {
 		ret = -EINVAL;
 		goto bail;
 	}
 	/* must be allocated */
-	sc = dd->send_contexts[dp->context].sc;
+	sc = dd->send_contexts[dp->sw_index].sc;
 	if (!sc) {
 		ret = -EINVAL;
 		goto bail;
@@ -802,9 +800,10 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 		vl = (dp.pbc >> WFR_PBC_VL_SHIFT) & WFR_PBC_VL_MASK;
 		sc = dd->vld[vl].sc;
 		if (sc != NULL)
-			dp.context = sc->context;
-		hfi_cdbg(PKT, "Packet sent over VL %d via Send Context %d",
-			 vl, dp.context);
+			dp.sw_index = sc->sw_index;
+		hfi_cdbg(PKT,
+			"Packet sent over VL %d via Send Context %u(%u)",
+			 vl, sc->sw_index, sc->hw_context);
 	}
 
 	return diagpkt_send(&dp);
@@ -1102,14 +1101,46 @@ static struct hfi_devdata *hfi_dd_from_sc_inode(struct inode *in)
 
 }
 
+/* clear or restore send conext integrity checks */
+static void adjust_integrity_checks(struct hfi_devdata *dd, int restore)
+{
+	struct send_context *sc;
+	unsigned long sc_flags;
+	u64 reg;
+	u64 mask;
+	int i;
+
+	/* nothing to do if no integrity checks */
+	if (HFI_CAP_IS_KSET(NO_INTEGRITY))
+		return;
+
+	spin_lock_irqsave(&dd->sc_lock, sc_flags);
+	for (i = 0; i < dd->num_send_contexts; i++) {
+		sc = dd->send_contexts[i].sc;
+
+		if (!sc)
+			continue;	/* not allocated */
+
+		mask = hfi_pkt_default_send_ctxt_mask(dd, sc->type);
+		reg = read_kctxt_csr(dd, sc->hw_context,
+					WFR_SEND_CTXT_CHECK_ENABLE);
+		if (restore)
+			reg |= mask;
+		else
+			reg &= ~mask;
+		write_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_CHECK_ENABLE,
+				reg);
+	}
+	spin_unlock_irqrestore(&dd->sc_lock, sc_flags);
+}
+
 static int hfi_snoop_open(struct inode *in, struct file *fp)
 {
-	int ret, i;
+	int ret;
 	int mode_flag = 0;
 	unsigned long flags = 0;
 	struct hfi_devdata *dd;
 	struct list_head *queue;
-	u64 reg_cur, reg_new;
 
 	mutex_lock(&qib_mutex);
 
@@ -1161,17 +1192,8 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	 * disable and re-enable when we stop snooping.
 	 */
 	if (mode_flag == HFI_PORT_SNOOP_MODE) {
-		for (i = 0; i < dd->num_send_contexts; i++) {
-			u64 type = dd->send_contexts[i].type;
-
-			reg_cur = read_kctxt_csr(dd, i,
-						WFR_SEND_CTXT_CHECK_ENABLE);
-			reg_new = ~(hfi_pkt_default_send_ctxt_mask(dd,
-								   type)) &
-					reg_cur;
-			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE,
-					reg_new);
-		}
+		/* clear after snoop mode is on */
+		adjust_integrity_checks(dd, 0); /* clear */
 
 		/*
 		 * We also do not want to be doing the DLID LMC check for
@@ -1213,8 +1235,7 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 {
 	unsigned long flags = 0;
 	struct hfi_devdata *dd;
-	int i;
-	u64 reg_cur, reg_new;
+	int mode_flag;
 
 	dd = hfi_dd_from_sc_inode(in);
 	if (dd == NULL)
@@ -1222,26 +1243,21 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 
 	spin_lock_irqsave(&dd->hfi_snoop.snoop_lock, flags);
 
+	/* clear the snoop mode before re-adjusting send context CSRs */
+	mode_flag = dd->hfi_snoop.mode_flag;
+	dd->hfi_snoop.mode_flag = 0;
+
 	/*
 	 * Drain the queue and clear the filters we are done with it. Don't
 	 * forget to restore the packet integrity checks
 	 */
 	drain_snoop_list(&dd->hfi_snoop.queue);
-	if (dd->hfi_snoop.mode_flag == HFI_PORT_SNOOP_MODE) {
-		for (i = 0; i < dd->num_send_contexts; i++) {
-			u64 type = dd->send_contexts[i].type;
-
-			reg_cur = read_kctxt_csr(dd, i,
-						WFR_SEND_CTXT_CHECK_ENABLE);
-			reg_new = hfi_pkt_default_send_ctxt_mask(dd,
-								 type) |
-					reg_cur;
-			write_kctxt_csr(dd, i, WFR_SEND_CTXT_CHECK_ENABLE,
-						reg_new);
-		}
+	if (mode_flag == HFI_PORT_SNOOP_MODE) {
+		/* restore after snoop mode is clear */
+		adjust_integrity_checks(dd, 1); /* restore */
 
 		/*
-		 * Also should probably reset the DCC_CONFIG1 register for  DLID
+		 * Also should probably reset the DCC_CONFIG1 register for DLID
 		 * checking on incoming packets again. Use the value saved when
 		 * opening the snoop device.
 		 */
@@ -1256,7 +1272,6 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	 * User is done snooping and capturing, return control to the normal
 	 * handler. Re-enable SDMA handling.
 	 */
-	dd->hfi_snoop.mode_flag = 0;
 
 	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
 	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
@@ -1356,8 +1371,9 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 
 	sc = dd->vld[vl].sc; /* Look up the context based on VL */
 	if (sc != NULL) {
-		dpkt.context = sc->context;
-		snoop_dbg("Sending on context %d", sc->context);
+		dpkt.sw_index = sc->sw_index;
+		snoop_dbg("Sending on context %u(%u)", sc->sw_index,
+			sc->hw_context);
 	} else {
 		snoop_dbg("Could not find context for vl %d", vl);
 		return -EINVAL;

@@ -36,6 +36,7 @@
 #include <linux/delay.h>
 
 #include "hfi.h"
+#include "trace.h"
 
 static uint fw_8051_load = 1;
 module_param_named(fw_8051_load, fw_8051_load, uint, S_IRUGO);
@@ -51,7 +52,7 @@ MODULE_PARM_DESC(fw_pcie_serdes_load, "Load the PCIe SerDes firmware");
 
 static uint fw_sbus_load = 1;
 module_param_named(fw_sbus_load, fw_sbus_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_sbus_load, "Load the SBUS firmware");
+MODULE_PARM_DESC(fw_sbus_load, "Load the SBus firmware");
 
 static uint fw_validate;
 module_param_named(fw_validate, fw_validate, uint, S_IRUGO);
@@ -77,7 +78,7 @@ MODULE_PARM_DESC(fw_fabric_serdes_name, "Fabric SerDes firmware name");
 
 static char *fw_sbus_name;
 module_param_named(fw_sbus_name, fw_sbus_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fw_sbus_name, "SBUS firmware name");
+MODULE_PARM_DESC(fw_sbus_name, "SBus firmware name");
 
 static char *fw_pcie_serdes_name;
 module_param_named(fw_pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
@@ -195,18 +196,16 @@ static struct firmware_details fw_sbus;
 /* 8051 memory access timout, in us */
 #define DC8051_ACCESS_TIMEOUT 100 /* us */
 
-static int print_css_header = 1;	/* TODO: hook to verbosity level */
-
-/* the number of fabric SerDes on the SBUS */
+/* the number of fabric SerDes on the SBus */
 #define NUM_FABRIC_SERDES 4
 
-/* SBUS fabric SerDes addresses, one set per HFI */
+/* SBus fabric SerDes addresses, one set per HFI */
 static const u8 fabric_serdes_addrs[2][NUM_FABRIC_SERDES] = {
 	{ 0x01, 0x02, 0x03, 0x04 },
 	{ 0x28, 0x29, 0x2a, 0x2b }
 };
 
-/* SBUS PCIe SerDes addresses, one set per HFI */
+/* SBus PCIe SerDes addresses, one set per HFI */
 static const u8 pcie_serdes_addrs[2][NUM_PCIE_SERDES] = {
 	{ 0x08, 0x0a, 0x0c, 0x0e, 0x10, 0x12, 0x14, 0x16,
 	  0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22, 0x24, 0x26 },
@@ -214,7 +213,7 @@ static const u8 pcie_serdes_addrs[2][NUM_PCIE_SERDES] = {
 	  0x3f, 0x41, 0x43, 0x45, 0x47, 0x49, 0x4b, 0x4d }
 };
 
-/* SBUS PCIe PCS addresses, one set per HFI */
+/* SBus PCIe PCS addresses, one set per HFI */
 const u8 pcie_pcs_addrs[2][NUM_PCIE_SERDES] = {
 	{ 0x09, 0x0b, 0x0d, 0x0f, 0x11, 0x13, 0x15, 0x17,
 	  0x19, 0x1b, 0x1d, 0x1f, 0x21, 0x23, 0x25, 0x27 },
@@ -222,11 +221,11 @@ const u8 pcie_pcs_addrs[2][NUM_PCIE_SERDES] = {
 	  0x40, 0x42, 0x44, 0x46, 0x48, 0x4a, 0x4c, 0x4e }
 };
 
-/* SBUS fabric SerDes broadcast addresses, one per HFI */
+/* SBus fabric SerDes broadcast addresses, one per HFI */
 static const u8 fabric_serdes_broadcast[2] = { 0xe4, 0xe5 };
 static const u8 all_fabric_serdes_broadcast = 0xe1;
 
-/* SBUS PCIe SerDes broadcast addresses, one per HFI */
+/* SBus PCIe SerDes broadcast addresses, one per HFI */
 const u8 pcie_serdes_broadcast[2] = { 0xe2, 0xe3 };
 static const u8 all_pcie_serdes_broadcast = 0xe0;
 
@@ -372,31 +371,27 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 		goto done;
 	}
 	css = (struct css_header *)fdet->fw->data;
-	if (print_css_header) {
-		dd_dev_info(dd, "Firmware %s details:\n", name);
-		dd_dev_info(dd, "file size: 0x%lx bytes\n", fdet->fw->size);
-		dd_dev_info(dd, "CSS structure:\n");
-		dd_dev_info(dd, "  module_type    0x%x\n", css->module_type);
-		dd_dev_info(dd, "  header_len     0x%03x (0x%03x bytes)",
-			css->header_len, 4*css->header_len);
-		dd_dev_info(dd, "  header_version 0x%x\n", css->header_version);
-		dd_dev_info(dd, "  module_id      0x%x\n", css->module_id);
-		dd_dev_info(dd, "  module_vendor  0x%x\n", css->module_vendor);
-		dd_dev_info(dd, "  date           0x%x\n", css->date);
-		dd_dev_info(dd, "  size           0x%03x (0x%03x bytes)\n",
-			css->size, 4*css->size);
-		dd_dev_info(dd, "  key_size       0x%03x (0x%03x bytes)\n",
-			css->key_size, 4*css->key_size);
-		dd_dev_info(dd, "  modulus_size   0x%03x (0x%03x bytes)\n",
-			css->modulus_size, 4*css->modulus_size);
-		dd_dev_info(dd, "  exponent_size  0x%03x (0x%03x bytes)\n",
-			css->exponent_size, 4*css->exponent_size);
-		if (fdet->fw->size >= sizeof(struct firmware_file))
-			dd_dev_info(dd, "firmware size: 0x%lx bytes\n",
-				fdet->fw->size - sizeof(struct firmware_file));
-		else
-			dd_dev_info(dd, "firmware size: ? header too long\n");
-	}
+
+	hfi_cdbg(FIRMWARE, "Firmware %s details:", name);
+	hfi_cdbg(FIRMWARE, "file size: 0x%lx bytes", fdet->fw->size);
+	hfi_cdbg(FIRMWARE, "CSS structure:");
+	hfi_cdbg(FIRMWARE, "  module_type    0x%x", css->module_type);
+	hfi_cdbg(FIRMWARE, "  header_len     0x%03x (0x%03x bytes)",
+		css->header_len, 4*css->header_len);
+	hfi_cdbg(FIRMWARE, "  header_version 0x%x", css->header_version);
+	hfi_cdbg(FIRMWARE, "  module_id      0x%x", css->module_id);
+	hfi_cdbg(FIRMWARE, "  module_vendor  0x%x", css->module_vendor);
+	hfi_cdbg(FIRMWARE, "  date           0x%x", css->date);
+	hfi_cdbg(FIRMWARE, "  size           0x%03x (0x%03x bytes)",
+		css->size, 4*css->size);
+	hfi_cdbg(FIRMWARE, "  key_size       0x%03x (0x%03x bytes)",
+		css->key_size, 4*css->key_size);
+	hfi_cdbg(FIRMWARE, "  modulus_size   0x%03x (0x%03x bytes)",
+		css->modulus_size, 4*css->modulus_size);
+	hfi_cdbg(FIRMWARE, "  exponent_size  0x%03x (0x%03x bytes)",
+		css->exponent_size, 4*css->exponent_size);
+	hfi_cdbg(FIRMWARE, "firmware size: 0x%lx bytes",
+		fdet->fw->size - sizeof(struct firmware_file));
 
 	/*
 	 * If the file does not have a valid CSS header, assume it is
@@ -839,10 +834,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	if (ret)
 		return ret;
 
-	/* TODO: guard with verbosity level */
-	dd_dev_info(dd, "8051 firmware download stats: %u writes",
-		(fdet->firmware_len+7)/8);
-
 	/*
 	 * DC reset step 4. Host starts the DC8051 firmware
 	 */
@@ -890,11 +881,11 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	return 0;
 }
 
-/* SBUS Master broadcast address */
+/* SBus Master broadcast address */
 #define SBUS_MASTER_BROADCAST 0xfd
 
 /*
- * Write the SBUS request register
+ * Write the SBus request register
  *
  * No need for masking - the arguments are sized exactly.
  */
@@ -1065,7 +1056,7 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	sbus_request(dd, ra, 0x01, WRITE_SBUS_RECEIVER, 0x00000240);
 	/* step 4: set starting IMEM address for burst download */
 	sbus_request(dd, ra, 0x03, WRITE_SBUS_RECEIVER, 0x80000000);
-	/* step 5: download the SBUS Master machine code */
+	/* step 5: download the SBus Master machine code */
 	for (i = 0; i < fdet->firmware_len; i += 4) {
 		sbus_request(dd, ra, 0x14, WRITE_SBUS_RECEIVER,
 					*(u32 *)&fdet->firmware_ptr[i]);
@@ -1076,7 +1067,7 @@ static int load_sbus_firmware(struct hfi_devdata *dd,
 	sbus_request(dd, ra, 0x16, WRITE_SBUS_RECEIVER, 0x000c0000);
 
 	/* steps 8-11: run the RSA engine */
-	err = run_rsa(dd, "SBUS", fdet->signature);
+	err = run_rsa(dd, "SBus", fdet->signature);
 	if (err)
 		return err;
 
@@ -1210,7 +1201,7 @@ int load_firmware(struct hfi_devdata *dd)
 		set_sbus_fast_mode(dd);
 
 		/*
-		 * The SBUS contains part of the fabric firmware and so must
+		 * The SBus contains part of the fabric firmware and so must
 		 * also be downloaded.
 		 */
 		if (fw_sbus_load) {
@@ -1291,7 +1282,7 @@ int firmware_init(struct hfi_devdata *dd)
 
 /*
  * Download the firmware needed for the Gen3 PCIe SerDes.  An update
- * to the SBUS firmware is needed before updating the PCIe firmware.
+ * to the SBus firmware is needed before updating the PCIe firmware.
  *
  * Note: caller must be holding the HW mutex.
  */
@@ -1299,7 +1290,7 @@ int load_pcie_firmware(struct hfi_devdata *dd)
 {
 	int ret = 0;
 
-	/* both firmware loads below use the SBUS */
+	/* both firmware loads below use the SBus */
 	set_sbus_fast_mode(dd);
 
 	if (fw_sbus_load) {

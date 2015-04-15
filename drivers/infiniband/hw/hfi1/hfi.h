@@ -319,6 +319,10 @@ struct hfi_snoop_data {
 	u64 dcc_cfg; /* saved value of DCC Cfg register */
 };
 
+/* snoop mode_flag values */
+#define HFI_PORT_SNOOP_MODE     1U
+#define HFI_PORT_CAPTURE_MODE   2U
+
 struct qib_sge_state;
 
 /*
@@ -729,10 +733,14 @@ struct hfi_devdata {
 	u8 __iomem *kregend;
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
-	/* recevie context data */
+	/* receive context data */
 	struct qib_ctxtdata **rcd;
 	/* send context data */
 	struct send_context_info *send_contexts;
+	/* map hardware send contexts to software index */
+	u8 *hw_to_sw;
+	/* spinlock for alocating and releasing send context resources */
+	spinlock_t sc_lock;
 	/* Per VL data. Enough for all VLs but not all elements are set/used. */
 	struct per_vl_data vld[PER_VL_SEND_CONTEXTS];
 	/* seqlock for sc2vl */

@@ -957,7 +957,7 @@ const struct pci_error_handlers qib_pci_err_handler = {
 					/*   or response data */
 #define WFR_DL_ERR_DISABLED	0x2	/* hfi disabled */
 #define WFR_DL_ERR_SECURITY	0x3	/* security check failed */
-#define WFR_DL_ERR_SBUS		0x4	/* SBUS status error */
+#define WFR_DL_ERR_SBUS		0x4	/* SBus status error */
 #define WFR_DL_ERR_XFR_PARITY	0x5	/* parity error during ROM transfer*/
 
 /* gasket block secondary bus reset delay */
@@ -1253,7 +1253,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	/* step 3: download SBUS Master firmware */
+	/* step 3: download SBus Master firmware */
 	/* step 4: download PCIe Gen3 SerDes firmware */
 	dd_dev_info(dd, "%s: downloading firmware\n", __func__);
 	ret = load_pcie_firmware(dd);
