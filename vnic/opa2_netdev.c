@@ -475,9 +475,8 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	struct opa_core_ops *ops = odev->bus_ops;
 	struct hfi_cq *tx = &dev->tx;
 	struct hfi_cq *rx = &dev->rx;
-	struct hfi_auth_tuple auth_table[HFI_NUM_AUTH_TUPLES];
 	ssize_t head_size;
-	int rc, i;
+	int rc;
 
 	ctx->ptl_pid = HFI_PID_NONE;
 	ctx->devdata = odev->dd;
@@ -485,6 +484,7 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	ctx_assign.unexpected_count = OPA2_NET_UNEX_COUNT;
 	ctx->allow_phys_dlid = 1;
 	ctx->sl_mask = -1;   /* allow all SLs */
+	ctx->ptl_uid = 0;    /* 0 reserved for kernel clients */
 
 	rc = ops->ctx_assign(ctx, &ctx_assign);
 	if (rc)
@@ -509,13 +509,8 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 			   &ctx->pt_addr, &ctx->pt_size);
 	if (rc)
 		goto err;
-	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		auth_table[i].uid = 0;
-		ctx->ptl_uid = 0;
-		auth_table[i].srank = 0;
-	}
 	/* Obtain a pair of command queues */
-	rc = ops->cq_assign(ctx, auth_table, &dev->cq_idx);
+	rc = ops->cq_assign(ctx, NULL, &dev->cq_idx);
 	if (rc)
 		goto err;
 	/* stash pointer to CQ head */

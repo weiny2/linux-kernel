@@ -109,6 +109,11 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	cleanup_interrupts(dd);
 
+	/* release any privileged CQs */
+	hfi_cq_cleanup(&dd->priv_ctx);
+
+	idr_destroy(&dd->cq_pair);
+
 	hfi_iommu_root_clear_context(dd);
 
 	/* free host memory for FXR and Portals resources */
@@ -163,6 +168,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	resource_size_t addr;
 	int i, ret;
 	struct opa_core_device_id bus_id;
+	struct hfi_ctx *ctx;
+	u16 priv_cq_idx;
 
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
@@ -227,8 +234,20 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* TX and RX command queues - fast path access */
 	dd->cq_tx_base = (void *)dd->physaddr + FXR_TXCQ_ENTRY;
 	dd->cq_rx_base = (void *)dd->physaddr + FXR_RXCQ_ENTRY;
-	memset(&dd->cq_pair, HFI_PID_NONE, sizeof(dd->cq_pair));
+	idr_init(&dd->cq_pair);
 	spin_lock_init(&dd->cq_lock);
+
+	ctx = &dd->priv_ctx;
+	ctx->devdata = dd;
+	ctx->allow_phys_dlid = 1;
+	ctx->sl_mask = -1;
+	ctx->ptl_pid = HFI_PID_NONE;
+	ctx->ptl_uid = 0;
+	/* assign one CQ for privileged commands (DLID, EQ_DESC_WRITE) */
+	ret = hfi_cq_assign_privileged(ctx, &priv_cq_idx);
+	if (ret)
+		goto err_post_alloc;
+	/* TODO - next is to write the hfi_cq structs (see VNIC code) */
 
 	ret = setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
 	/* TODO - ignore error, FXR model missing MSI-X table */
@@ -352,11 +371,13 @@ void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 	/* write AUTH tuples */
 	offset = FXR_TXCI_CFG_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		if (ctx->auth_mask == 0)
-			cq_auth.field.USER_ID = ctx->ptl_uid;
-		else
+		if (auth_table) {
 			cq_auth.field.USER_ID = auth_table[i].uid;
-		cq_auth.field.SRANK = auth_table[i].srank;
+			cq_auth.field.SRANK = auth_table[i].srank;
+		} else {
+			cq_auth.field.USER_ID = ctx->ptl_uid;
+			cq_auth.field.SRANK = 0;
+		}
 		write_csr(dd, offset, cq_auth.val);
 		offset += 8;
 	}
@@ -367,7 +388,7 @@ void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
  * Authentication Tuple UIDs have been pre-validated by caller.
  */
 void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
-		   struct hfi_auth_tuple *auth_table)
+		   struct hfi_auth_tuple *auth_table, bool unprivileged)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
@@ -379,7 +400,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 	/* set TX CQ config, enable */
 	tx_cq_config.field.enable = 1;
 	tx_cq_config.field.pid = ctx->ptl_pid;
-	tx_cq_config.field.priv_level = 1;
+	tx_cq_config.field.priv_level = unprivileged;
 	tx_cq_config.field.dlid_base = ctx->dlid_base;
 	tx_cq_config.field.phys_dlid = ctx->allow_phys_dlid;
 	tx_cq_config.field.sl_enable = ctx->sl_mask;
@@ -389,7 +410,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 	/* set RX CQ config, enable */
 	rx_cq_config.field.enable = 1;
 	rx_cq_config.field.pid = ctx->ptl_pid;
-	rx_cq_config.field.priv_level = 1;
+	tx_cq_config.field.priv_level = unprivileged;
 	offset = FXR_RXCI_CFG_CNTRL + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);
 }
@@ -398,6 +419,8 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize
 {
 	struct hfi_devdata *dd;
 	void *psb_base;
+	struct hfi_ctx *cq_ctx;
+	unsigned long flags;
 	int ret = 0;
 
 	BUG_ON(!ctx || !ctx->devdata);
@@ -406,12 +429,20 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize
 	psb_base = ctx->ptl_state_base;
 	BUG_ON(psb_base == NULL);
 
-	/* Validate passed in ctxt */
+	/*
+	 * Validate passed in ctxt value.
+	 * For CQs, verify ownership of this CQ before allowing remapping.
+	 * Unused for per-PID state, we are already restricted to
+	 * host memory associated with the PID (ctx->ptl_state_base).
+	 */
 	switch (type) {
 	case TOK_CQ_TX:
 	case TOK_CQ_RX:
 	case TOK_CQ_HEAD:
-		if (ctx->ptl_pid != dd->cq_pair[ctxt])
+		spin_lock_irqsave(&dd->cq_lock, flags);
+		cq_ctx = idr_find(&dd->cq_pair, ctxt);
+		spin_unlock_irqrestore(&dd->cq_lock, flags);
+		if (cq_ctx != ctx)
 			return -EINVAL;
 		break;
 	default:
