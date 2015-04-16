@@ -97,11 +97,11 @@ struct hfi_devdata {
 	size_t ptl_user_size;
 	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
 	spinlock_t ptl_lock;
+	struct hfi_ctx priv_ctx;
 
 	/* Command Queue State */
-	u16 cq_pair[HFI_CQ_COUNT];
+	struct idr cq_pair;
 	spinlock_t cq_lock;
-	u16 cq_pair_next_unused;
 	void *cq_tx_base;
 	void *cq_rx_base;
 	void *cq_head_base;
@@ -127,8 +127,10 @@ struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
 int hfi_user_cleanup(struct hfi_ctx *ud);
 
 /* HFI specific functions */
+int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx);
+void hfi_cq_cleanup(struct hfi_ctx *ctx);
 void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
-		   struct hfi_auth_tuple *auth_table);
+		   struct hfi_auth_tuple *auth_table, bool unprivileged);
 void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);

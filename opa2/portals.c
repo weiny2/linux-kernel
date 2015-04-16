@@ -57,38 +57,6 @@
 static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
 
-static int hfi_cq_assign_next(struct hfi_ctx *ctx,
-			      u16 ptl_pid, int *out_cq_idx)
-{
-	struct hfi_devdata *dd = ctx->devdata;
-	unsigned cq_idx, num_cqs = HFI_CQ_COUNT;
-
-#if 0
-	/* TODO - for now allow just one CQ pair.
-	 * We can introduce HFI limits later.
-	 */
-	if (ctx->cq_pair_num_assigned > 0)
-		return -ENOSPC;
-#endif
-
-	/* search the whole CQ array, starting with next_unused */
-	while (num_cqs > 0) {
-		cq_idx = dd->cq_pair_next_unused++ % HFI_CQ_COUNT;
-		if (dd->cq_pair[cq_idx] == HFI_PID_NONE)
-			break;
-		num_cqs--;
-	}
-	if (num_cqs == 0) {
-		/* all CQs are assigned */
-		return -EBUSY;
-	}
-
-	*out_cq_idx = cq_idx;
-	dd->cq_pair[cq_idx] = ptl_pid;
-	ctx->cq_pair_num_assigned++;
-	return 0;
-}
-
 static int hfi_cq_validate_tuples(struct hfi_ctx *ctx,
 				  struct hfi_auth_tuple *auth_table)
 {
@@ -130,38 +98,73 @@ static int hfi_cq_validate_tuples(struct hfi_ctx *ctx,
 	return 0;
 }
 
+static int __hfi_cq_assign(struct hfi_ctx *ctx, u16 *cq_idx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	int ret;
+	unsigned long flags;
+
+	idr_preload(GFP_KERNEL);
+	spin_lock_irqsave(&dd->cq_lock, flags);
+	ret = idr_alloc_cyclic(&dd->cq_pair, ctx, 0, HFI_CQ_COUNT, GFP_NOWAIT);
+	spin_unlock_irqrestore(&dd->cq_lock, flags);
+	idr_preload_end();
+	if (ret < 0)
+		return ret;
+
+	*cq_idx = ret;
+	dd_dev_info(dd, "CQ pair %u assigned\n", ret);
+
+	/*
+	 * TODO - this is a placeholder for tracking resource usage/limits.
+	 *   Should be atomic or in locked region where compared against limit.
+	 */
+	ctx->cq_pair_num_assigned++;
+
+	return 0;
+}
+
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	int tmp_cq_idx, ret;
-	unsigned long flags;
+	int ret;
 
 	/* verify we are attached to Portals */
 	if (ctx->ptl_pid == HFI_PID_NONE)
 		return -EPERM;
 
-	ret = hfi_cq_validate_tuples(ctx, auth_table);
-	if (ret)
-		return ret;
+	/*
+	 * some kernel clients may not need to specify UID,SRANK
+	 * if no auth_table, driver will set all to default
+	 */
+	if (auth_table) {
+		ret = hfi_cq_validate_tuples(ctx, auth_table);
+		if (ret)
+			return ret;
+	}
 
-	spin_lock_irqsave(&dd->cq_lock, flags);
-	ret = hfi_cq_assign_next(ctx, ctx->ptl_pid, &tmp_cq_idx);
-	spin_unlock_irqrestore(&dd->cq_lock, flags);
-	if (ret)
-		return ret;
+	ret = __hfi_cq_assign(ctx, cq_idx);
+	if (!ret)
+		hfi_cq_config(ctx, *cq_idx, dd->cq_head_base, auth_table, 1);
+	return ret;
+}
 
-	dd_dev_info(dd, "CQ pair %u assigned\n", tmp_cq_idx);
-	*cq_idx = tmp_cq_idx;
+int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	int ret;
 
-	/* write CQ config in HFI CSRs */
-	hfi_cq_config(ctx, tmp_cq_idx, dd->cq_head_base, auth_table);
-
-	return 0;
+	ret = __hfi_cq_assign(ctx, cq_idx);
+	if (!ret)
+		hfi_cq_config(ctx, *cq_idx, dd->cq_head_base, NULL, 0);
+	return ret;
 }
 
 int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_table)
 {
 	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_ctx *cq_ctx;
+	unsigned long flags;
 	int ret = 0;
 
 	/* verify we are attached to Portals */
@@ -169,7 +172,10 @@ int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_t
 		return -EPERM;
 
 	/* verify we own specified CQ */
-	if (ctx->ptl_pid != dd->cq_pair[cq_idx])
+	spin_lock_irqsave(&dd->cq_lock, flags);
+	cq_ctx = idr_find(&dd->cq_pair, cq_idx);
+	spin_unlock_irqrestore(&dd->cq_lock, flags);
+	if (cq_ctx != ctx)
 		return -EINVAL;
 
 	ret = hfi_cq_validate_tuples(ctx, auth_table);
@@ -189,11 +195,11 @@ int hfi_cq_release(struct hfi_ctx *ctx, u16 cq_idx)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dd->cq_lock, flags);
-	if (ctx->ptl_pid != dd->cq_pair[cq_idx]) {
+	if (idr_find(&dd->cq_pair, cq_idx) != ctx) {
 		ret = -EINVAL;
 	} else {
 		hfi_cq_disable(dd, cq_idx);
-		dd->cq_pair[cq_idx] = HFI_PID_NONE;
+		idr_remove(&dd->cq_pair, cq_idx);
 		ctx->cq_pair_num_assigned--;
 		/* TODO - remove any CQ head mappings */
 	}
@@ -202,18 +208,18 @@ int hfi_cq_release(struct hfi_ctx *ctx, u16 cq_idx)
 	return ret;
 }
 
-static void hfi_cq_cleanup(struct hfi_ctx *ctx)
+void hfi_cq_cleanup(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	u64 ptl_pid = ctx->ptl_pid;
+	struct hfi_ctx *cq_ctx;
 	int i;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dd->cq_lock, flags);
-	for (i = 0; i < HFI_CQ_COUNT; i++) {
-		if (ptl_pid == dd->cq_pair[i]) {
+	idr_for_each_entry(&dd->cq_pair, cq_ctx, i) {
+		if (cq_ctx == ctx) {
 			hfi_cq_disable(dd, i);
-			dd->cq_pair[i] = HFI_PID_NONE;
+			idr_remove(&dd->cq_pair, i);
 		}
 	}
 	ctx->cq_pair_num_assigned = 0;
