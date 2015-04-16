@@ -755,7 +755,7 @@ struct qib_ibport {
 	u8 mkeyprot;
 	u8 subnet_timeout;
 	u8 vl_high_limit;
-	/* the first 16 entries are sl_to_vl for !STL */
+	/* the first 16 entries are sl_to_vl for !OPA */
 	u8 sl_to_sc[32];
 	u8 sc_to_sl[32];
 };

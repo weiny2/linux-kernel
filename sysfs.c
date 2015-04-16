@@ -271,7 +271,7 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
 	struct cc_state *cc_state;
 
-	ret = sizeof(struct stl_congestion_setting_attr_shadow);
+	ret = sizeof(struct opa_congestion_setting_attr_shadow);
 
 	if (pos > ret)
 		return -EINVAL;

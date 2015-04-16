@@ -943,7 +943,7 @@ static struct flag_table dc8051_info_host_msg_flags[] = {
 
 
 static u32 encoded_size(u32 size);
-static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate);
+static u32 chip_to_opa_lstate(struct hfi_devdata *dd, u32 chip_lstate);
 static int set_physical_link_state(struct hfi_devdata *dd, u64 state);
 static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
 				u8 *continous);
@@ -2954,7 +2954,7 @@ void handle_sma_message(struct work_struct *work)
 	switch (msg & 0xff) {
 	case SMA_IDLE_ARM:
 		/*
-		 * See STLv1 table 9-14 - HFI and External Switch Ports Key
+		 * See OPAv1 table 9-14 - HFI and External Switch Ports Key
 		 * State Transitions
 		 *
 		 * Only expected in INIT or ARMED, discard otherwise.
@@ -2965,7 +2965,7 @@ void handle_sma_message(struct work_struct *work)
 		break;
 	case SMA_IDLE_ACTIVE:
 		/*
-		 * See STLv1 table 9-14 - HFI and External Switch Ports Key
+		 * See OPAv1 table 9-14 - HFI and External Switch Ports Key
 		 * State Transitions
 		 *
 		 * Can activate the node.  Discard otherwise.
@@ -3194,7 +3194,7 @@ void handle_link_up(struct work_struct *work)
 	/* cache the read of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
 	read_ltp_rtt(ppd->dd);
 	/*
-	 * STL specifies that certain counters are cleared on a transition
+	 * OPA specifies that certain counters are cleared on a transition
 	 * to link up, so do that.
 	 */
 	clear_linkup_counters(ppd->dd);
@@ -3257,7 +3257,7 @@ static int cap_to_port_ltp(int cap)
 }
 
 /*
- * Convert an STL Port LTP mask to capability mask
+ * Convert an OPA Port LTP mask to capability mask
  */
 int port_ltp_to_cap(int port_ltp)
 {
@@ -3274,7 +3274,7 @@ int port_ltp_to_cap(int port_ltp)
 }
 
 /*
- * Convert a single DC LCB CRC mode to an STL Port LTP mask.
+ * Convert a single DC LCB CRC mode to an OPA Port LTP mask.
  */
 static int lcb_to_port_ltp(int lcb_crc)
 {
@@ -3300,7 +3300,7 @@ static int neigh_is_hfi(struct qib_pportdata *ppd)
 /*
  * Our neighbor has indicated that we are allowed to act as a fabric
  * manager, so place the full management partition key in the second
- * (0-based) pkey array position (see STLv1, section 20.2.2.6.8). Note
+ * (0-based) pkey array position (see OPAv1, section 20.2.2.6.8). Note
  * that we should already have the limited management partition key in
  * array element 1, and also that the port is not yet up when
  * add_full_mgmt_pkey() is invoked.
@@ -3318,7 +3318,7 @@ static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
 }
 
 /*
- * Convert the given link width to the STL link width bitmask.
+ * Convert the given link width to the OPA link width bitmask.
  */
 static u16 link_width_to_bits(struct hfi_devdata *dd, u16 width)
 {
@@ -3461,7 +3461,7 @@ void get_linkup_link_widths(struct qib_pportdata *ppd)
 	/* link width downgrade active (LWD.A) starts out matching LW.A */
 	ppd->link_width_downgrade_tx_active = ppd->link_width_active;
 	ppd->link_width_downgrade_rx_active = ppd->link_width_active;
-	/* per STL spec, on link up LWD.E resets to LWD.S */
+	/* per OPA spec, on link up LWD.E resets to LWD.S */
 	ppd->link_width_downgrade_enabled = ppd->link_width_downgrade_supported;
 }
 
@@ -3980,11 +3980,11 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	int do_bounce = 0;
 
 	if (reg & DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK) {
-		if (!(dd->err_info_uncorrectable & STL_EI_STATUS_SMASK)) {
+		if (!(dd->err_info_uncorrectable & OPA_EI_STATUS_SMASK)) {
 			info = read_csr(dd, DCC_ERR_INFO_UNCORRECTABLE);
-			dd->err_info_uncorrectable = info & STL_EI_CODE_SMASK;
+			dd->err_info_uncorrectable = info & OPA_EI_CODE_SMASK;
 			/* set status bit */
-			dd->err_info_uncorrectable |= STL_EI_STATUS_SMASK;
+			dd->err_info_uncorrectable |= OPA_EI_STATUS_SMASK;
 		}
 
 		/* strip so we don't see in the generic unhandled */
@@ -4003,10 +4003,10 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		u8 reason_valid = 1;
 
 		info = read_csr(dd, DCC_ERR_INFO_FMCONFIG);
-		if (!(dd->err_info_fmconfig & STL_EI_STATUS_SMASK)) {
-			dd->err_info_fmconfig = info & STL_EI_CODE_SMASK;
+		if (!(dd->err_info_fmconfig & OPA_EI_STATUS_SMASK)) {
+			dd->err_info_fmconfig = info & OPA_EI_CODE_SMASK;
 			/* set status bit */
-			dd->err_info_fmconfig |= STL_EI_STATUS_SMASK;
+			dd->err_info_fmconfig |= OPA_EI_STATUS_SMASK;
 		}
 		switch (info) {
 		case 0:
@@ -4059,12 +4059,12 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		hdr0 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR0);
 		hdr1 = read_csr(dd, DCC_ERR_INFO_PORTRCV_HDR1);
 		if (!(dd->err_info_rcvport.status_and_code &
-		      STL_EI_STATUS_SMASK)) {
+		      OPA_EI_STATUS_SMASK)) {
 			dd->err_info_rcvport.status_and_code =
-				info & STL_EI_CODE_SMASK;
+				info & OPA_EI_CODE_SMASK;
 			/* set status bit */
 			dd->err_info_rcvport.status_and_code |=
-				STL_EI_STATUS_SMASK;
+				OPA_EI_STATUS_SMASK;
 			/* save first 2 flits in the packet that caused
 			 * the error */
 			 dd->err_info_rcvport.packet_flit1 = hdr0;
@@ -5073,7 +5073,7 @@ static int init_loopback(struct hfi_devdata *dd)
  * Translate from the OPA_LINK_WIDTH handed to us by the FM to bits
  * used in the Verify Capability link width attribute.
  */
-static u16 stl_to_vc_link_widths(u16 stl_widths)
+static u16 opa_to_vc_link_widths(u16 opa_widths)
 {
 	int i;
 	u16 result = 0;
@@ -5081,16 +5081,16 @@ static u16 stl_to_vc_link_widths(u16 stl_widths)
 	static const struct link_bits {
 		u16 from;
 		u16 to;
-	} stl_link_xlate[] = {
+	} opa_link_xlate[] = {
 		{ OPA_LINK_WIDTH_1X, 1 << (1-1)  },
 		{ OPA_LINK_WIDTH_2X, 1 << (2-1)  },
 		{ OPA_LINK_WIDTH_3X, 1 << (3-1)  },
 		{ OPA_LINK_WIDTH_4X, 1 << (4-1)  },
 	};
 
-	for (i = 0; i < ARRAY_SIZE(stl_link_xlate); i++) {
-		if (stl_widths & stl_link_xlate[i].from)
-			result |= stl_link_xlate[i].to;
+	for (i = 0; i < ARRAY_SIZE(opa_link_xlate); i++) {
+		if (opa_widths & opa_link_xlate[i].from)
+			result |= opa_link_xlate[i].to;
 	}
 	return result;
 }
@@ -5142,7 +5142,7 @@ static int set_local_link_attributes(struct qib_pportdata *ppd)
 		goto set_local_link_attributes_fail;
 
 	ret = write_vc_local_link_width(dd, 0,
-		     stl_to_vc_link_widths(ppd->link_width_enabled));
+		     opa_to_vc_link_widths(ppd->link_width_enabled));
 	if (ret != WFR_HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
@@ -6543,7 +6543,7 @@ static int get_buffer_control(struct hfi_devdata *dd,
 	/* not all entries are filled in */
 	memset(bc, 0, sizeof(*bc));
 
-	/* STL and WFR have a 1-1 mapping */
+	/* OPA and WFR have a 1-1 mapping */
 	for (i = 0; i < WFR_TXE_NUM_DATA_VL; i++)
 		read_one_cm_vl(dd, WFR_SEND_CM_CREDIT_VL + (8*i), &bc->vl[i]);
 
@@ -6967,7 +6967,7 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 	case FM_TBL_VL_HIGH_ARB:
 		size = 256;
 		/*
-		 * STL specifies 128 elements (of 2 bytes each), though
+		 * OPA specifies 128 elements (of 2 bytes each), though
 		 * WFR supports only 16 elements in h/w.
 		 */
 		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
@@ -6976,7 +6976,7 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 	case FM_TBL_VL_LOW_ARB:
 		size = 256;
 		/*
-		 * STL specifies 128 elements (of 2 bytes each), though
+		 * OPA specifies 128 elements (of 2 bytes each), though
 		 * WFR supports only 16 elements in h/w.
 		 */
 		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
@@ -6990,13 +6990,13 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 		break;
 	case FM_TBL_VL_PREEMPT_ELEMS:
 		size = 256;
-		/* STL specifies 128 elements, of 2 bytes each */
+		/* OPA specifies 128 elements, of 2 bytes each */
 		get_vlarb_preempt(ppd->dd, OPA_MAX_VLS, t);
 		break;
 	case FM_TBL_VL_PREEMPT_MATRIX:
 		size = 256;
 		/*
-		 * STL specifies that this is the same size as the VL
+		 * OPA specifies that this is the same size as the VL
 		 * arbitration tables (i.e., 256 bytes).
 		 */
 		break;
@@ -8030,7 +8030,7 @@ static void xgxs_reset(struct qib_pportdata *ppd)
 		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
 }
 
-static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate)
+static u32 chip_to_opa_lstate(struct hfi_devdata *dd, u32 chip_lstate)
 {
 	switch (chip_lstate) {
 	default:
@@ -8049,7 +8049,7 @@ static u32 chip_to_stl_lstate(struct hfi_devdata *dd, u32 chip_lstate)
 	}
 }
 
-static u32 chip_to_stl_pstate(struct hfi_devdata *dd, u32 chip_pstate)
+static u32 chip_to_opa_pstate(struct hfi_devdata *dd, u32 chip_pstate)
 {
 	/* look at the WFR meta-states only */
 	switch (chip_pstate & 0xf0) {
@@ -8060,7 +8060,7 @@ static u32 chip_to_stl_pstate(struct hfi_devdata *dd, u32 chip_pstate)
 	case WFR_PLS_DISABLED:
 		return IB_PORTPHYSSTATE_DISABLED;
 	case WFR_PLS_OFFLINE:
-		return STL_PORTPHYSSTATE_OFFLINE;
+		return OPA_PORTPHYSSTATE_OFFLINE;
 	case WFR_PLS_POLLING:
 		return IB_PORTPHYSSTATE_POLLING;
 	case WFR_PLS_CONFIGPHY:
@@ -8072,8 +8072,8 @@ static u32 chip_to_stl_pstate(struct hfi_devdata *dd, u32 chip_pstate)
 	}
 }
 
-/* return the STL port logical state name */
-static const char *stl_lstate_name(u32 lstate)
+/* return the OPA port logical state name */
+static const char *opa_lstate_name(u32 lstate)
 {
 	static const char * const port_logical_names[] = {
 		"PORT_NOP",
@@ -8088,8 +8088,8 @@ static const char *stl_lstate_name(u32 lstate)
 	return "unknown";
 }
 
-/* return the STL port physical state name */
-static const char *stl_pstate_name(u32 pstate)
+/* return the OPA port physical state name */
+static const char *opa_pstate_name(u32 pstate)
 {
 	static const char * const port_physical_names[] = {
 		"PHYS_NOP",
@@ -8118,10 +8118,10 @@ static u32 get_logical_state(struct qib_pportdata *ppd)
 {
 	u32 new_state;
 
-	new_state = chip_to_stl_lstate(ppd->dd, read_logical_state(ppd->dd));
+	new_state = chip_to_opa_lstate(ppd->dd, read_logical_state(ppd->dd));
 	if (new_state != ppd->lstate) {
 		dd_dev_info(ppd->dd, "logical state changed to %s (0x%x)\n",
-			stl_lstate_name(new_state), new_state);
+			opa_lstate_name(new_state), new_state);
 		ppd->lstate = new_state;
 	}
 	/*
@@ -8185,11 +8185,11 @@ static u8 ibphys_portstate(struct qib_pportdata *ppd)
 	u32 ib_pstate;
 
 	pstate = read_physical_state(ppd->dd);
-	ib_pstate = chip_to_stl_pstate(ppd->dd, pstate);
+	ib_pstate = chip_to_opa_pstate(ppd->dd, pstate);
 	if (remembered_state != ib_pstate) {
 		dd_dev_info(ppd->dd,
 			"%s: physical state changed to %s (0x%x), phy 0x%x\n",
-			__func__, stl_pstate_name(ib_pstate), ib_pstate,
+			__func__, opa_pstate_name(ib_pstate), ib_pstate,
 			pstate);
 		remembered_state = ib_pstate;
 	}

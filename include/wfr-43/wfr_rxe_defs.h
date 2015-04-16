@@ -197,7 +197,7 @@
 * Table #13 of 250_RXE_Registers.xml - RcvVL15
 * This CSR is used to specify the receive context used for VL15 packets. VL15 
 * packets are identified by the 4-bit VL sideband signal from Duncan Creek 
-* having the value of 15. For STL 9B packets this is the result of translating 
+* having the value of 15. For OPA 9B packets this is the result of translating
 * the SC field through the SC2VL_r table inside Duncan Creek. Bypass packets are 
 * handled separately and do not use the value in this CSR. Receive context 
 * numbers are in the range of 0 to 159 inclusive. Values in the range 160 to 255 

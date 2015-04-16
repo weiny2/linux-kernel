@@ -455,7 +455,7 @@ last_imm:
 		 * with the way that IB/qib works and is trying avoid
 		 * introducing incompatabilities.
 		 *
-		 * See also STL Vol. 1, section 9.7.6, and table 9-17.
+		 * See also OPA Vol. 1, section 9.7.6, and table 9-17.
 		 */
 		wc.sl = qp->remote_ah_attr.sl;
 		/* zero fields that are N/A */

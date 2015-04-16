@@ -584,7 +584,7 @@ struct qib_pportdata {
 	struct ib_cc_table_entry_shadow ccti_entries[CC_TABLE_SHADOW_MAX];
 
 	/* congestion entries, each entry corresponding to a SL */
-	struct stl_congestion_setting_entry_shadow
+	struct opa_congestion_setting_entry_shadow
 		congestion_entries[OPA_MAX_SLS];
 
 	/*
@@ -609,7 +609,7 @@ struct qib_pportdata {
 	spinlock_t cc_log_lock ____cacheline_aligned_in_smp;
 	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
 	u16 threshold_event_counter;
-	struct stl_hfi_cong_log_event_internal cc_events[STL_CONG_LOG_ELEMS];
+	struct opa_hfi_cong_log_event_internal cc_events[OPA_CONG_LOG_ELEMS];
 	int cc_log_idx; /* index for logging events */
 	int cc_mad_idx; /* index for reporting events */
 	/* end congestion log related entries */
@@ -1131,7 +1131,7 @@ void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
 
-/* return the driver's idea of the logical STL port state */
+/* return the driver's idea of the logical OPA port state */
 static inline u32 driver_lstate(struct qib_pportdata *ppd)
 {
 	return ppd->lstate; /* use the cached value */
@@ -1188,7 +1188,7 @@ static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
  * ingress_pkey_matches_entry - return 1 if the pkey matches ent (ent
  * being an entry from the ingress partition key table), return 0
  * otherwise. Use the matching criteria for ingress partition keys
- * specified in the STLv1 spec., section 9.10.14.
+ * specified in the OPAv1 spec., section 9.10.14.
  */
 static inline int ingress_pkey_matches_entry(u16 pkey, u16 ent)
 {
@@ -1235,8 +1235,8 @@ static void ingress_pkey_table_fail(struct qib_pportdata *ppd, u16 pkey,
 	struct hfi_devdata *dd = ppd->dd;
 
 	incr_cntr64(&ppd->port_rcv_constraint_errors);
-	if (!(dd->err_info_rcv_constraint.status & STL_EI_STATUS_SMASK)) {
-		dd->err_info_rcv_constraint.status |= STL_EI_STATUS_SMASK;
+	if (!(dd->err_info_rcv_constraint.status & OPA_EI_STATUS_SMASK)) {
+		dd->err_info_rcv_constraint.status |= OPA_EI_STATUS_SMASK;
 		dd->err_info_rcv_constraint.slid = slid;
 		dd->err_info_rcv_constraint.pkey = pkey;
 	}
@@ -1244,7 +1244,7 @@ static void ingress_pkey_table_fail(struct qib_pportdata *ppd, u16 pkey,
 
 /*
  * ingress_pkey_check - Return 0 if the ingress pkey is valid, return 1
- * otherwise. Use the criterea in the STLv1 spec, section 9.10.14. idx
+ * otherwise. Use the criterea in the OPAv1 spec, section 9.10.14. idx
  * is a hint as to the best place in the partition key table to begin
  * searching.
  */
@@ -1294,7 +1294,7 @@ static inline int valid_ib_mtu(unsigned int mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
-static inline int valid_stl_mtu(unsigned int mtu)
+static inline int valid_opa_mtu(unsigned int mtu)
 {
 	return valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240;
 }

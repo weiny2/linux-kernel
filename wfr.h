@@ -495,7 +495,7 @@ enum {
 #define LCB_CRC_12B_16B_PER_LANE	0x3	/* 12b-16b per lane CRC */
 
 /* the following enum is (almost) a copy/paste of the definition
- * in the STL spec, section 20.2.2.6.8 (PortInfo) */
+ * in the OPA spec, section 20.2.2.6.8 (PortInfo) */
 enum {
 	PORT_LTP_CRC_MODE_NONE = 0,
 	PORT_LTP_CRC_MODE_14 = 1, /* 14-bit LTP CRC mode (optional) */

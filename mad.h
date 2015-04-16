@@ -192,11 +192,11 @@ struct ib_vl_weight_elem {
 #define IB_VLARB_HIGHPRI_0_31   3
 #define IB_VLARB_HIGHPRI_32_63  4
 
-#define STL_MAX_PREEMPT_CAP         32
-#define STL_VLARB_LOW_ELEMENTS       0
-#define STL_VLARB_HIGH_ELEMENTS      1
-#define STL_VLARB_PREEMPT_ELEMENTS   2
-#define STL_VLARB_PREEMPT_MATRIX     3
+#define OPA_MAX_PREEMPT_CAP         32
+#define OPA_VLARB_LOW_ELEMENTS       0
+#define OPA_VLARB_HIGH_ELEMENTS      1
+#define OPA_VLARB_PREEMPT_ELEMENTS   2
+#define OPA_VLARB_PREEMPT_MATRIX     3
 
 #define IB_PMA_PORT_COUNTERS_CONG       cpu_to_be16(0xFF00)
 
@@ -262,9 +262,9 @@ struct ib_pma_portcounters_cong {
  * There should be an equivalent IB #define for the following, but
  * I cannot find it.
  */
-#define STL_CC_LOG_TYPE_HFI	2
+#define OPA_CC_LOG_TYPE_HFI	2
 
-struct stl_hfi_cong_log_event_internal {
+struct opa_hfi_cong_log_event_internal {
 	u32 lqpn;
 	u32 rqpn;
 	u8 sl;
@@ -273,7 +273,7 @@ struct stl_hfi_cong_log_event_internal {
 	s64 timestamp; /* wider than 32 bits to detect 32 bit rollover */
 };
 
-struct stl_hfi_cong_log_event {
+struct opa_hfi_cong_log_event {
 	u8 local_qp_cn_entry[3];
 	u8 remote_qp_number_cn_entry[3];
 	u8 sl_svc_type_cn_entry; /* 5 bits SL, 3 bits svc type */
@@ -282,15 +282,15 @@ struct stl_hfi_cong_log_event {
 	__be32 timestamp_cn_entry;
 } __packed;
 
-#define STL_CONG_LOG_ELEMS	96
+#define OPA_CONG_LOG_ELEMS	96
 
-struct stl_hfi_cong_log {
+struct opa_hfi_cong_log {
 	u8 log_type;
 	u8 congestion_flags;
 	__be16 threshold_event_counter;
 	__be32 current_time_stamp;
 	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
-	struct stl_hfi_cong_log_event events[STL_CONG_LOG_ELEMS];
+	struct opa_hfi_cong_log_event events[OPA_CONG_LOG_ELEMS];
 } __packed;
 
 #define IB_CC_TABLE_CAP_DEFAULT 31
@@ -298,7 +298,7 @@ struct stl_hfi_cong_log {
 /* Port control flags */
 #define IB_CC_CCS_PC_SL_BASED 0x01
 
-struct stl_congestion_setting_entry {
+struct opa_congestion_setting_entry {
 	u8 ccti_increase;
 	u8 reserved;
 	__be16 ccti_timer;
@@ -306,7 +306,7 @@ struct stl_congestion_setting_entry {
 	u8 ccti_min; /* min CCTI for cc table */
 } __packed;
 
-struct stl_congestion_setting_entry_shadow {
+struct opa_congestion_setting_entry_shadow {
 	u8 ccti_increase;
 	u8 reserved;
 	u16 ccti_timer;
@@ -314,16 +314,16 @@ struct stl_congestion_setting_entry_shadow {
 	u8 ccti_min; /* min CCTI for cc table */
 } __packed;
 
-struct stl_congestion_setting_attr {
+struct opa_congestion_setting_attr {
 	__be32 control_map;
 	__be16 port_control;
-	struct stl_congestion_setting_entry entries[OPA_MAX_SLS];
+	struct opa_congestion_setting_entry entries[OPA_MAX_SLS];
 } __packed;
 
-struct stl_congestion_setting_attr_shadow {
+struct opa_congestion_setting_attr_shadow {
 	u32 control_map;
 	u16 port_control;
-	struct stl_congestion_setting_entry_shadow entries[OPA_MAX_SLS];
+	struct opa_congestion_setting_entry_shadow entries[OPA_MAX_SLS];
 } __packed;
 
 #define IB_CC_TABLE_ENTRY_INCREASE_DEFAULT 1
@@ -368,67 +368,67 @@ struct cc_table_shadow {
 struct cc_state {
 	struct rcu_head rcu;
 	struct cc_table_shadow cct;
-	struct stl_congestion_setting_attr_shadow cong_setting;
+	struct opa_congestion_setting_attr_shadow cong_setting;
 };
 
 /*
- * STL BufferControl MAD
+ * OPA BufferControl MAD
  */
 
 /* attribute modifier macros */
-#define STL_AM_NPORT_SHIFT	24
-#define STL_AM_NPORT_MASK	0xff
-#define STL_AM_NPORT_SMASK	(STL_AM_NPORT_MASK << STL_AM_NPORT_SHIFT)
-#define STL_AM_NPORT(am)	(((am) >> STL_AM_NPORT_SHIFT) & \
-					STL_AM_NPORT_MASK)
+#define OPA_AM_NPORT_SHIFT	24
+#define OPA_AM_NPORT_MASK	0xff
+#define OPA_AM_NPORT_SMASK	(OPA_AM_NPORT_MASK << OPA_AM_NPORT_SHIFT)
+#define OPA_AM_NPORT(am)	(((am) >> OPA_AM_NPORT_SHIFT) & \
+					OPA_AM_NPORT_MASK)
 
-#define STL_AM_NBLK_SHIFT	24
-#define STL_AM_NBLK_MASK	0xff
-#define STL_AM_NBLK_SMASK	(STL_AM_NBLK_MASK << STL_AM_NBLK_SHIFT)
-#define STL_AM_NBLK(am)		(((am) >> STL_AM_NBLK_SHIFT) & \
-					STL_AM_NBLK_MASK)
+#define OPA_AM_NBLK_SHIFT	24
+#define OPA_AM_NBLK_MASK	0xff
+#define OPA_AM_NBLK_SMASK	(OPA_AM_NBLK_MASK << OPA_AM_NBLK_SHIFT)
+#define OPA_AM_NBLK(am)		(((am) >> OPA_AM_NBLK_SHIFT) & \
+					OPA_AM_NBLK_MASK)
 
-#define STL_AM_START_BLK_SHIFT	0
-#define STL_AM_START_BLK_MASK	0xff
-#define STL_AM_START_BLK_SMASK	(STL_AM_START_BLK_MASK << \
-					STL_AM_START_BLK_SHIFT)
-#define STL_AM_START_BLK(am)	(((am) >> STL_AM_START_BLK_SHIFT) & \
-					STL_AM_START_BLK_MASK)
+#define OPA_AM_START_BLK_SHIFT	0
+#define OPA_AM_START_BLK_MASK	0xff
+#define OPA_AM_START_BLK_SMASK	(OPA_AM_START_BLK_MASK << \
+					OPA_AM_START_BLK_SHIFT)
+#define OPA_AM_START_BLK(am)	(((am) >> OPA_AM_START_BLK_SHIFT) & \
+					OPA_AM_START_BLK_MASK)
 
-#define STL_AM_PORTNUM_SHIFT	0
-#define STL_AM_PORTNUM_MASK	0xff
-#define STL_AM_PORTNUM_SMASK	(STL_AM_PORTNUM_MASK << STL_AM_PORTNUM_SHIFT)
-#define STL_AM_PORTNUM(am)	(((am) >> STL_AM_PORTNUM_SHIFT) & \
-					STL_AM_PORTNUM_MASK)
+#define OPA_AM_PORTNUM_SHIFT	0
+#define OPA_AM_PORTNUM_MASK	0xff
+#define OPA_AM_PORTNUM_SMASK	(OPA_AM_PORTNUM_MASK << OPA_AM_PORTNUM_SHIFT)
+#define OPA_AM_PORTNUM(am)	(((am) >> OPA_AM_PORTNUM_SHIFT) & \
+					OPA_AM_PORTNUM_MASK)
 
-#define STL_AM_ASYNC_SHIFT	12
-#define STL_AM_ASYNC_MASK	0x1
-#define STL_AM_ASYNC_SMASK	(STL_AM_ASYNC_MASK << STL_AM_ASYNC_SHIFT)
-#define STL_AM_ASYNC(am)	(((am) >> STL_AM_ASYNC_SHIFT) & \
-					STL_AM_ASYNC_MASK)
+#define OPA_AM_ASYNC_SHIFT	12
+#define OPA_AM_ASYNC_MASK	0x1
+#define OPA_AM_ASYNC_SMASK	(OPA_AM_ASYNC_MASK << OPA_AM_ASYNC_SHIFT)
+#define OPA_AM_ASYNC(am)	(((am) >> OPA_AM_ASYNC_SHIFT) & \
+					OPA_AM_ASYNC_MASK)
 
-#define STL_AM_START_SM_CFG_SHIFT	9
-#define STL_AM_START_SM_CFG_MASK	0x1
-#define STL_AM_START_SM_CFG_SMASK	(STL_AM_START_SM_CFG_MASK << \
-						STL_AM_START_SM_CFG_SHIFT)
-#define STL_AM_START_SM_CFG(am)		(((am) >> STL_AM_START_SM_CFG_SHIFT) \
-						& STL_AM_START_SM_CFG_MASK)
+#define OPA_AM_START_SM_CFG_SHIFT	9
+#define OPA_AM_START_SM_CFG_MASK	0x1
+#define OPA_AM_START_SM_CFG_SMASK	(OPA_AM_START_SM_CFG_MASK << \
+						OPA_AM_START_SM_CFG_SHIFT)
+#define OPA_AM_START_SM_CFG(am)		(((am) >> OPA_AM_START_SM_CFG_SHIFT) \
+						& OPA_AM_START_SM_CFG_MASK)
 
-#define STL_AM_CI_ADDR_SHIFT	19
-#define STL_AM_CI_ADDR_MASK	0xfff
-#define STL_AM_CI_ADDR_SMASK	(STL_AM_CI_ADDR_MASK << STL_CI_ADDR_SHIFT)
-#define STL_AM_CI_ADDR(am)	(((am) >> STL_AM_CI_ADDR_SHIFT) & \
-					STL_AM_CI_ADDR_MASK)
+#define OPA_AM_CI_ADDR_SHIFT	19
+#define OPA_AM_CI_ADDR_MASK	0xfff
+#define OPA_AM_CI_ADDR_SMASK	(OPA_AM_CI_ADDR_MASK << OPA_CI_ADDR_SHIFT)
+#define OPA_AM_CI_ADDR(am)	(((am) >> OPA_AM_CI_ADDR_SHIFT) & \
+					OPA_AM_CI_ADDR_MASK)
 
-#define STL_AM_CI_LEN_SHIFT	13
-#define STL_AM_CI_LEN_MASK	0x3f
-#define STL_AM_CI_LEN_SMASK	(STL_AM_CI_LEN_MASK << STL_CI_LEN_SHIFT)
-#define STL_AM_CI_LEN(am)	(((am) >> STL_AM_CI_LEN_SHIFT) & \
-					STL_AM_CI_LEN_MASK)
+#define OPA_AM_CI_LEN_SHIFT	13
+#define OPA_AM_CI_LEN_MASK	0x3f
+#define OPA_AM_CI_LEN_SMASK	(OPA_AM_CI_LEN_MASK << OPA_CI_LEN_SHIFT)
+#define OPA_AM_CI_LEN(am)	(((am) >> OPA_AM_CI_LEN_SHIFT) & \
+					OPA_AM_CI_LEN_MASK)
 
 /* error info macros */
-#define STL_EI_STATUS_SMASK	0x80
-#define STL_EI_CODE_SMASK	0x0f
+#define OPA_EI_STATUS_SMASK	0x80
+#define OPA_EI_CODE_SMASK	0x0f
 
 struct vl_limit {
 	__be16 dedicated;

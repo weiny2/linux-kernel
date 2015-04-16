@@ -397,7 +397,7 @@ int qsfp_mod_present(struct qib_pportdata *ppd)
 
 /*
  * This function maps QSFP memory addresses in 128 byte chunks in the following
- * fashion per the CableInfo SMA query definition in the IBA 1.3 spec/STL Gen 1
+ * fashion per the CableInfo SMA query definition in the IBA 1.3 spec/OPA Gen 1
  * spec
  * For addr 000-127, lower page 00h
  * For addr 128-255, upper page 00h

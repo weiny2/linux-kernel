@@ -52,7 +52,7 @@ def get_phys_link_state(val):
     elif val == 7:
         return "IB_PORTPHYSSTATE_PHY_TEST"
     elif val == 9:
-        return "STL_PORTPHYSSTATE_OFFLINE"
+        return "OPA_PORTPHYSSTATE_OFFLINE"
     else:
         RegLib.test_fail("Unknown phys state %s" % val)
 
@@ -87,7 +87,7 @@ def is_training(link, phys):
         return False
 
 def is_offline(link, phys):
-    if phys == "STL_PORTPHYSSTATE_OFFLINE":
+    if phys == "OPA_PORTPHYSSTATE_OFFLINE":
         return True
     else:
         return False

@@ -1175,9 +1175,9 @@ static int __init qib_ib_init(void)
 		goto bail;
 
 	/* validate max and default MTUs before any devices start */
-	if (!valid_stl_mtu(default_mtu))
+	if (!valid_opa_mtu(default_mtu))
 		default_mtu = HFI_DEFAULT_ACTIVE_MTU;
-	if (!valid_stl_mtu(max_mtu))
+	if (!valid_opa_mtu(max_mtu))
 		max_mtu = HFI_DEFAULT_MAX_MTU;
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
