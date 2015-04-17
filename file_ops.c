@@ -383,7 +383,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 			}
 			sc_disable(sc);
 			ret = sc_enable(sc);
-			dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB,
+			hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB,
 				      uctxt->ctxt);
 		} else
 			ret = sc_restart(sc);
@@ -769,12 +769,12 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	 * Disable receive context and interrupt available, reset all
 	 * RcvCtxtCtrl bits to default values.
 	 */
-	dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS | QIB_RCVCTRL_TIDFLOW_DIS |
+	hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS | QIB_RCVCTRL_TIDFLOW_DIS |
 		      QIB_RCVCTRL_INTRAVAIL_DIS | QIB_RCVCTRL_ONE_PKT_EGR_DIS |
 		      QIB_RCVCTRL_NO_RHQ_DROP_DIS | QIB_RCVCTRL_NO_EGR_DROP_DIS,
 		      uctxt->ctxt);
 	/* Clear the context's J_KEY */
-	dd->f_clear_ctxt_jkey(dd, uctxt->ctxt);
+	hfi1_clear_ctxt_jkey(dd, uctxt->ctxt);
 	/*
 	 * Reset context integrity checks to default.
 	 * (writes to CSRs probably belong in wfr.c)
@@ -792,8 +792,8 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	uctxt->pionowait = 0;
 	uctxt->event_flags = 0;
 
-	dd->f_clear_tids(uctxt);
-	dd->f_clear_ctxt_pkey(dd, uctxt->ctxt);
+	hfi1_clear_tids(uctxt);
+	hfi1_clear_ctxt_pkey(dd, uctxt->ctxt);
 
 	if (uctxt->tid_pg_list)
 		unlock_exp_tids(uctxt);
@@ -1125,7 +1125,7 @@ static int user_init(struct file *fp)
 		qib_clear_rcvhdrtail(uctxt);
 
 	/* Setup J_KEY before enabling the context */
-	uctxt->dd->f_set_ctxt_jkey(uctxt->dd, uctxt->ctxt, uctxt->jkey);
+	hfi1_set_ctxt_jkey(uctxt->dd, uctxt->ctxt, uctxt->jkey);
 
 	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB;
 	if (HFI_CAP_KGET_MASK(uctxt->flags, HDRSUPP))
@@ -1143,7 +1143,7 @@ static int user_init(struct file *fp)
 		rcvctrl_ops |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
 	if (HFI_CAP_KGET_MASK(uctxt->flags, DMA_RTAIL))
 		rcvctrl_ops |= QIB_RCVCTRL_TAILUPD_ENB;
-	uctxt->dd->f_rcvctrl(uctxt->dd, rcvctrl_ops, uctxt->ctxt);
+	hfi1_rcvctrl(uctxt->dd, rcvctrl_ops, uctxt->ctxt);
 
 	/* Notify any waiting slaves */
 	if (uctxt->subctxt_cnt) {
@@ -1163,7 +1163,7 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 	struct hfi_filedata *fd = fp->private_data;
 	int ret = 0;
 
-	ret = uctxt->dd->f_get_base_info(uctxt, &cinfo);
+	ret = hfi1_get_base_kinfo(uctxt, &cinfo);
 	if (ret < 0)
 		goto done;
 	cinfo.num_active = qib_count_active_units();
@@ -1204,7 +1204,7 @@ static int setup_ctxt(struct file *fp)
 	 * is not requested or by the master process.
 	 */
 	if (!uctxt->subctxt_cnt || !subctxt_fp(fp)) {
-		ret = dd->f_init_ctxt(uctxt);
+		ret = hfi1_init_ctxt(uctxt);
 		if (ret)
 			goto done;
 
@@ -1382,7 +1382,7 @@ static unsigned int poll_next(struct file *fp,
 	spin_lock_irq(&dd->uctxt_lock);
 	if (hdrqempty(uctxt)) {
 		set_bit(QIB_CTXT_WAITING_RCV, &uctxt->event_flags);
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_ENB, uctxt->ctxt);
+		hfi1_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_ENB, uctxt->ctxt);
 		pollflag = 0;
 	} else
 		pollflag = POLLIN | POLLRDNORM;
@@ -1465,7 +1465,7 @@ static int manage_rcvq(struct qib_ctxtdata *uctxt, unsigned subctxt,
 		rcvctrl_op = QIB_RCVCTRL_CTXT_ENB;
 	} else
 		rcvctrl_op = QIB_RCVCTRL_CTXT_DIS;
-	dd->f_rcvctrl(dd, rcvctrl_op, uctxt->ctxt);
+	hfi1_rcvctrl(dd, rcvctrl_op, uctxt->ctxt);
 	/* always; new head should be equal to new tail; see above */
 bail:
 	return 0;
@@ -1716,7 +1716,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 				 */
 				/* XXX MITKO: better determine the order of the
 				 * TID */
-				dd->f_put_tid(dd, tid, PT_EXPECTED,
+				hfi1_put_tid(dd, tid, PT_EXPECTED,
 					      phys[pmapped],
 					      tidsize >> PAGE_SHIFT);
 				pair_size += tidsize >> PAGE_SHIFT;
@@ -1809,7 +1809,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 			for (i = 0; i < dd->rcv_entries.group_size;
 			     i++, tid++) {
 				if (pages[i]) {
-					dd->f_put_tid(dd, tid, PT_INVALID,
+					hfi1_put_tid(dd, tid, PT_INVALID,
 						      0, 0);
 					trace_hfi_exp_rcv_free(uctxt->ctxt,
 							       subctxt_fp(fp),
@@ -1875,7 +1875,7 @@ static int set_ctxt_pkey(struct qib_ctxtdata *uctxt, unsigned subctxt, u16 pkey)
 		}
 
 	if (intable)
-		ret = dd->f_set_ctxt_pkey(dd, uctxt->ctxt, pkey);
+		ret = hfi1_set_ctxt_pkey(dd, uctxt->ctxt, pkey);
 done:
 	return ret;
 }

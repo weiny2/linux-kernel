@@ -370,17 +370,17 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 
 static void set_link_width_enabled(struct qib_pportdata *ppd, u32 w)
 {
-	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LWID_ENB, w);
+	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LWID_ENB, w);
 }
 
 static void set_link_width_downgrade_enabled(struct qib_pportdata *ppd, u32 w)
 {
-	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LWID_DG_ENB, w);
+	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LWID_DG_ENB, w);
 }
 
 static void set_link_speed_enabled(struct qib_pportdata *ppd, u32 s)
 {
-	(void) ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_SPD_ENB, s);
+	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_SPD_ENB, s);
 }
 
 static int check_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
@@ -598,7 +598,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 #endif /* PI_LED_ENABLE_SUP */
 
 	pi->port_states.portphysstate_portstate =
-		(dd->f_ibphys_portstate(ppd) << 4) | state;
+		(hfi1_ibphys_portstate(ppd) << 4) | state;
 
 	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 
@@ -615,7 +615,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->neigh_mtu.pvlx_to_mtu[15/2] |= mtu;
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
 	pi->operational_vls =
-		hfi_num_vls(dd->f_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
+		hfi_num_vls(hfi1_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
 	pi->partenforce_filterraw |=
 		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
@@ -629,8 +629,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->vl.cap = hfi_num_vls(ppd->vls_supported);
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
-	pi->vl.arb_high_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
-	pi->vl.arb_low_cap = (u8)dd->f_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
+	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
+	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
 
@@ -1035,7 +1035,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT) >> 6;
 	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
-	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
+	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
 	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
@@ -1085,7 +1085,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		} else
-			(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS,
+			(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS,
 						vl_enum);
 	}
 
@@ -1216,7 +1216,7 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	if (changed) {
 		struct ib_event event;
 
-		(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
+		(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
 
 		event.event = IB_EVENT_PKEY_CHANGE;
 		event.device = &dd->verbs_dev.ibdev;
@@ -1522,7 +1522,6 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	u32 port_num = OPA_AM_PORTNUM(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	u32 lstate;
-	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	struct qib_ibport *ibp;
 	struct qib_pportdata *ppd;
 	struct opa_port_state_info *psi = (struct opa_port_state_info *) data;
@@ -1557,7 +1556,7 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 #endif /* PI_LED_ENABLE_SUP */
 
 	psi->port_states.portphysstate_portstate =
-		(dd->f_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
+		(hfi1_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
 	psi->link_width_downgrade_tx_active =
 	  ppd->link_width_downgrade_tx_active;
 	psi->link_width_downgrade_rx_active =
@@ -2222,7 +2221,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	/* rsp->port_rcv_switch_relay_errors is 0 for HFIs */
 
 	/* FIXME: Should this be included with the rest of the counters? */
-	dd->f_read_link_quality(dd, &rsp->link_quality_indicator);
+	hfi1_read_link_quality(dd, &rsp->link_quality_indicator);
 
 	rsp->vl_select_mask = cpu_to_be32(vl_select_mask);
 	rsp->port_xmit_data = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_FLITS,
@@ -2511,7 +2510,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	 * 'datacounters' queries (as opposed to 'portinfo' queries,
 	 * where it's a byte).
 	 */
-	dd->f_read_link_quality(dd, &lq);
+	hfi1_read_link_quality(dd, &lq);
 	rsp->link_quality_indicator = cpu_to_be32((u32)lq);
 
 	/* FIXME

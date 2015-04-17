@@ -1107,7 +1107,7 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 			atomic_inc(&qp->refcount);
 			/* counting: only call wantpiobuf_intr if first user */
 			if (was_empty)
-				dd->f_wantpiobuf_intr(sc, 1);
+				hfi1_sc_wantpiobuf_intr(sc, 1);
 		}
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;
@@ -1467,7 +1467,7 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->sm_sl = ibp->sm_sl;
 	/* OPA logical states match IB logical states */
 	props->state = driver_lstate(ppd);
-	props->phys_state = dd->f_ibphys_portstate(ppd);
+	props->phys_state = hfi1_ibphys_portstate(ppd);
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = QIB_GUIDS_PER_PORT;
 	props->max_msg_sz = 0x80000000;

@@ -152,7 +152,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			HFI_CAP_KGET(NODROP_RHQ_FULL) |
 			HFI_CAP_KGET(NODROP_EGR_FULL) |
 			HFI_CAP_KGET(DMA_RTAIL);
-		ret = dd->f_init_ctxt(rcd);
+		ret = hfi1_init_ctxt(rcd);
 		if (ret < 0) {
 			dd_dev_err(dd,
 				   "Failed to setup kernel receive context, failing\n");
@@ -592,7 +592,7 @@ static int init_after_reset(struct hfi_devdata *dd)
 	 * for the driver data structures, not chip registers.
 	 */
 	for (i = 0; i < dd->num_rcv_contexts; i++)
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
+		hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
 				  QIB_RCVCTRL_INTRAVAIL_DIS |
 				  QIB_RCVCTRL_TAILUPD_DIS, i);
 	pio_send_control(dd, PSC_GLOBAL_DISABLE);
@@ -624,7 +624,7 @@ static void enable_chip(struct hfi_devdata *dd)
 			rcvmask |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
 		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_EGR_FULL))
 			rcvmask |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
-		dd->f_rcvctrl(dd, rcvmask, i);
+		hfi1_rcvctrl(dd, rcvmask, i);
 		/* XXX (Mitko): Do we care about the result of this?
 		 * sc_enable() will display an error message. */
 		sc_enable(dd->rcd[i]->sc);
@@ -894,7 +894,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		for (i = 0; i < dd->num_rcv_contexts; i++)
-			dd->f_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
+			hfi1_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
 					  QIB_RCVCTRL_CTXT_DIS |
 					  QIB_RCVCTRL_INTRAVAIL_DIS |
 					  QIB_RCVCTRL_PKEY_DIS |
@@ -915,7 +915,6 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		dd->f_setextled(ppd, 0); /* make sure LEDs are off */
 
 		/* disable all contexts */
 		for (i = 0; i < dd->num_send_contexts; i++)
@@ -927,7 +926,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 		 * Clear SerdesEnable.
 		 * We can't count on interrupts since we are stopping.
 		 */
-		dd->f_quiet_serdes(ppd);
+		hfi1_quiet_serdes(ppd);
 
 		if (ppd->qib_wq) {
 			destroy_workqueue(ppd->qib_wq);
@@ -1113,10 +1112,9 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 				struct qib_pportdata *ppd;
 
 				ppd = dd->pport + pidx;
-				if (dd->flags & HFI_PRESENT) {
+				if (dd->flags & HFI_PRESENT)
 					set_link_state(ppd, HLS_DN_DISABLE);
-					dd->f_setextled(ppd, 0);
-				}
+
 				if (ppd->statusp)
 					*ppd->statusp &= ~HFI_STATUS_IB_READY;
 			}
@@ -1304,7 +1302,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 
 		tmp[ctxt] = NULL; /* debugging paranoia */
 		if (rcd) {
-			dd->f_clear_tids(rcd);
+			hfi1_clear_tids(rcd);
 			qib_free_ctxtdata(dd, rcd);
 		}
 	}
@@ -1327,15 +1325,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
  */
 static void qib_postinit_cleanup(struct hfi_devdata *dd)
 {
-	/*
-	 * Clean up chip-specific stuff.
-	 * We check for NULL here, because it's outside
-	 * the kregbase check, and we need to call it
-	 * after the free_irq.  Thus it's possible that
-	 * the function pointers were never initialized.
-	 */
-	if (dd->f_cleanup)
-		dd->f_cleanup(dd);
+	hfi1_start_cleanup(dd);
 
 	qib_pcie_ddcleanup(dd);
 	hfi_pcie_cleanup(dd->pcidev);
@@ -1406,7 +1396,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	case PCI_DEVICE_ID_INTEL_WFR0:
 	case PCI_DEVICE_ID_INTEL_WFR1:
 	case PCI_DEVICE_ID_INTEL_WFR2:
-		dd = qib_init_wfr_funcs(pdev, ent);
+		dd = hfi1_init_dd(pdev, ent);
 		break;
 	default:
 		qib_early_err(&pdev->dev,
@@ -1446,7 +1436,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		qib_stop_timers(dd);
 		flush_workqueue(ib_wq);
 		for (pidx = 0; pidx < dd->num_pports; ++pidx)
-			dd->f_quiet_serdes(dd->pport + pidx);
+			hfi1_quiet_serdes(dd->pport + pidx);
 		if (!j)
 			hfi_device_remove(dd);
 		if (!ret)
@@ -1745,7 +1735,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	}
 
 	for (idx = 0; idx < rcd->egrbufs.alloced; idx++) {
-		dd->f_put_tid(dd, rcd->eager_base + idx, PT_EAGER,
+		hfi1_put_tid(dd, rcd->eager_base + idx, PT_EAGER,
 			      rcd->egrbufs.rcvtids[idx].phys, order);
 		cond_resched();
 	}

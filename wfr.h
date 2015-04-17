@@ -1005,5 +1005,30 @@ enum {
 /* FIXME: End of CSR defines to be removed */
 
 u64 get_all_cpu_total(u64 __percpu *cntr);
+void hfi1_start_cleanup(struct hfi_devdata *dd);
+void hfi1_clear_tids(struct qib_ctxtdata *rcd);
+struct qib_message_header *hfi1_get_msgheader(
+				struct hfi_devdata *dd, __le32 *rhf_addr);
+int hfi1_get_base_kinfo(struct qib_ctxtdata *rcd,
+				  struct hfi_ctxt_info *kinfo);
+u64 hfi1_gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
+			u32 mask);
+int hfi1_init_ctxt(struct qib_ctxtdata *rcd);
+void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
+	     u32 type, unsigned long pa, u16 order);
+void hfi1_quiet_serdes(struct qib_pportdata *ppd);
+void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
+u32 hfi1_read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
+			      u64 **cntrp);
+u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
+				  char **namep, u64 **cntrp);
+u8 hfi1_ibphys_portstate(struct qib_pportdata *ppd);
+int hfi1_get_ib_cfg(struct qib_pportdata *ppd, int which);
+int hfi1_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val);
+int hfi1_set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey);
+int hfi1_clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt);
+int hfi1_set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey);
+int hfi1_clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt);
+void hfi1_read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
 #endif /* _WFR_H */
 

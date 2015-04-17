@@ -956,7 +956,6 @@ static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
 static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
 				u8 *device_rev);
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
-static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
 static void read_local_lni(struct hfi_devdata *dd, u8 *enable_lane_rx);
 static int read_tx_settings(struct hfi_devdata *dd, u8 *enable_lane_tx,
 				u8 *tx_polarity_inversion,
@@ -982,7 +981,6 @@ static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state);
 static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 				u64 *out_data);
 static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
-static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
 static int thermal_init(struct hfi_devdata *dd);
 
 static u32 read_physical_state(struct hfi_devdata *dd);
@@ -3078,7 +3076,7 @@ static void rxe_freeze(struct hfi_devdata *dd)
 
 	/* disable all receive contexts */
 	for (i = 0; i < dd->num_rcv_contexts; i++)
-		rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS, i);
+		hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS, i);
 }
 
 /*
@@ -3094,7 +3092,7 @@ static void rxe_kernel_unfreeze(struct hfi_devdata *dd)
 
 	/* enable all kernel contexts */
 	for (i = 0; i < dd->n_krcv_queues; i++)
-		rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB, i);
+		hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB, i);
 
 	/* enable port */
 	reg = read_csr(dd, WFR_RCV_CTRL);
@@ -3314,7 +3312,7 @@ static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
 		dd_dev_err(dd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
 			   __func__, ppd->pkeys[2], WFR_FULL_MGMT_P_KEY);
 	ppd->pkeys[2] = WFR_FULL_MGMT_P_KEY;
-	(void) dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
+	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
 }
 
 /*
@@ -3522,7 +3520,7 @@ void handle_verify_cap(struct work_struct *work)
 	 * LNI, is also be available at this point.
 	 */
 	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
-	read_link_quality(dd, &ppd->link_quality);
+	hfi1_read_link_quality(dd, &ppd->link_quality);
 	/* print the active widths */
 	get_link_widths(dd, &active_tx, &active_rx);
 	dd_dev_info(dd,
@@ -4749,7 +4747,7 @@ static void read_last_remote_state(struct hfi_devdata *dd, u32 *lrs)
 	read_8051_config(dd, LAST_REMOTE_STATE_COMPLETE, GENERAL_CONFIG, lrs);
 }
 
-static void read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
+void hfi1_read_link_quality(struct hfi_devdata *dd, u8 *link_quality)
 {
 	u32 frame;
 
@@ -5513,7 +5511,7 @@ int bringup_serdes(struct qib_pportdata *ppd)
 	return start_link(ppd);
 }
 
-static void quiet_serdes(struct qib_pportdata *ppd)
+void hfi1_quiet_serdes(struct qib_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
@@ -5539,29 +5537,6 @@ static void quiet_serdes(struct qib_pportdata *ppd)
 	write_csr(dd, WFR_RCV_CTRL, reg);
 }
 
-static void setextled(struct qib_pportdata *ppd, u32 on)
-{
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-}
-
-static inline void reset_cpu_counters(struct hfi_devdata *dd)
-{
-	struct qib_pportdata *ppd;
-	int i;
-
-	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
-
-	ppd = (struct qib_pportdata *)(dd + 1);
-	for (i = 0; i < dd->num_pports; i++, ppd++) {
-		ppd->ibport_data.z_rc_acks =
-			get_all_cpu_total(ppd->ibport_data.rc_acks);
-		ppd->ibport_data.z_rc_qacks =
-			get_all_cpu_total(ppd->ibport_data.rc_qacks);
-	}
-
-}
-
 static inline int init_cpu_counters(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd;
@@ -5581,16 +5556,6 @@ static inline int init_cpu_counters(struct hfi_devdata *dd)
 	return 0;
 }
 
-static int reset(struct hfi_devdata *dd)
-{
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(dd, "%s: not implemented\n", __func__);
-
-	reset_cpu_counters(dd);
-
-	return 0;
-}
-
 static int trace_tid;	/* TODO: hook this up with tracing */
 static const char * const pt_names[] = {
 	"expected",
@@ -5606,8 +5571,8 @@ static const char *pt_name(u32 type)
 /*
  * index is the index into the receive array
  */
-static void put_tid(struct hfi_devdata *dd, u32 index,
-		    u32 type, unsigned long pa, u16 order)
+void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
+	     u32 type, unsigned long pa, u16 order)
 {
 	u64 reg;
 	void __iomem *base = (dd->rcvarray_wc ? dd->rcvarray_wc :
@@ -5647,7 +5612,7 @@ done:
 	return;
 }
 
-static void clear_tids(struct qib_ctxtdata *rcd)
+void hfi1_clear_tids(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u32 i;
@@ -5655,14 +5620,14 @@ static void clear_tids(struct qib_ctxtdata *rcd)
 	/* this could be optimized */
 	for (i = rcd->eager_base; i < rcd->eager_base +
 		     rcd->egrbufs.alloced; i++)
-		put_tid(dd, i, PT_INVALID, 0, 0);
+		hfi1_put_tid(dd, i, PT_INVALID, 0, 0);
 
 	for (i = rcd->expected_base;
 			i < rcd->expected_base + rcd->expected_count; i++)
-		put_tid(dd, i, PT_INVALID, 0, 0);
+		hfi1_put_tid(dd, i, PT_INVALID, 0, 0);
 }
 
-static int get_base_info(struct qib_ctxtdata *rcd,
+int hfi1_get_base_kinfo(struct qib_ctxtdata *rcd,
 				  struct hfi_ctxt_info *kinfo)
 {
 	kinfo->runtime_flags = (HFI_MISC_GET() << HFI_CAP_USER_SHIFT) |
@@ -5670,7 +5635,7 @@ static int get_base_info(struct qib_ctxtdata *rcd,
 	return 0;
 }
 
-static struct qib_message_header *get_msgheader(
+struct qib_message_header *hfi1_get_msgheader(
 				struct hfi_devdata *dd, __le32 *rhf_addr)
 {
 	u32 offset = rhf_hdrq_offset(rhf_to_cpu(rhf_addr));
@@ -5711,7 +5676,7 @@ static const char *ib_cfg_name(int which)
 	return ib_cfg_name_strings[which];
 }
 
-static int get_ib_cfg(struct qib_pportdata *ppd, int which)
+int hfi1_get_ib_cfg(struct qib_pportdata *ppd, int which)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int val = 0;
@@ -6341,7 +6306,7 @@ done:
 	return ret;
 }
 
-static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
+int hfi1_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 {
 	u64 reg;
 	int ret = 0;
@@ -6428,13 +6393,6 @@ static int set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
 		break;
 	}
 	return ret;
-}
-
-static int set_ib_loopback(struct qib_pportdata *ppd, const char *what)
-{
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-	return 0;
 }
 
 static void get_vl_weights(struct hfi_devdata *dd, u32 target,
@@ -7269,7 +7227,7 @@ static u32 encoded_size(u32 size)
 	return 0x1;	/* if invalid, go with the minimum size */
 }
 
-static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
+void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
 	struct qib_ctxtdata *rcd;
 	u64 rcvctrl, reg;
@@ -7426,7 +7384,7 @@ static void rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_TAIL_ADDR, 0);
 }
 
-static u32 read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
+u32 hfi1_read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp)
 {
 	int ret;
@@ -7491,7 +7449,7 @@ static u32 read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 /*
  * Used by sys fs to create files for hfi stats to read
  */
-static u32 read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
+u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 				  char **namep, u64 **cntrp)
 {
 	int ret;
@@ -8024,11 +7982,6 @@ bail:
 	return -ENOMEM;
 }
 
-static void xgxs_reset(struct qib_pportdata *ppd)
-{
-	if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
-		dd_dev_info(ppd->dd, "%s: not implemented\n", __func__);
-}
 
 static u32 chip_to_opa_lstate(struct hfi_devdata *dd, u32 chip_lstate)
 {
@@ -8178,7 +8131,7 @@ static int wait_logical_linkstate(struct qib_pportdata *ppd, u32 state,
 	return -ETIMEDOUT;
 }
 
-static u8 ibphys_portstate(struct qib_pportdata *ppd)
+u8 hfi1_ibphys_portstate(struct qib_pportdata *ppd)
 {
 	static u32 remembered_state = 0xff;
 	u32 pstate;
@@ -8204,7 +8157,7 @@ static u8 ibphys_portstate(struct qib_pportdata *ppd)
  *      I2CCLK  (bit 0)
  *      I2CDATA (bit 1)
  */
-static u64 gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
+u64 hfi1_gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 			u32 mask)
 {
 	u64 qsfp_oe, target_oe;
@@ -8233,7 +8186,7 @@ static u64 gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 #define SET_STATIC_RATE_CONTROL_SMASK(r) \
 (r |= WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
 
-static int init_ctxt(struct qib_ctxtdata *rcd)
+int hfi1_init_ctxt(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	int ret = 0;
@@ -8255,7 +8208,7 @@ static int init_ctxt(struct qib_ctxtdata *rcd)
 	return ret;
 }
 
-static int tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp)
+int hfi1_tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp)
 {
 	int ret = 0;
 	u64 reg;
@@ -8727,39 +8680,6 @@ static int set_up_interrupts(struct hfi_devdata *dd)
 fail:
 	clean_up_interrupts(dd);
 	return ret;
-}
-
-/*
- * Called from verify_interrupt() when it has detected that we have received
- * no interrupts.
- *
- * NOTE: The IRQ releases in clean_up_interrupts() require non-interrupt
- * context.  This means we can't be called from inside a timer function.
- */
-static int intr_fallback(struct hfi_devdata *dd)
-{
-/*
- * TODO: remove #if when the simulation supports interrupts.
- * NOTE: the simulated HW does not support INTx yet, so we may want to
- *  keep the #if until then.
- */
-#if 0
-	if (dd->num_msix_entries == 0) {
-		/* already using INTx.  Return a failure */
-		 return 0;
-	}
-	/* clean our current set-up */
-	clean_up_interrupts(dd);
-	/* reset back to chip default */
-	reset_interrupts(dd);
-	/* set up INTx irq */
-	request_intx_irq(dd);
-	/* try again */
-	return 1;
-#else
-	this_cpu_inc(*dd->int_counter);
-	return 1;
-#endif
 }
 
 /*
@@ -9894,7 +9814,7 @@ static void init_txe(struct hfi_devdata *dd)
 	assign_local_cm_au_table(dd, dd->vcu);
 }
 
-static int set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
+int hfi1_set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 {
 	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
 	unsigned sctxt;
@@ -9932,7 +9852,7 @@ done:
 	return ret;
 }
 
-static int clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
+int hfi1_clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
 {
 	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
 	unsigned sctxt;
@@ -9961,7 +9881,7 @@ done:
 	return ret;
 }
 
-static int set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
+int hfi1_set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
 {
 	struct qib_ctxtdata *rcd;
 	unsigned sctxt;
@@ -9989,7 +9909,7 @@ done:
 	return ret;
 }
 
-static int clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
+int hfi1_clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
 {
 	struct qib_ctxtdata *rcd;
 	unsigned sctxt;
@@ -10016,19 +9936,10 @@ done:
 }
 
 /*
- * Clean up stuff initialized in qib_init_wfr_funcs() - mostly.
- * TODO: Cleanup of stuff done in qib_init_wfr_funcs() gets done elsewhere,
- * so we have an asymmetric cleanup.
- *
- * This is f_cleanup
- * TODO:
- * - Remove indirect call
- * - rename to chip_cleanup() or asic_cleanup()
- * - rename qib_init_wfr_funcs() to chip_init() or asic_init()
- *
- * called from qib_postinit_cleanup()
+ * Start doing the clean up the the chip. Our clean up happens in multiple
+ * stages and this is just the first.
  */
-static void cleanup(struct hfi_devdata *dd)
+void hfi1_start_cleanup(struct hfi_devdata *dd)
 {
 	free_cntrs(dd);
 	free_rcverr(dd);
@@ -10036,7 +9947,7 @@ static void cleanup(struct hfi_devdata *dd)
 }
 
 /**
- * qib_init_wfr_funcs - set up the chip-specific function pointers
+ * Allocate an initialize the device structure for the hfi.
  * @dev: the pci_dev for qlogic_ib device
  * @ent: pci_device_id struct for this dev
  *
@@ -10046,7 +9957,7 @@ static void cleanup(struct hfi_devdata *dd)
  * This is global, and is called directly at init to set up the
  * chip-specific function pointers for later use.
  */
-struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
+struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 					   const struct pci_device_id *ent)
 {
 	struct hfi_devdata *dd;
@@ -10124,36 +10035,6 @@ struct hfi_devdata *qib_init_wfr_funcs(struct pci_dev *pdev,
 		ppd->host_link_state = HLS_DN_OFFLINE;
 	}
 
-	dd->f_cleanup           = cleanup;
-	dd->f_clear_tids        = clear_tids;
-	dd->f_get_base_info     = get_base_info;
-	dd->f_get_msgheader     = get_msgheader;
-	dd->f_gpio_mod          = gpio_mod;
-	dd->f_init_ctxt         = init_ctxt;
-	dd->f_intr_fallback     = intr_fallback;
-	dd->f_put_tid           = put_tid;
-	dd->f_quiet_serdes      = quiet_serdes;
-	dd->f_rcvctrl           = rcvctrl;
-	dd->f_read_cntrs        = read_cntrs;
-	dd->f_read_portcntrs    = read_portcntrs;
-	dd->f_reset             = reset;
-	dd->f_ibphys_portstate  = ibphys_portstate;
-	dd->f_get_ib_cfg        = get_ib_cfg;
-	dd->f_set_ib_cfg        = set_ib_cfg;
-	dd->f_set_ib_loopback   = set_ib_loopback;
-	dd->f_setextled         = setextled;
-	dd->f_wantpiobuf_intr   = sc_wantpiobuf_intr;
-	dd->f_xgxs_reset        = xgxs_reset;
-	dd->f_tempsense_rd	= tempsense_rd;
-	dd->f_set_ctxt_jkey     = set_ctxt_jkey;
-	dd->f_clear_ctxt_jkey   = clear_ctxt_jkey;
-	dd->f_set_ctxt_pkey     = set_ctxt_pkey;
-	dd->f_clear_ctxt_pkey   = clear_ctxt_pkey;
-	dd->f_read_link_quality	= read_link_quality;
-
-	/*
-	 * Set other early dd values.
-	 */
 	dd->link_default = HLS_DN_POLL;
 
 	/*

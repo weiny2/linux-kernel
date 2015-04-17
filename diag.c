@@ -1580,7 +1580,7 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				ret = -EINVAL;
 				break;
 			}
-			value = dd->f_ibphys_portstate(ppd);
+			value = hfi1_ibphys_portstate(ppd);
 			value <<= 4;
 			value |= driver_lstate(ppd);
 

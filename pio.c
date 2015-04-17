@@ -1433,7 +1433,7 @@ void sc_del_credit_return_intr(struct send_context *sc)
  * The caller must be careful when calling this.  All needint calls
  * must be paried with !needint.
  */
-void sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
+void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 {
 	if (needint)
 		sc_add_credit_return_intr(sc);
@@ -1490,7 +1490,7 @@ static void sc_piobufavail(struct send_context *sc)
 	 * are now all gone.
 	 */
 	if (n)
-		dd->f_wantpiobuf_intr(sc, 0);
+		hfi1_sc_wantpiobuf_intr(sc, 0);
 full:
 	spin_unlock_irqrestore(&dev->pending_lock, flags);
 

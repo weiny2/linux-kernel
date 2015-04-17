@@ -578,7 +578,7 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	}
 
 	for (last = 0, i = 1; !last; i += !last) {
-		hdr = dd->f_get_msgheader(dd, rhf_addr);
+		hdr = hfi1_get_msgheader(dd, rhf_addr);
 		hlen = (u8 *)rhf_addr - (u8 *)hdr;
 		etype = rhf_rcv_type(rhf);
 		/* total length */
@@ -777,7 +777,7 @@ int set_mtu(struct qib_pportdata *ppd)
 		goto err;
 	}
 
-	ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
+	hfi1_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
 
 	if (drain)
 		open_fill_data_vls(dd); /* reopen all VLs */
@@ -794,7 +794,7 @@ int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
 
 	ppd->lid = lid;
 	ppd->lmc = lmc;
-	dd->f_set_ib_cfg(ppd, QIB_IB_CFG_LIDLMC, 0);
+	hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LIDLMC, 0);
 
 	dd_dev_info(dd, "IB%u:%u got a lid: 0x%x\n", dd->unit, ppd->port, lid);
 
@@ -827,7 +827,6 @@ static void qib_run_led_override(unsigned long opaque)
 	ppd->led_override = ppd->led_override_vals[ph_idx];
 	timeoff = ppd->led_override_timeoff;
 
-	dd->f_setextled(ppd, 1);
 	/*
 	 * don't re-fire the timer if user asked for it to be off; we let
 	 * it fire one more time after they turn it off to simplify
@@ -931,16 +930,14 @@ int qib_reset_device(int unit)
 
 		/* Shut off LEDs after we are sure timer is not running */
 		ppd->led_override = LED_OVER_BOTH_OFF;
-		dd->f_setextled(ppd, 0);
 	}
 	if (dd->flags & HFI_HAS_SEND_DMA)
 		sdma_exit(dd);
 
-	ret = dd->f_reset(dd);
-	if (ret == 1)
-		ret = qib_init(dd, 1);
-	else
-		ret = -EAGAIN;
+	hfi1_reset_cpu_counters(dd);
+
+	ret = qib_init(dd, 1);
+
 	if (ret)
 		dd_dev_err(dd,
 			"Reinitialize unit %u after reset failed with %d\n",

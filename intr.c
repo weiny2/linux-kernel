@@ -180,7 +180,7 @@ void handle_user_interrupt(struct qib_ctxtdata *rcd)
 
 	if (test_and_clear_bit(QIB_CTXT_WAITING_RCV, &rcd->event_flags)) {
 		wake_up_interruptible(&rcd->wait);
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_DIS, rcd->ctxt);
+		hfi1_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_DIS, rcd->ctxt);
 	} else if (test_and_clear_bit(QIB_CTXT_WAITING_URG,
 							&rcd->event_flags)) {
 		rcd->urgent++;

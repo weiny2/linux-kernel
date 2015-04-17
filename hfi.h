@@ -794,51 +794,6 @@ struct hfi_devdata {
 
 	u32 lcb_access_count;		/* count of LCB users */
 
-	/* device-specific implementations of functions needed by
-	 * common code. Contrary to previous consensus, we can't
-	 * really just point to a device-specific table, because we
-	 * may need to "bend", e.g. *_f_put_tid
-	 */
-	/* fallback to alternate interrupt type if possible */
-	int (*f_intr_fallback)(struct hfi_devdata *);
-	/* hard reset chip */
-	int (*f_reset)(struct hfi_devdata *);
-	void (*f_quiet_serdes)(struct qib_pportdata *);
-	int (*f_bringup_serdes)(struct qib_pportdata *);
-	int (*f_early_init)(struct hfi_devdata *);
-	void (*f_clear_tids)(struct qib_ctxtdata *);
-	void (*f_put_tid)(struct hfi_devdata *, u32, u32, unsigned long, u16);
-	void (*f_cleanup)(struct hfi_devdata *);
-	void (*f_setextled)(struct qib_pportdata *, u32);
-	/* fill out chip-specific fields */
-	int (*f_get_base_info)(struct qib_ctxtdata *, struct hfi_ctxt_info *);
-	struct qib_message_header *(*f_get_msgheader)
-					(struct hfi_devdata *, __le32 *);
-	void (*f_config_ctxts)(struct hfi_devdata *);
-	int (*f_get_ib_cfg)(struct qib_pportdata *, int);
-	int (*f_set_ib_cfg)(struct qib_pportdata *, int, u32);
-	int (*f_set_ib_loopback)(struct qib_pportdata *, const char *);
-	u8 (*f_ibphys_portstate)(struct qib_pportdata *);
-	void (*f_xgxs_reset)(struct qib_pportdata *);
-	/* Read/modify/write of GPIO pins (potentially chip-specific */
-	u64 (*f_gpio_mod)(struct hfi_devdata *dd, u32 target, u32 out, u32 dir,
-		u32 mask);
-	/* modify receive context registers, see RCVCTRL_* for operations */
-	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int context);
-	void (*f_wantpiobuf_intr)(struct send_context *, u32);
-	u64 (*f_portcntr)(struct qib_pportdata *, u32);
-	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
-		u64 **);
-	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
-		char **, u64 **);
-	int (*f_init_ctxt)(struct qib_ctxtdata *);
-	int (*f_tempsense_rd)(struct hfi_devdata *, struct hfi_temp *);
-	int (*f_set_ctxt_jkey)(struct hfi_devdata *, unsigned, u16);
-	int (*f_clear_ctxt_jkey)(struct hfi_devdata *, unsigned);
-	int (*f_set_ctxt_pkey)(struct hfi_devdata *, unsigned, u16);
-	int (*f_clear_ctxt_pkey)(struct hfi_devdata *, unsigned);
-	void (*f_read_link_quality)(struct hfi_devdata *, u8*);
-
 	char *boardname; /* human readable board info */
 
 	/* number of registers used for pioavail */
@@ -1398,9 +1353,8 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 
 /* free up any allocated data at closes */
 void qib_free_data(struct qib_ctxtdata *dd);
-struct hfi_devdata *qib_init_wfr_funcs(
-	struct pci_dev *,
-	const struct pci_device_id *);
+struct hfi_devdata *hfi1_init_dd(struct pci_dev *,
+				 const struct pci_device_id *);
 void qib_free_devdata(struct hfi_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
 struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
@@ -1712,5 +1666,24 @@ void qib_format_hwerrors(u64 hwerrs,
 #define WFR_USER_OPCODE_CHECK_MASK 0xC0
 #define WFR_OPCODE_CHECK_VAL_DISABLED 0x0
 #define WFR_OPCODE_CHECK_MASK_DISABLED 0x0
+
+static inline void hfi1_reset_cpu_counters(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
+
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		ppd->ibport_data.z_rc_acks =
+			get_all_cpu_total(ppd->ibport_data.rc_acks);
+		ppd->ibport_data.z_rc_qacks =
+			get_all_cpu_total(ppd->ibport_data.rc_qacks);
+	}
+}
+
+int hfi1_tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp);
+
 
 #endif                          /* _QIB_KERNEL_H */
