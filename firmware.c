@@ -442,8 +442,8 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 			fdet->firmware_len = fdet->fw->size -
 						sizeof(struct firmware_file);
 			/*
-			 * TODO: header does not include r2 and mu -
-			 * generate here.  For now, fail if validating.
+			 * Header does not include r2 and mu - generate here.
+			 * For now, fail if validating.
 			 */
 			if (fw_validate) {
 				dd_dev_err(dd, "driver is unable to validate firmware without r2 and mu (not in firmware file)\n");
@@ -860,15 +860,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 */
 	ret = wait_fm_ready(dd, TIMEOUT_8051_START);
 	if (ret) { /* timed out */
-		/*
-		 * TODO: the functional simulator stopped doing this
-		 * correctly in the v28-v34 timeframe.
-		 */
-		if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
-			dd_dev_info(dd, "8051 start timed out (ignored)\n");
-			return 0;
-		}
-
 		dd_dev_err(dd, "8051 start timeout, current state 0x%x\n",
 			get_firmware_state(dd));
 		return -ETIMEDOUT;

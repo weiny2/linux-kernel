@@ -5,7 +5,6 @@
 driver=/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-driver
 psm=/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-psm
 diags=/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-diagtools-sw
-openmpi=/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-openmpi
 
 yum_server=phlsvlogin02.ph.intel.com
 yum_dir=/nfs/site/proj/ftp/wfr_yum/next
@@ -63,7 +62,7 @@ cd $driver
 rm -f *.tgz
 make dist
 driver_drop=`ls *.tgz | awk 'BEGIN { FS="-"} ; { print $2 }' | awk 'BEGIN { FS="." } ; {print $1 "." $2}'`
-rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi-$driver_drop.tgz | tee .driver.build
+rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-$driver_drop.tgz | tee .driver.build
 if [ $? -ne 0 ]; then
 	echo "Build failed see .driver.build"
 	exit 1
@@ -79,7 +78,7 @@ for i in $(grep x86_64.rpm .driver.build | awk '{print $2}'); do
 done
 
 # Need to patch up driver version
-driver_drop=`grep Wrote .driver.build | grep hfi-devel | awk 'BEGIN { FS="x86_64/" } ; {print $2}' | awk 'BEGIN { FS="-" } ; { print $3 "-" $4}' | awk 'BEGIN {FS="."} ; {print $1 "." $2}'`
+driver_drop=`grep Wrote .driver.build | grep hfi1-devel | awk 'BEGIN { FS="x86_64/" } ; {print $2}' | awk 'BEGIN { FS="-" } ; { print $3 "-" $4}' | awk 'BEGIN {FS="."} ; {print $1 "." $2}'`
 
 #echo "Building PSM"
 echo "------------"
@@ -87,7 +86,7 @@ cd $psm
 rm -f *.tar.gz
 make dist
 psm_drop=`ls *.tar.gz  | awk 'BEGIN { FS="-"} ; { print $3 "-" $4 }' | awk 'BEGIN { FS="." } ; {print $1 "." $2}'`
-rpmbuild -ta hfi-psm-$psm_drop.tar.gz | tee .psm.build
+rpmbuild -ta hfi1-psm-$psm_drop.tar.gz | tee .psm.build
 if [ $? -ne 0 ]; then
 	echo "Build failed see .psm.build"
 	exit 1
@@ -106,20 +105,20 @@ echo "------------"
 cd $diags
 rm -f *.tar.gz
 make dist
-diags_drop=`ls hfi-utils*.tar.gz  | awk 'BEGIN { FS="-"} ; { print $3 "-" $4 }' | awk 'BEGIN { FS="." } ; {print $1 "." $2}'`
-rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi-diagtools-sw-$diags_drop.tar.gz | tee .diags.ship
+diags_drop=`ls hfi1-utils*.tar.gz  | awk 'BEGIN { FS="-"} ; { print $3 "-" $4 }' | awk 'BEGIN { FS="." } ; {print $1 "." $2}'`
+rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-diagtools-sw-$diags_drop.tar.gz | tee .diags.ship
 if [ $? -ne 0 ]; then
 	echo "Build failed see .diags.ship"
 	exit 1
 fi
 
-rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi-diagtools-sw-noship-$diags_drop.tar.gz | tee .diags.noship
+rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-diagtools-sw-noship-$diags_drop.tar.gz | tee .diags.noship
 if [ $? -ne 0 ]; then
 	echo "Build failed see .diags.noship"
 	exit 1
 fi
 
-rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi-utils-$diags_drop.tar.gz | tee .diags.utils
+rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-utils-$diags_drop.tar.gz | tee .diags.utils
 if [ $? -ne 0 ]; then
 	echo "Build failed see .diags.utils"
 	exit 1

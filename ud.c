@@ -514,7 +514,7 @@ void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
 
 /*
  * opa_smp_check() - Do the regular pkey checking, and the additional
- * checks for SMPs specified in STLv1 rev 0.90, section 9.10.26
+ * checks for SMPs specified in OPAv1 rev 0.90, section 9.10.26
  * ("SMA Packet Checks").
  *
  * Note that:

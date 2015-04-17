@@ -272,6 +272,10 @@ struct hfi_packet_filter_command {
 	void *value_ptr;
 };
 
+/* Can't re-use PKT_DIR_*GRESS here because 0 means no packets for this */
+#define HFI_SNOOP_INGRESS 0x1
+#define HFI_SNOOP_EGRESS  0x2
+
 enum hfi_packet_filter_opcodes {
 	FILTER_BY_LID,
 	FILTER_BY_DLID,
@@ -279,7 +283,8 @@ enum hfi_packet_filter_opcodes {
 	FILTER_BY_QP_NUMBER,
 	FILTER_BY_PKT_TYPE,
 	FILTER_BY_SERVICE_LEVEL,
-	FILTER_BY_PKEY
+	FILTER_BY_PKEY,
+	FILTER_BY_DIRECTION,
 };
 
 static const struct file_operations snoop_file_ops = {
@@ -306,6 +311,7 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 static int hfi_filter_ib_service_level(void *ibhdr, void *packet_data,
 				       void *value);
 static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value);
+static int hfi_filter_direction(void *ibhdr, void *packet_data, void *value);
 
 static struct hfi_filter_array hfi_filters[] = {
 	{ hfi_filter_lid },
@@ -314,7 +320,8 @@ static struct hfi_filter_array hfi_filters[] = {
 	{ hfi_filter_qp_number },
 	{ hfi_filter_ibpacket_type },
 	{ hfi_filter_ib_service_level },
-	{ hfi_filter_ib_pkey }
+	{ hfi_filter_ib_pkey },
+	{ hfi_filter_direction },
 };
 
 #define HFI_MAX_FILTERS	ARRAY_SIZE(hfi_filters)
@@ -660,8 +667,11 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 		ret = -EINVAL;
 		goto bail;
 	}
-	/* TODO: check for enabled?  Or should that be in the buffer
-	   allocator? */
+	/* must be enabled */
+	if (!(sc->flags & SCF_ENABLED)) {
+		ret = -EINVAL;
+		goto bail;
+	}
 
 	/* allocate a buffer and copy the data in */
 	tmpbuf = vmalloc(dp->len);
@@ -1062,6 +1072,7 @@ static void dump_ioctl_table(void)
 	pr_alert("Packet Type %d\n", FILTER_BY_PKT_TYPE);
 	pr_alert("Service Level %d\n", FILTER_BY_SERVICE_LEVEL);
 	pr_alert("PKey %d\n", FILTER_BY_PKEY);
+	pr_alert("Direction %d\n", FILTER_BY_DIRECTION);
 }
 #endif
 
@@ -1106,13 +1117,7 @@ static void adjust_integrity_checks(struct hfi_devdata *dd, int restore)
 {
 	struct send_context *sc;
 	unsigned long sc_flags;
-	u64 reg;
-	u64 mask;
 	int i;
-
-	/* nothing to do if no integrity checks */
-	if (HFI_CAP_IS_KSET(NO_INTEGRITY))
-		return;
 
 	spin_lock_irqsave(&dd->sc_lock, sc_flags);
 	for (i = 0; i < dd->num_send_contexts; i++) {
@@ -1121,15 +1126,7 @@ static void adjust_integrity_checks(struct hfi_devdata *dd, int restore)
 		if (!sc)
 			continue;	/* not allocated */
 
-		mask = hfi_pkt_default_send_ctxt_mask(dd, sc->type);
-		reg = read_kctxt_csr(dd, sc->hw_context,
-					WFR_SEND_CTXT_CHECK_ENABLE);
-		if (restore)
-			reg |= mask;
-		else
-			reg &= ~mask;
-		write_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_CHECK_ENABLE,
-				reg);
+		set_pio_integrity(sc);
 	}
 	spin_unlock_irqrestore(&dd->sc_lock, sc_flags);
 }
@@ -1591,9 +1588,9 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				ret = -EINVAL;
 				break;
 			}
-			value = dd->f_ibphys_portstate(ppd);
+			value = hfi1_ibphys_portstate(ppd);
 			value <<= 4;
-			value |= dd->f_iblink_state(ppd);
+			value |= driver_lstate(ppd);
 
 			snoop_dbg("Link port | Link State: %d\n", value);
 
@@ -1709,21 +1706,26 @@ static void qib_snoop_list_add_tail(struct snoop_packet *packet,
 	wake_up_interruptible(&dd->hfi_snoop.waitq);
 }
 
-#define HFI_FILTER_CHECK(val, msg)					\
-do {									\
-	if (val == NULL) {						\
-		snoop_dbg("Error invalid " msg " value for filter\n");	\
-		return HFI_FILTER_ERR;					\
-	}								\
-} while (0)
+static inline int hfi_filter_check(void *val, const char *msg)
+{
+	if (!val) {
+		snoop_dbg("Error invalid %s value for filter\n", msg);
+		return HFI_FILTER_ERR;
+	}
+	return 0;
+}
 
 static int hfi_filter_lid(void *ibhdr, void *packet_data, void *value)
 {
 	struct qib_ib_header *hdr;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
-
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 	hdr = (struct qib_ib_header *)ibhdr;
 
 	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[3])) /* matches slid */
@@ -1735,9 +1737,14 @@ static int hfi_filter_lid(void *ibhdr, void *packet_data, void *value)
 static int hfi_filter_dlid(void *ibhdr, void *packet_data, void *value)
 {
 	struct qib_ib_header *hdr;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1755,10 +1762,17 @@ static int hfi_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 	struct qib_other_headers *ohdr = NULL;
 	struct ib_smp *smp = NULL;
 	u32 qpn = 0;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(packet_data, "packet_data");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(packet_data, "packet_data");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1784,9 +1798,14 @@ static int hfi_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 
 	struct qib_ib_header *hdr;
 	struct qib_other_headers *ohdr = NULL;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1808,9 +1827,14 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 	u8 opcode = 0;
 	struct qib_ib_header *hdr;
 	struct qib_other_headers *ohdr = NULL;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1835,9 +1859,14 @@ static int hfi_filter_ib_service_level(void *ibhdr, void *packet_data,
 					   void *value)
 {
 	struct qib_ib_header *hdr;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1853,9 +1882,14 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	u32 lnh = 0;
 	struct qib_ib_header *hdr;
 	struct qib_other_headers *ohdr = NULL;
+	int ret;
 
-	HFI_FILTER_CHECK(ibhdr, "header");
-	HFI_FILTER_CHECK(value, "user");
+	ret = hfi_filter_check(ibhdr, "header");
+	if (ret)
+		return ret;
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
 
 	hdr = (struct qib_ib_header *)ibhdr;
 
@@ -1878,6 +1912,32 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	if ((*(u16 *)value & 0x7FFF) ==
 		((be32_to_cpu(ohdr->bth[0])) & 0x7FFF))
 		return HFI_FILTER_HIT;
+
+	return HFI_FILTER_MISS;
+}
+
+/*
+ * If packet_data is NULL then this is coming from one of the send functions.
+ * Thus we know if its an ingressed or egressed packet.
+ */
+static int hfi_filter_direction(void *ibhdr, void *packet_data, void *value)
+{
+	u8 user_dir = *(u8 *)value;
+	int ret;
+
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
+
+	if (packet_data) {
+		/* Incoming packet */
+		if (user_dir & HFI_SNOOP_INGRESS)
+			return HFI_FILTER_HIT;
+	} else {
+		/* Outgoing packet */
+		if (user_dir & HFI_SNOOP_EGRESS)
+			return HFI_FILTER_HIT;
+	}
 
 	return HFI_FILTER_MISS;
 }

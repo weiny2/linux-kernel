@@ -37,7 +37,7 @@
 #define QSFP_PWR_LAG_MSEC 2000
 #define QSFP_MODPRS_LAG_MSEC 20
 /* 128 byte pages, per SFF 8636 rev 2.4 */
-#define QSFP_MAX_NUM_PAGES	4
+#define QSFP_MAX_NUM_PAGES	5
 
 /*
  * Below are masks for QSFP pins.  Pins are the same for HFI0 and HFI1.

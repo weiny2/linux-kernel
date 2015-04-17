@@ -81,17 +81,6 @@ MODULE_PARM_DESC(krcvqs, "Array of the number of kernel receive queues by VL");
 /* computed based on above array */
 unsigned n_krcvqs;
 
-/* TODO: temporary code for missing interrupts, HSD 291041 */
-uint fifo_check;	/* off by default */
-module_param(fifo_check, uint, S_IRUGO);
-MODULE_PARM_DESC(fifo_check, "Check for stalled receive FIFOs every N milliseconds (set to 0 to disable)");
-
-/* TODO: temporary code for missing interrupts, HSD 291041 */
-/* hack: export this counter as a parameter for easy viewing */
-uint fifo_stalled_count;
-module_param(fifo_stalled_count, uint, S_IRUGO);
-MODULE_PARM_DESC(fifo_stalled_count, "How many times have the receive FIFOs been stalled?");
-
 /* interrupt testing */
 static unsigned int test_interrupts;
 module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
@@ -163,7 +152,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			HFI_CAP_KGET(NODROP_RHQ_FULL) |
 			HFI_CAP_KGET(NODROP_EGR_FULL) |
 			HFI_CAP_KGET(DMA_RTAIL);
-		ret = dd->f_init_ctxt(rcd);
+		ret = hfi1_init_ctxt(rcd);
 		if (ret < 0) {
 			dd_dev_err(dd,
 				   "Failed to setup kernel receive context, failing\n");
@@ -180,26 +169,6 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 				"Unable to allocate kernel send context, failing\n");
 			goto nomem;
 		}
-	}
-
-	/*
-	 * TODO: temporary code for missing interrupts, HSD 291041.
-	 *
-	 * If requested, start a timer to check the kernel
-	 * receive FIFOS for any stuck ones.
-	 */
-	if (dd->icode != WFR_ICODE_FPGA_EMULATION)
-		fifo_check = 0;	/* emulator only */
-	if (fifo_check) {
-		dd->last_krcv_fifo_head = kzalloc(dd->n_krcv_queues *
-						sizeof(u32), GFP_KERNEL);
-		if (!dd->last_krcv_fifo_head)
-			goto nomem;
-		init_timer(&dd->fifo_timer);
-		dd->fifo_timer.function = check_fifos;
-		dd->fifo_timer.data = (unsigned long)dd;
-		mod_timer(&dd->fifo_timer,
-				jiffies + msecs_to_jiffies(fifo_check));
 	}
 
 	return 0;
@@ -623,7 +592,7 @@ static int init_after_reset(struct hfi_devdata *dd)
 	 * for the driver data structures, not chip registers.
 	 */
 	for (i = 0; i < dd->num_rcv_contexts; i++)
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
+		hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
 				  QIB_RCVCTRL_INTRAVAIL_DIS |
 				  QIB_RCVCTRL_TAILUPD_DIS, i);
 	pio_send_control(dd, PSC_GLOBAL_DISABLE);
@@ -655,7 +624,7 @@ static void enable_chip(struct hfi_devdata *dd)
 			rcvmask |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
 		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_EGR_FULL))
 			rcvmask |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
-		dd->f_rcvctrl(dd, rcvmask, i);
+		hfi1_rcvctrl(dd, rcvmask, i);
 		/* XXX (Mitko): Do we care about the result of this?
 		 * sc_enable() will display an error message. */
 		sc_enable(dd->rcd[i]->sc);
@@ -925,7 +894,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		for (i = 0; i < dd->num_rcv_contexts; i++)
-			dd->f_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
+			hfi1_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
 					  QIB_RCVCTRL_CTXT_DIS |
 					  QIB_RCVCTRL_INTRAVAIL_DIS |
 					  QIB_RCVCTRL_PKEY_DIS |
@@ -946,7 +915,6 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		dd->f_setextled(ppd, 0); /* make sure LEDs are off */
 
 		/* disable all contexts */
 		for (i = 0; i < dd->num_send_contexts; i++)
@@ -958,7 +926,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 		 * Clear SerdesEnable.
 		 * We can't count on interrupts since we are stopping.
 		 */
-		dd->f_quiet_serdes(ppd);
+		hfi1_quiet_serdes(ppd);
 
 		if (ppd->qib_wq) {
 			destroy_workqueue(ppd->qib_wq);
@@ -1027,117 +995,6 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 	kfree(rcd->opstats);
 	kfree(rcd);
 }
-
-/*
- * Perform a PIO buffer bandwidth write test, to verify proper system
- * configuration.  Even when all the setup calls work, occasionally
- * BIOS or other issues can prevent write combining from working, or
- * can cause other bandwidth problems to the chip.
- *
- * This test simply writes a buffer over and over again, and
- * measures close to the peak bandwidth to the chip (not testing
- * data bandwidth to the wire).  The header of the buffer is
- * invalid and will generate an error, but we ignore it.
- */
-
-/* FIXME: always zero so we return early */
-static int fake_early_return;
-
-static void qib_verify_pioperf(struct hfi_devdata *dd)
-{
-	struct send_context *sc;
-	struct pio_buf *pbuf;
-	u64 pbc, msecs, emsecs;
-	u32 cnt, lcnt, dw;
-	u32 *addr;
-
-	if (dd->num_send_contexts == 0) {
-		dd_dev_info(dd,
-			"Performance check: No contexts for checking perf, skipping\n");
-		return;
-	}
-
-	/* FIXME: not ready yet */
-	if (fake_early_return == 0)
-		return;
-
-	/* only run this on unit 0 */
-	if (dd->unit != 0)
-		return;
-
-	/* TEMPORARY: force a non-context PIO error and see what happens... */
-	/* write_csr(dd, WFR_SEND_PIO_ERR_FORCE,
-		WFR_SEND_PIO_ERR_FORCE_PIO_WRITE_BAD_CTXT_ERR_SMASK); */
-
-	/*
-	 * Enough to give us a reasonable test, less than piobuf size, and
-	 * likely multiple of store buffer length.
-	 */
-	cnt = 1024;
-	/* dword count - includes PBC */
-	dw = (cnt + sizeof(u64)) / sizeof(u32);
-
-	/* use the first context */
-	sc = dd->rcd[0]->sc;
-	if (!sc) {
-		dd_dev_info(dd, "Performance check: No send context\n");
-		return;
-	}
-
-	addr = kzalloc(cnt, GFP_KERNEL);
-	if (!addr) {
-		dd_dev_info(dd,
-			 "Performance check: Could not get memory for checking PIO perf, skipping\n");
-		return;
-	}
-
-	/* zero'ed lrh/bth above will generate an error, disable it */
-	dd->f_set_armlaunch(dd, 0);
-
-	/* minimal PBC - just the length in DW */
-	pbc = create_pbc(0, 0, 0, dw);
-
-	preempt_disable();  /* we want reasonably accurate elapsed time */
-
-	msecs = 1 + jiffies_to_msecs(jiffies);
-	for (lcnt = 0; lcnt < 10000U; lcnt++) {
-		/* wait until we cross msec boundary */
-		if (jiffies_to_msecs(jiffies) >= msecs)
-			break;
-		udelay(1);
-	}
-
-	/*
-	 * This is only roughly accurate, since even with preempt we
-	 * still take interrupts that could take a while.   Running for
-	 * >= 5 msec seems to get us "close enough" to accurate values.
-	 */
-	msecs = jiffies_to_msecs(jiffies);
-	for (emsecs = lcnt = 0; emsecs <= 5UL && lcnt < 1; lcnt++) {
-		pbuf = sc_buffer_alloc(sc, dw, NULL, NULL);
-		if (!pbuf) {
-			preempt_enable();
-			dd_dev_info(dd,
-				"Performance check: PIO buffer allocation failure at count %u, skipping\n",
-				lcnt);
-			goto done;
-		}
-		pio_copy(dd, pbuf, pbc, addr, cnt >> 2);
-		emsecs = jiffies_to_msecs(jiffies) - msecs;
-	}
-	preempt_enable();
-
-	/* 1 GiB/sec, slightly over IB SDR line rate */
-	if (lcnt < (emsecs * 1024U))
-		dd_dev_err(dd,
-			    "Performance problem: bandwidth to PIO buffers is only %u MiB/sec\n",
-			    lcnt / (u32) emsecs);
-
-done:
-	kfree(addr);
-	dd->f_set_armlaunch(dd, 1);
-}
-
 
 void qib_free_devdata(struct hfi_devdata *dd)
 {
@@ -1255,10 +1112,9 @@ void qib_disable_after_error(struct hfi_devdata *dd)
 				struct qib_pportdata *ppd;
 
 				ppd = dd->pport + pidx;
-				if (dd->flags & HFI_PRESENT) {
+				if (dd->flags & HFI_PRESENT)
 					set_link_state(ppd, HLS_DN_DISABLE);
-					dd->f_setextled(ppd, 0);
-				}
+
 				if (ppd->statusp)
 					*ppd->statusp &= ~HFI_STATUS_IB_READY;
 			}
@@ -1317,9 +1173,9 @@ static int __init qib_ib_init(void)
 		goto bail;
 
 	/* validate max and default MTUs before any devices start */
-	if (!valid_stl_mtu(default_mtu))
+	if (!valid_opa_mtu(default_mtu))
 		default_mtu = HFI_DEFAULT_ACTIVE_MTU;
-	if (!valid_stl_mtu(max_mtu))
+	if (!valid_opa_mtu(max_mtu))
 		max_mtu = HFI_DEFAULT_MAX_MTU;
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
@@ -1430,14 +1286,6 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 
 	free_credit_return(dd);
 
-	/* TODO: temporary code for missing interrupts, HSD 291041 */
-	/* make sure no fifo timer is running */
-	if (dd->fifo_timer.data) {
-		del_timer(&dd->fifo_timer);
-		kfree(dd->last_krcv_fifo_head);
-		dd->last_krcv_fifo_head = NULL;
-	}
-
 	/*
 	 * Free any resources still in use (usually just kernel contexts)
 	 * at unload; we do for ctxtcnt, because that's what we allocate.
@@ -1454,7 +1302,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 
 		tmp[ctxt] = NULL; /* debugging paranoia */
 		if (rcd) {
-			dd->f_clear_tids(rcd);
+			hfi1_clear_tids(rcd);
 			qib_free_ctxtdata(dd, rcd);
 		}
 	}
@@ -1477,15 +1325,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
  */
 static void qib_postinit_cleanup(struct hfi_devdata *dd)
 {
-	/*
-	 * Clean up chip-specific stuff.
-	 * We check for NULL here, because it's outside
-	 * the kregbase check, and we need to call it
-	 * after the free_irq.  Thus it's possible that
-	 * the function pointers were never initialized.
-	 */
-	if (dd->f_cleanup)
-		dd->f_cleanup(dd);
+	hfi1_start_cleanup(dd);
 
 	qib_pcie_ddcleanup(dd);
 	hfi_pcie_cleanup(dd->pcidev);
@@ -1556,7 +1396,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	case PCI_DEVICE_ID_INTEL_WFR0:
 	case PCI_DEVICE_ID_INTEL_WFR1:
 	case PCI_DEVICE_ID_INTEL_WFR2:
-		dd = qib_init_wfr_funcs(pdev, ent);
+		dd = hfi1_init_dd(pdev, ent);
 		break;
 	default:
 		qib_early_err(&pdev->dev,
@@ -1596,7 +1436,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		qib_stop_timers(dd);
 		flush_workqueue(ib_wq);
 		for (pidx = 0; pidx < dd->num_pports; ++pidx)
-			dd->f_quiet_serdes(dd->pport + pidx);
+			hfi1_quiet_serdes(dd->pport + pidx);
 		if (!j)
 			hfi_device_remove(dd);
 		if (!ret)
@@ -1608,8 +1448,6 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	sdma_start(dd);
-
-	qib_verify_pioperf(dd);
 
 	/* interrupt testing */
 	if (test_interrupts) {
@@ -1897,7 +1735,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
 	}
 
 	for (idx = 0; idx < rcd->egrbufs.alloced; idx++) {
-		dd->f_put_tid(dd, rcd->eager_base + idx, PT_EAGER,
+		hfi1_put_tid(dd, rcd->eager_base + idx, PT_EAGER,
 			      rcd->egrbufs.rcvtids[idx].phys, order);
 		cond_resched();
 	}

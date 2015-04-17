@@ -1659,15 +1659,45 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
 	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_CLEAR, reg);
 }
 
+/*
+ * set_sdma_integrity
+ *
+ * Set the WFR_SEND_DMA_CHECK_ENABLE register for send DMA engine 'sde'.
+ * Use hfi_pkt_base_sdma_integrity(dd) as the starting point, and adjust
+ * that value based on relevant HFI_CAP* flags.
+ */
+static void set_sdma_integrity(struct sdma_engine *sde)
+{
+	struct hfi_devdata *dd = sde->dd;
+	u64 reg, smask;
+
+	if (unlikely(HFI_CAP_IS_KSET(NO_INTEGRITY)))
+		return;
+
+	reg = hfi_pkt_base_sdma_integrity(dd);
+
+	/* make adjustments based on HFI_CAP* flags */
+	smask = WFR_SEND_DMA_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+	if (!HFI_CAP_IS_KSET(PKEY_CHECK))
+		reg &= ~smask;
+
+	smask = WFR_SEND_DMA_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+	if (!HFI_CAP_IS_KSET(STATIC_RATE_CTRL))
+		reg |= smask;
+
+	write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE, reg);
+}
+
+
 static void init_sdma_regs(
 	struct sdma_engine *sde,
 	u32 credits,
 	uint idle_cnt)
 {
 	u8 opval, opmask;
-	struct hfi_devdata *dd = sde->dd;
 
 #ifdef JAG_SDMA_VERBOSITY
+	struct hfi_devdata *dd = sde->dd;
 	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n",
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
@@ -1684,9 +1714,7 @@ static void init_sdma_regs(
 		((u64)(credits * sde->this_idx) <<
 			WFR_SEND_DMA_MEMORY_SDMA_MEMORY_INDEX_SHIFT));
 	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
-	if (likely(!HFI_CAP_IS_KSET(NO_INTEGRITY)))
-		write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE,
-				hfi_pkt_base_sdma_integrity(dd));
+	set_sdma_integrity(sde);
 	opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
 	opval = WFR_OPCODE_CHECK_VAL_DISABLED;
 	write_sde_csr(sde, WFR_SEND_DMA_CHECK_OPCODE,

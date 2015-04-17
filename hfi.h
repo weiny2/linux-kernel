@@ -400,8 +400,6 @@ struct qib_sge_state;
 #define QIB_RCVCTRL_INTRAVAIL_DIS 0x20
 #define QIB_RCVCTRL_PKEY_ENB 0x40  /* Note, default is enabled */
 #define QIB_RCVCTRL_PKEY_DIS 0x80
-#define QIB_RCVCTRL_BP_ENB 0x0100
-#define QIB_RCVCTRL_BP_DIS 0x0200
 #define QIB_RCVCTRL_TIDFLOW_ENB 0x0400
 #define QIB_RCVCTRL_TIDFLOW_DIS 0x0800
 #define QIB_RCVCTRL_ONE_PKT_EGR_ENB 0x1000
@@ -586,7 +584,7 @@ struct qib_pportdata {
 	struct ib_cc_table_entry_shadow ccti_entries[CC_TABLE_SHADOW_MAX];
 
 	/* congestion entries, each entry corresponding to a SL */
-	struct stl_congestion_setting_entry_shadow
+	struct opa_congestion_setting_entry_shadow
 		congestion_entries[OPA_MAX_SLS];
 
 	/*
@@ -611,7 +609,7 @@ struct qib_pportdata {
 	spinlock_t cc_log_lock ____cacheline_aligned_in_smp;
 	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
 	u16 threshold_event_counter;
-	struct stl_hfi_cong_log_event_internal cc_events[STL_CONG_LOG_ELEMS];
+	struct opa_hfi_cong_log_event_internal cc_events[OPA_CONG_LOG_ELEMS];
 	int cc_log_idx; /* index for logging events */
 	int cc_mad_idx; /* index for reporting events */
 	/* end congestion log related entries */
@@ -795,55 +793,6 @@ struct hfi_devdata {
 	struct sc_config_sizes sc_sizes[SC_MAX];
 
 	u32 lcb_access_count;		/* count of LCB users */
-
-	/* device-specific implementations of functions needed by
-	 * common code. Contrary to previous consensus, we can't
-	 * really just point to a device-specific table, because we
-	 * may need to "bend", e.g. *_f_put_tid
-	 */
-	/* fallback to alternate interrupt type if possible */
-	int (*f_intr_fallback)(struct hfi_devdata *);
-	/* hard reset chip */
-	int (*f_reset)(struct hfi_devdata *);
-	void (*f_quiet_serdes)(struct qib_pportdata *);
-	int (*f_bringup_serdes)(struct qib_pportdata *);
-	int (*f_early_init)(struct hfi_devdata *);
-	void (*f_clear_tids)(struct qib_ctxtdata *);
-	void (*f_put_tid)(struct hfi_devdata *, u32, u32, unsigned long, u16);
-	void (*f_cleanup)(struct hfi_devdata *);
-	void (*f_setextled)(struct qib_pportdata *, u32);
-	/* fill out chip-specific fields */
-	int (*f_get_base_info)(struct qib_ctxtdata *, struct hfi_ctxt_info *);
-	/* free irq */
-	void (*f_free_irq)(struct hfi_devdata *);
-	struct qib_message_header *(*f_get_msgheader)
-					(struct hfi_devdata *, __le32 *);
-	void (*f_config_ctxts)(struct hfi_devdata *);
-	int (*f_get_ib_cfg)(struct qib_pportdata *, int);
-	int (*f_set_ib_cfg)(struct qib_pportdata *, int, u32);
-	int (*f_set_ib_loopback)(struct qib_pportdata *, const char *);
-	u32 (*f_iblink_state)(struct qib_pportdata *);
-	u8 (*f_ibphys_portstate)(struct qib_pportdata *);
-	void (*f_xgxs_reset)(struct qib_pportdata *);
-	/* Read/modify/write of GPIO pins (potentially chip-specific */
-	u64 (*f_gpio_mod)(struct hfi_devdata *dd, u32 target, u32 out, u32 dir,
-		u32 mask);
-	/* modify receive context registers, see RCVCTRL_* for operations */
-	void (*f_rcvctrl)(struct hfi_devdata *, unsigned int op, int context);
-	void (*f_set_armlaunch)(struct hfi_devdata *, u32);
-	void (*f_wantpiobuf_intr)(struct send_context *, u32);
-	u64 (*f_portcntr)(struct qib_pportdata *, u32);
-	u32 (*f_read_cntrs)(struct hfi_devdata *, loff_t, char **,
-		u64 **);
-	u32 (*f_read_portcntrs)(struct hfi_devdata *, loff_t, u32,
-		char **, u64 **);
-	int (*f_init_ctxt)(struct qib_ctxtdata *);
-	int (*f_tempsense_rd)(struct hfi_devdata *, struct hfi_temp *);
-	int (*f_set_ctxt_jkey)(struct hfi_devdata *, unsigned, u16);
-	int (*f_clear_ctxt_jkey)(struct hfi_devdata *, unsigned);
-	int (*f_set_ctxt_pkey)(struct hfi_devdata *, unsigned, u16);
-	int (*f_clear_ctxt_pkey)(struct hfi_devdata *, unsigned);
-	void (*f_read_link_quality)(struct hfi_devdata *, u8*);
 
 	char *boardname; /* human readable board info */
 
@@ -1051,10 +1000,6 @@ struct hfi_devdata {
 	char *portcntrnames;
 	size_t portcntrnameslen;
 
-	/* TODO: temporary code for missing interrupts, HSD 291041 */
-	struct timer_list fifo_timer;	/* interval timer for FIFO check */
-	u32 *last_krcv_fifo_head;	/* last read FIFO head value */
-
 	struct hfi_snoop_data hfi_snoop;
 
 	struct err_info_rcvport err_info_rcvport;
@@ -1128,7 +1073,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup);
 void qib_sdma_update_tail(struct qib_pportdata *, u16); /* hold sdma_lock */
 
 int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
-void qib_bad_intrstatus(struct hfi_devdata *);
 void handle_user_interrupt(struct qib_ctxtdata *rcd);
 
 int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
@@ -1141,7 +1085,13 @@ void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
 
 void handle_receive_interrupt(struct qib_ctxtdata *);
 int qib_reset_device(int);
-int qib_wait_linkstate(struct qib_pportdata *, u32, int);
+
+/* return the driver's idea of the logical OPA port state */
+static inline u32 driver_lstate(struct qib_pportdata *ppd)
+{
+	return ppd->lstate; /* use the cached value */
+}
+
 static inline u16 generate_jkey(kuid_t uid)
 {
 	return from_kuid(current_user_ns(), uid) & 0xffff;
@@ -1193,7 +1143,7 @@ static inline u8 sc_to_vlt(struct hfi_devdata *dd, u8 sc5)
  * ingress_pkey_matches_entry - return 1 if the pkey matches ent (ent
  * being an entry from the ingress partition key table), return 0
  * otherwise. Use the matching criteria for ingress partition keys
- * specified in the STLv1 spec., section 9.10.14.
+ * specified in the OPAv1 spec., section 9.10.14.
  */
 static inline int ingress_pkey_matches_entry(u16 pkey, u16 ent)
 {
@@ -1240,8 +1190,8 @@ static void ingress_pkey_table_fail(struct qib_pportdata *ppd, u16 pkey,
 	struct hfi_devdata *dd = ppd->dd;
 
 	incr_cntr64(&ppd->port_rcv_constraint_errors);
-	if (!(dd->err_info_rcv_constraint.status & STL_EI_STATUS_SMASK)) {
-		dd->err_info_rcv_constraint.status |= STL_EI_STATUS_SMASK;
+	if (!(dd->err_info_rcv_constraint.status & OPA_EI_STATUS_SMASK)) {
+		dd->err_info_rcv_constraint.status |= OPA_EI_STATUS_SMASK;
 		dd->err_info_rcv_constraint.slid = slid;
 		dd->err_info_rcv_constraint.pkey = pkey;
 	}
@@ -1249,7 +1199,7 @@ static void ingress_pkey_table_fail(struct qib_pportdata *ppd, u16 pkey,
 
 /*
  * ingress_pkey_check - Return 0 if the ingress pkey is valid, return 1
- * otherwise. Use the criterea in the STLv1 spec, section 9.10.14. idx
+ * otherwise. Use the criterea in the OPAv1 spec, section 9.10.14. idx
  * is a hint as to the best place in the partition key table to begin
  * searching.
  */
@@ -1299,7 +1249,7 @@ static inline int valid_ib_mtu(unsigned int mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
-static inline int valid_stl_mtu(unsigned int mtu)
+static inline int valid_opa_mtu(unsigned int mtu)
 {
 	return valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240;
 }
@@ -1316,7 +1266,6 @@ int fm_set_table(struct qib_pportdata *, int, void *);
 void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf);
 void reset_link_credits(struct hfi_devdata *dd);
 void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu);
-void assign_link_credits(struct hfi_devdata *dd);
 
 void snoop_recv_handler(struct hfi_packet *packet);
 int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
@@ -1386,8 +1335,6 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 #define HFI_FROZEN            0x4    /* chip in SPC freeze */
 #define HFI_HAS_SDMA_TIMEOUT  0x8
 #define HFI_HAS_SEND_DMA      0x10   /* Supports Send DMA */
-#define HFI_BADINTR           0x20   /* severe interrupt problems */
-#define ICHECK_WORKER_INITED  0x40   /* initialized interrupt_check_worker */
 #define HFI_FORCED_FREEZE     0x80   /* driver forced freeze mode */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
@@ -1406,9 +1353,8 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 
 /* free up any allocated data at closes */
 void qib_free_data(struct qib_ctxtdata *dd);
-struct hfi_devdata *qib_init_wfr_funcs(
-	struct pci_dev *,
-	const struct pci_device_id *);
+struct hfi_devdata *hfi1_init_dd(struct pci_dev *,
+				 const struct pci_device_id *);
 void qib_free_devdata(struct hfi_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
 struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
@@ -1572,7 +1518,6 @@ extern unsigned int max_mtu;
 extern unsigned int default_mtu;
 extern unsigned int hfi_cu;
 extern unsigned int user_credit_return_threshold;
-extern unsigned int set_link_credits;
 extern uint num_rcv_contexts;
 extern unsigned n_krcvqs;
 extern u8 krcvqs[];
@@ -1583,8 +1528,6 @@ extern uint quick_linkup;
 extern uint rcv_intr_timeout;
 extern uint rcv_intr_count;
 extern uint rcv_intr_dynamic;
-extern uint fifo_check;
-extern uint fifo_stalled_count;
 extern ushort link_crc_mask;
 
 extern struct mutex qib_mutex;
@@ -1635,13 +1578,11 @@ static inline u64 hfi_pkt_default_send_ctxt_mask(struct hfi_devdata *dd,
 	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_VL_SMASK
 	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_ENABLE_SMASK;
 
-	if (ctxt_type == SC_USER) {
-		base_sc_integrity = base_sc_integrity |
-			HFI_PKT_USER_SC_INTEGRITY;
-	} else {
-		base_sc_integrity = base_sc_integrity |
-			HFI_PKT_KERNEL_SC_INTEGRITY;
-	}
+	if (ctxt_type == SC_USER)
+		base_sc_integrity |= HFI_PKT_USER_SC_INTEGRITY;
+	else
+		base_sc_integrity |= HFI_PKT_KERNEL_SC_INTEGRITY;
+
 	if (is_a0(dd))
 		/* turn off send-side job key checks - A0 erratum */
 		return base_sc_integrity &
@@ -1725,5 +1666,24 @@ void qib_format_hwerrors(u64 hwerrs,
 #define WFR_USER_OPCODE_CHECK_MASK 0xC0
 #define WFR_OPCODE_CHECK_VAL_DISABLED 0x0
 #define WFR_OPCODE_CHECK_MASK_DISABLED 0x0
+
+static inline void hfi1_reset_cpu_counters(struct hfi_devdata *dd)
+{
+	struct qib_pportdata *ppd;
+	int i;
+
+	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
+
+	ppd = (struct qib_pportdata *)(dd + 1);
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
+		ppd->ibport_data.z_rc_acks =
+			get_all_cpu_total(ppd->ibport_data.rc_acks);
+		ppd->ibport_data.z_rc_qacks =
+			get_all_cpu_total(ppd->ibport_data.rc_qacks);
+	}
+}
+
+int hfi1_tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp);
+
 
 #endif                          /* _QIB_KERNEL_H */

@@ -593,6 +593,48 @@ void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold)
 }
 
 /*
+ * set_pio_integrity
+ *
+ * Set the WFR_SEND_CTXT_CHECK_ENABLE register for the send context 'sc'.
+ * Use hfi_pkt_default_send_ctxt_mask(dd) as the starting point, and adjust
+ * that value based on relevant HFI_CAP* flags.
+ */
+void set_pio_integrity(struct send_context *sc)
+{
+	struct hfi_devdata *dd = sc->dd;
+	u64 reg = 0, smask;
+	u32 hw_context = sc->hw_context;
+	int type = sc->type, set;
+
+	/*
+	 * No integrity checks if HFI_CAP_NO_INTEGRITY is set, or if
+	 * we're snooping.
+	 */
+	if (likely(!HFI_CAP_IS_KSET(NO_INTEGRITY)) &&
+	    dd->hfi_snoop.mode_flag != HFI_PORT_SNOOP_MODE) {
+
+		reg = hfi_pkt_default_send_ctxt_mask(dd, type);
+
+		/* make adjustments based on HFI_CAP* flags */
+		smask = WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+		set = (sc->type == SC_USER ? HFI_CAP_IS_USET(PKEY_CHECK) :
+		       HFI_CAP_IS_KSET(PKEY_CHECK));
+
+		if (!set)
+			reg &= ~smask;
+
+		smask = WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+		set = (sc->type == SC_USER ?
+		       HFI_CAP_IS_USET(STATIC_RATE_CTRL) :
+		       HFI_CAP_IS_KSET(STATIC_RATE_CTRL));
+
+		if (!set)
+			reg |= smask;
+	}
+	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+}
+
+/*
  * Allocate a NUMA relative send context structure of the given type along
  * with a HW context.
  */
@@ -663,13 +705,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 					<< WFR_SEND_CTXT_CTRL_CTXT_BASE_SHIFT);
 	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CTRL, reg);
 
-	/* set up packet checking - none if currently snooping */
-	if (HFI_CAP_IS_KSET(NO_INTEGRITY)
-			|| dd->hfi_snoop.mode_flag == HFI_PORT_SNOOP_MODE)
-		reg = 0;
-	else
-		reg = hfi_pkt_default_send_ctxt_mask(dd, type);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	set_pio_integrity(sc);
 
 	/* unmask all errors */
 	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
@@ -1397,7 +1433,7 @@ void sc_del_credit_return_intr(struct send_context *sc)
  * The caller must be careful when calling this.  All needint calls
  * must be paried with !needint.
  */
-void sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
+void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 {
 	if (needint)
 		sc_add_credit_return_intr(sc);
@@ -1454,7 +1490,7 @@ static void sc_piobufavail(struct send_context *sc)
 	 * are now all gone.
 	 */
 	if (n)
-		dd->f_wantpiobuf_intr(sc, 0);
+		hfi1_sc_wantpiobuf_intr(sc, 0);
 full:
 	spin_unlock_irqrestore(&dev->pending_lock, flags);
 

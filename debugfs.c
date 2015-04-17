@@ -323,7 +323,7 @@ static ssize_t dev_counters_read(struct file *file, char __user *buf,
 
 	rcu_read_lock();
 	dd = private2dd(file);
-	avail = dd->f_read_cntrs(dd, *ppos, NULL, &counters);
+	avail = hfi1_read_cntrs(dd, *ppos, NULL, &counters);
 	rval =  simple_read_from_buffer(buf, count, ppos, counters, avail);
 	rcu_read_unlock();
 	return rval;
@@ -340,7 +340,7 @@ static ssize_t dev_names_read(struct file *file, char __user *buf,
 
 	rcu_read_lock();
 	dd = private2dd(file);
-	avail = dd->f_read_cntrs(dd, *ppos, &names, NULL);
+	avail = hfi1_read_cntrs(dd, *ppos, &names, NULL);
 	rval =  simple_read_from_buffer(buf, count, ppos, names, avail);
 	rcu_read_unlock();
 	return rval;
@@ -368,7 +368,7 @@ static ssize_t portnames_read(struct file *file, char __user *buf,
 	rcu_read_lock();
 	dd = private2dd(file);
 	/* port num n/a here since names are constant */
-	avail = dd->f_read_portcntrs(dd, *ppos, 0, &names, NULL);
+	avail = hfi1_read_portcntrs(dd, *ppos, 0, &names, NULL);
 	rval = simple_read_from_buffer(buf, count, ppos, names, avail);
 	rcu_read_unlock();
 	return rval;
@@ -387,7 +387,7 @@ static ssize_t portcntrs_debugfs_read(struct file *file, char __user *buf,
 	rcu_read_lock();
 	ppd = private2ppd(file);
 	dd = ppd->dd;
-	avail = dd->f_read_portcntrs(dd, *ppos, ppd->port - 1, NULL, &counters);
+	avail = hfi1_read_portcntrs(dd, *ppos, ppd->port - 1, NULL, &counters);
 	rval = simple_read_from_buffer(buf, count, ppos, counters, avail);
 	rcu_read_unlock();
 	return rval;

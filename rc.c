@@ -724,7 +724,7 @@ void qib_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */
-	if (ppd->lstate != IB_PORT_ACTIVE)
+	if (driver_lstate(ppd) != IB_PORT_ACTIVE)
 		goto done;
 
 	sc = rcd->sc;
@@ -1851,7 +1851,7 @@ static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
 static void log_cca_event(struct qib_pportdata *ppd, u8 sl, u32 rlid,
 			  u32 lqpn, u32 rqpn, u8 svc_type)
 {
-	struct stl_hfi_cong_log_event_internal *cc_event;
+	struct opa_hfi_cong_log_event_internal *cc_event;
 
 	if (sl >= OPA_MAX_SLS)
 		return;
@@ -1862,7 +1862,7 @@ static void log_cca_event(struct qib_pportdata *ppd, u8 sl, u32 rlid,
 	ppd->threshold_event_counter++;
 
 	cc_event = &ppd->cc_events[ppd->cc_log_idx++];
-	if (ppd->cc_log_idx == STL_CONG_LOG_ELEMS)
+	if (ppd->cc_log_idx == OPA_CONG_LOG_ELEMS)
 		ppd->cc_log_idx = 0;
 	cc_event->lqpn = lqpn & QIB_QPN_MASK;
 	cc_event->rqpn = rqpn & QIB_QPN_MASK;
@@ -2156,7 +2156,7 @@ send_last:
 		 * with the way that IB/qib works and is trying avoid
 		 * introducing incompatabilities.
 		 *
-		 * See also STL Vol. 1, section 9.7.6, and table 9-17.
+		 * See also OPA Vol. 1, section 9.7.6, and table 9-17.
 		 */
 		wc.sl = qp->remote_ah_attr.sl;
 		/* zero fields that are N/A */

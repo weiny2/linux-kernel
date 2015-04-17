@@ -4,7 +4,7 @@
 #
 # Author: Dennis Dalessandro (dennis.dalessandro@intel.com)
 #
-# Feed in two arg, the path to the kernel build dir and your WFR sourece dir.
+# Feed in three args, the path to the kernel build dir, your WFR sourece dir and sparse flag
 
 kernel_build=$1
 if [ -z $1 ]; then
@@ -14,6 +14,11 @@ fi
 wfr_src=$2
 if [ -z $2 ]; then
 	wfr_src=$(git rev-parse --show-toplevel)
+fi
+
+sparse=$3
+if [ -z $3 ]; then
+	sparse=0
 fi
 
 if [ ! -d $kernel_build ]; then
@@ -44,7 +49,11 @@ fi
 echo "Doing build in $PWD"
 KBUILD=$kernel_build 
 export KBUILD
-make
+if [ $sparse -eq 1 ]; then
+	make C=2
+else
+	make
+fi
 
 if [ $? -ne 0 ]; then
 	echo "Failed to do build"

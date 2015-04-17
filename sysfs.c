@@ -43,10 +43,9 @@
  */
 static ssize_t show_hrtbt_enb(struct qib_pportdata *ppd, char *buf)
 {
-	struct hfi_devdata *dd = ppd->dd;
 	int ret;
 
-	ret = dd->f_get_ib_cfg(ppd, QIB_IB_CFG_HRTBT);
+	ret = hfi1_get_ib_cfg(ppd, QIB_IB_CFG_HRTBT);
 	ret = scnprintf(buf, PAGE_SIZE, "%d\n", ret);
 	return ret;
 }
@@ -71,21 +70,8 @@ static ssize_t store_hrtbt_enb(struct qib_pportdata *ppd, const char *buf,
 	 * because entering loopback mode overrides it and automatically
 	 * disables heartbeat.
 	 */
-	ret = dd->f_set_ib_cfg(ppd, QIB_IB_CFG_HRTBT, val);
+	ret = hfi1_set_ib_cfg(ppd, QIB_IB_CFG_HRTBT, val);
 	return ret < 0 ? ret : count;
-}
-
-static ssize_t store_loopback(struct qib_pportdata *ppd, const char *buf,
-			      size_t count)
-{
-	struct hfi_devdata *dd = ppd->dd;
-	int ret = count, r;
-
-	r = dd->f_set_ib_loopback(ppd, buf);
-	if (r < 0)
-		ret = r;
-
-	return ret;
 }
 
 static ssize_t store_led_override(struct qib_pportdata *ppd, const char *buf,
@@ -186,7 +172,6 @@ struct qib_port_attr {
 	ssize_t (*store)(struct qib_pportdata *, const char *, size_t);
 };
 
-QIB_PORT_ATTR(loopback, S_IWUSR, NULL, store_loopback);
 QIB_PORT_ATTR(led_override, S_IWUSR, NULL, store_led_override);
 QIB_PORT_ATTR(hrtbt_enable, S_IWUSR | S_IRUGO, show_hrtbt_enb,
 	      store_hrtbt_enb);
@@ -194,7 +179,6 @@ QIB_PORT_ATTR(status, S_IRUGO, show_status, NULL);
 QIB_PORT_ATTR(status_str, S_IRUGO, show_status_str, NULL);
 
 static struct attribute *port_default_attributes[] = {
-	&qib_port_attr_loopback.attr,
 	&qib_port_attr_led_override.attr,
 	&qib_port_attr_hrtbt_enable.attr,
 	&qib_port_attr_status.attr,
@@ -271,7 +255,7 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
 	struct cc_state *cc_state;
 
-	ret = sizeof(struct stl_congestion_setting_attr_shadow);
+	ret = sizeof(struct opa_congestion_setting_attr_shadow);
 
 	if (pos > ret)
 		return -EINVAL;
@@ -873,7 +857,7 @@ static ssize_t show_tempsense(struct device *device,
 	struct hfi_temp temp;
 	int ret = -ENXIO;
 
-	ret = dd->f_tempsense_rd(dd, &temp);
+	ret = hfi1_tempsense_rd(dd, &temp);
 	if (!ret) {
 		int idx = 0;
 

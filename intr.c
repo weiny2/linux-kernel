@@ -140,12 +140,6 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		/* link widths are not avaiable until the link is fully up */
 		get_linkup_link_widths(ppd);
 
-		/*
-		 * The STL FM is not yet available.  Fake a BufferControlTable
-		 * MAD packet so that all VLs have credits.
-		 */
-		if (set_link_credits)
-			assign_link_credits(dd);
 	} else {
 		/* physical link went down */
 		ppd->linkup = 0;
@@ -186,7 +180,7 @@ void handle_user_interrupt(struct qib_ctxtdata *rcd)
 
 	if (test_and_clear_bit(QIB_CTXT_WAITING_RCV, &rcd->event_flags)) {
 		wake_up_interruptible(&rcd->wait);
-		dd->f_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_DIS, rcd->ctxt);
+		hfi1_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_DIS, rcd->ctxt);
 	} else if (test_and_clear_bit(QIB_CTXT_WAITING_URG,
 							&rcd->event_flags)) {
 		rcd->urgent++;
@@ -194,30 +188,4 @@ void handle_user_interrupt(struct qib_ctxtdata *rcd)
 	}
 done:
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
-}
-
-void qib_bad_intrstatus(struct hfi_devdata *dd)
-{
-	static int allbits;
-
-	/* separate routine, for better optimization of qib_intr() */
-
-	/*
-	 * We print the message and disable interrupts, in hope of
-	 * having a better chance of debugging the problem.
-	 */
-	dd_dev_err(dd,
-		"Read of chip interrupt status failed disabling interrupts\n");
-	if (allbits++) {
-		/* disable interrupt delivery, something is very wrong */
-		if (allbits == 2)
-			set_intr_state(dd, 0);
-		if (allbits == 3) {
-			dd_dev_err(dd,
-				"2nd bad interrupt status, unregistering interrupts\n");
-			dd->flags |= HFI_BADINTR;
-			dd->flags &= ~HFI_INITTED;
-			dd->f_free_irq(dd);
-		}
-	}
 }
