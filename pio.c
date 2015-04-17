@@ -1480,7 +1480,7 @@ void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
  * @sc: the send context
  *
  * This is called from the interrupt handler when a PIO buffer is
- * available after qib_verbs_send() returned an error that no buffers were
+ * available after hfi1_verbs_send() returned an error that no buffers were
  * available. Disable the interrupt if there are no more QPs waiting.
  */
 static void sc_piobufavail(struct send_context *sc)

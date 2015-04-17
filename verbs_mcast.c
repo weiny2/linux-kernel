@@ -58,7 +58,7 @@ static void qib_mcast_qp_free(struct qib_mcast_qp *mqp)
 {
 	struct qib_qp *qp = mqp->qp;
 
-	/* Notify qib_destroy_qp() if it is waiting. */
+	/* Notify hfi1_destroy_qp() if it is waiting. */
 	if (atomic_dec_and_test(&qp->refcount))
 		wake_up(&qp->wait);
 
@@ -100,7 +100,7 @@ static void qib_mcast_free(struct qib_mcast *mcast)
 }
 
 /**
- * qib_mcast_find - search the global table for the given multicast GID
+ * hfi1_mcast_find - search the global table for the given multicast GID
  * @ibp: the IB port structure
  * @mgid: the multicast GID to search for
  *
@@ -108,7 +108,7 @@ static void qib_mcast_free(struct qib_mcast *mcast)
  *
  * The caller is responsible for decrementing the reference count if found.
  */
-struct qib_mcast *qib_mcast_find(struct qib_ibport *ibp, union ib_gid *mgid)
+struct qib_mcast *hfi1_mcast_find(struct qib_ibport *ibp, union ib_gid *mgid)
 {
 	struct rb_node *n;
 	unsigned long flags;
@@ -222,7 +222,7 @@ bail:
 	return ret;
 }
 
-int qib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
+int hfi1_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
 	struct qib_qp *qp = to_iqp(ibqp);
 	struct qib_ibdev *dev = to_idev(ibqp->device);
@@ -280,7 +280,7 @@ bail:
 	return ret;
 }
 
-int qib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
+int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
 	struct qib_qp *qp = to_iqp(ibqp);
 	struct qib_ibdev *dev = to_idev(ibqp->device);
@@ -362,7 +362,7 @@ bail:
 	return ret;
 }
 
-int qib_mcast_tree_empty(struct qib_ibport *ibp)
+int hfi1_mcast_tree_empty(struct qib_ibport *ibp)
 {
 	return ibp->mcast_tree.rb_node == NULL;
 }

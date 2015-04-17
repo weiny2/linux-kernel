@@ -661,7 +661,7 @@ struct diag_observer {
 	u32 top;
 };
 
-extern int qib_register_observer(struct hfi_devdata *dd,
+extern int hfi1_register_observer(struct hfi_devdata *dd,
 	const struct diag_observer *op);
 
 /* Only declared here, not defined. Private to diags */
@@ -1033,34 +1033,34 @@ struct hfi_filedata {
 
 extern struct list_head qib_dev_list;
 extern spinlock_t qib_devs_lock;
-extern struct hfi_devdata *qib_lookup(int unit);
+extern struct hfi_devdata *hfi1_lookup(int unit);
 extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
 
 extern unsigned int snoop_drop_send;
 extern unsigned int snoop_force_capture;
-int qib_init(struct hfi_devdata *, int);
-int qib_count_units(int *npresentp, int *nupp);
-int qib_count_active_units(void);
+int hfi1_init(struct hfi_devdata *, int);
+int hfi1_count_units(int *npresentp, int *nupp);
+int hfi1_count_active_units(void);
 
-int qib_diag_add(struct hfi_devdata *);
-void qib_diag_remove(struct hfi_devdata *);
+int hfi1_diag_add(struct hfi_devdata *);
+void hfi1_diag_remove(struct hfi_devdata *);
 void handle_linkup_change(struct hfi_devdata *dd, u32 linkup);
 void qib_sdma_update_tail(struct qib_pportdata *, u16); /* hold sdma_lock */
 
 int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
 void handle_user_interrupt(struct qib_ctxtdata *rcd);
 
-int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
-int qib_setup_eagerbufs(struct qib_ctxtdata *);
-int qib_create_ctxts(struct hfi_devdata *dd);
-struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
-void qib_init_pportdata(struct pci_dev *, struct qib_pportdata *,
+int hfi1_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
+int hfi1_setup_eagerbufs(struct qib_ctxtdata *);
+int hfi1_create_ctxts(struct hfi_devdata *dd);
+struct qib_ctxtdata *hfi1_create_ctxtdata(struct qib_pportdata *, u32);
+void hfi1_init_pportdata(struct pci_dev *, struct qib_pportdata *,
 			struct hfi_devdata *, u8, u8);
-void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
+void hfi1_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
 
 void handle_receive_interrupt(struct qib_ctxtdata *);
-int qib_reset_device(int);
+int hfi1_reset_device(int);
 
 /* return the driver's idea of the logical OPA port state */
 static inline u32 driver_lstate(struct qib_pportdata *ppd)
@@ -1231,9 +1231,9 @@ static inline int valid_opa_mtu(unsigned int mtu)
 }
 int set_mtu(struct qib_pportdata *);
 
-int qib_set_lid(struct qib_pportdata *, u32, u8);
-void qib_disable_after_error(struct hfi_devdata *);
-int qib_set_uevent_bits(struct qib_pportdata *, const int);
+int hfi1_set_lid(struct qib_pportdata *, u32, u8);
+void hfi1_disable_after_error(struct hfi_devdata *);
+int hfi1_set_uevent_bits(struct qib_pportdata *, const int);
 int hfi_rcvbuf_validate(u32, u8, u16 *);
 
 int fm_get_table(struct qib_pportdata *, int, void *);
@@ -1331,9 +1331,9 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 void qib_free_data(struct qib_ctxtdata *dd);
 struct hfi_devdata *hfi1_init_dd(struct pci_dev *,
 				 const struct pci_device_id *);
-void qib_free_devdata(struct hfi_devdata *);
+void hfi1_free_devdata(struct hfi_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
-struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
+struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 void qib_dump_lookup_output_queue(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
@@ -1345,7 +1345,7 @@ void qib_clear_symerror_on_linkup(unsigned long opaque);
  */
 #define QIB_LED_PHYS 1 /* Physical (linktraining) GREEN LED */
 #define QIB_LED_LOG 2  /* Logical (link) YELLOW LED */
-void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val);
+void hfi1_set_led_override(struct qib_pportdata *ppd, unsigned int val);
 
 /* send dma routines */
 void __qib_sdma_intr(struct qib_pportdata *);
@@ -1391,8 +1391,8 @@ int qib_sdma_verbs_send(struct sdma_engine *, struct qib_sge_state *,
  */
 #define DEFAULT_RCVHDR_ENTSIZE 32
 
-int qib_get_user_pages(unsigned long, size_t, struct page **);
-void qib_release_user_pages(struct page **, size_t);
+int hfi1_get_user_pages(unsigned long, size_t, struct page **);
+void hfi1_release_user_pages(struct page **, size_t);
 
 static inline void qib_clear_rcvhdrtail(const struct qib_ctxtdata *rcd)
 {
@@ -1438,30 +1438,30 @@ extern const char ib_qib_version[];
 int hfi_device_create(struct hfi_devdata *);
 void hfi_device_remove(struct hfi_devdata *);
 
-int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
+int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 			  struct kobject *kobj);
-int qib_verbs_register_sysfs(struct hfi_devdata *);
-void qib_verbs_unregister_sysfs(struct hfi_devdata *);
+int hfi1_verbs_register_sysfs(struct hfi_devdata *);
+void hfi1_verbs_unregister_sysfs(struct hfi_devdata *);
 /* Hook for sysfs read of QSFP */
 extern int qsfp_dump(struct qib_pportdata *ppd, char *buf, int len);
 
-int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
+int hfi1_pcie_init(struct pci_dev *, const struct pci_device_id *);
 void hfi_pcie_cleanup(struct pci_dev *);
-int qib_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
+int hfi1_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
 		    const struct pci_device_id *);
-void qib_pcie_ddcleanup(struct hfi_devdata *);
+void hfi1_pcie_ddcleanup(struct hfi_devdata *);
 void hfi_pcie_flr(struct hfi_devdata *);
 int pcie_speeds(struct hfi_devdata *);
 void request_msix(struct hfi_devdata *, u32 *, struct qib_msix_entry *);
-void qib_enable_intx(struct pci_dev *);
-void qib_nomsix(struct hfi_devdata *);
+void hfi1_enable_intx(struct pci_dev *);
+void hfi1_nomsix(struct hfi_devdata *);
 void restore_pci_variables(struct hfi_devdata *dd);
 int do_pcie_gen3_transition(struct hfi_devdata *dd);
 
 /*
  * dma_addr wrappers - all 0's invalid for hw
  */
-dma_addr_t qib_map_page(struct pci_dev *, struct page *, unsigned long,
+dma_addr_t hfi1_map_page(struct pci_dev *, struct page *, unsigned long,
 			  size_t, int);
 const char *get_unit_name(int unit);
 
@@ -1634,7 +1634,7 @@ struct qib_hwerror_msgs {
 #define QLOGIC_IB_HWE_MSG(a, b) { .mask = a, .msg = b }
 
 /* in qib_intr.c... */
-void qib_format_hwerrors(u64 hwerrs,
+void hfi1_format_hwerrors(u64 hwerrs,
 			 const struct qib_hwerror_msgs *hwerrmsgs,
 			 size_t nhwerrmsgs, char *msg, size_t lmsg);
 

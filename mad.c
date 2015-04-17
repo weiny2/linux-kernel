@@ -90,7 +90,7 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
 		pr_warn("%s: failed to find limited mgmt pkey, defaulting 0x%x\n",
-			__func__, qib_get_pkey(ibp, 1));
+			__func__, hfi1_get_pkey(ibp, 1));
 		pkey_idx = 1;
 	}
 
@@ -116,7 +116,7 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 		if (ibp->sm_lid != be16_to_cpu(IB_LID_PERMISSIVE)) {
 			struct ib_ah *ah;
 
-			ah = qib_create_qp0_ah(ibp, ibp->sm_lid);
+			ah = hfi1_create_qp0_ah(ibp, ibp->sm_lid);
 			if (IS_ERR(ah))
 				ret = PTR_ERR(ah);
 			else {
@@ -147,7 +147,7 @@ static void qib_send_trap(struct qib_ibport *ibp, void *data, unsigned len)
 /*
  * Send a bad [PQ]_Key trap (ch. 14.3.8).
  */
-void qib_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
+void hfi1_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 		   u32 qp1, u32 qp2, __be16 lid1, __be16 lid2)
 {
 	struct ib_mad_notice_attr data;
@@ -216,7 +216,7 @@ static void qib_bad_mkey(struct qib_ibport *ibp, struct ib_mad_hdr *mad,
 /*
  * Send a Port Capability Mask Changed trap (ch. 14.3.11).
  */
-void qib_cap_mask_chg(struct qib_ibport *ibp)
+void hfi1_cap_mask_chg(struct qib_ibport *ibp)
 {
 	struct ib_mad_notice_attr data;
 
@@ -236,7 +236,7 @@ void qib_cap_mask_chg(struct qib_ibport *ibp)
 /*
  * Send a System Image GUID Changed trap (ch. 14.3.12).
  */
-void qib_sys_guid_chg(struct qib_ibport *ibp)
+void hfi1_sys_guid_chg(struct qib_ibport *ibp)
 {
 	struct ib_mad_notice_attr data;
 
@@ -256,7 +256,7 @@ void qib_sys_guid_chg(struct qib_ibport *ibp)
 /*
  * Send a Node Description Changed trap (ch. 14.3.13).
  */
-void qib_node_desc_chg(struct qib_ibport *ibp)
+void hfi1_node_desc_chg(struct qib_ibport *ibp)
 {
 	struct ib_mad_notice_attr data;
 
@@ -319,7 +319,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	/* This is already in network order */
 	ni->system_image_guid = ib_qib_sys_image_guid;
 	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
-	ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
+	ni->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	ni->device_id = cpu_to_be16(dd->pcidev->device);
 	ni->revision = cpu_to_be32(dd->minrev);
 	ni->local_port_num = port;
@@ -354,7 +354,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	/* This is already in network order */
 	nip->sys_guid = ib_qib_sys_image_guid;
 	nip->node_guid = dd->pport->guid; /* Use first-port GUID as node */
-	nip->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
+	nip->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	nip->device_id = cpu_to_be16(dd->pcidev->device);
 	nip->revision = cpu_to_be32(dd->minrev);
 	nip->local_port_num = port;
@@ -738,7 +738,7 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	__be16 *p;
 	int i;
 	u16 n_blocks_avail;
-	unsigned npkeys = qib_get_npkeys(dd);
+	unsigned npkeys = hfi1_get_npkeys(dd);
 	size_t size;
 
 	if (am_port == 0)
@@ -942,10 +942,10 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	} else if (ppd->lid != lid ||
 		 ppd->lmc != (pi->mkeyprotect_lmc & OPA_PI_MASK_LMC)) {
 		if (ppd->lid != lid)
-			qib_set_uevent_bits(ppd, _HFI_EVENT_LID_CHANGE_BIT);
+			hfi1_set_uevent_bits(ppd, _HFI_EVENT_LID_CHANGE_BIT);
 		if (ppd->lmc != (pi->mkeyprotect_lmc & OPA_PI_MASK_LMC))
-			qib_set_uevent_bits(ppd, _HFI_EVENT_LMC_CHANGE_BIT);
-		qib_set_lid(ppd, lid, pi->mkeyprotect_lmc & OPA_PI_MASK_LMC);
+			hfi1_set_uevent_bits(ppd, _HFI_EVENT_LMC_CHANGE_BIT);
+		hfi1_set_lid(ppd, lid, pi->mkeyprotect_lmc & OPA_PI_MASK_LMC);
 		event.event = IB_EVENT_LID_CHANGE;
 		ib_dispatch_event(&event);
 	}
@@ -1232,7 +1232,7 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	u16 *p = (u16 *) data;
 	int i;
 	u16 n_blocks_avail;
-	unsigned npkeys = qib_get_npkeys(dd);
+	unsigned npkeys = hfi1_get_npkeys(dd);
 
 	if (am_port == 0)
 		am_port = port;
@@ -4014,7 +4014,7 @@ static int hfi_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
 		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
-			qib_get_pkey(ibp, 1));
+			hfi1_get_pkey(ibp, 1));
 		pkey_idx = 1;
 	}
 	in_wc->pkey_index = (u16)pkey_idx;
@@ -4068,7 +4068,7 @@ bail:
 }
 
 /**
- * qib_process_mad - process an incoming MAD packet
+ * hfi1_process_mad - process an incoming MAD packet
  * @ibdev: the infiniband device this packet came in on
  * @mad_flags: MAD flags
  * @port: the port number this packet came in on
@@ -4086,7 +4086,7 @@ bail:
  *
  * This is called by the ib_mad module.
  */
-int qib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		    struct ib_wc *in_wc, struct ib_grh *in_grh,
 		    struct ib_mad *in_mad, struct ib_mad *out_mad)
 {
@@ -4112,7 +4112,7 @@ static void send_handler(struct ib_mad_agent *agent,
 	ib_free_send_mad(mad_send_wc->send_buf);
 }
 
-int qib_create_agents(struct qib_ibdev *dev)
+int hfi1_create_agents(struct qib_ibdev *dev)
 {
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct ib_mad_agent *agent;
@@ -4148,7 +4148,7 @@ err:
 	return ret;
 }
 
-void qib_free_agents(struct qib_ibdev *dev)
+void hfi1_free_agents(struct qib_ibdev *dev)
 {
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct ib_mad_agent *agent;

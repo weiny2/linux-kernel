@@ -40,10 +40,10 @@
 #include "verbs.h"
 
 /**
- * qib_release_mmap_info - free mmap info structure
+ * hfi1_release_mmap_info - free mmap info structure
  * @ref: a pointer to the kref within struct qib_mmap_info
  */
-void qib_release_mmap_info(struct kref *ref)
+void hfi1_release_mmap_info(struct kref *ref)
 {
 	struct qib_mmap_info *ip =
 		container_of(ref, struct qib_mmap_info, ref);
@@ -72,7 +72,7 @@ static void qib_vma_close(struct vm_area_struct *vma)
 {
 	struct qib_mmap_info *ip = vma->vm_private_data;
 
-	kref_put(&ip->ref, qib_release_mmap_info);
+	kref_put(&ip->ref, hfi1_release_mmap_info);
 }
 
 static struct vm_operations_struct qib_vm_ops = {
@@ -81,12 +81,12 @@ static struct vm_operations_struct qib_vm_ops = {
 };
 
 /**
- * qib_mmap - create a new mmap region
+ * hfi1_mmap - create a new mmap region
  * @context: the IB user context of the process making the mmap() call
  * @vma: the VMA to be initialized
  * Return zero if the mmap is OK. Otherwise, return an errno.
  */
-int qib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 {
 	struct qib_ibdev *dev = to_idev(context->device);
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
@@ -126,9 +126,9 @@ done:
 }
 
 /*
- * Allocate information for qib_mmap
+ * Allocate information for hfi1_mmap
  */
-struct qib_mmap_info *qib_create_mmap_info(struct qib_ibdev *dev,
+struct qib_mmap_info *hfi1_create_mmap_info(struct qib_ibdev *dev,
 					   u32 size,
 					   struct ib_ucontext *context,
 					   void *obj) {
@@ -157,7 +157,7 @@ bail:
 	return ip;
 }
 
-void qib_update_mmap_info(struct qib_ibdev *dev, struct qib_mmap_info *ip,
+void hfi1_update_mmap_info(struct qib_ibdev *dev, struct qib_mmap_info *ip,
 			  u32 size, void *obj)
 {
 	size = PAGE_ALIGN(size);

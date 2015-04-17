@@ -87,7 +87,7 @@ static ssize_t store_led_override(struct qib_pportdata *ppd, const char *buf,
 		return ret;
 	}
 
-	qib_set_led_override(ppd, val);
+	hfi1_set_led_override(ppd, val);
 	return count;
 }
 
@@ -228,7 +228,7 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 
 static void qib_port_release(struct kobject *kobj)
 {
-	/* nothing to do since memory is freed by qib_free_devdata() */
+	/* nothing to do since memory is freed by hfi1_free_devdata() */
 }
 
 static struct kobj_type qib_port_cc_ktype = {
@@ -832,7 +832,7 @@ static ssize_t store_chip_reset(struct device *device,
 		goto bail;
 	}
 
-	ret = qib_reset_device(dd->unit);
+	ret = hfi1_reset_device(dd->unit);
 bail:
 	return ret < 0 ? ret : count;
 }
@@ -905,7 +905,7 @@ static struct device_attribute *qib_attributes[] = {
 	&dev_attr_chip_reset,
 };
 
-int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
+int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 			  struct kobject *kobj)
 {
 	struct qib_pportdata *ppd;
@@ -1024,7 +1024,7 @@ bail:
 /*
  * Register and create our files in /sys/class/infiniband.
  */
-int qib_verbs_register_sysfs(struct hfi_devdata *dd)
+int hfi1_verbs_register_sysfs(struct hfi_devdata *dd)
 {
 	struct ib_device *dev = &dd->verbs_dev.ibdev;
 	int i, ret;
@@ -1045,7 +1045,7 @@ bail:
 /*
  * Unregister and remove our files in /sys/class/infiniband.
  */
-void qib_verbs_unregister_sysfs(struct hfi_devdata *dd)
+void hfi1_verbs_unregister_sysfs(struct hfi_devdata *dd)
 {
 	struct qib_pportdata *ppd;
 	int i;

@@ -802,7 +802,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	qib_stats.sps_ctxts--;
 	dd->freectxts++;
 	mutex_unlock(&qib_mutex);
-	qib_free_ctxtdata(dd, uctxt);
+	hfi1_free_ctxtdata(dd, uctxt);
 done:
 	kfree(fdata);
 	return 0;
@@ -864,7 +864,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 	struct hfi_devdata *dd = NULL;
 	int ret = 0, devmax, npresent, nup, dev;
 
-	devmax = qib_count_units(&npresent, &nup);
+	devmax = hfi1_count_units(&npresent, &nup);
 	if (!npresent) {
 		ret = -ENXIO;
 		goto done;
@@ -874,7 +874,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 		goto done;
 	}
 	if (devno >= 0) {
-		dd = qib_lookup(devno);
+		dd = hfi1_lookup(devno);
 		if (!dd)
 			ret = -ENODEV;
 		else if (!dd->freectxts)
@@ -886,7 +886,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 			unsigned free = 0U;
 
 			for (dev = 0; dev < devmax; dev++) {
-				pdd = qib_lookup(dev);
+				pdd = hfi1_lookup(dev);
 				if (pdd && pdd->freectxts &&
 				    pdd->freectxts > free) {
 					dd = pdd;
@@ -895,7 +895,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 			}
 		} else {
 			for (dev = 0; dev < devmax; dev++) {
-				pdd = qib_lookup(dev);
+				pdd = hfi1_lookup(dev);
 				if (pdd && pdd->freectxts) {
 					dd = pdd;
 					break;
@@ -915,10 +915,10 @@ static int find_shared_ctxt(struct file *fp,
 	int devmax, ndev, i;
 	int ret = 0;
 
-	devmax = qib_count_units(NULL, NULL);
+	devmax = hfi1_count_units(NULL, NULL);
 
 	for (ndev = 0; ndev < devmax; ndev++) {
-		struct hfi_devdata *dd = qib_lookup(ndev);
+		struct hfi_devdata *dd = hfi1_lookup(ndev);
 
 		/* device portion of usable() */
 		if (!(dd && (dd->flags & HFI_PRESENT) && dd->kregbase))
@@ -980,7 +980,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	if (ctxt == dd->num_rcv_contexts)
 		return -EBUSY;
 
-	uctxt = qib_create_ctxtdata(dd->pport, ctxt);
+	uctxt = hfi1_create_ctxtdata(dd->pport, ctxt);
 	if (!uctxt) {
 		dd_dev_err(dd,
 			   "Unable to allocate ctxtdata memory, failing open\n");
@@ -1167,7 +1167,7 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 	ret = hfi1_get_base_kinfo(uctxt, &cinfo);
 	if (ret < 0)
 		goto done;
-	cinfo.num_active = qib_count_active_units();
+	cinfo.num_active = hfi1_count_active_units();
 	cinfo.unit = uctxt->dd->unit;
 	cinfo.ctxt = uctxt->ctxt;
 	cinfo.subctxt = subctxt_fp(fp);
@@ -1210,10 +1210,10 @@ static int setup_ctxt(struct file *fp)
 			goto done;
 
 		/* Now allocate the RcvHdr queue and eager buffers. */
-		ret = qib_create_rcvhdrq(dd, uctxt);
+		ret = hfi1_create_rcvhdrq(dd, uctxt);
 		if (ret)
 			goto done;
-		ret = qib_setup_eagerbufs(uctxt);
+		ret = hfi1_setup_eagerbufs(uctxt);
 		if (ret)
 			goto done;
 		if (uctxt->subctxt_cnt && !subctxt_fp(fp)) {
@@ -1395,7 +1395,7 @@ static unsigned int poll_next(struct file *fp,
  * event mask.
  * See also find_ctxt() for a similar use, that is specific to send buffers.
  */
-int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
+int hfi1_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
 {
 	struct qib_ctxtdata *uctxt;
 	struct hfi_devdata *dd = ppd->dd;
@@ -1653,7 +1653,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		 * Now that we know how many free RcvArray entries we have,
 		 * we can pin that many user pages.
 		 */
-		ret = qib_get_user_pages(vaddr + (mapped * PAGE_SIZE),
+		ret = hfi1_get_user_pages(vaddr + (mapped * PAGE_SIZE),
 					 pinned, pages);
 		if (ret) {
 			/*
@@ -1696,7 +1696,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 			for (j = 0; j < dd->rcv_entries.group_size &&
 				     pmapped < pinned; j++, pmapped++, tid++) {
 				tidsize = PAGE_SIZE;
-				phys[pmapped] = qib_map_page(dd->pcidev,
+				phys[pmapped] = hfi1_map_page(dd->pcidev,
 						   pages[pmapped], 0,
 						   tidsize, PCI_DMA_FROMDEVICE);
 				trace_hfi_exp_rcv_set(uctxt->ctxt,
@@ -1823,7 +1823,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 				}
 			}
 			qib_flush_wc();
-			qib_release_user_pages(pshadow, pcount);
+			hfi1_release_user_pages(pshadow, pcount);
 			clear_bit(bitidx, &uctxt->tidusemap[idx]);
 			map &= ~(1ULL<<bitidx);
 		};
@@ -1852,7 +1852,7 @@ static void unlock_exp_tids(struct qib_ctxtdata *uctxt)
 		uctxt->physshadow[tid] = 0;
 		uctxt->tid_pg_list[tid] = NULL;
 		pci_unmap_page(dd->pcidev, phys, PAGE_SIZE, PCI_DMA_FROMDEVICE);
-		qib_release_user_pages(&p, 1);
+		hfi1_release_user_pages(&p, 1);
 	}
 }
 
@@ -2103,7 +2103,7 @@ int hfi_device_create(struct hfi_devdata *dd)
 	int r, ret;
 
 	r = qib_user_add(dd);
-	ret = qib_diag_add(dd);
+	ret = hfi1_diag_add(dd);
 	if (r && !ret)
 		ret = r;
 	return ret;
@@ -2116,5 +2116,5 @@ int hfi_device_create(struct hfi_devdata *dd)
 void hfi_device_remove(struct hfi_devdata *dd)
 {
 	qib_user_remove(dd);
-	qib_diag_remove(dd);
+	hfi1_diag_remove(dd);
 }

@@ -41,14 +41,14 @@
 #include "hfi.h"
 
 /**
- * qib_cq_enter - add a new entry to the completion queue
+ * hfi1_cq_enter - add a new entry to the completion queue
  * @cq: completion queue
  * @entry: work completion entry to add
  * @sig: true if @entry is a solicitated entry
  *
  * This may be called with qp->s_lock held.
  */
-void qib_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
+void hfi1_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
 {
 	struct qib_cq_wc *wc;
 	unsigned long flags;
@@ -110,7 +110,7 @@ void qib_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
 		 * This will cause send_complete() to be called in
 		 * another thread.
 		 */
-		smp_read_barrier_depends(); /* see qib_cq_exit */
+		smp_read_barrier_depends(); /* see hfi1_cq_exit */
 		worker = cq->dd->worker;
 		if (likely(worker)) {
 			cq->notify = IB_CQ_NONE;
@@ -123,7 +123,7 @@ void qib_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
 }
 
 /**
- * qib_poll_cq - poll for work completion entries
+ * hfi1_poll_cq - poll for work completion entries
  * @ibcq: the completion queue to poll
  * @num_entries: the maximum number of entries to return
  * @entry: pointer to array where work completions are placed
@@ -133,7 +133,7 @@ void qib_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
  * This may be called from interrupt context.  Also called by ib_poll_cq()
  * in the generic verbs code.
  */
-int qib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
+int hfi1_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
 {
 	struct qib_cq *cq = to_icq(ibcq);
 	struct qib_cq_wc *wc;
@@ -201,7 +201,7 @@ static void send_complete(struct kthread_work *work)
 }
 
 /**
- * qib_create_cq - create a completion queue
+ * hfi1_create_cq - create a completion queue
  * @ibdev: the device this completion queue is attached to
  * @entries: the minimum size of the completion queue
  * @context: unused by the QLogic_IB driver
@@ -212,7 +212,7 @@ static void send_complete(struct kthread_work *work)
  *
  * Called by ib_create_cq() in the generic verbs code.
  */
-struct ib_cq *qib_create_cq(struct ib_device *ibdev, int entries,
+struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 			    int comp_vector, struct ib_ucontext *context,
 			    struct ib_udata *udata)
 {
@@ -254,12 +254,12 @@ struct ib_cq *qib_create_cq(struct ib_device *ibdev, int entries,
 
 	/*
 	 * Return the address of the WC as the offset to mmap.
-	 * See qib_mmap() for details.
+	 * See hfi1_mmap() for details.
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		int err;
 
-		cq->ip = qib_create_mmap_info(dev, sz, context, wc);
+		cq->ip = hfi1_create_mmap_info(dev, sz, context, wc);
 		if (!cq->ip) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail_wc;
@@ -320,14 +320,14 @@ done:
 }
 
 /**
- * qib_destroy_cq - destroy a completion queue
+ * hfi1_destroy_cq - destroy a completion queue
  * @ibcq: the completion queue to destroy.
  *
  * Returns 0 for success.
  *
  * Called by ib_destroy_cq() in the generic verbs code.
  */
-int qib_destroy_cq(struct ib_cq *ibcq)
+int hfi1_destroy_cq(struct ib_cq *ibcq)
 {
 	struct qib_ibdev *dev = to_idev(ibcq->device);
 	struct qib_cq *cq = to_icq(ibcq);
@@ -337,7 +337,7 @@ int qib_destroy_cq(struct ib_cq *ibcq)
 	dev->n_cqs_allocated--;
 	spin_unlock(&dev->n_cqs_lock);
 	if (cq->ip)
-		kref_put(&cq->ip->ref, qib_release_mmap_info);
+		kref_put(&cq->ip->ref, hfi1_release_mmap_info);
 	else
 		vfree(cq->queue);
 	kfree(cq);
@@ -346,7 +346,7 @@ int qib_destroy_cq(struct ib_cq *ibcq)
 }
 
 /**
- * qib_req_notify_cq - change the notification type for a completion queue
+ * hfi1_req_notify_cq - change the notification type for a completion queue
  * @ibcq: the completion queue
  * @notify_flags: the type of notification to request
  *
@@ -355,7 +355,7 @@ int qib_destroy_cq(struct ib_cq *ibcq)
  * This may be called from interrupt context.  Also called by
  * ib_req_notify_cq() in the generic verbs code.
  */
-int qib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
+int hfi1_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
 {
 	struct qib_cq *cq = to_icq(ibcq);
 	unsigned long flags;
@@ -379,12 +379,12 @@ int qib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
 }
 
 /**
- * qib_resize_cq - change the size of the CQ
+ * hfi1_resize_cq - change the size of the CQ
  * @ibcq: the completion queue
  *
  * Returns 0 for success.
  */
-int qib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
+int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 {
 	struct qib_cq *cq = to_icq(ibcq);
 	struct qib_cq_wc *old_wc;
@@ -463,11 +463,11 @@ int qib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 		struct qib_ibdev *dev = to_idev(ibcq->device);
 		struct qib_mmap_info *ip = cq->ip;
 
-		qib_update_mmap_info(dev, ip, sz, wc);
+		hfi1_update_mmap_info(dev, ip, sz, wc);
 
 		/*
 		 * Return the offset to mmap.
-		 * See qib_mmap() for details.
+		 * See hfi1_mmap() for details.
 		 */
 		if (udata && udata->outlen >= sizeof(__u64)) {
 			ret = ib_copy_to_udata(udata, &ip->offset,
@@ -493,7 +493,7 @@ bail:
 	return ret;
 }
 
-int qib_cq_init(struct hfi_devdata *dd)
+int hfi1_cq_init(struct hfi_devdata *dd)
 {
 	int ret = 0;
 	int cpu;
@@ -524,7 +524,7 @@ task_fail:
 	goto out;
 }
 
-void qib_cq_exit(struct hfi_devdata *dd)
+void hfi1_cq_exit(struct hfi_devdata *dd)
 {
 	struct kthread_worker *worker;
 
@@ -533,7 +533,7 @@ void qib_cq_exit(struct hfi_devdata *dd)
 		return;
 	/* blocks future queuing from send_complete() */
 	dd->worker = NULL;
-	smp_wmb(); /* See qib_cq_enter */
+	smp_wmb(); /* See hfi1_cq_enter */
 	flush_kthread_worker(worker);
 	kthread_stop(worker->task);
 	kfree(worker);

@@ -66,17 +66,17 @@ struct hfi_qp_ibdev {
 };
 
 /**
- * qib_lookup_qpn - return the QP with the given QPN
+ * hfi1_lookup_qpn - return the QP with the given QPN
  * @ibp: a pointer to the IB port
  * @qpn: the QP number to look up
  *
  * The caller is responsible for decrementing the QP reference count
  * when done.
  */
-struct qib_qp *qib_lookup_qpn(struct qib_ibport *ibp, u32 qpn);
+struct qib_qp *hfi1_lookup_qpn(struct qib_ibport *ibp, u32 qpn);
 
 /**
- * qib_error_qp - put a QP into the error state
+ * hfi1_error_qp - put a QP into the error state
  * @qp: the QP to put into the error state
  * @err: the receive completion error to signal if a RWQE is active
  *
@@ -85,10 +85,10 @@ struct qib_qp *qib_lookup_qpn(struct qib_ibport *ibp, u32 qpn);
  * The QP r_lock and s_lock should be held and interrupts disabled.
  * If we are already in error state, just return.
  */
-int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err);
+int hfi1_error_qp(struct qib_qp *qp, enum ib_wc_status err);
 
 /**
- * qib_modify_qp - modify the attributes of a queue pair
+ * hfi1_modify_qp - modify the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we're modifying
  * @attr: the new attributes
  * @attr_mask: the mask of attributes to modify
@@ -96,22 +96,22 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err);
  *
  * Returns 0 on success, otherwise returns an errno.
  */
-int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		  int attr_mask, struct ib_udata *udata);
 
-int qib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		 int attr_mask, struct ib_qp_init_attr *init_attr);
 
 /**
- * qib_compute_aeth - compute the AETH (syndrome + MSN)
+ * hfi1_compute_aeth - compute the AETH (syndrome + MSN)
  * @qp: the queue pair to compute the AETH for
  *
  * Returns the AETH.
  */
-__be32 qib_compute_aeth(struct qib_qp *qp);
+__be32 hfi1_compute_aeth(struct qib_qp *qp);
 
 /**
- * qib_create_qp - create a queue pair for a device
+ * hfi1_create_qp - create a queue pair for a device
  * @ibpd: the protection domain who's device we create the queue pair for
  * @init_attr: the attributes of the queue pair
  * @udata: user data for libibverbs.so
@@ -120,11 +120,11 @@ __be32 qib_compute_aeth(struct qib_qp *qp);
  *
  * Called by the ib_create_qp() core verbs function.
  */
-struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
+struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 			    struct ib_qp_init_attr *init_attr,
 			    struct ib_udata *udata);
 /**
- * qib_destroy_qp - destroy a queue pair
+ * hfi1_destroy_qp - destroy a queue pair
  * @ibqp: the queue pair to destroy
  *
  * Returns 0 on success.
@@ -132,16 +132,16 @@ struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
  * Note that this can be called while the QP is actively sending or
  * receiving!
  */
-int qib_destroy_qp(struct ib_qp *ibqp);
+int hfi1_destroy_qp(struct ib_qp *ibqp);
 
 /**
- * qib_get_credit - flush the send work queue of a QP
+ * hfi1_get_credit - flush the send work queue of a QP
  * @qp: the qp who's send work queue to flush
  * @aeth: the Acknowledge Extended Transport Header
  *
  * The QP s_lock should be held.
  */
-void qib_get_credit(struct qib_qp *qp, u32 aeth);
+void hfi1_get_credit(struct qib_qp *qp, u32 aeth);
 
 /**
  * qib_qp_init - allocate QP tables

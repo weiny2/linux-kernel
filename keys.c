@@ -34,7 +34,7 @@
 #include "hfi.h"
 
 /**
- * qib_alloc_lkey - allocate an lkey
+ * hfi1_alloc_lkey - allocate an lkey
  * @mr: memory region that this lkey protects
  * @dma_region: 0->normal key, 1->restricted DMA key
  *
@@ -46,7 +46,7 @@
  *
  */
 
-int qib_alloc_lkey(struct qib_mregion *mr, int dma_region)
+int hfi1_alloc_lkey(struct qib_mregion *mr, int dma_region)
 {
 	unsigned long flags;
 	u32 r;
@@ -109,10 +109,10 @@ bail:
 }
 
 /**
- * qib_free_lkey - free an lkey
+ * hfi1_free_lkey - free an lkey
  * @mr: mr to free from tables
  */
-void qib_free_lkey(struct qib_mregion *mr)
+void hfi1_free_lkey(struct qib_mregion *mr)
 {
 	unsigned long flags;
 	u32 lkey = mr->lkey;
@@ -141,7 +141,7 @@ out:
 }
 
 /**
- * qib_lkey_ok - check IB SGE for validity and initialize
+ * hfi1_lkey_ok - check IB SGE for validity and initialize
  * @rkt: table containing lkey to check SGE against
  * @pd: protection domain
  * @isge: outgoing internal SGE
@@ -155,7 +155,7 @@ out:
  * Check the IB SGE for validity and initialize our internal version
  * of it.
  */
-int qib_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
+int hfi1_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
 		struct qib_sge *isge, struct ib_sge *sge, int acc)
 {
 	struct qib_mregion *mr;
@@ -164,7 +164,7 @@ int qib_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
 
 	/*
 	 * We use LKEY == zero for kernel virtual addresses
-	 * (see qib_get_dma_mr and qib_dma.c).
+	 * (see hfi1_get_dma_mr and qib_dma.c).
 	 */
 	rcu_read_lock();
 	if (sge->lkey == 0) {
@@ -238,7 +238,7 @@ bail:
 }
 
 /**
- * qib_rkey_ok - check the IB virtual address, length, and RKEY
+ * hfi1_rkey_ok - check the IB virtual address, length, and RKEY
  * @qp: qp for validation
  * @sge: SGE state
  * @len: length of data
@@ -250,7 +250,7 @@ bail:
  *
  * increments the reference count upon success
  */
-int qib_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
+int hfi1_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
 		u32 len, u64 vaddr, u32 rkey, int acc)
 {
 	struct qib_lkey_table *rkt = &to_idev(qp->ibqp.device)->lk_table;
@@ -260,7 +260,7 @@ int qib_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
 
 	/*
 	 * We use RKEY == zero for kernel virtual addresses
-	 * (see qib_get_dma_mr and qib_dma.c).
+	 * (see hfi1_get_dma_mr and qib_dma.c).
 	 */
 	rcu_read_lock();
 	if (rkey == 0) {
@@ -337,7 +337,7 @@ bail:
 /*
  * Initialize the memory region specified by the work reqeust.
  */
-int qib_fast_reg_mr(struct qib_qp *qp, struct ib_send_wr *wr)
+int hfi1_fast_reg_mr(struct qib_qp *qp, struct ib_send_wr *wr)
 {
 	struct qib_lkey_table *rkt = &to_idev(qp->ibqp.device)->lk_table;
 	struct qib_pd *pd = to_ipd(qp->ibqp.pd);

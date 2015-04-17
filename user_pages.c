@@ -86,7 +86,7 @@ bail:
 }
 
 /**
- * qib_map_page - a safety wrapper around pci_map_page()
+ * hfi1_map_page - a safety wrapper around pci_map_page()
  *
  * A dma_addr of all 0's is interpreted by the chip as "disabled".
  * Unfortunately, it can also be a valid dma_addr returned on some
@@ -98,7 +98,7 @@ bail:
  *
  * I'm sure we won't be so lucky with other iommu's, so FIXME.
  */
-dma_addr_t qib_map_page(struct pci_dev *hwdev, struct page *page,
+dma_addr_t hfi1_map_page(struct pci_dev *hwdev, struct page *page,
 			unsigned long offset, size_t size, int direction)
 {
 	dma_addr_t phys;
@@ -118,7 +118,7 @@ dma_addr_t qib_map_page(struct pci_dev *hwdev, struct page *page,
 }
 
 /**
- * qib_get_user_pages - lock user pages into memory
+ * hfi1_get_user_pages - lock user pages into memory
  * @start_page: the start page
  * @num_pages: the number of pages
  * @p: the output page structures
@@ -129,7 +129,7 @@ dma_addr_t qib_map_page(struct pci_dev *hwdev, struct page *page,
  * (because caller is doing expected sends on a single virtually contiguous
  * buffer, so we can do all pages at once).
  */
-int qib_get_user_pages(unsigned long start_page, size_t num_pages,
+int hfi1_get_user_pages(unsigned long start_page, size_t num_pages,
 		       struct page **p)
 {
 	int ret;
@@ -143,7 +143,7 @@ int qib_get_user_pages(unsigned long start_page, size_t num_pages,
 	return ret;
 }
 
-void qib_release_user_pages(struct page **p, size_t num_pages)
+void hfi1_release_user_pages(struct page **p, size_t num_pages)
 {
 	if (current->mm) /* during close after signal, mm can be NULL */
 		down_write(&current->mm->mmap_sem);

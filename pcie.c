@@ -62,7 +62,7 @@ static void qib_tune_pcie_coalesce(struct hfi_devdata *);
  * routine returns success.  Therefore dd_dev_err() can't be used for error
  * printing.
  */
-int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
+int hfi1_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int ret;
 
@@ -131,7 +131,7 @@ done:
 }
 
 /*
- * Clean what was done in qib_pcie_init()
+ * Clean what was done in hfi1_pcie_init()
  */
 void hfi_pcie_cleanup(struct pci_dev *pdev)
 {
@@ -148,7 +148,7 @@ void hfi_pcie_cleanup(struct pci_dev *pdev)
  * fields required to re-initialize after a chip reset, or for
  * various other purposes
  */
-int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
+int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 		    const struct pci_device_id *ent)
 {
 	unsigned long len;
@@ -227,7 +227,7 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
  * to releasing the dd memory.
  * Void because all of the core pcie cleanup functions are void.
  */
-void qib_pcie_ddcleanup(struct hfi_devdata *dd)
+void hfi1_pcie_ddcleanup(struct hfi_devdata *dd)
 {
 	u64 __iomem *base = (void __iomem *) dd->kregbase;
 
@@ -314,7 +314,7 @@ do_intx:
 	*msixcnt = tabsize;
 
 	if (ret)
-		qib_enable_intx(dd->pcidev);
+		hfi1_enable_intx(dd->pcidev);
 
 }
 
@@ -415,7 +415,7 @@ void request_msix(struct hfi_devdata *dd, u32 *nent,
 		/* did it, either MSI-X or INTx */
 	} else {
 		*nent = 0;
-		qib_enable_intx(dd->pcidev);
+		hfi1_enable_intx(dd->pcidev);
 	}
 
 	qib_tune_pcie_caps(dd);
@@ -425,12 +425,12 @@ void request_msix(struct hfi_devdata *dd, u32 *nent,
 /*
  * Disable MSI-X.
  */
-void qib_nomsix(struct hfi_devdata *dd)
+void hfi1_nomsix(struct hfi_devdata *dd)
 {
 	pci_disable_msix(dd->pcidev);
 }
 
-void qib_enable_intx(struct pci_dev *pdev)
+void hfi1_enable_intx(struct pci_dev *pdev)
 {
 	/* first, turn on INTx */
 	pci_intx(pdev, 1);
@@ -771,7 +771,7 @@ qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 			dd_dev_info(dd, "State Permanent Failure, disabling\n");
 			/* no more register accesses! */
 			dd->flags &= ~HFI_PRESENT;
-			qib_disable_after_error(dd);
+			hfi1_disable_after_error(dd);
 		}
 		 /* else early, or other problem */
 		ret =  PCI_ERS_RESULT_DISCONNECT;
@@ -833,7 +833,7 @@ qib_pci_resume(struct pci_dev *pdev)
 	 * unlike sysfs-requested reset.   Better than
 	 * doing nothing.
 	 */
-	qib_init(dd, 1); /* same as re-init after reset */
+	hfi1_init(dd, 1); /* same as re-init after reset */
 }
 
 const struct pci_error_handlers qib_pci_err_handler = {

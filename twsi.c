@@ -255,11 +255,11 @@ static void stop_cmd(struct hfi_devdata *dd, u32 target)
 }
 
 /**
- * qib_twsi_reset - reset I2C communication
+ * hfi1_twsi_reset - reset I2C communication
  * @dd: the qlogic_ib device
  */
 
-int qib_twsi_reset(struct hfi_devdata *dd, u32 target)
+int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target)
 {
 	int clock_cycles_left = 9;
 	int was_high = 0;
@@ -342,7 +342,7 @@ static int qib_twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
 #define QIB_TEMP_DEV 0x98
 
 /*
- * qib_twsi_blk_rd
+ * hfi1_twsi_blk_rd
  * Formerly called qib_eeprom_internal_read, and only used for eeprom,
  * but now the general interface for data transfer from twsi devices.
  * One vestige of its former role is that it recognizes a device
@@ -353,7 +353,7 @@ static int qib_twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
  * the "register" or "offset" within the device from which data should
  * be read.
  */
-int qib_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
+int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		    void *buffer, int len)
 {
 	int ret;
@@ -420,7 +420,7 @@ bail:
 }
 
 /*
- * qib_twsi_blk_wr
+ * hfi1_twsi_blk_wr
  * Formerly called qib_eeprom_internal_write, and only used for eeprom,
  * but now the general interface for data transfer to twsi devices.
  * One vestige of its former role is that it recognizes a device
@@ -431,7 +431,7 @@ bail:
  * the "register" or "offset" within the device to which data should
  * be written.
  */
-int qib_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
+int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		    const void *buffer, int len)
 {
 	int sub_len;

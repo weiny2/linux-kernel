@@ -85,7 +85,7 @@ static void deinit_qib_mregion(struct qib_mregion *mr)
 
 
 /**
- * qib_get_dma_mr - get a DMA memory region
+ * hfi1_get_dma_mr - get a DMA memory region
  * @pd: protection domain for this memory region
  * @acc: access flags
  *
@@ -93,7 +93,7 @@ static void deinit_qib_mregion(struct qib_mregion *mr)
  * Note that all DMA addresses should be created via the
  * struct ib_dma_mapping_ops functions (see qib_dma.c).
  */
-struct ib_mr *qib_get_dma_mr(struct ib_pd *pd, int acc)
+struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc)
 {
 	struct qib_mr *mr = NULL;
 	struct ib_mr *ret;
@@ -117,7 +117,7 @@ struct ib_mr *qib_get_dma_mr(struct ib_pd *pd, int acc)
 	}
 
 
-	rval = qib_alloc_lkey(&mr->mr, 1);
+	rval = hfi1_alloc_lkey(&mr->mr, 1);
 	if (rval) {
 		ret = ERR_PTR(rval);
 		goto bail_mregion;
@@ -154,7 +154,7 @@ static struct qib_mr *alloc_mr(int count, struct ib_pd *pd)
 	 * ib_reg_phys_mr() will initialize mr->ibmr except for
 	 * lkey and rkey.
 	 */
-	rval = qib_alloc_lkey(&mr->mr, 0);
+	rval = hfi1_alloc_lkey(&mr->mr, 0);
 	if (rval)
 		goto bail_mregion;
 	mr->ibmr.lkey = mr->mr.lkey;
@@ -171,7 +171,7 @@ bail:
 }
 
 /**
- * qib_reg_phys_mr - register a physical memory region
+ * hfi1_reg_phys_mr - register a physical memory region
  * @pd: protection domain for this memory region
  * @buffer_list: pointer to the list of physical buffers to register
  * @num_phys_buf: the number of physical buffers to register
@@ -179,7 +179,7 @@ bail:
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *qib_reg_phys_mr(struct ib_pd *pd,
+struct ib_mr *hfi1_reg_phys_mr(struct ib_pd *pd,
 			      struct ib_phys_buf *buffer_list,
 			      int num_phys_buf, int acc, u64 *iova_start)
 {
@@ -217,7 +217,7 @@ bail:
 }
 
 /**
- * qib_reg_user_mr - register a userspace memory region
+ * hfi1_reg_user_mr - register a userspace memory region
  * @pd: protection domain for this memory region
  * @start: starting userspace address
  * @length: length of region to register
@@ -226,7 +226,7 @@ bail:
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *qib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+struct ib_mr *hfi1_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			      u64 virt_addr, int mr_access_flags,
 			      struct ib_udata *udata)
 {
@@ -293,21 +293,21 @@ bail:
 }
 
 /**
- * qib_dereg_mr - unregister and free a memory region
+ * hfi1_dereg_mr - unregister and free a memory region
  * @ibmr: the memory region to free
  *
  * Returns 0 on success.
  *
- * Note that this is called to free MRs created by qib_get_dma_mr()
- * or qib_reg_user_mr().
+ * Note that this is called to free MRs created by hfi1_get_dma_mr()
+ * or hfi1_reg_user_mr().
  */
-int qib_dereg_mr(struct ib_mr *ibmr)
+int hfi1_dereg_mr(struct ib_mr *ibmr)
 {
 	struct qib_mr *mr = to_imr(ibmr);
 	int ret = 0;
 	unsigned long timeout;
 
-	qib_free_lkey(&mr->mr);
+	hfi1_free_lkey(&mr->mr);
 
 	qib_put_mr(&mr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&mr->mr.comp,
@@ -315,7 +315,7 @@ int qib_dereg_mr(struct ib_mr *ibmr)
 	if (!timeout) {
 		dd_dev_err(
 			dd_from_ibdev(mr->mr.pd->device),
-			"qib_dereg_mr timeout mr %p pd %p refcount %u\n",
+			"hfi1_dereg_mr timeout mr %p pd %p refcount %u\n",
 			mr, mr->mr.pd, atomic_read(&mr->mr.refcount));
 		qib_get_mr(&mr->mr);
 		ret = -EBUSY;
@@ -335,7 +335,7 @@ out:
  *
  * Return the memory region on success, otherwise return an errno.
  */
-struct ib_mr *qib_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len)
+struct ib_mr *hfi1_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len)
 {
 	struct qib_mr *mr;
 
@@ -347,7 +347,7 @@ struct ib_mr *qib_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len)
 }
 
 struct ib_fast_reg_page_list *
-qib_alloc_fast_reg_page_list(struct ib_device *ibdev, int page_list_len)
+hfi1_alloc_fast_reg_page_list(struct ib_device *ibdev, int page_list_len)
 {
 	unsigned size = page_list_len * sizeof(u64);
 	struct ib_fast_reg_page_list *pl;
@@ -370,21 +370,21 @@ err_free:
 	return ERR_PTR(-ENOMEM);
 }
 
-void qib_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl)
+void hfi1_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl)
 {
 	kfree(pl->page_list);
 	kfree(pl);
 }
 
 /**
- * qib_alloc_fmr - allocate a fast memory region
+ * hfi1_alloc_fmr - allocate a fast memory region
  * @pd: the protection domain for this memory region
  * @mr_access_flags: access flags for this memory region
  * @fmr_attr: fast memory region attributes
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
-struct ib_fmr *qib_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
+struct ib_fmr *hfi1_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
 			     struct ib_fmr_attr *fmr_attr)
 {
 	struct qib_fmr *fmr;
@@ -406,7 +406,7 @@ struct ib_fmr *qib_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
 	 * ib_alloc_fmr() will initialize fmr->ibfmr except for lkey &
 	 * rkey.
 	 */
-	rval = qib_alloc_lkey(&fmr->mr, 0);
+	rval = hfi1_alloc_lkey(&fmr->mr, 0);
 	if (rval)
 		goto bail_mregion;
 	fmr->ibfmr.rkey = fmr->mr.lkey;
@@ -432,7 +432,7 @@ bail:
 }
 
 /**
- * qib_map_phys_fmr - set up a fast memory region
+ * hfi1_map_phys_fmr - set up a fast memory region
  * @ibmfr: the fast memory region to set up
  * @page_list: the list of pages to associate with the fast memory region
  * @list_len: the number of pages to associate with the fast memory region
@@ -441,7 +441,7 @@ bail:
  * This may be called from interrupt context.
  */
 
-int qib_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
+int hfi1_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
 		     int list_len, u64 iova)
 {
 	struct qib_fmr *fmr = to_ifmr(ibfmr);
@@ -483,12 +483,12 @@ bail:
 }
 
 /**
- * qib_unmap_fmr - unmap fast memory regions
+ * hfi1_unmap_fmr - unmap fast memory regions
  * @fmr_list: the list of fast memory regions to unmap
  *
  * Returns 0 on success.
  */
-int qib_unmap_fmr(struct list_head *fmr_list)
+int hfi1_unmap_fmr(struct list_head *fmr_list)
 {
 	struct qib_fmr *fmr;
 	struct qib_lkey_table *rkt;
@@ -506,18 +506,18 @@ int qib_unmap_fmr(struct list_head *fmr_list)
 }
 
 /**
- * qib_dealloc_fmr - deallocate a fast memory region
+ * hfi1_dealloc_fmr - deallocate a fast memory region
  * @ibfmr: the fast memory region to deallocate
  *
  * Returns 0 on success.
  */
-int qib_dealloc_fmr(struct ib_fmr *ibfmr)
+int hfi1_dealloc_fmr(struct ib_fmr *ibfmr)
 {
 	struct qib_fmr *fmr = to_ifmr(ibfmr);
 	int ret = 0;
 	unsigned long timeout;
 
-	qib_free_lkey(&fmr->mr);
+	hfi1_free_lkey(&fmr->mr);
 	qib_put_mr(&fmr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&fmr->mr.comp,
 		5 * HZ);

@@ -114,7 +114,7 @@ static void verbs_sdma_complete(
 
 /*
  * Note that it is OK to post send work requests in the SQE and ERR
- * states; qib_do_send() will process them and generate error
+ * states; hfi1_do_send() will process them and generate error
  * completions as per IB 1.2 C10-96.
  */
 const int ib_qib_state_ops[IB_QPS_ERR + 1] = {
@@ -205,12 +205,12 @@ const u8 hdr_len_by_opcode[256] = {
 __be64 ib_qib_sys_image_guid;
 
 /**
- * qib_copy_sge - copy data to SGE memory
+ * hfi1_copy_sge - copy data to SGE memory
  * @ss: the SGE state
  * @data: the data to copy
  * @length: the length of the data
  */
-void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
+void hfi1_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
 {
 	struct qib_sge *sge = &ss->sge;
 
@@ -248,11 +248,11 @@ void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
 }
 
 /**
- * qib_skip_sge - skip over SGE memory - XXX almost dup of prev func
+ * hfi1_skip_sge - skip over SGE memory - XXX almost dup of prev func
  * @ss: the SGE state
  * @length: the number of bytes to skip
  */
-void qib_skip_sge(struct qib_sge_state *ss, u32 length, int release)
+void hfi1_skip_sge(struct qib_sge_state *ss, u32 length, int release)
 {
 	struct qib_sge *sge = &ss->sge;
 
@@ -327,7 +327,7 @@ static int qib_post_one_send(struct qib_qp *qp, struct ib_send_wr *wr,
 	 * Make sure buffer is large enough to hold the result for atomics.
 	 */
 	if (wr->opcode == IB_WR_FAST_REG_MR) {
-		if (qib_fast_reg_mr(qp, wr))
+		if (hfi1_fast_reg_mr(qp, wr))
 			goto bail_inval;
 	} else if (qp->ibqp.qp_type == IB_QPT_UC) {
 		if ((unsigned) wr->opcode >= IB_WR_RDMA_READ)
@@ -373,7 +373,7 @@ static int qib_post_one_send(struct qib_qp *qp, struct ib_send_wr *wr,
 
 			if (length == 0)
 				continue;
-			ok = qib_lkey_ok(rkt, pd, &wqe->sg_list[j],
+			ok = hfi1_lkey_ok(rkt, pd, &wqe->sg_list[j],
 					 &wr->sg_list[i], acc);
 			if (!ok)
 				goto bail_inval_free;
@@ -418,7 +418,7 @@ bail:
 
 		sde = qp_to_sdma_engine(qp, sc5);
 		if (sde && !sdma_empty(sde)) {
-			qib_schedule_send(qp);
+			hfi1_schedule_send(qp);
 			*scheduled = 1;
 		}
 	}
@@ -451,7 +451,7 @@ static int qib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 
 	/* Try to do the send work in the caller's context. */
 	if (!scheduled)
-		qib_do_send(&qp->s_iowait.iowork);
+		hfi1_do_send(&qp->s_iowait.iowork);
 
 bail:
 	return err;
@@ -527,7 +527,7 @@ bail:
  * @tlen: the packet length
  * @qp: the QP the packet came on
  *
- * This is called from qib_ib_rcv() to process an incoming packet
+ * This is called from hfi1_ib_rcv() to process an incoming packet
  * for the given QP.
  * Called at interrupt level.
  */
@@ -551,15 +551,15 @@ static void qib_qp_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 			break;
 		/* FALLTHROUGH */
 	case IB_QPT_UD:
-		qib_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
+		hfi1_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
 		break;
 
 	case IB_QPT_RC:
-		qib_rc_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
+		hfi1_rc_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
 		break;
 
 	case IB_QPT_UC:
-		qib_uc_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
+		hfi1_uc_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
 		break;
 
 	default:
@@ -571,14 +571,14 @@ unlock:
 }
 
 /**
- * qib_ib_rcv - process an incoming packet
+ * hfi1_ib_rcv - process an incoming packet
  * @packet: data packet information
  *
  * This is called to process an incoming packet at interrupt level.
  *
  * Tlen is the length of the header + data + CRC in bytes.
  */
-void qib_ib_rcv(struct hfi_packet *packet)
+void hfi1_ib_rcv(struct hfi_packet *packet)
 {
 	struct qib_ctxtdata *rcd = packet->rcd;
 	struct qib_ib_header *hdr = packet->hdr;
@@ -631,7 +631,7 @@ void qib_ib_rcv(struct hfi_packet *packet)
 
 		if (lnh != QIB_LRH_GRH)
 			goto drop;
-		mcast = qib_mcast_find(ibp, &hdr->u.l.grh.dgid);
+		mcast = hfi1_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
 		rcv_flags |= QIB_HAS_GRH;
@@ -640,7 +640,7 @@ void qib_ib_rcv(struct hfi_packet *packet)
 		list_for_each_entry_rcu(p, &mcast->qp_list, list)
 			qib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, p->qp);
 		/*
-		 * Notify qib_multicast_detach() if it is waiting for us
+		 * Notify hfi1_multicast_detach() if it is waiting for us
 		 * to finish.
 		 */
 		if (atomic_dec_return(&mcast->refcount) <= 1)
@@ -656,7 +656,7 @@ void qib_ib_rcv(struct hfi_packet *packet)
 				}
 		}
 		if (!rcd->lookaside_qp) {
-			qp = qib_lookup_qpn(ibp, qp_num);
+			qp = hfi1_lookup_qpn(ibp, qp_num);
 			if (!qp)
 				goto drop;
 			rcd->lookaside_qp = qp;
@@ -783,7 +783,7 @@ static inline struct verbs_txreq *get_txreq(struct qib_ibdev *dev,
 	return tx;
 }
 
-void qib_put_txreq(struct verbs_txreq *tx)
+void hfi1_put_txreq(struct verbs_txreq *tx)
 {
 	struct qib_ibdev *dev;
 	struct qib_qp *qp;
@@ -834,13 +834,13 @@ static void verbs_sdma_complete(
 
 	spin_lock(&qp->s_lock);
 	if (tx->wqe)
-		qib_send_complete(qp, tx->wqe, IB_WC_SUCCESS);
+		hfi1_send_complete(qp, tx->wqe, IB_WC_SUCCESS);
 	else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		struct qib_ib_header *hdr;
 		struct qib_ibdev *dev = to_idev(qp->ibqp.device);
 
 		hdr = &dev->pio_hdrs[tx->hdr_inx].phdr.hdr;
-		qib_rc_send_complete(qp, hdr);
+		hfi1_rc_send_complete(qp, hdr);
 	}
 	if (drained) {
 		/*
@@ -851,12 +851,12 @@ static void verbs_sdma_complete(
 		 */
 		if (qp->s_flags & QIB_S_WAIT_DMA) {
 			qp->s_flags &= ~QIB_S_WAIT_DMA;
-			qib_schedule_send(qp);
+			hfi1_schedule_send(qp);
 		}
 	}
 	spin_unlock(&qp->s_lock);
 
-	qib_put_txreq(tx);
+	hfi1_put_txreq(tx);
 }
 
 static int wait_kmem(struct qib_ibdev *dev, struct qib_qp *qp)
@@ -1009,7 +1009,7 @@ bail_txadd:
 	return ret;
 }
 
-int qib_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *ahdr,
+int hfi1_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc)
 {
@@ -1069,7 +1069,7 @@ bail_ecomm:
 	return 0;
 bail_build:
 	/* kmalloc or mapping fail */
-	qib_put_txreq(tx);
+	hfi1_put_txreq(tx);
 	return wait_kmem(dev, qp);
 bail_tx:
 	return PTR_ERR(tx);
@@ -1129,7 +1129,7 @@ struct send_context *qp_to_send_context(struct qib_qp *qp, u8 sc5)
 	return dd->vld[vl].sc;
 }
 
-int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
+int hfi1_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc)
 {
@@ -1208,11 +1208,11 @@ int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 pio_bail:
 	if (qp->s_wqe) {
 		spin_lock_irqsave(&qp->s_lock, flags);
-		qib_send_complete(qp, qp->s_wqe, wc_status);
+		hfi1_send_complete(qp, qp->s_wqe, wc_status);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	} else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		spin_lock_irqsave(&qp->s_lock, flags);
-		qib_rc_send_complete(qp, &ahdr->ibh);
+		hfi1_rc_send_complete(qp, &ahdr->ibh);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	}
 	return 0;
@@ -1301,7 +1301,7 @@ bad:
 }
 
 /**
- * qib_verbs_send - send a packet
+ * hfi1_verbs_send - send a packet
  * @qp: the QP to send on
  * @ahdr: the packet header
  * @hdrwords: the number of 32-bit words in the header
@@ -1311,7 +1311,7 @@ bad:
  * Return zero if packet is sent or queued OK.
  * Return non-zero and clear qp->s_flags QIB_S_BUSY otherwise.
  */
-int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
+int hfi1_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
@@ -1344,7 +1344,7 @@ int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			hfi_cdbg(PIO, "%s() Failed. Completing with err",
 				 __func__);
 			spin_lock_irqsave(&qp->s_lock, flags);
-			qib_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
+			hfi1_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
 			spin_unlock_irqrestore(&qp->s_lock, flags);
 		}
 		return -EINVAL;
@@ -1411,7 +1411,7 @@ static int qib_query_device(struct ib_device *ibdev,
 	props->max_srq_sge = ib_qib_max_srq_sges;
 	/* props->local_ca_ack_delay */
 	props->atomic_cap = IB_ATOMIC_GLOB;
-	props->max_pkeys = qib_get_npkeys(dd);
+	props->max_pkeys = hfi1_get_npkeys(dd);
 	props->max_mcast_grp = ib_qib_max_mcast_grps;
 	props->max_mcast_qp_attach = ib_qib_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
@@ -1471,7 +1471,7 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = QIB_GUIDS_PER_PORT;
 	props->max_msg_sz = 0x80000000;
-	props->pkey_tbl_len = qib_get_npkeys(dd);
+	props->pkey_tbl_len = hfi1_get_npkeys(dd);
 	props->bad_pkey_cntr = ibp->pkey_violations;
 	props->qkey_viol_cntr = ibp->qkey_violations;
 	props->active_width = (u8)opa_width_to_ib(ppd->link_width_active);
@@ -1516,7 +1516,7 @@ static int qib_modify_device(struct ib_device *device,
 		for (i = 0; i < dd->num_pports; i++) {
 			struct qib_ibport *ibp = &dd->pport[i].ibport_data;
 
-			qib_node_desc_chg(ibp);
+			hfi1_node_desc_chg(ibp);
 		}
 	}
 
@@ -1526,7 +1526,7 @@ static int qib_modify_device(struct ib_device *device,
 		for (i = 0; i < dd->num_pports; i++) {
 			struct qib_ibport *ibp = &dd->pport[i].ibport_data;
 
-			qib_sys_guid_chg(ibp);
+			hfi1_sys_guid_chg(ibp);
 		}
 	}
 
@@ -1546,7 +1546,7 @@ static int qib_modify_port(struct ib_device *ibdev, u8 port,
 	ibp->port_cap_flags |= props->set_port_cap_mask;
 	ibp->port_cap_flags &= ~props->clr_port_cap_mask;
 	if (props->set_port_cap_mask || props->clr_port_cap_mask)
-		qib_cap_mask_chg(ibp);
+		hfi1_cap_mask_chg(ibp);
 	if (port_modify_mask & IB_PORT_SHUTDOWN) {
 		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_UNKNOWN, 0,
 		  OPA_LINKDOWN_REASON_UNKNOWN);
@@ -1646,7 +1646,7 @@ u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah)
 	return ibp->sl_to_sc[ah->sl];
 }
 
-int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
+int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
 	struct qib_ibport *ibp;
 	struct qib_pportdata *ppd;
@@ -1698,7 +1698,7 @@ static struct ib_ah *qib_create_ah(struct ib_pd *pd,
 	struct qib_ibdev *dev = to_idev(pd->device);
 	unsigned long flags;
 
-	if (qib_check_ah(pd->device, ah_attr)) {
+	if (hfi1_check_ah(pd->device, ah_attr)) {
 		ret = ERR_PTR(-EINVAL);
 		goto bail;
 	}
@@ -1730,7 +1730,7 @@ bail:
 	return ret;
 }
 
-struct ib_ah *qib_create_qp0_ah(struct qib_ibport *ibp, u16 dlid)
+struct ib_ah *hfi1_create_qp0_ah(struct qib_ibport *ibp, u16 dlid)
 {
 	struct ib_ah_attr attr;
 	struct ib_ah *ah = ERR_PTR(-EINVAL);
@@ -1775,7 +1775,7 @@ static int qib_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 {
 	struct qib_ah *ah = to_iah(ibah);
 
-	if (qib_check_ah(ibah->device, ah_attr))
+	if (hfi1_check_ah(ibah->device, ah_attr))
 		return -EINVAL;
 
 	ah->attr = *ah_attr;
@@ -1793,10 +1793,10 @@ static int qib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 }
 
 /**
- * qib_get_npkeys - return the size of the PKEY table for context 0
+ * hfi1_get_npkeys - return the size of the PKEY table for context 0
  * @dd: the qlogic_ib device
  */
-unsigned qib_get_npkeys(struct hfi_devdata *dd)
+unsigned hfi1_get_npkeys(struct hfi_devdata *dd)
 {
 	return ARRAY_SIZE(dd->pport[0].pkeys);
 }
@@ -1804,7 +1804,7 @@ unsigned qib_get_npkeys(struct hfi_devdata *dd)
 /*
  * Return the indexed PKEY from the port PKEY table.
  */
-unsigned qib_get_pkey(struct qib_ibport *ibp, unsigned index)
+unsigned hfi1_get_pkey(struct qib_ibport *ibp, unsigned index)
 {
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	unsigned ret;
@@ -1823,12 +1823,12 @@ static int qib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	int ret;
 
-	if (index >= qib_get_npkeys(dd)) {
+	if (index >= hfi1_get_npkeys(dd)) {
 		ret = -EINVAL;
 		goto bail;
 	}
 
-	*pkey = qib_get_pkey(to_iport(ibdev, port), index);
+	*pkey = hfi1_get_pkey(to_iport(ibdev, port), index);
 	ret = 0;
 
 bail:
@@ -1894,11 +1894,11 @@ static void init_ibport(struct qib_pportdata *ppd)
 }
 
 /**
- * qib_register_ib_device - register our device with the infiniband core
+ * hfi1_register_ib_device - register our device with the infiniband core
  * @dd: the device data structure
  * Return the allocated qib_ibdev pointer or NULL on error.
  */
-int qib_register_ib_device(struct hfi_devdata *dd)
+int hfi1_register_ib_device(struct hfi_devdata *dd)
 {
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;
@@ -2044,58 +2044,58 @@ int qib_register_ib_device(struct hfi_devdata *dd)
 	ibdev->destroy_ah = qib_destroy_ah;
 	ibdev->modify_ah = qib_modify_ah;
 	ibdev->query_ah = qib_query_ah;
-	ibdev->create_srq = qib_create_srq;
-	ibdev->modify_srq = qib_modify_srq;
-	ibdev->query_srq = qib_query_srq;
-	ibdev->destroy_srq = qib_destroy_srq;
-	ibdev->create_qp = qib_create_qp;
-	ibdev->modify_qp = qib_modify_qp;
-	ibdev->query_qp = qib_query_qp;
-	ibdev->destroy_qp = qib_destroy_qp;
+	ibdev->create_srq = hfi1_create_srq;
+	ibdev->modify_srq = hfi1_modify_srq;
+	ibdev->query_srq = hfi1_query_srq;
+	ibdev->destroy_srq = hfi1_destroy_srq;
+	ibdev->create_qp = hfi1_create_qp;
+	ibdev->modify_qp = hfi1_modify_qp;
+	ibdev->query_qp = hfi1_query_qp;
+	ibdev->destroy_qp = hfi1_destroy_qp;
 	ibdev->post_send = qib_post_send;
 	ibdev->post_recv = qib_post_receive;
-	ibdev->post_srq_recv = qib_post_srq_receive;
-	ibdev->create_cq = qib_create_cq;
-	ibdev->destroy_cq = qib_destroy_cq;
-	ibdev->resize_cq = qib_resize_cq;
-	ibdev->poll_cq = qib_poll_cq;
-	ibdev->req_notify_cq = qib_req_notify_cq;
-	ibdev->get_dma_mr = qib_get_dma_mr;
-	ibdev->reg_phys_mr = qib_reg_phys_mr;
-	ibdev->reg_user_mr = qib_reg_user_mr;
-	ibdev->dereg_mr = qib_dereg_mr;
-	ibdev->alloc_fast_reg_mr = qib_alloc_fast_reg_mr;
-	ibdev->alloc_fast_reg_page_list = qib_alloc_fast_reg_page_list;
-	ibdev->free_fast_reg_page_list = qib_free_fast_reg_page_list;
-	ibdev->alloc_fmr = qib_alloc_fmr;
-	ibdev->map_phys_fmr = qib_map_phys_fmr;
-	ibdev->unmap_fmr = qib_unmap_fmr;
-	ibdev->dealloc_fmr = qib_dealloc_fmr;
-	ibdev->attach_mcast = qib_multicast_attach;
-	ibdev->detach_mcast = qib_multicast_detach;
-	ibdev->process_mad = qib_process_mad;
-	ibdev->mmap = qib_mmap;
+	ibdev->post_srq_recv = hfi1_post_srq_receive;
+	ibdev->create_cq = hfi1_create_cq;
+	ibdev->destroy_cq = hfi1_destroy_cq;
+	ibdev->resize_cq = hfi1_resize_cq;
+	ibdev->poll_cq = hfi1_poll_cq;
+	ibdev->req_notify_cq = hfi1_req_notify_cq;
+	ibdev->get_dma_mr = hfi1_get_dma_mr;
+	ibdev->reg_phys_mr = hfi1_reg_phys_mr;
+	ibdev->reg_user_mr = hfi1_reg_user_mr;
+	ibdev->dereg_mr = hfi1_dereg_mr;
+	ibdev->alloc_fast_reg_mr = hfi1_alloc_fast_reg_mr;
+	ibdev->alloc_fast_reg_page_list = hfi1_alloc_fast_reg_page_list;
+	ibdev->free_fast_reg_page_list = hfi1_free_fast_reg_page_list;
+	ibdev->alloc_fmr = hfi1_alloc_fmr;
+	ibdev->map_phys_fmr = hfi1_map_phys_fmr;
+	ibdev->unmap_fmr = hfi1_unmap_fmr;
+	ibdev->dealloc_fmr = hfi1_dealloc_fmr;
+	ibdev->attach_mcast = hfi1_multicast_attach;
+	ibdev->detach_mcast = hfi1_multicast_detach;
+	ibdev->process_mad = hfi1_process_mad;
+	ibdev->mmap = hfi1_mmap;
 	ibdev->dma_ops = &qib_dma_mapping_ops;
 
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
 
-	ret = ib_register_device(ibdev, qib_create_port_files);
+	ret = ib_register_device(ibdev, hfi1_create_port_files);
 	if (ret)
 		goto err_reg;
 
-	ret = qib_create_agents(dev);
+	ret = hfi1_create_agents(dev);
 	if (ret)
 		goto err_agents;
 
-	ret = qib_verbs_register_sysfs(dd);
+	ret = hfi1_verbs_register_sysfs(dd);
 	if (ret)
 		goto err_class;
 
 	goto bail;
 
 err_class:
-	qib_free_agents(dev);
+	hfi1_free_agents(dev);
 err_agents:
 	ib_unregister_device(ibdev);
 err_reg:
@@ -2122,15 +2122,15 @@ bail:
 	return ret;
 }
 
-void qib_unregister_ib_device(struct hfi_devdata *dd)
+void hfi1_unregister_ib_device(struct hfi_devdata *dd)
 {
 	struct qib_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;
 	unsigned lk_tab_size;
 
-	qib_verbs_unregister_sysfs(dd);
+	hfi1_verbs_unregister_sysfs(dd);
 
-	qib_free_agents(dev);
+	hfi1_free_agents(dev);
 
 	ib_unregister_device(ibdev);
 
@@ -2163,7 +2163,7 @@ void qib_unregister_ib_device(struct hfi_devdata *dd)
 /*
  * This must be called with s_lock held.
  */
-void qib_schedule_send(struct qib_qp *qp)
+void hfi1_schedule_send(struct qib_qp *qp)
 {
 	if (qib_send_ok(qp)) {
 		struct qib_ibport *ibp =

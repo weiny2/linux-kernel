@@ -3013,7 +3013,7 @@ void start_freeze_handling(struct qib_pportdata *ppd, int flags)
 	}
 
 	/* Send context are frozen. Notify user space */
-	qib_set_uevent_bits(ppd, _HFI_EVENT_FROZEN_BIT);
+	hfi1_set_uevent_bits(ppd, _HFI_EVENT_FROZEN_BIT);
 
 	if (flags & WFR_FREEZE_ABORT) {
 		dd_dev_err(dd,
@@ -8338,7 +8338,7 @@ static void clean_up_interrupts(struct hfi_devdata *dd)
 	/* turn off interrupts */
 	if (dd->num_msix_entries) {
 		/* MSI-X */
-		qib_nomsix(dd);
+		hfi1_nomsix(dd);
 	} else {
 		/* INTx */
 		disable_intx(dd->pcidev);
@@ -8811,7 +8811,7 @@ static void set_partition_keys(struct qib_pportdata *ppd)
 	int i;
 
 	dd_dev_info(dd, "Setting partition keys\n");
-	for (i = 0; i < qib_get_npkeys(dd); i++) {
+	for (i = 0; i < hfi1_get_npkeys(dd); i++) {
 		reg |= (ppd->pkeys[i] &
 			WFR_RCV_PARTITION_KEY_PARTITION_KEY_A_MASK) <<
 			((i % 4) *
@@ -9959,7 +9959,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		"Functional simulator"
 	};
 
-	dd = qib_alloc_devdata(pdev,
+	dd = hfi1_alloc_devdata(pdev,
 		NUM_IB_PORTS * sizeof(struct qib_pportdata));
 	if (IS_ERR(dd))
 		goto bail;
@@ -9967,7 +9967,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		int vl;
 		/* init common fields */
-		qib_init_pportdata(pdev, ppd, dd, 0, 1);
+		hfi1_init_pportdata(pdev, ppd, dd, 0, 1);
 		/* DC supports 4 link widths */
 		ppd->link_width_supported =
 			OPA_LINK_WIDTH_1X | OPA_LINK_WIDTH_2X |
@@ -10029,7 +10029,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	 * Any error printing is already done by the init code.
 	 * On return, we have the chip mapped.
 	 */
-	ret = qib_pcie_ddinit(dd, pdev, ent);
+	ret = hfi1_pcie_ddinit(dd, pdev, ent);
 	if (ret < 0)
 		goto bail_free;
 
@@ -10191,7 +10191,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 
-	ret = qib_create_ctxts(dd);
+	ret = hfi1_create_ctxts(dd);
 	if (ret)
 		goto bail_cleanup;
 
@@ -10213,7 +10213,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 			goto bail_cleanup;
 	}
 
-	/* use contexts created by qib_create_ctxts */
+	/* use contexts created by hfi1_create_ctxts */
 	ret = set_up_interrupts(dd);
 	if (ret)
 		goto bail_cleanup;
@@ -10264,9 +10264,9 @@ bail_free_cntrs:
 bail_clear_intr:
 	clean_up_interrupts(dd);
 bail_cleanup:
-	qib_pcie_ddcleanup(dd);
+	hfi1_pcie_ddcleanup(dd);
 bail_free:
-	qib_free_devdata(dd);
+	hfi1_free_devdata(dd);
 	dd = ERR_PTR(ret);
 bail:
 	return dd;

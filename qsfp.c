@@ -56,7 +56,7 @@ static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	u8 *buff = bp;
 
 	/* Make sure TWSI bus is in sane state. */
-	ret = qib_twsi_reset(dd, target);
+	ret = hfi1_twsi_reset(dd, target);
 	if (ret) {
 		qib_dev_porterr(dd, ppd->port,
 				"I2C interface Reset for write failed\n");
@@ -67,10 +67,10 @@ static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	while (cnt < len) {
 		int wlen = len - cnt;
 
-		ret = qib_twsi_blk_wr(dd, target, i2c_addr, offset,
+		ret = hfi1_twsi_blk_wr(dd, target, i2c_addr, offset,
 							buff + cnt, wlen);
 		if (ret) {
-			/* qib_twsi_blk_wr() 1 for error, else 0 */
+			/* hfi1_twsi_blk_wr() 1 for error, else 0 */
 			return -EIO;
 		}
 		offset += wlen;
@@ -110,7 +110,7 @@ static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	u8 *buff = bp;
 
 	/* Make sure TWSI bus is in sane state. */
-	ret = qib_twsi_reset(dd, target);
+	ret = hfi1_twsi_reset(dd, target);
 	if (ret) {
 		qib_dev_porterr(dd, ppd->port,
 				"I2C interface Reset for read failed\n");
@@ -123,13 +123,13 @@ static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	while (cnt < len) {
 		int rlen = len - cnt;
 
-		ret = qib_twsi_blk_rd(dd, target, i2c_addr, offset,
+		ret = hfi1_twsi_blk_rd(dd, target, i2c_addr, offset,
 							buff + cnt, rlen);
 		/* Some QSFP's fail first try. Retry as experiment */
 		if (ret && cnt == 0 && ++pass < I2C_MAX_RETRY)
 			continue;
 		if (ret) {
-			/* qib_twsi_blk_rd() 1 for error, else 0 */
+			/* hfi1_twsi_blk_rd() 1 for error, else 0 */
 			ret = -EIO;
 			goto exit;
 		}

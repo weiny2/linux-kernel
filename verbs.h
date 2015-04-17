@@ -127,7 +127,7 @@ struct hfi_packet;
 #define IB_VL_VL0_7     4
 #define IB_VL_VL0_14    5
 
-/* flags passed by qib_ib_rcv() */
+/* flags passed by hfi1_ib_rcv() */
 enum {
 	QIB_HAS_GRH = (1 << 0),
 	QIB_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
@@ -275,7 +275,7 @@ struct qib_ah {
 };
 
 /*
- * This structure is used by qib_mmap() to validate an offset
+ * This structure is used by hfi1_mmap() to validate an offset
  * when an mmap() request is made.  The vm_area_struct then uses
  * this as its vm_private_data.
  */
@@ -868,17 +868,17 @@ static inline int qib_send_ok(struct qib_qp *qp)
 /*
  * This must be called with s_lock held.
  */
-void qib_schedule_send(struct qib_qp *qp);
-void qib_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
+void hfi1_schedule_send(struct qib_qp *qp);
+void hfi1_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 		   u32 qp1, u32 qp2, __be16 lid1, __be16 lid2);
-void qib_cap_mask_chg(struct qib_ibport *ibp);
-void qib_sys_guid_chg(struct qib_ibport *ibp);
-void qib_node_desc_chg(struct qib_ibport *ibp);
-int qib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
+void hfi1_cap_mask_chg(struct qib_ibport *ibp);
+void hfi1_sys_guid_chg(struct qib_ibport *ibp);
+void hfi1_node_desc_chg(struct qib_ibport *ibp);
+int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 		    struct ib_wc *in_wc, struct ib_grh *in_grh,
 		    struct ib_mad *in_mad, struct ib_mad *out_mad);
-int qib_create_agents(struct qib_ibdev *dev);
-void qib_free_agents(struct qib_ibdev *dev);
+int hfi1_create_agents(struct qib_ibdev *dev);
+void hfi1_free_agents(struct qib_ibdev *dev);
 
 /*
  * The PSN_MASK and PSN_SHIFT allow for
@@ -932,7 +932,7 @@ static inline u32 delta_psn(u32 a, u32 b)
 	return (((int)a - (int)b) << PSN_SHIFT) >> PSN_SHIFT;
 }
 
-struct qib_mcast *qib_mcast_find(struct qib_ibport *ibp, union ib_gid *mgid);
+struct qib_mcast *hfi1_mcast_find(struct qib_ibport *ibp, union ib_gid *mgid);
 
 int qib_snapshot_counters(struct qib_pportdata *ppd, u64 *swords,
 			  u64 *rwords, u64 *spkts, u64 *rpkts,
@@ -941,11 +941,11 @@ int qib_snapshot_counters(struct qib_pportdata *ppd, u64 *swords,
 int qib_get_counters(struct qib_pportdata *ppd,
 		     struct qib_verbs_counters *cntrs);
 
-int qib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+int hfi1_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
-int qib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
-int qib_mcast_tree_empty(struct qib_ibport *ibp);
+int hfi1_mcast_tree_empty(struct qib_ibport *ibp);
 
 unsigned qib_pkt_delay(u32 plen, u8 snd_mult, u8 rcv_mult);
 
@@ -953,20 +953,20 @@ struct sdma_engine;
 void qib_verbs_sdma_desc_avail(struct sdma_engine *engine, unsigned avail);
 
 struct verbs_txreq;
-void qib_put_txreq(struct verbs_txreq *tx);
+void hfi1_put_txreq(struct verbs_txreq *tx);
 
-int qib_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
+int hfi1_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		   u32 hdrwords, struct qib_sge_state *ss, u32 len);
 
-void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length,
+void hfi1_copy_sge(struct qib_sge_state *ss, void *data, u32 length,
 		  int release);
 
-void qib_skip_sge(struct qib_sge_state *ss, u32 length, int release);
+void hfi1_skip_sge(struct qib_sge_state *ss, u32 length, int release);
 
-void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
+void hfi1_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
 
-void qib_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
+void hfi1_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
 
 void qib_rc_hdrerr(
@@ -977,96 +977,96 @@ void qib_rc_hdrerr(
 
 u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 
-int qib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
+int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 
-struct ib_ah *qib_create_qp0_ah(struct qib_ibport *ibp, u16 dlid);
+struct ib_ah *hfi1_create_qp0_ah(struct qib_ibport *ibp, u16 dlid);
 
-void qib_rc_rnr_retry(unsigned long arg);
+void hfi1_rc_rnr_retry(unsigned long arg);
 
-void qib_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr);
+void hfi1_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr);
 
-void qib_rc_error(struct qib_qp *qp, enum ib_wc_status err);
+void hfi1_rc_error(struct qib_qp *qp, enum ib_wc_status err);
 
 int qib_post_ud_send(struct qib_qp *qp, struct ib_send_wr *wr);
 
-void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
+void hfi1_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
 
 int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey);
 
-int qib_alloc_lkey(struct qib_mregion *mr, int dma_region);
+int hfi1_alloc_lkey(struct qib_mregion *mr, int dma_region);
 
-void qib_free_lkey(struct qib_mregion *mr);
+void hfi1_free_lkey(struct qib_mregion *mr);
 
-int qib_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
+int hfi1_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
 		struct qib_sge *isge, struct ib_sge *sge, int acc);
 
-int qib_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
+int hfi1_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
 		u32 len, u64 vaddr, u32 rkey, int acc);
 
-int qib_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
+int hfi1_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
 			 struct ib_recv_wr **bad_wr);
 
-struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
+struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
 			      struct ib_srq_init_attr *srq_init_attr,
 			      struct ib_udata *udata);
 
-int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
+int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		   enum ib_srq_attr_mask attr_mask,
 		   struct ib_udata *udata);
 
-int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr);
+int hfi1_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr);
 
-int qib_destroy_srq(struct ib_srq *ibsrq);
+int hfi1_destroy_srq(struct ib_srq *ibsrq);
 
-int qib_cq_init(struct hfi_devdata *dd);
+int hfi1_cq_init(struct hfi_devdata *dd);
 
-void qib_cq_exit(struct hfi_devdata *dd);
+void hfi1_cq_exit(struct hfi_devdata *dd);
 
-void qib_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int sig);
+void hfi1_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int sig);
 
-int qib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
+int hfi1_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
 
-struct ib_cq *qib_create_cq(struct ib_device *ibdev, int entries,
+struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 			    int comp_vector, struct ib_ucontext *context,
 			    struct ib_udata *udata);
 
-int qib_destroy_cq(struct ib_cq *ibcq);
+int hfi1_destroy_cq(struct ib_cq *ibcq);
 
-int qib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
+int hfi1_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
 
-int qib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
+int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
 
-struct ib_mr *qib_get_dma_mr(struct ib_pd *pd, int acc);
+struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc);
 
-struct ib_mr *qib_reg_phys_mr(struct ib_pd *pd,
+struct ib_mr *hfi1_reg_phys_mr(struct ib_pd *pd,
 			      struct ib_phys_buf *buffer_list,
 			      int num_phys_buf, int acc, u64 *iova_start);
 
-struct ib_mr *qib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+struct ib_mr *hfi1_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			      u64 virt_addr, int mr_access_flags,
 			      struct ib_udata *udata);
 
-int qib_dereg_mr(struct ib_mr *ibmr);
+int hfi1_dereg_mr(struct ib_mr *ibmr);
 
-struct ib_mr *qib_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len);
+struct ib_mr *hfi1_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len);
 
-struct ib_fast_reg_page_list *qib_alloc_fast_reg_page_list(
+struct ib_fast_reg_page_list *hfi1_alloc_fast_reg_page_list(
 				struct ib_device *ibdev, int page_list_len);
 
-void qib_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl);
+void hfi1_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl);
 
-int qib_fast_reg_mr(struct qib_qp *qp, struct ib_send_wr *wr);
+int hfi1_fast_reg_mr(struct qib_qp *qp, struct ib_send_wr *wr);
 
-struct ib_fmr *qib_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
+struct ib_fmr *hfi1_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
 			     struct ib_fmr_attr *fmr_attr);
 
-int qib_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
+int hfi1_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
 		     int list_len, u64 iova);
 
-int qib_unmap_fmr(struct list_head *fmr_list);
+int hfi1_unmap_fmr(struct list_head *fmr_list);
 
-int qib_dealloc_fmr(struct ib_fmr *ibfmr);
+int hfi1_dealloc_fmr(struct ib_fmr *ibfmr);
 
 static inline void qib_get_mr(struct qib_mregion *mr)
 {
@@ -1089,60 +1089,60 @@ static inline void qib_put_ss(struct qib_sge_state *ss)
 }
 
 
-void qib_release_mmap_info(struct kref *ref);
+void hfi1_release_mmap_info(struct kref *ref);
 
-struct qib_mmap_info *qib_create_mmap_info(struct qib_ibdev *dev, u32 size,
+struct qib_mmap_info *hfi1_create_mmap_info(struct qib_ibdev *dev, u32 size,
 					   struct ib_ucontext *context,
 					   void *obj);
 
-void qib_update_mmap_info(struct qib_ibdev *dev, struct qib_mmap_info *ip,
+void hfi1_update_mmap_info(struct qib_ibdev *dev, struct qib_mmap_info *ip,
 			  u32 size, void *obj);
 
-int qib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
+int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 
-int qib_get_rwqe(struct qib_qp *qp, int wr_id_only);
+int hfi1_get_rwqe(struct qib_qp *qp, int wr_id_only);
 
-void qib_migrate_qp(struct qib_qp *qp);
+void hfi1_migrate_qp(struct qib_qp *qp);
 
-int qib_ruc_check_hdr(struct qib_ibport *ibp, struct qib_ib_header *hdr,
+int hfi1_ruc_check_hdr(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		      int has_grh, struct qib_qp *qp, u32 bth0);
 
-u32 qib_make_grh(struct qib_ibport *ibp, struct ib_grh *hdr,
+u32 hfi1_make_grh(struct qib_ibport *ibp, struct ib_grh *hdr,
 		 struct ib_global_route *grh, u32 hwords, u32 nwords);
 
 void clear_ahg(struct qib_qp *qp);
 
-void qib_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
+void hfi1_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
 			 u32 bth0, u32 bth2, int middle);
 
-void qib_do_send(struct work_struct *work);
+void hfi1_do_send(struct work_struct *work);
 
-void qib_send_complete(struct qib_qp *qp, struct qib_swqe *wqe,
+void hfi1_send_complete(struct qib_qp *qp, struct qib_swqe *wqe,
 		       enum ib_wc_status status);
 
-void qib_send_rc_ack(struct qib_ctxtdata *, struct qib_qp *qp, int is_fecn);
+void hfi1_send_rc_ack(struct qib_ctxtdata *, struct qib_qp *qp, int is_fecn);
 
-int qib_make_rc_req(struct qib_qp *qp);
+int hfi1_make_rc_req(struct qib_qp *qp);
 
-int qib_make_uc_req(struct qib_qp *qp);
+int hfi1_make_uc_req(struct qib_qp *qp);
 
-int qib_make_ud_req(struct qib_qp *qp);
+int hfi1_make_ud_req(struct qib_qp *qp);
 
-int qib_register_ib_device(struct hfi_devdata *);
+int hfi1_register_ib_device(struct hfi_devdata *);
 
-void qib_unregister_ib_device(struct hfi_devdata *);
+void hfi1_unregister_ib_device(struct hfi_devdata *);
 
-void qib_ib_rcv(struct hfi_packet *packet);
+void hfi1_ib_rcv(struct hfi_packet *packet);
 
-unsigned qib_get_npkeys(struct hfi_devdata *);
+unsigned hfi1_get_npkeys(struct hfi_devdata *);
 
-unsigned qib_get_pkey(struct qib_ibport *, unsigned);
+unsigned hfi1_get_pkey(struct qib_ibport *, unsigned);
 
-int qib_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *hdr,
+int hfi1_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc);
 
-int qib_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *hdr,
+int hfi1_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *hdr,
 			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
 			      u32 plen, u32 dwords, u64 pbc);
 

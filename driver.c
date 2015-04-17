@@ -167,7 +167,7 @@ MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
 MODULE_VERSION(HFI_DRIVER_VERSION);
 
-/* See qib_init() */
+/* See hfi1_init() */
 void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 
 /*
@@ -278,7 +278,7 @@ const char *get_unit_name(int unit)
 /*
  * Return count of units with at least one port ACTIVE.
  */
-int qib_count_active_units(void)
+int hfi1_count_active_units(void)
 {
 	struct hfi_devdata *dd;
 	struct qib_pportdata *ppd;
@@ -306,7 +306,7 @@ int qib_count_active_units(void)
  * the number of usable (present) units, and the number of
  * ports that are up.
  */
-int qib_count_units(int *npresentp, int *nupp)
+int hfi1_count_units(int *npresentp, int *nupp)
 {
 	int nunits = 0, npresent = 0, nup = 0;
 	struct hfi_devdata *dd;
@@ -424,7 +424,7 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		if (lid < QIB_MULTICAST_LID_BASE) {
 			struct qib_qp *qp;
 
-			qp = qib_lookup_qpn(ibp, qp_num);
+			qp = hfi1_lookup_qpn(ibp, qp_num);
 			if (!qp)
 				goto drop;
 
@@ -455,7 +455,7 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 
 			spin_unlock(&qp->r_lock);
 			/*
-			 * Notify qib_destroy_qp() if it is waiting
+			 * Notify hfi1_destroy_qp() if it is waiting
 			 * for us to finish.
 			 */
 			if (atomic_dec_and_test(&qp->refcount))
@@ -503,7 +503,7 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			sl = ibp->sc_to_sl[sc5];
 
 			lqpn = be32_to_cpu(bth[1]) & QIB_QPN_MASK;
-			qp = qib_lookup_qpn(ibp, lqpn);
+			qp = hfi1_lookup_qpn(ibp, lqpn);
 			if (qp == NULL)
 				goto drop;
 
@@ -659,7 +659,7 @@ skip:
 		}
 	}
 	/*
-	 * Notify qib_destroy_qp() if it is waiting
+	 * Notify hfi1_destroy_qp() if it is waiting
 	 * for lookaside_qp to finish.
 	 */
 	if (rcd->lookaside_qp) {
@@ -678,7 +678,7 @@ skip:
 		list_del_init(&qp->rspwait);
 		if (qp->r_flags & QIB_R_RSP_NAK) {
 			qp->r_flags &= ~QIB_R_RSP_NAK;
-			qib_send_rc_ack(rcd, qp, 0);
+			hfi1_send_rc_ack(rcd, qp, 0);
 		}
 		if (qp->r_flags & QIB_R_RSP_SEND) {
 			unsigned long flags;
@@ -687,7 +687,7 @@ skip:
 			spin_lock_irqsave(&qp->s_lock, flags);
 			if (ib_qib_state_ops[qp->state] &
 					QIB_PROCESS_OR_FLUSH_SEND)
-				qib_schedule_send(qp);
+				hfi1_schedule_send(qp);
 			spin_unlock_irqrestore(&qp->s_lock, flags);
 		}
 		if (atomic_dec_and_test(&qp->refcount))
@@ -788,7 +788,7 @@ err:
 	return ret;
 }
 
-int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
+int hfi1_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
 {
 	struct hfi_devdata *dd = ppd->dd;
 
@@ -835,7 +835,7 @@ static void qib_run_led_override(unsigned long opaque)
 		mod_timer(&ppd->led_override_timer, jiffies + timeoff);
 }
 
-void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
+void hfi1_set_led_override(struct qib_pportdata *ppd, unsigned int val)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int timeoff, freq;
@@ -878,7 +878,7 @@ void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
 }
 
 /**
- * qib_reset_device - reset the chip if possible
+ * hfi1_reset_device - reset the chip if possible
  * @unit: the device to reset
  *
  * Whether or not reset is successful, we attempt to re-initialize the chip
@@ -886,10 +886,10 @@ void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
  * so that the various entry points will fail until we reinitialize.  For
  * now, we only allow this if no user contexts are open that use chip resources
  */
-int qib_reset_device(int unit)
+int hfi1_reset_device(int unit)
 {
 	int ret, i;
-	struct hfi_devdata *dd = qib_lookup(unit);
+	struct hfi_devdata *dd = hfi1_lookup(unit);
 	struct qib_pportdata *ppd;
 	unsigned long flags;
 	int pidx;
@@ -936,7 +936,7 @@ int qib_reset_device(int unit)
 
 	hfi1_reset_cpu_counters(dd);
 
-	ret = qib_init(dd, 1);
+	ret = hfi1_init(dd, 1);
 
 	if (ret)
 		dd_dev_err(dd,
@@ -991,7 +991,7 @@ void process_receive_ib(struct hfi_packet *packet)
 		return;
 	}
 
-	qib_ib_rcv(packet);
+	hfi1_ib_rcv(packet);
 }
 
 void process_receive_bypass(struct hfi_packet *packet)

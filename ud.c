@@ -44,9 +44,9 @@
  * @sqp: the sending QP
  * @swqe: the send work request
  *
- * This is called from qib_make_ud_req() to forward a WQE addressed
+ * This is called from hfi1_make_ud_req() to forward a WQE addressed
  * to the same HCA.
- * Note that the receive interrupt handler may be calling qib_ud_rcv()
+ * Note that the receive interrupt handler may be calling hfi1_ud_rcv()
  * while this is being called.
  */
 static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
@@ -62,7 +62,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	u32 length;
 	enum ib_qp_type sqptype, dqptype;
 
-	qp = qib_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
+	qp = hfi1_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
 	if (!qp) {
 		ibp->n_pkt_drops++;
 		return;
@@ -87,12 +87,12 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 		u16 slid;
 		u8 sc5 = ibp->sl_to_sc[ah_attr->sl];
 
-		pkey = qib_get_pkey(ibp, sqp->s_pkey_index);
+		pkey = hfi1_get_pkey(ibp, sqp->s_pkey_index);
 		slid = ppd->lid | (ah_attr->src_path_bits &
 				   ((1 << ppd->lmc) - 1));
 		if (unlikely(ingress_pkey_check(ppd, pkey, sc5,
 						qp->s_pkey_index, slid))) {
-			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY, pkey,
+			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY, pkey,
 				      ah_attr->sl,
 				      sqp->ibqp.qp_num, qp->ibqp.qp_num,
 				      cpu_to_be16(slid),
@@ -116,7 +116,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 
 			lid = ppd->lid | (ah_attr->src_path_bits &
 					  ((1 << ppd->lmc) - 1));
-			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
+			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
 				      ah_attr->sl,
 				      sqp->ibqp.qp_num, qp->ibqp.qp_num,
 				      cpu_to_be16(lid),
@@ -148,9 +148,9 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	else {
 		int ret;
 
-		ret = qib_get_rwqe(qp, 0);
+		ret = hfi1_get_rwqe(qp, 0);
 		if (ret < 0) {
-			qib_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
+			hfi1_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
 			goto bail_unlock;
 		}
 		if (!ret) {
@@ -167,11 +167,11 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	}
 
 	if (ah_attr->ah_flags & IB_AH_GRH) {
-		qib_copy_sge(&qp->r_sge, &ah_attr->grh,
+		hfi1_copy_sge(&qp->r_sge, &ah_attr->grh,
 			     sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
 	} else
-		qib_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
 	ssge.sg_list = swqe->sg_list + 1;
 	ssge.sge = *swqe->sg_list;
 	ssge.num_sge = swqe->wr.num_sge;
@@ -184,7 +184,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 		if (len > sge->sge_length)
 			len = sge->sge_length;
 		BUG_ON(len == 0);
-		qib_copy_sge(&qp->r_sge, sge->vaddr, len, 1);
+		hfi1_copy_sge(&qp->r_sge, sge->vaddr, len, 1);
 		sge->vaddr += len;
 		sge->length -= len;
 		sge->sge_length -= len;
@@ -229,7 +229,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	wc.dlid_path_bits = ah_attr->dlid & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
-	qib_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
+	hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
 		     swqe->wr.send_flags & IB_SEND_SOLICITED);
 	ibp->n_loop_pkts++;
 bail_unlock:
@@ -240,12 +240,12 @@ drop:
 }
 
 /**
- * qib_make_ud_req - construct a UD request packet
+ * hfi1_make_ud_req - construct a UD request packet
  * @qp: the QP
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int qib_make_ud_req(struct qib_qp *qp)
+int hfi1_make_ud_req(struct qib_qp *qp)
 {
 	struct qib_other_headers *ohdr;
 	struct ib_ah_attr *ah_attr;
@@ -276,7 +276,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 			goto bail;
 		}
 		wqe = get_swqe_ptr(qp, qp->s_last);
-		qib_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
+		hfi1_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
 
@@ -313,7 +313,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 			spin_unlock_irqrestore(&qp->s_lock, flags);
 			qib_ud_loopback(qp, wqe);
 			spin_lock_irqsave(&qp->s_lock, flags);
-			qib_send_complete(qp, wqe, IB_WC_SUCCESS);
+			hfi1_send_complete(qp, wqe, IB_WC_SUCCESS);
 			goto done;
 		}
 	}
@@ -335,7 +335,7 @@ int qib_make_ud_req(struct qib_qp *qp)
 
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* Header size in 32-bit words. */
-		qp->s_hdrwords += qib_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
+		qp->s_hdrwords += hfi1_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
 					       &ah_attr->grh,
 					       qp->s_hdrwords, nwords);
 		lrh0 = QIB_LRH_GRH;
@@ -382,9 +382,9 @@ int qib_make_ud_req(struct qib_qp *qp)
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
 	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
-		bth0 |= qib_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+		bth0 |= hfi1_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
 	else
-		bth0 |= qib_get_pkey(ibp, qp->s_pkey_index);
+		bth0 |= hfi1_get_pkey(ibp, qp->s_pkey_index);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
@@ -607,7 +607,7 @@ static int opa_smp_check(struct qib_ibport *ibp, u16 pkey, u8 sc5,
 
 
 /**
- * qib_ud_rcv - receive an incoming UD packet
+ * hfi1_ud_rcv - receive an incoming UD packet
  * @ibp: the port the packet came in on
  * @hdr: the packet header
  * @rcv_flags: flags relevant to rcv processing
@@ -619,7 +619,7 @@ static int opa_smp_check(struct qib_ibport *ibp, u16 pkey, u8 sc5,
  * for the given QP.
  * Called at interrupt level.
  */
-void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
+void hfi1_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
 {
 	struct qib_other_headers *ohdr;
@@ -720,7 +720,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 			if (unlikely(ingress_pkey_check(ppd, pkey, sc5,
 							qp->s_pkey_index,
 							slid))) {
-				qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+				hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
 					      pkey,
 					      (be16_to_cpu(hdr->lrh[0]) >> 4) &
 						0xF,
@@ -736,7 +736,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 
 		}
 		if (unlikely(qkey != qp->qkey)) {
-			qib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
+			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
 				      (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
 				      src_qp, qp->ibqp.qp_num,
 				      hdr->lrh[3], hdr->lrh[1]);
@@ -798,9 +798,9 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	else {
 		int ret;
 
-		ret = qib_get_rwqe(qp, 0);
+		ret = hfi1_get_rwqe(qp, 0);
 		if (ret < 0) {
-			qib_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
+			hfi1_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
 			return;
 		}
 		if (!ret) {
@@ -815,12 +815,12 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		goto drop;
 	}
 	if (has_grh) {
-		qib_copy_sge(&qp->r_sge, &hdr->u.l.grh,
+		hfi1_copy_sge(&qp->r_sge, &hdr->u.l.grh,
 			     sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
 	} else
-		qib_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
-	qib_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1);
+		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+	hfi1_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1);
 	qib_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags))
 		return;
@@ -859,7 +859,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		dlid & ((1 << ppd_from_ibp(ibp)->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
-	qib_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
+	hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
 		     (ohdr->bth[0] &
 			cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 	return;

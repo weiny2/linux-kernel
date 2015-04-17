@@ -54,14 +54,14 @@ static void qib_format_hwmsg(char *msg, size_t msgl, const char *hwmsg)
 }
 
 /**
- * qib_format_hwerrors - format hardware error messages for display
+ * hfi1_format_hwerrors - format hardware error messages for display
  * @hwerrs hardware errors bit vector
  * @hwerrmsgs hardware error descriptions
  * @nhwerrmsgs number of hwerrmsgs
  * @msg message buffer
  * @msgl message buffer length
  */
-void qib_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
+void hfi1_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
 			 size_t nhwerrmsgs, char *msg, size_t msgl)
 {
 	int i;
@@ -152,7 +152,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		ev = IB_EVENT_PORT_ERR;
 
-		qib_set_uevent_bits(ppd, _HFI_EVENT_LINKDOWN_BIT);
+		hfi1_set_uevent_bits(ppd, _HFI_EVENT_LINKDOWN_BIT);
 
 		/* if we are down, the neighbor is down */
 		ppd->neighbor_normal = 0;

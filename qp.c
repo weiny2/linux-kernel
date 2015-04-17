@@ -304,7 +304,7 @@ static unsigned free_all_qps(struct hfi_devdata *dd)
 	for (n = 0; n < dd->num_pports; n++) {
 		struct qib_ibport *ibp = &dd->pport[n].ibport_data;
 
-		if (!qib_mcast_tree_empty(ibp))
+		if (!hfi1_mcast_tree_empty(ibp))
 			qp_inuse++;
 		rcu_read_lock();
 		if (rcu_dereference(ibp->qp0))
@@ -333,14 +333,14 @@ bail:
 }
 
 /**
- * qib_lookup_qpn - return the QP with the given QPN
+ * hfi1_lookup_qpn - return the QP with the given QPN
  * @qpt: the QP table
  * @qpn: the QP number to look up
  *
  * The caller is responsible for decrementing the QP reference count
  * when done.
  */
-struct qib_qp *qib_lookup_qpn(struct qib_ibport *ibp, u32 qpn)
+struct qib_qp *hfi1_lookup_qpn(struct qib_ibport *ibp, u32 qpn)
 {
 	struct qib_qp *qp = NULL;
 
@@ -380,7 +380,7 @@ static void qib_reset_qp(struct qib_qp *qp, enum ib_qp_type type)
 	iowait_init(
 		&qp->s_iowait,
 		1,
-		qib_do_send,
+		hfi1_do_send,
 		iowait_sleep,
 		iowait_wakeup);
 	qp->s_flags &= QIB_S_SIGNAL_REQ_WR;
@@ -472,7 +472,7 @@ static void clear_mr_refs(struct qib_qp *qp, int clr_sends)
 }
 
 /**
- * qib_error_qp - put a QP into the error state
+ * hfi1_error_qp - put a QP into the error state
  * @qp: the QP to put into the error state
  * @err: the receive completion error to signal if a RWQE is active
  *
@@ -481,7 +481,7 @@ static void clear_mr_refs(struct qib_qp *qp, int clr_sends)
  * The QP r_lock and s_lock should be held and interrupts disabled.
  * If we are already in error state, just return.
  */
-int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
+int hfi1_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 {
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
 	struct ib_wc wc;
@@ -520,7 +520,7 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 
 	/* Schedule the sending tasklet to drain the send work queue. */
 	if (qp->s_last != qp->s_head)
-		qib_schedule_send(qp);
+		hfi1_schedule_send(qp);
 
 	clear_mr_refs(qp, 0);
 
@@ -531,7 +531,7 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 	if (test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags)) {
 		wc.wr_id = qp->r_wr_id;
 		wc.status = err;
-		qib_cq_enter(to_icq(qp->ibqp.recv_cq), &wc, 1);
+		hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc, 1);
 	}
 	wc.status = IB_WC_WR_FLUSH_ERR;
 
@@ -554,7 +554,7 @@ int qib_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 			wc.wr_id = get_rwqe_ptr(&qp->r_rq, tail)->wr_id;
 			if (++tail >= qp->r_rq.size)
 				tail = 0;
-			qib_cq_enter(to_icq(qp->ibqp.recv_cq), &wc, 1);
+			hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc, 1);
 		}
 		wq->tail = tail;
 
@@ -576,7 +576,7 @@ static void flush_tx_list(struct qib_qp *qp)
 			struct sdma_txreq,
 			list);
 		list_del_init(&tx->list);
-		qib_put_txreq(
+		hfi1_put_txreq(
 			container_of(tx, struct verbs_txreq, txreq));
 	}
 }
@@ -623,7 +623,7 @@ static inline int verbs_mtu_enum_to_int(struct ib_device *dev, enum ib_mtu mtu)
 
 
 /**
- * qib_modify_qp - modify the attributes of a queue pair
+ * hfi1_modify_qp - modify the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we're modifying
  * @attr: the new attributes
  * @attr_mask: the mask of attributes to modify
@@ -631,7 +631,7 @@ static inline int verbs_mtu_enum_to_int(struct ib_device *dev, enum ib_mtu mtu)
  *
  * Returns 0 on success, otherwise returns an errno.
  */
-int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		  int attr_mask, struct ib_udata *udata)
 {
 	struct qib_ibdev *dev = to_idev(ibqp->device);
@@ -658,21 +658,21 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	if (attr_mask & IB_QP_AV) {
 		if (attr->ah_attr.dlid >= QIB_MULTICAST_LID_BASE)
 			goto inval;
-		if (qib_check_ah(qp->ibqp.device, &attr->ah_attr))
+		if (hfi1_check_ah(qp->ibqp.device, &attr->ah_attr))
 			goto inval;
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
 		if (attr->alt_ah_attr.dlid >= QIB_MULTICAST_LID_BASE)
 			goto inval;
-		if (qib_check_ah(qp->ibqp.device, &attr->alt_ah_attr))
+		if (hfi1_check_ah(qp->ibqp.device, &attr->alt_ah_attr))
 			goto inval;
-		if (attr->alt_pkey_index >= qib_get_npkeys(dd_from_dev(dev)))
+		if (attr->alt_pkey_index >= hfi1_get_npkeys(dd_from_dev(dev)))
 			goto inval;
 	}
 
 	if (attr_mask & IB_QP_PKEY_INDEX)
-		if (attr->pkey_index >= qib_get_npkeys(dd_from_dev(dev)))
+		if (attr->pkey_index >= hfi1_get_npkeys(dd_from_dev(dev)))
 			goto inval;
 
 	if (attr_mask & IB_QP_MIN_RNR_TIMER)
@@ -782,7 +782,7 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		break;
 
 	case IB_QPS_ERR:
-		lastwqe = qib_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+		lastwqe = hfi1_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 		break;
 
 	default:
@@ -911,7 +911,7 @@ bail:
 	return ret;
 }
 
-int qib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		 int attr_mask, struct ib_qp_init_attr *init_attr)
 {
 	struct qib_qp *qp = to_iqp(ibqp);
@@ -962,12 +962,12 @@ int qib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 }
 
 /**
- * qib_compute_aeth - compute the AETH (syndrome + MSN)
+ * hfi1_compute_aeth - compute the AETH (syndrome + MSN)
  * @qp: the queue pair to compute the AETH for
  *
  * Returns the AETH.
  */
-__be32 qib_compute_aeth(struct qib_qp *qp)
+__be32 hfi1_compute_aeth(struct qib_qp *qp)
 {
 	u32 aeth = qp->r_msn & QIB_MSN_MASK;
 
@@ -1022,7 +1022,7 @@ __be32 qib_compute_aeth(struct qib_qp *qp)
 }
 
 /**
- * qib_create_qp - create a queue pair for a device
+ * hfi1_create_qp - create a queue pair for a device
  * @ibpd: the protection domain who's device we create the queue pair for
  * @init_attr: the attributes of the queue pair
  * @udata: user data for libibverbs.so
@@ -1031,7 +1031,7 @@ __be32 qib_compute_aeth(struct qib_qp *qp)
  *
  * Called by the ib_create_qp() core verbs function.
  */
-struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
+struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 			    struct ib_qp_init_attr *init_attr,
 			    struct ib_udata *udata)
 {
@@ -1168,7 +1168,7 @@ struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
 
 	/*
 	 * Return the address of the RWQ as the offset to mmap.
-	 * See qib_mmap() for details.
+	 * See hfi1_mmap() for details.
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		if (!qp->r_rq.wq) {
@@ -1183,7 +1183,7 @@ struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
 		} else {
 			u32 s = sizeof(struct qib_rwq) + qp->r_rq.size * sz;
 
-			qp->ip = qib_create_mmap_info(dev, s,
+			qp->ip = hfi1_create_mmap_info(dev, s,
 						      ibpd->uobject->context,
 						      qp->r_rq.wq);
 			if (!qp->ip) {
@@ -1221,7 +1221,7 @@ struct ib_qp *qib_create_qp(struct ib_pd *ibpd,
 
 bail_ip:
 	if (qp->ip)
-		kref_put(&qp->ip->ref, qib_release_mmap_info);
+		kref_put(&qp->ip->ref, hfi1_release_mmap_info);
 	else
 		vfree(qp->r_rq.wq);
 	free_qpn(&dev->qp_dev->qpn_table, qp->ibqp.qp_num);
@@ -1235,7 +1235,7 @@ bail:
 }
 
 /**
- * qib_destroy_qp - destroy a queue pair
+ * hfi1_destroy_qp - destroy a queue pair
  * @ibqp: the queue pair to destroy
  *
  * Returns 0 on success.
@@ -1243,7 +1243,7 @@ bail:
  * Note that this can be called while the QP is actively sending or
  * receiving!
  */
-int qib_destroy_qp(struct ib_qp *ibqp)
+int hfi1_destroy_qp(struct ib_qp *ibqp)
 {
 	struct qib_qp *qp = to_iqp(ibqp);
 	struct qib_ibdev *dev = to_idev(ibqp->device);
@@ -1278,7 +1278,7 @@ int qib_destroy_qp(struct ib_qp *ibqp)
 	spin_unlock(&dev->n_qps_lock);
 
 	if (qp->ip)
-		kref_put(&qp->ip->ref, qib_release_mmap_info);
+		kref_put(&qp->ip->ref, hfi1_release_mmap_info);
 	else
 		vfree(qp->r_rq.wq);
 	vfree(qp->s_wq);
@@ -1343,13 +1343,13 @@ static void free_qpn_table(struct hfi_qpn_table *qpt)
 }
 
 /**
- * qib_get_credit - flush the send work queue of a QP
+ * hfi1_get_credit - flush the send work queue of a QP
  * @qp: the qp who's send work queue to flush
  * @aeth: the Acknowledge Extended Transport Header
  *
  * The QP s_lock should be held.
  */
-void qib_get_credit(struct qib_qp *qp, u32 aeth)
+void hfi1_get_credit(struct qib_qp *qp, u32 aeth)
 {
 	u32 credit = (aeth >> QIB_AETH_CREDIT_SHIFT) & QIB_AETH_CREDIT_MASK;
 
@@ -1363,7 +1363,7 @@ void qib_get_credit(struct qib_qp *qp, u32 aeth)
 			qp->s_flags |= QIB_S_UNLIMITED_CREDIT;
 			if (qp->s_flags & QIB_S_WAIT_SSN_CREDIT) {
 				qp->s_flags &= ~QIB_S_WAIT_SSN_CREDIT;
-				qib_schedule_send(qp);
+				hfi1_schedule_send(qp);
 			}
 		}
 	} else if (!(qp->s_flags & QIB_S_UNLIMITED_CREDIT)) {
@@ -1373,7 +1373,7 @@ void qib_get_credit(struct qib_qp *qp, u32 aeth)
 			qp->s_lsn = credit;
 			if (qp->s_flags & QIB_S_WAIT_SSN_CREDIT) {
 				qp->s_flags &= ~QIB_S_WAIT_SSN_CREDIT;
-				qib_schedule_send(qp);
+				hfi1_schedule_send(qp);
 			}
 		}
 	}
@@ -1387,10 +1387,10 @@ void qib_qp_wakeup(struct qib_qp *qp, u32 flag)
 	if (qp->s_flags & flag) {
 		qp->s_flags &= ~flag;
 		trace_hfi_qpwakeup(qp, flag);
-		qib_schedule_send(qp);
+		hfi1_schedule_send(qp);
 	}
 	spin_unlock_irqrestore(&qp->s_lock, flags);
-	/* Notify qib_destroy_qp() if it is waiting. */
+	/* Notify hfi1_destroy_qp() if it is waiting. */
 	if (atomic_dec_and_test(&qp->refcount))
 		wake_up(&qp->wait);
 }
@@ -1439,7 +1439,7 @@ static int iowait_sleep(
 		ret = -EBUSY;
 	} else {
 		spin_unlock_irqrestore(&qp->s_lock, flags);
-		qib_put_txreq(tx);
+		hfi1_put_txreq(tx);
 	}
 	return ret;
 eagain:

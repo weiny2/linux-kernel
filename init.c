@@ -114,7 +114,7 @@ unsigned long *qib_cpulist;
 /*
  * Common code for creating the receive context array.
  */
-int qib_create_ctxts(struct hfi_devdata *dd)
+int hfi1_create_ctxts(struct hfi_devdata *dd)
 {
 	unsigned i;
 	int ret;
@@ -137,7 +137,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 		struct qib_ctxtdata *rcd;
 
 		ppd = dd->pport + (i % dd->num_pports);
-		rcd = qib_create_ctxtdata(ppd, i);
+		rcd = hfi1_create_ctxtdata(ppd, i);
 		if (!rcd) {
 			dd_dev_err(dd,
 				"Unable to allocate kernel receive context, failing\n");
@@ -157,7 +157,7 @@ int qib_create_ctxts(struct hfi_devdata *dd)
 			dd_dev_err(dd,
 				   "Failed to setup kernel receive context, failing\n");
 			dd->rcd[rcd->ctxt] = NULL;
-			qib_free_ctxtdata(dd, rcd);
+			hfi1_free_ctxtdata(dd, rcd);
 			ret = -EFAULT;
 			goto bail;
 		}
@@ -183,7 +183,7 @@ bail:
 /*
  * Common code for user and kernel context setup.
  */
-struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
+struct qib_ctxtdata *hfi1_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct qib_ctxtdata *rcd;
@@ -482,7 +482,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 /*
  * Common code for initializing the physical port structure.
  */
-void qib_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
+void hfi1_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
 			struct hfi_devdata *dd, u8 hw_pidx, u8 port)
 {
 	int i, size;
@@ -647,7 +647,7 @@ wq_error:
 }
 
 /**
- * qib_init - do the actual initialization sequence on the chip
+ * hfi1_init - do the actual initialization sequence on the chip
  * @dd: the qlogic_ib device
  * @reinit: reinitializing, so don't allocate new memory
  *
@@ -661,7 +661,7 @@ wq_error:
  * without memory allocation, we need to re-write all the chip registers
  * TIDs, etc. after the reset or enable has completed.
  */
-int qib_init(struct hfi_devdata *dd, int reinit)
+int hfi1_init(struct hfi_devdata *dd, int reinit)
 {
 	int ret = 0, pidx, lastfail = 0;
 	unsigned i, len;
@@ -676,8 +676,8 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
 
 	/* Set up send low level handlers */
-	dd->process_pio_send = qib_verbs_send_pio;
-	dd->process_dma_send = qib_verbs_send_dma;
+	dd->process_pio_send = hfi1_verbs_send_pio;
+	dd->process_dma_send = hfi1_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
 
 	/*
@@ -719,9 +719,9 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 		if (!rcd)
 			continue;
 
-		lastfail = qib_create_rcvhdrq(dd, rcd);
+		lastfail = hfi1_create_rcvhdrq(dd, rcd);
 		if (!lastfail)
-			lastfail = qib_setup_eagerbufs(rcd);
+			lastfail = hfi1_setup_eagerbufs(rcd);
 		if (lastfail)
 			dd_dev_err(dd,
 				"failed to allocate kernel ctxt's rcvhdrq and/or egr bufs\n");
@@ -757,7 +757,7 @@ int qib_init(struct hfi_devdata *dd, int reinit)
 	/* enable chip even if we have an error, so we can debug cause */
 	enable_chip(dd);
 
-	ret = qib_cq_init(dd);
+	ret = hfi1_cq_init(dd);
 done:
 	/*
 	 * Set status even if port serdes is not initialized
@@ -812,7 +812,7 @@ static inline struct hfi_devdata *__qib_lookup(int unit)
 	return idr_find(&qib_unit_table, unit);
 }
 
-struct hfi_devdata *qib_lookup(int unit)
+struct hfi_devdata *hfi1_lookup(int unit)
 {
 	struct hfi_devdata *dd;
 	unsigned long flags;
@@ -849,7 +849,7 @@ static void qib_stop_timers(struct hfi_devdata *dd)
  * This is called to make the device quiet when we are about to
  * unload the driver, and also when the device is administratively
  * disabled.   It does not free any data structures.
- * Everything it does has to be setup again by qib_init(dd, 1)
+ * Everything it does has to be setup again by hfi1_init(dd, 1)
  */
 static void qib_shutdown_device(struct hfi_devdata *dd)
 {
@@ -916,7 +916,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 }
 
 /**
- * qib_free_ctxtdata - free a context's allocated data
+ * hfi1_free_ctxtdata - free a context's allocated data
  * @dd: the qlogic_ib device
  * @rcd: the ctxtdata structure
  *
@@ -926,7 +926,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
  * is released (and can be called from reinit as well).
  * It should never change any chip state, or global driver state.
  */
-void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
+void hfi1_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 {
 	if (!rcd)
 		return;
@@ -975,7 +975,7 @@ void qib_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 	kfree(rcd);
 }
 
-void qib_free_devdata(struct hfi_devdata *dd)
+void hfi1_free_devdata(struct hfi_devdata *dd)
 {
 	unsigned long flags;
 
@@ -997,7 +997,7 @@ void qib_free_devdata(struct hfi_devdata *dd)
  *
  * Use the idr mechanism to get a unit number for this unit.
  */
-struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra)
+struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 {
 	unsigned long flags;
 	struct hfi_devdata *dd;
@@ -1080,7 +1080,7 @@ bail:
  * reporting code.  Should be paranoid about state of
  * system and data structures.
  */
-void qib_disable_after_error(struct hfi_devdata *dd)
+void hfi1_disable_after_error(struct hfi_devdata *dd)
 {
 	if (dd->flags & HFI_INITTED) {
 		u32 pidx;
@@ -1282,7 +1282,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 		tmp[ctxt] = NULL; /* debugging paranoia */
 		if (rcd) {
 			hfi1_clear_tids(rcd);
-			qib_free_ctxtdata(dd, rcd);
+			hfi1_free_ctxtdata(dd, rcd);
 		}
 	}
 	kfree(tmp);
@@ -1295,7 +1295,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	kfree(dd->boardname);
 	vfree(dd->events);
 	vfree(dd->status);
-	qib_cq_exit(dd);
+	hfi1_cq_exit(dd);
 }
 
 /*
@@ -1306,12 +1306,12 @@ static void qib_postinit_cleanup(struct hfi_devdata *dd)
 {
 	hfi1_start_cleanup(dd);
 
-	qib_pcie_ddcleanup(dd);
+	hfi1_pcie_ddcleanup(dd);
 	hfi_pcie_cleanup(dd->pcidev);
 
 	cleanup_device_data(dd);
 
-	qib_free_devdata(dd);
+	hfi1_free_devdata(dd);
 }
 
 static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1363,7 +1363,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* restrict value of hfi_rcvarr_split */
 	hfi_rcvarr_split = clamp_val(hfi_rcvarr_split, 0, 100);
 
-	ret = qib_pcie_init(pdev, ent);
+	ret = hfi1_pcie_init(pdev, ent);
 	if (ret)
 		goto bail;
 
@@ -1394,9 +1394,9 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto clean_bail;
 
 	/* do the generic initialization */
-	initfail = qib_init(dd, 0);
+	initfail = hfi1_init(dd, 0);
 
-	ret = qib_register_ib_device(dd);
+	ret = hfi1_register_ib_device(dd);
 
 	/*
 	 * Now ready for use.  this should be cleared whenever we
@@ -1419,7 +1419,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		if (!j)
 			hfi_device_remove(dd);
 		if (!ret)
-			qib_unregister_ib_device(dd);
+			hfi1_unregister_ib_device(dd);
 		qib_postinit_cleanup(dd);
 		if (initfail)
 			ret = initfail;
@@ -1449,7 +1449,7 @@ static void qib_remove_one(struct pci_dev *pdev)
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
 	/* unregister from IB core */
-	qib_unregister_ib_device(dd);
+	hfi1_unregister_ib_device(dd);
 
 	/*
 	 * Disable the IB link, disable interrupts on the device,
@@ -1468,7 +1468,7 @@ static void qib_remove_one(struct pci_dev *pdev)
 }
 
 /**
- * qib_create_rcvhdrq - create a receive header queue
+ * hfi1_create_rcvhdrq - create a receive header queue
  * @dd: the qlogic_ib device
  * @rcd: the context data
  *
@@ -1476,7 +1476,7 @@ static void qib_remove_one(struct pci_dev *pdev)
  * DMA'able (which means for some systems, it will go through an IOMMU,
  * or be forced into a low address range).
  */
-int qib_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
+int hfi1_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
 {
 	unsigned amt;
 	u64 reg;
@@ -1564,7 +1564,7 @@ bail:
  * calls.  Otherwise we get the OOM code involved, by asking for too
  * much per call, with disastrous results on some kernels.
  */
-int qib_setup_eagerbufs(struct qib_ctxtdata *rcd)
+int hfi1_setup_eagerbufs(struct qib_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u32 max_entries, egrtop, alloced_bytes = 0, idx = 0;

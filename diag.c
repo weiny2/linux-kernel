@@ -329,7 +329,7 @@ static struct hfi_filter_array hfi_filters[] = {
 
 static int hfi_snoop_add(struct hfi_devdata *dd, const char *name);
 
-int qib_diag_add(struct hfi_devdata *dd)
+int hfi1_diag_add(struct hfi_devdata *dd)
 {
 	char name[16];
 	int ret = 0;
@@ -386,7 +386,7 @@ static void hfi_snoop_remove(struct hfi_devdata *dd)
 	spin_unlock_irqrestore(&dd->hfi_snoop.snoop_lock, flags);
 }
 
-void qib_diag_remove(struct hfi_devdata *dd)
+void hfi1_diag_remove(struct hfi_devdata *dd)
 {
 	struct diag_client *dc;
 
@@ -549,7 +549,7 @@ static int diag_open(struct inode *in, struct file *fp)
 
 	mutex_lock(&qib_mutex);
 
-	dd = qib_lookup(unit);
+	dd = hfi1_lookup(unit);
 
 	if (dd == NULL || !(dd->flags & HFI_PRESENT) ||
 	    !dd->kregbase) {
@@ -621,7 +621,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	void *credit_arg = NULL;
 	struct diagpkt_wait *wait = NULL;
 
-	dd = qib_lookup(dp->unit);
+	dd = hfi1_lookup(dp->unit);
 	if (!dd || !(dd->flags & HFI_PRESENT) || !dd->kregbase) {
 		ret = -ENODEV;
 		goto bail;
@@ -804,7 +804,7 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 	* if PBC is populated
 	*/
 	if (dp.pbc) {
-		dd = qib_lookup(dp.unit);
+		dd = hfi1_lookup(dp.unit);
 		if (dd == NULL)
 			return -ENODEV;
 		vl = (dp.pbc >> WFR_PBC_VL_SHIFT) & WFR_PBC_VL_MASK;
@@ -837,7 +837,7 @@ struct diag_observer_list_elt {
 	const struct diag_observer *op;
 };
 
-int qib_register_observer(struct hfi_devdata *dd,
+int hfi1_register_observer(struct hfi_devdata *dd,
 			  const struct diag_observer *op)
 {
 	struct diag_observer_list_elt *olp;
@@ -1107,7 +1107,7 @@ static struct hfi_devdata *hfi_dd_from_sc_inode(struct inode *in)
 	int unit = iminor(in) - HFI_SNOOP_CAPTURE_BASE;
 	struct hfi_devdata *dd = NULL;
 
-	dd = qib_lookup(unit);
+	dd = hfi1_lookup(unit);
 	return dd;
 
 }
@@ -1276,8 +1276,8 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
 	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = process_receive_expected;
 
-	dd->process_pio_send = qib_verbs_send_pio;
-	dd->process_dma_send = qib_verbs_send_dma;
+	dd->process_pio_send = hfi1_verbs_send_pio;
+	dd->process_dma_send = hfi1_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
 
 	spin_unlock_irqrestore(&dd->hfi_snoop.snoop_lock, flags);
@@ -1964,7 +1964,7 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
 
 /*
  * Instead of having snoop and capture code intermixed with the recv functions,
- * both the interrupt handler and qib_ib_rcv() we are going to hijack the call
+ * both the interrupt handler and hfi1_ib_rcv() we are going to hijack the call
  * and land in here for snoop/capture but if not enbaled the call will go
  * through as before. This gives us a single point to constrain all of the snoop
  * snoop recv logic. There is nothign special that needs to happen for bypass
@@ -2080,7 +2080,7 @@ void snoop_recv_handler(struct hfi_packet *packet)
 
 	/*
 	 * We do not care what type of packet came in here just pass it off to
-	 * its usual handler. See qib_init(). We can't just rely on calling into
+	 * its usual handler. See hfi1_init(). We can't just rely on calling into
 	 * the function map array becaue snoop/capture has hijacked it. If we
 	 * call the IB type specific handler we will be calling ourself
 	 * recursively.
@@ -2115,7 +2115,7 @@ int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
 {
 	pr_alert("Snooping/Capture of  Send DMA Packets Is Not Supported!\n");
 	snoop_dbg("Unsupported Operation\n");
-	return qib_verbs_send_dma(qp, ibhdr, hdrwords, ss, len, plen, dwords,
+	return hfi1_verbs_send_dma(qp, ibhdr, hdrwords, ss, len, plen, dwords,
 				  0);
 }
 
@@ -2254,11 +2254,11 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			snoop_dbg("Dropping packet\n");
 			if (qp->s_wqe) {
 				spin_lock_irqsave(&qp->s_lock, flags);
-				qib_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
+				hfi1_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
 				spin_unlock_irqrestore(&qp->s_lock, flags);
 			} else if (qp->ibqp.qp_type == IB_QPT_RC) {
 				spin_lock_irqsave(&qp->s_lock, flags);
-				qib_rc_send_complete(qp, &ahdr->ibh);
+				hfi1_rc_send_complete(qp, &ahdr->ibh);
 				spin_unlock_irqrestore(&qp->s_lock, flags);
 			}
 			return 0;
@@ -2269,7 +2269,7 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 		break;
 	}
 out:
-	return qib_verbs_send_pio(qp, ahdr, hdrwords, ss, len, plen, dwords,
+	return hfi1_verbs_send_pio(qp, ahdr, hdrwords, ss, len, plen, dwords,
 				  md.u.pbc);
 }
 

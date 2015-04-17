@@ -40,12 +40,12 @@
 #define OP(x) IB_OPCODE_UC_##x
 
 /**
- * qib_make_uc_req - construct a request packet (SEND, RDMA write)
+ * hfi1_make_uc_req - construct a request packet (SEND, RDMA write)
  * @qp: a pointer to the QP
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int qib_make_uc_req(struct qib_qp *qp)
+int hfi1_make_uc_req(struct qib_qp *qp)
 {
 	struct qib_other_headers *ohdr;
 	struct qib_swqe *wqe;
@@ -72,7 +72,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 		}
 		clear_ahg(qp);
 		wqe = get_swqe_ptr(qp, qp->s_last);
-		qib_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
+		hfi1_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
 
@@ -217,7 +217,7 @@ int qib_make_uc_req(struct qib_qp *qp)
 	qp->s_hdrwords = hwords;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
-	qib_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
+	hfi1_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
 			    mask_psn(qp->s_next_psn++), middle);
 done:
 	ret = 1;
@@ -231,7 +231,7 @@ unlock:
 }
 
 /**
- * qib_uc_rcv - handle an incoming UC packet
+ * hfi1_uc_rcv - handle an incoming UC packet
  * @ibp: the port the packet came in on
  * @hdr: the header of the packet
  * @rcv_flags: flags relevant to rcv processing
@@ -243,7 +243,7 @@ unlock:
  * for the given QP.
  * Called at interrupt level.
  */
-void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
+void hfi1_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
 {
 	struct qib_other_headers *ohdr;
@@ -269,7 +269,7 @@ void qib_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	}
 
 	opcode = be32_to_cpu(ohdr->bth[0]);
-	if (qib_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
+	if (hfi1_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
 		return;
 
 	is_becn = (be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT)
@@ -388,7 +388,7 @@ send_first:
 		if (test_and_clear_bit(QIB_R_REWIND_SGE, &qp->r_aflags))
 			qp->r_sge = qp->s_rdma_read_sge;
 		else {
-			ret = qib_get_rwqe(qp, 0);
+			ret = hfi1_get_rwqe(qp, 0);
 			if (ret < 0)
 				goto op_err;
 			if (!ret)
@@ -412,7 +412,7 @@ send_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto rewind;
-		qib_copy_sge(&qp->r_sge, data, pmtu, 0);
+		hfi1_copy_sge(&qp->r_sge, data, pmtu, 0);
 		break;
 
 	case OP(SEND_LAST_WITH_IMMEDIATE):
@@ -438,7 +438,7 @@ send_last:
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto rewind;
 		wc.opcode = IB_WC_RECV;
-		qib_copy_sge(&qp->r_sge, data, tlen, 0);
+		hfi1_copy_sge(&qp->r_sge, data, tlen, 0);
 		qib_put_ss(&qp->s_rdma_read_sge);
 last_imm:
 		wc.wr_id = qp->r_wr_id;
@@ -464,7 +464,7 @@ last_imm:
 		wc.dlid_path_bits = 0;
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
-		qib_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
+		hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
 			     (ohdr->bth[0] &
 				cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 		break;
@@ -488,7 +488,7 @@ rdma_first:
 			int ok;
 
 			/* Check rkey */
-			ok = qib_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
+			ok = hfi1_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
 					 vaddr, rkey, IB_ACCESS_REMOTE_WRITE);
 			if (unlikely(!ok))
 				goto drop;
@@ -514,7 +514,7 @@ rdma_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto drop;
-		qib_copy_sge(&qp->r_sge, data, pmtu, 1);
+		hfi1_copy_sge(&qp->r_sge, data, pmtu, 1);
 		break;
 
 	case OP(RDMA_WRITE_LAST_WITH_IMMEDIATE):
@@ -536,7 +536,7 @@ rdma_last_imm:
 		if (test_and_clear_bit(QIB_R_REWIND_SGE, &qp->r_aflags))
 			qib_put_ss(&qp->s_rdma_read_sge);
 		else {
-			ret = qib_get_rwqe(qp, 1);
+			ret = hfi1_get_rwqe(qp, 1);
 			if (ret < 0)
 				goto op_err;
 			if (!ret)
@@ -544,7 +544,7 @@ rdma_last_imm:
 		}
 		wc.byte_len = qp->r_len;
 		wc.opcode = IB_WC_RECV_RDMA_WITH_IMM;
-		qib_copy_sge(&qp->r_sge, data, tlen, 1);
+		hfi1_copy_sge(&qp->r_sge, data, tlen, 1);
 		qib_put_ss(&qp->r_sge);
 		goto last_imm;
 
@@ -560,7 +560,7 @@ rdma_last:
 		tlen -= (hdrsize + pad + 4);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
-		qib_copy_sge(&qp->r_sge, data, tlen, 1);
+		hfi1_copy_sge(&qp->r_sge, data, tlen, 1);
 		qib_put_ss(&qp->r_sge);
 		break;
 
@@ -580,7 +580,7 @@ drop:
 	return;
 
 op_err:
-	qib_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
+	hfi1_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
 	return;
 
 }

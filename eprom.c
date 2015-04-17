@@ -307,7 +307,7 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 	 * The EPROM is per-device, so use unit 0 as that will always
 	 * exist.
 	 */
-	dd = qib_lookup(0);
+	dd = hfi1_lookup(0);
 	if (!dd) {
 		pr_err("%s: cannot find unit 0!\n", __func__);
 		return -EINVAL;

@@ -38,14 +38,14 @@
 #include "verbs.h"
 
 /**
- * qib_post_srq_receive - post a receive on a shared receive queue
+ * hfi1_post_srq_receive - post a receive on a shared receive queue
  * @ibsrq: the SRQ to post the receive on
  * @wr: the list of work requests to post
  * @bad_wr: A pointer to the first WR to cause a problem is put here
  *
  * This may be called from interrupt context.
  */
-int qib_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
+int hfi1_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
 			 struct ib_recv_wr **bad_wr)
 {
 	struct qib_srq *srq = to_isrq(ibsrq);
@@ -93,12 +93,12 @@ bail:
 }
 
 /**
- * qib_create_srq - create a shared receive queue
+ * hfi1_create_srq - create a shared receive queue
  * @ibpd: the protection domain of the SRQ to create
  * @srq_init_attr: the attributes of the SRQ
  * @udata: data from libibverbs when creating a user SRQ
  */
-struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
+struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
 			      struct ib_srq_init_attr *srq_init_attr,
 			      struct ib_udata *udata)
 {
@@ -141,14 +141,14 @@ struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
 
 	/*
 	 * Return the address of the RWQ as the offset to mmap.
-	 * See qib_mmap() for details.
+	 * See hfi1_mmap() for details.
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		int err;
 		u32 s = sizeof(struct qib_rwq) + srq->rq.size * sz;
 
 		srq->ip =
-		    qib_create_mmap_info(dev, s, ibpd->uobject->context,
+		    hfi1_create_mmap_info(dev, s, ibpd->uobject->context,
 					 srq->rq.wq);
 		if (!srq->ip) {
 			ret = ERR_PTR(-ENOMEM);
@@ -202,13 +202,13 @@ done:
 }
 
 /**
- * qib_modify_srq - modify a shared receive queue
+ * hfi1_modify_srq - modify a shared receive queue
  * @ibsrq: the SRQ to modify
  * @attr: the new attributes of the SRQ
  * @attr_mask: indicates which attributes to modify
  * @udata: user data for libibverbs.so
  */
-int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
+int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		   enum ib_srq_attr_mask attr_mask,
 		   struct ib_udata *udata)
 {
@@ -307,11 +307,11 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			struct qib_ibdev *dev = to_idev(srq->ibsrq.device);
 			u32 s = sizeof(struct qib_rwq) + size * sz;
 
-			qib_update_mmap_info(dev, ip, s, wq);
+			hfi1_update_mmap_info(dev, ip, s, wq);
 
 			/*
 			 * Return the offset to mmap.
-			 * See qib_mmap() for details.
+			 * See hfi1_mmap() for details.
 			 */
 			if (udata && udata->inlen >= sizeof(__u64)) {
 				ret = ib_copy_to_udata(udata, &ip->offset,
@@ -348,7 +348,7 @@ bail:
 	return ret;
 }
 
-int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
+int hfi1_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 {
 	struct qib_srq *srq = to_isrq(ibsrq);
 
@@ -359,10 +359,10 @@ int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 }
 
 /**
- * qib_destroy_srq - destroy a shared receive queue
+ * hfi1_destroy_srq - destroy a shared receive queue
  * @ibsrq: the SRQ to destroy
  */
-int qib_destroy_srq(struct ib_srq *ibsrq)
+int hfi1_destroy_srq(struct ib_srq *ibsrq)
 {
 	struct qib_srq *srq = to_isrq(ibsrq);
 	struct qib_ibdev *dev = to_idev(ibsrq->device);
@@ -371,7 +371,7 @@ int qib_destroy_srq(struct ib_srq *ibsrq)
 	dev->n_srqs_allocated--;
 	spin_unlock(&dev->n_srqs_lock);
 	if (srq->ip)
-		kref_put(&srq->ip->ref, qib_release_mmap_info);
+		kref_put(&srq->ip->ref, hfi1_release_mmap_info);
 	else
 		vfree(srq->rq.wq);
 	kfree(srq);
