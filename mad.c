@@ -44,11 +44,8 @@
 #define OPA_LINK_WIDTH_RESET_OLD 0x0fff
 #define OPA_LINK_WIDTH_RESET 0xffff
 
-static int reply(void *arg)
+static int reply(struct ib_mad_hdr *smp)
 {
-	/* XXX change all callers so that they all pass a
-	 * struct ib_mad_hdr * */
-	struct ib_mad_hdr *smp = (struct ib_mad_hdr *)arg;
 	/*
 	 * The verbs framework will handle the directed/LID route
 	 * packet changes.
@@ -285,7 +282,7 @@ static int __subn_get_opa_nodedesc(struct opa_smp *smp, u32 am,
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	nd = (struct opa_node_description *)data;
@@ -295,7 +292,7 @@ static int __subn_get_opa_nodedesc(struct opa_smp *smp, u32 am,
 	if (resp_len)
 		*resp_len += sizeof(*nd);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
@@ -311,7 +308,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	/* GUID 0 is illegal */
 	if (am || pidx >= dd->num_pports || dd->pport[pidx].guid == 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	ni->port_guid = dd->pport[pidx].guid;
@@ -333,7 +330,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += sizeof(*ni);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
@@ -365,7 +362,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	nip->vendor_id[1] = dd->oui2;
 	nip->vendor_id[2] = dd->oui3;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static void set_link_width_enabled(struct qib_pportdata *ppd, u32 w)
@@ -519,14 +516,14 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 	if (port_num == 0)
 		port_num = port;
 	else {
 		if (port_num > ibdev->phys_port_cnt) {
 			smp->status |= IB_SMP_INVALID_FIELD;
-			return reply(smp);
+			return reply((struct ib_mad_hdr *)smp);
 		}
 		if (port_num != port) {
 			ibp = to_iport(ibdev, port_num);
@@ -713,7 +710,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += sizeof(struct opa_port_info);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 /**
@@ -752,7 +749,7 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 		pr_warn("OPA Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
 			am_port, start_block, n_blocks_req);
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	n_blocks_avail = (u16) (npkeys/OPA_PARTITION_TABLE_BLK_SIZE) + 1;
@@ -766,7 +763,7 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 			start_block, n_blocks_req, n_blocks_avail,
 			OPA_NUM_PKEY_BLOCKS_PER_SMP);
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	p = (__be16 *) data;
@@ -780,7 +777,7 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	} else
 		smp->status |= IB_SMP_INVALID_FIELD;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int set_port_states(struct qib_pportdata *ppd, struct opa_smp *smp,
@@ -891,7 +888,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (num_ports != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	/* PortInfo is only valid on receiving port
@@ -1246,7 +1243,7 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 		pr_warn("OPA Get PKey AM Invalid : P = %d; B = 0x%x; N = 0x%x\n",
 			am_port, start_block, n_blocks_sent);
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	n_blocks_avail = (u16)(npkeys/OPA_PARTITION_TABLE_BLK_SIZE) + 1;
@@ -1257,7 +1254,7 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 			start_block, n_blocks_sent, n_blocks_avail,
 			OPA_NUM_PKEY_BLOCKS_PER_SMP);
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	for (i = 0; i < n_blocks_sent * OPA_PARTITION_TABLE_BLK_SIZE; i++)
@@ -1265,7 +1262,7 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (start_block == 0 && set_pkeys(dd, port, p) != 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	return __subn_get_opa_pkeytable(smp, am, data, ibdev, port, resp_len);
@@ -1329,7 +1326,7 @@ static int __subn_get_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++)
@@ -1338,7 +1335,7 @@ static int __subn_get_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += size;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
@@ -1351,7 +1348,7 @@ static int __subn_set_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	for (i = 0; i <  ARRAY_SIZE(ibp->sl_to_sc); i++)
@@ -1371,7 +1368,7 @@ static int __subn_get_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_sl); i++)
@@ -1380,7 +1377,7 @@ static int __subn_get_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += size;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
@@ -1393,7 +1390,7 @@ static int __subn_set_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (am) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_sl); i++)
@@ -1414,7 +1411,7 @@ static int __subn_get_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (am_port != port || port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	get_sc2vlt_tables(dd, vp);
@@ -1422,7 +1419,7 @@ static int __subn_get_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += size;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
@@ -1439,7 +1436,7 @@ static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (am_port != port || port != 1 || n_blocks != 1 || async_update) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	/* IB numbers ports from 1, hdw from 0 */
@@ -1450,7 +1447,7 @@ static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 	if (!async_update &&
 	    (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	set_sc2vlt_tables(dd, vp);
@@ -1470,7 +1467,7 @@ static int __subn_get_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	ppd = dd->pport + (port - 1);
@@ -1480,7 +1477,7 @@ static int __subn_get_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += size;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
@@ -1495,7 +1492,7 @@ static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (port != 1 || n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	/* IB numbers ports from 1, hdw from 0 */
@@ -1503,7 +1500,7 @@ static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 	lstate = driver_lstate(ppd);
 	if (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	ppd = dd->pport + (port - 1);
@@ -1531,7 +1528,7 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (nports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	ibp = to_iport(ibdev, port);
@@ -1564,7 +1561,7 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += sizeof(struct opa_port_state_info);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
@@ -1586,7 +1583,7 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (nports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	ibp = to_iport(ibdev, port);
@@ -1635,14 +1632,14 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 	if (addr >= 4096 ||
 		(__CI_PAGE_NUM(addr) != __CI_PAGE_NUM(addr + len))) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	ret = get_cable_info(dd, port, addr, len, data);
 
 	if (ret == -ENODEV) {
 		smp->status |= IB_SMP_UNSUP_METH_ATTR;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	/* The address range for the CableInfo SMA query is wider than the
@@ -1652,13 +1649,13 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 	 */
 	if (ret < 0 && ret != -ERANGE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	if (resp_len)
 		*resp_len += len;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
@@ -1673,7 +1670,7 @@ static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	ppd = dd->pport + (port_num - 1);
@@ -1682,7 +1679,7 @@ static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += size;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
@@ -1696,13 +1693,13 @@ static int __subn_set_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 	ppd = dd->pport + (port_num - 1);
 	trace_bct_set(dd, p);
 	if (fm_set_table(ppd, FM_TBL_BUFFER_CONTROL, p) < 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	return __subn_get_opa_bct(smp, am, data, ibdev, port, resp_len);
@@ -1724,7 +1721,7 @@ static int __subn_get_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	switch (section) {
@@ -1750,7 +1747,7 @@ static int __subn_get_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
 	if (size > 0 && resp_len)
 		*resp_len += size;
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
@@ -1768,7 +1765,7 @@ static int __subn_set_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (num_ports != 1 || port_num != port) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	switch (section) {
@@ -2100,7 +2097,7 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	 */
 	p->resp_time_value = 18;
 
-	return reply(pmp);
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static void workaround_portstatus_errata(struct hfi_devdata *dd,
@@ -2185,13 +2182,13 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 				num_vls * sizeof(struct _vls_pctrs);
 	if (response_data_size > sizeof(pmp->data)) {
 		pmp->mad_hdr.status |= OPA_PM_STATUS_REQUEST_TOO_LARGE;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	if (nports != 1 || (port_num && port_num != port)
 	    || num_vls > OPA_MAX_VLS || (vl_select_mask & ~WFR_VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	memset(pmp->data, 0, sizeof(pmp->data));
@@ -2345,7 +2342,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 
 	workaround_portstatus_errata(dd, rsp, vl_select_mask);
 
-	return reply(pmp);
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
@@ -2476,7 +2473,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 
 	if (num_ports != 1 || (vl_select_mask & ~WFR_VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	/* Sanity check */
@@ -2485,7 +2482,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 
 	if (response_data_size > sizeof(pmp->data)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	/*
@@ -2498,7 +2495,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	rsp = (struct _port_dctrs *)&(req->port[0]);
@@ -2608,7 +2605,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	}
 
 	workaround_datacounters_errata(dd, rsp, vl_select_mask);
-	return reply(pmp);
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
@@ -2646,7 +2643,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	if (num_ports != 1 || num_ports != num_pslm ||
 		(counter_size_mode != COUNTER_SIZE_MODE_ALL64)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	response_data_size = sizeof(struct opa_port_error_counters64_msg) +
@@ -2654,7 +2651,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 
 	if (response_data_size > sizeof(pmp->data)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 	/*
 	 * The bit set in the mask needs to be consistent with the
@@ -2666,7 +2663,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	rsp = (struct _port_ectrs *)&(req->port[0]);
@@ -2735,7 +2732,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	return reply(pmp);
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
@@ -2761,7 +2758,7 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 
 	if (num_ports != 1 || num_ports != num_pslm) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	/* Sanity check */
@@ -2769,7 +2766,7 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 
 	if (response_data_size > sizeof(pmp->data)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	/*
@@ -2782,7 +2779,7 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	/* PortRcvErrorInfo */
@@ -2830,7 +2827,7 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 	/* FMConfigErrorInfo */
 	rsp->fm_config_ei.status_and_code = dd->err_info_fmconfig;
 
-	return reply(pmp);
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
@@ -2849,7 +2846,7 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 
 	if ((nports != 1) || (portn != 1 << port)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 	/*
 	 * only counters returned by pma_get_opa_portstatus() are
@@ -2975,7 +2972,7 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		/* port_vl_xmit_discards ??? */
 	}
 
-	return reply(pmp);
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
@@ -3000,7 +2997,7 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 
 	if (num_ports != 1 || num_ports != num_pslm) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	/*
@@ -3013,7 +3010,7 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 
 	if ((u8)port_num != port) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	error_info_select = be32_to_cpu(req->error_info_select_mask);
@@ -3049,7 +3046,7 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 		/* turn off status bit */
 		dd->err_info_fmconfig &= ~OPA_EI_STATUS_SMASK;
 
-	return reply(pmp);
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 struct opa_congestion_info_attr {
@@ -3074,7 +3071,7 @@ static int __subn_get_opa_cong_info(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += sizeof(*p);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_get_opa_cong_setting(struct opa_smp *smp, u32 am,
@@ -3096,7 +3093,7 @@ static int __subn_get_opa_cong_setting(struct opa_smp *smp, u32 am,
 
 	if (cc_state == NULL) {
 		rcu_read_unlock();
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	entries = cc_state->cong_setting.entries;
@@ -3115,7 +3112,7 @@ static int __subn_get_opa_cong_setting(struct opa_smp *smp, u32 am,
 	if (resp_len)
 		*resp_len += sizeof(*p);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_cong_setting(struct opa_smp *smp, u32 am, u8 *data,
@@ -3156,7 +3153,7 @@ static int __subn_get_opa_hfi_cong_log(struct opa_smp *smp, u32 am,
 
 	if (am != 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	spin_lock(&ppd->cc_log_lock);
@@ -3207,7 +3204,7 @@ static int __subn_get_opa_hfi_cong_log(struct opa_smp *smp, u32 am,
 	if (resp_len)
 		*resp_len += sizeof(struct opa_hfi_cong_log);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_get_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
@@ -3229,7 +3226,7 @@ static int __subn_get_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 	if (n_blocks == 0 ||
 	    start_block + n_blocks > ppd->cc_max_table_entries) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	rcu_read_lock();
@@ -3238,7 +3235,7 @@ static int __subn_get_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (cc_state == NULL) {
 		rcu_read_unlock();
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	sentry = start_block * IB_CCT_ENTRIES;
@@ -3258,7 +3255,7 @@ static int __subn_get_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += sizeof(u16)*(IB_CCT_ENTRIES * n_blocks + 1);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 void cc_state_reclaim(struct rcu_head *rcu)
@@ -3287,7 +3284,7 @@ static int __subn_set_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 	if (n_blocks == 0 ||
 	    start_block + n_blocks > ppd->cc_max_table_entries) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	sentry = start_block * IB_CCT_ENTRIES;
@@ -3298,7 +3295,7 @@ static int __subn_set_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 	ccti_limit = be16_to_cpu(p->ccti_limit);
 	if (ccti_limit + 1 > eentry) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	new_cc_state = kzalloc(sizeof(*new_cc_state), GFP_KERNEL);
@@ -3312,7 +3309,7 @@ static int __subn_set_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 	if (old_cc_state == NULL) {
 		spin_unlock(&ppd->cc_state_lock);
 		kfree(new_cc_state);
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	*new_cc_state = *old_cc_state;
@@ -3362,7 +3359,7 @@ static int __subn_get_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (port != 1 || nport != 1 || OPA_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	reg = read_csr(dd, DCC_CFG_LED_CNTRL);
@@ -3373,7 +3370,7 @@ static int __subn_get_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += sizeof(struct opa_led_info);
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
@@ -3388,7 +3385,7 @@ static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (port != 1 || nport != 1 || OPA_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	if (on)
@@ -3486,7 +3483,7 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		/* FALLTHROUGH */
 	default:
 		smp->status |= IB_SMP_UNSUP_METH_ATTR;
-		ret = reply(smp);
+		ret = reply((struct ib_mad_hdr *)smp);
 		break;
 	}
 	return ret;
@@ -3556,7 +3553,7 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		/* FALLTHROUGH */
 	default:
 		smp->status |= IB_SMP_UNSUP_METH_ATTR;
-		ret = reply(smp);
+		ret = reply((struct ib_mad_hdr *)smp);
 		break;
 	}
 	return ret;
@@ -3577,7 +3574,7 @@ static int subn_get_opa_aggregate(struct opa_smp *smp,
 
 	if (num_attr < 1 || num_attr > 117) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	for (i = 0; i < num_attr; i++) {
@@ -3595,7 +3592,7 @@ static int subn_get_opa_aggregate(struct opa_smp *smp,
 
 		if (next_smp + agg_size > ((u8 *)smp) + sizeof(*smp)) {
 			smp->status |= IB_SMP_INVALID_FIELD;
-			return reply(smp);
+			return reply((struct ib_mad_hdr *)smp);
 		}
 
 		/* zero the payload for this segment */
@@ -3605,13 +3602,13 @@ static int subn_get_opa_aggregate(struct opa_smp *smp,
 					ibdev, port, NULL);
 		if (smp->status & ~IB_SMP_DIRECTION) {
 			set_aggr_error(agg);
-			return reply(smp);
+			return reply((struct ib_mad_hdr *)smp);
 		}
 		next_smp += agg_size;
 
 	}
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int subn_set_opa_aggregate(struct opa_smp *smp,
@@ -3624,7 +3621,7 @@ static int subn_set_opa_aggregate(struct opa_smp *smp,
 
 	if (num_attr < 1 || num_attr > 117) {
 		smp->status |= IB_SMP_INVALID_FIELD;
-		return reply(smp);
+		return reply((struct ib_mad_hdr *)smp);
 	}
 
 	for (i = 0; i < num_attr; i++) {
@@ -3642,20 +3639,20 @@ static int subn_set_opa_aggregate(struct opa_smp *smp,
 
 		if (next_smp + agg_size > ((u8 *)smp) + sizeof(*smp)) {
 			smp->status |= IB_SMP_INVALID_FIELD;
-			return reply(smp);
+			return reply((struct ib_mad_hdr *)smp);
 		}
 
 		(void) subn_set_opa_sma(agg->attr_id, smp, am, agg->data,
 					ibdev, port, NULL);
 		if (smp->status & ~IB_SMP_DIRECTION) {
 			set_aggr_error(agg);
-			return reply(smp);
+			return reply((struct ib_mad_hdr *)smp);
 		}
 		next_smp += agg_size;
 
 	}
 
-	return reply(smp);
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 /*
@@ -3768,7 +3765,7 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 	attr_id = smp->attr_id;
 	if (smp->class_version != OPA_SMI_CLASS_VERSION) {
 		smp->status |= IB_SMP_UNSUP_VERSION;
-		ret = reply(smp);
+		ret = reply((struct ib_mad_hdr *)smp);
 		goto bail;
 	}
 	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags, smp->mkey,
@@ -3830,7 +3827,7 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 			ret = subn_trap_repress(smp, ibdev, port);
 		else {
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply(smp);
+			ret = reply((struct ib_mad_hdr *)smp);
 		}
 		goto bail;
 #endif /* 01 */
@@ -3859,7 +3856,7 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 #endif /* 0 */
 	default:
 		smp->status |= IB_SMP_UNSUP_METHOD;
-		ret = reply(smp);
+		ret = reply((struct ib_mad_hdr *)smp);
 	}
 
 bail:
@@ -3877,7 +3874,7 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 	*out_mad = *in_mad;
 	if (smp->class_version != 1) {
 		smp->status |= IB_SMP_UNSUP_VERSION;
-		ret = reply(smp);
+		ret = reply((struct ib_mad_hdr *)smp);
 		goto bail;
 	}
 
@@ -3915,7 +3912,7 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		default:
 			smp->status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply(smp);
+			ret = reply((struct ib_mad_hdr *)smp);
 			goto bail;
 		}
 	}
@@ -3935,7 +3932,7 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 
 	if (pmp->mad_hdr.class_version != OPA_SMI_CLASS_VERSION) {
 		pmp->mad_hdr.status |= IB_SMP_UNSUP_VERSION;
-		return reply(pmp);
+		return reply((struct ib_mad_hdr *)pmp);
 	}
 
 	/* FIXME decide proper length for all these */
@@ -3981,7 +3978,7 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 #endif /* 01 */
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply(pmp);
+			ret = reply((struct ib_mad_hdr *)pmp);
 			goto bail;
 		}
 
@@ -4009,7 +4006,7 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 #endif /* 01 */
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply(pmp);
+			ret = reply((struct ib_mad_hdr *)pmp);
 			goto bail;
 		}
 
@@ -4025,7 +4022,7 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 
 	default:
 		pmp->mad_hdr.status |= IB_SMP_UNSUP_METHOD;
-		ret = reply(pmp);
+		ret = reply((struct ib_mad_hdr *)pmp);
 	}
 
 bail:
