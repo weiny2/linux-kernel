@@ -1624,13 +1624,11 @@ static inline u64 hfi_pkt_default_send_ctxt_mask(struct hfi_devdata *dd,
 	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_VL_SMASK
 	| WFR_SEND_CTXT_CHECK_ENABLE_CHECK_ENABLE_SMASK;
 
-	if (ctxt_type == SC_USER) {
-		base_sc_integrity = base_sc_integrity |
-			HFI_PKT_USER_SC_INTEGRITY;
-	} else {
-		base_sc_integrity = base_sc_integrity |
-			HFI_PKT_KERNEL_SC_INTEGRITY;
-	}
+	if (ctxt_type == SC_USER)
+		base_sc_integrity |= HFI_PKT_USER_SC_INTEGRITY;
+	else
+		base_sc_integrity |= HFI_PKT_KERNEL_SC_INTEGRITY;
+
 	if (is_a0(dd))
 		/* turn off send-side job key checks - A0 erratum */
 		return base_sc_integrity &

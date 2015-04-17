@@ -175,6 +175,7 @@ void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold);
 u32 sc_mtu_to_threshold(struct send_context *sc, u32 mtu, u32 hdrqentsize);
 void sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
 void sc_wait(struct hfi_devdata *dd);
+void set_pio_integrity(struct send_context *sc);
 
 /* support functions */
 void pio_reset_all(struct hfi_devdata *dd);

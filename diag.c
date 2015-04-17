@@ -1109,13 +1109,7 @@ static void adjust_integrity_checks(struct hfi_devdata *dd, int restore)
 {
 	struct send_context *sc;
 	unsigned long sc_flags;
-	u64 reg;
-	u64 mask;
 	int i;
-
-	/* nothing to do if no integrity checks */
-	if (HFI_CAP_IS_KSET(NO_INTEGRITY))
-		return;
 
 	spin_lock_irqsave(&dd->sc_lock, sc_flags);
 	for (i = 0; i < dd->num_send_contexts; i++) {
@@ -1124,15 +1118,7 @@ static void adjust_integrity_checks(struct hfi_devdata *dd, int restore)
 		if (!sc)
 			continue;	/* not allocated */
 
-		mask = hfi_pkt_default_send_ctxt_mask(dd, sc->type);
-		reg = read_kctxt_csr(dd, sc->hw_context,
-					WFR_SEND_CTXT_CHECK_ENABLE);
-		if (restore)
-			reg |= mask;
-		else
-			reg &= ~mask;
-		write_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_CHECK_ENABLE,
-				reg);
+		set_pio_integrity(sc);
 	}
 	spin_unlock_irqrestore(&dd->sc_lock, sc_flags);
 }
