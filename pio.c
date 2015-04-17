@@ -36,6 +36,8 @@
 #include "trace.h"
 
 #define SC_CTXT_PACKET_EGRESS_TIMEOUT 350 /* in chip cycles */
+
+#define SC(name) WFR_SEND_CTXT_##name
 /*
  * Send Context functions
  */
@@ -596,18 +598,18 @@ void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold)
 	spin_lock_irqsave(&sc->credit_ctrl_lock, flags);
 
 	old_threshold = (sc->credit_ctrl >>
-				WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT)
-			 & WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_MASK;
+				SC(CREDIT_CTRL_THRESHOLD_SHIFT))
+			 & SC(CREDIT_CTRL_THRESHOLD_MASK);
 
 	if (new_threshold != old_threshold) {
 		sc->credit_ctrl =
 			(sc->credit_ctrl
-				& ~WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SMASK)
+				& ~SC(CREDIT_CTRL_THRESHOLD_SMASK))
 			| ((new_threshold
-				& WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_MASK)
-			   << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT);
+				& SC(CREDIT_CTRL_THRESHOLD_MASK))
+			   << SC(CREDIT_CTRL_THRESHOLD_SHIFT));
 		write_kctxt_csr(sc->dd, sc->hw_context,
-			WFR_SEND_CTXT_CREDIT_CTRL, sc->credit_ctrl);
+			SC(CREDIT_CTRL), sc->credit_ctrl);
 
 		/* force a credit return on change to avoid a possible stall */
 		force_return = 1;
@@ -622,14 +624,14 @@ void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold)
 /*
  * set_pio_integrity
  *
- * Set the WFR_SEND_CTXT_CHECK_ENABLE register for the send context 'sc'.
+ * Set the CHECK_ENABLE register for the send context 'sc'.
  * Use hfi_pkt_default_send_ctxt_mask(dd) as the starting point, and adjust
  * that value based on relevant HFI_CAP* flags.
  */
 void set_pio_integrity(struct send_context *sc)
 {
 	struct hfi_devdata *dd = sc->dd;
-	u64 reg = 0, smask;
+	u64 reg = 0, mask;
 	u32 hw_context = sc->hw_context;
 	int type = sc->type, set;
 
@@ -643,22 +645,22 @@ void set_pio_integrity(struct send_context *sc)
 		reg = hfi_pkt_default_send_ctxt_mask(dd, type);
 
 		/* make adjustments based on HFI_CAP* flags */
-		smask = WFR_SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+		mask = SC(CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK);
 		set = (sc->type == SC_USER ? HFI_CAP_IS_USET(PKEY_CHECK) :
 		       HFI_CAP_IS_KSET(PKEY_CHECK));
 
 		if (!set)
-			reg &= ~smask;
+			reg &= ~mask;
 
-		smask = WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+		mask = SC(CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK);
 		set = (sc->type == SC_USER ?
 		       HFI_CAP_IS_USET(STATIC_RATE_CTRL) :
 		       HFI_CAP_IS_KSET(STATIC_RATE_CTRL));
 
 		if (!set)
-			reg |= smask;
+			reg |= mask;
 	}
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_ENABLE, reg);
+	write_kctxt_csr(dd, hw_context, SC(CHECK_ENABLE), reg);
 }
 
 /*
@@ -726,22 +728,22 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 					<< WFR_PIO_ADDR_CONTEXT_SHIFT);
 
 	/* set base and credits */
-	reg = ((sci->credits & WFR_SEND_CTXT_CTRL_CTXT_DEPTH_MASK)
-					<< WFR_SEND_CTXT_CTRL_CTXT_DEPTH_SHIFT)
-		| ((sci->base & WFR_SEND_CTXT_CTRL_CTXT_BASE_MASK)
-					<< WFR_SEND_CTXT_CTRL_CTXT_BASE_SHIFT);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CTRL, reg);
+	reg = ((sci->credits & SC(CTRL_CTXT_DEPTH_MASK))
+					<< SC(CTRL_CTXT_DEPTH_SHIFT))
+		| ((sci->base & SC(CTRL_CTXT_BASE_MASK))
+					<< SC(CTRL_CTXT_BASE_SHIFT));
+	write_kctxt_csr(dd, hw_context, SC(CTRL), reg);
 
 	set_pio_integrity(sc);
 
 	/* unmask all errors */
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_ERR_MASK, (u64)-1);
+	write_kctxt_csr(dd, hw_context, SC(ERR_MASK), (u64)-1);
 
 	/* set the default partition key */
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_PARTITION_KEY,
+	write_kctxt_csr(dd, hw_context, SC(CHECK_PARTITION_KEY),
 		(DEFAULT_PKEY &
-			WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_MASK)
-		    << WFR_SEND_CTXT_CHECK_PARTITION_KEY_VALUE_SHIFT);
+			SC(CHECK_PARTITION_KEY_VALUE_MASK))
+		    << SC(CHECK_PARTITION_KEY_VALUE_SHIFT));
 
 	/* per context type checks */
 	if (type == SC_USER) {
@@ -753,13 +755,13 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	}
 
 	/* set the send context check opcode mask and value */
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_OPCODE,
-		((u64)opmask << WFR_SEND_CTXT_CHECK_OPCODE_MASK_SHIFT) |
-		((u64)opval << WFR_SEND_CTXT_CHECK_OPCODE_VALUE_SHIFT));
+	write_kctxt_csr(dd, hw_context, SC(CHECK_OPCODE),
+		((u64)opmask << SC(CHECK_OPCODE_MASK_SHIFT)) |
+		((u64)opval << SC(CHECK_OPCODE_VALUE_SHIFT)));
 
 	/* set up credit return */
-	reg = pa & WFR_SEND_CTXT_CREDIT_RETURN_ADDR_ADDRESS_SMASK;
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, reg);
+	reg = pa & SC(CREDIT_RETURN_ADDR_ADDRESS_SMASK);
+	write_kctxt_csr(dd, hw_context, SC(CREDIT_RETURN_ADDR), reg);
 
 	/*
 	 * Calculate the initial credit return threshold.
@@ -777,16 +779,16 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	} else { /* kernel */
 		thresh = sc_mtu_to_threshold(sc, default_mtu, hdrqentsize);
 	}
-	reg = thresh << WFR_SEND_CTXT_CREDIT_CTRL_THRESHOLD_SHIFT;
+	reg = thresh << SC(CREDIT_CTRL_THRESHOLD_SHIFT);
 	/* add in early return */
 	if (type == SC_USER && HFI_CAP_IS_USET(EARLY_CREDIT_RETURN))
-		reg |= WFR_SEND_CTXT_CREDIT_CTRL_EARLY_RETURN_SMASK;
+		reg |= SC(CREDIT_CTRL_EARLY_RETURN_SMASK);
 	else if (HFI_CAP_IS_KSET(EARLY_CREDIT_RETURN)) /* kernel, ack */
-		reg |= WFR_SEND_CTXT_CREDIT_CTRL_EARLY_RETURN_SMASK;
+		reg |= SC(CREDIT_CTRL_EARLY_RETURN_SMASK);
 
 	/* set up write-through credit_ctrl */
 	sc->credit_ctrl = reg;
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CREDIT_CTRL, reg);
+	write_kctxt_csr(dd, hw_context, SC(CREDIT_CTRL), reg);
 
 	spin_unlock_irqrestore(&dd->sc_lock, flags);
 
@@ -851,13 +853,13 @@ void sc_free(struct send_context *sc)
 	dd->send_contexts[sw_index].sc = NULL;
 
 	/* clear/disable all registers set in sc_alloc */
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CTRL, 0);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_ENABLE, 0);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_ERR_MASK, 0);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_PARTITION_KEY, 0);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CHECK_OPCODE, 0);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CREDIT_RETURN_ADDR, 0);
-	write_kctxt_csr(dd, hw_context, WFR_SEND_CTXT_CREDIT_CTRL, 0);
+	write_kctxt_csr(dd, hw_context, SC(CTRL), 0);
+	write_kctxt_csr(dd, hw_context, SC(CHECK_ENABLE), 0);
+	write_kctxt_csr(dd, hw_context, SC(ERR_MASK), 0);
+	write_kctxt_csr(dd, hw_context, SC(CHECK_PARTITION_KEY), 0);
+	write_kctxt_csr(dd, hw_context, SC(CHECK_OPCODE), 0);
+	write_kctxt_csr(dd, hw_context, SC(CREDIT_RETURN_ADDR), 0);
+	write_kctxt_csr(dd, hw_context, SC(CREDIT_CTRL), 0);
 
 	/* release the index and context for re-use */
 	sc_hw_free(dd, sw_index, hw_context);
@@ -878,12 +880,12 @@ void sc_disable(struct send_context *sc)
 		return;
 
 	/* do all steps, even if already disabled */
-	reg = read_kctxt_csr(sc->dd, sc->hw_context, WFR_SEND_CTXT_CTRL);
-	reg &= ~WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+	reg = read_kctxt_csr(sc->dd, sc->hw_context, SC(CTRL));
+	reg &= ~SC(CTRL_CTXT_ENABLE_SMASK);
 	spin_lock_irqsave(&sc->alloc_lock, flags);
 	sc->flags &= ~SCF_ENABLED;
 	sc_wait_for_packet_egress(sc, 1);
-	write_kctxt_csr(sc->dd, sc->hw_context, WFR_SEND_CTXT_CTRL, reg);
+	write_kctxt_csr(sc->dd, sc->hw_context, SC(CTRL), reg);
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
 	/*
@@ -994,8 +996,8 @@ int sc_restart(struct send_context *sc)
 	 */
 	loop = 0;
 	while (1) {
-		reg = read_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_STATUS);
-		if (reg & WFR_SEND_CTXT_STATUS_CTXT_HALTED_SMASK)
+		reg = read_kctxt_csr(dd, sc->hw_context, SC(STATUS));
+		if (reg & SC(STATUS_CTXT_HALTED_SMASK))
 			break;
 		if (loop > 100) {
 			dd_dev_err(dd, "%s: context %u(%u) not halting, skipping\n",
@@ -1169,8 +1171,8 @@ int sc_enable(struct send_context *sc)
 		return -EINVAL;
 	dd = sc->dd;
 
-	sc_ctrl = read_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_CTRL);
-	if ((sc_ctrl & WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK))
+	sc_ctrl = read_kctxt_csr(dd, sc->hw_context, SC(CTRL));
+	if ((sc_ctrl & SC(CTRL_CTXT_ENABLE_SMASK)))
 		return 0; /* already enabled */
 
 	/* IMPORTANT: only clear free and fill if transitioning 0 -> 1 */
@@ -1191,9 +1193,9 @@ int sc_enable(struct send_context *sc)
 	 * is disabled, the halt will not clear until after the PIO init
 	 * engine runs below.
 	 */
-	reg = read_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_ERR_STATUS);
+	reg = read_kctxt_csr(dd, sc->hw_context, SC(ERR_STATUS));
 	if (reg)
-		write_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_ERR_CLEAR,
+		write_kctxt_csr(dd, sc->hw_context, SC(ERR_CLEAR),
 			reg);
 
 	/*
@@ -1234,14 +1236,14 @@ int sc_enable(struct send_context *sc)
 	 * worry about locking since the releaser will not do anything
 	 * if the context accounting values have not changed.
 	 */
-	sc_ctrl |= WFR_SEND_CTXT_CTRL_CTXT_ENABLE_SMASK;
+	sc_ctrl |= SC(CTRL_CTXT_ENABLE_SMASK);
 	spin_lock_irqsave(&sc->alloc_lock, flags);
-	write_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_CTRL, sc_ctrl);
+	write_kctxt_csr(dd, sc->hw_context, SC(CTRL), sc_ctrl);
 	/*
 	 * Read SendCtxtCtrl to force the write out and prevent a timing
 	 * hazard where a PIO write may reach the context before the enable.
 	 */
-	read_kctxt_csr(dd, sc->hw_context, WFR_SEND_CTXT_CTRL);
+	read_kctxt_csr(dd, sc->hw_context, SC(CTRL));
 	sc->flags |= SCF_ENABLED;
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
@@ -1255,15 +1257,15 @@ void sc_return_credits(struct send_context *sc)
 		return;
 
 	/* a 0->1 transition schedules a credit return */
-	write_kctxt_csr(sc->dd, sc->hw_context, WFR_SEND_CTXT_CREDIT_FORCE,
-		WFR_SEND_CTXT_CREDIT_FORCE_FORCE_RETURN_SMASK);
+	write_kctxt_csr(sc->dd, sc->hw_context, SC(CREDIT_FORCE),
+		SC(CREDIT_FORCE_FORCE_RETURN_SMASK));
 	/*
 	 * Ensure that the write is flushed and the credit return is
 	 * schedule. We care more about the 0 -> 1 transition.
 	 */
-	read_kctxt_csr(sc->dd, sc->hw_context, WFR_SEND_CTXT_CREDIT_FORCE);
+	read_kctxt_csr(sc->dd, sc->hw_context, SC(CREDIT_FORCE));
 	/* set back to 0 for next time */
-	write_kctxt_csr(sc->dd, sc->hw_context, WFR_SEND_CTXT_CREDIT_FORCE, 0);
+	write_kctxt_csr(sc->dd, sc->hw_context, SC(CREDIT_FORCE), 0);
 }
 
 /* allow all in-flight packets to drain on the context */
@@ -1427,9 +1429,9 @@ void sc_add_credit_return_intr(struct send_context *sc)
 	/* lock must surround both the count change and the CSR update */
 	spin_lock_irqsave(&sc->credit_ctrl_lock, flags);
 	if (sc->credit_intr_count == 0) {
-		sc->credit_ctrl |= WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+		sc->credit_ctrl |= SC(CREDIT_CTRL_CREDIT_INTR_SMASK);
 		write_kctxt_csr(sc->dd, sc->hw_context,
-			WFR_SEND_CTXT_CREDIT_CTRL, sc->credit_ctrl);
+			SC(CREDIT_CTRL), sc->credit_ctrl);
 	}
 	sc->credit_intr_count++;
 	spin_unlock_irqrestore(&sc->credit_ctrl_lock, flags);
@@ -1449,9 +1451,9 @@ void sc_del_credit_return_intr(struct send_context *sc)
 	spin_lock_irqsave(&sc->credit_ctrl_lock, flags);
 	sc->credit_intr_count--;
 	if (sc->credit_intr_count == 0) {
-		sc->credit_ctrl &= ~WFR_SEND_CTXT_CREDIT_CTRL_CREDIT_INTR_SMASK;
+		sc->credit_ctrl &= ~SC(CREDIT_CTRL_CREDIT_INTR_SMASK);
 		write_kctxt_csr(sc->dd, sc->hw_context,
-			WFR_SEND_CTXT_CREDIT_CTRL, sc->credit_ctrl);
+			SC(CREDIT_CTRL), sc->credit_ctrl);
 	}
 	spin_unlock_irqrestore(&sc->credit_ctrl_lock, flags);
 }
@@ -1670,7 +1672,7 @@ int init_pervl_scs(struct hfi_devdata *dd)
 	sc_enable(dd->vld[15].sc);
 	ctxt = dd->vld[15].sc->hw_context;
 	mask = all_vl_mask & ~(1LL << 15);
-	write_kctxt_csr(dd, ctxt, WFR_SEND_CTXT_CHECK_VL, mask);
+	write_kctxt_csr(dd, ctxt, SC(CHECK_VL), mask);
 	dd_dev_info(dd,
 		    "Using send context %u(%u) for VL15\n",
 		    dd->vld[15].sc->sw_index, ctxt);
@@ -1678,7 +1680,7 @@ int init_pervl_scs(struct hfi_devdata *dd)
 		sc_enable(dd->vld[i].sc);
 		ctxt = dd->vld[i].sc->hw_context;
 		mask = all_vl_mask & ~(1LL << i);
-		write_kctxt_csr(dd, ctxt, WFR_SEND_CTXT_CHECK_VL, mask);
+		write_kctxt_csr(dd, ctxt, SC(CHECK_VL), mask);
 	}
 	return 0;
 nomem:
