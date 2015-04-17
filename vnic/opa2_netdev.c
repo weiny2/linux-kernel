@@ -261,8 +261,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	hfi_ni_t ni = PTL_NONMATCHING_PHYSICAL;
 	hfi_hdr_data_t hdr_data = 0x1;
 	hfi_ack_req_t ack_req = PTL_NO_ACK_REQ;
-	hfi_md_options_t md_options = PTL_MD_EVENT_SUCCESS_DISABLE |
-					PTL_MD_EVENT_SEND_DISABLE;
+	hfi_md_options_t md_options = PTL_MD_EVENT_SEND_DISABLE |
+					PTL_MD_EVENT_CT_SEND;
 	hfi_tx_handle_t tx_handle = 0xc;
 	hfi_eq_handle_t eq_handle = 0;
 	hfi_size_t remote_offset = 0;
@@ -410,6 +410,13 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc < 0)
 		goto err3;
 
+	/* Wait for TX command 1 to complete */
+	rc = hfi_ct_wait(ctx, ct_tx, 1, NULL);
+	if (rc < 0)
+		goto err3;
+	else
+		dev_info(&odev->dev, "TX CT event 1 success\n");
+
 	/* TX data to the regular PTE */
 	rc = hfi_tx_write(tx, ctx, ni, tx_base,
 			  PAYLOAD_SIZE,
@@ -422,6 +429,13 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 			  tx_handle);
 	if (rc < 0)
 		goto err3;
+
+	/* Wait for TX command 2 to complete */
+	rc = hfi_ct_wait(ctx, ct_tx, 2, NULL);
+	if (rc < 0)
+		goto err3;
+	else
+		dev_info(&odev->dev, "TX CT event 2 success\n");
 
 	/* Wait to receive from peer */
 	rc = hfi_ct_wait(ctx, ct_rx, 1, NULL);
