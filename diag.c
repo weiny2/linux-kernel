@@ -272,6 +272,10 @@ struct hfi_packet_filter_command {
 	void *value_ptr;
 };
 
+/* Can't re-use PKT_DIR_*GRESS here because 0 means no packets for this */
+#define HFI_SNOOP_INGRESS 0x1
+#define HFI_SNOOP_EGRESS  0x2
+
 enum hfi_packet_filter_opcodes {
 	FILTER_BY_LID,
 	FILTER_BY_DLID,
@@ -279,7 +283,8 @@ enum hfi_packet_filter_opcodes {
 	FILTER_BY_QP_NUMBER,
 	FILTER_BY_PKT_TYPE,
 	FILTER_BY_SERVICE_LEVEL,
-	FILTER_BY_PKEY
+	FILTER_BY_PKEY,
+	FILTER_BY_DIRECTION,
 };
 
 static const struct file_operations snoop_file_ops = {
@@ -306,6 +311,7 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 static int hfi_filter_ib_service_level(void *ibhdr, void *packet_data,
 				       void *value);
 static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value);
+static int hfi_filter_direction(void *ibhdr, void *packet_data, void *value);
 
 static struct hfi_filter_array hfi_filters[] = {
 	{ hfi_filter_lid },
@@ -314,7 +320,8 @@ static struct hfi_filter_array hfi_filters[] = {
 	{ hfi_filter_qp_number },
 	{ hfi_filter_ibpacket_type },
 	{ hfi_filter_ib_service_level },
-	{ hfi_filter_ib_pkey }
+	{ hfi_filter_ib_pkey },
+	{ hfi_filter_direction },
 };
 
 #define HFI_MAX_FILTERS	ARRAY_SIZE(hfi_filters)
@@ -1065,6 +1072,7 @@ static void dump_ioctl_table(void)
 	pr_alert("Packet Type %d\n", FILTER_BY_PKT_TYPE);
 	pr_alert("Service Level %d\n", FILTER_BY_SERVICE_LEVEL);
 	pr_alert("PKey %d\n", FILTER_BY_PKEY);
+	pr_alert("Direction %d\n", FILTER_BY_DIRECTION);
 }
 #endif
 
@@ -1904,6 +1912,32 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	if ((*(u16 *)value & 0x7FFF) ==
 		((be32_to_cpu(ohdr->bth[0])) & 0x7FFF))
 		return HFI_FILTER_HIT;
+
+	return HFI_FILTER_MISS;
+}
+
+/*
+ * If packet_data is NULL then this is coming from one of the send functions.
+ * Thus we know if its an ingressed or egressed packet.
+ */
+static int hfi_filter_direction(void *ibhdr, void *packet_data, void *value)
+{
+	u8 user_dir = *(u8 *)value;
+	int ret;
+
+	ret = hfi_filter_check(value, "user");
+	if (ret)
+		return ret;
+
+	if (packet_data) {
+		/* Incoming packet */
+		if (user_dir & HFI_SNOOP_INGRESS)
+			return HFI_FILTER_HIT;
+	} else {
+		/* Outgoing packet */
+		if (user_dir & HFI_SNOOP_EGRESS)
+			return HFI_FILTER_HIT;
+	}
 
 	return HFI_FILTER_MISS;
 }

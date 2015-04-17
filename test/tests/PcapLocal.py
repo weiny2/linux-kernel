@@ -81,8 +81,6 @@ def signal_handler(signal, frame):
 def main():
 
     IB_PACKET_SIZE = 5000 #iba_pcap.h = 4208 but not big enough for 4K MTU
-    FILTER_BY_SLID = 0x0
-    FILTER_BY_DLID = 0x1
     SET_FILTER_IOCTL = 7044
     CLEAR_FILTER_IOCTL = 7043
 
@@ -90,9 +88,10 @@ def main():
     CAPTURE_MODE = os.O_RDONLY
 
     dev = "/dev/hfi1_diagpkt0"
-    set_ioctl = 0
     test_fail = 0
-
+    set_filter = 0
+    filter_code = 0
+    filter_val = 0
     test_info = RegLib.TestInfo()
 
     dump = 0
@@ -105,6 +104,14 @@ def main():
         if arg == "snoop":
             open_mode = SNOOP_MODE
             print "Using snoop mode"
+
+        matchObj = re.match(r"filter:(.*):(.*)", arg)
+        if matchObj:
+            filter_code = int(matchObj.group(1))
+            filter_val = int(matchObj.group(2))
+            set_filter = 1
+            RegLib.test_log(0, "Filter using %d with val %d" % (filter_code, filter_val))
+
 
     # Open the device and create a file object.
     # Need a file object for sending ioctl
@@ -119,13 +126,13 @@ def main():
         RegLib.test_fail("Could not open capture device %s" % c_dev0)
 
     # Filter value we need to pass to kernel. We need a pointer to it.
-    filter_buf = array.array('i', [0x2])
+    filter_buf = array.array('i', [filter_val])
     (filter_addr, filter_len) = filter_buf.buffer_info()
 
     # Need a buffer to write to kernel. Includes the filter opcode
     # The length of the filter value, and a pointer to that filter
     # value.
-    filter_opcode = FILTER_BY_DLID
+    filter_opcode = filter_code
     filter_len = 0x4
     buf = array.array('i', [filter_opcode, filter_len, filter_addr])
 
@@ -135,8 +142,8 @@ def main():
     print "CLEAR IOCTL return", ret
 
     # Now we can send the IOCTL, 7044 means set filter
-    if set_ioctl:
-        RegLib.test_log(0, "Sending IOCTL")
+    if set_filter:
+        RegLib.test_log(0, "Sending Filter IOCTL")
         ret = fcntl.ioctl(file_obj, SET_FILTER_IOCTL, buf)
         print "IOCTL return", ret
 

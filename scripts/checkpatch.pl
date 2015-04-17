@@ -2166,10 +2166,11 @@ sub process {
 		}
 
 # Check for unwanted Gerrit info
-		if ($in_commit_log && $line =~ /^\s*change-id:/i) {
-			ERROR("GERRIT_CHANGE_ID",
-			      "Remove Gerrit Change-Id's before submitting upstream.\n" . $herecurr);
-		}
+# Allow these for our development.
+#		if ($in_commit_log && $line =~ /^\s*change-id:/i) {
+#			ERROR("GERRIT_CHANGE_ID",
+#			      "Remove Gerrit Change-Id's before submitting upstream.\n" . $herecurr);
+#		}
 
 # Check for improperly formed commit descriptions
 		if ($in_commit_log &&
