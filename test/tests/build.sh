@@ -21,6 +21,11 @@ if [ -z $3 ]; then
 	sparse=0
 fi
 
+checkpatch=$4
+if [ -z $4 ]; then
+	checkpatch=0
+fi
+
 if [ ! -d $kernel_build ]; then
 	echo "Could not find dir: $kernel_build for kernel build"
 	exit 1
@@ -35,6 +40,8 @@ echo "Changing to $wfr_src and building against $kernel_build"
 cd $wfr_src
 
 echo "Doing clean build"
+KBUILD=$kernel_build 
+export KBUILD
 make clean
 if [ $? -ne 0 ]; then
 	echo "Failed to do clean build"
@@ -46,9 +53,16 @@ if [ -e hfi1.ko ]; then
 	exit 1
 fi
 
+if [ $checkpatch -eq 1 ];then
+	cd $wfr_src
+	scripts/checkpatch.pl -F --no-tree *.[ch] | scripts/build_checkpatch_whitelist.sh > checkpatch.current
+	if ! diff -c test/tests/checkpatch.whitelist checkpatch.current; then
+		echo "Failed checkpatch whitelist comparison"
+	fi
+	rm -f checkpatch.current
+fi
+
 echo "Doing build in $PWD"
-KBUILD=$kernel_build 
-export KBUILD
 if [ $sparse -eq 1 ]; then
 	make C=2
 else
