@@ -1107,7 +1107,7 @@ static int no_bufs_available(struct qib_qp *qp, struct send_context *sc)
 			atomic_inc(&qp->refcount);
 			/* counting: only call wantpiobuf_intr if first user */
 			if (was_empty)
-				dd->f_wantpiobuf_intr(sc, 1);
+				hfi1_sc_wantpiobuf_intr(sc, 1);
 		}
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~QIB_S_BUSY;
@@ -1221,7 +1221,7 @@ pio_bail:
  * egress_pkey_matches_entry - return 1 if the pkey matches ent (ent
  * being an entry from the ingress partition key table), return 0
  * otherwise. Use the matching criteria for egress partition keys
- * specified in the STLv1 spec., section 9.1l.7.
+ * specified in the OPAv1 spec., section 9.1l.7.
  */
 static inline int egress_pkey_matches_entry(u16 pkey, u16 ent)
 {
@@ -1243,7 +1243,7 @@ static inline int egress_pkey_matches_entry(u16 pkey, u16 ent)
 
 /*
  * egress_pkey_check - return 0 if hdr's pkey matches according to the
- * criterea in the STLv1 spec., section 9.11.7.
+ * criterea in the OPAv1 spec., section 9.11.7.
  */
 static inline int egress_pkey_check(struct qib_pportdata *ppd,
 				    struct qib_ib_header *hdr,
@@ -1290,10 +1290,10 @@ static inline int egress_pkey_check(struct qib_pportdata *ppd,
 bad:
 	incr_cntr64(&ppd->port_xmit_constraint_errors);
 	dd = ppd->dd;
-	if (!(dd->err_info_xmit_constraint.status & STL_EI_STATUS_SMASK)) {
+	if (!(dd->err_info_xmit_constraint.status & OPA_EI_STATUS_SMASK)) {
 		u16 slid = be16_to_cpu(hdr->lrh[3]);
 
-		dd->err_info_xmit_constraint.status |= STL_EI_STATUS_SMASK;
+		dd->err_info_xmit_constraint.status |= OPA_EI_STATUS_SMASK;
 		dd->err_info_xmit_constraint.slid = slid;
 		dd->err_info_xmit_constraint.pkey = pkey;
 	}
@@ -1420,7 +1420,7 @@ static int qib_query_device(struct ib_device *ibdev,
 	return 0;
 }
 
-static inline u16 stl_speed_to_ib(u16 in)
+static inline u16 opa_speed_to_ib(u16 in)
 {
 	u16 out = 0;
 
@@ -1434,11 +1434,11 @@ static inline u16 stl_speed_to_ib(u16 in)
 }
 
 /*
- * Convert a single STL link width (no multiple flags) to an IB value.
- * A zero STL link width means link down, which means the IB width value
+ * Convert a single OPA link width (no multiple flags) to an IB value.
+ * A zero OPA link width means link down, which means the IB width value
  * is a don't care.
  */
-static inline u16 stl_width_to_ib(u16 in)
+static inline u16 opa_width_to_ib(u16 in)
 {
 	switch (in) {
 	case OPA_LINK_WIDTH_1X:
@@ -1465,21 +1465,22 @@ static int qib_query_port(struct ib_device *ibdev, u8 port,
 	props->lmc = ppd->lmc;
 	props->sm_lid = ibp->sm_lid;
 	props->sm_sl = ibp->sm_sl;
-	props->state = dd->f_iblink_state(ppd);
-	props->phys_state = dd->f_ibphys_portstate(ppd);
+	/* OPA logical states match IB logical states */
+	props->state = driver_lstate(ppd);
+	props->phys_state = hfi1_ibphys_portstate(ppd);
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = QIB_GUIDS_PER_PORT;
 	props->max_msg_sz = 0x80000000;
 	props->pkey_tbl_len = qib_get_npkeys(dd);
 	props->bad_pkey_cntr = ibp->pkey_violations;
 	props->qkey_viol_cntr = ibp->qkey_violations;
-	props->active_width = (u8)stl_width_to_ib(ppd->link_width_active);
+	props->active_width = (u8)opa_width_to_ib(ppd->link_width_active);
 	/* see rate_show() in ib core/sysfs.c */
-	props->active_speed = (u8)stl_speed_to_ib(ppd->link_speed_active);
+	props->active_speed = (u8)opa_speed_to_ib(ppd->link_speed_active);
 	props->max_vl_num = hfi_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
-	/* Once we are a "first class" citizen and have added the STL MTUs to
+	/* Once we are a "first class" citizen and have added the OPA MTUs to
 	 * the core we can advertise the larger MTU enum to the ULPs, for now
 	 * advertise only 4K.
 	 *
@@ -1879,7 +1880,7 @@ static void init_ibport(struct qib_pportdata *ppd)
 	/* Set the prefix to the default value (see ch. 4.1.1) */
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->sm_lid = be16_to_cpu(0);
-	/* Below should only set bits defined in STL PortInfo.CapabilityMask */
+	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
 	ibp->pma_counter_select[0] = IB_PMA_PORT_XMIT_DATA;

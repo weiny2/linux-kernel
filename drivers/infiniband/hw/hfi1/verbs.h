@@ -109,9 +109,6 @@ struct hfi_packet;
 #define IB_BTH_SOLICITED	(1 << 23)
 #define IB_BTH_MIG_REQ		(1 << 22)
 
-/* XXX Should be defined in ib_verbs.h enum ib_port_cap_flags */
-#define IB_PORT_OTHER_LOCAL_CHANGES_SUP (1 << 26)
-
 #define IB_GRH_VERSION		6
 #define IB_GRH_VERSION_MASK	0xF
 #define IB_GRH_VERSION_SHIFT	28
@@ -755,7 +752,7 @@ struct qib_ibport {
 	u8 mkeyprot;
 	u8 subnet_timeout;
 	u8 vl_high_limit;
-	/* the first 16 entries are sl_to_vl for !STL */
+	/* the first 16 entries are sl_to_vl for !OPA */
 	u8 sl_to_sc[32];
 	u8 sc_to_sl[32];
 };

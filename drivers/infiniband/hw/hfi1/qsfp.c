@@ -397,14 +397,16 @@ int qsfp_mod_present(struct qib_pportdata *ppd)
 
 /*
  * This function maps QSFP memory addresses in 128 byte chunks in the following
- * fashion per the CableInfo SMA query definition in the IBA 1.3 spec/STL Gen 1
+ * fashion per the CableInfo SMA query definition in the IBA 1.3 spec/OPA Gen 1
  * spec
  * For addr 000-127, lower page 00h
  * For addr 128-255, upper page 00h
  * For addr 256-383, upper page 01h
  * For addr 384-511, upper page 02h
  * For addr 512-639, upper page 03h
- * For addresses beyond this range, it returns data buffer set to 0.
+ *
+ * For addresses beyond this range, it returns the invalid range of data buffer
+ * set to 0.
  * For upper pages that are optional, if they are not valid, returns the
  * particular range of bytes in the data buffer set to 0.
  */
@@ -412,32 +414,44 @@ int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr, u32 len,
 			u8 *data)
 {
 	struct qib_pportdata *ppd;
+	u32 excess_len = len;
 	int ret = 0;
 
 	if (port_num > dd->num_pports || port_num < 1) {
 		dd_dev_info(dd, "%s: Invalid port number %d\n",
 				__func__, port_num);
 		ret = -EINVAL;
-		goto bail;
+		goto set_zeroes;
 	}
 
 	ppd = dd->pport + (port_num - 1);
 	if (!qsfp_mod_present(ppd)) {
 		ret = -ENODEV;
-		goto bail;
+		goto set_zeroes;
 	}
 
-	if ((addr + len) >= (QSFP_MAX_NUM_PAGES * 128) ||
-		!ppd->qsfp_info.cache_valid) {
+	if (!ppd->qsfp_info.cache_valid) {
 		ret = -EINVAL;
-		goto bail;
+		goto set_zeroes;
+	}
+
+	if (addr >= (QSFP_MAX_NUM_PAGES * 128)) {
+		ret = -ERANGE;
+		goto set_zeroes;
+	}
+
+	if ((addr + len) >= (QSFP_MAX_NUM_PAGES * 128)) {
+		excess_len = (addr + len) - (QSFP_MAX_NUM_PAGES * 128);
+		memcpy(data, &ppd->qsfp_info.cache[addr], (len - excess_len));
+		data += (len - excess_len);
+		goto set_zeroes;
 	}
 
 	memcpy(data, &ppd->qsfp_info.cache[addr], len);
-
 	return 0;
-bail:
-	memset(data, 0, len);
+
+set_zeroes:
+	memset(data, 0, excess_len);
 	return ret;
 }
 

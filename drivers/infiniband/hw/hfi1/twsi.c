@@ -72,7 +72,7 @@ static void i2c_wait_for_writes(struct hfi_devdata *dd, u32 target)
 	 * read of scratch, if all we want to do is flush
 	 * writes.
 	 */
-	dd->f_gpio_mod(dd, target, 0, 0, 0);
+	hfi1_gpio_mod(dd, target, 0, 0, 0);
 	rmb(); /* inlined, so prevent compiler reordering */
 }
 
@@ -96,7 +96,7 @@ static void scl_out(struct hfi_devdata *dd, u32 target, u8 bit)
 	mask = QSFP_HFI0_I2CCLK;
 
 	/* SCL is meant to be bare-drain, so never set "OUT", just DIR */
-	dd->f_gpio_mod(dd, target, 0, bit ? 0 : mask, mask);
+	hfi1_gpio_mod(dd, target, 0, bit ? 0 : mask, mask);
 
 	/*
 	 * Allow for slow slaves by simple
@@ -108,7 +108,7 @@ static void scl_out(struct hfi_devdata *dd, u32 target, u8 bit)
 		int rise_usec;
 
 		for (rise_usec = SCL_WAIT_USEC; rise_usec > 0; rise_usec -= 2) {
-			if (mask & dd->f_gpio_mod(dd, target, 0, 0, 0))
+			if (mask & hfi1_gpio_mod(dd, target, 0, 0, 0))
 				break;
 			udelay(2);
 		}
@@ -126,7 +126,7 @@ static void sda_out(struct hfi_devdata *dd, u32 target, u8 bit)
 	mask = QSFP_HFI0_I2CDAT;
 
 	/* SDA is meant to be bare-drain, so never set "OUT", just DIR */
-	dd->f_gpio_mod(dd, target, 0, bit ? 0 : mask, mask);
+	hfi1_gpio_mod(dd, target, 0, bit ? 0 : mask, mask);
 
 	i2c_wait_for_writes(dd, target);
 	udelay(2);
@@ -138,8 +138,8 @@ static u8 sda_in(struct hfi_devdata *dd, u32 target, int wait)
 
 	mask = QSFP_HFI0_I2CDAT;
 	/* SDA is meant to be bare-drain, so never set "OUT", just DIR */
-	dd->f_gpio_mod(dd, target, 0, 0, mask);
-	read_val = dd->f_gpio_mod(dd, target, 0, 0, 0);
+	hfi1_gpio_mod(dd, target, 0, 0, mask);
+	read_val = hfi1_gpio_mod(dd, target, 0, 0, 0);
 	if (wait)
 		i2c_wait_for_writes(dd, target);
 	return (read_val & mask) >> WFR_GPIO_SDA_NUM;
@@ -275,7 +275,7 @@ int qib_twsi_reset(struct hfi_devdata *dd, u32 target)
 	 * This is the default power-on state with out=0 and dir=0,
 	 * So tri-stated and should be floating high (barring HW problems)
 	 */
-	dd->f_gpio_mod(dd, target, 0, 0, mask);
+	hfi1_gpio_mod(dd, target, 0, 0, mask);
 
 	/*
 	 * Clock nine times to get all listeners into a sane state.
@@ -300,7 +300,7 @@ int qib_twsi_reset(struct hfi_devdata *dd, u32 target)
 		 * Issue START, STOP, pause for T_BUF.
 		 */
 
-		pins = dd->f_gpio_mod(dd, target, 0, 0, 0);
+		pins = hfi1_gpio_mod(dd, target, 0, 0, 0);
 		if ((pins & mask) != mask)
 			dd_dev_err(dd, "GPIO pins not at rest: %d\n",
 				    pins & mask);
