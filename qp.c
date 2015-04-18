@@ -1009,8 +1009,9 @@ __be32 hfi1_compute_aeth(struct qib_qp *qp)
 			tail = 0;
 		/*
 		 * Compute the number of credits available (RWQEs).
-		 * XXX Not holding the r_rq.lock here so there is a small
-		 * chance that the pair of reads are not atomic.
+		 * There is a small chance that the pair of reads are
+		 * not atomic, which is ok, since the fuzziness is
+		 * resolved as further ACKs go out.
 		 */
 		credits = head - tail;
 		if ((int)credits < 0)
