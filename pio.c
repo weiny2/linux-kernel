@@ -145,7 +145,7 @@ static struct sc_config_sizes sc_config_sizes[SC_MAX] = {
 /* send context memory pool configuration */
 struct mem_pool_config {
 	int centipercent;	/* % of memory, in 100ths of 1% */
-	int absolute_blocks;	/* absolut block count */
+	int absolute_blocks;	/* absolute block count */
 };
 
 /* default memory pool configuration: 100% in pool 0 */
@@ -313,7 +313,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 		/*
 		 * Sanity check pool: The conversion will return a pool
 		 * number or -1 if a fixed (non-negative) value.  The fixed
-		 * value is is checked later when we compare against
+		 * value is checked later when we compare against
 		 * total memory available.
 		 */
 		pool = wildcard_to_pool(size);
@@ -429,7 +429,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 		dd->hw_to_sw[i] = INVALID_SCI;
 
 	/*
-	 * All send contexts have their credits sizes.  Allocate credits
+	 * All send contexts have their credit sizes.  Allocate credits
 	 * for each context one after another from the global space.
 	 */
 	context = 0;
@@ -543,7 +543,7 @@ static void sc_halted(struct work_struct *work)
 
 	sc = container_of(work, struct send_context, halt_work);
 	sc_restart(sc);
-	/* idea: add a timed retry if the restart fails */
+	/* TODO: add a timed retry if the restart fails */
 }
 
 /*
@@ -576,7 +576,7 @@ u32 sc_mtu_to_threshold(struct send_context *sc, u32 mtu, u32 hdrqentsize)
 
 /*
  * Calculate credit threshold in terms of percent of the allocated credits.
- * Trigger when unreturn credits equal or exceed the percentage of the whole.
+ * Trigger when unreturned credits equal or exceed the percentage of the whole.
  *
  * Return value is what to write into the CSR: trigger return when
  * unreturned credits pass this count.
@@ -713,7 +713,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	atomic_set(&sc->buffers_allocated, 0);
 	init_waitqueue_head(&sc->halt_wait);
 
-	/* TBD: group set-up.  Make it always 0 for now. */
+	/* TODO: group set-up.  Make it always 0 for now. */
 	sc->group = 0;
 
 	sc->sw_index = sw_index;
@@ -915,7 +915,7 @@ void sc_disable(struct send_context *sc)
 	(((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SMASK)\
 	>> WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SHIFT)
 
-/* is egress is halted on the context? */
+/* is egress halted on the context? */
 #define egress_halted(r) \
 	((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_HALT_STATUS_SMASK)
 
@@ -991,7 +991,7 @@ int sc_restart(struct send_context *sc)
 	/*
 	 * Step 1: Wait for the context to actually halt.
 	 *
-	 * The error interrupt is asynchronous of actually setting halt
+	 * The error interrupt is asynchronous to actually setting halt
 	 * on the context.
 	 */
 	loop = 0;
@@ -1071,7 +1071,7 @@ void pio_freeze(struct hfi_devdata *dd)
 		/*
 		 * Don't disable unallocated, unfrozen, or user send contexts.
 		 * User send contexts will be disabled when the process
-		 * calls in to driver to reset its context.
+		 * calls into the driver to reset its context.
 		 */
 		if (!sc || !(sc->flags & SCF_FROZEN) || sc->type == SC_USER)
 			continue;
@@ -1084,7 +1084,7 @@ void pio_freeze(struct hfi_devdata *dd)
 /*
  * Unfreeze PIO for kernel send contexts.  The precondtion for calling this
  * is that all PIO send contexts have been disabled and the SPC freeze has
- * been cleared.  Now perform the last step and re-enable each kernel conext.
+ * been cleared.  Now perform the last step and re-enable each kernel context.
  * User (PSM) processing will occur when PSM calls into the kernel to
  * acknowledge the freeze.
  */
@@ -1177,7 +1177,7 @@ int sc_enable(struct send_context *sc)
 
 	/* IMPORTANT: only clear free and fill if transitioning 0 -> 1 */
 
-	// FIXME: obtain the locks?
+	/* FIXME: obtain the locks? */
 	*sc->hw_free = 0;
 	sc->free = 0;
 	sc->alloc_free = 0;
@@ -1261,7 +1261,7 @@ void sc_return_credits(struct send_context *sc)
 		SC(CREDIT_FORCE_FORCE_RETURN_SMASK));
 	/*
 	 * Ensure that the write is flushed and the credit return is
-	 * schedule. We care more about the 0 -> 1 transition.
+	 * scheduled. We care more about the 0 -> 1 transition.
 	 */
 	read_kctxt_csr(sc->dd, sc->hw_context, SC(CREDIT_FORCE));
 	/* set back to 0 for next time */
@@ -1320,7 +1320,7 @@ void sc_stop(struct send_context *sc, int flag)
  * @cb: optional callback to call when the buffer is finished sending
  * @arg: argument for cb
  *
- * Return a pointer to a PIO buffer  if successful, NULL if not enough room.
+ * Return a pointer to a PIO buffer if successful, NULL if not enough room.
  */
 struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 				pio_release_cb cb, void *arg)
@@ -1460,7 +1460,7 @@ void sc_del_credit_return_intr(struct send_context *sc)
 
 /*
  * The caller must be careful when calling this.  All needint calls
- * must be paried with !needint.
+ * must be paired with !needint.
  */
 void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 {
@@ -1657,9 +1657,9 @@ int init_pervl_scs(struct hfi_devdata *dd)
 	for (i = 0; i < num_vls; i++) {
 		/*
 		 * Since this function does not deal with a specific
-		 * receive context but we need the RcvHdrQ entry size
+		 * receive context but we need the RcvHdrQ entry size,
 		 * use the size from rcd[0]. It is guaranteed to be
-		 * valid at this point and will the same for all
+		 * valid at this point and will remain the same for all
 		 * receive contexts.
 		 */
 		dd->vld[i].sc = sc_alloc(dd, SC_KERNEL,
