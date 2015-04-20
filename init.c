@@ -550,28 +550,7 @@ bail:
  */
 static int loadtime_init(struct hfi_devdata *dd)
 {
-	int ret = 0;
-
-/* FIXME: needed? */
-#if 0
-	if (((dd->revision >> QLOGIC_IB_R_SOFTWARE_SHIFT) &
-	     QLOGIC_IB_R_SOFTWARE_MASK) != QIB_CHIP_SWVERSION) {
-		dd_dev_err(dd,
-			"Driver only handles version %d, chip swversion is %d (%llx), failng\n",
-			QIB_CHIP_SWVERSION,
-			(int)(dd->revision >>
-				QLOGIC_IB_R_SOFTWARE_SHIFT) &
-				QLOGIC_IB_R_SOFTWARE_MASK,
-			(unsigned long long) dd->revision);
-		ret = -ENOSYS;
-		goto done;
-	}
-#endif
-
-#if 0
-done:
-#endif
-	return ret;
+	return 0;
 }
 
 /**
