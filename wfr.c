@@ -1371,7 +1371,7 @@ static u64 access_sw_xmit_discards(const struct cntr_entry *entry,
 	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
 
 	if (vl != CNTR_INVALID_VL)
-		return 0; /* FIXME Do the right thing when implemented */
+		return 0;
 
 	return read_write_sw(ppd->dd, &ppd->port_xmit_discards, mode, data);
 }
@@ -10242,7 +10242,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 
 	/*
 	 * GUID is now stored in big endian by the function above, swap it.
-	 * TODO:
+	 *
 	 * Despite the multiple uses here there are more uses of the GUID in big
 	 * endian format, mostly in the mad layer. At some point we should
 	 * convert to host byte order and convert to network when we want to

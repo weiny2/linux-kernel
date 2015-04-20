@@ -2199,25 +2199,10 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	else
 		rsp->port_num = port;
 
-	/* FIXME
-	 * some of the counters are not implemented. if the WFR spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
-	/* rsp->sw_port_congestion is 0 for HFIs */
-	/* rsp->port_xmit_time_cong is 0 for HFIs */
-	/* rsp->port_xmit_wasted_bw ??? */
-	/* rsp->port_xmit_wait_data ??? */
-	/* FECN marking is only relevant for swich not HFI */
-	/*rsp->port_mark_fecn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT));*/
 	rsp->port_rcv_constraint_errors =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
 					   CNTR_INVALID_VL));
-	/* rsp->port_rcv_switch_relay_errors is 0 for HFIs */
 
-	/* FIXME: Should this be included with the rest of the counters? */
 	hfi1_read_link_quality(dd, &rsp->link_quality_indicator);
 
 	rsp->vl_select_mask = cpu_to_be32(vl_select_mask);
@@ -2324,18 +2309,6 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN_VL,
 					idx_from_vl(vl)));
 
-		/* FIXME */
-		/* rsp->vls[vfi].sw_port_vl_congestion is 0 for HFIs */
-		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
-		/* rsp->port_vl_xmit_wasted_bw ??? */
-		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
-		 * does this differ from rsp->vls[vfi].port_vl_xmit_wait */
-		/* Like above, marking fecn is a switch thing
-		 * rsp->vls[vfi].port_vl_mark_fecn =
-			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
-					 + offset));
-					*/
-		/* rsp->vls[vfi].port_vl_xmit_discards ??? */
 		vlinfo++;
 		vfi++;
 	}

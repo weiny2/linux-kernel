@@ -1602,7 +1602,6 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 							ppd->link_speed_active;
 				link_info.link_width_active =
 							ppd->link_width_active;
-				/* FIXME what about port_mode and vl15_init? */
 				ret = copy_to_user(
 					(struct hfi_link_info __user *)arg,
 					&link_info, sizeof(link_info));
