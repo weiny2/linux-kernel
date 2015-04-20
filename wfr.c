@@ -10157,11 +10157,6 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	/* start setting dd values and adjusting CSRs */
 	init_early_variables(dd);
 
-	/* TODO these are set by the chip and don't change */
-	/* per-context kernel/user CSRs */
-	dd->uregbase = WFR_RXE_PER_CONTEXT_USER;
-	dd->ureg_align = WFR_RXE_PER_CONTEXT_SIZE;
-
 	/* TODO: real board name */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
 	snprintf(dd->boardname, 64, "WFR_ID 0x%llx",

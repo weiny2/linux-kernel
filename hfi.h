@@ -835,8 +835,6 @@ struct hfi_devdata {
 	struct hfi_status *status;
 	u32 freezelen; /* max length of freezemsg */
 
-	unsigned long ureg_align; /* user register alignment */
-
 	/* revision register shadow */
 	u64 revision;
 	/* Base GUID for device (network order) */
@@ -856,8 +854,6 @@ struct hfi_devdata {
 	u32 chip_pio_mem_size;
 	/* number of bytes in the SDMA memory buffer */
 	u32 chip_sdma_mem_size;
-	/* kr_userregbase */
-	u32 uregbase;
 
 	/* size of each rcvegrbuffer */
 	u32 rcvegrbufsize;

@@ -571,8 +571,9 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * Map only the page that contains this context's user
 		 * registers.
 		 */
-		memaddr = (unsigned long)(dd->physaddr + dd->uregbase) +
-			(uctxt->ctxt * dd->ureg_align);
+		memaddr = (unsigned long)
+			(dd->physaddr + WFR_RXE_PER_CONTEXT_USER)
+			+ (uctxt->ctxt * WFR_RXE_PER_CONTEXT_SIZE);
 		/*
 		 * TidFlow table is on the same page as the rest of the
 		 * user registers.
@@ -1314,8 +1315,6 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	/*
 	 * user regs are at
 	 * (WFR_RXE_PER_CONTEXT_USER + (ctxt * WFR_RXE_PER_CONTEXT_SIZE))
-	 * or
-	 * ((char *)dd->uregbase + (ctxt * dd->ureg_align))
 	 */
 	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
 					    subctxt_fp(fp), 0);
