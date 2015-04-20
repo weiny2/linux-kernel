@@ -1050,6 +1050,8 @@ static int wait_logical_linkstate(struct hfi1_pportdata *ppd, u32 state,
 				  int msecs);
 static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc);
 static void handle_temp_err(struct hfi_devdata *);
+static void dc_shutdown(struct hfi_devdata *);
+static void dc_start(struct hfi_devdata *);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -2565,8 +2567,16 @@ static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
+			if (ppd->host_link_state == HLS_DN_POLL) {
+				/*
+				 * The link is still in POLL. This means
+				 * that the normal link down processing
+				 * will not happen. We have to do it here
+				 * before turning the DC off.
+				 */
+				queue_work(ppd->hfi1_wq, &ppd->link_down_work);
+			}
 		} else {
-
 			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
 			ppd->qsfp_info.cache_valid = 0;
 			ppd->qsfp_info.cache_refresh_required = 1;
@@ -2592,7 +2602,9 @@ static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
 		spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
 	}
 
-	queue_work(ppd->hfi1_wq, &ppd->qsfp_info.qsfp_work);
+	/* Schedule the QSFP work only if there is a cable attached. */
+	if (qsfp_mod_present(ppd))
+		queue_work(ppd->hfi1_wq, &ppd->qsfp_info.qsfp_work);
 }
 
 /*
@@ -2914,7 +2926,7 @@ static void set_linkup_defaults(struct hfi1_pportdata *ppd)
  */
 static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 {
-	u64 reg, saved_lcb_err_en;
+	u64 reg;
 
 	/* clear lcb run: LCB_CFG_RUN.EN = 0 */
 	write_csr(dd, DC_LCB_CFG_RUN, 0);
@@ -2922,7 +2934,7 @@ static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
 		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
 	/* set dcc reset csr: DCC_CFG_RESET.{reset_lcb,reset_rx_fpe} = 1 */
-	saved_lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
+	dd->lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
 	reg = read_csr(dd, DCC_CFG_RESET);
 	write_csr(dd, DCC_CFG_RESET,
 		reg
@@ -2932,8 +2944,61 @@ static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 	if (!abort) {
 		udelay(1);    /* must hold for the longer of 16cclks or 20ns */
 		write_csr(dd, DCC_CFG_RESET, reg);
-		write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
+		write_csr(dd, DC_LCB_ERR_EN, dd->lcb_err_en);
 	}
+}
+
+/*
+ * This routine should be called after the link has been transitioned to
+ * OFFLINE (OFFLINE state has the side effect of putting the SerDes into
+ * reset).
+ *
+ * The expectation is that the caller of this routine would have taken
+ * care of properly transitioning the link into the correct state.
+ */
+static void dc_shutdown(struct hfi_devdata *dd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->dc8051_lock, flags);
+	if (dd->dc_shutdown) {
+		spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+		return;
+	}
+	dd->dc_shutdown = 1;
+	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+	set_host_lcb_access(dd);
+	/* Shutdown the LCB */
+	lcb_shutdown(dd, 1);
+	set_8051_lcb_access(dd);
+	/* Going to OFFLINE would have causes the 8051 to put the
+	 * SerDes into reset already. Just need to shutdown the 8051,
+	 * iteself. */
+	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
+}
+
+/* Calling this after the DC has been brought out of reset should not
+ * do any damage. */
+static void dc_start(struct hfi_devdata *dd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->dc8051_lock, flags);
+	if (!dd->dc_shutdown)
+		goto done;
+	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+	/* Take the 8051 out of reset */
+	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
+	/* Wait until 8052 is ready */
+	wait_fm_ready(dd, TIMEOUT_8051_START);
+	/* Take away reset for LCB and RX FPE (set in lcb_shutdown). */
+	write_csr(dd, DCC_CFG_RESET, 0x10);
+	/* lcb_shutdown() with abort=1 does not restore these */
+	write_csr(dd, DC_LCB_ERR_EN, dd->lcb_err_en);
+	spin_lock_irqsave(&dd->dc8051_lock, flags);
+	dd->dc_shutdown = 0;
+done:
+	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
 }
 
 /*
@@ -3340,7 +3405,12 @@ void handle_link_down(struct work_struct *work)
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 
-	start_link(ppd);
+	/* If there is no cable attached, turn the DC off. Otherwise,
+	 * start the link bring up. */
+	if (!qsfp_mod_present(ppd))
+		dc_shutdown(ppd->dd);
+	else
+		start_link(ppd);
 }
 
 /*
@@ -4565,21 +4635,35 @@ static int do_8051_command(
 	 */
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
 
+
+	/* We can't send any commands to the 8051 if it's in reset */
+	if (dd->dc_shutdown) {
+		return_code = -ENODEV;
+		goto fail;
+	}
+
 	/*
 	 * If an 8051 host command timed out previously, then the 8051 is
-	 * stuck.  Fail this command immediately.  Handling it this way
-	 * allows the driver to properly unload.
+	 * stuck.
 	 *
-	 * Alternative: Reset the 8051 at timeout time (no need to re-download
-	 * firmware).  The concern with this approach is all state, if any,
-	 * is lost. OTOH, immediately failing has no chance of recovery.
+	 * On first timeout, attempt to reset and restart the entire DC
+	 * block (including 8051). (Is this too big of a hammer?)
+	 *
+	 * If the 8051 times out a second time, the reset did not bring it
+	 * back to healthy life. In that case, fail any subsequent commands.
 	 */
 	if (dd->dc8051_timed_out) {
-		dd_dev_err(dd,
-			"Previous 8051 host command timed out, skipping command %u\n",
-			type);
-		return_code = -ENXIO;
-		goto fail;
+		if (dd->dc8051_timed_out > 1) {
+			dd_dev_err(dd,
+				   "Previous 8051 host command timed out, skipping command %u\n",
+				   type);
+			return_code = -ENXIO;
+			goto fail;
+		}
+		spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+		dc_shutdown(dd);
+		dc_start(dd);
+		spin_lock_irqsave(&dd->dc8051_lock, flags);
 	}
 
 	/*
@@ -4608,7 +4692,7 @@ static int do_8051_command(
 		if (completed)
 			break;
 		if (time_after(jiffies, timeout)) {
-			dd->dc8051_timed_out = 1;
+			dd->dc8051_timed_out++;
 			dd_dev_err(dd, "8051 host command %u timeout\n", type);
 			if (out_data)
 				*out_data = 0;
@@ -4623,6 +4707,7 @@ static int do_8051_command(
 				& DC_DC8051_CFG_HOST_CMD_1_RSP_DATA_MASK;
 	return_code = (reg >> DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_SHIFT)
 				& DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_MASK;
+	dd->dc8051_timed_out = 0;
 	/*
 	 * Clear command for next user.
 	 */
@@ -5429,6 +5514,7 @@ static int do_qsfp_intr_fallback(struct hfi1_pportdata *ppd)
 	return 0;
 }
 
+/* This routine will only be scheduled if the QSFP module is present */
 static void qsfp_event(struct work_struct *work)
 {
 	struct qsfp_data *qd;
@@ -5439,7 +5525,18 @@ static void qsfp_event(struct work_struct *work)
 	ppd = qd->ppd;
 	dd = ppd->dd;
 
-	if (qd->cache_refresh_required && qsfp_mod_present(ppd)) {
+	/* Sanity check */
+	if (!qsfp_mod_present(ppd))
+		return;
+
+	/*
+	 * Turn DC back on after cables has been
+	 * re-inserted. Up until now, the DC has been in
+	 * reset to save power.
+	 */
+	dc_start(dd);
+
+	if (qd->cache_refresh_required) {
 		msleep(3000);
 		reset_qsfp(ppd);
 
@@ -5456,7 +5553,7 @@ static void qsfp_event(struct work_struct *work)
 		}
 	}
 
-	if (qd->check_interrupt_flags && qsfp_mod_present(ppd)) {
+	if (qd->check_interrupt_flags) {
 		u8 qsfp_interrupt_status[16] = {0,};
 
 		if (qsfp_read(ppd, dd->hfi_id, 6, &qsfp_interrupt_status[0], 16)
@@ -5513,20 +5610,11 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 		qsfp_mask);
 
 	/* Handle active low nature of INT_N and MODPRST_N pins */
-	if (qsfp_mod_present(ppd)) {
+	if (qsfp_mod_present(ppd))
 		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
-		write_csr(dd,
-				dd->hfi_id ?
-					ASIC_QSFP2_INVERT :
-					ASIC_QSFP1_INVERT,
-			qsfp_mask);
-	} else {
-		write_csr(dd,
-				dd->hfi_id ?
-					ASIC_QSFP2_INVERT :
-					ASIC_QSFP1_INVERT,
-			qsfp_mask);
-	}
+	write_csr(dd,
+		  dd->hfi_id ? ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
+		  qsfp_mask);
 
 	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
 	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
@@ -6236,6 +6324,11 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		}
 		break;
 	case HLS_DN_POLL:
+		if ((ppd->host_link_state == HLS_DN_DISABLE ||
+		     ppd->host_link_state == HLS_DN_OFFLINE) &&
+		    dd->dc_shutdown)
+			dc_start(dd);
+
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			u8 tmp = ppd->link_enabled;
 
@@ -6302,6 +6395,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 			break;
 		}
 		ppd->host_link_state = HLS_DN_DISABLE;
+		dc_shutdown(dd);
 		break;
 	case HLS_DN_OFFLINE:
 		/* allow any state to transition to offline */
@@ -10462,8 +10556,6 @@ static void handle_temp_err(struct hfi_devdata *dd)
 		     "Critical temperature reached! Forcing device into freeze mode!\n");
 	dd->flags |= HFI_FORCED_FREEZE;
 	start_freeze_handling(ppd, FREEZE_SELF|FREEZE_ABORT);
-	/* TODO: Adjust PowerDown recipe pending a discussion with HW team.
-	 * The goal is to turn off as much as possible in DC. */
 	/*
 	 * Shut DC down as much and as quickly as possible.
 	 *
@@ -10478,16 +10570,10 @@ static void handle_temp_err(struct hfi_devdata *dd)
 	ppd->driver_link_ready = 0;
 	ppd->link_enabled = 0;
 	set_physical_link_state(dd, PLS_OFFLINE |
-				OPA_LINKDOWN_REASON_SMA_DISABLED);
+				(OPA_LINKDOWN_REASON_SMA_DISABLED << 8));
 	/*
-	 * Step 2: Shutdown LCB
+	 * Step 2: Shutdown LCB and 8051
 	 *         After shutdown, do not restore DC_CFG_RESET value.
 	 */
-	set_host_lcb_access(dd);
-	lcb_shutdown(dd, 1);
-	set_8051_lcb_access(dd);
-	/*
-	 * Step 3: Shutdown 8051
-	 */
-	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
+	dc_shutdown(dd);
 }

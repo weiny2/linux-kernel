@@ -205,9 +205,6 @@ static struct firmware_details fw_sbus;
 /* RSA engine timeout, in ms */
 #define RSA_ENGINE_TIMEOUT 100 /* ms */
 
-/* 8051 start timeout, in ms */
-#define TIMEOUT_8051_START 5000 /* ms */
-
 /* hardware mutex timeout, in ms */
 #define HM_TIMEOUT 20 /* ms */
 

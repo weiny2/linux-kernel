@@ -1012,6 +1012,10 @@ struct hfi_devdata {
 
 	int assigned_node_id;
 	wait_queue_head_t event_queue;
+
+	/* Save the enabled LCB error bits */
+	u64 lcb_err_en;
+	u8 dc_shutdown;
 };
 
 /* f_put_tid types */
