@@ -796,8 +796,6 @@ struct hfi_devdata {
 
 	char *boardname; /* human readable board info */
 
-	/* number of registers used for pioavail */
-	u32 pioavregs;
 	/* device (not port) flags, basically device capabilities */
 	u32 flags;
 
@@ -816,22 +814,6 @@ struct hfi_devdata {
 	u32 freectxts;
 	/* base receive interrupt timeout, in CSR units */
 	u32 rcv_intr_timeout_csr;
-
-	/*
-	 * hint that we should update pioavailshadow before
-	 * looking for a PIO buffer
-	 */
-	u32 upd_pio_shadow;
-
-	/* internal debugging stats */
-	u32 maxpkts_call;
-	u32 avgpkts_call;
-	u64 nopiobufs;
-
-	/* for write combining settings */
-	unsigned long wc_cookie;
-	unsigned long wc_base;
-	unsigned long wc_len;
 
 	u64 __iomem *egrtidbase;
 	spinlock_t sendctrl_lock; /* protect changes to sendctrl */
@@ -876,8 +858,6 @@ struct hfi_devdata {
 	u32 chip_sdma_mem_size;
 	/* kr_userregbase */
 	u32 uregbase;
-	/* shadow the control register contents */
-	u32 control;
 
 	/* size of each rcvegrbuffer */
 	u32 rcvegrbufsize;
