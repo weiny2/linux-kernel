@@ -5825,7 +5825,6 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 	u64 sreg = 0;
 	struct hfi_devdata *dd = ppd->dd;
 	u32 mask = ~((1U << ppd->lmc) - 1);
-	u32 dcmask = mask; /* TODO: Remove when rid of the version check */
 	u64 c1 = read_csr(ppd->dd, DCC_CFG_PORT_CONFIG1);
 
 	if (dd->hfi_snoop.mode_flag)
@@ -5835,7 +5834,7 @@ static void set_lidlmc(struct qib_pportdata *ppd)
 		| DCC_CFG_PORT_CONFIG1_DLID_MASK_SMASK);
 	c1 |= ((ppd->lid & DCC_CFG_PORT_CONFIG1_TARGET_DLID_MASK)
 			<< DCC_CFG_PORT_CONFIG1_TARGET_DLID_SHIFT)|
-	      ((dcmask & DCC_CFG_PORT_CONFIG1_DLID_MASK_MASK)
+	      ((mask & DCC_CFG_PORT_CONFIG1_DLID_MASK_MASK)
 			<< DCC_CFG_PORT_CONFIG1_DLID_MASK_SHIFT);
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG1, c1);
 
