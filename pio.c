@@ -56,12 +56,24 @@ void __cm_reset(struct hfi_devdata *dd, u64 sendctrl)
 	}
 }
 
+/* defined in header release 48 and higher */
+#ifndef WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT 3
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_MASK 0xffull
+#define WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK (WFR_SEND_CTRL_UNSUPPORTED_VL_MASK \
+		<< WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT)
+#endif
+
 /* global control of PIO send */
 void pio_send_control(struct hfi_devdata *dd, int op)
 {
 	u64 reg;
+	unsigned long flags;
+	int write = 1;	/* write sendctrl back */
+	int flush = 0;	/* re-read sendctrl to make sure it is flushed */
 
-//FIXME: QIB held sendctrl_lock when changing the global ctrl
+	spin_lock_irqsave(&dd->sendctrl_lock, flags);
+
 	reg = read_csr(dd, WFR_SEND_CTRL);
 	switch (op) {
 	case PSC_GLOBAL_ENABLE:
@@ -78,12 +90,27 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 		break;
 	case PSC_CM_RESET:
 		__cm_reset(dd, reg);
-		return; /* NOTE: return, not break */
+		write = 0; /* CSR already written (and flushed) */
+		break;
+	case PSC_DATA_VL_ENABLE:
+		reg &= ~WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
+		break;
+	case PSC_DATA_VL_DISABLE:
+		reg |= WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
+		flush = 1;
+		break;
 	default:
 		dd_dev_err(dd, "%s: invalid control %d\n", __func__, op);
-		return;
+		break;
 	}
-	write_csr(dd, WFR_SEND_CTRL, reg);
+
+	if (write) {
+		write_csr(dd, WFR_SEND_CTRL, reg);
+		if (flush)
+			(void) read_csr(dd, WFR_SEND_CTRL); /* flush write */
+	}
+
+	spin_unlock_irqrestore(&dd->sendctrl_lock, flags);
 }
 
 /* number of send context memory pools */

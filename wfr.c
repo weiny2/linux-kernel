@@ -6991,25 +6991,17 @@ int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
 	return ret;
 }
 
-/* defined in header release 48 and higher */
-#ifndef WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT
-#define WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT 3
-#define WFR_SEND_CTRL_UNSUPPORTED_VL_MASK 0xffull
-#define WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK (WFR_SEND_CTRL_UNSUPPORTED_VL_MASK \
-		<< WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT)
-#endif
-
+/*
+ * Disable all data VLs.
+ *
+ * Return 0 if disabled, non-zero if the VLs cannot be disabled.
+ */
 static int disable_data_vls(struct hfi_devdata *dd)
 {
-	u64 reg;
+	if (is_a0(dd))
+		return 1;
 
-	if (!is_bx(dd))
-		return 1; /* XXX better error #? */
-
-	reg = read_csr(dd, WFR_SEND_CTRL);
-	reg |= WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
-	write_csr(dd, WFR_SEND_CTRL, reg);
-	reg = read_csr(dd, WFR_SEND_CTRL); /* flush write */
+	pio_send_control(dd, PSC_DATA_VL_DISABLE);
 
 	return 0;
 }
@@ -7019,17 +7011,15 @@ static int disable_data_vls(struct hfi_devdata *dd)
  * Just re-enables all data VLs (the "fill" part happens
  * automatically - the name was chosen for symmetry with
  * stop_drain_data_vls()).
+ *
+ * Return 0 if successful, non-zero if the VLs cannot be enabled.
  */
 int open_fill_data_vls(struct hfi_devdata *dd)
 {
-	u64 reg;
+	if (is_a0(dd))
+		return 1;
 
-	if (!is_bx(dd))
-		return 1; /* XXX better error #? */
-
-	reg = read_csr(dd, WFR_SEND_CTRL);
-	reg &= ~WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
-	write_csr(dd, WFR_SEND_CTRL, reg);
+	pio_send_control(dd, PSC_DATA_VL_ENABLE);
 
 	return 0;
 }
@@ -7042,21 +7032,19 @@ int open_fill_data_vls(struct hfi_devdata *dd)
 static void drain_data_vls(struct hfi_devdata *dd)
 {
 	sc_wait(dd);
-
 	sdma_wait(dd);
-
 	pause_for_credit_return(dd);
 }
 
 /*
  * stop_drain_data_vls() - disable, then drain all per-VL fifos.
- * The function to resume using data VLs is open_fill_data_vls(),
- * and  this pair is meant to be used like this:
+ *
+ * Use open_fill_data_vls() to resume using data VLs.  This pair is
+ * meant to be used like this:
  *
  * stop_drain_data_vls(dd);
  * // do things with per-VL resources
  * open_fill_data_vls(dd);
- *
  */
 int stop_drain_data_vls(struct hfi_devdata *dd)
 {

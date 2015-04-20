@@ -834,7 +834,7 @@ struct hfi_devdata {
 	unsigned long wc_len;
 
 	u64 __iomem *egrtidbase;
-	spinlock_t sendctrl_lock; /* protect changes to sendctrl shadow */
+	spinlock_t sendctrl_lock; /* protect changes to sendctrl */
 	/* around rcd and (user ctxts) ctxt_cnt use (intr vs free) */
 	spinlock_t uctxt_lock; /* rcd and user context changes */
 	/* exclusive access to 8051 */
