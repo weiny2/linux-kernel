@@ -78,9 +78,8 @@ static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
 
 	/*
 	 * Only call ib_dispatch_event() if the IB device has been
-	 * registered.  Right now, QIB_INITED is set iff the driver
-	 * has successfully registered with IB core.
-	 * TODO: Make a separate flag for registering with IB?
+	 * registered.  HFI_INITED is set iff the driver has successfully
+	 * registered with the IB core.
 	 */
 	if (!(dd->flags & HFI_INITTED))
 		return;
