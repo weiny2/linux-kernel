@@ -480,7 +480,7 @@ DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
 	TP_ARGS(dd, hdr));
 
 #define SNOOP_PRN \
-	"slid %.4x dlid %.4x mgmt_class %d qpn 0x%.6x opcode 0x%.2x,%s " \
+	"slid %.4x dlid %.4x qpn 0x%.6x opcode 0x%.2x,%s " \
 	"svc lvl %d pkey 0x%.4x [header = %d bytes] [data = %d bytes]"
 
 #undef TRACE_SYSTEM
@@ -498,7 +498,6 @@ TRACE_EVENT(snoop_capture,
 		DD_DEV_ENTRY(dd)
 		__field(u16, slid)
 		__field(u16, dlid)
-		__field(u8, mgmt_class)
 		__field(u32, qpn)
 		__field(u8, opcode)
 		__field(u8, sl)
@@ -520,7 +519,6 @@ TRACE_EVENT(snoop_capture,
 		DD_DEV_ASSIGN(dd);
 		__entry->slid = be16_to_cpu(hdr->lrh[3]);
 		__entry->dlid = be16_to_cpu(hdr->lrh[1]);
-		__entry->mgmt_class = 0; /* XXX Fix me */
 		__entry->qpn = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
 		__entry->opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
 		__entry->sl = (u8)(be16_to_cpu(hdr->lrh[0] >> 4) & 0xf);
@@ -534,7 +532,6 @@ TRACE_EVENT(snoop_capture,
 		__get_str(dev),
 		__entry->slid,
 		__entry->dlid,
-		__entry->mgmt_class,
 		__entry->qpn,
 		__entry->opcode,
 		show_ib_opcode(__entry->opcode),
