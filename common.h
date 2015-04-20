@@ -146,11 +146,13 @@
 				 HFI_CAP_SDMA |				\
 				 HFI_CAP_ENABLE_SMA |			\
 				 HFI_CAP_PRINT_UNIMPL |			\
+				 HFI_CAP_STATIC_RATE_CTRL |		\
 				 HFI_CAP_QSFP_ENABLED |			\
 				 HFI_CAP_PKEY_CHECK |			\
 				 HFI_CAP_MULTI_PKT_EGR |		\
 				 ((HFI_CAP_HDRSUPP |			\
 				   HFI_CAP_MULTI_PKT_EGR |		\
+				   HFI_CAP_STATIC_RATE_CTRL |		\
 				   HFI_CAP_EARLY_CREDIT_RETURN) <<	\
 				  HFI_CAP_USER_SHIFT))
 /*
