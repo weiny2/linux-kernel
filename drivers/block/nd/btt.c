@@ -70,7 +70,6 @@ static int btt_info_read(struct arena_info *arena, struct btt_sb *super)
 	WARN_ON(!super);
 	return arena_rw_bytes(arena, super, sizeof(struct btt_sb),
 			arena->infooff, READ);
-
 }
 
 /*
