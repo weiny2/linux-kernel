@@ -638,7 +638,6 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
 
-	/* TODO: other modes */
 	pi->port_mode = cpu_to_be16(
 				ppd->is_active_optimize_enabled ?
 					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
@@ -1105,7 +1104,6 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (crc_enabled != 0)
 		ppd->port_crc_mode_enabled = port_ltp_to_cap(crc_enabled);
 
-	/* TODO: other modes */
 	ppd->is_active_optimize_enabled =
 			!!(be16_to_cpu(pi->port_mode)
 					& OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE);
