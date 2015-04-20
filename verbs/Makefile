@@ -2,7 +2,6 @@
 # Makefile - Omni-Path IB verbs driver
 # Copyright(c) 2015, Intel Corporation.
 #
-ccflags-y += -mno-fentry
 ccflags-y += -I $(src)/../common
 ccflags-y += -I $(src)/../common/uapi
 obj-m += opa2_ib.o
