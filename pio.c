@@ -197,8 +197,6 @@ static const char *sc_type_name(int index)
  * Read the send context memory pool configuration and send context
  * size configuration.  Replace any wildcards and come up with final
  * counts and sizes for the send context types.
- *
- * TODO: this needs to be much more sophisticated for group allocations.
  */
 int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 {
@@ -880,9 +878,9 @@ void sc_disable(struct send_context *sc)
 		return;
 
 	/* do all steps, even if already disabled */
+	spin_lock_irqsave(&sc->alloc_lock, flags);
 	reg = read_kctxt_csr(sc->dd, sc->hw_context, SC(CTRL));
 	reg &= ~SC(CTRL_CTXT_ENABLE_SMASK);
-	spin_lock_irqsave(&sc->alloc_lock, flags);
 	sc->flags &= ~SCF_ENABLED;
 	sc_wait_for_packet_egress(sc, 1);
 	write_kctxt_csr(sc->dd, sc->hw_context, SC(CTRL), reg);
@@ -1165,19 +1163,26 @@ int sc_enable(struct send_context *sc)
 	u64 sc_ctrl, reg, pio;
 	struct hfi_devdata *dd;
 	unsigned long flags;
-	int ret;
+	int ret = 0;
 
 	if (!sc)
 		return -EINVAL;
 	dd = sc->dd;
 
+	/*
+	 * Obtain the allocator lock to guard against any allocation
+	 * attempts (which should not happen prior to context being
+	 * enabled). On the release/disable side we don't need to
+	 * worry about locking since the releaser will not do anything
+	 * if the context accounting values have not changed.
+	 */
+	spin_lock_irqsave(&sc->alloc_lock, flags);
 	sc_ctrl = read_kctxt_csr(dd, sc->hw_context, SC(CTRL));
 	if ((sc_ctrl & SC(CTRL_CTXT_ENABLE_SMASK)))
-		return 0; /* already enabled */
+		goto unlock; /* already enabled */
 
 	/* IMPORTANT: only clear free and fill if transitioning 0 -> 1 */
 
-	/* FIXME: obtain the locks? */
 	*sc->hw_free = 0;
 	sc->free = 0;
 	sc->alloc_free = 0;
@@ -1202,7 +1207,7 @@ int sc_enable(struct send_context *sc)
 	 * The HW PIO initialization engine can handle only one init
 	 * request at a time. Serialize access to each device's engine.
 	 */
-	spin_lock_irqsave(&dd->sc_init_lock, flags);
+	spin_lock(&dd->sc_init_lock);
 	/*
 	 * Since access to this code block is serialized and
 	 * each access waits for the initialization to complete
@@ -1220,24 +1225,18 @@ int sc_enable(struct send_context *sc)
 	 */
 	udelay(2);
 	ret = pio_init_wait_progress(dd);
-	spin_unlock_irqrestore(&dd->sc_init_lock, flags);
+	spin_unlock(&dd->sc_init_lock);
 	if (ret) {
 		dd_dev_err(dd,
 			   "sctxt%u(%u): Context not enabled due to init failure %d\n",
 			   sc->sw_index, sc->hw_context, ret);
-		return ret;
+		goto unlock;
 	}
 
 	/*
 	 * All is well. Enable the context.
-	 * Obtain the allocator lock to guard against any allocation
-	 * attempts (which should not happen prior to context being
-	 * enabled). On the release/disable side we don't need to
-	 * worry about locking since the releaser will not do anything
-	 * if the context accounting values have not changed.
 	 */
 	sc_ctrl |= SC(CTRL_CTXT_ENABLE_SMASK);
-	spin_lock_irqsave(&sc->alloc_lock, flags);
 	write_kctxt_csr(dd, sc->hw_context, SC(CTRL), sc_ctrl);
 	/*
 	 * Read SendCtxtCtrl to force the write out and prevent a timing
@@ -1245,9 +1244,11 @@ int sc_enable(struct send_context *sc)
 	 */
 	read_kctxt_csr(dd, sc->hw_context, SC(CTRL));
 	sc->flags |= SCF_ENABLED;
+
+unlock:
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
 
-	return 0;
+	return ret;
 }
 
 /* force a credit return on the context */
@@ -1748,7 +1749,6 @@ void free_credit_return(struct hfi_devdata *dd)
 	if (!dd->cr_base)
 		return;
 
-	/* TODO: save this value on allocate in case the number changes? */
 	num_numa = num_online_nodes();
 	for (i = 0; i < num_numa; i++) {
 		if (dd->cr_base[i].va) {
