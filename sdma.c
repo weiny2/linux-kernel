@@ -1843,9 +1843,8 @@ static void dump_sdma_state(struct sdma_engine *sde)
 	}
 }
 
-/* TODO augment this to dump slid check register */
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLNE %d DQF %u\n"
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLNE %d DQF %u SLC 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1885,7 +1884,8 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		sde->descq_tail,
 		sde->descq_head,
 		   !list_empty(&sde->flushlist),
-		sde->descq_full_count);
+		sde->descq_full_count,
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CHECK_SLID));
 
 	/* print info for each entry in the descriptor queue */
 	while (head != tail) {
