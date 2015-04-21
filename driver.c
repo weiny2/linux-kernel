@@ -224,7 +224,7 @@ static int hfi_caps_get(char *buffer, const struct kernel_param *kp)
 	cap_mask &= ~HFI_CAP_LOCKED_SMASK;
 	cap_mask |= ((cap_mask & HFI_CAP_K2U) << HFI_CAP_USER_SHIFT);
 
-	return scnprintf(buffer, PAGE_SIZE, "%lu", cap_mask);
+	return scnprintf(buffer, PAGE_SIZE, "0x%lx", cap_mask);
 }
 
 #if HFI_COMPAT_MODPARAMS
