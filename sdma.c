@@ -536,9 +536,9 @@ static void sdma_hw_clean_up_task(unsigned long opaque)
 	u64 statuscsr;
 
 	while (1) {
-#ifdef JAG_SDMA_VERBOSITY
-		dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
-			sde->this_idx, slashstrip(__FILE__), __LINE__,
+#ifdef CONFIG_SDMA_VERBOSITY
+		dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n",
+			   sde->this_idx, slashstrip(__FILE__), __LINE__,
 			__func__);
 #endif
 		statuscsr = read_sde_csr(sde, SD(STATUS));
@@ -1344,9 +1344,9 @@ static inline u16 sdma_gethead(struct sdma_engine *sde)
 	int use_dmahead;
 	u16 hwhead;
 
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
-		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n",
+		   sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
 retry:
@@ -1409,9 +1409,9 @@ static void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 	struct sdma_txreq *stx;
 	struct hfi1_ibdev *dev = &sde->dd->verbs_dev;
 
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
-		slashstrip(__FILE__), __LINE__, __func__);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n", sde->this_idx,
+		   slashstrip(__FILE__), __LINE__, __func__);
 	dd_dev_err(sde->dd, "avail: %u\n", avail);
 #endif
 
@@ -1549,11 +1549,11 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 {
 	unsigned long flags;
 
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) error status 0x%llx state %s\n",
-		sde->this_idx,
-		(unsigned long long)status,
-		sdma_state_names[sde->state.current_state]);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) error status 0x%llx state %s\n",
+		   sde->this_idx,
+		   (unsigned long long)status,
+		   sdma_state_names[sde->state.current_state]);
 #endif
 	spin_lock_irqsave(&sde->tail_lock, flags);
 	write_seqlock(&sde->head_lock);
@@ -1577,13 +1577,13 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 	u64 clr_senddmactrl = 0;
 	unsigned long flags;
 
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) senddmactrl E=%d I=%d H=%d C=%d\n",
-		sde->this_idx,
-		(op & SDMA_SENDCTRL_OP_ENABLE) ? 1 : 0,
-		(op & SDMA_SENDCTRL_OP_INTENABLE) ? 1 : 0,
-		(op & SDMA_SENDCTRL_OP_HALT) ? 1 : 0,
-		(op & SDMA_SENDCTRL_OP_CLEANUP) ? 1 : 0);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) senddmactrl E=%d I=%d H=%d C=%d\n",
+		   sde->this_idx,
+		   (op & SDMA_SENDCTRL_OP_ENABLE) ? 1 : 0,
+		   (op & SDMA_SENDCTRL_OP_INTENABLE) ? 1 : 0,
+		   (op & SDMA_SENDCTRL_OP_HALT) ? 1 : 0,
+		   (op & SDMA_SENDCTRL_OP_CLEANUP) ? 1 : 0);
 #endif
 
 	if (op & SDMA_SENDCTRL_OP_ENABLE)
@@ -1615,16 +1615,16 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 
 	spin_unlock_irqrestore(&sde->senddmactrl_lock, flags);
 
-#ifdef JAG_SDMA_VERBOSITY
+#ifdef CONFIG_SDMA_VERBOSITY
 	sdma_dumpstate(sde);
 #endif
 }
 
 static void sdma_setlengen(struct sdma_engine *sde)
 {
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
-		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n",
+		   sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
 	/*
@@ -1656,9 +1656,9 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
 {
 	u64 reg;
 
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n",
-		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n",
+		   sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
 	sdma_setlengen(sde);
@@ -1714,11 +1714,11 @@ static void init_sdma_regs(
 	uint idle_cnt)
 {
 	u8 opval, opmask;
-#ifdef JAG_SDMA_VERBOSITY
+#ifdef CONFIG_SDMA_VERBOSITY
 	struct hfi_devdata *dd = sde->dd;
 
-	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n",
-		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
+	dd_dev_err(dd, "CONFIG SDMA(%u) %s:%d %s()\n",
+		   sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
 	write_sde_csr(sde, SD(BASE_ADDR), sde->descq_phys);
@@ -1741,7 +1741,7 @@ static void init_sdma_regs(
 		(opval << WFR_SEND_CTXT_CHECK_OPCODE_VALUE_SHIFT));
 }
 
-#ifdef JAG_SDMA_VERBOSITY
+#ifdef CONFIG_SDMA_VERBOSITY
 
 #define sdma_dumpstate_helper0(reg) do { \
 		csr = read_csr(sde->dd, reg); \
@@ -2221,10 +2221,11 @@ static void __sdma_process_event(struct sdma_engine *sde,
 	struct sdma_state *ss = &sde->state;
 	int need_progress = 0;
 
-	/* JAG SDMA temporary */
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) [%s] %s\n", sde->this_idx,
-		sdma_state_names[ss->current_state], sdma_event_names[event]);
+	/* CONFIG SDMA temporary */
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) [%s] %s\n", sde->this_idx,
+		   sdma_state_names[ss->current_state],
+		   sdma_event_names[event]);
 #endif
 
 	switch (ss->current_state) {

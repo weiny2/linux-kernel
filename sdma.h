@@ -466,7 +466,7 @@ struct sdma_engine {
 	/* private: */
 	struct list_head      dmawait;
 
-	/* JAG SDMA for now, just blindly duplicate */
+	/* CONFIG SDMA for now, just blindly duplicate */
 	/* private: */
 	struct tasklet_struct sdma_hw_clean_up_task
 		____cacheline_aligned_in_smp;
@@ -1092,8 +1092,7 @@ struct sdma_engine *sdma_select_engine_vl(
 
 void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *);
 
-#ifdef JAG_SDMA_VERBOSITY
-/* XXX JAG SDMA - Temporary debug/dump routine */
+#ifdef CONFIG_SDMA_VERBOSITY
 void sdma_dumpstate(struct sdma_engine *);
 #endif
 static inline char *slashstrip(char *s)

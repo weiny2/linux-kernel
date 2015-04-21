@@ -1379,9 +1379,9 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		ret = dd->process_pio_send(
 			qp, ahdr, hdrwords, ss, len, plen, dwords, 0);
 	} else {
-#ifdef JAG_SDMA_VERBOSITY
-		dd_dev_err(dd, "JAG SDMA %s:%d %s()\n",
-			slashstrip(__FILE__), __LINE__, __func__);
+#ifdef CONFIG_SDMA_VERBOSITY
+		dd_dev_err(dd, "CONFIG SDMA %s:%d %s()\n",
+			   slashstrip(__FILE__), __LINE__, __func__);
 		dd_dev_err(dd, "SDMA hdrwords = %u, len = %u\n", hdrwords, len);
 #endif
 		ret = dd->process_dma_send(

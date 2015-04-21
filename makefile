@@ -49,7 +49,7 @@ KVER=$(shell uname -r)
 KBUILD  ?= /lib/modules/$(KVER)/build
 
 # Enable extra SDMA debugging
-#NOSTDINC_FLAGS += -DJAG_SDMA_VERBOSITY
+#NOSTDINC_FLAGS += -DCONFIG_SDMA_VERBOSITY
 # Disable compatibility module parameters
 #NOSTDINC_FLAGS += -DHFI_COMPAT_MODPARAMS=0
 # Debug sdma ordering

@@ -2440,11 +2440,11 @@ static void handle_sdma_eng_err(struct hfi_devdata *dd,
 
 	sde = &dd->per_sdma[source];
 	/* BUG_ON(source != 0); */
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
-		slashstrip(__FILE__), __LINE__, __func__);
-	dd_dev_err(sde->dd, "JAG SDMA(%u) source: %u status 0x%llx\n",
-		sde->this_idx, source, (unsigned long long)status);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n", sde->this_idx,
+		   slashstrip(__FILE__), __LINE__, __func__);
+	dd_dev_err(sde->dd, "CONFIG SDMA(%u) source: %u status 0x%llx\n",
+		   sde->this_idx, source, (unsigned long long)status);
 #endif
 	sdma_engine_error(sde, status);
 }
@@ -2454,13 +2454,13 @@ static void handle_sdma_eng_err(struct hfi_devdata *dd,
  */
 static void is_sdma_eng_err_int(struct hfi_devdata *dd, unsigned int source)
 {
-#ifdef JAG_SDMA_VERBOSITY
+#ifdef CONFIG_SDMA_VERBOSITY
 	struct sdma_engine *sde = &dd->per_sdma[source];
 
-	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
-		slashstrip(__FILE__), __LINE__, __func__);
-	dd_dev_err(dd, "JAG SDMA(%u) source: %u\n", sde->this_idx,
-		source);
+	dd_dev_err(dd, "CONFIG SDMA(%u) %s:%d %s()\n", sde->this_idx,
+		   slashstrip(__FILE__), __LINE__, __func__);
+	dd_dev_err(dd, "CONFIG SDMA(%u) source: %u\n", sde->this_idx,
+		   source);
 	sdma_dumpstate(sde);
 #endif
 	interrupt_clear_down(dd, source, &sdma_eng_err);
@@ -4205,9 +4205,9 @@ static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
 	/* which engine */
 	unsigned int which = source % WFR_TXE_NUM_SDMA_ENGINES;
 
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n", which,
-		slashstrip(__FILE__), __LINE__, __func__);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(dd, "CONFIG SDMA(%u) %s:%d %s()\n", which,
+		   slashstrip(__FILE__), __LINE__, __func__);
 	sdma_dumpstate(&dd->per_sdma[which]);
 #endif
 
@@ -4401,9 +4401,9 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 	struct hfi_devdata *dd = sde->dd;
 	u64 status;
 
-#ifdef JAG_SDMA_VERBOSITY
-	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
-		slashstrip(__FILE__), __LINE__, __func__);
+#ifdef CONFIG_SDMA_VERBOSITY
+	dd_dev_err(dd, "CONFIG SDMA(%u) %s:%d %s()\n", sde->this_idx,
+		   slashstrip(__FILE__), __LINE__, __func__);
 	sdma_dumpstate(sde);
 #endif
 
