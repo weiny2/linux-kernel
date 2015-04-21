@@ -127,7 +127,7 @@ int ipath_enable_wc(struct ipath_devdata *dd)
 			   "(addr %llx, len=0x%llx)\n",
 			   (unsigned long long) pioaddr,
 			   (unsigned long long) piolen);
-		cookie = mtrr_add(pioaddr, piolen, MTRR_TYPE_WRCOMB, 0);
+		cookie = mtrr_add(pioaddr, piolen, MTRR_TYPE_WRCOMB, 1);
 		if (cookie < 0) {
 			{
 				dev_info(&dd->pcidev->dev,
