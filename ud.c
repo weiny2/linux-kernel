@@ -593,8 +593,6 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
 	case IB_MGMT_METHOD_SET:
-	case IB_MGMT_METHOD_SEND:
-	case IB_MGMT_METHOD_TRAP:
 	case IB_MGMT_METHOD_REPORT:
 	case IB_MGMT_METHOD_TRAP_REPRESS:
 		if (pkey != WFR_FULL_MGMT_P_KEY) {
@@ -602,6 +600,8 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 			return 1;
 		}
 		break;
+	case IB_MGMT_METHOD_SEND:
+	case IB_MGMT_METHOD_TRAP:
 	case IB_MGMT_METHOD_GET_RESP:
 	case IB_MGMT_METHOD_REPORT_RESP:
 		if (ibp->port_cap_flags & IB_PORT_SM)
