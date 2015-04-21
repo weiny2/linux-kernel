@@ -5,17 +5,20 @@ RPM_PACKAGE_NAME=opa2_hfi
 VERSION=0.0
 
 # main start here
+rm -r ~/rpmbuild
 make rpm KVER=${KERNEL_BUILT_AGAINST} NAME=${RPM_PACKAGE_NAME} VERSION=${VERSION}
+res=$?
+if [ ! ${res} ]; then
+    echo fail on building driver
+    exit 1
+fi
+
 cd opa-headers.git
 ./build_rpm.sh
-
-# copy rpm files to yum repository
-scp -i ~/ssh-jenkins/id_rsa \
-    ~/rpmbuild/RPMS/x86_64/opa2_hfi-0.0-*.x86_64.rpm \
-    opa-headers-0.0-1.x86_64.rpm \
-    cyokoyam@phlsvlogin02.ph.intel.com:/nfs/site/proj/ftp/fxr_yum/next
-ssh -i ~/ssh-jenkins/id_rsa \
-    jenkins@phlsdevlab.ph.intel.com \
-    "/usr/bin/cobbler reposync --only=fxr-next"
+res=$?
+if [ ! ${res} ]; then
+    echo fail on building rpm
+    exit 2
+fi
 
 exit 0
