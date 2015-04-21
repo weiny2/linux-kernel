@@ -1,35 +1,51 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation. All rights reserved.
- * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
- * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/spinlock.h>
@@ -167,7 +183,7 @@ MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
 MODULE_VERSION(HFI_DRIVER_VERSION);
 
-/* See qib_init() */
+/* See hfi1_init() */
 void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 
 /*
@@ -224,7 +240,7 @@ static int hfi_caps_get(char *buffer, const struct kernel_param *kp)
 	cap_mask &= ~HFI_CAP_LOCKED_SMASK;
 	cap_mask |= ((cap_mask & HFI_CAP_K2U) << HFI_CAP_USER_SHIFT);
 
-	return scnprintf(buffer, PAGE_SIZE, "%lu", cap_mask);
+	return scnprintf(buffer, PAGE_SIZE, "0x%lx", cap_mask);
 }
 
 #if HFI_COMPAT_MODPARAMS
@@ -278,10 +294,10 @@ const char *get_unit_name(int unit)
 /*
  * Return count of units with at least one port ACTIVE.
  */
-int qib_count_active_units(void)
+int hfi1_count_active_units(void)
 {
 	struct hfi_devdata *dd;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	unsigned long flags;
 	int pidx, nunits_active = 0;
 
@@ -306,13 +322,13 @@ int qib_count_active_units(void)
  * the number of usable (present) units, and the number of
  * ports that are up.
  */
-int qib_count_units(int *npresentp, int *nupp)
+int hfi1_count_units(int *npresentp, int *nupp)
 {
 	int nunits = 0, npresent = 0, nup = 0;
 	struct hfi_devdata *dd;
 	unsigned long flags;
 	int pidx;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 
 	spin_lock_irqsave(&qib_devs_lock, flags);
 
@@ -341,7 +357,7 @@ int qib_count_units(int *npresentp, int *nupp)
  * Get address of eager buffer from it's index (allocated in chunks, not
  * contiguous).
  */
-static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u64 rhf,
+static inline void *qib_get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
 				   u32 *update)
 {
 	u32 idx = rhf_egr_index(rhf), offset = rhf_egr_buf_offset(rhf);
@@ -371,13 +387,13 @@ inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 	return 1;
 }
 
-static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
+static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 		       struct hfi_packet *packet)
 {
-	struct qib_message_header *rhdr = packet->hdr;
+	struct hfi1_message_header *rhdr = packet->hdr;
 	u32 rte = rhf_rcv_type_err(packet->rhf);
 	int lnh = be16_to_cpu(rhdr->lrh[0]) & 3;
-	struct qib_ibport *ibp = &ppd->ibport_data;
+	struct hfi1_ibport *ibp = &ppd->ibport_data;
 
 	if (packet->rhf & (RHF_VCRC_ERR | RHF_ICRC_ERR))
 		return;
@@ -392,8 +408,8 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 	 */
 	if (packet->rhf & RHF_TID_ERR) {
 		/* For TIDERR and RC QPs premptively schedule a NAK */
-		struct qib_ib_header *hdr = (struct qib_ib_header *) rhdr;
-		struct qib_other_headers *ohdr = NULL;
+		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)rhdr;
+		struct hfi1_other_headers *ohdr = NULL;
 		u32 tlen = rhf_pkt_len(packet->rhf); /* in bytes */
 		u16 lid  = be16_to_cpu(hdr->lrh[1]);
 		u32 qp_num;
@@ -422,9 +438,9 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		/* Get the destination QP number. */
 		qp_num = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
 		if (lid < QIB_MULTICAST_LID_BASE) {
-			struct qib_qp *qp;
+			struct hfi1_qp *qp;
 
-			qp = qib_lookup_qpn(ibp, qp_num);
+			qp = hfi1_lookup_qpn(ibp, qp_num);
 			if (!qp)
 				goto drop;
 
@@ -455,7 +471,7 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 
 			spin_unlock(&qp->r_lock);
 			/*
-			 * Notify qib_destroy_qp() if it is waiting
+			 * Notify hfi1_destroy_qp() if it is waiting
 			 * for us to finish.
 			 */
 			if (atomic_dec_and_test(&qp->refcount))
@@ -492,7 +508,7 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			 * Only in pre-B0 h/w is the CNP_OPCODE handled
 			 * via this code path (errata 291394).
 			 */
-			struct qib_qp *qp = NULL;
+			struct hfi1_qp *qp = NULL;
 			u32 lqpn, rqpn;
 			u16 rlid;
 			u8 svc_type, sl, sc5;
@@ -503,7 +519,7 @@ static void rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			sl = ibp->sc_to_sl[sc5];
 
 			lqpn = be32_to_cpu(bth[1]) & QIB_QPN_MASK;
-			qp = qib_lookup_qpn(ibp, lqpn);
+			qp = hfi1_lookup_qpn(ibp, lqpn);
 			if (qp == NULL)
 				goto drop;
 
@@ -545,7 +561,7 @@ drop:
  *
  * Called from interrupt handler for errors or receive interrupt.
  */
-void handle_receive_interrupt(struct qib_ctxtdata *rcd)
+void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	__le32 *rhf_addr;
@@ -554,10 +570,10 @@ void handle_receive_interrupt(struct qib_ctxtdata *rcd)
 	const u32 rsize = rcd->rcvhdrqentsize;        /* words */
 	const u32 maxcnt = rcd->rcvhdrq_cnt * rsize;   /* words */
 	u32 etail = -1, l, hdrqtail;
-	struct qib_message_header *hdr;
+	struct hfi1_message_header *hdr;
 	u32 etype, hlen, tlen, i = 0, updegr = 0;
 	int last;
-	struct qib_qp *qp, *nqp;
+	struct hfi1_qp *qp, *nqp;
 	struct hfi_packet packet;
 
 	l = rcd->head;
@@ -659,7 +675,7 @@ skip:
 		}
 	}
 	/*
-	 * Notify qib_destroy_qp() if it is waiting
+	 * Notify hfi1_destroy_qp() if it is waiting
 	 * for lookaside_qp to finish.
 	 */
 	if (rcd->lookaside_qp) {
@@ -678,7 +694,7 @@ skip:
 		list_del_init(&qp->rspwait);
 		if (qp->r_flags & QIB_R_RSP_NAK) {
 			qp->r_flags &= ~QIB_R_RSP_NAK;
-			qib_send_rc_ack(rcd, qp, 0);
+			hfi1_send_rc_ack(rcd, qp, 0);
 		}
 		if (qp->r_flags & QIB_R_RSP_SEND) {
 			unsigned long flags;
@@ -687,7 +703,7 @@ skip:
 			spin_lock_irqsave(&qp->s_lock, flags);
 			if (ib_qib_state_ops[qp->state] &
 					QIB_PROCESS_OR_FLUSH_SEND)
-				qib_schedule_send(qp);
+				hfi1_schedule_send(qp);
 			spin_unlock_irqrestore(&qp->s_lock, flags);
 		}
 		if (atomic_dec_and_test(&qp->refcount))
@@ -744,7 +760,7 @@ u16 enum_to_mtu(int mtu)
  * need to restrict our outgoing size.  We do not deal with what happens
  * to programs that are already running when the size changes.
  */
-int set_mtu(struct qib_pportdata *ppd)
+int set_mtu(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int i, drain, ret = 0, is_up = 0;
@@ -788,7 +804,7 @@ err:
 	return ret;
 }
 
-int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
+int hfi1_set_lid(struct hfi1_pportdata *ppd, u32 lid, u8 lmc)
 {
 	struct hfi_devdata *dd = ppd->dd;
 
@@ -815,7 +831,7 @@ int qib_set_lid(struct qib_pportdata *ppd, u32 lid, u8 lmc)
 
 static void qib_run_led_override(unsigned long opaque)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)opaque;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)opaque;
 	struct hfi_devdata *dd = ppd->dd;
 	int timeoff;
 	int ph_idx;
@@ -835,7 +851,7 @@ static void qib_run_led_override(unsigned long opaque)
 		mod_timer(&ppd->led_override_timer, jiffies + timeoff);
 }
 
-void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
+void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int timeoff, freq;
@@ -878,7 +894,7 @@ void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
 }
 
 /**
- * qib_reset_device - reset the chip if possible
+ * hfi1_reset_device - reset the chip if possible
  * @unit: the device to reset
  *
  * Whether or not reset is successful, we attempt to re-initialize the chip
@@ -886,11 +902,11 @@ void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val)
  * so that the various entry points will fail until we reinitialize.  For
  * now, we only allow this if no user contexts are open that use chip resources
  */
-int qib_reset_device(int unit)
+int hfi1_reset_device(int unit)
 {
 	int ret, i;
-	struct hfi_devdata *dd = qib_lookup(unit);
-	struct qib_pportdata *ppd;
+	struct hfi_devdata *dd = hfi1_lookup(unit);
+	struct hfi1_pportdata *ppd;
 	unsigned long flags;
 	int pidx;
 
@@ -936,7 +952,7 @@ int qib_reset_device(int unit)
 
 	hfi1_reset_cpu_counters(dd);
 
-	ret = qib_init(dd, 1);
+	ret = hfi1_init(dd, 1);
 
 	if (ret)
 		dd_dev_err(dd,
@@ -952,7 +968,7 @@ bail:
 
 void handle_eflags(struct hfi_packet *packet)
 {
-	struct qib_ctxtdata *rcd = packet->rcd;
+	struct hfi1_ctxtdata *rcd = packet->rcd;
 	u32 rte = rhf_rcv_type_err(packet->rhf);
 
 	dd_dev_err(rcd->dd,
@@ -991,7 +1007,7 @@ void process_receive_ib(struct hfi_packet *packet)
 		return;
 	}
 
-	qib_ib_rcv(packet);
+	hfi1_ib_rcv(packet);
 }
 
 void process_receive_bypass(struct hfi_packet *packet)

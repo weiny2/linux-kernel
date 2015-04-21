@@ -1,33 +1,51 @@
 /*
- * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/module.h>
@@ -40,14 +58,14 @@
 #include "verbs.h"
 
 /**
- * qib_release_mmap_info - free mmap info structure
- * @ref: a pointer to the kref within struct qib_mmap_info
+ * hfi1_release_mmap_info - free mmap info structure
+ * @ref: a pointer to the kref within struct hfi1_mmap_info
  */
-void qib_release_mmap_info(struct kref *ref)
+void hfi1_release_mmap_info(struct kref *ref)
 {
-	struct qib_mmap_info *ip =
-		container_of(ref, struct qib_mmap_info, ref);
-	struct qib_ibdev *dev = to_idev(ip->context->device);
+	struct hfi1_mmap_info *ip =
+		container_of(ref, struct hfi1_mmap_info, ref);
+	struct hfi1_ibdev *dev = to_idev(ip->context->device);
 
 	spin_lock_irq(&dev->pending_lock);
 	list_del(&ip->pending_mmaps);
@@ -63,35 +81,35 @@ void qib_release_mmap_info(struct kref *ref)
  */
 static void qib_vma_open(struct vm_area_struct *vma)
 {
-	struct qib_mmap_info *ip = vma->vm_private_data;
+	struct hfi1_mmap_info *ip = vma->vm_private_data;
 
 	kref_get(&ip->ref);
 }
 
 static void qib_vma_close(struct vm_area_struct *vma)
 {
-	struct qib_mmap_info *ip = vma->vm_private_data;
+	struct hfi1_mmap_info *ip = vma->vm_private_data;
 
-	kref_put(&ip->ref, qib_release_mmap_info);
+	kref_put(&ip->ref, hfi1_release_mmap_info);
 }
 
-static struct vm_operations_struct qib_vm_ops = {
+static struct vm_operations_struct hfi1_vm_ops = {
 	.open =     qib_vma_open,
 	.close =    qib_vma_close,
 };
 
 /**
- * qib_mmap - create a new mmap region
+ * hfi1_mmap - create a new mmap region
  * @context: the IB user context of the process making the mmap() call
  * @vma: the VMA to be initialized
  * Return zero if the mmap is OK. Otherwise, return an errno.
  */
-int qib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 {
-	struct qib_ibdev *dev = to_idev(context->device);
+	struct hfi1_ibdev *dev = to_idev(context->device);
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 	unsigned long size = vma->vm_end - vma->vm_start;
-	struct qib_mmap_info *ip, *pp;
+	struct hfi1_mmap_info *ip, *pp;
 	int ret = -EINVAL;
 
 	/*
@@ -115,7 +133,7 @@ int qib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 		ret = remap_vmalloc_range(vma, ip->obj, 0);
 		if (ret)
 			goto done;
-		vma->vm_ops = &qib_vm_ops;
+		vma->vm_ops = &hfi1_vm_ops;
 		vma->vm_private_data = ip;
 		qib_vma_open(vma);
 		goto done;
@@ -126,13 +144,13 @@ done:
 }
 
 /*
- * Allocate information for qib_mmap
+ * Allocate information for hfi1_mmap
  */
-struct qib_mmap_info *qib_create_mmap_info(struct qib_ibdev *dev,
-					   u32 size,
-					   struct ib_ucontext *context,
-					   void *obj) {
-	struct qib_mmap_info *ip;
+struct hfi1_mmap_info *hfi1_create_mmap_info(struct hfi1_ibdev *dev,
+					     u32 size,
+					     struct ib_ucontext *context,
+					     void *obj) {
+	struct hfi1_mmap_info *ip;
 
 	ip = kmalloc(sizeof(*ip), GFP_KERNEL);
 	if (!ip)
@@ -157,8 +175,8 @@ bail:
 	return ip;
 }
 
-void qib_update_mmap_info(struct qib_ibdev *dev, struct qib_mmap_info *ip,
-			  u32 size, void *obj)
+void hfi1_update_mmap_info(struct hfi1_ibdev *dev, struct hfi1_mmap_info *ip,
+			   u32 size, void *obj)
 {
 	size = PAGE_ALIGN(size);
 

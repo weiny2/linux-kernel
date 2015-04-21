@@ -1,33 +1,51 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 #include <linux/pci.h>
 #include <linux/poll.h>
@@ -71,12 +89,12 @@ static int hfi_mmap(struct file *, struct vm_area_struct *);
 
 static u64 kvirt_to_phys(void *);
 static int assign_ctxt(struct file *, struct hfi_user_info *);
-static int init_subctxts(struct qib_ctxtdata *, const struct hfi_user_info *);
+static int init_subctxts(struct hfi1_ctxtdata *, const struct hfi_user_info *);
 static int user_init(struct file *);
 static int get_ctxt_info(struct file *, void __user *, __u32);
 static int get_base_info(struct file *, void __user *, __u32);
 static int setup_ctxt(struct file *);
-static int setup_subctxt(struct qib_ctxtdata *);
+static int setup_subctxt(struct hfi1_ctxtdata *);
 static int get_user_context(struct file *, struct hfi_user_info *,
 			    int, unsigned);
 static int find_shared_ctxt(struct file *, const struct hfi_user_info *);
@@ -84,13 +102,13 @@ static int allocate_ctxt(struct file *, struct hfi_devdata *,
 			 struct hfi_user_info *);
 static unsigned int poll_urgent(struct file *, struct poll_table_struct *);
 static unsigned int poll_next(struct file *, struct poll_table_struct *);
-static int user_event_ack(struct qib_ctxtdata *, int, unsigned long);
-static int set_ctxt_pkey(struct qib_ctxtdata *, unsigned, u16);
-static int manage_rcvq(struct qib_ctxtdata *, unsigned, int);
+static int user_event_ack(struct hfi1_ctxtdata *, int, unsigned long);
+static int set_ctxt_pkey(struct hfi1_ctxtdata *, unsigned, u16);
+static int manage_rcvq(struct hfi1_ctxtdata *, unsigned, int);
 static int vma_fault(struct vm_area_struct *, struct vm_fault *);
 static int exp_tid_setup(struct file *, struct hfi_tid_info *);
 static int exp_tid_free(struct file *, struct hfi_tid_info *);
-static void unlock_exp_tids(struct qib_ctxtdata *);
+static void unlock_exp_tids(struct hfi1_ctxtdata *);
 
 static const struct file_operations qib_file_ops = {
 	.owner = THIS_MODULE,
@@ -187,7 +205,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 			 loff_t *offset)
 {
 	const struct hfi_cmd __user *ucmd;
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_cmd cmd;
 	struct hfi_user_info uinfo;
 	struct hfi_tid_info tinfo;
@@ -456,7 +474,7 @@ done:
 
 static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 {
-	struct qib_ctxtdata *uctxt;
+	struct hfi1_ctxtdata *uctxt;
 	struct hfi_devdata *dd;
 	unsigned long flags, pfn;
 	u64 token = vma->vm_pgoff << PAGE_SHIFT,
@@ -571,8 +589,9 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * Map only the page that contains this context's user
 		 * registers.
 		 */
-		memaddr = (unsigned long)(dd->physaddr + dd->uregbase) +
-			(uctxt->ctxt * dd->ureg_align);
+		memaddr = (unsigned long)
+			(dd->physaddr + WFR_RXE_PER_CONTEXT_USER)
+			+ (uctxt->ctxt * WFR_RXE_PER_CONTEXT_SIZE);
 		/*
 		 * TidFlow table is on the same page as the rest of the
 		 * user registers.
@@ -707,7 +726,7 @@ static int vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 static unsigned int hfi_poll(struct file *fp, struct poll_table_struct *pt)
 {
-	struct qib_ctxtdata *uctxt;
+	struct hfi1_ctxtdata *uctxt;
 	unsigned pollflag;
 
 	uctxt = ctxt_fp(fp);
@@ -726,7 +745,7 @@ static unsigned int hfi_poll(struct file *fp, struct poll_table_struct *pt)
 static int hfi_close(struct inode *inode, struct file *fp)
 {
 	struct hfi_filedata *fdata = fp->private_data;
-	struct qib_ctxtdata *uctxt = fdata->uctxt;
+	struct hfi1_ctxtdata *uctxt = fdata->uctxt;
 	struct hfi_devdata *dd;
 	unsigned long flags, *ev;
 
@@ -801,7 +820,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	qib_stats.sps_ctxts--;
 	dd->freectxts++;
 	mutex_unlock(&qib_mutex);
-	qib_free_ctxtdata(dd, uctxt);
+	hfi1_free_ctxtdata(dd, uctxt);
 done:
 	kfree(fdata);
 	return 0;
@@ -863,7 +882,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 	struct hfi_devdata *dd = NULL;
 	int ret = 0, devmax, npresent, nup, dev;
 
-	devmax = qib_count_units(&npresent, &nup);
+	devmax = hfi1_count_units(&npresent, &nup);
 	if (!npresent) {
 		ret = -ENXIO;
 		goto done;
@@ -873,7 +892,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 		goto done;
 	}
 	if (devno >= 0) {
-		dd = qib_lookup(devno);
+		dd = hfi1_lookup(devno);
 		if (!dd)
 			ret = -ENODEV;
 		else if (!dd->freectxts)
@@ -885,7 +904,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 			unsigned free = 0U;
 
 			for (dev = 0; dev < devmax; dev++) {
-				pdd = qib_lookup(dev);
+				pdd = hfi1_lookup(dev);
 				if (pdd && pdd->freectxts &&
 				    pdd->freectxts > free) {
 					dd = pdd;
@@ -894,7 +913,7 @@ static int get_user_context(struct file *fp, struct hfi_user_info *uinfo,
 			}
 		} else {
 			for (dev = 0; dev < devmax; dev++) {
-				pdd = qib_lookup(dev);
+				pdd = hfi1_lookup(dev);
 				if (pdd && pdd->freectxts) {
 					dd = pdd;
 					break;
@@ -914,16 +933,16 @@ static int find_shared_ctxt(struct file *fp,
 	int devmax, ndev, i;
 	int ret = 0;
 
-	devmax = qib_count_units(NULL, NULL);
+	devmax = hfi1_count_units(NULL, NULL);
 
 	for (ndev = 0; ndev < devmax; ndev++) {
-		struct hfi_devdata *dd = qib_lookup(ndev);
+		struct hfi_devdata *dd = hfi1_lookup(ndev);
 
 		/* device portion of usable() */
 		if (!(dd && (dd->flags & HFI_PRESENT) && dd->kregbase))
 			continue;
 		for (i = dd->first_user_ctxt; i < dd->num_rcv_contexts; i++) {
-			struct qib_ctxtdata *uctxt = dd->rcd[i];
+			struct hfi1_ctxtdata *uctxt = dd->rcd[i];
 
 			/* Skip ctxts which are not yet open */
 			if (!uctxt || !uctxt->cnt)
@@ -957,7 +976,7 @@ done:
 static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 			 struct hfi_user_info *uinfo)
 {
-	struct qib_ctxtdata *uctxt;
+	struct hfi1_ctxtdata *uctxt;
 	unsigned ctxt;
 	int ret;
 
@@ -979,7 +998,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	if (ctxt == dd->num_rcv_contexts)
 		return -EBUSY;
 
-	uctxt = qib_create_ctxtdata(dd->pport, ctxt);
+	uctxt = hfi1_create_ctxtdata(dd->pport, ctxt);
 	if (!uctxt) {
 		dd_dev_err(dd,
 			   "Unable to allocate ctxtdata memory, failing open\n");
@@ -1029,7 +1048,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	return 0;
 }
 
-static int init_subctxts(struct qib_ctxtdata *uctxt,
+static int init_subctxts(struct hfi1_ctxtdata *uctxt,
 			 const struct hfi_user_info *uinfo)
 {
 	int ret = 0;
@@ -1050,7 +1069,7 @@ bail:
 	return ret;
 }
 
-static int setup_subctxt(struct qib_ctxtdata *uctxt)
+static int setup_subctxt(struct hfi1_ctxtdata *uctxt)
 {
 	int ret = 0;
 	unsigned num_subctxts = uctxt->subctxt_cnt;
@@ -1088,7 +1107,7 @@ static int user_init(struct file *fp)
 {
 	int ret;
 	unsigned int rcvctrl_ops = 0;
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 
 	/* make sure that the context has already been setup */
 	if (!test_bit(QIB_CTXT_SETUP_DONE, &uctxt->event_flags)) {
@@ -1159,14 +1178,14 @@ done:
 static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 {
 	struct hfi_ctxt_info cinfo;
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_filedata *fd = fp->private_data;
 	int ret = 0;
 
 	ret = hfi1_get_base_kinfo(uctxt, &cinfo);
 	if (ret < 0)
 		goto done;
-	cinfo.num_active = qib_count_active_units();
+	cinfo.num_active = hfi1_count_active_units();
 	cinfo.unit = uctxt->dd->unit;
 	cinfo.ctxt = uctxt->ctxt;
 	cinfo.subctxt = subctxt_fp(fp);
@@ -1194,7 +1213,7 @@ done:
 
 static int setup_ctxt(struct file *fp)
 {
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	int ret = 0;
 
@@ -1209,10 +1228,10 @@ static int setup_ctxt(struct file *fp)
 			goto done;
 
 		/* Now allocate the RcvHdr queue and eager buffers. */
-		ret = qib_create_rcvhdrq(dd, uctxt);
+		ret = hfi1_create_rcvhdrq(dd, uctxt);
 		if (ret)
 			goto done;
-		ret = qib_setup_eagerbufs(uctxt);
+		ret = hfi1_setup_eagerbufs(uctxt);
 		if (ret)
 			goto done;
 		if (uctxt->subctxt_cnt && !subctxt_fp(fp)) {
@@ -1273,7 +1292,7 @@ done:
 static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 {
 	struct hfi_base_info binfo;
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	ssize_t sz;
 	unsigned offset;
@@ -1314,8 +1333,6 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 	/*
 	 * user regs are at
 	 * (WFR_RXE_PER_CONTEXT_USER + (ctxt * WFR_RXE_PER_CONTEXT_SIZE))
-	 * or
-	 * ((char *)dd->uregbase + (ctxt * dd->ureg_align))
 	 */
 	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
 					    subctxt_fp(fp), 0);
@@ -1351,7 +1368,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 static unsigned int poll_urgent(struct file *fp,
 				struct poll_table_struct *pt)
 {
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	unsigned pollflag;
 
@@ -1373,7 +1390,7 @@ static unsigned int poll_urgent(struct file *fp,
 static unsigned int poll_next(struct file *fp,
 			      struct poll_table_struct *pt)
 {
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	unsigned pollflag;
 
@@ -1396,9 +1413,9 @@ static unsigned int poll_next(struct file *fp,
  * event mask.
  * See also find_ctxt() for a similar use, that is specific to send buffers.
  */
-int qib_set_uevent_bits(struct qib_pportdata *ppd, const int evtbit)
+int hfi1_set_uevent_bits(struct hfi1_pportdata *ppd, const int evtbit)
 {
-	struct qib_ctxtdata *uctxt;
+	struct hfi1_ctxtdata *uctxt;
 	struct hfi_devdata *dd = ppd->dd;
 	unsigned ctxt;
 	int ret = 0;
@@ -1442,8 +1459,8 @@ done:
  * overflow conditions.  start_stop==1 re-enables, to be used to
  * re-init the software copy of the head register
  */
-static int manage_rcvq(struct qib_ctxtdata *uctxt, unsigned subctxt,
-			   int start_stop)
+static int manage_rcvq(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
+		       int start_stop)
 {
 	struct hfi_devdata *dd = uctxt->dd;
 	unsigned int rcvctrl_op;
@@ -1476,8 +1493,8 @@ bail:
  * User process then performs actions appropriate to bit having been
  * set, if desired, and checks again in future.
  */
-static int user_event_ack(struct qib_ctxtdata *uctxt, int subctxt,
-			      unsigned long events)
+static int user_event_ack(struct hfi1_ctxtdata *uctxt, int subctxt,
+			  unsigned long events)
 {
 	int ret = 0, i;
 	struct hfi_devdata *dd = uctxt->dd;
@@ -1545,7 +1562,7 @@ static inline unsigned num_free_groups(unsigned long map, u16 *start)
 static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 {
 	int ret = 0;
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	unsigned tid, mapped = 0, npages, ngroups, exp_groups,
 		tidpairs = uctxt->expected_count / 2;
@@ -1654,8 +1671,8 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		 * Now that we know how many free RcvArray entries we have,
 		 * we can pin that many user pages.
 		 */
-		ret = qib_get_user_pages(vaddr + (mapped * PAGE_SIZE),
-					 pinned, pages);
+		ret = hfi1_get_user_pages(vaddr + (mapped * PAGE_SIZE),
+					  pinned, pages);
 		if (ret) {
 			/*
 			 * We can't continue because the pages array won't be
@@ -1697,7 +1714,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 			for (j = 0; j < dd->rcv_entries.group_size &&
 				     pmapped < pinned; j++, pmapped++, tid++) {
 				tidsize = PAGE_SIZE;
-				phys[pmapped] = qib_map_page(dd->pcidev,
+				phys[pmapped] = hfi1_map_page(dd->pcidev,
 						   pages[pmapped], 0,
 						   tidsize, PCI_DMA_FROMDEVICE);
 				trace_hfi_exp_rcv_set(uctxt->ctxt,
@@ -1776,7 +1793,7 @@ bail:
 
 static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 {
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_devdata *dd = uctxt->dd;
 	unsigned long tidmap[uctxt->tidmapcnt];
 	struct page **pages;
@@ -1824,7 +1841,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 				}
 			}
 			qib_flush_wc();
-			qib_release_user_pages(pshadow, pcount);
+			hfi1_release_user_pages(pshadow, pcount);
 			clear_bit(bitidx, &uctxt->tidusemap[idx]);
 			map &= ~(1ULL<<bitidx);
 		};
@@ -1835,7 +1852,7 @@ done:
 	return ret;
 }
 
-static void unlock_exp_tids(struct qib_ctxtdata *uctxt)
+static void unlock_exp_tids(struct hfi1_ctxtdata *uctxt)
 {
 	struct hfi_devdata *dd = uctxt->dd;
 	unsigned tid;
@@ -1853,14 +1870,15 @@ static void unlock_exp_tids(struct qib_ctxtdata *uctxt)
 		uctxt->physshadow[tid] = 0;
 		uctxt->tid_pg_list[tid] = NULL;
 		pci_unmap_page(dd->pcidev, phys, PAGE_SIZE, PCI_DMA_FROMDEVICE);
-		qib_release_user_pages(&p, 1);
+		hfi1_release_user_pages(&p, 1);
 	}
 }
 
-static int set_ctxt_pkey(struct qib_ctxtdata *uctxt, unsigned subctxt, u16 pkey)
+static int set_ctxt_pkey(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
+			 u16 pkey)
 {
 	int ret = -ENOENT, i, intable = 0;
-	struct qib_pportdata *ppd = uctxt->ppd;
+	struct hfi1_pportdata *ppd = uctxt->ppd;
 	struct hfi_devdata *dd = uctxt->dd;
 
 	if (pkey == WFR_LIM_MGMT_P_KEY || pkey == WFR_FULL_MGMT_P_KEY) {
@@ -2104,7 +2122,7 @@ int hfi_device_create(struct hfi_devdata *dd)
 	int r, ret;
 
 	r = qib_user_add(dd);
-	ret = qib_diag_add(dd);
+	ret = hfi1_diag_add(dd);
 	if (r && !ret)
 		ret = r;
 	return ret;
@@ -2117,5 +2135,5 @@ int hfi_device_create(struct hfi_devdata *dd)
 void hfi_device_remove(struct hfi_devdata *dd)
 {
 	qib_user_remove(dd);
-	qib_diag_remove(dd);
+	hfi1_diag_remove(dd);
 }

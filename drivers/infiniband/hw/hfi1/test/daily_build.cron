@@ -4,5 +4,6 @@
 cd tests
 git remote update
 git pull --rebase
-./build.sh
+# do checkpatch too
+./build.sh "" "" "" 1
 
