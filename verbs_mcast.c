@@ -56,9 +56,9 @@
  * qib_mcast_qp_alloc - alloc a struct to link a QP to mcast GID struct
  * @qp: the QP to link
  */
-static struct qib_mcast_qp *qib_mcast_qp_alloc(struct qib_qp *qp)
+static struct hfi1_mcast_qp *qib_mcast_qp_alloc(struct hfi1_qp *qp)
 {
-	struct qib_mcast_qp *mqp;
+	struct hfi1_mcast_qp *mqp;
 
 	mqp = kmalloc(sizeof(*mqp), GFP_KERNEL);
 	if (!mqp)
@@ -71,9 +71,9 @@ bail:
 	return mqp;
 }
 
-static void qib_mcast_qp_free(struct qib_mcast_qp *mqp)
+static void qib_mcast_qp_free(struct hfi1_mcast_qp *mqp)
 {
-	struct qib_qp *qp = mqp->qp;
+	struct hfi1_qp *qp = mqp->qp;
 
 	/* Notify hfi1_destroy_qp() if it is waiting. */
 	if (atomic_dec_and_test(&qp->refcount))
@@ -88,9 +88,9 @@ static void qib_mcast_qp_free(struct qib_mcast_qp *mqp)
  *
  * A list of QPs will be attached to this structure.
  */
-static struct qib_mcast *qib_mcast_alloc(union ib_gid *mgid)
+static struct hfi1_mcast *qib_mcast_alloc(union ib_gid *mgid)
 {
-	struct qib_mcast *mcast;
+	struct hfi1_mcast *mcast;
 
 	mcast = kmalloc(sizeof(*mcast), GFP_KERNEL);
 	if (!mcast)
@@ -106,9 +106,9 @@ bail:
 	return mcast;
 }
 
-static void qib_mcast_free(struct qib_mcast *mcast)
+static void qib_mcast_free(struct hfi1_mcast *mcast)
 {
-	struct qib_mcast_qp *p, *tmp;
+	struct hfi1_mcast_qp *p, *tmp;
 
 	list_for_each_entry_safe(p, tmp, &mcast->qp_list, list)
 		qib_mcast_qp_free(p);
@@ -125,18 +125,18 @@ static void qib_mcast_free(struct qib_mcast *mcast)
  *
  * The caller is responsible for decrementing the reference count if found.
  */
-struct qib_mcast *hfi1_mcast_find(struct qib_ibport *ibp, union ib_gid *mgid)
+struct hfi1_mcast *hfi1_mcast_find(struct hfi1_ibport *ibp, union ib_gid *mgid)
 {
 	struct rb_node *n;
 	unsigned long flags;
-	struct qib_mcast *mcast;
+	struct hfi1_mcast *mcast;
 
 	spin_lock_irqsave(&ibp->lock, flags);
 	n = ibp->mcast_tree.rb_node;
 	while (n) {
 		int ret;
 
-		mcast = rb_entry(n, struct qib_mcast, rb_node);
+		mcast = rb_entry(n, struct hfi1_mcast, rb_node);
 
 		ret = memcmp(mgid->raw, mcast->mgid.raw,
 			     sizeof(union ib_gid));
@@ -167,8 +167,8 @@ bail:
  * the table but the QP was added.  Return ESRCH if the QP was already
  * attached and neither structure was added.
  */
-static int qib_mcast_add(struct qib_ibdev *dev, struct qib_ibport *ibp,
-			 struct qib_mcast *mcast, struct qib_mcast_qp *mqp)
+static int qib_mcast_add(struct hfi1_ibdev *dev, struct hfi1_ibport *ibp,
+			 struct hfi1_mcast *mcast, struct hfi1_mcast_qp *mqp)
 {
 	struct rb_node **n = &ibp->mcast_tree.rb_node;
 	struct rb_node *pn = NULL;
@@ -177,11 +177,11 @@ static int qib_mcast_add(struct qib_ibdev *dev, struct qib_ibport *ibp,
 	spin_lock_irq(&ibp->lock);
 
 	while (*n) {
-		struct qib_mcast *tmcast;
-		struct qib_mcast_qp *p;
+		struct hfi1_mcast *tmcast;
+		struct hfi1_mcast_qp *p;
 
 		pn = *n;
-		tmcast = rb_entry(pn, struct qib_mcast, rb_node);
+		tmcast = rb_entry(pn, struct hfi1_mcast, rb_node);
 
 		ret = memcmp(mcast->mgid.raw, tmcast->mgid.raw,
 			     sizeof(union ib_gid));
@@ -241,11 +241,11 @@ bail:
 
 int hfi1_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
-	struct qib_qp *qp = to_iqp(ibqp);
-	struct qib_ibdev *dev = to_idev(ibqp->device);
-	struct qib_ibport *ibp;
-	struct qib_mcast *mcast;
-	struct qib_mcast_qp *mqp;
+	struct hfi1_qp *qp = to_iqp(ibqp);
+	struct hfi1_ibdev *dev = to_idev(ibqp->device);
+	struct hfi1_ibport *ibp;
+	struct hfi1_mcast *mcast;
+	struct hfi1_mcast_qp *mqp;
 	int ret;
 
 	if (ibqp->qp_num <= 1 || qp->state == IB_QPS_RESET) {
@@ -299,11 +299,11 @@ bail:
 
 int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
-	struct qib_qp *qp = to_iqp(ibqp);
-	struct qib_ibdev *dev = to_idev(ibqp->device);
-	struct qib_ibport *ibp = to_iport(ibqp->device, qp->port_num);
-	struct qib_mcast *mcast = NULL;
-	struct qib_mcast_qp *p, *tmp;
+	struct hfi1_qp *qp = to_iqp(ibqp);
+	struct hfi1_ibdev *dev = to_idev(ibqp->device);
+	struct hfi1_ibport *ibp = to_iport(ibqp->device, qp->port_num);
+	struct hfi1_mcast *mcast = NULL;
+	struct hfi1_mcast_qp *p, *tmp;
 	struct rb_node *n;
 	int last = 0;
 	int ret;
@@ -324,7 +324,7 @@ int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 			goto bail;
 		}
 
-		mcast = rb_entry(n, struct qib_mcast, rb_node);
+		mcast = rb_entry(n, struct hfi1_mcast, rb_node);
 		ret = memcmp(gid->raw, mcast->mgid.raw,
 			     sizeof(union ib_gid));
 		if (ret < 0)
@@ -379,7 +379,7 @@ bail:
 	return ret;
 }
 
-int hfi1_mcast_tree_empty(struct qib_ibport *ibp)
+int hfi1_mcast_tree_empty(struct hfi1_ibport *ibp)
 {
 	return ibp->mcast_tree.rb_node == NULL;
 }

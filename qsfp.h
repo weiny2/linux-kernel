@@ -196,7 +196,7 @@ extern const char *const qib_qsfp_devtech[16];
 
 struct qsfp_data {
 	/* Helps to find our way */
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	struct work_struct qsfp_work;
 	u8 cache[QSFP_MAX_NUM_PAGES*128];
 	spinlock_t qsfp_lock;
@@ -206,18 +206,18 @@ struct qsfp_data {
 	u8 cache_refresh_required;
 };
 
-extern int refresh_qsfp_cache(struct qib_pportdata *ppd,
-				  struct qsfp_data *cp);
-extern int qsfp_mod_present(struct qib_pportdata *ppd);
-extern int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr,
-			  u32 len, u8 *data);
-extern void qib_qsfp_init(struct qib_pportdata *ppd);
+int refresh_qsfp_cache(struct hfi1_pportdata *ppd,
+		       struct qsfp_data *cp);
+int qsfp_mod_present(struct hfi1_pportdata *ppd);
+int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr,
+		   u32 len, u8 *data);
+void qib_qsfp_init(struct hfi1_pportdata *ppd);
 
-extern int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
-		     int offset, void *bp, int len);
-extern int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
-		    int offset, void *bp, int len);
-extern int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
-		      int len);
-extern int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
-		     int len);
+int i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
+	      int offset, void *bp, int len);
+int i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
+	     int offset, void *bp, int len);
+int qsfp_write(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
+	       int len);
+int qsfp_read(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
+	      int len);

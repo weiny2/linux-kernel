@@ -63,8 +63,8 @@
 #include <rdma/ib_user_verbs.h>
 
 
-struct qib_ctxtdata;
-struct qib_pportdata;
+struct hfi1_ctxtdata;
+struct hfi1_pportdata;
 struct hfi_devdata;
 struct qib_verbs_txreq;
 struct hfi_packet;
@@ -215,7 +215,7 @@ union ib_ehdrs {
 	struct ib_atomic_eth atomic_eth;
 }  __packed;
 
-struct qib_other_headers {
+struct hfi1_other_headers {
 	__be32 bth[3];
 	union ib_ehdrs u;
 } __packed;
@@ -226,14 +226,14 @@ struct qib_other_headers {
  * will be in the eager header buffer.  The remaining 12 or 16 bytes
  * are in the data buffer.
  */
-struct qib_ib_header {
+struct hfi1_ib_header {
 	__be16 lrh[4];
 	union {
 		struct {
 			struct ib_grh grh;
-			struct qib_other_headers oth;
+			struct hfi1_other_headers oth;
 		} l;
-		struct qib_other_headers oth;
+		struct hfi1_other_headers oth;
 	} u;
 } __packed;
 
@@ -243,32 +243,32 @@ struct ahg_ib_header {
 	u16 tx_flags;
 	u8 ahgcount;
 	u8 ahgidx;
-	struct qib_ib_header ibh;
+	struct hfi1_ib_header ibh;
 };
 
-struct qib_pio_header {
+struct hfi1_pio_header {
 	__le64 pbc;
-	struct qib_ib_header hdr;
+	struct hfi1_ib_header hdr;
 } __packed;
 
 /*
  * used for force cacheline alignment for AHG
  */
 struct tx_pio_header {
-	struct qib_pio_header phdr;
+	struct hfi1_pio_header phdr;
 } ____cacheline_aligned;
 
 /*
- * There is one struct qib_mcast for each multicast GID.
+ * There is one struct hfi1_mcast for each multicast GID.
  * All attached QPs are then stored as a list of
- * struct qib_mcast_qp.
+ * struct hfi1_mcast_qp.
  */
-struct qib_mcast_qp {
+struct hfi1_mcast_qp {
 	struct list_head list;
-	struct qib_qp *qp;
+	struct hfi1_qp *qp;
 };
 
-struct qib_mcast {
+struct hfi1_mcast {
 	struct rb_node rb_node;
 	union ib_gid mgid;
 	struct list_head qp_list;
@@ -278,13 +278,13 @@ struct qib_mcast {
 };
 
 /* Protection domain */
-struct qib_pd {
+struct hfi1_pd {
 	struct ib_pd ibpd;
 	int user;               /* non-zero if created from user space */
 };
 
 /* Address Handle */
-struct qib_ah {
+struct hfi1_ah {
 	struct ib_ah ibah;
 	struct ib_ah_attr attr;
 	atomic_t refcount;
@@ -295,7 +295,7 @@ struct qib_ah {
  * when an mmap() request is made.  The vm_area_struct then uses
  * this as its vm_private_data.
  */
-struct qib_mmap_info {
+struct hfi1_mmap_info {
 	struct list_head pending_mmaps;
 	struct ib_ucontext *context;
 	void *obj;
@@ -309,7 +309,7 @@ struct qib_mmap_info {
  * and completion queue entries as a single memory allocation so
  * it can be mmap'ed into user space.
  */
-struct qib_cq_wc {
+struct hfi1_cq_wc {
 	u32 head;               /* index of next entry to fill */
 	u32 tail;               /* index of next ib_poll_cq() entry */
 	union {
@@ -322,34 +322,34 @@ struct qib_cq_wc {
 /*
  * The completion queue structure.
  */
-struct qib_cq {
+struct hfi1_cq {
 	struct ib_cq ibcq;
 	struct kthread_work comptask;
 	struct hfi_devdata *dd;
 	spinlock_t lock; /* protect changes in this struct */
 	u8 notify;
 	u8 triggered;
-	struct qib_cq_wc *queue;
-	struct qib_mmap_info *ip;
+	struct hfi1_cq_wc *queue;
+	struct hfi1_mmap_info *ip;
 };
 
 /*
  * A segment is a linear region of low physical memory.
  * Used by the verbs layer.
  */
-struct qib_seg {
+struct hfi1_seg {
 	void *vaddr;
 	size_t length;
 };
 
 /* The number of qib_segs that fit in a page. */
-#define QIB_SEGSZ     (PAGE_SIZE / sizeof(struct qib_seg))
+#define QIB_SEGSZ     (PAGE_SIZE / sizeof(struct hfi1_seg))
 
-struct qib_segarray {
-	struct qib_seg segs[QIB_SEGSZ];
+struct hfi1_segarray {
+	struct hfi1_seg segs[QIB_SEGSZ];
 };
 
-struct qib_mregion {
+struct hfi1_mregion {
 	struct ib_pd *pd;       /* shares refcnt of ibmr.pd */
 	u64 user_base;          /* User's address for this region */
 	u64 iova;               /* IB start address of this region */
@@ -363,15 +363,15 @@ struct qib_mregion {
 	u8  lkey_published;     /* in global table */
 	struct completion comp; /* complete when refcount goes to zero */
 	atomic_t refcount;
-	struct qib_segarray *map[0];    /* the segments */
+	struct hfi1_segarray *map[0];    /* the segments */
 };
 
 /*
  * These keep track of the copy progress within a memory region.
  * Used by the verbs layer.
  */
-struct qib_sge {
-	struct qib_mregion *mr;
+struct hfi1_sge {
+	struct hfi1_mregion *mr;
 	void *vaddr;            /* kernel virtual address of segment */
 	u32 sge_length;         /* length of the SGE */
 	u32 length;             /* remaining length of the segment */
@@ -380,10 +380,10 @@ struct qib_sge {
 };
 
 /* Memory region */
-struct qib_mr {
+struct hfi1_mr {
 	struct ib_mr ibmr;
 	struct ib_umem *umem;
-	struct qib_mregion mr;  /* must be last */
+	struct hfi1_mregion mr;  /* must be last */
 };
 
 /*
@@ -391,13 +391,13 @@ struct qib_mr {
  * The size of the sg_list is determined when the QP is created and stored
  * in qp->s_max_sge.
  */
-struct qib_swqe {
+struct hfi1_swqe {
 	struct ib_send_wr wr;   /* don't use wr.sg_list */
 	u32 psn;                /* first packet sequence number */
 	u32 lpsn;               /* last packet sequence number */
 	u32 ssn;                /* send sequence number */
 	u32 length;             /* total length of data in sg_list */
-	struct qib_sge sg_list[0];
+	struct hfi1_sge sg_list[0];
 };
 
 /*
@@ -405,7 +405,7 @@ struct qib_swqe {
  * The size of the sg_list is determined when the QP (or SRQ) is created
  * and stored in qp->r_rq.max_sge (or srq->rq.max_sge).
  */
-struct qib_rwqe {
+struct hfi1_rwqe {
 	u64 wr_id;
 	u8 num_sge;
 	struct ib_sge sg_list[0];
@@ -419,31 +419,31 @@ struct qib_rwqe {
  * just index into the array to get the N'th element;
  * use get_rwqe_ptr() instead.
  */
-struct qib_rwq {
+struct hfi1_rwq {
 	u32 head;               /* new work requests posted to the head */
 	u32 tail;               /* receives pull requests from here. */
-	struct qib_rwqe wq[0];
+	struct hfi1_rwqe wq[0];
 };
 
-struct qib_rq {
-	struct qib_rwq *wq;
+struct hfi1_rq {
+	struct hfi1_rwq *wq;
 	u32 size;               /* size of RWQE array */
 	u8 max_sge;
 	/* protect changes in this struct */
 	spinlock_t lock ____cacheline_aligned_in_smp;
 };
 
-struct qib_srq {
+struct hfi1_srq {
 	struct ib_srq ibsrq;
-	struct qib_rq rq;
-	struct qib_mmap_info *ip;
+	struct hfi1_rq rq;
+	struct hfi1_mmap_info *ip;
 	/* send signal when number of RWQEs < limit */
 	u32 limit;
 };
 
-struct qib_sge_state {
-	struct qib_sge *sg_list;      /* next SGE to be used if any */
-	struct qib_sge sge;   /* progress state for the current SGE */
+struct hfi1_sge_state {
+	struct hfi1_sge *sg_list;      /* next SGE to be used if any */
+	struct hfi1_sge sge;   /* progress state for the current SGE */
 	u32 total_len;
 	u8 num_sge;
 };
@@ -452,13 +452,13 @@ struct qib_sge_state {
  * This structure holds the information that the send tasklet needs
  * to send a RDMA read response or atomic operation.
  */
-struct qib_ack_entry {
+struct hfi1_ack_entry {
 	u8 opcode;
 	u8 sent;
 	u32 psn;
 	u32 lpsn;
 	union {
-		struct qib_sge rdma_sge;
+		struct hfi1_sge rdma_sge;
 		u64 atomic_data;
 	};
 };
@@ -471,14 +471,14 @@ struct qib_ack_entry {
  * Common variables are protected by both r_rq.lock and s_lock in that order
  * which only happens in modify_qp() or changing the QP 'state'.
  */
-struct qib_qp {
+struct hfi1_qp {
 	struct ib_qp ibqp;
 	/* read mostly fields above and below */
 	struct ib_ah_attr remote_ah_attr;
 	struct ib_ah_attr alt_ah_attr;
-	struct qib_qp __rcu *next;            /* link list for QPN hash table */
-	struct qib_swqe *s_wq;  /* send work queue */
-	struct qib_mmap_info *ip;
+	struct hfi1_qp __rcu *next;           /* link list for QPN hash table */
+	struct hfi1_swqe *s_wq;  /* send work queue */
+	struct hfi1_mmap_info *ip;
 	struct ahg_ib_header *s_hdr;     /* next packet header to send */
 	u8 s_sc;			/* SC[0..4] for next packet */
 	unsigned long timeout_jiffies;  /* computed from timeout */
@@ -514,9 +514,9 @@ struct qib_qp {
 	wait_queue_head_t wait;
 
 
-	struct qib_ack_entry s_ack_queue[QIB_MAX_RDMA_ATOMIC + 1]
+	struct hfi1_ack_entry s_ack_queue[QIB_MAX_RDMA_ATOMIC + 1]
 		____cacheline_aligned_in_smp;
-	struct qib_sge_state s_rdma_read_sge;
+	struct hfi1_sge_state s_rdma_read_sge;
 
 	spinlock_t r_lock ____cacheline_aligned_in_smp;      /* used for APM */
 	unsigned long r_aflags;
@@ -533,16 +533,16 @@ struct qib_qp {
 
 	struct list_head rspwait;       /* link for waititing to respond */
 
-	struct qib_sge_state r_sge;     /* current receive data */
-	struct qib_rq r_rq;             /* receive work queue */
+	struct hfi1_sge_state r_sge;     /* current receive data */
+	struct hfi1_rq r_rq;             /* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
 	unsigned long s_aflags;
-	struct qib_sge_state *s_cur_sge;
+	struct hfi1_sge_state *s_cur_sge;
 	u32 s_flags;
-	struct qib_swqe *s_wqe;
-	struct qib_sge_state s_sge;     /* current send request data */
-	struct qib_mregion *s_rdma_mr;
+	struct hfi1_swqe *s_wqe;
+	struct hfi1_sge_state s_sge;     /* current send request data */
+	struct hfi1_mregion *s_rdma_mr;
 	struct sdma_engine *s_sde; /* current sde */
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
@@ -573,12 +573,12 @@ struct qib_qp {
 	u8 s_num_rd_atomic;     /* number of RDMA read/atomic pending */
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
 
-	struct qib_sge_state s_ack_rdma_sge;
+	struct hfi1_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
 
 	struct iowait s_iowait;
 
-	struct qib_sge r_sg_list[0] /* verified SGEs */
+	struct hfi1_sge r_sg_list[0] /* verified SGEs */
 		____cacheline_aligned_in_smp;
 };
 
@@ -664,36 +664,36 @@ struct qib_qp {
 #define QIB_PSN_CREDIT  16
 
 /*
- * Since struct qib_swqe is not a fixed size, we can't simply index into
- * struct qib_qp.s_wq.  This function does the array index computation.
+ * Since struct hfi1_swqe is not a fixed size, we can't simply index into
+ * struct hfi1_qp.s_wq.  This function does the array index computation.
  */
-static inline struct qib_swqe *get_swqe_ptr(struct qib_qp *qp,
-					      unsigned n)
+static inline struct hfi1_swqe *get_swqe_ptr(struct hfi1_qp *qp,
+					     unsigned n)
 {
-	return (struct qib_swqe *)((char *)qp->s_wq +
-				     (sizeof(struct qib_swqe) +
+	return (struct hfi1_swqe *)((char *)qp->s_wq +
+				     (sizeof(struct hfi1_swqe) +
 				      qp->s_max_sge *
-				      sizeof(struct qib_sge)) * n);
+				      sizeof(struct hfi1_sge)) * n);
 }
 
 /*
- * Since struct qib_rwqe is not a fixed size, we can't simply index into
- * struct qib_rwq.wq.  This function does the array index computation.
+ * Since struct hfi1_rwqe is not a fixed size, we can't simply index into
+ * struct hfi1_rwq.wq.  This function does the array index computation.
  */
-static inline struct qib_rwqe *get_rwqe_ptr(struct qib_rq *rq, unsigned n)
+static inline struct hfi1_rwqe *get_rwqe_ptr(struct hfi1_rq *rq, unsigned n)
 {
-	return (struct qib_rwqe *)
+	return (struct hfi1_rwqe *)
 		((char *) rq->wq->wq +
-		 (sizeof(struct qib_rwqe) +
+		 (sizeof(struct hfi1_rwqe) +
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
 
-struct qib_lkey_table {
+struct hfi1_lkey_table {
 	spinlock_t lock; /* protect changes in this struct */
 	u32 next;               /* next unused index (speeds search) */
 	u32 gen;                /* generation count */
 	u32 max;                /* size of the table */
-	struct qib_mregion __rcu **table;
+	struct hfi1_mregion __rcu **table;
 };
 
 struct hfi_opcode_stats {
@@ -715,12 +715,12 @@ static inline void inc_opstats(
 #endif
 }
 
-struct qib_ibport {
-	struct qib_qp __rcu *qp0;
-	struct qib_qp __rcu *qp1;
+struct hfi1_ibport {
+	struct hfi1_qp __rcu *qp0;
+	struct hfi1_qp __rcu *qp1;
 	struct ib_mad_agent *send_agent;	/* agent for SMI (traps) */
-	struct qib_ah *sm_ah;
-	struct qib_ah *smi_ah;
+	struct hfi1_ah *sm_ah;
+	struct hfi1_ah *smi_ah;
 	struct rb_root mcast_tree;
 	spinlock_t lock;		/* protect changes in this struct */
 
@@ -774,17 +774,17 @@ struct qib_ibport {
 
 
 struct hfi_qp_ibdev;
-struct qib_ibdev {
+struct hfi1_ibdev {
 	struct ib_device ibdev;
 	struct list_head pending_mmaps;
 	spinlock_t mmap_offset_lock; /* protect mmap_offset */
 	u32 mmap_offset;
-	struct qib_mregion __rcu *dma_mr;
+	struct hfi1_mregion __rcu *dma_mr;
 
 	struct hfi_qp_ibdev *qp_dev;
 
 	/* QP numbers are shared by all IB ports */
-	struct qib_lkey_table lk_table;
+	struct hfi1_lkey_table lk_table;
 	struct list_head txwait;        /* list for wait qib_verbs_txreq */
 	struct list_head memwait;       /* list for wait kernel memory */
 	struct list_head txreq_free;
@@ -818,7 +818,7 @@ struct qib_ibdev {
 #endif
 };
 
-struct qib_verbs_counters {
+struct hfi1_verbs_counters {
 	u64 symbol_error_counter;
 	u64 link_error_recovery_counter;
 	u64 link_downed_counter;
@@ -834,46 +834,46 @@ struct qib_verbs_counters {
 	u32 vl15_dropped;
 };
 
-static inline struct qib_mr *to_imr(struct ib_mr *ibmr)
+static inline struct hfi1_mr *to_imr(struct ib_mr *ibmr)
 {
-	return container_of(ibmr, struct qib_mr, ibmr);
+	return container_of(ibmr, struct hfi1_mr, ibmr);
 }
 
-static inline struct qib_pd *to_ipd(struct ib_pd *ibpd)
+static inline struct hfi1_pd *to_ipd(struct ib_pd *ibpd)
 {
-	return container_of(ibpd, struct qib_pd, ibpd);
+	return container_of(ibpd, struct hfi1_pd, ibpd);
 }
 
-static inline struct qib_ah *to_iah(struct ib_ah *ibah)
+static inline struct hfi1_ah *to_iah(struct ib_ah *ibah)
 {
-	return container_of(ibah, struct qib_ah, ibah);
+	return container_of(ibah, struct hfi1_ah, ibah);
 }
 
-static inline struct qib_cq *to_icq(struct ib_cq *ibcq)
+static inline struct hfi1_cq *to_icq(struct ib_cq *ibcq)
 {
-	return container_of(ibcq, struct qib_cq, ibcq);
+	return container_of(ibcq, struct hfi1_cq, ibcq);
 }
 
-static inline struct qib_srq *to_isrq(struct ib_srq *ibsrq)
+static inline struct hfi1_srq *to_isrq(struct ib_srq *ibsrq)
 {
-	return container_of(ibsrq, struct qib_srq, ibsrq);
+	return container_of(ibsrq, struct hfi1_srq, ibsrq);
 }
 
-static inline struct qib_qp *to_iqp(struct ib_qp *ibqp)
+static inline struct hfi1_qp *to_iqp(struct ib_qp *ibqp)
 {
-	return container_of(ibqp, struct qib_qp, ibqp);
+	return container_of(ibqp, struct hfi1_qp, ibqp);
 }
 
-static inline struct qib_ibdev *to_idev(struct ib_device *ibdev)
+static inline struct hfi1_ibdev *to_idev(struct ib_device *ibdev)
 {
-	return container_of(ibdev, struct qib_ibdev, ibdev);
+	return container_of(ibdev, struct hfi1_ibdev, ibdev);
 }
 
 /*
  * Send if not busy or waiting for I/O and either
  * a RC response is pending or we can process send work requests.
  */
-static inline int qib_send_ok(struct qib_qp *qp)
+static inline int qib_send_ok(struct hfi1_qp *qp)
 {
 	return !(qp->s_flags & (QIB_S_BUSY | QIB_S_ANY_WAIT_IO)) &&
 		(qp->s_hdrwords || (qp->s_flags & QIB_S_RESP_PENDING) ||
@@ -883,17 +883,17 @@ static inline int qib_send_ok(struct qib_qp *qp)
 /*
  * This must be called with s_lock held.
  */
-void hfi1_schedule_send(struct qib_qp *qp);
-void hfi1_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
-		   u32 qp1, u32 qp2, __be16 lid1, __be16 lid2);
-void hfi1_cap_mask_chg(struct qib_ibport *ibp);
-void hfi1_sys_guid_chg(struct qib_ibport *ibp);
-void hfi1_node_desc_chg(struct qib_ibport *ibp);
+void hfi1_schedule_send(struct hfi1_qp *qp);
+void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
+		    u32 qp1, u32 qp2, __be16 lid1, __be16 lid2);
+void hfi1_cap_mask_chg(struct hfi1_ibport *ibp);
+void hfi1_sys_guid_chg(struct hfi1_ibport *ibp);
+void hfi1_node_desc_chg(struct hfi1_ibport *ibp);
 int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
-		    struct ib_wc *in_wc, struct ib_grh *in_grh,
-		    struct ib_mad *in_mad, struct ib_mad *out_mad);
-int hfi1_create_agents(struct qib_ibdev *dev);
-void hfi1_free_agents(struct qib_ibdev *dev);
+		     struct ib_wc *in_wc, struct ib_grh *in_grh,
+		     struct ib_mad *in_mad, struct ib_mad *out_mad);
+int hfi1_create_agents(struct hfi1_ibdev *dev);
+void hfi1_free_agents(struct hfi1_ibdev *dev);
 
 /*
  * The PSN_MASK and PSN_SHIFT allow for
@@ -947,20 +947,20 @@ static inline u32 delta_psn(u32 a, u32 b)
 	return (((int)a - (int)b) << PSN_SHIFT) >> PSN_SHIFT;
 }
 
-struct qib_mcast *hfi1_mcast_find(struct qib_ibport *ibp, union ib_gid *mgid);
+struct hfi1_mcast *hfi1_mcast_find(struct hfi1_ibport *ibp, union ib_gid *mgid);
 
-int qib_snapshot_counters(struct qib_pportdata *ppd, u64 *swords,
+int qib_snapshot_counters(struct hfi1_pportdata *ppd, u64 *swords,
 			  u64 *rwords, u64 *spkts, u64 *rpkts,
 			  u64 *xmit_wait);
 
-int qib_get_counters(struct qib_pportdata *ppd,
-		     struct qib_verbs_counters *cntrs);
+int qib_get_counters(struct hfi1_pportdata *ppd,
+		     struct hfi1_verbs_counters *cntrs);
 
 int hfi1_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
 int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
-int hfi1_mcast_tree_empty(struct qib_ibport *ibp);
+int hfi1_mcast_tree_empty(struct hfi1_ibport *ibp);
 
 unsigned qib_pkt_delay(u32 plen, u8 snd_mult, u8 rcv_mult);
 
@@ -970,65 +970,65 @@ void qib_verbs_sdma_desc_avail(struct sdma_engine *engine, unsigned avail);
 struct verbs_txreq;
 void hfi1_put_txreq(struct verbs_txreq *tx);
 
-int hfi1_verbs_send(struct qib_qp *qp, struct ahg_ib_header *ahdr,
-		   u32 hdrwords, struct qib_sge_state *ss, u32 len);
+int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
+		    u32 hdrwords, struct hfi1_sge_state *ss, u32 len);
 
-void hfi1_copy_sge(struct qib_sge_state *ss, void *data, u32 length,
-		  int release);
+void hfi1_copy_sge(struct hfi1_sge_state *ss, void *data, u32 length,
+		   int release);
 
-void hfi1_skip_sge(struct qib_sge_state *ss, u32 length, int release);
+void hfi1_skip_sge(struct hfi1_sge_state *ss, u32 length, int release);
 
-void hfi1_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
+void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
+		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
 
-void hfi1_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
-		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
+void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
+		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
 
 void qib_rc_hdrerr(
-	struct qib_ctxtdata *rcd,
-	struct qib_ib_header *hdr,
+	struct hfi1_ctxtdata *rcd,
+	struct hfi1_ib_header *hdr,
 	u32 rcv_flags,
-	struct qib_qp *qp);
+	struct hfi1_qp *qp);
 
 u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 
 int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 
-struct ib_ah *hfi1_create_qp0_ah(struct qib_ibport *ibp, u16 dlid);
+struct ib_ah *hfi1_create_qp0_ah(struct hfi1_ibport *ibp, u16 dlid);
 
 void hfi1_rc_rnr_retry(unsigned long arg);
 
-void hfi1_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr);
+void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr);
 
-void hfi1_rc_error(struct qib_qp *qp, enum ib_wc_status err);
+void hfi1_rc_error(struct hfi1_qp *qp, enum ib_wc_status err);
 
-int qib_post_ud_send(struct qib_qp *qp, struct ib_send_wr *wr);
+int qib_post_ud_send(struct hfi1_qp *qp, struct ib_send_wr *wr);
 
-void hfi1_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp);
+void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
+		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
 
-int wfr_lookup_pkey_idx(struct qib_ibport *ibp, u16 pkey);
+int wfr_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey);
 
-int hfi1_alloc_lkey(struct qib_mregion *mr, int dma_region);
+int hfi1_alloc_lkey(struct hfi1_mregion *mr, int dma_region);
 
-void hfi1_free_lkey(struct qib_mregion *mr);
+void hfi1_free_lkey(struct hfi1_mregion *mr);
 
-int hfi1_lkey_ok(struct qib_lkey_table *rkt, struct qib_pd *pd,
-		struct qib_sge *isge, struct ib_sge *sge, int acc);
+int hfi1_lkey_ok(struct hfi1_lkey_table *rkt, struct hfi1_pd *pd,
+		 struct hfi1_sge *isge, struct ib_sge *sge, int acc);
 
-int hfi1_rkey_ok(struct qib_qp *qp, struct qib_sge *sge,
-		u32 len, u64 vaddr, u32 rkey, int acc);
+int hfi1_rkey_ok(struct hfi1_qp *qp, struct hfi1_sge *sge,
+		 u32 len, u64 vaddr, u32 rkey, int acc);
 
 int hfi1_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
-			 struct ib_recv_wr **bad_wr);
+			  struct ib_recv_wr **bad_wr);
 
 struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
-			      struct ib_srq_init_attr *srq_init_attr,
-			      struct ib_udata *udata);
+			       struct ib_srq_init_attr *srq_init_attr,
+			       struct ib_udata *udata);
 
 int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
-		   enum ib_srq_attr_mask attr_mask,
-		   struct ib_udata *udata);
+		    enum ib_srq_attr_mask attr_mask,
+		    struct ib_udata *udata);
 
 int hfi1_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr);
 
@@ -1038,13 +1038,13 @@ int hfi1_cq_init(struct hfi_devdata *dd);
 
 void hfi1_cq_exit(struct hfi_devdata *dd);
 
-void hfi1_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int sig);
+void hfi1_cq_enter(struct hfi1_cq *cq, struct ib_wc *entry, int sig);
 
 int hfi1_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
 
 struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
-			    int comp_vector, struct ib_ucontext *context,
-			    struct ib_udata *udata);
+			     int comp_vector, struct ib_ucontext *context,
+			     struct ib_udata *udata);
 
 int hfi1_destroy_cq(struct ib_cq *ibcq);
 
@@ -1057,12 +1057,12 @@ int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
 struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc);
 
 struct ib_mr *hfi1_reg_phys_mr(struct ib_pd *pd,
-			      struct ib_phys_buf *buffer_list,
-			      int num_phys_buf, int acc, u64 *iova_start);
+			       struct ib_phys_buf *buffer_list,
+			       int num_phys_buf, int acc, u64 *iova_start);
 
 struct ib_mr *hfi1_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
-			      u64 virt_addr, int mr_access_flags,
-			      struct ib_udata *udata);
+			       u64 virt_addr, int mr_access_flags,
+			       struct ib_udata *udata);
 
 int hfi1_dereg_mr(struct ib_mr *ibmr);
 
@@ -1073,30 +1073,30 @@ struct ib_fast_reg_page_list *hfi1_alloc_fast_reg_page_list(
 
 void hfi1_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl);
 
-int hfi1_fast_reg_mr(struct qib_qp *qp, struct ib_send_wr *wr);
+int hfi1_fast_reg_mr(struct hfi1_qp *qp, struct ib_send_wr *wr);
 
 struct ib_fmr *hfi1_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
-			     struct ib_fmr_attr *fmr_attr);
+			      struct ib_fmr_attr *fmr_attr);
 
 int hfi1_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
-		     int list_len, u64 iova);
+		      int list_len, u64 iova);
 
 int hfi1_unmap_fmr(struct list_head *fmr_list);
 
 int hfi1_dealloc_fmr(struct ib_fmr *ibfmr);
 
-static inline void qib_get_mr(struct qib_mregion *mr)
+static inline void qib_get_mr(struct hfi1_mregion *mr)
 {
 	atomic_inc(&mr->refcount);
 }
 
-static inline void qib_put_mr(struct qib_mregion *mr)
+static inline void qib_put_mr(struct hfi1_mregion *mr)
 {
 	if (unlikely(atomic_dec_and_test(&mr->refcount)))
 		complete(&mr->comp);
 }
 
-static inline void qib_put_ss(struct qib_sge_state *ss)
+static inline void qib_put_ss(struct hfi1_sge_state *ss)
 {
 	while (ss->num_sge) {
 		qib_put_mr(ss->sge.mr);
@@ -1105,45 +1105,44 @@ static inline void qib_put_ss(struct qib_sge_state *ss)
 	}
 }
 
-
 void hfi1_release_mmap_info(struct kref *ref);
 
-struct qib_mmap_info *hfi1_create_mmap_info(struct qib_ibdev *dev, u32 size,
-					   struct ib_ucontext *context,
-					   void *obj);
+struct hfi1_mmap_info *hfi1_create_mmap_info(struct hfi1_ibdev *dev, u32 size,
+					     struct ib_ucontext *context,
+					     void *obj);
 
-void hfi1_update_mmap_info(struct qib_ibdev *dev, struct qib_mmap_info *ip,
-			  u32 size, void *obj);
+void hfi1_update_mmap_info(struct hfi1_ibdev *dev, struct hfi1_mmap_info *ip,
+			   u32 size, void *obj);
 
 int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 
-int hfi1_get_rwqe(struct qib_qp *qp, int wr_id_only);
+int hfi1_get_rwqe(struct hfi1_qp *qp, int wr_id_only);
 
-void hfi1_migrate_qp(struct qib_qp *qp);
+void hfi1_migrate_qp(struct hfi1_qp *qp);
 
-int hfi1_ruc_check_hdr(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		      int has_grh, struct qib_qp *qp, u32 bth0);
+int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
+		       int has_grh, struct hfi1_qp *qp, u32 bth0);
 
-u32 hfi1_make_grh(struct qib_ibport *ibp, struct ib_grh *hdr,
-		 struct ib_global_route *grh, u32 hwords, u32 nwords);
+u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
+		  struct ib_global_route *grh, u32 hwords, u32 nwords);
 
-void clear_ahg(struct qib_qp *qp);
+void clear_ahg(struct hfi1_qp *qp);
 
-void hfi1_make_ruc_header(struct qib_qp *qp, struct qib_other_headers *ohdr,
-			 u32 bth0, u32 bth2, int middle);
+void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
+			  u32 bth0, u32 bth2, int middle);
 
 void hfi1_do_send(struct work_struct *work);
 
-void hfi1_send_complete(struct qib_qp *qp, struct qib_swqe *wqe,
-		       enum ib_wc_status status);
+void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
+			enum ib_wc_status status);
 
-void hfi1_send_rc_ack(struct qib_ctxtdata *, struct qib_qp *qp, int is_fecn);
+void hfi1_send_rc_ack(struct hfi1_ctxtdata *, struct hfi1_qp *qp, int is_fecn);
 
-int hfi1_make_rc_req(struct qib_qp *qp);
+int hfi1_make_rc_req(struct hfi1_qp *qp);
 
-int hfi1_make_uc_req(struct qib_qp *qp);
+int hfi1_make_uc_req(struct hfi1_qp *qp);
 
-int hfi1_make_ud_req(struct qib_qp *qp);
+int hfi1_make_ud_req(struct hfi1_qp *qp);
 
 int hfi1_register_ib_device(struct hfi_devdata *);
 
@@ -1153,17 +1152,17 @@ void hfi1_ib_rcv(struct hfi_packet *packet);
 
 unsigned hfi1_get_npkeys(struct hfi_devdata *);
 
-unsigned hfi1_get_pkey(struct qib_ibport *, unsigned);
+unsigned hfi1_get_pkey(struct hfi1_ibport *, unsigned);
 
-int hfi1_verbs_send_dma(struct qib_qp *qp, struct ahg_ib_header *hdr,
-			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			      u32 plen, u32 dwords, u64 pbc);
+int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *hdr,
+			u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
+			u32 plen, u32 dwords, u64 pbc);
 
-int hfi1_verbs_send_pio(struct qib_qp *qp, struct ahg_ib_header *hdr,
-			      u32 hdrwords, struct qib_sge_state *ss, u32 len,
-			      u32 plen, u32 dwords, u64 pbc);
+int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *hdr,
+			u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
+			u32 plen, u32 dwords, u64 pbc);
 
-struct send_context *qp_to_send_context(struct qib_qp *qp, u8 sc5);
+struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5);
 
 extern const enum ib_wc_opcode ib_qib_wc_opcode[];
 

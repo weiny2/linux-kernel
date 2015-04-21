@@ -370,7 +370,7 @@ static int qib_twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
  * be read.
  */
 int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
-		    void *buffer, int len)
+		     void *buffer, int len)
 {
 	int ret;
 	u8 *bp = buffer;
@@ -448,7 +448,7 @@ bail:
  * be written.
  */
 int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
-		    const void *buffer, int len)
+		     const void *buffer, int len)
 {
 	int sub_len;
 	const u8 *bp = buffer;

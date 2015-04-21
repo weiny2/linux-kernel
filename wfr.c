@@ -992,17 +992,18 @@ static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_egress_err(struct hfi_devdata *dd, u32 unused, u64 reg);
 static void handle_txe_err(struct hfi_devdata *dd, u32 unused, u64 reg);
-static void set_partition_keys(struct qib_pportdata *);
+static void set_partition_keys(struct hfi1_pportdata *);
 static const char *link_state_name(u32 state);
-static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state);
+static const char *link_state_reason_name(struct hfi1_pportdata *ppd,
+					  u32 state);
 static int do_8051_command(struct hfi_devdata *dd, u32 type, u64 in_data,
 				u64 *out_data);
 static int read_idle_sma(struct hfi_devdata *dd, u64 *data);
 static int thermal_init(struct hfi_devdata *dd);
 
 static u32 read_physical_state(struct hfi_devdata *dd);
-static int wait_logical_linkstate(struct qib_pportdata *ppd, u32 state,
-					int msecs);
+static int wait_logical_linkstate(struct hfi1_pportdata *ppd, u32 state,
+				  int msecs);
 static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc);
 static void handle_temp_err(struct hfi_devdata *);
 
@@ -1320,7 +1321,7 @@ static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
 static u64 port_access_u32_csr(const struct cntr_entry *entry, void *context,
 			     int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
 	BUG_ON(vl != CNTR_INVALID_VL);
 	return read_write_csr(ppd->dd, entry->csr, mode, data);
@@ -1329,7 +1330,7 @@ static u64 port_access_u32_csr(const struct cntr_entry *entry, void *context,
 static u64 port_access_u64_csr(const struct cntr_entry *entry,
 			     void *context, int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 	u64 val;
 	u64 csr = entry->csr;
 
@@ -1367,7 +1368,7 @@ static inline u64 read_write_sw(struct hfi_devdata *dd, u64 *cntr, int mode,
 static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
 			       int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
 	BUG_ON(vl != CNTR_INVALID_VL);
 	return read_write_sw(ppd->dd, &ppd->link_downed, mode, data);
@@ -1376,7 +1377,7 @@ static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
 static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
 			       int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
 	BUG_ON(vl != CNTR_INVALID_VL);
 	return read_write_sw(ppd->dd, &ppd->link_up, mode, data);
@@ -1385,7 +1386,7 @@ static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
 static u64 access_sw_xmit_discards(const struct cntr_entry *entry,
 				    void *context, int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
 	if (vl != CNTR_INVALID_VL)
 		return 0;
@@ -1396,7 +1397,7 @@ static u64 access_sw_xmit_discards(const struct cntr_entry *entry,
 static u64 access_xmit_constraint_errs(const struct cntr_entry *entry,
 				     void *context, int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
 	if (vl != CNTR_INVALID_VL)
 		return 0;
@@ -1408,7 +1409,7 @@ static u64 access_xmit_constraint_errs(const struct cntr_entry *entry,
 static u64 access_rcv_constraint_errs(const struct cntr_entry *entry,
 				     void *context, int vl, int mode, u64 data)
 {
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
 	if (vl != CNTR_INVALID_VL)
 		return 0;
@@ -1466,7 +1467,7 @@ static u64 access_sw_cpu_intr(const struct cntr_entry *entry,
 static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
 			      void *context, int vl, int mode, u64 data)      \
 {									      \
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;	      \
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;	      \
 	return read_write_cpu(ppd->dd, &ppd->ibport_data.z_ ##cntr,	      \
 			      ppd->ibport_data.cntr, vl,		      \
 			      mode, data);				      \
@@ -1479,7 +1480,7 @@ def_access_sw_cpu(rc_qacks);
 static u64 access_ibp_##cntr(const struct cntr_entry *entry,		      \
 				void *context, int vl, int mode, u64 data)    \
 {									      \
-	struct qib_pportdata *ppd = (struct qib_pportdata *)context;	      \
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;	      \
 									      \
 	if (vl != CNTR_INVALID_VL)					      \
 		return 0;						      \
@@ -2081,7 +2082,7 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 static void update_rcverr_timer(unsigned long opaque)
 {
 	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
-	struct qib_pportdata *ppd = dd->pport;
+	struct hfi1_pportdata *ppd = dd->pport;
 	u32 cur_ovfl_cnt = read_dev_cntr(dd, C_RCV_OVF, CNTR_INVALID_VL);
 
 	if (dd->rcv_ovfl_cnt < cur_ovfl_cnt &&
@@ -2165,7 +2166,7 @@ static void handle_sdma_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 static void count_port_inactive(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd = dd->pport;
+	struct hfi1_pportdata *ppd = dd->pport;
 
 	if (ppd->port_xmit_discards < ~(u64)0)
 		ppd->port_xmit_discards++;
@@ -2182,7 +2183,7 @@ static void count_port_inactive(struct hfi_devdata *dd)
  */
 static void handle_send_egress_err_info(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd = dd->pport;
+	struct hfi1_pportdata *ppd = dd->pport;
 	u64 src = read_csr(dd, WFR_SEND_EGRESS_ERR_SOURCE); /* read first */
 	u64 info = read_csr(dd, WFR_SEND_EGRESS_ERR_INFO);
 	char buf[96];
@@ -2458,7 +2459,7 @@ static void is_various_int(struct hfi_devdata *dd, unsigned int source)
 static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
 {
 	/* source is always zero */
-	struct qib_pportdata *ppd = dd->pport;
+	struct hfi1_pportdata *ppd = dd->pport;
 	unsigned long flags;
 	u64 qsfp_int_mgmt = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
 
@@ -2826,7 +2827,7 @@ static u32 vau_to_au(u8 vau)
 	return 8 * (1 << vau);
 }
 
-static void set_linkup_defaults(struct qib_pportdata *ppd)
+static void set_linkup_defaults(struct hfi1_pportdata *ppd)
 {
 	ppd->sm_trap_qp = 0x0;
 	ppd->sa_qp = 0x1;
@@ -2951,7 +2952,7 @@ static void adjust_lcb_for_fpga_serdes(struct hfi_devdata *dd)
  */
 void handle_sma_message(struct work_struct *work)
 {
-	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 							sma_message_work);
 	struct hfi_devdata *dd = ppd->dd;
 	u64 msg;
@@ -3007,7 +3008,7 @@ void handle_sma_message(struct work_struct *work)
 /*
  * Called from all interrupt handlers to start handling an SPC freeze.
  */
-void start_freeze_handling(struct qib_pportdata *ppd, int flags)
+void start_freeze_handling(struct hfi1_pportdata *ppd, int flags)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct send_context *sc;
@@ -3124,7 +3125,7 @@ static void rxe_kernel_unfreeze(struct hfi_devdata *dd)
  */
 void handle_freeze(struct work_struct *work)
 {
-	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								freeze_work);
 	struct hfi_devdata *dd = ppd->dd;
 
@@ -3202,7 +3203,7 @@ void handle_freeze(struct work_struct *work)
  */
 void handle_link_up(struct work_struct *work)
 {
-	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								link_up_work);
 	set_link_state(ppd, HLS_UP_INIT);
 
@@ -3228,7 +3229,7 @@ void handle_link_down(struct work_struct *work)
 {
 	u8 lcl_reason, neigh_reason = 0;
 	u64 reg;
-	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								link_down_work);
 	lcl_reason = 0;
 
@@ -3307,7 +3308,7 @@ static int lcb_to_port_ltp(int lcb_crc)
 	return port_ltp;
 }
 
-static int neigh_is_hfi(struct qib_pportdata *ppd)
+static int neigh_is_hfi(struct hfi1_pportdata *ppd)
 {
 	return (ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) == 0;
 }
@@ -3320,7 +3321,7 @@ static int neigh_is_hfi(struct qib_pportdata *ppd)
  * array element 1, and also that the port is not yet up when
  * add_full_mgmt_pkey() is invoked.
  */
-static void add_full_mgmt_pkey(struct qib_pportdata *ppd)
+static void add_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 
@@ -3464,7 +3465,7 @@ static void get_linkup_widths(struct hfi_devdata *dd, u16 *tx_width,
  * (the trigger for handle_verify_cap), so this is outside that routine
  * and should be called when the 8051 signals linkup.
  */
-void get_linkup_link_widths(struct qib_pportdata *ppd)
+void get_linkup_link_widths(struct hfi1_pportdata *ppd)
 {
 	u16 tx_width, rx_width;
 
@@ -3487,7 +3488,7 @@ void get_linkup_link_widths(struct qib_pportdata *ppd)
  */
 void handle_verify_cap(struct work_struct *work)
 {
-	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								link_vc_work);
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
@@ -3676,7 +3677,7 @@ void handle_verify_cap(struct work_struct *work)
  *
  * Called when the enabled policy changes or the active link widths change.
  */
-void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths)
+void apply_link_downgrade_policy(struct hfi1_pportdata *ppd, int refresh_widths)
 {
 	int skip = 1;
 	int do_bounce = 0;
@@ -3744,7 +3745,7 @@ void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths)
  */
 void handle_link_downgrade(struct work_struct *work)
 {
-	struct qib_pportdata *ppd = container_of(work, struct qib_pportdata,
+	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 							link_downgrade_work);
 
 	dd_dev_info(ppd->dd, "8051: Link width downgrade\n");
@@ -3777,7 +3778,7 @@ static char *dc8051_info_host_msg_string(char *buf, int buf_len, u64 flags)
 
 static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	struct qib_pportdata *ppd = dd->pport;
+	struct hfi1_pportdata *ppd = dd->pport;
 	u64 info, err, host_msg;
 	int queue_link_down = 0;
 	char buf[96];
@@ -3990,7 +3991,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	u64 info, hdr0, hdr1;
 	const char *extra;
 	char buf[96];
-	struct qib_pportdata *ppd = dd->pport;
+	struct hfi1_pportdata *ppd = dd->pport;
 	u8 lcl_reason = 0;
 	int do_bounce = 0;
 
@@ -4007,7 +4008,7 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 
 	if (reg & DCC_ERR_FLG_LINK_ERR_SMASK) {
-		struct qib_pportdata *ppd = dd->pport;
+		struct hfi1_pportdata *ppd = dd->pport;
 		/* this counter saturates at (2^32) - 1 */
 		if (ppd->link_downed < (u32)UINT_MAX)
 			ppd->link_downed++;
@@ -4222,7 +4223,7 @@ static void is_sdma_eng_int(struct hfi_devdata *dd, unsigned int source)
  */
 static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
 {
-	struct qib_ctxtdata *rcd;
+	struct hfi1_ctxtdata *rcd;
 	char *err_detail;
 
 	if (likely(source < dd->num_rcv_contexts)) {
@@ -4249,7 +4250,7 @@ static void is_rcv_avail_int(struct hfi_devdata *dd, unsigned int source)
  */
 static void is_rcv_urgent_int(struct hfi_devdata *dd, unsigned int source)
 {
-	struct qib_ctxtdata *rcd;
+	struct hfi1_ctxtdata *rcd;
 	char *err_detail;
 
 	if (likely(source < dd->num_rcv_contexts)) {
@@ -4433,7 +4434,7 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
  */
 static irqreturn_t receive_context_interrupt(int irq, void *data)
 {
-	struct qib_ctxtdata *rcd = data;
+	struct hfi1_ctxtdata *rcd = data;
 	struct hfi_devdata *dd = rcd->dd;
 
 	trace_hfi_receive_interrupt(dd, rcd->ctxt);
@@ -5113,7 +5114,7 @@ static u16 opa_to_vc_link_widths(u16 opa_widths)
 /*
  * Set link attributes before moving to polling.
  */
-static int set_local_link_attributes(struct qib_pportdata *ppd)
+static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u8 enable_lane_tx;
@@ -5178,7 +5179,7 @@ set_local_link_attributes_fail:
  * present or if unable to start polling.  Do not do anything if the
  * link is disabled.  Returns 0 if link is disabled or moved to polling
  */
-int start_link(struct qib_pportdata *ppd)
+int start_link(struct hfi1_pportdata *ppd)
 {
 	if (!ppd->link_enabled) {
 		dd_dev_info(ppd->dd,
@@ -5203,7 +5204,7 @@ int start_link(struct qib_pportdata *ppd)
 	return -EAGAIN;
 }
 
-static void reset_qsfp(struct qib_pportdata *ppd)
+static void reset_qsfp(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 mask, qsfp_mask;
@@ -5229,7 +5230,7 @@ static void reset_qsfp(struct qib_pportdata *ppd)
 		qsfp_mask);
 }
 
-static int handle_qsfp_error_conditions(struct qib_pportdata *ppd,
+static int handle_qsfp_error_conditions(struct hfi1_pportdata *ppd,
 					u8 *qsfp_interrupt_status)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -5338,7 +5339,7 @@ static int handle_qsfp_error_conditions(struct qib_pportdata *ppd,
 	return 0;
 }
 
-static int do_pre_lni_host_behaviors(struct qib_pportdata *ppd)
+static int do_pre_lni_host_behaviors(struct hfi1_pportdata *ppd)
 {
 	refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 
@@ -5348,7 +5349,7 @@ static int do_pre_lni_host_behaviors(struct qib_pportdata *ppd)
 	return 0;
 }
 
-static int do_qsfp_intr_fallback(struct qib_pportdata *ppd)
+static int do_qsfp_intr_fallback(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u8 qsfp_interrupt_status = 0;
@@ -5371,7 +5372,7 @@ static int do_qsfp_intr_fallback(struct qib_pportdata *ppd)
 static void qsfp_event(struct work_struct *work)
 {
 	struct qsfp_data *qd;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	struct hfi_devdata *dd;
 
 	qd = container_of(work, struct qsfp_data, qsfp_work);
@@ -5428,7 +5429,7 @@ static void qsfp_event(struct work_struct *work)
 	}
 }
 
-void init_qsfp(struct qib_pportdata *ppd)
+void init_qsfp(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 qsfp_mask;
@@ -5489,7 +5490,7 @@ void init_qsfp(struct qib_pportdata *ppd)
 	}
 }
 
-int bringup_serdes(struct qib_pportdata *ppd)
+int bringup_serdes(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 guid, reg;
@@ -5528,7 +5529,7 @@ int bringup_serdes(struct qib_pportdata *ppd)
 	return start_link(ppd);
 }
 
-void hfi1_quiet_serdes(struct qib_pportdata *ppd)
+void hfi1_quiet_serdes(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
@@ -5556,10 +5557,10 @@ void hfi1_quiet_serdes(struct qib_pportdata *ppd)
 
 static inline int init_cpu_counters(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int i;
 
-	ppd = (struct qib_pportdata *)(dd + 1);
+	ppd = (struct hfi1_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		ppd->ibport_data.rc_acks = NULL;
 		ppd->ibport_data.rc_qacks = NULL;
@@ -5629,7 +5630,7 @@ done:
 	return;
 }
 
-void hfi1_clear_tids(struct qib_ctxtdata *rcd)
+void hfi1_clear_tids(struct hfi1_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u32 i;
@@ -5644,20 +5645,20 @@ void hfi1_clear_tids(struct qib_ctxtdata *rcd)
 		hfi1_put_tid(dd, i, PT_INVALID, 0, 0);
 }
 
-int hfi1_get_base_kinfo(struct qib_ctxtdata *rcd,
-				  struct hfi_ctxt_info *kinfo)
+int hfi1_get_base_kinfo(struct hfi1_ctxtdata *rcd,
+			struct hfi_ctxt_info *kinfo)
 {
 	kinfo->runtime_flags = (HFI_MISC_GET() << HFI_CAP_USER_SHIFT) |
 		HFI_CAP_UGET(MASK) | HFI_CAP_KGET(K2U);
 	return 0;
 }
 
-struct qib_message_header *hfi1_get_msgheader(
+struct hfi1_message_header *hfi1_get_msgheader(
 				struct hfi_devdata *dd, __le32 *rhf_addr)
 {
 	u32 offset = rhf_hdrq_offset(rhf_to_cpu(rhf_addr));
 
-	return (struct qib_message_header *)
+	return (struct hfi1_message_header *)
 		(rhf_addr - dd->rhf_offset + offset);
 }
 
@@ -5693,7 +5694,7 @@ static const char *ib_cfg_name(int which)
 	return ib_cfg_name_strings[which];
 }
 
-int hfi1_get_ib_cfg(struct qib_pportdata *ppd, int which)
+int hfi1_get_ib_cfg(struct hfi1_pportdata *ppd, int which)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int val = 0;
@@ -5792,7 +5793,7 @@ u32 lrh_max_header_bytes(struct hfi_devdata *dd)
  * This routine changes all VL values except VL15, which it maintains at
  * the same value.
  */
-static void set_send_length(struct qib_pportdata *ppd)
+static void set_send_length(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u32 max_hb = lrh_max_header_bytes(dd), maxvlmtu = 0, dcmtu;
@@ -5836,7 +5837,7 @@ static void set_send_length(struct qib_pportdata *ppd)
 	write_csr(ppd->dd, DCC_CFG_PORT_CONFIG, len1);
 }
 
-static void set_lidlmc(struct qib_pportdata *ppd)
+static void set_lidlmc(struct hfi1_pportdata *ppd)
 {
 	int i;
 	u64 sreg = 0;
@@ -5903,7 +5904,7 @@ static int wait_phy_linkstate(struct hfi_devdata *dd, u32 state, u32 msecs)
  *
  * LinkDownReasons only set if transition succeeds.
  */
-static int goto_offline(struct qib_pportdata *ppd, u8 rem_reason)
+static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u32 pstate, previous_state;
@@ -6020,7 +6021,7 @@ static const char *link_state_name(u32 state)
 }
 
 /* return the link state reason name */
-static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state)
+static const char *link_state_reason_name(struct hfi1_pportdata *ppd, u32 state)
 {
 	if (state == HLS_UP_INIT) {
 		switch (ppd->linkinit_reason) {
@@ -6041,8 +6042,8 @@ static const char *link_state_reason_name(struct qib_pportdata *ppd, u32 state)
 	return "";
 }
 
-void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
-	u8 neigh_reason, u8 rem_reason)
+void set_link_down_reason(struct hfi1_pportdata *ppd, u8 lcl_reason,
+			  u8 neigh_reason, u8 rem_reason)
 {
 	if (ppd->local_link_down_reason.latest == 0 &&
 	    ppd->neigh_link_down_reason.latest == 0) {
@@ -6057,7 +6058,7 @@ void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
  *
  * Returns 0 on success, -errno on failure.
  */
-int set_link_state(struct qib_pportdata *ppd, u32 state)
+int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct ib_event event = {.device = NULL};
@@ -6322,7 +6323,7 @@ done:
 	return ret;
 }
 
-int hfi1_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val)
+int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 {
 	u64 reg;
 	int ret = 0;
@@ -6431,7 +6432,7 @@ static void get_vl_weights(struct hfi_devdata *dd, u32 target,
 	}
 }
 
-static int set_vl_weights(struct qib_pportdata *ppd, u32 target,
+static int set_vl_weights(struct hfi1_pportdata *ppd, u32 target,
 			  u32 size, struct ib_vl_weight_elem *vl)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -6932,7 +6933,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
  * table (in bytes) on success, and a negative error code on
  * failure.
  */
-int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
+int fm_get_table(struct hfi1_pportdata *ppd, int which, void *t)
 
 {
 	int size;
@@ -6983,7 +6984,7 @@ int fm_get_table(struct qib_pportdata *ppd, int which, void *t)
 /*
  * Write the given fabric manager table.
  */
-int fm_set_table(struct qib_pportdata *ppd, int which, void *t)
+int fm_set_table(struct hfi1_pportdata *ppd, int which, void *t)
 {
 	int ret = 0;
 
@@ -7114,7 +7115,7 @@ u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclocks)
  *
  * NOTE: Dynamic adjustment does not allow rcv_intr_count to be zero.
  */
-static void adjust_rcv_timeout(struct qib_ctxtdata *rcd, u32 npkts)
+static void adjust_rcv_timeout(struct hfi1_ctxtdata *rcd, u32 npkts)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u32 timeout = rcd->rcvavail_timeout;
@@ -7154,8 +7155,8 @@ static void adjust_rcv_timeout(struct qib_ctxtdata *rcd, u32 npkts)
 		(u64)timeout << WFR_RCV_AVAIL_TIME_OUT_TIME_OUT_RELOAD_SHIFT);
 }
 
-void update_usrhead(struct qib_ctxtdata *rcd, u32 hd, u32 updegr, u32 egrhd,
-			u32 intr_adjust, u32 npkts)
+void update_usrhead(struct hfi1_ctxtdata *rcd, u32 hd, u32 updegr, u32 egrhd,
+		    u32 intr_adjust, u32 npkts)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u64 reg;
@@ -7180,7 +7181,7 @@ void update_usrhead(struct qib_ctxtdata *rcd, u32 hd, u32 updegr, u32 egrhd,
 	mmiowb();
 }
 
-u32 hdrqempty(struct qib_ctxtdata *rcd)
+u32 hdrqempty(struct hfi1_ctxtdata *rcd)
 {
 	u32 head, tail;
 
@@ -7233,7 +7234,7 @@ static u32 encoded_size(u32 size)
 
 void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 {
-	struct qib_ctxtdata *rcd;
+	struct hfi1_ctxtdata *rcd;
 	u64 rcvctrl, reg;
 	int did_enable = 0;
 
@@ -7468,7 +7469,7 @@ u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 		*namep = dd->portcntrnames;
 	} else {
 		const struct cntr_entry *entry;
-		struct qib_pportdata *ppd;
+		struct hfi1_pportdata *ppd;
 		int i, j;
 
 		ret = (dd->nportcntrs) * sizeof(u64);
@@ -7476,7 +7477,7 @@ u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 			dd_dev_err(dd, "indexing not supported");
 			return 0;
 		}
-		ppd = (struct qib_pportdata *)(dd + 1 + port);
+		ppd = (struct hfi1_pportdata *)(dd + 1 + port);
 		*cntrp = ppd->cntrs;
 
 		for (i = 0; i < PORT_CNTR_LAST; i++) {
@@ -7514,13 +7515,13 @@ u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 
 static void free_cntrs(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int i;
 
 	if (dd->synth_stats_timer.data)
 		del_timer_sync(&dd->synth_stats_timer);
 	dd->synth_stats_timer.data = 0;
-	ppd = (struct qib_pportdata *)(dd + 1);
+	ppd = (struct hfi1_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		kfree(ppd->cntrs);
 		kfree(ppd->scntrs);
@@ -7656,7 +7657,7 @@ u64 write_dev_cntr(struct hfi_devdata *dd, int index, int vl, u64 data)
 	return write_dev_port_cntr(dd, entry, sval, dd, vl, data);
 }
 
-u64 read_port_cntr(struct qib_pportdata *ppd, int index, int vl)
+u64 read_port_cntr(struct hfi1_pportdata *ppd, int index, int vl)
 {
 	struct cntr_entry *entry;
 	u64 *sval;
@@ -7676,7 +7677,7 @@ u64 read_port_cntr(struct qib_pportdata *ppd, int index, int vl)
 	return read_dev_port_cntr(ppd->dd, entry, sval, ppd, vl);
 }
 
-u64 write_port_cntr(struct qib_pportdata *ppd, int index, int vl, u64 data)
+u64 write_port_cntr(struct hfi1_pportdata *ppd, int index, int vl, u64 data)
 {
 	struct cntr_entry *entry;
 	u64 *sval;
@@ -7703,7 +7704,7 @@ static void update_synth_timer(unsigned long opaque)
 	u64 total_flits;
 	u8 update = 0;
 	int i, j, vl;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	struct cntr_entry *entry;
 
 	struct hfi_devdata *dd = (struct hfi_devdata *) opaque;
@@ -7755,7 +7756,7 @@ static void update_synth_timer(unsigned long opaque)
 				read_dev_cntr(dd, i, CNTR_INVALID_VL);
 			}
 		}
-		ppd = (struct qib_pportdata *)(dd + 1);
+		ppd = (struct hfi1_pportdata *)(dd + 1);
 		for (i = 0; i < dd->num_pports; i++, ppd++) {
 			for (j = 0; j < PORT_CNTR_LAST; j++) {
 				entry = &port_cntrs[j];
@@ -7799,7 +7800,7 @@ static int init_cntrs(struct hfi_devdata *dd)
 	size_t sz;
 	char *p;
 	char name[C_MAX_NAME];
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 
 	/* set up the stats timer; the add_timer is done at the end */
 	init_timer(&dd->synth_stats_timer);
@@ -7964,7 +7965,7 @@ static int init_cntrs(struct hfi_devdata *dd)
 	}
 
 	/* allocate per port storage for counter values */
-	ppd = (struct qib_pportdata *)(dd + 1);
+	ppd = (struct hfi1_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) { /* FIXME. ppd++? */
 		ppd->cntrs = kcalloc(dd->nportcntrs, sizeof(u64), GFP_KERNEL);
 		if (!ppd->cntrs)
@@ -8071,7 +8072,7 @@ static const char *opa_pstate_name(u32 pstate)
  * Read the hardware link state and set the driver's cached value of it.
  * Return the (new) current value.
  */
-static u32 get_logical_state(struct qib_pportdata *ppd)
+static u32 get_logical_state(struct hfi1_pportdata *ppd)
 {
 	u32 new_state;
 
@@ -8117,8 +8118,8 @@ static u32 get_logical_state(struct qib_pportdata *ppd)
  * For now, take the easy polling route.
  * Returns 0 if state reached, otherwise -ETIMEDOUT.
  */
-static int wait_logical_linkstate(struct qib_pportdata *ppd, u32 state,
-					int msecs)
+static int wait_logical_linkstate(struct hfi1_pportdata *ppd, u32 state,
+				  int msecs)
 {
 	unsigned long timeout;
 
@@ -8135,7 +8136,7 @@ static int wait_logical_linkstate(struct qib_pportdata *ppd, u32 state,
 	return -ETIMEDOUT;
 }
 
-u8 hfi1_ibphys_portstate(struct qib_pportdata *ppd)
+u8 hfi1_ibphys_portstate(struct hfi1_pportdata *ppd)
 {
 	static u32 remembered_state = 0xff;
 	u32 pstate;
@@ -8190,7 +8191,7 @@ u64 hfi1_gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 #define SET_STATIC_RATE_CONTROL_SMASK(r) \
 (r |= WFR_SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
 
-int hfi1_init_ctxt(struct qib_ctxtdata *rcd)
+int hfi1_init_ctxt(struct hfi1_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	int ret = 0;
@@ -8335,7 +8336,7 @@ static void clean_up_interrupts(struct hfi_devdata *dd)
 	/* remove irqs - must happen before disabling/turning off */
 	if (dd->num_msix_entries) {
 		/* MSI-X */
-		struct qib_msix_entry *me = dd->msix_entries;
+		struct hfi1_msix_entry *me = dd->msix_entries;
 
 		for (i = 0; i < dd->num_msix_entries; i++, me++) {
 			if (me->arg == NULL) /* => no irq, no affinity */
@@ -8503,7 +8504,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 	BUILD_BUG_ON(WFR_IS_SDMA_START % 64);
 
 	for (i = 0; i < dd->num_msix_entries; i++) {
-		struct qib_msix_entry *me = &dd->msix_entries[i];
+		struct hfi1_msix_entry *me = &dd->msix_entries[i];
 		const char *err_info;
 		irq_handler_t handler;
 		void *arg;
@@ -8529,7 +8530,7 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 			err_info = "sdma";
 			remap_sdma_interrupts(dd, idx, i);
 		} else if (first_rx <= i && i < last_rx) {
-			struct qib_ctxtdata *rcd;
+			struct hfi1_ctxtdata *rcd;
 
 			idx = i - first_rx;
 			rcd = dd->rcd[idx];
@@ -8613,7 +8614,7 @@ static void reset_interrupts(struct hfi_devdata *dd)
 
 static int set_up_interrupts(struct hfi_devdata *dd)
 {
-	struct qib_msix_entry *entries;
+	struct hfi1_msix_entry *entries;
 	u32 total, request;
 	int i, ret;
 	int single_interrupt = 0; /* we expect to have all the interrupts */
@@ -8821,7 +8822,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
  * will ensure that, at least, the partial management
  * partition key is present in the table.
  */
-static void set_partition_keys(struct qib_pportdata *ppd)
+static void set_partition_keys(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg = 0;
@@ -9532,7 +9533,7 @@ static void init_early_variables(struct hfi_devdata *dd)
 
 	if (HFI_CAP_IS_KSET(PKEY_CHECK))
 		for (i = 0; i < dd->num_pports; i++) {
-			struct qib_pportdata *ppd = &dd->pport[i];
+			struct hfi1_pportdata *ppd = &dd->pport[i];
 
 			set_partition_keys(ppd);
 		}
@@ -9820,7 +9821,7 @@ static void init_txe(struct hfi_devdata *dd)
 
 int hfi1_set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey)
 {
-	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
+	struct hfi1_ctxtdata *rcd = dd->rcd[ctxt];
 	unsigned sctxt;
 	int ret = 0;
 	u64 reg;
@@ -9858,7 +9859,7 @@ done:
 
 int hfi1_clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt)
 {
-	struct qib_ctxtdata *rcd = dd->rcd[ctxt];
+	struct hfi1_ctxtdata *rcd = dd->rcd[ctxt];
 	unsigned sctxt;
 	int ret = 0;
 	u64 reg;
@@ -9887,7 +9888,7 @@ done:
 
 int hfi1_set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey)
 {
-	struct qib_ctxtdata *rcd;
+	struct hfi1_ctxtdata *rcd;
 	unsigned sctxt;
 	int ret = 0;
 	u64 reg;
@@ -9915,7 +9916,7 @@ done:
 
 int hfi1_clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt)
 {
-	struct qib_ctxtdata *rcd;
+	struct hfi1_ctxtdata *rcd;
 	unsigned sctxt;
 	int ret = 0;
 	u64 reg;
@@ -9965,7 +9966,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 					   const struct pci_device_id *ent)
 {
 	struct hfi_devdata *dd;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	u64 reg;
 	u32 patch;	/* hardware patch level */
 	int i, ret;
@@ -9977,7 +9978,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	};
 
 	dd = hfi1_alloc_devdata(pdev,
-		NUM_IB_PORTS * sizeof(struct qib_pportdata));
+		NUM_IB_PORTS * sizeof(struct hfi1_pportdata));
 	if (IS_ERR(dd))
 		goto bail;
 	ppd = dd->pport;
@@ -10425,7 +10426,7 @@ done:
 
 static void handle_temp_err(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd = &dd->pport[0];
+	struct hfi1_pportdata *ppd = &dd->pport[0];
 	/*
 	 * Thermal Critical Interrupt
 	 * Put the device into forced freeze mode, take link down to

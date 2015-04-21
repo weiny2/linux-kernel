@@ -854,7 +854,7 @@ struct diag_observer_list_elt {
 };
 
 int hfi1_register_observer(struct hfi_devdata *dd,
-			  const struct diag_observer *op)
+			   const struct diag_observer *op)
 {
 	struct diag_observer_list_elt *olp;
 	int ret = -EINVAL;
@@ -1336,7 +1336,7 @@ static ssize_t hfi_snoop_write(struct file *fp, const char __user *data,
 	struct send_context *sc;
 	u32 len;
 	u64 pbc;
-	struct qib_ibport *ibp;
+	struct hfi1_ibport *ibp;
 
 	dd = hfi_dd_from_sc_inode(fp->f_inode);
 	if (dd == NULL)
@@ -1473,7 +1473,7 @@ static long hfi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	unsigned long *argp = NULL;
 	struct hfi_packet_filter_command filter_cmd = {0};
 	int mode_flag = 0;
-	struct qib_pportdata *ppd = NULL;
+	struct hfi1_pportdata *ppd = NULL;
 	unsigned int index;
 	struct hfi_link_info link_info;
 
@@ -1732,7 +1732,7 @@ static inline int hfi_filter_check(void *val, const char *msg)
 
 static int hfi_filter_lid(void *ibhdr, void *packet_data, void *value)
 {
-	struct qib_ib_header *hdr;
+	struct hfi1_ib_header *hdr;
 	int ret;
 
 	ret = hfi_filter_check(ibhdr, "header");
@@ -1741,7 +1741,7 @@ static int hfi_filter_lid(void *ibhdr, void *packet_data, void *value)
 	ret = hfi_filter_check(value, "user");
 	if (ret)
 		return ret;
-	hdr = (struct qib_ib_header *)ibhdr;
+	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[3])) /* matches slid */
 		return HFI_FILTER_HIT; /* matched */
@@ -1751,7 +1751,7 @@ static int hfi_filter_lid(void *ibhdr, void *packet_data, void *value)
 
 static int hfi_filter_dlid(void *ibhdr, void *packet_data, void *value)
 {
-	struct qib_ib_header *hdr;
+	struct hfi1_ib_header *hdr;
 	int ret;
 
 	ret = hfi_filter_check(ibhdr, "header");
@@ -1761,7 +1761,7 @@ static int hfi_filter_dlid(void *ibhdr, void *packet_data, void *value)
 	if (ret)
 		return ret;
 
-	hdr = (struct qib_ib_header *)ibhdr;
+	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[1]))
 		return HFI_FILTER_HIT;
@@ -1773,8 +1773,8 @@ static int hfi_filter_dlid(void *ibhdr, void *packet_data, void *value)
 static int hfi_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 					 void *value)
 {
-	struct qib_ib_header *hdr;
-	struct qib_other_headers *ohdr = NULL;
+	struct hfi1_ib_header *hdr;
+	struct hfi1_other_headers *ohdr = NULL;
 	struct ib_smp *smp = NULL;
 	u32 qpn = 0;
 	int ret;
@@ -1789,7 +1789,7 @@ static int hfi_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 	if (ret)
 		return ret;
 
-	hdr = (struct qib_ib_header *)ibhdr;
+	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	/* Check for GRH */
 	if ((be16_to_cpu(hdr->lrh[0]) & 3) == QIB_LRH_BTH)
@@ -1811,8 +1811,8 @@ static int hfi_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 static int hfi_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 {
 
-	struct qib_ib_header *hdr;
-	struct qib_other_headers *ohdr = NULL;
+	struct hfi1_ib_header *hdr;
+	struct hfi1_other_headers *ohdr = NULL;
 	int ret;
 
 	ret = hfi_filter_check(ibhdr, "header");
@@ -1822,7 +1822,7 @@ static int hfi_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 	if (ret)
 		return ret;
 
-	hdr = (struct qib_ib_header *)ibhdr;
+	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	/* Check for GRH */
 	if ((be16_to_cpu(hdr->lrh[0]) & 3) == QIB_LRH_BTH)
@@ -1840,8 +1840,8 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 {
 	u32 lnh = 0;
 	u8 opcode = 0;
-	struct qib_ib_header *hdr;
-	struct qib_other_headers *ohdr = NULL;
+	struct hfi1_ib_header *hdr;
+	struct hfi1_other_headers *ohdr = NULL;
 	int ret;
 
 	ret = hfi_filter_check(ibhdr, "header");
@@ -1851,7 +1851,7 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 	if (ret)
 		return ret;
 
-	hdr = (struct qib_ib_header *)ibhdr;
+	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
 
@@ -1873,7 +1873,7 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 static int hfi_filter_ib_service_level(void *ibhdr, void *packet_data,
 					   void *value)
 {
-	struct qib_ib_header *hdr;
+	struct hfi1_ib_header *hdr;
 	int ret;
 
 	ret = hfi_filter_check(ibhdr, "header");
@@ -1883,7 +1883,7 @@ static int hfi_filter_ib_service_level(void *ibhdr, void *packet_data,
 	if (ret)
 		return ret;
 
-	hdr = (struct qib_ib_header *)ibhdr;
+	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	if ((*((u8 *)value)) == (be16_to_cpu(hdr->lrh[0] >> 4) & 0xF))
 		return HFI_FILTER_HIT;
@@ -1895,8 +1895,8 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 {
 
 	u32 lnh = 0;
-	struct qib_ib_header *hdr;
-	struct qib_other_headers *ohdr = NULL;
+	struct hfi1_ib_header *hdr;
+	struct hfi1_other_headers *ohdr = NULL;
 	int ret;
 
 	ret = hfi_filter_check(ibhdr, "header");
@@ -1906,7 +1906,7 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	if (ret)
 		return ret;
 
-	hdr = (struct qib_ib_header *)ibhdr;
+	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
 	if (lnh == QIB_LRH_BTH)
@@ -1991,8 +1991,8 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
  */
 void snoop_recv_handler(struct hfi_packet *packet)
 {
-	struct qib_pportdata *ppd = packet->rcd->ppd;
-	struct qib_ib_header *hdr = packet->hdr;
+	struct hfi1_pportdata *ppd = packet->rcd->ppd;
+	struct hfi1_ib_header *hdr = packet->hdr;
 	int header_size = packet->hlen;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -2125,8 +2125,8 @@ void snoop_recv_handler(struct hfi_packet *packet)
 /*
  * Handle snooping and capturing packets when sdma is being used.
  */
-int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
-			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
+int snoop_send_dma_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
+			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc)
 {
 	pr_alert("Snooping/Capture of  Send DMA Packets Is Not Supported!\n");
@@ -2140,16 +2140,16 @@ int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
  * bypass packets. The only way to send a bypass packet currently is to use the
  * diagpkt interface. When that interface is enable snoop/capture is not.
  */
-int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ahdr,
-			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
+int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
+			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc)
 {
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	struct snoop_packet *s_packet = NULL;
 	u32 *hdr = (u32 *)&ahdr->ibh;
 	u32 length = 0;
-	struct qib_sge_state temp_ss;
+	struct hfi1_sge_state temp_ss;
 	void *data = NULL;
 	void *data_start = NULL;
 	int ret;
@@ -2319,7 +2319,7 @@ void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,
 		ret = HFI_FILTER_HIT;
 	} else {
 		ret = dd->hfi_snoop.filter_callback(
-				(struct qib_ib_header *)from,
+				(struct hfi1_ib_header *)from,
 				NULL,
 				dd->hfi_snoop.filter_value);
 	}

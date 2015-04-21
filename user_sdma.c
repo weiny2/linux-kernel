@@ -326,7 +326,7 @@ static int defer_packet_queue(
 {
 	struct hfi_user_sdma_pkt_q *pq =
 		container_of(wait, struct hfi_user_sdma_pkt_q, busy);
-	struct qib_ibdev *dev = &pq->dd->verbs_dev;
+	struct hfi1_ibdev *dev = &pq->dd->verbs_dev;
 	struct user_sdma_txreq *tx =
 		container_of(txreq, struct user_sdma_txreq, txreq);
 
@@ -362,7 +362,7 @@ static void activate_packet_queue(struct iowait *wait, int reason)
 	struct hfi_user_sdma_pkt_q *pq =
 		container_of(wait, struct hfi_user_sdma_pkt_q, busy);
 #if 0
-	struct qib_ctxtdata *uctxt = pq->dd->rcd[pq->ctxt];
+	struct hfi1_ctxtdata *uctxt = pq->dd->rcd[pq->ctxt];
 
 	if (cmpxchg(&pq->state, SDMA_PKT_Q_DEFERRED, SDMA_PKT_Q_ACTIVE) ==
 	    SDMA_PKT_Q_DEFERRED)
@@ -375,7 +375,7 @@ static void activate_packet_queue(struct iowait *wait, int reason)
 	wake_up(&wait->wait_dma);
 };
 
-int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *uctxt, struct file *fp)
+int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 {
 	int ret = 0;
 	unsigned memsize;
@@ -501,7 +501,7 @@ done:
 
 int hfi_user_sdma_free_queues(struct hfi_filedata *fd)
 {
-	struct qib_ctxtdata *uctxt = fd->uctxt;
+	struct hfi1_ctxtdata *uctxt = fd->uctxt;
 	struct hfi_user_sdma_pkt_q *pq;
 	unsigned long flags;
 
@@ -551,7 +551,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 				  unsigned long dim, unsigned long *count)
 {
 	int ret = 0, i = 0, sent;
-	struct qib_ctxtdata *uctxt = ctxt_fp(fp);
+	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 	struct hfi_user_sdma_pkt_q *pq = user_sdma_pkt_fp(fp);
 	struct hfi_user_sdma_comp_q *cq = user_sdma_comp_fp(fp);
 	struct hfi_devdata *dd = pq->dd;
@@ -1546,7 +1546,7 @@ static _hfi_inline void set_comp_state(struct user_sdma_request *req,
 static int user_sdma_progress(void *data)
 {
 	int ret = 0, sleep;
-	struct qib_ctxtdata *uctxt = data;
+	struct hfi1_ctxtdata *uctxt = data;
 	struct hfi_user_sdma_pkt_q *pq, *ptr;
 
 	while (!kthread_should_stop()) {

@@ -51,9 +51,9 @@
 #define HFI_TRACE_DO_NOT_CREATE_INLINES
 #include "trace.h"
 
-u8 ibhdr_exhdr_len(struct qib_ib_header *hdr)
+u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr)
 {
-	struct qib_other_headers *ohdr;
+	struct hfi1_other_headers *ohdr;
 	u8 opcode;
 	u8 lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 

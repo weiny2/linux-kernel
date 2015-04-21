@@ -60,9 +60,9 @@ struct hfi_devdata;
 /* these functions must be called with qsfp_lock held */
 int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target);
 int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
-		    void *buffer, int len);
+		     void *buffer, int len);
 int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
-		    const void *buffer, int len);
+		     const void *buffer, int len);
 
 
 #endif /* _TWSI_H */

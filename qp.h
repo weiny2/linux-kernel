@@ -78,7 +78,7 @@ struct hfi_qpn_table {
 struct hfi_qp_ibdev {
 	u32 qp_table_size;
 	u32 qp_rnd;
-	struct qib_qp __rcu **qp_table;
+	struct hfi1_qp __rcu **qp_table;
 	spinlock_t qpt_lock;
 	struct hfi_qpn_table qpn_table;
 };
@@ -91,7 +91,7 @@ struct hfi_qp_ibdev {
  * The caller is responsible for decrementing the QP reference count
  * when done.
  */
-struct qib_qp *hfi1_lookup_qpn(struct qib_ibport *ibp, u32 qpn);
+struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp, u32 qpn);
 
 /**
  * hfi1_error_qp - put a QP into the error state
@@ -103,7 +103,7 @@ struct qib_qp *hfi1_lookup_qpn(struct qib_ibport *ibp, u32 qpn);
  * The QP r_lock and s_lock should be held and interrupts disabled.
  * If we are already in error state, just return.
  */
-int hfi1_error_qp(struct qib_qp *qp, enum ib_wc_status err);
+int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err);
 
 /**
  * hfi1_modify_qp - modify the attributes of a queue pair
@@ -115,10 +115,10 @@ int hfi1_error_qp(struct qib_qp *qp, enum ib_wc_status err);
  * Returns 0 on success, otherwise returns an errno.
  */
 int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		  int attr_mask, struct ib_udata *udata);
+		   int attr_mask, struct ib_udata *udata);
 
 int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		 int attr_mask, struct ib_qp_init_attr *init_attr);
+		  int attr_mask, struct ib_qp_init_attr *init_attr);
 
 /**
  * hfi1_compute_aeth - compute the AETH (syndrome + MSN)
@@ -126,7 +126,7 @@ int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
  *
  * Returns the AETH.
  */
-__be32 hfi1_compute_aeth(struct qib_qp *qp);
+__be32 hfi1_compute_aeth(struct hfi1_qp *qp);
 
 /**
  * hfi1_create_qp - create a queue pair for a device
@@ -139,8 +139,8 @@ __be32 hfi1_compute_aeth(struct qib_qp *qp);
  * Called by the ib_create_qp() core verbs function.
  */
 struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
-			    struct ib_qp_init_attr *init_attr,
-			    struct ib_udata *udata);
+			     struct ib_qp_init_attr *init_attr,
+			     struct ib_udata *udata);
 /**
  * hfi1_destroy_qp - destroy a queue pair
  * @ibqp: the queue pair to destroy
@@ -159,28 +159,28 @@ int hfi1_destroy_qp(struct ib_qp *ibqp);
  *
  * The QP s_lock should be held.
  */
-void hfi1_get_credit(struct qib_qp *qp, u32 aeth);
+void hfi1_get_credit(struct hfi1_qp *qp, u32 aeth);
 
 /**
  * qib_qp_init - allocate QP tables
  * @dev: a pointer to the qib_ibdev
  */
-int qib_qp_init(struct qib_ibdev *dev);
+int qib_qp_init(struct hfi1_ibdev *dev);
 
 /**
  * qib_qp_exit - free the QP related structures
  * @dev: a pointer to the qib_ibdev
  */
-void qib_qp_exit(struct qib_ibdev *dev);
+void qib_qp_exit(struct hfi1_ibdev *dev);
 
 /**
  * qib_qp_waitup - wakeup on the indicated event
  * @qp: the QP
  * @flag: flag the qp on which the qp is stalled
  */
-void qib_qp_wakeup(struct qib_qp *qp, u32 flag);
+void qib_qp_wakeup(struct hfi1_qp *qp, u32 flag);
 
-struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5);
+struct sdma_engine *qp_to_sdma_engine(struct hfi1_qp *qp, u8 sc5);
 
 struct qp_iter;
 
@@ -188,7 +188,7 @@ struct qp_iter;
  * qp_iter_init - wakeup on the indicated event
  * @dev: the qib_ib_dev
  */
-struct qp_iter *qp_iter_init(struct qib_ibdev *dev);
+struct qp_iter *qp_iter_init(struct hfi1_ibdev *dev);
 
 /**
  * qp_iter_next - wakeup on the indicated event

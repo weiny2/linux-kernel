@@ -60,10 +60,10 @@
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int hfi1_make_uc_req(struct qib_qp *qp)
+int hfi1_make_uc_req(struct hfi1_qp *qp)
 {
-	struct qib_other_headers *ohdr;
-	struct qib_swqe *wqe;
+	struct hfi1_other_headers *ohdr;
+	struct hfi1_swqe *wqe;
 	unsigned long flags;
 	u32 hwords = 5;
 	u32 bth0 = 0;
@@ -233,7 +233,7 @@ int hfi1_make_uc_req(struct qib_qp *qp)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
 	hfi1_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-			    mask_psn(qp->s_next_psn++), middle);
+			     mask_psn(qp->s_next_psn++), middle);
 done:
 	ret = 1;
 	goto unlock;
@@ -258,10 +258,10 @@ unlock:
  * for the given QP.
  * Called at interrupt level.
  */
-void hfi1_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
-		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
+void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
+		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp)
 {
-	struct qib_other_headers *ohdr;
+	struct hfi1_other_headers *ohdr;
 	u32 opcode;
 	u32 hdrsize;
 	u32 psn;
@@ -293,7 +293,7 @@ void hfi1_uc_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		& QIB_FECN_MASK;
 
 	if (is_becn) {
-		struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 		u32 rqpn, lqpn;
 		u16 rlid = be16_to_cpu(hdr->lrh[3]);
 		u8 sl, sc5;
@@ -480,7 +480,7 @@ last_imm:
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
 		hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
-			     (ohdr->bth[0] &
+			      (ohdr->bth[0] &
 				cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 		break;
 
@@ -504,7 +504,7 @@ rdma_first:
 
 			/* Check rkey */
 			ok = hfi1_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
-					 vaddr, rkey, IB_ACCESS_REMOTE_WRITE);
+					  vaddr, rkey, IB_ACCESS_REMOTE_WRITE);
 			if (unlikely(!ok))
 				goto drop;
 			qp->r_sge.num_sge = 1;

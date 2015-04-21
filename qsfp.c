@@ -64,8 +64,8 @@
 /*
  * Unlocked i2c write.  Must hold dd->qsfp_i2c_mutex.
  */
-static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
-		int offset, void *bp, int len)
+static int __i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
+		       int offset, void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int ret, cnt;
@@ -84,7 +84,7 @@ static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 		int wlen = len - cnt;
 
 		ret = hfi1_twsi_blk_wr(dd, target, i2c_addr, offset,
-							buff + cnt, wlen);
+				       buff + cnt, wlen);
 		if (ret) {
 			/* hfi1_twsi_blk_wr() 1 for error, else 0 */
 			return -EIO;
@@ -99,8 +99,8 @@ static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	return cnt;
 }
 
-int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
-		void *bp, int len)
+int i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
+	      void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int ret;
@@ -117,8 +117,8 @@ int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
 /*
  * Unlocked i2c read.  Must hold dd->qsfp_i2c_mutex.
  */
-static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
-			int offset, void *bp, int len)
+static int __i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
+		      int offset, void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int ret, cnt, pass = 0;
@@ -140,7 +140,7 @@ static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 		int rlen = len - cnt;
 
 		ret = hfi1_twsi_blk_rd(dd, target, i2c_addr, offset,
-							buff + cnt, rlen);
+				       buff + cnt, rlen);
 		/* Some QSFP's fail first try. Retry as experiment */
 		if (ret && cnt == 0 && ++pass < I2C_MAX_RETRY)
 			continue;
@@ -171,7 +171,7 @@ exit:
 	return ret;
 }
 
-int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
+int i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
 	     void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -186,8 +186,8 @@ int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
 	return ret;
 }
 
-int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
-		int len)
+int qsfp_write(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
+	       int len)
 {
 	int count = 0;
 	int offset;
@@ -237,8 +237,8 @@ int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
 	return count;
 }
 
-int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
-		int len)
+int qsfp_read(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
+	      int len)
 {
 	int count = 0;
 	int offset;
@@ -292,7 +292,7 @@ int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
  * As an example, the next byte after address 255 is byte 128 from
  * upper page 01H (if existing) rather than byte 0 from lower page 00H.
  */
-int refresh_qsfp_cache(struct qib_pportdata *ppd, struct qsfp_data *cp)
+int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 {
 	u32 target = ppd->dd->hfi_id;
 	int ret;
@@ -397,7 +397,7 @@ const char * const qib_qsfp_devtech[16] = {
 
 static const char *pwr_codes = "1.5W2.0W2.5W3.5W";
 
-int qsfp_mod_present(struct qib_pportdata *ppd)
+int qsfp_mod_present(struct hfi1_pportdata *ppd)
 {
 	if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
 		struct hfi_devdata *dd = ppd->dd;
@@ -429,7 +429,7 @@ int qsfp_mod_present(struct qib_pportdata *ppd)
 int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr, u32 len,
 			u8 *data)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	u32 excess_len = len;
 	int ret = 0;
 
@@ -471,7 +471,7 @@ set_zeroes:
 	return ret;
 }
 
-int qsfp_dump(struct qib_pportdata *ppd, char *buf, int len)
+int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len)
 {
 	u8 *cache = &ppd->qsfp_info.cache[0];
 	u8 bin_buff[QSFP_DUMP_CHUNK];

@@ -213,7 +213,7 @@
 #define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
 #endif
 
-struct qib_iovec {
+struct hfi1_iovec {
 	/* Pointer to data, but same size 32 and 64 bit */
 	__u64 iov_base;
 	/*
@@ -234,7 +234,7 @@ struct __qib_sendpkt {
 	__u32 sps_flags;        /* flags for packet (TBD) */
 	__u32 sps_cnt;          /* number of entries to use in sps_iov */
 	/* array of iov's describing packet. TEMPORARY */
-	struct qib_iovec sps_iov[4];
+	struct hfi1_iovec sps_iov[4];
 };
 
 /*
@@ -387,7 +387,7 @@ struct qib_flash {
  * This structure contains the first field common to all protocols
  * that employ this chip.
  */
-struct qib_message_header {
+struct hfi1_message_header {
 	__be16 lrh[4];
 };
 

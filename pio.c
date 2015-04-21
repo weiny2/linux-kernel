@@ -1505,10 +1505,10 @@ void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 static void sc_piobufavail(struct send_context *sc)
 {
 	struct hfi_devdata *dd = sc->dd;
-	struct qib_ibdev *dev = &dd->verbs_dev;
+	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	struct list_head *list;
-	struct qib_qp *qps[PIO_WAIT_BATCH_SIZE];
-	struct qib_qp *qp;
+	struct hfi1_qp *qps[PIO_WAIT_BATCH_SIZE];
+	struct hfi1_qp *qp;
 	unsigned long flags;
 	unsigned i, n = 0;
 
@@ -1528,7 +1528,7 @@ static void sc_piobufavail(struct send_context *sc)
 		if (n == ARRAY_SIZE(qps))
 			goto full;
 		wait = list_first_entry(list, struct iowait, list);
-		qp = container_of(wait, struct qib_qp, s_iowait);
+		qp = container_of(wait, struct hfi1_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
 		/* refcount held until actual wakeup */
 		qps[n++] = qp;

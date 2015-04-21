@@ -116,7 +116,7 @@ bail:
  * I'm sure we won't be so lucky with other iommu's, so FIXME.
  */
 dma_addr_t hfi1_map_page(struct pci_dev *hwdev, struct page *page,
-			unsigned long offset, size_t size, int direction)
+			 unsigned long offset, size_t size, int direction)
 {
 	dma_addr_t phys;
 
@@ -147,7 +147,7 @@ dma_addr_t hfi1_map_page(struct pci_dev *hwdev, struct page *page,
  * buffer, so we can do all pages at once).
  */
 int hfi1_get_user_pages(unsigned long start_page, size_t num_pages,
-		       struct page **p)
+			struct page **p)
 {
 	int ret;
 

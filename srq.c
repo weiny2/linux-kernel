@@ -63,15 +63,15 @@
  * This may be called from interrupt context.
  */
 int hfi1_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
-			 struct ib_recv_wr **bad_wr)
+			  struct ib_recv_wr **bad_wr)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_rwq *wq;
+	struct hfi1_srq *srq = to_isrq(ibsrq);
+	struct hfi1_rwq *wq;
 	unsigned long flags;
 	int ret;
 
 	for (; wr; wr = wr->next) {
-		struct qib_rwqe *wqe;
+		struct hfi1_rwqe *wqe;
 		u32 next;
 		int i;
 
@@ -116,11 +116,11 @@ bail:
  * @udata: data from libibverbs when creating a user SRQ
  */
 struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
-			      struct ib_srq_init_attr *srq_init_attr,
-			      struct ib_udata *udata)
+			       struct ib_srq_init_attr *srq_init_attr,
+			       struct ib_udata *udata)
 {
-	struct qib_ibdev *dev = to_idev(ibpd->device);
-	struct qib_srq *srq;
+	struct hfi1_ibdev *dev = to_idev(ibpd->device);
+	struct hfi1_srq *srq;
 	u32 sz;
 	struct ib_srq *ret;
 
@@ -149,8 +149,8 @@ struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
 	srq->rq.size = srq_init_attr->attr.max_wr + 1;
 	srq->rq.max_sge = srq_init_attr->attr.max_sge;
 	sz = sizeof(struct ib_sge) * srq->rq.max_sge +
-		sizeof(struct qib_rwqe);
-	srq->rq.wq = vmalloc_user(sizeof(struct qib_rwq) + srq->rq.size * sz);
+		sizeof(struct hfi1_rwqe);
+	srq->rq.wq = vmalloc_user(sizeof(struct hfi1_rwq) + srq->rq.size * sz);
 	if (!srq->rq.wq) {
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_srq;
@@ -162,11 +162,11 @@ struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		int err;
-		u32 s = sizeof(struct qib_rwq) + srq->rq.size * sz;
+		u32 s = sizeof(struct hfi1_rwq) + srq->rq.size * sz;
 
 		srq->ip =
 		    hfi1_create_mmap_info(dev, s, ibpd->uobject->context,
-					 srq->rq.wq);
+					  srq->rq.wq);
 		if (!srq->ip) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail_wq;
@@ -226,16 +226,16 @@ done:
  * @udata: user data for libibverbs.so
  */
 int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
-		   enum ib_srq_attr_mask attr_mask,
-		   struct ib_udata *udata)
+		    enum ib_srq_attr_mask attr_mask,
+		    struct ib_udata *udata)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_rwq *wq;
+	struct hfi1_srq *srq = to_isrq(ibsrq);
+	struct hfi1_rwq *wq;
 	int ret = 0;
 
 	if (attr_mask & IB_SRQ_MAX_WR) {
-		struct qib_rwq *owq;
-		struct qib_rwqe *p;
+		struct hfi1_rwq *owq;
+		struct hfi1_rwqe *p;
 		u32 sz, size, n, head, tail;
 
 		/* Check that the requested sizes are below the limits. */
@@ -246,10 +246,10 @@ int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			goto bail;
 		}
 
-		sz = sizeof(struct qib_rwqe) +
+		sz = sizeof(struct hfi1_rwqe) +
 			srq->rq.max_sge * sizeof(struct ib_sge);
 		size = attr->max_wr + 1;
-		wq = vmalloc_user(sizeof(struct qib_rwq) + size * sz);
+		wq = vmalloc_user(sizeof(struct hfi1_rwq) + size * sz);
 		if (!wq) {
 			ret = -ENOMEM;
 			goto bail;
@@ -296,7 +296,7 @@ int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		n = 0;
 		p = wq->wq;
 		while (tail != head) {
-			struct qib_rwqe *wqe;
+			struct hfi1_rwqe *wqe;
 			int i;
 
 			wqe = get_rwqe_ptr(&srq->rq, tail);
@@ -305,7 +305,7 @@ int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			for (i = 0; i < wqe->num_sge; i++)
 				p->sg_list[i] = wqe->sg_list[i];
 			n++;
-			p = (struct qib_rwqe *)((char *) p + sz);
+			p = (struct hfi1_rwqe *)((char *)p + sz);
 			if (++tail >= srq->rq.size)
 				tail = 0;
 		}
@@ -320,9 +320,9 @@ int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		vfree(owq);
 
 		if (srq->ip) {
-			struct qib_mmap_info *ip = srq->ip;
-			struct qib_ibdev *dev = to_idev(srq->ibsrq.device);
-			u32 s = sizeof(struct qib_rwq) + size * sz;
+			struct hfi1_mmap_info *ip = srq->ip;
+			struct hfi1_ibdev *dev = to_idev(srq->ibsrq.device);
+			u32 s = sizeof(struct hfi1_rwq) + size * sz;
 
 			hfi1_update_mmap_info(dev, ip, s, wq);
 
@@ -367,7 +367,7 @@ bail:
 
 int hfi1_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
+	struct hfi1_srq *srq = to_isrq(ibsrq);
 
 	attr->max_wr = srq->rq.size - 1;
 	attr->max_sge = srq->rq.max_sge;
@@ -381,8 +381,8 @@ int hfi1_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
  */
 int hfi1_destroy_srq(struct ib_srq *ibsrq)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_ibdev *dev = to_idev(ibsrq->device);
+	struct hfi1_srq *srq = to_isrq(ibsrq);
+	struct hfi1_ibdev *dev = to_idev(ibsrq->device);
 
 	spin_lock(&dev->n_srqs_lock);
 	dev->n_srqs_allocated--;

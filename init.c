@@ -149,8 +149,8 @@ int hfi1_create_ctxts(struct hfi_devdata *dd)
 
 	/* create one or more kernel contexts */
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
-		struct qib_pportdata *ppd;
-		struct qib_ctxtdata *rcd;
+		struct hfi1_pportdata *ppd;
+		struct hfi1_ctxtdata *rcd;
 
 		ppd = dd->pport + (i % dd->num_pports);
 		rcd = hfi1_create_ctxtdata(ppd, i);
@@ -199,10 +199,10 @@ bail:
 /*
  * Common code for user and kernel context setup.
  */
-struct qib_ctxtdata *hfi1_create_ctxtdata(struct qib_pportdata *ppd, u32 ctxt)
+struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	struct qib_ctxtdata *rcd;
+	struct hfi1_ctxtdata *rcd;
 	unsigned kctxt_ngroups = 0;
 	u32 base;
 
@@ -362,7 +362,7 @@ static inline u64 encode_rcv_header_entry_size(u16 size)
  * called with cca_timer_lock held (to protect access to cca_timer
  * array), and rcu_read_lock() (to protect access to cc_state).
  */
-void set_link_ipg(struct qib_pportdata *ppd)
+void set_link_ipg(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	struct cc_state *cc_state;
@@ -446,7 +446,7 @@ void set_link_ipg(struct qib_pportdata *ppd)
 static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 {
 	struct cca_timer *cca_timer;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int sl;
 	u16 ccti, ccti_timer, ccti_min;
 	struct cc_state *cc_state;
@@ -498,8 +498,8 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 /*
  * Common code for initializing the physical port structure.
  */
-void hfi1_init_pportdata(struct pci_dev *pdev, struct qib_pportdata *ppd,
-			struct hfi_devdata *dd, u8 hw_pidx, u8 port)
+void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
+			 struct hfi_devdata *dd, u8 hw_pidx, u8 port)
 {
 	int i, size;
 	uint default_pkey_idx;
@@ -633,7 +633,7 @@ static void enable_chip(struct hfi_devdata *dd)
 static int qib_create_workqueues(struct hfi_devdata *dd)
 {
 	int pidx;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
@@ -681,8 +681,8 @@ int hfi1_init(struct hfi_devdata *dd, int reinit)
 {
 	int ret = 0, pidx, lastfail = 0;
 	unsigned i, len;
-	struct qib_ctxtdata *rcd;
-	struct qib_pportdata *ppd;
+	struct hfi1_ctxtdata *rcd;
+	struct hfi1_pportdata *ppd;
 
 	/* Set up recv low level handlers */
 	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
@@ -846,7 +846,7 @@ struct hfi_devdata *hfi1_lookup(int unit)
  */
 static void qib_stop_timers(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int pidx;
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
@@ -869,7 +869,7 @@ static void qib_stop_timers(struct hfi_devdata *dd)
  */
 static void qib_shutdown_device(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	unsigned pidx;
 	int i;
 
@@ -942,7 +942,7 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
  * is released (and can be called from reinit as well).
  * It should never change any chip state, or global driver state.
  */
-void hfi1_free_ctxtdata(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
+void hfi1_free_ctxtdata(struct hfi_devdata *dd, struct hfi1_ctxtdata *rcd)
 {
 	if (!rcd)
 		return;
@@ -1023,8 +1023,8 @@ struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	if (!dd)
 		return ERR_PTR(-ENOMEM);
 	/* extra is * number of ports */
-	dd->num_pports = extra/sizeof(struct qib_pportdata);
-	dd->pport = (struct qib_pportdata *)(dd + 1);
+	dd->num_pports = extra / sizeof(struct hfi1_pportdata);
+	dd->pport = (struct hfi1_pportdata *)(dd + 1);
 
 	INIT_LIST_HEAD(&dd->list);
 	dd->node = dev_to_node(&pdev->dev);
@@ -1104,7 +1104,7 @@ void hfi1_disable_after_error(struct hfi_devdata *dd)
 		dd->flags &= ~HFI_INITTED;
 		if (dd->pport)
 			for (pidx = 0; pidx < dd->num_pports; ++pidx) {
-				struct qib_pportdata *ppd;
+				struct hfi1_pportdata *ppd;
 
 				ppd = dd->pport + pidx;
 				if (dd->flags & HFI_PRESENT)
@@ -1255,12 +1255,12 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 {
 	int ctxt;
 	int pidx;
-	struct qib_ctxtdata **tmp;
+	struct hfi1_ctxtdata **tmp;
 	unsigned long flags;
 
 	/* users can't do anything more with chip */
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
-		struct qib_pportdata *ppd = &dd->pport[pidx];
+		struct hfi1_pportdata *ppd = &dd->pport[pidx];
 		struct cc_state *cc_state;
 		int i;
 
@@ -1293,7 +1293,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
 	dd->rcd = NULL;
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 	for (ctxt = 0; tmp && ctxt < dd->num_rcv_contexts; ctxt++) {
-		struct qib_ctxtdata *rcd = tmp[ctxt];
+		struct hfi1_ctxtdata *rcd = tmp[ctxt];
 
 		tmp[ctxt] = NULL; /* debugging paranoia */
 		if (rcd) {
@@ -1492,7 +1492,7 @@ static void qib_remove_one(struct pci_dev *pdev)
  * DMA'able (which means for some systems, it will go through an IOMMU,
  * or be forced into a low address range).
  */
-int hfi1_create_rcvhdrq(struct hfi_devdata *dd, struct qib_ctxtdata *rcd)
+int hfi1_create_rcvhdrq(struct hfi_devdata *dd, struct hfi1_ctxtdata *rcd)
 {
 	unsigned amt;
 	u64 reg;
@@ -1580,7 +1580,7 @@ bail:
  * calls.  Otherwise we get the OOM code involved, by asking for too
  * much per call, with disastrous results on some kernels.
  */
-int hfi1_setup_eagerbufs(struct qib_ctxtdata *rcd)
+int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	u32 max_entries, egrtop, alloced_bytes = 0, idx = 0;

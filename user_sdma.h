@@ -83,7 +83,7 @@ struct hfi_user_sdma_comp_q {
 	struct hfi_sdma_comp_entry *comps;
 };
 
-int hfi_user_sdma_alloc_queues(struct qib_ctxtdata *, struct file *);
+int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *, struct file *);
 int hfi_user_sdma_free_queues(struct hfi_filedata *);
 int hfi_user_sdma_process_request(struct file *, struct iovec *, unsigned long,
 				  unsigned long *);

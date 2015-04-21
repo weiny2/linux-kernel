@@ -76,8 +76,8 @@ static void qib_format_hwmsg(char *msg, size_t msgl, const char *hwmsg)
  * @msg message buffer
  * @msgl message buffer length
  */
-void hfi1_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
-			 size_t nhwerrmsgs, char *msg, size_t msgl)
+void hfi1_format_hwerrors(u64 hwerrs, const struct hfi1_hwerror_msgs *hwerrmsgs,
+			  size_t nhwerrmsgs, char *msg, size_t msgl)
 {
 	int i;
 
@@ -86,7 +86,7 @@ void hfi1_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
 			qib_format_hwmsg(msg, msgl, hwerrmsgs[i].msg);
 }
 
-static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
+static void signal_ib_event(struct hfi1_pportdata *ppd, enum ib_event_type ev)
 {
 	struct ib_event event;
 	struct hfi_devdata *dd = ppd->dd;
@@ -110,7 +110,7 @@ static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
  */
 void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 {
-	struct qib_pportdata *ppd = &dd->pport[0];
+	struct hfi1_pportdata *ppd = &dd->pport[0];
 	enum ib_event_type ev;
 
 	if (!(ppd->linkup ^ !!linkup))
@@ -183,7 +183,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
  * Handle receive or urgent interrupts for user contexts.  This means a user
  * process was waiting for a packet to arrive, and didn't want to poll.
  */
-void handle_user_interrupt(struct qib_ctxtdata *rcd)
+void handle_user_interrupt(struct hfi1_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	unsigned long flags;

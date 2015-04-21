@@ -166,7 +166,7 @@ void hfi_pcie_cleanup(struct pci_dev *pdev)
  * various other purposes
  */
 int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
-		    const struct pci_device_id *ent)
+		     const struct pci_device_id *ent)
 {
 	unsigned long len;
 	resource_size_t addr;
@@ -290,7 +290,7 @@ clear:
 }
 
 static void qib_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
-			   struct qib_msix_entry *qib_msix_entry)
+			   struct hfi1_msix_entry *qib_msix_entry)
 {
 	int ret;
 	u32 tabsize = 0;
@@ -422,7 +422,7 @@ int pcie_speeds(struct hfi_devdata *dd)
  *	- 0 if fell back to INTx.
  */
 void request_msix(struct hfi_devdata *dd, u32 *nent,
-			struct qib_msix_entry *entry)
+			struct hfi1_msix_entry *entry)
 {
 	int pos;
 

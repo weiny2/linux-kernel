@@ -54,18 +54,18 @@
 #include "hfi.h"
 
 /* Fast memory region */
-struct qib_fmr {
+struct hfi1_fmr {
 	struct ib_fmr ibfmr;
-	struct qib_mregion mr;        /* must be last */
+	struct hfi1_mregion mr;        /* must be last */
 };
 
-static inline struct qib_fmr *to_ifmr(struct ib_fmr *ibfmr)
+static inline struct hfi1_fmr *to_ifmr(struct ib_fmr *ibfmr)
 {
-	return container_of(ibfmr, struct qib_fmr, ibfmr);
+	return container_of(ibfmr, struct hfi1_fmr, ibfmr);
 }
 
-static int init_qib_mregion(struct qib_mregion *mr, struct ib_pd *pd,
-	int count)
+static int init_qib_mregion(struct hfi1_mregion *mr, struct ib_pd *pd,
+			    int count)
 {
 	int m, i = 0;
 	int rval = 0;
@@ -91,7 +91,7 @@ bail:
 	goto out;
 }
 
-static void deinit_qib_mregion(struct qib_mregion *mr)
+static void deinit_qib_mregion(struct hfi1_mregion *mr)
 {
 	int i = mr->mapsz;
 
@@ -112,7 +112,7 @@ static void deinit_qib_mregion(struct qib_mregion *mr)
  */
 struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc)
 {
-	struct qib_mr *mr = NULL;
+	struct hfi1_mr *mr = NULL;
 	struct ib_mr *ret;
 	int rval;
 
@@ -152,9 +152,9 @@ bail:
 	goto done;
 }
 
-static struct qib_mr *alloc_mr(int count, struct ib_pd *pd)
+static struct hfi1_mr *alloc_mr(int count, struct ib_pd *pd)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 	int rval = -ENOMEM;
 	int m;
 
@@ -197,10 +197,10 @@ bail:
  * Returns the memory region on success, otherwise returns an errno.
  */
 struct ib_mr *hfi1_reg_phys_mr(struct ib_pd *pd,
-			      struct ib_phys_buf *buffer_list,
-			      int num_phys_buf, int acc, u64 *iova_start)
+			       struct ib_phys_buf *buffer_list,
+			       int num_phys_buf, int acc, u64 *iova_start)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 	int n, m, i;
 	struct ib_mr *ret;
 
@@ -244,10 +244,10 @@ bail:
  * Returns the memory region on success, otherwise returns an errno.
  */
 struct ib_mr *hfi1_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
-			      u64 virt_addr, int mr_access_flags,
-			      struct ib_udata *udata)
+			       u64 virt_addr, int mr_access_flags,
+			       struct ib_udata *udata)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 	struct ib_umem *umem;
 	struct ib_umem_chunk *chunk;
 	int n, m, i;
@@ -320,7 +320,7 @@ bail:
  */
 int hfi1_dereg_mr(struct ib_mr *ibmr)
 {
-	struct qib_mr *mr = to_imr(ibmr);
+	struct hfi1_mr *mr = to_imr(ibmr);
 	int ret = 0;
 	unsigned long timeout;
 
@@ -354,7 +354,7 @@ out:
  */
 struct ib_mr *hfi1_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 
 	mr = alloc_mr(max_page_list_len, pd);
 	if (IS_ERR(mr))
@@ -402,9 +402,9 @@ void hfi1_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl)
  * Returns the memory region on success, otherwise returns an errno.
  */
 struct ib_fmr *hfi1_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
-			     struct ib_fmr_attr *fmr_attr)
+			      struct ib_fmr_attr *fmr_attr)
 {
-	struct qib_fmr *fmr;
+	struct hfi1_fmr *fmr;
 	int m;
 	struct ib_fmr *ret;
 	int rval = -ENOMEM;
@@ -459,10 +459,10 @@ bail:
  */
 
 int hfi1_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
-		     int list_len, u64 iova)
+		      int list_len, u64 iova)
 {
-	struct qib_fmr *fmr = to_ifmr(ibfmr);
-	struct qib_lkey_table *rkt;
+	struct hfi1_fmr *fmr = to_ifmr(ibfmr);
+	struct hfi1_lkey_table *rkt;
 	unsigned long flags;
 	int m, n, i;
 	u32 ps;
@@ -507,8 +507,8 @@ bail:
  */
 int hfi1_unmap_fmr(struct list_head *fmr_list)
 {
-	struct qib_fmr *fmr;
-	struct qib_lkey_table *rkt;
+	struct hfi1_fmr *fmr;
+	struct hfi1_lkey_table *rkt;
 	unsigned long flags;
 
 	list_for_each_entry(fmr, fmr_list, ibfmr.list) {
@@ -530,7 +530,7 @@ int hfi1_unmap_fmr(struct list_head *fmr_list)
  */
 int hfi1_dealloc_fmr(struct ib_fmr *ibfmr)
 {
-	struct qib_fmr *fmr = to_ifmr(ibfmr);
+	struct hfi1_fmr *fmr = to_ifmr(ibfmr);
 	int ret = 0;
 	unsigned long timeout;
 

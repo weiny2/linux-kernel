@@ -377,10 +377,10 @@ struct sdma_txreq {
 /* FIXME - remove when verbs done */
 struct verbs_txreq {
 	struct sdma_txreq       txreq;
-	struct qib_qp           *qp;
-	struct qib_swqe         *wqe;
-	struct qib_mregion	*mr;
-	struct qib_sge_state    *ss;
+	struct hfi1_qp           *qp;
+	struct hfi1_swqe         *wqe;
+	struct hfi1_mregion	*mr;
+	struct hfi1_sge_state    *ss;
 	struct sdma_engine     *sde;
 	u16                     hdr_dwords;
 	u16                     hdr_inx;
@@ -401,7 +401,7 @@ struct verbs_txreq {
 struct sdma_engine {
 	/* read mostly */
 	struct hfi_devdata *dd;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	/* private: */
 	void __iomem *tail_csr;
 	u64 imask;			/* clear interrupt mask */

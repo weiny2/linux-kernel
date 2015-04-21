@@ -60,7 +60,7 @@
 
 static void rc_timeout(unsigned long arg);
 
-static u32 restart_sge(struct qib_sge_state *ss, struct qib_swqe *wqe,
+static u32 restart_sge(struct hfi1_sge_state *ss, struct hfi1_swqe *wqe,
 		       u32 psn, u32 pmtu)
 {
 	u32 len;
@@ -74,7 +74,7 @@ static u32 restart_sge(struct qib_sge_state *ss, struct qib_swqe *wqe,
 	return wqe->length - len;
 }
 
-static void start_timer(struct qib_qp *qp)
+static void start_timer(struct hfi1_qp *qp)
 {
 	qp->s_flags |= QIB_S_TIMER;
 	qp->s_timer.function = rc_timeout;
@@ -94,10 +94,10 @@ static void start_timer(struct qib_qp *qp)
  * Note that we are in the responder's side of the QP context.
  * Note the QP s_lock must be held.
  */
-static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
-			   struct qib_other_headers *ohdr, u32 pmtu)
+static int qib_make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
+			   struct hfi1_other_headers *ohdr, u32 pmtu)
 {
-	struct qib_ack_entry *e;
+	struct hfi1_ack_entry *e;
 	u32 hwords;
 	u32 len;
 	u32 bth0;
@@ -252,12 +252,12 @@ bail:
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int hfi1_make_rc_req(struct qib_qp *qp)
+int hfi1_make_rc_req(struct hfi1_qp *qp)
 {
-	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
-	struct qib_other_headers *ohdr;
-	struct qib_sge_state *ss;
-	struct qib_swqe *wqe;
+	struct hfi1_ibdev *dev = to_idev(qp->ibqp.device);
+	struct hfi1_other_headers *ohdr;
+	struct hfi1_sge_state *ss;
+	struct hfi1_swqe *wqe;
 	/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 	u32 hwords = 5;
 	u32 len;
@@ -677,10 +677,11 @@ unlock:
  * Note that RDMA reads and atomics are handled in the
  * send side QP state and tasklet.
  */
-void hfi1_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
+void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
+		      int is_fecn)
 {
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 pbc, pbc_flags = 0;
 	u16 lrh0;
 	u16 sc5;
@@ -689,8 +690,8 @@ void hfi1_send_rc_ack(struct qib_ctxtdata *rcd, struct qib_qp *qp, int is_fecn)
 	u32 vl, plen;
 	struct send_context *sc;
 	struct pio_buf *pbuf;
-	struct qib_ib_header hdr;
-	struct qib_other_headers *ohdr;
+	struct hfi1_ib_header hdr;
+	struct hfi1_other_headers *ohdr;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
@@ -794,10 +795,10 @@ done:
  * for the given QP.
  * Called at interrupt level with the QP s_lock held.
  */
-static void reset_psn(struct qib_qp *qp, u32 psn)
+static void reset_psn(struct hfi1_qp *qp, u32 psn)
 {
 	u32 n = qp->s_acked;
-	struct qib_swqe *wqe = get_swqe_ptr(qp, n);
+	struct hfi1_swqe *wqe = get_swqe_ptr(qp, n);
 	u32 opcode;
 
 	qp->s_cur = n;
@@ -880,10 +881,10 @@ done:
  * Back up requester to resend the last un-ACKed request.
  * The QP r_lock and s_lock should be held and interrupts disabled.
  */
-static void qib_restart_rc(struct qib_qp *qp, u32 psn, int wait)
+static void qib_restart_rc(struct hfi1_qp *qp, u32 psn, int wait)
 {
-	struct qib_swqe *wqe = get_swqe_ptr(qp, qp->s_acked);
-	struct qib_ibport *ibp;
+	struct hfi1_swqe *wqe = get_swqe_ptr(qp, qp->s_acked);
+	struct hfi1_ibport *ibp;
 
 	if (qp->s_retry == 0) {
 		if (qp->s_mig_state == IB_MIG_ARMED) {
@@ -917,8 +918,8 @@ static void qib_restart_rc(struct qib_qp *qp, u32 psn, int wait)
  */
 static void rc_timeout(unsigned long arg)
 {
-	struct qib_qp *qp = (struct qib_qp *)arg;
-	struct qib_ibport *ibp;
+	struct hfi1_qp *qp = (struct hfi1_qp *)arg;
+	struct hfi1_ibport *ibp;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->r_lock, flags);
@@ -940,7 +941,7 @@ static void rc_timeout(unsigned long arg)
  */
 void hfi1_rc_rnr_retry(unsigned long arg)
 {
-	struct qib_qp *qp = (struct qib_qp *)arg;
+	struct hfi1_qp *qp = (struct hfi1_qp *)arg;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
@@ -956,9 +957,9 @@ void hfi1_rc_rnr_retry(unsigned long arg)
  * Set qp->s_sending_psn to the next PSN after the given one.
  * This would be psn+1 except when RDMA reads are present.
  */
-static void reset_sending_psn(struct qib_qp *qp, u32 psn)
+static void reset_sending_psn(struct hfi1_qp *qp, u32 psn)
 {
-	struct qib_swqe *wqe;
+	struct hfi1_swqe *wqe;
 	u32 n = qp->s_last;
 
 	/* Find the work request corresponding to the given PSN. */
@@ -981,10 +982,10 @@ static void reset_sending_psn(struct qib_qp *qp, u32 psn)
 /*
  * This should be called with the QP s_lock held and interrupts disabled.
  */
-void hfi1_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr)
+void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr)
 {
-	struct qib_other_headers *ohdr;
-	struct qib_swqe *wqe;
+	struct hfi1_other_headers *ohdr;
+	struct hfi1_swqe *wqe;
 	struct ib_wc wc;
 	unsigned i;
 	u32 opcode;
@@ -1025,7 +1026,7 @@ void hfi1_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr)
 		    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)
 			break;
 		for (i = 0; i < wqe->wr.num_sge; i++) {
-			struct qib_sge *sge = &wqe->sg_list[i];
+			struct hfi1_sge *sge = &wqe->sg_list[i];
 
 			qib_put_mr(sge->mr);
 		}
@@ -1057,7 +1058,7 @@ void hfi1_rc_send_complete(struct qib_qp *qp, struct qib_ib_header *hdr)
 	}
 }
 
-static inline void update_last_psn(struct qib_qp *qp, u32 psn)
+static inline void update_last_psn(struct hfi1_qp *qp, u32 psn)
 {
 	qp->s_last_psn = psn;
 }
@@ -1067,9 +1068,9 @@ static inline void update_last_psn(struct qib_qp *qp, u32 psn)
  * This is similar to hfi1_send_complete but has to check to be sure
  * that the SGEs are not being referenced if the SWQE is being resent.
  */
-static struct qib_swqe *do_rc_completion(struct qib_qp *qp,
-					 struct qib_swqe *wqe,
-					 struct qib_ibport *ibp)
+static struct hfi1_swqe *do_rc_completion(struct hfi1_qp *qp,
+					  struct hfi1_swqe *wqe,
+					  struct hfi1_ibport *ibp)
 {
 	struct ib_wc wc;
 	unsigned i;
@@ -1082,7 +1083,7 @@ static struct qib_swqe *do_rc_completion(struct qib_qp *qp,
 	if (cmp_psn(wqe->lpsn, qp->s_sending_psn) < 0 ||
 	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
 		for (i = 0; i < wqe->wr.num_sge; i++) {
-			struct qib_sge *sge = &wqe->sg_list[i];
+			struct hfi1_sge *sge = &wqe->sg_list[i];
 
 			qib_put_mr(sge->mr);
 		}
@@ -1140,12 +1141,12 @@ static struct qib_swqe *do_rc_completion(struct qib_qp *qp,
  * Called at interrupt level with the QP s_lock held.
  * Returns 1 if OK, 0 if current operation should be aborted (NAK).
  */
-static int do_rc_ack(struct qib_qp *qp, u32 aeth, u32 psn, int opcode,
-		     u64 val, struct qib_ctxtdata *rcd)
+static int do_rc_ack(struct hfi1_qp *qp, u32 aeth, u32 psn, int opcode,
+		     u64 val, struct hfi1_ctxtdata *rcd)
 {
-	struct qib_ibport *ibp;
+	struct hfi1_ibport *ibp;
 	enum ib_wc_status status;
-	struct qib_swqe *wqe;
+	struct hfi1_swqe *wqe;
 	int ret = 0;
 	u32 ack_psn;
 	int diff;
@@ -1363,10 +1364,10 @@ bail:
  * We have seen an out of sequence RDMA read middle or last packet.
  * This ACKs SENDs and RDMA writes up to the first RDMA read or atomic SWQE.
  */
-static void rdma_seq_err(struct qib_qp *qp, struct qib_ibport *ibp, u32 psn,
-			 struct qib_ctxtdata *rcd)
+static void rdma_seq_err(struct hfi1_qp *qp, struct hfi1_ibport *ibp, u32 psn,
+			 struct hfi1_ctxtdata *rcd)
 {
-	struct qib_swqe *wqe;
+	struct hfi1_swqe *wqe;
 
 	/* Remove QP from retry timer */
 	if (qp->s_flags & (QIB_S_TIMER | QIB_S_WAIT_RNR)) {
@@ -1410,16 +1411,16 @@ static void rdma_seq_err(struct qib_qp *qp, struct qib_ibport *ibp, u32 psn,
  * packet for the given QP.
  * Called at interrupt level.
  */
-static void qib_rc_rcv_resp(struct qib_ibport *ibp,
-			    struct qib_other_headers *ohdr,
+static void qib_rc_rcv_resp(struct hfi1_ibport *ibp,
+			    struct hfi1_other_headers *ohdr,
 			    void *data, u32 tlen,
-			    struct qib_qp *qp,
+			    struct hfi1_qp *qp,
 			    u32 opcode,
 			    u32 psn, u32 hdrsize, u32 pmtu,
-			    struct qib_ctxtdata *rcd)
+			    struct hfi1_ctxtdata *rcd)
 {
-	struct qib_swqe *wqe;
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
+	struct hfi1_swqe *wqe;
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	enum ib_wc_status status;
 	unsigned long flags;
 	int diff;
@@ -1638,16 +1639,16 @@ bail:
  * Return 1 if no more processing is needed; otherwise return 0 to
  * schedule a response to be sent.
  */
-static int qib_rc_rcv_error(struct qib_other_headers *ohdr,
+static int qib_rc_rcv_error(struct hfi1_other_headers *ohdr,
 			    void *data,
-			    struct qib_qp *qp,
+			    struct hfi1_qp *qp,
 			    u32 opcode,
 			    u32 psn,
 			    int diff,
-			    struct qib_ctxtdata *rcd)
+			    struct hfi1_ctxtdata *rcd)
 {
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	struct qib_ack_entry *e;
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_ack_entry *e;
 	unsigned long flags;
 	u8 i, prev;
 	int old_req;
@@ -1757,7 +1758,7 @@ static int qib_rc_rcv_error(struct qib_other_headers *ohdr,
 			int ok;
 
 			ok = hfi1_rkey_ok(qp, &e->rdma_sge, len, vaddr, rkey,
-					 IB_ACCESS_REMOTE_READ);
+					  IB_ACCESS_REMOTE_READ);
 			if (unlikely(!ok))
 				goto unlock_done;
 		} else {
@@ -1834,7 +1835,7 @@ send_ack:
 	return 0;
 }
 
-void hfi1_rc_error(struct qib_qp *qp, enum ib_wc_status err)
+void hfi1_rc_error(struct hfi1_qp *qp, enum ib_wc_status err)
 {
 	unsigned long flags;
 	int lastwqe;
@@ -1853,7 +1854,7 @@ void hfi1_rc_error(struct qib_qp *qp, enum ib_wc_status err)
 	}
 }
 
-static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
+static inline void qib_update_ack_queue(struct hfi1_qp *qp, unsigned n)
 {
 	unsigned next;
 
@@ -1864,7 +1865,7 @@ static inline void qib_update_ack_queue(struct qib_qp *qp, unsigned n)
 	qp->s_ack_state = OP(ACKNOWLEDGE);
 }
 
-static void log_cca_event(struct qib_pportdata *ppd, u8 sl, u32 rlid,
+static void log_cca_event(struct hfi1_pportdata *ppd, u8 sl, u32 rlid,
 			  u32 lqpn, u32 rqpn, u8 svc_type)
 {
 	struct opa_hfi_cong_log_event_internal *cc_event;
@@ -1891,7 +1892,7 @@ static void log_cca_event(struct qib_pportdata *ppd, u8 sl, u32 rlid,
 	spin_unlock(&ppd->cc_log_lock);
 }
 
-void process_becn(struct qib_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
+void process_becn(struct hfi1_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 		  u32 rqpn, u8 svc_type)
 {
 	struct cca_timer *cca_timer;
@@ -1965,12 +1966,12 @@ void process_becn(struct qib_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
  * for the given QP.
  * Called at interrupt level.
  */
-void hfi1_rc_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
-		u32 rcv_flags, void *data, u32 tlen, struct qib_qp *qp)
+void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
+		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp)
 {
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
-	struct qib_other_headers *ohdr;
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+	struct hfi1_other_headers *ohdr;
 	u32 opcode;
 	u32 hdrsize;
 	u32 psn;
@@ -2182,7 +2183,7 @@ send_last:
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
 		hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
-			     (ohdr->bth[0] &
+			      (ohdr->bth[0] &
 			      cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 		break;
 
@@ -2204,7 +2205,7 @@ send_last:
 
 			/* Check rkey & NAK */
 			ok = hfi1_rkey_ok(qp, &qp->r_sge.sge, qp->r_len, vaddr,
-					 rkey, IB_ACCESS_REMOTE_WRITE);
+					  rkey, IB_ACCESS_REMOTE_WRITE);
 			if (unlikely(!ok))
 				goto nack_acc;
 			qp->r_sge.num_sge = 1;
@@ -2230,7 +2231,7 @@ send_last:
 		goto send_last;
 
 	case OP(RDMA_READ_REQUEST): {
-		struct qib_ack_entry *e;
+		struct hfi1_ack_entry *e;
 		u32 len;
 		u8 next;
 
@@ -2260,7 +2261,7 @@ send_last:
 
 			/* Check rkey & NAK */
 			ok = hfi1_rkey_ok(qp, &e->rdma_sge, len, vaddr,
-					 rkey, IB_ACCESS_REMOTE_READ);
+					  rkey, IB_ACCESS_REMOTE_READ);
 			if (unlikely(!ok))
 				goto nack_acc_unlck;
 			/*
@@ -2300,7 +2301,7 @@ send_last:
 	case OP(COMPARE_SWAP):
 	case OP(FETCH_ADD): {
 		struct ib_atomic_eth *ateth;
-		struct qib_ack_entry *e;
+		struct hfi1_ack_entry *e;
 		u64 vaddr;
 		atomic64_t *maddr;
 		u64 sdata;
@@ -2331,8 +2332,8 @@ send_last:
 		rkey = be32_to_cpu(ateth->rkey);
 		/* Check rkey & NAK */
 		if (unlikely(!hfi1_rkey_ok(qp, &qp->r_sge.sge, sizeof(u64),
-					  vaddr, rkey,
-					  IB_ACCESS_REMOTE_ATOMIC)))
+					   vaddr, rkey,
+					   IB_ACCESS_REMOTE_ATOMIC)))
 			goto nack_acc_unlck;
 		/* Perform atomic OP and save result. */
 		maddr = (atomic64_t *) qp->r_sge.sge.vaddr;
@@ -2426,14 +2427,14 @@ sunlock:
 }
 
 void qib_rc_hdrerr(
-	struct qib_ctxtdata *rcd,
-	struct qib_ib_header *hdr,
+	struct hfi1_ctxtdata *rcd,
+	struct hfi1_ib_header *hdr,
 	u32 rcv_flags,
-	struct qib_qp *qp)
+	struct hfi1_qp *qp)
 {
 	int has_grh = rcv_flags & QIB_HAS_GRH;
-	struct qib_other_headers *ohdr;
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_other_headers *ohdr;
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	int diff;
 	u8 opcode;
 	u32 psn;

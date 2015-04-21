@@ -50,18 +50,18 @@
  *
  */
 
-struct qib_ibdev;
+struct hfi1_ibdev;
 #ifdef CONFIG_DEBUG_FS
-void hfi_dbg_ibdev_init(struct qib_ibdev *ibd);
-void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd);
+void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd);
+void hfi_dbg_ibdev_exit(struct hfi1_ibdev *ibd);
 void hfi_dbg_init(void);
 void hfi_dbg_exit(void);
 #else
-static inline void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
+static inline void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 {
 }
 
-void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd)
+void hfi_dbg_ibdev_exit(struct hfi1_ibdev *ibd)
 {
 }
 

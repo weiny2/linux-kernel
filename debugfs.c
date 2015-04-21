@@ -139,7 +139,7 @@ static int _opcode_stats_seq_show(struct seq_file *s, void *v)
 	loff_t *spos = v;
 	loff_t i = *spos, j;
 	u64 n_packets = 0, n_bytes = 0;
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	for (j = 0; j < dd->first_user_ctxt; j++) {
@@ -163,7 +163,7 @@ DEBUGFS_FILE_OPS(opcode_stats);
 
 static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	if (!*pos)
@@ -175,7 +175,7 @@ static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 
 static void *_ctx_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	if (v == SEQ_START_TOKEN)
@@ -197,7 +197,7 @@ static int _ctx_stats_seq_show(struct seq_file *s, void *v)
 	loff_t *spos;
 	loff_t i, j;
 	u64 n_packets = 0;
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	if (v == SEQ_START_TOKEN) {
@@ -286,11 +286,11 @@ DEBUGFS_FILE_OPS(qp_stats);
 static void *_sdes_seq_start(struct seq_file *s, loff_t *pos)
 __acquires(RCU)
 {
-	struct qib_ibdev *ibd;
+	struct hfi1_ibdev *ibd;
 	struct hfi_devdata *dd;
 
 	rcu_read_lock();
-	ibd = (struct qib_ibdev *)s->private;
+	ibd = (struct hfi1_ibdev *)s->private;
 	dd = dd_from_dev(ibd);
 	if (!dd->per_sdma || *pos >= dd->num_sdma)
 		return NULL;
@@ -299,7 +299,7 @@ __acquires(RCU)
 
 static void *_sdes_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	++*pos;
@@ -317,7 +317,7 @@ __releases(RCU)
 
 static int _sdes_seq_show(struct seq_file *s, void *v)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 	loff_t *spos = v;
 	loff_t i = *spos;
@@ -399,7 +399,7 @@ static ssize_t portcntrs_debugfs_read(struct file *file, char __user *buf,
 	u64 *counters;
 	size_t avail;
 	struct hfi_devdata *dd;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	ssize_t rval;
 
 	rcu_read_lock();
@@ -417,7 +417,7 @@ static ssize_t portcntrs_debugfs_read(struct file *file, char __user *buf,
 static ssize_t qsfp_debugfs_dump(struct file *file, char __user *buf,
 			   size_t count, loff_t *ppos)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *tmp;
 	int ret;
 
@@ -441,7 +441,7 @@ static ssize_t qsfp_debugfs_dump(struct file *file, char __user *buf,
 static ssize_t __i2c_debugfs_write(struct file *file, const char __user *buf,
 			   size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int i2c_addr;
@@ -501,7 +501,7 @@ static ssize_t i2c2_debugfs_write(struct file *file, const char __user *buf,
 static ssize_t __i2c_debugfs_read(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int i2c_addr;
@@ -561,7 +561,7 @@ static ssize_t i2c2_debugfs_read(struct file *file, char __user *buf,
 static ssize_t __qsfp_debugfs_write(struct file *file, const char __user *buf,
 			   size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int total_written;
@@ -621,7 +621,7 @@ static ssize_t qsfp2_debugfs_write(struct file *file, const char __user *buf,
 static ssize_t __qsfp_debugfs_read(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int total_read;
@@ -702,12 +702,12 @@ static const struct counter_info port_cntr_ops[] = {
 	DEBUGFS_OPS("qsfp2", qsfp2_debugfs_read, qsfp2_debugfs_write),
 };
 
-void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
+void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 {
 	char name[sizeof("port0counters") + 1];
 	char link[10];
 	struct hfi_devdata *dd = dd_from_dev(ibd);
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int unit = dd->unit;
 	int i, j;
 
@@ -752,7 +752,7 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 		}
 }
 
-void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd)
+void hfi_dbg_ibdev_exit(struct hfi1_ibdev *ibd)
 {
 	if (!hfi_dbg_root)
 		goto out;

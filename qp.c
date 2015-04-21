@@ -67,7 +67,7 @@ static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
-static void flush_tx_list(struct qib_qp *qp);
+static void flush_tx_list(struct hfi1_qp *qp);
 static int iowait_sleep(
 	struct sdma_engine *sde,
 	struct iowait *wait,
@@ -236,9 +236,9 @@ static inline unsigned qpn_hash(struct hfi_qp_ibdev *dev, u32 qpn)
  * Put the QP into the hash table.
  * The hash table holds a reference to the QP.
  */
-static void insert_qp(struct qib_ibdev *dev, struct qib_qp *qp)
+static void insert_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 {
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	unsigned long flags;
 	unsigned n = qpn_hash(dev->qp_dev, qp->ibqp.qp_num);
 
@@ -261,9 +261,9 @@ static void insert_qp(struct qib_ibdev *dev, struct qib_qp *qp)
  * Remove the QP from the table so it can't be found asynchronously by
  * the receive interrupt routine.
  */
-static void remove_qp(struct qib_ibdev *dev, struct qib_qp *qp)
+static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 {
-	struct qib_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	unsigned n = qpn_hash(dev->qp_dev, qp->ibqp.qp_num);
 	unsigned long flags;
 	int removed = 1;
@@ -277,8 +277,8 @@ static void remove_qp(struct qib_ibdev *dev, struct qib_qp *qp)
 			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
 		RCU_INIT_POINTER(ibp->qp1, NULL);
 	} else {
-		struct qib_qp *q;
-		struct qib_qp __rcu **qpp;
+		struct hfi1_qp *q;
+		struct hfi1_qp __rcu **qpp;
 
 		removed = 0;
 		qpp = &dev->qp_dev->qp_table[n];
@@ -312,13 +312,13 @@ static void remove_qp(struct qib_ibdev *dev, struct qib_qp *qp)
  */
 static unsigned free_all_qps(struct hfi_devdata *dd)
 {
-	struct qib_ibdev *dev = &dd->verbs_dev;
+	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	unsigned long flags;
-	struct qib_qp *qp;
+	struct hfi1_qp *qp;
 	unsigned n, qp_inuse = 0;
 
 	for (n = 0; n < dd->num_pports; n++) {
-		struct qib_ibport *ibp = &dd->pport[n].ibport_data;
+		struct hfi1_ibport *ibp = &dd->pport[n].ibport_data;
 
 		if (!hfi1_mcast_tree_empty(ibp))
 			qp_inuse++;
@@ -356,9 +356,9 @@ bail:
  * The caller is responsible for decrementing the QP reference count
  * when done.
  */
-struct qib_qp *hfi1_lookup_qpn(struct qib_ibport *ibp, u32 qpn)
+struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp, u32 qpn)
 {
-	struct qib_qp *qp = NULL;
+	struct hfi1_qp *qp = NULL;
 
 	rcu_read_lock();
 	if (unlikely(qpn <= 1)) {
@@ -369,7 +369,7 @@ struct qib_qp *hfi1_lookup_qpn(struct qib_ibport *ibp, u32 qpn)
 		if (qp)
 			atomic_inc(&qp->refcount);
 	} else {
-		struct qib_ibdev *dev = &ppd_from_ibp(ibp)->dd->verbs_dev;
+		struct hfi1_ibdev *dev = &ppd_from_ibp(ibp)->dd->verbs_dev;
 		unsigned n = qpn_hash(dev->qp_dev, qpn);
 
 		for (qp = rcu_dereference(dev->qp_dev->qp_table[n]); qp;
@@ -388,7 +388,7 @@ struct qib_qp *hfi1_lookup_qpn(struct qib_ibport *ibp, u32 qpn)
  * @qp: the QP to reset
  * @type: the QP type
  */
-static void qib_reset_qp(struct qib_qp *qp, enum ib_qp_type type)
+static void qib_reset_qp(struct hfi1_qp *qp, enum ib_qp_type type)
 {
 	qp->remote_qpn = 0;
 	qp->qkey = 0;
@@ -441,7 +441,7 @@ static void qib_reset_qp(struct qib_qp *qp, enum ib_qp_type type)
 	qp->r_sge.num_sge = 0;
 }
 
-static void clear_mr_refs(struct qib_qp *qp, int clr_sends)
+static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 {
 	unsigned n;
 
@@ -452,11 +452,11 @@ static void clear_mr_refs(struct qib_qp *qp, int clr_sends)
 
 	if (clr_sends) {
 		while (qp->s_last != qp->s_head) {
-			struct qib_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
+			struct hfi1_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
 			unsigned i;
 
 			for (i = 0; i < wqe->wr.num_sge; i++) {
-				struct qib_sge *sge = &wqe->sg_list[i];
+				struct hfi1_sge *sge = &wqe->sg_list[i];
 
 				qib_put_mr(sge->mr);
 			}
@@ -477,7 +477,7 @@ static void clear_mr_refs(struct qib_qp *qp, int clr_sends)
 		return;
 
 	for (n = 0; n < ARRAY_SIZE(qp->s_ack_queue); n++) {
-		struct qib_ack_entry *e = &qp->s_ack_queue[n];
+		struct hfi1_ack_entry *e = &qp->s_ack_queue[n];
 
 		if (e->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST &&
 		    e->rdma_sge.mr) {
@@ -497,9 +497,9 @@ static void clear_mr_refs(struct qib_qp *qp, int clr_sends)
  * The QP r_lock and s_lock should be held and interrupts disabled.
  * If we are already in error state, just return.
  */
-int hfi1_error_qp(struct qib_qp *qp, enum ib_wc_status err)
+int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 {
-	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
+	struct hfi1_ibdev *dev = to_idev(qp->ibqp.device);
 	struct ib_wc wc;
 	int ret = 0;
 
@@ -552,7 +552,7 @@ int hfi1_error_qp(struct qib_qp *qp, enum ib_wc_status err)
 	wc.status = IB_WC_WR_FLUSH_ERR;
 
 	if (qp->r_rq.wq) {
-		struct qib_rwq *wq;
+		struct hfi1_rwq *wq;
 		u32 head;
 		u32 tail;
 
@@ -582,7 +582,7 @@ bail:
 	return ret;
 }
 
-static void flush_tx_list(struct qib_qp *qp)
+static void flush_tx_list(struct hfi1_qp *qp)
 {
 	while (!list_empty(&qp->s_iowait.tx_head)) {
 		struct sdma_txreq *tx;
@@ -597,9 +597,9 @@ static void flush_tx_list(struct qib_qp *qp)
 	}
 }
 
-static void flush_iowait(struct qib_qp *qp)
+static void flush_iowait(struct hfi1_qp *qp)
 {
-	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
+	struct hfi1_ibdev *dev = to_idev(qp->ibqp.device);
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->pending_lock, flags);
@@ -648,10 +648,10 @@ static inline int verbs_mtu_enum_to_int(struct ib_device *dev, enum ib_mtu mtu)
  * Returns 0 on success, otherwise returns an errno.
  */
 int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		  int attr_mask, struct ib_udata *udata)
+		   int attr_mask, struct ib_udata *udata)
 {
-	struct qib_ibdev *dev = to_idev(ibqp->device);
-	struct qib_qp *qp = to_iqp(ibqp);
+	struct hfi1_ibdev *dev = to_idev(ibqp->device);
+	struct hfi1_qp *qp = to_iqp(ibqp);
 	enum ib_qp_state cur_state, new_state;
 	struct ib_event ev;
 	int lastwqe = 0;
@@ -850,7 +850,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_PATH_MTU) {
-		struct qib_ibport *ibp;
+		struct hfi1_ibport *ibp;
 		u8 sc, vl;
 		u32 mtu;
 
@@ -928,9 +928,9 @@ bail:
 }
 
 int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		 int attr_mask, struct ib_qp_init_attr *init_attr)
+		  int attr_mask, struct ib_qp_init_attr *init_attr)
 {
-	struct qib_qp *qp = to_iqp(ibqp);
+	struct hfi1_qp *qp = to_iqp(ibqp);
 
 	attr->qp_state = qp->state;
 	attr->cur_qp_state = attr->qp_state;
@@ -983,7 +983,7 @@ int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
  *
  * Returns the AETH.
  */
-__be32 hfi1_compute_aeth(struct qib_qp *qp)
+__be32 hfi1_compute_aeth(struct hfi1_qp *qp)
 {
 	u32 aeth = qp->r_msn & QIB_MSN_MASK;
 
@@ -996,7 +996,7 @@ __be32 hfi1_compute_aeth(struct qib_qp *qp)
 	} else {
 		u32 min, max, x;
 		u32 credits;
-		struct qib_rwq *wq = qp->r_rq.wq;
+		struct hfi1_rwq *wq = qp->r_rq.wq;
 		u32 head;
 		u32 tail;
 
@@ -1049,13 +1049,13 @@ __be32 hfi1_compute_aeth(struct qib_qp *qp)
  * Called by the ib_create_qp() core verbs function.
  */
 struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
-			    struct ib_qp_init_attr *init_attr,
-			    struct ib_udata *udata)
+			     struct ib_qp_init_attr *init_attr,
+			     struct ib_udata *udata)
 {
-	struct qib_qp *qp;
+	struct hfi1_qp *qp;
 	int err;
-	struct qib_swqe *swq = NULL;
-	struct qib_ibdev *dev;
+	struct hfi1_swqe *swq = NULL;
+	struct hfi1_ibdev *dev;
 	struct hfi_devdata *dd;
 	size_t sz;
 	size_t sg_list_sz;
@@ -1095,9 +1095,9 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	case IB_QPT_UC:
 	case IB_QPT_RC:
 	case IB_QPT_UD:
-		sz = sizeof(struct qib_sge) *
+		sz = sizeof(struct hfi1_sge) *
 			init_attr->cap.max_send_sge +
-			sizeof(struct qib_swqe);
+			sizeof(struct hfi1_swqe);
 		swq = vmalloc((init_attr->cap.max_send_wr + 1) * sz);
 		if (swq == NULL) {
 			ret = ERR_PTR(-ENOMEM);
@@ -1106,7 +1106,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		sz = sizeof(*qp);
 		sg_list_sz = 0;
 		if (init_attr->srq) {
-			struct qib_srq *srq = to_isrq(init_attr->srq);
+			struct hfi1_srq *srq = to_isrq(init_attr->srq);
 
 			if (srq->rq.max_sge > 1)
 				sg_list_sz = sizeof(*qp->r_sg_list) *
@@ -1134,8 +1134,8 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 			qp->r_rq.size = init_attr->cap.max_recv_wr + 1;
 			qp->r_rq.max_sge = init_attr->cap.max_recv_sge;
 			sz = (sizeof(struct ib_sge) * qp->r_rq.max_sge) +
-				sizeof(struct qib_rwqe);
-			qp->r_rq.wq = vmalloc_user(sizeof(struct qib_rwq) +
+				sizeof(struct hfi1_rwqe);
+			qp->r_rq.wq = vmalloc_user(sizeof(struct hfi1_rwq) +
 						   qp->r_rq.size * sz);
 			if (!qp->r_rq.wq) {
 				ret = ERR_PTR(-ENOMEM);
@@ -1198,7 +1198,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 				goto bail_ip;
 			}
 		} else {
-			u32 s = sizeof(struct qib_rwq) + qp->r_rq.size * sz;
+			u32 s = sizeof(struct hfi1_rwq) + qp->r_rq.size * sz;
 
 			qp->ip = hfi1_create_mmap_info(dev, s,
 						      ibpd->uobject->context,
@@ -1262,8 +1262,8 @@ bail:
  */
 int hfi1_destroy_qp(struct ib_qp *ibqp)
 {
-	struct qib_qp *qp = to_iqp(ibqp);
-	struct qib_ibdev *dev = to_idev(ibqp->device);
+	struct hfi1_qp *qp = to_iqp(ibqp);
+	struct hfi1_ibdev *dev = to_idev(ibqp->device);
 
 	/* Make sure HW and driver activity is stopped. */
 	spin_lock_irq(&qp->r_lock);
@@ -1366,7 +1366,7 @@ static void free_qpn_table(struct hfi_qpn_table *qpt)
  *
  * The QP s_lock should be held.
  */
-void hfi1_get_credit(struct qib_qp *qp, u32 aeth)
+void hfi1_get_credit(struct hfi1_qp *qp, u32 aeth)
 {
 	u32 credit = (aeth >> QIB_AETH_CREDIT_SHIFT) & QIB_AETH_CREDIT_MASK;
 
@@ -1396,7 +1396,7 @@ void hfi1_get_credit(struct qib_qp *qp, u32 aeth)
 	}
 }
 
-void qib_qp_wakeup(struct qib_qp *qp, u32 flag)
+void qib_qp_wakeup(struct hfi1_qp *qp, u32 flag)
 {
 	unsigned long flags;
 
@@ -1419,10 +1419,10 @@ static int iowait_sleep(
 	unsigned seq)
 {
 	struct verbs_txreq *tx = container_of(stx, struct verbs_txreq, txreq);
-	struct qib_qp *qp;
+	struct hfi1_qp *qp;
 	unsigned long flags;
 	int ret = 0;
-	struct qib_ibdev *dev;
+	struct hfi1_ibdev *dev;
 
 	qp = tx->qp;
 
@@ -1441,7 +1441,7 @@ static int iowait_sleep(
 		if (sdma_progress(sde, seq, stx))
 			goto eagain;
 		if (list_empty(&qp->s_iowait.list)) {
-			struct qib_ibport *ibp =
+			struct hfi1_ibport *ibp =
 				to_iport(qp->ibqp.device, qp->port_num);
 
 			ibp->n_dmawait++;
@@ -1468,13 +1468,13 @@ eagain:
 
 static void iowait_wakeup(struct iowait *wait, int reason)
 {
-	struct qib_qp *qp = container_of(wait, struct qib_qp, s_iowait);
+	struct hfi1_qp *qp = container_of(wait, struct hfi1_qp, s_iowait);
 
 	BUG_ON(reason != SDMA_AVAIL_REASON);
 	qib_qp_wakeup(qp, QIB_S_WAIT_DMA_DESC);
 }
 
-int qib_qp_init(struct qib_ibdev *dev)
+int qib_qp_init(struct hfi1_ibdev *dev)
 {
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	int i;
@@ -1511,7 +1511,7 @@ nomem:
 	return ret;
 }
 
-void qib_qp_exit(struct qib_ibdev *dev)
+void qib_qp_exit(struct hfi1_ibdev *dev)
 {
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	u32 qps_inuse;
@@ -1536,7 +1536,7 @@ void qib_qp_exit(struct qib_ibdev *dev)
  * Return:
  * A send engine for the qp or NULL for SMI type qp.
  */
-struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5)
+struct sdma_engine *qp_to_sdma_engine(struct hfi1_qp *qp, u8 sc5)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct sdma_engine *sde;
@@ -1557,13 +1557,13 @@ struct sdma_engine *qp_to_sdma_engine(struct qib_qp *qp, u8 sc5)
 }
 
 struct qp_iter {
-	struct qib_ibdev *dev;
-	struct qib_qp *qp;
+	struct hfi1_ibdev *dev;
+	struct hfi1_qp *qp;
 	int specials;
 	int n;
 };
 
-struct qp_iter *qp_iter_init(struct qib_ibdev *dev)
+struct qp_iter *qp_iter_init(struct hfi1_ibdev *dev)
 {
 	struct qp_iter *iter;
 
@@ -1583,11 +1583,11 @@ struct qp_iter *qp_iter_init(struct qib_ibdev *dev)
 
 int qp_iter_next(struct qp_iter *iter)
 {
-	struct qib_ibdev *dev = iter->dev;
+	struct hfi1_ibdev *dev = iter->dev;
 	int n = iter->n;
 	int ret = 1;
-	struct qib_qp *pqp = iter->qp;
-	struct qib_qp *qp;
+	struct hfi1_qp *pqp = iter->qp;
+	struct hfi1_qp *qp;
 
 	/*
 	 * The approach is to consider the special qps
@@ -1608,8 +1608,8 @@ int qp_iter_next(struct qp_iter *iter)
 			qp = rcu_dereference(pqp->next);
 		} else {
 			if (n < iter->specials) {
-				struct qib_pportdata *ppd;
-				struct qib_ibport *ibp;
+				struct hfi1_pportdata *ppd;
+				struct hfi1_ibport *ibp;
 				int pidx;
 
 				pidx = n % dev->ibdev.phys_port_cnt;
@@ -1640,7 +1640,7 @@ static const char * const qp_type_str[] = {
 	"SMI", "GSI", "RC", "UC", "UD",
 };
 
-static int qp_idle(struct qib_qp *qp)
+static int qp_idle(struct hfi1_qp *qp)
 {
 	return
 		qp->s_last == qp->s_acked &&
@@ -1651,8 +1651,8 @@ static int qp_idle(struct qib_qp *qp)
 
 void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 {
-	struct qib_swqe *wqe;
-	struct qib_qp *qp = iter->qp;
+	struct hfi1_swqe *wqe;
+	struct hfi1_qp *qp = iter->qp;
 	struct sdma_engine *sde;
 
 	sde = qp_to_sdma_engine(qp, qp->s_sc);

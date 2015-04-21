@@ -857,7 +857,7 @@ static void sdma_map_rcu_callback(struct rcu_head *list)
 int sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 {
 	int i, j;
-	struct qib_pportdata *ppd = dd->pport + port;
+	struct hfi1_pportdata *ppd = dd->pport + port;
 	int extra, sde_per_vl;
 	int engine = 0;
 	u8 lvl_engines[OPA_MAX_VLS];
@@ -1007,7 +1007,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 	struct sdma_engine *sde;
 	u16 descq_cnt;
 	void *curr_head;
-	struct qib_pportdata *ppd = dd->pport + port;
+	struct hfi1_pportdata *ppd = dd->pport + port;
 	u32 per_sdma_credits;
 	uint idle_cnt = sdma_idle_cnt;
 	size_t num_engines = dd->chip_sdma_engines;
@@ -1407,7 +1407,7 @@ static void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 	struct iowait *waits[SDMA_WAIT_BATCH_SIZE];
 	unsigned i, n = 0;
 	struct sdma_txreq *stx;
-	struct qib_ibdev *dev = &sde->dd->verbs_dev;
+	struct hfi1_ibdev *dev = &sde->dd->verbs_dev;
 
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,

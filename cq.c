@@ -64,9 +64,9 @@
  *
  * This may be called with qp->s_lock held.
  */
-void hfi1_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
+void hfi1_cq_enter(struct hfi1_cq *cq, struct ib_wc *entry, int solicited)
 {
-	struct qib_cq_wc *wc;
+	struct hfi1_cq_wc *wc;
 	unsigned long flags;
 	u32 head;
 	u32 next;
@@ -151,8 +151,8 @@ void hfi1_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int solicited)
  */
 int hfi1_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
 {
-	struct qib_cq *cq = to_icq(ibcq);
-	struct qib_cq_wc *wc;
+	struct hfi1_cq *cq = to_icq(ibcq);
+	struct hfi1_cq_wc *wc;
 	unsigned long flags;
 	int npolled;
 	u32 tail;
@@ -189,7 +189,7 @@ bail:
 
 static void send_complete(struct kthread_work *work)
 {
-	struct qib_cq *cq = container_of(work, struct qib_cq, comptask);
+	struct hfi1_cq *cq = container_of(work, struct hfi1_cq, comptask);
 
 	/*
 	 * The completion handler will most likely rearm the notification
@@ -229,12 +229,12 @@ static void send_complete(struct kthread_work *work)
  * Called by ib_create_cq() in the generic verbs code.
  */
 struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
-			    int comp_vector, struct ib_ucontext *context,
-			    struct ib_udata *udata)
+			     int comp_vector, struct ib_ucontext *context,
+			     struct ib_udata *udata)
 {
-	struct qib_ibdev *dev = to_idev(ibdev);
-	struct qib_cq *cq;
-	struct qib_cq_wc *wc;
+	struct hfi1_ibdev *dev = to_idev(ibdev);
+	struct hfi1_cq *cq;
+	struct hfi1_cq_wc *wc;
 	struct ib_cq *ret;
 	u32 sz;
 
@@ -345,8 +345,8 @@ done:
  */
 int hfi1_destroy_cq(struct ib_cq *ibcq)
 {
-	struct qib_ibdev *dev = to_idev(ibcq->device);
-	struct qib_cq *cq = to_icq(ibcq);
+	struct hfi1_ibdev *dev = to_idev(ibcq->device);
+	struct hfi1_cq *cq = to_icq(ibcq);
 
 	flush_kthread_work(&cq->comptask);
 	spin_lock(&dev->n_cqs_lock);
@@ -373,7 +373,7 @@ int hfi1_destroy_cq(struct ib_cq *ibcq)
  */
 int hfi1_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
 {
-	struct qib_cq *cq = to_icq(ibcq);
+	struct hfi1_cq *cq = to_icq(ibcq);
 	unsigned long flags;
 	int ret = 0;
 
@@ -402,9 +402,9 @@ int hfi1_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
  */
 int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 {
-	struct qib_cq *cq = to_icq(ibcq);
-	struct qib_cq_wc *old_wc;
-	struct qib_cq_wc *wc;
+	struct hfi1_cq *cq = to_icq(ibcq);
+	struct hfi1_cq_wc *old_wc;
+	struct hfi1_cq_wc *wc;
 	u32 head, tail, n;
 	int ret;
 	u32 sz;
@@ -476,8 +476,8 @@ int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	vfree(old_wc);
 
 	if (cq->ip) {
-		struct qib_ibdev *dev = to_idev(ibcq->device);
-		struct qib_mmap_info *ip = cq->ip;
+		struct hfi1_ibdev *dev = to_idev(ibcq->device);
+		struct hfi1_mmap_info *ip = cq->ip;
 
 		hfi1_update_mmap_info(dev, ip, sz, wc);
 

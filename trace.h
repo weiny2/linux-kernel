@@ -274,7 +274,7 @@ TRACE_EVENT(hfi_wantpiointr,
 );
 
 DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
-	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	TP_ARGS(qp, flags),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
@@ -298,17 +298,17 @@ DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
 );
 
 DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpwakeup,
-	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	TP_ARGS(qp, flags));
 
 DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpsleep,
-	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	TP_ARGS(qp, flags));
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_ibhdrs
 
-u8 ibhdr_exhdr_len(struct qib_ib_header *hdr);
+u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr);
 const char *parse_everbs_hdrs(
 	struct trace_seq *p,
 	u8 opcode,
@@ -377,7 +377,7 @@ __print_symbolic(opcode,                                   \
 
 DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 	TP_PROTO(struct hfi_devdata *dd,
-		 struct qib_ib_header *hdr),
+		 struct hfi1_ib_header *hdr),
 	TP_ARGS(dd, hdr),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
@@ -405,7 +405,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__dynamic_array(u8, ehdrs, ibhdr_exhdr_len(hdr))
 	),
 	TP_fast_assign(
-		struct qib_other_headers *ohdr;
+		struct hfi1_other_headers *ohdr;
 
 		DD_DEV_ASSIGN(dd);
 		/* LRH */
@@ -490,11 +490,11 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 );
 
 DEFINE_EVENT(hfi_ibhdr_template, input_ibhdr,
-	TP_PROTO(struct hfi_devdata *dd, struct qib_ib_header *hdr),
+	TP_PROTO(struct hfi_devdata *dd, struct hfi1_ib_header *hdr),
 	TP_ARGS(dd, hdr));
 
 DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
-	TP_PROTO(struct hfi_devdata *dd, struct qib_ib_header *hdr),
+	TP_PROTO(struct hfi_devdata *dd, struct hfi1_ib_header *hdr),
 	TP_ARGS(dd, hdr));
 
 #define SNOOP_PRN \
@@ -508,7 +508,7 @@ DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
 TRACE_EVENT(snoop_capture,
 	TP_PROTO(struct hfi_devdata *dd,
 		 int hdr_len,
-		 struct qib_ib_header *hdr,
+		 struct hfi1_ib_header *hdr,
 		 int data_len,
 		 void *data),
 	TP_ARGS(dd, hdr_len, hdr, data_len, data),
@@ -527,7 +527,7 @@ TRACE_EVENT(snoop_capture,
 		__dynamic_array(u8, raw_pkt, data_len)
 	),
 	TP_fast_assign(
-		struct qib_other_headers *ohdr;
+		struct hfi1_other_headers *ohdr;
 
 		__entry->lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 		if (__entry->lnh == QIB_LRH_BTH)
@@ -567,7 +567,7 @@ TRACE_EVENT(snoop_capture,
 	"cred:%u, credaddr:0x%llx, piobase:0x%llx, rcvhdr_cnt:%u, "	\
 	"rcvbase:0x%llx, rcvegrc:%u, rcvegrb:0x%llx"
 TRACE_EVENT(hfi_uctxtdata,
-	    TP_PROTO(struct hfi_devdata *dd, struct qib_ctxtdata *uctxt),
+	    TP_PROTO(struct hfi_devdata *dd, struct hfi1_ctxtdata *uctxt),
 	    TP_ARGS(dd, uctxt),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
@@ -1186,7 +1186,7 @@ TRACE_EVENT(hfi_sdma_state,
 #define TRACE_SYSTEM hfi1_rc
 
 DECLARE_EVENT_CLASS(hfi_sdma_rc,
-	TP_PROTO(struct qib_qp *qp, u32 psn),
+	TP_PROTO(struct hfi1_qp *qp, u32 psn),
 	TP_ARGS(qp, psn),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
@@ -1216,7 +1216,7 @@ DECLARE_EVENT_CLASS(hfi_sdma_rc,
 );
 
 DEFINE_EVENT(hfi_sdma_rc, hfi_rc_sendcomplete,
-	TP_PROTO(struct qib_qp *qp, u32 psn),
+	TP_PROTO(struct hfi1_qp *qp, u32 psn),
 	TP_ARGS(qp, psn)
 );
 
