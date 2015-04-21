@@ -479,6 +479,17 @@ struct link_down_reason {
 	u8 latest;
 };
 
+enum {
+	LO_PRIO_TABLE,
+	HI_PRIO_TABLE,
+	MAX_PRIO_TABLE
+};
+
+struct vl_arb_cache {
+	spinlock_t lock;
+	struct ib_vl_weight_elem table[WFR_VL_ARB_TABLE_SIZE];
+};
+
 /*
  * The structure below encapsulates data relevant to a physical IB Port.
  * Current chips support only one such port, but the separation
@@ -629,6 +640,8 @@ struct hfi1_pportdata {
 	int cc_log_idx; /* index for logging events */
 	int cc_mad_idx; /* index for reporting events */
 	/* end congestion log related entries */
+
+	struct vl_arb_cache vl_arb_cache[MAX_PRIO_TABLE];
 
 	/* port relative counter buffer */
 	u64 *cntrs;

@@ -6412,25 +6412,68 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 	return ret;
 }
 
-static void get_vl_weights(struct hfi_devdata *dd, u32 target,
-			   u32 size, struct ib_vl_weight_elem *vl)
+/* begin functions related to vl arbitration table caching */
+static void init_vl_arb_caches(struct hfi1_pportdata *ppd)
 {
-	u64 reg;
-	unsigned int i;
+	int i;
 
-	for (i = 0; i < size; i++, vl++) {
-		reg = read_csr(dd, target + (i * 8));
+	BUILD_BUG_ON(WFR_VL_ARB_TABLE_SIZE !=
+			WFR_VL_ARB_LOW_PRIO_TABLE_SIZE);
+	BUILD_BUG_ON(WFR_VL_ARB_TABLE_SIZE !=
+			WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE);
 
-		/*
-		 * NOTE: We use the low pririty shift and mask here, but
-		 * they are the same for both the low and high registers.
-		 */
-		vl->vl = (reg >> WFR_SEND_LOW_PRIORITY_LIST_VL_SHIFT)
-				& WFR_SEND_LOW_PRIORITY_LIST_VL_MASK;
-		vl->weight = (reg >> WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT)
-				& WFR_SEND_LOW_PRIORITY_LIST_WEIGHT_MASK;
-	}
+	/*
+	 * Note that we always return values directly from the
+	 * 'vl_arb_cache' (and do no CSR reads) in response to a
+	 * 'Get(VLArbTable)'. This is obviously correct after a
+	 * 'Set(VLArbTable)', since the cache will then be up to
+	 * date. But it's also correct prior to any 'Set(VLArbTable)'
+	 * since then both the cache, and the relevant h/w registers
+	 * will be zeroed.
+	 */
+
+	for (i = 0; i < MAX_PRIO_TABLE; i++)
+		spin_lock_init(&ppd->vl_arb_cache[i].lock);
 }
+
+/*
+ * vl_arb_lock_cache
+ *
+ * All other vl_arb_* functions should be called only after locking
+ * the cache.
+ */
+static inline struct vl_arb_cache *
+vl_arb_lock_cache(struct hfi1_pportdata *ppd, int idx)
+{
+	if (idx != LO_PRIO_TABLE && idx != HI_PRIO_TABLE)
+		return NULL;
+	spin_lock(&ppd->vl_arb_cache[idx].lock);
+	return &ppd->vl_arb_cache[idx];
+}
+
+static inline void vl_arb_unlock_cache(struct hfi1_pportdata *ppd, int idx)
+{
+	spin_unlock(&ppd->vl_arb_cache[idx].lock);
+}
+
+static void vl_arb_get_cache(struct vl_arb_cache *cache,
+			     struct ib_vl_weight_elem *vl)
+{
+	memcpy(vl, cache->table, WFR_VL_ARB_TABLE_SIZE * sizeof(*vl));
+}
+
+static void vl_arb_set_cache(struct vl_arb_cache *cache,
+			     struct ib_vl_weight_elem *vl)
+{
+	memcpy(cache->table, vl, WFR_VL_ARB_TABLE_SIZE * sizeof(*vl));
+}
+
+static int vl_arb_match_cache(struct vl_arb_cache *cache,
+			      struct ib_vl_weight_elem *vl)
+{
+	return !memcmp(cache->table, vl, WFR_VL_ARB_TABLE_SIZE * sizeof(*vl));
+}
+/* end functions related to vl arbitration table caching */
 
 static int set_vl_weights(struct hfi1_pportdata *ppd, u32 target,
 			  u32 size, struct ib_vl_weight_elem *vl)
@@ -6937,6 +6980,7 @@ int fm_get_table(struct hfi1_pportdata *ppd, int which, void *t)
 
 {
 	int size;
+	struct vl_arb_cache *vlc;
 
 	switch (which) {
 	case FM_TBL_VL_HIGH_ARB:
@@ -6945,8 +6989,9 @@ int fm_get_table(struct hfi1_pportdata *ppd, int which, void *t)
 		 * OPA specifies 128 elements (of 2 bytes each), though
 		 * WFR supports only 16 elements in h/w.
 		 */
-		get_vl_weights(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIST,
-			       WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
+		vlc = vl_arb_lock_cache(ppd, HI_PRIO_TABLE);
+		vl_arb_get_cache(vlc, t);
+		vl_arb_unlock_cache(ppd, HI_PRIO_TABLE);
 		break;
 	case FM_TBL_VL_LOW_ARB:
 		size = 256;
@@ -6954,8 +6999,9 @@ int fm_get_table(struct hfi1_pportdata *ppd, int which, void *t)
 		 * OPA specifies 128 elements (of 2 bytes each), though
 		 * WFR supports only 16 elements in h/w.
 		 */
-		get_vl_weights(ppd->dd, WFR_SEND_LOW_PRIORITY_LIST,
-			       WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+		vlc = vl_arb_lock_cache(ppd, LO_PRIO_TABLE);
+		vl_arb_get_cache(vlc, t);
+		vl_arb_unlock_cache(ppd, LO_PRIO_TABLE);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
 		size = get_buffer_control(ppd->dd, t, NULL);
@@ -6987,15 +7033,30 @@ int fm_get_table(struct hfi1_pportdata *ppd, int which, void *t)
 int fm_set_table(struct hfi1_pportdata *ppd, int which, void *t)
 {
 	int ret = 0;
+	struct vl_arb_cache *vlc;
 
 	switch (which) {
 	case FM_TBL_VL_HIGH_ARB:
+		vlc = vl_arb_lock_cache(ppd, HI_PRIO_TABLE);
+		if (vl_arb_match_cache(vlc, t)) {
+			vl_arb_unlock_cache(ppd, HI_PRIO_TABLE);
+			break;
+		}
+		vl_arb_set_cache(vlc, t);
+		vl_arb_unlock_cache(ppd, HI_PRIO_TABLE);
 		ret = set_vl_weights(ppd, WFR_SEND_HIGH_PRIORITY_LIST,
-				WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
+				     WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_VL_LOW_ARB:
+		vlc = vl_arb_lock_cache(ppd, LO_PRIO_TABLE);
+		if (vl_arb_match_cache(vlc, t)) {
+			vl_arb_unlock_cache(ppd, LO_PRIO_TABLE);
+			break;
+		}
+		vl_arb_set_cache(vlc, t);
+		vl_arb_unlock_cache(ppd, LO_PRIO_TABLE);
 		ret = set_vl_weights(ppd, WFR_SEND_LOW_PRIORITY_LIST,
-				WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
+				     WFR_VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
 		ret = set_buffer_control(ppd->dd, t);
@@ -10038,6 +10099,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		ppd->port_ltp_crc_mode |= cap_to_port_ltp(link_crc_mask) << 4;
 		/* start in offline */
 		ppd->host_link_state = HLS_DN_OFFLINE;
+		init_vl_arb_caches(ppd);
 	}
 
 	dd->link_default = HLS_DN_POLL;
