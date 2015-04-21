@@ -1,34 +1,51 @@
 /*
- * Copyright (c) 2012,2013,2014,2015 Intel Corporation. All rights reserved.
- * Copyright (c) 2007 - 2012 QLogic Corporation. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/spinlock.h>
@@ -65,25 +82,27 @@ MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 /* max wait time for a SDMA engine to indicate it has halted */
 #define SDMA_ERR_HALT_TIMEOUT 10 /* ms */
 /* all SDMA engine errors that cause a halt */
+
+#define SD(name) WFR_SEND_DMA_##name
 #define ALL_SDMA_ENG_HALT_ERRS \
-	(WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_WRONG_DW_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_GEN_MISMATCH_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_TOO_LONG_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_TAIL_OUT_OF_BOUNDS_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_FIRST_DESC_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_MEM_READ_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_LENGTH_MISMATCH_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_PACKET_DESC_OVERFLOW_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HEADER_SELECT_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HEADER_ADDRESS_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HEADER_LENGTH_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_TIMEOUT_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_DESC_TABLE_UNC_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_ASSEMBLY_UNC_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_PACKET_TRACKING_UNC_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HEADER_STORAGE_UNC_ERR_SMASK \
-	| WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_SMASK)
+	(SD(ENG_ERR_STATUS_SDMA_WRONG_DW_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_GEN_MISMATCH_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_TOO_LONG_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_TAIL_OUT_OF_BOUNDS_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_FIRST_DESC_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_MEM_READ_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_LENGTH_MISMATCH_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_PACKET_DESC_OVERFLOW_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_HEADER_SELECT_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_HEADER_ADDRESS_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_HEADER_LENGTH_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_TIMEOUT_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_DESC_TABLE_UNC_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_ASSEMBLY_UNC_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_PACKET_TRACKING_UNC_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_HEADER_STORAGE_UNC_ERR_SMASK) \
+	| SD(ENG_ERR_STATUS_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_SMASK))
 
 /* sdma_sendctrl operations */
 #define SDMA_SENDCTRL_OP_ENABLE    (1U << 0)
@@ -322,9 +341,9 @@ static inline void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
 	if (!(sde->dd->flags & HFI_HAS_SDMA_TIMEOUT))
 		return;
 	reg = cnt;
-	reg &= WFR_SEND_DMA_DESC_CNT_CNT_MASK;
-	reg <<= WFR_SEND_DMA_DESC_CNT_CNT_SHIFT;
-	write_sde_csr(sde, WFR_SEND_DMA_DESC_CNT, reg);
+	reg &= SD(DESC_CNT_CNT_MASK);
+	reg <<= SD(DESC_CNT_CNT_SHIFT);
+	write_sde_csr(sde, SD(DESC_CNT), reg);
 }
 
 /*
@@ -414,8 +433,8 @@ static void sdma_err_halt_wait(struct work_struct *work)
 
 	timeout = jiffies + msecs_to_jiffies(SDMA_ERR_HALT_TIMEOUT);
 	while (1) {
-		statuscsr = read_sde_csr(sde, WFR_SEND_DMA_STATUS);
-		statuscsr &= WFR_SEND_DMA_STATUS_ENG_HALTED_SMASK;
+		statuscsr = read_sde_csr(sde, SD(STATUS));
+		statuscsr &= SD(STATUS_ENG_HALTED_SMASK);
 		if (statuscsr)
 			break;
 		if (time_after(jiffies, timeout)) {
@@ -522,8 +541,8 @@ static void sdma_hw_clean_up_task(unsigned long opaque)
 			sde->this_idx, slashstrip(__FILE__), __LINE__,
 			__func__);
 #endif
-		statuscsr = read_sde_csr(sde, WFR_SEND_DMA_STATUS);
-		statuscsr &= WFR_SEND_DMA_STATUS_ENG_CLEANED_UP_SMASK;
+		statuscsr = read_sde_csr(sde, SD(STATUS));
+		statuscsr &= SD(STATUS_ENG_CLEANED_UP_SMASK);
 		if (statuscsr)
 			break;
 		udelay(10);
@@ -838,7 +857,7 @@ static void sdma_map_rcu_callback(struct rcu_head *list)
 int sdma_map_init(struct hfi_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 {
 	int i, j;
-	struct qib_pportdata *ppd = dd->pport + port;
+	struct hfi1_pportdata *ppd = dd->pport + port;
 	int extra, sde_per_vl;
 	int engine = 0;
 	u8 lvl_engines[OPA_MAX_VLS];
@@ -988,7 +1007,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 	struct sdma_engine *sde;
 	u16 descq_cnt;
 	void *curr_head;
-	struct qib_pportdata *ppd = dd->pport + port;
+	struct hfi1_pportdata *ppd = dd->pport + port;
 	u32 per_sdma_credits;
 	uint idle_cnt = sdma_idle_cnt;
 	size_t num_engines = dd->chip_sdma_engines;
@@ -1062,7 +1081,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		INIT_LIST_HEAD(&sde->dmawait);
 
 		sde->tail_csr =
-			get_kctxt_csr_addr(dd, this_idx, WFR_SEND_DMA_TAIL);
+			get_kctxt_csr_addr(dd, this_idx, SD(TAIL));
 
 		if (idle_cnt)
 			dd->default_desc1 =
@@ -1335,7 +1354,7 @@ retry:
 			&& (dd->flags & HFI_HAS_SDMA_TIMEOUT);
 	hwhead = use_dmahead ?
 		(u16) le64_to_cpu(*sde->head_dma) :
-		(u16) read_sde_csr(sde, WFR_SEND_DMA_HEAD);
+		(u16) read_sde_csr(sde, SD(HEAD));
 
 	if (unlikely(HFI_CAP_IS_KSET(SDMA_HEAD_CHECK))) {
 		u16 cnt;
@@ -1388,7 +1407,7 @@ static void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 	struct iowait *waits[SDMA_WAIT_BATCH_SIZE];
 	unsigned i, n = 0;
 	struct sdma_txreq *stx;
-	struct qib_ibdev *dev = &sde->dd->verbs_dev;
+	struct hfi1_ibdev *dev = &sde->dd->verbs_dev;
 
 #ifdef JAG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "JAG SDMA(%u) %s:%d %s()\n", sde->this_idx,
@@ -1492,7 +1511,7 @@ retry:
 	if ((status & sde->idle_mask) && !idle_check_done) {
 		swtail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
 		if (swtail != hwhead) {
-			hwhead = (u16)read_sde_csr(sde, WFR_SEND_DMA_HEAD);
+			hwhead = (u16)read_sde_csr(sde, SD(HEAD));
 			idle_check_done = 1;
 			goto retry;
 		}
@@ -1540,7 +1559,7 @@ void sdma_engine_error(struct sdma_engine *sde, u64 status)
 	write_seqlock(&sde->head_lock);
 	if (status & ALL_SDMA_ENG_HALT_ERRS)
 		__sdma_process_event(sde, sdma_event_e60_hw_halted);
-	if (status & ~WFR_SEND_DMA_ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK) {
+	if (status & ~SD(ENG_ERR_STATUS_SDMA_HALT_ERR_SMASK)) {
 		dd_dev_err(sde->dd,
 			"SDMA (%u) engine error: 0x%llx state %s\n",
 			sde->this_idx,
@@ -1568,19 +1587,19 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 #endif
 
 	if (op & SDMA_SENDCTRL_OP_ENABLE)
-		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_ENABLE_SMASK;
+		set_senddmactrl |= SD(CTRL_SDMA_ENABLE_SMASK);
 	else
-		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_ENABLE_SMASK;
+		clr_senddmactrl |= SD(CTRL_SDMA_ENABLE_SMASK);
 
 	if (op & SDMA_SENDCTRL_OP_INTENABLE)
-		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_INT_ENABLE_SMASK;
+		set_senddmactrl |= SD(CTRL_SDMA_INT_ENABLE_SMASK);
 	else
-		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_INT_ENABLE_SMASK;
+		clr_senddmactrl |= SD(CTRL_SDMA_INT_ENABLE_SMASK);
 
 	if (op & SDMA_SENDCTRL_OP_HALT)
-		set_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_HALT_SMASK;
+		set_senddmactrl |= SD(CTRL_SDMA_HALT_SMASK);
 	else
-		clr_senddmactrl |= WFR_SEND_DMA_CTRL_SDMA_HALT_SMASK;
+		clr_senddmactrl |= SD(CTRL_SDMA_HALT_SMASK);
 
 	spin_lock_irqsave(&sde->senddmactrl_lock, flags);
 
@@ -1588,11 +1607,11 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 	sde->p_senddmactrl &= ~clr_senddmactrl;
 
 	if (op & SDMA_SENDCTRL_OP_CLEANUP)
-		write_sde_csr(sde, WFR_SEND_DMA_CTRL,
+		write_sde_csr(sde, SD(CTRL),
 			sde->p_senddmactrl |
-			WFR_SEND_DMA_CTRL_SDMA_CLEANUP_SMASK);
+			SD(CTRL_SDMA_CLEANUP_SMASK));
 	else
-		write_sde_csr(sde, WFR_SEND_DMA_CTRL, sde->p_senddmactrl);
+		write_sde_csr(sde, SD(CTRL), sde->p_senddmactrl);
 
 	spin_unlock_irqrestore(&sde->senddmactrl_lock, flags);
 
@@ -1613,12 +1632,12 @@ static void sdma_setlengen(struct sdma_engine *sde)
 	 * count to enable generation checking and load the internal
 	 * generation counter.
 	 */
-	write_sde_csr(sde, WFR_SEND_DMA_LEN_GEN,
-		(sde->descq_cnt/64) << WFR_SEND_DMA_LEN_GEN_LENGTH_SHIFT
+	write_sde_csr(sde, SD(LEN_GEN),
+		(sde->descq_cnt/64) << SD(LEN_GEN_LENGTH_SHIFT)
 	);
-	write_sde_csr(sde, WFR_SEND_DMA_LEN_GEN,
-		((sde->descq_cnt/64) << WFR_SEND_DMA_LEN_GEN_LENGTH_SHIFT)
-		| (4ULL << WFR_SEND_DMA_LEN_GEN_GENERATION_SHIFT)
+	write_sde_csr(sde, SD(LEN_GEN),
+		((sde->descq_cnt/64) << SD(LEN_GEN_LENGTH_SHIFT))
+		| (4ULL << SD(LEN_GEN_GENERATION_SHIFT))
 	);
 }
 
@@ -1654,15 +1673,15 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
 	* Setting a single bit in ErrClear CSR won't affect other error
 	* conditions
 	*/
-	reg = WFR_SEND_DMA_ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_MASK<<
-	      WFR_SEND_DMA_ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_SHIFT;
-	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_CLEAR, reg);
+	reg = SD(ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_MASK) <<
+	      SD(ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_SHIFT);
+	write_sde_csr(sde, SD(ENG_ERR_CLEAR), reg);
 }
 
 /*
  * set_sdma_integrity
  *
- * Set the WFR_SEND_DMA_CHECK_ENABLE register for send DMA engine 'sde'.
+ * Set the SD(CHECK_ENABLE register for send DMA engine 'sde'.
  * Use hfi_pkt_base_sdma_integrity(dd) as the starting point, and adjust
  * that value based on relevant HFI_CAP* flags.
  */
@@ -1677,15 +1696,15 @@ static void set_sdma_integrity(struct sdma_engine *sde)
 	reg = hfi_pkt_base_sdma_integrity(dd);
 
 	/* make adjustments based on HFI_CAP* flags */
-	smask = WFR_SEND_DMA_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+	smask = SD(CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK);
 	if (!HFI_CAP_IS_KSET(PKEY_CHECK))
 		reg &= ~smask;
 
-	smask = WFR_SEND_DMA_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK;
+	smask = SD(CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK);
 	if (!HFI_CAP_IS_KSET(STATIC_RATE_CTRL))
 		reg |= smask;
 
-	write_sde_csr(sde, WFR_SEND_DMA_CHECK_ENABLE, reg);
+	write_sde_csr(sde, SD(CHECK_ENABLE), reg);
 }
 
 
@@ -1695,29 +1714,29 @@ static void init_sdma_regs(
 	uint idle_cnt)
 {
 	u8 opval, opmask;
-
 #ifdef JAG_SDMA_VERBOSITY
 	struct hfi_devdata *dd = sde->dd;
+
 	dd_dev_err(dd, "JAG SDMA(%u) %s:%d %s()\n",
 		sde->this_idx, slashstrip(__FILE__), __LINE__, __func__);
 #endif
 
-	write_sde_csr(sde, WFR_SEND_DMA_BASE_ADDR, sde->descq_phys);
+	write_sde_csr(sde, SD(BASE_ADDR), sde->descq_phys);
 	sdma_setlengen(sde);
 	sdma_update_tail(sde, 0); /* Set SendDmaTail */
-	write_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT, idle_cnt);
-	write_sde_csr(sde, WFR_SEND_DMA_DESC_CNT, 0);
-	write_sde_csr(sde, WFR_SEND_DMA_HEAD_ADDR, sde->head_phys);
-	write_sde_csr(sde, WFR_SEND_DMA_MEMORY,
+	write_sde_csr(sde, SD(RELOAD_CNT), idle_cnt);
+	write_sde_csr(sde, SD(DESC_CNT), 0);
+	write_sde_csr(sde, SD(HEAD_ADDR), sde->head_phys);
+	write_sde_csr(sde, SD(MEMORY),
 		((u64)credits <<
-			WFR_SEND_DMA_MEMORY_SDMA_MEMORY_CNT_SHIFT) |
+			SD(MEMORY_SDMA_MEMORY_CNT_SHIFT)) |
 		((u64)(credits * sde->this_idx) <<
-			WFR_SEND_DMA_MEMORY_SDMA_MEMORY_INDEX_SHIFT));
-	write_sde_csr(sde, WFR_SEND_DMA_ENG_ERR_MASK, ~0ull);
+			SD(MEMORY_SDMA_MEMORY_INDEX_SHIFT)));
+	write_sde_csr(sde, SD(ENG_ERR_MASK), ~0ull);
 	set_sdma_integrity(sde);
 	opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
 	opval = WFR_OPCODE_CHECK_VAL_DISABLED;
-	write_sde_csr(sde, WFR_SEND_DMA_CHECK_OPCODE,
+	write_sde_csr(sde, SD(CHECK_OPCODE),
 		(opmask << WFR_SEND_CTXT_CHECK_OPCODE_MASK_SHIFT) |
 		(opval << WFR_SEND_CTXT_CHECK_OPCODE_VALUE_SHIFT));
 }
@@ -1746,39 +1765,39 @@ void sdma_dumpstate(struct sdma_engine *sde)
 	u64 csr;
 	unsigned i;
 
-	sdma_dumpstate_helper(WFR_SEND_DMA_CTRL);
-	sdma_dumpstate_helper(WFR_SEND_DMA_STATUS);
-	sdma_dumpstate_helper0(WFR_SEND_DMA_ERR_STATUS);
-	sdma_dumpstate_helper0(WFR_SEND_DMA_ERR_MASK);
-	sdma_dumpstate_helper(WFR_SEND_DMA_ENG_ERR_STATUS);
-	sdma_dumpstate_helper(WFR_SEND_DMA_ENG_ERR_MASK);
+	sdma_dumpstate_helper(SD(CTRL));
+	sdma_dumpstate_helper(SD(STATUS));
+	sdma_dumpstate_helper0(SD(ERR_STATUS));
+	sdma_dumpstate_helper0(SD(ERR_MASK));
+	sdma_dumpstate_helper(SD(ENG_ERR_STATUS));
+	sdma_dumpstate_helper(SD(ENG_ERR_MASK));
 
 	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; ++i) {
-		sdma_dumpstate_helper2(WFR_CCE_INT_STATUS);
+		sdma_dumpstate_helper2(WFR_CCE_INT_STATUS));
 		sdma_dumpstate_helper2(WFR_CCE_INT_MASK);
 		sdma_dumpstate_helper2(WFR_CCE_INT_BLOCKED);
 	}
 
-	sdma_dumpstate_helper(WFR_SEND_DMA_TAIL);
-	sdma_dumpstate_helper(WFR_SEND_DMA_HEAD);
-	sdma_dumpstate_helper(WFR_SEND_DMA_PRIORITY_THLD);
-	sdma_dumpstate_helper(WFR_SEND_DMA_IDLE_CNT);
-	sdma_dumpstate_helper(WFR_SEND_DMA_RELOAD_CNT);
-	sdma_dumpstate_helper(WFR_SEND_DMA_DESC_CNT);
-	sdma_dumpstate_helper(WFR_SEND_DMA_DESC_FETCHED_CNT);
-	sdma_dumpstate_helper(WFR_SEND_DMA_MEMORY);
-	sdma_dumpstate_helper0(WFR_SEND_DMA_ENGINES);
-	sdma_dumpstate_helper0(WFR_SEND_DMA_MEM_SIZE);
+	sdma_dumpstate_helper(SD(TAIL));
+	sdma_dumpstate_helper(SD(HEAD));
+	sdma_dumpstate_helper(SD(PRIORITY_THLD));
+	sdma_dumpstate_helper(SD(IDLE_CNT);
+	sdma_dumpstate_helper(SD(RELOAD_CNT));
+	sdma_dumpstate_helper(SD(DESC_CNT));
+	sdma_dumpstate_helper(SD(DESC_FETCHED_CNT));
+	sdma_dumpstate_helper(SD(MEMORY));
+	sdma_dumpstate_helper0(SD(ENGINES));
+	sdma_dumpstate_helper0(SD(MEM_SIZE));
 	/* sdma_dumpstate_helper(WFR_SEND_EGRESS_SEND_DMA_STATUS);  */
-	sdma_dumpstate_helper(WFR_SEND_DMA_BASE_ADDR);
-	sdma_dumpstate_helper(WFR_SEND_DMA_LEN_GEN);
-	sdma_dumpstate_helper(WFR_SEND_DMA_HEAD_ADDR);
-	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_ENABLE);
-	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_VL);
-	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_JOB_KEY);
-	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_PARTITION_KEY);
-	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_SLID);
-	sdma_dumpstate_helper(WFR_SEND_DMA_CHECK_OPCODE);
+	sdma_dumpstate_helper(SD(BASE_ADDR));
+	sdma_dumpstate_helper(SD(LEN_GEN));
+	sdma_dumpstate_helper(SD(HEAD_ADDR));
+	sdma_dumpstate_helper(SD(CHECK_ENABLE));
+	sdma_dumpstate_helper(SD(CHECK_VL));
+	sdma_dumpstate_helper(SD(CHECK_JOB_KEY));
+	sdma_dumpstate_helper(SD(CHECK_PARTITION_KEY));
+	sdma_dumpstate_helper(SD(CHECK_SLID));
+	sdma_dumpstate_helper(SD(CHECK_OPCODE));
 }
 #endif
 
@@ -1843,9 +1862,8 @@ static void dump_sdma_state(struct sdma_engine *sde)
 	}
 }
 
-/* TODO augment this to dump slid check register */
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLNE %d DQF %u\n"
+	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLNE %d DQF %u SLC 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1866,18 +1884,18 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 	tail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
 	seq_printf(s, SDE_FMT, sde->this_idx,
 		sdma_state_name(sde->state.current_state),
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CTRL),
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_STATUS),
+		(unsigned long long)read_sde_csr(sde, SD(CTRL)),
+		(unsigned long long)read_sde_csr(sde, SD(STATUS)),
 		(unsigned long long)read_sde_csr(sde,
-			WFR_SEND_DMA_ENG_ERR_STATUS),
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_TAIL),
+			SD(ENG_ERR_STATUS)),
+		(unsigned long long)read_sde_csr(sde, SD(TAIL)),
 		tail,
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_HEAD),
+		(unsigned long long)read_sde_csr(sde, SD(HEAD)),
 		head,
 		(unsigned long long)*sde->head_dma,
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_MEMORY),
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_LEN_GEN),
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_RELOAD_CNT),
+		(unsigned long long)read_sde_csr(sde, SD(MEMORY)),
+		(unsigned long long)read_sde_csr(sde, SD(LEN_GEN)),
+		(unsigned long long)read_sde_csr(sde, SD(RELOAD_CNT)),
 		(unsigned long long)sde->last_status,
 		(unsigned long long)sde->ahg_bits,
 		sde->tx_tail,
@@ -1885,7 +1903,8 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		sde->descq_tail,
 		sde->descq_head,
 		   !list_empty(&sde->flushlist),
-		sde->descq_full_count);
+		sde->descq_full_count,
+		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CHECK_SLID));
 
 	/* print info for each entry in the descriptor queue */
 	while (head != tail) {
@@ -2714,16 +2733,16 @@ void sdma_update_lmc(struct hfi_devdata *dd, u64 mask, u32 lid)
 	int i;
 	u64 sreg;
 
-	sreg = ((mask & WFR_SEND_DMA_CHECK_SLID_MASK_MASK) <<
-		WFR_SEND_DMA_CHECK_SLID_MASK_SHIFT) |
-		(((lid & mask) & WFR_SEND_DMA_CHECK_SLID_VALUE_MASK) <<
-		WFR_SEND_DMA_CHECK_SLID_VALUE_SHIFT);
+	sreg = ((mask & SD(CHECK_SLID_MASK_MASK)) <<
+		SD(CHECK_SLID_MASK_SHIFT)) |
+		(((lid & mask) & SD(CHECK_SLID_VALUE_MASK)) <<
+		SD(CHECK_SLID_VALUE_SHIFT));
 
 	for (i = 0; i < dd->num_sdma; i++) {
 		hfi_cdbg(LINKVERB, "SendDmaEngine[%d].SLID_CHECK = 0x%x",
 			 i, (u32)sreg);
 		sde = &dd->per_sdma[i];
-		write_sde_csr(sde, WFR_SEND_DMA_CHECK_SLID, sreg);
+		write_sde_csr(sde, SD(CHECK_SLID), sreg);
 	}
 }
 

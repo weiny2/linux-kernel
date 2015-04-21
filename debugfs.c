@@ -1,34 +1,52 @@
 #ifdef CONFIG_DEBUG_FS
 /*
- * Copyright (c) 2014 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
@@ -121,7 +139,7 @@ static int _opcode_stats_seq_show(struct seq_file *s, void *v)
 	loff_t *spos = v;
 	loff_t i = *spos, j;
 	u64 n_packets = 0, n_bytes = 0;
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	for (j = 0; j < dd->first_user_ctxt; j++) {
@@ -145,7 +163,7 @@ DEBUGFS_FILE_OPS(opcode_stats);
 
 static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	if (!*pos)
@@ -157,7 +175,7 @@ static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 
 static void *_ctx_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	if (v == SEQ_START_TOKEN)
@@ -179,7 +197,7 @@ static int _ctx_stats_seq_show(struct seq_file *s, void *v)
 	loff_t *spos;
 	loff_t i, j;
 	u64 n_packets = 0;
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	if (v == SEQ_START_TOKEN) {
@@ -268,11 +286,11 @@ DEBUGFS_FILE_OPS(qp_stats);
 static void *_sdes_seq_start(struct seq_file *s, loff_t *pos)
 __acquires(RCU)
 {
-	struct qib_ibdev *ibd;
+	struct hfi1_ibdev *ibd;
 	struct hfi_devdata *dd;
 
 	rcu_read_lock();
-	ibd = (struct qib_ibdev *)s->private;
+	ibd = (struct hfi1_ibdev *)s->private;
 	dd = dd_from_dev(ibd);
 	if (!dd->per_sdma || *pos >= dd->num_sdma)
 		return NULL;
@@ -281,7 +299,7 @@ __acquires(RCU)
 
 static void *_sdes_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 
 	++*pos;
@@ -299,7 +317,7 @@ __releases(RCU)
 
 static int _sdes_seq_show(struct seq_file *s, void *v)
 {
-	struct qib_ibdev *ibd = (struct qib_ibdev *)s->private;
+	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
 	struct hfi_devdata *dd = dd_from_dev(ibd);
 	loff_t *spos = v;
 	loff_t i = *spos;
@@ -381,7 +399,7 @@ static ssize_t portcntrs_debugfs_read(struct file *file, char __user *buf,
 	u64 *counters;
 	size_t avail;
 	struct hfi_devdata *dd;
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	ssize_t rval;
 
 	rcu_read_lock();
@@ -399,7 +417,7 @@ static ssize_t portcntrs_debugfs_read(struct file *file, char __user *buf,
 static ssize_t qsfp_debugfs_dump(struct file *file, char __user *buf,
 			   size_t count, loff_t *ppos)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *tmp;
 	int ret;
 
@@ -423,7 +441,7 @@ static ssize_t qsfp_debugfs_dump(struct file *file, char __user *buf,
 static ssize_t __i2c_debugfs_write(struct file *file, const char __user *buf,
 			   size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int i2c_addr;
@@ -483,7 +501,7 @@ static ssize_t i2c2_debugfs_write(struct file *file, const char __user *buf,
 static ssize_t __i2c_debugfs_read(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int i2c_addr;
@@ -543,7 +561,7 @@ static ssize_t i2c2_debugfs_read(struct file *file, char __user *buf,
 static ssize_t __qsfp_debugfs_write(struct file *file, const char __user *buf,
 			   size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int total_written;
@@ -603,7 +621,7 @@ static ssize_t qsfp2_debugfs_write(struct file *file, const char __user *buf,
 static ssize_t __qsfp_debugfs_read(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos, u32 target)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	char *buff;
 	int ret;
 	int total_read;
@@ -684,12 +702,12 @@ static const struct counter_info port_cntr_ops[] = {
 	DEBUGFS_OPS("qsfp2", qsfp2_debugfs_read, qsfp2_debugfs_write),
 };
 
-void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
+void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 {
 	char name[sizeof("port0counters") + 1];
 	char link[10];
 	struct hfi_devdata *dd = dd_from_dev(ibd);
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int unit = dd->unit;
 	int i, j;
 
@@ -734,7 +752,7 @@ void hfi_dbg_ibdev_init(struct qib_ibdev *ibd)
 		}
 }
 
-void hfi_dbg_ibdev_exit(struct qib_ibdev *ibd)
+void hfi_dbg_ibdev_exit(struct hfi1_ibdev *ibd)
 {
 	if (!hfi_dbg_root)
 		goto out;

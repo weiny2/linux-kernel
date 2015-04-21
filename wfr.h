@@ -1,35 +1,53 @@
 #ifndef _WFR_H
 #define _WFR_H
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 /*
@@ -50,6 +68,7 @@
 #define WFR_NUM_CONTEXTS_PER_SET 8
 #define WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE 16
 #define WFR_VL_ARB_LOW_PRIO_TABLE_SIZE 16
+#define WFR_VL_ARB_TABLE_SIZE 16
 #define WFR_TXE_NUM_32_BIT_COUNTER 7
 #define WFR_TXE_NUM_64_BIT_COUNTER 30
 #define WFR_TXE_NUM_DATA_VL 8
@@ -616,9 +635,9 @@ void fabric_serdes_reset(struct hfi_devdata *dd);
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
 void read_guid(struct hfi_devdata *dd);
 int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
-void set_link_down_reason(struct qib_pportdata *ppd, u8 lcl_reason,
-	u8 neigh_reason, u8 rem_reason);
-int set_link_state(struct qib_pportdata *, u32 state);
+void set_link_down_reason(struct hfi1_pportdata *ppd, u8 lcl_reason,
+			  u8 neigh_reason, u8 rem_reason);
+int set_link_state(struct hfi1_pportdata *, u32 state);
 int port_ltp_to_cap(int port_ltp);
 void handle_verify_cap(struct work_struct *work);
 void handle_freeze(struct work_struct *work);
@@ -626,22 +645,23 @@ void handle_link_up(struct work_struct *work);
 void handle_link_down(struct work_struct *work);
 void handle_link_downgrade(struct work_struct *work);
 void handle_sma_message(struct work_struct *work);
-void start_freeze_handling(struct qib_pportdata *ppd, int flags);
+void start_freeze_handling(struct hfi1_pportdata *ppd, int flags);
 int send_idle_sma(struct hfi_devdata *dd, u64 message);
-int start_link(struct qib_pportdata *ppd);
-void init_qsfp(struct qib_pportdata *ppd);
-int bringup_serdes(struct qib_pportdata *ppd);
+int start_link(struct hfi1_pportdata *ppd);
+void init_qsfp(struct hfi1_pportdata *ppd);
+int bringup_serdes(struct hfi1_pportdata *ppd);
 void set_intr_state(struct hfi_devdata *dd, u32 enable);
-void apply_link_downgrade_policy(struct qib_pportdata *ppd, int refresh_widths);
-void update_usrhead(struct qib_ctxtdata *, u32, u32, u32, u32, u32);
+void apply_link_downgrade_policy(struct hfi1_pportdata *ppd,
+				 int refresh_widths);
+void update_usrhead(struct hfi1_ctxtdata *, u32, u32, u32, u32, u32);
 int stop_drain_data_vls(struct hfi_devdata *dd);
 int open_fill_data_vls(struct hfi_devdata *dd);
 u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
 u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclock);
-void get_linkup_link_widths(struct qib_pportdata *ppd);
+void get_linkup_link_widths(struct hfi1_pportdata *ppd);
 void read_ltp_rtt(struct hfi_devdata *dd);
 void clear_linkup_counters(struct hfi_devdata *dd);
-u32 hdrqempty(struct qib_ctxtdata *rcd);
+u32 hdrqempty(struct hfi1_ctxtdata *rcd);
 int is_a0(struct hfi_devdata *dd);
 int is_ax(struct hfi_devdata *dd);
 int is_bx(struct hfi_devdata *dd);
@@ -661,8 +681,8 @@ extern uint num_vls;
 extern uint disable_integrity;
 u64 read_dev_cntr(struct hfi_devdata *dd, int index, int vl);
 u64 write_dev_cntr(struct hfi_devdata *dd, int index, int vl, u64 data);
-u64 read_port_cntr(struct qib_pportdata *ppd, int index, int vl);
-u64 write_port_cntr(struct qib_pportdata *ppd, int index, int vl, u64 data);
+u64 read_port_cntr(struct hfi1_pportdata *ppd, int index, int vl);
+u64 write_port_cntr(struct hfi1_pportdata *ppd, int index, int vl, u64 data);
 
 /* Per VL indexes */
 enum {
@@ -1006,25 +1026,25 @@ enum {
 
 u64 get_all_cpu_total(u64 __percpu *cntr);
 void hfi1_start_cleanup(struct hfi_devdata *dd);
-void hfi1_clear_tids(struct qib_ctxtdata *rcd);
-struct qib_message_header *hfi1_get_msgheader(
+void hfi1_clear_tids(struct hfi1_ctxtdata *rcd);
+struct hfi1_message_header *hfi1_get_msgheader(
 				struct hfi_devdata *dd, __le32 *rhf_addr);
-int hfi1_get_base_kinfo(struct qib_ctxtdata *rcd,
-				  struct hfi_ctxt_info *kinfo);
+int hfi1_get_base_kinfo(struct hfi1_ctxtdata *rcd,
+			struct hfi_ctxt_info *kinfo);
 u64 hfi1_gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 			u32 mask);
-int hfi1_init_ctxt(struct qib_ctxtdata *rcd);
+int hfi1_init_ctxt(struct hfi1_ctxtdata *rcd);
 void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
 	     u32 type, unsigned long pa, u16 order);
-void hfi1_quiet_serdes(struct qib_pportdata *ppd);
+void hfi1_quiet_serdes(struct hfi1_pportdata *ppd);
 void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
 u32 hfi1_read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 			      u64 **cntrp);
 u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 				  char **namep, u64 **cntrp);
-u8 hfi1_ibphys_portstate(struct qib_pportdata *ppd);
-int hfi1_get_ib_cfg(struct qib_pportdata *ppd, int which);
-int hfi1_set_ib_cfg(struct qib_pportdata *ppd, int which, u32 val);
+u8 hfi1_ibphys_portstate(struct hfi1_pportdata *ppd);
+int hfi1_get_ib_cfg(struct hfi1_pportdata *ppd, int which);
+int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val);
 int hfi1_set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey);
 int hfi1_clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt);
 int hfi1_set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey);

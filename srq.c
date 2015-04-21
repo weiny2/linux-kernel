@@ -1,34 +1,51 @@
 /*
- * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
- * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/err.h>
@@ -38,23 +55,23 @@
 #include "verbs.h"
 
 /**
- * qib_post_srq_receive - post a receive on a shared receive queue
+ * hfi1_post_srq_receive - post a receive on a shared receive queue
  * @ibsrq: the SRQ to post the receive on
  * @wr: the list of work requests to post
  * @bad_wr: A pointer to the first WR to cause a problem is put here
  *
  * This may be called from interrupt context.
  */
-int qib_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
-			 struct ib_recv_wr **bad_wr)
+int hfi1_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
+			  struct ib_recv_wr **bad_wr)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_rwq *wq;
+	struct hfi1_srq *srq = to_isrq(ibsrq);
+	struct hfi1_rwq *wq;
 	unsigned long flags;
 	int ret;
 
 	for (; wr; wr = wr->next) {
-		struct qib_rwqe *wqe;
+		struct hfi1_rwqe *wqe;
 		u32 next;
 		int i;
 
@@ -93,17 +110,17 @@ bail:
 }
 
 /**
- * qib_create_srq - create a shared receive queue
+ * hfi1_create_srq - create a shared receive queue
  * @ibpd: the protection domain of the SRQ to create
  * @srq_init_attr: the attributes of the SRQ
  * @udata: data from libibverbs when creating a user SRQ
  */
-struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
-			      struct ib_srq_init_attr *srq_init_attr,
-			      struct ib_udata *udata)
+struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
+			       struct ib_srq_init_attr *srq_init_attr,
+			       struct ib_udata *udata)
 {
-	struct qib_ibdev *dev = to_idev(ibpd->device);
-	struct qib_srq *srq;
+	struct hfi1_ibdev *dev = to_idev(ibpd->device);
+	struct hfi1_srq *srq;
 	u32 sz;
 	struct ib_srq *ret;
 
@@ -132,8 +149,8 @@ struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
 	srq->rq.size = srq_init_attr->attr.max_wr + 1;
 	srq->rq.max_sge = srq_init_attr->attr.max_sge;
 	sz = sizeof(struct ib_sge) * srq->rq.max_sge +
-		sizeof(struct qib_rwqe);
-	srq->rq.wq = vmalloc_user(sizeof(struct qib_rwq) + srq->rq.size * sz);
+		sizeof(struct hfi1_rwqe);
+	srq->rq.wq = vmalloc_user(sizeof(struct hfi1_rwq) + srq->rq.size * sz);
 	if (!srq->rq.wq) {
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_srq;
@@ -141,15 +158,15 @@ struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
 
 	/*
 	 * Return the address of the RWQ as the offset to mmap.
-	 * See qib_mmap() for details.
+	 * See hfi1_mmap() for details.
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		int err;
-		u32 s = sizeof(struct qib_rwq) + srq->rq.size * sz;
+		u32 s = sizeof(struct hfi1_rwq) + srq->rq.size * sz;
 
 		srq->ip =
-		    qib_create_mmap_info(dev, s, ibpd->uobject->context,
-					 srq->rq.wq);
+		    hfi1_create_mmap_info(dev, s, ibpd->uobject->context,
+					  srq->rq.wq);
 		if (!srq->ip) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail_wq;
@@ -202,23 +219,23 @@ done:
 }
 
 /**
- * qib_modify_srq - modify a shared receive queue
+ * hfi1_modify_srq - modify a shared receive queue
  * @ibsrq: the SRQ to modify
  * @attr: the new attributes of the SRQ
  * @attr_mask: indicates which attributes to modify
  * @udata: user data for libibverbs.so
  */
-int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
-		   enum ib_srq_attr_mask attr_mask,
-		   struct ib_udata *udata)
+int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
+		    enum ib_srq_attr_mask attr_mask,
+		    struct ib_udata *udata)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_rwq *wq;
+	struct hfi1_srq *srq = to_isrq(ibsrq);
+	struct hfi1_rwq *wq;
 	int ret = 0;
 
 	if (attr_mask & IB_SRQ_MAX_WR) {
-		struct qib_rwq *owq;
-		struct qib_rwqe *p;
+		struct hfi1_rwq *owq;
+		struct hfi1_rwqe *p;
 		u32 sz, size, n, head, tail;
 
 		/* Check that the requested sizes are below the limits. */
@@ -229,10 +246,10 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			goto bail;
 		}
 
-		sz = sizeof(struct qib_rwqe) +
+		sz = sizeof(struct hfi1_rwqe) +
 			srq->rq.max_sge * sizeof(struct ib_sge);
 		size = attr->max_wr + 1;
-		wq = vmalloc_user(sizeof(struct qib_rwq) + size * sz);
+		wq = vmalloc_user(sizeof(struct hfi1_rwq) + size * sz);
 		if (!wq) {
 			ret = -ENOMEM;
 			goto bail;
@@ -279,7 +296,7 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		n = 0;
 		p = wq->wq;
 		while (tail != head) {
-			struct qib_rwqe *wqe;
+			struct hfi1_rwqe *wqe;
 			int i;
 
 			wqe = get_rwqe_ptr(&srq->rq, tail);
@@ -288,7 +305,7 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			for (i = 0; i < wqe->num_sge; i++)
 				p->sg_list[i] = wqe->sg_list[i];
 			n++;
-			p = (struct qib_rwqe *)((char *) p + sz);
+			p = (struct hfi1_rwqe *)((char *)p + sz);
 			if (++tail >= srq->rq.size)
 				tail = 0;
 		}
@@ -303,15 +320,15 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		vfree(owq);
 
 		if (srq->ip) {
-			struct qib_mmap_info *ip = srq->ip;
-			struct qib_ibdev *dev = to_idev(srq->ibsrq.device);
-			u32 s = sizeof(struct qib_rwq) + size * sz;
+			struct hfi1_mmap_info *ip = srq->ip;
+			struct hfi1_ibdev *dev = to_idev(srq->ibsrq.device);
+			u32 s = sizeof(struct hfi1_rwq) + size * sz;
 
-			qib_update_mmap_info(dev, ip, s, wq);
+			hfi1_update_mmap_info(dev, ip, s, wq);
 
 			/*
 			 * Return the offset to mmap.
-			 * See qib_mmap() for details.
+			 * See hfi1_mmap() for details.
 			 */
 			if (udata && udata->inlen >= sizeof(__u64)) {
 				ret = ib_copy_to_udata(udata, &ip->offset,
@@ -348,9 +365,9 @@ bail:
 	return ret;
 }
 
-int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
+int hfi1_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
+	struct hfi1_srq *srq = to_isrq(ibsrq);
 
 	attr->max_wr = srq->rq.size - 1;
 	attr->max_sge = srq->rq.max_sge;
@@ -359,19 +376,19 @@ int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 }
 
 /**
- * qib_destroy_srq - destroy a shared receive queue
+ * hfi1_destroy_srq - destroy a shared receive queue
  * @ibsrq: the SRQ to destroy
  */
-int qib_destroy_srq(struct ib_srq *ibsrq)
+int hfi1_destroy_srq(struct ib_srq *ibsrq)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_ibdev *dev = to_idev(ibsrq->device);
+	struct hfi1_srq *srq = to_isrq(ibsrq);
+	struct hfi1_ibdev *dev = to_idev(ibsrq->device);
 
 	spin_lock(&dev->n_srqs_lock);
 	dev->n_srqs_allocated--;
 	spin_unlock(&dev->n_srqs_lock);
 	if (srq->ip)
-		kref_put(&srq->ip->ref, qib_release_mmap_info);
+		kref_put(&srq->ip->ref, hfi1_release_mmap_info);
 	else
 		vfree(srq->rq.wq);
 	kfree(srq);

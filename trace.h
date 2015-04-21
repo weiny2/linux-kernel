@@ -1,33 +1,51 @@
 /*
- * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 #if !defined(__HFI_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
 #define __HFI_TRACE_H
@@ -256,7 +274,7 @@ TRACE_EVENT(hfi_wantpiointr,
 );
 
 DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
-	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	TP_ARGS(qp, flags),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
@@ -280,17 +298,17 @@ DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
 );
 
 DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpwakeup,
-	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	TP_ARGS(qp, flags));
 
 DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpsleep,
-	TP_PROTO(struct qib_qp *qp, u32 flags),
+	TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	TP_ARGS(qp, flags));
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_ibhdrs
 
-u8 ibhdr_exhdr_len(struct qib_ib_header *hdr);
+u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr);
 const char *parse_everbs_hdrs(
 	struct trace_seq *p,
 	u8 opcode,
@@ -359,7 +377,7 @@ __print_symbolic(opcode,                                   \
 
 DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 	TP_PROTO(struct hfi_devdata *dd,
-		 struct qib_ib_header *hdr),
+		 struct hfi1_ib_header *hdr),
 	TP_ARGS(dd, hdr),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
@@ -387,7 +405,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__dynamic_array(u8, ehdrs, ibhdr_exhdr_len(hdr))
 	),
 	TP_fast_assign(
-		struct qib_other_headers *ohdr;
+		struct hfi1_other_headers *ohdr;
 
 		DD_DEV_ASSIGN(dd);
 		/* LRH */
@@ -472,15 +490,15 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 );
 
 DEFINE_EVENT(hfi_ibhdr_template, input_ibhdr,
-	TP_PROTO(struct hfi_devdata *dd, struct qib_ib_header *hdr),
+	TP_PROTO(struct hfi_devdata *dd, struct hfi1_ib_header *hdr),
 	TP_ARGS(dd, hdr));
 
 DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
-	TP_PROTO(struct hfi_devdata *dd, struct qib_ib_header *hdr),
+	TP_PROTO(struct hfi_devdata *dd, struct hfi1_ib_header *hdr),
 	TP_ARGS(dd, hdr));
 
 #define SNOOP_PRN \
-	"slid %.4x dlid %.4x mgmt_class %d qpn 0x%.6x opcode 0x%.2x,%s " \
+	"slid %.4x dlid %.4x qpn 0x%.6x opcode 0x%.2x,%s " \
 	"svc lvl %d pkey 0x%.4x [header = %d bytes] [data = %d bytes]"
 
 #undef TRACE_SYSTEM
@@ -490,7 +508,7 @@ DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
 TRACE_EVENT(snoop_capture,
 	TP_PROTO(struct hfi_devdata *dd,
 		 int hdr_len,
-		 struct qib_ib_header *hdr,
+		 struct hfi1_ib_header *hdr,
 		 int data_len,
 		 void *data),
 	TP_ARGS(dd, hdr_len, hdr, data_len, data),
@@ -498,7 +516,6 @@ TRACE_EVENT(snoop_capture,
 		DD_DEV_ENTRY(dd)
 		__field(u16, slid)
 		__field(u16, dlid)
-		__field(u8, mgmt_class)
 		__field(u32, qpn)
 		__field(u8, opcode)
 		__field(u8, sl)
@@ -510,7 +527,7 @@ TRACE_EVENT(snoop_capture,
 		__dynamic_array(u8, raw_pkt, data_len)
 	),
 	TP_fast_assign(
-		struct qib_other_headers *ohdr;
+		struct hfi1_other_headers *ohdr;
 
 		__entry->lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 		if (__entry->lnh == QIB_LRH_BTH)
@@ -520,7 +537,6 @@ TRACE_EVENT(snoop_capture,
 		DD_DEV_ASSIGN(dd);
 		__entry->slid = be16_to_cpu(hdr->lrh[3]);
 		__entry->dlid = be16_to_cpu(hdr->lrh[1]);
-		__entry->mgmt_class = 0; /* XXX Fix me */
 		__entry->qpn = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
 		__entry->opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
 		__entry->sl = (u8)(be16_to_cpu(hdr->lrh[0] >> 4) & 0xf);
@@ -534,7 +550,6 @@ TRACE_EVENT(snoop_capture,
 		__get_str(dev),
 		__entry->slid,
 		__entry->dlid,
-		__entry->mgmt_class,
 		__entry->qpn,
 		__entry->opcode,
 		show_ib_opcode(__entry->opcode),
@@ -552,7 +567,7 @@ TRACE_EVENT(snoop_capture,
 	"cred:%u, credaddr:0x%llx, piobase:0x%llx, rcvhdr_cnt:%u, "	\
 	"rcvbase:0x%llx, rcvegrc:%u, rcvegrb:0x%llx"
 TRACE_EVENT(hfi_uctxtdata,
-	    TP_PROTO(struct hfi_devdata *dd, struct qib_ctxtdata *uctxt),
+	    TP_PROTO(struct hfi_devdata *dd, struct hfi1_ctxtdata *uctxt),
 	    TP_ARGS(dd, uctxt),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
@@ -1171,7 +1186,7 @@ TRACE_EVENT(hfi_sdma_state,
 #define TRACE_SYSTEM hfi1_rc
 
 DECLARE_EVENT_CLASS(hfi_sdma_rc,
-	TP_PROTO(struct qib_qp *qp, u32 psn),
+	TP_PROTO(struct hfi1_qp *qp, u32 psn),
 	TP_ARGS(qp, psn),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
@@ -1201,7 +1216,7 @@ DECLARE_EVENT_CLASS(hfi_sdma_rc,
 );
 
 DEFINE_EVENT(hfi_sdma_rc, hfi_rc_sendcomplete,
-	TP_PROTO(struct qib_qp *qp, u32 psn),
+	TP_PROTO(struct hfi1_qp *qp, u32 psn),
 	TP_ARGS(qp, psn)
 );
 

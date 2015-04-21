@@ -1,34 +1,51 @@
 /*
- * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
- * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <rdma/ib_umem.h>
@@ -37,18 +54,18 @@
 #include "hfi.h"
 
 /* Fast memory region */
-struct qib_fmr {
+struct hfi1_fmr {
 	struct ib_fmr ibfmr;
-	struct qib_mregion mr;        /* must be last */
+	struct hfi1_mregion mr;        /* must be last */
 };
 
-static inline struct qib_fmr *to_ifmr(struct ib_fmr *ibfmr)
+static inline struct hfi1_fmr *to_ifmr(struct ib_fmr *ibfmr)
 {
-	return container_of(ibfmr, struct qib_fmr, ibfmr);
+	return container_of(ibfmr, struct hfi1_fmr, ibfmr);
 }
 
-static int init_qib_mregion(struct qib_mregion *mr, struct ib_pd *pd,
-	int count)
+static int init_qib_mregion(struct hfi1_mregion *mr, struct ib_pd *pd,
+			    int count)
 {
 	int m, i = 0;
 	int rval = 0;
@@ -74,7 +91,7 @@ bail:
 	goto out;
 }
 
-static void deinit_qib_mregion(struct qib_mregion *mr)
+static void deinit_qib_mregion(struct hfi1_mregion *mr)
 {
 	int i = mr->mapsz;
 
@@ -85,7 +102,7 @@ static void deinit_qib_mregion(struct qib_mregion *mr)
 
 
 /**
- * qib_get_dma_mr - get a DMA memory region
+ * hfi1_get_dma_mr - get a DMA memory region
  * @pd: protection domain for this memory region
  * @acc: access flags
  *
@@ -93,9 +110,9 @@ static void deinit_qib_mregion(struct qib_mregion *mr)
  * Note that all DMA addresses should be created via the
  * struct ib_dma_mapping_ops functions (see qib_dma.c).
  */
-struct ib_mr *qib_get_dma_mr(struct ib_pd *pd, int acc)
+struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc)
 {
-	struct qib_mr *mr = NULL;
+	struct hfi1_mr *mr = NULL;
 	struct ib_mr *ret;
 	int rval;
 
@@ -117,7 +134,7 @@ struct ib_mr *qib_get_dma_mr(struct ib_pd *pd, int acc)
 	}
 
 
-	rval = qib_alloc_lkey(&mr->mr, 1);
+	rval = hfi1_alloc_lkey(&mr->mr, 1);
 	if (rval) {
 		ret = ERR_PTR(rval);
 		goto bail_mregion;
@@ -135,9 +152,9 @@ bail:
 	goto done;
 }
 
-static struct qib_mr *alloc_mr(int count, struct ib_pd *pd)
+static struct hfi1_mr *alloc_mr(int count, struct ib_pd *pd)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 	int rval = -ENOMEM;
 	int m;
 
@@ -154,7 +171,7 @@ static struct qib_mr *alloc_mr(int count, struct ib_pd *pd)
 	 * ib_reg_phys_mr() will initialize mr->ibmr except for
 	 * lkey and rkey.
 	 */
-	rval = qib_alloc_lkey(&mr->mr, 0);
+	rval = hfi1_alloc_lkey(&mr->mr, 0);
 	if (rval)
 		goto bail_mregion;
 	mr->ibmr.lkey = mr->mr.lkey;
@@ -171,7 +188,7 @@ bail:
 }
 
 /**
- * qib_reg_phys_mr - register a physical memory region
+ * hfi1_reg_phys_mr - register a physical memory region
  * @pd: protection domain for this memory region
  * @buffer_list: pointer to the list of physical buffers to register
  * @num_phys_buf: the number of physical buffers to register
@@ -179,11 +196,11 @@ bail:
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *qib_reg_phys_mr(struct ib_pd *pd,
-			      struct ib_phys_buf *buffer_list,
-			      int num_phys_buf, int acc, u64 *iova_start)
+struct ib_mr *hfi1_reg_phys_mr(struct ib_pd *pd,
+			       struct ib_phys_buf *buffer_list,
+			       int num_phys_buf, int acc, u64 *iova_start)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 	int n, m, i;
 	struct ib_mr *ret;
 
@@ -217,7 +234,7 @@ bail:
 }
 
 /**
- * qib_reg_user_mr - register a userspace memory region
+ * hfi1_reg_user_mr - register a userspace memory region
  * @pd: protection domain for this memory region
  * @start: starting userspace address
  * @length: length of region to register
@@ -226,11 +243,11 @@ bail:
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *qib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
-			      u64 virt_addr, int mr_access_flags,
-			      struct ib_udata *udata)
+struct ib_mr *hfi1_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+			       u64 virt_addr, int mr_access_flags,
+			       struct ib_udata *udata)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 	struct ib_umem *umem;
 	struct ib_umem_chunk *chunk;
 	int n, m, i;
@@ -293,21 +310,21 @@ bail:
 }
 
 /**
- * qib_dereg_mr - unregister and free a memory region
+ * hfi1_dereg_mr - unregister and free a memory region
  * @ibmr: the memory region to free
  *
  * Returns 0 on success.
  *
- * Note that this is called to free MRs created by qib_get_dma_mr()
- * or qib_reg_user_mr().
+ * Note that this is called to free MRs created by hfi1_get_dma_mr()
+ * or hfi1_reg_user_mr().
  */
-int qib_dereg_mr(struct ib_mr *ibmr)
+int hfi1_dereg_mr(struct ib_mr *ibmr)
 {
-	struct qib_mr *mr = to_imr(ibmr);
+	struct hfi1_mr *mr = to_imr(ibmr);
 	int ret = 0;
 	unsigned long timeout;
 
-	qib_free_lkey(&mr->mr);
+	hfi1_free_lkey(&mr->mr);
 
 	qib_put_mr(&mr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&mr->mr.comp,
@@ -315,7 +332,7 @@ int qib_dereg_mr(struct ib_mr *ibmr)
 	if (!timeout) {
 		dd_dev_err(
 			dd_from_ibdev(mr->mr.pd->device),
-			"qib_dereg_mr timeout mr %p pd %p refcount %u\n",
+			"hfi1_dereg_mr timeout mr %p pd %p refcount %u\n",
 			mr, mr->mr.pd, atomic_read(&mr->mr.refcount));
 		qib_get_mr(&mr->mr);
 		ret = -EBUSY;
@@ -335,9 +352,9 @@ out:
  *
  * Return the memory region on success, otherwise return an errno.
  */
-struct ib_mr *qib_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len)
+struct ib_mr *hfi1_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len)
 {
-	struct qib_mr *mr;
+	struct hfi1_mr *mr;
 
 	mr = alloc_mr(max_page_list_len, pd);
 	if (IS_ERR(mr))
@@ -347,7 +364,7 @@ struct ib_mr *qib_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len)
 }
 
 struct ib_fast_reg_page_list *
-qib_alloc_fast_reg_page_list(struct ib_device *ibdev, int page_list_len)
+hfi1_alloc_fast_reg_page_list(struct ib_device *ibdev, int page_list_len)
 {
 	unsigned size = page_list_len * sizeof(u64);
 	struct ib_fast_reg_page_list *pl;
@@ -370,24 +387,24 @@ err_free:
 	return ERR_PTR(-ENOMEM);
 }
 
-void qib_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl)
+void hfi1_free_fast_reg_page_list(struct ib_fast_reg_page_list *pl)
 {
 	kfree(pl->page_list);
 	kfree(pl);
 }
 
 /**
- * qib_alloc_fmr - allocate a fast memory region
+ * hfi1_alloc_fmr - allocate a fast memory region
  * @pd: the protection domain for this memory region
  * @mr_access_flags: access flags for this memory region
  * @fmr_attr: fast memory region attributes
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
-struct ib_fmr *qib_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
-			     struct ib_fmr_attr *fmr_attr)
+struct ib_fmr *hfi1_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
+			      struct ib_fmr_attr *fmr_attr)
 {
-	struct qib_fmr *fmr;
+	struct hfi1_fmr *fmr;
 	int m;
 	struct ib_fmr *ret;
 	int rval = -ENOMEM;
@@ -406,7 +423,7 @@ struct ib_fmr *qib_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
 	 * ib_alloc_fmr() will initialize fmr->ibfmr except for lkey &
 	 * rkey.
 	 */
-	rval = qib_alloc_lkey(&fmr->mr, 0);
+	rval = hfi1_alloc_lkey(&fmr->mr, 0);
 	if (rval)
 		goto bail_mregion;
 	fmr->ibfmr.rkey = fmr->mr.lkey;
@@ -432,7 +449,7 @@ bail:
 }
 
 /**
- * qib_map_phys_fmr - set up a fast memory region
+ * hfi1_map_phys_fmr - set up a fast memory region
  * @ibmfr: the fast memory region to set up
  * @page_list: the list of pages to associate with the fast memory region
  * @list_len: the number of pages to associate with the fast memory region
@@ -441,11 +458,11 @@ bail:
  * This may be called from interrupt context.
  */
 
-int qib_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
-		     int list_len, u64 iova)
+int hfi1_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
+		      int list_len, u64 iova)
 {
-	struct qib_fmr *fmr = to_ifmr(ibfmr);
-	struct qib_lkey_table *rkt;
+	struct hfi1_fmr *fmr = to_ifmr(ibfmr);
+	struct hfi1_lkey_table *rkt;
 	unsigned long flags;
 	int m, n, i;
 	u32 ps;
@@ -483,15 +500,15 @@ bail:
 }
 
 /**
- * qib_unmap_fmr - unmap fast memory regions
+ * hfi1_unmap_fmr - unmap fast memory regions
  * @fmr_list: the list of fast memory regions to unmap
  *
  * Returns 0 on success.
  */
-int qib_unmap_fmr(struct list_head *fmr_list)
+int hfi1_unmap_fmr(struct list_head *fmr_list)
 {
-	struct qib_fmr *fmr;
-	struct qib_lkey_table *rkt;
+	struct hfi1_fmr *fmr;
+	struct hfi1_lkey_table *rkt;
 	unsigned long flags;
 
 	list_for_each_entry(fmr, fmr_list, ibfmr.list) {
@@ -506,18 +523,18 @@ int qib_unmap_fmr(struct list_head *fmr_list)
 }
 
 /**
- * qib_dealloc_fmr - deallocate a fast memory region
+ * hfi1_dealloc_fmr - deallocate a fast memory region
  * @ibfmr: the fast memory region to deallocate
  *
  * Returns 0 on success.
  */
-int qib_dealloc_fmr(struct ib_fmr *ibfmr)
+int hfi1_dealloc_fmr(struct ib_fmr *ibfmr)
 {
-	struct qib_fmr *fmr = to_ifmr(ibfmr);
+	struct hfi1_fmr *fmr = to_ifmr(ibfmr);
 	int ret = 0;
 	unsigned long timeout;
 
-	qib_free_lkey(&fmr->mr);
+	hfi1_free_lkey(&fmr->mr);
 	qib_put_mr(&fmr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&fmr->mr.comp,
 		5 * HZ);

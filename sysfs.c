@@ -1,35 +1,51 @@
 /*
- * Copyright (c) 2012-2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
- * Copyright (c) 2006 PathScale, Inc. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 #include <linux/ctype.h>
 
@@ -41,7 +57,7 @@
 /*
  * Get/Set heartbeat enable. OR of 1=enabled, 2=auto
  */
-static ssize_t show_hrtbt_enb(struct qib_pportdata *ppd, char *buf)
+static ssize_t show_hrtbt_enb(struct hfi1_pportdata *ppd, char *buf)
 {
 	int ret;
 
@@ -50,7 +66,7 @@ static ssize_t show_hrtbt_enb(struct qib_pportdata *ppd, char *buf)
 	return ret;
 }
 
-static ssize_t store_hrtbt_enb(struct qib_pportdata *ppd, const char *buf,
+static ssize_t store_hrtbt_enb(struct hfi1_pportdata *ppd, const char *buf,
 			       size_t count)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -74,7 +90,7 @@ static ssize_t store_hrtbt_enb(struct qib_pportdata *ppd, const char *buf,
 	return ret < 0 ? ret : count;
 }
 
-static ssize_t store_led_override(struct qib_pportdata *ppd, const char *buf,
+static ssize_t store_led_override(struct hfi1_pportdata *ppd, const char *buf,
 				  size_t count)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -87,11 +103,11 @@ static ssize_t store_led_override(struct qib_pportdata *ppd, const char *buf,
 		return ret;
 	}
 
-	qib_set_led_override(ppd, val);
+	hfi1_set_led_override(ppd, val);
 	return count;
 }
 
-static ssize_t show_status(struct qib_pportdata *ppd, char *buf)
+static ssize_t show_status(struct hfi1_pportdata *ppd, char *buf)
 {
 	ssize_t ret;
 
@@ -121,7 +137,7 @@ static const char * const qib_status_str[] = {
 	NULL,
 };
 
-static ssize_t show_status_str(struct qib_pportdata *ppd, char *buf)
+static ssize_t show_status_str(struct hfi1_pportdata *ppd, char *buf)
 {
 	int i, any;
 	u64 s;
@@ -163,13 +179,13 @@ bail:
  * full set of kobject/sysfs_ops structures and routines.
  */
 #define QIB_PORT_ATTR(name, mode, show, store) \
-	static struct qib_port_attr qib_port_attr_##name = \
+	static struct hfi1_port_attr qib_port_attr_##name = \
 		__ATTR(name, mode, show, store)
 
-struct qib_port_attr {
+struct hfi1_port_attr {
 	struct attribute attr;
-	ssize_t (*show)(struct qib_pportdata *, char *);
-	ssize_t (*store)(struct qib_pportdata *, const char *, size_t);
+	ssize_t (*show)(struct hfi1_pportdata *, char *);
+	ssize_t (*store)(struct hfi1_pportdata *, const char *, size_t);
 };
 
 QIB_PORT_ATTR(led_override, S_IWUSR, NULL, store_led_override);
@@ -198,8 +214,8 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 		char *buf, loff_t pos, size_t count)
 {
 	int ret;
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, pport_cc_kobj);
 	struct cc_state *cc_state;
 
 	ret = ppd->total_cct_entry * sizeof(struct ib_cc_table_entry_shadow)
@@ -228,7 +244,7 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 
 static void qib_port_release(struct kobject *kobj)
 {
-	/* nothing to do since memory is freed by qib_free_devdata() */
+	/* nothing to do since memory is freed by hfi1_free_devdata() */
 }
 
 static struct kobj_type qib_port_cc_ktype = {
@@ -251,8 +267,8 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 		char *buf, loff_t pos, size_t count)
 {
 	int ret;
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, pport_cc_kobj);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, pport_cc_kobj);
 	struct cc_state *cc_state;
 
 	ret = sizeof(struct opa_congestion_setting_attr_shadow);
@@ -287,10 +303,10 @@ static struct bin_attribute cc_setting_bin_attr = {
 static ssize_t qib_portattr_show(struct kobject *kobj,
 	struct attribute *attr, char *buf)
 {
-	struct qib_port_attr *pattr =
-		container_of(attr, struct qib_port_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, pport_kobj);
+	struct hfi1_port_attr *pattr =
+		container_of(attr, struct hfi1_port_attr, attr);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, pport_kobj);
 
 	return pattr->show(ppd, buf);
 }
@@ -298,10 +314,10 @@ static ssize_t qib_portattr_show(struct kobject *kobj,
 static ssize_t qib_portattr_store(struct kobject *kobj,
 	struct attribute *attr, const char *buf, size_t len)
 {
-	struct qib_port_attr *pattr =
-		container_of(attr, struct qib_port_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, pport_kobj);
+	struct hfi1_port_attr *pattr =
+		container_of(attr, struct hfi1_port_attr, attr);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, pport_kobj);
 
 	return pattr->store(ppd, buf, len);
 }
@@ -405,8 +421,8 @@ static ssize_t sc2vl_attr_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct hfi_sc2vl_attr *sattr =
 		container_of(attr, struct hfi_sc2vl_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, sc2vl_kobj);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, sc2vl_kobj);
 	struct hfi_devdata *dd = ppd->dd;
 
 	return sprintf(buf, "%u\n", *((u8 *)dd->sc2vl + sattr->sc));
@@ -511,9 +527,9 @@ static ssize_t sl2sc_attr_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct hfi_sl2sc_attr *sattr =
 		container_of(attr, struct hfi_sl2sc_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, sl2sc_kobj);
-	struct qib_ibport *ibp = &ppd->ibport_data;
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, sl2sc_kobj);
+	struct hfi1_ibport *ibp = &ppd->ibport_data;
 
 	return sprintf(buf, "%u\n", ibp->sl_to_sc[sattr->sl]);
 }
@@ -585,8 +601,8 @@ static ssize_t vl2mtu_attr_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct hfi_vl2mtu_attr *vlattr =
 		container_of(attr, struct hfi_vl2mtu_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, vl2mtu_kobj);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, vl2mtu_kobj);
 	struct hfi_devdata *dd = ppd->dd;
 
 	return sprintf(buf, "%u\n", dd->vld[vlattr->vl].mtu);
@@ -607,22 +623,22 @@ static struct kobj_type hfi_vl2mtu_ktype = {
 #define QIB_DIAGC_PCPU   0x1
 
 #define QIB_DIAGC_ATTR(N) \
-	static struct qib_diagc_attr qib_diagc_attr_##N = { \
+	static struct hfi1_diagc_attr qib_diagc_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0664 }, \
-		.counter = offsetof(struct qib_ibport, n_##N), \
+		.counter = offsetof(struct hfi1_ibport, n_##N), \
 		.type = QIB_DIAGC_NORMAL, \
 		.vl = CNTR_INVALID_VL \
 	}
 
 #define QIB_DIAGC_ATTR_PCPU(N, V, L) \
-	static struct qib_diagc_attr qib_diagc_attr_##N = { \
+	static struct hfi1_diagc_attr qib_diagc_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0664 }, \
 		.counter = V, \
 		.type = QIB_DIAGC_PCPU, \
 		.vl = L \
 	}
 
-struct qib_diagc_attr {
+struct hfi1_diagc_attr {
 	struct attribute attr;
 	size_t counter;
 	int type;
@@ -667,11 +683,11 @@ static struct attribute *diagc_default_attributes[] = {
 static ssize_t diagc_attr_show(struct kobject *kobj, struct attribute *attr,
 			       char *buf)
 {
-	struct qib_diagc_attr *dattr =
-		container_of(attr, struct qib_diagc_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, diagc_kobj);
-	struct qib_ibport *qibp = &ppd->ibport_data;
+	struct hfi1_diagc_attr *dattr =
+		container_of(attr, struct hfi1_diagc_attr, attr);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, diagc_kobj);
+	struct hfi1_ibport *qibp = &ppd->ibport_data;
 
 	switch (dattr->type) {
 	case (QIB_DIAGC_PCPU):
@@ -690,11 +706,11 @@ static ssize_t diagc_attr_show(struct kobject *kobj, struct attribute *attr,
 static ssize_t diagc_attr_store(struct kobject *kobj, struct attribute *attr,
 				const char *buf, size_t size)
 {
-	struct qib_diagc_attr *dattr =
-		container_of(attr, struct qib_diagc_attr, attr);
-	struct qib_pportdata *ppd =
-		container_of(kobj, struct qib_pportdata, diagc_kobj);
-	struct qib_ibport *qibp = &ppd->ibport_data;
+	struct hfi1_diagc_attr *dattr =
+		container_of(attr, struct hfi1_diagc_attr, attr);
+	struct hfi1_pportdata *ppd =
+		container_of(kobj, struct hfi1_pportdata, diagc_kobj);
+	struct hfi1_ibport *qibp = &ppd->ibport_data;
 	u32 val;
 	int ret;
 
@@ -727,8 +743,8 @@ static struct kobj_type qib_diagc_ktype = {
 static ssize_t show_rev(struct device *device, struct device_attribute *attr,
 			char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 
 	return sprintf(buf, "%x\n", dd_from_dev(dev)->minrev);
 }
@@ -736,8 +752,8 @@ static ssize_t show_rev(struct device *device, struct device_attribute *attr,
 static ssize_t show_hca(struct device *device, struct device_attribute *attr,
 			char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	int ret;
 
@@ -758,8 +774,8 @@ static ssize_t show_version(struct device *device,
 static ssize_t show_boardversion(struct device *device,
 				 struct device_attribute *attr, char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	/* The string printed here is already newline-terminated. */
@@ -770,8 +786,8 @@ static ssize_t show_boardversion(struct device *device,
 static ssize_t show_localbus_info(struct device *device,
 				  struct device_attribute *attr, char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	return scnprintf(buf, PAGE_SIZE, "%s\n", dd->lbus_info);
@@ -781,8 +797,8 @@ static ssize_t show_localbus_info(struct device *device,
 static ssize_t show_nctxts(struct device *device,
 			   struct device_attribute *attr, char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	/*
@@ -799,8 +815,8 @@ static ssize_t show_nctxts(struct device *device,
 static ssize_t show_nfreectxts(struct device *device,
 			   struct device_attribute *attr, char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	/* Return the number of free user ports (contexts) available. */
@@ -810,8 +826,8 @@ static ssize_t show_nfreectxts(struct device *device,
 static ssize_t show_serial(struct device *device,
 			   struct device_attribute *attr, char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->serial);
@@ -822,8 +838,8 @@ static ssize_t store_chip_reset(struct device *device,
 				struct device_attribute *attr, const char *buf,
 				size_t count)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	int ret;
 
@@ -832,7 +848,7 @@ static ssize_t store_chip_reset(struct device *device,
 		goto bail;
 	}
 
-	ret = qib_reset_device(dd->unit);
+	ret = hfi1_reset_device(dd->unit);
 bail:
 	return ret < 0 ? ret : count;
 }
@@ -851,8 +867,8 @@ bail:
 static ssize_t show_tempsense(struct device *device,
 			      struct device_attribute *attr, char *buf)
 {
-	struct qib_ibdev *dev =
-		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct hfi1_ibdev *dev =
+		container_of(device, struct hfi1_ibdev, ibdev.dev);
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	struct hfi_temp temp;
 	int ret = -ENXIO;
@@ -905,10 +921,10 @@ static struct device_attribute *qib_attributes[] = {
 	&dev_attr_chip_reset,
 };
 
-int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
-			  struct kobject *kobj)
+int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
+			   struct kobject *kobj)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	int ret;
 
@@ -1024,7 +1040,7 @@ bail:
 /*
  * Register and create our files in /sys/class/infiniband.
  */
-int qib_verbs_register_sysfs(struct hfi_devdata *dd)
+int hfi1_verbs_register_sysfs(struct hfi_devdata *dd)
 {
 	struct ib_device *dev = &dd->verbs_dev.ibdev;
 	int i, ret;
@@ -1045,9 +1061,9 @@ bail:
 /*
  * Unregister and remove our files in /sys/class/infiniband.
  */
-void qib_verbs_unregister_sysfs(struct hfi_devdata *dd)
+void hfi1_verbs_unregister_sysfs(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int i;
 
 	for (i = 0; i < dd->num_pports; i++) {

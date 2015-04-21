@@ -1,34 +1,51 @@
 /*
- * Copyright (c) 2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2008, 2009 QLogic Corporation. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/pci.h>
@@ -62,7 +79,7 @@ static void qib_tune_pcie_coalesce(struct hfi_devdata *);
  * routine returns success.  Therefore dd_dev_err() can't be used for error
  * printing.
  */
-int qib_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
+int hfi1_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int ret;
 
@@ -131,7 +148,7 @@ done:
 }
 
 /*
- * Clean what was done in qib_pcie_init()
+ * Clean what was done in hfi1_pcie_init()
  */
 void hfi_pcie_cleanup(struct pci_dev *pdev)
 {
@@ -148,8 +165,8 @@ void hfi_pcie_cleanup(struct pci_dev *pdev)
  * fields required to re-initialize after a chip reset, or for
  * various other purposes
  */
-int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
-		    const struct pci_device_id *ent)
+int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
+		     const struct pci_device_id *ent)
 {
 	unsigned long len;
 	resource_size_t addr;
@@ -227,7 +244,7 @@ int qib_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
  * to releasing the dd memory.
  * Void because all of the core pcie cleanup functions are void.
  */
-void qib_pcie_ddcleanup(struct hfi_devdata *dd)
+void hfi1_pcie_ddcleanup(struct hfi_devdata *dd)
 {
 	u64 __iomem *base = (void __iomem *) dd->kregbase;
 
@@ -273,7 +290,7 @@ clear:
 }
 
 static void qib_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
-			   struct qib_msix_entry *qib_msix_entry)
+			   struct hfi1_msix_entry *qib_msix_entry)
 {
 	int ret;
 	u32 tabsize = 0;
@@ -314,7 +331,7 @@ do_intx:
 	*msixcnt = tabsize;
 
 	if (ret)
-		qib_enable_intx(dd->pcidev);
+		hfi1_enable_intx(dd->pcidev);
 
 }
 
@@ -405,7 +422,7 @@ int pcie_speeds(struct hfi_devdata *dd)
  *	- 0 if fell back to INTx.
  */
 void request_msix(struct hfi_devdata *dd, u32 *nent,
-			struct qib_msix_entry *entry)
+			struct hfi1_msix_entry *entry)
 {
 	int pos;
 
@@ -415,7 +432,7 @@ void request_msix(struct hfi_devdata *dd, u32 *nent,
 		/* did it, either MSI-X or INTx */
 	} else {
 		*nent = 0;
-		qib_enable_intx(dd->pcidev);
+		hfi1_enable_intx(dd->pcidev);
 	}
 
 	qib_tune_pcie_caps(dd);
@@ -425,12 +442,12 @@ void request_msix(struct hfi_devdata *dd, u32 *nent,
 /*
  * Disable MSI-X.
  */
-void qib_nomsix(struct hfi_devdata *dd)
+void hfi1_nomsix(struct hfi_devdata *dd)
 {
 	pci_disable_msix(dd->pcidev);
 }
 
-void qib_enable_intx(struct pci_dev *pdev)
+void hfi1_enable_intx(struct pci_dev *pdev)
 {
 	/* first, turn on INTx */
 	pci_intx(pdev, 1);
@@ -771,7 +788,7 @@ qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 			dd_dev_info(dd, "State Permanent Failure, disabling\n");
 			/* no more register accesses! */
 			dd->flags &= ~HFI_PRESENT;
-			qib_disable_after_error(dd);
+			hfi1_disable_after_error(dd);
 		}
 		 /* else early, or other problem */
 		ret =  PCI_ERS_RESULT_DISCONNECT;
@@ -833,7 +850,7 @@ qib_pci_resume(struct pci_dev *pdev)
 	 * unlike sysfs-requested reset.   Better than
 	 * doing nothing.
 	 */
-	qib_init(dd, 1); /* same as re-init after reset */
+	hfi1_init(dd, 1); /* same as re-init after reset */
 }
 
 const struct pci_error_handlers qib_pci_err_handler = {

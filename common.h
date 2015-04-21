@@ -1,36 +1,51 @@
 /*
- * Copyright (c) 2014, 2015 Intel Corporation. All rights reserved.
- * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
- * All rights reserved.
- * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #ifndef _COMMON_H
@@ -146,11 +161,13 @@
 				 HFI_CAP_SDMA |				\
 				 HFI_CAP_ENABLE_SMA |			\
 				 HFI_CAP_PRINT_UNIMPL |			\
+				 HFI_CAP_STATIC_RATE_CTRL |		\
 				 HFI_CAP_QSFP_ENABLED |			\
 				 HFI_CAP_PKEY_CHECK |			\
 				 HFI_CAP_MULTI_PKT_EGR |		\
 				 ((HFI_CAP_HDRSUPP |			\
 				   HFI_CAP_MULTI_PKT_EGR |		\
+				   HFI_CAP_STATIC_RATE_CTRL |		\
 				   HFI_CAP_EARLY_CREDIT_RETURN) <<	\
 				  HFI_CAP_USER_SHIFT))
 /*
@@ -196,7 +213,7 @@
 #define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
 #endif
 
-struct qib_iovec {
+struct hfi1_iovec {
 	/* Pointer to data, but same size 32 and 64 bit */
 	__u64 iov_base;
 	/*
@@ -217,7 +234,7 @@ struct __qib_sendpkt {
 	__u32 sps_flags;        /* flags for packet (TBD) */
 	__u32 sps_cnt;          /* number of entries to use in sps_iov */
 	/* array of iov's describing packet. TEMPORARY */
-	struct qib_iovec sps_iov[4];
+	struct hfi1_iovec sps_iov[4];
 };
 
 /*
@@ -370,7 +387,7 @@ struct qib_flash {
  * This structure contains the first field common to all protocols
  * that employ this chip.
  */
-struct qib_message_header {
+struct hfi1_message_header {
 	__be16 lrh[4];
 };
 

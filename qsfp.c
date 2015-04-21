@@ -1,35 +1,51 @@
 /*
- * Copyright (c) 2006, 2007, 2008, 2009 QLogic Corporation. All rights reserved.
- * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
- * Copyright (c) 2015 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/delay.h>
@@ -48,15 +64,15 @@
 /*
  * Unlocked i2c write.  Must hold dd->qsfp_i2c_mutex.
  */
-static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
-		int offset, void *bp, int len)
+static int __i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
+		       int offset, void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int ret, cnt;
 	u8 *buff = bp;
 
 	/* Make sure TWSI bus is in sane state. */
-	ret = qib_twsi_reset(dd, target);
+	ret = hfi1_twsi_reset(dd, target);
 	if (ret) {
 		qib_dev_porterr(dd, ppd->port,
 				"I2C interface Reset for write failed\n");
@@ -67,10 +83,10 @@ static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	while (cnt < len) {
 		int wlen = len - cnt;
 
-		ret = qib_twsi_blk_wr(dd, target, i2c_addr, offset,
-							buff + cnt, wlen);
+		ret = hfi1_twsi_blk_wr(dd, target, i2c_addr, offset,
+				       buff + cnt, wlen);
 		if (ret) {
-			/* qib_twsi_blk_wr() 1 for error, else 0 */
+			/* hfi1_twsi_blk_wr() 1 for error, else 0 */
 			return -EIO;
 		}
 		offset += wlen;
@@ -83,8 +99,8 @@ static int __i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	return cnt;
 }
 
-int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
-		void *bp, int len)
+int i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
+	      void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int ret;
@@ -101,8 +117,8 @@ int i2c_write(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
 /*
  * Unlocked i2c read.  Must hold dd->qsfp_i2c_mutex.
  */
-static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
-			int offset, void *bp, int len)
+static int __i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
+		      int offset, void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int ret, cnt, pass = 0;
@@ -110,7 +126,7 @@ static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	u8 *buff = bp;
 
 	/* Make sure TWSI bus is in sane state. */
-	ret = qib_twsi_reset(dd, target);
+	ret = hfi1_twsi_reset(dd, target);
 	if (ret) {
 		qib_dev_porterr(dd, ppd->port,
 				"I2C interface Reset for read failed\n");
@@ -123,13 +139,13 @@ static int __i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr,
 	while (cnt < len) {
 		int rlen = len - cnt;
 
-		ret = qib_twsi_blk_rd(dd, target, i2c_addr, offset,
-							buff + cnt, rlen);
+		ret = hfi1_twsi_blk_rd(dd, target, i2c_addr, offset,
+				       buff + cnt, rlen);
 		/* Some QSFP's fail first try. Retry as experiment */
 		if (ret && cnt == 0 && ++pass < I2C_MAX_RETRY)
 			continue;
 		if (ret) {
-			/* qib_twsi_blk_rd() 1 for error, else 0 */
+			/* hfi1_twsi_blk_rd() 1 for error, else 0 */
 			ret = -EIO;
 			goto exit;
 		}
@@ -155,7 +171,7 @@ exit:
 	return ret;
 }
 
-int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
+int i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
 	     void *bp, int len)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -170,8 +186,8 @@ int i2c_read(struct qib_pportdata *ppd, u32 target, int i2c_addr, int offset,
 	return ret;
 }
 
-int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
-		int len)
+int qsfp_write(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
+	       int len)
 {
 	int count = 0;
 	int offset;
@@ -221,8 +237,8 @@ int qsfp_write(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
 	return count;
 }
 
-int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
-		int len)
+int qsfp_read(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
+	      int len)
 {
 	int count = 0;
 	int offset;
@@ -276,7 +292,7 @@ int qsfp_read(struct qib_pportdata *ppd, u32 target, int addr, void *bp,
  * As an example, the next byte after address 255 is byte 128 from
  * upper page 01H (if existing) rather than byte 0 from lower page 00H.
  */
-int refresh_qsfp_cache(struct qib_pportdata *ppd, struct qsfp_data *cp)
+int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 {
 	u32 target = ppd->dd->hfi_id;
 	int ret;
@@ -381,7 +397,7 @@ const char * const qib_qsfp_devtech[16] = {
 
 static const char *pwr_codes = "1.5W2.0W2.5W3.5W";
 
-int qsfp_mod_present(struct qib_pportdata *ppd)
+int qsfp_mod_present(struct hfi1_pportdata *ppd)
 {
 	if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
 		struct hfi_devdata *dd = ppd->dd;
@@ -413,7 +429,7 @@ int qsfp_mod_present(struct qib_pportdata *ppd)
 int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr, u32 len,
 			u8 *data)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	u32 excess_len = len;
 	int ret = 0;
 
@@ -455,7 +471,7 @@ set_zeroes:
 	return ret;
 }
 
-int qsfp_dump(struct qib_pportdata *ppd, char *buf, int len)
+int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len)
 {
 	u8 *cache = &ppd->qsfp_info.cache[0];
 	u8 bin_buff[QSFP_DUMP_CHUNK];

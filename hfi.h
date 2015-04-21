@@ -1,37 +1,53 @@
 #ifndef _QIB_KERNEL_H
 #define _QIB_KERNEL_H
 /*
- * Copyright (c) 2012 - 2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
- * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 /*
@@ -147,7 +163,7 @@ struct ctxt_eager_bufs {
 	} *rcvtids;
 };
 
-struct qib_ctxtdata {
+struct hfi1_ctxtdata {
 	/* shadow the ctxt's RcvCtrl register */
 	u64 rcvctrl;
 	/* rcvhdrq base, needs mmap before useful */
@@ -247,7 +263,7 @@ struct qib_ctxtdata {
 	/* so file ops can get at unit */
 	struct hfi_devdata *dd;
 	/* so funcs that need physical port can get it easily */
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	/* A page of memory for rcvhdrhead, rcvegrhead, rcvegrtail * N */
 	void *subctxt_uregbase;
 	/* An array of pages for the eager receive buffers * N */
@@ -267,7 +283,7 @@ struct qib_ctxtdata {
 	u32 head;
 	u32 pkt_count;
 	/* lookaside fields */
-	struct qib_qp *lookaside_qp;
+	struct hfi1_qp *lookaside_qp;
 	u32 lookaside_qpn;
 	/* QPs waiting for context processing */
 	struct list_head qp_wait_list;
@@ -297,7 +313,7 @@ struct qib_ctxtdata {
 struct hfi_packet {
 	void *ebuf;
 	void *hdr;
-	struct qib_ctxtdata *rcd;
+	struct hfi1_ctxtdata *rcd;
 	u64 rhf;
 	u16 tlen;
 	u16 hlen;
@@ -323,7 +339,7 @@ struct hfi_snoop_data {
 #define HFI_PORT_SNOOP_MODE     1U
 #define HFI_PORT_CAPTURE_MODE   2U
 
-struct qib_sge_state;
+struct hfi1_sge_state;
 
 /*
  * Get/Set IB link-level config parameters for f_get/set_ib_cfg()
@@ -439,7 +455,7 @@ static inline void incr_cntr32(u32 *cntr)
 }
 
 #define MAX_NAME_SIZE 64
-struct qib_msix_entry {
+struct hfi1_msix_entry {
 	struct msix_entry msix;
 	void *arg;
 	char name[MAX_NAME_SIZE];
@@ -449,7 +465,7 @@ struct qib_msix_entry {
 /* per-SL CCA information */
 struct cca_timer {
 	struct hrtimer hrtimer;
-	struct qib_pportdata *ppd; /* read-only */
+	struct hfi1_pportdata *ppd; /* read-only */
 	int sl; /* read-only */
 	u16 ccti; /* read/write - current value of CCTI */
 };
@@ -463,14 +479,25 @@ struct link_down_reason {
 	u8 latest;
 };
 
+enum {
+	LO_PRIO_TABLE,
+	HI_PRIO_TABLE,
+	MAX_PRIO_TABLE
+};
+
+struct vl_arb_cache {
+	spinlock_t lock;
+	struct ib_vl_weight_elem table[WFR_VL_ARB_TABLE_SIZE];
+};
+
 /*
  * The structure below encapsulates data relevant to a physical IB Port.
  * Current chips support only one such port, but the separation
  * clarifies things a bit. Note that to conform to IB conventions,
  * port-numbers are one-based. The first or only port is port1.
  */
-struct qib_pportdata {
-	struct qib_ibport ibport_data;
+struct hfi1_pportdata {
+	struct hfi1_ibport ibport_data;
 
 	struct hfi_devdata *dd;
 	struct kobject pport_kobj;
@@ -614,6 +641,8 @@ struct qib_pportdata {
 	int cc_mad_idx; /* index for reporting events */
 	/* end congestion log related entries */
 
+	struct vl_arb_cache vl_arb_cache[MAX_PRIO_TABLE];
+
 	/* port relative counter buffer */
 	u64 *cntrs;
 	/* port relatvie synthetic counter buffer */
@@ -661,8 +690,8 @@ struct diag_observer {
 	u32 top;
 };
 
-extern int qib_register_observer(struct hfi_devdata *dd,
-	const struct diag_observer *op);
+int hfi1_register_observer(struct hfi_devdata *dd,
+			   const struct diag_observer *op);
 
 /* Only declared here, not defined. Private to diags */
 struct diag_observer_list_elt;
@@ -713,7 +742,7 @@ struct sdma_vl_map;
 #define SERIAL_MAX 16 /* length of the serial number */
 
 struct hfi_devdata {
-	struct qib_ibdev verbs_dev;     /* must be first */
+	struct hfi1_ibdev verbs_dev;     /* must be first */
 	struct list_head list;
 	/* pointers to related structs for this device */
 	/* pci access data structure */
@@ -732,7 +761,7 @@ struct hfi_devdata {
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
 	/* receive context data */
-	struct qib_ctxtdata **rcd;
+	struct hfi1_ctxtdata **rcd;
 	/* send context data */
 	struct send_context_info *send_contexts;
 	/* map hardware send contexts to software index */
@@ -774,7 +803,7 @@ struct hfi_devdata {
 	/* qib_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
 	 */
-	struct qib_pportdata *pport;
+	struct hfi1_pportdata *pport;
 
 	/* mem-mapped pointer to base of PIO buffers */
 	void __iomem *piobase;
@@ -796,8 +825,6 @@ struct hfi_devdata {
 
 	char *boardname; /* human readable board info */
 
-	/* number of registers used for pioavail */
-	u32 pioavregs;
 	/* device (not port) flags, basically device capabilities */
 	u32 flags;
 
@@ -817,24 +844,8 @@ struct hfi_devdata {
 	/* base receive interrupt timeout, in CSR units */
 	u32 rcv_intr_timeout_csr;
 
-	/*
-	 * hint that we should update pioavailshadow before
-	 * looking for a PIO buffer
-	 */
-	u32 upd_pio_shadow;
-
-	/* internal debugging stats */
-	u32 maxpkts_call;
-	u32 avgpkts_call;
-	u64 nopiobufs;
-
-	/* for write combining settings */
-	unsigned long wc_cookie;
-	unsigned long wc_base;
-	unsigned long wc_len;
-
 	u64 __iomem *egrtidbase;
-	spinlock_t sendctrl_lock; /* protect changes to sendctrl shadow */
+	spinlock_t sendctrl_lock; /* protect changes to sendctrl */
 	/* around rcd and (user ctxts) ctxt_cnt use (intr vs free) */
 	spinlock_t uctxt_lock; /* rcd and user context changes */
 	/* exclusive access to 8051 */
@@ -852,8 +863,6 @@ struct hfi_devdata {
 	 */
 	struct hfi_status *status;
 	u32 freezelen; /* max length of freezemsg */
-
-	unsigned long ureg_align; /* user register alignment */
 
 	/* revision register shadow */
 	u64 revision;
@@ -874,10 +883,6 @@ struct hfi_devdata {
 	u32 chip_pio_mem_size;
 	/* number of bytes in the SDMA memory buffer */
 	u32 chip_sdma_mem_size;
-	/* kr_userregbase */
-	u32 uregbase;
-	/* shadow the control register contents */
-	u32 control;
 
 	/* size of each rcvegrbuffer */
 	u32 rcvegrbufsize;
@@ -961,7 +966,7 @@ struct hfi_devdata {
 	struct kthread_worker *worker;
 
 	/* MSI-X information */
-	struct qib_msix_entry *msix_entries;
+	struct hfi1_msix_entry *msix_entries;
 	u32 num_msix_entries;
 
 	/* INTx information */
@@ -1019,12 +1024,12 @@ struct hfi_devdata {
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path
 	 */
-	int (*process_pio_send)(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
-				u32 hdrwords, struct qib_sge_state *ss, u32 len,
-				u32 plen, u32 dwords, u64 pbc);
-	int (*process_dma_send)(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
-				u32 hdrwords, struct qib_sge_state *ss, u32 len,
-				u32 plen, u32 dwords, u64 pbc);
+	int (*process_pio_send)(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
+				u32 hdrwords, struct hfi1_sge_state *ss,
+				u32 len, u32 plen, u32 dwords, u64 pbc);
+	int (*process_dma_send)(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
+				u32 hdrwords, struct hfi1_sge_state *ss,
+				u32 len, u32 plen, u32 dwords, u64 pbc);
 	void (*pio_inline_send)(struct hfi_devdata *dd, struct pio_buf *pbuf,
 				u64 pbc, const void *from, size_t count);
 
@@ -1047,7 +1052,7 @@ struct hfi_devdata {
 
 /* Private data for file operations */
 struct hfi_filedata {
-	struct qib_ctxtdata *uctxt;
+	struct hfi1_ctxtdata *uctxt;
 	unsigned subctxt;
 	struct hfi_user_sdma_comp_q *cq;
 	struct hfi_user_sdma_pkt_q *pq;
@@ -1057,37 +1062,37 @@ struct hfi_filedata {
 
 extern struct list_head qib_dev_list;
 extern spinlock_t qib_devs_lock;
-extern struct hfi_devdata *qib_lookup(int unit);
+struct hfi_devdata *hfi1_lookup(int unit);
 extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
 
 extern unsigned int snoop_drop_send;
 extern unsigned int snoop_force_capture;
-int qib_init(struct hfi_devdata *, int);
-int qib_count_units(int *npresentp, int *nupp);
-int qib_count_active_units(void);
+int hfi1_init(struct hfi_devdata *, int);
+int hfi1_count_units(int *npresentp, int *nupp);
+int hfi1_count_active_units(void);
 
-int qib_diag_add(struct hfi_devdata *);
-void qib_diag_remove(struct hfi_devdata *);
+int hfi1_diag_add(struct hfi_devdata *);
+void hfi1_diag_remove(struct hfi_devdata *);
 void handle_linkup_change(struct hfi_devdata *dd, u32 linkup);
-void qib_sdma_update_tail(struct qib_pportdata *, u16); /* hold sdma_lock */
+void qib_sdma_update_tail(struct hfi1_pportdata *, u16); /* hold sdma_lock */
 
 int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
-void handle_user_interrupt(struct qib_ctxtdata *rcd);
+void handle_user_interrupt(struct hfi1_ctxtdata *rcd);
 
-int qib_create_rcvhdrq(struct hfi_devdata *, struct qib_ctxtdata *);
-int qib_setup_eagerbufs(struct qib_ctxtdata *);
-int qib_create_ctxts(struct hfi_devdata *dd);
-struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
-void qib_init_pportdata(struct pci_dev *, struct qib_pportdata *,
-			struct hfi_devdata *, u8, u8);
-void qib_free_ctxtdata(struct hfi_devdata *, struct qib_ctxtdata *);
+int hfi1_create_rcvhdrq(struct hfi_devdata *, struct hfi1_ctxtdata *);
+int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *);
+int hfi1_create_ctxts(struct hfi_devdata *dd);
+struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *, u32);
+void hfi1_init_pportdata(struct pci_dev *, struct hfi1_pportdata *,
+			 struct hfi_devdata *, u8, u8);
+void hfi1_free_ctxtdata(struct hfi_devdata *, struct hfi1_ctxtdata *);
 
-void handle_receive_interrupt(struct qib_ctxtdata *);
-int qib_reset_device(int);
+void handle_receive_interrupt(struct hfi1_ctxtdata *);
+int hfi1_reset_device(int);
 
 /* return the driver's idea of the logical OPA port state */
-static inline u32 driver_lstate(struct qib_pportdata *ppd)
+static inline u32 driver_lstate(struct hfi1_pportdata *ppd)
 {
 	return ppd->lstate; /* use the cached value */
 }
@@ -1096,10 +1101,11 @@ static inline u16 generate_jkey(kuid_t uid)
 {
 	return from_kuid(current_user_ns(), uid) & 0xffff;
 }
-void set_link_ipg(struct qib_pportdata *ppd);
-void process_becn(struct qib_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,
+
+void set_link_ipg(struct hfi1_pportdata *ppd);
+void process_becn(struct hfi1_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,
 		  u32 rqpn, u8 svc_type);
-void return_cnp(struct qib_ibport *ibp, struct qib_qp *qp, u32 remote_qpn,
+void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 		u32 pkey, u32 slid, u32 dlid, u8 sc5,
 		const struct ib_grh *old_grh);
 
@@ -1168,7 +1174,7 @@ static inline int ingress_pkey_matches_entry(u16 pkey, u16 ent)
  * an entry which matches 'pkey'. return 0 if a match is found,
  * and 1 otherwise.
  */
-static int ingress_pkey_table_search(struct qib_pportdata *ppd, u16 pkey)
+static int ingress_pkey_table_search(struct hfi1_pportdata *ppd, u16 pkey)
 {
 	int i;
 
@@ -1184,7 +1190,7 @@ static int ingress_pkey_table_search(struct qib_pportdata *ppd, u16 pkey)
  * i.e., increment port_rcv_constraint_errors for the port, and record
  * the 'error info' for this failure.
  */
-static void ingress_pkey_table_fail(struct qib_pportdata *ppd, u16 pkey,
+static void ingress_pkey_table_fail(struct hfi1_pportdata *ppd, u16 pkey,
 				    u16 slid)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -1203,7 +1209,7 @@ static void ingress_pkey_table_fail(struct qib_pportdata *ppd, u16 pkey,
  * is a hint as to the best place in the partition key table to begin
  * searching.
  */
-static inline int ingress_pkey_check(struct qib_pportdata *ppd, u16 pkey,
+static inline int ingress_pkey_check(struct hfi1_pportdata *ppd, u16 pkey,
 				     u8 sc5, u8 idx, u16 slid)
 {
 	if (!(ppd->part_enforce & HFI_PART_ENFORCE_IN))
@@ -1253,26 +1259,27 @@ static inline int valid_opa_mtu(unsigned int mtu)
 {
 	return valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240;
 }
-int set_mtu(struct qib_pportdata *);
 
-int qib_set_lid(struct qib_pportdata *, u32, u8);
-void qib_disable_after_error(struct hfi_devdata *);
-int qib_set_uevent_bits(struct qib_pportdata *, const int);
+int set_mtu(struct hfi1_pportdata *);
+
+int hfi1_set_lid(struct hfi1_pportdata *, u32, u8);
+void hfi1_disable_after_error(struct hfi_devdata *);
+int hfi1_set_uevent_bits(struct hfi1_pportdata *, const int);
 int hfi_rcvbuf_validate(u32, u8, u16 *);
 
-int fm_get_table(struct qib_pportdata *, int, void *);
-int fm_set_table(struct qib_pportdata *, int, void *);
+int fm_get_table(struct hfi1_pportdata *, int, void *);
+int fm_set_table(struct hfi1_pportdata *, int, void *);
 
 void set_up_vl15(struct hfi_devdata *dd, u8 vau, u16 vl15buf);
 void reset_link_credits(struct hfi_devdata *dd);
 void assign_remote_cm_au_table(struct hfi_devdata *dd, u8 vcu);
 
 void snoop_recv_handler(struct hfi_packet *packet);
-int snoop_send_dma_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
-			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
+int snoop_send_dma_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
+			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc);
-int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ibhdr,
-			   u32 hdrwords, struct qib_sge_state *ss, u32 len,
+int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
+			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc);
 void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,
 			   u64 pbc, const void *from, size_t count);
@@ -1289,12 +1296,12 @@ void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,
 #define user_sdma_comp_fp(fp) \
 	(((struct hfi_filedata *)(fp)->private_data)->cq)
 
-static inline struct hfi_devdata *dd_from_ppd(struct qib_pportdata *ppd)
+static inline struct hfi_devdata *dd_from_ppd(struct hfi1_pportdata *ppd)
 {
 	return ppd->dd;
 }
 
-static inline struct hfi_devdata *dd_from_dev(struct qib_ibdev *dev)
+static inline struct hfi_devdata *dd_from_dev(struct hfi1_ibdev *dev)
 {
 	return container_of(dev, struct hfi_devdata, verbs_dev);
 }
@@ -1304,12 +1311,12 @@ static inline struct hfi_devdata *dd_from_ibdev(struct ib_device *ibdev)
 	return dd_from_dev(to_idev(ibdev));
 }
 
-static inline struct qib_pportdata *ppd_from_ibp(struct qib_ibport *ibp)
+static inline struct hfi1_pportdata *ppd_from_ibp(struct hfi1_ibport *ibp)
 {
-	return container_of(ibp, struct qib_pportdata, ibport_data);
+	return container_of(ibp, struct hfi1_pportdata, ibport_data);
 }
 
-static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
+static inline struct hfi1_ibport *to_iport(struct ib_device *ibdev, u8 port)
 {
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
@@ -1322,7 +1329,7 @@ static inline struct qib_ibport *to_iport(struct ib_device *ibdev, u8 port)
  * Readers of cc_state must call get_cc_state() under rcu_read_lock().
  * Writers of cc_state must call get_cc_state() under cc_state_lock.
  */
-static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
+static inline struct cc_state *get_cc_state(struct hfi1_pportdata *ppd)
 {
 	return rcu_dereference(ppd->cc_state);
 }
@@ -1352,12 +1359,12 @@ static inline struct cc_state *get_cc_state(struct qib_pportdata *ppd)
 #define QIB_CTXT_WAITING_URG 5
 
 /* free up any allocated data at closes */
-void qib_free_data(struct qib_ctxtdata *dd);
+void qib_free_data(struct hfi1_ctxtdata *dd);
 struct hfi_devdata *hfi1_init_dd(struct pci_dev *,
 				 const struct pci_device_id *);
-void qib_free_devdata(struct hfi_devdata *);
+void hfi1_free_devdata(struct hfi_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
-struct hfi_devdata *qib_alloc_devdata(struct pci_dev *pdev, size_t extra);
+struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
 void qib_dump_lookup_output_queue(struct hfi_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
@@ -1369,13 +1376,13 @@ void qib_clear_symerror_on_linkup(unsigned long opaque);
  */
 #define QIB_LED_PHYS 1 /* Physical (linktraining) GREEN LED */
 #define QIB_LED_LOG 2  /* Logical (link) YELLOW LED */
-void qib_set_led_override(struct qib_pportdata *ppd, unsigned int val);
+void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
 
 /* send dma routines */
-void __qib_sdma_intr(struct qib_pportdata *);
-void qib_sdma_intr(struct qib_pportdata *);
+void __qib_sdma_intr(struct hfi1_pportdata *);
+void qib_sdma_intr(struct hfi1_pportdata *);
 struct verbs_txreq;
-int qib_sdma_verbs_send(struct sdma_engine *, struct qib_sge_state *,
+int qib_sdma_verbs_send(struct sdma_engine *, struct hfi1_sge_state *,
 			u32, struct verbs_txreq *);
 /*
  * The number of words for the KDETH protocol field.  If this is
@@ -1415,15 +1422,15 @@ int qib_sdma_verbs_send(struct sdma_engine *, struct qib_sge_state *,
  */
 #define DEFAULT_RCVHDR_ENTSIZE 32
 
-int qib_get_user_pages(unsigned long, size_t, struct page **);
-void qib_release_user_pages(struct page **, size_t);
+int hfi1_get_user_pages(unsigned long, size_t, struct page **);
+void hfi1_release_user_pages(struct page **, size_t);
 
-static inline void qib_clear_rcvhdrtail(const struct qib_ctxtdata *rcd)
+static inline void qib_clear_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 {
 	*((u64 *) rcd->rcvhdrtail_kvaddr) = 0ULL;
 }
 
-static inline u32 qib_get_rcvhdrtail(const struct qib_ctxtdata *rcd)
+static inline u32 qib_get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 {
 	/*
 	 * volatile because it's a DMA target from the chip, routine is
@@ -1432,7 +1439,7 @@ static inline u32 qib_get_rcvhdrtail(const struct qib_ctxtdata *rcd)
 	return (u32) le64_to_cpu(*rcd->rcvhdrtail_kvaddr);
 }
 
-static inline u32 qib_get_hdrqtail(const struct qib_ctxtdata *rcd)
+static inline u32 qib_get_hdrqtail(const struct hfi1_ctxtdata *rcd)
 {
 	const struct hfi_devdata *dd = rcd->dd;
 	u32 hdrqtail;
@@ -1462,31 +1469,31 @@ extern const char ib_qib_version[];
 int hfi_device_create(struct hfi_devdata *);
 void hfi_device_remove(struct hfi_devdata *);
 
-int qib_create_port_files(struct ib_device *ibdev, u8 port_num,
-			  struct kobject *kobj);
-int qib_verbs_register_sysfs(struct hfi_devdata *);
-void qib_verbs_unregister_sysfs(struct hfi_devdata *);
+int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
+			   struct kobject *kobj);
+int hfi1_verbs_register_sysfs(struct hfi_devdata *);
+void hfi1_verbs_unregister_sysfs(struct hfi_devdata *);
 /* Hook for sysfs read of QSFP */
-extern int qsfp_dump(struct qib_pportdata *ppd, char *buf, int len);
+int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len);
 
-int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
+int hfi1_pcie_init(struct pci_dev *, const struct pci_device_id *);
 void hfi_pcie_cleanup(struct pci_dev *);
-int qib_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
-		    const struct pci_device_id *);
-void qib_pcie_ddcleanup(struct hfi_devdata *);
+int hfi1_pcie_ddinit(struct hfi_devdata *, struct pci_dev *,
+		     const struct pci_device_id *);
+void hfi1_pcie_ddcleanup(struct hfi_devdata *);
 void hfi_pcie_flr(struct hfi_devdata *);
 int pcie_speeds(struct hfi_devdata *);
-void request_msix(struct hfi_devdata *, u32 *, struct qib_msix_entry *);
-void qib_enable_intx(struct pci_dev *);
-void qib_nomsix(struct hfi_devdata *);
+void request_msix(struct hfi_devdata *, u32 *, struct hfi1_msix_entry *);
+void hfi1_enable_intx(struct pci_dev *);
+void hfi1_nomsix(struct hfi_devdata *);
 void restore_pci_variables(struct hfi_devdata *dd);
 int do_pcie_gen3_transition(struct hfi_devdata *dd);
 
 /*
  * dma_addr wrappers - all 0's invalid for hw
  */
-dma_addr_t qib_map_page(struct pci_dev *, struct page *, unsigned long,
-			  size_t, int);
+dma_addr_t hfi1_map_page(struct pci_dev *, struct page *, unsigned long,
+			 size_t, int);
 const char *get_unit_name(int unit);
 
 /*
@@ -1511,7 +1518,7 @@ extern void process_receive_eager(struct hfi_packet *packet);
 
 extern void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 
-extern void update_sge(struct qib_sge_state *ss, u32 length);
+void update_sge(struct hfi1_sge_state *ss, u32 length);
 
 /* global module parameter variables */
 extern unsigned int max_mtu;
@@ -1649,7 +1656,7 @@ static inline u64 hfi_pkt_base_sdma_integrity(struct hfi_devdata *dd)
 /*
  * this is used for formatting hw error messages...
  */
-struct qib_hwerror_msgs {
+struct hfi1_hwerror_msgs {
 	u64 mask;
 	const char *msg;
 	size_t sz;
@@ -1658,9 +1665,9 @@ struct qib_hwerror_msgs {
 #define QLOGIC_IB_HWE_MSG(a, b) { .mask = a, .msg = b }
 
 /* in qib_intr.c... */
-void qib_format_hwerrors(u64 hwerrs,
-			 const struct qib_hwerror_msgs *hwerrmsgs,
-			 size_t nhwerrmsgs, char *msg, size_t lmsg);
+void hfi1_format_hwerrors(u64 hwerrs,
+			  const struct hfi1_hwerror_msgs *hwerrmsgs,
+			  size_t nhwerrmsgs, char *msg, size_t lmsg);
 
 #define WFR_USER_OPCODE_CHECK_VAL 0xC0
 #define WFR_USER_OPCODE_CHECK_MASK 0xC0
@@ -1669,12 +1676,12 @@ void qib_format_hwerrors(u64 hwerrs,
 
 static inline void hfi1_reset_cpu_counters(struct hfi_devdata *dd)
 {
-	struct qib_pportdata *ppd;
+	struct hfi1_pportdata *ppd;
 	int i;
 
 	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
 
-	ppd = (struct qib_pportdata *)(dd + 1);
+	ppd = (struct hfi1_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		ppd->ibport_data.z_rc_acks =
 			get_all_cpu_total(ppd->ibport_data.rc_acks);

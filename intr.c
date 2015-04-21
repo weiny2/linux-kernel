@@ -1,36 +1,51 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
- * Copyright (c) 2006, 2007, 2008, 2009, 2010 QLogic Corporation.
- * All rights reserved.
- * Copyright (c) 2003, 2004, 2005, 2006 PathScale, Inc. All rights reserved.
  *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
  *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
+ * GPL LICENSE SUMMARY
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ * Copyright(c) 2015 Intel Corporation.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  - Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/pci.h>
@@ -54,15 +69,15 @@ static void qib_format_hwmsg(char *msg, size_t msgl, const char *hwmsg)
 }
 
 /**
- * qib_format_hwerrors - format hardware error messages for display
+ * hfi1_format_hwerrors - format hardware error messages for display
  * @hwerrs hardware errors bit vector
  * @hwerrmsgs hardware error descriptions
  * @nhwerrmsgs number of hwerrmsgs
  * @msg message buffer
  * @msgl message buffer length
  */
-void qib_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
-			 size_t nhwerrmsgs, char *msg, size_t msgl)
+void hfi1_format_hwerrors(u64 hwerrs, const struct hfi1_hwerror_msgs *hwerrmsgs,
+			  size_t nhwerrmsgs, char *msg, size_t msgl)
 {
 	int i;
 
@@ -71,16 +86,15 @@ void qib_format_hwerrors(u64 hwerrs, const struct qib_hwerror_msgs *hwerrmsgs,
 			qib_format_hwmsg(msg, msgl, hwerrmsgs[i].msg);
 }
 
-static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
+static void signal_ib_event(struct hfi1_pportdata *ppd, enum ib_event_type ev)
 {
 	struct ib_event event;
 	struct hfi_devdata *dd = ppd->dd;
 
 	/*
 	 * Only call ib_dispatch_event() if the IB device has been
-	 * registered.  Right now, QIB_INITED is set iff the driver
-	 * has successfully registered with IB core.
-	 * TODO: Make a separate flag for registering with IB?
+	 * registered.  HFI_INITED is set iff the driver has successfully
+	 * registered with the IB core.
 	 */
 	if (!(dd->flags & HFI_INITTED))
 		return;
@@ -96,7 +110,7 @@ static void signal_ib_event(struct qib_pportdata *ppd, enum ib_event_type ev)
  */
 void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 {
-	struct qib_pportdata *ppd = &dd->pport[0];
+	struct hfi1_pportdata *ppd = &dd->pport[0];
 	enum ib_event_type ev;
 
 	if (!(ppd->linkup ^ !!linkup))
@@ -153,7 +167,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		ev = IB_EVENT_PORT_ERR;
 
-		qib_set_uevent_bits(ppd, _HFI_EVENT_LINKDOWN_BIT);
+		hfi1_set_uevent_bits(ppd, _HFI_EVENT_LINKDOWN_BIT);
 
 		/* if we are down, the neighbor is down */
 		ppd->neighbor_normal = 0;
@@ -169,7 +183,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
  * Handle receive or urgent interrupts for user contexts.  This means a user
  * process was waiting for a packet to arrive, and didn't want to poll.
  */
-void handle_user_interrupt(struct qib_ctxtdata *rcd)
+void handle_user_interrupt(struct hfi1_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
 	unsigned long flags;
