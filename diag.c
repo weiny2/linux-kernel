@@ -2096,10 +2096,10 @@ void snoop_recv_handler(struct hfi_packet *packet)
 
 	/*
 	 * We do not care what type of packet came in here just pass it off to
-	 * its usual handler. See hfi1_init(). We can't just rely on calling into
-	 * the function map array becaue snoop/capture has hijacked it. If we
-	 * call the IB type specific handler we will be calling ourself
-	 * recursively.
+	 * its usual handler. See hfi1_init(). We can't just rely on calling
+	 * into the function map array becaue snoop/capture has hijacked it.
+	 * If we call the IB type specific handler we will be calling
+	 * ourself recursively.
 	 */
 	switch (rhf_rcv_type(packet->rhf)) {
 	case RHF_RCV_TYPE_IB:
@@ -2270,7 +2270,10 @@ int snoop_send_pio_handler(struct qib_qp *qp, struct ahg_ib_header *ahdr,
 			snoop_dbg("Dropping packet\n");
 			if (qp->s_wqe) {
 				spin_lock_irqsave(&qp->s_lock, flags);
-				hfi1_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
+				hfi1_send_complete(
+					qp,
+					qp->s_wqe,
+					IB_WC_SUCCESS);
 				spin_unlock_irqrestore(&qp->s_lock, flags);
 			} else if (qp->ibqp.qp_type == IB_QPT_RC) {
 				spin_lock_irqsave(&qp->s_lock, flags);

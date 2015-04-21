@@ -1048,7 +1048,9 @@ struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 
 int hfi1_destroy_cq(struct ib_cq *ibcq);
 
-int hfi1_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
+int hfi1_req_notify_cq(
+	struct ib_cq *ibcq,
+	enum ib_cq_notify_flags notify_flags);
 
 int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
 

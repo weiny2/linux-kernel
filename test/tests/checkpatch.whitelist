@@ -1,7 +1,6 @@
 2 diag.c WARNING: Possible unnecessary 'out of memory' message
 2 hfi.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 2 init.c WARNING: Possible unnecessary 'out of memory' message
-2 pio.c ERROR: do not use C99 // comments
 2 pio.c WARNING: Possible unnecessary 'out of memory' message
 1 pio.h WARNING: Missing a blank line after declarations
 2 pio.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt

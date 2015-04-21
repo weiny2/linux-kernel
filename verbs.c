@@ -226,7 +226,10 @@ __be64 ib_qib_sys_image_guid;
  * @data: the data to copy
  * @length: the length of the data
  */
-void hfi1_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
+void hfi1_copy_sge(
+	struct qib_sge_state *ss,
+	void *data, u32 length,
+	int release)
 {
 	struct qib_sge *sge = &ss->sge;
 
