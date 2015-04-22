@@ -455,97 +455,6 @@ void hfi1_enable_intx(struct pci_dev *pdev)
 	pci_disable_msix(pdev);
 }
 
-static inline u32 read_dbi_status(struct hfi_devdata *dd)
-{
-	return (u32)((read_csr(dd, WFR_CCE_DBI_CTRL)
-					& WFR_CCE_DBI_CTRL_STATUS_SMASK)
-				>> WFR_CCE_DBI_CTRL_STATUS_SHIFT);
-}
-
-/*
- * Wait for DBI to go idle.  Return
- *   0 on success
- *   -ETIMEDOUT on timeout
- */
-static int wait_dbi_idle(struct hfi_devdata *dd)
-{
-	unsigned long timeout;
-	u32 status;
-
-	timeout = jiffies + msecs_to_jiffies(DBI_TIMEOUT);
-	while (1) {
-		status = read_dbi_status(dd);
-		if (status == DBI_CTL_IDLE)
-			return 0;
-		if (time_after(jiffies, timeout)) {
-			dd_dev_err(dd, "Timeout waiting for DBI to go idle\n");
-			return -ETIMEDOUT;
-		}
-		/* keep trying to go to idle */
-		write_csr(dd, WFR_CCE_DBI_CTRL, 0);
-	}
-}
-
-/*
- * Wait for DBI to finish.  Return
- *   0 on success
- *   -ETIMEDOUT on timeout
- *   -EIO on error
- */
-static int wait_dbi_done(struct hfi_devdata *dd)
-{
-	unsigned long timeout;
-	u32 status;
-
-	timeout = jiffies + msecs_to_jiffies(DBI_TIMEOUT);
-	while (1) {
-		status = read_dbi_status(dd);
-		if (status == DBI_CTL_SUCCESS)
-			return 0;
-		if (status == DBI_CTL_ERROR) {
-			dd_dev_err(dd, "DBI error\n");
-			return -EIO;
-		}
-		if (time_after(jiffies, timeout)) {
-			dd_dev_err(dd,
-				"Timeout waiting for DBI to finish, status %d\n",
-				status);
-			return -ETIMEDOUT;
-		}
-		udelay(1);
-	}
-}
-
-static int adjust_pci(struct hfi_devdata *dd, u32 address, u32 data)
-{
-	int ret;
-
-	/* simulator does not implement DBI */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
-		return 0;
-
-	/* make sure DBI is idle */
-	ret = wait_dbi_idle(dd);
-	if (ret)
-		return ret;
-
-	write_csr(dd, WFR_CCE_DBI_ADDR, address);
-	write_csr(dd, WFR_CCE_DBI_DATA, data);
-	/* must set WriteEnables, then CS, in two writes */
-	write_csr(dd, WFR_CCE_DBI_CTRL,
-		(u32)0xf << WFR_CCE_DBI_CTRL_WRITE_ENABLES_SHIFT);
-	write_csr(dd, WFR_CCE_DBI_CTRL,
-		((u32)0xf << WFR_CCE_DBI_CTRL_WRITE_ENABLES_SHIFT)
-		| ((u32)1 << WFR_CCE_DBI_CTRL_CS_SHIFT));
-
-	/* wait for DBI to finish */
-	ret = wait_dbi_done(dd);
-	/* (try to) go idle no matter what happened */
-	write_csr(dd, WFR_CCE_DBI_CTRL, 0);
-
-	return ret;
-}
-
 /* restore command and BARs after a reset has wiped them out */
 void restore_pci_variables(struct hfi_devdata *dd)
 {
@@ -564,24 +473,6 @@ void restore_pci_variables(struct hfi_devdata *dd)
 	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE1,
 							dd->pci_lnkctl3);
 	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_TPH2, dd->pci_tph2);
-
-	/*
-	 * TODO: Use of DBI back-door is undesirable but the only way to
-	 *       restore the subsystem IDs.
-	 * TODO: This is an _expected_ B0 fix.  A new PCIe is being tested
-	 *	 now that has this fixed.  Adding the A0 check for now.
-	 * Need to restore subsystem ids after a reset.
-	 */
-	if (is_a0(dd)) {
-		int ret;
-
-		ret = adjust_pci(dd, WFR_PCI_CFG_REG11,
-			((u32)dd->pcidev->subsystem_device << 16)
-			| (u32)dd->pcidev->subsystem_vendor);
-		if (ret)
-			dd_dev_err(dd,
-				"Unable to restore PCI subsystem settings\n");
-	}
 }
 
 /* code to adjust PCIe capabilities. */

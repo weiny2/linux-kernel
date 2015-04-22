@@ -347,12 +347,6 @@
 #define WFR_RCV_SHIFT 3
 #define WFR_RCV_INCREMENT (1 << WFR_RCV_SHIFT)
 
-/* CceDbiCtrl.Status values */
-#define DBI_CTL_IDLE	0
-#define DBI_CTL_BUSY	1
-#define DBI_CTL_SUCCESS	2
-#define DBI_CTL_ERROR	3
-
 /*
  * Receive header queue entry increment - the CSR holds multiples of
  * this value.
@@ -529,7 +523,6 @@ enum {
 #define LINK_RESTART_DELAY 1000		/* link restart delay, in ms */
 #define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
 #define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
-#define DBI_TIMEOUT 1			/* DBI hardare access timeout, in ms */
 #define VL_STATUS_CLEAR_TIMEOUT 5000	/* per-VL status clear, in ms */
 #define CCE_STATUS_TIMEOUT 10		/* time to clear CCE Status, in ms */
 
@@ -984,30 +977,6 @@ enum {
  * FIXME: These are non-exported register definitions that are still
  * used in the driver.  Remove when their use is removed.
  */
-#define WFR_CCE_DBI_CTRL                         (WFR_CCE + 0x0000000000A0)
-#define WFR_CCE_DBI_CTRL_RESETCSR                0x0000000000000000ull
-#define WFR_CCE_DBI_CTRL_STATUS_SHIFT            6
-#define WFR_CCE_DBI_CTRL_STATUS_MASK             0x3ull
-#define WFR_CCE_DBI_CTRL_STATUS_SMASK            0xC0ull
-#define WFR_CCE_DBI_CTRL_CS_SHIFT                4
-#define WFR_CCE_DBI_CTRL_CS_MASK                 0x3ull
-#define WFR_CCE_DBI_CTRL_CS_SMASK                0x30ull
-#define WFR_CCE_DBI_CTRL_WRITE_ENABLES_SHIFT     0
-#define WFR_CCE_DBI_CTRL_WRITE_ENABLES_MASK      0xFull
-#define WFR_CCE_DBI_CTRL_WRITE_ENABLES_SMASK     0xFull
-
-#define WFR_CCE_DBI_ADDR                         (WFR_CCE + 0x0000000000A8)
-#define WFR_CCE_DBI_ADDR_RESETCSR                0x0000000000000000ull
-#define WFR_CCE_DBI_ADDR_ADDR_SHIFT              0
-#define WFR_CCE_DBI_ADDR_ADDR_MASK               0xFFFFFFFFull
-#define WFR_CCE_DBI_ADDR_ADDR_SMASK              0xFFFFFFFFull
-
-#define WFR_CCE_DBI_DATA                         (WFR_CCE + 0x0000000000B0)
-#define WFR_CCE_DBI_DATA_RESETCSR                0x0000000000000000ull
-#define WFR_CCE_DBI_DATA_DATA_SHIFT              0
-#define WFR_CCE_DBI_DATA_DATA_MASK               0xFFFFFFFFull
-#define WFR_CCE_DBI_DATA_DATA_SMASK              0xFFFFFFFFull
-
 #define WFR_ASIC_WFR_EFUSE_REGS6                (WFR_ASIC + 0x000000001430)
 #define WFR_ASIC_WFR_EFUSE_REGS6_RESETCSR       0x0000000000000000ull
 #define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SHIFT 32
