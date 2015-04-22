@@ -2142,7 +2142,7 @@ send_last:
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
-		/* XXX LAST len should be >= 1 */
+		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
 			goto nack_inv;
 		/* Don't count the CRC. */
