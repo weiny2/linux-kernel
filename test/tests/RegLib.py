@@ -420,7 +420,7 @@ class TestInfo:
 
         git_root = os.popen('git rev-parse --show-toplevel').read()
         git_root = chomp(git_root)
-	kbuild_def = "/lib/modules/3.12.18-wfr+/build"
+	kbuild_def = "/lib/modules/3.12.18-wfr/build"
 
         # Some ancient disros do not support the above git command. Or git may
         # not be in the users path. Rather than getting garbage and accepting
