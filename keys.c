@@ -105,8 +105,8 @@ int hfi1_alloc_lkey(struct hfi1_mregion *mr, int dma_region)
 	 * unrestricted LKEY.
 	 */
 	rkt->gen++;
-	mr->lkey = (r << (32 - ib_qib_lkey_table_size)) |
-		((((1 << (24 - ib_qib_lkey_table_size)) - 1) & rkt->gen)
+	mr->lkey = (r << (32 - ib_hfi1_lkey_table_size)) |
+		((((1 << (24 - ib_hfi1_lkey_table_size)) - 1) & rkt->gen)
 		 << 8);
 	if (mr->lkey == 0) {
 		mr->lkey |= 1 << 8;
@@ -144,7 +144,7 @@ void hfi1_free_lkey(struct hfi1_mregion *mr)
 	if (lkey == 0)
 		RCU_INIT_POINTER(dev->dma_mr, NULL);
 	else {
-		r = lkey >> (32 - ib_qib_lkey_table_size);
+		r = lkey >> (32 - ib_hfi1_lkey_table_size);
 		RCU_INIT_POINTER(rkt->table[r], NULL);
 	}
 	mr->lkey_published = 0;
@@ -204,7 +204,7 @@ int hfi1_lkey_ok(struct hfi1_lkey_table *rkt, struct hfi1_pd *pd,
 		goto ok;
 	}
 	mr = rcu_dereference(
-		rkt->table[(sge->lkey >> (32 - ib_qib_lkey_table_size))]);
+		rkt->table[(sge->lkey >> (32 - ib_hfi1_lkey_table_size))]);
 	if (unlikely(!mr || mr->lkey != sge->lkey || mr->pd != &pd->ibpd))
 		goto bail;
 
@@ -227,15 +227,15 @@ int hfi1_lkey_ok(struct hfi1_lkey_table *rkt, struct hfi1_pd *pd,
 
 		entries_spanned_by_off = off >> mr->page_shift;
 		off -= (entries_spanned_by_off << mr->page_shift);
-		m = entries_spanned_by_off/QIB_SEGSZ;
-		n = entries_spanned_by_off%QIB_SEGSZ;
+		m = entries_spanned_by_off / HFI1_SEGSZ;
+		n = entries_spanned_by_off % HFI1_SEGSZ;
 	} else {
 		m = 0;
 		n = 0;
 		while (off >= mr->map[m]->segs[n].length) {
 			off -= mr->map[m]->segs[n].length;
 			n++;
-			if (n >= QIB_SEGSZ) {
+			if (n >= HFI1_SEGSZ) {
 				m++;
 				n = 0;
 			}
@@ -302,7 +302,7 @@ int hfi1_rkey_ok(struct hfi1_qp *qp, struct hfi1_sge *sge,
 	}
 
 	mr = rcu_dereference(
-		rkt->table[(rkey >> (32 - ib_qib_lkey_table_size))]);
+		rkt->table[(rkey >> (32 - ib_hfi1_lkey_table_size))]);
 	if (unlikely(!mr || mr->lkey != rkey || qp->ibqp.pd != mr->pd))
 		goto bail;
 
@@ -324,15 +324,15 @@ int hfi1_rkey_ok(struct hfi1_qp *qp, struct hfi1_sge *sge,
 
 		entries_spanned_by_off = off >> mr->page_shift;
 		off -= (entries_spanned_by_off << mr->page_shift);
-		m = entries_spanned_by_off/QIB_SEGSZ;
-		n = entries_spanned_by_off%QIB_SEGSZ;
+		m = entries_spanned_by_off / HFI1_SEGSZ;
+		n = entries_spanned_by_off % HFI1_SEGSZ;
 	} else {
 		m = 0;
 		n = 0;
 		while (off >= mr->map[m]->segs[n].length) {
 			off -= mr->map[m]->segs[n].length;
 			n++;
-			if (n >= QIB_SEGSZ) {
+			if (n >= HFI1_SEGSZ) {
 				m++;
 				n = 0;
 			}
@@ -371,7 +371,7 @@ int hfi1_fast_reg_mr(struct hfi1_qp *qp, struct ib_send_wr *wr)
 		goto bail;
 
 	mr = rcu_dereference_protected(
-		rkt->table[(rkey >> (32 - ib_qib_lkey_table_size))],
+		rkt->table[(rkey >> (32 - ib_hfi1_lkey_table_size))],
 		lockdep_is_held(&rkt->lock));
 	if (unlikely(mr == NULL || qp->ibqp.pd != mr->pd))
 		goto bail;
@@ -394,7 +394,7 @@ int hfi1_fast_reg_mr(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	for (i = 0; i < wr->wr.fast_reg.page_list_len; i++) {
 		mr->map[m]->segs[n].vaddr = (void *) page_list[i];
 		mr->map[m]->segs[n].length = ps;
-		if (++n == QIB_SEGSZ) {
+		if (++n == HFI1_SEGSZ) {
 			m++;
 			n = 0;
 		}

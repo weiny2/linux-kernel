@@ -50,7 +50,7 @@
  *
  */
 
-#define QIB_TWSI_NO_DEV 0xFF
+#define HFI1_TWSI_NO_DEV 0xFF
 
 struct hfi_devdata;
 

@@ -264,7 +264,7 @@ void hfi1_sys_guid_chg(struct hfi1_ibport *ibp)
 	data.toggle_count = 0;
 	memset(&data.details, 0, sizeof(data.details));
 	data.details.ntc_145.lid = data.issuer_lid;
-	data.details.ntc_145.new_sys_guid = ib_qib_sys_image_guid;
+	data.details.ntc_145.new_sys_guid = ib_hfi1_sys_image_guid;
 
 	qib_send_trap(ibp, &data, sizeof(data));
 }
@@ -333,7 +333,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
-	ni->system_image_guid = ib_qib_sys_image_guid;
+	ni->system_image_guid = ib_hfi1_sys_image_guid;
 	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
 	ni->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	ni->device_id = cpu_to_be16(dd->pcidev->device);
@@ -368,7 +368,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	nip->node_type = 1;     /* channel adapter */
 	nip->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
-	nip->sys_guid = ib_qib_sys_image_guid;
+	nip->sys_guid = ib_hfi1_sys_image_guid;
 	nip->node_guid = dd->pport->guid; /* Use first-port GUID as node */
 	nip->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	nip->device_id = cpu_to_be16(dd->pcidev->device);
@@ -383,17 +383,17 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 
 static void set_link_width_enabled(struct hfi1_pportdata *ppd, u32 w)
 {
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LWID_ENB, w);
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_LWID_ENB, w);
 }
 
 static void set_link_width_downgrade_enabled(struct hfi1_pportdata *ppd, u32 w)
 {
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LWID_DG_ENB, w);
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_LWID_DG_ENB, w);
 }
 
 static void set_link_speed_enabled(struct hfi1_pportdata *ppd, u32 s)
 {
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_SPD_ENB, s);
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_SPD_ENB, s);
 }
 
 static int check_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
@@ -628,7 +628,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->neigh_mtu.pvlx_to_mtu[15/2] |= mtu;
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
 	pi->operational_vls =
-		hfi_num_vls(hfi1_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
+		hfi_num_vls(hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS));
 	pi->partenforce_filterraw |=
 		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
@@ -642,8 +642,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->vl.cap = hfi_num_vls(ppd->vls_supported);
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
-	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
-	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
+	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_CAP);
+	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_LOW_CAP);
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
 
@@ -730,7 +730,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 /**
  * get_pkeys - return the PKEY table
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @port: the IB port number
  * @pkeys: the pkey table is placed here
  */
@@ -951,7 +951,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	/* Must be a valid unicast LID address. */
 	if ((lid == 0 && ls_old > IB_PORT_INIT) ||
-	     lid >= QIB_MULTICAST_LID_BASE) {
+	     lid >= HFI1_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		pr_warn("SubnSet(OPA_PortInfo) lid invalid 0x%x\n",
 			lid);
@@ -977,7 +977,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
 	/* Must be a valid unicast LID address. */
 	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
-	     smlid >= QIB_MULTICAST_LID_BASE) {
+	     smlid >= HFI1_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
@@ -1047,7 +1047,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT) >> 6;
 	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
 	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
@@ -1097,7 +1097,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		} else
-			(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS,
+			(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS,
 						vl_enum);
 	}
 
@@ -1178,7 +1178,7 @@ get_only:
 
 /**
  * set_pkeys - set the PKEY table for ctxt 0
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @port: the IB port number
  * @pkeys: the PKEY table
  */
@@ -1227,7 +1227,7 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	if (changed) {
 		struct ib_event event;
 
-		(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
+		(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
 
 		event.event = IB_EVENT_PKEY_CHANGE;
 		event.device = &dd->verbs_dev.ibdev;
@@ -3832,8 +3832,8 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 #if 0
 	case IB_MGMT_METHOD_SEND:
 		if (ib_get_smp_direction(smp) &&
-		    smp->attr_id == QIB_VENDOR_IPG) {
-			ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PORT,
+		    smp->attr_id == HFI1_VENDOR_IPG) {
+			ppd->dd->f_set_ib_cfg(ppd, HFI1_IB_CFG_PORT,
 					      smp->data[0]);
 			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 		} else

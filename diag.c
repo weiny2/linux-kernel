@@ -138,7 +138,7 @@ struct capture_md {
 
 /*
  * Get a client struct. Recycled if possible, else kmalloc.
- * Must be called with qib_mutex held
+ * Must be called with hfi1_mutex held
  */
 static struct diag_client *get_client(struct hfi_devdata *dd)
 {
@@ -162,7 +162,7 @@ static struct diag_client *get_client(struct hfi_devdata *dd)
 }
 
 /*
- * Return to pool. Must be called with qib_mutex held
+ * Return to pool. Must be called with hfi1_mutex held
  */
 static void return_client(struct diag_client *dc)
 {
@@ -563,7 +563,7 @@ static int diag_open(struct inode *in, struct file *fp)
 	struct diag_client *dc;
 	int ret;
 
-	mutex_lock(&qib_mutex);
+	mutex_lock(&hfi1_mutex);
 
 	dd = hfi1_lookup(unit);
 
@@ -583,7 +583,7 @@ static int diag_open(struct inode *in, struct file *fp)
 	fp->private_data = dc;
 	ret = 0;
 bail:
-	mutex_unlock(&qib_mutex);
+	mutex_unlock(&hfi1_mutex);
 
 	return ret;
 }
@@ -837,10 +837,10 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 
 static int diag_release(struct inode *in, struct file *fp)
 {
-	mutex_lock(&qib_mutex);
+	mutex_lock(&hfi1_mutex);
 	return_client(fp->private_data);
 	fp->private_data = NULL;
-	mutex_unlock(&qib_mutex);
+	mutex_unlock(&hfi1_mutex);
 	return 0;
 }
 
@@ -870,11 +870,11 @@ int hfi1_register_observer(struct hfi_devdata *dd,
 	if (olp) {
 		unsigned long flags;
 
-		spin_lock_irqsave(&dd->qib_diag_trans_lock, flags);
+		spin_lock_irqsave(&dd->hfi1_diag_trans_lock, flags);
 		olp->op = op;
 		olp->next = dd->diag_observer_list;
 		dd->diag_observer_list = olp;
-		spin_unlock_irqrestore(&dd->qib_diag_trans_lock, flags);
+		spin_unlock_irqrestore(&dd->hfi1_diag_trans_lock, flags);
 		ret = 0;
 	}
 bail:
@@ -887,18 +887,18 @@ static void unregister_observers(struct hfi_devdata *dd)
 	struct diag_observer_list_elt *olp;
 	unsigned long flags;
 
-	spin_lock_irqsave(&dd->qib_diag_trans_lock, flags);
+	spin_lock_irqsave(&dd->hfi1_diag_trans_lock, flags);
 	olp = dd->diag_observer_list;
 	while (olp) {
 		/* Pop one observer, let go of lock */
 		dd->diag_observer_list = olp->next;
-		spin_unlock_irqrestore(&dd->qib_diag_trans_lock, flags);
+		spin_unlock_irqrestore(&dd->hfi1_diag_trans_lock, flags);
 		vfree(olp);
 		/* try again. */
-		spin_lock_irqsave(&dd->qib_diag_trans_lock, flags);
+		spin_lock_irqsave(&dd->hfi1_diag_trans_lock, flags);
 		olp = dd->diag_observer_list;
 	}
-	spin_unlock_irqrestore(&dd->qib_diag_trans_lock, flags);
+	spin_unlock_irqrestore(&dd->hfi1_diag_trans_lock, flags);
 }
 
 /*
@@ -953,7 +953,7 @@ static ssize_t diag_read(struct file *fp, char __user *data,
 		const struct diag_observer *op;
 
 		ret = -1;
-		spin_lock_irqsave(&dd->qib_diag_trans_lock, flags);
+		spin_lock_irqsave(&dd->hfi1_diag_trans_lock, flags);
 		/*
 		 * Check for observer on this address range.
 		 * we only support a single 64-bit read
@@ -969,7 +969,7 @@ static ssize_t diag_read(struct file *fp, char __user *data,
 		 * We need to release lock before any copy_to_user(),
 		 * whether implicit in read_umem64 or explicit below.
 		 */
-		spin_unlock_irqrestore(&dd->qib_diag_trans_lock, flags);
+		spin_unlock_irqrestore(&dd->hfi1_diag_trans_lock, flags);
 		if (!op) {
 			ret = read_umem64(dd, data, (u32) *off, count);
 		} else if (ret == count) {
@@ -1032,13 +1032,14 @@ static ssize_t diag_write(struct file *fp, const char __user *data,
 				ret = -EFAULT;
 				goto bail;
 			}
-			spin_lock_irqsave(&dd->qib_diag_trans_lock, flags);
+			spin_lock_irqsave(&dd->hfi1_diag_trans_lock, flags);
 			op = diag_get_observer(dd, *off);
 			/* FIXME: op->hook()'x last arg used to be use_32 */
 			if (op)
 				ret = op->hook(dd, op, offset, &data64, ~0Ull,
 					       0);
-			spin_unlock_irqrestore(&dd->qib_diag_trans_lock, flags);
+			spin_unlock_irqrestore(&dd->hfi1_diag_trans_lock,
+					       flags);
 		}
 
 		if (!op)
@@ -1155,7 +1156,7 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	struct hfi_devdata *dd;
 	struct list_head *queue;
 
-	mutex_lock(&qib_mutex);
+	mutex_lock(&hfi1_mutex);
 
 	dd = hfi_dd_from_sc_inode(in);
 	if (dd == NULL) {
@@ -1239,7 +1240,7 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	ret = 0;
 
 bail:
-	mutex_unlock(&qib_mutex);
+	mutex_unlock(&hfi1_mutex);
 
 	return ret;
 }
@@ -1792,7 +1793,7 @@ static int hfi_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	/* Check for GRH */
-	if ((be16_to_cpu(hdr->lrh[0]) & 3) == QIB_LRH_BTH)
+	if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
 		ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
 	else
 		ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
@@ -1825,7 +1826,7 @@ static int hfi_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	/* Check for GRH */
-	if ((be16_to_cpu(hdr->lrh[0]) & 3) == QIB_LRH_BTH)
+	if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
 		ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
 	else
 		ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
@@ -1855,9 +1856,9 @@ static int hfi_filter_ibpacket_type(void *ibhdr, void *packet_data,
 
 	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
 
-	if (lnh == QIB_LRH_BTH)
+	if (lnh == HFI1_LRH_BTH)
 		ohdr = &hdr->u.oth;
-	else if (lnh == QIB_LRH_GRH)
+	else if (lnh == HFI1_LRH_GRH)
 		ohdr = &hdr->u.l.oth;
 	else
 		return HFI_FILTER_ERR;
@@ -1909,9 +1910,9 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	hdr = (struct hfi1_ib_header *)ibhdr;
 
 	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
-	if (lnh == QIB_LRH_BTH)
+	if (lnh == HFI1_LRH_BTH)
 		ohdr = &hdr->u.oth;
-	else if (lnh == QIB_LRH_GRH)
+	else if (lnh == HFI1_LRH_GRH)
 		ohdr = &hdr->u.l.oth;
 	else
 		return HFI_FILTER_ERR;

@@ -97,15 +97,15 @@ int hfi1_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		 * about that, it appears.  If the original BAR was retained
 		 * in the kernel data structures, this may be OK.
 		 */
-		qib_early_err(&pdev->dev, "pci enable failed: error %d\n",
-			      -ret);
+		hfi1_early_err(&pdev->dev, "pci enable failed: error %d\n",
+			       -ret);
 		goto done;
 	}
 
 	ret = pci_request_regions(pdev, DRIVER_NAME);
 	if (ret) {
-		qib_early_err(&pdev->dev,
-			"pci_request_regions fails: err %d\n", -ret);
+		hfi1_early_err(&pdev->dev,
+			       "pci_request_regions fails: err %d\n", -ret);
 		goto bail;
 	}
 
@@ -118,24 +118,24 @@ int hfi1_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		 */
 		ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
 		if (ret) {
-			qib_early_err(&pdev->dev,
-				"Unable to set DMA mask: %d\n", ret);
+			hfi1_early_err(&pdev->dev,
+				       "Unable to set DMA mask: %d\n", ret);
 			goto bail;
 		}
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
 	} else
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64));
 	if (ret) {
-		qib_early_err(&pdev->dev,
-			      "Unable to set DMA consistent mask: %d\n", ret);
+		hfi1_early_err(&pdev->dev,
+			       "Unable to set DMA consistent mask: %d\n", ret);
 		goto bail;
 	}
 
 	pci_set_master(pdev);
 	ret = pci_enable_pcie_error_reporting(pdev);
 	if (ret) {
-		qib_early_err(&pdev->dev,
-			      "Unable to enable pcie error reporting: %d\n",
+		hfi1_early_err(&pdev->dev,
+			       "Unable to enable pcie error reporting: %d\n",
 			      ret);
 		ret = 0;
 	}
@@ -654,7 +654,7 @@ static void qib_tune_pcie_caps(struct hfi_devdata *dd)
 /* End of PCIe capability tuning */
 
 /*
- * From here through qib_pci_err_handler definition is invoked via
+ * From here through hfi1_pci_err_handler definition is invoked via
  * PCI error infrastructure, registered via pci
  */
 static pci_ers_result_t
@@ -744,7 +744,7 @@ qib_pci_resume(struct pci_dev *pdev)
 	hfi1_init(dd, 1); /* same as re-init after reset */
 }
 
-const struct pci_error_handlers qib_pci_err_handler = {
+const struct pci_error_handlers hfi1_pci_err_handler = {
 	.error_detected = qib_pci_error_detected,
 	.mmio_enabled = qib_pci_mmio_enabled,
 	.link_reset = qib_pci_link_reset,

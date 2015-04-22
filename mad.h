@@ -47,8 +47,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef _QIB_MAD_H
-#define _QIB_MAD_H
+#ifndef _HFI1_MAD_H
+#define _HFI1_MAD_H
 
 #include <rdma/ib_pma.h>
 #define USE_PI_LED_ENABLE	1 /* use led enabled bit in struct
@@ -244,10 +244,10 @@ struct ib_pma_portcounters_cong {
 #define IB_PMA_CONG_HW_CONTROL_TIMER            0x00
 #define IB_PMA_CONG_HW_CONTROL_SAMPLE           0x01
 
-#define QIB_XMIT_RATE_UNSUPPORTED               0x0
-#define QIB_XMIT_RATE_PICO                      0x7
+#define HFI1_XMIT_RATE_UNSUPPORTED               0x0
+#define HFI1_XMIT_RATE_PICO                      0x7
 /* number of 4nsec cycles equaling 2secs */
-#define QIB_CONG_TIMER_PSINTERVAL               0x1DCD64EC
+#define HFI1_CONG_TIMER_PSINTERVAL               0x1DCD64EC
 
 #define IB_PMA_SEL_CONG_ALL                     0x01
 #define IB_PMA_SEL_CONG_PORT_DATA               0x02
@@ -474,4 +474,4 @@ struct sc2vlnt {
 		    COUNTER_MASK(1, 3) | \
 		    COUNTER_MASK(1, 4))
 
-#endif				/* _QIB_MAD_H */
+#endif				/* _HFI1_MAD_H */

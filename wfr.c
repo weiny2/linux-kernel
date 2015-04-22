@@ -2397,7 +2397,7 @@ static void is_sendctxt_err_int(struct hfi_devdata *dd, unsigned int hw_context)
 	 * context.  User contexts must ask the driver to restart the context.
 	 */
 	if (sc->type != SC_USER)
-		queue_work(dd->pport->qib_wq, &sc->halt_work);
+		queue_work(dd->pport->hfi1_wq, &sc->halt_work);
 }
 
 static void handle_sdma_eng_err(struct hfi_devdata *dd,
@@ -2515,7 +2515,7 @@ static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
 		spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
 	}
 
-	queue_work(ppd->qib_wq, &ppd->qsfp_info.qsfp_work);
+	queue_work(ppd->hfi1_wq, &ppd->qsfp_info.qsfp_work);
 }
 
 /*
@@ -3038,7 +3038,7 @@ void start_freeze_handling(struct hfi1_pportdata *ppd, int flags)
 		return;
 	}
 	/* queue non-interrupt handler */
-	queue_work(ppd->qib_wq, &ppd->freeze_work);
+	queue_work(ppd->hfi1_wq, &ppd->freeze_work);
 }
 
 /*
@@ -3093,7 +3093,7 @@ static void rxe_freeze(struct hfi_devdata *dd)
 
 	/* disable all receive contexts */
 	for (i = 0; i < dd->num_rcv_contexts; i++)
-		hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS, i);
+		hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_DIS, i);
 }
 
 /*
@@ -3109,7 +3109,7 @@ static void rxe_kernel_unfreeze(struct hfi_devdata *dd)
 
 	/* enable all kernel contexts */
 	for (i = 0; i < dd->n_krcv_queues; i++)
-		hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB, i);
+		hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_ENB, i);
 
 	/* enable port */
 	reg = read_csr(dd, WFR_RCV_CTRL);
@@ -3329,7 +3329,7 @@ static void add_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 		dd_dev_err(dd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
 			   __func__, ppd->pkeys[2], WFR_FULL_MGMT_P_KEY);
 	ppd->pkeys[2] = WFR_FULL_MGMT_P_KEY;
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
 }
 
 /*
@@ -3849,14 +3849,14 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			host_msg &= ~(u64)WFR_HOST_REQ_DONE;
 		}
 		if (host_msg & WFR_BC_SMA_MSG) {
-			queue_work(ppd->qib_wq, &ppd->sma_message_work);
+			queue_work(ppd->hfi1_wq, &ppd->sma_message_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_BC_SMA_MSG;
 		}
 		if (host_msg & WFR_LINKUP_ACHIEVED) {
 			dd_dev_info(dd, "8051: LinkUp achieved\n");
-			queue_work(ppd->qib_wq, &ppd->link_up_work);
+			queue_work(ppd->hfi1_wq, &ppd->link_up_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
@@ -3868,7 +3868,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			host_msg &= ~(u64)WFR_EXT_DEVICE_CFG_REQ;
 		}
 		if (host_msg & WFR_VERIFY_CAP_FRAME) {
-			queue_work(ppd->qib_wq, &ppd->link_vc_work);
+			queue_work(ppd->hfi1_wq, &ppd->link_vc_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
@@ -3887,7 +3887,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			host_msg &= ~(u64)WFR_LINK_GOING_DOWN;
 		}
 		if (host_msg & WFR_LINK_WIDTH_DOWNGRADED) {
-			queue_work(ppd->qib_wq, &ppd->link_downgrade_work);
+			queue_work(ppd->hfi1_wq, &ppd->link_downgrade_work);
 			/* clear flag so "uhnandled" message below
 			   does not include this */
 			host_msg &= ~(u64)WFR_LINK_WIDTH_DOWNGRADED;
@@ -3932,7 +3932,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			dd_dev_info(dd, "%s: not queueing link down\n",
 				__func__);
 		} else {
-			queue_work(ppd->qib_wq, &ppd->link_down_work);
+			queue_work(ppd->hfi1_wq, &ppd->link_down_work);
 		}
 	}
 }
@@ -5662,28 +5662,28 @@ struct hfi1_message_header *hfi1_get_msgheader(
 }
 
 static const char * const ib_cfg_name_strings[] = {
-	"QIB_IB_CFG_LIDLMC",
-	"QIB_IB_CFG_LWID_DG_ENB",
-	"QIB_IB_CFG_LWID_ENB",
-	"QIB_IB_CFG_LWID",
-	"QIB_IB_CFG_SPD_ENB",
-	"QIB_IB_CFG_SPD",
-	"QIB_IB_CFG_RXPOL_ENB",
-	"QIB_IB_CFG_LREV_ENB",
-	"QIB_IB_CFG_LINKLATENCY",
-	"QIB_IB_CFG_HRTBT",
-	"QIB_IB_CFG_OP_VLS",
-	"QIB_IB_CFG_VL_HIGH_CAP",
-	"QIB_IB_CFG_VL_LOW_CAP",
-	"QIB_IB_CFG_OVERRUN_THRESH",
-	"QIB_IB_CFG_PHYERR_THRESH",
-	"QIB_IB_CFG_LINKDEFAULT",
-	"QIB_IB_CFG_PKEYS",
-	"QIB_IB_CFG_MTU",
-	"QIB_IB_CFG_LSTATE",
-	"QIB_IB_CFG_VL_HIGH_LIMIT",
-	"QIB_IB_CFG_PMA_TICKS",
-	"QIB_IB_CFG_PORT"
+	"HFI1_IB_CFG_LIDLMC",
+	"HFI1_IB_CFG_LWID_DG_ENB",
+	"HFI1_IB_CFG_LWID_ENB",
+	"HFI1_IB_CFG_LWID",
+	"HFI1_IB_CFG_SPD_ENB",
+	"HFI1_IB_CFG_SPD",
+	"HFI1_IB_CFG_RXPOL_ENB",
+	"HFI1_IB_CFG_LREV_ENB",
+	"HFI1_IB_CFG_LINKLATENCY",
+	"HFI1_IB_CFG_HRTBT",
+	"HFI1_IB_CFG_OP_VLS",
+	"HFI1_IB_CFG_VL_HIGH_CAP",
+	"HFI1_IB_CFG_VL_LOW_CAP",
+	"HFI1_IB_CFG_OVERRUN_THRESH",
+	"HFI1_IB_CFG_PHYERR_THRESH",
+	"HFI1_IB_CFG_LINKDEFAULT",
+	"HFI1_IB_CFG_PKEYS",
+	"HFI1_IB_CFG_MTU",
+	"HFI1_IB_CFG_LSTATE",
+	"HFI1_IB_CFG_VL_HIGH_LIMIT",
+	"HFI1_IB_CFG_PMA_TICKS",
+	"HFI1_IB_CFG_PORT"
 };
 
 static const char *ib_cfg_name(int which)
@@ -5699,45 +5699,45 @@ int hfi1_get_ib_cfg(struct hfi1_pportdata *ppd, int which)
 	int val = 0;
 
 	switch (which) {
-	case QIB_IB_CFG_LWID_ENB: /* allowed Link-width */
+	case HFI1_IB_CFG_LWID_ENB: /* allowed Link-width */
 		val = ppd->link_width_enabled;
 		break;
-	case QIB_IB_CFG_LWID: /* currently active Link-width */
+	case HFI1_IB_CFG_LWID: /* currently active Link-width */
 		val = ppd->link_width_active;
 		break;
-	case QIB_IB_CFG_SPD_ENB: /* allowed Link speeds */
+	case HFI1_IB_CFG_SPD_ENB: /* allowed Link speeds */
 		val = ppd->link_speed_enabled;
 		break;
-	case QIB_IB_CFG_SPD: /* current Link speed */
+	case HFI1_IB_CFG_SPD: /* current Link speed */
 		val = ppd->link_speed_active;
 		break;
 
-	case QIB_IB_CFG_RXPOL_ENB: /* Auto-RX-polarity enable */
-	case QIB_IB_CFG_LREV_ENB: /* Auto-Lane-reversal enable */
-	case QIB_IB_CFG_LINKLATENCY:
+	case HFI1_IB_CFG_RXPOL_ENB: /* Auto-RX-polarity enable */
+	case HFI1_IB_CFG_LREV_ENB: /* Auto-Lane-reversal enable */
+	case HFI1_IB_CFG_LINKLATENCY:
 		goto unimplemented;
 
-	case QIB_IB_CFG_OP_VLS:
+	case HFI1_IB_CFG_OP_VLS:
 		val = ppd->vls_operational;
 		break;
-	case QIB_IB_CFG_VL_HIGH_CAP: /* VL arb high priority table size */
+	case HFI1_IB_CFG_VL_HIGH_CAP: /* VL arb high priority table size */
 		val = WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE;
 		break;
-	case QIB_IB_CFG_VL_LOW_CAP: /* VL arb low priority table size */
+	case HFI1_IB_CFG_VL_LOW_CAP: /* VL arb low priority table size */
 		val = WFR_VL_ARB_LOW_PRIO_TABLE_SIZE;
 		break;
-	case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
+	case HFI1_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
 		val = ppd->overrun_threshold;
 		break;
-	case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
+	case HFI1_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
 		val = ppd->phy_error_threshold;
 		break;
-	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
+	case HFI1_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
 		val = dd->link_default;
 		break;
 
-	case QIB_IB_CFG_HRTBT: /* Heartbeat off/enable/auto */
-	case QIB_IB_CFG_PMA_TICKS:
+	case HFI1_IB_CFG_HRTBT: /* Heartbeat off/enable/auto */
+	case HFI1_IB_CFG_PMA_TICKS:
 	default:
 unimplemented:
 		if (HFI_CAP_IS_KSET(PRINT_UNIMPL))
@@ -6328,10 +6328,10 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 	int ret = 0;
 
 	switch (which) {
-	case QIB_IB_CFG_LIDLMC:
+	case HFI1_IB_CFG_LIDLMC:
 		set_lidlmc(ppd);
 		break;
-	case QIB_IB_CFG_VL_HIGH_LIMIT:
+	case HFI1_IB_CFG_VL_HIGH_LIMIT:
 		/*
 		 * The VL Arbitrator high limit is sent in units of 4k
 		 * bytes, while WFR stores it in units of 64 bytes.
@@ -6341,12 +6341,12 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 			<< WFR_SEND_HIGH_PRIORITY_LIMIT_LIMIT_SHIFT;
 		write_csr(ppd->dd, WFR_SEND_HIGH_PRIORITY_LIMIT, reg);
 		break;
-	case QIB_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
+	case HFI1_IB_CFG_LINKDEFAULT: /* IB link default (sleep/poll) */
 		/* WFR only supports POLL as the default link down state */
 		if (val != HLS_DN_POLL)
 			ret = -EINVAL;
 		break;
-	case QIB_IB_CFG_OP_VLS:
+	case HFI1_IB_CFG_OP_VLS:
 		if (ppd->vls_operational != val) {
 			ppd->vls_operational = val;
 			BUG_ON(!ppd->port);
@@ -6367,24 +6367,24 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 	 * "fill in with your supported value" have all the bits in the
 	 * field set, so simply ANDing with supported has the desired result.
 	 */
-	case QIB_IB_CFG_LWID_ENB: /* set allowed Link-width */
+	case HFI1_IB_CFG_LWID_ENB: /* set allowed Link-width */
 		ppd->link_width_enabled = val & ppd->link_width_supported;
 		break;
-	case QIB_IB_CFG_LWID_DG_ENB: /* set allowed link width downgrade */
+	case HFI1_IB_CFG_LWID_DG_ENB: /* set allowed link width downgrade */
 		ppd->link_width_downgrade_enabled =
 				val & ppd->link_width_downgrade_supported;
 		break;
-	case QIB_IB_CFG_SPD_ENB: /* allowed Link speeds */
+	case HFI1_IB_CFG_SPD_ENB: /* allowed Link speeds */
 		ppd->link_speed_enabled = val & ppd->link_speed_supported;
 		break;
-	case QIB_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
+	case HFI1_IB_CFG_OVERRUN_THRESH: /* IB overrun threshold */
 		/*
 		 * WFR does not follow IB specs, save this value
 		 * so we can report it, if asked.
 		 */
 		ppd->overrun_threshold = val;
 		break;
-	case QIB_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
+	case HFI1_IB_CFG_PHYERR_THRESH: /* IB PHY error threshold */
 		/*
 		 * WFR does not follow IB specs, save this value
 		 * so we can report it, if asked.
@@ -6392,11 +6392,11 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 		ppd->phy_error_threshold = val;
 		break;
 
-	case QIB_IB_CFG_MTU:
+	case HFI1_IB_CFG_MTU:
 		set_send_length(ppd);
 		break;
 
-	case QIB_IB_CFG_PKEYS:
+	case HFI1_IB_CFG_PKEYS:
 		if (HFI_CAP_IS_KSET(PKEY_CHECK))
 			set_partition_keys(ppd);
 		break;
@@ -7307,7 +7307,7 @@ void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 	/* XXX (Mitko): Do we want to use the shadow value here? */
 	rcvctrl = read_kctxt_csr(dd, ctxt, WFR_RCV_CTXT_CTRL);
 	/* if the context already enabled, don't do the extra steps */
-	if ((op & QIB_RCVCTRL_CTXT_ENB)
+	if ((op & HFI1_RCVCTRL_CTXT_ENB)
 			&& !(rcvctrl & WFR_RCV_CTXT_CTRL_ENABLE_SMASK)) {
 		/* reset the tail and hdr addresses, and sequence count */
 		write_kctxt_csr(dd, ctxt, WFR_RCV_HDR_ADDR,
@@ -7372,37 +7372,37 @@ void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		if (ctxt == VL15CTXT)
 			write_csr(dd, WFR_RCV_VL15, VL15CTXT);
 	}
-	if (op & QIB_RCVCTRL_CTXT_DIS) {
+	if (op & HFI1_RCVCTRL_CTXT_DIS) {
 		write_csr(dd, WFR_RCV_VL15, 0);
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ENABLE_SMASK;
 	}
-	if (op & QIB_RCVCTRL_INTRAVAIL_ENB)
+	if (op & HFI1_RCVCTRL_INTRAVAIL_ENB)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
-	if (op & QIB_RCVCTRL_INTRAVAIL_DIS)
+	if (op & HFI1_RCVCTRL_INTRAVAIL_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_INTR_AVAIL_SMASK;
-	if (op & QIB_RCVCTRL_TAILUPD_ENB && rcd->rcvhdrqtailaddr_phys)
+	if (op & HFI1_RCVCTRL_TAILUPD_ENB && rcd->rcvhdrqtailaddr_phys)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
-	if (op & QIB_RCVCTRL_TAILUPD_DIS)
+	if (op & HFI1_RCVCTRL_TAILUPD_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TAIL_UPD_SMASK;
-	if (op & QIB_RCVCTRL_TIDFLOW_ENB)
+	if (op & HFI1_RCVCTRL_TIDFLOW_ENB)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
-	if (op & QIB_RCVCTRL_TIDFLOW_DIS)
+	if (op & HFI1_RCVCTRL_TIDFLOW_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_TID_FLOW_ENABLE_SMASK;
-	if (op & QIB_RCVCTRL_ONE_PKT_EGR_ENB) {
+	if (op & HFI1_RCVCTRL_ONE_PKT_EGR_ENB) {
 		/* In one-packet-per-eager mode, the size comes from
 		   the RcvArray entry. */
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_EGR_BUF_SIZE_SMASK;
 		rcvctrl |= WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
 	}
-	if (op & QIB_RCVCTRL_ONE_PKT_EGR_DIS)
+	if (op & HFI1_RCVCTRL_ONE_PKT_EGR_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_ONE_PACKET_PER_EGR_BUFFER_SMASK;
-	if (op & QIB_RCVCTRL_NO_RHQ_DROP_ENB)
+	if (op & HFI1_RCVCTRL_NO_RHQ_DROP_ENB)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK;
-	if (op & QIB_RCVCTRL_NO_RHQ_DROP_DIS)
+	if (op & HFI1_RCVCTRL_NO_RHQ_DROP_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_DONT_DROP_RHQ_FULL_SMASK;
-	if (op & QIB_RCVCTRL_NO_EGR_DROP_ENB)
+	if (op & HFI1_RCVCTRL_NO_EGR_DROP_ENB)
 		rcvctrl |= WFR_RCV_CTXT_CTRL_DONT_DROP_EGR_FULL_SMASK;
-	if (op & QIB_RCVCTRL_NO_EGR_DROP_DIS)
+	if (op & HFI1_RCVCTRL_NO_EGR_DROP_DIS)
 		rcvctrl &= ~WFR_RCV_CTXT_CTRL_DONT_DROP_EGR_FULL_SMASK;
 	rcd->rcvctrl = rcvctrl;
 	hfi_cdbg(RCVCTRL, "ctxt %d rcvctrl 0x%llx\n", ctxt, rcvctrl);
@@ -7440,7 +7440,7 @@ void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 		write_uctxt_csr(dd, ctxt, WFR_RCV_HDR_HEAD, reg);
 	}
 
-	if (op & (QIB_RCVCTRL_TAILUPD_DIS | QIB_RCVCTRL_CTXT_DIS))
+	if (op & (HFI1_RCVCTRL_TAILUPD_DIS | HFI1_RCVCTRL_CTXT_DIS))
 		/*
 		 * If the context has been disabled and the Tail Update has
 		 * been cleared, clear the WFR_RCV_HDR_TAIL_ADDR CSR so
@@ -10007,7 +10007,7 @@ void hfi1_start_cleanup(struct hfi_devdata *dd)
 
 /**
  * Allocate an initialize the device structure for the hfi.
- * @dev: the pci_dev for qlogic_ib device
+ * @dev: the pci_dev for hfi1_ib device
  * @ent: pci_device_id struct for this dev
  *
  * Also allocates, inits, and returns the devdata struct for this
@@ -10061,8 +10061,8 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 			ppd->vls_supported = IB_VL_VL0_1;
 			break;
 		default:
-			qib_early_err(&pdev->dev,
-				    "Invalid num_vls %u, using 4 VLs\n",
+			hfi1_early_err(&pdev->dev,
+				       "Invalid num_vls %u, using 4 VLs\n",
 				    num_vls);
 			num_vls = 4;
 			/* fall through */

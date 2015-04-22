@@ -48,8 +48,8 @@
  *
  */
 
-#ifndef QIB_VERBS_H
-#define QIB_VERBS_H
+#ifndef HFI1_VERBS_H
+#define HFI1_VERBS_H
 
 #include <linux/types.h>
 #include <linux/spinlock.h>
@@ -71,14 +71,14 @@ struct hfi_packet;
 
 #include "iowait.h"
 
-#define QIB_MAX_RDMA_ATOMIC     16
-#define QIB_GUIDS_PER_PORT	5
+#define HFI1_MAX_RDMA_ATOMIC     16
+#define HFI1_GUIDS_PER_PORT	5
 
 /*
  * Increment this value if any changes that break userspace ABI
  * compatibility are made.
  */
-#define QIB_UVERBS_ABI_VERSION       2
+#define HFI1_UVERBS_ABI_VERSION       2
 
 /*
  * Define an ib_cq_notify value that is not valid so we know when CQ
@@ -96,16 +96,16 @@ struct hfi_packet;
 #define IB_NAK_REMOTE_OPERATIONAL_ERROR 0x63
 #define IB_NAK_INVALID_RD_REQUEST       0x64
 
-/* Flags for checking QP state (see ib_qib_state_ops[]) */
-#define QIB_POST_SEND_OK                0x01
-#define QIB_POST_RECV_OK                0x02
-#define QIB_PROCESS_RECV_OK             0x04
-#define QIB_PROCESS_SEND_OK             0x08
-#define QIB_PROCESS_NEXT_SEND_OK        0x10
-#define QIB_FLUSH_SEND			0x20
-#define QIB_FLUSH_RECV			0x40
-#define QIB_PROCESS_OR_FLUSH_SEND \
-	(QIB_PROCESS_SEND_OK | QIB_FLUSH_SEND)
+/* Flags for checking QP state (see ib_hfi1_state_ops[]) */
+#define HFI1_POST_SEND_OK                0x01
+#define HFI1_POST_RECV_OK                0x02
+#define HFI1_PROCESS_RECV_OK             0x04
+#define HFI1_PROCESS_SEND_OK             0x08
+#define HFI1_PROCESS_NEXT_SEND_OK        0x10
+#define HFI1_FLUSH_SEND			0x20
+#define HFI1_FLUSH_RECV			0x40
+#define HFI1_PROCESS_OR_FLUSH_SEND \
+	(HFI1_PROCESS_SEND_OK | HFI1_FLUSH_SEND)
 
 /* IB Performance Manager status values */
 #define IB_PMA_SAMPLE_STATUS_DONE       0x00
@@ -119,7 +119,7 @@ struct hfi_packet;
 #define IB_PMA_PORT_RCV_PKTS    cpu_to_be16(0x0004)
 #define IB_PMA_PORT_XMIT_WAIT   cpu_to_be16(0x0005)
 
-#define QIB_VENDOR_IPG		cpu_to_be16(0xFFA0)
+#define HFI1_VENDOR_IPG		cpu_to_be16(0xFFA0)
 
 #define IB_BTH_REQ_ACK		(1 << 31)
 #define IB_BTH_SOLICITED	(1 << 23)
@@ -145,8 +145,8 @@ struct hfi_packet;
 
 /* flags passed by hfi1_ib_rcv() */
 enum {
-	QIB_HAS_GRH = (1 << 0),
-	QIB_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
+	HFI1_HAS_GRH = (1 << 0),
+	HFI1_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
 };
 
 static inline int hfi_num_vls(int vls)
@@ -343,10 +343,10 @@ struct hfi1_seg {
 };
 
 /* The number of qib_segs that fit in a page. */
-#define QIB_SEGSZ     (PAGE_SIZE / sizeof(struct hfi1_seg))
+#define HFI1_SEGSZ     (PAGE_SIZE / sizeof(struct hfi1_seg))
 
 struct hfi1_segarray {
-	struct hfi1_seg segs[QIB_SEGSZ];
+	struct hfi1_seg segs[HFI1_SEGSZ];
 };
 
 struct hfi1_mregion {
@@ -514,7 +514,7 @@ struct hfi1_qp {
 	wait_queue_head_t wait;
 
 
-	struct hfi1_ack_entry s_ack_queue[QIB_MAX_RDMA_ATOMIC + 1]
+	struct hfi1_ack_entry s_ack_queue[HFI1_MAX_RDMA_ATOMIC + 1]
 		____cacheline_aligned_in_smp;
 	struct hfi1_sge_state s_rdma_read_sge;
 
@@ -585,83 +585,83 @@ struct hfi1_qp {
 /*
  * Atomic bit definitions for r_aflags.
  */
-#define QIB_R_WRID_VALID        0
-#define QIB_R_REWIND_SGE        1
+#define HFI1_R_WRID_VALID        0
+#define HFI1_R_REWIND_SGE        1
 
 /*
  * Atomic bit definitions for s_aflags.
  */
-#define QIB_S_ECN		0
+#define HFI1_S_ECN		0
 
 /*
  * Bit definitions for r_flags.
  */
-#define QIB_R_REUSE_SGE 0x01
-#define QIB_R_RDMAR_SEQ 0x02
-#define QIB_R_RSP_NAK   0x04
-#define QIB_R_RSP_SEND  0x08
-#define QIB_R_COMM_EST  0x10
+#define HFI1_R_REUSE_SGE 0x01
+#define HFI1_R_RDMAR_SEQ 0x02
+#define HFI1_R_RSP_NAK   0x04
+#define HFI1_R_RSP_SEND  0x08
+#define HFI1_R_COMM_EST  0x10
 
 /*
  * Bit definitions for s_flags.
  *
- * QIB_S_SIGNAL_REQ_WR - set if QP send WRs contain completion signaled
- * QIB_S_BUSY - send tasklet is processing the QP
- * QIB_S_TIMER - the RC retry timer is active
- * QIB_S_ACK_PENDING - an ACK is waiting to be sent after RDMA read/atomics
- * QIB_S_WAIT_FENCE - waiting for all prior RDMA read or atomic SWQEs
+ * HFI1_S_SIGNAL_REQ_WR - set if QP send WRs contain completion signaled
+ * HFI1_S_BUSY - send tasklet is processing the QP
+ * HFI1_S_TIMER - the RC retry timer is active
+ * HFI1_S_ACK_PENDING - an ACK is waiting to be sent after RDMA read/atomics
+ * HFI1_S_WAIT_FENCE - waiting for all prior RDMA read or atomic SWQEs
  *                         before processing the next SWQE
- * QIB_S_WAIT_RDMAR - waiting for a RDMA read or atomic SWQE to complete
+ * HFI1_S_WAIT_RDMAR - waiting for a RDMA read or atomic SWQE to complete
  *                         before processing the next SWQE
- * QIB_S_WAIT_RNR - waiting for RNR timeout
- * QIB_S_WAIT_SSN_CREDIT - waiting for RC credits to process next SWQE
- * QIB_S_WAIT_DMA - waiting for send DMA queue to drain before generating
+ * HFI1_S_WAIT_RNR - waiting for RNR timeout
+ * HFI1_S_WAIT_SSN_CREDIT - waiting for RC credits to process next SWQE
+ * HFI1_S_WAIT_DMA - waiting for send DMA queue to drain before generating
  *                  next send completion entry not via send DMA
- * QIB_S_WAIT_PIO - waiting for a send buffer to be available
- * QIB_S_WAIT_TX - waiting for a struct qib_verbs_txreq to be available
- * QIB_S_WAIT_DMA_DESC - waiting for DMA descriptors to be available
- * QIB_S_WAIT_KMEM - waiting for kernel memory to be available
- * QIB_S_WAIT_PSN - waiting for a packet to exit the send DMA queue
- * QIB_S_WAIT_ACK - waiting for an ACK packet before sending more requests
- * QIB_S_SEND_ONE - send one packet, request ACK, then wait for ACK
+ * HFI1_S_WAIT_PIO - waiting for a send buffer to be available
+ * HFI1_S_WAIT_TX - waiting for a struct qib_verbs_txreq to be available
+ * HFI1_S_WAIT_DMA_DESC - waiting for DMA descriptors to be available
+ * HFI1_S_WAIT_KMEM - waiting for kernel memory to be available
+ * HFI1_S_WAIT_PSN - waiting for a packet to exit the send DMA queue
+ * HFI1_S_WAIT_ACK - waiting for an ACK packet before sending more requests
+ * HFI1_S_SEND_ONE - send one packet, request ACK, then wait for ACK
  */
-#define QIB_S_SIGNAL_REQ_WR	0x0001
-#define QIB_S_BUSY		0x0002
-#define QIB_S_TIMER		0x0004
-#define QIB_S_RESP_PENDING	0x0008
-#define QIB_S_ACK_PENDING	0x0010
-#define QIB_S_WAIT_FENCE	0x0020
-#define QIB_S_WAIT_RDMAR	0x0040
-#define QIB_S_WAIT_RNR		0x0080
-#define QIB_S_WAIT_SSN_CREDIT	0x0100
-#define QIB_S_WAIT_DMA		0x0200
-#define QIB_S_WAIT_PIO		0x0400
-#define QIB_S_WAIT_TX		0x0800
-#define QIB_S_WAIT_DMA_DESC	0x1000
-#define QIB_S_WAIT_KMEM		0x2000
-#define QIB_S_WAIT_PSN		0x4000
-#define QIB_S_WAIT_ACK		0x8000
-#define QIB_S_SEND_ONE		0x10000
-#define QIB_S_UNLIMITED_CREDIT	0x20000
-#define QIB_S_AHG_VALID		0x40000
-#define QIB_S_AHG_CLEAR		0x80000
+#define HFI1_S_SIGNAL_REQ_WR	0x0001
+#define HFI1_S_BUSY		0x0002
+#define HFI1_S_TIMER		0x0004
+#define HFI1_S_RESP_PENDING	0x0008
+#define HFI1_S_ACK_PENDING	0x0010
+#define HFI1_S_WAIT_FENCE	0x0020
+#define HFI1_S_WAIT_RDMAR	0x0040
+#define HFI1_S_WAIT_RNR		0x0080
+#define HFI1_S_WAIT_SSN_CREDIT	0x0100
+#define HFI1_S_WAIT_DMA		0x0200
+#define HFI1_S_WAIT_PIO		0x0400
+#define HFI1_S_WAIT_TX		0x0800
+#define HFI1_S_WAIT_DMA_DESC	0x1000
+#define HFI1_S_WAIT_KMEM		0x2000
+#define HFI1_S_WAIT_PSN		0x4000
+#define HFI1_S_WAIT_ACK		0x8000
+#define HFI1_S_SEND_ONE		0x10000
+#define HFI1_S_UNLIMITED_CREDIT	0x20000
+#define HFI1_S_AHG_VALID		0x40000
+#define HFI1_S_AHG_CLEAR		0x80000
 
 /*
  * Wait flags that would prevent any packet type from being sent.
  */
-#define QIB_S_ANY_WAIT_IO (QIB_S_WAIT_PIO | QIB_S_WAIT_TX | \
-	QIB_S_WAIT_DMA_DESC | QIB_S_WAIT_KMEM)
+#define HFI1_S_ANY_WAIT_IO (HFI1_S_WAIT_PIO | HFI1_S_WAIT_TX | \
+	HFI1_S_WAIT_DMA_DESC | HFI1_S_WAIT_KMEM)
 
 /*
  * Wait flags that would prevent send work requests from making progress.
  */
-#define QIB_S_ANY_WAIT_SEND (QIB_S_WAIT_FENCE | QIB_S_WAIT_RDMAR | \
-	QIB_S_WAIT_RNR | QIB_S_WAIT_SSN_CREDIT | QIB_S_WAIT_DMA | \
-	QIB_S_WAIT_PSN | QIB_S_WAIT_ACK)
+#define HFI1_S_ANY_WAIT_SEND (HFI1_S_WAIT_FENCE | HFI1_S_WAIT_RDMAR | \
+	HFI1_S_WAIT_RNR | HFI1_S_WAIT_SSN_CREDIT | HFI1_S_WAIT_DMA | \
+	HFI1_S_WAIT_PSN | HFI1_S_WAIT_ACK)
 
-#define QIB_S_ANY_WAIT (QIB_S_ANY_WAIT_IO | QIB_S_ANY_WAIT_SEND)
+#define HFI1_S_ANY_WAIT (HFI1_S_ANY_WAIT_IO | HFI1_S_ANY_WAIT_SEND)
 
-#define QIB_PSN_CREDIT  16
+#define HFI1_PSN_CREDIT  16
 
 /*
  * Since struct hfi1_swqe is not a fixed size, we can't simply index into
@@ -729,7 +729,7 @@ struct hfi1_ibport {
 	unsigned long trap_timeout;
 	__be64 gid_prefix;      /* in network order */
 	__be64 mkey;
-	__be64 guids[QIB_GUIDS_PER_PORT	- 1];	/* writable GUIDs */
+	__be64 guids[HFI1_GUIDS_PER_PORT	- 1];	/* writable GUIDs */
 	u64 tid;		/* TID for traps */
 	u64 n_rc_resends;
 	u64 n_rc_delayed_comp;
@@ -875,9 +875,9 @@ static inline struct hfi1_ibdev *to_idev(struct ib_device *ibdev)
  */
 static inline int qib_send_ok(struct hfi1_qp *qp)
 {
-	return !(qp->s_flags & (QIB_S_BUSY | QIB_S_ANY_WAIT_IO)) &&
-		(qp->s_hdrwords || (qp->s_flags & QIB_S_RESP_PENDING) ||
-		 !(qp->s_flags & QIB_S_ANY_WAIT_SEND));
+	return !(qp->s_flags & (HFI1_S_BUSY | HFI1_S_ANY_WAIT_IO)) &&
+		(qp->s_hdrwords || (qp->s_flags & HFI1_S_RESP_PENDING) ||
+		 !(qp->s_flags & HFI1_S_ANY_WAIT_SEND));
 }
 
 /*
@@ -1164,38 +1164,38 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *hdr,
 
 struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5);
 
-extern const enum ib_wc_opcode ib_qib_wc_opcode[];
+extern const enum ib_wc_opcode ib_hfi1_wc_opcode[];
 
 extern const u8 hdr_len_by_opcode[];
 
-extern const int ib_qib_state_ops[];
+extern const int ib_hfi1_state_ops[];
 
-extern __be64 ib_qib_sys_image_guid;    /* in network order */
+extern __be64 ib_hfi1_sys_image_guid;    /* in network order */
 
-extern unsigned int ib_qib_lkey_table_size;
+extern unsigned int ib_hfi1_lkey_table_size;
 
-extern unsigned int ib_qib_max_cqes;
+extern unsigned int ib_hfi1_max_cqes;
 
-extern unsigned int ib_qib_max_cqs;
+extern unsigned int ib_hfi1_max_cqs;
 
-extern unsigned int ib_qib_max_qp_wrs;
+extern unsigned int ib_hfi1_max_qp_wrs;
 
-extern unsigned int ib_qib_max_qps;
+extern unsigned int ib_hfi1_max_qps;
 
-extern unsigned int ib_qib_max_sges;
+extern unsigned int ib_hfi1_max_sges;
 
-extern unsigned int ib_qib_max_mcast_grps;
+extern unsigned int ib_hfi1_max_mcast_grps;
 
-extern unsigned int ib_qib_max_mcast_qp_attached;
+extern unsigned int ib_hfi1_max_mcast_qp_attached;
 
-extern unsigned int ib_qib_max_srqs;
+extern unsigned int ib_hfi1_max_srqs;
 
-extern unsigned int ib_qib_max_srq_sges;
+extern unsigned int ib_hfi1_max_srq_sges;
 
-extern unsigned int ib_qib_max_srq_wrs;
+extern unsigned int ib_hfi1_max_srq_wrs;
 
-extern const u32 ib_qib_rnr_table[];
+extern const u32 ib_hfi1_rnr_table[];
 
-extern struct ib_dma_mapping_ops qib_dma_mapping_ops;
+extern struct ib_dma_mapping_ops hfi1_dma_mapping_ops;
 
-#endif                          /* QIB_VERBS_H */
+#endif                          /* HFI1_VERBS_H */

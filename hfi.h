@@ -1,5 +1,5 @@
-#ifndef _QIB_KERNEL_H
-#define _QIB_KERNEL_H
+#ifndef _HFI1_KERNEL_H
+#define _HFI1_KERNEL_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -51,7 +51,7 @@
  */
 
 /*
- * This header file is the base header file for qlogic_ib kernel code
+ * This header file is the base header file for hfi1_ib kernel code
  * qib_user.h serves a similar purpose for user code.
  */
 
@@ -85,8 +85,8 @@
 #define HFI_CHIP_VERS_MIN 0U
 
 /* The Organization Unique Identifier (Mfg code), and its position in GUID */
-#define QIB_OUI 0x001175
-#define QIB_OUI_LSB 40
+#define HFI1_OUI 0x001175
+#define HFI1_OUI_LSB 40
 
 /*
  * A0 erratum 291500: States to keep track of corrupt packet.
@@ -113,7 +113,7 @@ extern unsigned long hfi_cap_mask;
  * If members are added or deleted qib_statnames[] in qib_fs.c must
  * change to match.
  */
-struct qlogic_ib_stats {
+struct hfi1_ib_stats {
 	__u64 sps_ints; /* number of interrupts handled */
 	__u64 sps_errints; /* number of error interrupts */
 	__u64 sps_txerrs; /* tx-related packet errors */
@@ -126,8 +126,8 @@ struct qlogic_ib_stats {
 	__u64 sps_hdrfull;
 };
 
-extern struct qlogic_ib_stats qib_stats;
-extern const struct pci_error_handlers qib_pci_err_handler;
+extern struct hfi1_ib_stats hfi1_stats;
+extern const struct pci_error_handlers hfi1_pci_err_handler;
 
 /*
  * First-cut critierion for "device is active" is
@@ -135,7 +135,7 @@ extern const struct pci_error_handlers qib_pci_err_handler;
  * 5-second interval. SMA packets are 64 dwords,
  * and occur "a few per second", presumably each way.
  */
-#define QIB_TRAFFIC_ACTIVE_THRESHOLD (2000)
+#define HFI1_TRAFFIC_ACTIVE_THRESHOLD (2000)
 
 /*
  * Below contains all data related to a single context (formerly called port).
@@ -172,8 +172,8 @@ struct hfi1_ctxtdata {
 	volatile __le64 *rcvhdrtail_kvaddr;
 	/*
 	 * Shared page for kernel to signal user processes that send buffers
-	 * need disarming.  The process should call QIB_CMD_DISARM_BUFS
-	 * or QIB_CMD_ACK_EVENT with IPATH_EVENT_DISARM_BUFS set.
+	 * need disarming.  The process should call HFI1_CMD_DISARM_BUFS
+	 * or HFI1_CMD_ACK_EVENT with IPATH_EVENT_DISARM_BUFS set.
 	 */
 	unsigned long *user_event_mask;
 	/* when waiting for rcv or pioavail */
@@ -346,27 +346,27 @@ struct hfi1_sge_state;
  * Mostly for MADs that set or query link parameters, also ipath
  * config interfaces
  */
-#define QIB_IB_CFG_LIDLMC 0 /* LID (LS16b) and Mask (MS16b) */
-#define QIB_IB_CFG_LWID_DG_ENB 1 /* allowed Link-width downgrade */
-#define QIB_IB_CFG_LWID_ENB 2 /* allowed Link-width */
-#define QIB_IB_CFG_LWID 3 /* currently active Link-width */
-#define QIB_IB_CFG_SPD_ENB 4 /* allowed Link speeds */
-#define QIB_IB_CFG_SPD 5 /* current Link spd */
-#define QIB_IB_CFG_RXPOL_ENB 6 /* Auto-RX-polarity enable */
-#define QIB_IB_CFG_LREV_ENB 7 /* Auto-Lane-reversal enable */
-#define QIB_IB_CFG_LINKLATENCY 8 /* Link Latency (IB1.2 only) */
-#define QIB_IB_CFG_HRTBT 9 /* IB heartbeat off/enable/auto; DDR/QDR only */
-#define QIB_IB_CFG_OP_VLS 10 /* operational VLs */
-#define QIB_IB_CFG_VL_HIGH_CAP 11 /* num of VL high priority weights */
-#define QIB_IB_CFG_VL_LOW_CAP 12 /* num of VL low priority weights */
-#define QIB_IB_CFG_OVERRUN_THRESH 13 /* IB overrun threshold */
-#define QIB_IB_CFG_PHYERR_THRESH 14 /* IB PHY error threshold */
-#define QIB_IB_CFG_LINKDEFAULT 15 /* IB link default (sleep/poll) */
-#define QIB_IB_CFG_PKEYS 16 /* update partition keys */
-#define QIB_IB_CFG_MTU 17 /* update MTU in IBC */
-#define QIB_IB_CFG_VL_HIGH_LIMIT 19
-#define QIB_IB_CFG_PMA_TICKS 20 /* PMA sample tick resolution */
-#define QIB_IB_CFG_PORT 21 /* switch port we are connected to */
+#define HFI1_IB_CFG_LIDLMC 0 /* LID (LS16b) and Mask (MS16b) */
+#define HFI1_IB_CFG_LWID_DG_ENB 1 /* allowed Link-width downgrade */
+#define HFI1_IB_CFG_LWID_ENB 2 /* allowed Link-width */
+#define HFI1_IB_CFG_LWID 3 /* currently active Link-width */
+#define HFI1_IB_CFG_SPD_ENB 4 /* allowed Link speeds */
+#define HFI1_IB_CFG_SPD 5 /* current Link spd */
+#define HFI1_IB_CFG_RXPOL_ENB 6 /* Auto-RX-polarity enable */
+#define HFI1_IB_CFG_LREV_ENB 7 /* Auto-Lane-reversal enable */
+#define HFI1_IB_CFG_LINKLATENCY 8 /* Link Latency (IB1.2 only) */
+#define HFI1_IB_CFG_HRTBT 9 /* IB heartbeat off/enable/auto; DDR/QDR only */
+#define HFI1_IB_CFG_OP_VLS 10 /* operational VLs */
+#define HFI1_IB_CFG_VL_HIGH_CAP 11 /* num of VL high priority weights */
+#define HFI1_IB_CFG_VL_LOW_CAP 12 /* num of VL low priority weights */
+#define HFI1_IB_CFG_OVERRUN_THRESH 13 /* IB overrun threshold */
+#define HFI1_IB_CFG_PHYERR_THRESH 14 /* IB PHY error threshold */
+#define HFI1_IB_CFG_LINKDEFAULT 15 /* IB link default (sleep/poll) */
+#define HFI1_IB_CFG_PKEYS 16 /* update partition keys */
+#define HFI1_IB_CFG_MTU 17 /* update MTU in IBC */
+#define HFI1_IB_CFG_VL_HIGH_LIMIT 19
+#define HFI1_IB_CFG_PMA_TICKS 20 /* PMA sample tick resolution */
+#define HFI1_IB_CFG_PORT 21 /* switch port we are connected to */
 
 /*
  * HFI or Host Link States
@@ -406,24 +406,24 @@ struct hfi1_sge_state;
 /*
  * Possible "operations" for f_rcvctrl(ppd, op, ctxt)
  * these are bits so they can be combined, e.g.
- * QIB_RCVCTRL_INTRAVAIL_ENB | QIB_RCVCTRL_CTXT_ENB
+ * HFI1_RCVCTRL_INTRAVAIL_ENB | HFI1_RCVCTRL_CTXT_ENB
  */
-#define QIB_RCVCTRL_TAILUPD_ENB 0x01
-#define QIB_RCVCTRL_TAILUPD_DIS 0x02
-#define QIB_RCVCTRL_CTXT_ENB 0x04
-#define QIB_RCVCTRL_CTXT_DIS 0x08
-#define QIB_RCVCTRL_INTRAVAIL_ENB 0x10
-#define QIB_RCVCTRL_INTRAVAIL_DIS 0x20
-#define QIB_RCVCTRL_PKEY_ENB 0x40  /* Note, default is enabled */
-#define QIB_RCVCTRL_PKEY_DIS 0x80
-#define QIB_RCVCTRL_TIDFLOW_ENB 0x0400
-#define QIB_RCVCTRL_TIDFLOW_DIS 0x0800
-#define QIB_RCVCTRL_ONE_PKT_EGR_ENB 0x1000
-#define QIB_RCVCTRL_ONE_PKT_EGR_DIS 0x2000
-#define QIB_RCVCTRL_NO_RHQ_DROP_ENB 0x4000
-#define QIB_RCVCTRL_NO_RHQ_DROP_DIS 0x8000
-#define QIB_RCVCTRL_NO_EGR_DROP_ENB 0x10000
-#define QIB_RCVCTRL_NO_EGR_DROP_DIS 0x20000
+#define HFI1_RCVCTRL_TAILUPD_ENB 0x01
+#define HFI1_RCVCTRL_TAILUPD_DIS 0x02
+#define HFI1_RCVCTRL_CTXT_ENB 0x04
+#define HFI1_RCVCTRL_CTXT_DIS 0x08
+#define HFI1_RCVCTRL_INTRAVAIL_ENB 0x10
+#define HFI1_RCVCTRL_INTRAVAIL_DIS 0x20
+#define HFI1_RCVCTRL_PKEY_ENB 0x40  /* Note, default is enabled */
+#define HFI1_RCVCTRL_PKEY_DIS 0x80
+#define HFI1_RCVCTRL_TIDFLOW_ENB 0x0400
+#define HFI1_RCVCTRL_TIDFLOW_DIS 0x0800
+#define HFI1_RCVCTRL_ONE_PKT_EGR_ENB 0x1000
+#define HFI1_RCVCTRL_ONE_PKT_EGR_DIS 0x2000
+#define HFI1_RCVCTRL_NO_RHQ_DROP_ENB 0x4000
+#define HFI1_RCVCTRL_NO_RHQ_DROP_DIS 0x8000
+#define HFI1_RCVCTRL_NO_EGR_DROP_ENB 0x10000
+#define HFI1_RCVCTRL_NO_EGR_DROP_DIS 0x20000
 
 /* partition enforcement flags */
 #define HFI_PART_ENFORCE_IN	0x1
@@ -526,7 +526,7 @@ struct hfi1_pportdata {
 
 	/* SendDMA related entries */
 
-	struct workqueue_struct *qib_wq;
+	struct workqueue_struct *hfi1_wq;
 
 	/* move out of interrupt context */
 	struct work_struct link_vc_work;
@@ -954,7 +954,7 @@ struct hfi_devdata {
 	struct mutex qsfp_i2c_mutex;
 
 	struct diag_client *diag_client;
-	spinlock_t qib_diag_trans_lock; /* protect diag observer ops */
+	spinlock_t hfi1_diag_trans_lock; /* protect diag observer ops */
 	struct diag_observer_list_elt *diag_observer_list;
 
 	u8 psxmitwait_supported;
@@ -1060,11 +1060,11 @@ struct hfi_filedata {
 	int rec_cpu_num;
 };
 
-extern struct list_head qib_dev_list;
-extern spinlock_t qib_devs_lock;
+extern struct list_head hfi1_dev_list;
+extern spinlock_t hfi1_devs_lock;
 struct hfi_devdata *hfi1_lookup(int unit);
-extern u32 qib_cpulist_count;
-extern unsigned long *qib_cpulist;
+extern u32 hfi1_cpulist_count;
+extern unsigned long *hfi1_cpulist;
 
 extern unsigned int snoop_drop_send;
 extern unsigned int snoop_force_capture;
@@ -1345,18 +1345,18 @@ static inline struct cc_state *get_cc_state(struct hfi1_pportdata *ppd)
 #define HFI_FORCED_FREEZE     0x80   /* driver forced freeze mode */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
-#define QIB_PBC_LENGTH_MASK                     ((1 << 11) - 1)
+#define HFI1_PBC_LENGTH_MASK                     ((1 << 11) - 1)
 
 
 /* ctxt_flag bit offsets */
 		/* context has been setup */
-#define QIB_CTXT_SETUP_DONE 1
+#define HFI1_CTXT_SETUP_DONE 1
 		/* waiting for a packet to arrive */
-#define QIB_CTXT_WAITING_RCV   2
+#define HFI1_CTXT_WAITING_RCV   2
 		/* master has not finished initializing */
-#define QIB_CTXT_MASTER_UNINIT 4
+#define HFI1_CTXT_MASTER_UNINIT 4
 		/* waiting for an urgent packet to arrive */
-#define QIB_CTXT_WAITING_URG 5
+#define HFI1_CTXT_WAITING_URG 5
 
 /* free up any allocated data at closes */
 void qib_free_data(struct hfi1_ctxtdata *dd);
@@ -1374,8 +1374,8 @@ void qib_clear_symerror_on_linkup(unsigned long opaque);
  * any non-zero value substitutes them for the Link and LinkTrain
  * LED states.
  */
-#define QIB_LED_PHYS 1 /* Physical (linktraining) GREEN LED */
-#define QIB_LED_LOG 2  /* Logical (link) YELLOW LED */
+#define HFI1_LED_PHYS 1 /* Physical (linktraining) GREEN LED */
+#define HFI1_LED_LOG 2  /* Logical (link) YELLOW LED */
 void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
 
 /* send dma routines */
@@ -1464,7 +1464,7 @@ static inline u32 qib_get_hdrqtail(const struct hfi1_ctxtdata *rcd)
  * sysfs interface.
  */
 
-extern const char ib_qib_version[];
+extern const char ib_hfi1_version[];
 
 int hfi_device_create(struct hfi_devdata *);
 void hfi_device_remove(struct hfi_devdata *);
@@ -1537,7 +1537,7 @@ extern uint rcv_intr_count;
 extern uint rcv_intr_dynamic;
 extern ushort link_crc_mask;
 
-extern struct mutex qib_mutex;
+extern struct mutex hfi1_mutex;
 
 /* Number of seconds before our card status check...  */
 #define STATUS_TIMEOUT 60
@@ -1625,16 +1625,16 @@ static inline u64 hfi_pkt_base_sdma_integrity(struct hfi_devdata *dd)
 }
 
 /*
- * qib_early_err is used (only!) to print early errors before devdata is
+ * hfi1_early_err is used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
- * cleanup when devdata may have been freed, etc.  qib_dev_porterr is
+ * cleanup when devdata may have been freed, etc.  hfi1_dev_porterr is
  * the same as dd_dev_err, but is used when the message really needs
  * the IB port# to be definitive as to what's happening..
  */
-#define qib_early_err(dev, fmt, ...) \
+#define hfi1_early_err(dev, fmt, ...) \
 	dev_err(dev, fmt, ##__VA_ARGS__)
 
-#define qib_early_info(dev, fmt, ...) \
+#define hfi1_early_info(dev, fmt, ...) \
 	dev_info(dev, fmt, ##__VA_ARGS__)
 
 #define dd_dev_emerg(dd, fmt, ...) \
@@ -1648,7 +1648,7 @@ static inline u64 hfi_pkt_base_sdma_integrity(struct hfi_devdata *dd)
 	dev_info(&(dd)->pcidev->dev, "%s: " fmt, \
 			get_unit_name((dd)->unit), ##__VA_ARGS__)
 
-#define qib_dev_porterr(dd, port, fmt, ...) \
+#define hfi1_dev_porterr(dd, port, fmt, ...) \
 	dev_err(&(dd)->pcidev->dev, "%s: IB%u:%u " fmt, \
 			get_unit_name((dd)->unit), (dd)->unit, (port), \
 			##__VA_ARGS__)
@@ -1693,4 +1693,4 @@ static inline void hfi1_reset_cpu_counters(struct hfi_devdata *dd)
 int hfi1_tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp);
 
 
-#endif                          /* _QIB_KERNEL_H */
+#endif                          /* _HFI1_KERNEL_H */

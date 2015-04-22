@@ -170,7 +170,7 @@ static void qib_dma_free_coherent(struct ib_device *dev, size_t size,
 	free_pages((unsigned long) cpu_addr, get_order(size));
 }
 
-struct ib_dma_mapping_ops qib_dma_mapping_ops = {
+struct ib_dma_mapping_ops hfi1_dma_mapping_ops = {
 	.mapping_error = qib_mapping_error,
 	.map_single = qib_dma_map_single,
 	.unmap_single = qib_dma_unmap_single,

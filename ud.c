@@ -90,7 +90,7 @@ static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 			IB_QPT_UD : qp->ibqp.qp_type;
 
 	if (dqptype != sqptype ||
-	    !(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK)) {
+	    !(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
 		ibp->n_pkt_drops++;
 		goto drop;
 	}
@@ -159,8 +159,8 @@ static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 	/*
 	 * Get the next work request entry to find where to put the data.
 	 */
-	if (qp->r_flags & QIB_R_REUSE_SGE)
-		qp->r_flags &= ~QIB_R_REUSE_SGE;
+	if (qp->r_flags & HFI1_R_REUSE_SGE)
+		qp->r_flags &= ~HFI1_R_REUSE_SGE;
 	else {
 		int ret;
 
@@ -177,7 +177,7 @@ static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 	}
 	/* Silently drop packets which are too big. */
 	if (unlikely(wc.byte_len > qp->r_len)) {
-		qp->r_flags |= QIB_R_REUSE_SGE;
+		qp->r_flags |= HFI1_R_REUSE_SGE;
 		ibp->n_pkt_drops++;
 		goto bail_unlock;
 	}
@@ -208,7 +208,7 @@ static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 			if (--ssge.num_sge)
 				*sge = *ssge.sg_list++;
 		} else if (sge->length == 0 && sge->mr->lkey) {
-			if (++sge->n >= QIB_SEGSZ) {
+			if (++sge->n >= HFI1_SEGSZ) {
 				if (++sge->m >= sge->mr->mapsz)
 					break;
 				sge->n = 0;
@@ -221,7 +221,7 @@ static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 		length -= len;
 	}
 	qib_put_ss(&qp->r_sge);
-	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags))
+	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		goto bail_unlock;
 	wc.wr_id = qp->r_wr_id;
 	wc.status = IB_WC_SUCCESS;
@@ -240,7 +240,7 @@ static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 	wc.slid = ppd->lid | (ah_attr->src_path_bits & ((1 << ppd->lmc) - 1));
 	/* Check for loopback when the port lid is not set */
 	if (wc.slid == 0 && sqp->ibqp.qp_type == IB_QPT_GSI)
-		wc.slid = QIB_PERMISSIVE_LID;
+		wc.slid = HFI1_PERMISSIVE_LID;
 	wc.sl = ah_attr->sl;
 	wc.dlid_path_bits = ah_attr->dlid & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
@@ -280,15 +280,15 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
-	if (!(ib_qib_state_ops[qp->state] & QIB_PROCESS_NEXT_SEND_OK)) {
-		if (!(ib_qib_state_ops[qp->state] & QIB_FLUSH_SEND))
+	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_NEXT_SEND_OK)) {
+		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
 		if (qp->s_last == qp->s_head)
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
 		if (atomic_read(&qp->s_iowait.sdma_busy)) {
-			qp->s_flags |= QIB_S_WAIT_DMA;
+			qp->s_flags |= HFI1_S_WAIT_DMA;
 			goto bail;
 		}
 		wqe = get_swqe_ptr(qp, qp->s_last);
@@ -308,11 +308,11 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
 	ah_attr = &to_iah(wqe->wr.wr.ud.ah)->attr;
-	if (ah_attr->dlid < QIB_MULTICAST_LID_BASE ||
-	    ah_attr->dlid == QIB_PERMISSIVE_LID) {
+	if (ah_attr->dlid < HFI1_MULTICAST_LID_BASE ||
+	    ah_attr->dlid == HFI1_PERMISSIVE_LID) {
 		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
 		if (unlikely(!loopback && (lid == ppd->lid ||
-		    (lid == QIB_PERMISSIVE_LID &&
+		    (lid == HFI1_PERMISSIVE_LID &&
 		     qp->ibqp.qp_type == IB_QPT_GSI)))) {
 			/*
 			 * If DMAs are in progress, we can't generate
@@ -322,7 +322,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 			 * zero length descriptor so we get a callback.
 			 */
 			if (atomic_read(&qp->s_iowait.sdma_busy)) {
-				qp->s_flags |= QIB_S_WAIT_DMA;
+				qp->s_flags |= HFI1_S_WAIT_DMA;
 				goto bail;
 			}
 			qp->s_cur = next_cur;
@@ -354,7 +354,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		qp->s_hdrwords += hfi1_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
 					       &ah_attr->grh,
 					       qp->s_hdrwords, nwords);
-		lrh0 = QIB_LRH_GRH;
+		lrh0 = HFI1_LRH_GRH;
 		ohdr = &qp->s_hdr->ibh.u.l.oth;
 		/*
 		 * Don't worry about sending to locally attached multicast
@@ -362,7 +362,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		 */
 	} else {
 		/* Header size in 32-bit words. */
-		lrh0 = QIB_LRH_BTH;
+		lrh0 = HFI1_LRH_BTH;
 		ohdr = &qp->s_hdr->ibh.u.oth;
 	}
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {
@@ -422,7 +422,7 @@ done:
 	goto unlock;
 
 bail:
-	qp->s_flags &= ~QIB_S_BUSY;
+	qp->s_flags &= ~HFI1_S_BUSY;
 unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
@@ -496,11 +496,11 @@ void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 		grh->sgid = old_grh->dgid;
 		grh->dgid = old_grh->sgid;
 		ohdr = &hdr.u.l.oth;
-		lrh0 = QIB_LRH_GRH;
+		lrh0 = HFI1_LRH_GRH;
 		hwords += sizeof(struct ib_grh) / sizeof(u32);
 	} else {
 		ohdr = &hdr.u.oth;
-		lrh0 = QIB_LRH_BTH;
+		lrh0 = HFI1_LRH_BTH;
 	}
 
 	lrh0 |= (sc5 & 0xf) << 12 | sl << 4;
@@ -508,7 +508,7 @@ void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 	bth0 = pkey | (CNP_OPCODE << 24);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 
-	ohdr->bth[1] = cpu_to_be32(remote_qpn | (1 << QIB_BECN_SHIFT));
+	ohdr->bth[1] = cpu_to_be32(remote_qpn | (1 << HFI1_BECN_SHIFT));
 	ohdr->bth[2] = 0; /* PSN 0 */
 
 	hdr.lrh[0] = cpu_to_be16(lrh0);
@@ -647,8 +647,8 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	u32 src_qp;
 	u16 dlid, pkey;
 	int mgmt_pkey_idx = -1;
-	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
-	int sc4_bit = (!!(rcv_flags & QIB_SC4_BIT)) << 4;
+	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
+	int sc4_bit = (!!(rcv_flags & HFI1_SC4_BIT)) << 4;
 	u8 sc;
 	int is_becn, is_fecn, is_mcast;
 	struct ib_grh *grh = NULL;
@@ -663,14 +663,14 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		grh = &hdr->u.l.grh;
 	}
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
-	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & QIB_QPN_MASK;
+	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & HFI1_QPN_MASK;
 	dlid = be16_to_cpu(hdr->lrh[1]);
-	is_mcast = (dlid > QIB_MULTICAST_LID_BASE) &&
-			(dlid != QIB_PERMISSIVE_LID);
-	is_becn = (be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT)
-		& QIB_BECN_MASK;
-	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
-		& QIB_FECN_MASK;
+	is_mcast = (dlid > HFI1_MULTICAST_LID_BASE) &&
+			(dlid != HFI1_PERMISSIVE_LID);
+	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
+		& HFI1_BECN_MASK;
+	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
+		& HFI1_FECN_MASK;
 
 	if (is_becn) {
 		/*
@@ -678,7 +678,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		 * error path (errata 291394).
 		 */
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-		u32 lqpn =  be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
+		u32 lqpn =  be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 		u8 sl, sc5;
 
 		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
@@ -809,8 +809,8 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	/*
 	 * Get the next work request entry to find where to put the data.
 	 */
-	if (qp->r_flags & QIB_R_REUSE_SGE)
-		qp->r_flags &= ~QIB_R_REUSE_SGE;
+	if (qp->r_flags & HFI1_R_REUSE_SGE)
+		qp->r_flags &= ~HFI1_R_REUSE_SGE;
 	else {
 		int ret;
 
@@ -827,7 +827,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	}
 	/* Silently drop packets which are too big. */
 	if (unlikely(wc.byte_len > qp->r_len)) {
-		qp->r_flags |= QIB_R_REUSE_SGE;
+		qp->r_flags |= HFI1_R_REUSE_SGE;
 		goto drop;
 	}
 	if (has_grh) {
@@ -838,7 +838,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
 	hfi1_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1);
 	qib_put_ss(&qp->r_sge);
-	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags))
+	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		return;
 	wc.wr_id = qp->r_wr_id;
 	wc.status = IB_WC_SUCCESS;
@@ -871,7 +871,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.
 	 */
-	wc.dlid_path_bits = dlid >= QIB_MULTICAST_LID_BASE ? 0 :
+	wc.dlid_path_bits = dlid >= HFI1_MULTICAST_LID_BASE ? 0 :
 		dlid & ((1 << ppd_from_ibp(ibp)->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */

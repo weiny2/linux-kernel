@@ -659,7 +659,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	 * the RXE parsing will be off and will land in the middle of the KDETH
 	 * or miss it entirely.
 	 */
-	if ((be16_to_cpu(req->hdr.lrh[0]) & 0x3) == QIB_LRH_GRH) {
+	if ((be16_to_cpu(req->hdr.lrh[0]) & 0x3) == HFI1_LRH_GRH) {
 		SDMA_DBG(req, "User tried to pass in a GRH");
 		ret = -EINVAL;
 		goto free_req;

@@ -399,7 +399,7 @@ static void qib_reset_qp(struct hfi1_qp *qp, enum ib_qp_type type)
 		hfi1_do_send,
 		iowait_sleep,
 		iowait_wakeup);
-	qp->s_flags &= QIB_S_SIGNAL_REQ_WR;
+	qp->s_flags &= HFI1_S_SIGNAL_REQ_WR;
 	qp->s_hdrwords = 0;
 	qp->s_wqe = NULL;
 	qp->s_draining = 0;
@@ -445,7 +445,7 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 {
 	unsigned n;
 
-	if (test_and_clear_bit(QIB_R_REWIND_SGE, &qp->r_aflags))
+	if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
 		qib_put_ss(&qp->s_rdma_read_sge);
 
 	qib_put_ss(&qp->r_sge);
@@ -508,24 +508,24 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 
 	qp->state = IB_QPS_ERR;
 
-	if (qp->s_flags & (QIB_S_TIMER | QIB_S_WAIT_RNR)) {
-		qp->s_flags &= ~(QIB_S_TIMER | QIB_S_WAIT_RNR);
+	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
+		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
 		del_timer(&qp->s_timer);
 	}
 
-	if (qp->s_flags & QIB_S_ANY_WAIT_SEND)
-		qp->s_flags &= ~QIB_S_ANY_WAIT_SEND;
+	if (qp->s_flags & HFI1_S_ANY_WAIT_SEND)
+		qp->s_flags &= ~HFI1_S_ANY_WAIT_SEND;
 
 	spin_lock(&dev->pending_lock);
-	if (!list_empty(&qp->s_iowait.list) && !(qp->s_flags & QIB_S_BUSY)) {
-		qp->s_flags &= ~QIB_S_ANY_WAIT_IO;
+	if (!list_empty(&qp->s_iowait.list) && !(qp->s_flags & HFI1_S_BUSY)) {
+		qp->s_flags &= ~HFI1_S_ANY_WAIT_IO;
 		list_del_init(&qp->s_iowait.list);
 		if (atomic_dec_and_test(&qp->refcount))
 			wake_up(&qp->wait);
 	}
 	spin_unlock(&dev->pending_lock);
 
-	if (!(qp->s_flags & QIB_S_BUSY)) {
+	if (!(qp->s_flags & HFI1_S_BUSY)) {
 		qp->s_hdrwords = 0;
 		if (qp->s_rdma_mr) {
 			qib_put_mr(qp->s_rdma_mr);
@@ -544,7 +544,7 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 	wc.qp = &qp->ibqp;
 	wc.opcode = IB_WC_RECV;
 
-	if (test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags)) {
+	if (test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags)) {
 		wc.wr_id = qp->r_wr_id;
 		wc.status = err;
 		hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc, 1);
@@ -672,14 +672,14 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		goto inval;
 
 	if (attr_mask & IB_QP_AV) {
-		if (attr->ah_attr.dlid >= QIB_MULTICAST_LID_BASE)
+		if (attr->ah_attr.dlid >= HFI1_MULTICAST_LID_BASE)
 			goto inval;
 		if (hfi1_check_ah(qp->ibqp.device, &attr->ah_attr))
 			goto inval;
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
-		if (attr->alt_ah_attr.dlid >= QIB_MULTICAST_LID_BASE)
+		if (attr->alt_ah_attr.dlid >= HFI1_MULTICAST_LID_BASE)
 			goto inval;
 		if (hfi1_check_ah(qp->ibqp.device, &attr->alt_ah_attr))
 			goto inval;
@@ -703,7 +703,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 
 	if (attr_mask & IB_QP_DEST_QPN)
-		if (attr->dest_qp_num > QIB_QPN_MASK)
+		if (attr->dest_qp_num > HFI1_QPN_MASK)
 			goto inval;
 
 	if (attr_mask & IB_QP_RETRY_CNT)
@@ -754,7 +754,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_MAX_DEST_RD_ATOMIC)
-		if (attr->max_dest_rd_atomic > QIB_MAX_RDMA_ATOMIC)
+		if (attr->max_dest_rd_atomic > HFI1_MAX_RDMA_ATOMIC)
 			goto inval;
 
 	switch (new_state) {
@@ -762,7 +762,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		if (qp->state != IB_QPS_RESET) {
 			qp->state = IB_QPS_RESET;
 			flush_iowait(qp);
-			qp->s_flags &= ~(QIB_S_TIMER | QIB_S_ANY_WAIT);
+			qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
 			spin_unlock(&qp->s_lock);
 			spin_unlock_irq(&qp->r_lock);
 			/* Stop the sending work queue and retry timer */
@@ -782,7 +782,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	case IB_QPS_RTR:
 		/* Allow event to retrigger if QP set to RTR more than once */
-		qp->r_flags &= ~QIB_R_COMM_EST;
+		qp->r_flags &= ~HFI1_R_COMM_EST;
 		qp->state = new_state;
 		break;
 
@@ -845,7 +845,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			qp->remote_ah_attr = qp->alt_ah_attr;
 			qp->port_num = qp->alt_ah_attr.port_num;
 			qp->s_pkey_index = qp->s_alt_pkey_index;
-			qp->s_flags |= QIB_S_AHG_CLEAR;
+			qp->s_flags |= HFI1_S_AHG_CLEAR;
 		}
 	}
 
@@ -968,7 +968,7 @@ int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	init_attr->recv_cq = qp->ibqp.recv_cq;
 	init_attr->srq = qp->ibqp.srq;
 	init_attr->cap = attr->cap;
-	if (qp->s_flags & QIB_S_SIGNAL_REQ_WR)
+	if (qp->s_flags & HFI1_S_SIGNAL_REQ_WR)
 		init_attr->sq_sig_type = IB_SIGNAL_REQ_WR;
 	else
 		init_attr->sq_sig_type = IB_SIGNAL_ALL_WR;
@@ -985,14 +985,14 @@ int hfi1_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
  */
 __be32 hfi1_compute_aeth(struct hfi1_qp *qp)
 {
-	u32 aeth = qp->r_msn & QIB_MSN_MASK;
+	u32 aeth = qp->r_msn & HFI1_MSN_MASK;
 
 	if (qp->ibqp.srq) {
 		/*
 		 * Shared receive queues don't generate credits.
 		 * Set the credit field to the invalid value.
 		 */
-		aeth |= QIB_AETH_CREDIT_INVAL << QIB_AETH_CREDIT_SHIFT;
+		aeth |= HFI1_AETH_CREDIT_INVAL << HFI1_AETH_CREDIT_SHIFT;
 	} else {
 		u32 min, max, x;
 		u32 credits;
@@ -1033,7 +1033,7 @@ __be32 hfi1_compute_aeth(struct hfi1_qp *qp)
 			else
 				min = x;
 		}
-		aeth |= x << QIB_AETH_CREDIT_SHIFT;
+		aeth |= x << HFI1_AETH_CREDIT_SHIFT;
 	}
 	return cpu_to_be32(aeth);
 }
@@ -1061,8 +1061,8 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	size_t sg_list_sz;
 	struct ib_qp *ret;
 
-	if (init_attr->cap.max_send_sge > ib_qib_max_sges ||
-	    init_attr->cap.max_send_wr > ib_qib_max_qp_wrs ||
+	if (init_attr->cap.max_send_sge > ib_hfi1_max_sges ||
+	    init_attr->cap.max_send_wr > ib_hfi1_max_qp_wrs ||
 	    init_attr->create_flags) {
 		ret = ERR_PTR(-EINVAL);
 		goto bail;
@@ -1070,8 +1070,8 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 
 	/* Check receive queue parameters if no SRQ is specified. */
 	if (!init_attr->srq) {
-		if (init_attr->cap.max_recv_sge > ib_qib_max_sges ||
-		    init_attr->cap.max_recv_wr > ib_qib_max_qp_wrs) {
+		if (init_attr->cap.max_recv_sge > ib_hfi1_max_sges ||
+		    init_attr->cap.max_recv_wr > ib_hfi1_max_qp_wrs) {
 			ret = ERR_PTR(-EINVAL);
 			goto bail;
 		}
@@ -1160,7 +1160,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		qp->s_size = init_attr->cap.max_send_wr + 1;
 		qp->s_max_sge = init_attr->cap.max_send_sge;
 		if (init_attr->sq_sig_type == IB_SIGNAL_REQ_WR)
-			qp->s_flags = QIB_S_SIGNAL_REQ_WR;
+			qp->s_flags = HFI1_S_SIGNAL_REQ_WR;
 		dev = to_idev(ibpd->device);
 		dd = dd_from_dev(dev);
 		err = alloc_qpn(dd, &dev->qp_dev->qpn_table, init_attr->qp_type,
@@ -1218,7 +1218,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	}
 
 	spin_lock(&dev->n_qps_lock);
-	if (dev->n_qps_allocated == ib_qib_max_qps) {
+	if (dev->n_qps_allocated == ib_hfi1_max_qps) {
 		spin_unlock(&dev->n_qps_lock);
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_ip;
@@ -1271,7 +1271,7 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 	if (qp->state != IB_QPS_RESET) {
 		qp->state = IB_QPS_RESET;
 		flush_iowait(qp);
-		qp->s_flags &= ~(QIB_S_TIMER | QIB_S_ANY_WAIT);
+		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
 		spin_unlock(&qp->s_lock);
 		spin_unlock_irq(&qp->r_lock);
 		cancel_work_sync(&qp->s_iowait.iowork);
@@ -1368,28 +1368,28 @@ static void free_qpn_table(struct hfi_qpn_table *qpt)
  */
 void hfi1_get_credit(struct hfi1_qp *qp, u32 aeth)
 {
-	u32 credit = (aeth >> QIB_AETH_CREDIT_SHIFT) & QIB_AETH_CREDIT_MASK;
+	u32 credit = (aeth >> HFI1_AETH_CREDIT_SHIFT) & HFI1_AETH_CREDIT_MASK;
 
 	/*
 	 * If the credit is invalid, we can send
 	 * as many packets as we like.  Otherwise, we have to
 	 * honor the credit field.
 	 */
-	if (credit == QIB_AETH_CREDIT_INVAL) {
-		if (!(qp->s_flags & QIB_S_UNLIMITED_CREDIT)) {
-			qp->s_flags |= QIB_S_UNLIMITED_CREDIT;
-			if (qp->s_flags & QIB_S_WAIT_SSN_CREDIT) {
-				qp->s_flags &= ~QIB_S_WAIT_SSN_CREDIT;
+	if (credit == HFI1_AETH_CREDIT_INVAL) {
+		if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT)) {
+			qp->s_flags |= HFI1_S_UNLIMITED_CREDIT;
+			if (qp->s_flags & HFI1_S_WAIT_SSN_CREDIT) {
+				qp->s_flags &= ~HFI1_S_WAIT_SSN_CREDIT;
 				hfi1_schedule_send(qp);
 			}
 		}
-	} else if (!(qp->s_flags & QIB_S_UNLIMITED_CREDIT)) {
+	} else if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT)) {
 		/* Compute new LSN (i.e., MSN + credit) */
-		credit = (aeth + credit_table[credit]) & QIB_MSN_MASK;
+		credit = (aeth + credit_table[credit]) & HFI1_MSN_MASK;
 		if (cmp_msn(credit, qp->s_lsn) > 0) {
 			qp->s_lsn = credit;
-			if (qp->s_flags & QIB_S_WAIT_SSN_CREDIT) {
-				qp->s_flags &= ~QIB_S_WAIT_SSN_CREDIT;
+			if (qp->s_flags & HFI1_S_WAIT_SSN_CREDIT) {
+				qp->s_flags &= ~HFI1_S_WAIT_SSN_CREDIT;
 				hfi1_schedule_send(qp);
 			}
 		}
@@ -1427,7 +1427,7 @@ static int iowait_sleep(
 	qp = tx->qp;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) {
+	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
 
 		/*
 		 * If we couldn't queue the DMA request, save the info
@@ -1445,13 +1445,13 @@ static int iowait_sleep(
 				to_iport(qp->ibqp.device, qp->port_num);
 
 			ibp->n_dmawait++;
-			qp->s_flags |= QIB_S_WAIT_DMA_DESC;
+			qp->s_flags |= HFI1_S_WAIT_DMA_DESC;
 			list_add_tail(&qp->s_iowait.list, &sde->dmawait);
-			trace_hfi_qpsleep(qp, QIB_S_WAIT_DMA_DESC);
+			trace_hfi_qpsleep(qp, HFI1_S_WAIT_DMA_DESC);
 			atomic_inc(&qp->refcount);
 		}
 		spin_unlock(&dev->pending_lock);
-		qp->s_flags &= ~QIB_S_BUSY;
+		qp->s_flags &= ~HFI1_S_BUSY;
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		ret = -EBUSY;
 	} else {
@@ -1471,7 +1471,7 @@ static void iowait_wakeup(struct iowait *wait, int reason)
 	struct hfi1_qp *qp = container_of(wait, struct hfi1_qp, s_iowait);
 
 	BUG_ON(reason != SDMA_AVAIL_REASON);
-	qib_qp_wakeup(qp, QIB_S_WAIT_DMA_DESC);
+	qib_qp_wakeup(qp, HFI1_S_WAIT_DMA_DESC);
 }
 
 int qib_qp_init(struct hfi1_ibdev *dev)

@@ -74,8 +74,8 @@ static int __i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
 	/* Make sure TWSI bus is in sane state. */
 	ret = hfi1_twsi_reset(dd, target);
 	if (ret) {
-		qib_dev_porterr(dd, ppd->port,
-				"I2C interface Reset for write failed\n");
+		hfi1_dev_porterr(dd, ppd->port,
+				 "I2C interface Reset for write failed\n");
 		return -EIO;
 	}
 
@@ -128,8 +128,8 @@ static int __i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
 	/* Make sure TWSI bus is in sane state. */
 	ret = hfi1_twsi_reset(dd, target);
 	if (ret) {
-		qib_dev_porterr(dd, ppd->port,
-				"I2C interface Reset for read failed\n");
+		hfi1_dev_porterr(dd, ppd->port,
+				 "I2C interface Reset for read failed\n");
 		ret = -EIO;
 		stuck = 1;
 		goto exit;
@@ -160,10 +160,10 @@ exit:
 		dd_dev_err(dd, "I2C interface bus stuck non-idle\n");
 
 	if (pass >= I2C_MAX_RETRY && ret)
-		qib_dev_porterr(dd, ppd->port,
-					"I2C failed even retrying\n");
+		hfi1_dev_porterr(dd, ppd->port,
+				 "I2C failed even retrying\n");
 	else if (pass)
-		qib_dev_porterr(dd, ppd->port, "I2C retries: %d\n", pass);
+		hfi1_dev_porterr(dd, ppd->port, "I2C retries: %d\n", pass);
 
 	/* Must wait min 20us between qsfp i2c transactions */
 	udelay(20);
@@ -209,8 +209,10 @@ int qsfp_write(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
 		ret = __i2c_write(ppd, target, QSFP_DEV,
 					QSFP_PAGE_SELECT_BYTE_OFFS, &page, 1);
 		if (ret != 1) {
-			qib_dev_porterr(ppd->dd, ppd->port,
-				"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
+			hfi1_dev_porterr(
+			ppd->dd,
+			ppd->port,
+			"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
 			ret = -EIO;
 			break;
 		}
@@ -259,8 +261,10 @@ int qsfp_read(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
 		ret = __i2c_write(ppd, target, QSFP_DEV,
 					QSFP_PAGE_SELECT_BYTE_OFFS, &page, 1);
 		if (ret != 1) {
-			qib_dev_porterr(ppd->dd, ppd->port,
-				"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
+			hfi1_dev_porterr(
+			ppd->dd,
+			ppd->port,
+			"can't write QSFP_PAGE_SELECT_BYTE: %d\n", ret);
 			ret = -EIO;
 			break;
 		}
@@ -385,7 +389,7 @@ bail:
 	return ret;
 }
 
-const char * const qib_qsfp_devtech[16] = {
+const char * const hfi1_qsfp_devtech[16] = {
 	"850nm VCSEL", "1310nm VCSEL", "1550nm VCSEL", "1310nm FP",
 	"1310nm DFB", "1550nm DFB", "1310nm EML", "1550nm EML",
 	"Cu Misc", "1490nm DFB", "Cu NoEq", "Cu Eq",
@@ -496,7 +500,7 @@ int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len)
 
 		sofar += scnprintf(buf + sofar, len - sofar, "TECH:%s%s\n",
 				lenstr,
-			qib_qsfp_devtech[(cache[QSFP_MOD_TECH_OFFS]) >> 4]);
+			hfi1_qsfp_devtech[(cache[QSFP_MOD_TECH_OFFS]) >> 4]);
 
 		sofar += scnprintf(buf + sofar, len - sofar, "Vendor:%.*s\n",
 				   QSFP_VEND_LEN, &cache[QSFP_VEND_OFFS]);
