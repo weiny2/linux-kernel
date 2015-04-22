@@ -926,7 +926,7 @@ static struct flag_table dc8051_err_flags[] = {
  */
 static struct flag_table dc8051_info_err_flags[] = {
 	FLAG_ENTRY0("Spico ROM check failed",  WFR_SPICO_ROM_FAILED),
-	FLAG_ENTRY0("UNKNOWN_FRAME type",      WFR_UNKNOWN_FRAME),
+	FLAG_ENTRY0("Unknown frame received",  WFR_UNKNOWN_FRAME),
 	FLAG_ENTRY0("Target BER not met",      WFR_TARGET_BER_NOT_MET),
 	FLAG_ENTRY0("Serdes internal looopback failure",
 					WFR_FAILED_SERDES_INTERNAL_LOOPBACK),
@@ -1812,18 +1812,58 @@ int is_bx(struct hfi_devdata *dd)
 }
 
 /*
+ * Append string s to buffer buf.  Arguments curp and len are the current
+ * position and remaining length, respectively.
+ *
+ * return 0 on success, 1 on out of room
+ */
+static int append_str(char *buf, char **curp, int *lenp, const char *s)
+{
+	char *p = *curp;
+	int len = *lenp;
+	int result = 0; /* success */
+	char c;
+
+	/* add a comma, if first in the buffer */
+	if (p != buf) {
+		if (len == 0) {
+			result = 1; /* out of room */
+			goto done;
+		}
+		*p++ = ',';
+		len--;
+	}
+
+	/* copy the string */
+	while ((c = *s++) != 0) {
+		if (len == 0) {
+			result = 1; /* out of room */
+			goto done;
+		}
+		*p++ = c;
+		len--;
+	}
+
+done:
+	/* write return values */
+	*curp = p;
+	*lenp = len;
+
+	return result;
+}
+
+/*
  * Using the given flag table, print a comma separated string into
  * the buffer.  End in '*' if the buffer is too short.
  */
 static char *flag_string(char *buf, int buf_len, u64 flags,
 				struct flag_table *table, int table_size)
 {
-	const char *s;
+	char extra[32];
 	char *p = buf;
 	int len = buf_len;
 	int no_room = 0;
 	int i;
-	char c;
 
 	/* make sure there is at least 2 so we can form "*" */
 	if (len < 2)
@@ -1832,27 +1872,19 @@ static char *flag_string(char *buf, int buf_len, u64 flags,
 	len--;	/* leave room for a nul */
 	for (i = 0; i < table_size; i++) {
 		if (flags & table[i].flag) {
-			/* add a comma, if not the first */
-			if (p != buf) {
-				if (len == 0) {
-					no_room = 1;
-					break;
-				}
-				*p++ = ',';
-				len--;
-			}
-			/* copy the string */
-			s = table[i].str;
-			while ((c = *s++) != 0 && len > 0) {
-				*p++ = c;
-				len--;
-			}
-			if (c != 0) {
-				no_room = 1;
+			no_room = append_str(buf, &p, &len, table[i].str);
+			if (no_room)
 				break;
-			}
+			flags &= ~table[i].flag;
 		}
 	}
+
+	/* any undocumented bits left? */
+	if (!no_room && flags) {
+		snprintf(extra, sizeof(extra), "bits 0x%llx", flags);
+		no_room = append_str(buf, &p, &len, extra);
+	}
+
 	/* add * if ran out of room */
 	if (no_room) {
 		/* may need to back up to add space for a '*' */
@@ -1860,6 +1892,7 @@ static char *flag_string(char *buf, int buf_len, u64 flags,
 			--p;
 		*p++ = '*';
 	}
+
 	/* add final nul - space already allocated above */
 	*p = 0;
 	return buf;
@@ -3796,12 +3829,6 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 		/*
 		 * Handle error flags.
 		 */
-		if (err & WFR_UNKNOWN_FRAME) {
-			/* informational only */
-			dd_dev_info(dd,
-				"Unknown frame received\n");
-			err &= ~(u64)WFR_UNKNOWN_FRAME;
-		}
 		if (err & FAILED_LNI) {
 			/*
 			 * LNI error indications are cleared by the 8051
@@ -3821,8 +3848,8 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			err &= ~(u64)FAILED_LNI;
 		}
 		if (err) {
-			/* TODO: implement all 8051 error handling */
-			dd_dev_info(dd, "8051 info error: %s (unhandled)\n",
+			/* report remaining errors, but do not do anything */
+			dd_dev_err(dd, "8051 info error: %s\n",
 				dc8051_info_err_string(buf, sizeof(buf), err));
 		}
 
@@ -3833,44 +3860,29 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			/*
 			 * Presently, the driver does a busy wait for
 			 * host requests to complete.  This is only an
-			 * informational message that should be
-			 * moved to a trace level.
+			 * informational message.
 			 * NOTE: The 8051 clears the host message
-			 * information _on the next 8051 command_.
+			 * information *on the next 8051 command*.
 			 * Therefore, when linkup is achieved,
 			 * this flag will still be set.
-			 *
-			 * TODO: Tell the 8051 not to interrupt the host
-			 * for this.
 			 */
-			/*dd_dev_info(dd, "8051: host request done\n");*/
-			/* clear flag so "uhnandled" message below
-			   does not include this */
 			host_msg &= ~(u64)WFR_HOST_REQ_DONE;
 		}
 		if (host_msg & WFR_BC_SMA_MSG) {
 			queue_work(ppd->hfi1_wq, &ppd->sma_message_work);
-			/* clear flag so "uhnandled" message below
-			   does not include this */
 			host_msg &= ~(u64)WFR_BC_SMA_MSG;
 		}
 		if (host_msg & WFR_LINKUP_ACHIEVED) {
-			dd_dev_info(dd, "8051: LinkUp achieved\n");
+			dd_dev_info(dd, "8051: Link up\n");
 			queue_work(ppd->hfi1_wq, &ppd->link_up_work);
-			/* clear flag so "uhnandled" message below
-			   does not include this */
 			host_msg &= ~(u64)WFR_LINKUP_ACHIEVED;
 		}
 		if (host_msg & WFR_EXT_DEVICE_CFG_REQ) {
 			handle_8051_request(dd);
-			/* clear flag so "uhnandled" message below
-			   does not include this */
 			host_msg &= ~(u64)WFR_EXT_DEVICE_CFG_REQ;
 		}
 		if (host_msg & WFR_VERIFY_CAP_FRAME) {
 			queue_work(ppd->hfi1_wq, &ppd->link_vc_work);
-			/* clear flag so "uhnandled" message below
-			   does not include this */
 			host_msg &= ~(u64)WFR_VERIFY_CAP_FRAME;
 		}
 		if (host_msg & WFR_LINK_GOING_DOWN) {
@@ -3882,27 +3894,19 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			}
 			dd_dev_info(dd, "8051: Link down%s\n", extra);
 			queue_link_down = 1;
-			/* clear flag so "uhnandled" message below
-			   does not include this */
 			host_msg &= ~(u64)WFR_LINK_GOING_DOWN;
 		}
 		if (host_msg & WFR_LINK_WIDTH_DOWNGRADED) {
 			queue_work(ppd->hfi1_wq, &ppd->link_downgrade_work);
-			/* clear flag so "uhnandled" message below
-			   does not include this */
 			host_msg &= ~(u64)WFR_LINK_WIDTH_DOWNGRADED;
 		}
-		/* look for unhandled flags */
 		if (host_msg) {
-			/* TODO: implement all other valid flags here */
-			dd_dev_info(dd,
-				"8051 info host message: %s (unhandled)\n",
+			/* report remaining messages, but do not do anything */
+			dd_dev_info(dd, "8051 info host message: %s\n",
 				dc8051_info_host_msg_string(buf, sizeof(buf),
 					host_msg));
 		}
 
-		/* clear flag so "unhandled" message below does not
-		   include this */
 		reg &= ~DC_DC8051_ERR_FLG_SET_BY_8051_SMASK;
 	}
 	if (reg & DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK) {
@@ -3916,13 +3920,11 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			read_csr(dd, DC_DC8051_ERR_EN)
 			  & ~DC_DC8051_ERR_EN_LOST_8051_HEART_BEAT_SMASK);
 
-		/* clear flag so "unhandled" message below does not
-		   include this */
 		reg &= ~DC_DC8051_ERR_FLG_LOST_8051_HEART_BEAT_SMASK;
 	}
 	if (reg) {
-		/* TODO: implement all other flags here */
-		dd_dev_info(dd, "%s: 8051 Error: %s (unhandled)\n", __func__,
+		/* report the error, but do not do anything */
+		dd_dev_err(dd, "8051 error: %s\n",
 			dc8051_err_string(buf, sizeof(buf), reg));
 	}
 
