@@ -6810,15 +6810,12 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	u64 changing_mask, ld_mask, stat_mask;
 	int change_count;
 	int i, use_all_mask;
+	int this_shared_changing;
 	/*
-	 * TODO: Erratum 291241 - the variables {any,this}_shared_changing,
-	 * their use below and the description above.  This erratum may or
-	 * may not be fixed in B0.  When the decision is made:
-	 * If no fix: remove this coment.
-	 * If fix for B0: add a A0 vs B0 conditional. Possibly update the
-	 *   algorithm above.
+	 * A0: add the variable any_shared_limit_changing below and in the
+	 * algorithm above.  If removing A0 support, it can be removed.
 	 */
-	int any_shared_changing, this_shared_changing;
+	int any_shared_limit_changing;
 	struct buffer_control cur_bc;
 	u8 changing[OPA_MAX_VLS];
 	u8 lowering_dedicated[OPA_MAX_VLS];
@@ -6862,7 +6859,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	 * Create the masks we will use.
 	 */
 	memset(changing, 0, sizeof(changing));
-	memset(lowering_dedicated, 0, sizeof(changing));
+	memset(lowering_dedicated, 0, sizeof(lowering_dedicated));
 	/* NOTE: Assumes that the individual VL bits are adjacent and in
 	   increasing order */
 	stat_mask =
@@ -6870,16 +6867,15 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	changing_mask = 0;
 	ld_mask = 0;
 	change_count = 0;
-	any_shared_changing = 0;
+	any_shared_limit_changing = 0;
 	for (i = 0; i < NUM_USABLE_VLS; i++, stat_mask <<= 1) {
 		if (!valid_vl(i))
 			continue;
 		this_shared_changing = new_bc->vl[i].shared
 						!= cur_bc.vl[i].shared;
 		if (this_shared_changing)
-			any_shared_changing = 1;
-		if (new_bc->vl[i].dedicated
-					!= cur_bc.vl[i].dedicated
+			any_shared_limit_changing = 1;
+		if (new_bc->vl[i].dedicated != cur_bc.vl[i].dedicated
 				|| this_shared_changing) {
 			changing[i] = 1;
 			changing_mask |= stat_mask;
@@ -6902,7 +6898,7 @@ static int set_buffer_control(struct hfi_devdata *dd,
 	use_all_mask = 0;
 	if ((be16_to_cpu(new_bc->overall_shared_limit) <
 				be16_to_cpu(cur_bc.overall_shared_limit))
-			|| any_shared_changing) {
+			|| (is_a0(dd) && any_shared_limit_changing)) {
 		set_global_shared(dd, 0);
 		cur_bc.overall_shared_limit = 0;
 		use_all_mask = 1;
