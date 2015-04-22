@@ -1,6 +1,0 @@
-read SendCounterArray64[3]
-read SendCounterArray64[11]
-read DCC_PRF_PORT_XMIT_DATA_CNT
-read DCC_PRF_PORT_RCV_DATA_CNT
-read DCC_PRF_PORT_VL_RCV_DATA_CNT[0]
-read DCC_PRF_PORT_VL_RCV_DATA_CNT[8]

@@ -48,7 +48,7 @@ if [ ! $? ]; then
     exit 15
 fi
 # run quick test.
-cd ${fxr}/fxr-driver/test
+cd ${fxr}/fxr-driver/opa-headers.git/test
 ./harness.py --nodelist=viper0 --type=quick
 res=$?
 if [ ! ${res} ]; then
