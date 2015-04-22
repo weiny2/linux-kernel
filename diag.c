@@ -825,11 +825,13 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 			return -ENODEV;
 		vl = (dp.pbc >> WFR_PBC_VL_SHIFT) & WFR_PBC_VL_MASK;
 		sc = dd->vld[vl].sc;
-		if (sc != NULL)
+		if (sc) {
 			dp.sw_index = sc->sw_index;
-		hfi_cdbg(PKT,
-			"Packet sent over VL %d via Send Context %u(%u)",
-			 vl, sc->sw_index, sc->hw_context);
+			hfi_cdbg(
+			       PKT,
+			       "Packet sent over VL %d via Send Context %u(%u)",
+			       vl, sc->sw_index, sc->hw_context);
+		}
 	}
 
 	return diagpkt_send(&dp);
