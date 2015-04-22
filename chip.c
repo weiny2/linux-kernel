@@ -5118,7 +5118,6 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 		goto set_local_link_attributes_fail;
 
 	/*
-	 * Storm Lake generation 1 has no power management.
 	 * DC supports continous updates.
 	 */
 	ret = write_vc_local_phy(dd, 0 /* no power management */,
