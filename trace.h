@@ -1304,6 +1304,7 @@ __hfi_trace_fn(PIO);
 __hfi_trace_fn(DC8051);
 __hfi_trace_fn(FIRMWARE);
 __hfi_trace_fn(RCVCTRL);
+__hfi_trace_fn(TID);
 
 #define hfi_cdbg(which, fmt, ...) \
 	__hfi_trace_##which(__func__, fmt, ##__VA_ARGS__)

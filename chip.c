@@ -5620,7 +5620,6 @@ static inline int init_cpu_counters(struct hfi_devdata *dd)
 	return 0;
 }
 
-static int trace_tid;	/* TODO: hook this up with tracing */
 static const char * const pt_names[] = {
 	"expected",
 	"eager",
@@ -5654,10 +5653,8 @@ void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
 		goto done;
 	}
 
-	if (trace_tid)
-		dd_dev_info(dd, "%s: type %s, index 0x%x, pa 0x%lx, bsize 0x%lx\n",
-			__func__, pt_name(type), index, pa,
-			(unsigned long)order);
+	hfi_cdbg(TID, "type %s, index 0x%x, pa 0x%lx, bsize 0x%lx",
+		 pt_name(type), index, pa, (unsigned long)order);
 
 #define RT_ADDR_SHIFT 12	/* 4KB kernel address boundary */
 	reg = RCV_ARRAY_RT_WRITE_ENABLE_SMASK
