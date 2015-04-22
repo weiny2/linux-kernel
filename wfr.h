@@ -973,26 +973,6 @@ enum {
 	PORT_CNTR_LAST /* Must be kept last */
 };
 
-/*
- * FIXME: These are non-exported register definitions that are still
- * used in the driver.  Remove when their use is removed.
- */
-#define WFR_ASIC_WFR_EFUSE_REGS6                (WFR_ASIC + 0x000000001430)
-#define WFR_ASIC_WFR_EFUSE_REGS6_RESETCSR       0x0000000000000000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SHIFT 32
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_MASK 0xFFFFFFFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SMASK 0xFFFFFFFF00000000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_SHIFT 24
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_MASK 0xFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_SMASK 0xFF000000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_SHIFT 16
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_MASK 0xFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_SMASK 0xFF0000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_VERSION_SHIFT 0
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_VERSION_MASK 0xFFFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_VERSION_SMASK 0xFFFFull
-/* FIXME: End of CSR defines to be removed */
-
 u64 get_all_cpu_total(u64 __percpu *cntr);
 void hfi1_start_cleanup(struct hfi_devdata *dd);
 void hfi1_clear_tids(struct hfi1_ctxtdata *rcd);

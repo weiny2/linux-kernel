@@ -1280,7 +1280,6 @@ int firmware_init(struct hfi_devdata *dd)
 	 * Expect that we enter this routine with MISC_CFG_FW_CTRL reset:
 	 *	- FW_8051_LOADED clear
 	 *	- DISABLE_VALIDATION clear
-	 * Possibly set DISABLE_VALIDATION - EFUSE may override the disable.
 	 */
 	if (!fw_validate)
 		write_csr(dd, WFR_MISC_CFG_FW_CTRL,

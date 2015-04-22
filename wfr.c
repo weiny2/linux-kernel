@@ -9115,9 +9115,6 @@ static void reset_asic_csrs(struct hfi_devdata *dd)
 	/* this also writes a NOP command, clearing paging mode */
 	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, 0);
 	write_csr(dd, WFR_ASIC_EEP_DATA, 0);
-	/* WFR_ASIC_MAN_EFUSE* read-only */
-	/* WFR_ASIC_WFR_EFUSE read-only */
-	/* WFR_ASIC_WFR_EFUSE_REGS* read-only */
 
 done:
 	mutex_unlock(&asic_mutex);
@@ -10018,7 +10015,6 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	struct hfi_devdata *dd;
 	struct hfi1_pportdata *ppd;
 	u64 reg;
-	u32 patch;	/* hardware patch level */
 	int i, ret;
 	static const char * const inames[] = { /* implementation names */
 		"RTL silicon",
@@ -10126,19 +10122,6 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
 
-	/*
-	 * TODO: Eventually remove access to ASIC_WFR_EFUSE_REGS6 as that is a
-	 * restriced register.  For now, we want to look at the patch level.
-	 * Read patch level.
-	 */
-	reg = read_csr(dd, WFR_ASIC_WFR_EFUSE_REGS6);
-	patch = (u32)
-		((reg >> WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SHIFT)
-			& WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_MASK);
-	/* All WFR A0 silicon should be at patch 3, warn if not */
-	if (patch < 3 && is_a0(dd) && dd->icode == WFR_ICODE_RTL_SILICON)
-		dd_dev_err(dd, "WARNING: WFR at patch %d, expecting >= 3",
-			patch);
 	/* set supportd speed mask */
 	dd->pport->link_speed_supported =
 			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
@@ -10235,12 +10218,11 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		    & WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_MASK);
 
 	snprintf(dd->boardversion, BOARD_VERS_MAX,
-		 "ChipABI %u.%u, %s, ChipRev %u.%u patch 0x%08x, SW Compat %llu\n",
+		 "ChipABI %u.%u, %s, ChipRev %u.%u, SW Compat %llu\n",
 		 HFI_CHIP_VERS_MAJ, HFI_CHIP_VERS_MIN,
 		 dd->boardname,
 		 (u32)dd->majrev,
 		 (u32)dd->minrev,
-		 patch,
 		 (dd->revision >> WFR_CCE_REVISION_SW_SHIFT)
 		    & WFR_CCE_REVISION_SW_MASK);
 
