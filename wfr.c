@@ -10230,9 +10230,11 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	/* start setting dd values and adjusting CSRs */
 	init_early_variables(dd);
 
-	/* TODO: real board name */
+	/* add board names as they are defined */
 	dd->boardname = kmalloc(64, GFP_KERNEL);
-	snprintf(dd->boardname, 64, "WFR_ID 0x%llx",
+	if (!dd->boardname)
+		goto bail_cleanup;
+	snprintf(dd->boardname, 64, "Board ID 0x%llx",
 		 dd->revision >> WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_SHIFT
 		    & WFR_CCE_REVISION_BOARD_ID_LOWER_NIBBLE_MASK);
 
