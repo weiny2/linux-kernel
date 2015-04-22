@@ -101,7 +101,6 @@ static ushort crc_14b_sideband = 1;
 module_param(crc_14b_sideband, ushort, S_IRUGO);
 MODULE_PARM_DESC(crc_14b_sideband, "Use sideband credit return (14b CRC only)");
 
-/* TODO: temporary */
 static uint use_flr = 1;
 module_param_named(use_flr, use_flr, uint, S_IRUGO);
 MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
@@ -9006,13 +9005,8 @@ static void reset_cce_csrs(struct hfi_devdata *dd)
 	/* WFR_CCE_ERR_FORCE leave alone */
 	for (i = 0; i < CCE_NUM_32_BIT_COUNTERS; i++)
 		write_csr(dd, WFR_CCE_COUNTER_ARRAY32 + (8 * i), 0);
-	/* TODO: what is the policy for CceDbiCtrl? */
-	/* TODO: WFR_CCE_DBI_CTRL */
-	/* TODO: WFR_CCE_DBI_ADDR */
-	/* TODO: WFR_CCE_DBI_DATA */
 	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_RESETCSR);
-	/* TODO: what is the policy for CcePcieCtrl? Leave alone? */
-	/* TODO: write_csr(dd, WFR_CCE_PCIE_CTRL, 0);*/
+	/* WFR_CCE_PCIE_CTRL leave alone */
 	for (i = 0; i < CCE_NUM_MSIX_VECTORS; i++) {
 		write_csr(dd, WFR_CCE_MSIX_TABLE_LOWER + (8 * i), 0);
 		write_csr(dd, WFR_CCE_MSIX_TABLE_UPPER + (8 * i),
@@ -9044,7 +9038,7 @@ static void reset_asic_csrs(struct hfi_devdata *dd)
 	int i;
 
 	/*
-	 * TODO:  If the HFIs are shared between separate nodes or VMs,
+	 * If the HFIs are shared between separate nodes or VMs,
 	 * then more will need to be done here.  One idea is a module
 	 * parameter that returns early, letting the first power-on or
 	 * a known first load do the reset and blocking all others.
@@ -9063,15 +9057,14 @@ static void reset_asic_csrs(struct hfi_devdata *dd)
 	if (dd->icode != WFR_ICODE_FPGA_EMULATION) {
 		/* emulation does not have an SBus - leave these alone */
 		/*
-		 * TODO: All writes to ASIC_CFG_SBUS_REQUEST do something.
-		 * Do we want to write a reset here or leave it alone?
+		 * All writes to ASIC_CFG_SBUS_REQUEST do something.
 		 * Notes:
 		 * o The reset is not zero if aimed at the core.  See the
 		 *   SBus documentation for details.
 		 * o If the SBus firmware has been upated (e.g. by the BIOS),
 		 *   will the reset revert that?
 		 */
-		/*write_csr(dd, WFR_ASIC_CFG_SBUS_REQUEST, 0);*/
+		/* WFR_ASIC_CFG_SBUS_REQUEST leave alone */
 		write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
 	}
 	/* WFR_ASIC_SBUS_RESULT read-only */
