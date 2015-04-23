@@ -983,9 +983,8 @@ void sc_wait(struct hfi_devdata *dd)
 /*
  * Restart a context after it has been halted due to error.
  *
- * This follows the ordering given in the HAS. If the first step fails
- * - wait for the halt to be asserted, return early.  Otherwise complain
- * about timeouts but keep going.
+ * If the first step fails - wait for the halt to be asserted, return early.
+ * Otherwise complain about timeouts but keep going.
  *
  * It is expected that allocations (enabled flag bit) have been shut off
  * already (only applies to kernel contexts).

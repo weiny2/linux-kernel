@@ -400,11 +400,9 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 
 	/*
 	 * TODO: In HFI, RHF.TIDErr can mean 2 things, depending on the
-	 * packet type.  Does this code apply to both?
-	 * For type 0 packets (expected receive), see section 8.5.6.2
-	 * Expected TIDErr.
-	 * For non-type 0 packets (not expected receive) see the section
-	 * 8.5.7.3 Eager TIDErr, in HAS snapshots on or later than 2013-07-12.
+	 * packet type.  Does this code apply to both,
+	 * type 0 packets (expected receive) - Expected TIDErr and
+	 * non-type 0 packets (not expected receive) - Eager TIDErr?
 	 */
 	if (packet->rhf & RHF_TID_ERR) {
 		/* For TIDERR and RC QPs premptively schedule a NAK */

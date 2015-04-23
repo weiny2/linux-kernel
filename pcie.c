@@ -1143,7 +1143,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 
 	/*
 	 * Do the Gen3 transition.  Steps are those of the PCIe Gen3
-	 * recipe, Table 5-6 in the HFI HAS.
+	 * recipe.
 	 */
 
 	/* step 1: pcie link working in gen1/gen2 */

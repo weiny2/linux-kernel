@@ -61,9 +61,9 @@
 
 /* increased for AHG */
 #define NUM_DESC 6
-/* Hardware limit - see HAS 7.3 */
+/* Hardware limit */
 #define MAX_DESC 64
-/* Hardware limit for SDMA packet size - see HAS Table 7-24 */
+/* Hardware limit for SDMA packet size */
 #define MAX_SDMA_PKT_SIZE ((16 * 1024) - 1)
 
 
@@ -892,10 +892,10 @@ void sdma_ahg_free(struct sdma_engine *sde, int ahg_index);
 
 /**
  * sdma_build_ahg - build ahg descriptor
- * @data: per HAS
- * @dwindex: per HAS
- * @startbit: per HAS
- * @bits: per HAS
+ * @data
+ * @dwindex
+ * @startbit
+ * @bits
  *
  * Build and return a 32 bit descriptor.
  */

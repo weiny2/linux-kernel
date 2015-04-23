@@ -811,8 +811,8 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	u8 ver_a, ver_b;
 
 	/*
-	 * DC Reset sequence as described in the DC HAS, steps 1-5.
-	 * Load DC 8051 firmware as described in the HFI HAS, steps 1-10.
+	 * DC Reset sequence
+	 * Load DC 8051 firmware
 	 */
 	/*
 	 * DC reset step 1: Reset DC8051

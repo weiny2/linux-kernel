@@ -4504,7 +4504,7 @@ static int do_8051_command(
 	 */
 
 	/*
-	 * Follow the HAS and do two writes - the first to stablize
+	 * Do two writes - the first to stablize
 	 * the type and req_data, the second to activate.
 	 *
 	 * The HW has been DV'ed and is known to work with 1 write.
@@ -8276,9 +8276,8 @@ void set_intr_state(struct hfi_devdata *dd, u32 enable)
 
 		/*
 		 * TODO: the 7322 wrote to INTCLEAR to "cause any
-		 * pending interrupts to be redelivered".  The
-		 * HFI HAS does not indicate that this this occurs
-		 * for HFI.
+		 * pending interrupts to be redelivered".
+		 * This does not occur for HFI.
 		 *
 		 * TODO: the 7322 also does a read and write of INTGRANTED
 		 * for MSI-X interrupts.  Is there an equivalent for
