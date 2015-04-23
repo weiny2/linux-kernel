@@ -1053,6 +1053,7 @@ struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	 */
 	spin_lock_init(&dd->sc_lock);
 	spin_lock_init(&dd->sendctrl_lock);
+	spin_lock_init(&dd->rcvctrl_lock);
 	spin_lock_init(&dd->uctxt_lock);
 	spin_lock_init(&dd->hfi1_diag_trans_lock);
 	spin_lock_init(&dd->sc_init_lock);

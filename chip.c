@@ -3011,6 +3011,29 @@ void handle_sma_message(struct work_struct *work)
 	}
 }
 
+static void adjust_rcvctrl(struct hfi_devdata *dd, u64 add, u64 clear)
+{
+	u64 rcvctrl;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->rcvctrl_lock, flags);
+	rcvctrl = read_csr(dd, RCV_CTRL);
+	rcvctrl |= add;
+	rcvctrl &= ~clear;
+	write_csr(dd, RCV_CTRL, rcvctrl);
+	spin_unlock_irqrestore(&dd->rcvctrl_lock, flags);
+}
+
+static inline void add_rcvctrl(struct hfi_devdata *dd, u64 add)
+{
+	adjust_rcvctrl(dd, add, 0);
+}
+
+static inline void clear_rcvctrl(struct hfi_devdata *dd, u64 clear)
+{
+	adjust_rcvctrl(dd, 0, clear);
+}
+
 /*
  * Called from all interrupt handlers to start handling an SPC freeze.
  */
@@ -3090,13 +3113,10 @@ static void wait_for_freeze_status(struct hfi_devdata *dd, int freeze)
  */
 static void rxe_freeze(struct hfi_devdata *dd)
 {
-	u64 reg;
 	int i;
 
 	/* disable port */
-	reg = read_csr(dd, RCV_CTRL);
-	reg &= ~RCV_CTRL_RCV_PORT_ENABLE_SMASK;
-	write_csr(dd, RCV_CTRL, reg);
+	clear_rcvctrl(dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 
 	/* disable all receive contexts */
 	for (i = 0; i < dd->num_rcv_contexts; i++)
@@ -3111,7 +3131,6 @@ static void rxe_freeze(struct hfi_devdata *dd)
  */
 static void rxe_kernel_unfreeze(struct hfi_devdata *dd)
 {
-	u64 reg;
 	int i;
 
 	/* enable all kernel contexts */
@@ -3119,9 +3138,7 @@ static void rxe_kernel_unfreeze(struct hfi_devdata *dd)
 		hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_ENB, i);
 
 	/* enable port */
-	reg = read_csr(dd, RCV_CTRL);
-	reg |= RCV_CTRL_RCV_PORT_ENABLE_SMASK;
-	write_csr(dd, RCV_CTRL, reg);
+	add_rcvctrl(dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 }
 
 /*
@@ -3234,7 +3251,6 @@ void handle_link_up(struct work_struct *work)
 void handle_link_down(struct work_struct *work)
 {
 	u8 lcl_reason, neigh_reason = 0;
-	u64 reg;
 	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								link_down_work);
 	lcl_reason = 0;
@@ -3252,10 +3268,7 @@ void handle_link_down(struct work_struct *work)
 	set_link_state(ppd, HLS_DN_OFFLINE);
 
 	/* disable the port */
-	/* TODO: 7322: done within rcvmod_lock */
-	reg = read_csr(ppd->dd, RCV_CTRL);
-	reg &= ~RCV_CTRL_RCV_PORT_ENABLE_SMASK;
-	write_csr(ppd->dd, RCV_CTRL, reg);
+	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 
 	start_link(ppd);
 }
@@ -5467,17 +5480,14 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 int bringup_serdes(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u64 guid, reg;
+	u64 guid;
 	int ret;
 
 	/* XXX (Mitko): This should have a better place than
 	 * here!
 	 */
-	reg = read_csr(dd, RCV_CTRL);
 	if (HFI_CAP_IS_KSET(EXTENDED_PSN))
-		reg |=
-		RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK;
-	write_csr(dd, RCV_CTRL, reg);
+		add_rcvctrl(dd, RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK);
 
 	guid = be64_to_cpu(ppd->guid);
 	if (!guid) {
@@ -5506,7 +5516,6 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 void hfi1_quiet_serdes(struct hfi1_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u64 reg;
 
 	/*
 	 * Shut down the link and keep it down.   First turn off that the
@@ -5523,10 +5532,7 @@ void hfi1_quiet_serdes(struct hfi1_pportdata *ppd)
 	set_link_state(ppd, HLS_DN_OFFLINE);
 
 	/* disable the port */
-	/* TODO: 7322: done within rcvmod_lock */
-	reg = read_csr(dd, RCV_CTRL);
-	reg &= ~RCV_CTRL_RCV_PORT_ENABLE_SMASK;
-	write_csr(dd, RCV_CTRL, reg);
+	clear_rcvctrl(dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 }
 
 static inline int init_cpu_counters(struct hfi_devdata *dd)
@@ -6039,7 +6045,6 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 	int ret1, ret = 0;
 	int was_up, is_down;
 	int orig_new_state, poll_bounce;
-	u64 reg;
 
 	mutex_lock(&ppd->hls_lock);
 
@@ -6107,10 +6112,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 					OPA_LINKINIT_REASON_LINKUP;
 
 			/* enable the port */
-			/* TODO: 7322: done within rcvmod_lock */
-			reg = read_csr(dd, RCV_CTRL);
-			reg |= RCV_CTRL_RCV_PORT_ENABLE_SMASK;
-			write_csr(dd, RCV_CTRL, reg);
+			add_rcvctrl(dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 
 			handle_linkup_change(dd, 1);
 		}
@@ -8825,9 +8827,7 @@ static void set_partition_keys(struct hfi1_pportdata *ppd)
 		}
 	}
 
-	reg = read_csr(dd, RCV_CTRL);
-	reg |= RCV_CTRL_RCV_PARTITION_KEY_ENABLE_SMASK;
-	write_csr(dd, RCV_CTRL, reg);
+	add_rcvctrl(dd, RCV_CTRL_RCV_PARTITION_KEY_ENABLE_SMASK);
 }
 
 /*
@@ -9226,9 +9226,9 @@ static void init_rbufs(struct hfi_devdata *dd)
 		udelay(2); /* do not busy-wait the CSR */
 	}
 
-	/* start the init */
-	write_csr(dd, RCV_CTRL,
-		read_csr(dd, RCV_CTRL) | RCV_CTRL_RX_RBUF_INIT_SMASK);
+	/* start the init - expect RcvCtrl to be 0 */
+	write_csr(dd, RCV_CTRL, RCV_CTRL_RX_RBUF_INIT_SMASK);
+
 	/*
 	 * Read to force the write of Rcvtrl.RxRbufInit.  There is a brief
 	 * period after the write before RcvStatus.RxRbufInitDone is valid.
@@ -9580,10 +9580,9 @@ static void init_qpmap_table(struct hfi_devdata *dd,
 	}
 	if (i % 8)
 		write_csr(dd, regno, reg);
-	reg = read_csr(dd, RCV_CTRL);
-	reg |= RCV_CTRL_RCV_QP_MAP_ENABLE_SMASK;
-	reg |= RCV_CTRL_RCV_BYPASS_ENABLE_SMASK;
-	write_csr(dd, RCV_CTRL, reg);
+
+	add_rcvctrl(dd, RCV_CTRL_RCV_QP_MAP_ENABLE_SMASK
+			| RCV_CTRL_RCV_BYPASS_ENABLE_SMASK);
 }
 
 /**
@@ -9678,9 +9677,7 @@ static void init_qos(struct hfi_devdata *dd, u32 first_ctxt)
 		LRH_SC_MASK << RCV_RSM_MATCH_MASK2_SHIFT |
 		LRH_SC_VALUE << RCV_RSM_MATCH_VALUE2_SHIFT);
 	/* Enable RSM */
-	reg = read_csr(dd, RCV_CTRL);
-	reg |= RCV_CTRL_RCV_RSM_ENABLE_SMASK;
-	write_csr(dd, RCV_CTRL, reg);
+	add_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
 	kfree(rsmmap);
 	/* map everything else (non-VL15) to context 0 */
 	init_qpmap_table(

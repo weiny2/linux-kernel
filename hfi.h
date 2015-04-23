@@ -821,7 +821,8 @@ struct hfi_devdata {
 	u32 rcv_intr_timeout_csr;
 
 	u64 __iomem *egrtidbase;
-	spinlock_t sendctrl_lock; /* protect changes to sendctrl */
+	spinlock_t sendctrl_lock; /* protect changes to SendCtrl */
+	spinlock_t rcvctrl_lock; /* protect changes to RcvCtrl */
 	/* around rcd and (user ctxts) ctxt_cnt use (intr vs free) */
 	spinlock_t uctxt_lock; /* rcd and user context changes */
 	/* exclusive access to 8051 */
