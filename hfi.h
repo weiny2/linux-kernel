@@ -672,31 +672,6 @@ struct hfi1_pportdata {
 	u32 port_error_action;
 };
 
-/* Observers. Not to be taken lightly, possibly not to ship. */
-/*
- * If a diag read or write is to (bottom <= offset <= top),
- * the "hoook" is called, allowing, e.g. shadows to be
- * updated in sync with the driver. struct diag_observer
- * is the "visible" part.
- */
-struct diag_observer;
-
-typedef int (*diag_hook) (struct hfi_devdata *dd,
-	const struct diag_observer *op,
-	u32 offs, u64 *data, u64 mask, int only_32);
-
-struct diag_observer {
-	diag_hook hook;
-	u32 bottom;
-	u32 top;
-};
-
-int hfi1_register_observer(struct hfi_devdata *dd,
-			   const struct diag_observer *op);
-
-/* Only declared here, not defined. Private to diags */
-struct diag_observer_list_elt;
-
 struct rcv_array_data {
 	u8 group_size;
 	u16 ngroups;
@@ -956,7 +931,6 @@ struct hfi_devdata {
 
 	struct diag_client *diag_client;
 	spinlock_t hfi1_diag_trans_lock; /* protect diag observer ops */
-	struct diag_observer_list_elt *diag_observer_list;
 
 	u8 psxmitwait_supported;
 	/* cycle length of PS* counters in HW (in picoseconds) */
