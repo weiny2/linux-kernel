@@ -8273,18 +8273,6 @@ void set_intr_state(struct hfi_devdata *dd, u32 enable)
 			write_csr(dd, CCE_INT_MASK + (8*(QSFP2_INT/64)),
 					cce_int_mask);
 		}
-
-		/*
-		 * TODO: the 7322 wrote to INTCLEAR to "cause any
-		 * pending interrupts to be redelivered".
-		 * This does not occur for HFI.
-		 *
-		 * TODO: the 7322 also does a read and write of INTGRANTED
-		 * for MSI-X interrupts.  Is there an equivalent for
-		 * HFI?
-		 * See qib_7322_set_intr_state() for details.
-		 */
-
 	} else {
 		for (i = 0; i < CCE_NUM_INT_CSRS; i++)
 			write_csr(dd, CCE_INT_MASK + (8*i), 0ull);
