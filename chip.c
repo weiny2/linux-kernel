@@ -3409,7 +3409,7 @@ static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
 	rx = nibble_to_count(enable_lane_rx);
 
 	/*
-	 * FIXME: Remove the setting of link_speed_active in this routine
+	 * Remove the setting of link_speed_active in this routine
 	 * when the 8051 firmware is using the "real" LNI and not the
 	 * "engineering" LNI.
 	 *
@@ -4487,8 +4487,7 @@ static int do_8051_command(
 	hfi_cdbg(DC8051, "type %d, data 0x%012llx", type, in_data);
 
 	/*
-	 * TODO: Do we want to hold the lock for this long?
-	 * Alternatives:
+	 * Alternative to holding the lock for a long time:
 	 * - keep busy wait - have other users bounce off
 	 */
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
@@ -4498,7 +4497,6 @@ static int do_8051_command(
 	 * stuck.  Fail this command immediately.  Handling it this way
 	 * allows the driver to properly unload.
 	 *
-	 * TODO: reset the 8051?
 	 * Alternative: Reset the 8051 at timeout time (no need to re-download
 	 * firmware).  The concern with this approach is all state, if any,
 	 * is lost. OTOH, immediately failing has no chance of recovery.
@@ -4517,12 +4515,8 @@ static int do_8051_command(
 	 */
 
 	/*
-	 * Do two writes - the first to stablize
-	 * the type and req_data, the second to activate.
-	 *
-	 * The HW has been DV'ed and is known to work with 1 write.
-	 * TODO: In the mean time, the simulator needs at least
-	 * 2 writes to operate correctly.  Do that here.
+	 * Do two writes: the first to stablize the type and req_data, the
+	 * second to activate.
 	 */
 	reg = ((u64)type & DC_DC8051_CFG_HOST_CMD_0_REQ_TYPE_MASK)
 			<< DC_DC8051_CFG_HOST_CMD_0_REQ_TYPE_SHIFT
@@ -6164,9 +6158,6 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		}
 		break;
 	case HLS_DN_POLL:
-		/* TODO: only start Polling if we have verified that media is
-		   present */
-
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			u8 tmp = ppd->link_enabled;
 
@@ -7119,10 +7110,9 @@ static void adjust_rcv_timeout(struct hfi1_ctxtdata *rcd, u32 npkts)
 	u32 timeout = rcd->rcvavail_timeout;
 
 	/*
-	 * TODO: This algorithm is derived from the QIB source.  It doubles
-	 * or halves the timeout depending on whether the number of
-	 * packets received in this interrupt were less than or greater
-	 * equal the interrupt count.  It should be properly tested.
+	 * This algorithm doubles or halves the timeout depending on whether
+	 * the number of packets received in this interrupt were less than or
+	 * greater equal the interrupt count.
 	 *
 	 * The calculations below do not allow a steady state to be achieved.
 	 * Only at the endpoints it is possible to have an unchanging
