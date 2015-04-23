@@ -337,6 +337,26 @@ static struct flag_table cce_err_status_flags[] = {
 };
 
 /*
+ * Misc Error flags
+ */
+#define MES(text) MISC_ERR_STATUS_MISC_##text##_ERR_SMASK
+static struct flag_table misc_err_status_flags[] = {
+/* 0*/	FLAG_ENTRY0("CSR_PARITY", MES(CSR_PARITY)),
+/* 1*/	FLAG_ENTRY0("CSR_READ_BAD_ADDR", MES(CSR_READ_BAD_ADDR)),
+/* 2*/	FLAG_ENTRY0("CSR_WRITE_BAD_ADDR", MES(CSR_WRITE_BAD_ADDR)),
+/* 3*/	FLAG_ENTRY0("SBUS_WRITE_FAILED", MES(SBUS_WRITE_FAILED)),
+/* 4*/	FLAG_ENTRY0("KEY_MISMATCH", MES(KEY_MISMATCH)),
+/* 5*/	FLAG_ENTRY0("FW_AUTH_FAILED", MES(FW_AUTH_FAILED)),
+/* 6*/	FLAG_ENTRY0("EFUSE_CSR_PARITY", MES(EFUSE_CSR_PARITY)),
+/* 7*/	FLAG_ENTRY0("EFUSE_READ_BAD_ADDR", MES(EFUSE_READ_BAD_ADDR)),
+/* 8*/	FLAG_ENTRY0("EFUSE_WRITE", MES(EFUSE_WRITE)),
+/* 9*/	FLAG_ENTRY0("EFUSE_DONE_PARITY", MES(EFUSE_DONE_PARITY)),
+/*10*/	FLAG_ENTRY0("INVALID_EEP_CMD", MES(INVALID_EEP_CMD)),
+/*11*/	FLAG_ENTRY0("MBIST_FAIL", MES(MBIST_FAIL)),
+/*12*/	FLAG_ENTRY0("PLL_LOCK_FAIL", MES(PLL_LOCK_FAIL))
+};
+
+/*
  * TXE PIO Error flags and consequences
  */
 static struct flag_table pio_err_status_flags[] = {
@@ -500,7 +520,7 @@ static struct flag_table sdma_err_status_flags[] = {
 		| SEND_DMA_ERR_STATUS_SDMA_PCIE_REQ_TRACKING_UNC_ERR_SMASK)
 
 /*
- * TXE Egress Error flags and consequences
+ * TXE Egress Error flags
  */
 #define SEES(text) SEND_EGRESS_ERR_STATUS_##text##_ERR_SMASK
 static struct flag_table egress_err_status_flags[] = {
@@ -600,6 +620,9 @@ static struct flag_table egress_err_status_flags[] = {
 		SEES(TX_READ_PIO_MEMORY_CSR_UNC)),
 };
 
+/*
+ * TXE Egress Error Info flags
+ */
 #define SEEI(text) SEND_EGRESS_ERR_INFO_##text##_ERR_SMASK
 static struct flag_table egress_err_info_flags[] = {
 /* 0*/	FLAG_ENTRY0("Reserved", 0ull),
@@ -625,10 +648,6 @@ static struct flag_table egress_err_info_flags[] = {
 /*20*/	FLAG_ENTRY0("PbcStaticRateControlErr", SEEI(PBC_STATIC_RATE_CONTROL)),
 /*21*/	FLAG_ENTRY0("BypassBadPktLenErr", SEEI(BAD_PKT_LEN)),
 };
-
-/*
- * TXE Egress Error Info flags and consequences
- */
 
 /* TXE Egress errors that cause an SPC freeze */
 #define ALL_TXE_EGRESS_FREEZE_ERR \
@@ -882,6 +901,49 @@ static struct flag_table dcc_err_flags[] = {
 	FLAG_ENTRY0("rx_byte_shft_parity_err", DCCE(RX_BYTE_SHFT_PARITY_ERR)),
 	FLAG_ENTRY0("fmconfig_err", DCCE(FMCONFIG_ERR)),
 	FLAG_ENTRY0("rcvport_err", DCCE(RCVPORT_ERR)),
+};
+
+/*
+ * LCB error flags
+ */
+#define LCBE(name) DC_LCB_ERR_FLG_##name##_SMASK
+static struct flag_table lcb_err_flags[] = {
+/* 0*/	FLAG_ENTRY0("CSR_PARITY_ERR", LCBE(CSR_PARITY_ERR)),
+/* 1*/	FLAG_ENTRY0("INVALID_CSR_ADDR", LCBE(INVALID_CSR_ADDR)),
+/* 2*/	FLAG_ENTRY0("RST_FOR_FAILED_DESKEW", LCBE(RST_FOR_FAILED_DESKEW)),
+/* 3*/	FLAG_ENTRY0("ALL_LNS_FAILED_REINIT_TEST",
+		LCBE(ALL_LNS_FAILED_REINIT_TEST)),
+/* 4*/	FLAG_ENTRY0("LOST_REINIT_STALL_OR_TOS", LCBE(LOST_REINIT_STALL_OR_TOS)),
+/* 5*/	FLAG_ENTRY0("TX_LESS_THAN_FOUR_LNS", LCBE(TX_LESS_THAN_FOUR_LNS)),
+/* 6*/	FLAG_ENTRY0("RX_LESS_THAN_FOUR_LNS", LCBE(RX_LESS_THAN_FOUR_LNS)),
+/* 7*/	FLAG_ENTRY0("SEQ_CRC_ERR", LCBE(SEQ_CRC_ERR)),
+/* 8*/	FLAG_ENTRY0("REINIT_FROM_PEER", LCBE(REINIT_FROM_PEER)),
+/* 9*/	FLAG_ENTRY0("REINIT_FOR_LN_DEGRADE", LCBE(REINIT_FOR_LN_DEGRADE)),
+/*10*/	FLAG_ENTRY0("CRC_ERR_CNT_HIT_LIMIT", LCBE(CRC_ERR_CNT_HIT_LIMIT)),
+/*11*/	FLAG_ENTRY0("RCLK_STOPPED", LCBE(RCLK_STOPPED)),
+/*12*/	FLAG_ENTRY0("UNEXPECTED_REPLAY_MARKER", LCBE(UNEXPECTED_REPLAY_MARKER)),
+/*13*/	FLAG_ENTRY0("UNEXPECTED_ROUND_TRIP_MARKER",
+		LCBE(UNEXPECTED_ROUND_TRIP_MARKER)),
+/*14*/	FLAG_ENTRY0("ILLEGAL_NULL_LTP", LCBE(ILLEGAL_NULL_LTP)),
+/*15*/	FLAG_ENTRY0("ILLEGAL_FLIT_ENCODING", LCBE(ILLEGAL_FLIT_ENCODING)),
+/*16*/	FLAG_ENTRY0("FLIT_INPUT_BUF_OFLW", LCBE(FLIT_INPUT_BUF_OFLW)),
+/*17*/	FLAG_ENTRY0("VL_ACK_INPUT_BUF_OFLW", LCBE(VL_ACK_INPUT_BUF_OFLW)),
+/*18*/	FLAG_ENTRY0("VL_ACK_INPUT_PARITY_ERR", LCBE(VL_ACK_INPUT_PARITY_ERR)),
+/*19*/	FLAG_ENTRY0("VL_ACK_INPUT_WRONG_CRC_MODE",
+		LCBE(VL_ACK_INPUT_WRONG_CRC_MODE)),
+/*20*/	FLAG_ENTRY0("FLIT_INPUT_BUF_MBE", LCBE(FLIT_INPUT_BUF_MBE)),
+/*21*/	FLAG_ENTRY0("FLIT_INPUT_BUF_SBE", LCBE(FLIT_INPUT_BUF_SBE)),
+/*22*/	FLAG_ENTRY0("REPLAY_BUF_MBE", LCBE(REPLAY_BUF_MBE)),
+/*23*/	FLAG_ENTRY0("REPLAY_BUF_SBE", LCBE(REPLAY_BUF_SBE)),
+/*24*/	FLAG_ENTRY0("CREDIT_RETURN_FLIT_MBE", LCBE(CREDIT_RETURN_FLIT_MBE)),
+/*25*/	FLAG_ENTRY0("RST_FOR_LINK_TIMEOUT", LCBE(RST_FOR_LINK_TIMEOUT)),
+/*26*/	FLAG_ENTRY0("RST_FOR_INCOMPLT_RND_TRIP",
+		LCBE(RST_FOR_INCOMPLT_RND_TRIP)),
+/*27*/	FLAG_ENTRY0("HOLD_REINIT", LCBE(HOLD_REINIT)),
+/*28*/	FLAG_ENTRY0("NEG_EDGE_LINK_TRANSFER_ACTIVE",
+		LCBE(NEG_EDGE_LINK_TRANSFER_ACTIVE)),
+/*29*/	FLAG_ENTRY0("REDUNDANT_FLIT_PARITY_ERR",
+		LCBE(REDUNDANT_FLIT_PARITY_ERR))
 };
 
 /*
@@ -2037,6 +2099,12 @@ static char *rxe_err_status_string(char *buf, int buf_len, u64 flags)
 			rxe_err_status_flags, ARRAY_SIZE(rxe_err_status_flags));
 }
 
+static char *misc_err_status_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, misc_err_status_flags,
+			ARRAY_SIZE(misc_err_status_flags));
+}
+
 static char *pio_err_status_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags,
@@ -2151,10 +2219,12 @@ static void handle_rxe_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 }
 
-/* TODO */
 static void handle_misc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	dd_dev_info(dd, "Misc Error: 0x%llx (unhandled)\n", reg);
+	char buf[96];
+
+	dd_dev_info(dd, "Misc Error: %s",
+		misc_err_status_string(buf, sizeof(buf), reg));
 }
 
 static void handle_pio_err(struct hfi_devdata *dd, u32 unused, u64 reg)
@@ -3777,6 +3847,12 @@ static char *dcc_err_string(char *buf, int buf_len, u64 flags)
 		ARRAY_SIZE(dcc_err_flags));
 }
 
+static char *lcb_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, lcb_err_flags,
+		ARRAY_SIZE(lcb_err_flags));
+}
+
 static char *dc8051_err_string(char *buf, int buf_len, u64 flags)
 {
 	return flag_string(buf, buf_len, flags, dc8051_err_flags,
@@ -3973,7 +4049,6 @@ static const char * const port_rcv_txt[] = {
 
 #define OPA_LDR_FMCONFIG_OFFSET 16
 #define OPA_LDR_PORTRCV_OFFSET 0
-/* TODO */
 static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
 	u64 info, hdr0, hdr1;
@@ -3990,8 +4065,6 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			/* set status bit */
 			dd->err_info_uncorrectable |= OPA_EI_STATUS_SMASK;
 		}
-
-		/* strip so we don't see in the generic unhandled */
 		reg &= ~DCC_ERR_FLG_UNCORRECTABLE_ERR_SMASK;
 	}
 
@@ -4051,8 +4124,6 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 		/* just report this */
 		dd_dev_info(dd, "DCC Error: fmconfig error: %s\n", extra);
-
-		/* strip so we don't see in the generic unhandled */
 		reg &= ~DCC_ERR_FLG_FMCONFIG_ERR_SMASK;
 	}
 
@@ -4103,12 +4174,10 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		}
 
 		/* just report this */
-		dd_dev_info(dd, "DCC Error: PortRcv error: %s\n",
-			extra);
+		dd_dev_info(dd, "DCC Error: PortRcv error: %s\n", extra);
 		dd_dev_info(dd, "           hdr0 0x%llx, hdr1 0x%llx\n",
 			hdr0, hdr1);
 
-		/* strip so we don't see in the generic unhandled */
 		reg &= ~DCC_ERR_FLG_RCVPORT_ERR_SMASK;
 	}
 
@@ -4123,8 +4192,9 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 		reg &= ~DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_HOST_SMASK;
 	}
 
+	/* report any remaining errors */
 	if (reg)
-		dd_dev_info(dd, "DCC Error: %s (unhandled)\n",
+		dd_dev_info(dd, "DCC Error: %s\n",
 			dcc_err_string(buf, sizeof(buf), reg));
 
 	if (lcl_reason == 0)
@@ -4137,10 +4207,12 @@ static void handle_dcc_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 	}
 }
 
-/* TODO */
 static void handle_lcb_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 {
-	dd_dev_info(dd, "LCB Error: 0x%llx (unhandled)\n", reg);
+	char buf[96];
+
+	dd_dev_info(dd, "LCB Error: %s\n",
+		lcb_err_string(buf, sizeof(buf), reg));
 }
 
 /*
