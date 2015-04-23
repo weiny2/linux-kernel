@@ -220,7 +220,7 @@ static int check_blacklist(const char *hash_algo_name, const void *hash)
 static int mod_verify_hash(const void *mod, unsigned long modlen,
 		struct public_key_signature *pks)
 {
-	const char *pks_hash_algo = pkey_hash_algo_name[pks->pkey_hash_algo];
+	const char *pks_hash_algo = hash_algo_name[pks->pkey_hash_algo];
 	struct crypto_shash *tfm;
 	struct shash_desc *desc;
 	size_t digest_size, desc_size;
