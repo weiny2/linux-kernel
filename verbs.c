@@ -1065,8 +1065,8 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 	if (likely(pbc == 0)) {
 		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 		/* No vl15 here */
-		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
-		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
+		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
+		pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 
 		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	}
@@ -1170,8 +1170,8 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		return -EINVAL;
 	if (likely(pbc == 0)) {
 		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
-		/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
-		pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
+		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
+		pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	}
 	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
@@ -1298,13 +1298,13 @@ static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
 	/* The most likely matching pkey has index qp->s_pkey_index */
 	if (!egress_pkey_matches_entry(pkey, ppd->pkeys[qp->s_pkey_index])) {
 		/* no match - try the entire table */
-		for (; i < WFR_MAX_PKEY_VALUES; i++) {
+		for (; i < MAX_PKEY_VALUES; i++) {
 			if (egress_pkey_matches_entry(pkey, ppd->pkeys[i]))
 				break;
 		}
 	}
 
-	if (i < WFR_MAX_PKEY_VALUES)
+	if (i < MAX_PKEY_VALUES)
 		return 0;
 bad:
 	incr_cntr64(&ppd->port_xmit_constraint_errors);

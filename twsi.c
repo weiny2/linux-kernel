@@ -158,7 +158,7 @@ static u8 sda_in(struct hfi_devdata *dd, u32 target, int wait)
 	read_val = hfi1_gpio_mod(dd, target, 0, 0, 0);
 	if (wait)
 		i2c_wait_for_writes(dd, target);
-	return (read_val & mask) >> WFR_GPIO_SDA_NUM;
+	return (read_val & mask) >> GPIO_SDA_NUM;
 }
 
 /**

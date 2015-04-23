@@ -408,7 +408,7 @@ int qsfp_mod_present(struct hfi1_pportdata *ppd)
 		u64 reg;
 
 		reg = read_csr(dd,
-			dd->hfi_id ? WFR_ASIC_QSFP2_IN : WFR_ASIC_QSFP1_IN);
+			dd->hfi_id ? ASIC_QSFP2_IN : ASIC_QSFP1_IN);
 		return !(reg & QSFP_HFI0_MODPRST_N);
 	}
 	/* always return cable present */

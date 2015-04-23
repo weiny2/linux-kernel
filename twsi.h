@@ -55,7 +55,7 @@
 struct hfi_devdata;
 
 /* Bit position of SDA pin in ASIC_QSFP* registers  */
-#define  WFR_GPIO_SDA_NUM 1
+#define  GPIO_SDA_NUM 1
 
 /* these functions must be called with qsfp_lock held */
 int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target);

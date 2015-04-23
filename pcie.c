@@ -183,23 +183,23 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	 */
 
 	/* sanity check vs expectations */
-	if (len != WFR_TXE_PIO_SEND + WFR_TXE_PIO_SIZE) {
+	if (len != TXE_PIO_SEND + TXE_PIO_SIZE) {
 		dd_dev_err(dd, "chip PIO range does not match\n");
 		return -EINVAL;
 	}
 
 #if defined(__powerpc__)
 	/* There isn't a generic way to specify writethrough mappings */
-	dd->kregbase = __ioremap(addr, WFR_TXE_PIO_SEND,
+	dd->kregbase = __ioremap(addr, TXE_PIO_SEND,
 					_PAGE_NO_CACHE | _PAGE_WRITETHRU);
 #else
-	dd->kregbase = ioremap_nocache(addr, WFR_TXE_PIO_SEND);
+	dd->kregbase = ioremap_nocache(addr, TXE_PIO_SEND);
 #endif
 
 	if (!dd->kregbase)
 		return -ENOMEM;
 
-	dd->piobase = ioremap_wc(addr + WFR_TXE_PIO_SEND, WFR_TXE_PIO_SIZE);
+	dd->piobase = ioremap_wc(addr + TXE_PIO_SEND, TXE_PIO_SIZE);
 	if (!dd->piobase) {
 		iounmap(dd->kregbase);
 		return -ENOMEM;
@@ -207,7 +207,7 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 
 	dd->flags |= HFI_PRESENT;	/* now register routines work */
 
-	dd->kregend = dd->kregbase + WFR_TXE_PIO_SEND;
+	dd->kregend = dd->kregbase + TXE_PIO_SEND;
 	dd->physaddr = addr;        /* used for io_remap, etc. */
 
 	/*
@@ -216,8 +216,8 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	 * If this re-map fails, just continue - the RcvArray programming
 	 * function will handle both cases.
 	 */
-	dd->chip_rcv_array_count = read_csr(dd, WFR_RCV_ARRAY_CNT);
-	dd->rcvarray_wc = ioremap_wc(addr + WFR_RCV_ARRAY,
+	dd->chip_rcv_array_count = read_csr(dd, RCV_ARRAY_CNT);
+	dd->rcvarray_wc = ioremap_wc(addr + RCV_ARRAY,
 				     dd->chip_rcv_array_count * 8);
 	dd_dev_info(dd, "WC Remapped RcvArray: %p\n", dd->rcvarray_wc);
 	/*
@@ -231,10 +231,10 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL, &dd->pcie_lnkctl);
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCTL2,
 							&dd->pcie_devctl2);
-	pci_read_config_dword(dd->pcidev, WFR_PCI_CFG_MSIX0, &dd->pci_msix0);
-	pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE1,
+	pci_read_config_dword(dd->pcidev, PCI_CFG_MSIX0, &dd->pci_msix0);
+	pci_read_config_dword(dd->pcidev, PCIE_CFG_SPCIE1,
 							&dd->pci_lnkctl3);
-	pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_TPH2, &dd->pci_tph2);
+	pci_read_config_dword(dd->pcidev, PCIE_CFG_TPH2, &dd->pci_tph2);
 
 	return 0;
 }
@@ -469,10 +469,10 @@ void restore_pci_variables(struct hfi_devdata *dd)
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL, dd->pcie_lnkctl);
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_DEVCTL2,
 							dd->pcie_devctl2);
-	pci_write_config_dword(dd->pcidev, WFR_PCI_CFG_MSIX0, dd->pci_msix0);
-	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE1,
+	pci_write_config_dword(dd->pcidev, PCI_CFG_MSIX0, dd->pci_msix0);
+	pci_write_config_dword(dd->pcidev, PCIE_CFG_SPCIE1,
 							dd->pci_lnkctl3);
-	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_TPH2, dd->pci_tph2);
+	pci_write_config_dword(dd->pcidev, PCIE_CFG_TPH2, dd->pci_tph2);
 }
 
 /* code to adjust PCIe capabilities. */
@@ -762,111 +762,111 @@ const struct pci_error_handlers hfi1_pci_err_handler = {
  */
 
 /* this CSR definition does not appear in the pcie_defs headers */
-#define WFR_PCIE_CFG_REG_PL106 (WFR_PCIE + 0x0000000008A8)
-#define WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT 8
+#define PCIE_CFG_REG_PL106 (PCIE + 0x0000000008A8)
+#define PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT 8
 
 
 /*
  * These registers disappeared from the headers after release 48.  Add
  * them here.
  */
-#ifndef WFR_PCIE_CFG_REG_PL102
+#ifndef PCIE_CFG_REG_PL102
 
-#define WFR_PCIE_CFG_REG_PL102                  (WFR_PCIE + 0x000000000898)
-#define WFR_PCIE_CFG_REG_PL102_RESETCSR         0x0000C000ull
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_SHIFT    12
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_MASK     0x3Full
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_SMASK    0x3F000ull
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_SHIFT 6
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_MASK          0x3Full
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_SMASK 0xFC0ull
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_SHIFT     0
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_MASK      0x3Full
-#define WFR_PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_SMASK     0x3Full
+#define PCIE_CFG_REG_PL102                  (PCIE + 0x000000000898)
+#define PCIE_CFG_REG_PL102_RESETCSR         0x0000C000ull
+#define PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_SHIFT    12
+#define PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_MASK     0x3Full
+#define PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_SMASK    0x3F000ull
+#define PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_SHIFT 6
+#define PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_MASK          0x3Full
+#define PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_SMASK 0xFC0ull
+#define PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_SHIFT     0
+#define PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_MASK      0x3Full
+#define PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_SMASK     0x3Full
 
-#define WFR_PCIE_CFG_REG_PL103                  (WFR_PCIE + 0x00000000089C)
-#define WFR_PCIE_CFG_REG_PL103_RESETCSR         0x00000000ull
-#define WFR_PCIE_CFG_REG_PL103_GEN3_EQ_PSET_INDEX_SHIFT          0
-#define WFR_PCIE_CFG_REG_PL103_GEN3_EQ_PSET_INDEX_MASK           0xFull
-#define WFR_PCIE_CFG_REG_PL103_GEN3_EQ_PSET_INDEX_SMASK          0xFull
+#define PCIE_CFG_REG_PL103                  (PCIE + 0x00000000089C)
+#define PCIE_CFG_REG_PL103_RESETCSR         0x00000000ull
+#define PCIE_CFG_REG_PL103_GEN3_EQ_PSET_INDEX_SHIFT          0
+#define PCIE_CFG_REG_PL103_GEN3_EQ_PSET_INDEX_MASK           0xFull
+#define PCIE_CFG_REG_PL103_GEN3_EQ_PSET_INDEX_SMASK          0xFull
 
-#define WFR_PCIE_CFG_REG_PL105                  (WFR_PCIE + 0x0000000008A4)
-#define WFR_PCIE_CFG_REG_PL105_RESETCSR         0x00000000ull
-#define WFR_PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_SHIFT  0
-#define WFR_PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_MASK   0x1ull
-#define WFR_PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_SMASK  0x1ull
+#define PCIE_CFG_REG_PL105                  (PCIE + 0x0000000008A4)
+#define PCIE_CFG_REG_PL105_RESETCSR         0x00000000ull
+#define PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_SHIFT  0
+#define PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_MASK   0x1ull
+#define PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_SMASK  0x1ull
 
-#define WFR_PCIE_CFG_REG_PL2                    (WFR_PCIE + 0x000000000708)
-#define WFR_PCIE_CFG_REG_PL2_RESETCSR           0x07000000ull
-#define WFR_PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_SHIFT               24
-#define WFR_PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_MASK 0xFFull
-#define WFR_PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_SMASK               0xFF000000ull
-#define WFR_PCIE_CFG_REG_PL2_LINK_COMMAND_SHIFT 16
-#define WFR_PCIE_CFG_REG_PL2_LINK_COMMAND_MASK  0x3Full
-#define WFR_PCIE_CFG_REG_PL2_LINK_COMMAND_SMASK 0x3F0000ull
-#define WFR_PCIE_CFG_REG_PL2_FORCE_LINK_SHIFT   15
-#define WFR_PCIE_CFG_REG_PL2_FORCE_LINK_MASK    0x1ull
-#define WFR_PCIE_CFG_REG_PL2_FORCE_LINK_SMASK   0x8000ull
-#define WFR_PCIE_CFG_REG_PL2_LINK_STATE_SHIFT   8
-#define WFR_PCIE_CFG_REG_PL2_LINK_STATE_MASK    0xFull
-#define WFR_PCIE_CFG_REG_PL2_LINK_STATE_SMASK   0xF00ull
-#define WFR_PCIE_CFG_REG_PL2_LINK_NUM_SHIFT     0
-#define WFR_PCIE_CFG_REG_PL2_LINK_NUM_MASK      0xFFull
-#define WFR_PCIE_CFG_REG_PL2_LINK_NUM_SMASK     0xFFull
+#define PCIE_CFG_REG_PL2                    (PCIE + 0x000000000708)
+#define PCIE_CFG_REG_PL2_RESETCSR           0x07000000ull
+#define PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_SHIFT               24
+#define PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_MASK 0xFFull
+#define PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_SMASK               0xFF000000ull
+#define PCIE_CFG_REG_PL2_LINK_COMMAND_SHIFT 16
+#define PCIE_CFG_REG_PL2_LINK_COMMAND_MASK  0x3Full
+#define PCIE_CFG_REG_PL2_LINK_COMMAND_SMASK 0x3F0000ull
+#define PCIE_CFG_REG_PL2_FORCE_LINK_SHIFT   15
+#define PCIE_CFG_REG_PL2_FORCE_LINK_MASK    0x1ull
+#define PCIE_CFG_REG_PL2_FORCE_LINK_SMASK   0x8000ull
+#define PCIE_CFG_REG_PL2_LINK_STATE_SHIFT   8
+#define PCIE_CFG_REG_PL2_LINK_STATE_MASK    0xFull
+#define PCIE_CFG_REG_PL2_LINK_STATE_SMASK   0xF00ull
+#define PCIE_CFG_REG_PL2_LINK_NUM_SHIFT     0
+#define PCIE_CFG_REG_PL2_LINK_NUM_MASK      0xFFull
+#define PCIE_CFG_REG_PL2_LINK_NUM_SMASK     0xFFull
 
-#define WFR_PCIE_CFG_REG_PL100                  (WFR_PCIE + 0x000000000890)
-#define WFR_PCIE_CFG_REG_PL100_RESETCSR         0x00000000ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3_DC_BALANCE_DIS_SHIFT 18
-#define WFR_PCIE_CFG_REG_PL100_GEN3_DC_BALANCE_DIS_MASK          0x1ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3_DC_BALANCE_DIS_SMASK 0x40000ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3_DLLP_XMT_DELAY_DIS_SHIFT     17
-#define WFR_PCIE_CFG_REG_PL100_GEN3_DLLP_XMT_DELAY_DIS_MASK      0x1ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3_DLLP_XMT_DELAY_DIS_SMASK     0x20000ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3_EQ_DIS_SHIFT 16
-#define WFR_PCIE_CFG_REG_PL100_GEN3_EQ_DIS_MASK 0x1ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3_EQ_DIS_SMASK 0x10000ull
-#define WFR_PCIE_CFG_REG_PL100_RX_EQ_PH01_EN_SHIFT               12
-#define WFR_PCIE_CFG_REG_PL100_RX_EQ_PH01_EN_MASK0x1ull
-#define WFR_PCIE_CFG_REG_PL100_RX_EQ_PH01_EN_SMASK               0x1000ull
-#define WFR_PCIE_CFG_REG_PL100_EQ_REDO_DIS_SHIFT 11
-#define WFR_PCIE_CFG_REG_PL100_EQ_REDO_DIS_MASK 0x1ull
-#define WFR_PCIE_CFG_REG_PL100_EQ_REDO_DIS_SMASK 0x800ull
-#define WFR_PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_SHIFT 10
-#define WFR_PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_MASK 0x1ull
-#define WFR_PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_SMASK 0x400ull
-#define WFR_PCIE_CFG_REG_PL100_EQ_PHASE23_SHIFT 9
-#define WFR_PCIE_CFG_REG_PL100_EQ_PHASE23_MASK  0x1ull
-#define WFR_PCIE_CFG_REG_PL100_EQ_PHASE23_SMASK 0x200ull
-#define WFR_PCIE_CFG_REG_PL100_DISABLE_SCRAMBLER_GEN3_SHIFT      8
-#define WFR_PCIE_CFG_REG_PL100_DISABLE_SCRAMBLER_GEN3_MASK       0x1ull
-#define WFR_PCIE_CFG_REG_PL100_DISABLE_SCRAMBLER_GEN3_SMASK      0x100ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3ZRX_DC_NON_COMPL_SHIFT        0
-#define WFR_PCIE_CFG_REG_PL100_GEN3ZRX_DC_NON_COMPL_MASK 0x1ull
-#define WFR_PCIE_CFG_REG_PL100_GEN3ZRX_DC_NON_COMPL_SMASK        0x1ull
+#define PCIE_CFG_REG_PL100                  (PCIE + 0x000000000890)
+#define PCIE_CFG_REG_PL100_RESETCSR         0x00000000ull
+#define PCIE_CFG_REG_PL100_GEN3_DC_BALANCE_DIS_SHIFT 18
+#define PCIE_CFG_REG_PL100_GEN3_DC_BALANCE_DIS_MASK          0x1ull
+#define PCIE_CFG_REG_PL100_GEN3_DC_BALANCE_DIS_SMASK 0x40000ull
+#define PCIE_CFG_REG_PL100_GEN3_DLLP_XMT_DELAY_DIS_SHIFT     17
+#define PCIE_CFG_REG_PL100_GEN3_DLLP_XMT_DELAY_DIS_MASK      0x1ull
+#define PCIE_CFG_REG_PL100_GEN3_DLLP_XMT_DELAY_DIS_SMASK     0x20000ull
+#define PCIE_CFG_REG_PL100_GEN3_EQ_DIS_SHIFT 16
+#define PCIE_CFG_REG_PL100_GEN3_EQ_DIS_MASK 0x1ull
+#define PCIE_CFG_REG_PL100_GEN3_EQ_DIS_SMASK 0x10000ull
+#define PCIE_CFG_REG_PL100_RX_EQ_PH01_EN_SHIFT               12
+#define PCIE_CFG_REG_PL100_RX_EQ_PH01_EN_MASK0x1ull
+#define PCIE_CFG_REG_PL100_RX_EQ_PH01_EN_SMASK               0x1000ull
+#define PCIE_CFG_REG_PL100_EQ_REDO_DIS_SHIFT 11
+#define PCIE_CFG_REG_PL100_EQ_REDO_DIS_MASK 0x1ull
+#define PCIE_CFG_REG_PL100_EQ_REDO_DIS_SMASK 0x800ull
+#define PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_SHIFT 10
+#define PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_MASK 0x1ull
+#define PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_SMASK 0x400ull
+#define PCIE_CFG_REG_PL100_EQ_PHASE23_SHIFT 9
+#define PCIE_CFG_REG_PL100_EQ_PHASE23_MASK  0x1ull
+#define PCIE_CFG_REG_PL100_EQ_PHASE23_SMASK 0x200ull
+#define PCIE_CFG_REG_PL100_DISABLE_SCRAMBLER_GEN3_SHIFT      8
+#define PCIE_CFG_REG_PL100_DISABLE_SCRAMBLER_GEN3_MASK       0x1ull
+#define PCIE_CFG_REG_PL100_DISABLE_SCRAMBLER_GEN3_SMASK      0x100ull
+#define PCIE_CFG_REG_PL100_GEN3ZRX_DC_NON_COMPL_SHIFT        0
+#define PCIE_CFG_REG_PL100_GEN3ZRX_DC_NON_COMPL_MASK 0x1ull
+#define PCIE_CFG_REG_PL100_GEN3ZRX_DC_NON_COMPL_SMASK        0x1ull
 
-#define WFR_PCIE_CFG_REG_PL101                  (WFR_PCIE + 0x000000000894)
-#define WFR_PCIE_CFG_REG_PL101_RESETCSR         0x00000000ull
-#define WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT            6
-#define WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_MASK             0x3Full
-#define WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SMASK            0xFC0ull
-#define WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT            0
-#define WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_MASK             0x3Full
-#define WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SMASK            0x3Full
+#define PCIE_CFG_REG_PL101                  (PCIE + 0x000000000894)
+#define PCIE_CFG_REG_PL101_RESETCSR         0x00000000ull
+#define PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT            6
+#define PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_MASK             0x3Full
+#define PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SMASK            0xFC0ull
+#define PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT            0
+#define PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_MASK             0x3Full
+#define PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SMASK            0x3Full
 #endif
 
 /* ASIC_PCI_SD_HOST_STATUS.FW_DNLD_STS field values */
-#define WFR_DL_STATUS_HFI0 0x1	/* hfi0 firmware download complete */
-#define WFR_DL_STATUS_HFI1 0x2	/* hfi1 firmware download complete */
-#define WFR_DL_STATUS_BOTH 0x3	/* hfi0 and hfi1 firmware download complete */
+#define DL_STATUS_HFI0 0x1	/* hfi0 firmware download complete */
+#define DL_STATUS_HFI1 0x2	/* hfi1 firmware download complete */
+#define DL_STATUS_BOTH 0x3	/* hfi0 and hfi1 firmware download complete */
 
 /* ASIC_PCI_SD_HOST_STATUS.FW_DNLD_ERR field values */
-#define WFR_DL_ERR_NONE		0x0	/* no error */
-#define WFR_DL_ERR_SWAP_PARITY	0x1	/* parity error in SerDes interrupt */
+#define DL_ERR_NONE		0x0	/* no error */
+#define DL_ERR_SWAP_PARITY	0x1	/* parity error in SerDes interrupt */
 					/*   or response data */
-#define WFR_DL_ERR_DISABLED	0x2	/* hfi disabled */
-#define WFR_DL_ERR_SECURITY	0x3	/* security check failed */
-#define WFR_DL_ERR_SBUS		0x4	/* SBus status error */
-#define WFR_DL_ERR_XFR_PARITY	0x5	/* parity error during ROM transfer*/
+#define DL_ERR_DISABLED	0x2	/* hfi disabled */
+#define DL_ERR_SECURITY	0x3	/* security check failed */
+#define DL_ERR_SBUS		0x4	/* SBus status error */
+#define DL_ERR_XFR_PARITY	0x5	/* parity error during ROM transfer*/
 
 /* gasket block secondary bus reset delay */
 #define SBR_DELAY_US 200000	/* 200ms */
@@ -940,10 +940,10 @@ static const u8 integrated_preliminary_eq[11][3] = {
 /* helper to format the value to write to hardware */
 #define eq_value(pre, curr, post) \
 	((((u32)(pre)) << \
-			WFR_PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_SHIFT) \
-	| (((u32)(curr)) << WFR_PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_SHIFT) \
+			PCIE_CFG_REG_PL102_GEN3_EQ_PRE_CURSOR_PSET_SHIFT) \
+	| (((u32)(curr)) << PCIE_CFG_REG_PL102_GEN3_EQ_CURSOR_PSET_SHIFT) \
 	| (((u32)(post)) << \
-		WFR_PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_SHIFT))
+		PCIE_CFG_REG_PL102_GEN3_EQ_POST_CURSOR_PSET_SHIFT))
 
 /*
  * Load the given EQ preset table into the PCIe hardware.
@@ -959,18 +959,18 @@ static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3], u8 fs,
 
 	for (i = 0; i < 11; i++) {
 		/* set index */
-		pci_write_config_dword(pdev, WFR_PCIE_CFG_REG_PL103, i);
+		pci_write_config_dword(pdev, PCIE_CFG_REG_PL103, i);
 		/* write the value */
 		c_minus1 = eq[i][PREC] / div;
 		c0 = fs - (eq[i][PREC] / div) - (eq[i][POST] / div);
 		c_plus1 = eq[i][POST] / div;
-		pci_write_config_dword(pdev, WFR_PCIE_CFG_REG_PL102,
+		pci_write_config_dword(pdev, PCIE_CFG_REG_PL102,
 			eq_value(c_minus1, c0, c_plus1));
 		/* check if these coefficients violate EQ rules */
-		pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL105,
+		pci_read_config_dword(dd->pcidev, PCIE_CFG_REG_PL105,
 								&violation);
 		if (violation
-		    & WFR_PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_SMASK){
+		    & PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_SMASK){
 			if (hit_error == 0) {
 				dd_dev_err(dd,
 					"Gen3 EQ Table Coefficient rule violations\n");
@@ -1064,9 +1064,9 @@ static int trigger_sbr(struct hfi_devdata *dd)
 static void write_gasket_interrupt(struct hfi_devdata *dd, int index,
 					u16 code, u16 data)
 {
-	write_csr(dd, WFR_ASIC_PCIE_SD_INTRPT_LIST + (index * 8),
-	    (((u64)code << WFR_ASIC_PCIE_SD_INTRPT_LIST_INTRPT_CODE_SHIFT)
-	    |((u64)data << WFR_ASIC_PCIE_SD_INTRPT_LIST_INTRPT_DATA_SHIFT)));
+	write_csr(dd, ASIC_PCIE_SD_INTRPT_LIST + (index * 8),
+	    (((u64)code << ASIC_PCIE_SD_INTRPT_LIST_INTRPT_CODE_SHIFT)
+	    |((u64)data << ASIC_PCIE_SD_INTRPT_LIST_INTRPT_DATA_SHIFT)));
 }
 
 /*
@@ -1077,16 +1077,16 @@ static void arm_gasket_logic(struct hfi_devdata *dd)
 	u64 reg;
 
 	reg = (((u64)1 << dd->hfi_id)
-			<< WFR_ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
+			<< ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
 		| ((u64)pcie_serdes_broadcast[dd->hfi_id]
-			<< WFR_ASIC_PCIE_SD_HOST_CMD_SBUS_RCVR_ADDR_SHIFT
-		| WFR_ASIC_PCIE_SD_HOST_CMD_SBR_MODE_SMASK
-		| ((u64)SBR_DELAY_US & WFR_ASIC_PCIE_SD_HOST_CMD_TIMER_MASK)
-			<< WFR_ASIC_PCIE_SD_HOST_CMD_TIMER_SHIFT
+			<< ASIC_PCIE_SD_HOST_CMD_SBUS_RCVR_ADDR_SHIFT
+		| ASIC_PCIE_SD_HOST_CMD_SBR_MODE_SMASK
+		| ((u64)SBR_DELAY_US & ASIC_PCIE_SD_HOST_CMD_TIMER_MASK)
+			<< ASIC_PCIE_SD_HOST_CMD_TIMER_SHIFT
 		);
-	write_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD, reg);
+	write_csr(dd, ASIC_PCIE_SD_HOST_CMD, reg);
 	/* read back to push the write */
-	read_csr(dd, WFR_ASIC_PCIE_SD_HOST_CMD);
+	read_csr(dd, ASIC_PCIE_SD_HOST_CMD);
 }
 
 /*
@@ -1107,7 +1107,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	const u8 (*eq)[3];
 
 	/* PCIe Gen3 is for the ASIC only */
-	if (dd->icode != WFR_ICODE_RTL_SILICON)
+	if (dd->icode != ICODE_RTL_SILICON)
 		return 0;
 
 	if (pcie_target == 1) {			/* target Gen1 */
@@ -1143,7 +1143,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 
 	/*
 	 * Do the Gen3 transition.  Steps are those of the PCIe Gen3
-	 * recipe, Table 5-6 in the WFR HAS.
+	 * recipe, Table 5-6 in the HFI HAS.
 	 */
 
 	/* step 1: pcie link working in gen1/gen2 */
@@ -1180,7 +1180,7 @@ retry:
 	 */
 
 	/* clear all 16 per-lane error bits (PCIe: Lane Error Status) */
-	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE2, 0xffff);
+	pci_write_config_dword(dd->pcidev, PCIE_CFG_SPCIE2, 0xffff);
 
 	/* step 5a: Set Synopsys Port Logic registers */
 
@@ -1190,8 +1190,8 @@ retry:
 	 * Set the low power field to 0x10 to avoid unnecessary power
 	 * management messages.  All other fields are zero.
 	 */
-	reg32 = 0x10ul << WFR_PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_SHIFT;
-	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL2, reg32);
+	reg32 = 0x10ul << PCIE_CFG_REG_PL2_LOW_PWR_ENT_CNT_SHIFT;
+	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL2, reg32);
 
 	/*
 	 * PcieCfgRegPl100 - Gen3 Control
@@ -1200,8 +1200,8 @@ retry:
 	 * turn on PcieCfgRegPl100.EqEieosCnt (erratum)
 	 * Everything else zero.
 	 */
-	reg32 = WFR_PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_SMASK;
-	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL100, reg32);
+	reg32 = PCIE_CFG_REG_PL100_EQ_EIEOS_CNT_SMASK;
+	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL100, reg32);
 
 	/*
 	 * PcieCfgRegPl101 - Gen3 EQ FS and LF
@@ -1211,7 +1211,7 @@ retry:
 	 *
 	 * Give initial EQ settings.
 	 */
-	if (dd->pcidev->device == PCI_DEVICE_ID_INTEL_WFR0) { /* discrete */
+	if (dd->pcidev->device == PCI_DEVICE_ID_INTEL0) { /* discrete */
 		/* 1000mV, FS=24, LF = 8 */
 		fs = 24;
 		lf = 8;
@@ -1224,9 +1224,9 @@ retry:
 		div = 1;
 		eq = integrated_preliminary_eq;
 	}
-	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL101,
-		(fs << WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT)
-		| (lf << WFR_PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT));
+	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL101,
+		(fs << PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT)
+		| (lf << PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT));
 	ret = load_eq_table(dd, eq, fs, div);
 	if (ret)
 		goto done;
@@ -1242,9 +1242,9 @@ retry:
 		pcie_pset = 0;
 	}
 	dd_dev_info(dd, "%s: using EQ Pset %u\n", __func__, pcie_pset);
-	pci_write_config_dword(dd->pcidev, WFR_PCIE_CFG_REG_PL106,
+	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL106,
 		(1 << pcie_pset)
-			<< WFR_PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
+			<< PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
 
 	/*
 	 * step 5b: Do post firmware download steps via SBus
@@ -1298,10 +1298,10 @@ retry:
 
 	/* step 5h: arm gasket logic */
 	/* hold DC in reset across the SBR */
-	write_csr(dd, WFR_CCE_DC_CTRL, WFR_CCE_DC_CTRL_DC_RESET_SMASK);
-	(void) read_csr(dd, WFR_CCE_DC_CTRL); /* DC reset hold */
+	write_csr(dd, CCE_DC_CTRL, CCE_DC_CTRL_DC_RESET_SMASK);
+	(void) read_csr(dd, CCE_DC_CTRL); /* DC reset hold */
 	/* save firwmare control across the SBR */
-	fw_ctrl = read_csr(dd, WFR_MISC_CFG_FW_CTRL);
+	fw_ctrl = read_csr(dd, MISC_CFG_FW_CTRL);
 
 	dd_dev_info(dd, "%s: arming gasket logic\n", __func__);
 	arm_gasket_logic(dd);
@@ -1346,7 +1346,7 @@ retry:
 	dd_dev_info(dd, "%s: calling restore_pci_variables\n", __func__);
 	restore_pci_variables(dd);
 	/* restore firmware control, i.e. security disable */
-	write_csr(dd, WFR_MISC_CFG_FW_CTRL, fw_ctrl);
+	write_csr(dd, MISC_CFG_FW_CTRL, fw_ctrl);
 
 	/*
 	 * Check the gasket block status.
@@ -1358,7 +1358,7 @@ retry:
 	 * the SBR.  Then check for any per-lane errors. Then look over
 	 * the status.
 	 */
-	reg = read_csr(dd, WFR_ASIC_PCIE_SD_HOST_STATUS);
+	reg = read_csr(dd, ASIC_PCIE_SD_HOST_STATUS);
 	dd_dev_info(dd, "%s: gasket block status: 0x%llx\n", __func__, reg);
 	if (reg == ~0ull) {	/* PCIe read failed/timeout */
 		dd_dev_err(dd, "SBR failed - unable to read from device\n");
@@ -1368,15 +1368,15 @@ retry:
 	}
 
 	/* clear the DC reset */
-	write_csr(dd, WFR_CCE_DC_CTRL, 0);
+	write_csr(dd, CCE_DC_CTRL, 0);
 
 	/* check for any per-lane errors */
-	pci_read_config_dword(dd->pcidev, WFR_PCIE_CFG_SPCIE2, &reg32);
+	pci_read_config_dword(dd->pcidev, PCIE_CFG_SPCIE2, &reg32);
 	dd_dev_info(dd, "%s: per-lane errors: 0x%x\n", __func__, reg32);
 
 	/* extract status, look for our HFI */
-	status = (reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_SHIFT)
-			& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
+	status = (reg >> ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_SHIFT)
+			& ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
 	if ((status & (1 << dd->hfi_id)) == 0) {
 		dd_dev_err(dd,
 			"%s: gasket status 0x%x, expecting 0x%x\n",
@@ -1386,8 +1386,8 @@ retry:
 	}
 
 	/* extract error */
-	err = (reg >> WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_SHIFT)
-		& WFR_ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_MASK;
+	err = (reg >> ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_SHIFT)
+		& ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_ERR_MASK;
 	if (err) {
 		dd_dev_err(dd, "%s: gasket error %d\n", __func__, err);
 		ret = -EIO;

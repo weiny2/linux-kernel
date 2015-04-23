@@ -398,10 +398,10 @@ struct hfi1_message_header {
 /* misc. */
 #define SIZE_OF_CRC 1
 
-#define WFR_LIM_MGMT_P_KEY       0x7FFF
-#define WFR_FULL_MGMT_P_KEY      0xFFFF
+#define LIM_MGMT_P_KEY       0x7FFF
+#define FULL_MGMT_P_KEY      0xFFFF
 
-#define WFR_DEFAULT_P_KEY WFR_LIM_MGMT_P_KEY
+#define DEFAULT_P_KEY LIM_MGMT_P_KEY
 #define HFI1_PERMISSIVE_LID 0xFFFF
 #define HFI1_AETH_CREDIT_SHIFT 24
 #define HFI1_AETH_CREDIT_MASK 0x1F

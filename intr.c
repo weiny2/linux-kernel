@@ -132,7 +132,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		 * the remote values.  Both sides must be using the values.
 		 */
 		if (quick_linkup
-			    || dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR) {
+			    || dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
 			set_up_vl15(dd, dd->vau, dd->vl15_init);
 			assign_remote_cm_au_table(dd, dd->vcu);
 			ppd->neighbor_guid =
@@ -163,7 +163,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		/* freeze after a link down to guarantee a clean egress */
 		start_freeze_handling(ppd,
-					WFR_FREEZE_SELF|WFR_FREEZE_LINK_DOWN);
+					FREEZE_SELF|FREEZE_LINK_DOWN);
 
 		ev = IB_EVENT_PORT_ERR;
 

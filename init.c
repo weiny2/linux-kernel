@@ -89,7 +89,7 @@ uint num_rcv_contexts;
 module_param_named(num_rcv_contexts, num_rcv_contexts, uint, S_IRUGO);
 MODULE_PARM_DESC(num_rcv_contexts, "Set max number of receive contexts to use");
 
-u8 krcvqs[WFR_RXE_NUM_DATA_VL];
+u8 krcvqs[RXE_NUM_DATA_VL];
 int krcvqsset;
 module_param_array(krcvqs, byte, &krcvqsset, S_IRUGO);
 MODULE_PARM_DESC(krcvqs, "Array of the number of kernel receive queues by VL");
@@ -256,10 +256,10 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		rcd->eager_base = base * dd->rcv_entries.group_size;
 
 		/* Validate and initialize Rcv Hdr Q variables */
-		if (rcvhdrcnt & WFR_HDRQ_INCREMENT) {
+		if (rcvhdrcnt & HDRQ_INCREMENT) {
 			dd_dev_err(dd,
 				   "ctxt%u: header queue count %d must be divisible by %d\n",
-				   rcd->ctxt, rcvhdrcnt, WFR_HDRQ_INCREMENT);
+				   rcd->ctxt, rcvhdrcnt, HDRQ_INCREMENT);
 			goto bail;
 		}
 		rcd->rcvhdrq_cnt = rcvhdrcnt;
@@ -280,10 +280,10 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		rcvtids = ((max_entries * hfi_rcvarr_split) / 100);
 		rcd->egrbufs.count = round_down(rcvtids,
 						dd->rcv_entries.group_size);
-		if (rcd->egrbufs.count > WFR_MAX_EAGER_ENTRIES) {
+		if (rcd->egrbufs.count > MAX_EAGER_ENTRIES) {
 			dd_dev_err(dd, "ctxt%u: requested too many RcvArray entries.\n",
 				   rcd->ctxt);
-			rcd->egrbufs.count = WFR_MAX_EAGER_ENTRIES;
+			rcd->egrbufs.count = MAX_EAGER_ENTRIES;
 		}
 		dd_dev_info(dd, "ctxt%u: max Eager buffer RcvArray entries: %u\n",
 			    rcd->ctxt, rcd->egrbufs.count);
@@ -437,10 +437,10 @@ void set_link_ipg(struct hfi1_pportdata *ppd)
 
 	src = (max_pkt_time >> shift) * mult;
 
-	src &= WFR_SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SMASK;
-	src <<= WFR_SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SHIFT;
+	src &= SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SMASK;
+	src <<= SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SHIFT;
 
-	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, src);
+	write_csr(dd, SEND_STATIC_RATE_CONTROL, src);
 }
 
 static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
@@ -510,7 +510,7 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 
 	default_pkey_idx = 1;
 
-	ppd->pkeys[default_pkey_idx] = WFR_DEFAULT_P_KEY;
+	ppd->pkeys[default_pkey_idx] = DEFAULT_P_KEY;
 	if (loopback) {
 		hfi1_early_err(&pdev->dev,
 			       "Faking data partition 0x8001 in idx %u\n",
@@ -1132,9 +1132,9 @@ static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
 #define PFX DRIVER_NAME ": "
 
 static const struct pci_device_id qib_pci_tbl[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR0) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR1) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR2) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL0) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL1) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL2) },
 	{ 0, }
 };
 
@@ -1183,8 +1183,8 @@ static int __init qib_ib_init(void)
 	compute_krcvqs();
 	/* sanitize receive interrupt count, time must wait until after
 	   the hardware type is known */
-	if (rcv_intr_count > WFR_RCV_HDR_HEAD_COUNTER_MASK)
-		rcv_intr_count = WFR_RCV_HDR_HEAD_COUNTER_MASK;
+	if (rcv_intr_count > RCV_HDR_HEAD_COUNTER_MASK)
+		rcv_intr_count = RCV_HDR_HEAD_COUNTER_MASK;
 	/* reject invalid combinations */
 	if (rcv_intr_count == 0 && rcv_intr_timeout == 0) {
 		pr_err("Invalid mode: both receive interrupt count and available timeout are zero - setting interrupt count to 1\n");
@@ -1208,7 +1208,7 @@ static int __init qib_ib_init(void)
 	}
 
 	/* sanitize link CRC options */
-	link_crc_mask &= WFR_SUPPORTED_CRCS;
+	link_crc_mask &= SUPPORTED_CRCS;
 
 	/*
 	 * These must be called before the driver is registered with
@@ -1367,8 +1367,8 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 				roundup_pow_of_two(eager_buffer_size);
 		eager_buffer_size =
 			clamp_val(eager_buffer_size,
-				  WFR_MIN_EAGER_BUFFER * 8,
-				  WFR_MAX_EAGER_BUFFER_TOTAL);
+				  MIN_EAGER_BUFFER * 8,
+				  MAX_EAGER_BUFFER_TOTAL);
 		hfi1_early_info(&pdev->dev, "Eager buffer size %u\n",
 				eager_buffer_size);
 	} else {
@@ -1389,9 +1389,9 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * allocation, etc.
 	 */
 	switch (ent->device) {
-	case PCI_DEVICE_ID_INTEL_WFR0:
-	case PCI_DEVICE_ID_INTEL_WFR1:
-	case PCI_DEVICE_ID_INTEL_WFR2:
+	case PCI_DEVICE_ID_INTEL0:
+	case PCI_DEVICE_ID_INTEL1:
+	case PCI_DEVICE_ID_INTEL2:
 		dd = hfi1_init_dd(pdev, ent);
 		break;
 	default:
@@ -1546,17 +1546,17 @@ int hfi1_create_rcvhdrq(struct hfi_devdata *dd, struct hfi1_ctxtdata *rcd)
 	 *	RcvHdrEntSize
 	 *	RcvHdrSize
 	 */
-	reg = ((u64)(rcd->rcvhdrq_cnt >> WFR_HDRQ_SIZE_SHIFT)
-			& WFR_RCV_HDR_CNT_CNT_MASK)
-		<< WFR_RCV_HDR_CNT_CNT_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_CNT, reg);
+	reg = ((u64)(rcd->rcvhdrq_cnt >> HDRQ_SIZE_SHIFT)
+			& RCV_HDR_CNT_CNT_MASK)
+		<< RCV_HDR_CNT_CNT_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_CNT, reg);
 	reg = (encode_rcv_header_entry_size(rcd->rcvhdrqentsize)
-			& WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
-		<< WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_ENT_SIZE, reg);
-	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
-		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_SIZE, reg);
+			& RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
+		<< RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_ENT_SIZE, reg);
+	reg = (dd->rcvhdrsize & RCV_HDR_SIZE_HDR_SIZE_MASK)
+		<< RCV_HDR_SIZE_HDR_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_SIZE, reg);
 	return 0;
 
 bail_free:
@@ -1715,8 +1715,8 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 	max_entries = rcd->rcv_array_groups * dd->rcv_entries.group_size;
 	egrtop = roundup(rcd->egrbufs.alloced, dd->rcv_entries.group_size);
 	rcd->expected_count = max_entries - egrtop;
-	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
-		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
+	if (rcd->expected_count > MAX_TID_PAIR_ENTRIES * 2)
+		rcd->expected_count = MAX_TID_PAIR_ENTRIES * 2;
 
 	rcd->expected_base = rcd->eager_base + egrtop;
 	dd_dev_info(dd, "ctxt%u: eager:%u, exp:%u, egrbase:%u, expbase:%u\n",

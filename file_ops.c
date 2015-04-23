@@ -504,17 +504,17 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	switch (type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
-		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) +
+		memaddr = ((dd->physaddr + TXE_PIO_SEND) +
 				/* chip pio base */
 			   (uctxt->sc->hw_context * (1 << 16))) +
 				/* 64K PIO space / ctxt */
 			(type == PIO_BUFS_SOP ?
-				(WFR_TXE_PIO_SIZE / 2) : 0); /* sop? */
+				(TXE_PIO_SIZE / 2) : 0); /* sop? */
 		/*
 		 * Map only the amount allocated to the context, not the
 		 * entire available context's PIO space.
 		 */
-		memlen = ALIGN(uctxt->sc->credits * WFR_PIO_BLOCK_SIZE,
+		memlen = ALIGN(uctxt->sc->credits * PIO_BLOCK_SIZE,
 			       PAGE_SIZE);
 		flags &= ~VM_MAYREAD;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
@@ -590,8 +590,8 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * registers.
 		 */
 		memaddr = (unsigned long)
-			(dd->physaddr + WFR_RXE_PER_CONTEXT_USER)
-			+ (uctxt->ctxt * WFR_RXE_PER_CONTEXT_SIZE);
+			(dd->physaddr + RXE_PER_CONTEXT_USER)
+			+ (uctxt->ctxt * RXE_PER_CONTEXT_SIZE);
 		/*
 		 * TidFlow table is on the same page as the rest of the
 		 * user registers.
@@ -800,7 +800,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	 * Reset context integrity checks to default.
 	 * (writes to CSRs probably belong in chip.c)
 	 */
-	write_kctxt_csr(dd, uctxt->sc->hw_context, WFR_SEND_CTXT_CHECK_ENABLE,
+	write_kctxt_csr(dd, uctxt->sc->hw_context, SEND_CTXT_CHECK_ENABLE,
 			hfi_pkt_default_send_ctxt_mask(dd, uctxt->sc->type));
 	sc_disable(uctxt->sc);
 	uctxt->pid = 0;
@@ -1335,7 +1335,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 						 subctxt_fp(fp), 0);
 	/*
 	 * user regs are at
-	 * (WFR_RXE_PER_CONTEXT_USER + (ctxt * WFR_RXE_PER_CONTEXT_SIZE))
+	 * (RXE_PER_CONTEXT_USER + (ctxt * RXE_PER_CONTEXT_SIZE))
 	 */
 	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
 					    subctxt_fp(fp), 0);
@@ -1884,7 +1884,7 @@ static int set_ctxt_pkey(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
 	struct hfi1_pportdata *ppd = uctxt->ppd;
 	struct hfi_devdata *dd = uctxt->dd;
 
-	if (pkey == WFR_LIM_MGMT_P_KEY || pkey == WFR_FULL_MGMT_P_KEY) {
+	if (pkey == LIM_MGMT_P_KEY || pkey == FULL_MGMT_P_KEY) {
 		ret = -EINVAL;
 		goto done;
 	}
@@ -1990,12 +1990,12 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		 * by not reading them.  These registers are defined as
 		 * having a read value of 0.
 		 */
-		if (csr_off == WFR_ASIC_GPIO_CLEAR
-				|| csr_off == WFR_ASIC_GPIO_FORCE
-				|| csr_off == WFR_ASIC_QSFP1_CLEAR
-				|| csr_off == WFR_ASIC_QSFP1_FORCE
-				|| csr_off == WFR_ASIC_QSFP2_CLEAR
-				|| csr_off == WFR_ASIC_QSFP2_FORCE)
+		if (csr_off == ASIC_GPIO_CLEAR
+				|| csr_off == ASIC_GPIO_FORCE
+				|| csr_off == ASIC_QSFP1_CLEAR
+				|| csr_off == ASIC_QSFP1_FORCE
+				|| csr_off == ASIC_QSFP2_CLEAR
+				|| csr_off == ASIC_QSFP2_FORCE)
 			data = 0;
 		else
 			data = readq(base + total);

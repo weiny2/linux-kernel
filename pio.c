@@ -55,7 +55,7 @@
 
 #define SC_CTXT_PACKET_EGRESS_TIMEOUT 350 /* in chip cycles */
 
-#define SC(name) WFR_SEND_CTXT_##name
+#define SC(name) SEND_CTXT_##name
 /*
  * Send Context functions
  */
@@ -67,21 +67,21 @@ static void sc_wait_for_packet_egress(struct send_context *sc, int pause);
  */
 void __cm_reset(struct hfi_devdata *dd, u64 sendctrl)
 {
-	write_csr(dd, WFR_SEND_CTRL, sendctrl | WFR_SEND_CTRL_CM_RESET_SMASK);
+	write_csr(dd, SEND_CTRL, sendctrl | SEND_CTRL_CM_RESET_SMASK);
 	while (1) {
 		udelay(1);
-		sendctrl = read_csr(dd, WFR_SEND_CTRL);
-		if ((sendctrl & WFR_SEND_CTRL_CM_RESET_SMASK) == 0)
+		sendctrl = read_csr(dd, SEND_CTRL);
+		if ((sendctrl & SEND_CTRL_CM_RESET_SMASK) == 0)
 			break;
 	}
 }
 
 /* defined in header release 48 and higher */
-#ifndef WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT
-#define WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT 3
-#define WFR_SEND_CTRL_UNSUPPORTED_VL_MASK 0xffull
-#define WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK (WFR_SEND_CTRL_UNSUPPORTED_VL_MASK \
-		<< WFR_SEND_CTRL_UNSUPPORTED_VL_SHIFT)
+#ifndef SEND_CTRL_UNSUPPORTED_VL_SHIFT
+#define SEND_CTRL_UNSUPPORTED_VL_SHIFT 3
+#define SEND_CTRL_UNSUPPORTED_VL_MASK 0xffull
+#define SEND_CTRL_UNSUPPORTED_VL_SMASK (SEND_CTRL_UNSUPPORTED_VL_MASK \
+		<< SEND_CTRL_UNSUPPORTED_VL_SHIFT)
 #endif
 
 /* global control of PIO send */
@@ -94,29 +94,29 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 
 	spin_lock_irqsave(&dd->sendctrl_lock, flags);
 
-	reg = read_csr(dd, WFR_SEND_CTRL);
+	reg = read_csr(dd, SEND_CTRL);
 	switch (op) {
 	case PSC_GLOBAL_ENABLE:
-		reg |= WFR_SEND_CTRL_SEND_ENABLE_SMASK;
+		reg |= SEND_CTRL_SEND_ENABLE_SMASK;
 		break;
 	case PSC_GLOBAL_DISABLE:
-		reg &= ~WFR_SEND_CTRL_SEND_ENABLE_SMASK;
+		reg &= ~SEND_CTRL_SEND_ENABLE_SMASK;
 		break;
 	case PSC_GLOBAL_VLARB_ENABLE:
-		reg |= WFR_SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
+		reg |= SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
 		break;
 	case PSC_GLOBAL_VLARB_DISABLE:
-		reg &= ~WFR_SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
+		reg &= ~SEND_CTRL_VL_ARBITER_ENABLE_SMASK;
 		break;
 	case PSC_CM_RESET:
 		__cm_reset(dd, reg);
 		write = 0; /* CSR already written (and flushed) */
 		break;
 	case PSC_DATA_VL_ENABLE:
-		reg &= ~WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
+		reg &= ~SEND_CTRL_UNSUPPORTED_VL_SMASK;
 		break;
 	case PSC_DATA_VL_DISABLE:
-		reg |= WFR_SEND_CTRL_UNSUPPORTED_VL_SMASK;
+		reg |= SEND_CTRL_UNSUPPORTED_VL_SMASK;
 		flush = 1;
 		break;
 	default:
@@ -125,9 +125,9 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 	}
 
 	if (write) {
-		write_csr(dd, WFR_SEND_CTRL, reg);
+		write_csr(dd, SEND_CTRL, reg);
 		if (flush)
-			(void) read_csr(dd, WFR_SEND_CTRL); /* flush write */
+			(void) read_csr(dd, SEND_CTRL); /* flush write */
 	}
 
 	spin_unlock_irqrestore(&dd->sendctrl_lock, flags);
@@ -220,7 +220,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 {
 	struct mem_pool_info mem_pool_info[NUM_SC_POOLS] = { { 0 } };
 	/* erratum 291585 - do not use PIO block 0 */
-	int total_blocks = (dd->chip_pio_mem_size / WFR_PIO_BLOCK_SIZE) - 1;
+	int total_blocks = (dd->chip_pio_mem_size / PIO_BLOCK_SIZE) - 1;
 	int total_contexts = 0;
 	int fixed_blocks;
 	int pool_blocks;
@@ -404,9 +404,9 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 			dd->sc_sizes[i].size = mem_pool_info[pool].size;
 		}
 		/* make sure we are not larger than what is allowed by the HW */
-#define WFR_PIO_MAX_BLOCKS 1024
-		if (dd->sc_sizes[i].size > WFR_PIO_MAX_BLOCKS)
-			dd->sc_sizes[i].size = WFR_PIO_MAX_BLOCKS;
+#define PIO_MAX_BLOCKS 1024
+		if (dd->sc_sizes[i].size > PIO_MAX_BLOCKS)
+			dd->sc_sizes[i].size = PIO_MAX_BLOCKS;
 
 		/* calculate our total usage */
 		used_blocks += dd->sc_sizes[i].size * dd->sc_sizes[i].count;
@@ -427,7 +427,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	dd->hw_to_sw = kmalloc_array(WFR_TXE_NUM_CONTEXTS, sizeof(u8),
+	dd->hw_to_sw = kmalloc_array(TXE_NUM_CONTEXTS, sizeof(u8),
 					GFP_KERNEL);
 	dd->send_contexts = kcalloc(dd->num_send_contexts,
 					sizeof(struct send_context_info),
@@ -441,7 +441,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	}
 
 	/* hardware context map starts with invalid send context indices */
-	for (i = 0; i < WFR_TXE_NUM_CONTEXTS; i++)
+	for (i = 0; i < TXE_NUM_CONTEXTS; i++)
 		dd->hw_to_sw[i] = INVALID_SCI;
 
 	/*
@@ -579,7 +579,7 @@ u32 sc_mtu_to_threshold(struct send_context *sc, u32 mtu, u32 hdrqentsize)
 
 	/* add in the header size, then divide by the PIO block size */
 	mtu += hdrqentsize << 2;
-	release_credits = DIV_ROUND_UP(mtu, WFR_PIO_BLOCK_SIZE);
+	release_credits = DIV_ROUND_UP(mtu, PIO_BLOCK_SIZE);
 
 	/* check against this context's credits */
 	if (sc->credits <= release_credits)
@@ -738,10 +738,10 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	sc->credits = sci->credits;
 
 /* PIO Send Memory Address details */
-#define WFR_PIO_ADDR_CONTEXT_MASK 0xfful
-#define WFR_PIO_ADDR_CONTEXT_SHIFT 16
-	sc->base_addr = dd->piobase + ((hw_context & WFR_PIO_ADDR_CONTEXT_MASK)
-					<< WFR_PIO_ADDR_CONTEXT_SHIFT);
+#define PIO_ADDR_CONTEXT_MASK 0xfful
+#define PIO_ADDR_CONTEXT_SHIFT 16
+	sc->base_addr = dd->piobase + ((hw_context & PIO_ADDR_CONTEXT_MASK)
+					<< PIO_ADDR_CONTEXT_SHIFT);
 
 	/* set base and credits */
 	reg = ((sci->credits & SC(CTRL_CTXT_DEPTH_MASK))
@@ -763,11 +763,11 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 
 	/* per context type checks */
 	if (type == SC_USER) {
-		opval = WFR_USER_OPCODE_CHECK_VAL;
-		opmask = WFR_USER_OPCODE_CHECK_MASK;
+		opval = USER_OPCODE_CHECK_VAL;
+		opmask = USER_OPCODE_CHECK_MASK;
 	} else {
-		opval = WFR_OPCODE_CHECK_VAL_DISABLED;
-		opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
+		opval = OPCODE_CHECK_VAL_DISABLED;
+		opmask = OPCODE_CHECK_MASK_DISABLED;
 	}
 
 	/* set the send context check opcode mask and value */
@@ -928,12 +928,12 @@ void sc_disable(struct send_context *sc)
 
 /* return SendEgressCtxtStatus.PacketOccupancy */
 #define packet_occupancy(r) \
-	(((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SMASK)\
-	>> WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SHIFT)
+	(((r) & SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SMASK)\
+	>> SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_PACKET_OCCUPANCY_SHIFT)
 
 /* is egress halted on the context? */
 #define egress_halted(r) \
-	((r) & WFR_SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_HALT_STATUS_SMASK)
+	((r) & SEND_EGRESS_CTXT_STATUS_CTXT_EGRESS_HALT_STATUS_SMASK)
 
 /* wait for packet egress, optionally pause for credit return  */
 static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
@@ -944,7 +944,7 @@ static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
 
 	while (1) {
 		reg = read_csr(dd, sc->hw_context * 8 +
-			       WFR_SEND_EGRESS_CTXT_STATUS);
+			       SEND_EGRESS_CTXT_STATUS);
 		/* done if egress is stopped */
 		if (egress_halted(reg))
 			break;
@@ -1130,15 +1130,15 @@ static int pio_init_wait_progress(struct hfi_devdata *dd)
 	int count = 0;
 
 	while (1) {
-		reg = read_csr(dd, WFR_SEND_PIO_INIT_CTXT);
-		if (!(reg & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SMASK))
+		reg = read_csr(dd, SEND_PIO_INIT_CTXT);
+		if (!(reg & SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SMASK))
 			break;
 		mdelay(20);
 		if (count++ > 10)
 			return -ETIMEDOUT;
 	}
 
-	return reg & WFR_SEND_PIO_INIT_CTXT_PIO_INIT_ERR_SMASK ? -EIO : 0;
+	return reg & SEND_PIO_INIT_CTXT_PIO_INIT_ERR_SMASK ? -EIO : 0;
 }
 
 /*
@@ -1159,13 +1159,13 @@ void pio_reset_all(struct hfi_devdata *dd)
 
 	if (ret == -EIO) {
 		/* clear the error */
-		write_csr(dd, WFR_SEND_PIO_ERR_CLEAR,
-			WFR_SEND_PIO_ERR_CLEAR_PIO_INIT_SM_IN_ERR_SMASK);
+		write_csr(dd, SEND_PIO_ERR_CLEAR,
+			SEND_PIO_ERR_CLEAR_PIO_INIT_SM_IN_ERR_SMASK);
 	}
 
 	/* reset init all */
-	write_csr(dd, WFR_SEND_PIO_INIT_CTXT,
-			WFR_SEND_PIO_INIT_CTXT_PIO_ALL_CTXT_INIT_SMASK);
+	write_csr(dd, SEND_PIO_INIT_CTXT,
+			SEND_PIO_INIT_CTXT_PIO_ALL_CTXT_INIT_SMASK);
 	udelay(2);
 	ret = pio_init_wait_progress(dd);
 	if (ret < 0) {
@@ -1233,10 +1233,10 @@ int sc_enable(struct send_context *sc)
 	 * should not be in use, so we don't have to wait for the
 	 * InProgress bit to go down.
 	 */
-	pio = ((sc->hw_context & WFR_SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_MASK) <<
-	       WFR_SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_SHIFT) |
-		WFR_SEND_PIO_INIT_CTXT_PIO_SINGLE_CTXT_INIT_SMASK;
-	write_csr(dd, WFR_SEND_PIO_INIT_CTXT, pio);
+	pio = ((sc->hw_context & SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_MASK) <<
+	       SEND_PIO_INIT_CTXT_PIO_CTXT_NUM_SHIFT) |
+		SEND_PIO_INIT_CTXT_PIO_SINGLE_CTXT_INIT_SMASK;
+	write_csr(dd, SEND_PIO_INIT_CTXT, pio);
 	/*
 	 * Wait until the engine is done.  Give the chip the required time
 	 * so, hopefully, we read the register just once.
@@ -1328,7 +1328,7 @@ void sc_stop(struct send_context *sc, int flag)
 	wake_up(&sc->halt_wait);
 }
 
-#define BLOCK_DWORDS (WFR_PIO_BLOCK_SIZE/sizeof(u32))
+#define BLOCK_DWORDS (PIO_BLOCK_SIZE/sizeof(u32))
 #define dwords_to_blocks(x) DIV_ROUND_UP(x, BLOCK_DWORDS)
 
 /*
@@ -1419,8 +1419,8 @@ retry:
 
 	/* finish filling in the buffer outside the lock */
 	pbuf->start = sc->base_addr + ((start_fill % sc->credits)
-							* WFR_PIO_BLOCK_SIZE);
-	pbuf->size = sc->credits * WFR_PIO_BLOCK_SIZE;
+							* PIO_BLOCK_SIZE);
+	pbuf->size = sc->credits * PIO_BLOCK_SIZE;
 	pbuf->end = sc->base_addr + pbuf->size;
 	pbuf->block_count = blocks;
 	pbuf->qw_written = 0;
@@ -1551,15 +1551,15 @@ static inline int fill_code(u64 hw_free)
 {
 	int code = 0;
 
-	if (hw_free & WFR_CR_STATUS_SMASK)
+	if (hw_free & CR_STATUS_SMASK)
 		code |= PRC_STATUS_ERR;
-	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK)
+	if (hw_free & CR_CREDIT_RETURN_DUE_TO_PBC_SMASK)
 		code |= PRC_PBC;
-	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK)
+	if (hw_free & CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK)
 		code |= PRC_THRESHOLD;
-	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SMASK)
+	if (hw_free & CR_CREDIT_RETURN_DUE_TO_ERR_SMASK)
 		code |= PRC_FILL_ERR;
-	if (hw_free & WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
+	if (hw_free & CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
 		code |= PRC_SC_DISABLE;
 	return code;
 }
@@ -1587,9 +1587,9 @@ void sc_release_update(struct send_context *sc)
 	/* update free */
 	hw_free = *sc->hw_free;				/* volatile read */
 	old_free = sc->free;
-	extra = (((hw_free & WFR_CR_COUNTER_SMASK) >> WFR_CR_COUNTER_SHIFT)
-			- (old_free & WFR_CR_COUNTER_MASK))
-				& WFR_CR_COUNTER_MASK;
+	extra = (((hw_free & CR_COUNTER_SMASK) >> CR_COUNTER_SHIFT)
+			- (old_free & CR_COUNTER_MASK))
+				& CR_COUNTER_MASK;
 	sc->free = old_free + extra;
 	trace_hfi_piofree(sc, extra);
 
@@ -1735,7 +1735,7 @@ int init_credit_return(struct hfi_devdata *dd)
 		goto done;
 	}
 	for (i = 0; i < num_numa; i++) {
-		int bytes = WFR_TXE_NUM_CONTEXTS * sizeof(struct credit_return);
+		int bytes = TXE_NUM_CONTEXTS * sizeof(struct credit_return);
 
 		set_dev_node(&dd->pcidev->dev, i);
 		dd->cr_base[i].va = dma_zalloc_coherent(
@@ -1771,7 +1771,7 @@ void free_credit_return(struct hfi_devdata *dd)
 	for (i = 0; i < num_numa; i++) {
 		if (dd->cr_base[i].va) {
 			dma_free_coherent(&dd->pcidev->dev,
-				WFR_TXE_NUM_CONTEXTS
+				TXE_NUM_CONTEXTS
 					* sizeof(struct credit_return),
 				dd->cr_base[i].va,
 				dd->cr_base[i].pa);

@@ -446,15 +446,15 @@ static u64 __iomem *get_ioaddr(struct hfi_devdata *dd, u32 offset, u32 *cntp)
 	u8 __iomem *map;
 	u32 cnt;
 
-	if (offset < WFR_TXE_PIO_SEND) {
+	if (offset < TXE_PIO_SEND) {
 		/* offset is within the CSR map */
 		map = dd->kregbase + offset;
-		cnt = WFR_TXE_PIO_SEND - offset;
-	} else if (offset < (WFR_TXE_PIO_SEND + WFR_TXE_PIO_SIZE)) {
+		cnt = TXE_PIO_SEND - offset;
+	} else if (offset < (TXE_PIO_SEND + TXE_PIO_SIZE)) {
 		/* offset is within the PIO map */
-		offset -= WFR_TXE_PIO_SEND;
+		offset -= TXE_PIO_SEND;
 		map = dd->piobase + offset;
-		cnt = WFR_TXE_PIO_SIZE - offset;
+		cnt = TXE_PIO_SIZE - offset;
 	} else {
 		/* offset is outside anything */
 		map = NULL;
@@ -733,7 +733,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	 */
 	if (dp->flags & F_DIAGPKT_WAIT) {
 		/* always force a credit return */
-		dp->pbc |= WFR_PBC_CREDIT_RETURN;
+		dp->pbc |= PBC_CREDIT_RETURN;
 		/* turn on credit return interrupts */
 		sc_add_credit_return_intr(sc);
 		wait = kmalloc(sizeof(*wait), GFP_KERNEL);
@@ -823,7 +823,7 @@ static ssize_t diagpkt_write(struct file *fp, const char __user *data,
 		dd = hfi1_lookup(dp.unit);
 		if (dd == NULL)
 			return -ENODEV;
-		vl = (dp.pbc >> WFR_PBC_VL_SHIFT) & WFR_PBC_VL_MASK;
+		vl = (dp.pbc >> PBC_VL_SHIFT) & PBC_VL_MASK;
 		sc = dd->vld[vl].sc;
 		if (sc) {
 			dp.sw_index = sc->sw_index;

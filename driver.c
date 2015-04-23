@@ -190,7 +190,7 @@ void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
  */
 #define MAX_PKT_RECV 64
-#define WFR_EGR_HEAD_UPDATE_THRESHOLD 16
+#define EGR_HEAD_UPDATE_THRESHOLD 16
 
 struct hfi1_ib_stats hfi1_stats;
 
@@ -364,7 +364,7 @@ static inline void *qib_get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
 
 	*update |= !(idx & (rcd->egrbufs.threshold - 1)) && !offset;
 	return (void *)(((u64)(rcd->egrbufs.rcvtids[idx].addr)) +
-			(offset * WFR_RCV_BUF_BLOCK_SIZE));
+			(offset * RCV_BUF_BLOCK_SIZE));
 }
 
 /*
@@ -377,10 +377,10 @@ inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 {
 	if (unlikely(!IS_ALIGNED(size, PAGE_SIZE)))
 		return 0;
-	if (unlikely(size < WFR_MIN_EAGER_BUFFER))
+	if (unlikely(size < MIN_EAGER_BUFFER))
 		return 0;
 	if (size >
-	    (type == PT_EAGER ? WFR_MAX_EAGER_BUFFER : WFR_MAX_EXPECTED_BUFFER))
+	    (type == PT_EAGER ? MAX_EAGER_BUFFER : MAX_EXPECTED_BUFFER))
 		return 0;
 	if (encoded)
 		*encoded = ilog2(size / PAGE_SIZE) + 1;
@@ -399,7 +399,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 		return;
 
 	/*
-	 * TODO: In WFR, RHF.TIDErr can mean 2 things, depending on the
+	 * TODO: In HFI, RHF.TIDErr can mean 2 things, depending on the
 	 * packet type.  Does this code apply to both?
 	 * For type 0 packets (expected receive), see section 8.5.6.2
 	 * Expected TIDErr.

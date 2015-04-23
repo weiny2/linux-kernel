@@ -442,19 +442,19 @@ int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey)
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	unsigned i;
 
-	if (pkey == WFR_FULL_MGMT_P_KEY || pkey == WFR_LIM_MGMT_P_KEY) {
+	if (pkey == FULL_MGMT_P_KEY || pkey == LIM_MGMT_P_KEY) {
 		unsigned lim_idx = -1;
 
 		for (i = 0; i < ARRAY_SIZE(ppd->pkeys); ++i) {
 			/* here we look for an exact match */
 			if (ppd->pkeys[i] == pkey)
 				return i;
-			if (ppd->pkeys[i] == WFR_LIM_MGMT_P_KEY)
+			if (ppd->pkeys[i] == LIM_MGMT_P_KEY)
 				lim_idx = i;
 		}
 
 		/* did not find 0xffff return 0x7fff idx if found */
-		if (pkey == WFR_FULL_MGMT_P_KEY)
+		if (pkey == FULL_MGMT_P_KEY)
 			return lim_idx;
 
 		/* no match...  */
@@ -517,7 +517,7 @@ void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 	hdr.lrh[3] = cpu_to_be16(slid);
 
 	plen = 2 /* PBC */ + hwords;
-	pbc_flags |= (!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT;
+	pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 	vl = sc_to_vlt(ppd->dd, sc5);
 	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
 	if (ctxt) {
@@ -563,7 +563,7 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 
 	/*
 	 * At this point we know (and so don't need to check again) that
-	 * the pkey is either WFR_LIM_MGMT_P_KEY, or WFR_FULL_MGMT_P_KEY
+	 * the pkey is either LIM_MGMT_P_KEY, or FULL_MGMT_P_KEY
 	 * (see ingress_pkey_check).
 	 */
 	if (smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE &&
@@ -580,14 +580,14 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 	 *
 	 * If this is not an SMA request, or trap repress:
 	 *   - accept MAD if the port is running an SM
-	 *   - pkey == WFR_FULL_MGMT_P_KEY =>
+	 *   - pkey == FULL_MGMT_P_KEY =>
 	 *       reply with unsupported method (i.e., just mark
 	 *       the smp's status field here, and let it be
 	 *       processed normally)
-	 *   - pkey != WFR_LIM_MGMT_P_KEY =>
+	 *   - pkey != LIM_MGMT_P_KEY =>
 	 *       increment port recv constraint errors, drop MAD
 	 * If this is an SMA request or trap repress:
-	 *   - pkey != WFR_FULL_MGMT_P_KEY =>
+	 *   - pkey != FULL_MGMT_P_KEY =>
 	 *       increment port recv constraint errors, drop MAD
 	 */
 	switch (smp->method) {
@@ -595,7 +595,7 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 	case IB_MGMT_METHOD_SET:
 	case IB_MGMT_METHOD_REPORT:
 	case IB_MGMT_METHOD_TRAP_REPRESS:
-		if (pkey != WFR_FULL_MGMT_P_KEY) {
+		if (pkey != FULL_MGMT_P_KEY) {
 			ingress_pkey_table_fail(ppd, pkey, slid);
 			return 1;
 		}
@@ -606,11 +606,11 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 	case IB_MGMT_METHOD_REPORT_RESP:
 		if (ibp->port_cap_flags & IB_PORT_SM)
 			return 0;
-		if (pkey == WFR_FULL_MGMT_P_KEY) {
+		if (pkey == FULL_MGMT_P_KEY) {
 			smp->status |= IB_SMP_UNSUP_METHOD;
 			return 0;
 		}
-		if (pkey != WFR_LIM_MGMT_P_KEY) {
+		if (pkey != LIM_MGMT_P_KEY) {
 			ingress_pkey_table_fail(ppd, pkey, slid);
 			return 1;
 		}

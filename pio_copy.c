@@ -51,10 +51,10 @@
 #include "hfi.h"
 
 /* additive distance between non-SOP and SOP space */
-#define WFR_SOP_DISTANCE (WFR_TXE_PIO_SIZE / 2)
-#define WFR_PIO_BLOCK_MASK (WFR_PIO_BLOCK_SIZE-1)
+#define SOP_DISTANCE (TXE_PIO_SIZE / 2)
+#define PIO_BLOCK_MASK (PIO_BLOCK_SIZE-1)
 /* number of QUADWORDs in a block */
-#define WFR_PIO_BLOCK_QWS (WFR_PIO_BLOCK_SIZE/sizeof(u64))
+#define PIO_BLOCK_QWS (PIO_BLOCK_SIZE/sizeof(u64))
 
 /**
  * pio_copy - copy data block to MMIO space
@@ -74,8 +74,8 @@
 void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
 	      const void *from, size_t count)
 {
-	void __iomem *dest = pbuf->start + WFR_SOP_DISTANCE;
-	void __iomem *send = dest + WFR_PIO_BLOCK_SIZE;
+	void __iomem *dest = pbuf->start + SOP_DISTANCE;
+	void __iomem *send = dest + PIO_BLOCK_SIZE;
 	void __iomem *dend;			/* 8-byte data end */
 
 	/* write thte PBC */
@@ -111,8 +111,8 @@ void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
 			dest += sizeof(u64);
 		}
 		/* drop out of the SOP range */
-		dest -= WFR_SOP_DISTANCE;
-		dend -= WFR_SOP_DISTANCE;
+		dest -= SOP_DISTANCE;
+		dend -= SOP_DISTANCE;
 
 		/*
 		 * If the wrap comes before or matches the data end,
@@ -154,7 +154,7 @@ void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
 	}
 	/* fill in rest of block, no need to check pbuf->end
 	   as we only wrap on a block boundary */
-	while (((unsigned long)dest & WFR_PIO_BLOCK_MASK) != 0) {
+	while (((unsigned long)dest & PIO_BLOCK_MASK) != 0) {
 		writeq(0, dest);
 		dest += sizeof(u64);
 	}
@@ -463,8 +463,8 @@ static inline int carry_write8(struct pio_buf *pbuf, void *dest)
 void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
 				const void *from, size_t nbytes)
 {
-	void __iomem *dest = pbuf->start + WFR_SOP_DISTANCE;
-	void __iomem *send = dest + WFR_PIO_BLOCK_SIZE;
+	void __iomem *dest = pbuf->start + SOP_DISTANCE;
+	void __iomem *send = dest + PIO_BLOCK_SIZE;
 	void __iomem *dend;			/* 8-byte data end */
 
 	writeq(pbc, dest);
@@ -499,8 +499,8 @@ void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
 			dest += sizeof(u64);
 		}
 		/* drop out of the SOP range */
-		dest -= WFR_SOP_DISTANCE;
-		dend -= WFR_SOP_DISTANCE;
+		dest -= SOP_DISTANCE;
+		dend -= SOP_DISTANCE;
 
 		/*
 		 * If the wrap comes before or matches the data end,
@@ -561,7 +561,7 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t nbytes)
 	/* calculate 8-byte data end */
 	dend = dest + (qw_to_write * sizeof(u64));
 
-	if (pbuf->qw_written < WFR_PIO_BLOCK_QWS) {
+	if (pbuf->qw_written < PIO_BLOCK_QWS) {
 		/*
 		 * Still within SOP block.  We don't need to check for
 		 * wrap because we are still in the first block and
@@ -572,12 +572,12 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t nbytes)
 
 		/* calculate the end of data or end of block, whichever
 		   comes first */
-		send = pbuf->start + WFR_PIO_BLOCK_SIZE;
+		send = pbuf->start + PIO_BLOCK_SIZE;
 		xend = send < dend ? send : dend;
 
 		/* shift up to SOP=1 space */
-		dest += WFR_SOP_DISTANCE;
-		xend += WFR_SOP_DISTANCE;
+		dest += SOP_DISTANCE;
+		xend += SOP_DISTANCE;
 
 		/* write 8-byte chunk data */
 		while (dest < xend) {
@@ -587,7 +587,7 @@ static void mid_copy_mix(struct pio_buf *pbuf, const void *from, size_t nbytes)
 		}
 
 		/* shift down to SOP=0 space */
-		dest -= WFR_SOP_DISTANCE;
+		dest -= SOP_DISTANCE;
 	}
 	/*
 	 * At this point dest could be (either, both, or neither):
@@ -655,7 +655,7 @@ static void mid_copy_straight(struct pio_buf *pbuf,
 	/* calculate 8-byte data end */
 	dend = dest + ((nbytes>>3) * sizeof(u64));
 
-	if (pbuf->qw_written < WFR_PIO_BLOCK_QWS) {
+	if (pbuf->qw_written < PIO_BLOCK_QWS) {
 		/*
 		 * Still within SOP block.  We don't need to check for
 		 * wrap because we are still in the first block and
@@ -666,12 +666,12 @@ static void mid_copy_straight(struct pio_buf *pbuf,
 
 		/* calculate the end of data or end of block, whichever
 		   comes first */
-		send = pbuf->start + WFR_PIO_BLOCK_SIZE;
+		send = pbuf->start + PIO_BLOCK_SIZE;
 		xend = send < dend ? send : dend;
 
 		/* shift up to SOP=1 space */
-		dest += WFR_SOP_DISTANCE;
-		xend += WFR_SOP_DISTANCE;
+		dest += SOP_DISTANCE;
+		xend += SOP_DISTANCE;
 
 		/* write 8-byte chunk data */
 		while (dest < xend) {
@@ -681,7 +681,7 @@ static void mid_copy_straight(struct pio_buf *pbuf,
 		}
 
 		/* shift down to SOP=0 space */
-		dest -= WFR_SOP_DISTANCE;
+		dest -= SOP_DISTANCE;
 	}
 	/*
 	 * At this point dest could be (either, both, or neither):
@@ -788,8 +788,8 @@ void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t nbytes)
 			if (dest >= pbuf->end)
 				dest -= pbuf->size;
 			/* jump to SOP range if within the first block */
-			else if (pbuf->qw_written < WFR_PIO_BLOCK_QWS)
-				dest += WFR_SOP_DISTANCE;
+			else if (pbuf->qw_written < PIO_BLOCK_QWS)
+				dest += SOP_DISTANCE;
 
 			carry8_write8(pbuf->carry, dest);
 			pbuf->qw_written++;
@@ -832,32 +832,32 @@ void seg_pio_copy_end(struct pio_buf *pbuf)
 	if (dest >= pbuf->end)
 		dest -= pbuf->size;
 	/* jump to the SOP range if within the first block */
-	else if (pbuf->qw_written < WFR_PIO_BLOCK_QWS)
-		dest += WFR_SOP_DISTANCE;
+	else if (pbuf->qw_written < PIO_BLOCK_QWS)
+		dest += SOP_DISTANCE;
 
 	/* write final bytes, if any */
 	if (carry_write8(pbuf, dest)) {
 		dest += sizeof(u64);
 		/*
 		 * NOTE: We do not need to recalculate whether dest needs
-		 * WFR_SOP_DISTANCE or not.
+		 * SOP_DISTANCE or not.
 		 *
 		 * If we are in the first block and the dangle write
 		 * keeps us in the same block, dest will need
-		 * to retain WFR_SOP_DISTANCE in the loop below.
+		 * to retain SOP_DISTANCE in the loop below.
 		 *
 		 * If we are in the first block and the dangle write pushes
 		 * us to the next block, then loop below will not run
 		 * and dest is not used.  Hence we do not need to update
 		 * it.
 		 *
-		 * If we are past the first block, then WFR_SOP_DISTANCE
+		 * If we are past the first block, then SOP_DISTANCE
 		 * was never added, so there is nothing to do.
 		 */
 	}
 
 	/* fill in rest of block */
-	while (((unsigned long)dest & WFR_PIO_BLOCK_MASK) != 0) {
+	while (((unsigned long)dest & PIO_BLOCK_MASK) != 0) {
 		writeq(0, dest);
 		dest += sizeof(u64);
 	}

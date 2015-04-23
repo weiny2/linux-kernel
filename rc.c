@@ -726,8 +726,8 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 	else
 		ohdr->u.aeth = hfi1_compute_aeth(qp);
 	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-	/* set WFR_PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
-	pbc_flags |= ((!!(sc5 & 0x10)) << WFR_PBC_DC_INFO_SHIFT);
+	/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
+	pbc_flags |= ((!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT);
 	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	hdr.lrh[0] = cpu_to_be16(lrh0);
 	hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);

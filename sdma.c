@@ -83,7 +83,7 @@ MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 #define SDMA_ERR_HALT_TIMEOUT 10 /* ms */
 /* all SDMA engine errors that cause a halt */
 
-#define SD(name) WFR_SEND_DMA_##name
+#define SD(name) SEND_DMA_##name
 #define ALL_SDMA_ENG_HALT_ERRS \
 	(SD(ENG_ERR_STATUS_SDMA_WRONG_DW_ERR_SMASK) \
 	| SD(ENG_ERR_STATUS_SDMA_GEN_MISMATCH_ERR_SMASK) \
@@ -112,9 +112,9 @@ MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 
 /* handle long defines */
 #define SDMA_EGRESS_PACKET_OCCUPANCY_SMASK \
-WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SMASK
+SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SMASK
 #define SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT \
-WFR_SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT
+SEND_EGRESS_SEND_DMA_STATUS_SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT
 
 static const char * const sdma_state_names[] = {
 	[sdma_state_s00_hw_down]                = "s00_HwDown",
@@ -304,7 +304,7 @@ static void sdma_wait_for_packet_egress(struct sdma_engine *sde,
 	int lcnt = 0;
 
 	while (1) {
-		u64 reg = read_csr(dd, off + WFR_SEND_EGRESS_SEND_DMA_STATUS);
+		u64 reg = read_csr(dd, off + SEND_EGRESS_SEND_DMA_STATUS);
 
 		reg &= SDMA_EGRESS_PACKET_OCCUPANCY_SMASK;
 		reg >>= SDMA_EGRESS_PACKET_OCCUPANCY_SHIFT;
@@ -1029,7 +1029,7 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		dd->chip_sdma_mem_size);
 
 	per_sdma_credits =
-		dd->chip_sdma_mem_size/(num_engines * WFR_SDMA_BLOCK_SIZE);
+		dd->chip_sdma_mem_size/(num_engines * SDMA_BLOCK_SIZE);
 
 	/* set up freeze waitqueue */
 	init_waitqueue_head(&dd->sdma_unfreeze_wq);
@@ -1058,12 +1058,12 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		sde->descq_full_count = 0;
 
 		/* Create a mask for all 3 chip interrupt sources */
-		sde->imask = (u64)1 << (0*WFR_TXE_NUM_SDMA_ENGINES + this_idx)
-			| (u64)1 << (1*WFR_TXE_NUM_SDMA_ENGINES + this_idx)
-			| (u64)1 << (2*WFR_TXE_NUM_SDMA_ENGINES + this_idx);
+		sde->imask = (u64)1 << (0*TXE_NUM_SDMA_ENGINES + this_idx)
+			| (u64)1 << (1*TXE_NUM_SDMA_ENGINES + this_idx)
+			| (u64)1 << (2*TXE_NUM_SDMA_ENGINES + this_idx);
 		/* Create a mask specifically for sdma_idle */
 		sde->idle_mask =
-			(u64)1 << (2*WFR_TXE_NUM_SDMA_ENGINES + this_idx);
+			(u64)1 << (2*TXE_NUM_SDMA_ENGINES + this_idx);
 		spin_lock_init(&sde->tail_lock);
 		seqlock_init(&sde->head_lock);
 		spin_lock_init(&sde->senddmactrl_lock);
@@ -1734,11 +1734,11 @@ static void init_sdma_regs(
 			SD(MEMORY_SDMA_MEMORY_INDEX_SHIFT)));
 	write_sde_csr(sde, SD(ENG_ERR_MASK), ~0ull);
 	set_sdma_integrity(sde);
-	opmask = WFR_OPCODE_CHECK_MASK_DISABLED;
-	opval = WFR_OPCODE_CHECK_VAL_DISABLED;
+	opmask = OPCODE_CHECK_MASK_DISABLED;
+	opval = OPCODE_CHECK_VAL_DISABLED;
 	write_sde_csr(sde, SD(CHECK_OPCODE),
-		(opmask << WFR_SEND_CTXT_CHECK_OPCODE_MASK_SHIFT) |
-		(opval << WFR_SEND_CTXT_CHECK_OPCODE_VALUE_SHIFT));
+		(opmask << SEND_CTXT_CHECK_OPCODE_MASK_SHIFT) |
+		(opval << SEND_CTXT_CHECK_OPCODE_VALUE_SHIFT));
 }
 
 #ifdef CONFIG_SDMA_VERBOSITY
@@ -1772,10 +1772,10 @@ void sdma_dumpstate(struct sdma_engine *sde)
 	sdma_dumpstate_helper(SD(ENG_ERR_STATUS));
 	sdma_dumpstate_helper(SD(ENG_ERR_MASK));
 
-	for (i = 0; i < WFR_CCE_NUM_INT_CSRS; ++i) {
-		sdma_dumpstate_helper2(WFR_CCE_INT_STATUS));
-		sdma_dumpstate_helper2(WFR_CCE_INT_MASK);
-		sdma_dumpstate_helper2(WFR_CCE_INT_BLOCKED);
+	for (i = 0; i < CCE_NUM_INT_CSRS; ++i) {
+		sdma_dumpstate_helper2(CCE_INT_STATUS));
+		sdma_dumpstate_helper2(CCE_INT_MASK);
+		sdma_dumpstate_helper2(CCE_INT_BLOCKED);
 	}
 
 	sdma_dumpstate_helper(SD(TAIL));
@@ -1788,7 +1788,7 @@ void sdma_dumpstate(struct sdma_engine *sde)
 	sdma_dumpstate_helper(SD(MEMORY));
 	sdma_dumpstate_helper0(SD(ENGINES));
 	sdma_dumpstate_helper0(SD(MEM_SIZE));
-	/* sdma_dumpstate_helper(WFR_SEND_EGRESS_SEND_DMA_STATUS);  */
+	/* sdma_dumpstate_helper(SEND_EGRESS_SEND_DMA_STATUS);  */
 	sdma_dumpstate_helper(SD(BASE_ADDR));
 	sdma_dumpstate_helper(SD(LEN_GEN));
 	sdma_dumpstate_helper(SD(HEAD_ADDR));
@@ -1904,7 +1904,7 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		sde->descq_head,
 		   !list_empty(&sde->flushlist),
 		sde->descq_full_count,
-		(unsigned long long)read_sde_csr(sde, WFR_SEND_DMA_CHECK_SLID));
+		(unsigned long long)read_sde_csr(sde, SEND_DMA_CHECK_SLID));
 
 	/* print info for each entry in the descriptor queue */
 	while (head != tail) {

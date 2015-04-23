@@ -585,8 +585,8 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 
 	/* Validate the opcode. Do not trust packets from user space blindly. */
 	opcode = (be32_to_cpu(req->hdr.bth[0]) >> 24) & 0xff;
-	if ((opcode & WFR_USER_OPCODE_CHECK_MASK) !=
-	     WFR_USER_OPCODE_CHECK_VAL) {
+	if ((opcode & USER_OPCODE_CHECK_MASK) !=
+	     USER_OPCODE_CHECK_VAL) {
 		SDMA_DBG(req, "Invalid opcode (%d)", opcode);
 		ret = -EINVAL;
 		goto free_req;
@@ -647,7 +647,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u16 ntids = iovec[idx].iov_len / sizeof(*req->tids);
 
-		if (!ntids || ntids > WFR_MAX_TID_PAIR_ENTRIES) {
+		if (!ntids || ntids > MAX_TID_PAIR_ENTRIES) {
 			ret = -EINVAL;
 			goto free_req;
 		}
@@ -1121,7 +1121,7 @@ static int check_header_template(struct user_sdma_request *req,
 	 * transfer since the header is "given" to us by user space.
 	 * For the remainder of the packets we compute the values.
 	 */
-	if (req->info.fragsize % WFR_PIO_BLOCK_SIZE ||
+	if (req->info.fragsize % PIO_BLOCK_SIZE ||
 	    lrhlen & 0x3 || req->data_len & 0x3) /* ||
 		// XXX (MITKO): lrhlen will be larger than the fragsize due
 		// to the header. How do we handle that?
