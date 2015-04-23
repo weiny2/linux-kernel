@@ -1007,7 +1007,7 @@ int qib_post_ud_send(struct hfi1_qp *qp, struct ib_send_wr *wr);
 void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
 
-int wfr_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey);
+int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey);
 
 int hfi1_alloc_lkey(struct hfi1_mregion *mr, int dma_region);
 

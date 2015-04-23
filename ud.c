@@ -437,7 +437,7 @@ unlock:
  *
  * @returns the index found or -1 if not found
  */
-int wfr_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey)
+int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey)
 {
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	unsigned i;
@@ -746,7 +746,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 			}
 		} else {
 			/* GSI packet */
-			mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
+			mgmt_pkey_idx = hfi1_lookup_pkey_idx(ibp, pkey);
 			if (mgmt_pkey_idx < 0)
 				goto drop;
 
@@ -783,7 +783,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 			goto drop;
 
 		/* lookup SMI pkey */
-		mgmt_pkey_idx = wfr_lookup_pkey_idx(ibp, pkey);
+		mgmt_pkey_idx = hfi1_lookup_pkey_idx(ibp, pkey);
 		if (mgmt_pkey_idx < 0)
 			goto drop;
 

@@ -103,7 +103,7 @@ static void qib_send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 	if (ibp->trap_timeout && time_before(jiffies, ibp->trap_timeout))
 		return;
 
-	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
+	pkey_idx = hfi1_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
 		pr_warn("%s: failed to find limited mgmt pkey, defaulting 0x%x\n",
 			__func__, hfi1_get_pkey(ibp, 1));
@@ -4027,7 +4027,7 @@ static int hfi_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 	u32 resp_len = 0;
 	struct hfi1_ibport *ibp = to_iport(ibdev, port);
 
-	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
+	pkey_idx = hfi1_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
 		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
 			hfi1_get_pkey(ibp, 1));
