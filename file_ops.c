@@ -798,7 +798,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	hfi1_clear_ctxt_jkey(dd, uctxt->ctxt);
 	/*
 	 * Reset context integrity checks to default.
-	 * (writes to CSRs probably belong in wfr.c)
+	 * (writes to CSRs probably belong in chip.c)
 	 */
 	write_kctxt_csr(dd, uctxt->sc->hw_context, WFR_SEND_CTXT_CHECK_ENABLE,
 			hfi_pkt_default_send_ctxt_mask(dd, uctxt->sc->type));

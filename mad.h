@@ -58,7 +58,7 @@
 #ifndef PI_LED_ENABLE_SUP
 #define PI_LED_ENABLE_SUP 0
 #endif
-#include "wfr_linux.h"
+#include "opa_compat.h"
 
 #define IB_SMP_UNSUP_VERSION    cpu_to_be16(0x0004)
 #define IB_SMP_UNSUP_METHOD     cpu_to_be16(0x0008)

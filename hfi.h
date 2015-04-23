@@ -74,7 +74,7 @@
 #include "common.h"
 #include "verbs.h"
 #include "pio.h"
-#include "wfr.h"
+#include "chip.h"
 #include "mad.h"
 #include "qsfp.h"
 

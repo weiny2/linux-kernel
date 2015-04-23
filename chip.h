@@ -1,5 +1,5 @@
-#ifndef _WFR_H
-#define _WFR_H
+#ifndef _CHIP_H
+#define _CHIP_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -624,7 +624,7 @@ int acquire_hw_mutex(struct hfi_devdata *dd);
 void release_hw_mutex(struct hfi_devdata *dd);
 void fabric_serdes_reset(struct hfi_devdata *dd);
 
-/* wfr.c */
+/* chip.c */
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
 void read_guid(struct hfi_devdata *dd);
 int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
@@ -999,5 +999,5 @@ int hfi1_clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt);
 int hfi1_set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey);
 int hfi1_clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt);
 void hfi1_read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
-#endif /* _WFR_H */
+#endif /* _CHIP_H */
 
