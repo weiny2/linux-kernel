@@ -8459,19 +8459,17 @@ static int request_msix_irqs(struct hfi_devdata *dd)
 	 */
 	local_mask = cpumask_of_pcibus(dd->pcidev->bus);
 	first_cpu = cpumask_first(local_mask);
-	/* TODO: What is the point of the cpumask_weight check? */
-	if (first_cpu >= nr_cpu_ids ||
-		cpumask_weight(local_mask) == num_online_cpus()) {
+	/* if first cpu is invalid, use NUMA 0 */
+	if (first_cpu >= nr_cpu_ids) {
 		local_mask = topology_core_cpumask(0);
 		first_cpu = cpumask_first(local_mask);
 	}
-	if (first_cpu < nr_cpu_ids) {
-		restart_cpu = cpumask_next(first_cpu, local_mask);
-		if (restart_cpu >= nr_cpu_ids)
-			restart_cpu = first_cpu;
-	}
 	/* decide the restart point */
-	if (local_node > 0) {	/* not NUMA 0 */
+	if (local_node == 0) {
+		restart_cpu = cpumask_next(first_cpu, local_mask);
+		if (restart_cpu >= nr_cpu_ids) /* invalid */
+			restart_cpu = first_cpu;
+	} else {
 		/* restart is the first */
 		restart_cpu = first_cpu;
 	}
