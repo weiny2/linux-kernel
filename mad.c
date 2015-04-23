@@ -2508,9 +2508,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	/* rsp->port_xmit_time_cong is 0 for HFIs */
 	/* rsp->port_xmit_wasted_bw ??? */
 	/* rsp->port_xmit_wait_data ??? */
-	/* FECN markins is only relevant for swich not HFI */
-	/*rsp->port_mark_fecn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK*/
+	/* rsp->port_mark_fecn is 0 for HFIs */
 
 	rsp->port_xmit_data = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_FLITS,
 						CNTR_INVALID_VL));
@@ -2805,9 +2803,6 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 	rsp->port_rcv_constraint_ei.slid =
 		cpu_to_be32(dd->err_info_rcv_constraint.slid);
 
-	/* PortRcvSwitchRelayErrorInfo */
-	/* FIXME this error counter isn't relevant to HFIs */
-
 	/* UncorrectableErrorInfo */
 	rsp->uncorrectable_ei.status_and_code = dd->err_info_uncorrectable;
 
@@ -3019,9 +3014,6 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 
 	if (error_info_select & ES_PORT_RCV_CONSTRAINT_ERROR_INFO)
 		dd->err_info_rcv_constraint.status &= ~OPA_EI_STATUS_SMASK;
-
-	/* PortRcvSwitchRelayErrorInfo */
-	/* FIXME this error counter isn't relevant to HFIs */
 
 	/* UncorrectableErrorInfo */
 	if (error_info_select & ES_UNCORRECTABLE_ERROR_INFO)

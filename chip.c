@@ -6495,7 +6495,6 @@ static int set_vl_weights(struct hfi1_pportdata *ppd, u32 target,
 				<< SEND_LOW_PRIORITY_LIST_WEIGHT_SHIFT);
 		write_csr(dd, target + (i * 8), reg);
 	}
-	/* FIXME: Setting the weights automatically turns this on? */
 	pio_send_control(dd, PSC_GLOBAL_VLARB_ENABLE);
 
 	if (drain)
