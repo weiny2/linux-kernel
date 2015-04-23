@@ -587,7 +587,7 @@ static void qib_tune_pcie_caps(struct hfi_devdata *dd)
 
 	/* Find out supported and configured values for parent (root) */
 	parent = dd->pcidev->bus->self;
-	if (parent->bus->parent) {
+	if (!pci_is_root_bus(parent->bus)) {
 		dd_dev_info(dd, "Parent not root\n");
 		return;
 	}
