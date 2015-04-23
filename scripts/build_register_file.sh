@@ -1,10 +1,12 @@
 #!/bin/bash
 
 # You probably do not want to run this. If you don't know what you are doing
-# then STOP HERE.
+# then STOP HERE. This script is being included just for informational purposes
+# it should not need to be run ever again. This shows what was done to create
+# the initial minimal register set.
 
 echo "Really want to run this script? You probably want refresh_register_file.sh"
-sleep 30
+exit 0
 
 # This script builds the register header file.
 echo "Removing old chip register file"
@@ -76,5 +78,4 @@ for reg in `cat register_used.txt`; do
 	egrep "^ $reg\s+" register_val_list.txt >> register_minimal_set.txt; 
 done
 
-./refresh_register_file.sh
 

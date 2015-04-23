@@ -1,5 +1,9 @@
 #!/bin/bash
 
+echo "Building list of all possible registers and their value"
+rm -f register_val_list.txt
+awk '/#define/ {if (NF > 2) { $1=""; print $0}}' ../include/wfr/* > register_val_list.txt
+
 echo "Generating header file"
 echo "#ifndef DEF_CHIP_REG" > chip_registers.h
 echo "#define DEF_CHIP_REG" >> chip_registers.h
@@ -61,7 +65,17 @@ COPYRIGHT
 
 egrep "#define\s+\S+\s+" ../include/wfr/wfr_core_defs.h >> chip_registers.h
 echo "" >> chip_registers.h
-awk '{print "#define" $0}' register_minimal_set.txt >> chip_registers.h
+
+# Look up the register values for the registers we want.
+for reg in `cat register_minimal_set.txt`; do
+	val=`egrep "^ $reg\s+" register_val_list.txt`
+	if [[ $? -ne 0 ]]; then
+		echo "ERROR: $reg not defined!"
+		exit 1
+	fi
+	echo "#define$val" >> chip_registers.h
+done
+
 echo "" >> chip_registers.h
 echo "#endif          /* DEF_CHIP_REG */" >> chip_registers.h
 
