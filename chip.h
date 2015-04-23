@@ -87,17 +87,9 @@
 /* Number of PKey entries in the HW */
 #define WFR_MAX_PKEY_VALUES 16
 
-#include "include/wfr/wfr_core_defs.h"
-#include "include/wfr/wfr_cce_defs.h"
-#include "include/wfr/wfr_rxe_defs.h"
-#include "include/wfr/wfr_txe_defs.h"
-#include "include/wfr/wfr_misc_defs.h"
-#include "include/wfr/wfr_asic_defs.h"
-#include "include/wfr/dc_8051_csrs_defs.h"
-#include "include/wfr/dcc_csrs_defs.h"
-#include "include/wfr/dc_lcb_csrs_defs.h"
+#include "chip_registers.h"
 
-/* not defined in wfr_core_defs.h */
+/* not defined in chip_registers.h */
 #define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000
 #define WFR_RXE_PER_CONTEXT_USER   (WFR_RXE + WFR_RXE_PER_CONTEXT_USER_OFFSET)
 

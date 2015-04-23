@@ -71,6 +71,7 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 
+#include "chip_registers.h"
 #include "common.h"
 #include "verbs.h"
 #include "pio.h"

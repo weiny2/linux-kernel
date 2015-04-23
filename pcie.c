@@ -56,7 +56,7 @@
 #include <linux/module.h>
 
 #include "hfi.h"
-#include "include/wfr/wfr_pcie_defs.h"
+#include "chip_registers.h"
 
 /* link speed vector for Gen3 speed - not in Linux headers */
 #define GEN1_SPEED_VECTOR 0x1
