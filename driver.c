@@ -398,12 +398,6 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 	if (packet->rhf & (RHF_VCRC_ERR | RHF_ICRC_ERR))
 		return;
 
-	/*
-	 * TODO: In HFI, RHF.TIDErr can mean 2 things, depending on the
-	 * packet type.  Does this code apply to both,
-	 * type 0 packets (expected receive) - Expected TIDErr and
-	 * non-type 0 packets (not expected receive) - Eager TIDErr?
-	 */
 	if (packet->rhf & RHF_TID_ERR) {
 		/* For TIDERR and RC QPs premptively schedule a NAK */
 		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)rhdr;
@@ -602,7 +596,6 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 		if (rhf_use_egr_bfr(rhf)) {
 			etail = rhf_egr_index(rhf);
 			ebuf = qib_get_egrbuf(rcd, rhf, &updegr);
-			/* TODO: Keep the prefetch?  Why are we doing it? */
 			/*
 			 * Prefetch the contents of the eager buffer.  It is
 			 * OK to send a negative length to prefetch_range().
