@@ -293,9 +293,6 @@ static _hfi_inline void set_comp_state(struct user_sdma_request *,
 static _hfi_inline u32 set_pkt_bth_psn(__be32, u8, u32);
 static _hfi_inline u32 get_lrh_len(struct hfi_pkt_header, u32 len);
 
-#if 0
-static int user_sdma_progress(void *);
-#endif
 static int defer_packet_queue(
 	struct sdma_engine *,
 	struct iowait *,
@@ -330,11 +327,6 @@ static int defer_packet_queue(
 	struct user_sdma_txreq *tx =
 		container_of(txreq, struct user_sdma_txreq, txreq);
 
-#if 0
-	SDMA_Q_DBG(pq, "Putting queue to sleep");
-	/* if (cmpxchg(&pq->state, SDMA_PKT_Q_ACTIVE, SDMA_PKT_Q_DEFERRED) ==
-	   SDMA_PKT_Q_ACTIVE) */
-#endif
 	if (sdma_progress(sde, seq, txreq)) {
 		if (tx->busycount++ < MAX_DEFER_RETRY_COUNT)
 			goto eagain;
@@ -352,25 +344,12 @@ static int defer_packet_queue(
 	return -EBUSY;
 eagain:
 	return -EAGAIN;
-#if 0
-	return -EINVAL;
-#endif
 }
 
 static void activate_packet_queue(struct iowait *wait, int reason)
 {
 	struct hfi_user_sdma_pkt_q *pq =
 		container_of(wait, struct hfi_user_sdma_pkt_q, busy);
-#if 0
-	struct hfi1_ctxtdata *uctxt = pq->dd->rcd[pq->ctxt];
-
-	if (cmpxchg(&pq->state, SDMA_PKT_Q_DEFERRED, SDMA_PKT_Q_ACTIVE) ==
-	    SDMA_PKT_Q_DEFERRED)
-		wake_up_process(uctxt->progress);
-	else
-		SDMA_Q_DBG(pq, "Wrong queue state %u, expected %u",
-			   pq->state, SDMA_PKT_Q_DEFERRED);
-#endif
 	xchg(&pq->state, SDMA_PKT_Q_ACTIVE);
 	wake_up(&wait->wait_dma);
 };
@@ -456,29 +435,6 @@ int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 	cq->nentries = hfi_sdma_comp_ring_size;
 	user_sdma_comp_fp(fp) = cq;
 
-#if 0
-	/* Allocate the task (only if master context). However, we don't need
-	 * to start it until the first request arrives. */
-	if (!subctxt_fp(fp)) {
-		uctxt->progress =
-			kthread_create_on_node(user_sdma_progress,
-					       (void *)uctxt,
-					       uctxt->numa_id, "hfiusdma%u:%u",
-					       dd->unit, uctxt->ctxt);
-		if (IS_ERR(uctxt->progress)) {
-			dd_dev_err(dd,
-				   "[%u:%u] Failed to create progress thread\n",
-				   dd->unit, uctxt->ctxt);
-			ret = PTR_ERR(uctxt->progress);
-			goto done;
-		}
-	}
-	/*
-	 * This should start the thread, which should immediately put itself
-	 * to sleep since there is nothing to do yet.
-	 */
-	wake_up_process(uctxt->progress);
-#endif
 	spin_lock_irqsave(&uctxt->sdma_qlock, flags);
 	list_add(&pq->list, &uctxt->sdma_queues);
 	spin_unlock_irqrestore(&uctxt->sdma_qlock, flags);
@@ -507,10 +463,6 @@ int hfi_user_sdma_free_queues(struct hfi_filedata *fd)
 
 	hfi_cdbg(SDMA, "[%u:%u:%u] Freeing user SDMA queues", uctxt->dd->unit,
 		 uctxt->ctxt, fd->subctxt);
-#if 0
-	if (!fd->subctxt && uctxt->progress)
-		kthread_stop(uctxt->progress);
-#endif
 	pq = fd->pq;
 	if (pq) {
 		u16 i, j;
@@ -758,27 +710,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		/* Take the references to the user's task and mm_struct */
 		get_task_struct(current);
 		req->user_proc = current;
-#if 0
-		/*
-		 * It is *VERY* important that this increment does not happen
-		 * until all request processing that should happen in this
-		 * function has already completed. This is due to the fact that
-		 * the background packet processing thread uses this count as an
-		 * indicator to start processing the request.
-		 * If the increment happens before this function is done with
-		 * the request, then the thread could start processing it before
-		 * this function is done.
-		 */
-		set_bit(SDMA_REQ_FOR_THREAD, &req->flags);
-		xchg(&pq->state, SDMA_PKT_Q_ACTIVE);
-		/*
-		 * We are done with everything here and we've indicated to the
-		 * thread that we've added this request. Now, it's time to wake
-		 * it up.
-		 */
-		if (uctxt->progress)
-			wake_up_process(uctxt->progress);
-#endif
+
 		/*
 		 * This is a somewhat blocking send implementation.
 		 * The driver will block the caller until all packets of the
@@ -1542,87 +1474,3 @@ static _hfi_inline void set_comp_state(struct user_sdma_request *req,
 				       state, ret);
 }
 
-#if 0
-static int user_sdma_progress(void *data)
-{
-	int ret = 0, sleep;
-	struct hfi1_ctxtdata *uctxt = data;
-	struct hfi_user_sdma_pkt_q *pq, *ptr;
-
-	while (!kthread_should_stop()) {
-		sleep = 1;
-		list_for_each_entry_safe(pq, ptr, &uctxt->sdma_queues, list) {
-			struct user_sdma_request *req = NULL;
-			unsigned sent = 0;
-
-			if (pq->state != SDMA_PKT_Q_ACTIVE)
-				continue;
-
-			hfi_cdbg(SDMA, "processing queue %u:%u %u", pq->ctxt,
-				 pq->subctxt, pq->reqidx);
-			/* Does this queue contain any requests? */
-			if (unlikely(!atomic_read(&pq->n_reqs)))
-				continue;
-
-			while (atomic64_read(&pq->npkts) &&
-			      sent < MAX_PKTS_PER_QUEUE) {
-				unsigned to_send = 0, next = 0;
-
-				req = &pq->reqs[pq->reqidx];
-				/* Is this request current active */
-				if (!test_bit(SDMA_REQ_IN_USE, &req->flags) ||
-				    !test_bit(SDMA_REQ_FOR_THREAD,
-					      &req->flags) ||
-				    test_bit(SDMA_REQ_SEND_DONE, &req->flags)) {
-					next = 1;
-					goto next;
-				}
-				/*
-				 * Check whether the request contains any
-				 * data vectors. We won't be processing any
-				 * requests that have only a header since that
-				 * would have been sent as the first (and only)
-				 * packet.
-				 */
-				if (!req->data_iovs) {
-					next = 1;
-					goto next;
-				}
-				to_send = min(req->info.npkts -
-					      req->txreqs_sent,
-					      MAX_PKTS_PER_QUEUE);
-				SDMA_DBG(req, "attempting to send %u pkts %u",
-					 to_send, sleep);
-				if (!to_send)
-					goto next;
-				ret = user_sdma_send_pkts(req, to_send);
-				if (unlikely(ret < 0)) {
-					if (ret != -EBUSY) {
-						set_comp_state(req, ERROR, ret);
-						user_sdma_free_request(req);
-						next = 1;
-						goto next;
-					} else
-						break;
-				} else
-					sent += ret;
-				if (req->txreqs_sent == req->info.npkts)
-					next = 1;
-next:
-				if (next)
-					if (++pq->reqidx == pq->n_max_reqs)
-						pq->reqidx = 0;
-			}
-			if (atomic64_read(&pq->npkts))
-				sleep = 0;
-		}
-		if (sleep) {
-			hfi_cdbg(SDMA, "Going to sleep");
-			/* Put ourselves to sleep if there is nothing to do */
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule();
-		}
-	}
-	return 0;
-}
-#endif

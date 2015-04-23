@@ -3808,16 +3808,6 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 						     resp_len);
 			goto bail;
 		}
-#if 0
-	case IB_MGMT_METHOD_TRAP_REPRESS:
-		if (smp->attr_id == IB_SMP_ATTR_NOTICE)
-			ret = subn_trap_repress(smp, ibdev, port);
-		else {
-			smp->status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply((struct ib_mad_hdr *)smp);
-		}
-		goto bail;
-#endif /* 01 */
 	case IB_MGMT_METHOD_TRAP:
 	case IB_MGMT_METHOD_REPORT:
 	case IB_MGMT_METHOD_REPORT_RESP:
@@ -3829,18 +3819,6 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 		 */
 		ret = IB_MAD_RESULT_SUCCESS;
 		goto bail;
-#if 0
-	case IB_MGMT_METHOD_SEND:
-		if (ib_get_smp_direction(smp) &&
-		    smp->attr_id == HFI1_VENDOR_IPG) {
-			ppd->dd->f_set_ib_cfg(ppd, HFI1_IB_CFG_PORT,
-					      smp->data[0]);
-			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
-		} else
-			ret = IB_MAD_RESULT_SUCCESS;
-		goto bail;
-
-#endif /* 0 */
 	default:
 		smp->status |= IB_SMP_UNSUP_METHOD;
 		ret = reply((struct ib_mad_hdr *)smp);
@@ -3943,26 +3921,6 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		case OPA_PM_ATTRIB_ID_ERROR_INFO:
 			ret = pma_get_opa_errorinfo(pmp, ibdev, port);
 			goto bail;
-#if 0
-		case IB_PMA_PORT_SAMPLES_CONTROL:
-			ret = pma_get_portsamplescontrol(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_SAMPLES_RESULT:
-			ret = pma_get_portsamplesresult(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_SAMPLES_RESULT_EXT:
-			ret = pma_get_portsamplesresult_ext(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS:
-			ret = pma_get_portcounters(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_EXT:
-			ret = pma_get_portcounters_ext(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_CONG:
-			ret = pma_get_portcounters_cong(pmp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply((struct ib_mad_hdr *)pmp);
@@ -3977,20 +3935,6 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		case OPA_PM_ATTRIB_ID_ERROR_INFO:
 			ret = pma_set_opa_errorinfo(pmp, ibdev, port);
 			goto bail;
-#if 0
-		case IB_PMA_PORT_SAMPLES_CONTROL:
-			ret = pma_set_portsamplescontrol(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS:
-			ret = pma_set_portcounters(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_EXT:
-			ret = pma_set_portcounters_ext(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_CONG:
-			ret = pma_set_portcounters_cong(pmp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply((struct ib_mad_hdr *)pmp);

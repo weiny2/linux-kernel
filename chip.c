@@ -831,23 +831,6 @@ static struct flag_table rxe_err_status_flags[] = {
 	WFR_RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK | \
 	WFR_RCV_ERR_STATUS_RX_DMA_DATA_FIFO_RD_UNC_ERR_SMASK)
 
-#if 0 /* no users at present */
-/*
- * Credit Return flags
- */
-static struct flag_table credit_return_flags[] = {
-	FLAG_ENTRY("Status", 0, WFR_CR_STATUS_SMASK),
-	FLAG_ENTRY("CreditReturnDueToPbc", 0,
-		WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK),
-	FLAG_ENTRY("CreditReturnDueToThreshold", 0,
-		WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK),
-	FLAG_ENTRY("CreditReturnDueToErr", 0,
-		WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SMASK),
-	FLAG_ENTRY("CreditReturnDueToForce", 0,
-		WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK)
-};
-#endif
-
 /*
  * DCC Error Flags
  */
@@ -2372,15 +2355,6 @@ static char *send_context_err_status_string(char *buf, int buf_len, u64 flags)
 	return flag_string(buf, buf_len, flags,
 			sc_err_status_flags, ARRAY_SIZE(sc_err_status_flags));
 }
-
-#if 0 /* no users at present */
-/* print credit return flag fields */
-static char *credit_return_string(char *buf, int buf_len, u64 flags)
-{
-	return flag_string(buf, buf_len, flags,
-			credit_return_flags, ARRAY_SIZE(credit_return_flags));
-}
-#endif
 
 /*
  * Send context error interrupt.  Source (hw_context) is < 160.
@@ -6654,40 +6628,6 @@ static void set_sc2vlnt(struct hfi_devdata *dd, struct sc2vlnt *dp)
 		30, dp->vlnt[30] & 0xf,
 		31, dp->vlnt[31] & 0xf));
 }
-
-#if 0
-static void print_bc(
-	struct hfi_devdata *dd,
-	const char *func,
-	struct buffer_control *bc,
-	const char *what)
-{
-	dd_dev_info(dd, "%s: buffer control \"%s\" (hex values)\n", func, what);
-	dd_dev_info(dd, "%s:   overall_shared_limit %x\n", func,
-		be16_to_cpu(bc->overall_shared_limit));
-	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
-		(unsigned)be16_to_cpu(bc->vl[0].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[0].shared),
-		(unsigned)be16_to_cpu(bc->vl[1].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[1].shared),
-		(unsigned)be16_to_cpu(bc->vl[2].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[2].shared),
-		(unsigned)be16_to_cpu(bc->vl[3].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[3].shared));
-	dd_dev_info(dd, "%s:   vls [%x,%x], [%x,%x], [%x,%x], [%x,%x]\n", func,
-		(unsigned)be16_to_cpu(bc->vl[4].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[4].shared),
-		(unsigned)be16_to_cpu(bc->vl[5].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[5].shared),
-		(unsigned)be16_to_cpu(bc->vl[6].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[6].shared),
-		(unsigned)be16_to_cpu(bc->vl[7].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[7].shared));
-	dd_dev_info(dd, "%s:   vls [%x,%x]\n", func,
-		(unsigned)be16_to_cpu(bc->vl[15].dedicated),
-		(unsigned)be16_to_cpu(bc->vl[15].shared));
-}
-#endif
 
 static void nonzero_msg(struct hfi_devdata *dd, int idx, const char *what,
 				u16 limit)
