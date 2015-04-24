@@ -67,11 +67,11 @@
 /*
  * These are compile time constants that you may want to enable or disable
  * if you are trying to debug problems with code or performance.
- * QIB_VERBOSE_TRACING define as 1 if you want additional tracing in
+ * HFI1_VERBOSE_TRACING define as 1 if you want additional tracing in
  * fastpath code
- * QIB_TRACE_REGWRITES define as 1 if you want register writes to be
+ * HFI1_TRACE_REGWRITES define as 1 if you want register writes to be
  * traced in faspath code
- * _QIB_TRACING define as 0 if you want to remove all tracing in a
+ * _HFI1_TRACING define as 0 if you want to remove all tracing in a
  * compilation unit
  */
 
@@ -203,7 +203,7 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI_DRIVER_VERSION_BASE
-#define HFI_DRIVER_VERSION_BASE "0.7-420"
+#define HFI_DRIVER_VERSION_BASE "0.7-452"
 #endif
 
 /* create the final driver version string */
@@ -264,9 +264,9 @@ struct diag_pkt {
  * Data layout in I2C flash (for GUID, etc.)
  * All fields are little-endian binary unless otherwise stated
  */
-#define QIB_FLASH_VERSION 2
+#define HFI1_FLASH_VERSION 2
 struct qib_flash {
-	/* flash layout version (QIB_FLASH_VERSION) */
+	/* flash layout version (HFI1_FLASH_VERSION) */
 	__u8 if_fversion;
 	/* checksum protecting if_length bytes */
 	__u8 if_csum;
@@ -392,27 +392,27 @@ struct hfi1_message_header {
 };
 
 /* IB - LRH header consts */
-#define QIB_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
-#define QIB_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
+#define HFI1_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
+#define HFI1_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
 
 /* misc. */
 #define SIZE_OF_CRC 1
 
-#define WFR_LIM_MGMT_P_KEY       0x7FFF
-#define WFR_FULL_MGMT_P_KEY      0xFFFF
+#define LIM_MGMT_P_KEY       0x7FFF
+#define FULL_MGMT_P_KEY      0xFFFF
 
-#define WFR_DEFAULT_P_KEY WFR_LIM_MGMT_P_KEY
-#define QIB_PERMISSIVE_LID 0xFFFF
-#define QIB_AETH_CREDIT_SHIFT 24
-#define QIB_AETH_CREDIT_MASK 0x1F
-#define QIB_AETH_CREDIT_INVAL 0x1F
-#define QIB_MSN_MASK 0xFFFFFF
-#define QIB_QPN_MASK 0xFFFFFF
-#define QIB_FECN_SHIFT 31
-#define QIB_FECN_MASK 0x1
-#define QIB_BECN_SHIFT 30
-#define QIB_BECN_MASK 0x1
-#define QIB_MULTICAST_LID_BASE 0xC000
+#define DEFAULT_P_KEY LIM_MGMT_P_KEY
+#define HFI1_PERMISSIVE_LID 0xFFFF
+#define HFI1_AETH_CREDIT_SHIFT 24
+#define HFI1_AETH_CREDIT_MASK 0x1F
+#define HFI1_AETH_CREDIT_INVAL 0x1F
+#define HFI1_MSN_MASK 0xFFFFFF
+#define HFI1_QPN_MASK 0xFFFFFF
+#define HFI1_FECN_SHIFT 31
+#define HFI1_FECN_MASK 0x1
+#define HFI1_BECN_SHIFT 30
+#define HFI1_BECN_MASK 0x1
+#define HFI1_MULTICAST_LID_BASE 0xC000
 
 static inline __u64 rhf_to_cpu(const __le32 *rbuf)
 {

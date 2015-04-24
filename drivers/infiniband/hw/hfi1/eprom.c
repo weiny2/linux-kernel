@@ -91,7 +91,7 @@
 #define COUNT_DELAY_SEC(n) ((n) * (1000000/WAIT_SLEEP_US))
 
 /* GPIO pins */
-#define WFR_EPROM_WP_N (1ull << 14)	/* EPROM write line */
+#define EPROM_WP_N (1ull << 14)	/* EPROM write line */
 
 /*
  * Use the EP mutex to guard against other callers from within the driver.
@@ -106,11 +106,11 @@ static int eprom_available;	/* default: not available */
 static void write_enable(struct hfi_devdata *dd)
 {
 	/* raise signal */
-	write_csr(dd, WFR_ASIC_GPIO_OUT,
-		read_csr(dd, WFR_ASIC_GPIO_OUT) | WFR_EPROM_WP_N);
+	write_csr(dd, ASIC_GPIO_OUT,
+		read_csr(dd, ASIC_GPIO_OUT) | EPROM_WP_N);
 	/* raise enable */
-	write_csr(dd, WFR_ASIC_GPIO_OE,
-		read_csr(dd, WFR_ASIC_GPIO_OE) | WFR_EPROM_WP_N);
+	write_csr(dd, ASIC_GPIO_OE,
+		read_csr(dd, ASIC_GPIO_OE) | EPROM_WP_N);
 }
 
 /*
@@ -119,11 +119,11 @@ static void write_enable(struct hfi_devdata *dd)
 static void write_disable(struct hfi_devdata *dd)
 {
 	/* lower signal */
-	write_csr(dd, WFR_ASIC_GPIO_OUT,
-		read_csr(dd, WFR_ASIC_GPIO_OUT) & ~WFR_EPROM_WP_N);
+	write_csr(dd, ASIC_GPIO_OUT,
+		read_csr(dd, ASIC_GPIO_OUT) & ~EPROM_WP_N);
 	/* lower enable */
-	write_csr(dd, WFR_ASIC_GPIO_OE,
-		read_csr(dd, WFR_ASIC_GPIO_OE) & ~WFR_EPROM_WP_N);
+	write_csr(dd, ASIC_GPIO_OE,
+		read_csr(dd, ASIC_GPIO_OE) & ~EPROM_WP_N);
 }
 
 /*
@@ -137,12 +137,12 @@ static int wait_for_not_busy(struct hfi_devdata *dd)
 	int ret = 0;
 
 	/* starts page mode */
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_READ_SR1);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_READ_SR1);
 	while (1) {
 		udelay(WAIT_SLEEP_US);
 		usleep_range(WAIT_SLEEP_US - 5, WAIT_SLEEP_US + 5);
 		count++;
-		reg = read_csr(dd, WFR_ASIC_EEP_DATA);
+		reg = read_csr(dd, ASIC_EEP_DATA);
 		if ((reg & SR1_BUSY) == 0)
 			break;
 		/* 200s is the largest time for a 128Mb device */
@@ -154,7 +154,7 @@ static int wait_for_not_busy(struct hfi_devdata *dd)
 	}
 
 	/* stop page mode with a NOP */
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_NOP);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_NOP);
 
 	return ret;
 }
@@ -165,8 +165,8 @@ static int wait_for_not_busy(struct hfi_devdata *dd)
 static u32 read_device_id(struct hfi_devdata *dd)
 {
 	/* read the Manufacture Device ID */
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_READ_MANUF_DEV_ID);
-	return (u32)read_csr(dd, WFR_ASIC_EEP_DATA);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_READ_MANUF_DEV_ID);
+	return (u32)read_csr(dd, ASIC_EEP_DATA);
 }
 
 /*
@@ -178,8 +178,8 @@ static int erase_chip(struct hfi_devdata *dd)
 
 	write_enable(dd);
 
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_WRITE_ENABLE);
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_CHIP_ERASE);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_WRITE_ENABLE);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_CHIP_ERASE);
 	ret = wait_for_not_busy(dd);
 
 	write_disable(dd);
@@ -207,8 +207,8 @@ static int erase_32kb_range(struct hfi_devdata *dd, u32 start, u32 end)
 	write_enable(dd);
 
 	for (; start < end; start += SIZE_32KB) {
-		write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_WRITE_ENABLE);
-		write_csr(dd, WFR_ASIC_EEP_ADDR_CMD,
+		write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_WRITE_ENABLE);
+		write_csr(dd, ASIC_EEP_ADDR_CMD,
 						CMD_SECTOR_ERASE_32KB(start));
 		ret = wait_for_not_busy(dd);
 		if (ret)
@@ -229,10 +229,10 @@ static void read_page(struct hfi_devdata *dd, u32 offset, u32 *result)
 {
 	int i;
 
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_READ_DATA(offset));
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_READ_DATA(offset));
 	for (i = 0; i < EP_PAGE_SIZE/sizeof(u32); i++)
-		result[i] = (u32)read_csr(dd, WFR_ASIC_EEP_DATA);
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_NOP); /* close open page */
+		result[i] = (u32)read_csr(dd, ASIC_EEP_DATA);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_NOP); /* close open page */
 }
 
 /*
@@ -269,11 +269,11 @@ static int write_page(struct hfi_devdata *dd, u32 offset, u32 *data)
 {
 	int i;
 
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_WRITE_ENABLE);
-	write_csr(dd, WFR_ASIC_EEP_DATA, data[0]);
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_PAGE_PROGRAM(offset));
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_WRITE_ENABLE);
+	write_csr(dd, ASIC_EEP_DATA, data[0]);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_PAGE_PROGRAM(offset));
 	for (i = 1; i < EP_PAGE_SIZE/sizeof(u32); i++)
-		write_csr(dd, WFR_ASIC_EEP_DATA, data[i]);
+		write_csr(dd, ASIC_EEP_DATA, data[i]);
 	/* will close the open page */
 	return wait_for_not_busy(dd);
 }
@@ -376,7 +376,7 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 		break;
 	case HFI_CMD_EP_ERASE_P1:
 		/* check for overflow */
-		if (P1_START + cmd->len > WFR_ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
+		if (P1_START + cmd->len > ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
 			ret = -ERANGE;
 			break;
 		}
@@ -391,7 +391,7 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 		break;
 	case HFI_CMD_EP_READ_P1:
 		/* check for overflow */
-		if (P1_START + cmd->len > WFR_ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
+		if (P1_START + cmd->len > ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
 			ret = -ERANGE;
 			break;
 		}
@@ -406,7 +406,7 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 		break;
 	case HFI_CMD_EP_WRITE_P1:
 		/* check for overflow */
-		if (P1_START + cmd->len > WFR_ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
+		if (P1_START + cmd->len > ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
 			ret = -ERANGE;
 			break;
 		}
@@ -433,7 +433,7 @@ int eprom_init(struct hfi_devdata *dd)
 	int ret = 0;
 
 	/* only the discrete chip has an EPROM, nothing to do */
-	if (dd->pcidev->device != PCI_DEVICE_ID_INTEL_WFR0)
+	if (dd->pcidev->device != PCI_DEVICE_ID_INTEL0)
 		return 0;
 
 	/* lock against other callers */
@@ -458,14 +458,14 @@ int eprom_init(struct hfi_devdata *dd)
 	/* reset EPROM to be sure it is in a good state */
 
 	/* set reset */
-	write_csr(dd, WFR_ASIC_EEP_CTL_STAT,
-					WFR_ASIC_EEP_CTL_STAT_EP_RESET_SMASK);
+	write_csr(dd, ASIC_EEP_CTL_STAT,
+					ASIC_EEP_CTL_STAT_EP_RESET_SMASK);
 	/* clear reset, set speed */
-	write_csr(dd, WFR_ASIC_EEP_CTL_STAT,
-			EP_SPEED_FULL << WFR_ASIC_EEP_CTL_STAT_RATE_SPI_SHIFT);
+	write_csr(dd, ASIC_EEP_CTL_STAT,
+			EP_SPEED_FULL << ASIC_EEP_CTL_STAT_RATE_SPI_SHIFT);
 
 	/* wake the device with command "release powerdown NoID" */
-	write_csr(dd, WFR_ASIC_EEP_ADDR_CMD, CMD_RELEASE_POWERDOWN_NOID);
+	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_RELEASE_POWERDOWN_NOID);
 
 	eprom_available = 1;
 	release_hw_mutex(dd);

@@ -401,8 +401,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 			}
 			sc_disable(sc);
 			ret = sc_enable(sc);
-			hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_ENB,
-				      uctxt->ctxt);
+			hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_ENB,
+				     uctxt->ctxt);
 		} else
 			ret = sc_restart(sc);
 		if (!ret)
@@ -504,17 +504,17 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	switch (type) {
 	case PIO_BUFS:
 	case PIO_BUFS_SOP:
-		memaddr = ((dd->physaddr + WFR_TXE_PIO_SEND) +
+		memaddr = ((dd->physaddr + TXE_PIO_SEND) +
 				/* chip pio base */
 			   (uctxt->sc->hw_context * (1 << 16))) +
 				/* 64K PIO space / ctxt */
 			(type == PIO_BUFS_SOP ?
-				(WFR_TXE_PIO_SIZE / 2) : 0); /* sop? */
+				(TXE_PIO_SIZE / 2) : 0); /* sop? */
 		/*
 		 * Map only the amount allocated to the context, not the
 		 * entire available context's PIO space.
 		 */
-		memlen = ALIGN(uctxt->sc->credits * WFR_PIO_BLOCK_SIZE,
+		memlen = ALIGN(uctxt->sc->credits * PIO_BLOCK_SIZE,
 			       PAGE_SIZE);
 		flags &= ~VM_MAYREAD;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
@@ -590,8 +590,8 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		 * registers.
 		 */
 		memaddr = (unsigned long)
-			(dd->physaddr + WFR_RXE_PER_CONTEXT_USER)
-			+ (uctxt->ctxt * WFR_RXE_PER_CONTEXT_SIZE);
+			(dd->physaddr + RXE_PER_CONTEXT_USER)
+			+ (uctxt->ctxt * RXE_PER_CONTEXT_SIZE);
 		/*
 		 * TidFlow table is on the same page as the rest of the
 		 * user registers.
@@ -756,7 +756,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 
 	hfi_cdbg(PROC, "freeing ctxt %u:%u", uctxt->ctxt, fdata->subctxt);
 	dd = uctxt->dd;
-	mutex_lock(&qib_mutex);
+	mutex_lock(&hfi1_mutex);
 
 	qib_flush_wc();
 	/* drain user sdma queue */
@@ -779,7 +779,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 		 */
 		uctxt->active_slaves &= ~(1 << fdata->subctxt);
 		uctxt->subpid[fdata->subctxt] = 0;
-		mutex_unlock(&qib_mutex);
+		mutex_unlock(&hfi1_mutex);
 		goto done;
 	}
 
@@ -788,17 +788,19 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	 * Disable receive context and interrupt available, reset all
 	 * RcvCtxtCtrl bits to default values.
 	 */
-	hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS | QIB_RCVCTRL_TIDFLOW_DIS |
-		      QIB_RCVCTRL_INTRAVAIL_DIS | QIB_RCVCTRL_ONE_PKT_EGR_DIS |
-		      QIB_RCVCTRL_NO_RHQ_DROP_DIS | QIB_RCVCTRL_NO_EGR_DROP_DIS,
-		      uctxt->ctxt);
+	hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_DIS |
+		     HFI1_RCVCTRL_TIDFLOW_DIS |
+		     HFI1_RCVCTRL_INTRAVAIL_DIS |
+		     HFI1_RCVCTRL_ONE_PKT_EGR_DIS |
+		     HFI1_RCVCTRL_NO_RHQ_DROP_DIS |
+		     HFI1_RCVCTRL_NO_EGR_DROP_DIS, uctxt->ctxt);
 	/* Clear the context's J_KEY */
 	hfi1_clear_ctxt_jkey(dd, uctxt->ctxt);
 	/*
 	 * Reset context integrity checks to default.
-	 * (writes to CSRs probably belong in wfr.c)
+	 * (writes to CSRs probably belong in chip.c)
 	 */
-	write_kctxt_csr(dd, uctxt->sc->hw_context, WFR_SEND_CTXT_CHECK_ENABLE,
+	write_kctxt_csr(dd, uctxt->sc->hw_context, SEND_CTXT_CHECK_ENABLE,
 			hfi_pkt_default_send_ctxt_mask(dd, uctxt->sc->type));
 	sc_disable(uctxt->sc);
 	uctxt->pid = 0;
@@ -817,9 +819,9 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	if (uctxt->tid_pg_list)
 		unlock_exp_tids(uctxt);
 
-	qib_stats.sps_ctxts--;
+	hfi1_stats.sps_ctxts--;
 	dd->freectxts++;
-	mutex_unlock(&qib_mutex);
+	mutex_unlock(&hfi1_mutex);
 	hfi1_free_ctxtdata(dd, uctxt);
 done:
 	kfree(fdata);
@@ -858,7 +860,7 @@ static int assign_ctxt(struct file *fp, struct hfi_user_info *uinfo)
 	if (uinfo->hfi_alg < HFI_ALG_COUNT)
 		alg = uinfo->hfi_alg;
 
-	mutex_lock(&qib_mutex);
+	mutex_lock(&hfi1_mutex);
 	/* First, lets check if we need to setup a shared context? */
 	if (uinfo->subctxt_cnt)
 		ret = find_shared_ctxt(fp, uinfo);
@@ -871,7 +873,7 @@ static int assign_ctxt(struct file *fp, struct hfi_user_info *uinfo)
 		i_minor = iminor(file_inode(fp)) - HFI_USER_MINOR_BASE;
 		ret = get_user_context(fp, uinfo, i_minor - 1, alg);
 	}
-	mutex_unlock(&qib_mutex);
+	mutex_unlock(&hfi1_mutex);
 done:
 	return ret;
 }
@@ -1041,7 +1043,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	uctxt->jkey = generate_jkey(current_uid());
 	INIT_LIST_HEAD(&uctxt->sdma_queues);
 	spin_lock_init(&uctxt->sdma_qlock);
-	qib_stats.sps_ctxts++;
+	hfi1_stats.sps_ctxts++;
 	dd->freectxts--;
 	ctxt_fp(fp) = uctxt;
 
@@ -1064,7 +1066,7 @@ static int init_subctxts(struct hfi1_ctxtdata *uctxt,
 	uctxt->subctxt_id = uinfo->subctxt_id;
 	uctxt->active_slaves = 1;
 	uctxt->redirect_seq_cnt = 1;
-	set_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->event_flags);
+	set_bit(HFI1_CTXT_MASTER_UNINIT, &uctxt->event_flags);
 bail:
 	return ret;
 }
@@ -1110,7 +1112,7 @@ static int user_init(struct file *fp)
 	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
 
 	/* make sure that the context has already been setup */
-	if (!test_bit(QIB_CTXT_SETUP_DONE, &uctxt->event_flags)) {
+	if (!test_bit(HFI1_CTXT_SETUP_DONE, &uctxt->event_flags)) {
 		ret = -EFAULT;
 		goto done;
 	}
@@ -1121,7 +1123,8 @@ static int user_init(struct file *fp)
 	 */
 	if (subctxt_fp(fp)) {
 		ret = wait_event_interruptible(uctxt->wait,
-			!test_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->event_flags));
+			!test_bit(HFI1_CTXT_MASTER_UNINIT,
+			&uctxt->event_flags));
 		goto done;
 	}
 
@@ -1146,27 +1149,27 @@ static int user_init(struct file *fp)
 	/* Setup J_KEY before enabling the context */
 	hfi1_set_ctxt_jkey(uctxt->dd, uctxt->ctxt, uctxt->jkey);
 
-	rcvctrl_ops = QIB_RCVCTRL_CTXT_ENB;
+	rcvctrl_ops = HFI1_RCVCTRL_CTXT_ENB;
 	if (HFI_CAP_KGET_MASK(uctxt->flags, HDRSUPP))
-		rcvctrl_ops |= QIB_RCVCTRL_TIDFLOW_ENB;
+		rcvctrl_ops |= HFI1_RCVCTRL_TIDFLOW_ENB;
 	/*
 	 * Ignore the bit in the flags for now until proper
 	 * support for multiple packet per rcv array entry is
 	 * added.
 	 */
 	if (!HFI_CAP_KGET_MASK(uctxt->flags, MULTI_PKT_EGR))
-		rcvctrl_ops |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
+		rcvctrl_ops |= HFI1_RCVCTRL_ONE_PKT_EGR_ENB;
 	if (HFI_CAP_KGET_MASK(uctxt->flags, NODROP_EGR_FULL))
-		rcvctrl_ops |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
+		rcvctrl_ops |= HFI1_RCVCTRL_NO_EGR_DROP_ENB;
 	if (HFI_CAP_KGET_MASK(uctxt->flags, NODROP_RHQ_FULL))
-		rcvctrl_ops |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
+		rcvctrl_ops |= HFI1_RCVCTRL_NO_RHQ_DROP_ENB;
 	if (HFI_CAP_KGET_MASK(uctxt->flags, DMA_RTAIL))
-		rcvctrl_ops |= QIB_RCVCTRL_TAILUPD_ENB;
+		rcvctrl_ops |= HFI1_RCVCTRL_TAILUPD_ENB;
 	hfi1_rcvctrl(uctxt->dd, rcvctrl_ops, uctxt->ctxt);
 
 	/* Notify any waiting slaves */
 	if (uctxt->subctxt_cnt) {
-		clear_bit(QIB_CTXT_MASTER_UNINIT, &uctxt->event_flags);
+		clear_bit(HFI1_CTXT_MASTER_UNINIT, &uctxt->event_flags);
 		wake_up(&uctxt->wait);
 	}
 	ret = 0;
@@ -1284,7 +1287,7 @@ static int setup_ctxt(struct file *fp)
 	if (ret)
 		goto done;
 
-	set_bit(QIB_CTXT_SETUP_DONE, &uctxt->event_flags);
+	set_bit(HFI1_CTXT_SETUP_DONE, &uctxt->event_flags);
 done:
 	return ret;
 }
@@ -1332,7 +1335,7 @@ static int get_base_info(struct file *fp, void __user *ubase, __u32 len)
 						 subctxt_fp(fp), 0);
 	/*
 	 * user regs are at
-	 * (WFR_RXE_PER_CONTEXT_USER + (ctxt * WFR_RXE_PER_CONTEXT_SIZE))
+	 * (RXE_PER_CONTEXT_USER + (ctxt * RXE_PER_CONTEXT_SIZE))
 	 */
 	binfo.user_regbase = HFI_MMAP_TOKEN(UREGS, uctxt->ctxt,
 					    subctxt_fp(fp), 0);
@@ -1380,7 +1383,7 @@ static unsigned int poll_urgent(struct file *fp,
 		uctxt->urgent_poll = uctxt->urgent;
 	} else {
 		pollflag = 0;
-		set_bit(QIB_CTXT_WAITING_URG, &uctxt->event_flags);
+		set_bit(HFI1_CTXT_WAITING_URG, &uctxt->event_flags);
 	}
 	spin_unlock_irq(&dd->uctxt_lock);
 
@@ -1398,8 +1401,8 @@ static unsigned int poll_next(struct file *fp,
 
 	spin_lock_irq(&dd->uctxt_lock);
 	if (hdrqempty(uctxt)) {
-		set_bit(QIB_CTXT_WAITING_RCV, &uctxt->event_flags);
-		hfi1_rcvctrl(dd, QIB_RCVCTRL_INTRAVAIL_ENB, uctxt->ctxt);
+		set_bit(HFI1_CTXT_WAITING_RCV, &uctxt->event_flags);
+		hfi1_rcvctrl(dd, HFI1_RCVCTRL_INTRAVAIL_ENB, uctxt->ctxt);
 		pollflag = 0;
 	} else
 		pollflag = POLLIN | POLLRDNORM;
@@ -1479,9 +1482,9 @@ static int manage_rcvq(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
 		 */
 		if (uctxt->rcvhdrtail_kvaddr)
 			qib_clear_rcvhdrtail(uctxt);
-		rcvctrl_op = QIB_RCVCTRL_CTXT_ENB;
+		rcvctrl_op = HFI1_RCVCTRL_CTXT_ENB;
 	} else
-		rcvctrl_op = QIB_RCVCTRL_CTXT_DIS;
+		rcvctrl_op = HFI1_RCVCTRL_CTXT_DIS;
 	hfi1_rcvctrl(dd, rcvctrl_op, uctxt->ctxt);
 	/* always; new head should be equal to new tail; see above */
 bail:
@@ -1881,7 +1884,7 @@ static int set_ctxt_pkey(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
 	struct hfi1_pportdata *ppd = uctxt->ppd;
 	struct hfi_devdata *dd = uctxt->dd;
 
-	if (pkey == WFR_LIM_MGMT_P_KEY || pkey == WFR_FULL_MGMT_P_KEY) {
+	if (pkey == LIM_MGMT_P_KEY || pkey == FULL_MGMT_P_KEY) {
 		ret = -EINVAL;
 		goto done;
 	}
@@ -1987,12 +1990,12 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		 * by not reading them.  These registers are defined as
 		 * having a read value of 0.
 		 */
-		if (csr_off == WFR_ASIC_GPIO_CLEAR
-				|| csr_off == WFR_ASIC_GPIO_FORCE
-				|| csr_off == WFR_ASIC_QSFP1_CLEAR
-				|| csr_off == WFR_ASIC_QSFP1_FORCE
-				|| csr_off == WFR_ASIC_QSFP2_CLEAR
-				|| csr_off == WFR_ASIC_QSFP2_FORCE)
+		if (csr_off == ASIC_GPIO_CLEAR
+				|| csr_off == ASIC_GPIO_FORCE
+				|| csr_off == ASIC_QSFP1_CLEAR
+				|| csr_off == ASIC_QSFP1_FORCE
+				|| csr_off == ASIC_QSFP2_CLEAR
+				|| csr_off == ASIC_QSFP2_FORCE)
 			data = 0;
 		else
 			data = readq(base + total);

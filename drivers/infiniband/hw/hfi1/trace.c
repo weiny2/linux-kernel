@@ -57,7 +57,7 @@ u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr)
 	u8 opcode;
 	u8 lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 
-	if (lnh == QIB_LRH_BTH)
+	if (lnh == HFI1_LRH_BTH)
 		ohdr = &hdr->u.oth;
 	else
 		ohdr = &hdr->u.l.oth;
@@ -127,13 +127,13 @@ const char *parse_everbs_hdrs(
 	case OP(RC, ACKNOWLEDGE):
 		trace_seq_printf(p, AETH_PRN,
 			be32_to_cpu(eh->aeth) >> 24,
-			be32_to_cpu(eh->aeth) & QIB_QPN_MASK);
+			be32_to_cpu(eh->aeth) & HFI1_QPN_MASK);
 		break;
 	/* aeth + atomicacketh */
 	case OP(RC, ATOMIC_ACKNOWLEDGE):
 		trace_seq_printf(p, AETH_PRN " " ATOMICACKETH_PRN,
 			(be32_to_cpu(eh->at.aeth) >> 24) & 0xff,
-			be32_to_cpu(eh->at.aeth) & QIB_QPN_MASK,
+			be32_to_cpu(eh->at.aeth) & HFI1_QPN_MASK,
 			(unsigned long long)ib_u64_get(eh->at.atomic_ack_eth));
 		break;
 	/* atomiceth */
@@ -152,7 +152,7 @@ const char *parse_everbs_hdrs(
 	case OP(UD, SEND_ONLY_WITH_IMMEDIATE):
 		trace_seq_printf(p, DETH_PRN,
 			be32_to_cpu(eh->ud.deth[0]),
-			be32_to_cpu(eh->ud.deth[1]) & QIB_QPN_MASK);
+			be32_to_cpu(eh->ud.deth[1]) & HFI1_QPN_MASK);
 		break;
 	}
 	trace_seq_putc(p, 0);

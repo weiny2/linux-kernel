@@ -58,7 +58,7 @@
 /*
  * Convert the AETH RNR timeout code into the number of microseconds.
  */
-const u32 ib_qib_rnr_table[32] = {
+const u32 ib_hfi1_rnr_table[32] = {
 	655360,	/* 00: 655.36 */
 	10,	/* 01:    .01 */
 	20,	/* 02     .02 */
@@ -176,7 +176,7 @@ int hfi1_get_rwqe(struct hfi1_qp *qp, int wr_id_only)
 	}
 
 	spin_lock_irqsave(&rq->lock, flags);
-	if (!(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK)) {
+	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
 		ret = 0;
 		goto unlock;
 	}
@@ -208,7 +208,7 @@ int hfi1_get_rwqe(struct hfi1_qp *qp, int wr_id_only)
 	qp->r_wr_id = wqe->wr_id;
 
 	ret = 1;
-	set_bit(QIB_R_WRID_VALID, &qp->r_aflags);
+	set_bit(HFI1_R_WRID_VALID, &qp->r_aflags);
 	if (handler) {
 		u32 n;
 
@@ -253,7 +253,7 @@ void hfi1_migrate_qp(struct hfi1_qp *qp)
 	qp->remote_ah_attr = qp->alt_ah_attr;
 	qp->port_num = qp->alt_ah_attr.port_num;
 	qp->s_pkey_index = qp->s_alt_pkey_index;
-	qp->s_flags |= QIB_S_AHG_CLEAR;
+	qp->s_flags |= HFI1_S_AHG_CLEAR;
 
 	ev.device = qp->ibqp.device;
 	ev.element.qp = &qp->ibqp;
@@ -398,11 +398,11 @@ static void qib_ruc_loopback(struct hfi1_qp *sqp)
 	spin_lock_irqsave(&sqp->s_lock, flags);
 
 	/* Return if we are already busy processing a work request. */
-	if ((sqp->s_flags & (QIB_S_BUSY | QIB_S_ANY_WAIT)) ||
-	    !(ib_qib_state_ops[sqp->state] & QIB_PROCESS_OR_FLUSH_SEND))
+	if ((sqp->s_flags & (HFI1_S_BUSY | HFI1_S_ANY_WAIT)) ||
+	    !(ib_hfi1_state_ops[sqp->state] & HFI1_PROCESS_OR_FLUSH_SEND))
 		goto unlock;
 
-	sqp->s_flags |= QIB_S_BUSY;
+	sqp->s_flags |= HFI1_S_BUSY;
 
 again:
 	if (sqp->s_last == sqp->s_head)
@@ -410,8 +410,8 @@ again:
 	wqe = get_swqe_ptr(sqp, sqp->s_last);
 
 	/* Return if it is not OK to start a new work reqeust. */
-	if (!(ib_qib_state_ops[sqp->state] & QIB_PROCESS_NEXT_SEND_OK)) {
-		if (!(ib_qib_state_ops[sqp->state] & QIB_FLUSH_SEND))
+	if (!(ib_hfi1_state_ops[sqp->state] & HFI1_PROCESS_NEXT_SEND_OK)) {
+		if (!(ib_hfi1_state_ops[sqp->state] & HFI1_FLUSH_SEND))
 			goto clr_busy;
 		/* We are in the error state, flush the work request. */
 		send_status = IB_WC_WR_FLUSH_ERR;
@@ -429,7 +429,7 @@ again:
 	}
 	spin_unlock_irqrestore(&sqp->s_lock, flags);
 
-	if (!qp || !(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) ||
+	if (!qp || !(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) ||
 	    qp->ibqp.qp_type != sqp->ibqp.qp_type) {
 		ibp->n_pkt_drops++;
 		/*
@@ -552,7 +552,7 @@ again:
 			if (--sqp->s_sge.num_sge)
 				*sge = *sqp->s_sge.sg_list++;
 		} else if (sge->length == 0 && sge->mr->lkey) {
-			if (++sge->n >= QIB_SEGSZ) {
+			if (++sge->n >= HFI1_SEGSZ) {
 				if (++sge->m >= sge->mr->mapsz)
 					break;
 				sge->n = 0;
@@ -567,7 +567,7 @@ again:
 	if (release)
 		qib_put_ss(&qp->r_sge);
 
-	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags))
+	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		goto send_comp;
 
 	if (wqe->wr.opcode == IB_WR_RDMA_WRITE_WITH_IMM)
@@ -610,12 +610,12 @@ rnr_nak:
 	if (sqp->s_rnr_retry_cnt < 7)
 		sqp->s_rnr_retry--;
 	spin_lock_irqsave(&sqp->s_lock, flags);
-	if (!(ib_qib_state_ops[sqp->state] & QIB_PROCESS_RECV_OK))
+	if (!(ib_hfi1_state_ops[sqp->state] & HFI1_PROCESS_RECV_OK))
 		goto clr_busy;
-	sqp->s_flags |= QIB_S_WAIT_RNR;
+	sqp->s_flags |= HFI1_S_WAIT_RNR;
 	sqp->s_timer.function = hfi1_rc_rnr_retry;
 	sqp->s_timer.expires = jiffies +
-		usecs_to_jiffies(ib_qib_rnr_table[qp->r_min_rnr_timer]);
+		usecs_to_jiffies(ib_hfi1_rnr_table[qp->r_min_rnr_timer]);
 	add_timer(&sqp->s_timer);
 	goto clr_busy;
 
@@ -642,7 +642,7 @@ serr:
 	if (sqp->ibqp.qp_type == IB_QPT_RC) {
 		int lastwqe = hfi1_error_qp(sqp, IB_WC_WR_FLUSH_ERR);
 
-		sqp->s_flags &= ~QIB_S_BUSY;
+		sqp->s_flags &= ~HFI1_S_BUSY;
 		spin_unlock_irqrestore(&sqp->s_lock, flags);
 		if (lastwqe) {
 			struct ib_event ev;
@@ -655,7 +655,7 @@ serr:
 		goto done;
 	}
 clr_busy:
-	sqp->s_flags &= ~QIB_S_BUSY;
+	sqp->s_flags &= ~HFI1_S_BUSY;
 unlock:
 	spin_unlock_irqrestore(&sqp->s_lock, flags);
 done:
@@ -701,7 +701,7 @@ u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 void clear_ahg(struct hfi1_qp *qp)
 {
 	qp->s_hdr->ahgcount = 0;
-	qp->s_flags &= ~(QIB_S_AHG_VALID|QIB_S_AHG_CLEAR);
+	qp->s_flags &= ~(HFI1_S_AHG_VALID | HFI1_S_AHG_CLEAR);
 	if (qp->s_sde)
 		sdma_ahg_free(qp->s_sde, qp->s_ahgidx);
 	qp->s_ahgidx = -1;
@@ -723,9 +723,9 @@ void clear_ahg(struct hfi1_qp *qp)
  */
 static inline void build_ahg(struct hfi1_qp *qp, u32 npsn)
 {
-	if (unlikely(qp->s_flags & QIB_S_AHG_CLEAR))
+	if (unlikely(qp->s_flags & HFI1_S_AHG_CLEAR))
 		clear_ahg(qp);
-	if (!(qp->s_flags & QIB_S_AHG_VALID)) {
+	if (!(qp->s_flags & HFI1_S_AHG_VALID)) {
 		/* first middle that needs copy  */
 		if (qp->s_ahgidx < 0) {
 			if (!qp->s_sde)
@@ -738,7 +738,7 @@ static inline void build_ahg(struct hfi1_qp *qp, u32 npsn)
 			/* save to protect a change in another thread */
 			qp->s_hdr->sde = qp->s_sde;
 			qp->s_hdr->ahgidx = qp->s_ahgidx;
-			qp->s_flags |= QIB_S_AHG_VALID;
+			qp->s_flags |= HFI1_S_AHG_VALID;
 		}
 	} else {
 		/* subsequent middle after valid */
@@ -779,12 +779,12 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 	/* Construct the header. */
 	extra_bytes = -qp->s_cur_size & 3;
 	nwords = (qp->s_cur_size + extra_bytes) >> 2;
-	lrh0 = QIB_LRH_BTH;
+	lrh0 = HFI1_LRH_BTH;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
 		qp->s_hdrwords += hfi1_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
 					       &qp->remote_ah_attr.grh,
 					       qp->s_hdrwords, nwords);
-		lrh0 = QIB_LRH_GRH;
+		lrh0 = HFI1_LRH_GRH;
 		middle = 0;
 	}
 	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
@@ -812,7 +812,7 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 	if (middle)
 		build_ahg(qp, bth2);
 	else
-		qp->s_flags &= ~QIB_S_AHG_VALID;
+		qp->s_flags &= ~HFI1_S_AHG_VALID;
 	qp->s_hdr->ibh.lrh[0] = cpu_to_be16(lrh0);
 	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	qp->s_hdr->ibh.lrh[2] =
@@ -823,9 +823,9 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
-	if (test_and_clear_bit(QIB_S_ECN, &qp->s_aflags))
+	if (test_and_clear_bit(HFI1_S_ECN, &qp->s_aflags))
 		/* we recently received a FECN, so return a BECN */
-		ohdr->bth[1] |= cpu_to_be32(QIB_BECN_MASK << QIB_BECN_SHIFT);
+		ohdr->bth[1] |= cpu_to_be32(HFI1_BECN_MASK << HFI1_BECN_SHIFT);
 	ohdr->bth[2] = cpu_to_be32(bth2);
 }
 
@@ -869,7 +869,7 @@ void hfi1_do_send(struct work_struct *work)
 		return;
 	}
 
-	qp->s_flags |= QIB_S_BUSY;
+	qp->s_flags |= HFI1_S_BUSY;
 
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
@@ -898,7 +898,7 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 	u32 old_last, last;
 	unsigned i;
 
-	if (!(ib_qib_state_ops[qp->state] & QIB_PROCESS_OR_FLUSH_SEND))
+	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_OR_FLUSH_SEND))
 		return;
 
 	for (i = 0; i < wqe->wr.num_sge; i++) {
@@ -912,7 +912,7 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 		atomic_dec(&to_iah(wqe->wr.wr.ud.ah)->refcount);
 
 	/* See ch. 11.2.4.1 and 10.7.3.1 */
-	if (!(qp->s_flags & QIB_S_SIGNAL_REQ_WR) ||
+	if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
 	    (wqe->wr.send_flags & IB_SEND_SIGNALED) ||
 	    status != IB_WC_SUCCESS) {
 		struct ib_wc wc;
@@ -920,7 +920,7 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 		memset(&wc, 0, sizeof(wc));
 		wc.wr_id = wqe->wr.wr_id;
 		wc.status = status;
-		wc.opcode = ib_qib_wc_opcode[wqe->wr.opcode];
+		wc.opcode = ib_hfi1_wc_opcode[wqe->wr.opcode];
 		wc.qp = &qp->ibqp;
 		if (status == IB_WC_SUCCESS)
 			wc.byte_len = wqe->length;

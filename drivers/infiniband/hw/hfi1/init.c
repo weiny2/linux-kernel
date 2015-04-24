@@ -71,7 +71,7 @@
 /*
  * min buffers we want to have per context, after driver
  */
-#define QIB_MIN_USER_CTXT_BUFCNT 7
+#define HFI1_MIN_USER_CTXT_BUFCNT 7
 
 #define QLOGIC_IB_R_SOFTWARE_MASK 0xFF
 #define QLOGIC_IB_R_SOFTWARE_SHIFT 24
@@ -89,7 +89,7 @@ uint num_rcv_contexts;
 module_param_named(num_rcv_contexts, num_rcv_contexts, uint, S_IRUGO);
 MODULE_PARM_DESC(num_rcv_contexts, "Set max number of receive contexts to use");
 
-u8 krcvqs[WFR_RXE_NUM_DATA_VL];
+u8 krcvqs[RXE_NUM_DATA_VL];
 int krcvqsset;
 module_param_array(krcvqs, byte, &krcvqsset, S_IRUGO);
 MODULE_PARM_DESC(krcvqs, "Array of the number of kernel receive queues by VL");
@@ -124,8 +124,8 @@ MODULE_PARM_DESC(user_credit_return_theshold, "Credit return threshold for user 
 static inline u64 encode_rcv_header_entry_size(u16);
 
 static struct idr qib_unit_table;
-u32 qib_cpulist_count;
-unsigned long *qib_cpulist;
+u32 hfi1_cpulist_count;
+unsigned long *hfi1_cpulist;
 
 /*
  * Common code for creating the receive context array.
@@ -256,10 +256,10 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		rcd->eager_base = base * dd->rcv_entries.group_size;
 
 		/* Validate and initialize Rcv Hdr Q variables */
-		if (rcvhdrcnt & WFR_HDRQ_INCREMENT) {
+		if (rcvhdrcnt & HDRQ_INCREMENT) {
 			dd_dev_err(dd,
 				   "ctxt%u: header queue count %d must be divisible by %d\n",
-				   rcd->ctxt, rcvhdrcnt, WFR_HDRQ_INCREMENT);
+				   rcd->ctxt, rcvhdrcnt, HDRQ_INCREMENT);
 			goto bail;
 		}
 		rcd->rcvhdrq_cnt = rcvhdrcnt;
@@ -280,10 +280,10 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		rcvtids = ((max_entries * hfi_rcvarr_split) / 100);
 		rcd->egrbufs.count = round_down(rcvtids,
 						dd->rcv_entries.group_size);
-		if (rcd->egrbufs.count > WFR_MAX_EAGER_ENTRIES) {
+		if (rcd->egrbufs.count > MAX_EAGER_ENTRIES) {
 			dd_dev_err(dd, "ctxt%u: requested too many RcvArray entries.\n",
 				   rcd->ctxt);
-			rcd->egrbufs.count = WFR_MAX_EAGER_ENTRIES;
+			rcd->egrbufs.count = MAX_EAGER_ENTRIES;
 		}
 		dd_dev_info(dd, "ctxt%u: max Eager buffer RcvArray entries: %u\n",
 			    rcd->ctxt, rcd->egrbufs.count);
@@ -437,10 +437,10 @@ void set_link_ipg(struct hfi1_pportdata *ppd)
 
 	src = (max_pkt_time >> shift) * mult;
 
-	src &= WFR_SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SMASK;
-	src <<= WFR_SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SHIFT;
+	src &= SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SMASK;
+	src <<= SEND_STATIC_RATE_CONTROL_CSR_SRC_RELOAD_SHIFT;
 
-	write_csr(dd, WFR_SEND_STATIC_RATE_CONTROL, src);
+	write_csr(dd, SEND_STATIC_RATE_CONTROL, src);
 }
 
 static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
@@ -510,11 +510,11 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 
 	default_pkey_idx = 1;
 
-	ppd->pkeys[default_pkey_idx] = WFR_DEFAULT_P_KEY;
+	ppd->pkeys[default_pkey_idx] = DEFAULT_P_KEY;
 	if (loopback) {
-		qib_early_err(&pdev->dev,
-			      "Faking data partition 0x8001 in idx %u\n",
-			      !default_pkey_idx);
+		hfi1_early_err(&pdev->dev,
+			       "Faking data partition 0x8001 in idx %u\n",
+			       !default_pkey_idx);
 		ppd->pkeys[!default_pkey_idx] = 0x8001;
 	}
 
@@ -531,7 +531,7 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 	ppd->sm_trap_qp = 0x0;
 	ppd->sa_qp = 0x1;
 
-	ppd->qib_wq = NULL;
+	ppd->hfi1_wq = NULL;
 
 	spin_lock_init(&ppd->cca_timer_lock);
 
@@ -556,8 +556,8 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 
 bail:
 
-	qib_early_err(&pdev->dev,
-		      "Congestion Control Agent disabled for port %d\n", port);
+	hfi1_early_err(&pdev->dev,
+		       "Congestion Control Agent disabled for port %d\n", port);
 }
 
 /*
@@ -571,7 +571,7 @@ static int loadtime_init(struct hfi_devdata *dd)
 
 /**
  * init_after_reset - re-initialize after a reset
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  *
  * sanity check at least some of the values after reset, and
  * ensure no receive or transmit (explicitly, in case reset
@@ -587,9 +587,9 @@ static int init_after_reset(struct hfi_devdata *dd)
 	 * for the driver data structures, not chip registers.
 	 */
 	for (i = 0; i < dd->num_rcv_contexts; i++)
-		hfi1_rcvctrl(dd, QIB_RCVCTRL_CTXT_DIS |
-				  QIB_RCVCTRL_INTRAVAIL_DIS |
-				  QIB_RCVCTRL_TAILUPD_DIS, i);
+		hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_DIS |
+				  HFI1_RCVCTRL_INTRAVAIL_DIS |
+				  HFI1_RCVCTRL_TAILUPD_DIS, i);
 	pio_send_control(dd, PSC_GLOBAL_DISABLE);
 	for (i = 0; i < dd->num_send_contexts; i++)
 		sc_disable(dd->send_contexts[i].sc);
@@ -609,16 +609,16 @@ static void enable_chip(struct hfi_devdata *dd)
 	 * Enable kernel ctxts' receive and receive interrupt.
 	 * Other ctxts done as user opens and inits them.
 	 */
-	rcvmask = QIB_RCVCTRL_CTXT_ENB | QIB_RCVCTRL_INTRAVAIL_ENB;
+	rcvmask = HFI1_RCVCTRL_CTXT_ENB | HFI1_RCVCTRL_INTRAVAIL_ENB;
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
 		rcvmask |= HFI_CAP_KGET_MASK(dd->rcd[i]->flags, DMA_RTAIL) ?
-			QIB_RCVCTRL_TAILUPD_ENB : QIB_RCVCTRL_TAILUPD_DIS;
+			HFI1_RCVCTRL_TAILUPD_ENB : HFI1_RCVCTRL_TAILUPD_DIS;
 		if (!HFI_CAP_KGET_MASK(dd->rcd[i]->flags, MULTI_PKT_EGR))
-			rcvmask |= QIB_RCVCTRL_ONE_PKT_EGR_ENB;
+			rcvmask |= HFI1_RCVCTRL_ONE_PKT_EGR_ENB;
 		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_RHQ_FULL))
-			rcvmask |= QIB_RCVCTRL_NO_RHQ_DROP_ENB;
+			rcvmask |= HFI1_RCVCTRL_NO_RHQ_DROP_ENB;
 		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_EGR_FULL))
-			rcvmask |= QIB_RCVCTRL_NO_EGR_DROP_ENB;
+			rcvmask |= HFI1_RCVCTRL_NO_EGR_DROP_ENB;
 		hfi1_rcvctrl(dd, rcvmask, i);
 		/* XXX (Mitko): Do we care about the result of this?
 		 * sc_enable() will display an error message. */
@@ -628,7 +628,7 @@ static void enable_chip(struct hfi_devdata *dd)
 
 /**
  * qib_create_workqueues - create per port workqueues
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  */
 static int qib_create_workqueues(struct hfi_devdata *dd)
 {
@@ -637,14 +637,14 @@ static int qib_create_workqueues(struct hfi_devdata *dd)
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		if (!ppd->qib_wq) {
+		if (!ppd->hfi1_wq) {
 			char wq_name[8]; /* 3 + 2 + 1 + 1 + 1 */
 
 			snprintf(wq_name, sizeof(wq_name), "qib%d_%d",
 				dd->unit, pidx);
-			ppd->qib_wq =
+			ppd->hfi1_wq =
 				create_singlethread_workqueue(wq_name);
-			if (!ppd->qib_wq)
+			if (!ppd->hfi1_wq)
 				goto wq_error;
 		}
 	}
@@ -654,9 +654,9 @@ wq_error:
 		pidx + 1);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		if (ppd->qib_wq) {
-			destroy_workqueue(ppd->qib_wq);
-			ppd->qib_wq = NULL;
+		if (ppd->hfi1_wq) {
+			destroy_workqueue(ppd->hfi1_wq);
+			ppd->hfi1_wq = NULL;
 		}
 	}
 	return -ENOMEM;
@@ -664,7 +664,7 @@ wq_error:
 
 /**
  * hfi1_init - do the actual initialization sequence on the chip
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @reinit: reinitializing, so don't allocate new memory
  *
  * Do the actual initialization sequence on the chip.  This is done
@@ -794,7 +794,7 @@ done:
 			 * Requires interrupts to be enabled so we are notified
 			 * when the QSFP completes reset, and has
 			 * to be done before bringing up the SERDES
-			 * TODO: Call init_qsfp only if QIB_HAS_QSFP
+			 * TODO: Call init_qsfp only if HFI1_HAS_QSFP
 			 * is set in ppd->qsfp_info.flags
 			 */
 			init_qsfp(ppd);
@@ -833,9 +833,9 @@ struct hfi_devdata *hfi1_lookup(int unit)
 	struct hfi_devdata *dd;
 	unsigned long flags;
 
-	spin_lock_irqsave(&qib_devs_lock, flags);
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
 	dd = __qib_lookup(unit);
-	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 
 	return dd;
 }
@@ -860,7 +860,7 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 
 /**
  * qib_shutdown_device - shut down a device
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  *
  * This is called to make the device quiet when we are about to
  * unload the driver, and also when the device is administratively
@@ -889,11 +889,11 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		for (i = 0; i < dd->num_rcv_contexts; i++)
-			hfi1_rcvctrl(dd, QIB_RCVCTRL_TAILUPD_DIS |
-					  QIB_RCVCTRL_CTXT_DIS |
-					  QIB_RCVCTRL_INTRAVAIL_DIS |
-					  QIB_RCVCTRL_PKEY_DIS |
-					  QIB_RCVCTRL_ONE_PKT_EGR_DIS, i);
+			hfi1_rcvctrl(dd, HFI1_RCVCTRL_TAILUPD_DIS |
+					  HFI1_RCVCTRL_CTXT_DIS |
+					  HFI1_RCVCTRL_INTRAVAIL_DIS |
+					  HFI1_RCVCTRL_PKEY_DIS |
+					  HFI1_RCVCTRL_ONE_PKT_EGR_DIS, i);
 		/*
 		 * Gracefully stop all sends allowing any in progress to
 		 * trickle out first.
@@ -923,9 +923,9 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 		 */
 		hfi1_quiet_serdes(ppd);
 
-		if (ppd->qib_wq) {
-			destroy_workqueue(ppd->qib_wq);
-			ppd->qib_wq = NULL;
+		if (ppd->hfi1_wq) {
+			destroy_workqueue(ppd->hfi1_wq);
+			ppd->hfi1_wq = NULL;
 		}
 	}
 	sdma_exit(dd);
@@ -933,12 +933,12 @@ static void qib_shutdown_device(struct hfi_devdata *dd)
 
 /**
  * hfi1_free_ctxtdata - free a context's allocated data
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @rcd: the ctxtdata structure
  *
  * free up any allocated data for a context
  * This should not touch anything that would affect a simultaneous
- * re-allocation of context data, because it is called after qib_mutex
+ * re-allocation of context data, because it is called after hfi1_mutex
  * is released (and can be called from reinit as well).
  * It should never change any chip state, or global driver state.
  */
@@ -995,10 +995,10 @@ void hfi1_free_devdata(struct hfi_devdata *dd)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&qib_devs_lock, flags);
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
 	idr_remove(&qib_unit_table, dd->unit);
 	list_del(&dd->list);
-	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 	hfi_dbg_ibdev_exit(&dd->verbs_dev);
 	rcu_barrier(); /* wait for rcu callbacks to complete */
 	free_percpu(dd->int_counter);
@@ -1031,20 +1031,20 @@ struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	if (dd->node < 0)
 		dd->node = 0;
 	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&qib_devs_lock, flags);
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
 
 	ret = idr_alloc(&qib_unit_table, dd, 0, 0, GFP_NOWAIT);
 	if (ret >= 0) {
 		dd->unit = ret;
-		list_add(&dd->list, &qib_dev_list);
+		list_add(&dd->list, &hfi1_dev_list);
 	}
 
-	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 	idr_preload_end();
 
 	if (ret < 0) {
-		qib_early_err(&pdev->dev,
-			      "Could not allocate unit ID: error %d\n", -ret);
+		hfi1_early_err(&pdev->dev,
+			       "Could not allocate unit ID: error %d\n", -ret);
 		goto bail;
 	}
 	/*
@@ -1053,8 +1053,9 @@ struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	 */
 	spin_lock_init(&dd->sc_lock);
 	spin_lock_init(&dd->sendctrl_lock);
+	spin_lock_init(&dd->rcvctrl_lock);
 	spin_lock_init(&dd->uctxt_lock);
-	spin_lock_init(&dd->qib_diag_trans_lock);
+	spin_lock_init(&dd->hfi1_diag_trans_lock);
 	spin_lock_init(&dd->sc_init_lock);
 	spin_lock_init(&dd->dc8051_lock);
 	mutex_init(&dd->qsfp_i2c_mutex);
@@ -1065,21 +1066,22 @@ struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	dd->int_counter = alloc_percpu(u64);
 	if (!dd->int_counter) {
 		ret = -ENOMEM;
-		qib_early_err(&pdev->dev,
-			      "Could not allocate per-cpu int_counter\n");
+		hfi1_early_err(&pdev->dev,
+			       "Could not allocate per-cpu int_counter\n");
 		goto bail;
 	}
 
-	if (!qib_cpulist_count) {
+	if (!hfi1_cpulist_count) {
 		u32 count = num_online_cpus();
 
-		qib_cpulist = kzalloc(BITS_TO_LONGS(count) *
+		hfi1_cpulist = kzalloc(BITS_TO_LONGS(count) *
 				      sizeof(long), GFP_KERNEL);
-		if (qib_cpulist)
-			qib_cpulist_count = count;
+		if (hfi1_cpulist)
+			hfi1_cpulist_count = count;
 		else
-			qib_early_err(&pdev->dev,
-				"Could not alloc cpulist info, cpu affinity might be wrong\n");
+			hfi1_early_err(
+			&pdev->dev,
+			"Could not alloc cpulist info, cpu affinity might be wrong\n");
 	}
 	hfi_dbg_ibdev_init(&dd->verbs_dev);
 	return dd;
@@ -1131,9 +1133,9 @@ static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
 #define PFX DRIVER_NAME ": "
 
 static const struct pci_device_id qib_pci_tbl[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR0) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR1) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WFR2) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL0) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL1) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL2) },
 	{ 0, }
 };
 
@@ -1144,7 +1146,7 @@ static struct pci_driver qib_driver = {
 	.probe = qib_init_one,
 	.remove = qib_remove_one,
 	.id_table = qib_pci_tbl,
-	.err_handler = &qib_pci_err_handler,
+	.err_handler = &hfi1_pci_err_handler,
 };
 
 static void __init compute_krcvqs(void)
@@ -1182,8 +1184,8 @@ static int __init qib_ib_init(void)
 	compute_krcvqs();
 	/* sanitize receive interrupt count, time must wait until after
 	   the hardware type is known */
-	if (rcv_intr_count > WFR_RCV_HDR_HEAD_COUNTER_MASK)
-		rcv_intr_count = WFR_RCV_HDR_HEAD_COUNTER_MASK;
+	if (rcv_intr_count > RCV_HDR_HEAD_COUNTER_MASK)
+		rcv_intr_count = RCV_HDR_HEAD_COUNTER_MASK;
 	/* reject invalid combinations */
 	if (rcv_intr_count == 0 && rcv_intr_timeout == 0) {
 		pr_err("Invalid mode: both receive interrupt count and available timeout are zero - setting interrupt count to 1\n");
@@ -1207,7 +1209,7 @@ static int __init qib_ib_init(void)
 	}
 
 	/* sanitize link CRC options */
-	link_crc_mask &= WFR_SUPPORTED_CRCS;
+	link_crc_mask &= SUPPORTED_CRCS;
 
 	/*
 	 * These must be called before the driver is registered with
@@ -1240,8 +1242,8 @@ static void __exit qib_ib_cleanup(void)
 {
 	pci_unregister_driver(&qib_driver);
 	hfi_dbg_exit();
-	qib_cpulist_count = 0;
-	kfree(qib_cpulist);
+	hfi1_cpulist_count = 0;
+	kfree(hfi1_cpulist);
 
 	idr_destroy(&qib_unit_table);
 	dispose_firmware();	/* asymmetric with obtain_firmware() */
@@ -1340,14 +1342,14 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Validate some global module parameters */
 	if (rcvhdrcnt <= HFI_MIN_HDRQ_EGRBUF_CNT) {
-		qib_early_err(&pdev->dev, "Header queue  count too small\n");
+		hfi1_early_err(&pdev->dev, "Header queue  count too small\n");
 		ret = -EINVAL;
 		goto bail;
 	}
 	/* use the encoding function as a sanitization check */
 	if (!encode_rcv_header_entry_size(hfi_hdrq_entsize)) {
-		qib_early_err(&pdev->dev, "Invalid HdrQ Entry size %u\n",
-			     hfi_hdrq_entsize);
+		hfi1_early_err(&pdev->dev, "Invalid HdrQ Entry size %u\n",
+			       hfi_hdrq_entsize);
 		goto bail;
 	}
 
@@ -1366,12 +1368,12 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 				roundup_pow_of_two(eager_buffer_size);
 		eager_buffer_size =
 			clamp_val(eager_buffer_size,
-				  WFR_MIN_EAGER_BUFFER * 8,
-				  WFR_MAX_EAGER_BUFFER_TOTAL);
-		qib_early_info(&pdev->dev, "Eager buffer size %u\n",
-			       eager_buffer_size);
+				  MIN_EAGER_BUFFER * 8,
+				  MAX_EAGER_BUFFER_TOTAL);
+		hfi1_early_info(&pdev->dev, "Eager buffer size %u\n",
+				eager_buffer_size);
 	} else {
-		qib_early_err(&pdev->dev, "Invalid Eager buffer size of 0\n");
+		hfi1_early_err(&pdev->dev, "Invalid Eager buffer size of 0\n");
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -1388,15 +1390,15 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * allocation, etc.
 	 */
 	switch (ent->device) {
-	case PCI_DEVICE_ID_INTEL_WFR0:
-	case PCI_DEVICE_ID_INTEL_WFR1:
-	case PCI_DEVICE_ID_INTEL_WFR2:
+	case PCI_DEVICE_ID_INTEL0:
+	case PCI_DEVICE_ID_INTEL1:
+	case PCI_DEVICE_ID_INTEL2:
 		dd = hfi1_init_dd(pdev, ent);
 		break;
 	default:
-		qib_early_err(&pdev->dev,
-			"Failing on unknown Intel deviceid 0x%x\n",
-			ent->device);
+		hfi1_early_err(&pdev->dev,
+			       "Failing on unknown Intel deviceid 0x%x\n",
+			       ent->device);
 		ret = -ENODEV;
 	}
 
@@ -1485,7 +1487,7 @@ static void qib_remove_one(struct pci_dev *pdev)
 
 /**
  * hfi1_create_rcvhdrq - create a receive header queue
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @rcd: the context data
  *
  * This must be contiguous memory (from an i/o perspective), and must be
@@ -1545,17 +1547,17 @@ int hfi1_create_rcvhdrq(struct hfi_devdata *dd, struct hfi1_ctxtdata *rcd)
 	 *	RcvHdrEntSize
 	 *	RcvHdrSize
 	 */
-	reg = ((u64)(rcd->rcvhdrq_cnt >> WFR_HDRQ_SIZE_SHIFT)
-			& WFR_RCV_HDR_CNT_CNT_MASK)
-		<< WFR_RCV_HDR_CNT_CNT_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_CNT, reg);
+	reg = ((u64)(rcd->rcvhdrq_cnt >> HDRQ_SIZE_SHIFT)
+			& RCV_HDR_CNT_CNT_MASK)
+		<< RCV_HDR_CNT_CNT_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_CNT, reg);
 	reg = (encode_rcv_header_entry_size(rcd->rcvhdrqentsize)
-			& WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
-		<< WFR_RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_ENT_SIZE, reg);
-	reg = (dd->rcvhdrsize & WFR_RCV_HDR_SIZE_HDR_SIZE_MASK)
-		<< WFR_RCV_HDR_SIZE_HDR_SIZE_SHIFT;
-	write_kctxt_csr(dd, rcd->ctxt, WFR_RCV_HDR_SIZE, reg);
+			& RCV_HDR_ENT_SIZE_ENT_SIZE_MASK)
+		<< RCV_HDR_ENT_SIZE_ENT_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_ENT_SIZE, reg);
+	reg = (dd->rcvhdrsize & RCV_HDR_SIZE_HDR_SIZE_MASK)
+		<< RCV_HDR_SIZE_HDR_SIZE_SHIFT;
+	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_SIZE, reg);
 	return 0;
 
 bail_free:
@@ -1714,8 +1716,8 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 	max_entries = rcd->rcv_array_groups * dd->rcv_entries.group_size;
 	egrtop = roundup(rcd->egrbufs.alloced, dd->rcv_entries.group_size);
 	rcd->expected_count = max_entries - egrtop;
-	if (rcd->expected_count > WFR_MAX_TID_PAIR_ENTRIES * 2)
-		rcd->expected_count = WFR_MAX_TID_PAIR_ENTRIES * 2;
+	if (rcd->expected_count > MAX_TID_PAIR_ENTRIES * 2)
+		rcd->expected_count = MAX_TID_PAIR_ENTRIES * 2;
 
 	rcd->expected_base = rcd->eager_base + egrtop;
 	dd_dev_info(dd, "ctxt%u: eager:%u, exp:%u, egrbase:%u, expbase:%u\n",

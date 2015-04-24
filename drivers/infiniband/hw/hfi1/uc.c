@@ -74,15 +74,15 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
-	if (!(ib_qib_state_ops[qp->state] & QIB_PROCESS_SEND_OK)) {
-		if (!(ib_qib_state_ops[qp->state] & QIB_FLUSH_SEND))
+	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
+		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
 		if (qp->s_last == qp->s_head)
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
 		if (atomic_read(&qp->s_iowait.sdma_busy)) {
-			qp->s_flags |= QIB_S_WAIT_DMA;
+			qp->s_flags |= HFI1_S_WAIT_DMA;
 			goto bail;
 		}
 		clear_ahg(qp);
@@ -100,8 +100,8 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 	qp->s_wqe = NULL;
 	switch (qp->s_state) {
 	default:
-		if (!(ib_qib_state_ops[qp->state] &
-		    QIB_PROCESS_NEXT_SEND_OK))
+		if (!(ib_hfi1_state_ops[qp->state] &
+		    HFI1_PROCESS_NEXT_SEND_OK))
 			goto bail;
 		/* Check if send work queue is empty. */
 		if (qp->s_cur == qp->s_head) {
@@ -239,7 +239,7 @@ done:
 	goto unlock;
 
 bail:
-	qp->s_flags &= ~QIB_S_BUSY;
+	qp->s_flags &= ~HFI1_S_BUSY;
 unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
@@ -269,7 +269,7 @@ void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	struct ib_wc wc;
 	u32 pmtu = qp->pmtu;
 	struct ib_reth *reth;
-	int has_grh = !!(rcv_flags & QIB_HAS_GRH);
+	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
 	int is_becn, is_fecn, ret;
 	struct ib_grh *grh = NULL;
 
@@ -287,10 +287,10 @@ void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	if (hfi1_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
 		return;
 
-	is_becn = (be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT)
-		& QIB_BECN_MASK;
-	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
-		& QIB_FECN_MASK;
+	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
+		& HFI1_BECN_MASK;
+	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
+		& HFI1_FECN_MASK;
 
 	if (is_becn) {
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
@@ -298,7 +298,7 @@ void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		u16 rlid = be16_to_cpu(hdr->lrh[3]);
 		u8 sl, sc5;
 
-		lqpn = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
+		lqpn = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 		rqpn = qp->remote_qpn;
 
 		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
@@ -332,7 +332,7 @@ void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 inv:
 		if (qp->r_state == OP(SEND_FIRST) ||
 		    qp->r_state == OP(SEND_MIDDLE)) {
-			set_bit(QIB_R_REWIND_SGE, &qp->r_aflags);
+			set_bit(HFI1_R_REWIND_SGE, &qp->r_aflags);
 			qp->r_sge.num_sge = 0;
 		} else
 			qib_put_ss(&qp->r_sge);
@@ -382,8 +382,8 @@ inv:
 		goto inv;
 	}
 
-	if (qp->state == IB_QPS_RTR && !(qp->r_flags & QIB_R_COMM_EST)) {
-		qp->r_flags |= QIB_R_COMM_EST;
+	if (qp->state == IB_QPS_RTR && !(qp->r_flags & HFI1_R_COMM_EST)) {
+		qp->r_flags |= HFI1_R_COMM_EST;
 		if (qp->ibqp.event_handler) {
 			struct ib_event ev;
 
@@ -400,7 +400,7 @@ inv:
 	case OP(SEND_ONLY):
 	case OP(SEND_ONLY_WITH_IMMEDIATE):
 send_first:
-		if (test_and_clear_bit(QIB_R_REWIND_SGE, &qp->r_aflags))
+		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
 			qp->r_sge = qp->s_rdma_read_sge;
 		else {
 			ret = hfi1_get_rwqe(qp, 0);
@@ -444,7 +444,7 @@ send_last:
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
-		/* XXX LAST len should be >= 1 */
+		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
 			goto rewind;
 		/* Don't count the CRC. */
@@ -541,14 +541,14 @@ rdma_last_imm:
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
-		/* XXX LAST len should be >= 1 */
+		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
 			goto drop;
 		/* Don't count the CRC. */
 		tlen -= (hdrsize + pad + 4);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
-		if (test_and_clear_bit(QIB_R_REWIND_SGE, &qp->r_aflags))
+		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
 			qib_put_ss(&qp->s_rdma_read_sge);
 		else {
 			ret = hfi1_get_rwqe(qp, 1);
@@ -568,7 +568,7 @@ rdma_last:
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
-		/* XXX LAST len should be >= 1 */
+		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
 			goto drop;
 		/* Don't count the CRC. */
@@ -588,7 +588,7 @@ rdma_last:
 	return;
 
 rewind:
-	set_bit(QIB_R_REWIND_SGE, &qp->r_aflags);
+	set_bit(HFI1_R_REWIND_SGE, &qp->r_aflags);
 	qp->r_sge.num_sge = 0;
 drop:
 	ibp->n_pkt_drops++;

@@ -130,9 +130,9 @@ struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
 	}
 
 	if (srq_init_attr->attr.max_sge == 0 ||
-	    srq_init_attr->attr.max_sge > ib_qib_max_srq_sges ||
+	    srq_init_attr->attr.max_sge > ib_hfi1_max_srq_sges ||
 	    srq_init_attr->attr.max_wr == 0 ||
-	    srq_init_attr->attr.max_wr > ib_qib_max_srq_wrs) {
+	    srq_init_attr->attr.max_wr > ib_hfi1_max_srq_wrs) {
 		ret = ERR_PTR(-EINVAL);
 		goto done;
 	}
@@ -190,7 +190,7 @@ struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
 	srq->limit = srq_init_attr->attr.srq_limit;
 
 	spin_lock(&dev->n_srqs_lock);
-	if (dev->n_srqs_allocated == ib_qib_max_srqs) {
+	if (dev->n_srqs_allocated == ib_hfi1_max_srqs) {
 		spin_unlock(&dev->n_srqs_lock);
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_ip;
@@ -239,7 +239,7 @@ int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		u32 sz, size, n, head, tail;
 
 		/* Check that the requested sizes are below the limits. */
-		if ((attr->max_wr > ib_qib_max_srq_wrs) ||
+		if ((attr->max_wr > ib_hfi1_max_srq_wrs) ||
 		    ((attr_mask & IB_SRQ_LIMIT) ?
 		     attr->srq_limit : srq->limit) > attr->max_wr) {
 			ret = -EINVAL;

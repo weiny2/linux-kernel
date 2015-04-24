@@ -323,7 +323,7 @@ const char *parse_sdma_flags(
 #define __parse_sdma_flags(desc0, desc1) parse_sdma_flags(p, desc0, desc1)
 
 
-#define lrh_name(lrh) { QIB_##lrh, #lrh }
+#define lrh_name(lrh) { HFI1_##lrh, #lrh }
 #define show_lnh(lrh)                    \
 __print_symbolic(lrh,                    \
 	lrh_name(LRH_BTH),               \
@@ -425,7 +425,7 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__entry->slid =
 			be16_to_cpu(hdr->lrh[3]);
 		/* BTH */
-		if (__entry->lnh == QIB_LRH_BTH)
+		if (__entry->lnh == HFI1_LRH_BTH)
 			ohdr = &hdr->u.oth;
 		else
 			ohdr = &hdr->u.l.oth;
@@ -442,13 +442,13 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 		__entry->pkey =
 			be32_to_cpu(ohdr->bth[0]) & 0xffff;
 		__entry->f =
-			(be32_to_cpu(ohdr->bth[1]) >> QIB_FECN_SHIFT)
-			& QIB_FECN_MASK;
+			(be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
+			& HFI1_FECN_MASK;
 		__entry->b =
-			(be32_to_cpu(ohdr->bth[1]) >> QIB_BECN_SHIFT)
-			& QIB_BECN_MASK;
+			(be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
+			& HFI1_BECN_MASK;
 		__entry->qpn =
-			be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
+			be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 		__entry->a =
 			(be32_to_cpu(ohdr->bth[2]) >> 31) & 1;
 		/* allow for larger PSN */
@@ -530,14 +530,14 @@ TRACE_EVENT(snoop_capture,
 		struct hfi1_other_headers *ohdr;
 
 		__entry->lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
-		if (__entry->lnh == QIB_LRH_BTH)
+		if (__entry->lnh == HFI1_LRH_BTH)
 			ohdr = &hdr->u.oth;
 		else
 			ohdr = &hdr->u.l.oth;
 		DD_DEV_ASSIGN(dd);
 		__entry->slid = be16_to_cpu(hdr->lrh[3]);
 		__entry->dlid = be16_to_cpu(hdr->lrh[1]);
-		__entry->qpn = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
+		__entry->qpn = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 		__entry->opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
 		__entry->sl = (u8)(be16_to_cpu(hdr->lrh[0] >> 4) & 0xf);
 		__entry->pkey =	be32_to_cpu(ohdr->bth[0]) & 0xffff;
@@ -1304,6 +1304,7 @@ __hfi_trace_fn(PIO);
 __hfi_trace_fn(DC8051);
 __hfi_trace_fn(FIRMWARE);
 __hfi_trace_fn(RCVCTRL);
+__hfi_trace_fn(TID);
 
 #define hfi_cdbg(which, fmt, ...) \
 	__hfi_trace_##which(__func__, fmt, ##__VA_ARGS__)

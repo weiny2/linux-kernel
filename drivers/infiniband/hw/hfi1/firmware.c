@@ -104,8 +104,8 @@ MODULE_PARM_DESC(fw_pcie_serdes_name, "PCIe SerDes firmware name");
 
 #define SBUS_MAX_POLL_COUNT 100
 #define SBUS_COUNTER(reg, name) \
-	(((reg) >> WFR_ASIC_STS_SBUS_COUNTERS_##name##_CNT_SHIFT) & \
-	 WFR_ASIC_STS_SBUS_COUNTERS_##name##_CNT_MASK)
+	(((reg) >> ASIC_STS_SBUS_COUNTERS_##name##_CNT_SHIFT) & \
+	 ASIC_STS_SBUS_COUNTERS_##name##_CNT_MASK)
 
 /*
  * Firmware security header.
@@ -649,18 +649,18 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 		return 0;	/* done with no error if not validating */
 
 	/* write the signature */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_SIGNATURE, signature, KEY_SIZE);
+	write_rsa_data(dd, MISC_CFG_RSA_SIGNATURE, signature, KEY_SIZE);
 
 	/* init RSA */
-	write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_INIT);
+	write_csr(dd, MISC_CFG_RSA_CMD, RSA_CMD_INIT);
 
 	/*
 	 * Make sure the engine is idle and insert a delay between the two
 	 * writes to MISC_CFG_RSA_CMD.
 	 */
-	status = (read_csr(dd, WFR_MISC_CFG_FW_CTRL)
-			   & WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SMASK)
-			     >> WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT;
+	status = (read_csr(dd, MISC_CFG_FW_CTRL)
+			   & MISC_CFG_FW_CTRL_RSA_STATUS_SMASK)
+			     >> MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT;
 	if (status != RSA_STATUS_IDLE) {
 		dd_dev_err(dd, "%s security engine not idle - giving up\n",
 			who);
@@ -668,7 +668,7 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 	}
 
 	/* start RSA */
-	write_csr(dd, WFR_MISC_CFG_RSA_CMD, RSA_CMD_START);
+	write_csr(dd, MISC_CFG_RSA_CMD, RSA_CMD_START);
 
 	/*
 	 * Look for the result.
@@ -693,9 +693,9 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 	 */
 	timeout = msecs_to_jiffies(RSA_ENGINE_TIMEOUT) + jiffies;
 	while (1) {
-		status = (read_csr(dd, WFR_MISC_CFG_FW_CTRL)
-			   & WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SMASK)
-			     >> WFR_MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT;
+		status = (read_csr(dd, MISC_CFG_FW_CTRL)
+			   & MISC_CFG_FW_CTRL_RSA_STATUS_SMASK)
+			     >> MISC_CFG_FW_CTRL_RSA_STATUS_SHIFT;
 
 		if (status == RSA_STATUS_IDLE) {
 			/* should not happen */
@@ -733,19 +733,19 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 	 * error high.  All previous errors will clear - the RSA logic
 	 * is not keeping the error high.
 	 */
-	write_csr(dd, WFR_MISC_ERR_CLEAR,
-			WFR_MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK
-			| WFR_MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK);
+	write_csr(dd, MISC_ERR_CLEAR,
+			MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK
+			| MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK);
 	/*
 	 * All that is left are the current errors.  Print failure details,
 	 * if any.
 	 */
-	reg = read_csr(dd, WFR_MISC_ERR_STATUS);
+	reg = read_csr(dd, MISC_ERR_STATUS);
 	if (ret) {
-		if (reg & WFR_MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK)
+		if (reg & MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK)
 			dd_dev_err(dd, "%s firmware authorization failed\n",
 				who);
-		if (reg & WFR_MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK)
+		if (reg & MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK)
 			dd_dev_err(dd, "%s firmware key mismatch\n", who);
 	}
 
@@ -759,13 +759,13 @@ static void load_security_variables(struct hfi_devdata *dd,
 		return;	/* nothing to do */
 
 	/* Security variables a.  Write the modulus */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_MODULUS, fdet->modulus, KEY_SIZE);
+	write_rsa_data(dd, MISC_CFG_RSA_MODULUS, fdet->modulus, KEY_SIZE);
 	/* Security variables b.  Write the r2 */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_R2, fdet->r2, KEY_SIZE);
+	write_rsa_data(dd, MISC_CFG_RSA_R2, fdet->r2, KEY_SIZE);
 	/* Security variables c.  Write the mu */
-	write_rsa_data(dd, WFR_MISC_CFG_RSA_MU, fdet->mu, MU_SIZE);
+	write_rsa_data(dd, MISC_CFG_RSA_MU, fdet->mu, MU_SIZE);
 	/* Security variables d.  Write the header */
-	write_streamed_rsa_data(dd, WFR_MISC_CFG_SHA_PRELOAD,
+	write_streamed_rsa_data(dd, MISC_CFG_SHA_PRELOAD,
 			(u8 *)fdet->css_header, sizeof(struct css_header));
 }
 
@@ -787,7 +787,7 @@ int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout)
 	unsigned long timeout;
 
 	/* in the simulator, the fake 8051 is always ready */
-	if (dd->icode == WFR_ICODE_FUNCTIONAL_SIMULATOR)
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
 		return 0;
 
 	timeout = msecs_to_jiffies(mstimeout) + jiffies;
@@ -811,8 +811,8 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	u8 ver_a, ver_b;
 
 	/*
-	 * DC Reset sequence as described in the DC HAS, steps 1-5.
-	 * Load DC 8051 firmware as described in the WFR HAS, steps 1-10.
+	 * DC Reset sequence
+	 * Load DC 8051 firmware
 	 */
 	/*
 	 * DC reset step 1: Reset DC8051
@@ -842,9 +842,9 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	/*
 	 * Firmware load step 2.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
 	 */
-	write_csr(dd, WFR_MISC_CFG_FW_CTRL,
+	write_csr(dd, MISC_CFG_FW_CTRL,
 			(fw_validate ? 0 :
-			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
+			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
 
 	/* Firmware load steps 3-5 */
 	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware_ptr,
@@ -859,10 +859,10 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
 	 * Clear or set DISABLE_VALIDATION dependig on if we are validating.
 	 */
-	write_csr(dd, WFR_MISC_CFG_FW_CTRL,
-			WFR_MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK |
+	write_csr(dd, MISC_CFG_FW_CTRL,
+			MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK |
 			(fw_validate ? 0 :
-			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
+			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
 
 	/* Firmware load steps 7-10 */
 	ret = run_rsa(dd, "8051", fdet->signature);
@@ -901,12 +901,12 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 void sbus_request(struct hfi_devdata *dd,
 		u8 receiver_addr, u8 data_addr, u8 command, u32 data_in)
 {
-	write_csr(dd, WFR_ASIC_CFG_SBUS_REQUEST,
-		((u64)data_in << WFR_ASIC_CFG_SBUS_REQUEST_DATA_IN_SHIFT)
-		| ((u64)command << WFR_ASIC_CFG_SBUS_REQUEST_COMMAND_SHIFT)
-		| ((u64)data_addr << WFR_ASIC_CFG_SBUS_REQUEST_DATA_ADDR_SHIFT)
+	write_csr(dd, ASIC_CFG_SBUS_REQUEST,
+		((u64)data_in << ASIC_CFG_SBUS_REQUEST_DATA_IN_SHIFT)
+		| ((u64)command << ASIC_CFG_SBUS_REQUEST_COMMAND_SHIFT)
+		| ((u64)data_addr << ASIC_CFG_SBUS_REQUEST_DATA_ADDR_SHIFT)
 		| ((u64)receiver_addr
-			<< WFR_ASIC_CFG_SBUS_REQUEST_RECEIVER_ADDR_SHIFT));
+			<< ASIC_CFG_SBUS_REQUEST_RECEIVER_ADDR_SHIFT));
 }
 
 /*
@@ -934,8 +934,8 @@ static void turn_off_spicos(struct hfi_devdata *dd, int flags)
 		flags & SPICO_SBUS ? " SBus" : "",
 		flags & SPICO_FABRIC ? " fabric" : "");
 
-	write_csr(dd, WFR_MISC_CFG_FW_CTRL,
-			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
+	write_csr(dd, MISC_CFG_FW_CTRL,
+			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
 	/* disable SBus spico */
 	if (flags & SPICO_SBUS)
 		sbus_request(dd, SBUS_MASTER_BROADCAST, 0x01,
@@ -945,7 +945,7 @@ static void turn_off_spicos(struct hfi_devdata *dd, int flags)
 	if (flags & SPICO_FABRIC)
 		sbus_request(dd, fabric_serdes_broadcast[dd->hfi_id],
 				0x07, WRITE_SBUS_RECEIVER, 0x00000000);
-	write_csr(dd, WFR_MISC_CFG_FW_CTRL, 0);
+	write_csr(dd, MISC_CFG_FW_CTRL, 0);
 }
 
 /*
@@ -955,7 +955,7 @@ void fabric_serdes_reset(struct hfi_devdata *dd)
 {
 	u8 ra;
 
-	if (dd->icode != WFR_ICODE_RTL_SILICON) /* only for RTL */
+	if (dd->icode != ICODE_RTL_SILICON) /* only for RTL */
 		return;
 
 	ra = fabric_serdes_broadcast[dd->hfi_id];
@@ -982,28 +982,28 @@ int sbus_request_slow(struct hfi_devdata *dd,
 	int ret = 0;
 
 	sbus_request(dd, receiver_addr, data_addr, command, data_in);
-	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE,
-		  WFR_ASIC_CFG_SBUS_EXECUTE_EXECUTE_SMASK);
+	write_csr(dd, ASIC_CFG_SBUS_EXECUTE,
+		  ASIC_CFG_SBUS_EXECUTE_EXECUTE_SMASK);
 	/* Wait for both DONE and RCV_DATA_VALID to go high */
-	reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
-	while (!((reg & WFR_ASIC_STS_SBUS_RESULT_DONE_SMASK) &&
-		 (reg & WFR_ASIC_STS_SBUS_RESULT_RCV_DATA_VALID_SMASK))) {
+	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
+	while (!((reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) &&
+		 (reg & ASIC_STS_SBUS_RESULT_RCV_DATA_VALID_SMASK))) {
 		if (count++ >= SBUS_MAX_POLL_COUNT)
 			/* We timed out waiting but proceed anyway */
 			break;
 		udelay(1);
-		reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
+		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
 	}
-	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
+	write_csr(dd, ASIC_CFG_SBUS_EXECUTE, 0);
 	/* Wait for DONE to clear after EXECUTE is cleared */
-	reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
-	while (reg & WFR_ASIC_STS_SBUS_RESULT_DONE_SMASK) {
+	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
+	while (reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) {
 		if (count++ >= SBUS_MAX_POLL_COUNT) {
 			ret = -ETIME;
 			break;
 		}
 		udelay(1);
-		reg = read_csr(dd, WFR_ASIC_STS_SBUS_RESULT);
+		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
 	}
 	return ret;
 }
@@ -1154,8 +1154,8 @@ int acquire_hw_mutex(struct hfi_devdata *dd)
 
 	timeout = msecs_to_jiffies(HM_TIMEOUT) + jiffies;
 	while (1) {
-		write_csr(dd, WFR_ASIC_CFG_MUTEX, mask);
-		user = (u8)read_csr(dd, WFR_ASIC_CFG_MUTEX);
+		write_csr(dd, ASIC_CFG_MUTEX, mask);
+		user = (u8)read_csr(dd, ASIC_CFG_MUTEX);
 		if (user == mask)
 			return 0; /* success */
 		if (time_after(jiffies, timeout))
@@ -1174,28 +1174,28 @@ int acquire_hw_mutex(struct hfi_devdata *dd)
 
 void release_hw_mutex(struct hfi_devdata *dd)
 {
-	write_csr(dd, WFR_ASIC_CFG_MUTEX, 0);
+	write_csr(dd, ASIC_CFG_MUTEX, 0);
 }
 
 void set_sbus_fast_mode(struct hfi_devdata *dd)
 {
-	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE,
-				WFR_ASIC_CFG_SBUS_EXECUTE_FAST_MODE_SMASK);
+	write_csr(dd, ASIC_CFG_SBUS_EXECUTE,
+				ASIC_CFG_SBUS_EXECUTE_FAST_MODE_SMASK);
 }
 
 void clear_sbus_fast_mode(struct hfi_devdata *dd)
 {
 	u64 reg, count = 0;
 
-	reg = read_csr(dd, WFR_ASIC_STS_SBUS_COUNTERS);
+	reg = read_csr(dd, ASIC_STS_SBUS_COUNTERS);
 	while (SBUS_COUNTER(reg, EXECUTE) !=
 	       SBUS_COUNTER(reg, RCV_DATA_VALID)) {
 		if (count++ >= SBUS_MAX_POLL_COUNT)
 			break;
 		udelay(1);
-		reg = read_csr(dd, WFR_ASIC_STS_SBUS_COUNTERS);
+		reg = read_csr(dd, ASIC_STS_SBUS_COUNTERS);
 	}
-	write_csr(dd, WFR_ASIC_CFG_SBUS_EXECUTE, 0);
+	write_csr(dd, ASIC_CFG_SBUS_EXECUTE, 0);
 }
 
 int load_firmware(struct hfi_devdata *dd)
@@ -1253,14 +1253,14 @@ int firmware_init(struct hfi_devdata *dd)
 	BUG_ON(dd->hfi_id >= 2);
 
 	/* only RTL can use these */
-	if (dd->icode != WFR_ICODE_RTL_SILICON) {
+	if (dd->icode != ICODE_RTL_SILICON) {
 		fw_fabric_serdes_load = 0;
 		fw_pcie_serdes_load = 0;
 		fw_sbus_load = 0;
 	}
 
 	if (!fw_8051_name) {
-		if (dd->icode == WFR_ICODE_RTL_SILICON)
+		if (dd->icode == ICODE_RTL_SILICON)
 			fw_8051_name = DEFAULT_FW_8051_NAME_ASIC;
 		else
 			fw_8051_name = DEFAULT_FW_8051_NAME_FPGA;
@@ -1280,11 +1280,10 @@ int firmware_init(struct hfi_devdata *dd)
 	 * Expect that we enter this routine with MISC_CFG_FW_CTRL reset:
 	 *	- FW_8051_LOADED clear
 	 *	- DISABLE_VALIDATION clear
-	 * Possibly set DISABLE_VALIDATION - EFUSE may override the disable.
 	 */
 	if (!fw_validate)
-		write_csr(dd, WFR_MISC_CFG_FW_CTRL,
-			    WFR_MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
+		write_csr(dd, MISC_CFG_FW_CTRL,
+			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
 
 	return 0;
 }

@@ -97,7 +97,7 @@
  * D4..7 select from 15 choices, translated by table:
  */
 #define QSFP_MOD_TECH_OFFS 147
-extern const char *const qib_qsfp_devtech[16];
+extern const char *const hfi1_qsfp_devtech[16];
 /* Active Equalization includes fiber, copper full EQ, and copper near Eq */
 #define QSFP_IS_ACTIVE(tech) ((0xA2FF >> ((tech) >> 4)) & 1)
 /* Active Equalization includes fiber, copper full EQ, and copper far Eq */
