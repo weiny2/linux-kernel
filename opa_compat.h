@@ -1,5 +1,5 @@
-#ifndef _WFR_LINUX_H
-#define _WFR_LINUX_H
+#ifndef _LINUX_H
+#define _LINUX_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -52,7 +52,7 @@
 
 /*
  * This header file is for OPA-specific definitions which are
- * required by the WFR driver, and which aren't yet in the linux
+ * required by the HFI driver, and which aren't yet in the linux
  * IB core. We'll collect these all here, then merge them into
  * the kernel when that's convenient.
  */
@@ -129,4 +129,4 @@ enum opa_port_phys_state {
  * as defined by Intel SFO group */
 /* 6 - 15 are reserved */
 
-#endif /* _WFR_LINUX_H */
+#endif /* _LINUX_H */

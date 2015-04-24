@@ -97,7 +97,6 @@ static u64 qib_dma_map_page(struct ib_device *dev, struct page *page,
 	addr = (u64) page_address(page);
 	if (addr)
 		addr += offset;
-	/* TODO: handle highmem pages */
 
 done:
 	return addr;
@@ -121,7 +120,6 @@ static int qib_map_sg(struct ib_device *dev, struct scatterlist *sgl,
 
 	for_each_sg(sgl, sg, nents, i) {
 		addr = (u64) page_address(sg_page(sg));
-		/* TODO: handle highmem pages */
 		if (!addr) {
 			ret = 0;
 			break;
@@ -172,7 +170,7 @@ static void qib_dma_free_coherent(struct ib_device *dev, size_t size,
 	free_pages((unsigned long) cpu_addr, get_order(size));
 }
 
-struct ib_dma_mapping_ops qib_dma_mapping_ops = {
+struct ib_dma_mapping_ops hfi1_dma_mapping_ops = {
 	.mapping_error = qib_mapping_error,
 	.map_single = qib_dma_map_single,
 	.unmap_single = qib_dma_unmap_single,

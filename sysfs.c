@@ -61,7 +61,7 @@ static ssize_t show_hrtbt_enb(struct hfi1_pportdata *ppd, char *buf)
 {
 	int ret;
 
-	ret = hfi1_get_ib_cfg(ppd, QIB_IB_CFG_HRTBT);
+	ret = hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_HRTBT);
 	ret = scnprintf(buf, PAGE_SIZE, "%d\n", ret);
 	return ret;
 }
@@ -86,7 +86,7 @@ static ssize_t store_hrtbt_enb(struct hfi1_pportdata *ppd, const char *buf,
 	 * because entering loopback mode overrides it and automatically
 	 * disables heartbeat.
 	 */
-	ret = hfi1_set_ib_cfg(ppd, QIB_IB_CFG_HRTBT, val);
+	ret = hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_HRTBT, val);
 	return ret < 0 ? ret : count;
 }
 
@@ -178,7 +178,7 @@ bail:
  * Because we are fitting into other infrastructure, we have to supply the
  * full set of kobject/sysfs_ops structures and routines.
  */
-#define QIB_PORT_ATTR(name, mode, show, store) \
+#define HFI1_PORT_ATTR(name, mode, show, store) \
 	static struct hfi1_port_attr qib_port_attr_##name = \
 		__ATTR(name, mode, show, store)
 
@@ -188,11 +188,11 @@ struct hfi1_port_attr {
 	ssize_t (*store)(struct hfi1_pportdata *, const char *, size_t);
 };
 
-QIB_PORT_ATTR(led_override, S_IWUSR, NULL, store_led_override);
-QIB_PORT_ATTR(hrtbt_enable, S_IWUSR | S_IRUGO, show_hrtbt_enb,
-	      store_hrtbt_enb);
-QIB_PORT_ATTR(status, S_IRUGO, show_status, NULL);
-QIB_PORT_ATTR(status_str, S_IRUGO, show_status_str, NULL);
+HFI1_PORT_ATTR(led_override, S_IWUSR, NULL, store_led_override);
+HFI1_PORT_ATTR(hrtbt_enable, S_IWUSR | S_IRUGO, show_hrtbt_enb,
+	       store_hrtbt_enb);
+HFI1_PORT_ATTR(status, S_IRUGO, show_status, NULL);
+HFI1_PORT_ATTR(status_str, S_IRUGO, show_status_str, NULL);
 
 static struct attribute *port_default_attributes[] = {
 	&qib_port_attr_led_override.attr,
@@ -619,22 +619,22 @@ static struct kobj_type hfi_vl2mtu_ktype = {
 };
 
 /* Start diag_counters */
-#define QIB_DIAGC_NORMAL 0x0
-#define QIB_DIAGC_PCPU   0x1
+#define HFI1_DIAGC_NORMAL 0x0
+#define HFI1_DIAGC_PCPU   0x1
 
-#define QIB_DIAGC_ATTR(N) \
+#define HFI1_DIAGC_ATTR(N) \
 	static struct hfi1_diagc_attr qib_diagc_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0664 }, \
 		.counter = offsetof(struct hfi1_ibport, n_##N), \
-		.type = QIB_DIAGC_NORMAL, \
+		.type = HFI1_DIAGC_NORMAL, \
 		.vl = CNTR_INVALID_VL \
 	}
 
-#define QIB_DIAGC_ATTR_PCPU(N, V, L) \
+#define HFI1_DIAGC_ATTR_PCPU(N, V, L) \
 	static struct hfi1_diagc_attr qib_diagc_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0664 }, \
 		.counter = V, \
-		.type = QIB_DIAGC_PCPU, \
+		.type = HFI1_DIAGC_PCPU, \
 		.vl = L \
 	}
 
@@ -645,21 +645,21 @@ struct hfi1_diagc_attr {
 	int vl;
 };
 
-QIB_DIAGC_ATTR(rc_resends);
-QIB_DIAGC_ATTR_PCPU(rc_acks, C_SW_CPU_RC_ACKS, CNTR_INVALID_VL);
-QIB_DIAGC_ATTR_PCPU(rc_qacks, C_SW_CPU_RC_QACKS, CNTR_INVALID_VL);
-QIB_DIAGC_ATTR(rc_delayed_comp);
-QIB_DIAGC_ATTR(seq_naks);
-QIB_DIAGC_ATTR(rdma_seq);
-QIB_DIAGC_ATTR(rnr_naks);
-QIB_DIAGC_ATTR(other_naks);
-QIB_DIAGC_ATTR(rc_timeouts);
-QIB_DIAGC_ATTR(loop_pkts);
-QIB_DIAGC_ATTR(pkt_drops);
-QIB_DIAGC_ATTR(dmawait);
-QIB_DIAGC_ATTR(unaligned);
-QIB_DIAGC_ATTR(rc_dupreq);
-QIB_DIAGC_ATTR(rc_seqnak);
+HFI1_DIAGC_ATTR(rc_resends);
+HFI1_DIAGC_ATTR_PCPU(rc_acks, C_SW_CPU_RC_ACKS, CNTR_INVALID_VL);
+HFI1_DIAGC_ATTR_PCPU(rc_qacks, C_SW_CPU_RC_QACKS, CNTR_INVALID_VL);
+HFI1_DIAGC_ATTR(rc_delayed_comp);
+HFI1_DIAGC_ATTR(seq_naks);
+HFI1_DIAGC_ATTR(rdma_seq);
+HFI1_DIAGC_ATTR(rnr_naks);
+HFI1_DIAGC_ATTR(other_naks);
+HFI1_DIAGC_ATTR(rc_timeouts);
+HFI1_DIAGC_ATTR(loop_pkts);
+HFI1_DIAGC_ATTR(pkt_drops);
+HFI1_DIAGC_ATTR(dmawait);
+HFI1_DIAGC_ATTR(unaligned);
+HFI1_DIAGC_ATTR(rc_dupreq);
+HFI1_DIAGC_ATTR(rc_seqnak);
 
 static struct attribute *diagc_default_attributes[] = {
 	&qib_diagc_attr_rc_resends.attr,
@@ -690,12 +690,12 @@ static ssize_t diagc_attr_show(struct kobject *kobj, struct attribute *attr,
 	struct hfi1_ibport *qibp = &ppd->ibport_data;
 
 	switch (dattr->type) {
-	case (QIB_DIAGC_PCPU):
+	case (HFI1_DIAGC_PCPU):
 		return(sprintf(buf, "%lld\n",
 			read_port_cntr(ppd,
 				       dattr->counter,
 				       dattr->vl)));
-	case (QIB_DIAGC_NORMAL):
+	case (HFI1_DIAGC_NORMAL):
 		/* Fall through */
 	default:
 		return sprintf(buf, "%u\n",
@@ -768,7 +768,7 @@ static ssize_t show_version(struct device *device,
 			    struct device_attribute *attr, char *buf)
 {
 	/* The string printed here is already newline-terminated. */
-	return scnprintf(buf, PAGE_SIZE, "%s", (char *)ib_qib_version);
+	return scnprintf(buf, PAGE_SIZE, "%s", (char *)ib_hfi1_version);
 }
 
 static ssize_t show_boardversion(struct device *device,

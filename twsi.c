@@ -74,7 +74,7 @@
 
 /**
  * i2c_wait_for_writes - wait for a write
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  *
  * We use this instead of udelay directly, so we can make sure
  * that previous register writes have been flushed all the way
@@ -158,12 +158,12 @@ static u8 sda_in(struct hfi_devdata *dd, u32 target, int wait)
 	read_val = hfi1_gpio_mod(dd, target, 0, 0, 0);
 	if (wait)
 		i2c_wait_for_writes(dd, target);
-	return (read_val & mask) >> WFR_GPIO_SDA_NUM;
+	return (read_val & mask) >> GPIO_SDA_NUM;
 }
 
 /**
  * i2c_ackrcv - see if ack following write is true
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  */
 static int i2c_ackrcv(struct hfi_devdata *dd, u32 target)
 {
@@ -182,7 +182,7 @@ static void stop_cmd(struct hfi_devdata *dd, u32 target);
 
 /**
  * rd_byte - read a byte, sending STOP on last, else ACK
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  *
  * Returns byte shifted out of device
  */
@@ -212,7 +212,7 @@ static int rd_byte(struct hfi_devdata *dd, u32 target, int last)
 
 /**
  * wr_byte - write a byte, one bit at a time
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @data: the byte to write
  *
  * Returns 0 if we got the following ack, otherwise 1
@@ -246,7 +246,7 @@ static void start_seq(struct hfi_devdata *dd, u32 target)
 
 /**
  * stop_seq - transmit the stop sequence
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
@@ -260,7 +260,7 @@ static void stop_seq(struct hfi_devdata *dd, u32 target)
 
 /**
  * stop_cmd - transmit the stop condition
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
@@ -272,7 +272,7 @@ static void stop_cmd(struct hfi_devdata *dd, u32 target)
 
 /**
  * hfi1_twsi_reset - reset I2C communication
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  */
 
 int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target)
@@ -332,8 +332,8 @@ int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target)
 	return !was_high;
 }
 
-#define QIB_TWSI_START 0x100
-#define QIB_TWSI_STOP 0x200
+#define HFI1_TWSI_START 0x100
+#define HFI1_TWSI_STOP 0x200
 
 /* Write byte to TWSI, optionally prefixed with START or suffixed with
  * STOP.
@@ -343,26 +343,26 @@ static int qib_twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
 {
 	int ret = 1;
 
-	if (flags & QIB_TWSI_START)
+	if (flags & HFI1_TWSI_START)
 		start_seq(dd, target);
 
 	/* Leaves SCL low (from i2c_ackrcv()) */
 	ret = wr_byte(dd, target, data);
 
-	if (flags & QIB_TWSI_STOP)
+	if (flags & HFI1_TWSI_STOP)
 		stop_cmd(dd, target);
 	return ret;
 }
 
 /* Added functionality for IBA7220-based cards */
-#define QIB_TEMP_DEV 0x98
+#define HFI1_TEMP_DEV 0x98
 
 /*
  * hfi1_twsi_blk_rd
  * Formerly called qib_eeprom_internal_read, and only used for eeprom,
  * but now the general interface for data transfer from twsi devices.
  * One vestige of its former role is that it recognizes a device
- * QIB_TWSI_NO_DEV and does the correct operation for the legacy part,
+ * HFI1_TWSI_NO_DEV and does the correct operation for the legacy part,
  * which responded to all TWSI device codes, interpreting them as
  * address within device. On all other devices found on board handled by
  * this driver, the device is followed by a one-byte "address" which selects
@@ -377,13 +377,13 @@ int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 
 	ret = 1;
 
-	if (dev == QIB_TWSI_NO_DEV) {
+	if (dev == HFI1_TWSI_NO_DEV) {
 		/* legacy not-really-I2C */
 		addr = (addr << 1) | READ_CMD;
-		ret = qib_twsi_wr(dd, target, addr, QIB_TWSI_START);
+		ret = qib_twsi_wr(dd, target, addr, HFI1_TWSI_START);
 	} else {
 		/* Actual I2C */
-		ret = qib_twsi_wr(dd, target, dev | WRITE_CMD, QIB_TWSI_START);
+		ret = qib_twsi_wr(dd, target, dev | WRITE_CMD, HFI1_TWSI_START);
 		if (ret) {
 			stop_cmd(dd, target);
 			ret = 1;
@@ -406,7 +406,7 @@ int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 			ret = 1;
 			goto bail;
 		}
-		ret = qib_twsi_wr(dd, target, dev | READ_CMD, QIB_TWSI_START);
+		ret = qib_twsi_wr(dd, target, dev | READ_CMD, HFI1_TWSI_START);
 	}
 	if (ret) {
 		stop_cmd(dd, target);
@@ -440,7 +440,7 @@ bail:
  * Formerly called qib_eeprom_internal_write, and only used for eeprom,
  * but now the general interface for data transfer to twsi devices.
  * One vestige of its former role is that it recognizes a device
- * QIB_TWSI_NO_DEV and does the correct operation for the legacy part,
+ * HFI1_TWSI_NO_DEV and does the correct operation for the legacy part,
  * which responded to all TWSI device codes, interpreting them as
  * address within device. On all other devices found on board handled by
  * this driver, the device is followed by a one-byte "address" which selects
@@ -456,15 +456,15 @@ int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 	int ret = 1;
 
 	while (len > 0) {
-		if (dev == QIB_TWSI_NO_DEV) {
+		if (dev == HFI1_TWSI_NO_DEV) {
 			if (qib_twsi_wr(dd, target, (addr << 1) | WRITE_CMD,
-					QIB_TWSI_START)) {
+					HFI1_TWSI_START)) {
 				goto failed_write;
 			}
 		} else {
 			/* Real I2C */
 			if (qib_twsi_wr(dd, target,
-					dev | WRITE_CMD, QIB_TWSI_START))
+					dev | WRITE_CMD, HFI1_TWSI_START))
 				goto failed_write;
 			ret = qib_twsi_wr(dd, target, addr, 0);
 			if (ret) {
@@ -498,7 +498,7 @@ int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		 */
 		max_wait_time = 100;
 		while (qib_twsi_wr(dd, target,
-					dev | READ_CMD, QIB_TWSI_START)) {
+					dev | READ_CMD, HFI1_TWSI_START)) {
 			stop_cmd(dd, target);
 			if (!--max_wait_time)
 				goto failed_write;

@@ -238,7 +238,7 @@ struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 	struct ib_cq *ret;
 	u32 sz;
 
-	if (entries < 1 || entries > ib_qib_max_cqes) {
+	if (entries < 1 || entries > ib_hfi1_max_cqes) {
 		ret = ERR_PTR(-EINVAL);
 		goto done;
 	}
@@ -291,7 +291,7 @@ struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 		cq->ip = NULL;
 
 	spin_lock(&dev->n_cqs_lock);
-	if (dev->n_cqs_allocated == ib_qib_max_cqs) {
+	if (dev->n_cqs_allocated == ib_hfi1_max_cqs) {
 		spin_unlock(&dev->n_cqs_lock);
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_ip;
@@ -409,7 +409,7 @@ int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	int ret;
 	u32 sz;
 
-	if (cqe < 1 || cqe > ib_qib_max_cqes) {
+	if (cqe < 1 || cqe > ib_hfi1_max_cqes) {
 		ret = -EINVAL;
 		goto bail;
 	}

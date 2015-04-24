@@ -105,15 +105,6 @@ bail:
 /**
  * hfi1_map_page - a safety wrapper around pci_map_page()
  *
- * A dma_addr of all 0's is interpreted by the chip as "disabled".
- * Unfortunately, it can also be a valid dma_addr returned on some
- * architectures.
- *
- * The powerpc iommu assigns dma_addrs in ascending order, so we don't
- * have to bother with retries or mapping a dummy page to insure we
- * don't just get the same mapping again.
- *
- * I'm sure we won't be so lucky with other iommu's, so FIXME.
  */
 dma_addr_t hfi1_map_page(struct pci_dev *hwdev, struct page *page,
 			 unsigned long offset, size_t size, int direction)
@@ -121,15 +112,6 @@ dma_addr_t hfi1_map_page(struct pci_dev *hwdev, struct page *page,
 	dma_addr_t phys;
 
 	phys = pci_map_page(hwdev, page, offset, size, direction);
-
-	if (phys == 0) {
-		pci_unmap_page(hwdev, phys, size, direction);
-		phys = pci_map_page(hwdev, page, offset, size, direction);
-		/*
-		 * FIXME: If we get 0 again, we should keep this page,
-		 * map another, then free the 0 page.
-		 */
-	}
 
 	return phys;
 }

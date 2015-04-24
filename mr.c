@@ -70,7 +70,7 @@ static int init_qib_mregion(struct hfi1_mregion *mr, struct ib_pd *pd,
 	int m, i = 0;
 	int rval = 0;
 
-	m = (count + QIB_SEGSZ - 1) / QIB_SEGSZ;
+	m = (count + HFI1_SEGSZ - 1) / HFI1_SEGSZ;
 	for (; i < m; i++) {
 		mr->map[i] = kzalloc(sizeof(*mr->map[0]), GFP_KERNEL);
 		if (!mr->map[i])
@@ -159,7 +159,7 @@ static struct hfi1_mr *alloc_mr(int count, struct ib_pd *pd)
 	int m;
 
 	/* Allocate struct plus pointers to first level page tables. */
-	m = (count + QIB_SEGSZ - 1) / QIB_SEGSZ;
+	m = (count + HFI1_SEGSZ - 1) / HFI1_SEGSZ;
 	mr = kzalloc(sizeof(*mr) + m * sizeof(mr->mr.map[0]), GFP_KERNEL);
 	if (!mr)
 		goto bail;
@@ -221,7 +221,7 @@ struct ib_mr *hfi1_reg_phys_mr(struct ib_pd *pd,
 		mr->mr.map[m]->segs[n].length = buffer_list[i].size;
 		mr->mr.length += buffer_list[i].size;
 		n++;
-		if (n == QIB_SEGSZ) {
+		if (n == HFI1_SEGSZ) {
 			m++;
 			n = 0;
 		}
@@ -297,7 +297,7 @@ struct ib_mr *hfi1_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			mr->mr.map[m]->segs[n].vaddr = vaddr;
 			mr->mr.map[m]->segs[n].length = umem->page_size;
 			n++;
-			if (n == QIB_SEGSZ) {
+			if (n == HFI1_SEGSZ) {
 				m++;
 				n = 0;
 			}
@@ -410,7 +410,7 @@ struct ib_fmr *hfi1_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
 	int rval = -ENOMEM;
 
 	/* Allocate struct plus pointers to first level page tables. */
-	m = (fmr_attr->max_pages + QIB_SEGSZ - 1) / QIB_SEGSZ;
+	m = (fmr_attr->max_pages + HFI1_SEGSZ - 1) / HFI1_SEGSZ;
 	fmr = kzalloc(sizeof(*fmr) + m * sizeof(fmr->mr.map[0]), GFP_KERNEL);
 	if (!fmr)
 		goto bail;
@@ -487,7 +487,7 @@ int hfi1_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
 	for (i = 0; i < list_len; i++) {
 		fmr->mr.map[m]->segs[n].vaddr = (void *) page_list[i];
 		fmr->mr.map[m]->segs[n].length = ps;
-		if (++n == QIB_SEGSZ) {
+		if (++n == HFI1_SEGSZ) {
 			m++;
 			n = 0;
 		}

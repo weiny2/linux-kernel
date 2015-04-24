@@ -61,9 +61,9 @@
 
 /* increased for AHG */
 #define NUM_DESC 6
-/* Hardware limit - see HAS 7.3 */
+/* Hardware limit */
 #define MAX_DESC 64
-/* Hardware limit for SDMA packet size - see HAS Table 7-24 */
+/* Hardware limit for SDMA packet size */
 #define MAX_SDMA_PKT_SIZE ((16 * 1024) - 1)
 
 
@@ -466,7 +466,7 @@ struct sdma_engine {
 	/* private: */
 	struct list_head      dmawait;
 
-	/* JAG SDMA for now, just blindly duplicate */
+	/* CONFIG SDMA for now, just blindly duplicate */
 	/* private: */
 	struct tasklet_struct sdma_hw_clean_up_task
 		____cacheline_aligned_in_smp;
@@ -892,10 +892,10 @@ void sdma_ahg_free(struct sdma_engine *sde, int ahg_index);
 
 /**
  * sdma_build_ahg - build ahg descriptor
- * @data: per HAS
- * @dwindex: per HAS
- * @startbit: per HAS
- * @bits: per HAS
+ * @data
+ * @dwindex
+ * @startbit
+ * @bits
  *
  * Build and return a 32 bit descriptor.
  */
@@ -1092,8 +1092,7 @@ struct sdma_engine *sdma_select_engine_vl(
 
 void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *);
 
-#ifdef JAG_SDMA_VERBOSITY
-/* XXX JAG SDMA - Temporary debug/dump routine */
+#ifdef CONFIG_SDMA_VERBOSITY
 void sdma_dumpstate(struct sdma_engine *);
 #endif
 static inline char *slashstrip(char *s)

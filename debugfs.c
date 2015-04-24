@@ -851,11 +851,11 @@ static u64 hfi_sps_ints(void)
 	struct hfi_devdata *dd;
 	u64 sps_ints = 0;
 
-	spin_lock_irqsave(&qib_devs_lock, flags);
-	list_for_each_entry(dd, &qib_dev_list, list) {
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
+	list_for_each_entry(dd, &hfi1_dev_list, list) {
 		sps_ints += get_all_cpu_total(dd->int_counter);
 	}
-	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 	return sps_ints;
 }
 
@@ -863,7 +863,7 @@ static int _driver_stats_seq_show(struct seq_file *s, void *v)
 {
 	loff_t *spos = v;
 	char *buffer;
-	u64 *stats = (u64 *)&qib_stats;
+	u64 *stats = (u64 *)&hfi1_stats;
 	size_t sz = seq_get_buf(s, &buffer);
 
 	if (sz < sizeof(u64))

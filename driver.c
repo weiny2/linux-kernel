@@ -69,11 +69,11 @@
  * The size has to be longer than this string, so we can append
  * board/chip information to it in the init code.
  */
-const char ib_qib_version[] = HFI_DRIVER_VERSION "\n";
+const char ib_hfi1_version[] = HFI_DRIVER_VERSION "\n";
 
-DEFINE_SPINLOCK(qib_devs_lock);
-LIST_HEAD(qib_dev_list);
-DEFINE_MUTEX(qib_mutex);	/* general driver use */
+DEFINE_SPINLOCK(hfi1_devs_lock);
+LIST_HEAD(hfi1_dev_list);
+DEFINE_MUTEX(hfi1_mutex);	/* general driver use */
 
 unsigned int max_mtu;
 module_param_named(max_mtu, max_mtu, uint, S_IRUGO);
@@ -190,9 +190,9 @@ void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
  */
 #define MAX_PKT_RECV 64
-#define WFR_EGR_HEAD_UPDATE_THRESHOLD 16
+#define EGR_HEAD_UPDATE_THRESHOLD 16
 
-struct qlogic_ib_stats qib_stats;
+struct hfi1_ib_stats hfi1_stats;
 
 static int hfi_caps_set(const char *val, const struct kernel_param *kp)
 {
@@ -301,8 +301,8 @@ int hfi1_count_active_units(void)
 	unsigned long flags;
 	int pidx, nunits_active = 0;
 
-	spin_lock_irqsave(&qib_devs_lock, flags);
-	list_for_each_entry(dd, &qib_dev_list, list) {
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
+	list_for_each_entry(dd, &hfi1_dev_list, list) {
 		if (!(dd->flags & HFI_PRESENT) || !dd->kregbase)
 			continue;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
@@ -313,7 +313,7 @@ int hfi1_count_active_units(void)
 			}
 		}
 	}
-	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 	return nunits_active;
 }
 
@@ -330,9 +330,9 @@ int hfi1_count_units(int *npresentp, int *nupp)
 	int pidx;
 	struct hfi1_pportdata *ppd;
 
-	spin_lock_irqsave(&qib_devs_lock, flags);
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
 
-	list_for_each_entry(dd, &qib_dev_list, list) {
+	list_for_each_entry(dd, &hfi1_dev_list, list) {
 		nunits++;
 		if ((dd->flags & HFI_PRESENT) && dd->kregbase)
 			npresent++;
@@ -343,7 +343,7 @@ int hfi1_count_units(int *npresentp, int *nupp)
 		}
 	}
 
-	spin_unlock_irqrestore(&qib_devs_lock, flags);
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 
 	if (npresentp)
 		*npresentp = npresent;
@@ -364,7 +364,7 @@ static inline void *qib_get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
 
 	*update |= !(idx & (rcd->egrbufs.threshold - 1)) && !offset;
 	return (void *)(((u64)(rcd->egrbufs.rcvtids[idx].addr)) +
-			(offset * WFR_RCV_BUF_BLOCK_SIZE));
+			(offset * RCV_BUF_BLOCK_SIZE));
 }
 
 /*
@@ -377,10 +377,10 @@ inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 {
 	if (unlikely(!IS_ALIGNED(size, PAGE_SIZE)))
 		return 0;
-	if (unlikely(size < WFR_MIN_EAGER_BUFFER))
+	if (unlikely(size < MIN_EAGER_BUFFER))
 		return 0;
 	if (size >
-	    (type == PT_EAGER ? WFR_MAX_EAGER_BUFFER : WFR_MAX_EXPECTED_BUFFER))
+	    (type == PT_EAGER ? MAX_EAGER_BUFFER : MAX_EXPECTED_BUFFER))
 		return 0;
 	if (encoded)
 		*encoded = ilog2(size / PAGE_SIZE) + 1;
@@ -398,14 +398,6 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 	if (packet->rhf & (RHF_VCRC_ERR | RHF_ICRC_ERR))
 		return;
 
-	/*
-	 * TODO: In WFR, RHF.TIDErr can mean 2 things, depending on the
-	 * packet type.  Does this code apply to both?
-	 * For type 0 packets (expected receive), see section 8.5.6.2
-	 * Expected TIDErr.
-	 * For non-type 0 packets (not expected receive) see the section
-	 * 8.5.7.3 Eager TIDErr, in HAS snapshots on or later than 2013-07-12.
-	 */
 	if (packet->rhf & RHF_TID_ERR) {
 		/* For TIDERR and RC QPs premptively schedule a NAK */
 		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)rhdr;
@@ -420,9 +412,9 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			goto drop;
 
 		/* Check for GRH */
-		if (lnh == QIB_LRH_BTH)
+		if (lnh == HFI1_LRH_BTH)
 			ohdr = &hdr->u.oth;
-		else if (lnh == QIB_LRH_GRH) {
+		else if (lnh == HFI1_LRH_GRH) {
 			u32 vtf;
 
 			ohdr = &hdr->u.l.oth;
@@ -431,13 +423,13 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
 			if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 				goto drop;
-			rcv_flags |= QIB_HAS_GRH;
+			rcv_flags |= HFI1_HAS_GRH;
 		} else
 			goto drop;
 
 		/* Get the destination QP number. */
-		qp_num = be32_to_cpu(ohdr->bth[1]) & QIB_QPN_MASK;
-		if (lid < QIB_MULTICAST_LID_BASE) {
+		qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
+		if (lid < HFI1_MULTICAST_LID_BASE) {
 			struct hfi1_qp *qp;
 
 			qp = hfi1_lookup_qpn(ibp, qp_num);
@@ -451,8 +443,8 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			spin_lock(&qp->r_lock);
 
 			/* Check for valid receive state. */
-			if (!(ib_qib_state_ops[qp->state] &
-			      QIB_PROCESS_RECV_OK)) {
+			if (!(ib_hfi1_state_ops[qp->state] &
+			      HFI1_PROCESS_RECV_OK)) {
 				ibp->n_pkt_drops++;
 			}
 
@@ -493,9 +485,9 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 		if (ebuf == NULL)
 			goto drop; /* this should never happen */
 
-		if (lnh == QIB_LRH_BTH)
+		if (lnh == HFI1_LRH_BTH)
 			bth = (__be32 *)ebuf;
-		else if (lnh == QIB_LRH_GRH)
+		else if (lnh == HFI1_LRH_GRH)
 			bth = (__be32 *)((char *)ebuf + sizeof(struct ib_grh));
 		else
 			goto drop;
@@ -518,7 +510,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 				sc5 |= 0x10;
 			sl = ibp->sc_to_sl[sc5];
 
-			lqpn = be32_to_cpu(bth[1]) & QIB_QPN_MASK;
+			lqpn = be32_to_cpu(bth[1]) & HFI1_QPN_MASK;
 			qp = hfi1_lookup_qpn(ibp, lqpn);
 			if (qp == NULL)
 				goto drop;
@@ -604,7 +596,6 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 		if (rhf_use_egr_bfr(rhf)) {
 			etail = rhf_egr_index(rhf);
 			ebuf = qib_get_egrbuf(rcd, rhf, &updegr);
-			/* TODO: Keep the prefetch?  Why are we doing it? */
 			/*
 			 * Prefetch the contents of the eager buffer.  It is
 			 * OK to send a negative length to prefetch_range().
@@ -692,17 +683,17 @@ skip:
 	 */
 	list_for_each_entry_safe(qp, nqp, &rcd->qp_wait_list, rspwait) {
 		list_del_init(&qp->rspwait);
-		if (qp->r_flags & QIB_R_RSP_NAK) {
-			qp->r_flags &= ~QIB_R_RSP_NAK;
+		if (qp->r_flags & HFI1_R_RSP_NAK) {
+			qp->r_flags &= ~HFI1_R_RSP_NAK;
 			hfi1_send_rc_ack(rcd, qp, 0);
 		}
-		if (qp->r_flags & QIB_R_RSP_SEND) {
+		if (qp->r_flags & HFI1_R_RSP_SEND) {
 			unsigned long flags;
 
-			qp->r_flags &= ~QIB_R_RSP_SEND;
+			qp->r_flags &= ~HFI1_R_RSP_SEND;
 			spin_lock_irqsave(&qp->s_lock, flags);
-			if (ib_qib_state_ops[qp->state] &
-					QIB_PROCESS_OR_FLUSH_SEND)
+			if (ib_hfi1_state_ops[qp->state] &
+					HFI1_PROCESS_OR_FLUSH_SEND)
 				hfi1_schedule_send(qp);
 			spin_unlock_irqrestore(&qp->s_lock, flags);
 		}
@@ -793,7 +784,7 @@ int set_mtu(struct hfi1_pportdata *ppd)
 		goto err;
 	}
 
-	hfi1_set_ib_cfg(ppd, QIB_IB_CFG_MTU, 0);
+	hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_MTU, 0);
 
 	if (drain)
 		open_fill_data_vls(dd); /* reopen all VLs */
@@ -810,7 +801,7 @@ int hfi1_set_lid(struct hfi1_pportdata *ppd, u32 lid, u8 lmc)
 
 	ppd->lid = lid;
 	ppd->lmc = lmc;
-	hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LIDLMC, 0);
+	hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_LIDLMC, 0);
 
 	dd_dev_info(dd, "IB%u:%u got a lid: 0x%x\n", dd->unit, ppd->port, lid);
 

@@ -201,7 +201,7 @@ static int qib_mcast_add(struct hfi1_ibdev *dev, struct hfi1_ibport *ibp,
 				goto bail;
 			}
 		}
-		if (tmcast->n_attached == ib_qib_max_mcast_qp_attached) {
+		if (tmcast->n_attached == ib_hfi1_max_mcast_qp_attached) {
 			ret = ENOMEM;
 			goto bail;
 		}
@@ -214,7 +214,7 @@ static int qib_mcast_add(struct hfi1_ibdev *dev, struct hfi1_ibport *ibp,
 	}
 
 	spin_lock(&dev->n_mcast_grps_lock);
-	if (dev->n_mcast_grps_allocated == ib_qib_max_mcast_grps) {
+	if (dev->n_mcast_grps_allocated == ib_hfi1_max_mcast_grps) {
 		spin_unlock(&dev->n_mcast_grps_lock);
 		ret = ENOMEM;
 		goto bail;

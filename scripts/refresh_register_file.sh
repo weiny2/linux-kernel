@@ -1,5 +1,16 @@
-#ifndef _TWSI_H
-#define _TWSI_H
+#!/bin/bash
+
+echo "Building list of all possible registers and their value"
+rm -f register_val_list.txt
+awk '/#define/ {if (NF > 2) { $1=""; print $0}}' ../include/wfr/* > register_val_list.txt
+
+echo "Generating header file"
+echo "#ifndef DEF_CHIP_REG" > chip_registers.h
+echo "#define DEF_CHIP_REG" >> chip_registers.h
+
+# Add copyright
+cat >> chip_registers.h << 'COPYRIGHT'
+
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -50,19 +61,34 @@
  *
  */
 
-#define HFI1_TWSI_NO_DEV 0xFF
+COPYRIGHT
 
-struct hfi_devdata;
+egrep "#define\s+\S+\s+" ../include/wfr/wfr_core_defs.h >> chip_registers.h
+echo "" >> chip_registers.h
 
-/* Bit position of SDA pin in ASIC_QSFP* registers  */
-#define  GPIO_SDA_NUM 1
+# Look up the register values for the registers we want.
+for reg in `cat register_minimal_set.txt`; do
+	val=`egrep "^ $reg\s+" register_val_list.txt`
+	if [[ $? -ne 0 ]]; then
+		echo "ERROR: $reg not defined!"
+		exit 1
+	fi
+	echo "#define$val" >> chip_registers.h
+done
 
-/* these functions must be called with qsfp_lock held */
-int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target);
-int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
-		     void *buffer, int len);
-int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
-		     const void *buffer, int len);
+echo "" >> chip_registers.h
+echo "#endif          /* DEF_CHIP_REG */" >> chip_registers.h
+
+echo "Removing WFR_ from the header file"
+# Need to rename WFR_DEBUG becuase if we do not then we end up with
+# a define for DEBUG which will screw up the tracing for DEBUG level
+sed -i 's/WFR_DEBUG/CHIP_DEBUG/' chip_registers.h
+
+# Other than the above special case(s) blow away WFR in the file.
+sed -i 's/WFR_//g' chip_registers.h
+
+echo "Moving chip_register.h to build dir"
+mv chip_registers.h ../
 
 
-#endif /* _TWSI_H */
+

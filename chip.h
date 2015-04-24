@@ -1,5 +1,5 @@
-#ifndef _WFR_H
-#define _WFR_H
+#ifndef _CHIP_H
+#define _CHIP_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -51,265 +51,257 @@
  */
 
 /*
- * This file contains all of the defines that is specific to the WFR chip
+ * This file contains all of the defines that is specific to the HFI chip
  */
 
 /* sizes */
-#define WFR_CCE_NUM_MSIX_VECTORS 256
-#define WFR_CCE_NUM_INT_CSRS 12
-#define WFR_CCE_NUM_INT_MAP_CSRS 96
-#define WFR_NUM_INTERRUPT_SOURCES 768
-#define WFR_RXE_NUM_CONTEXTS 160
-#define WFR_RXE_PER_CONTEXT_SIZE 0x1000	/* 4k */
-#define WFR_RXE_NUM_TID_FLOWS 32
-#define WFR_RXE_NUM_DATA_VL 8
-#define WFR_TXE_NUM_CONTEXTS 160
-#define WFR_TXE_NUM_SDMA_ENGINES 16
-#define WFR_NUM_CONTEXTS_PER_SET 8
-#define WFR_VL_ARB_HIGH_PRIO_TABLE_SIZE 16
-#define WFR_VL_ARB_LOW_PRIO_TABLE_SIZE 16
-#define WFR_VL_ARB_TABLE_SIZE 16
-#define WFR_TXE_NUM_32_BIT_COUNTER 7
-#define WFR_TXE_NUM_64_BIT_COUNTER 30
-#define WFR_TXE_NUM_DATA_VL 8
-#define WFR_TXE_PIO_SIZE (32 * 0x100000)	/* 32 MB */
-#define WFR_PIO_BLOCK_SIZE 64			/* bytes */
-#define WFR_SDMA_BLOCK_SIZE 64			/* bytes */
-#define WFR_RCV_BUF_BLOCK_SIZE 64               /* bytes */
-#define WFR_PIO_CMASK 0x7ff	/* counter mask for free and fill counters */
-#define WFR_MAX_EAGER_ENTRIES    2048	/* max receive eager entries */
-#define WFR_MAX_TID_PAIR_ENTRIES 1024	/* max receive expected pairs */
+#define CCE_NUM_MSIX_VECTORS 256
+#define CCE_NUM_INT_CSRS 12
+#define CCE_NUM_INT_MAP_CSRS 96
+#define NUM_INTERRUPT_SOURCES 768
+#define RXE_NUM_CONTEXTS 160
+#define RXE_PER_CONTEXT_SIZE 0x1000	/* 4k */
+#define RXE_NUM_TID_FLOWS 32
+#define RXE_NUM_DATA_VL 8
+#define TXE_NUM_CONTEXTS 160
+#define TXE_NUM_SDMA_ENGINES 16
+#define NUM_CONTEXTS_PER_SET 8
+#define VL_ARB_HIGH_PRIO_TABLE_SIZE 16
+#define VL_ARB_LOW_PRIO_TABLE_SIZE 16
+#define VL_ARB_TABLE_SIZE 16
+#define TXE_NUM_32_BIT_COUNTER 7
+#define TXE_NUM_64_BIT_COUNTER 30
+#define TXE_NUM_DATA_VL 8
+#define TXE_PIO_SIZE (32 * 0x100000)	/* 32 MB */
+#define PIO_BLOCK_SIZE 64			/* bytes */
+#define SDMA_BLOCK_SIZE 64			/* bytes */
+#define RCV_BUF_BLOCK_SIZE 64               /* bytes */
+#define PIO_CMASK 0x7ff	/* counter mask for free and fill counters */
+#define MAX_EAGER_ENTRIES    2048	/* max receive eager entries */
+#define MAX_TID_PAIR_ENTRIES 1024	/* max receive expected pairs */
 /* Virtual? Allocation Unit, defined as AU = 8*2^vAU, 64 bytes, AU is fixed
    at 64 bytes for all generation one devices */
-#define WFR_CM_VAU 3
-/* WFR link credit count, AKA receive buffer depth (RBUF_DEPTH) */
-#define WFR_CM_GLOBAL_CREDITS 0x940
+#define CM_VAU 3
+/* HFI link credit count, AKA receive buffer depth (RBUF_DEPTH) */
+#define CM_GLOBAL_CREDITS 0x940
 /* Number of PKey entries in the HW */
-#define WFR_MAX_PKEY_VALUES 16
+#define MAX_PKEY_VALUES 16
 
-#include "include/wfr/wfr_core_defs.h"
-#include "include/wfr/wfr_cce_defs.h"
-#include "include/wfr/wfr_rxe_defs.h"
-#include "include/wfr/wfr_txe_defs.h"
-#include "include/wfr/wfr_misc_defs.h"
-#include "include/wfr/wfr_asic_defs.h"
-#include "include/wfr/dc_8051_csrs_defs.h"
-#include "include/wfr/dcc_csrs_defs.h"
-#include "include/wfr/dc_lcb_csrs_defs.h"
+#include "chip_registers.h"
 
-/* not defined in wfr_core_defs.h */
-#define WFR_RXE_PER_CONTEXT_USER_OFFSET 0x0300000
-#define WFR_RXE_PER_CONTEXT_USER   (WFR_RXE + WFR_RXE_PER_CONTEXT_USER_OFFSET)
+/* not defined in chip_registers.h */
+#define RXE_PER_CONTEXT_USER_OFFSET 0x0300000
+#define RXE_PER_CONTEXT_USER   (RXE + RXE_PER_CONTEXT_USER_OFFSET)
 
-#define WFR_TXE_PIO_SEND_OFFSET 0x0800000
-#define WFR_TXE_PIO_SEND (WFR_TXE + WFR_TXE_PIO_SEND_OFFSET)
+#define TXE_PIO_SEND_OFFSET 0x0800000
+#define TXE_PIO_SEND (TXE + TXE_PIO_SEND_OFFSET)
 
 /* PBC flags */
-#define WFR_PBC_INTR		(1ull << 31)
-#define WFR_PBC_DC_INFO_SHIFT	(30)
-#define WFR_PBC_DC_INFO		(1ull << WFR_PBC_DC_INFO_SHIFT)
-#define WFR_PBC_TEST_EBP	(1ull << 29)
-#define WFR_PBC_PACKET_BYPASS	(1ull << 28)
-#define WFR_PBC_CREDIT_RETURN	(1ull << 25)
-#define WFR_PBC_INSERT_BYPASS_ICRC (1ull << 24)
-#define WFR_PBC_TEST_BAD_ICRC	(1ull << 23)
-#define WFR_PBC_FECN		(1ull << 22)
+#define PBC_INTR		(1ull << 31)
+#define PBC_DC_INFO_SHIFT	(30)
+#define PBC_DC_INFO		(1ull << PBC_DC_INFO_SHIFT)
+#define PBC_TEST_EBP	(1ull << 29)
+#define PBC_PACKET_BYPASS	(1ull << 28)
+#define PBC_CREDIT_RETURN	(1ull << 25)
+#define PBC_INSERT_BYPASS_ICRC (1ull << 24)
+#define PBC_TEST_BAD_ICRC	(1ull << 23)
+#define PBC_FECN		(1ull << 22)
 
 /* PbcInsertHcrc field settings */
-#define WFR_PBC_IHCRC_LKDETH 0x0	/* insert @ local KDETH offset */
-#define WFR_PBC_IHCRC_GKDETH 0x1	/* insert @ global KDETH offset */
-#define WFR_PBC_IHCRC_NONE   0x2	/* no HCRC inserted */
+#define PBC_IHCRC_LKDETH 0x0	/* insert @ local KDETH offset */
+#define PBC_IHCRC_GKDETH 0x1	/* insert @ global KDETH offset */
+#define PBC_IHCRC_NONE   0x2	/* no HCRC inserted */
 
 /* PBC fields */
-#define WFR_PBC_STATIC_RATE_CONTROL_COUNT_SHIFT 32
-#define WFR_PBC_STATIC_RATE_CONTROL_COUNT_MASK 0xffffull
-#define WFR_PBC_STATIC_RATE_CONTROL_COUNT_SMASK \
-	(WFR_PBC_STATIC_RATE_CONTROL_COUNT_MASK << \
-	WFR_PBC_STATIC_RATE_CONTROL_COUNT_SHIFT)
+#define PBC_STATIC_RATE_CONTROL_COUNT_SHIFT 32
+#define PBC_STATIC_RATE_CONTROL_COUNT_MASK 0xffffull
+#define PBC_STATIC_RATE_CONTROL_COUNT_SMASK \
+	(PBC_STATIC_RATE_CONTROL_COUNT_MASK << \
+	PBC_STATIC_RATE_CONTROL_COUNT_SHIFT)
 
-#define WFR_PBC_INSERT_HCRC_SHIFT 26
-#define WFR_PBC_INSERT_HCRC_MASK 0x3ull
-#define WFR_PBC_INSERT_HCRC_SMASK \
-	(WFR_PBC_INSERT_HCRC_MASK << WFR_PBC_INSERT_HCRC_SHIFT)
+#define PBC_INSERT_HCRC_SHIFT 26
+#define PBC_INSERT_HCRC_MASK 0x3ull
+#define PBC_INSERT_HCRC_SMASK \
+	(PBC_INSERT_HCRC_MASK << PBC_INSERT_HCRC_SHIFT)
 
-#define WFR_PBC_VL_SHIFT 12
-#define WFR_PBC_VL_MASK 0xfull
-#define WFR_PBC_VL_SMASK (WFR_PBC_VL_MASK << WFR_PBC_VL_SHIFT)
+#define PBC_VL_SHIFT 12
+#define PBC_VL_MASK 0xfull
+#define PBC_VL_SMASK (PBC_VL_MASK << PBC_VL_SHIFT)
 
-#define WFR_PBC_LENGTH_DWS_SHIFT 0
-#define WFR_PBC_LENGTH_DWS_MASK 0xfffull
-#define WFR_PBC_LENGTH_DWS_SMASK \
-	(WFR_PBC_LENGTH_DWS_MASK << WFR_PBC_LENGTH_DWS_SHIFT)
+#define PBC_LENGTH_DWS_SHIFT 0
+#define PBC_LENGTH_DWS_MASK 0xfffull
+#define PBC_LENGTH_DWS_SMASK \
+	(PBC_LENGTH_DWS_MASK << PBC_LENGTH_DWS_SHIFT)
 
 /* Credit Return Fields */
-#define WFR_CR_COUNTER_SHIFT 0
-#define WFR_CR_COUNTER_MASK 0x7ffull
-#define WFR_CR_COUNTER_SMASK (WFR_CR_COUNTER_MASK << WFR_CR_COUNTER_SHIFT)
+#define CR_COUNTER_SHIFT 0
+#define CR_COUNTER_MASK 0x7ffull
+#define CR_COUNTER_SMASK (CR_COUNTER_MASK << CR_COUNTER_SHIFT)
 
-#define WFR_CR_STATUS_SHIFT 11
-#define WFR_CR_STATUS_MASK 0x1ull
-#define WFR_CR_STATUS_SMASK (WFR_CR_STATUS_MASK << WFR_CR_STATUS_SHIFT)
+#define CR_STATUS_SHIFT 11
+#define CR_STATUS_MASK 0x1ull
+#define CR_STATUS_SMASK (CR_STATUS_MASK << CR_STATUS_SHIFT)
 
-#define WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SHIFT 12
-#define WFR_CR_CREDIT_RETURN_DUE_TO_PBC_MASK 0x1ull
-#define WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SMASK \
-	(WFR_CR_CREDIT_RETURN_DUE_TO_PBC_MASK << \
-	WFR_CR_CREDIT_RETURN_DUE_TO_PBC_SHIFT)
+#define CR_CREDIT_RETURN_DUE_TO_PBC_SHIFT 12
+#define CR_CREDIT_RETURN_DUE_TO_PBC_MASK 0x1ull
+#define CR_CREDIT_RETURN_DUE_TO_PBC_SMASK \
+	(CR_CREDIT_RETURN_DUE_TO_PBC_MASK << \
+	CR_CREDIT_RETURN_DUE_TO_PBC_SHIFT)
 
-#define WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SHIFT 13
-#define WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_MASK 0x1ull
-#define WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK \
-	(WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_MASK << \
-	WFR_CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SHIFT)
+#define CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SHIFT 13
+#define CR_CREDIT_RETURN_DUE_TO_THRESHOLD_MASK 0x1ull
+#define CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SMASK \
+	(CR_CREDIT_RETURN_DUE_TO_THRESHOLD_MASK << \
+	CR_CREDIT_RETURN_DUE_TO_THRESHOLD_SHIFT)
 
-#define WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SHIFT 14
-#define WFR_CR_CREDIT_RETURN_DUE_TO_ERR_MASK 0x1ull
-#define WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SMASK \
-	(WFR_CR_CREDIT_RETURN_DUE_TO_ERR_MASK << \
-	WFR_CR_CREDIT_RETURN_DUE_TO_ERR_SHIFT)
+#define CR_CREDIT_RETURN_DUE_TO_ERR_SHIFT 14
+#define CR_CREDIT_RETURN_DUE_TO_ERR_MASK 0x1ull
+#define CR_CREDIT_RETURN_DUE_TO_ERR_SMASK \
+	(CR_CREDIT_RETURN_DUE_TO_ERR_MASK << \
+	CR_CREDIT_RETURN_DUE_TO_ERR_SHIFT)
 
-#define WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SHIFT 15
-#define WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_MASK 0x1ull
-#define WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK \
-	(WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_MASK << \
-	WFR_CR_CREDIT_RETURN_DUE_TO_FORCE_SHIFT)
+#define CR_CREDIT_RETURN_DUE_TO_FORCE_SHIFT 15
+#define CR_CREDIT_RETURN_DUE_TO_FORCE_MASK 0x1ull
+#define CR_CREDIT_RETURN_DUE_TO_FORCE_SMASK \
+	(CR_CREDIT_RETURN_DUE_TO_FORCE_MASK << \
+	CR_CREDIT_RETURN_DUE_TO_FORCE_SHIFT)
 
 /* interrupt source numbers */
-#define WFR_IS_GENERAL_ERR_START	  0
-#define WFR_IS_SDMAENG_ERR_START	 16
-#define WFR_IS_SENDCTXT_ERR_START	 32
-#define WFR_IS_SDMA_START		192 /* includes SDmaProgress,SDmaIdle */
-#define WFR_IS_VARIOUS_START		240
-#define WFR_IS_DC_START			248
-#define WFR_IS_RCVAVAIL_START		256
-#define WFR_IS_RCVURGENT_START		416
-#define WFR_IS_SENDCREDIT_START		576
-#define WFR_IS_RESERVED_START		736
-#define WFR_IS_MAX_SOURCES		768
+#define IS_GENERAL_ERR_START	  0
+#define IS_SDMAENG_ERR_START	 16
+#define IS_SENDCTXT_ERR_START	 32
+#define IS_SDMA_START		192 /* includes SDmaProgress,SDmaIdle */
+#define IS_VARIOUS_START		240
+#define IS_DC_START			248
+#define IS_RCVAVAIL_START		256
+#define IS_RCVURGENT_START		416
+#define IS_SENDCREDIT_START		576
+#define IS_RESERVED_START		736
+#define IS_MAX_SOURCES		768
 
 /* derived interrupt source values */
-#define WFR_IS_GENERAL_ERR_END		WFR_IS_SDMAENG_ERR_START
-#define WFR_IS_SDMAENG_ERR_END		WFR_IS_SENDCTXT_ERR_START
-#define WFR_IS_SENDCTXT_ERR_END		WFR_IS_SDMA_START
-#define WFR_IS_SDMA_END			WFR_IS_VARIOUS_START
-#define WFR_IS_VARIOUS_END		WFR_IS_DC_START
-#define WFR_IS_DC_END			WFR_IS_RCVAVAIL_START
-#define WFR_IS_RCVAVAIL_END		WFR_IS_RCVURGENT_START
-#define WFR_IS_RCVURGENT_END		WFR_IS_SENDCREDIT_START
-#define WFR_IS_SENDCREDIT_END		WFR_IS_RESERVED_START
-#define WFR_IS_RESERVED_END		WFR_IS_MAX_SOURCES
+#define IS_GENERAL_ERR_END		IS_SDMAENG_ERR_START
+#define IS_SDMAENG_ERR_END		IS_SENDCTXT_ERR_START
+#define IS_SENDCTXT_ERR_END		IS_SDMA_START
+#define IS_SDMA_END			IS_VARIOUS_START
+#define IS_VARIOUS_END		IS_DC_START
+#define IS_DC_END			IS_RCVAVAIL_START
+#define IS_RCVAVAIL_END		IS_RCVURGENT_START
+#define IS_RCVURGENT_END		IS_SENDCREDIT_START
+#define IS_SENDCREDIT_END		IS_RESERVED_START
+#define IS_RESERVED_END		IS_MAX_SOURCES
 
 /* absolute interrupt numbers for QSFP1Int and QSFP2Int */
-#define WFR_QSFP1_INT		242
-#define WFR_QSFP2_INT		243
+#define QSFP1_INT		242
+#define QSFP2_INT		243
 
 /* DCC_CFG_PORT_CONFIG logical link states */
-#define WFR_LSTATE_DOWN    0x1
-#define WFR_LSTATE_INIT    0x2
-#define WFR_LSTATE_ARMED   0x3
-#define WFR_LSTATE_ACTIVE  0x4
+#define LSTATE_DOWN    0x1
+#define LSTATE_INIT    0x2
+#define LSTATE_ARMED   0x3
+#define LSTATE_ACTIVE  0x4
 
 /* DC8051_STS_CUR_STATE port values (physical link states) */
-#define WFR_PLS_DISABLED			   0x30
-#define WFR_PLS_OFFLINE				   0x90
-#define WFR_PLS_OFFLINE_QUIET			   0x90
-#define WFR_PLS_OFFLINE_PLANNED_DOWN_INFORM	   0x91
-#define WFR_PLS_OFFLINE_READY_TO_QUIET_LT	   0x92
-#define WFR_PLS_OFFLINE_REPORT_FAILURE		   0x93
-#define WFR_PLS_OFFLINE_READY_TO_QUIET_BCC	   0x94
-#define WFR_PLS_POLLING				   0x20
-#define WFR_PLS_POLLING_QUIET			   0x20
-#define WFR_PLS_POLLING_ACTIVE			   0x21
-#define WFR_PLS_CONFIGPHY			   0x40
-#define WFR_PLS_CONFIGPHY_DEBOUCE		   0x40
-#define WFR_PLS_CONFIGPHY_ESTCOMM		   0x41
-#define WFR_PLS_CONFIGPHY_ESTCOMM_TXRX_HUNT	   0x42
-#define WFR_PLS_CONFIGPHY_ESTcOMM_LOCAL_COMPLETE   0x43
-#define WFR_PLS_CONFIGPHY_OPTEQ			   0x44
-#define WFR_PLS_CONFIGPHY_OPTEQ_OPTIMIZING	   0x44
-#define WFR_PLS_CONFIGPHY_OPTEQ_LOCAL_COMPLETE	   0x45
-#define WFR_PLS_CONFIGPHY_VERIFYCAP		   0x46
-#define WFR_PLS_CONFIGPHY_VERIFYCAP_EXCHANGE	   0x46
-#define WFR_PLS_CONFIGPHY_VERIFYCAP_LOCAL_COMPLETE 0x47
-#define WFR_PLS_CONFIGLT			   0x48
-#define WFR_PLS_CONFIGLT_CONFIGURE		   0x48
-#define WFR_PLS_CONFIGLT_LINK_TRANSFER_ACTIVE	   0x49
-#define WFR_PLS_LINKUP				   0x50
-#define WFR_PLS_PHYTEST				   0xB0
-#define WFR_PLS_INTERNAL_SERDES_LOOPBACK	   0xe1
-#define WFR_PLS_QUICK_LINKUP			   0xe2
+#define PLS_DISABLED			   0x30
+#define PLS_OFFLINE				   0x90
+#define PLS_OFFLINE_QUIET			   0x90
+#define PLS_OFFLINE_PLANNED_DOWN_INFORM	   0x91
+#define PLS_OFFLINE_READY_TO_QUIET_LT	   0x92
+#define PLS_OFFLINE_REPORT_FAILURE		   0x93
+#define PLS_OFFLINE_READY_TO_QUIET_BCC	   0x94
+#define PLS_POLLING				   0x20
+#define PLS_POLLING_QUIET			   0x20
+#define PLS_POLLING_ACTIVE			   0x21
+#define PLS_CONFIGPHY			   0x40
+#define PLS_CONFIGPHY_DEBOUCE		   0x40
+#define PLS_CONFIGPHY_ESTCOMM		   0x41
+#define PLS_CONFIGPHY_ESTCOMM_TXRX_HUNT	   0x42
+#define PLS_CONFIGPHY_ESTcOMM_LOCAL_COMPLETE   0x43
+#define PLS_CONFIGPHY_OPTEQ			   0x44
+#define PLS_CONFIGPHY_OPTEQ_OPTIMIZING	   0x44
+#define PLS_CONFIGPHY_OPTEQ_LOCAL_COMPLETE	   0x45
+#define PLS_CONFIGPHY_VERIFYCAP		   0x46
+#define PLS_CONFIGPHY_VERIFYCAP_EXCHANGE	   0x46
+#define PLS_CONFIGPHY_VERIFYCAP_LOCAL_COMPLETE 0x47
+#define PLS_CONFIGLT			   0x48
+#define PLS_CONFIGLT_CONFIGURE		   0x48
+#define PLS_CONFIGLT_LINK_TRANSFER_ACTIVE	   0x49
+#define PLS_LINKUP				   0x50
+#define PLS_PHYTEST				   0xB0
+#define PLS_INTERNAL_SERDES_LOOPBACK	   0xe1
+#define PLS_QUICK_LINKUP			   0xe2
 
 /* DC_DC8051_CFG_HOST_CMD_0.REQ_TYPE - 8051 host commands */
-#define WFR_HCMD_LOAD_CONFIG_DATA  0x01
-#define WFR_HCMD_READ_CONFIG_DATA  0x02
-#define WFR_HCMD_CHANGE_PHY_STATE  0x03
-#define WFR_HCMD_SEND_LCB_IDLE_MSG 0x04
-#define WFR_HCMD_MISC		   0x05
-#define WFR_HCMD_READ_LCB_IDLE_MSG 0x06
-#define WFR_HCMD_INTERFACE_TEST	   0xff
+#define HCMD_LOAD_CONFIG_DATA  0x01
+#define HCMD_READ_CONFIG_DATA  0x02
+#define HCMD_CHANGE_PHY_STATE  0x03
+#define HCMD_SEND_LCB_IDLE_MSG 0x04
+#define HCMD_MISC		   0x05
+#define HCMD_READ_LCB_IDLE_MSG 0x06
+#define HCMD_INTERFACE_TEST	   0xff
 
 /* DC_DC8051_CFG_HOST_CMD_1.RETURN_CODE - 8051 host command return */
-#define WFR_HCMD_SUCCESS 2
+#define HCMD_SUCCESS 2
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.ERROR - error flags */
-#define WFR_SPICO_ROM_FAILED		    (1 <<  0)
-#define WFR_UNKNOWN_FRAME		    (1 <<  1)
-#define WFR_TARGET_BER_NOT_MET		    (1 <<  2)
-#define WFR_FAILED_SERDES_INTERNAL_LOOPBACK (1 <<  3)
-#define WFR_FAILED_SERDES_INIT		    (1 <<  4)
-#define WFR_FAILED_LNI_POLLING		    (1 <<  5)
-#define WFR_FAILED_LNI_DEBOUNCE		    (1 <<  6)
-#define WFR_FAILED_LNI_ESTBCOMM		    (1 <<  7)
-#define WFR_FAILED_LNI_OPTEQ		    (1 <<  8)
-#define WFR_FAILED_LNI_VERIFY_CAP1	    (1 <<  9)
-#define WFR_FAILED_LNI_VERIFY_CAP2	    (1 << 10)
-#define WFR_FAILED_LNI_CONFIGLT		    (1 << 11)
+#define SPICO_ROM_FAILED		    (1 <<  0)
+#define UNKNOWN_FRAME		    (1 <<  1)
+#define TARGET_BER_NOT_MET		    (1 <<  2)
+#define FAILED_SERDES_INTERNAL_LOOPBACK (1 <<  3)
+#define FAILED_SERDES_INIT		    (1 <<  4)
+#define FAILED_LNI_POLLING		    (1 <<  5)
+#define FAILED_LNI_DEBOUNCE		    (1 <<  6)
+#define FAILED_LNI_ESTBCOMM		    (1 <<  7)
+#define FAILED_LNI_OPTEQ		    (1 <<  8)
+#define FAILED_LNI_VERIFY_CAP1	    (1 <<  9)
+#define FAILED_LNI_VERIFY_CAP2	    (1 << 10)
+#define FAILED_LNI_CONFIGLT		    (1 << 11)
 
-#define FAILED_LNI (WFR_FAILED_LNI_POLLING | WFR_FAILED_LNI_DEBOUNCE \
-			| WFR_FAILED_LNI_ESTBCOMM | WFR_FAILED_LNI_OPTEQ \
-			| WFR_FAILED_LNI_VERIFY_CAP1 \
-			| WFR_FAILED_LNI_VERIFY_CAP2 \
-			| WFR_FAILED_LNI_CONFIGLT)
+#define FAILED_LNI (FAILED_LNI_POLLING | FAILED_LNI_DEBOUNCE \
+			| FAILED_LNI_ESTBCOMM | FAILED_LNI_OPTEQ \
+			| FAILED_LNI_VERIFY_CAP1 \
+			| FAILED_LNI_VERIFY_CAP2 \
+			| FAILED_LNI_CONFIGLT)
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG - host message flags */
-#define WFR_HOST_REQ_DONE	   (1 << 0)
-#define WFR_BC_PWR_MGM_MSG	   (1 << 1)
-#define WFR_BC_SMA_MSG		   (1 << 2)
-#define WFR_BC_BCC_UNKOWN_MSG	   (1 << 3)
-#define WFR_BC_IDLE_UNKNOWN_MSG	   (1 << 4)
-#define WFR_EXT_DEVICE_CFG_REQ	   (1 << 5)
-#define WFR_VERIFY_CAP_FRAME	   (1 << 6)
-#define WFR_LINKUP_ACHIEVED	   (1 << 7)
-#define WFR_LINK_GOING_DOWN	   (1 << 8)
-#define WFR_LINK_WIDTH_DOWNGRADED  (1 << 9)
+#define HOST_REQ_DONE	   (1 << 0)
+#define BC_PWR_MGM_MSG	   (1 << 1)
+#define BC_SMA_MSG		   (1 << 2)
+#define BC_BCC_UNKOWN_MSG	   (1 << 3)
+#define BC_IDLE_UNKNOWN_MSG	   (1 << 4)
+#define EXT_DEVICE_CFG_REQ	   (1 << 5)
+#define VERIFY_CAP_FRAME	   (1 << 6)
+#define LINKUP_ACHIEVED	   (1 << 7)
+#define LINK_GOING_DOWN	   (1 << 8)
+#define LINK_WIDTH_DOWNGRADED  (1 << 9)
 
 /* DC_DC8051_CFG_EXT_DEV_1.REQ_TYPE - 8051 host requests */
-#define WFR_HREQ_LOAD_CONFIG	0x01
-#define WFR_HREQ_SAVE_CONFIG	0x02
-#define WFR_HREQ_READ_CONFIG	0x03
-#define WFR_HREQ_SET_TX_EQ_ABS	0x04
-#define WFR_HREQ_SET_TX_EQ_REL	0x05
-#define WFR_HREQ_ENABLE		0x06
-#define WFR_HREQ_CONFIG_DONE	0xfe
-#define WFR_HREQ_INTERFACE_TEST	0xff
+#define HREQ_LOAD_CONFIG	0x01
+#define HREQ_SAVE_CONFIG	0x02
+#define HREQ_READ_CONFIG	0x03
+#define HREQ_SET_TX_EQ_ABS	0x04
+#define HREQ_SET_TX_EQ_REL	0x05
+#define HREQ_ENABLE		0x06
+#define HREQ_CONFIG_DONE	0xfe
+#define HREQ_INTERFACE_TEST	0xff
 
 /* DC_DC8051_CFG_EXT_DEV_0.RETURN_CODE - 8051 host request return codes */
-#define WFR_HREQ_INVALID		0x01
-#define WFR_HREQ_SUCCESS		0x02
-#define WFR_HREQ_NOT_SUPPORTED		0x03
-#define WFR_HREQ_FEATURE_NOT_SUPPORTED	0x04 /* request specific feature */
-#define WFR_HREQ_REQUEST_REJECTED	0xfe
-#define WFR_HREQ_EXECUTION_ONGOING	0xff
+#define HREQ_INVALID		0x01
+#define HREQ_SUCCESS		0x02
+#define HREQ_NOT_SUPPORTED		0x03
+#define HREQ_FEATURE_NOT_SUPPORTED	0x04 /* request specific feature */
+#define HREQ_REQUEST_REJECTED	0xfe
+#define HREQ_EXECUTION_ONGOING	0xff
 
 /* MISC host command functions */
 #define HCMD_MISC_REQUEST_LCB_ACCESS 0x1
 #define HCMD_MISC_GRANT_LCB_ACCESS   0x2
 
 /* idle flit message types */
-#define WFR_IDLE_PHYSICAL_LINK_MGMT 0x1
-#define WFR_IDLE_CRU		    0x2
-#define WFR_IDLE_SMA		    0x3
-#define WFR_IDLE_POWER_MGMT	    0x4
+#define IDLE_PHYSICAL_LINK_MGMT 0x1
+#define IDLE_CRU		    0x2
+#define IDLE_SMA		    0x3
+#define IDLE_POWER_MGMT	    0x4
 
 /* idle flit message send fields (both send and read) */
 #define IDLE_PAYLOAD_MASK 0xffffffffffull /* 40 bits */
@@ -331,49 +323,43 @@
 /*
  * Eager buffer minimum and maximum sizes supported by the hardware.
  * All power-of-two sizes in between are supported as well.
- * WFR_MAX_EAGER_BUFFER_TOTAL is the maximum size of memory
+ * MAX_EAGER_BUFFER_TOTAL is the maximum size of memory
  * allocatable for Eager buffer to a single context. All others
  * are limits for the RcvArray entries.
  */
-#define WFR_MIN_EAGER_BUFFER       (4 * 1024)
-#define WFR_MAX_EAGER_BUFFER       (256 * 1024)
-#define WFR_MAX_EAGER_BUFFER_TOTAL (64 * (1 << 20)) /* max per ctxt 64MB */
-#define WFR_MAX_EXPECTED_BUFFER    (2048 * 1024)
+#define MIN_EAGER_BUFFER       (4 * 1024)
+#define MAX_EAGER_BUFFER       (256 * 1024)
+#define MAX_EAGER_BUFFER_TOTAL (64 * (1 << 20)) /* max per ctxt 64MB */
+#define MAX_EXPECTED_BUFFER    (2048 * 1024)
 
 /*
  * Receive expected base and count and eager base and count increment -
  * the CSR fields hold multiples of this value.
  */
-#define WFR_RCV_SHIFT 3
-#define WFR_RCV_INCREMENT (1 << WFR_RCV_SHIFT)
-
-/* CceDbiCtrl.Status values */
-#define DBI_CTL_IDLE	0
-#define DBI_CTL_BUSY	1
-#define DBI_CTL_SUCCESS	2
-#define DBI_CTL_ERROR	3
+#define RCV_SHIFT 3
+#define RCV_INCREMENT (1 << RCV_SHIFT)
 
 /*
  * Receive header queue entry increment - the CSR holds multiples of
  * this value.
  */
-#define WFR_HDRQ_SIZE_SHIFT 5
-#define WFR_HDRQ_INCREMENT (1 << WFR_HDRQ_SIZE_SHIFT)
+#define HDRQ_SIZE_SHIFT 5
+#define HDRQ_INCREMENT (1 << HDRQ_SIZE_SHIFT)
 
 /*
  * Freeze handling flags
  */
-#define WFR_FREEZE_ABORT     0x01	/* do not do recovery */
-#define WFR_FREEZE_SELF	     0x02	/* initiate the freeze */
-#define WFR_FREEZE_LINK_DOWN 0x04	/* link is down */
+#define FREEZE_ABORT     0x01	/* do not do recovery */
+#define FREEZE_SELF	     0x02	/* initiate the freeze */
+#define FREEZE_LINK_DOWN 0x04	/* link is down */
 
 /*
  * Chip implementation codes.
  */
-#define WFR_ICODE_RTL_SILICON		0x00
-#define WFR_ICODE_RTL_VCS_SIMULATION	0x01
-#define WFR_ICODE_FPGA_EMULATION	0x02
-#define WFR_ICODE_FUNCTIONAL_SIMULATOR	0x03
+#define ICODE_RTL_SILICON		0x00
+#define ICODE_RTL_VCS_SIMULATION	0x01
+#define ICODE_FPGA_EMULATION	0x02
+#define ICODE_FUNCTIONAL_SIMULATOR	0x03
 
 /* 8051 general register Field IDs */
 #define TX_SETTINGS		     0x06
@@ -498,7 +484,7 @@ enum {
 	CAP_CRC_12B_16B_PER_LANE = (1 << 2) /* 12b-16b per lane CRC */
 };
 
-#define WFR_SUPPORTED_CRCS (CAP_CRC_14B | CAP_CRC_48B | \
+#define SUPPORTED_CRCS (CAP_CRC_14B | CAP_CRC_48B | \
 			    CAP_CRC_12B_16B_PER_LANE)
 
 /* misc status version fields */
@@ -529,7 +515,6 @@ enum {
 #define LINK_RESTART_DELAY 1000		/* link restart delay, in ms */
 #define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
 #define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
-#define DBI_TIMEOUT 1			/* DBI hardare access timeout, in ms */
 #define VL_STATUS_CLEAR_TIMEOUT 5000	/* per-VL status clear, in ms */
 #define CCE_STATUS_TIMEOUT 10		/* time to clear CCE Status, in ms */
 
@@ -542,8 +527,8 @@ enum {
  * see firmware.c:run_rsa() for details.
  */
 #define DRIVER_MISC_MASK \
-	(~(WFR_MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK \
-		| WFR_MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK))
+	(~(MISC_ERR_STATUS_MISC_FW_AUTH_FAILED_ERR_SMASK \
+		| MISC_ERR_STATUS_MISC_KEY_MISMATCH_ERR_SMASK))
 
 /* valid values for the loopback module parameter */
 #define LOOPBACK_NONE	0	/* no loopback - default */
@@ -631,7 +616,7 @@ int acquire_hw_mutex(struct hfi_devdata *dd);
 void release_hw_mutex(struct hfi_devdata *dd);
 void fabric_serdes_reset(struct hfi_devdata *dd);
 
-/* wfr.c */
+/* chip.c */
 void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
 void read_guid(struct hfi_devdata *dd);
 int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
@@ -980,50 +965,6 @@ enum {
 	PORT_CNTR_LAST /* Must be kept last */
 };
 
-/*
- * FIXME: These are non-exported register definitions that are still
- * used in the driver.  Remove when their use is removed.
- */
-#define WFR_CCE_DBI_CTRL                         (WFR_CCE + 0x0000000000A0)
-#define WFR_CCE_DBI_CTRL_RESETCSR                0x0000000000000000ull
-#define WFR_CCE_DBI_CTRL_STATUS_SHIFT            6
-#define WFR_CCE_DBI_CTRL_STATUS_MASK             0x3ull
-#define WFR_CCE_DBI_CTRL_STATUS_SMASK            0xC0ull
-#define WFR_CCE_DBI_CTRL_CS_SHIFT                4
-#define WFR_CCE_DBI_CTRL_CS_MASK                 0x3ull
-#define WFR_CCE_DBI_CTRL_CS_SMASK                0x30ull
-#define WFR_CCE_DBI_CTRL_WRITE_ENABLES_SHIFT     0
-#define WFR_CCE_DBI_CTRL_WRITE_ENABLES_MASK      0xFull
-#define WFR_CCE_DBI_CTRL_WRITE_ENABLES_SMASK     0xFull
-
-#define WFR_CCE_DBI_ADDR                         (WFR_CCE + 0x0000000000A8)
-#define WFR_CCE_DBI_ADDR_RESETCSR                0x0000000000000000ull
-#define WFR_CCE_DBI_ADDR_ADDR_SHIFT              0
-#define WFR_CCE_DBI_ADDR_ADDR_MASK               0xFFFFFFFFull
-#define WFR_CCE_DBI_ADDR_ADDR_SMASK              0xFFFFFFFFull
-
-#define WFR_CCE_DBI_DATA                         (WFR_CCE + 0x0000000000B0)
-#define WFR_CCE_DBI_DATA_RESETCSR                0x0000000000000000ull
-#define WFR_CCE_DBI_DATA_DATA_SHIFT              0
-#define WFR_CCE_DBI_DATA_DATA_MASK               0xFFFFFFFFull
-#define WFR_CCE_DBI_DATA_DATA_SMASK              0xFFFFFFFFull
-
-#define WFR_ASIC_WFR_EFUSE_REGS6                (WFR_ASIC + 0x000000001430)
-#define WFR_ASIC_WFR_EFUSE_REGS6_RESETCSR       0x0000000000000000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SHIFT 32
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_MASK 0xFFFFFFFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_PATCH_VERSION_SMASK 0xFFFFFFFF00000000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_SHIFT 24
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_MASK 0xFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI1_SMASK 0xFF000000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_SHIFT 16
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_MASK 0xFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_DC_HFI0_SMASK 0xFF0000ull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_VERSION_SHIFT 0
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_VERSION_MASK 0xFFFFull
-#define WFR_ASIC_WFR_EFUSE_REGS6_EFUSE_VERSION_SMASK 0xFFFFull
-/* FIXME: End of CSR defines to be removed */
-
 u64 get_all_cpu_total(u64 __percpu *cntr);
 void hfi1_start_cleanup(struct hfi_devdata *dd);
 void hfi1_clear_tids(struct hfi1_ctxtdata *rcd);
@@ -1050,5 +991,5 @@ int hfi1_clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt);
 int hfi1_set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey);
 int hfi1_clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt);
 void hfi1_read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
-#endif /* _WFR_H */
+#endif /* _CHIP_H */
 

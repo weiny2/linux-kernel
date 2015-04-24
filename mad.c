@@ -103,7 +103,7 @@ static void qib_send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 	if (ibp->trap_timeout && time_before(jiffies, ibp->trap_timeout))
 		return;
 
-	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
+	pkey_idx = hfi1_lookup_pkey_idx(ibp, LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
 		pr_warn("%s: failed to find limited mgmt pkey, defaulting 0x%x\n",
 			__func__, hfi1_get_pkey(ibp, 1));
@@ -264,7 +264,7 @@ void hfi1_sys_guid_chg(struct hfi1_ibport *ibp)
 	data.toggle_count = 0;
 	memset(&data.details, 0, sizeof(data.details));
 	data.details.ntc_145.lid = data.issuer_lid;
-	data.details.ntc_145.new_sys_guid = ib_qib_sys_image_guid;
+	data.details.ntc_145.new_sys_guid = ib_hfi1_sys_image_guid;
 
 	qib_send_trap(ibp, &data, sizeof(data));
 }
@@ -333,7 +333,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
-	ni->system_image_guid = ib_qib_sys_image_guid;
+	ni->system_image_guid = ib_hfi1_sys_image_guid;
 	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
 	ni->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	ni->device_id = cpu_to_be16(dd->pcidev->device);
@@ -368,7 +368,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	nip->node_type = 1;     /* channel adapter */
 	nip->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
-	nip->sys_guid = ib_qib_sys_image_guid;
+	nip->sys_guid = ib_hfi1_sys_image_guid;
 	nip->node_guid = dd->pport->guid; /* Use first-port GUID as node */
 	nip->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	nip->device_id = cpu_to_be16(dd->pcidev->device);
@@ -383,17 +383,17 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 
 static void set_link_width_enabled(struct hfi1_pportdata *ppd, u32 w)
 {
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LWID_ENB, w);
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_LWID_ENB, w);
 }
 
 static void set_link_width_downgrade_enabled(struct hfi1_pportdata *ppd, u32 w)
 {
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_LWID_DG_ENB, w);
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_LWID_DG_ENB, w);
 }
 
 static void set_link_speed_enabled(struct hfi1_pportdata *ppd, u32 s)
 {
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_SPD_ENB, s);
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_SPD_ENB, s);
 }
 
 static int check_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
@@ -628,7 +628,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->neigh_mtu.pvlx_to_mtu[15/2] |= mtu;
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
 	pi->operational_vls =
-		hfi_num_vls(hfi1_get_ib_cfg(ppd, QIB_IB_CFG_OP_VLS));
+		hfi_num_vls(hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS));
 	pi->partenforce_filterraw |=
 		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
@@ -642,8 +642,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->vl.cap = hfi_num_vls(ppd->vls_supported);
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
-	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_CAP);
-	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, QIB_IB_CFG_VL_LOW_CAP);
+	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_CAP);
+	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_LOW_CAP);
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
 
@@ -672,7 +672,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 * 5		MaxNextLevelTxEnabled
 	 * 5		MaxNestLevelRxSupported
 	 *
-	 * WFR supports only "distance mode 1" (see OPA V1, version .76,
+	 * HFI supports only "distance mode 1" (see OPA V1, version .76,
 	 * section 9.6.2), so set DistanceSupported, DistanceEnabled
 	 * to 0x1.
 	 */
@@ -711,7 +711,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
 
-	/* WFR supports a replay buffer 128 LTPs in size */
+	/* HFI supports a replay buffer 128 LTPs in size */
 	pi->replay_depth.buffer = 0x80;
 	/* read the cached value of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
 	read_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, &tmp);
@@ -730,7 +730,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 /**
  * get_pkeys - return the PKEY table
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @port: the IB port number
  * @pkeys: the pkey table is placed here
  */
@@ -951,7 +951,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	/* Must be a valid unicast LID address. */
 	if ((lid == 0 && ls_old > IB_PORT_INIT) ||
-	     lid >= QIB_MULTICAST_LID_BASE) {
+	     lid >= HFI1_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		pr_warn("SubnSet(OPA_PortInfo) lid invalid 0x%x\n",
 			lid);
@@ -977,7 +977,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
 	/* Must be a valid unicast LID address. */
 	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
-	     smlid >= QIB_MULTICAST_LID_BASE) {
+	     smlid >= HFI1_MULTICAST_LID_BASE) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
@@ -1047,7 +1047,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT) >> 6;
 	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
-	(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_VL_HIGH_LIMIT,
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
 	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++) {
@@ -1097,7 +1097,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		} else
-			(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_OP_VLS,
+			(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS,
 						vl_enum);
 	}
 
@@ -1178,7 +1178,7 @@ get_only:
 
 /**
  * set_pkeys - set the PKEY table for ctxt 0
- * @dd: the qlogic_ib device
+ * @dd: the hfi1_ib device
  * @port: the IB port number
  * @pkeys: the PKEY table
  */
@@ -1200,7 +1200,7 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	 * If the update does not include the management pkey, don't do it.
 	 */
 	for (i = 0; i < ARRAY_SIZE(ppd->pkeys); i++) {
-		if (pkeys[i] == WFR_LIM_MGMT_P_KEY) {
+		if (pkeys[i] == LIM_MGMT_P_KEY) {
 			update_includes_mgmt_partition = 1;
 			break;
 		}
@@ -1227,7 +1227,7 @@ static int set_pkeys(struct hfi_devdata *dd, u8 port, u16 *pkeys)
 	if (changed) {
 		struct ib_event event;
 
-		(void) hfi1_set_ib_cfg(ppd, QIB_IB_CFG_PKEYS, 0);
+		(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
 
 		event.event = IB_EVENT_PKEY_CHANGE;
 		event.device = &dd->verbs_dev.ibdev;
@@ -1286,16 +1286,16 @@ static int get_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 {
 	u64 *val = (u64 *)data;
 
-	*val++ = read_csr(dd, WFR_SEND_SC2VLT0);
-	*val++ = read_csr(dd, WFR_SEND_SC2VLT1);
-	*val++ = read_csr(dd, WFR_SEND_SC2VLT2);
-	*val++ = read_csr(dd, WFR_SEND_SC2VLT3);
+	*val++ = read_csr(dd, SEND_SC2VLT0);
+	*val++ = read_csr(dd, SEND_SC2VLT1);
+	*val++ = read_csr(dd, SEND_SC2VLT2);
+	*val++ = read_csr(dd, SEND_SC2VLT3);
 	return 0;
 }
 
-#define WFR_ILLEGAL_VL 12
+#define ILLEGAL_VL 12
 /*
- * filter_sc2vlt changes mappings to VL15 to WFR_ILLEGAL_VL (except
+ * filter_sc2vlt changes mappings to VL15 to ILLEGAL_VL (except
  * for SC15, which must map to VL15). If we don't remap things this
  * way it is possible for VL15 counters to increment when we try to
  * send on a SC which is mapped to an invalid VL.
@@ -1309,7 +1309,7 @@ static void filter_sc2vlt(void *data)
 		if (i == 15)
 			continue;
 		if ((pd[i] & 0x1f) == 0xf)
-			pd[i] = WFR_ILLEGAL_VL;
+			pd[i] = ILLEGAL_VL;
 	}
 }
 
@@ -1319,10 +1319,10 @@ static int set_sc2vlt_tables(struct hfi_devdata *dd, void *data)
 
 	filter_sc2vlt(data);
 
-	write_csr(dd, WFR_SEND_SC2VLT0, *val++);
-	write_csr(dd, WFR_SEND_SC2VLT1, *val++);
-	write_csr(dd, WFR_SEND_SC2VLT2, *val++);
-	write_csr(dd, WFR_SEND_SC2VLT3, *val++);
+	write_csr(dd, SEND_SC2VLT0, *val++);
+	write_csr(dd, SEND_SC2VLT1, *val++);
+	write_csr(dd, SEND_SC2VLT2, *val++);
+	write_csr(dd, SEND_SC2VLT3, *val++);
 	write_seqlock_irq(&dd->sc2vl_lock);
 	memcpy(dd->sc2vl, (u64 *)data, sizeof(dd->sc2vl));
 	write_sequnlock_irq(&dd->sc2vl_lock);
@@ -1817,7 +1817,7 @@ struct opa_port_status_req {
 	__be32 vl_select_mask;
 };
 
-#define WFR_VL_MASK_ALL		0x000080ff
+#define VL_MASK_ALL		0x000080ff
 
 struct opa_port_status_rsp {
 	__u8 port_num;
@@ -2200,7 +2200,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	}
 
 	if (nports != 1 || (port_num && port_num != port)
-	    || num_vls > OPA_MAX_VLS || (vl_select_mask & ~WFR_VL_MASK_ALL)) {
+	    || num_vls > OPA_MAX_VLS || (vl_select_mask & ~VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)pmp);
 	}
@@ -2339,7 +2339,7 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 error_counter_summary = 0, tmp;
 	/* FIXME
-	 * some of the counters are not implemented. if the WFR spec
+	 * some of the counters are not implemented. if the HFI spec
 	 * indicates the source of the value (e.g., driver, DC, etc.)
 	 * that's noted. If I don't have a clue how to get the counter,
 	 * a '???' appears.
@@ -2458,7 +2458,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
 	vl_select_mask = cpu_to_be32(req->vl_select_mask);
 
-	if (num_ports != 1 || (vl_select_mask & ~WFR_VL_MASK_ALL)) {
+	if (num_ports != 1 || (vl_select_mask & ~VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)pmp);
 	}
@@ -2498,7 +2498,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	rsp->link_quality_indicator = cpu_to_be32((u32)lq);
 
 	/* FIXME
-	 * some of the counters are not implemented. if the WFR spec
+	 * some of the counters are not implemented. if the HFI spec
 	 * indicates the source of the value (e.g., driver, DC, etc.)
 	 * that's noted. If I don't have a clue how to get the counter,
 	 * a '???' appears.
@@ -2508,9 +2508,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	/* rsp->port_xmit_time_cong is 0 for HFIs */
 	/* rsp->port_xmit_wasted_bw ??? */
 	/* rsp->port_xmit_wait_data ??? */
-	/* FECN markins is only relevant for swich not HFI */
-	/*rsp->port_mark_fecn =
-		cpu_to_be64(read_csr(dd, DCC_PRF_PORT_MARK*/
+	/* rsp->port_mark_fecn is 0 for HFIs */
 
 	rsp->port_xmit_data = cpu_to_be64(read_dev_cntr(dd, C_DC_XMIT_FLITS,
 						CNTR_INVALID_VL));
@@ -2581,7 +2579,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 
 		/* rsp->port_vl_xmit_time_cong is 0 for HFIs */
 		/* rsp->port_vl_xmit_wasted_bw ??? */
-		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ???
+		/* port_vl_xmit_wait_data - TXE (table 13-9 HFI spec) ???
 		 * does this differ from rsp->vls[vfi].port_vl_xmit_wait */
 		/*rsp->vls[vfi].port_vl_mark_fecn =
 			cpu_to_be64(read_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT
@@ -2662,7 +2660,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	rsp->port_number = (u8)port_num;
 
 	/* FIXME
-	 * some of the counters are not implemented. if the WFR spec
+	 * some of the counters are not implemented. if the HFI spec
 	 * indicates the source of the value (e.g., driver, DC, etc.)
 	 * that's noted. If I don't have a clue how to get the counter,
 	 * a '???' appears.
@@ -2778,13 +2776,13 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 		&dd->err_info_rcvport.packet_flit2, sizeof(u64));
 
 	/* ExcessiverBufferOverrunInfo */
-	reg = read_csr(dd, WFR_RCV_ERR_INFO);
-	if (reg & WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK) {
+	reg = read_csr(dd, RCV_ERR_INFO);
+	if (reg & RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK) {
 		/* if the RcvExcessBufferOverrun bit is set, save SC of
 		 * first pkt that encountered an excess buffer overrun */
 		u8 tmp = (u8)reg;
 
-		tmp &=  WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SC_SMASK;
+		tmp &=  RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SC_SMASK;
 		tmp <<= 2;
 		rsp->excessive_buffer_overrun_ei.status_and_sc = tmp;
 		/* set the status bit */
@@ -2804,9 +2802,6 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 		cpu_to_be16(dd->err_info_rcv_constraint.pkey);
 	rsp->port_rcv_constraint_ei.slid =
 		cpu_to_be32(dd->err_info_rcv_constraint.slid);
-
-	/* PortRcvSwitchRelayErrorInfo */
-	/* FIXME this error counter isn't relevant to HFIs */
 
 	/* UncorrectableErrorInfo */
 	rsp->uncorrectable_ei.status_and_code = dd->err_info_uncorrectable;
@@ -2828,7 +2823,7 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 	u32 nports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	u64 portn = be64_to_cpu(req->port_select_mask[3]);
 	u32 counter_select = be32_to_cpu(req->counter_select_mask);
-	u32 vl_select_mask = WFR_VL_MASK_ALL; /* clear all per-vl cnts */
+	u32 vl_select_mask = VL_MASK_ALL; /* clear all per-vl cnts */
 	unsigned long vl;
 
 	if ((nports != 1) || (portn != 1 << port)) {
@@ -2949,7 +2944,7 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 
 		/* port_vl_xmit_time_cong is 0 for HFIs */
 		/* port_vl_xmit_wasted_bw ??? */
-		/* port_vl_xmit_wait_data - TXE (table 13-9 WFR spec) ??? */
+		/* port_vl_xmit_wait_data - TXE (table 13-9 HFI spec) ??? */
 		if (counter_select & CS_PORT_RCV_BUBBLE)
 			write_dev_cntr(dd, C_DC_RCV_BBL_VL, idx_from_vl(vl), 0);
 
@@ -3010,18 +3005,15 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 	/* ExcessiverBufferOverrunInfo */
 	if (error_info_select & ES_EXCESSIVE_BUFFER_OVERRUN_INFO)
 		/* status bit is essentially kept in the h/w - bit 5 of
-		 * WFR_RCV_ERR_INFO */
-		write_csr(dd, WFR_RCV_ERR_INFO,
-			  WFR_RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK);
+		 * RCV_ERR_INFO */
+		write_csr(dd, RCV_ERR_INFO,
+			  RCV_ERR_INFO_RCV_EXCESS_BUFFER_OVERRUN_SMASK);
 
 	if (error_info_select & ES_PORT_XMIT_CONSTRAINT_ERROR_INFO)
 		dd->err_info_xmit_constraint.status &= ~OPA_EI_STATUS_SMASK;
 
 	if (error_info_select & ES_PORT_RCV_CONSTRAINT_ERROR_INFO)
 		dd->err_info_rcv_constraint.status &= ~OPA_EI_STATUS_SMASK;
-
-	/* PortRcvSwitchRelayErrorInfo */
-	/* FIXME this error counter isn't relevant to HFIs */
 
 	/* UncorrectableErrorInfo */
 	if (error_info_select & ES_UNCORRECTABLE_ERROR_INFO)
@@ -3727,7 +3719,7 @@ static int opa_local_smp_check(struct hfi1_ibport *ibp, struct ib_wc *in_wc)
 	 *     our own port's lid
 	 *
 	 */
-	if (pkey == WFR_LIM_MGMT_P_KEY || pkey == WFR_FULL_MGMT_P_KEY)
+	if (pkey == LIM_MGMT_P_KEY || pkey == FULL_MGMT_P_KEY)
 		return 0;
 	ingress_pkey_table_fail(ppd, pkey, slid);
 	return 1;
@@ -3808,16 +3800,6 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 						     resp_len);
 			goto bail;
 		}
-#if 0
-	case IB_MGMT_METHOD_TRAP_REPRESS:
-		if (smp->attr_id == IB_SMP_ATTR_NOTICE)
-			ret = subn_trap_repress(smp, ibdev, port);
-		else {
-			smp->status |= IB_SMP_UNSUP_METH_ATTR;
-			ret = reply((struct ib_mad_hdr *)smp);
-		}
-		goto bail;
-#endif /* 01 */
 	case IB_MGMT_METHOD_TRAP:
 	case IB_MGMT_METHOD_REPORT:
 	case IB_MGMT_METHOD_REPORT_RESP:
@@ -3829,18 +3811,6 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 		 */
 		ret = IB_MAD_RESULT_SUCCESS;
 		goto bail;
-#if 0
-	case IB_MGMT_METHOD_SEND:
-		if (ib_get_smp_direction(smp) &&
-		    smp->attr_id == QIB_VENDOR_IPG) {
-			ppd->dd->f_set_ib_cfg(ppd, QIB_IB_CFG_PORT,
-					      smp->data[0]);
-			ret = IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
-		} else
-			ret = IB_MAD_RESULT_SUCCESS;
-		goto bail;
-
-#endif /* 0 */
 	default:
 		smp->status |= IB_SMP_UNSUP_METHOD;
 		ret = reply((struct ib_mad_hdr *)smp);
@@ -3943,26 +3913,6 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		case OPA_PM_ATTRIB_ID_ERROR_INFO:
 			ret = pma_get_opa_errorinfo(pmp, ibdev, port);
 			goto bail;
-#if 0
-		case IB_PMA_PORT_SAMPLES_CONTROL:
-			ret = pma_get_portsamplescontrol(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_SAMPLES_RESULT:
-			ret = pma_get_portsamplesresult(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_SAMPLES_RESULT_EXT:
-			ret = pma_get_portsamplesresult_ext(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS:
-			ret = pma_get_portcounters(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_EXT:
-			ret = pma_get_portcounters_ext(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_CONG:
-			ret = pma_get_portcounters_cong(pmp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply((struct ib_mad_hdr *)pmp);
@@ -3977,20 +3927,6 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		case OPA_PM_ATTRIB_ID_ERROR_INFO:
 			ret = pma_set_opa_errorinfo(pmp, ibdev, port);
 			goto bail;
-#if 0
-		case IB_PMA_PORT_SAMPLES_CONTROL:
-			ret = pma_set_portsamplescontrol(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS:
-			ret = pma_set_portcounters(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_EXT:
-			ret = pma_set_portcounters_ext(pmp, ibdev, port);
-			goto bail;
-		case IB_PMA_PORT_COUNTERS_CONG:
-			ret = pma_set_portcounters_cong(pmp, ibdev, port);
-			goto bail;
-#endif /* 01 */
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
 			ret = reply((struct ib_mad_hdr *)pmp);
@@ -4027,7 +3963,7 @@ static int hfi_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 	u32 resp_len = 0;
 	struct hfi1_ibport *ibp = to_iport(ibdev, port);
 
-	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
+	pkey_idx = hfi1_lookup_pkey_idx(ibp, LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
 		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
 			hfi1_get_pkey(ibp, 1));
