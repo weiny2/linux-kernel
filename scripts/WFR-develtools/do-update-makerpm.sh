@@ -301,8 +301,6 @@ mkdir -p \$RPM_BUILD_ROOT/sbin
 cp $wfrconfig \$RPM_BUILD_ROOT/lib/modules/%kver/updates/ifs-pkg-config
 cp /lib/modules/$DEFAULT_KERNEL_VERSION/build/.config \$RPM_BUILD_ROOT/lib/modules/%kver/updates/ifs-base-config
 
-cp scripts/WFR-develtools/activate-wfrl-b2b.sh \$RPM_BUILD_ROOT/sbin
-cp scripts/WFR-develtools/umad-trace.stp \$RPM_BUILD_ROOT/sbin
 cp drivers/infiniband/core/ib_mad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_umad.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 cp drivers/infiniband/core/ib_sa.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
