@@ -140,8 +140,11 @@ int qib_set_mod_param(const char *str, struct kernel_param *kp)
 	else if (*next && *next == ':')
 		/* no default, rewind the string */
 		next = tmp;
-	else
+	else {
 		pr_warn("invalid parameter value\n");
+		ret =  -EINVAL;
+		goto done;
+	}
 	while (*next && next[1]) {
 		if (*next == ',')
 			tmp = ++next;
@@ -150,10 +153,8 @@ int qib_set_mod_param(const char *str, struct kernel_param *kp)
 			if (next == tmp || !*next || *next != ':') {
 				pr_warn("Invalid unit:port argument at \"%s\".\n",
 					tmp);
-				while (*next && *next++ != ',')
-					;
-				tmp = next;
-				continue;
+				ret =  -EINVAL;
+				goto done;
 			}
 			tmp = ++next;
 			port = simple_strtoul(tmp, &next, 0);
@@ -161,29 +162,23 @@ int qib_set_mod_param(const char *str, struct kernel_param *kp)
 				/* port numbers start at 1, 0 is invalid */
 				pr_warn("Invalid argument at \"%s\". Port numbers start at 1.\n",
 					tmp);
-				while (*next && *next++ != ',')
-					;
-				tmp = next;
-				continue;
+				ret =  -EINVAL;
+				goto done;
 			}
 		}
 		if (next == tmp || *next != '=') {
 			pr_warn("Invalid %s argument at \"%s\".\n",
 				(param->type == qib_mod_param_port ?
 				"port" : "unit"), tmp);
-			while (*next && *next++ != ',')
-				;
-			tmp = next;
-			continue;
+			ret =  -EINVAL;
+			goto done;
 		}
 		tmp = ++next;
 		val = simple_strtoul(tmp, &next, 0);
 		if (next == tmp) {
 			pr_warn("Invalid value string at \"%s\"\n", tmp);
-			while (*next && *next++ != ',')
-				;
-			tmp = next;
-			continue;
+			ret =  -EINVAL;
+			goto done;
 		}
 		pport = kzalloc(sizeof(struct qib_mod_param_pport),
 				GFP_KERNEL);
