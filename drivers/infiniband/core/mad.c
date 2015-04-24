@@ -44,7 +44,7 @@
 #include "mad_priv.h"
 #include "mad_rmpp.h"
 #include "smi.h"
-#include "stl_smi.h"
+#include "opa_smi.h"
 #include "agent.h"
 #include "jumbo_mad.h"
 #include "jumbo_mad_rmpp.h"
@@ -69,9 +69,9 @@ module_param_named(support_jumbo, mad_support_jumbo, int, 0444);
 MODULE_PARM_DESC(support_jumbo,
 	"Enable Jumbo MAD support on devices which support them (default 1)");
 
-static int mad_fix_stl_size = 0;
-module_param_named(fix_stl_size, mad_fix_stl_size, int, S_IRUGO | S_IWUSR | S_IWGRP);
-MODULE_PARM_DESC(fix_stl_size, "Fix Jumbo MAD's to be 2K (default 0)");
+static int mad_fix_opa_size = 0;
+module_param_named(fix_opa_size, mad_fix_opa_size, int, S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(fix_opa_size, "Fix Jumbo MAD's to be 2K (default 0)");
 
 static struct kmem_cache *ib_mad_cache;
 struct kmem_cache *jumbo_mad_cache;
@@ -733,7 +733,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 {
 	int ret = 0;
 	struct ib_smp *smp = mad_send_wr->send_buf.mad;
-	struct stl_smp *stl_smp = (struct stl_smp *)smp;
+	struct opa_smp *opa_smp = (struct opa_smp *)smp;
 	unsigned long flags;
 	struct ib_mad_local_private *local;
 	struct ib_mad_private *mad_priv; /* or jumbo_mad_priv */
@@ -743,7 +743,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	u8 port_num;
 	struct ib_wc mad_wc;
 	struct ib_send_wr *send_wr = &mad_send_wr->send_wr;
-	u32 stl_drslid;
+	u32 opa_drslid;
 
 	if (device->node_type == RDMA_NODE_IB_SWITCH &&
 	    smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
@@ -758,21 +758,21 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	 * hop_ptr or hop_cnt.  See section 14.2.2, Vol 1 IB spec.
 	 */
 	if (smp->base_version == JUMBO_MGMT_BASE_VERSION) {
-		if ((stl_get_smp_direction(stl_smp)
-		     ? stl_smp->route.dr.dr_dlid : stl_smp->route.dr.dr_slid) ==
-		     STL_LID_PERMISSIVE &&
-		     stl_smi_handle_dr_smp_send(stl_smp, device->node_type,
+		if ((opa_get_smp_direction(opa_smp)
+		     ? opa_smp->route.dr.dr_dlid : opa_smp->route.dr.dr_slid) ==
+		     OPA_LID_PERMISSIVE &&
+		     opa_smi_handle_dr_smp_send(opa_smp, device->node_type,
 						port_num) == IB_SMI_DISCARD) {
 			ret = -EINVAL;
 			dev_err(&device->dev, "Invalid directed route\n");
 			goto out;
 		}
-		stl_drslid = be32_to_cpu(stl_smp->route.dr.dr_slid);
-		if (stl_drslid != STL_LID_PERMISSIVE &&
-		    stl_drslid & 0xffff0000) {
+		opa_drslid = be32_to_cpu(opa_smp->route.dr.dr_slid);
+		if (opa_drslid != OPA_LID_PERMISSIVE &&
+		    opa_drslid & 0xffff0000) {
 			ret = -EINVAL;
 			dev_err(&device->dev, "STL Invalid dr_slid 0x%x\n",
-			       stl_drslid);
+			       opa_drslid);
 			goto out;
 		}
 	} else {
@@ -784,7 +784,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 			dev_err(&device->dev, "Invalid directed route\n");
 			goto out;
 		}
-		stl_drslid = be16_to_cpu(smp->dr_slid);
+		opa_drslid = be16_to_cpu(smp->dr_slid);
 	}
 
 	/* Check to post send on QP or process locally */
@@ -817,7 +817,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 		mad_priv->header.flags = IB_MAD_PRIV_FLAG_JUMBO;
 
 	build_smp_wc(mad_agent_priv->agent.qp,
-		     send_wr->wr_id, (u16)(stl_drslid & 0x0000ffff),
+		     send_wr->wr_id, (u16)(opa_drslid & 0x0000ffff),
 		     send_wr->wr.ud.pkey_index,
 		     send_wr->wr.ud.port_num, &mad_wc);
 
@@ -900,7 +900,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	local->mad_send_wr->send_wr.wr.ud.pkey_index = mad_wc.pkey_index;
 	/* FIXME upstream; mad_wc.byte_len should be additional param in
 	 * process_mad */
-	if (mad_fix_stl_size)
+	if (mad_fix_opa_size)
 		local->return_wc_byte_len = sizeof(struct jumbo_mad);
 	else
 		local->return_wc_byte_len = mad_wc.byte_len;
@@ -2168,7 +2168,7 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 			if (ret & IB_MAD_RESULT_CONSUMED)
 				goto out;
 			if (ret & IB_MAD_RESULT_REPLY) {
-				if (mad_fix_stl_size)
+				if (mad_fix_opa_size)
 					wc->byte_len = sizeof(struct jumbo_mad);
 				agent_send_response(&response->mad.mad,
 						    &recv->grh, wc,

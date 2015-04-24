@@ -41,7 +41,7 @@
 #include <linux/workqueue.h>
 #include <rdma/ib_mad.h>
 #include <rdma/ib_smi.h>
-#include <rdma/stl_smi.h>
+#include <rdma/opa_smi.h>
 
 
 #define PFX "ib_mad: "
@@ -113,7 +113,7 @@ struct jumbo_mad_private {
 	union {
 		struct jumbo_mad mad;
 		struct jumbo_rmpp_mad rmpp_mad;
-		struct stl_smp smp;
+		struct opa_smp smp;
 	} mad;
 } __attribute__ ((packed));
 
