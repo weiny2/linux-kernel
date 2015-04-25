@@ -679,7 +679,7 @@ static int gfs2_adjust_quota(struct gfs2_inode *ip, loff_t loc,
 			qd->qd_qb.qb_limit = qp->qu_limit;
 		}
 		if (fdq->d_fieldmask & FS_DQ_BCOUNT) {
-			qp->qu_value = cpu_to_be64(fdq->d_bcount >> sdp->sd_fsb2bb_shift);
+			qp->qu_value = cpu_to_be64(fdq->d_bcount >> inode->i_sb->s_blocksize_bits);
 			qd->qd_qb.qb_value = qp->qu_value;
 		}
 	}
@@ -1497,7 +1497,7 @@ static int gfs2_get_dqblk(struct super_block *sb, struct kqid qid,
 	fdq->d_id = from_kqid_munged(current_user_ns(), qid);
 	fdq->d_blk_hardlimit = be64_to_cpu(qlvb->qb_limit) << sdp->sd_fsb2bb_shift;
 	fdq->d_blk_softlimit = be64_to_cpu(qlvb->qb_warn) << sdp->sd_fsb2bb_shift;
-	fdq->d_bcount = be64_to_cpu(qlvb->qb_value) << sdp->sd_fsb2bb_shift;
+	fdq->d_bcount = be64_to_cpu(qlvb->qb_value) << sb->s_blocksize_bits;
 
 	gfs2_glock_dq_uninit(&q_gh);
 out:
@@ -1562,7 +1562,7 @@ static int gfs2_set_dqblk(struct super_block *sb, struct kqid qid,
 		fdq->d_fieldmask ^= FS_DQ_BHARD;
 
 	if ((fdq->d_fieldmask & FS_DQ_BCOUNT) &&
-	    ((fdq->d_bcount >> sdp->sd_fsb2bb_shift) == be64_to_cpu(qd->qd_qb.qb_value)))
+	    ((fdq->d_bcount >> sb->s_blocksize_bits) == be64_to_cpu(qd->qd_qb.qb_value)))
 		fdq->d_fieldmask ^= FS_DQ_BCOUNT;
 
 	if (fdq->d_fieldmask == 0)

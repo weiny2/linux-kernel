@@ -386,4 +386,14 @@ static inline void dquot_release_reservation_block(struct inode *inode,
 	__dquot_free_space(inode, nr << inode->i_blkbits, DQUOT_SPACE_RESERVE);
 }
 
+static inline qsize_t bbtos(qsize_t blocks)
+{
+	return blocks << 9;
+}
+
+static inline qsize_t stobb(qsize_t space)
+{
+	return (space + 511) >> 9;
+}
+
 #endif /* _LINUX_QUOTAOPS_ */

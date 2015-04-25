@@ -2396,16 +2396,6 @@ out:
 }
 EXPORT_SYMBOL(dquot_quota_on_mount);
 
-static inline qsize_t qbtos(qsize_t blocks)
-{
-	return blocks << QIF_DQBLKSIZE_BITS;
-}
-
-static inline qsize_t stoqb(qsize_t space)
-{
-	return (space + QIF_DQBLKSIZE - 1) >> QIF_DQBLKSIZE_BITS;
-}
-
 /* Generic routine for getting common part of quota structure */
 static void do_get_dqblk(struct dquot *dquot, struct fs_disk_quota *di)
 {
@@ -2418,8 +2408,8 @@ static void do_get_dqblk(struct dquot *dquot, struct fs_disk_quota *di)
 	di->d_id = from_kqid_munged(current_user_ns(), dquot->dq_id);
 
 	spin_lock(&dq_data_lock);
-	di->d_blk_hardlimit = stoqb(dm->dqb_bhardlimit);
-	di->d_blk_softlimit = stoqb(dm->dqb_bsoftlimit);
+	di->d_blk_hardlimit = stobb(dm->dqb_bhardlimit);
+	di->d_blk_softlimit = stobb(dm->dqb_bsoftlimit);
 	di->d_ino_hardlimit = dm->dqb_ihardlimit;
 	di->d_ino_softlimit = dm->dqb_isoftlimit;
 	di->d_bcount = dm->dqb_curspace + dm->dqb_rsvspace;
@@ -2477,9 +2467,9 @@ static int do_set_dqblk(struct dquot *dquot, struct fs_disk_quota *di)
 	}
 
 	if (di->d_fieldmask & FS_DQ_BSOFT)
-		dm->dqb_bsoftlimit = qbtos(di->d_blk_softlimit);
+		dm->dqb_bsoftlimit = bbtos(di->d_blk_softlimit);
 	if (di->d_fieldmask & FS_DQ_BHARD)
-		dm->dqb_bhardlimit = qbtos(di->d_blk_hardlimit);
+		dm->dqb_bhardlimit = bbtos(di->d_blk_hardlimit);
 	if (di->d_fieldmask & (FS_DQ_BSOFT | FS_DQ_BHARD)) {
 		check_blim = 1;
 		set_bit(DQ_LASTSET_B + QIF_BLIMITS_B, &dquot->dq_flags);

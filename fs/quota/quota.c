@@ -115,10 +115,16 @@ static int quota_setinfo(struct super_block *sb, int type, void __user *addr)
 	return sb->s_qcop->set_info(sb, type, &info);
 }
 
+/* Convert from XFS basic blocks (512) to quota blocks (1024) */
+static u64 bbtoqb(u64 val)
+{
+	return val >> (QIF_DQBLKSIZE_BITS - 9);
+}
+
 static void copy_to_if_dqblk(struct if_dqblk *dst, struct fs_disk_quota *src)
 {
-	dst->dqb_bhardlimit = src->d_blk_hardlimit;
-	dst->dqb_bsoftlimit = src->d_blk_softlimit;
+	dst->dqb_bhardlimit = bbtoqb(src->d_blk_hardlimit);
+	dst->dqb_bsoftlimit = bbtoqb(src->d_blk_softlimit);
 	dst->dqb_curspace = src->d_bcount;
 	dst->dqb_ihardlimit = src->d_ino_hardlimit;
 	dst->dqb_isoftlimit = src->d_ino_softlimit;
@@ -150,10 +156,16 @@ static int quota_getquota(struct super_block *sb, int type, qid_t id,
 	return 0;
 }
 
+/* Convert from quota blocks (1024) to XFS basic blocks (512) */
+static u64 qbtobb(u64 val)
+{
+	return val << (QIF_DQBLKSIZE_BITS - 9);
+}
+
 static void copy_from_if_dqblk(struct fs_disk_quota *dst, struct if_dqblk *src)
 {
-	dst->d_blk_hardlimit = src->dqb_bhardlimit;
-	dst->d_blk_softlimit  = src->dqb_bsoftlimit;
+	dst->d_blk_hardlimit = qbtobb(src->dqb_bhardlimit);
+	dst->d_blk_softlimit = qbtobb(src->dqb_bsoftlimit);
 	dst->d_bcount = src->dqb_curspace;
 	dst->d_ino_hardlimit = src->dqb_ihardlimit;
 	dst->d_ino_softlimit = src->dqb_isoftlimit;
@@ -256,6 +268,8 @@ static int quota_setxquota(struct super_block *sb, int type, qid_t id,
 	qid = make_kqid(current_user_ns(), type, id);
 	if (!qid_valid(qid))
 		return -EINVAL;
+	/* We pass number in bytes, convert from basic blocks */
+	fdq.d_bcount = bbtos(fdq.d_bcount);
 	return sb->s_qcop->set_dqblk(sb, qid, &fdq);
 }
 
@@ -272,8 +286,12 @@ static int quota_getxquota(struct super_block *sb, int type, qid_t id,
 	if (!qid_valid(qid))
 		return -EINVAL;
 	ret = sb->s_qcop->get_dqblk(sb, qid, &fdq);
-	if (!ret && copy_to_user(addr, &fdq, sizeof(fdq)))
-		return -EFAULT;
+	if (!ret) {
+		/* We pass number in bytes, convert to basic blocks */
+		fdq.d_bcount = stobb(fdq.d_bcount);
+		if (copy_to_user(addr, &fdq, sizeof(fdq)))
+			return -EFAULT;
+	}
 	return ret;
 }
 
