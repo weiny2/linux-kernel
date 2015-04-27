@@ -50,11 +50,6 @@
  *
  */
 
-/*
- * This header file is the base header file for hfi1_ib kernel code
- * qib_user.h serves a similar purpose for user code.
- */
-
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
@@ -111,7 +106,7 @@ extern unsigned long hfi_cap_mask;
  * summed over all of the devices and ports.
  * They are described by name via ipathfs filesystem, so layout
  * and number of elements can change without breaking compatibility.
- * If members are added or deleted qib_statnames[] in qib_fs.c must
+ * If members are added or deleted hfi_statnames[] in debugfs.c must
  * change to match.
  */
 struct hfi1_ib_stats {
@@ -707,7 +702,7 @@ struct hfi_temp {
 };
 
 /* device data struct now contains only "general per-device" info.
- * fields related to a physical IB port are in a qib_pportdata struct,
+ * fields related to a physical IB port are in a hfi1_pportdata struct,
  * described above) while fields only used by a particular chip-type are in
  * a qib_chipdata struct, whose contents are opaque to this file.
  */
@@ -776,7 +771,7 @@ struct hfi_devdata {
 	wait_queue_head_t		  sdma_unfreeze_wq;
 	atomic_t			  sdma_unfreeze_count;
 
-	/* qib_pportdata, points to array of (physical) port-specific
+	/* hfi1_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
 	 */
 	struct hfi1_pportdata *pport;
@@ -1401,12 +1396,12 @@ int qib_sdma_verbs_send(struct sdma_engine *, struct hfi1_sge_state *,
 int hfi1_get_user_pages(unsigned long, size_t, struct page **);
 void hfi1_release_user_pages(struct page **, size_t);
 
-static inline void qib_clear_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
+static inline void clear_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 {
 	*((u64 *) rcd->rcvhdrtail_kvaddr) = 0ULL;
 }
 
-static inline u32 qib_get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
+static inline u32 get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 {
 	/*
 	 * volatile because it's a DMA target from the chip, routine is
@@ -1415,7 +1410,7 @@ static inline u32 qib_get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 	return (u32) le64_to_cpu(*rcd->rcvhdrtail_kvaddr);
 }
 
-static inline u32 qib_get_hdrqtail(const struct hfi1_ctxtdata *rcd)
+static inline u32 get_hdrqtail(const struct hfi1_ctxtdata *rcd)
 {
 	const struct hfi_devdata *dd = rcd->dd;
 	u32 hdrqtail;
@@ -1431,7 +1426,7 @@ static inline u32 qib_get_hdrqtail(const struct hfi1_ctxtdata *rcd)
 		if (seq == rcd->seq_cnt)
 			hdrqtail++;
 	} else
-		hdrqtail = qib_get_rcvhdrtail(rcd);
+		hdrqtail = get_rcvhdrtail(rcd);
 
 	return hdrqtail;
 }
@@ -1476,7 +1471,7 @@ const char *get_unit_name(int unit);
  * Flush write combining store buffers (if present) and perform a write
  * barrier.
  */
-static inline void qib_flush_wc(void)
+static inline void flush_wc(void)
 {
 #if defined(CONFIG_X86_64)
 	asm volatile("sfence" : : : "memory");
@@ -1640,7 +1635,7 @@ struct hfi1_hwerror_msgs {
 
 #define QLOGIC_IB_HWE_MSG(a, b) { .mask = a, .msg = b }
 
-/* in qib_intr.c... */
+/* in intr.c... */
 void hfi1_format_hwerrors(u64 hwerrs,
 			  const struct hfi1_hwerror_msgs *hwerrmsgs,
 			  size_t nhwerrmsgs, char *msg, size_t lmsg);

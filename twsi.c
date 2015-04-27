@@ -339,7 +339,7 @@ int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target)
  * STOP.
  * returns 0 if OK (ACK received), else != 0
  */
-static int qib_twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
+static int twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
 {
 	int ret = 1;
 
@@ -380,10 +380,10 @@ int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 	if (dev == HFI1_TWSI_NO_DEV) {
 		/* legacy not-really-I2C */
 		addr = (addr << 1) | READ_CMD;
-		ret = qib_twsi_wr(dd, target, addr, HFI1_TWSI_START);
+		ret = twsi_wr(dd, target, addr, HFI1_TWSI_START);
 	} else {
 		/* Actual I2C */
-		ret = qib_twsi_wr(dd, target, dev | WRITE_CMD, HFI1_TWSI_START);
+		ret = twsi_wr(dd, target, dev | WRITE_CMD, HFI1_TWSI_START);
 		if (ret) {
 			stop_cmd(dd, target);
 			ret = 1;
@@ -396,7 +396,7 @@ int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		 * we need t_buf (nominally 20uSec) before that start,
 		 * and cannot rely on the delay built in to the STOP
 		 */
-		ret = qib_twsi_wr(dd, target, addr, 0);
+		ret = twsi_wr(dd, target, addr, 0);
 		udelay(TWSI_BUF_WAIT_USEC);
 
 		if (ret) {
@@ -406,7 +406,7 @@ int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 			ret = 1;
 			goto bail;
 		}
-		ret = qib_twsi_wr(dd, target, dev | READ_CMD, HFI1_TWSI_START);
+		ret = twsi_wr(dd, target, dev | READ_CMD, HFI1_TWSI_START);
 	}
 	if (ret) {
 		stop_cmd(dd, target);
@@ -457,16 +457,16 @@ int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 
 	while (len > 0) {
 		if (dev == HFI1_TWSI_NO_DEV) {
-			if (qib_twsi_wr(dd, target, (addr << 1) | WRITE_CMD,
-					HFI1_TWSI_START)) {
+			if (twsi_wr(dd, target, (addr << 1) | WRITE_CMD,
+				    HFI1_TWSI_START)) {
 				goto failed_write;
 			}
 		} else {
 			/* Real I2C */
-			if (qib_twsi_wr(dd, target,
-					dev | WRITE_CMD, HFI1_TWSI_START))
+			if (twsi_wr(dd, target,
+				    dev | WRITE_CMD, HFI1_TWSI_START))
 				goto failed_write;
-			ret = qib_twsi_wr(dd, target, addr, 0);
+			ret = twsi_wr(dd, target, addr, 0);
 			if (ret) {
 				dd_dev_err(dd,
 					"Failed to write interface write addr %02X\n",
@@ -480,7 +480,7 @@ int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		len -= sub_len;
 
 		for (i = 0; i < sub_len; i++)
-			if (qib_twsi_wr(dd, target, *bp++, 0))
+			if (twsi_wr(dd, target, *bp++, 0))
 				goto failed_write;
 
 		stop_cmd(dd, target);
@@ -497,8 +497,8 @@ int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		 * whether we have real eeprom_dev. Legacy likes any address.
 		 */
 		max_wait_time = 100;
-		while (qib_twsi_wr(dd, target,
-					dev | READ_CMD, HFI1_TWSI_START)) {
+		while (twsi_wr(dd, target,
+			       dev | READ_CMD, HFI1_TWSI_START)) {
 			stop_cmd(dd, target);
 			if (!--max_wait_time)
 				goto failed_write;

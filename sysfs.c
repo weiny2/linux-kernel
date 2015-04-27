@@ -123,7 +123,7 @@ static ssize_t show_status(struct hfi1_pportdata *ppd, char *buf)
  * For userland compatibility, these offsets must remain fixed.
  * They are strings for HFI_STATUS_*
  */
-static const char * const qib_status_str[] = {
+static const char * const hfi1_status_str[] = {
 	"Initted",
 	"",
 	"",
@@ -150,12 +150,12 @@ static ssize_t show_status_str(struct hfi1_pportdata *ppd, char *buf)
 
 	s = *(ppd->statusp);
 	*buf = '\0';
-	for (any = i = 0; s && qib_status_str[i]; i++) {
+	for (any = i = 0; s && hfi1_status_str[i]; i++) {
 		if (s & 1) {
 			/* if overflow */
 			if (any && strlcat(buf, " ", PAGE_SIZE) >= PAGE_SIZE)
 				break;
-			if (strlcat(buf, qib_status_str[i], PAGE_SIZE) >=
+			if (strlcat(buf, hfi1_status_str[i], PAGE_SIZE) >=
 					PAGE_SIZE)
 				break;
 			any = 1;
@@ -179,7 +179,7 @@ bail:
  * full set of kobject/sysfs_ops structures and routines.
  */
 #define HFI1_PORT_ATTR(name, mode, show, store) \
-	static struct hfi1_port_attr qib_port_attr_##name = \
+	static struct hfi1_port_attr port_attr_##name = \
 		__ATTR(name, mode, show, store)
 
 struct hfi1_port_attr {
@@ -195,10 +195,10 @@ HFI1_PORT_ATTR(status, S_IRUGO, show_status, NULL);
 HFI1_PORT_ATTR(status_str, S_IRUGO, show_status_str, NULL);
 
 static struct attribute *port_default_attributes[] = {
-	&qib_port_attr_led_override.attr,
-	&qib_port_attr_hrtbt_enable.attr,
-	&qib_port_attr_status.attr,
-	&qib_port_attr_status_str.attr,
+	&port_attr_led_override.attr,
+	&port_attr_hrtbt_enable.attr,
+	&port_attr_status.attr,
+	&port_attr_status_str.attr,
 	NULL
 };
 
@@ -242,13 +242,13 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 	return count;
 }
 
-static void qib_port_release(struct kobject *kobj)
+static void port_release(struct kobject *kobj)
 {
 	/* nothing to do since memory is freed by hfi1_free_devdata() */
 }
 
-static struct kobj_type qib_port_cc_ktype = {
-	.release = qib_port_release,
+static struct kobj_type port_cc_ktype = {
+	.release = port_release,
 };
 
 static struct bin_attribute cc_table_bin_attr = {
@@ -300,8 +300,8 @@ static struct bin_attribute cc_setting_bin_attr = {
 };
 
 
-static ssize_t qib_portattr_show(struct kobject *kobj,
-	struct attribute *attr, char *buf)
+static ssize_t portattr_show(struct kobject *kobj,
+			     struct attribute *attr, char *buf)
 {
 	struct hfi1_port_attr *pattr =
 		container_of(attr, struct hfi1_port_attr, attr);
@@ -311,8 +311,9 @@ static ssize_t qib_portattr_show(struct kobject *kobj,
 	return pattr->show(ppd, buf);
 }
 
-static ssize_t qib_portattr_store(struct kobject *kobj,
-	struct attribute *attr, const char *buf, size_t len)
+static ssize_t portattr_store(struct kobject *kobj,
+			      struct attribute *attr,
+			      const char *buf, size_t len)
 {
 	struct hfi1_port_attr *pattr =
 		container_of(attr, struct hfi1_port_attr, attr);
@@ -323,14 +324,14 @@ static ssize_t qib_portattr_store(struct kobject *kobj,
 }
 
 
-static const struct sysfs_ops qib_port_ops = {
-	.show = qib_portattr_show,
-	.store = qib_portattr_store,
+static const struct sysfs_ops hfi1_port_ops = {
+	.show = portattr_show,
+	.store = portattr_store,
 };
 
-static struct kobj_type qib_port_ktype = {
-	.release = qib_port_release,
-	.sysfs_ops = &qib_port_ops,
+static struct kobj_type hfi1_port_ktype = {
+	.release = port_release,
+	.sysfs_ops = &hfi1_port_ops,
 	.default_attrs = port_default_attributes
 };
 
@@ -433,7 +434,7 @@ static const struct sysfs_ops hfi_sc2vl_ops = {
 };
 
 static struct kobj_type hfi_sc2vl_ktype = {
-	.release = qib_port_release,
+	.release = port_release,
 	.sysfs_ops = &hfi_sc2vl_ops,
 	.default_attrs = sc2vl_default_attributes
 };
@@ -539,7 +540,7 @@ static const struct sysfs_ops hfi_sl2sc_ops = {
 };
 
 static struct kobj_type hfi_sl2sc_ktype = {
-	.release = qib_port_release,
+	.release = port_release,
 	.sysfs_ops = &hfi_sl2sc_ops,
 	.default_attrs = sl2sc_default_attributes
 };
@@ -613,7 +614,7 @@ static const struct sysfs_ops hfi_vl2mtu_ops = {
 };
 
 static struct kobj_type hfi_vl2mtu_ktype = {
-	.release = qib_port_release,
+	.release = port_release,
 	.sysfs_ops = &hfi_vl2mtu_ops,
 	.default_attrs = vl2mtu_default_attributes
 };
@@ -623,7 +624,7 @@ static struct kobj_type hfi_vl2mtu_ktype = {
 #define HFI1_DIAGC_PCPU   0x1
 
 #define HFI1_DIAGC_ATTR(N) \
-	static struct hfi1_diagc_attr qib_diagc_attr_##N = { \
+	static struct hfi1_diagc_attr diagc_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0664 }, \
 		.counter = offsetof(struct hfi1_ibport, n_##N), \
 		.type = HFI1_DIAGC_NORMAL, \
@@ -631,7 +632,7 @@ static struct kobj_type hfi_vl2mtu_ktype = {
 	}
 
 #define HFI1_DIAGC_ATTR_PCPU(N, V, L) \
-	static struct hfi1_diagc_attr qib_diagc_attr_##N = { \
+	static struct hfi1_diagc_attr diagc_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0664 }, \
 		.counter = V, \
 		.type = HFI1_DIAGC_PCPU, \
@@ -662,21 +663,21 @@ HFI1_DIAGC_ATTR(rc_dupreq);
 HFI1_DIAGC_ATTR(rc_seqnak);
 
 static struct attribute *diagc_default_attributes[] = {
-	&qib_diagc_attr_rc_resends.attr,
-	&qib_diagc_attr_rc_acks.attr,
-	&qib_diagc_attr_rc_qacks.attr,
-	&qib_diagc_attr_rc_delayed_comp.attr,
-	&qib_diagc_attr_seq_naks.attr,
-	&qib_diagc_attr_rdma_seq.attr,
-	&qib_diagc_attr_rnr_naks.attr,
-	&qib_diagc_attr_other_naks.attr,
-	&qib_diagc_attr_rc_timeouts.attr,
-	&qib_diagc_attr_loop_pkts.attr,
-	&qib_diagc_attr_pkt_drops.attr,
-	&qib_diagc_attr_dmawait.attr,
-	&qib_diagc_attr_unaligned.attr,
-	&qib_diagc_attr_rc_dupreq.attr,
-	&qib_diagc_attr_rc_seqnak.attr,
+	&diagc_attr_rc_resends.attr,
+	&diagc_attr_rc_acks.attr,
+	&diagc_attr_rc_qacks.attr,
+	&diagc_attr_rc_delayed_comp.attr,
+	&diagc_attr_seq_naks.attr,
+	&diagc_attr_rdma_seq.attr,
+	&diagc_attr_rnr_naks.attr,
+	&diagc_attr_other_naks.attr,
+	&diagc_attr_rc_timeouts.attr,
+	&diagc_attr_loop_pkts.attr,
+	&diagc_attr_pkt_drops.attr,
+	&diagc_attr_dmawait.attr,
+	&diagc_attr_unaligned.attr,
+	&diagc_attr_rc_dupreq.attr,
+	&diagc_attr_rc_seqnak.attr,
 	NULL
 };
 
@@ -687,7 +688,7 @@ static ssize_t diagc_attr_show(struct kobject *kobj, struct attribute *attr,
 		container_of(attr, struct hfi1_diagc_attr, attr);
 	struct hfi1_pportdata *ppd =
 		container_of(kobj, struct hfi1_pportdata, diagc_kobj);
-	struct hfi1_ibport *qibp = &ppd->ibport_data;
+	struct hfi1_ibport *hfip = &ppd->ibport_data;
 
 	switch (dattr->type) {
 	case (HFI1_DIAGC_PCPU):
@@ -699,7 +700,7 @@ static ssize_t diagc_attr_show(struct kobject *kobj, struct attribute *attr,
 		/* Fall through */
 	default:
 		return sprintf(buf, "%u\n",
-			*(u32 *)((char *)qibp + dattr->counter));
+			*(u32 *)((char *)hfip + dattr->counter));
 	}
 }
 
@@ -710,25 +711,25 @@ static ssize_t diagc_attr_store(struct kobject *kobj, struct attribute *attr,
 		container_of(attr, struct hfi1_diagc_attr, attr);
 	struct hfi1_pportdata *ppd =
 		container_of(kobj, struct hfi1_pportdata, diagc_kobj);
-	struct hfi1_ibport *qibp = &ppd->ibport_data;
+	struct hfi1_ibport *hfip = &ppd->ibport_data;
 	u32 val;
 	int ret;
 
 	ret = kstrtou32(buf, 0, &val);
 	if (ret)
 		return ret;
-	*(u32 *)((char *) qibp + dattr->counter) = val;
+	*(u32 *)((char *)hfip + dattr->counter) = val;
 	return size;
 }
 
-static const struct sysfs_ops qib_diagc_ops = {
+static const struct sysfs_ops hfi1_diagc_ops = {
 	.show = diagc_attr_show,
 	.store = diagc_attr_store,
 };
 
-static struct kobj_type qib_diagc_ktype = {
-	.release = qib_port_release,
-	.sysfs_ops = &qib_diagc_ops,
+static struct kobj_type diagc_ktype = {
+	.release = port_release,
+	.sysfs_ops = &hfi1_diagc_ops,
 	.default_attrs = diagc_default_attributes
 };
 
@@ -907,7 +908,7 @@ static DEVICE_ATTR(tempsense, S_IRUGO, show_tempsense, NULL);
 static DEVICE_ATTR(localbus_info, S_IRUGO, show_localbus_info, NULL);
 static DEVICE_ATTR(chip_reset, S_IWUSR, NULL, store_chip_reset);
 
-static struct device_attribute *qib_attributes[] = {
+static struct device_attribute *hfi1_attributes[] = {
 	&dev_attr_hw_rev,
 	&dev_attr_hca_type,
 	&dev_attr_board_id,
@@ -937,7 +938,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	ppd = &dd->pport[port_num - 1];
 
-	ret = kobject_init_and_add(&ppd->pport_kobj, &qib_port_ktype, kobj,
+	ret = kobject_init_and_add(&ppd->pport_kobj, &hfi1_port_ktype, kobj,
 				   "linkcontrol");
 	if (ret) {
 		dd_dev_err(dd,
@@ -976,7 +977,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->vl2mtu_kobj, KOBJ_ADD);
 
-	ret = kobject_init_and_add(&ppd->diagc_kobj, &qib_diagc_ktype, kobj,
+	ret = kobject_init_and_add(&ppd->diagc_kobj, &diagc_ktype, kobj,
 				   "diag_counters");
 	if (ret) {
 		dd_dev_err(dd,
@@ -986,8 +987,8 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->diagc_kobj, KOBJ_ADD);
 
-	ret = kobject_init_and_add(&ppd->pport_cc_kobj, &qib_port_cc_ktype,
-				kobj, "CCMgtA");
+	ret = kobject_init_and_add(&ppd->pport_cc_kobj, &port_cc_ktype,
+				   kobj, "CCMgtA");
 	if (ret) {
 		dd_dev_err(dd,
 		 "Skipping Congestion Control sysfs info, (err %d) port %u\n",
@@ -1045,16 +1046,16 @@ int hfi1_verbs_register_sysfs(struct hfi_devdata *dd)
 	struct ib_device *dev = &dd->verbs_dev.ibdev;
 	int i, ret;
 
-	for (i = 0; i < ARRAY_SIZE(qib_attributes); ++i) {
-		ret = device_create_file(&dev->dev, qib_attributes[i]);
+	for (i = 0; i < ARRAY_SIZE(hfi1_attributes); ++i) {
+		ret = device_create_file(&dev->dev, hfi1_attributes[i]);
 		if (ret)
 			goto bail;
 	}
 
 	return 0;
 bail:
-	for (i = 0; i < ARRAY_SIZE(qib_attributes); ++i)
-		device_remove_file(&dev->dev, qib_attributes[i]);
+	for (i = 0; i < ARRAY_SIZE(hfi1_attributes); ++i)
+		device_remove_file(&dev->dev, hfi1_attributes[i]);
 	return ret;
 }
 

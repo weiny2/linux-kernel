@@ -53,10 +53,10 @@
 #include "hfi.h"
 
 /**
- * qib_mcast_qp_alloc - alloc a struct to link a QP to mcast GID struct
+ * mcast_qp_alloc - alloc a struct to link a QP to mcast GID struct
  * @qp: the QP to link
  */
-static struct hfi1_mcast_qp *qib_mcast_qp_alloc(struct hfi1_qp *qp)
+static struct hfi1_mcast_qp *mcast_qp_alloc(struct hfi1_qp *qp)
 {
 	struct hfi1_mcast_qp *mqp;
 
@@ -71,7 +71,7 @@ bail:
 	return mqp;
 }
 
-static void qib_mcast_qp_free(struct hfi1_mcast_qp *mqp)
+static void mcast_qp_free(struct hfi1_mcast_qp *mqp)
 {
 	struct hfi1_qp *qp = mqp->qp;
 
@@ -83,12 +83,12 @@ static void qib_mcast_qp_free(struct hfi1_mcast_qp *mqp)
 }
 
 /**
- * qib_mcast_alloc - allocate the multicast GID structure
+ * mcast_alloc - allocate the multicast GID structure
  * @mgid: the multicast GID
  *
  * A list of QPs will be attached to this structure.
  */
-static struct hfi1_mcast *qib_mcast_alloc(union ib_gid *mgid)
+static struct hfi1_mcast *mcast_alloc(union ib_gid *mgid)
 {
 	struct hfi1_mcast *mcast;
 
@@ -106,12 +106,12 @@ bail:
 	return mcast;
 }
 
-static void qib_mcast_free(struct hfi1_mcast *mcast)
+static void mcast_free(struct hfi1_mcast *mcast)
 {
 	struct hfi1_mcast_qp *p, *tmp;
 
 	list_for_each_entry_safe(p, tmp, &mcast->qp_list, list)
-		qib_mcast_qp_free(p);
+		mcast_qp_free(p);
 
 	kfree(mcast);
 }
@@ -159,7 +159,7 @@ bail:
 }
 
 /**
- * qib_mcast_add - insert mcast GID into table and attach QP struct
+ * mcast_add - insert mcast GID into table and attach QP struct
  * @mcast: the mcast GID table
  * @mqp: the QP to attach
  *
@@ -167,8 +167,8 @@ bail:
  * the table but the QP was added.  Return ESRCH if the QP was already
  * attached and neither structure was added.
  */
-static int qib_mcast_add(struct hfi1_ibdev *dev, struct hfi1_ibport *ibp,
-			 struct hfi1_mcast *mcast, struct hfi1_mcast_qp *mqp)
+static int mcast_add(struct hfi1_ibdev *dev, struct hfi1_ibport *ibp,
+		     struct hfi1_mcast *mcast, struct hfi1_mcast_qp *mqp)
 {
 	struct rb_node **n = &ibp->mcast_tree.rb_node;
 	struct rb_node *pn = NULL;
@@ -201,7 +201,7 @@ static int qib_mcast_add(struct hfi1_ibdev *dev, struct hfi1_ibport *ibp,
 				goto bail;
 			}
 		}
-		if (tmcast->n_attached == ib_hfi1_max_mcast_qp_attached) {
+		if (tmcast->n_attached == hfi1_max_mcast_qp_attached) {
 			ret = ENOMEM;
 			goto bail;
 		}
@@ -214,7 +214,7 @@ static int qib_mcast_add(struct hfi1_ibdev *dev, struct hfi1_ibport *ibp,
 	}
 
 	spin_lock(&dev->n_mcast_grps_lock);
-	if (dev->n_mcast_grps_allocated == ib_hfi1_max_mcast_grps) {
+	if (dev->n_mcast_grps_allocated == hfi1_max_mcast_grps) {
 		spin_unlock(&dev->n_mcast_grps_lock);
 		ret = ENOMEM;
 		goto bail;
@@ -257,33 +257,33 @@ int hfi1_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 	 * Allocate data structures since its better to do this outside of
 	 * spin locks and it will most likely be needed.
 	 */
-	mcast = qib_mcast_alloc(gid);
+	mcast = mcast_alloc(gid);
 	if (mcast == NULL) {
 		ret = -ENOMEM;
 		goto bail;
 	}
-	mqp = qib_mcast_qp_alloc(qp);
+	mqp = mcast_qp_alloc(qp);
 	if (mqp == NULL) {
-		qib_mcast_free(mcast);
+		mcast_free(mcast);
 		ret = -ENOMEM;
 		goto bail;
 	}
 	ibp = to_iport(ibqp->device, qp->port_num);
-	switch (qib_mcast_add(dev, ibp, mcast, mqp)) {
+	switch (mcast_add(dev, ibp, mcast, mqp)) {
 	case ESRCH:
 		/* Neither was used: OK to attach the same QP twice. */
-		qib_mcast_qp_free(mqp);
-		qib_mcast_free(mcast);
+		mcast_qp_free(mqp);
+		mcast_free(mcast);
 		break;
 
 	case EEXIST:            /* The mcast wasn't used */
-		qib_mcast_free(mcast);
+		mcast_free(mcast);
 		break;
 
 	case ENOMEM:
 		/* Exceeded the maximum number of mcast groups. */
-		qib_mcast_qp_free(mqp);
-		qib_mcast_free(mcast);
+		mcast_qp_free(mqp);
+		mcast_free(mcast);
 		ret = -ENOMEM;
 		goto bail;
 
@@ -362,12 +362,12 @@ int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 		 * list element.
 		 */
 		wait_event(mcast->wait, atomic_read(&mcast->refcount) <= 1);
-		qib_mcast_qp_free(p);
+		mcast_qp_free(p);
 	}
 	if (last) {
 		atomic_dec(&mcast->refcount);
 		wait_event(mcast->wait, !atomic_read(&mcast->refcount));
-		qib_mcast_free(mcast);
+		mcast_free(mcast);
 		spin_lock_irq(&dev->n_mcast_grps_lock);
 		dev->n_mcast_grps_allocated--;
 		spin_unlock_irq(&dev->n_mcast_grps_lock);

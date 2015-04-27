@@ -79,14 +79,14 @@ void hfi1_release_mmap_info(struct kref *ref)
  * open and close keep track of how many times the CQ is mapped,
  * to avoid releasing it.
  */
-static void qib_vma_open(struct vm_area_struct *vma)
+static void hfi1_vma_open(struct vm_area_struct *vma)
 {
 	struct hfi1_mmap_info *ip = vma->vm_private_data;
 
 	kref_get(&ip->ref);
 }
 
-static void qib_vma_close(struct vm_area_struct *vma)
+static void hfi1_vma_close(struct vm_area_struct *vma)
 {
 	struct hfi1_mmap_info *ip = vma->vm_private_data;
 
@@ -94,8 +94,8 @@ static void qib_vma_close(struct vm_area_struct *vma)
 }
 
 static struct vm_operations_struct hfi1_vm_ops = {
-	.open =     qib_vma_open,
-	.close =    qib_vma_close,
+	.open =     hfi1_vma_open,
+	.close =    hfi1_vma_close,
 };
 
 /**
@@ -135,7 +135,7 @@ int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 			goto done;
 		vma->vm_ops = &hfi1_vm_ops;
 		vma->vm_private_data = ip;
-		qib_vma_open(vma);
+		hfi1_vma_open(vma);
 		goto done;
 	}
 	spin_unlock_irq(&dev->pending_lock);

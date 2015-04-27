@@ -5668,7 +5668,7 @@ void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
 		 * Eager entries are written one-by-one so we have to push them
 		 * after we write the entry.
 		 */
-		qib_flush_wc();
+		flush_wc();
 done:
 	return;
 }
@@ -7246,7 +7246,7 @@ u32 hdrqempty(struct hfi1_ctxtdata *rcd)
 		& RCV_HDR_HEAD_HEAD_SMASK) >> RCV_HDR_HEAD_HEAD_SHIFT;
 
 	if (rcd->rcvhdrtail_kvaddr)
-		tail = qib_get_rcvhdrtail(rcd);
+		tail = get_rcvhdrtail(rcd);
 	else
 		tail = read_uctxt_csr(rcd->dd, rcd->ctxt, RCV_HDR_TAIL);
 
@@ -9768,7 +9768,7 @@ static void init_rxe(struct hfi_devdata *dd)
 	 *
 	 * Presently, RcvCtrl.RcvWcb is not modified from its default of 0
 	 * (64 bytes).  Max_Payload_Size is possibly modified upward in
-	 * qib_tune_pcie_caps() which is called after this routine.
+	 * tune_pcie_caps() which is called after this routine.
 	 */
 }
 

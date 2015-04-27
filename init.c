@@ -123,7 +123,7 @@ MODULE_PARM_DESC(user_credit_return_theshold, "Credit return threshold for user 
 
 static inline u64 encode_rcv_header_entry_size(u16);
 
-static struct idr qib_unit_table;
+static struct idr hfi1_unit_table;
 u32 hfi1_cpulist_count;
 unsigned long *hfi1_cpulist;
 
@@ -627,10 +627,10 @@ static void enable_chip(struct hfi_devdata *dd)
 }
 
 /**
- * qib_create_workqueues - create per port workqueues
+ * create_workqueues - create per port workqueues
  * @dd: the hfi1_ib device
  */
-static int qib_create_workqueues(struct hfi_devdata *dd)
+static int create_workqueues(struct hfi_devdata *dd)
 {
 	int pidx;
 	struct hfi1_pportdata *ppd;
@@ -640,8 +640,8 @@ static int qib_create_workqueues(struct hfi_devdata *dd)
 		if (!ppd->hfi1_wq) {
 			char wq_name[8]; /* 3 + 2 + 1 + 1 + 1 */
 
-			snprintf(wq_name, sizeof(wq_name), "qib%d_%d",
-				dd->unit, pidx);
+			snprintf(wq_name, sizeof(wq_name), "hfi%d_%d",
+				 dd->unit, pidx);
 			ppd->hfi1_wq =
 				create_singlethread_workqueue(wq_name);
 			if (!ppd->hfi1_wq)
@@ -823,9 +823,9 @@ done:
 	return ret;
 }
 
-static inline struct hfi_devdata *__qib_lookup(int unit)
+static inline struct hfi_devdata *__hfi1_lookup(int unit)
 {
-	return idr_find(&qib_unit_table, unit);
+	return idr_find(&hfi1_unit_table, unit);
 }
 
 struct hfi_devdata *hfi1_lookup(int unit)
@@ -834,7 +834,7 @@ struct hfi_devdata *hfi1_lookup(int unit)
 	unsigned long flags;
 
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
-	dd = __qib_lookup(unit);
+	dd = __hfi1_lookup(unit);
 	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 
 	return dd;
@@ -844,7 +844,7 @@ struct hfi_devdata *hfi1_lookup(int unit)
  * Stop the timers during unit shutdown, or after an error late
  * in initialization.
  */
-static void qib_stop_timers(struct hfi_devdata *dd)
+static void stop_timers(struct hfi_devdata *dd)
 {
 	struct hfi1_pportdata *ppd;
 	int pidx;
@@ -859,7 +859,7 @@ static void qib_stop_timers(struct hfi_devdata *dd)
 }
 
 /**
- * qib_shutdown_device - shut down a device
+ * shutdown_device - shut down a device
  * @dd: the hfi1_ib device
  *
  * This is called to make the device quiet when we are about to
@@ -867,7 +867,7 @@ static void qib_stop_timers(struct hfi_devdata *dd)
  * disabled.   It does not free any data structures.
  * Everything it does has to be setup again by hfi1_init(dd, 1)
  */
-static void qib_shutdown_device(struct hfi_devdata *dd)
+static void shutdown_device(struct hfi_devdata *dd)
 {
 	struct hfi1_pportdata *ppd;
 	unsigned pidx;
@@ -996,7 +996,7 @@ void hfi1_free_devdata(struct hfi_devdata *dd)
 	unsigned long flags;
 
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
-	idr_remove(&qib_unit_table, dd->unit);
+	idr_remove(&hfi1_unit_table, dd->unit);
 	list_del(&dd->list);
 	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 	hfi_dbg_ibdev_exit(&dd->verbs_dev);
@@ -1033,7 +1033,7 @@ struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	idr_preload(GFP_KERNEL);
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
 
-	ret = idr_alloc(&qib_unit_table, dd, 0, 0, GFP_NOWAIT);
+	ret = idr_alloc(&hfi1_unit_table, dd, 0, 0, GFP_NOWAIT);
 	if (ret >= 0) {
 		dd->unit = ret;
 		list_add(&dd->list, &hfi1_dev_list);
@@ -1126,26 +1126,26 @@ void hfi1_disable_after_error(struct hfi_devdata *dd)
 		dd->status->dev |= HFI_STATUS_HWERROR;
 }
 
-static void qib_remove_one(struct pci_dev *);
-static int qib_init_one(struct pci_dev *, const struct pci_device_id *);
+static void remove_one(struct pci_dev *);
+static int init_one(struct pci_dev *, const struct pci_device_id *);
 
 #define DRIVER_LOAD_MSG "Intel " DRIVER_NAME " loaded: "
 #define PFX DRIVER_NAME ": "
 
-static const struct pci_device_id qib_pci_tbl[] = {
+static const struct pci_device_id hfi1_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL0) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL1) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL2) },
 	{ 0, }
 };
 
-MODULE_DEVICE_TABLE(pci, qib_pci_tbl);
+MODULE_DEVICE_TABLE(pci, hfi1_pci_tbl);
 
-static struct pci_driver qib_driver = {
+static struct pci_driver hfi1_pci_driver = {
 	.name = DRIVER_NAME,
-	.probe = qib_init_one,
-	.remove = qib_remove_one,
-	.id_table = qib_pci_tbl,
+	.probe = init_one,
+	.remove = remove_one,
+	.id_table = hfi1_pci_tbl,
 	.err_handler = &hfi1_pci_err_handler,
 };
 
@@ -1161,7 +1161,7 @@ static void __init compute_krcvqs(void)
  * Do all the generic driver unit- and chip-independent memory
  * allocation and initialization.
  */
-static int __init qib_ib_init(void)
+static int __init hfi1_mod_init(void)
 {
 	int ret;
 
@@ -1215,10 +1215,10 @@ static int __init qib_ib_init(void)
 	 * These must be called before the driver is registered with
 	 * the PCI subsystem.
 	 */
-	idr_init(&qib_unit_table);
+	idr_init(&hfi1_unit_table);
 
 	hfi_dbg_init();
-	ret = pci_register_driver(&qib_driver);
+	ret = pci_register_driver(&hfi1_pci_driver);
 	if (ret < 0) {
 		pr_err("Unable to register driver: error %d\n", -ret);
 		goto bail_dev;
@@ -1227,30 +1227,30 @@ static int __init qib_ib_init(void)
 
 bail_dev:
 	hfi_dbg_exit();
-	idr_destroy(&qib_unit_table);
+	idr_destroy(&hfi1_unit_table);
 	dev_cleanup();
 bail:
 	return ret;
 }
 
-module_init(qib_ib_init);
+module_init(hfi1_mod_init);
 
 /*
  * Do the non-unit driver cleanup, memory free, etc. at unload.
  */
-static void __exit qib_ib_cleanup(void)
+static void __exit hfi1_mod_cleanup(void)
 {
-	pci_unregister_driver(&qib_driver);
+	pci_unregister_driver(&hfi1_pci_driver);
 	hfi_dbg_exit();
 	hfi1_cpulist_count = 0;
 	kfree(hfi1_cpulist);
 
-	idr_destroy(&qib_unit_table);
+	idr_destroy(&hfi1_unit_table);
 	dispose_firmware();	/* asymmetric with obtain_firmware() */
 	dev_cleanup();
 }
 
-module_exit(qib_ib_cleanup);
+module_exit(hfi1_mod_cleanup);
 
 /* this can only be called after a successful initialization */
 static void cleanup_device_data(struct hfi_devdata *dd)
@@ -1320,7 +1320,7 @@ static void cleanup_device_data(struct hfi_devdata *dd)
  * Clean up on unit shutdown, or error during unit load after
  * successful initialization.
  */
-static void qib_postinit_cleanup(struct hfi_devdata *dd)
+static void postinit_cleanup(struct hfi_devdata *dd)
 {
 	hfi1_start_cleanup(dd);
 
@@ -1332,7 +1332,7 @@ static void qib_postinit_cleanup(struct hfi_devdata *dd)
 	hfi1_free_devdata(dd);
 }
 
-static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int ret = 0, j, pidx, initfail;
 	struct hfi_devdata *dd = NULL;
@@ -1407,7 +1407,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		goto clean_bail; /* error already printed */
 
-	ret = qib_create_workqueues(dd);
+	ret = create_workqueues(dd);
 	if (ret)
 		goto clean_bail;
 
@@ -1430,7 +1430,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dd_dev_err(dd, "Failed to create /dev devices: %d\n", -j);
 
 	if (initfail || ret) {
-		qib_stop_timers(dd);
+		stop_timers(dd);
 		flush_workqueue(ib_wq);
 		for (pidx = 0; pidx < dd->num_pports; ++pidx)
 			hfi1_quiet_serdes(dd->pport + pidx);
@@ -1438,7 +1438,7 @@ static int qib_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 			hfi_device_remove(dd);
 		if (!ret)
 			hfi1_unregister_ib_device(dd);
-		qib_postinit_cleanup(dd);
+		postinit_cleanup(dd);
 		if (initfail)
 			ret = initfail;
 		goto bail;	/* everything already cleaned */
@@ -1462,7 +1462,7 @@ bail:
 	return ret;
 }
 
-static void qib_remove_one(struct pci_dev *pdev)
+static void remove_one(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
@@ -1473,16 +1473,16 @@ static void qib_remove_one(struct pci_dev *pdev)
 	 * Disable the IB link, disable interrupts on the device,
 	 * clear dma engines, etc.
 	 */
-	qib_shutdown_device(dd);
+	shutdown_device(dd);
 
-	qib_stop_timers(dd);
+	stop_timers(dd);
 
 	/* wait until all of our (qsfp) queue_work() calls complete */
 	flush_workqueue(ib_wq);
 
 	hfi_device_remove(dd);
 
-	qib_postinit_cleanup(dd);
+	postinit_cleanup(dd);
 }
 
 /**

@@ -53,8 +53,8 @@
 
 #include "hfi.h"
 
-static void __qib_release_user_pages(struct page **p, size_t num_pages,
-				     int dirty)
+static void __hfi1_release_user_pages(struct page **p, size_t num_pages,
+				      int dirty)
 {
 	size_t i;
 
@@ -68,8 +68,8 @@ static void __qib_release_user_pages(struct page **p, size_t num_pages,
 /*
  * Call with current->mm->mmap_sem held.
  */
-static int __qib_get_user_pages(unsigned long start_page, size_t num_pages,
-				struct page **p)
+static int __hfi1_get_user_pages(unsigned long start_page, size_t num_pages,
+				 struct page **p)
 {
 	unsigned long lock_limit;
 	size_t got;
@@ -97,7 +97,7 @@ static int __qib_get_user_pages(unsigned long start_page, size_t num_pages,
 	goto bail;
 
 bail_release:
-	__qib_release_user_pages(p, got, 0);
+	__hfi1_release_user_pages(p, got, 0);
 bail:
 	return ret;
 }
@@ -135,7 +135,7 @@ int hfi1_get_user_pages(unsigned long start_page, size_t num_pages,
 
 	down_write(&current->mm->mmap_sem);
 
-	ret = __qib_get_user_pages(start_page, num_pages, p);
+	ret = __hfi1_get_user_pages(start_page, num_pages, p);
 
 	up_write(&current->mm->mmap_sem);
 
@@ -147,7 +147,7 @@ void hfi1_release_user_pages(struct page **p, size_t num_pages)
 	if (current->mm) /* during close after signal, mm can be NULL */
 		down_write(&current->mm->mmap_sem);
 
-	__qib_release_user_pages(p, num_pages, 1);
+	__hfi1_release_user_pages(p, num_pages, 1);
 
 	if (current->mm) {
 		current->mm->pinned_vm -= num_pages;

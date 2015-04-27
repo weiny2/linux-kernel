@@ -56,7 +56,7 @@
 #include "qp.h"
 
 /**
- * qib_ud_loopback - handle send on loopback QPs
+ * ud_loopback - handle send on loopback QPs
  * @sqp: the sending QP
  * @swqe: the send work request
  *
@@ -65,7 +65,7 @@
  * Note that the receive interrupt handler may be calling hfi1_ud_rcv()
  * while this is being called.
  */
-static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
+static void ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 {
 	struct hfi1_ibport *ibp = to_iport(sqp->ibqp.device, sqp->port_num);
 	struct hfi1_pportdata *ppd;
@@ -220,7 +220,7 @@ static void qib_ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 		}
 		length -= len;
 	}
-	qib_put_ss(&qp->r_sge);
+	hfi1_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		goto bail_unlock;
 	wc.wr_id = qp->r_wr_id;
@@ -327,7 +327,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 			}
 			qp->s_cur = next_cur;
 			spin_unlock_irqrestore(&qp->s_lock, flags);
-			qib_ud_loopback(qp, wqe);
+			ud_loopback(qp, wqe);
 			spin_lock_irqsave(&qp->s_lock, flags);
 			hfi1_send_complete(qp, wqe, IB_WC_SUCCESS);
 			goto done;
@@ -631,7 +631,7 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
  * @tlen: the packet length
  * @qp: the QP the packet came on
  *
- * This is called from qib_qp_rcv() to process an incoming UD packet
+ * This is called from qp_rcv() to process an incoming UD packet
  * for the given QP.
  * Called at interrupt level.
  */
@@ -837,7 +837,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	} else
 		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
 	hfi1_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1);
-	qib_put_ss(&qp->r_sge);
+	hfi1_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		return;
 	wc.wr_id = qp->r_wr_id;

@@ -56,12 +56,12 @@
 #include "sdma.h"
 
 /**
- * qib_format_hwmsg - format a single hwerror message
+ * format_hwmsg - format a single hwerror message
  * @msg message buffer
  * @msgl length of message buffer
  * @hwmsg message to add to message buffer
  */
-static void qib_format_hwmsg(char *msg, size_t msgl, const char *hwmsg)
+static void format_hwmsg(char *msg, size_t msgl, const char *hwmsg)
 {
 	strlcat(msg, "[", msgl);
 	strlcat(msg, hwmsg, msgl);
@@ -83,7 +83,7 @@ void hfi1_format_hwerrors(u64 hwerrs, const struct hfi1_hwerror_msgs *hwerrmsgs,
 
 	for (i = 0; i < nhwerrmsgs; i++)
 		if (hwerrs & hwerrmsgs[i].mask)
-			qib_format_hwmsg(msg, msgl, hwerrmsgs[i].msg);
+			format_hwmsg(msg, msgl, hwerrmsgs[i].msg);
 }
 
 static void signal_ib_event(struct hfi1_pportdata *ppd, enum ib_event_type ev)

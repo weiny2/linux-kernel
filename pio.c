@@ -1542,7 +1542,7 @@ full:
 	spin_unlock_irqrestore(&dev->pending_lock, flags);
 
 	for (i = 0; i < n; i++)
-		qib_qp_wakeup(qps[i], HFI1_S_WAIT_PIO);
+		hfi1_qp_wakeup(qps[i], HFI1_S_WAIT_PIO);
 }
 
 /* translate a send credit update to a bit code of reasons */

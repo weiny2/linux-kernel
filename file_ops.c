@@ -110,7 +110,7 @@ static int exp_tid_setup(struct file *, struct hfi_tid_info *);
 static int exp_tid_free(struct file *, struct hfi_tid_info *);
 static void unlock_exp_tids(struct hfi1_ctxtdata *);
 
-static const struct file_operations qib_file_ops = {
+static const struct file_operations hfi1_file_ops = {
 	.owner = THIS_MODULE,
 	.write = hfi_write,
 	.aio_write = hfi_aio_write,
@@ -758,7 +758,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	dd = uctxt->dd;
 	mutex_lock(&hfi1_mutex);
 
-	qib_flush_wc();
+	flush_wc();
 	/* drain user sdma queue */
 	if (fdata->pq)
 		hfi_user_sdma_free_queues(fdata);
@@ -1144,7 +1144,7 @@ static int user_init(struct file *fp)
 	 * (chip resets head/tail to 0 on transition to enable).
 	 */
 	if (uctxt->rcvhdrtail_kvaddr)
-		qib_clear_rcvhdrtail(uctxt);
+		clear_rcvhdrtail(uctxt);
 
 	/* Setup J_KEY before enabling the context */
 	hfi1_set_ctxt_jkey(uctxt->dd, uctxt->ctxt, uctxt->jkey);
@@ -1453,7 +1453,7 @@ done:
 }
 
 /**
- * qib_manage_rcvq - manage a context's receive queue
+ * manage_rcvq - manage a context's receive queue
  * @uctxt: the context
  * @subctxt: the subcontext
  * @start_stop: action to carry out
@@ -1481,7 +1481,7 @@ static int manage_rcvq(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
 		 * transition from disabled to enabled.
 		 */
 		if (uctxt->rcvhdrtail_kvaddr)
-			qib_clear_rcvhdrtail(uctxt);
+			clear_rcvhdrtail(uctxt);
 		rcvctrl_op = HFI1_RCVCTRL_CTXT_ENB;
 	} else
 		rcvctrl_op = HFI1_RCVCTRL_CTXT_DIS;
@@ -1760,7 +1760,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 			 * We've programmed the entire group (or as much of the
 			 * group as we'll use. Now, it's time to push it out...
 			 */
-			qib_flush_wc();
+			flush_wc();
 		}
 		mapped += pinned;
 		atomic_set(&uctxt->tidcursor,
@@ -1843,7 +1843,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 					phys[i] = 0;
 				}
 			}
-			qib_flush_wc();
+			flush_wc();
 			hfi1_release_user_pages(pshadow, pcount);
 			clear_bit(bitidx, &uctxt->tidusemap[idx]);
 			map &= ~(1ULL<<bitidx);
@@ -2075,7 +2075,7 @@ static struct device *wildcard_device;
 
 static atomic_t user_count = ATOMIC_INIT(0);
 
-static void qib_user_remove(struct hfi_devdata *dd)
+static void user_remove(struct hfi_devdata *dd)
 {
 	if (atomic_dec_return(&user_count) == 0)
 		hfi_cdev_cleanup(&wildcard_cdev, &wildcard_device);
@@ -2084,20 +2084,20 @@ static void qib_user_remove(struct hfi_devdata *dd)
 	hfi_cdev_cleanup(&dd->ui_cdev, &dd->ui_device);
 }
 
-static int qib_user_add(struct hfi_devdata *dd)
+static int user_add(struct hfi_devdata *dd)
 {
 	char name[10];
 	int ret;
 
 	if (atomic_inc_return(&user_count) == 1) {
-		ret = hfi_cdev_init(0, class_name(), &qib_file_ops,
+		ret = hfi_cdev_init(0, class_name(), &hfi1_file_ops,
 				    &wildcard_cdev, &wildcard_device);
 		if (ret)
 			goto done;
 	}
 
 	snprintf(name, sizeof(name), "%s_%d", class_name(), dd->unit);
-	ret = hfi_cdev_init(dd->unit + 1, name, &qib_file_ops,
+	ret = hfi_cdev_init(dd->unit + 1, name, &hfi1_file_ops,
 			    &dd->user_cdev, &dd->user_device);
 	if (ret)
 		goto done;
@@ -2113,7 +2113,7 @@ static int qib_user_add(struct hfi_devdata *dd)
 
 	return 0;
 done:
-	qib_user_remove(dd);
+	user_remove(dd);
 	return ret;
 }
 
@@ -2124,7 +2124,7 @@ int hfi_device_create(struct hfi_devdata *dd)
 {
 	int r, ret;
 
-	r = qib_user_add(dd);
+	r = user_add(dd);
 	ret = hfi1_diag_add(dd);
 	if (r && !ret)
 		ret = r;
@@ -2137,6 +2137,6 @@ int hfi_device_create(struct hfi_devdata *dd)
  */
 void hfi_device_remove(struct hfi_devdata *dd)
 {
-	qib_user_remove(dd);
+	user_remove(dd);
 	hfi1_diag_remove(dd);
 }
