@@ -239,7 +239,7 @@ bail:
  * @start: starting userspace address
  * @length: length of region to register
  * @mr_access_flags: access flags for this memory region
- * @udata: unused by the QLogic_IB driver
+ * @udata: unused by the driver
  *
  * Returns the memory region on success, otherwise returns an errno.
  */

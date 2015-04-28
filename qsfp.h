@@ -68,7 +68,7 @@
 /* QSFP is paged at 256 bytes */
 #define QSFP_PAGESIZE 256
 
-/* Defined fields that QLogic requires of qualified cables */
+/* Defined fields that Intel requires of qualified cables */
 /* Byte 0 is Identifier, not checked */
 /* Byte 1 is reserved "status MSB" */
 /* Byte 2 is "status LSB" We only care that D2 "Flat Mem" is set. */
@@ -84,12 +84,12 @@
  *  0:1.5W, 1:2.0W, 2:2.5W, 3:3.5W
  */
 #define QSFP_MOD_PWR_OFFS 129
-/* Byte 130 is Connector type. Not QLogic req'd */
+/* Byte 130 is Connector type. Not Intel req'd */
 /* Bytes 131..138 are Transceiver types, bit maps for various tech, none IB */
-/* Byte 139 is encoding. code 0x01 is 8b10b. Not QLogic req'd */
-/* byte 140 is nominal bit-rate, in units of 100Mbits/sec Not QLogic req'd */
-/* Byte 141 is Extended Rate Select. Not QLogic req'd */
-/* Bytes 142..145 are lengths for various fiber types. Not QLogic req'd */
+/* Byte 139 is encoding. code 0x01 is 8b10b. Not Intel req'd */
+/* byte 140 is nominal bit-rate, in units of 100Mbits/sec Not Intel req'd */
+/* Byte 141 is Extended Rate Select. Not Intel req'd */
+/* Bytes 142..145 are lengths for various fiber types. Not Intel req'd */
 /* Byte 146 is length for Copper. Units of 1 meter */
 #define QSFP_MOD_LEN_OFFS 146
 /*
@@ -129,17 +129,17 @@ extern const char *const hfi1_qsfp_devtech[16];
 #define QSFP_REV_OFFS 184
 #define QSFP_REV_LEN 2
 /*
- * Bytes 186,187 are Wavelength, if Optical. Not Qlogic req'd
+ * Bytes 186,187 are Wavelength, if Optical. Not Intel req'd
  *  If copper, they are attenuation in dB:
  * Byte 186 is at 2.5Gb/sec (SDR), Byte 187 at 5.0Gb/sec (DDR)
  */
 #define QSFP_ATTEN_OFFS 186
 #define QSFP_ATTEN_LEN 2
-/* Bytes 188,189 are Wavelength tolerance, not QLogic req'd */
-/* Byte 190 is Max Case Temp. Not QLogic req'd */
-/* Byte 191 is LSB of sum of bytes 128..190. Not QLogic req'd */
+/* Bytes 188,189 are Wavelength tolerance, not Intel req'd */
+/* Byte 190 is Max Case Temp. Not Intel req'd */
+/* Byte 191 is LSB of sum of bytes 128..190. Not Intel req'd */
 #define QSFP_CC_OFFS 191
-/* Bytes 192..195 are Options implemented in qsfp. Not Qlogic req'd */
+/* Bytes 192..195 are Options implemented in qsfp. Not Intel req'd */
 /* Bytes 196..211 are Serial Number, String */
 #define QSFP_SN_OFFS 196
 #define QSFP_SN_LEN 16
@@ -149,7 +149,7 @@ extern const char *const hfi1_qsfp_devtech[16];
 /* Bytes 218,219 are optional lot-code, string */
 #define QSFP_LOT_OFFS 218
 #define QSFP_LOT_LEN 2
-/* Bytes 220, 221 indicate monitoring options, Not QLogic req'd */
+/* Bytes 220, 221 indicate monitoring options, Not Intel req'd */
 /* Byte 223 is LSB of sum of bytes 192..222 */
 #define QSFP_CC_EXT_OFFS 223
 

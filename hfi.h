@@ -74,7 +74,7 @@
 #include "mad.h"
 #include "qsfp.h"
 
-/* bumped 1 from s/w major version of QLogic_IB */
+/* bumped 1 from s/w major version of TrueScale */
 #define HFI_CHIP_VERS_MAJ 3U
 
 /* don't care about this except printing */
@@ -883,7 +883,7 @@ struct hfi_devdata {
 
 	/*
 	 * ASCII serial number, from flash, large enough for original
-	 * all digit strings, and longer QLogic serial number format
+	 * all digit strings, and longer serial number format
 	 */
 	u8 serial[SERIAL_MAX];
 	/* human readable board version */
@@ -1632,8 +1632,6 @@ struct hfi1_hwerror_msgs {
 	const char *msg;
 	size_t sz;
 };
-
-#define QLOGIC_IB_HWE_MSG(a, b) { .mask = a, .msg = b }
 
 /* in intr.c... */
 void hfi1_format_hwerrors(u64 hwerrs,

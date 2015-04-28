@@ -220,7 +220,7 @@ static void send_complete(struct kthread_work *work)
  * hfi1_create_cq - create a completion queue
  * @ibdev: the device this completion queue is attached to
  * @entries: the minimum size of the completion queue
- * @context: unused by the QLogic_IB driver
+ * @context: unused by the driver
  * @udata: user data for libibverbs.so
  *
  * Returns a pointer to the completion queue or negative errno values

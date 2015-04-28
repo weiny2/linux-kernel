@@ -1857,7 +1857,7 @@ bail:
 /**
  * alloc_ucontext - allocate a ucontest
  * @ibdev: the infiniband device
- * @udata: not used by the QLogic_IB driver
+ * @udata: not used by the driver
  */
 
 static struct ib_ucontext *alloc_ucontext(struct ib_device *ibdev,

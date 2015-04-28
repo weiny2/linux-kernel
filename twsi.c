@@ -56,7 +56,8 @@
 #include "twsi.h"
 
 /*
- * QLogic_IB "Two Wire Serial Interface" driver.
+ * "Two Wire Serial Interface" support.
+ *
  * Originally written for a not-quite-i2c serial eeprom, which is
  * still used on some supported boards. Later boards have added a
  * variety of other uses, most board-specific, so the bit-boffing
