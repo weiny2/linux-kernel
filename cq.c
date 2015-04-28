@@ -220,7 +220,7 @@ static void send_complete(struct kthread_work *work)
  * hfi1_create_cq - create a completion queue
  * @ibdev: the device this completion queue is attached to
  * @entries: the minimum size of the completion queue
- * @context: unused by the QLogic_IB driver
+ * @context: unused by the driver
  * @udata: user data for libibverbs.so
  *
  * Returns a pointer to the completion queue or negative errno values
@@ -238,7 +238,7 @@ struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 	struct ib_cq *ret;
 	u32 sz;
 
-	if (entries < 1 || entries > ib_hfi1_max_cqes) {
+	if (entries < 1 || entries > hfi1_max_cqes) {
 		ret = ERR_PTR(-EINVAL);
 		goto done;
 	}
@@ -291,7 +291,7 @@ struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 		cq->ip = NULL;
 
 	spin_lock(&dev->n_cqs_lock);
-	if (dev->n_cqs_allocated == ib_hfi1_max_cqs) {
+	if (dev->n_cqs_allocated == hfi1_max_cqs) {
 		spin_unlock(&dev->n_cqs_lock);
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_ip;
@@ -409,7 +409,7 @@ int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	int ret;
 	u32 sz;
 
-	if (cqe < 1 || cqe > ib_hfi1_max_cqes) {
+	if (cqe < 1 || cqe > hfi1_max_cqes) {
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -525,7 +525,7 @@ int hfi1_cq_init(struct hfi_devdata *dd)
 		kthread_worker_fn,
 		dd->worker,
 		dd->assigned_node_id,
-		"qib_cq%d", dd->unit);
+		"hfi1_cq%d", dd->unit);
 	if (IS_ERR(task))
 		goto task_fail;
 	cpu = cpumask_first(cpumask_of_node(dd->assigned_node_id));

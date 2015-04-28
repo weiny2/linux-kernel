@@ -97,7 +97,7 @@ const u32 ib_hfi1_rnr_table[32] = {
  * Validate a RWQE and fill in the SGE state.
  * Return 1 if OK.
  */
-static int qib_init_sge(struct hfi1_qp *qp, struct hfi1_rwqe *wqe)
+static int init_sge(struct hfi1_qp *qp, struct hfi1_rwqe *wqe)
 {
 	int i, j, ret;
 	struct ib_wc wc;
@@ -129,7 +129,7 @@ bad_lkey:
 	while (j) {
 		struct hfi1_sge *sge = --j ? &ss->sg_list[j - 1] : &ss->sge;
 
-		qib_put_mr(sge->mr);
+		hfi1_put_mr(sge->mr);
 	}
 	ss->num_sge = 0;
 	memset(&wc, 0, sizeof(wc));
@@ -201,7 +201,7 @@ int hfi1_get_rwqe(struct hfi1_qp *qp, int wr_id_only)
 	if (++tail >= rq->size)
 		tail = 0;
 	wq->tail = tail;
-	if (!wr_id_only && !qib_init_sge(qp, wqe)) {
+	if (!wr_id_only && !init_sge(qp, wqe)) {
 		ret = -1;
 		goto unlock;
 	}
@@ -365,7 +365,7 @@ err:
 }
 
 /**
- * qib_ruc_loopback - handle UC and RC lookback requests
+ * ruc_loopback - handle UC and RC lookback requests
  * @sqp: the sending QP
  *
  * This is called from hfi1_do_send() to
@@ -375,7 +375,7 @@ err:
  * receive interrupts since this is a connected protocol and all packets
  * will pass through here.
  */
-static void qib_ruc_loopback(struct hfi1_qp *sqp)
+static void ruc_loopback(struct hfi1_qp *sqp)
 {
 	struct hfi1_ibport *ibp = to_iport(sqp->ibqp.device, sqp->port_num);
 	struct hfi1_qp *qp;
@@ -524,7 +524,7 @@ again:
 			(u64) atomic64_add_return(sdata, maddr) - sdata :
 			(u64) cmpxchg((u64 *) qp->r_sge.sge.vaddr,
 				      sdata, wqe->wr.wr.atomic.swap);
-		qib_put_mr(qp->r_sge.sge.mr);
+		hfi1_put_mr(qp->r_sge.sge.mr);
 		qp->r_sge.num_sge = 0;
 		goto send_comp;
 
@@ -548,7 +548,7 @@ again:
 		sge->sge_length -= len;
 		if (sge->sge_length == 0) {
 			if (!release)
-				qib_put_mr(sge->mr);
+				hfi1_put_mr(sge->mr);
 			if (--sqp->s_sge.num_sge)
 				*sge = *sqp->s_sge.sg_list++;
 		} else if (sge->length == 0 && sge->mr->lkey) {
@@ -565,7 +565,7 @@ again:
 		sqp->s_len -= len;
 	}
 	if (release)
-		qib_put_ss(&qp->r_sge);
+		hfi1_put_ss(&qp->r_sge);
 
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		goto send_comp;
@@ -850,7 +850,7 @@ void hfi1_do_send(struct work_struct *work)
 	     qp->ibqp.qp_type == IB_QPT_UC) &&
 	    !loopback &&
 	    (qp->remote_ah_attr.dlid & ~((1 << ppd->lmc) - 1)) == ppd->lid) {
-		qib_ruc_loopback(qp);
+		ruc_loopback(qp);
 		return;
 	}
 
@@ -864,7 +864,7 @@ void hfi1_do_send(struct work_struct *work)
 	spin_lock_irqsave(&qp->s_lock, flags);
 
 	/* Return if we are already busy processing a work request. */
-	if (!qib_send_ok(qp)) {
+	if (!hfi1_send_ok(qp)) {
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		return;
 	}
@@ -904,7 +904,7 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 	for (i = 0; i < wqe->wr.num_sge; i++) {
 		struct hfi1_sge *sge = &wqe->sg_list[i];
 
-		qib_put_mr(sge->mr);
+		hfi1_put_mr(sge->mr);
 	}
 	if (qp->ibqp.qp_type == IB_QPT_UD ||
 	    qp->ibqp.qp_type == IB_QPT_SMI ||

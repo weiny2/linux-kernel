@@ -156,7 +156,7 @@ struct hfi_link_info {
 
 /*
  * This starts our ioctl sequence numbers *way* off from the ones
- * defined in ib_core and matches what as used in the qib driver.
+ * defined in ib_core and matches what as used in the hfi1 driver.
  */
 #define SNOOP_CAPTURE_VERSION 0x1
 #define IB_IOCTL_MAGIC          0x1b /* Present in Qib file ib_user_mad.h */
@@ -1206,8 +1206,8 @@ done:
 	return ret;
 }
 
-static void qib_snoop_list_add_tail(struct snoop_packet *packet,
-				    struct hfi_devdata *dd)
+static void snoop_list_add_tail(struct snoop_packet *packet,
+				struct hfi_devdata *dd)
 {
 	unsigned long flags = 0;
 
@@ -1576,7 +1576,7 @@ void snoop_recv_handler(struct hfi_packet *packet)
 			       tlen - header_size);
 
 		s_packet->total_len = tlen + md_len;
-		qib_snoop_list_add_tail(s_packet, ppd->dd);
+		snoop_list_add_tail(s_packet, ppd->dd);
 
 		/*
 		 * If we are snooping the packet not capturing then throw away
@@ -1767,7 +1767,7 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		break;
 	case HFI_FILTER_HIT:
 		snoop_dbg("Capturing packet\n");
-		qib_snoop_list_add_tail(s_packet, ppd->dd);
+		snoop_list_add_tail(s_packet, ppd->dd);
 
 		if (unlikely(snoop_drop_send &&
 			     (ppd->dd->hfi_snoop.mode_flag &
@@ -1800,7 +1800,7 @@ out:
 }
 
 /*
- * Callers of this must pass a qib_ib_header type for the from ptr. Currently
+ * Callers of this must pass a hfi1_ib_header type for the from ptr. Currently
  * this can be used anywhere, but the intention is for inline ACKs for RC and
  * CCA packets. We don't restrict this useage though.
  */
@@ -1865,7 +1865,7 @@ void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,
 		/* Add the packet data which is a single buffer */
 		memcpy(s_packet->data + md_len, from, packet_len);
 
-		qib_snoop_list_add_tail(s_packet, dd);
+		snoop_list_add_tail(s_packet, dd);
 
 		if (unlikely(snoop_drop_send && snoop_mode)) {
 			snoop_dbg("Dropping packet\n");

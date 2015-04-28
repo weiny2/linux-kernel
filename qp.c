@@ -63,8 +63,8 @@
 #define BITS_PER_PAGE           (PAGE_SIZE*BITS_PER_BYTE)
 #define BITS_PER_PAGE_MASK      (BITS_PER_PAGE-1)
 
-static unsigned int ib_qib_qp_table_size = 256;
-module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
+static unsigned int hfi1_qp_table_size = 256;
+module_param_named(qp_table_size, hfi1_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
 static void flush_tx_list(struct hfi1_qp *qp);
@@ -384,11 +384,11 @@ struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp, u32 qpn)
 }
 
 /**
- * qib_reset_qp - initialize the QP state to the reset state
+ * reset_qp - initialize the QP state to the reset state
  * @qp: the QP to reset
  * @type: the QP type
  */
-static void qib_reset_qp(struct hfi1_qp *qp, enum ib_qp_type type)
+static void reset_qp(struct hfi1_qp *qp, enum ib_qp_type type)
 {
 	qp->remote_qpn = 0;
 	qp->qkey = 0;
@@ -446,9 +446,9 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 	unsigned n;
 
 	if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
-		qib_put_ss(&qp->s_rdma_read_sge);
+		hfi1_put_ss(&qp->s_rdma_read_sge);
 
-	qib_put_ss(&qp->r_sge);
+	hfi1_put_ss(&qp->r_sge);
 
 	if (clr_sends) {
 		while (qp->s_last != qp->s_head) {
@@ -458,7 +458,7 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 			for (i = 0; i < wqe->wr.num_sge; i++) {
 				struct hfi1_sge *sge = &wqe->sg_list[i];
 
-				qib_put_mr(sge->mr);
+				hfi1_put_mr(sge->mr);
 			}
 			if (qp->ibqp.qp_type == IB_QPT_UD ||
 			    qp->ibqp.qp_type == IB_QPT_SMI ||
@@ -468,7 +468,7 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 				qp->s_last = 0;
 		}
 		if (qp->s_rdma_mr) {
-			qib_put_mr(qp->s_rdma_mr);
+			hfi1_put_mr(qp->s_rdma_mr);
 			qp->s_rdma_mr = NULL;
 		}
 	}
@@ -481,7 +481,7 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 
 		if (e->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST &&
 		    e->rdma_sge.mr) {
-			qib_put_mr(e->rdma_sge.mr);
+			hfi1_put_mr(e->rdma_sge.mr);
 			e->rdma_sge.mr = NULL;
 		}
 	}
@@ -528,7 +528,7 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 	if (!(qp->s_flags & HFI1_S_BUSY)) {
 		qp->s_hdrwords = 0;
 		if (qp->s_rdma_mr) {
-			qib_put_mr(qp->s_rdma_mr);
+			hfi1_put_mr(qp->s_rdma_mr);
 			qp->s_rdma_mr = NULL;
 		}
 		flush_tx_list(qp);
@@ -776,7 +776,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			spin_lock(&qp->s_lock);
 			clear_mr_refs(qp, 1);
 			clear_ahg(qp);
-			qib_reset_qp(qp, ibqp->qp_type);
+			reset_qp(qp, ibqp->qp_type);
 		}
 		break;
 
@@ -1061,8 +1061,8 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	size_t sg_list_sz;
 	struct ib_qp *ret;
 
-	if (init_attr->cap.max_send_sge > ib_hfi1_max_sges ||
-	    init_attr->cap.max_send_wr > ib_hfi1_max_qp_wrs ||
+	if (init_attr->cap.max_send_sge > hfi1_max_sges ||
+	    init_attr->cap.max_send_wr > hfi1_max_qp_wrs ||
 	    init_attr->create_flags) {
 		ret = ERR_PTR(-EINVAL);
 		goto bail;
@@ -1070,8 +1070,8 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 
 	/* Check receive queue parameters if no SRQ is specified. */
 	if (!init_attr->srq) {
-		if (init_attr->cap.max_recv_sge > ib_hfi1_max_sges ||
-		    init_attr->cap.max_recv_wr > ib_hfi1_max_qp_wrs) {
+		if (init_attr->cap.max_recv_sge > hfi1_max_sges ||
+		    init_attr->cap.max_recv_wr > hfi1_max_qp_wrs) {
 			ret = ERR_PTR(-EINVAL);
 			goto bail;
 		}
@@ -1172,7 +1172,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		}
 		qp->ibqp.qp_num = err;
 		qp->port_num = init_attr->port_num;
-		qib_reset_qp(qp, init_attr->qp_type);
+		reset_qp(qp, init_attr->qp_type);
 		break;
 
 	default:
@@ -1218,7 +1218,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	}
 
 	spin_lock(&dev->n_qps_lock);
-	if (dev->n_qps_allocated == ib_hfi1_max_qps) {
+	if (dev->n_qps_allocated == hfi1_max_qps) {
 		spin_unlock(&dev->n_qps_lock);
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_ip;
@@ -1396,7 +1396,7 @@ void hfi1_get_credit(struct hfi1_qp *qp, u32 aeth)
 	}
 }
 
-void qib_qp_wakeup(struct hfi1_qp *qp, u32 flag)
+void hfi1_qp_wakeup(struct hfi1_qp *qp, u32 flag)
 {
 	unsigned long flags;
 
@@ -1471,10 +1471,10 @@ static void iowait_wakeup(struct iowait *wait, int reason)
 	struct hfi1_qp *qp = container_of(wait, struct hfi1_qp, s_iowait);
 
 	BUG_ON(reason != SDMA_AVAIL_REASON);
-	qib_qp_wakeup(qp, HFI1_S_WAIT_DMA_DESC);
+	hfi1_qp_wakeup(qp, HFI1_S_WAIT_DMA_DESC);
 }
 
-int qib_qp_init(struct hfi1_ibdev *dev)
+int hfi1_qp_init(struct hfi1_ibdev *dev)
 {
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	int i;
@@ -1485,7 +1485,7 @@ int qib_qp_init(struct hfi1_ibdev *dev)
 	if (!dev->qp_dev)
 		goto nomem;
 	/* allocate hash table */
-	dev->qp_dev->qp_table_size = ib_qib_qp_table_size;
+	dev->qp_dev->qp_table_size = hfi1_qp_table_size;
 	get_random_bytes(&dev->qp_dev->qp_rnd,
 		sizeof(dev->qp_dev->qp_rnd));
 	dev->qp_dev->qp_table =
@@ -1511,7 +1511,7 @@ nomem:
 	return ret;
 }
 
-void qib_qp_exit(struct hfi1_ibdev *dev)
+void hfi1_qp_exit(struct hfi1_ibdev *dev)
 {
 	struct hfi_devdata *dd = dd_from_dev(dev);
 	u32 qps_inuse;

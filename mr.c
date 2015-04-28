@@ -64,8 +64,8 @@ static inline struct hfi1_fmr *to_ifmr(struct ib_fmr *ibfmr)
 	return container_of(ibfmr, struct hfi1_fmr, ibfmr);
 }
 
-static int init_qib_mregion(struct hfi1_mregion *mr, struct ib_pd *pd,
-			    int count)
+static int init_mregion(struct hfi1_mregion *mr, struct ib_pd *pd,
+			int count)
 {
 	int m, i = 0;
 	int rval = 0;
@@ -91,7 +91,7 @@ bail:
 	goto out;
 }
 
-static void deinit_qib_mregion(struct hfi1_mregion *mr)
+static void deinit_mregion(struct hfi1_mregion *mr)
 {
 	int i = mr->mapsz;
 
@@ -108,7 +108,7 @@ static void deinit_qib_mregion(struct hfi1_mregion *mr)
  *
  * Returns the memory region on success, otherwise returns an errno.
  * Note that all DMA addresses should be created via the
- * struct ib_dma_mapping_ops functions (see qib_dma.c).
+ * struct ib_dma_mapping_ops functions (see dma.c).
  */
 struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc)
 {
@@ -127,7 +127,7 @@ struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc)
 		goto bail;
 	}
 
-	rval = init_qib_mregion(&mr->mr, pd, 0);
+	rval = init_mregion(&mr->mr, pd, 0);
 	if (rval) {
 		ret = ERR_PTR(rval);
 		goto bail;
@@ -146,7 +146,7 @@ done:
 	return ret;
 
 bail_mregion:
-	deinit_qib_mregion(&mr->mr);
+	deinit_mregion(&mr->mr);
 bail:
 	kfree(mr);
 	goto done;
@@ -164,7 +164,7 @@ static struct hfi1_mr *alloc_mr(int count, struct ib_pd *pd)
 	if (!mr)
 		goto bail;
 
-	rval = init_qib_mregion(&mr->mr, pd, count);
+	rval = init_mregion(&mr->mr, pd, count);
 	if (rval)
 		goto bail;
 	/*
@@ -180,7 +180,7 @@ done:
 	return mr;
 
 bail_mregion:
-	deinit_qib_mregion(&mr->mr);
+	deinit_mregion(&mr->mr);
 bail:
 	kfree(mr);
 	mr = ERR_PTR(rval);
@@ -239,7 +239,7 @@ bail:
  * @start: starting userspace address
  * @length: length of region to register
  * @mr_access_flags: access flags for this memory region
- * @udata: unused by the QLogic_IB driver
+ * @udata: unused by the driver
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
@@ -326,7 +326,7 @@ int hfi1_dereg_mr(struct ib_mr *ibmr)
 
 	hfi1_free_lkey(&mr->mr);
 
-	qib_put_mr(&mr->mr); /* will set completion if last */
+	hfi1_put_mr(&mr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&mr->mr.comp,
 		5 * HZ);
 	if (!timeout) {
@@ -334,11 +334,11 @@ int hfi1_dereg_mr(struct ib_mr *ibmr)
 			dd_from_ibdev(mr->mr.pd->device),
 			"hfi1_dereg_mr timeout mr %p pd %p refcount %u\n",
 			mr, mr->mr.pd, atomic_read(&mr->mr.refcount));
-		qib_get_mr(&mr->mr);
+		hfi1_get_mr(&mr->mr);
 		ret = -EBUSY;
 		goto out;
 	}
-	deinit_qib_mregion(&mr->mr);
+	deinit_mregion(&mr->mr);
 	if (mr->umem)
 		ib_umem_release(mr->umem);
 	kfree(mr);
@@ -415,7 +415,7 @@ struct ib_fmr *hfi1_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
 	if (!fmr)
 		goto bail;
 
-	rval = init_qib_mregion(&fmr->mr, pd, fmr_attr->max_pages);
+	rval = init_mregion(&fmr->mr, pd, fmr_attr->max_pages);
 	if (rval)
 		goto bail;
 
@@ -441,7 +441,7 @@ done:
 	return ret;
 
 bail_mregion:
-	deinit_qib_mregion(&fmr->mr);
+	deinit_mregion(&fmr->mr);
 bail:
 	kfree(fmr);
 	ret = ERR_PTR(rval);
@@ -535,15 +535,15 @@ int hfi1_dealloc_fmr(struct ib_fmr *ibfmr)
 	unsigned long timeout;
 
 	hfi1_free_lkey(&fmr->mr);
-	qib_put_mr(&fmr->mr); /* will set completion if last */
+	hfi1_put_mr(&fmr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&fmr->mr.comp,
 		5 * HZ);
 	if (!timeout) {
-		qib_get_mr(&fmr->mr);
+		hfi1_get_mr(&fmr->mr);
 		ret = -EBUSY;
 		goto out;
 	}
-	deinit_qib_mregion(&fmr->mr);
+	deinit_mregion(&fmr->mr);
 	kfree(fmr);
 out:
 	return ret;

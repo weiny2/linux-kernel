@@ -162,23 +162,23 @@ int hfi1_destroy_qp(struct ib_qp *ibqp);
 void hfi1_get_credit(struct hfi1_qp *qp, u32 aeth);
 
 /**
- * qib_qp_init - allocate QP tables
- * @dev: a pointer to the qib_ibdev
+ * hfi1_qp_init - allocate QP tables
+ * @dev: a pointer to the hfi1_ibdev
  */
-int qib_qp_init(struct hfi1_ibdev *dev);
+int hfi1_qp_init(struct hfi1_ibdev *dev);
 
 /**
- * qib_qp_exit - free the QP related structures
- * @dev: a pointer to the qib_ibdev
+ * hfi1_qp_exit - free the QP related structures
+ * @dev: a pointer to the hfi1_ibdev
  */
-void qib_qp_exit(struct hfi1_ibdev *dev);
+void hfi1_qp_exit(struct hfi1_ibdev *dev);
 
 /**
- * qib_qp_waitup - wakeup on the indicated event
+ * hfi1_qp_waitup - wakeup on the indicated event
  * @qp: the QP
  * @flag: flag the qp on which the qp is stalled
  */
-void qib_qp_wakeup(struct hfi1_qp *qp, u32 flag);
+void hfi1_qp_wakeup(struct hfi1_qp *qp, u32 flag);
 
 struct sdma_engine *qp_to_sdma_engine(struct hfi1_qp *qp, u8 sc5);
 
@@ -186,7 +186,7 @@ struct qp_iter;
 
 /**
  * qp_iter_init - wakeup on the indicated event
- * @dev: the qib_ib_dev
+ * @dev: the hfi1_ibdev
  */
 struct qp_iter *qp_iter_init(struct hfi1_ibdev *dev);
 
