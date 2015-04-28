@@ -117,7 +117,7 @@ static void rdma_build_arg_xdr(struct svc_rqst *rqstp,
 
 static int rdma_read_max_sge(struct svcxprt_rdma *xprt, int sge_count)
 {
-	if (rdma_protocol_iwarp(xprt->sc_cm_id->device,
+	if (!cap_read_multi_sge(xprt->sc_cm_id->device,
 				xprt->sc_cm_id->port_num))
 		return 1;
 	else

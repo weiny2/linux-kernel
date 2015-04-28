@@ -1864,6 +1864,21 @@ static inline int cap_ib_mcast(struct ib_device *device, u8 port_num)
 	return cap_ib_sa(device, port_num);
 }
 
+/**
+ * cap_read_multi_sge - Check if the port of device has the capability
+ * RDMA Read Multiple Scatter-Gather Entries.
+ *
+ * @device: Device to be checked
+ * @port_num: Port number of the device
+ *
+ * Return 0 when port of the device don't support
+ * RDMA Read Multiple Scatter-Gather Entries.
+ */
+static inline int cap_read_multi_sge(struct ib_device *device, u8 port_num)
+{
+	return !rdma_protocol_iwarp(device, port_num);
+}
+
 int ib_query_gid(struct ib_device *device,
 		 u8 port_num, int index, union ib_gid *gid);
 
