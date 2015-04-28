@@ -1865,6 +1865,21 @@ static inline int cap_ib_mcast(struct ib_device *device, u8 port_num)
 }
 
 /**
+ * cap_af_ib - Check if the port of device has the capability
+ * Native Infiniband Address.
+ *
+ * @device: Device to be checked
+ * @port_num: Port number of the device
+ *
+ * Return 0 when port of the device don't support
+ * Native Infiniband Address.
+ */
+static inline int cap_af_ib(struct ib_device *device, u8 port_num)
+{
+	return rdma_ib_or_iboe(device, port_num);
+}
+
+/**
  * cap_read_multi_sge - Check if the port of device has the capability
  * RDMA Read Multiple Scatter-Gather Entries.
  *
