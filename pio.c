@@ -219,7 +219,6 @@ static const char *sc_type_name(int index)
 int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 {
 	struct mem_pool_info mem_pool_info[NUM_SC_POOLS] = { { 0 } };
-	/* erratum 291585 - do not use PIO block 0 */
 	int total_blocks = (dd->chip_pio_mem_size / PIO_BLOCK_SIZE) - 1;
 	int total_contexts = 0;
 	int fixed_blocks;
@@ -449,7 +448,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	 * for each context one after another from the global space.
 	 */
 	context = 0;
-	base = 1; /* erratum 291585 - do not use PIO block 0 */
+	base = 1;
 	for (i = 0; i < SC_MAX; i++) {
 		struct sc_config_sizes *scs = &dd->sc_sizes[i];
 

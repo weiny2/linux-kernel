@@ -1196,7 +1196,7 @@ retry:
 	/*
 	 * PcieCfgRegPl100 - Gen3 Control
 	 *
-	 * turn off PcieCfgRegPl100.Gen3ZRxDcNonCompl (erratum)
+	 * turn off PcieCfgRegPl100.Gen3ZRxDcNonCompl
 	 * turn on PcieCfgRegPl100.EqEieosCnt (erratum)
 	 * Everything else zero.
 	 */
