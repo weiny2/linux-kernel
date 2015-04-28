@@ -1804,6 +1804,21 @@ static inline int cap_ib_smi(struct ib_device *device, u8 port_num)
 	return rdma_protocol_ib(device, port_num);
 }
 
+/**
+ * cap_ib_cm - Check if the port of device has the capability Infiniband
+ * Communication Manager.
+ *
+ * @device: Device to be checked
+ * @port_num: Port number of the device
+ *
+ * Return 0 when port of the device don't support Infiniband
+ * Communication Manager.
+ */
+static inline int cap_ib_cm(struct ib_device *device, u8 port_num)
+{
+	return rdma_ib_or_iboe(device, port_num);
+}
+
 int ib_query_gid(struct ib_device *device,
 		 u8 port_num, int index, union ib_gid *gid);
 
