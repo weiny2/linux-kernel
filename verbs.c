@@ -267,7 +267,7 @@ void hfi1_copy_sge(
 }
 
 /**
- * hfi1_skip_sge - skip over SGE memory - XXX almost dup of prev func
+ * hfi1_skip_sge - skip over SGE memory
  * @ss: the SGE state
  * @length: the number of bytes to skip
  */

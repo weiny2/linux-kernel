@@ -1322,7 +1322,7 @@ static int init_qpn_table(struct hfi_devdata *dd, struct hfi_qpn_table *qpt)
 	/* insure we don't assign QPs from KDETH 64K window */
 	qpn = kdeth_qp << 16;
 	qpt->nmaps = qpn / BITS_PER_PAGE;
-	/* XXX - this should always be zero */
+	/* This should always be zero */
 	offset = qpn & BITS_PER_PAGE_MASK;
 	map = &qpt->map[qpt->nmaps];
 	dd_dev_info(dd, "Reserving QPNs for KDETH window from 0x%x to 0x%x\n",
