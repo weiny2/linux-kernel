@@ -80,7 +80,7 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 	memset(data, 0, size);
 }
 
-static void qib_send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
+static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 {
 	struct ib_mad_send_buf *send_buf;
 	struct ib_mad_agent *agent;
@@ -188,14 +188,14 @@ void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 	data.details.ntc_257_258.sl_qp1 = cpu_to_be32((sl << 28) | qp1);
 	data.details.ntc_257_258.qp2 = cpu_to_be32(qp2);
 
-	qib_send_trap(ibp, &data, sizeof(data));
+	send_trap(ibp, &data, sizeof(data));
 }
 
 /*
  * Send a bad M_Key trap (ch. 14.3.9).
  */
-static void qib_bad_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
-			 u64 mkey, u32 dr_slid, u8 return_path[], u8 hop_cnt)
+static void bad_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
+		     u64 mkey, u32 dr_slid, u8 return_path[], u8 hop_cnt)
 {
 	struct ib_mad_notice_attr data;
 
@@ -226,7 +226,7 @@ static void qib_bad_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
 		       hop_cnt);
 	}
 
-	qib_send_trap(ibp, &data, sizeof(data));
+	send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -246,7 +246,7 @@ void hfi1_cap_mask_chg(struct hfi1_ibport *ibp)
 	data.details.ntc_144.lid = data.issuer_lid;
 	data.details.ntc_144.new_cap_mask = cpu_to_be32(ibp->port_cap_flags);
 
-	qib_send_trap(ibp, &data, sizeof(data));
+	send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -266,7 +266,7 @@ void hfi1_sys_guid_chg(struct hfi1_ibport *ibp)
 	data.details.ntc_145.lid = data.issuer_lid;
 	data.details.ntc_145.new_sys_guid = ib_hfi1_sys_image_guid;
 
-	qib_send_trap(ibp, &data, sizeof(data));
+	send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -287,7 +287,7 @@ void hfi1_node_desc_chg(struct hfi1_ibport *ibp)
 	data.details.ntc_144.local_changes = 1;
 	data.details.ntc_144.change_flags = IB_NOTICE_TRAP_NODE_DESC_CHG;
 
-	qib_send_trap(ibp, &data, sizeof(data));
+	send_trap(ibp, &data, sizeof(data));
 }
 
 static int __subn_get_opa_nodedesc(struct opa_smp *smp, u32 am,
@@ -436,8 +436,8 @@ static int check_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
 				ibp->mkey_lease_timeout = jiffies +
 					ibp->mkey_lease_period * HZ;
 			/* Generate a trap notice. */
-			qib_bad_mkey(ibp, mad, mkey, dr_slid, return_path,
-				     hop_cnt);
+			bad_mkey(ibp, mad, mkey, dr_slid, return_path,
+				 hop_cnt);
 			ret = 1;
 		}
 	}

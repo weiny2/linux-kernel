@@ -70,8 +70,8 @@
 /*
  * Code to adjust PCIe capabilities.
  */
-static void qib_tune_pcie_caps(struct hfi_devdata *);
-static void qib_tune_pcie_coalesce(struct hfi_devdata *);
+static void tune_pcie_caps(struct hfi_devdata *);
+static void tune_pcie_coalesce(struct hfi_devdata *);
 
 /*
  * Do all the common PCIe setup and initialization.
@@ -289,8 +289,8 @@ clear:
 	msleep(100);
 }
 
-static void qib_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
-			   struct hfi1_msix_entry *qib_msix_entry)
+static void msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
+		       struct hfi1_msix_entry *hfi1_msix_entry)
 {
 	int ret;
 	u32 tabsize = 0;
@@ -298,16 +298,16 @@ static void qib_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
 	struct msix_entry *msix_entry;
 	int i;
 
-	/* We can't pass qib_msix_entry array to qib_msix_setup
+	/* We can't pass hfi1_msix_entry array to msix_setup
 	 * so use a dummy msix_entry array and copy the allocated
-	 * irq back to the qib_msix_entry array. */
+	 * irq back to the hfi1_msix_entry array. */
 	msix_entry = kcalloc(*msixcnt, sizeof(*msix_entry), GFP_KERNEL);
 	if (!msix_entry) {
 		ret = -ENOMEM;
 		goto do_intx;
 	}
 	for (i = 0; i < *msixcnt; i++)
-		msix_entry[i] = qib_msix_entry[i].msix;
+		msix_entry[i] = hfi1_msix_entry[i].msix;
 
 	pci_read_config_word(dd->pcidev, pos + PCI_MSIX_FLAGS, &msix_flags);
 	tabsize = 1 + (msix_flags & PCI_MSIX_FLAGS_QSIZE);
@@ -326,7 +326,7 @@ do_intx:
 		tabsize = 0;
 	}
 	for (i = 0; i < tabsize; i++)
-		qib_msix_entry[i].msix = msix_entry[i];
+		hfi1_msix_entry[i].msix = msix_entry[i];
 	kfree(msix_entry);
 	*msixcnt = tabsize;
 
@@ -428,15 +428,15 @@ void request_msix(struct hfi_devdata *dd, u32 *nent,
 
 	pos = dd->pcidev->msix_cap;
 	if (*nent && pos) {
-		qib_msix_setup(dd, pos, nent, entry);
+		msix_setup(dd, pos, nent, entry);
 		/* did it, either MSI-X or INTx */
 	} else {
 		*nent = 0;
 		hfi1_enable_intx(dd->pcidev);
 	}
 
-	qib_tune_pcie_caps(dd);
-	qib_tune_pcie_coalesce(dd);
+	tune_pcie_caps(dd);
+	tune_pcie_coalesce(dd);
 }
 
 /*
@@ -500,8 +500,8 @@ static int val2fld(int wd, int mask)
 	return wd;
 }
 
-static int qib_pcie_coalesce;
-module_param_named(pcie_coalesce, qib_pcie_coalesce, int, S_IRUGO);
+static int hfi1_pcie_coalesce;
+module_param_named(pcie_coalesce, hfi1_pcie_coalesce, int, S_IRUGO);
 MODULE_PARM_DESC(pcie_coalesce, "tune PCIe colescing on some Intel chipsets");
 
 /*
@@ -510,14 +510,14 @@ MODULE_PARM_DESC(pcie_coalesce, "tune PCIe colescing on some Intel chipsets");
  * of these chipsets, with some BIOS settings, and enabling it on those
  * systems may result in the system crashing, and/or data corruption.
  */
-static void qib_tune_pcie_coalesce(struct hfi_devdata *dd)
+static void tune_pcie_coalesce(struct hfi_devdata *dd)
 {
 	int r;
 	struct pci_dev *parent;
 	u16 devid;
 	u32 mask, bits, val;
 
-	if (!qib_pcie_coalesce)
+	if (!hfi1_pcie_coalesce)
 		return;
 
 	/* Find out supported and configured values for parent (root) */
@@ -574,11 +574,11 @@ static void qib_tune_pcie_coalesce(struct hfi_devdata *dd)
  * BIOS may not set PCIe bus-utilization parameters for best performance.
  * Check and optionally adjust them to maximize our throughput.
  */
-static int qib_pcie_caps;
-module_param_named(pcie_caps, qib_pcie_caps, int, S_IRUGO);
+static int hfi1_pcie_caps;
+module_param_named(pcie_caps, hfi1_pcie_caps, int, S_IRUGO);
 MODULE_PARM_DESC(pcie_caps, "Max PCIe tuning: Payload (0..3), ReadReq (4..7)");
 
-static void qib_tune_pcie_caps(struct hfi_devdata *dd)
+static void tune_pcie_caps(struct hfi_devdata *dd)
 {
 	struct pci_dev *parent;
 	u16 pcaps, pctl, ecaps, ectl;
@@ -610,8 +610,8 @@ static void qib_tune_pcie_caps(struct hfi_devdata *dd)
 	ep_cur = fld2val(ectl, PCI_EXP_DEVCTL_PAYLOAD);
 
 	/* If Supported greater than limit in module param, limit it */
-	if (rc_sup > (qib_pcie_caps & 7))
-		rc_sup = qib_pcie_caps & 7;
+	if (rc_sup > (hfi1_pcie_caps & 7))
+		rc_sup = hfi1_pcie_caps & 7;
 	/* If less than (allowed, supported), bump root payload */
 	if (rc_sup > rc_cur) {
 		rc_cur = rc_sup;
@@ -633,8 +633,8 @@ static void qib_tune_pcie_caps(struct hfi_devdata *dd)
 	 * which is code '5' (log2(4096) - 7)
 	 */
 	rc_sup = 5;
-	if (rc_sup > ((qib_pcie_caps >> 4) & 7))
-		rc_sup = (qib_pcie_caps >> 4) & 7;
+	if (rc_sup > ((hfi1_pcie_caps >> 4) & 7))
+		rc_sup = (hfi1_pcie_caps >> 4) & 7;
 	rc_cur = fld2val(pctl, PCI_EXP_DEVCTL_READRQ);
 	ep_cur = fld2val(ectl, PCI_EXP_DEVCTL_READRQ);
 
@@ -658,7 +658,7 @@ static void qib_tune_pcie_caps(struct hfi_devdata *dd)
  * PCI error infrastructure, registered via pci
  */
 static pci_ers_result_t
-qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
+pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 	pci_ers_result_t ret = PCI_ERS_RESULT_RECOVERED;
@@ -686,15 +686,15 @@ qib_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 		break;
 
 	default: /* shouldn't happen */
-		dd_dev_info(dd, "QIB PCI errors detected (state %d)\n",
-			state);
+		dd_dev_info(dd, "HFI1 PCI errors detected (state %d)\n",
+			    state);
 		break;
 	}
 	return ret;
 }
 
 static pci_ers_result_t
-qib_pci_mmio_enabled(struct pci_dev *pdev)
+pci_mmio_enabled(struct pci_dev *pdev)
 {
 	u64 words = 0U;
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
@@ -705,36 +705,36 @@ qib_pci_mmio_enabled(struct pci_dev *pdev)
 		if (words == ~0ULL)
 			ret = PCI_ERS_RESULT_NEED_RESET;
 		dd_dev_info(dd,
-			    "QIB mmio_enabled function called, read wordscntr %Lx, returning %d\n",
+			    "HFI1 mmio_enabled function called, read wordscntr %Lx, returning %d\n",
 			    words, ret);
 	}
 	return  ret;
 }
 
 static pci_ers_result_t
-qib_pci_slot_reset(struct pci_dev *pdev)
+pci_slot_reset(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
-	dd_dev_info(dd, "QIB slot_reset function called, ignored\n");
+	dd_dev_info(dd, "HFI1 slot_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
 static pci_ers_result_t
-qib_pci_link_reset(struct pci_dev *pdev)
+pci_link_reset(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
-	dd_dev_info(dd, "QIB link_reset function called, ignored\n");
+	dd_dev_info(dd, "HFI1 link_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
 static void
-qib_pci_resume(struct pci_dev *pdev)
+pci_resume(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
-	dd_dev_info(dd, "QIB resume function called\n");
+	dd_dev_info(dd, "HFI1 resume function called\n");
 	pci_cleanup_aer_uncorrect_error_status(pdev);
 	/*
 	 * Running jobs will fail, since it's asynchronous
@@ -745,11 +745,11 @@ qib_pci_resume(struct pci_dev *pdev)
 }
 
 const struct pci_error_handlers hfi1_pci_err_handler = {
-	.error_detected = qib_pci_error_detected,
-	.mmio_enabled = qib_pci_mmio_enabled,
-	.link_reset = qib_pci_link_reset,
-	.slot_reset = qib_pci_slot_reset,
-	.resume = qib_pci_resume,
+	.error_detected = pci_error_detected,
+	.mmio_enabled = pci_mmio_enabled,
+	.link_reset = pci_link_reset,
+	.slot_reset = pci_slot_reset,
+	.resume = pci_resume,
 };
 
 /*============================================================================*/

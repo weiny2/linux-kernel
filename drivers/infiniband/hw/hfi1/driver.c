@@ -357,8 +357,8 @@ int hfi1_count_units(int *npresentp, int *nupp)
  * Get address of eager buffer from it's index (allocated in chunks, not
  * contiguous).
  */
-static inline void *qib_get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
-				   u32 *update)
+static inline void *get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
+			       u32 *update)
 {
 	u32 idx = rhf_egr_index(rhf), offset = rhf_egr_buf_offset(rhf);
 
@@ -450,7 +450,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 
 			switch (qp->ibqp.qp_type) {
 			case IB_QPT_RC:
-				qib_rc_hdrerr(
+				hfi1_rc_hdrerr(
 					rcd,
 					hdr,
 					rcv_flags,
@@ -579,7 +579,7 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 			goto bail;
 		hdrqtail = 0;
 	} else {
-		hdrqtail = qib_get_rcvhdrtail(rcd);
+		hdrqtail = get_rcvhdrtail(rcd);
 		if (l == hdrqtail)
 			goto bail;
 		smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
@@ -595,7 +595,7 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 		/* retreive eager buffer details */
 		if (rhf_use_egr_bfr(rhf)) {
 			etail = rhf_egr_index(rhf);
-			ebuf = qib_get_egrbuf(rcd, rhf, &updegr);
+			ebuf = get_egrbuf(rcd, rhf, &updegr);
 			/*
 			 * Prefetch the contents of the eager buffer.  It is
 			 * OK to send a negative length to prefetch_range().
@@ -820,7 +820,7 @@ int hfi1_set_lid(struct hfi1_pportdata *ppd, u32 lid, u8 lmc)
 /* Below is "non-zero" to force override, but both actual LEDs are off */
 #define LED_OVER_BOTH_OFF (8)
 
-static void qib_run_led_override(unsigned long opaque)
+static void run_led_override(unsigned long opaque)
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)opaque;
 	struct hfi_devdata *dd = ppd->dd;
@@ -873,7 +873,7 @@ void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val)
 	if (atomic_inc_return(&ppd->led_override_timer_active) == 1) {
 		/* Need to start timer */
 		init_timer(&ppd->led_override_timer);
-		ppd->led_override_timer.function = qib_run_led_override;
+		ppd->led_override_timer.function = run_led_override;
 		ppd->led_override_timer.data = (unsigned long) ppd;
 		ppd->led_override_timer.expires = jiffies + 1;
 		add_timer(&ppd->led_override_timer);

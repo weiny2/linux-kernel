@@ -5398,7 +5398,6 @@ static int do_pre_lni_host_behaviors(struct hfi1_pportdata *ppd)
 
 	if (ppd->qsfp_info.cache_valid)
 		;/* TODO: Brent's flowchart */
-	ppd->driver_link_ready = 1;
 	return 0;
 }
 
@@ -5444,8 +5443,8 @@ static void qsfp_event(struct work_struct *work)
 			if (do_qsfp_intr_fallback(ppd) < 0)
 				dd_dev_info(dd, "%s: QSFP fallback failed\n",
 					__func__);
-			else
-				start_link(ppd);
+			ppd->driver_link_ready = 1;
+			start_link(ppd);
 		}
 	}
 
@@ -5535,11 +5534,13 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 		 * + extra
 		 */
 		msleep(3000);
-		if (!ppd->qsfp_info.qsfp_interrupt_functional)
+		if (!ppd->qsfp_info.qsfp_interrupt_functional) {
 			if (do_qsfp_intr_fallback(ppd) < 0)
 				dd_dev_info(dd,
 					"%s: QSFP fallback failed\n",
 					__func__);
+			ppd->driver_link_ready = 1;
+		}
 	}
 }
 
@@ -5668,7 +5669,7 @@ void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
 		 * Eager entries are written one-by-one so we have to push them
 		 * after we write the entry.
 		 */
-		qib_flush_wc();
+		flush_wc();
 done:
 	return;
 }
@@ -7246,7 +7247,7 @@ u32 hdrqempty(struct hfi1_ctxtdata *rcd)
 		& RCV_HDR_HEAD_HEAD_SMASK) >> RCV_HDR_HEAD_HEAD_SHIFT;
 
 	if (rcd->rcvhdrtail_kvaddr)
-		tail = qib_get_rcvhdrtail(rcd);
+		tail = get_rcvhdrtail(rcd);
 	else
 		tail = read_uctxt_csr(rcd->dd, rcd->ctxt, RCV_HDR_TAIL);
 
@@ -9768,7 +9769,7 @@ static void init_rxe(struct hfi_devdata *dd)
 	 *
 	 * Presently, RcvCtrl.RcvWcb is not modified from its default of 0
 	 * (64 bytes).  Max_Payload_Size is possibly modified upward in
-	 * qib_tune_pcie_caps() which is called after this routine.
+	 * tune_pcie_caps() which is called after this routine.
 	 */
 }
 

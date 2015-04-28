@@ -72,7 +72,7 @@ int hfi1_alloc_lkey(struct hfi1_mregion *mr, int dma_region)
 	struct hfi1_ibdev *dev = to_idev(mr->pd->device);
 	struct hfi1_lkey_table *rkt = &dev->lk_table;
 
-	qib_get_mr(mr);
+	hfi1_get_mr(mr);
 	spin_lock_irqsave(&rkt->lock, flags);
 
 	/* special case for dma_mr lkey == 0 */
@@ -84,7 +84,7 @@ int hfi1_alloc_lkey(struct hfi1_mregion *mr, int dma_region)
 			rcu_assign_pointer(dev->dma_mr, mr);
 			mr->lkey_published = 1;
 		} else {
-			qib_put_mr(mr);
+			hfi1_put_mr(mr);
 		}
 		goto success;
 	}
@@ -105,8 +105,8 @@ int hfi1_alloc_lkey(struct hfi1_mregion *mr, int dma_region)
 	 * unrestricted LKEY.
 	 */
 	rkt->gen++;
-	mr->lkey = (r << (32 - ib_hfi1_lkey_table_size)) |
-		((((1 << (24 - ib_hfi1_lkey_table_size)) - 1) & rkt->gen)
+	mr->lkey = (r << (32 - hfi1_lkey_table_size)) |
+		((((1 << (24 - hfi1_lkey_table_size)) - 1) & rkt->gen)
 		 << 8);
 	if (mr->lkey == 0) {
 		mr->lkey |= 1 << 8;
@@ -119,7 +119,7 @@ success:
 out:
 	return ret;
 bail:
-	qib_put_mr(mr);
+	hfi1_put_mr(mr);
 	spin_unlock_irqrestore(&rkt->lock, flags);
 	ret = -ENOMEM;
 	goto out;
@@ -144,7 +144,7 @@ void hfi1_free_lkey(struct hfi1_mregion *mr)
 	if (lkey == 0)
 		RCU_INIT_POINTER(dev->dma_mr, NULL);
 	else {
-		r = lkey >> (32 - ib_hfi1_lkey_table_size);
+		r = lkey >> (32 - hfi1_lkey_table_size);
 		RCU_INIT_POINTER(rkt->table[r], NULL);
 	}
 	mr->lkey_published = 0;
@@ -153,7 +153,7 @@ out:
 	spin_unlock_irqrestore(&rkt->lock, flags);
 	if (freed) {
 		synchronize_rcu();
-		qib_put_mr(mr);
+		hfi1_put_mr(mr);
 	}
 }
 
@@ -181,7 +181,7 @@ int hfi1_lkey_ok(struct hfi1_lkey_table *rkt, struct hfi1_pd *pd,
 
 	/*
 	 * We use LKEY == zero for kernel virtual addresses
-	 * (see hfi1_get_dma_mr and qib_dma.c).
+	 * (see hfi1_get_dma_mr and dma.c).
 	 */
 	rcu_read_lock();
 	if (sge->lkey == 0) {
@@ -204,7 +204,7 @@ int hfi1_lkey_ok(struct hfi1_lkey_table *rkt, struct hfi1_pd *pd,
 		goto ok;
 	}
 	mr = rcu_dereference(
-		rkt->table[(sge->lkey >> (32 - ib_hfi1_lkey_table_size))]);
+		rkt->table[(sge->lkey >> (32 - hfi1_lkey_table_size))]);
 	if (unlikely(!mr || mr->lkey != sge->lkey || mr->pd != &pd->ibpd))
 		goto bail;
 
@@ -277,7 +277,7 @@ int hfi1_rkey_ok(struct hfi1_qp *qp, struct hfi1_sge *sge,
 
 	/*
 	 * We use RKEY == zero for kernel virtual addresses
-	 * (see hfi1_get_dma_mr and qib_dma.c).
+	 * (see hfi1_get_dma_mr and dma.c).
 	 */
 	rcu_read_lock();
 	if (rkey == 0) {
@@ -302,7 +302,7 @@ int hfi1_rkey_ok(struct hfi1_qp *qp, struct hfi1_sge *sge,
 	}
 
 	mr = rcu_dereference(
-		rkt->table[(rkey >> (32 - ib_hfi1_lkey_table_size))]);
+		rkt->table[(rkey >> (32 - hfi1_lkey_table_size))]);
 	if (unlikely(!mr || mr->lkey != rkey || qp->ibqp.pd != mr->pd))
 		goto bail;
 
@@ -371,7 +371,7 @@ int hfi1_fast_reg_mr(struct hfi1_qp *qp, struct ib_send_wr *wr)
 		goto bail;
 
 	mr = rcu_dereference_protected(
-		rkt->table[(rkey >> (32 - ib_hfi1_lkey_table_size))],
+		rkt->table[(rkey >> (32 - hfi1_lkey_table_size))],
 		lockdep_is_held(&rkt->lock));
 	if (unlikely(mr == NULL || qp->ibqp.pd != mr->pd))
 		goto bail;

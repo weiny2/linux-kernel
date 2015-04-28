@@ -188,9 +188,9 @@
 /*
  * Similarly, this is the kernel version going back to the user.  It's
  * slightly different, in that we want to tell if the driver was built as
- * part of a QLogic release, or from the driver from openfabrics.org,
+ * part of a Intel release, or from the driver from openfabrics.org,
  * kernel.org, or a standard distribution, for support reasons.
- * The high bit is 0 for non-QLogic and 1 for QLogic-built/supplied.
+ * The high bit is 0 for non-Intel and 1 for Intel-built/supplied.
  *
  * It's returned by the driver to the user code during initialization in the
  * spi_sw_version field of hfi_base_info, so the user code can in turn
@@ -203,7 +203,7 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI_DRIVER_VERSION_BASE
-#define HFI_DRIVER_VERSION_BASE "0.7-452"
+#define HFI_DRIVER_VERSION_BASE "0.7-457"
 #endif
 
 /* create the final driver version string */
@@ -291,7 +291,7 @@ struct qib_flash {
 	__u8 if_powerhour[2];
 	/* ASCII free-form comment field */
 	char if_comment[32];
-	/* Backwards compatible prefix for longer QLogic Serial Numbers */
+	/* Backwards compatible prefix for longer Serial Numbers */
 	char if_sprefix[4];
 	/* 82 bytes used, min flash size is 128 bytes */
 	__u8 if_future[46];
@@ -377,11 +377,6 @@ struct qib_flash {
 
 /* RHF receive type error - bypass packet errors */
 #define RHF_RTE_BYPASS_NO_ERR		0x0
-
-
-/* SendPIOAvail bits */
-#define QLOGIC_IB_SENDPIOAVAIL_BUSY_SHIFT 1
-#define QLOGIC_IB_SENDPIOAVAIL_CHECK_SHIFT 0
 
 /*
  * This structure contains the first field common to all protocols

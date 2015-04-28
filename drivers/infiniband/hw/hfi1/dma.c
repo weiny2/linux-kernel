@@ -63,26 +63,26 @@
  * data instead of using hardware DMA.
  */
 
-static int qib_mapping_error(struct ib_device *dev, u64 dma_addr)
+static int hfi1_mapping_error(struct ib_device *dev, u64 dma_addr)
 {
 	return dma_addr == BAD_DMA_ADDRESS;
 }
 
-static u64 qib_dma_map_single(struct ib_device *dev, void *cpu_addr,
-			      size_t size, enum dma_data_direction direction)
+static u64 hfi1_dma_map_single(struct ib_device *dev, void *cpu_addr,
+			       size_t size, enum dma_data_direction direction)
 {
 	BUG_ON(!valid_dma_direction(direction));
 	return (u64) cpu_addr;
 }
 
-static void qib_dma_unmap_single(struct ib_device *dev, u64 addr, size_t size,
-				 enum dma_data_direction direction)
+static void hfi1_dma_unmap_single(struct ib_device *dev, u64 addr, size_t size,
+				  enum dma_data_direction direction)
 {
 	BUG_ON(!valid_dma_direction(direction));
 }
 
-static u64 qib_dma_map_page(struct ib_device *dev, struct page *page,
-			    unsigned long offset, size_t size,
+static u64 hfi1_dma_map_page(struct ib_device *dev, struct page *page,
+			     unsigned long offset, size_t size,
 			    enum dma_data_direction direction)
 {
 	u64 addr;
@@ -102,14 +102,14 @@ done:
 	return addr;
 }
 
-static void qib_dma_unmap_page(struct ib_device *dev, u64 addr, size_t size,
-			       enum dma_data_direction direction)
+static void hfi1_dma_unmap_page(struct ib_device *dev, u64 addr, size_t size,
+				enum dma_data_direction direction)
 {
 	BUG_ON(!valid_dma_direction(direction));
 }
 
-static int qib_map_sg(struct ib_device *dev, struct scatterlist *sgl,
-		      int nents, enum dma_data_direction direction)
+static int hfi1_map_sg(struct ib_device *dev, struct scatterlist *sgl,
+		       int nents, enum dma_data_direction direction)
 {
 	struct scatterlist *sg;
 	u64 addr;
@@ -132,26 +132,26 @@ static int qib_map_sg(struct ib_device *dev, struct scatterlist *sgl,
 	return ret;
 }
 
-static void qib_unmap_sg(struct ib_device *dev,
-			 struct scatterlist *sg, int nents,
+static void hfi1_unmap_sg(struct ib_device *dev,
+			  struct scatterlist *sg, int nents,
 			 enum dma_data_direction direction)
 {
 	BUG_ON(!valid_dma_direction(direction));
 }
 
-static void qib_sync_single_for_cpu(struct ib_device *dev, u64 addr,
-				    size_t size, enum dma_data_direction dir)
+static void hfi1_sync_single_for_cpu(struct ib_device *dev, u64 addr,
+				     size_t size, enum dma_data_direction dir)
 {
 }
 
-static void qib_sync_single_for_device(struct ib_device *dev, u64 addr,
-				       size_t size,
-				       enum dma_data_direction dir)
+static void hfi1_sync_single_for_device(struct ib_device *dev, u64 addr,
+					size_t size,
+					enum dma_data_direction dir)
 {
 }
 
-static void *qib_dma_alloc_coherent(struct ib_device *dev, size_t size,
-				    u64 *dma_handle, gfp_t flag)
+static void *hfi1_dma_alloc_coherent(struct ib_device *dev, size_t size,
+				     u64 *dma_handle, gfp_t flag)
 {
 	struct page *p;
 	void *addr = NULL;
@@ -164,22 +164,22 @@ static void *qib_dma_alloc_coherent(struct ib_device *dev, size_t size,
 	return addr;
 }
 
-static void qib_dma_free_coherent(struct ib_device *dev, size_t size,
-				  void *cpu_addr, u64 dma_handle)
+static void hfi1_dma_free_coherent(struct ib_device *dev, size_t size,
+				   void *cpu_addr, u64 dma_handle)
 {
 	free_pages((unsigned long) cpu_addr, get_order(size));
 }
 
 struct ib_dma_mapping_ops hfi1_dma_mapping_ops = {
-	.mapping_error = qib_mapping_error,
-	.map_single = qib_dma_map_single,
-	.unmap_single = qib_dma_unmap_single,
-	.map_page = qib_dma_map_page,
-	.unmap_page = qib_dma_unmap_page,
-	.map_sg = qib_map_sg,
-	.unmap_sg = qib_unmap_sg,
-	.sync_single_for_cpu = qib_sync_single_for_cpu,
-	.sync_single_for_device = qib_sync_single_for_device,
-	.alloc_coherent = qib_dma_alloc_coherent,
-	.free_coherent = qib_dma_free_coherent
+	.mapping_error = hfi1_mapping_error,
+	.map_single = hfi1_dma_map_single,
+	.unmap_single = hfi1_dma_unmap_single,
+	.map_page = hfi1_dma_map_page,
+	.unmap_page = hfi1_dma_unmap_page,
+	.map_sg = hfi1_map_sg,
+	.unmap_sg = hfi1_unmap_sg,
+	.sync_single_for_cpu = hfi1_sync_single_for_cpu,
+	.sync_single_for_device = hfi1_sync_single_for_device,
+	.alloc_coherent = hfi1_dma_alloc_coherent,
+	.free_coherent = hfi1_dma_free_coherent
 };

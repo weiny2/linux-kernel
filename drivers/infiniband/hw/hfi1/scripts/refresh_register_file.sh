@@ -73,7 +73,14 @@ for reg in `cat register_minimal_set.txt`; do
 		echo "ERROR: $reg not defined!"
 		exit 1
 	fi
-	echo "#define$val" >> chip_registers.h
+
+	echo $val | awk '{ if (length($0) > 71) { 
+				print "#define " $1 " \\";
+				print "\t\t"$2;
+			   } else { 
+			    	print "#define " $0; 
+			   }
+			}' >> chip_registers.h
 done
 
 echo "" >> chip_registers.h

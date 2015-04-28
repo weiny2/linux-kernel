@@ -342,7 +342,7 @@ struct hfi1_seg {
 	size_t length;
 };
 
-/* The number of qib_segs that fit in a page. */
+/* The number of hfi1_segs that fit in a page. */
 #define HFI1_SEGSZ     (PAGE_SIZE / sizeof(struct hfi1_seg))
 
 struct hfi1_segarray {
@@ -357,7 +357,7 @@ struct hfi1_mregion {
 	u32 lkey;
 	u32 offset;             /* offset (bytes) to start of region */
 	int access_flags;
-	u32 max_segs;           /* number of qib_segs in all the arrays */
+	u32 max_segs;           /* number of hfi1_segs in all the arrays */
 	u32 mapsz;              /* size of the map array */
 	u8  page_shift;         /* 0 - non unform/non powerof2 sizes */
 	u8  lkey_published;     /* in global table */
@@ -873,7 +873,7 @@ static inline struct hfi1_ibdev *to_idev(struct ib_device *ibdev)
  * Send if not busy or waiting for I/O and either
  * a RC response is pending or we can process send work requests.
  */
-static inline int qib_send_ok(struct hfi1_qp *qp)
+static inline int hfi1_send_ok(struct hfi1_qp *qp)
 {
 	return !(qp->s_flags & (HFI1_S_BUSY | HFI1_S_ANY_WAIT_IO)) &&
 		(qp->s_hdrwords || (qp->s_flags & HFI1_S_RESP_PENDING) ||
@@ -984,7 +984,7 @@ void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
 
-void qib_rc_hdrerr(
+void hfi1_rc_hdrerr(
 	struct hfi1_ctxtdata *rcd,
 	struct hfi1_ib_header *hdr,
 	u32 rcv_flags,
@@ -1085,21 +1085,21 @@ int hfi1_unmap_fmr(struct list_head *fmr_list);
 
 int hfi1_dealloc_fmr(struct ib_fmr *ibfmr);
 
-static inline void qib_get_mr(struct hfi1_mregion *mr)
+static inline void hfi1_get_mr(struct hfi1_mregion *mr)
 {
 	atomic_inc(&mr->refcount);
 }
 
-static inline void qib_put_mr(struct hfi1_mregion *mr)
+static inline void hfi1_put_mr(struct hfi1_mregion *mr)
 {
 	if (unlikely(atomic_dec_and_test(&mr->refcount)))
 		complete(&mr->comp);
 }
 
-static inline void qib_put_ss(struct hfi1_sge_state *ss)
+static inline void hfi1_put_ss(struct hfi1_sge_state *ss)
 {
 	while (ss->num_sge) {
-		qib_put_mr(ss->sge.mr);
+		hfi1_put_mr(ss->sge.mr);
 		if (--ss->num_sge)
 			ss->sge = *ss->sg_list++;
 	}
@@ -1172,27 +1172,27 @@ extern const int ib_hfi1_state_ops[];
 
 extern __be64 ib_hfi1_sys_image_guid;    /* in network order */
 
-extern unsigned int ib_hfi1_lkey_table_size;
+extern unsigned int hfi1_lkey_table_size;
 
-extern unsigned int ib_hfi1_max_cqes;
+extern unsigned int hfi1_max_cqes;
 
-extern unsigned int ib_hfi1_max_cqs;
+extern unsigned int hfi1_max_cqs;
 
-extern unsigned int ib_hfi1_max_qp_wrs;
+extern unsigned int hfi1_max_qp_wrs;
 
-extern unsigned int ib_hfi1_max_qps;
+extern unsigned int hfi1_max_qps;
 
-extern unsigned int ib_hfi1_max_sges;
+extern unsigned int hfi1_max_sges;
 
-extern unsigned int ib_hfi1_max_mcast_grps;
+extern unsigned int hfi1_max_mcast_grps;
 
-extern unsigned int ib_hfi1_max_mcast_qp_attached;
+extern unsigned int hfi1_max_mcast_qp_attached;
 
-extern unsigned int ib_hfi1_max_srqs;
+extern unsigned int hfi1_max_srqs;
 
-extern unsigned int ib_hfi1_max_srq_sges;
+extern unsigned int hfi1_max_srq_sges;
 
-extern unsigned int ib_hfi1_max_srq_wrs;
+extern unsigned int hfi1_max_srq_wrs;
 
 extern const u32 ib_hfi1_rnr_table[];
 
