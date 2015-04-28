@@ -412,8 +412,9 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr,
 
 		sc5 = ibp->sl_to_sc[ah->attr.sl];
 		vl = sc_to_vlt(dd, sc5);
-		if (wqe->length > dd->vld[vl].mtu)
-			goto bail_inval_free;
+		if (vl < PER_VL_SEND_CONTEXTS)
+			if (wqe->length > dd->vld[vl].mtu)
+				goto bail_inval_free;
 
 		atomic_inc(&ah->refcount);
 	}
