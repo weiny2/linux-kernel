@@ -1507,8 +1507,8 @@ static int query_port(struct ib_device *ibdev, u8 port,
 	 * from the Path Records to us will get the new 8k MTU.  Those that
 	 * attempt to process the MTU enum may fail in various ways.
 	 */
-	props->max_mtu = mtu_to_enum((!valid_ib_mtu(max_mtu) ?
-				      4096 : max_mtu), IB_MTU_4096);
+	props->max_mtu = mtu_to_enum((!valid_ib_mtu(hfi1_max_mtu) ?
+				      4096 : hfi1_max_mtu), IB_MTU_4096);
 	props->active_mtu = !valid_ib_mtu(ppd->ibmtu) ? props->max_mtu :
 		mtu_to_enum(ppd->ibmtu, IB_MTU_2048);
 	props->subnet_timeout = ibp->subnet_timeout;

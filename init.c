@@ -306,8 +306,8 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		 * entries needs to be big enough to handle the highest
 		 * MTU supported.
 		 */
-		if (rcd->egrbufs.size < max_mtu) {
-			rcd->egrbufs.size = __roundup_pow_of_two(max_mtu);
+		if (rcd->egrbufs.size < hfi1_max_mtu) {
+			rcd->egrbufs.size = __roundup_pow_of_two(hfi1_max_mtu);
 			dd_dev_info(dd,
 				    "ctxt%u: eager bufs size too small. Adjusting to %zu\n",
 				    rcd->ctxt, rcd->egrbufs.size);
@@ -1168,8 +1168,8 @@ static int __init hfi1_mod_init(void)
 	/* validate max and default MTUs before any devices start */
 	if (!valid_opa_mtu(default_mtu))
 		default_mtu = HFI_DEFAULT_ACTIVE_MTU;
-	if (!valid_opa_mtu(max_mtu))
-		max_mtu = HFI_DEFAULT_MAX_MTU;
+	if (!valid_opa_mtu(hfi1_max_mtu))
+		hfi1_max_mtu = HFI_DEFAULT_MAX_MTU;
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
 		hfi_cu = 1;
@@ -1585,7 +1585,7 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 	gfp_t gfp_flags;
 	u16 order;
 	int ret = 0;
-	u16 round_mtu = roundup_pow_of_two(max_mtu);
+	u16 round_mtu = roundup_pow_of_two(hfi1_max_mtu);
 
 	/*
 	 * GFP_USER, but without GFP_FS, so buffer cache can be

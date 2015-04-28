@@ -10169,7 +10169,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		goto bail_cleanup;
 
 	/* read in firmware */
-	ret = firmware_init(dd);
+	ret = hfi1_firmware_init(dd);
 	if (ret)
 		goto bail_cleanup;
 
@@ -10182,7 +10182,8 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	 * In particular, place this call after:
 	 * - init_chip()     - the chip will not initiate any PCIe transactions
 	 * - pcie_speeds()   - reads the current link speed
-	 * - firmware_init() - the needed firmware is ready to be downloaded
+	 * - hfi1_firmware_init() - the needed firmware is ready to be
+	 *			    downloaded
 	 */
 	ret = do_pcie_gen3_transition(dd);
 	if (ret)

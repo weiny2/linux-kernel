@@ -681,7 +681,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->link_down_reason = ppd->local_link_down_reason.sma;
 	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
 	pi->port_error_action = cpu_to_be32(ppd->port_error_action);
-	pi->mtucap = mtu_to_enum(max_mtu, IB_MTU_4096);
+	pi->mtucap = mtu_to_enum(hfi1_max_mtu, IB_MTU_4096);
 
 	/* 32.768 usec. response time (guessing) */
 	pi->resptimevalue = 3;

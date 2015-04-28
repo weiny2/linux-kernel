@@ -1492,7 +1492,7 @@ extern void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 void update_sge(struct hfi1_sge_state *ss, u32 length);
 
 /* global module parameter variables */
-extern unsigned int max_mtu;
+extern unsigned int hfi1_max_mtu;
 extern unsigned int default_mtu;
 extern unsigned int hfi_cu;
 extern unsigned int user_credit_return_threshold;

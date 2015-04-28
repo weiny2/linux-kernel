@@ -1245,7 +1245,7 @@ clear:
 	return 0;
 }
 
-int firmware_init(struct hfi_devdata *dd)
+int hfi1_firmware_init(struct hfi_devdata *dd)
 {
 	int ret;
 
