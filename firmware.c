@@ -797,7 +797,7 @@ int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout)
 		if (time_after(jiffies, timeout))	/* timed out */
 			return -ETIMEDOUT;
 		usleep_range(1950, 2050); /* sleep 2ms-ish */
-	};
+	}
 }
 
 /*

@@ -2842,7 +2842,7 @@ static void handle_8051_request(struct hfi_devdata *dd)
 		dd_dev_err(dd, "8051 request: unknown request 0x%x\n", type);
 		hreq_response(dd, HREQ_NOT_SUPPORTED, 0);
 		break;
-	};
+	}
 }
 
 static void write_global_credit(struct hfi_devdata *dd,

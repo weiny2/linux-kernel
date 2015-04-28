@@ -1847,7 +1847,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 			hfi1_release_user_pages(pshadow, pcount);
 			clear_bit(bitidx, &uctxt->tidusemap[idx]);
 			map &= ~(1ULL<<bitidx);
-		};
+		}
 	}
 	trace_hfi_exp_tid_map(uctxt->ctxt, subctxt_fp(fp), 1, uctxt->tidusemap,
 			      uctxt->tidmapcnt);
