@@ -861,7 +861,8 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		vl = sc_to_vlt(dd, sc);
 
 		mtu = verbs_mtu_enum_to_int(ibqp->device, pmtu);
-		mtu = min_t(u32, mtu, dd->vld[vl].mtu);
+		if (vl < PER_VL_SEND_CONTEXTS)
+			mtu = min_t(u32, mtu, dd->vld[vl].mtu);
 		pmtu = mtu_to_enum(mtu, OPA_MTU_8192);
 
 		qp->path_mtu = pmtu;
