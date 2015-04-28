@@ -5565,7 +5565,7 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 
 	/* the link defaults to enabled */
 	ppd->link_enabled = 1;
-	/* XXX (Easwar): Move to where driver_link_ready is set? */
+	/* Set linkinit_reason on power up per OPA spec */
 	ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
 
 	/* assign LCB access to the 8051 */
