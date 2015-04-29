@@ -1130,7 +1130,7 @@ static int nfit_blk_init_interleave(struct nfit_blk_mmio *mmio,
 	return 0;
 }
 
-int nd_acpi_blk_region_enable(struct nd_bus *nd_bus, struct nd_blk_region *ndbr)
+static int nd_acpi_blk_region_enable(struct nd_bus *nd_bus, struct nd_blk_region *ndbr)
 {
 	struct nd_bus_descriptor *nd_desc = to_nd_desc(nd_bus);
 	struct acpi_nfit_desc *acpi_desc = to_acpi_desc(nd_desc);
