@@ -702,9 +702,7 @@ struct hfi_temp {
 };
 
 /* device data struct now contains only "general per-device" info.
- * fields related to a physical IB port are in a hfi1_pportdata struct,
- * described above) while fields only used by a particular chip-type are in
- * a qib_chipdata struct, whose contents are opaque to this file.
+ * fields related to a physical IB port are in a hfi1_pportdata struct.
  */
 struct sdma_engine;
 struct sdma_vl_map;
@@ -1046,9 +1044,7 @@ int hfi1_count_active_units(void);
 int hfi1_diag_add(struct hfi_devdata *);
 void hfi1_diag_remove(struct hfi_devdata *);
 void handle_linkup_change(struct hfi_devdata *dd, u32 linkup);
-void qib_sdma_update_tail(struct hfi1_pportdata *, u16); /* hold sdma_lock */
 
-int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
 void handle_user_interrupt(struct hfi1_ctxtdata *rcd);
 
 int hfi1_create_rcvhdrq(struct hfi_devdata *, struct hfi1_ctxtdata *);
@@ -1330,15 +1326,11 @@ static inline struct cc_state *get_cc_state(struct hfi1_pportdata *ppd)
 #define HFI1_CTXT_WAITING_URG 5
 
 /* free up any allocated data at closes */
-void qib_free_data(struct hfi1_ctxtdata *dd);
 struct hfi_devdata *hfi1_init_dd(struct pci_dev *,
 				 const struct pci_device_id *);
 void hfi1_free_devdata(struct hfi_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
 struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
-
-void qib_dump_lookup_output_queue(struct hfi_devdata *);
-void qib_clear_symerror_on_linkup(unsigned long opaque);
 
 /*
  * Set LED override, only the two LSBs have "public" meaning, but
@@ -1349,12 +1341,6 @@ void qib_clear_symerror_on_linkup(unsigned long opaque);
 #define HFI1_LED_LOG 2  /* Logical (link) YELLOW LED */
 void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
 
-/* send dma routines */
-void __qib_sdma_intr(struct hfi1_pportdata *);
-void qib_sdma_intr(struct hfi1_pportdata *);
-struct verbs_txreq;
-int qib_sdma_verbs_send(struct sdma_engine *, struct hfi1_sge_state *,
-			u32, struct verbs_txreq *);
 /*
  * The number of words for the KDETH protocol field.  If this is
  * larger then the actual field used, then part of the payload

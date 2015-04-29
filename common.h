@@ -213,30 +213,6 @@
 #define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
 #endif
 
-struct hfi1_iovec {
-	/* Pointer to data, but same size 32 and 64 bit */
-	__u64 iov_base;
-	/*
-	 * Length of data; don't need 64 bits, but want
-	 * qib_sendpkt to remain same size as before 32 bit changes, so...
-	 */
-	__u64 iov_len;
-};
-
-/*
- * Describes a single packet for send.  Each packet can have one or more
- * buffers, but the total length (exclusive of IB headers) must be less
- * than the MTU, and if using the PIO method, entire packet length,
- * including IB headers, must be less than the qib_piosize value (words).
- * Use of this necessitates including sys/uio.h
- */
-struct __qib_sendpkt {
-	__u32 sps_flags;        /* flags for packet (TBD) */
-	__u32 sps_cnt;          /* number of entries to use in sps_iov */
-	/* array of iov's describing packet. TEMPORARY */
-	struct hfi1_iovec sps_iov[4];
-};
-
 /*
  * Diagnostics can send a packet by writing the following
  * struct to the diag packet special file.
@@ -259,43 +235,6 @@ struct diag_pkt {
 
 /* diag_pkt flags */
 #define F_DIAGPKT_WAIT 0x1	/* wait until packet is sent */
-
-/*
- * Data layout in I2C flash (for GUID, etc.)
- * All fields are little-endian binary unless otherwise stated
- */
-#define HFI1_FLASH_VERSION 2
-struct qib_flash {
-	/* flash layout version (HFI1_FLASH_VERSION) */
-	__u8 if_fversion;
-	/* checksum protecting if_length bytes */
-	__u8 if_csum;
-	/*
-	 * valid length (in use, protected by if_csum), including
-	 * if_fversion and if_csum themselves)
-	 */
-	__u8 if_length;
-	/* the GUID, in network order */
-	__u8 if_guid[8];
-	/* number of GUIDs to use, starting from if_guid */
-	__u8 if_numguid;
-	/* the (last 10 characters of) board serial number, in ASCII */
-	char if_serial[12];
-	/* board mfg date (YYYYMMDD ASCII) */
-	char if_mfgdate[8];
-	/* last board rework/test date (YYYYMMDD ASCII) */
-	char if_testdate[8];
-	/* logging of error counts, TBD */
-	__u8 if_errcntp[4];
-	/* powered on hours, updated at driver unload */
-	__u8 if_powerhour[2];
-	/* ASCII free-form comment field */
-	char if_comment[32];
-	/* Backwards compatible prefix for longer Serial Numbers */
-	char if_sprefix[4];
-	/* 82 bytes used, min flash size is 128 bytes */
-	__u8 if_future[46];
-};
 
 /*
  * The next set of defines are for packet headers, and chip register

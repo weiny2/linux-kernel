@@ -1916,7 +1916,7 @@ static void init_ibport(struct hfi1_pportdata *ppd)
 /**
  * hfi1_register_ib_device - register our device with the infiniband core
  * @dd: the device data structure
- * Return the allocated qib_ibdev pointer or NULL on error.
+ * Return 0 if successful, errno if unsuccessful.
  */
 int hfi1_register_ib_device(struct hfi_devdata *dd)
 {

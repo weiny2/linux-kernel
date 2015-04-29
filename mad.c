@@ -845,7 +845,6 @@ static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
 		 */
 		if (lstate == HLS_DN_DISABLE && smp->hop_cnt)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
-		/* XXX ??? qib_wait_linkstate(ppd, QIBL_LINKV, 10); */
 		break;
 	case IB_PORT_ARMED:
 		ret = set_link_state(ppd, HLS_UP_ARMED);

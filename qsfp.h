@@ -211,7 +211,6 @@ int refresh_qsfp_cache(struct hfi1_pportdata *ppd,
 int qsfp_mod_present(struct hfi1_pportdata *ppd);
 int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr,
 		   u32 len, u8 *data);
-void qib_qsfp_init(struct hfi1_pportdata *ppd);
 
 int i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
 	      int offset, void *bp, int len);
