@@ -111,14 +111,15 @@ struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 	return ndio_claim;
 }
 
-u64 nd_fletcher64(void __iomem *addr, size_t len)
+u64 nd_fletcher64(void *addr, size_t len, bool le)
 {
+	u32 *buf = addr;
 	u32 lo32 = 0;
 	u64 hi32 = 0;
 	int i;
 
-	for (i = 0; i < len; i += 4) {
-		lo32 += readl(addr + i);
+	for (i = 0; i < len / sizeof(u32); i++) {
+		lo32 += le ? le32_to_cpu(buf[i]) : buf[i];
 		hi32 += lo32;
 	}
 

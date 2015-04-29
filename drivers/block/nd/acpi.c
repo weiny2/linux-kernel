@@ -230,8 +230,8 @@ static int nfit_spa_type(struct acpi_nfit_spa *spa)
 }
 
 struct nfit_table_header {
-	__le16 type;
-	__le16 length;
+	u16 type;
+	u16 length;
 };
 
 static void *add_table(struct acpi_nfit_desc *acpi_desc, void *table, const void *end)
@@ -903,7 +903,7 @@ static int nd_acpi_init_interleave_set(struct acpi_nfit_desc *acpi_desc,
 
 	sort(&info->mapping[0], num_mappings, sizeof(struct nfit_set_info_map),
 			cmp_map, NULL);
-	nd_set->cookie = nd_fletcher64(info, sizeof_nfit_set_info(num_mappings));
+	nd_set->cookie = nd_fletcher64(info, sizeof_nfit_set_info(num_mappings), 0);
 	ndr_desc->nd_set = nd_set;
 	devm_kfree(dev, info);
 

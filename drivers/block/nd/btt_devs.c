@@ -347,7 +347,7 @@ u64 nd_btt_sb_checksum(struct btt_sb *btt_sb)
 
 	sum_save = btt_sb->checksum;
 	btt_sb->checksum = 0;
-	sum = nd_fletcher64(btt_sb, sizeof(*btt_sb));
+	sum = nd_fletcher64(btt_sb, sizeof(*btt_sb), 1);
 	btt_sb->checksum = sum_save;
 	return sum;
 }

@@ -118,5 +118,5 @@ struct nd_region *nd_blk_region_create(struct nd_bus *nd_bus,
 		struct nd_region_desc *ndr_desc);
 struct nd_region *nd_volatile_region_create(struct nd_bus *nd_bus,
 		struct nd_region_desc *ndr_desc);
-u64 nd_fletcher64(void __iomem *addr, size_t len);
+u64 nd_fletcher64(void *addr, size_t len, bool le);
 #endif /* __LIBND_H__ */
