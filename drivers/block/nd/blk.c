@@ -28,11 +28,9 @@ struct nd_blk_device {
 	struct nd_blk_region *ndbr;
 	struct nd_io ndio;
 	size_t disk_size;
-	int id;
 };
 
 static int nd_blk_major;
-static DEFINE_IDA(nd_blk_ida);
 
 static resource_size_t to_dev_offset(struct nd_namespace_blk *nsblk,
 				resource_size_t ns_offset, unsigned int len)
@@ -139,6 +137,7 @@ static const struct block_device_operations nd_blk_fops = {
 static int nd_blk_probe(struct device *dev)
 {
 	struct nd_namespace_blk *nsblk = to_nd_namespace_blk(dev);
+	struct nd_region *nd_region = to_nd_region(dev->parent);
 	struct nd_blk_device *blk_dev;
 	resource_size_t disk_size;
 	struct gendisk *disk;
@@ -151,12 +150,6 @@ static int nd_blk_probe(struct device *dev)
 	blk_dev = kzalloc(sizeof(*blk_dev), GFP_KERNEL);
 	if (!blk_dev)
 		return -ENOMEM;
-
-	blk_dev->id = ida_simple_get(&nd_blk_ida, 0, 0, GFP_KERNEL);
-	if (blk_dev->id < 0) {
-		err = blk_dev->id;
-		goto err_ida;
-	}
 
 	blk_dev->disk_size	= disk_size;
 
@@ -186,7 +179,7 @@ static int nd_blk_probe(struct device *dev)
 	disk->private_data	= blk_dev;
 	disk->queue		= blk_dev->queue;
 	disk->flags		= GENHD_FL_EXT_DEVT;
-	sprintf(disk->disk_name, "ndblk%d", blk_dev->id);
+	sprintf(disk->disk_name, "ndblk%d.%d", nd_region->id, nsblk->id);
 	set_capacity(disk, disk_size >> SECTOR_SHIFT);
 
 	nd_bus_lock(dev);
@@ -202,8 +195,6 @@ static int nd_blk_probe(struct device *dev)
  err_alloc_disk:
 	blk_cleanup_queue(blk_dev->queue);
  err_alloc_queue:
-	ida_simple_remove(&nd_blk_ida, blk_dev->id);
- err_ida:
 	kfree(blk_dev);
 	return err;
 }
@@ -219,7 +210,6 @@ static int nd_blk_remove(struct device *dev)
 	del_gendisk(blk_dev->disk);
 	put_disk(blk_dev->disk);
 	blk_cleanup_queue(blk_dev->queue);
-	ida_simple_remove(&nd_blk_ida, blk_dev->id);
 	kfree(blk_dev);
 
 	return 0;

@@ -37,11 +37,9 @@ struct pmem_device {
 	phys_addr_t		phys_addr;
 	void			*virt_addr;
 	size_t			size;
-	int			id;
 };
 
 static int pmem_major;
-static DEFINE_IDA(pmem_ida);
 
 static void pmem_do_bvec(struct pmem_device *pmem, struct page *page,
 			unsigned int len, unsigned int off, int rw,
@@ -142,7 +140,7 @@ static const struct block_device_operations pmem_fops = {
 	.direct_access =	pmem_direct_access,
 };
 
-static struct pmem_device *pmem_alloc(struct device *dev, struct resource *res)
+static struct pmem_device *pmem_alloc(struct device *dev, struct resource *res, int id)
 {
 	struct pmem_device *pmem;
 	struct gendisk *disk;
@@ -153,19 +151,13 @@ static struct pmem_device *pmem_alloc(struct device *dev, struct resource *res)
 	if (!pmem)
 		goto out;
 
-	pmem->id = ida_simple_get(&pmem_ida, 0, 0, GFP_KERNEL);
-	if (pmem->id < 0) {
-		err = pmem->id;
-		goto out_free_dev;
-	}
-
 	pmem->phys_addr = res->start;
 	pmem->size = resource_size(res);
 
 	err = -EINVAL;
 	if (!request_mem_region(pmem->phys_addr, pmem->size, "pmem")) {
 		dev_warn(dev, "could not reserve region [0x%pa:0x%zx]\n", &pmem->phys_addr, pmem->size);
-		goto out_free_ida;
+		goto out_free_dev;
 	}
 
 	/*
@@ -190,12 +182,12 @@ static struct pmem_device *pmem_alloc(struct device *dev, struct resource *res)
 		goto out_free_queue;
 
 	disk->major		= pmem_major;
-	disk->first_minor	= PMEM_MINORS * pmem->id;
+	disk->first_minor	= PMEM_MINORS * id;
 	disk->fops		= &pmem_fops;
 	disk->private_data	= pmem;
 	disk->queue		= pmem->pmem_queue;
 	disk->flags		= GENHD_FL_EXT_DEVT;
-	sprintf(disk->disk_name, "pmem%d", pmem->id);
+	sprintf(disk->disk_name, "pmem%d", id);
 	disk->driverfs_dev = dev;
 	set_capacity(disk, pmem->size >> 9);
 	pmem->pmem_disk = disk;
@@ -208,8 +200,6 @@ out_unmap:
 	iounmap(pmem->virt_addr);
 out_release_region:
 	release_mem_region(pmem->phys_addr, pmem->size);
-out_free_ida:
-	ida_simple_remove(&pmem_ida, pmem->id);
 out_free_dev:
 	kfree(pmem);
 out:
@@ -223,7 +213,6 @@ static void pmem_free(struct pmem_device *pmem)
 	blk_cleanup_queue(pmem->pmem_queue);
 	iounmap(pmem->virt_addr);
 	release_mem_region(pmem->phys_addr, pmem->size);
-	ida_simple_remove(&pmem_ida, pmem->id);
 	kfree(pmem);
 }
 
@@ -250,7 +239,7 @@ static int nd_pmem_probe(struct device *dev)
 		}
 	}
 
-	pmem = pmem_alloc(dev, &nsio->res);
+	pmem = pmem_alloc(dev, &nsio->res, nd_region->id);
 	if (IS_ERR(pmem))
 		return PTR_ERR(pmem);
 
