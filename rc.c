@@ -894,7 +894,7 @@ static void restart_rc(struct hfi1_qp *qp, u32 psn, int wait)
 			hfi1_send_complete(qp, wqe, IB_WC_RETRY_EXC_ERR);
 			hfi1_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 			return;
-		} else /* XXX need to handle delayed completion */
+		} else /* need to handle delayed completion */
 			return;
 	} else
 		qp->s_retry--;
