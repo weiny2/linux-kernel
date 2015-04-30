@@ -1972,9 +1972,6 @@ int hfi1_register_ib_device(struct hfi_devdata *dd)
 	INIT_LIST_HEAD(&dev->memwait);
 	INIT_LIST_HEAD(&dev->txreq_free);
 
-	/* FIXME - come up with a better scheme
-	 * - this one doesn't scale for multiple sdma engines
-	 */
 	descq_cnt = sdma_get_descq_cnt();
 	/*
 	 * AHG mode copy requires header be on cache line
