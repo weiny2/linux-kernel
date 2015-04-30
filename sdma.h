@@ -374,7 +374,6 @@ struct sdma_txreq {
 	struct sdma_desc descs[NUM_DESC];
 };
 
-/* FIXME - remove when verbs done */
 struct verbs_txreq {
 	struct sdma_txreq       txreq;
 	struct hfi1_qp           *qp;
