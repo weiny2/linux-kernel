@@ -670,10 +670,9 @@ void hfi1_ib_rcv(struct hfi_packet *packet)
 			if (rcd->lookaside_qpn != qp_num) {
 				if (atomic_dec_and_test(
 					&rcd->lookaside_qp->refcount))
-					wake_up(
-					 &rcd->lookaside_qp->wait);
-					rcd->lookaside_qp = NULL;
-				}
+					wake_up(&rcd->lookaside_qp->wait);
+				rcd->lookaside_qp = NULL;
+			}
 		}
 		if (!rcd->lookaside_qp) {
 			qp = hfi1_lookup_qpn(ibp, qp_num);
