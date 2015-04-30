@@ -292,7 +292,7 @@ int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
 		struct nd_namespace_label __iomem *nd_label;
 		struct nd_region *nd_region = NULL;
 		u8 label_uuid[NSLABEL_UUID_LEN];
-		struct nd_label_id *label_id;
+		struct nd_label_id label_id;
 		struct resource *res;
 		u32 flags;
 
@@ -301,16 +301,11 @@ int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
 		if (!slot_valid(nd_label, slot))
 			continue;
 
-		label_id = devm_kzalloc(ndd->dev, sizeof(*label_id),
-				GFP_KERNEL);
-		if (!label_id)
-			return -ENOMEM;
-		memcpy_fromio(label_uuid, nd_label->uuid,
-				NSLABEL_UUID_LEN);
+		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
 		flags = readl(&nd_label->flags);
-		res = __request_region(&ndd->dpa, readq(&nd_label->dpa),
-				readq(&nd_label->rawsize),
-				nd_label_gen_id(label_id, label_uuid, flags), 0);
+		nd_label_gen_id(&label_id, label_uuid, flags);
+		res = nd_dimm_allocate_dpa(ndd, &label_id, readq(&nd_label->dpa),
+				readq(&nd_label->rawsize));
 		nd_dbg_dpa(nd_region, ndd, res, "reserve\n");
 		if (!res)
 			return -EBUSY;
