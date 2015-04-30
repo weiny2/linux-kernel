@@ -8032,7 +8032,7 @@ static int init_cntrs(struct hfi_devdata *dd)
 
 	/* allocate per port storage for counter values */
 	ppd = (struct hfi1_pportdata *)(dd + 1);
-	for (i = 0; i < dd->num_pports; i++, ppd++) { /* FIXME. ppd++? */
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		ppd->cntrs = kcalloc(dd->nportcntrs, sizeof(u64), GFP_KERNEL);
 		if (!ppd->cntrs)
 			goto bail;
