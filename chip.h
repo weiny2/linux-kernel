@@ -430,11 +430,15 @@
 #define CRC_SIZES_SHIFT 20
 #define CRC_SIZES_MASK	0x7
 
-/* verify capability link width fields */
-#define LINK_WIDTH_SHIFT 0
-#define LINK_WIDTH_MASK 0xffff
+/* verify capability local link width fields */
+#define LINK_WIDTH_SHIFT 0		/* also for remote link width */
+#define LINK_WIDTH_MASK 0xffff		/* also for remote link width */
 #define LOCAL_FLAG_BITS_SHIFT 16
 #define LOCAL_FLAG_BITS_MASK 0xff
+#define MISC_CONFIG_BITS_SHIFT 24
+#define MISC_CONFIG_BITS_MASK 0xff
+
+/* verify cpability remote link width fields */
 #define REMOTE_TX_RATE_SHIFT 16
 #define REMOTE_TX_RATE_MASK 0xff
 

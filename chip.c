@@ -1012,8 +1012,8 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *z,
 				u8 *vcu, u16 *vl15buf, u8 *crc_sizes);
 static void read_vc_remote_link_width(struct hfi_devdata *dd,
 				u8 *remote_tx_rate, u16 *link_widths);
-static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
-				u16 *link_widths);
+static void read_vc_local_link_width(struct hfi_devdata *dd, u8 *misc_bits,
+				u8 *flag_bits, u16 *link_widths);
 static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
 				u8 *device_rev);
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
@@ -3531,10 +3531,11 @@ static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
 static void get_linkup_widths(struct hfi_devdata *dd, u16 *tx_width,
 				u16 *rx_width)
 {
-	u16 flags, widths, tx, rx;
+	u16 widths, tx, rx;
+	u8 misc_bits, local_flags;
 	u16 active_tx, active_rx;
 
-	read_vc_local_link_width(dd, &flags, &widths);
+	read_vc_local_link_width(dd, &misc_bits, &local_flags, &widths);
 	tx = widths >> 12;
 	rx = (widths >> 8) & 0xf;
 	dd_dev_info(dd, "%s: active tx %d, active rx %d\n", __func__, tx, rx);
@@ -4702,24 +4703,27 @@ static int write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 z, u8 vcu,
 				GENERAL_CONFIG, frame);
 }
 
-static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
-					u16 *link_widths)
+static void read_vc_local_link_width(struct hfi_devdata *dd, u8 *misc_bits,
+					u8 *flag_bits, u16 *link_widths)
 {
 	u32 frame;
 
 	read_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
 				&frame);
+	*misc_bits = (frame >> MISC_CONFIG_BITS_SHIFT) & MISC_CONFIG_BITS_MASK;
 	*flag_bits = (frame >> LOCAL_FLAG_BITS_SHIFT) & LOCAL_FLAG_BITS_MASK;
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
 }
 
 static int write_vc_local_link_width(struct hfi_devdata *dd,
-				u16 flag_bits,
+				u8 misc_bits,
+				u8 flag_bits,
 				u16 link_widths)
 {
 	u32 frame;
 
-	frame = (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
+	frame = (u32)misc_bits << MISC_CONFIG_BITS_SHIFT
+		| (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
 		| (u32)link_widths << LINK_WIDTH_SHIFT;
 	return load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
 		     frame);
@@ -5210,7 +5214,7 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
-	ret = write_vc_local_link_width(dd, 0,
+	ret = write_vc_local_link_width(dd, 0, 0,
 		     opa_to_vc_link_widths(ppd->link_width_enabled));
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
