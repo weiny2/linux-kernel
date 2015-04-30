@@ -1072,7 +1072,7 @@ static inline void sdma_engine_progress_schedule(
 	struct sdma_engine *sde)
 {
 	/*
-	 * FIXME - need a better mechanism here
+	 * Need a better mechanism here
 	 * that progresses the ring on a
 	 * CPU away from receive processing
 	 */
