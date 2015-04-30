@@ -4469,7 +4469,7 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 
 	this_cpu_inc(*dd->int_counter);
 
-	/* FIXME - this read_csr is really bad in the hot path */
+	/* This read_csr is really bad in the hot path */
 	status = read_csr(dd,
 			CCE_INT_STATUS + (8*(IS_SDMA_START/64)))
 			& sde->imask;
