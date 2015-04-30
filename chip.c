@@ -5119,8 +5119,12 @@ static int init_loopback(struct hfi_devdata *dd)
 	}
 
 	/* handle serdes loopback */
-	if (loopback == LOOPBACK_SERDES)
+	if (loopback == LOOPBACK_SERDES) {
+		/* internal serdes loopack needs quick linkup on RTL */
+		if (dd->icode == ICODE_RTL_SILICON)
+			quick_linkup = 1;
 		return set_serdes_loopback_mode(dd);
+	}
 
 	/* LCB loopback - handled at poll time */
 	if (loopback == LOOPBACK_LCB) {
