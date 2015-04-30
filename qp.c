@@ -1435,7 +1435,7 @@ static int iowait_sleep(
 		 * and try again later rather than destroying the
 		 * buffer and undoing the side effects of the copy.
 		 */
-		/* FIXME - make a common routine? */
+		/* Make a common routine? */
 		dev = &sde->dd->verbs_dev;
 		list_add_tail(&stx->list, &wait->tx_head);
 		spin_lock(&dev->pending_lock);
