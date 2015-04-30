@@ -271,11 +271,16 @@ static ssize_t init_namespaces_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct nd_region_namespaces *num_ns = dev_get_drvdata(dev);
+	ssize_t rc;
 
-	if (!num_ns)
-		return -ENXIO;
+	nd_bus_lock(dev);
+	if (num_ns)
+		rc = sprintf(buf, "%d/%d\n", num_ns->active, num_ns->count);
+	else
+		rc = -ENXIO;
+	nd_bus_unlock(dev);
 
-	return sprintf(buf, "%d/%d\n", num_ns->active, num_ns->count);
+	return rc;
 }
 static DEVICE_ATTR_RO(init_namespaces);
 
