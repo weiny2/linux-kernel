@@ -2685,9 +2685,6 @@ static void __sdma_process_event(struct sdma_engine *sde,
  * of MAX_DESC (64) descriptors.  There doesn't seem
  * much point in an interim step.
  *
- * TODO:
- * - Add coalesce processing for > MAX_DESC descriptors
- *
  */
 int _extend_sdma_tx_descs(struct hfi_devdata *dd, struct sdma_txreq *tx)
 {
