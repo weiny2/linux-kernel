@@ -1321,7 +1321,7 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 
 		label0 = nd_get_label(nd_mapping->labels, 0);
 		size += readq(&label0->rawsize);
-		if (readl(&label0->position) != 0)
+		if (readw(&label0->position) != 0)
 			continue;
 		WARN_ON(nspm->alt_name || nspm->uuid);
 		nspm->alt_name = kmemdup((void __force *) label0->name,
