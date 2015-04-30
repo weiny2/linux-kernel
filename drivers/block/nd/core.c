@@ -118,7 +118,7 @@ u64 nd_fletcher64(void __iomem *addr, size_t len)
 	int i;
 
 	for (i = 0; i < len; i += 4) {
-		lo32 = readl(addr + i);
+		lo32 += readl(addr + i);
 		hi32 += lo32;
 	}
 
