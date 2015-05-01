@@ -582,7 +582,7 @@ static void free_arenas(struct btt *btt)
  * This function checks if the metadata layout is valid and error free
  */
 static int arena_is_valid(struct arena_info *arena, struct btt_sb *super,
-				u8 *uuid)
+				u8 *uuid, u32 lbasize)
 {
 	u64 checksum;
 
@@ -594,6 +594,9 @@ static int arena_is_valid(struct arena_info *arena, struct btt_sb *super,
 	if (checksum != nd_btt_sb_checksum(super))
 		return 0;
 	super->checksum = cpu_to_le64(checksum);
+
+	if (lbasize != le32_to_cpu(super->external_lbasize))
+		return 0;
 
 	/* TODO: figure out action for this */
 	if ((le32_to_cpu(super->flags) & IB_FLAG_ERROR_MASK) != 0)
@@ -658,7 +661,8 @@ static int discover_arenas(struct btt *btt)
 		if (ret)
 			goto out;
 
-		if (!arena_is_valid(arena, super, btt->nd_btt->uuid)) {
+		if (!arena_is_valid(arena, super, btt->nd_btt->uuid,
+				btt->lbasize)) {
 			if (remaining == btt->rawsize) {
 				btt->init_state = INIT_NOTFOUND;
 				dev_info(to_dev(arena), "No existing arenas\n");
