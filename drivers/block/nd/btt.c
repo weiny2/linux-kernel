@@ -775,9 +775,6 @@ static int btt_arena_write_layout(struct arena_info *arena, u8 *uuid)
 	super->internal_nlba = cpu_to_le32(arena->internal_nlba);
 	super->nfree = cpu_to_le32(arena->nfree);
 	super->infosize = cpu_to_le32(sizeof(struct btt_sb));
-
-	/* TODO: make these relative to arena start. For now we get this
-	 * since each file = 1 arena = 1 dimm, but will change */
 	super->nextoff = cpu_to_le64(arena->nextoff);
 	/*
 	 * Subtract arena->infooff (arena start) so numbers are relative
