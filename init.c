@@ -620,8 +620,6 @@ static void enable_chip(struct hfi_devdata *dd)
 		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_EGR_FULL))
 			rcvmask |= HFI1_RCVCTRL_NO_EGR_DROP_ENB;
 		hfi1_rcvctrl(dd, rcvmask, i);
-		/* XXX (Mitko): Do we care about the result of this?
-		 * sc_enable() will display an error message. */
 		sc_enable(dd->rcd[i]->sc);
 	}
 }

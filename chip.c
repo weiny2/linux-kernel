@@ -5647,9 +5647,6 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 	u64 guid;
 	int ret;
 
-	/* XXX (Mitko): This should have a better place than
-	 * here!
-	 */
 	if (HFI_CAP_IS_KSET(EXTENDED_PSN))
 		add_rcvctrl(dd, RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK);
 
@@ -7405,7 +7402,6 @@ void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 
 	hfi_cdbg(RCVCTRL, "ctxt %d op 0x%x", ctxt, op);
 
-	/* XXX (Mitko): Do we want to use the shadow value here? */
 	rcvctrl = read_kctxt_csr(dd, ctxt, RCV_CTXT_CTRL);
 	/* if the context already enabled, don't do the extra steps */
 	if ((op & HFI1_RCVCTRL_CTXT_ENB)

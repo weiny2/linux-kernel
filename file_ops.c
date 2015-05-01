@@ -775,11 +775,6 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	*ev = 0;
 
 	if (--uctxt->cnt) {
-		/*
-		 * XXX If the master closes the context before the slave(s),
-		 * revoke the mmap for the eager receive queue so
-		 * the slave(s) don't wait for receive data forever.
-		 */
 		uctxt->active_slaves &= ~(1 << fdata->subctxt);
 		uctxt->subpid[fdata->subctxt] = 0;
 		mutex_unlock(&hfi1_mutex);
@@ -1199,7 +1194,6 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 				uctxt->dd->rcv_entries.group_size) +
 		uctxt->expected_count;
 	cinfo.credits = uctxt->sc->credits;
-	/* FIXME: set proper numa node */
 	cinfo.numa_node = uctxt->numa_id;
 	cinfo.rec_cpu = fd->rec_cpu_num;
 	cinfo.send_ctxt = uctxt->sc->hw_context;
@@ -1737,11 +1731,9 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 				 * bigger than 8K MTU, so should we even worry
 				 * about 10K here?
 				 */
-				/* XXX MITKO: better determine the order of the
-				 * TID */
 				hfi1_put_tid(dd, tid, PT_EXPECTED,
-					      phys[pmapped],
-					      tidsize >> PAGE_SHIFT);
+					     phys[pmapped],
+					     ilog2(tidsize >> PAGE_SHIFT) + 1);
 				pair_size += tidsize >> PAGE_SHIFT;
 				EXP_TID_RESET(tidlist[pairidx], LEN, pair_size);
 				if (!(tid % 2)) {
