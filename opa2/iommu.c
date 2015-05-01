@@ -153,6 +153,7 @@ hfi_iommu_root_set_context(struct hfi_devdata *dd)
 	/* Set context_entry for PCI device-funcY, sets PASID table */
 	c = &c_tbl[dev_id];
 	c->PASIDE = 1;
+	c->AW = 2;   /* 4-lvl page table */
 	c->WPE = 1;  /* don't allow writes to read-only pages */
 	c->PASIDPTR = (u64)virt_to_phys(p_tbl) >> PAGE_SHIFT;
 	c->P = 1;
@@ -204,7 +205,7 @@ hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *mm, u16 pasid)
 
 	p_entry.SRE = 1;
 	/* this is level-1 (w/PASID) translation pg_table */
-	p_entry.FLPTPTR = (u64)mm->pgd >> PAGE_SHIFT;
+	p_entry.FLPTPTR = virt_to_phys(mm->pgd) >> PAGE_SHIFT;
 	p_entry.P = 1;
 	p_tbl[pasid].val = p_entry.val;
 }
