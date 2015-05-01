@@ -114,7 +114,8 @@ int nd_label_validate(struct nd_dimm_drvdata *ndd)
 		}
 		sum_save = readq(&nsindex[i]->checksum);
 		writeq(0, &nsindex[i]->checksum);
-		sum = nd_fletcher64(nsindex[i], sizeof_namespace_index(ndd), 1);
+		sum = nd_fletcher64((void * __force) nsindex[i],
+				sizeof_namespace_index(ndd), 1);
 		writeq(sum_save, &nsindex[i]->checksum);
 		if (sum != sum_save) {
 			dev_dbg(dev, "%s: nsindex%d checksum invalid\n",
@@ -457,7 +458,8 @@ static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
 		for (i = 0, last_bits = nfree - nslot; i < last_bits; i++)
 			clear_bit_le(nslot + i, free);
 	}
-	checksum = nd_fletcher64(nsindex, sizeof_namespace_index(ndd), 1);
+	checksum = nd_fletcher64((void * __force) nsindex,
+			sizeof_namespace_index(ndd), 1);
 	writeq(checksum, &nsindex->checksum);
 	rc = nd_dimm_set_config_data(ndd, readq(&nsindex->myoff),
 			nsindex, sizeof_namespace_index(ndd));

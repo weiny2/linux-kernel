@@ -256,6 +256,9 @@ void nd_bus_unlock(struct device *dev);
 bool is_nd_bus_locked(struct device *dev);
 int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd);
 void nd_dimm_free_dpa(struct nd_dimm_drvdata *ndd, struct resource *res);
+struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
+		struct nd_label_id *label_id, resource_size_t start,
+		resource_size_t n);
 int nd_blk_region_init(struct nd_region *nd_region);
 resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk);
 #endif /* __ND_H__ */
