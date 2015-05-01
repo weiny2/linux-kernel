@@ -1346,6 +1346,8 @@ static int nd_btt_probe(struct device *dev)
 		return rc;
 
 	bdev = nd_btt->backing_dev;
+	sync_blockdev(bdev);
+	invalidate_bdev(bdev);
 	/* the first 4K of a device is padding */
 	nd_btt->offset = nd_partition_offset(bdev) + SZ_4K;
 	rawsize = (bdev->bd_part->nr_sects << SECTOR_SHIFT) - SZ_4K;
