@@ -29,10 +29,6 @@ static bool force_enable_dimms;
 module_param(force_enable_dimms, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(force_enable_dimms, "Ignore _STA (ACPI DIMM device) status");
 
-enum {
-	NFIT_ACPI_NOTIFY_TABLE = 0x80,
-};
-
 static u8 nd_acpi_uuids[2][16]; /* initialized at nd_acpi_init */
 
 static u8 *nd_acpi_bus_uuid(void)
@@ -1444,12 +1440,6 @@ static int nd_acpi_remove(struct acpi_device *adev)
 	return 0;
 }
 
-static void nd_acpi_notify(struct acpi_device *adev, u32 event)
-{
-	/* TODO: handle ACPI_NOTIFY_BUS_CHECK notification */
-	dev_dbg(&adev->dev, "%s: event: %d\n", __func__, event);
-}
-
 static const struct acpi_device_id nd_acpi_ids[] = {
 	{ "ACPI0012", 0 },
 	{ "", 0 },
@@ -1463,7 +1453,6 @@ static struct acpi_driver nd_acpi_driver = {
 	.ops = {
 		.add = nd_acpi_add,
 		.remove = nd_acpi_remove,
-		.notify = nd_acpi_notify
 	},
 };
 
