@@ -68,6 +68,9 @@
 #define OPA_IB_PORT_NUM_PKEYS   16
 #define IB_DEFAULT_GID_PREFIX	cpu_to_be64(0xfe80000000000000ULL)
 
+/* TODO - placeholders */
+extern __be64 opa_ib_sys_guid;
+
 extern unsigned int opa_ib_max_cqes;
 
 struct opa_ib_portdata {
@@ -100,6 +103,7 @@ struct opa_ib_data {
 	__be64 node_guid;
 	u8 num_pports;
 	struct opa_ib_portdata *pport;
+	struct device *parent_dev;
 };
 
 struct opa_ib_pd {
@@ -124,12 +128,18 @@ struct opa_ib_mr {
 	struct ib_mr ibmr;
 };
 
+struct opa_ucontext {
+	struct ib_ucontext ibucontext;
+};
+
 #define to_opa_ibpd(pd)	container_of((pd), struct opa_ib_pd, ibpd)
 #define to_opa_ibah(ah)	container_of((ah), struct opa_ib_ah, ibah)
 #define to_opa_ibqp(qp)	container_of((qp), struct opa_ib_qp, ibqp)
 #define to_opa_ibcq(cq)	container_of((cq), struct opa_ib_cq, ibcq)
 #define to_opa_ibmr(mr)	container_of((mr), struct opa_ib_mr, ibmr)
 #define to_opa_ibdata(ibd)	container_of((ibd), struct opa_ib_data, ibdev)
+#define to_opa_ucontext(ibu)	container_of((ibu),\
+				struct opa_ucontext, ibucontext)
 
 static inline struct opa_ib_portdata *to_opa_ibportdata(struct ib_device *ibdev,
 							u8 port)
@@ -174,4 +184,7 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr);
+int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+			struct ib_wc *in_wc, struct ib_grh *in_grh,
+			struct ib_mad *in_mad, struct ib_mad *out_mad);
 #endif

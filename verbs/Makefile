@@ -6,4 +6,4 @@ ccflags-y += -I $(src)/../common
 ccflags-y += -I $(src)/../common/uapi
 obj-m += opa2_ib.o
 
-opa2_ib-y := cq.o mr.o pd.o qp.o rdma.o verbs.o
+opa2_ib-y := cq.o mr.o pd.o qp.o rdma.o verbs.o mad.o
