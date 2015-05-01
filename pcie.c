@@ -797,8 +797,8 @@ static uint pcie_retry = 5;
 module_param(pcie_retry, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_retry, "Driver will try this many times to reach requested speed");
 
-/* default to p0 as that allows preservation of Gen3 across a reboot */
-static uint pcie_pset; /* default to p0 */
+#define DEFAULT_PSET 2
+static uint pcie_pset = DEFAULT_PSET;
 module_param(pcie_pset, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_pset, "PCIe Eq Pset value to use, range is 0-10");
 
@@ -1144,14 +1144,15 @@ retry:
 	 * Set Gen3EqPsetReqVec, leave other fields 0.
 	 */
 	if (pcie_pset > 10) {	/* valid range is 0-10, inclusive */
-		dd_dev_err(dd, "%s: Invalid Eq Pset %u, setting to 0\n",
-			__func__, pcie_pset);
-		pcie_pset = 0;
+		dd_dev_err(dd, "%s: Invalid Eq Pset %u, setting to %d\n",
+			__func__, pcie_pset, DEFAULT_PSET);
+		pcie_pset = DEFAULT_PSET;
 	}
 	dd_dev_info(dd, "%s: using EQ Pset %u\n", __func__, pcie_pset);
 	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL106,
-		(1 << pcie_pset)
-			<< PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
+		((1 << pcie_pset)
+			<< PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT)
+		| PCIE_CFG_REG_PL106_GEN3_EQ_EVAL2MS_DISABLE_SMASK);
 
 	/*
 	 * step 5b: Do post firmware download steps via SBus
