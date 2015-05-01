@@ -8,7 +8,7 @@ scp_cmd="scp -P4022"
 # start simics if not yet
 if [ -z `pidof simics-common` ]; then
     pushd ${fxr}/simics/workspace
-    ./simics -no-win -e '$disk_image=../FxrRhel7-201504250757.craff' \
+    ./simics -no-win -e '$disk_image=../FxrRhel7-201505011038.craff' \
 	FXR.simics >../simics.log &
     popd
     sleep 45
@@ -50,7 +50,7 @@ if [ ! $? ]; then
 fi
 # run quick test.
 cd opa-headers.git/test
-./harness.py --nodelist=viper0 --type=quick
+./harness.py --nodelist=viper0 --testlist=HFI-RING,HFI-APPEND,HFI-CMD,HFI-EQ,HFI-JOB,HFI-ME,HFI-PUT,HFI-SEND-SELF,HFI-TX-AUTH
 res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
