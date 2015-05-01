@@ -1450,9 +1450,6 @@ void hfi1_nomsix(struct hfi_devdata *);
 void restore_pci_variables(struct hfi_devdata *dd);
 int do_pcie_gen3_transition(struct hfi_devdata *dd);
 
-/*
- * dma_addr wrappers - all 0's invalid for hw
- */
 dma_addr_t hfi1_map_page(struct pci_dev *, struct page *, unsigned long,
 			 size_t, int);
 const char *get_unit_name(int unit);
