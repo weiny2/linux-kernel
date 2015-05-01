@@ -54,6 +54,8 @@
 #include <rdma/fxr/fxr_fast_path_defs.h>
 #include <rdma/fxr/fxr_tx_ci_csrs.h>
 #include <rdma/fxr/fxr_rx_ci_csrs.h>
+#include <rdma/fxr/fxr_rx_et_defs.h>
+#include <rdma/fxr/fxr_rx_eq_csrs.h>
 #include <rdma/fxr/fxr_rx_hiarb_defs.h>
 #include <rdma/fxr/fxr_rx_hiarb_csrs.h>
 #include <rdma/fxr/fxr_rx_hp_defs.h>
@@ -240,9 +242,9 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		goto err_post_alloc;
 	/* TODO - next is to write the hfi_cq structs (see VNIC code) */
 
-	ret = setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
-	/* TODO - ignore error, FXR model missing MSI-X table */
-	ret = 0;
+	/* enable MSI-X */
+	/* TODO - just ask for 64 IRQs for now */
+	ret = setup_interrupts(dd, /* HFI_NUM_INTERRUPTS */ 64, 0);
 	if (ret)
 		goto err_post_alloc;
 
@@ -268,19 +270,49 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
 	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
+	RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t eq_cache_access = {.val = 0};
+	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
+	union pte_cache_addr pte_cache_tag;
+	union eq_cache_addr eq_cache_tag;
+	union trig_op_cache_addr trig_op_cache_tag;
 
 	/* write PCB_LOW first to clear valid bit */
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
 	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 
-	/* invalidate cached host memory in HFI for Portals Tables */
+	/* invalidate cached host memory in HFI for Portals Tables by PID */
 	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
-	/* address and mask is 22 bits (PID in upper 12-bits) */
-	/* TODO - consider using pte_cache_addr_t here, when in HW headers */
-	pte_cache_access.field.address = ptl_pid << 10;
-	pte_cache_access.field.mask_address = 0x3FF;
+	pte_cache_tag.val = 0;
+	pte_cache_tag.tpid = ptl_pid;
+	pte_cache_access.field.address = pte_cache_tag.val;
+	pte_cache_tag.val = -1;
+	pte_cache_tag.tpid = 0;
+	pte_cache_access.field.mask_address = pte_cache_tag.val;
 	write_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL, pte_cache_access.val);
-	/* TODO - above incomplete, deferred processing needs to wait for .ack bit */
+
+	/* invalidate cached host memory in HFI for EQ Descs by PID */
+	eq_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	eq_cache_tag.val = 0;
+	eq_cache_tag.pid = ptl_pid;
+	eq_cache_access.field.address = eq_cache_tag.val;
+	eq_cache_tag.val = -1;
+	eq_cache_tag.pid = 0;
+	eq_cache_access.field.mask_address = eq_cache_tag.val;
+	write_csr(dd, FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL,
+		  eq_cache_access.val);
+
+	/* invalidate cached host memory in HFI for Triggered Ops by PID */
+	trig_op_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	trig_op_cache_tag.val = 0;
+	trig_op_cache_tag.pid = ptl_pid;
+	trig_op_cache_access.field.address = trig_op_cache_tag.val;
+	trig_op_cache_tag.val = -1;
+	trig_op_cache_tag.pid = 0;
+	trig_op_cache_access.field.mask_address = trig_op_cache_tag.val;
+	write_csr(dd, FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL,
+		  trig_op_cache_access.val);
+
+	/* TODO - above incomplete, deferred processing to wait for .ack bit */
 
 	/* TODO - write fake simics CSR to flush mini-TLB (AT interface TBD) */
 	write_csr(dd, 0x2820000, 1);
@@ -317,24 +349,21 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 
 	head_offset = FXR_RXCI_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
 
-#if 0
-	/* disable CQ head before reset */
-	/* TODO, CQ head should be set after CQ reset, but not working in simics */
+	/* disable CQ head before reset, as no assigned PASID */
 	write_csr(dd, head_offset, 0);
-#endif
-
-	/* set CQ head */
-	/* TODO, CQ head should be set after CQ reset, but not working in simics */
-	cq_head.field.valid = 1;
-	cq_head.field.hd_ptr_host_addr =
-			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
-	write_csr(dd, head_offset, cq_head.val);
 
 	/* reset CQ state, as CQ head starts at 0 */
 	tx_cq_reset.field.reset_cq = cq_idx;
 	rx_cq_reset.field.reset_cq = cq_idx;
 	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
 	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
+	/* TODO - reset needs async processing to wait for complete */
+
+	/* set CQ head, should be set after CQ reset */
+	cq_head.field.valid = 1;
+	cq_head.field.hd_ptr_host_addr =
+			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
+	write_csr(dd, head_offset, cq_head.val);
 }
 
 /*

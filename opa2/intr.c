@@ -111,13 +111,8 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw)
 		/* using MSI-X, with reduced interrupts */
 		dd->num_msix_entries = request;
 		dd->msix_entries = entries;
-
-		/* TODO: Consider handling reduced interrupt case? */
-		dd_dev_err(dd,
-			   "cannot handle reduced interrupt case, %u < %u\n",
+		dd_dev_err(dd, "reduced MSI-X interrupts, %u < %u\n",
 			   request, total);
-		ret = -ENOSPC;
-		goto fail;
 	} else {
 		/* using MSI-X */
 		dd->num_msix_entries = request;
