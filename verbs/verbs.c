@@ -55,6 +55,8 @@
 #include <linux/idr.h>
 #include <linux/module.h>
 #include <linux/utsname.h>
+#include <linux/pci.h>
+#include "mad.h"
 #include "verbs.h"
 
 static int opa_ib_add(struct opa_core_device *odev);
@@ -67,7 +69,7 @@ static struct opa_core_client opa_ib_driver = {
 };
 
 /* TODO - placeholders */
-static __be64 opa_ib_sys_guid;
+__be64 opa_ib_sys_guid;
 static unsigned int opa_ib_max_mtu = 8192;
 static unsigned int opa_ib_default_mtu = 4096;
 static unsigned int opa_ib_num_vls = 8;
@@ -175,7 +177,8 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	//props->state = dd->f_iblink_state(ppd);
 	//props->phys_state = dd->f_ibphys_portstate(ppd);
 #else
-	props->state = IB_PORT_DOWN;
+#warning "Forcing port to active for testing"
+	props->state = IB_PORT_ACTIVE;
 	props->phys_state = IB_PORTPHYSSTATE_POLLING;
 #endif
 	props->port_cap_flags = ibp->port_cap_flags;
@@ -219,6 +222,41 @@ static int opa_ib_query_gid(struct ib_device *ibdev, u8 port,
 	gid->global.subnet_prefix = ibp->gid_prefix;
 	gid->global.interface_id = ibp->guid;
 	return ret;
+}
+
+/**
+ * qib_alloc_ucontext - allocate a ucontext
+ * @ibdev: the infiniband device
+ * @udata: not used
+ */
+
+static struct ib_ucontext *opa_ib_alloc_ucontext(struct ib_device *ibdev,
+						struct ib_udata *udata)
+{
+	struct opa_ucontext *context;
+	struct ib_ucontext *ret;
+
+	context = kmalloc(sizeof(*context), GFP_KERNEL);
+	if (!context) {
+		ret = ERR_PTR(-ENOMEM);
+		goto bail;
+	}
+
+	ret = &context->ibucontext;
+
+bail:
+	return ret;
+}
+
+/**
+ * opa_ib_dealloc_ucontext - deallocate a ucontext
+ * @context: the context to deallocate
+ */
+
+static int opa_ib_dealloc_ucontext(struct ib_ucontext *context)
+{
+	kfree(to_opa_ucontext(context));
+	return 0;
 }
 
 static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
@@ -290,12 +328,13 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->req_notify_cq = opa_ib_req_notify_cq;
 	ibdev->get_dma_mr = opa_ib_get_dma_mr;
 	ibdev->dereg_mr = opa_ib_dereg_mr;
-#if 0
-	ibdey->dma_device = &dd->pcidev->dev;
-	ibdev->modify_device = opa_ib_modify_device;
-	ibdev->modify_port = opa_ib_modify_port;
+	ibdev->process_mad = opa_ib_process_mad;
 	ibdev->alloc_ucontext = opa_ib_alloc_ucontext;
 	ibdev->dealloc_ucontext = opa_ib_dealloc_ucontext;
+	ibdev->dma_device = ibd->parent_dev;
+#if 0
+	ibdev->modify_device = opa_ib_modify_device;
+	ibdev->modify_port = opa_ib_modify_port;
 	ibdev->create_srq = opa_ib_create_srq;
 	ibdev->modify_srq = opa_ib_modify_srq;
 	ibdev->query_srq = opa_ib_query_srq;
@@ -312,7 +351,6 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->dealloc_fmr = opa_ib_dealloc_fmr;
 	ibdev->attach_mcast = opa_ib_multicast_attach;
 	ibdev->detach_mcast = opa_ib_multicast_detach;
-	ibdev->process_mad = opa_ib_process_mad;
 	ibdev->mmap = opa_ib_mmap;
 	ibdev->dma_ops = &opa_ib_dma_mapping_ops;
 #endif
@@ -350,6 +388,8 @@ static void opa_ib_unregister_device(struct opa_ib_data *ibd)
 
 static void opa_ib_init_port(struct opa_ib_portdata *ibp)
 {
+	u32 default_pkey_idx = 1;
+
 	/* TODO - fetch from ops->device_desc() ? */
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->guid = 0;
@@ -361,6 +401,8 @@ static void opa_ib_init_port(struct opa_ib_portdata *ibp)
 	ibp->link_speed_active = OPA_LINK_SPEED_25G;
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
+	/* Set the default power on value */
+	ibp->pkeys[default_pkey_idx] = FXR_LIM_MGMT_P_KEY;
 }
 
 static int opa_ib_add(struct opa_core_device *odev)
@@ -382,7 +424,9 @@ static int opa_ib_add(struct opa_core_device *odev)
 	ibd->pport = (struct opa_ib_portdata *)(ibd + 1);
 	ibd->node_guid = 0;
 	ibd->id = odev->id;
+	ibd->parent_dev = odev->dev.parent;
 
+#warning "pkey support needs to be moved to opa2_hfi"
 	for (i = 0; i < num_ports; i++)
 		opa_ib_init_port(&ibd->pport[i]);
 

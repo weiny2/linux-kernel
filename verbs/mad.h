@@ -49,44 +49,17 @@
  *
  * Intel(R) OPA Gen2 IB Driver
  */
+#ifndef _OPA_MAD_H
+#define _OPA_MAD_H
 
-#include "verbs.h"
+#include <rdma/opa_smi.h>
+#include <rdma/opa_port_info.h>
 
-/**
- * opa_ib_post_send - post a send on a QP
- * @ibqp: the QP to post the send on
- * @wr: the list of work requests to post
- * @bad_wr: the first bad WR is put here
- *
- * This may be called from interrupt context.
- *
- * Return: 0 on success, otherwise returns an errno.
- */
-int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
-		     struct ib_send_wr **bad_wr)
-{
-	return -ENOSYS;
-}
+#define FXR_LIM_MGMT_P_KEY       0x7FFF
 
-/**
- * opa_ib_post_receive - post a receive on a QP
- * @ibqp: the QP to post the receive on
- * @wr: the WR to post
- * @bad_wr: the first bad WR is put here
- *
- * This may be called from interrupt context.
- *
- * Return: 0 on success, otherwise returns an errno.
- */
-int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
-			struct ib_recv_wr **bad_wr)
-{
-#warning "opa_ib_post_receive not implemented"
-	/*
-	 * TODO: return success to enable ib_* kernel modules and libraries
-	 * depending on this to continue thinking that qp is enabled.
-	 * This way Dr Route SMPs loopback works.
-	 * This function is to be enabled as part of VPD dev task
-	 */
-	return 0;
-}
+#define IB_SMP_UNSUP_VERSION    cpu_to_be16(0x0004)
+#define IB_SMP_UNSUP_METHOD     cpu_to_be16(0x0008)
+#define IB_SMP_UNSUP_METH_ATTR  cpu_to_be16(0x000C)
+#define IB_SMP_INVALID_FIELD    cpu_to_be16(0x001C)
+
+#endif				/* _OPA_MAD_H */

@@ -129,7 +129,14 @@ int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
  */
 int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
 {
-	return -ENOSYS;
+#warning "opa_ib_req_notify_cq not implemented. Fix this"
+	/*
+	 * TODO: return success to enable ib_* kernel modules and libraries
+	 * depending on this to continue thinking that cq is enabled.
+	 * This way Dr Route SMPs loopback works.
+	 * This function is to be enabled as part of VPD dev task
+	 */
+	return 0;
 }
 
 /**
