@@ -5,7 +5,7 @@ RPM_PACKAGE_NAME=opa2_hfi
 VERSION=0.0
 
 # main start here
-rm -r ~/rpmbuild
+rm -rf ~/rpmbuild
 make rpm KVER=${KERNEL_BUILT_AGAINST} NAME=${RPM_PACKAGE_NAME} VERSION=${VERSION}
 res=$?
 if [ ! ${res} ]; then
@@ -14,6 +14,7 @@ if [ ! ${res} ]; then
 fi
 
 cd opa-headers.git
+rm -f *.x86_64.rpm
 ./build_rpm.sh
 res=$?
 if [ ! ${res} ]; then
