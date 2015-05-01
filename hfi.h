@@ -680,7 +680,6 @@ struct hfi1_pportdata {
 	struct link_down_reason neigh_link_down_reason;
 	/* Value to be sent to link peer on LinkDown .*/
 	u8 remote_link_down_reason;
-	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 	/* Error events that will cause a port bounce. */
 	u32 port_error_action;
 };

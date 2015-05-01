@@ -3670,7 +3670,6 @@ void handle_verify_cap(struct work_struct *work)
 	 * LNI, is also be available at this point.
 	 */
 	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
-	hfi1_read_link_quality(dd, &ppd->link_quality);
 	/* print the active widths */
 	get_link_widths(dd, &active_tx, &active_rx);
 	dd_dev_info(dd,

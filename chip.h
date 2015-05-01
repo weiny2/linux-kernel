@@ -464,7 +464,7 @@
 #define MGMT_ALLOWED_MASK 0x1
 
 /* mask, shift for 'link_quality' within LINK_QUALITY_INFO field */
-#define LINK_QUALITY_SHIFT 0
+#define LINK_QUALITY_SHIFT 24
 #define LINK_QUALITY_MASK  0x7
 
 /*
