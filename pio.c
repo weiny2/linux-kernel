@@ -398,8 +398,9 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 	used_blocks = 0;
 	for (i = 0; i < SC_MAX; i++) {
 		if (dd->sc_sizes[i].size < 0) {
-			int pool = wildcard_to_pool(dd->sc_sizes[i].size);
+			unsigned pool = wildcard_to_pool(dd->sc_sizes[i].size);
 
+			BUG_ON(pool >= NUM_SC_POOLS);
 			dd->sc_sizes[i].size = mem_pool_info[pool].size;
 		}
 		/* make sure we are not larger than what is allowed by the HW */
