@@ -206,7 +206,7 @@ static struct firmware_details fw_sbus;
 #define RSA_ENGINE_TIMEOUT 100 /* ms */
 
 /* hardware mutex timeout, in ms */
-#define HM_TIMEOUT 20 /* ms */
+#define HM_TIMEOUT 4000 /* 4 s */
 
 /* 8051 memory access timout, in us */
 #define DC8051_ACCESS_TIMEOUT 100 /* us */
@@ -1146,9 +1146,11 @@ static void set_serdes_broadcast(struct hfi_devdata *dd, u8 bg1, u8 bg2,
 int acquire_hw_mutex(struct hfi_devdata *dd)
 {
 	unsigned long timeout;
+	int try = 0;
 	u8 mask = 1 << dd->hfi_id;
 	u8 user;
 
+retry:
 	timeout = msecs_to_jiffies(HM_TIMEOUT) + jiffies;
 	while (1) {
 		write_csr(dd, ASIC_CFG_MUTEX, mask);
@@ -1161,10 +1163,16 @@ int acquire_hw_mutex(struct hfi_devdata *dd)
 	}
 
 	/* timed out */
-	/* alternate: break the mutex and continue */
 	dd_dev_err(dd,
-		"Unable to acquire hardware mutex, mutex mask %u, my mask %u\n",
-		(u32)user, (u32)mask);
+		"Unable to acquire hardware mutex, mutex mask %u, my mask %u (%s)\n",
+		(u32)user, (u32)mask, (try == 0) ? "retrying" : "giving up");
+
+	if (try == 0) {
+		/* break mutex and retry */
+		write_csr(dd, ASIC_CFG_MUTEX, 0);
+		try++;
+		goto retry;
+	}
 
 	return -EBUSY;
 }
