@@ -17,9 +17,12 @@
 #include <linux/list.h>
 #include <linux/acpi.h>
 #include <linux/sort.h>
+#include <linux/io.h>
 #include "acpi_nfit.h"
 #include "libnd.h"
 #include "nd.h"
+
+#include <asm-generic/io-64-nonatomic-hi-lo.h>
 
 static bool warn_checksum;
 module_param(warn_checksum, bool, S_IRUGO|S_IWUSR);
