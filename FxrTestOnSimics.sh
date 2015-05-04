@@ -45,7 +45,7 @@ if [ ! $? ]; then
 fi
 # run quick test.
 cd opa-headers.git/test
-./harness.py --nodelist=viper0 --testlist=HFI-RING,HFI-APPEND,HFI-CMD,HFI-EQ,HFI-JOB,HFI-ME,HFI-PUT,HFI-SEND-SELF,HFI-TX-AUTH
+./harness.py --nodelist=viper0 --testlist=HFI-RING,TWO-HFI-RING,HFI-APPEND,HFI-CMD,HFI-EQ,HFI-JOB,HFI-ME,HFI-PUT,HFI-SEND-SELF,HFI-TX-AUTH
 res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
