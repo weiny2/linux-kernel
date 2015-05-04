@@ -2113,9 +2113,8 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
-static void workaround_portstatus_errata(struct hfi_devdata *dd,
-					 struct opa_port_status_rsp *rsp,
-					 u32 vl_select_mask)
+static void a0_portstatus(struct hfi_devdata *dd,
+			  struct opa_port_status_rsp *rsp, u32 vl_select_mask)
 {
 	if (!is_bx(dd)) {
 		unsigned long vl;
@@ -2319,7 +2318,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	workaround_portstatus_errata(dd, rsp, vl_select_mask);
+	a0_portstatus(dd, rsp, vl_select_mask);
 
 	return reply((struct ib_mad_hdr *)pmp);
 }
@@ -2369,9 +2368,8 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	return error_counter_summary;
 }
 
-static void workaround_datacounters_errata(struct hfi_devdata *dd,
-					 struct _port_dctrs *rsp,
-					 u32 vl_select_mask)
+static void a0_datacounters(struct hfi_devdata *dd, struct _port_dctrs *rsp,
+			    u32 vl_select_mask)
 {
 	if (!is_bx(dd)) {
 		unsigned long vl;
@@ -2574,7 +2572,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	workaround_datacounters_errata(dd, rsp, vl_select_mask);
+	a0_datacounters(dd, rsp, vl_select_mask);
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
