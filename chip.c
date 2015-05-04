@@ -5248,7 +5248,8 @@ int start_link(struct hfi1_pportdata *ppd)
 	}
 
 	if (qsfp_mod_present(ppd) || loopback == LOOPBACK_SERDES ||
-						loopback == LOOPBACK_LCB)
+			loopback == LOOPBACK_LCB ||
+			ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
 		return set_link_state(ppd, HLS_DN_POLL);
 
 	dd_dev_info(ppd->dd,
