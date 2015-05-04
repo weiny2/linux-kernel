@@ -4,7 +4,7 @@
 # copy rpm files to yum repository
 scp -i ~/ssh-jenkins/id_rsa \
     ~/rpmbuild/RPMS/x86_64/opa2_hfi-0.0-*.x86_64.rpm \
-    opa-headers.git/opa-headers-0.0-*.x86_64.rpm \
+    opa-headers.git/opa-headers-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
     cyokoyam@phlsvlogin02.ph.intel.com:/nfs/site/proj/ftp/fxr_yum/next
 res=$?
 if [ ! ${res} ]; then
