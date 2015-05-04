@@ -164,22 +164,26 @@ int hfi1_create_ctxts(struct hfi_devdata *dd)
 			HFI_CAP_KGET(NODROP_RHQ_FULL) |
 			HFI_CAP_KGET(NODROP_EGR_FULL) |
 			HFI_CAP_KGET(DMA_RTAIL);
-		ret = hfi1_init_ctxt(rcd);
-		if (ret < 0) {
-			dd_dev_err(dd,
-				   "Failed to setup kernel receive context, failing\n");
-			dd->rcd[rcd->ctxt] = NULL;
-			hfi1_free_ctxtdata(dd, rcd);
-			ret = -EFAULT;
-			goto bail;
-		}
 		rcd->seq_cnt = 1;
 
 		rcd->sc = sc_alloc(dd, SC_ACK, rcd->rcvhdrqentsize, dd->node);
 		if (!rcd->sc) {
 			dd_dev_err(dd,
 				"Unable to allocate kernel send context, failing\n");
+			dd->rcd[rcd->ctxt] = NULL;
+			hfi1_free_ctxtdata(dd, rcd);
 			goto nomem;
+		}
+
+		ret = hfi1_init_ctxt(rcd);
+		if (ret < 0) {
+			dd_dev_err(dd,
+				   "Failed to setup kernel receive context, failing\n");
+			sc_free(rcd->sc);
+			dd->rcd[rcd->ctxt] = NULL;
+			hfi1_free_ctxtdata(dd, rcd);
+			ret = -EFAULT;
+			goto bail;
 		}
 	}
 
