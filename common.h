@@ -168,6 +168,7 @@
 				 ((HFI_CAP_HDRSUPP |			\
 				   HFI_CAP_MULTI_PKT_EGR |		\
 				   HFI_CAP_STATIC_RATE_CTRL |		\
+				   HFI_CAP_PKEY_CHECK |			\
 				   HFI_CAP_EARLY_CREDIT_RETURN) <<	\
 				  HFI_CAP_USER_SHIFT))
 /*

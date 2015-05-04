@@ -1661,27 +1661,16 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
  * set_sdma_integrity
  *
  * Set the SD(CHECK_ENABLE register for send DMA engine 'sde'.
- * Use hfi_pkt_base_sdma_integrity(dd) as the starting point, and adjust
- * that value based on relevant HFI_CAP* flags.
  */
 static void set_sdma_integrity(struct sdma_engine *sde)
 {
 	struct hfi_devdata *dd = sde->dd;
-	u64 reg, smask;
+	u64 reg;
 
 	if (unlikely(HFI_CAP_IS_KSET(NO_INTEGRITY)))
 		return;
 
 	reg = hfi_pkt_base_sdma_integrity(dd);
-
-	/* make adjustments based on HFI_CAP* flags */
-	smask = SD(CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK);
-	if (!HFI_CAP_IS_KSET(PKEY_CHECK))
-		reg &= ~smask;
-
-	smask = SD(CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK);
-	if (!HFI_CAP_IS_KSET(STATIC_RATE_CTRL))
-		reg |= smask;
 
 	write_sde_csr(sde, SD(CHECK_ENABLE), reg);
 }
