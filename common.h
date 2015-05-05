@@ -165,6 +165,7 @@
 				 HFI_CAP_QSFP_ENABLED |			\
 				 HFI_CAP_PKEY_CHECK |			\
 				 HFI_CAP_MULTI_PKT_EGR |		\
+				 HFI_CAP_EXTENDED_PSN |			\
 				 ((HFI_CAP_HDRSUPP |			\
 				   HFI_CAP_MULTI_PKT_EGR |		\
 				   HFI_CAP_STATIC_RATE_CTRL |		\
