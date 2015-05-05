@@ -694,12 +694,6 @@ int hfi1_init(struct hfi_devdata *dd, int reinit)
 	dd->process_dma_send = hfi1_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
 
-	/*
-	 * A0 erratum 291500: Here due to ASIC reset
-	 * power-on. The first packet to be recieved
-	 * in the future might be corrupted. Mark it
-	 * to be dropped.
-	 */
 	if (is_a0(dd)) {
 		atomic_set(&dd->drop_packet, DROP_PACKET_ON);
 		dd->do_drop = 1;

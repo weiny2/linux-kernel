@@ -831,20 +831,6 @@ static struct flag_table rxe_err_status_flags[] = {
 	| RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK \
 	| RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK)
 
-/*
- * If RXDMA detects an uncorrectable error in a RcvHdrAddr or RcvHdrTailAddr
- * CSR when delivering a packet to host memory, the error is correctly reported
- * as RxDmaCsrUncErr and leads to SPC freeze. The problem is that a write TLP
- * can be sent upstream to a corrupted host memory address. A multi-bit hardware
- * data corruption on this internal state can lead to host memory corruption
- * along with the normal error reporting and SPC freeze mode entry. The
- * workaround for A0 is to not attempt to recover from freeze mode when the
- * RxDmaCsrUncErr error case occurs. A host reboot is instead required to
- * recover. This erratum is slated for a B0 fix.
- *
- * A0 erratum 291500: Freeze mode exit not supported due to packet
- * corruption for  RxDmaHdrFifoRdUncErr and RxDmaDataFifoRdUncErr
- */
 #define RXE_FREEZE_ABORT_MASK \
 	(RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK | \
 	RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK | \
@@ -3287,12 +3273,8 @@ void handle_freeze(struct work_struct *work)
 	write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_UNFREEZE_SMASK);
 	wait_for_freeze_status(dd, 0);
 
-	/*
-	 * A0 erratum 291496
-	 * additional SPC unfreeze sequence needed
-	 */
 	if (is_a0(dd)) {
-		dd_dev_info(dd, "Entering SPC freeze (A0 erratum 291496)\n");
+		dd_dev_info(dd, "Entering SPC freeze\n");
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_FREEZE_SMASK);
 		wait_for_freeze_status(dd, 1);
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_UNFREEZE_SMASK);
@@ -9644,12 +9626,8 @@ static void init_chip(struct hfi_devdata *dd)
 		/* restore command and BARs */
 		restore_pci_variables(dd);
 
-		/*
-		 * A0 erratum 291496
-		 * additional FLR required to prevent HW in arbitrary state.
-		 */
 		if (is_a0(dd)) {
-			dd_dev_info(dd, "Resetting CSRs with FLR (A0 erratum 291496)\n");
+			dd_dev_info(dd, "Resetting CSRs with FLR\n");
 			hfi_pcie_flr(dd);
 			restore_pci_variables(dd);
 		}

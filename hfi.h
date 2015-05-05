@@ -84,9 +84,6 @@
 #define HFI1_OUI 0x001175
 #define HFI1_OUI_LSB 40
 
-/*
- * A0 erratum 291500: States to keep track of corrupt packet.
- */
 #define DROP_PACKET_OFF		0
 #define DROP_PACKET_ON		1
 
@@ -999,10 +996,6 @@ struct hfi_devdata {
 	u8 err_info_uncorrectable;
 	u8 err_info_fmconfig;
 
-	/*
-	 * A0 erratum 291500: Keeps track of conditions to drop
-	 * first packet either after power-on or ASIC reset.
-	 */
 	atomic_t drop_packet;
 	u8 do_drop;
 
