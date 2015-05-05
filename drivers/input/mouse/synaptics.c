@@ -527,18 +527,22 @@ static int synaptics_is_pt_packet(unsigned char *buf)
 	return (buf[0] & 0xFC) == 0x84 && (buf[3] & 0xCC) == 0xC4;
 }
 
-static void synaptics_pass_pt_packet(struct serio *ptport, unsigned char *packet)
+static void synaptics_pass_pt_packet(struct psmouse *psmouse,
+				     struct serio *ptport,
+				     unsigned char *packet)
 {
+	struct synaptics_data *priv = psmouse->private;
 	struct psmouse *child = serio_get_drvdata(ptport);
 
 	if (child && child->state == PSMOUSE_ACTIVATED) {
-		serio_interrupt(ptport, packet[1], 0);
+		serio_interrupt(ptport, packet[1] | priv->pt_buttons, 0);
 		serio_interrupt(ptport, packet[4], 0);
 		serio_interrupt(ptport, packet[5], 0);
 		if (child->pktsize == 4)
 			serio_interrupt(ptport, packet[2], 0);
-	} else
+	} else {
 		serio_interrupt(ptport, packet[1], 0);
+	}
 }
 
 static void synaptics_pt_activate(struct psmouse *psmouse)
@@ -1349,7 +1353,8 @@ static psmouse_ret_t synaptics_process_byte(struct psmouse *psmouse)
 		if (SYN_CAP_PASS_THROUGH(priv->capabilities) &&
 		    synaptics_is_pt_packet(psmouse->packet)) {
 			if (priv->pt_port)
-				synaptics_pass_pt_packet(priv->pt_port, psmouse->packet);
+				synaptics_pass_pt_packet(psmouse, priv->pt_port,
+							 psmouse->packet);
 		} else
 			synaptics_process_packet(psmouse);
 
@@ -1443,8 +1448,9 @@ static void set_input_params(struct psmouse *psmouse,
 		__set_bit(BTN_BACK, dev->keybit);
 	}
 
-	for (i = 0; i < SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap); i++)
-		__set_bit(BTN_0 + i, dev->keybit);
+	if (!SYN_CAP_EXT_BUTTONS_STICK(priv->ext_cap_10))
+		for (i = 0; i < SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap); i++)
+			__set_bit(BTN_0 + i, dev->keybit);
 
 	__clear_bit(EV_REL, dev->evbit);
 	__clear_bit(REL_X, dev->relbit);
