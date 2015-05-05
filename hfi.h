@@ -382,7 +382,8 @@ struct hfi1_sge_state;
 #define __HLS_DN_OFFLINE_BP	7
 #define __HLS_VERIFY_CAP_BP	8
 #define __HLS_GOING_UP_BP	9
-#define __HLS_GOING_DOWN_BP    10
+#define __HLS_GOING_OFFLINE_BP 10
+#define __HLS_LINK_COOLDOWN_BP 11
 
 #define HLS_UP_INIT	  (1 << __HLS_UP_INIT_BP)
 #define HLS_UP_ARMED	  (1 << __HLS_UP_ARMED_BP)
@@ -394,7 +395,8 @@ struct hfi1_sge_state;
 #define HLS_DN_OFFLINE	  (1 << __HLS_DN_OFFLINE_BP)
 #define HLS_VERIFY_CAP	  (1 << __HLS_VERIFY_CAP_BP)
 #define HLS_GOING_UP	  (1 << __HLS_GOING_UP_BP)
-#define HLS_GOING_DOWN	  (1 << __HLS_GOING_DOWN_BP)
+#define HLS_GOING_OFFLINE (1 << __HLS_GOING_OFFLINE_BP)
+#define HLS_LINK_COOLDOWN (1 << __HLS_LINK_COOLDOWN_BP)
 
 #define HLS_UP (HLS_UP_INIT | HLS_UP_ARMED | HLS_UP_ACTIVE)
 

@@ -234,6 +234,7 @@
 #define HCMD_SEND_LCB_IDLE_MSG 0x04
 #define HCMD_MISC		   0x05
 #define HCMD_READ_LCB_IDLE_MSG 0x06
+#define HCMD_READ_LCB_CSR      0x07
 #define HCMD_INTERFACE_TEST	   0xff
 
 /* DC_DC8051_CFG_HOST_CMD_1.RETURN_CODE - 8051 host command return */
@@ -559,6 +560,9 @@ static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
 	/* kernel per-context CSRs are separated by 0x100 */
 	write_csr(dd, offset0 + (0x100 * ctxt), value);
 }
+
+int read_lcb_csr(struct hfi_devdata *dd, u32 offset, u64 *data);
+int write_lcb_csr(struct hfi_devdata *dd, u32 offset, u64 data);
 
 void __iomem *get_csr_addr(
 	struct hfi_devdata *dd,

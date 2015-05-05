@@ -490,15 +490,12 @@ static int read_lcb_cache(u32 off, u64 *val)
 
 void read_ltp_rtt(struct hfi_devdata *dd)
 {
-	u64 reg = 0;
+	u64 reg;
 
-	if (acquire_lcb_access(dd, 1) == 0) {
-		reg = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
-		release_lcb_access(dd, 1);
-		write_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, reg);
-	} else {
+	if (read_lcb_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT, &reg))
 		dd_dev_err(dd, "%s: unable to read LTP RTT\n", __func__);
-	}
+	else
+		write_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, reg);
 }
 
 static u8 __opa_porttype(struct hfi1_pportdata *ppd)

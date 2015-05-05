@@ -1946,7 +1946,6 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 	struct hfi_devdata *dd = filp->private_data;
 	void __iomem *base;
 	unsigned long total, data, csr_off;
-	int in_lcb;
 
 	/* only read 8 byte quantities */
 	if ((count % 8) != 0)
@@ -1962,30 +1961,19 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		return -EINVAL;
 	base = (void __iomem *)(dd->kregbase + *f_pos);
 	csr_off = *f_pos;
-	in_lcb = 0;
 	for (total = 0; total < count; total += 8, csr_off += 8) {
-		/* accessing LCB CSRs requires a special procuedure */
+		/* accessing LCB CSRs requires more checks */
 		if (is_lcb_offset(csr_off)) {
-			if (!in_lcb) {
-				int ret = acquire_lcb_access(dd, 1);
-
-				if (ret)
-					break;
-				in_lcb = 1;
-			}
-		} else {
-			if (in_lcb) {
-				release_lcb_access(dd, 1);
-				in_lcb = 0;
-			}
+			if (read_lcb_csr(dd, csr_off, (u64 *)&data))
+				break; /* failed */
 		}
 		/*
-		 * cannot read ASIC GPIO/QSFP* clear and force
-		 * CSRs without a false parity error.  Avoid the whole issue
-		 * by not reading them.  These registers are defined as
-		 * having a read value of 0.
+		 * Cannot read ASIC GPIO/QSFP* clear and force CSRs without a
+		 * false parity error.  Avoid the whole issue by not reading
+		 * them.  These registers are defined as having a read value
+		 * of 0.
 		 */
-		if (csr_off == ASIC_GPIO_CLEAR
+		else if (csr_off == ASIC_GPIO_CLEAR
 				|| csr_off == ASIC_GPIO_FORCE
 				|| csr_off == ASIC_QSFP1_CLEAR
 				|| csr_off == ASIC_QSFP1_FORCE
@@ -1997,8 +1985,6 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		if (put_user(data, (unsigned long __user *)(buf + total)))
 			break;
 	}
-	if (in_lcb)
-		release_lcb_access(dd, 1);
 	*f_pos += total;
 	return total;
 }
