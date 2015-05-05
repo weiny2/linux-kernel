@@ -2692,8 +2692,8 @@ static inline void set_8051_lcb_access(struct hfi_devdata *dd)
  */
 int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 {
+	struct hfi1_pportdata *ppd = dd->pport;
 	int ret = 0;
-	u32 state;
 
 	/*
 	 * Use the host link state lock so the operation of this routine
@@ -2702,18 +2702,17 @@ int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 	 * race between the state change and the count increment.
 	 */
 	if (sleep_ok) {
-		mutex_lock(&dd->pport->hls_lock);
+		mutex_lock(&ppd->hls_lock);
 	} else {
-		while (mutex_trylock(&dd->pport->hls_lock) == EBUSY)
+		while (mutex_trylock(&ppd->hls_lock) == EBUSY)
 			udelay(1);
 	}
 
 	/* can not use the LCB when the 8051 is using it */
-	state = dd->pport->host_link_state;
-	if (state == HLS_DN_POLL || state == HLS_VERIFY_CAP ||
-			state == HLS_GOING_UP || state == HLS_GOING_DOWN) {
+	if (ppd->host_link_state & (HLS_DN_POLL | HLS_VERIFY_CAP
+					| HLS_GOING_UP | HLS_GOING_DOWN)) {
 		dd_dev_info(dd, "%s: link state %s disallows LCB access\n",
-			__func__, link_state_name(state));
+			__func__, link_state_name(ppd->host_link_state));
 		ret = -EBUSY;
 		goto done;
 	}
@@ -2730,7 +2729,7 @@ int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 	}
 	dd->lcb_access_count++;
 done:
-	mutex_unlock(&dd->pport->hls_lock);
+	mutex_unlock(&ppd->hls_lock);
 	return ret;
 }
 
@@ -3116,8 +3115,7 @@ void handle_sma_message(struct work_struct *work)
 		 *
 		 * Only expected in INIT or ARMED, discard otherwise.
 		 */
-		if (ppd->host_link_state == HLS_UP_INIT
-				|| ppd->host_link_state == HLS_UP_ARMED)
+		if (ppd->host_link_state & (HLS_UP_INIT | HLS_UP_ARMED))
 			ppd->neighbor_normal = 1;
 		break;
 	case SMA_IDLE_ACTIVE:
@@ -3846,9 +3844,7 @@ void apply_link_downgrade_policy(struct hfi1_pportdata *ppd, int refresh_widths)
 
 	mutex_lock(&ppd->hls_lock);
 	/* only apply if the link is up */
-	if (ppd->host_link_state == HLS_UP_INIT
-			|| ppd->host_link_state == HLS_UP_ARMED
-			|| ppd->host_link_state == HLS_UP_ACTIVE)
+	if (ppd->host_link_state & HLS_UP)
 		skip = 0;
 	mutex_unlock(&ppd->hls_lock);
 	if (skip)
@@ -3970,9 +3966,8 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			 * to them when in the states that occur during
 			 * LNI.
 			 */
-			if (ppd->host_link_state == HLS_DN_POLL
-				|| ppd->host_link_state == HLS_VERIFY_CAP
-				|| ppd->host_link_state == HLS_GOING_UP) {
+			if (ppd->host_link_state
+			    & (HLS_DN_POLL | HLS_VERIFY_CAP | HLS_GOING_UP)) {
 				queue_link_down = 1;
 				dd_dev_info(dd, "Link error: %s\n",
 					dc8051_info_err_string(buf,
@@ -6113,13 +6108,11 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	 *	- notify others if we were previously in a linkup state
 	 */
 	ppd->host_link_state = HLS_DN_OFFLINE;
-	if (previous_state == HLS_UP_INIT || previous_state == HLS_UP_ARMED
-					|| previous_state == HLS_UP_ACTIVE) {
+	if (previous_state & HLS_UP) {
 		/* went down while link was up */
 		handle_linkup_change(dd, 0);
-	} else if (previous_state == HLS_DN_POLL
-			|| previous_state == HLS_VERIFY_CAP
-			|| previous_state == HLS_GOING_UP) {
+	} else if (previous_state
+			& (HLS_DN_POLL | HLS_VERIFY_CAP | HLS_GOING_UP)) {
 		/* went down while attempting link up */
 		/* byte 1 of last_*_state is the failure reason */
 		read_last_local_state(dd, &last_local_state);
@@ -6140,21 +6133,22 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 static const char *link_state_name(u32 state)
 {
 	const char *name;
+	int n = ilog2(state);
 	static const char * const names[] = {
-		[HLS_UP_INIT]	 = "INIT",
-		[HLS_UP_ARMED]	 = "ARMED",
-		[HLS_UP_ACTIVE]	 = "ACTIVE",
-		[HLS_DN_DOWNDEF] = "DOWNDEF",
-		[HLS_DN_POLL]	 = "POLL",
-		[HLS_DN_SLEEP]	 = "SLEEP",
-		[HLS_DN_DISABLE] = "DISABLE",
-		[HLS_DN_OFFLINE] = "OFFLINE",
-		[HLS_VERIFY_CAP] = "VERIFY_CAP",
-		[HLS_GOING_UP]	 = "GOING_UP",
-		[HLS_GOING_DOWN] = "GOING_DOWN"
+		[__HLS_UP_INIT_BP]	 = "INIT",
+		[__HLS_UP_ARMED_BP]	 = "ARMED",
+		[__HLS_UP_ACTIVE_BP]	 = "ACTIVE",
+		[__HLS_DN_DOWNDEF_BP]	 = "DOWNDEF",
+		[__HLS_DN_POLL_BP]	 = "POLL",
+		[__HLS_DN_SLEEP_BP]	 = "SLEEP",
+		[__HLS_DN_DISABLE_BP]	 = "DISABLE",
+		[__HLS_DN_OFFLINE_BP]	 = "OFFLINE",
+		[__HLS_VERIFY_CAP_BP]	 = "VERIFY_CAP",
+		[__HLS_GOING_UP_BP]	 = "GOING_UP",
+		[__HLS_GOING_DOWN_BP]	 = "GOING_DOWN"
 	};
 
-	name = state < ARRAY_SIZE(names) ? names[state] : NULL;
+	name = n < ARRAY_SIZE(names) ? names[n] : NULL;
 	return name ? name : "unkown";
 }
 
@@ -6220,9 +6214,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		poll_bounce ? "(bounce) " : "",
 		link_state_reason_name(ppd, state));
 
-	was_up = (ppd->host_link_state == HLS_UP_INIT ||
-		ppd->host_link_state == HLS_UP_ARMED ||
-		ppd->host_link_state == HLS_UP_ACTIVE);
+	was_up = !!(ppd->host_link_state & HLS_UP);
 
 	/*
 	 * If we're going to a (HLS_*) link state that implies the logical
@@ -6430,10 +6422,8 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		break;
 	}
 
-	is_down = (ppd->host_link_state == HLS_DN_POLL ||
-		ppd->host_link_state == HLS_DN_SLEEP ||
-		ppd->host_link_state == HLS_DN_DISABLE ||
-		ppd->host_link_state == HLS_DN_OFFLINE);
+	is_down = !!(ppd->host_link_state & (HLS_DN_POLL |
+			HLS_DN_SLEEP | HLS_DN_DISABLE | HLS_DN_OFFLINE));
 
 	if (was_up && is_down && ppd->local_link_down_reason.sma == 0 &&
 	    ppd->neigh_link_down_reason.sma == 0) {
@@ -6622,9 +6612,7 @@ static int set_vl_weights(struct hfi1_pportdata *ppd, u32 target,
 
 	mutex_lock(&ppd->hls_lock);
 
-	if (ppd->host_link_state == HLS_UP_INIT
-			|| ppd->host_link_state == HLS_UP_ARMED
-			|| ppd->host_link_state == HLS_UP_ACTIVE)
+	if (ppd->host_link_state & HLS_UP)
 		is_up = 1;
 
 	drain = !is_ax(dd) && is_up;

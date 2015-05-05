@@ -368,19 +368,35 @@ struct hfi1_sge_state;
  * HFI or Host Link States
  *
  * These describe the states the driver thinks the logical and physicial
- * states are in.  Used as an argument to set_link_state().
+ * states are in.  Used as an argument to set_link_state().  Implemented
+ * as bits for easy multi-state checking.  The actual state can ony be
+ * one.
  */
-#define HLS_UP_INIT	 0
-#define HLS_UP_ARMED	 1
-#define HLS_UP_ACTIVE	 2
-#define HLS_DN_DOWNDEF	 3	/* link down default */
-#define HLS_DN_POLL	 4
-#define HLS_DN_SLEEP	 5
-#define HLS_DN_DISABLE	 6
-#define HLS_DN_OFFLINE	 7
-#define HLS_VERIFY_CAP	 8
-#define HLS_GOING_UP	 9
-#define HLS_GOING_DOWN	10
+#define __HLS_UP_INIT_BP	0
+#define __HLS_UP_ARMED_BP	1
+#define __HLS_UP_ACTIVE_BP	2
+#define __HLS_DN_DOWNDEF_BP	3	/* link down default */
+#define __HLS_DN_POLL_BP	4
+#define __HLS_DN_SLEEP_BP	5
+#define __HLS_DN_DISABLE_BP	6
+#define __HLS_DN_OFFLINE_BP	7
+#define __HLS_VERIFY_CAP_BP	8
+#define __HLS_GOING_UP_BP	9
+#define __HLS_GOING_DOWN_BP    10
+
+#define HLS_UP_INIT	  (1 << __HLS_UP_INIT_BP)
+#define HLS_UP_ARMED	  (1 << __HLS_UP_ARMED_BP)
+#define HLS_UP_ACTIVE	  (1 << __HLS_UP_ACTIVE_BP)
+#define HLS_DN_DOWNDEF	  (1 << __HLS_DN_DOWNDEF_BP) /* link down default */
+#define HLS_DN_POLL	  (1 << __HLS_DN_POLL_BP)
+#define HLS_DN_SLEEP	  (1 << __HLS_DN_SLEEP_BP)
+#define HLS_DN_DISABLE	  (1 << __HLS_DN_DISABLE_BP)
+#define HLS_DN_OFFLINE	  (1 << __HLS_DN_OFFLINE_BP)
+#define HLS_VERIFY_CAP	  (1 << __HLS_VERIFY_CAP_BP)
+#define HLS_GOING_UP	  (1 << __HLS_GOING_UP_BP)
+#define HLS_GOING_DOWN	  (1 << __HLS_GOING_DOWN_BP)
+
+#define HLS_UP (HLS_UP_INIT | HLS_UP_ARMED | HLS_UP_ACTIVE)
 
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU 8192
