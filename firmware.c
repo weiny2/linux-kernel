@@ -1264,6 +1264,10 @@ int hfi1_firmware_init(struct hfi_devdata *dd)
 		fw_sbus_load = 0;
 	}
 
+	/* no 8051 on simulator */
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
+		fw_8051_load = 0;
+
 	if (!fw_8051_name) {
 		if (dd->icode == ICODE_RTL_SILICON)
 			fw_8051_name = DEFAULT_FW_8051_NAME_ASIC;
