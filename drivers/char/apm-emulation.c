@@ -300,8 +300,9 @@ apm_ioctl(struct file *filp, u_int cmd, u_long arg)
 			 * signal can cause busy looping.  We aren't doing
 			 * anything critical, chill a bit on each iteration.
 			 */
-			while (wait_event_freezable(apm_suspend_waitqueue,
-					as->suspend_state != SUSPEND_ACKED))
+			while (wait_event_freezable(apm_suspend_waitqueue, ({
+					kgr_task_safe(current);
+					as->suspend_state != SUSPEND_ACKED; })))
 				msleep(10);
 			break;
 		case SUSPEND_ACKTO:

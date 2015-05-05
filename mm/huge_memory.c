@@ -2266,7 +2266,8 @@ static void __collapse_huge_page_copy(pte_t *pte, struct page *page,
 
 static void khugepaged_alloc_sleep(void)
 {
-	wait_event_freezable_timeout(khugepaged_wait, false,
+	wait_event_freezable_timeout(khugepaged_wait,
+			({ kgr_task_safe(current); false; }),
 			msecs_to_jiffies(khugepaged_alloc_sleep_millisecs));
 }
 
@@ -2822,7 +2823,9 @@ static void khugepaged_wait_work(void)
 	}
 
 	if (khugepaged_enabled())
-		wait_event_freezable(khugepaged_wait, khugepaged_wait_event());
+		wait_event_freezable(khugepaged_wait, ({
+					kgr_task_safe(current);
+					khugepaged_wait_event(); }));
 }
 
 static int khugepaged(void *none)
