@@ -1042,8 +1042,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	}
 
 	/*
-	 * A0 erratum 291496
-	 * additional sbr needed.
+	 * A0 needs an additional SBR
 	 */
 	if (is_a0(dd))
 		nsbr++;
