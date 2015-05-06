@@ -81,9 +81,8 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr)
 {
-#warning "opa_ib_post_receive not implemented"
 	/*
-	 * TODO: return success to enable ib_* kernel modules and libraries
+	 * FXRTODO: return success to enable ib_* kernel modules and libraries
 	 * depending on this to continue thinking that qp is enabled.
 	 * This way Dr Route SMPs loopback works.
 	 * This function is to be enabled as part of VPD dev task

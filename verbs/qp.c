@@ -106,9 +106,8 @@ int opa_ib_destroy_qp(struct ib_qp *ibqp)
 int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		     int attr_mask, struct ib_udata *udata)
 {
-#warning "opa_ib_modify_qp not implemented"
 	/*
-	 * TODO: return success to enable ib_* kernel modules and libraries
+	 * FXRTODO: return success to enable ib_* kernel modules and libraries
 	 * depending on this to continue thinking that qp is enabled.
 	 * This way Dr Route SMPs loopback works.
 	 * This function is to be enabled as part of VPD dev task
