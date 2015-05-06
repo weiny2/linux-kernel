@@ -6512,8 +6512,6 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 				ppd->port - 1,
 				hfi_num_vls(val),
 				NULL);
-			/* FIXME: implement this */
-			/* set_vls(ppd) */
 		}
 		break;
 	/*
@@ -10437,14 +10435,10 @@ bail:
 u64 create_pbc(u64 flags, u32 srate, u32 vl, u32 dw_len)
 {
 	u64 pbc;
-	/* FIXME: calculate rate */
-	u32 rate = 0;
 
 	pbc = flags
 		| ((u64)PBC_IHCRC_NONE << PBC_INSERT_HCRC_SHIFT)
 		| (vl & PBC_VL_MASK) << PBC_VL_SHIFT
-		| (rate & PBC_STATIC_RATE_CONTROL_COUNT_MASK)
-			<< PBC_STATIC_RATE_CONTROL_COUNT_SHIFT
 		| (dw_len & PBC_LENGTH_DWS_MASK)
 			<< PBC_LENGTH_DWS_SHIFT;
 

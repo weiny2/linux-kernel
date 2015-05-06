@@ -592,7 +592,6 @@ static inline u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt,
 static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
 				   u32 offset0, u64 value)
 {
-	/* TODO: write to user mapping if available? */
 	/* user per-context CSRs are separated by 0x1000 */
 	write_csr(dd, offset0 + (0x1000 * ctxt), value);
 }

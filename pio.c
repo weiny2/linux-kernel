@@ -143,7 +143,6 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 #define SCC_PER_VL -1
 #define SCC_PER_CPU  -2
 
-/* TODO: decide on size and counts */
 #define SCC_PER_KRCVQ  -3
 #define SCC_ACK_CREDITS  32
 

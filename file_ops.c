@@ -521,7 +521,6 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 			       PAGE_SIZE);
 		flags &= ~VM_MAYREAD;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
-		/* FIXME:  how do we deal with write-combining? */
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 		mapio = 1;
 		break;
