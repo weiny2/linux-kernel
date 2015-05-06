@@ -2326,12 +2326,6 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	struct hfi1_ibport *ibp = to_iport(ibdev, port);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 error_counter_summary = 0, tmp;
-	/* FIXME
-	 * some of the counters are not implemented. if the HFI spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
 
 	error_counter_summary += read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
 						CNTR_INVALID_VL);
@@ -2477,13 +2471,6 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	hfi1_read_link_quality(dd, &lq);
 	rsp->link_quality_indicator = cpu_to_be32((u32)lq);
 
-	/* FIXME
-	 * some of the counters are not implemented. if the HFI spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
-
 	/* rsp->sw_port_congestion is 0 for HFIs */
 	/* rsp->port_xmit_time_cong is 0 for HFIs */
 	/* rsp->port_xmit_wasted_bw ??? */
@@ -2601,10 +2588,6 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	num_pslm = hweight64(req->port_select_mask[3]);
 	num_vls = hweight32(req->vl_select_mask);
 
-	/* TODO add support for:
-	 *	COUNTER_SIZE_MODE_ALL32
-	 *	COUNTER_SIZE_MODE_MIXED
-	 */
 	if (num_ports != 1 || num_ports != num_pslm ||
 		(counter_size_mode != COUNTER_SIZE_MODE_ALL64)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
@@ -2638,13 +2621,6 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->port_number = (u8)port_num;
-
-	/* FIXME
-	 * some of the counters are not implemented. if the HFI spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
 
 	rsp->port_rcv_constraint_errors =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
@@ -3872,7 +3848,6 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		return reply((struct ib_mad_hdr *)pmp);
 	}
 
-	/* FIXME decide proper length for all these */
 	*resp_len = sizeof(struct jumbo_mad);
 
 	switch (pmp->mad_hdr.method) {
