@@ -17,6 +17,7 @@ config X86_64
 	depends on 64BIT
 	select X86_DEV_DMA_OPS
 	select ARCH_USE_CMPXCHG_LOCKREF if !XEN
+	select HAVE_KGRAFT
 
 ### Arch settings
 config X86
@@ -125,7 +126,6 @@ config X86
 	select RTC_LIB if !XEN_UNPRIVILEGED_GUEST
 	select HAVE_DEBUG_STACKOVERFLOW
 	select ARCH_SUPPORTS_ATOMIC_RMW
-	select HAVE_KGRAFT
 
 config INSTRUCTION_DECODER
 	def_bool y
