@@ -1750,7 +1750,7 @@ static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 	count = ocount;
 
 	current->backing_dev_info = inode->i_mapping->backing_dev_info;
-	err = generic_write_checks(file, &pos, &count, S_ISBLK(inode->i_mode));
+	err = generic_write_checks2(iocb, &pos, &count, S_ISBLK(inode->i_mode));
 	if (err) {
 		mutex_unlock(&inode->i_mutex);
 		goto out;
@@ -1801,7 +1801,7 @@ static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 	if (sync)
 		atomic_inc(&BTRFS_I(inode)->sync_writers);
 
-	if (unlikely(file->f_flags & O_DIRECT)) {
+	if (unlikely(kiocb_is_direct(iocb))) {
 		num_written = __btrfs_direct_write(iocb, iov, nr_segs,
 						   pos, ppos, count, ocount);
 	} else {

@@ -962,7 +962,7 @@ ssize_t nfs_file_direct_write(struct kiocb *iocb, const struct iovec *iov,
 		file->f_path.dentry->d_name.name,
 		count, (long long) pos);
 
-	result = generic_write_checks(file, &pos, &count, 0);
+	result = generic_write_checks2(iocb, &pos, &count, 0);
 	if (result)
 		goto out;
 

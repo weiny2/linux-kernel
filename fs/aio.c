@@ -481,7 +481,7 @@ static int aio_setup_ring(struct kioctx *ctx)
 
 void kiocb_set_cancel_fn(struct kiocb *req, kiocb_cancel_fn *cancel)
 {
-	struct kioctx *ctx = req->ki_ctx;
+	struct kioctx *ctx = kiocb_ctx(req);
 	unsigned long flags;
 
 	spin_lock_irqsave(&ctx->ctx_lock, flags);
@@ -800,9 +800,9 @@ static void kill_ioctx(struct mm_struct *mm, struct kioctx *ctx,
  */
 ssize_t wait_on_sync_kiocb(struct kiocb *req)
 {
-	while (!req->ki_ctx) {
+	while (!kiocb_ctx(req)) {
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		if (req->ki_ctx)
+		if (kiocb_ctx(req))
 			break;
 		io_schedule();
 	}
@@ -933,7 +933,7 @@ static inline struct kiocb *aio_get_req(struct kioctx *ctx)
 
 	percpu_ref_get(&ctx->reqs);
 
-	req->ki_ctx = ctx;
+	req->ki_ctx = (unsigned long)ctx;
 	return req;
 out_put:
 	put_reqs_available(ctx, 1);
@@ -981,7 +981,7 @@ out:
  */
 void aio_complete(struct kiocb *iocb, long res, long res2)
 {
-	struct kioctx	*ctx = iocb->ki_ctx;
+	struct kioctx	*ctx = kiocb_ctx(iocb);
 	struct aio_ring	*ring;
 	struct io_event	*ev_page, *event;
 	unsigned long	flags;
@@ -997,7 +997,7 @@ void aio_complete(struct kiocb *iocb, long res, long res2)
 	if (is_sync_kiocb(iocb)) {
 		iocb->ki_user_data = res;
 		smp_wmb();
-		iocb->ki_ctx = ERR_PTR(-EXDEV);
+		iocb->ki_ctx = -EXDEV;
 		wake_up_process(iocb->ki_obj.tsk);
 		return;
 	}
@@ -1570,6 +1570,7 @@ static int io_submit_one(struct kioctx *ctx, struct iocb __user *user_iocb,
 		ret = -EBADF;
 		goto out_put_req;
 	}
+	req->ki_ctx |= iocb_flags(req->ki_filp);
 
 	if (iocb->aio_flags & IOCB_FLAG_RESFD) {
 		/*
