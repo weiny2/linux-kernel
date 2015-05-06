@@ -57,6 +57,12 @@
 static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
 
+/*
+ * TODO - PID_ANY changed to 4095, as FXR PID is 12-bits.
+ *        For temporary compatiblity with unit tests, also catch -1.
+ */
+#define IS_PID_ANY(x)	(x == HFI_PID_ANY || x == (u16)-1)
+
 static int hfi_cq_validate_tuples(struct hfi_ctx *ctx,
 				  struct hfi_auth_tuple *auth_table)
 {
@@ -322,14 +328,14 @@ static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
 	int ret = 0;
 	unsigned long flags;
 
-	start = (*base == HFI_PID_ANY) ? 0 : *base;
+	start = IS_PID_ANY(*base) ? 0 : *base;
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	n = bitmap_find_next_zero_area(dd->ptl_map, HFI_NUM_PIDS,
 				       start, count, 0);
 	if (n == -1)
 		ret = -EBUSY;
-	if (*base != HFI_PID_ANY && n != *base)
+	if (!IS_PID_ANY(*base) && n != *base)
 		ret = -EBUSY;
 	if (ret) {
 		spin_unlock_irqrestore(&dd->ptl_lock, flags);
@@ -465,11 +471,11 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 		 * reservation or ask for a specifc (logical) PID within the
 		 * reserved set of PIDs.
 		 */
-		if ((ptl_pid != HFI_PID_ANY) &&
+		if (!IS_PID_ANY(ptl_pid) &&
 		    (ptl_pid >= ctx->pid_count))
 			return -EINVAL;
 
-		if (ptl_pid == HFI_PID_ANY) {
+		if (IS_PID_ANY(ptl_pid)) {
 			/* get first available PID within the reservation */
 			start = ctx->pid_base;
 			end = ctx->pid_base + ctx->pid_count;
@@ -485,7 +491,7 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 		 * User can ask for driver assignment (-1) or ask for a
 		 * specific PID.
 		 */
-		if ((ptl_pid != HFI_PID_ANY) &&
+		if (!IS_PID_ANY(ptl_pid) &&
 		    (ptl_pid >= HFI_NUM_PIDS))
 			return -EINVAL;
 

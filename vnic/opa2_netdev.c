@@ -198,8 +198,8 @@ static const struct ethtool_ops opa_ethtool_ops = {
 };
 
 static inline int
-hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
-	    unsigned long threshold, unsigned long *ct_val)
+__hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
+	      unsigned long threshold, unsigned long *ct_val)
 {
 	unsigned long val;
 
@@ -252,7 +252,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct hfi_cq *tx = &dev->tx;
 	struct hfi_cq *rx = &dev->rx;
-	int rc;
+	int n_slots, rc;
 	void *tx_base, *rx_base, *rx_base1;
 	union ptentry_fp1 *pt_array, *ptentry;
 	union ptentry_fp0 *pt0_array, *pt0entry;
@@ -382,20 +382,20 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	pt0entry->enable = 1;
 	pt0entry->v = 1;
 
-	hfi_format_rx_append(ctx, ni,
-			     rx_base1,
-			     PAYLOAD_SIZE,
-			     HFI_TEST_PT + 1,
-			     match_id,
-			     0x0,
-			     match_bits, ignore_bits,
-			     me_options, 0,
-			     PTL_PRIORITY_LIST, min_free,
-			     user_ptr,
-			     me_handle, &rx_cmd);
+	n_slots = hfi_format_rx_append(ctx, ni,
+				       rx_base1,
+				       PAYLOAD_SIZE,
+				       HFI_TEST_PT + 1,
+				       match_id,
+				       0x0,
+				       match_bits, ignore_bits,
+				       me_options, 0,
+				       PTL_PRIORITY_LIST, min_free,
+				       user_ptr,
+				       me_handle, &rx_cmd);
 
 	/* Single slot command */
-	rc = hfi_rx_command(rx, (uint64_t *)&rx_cmd);
+	rc = hfi_rx_command(rx, (uint64_t *)&rx_cmd, n_slots);
 
 	/* TX data to the fast PTE */
 	rc = hfi_tx_write(tx, ctx, ni, tx_base,
@@ -410,12 +410,14 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc < 0)
 		goto err3;
 
+#if 0
 	/* Wait for TX command 1 to complete */
 	rc = hfi_ct_wait(ctx, ct_tx, 1, NULL);
 	if (rc < 0)
 		goto err3;
 	else
 		dev_info(&odev->dev, "TX CT event 1 success\n");
+#endif
 
 	/* TX data to the regular PTE */
 	rc = hfi_tx_write(tx, ctx, ni, tx_base,
@@ -430,15 +432,17 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc < 0)
 		goto err3;
 
+#if 0
 	/* Wait for TX command 2 to complete */
 	rc = hfi_ct_wait(ctx, ct_tx, 2, NULL);
 	if (rc < 0)
 		goto err3;
 	else
 		dev_info(&odev->dev, "TX CT event 2 success\n");
+#endif
 
 	/* Wait to receive from peer */
-	rc = hfi_ct_wait(ctx, ct_rx, 1, NULL);
+	rc = __hfi_ct_wait(ctx, ct_rx, 1, NULL);
 	if (rc < 0)
 		goto err3;
 	else
