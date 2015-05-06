@@ -786,8 +786,6 @@ done:
 			 * Requires interrupts to be enabled so we are notified
 			 * when the QSFP completes reset, and has
 			 * to be done before bringing up the SERDES
-			 * TODO: Call init_qsfp only if HFI1_HAS_QSFP
-			 * is set in ppd->qsfp_info.flags
 			 */
 			init_qsfp(ppd);
 

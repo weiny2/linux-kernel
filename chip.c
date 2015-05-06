@@ -5510,8 +5510,6 @@ static int do_pre_lni_host_behaviors(struct hfi1_pportdata *ppd)
 {
 	refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 
-	if (ppd->qsfp_info.cache_valid)
-		;/* TODO: SERDES tuning flowchart */
 	return 0;
 }
 
