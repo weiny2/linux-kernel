@@ -177,7 +177,7 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	//props->state = dd->f_iblink_state(ppd);
 	//props->phys_state = dd->f_ibphys_portstate(ppd);
 #else
-#warning "Forcing port to active for testing"
+	/* FXRTODO: Implement linkup */
 	props->state = IB_PORT_ACTIVE;
 	props->phys_state = IB_PORTPHYSSTATE_POLLING;
 #endif
@@ -426,7 +426,7 @@ static int opa_ib_add(struct opa_core_device *odev)
 	ibd->id = odev->id;
 	ibd->parent_dev = odev->dev.parent;
 
-#warning "pkey support needs to be moved to opa2_hfi"
+	/* FXRTODO: Move pkey support to opa2_hfi  */
 	for (i = 0; i < num_ports; i++)
 		opa_ib_init_port(&ibd->pport[i]);
 

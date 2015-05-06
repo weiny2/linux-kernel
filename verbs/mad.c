@@ -93,18 +93,15 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	ni = (struct opa_node_info *)data;
 
-	/* GUID 0 is illegal */
-	/* TODO GUID is currently zero. enable this check once this
-	 * is fixed
-	 */
-#warning "guid check bypassed"
+	/* FXRTODO: Implement guid check */
 #if 0
+	/* GUID 0 is illegal */
 	if (am || ibp->guid == 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(ibh);
 	}
 #endif
-#warning "get node info HW details needs to be fetched from opa2_hfi"
+	/* FXRTODO: Implement code to get HW data from opa2_hfi */
 
 	ni->port_guid = ibp->guid;
 	ni->base_version = JUMBO_MGMT_BASE_VERSION;
@@ -150,8 +147,10 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 #if 0
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 #endif
-
-#warning "Only get node info supported in MAD methods"
+	/*
+	 * FXRTODO: Only get node info supported in MAD methods.
+	 * Others yet to be implemented.
+	 */
 	switch (attr_id) {
 	case IB_SMP_ATTR_NODE_INFO:
 		ret = __subn_get_opa_nodeinfo(smp, am, data, ibdev, port,
@@ -259,7 +258,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		ret = reply(ibh);
 		goto bail;
 	}
-#warning "mkey check not implemented"
+
+	/* FXRTODO: Implement mkey check */
 #if 0
 	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags, smp->mkey,
 			 smp->route.dr.dr_slid, smp->route.dr.return_path,
@@ -299,7 +299,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 					       ibdev, port, resp_len);
 			goto bail;
 		case OPA_ATTRIB_ID_AGGREGATE:
-#warning "subn_get_opa_aggregate  not implemented"
+
+	/* FXRTODO: Implement subn_get_opa_aggregate */
 #if 0
 			ret = subn_get_opa_aggregate(smp, ibdev, port,
 						     resp_len);
@@ -307,7 +308,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			goto bail;
 		}
 	case IB_MGMT_METHOD_SET:
-#warning "MAD Set() and SetResp()  not implemented"
+
+	/* FXRTODO: Implement Set() and SetResp()*/
 #if 0
 		switch (attr_id) {
 		default:
@@ -349,6 +351,8 @@ static int process_stl_mad(struct ib_device *ibdev, int mad_flags,
 {
 	int ret = IB_MAD_RESULT_FAILURE;
 	u32 resp_len = 0;
+
+	/* FXRTODO: Implement pkey check */
 #if 0
 	int pkey_idx;
 	struct qib_ibport *ibp = to_iport(ibdev, port);
@@ -361,7 +365,6 @@ static int process_stl_mad(struct ib_device *ibdev, int mad_flags,
 	}
 	in_wc->pkey_index = (u16)pkey_idx;
 #endif
-#warning "pkey check not implemented"
 
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
@@ -370,7 +373,7 @@ static int process_stl_mad(struct ib_device *ibdev, int mad_flags,
 				       out_mad, &resp_len);
 		goto bail;
 	case IB_MGMT_CLASS_PERF_MGMT:
-#warning "process_perf_stl not implemented"
+	/* FXRTODO: Implement process_perf_stl */
 #if 0
 		ret = process_perf_stl(ibdev, port, in_mad, out_mad,
 				       &resp_len);
