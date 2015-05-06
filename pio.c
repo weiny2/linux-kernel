@@ -559,7 +559,6 @@ static void sc_halted(struct work_struct *work)
 
 	sc = container_of(work, struct send_context, halt_work);
 	sc_restart(sc);
-	/* TODO: add a timed retry if the restart fails */
 }
 
 /*
@@ -710,7 +709,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	atomic_set(&sc->buffers_allocated, 0);
 	init_waitqueue_head(&sc->halt_wait);
 
-	/* TODO: group set-up.  Make it always 0 for now. */
+	/* grouping is always single context for now */
 	sc->group = 0;
 
 	sc->sw_index = sw_index;
