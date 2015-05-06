@@ -60,9 +60,10 @@ static int ecryptfs_threadfn(void *ignored)
 		struct ecryptfs_open_req *req;
 
 		wait_event_freezable(
-			ecryptfs_kthread_ctl.wait,
+			ecryptfs_kthread_ctl.wait, ({
+			kgr_task_safe(current);
 			(!list_empty(&ecryptfs_kthread_ctl.req_list)
-			 || kthread_should_stop()));
+			 || kthread_should_stop()); }));
 		mutex_lock(&ecryptfs_kthread_ctl.mux);
 		if (ecryptfs_kthread_ctl.flags & ECRYPTFS_KTHREAD_ZOMBIE) {
 			mutex_unlock(&ecryptfs_kthread_ctl.mux);

@@ -188,18 +188,6 @@ static const char * const topbuttonpad_pnp_ids[] = {
 	NULL
 };
 
-static bool matches_pnp_id(struct psmouse *psmouse, const char * const ids[])
-{
-	int i;
-
-	if (!strncmp(psmouse->ps2dev.serio->firmware_id, "PNP:", 4))
-		for (i = 0; ids[i]; i++)
-			if (strstr(psmouse->ps2dev.serio->firmware_id, ids[i]))
-				return true;
-
-	return false;
-}
-
 /*****************************************************************************
  *	Synaptics communications functions
  ****************************************************************************/
@@ -241,11 +229,24 @@ static int synaptics_model_id(struct psmouse *psmouse)
 	return 0;
 }
 
+static int synaptics_more_extended_queries(struct psmouse *psmouse)
+{
+	struct synaptics_data *priv = psmouse->private;
+	unsigned char buf[3];
+
+	if (synaptics_send_cmd(psmouse, SYN_QUE_MEXT_CAPAB_10, buf))
+		return -1;
+
+	priv->ext_cap_10 = (buf[0]<<16) | (buf[1]<<8) | buf[2];
+
+	return 0;
+}
+
 /*
- * Read the board id from the touchpad
+ * Read the board id and the "More Extended Queries" from the touchpad
  * The board id is encoded in the "QUERY MODES" response
  */
-static int synaptics_board_id(struct psmouse *psmouse)
+static int synaptics_query_modes(struct psmouse *psmouse)
 {
 	struct synaptics_data *priv = psmouse->private;
 	unsigned char bid[3];
@@ -253,6 +254,10 @@ static int synaptics_board_id(struct psmouse *psmouse)
 	if (synaptics_send_cmd(psmouse, SYN_QUE_MODES, bid))
 		return -1;
 	priv->board_id = ((bid[0] & 0xfc) << 6) | bid[1];
+
+	if (SYN_MEXT_CAP_BIT(bid[0]))
+		return synaptics_more_extended_queries(psmouse);
+
 	return 0;
 }
 
@@ -365,7 +370,8 @@ static int synaptics_resolution(struct psmouse *psmouse)
 	}
 
 	for (i = 0; min_max_pnpid_table[i].pnp_ids; i++) {
-		if (matches_pnp_id(psmouse, min_max_pnpid_table[i].pnp_ids)) {
+		if (psmouse_matches_pnp_id(psmouse,
+					   min_max_pnpid_table[i].pnp_ids)) {
 			priv->x_min = min_max_pnpid_table[i].x_min;
 			priv->x_max = min_max_pnpid_table[i].x_max;
 			priv->y_min = min_max_pnpid_table[i].y_min;
@@ -407,7 +413,7 @@ static int synaptics_query_hardware(struct psmouse *psmouse)
 		return -1;
 	if (synaptics_firmware_id(psmouse))
 		return -1;
-	if (synaptics_board_id(psmouse))
+	if (synaptics_query_modes(psmouse))
 		return -1;
 	if (synaptics_capability(psmouse))
 		return -1;
@@ -521,18 +527,22 @@ static int synaptics_is_pt_packet(unsigned char *buf)
 	return (buf[0] & 0xFC) == 0x84 && (buf[3] & 0xCC) == 0xC4;
 }
 
-static void synaptics_pass_pt_packet(struct serio *ptport, unsigned char *packet)
+static void synaptics_pass_pt_packet(struct psmouse *psmouse,
+				     struct serio *ptport,
+				     unsigned char *packet)
 {
+	struct synaptics_data *priv = psmouse->private;
 	struct psmouse *child = serio_get_drvdata(ptport);
 
 	if (child && child->state == PSMOUSE_ACTIVATED) {
-		serio_interrupt(ptport, packet[1], 0);
+		serio_interrupt(ptport, packet[1] | priv->pt_buttons, 0);
 		serio_interrupt(ptport, packet[4], 0);
 		serio_interrupt(ptport, packet[5], 0);
 		if (child->pktsize == 4)
 			serio_interrupt(ptport, packet[2], 0);
-	} else
+	} else {
 		serio_interrupt(ptport, packet[1], 0);
+	}
 }
 
 static void synaptics_pt_activate(struct psmouse *psmouse)
@@ -621,6 +631,18 @@ static void synaptics_parse_agm(const unsigned char buf[],
 	priv->agm_pending = true;
 }
 
+static void synaptics_parse_ext_buttons(const unsigned char buf[],
+					struct synaptics_data *priv,
+					struct synaptics_hw_state *hw)
+{
+	unsigned int ext_bits =
+		(SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap) + 1) >> 1;
+	unsigned int ext_mask = GENMASK(ext_bits - 1, 0);
+
+	hw->ext_buttons = buf[4] & ext_mask;
+	hw->ext_buttons |= (buf[5] & ext_mask) << ext_bits;
+}
+
 static int synaptics_parse_hw_state(const unsigned char buf[],
 				    struct synaptics_data *priv,
 				    struct synaptics_hw_state *hw)
@@ -705,28 +727,9 @@ static int synaptics_parse_hw_state(const unsigned char buf[],
 			hw->down = ((buf[0] ^ buf[3]) & 0x02) ? 1 : 0;
 		}
 
-		if (SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap) &&
+		if (SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap) > 0 &&
 		    ((buf[0] ^ buf[3]) & 0x02)) {
-			switch (SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap) & ~0x01) {
-			default:
-				/*
-				 * if nExtBtn is greater than 8 it should be
-				 * considered invalid and treated as 0
-				 */
-				break;
-			case 8:
-				hw->ext_buttons |= ((buf[5] & 0x08)) ? 0x80 : 0;
-				hw->ext_buttons |= ((buf[4] & 0x08)) ? 0x40 : 0;
-			case 6:
-				hw->ext_buttons |= ((buf[5] & 0x04)) ? 0x20 : 0;
-				hw->ext_buttons |= ((buf[4] & 0x04)) ? 0x10 : 0;
-			case 4:
-				hw->ext_buttons |= ((buf[5] & 0x02)) ? 0x08 : 0;
-				hw->ext_buttons |= ((buf[4] & 0x02)) ? 0x04 : 0;
-			case 2:
-				hw->ext_buttons |= ((buf[5] & 0x01)) ? 0x02 : 0;
-				hw->ext_buttons |= ((buf[4] & 0x01)) ? 0x01 : 0;
-			}
+			synaptics_parse_ext_buttons(buf, priv, hw);
 		}
 	} else {
 		hw->x = (((buf[1] & 0x1f) << 8) | buf[2]);
@@ -788,12 +791,35 @@ static void synaptics_report_semi_mt_data(struct input_dev *dev,
 	}
 }
 
+static void synaptics_report_ext_buttons(struct psmouse *psmouse,
+					 const struct synaptics_hw_state *hw)
+{
+	struct input_dev *dev = psmouse->dev;
+	struct synaptics_data *priv = psmouse->private;
+	int ext_bits = (SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap) + 1) >> 1;
+	int i;
+
+	if (!SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap))
+		return;
+
+	/* Bug in FW 8.1, buttons are reported only when ExtBit is 1 */
+	if (SYN_ID_FULL(priv->identity) == 0x801 &&
+	    !((psmouse->packet[0] ^ psmouse->packet[3]) & 0x02))
+		return;
+
+	for (i = 0; i < ext_bits; i++) {
+		input_report_key(dev, BTN_0 + 2 * i,
+			hw->ext_buttons & (1 << i));
+		input_report_key(dev, BTN_1 + 2 * i,
+			hw->ext_buttons & (1 << (i + ext_bits)));
+	}
+}
+
 static void synaptics_report_buttons(struct psmouse *psmouse,
 				     const struct synaptics_hw_state *hw)
 {
 	struct input_dev *dev = psmouse->dev;
 	struct synaptics_data *priv = psmouse->private;
-	int i;
 
 	input_report_key(dev, BTN_LEFT, hw->left);
 	input_report_key(dev, BTN_RIGHT, hw->right);
@@ -806,8 +832,7 @@ static void synaptics_report_buttons(struct psmouse *psmouse,
 		input_report_key(dev, BTN_BACK, hw->down);
 	}
 
-	for (i = 0; i < SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap); i++)
-		input_report_key(dev, BTN_0 + i, hw->ext_buttons & (1 << i));
+	synaptics_report_ext_buttons(psmouse, hw);
 }
 
 static void synaptics_report_slot(struct input_dev *dev, int slot,
@@ -1343,7 +1368,8 @@ static psmouse_ret_t synaptics_process_byte(struct psmouse *psmouse)
 		if (SYN_CAP_PASS_THROUGH(priv->capabilities) &&
 		    synaptics_is_pt_packet(psmouse->packet)) {
 			if (priv->pt_port)
-				synaptics_pass_pt_packet(priv->pt_port, psmouse->packet);
+				synaptics_pass_pt_packet(psmouse, priv->pt_port,
+							 psmouse->packet);
 		} else
 			synaptics_process_packet(psmouse);
 
@@ -1437,8 +1463,9 @@ static void set_input_params(struct psmouse *psmouse,
 		__set_bit(BTN_BACK, dev->keybit);
 	}
 
-	for (i = 0; i < SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap); i++)
-		__set_bit(BTN_0 + i, dev->keybit);
+	if (!SYN_CAP_EXT_BUTTONS_STICK(priv->ext_cap_10))
+		for (i = 0; i < SYN_CAP_MULTI_BUTTON_NO(priv->ext_cap); i++)
+			__set_bit(BTN_0 + i, dev->keybit);
 
 	__clear_bit(EV_REL, dev->evbit);
 	__clear_bit(REL_X, dev->relbit);
@@ -1446,7 +1473,8 @@ static void set_input_params(struct psmouse *psmouse,
 
 	if (SYN_CAP_CLICKPAD(priv->ext_cap_0c)) {
 		__set_bit(INPUT_PROP_BUTTONPAD, dev->propbit);
-		if (matches_pnp_id(psmouse, topbuttonpad_pnp_ids))
+		if (psmouse_matches_pnp_id(psmouse, topbuttonpad_pnp_ids) &&
+		    !SYN_CAP_EXT_BUTTONS_STICK(priv->ext_cap_10))
 			__set_bit(INPUT_PROP_TOPBUTTONPAD, dev->propbit);
 		/* Clickpads report only left button */
 		__clear_bit(BTN_RIGHT, dev->keybit);
