@@ -89,11 +89,7 @@
 
 #include "chip_registers.h"
 
-/* not defined in chip_registers.h */
-#define RXE_PER_CONTEXT_USER_OFFSET 0x0300000
-#define RXE_PER_CONTEXT_USER   (RXE + RXE_PER_CONTEXT_USER_OFFSET)
-
-#define TXE_PIO_SEND_OFFSET 0x0800000
+#define RXE_PER_CONTEXT_USER   (RXE + RXE_PER_CONTEXT_OFFSET)
 #define TXE_PIO_SEND (TXE + TXE_PIO_SEND_OFFSET)
 
 /* PBC flags */
@@ -238,6 +234,7 @@
 #define HCMD_SEND_LCB_IDLE_MSG 0x04
 #define HCMD_MISC		   0x05
 #define HCMD_READ_LCB_IDLE_MSG 0x06
+#define HCMD_READ_LCB_CSR      0x07
 #define HCMD_INTERFACE_TEST	   0xff
 
 /* DC_DC8051_CFG_HOST_CMD_1.RETURN_CODE - 8051 host command return */
@@ -434,11 +431,15 @@
 #define CRC_SIZES_SHIFT 20
 #define CRC_SIZES_MASK	0x7
 
-/* verify capability link width fields */
-#define LINK_WIDTH_SHIFT 0
-#define LINK_WIDTH_MASK 0xffff
+/* verify capability local link width fields */
+#define LINK_WIDTH_SHIFT 0		/* also for remote link width */
+#define LINK_WIDTH_MASK 0xffff		/* also for remote link width */
 #define LOCAL_FLAG_BITS_SHIFT 16
 #define LOCAL_FLAG_BITS_MASK 0xff
+#define MISC_CONFIG_BITS_SHIFT 24
+#define MISC_CONFIG_BITS_MASK 0xff
+
+/* verify cpability remote link width fields */
 #define REMOTE_TX_RATE_SHIFT 16
 #define REMOTE_TX_RATE_MASK 0xff
 
@@ -463,7 +464,7 @@
 #define MGMT_ALLOWED_MASK 0x1
 
 /* mask, shift for 'link_quality' within LINK_QUALITY_INFO field */
-#define LINK_QUALITY_SHIFT 0
+#define LINK_QUALITY_SHIFT 24
 #define LINK_QUALITY_MASK  0x7
 
 /*
@@ -513,6 +514,7 @@ enum {
 
 /* timeouts */
 #define LINK_RESTART_DELAY 1000		/* link restart delay, in ms */
+#define TIMEOUT_8051_START 5000         /* 8051 start timeout, in ms */
 #define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
 #define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
 #define VL_STATUS_CLEAR_TIMEOUT 5000	/* per-VL status clear, in ms */
@@ -559,6 +561,9 @@ static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
 	write_csr(dd, offset0 + (0x100 * ctxt), value);
 }
 
+int read_lcb_csr(struct hfi_devdata *dd, u32 offset, u64 *data);
+int write_lcb_csr(struct hfi_devdata *dd, u32 offset, u64 data);
+
 void __iomem *get_csr_addr(
 	struct hfi_devdata *dd,
 	u32 offset);
@@ -587,7 +592,6 @@ static inline u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt,
 static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
 				   u32 offset0, u64 value)
 {
-	/* TODO: write to user mapping if available? */
 	/* user per-context CSRs are separated by 0x1000 */
 	write_csr(dd, offset0 + (0x1000 * ctxt), value);
 }
@@ -608,7 +612,7 @@ int sbus_request_slow(struct hfi_devdata *dd,
 		      u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
 void set_sbus_fast_mode(struct hfi_devdata *dd);
 void clear_sbus_fast_mode(struct hfi_devdata *dd);
-int firmware_init(struct hfi_devdata *dd);
+int hfi1_firmware_init(struct hfi_devdata *dd);
 int load_pcie_firmware(struct hfi_devdata *dd);
 int load_firmware(struct hfi_devdata *dd);
 void dispose_firmware(void);

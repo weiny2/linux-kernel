@@ -267,7 +267,7 @@ void hfi1_copy_sge(
 }
 
 /**
- * hfi1_skip_sge - skip over SGE memory - XXX almost dup of prev func
+ * hfi1_skip_sge - skip over SGE memory
  * @ss: the SGE state
  * @length: the number of bytes to skip
  */
@@ -412,8 +412,9 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr,
 
 		sc5 = ibp->sl_to_sc[ah->attr.sl];
 		vl = sc_to_vlt(dd, sc5);
-		if (wqe->length > dd->vld[vl].mtu)
-			goto bail_inval_free;
+		if (vl < PER_VL_SEND_CONTEXTS)
+			if (wqe->length > dd->vld[vl].mtu)
+				goto bail_inval_free;
 
 		atomic_inc(&ah->refcount);
 	}
@@ -669,10 +670,9 @@ void hfi1_ib_rcv(struct hfi_packet *packet)
 			if (rcd->lookaside_qpn != qp_num) {
 				if (atomic_dec_and_test(
 					&rcd->lookaside_qp->refcount))
-					wake_up(
-					 &rcd->lookaside_qp->wait);
-					rcd->lookaside_qp = NULL;
-				}
+					wake_up(&rcd->lookaside_qp->wait);
+				rcd->lookaside_qp = NULL;
+			}
 		}
 		if (!rcd->lookaside_qp) {
 			qp = hfi1_lookup_qpn(ibp, qp_num);
@@ -1507,8 +1507,8 @@ static int query_port(struct ib_device *ibdev, u8 port,
 	 * from the Path Records to us will get the new 8k MTU.  Those that
 	 * attempt to process the MTU enum may fail in various ways.
 	 */
-	props->max_mtu = mtu_to_enum((!valid_ib_mtu(max_mtu) ?
-				      4096 : max_mtu), IB_MTU_4096);
+	props->max_mtu = mtu_to_enum((!valid_ib_mtu(hfi1_max_mtu) ?
+				      4096 : hfi1_max_mtu), IB_MTU_4096);
 	props->active_mtu = !valid_ib_mtu(ppd->ibmtu) ? props->max_mtu :
 		mtu_to_enum(ppd->ibmtu, IB_MTU_2048);
 	props->subnet_timeout = ibp->subnet_timeout;
@@ -1915,7 +1915,7 @@ static void init_ibport(struct hfi1_pportdata *ppd)
 /**
  * hfi1_register_ib_device - register our device with the infiniband core
  * @dd: the device data structure
- * Return the allocated qib_ibdev pointer or NULL on error.
+ * Return 0 if successful, errno if unsuccessful.
  */
 int hfi1_register_ib_device(struct hfi_devdata *dd)
 {
@@ -1971,9 +1971,6 @@ int hfi1_register_ib_device(struct hfi_devdata *dd)
 	INIT_LIST_HEAD(&dev->memwait);
 	INIT_LIST_HEAD(&dev->txreq_free);
 
-	/* FIXME - come up with a better scheme
-	 * - this one doesn't scale for multiple sdma engines
-	 */
 	descq_cnt = sdma_get_descq_cnt();
 	/*
 	 * AHG mode copy requires header be on cache line

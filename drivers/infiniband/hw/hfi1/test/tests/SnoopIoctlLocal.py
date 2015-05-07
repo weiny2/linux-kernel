@@ -265,9 +265,9 @@ def set_polling(file_obj):
 def show_sys_state():
     RegLib.test_log(0, "----------------------------")
     RegLib.test_log(0, "Dumping logical state from sysfs")
-    os.system("cat /sys/class/infiniband/hfi0/ports/1/state")
+    os.system("cat /sys/class/infiniband/hfi1_0/ports/1/state")
     RegLib.test_log(0, "Dumping phyhsical state from sysfs")
-    os.system("cat /sys/class/infiniband/hfi0/ports/1/phys_state")
+    os.system("cat /sys/class/infiniband/hfi1_0/ports/1/phys_state")
     RegLib.test_log(0, "----------------------------")
 
 # Not using but leave here in case we need to add it back in for debugging

@@ -374,7 +374,6 @@ struct sdma_txreq {
 	struct sdma_desc descs[NUM_DESC];
 };
 
-/* FIXME - remove when verbs done */
 struct verbs_txreq {
 	struct sdma_txreq       txreq;
 	struct hfi1_qp           *qp;
@@ -1073,7 +1072,7 @@ static inline void sdma_engine_progress_schedule(
 	struct sdma_engine *sde)
 {
 	/*
-	 * FIXME - need a better mechanism here
+	 * Need a better mechanism here
 	 * that progresses the ring on a
 	 * CPU away from receive processing
 	 */

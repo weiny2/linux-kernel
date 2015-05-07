@@ -490,15 +490,12 @@ static int read_lcb_cache(u32 off, u64 *val)
 
 void read_ltp_rtt(struct hfi_devdata *dd)
 {
-	u64 reg = 0;
+	u64 reg;
 
-	if (acquire_lcb_access(dd, 1) == 0) {
-		reg = read_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT);
-		release_lcb_access(dd, 1);
-		write_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, reg);
-	} else {
+	if (read_lcb_csr(dd, DC_LCB_STS_ROUND_TRIP_LTP_CNT, &reg))
 		dd_dev_err(dd, "%s: unable to read LTP RTT\n", __func__);
-	}
+	else
+		write_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, reg);
 }
 
 static u8 __opa_porttype(struct hfi1_pportdata *ppd)
@@ -681,7 +678,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->link_down_reason = ppd->local_link_down_reason.sma;
 	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
 	pi->port_error_action = cpu_to_be32(ppd->port_error_action);
-	pi->mtucap = mtu_to_enum(max_mtu, IB_MTU_4096);
+	pi->mtucap = mtu_to_enum(hfi1_max_mtu, IB_MTU_4096);
 
 	/* 32.768 usec. response time (guessing) */
 	pi->resptimevalue = 3;
@@ -845,7 +842,6 @@ static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
 		 */
 		if (lstate == HLS_DN_DISABLE && smp->hop_cnt)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
-		/* XXX ??? qib_wait_linkstate(ppd, QIBL_LINKV, 10); */
 		break;
 	case IB_PORT_ARMED:
 		ret = set_link_state(ppd, HLS_UP_ARMED);
@@ -2114,19 +2110,15 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
-static void workaround_portstatus_errata(struct hfi_devdata *dd,
-					 struct opa_port_status_rsp *rsp,
-					 u32 vl_select_mask)
+static void a0_portstatus(struct hfi_devdata *dd,
+			  struct opa_port_status_rsp *rsp, u32 vl_select_mask)
 {
-	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
+	if (!is_bx(dd)) {
 		unsigned long vl;
 		int vfi = 0;
 		u64 sum_vl_xmit_wait = 0;
 		u64 rcv_data, rcv_bubble;
-		/*
-		 * Erratum 291341 - Spurious increments of DC counters for
-		 * PortRcvBubble and PortVLRcvBubble.
-		 */
+
 		rcv_data = be64_to_cpu(rsp->port_rcv_data);
 		rcv_bubble = be64_to_cpu(rsp->port_rcv_bubble);
 		/* In the measured time period, calculate the total number
@@ -2151,10 +2143,6 @@ static void workaround_portstatus_errata(struct hfi_devdata *dd,
 			vfi++;
 		}
 
-		/*
-		 * Erratum 291344: Make sure that port_xmit_wait does not
-		 * exceed the sum (over all VLs) of port_vl_xmit_wait.
-		 */
 		vfi = 0;
 		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 				 8 * sizeof(vl_select_mask)) {
@@ -2327,7 +2315,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	workaround_portstatus_errata(dd, rsp, vl_select_mask);
+	a0_portstatus(dd, rsp, vl_select_mask);
 
 	return reply((struct ib_mad_hdr *)pmp);
 }
@@ -2338,12 +2326,6 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	struct hfi1_ibport *ibp = to_iport(ibdev, port);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 error_counter_summary = 0, tmp;
-	/* FIXME
-	 * some of the counters are not implemented. if the HFI spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
 
 	error_counter_summary += read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
 						CNTR_INVALID_VL);
@@ -2377,18 +2359,14 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	return error_counter_summary;
 }
 
-static void workaround_datacounters_errata(struct hfi_devdata *dd,
-					 struct _port_dctrs *rsp,
-					 u32 vl_select_mask)
+static void a0_datacounters(struct hfi_devdata *dd, struct _port_dctrs *rsp,
+			    u32 vl_select_mask)
 {
-	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
+	if (!is_bx(dd)) {
 		unsigned long vl;
 		int vfi = 0;
 		u64 rcv_data, rcv_bubble, sum_vl_xmit_wait = 0;
-		/*
-		 * Erratum 291341 - Spurious increments of DC counters for
-		 * PortRcvBubble and PortVLRcvBubble.
-		 */
+
 		rcv_data = be64_to_cpu(rsp->port_rcv_data);
 		rcv_bubble = be64_to_cpu(rsp->port_rcv_bubble);
 		/* In the measured time period, calculate the total number
@@ -2412,10 +2390,6 @@ static void workaround_datacounters_errata(struct hfi_devdata *dd,
 			}
 			vfi++;
 		}
-		/*
-		 * Erratum 291344: Make sure that port_xmit_wait does not
-		 * exceed the sum (over all VLs) of port_vl_xmit_wait.
-		 */
 		vfi = 0;
 		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 				8 * sizeof(vl_select_mask)) {
@@ -2496,13 +2470,6 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	 */
 	hfi1_read_link_quality(dd, &lq);
 	rsp->link_quality_indicator = cpu_to_be32((u32)lq);
-
-	/* FIXME
-	 * some of the counters are not implemented. if the HFI spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
 
 	/* rsp->sw_port_congestion is 0 for HFIs */
 	/* rsp->port_xmit_time_cong is 0 for HFIs */
@@ -2589,7 +2556,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	workaround_datacounters_errata(dd, rsp, vl_select_mask);
+	a0_datacounters(dd, rsp, vl_select_mask);
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
@@ -2621,10 +2588,6 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	num_pslm = hweight64(req->port_select_mask[3]);
 	num_vls = hweight32(req->vl_select_mask);
 
-	/* TODO add support for:
-	 *	COUNTER_SIZE_MODE_ALL32
-	 *	COUNTER_SIZE_MODE_MIXED
-	 */
 	if (num_ports != 1 || num_ports != num_pslm ||
 		(counter_size_mode != COUNTER_SIZE_MODE_ALL64)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
@@ -2658,13 +2621,6 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->port_number = (u8)port_num;
-
-	/* FIXME
-	 * some of the counters are not implemented. if the HFI spec
-	 * indicates the source of the value (e.g., driver, DC, etc.)
-	 * that's noted. If I don't have a clue how to get the counter,
-	 * a '???' appears.
-	 */
 
 	rsp->port_rcv_constraint_errors =
 		cpu_to_be64(read_port_cntr(ppd, C_SW_RCV_CSTR_ERR,
@@ -3892,7 +3848,6 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		return reply((struct ib_mad_hdr *)pmp);
 	}
 
-	/* FIXME decide proper length for all these */
 	*resp_len = sizeof(struct jumbo_mad);
 
 	switch (pmp->mad_hdr.method) {

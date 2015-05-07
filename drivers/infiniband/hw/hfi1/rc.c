@@ -894,7 +894,7 @@ static void restart_rc(struct hfi1_qp *qp, u32 psn, int wait)
 			hfi1_send_complete(qp, wqe, IB_WC_RETRY_EXC_ERR);
 			hfi1_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 			return;
-		} else /* XXX need to handle delayed completion */
+		} else /* need to handle delayed completion */
 			return;
 	} else
 		qp->s_retry--;
@@ -1798,17 +1798,7 @@ static int rc_rcv_error(struct hfi1_other_headers *ohdr, void *data,
 			qp->r_ack_psn = qp->r_psn - 1;
 			goto send_ack;
 		}
-		/*
-		 * Try to send a simple ACK to work around a Mellanox bug
-		 * which doesn't accept a RDMA read response or atomic
-		 * response as an ACK for earlier SENDs or RDMA writes.
-		 */
-		if (!(qp->s_flags & HFI1_S_RESP_PENDING)) {
-			spin_unlock_irqrestore(&qp->s_lock, flags);
-			qp->r_nak_state = 0;
-			qp->r_ack_psn = qp->s_ack_queue[i].psn - 1;
-			goto send_ack;
-		}
+
 		/*
 		 * Resend the RDMA read or atomic op which
 		 * ACKs this duplicate request.

@@ -164,22 +164,26 @@ int hfi1_create_ctxts(struct hfi_devdata *dd)
 			HFI_CAP_KGET(NODROP_RHQ_FULL) |
 			HFI_CAP_KGET(NODROP_EGR_FULL) |
 			HFI_CAP_KGET(DMA_RTAIL);
-		ret = hfi1_init_ctxt(rcd);
-		if (ret < 0) {
-			dd_dev_err(dd,
-				   "Failed to setup kernel receive context, failing\n");
-			dd->rcd[rcd->ctxt] = NULL;
-			hfi1_free_ctxtdata(dd, rcd);
-			ret = -EFAULT;
-			goto bail;
-		}
 		rcd->seq_cnt = 1;
 
 		rcd->sc = sc_alloc(dd, SC_ACK, rcd->rcvhdrqentsize, dd->node);
 		if (!rcd->sc) {
 			dd_dev_err(dd,
 				"Unable to allocate kernel send context, failing\n");
+			dd->rcd[rcd->ctxt] = NULL;
+			hfi1_free_ctxtdata(dd, rcd);
 			goto nomem;
+		}
+
+		ret = hfi1_init_ctxt(rcd);
+		if (ret < 0) {
+			dd_dev_err(dd,
+				   "Failed to setup kernel receive context, failing\n");
+			sc_free(rcd->sc);
+			dd->rcd[rcd->ctxt] = NULL;
+			hfi1_free_ctxtdata(dd, rcd);
+			ret = -EFAULT;
+			goto bail;
 		}
 	}
 
@@ -306,8 +310,8 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		 * entries needs to be big enough to handle the highest
 		 * MTU supported.
 		 */
-		if (rcd->egrbufs.size < max_mtu) {
-			rcd->egrbufs.size = __roundup_pow_of_two(max_mtu);
+		if (rcd->egrbufs.size < hfi1_max_mtu) {
+			rcd->egrbufs.size = __roundup_pow_of_two(hfi1_max_mtu);
 			dd_dev_info(dd,
 				    "ctxt%u: eager bufs size too small. Adjusting to %zu\n",
 				    rcd->ctxt, rcd->egrbufs.size);
@@ -616,8 +620,6 @@ static void enable_chip(struct hfi_devdata *dd)
 		if (HFI_CAP_KGET_MASK(dd->rcd[i]->flags, NODROP_EGR_FULL))
 			rcvmask |= HFI1_RCVCTRL_NO_EGR_DROP_ENB;
 		hfi1_rcvctrl(dd, rcvmask, i);
-		/* XXX (Mitko): Do we care about the result of this?
-		 * sc_enable() will display an error message. */
 		sc_enable(dd->rcd[i]->sc);
 	}
 }
@@ -692,12 +694,6 @@ int hfi1_init(struct hfi_devdata *dd, int reinit)
 	dd->process_dma_send = hfi1_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
 
-	/*
-	 * A0 erratum 291500: Here due to ASIC reset
-	 * power-on. The first packet to be recieved
-	 * in the future might be corrupted. Mark it
-	 * to be dropped.
-	 */
 	if (is_a0(dd)) {
 		atomic_set(&dd->drop_packet, DROP_PACKET_ON);
 		dd->do_drop = 1;
@@ -790,8 +786,6 @@ done:
 			 * Requires interrupts to be enabled so we are notified
 			 * when the QSFP completes reset, and has
 			 * to be done before bringing up the SERDES
-			 * TODO: Call init_qsfp only if HFI1_HAS_QSFP
-			 * is set in ppd->qsfp_info.flags
 			 */
 			init_qsfp(ppd);
 
@@ -1168,8 +1162,8 @@ static int __init hfi1_mod_init(void)
 	/* validate max and default MTUs before any devices start */
 	if (!valid_opa_mtu(default_mtu))
 		default_mtu = HFI_DEFAULT_ACTIVE_MTU;
-	if (!valid_opa_mtu(max_mtu))
-		max_mtu = HFI_DEFAULT_MAX_MTU;
+	if (!valid_opa_mtu(hfi1_max_mtu))
+		hfi1_max_mtu = HFI_DEFAULT_MAX_MTU;
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi_cu > 128 || !is_power_of_2(hfi_cu))
 		hfi_cu = 1;
@@ -1585,7 +1579,7 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 	gfp_t gfp_flags;
 	u16 order;
 	int ret = 0;
-	u16 round_mtu = roundup_pow_of_two(max_mtu);
+	u16 round_mtu = roundup_pow_of_two(hfi1_max_mtu);
 
 	/*
 	 * GFP_USER, but without GFP_FS, so buffer cache can be

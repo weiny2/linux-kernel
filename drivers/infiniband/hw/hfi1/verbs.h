@@ -66,7 +66,6 @@
 struct hfi1_ctxtdata;
 struct hfi1_pportdata;
 struct hfi_devdata;
-struct qib_verbs_txreq;
 struct hfi_packet;
 
 #include "iowait.h"
@@ -618,7 +617,7 @@ struct hfi1_qp {
  * HFI1_S_WAIT_DMA - waiting for send DMA queue to drain before generating
  *                  next send completion entry not via send DMA
  * HFI1_S_WAIT_PIO - waiting for a send buffer to be available
- * HFI1_S_WAIT_TX - waiting for a struct qib_verbs_txreq to be available
+ * HFI1_S_WAIT_TX - waiting for a struct verbs_txreq to be available
  * HFI1_S_WAIT_DMA_DESC - waiting for DMA descriptors to be available
  * HFI1_S_WAIT_KMEM - waiting for kernel memory to be available
  * HFI1_S_WAIT_PSN - waiting for a packet to exit the send DMA queue
@@ -785,7 +784,7 @@ struct hfi1_ibdev {
 
 	/* QP numbers are shared by all IB ports */
 	struct hfi1_lkey_table lk_table;
-	struct list_head txwait;        /* list for wait qib_verbs_txreq */
+	struct list_head txwait;        /* list for wait verbs_txreq */
 	struct list_head memwait;       /* list for wait kernel memory */
 	struct list_head txreq_free;
 	struct timer_list mem_timer;
@@ -949,23 +948,11 @@ static inline u32 delta_psn(u32 a, u32 b)
 
 struct hfi1_mcast *hfi1_mcast_find(struct hfi1_ibport *ibp, union ib_gid *mgid);
 
-int qib_snapshot_counters(struct hfi1_pportdata *ppd, u64 *swords,
-			  u64 *rwords, u64 *spkts, u64 *rpkts,
-			  u64 *xmit_wait);
-
-int qib_get_counters(struct hfi1_pportdata *ppd,
-		     struct hfi1_verbs_counters *cntrs);
-
 int hfi1_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
 int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
 int hfi1_mcast_tree_empty(struct hfi1_ibport *ibp);
-
-unsigned qib_pkt_delay(u32 plen, u8 snd_mult, u8 rcv_mult);
-
-struct sdma_engine;
-void qib_verbs_sdma_desc_avail(struct sdma_engine *engine, unsigned avail);
 
 struct verbs_txreq;
 void hfi1_put_txreq(struct verbs_txreq *tx);
@@ -1001,8 +988,6 @@ void hfi1_rc_rnr_retry(unsigned long arg);
 void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr);
 
 void hfi1_rc_error(struct hfi1_qp *qp, enum ib_wc_status err);
-
-int qib_post_ud_send(struct hfi1_qp *qp, struct ib_send_wr *wr);
 
 void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);

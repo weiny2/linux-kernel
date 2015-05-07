@@ -831,20 +831,6 @@ static struct flag_table rxe_err_status_flags[] = {
 	| RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK \
 	| RCV_ERR_STATUS_RX_CSR_PARITY_ERR_SMASK)
 
-/*
- * If RXDMA detects an uncorrectable error in a RcvHdrAddr or RcvHdrTailAddr
- * CSR when delivering a packet to host memory, the error is correctly reported
- * as RxDmaCsrUncErr and leads to SPC freeze. The problem is that a write TLP
- * can be sent upstream to a corrupted host memory address. A multi-bit hardware
- * data corruption on this internal state can lead to host memory corruption
- * along with the normal error reporting and SPC freeze mode entry. The
- * workaround for A0 is to not attempt to recover from freeze mode when the
- * RxDmaCsrUncErr error case occurs. A host reboot is instead required to
- * recover. This erratum is slated for a B0 fix.
- *
- * A0 erratum 291500: Freeze mode exit not supported due to packet
- * corruption for  RxDmaHdrFifoRdUncErr and RxDmaDataFifoRdUncErr
- */
 #define RXE_FREEZE_ABORT_MASK \
 	(RCV_ERR_STATUS_RX_DMA_CSR_UNC_ERR_SMASK | \
 	RCV_ERR_STATUS_RX_DMA_HDR_FIFO_RD_UNC_ERR_SMASK | \
@@ -1012,8 +998,8 @@ static void read_vc_remote_fabric(struct hfi_devdata *dd, u8 *vau, u8 *z,
 				u8 *vcu, u16 *vl15buf, u8 *crc_sizes);
 static void read_vc_remote_link_width(struct hfi_devdata *dd,
 				u8 *remote_tx_rate, u16 *link_widths);
-static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
-				u16 *link_widths);
+static void read_vc_local_link_width(struct hfi_devdata *dd, u8 *misc_bits,
+				u8 *flag_bits, u16 *link_widths);
 static void read_remote_device_id(struct hfi_devdata *dd, u16 *device_id,
 				u8 *device_rev);
 static void read_mgmt_allowed(struct hfi_devdata *dd, u8 *mgmt_allowed);
@@ -1050,6 +1036,8 @@ static int wait_logical_linkstate(struct hfi1_pportdata *ppd, u32 state,
 				  int msecs);
 static void read_planned_down_reason_code(struct hfi_devdata *dd, u8 *pdrrc);
 static void handle_temp_err(struct hfi_devdata *);
+static void dc_shutdown(struct hfi_devdata *);
+static void dc_start(struct hfi_devdata *);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -1348,17 +1336,23 @@ static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
 			    int vl, int mode, u64 data)
 {
-	u64 reg;
 	struct hfi_devdata *dd = (struct hfi_devdata *)context;
+	u32 csr = entry->csr;
+	int ret = 0;
 
 	BUG_ON(vl != CNTR_INVALID_VL);
-	if (acquire_lcb_access(dd, 0) == 0) {
-		reg = read_write_csr(dd, entry->csr, mode, data);
-		release_lcb_access(dd, 0);
-		return reg;
+	if (mode == CNTR_MODE_R)
+		ret = read_lcb_csr(dd, csr, &data);
+	else if (mode == CNTR_MODE_W)
+		ret = write_lcb_csr(dd, csr, data);
+
+	if (ret) {
+		dd_dev_err(dd, "Could not acquire LCB for counter 0x%x", csr);
+		return 0;
 	}
-	dd_dev_err(dd, "Could not aquire LCB");
-	return 0;
+
+	hfi_cdbg(CNTR, "csr 0x%x val 0x%llx mode %d", csr, data, mode);
+	return data;
 }
 
 /* Port Access */
@@ -2565,8 +2559,16 @@ static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
+			if (ppd->host_link_state == HLS_DN_POLL) {
+				/*
+				 * The link is still in POLL. This means
+				 * that the normal link down processing
+				 * will not happen. We have to do it here
+				 * before turning the DC off.
+				 */
+				queue_work(ppd->hfi1_wq, &ppd->link_down_work);
+			}
 		} else {
-
 			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
 			ppd->qsfp_info.cache_valid = 0;
 			ppd->qsfp_info.cache_refresh_required = 1;
@@ -2592,31 +2594,9 @@ static void handle_qsfp_int(struct hfi_devdata *dd, u32 src_ctx, u64 reg)
 		spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
 	}
 
-	queue_work(ppd->hfi1_wq, &ppd->qsfp_info.qsfp_work);
-}
-
-/*
- * Wait until all LCB users leave.  Assumes that the caller has cut off
- * all new LCB accessors (by setting the link state) and is now waiting
- * for all current users to finish.
- */
-static int wait_lcb_access_done(struct hfi_devdata *dd)
-{
-	unsigned long timeout;
-	u32 count;
-
-	timeout = jiffies + msecs_to_jiffies(20);
-	while (1) {
-		count = ACCESS_ONCE(dd->lcb_access_count);
-		if (count == 0)
-			return 0;
-		if (time_after(jiffies, timeout)) {
-			dd_dev_err(dd, "%s: timed out waiting for LCB access to be released, access count %u\n",
-				__func__, count);
-			return -ETIMEDOUT;
-		}
-		usleep_range(100, 200);
-	}
+	/* Schedule the QSFP work only if there is a cable attached. */
+	if (qsfp_mod_present(ppd))
+		queue_work(ppd->hfi1_wq, &ppd->qsfp_info.qsfp_work);
 }
 
 static int request_host_lcb_access(struct hfi_devdata *dd)
@@ -2680,8 +2660,8 @@ static inline void set_8051_lcb_access(struct hfi_devdata *dd)
  */
 int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 {
+	struct hfi1_pportdata *ppd = dd->pport;
 	int ret = 0;
-	u32 state;
 
 	/*
 	 * Use the host link state lock so the operation of this routine
@@ -2690,18 +2670,16 @@ int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 	 * race between the state change and the count increment.
 	 */
 	if (sleep_ok) {
-		mutex_lock(&dd->pport->hls_lock);
+		mutex_lock(&ppd->hls_lock);
 	} else {
-		while (mutex_trylock(&dd->pport->hls_lock) == EBUSY)
+		while (mutex_trylock(&ppd->hls_lock) == EBUSY)
 			udelay(1);
 	}
 
-	/* can not use the LCB when the 8051 is using it */
-	state = dd->pport->host_link_state;
-	if (state == HLS_DN_POLL || state == HLS_VERIFY_CAP ||
-			state == HLS_GOING_UP || state == HLS_GOING_DOWN) {
-		dd_dev_info(dd, "%s: link state %s disallows LCB access\n",
-			__func__, link_state_name(state));
+	/* this access is valid only when the link is up */
+	if ((ppd->host_link_state & HLS_UP) == 0) {
+		dd_dev_info(dd, "%s: link state %s not up\n",
+			__func__, link_state_name(ppd->host_link_state));
 		ret = -EBUSY;
 		goto done;
 	}
@@ -2718,7 +2696,7 @@ int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 	}
 	dd->lcb_access_count++;
 done:
-	mutex_unlock(&dd->pport->hls_lock);
+	mutex_unlock(&ppd->hls_lock);
 	return ret;
 }
 
@@ -2782,7 +2760,6 @@ done:
 static void init_lcb_access(struct hfi_devdata *dd)
 {
 	dd->lcb_access_count = 0;
-	set_8051_lcb_access(dd);
 }
 
 /*
@@ -2842,7 +2819,7 @@ static void handle_8051_request(struct hfi_devdata *dd)
 		dd_dev_err(dd, "8051 request: unknown request 0x%x\n", type);
 		hreq_response(dd, HREQ_NOT_SUPPORTED, 0);
 		break;
-	};
+	}
 }
 
 static void write_global_credit(struct hfi_devdata *dd,
@@ -2914,7 +2891,7 @@ static void set_linkup_defaults(struct hfi1_pportdata *ppd)
  */
 static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 {
-	u64 reg, saved_lcb_err_en;
+	u64 reg;
 
 	/* clear lcb run: LCB_CFG_RUN.EN = 0 */
 	write_csr(dd, DC_LCB_CFG_RUN, 0);
@@ -2922,7 +2899,7 @@ static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET,
 		1ull << DC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
 	/* set dcc reset csr: DCC_CFG_RESET.{reset_lcb,reset_rx_fpe} = 1 */
-	saved_lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
+	dd->lcb_err_en = read_csr(dd, DC_LCB_ERR_EN);
 	reg = read_csr(dd, DCC_CFG_RESET);
 	write_csr(dd, DCC_CFG_RESET,
 		reg
@@ -2932,8 +2909,59 @@ static void lcb_shutdown(struct hfi_devdata *dd, int abort)
 	if (!abort) {
 		udelay(1);    /* must hold for the longer of 16cclks or 20ns */
 		write_csr(dd, DCC_CFG_RESET, reg);
-		write_csr(dd, DC_LCB_ERR_EN, saved_lcb_err_en);
+		write_csr(dd, DC_LCB_ERR_EN, dd->lcb_err_en);
 	}
+}
+
+/*
+ * This routine should be called after the link has been transitioned to
+ * OFFLINE (OFFLINE state has the side effect of putting the SerDes into
+ * reset).
+ *
+ * The expectation is that the caller of this routine would have taken
+ * care of properly transitioning the link into the correct state.
+ */
+static void dc_shutdown(struct hfi_devdata *dd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->dc8051_lock, flags);
+	if (dd->dc_shutdown) {
+		spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+		return;
+	}
+	dd->dc_shutdown = 1;
+	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+	/* Shutdown the LCB */
+	lcb_shutdown(dd, 1);
+	/* Going to OFFLINE would have causes the 8051 to put the
+	 * SerDes into reset already. Just need to shutdown the 8051,
+	 * iteself. */
+	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
+}
+
+/* Calling this after the DC has been brought out of reset should not
+ * do any damage. */
+static void dc_start(struct hfi_devdata *dd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dd->dc8051_lock, flags);
+	if (!dd->dc_shutdown)
+		goto done;
+	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+	/* Take the 8051 out of reset */
+	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
+	/* Wait until 8052 is ready */
+	wait_fm_ready(dd, TIMEOUT_8051_START);
+	/* Take away reset for LCB and RX FPE (set in lcb_shutdown). */
+	write_csr(dd, DCC_CFG_RESET, 0x10);
+	/* lcb_shutdown() with abort=1 does not restore these */
+	write_csr(dd, DC_LCB_ERR_EN, dd->lcb_err_en);
+	spin_lock_irqsave(&dd->dc8051_lock, flags);
+	dd->dc_shutdown = 0;
+done:
+	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
 }
 
 /*
@@ -3051,8 +3079,7 @@ void handle_sma_message(struct work_struct *work)
 		 *
 		 * Only expected in INIT or ARMED, discard otherwise.
 		 */
-		if (ppd->host_link_state == HLS_UP_INIT
-				|| ppd->host_link_state == HLS_UP_ARMED)
+		if (ppd->host_link_state & (HLS_UP_INIT | HLS_UP_ARMED))
 			ppd->neighbor_normal = 1;
 		break;
 	case SMA_IDLE_ACTIVE:
@@ -3246,12 +3273,8 @@ void handle_freeze(struct work_struct *work)
 	write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_UNFREEZE_SMASK);
 	wait_for_freeze_status(dd, 0);
 
-	/*
-	 * A0 erratum 291496
-	 * additional SPC unfreeze sequence needed
-	 */
 	if (is_a0(dd)) {
-		dd_dev_info(dd, "Entering SPC freeze (A0 erratum 291496)\n");
+		dd_dev_info(dd, "Entering SPC freeze\n");
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_FREEZE_SMASK);
 		wait_for_freeze_status(dd, 1);
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_UNFREEZE_SMASK);
@@ -3340,7 +3363,12 @@ void handle_link_down(struct work_struct *work)
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 
-	start_link(ppd);
+	/* If there is no cable attached, turn the DC off. Otherwise,
+	 * start the link bring up. */
+	if (!qsfp_mod_present(ppd))
+		dc_shutdown(ppd->dd);
+	else
+		start_link(ppd);
 }
 
 /*
@@ -3531,10 +3559,11 @@ static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
 static void get_linkup_widths(struct hfi_devdata *dd, u16 *tx_width,
 				u16 *rx_width)
 {
-	u16 flags, widths, tx, rx;
+	u16 widths, tx, rx;
+	u8 misc_bits, local_flags;
 	u16 active_tx, active_rx;
 
-	read_vc_local_link_width(dd, &flags, &widths);
+	read_vc_local_link_width(dd, &misc_bits, &local_flags, &widths);
 	tx = widths >> 12;
 	rx = (widths >> 8) & 0xf;
 	dd_dev_info(dd, "%s: active tx %d, active rx %d\n", __func__, tx, rx);
@@ -3598,10 +3627,6 @@ void handle_verify_cap(struct work_struct *work)
 
 	set_link_state(ppd, HLS_VERIFY_CAP);
 
-	/* set host access to the LCB CSRs */
-	set_host_lcb_access(dd);
-	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
-
 	lcb_shutdown(dd, 0);
 	adjust_lcb_for_fpga_serdes(dd);
 
@@ -3627,7 +3652,6 @@ void handle_verify_cap(struct work_struct *work)
 	 * LNI, is also be available at this point.
 	 */
 	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
-	hfi1_read_link_quality(dd, &ppd->link_quality);
 	/* print the active widths */
 	get_link_widths(dd, &active_tx, &active_rx);
 	dd_dev_info(dd,
@@ -3775,9 +3799,7 @@ void apply_link_downgrade_policy(struct hfi1_pportdata *ppd, int refresh_widths)
 
 	mutex_lock(&ppd->hls_lock);
 	/* only apply if the link is up */
-	if (ppd->host_link_state == HLS_UP_INIT
-			|| ppd->host_link_state == HLS_UP_ARMED
-			|| ppd->host_link_state == HLS_UP_ACTIVE)
+	if (ppd->host_link_state & HLS_UP)
 		skip = 0;
 	mutex_unlock(&ppd->hls_lock);
 	if (skip)
@@ -3899,9 +3921,8 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 			 * to them when in the states that occur during
 			 * LNI.
 			 */
-			if (ppd->host_link_state == HLS_DN_POLL
-				|| ppd->host_link_state == HLS_VERIFY_CAP
-				|| ppd->host_link_state == HLS_GOING_UP) {
+			if (ppd->host_link_state
+			    & (HLS_DN_POLL | HLS_VERIFY_CAP | HLS_GOING_UP)) {
 				queue_link_down = 1;
 				dd_dev_info(dd, "Link error: %s\n",
 					dc8051_info_err_string(buf,
@@ -3993,7 +4014,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 
 	if (queue_link_down) {
 		/* if the link is going down, don't queue another */
-		if (ppd->host_link_state == HLS_GOING_DOWN) {
+		if (ppd->host_link_state == HLS_GOING_OFFLINE) {
 			dd_dev_info(dd, "%s: not queueing link down\n",
 				__func__);
 		} else {
@@ -4468,7 +4489,7 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 
 	this_cpu_inc(*dd->int_counter);
 
-	/* FIXME - this read_csr is really bad in the hot path */
+	/* This read_csr is really bad in the hot path */
 	status = read_csr(dd,
 			CCE_INT_STATUS + (8*(IS_SDMA_START/64)))
 			& sde->imask;
@@ -4541,6 +4562,83 @@ static void set_logical_state(struct hfi_devdata *dd, u32 chip_lstate)
 }
 
 /*
+ * Use the 8051 to read a LCB CSR.
+ */
+static int read_lcb_via_8051(struct hfi_devdata *dd, u32 addr, u64 *data)
+{
+	u32 regno;
+	int ret;
+
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
+		if (acquire_lcb_access(dd, 0) == 0) {
+			*data = read_csr(dd, addr);
+			release_lcb_access(dd, 0);
+			return 0;
+		}
+		return -EBUSY;
+	}
+
+	/* register is an index of LCB registers: (offset - base) / 8 */
+	regno = (addr - DC_LCB_CFG_RUN) >> 3;
+	ret = do_8051_command(dd, HCMD_READ_LCB_CSR, regno, data);
+	if (ret != HCMD_SUCCESS)
+		return -EBUSY;
+	return 0;
+}
+
+/*
+ * Read an LCB CSR.  Access may not be in host control, so check.
+ * Return 0 on success, -EBUSY on failure.
+ */
+int read_lcb_csr(struct hfi_devdata *dd, u32 addr, u64 *data)
+{
+	struct hfi1_pportdata *ppd = dd->pport;
+
+	/* if up, go through the 8051 for the value */
+	if (ppd->host_link_state & HLS_UP)
+		return read_lcb_via_8051(dd, addr, data);
+	/* if going up or down, no access */
+	if (ppd->host_link_state & (HLS_GOING_UP | HLS_GOING_OFFLINE))
+		return -EBUSY;
+	/* otherwise, host has access */
+	*data = read_csr(dd, addr);
+	return 0;
+}
+
+/*
+ * Use the 8051 to write a LCB CSR.
+ */
+static int write_lcb_via_8051(struct hfi_devdata *dd, u32 addr, u64 data)
+{
+
+	if (acquire_lcb_access(dd, 0) == 0) {
+		write_csr(dd, addr, data);
+		release_lcb_access(dd, 0);
+		return 0;
+	}
+	return -EBUSY;
+}
+
+/*
+ * Write an LCB CSR.  Access may not be in host control, so check.
+ * Return 0 on success, -EBUSY on failure.
+ */
+int write_lcb_csr(struct hfi_devdata *dd, u32 addr, u64 data)
+{
+	struct hfi1_pportdata *ppd = dd->pport;
+
+	/* if up, go through the 8051 for the value */
+	if (ppd->host_link_state & HLS_UP)
+		return write_lcb_via_8051(dd, addr, data);
+	/* if going up or down, no access */
+	if (ppd->host_link_state & (HLS_GOING_UP | HLS_GOING_OFFLINE))
+		return -EBUSY;
+	/* otherwise, host has access */
+	write_csr(dd, addr, data);
+	return 0;
+}
+
+/*
  * Returns:
  *	< 0 = Linux error, not able to get access
  *	> 0 = 8051 command RETURN_CODE
@@ -4564,21 +4662,35 @@ static int do_8051_command(
 	 */
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
 
+
+	/* We can't send any commands to the 8051 if it's in reset */
+	if (dd->dc_shutdown) {
+		return_code = -ENODEV;
+		goto fail;
+	}
+
 	/*
 	 * If an 8051 host command timed out previously, then the 8051 is
-	 * stuck.  Fail this command immediately.  Handling it this way
-	 * allows the driver to properly unload.
+	 * stuck.
 	 *
-	 * Alternative: Reset the 8051 at timeout time (no need to re-download
-	 * firmware).  The concern with this approach is all state, if any,
-	 * is lost. OTOH, immediately failing has no chance of recovery.
+	 * On first timeout, attempt to reset and restart the entire DC
+	 * block (including 8051). (Is this too big of a hammer?)
+	 *
+	 * If the 8051 times out a second time, the reset did not bring it
+	 * back to healthy life. In that case, fail any subsequent commands.
 	 */
 	if (dd->dc8051_timed_out) {
-		dd_dev_err(dd,
-			"Previous 8051 host command timed out, skipping command %u\n",
-			type);
-		return_code = -ENXIO;
-		goto fail;
+		if (dd->dc8051_timed_out > 1) {
+			dd_dev_err(dd,
+				   "Previous 8051 host command timed out, skipping command %u\n",
+				   type);
+			return_code = -ENXIO;
+			goto fail;
+		}
+		spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+		dc_shutdown(dd);
+		dc_start(dd);
+		spin_lock_irqsave(&dd->dc8051_lock, flags);
 	}
 
 	/*
@@ -4607,7 +4719,7 @@ static int do_8051_command(
 		if (completed)
 			break;
 		if (time_after(jiffies, timeout)) {
-			dd->dc8051_timed_out = 1;
+			dd->dc8051_timed_out++;
 			dd_dev_err(dd, "8051 host command %u timeout\n", type);
 			if (out_data)
 				*out_data = 0;
@@ -4617,11 +4729,20 @@ static int do_8051_command(
 		udelay(2);
 	}
 
-	if (out_data)
+	if (out_data) {
 		*out_data = (reg >> DC_DC8051_CFG_HOST_CMD_1_RSP_DATA_SHIFT)
 				& DC_DC8051_CFG_HOST_CMD_1_RSP_DATA_MASK;
+		if (type == HCMD_READ_LCB_CSR) {
+			/* top 16 bits are in a different register */
+			*out_data |= (read_csr(dd, DC_DC8051_CFG_EXT_DEV_1)
+				& DC_DC8051_CFG_EXT_DEV_1_REQ_DATA_SMASK)
+				<< (48
+				    - DC_DC8051_CFG_EXT_DEV_1_REQ_DATA_SHIFT);
+		}
+	}
 	return_code = (reg >> DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_SHIFT)
 				& DC_DC8051_CFG_HOST_CMD_1_RETURN_CODE_MASK;
+	dd->dc8051_timed_out = 0;
 	/*
 	 * Clear command for next user.
 	 */
@@ -4702,24 +4823,27 @@ static int write_vc_local_fabric(struct hfi_devdata *dd, u8 vau, u8 z, u8 vcu,
 				GENERAL_CONFIG, frame);
 }
 
-static void read_vc_local_link_width(struct hfi_devdata *dd, u16 *flag_bits,
-					u16 *link_widths)
+static void read_vc_local_link_width(struct hfi_devdata *dd, u8 *misc_bits,
+					u8 *flag_bits, u16 *link_widths)
 {
 	u32 frame;
 
 	read_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
 				&frame);
+	*misc_bits = (frame >> MISC_CONFIG_BITS_SHIFT) & MISC_CONFIG_BITS_MASK;
 	*flag_bits = (frame >> LOCAL_FLAG_BITS_SHIFT) & LOCAL_FLAG_BITS_MASK;
 	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LINK_WIDTH_MASK;
 }
 
 static int write_vc_local_link_width(struct hfi_devdata *dd,
-				u16 flag_bits,
+				u8 misc_bits,
+				u8 flag_bits,
 				u16 link_widths)
 {
 	u32 frame;
 
-	frame = (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
+	frame = (u32)misc_bits << MISC_CONFIG_BITS_SHIFT
+		| (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
 		| (u32)link_widths << LINK_WIDTH_SHIFT;
 	return load_8051_config(dd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
 		     frame);
@@ -4975,24 +5099,6 @@ static int do_quick_linkup(struct hfi_devdata *dd)
 	unsigned long timeout;
 	int ret;
 
-	/*
-	 * Set host access to the LCB CSRs.  We grab and release access
-	 * in this routine.
-	 *
-	 * It is OK to grab and release LCB access here because:
-	 * - We are called from the routine that is moving the state
-	 *   to Poll.
-	 * - At the time of this call, the driver state has been changed
-	 *   to Poll, but the 8051 has not bee requested to do anything.
-	 *   Meaning that the link is Offline, and 8051 is not using the
-	 *   LCB CSRs.
-	 * - After setting the link state to Poll, the driver waited
-	 *   until all outside LCB accessors finished.  There is no
-	 *   one else adjusting the LCB access settings.
-	 */
-	set_host_lcb_access(dd);
-	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
-
 	lcb_shutdown(dd, 0);
 
 	if (loopback) {
@@ -5032,9 +5138,6 @@ static int do_quick_linkup(struct hfi_devdata *dd)
 			1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
 	}
 
-	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
-	set_8051_lcb_access(dd);
-
 	if (!loopback) {
 		/*
 		 * When doing quick linkup and not in loopback, both
@@ -5050,6 +5153,9 @@ static int do_quick_linkup(struct hfi_devdata *dd)
 			"Continuing with quick linkup\n");
 	}
 
+	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
+	set_8051_lcb_access(dd);
+
 	/*
 	 * State "quick" LinkUp request sets the physical link state to
 	 * LinkUp without a verify capabilbity sequence.
@@ -5060,6 +5166,9 @@ static int do_quick_linkup(struct hfi_devdata *dd)
 		dd_dev_err(dd,
 			"%s: set phsyical link state to quick LinkUp failed with return %d\n",
 			__func__, ret);
+
+		set_host_lcb_access(dd);
+		write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
 		if (ret >= 0)
 			ret = -EINVAL;
@@ -5115,8 +5224,12 @@ static int init_loopback(struct hfi_devdata *dd)
 	}
 
 	/* handle serdes loopback */
-	if (loopback == LOOPBACK_SERDES)
+	if (loopback == LOOPBACK_SERDES) {
+		/* internal serdes loopack needs quick linkup on RTL */
+		if (dd->icode == ICODE_RTL_SILICON)
+			quick_linkup = 1;
 		return set_serdes_loopback_mode(dd);
+	}
 
 	/* LCB loopback - handled at poll time */
 	if (loopback == LOOPBACK_LCB) {
@@ -5210,7 +5323,7 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
-	ret = write_vc_local_link_width(dd, 0,
+	ret = write_vc_local_link_width(dd, 0, 0,
 		     opa_to_vc_link_widths(ppd->link_width_enabled));
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
@@ -5248,7 +5361,8 @@ int start_link(struct hfi1_pportdata *ppd)
 	}
 
 	if (qsfp_mod_present(ppd) || loopback == LOOPBACK_SERDES ||
-						loopback == LOOPBACK_LCB)
+			loopback == LOOPBACK_LCB ||
+			ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
 		return set_link_state(ppd, HLS_DN_POLL);
 
 	dd_dev_info(ppd->dd,
@@ -5396,8 +5510,6 @@ static int do_pre_lni_host_behaviors(struct hfi1_pportdata *ppd)
 {
 	refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 
-	if (ppd->qsfp_info.cache_valid)
-		;/* TODO: Brent's flowchart */
 	return 0;
 }
 
@@ -5421,6 +5533,7 @@ static int do_qsfp_intr_fallback(struct hfi1_pportdata *ppd)
 	return 0;
 }
 
+/* This routine will only be scheduled if the QSFP module is present */
 static void qsfp_event(struct work_struct *work)
 {
 	struct qsfp_data *qd;
@@ -5431,7 +5544,18 @@ static void qsfp_event(struct work_struct *work)
 	ppd = qd->ppd;
 	dd = ppd->dd;
 
-	if (qd->cache_refresh_required && qsfp_mod_present(ppd)) {
+	/* Sanity check */
+	if (!qsfp_mod_present(ppd))
+		return;
+
+	/*
+	 * Turn DC back on after cables has been
+	 * re-inserted. Up until now, the DC has been in
+	 * reset to save power.
+	 */
+	dc_start(dd);
+
+	if (qd->cache_refresh_required) {
 		msleep(3000);
 		reset_qsfp(ppd);
 
@@ -5448,7 +5572,7 @@ static void qsfp_event(struct work_struct *work)
 		}
 	}
 
-	if (qd->check_interrupt_flags && qsfp_mod_present(ppd)) {
+	if (qd->check_interrupt_flags) {
 		u8 qsfp_interrupt_status[16] = {0,};
 
 		if (qsfp_read(ppd, dd->hfi_id, 6, &qsfp_interrupt_status[0], 16)
@@ -5505,20 +5629,11 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 		qsfp_mask);
 
 	/* Handle active low nature of INT_N and MODPRST_N pins */
-	if (qsfp_mod_present(ppd)) {
+	if (qsfp_mod_present(ppd))
 		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
-		write_csr(dd,
-				dd->hfi_id ?
-					ASIC_QSFP2_INVERT :
-					ASIC_QSFP1_INVERT,
-			qsfp_mask);
-	} else {
-		write_csr(dd,
-				dd->hfi_id ?
-					ASIC_QSFP2_INVERT :
-					ASIC_QSFP1_INVERT,
-			qsfp_mask);
-	}
+	write_csr(dd,
+		  dd->hfi_id ? ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
+		  qsfp_mask);
 
 	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
 	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
@@ -5550,9 +5665,6 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 	u64 guid;
 	int ret;
 
-	/* XXX (Mitko): This should have a better place than
-	 * here!
-	 */
 	if (HFI_CAP_IS_KSET(EXTENDED_PSN))
 		add_rcvctrl(dd, RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK);
 
@@ -5565,11 +5677,8 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 
 	/* the link defaults to enabled */
 	ppd->link_enabled = 1;
-	/* XXX (Easwar): Move to where driver_link_ready is set? */
+	/* Set linkinit_reason on power up per OPA spec */
 	ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
-
-	/* assign LCB access to the 8051 */
-	set_8051_lcb_access(dd);
 
 	if (loopback) {
 		ret = init_loopback(dd);
@@ -5959,6 +6068,7 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	int do_wait;
 
 	previous_state = ppd->host_link_state;
+	ppd->host_link_state = HLS_GOING_OFFLINE;
 	pstate = read_physical_state(dd);
 	if (pstate == PLS_OFFLINE) {
 		do_transition = 0;	/* in right state */
@@ -5966,11 +6076,9 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	} else if ((pstate & 0xff) == PLS_OFFLINE) {
 		do_transition = 0;	/* in an offline transient state */
 		do_wait = 1;		/* ...wait for it to settle */
-		ppd->host_link_state = HLS_GOING_DOWN;
 	} else {
 		do_transition = 1;	/* need to move to offline */
 		do_wait = 1;		/* ...will need to wait */
-		ppd->host_link_state = HLS_GOING_DOWN;
 	}
 
 	if (do_transition) {
@@ -5994,8 +6102,17 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 		if (ret < 0)
 			return ret;
 	}
+
 	/* make sure the logical state is also down */
 	wait_logical_linkstate(ppd, IB_PORT_DOWN, 1000);
+
+	/*
+	 * Now in charge of LCB - must be after the physical state is
+	 * offline.quiet and before host_link_state is changed.
+	 */
+	set_host_lcb_access(dd);
+	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
+	ppd->host_link_state = HLS_LINK_COOLDOWN; /* LCB access allowed */
 
 	/*
 	 * The LNI has a mandatory wait time after the physical state
@@ -6009,6 +6126,8 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	if (ret) {
 		dd_dev_err(dd,
 			"After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
+		/* state is really offline, so make it so */
+		ppd->host_link_state = HLS_DN_OFFLINE;
 		return ret;
 	}
 
@@ -6019,13 +6138,11 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	 *	- notify others if we were previously in a linkup state
 	 */
 	ppd->host_link_state = HLS_DN_OFFLINE;
-	if (previous_state == HLS_UP_INIT || previous_state == HLS_UP_ARMED
-					|| previous_state == HLS_UP_ACTIVE) {
+	if (previous_state & HLS_UP) {
 		/* went down while link was up */
 		handle_linkup_change(dd, 0);
-	} else if (previous_state == HLS_DN_POLL
-			|| previous_state == HLS_VERIFY_CAP
-			|| previous_state == HLS_GOING_UP) {
+	} else if (previous_state
+			& (HLS_DN_POLL | HLS_VERIFY_CAP | HLS_GOING_UP)) {
 		/* went down while attempting link up */
 		/* byte 1 of last_*_state is the failure reason */
 		read_last_local_state(dd, &last_local_state);
@@ -6046,21 +6163,23 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 static const char *link_state_name(u32 state)
 {
 	const char *name;
+	int n = ilog2(state);
 	static const char * const names[] = {
-		[HLS_UP_INIT]	 = "INIT",
-		[HLS_UP_ARMED]	 = "ARMED",
-		[HLS_UP_ACTIVE]	 = "ACTIVE",
-		[HLS_DN_DOWNDEF] = "DOWNDEF",
-		[HLS_DN_POLL]	 = "POLL",
-		[HLS_DN_SLEEP]	 = "SLEEP",
-		[HLS_DN_DISABLE] = "DISABLE",
-		[HLS_DN_OFFLINE] = "OFFLINE",
-		[HLS_VERIFY_CAP] = "VERIFY_CAP",
-		[HLS_GOING_UP]	 = "GOING_UP",
-		[HLS_GOING_DOWN] = "GOING_DOWN"
+		[__HLS_UP_INIT_BP]	 = "INIT",
+		[__HLS_UP_ARMED_BP]	 = "ARMED",
+		[__HLS_UP_ACTIVE_BP]	 = "ACTIVE",
+		[__HLS_DN_DOWNDEF_BP]	 = "DOWNDEF",
+		[__HLS_DN_POLL_BP]	 = "POLL",
+		[__HLS_DN_SLEEP_BP]	 = "SLEEP",
+		[__HLS_DN_DISABLE_BP]	 = "DISABLE",
+		[__HLS_DN_OFFLINE_BP]	 = "OFFLINE",
+		[__HLS_VERIFY_CAP_BP]	 = "VERIFY_CAP",
+		[__HLS_GOING_UP_BP]	 = "GOING_UP",
+		[__HLS_GOING_OFFLINE_BP] = "GOING_OFFLINE",
+		[__HLS_LINK_COOLDOWN_BP] = "LINK_COOLDOWN"
 	};
 
-	name = state < ARRAY_SIZE(names) ? names[state] : NULL;
+	name = n < ARRAY_SIZE(names) ? names[n] : NULL;
 	return name ? name : "unkown";
 }
 
@@ -6126,9 +6245,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		poll_bounce ? "(bounce) " : "",
 		link_state_reason_name(ppd, state));
 
-	was_up = (ppd->host_link_state == HLS_UP_INIT ||
-		ppd->host_link_state == HLS_UP_ARMED ||
-		ppd->host_link_state == HLS_UP_ACTIVE);
+	was_up = !!(ppd->host_link_state & HLS_UP);
 
 	/*
 	 * If we're going to a (HLS_*) link state that implies the logical
@@ -6228,6 +6345,11 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		}
 		break;
 	case HLS_DN_POLL:
+		if ((ppd->host_link_state == HLS_DN_DISABLE ||
+		     ppd->host_link_state == HLS_DN_OFFLINE) &&
+		    dd->dc_shutdown)
+			dc_start(dd);
+
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			u8 tmp = ppd->link_enabled;
 
@@ -6247,9 +6369,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 			break;
 
 		ppd->port_error_action = 0;
-		/* set link state first so LCB access starts bouncing off */
 		ppd->host_link_state = HLS_DN_POLL;
-		wait_lcb_access_done(dd);
 
 		if (quick_linkup) {
 			/* quick linkup does not go into polling */
@@ -6294,6 +6414,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 			break;
 		}
 		ppd->host_link_state = HLS_DN_DISABLE;
+		dc_shutdown(dd);
 		break;
 	case HLS_DN_OFFLINE:
 		/* allow any state to transition to offline */
@@ -6322,7 +6443,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		break;
 
 	case HLS_DN_SLEEP:	/* not supported by the HW */
-	case HLS_GOING_DOWN:		/* transient within goto_offline() */
+	case HLS_GOING_OFFLINE:		/* transient within goto_offline() */
 	default:
 		dd_dev_info(dd, "%s: state 0x%x: not supported\n",
 			__func__, state);
@@ -6330,10 +6451,8 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		break;
 	}
 
-	is_down = (ppd->host_link_state == HLS_DN_POLL ||
-		ppd->host_link_state == HLS_DN_SLEEP ||
-		ppd->host_link_state == HLS_DN_DISABLE ||
-		ppd->host_link_state == HLS_DN_OFFLINE);
+	is_down = !!(ppd->host_link_state & (HLS_DN_POLL |
+			HLS_DN_SLEEP | HLS_DN_DISABLE | HLS_DN_OFFLINE));
 
 	if (was_up && is_down && ppd->local_link_down_reason.sma == 0 &&
 	    ppd->neigh_link_down_reason.sma == 0) {
@@ -6393,8 +6512,6 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 				ppd->port - 1,
 				hfi_num_vls(val),
 				NULL);
-			/* FIXME: implement this */
-			/* set_vls(ppd) */
 		}
 		break;
 	/*
@@ -6522,9 +6639,7 @@ static int set_vl_weights(struct hfi1_pportdata *ppd, u32 target,
 
 	mutex_lock(&ppd->hls_lock);
 
-	if (ppd->host_link_state == HLS_UP_INIT
-			|| ppd->host_link_state == HLS_UP_ARMED
-			|| ppd->host_link_state == HLS_UP_ACTIVE)
+	if (ppd->host_link_state & HLS_UP)
 		is_up = 1;
 
 	drain = !is_ax(dd) && is_up;
@@ -7302,7 +7417,6 @@ void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt)
 
 	hfi_cdbg(RCVCTRL, "ctxt %d op 0x%x", ctxt, op);
 
-	/* XXX (Mitko): Do we want to use the shadow value here? */
 	rcvctrl = read_kctxt_csr(dd, ctxt, RCV_CTXT_CTRL);
 	/* if the context already enabled, don't do the extra steps */
 	if ((op & HFI1_RCVCTRL_CTXT_ENB)
@@ -8024,7 +8138,7 @@ static int init_cntrs(struct hfi_devdata *dd)
 
 	/* allocate per port storage for counter values */
 	ppd = (struct hfi1_pportdata *)(dd + 1);
-	for (i = 0; i < dd->num_pports; i++, ppd++) { /* FIXME. ppd++? */
+	for (i = 0; i < dd->num_pports; i++, ppd++) {
 		ppd->cntrs = kcalloc(dd->nportcntrs, sizeof(u64), GFP_KERNEL);
 		if (!ppd->cntrs)
 			goto bail;
@@ -9508,12 +9622,8 @@ static void init_chip(struct hfi_devdata *dd)
 		/* restore command and BARs */
 		restore_pci_variables(dd);
 
-		/*
-		 * A0 erratum 291496
-		 * additional FLR required to prevent HW in arbitrary state.
-		 */
 		if (is_a0(dd)) {
-			dd_dev_info(dd, "Resetting CSRs with FLR (A0 erratum 291496)\n");
+			dd_dev_info(dd, "Resetting CSRs with FLR\n");
 			hfi_pcie_flr(dd);
 			restore_pci_variables(dd);
 		}
@@ -10169,7 +10279,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		goto bail_cleanup;
 
 	/* read in firmware */
-	ret = firmware_init(dd);
+	ret = hfi1_firmware_init(dd);
 	if (ret)
 		goto bail_cleanup;
 
@@ -10182,7 +10292,8 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	 * In particular, place this call after:
 	 * - init_chip()     - the chip will not initiate any PCIe transactions
 	 * - pcie_speeds()   - reads the current link speed
-	 * - firmware_init() - the needed firmware is ready to be downloaded
+	 * - hfi1_firmware_init() - the needed firmware is ready to be
+	 *			    downloaded
 	 */
 	ret = do_pcie_gen3_transition(dd);
 	if (ret)
@@ -10324,14 +10435,10 @@ bail:
 u64 create_pbc(u64 flags, u32 srate, u32 vl, u32 dw_len)
 {
 	u64 pbc;
-	/* FIXME: calculate rate */
-	u32 rate = 0;
 
 	pbc = flags
 		| ((u64)PBC_IHCRC_NONE << PBC_INSERT_HCRC_SHIFT)
 		| (vl & PBC_VL_MASK) << PBC_VL_SHIFT
-		| (rate & PBC_STATIC_RATE_CONTROL_COUNT_MASK)
-			<< PBC_STATIC_RATE_CONTROL_COUNT_SHIFT
 		| (dw_len & PBC_LENGTH_DWS_MASK)
 			<< PBC_LENGTH_DWS_SHIFT;
 
@@ -10453,8 +10560,6 @@ static void handle_temp_err(struct hfi_devdata *dd)
 		     "Critical temperature reached! Forcing device into freeze mode!\n");
 	dd->flags |= HFI_FORCED_FREEZE;
 	start_freeze_handling(ppd, FREEZE_SELF|FREEZE_ABORT);
-	/* TODO: Adjust PowerDown recipe pending a discussion with HW team.
-	 * The goal is to turn off as much as possible in DC. */
 	/*
 	 * Shut DC down as much and as quickly as possible.
 	 *
@@ -10469,16 +10574,10 @@ static void handle_temp_err(struct hfi_devdata *dd)
 	ppd->driver_link_ready = 0;
 	ppd->link_enabled = 0;
 	set_physical_link_state(dd, PLS_OFFLINE |
-				OPA_LINKDOWN_REASON_SMA_DISABLED);
+				(OPA_LINKDOWN_REASON_SMA_DISABLED << 8));
 	/*
-	 * Step 2: Shutdown LCB
+	 * Step 2: Shutdown LCB and 8051
 	 *         After shutdown, do not restore DC_CFG_RESET value.
 	 */
-	set_host_lcb_access(dd);
-	lcb_shutdown(dd, 1);
-	set_8051_lcb_access(dd);
-	/*
-	 * Step 3: Shutdown 8051
-	 */
-	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
+	dc_shutdown(dd);
 }
