@@ -348,7 +348,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ret = user_event_ack(uctxt, subctxt_fp(fp), user_val);
 		break;
 	case HFI_CMD_SET_PKEY:
-		ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
+		if (HFI_CAP_IS_USET(PKEY_CHECK))
+			ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
+		else
+			ret = -EPERM;
 		break;
 	case HFI_CMD_CTXT_RESET: {
 		struct send_context *sc;
@@ -518,7 +521,6 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 			       PAGE_SIZE);
 		flags &= ~VM_MAYREAD;
 		flags |= VM_DONTCOPY | VM_DONTEXPAND;
-		/* FIXME:  how do we deal with write-combining? */
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 		mapio = 1;
 		break;
@@ -772,11 +774,6 @@ static int hfi_close(struct inode *inode, struct file *fp)
 	*ev = 0;
 
 	if (--uctxt->cnt) {
-		/*
-		 * XXX If the master closes the context before the slave(s),
-		 * revoke the mmap for the eager receive queue so
-		 * the slave(s) don't wait for receive data forever.
-		 */
 		uctxt->active_slaves &= ~(1 << fdata->subctxt);
 		uctxt->subpid[fdata->subctxt] = 0;
 		mutex_unlock(&hfi1_mutex);
@@ -1196,7 +1193,6 @@ static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
 				uctxt->dd->rcv_entries.group_size) +
 		uctxt->expected_count;
 	cinfo.credits = uctxt->sc->credits;
-	/* FIXME: set proper numa node */
 	cinfo.numa_node = uctxt->numa_id;
 	cinfo.rec_cpu = fd->rec_cpu_num;
 	cinfo.send_ctxt = uctxt->sc->hw_context;
@@ -1734,11 +1730,9 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 				 * bigger than 8K MTU, so should we even worry
 				 * about 10K here?
 				 */
-				/* XXX MITKO: better determine the order of the
-				 * TID */
 				hfi1_put_tid(dd, tid, PT_EXPECTED,
-					      phys[pmapped],
-					      tidsize >> PAGE_SHIFT);
+					     phys[pmapped],
+					     ilog2(tidsize >> PAGE_SHIFT) + 1);
 				pair_size += tidsize >> PAGE_SHIFT;
 				EXP_TID_RESET(tidlist[pairidx], LEN, pair_size);
 				if (!(tid % 2)) {
@@ -1847,7 +1841,7 @@ static int exp_tid_free(struct file *fp, struct hfi_tid_info *tinfo)
 			hfi1_release_user_pages(pshadow, pcount);
 			clear_bit(bitidx, &uctxt->tidusemap[idx]);
 			map &= ~(1ULL<<bitidx);
-		};
+		}
 	}
 	trace_hfi_exp_tid_map(uctxt->ctxt, subctxt_fp(fp), 1, uctxt->tidusemap,
 			      uctxt->tidmapcnt);
@@ -1951,7 +1945,6 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 	struct hfi_devdata *dd = filp->private_data;
 	void __iomem *base;
 	unsigned long total, data, csr_off;
-	int in_lcb;
 
 	/* only read 8 byte quantities */
 	if ((count % 8) != 0)
@@ -1967,30 +1960,19 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		return -EINVAL;
 	base = (void __iomem *)(dd->kregbase + *f_pos);
 	csr_off = *f_pos;
-	in_lcb = 0;
 	for (total = 0; total < count; total += 8, csr_off += 8) {
-		/* accessing LCB CSRs requires a special procuedure */
+		/* accessing LCB CSRs requires more checks */
 		if (is_lcb_offset(csr_off)) {
-			if (!in_lcb) {
-				int ret = acquire_lcb_access(dd, 1);
-
-				if (ret)
-					break;
-				in_lcb = 1;
-			}
-		} else {
-			if (in_lcb) {
-				release_lcb_access(dd, 1);
-				in_lcb = 0;
-			}
+			if (read_lcb_csr(dd, csr_off, (u64 *)&data))
+				break; /* failed */
 		}
 		/*
-		 * cannot read ASIC GPIO/QSFP* clear and force
-		 * CSRs without a false parity error.  Avoid the whole issue
-		 * by not reading them.  These registers are defined as
-		 * having a read value of 0.
+		 * Cannot read ASIC GPIO/QSFP* clear and force CSRs without a
+		 * false parity error.  Avoid the whole issue by not reading
+		 * them.  These registers are defined as having a read value
+		 * of 0.
 		 */
-		if (csr_off == ASIC_GPIO_CLEAR
+		else if (csr_off == ASIC_GPIO_CLEAR
 				|| csr_off == ASIC_GPIO_FORCE
 				|| csr_off == ASIC_QSFP1_CLEAR
 				|| csr_off == ASIC_QSFP1_FORCE
@@ -2002,8 +1984,6 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		if (put_user(data, (unsigned long __user *)(buf + total)))
 			break;
 	}
-	if (in_lcb)
-		release_lcb_access(dd, 1);
 	*f_pos += total;
 	return total;
 }

@@ -84,9 +84,6 @@
 #define HFI1_OUI 0x001175
 #define HFI1_OUI_LSB 40
 
-/*
- * A0 erratum 291500: States to keep track of corrupt packet.
- */
 #define DROP_PACKET_OFF		0
 #define DROP_PACKET_ON		1
 
@@ -368,19 +365,37 @@ struct hfi1_sge_state;
  * HFI or Host Link States
  *
  * These describe the states the driver thinks the logical and physicial
- * states are in.  Used as an argument to set_link_state().
+ * states are in.  Used as an argument to set_link_state().  Implemented
+ * as bits for easy multi-state checking.  The actual state can ony be
+ * one.
  */
-#define HLS_UP_INIT	 0
-#define HLS_UP_ARMED	 1
-#define HLS_UP_ACTIVE	 2
-#define HLS_DN_DOWNDEF	 3	/* link down default */
-#define HLS_DN_POLL	 4
-#define HLS_DN_SLEEP	 5
-#define HLS_DN_DISABLE	 6
-#define HLS_DN_OFFLINE	 7
-#define HLS_VERIFY_CAP	 8
-#define HLS_GOING_UP	 9
-#define HLS_GOING_DOWN	10
+#define __HLS_UP_INIT_BP	0
+#define __HLS_UP_ARMED_BP	1
+#define __HLS_UP_ACTIVE_BP	2
+#define __HLS_DN_DOWNDEF_BP	3	/* link down default */
+#define __HLS_DN_POLL_BP	4
+#define __HLS_DN_SLEEP_BP	5
+#define __HLS_DN_DISABLE_BP	6
+#define __HLS_DN_OFFLINE_BP	7
+#define __HLS_VERIFY_CAP_BP	8
+#define __HLS_GOING_UP_BP	9
+#define __HLS_GOING_OFFLINE_BP 10
+#define __HLS_LINK_COOLDOWN_BP 11
+
+#define HLS_UP_INIT	  (1 << __HLS_UP_INIT_BP)
+#define HLS_UP_ARMED	  (1 << __HLS_UP_ARMED_BP)
+#define HLS_UP_ACTIVE	  (1 << __HLS_UP_ACTIVE_BP)
+#define HLS_DN_DOWNDEF	  (1 << __HLS_DN_DOWNDEF_BP) /* link down default */
+#define HLS_DN_POLL	  (1 << __HLS_DN_POLL_BP)
+#define HLS_DN_SLEEP	  (1 << __HLS_DN_SLEEP_BP)
+#define HLS_DN_DISABLE	  (1 << __HLS_DN_DISABLE_BP)
+#define HLS_DN_OFFLINE	  (1 << __HLS_DN_OFFLINE_BP)
+#define HLS_VERIFY_CAP	  (1 << __HLS_VERIFY_CAP_BP)
+#define HLS_GOING_UP	  (1 << __HLS_GOING_UP_BP)
+#define HLS_GOING_OFFLINE (1 << __HLS_GOING_OFFLINE_BP)
+#define HLS_LINK_COOLDOWN (1 << __HLS_LINK_COOLDOWN_BP)
+
+#define HLS_UP (HLS_UP_INIT | HLS_UP_ARMED | HLS_UP_ACTIVE)
 
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU 8192
@@ -662,7 +677,6 @@ struct hfi1_pportdata {
 	struct link_down_reason neigh_link_down_reason;
 	/* Value to be sent to link peer on LinkDown .*/
 	u8 remote_link_down_reason;
-	u8 link_quality; /* part of portstatus, datacounters PMA queries */
 	/* Error events that will cause a port bounce. */
 	u32 port_error_action;
 };
@@ -702,9 +716,7 @@ struct hfi_temp {
 };
 
 /* device data struct now contains only "general per-device" info.
- * fields related to a physical IB port are in a hfi1_pportdata struct,
- * described above) while fields only used by a particular chip-type are in
- * a qib_chipdata struct, whose contents are opaque to this file.
+ * fields related to a physical IB port are in a hfi1_pportdata struct.
  */
 struct sdma_engine;
 struct sdma_vl_map;
@@ -984,10 +996,6 @@ struct hfi_devdata {
 	u8 err_info_uncorrectable;
 	u8 err_info_fmconfig;
 
-	/*
-	 * A0 erratum 291500: Keeps track of conditions to drop
-	 * first packet either after power-on or ASIC reset.
-	 */
 	atomic_t drop_packet;
 	u8 do_drop;
 
@@ -1014,6 +1022,10 @@ struct hfi_devdata {
 
 	int assigned_node_id;
 	wait_queue_head_t event_queue;
+
+	/* Save the enabled LCB error bits */
+	u64 lcb_err_en;
+	u8 dc_shutdown;
 };
 
 /* f_put_tid types */
@@ -1046,9 +1058,7 @@ int hfi1_count_active_units(void);
 int hfi1_diag_add(struct hfi_devdata *);
 void hfi1_diag_remove(struct hfi_devdata *);
 void handle_linkup_change(struct hfi_devdata *dd, u32 linkup);
-void qib_sdma_update_tail(struct hfi1_pportdata *, u16); /* hold sdma_lock */
 
-int qib_decode_err(struct hfi_devdata *dd, char *buf, size_t blen, u64 err);
 void handle_user_interrupt(struct hfi1_ctxtdata *rcd);
 
 int hfi1_create_rcvhdrq(struct hfi_devdata *, struct hfi1_ctxtdata *);
@@ -1084,9 +1094,6 @@ void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 static inline void pause_for_credit_return(struct hfi_devdata *dd)
 {
 	/* Pause at least 1us, to ensure chip returns all credits */
-
-	/* TODO: The cclock_to_ns conversion only makes sense on FPGA since
-	 * 350cclock on ASIC is less than 1us. */
 	u32 usec = cclock_to_ns(dd, PACKET_EGRESS_TIMEOUT) / 1000;
 
 	udelay(usec ? usec : 1);
@@ -1330,15 +1337,11 @@ static inline struct cc_state *get_cc_state(struct hfi1_pportdata *ppd)
 #define HFI1_CTXT_WAITING_URG 5
 
 /* free up any allocated data at closes */
-void qib_free_data(struct hfi1_ctxtdata *dd);
 struct hfi_devdata *hfi1_init_dd(struct pci_dev *,
 				 const struct pci_device_id *);
 void hfi1_free_devdata(struct hfi_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
 struct hfi_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
-
-void qib_dump_lookup_output_queue(struct hfi_devdata *);
-void qib_clear_symerror_on_linkup(unsigned long opaque);
 
 /*
  * Set LED override, only the two LSBs have "public" meaning, but
@@ -1349,12 +1352,6 @@ void qib_clear_symerror_on_linkup(unsigned long opaque);
 #define HFI1_LED_LOG 2  /* Logical (link) YELLOW LED */
 void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
 
-/* send dma routines */
-void __qib_sdma_intr(struct hfi1_pportdata *);
-void qib_sdma_intr(struct hfi1_pportdata *);
-struct verbs_txreq;
-int qib_sdma_verbs_send(struct sdma_engine *, struct hfi1_sge_state *,
-			u32, struct verbs_txreq *);
 /*
  * The number of words for the KDETH protocol field.  If this is
  * larger then the actual field used, then part of the payload
@@ -1460,9 +1457,6 @@ void hfi1_nomsix(struct hfi_devdata *);
 void restore_pci_variables(struct hfi_devdata *dd);
 int do_pcie_gen3_transition(struct hfi_devdata *dd);
 
-/*
- * dma_addr wrappers - all 0's invalid for hw
- */
 dma_addr_t hfi1_map_page(struct pci_dev *, struct page *, unsigned long,
 			 size_t, int);
 const char *get_unit_name(int unit);
@@ -1492,7 +1486,7 @@ extern void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 void update_sge(struct hfi1_sge_state *ss, u32 length);
 
 /* global module parameter variables */
-extern unsigned int max_mtu;
+extern unsigned int hfi1_max_mtu;
 extern unsigned int default_mtu;
 extern unsigned int hfi_cu;
 extern unsigned int user_credit_return_threshold;

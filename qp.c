@@ -861,7 +861,8 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		vl = sc_to_vlt(dd, sc);
 
 		mtu = verbs_mtu_enum_to_int(ibqp->device, pmtu);
-		mtu = min_t(u32, mtu, dd->vld[vl].mtu);
+		if (vl < PER_VL_SEND_CONTEXTS)
+			mtu = min_t(u32, mtu, dd->vld[vl].mtu);
 		pmtu = mtu_to_enum(mtu, OPA_MTU_8192);
 
 		qp->path_mtu = pmtu;
@@ -1322,7 +1323,7 @@ static int init_qpn_table(struct hfi_devdata *dd, struct hfi_qpn_table *qpt)
 	/* insure we don't assign QPs from KDETH 64K window */
 	qpn = kdeth_qp << 16;
 	qpt->nmaps = qpn / BITS_PER_PAGE;
-	/* XXX - this should always be zero */
+	/* This should always be zero */
 	offset = qpn & BITS_PER_PAGE_MASK;
 	map = &qpt->map[qpt->nmaps];
 	dd_dev_info(dd, "Reserving QPNs for KDETH window from 0x%x to 0x%x\n",
@@ -1434,7 +1435,7 @@ static int iowait_sleep(
 		 * and try again later rather than destroying the
 		 * buffer and undoing the side effects of the copy.
 		 */
-		/* FIXME - make a common routine? */
+		/* Make a common routine? */
 		dev = &sde->dd->verbs_dev;
 		list_add_tail(&stx->list, &wait->tx_head);
 		spin_lock(&dev->pending_lock);

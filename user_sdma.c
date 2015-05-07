@@ -837,8 +837,6 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 			goto done;
 		}
 
-		/* XXX (Mitko): check if the SDMA engine has any free
-		   resources */
 		tx = kmem_cache_alloc(pq->txreq_cache, GFP_KERNEL);
 		if (!tx) {
 			ret = -ENOMEM;
@@ -1129,10 +1127,8 @@ static int check_header_template(struct user_sdma_request *req,
 	 * For the remainder of the packets we compute the values.
 	 */
 	if (req->info.fragsize % PIO_BLOCK_SIZE ||
-	    lrhlen & 0x3 || req->data_len & 0x3) /* ||
-		// XXX (MITKO): lrhlen will be larger than the fragsize due
-		// to the header. How do we handle that?
-		//lrhlen > req->info.fragsize) */
+	    lrhlen & 0x3 || req->data_len & 0x3  ||
+	    lrhlen > get_lrh_len(*hdr, req->info.fragsize))
 		return -EINVAL;
 
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
@@ -1400,12 +1396,6 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 	struct user_sdma_request *req = tx->req;
 	struct hfi_user_sdma_pkt_q *pq = req ? req->pq : NULL;
 	u64 tx_seqnum;
-
-	/* XXX (MITKO): Once we start using the SDMA drain mechanism, this
-	 * should never happen. For now, guard against it so we don't crash
-	 * the kernel. */
-	if (!req || !pq)
-		return;
 
 	if (tx->iovec1)
 		iovec_may_free(tx->iovec1, unpin_vector_pages);

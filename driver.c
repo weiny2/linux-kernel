@@ -75,8 +75,8 @@ DEFINE_SPINLOCK(hfi1_devs_lock);
 LIST_HEAD(hfi1_dev_list);
 DEFINE_MUTEX(hfi1_mutex);	/* general driver use */
 
-unsigned int max_mtu;
-module_param_named(max_mtu, max_mtu, uint, S_IRUGO);
+unsigned int hfi1_max_mtu;
+module_param_named(max_mtu, hfi1_max_mtu, uint, S_IRUGO);
 MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 8192");
 
 unsigned int default_mtu;
@@ -606,10 +606,6 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 					  (rhf_hdrq_offset(rhf)+2)) * 4));
 		}
 
-		/*
-		 * A0 erratum 291500: Drop the first packet in HFI. It is
-		 * corrupted after power-on reset.
-		 */
 		if (unlikely(dd->do_drop && atomic_xchg(&dd->drop_packet,
 			DROP_PACKET_OFF) == DROP_PACKET_ON)) {
 			dd->do_drop = 0;

@@ -318,7 +318,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 			 * If DMAs are in progress, we can't generate
 			 * a completion for the loopback packet since
 			 * it would be out of order.
-			 * XXX Instead of waiting, we could queue a
+			 * Instead of waiting, we could queue a
 			 * zero length descriptor so we get a callback.
 			 */
 			if (atomic_read(&qp->s_iowait.sdma_busy)) {

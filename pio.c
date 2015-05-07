@@ -143,7 +143,6 @@ void pio_send_control(struct hfi_devdata *dd, int op)
 #define SCC_PER_VL -1
 #define SCC_PER_CPU  -2
 
-/* TODO: decide on size and counts */
 #define SCC_PER_KRCVQ  -3
 #define SCC_ACK_CREDITS  32
 
@@ -219,7 +218,6 @@ static const char *sc_type_name(int index)
 int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 {
 	struct mem_pool_info mem_pool_info[NUM_SC_POOLS] = { { 0 } };
-	/* erratum 291585 - do not use PIO block 0 */
 	int total_blocks = (dd->chip_pio_mem_size / PIO_BLOCK_SIZE) - 1;
 	int total_contexts = 0;
 	int fixed_blocks;
@@ -399,8 +397,9 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 	used_blocks = 0;
 	for (i = 0; i < SC_MAX; i++) {
 		if (dd->sc_sizes[i].size < 0) {
-			int pool = wildcard_to_pool(dd->sc_sizes[i].size);
+			unsigned pool = wildcard_to_pool(dd->sc_sizes[i].size);
 
+			BUG_ON(pool >= NUM_SC_POOLS);
 			dd->sc_sizes[i].size = mem_pool_info[pool].size;
 		}
 		/* make sure we are not larger than what is allowed by the HW */
@@ -449,7 +448,7 @@ int init_send_contexts(struct hfi_devdata *dd)
 	 * for each context one after another from the global space.
 	 */
 	context = 0;
-	base = 1; /* erratum 291585 - do not use PIO block 0 */
+	base = 1;
 	for (i = 0; i < SC_MAX; i++) {
 		struct sc_config_sizes *scs = &dd->sc_sizes[i];
 
@@ -559,7 +558,6 @@ static void sc_halted(struct work_struct *work)
 
 	sc = container_of(work, struct send_context, halt_work);
 	sc_restart(sc);
-	/* TODO: add a timed retry if the restart fails */
 }
 
 /*
@@ -641,41 +639,22 @@ void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold)
  * set_pio_integrity
  *
  * Set the CHECK_ENABLE register for the send context 'sc'.
- * Use hfi_pkt_default_send_ctxt_mask(dd) as the starting point, and adjust
- * that value based on relevant HFI_CAP* flags.
  */
 void set_pio_integrity(struct send_context *sc)
 {
 	struct hfi_devdata *dd = sc->dd;
-	u64 reg = 0, mask;
+	u64 reg = 0;
 	u32 hw_context = sc->hw_context;
-	int type = sc->type, set;
+	int type = sc->type;
 
 	/*
 	 * No integrity checks if HFI_CAP_NO_INTEGRITY is set, or if
 	 * we're snooping.
 	 */
 	if (likely(!HFI_CAP_IS_KSET(NO_INTEGRITY)) &&
-	    dd->hfi_snoop.mode_flag != HFI_PORT_SNOOP_MODE) {
-
+	    dd->hfi_snoop.mode_flag != HFI_PORT_SNOOP_MODE)
 		reg = hfi_pkt_default_send_ctxt_mask(dd, type);
 
-		/* make adjustments based on HFI_CAP* flags */
-		mask = SC(CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK);
-		set = (sc->type == SC_USER ? HFI_CAP_IS_USET(PKEY_CHECK) :
-		       HFI_CAP_IS_KSET(PKEY_CHECK));
-
-		if (!set)
-			reg &= ~mask;
-
-		mask = SC(CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK);
-		set = (sc->type == SC_USER ?
-		       HFI_CAP_IS_USET(STATIC_RATE_CTRL) :
-		       HFI_CAP_IS_KSET(STATIC_RATE_CTRL));
-
-		if (!set)
-			reg |= mask;
-	}
 	write_kctxt_csr(dd, hw_context, SC(CHECK_ENABLE), reg);
 }
 
@@ -729,7 +708,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	atomic_set(&sc->buffers_allocated, 0);
 	init_waitqueue_head(&sc->halt_wait);
 
-	/* TODO: group set-up.  Make it always 0 for now. */
+	/* grouping is always single context for now */
 	sc->group = 0;
 
 	sc->sw_index = sw_index;

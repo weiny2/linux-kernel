@@ -360,8 +360,7 @@ static int twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
 
 /*
  * hfi1_twsi_blk_rd
- * Formerly called qib_eeprom_internal_read, and only used for eeprom,
- * but now the general interface for data transfer from twsi devices.
+ * General interface for data transfer from twsi devices.
  * One vestige of its former role is that it recognizes a device
  * HFI1_TWSI_NO_DEV and does the correct operation for the legacy part,
  * which responded to all TWSI device codes, interpreting them as
@@ -438,8 +437,7 @@ bail:
 
 /*
  * hfi1_twsi_blk_wr
- * Formerly called qib_eeprom_internal_write, and only used for eeprom,
- * but now the general interface for data transfer to twsi devices.
+ * General interface for data transfer to twsi devices.
  * One vestige of its former role is that it recognizes a device
  * HFI1_TWSI_NO_DEV and does the correct operation for the legacy part,
  * which responded to all TWSI device codes, interpreting them as

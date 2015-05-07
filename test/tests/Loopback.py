@@ -101,14 +101,7 @@ def main():
                 RegLib.test_fail("Failed to execute subtest: %s" % test)
 
     if not test_info.is_simics():
-        # SerDes loopback
-        # ASIC 8051 firmware does not yet support internal serdes loopback with
-        # LNI.  Quick linkup is needed for all ASIC 8051 releases as of
-        # 2015.02.06.  Remove this when LNI is supported.
-        if test_info.is_fpga():
-            loopback_opts = {"loopback" : 1}
-        else:
-            loopback_opts = {"loopback" : 1, "quick_linkup" : 1}
+        loopback_opts = {"loopback" : 1}
         loopback_opts.update(opts)
 
         if not reload_module([host1], module_src, [loopback_opts]):
