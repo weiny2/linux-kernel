@@ -844,7 +844,7 @@ static int lba_to_arena(struct btt *btt, sector_t sector, __u32 *premap,
 				struct arena_info **arena)
 {
 	struct arena_info *arena_list;
-	__u64 lba = div_u64(sector << SECTOR_SHIFT, btt->lbasize);
+	__u64 lba = div_u64(sector << SECTOR_SHIFT, btt->sector_size);
 
 	list_for_each_entry(arena_list, &btt->arena_list, list) {
 		if (lba < arena_list->external_nlba) {
@@ -932,7 +932,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 		if (ret)
 			goto out_lane;
 
-		cur_len = min(arena->external_lbasize, len);
+		cur_len = min(btt->sector_size, len);
 
 		ret = btt_map_read(arena, premap, &postmap, &t_flag, &e_flag);
 		if (ret)
@@ -983,7 +983,7 @@ static int btt_read_pg(struct btt *btt, struct page *page, unsigned int off,
 
 		len -= cur_len;
 		off += cur_len;
-		sector += arena->external_lbasize >> SECTOR_SHIFT;
+		sector += btt->sector_size >> SECTOR_SHIFT;
 	}
 
 	return 0;
@@ -1012,7 +1012,7 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
 		ret = lba_to_arena(btt, sector, &premap, &arena);
 		if (ret)
 			goto out_lane;
-		cur_len = min(arena->external_lbasize, len);
+		cur_len = min(btt->sector_size, len);
 
 		if ((arena->flags & IB_FLAG_ERROR_MASK) != 0) {
 			ret = -EIO;
@@ -1063,7 +1063,7 @@ static int btt_write_pg(struct btt *btt, sector_t sector, struct page *page,
 
 		len -= cur_len;
 		off += cur_len;
-		sector += arena->external_lbasize >> SECTOR_SHIFT;
+		sector += btt->sector_size >> SECTOR_SHIFT;
 	}
 
 	return 0;
@@ -1118,10 +1118,10 @@ static void btt_make_request(struct request_queue *q, struct bio *bio)
 		unsigned int len = bvec.bv_len;
 
 		BUG_ON(len > PAGE_SIZE);
-		/* Make sure len is in multiples of lbasize. */
+		/* Make sure len is in multiples of sector size. */
 		/* XXX is this right? */
-		BUG_ON(len < btt->lbasize);
-		BUG_ON(len % btt->lbasize);
+		BUG_ON(len < btt->sector_size);
+		BUG_ON(len % btt->sector_size);
 
 		err = btt_do_bvec(btt, bvec.bv_page, len, bvec.bv_offset,
 				rw, sector);
@@ -1192,10 +1192,10 @@ static int btt_blk_init(struct btt *btt)
 	blk_queue_make_request(btt->btt_queue, btt_make_request);
 	blk_queue_max_hw_sectors(btt->btt_queue, 1024);
 	blk_queue_bounce_limit(btt->btt_queue, BLK_BOUNCE_ANY);
-	blk_queue_logical_block_size(btt->btt_queue, btt->lbasize);
+	blk_queue_logical_block_size(btt->btt_queue, btt->sector_size);
 	btt->btt_queue->queuedata = btt;
 
-	set_capacity(btt->btt_disk, btt->nlba * btt->lbasize >> SECTOR_SHIFT);
+	set_capacity(btt->btt_disk, btt->nlba * btt->sector_size >> SECTOR_SHIFT);
 	add_disk(btt->btt_disk);
 
 	return 0;
@@ -1243,6 +1243,7 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 	btt->nd_btt = nd_btt;
 	btt->rawsize = rawsize;
 	btt->lbasize = lbasize;
+	btt->sector_size = ((lbasize >= 4096) ? 4096 : 512);
 	INIT_LIST_HEAD(&btt->arena_list);
 	mutex_init(&btt->init_lock);
 	btt->nd_region = nd_region;
