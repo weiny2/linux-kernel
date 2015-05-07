@@ -73,7 +73,7 @@
 
 /*
  * Debugging aid - allows for quick switching between
- * inline function and non-inline fuctions (which
+ * inline function and non-inline functions (which
  * improve debuggability by making the stack traces
  * a bit easier to decode).
  */
@@ -601,7 +601,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	/*
 	 * Validate the vl. Do not trust packets from user space blindly.
 	 * VL comes from PBC, SC comes from LRH, and the VL needs to
-	 * match the SC lookup.
+	 * match the SC look up.
 	 */
 	vl = (le16_to_cpu(req->hdr.pbc[0]) >> 12) & 0xF;
 	sc = (((be16_to_cpu(req->hdr.lrh[0]) >> 12) & 0xF) |
@@ -757,7 +757,7 @@ static _hfi_inline u32 compute_data_length(struct user_sdma_request *req,
 	 * The size of the data of the first packet is in the header
 	 * template. However, it includes the header and ICRC, which need
 	 * to be subtracted.
-	 * The size of the remaining packets is the minumum of the frag
+	 * The size of the remaining packets is the minimum of the frag
 	 * size (MTU) or remaining data in the request.
 	 */
 	u32 len;
@@ -854,7 +854,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		SDMA_DBG(req, "tx->flags=%#x", tx->flags);
 		/*
 		 * Calculate the payload size - this is min of the fragment
-		 * (MTU) size or the remaing bytes in the request but only
+		 * (MTU) size or the remaining bytes in the request but only
 		 * if we have payload data.
 		 */
 		if (req->data_len) {
@@ -901,7 +901,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				 * address.
 				 * This copy can be optimized out if the hdr
 				 * member of user_sdma_request were also
-				 * cachline aligned.
+				 * cacheline aligned.
 				 */
 				memcpy(&tx->hdr, &req->hdr, sizeof(tx->hdr));
 				if (PBC2LRH(pbclen) != lrhlen) {
@@ -941,7 +941,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				goto free_tx;
 			/*
 			 * Modify the header for this packet. This only needs
-			 * to be done if we are not goint to use AHG. Otherwise,
+			 * to be done if we are not going to use AHG. Otherwise,
 			 * the HW will do it based on the changes we gave it
 			 * during sdma_txinit_ahg().
 			 */
@@ -1117,7 +1117,7 @@ static int check_header_template(struct user_sdma_request *req,
 {
 	/*
 	 * Perform safety checks for any type of packet:
-	 *    - trasnfer size is multiple of 64bytes
+	 *    - transfer size is multiple of 64bytes
 	 *    - packet length is multiple of 4bytes
 	 *    - entire request length is multiple of 4bytes
 	 *    - packet length is not larger than MTU size
@@ -1212,7 +1212,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 			 * From this point on the lengths in both the
 			 * PBC and LRH are the same until the last
 			 * packet.
-			 * Ajust the template so we don't have to update
+			 * Adjust the template so we don't have to update
 			 * every packet
 			 */
 			req->hdr.pbc[0] = hdr->pbc[0];
@@ -1319,7 +1319,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 		/* PBC.PbcLengthDWs */
 		AHG_HEADER_SET(req->ahg, diff, 0, 0, 12,
 			       cpu_to_le16(LRH2PBC(lrhlen)));
-		/* LRH.PktLen (we need the full 16 bits due to byteswap) */
+		/* LRH.PktLen (we need the full 16 bits due to byte swap) */
 		AHG_HEADER_SET(req->ahg, diff, 3, 0, 16,
 			       cpu_to_be16(lrhlen >> 2));
 	}

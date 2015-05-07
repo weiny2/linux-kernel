@@ -66,11 +66,11 @@ struct sdma_engine;
  * struct iowait - linkage for delayed progress/waiting
  * @list: used to add/insert into QP/PQ wait lists
  * @tx_head: overflow list of sdma_txreq's
- * @sleep: nospace callback
+ * @sleep: no space callback
  * @wakeup: space callback
  * @iowork: workqueue overhead
  * @wait_dma: wait for sdma_busy == 0
- * @sdma_busy: # of packets inflight
+ * @sdma_busy: # of packets in flight
  * @count: total number of descriptors in tx_head'ed list
  * @tx_limit: limit for overflow queuing
  * @tx_count: number of tx entry's in tx_head'ed list
@@ -80,7 +80,7 @@ struct sdma_engine;
  *
  * The sleep and wakeup members are a
  * bit misnamed.   They do not strictly
- * speaking sleep or wakeup, but they
+ * speaking sleep or wake up, but they
  * are callbacks for the ULP to implement
  * what ever queuing/dequeuing of
  * the embedded iowait and its containing struct
@@ -112,9 +112,9 @@ struct iowait {
 #define SDMA_AVAIL_REASON 0
 
 /**
- * iowait_init() - init wait structure
+ * iowait_init() - initialize wait structure
  * @wait: wait struct to initialize
- * @tx_limit: limit for overflow queueing
+ * @tx_limit: limit for overflow queuing
  * @func: restart function for workqueue
  * @sleep: sleep function for no space
  * @wakeup: wakeup function for no space
@@ -147,7 +147,7 @@ static inline void iowait_init(
 }
 
 /**
- * iowait_schedule() - init wait structure
+ * iowait_schedule() - initialize wait structure
  * @wait: wait struct to schedule
  * @wq: workqueue for schedule
  */

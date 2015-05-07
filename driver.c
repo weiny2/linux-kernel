@@ -67,7 +67,7 @@
 
 /*
  * The size has to be longer than this string, so we can append
- * board/chip information to it in the init code.
+ * board/chip information to it in the initialization code.
  */
 const char ib_hfi1_version[] = HFI_DRIVER_VERSION "\n";
 
@@ -149,7 +149,7 @@ static const struct kernel_param_ops k_pops_comp = {
 			  S_IWUSR : 0)));				\
 	MODULE_PARM_DESC(name, desc " (DEPRECATED)")
 
-/* Define all the depricated module parameters */
+/* Define all the deprecated module parameters */
 HFI_DEFINE_COMP_PARAM(hdrsup_enable, HDRSUPP, 0,
 		      "Enable/disable header suppression");
 HFI_DEFINE_COMP_PARAM(dont_drop_rhq_full, NODROP_RHQ_FULL, 0,
@@ -172,7 +172,7 @@ HFI_DEFINE_COMP_PARAM(one_pkt_per_egr, MULTI_PKT_EGR, 1,
 HFI_DEFINE_COMP_PARAM(enable_pkeys, PKEY_CHECK, 0,
 		      "Enable PKey checking on receive");
 HFI_DEFINE_COMP_PARAM(disable_integrity, NO_INTEGRITY, 0,
-		      "Disablep HW packet integrity checks");
+		      "Disable HW packet integrity checks");
 HFI_DEFINE_COMP_PARAM(sdma_head_check, SDMA_HEAD_CHECK, 0,
 		      "Enable SDMA head check");
 #endif /* HFI_COMPAT_MODPARAMS */
@@ -251,7 +251,7 @@ static int hfi_comp_param_set(const char *val, const struct kernel_param *kp)
 	unsigned long value;
 	int ret = 0;
 
-	pr_warn("Module parameter '%s' is depricated in favor of 'cap_mask'\n",
+	pr_warn("Module parameter '%s' is deprecated in favor of 'cap_mask'\n",
 		param->pname);
 	ret = kstrtoul(val, 0, &value);
 	if (ret) {
@@ -369,7 +369,7 @@ static inline void *get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
 
 /*
  * Validate and encode the a given RcvArray Buffer size.
- * The fuction will check whether the given size falls within
+ * The function will check whether the given size falls within
  * allowed size ranges for the respective type and, optionally,
  * return the proper encoding.
  */
@@ -399,7 +399,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 		return;
 
 	if (packet->rhf & RHF_TID_ERR) {
-		/* For TIDERR and RC QPs premptively schedule a NAK */
+		/* For TIDERR and RC QPs preemptively schedule a NAK */
 		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)rhdr;
 		struct hfi1_other_headers *ohdr = NULL;
 		u32 tlen = rhf_pkt_len(packet->rhf); /* in bytes */
@@ -592,7 +592,7 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 		/* total length */
 		tlen = rhf_pkt_len(rhf);	/* in bytes */
 		ebuf = NULL;
-		/* retreive eager buffer details */
+		/* retrieve eager buffer details */
 		if (rhf_use_egr_bfr(rhf)) {
 			etail = rhf_egr_index(rhf);
 			ebuf = get_egrbuf(rcd, rhf, &updegr);
@@ -626,7 +626,7 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 		 * the range of valid indexes. If so something is really
 		 * wrong and we can probably just let things come
 		 * crashing down. There is no need to eat another
-		 * comparision in this performance critical code.
+		 * comparison in this performance critical code.
 		 */
 		rhf_rcv_function_map[etype](&packet);
 
@@ -806,7 +806,7 @@ int hfi1_set_lid(struct hfi1_pportdata *ppd, u32 lid, u8 lmc)
 
 /*
  * Following deal with the "obviously simple" task of overriding the state
- * of the LEDS, which normally indicate link physical and logical status.
+ * of the LEDs, which normally indicate link physical and logical status.
  * The complications arise in dealing with different hardware mappings
  * and the board-dependent routine being called from interrupts.
  * and then there's the requirement to _flash_ them.

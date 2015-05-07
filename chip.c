@@ -959,7 +959,7 @@ static struct flag_table dc8051_info_err_flags[] = {
 	FLAG_ENTRY0("Spico ROM check failed",  SPICO_ROM_FAILED),
 	FLAG_ENTRY0("Unknown frame received",  UNKNOWN_FRAME),
 	FLAG_ENTRY0("Target BER not met",      TARGET_BER_NOT_MET),
-	FLAG_ENTRY0("Serdes internal looopback failure",
+	FLAG_ENTRY0("Serdes internal loopback failure",
 					FAILED_SERDES_INTERNAL_LOOPBACK),
 	FLAG_ENTRY0("Failed SerDes init",      FAILED_SERDES_INIT),
 	FLAG_ENTRY0("Failed LNI(Polling)",     FAILED_LNI_POLLING),
@@ -1092,7 +1092,7 @@ static const struct err_reg_info misc_errs[NUM_MISC_ERRS] = {
 #define TCRIT_INT_SOURCE 4
 
 /*
- * SDMA error interupt entry - refers to another register containing more
+ * SDMA error interrupt entry - refers to another register containing more
  * information.
  */
 static const struct err_reg_info sdma_eng_err =
@@ -1116,7 +1116,7 @@ static const struct err_reg_info various_err[NUM_VARIOUS] = {
 #define DCC_CFG_PORT_MTU_CAP_10240 7
 
 /*
- * Table of the DC grouping of error interupts.  Each entry refers to
+ * Table of the DC grouping of error interrupts.  Each entry refers to
  * another register containing more information.
  */
 static const struct err_reg_info dc_errs[NUM_DC_ERRS] = {
@@ -2012,7 +2012,7 @@ static char *is_dc_name(char *buf, size_t bsize, unsigned int source)
 		"common",
 		"lcb",
 		"8051",
-		"lbm"	/* local blcok merge */
+		"lbm"	/* local block merge */
 	};
 
 	if (source < ARRAY_SIZE(dc_int_names))
@@ -2146,7 +2146,7 @@ static void handle_cce_err(struct hfi_devdata *dd, u32 unused, u64 reg)
 			&& is_a0(dd)
 			&& (dd->icode != ICODE_FUNCTIONAL_SIMULATOR)) {
 		/* this error requires a manual drop into SPC freeze mode */
-		/* then a fixup */
+		/* then a fix up */
 		start_freeze_handling(dd->pport, FREEZE_SELF);
 	}
 }
@@ -2629,7 +2629,7 @@ static int request_8051_lcb_access(struct hfi_devdata *dd)
 
 /*
  * Set the LCB selector - allow host access.  The DCC selector always
- * pionts to the host.
+ * points to the host.
  */
 static inline void set_host_lcb_access(struct hfi_devdata *dd)
 {
@@ -2640,7 +2640,7 @@ static inline void set_host_lcb_access(struct hfi_devdata *dd)
 
 /*
  * Clear the LCB selector - allow 8051 access.  The DCC selector always
- * pionts to the host.
+ * points to the host.
  */
 static inline void set_8051_lcb_access(struct hfi_devdata *dd)
 {
@@ -2655,7 +2655,7 @@ static inline void set_8051_lcb_access(struct hfi_devdata *dd)
  *
  * Returns:
  *	0 on success
- *	-EBUSY if the 8051 has control and cannot be disburbed
+ *	-EBUSY if the 8051 has control and cannot be disturbed
  *	-errno if unable to acquire access from the 8051
  */
 int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok)
@@ -2725,7 +2725,7 @@ int release_lcb_access(struct hfi_devdata *dd, int sleep_ok)
 	}
 
 	if (dd->lcb_access_count == 0) {
-		dd_dev_err(dd, "%s: LCB accsess count is zero.  Skipping.\n",
+		dd_dev_err(dd, "%s: LCB access count is zero.  Skipping.\n",
 			__func__);
 		goto done;
 	}
@@ -2753,7 +2753,7 @@ done:
  * after most of the initialization is finished.
  *
  * The DC default is LCB access on for the host.  The driver defaults to
- * leaving access to the 8051.  Assign access now - this contrains the call
+ * leaving access to the 8051.  Assign access now - this constrains the call
  * to this routine to be after all LCB set-up is done.  In particular, after
  * hf1_init_dd() -> set_up_interrupts() -> clear_all_interrupts()
  */
@@ -2936,7 +2936,7 @@ static void dc_shutdown(struct hfi_devdata *dd)
 	lcb_shutdown(dd, 1);
 	/* Going to OFFLINE would have causes the 8051 to put the
 	 * SerDes into reset already. Just need to shutdown the 8051,
-	 * iteself. */
+	 * itself. */
 	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
 }
 
@@ -3096,7 +3096,7 @@ void handle_sma_message(struct work_struct *work)
 			if (ret)
 				dd_dev_err(
 					dd,
-					"%s: received Active SMA idlemessage, couldn't set link to Active\n",
+					"%s: received Active SMA idle message, couldn't set link to Active\n",
 					__func__);
 		}
 		break;
@@ -3512,7 +3512,7 @@ static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
 	 * "engineering" LNI.
 	 *
 	 * Set link_speed_active here, overriding what was set in
-	 * handle_verify_cap().  This is becaues the 8051 firmware using
+	 * handle_verify_cap().  This is because the 8051 firmware using
 	 * the "engineering" LNI does not correctly set the max_speed field.
 	 * For now, to find the speed, look at max_rate after link up.  This
 	 * routine is called in handle_verify_cap(),after linkup, and during
@@ -4015,7 +4015,7 @@ static void handle_8051_interrupt(struct hfi_devdata *dd, u32 unused, u64 reg)
 	if (queue_link_down) {
 		/* if the link is going down, don't queue another */
 		if (ppd->host_link_state == HLS_GOING_OFFLINE) {
-			dd_dev_info(dd, "%s: not queueing link down\n",
+			dd_dev_info(dd, "%s: not queuing link down\n",
 				__func__);
 		} else {
 			queue_work(ppd->hfi1_wq, &ppd->link_down_work);
@@ -4029,15 +4029,15 @@ static const char * const fm_config_txt[] = {
 [1] =
 	"BadTailDist: Distance violation between two tail flits",
 [2] =
-	"BadCtrlDist: Dstance violation between two credit control flits",
+	"BadCtrlDist: Distance violation between two credit control flits",
 [3] =
 	"BadCrdAck: Credits return for unsupported VL",
 [4] =
 	"UnsupportedVLMarker: Received VL Marker",
 [5] =
-	"BadPreempt: Exceeded the preemtion nesting level",
+	"BadPreempt: Exceeded the preemption nesting level",
 [6] =
-	"BadControlFlit: Received unsupport control flit",
+	"BadControlFlit: Received unsupported control flit",
 /* no 7 */
 [8] =
 	"UnsupportedVLMarker: Received VL Marker for unconfigured or disabled VL",
@@ -4049,7 +4049,7 @@ static const char * const port_rcv_txt[] = {
 [2] =
 	"PktLenTooLong: Packet longer than PktLen",
 [3] =
-	"PktLenTooShort: Packet shorterthan PktLen",
+	"PktLenTooShort: Packet shorter than PktLen",
 [4] =
 	"BadSLID: Illegal SLID (0, using multicast as SLID, does not include security validation of SLID)",
 [5] =
@@ -4250,7 +4250,7 @@ static void is_dc_int(struct hfi_devdata *dd, unsigned int source)
 		 * This indicates that a parity error has occurred on the
 		 * address/control lines presented to the LBM.  The error
 		 * is a single pulse, there is no associated error flag,
-		 * and it is not maskable.  This is because if a parity
+		 * and it is non-maskable.  This is because if a parity
 		 * error occurs on the request the request is dropped.
 		 * This should never occur, but it is nice to know if it
 		 * ever does.
@@ -4422,7 +4422,7 @@ static char *is_name(char *buf, size_t bsize, unsigned int source)
 }
 
 /*
- * Interupt source interrupt - called when the given source has an interrupt.
+ * Interrupt source interrupt - called when the given source has an interrupt.
  * Source is a bit index into an array of 64-bit integers.
  */
 static void is_interrupt(struct hfi_devdata *dd, unsigned int source)
@@ -4466,7 +4466,7 @@ static irqreturn_t general_interrupt(int irq, void *data)
 			write_csr(dd, CCE_INT_CLEAR + (8 * i), regs[i]);
 	}
 
-	/* phase 2: call the apropriate handler */
+	/* phase 2: call the appropriate handler */
 	for_each_set_bit(bit, (unsigned long *)&regs[0],
 						CCE_NUM_INT_CSRS*64) {
 		is_interrupt(dd, bit);
@@ -4510,7 +4510,7 @@ static irqreturn_t sdma_interrupt(int irq, void *data)
 
 /*
  * NOTE: this routine expects to be on its own MSI-X interrupt.  If
- * multiple receive contexts share the same MSI-X interupt, then this
+ * multiple receive contexts share the same MSI-X interrupt, then this
  * routine must check for who received it.
  */
 static irqreturn_t receive_context_interrupt(int irq, void *data)
@@ -4699,7 +4699,7 @@ static int do_8051_command(
 	 */
 
 	/*
-	 * Do two writes: the first to stablize the type and req_data, the
+	 * Do two writes: the first to stabilize the type and req_data, the
 	 * second to activate.
 	 */
 	reg = ((u64)type & DC_DC8051_CFG_HOST_CMD_0_REQ_TYPE_MASK)
@@ -5037,7 +5037,7 @@ static int read_idle_message(struct hfi_devdata *dd, u64 type, u64 *data_out)
 		return -EINVAL;
 	}
 	dd_dev_info(dd, "%s: read idle message 0x%llx\n", __func__, *data_out);
-	/* return only the payload as we alrady know the type */
+	/* return only the payload as we already know the type */
 	*data_out >>= IDLE_PAYLOAD_SHIFT;
 	return 0;
 }
@@ -5158,13 +5158,13 @@ static int do_quick_linkup(struct hfi_devdata *dd)
 
 	/*
 	 * State "quick" LinkUp request sets the physical link state to
-	 * LinkUp without a verify capabilbity sequence.
+	 * LinkUp without a verify capability sequence.
 	 * This state is in simulator v37 and later.
 	 */
 	ret = set_physical_link_state(dd, PLS_QUICK_LINKUP);
 	if (ret != HCMD_SUCCESS) {
 		dd_dev_err(dd,
-			"%s: set phsyical link state to quick LinkUp failed with return %d\n",
+			"%s: set physical link state to quick LinkUp failed with return %d\n",
 			__func__, ret);
 
 		set_host_lcb_access(dd);
@@ -5190,7 +5190,7 @@ static int set_serdes_loopback_mode(struct hfi_devdata *dd)
 	if (ret == HCMD_SUCCESS)
 		return 0;
 	dd_dev_err(dd,
-		"Set phsyical link state to SerDes Loopback failed with return %d\n",
+		"Set physical link state to SerDes Loopback failed with return %d\n",
 		ret);
 	if (ret >= 0)
 		ret = -EINVAL;
@@ -5210,7 +5210,7 @@ static int init_loopback(struct hfi_devdata *dd)
 
 	/*
 	 * The simulator has only one loopback option - LCB.  Switch
-	 * to that option, which inlcudes quick link up.
+	 * to that option, which includes quick link up.
 	 *
 	 * Accept all valid loopback values.
 	 */
@@ -5310,10 +5310,10 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 		goto set_local_link_attributes_fail;
 
 	/*
-	 * DC supports continous updates.
+	 * DC supports continuous updates.
 	 */
 	ret = write_vc_local_phy(dd, 0 /* no power management */,
-				     1 /* continous updates */);
+				     1 /* continuous updates */);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
@@ -5758,7 +5758,7 @@ void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
 		pa = 0;
 	} else if (type > PT_INVALID) {
 		dd_dev_err(dd,
-			"unexpeced receive array type %u for index %u, not handled\n",
+			"unexpected receive array type %u for index %u, not handled\n",
 			type, index);
 		goto done;
 	}
@@ -6050,7 +6050,7 @@ static int wait_phy_linkstate(struct hfi_devdata *dd, u32 state, u32 msecs)
 }
 
 /*
- * Helper for set_link_state().  Do not call excecpt from that routine.
+ * Helper for set_link_state().  Do not call except from that routine.
  * Expects ppd->hls_mutex to be held.
  *
  * @rem_reason value to be sent to the neighbor
@@ -6180,7 +6180,7 @@ static const char *link_state_name(u32 state)
 	};
 
 	name = n < ARRAY_SIZE(names) ? names[n] : NULL;
-	return name ? name : "unkown";
+	return name ? name : "unknown";
 }
 
 /* return the link state reason name */
@@ -6273,7 +6273,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 			 * simulator jumps from polling to link up.
 			 * Accept that here.
 			 */
-			/* ok */;
+			/* OK */;
 		} else if (ppd->host_link_state != HLS_GOING_UP) {
 			goto unexpected;
 		}
@@ -6314,7 +6314,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		}
 		/*
 		 * The simulator does not currently implement SMA messages,
-		 * so neigbor_normal is not set.  Set it here when we first
+		 * so neighbor_normal is not set.  Set it here when we first
 		 * move to Armed.
 		 */
 		if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
@@ -6385,7 +6385,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		}
 		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
 		/*
-		 * If an error occured above, go back to offline.  The
+		 * If an error occurred above, go back to offline.  The
 		 * caller may reschedule another attempt.
 		 */
 		if (ret)
@@ -6397,7 +6397,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 
 		/* allow any state to transition to disabled */
 
-		/* must transistion to offline first */
+		/* must transition to offline first */
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			ret = goto_offline(ppd, ppd->remote_link_down_reason);
 			if (ret)
@@ -6465,7 +6465,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 	goto done;
 
 unexpected:
-	dd_dev_err(dd, "%s: unexpected state trasition from %s to %s\n",
+	dd_dev_err(dd, "%s: unexpected state transition from %s to %s\n",
 		__func__, link_state_name(ppd->host_link_state),
 		link_state_name(state));
 	ret = -EINVAL;
@@ -6515,7 +6515,7 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 		}
 		break;
 	/*
-	 * For link width, link widht downgrade, and speed enable, always AND
+	 * For link width, link width downgrade, and speed enable, always AND
 	 * the setting with what is actually supported.  This has two benefits.
 	 * First, enabled can't have unsupported values, no matter what the
 	 * SM or FM might want.  Second, the ALL_SUPPORTED wildcards that mean
@@ -7308,7 +7308,7 @@ static void adjust_rcv_timeout(struct hfi1_ctxtdata *rcd, u32 npkts)
 		 * Not enough packets arrived before the timeout, adjust
 		 * timeout downward.
 		 */
-		if (timeout < 2) /* already at mininum? */
+		if (timeout < 2) /* already at minimum? */
 			return;
 		timeout >>= 1;
 	} else {
@@ -7624,7 +7624,7 @@ u32 hfi1_read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
 }
 
 /*
- * Used by sys fs to create files for hfi stats to read
+ * Used by sysfs to create files for hfi stats to read
  */
 u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
 				  char **namep, u64 **cntrp)
@@ -8850,7 +8850,7 @@ fail:
  *	num_rcv_contexts - number of contexts being used
  *	n_krcv_queues - number of kernel contexts
  *	first_user_ctxt - first non-kernel context in array of contexts
- *	freectxts  - nuber of free user contexts
+ *	freectxts  - number of free user contexts
  *	num_send_contexts - number of PIO send contexts being used
  */
 static int set_up_context_variables(struct hfi_devdata *dd)
@@ -8927,7 +8927,7 @@ static int set_up_context_variables(struct hfi_devdata *dd)
 		(int)dd->num_rcv_contexts - dd->n_krcv_queues);
 
 	/*
-	 * Recieve array allocation:
+	 * Receive array allocation:
 	 *   All RcvArray entries are divided into groups of 8. This
 	 *   is required by the hardware and will speed up writes to
 	 *   consecutive entries by using write-combining of the entire
@@ -9156,7 +9156,7 @@ static void reset_asic_csrs(struct hfi_devdata *dd)
 		 * Notes:
 		 * o The reset is not zero if aimed at the core.  See the
 		 *   SBus documentation for details.
-		 * o If the SBus firmware has been upated (e.g. by the BIOS),
+		 * o If the SBus firmware has been updated (e.g. by the BIOS),
 		 *   will the reset revert that?
 		 */
 		/* ASIC_CFG_SBUS_REQUEST leave alone */
@@ -9386,7 +9386,7 @@ static void init_rbufs(struct hfi_devdata *dd)
 		 * Give up after 1ms - maximum wait time.
 		 *
 		 * RBuf size is 148KiB.  Slowest possible is PCIe Gen1 x1 at
-		 * 250MB/s bandwidth.  Derate that at 66% for overhead to get:
+		 * 250MB/s bandwidth.  Lower rate to 66% for overhead to get:
 		 *	148 KB / (66% * 250MB/s) = 920us
 		 */
 		if (count++ > 500) {
@@ -9508,13 +9508,13 @@ static void reset_rxe_csrs(struct hfi_devdata *dd)
  *
  * SC 0-7 -> VL 0-7 (respectively)
  * SC 15  -> VL 15
- * otherwize
+ * otherwise
  *        -> VL 0
  */
 static void init_sc2vl_tables(struct hfi_devdata *dd)
 {
 	int i;
-	/* init per architecture spec, contrained by hardware capability */
+	/* init per architecture spec, constrained by hardware capability */
 
 	/* HFI maps sent packets */
 	write_csr(dd, SEND_SC2VLT0, SC2VL_VAL(
@@ -10095,7 +10095,7 @@ void hfi1_start_cleanup(struct hfi_devdata *dd)
  * @dev: the pci_dev for hfi1_ib device
  * @ent: pci_device_id struct for this dev
  *
- * Also allocates, inits, and returns the devdata struct for this
+ * Also allocates, initializes, and returns the devdata struct for this
  * device instance
  *
  * This is global, and is called directly at init to set up the
@@ -10214,7 +10214,7 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
 
-	/* set supportd speed mask */
+	/* set supported speed mask */
 	dd->pport->link_speed_supported =
 			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
 	/* apply link speed mask module parameter */

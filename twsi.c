@@ -392,7 +392,7 @@ int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
 		/*
 		 * SFF spec claims we do _not_ stop after the addr
 		 * but simply issue a start with the "read" dev-addr.
-		 * Since we are implicitely waiting for ACK here,
+		 * Since we are implicitly waiting for ACK here,
 		 * we need t_buf (nominally 20uSec) before that start,
 		 * and cannot rely on the delay built in to the STOP
 		 */

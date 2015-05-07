@@ -53,7 +53,7 @@
 #include "eprom.h"
 
 /*
- * The EPROM is logically dividied into two partitions:
+ * The EPROM is logically divided into two partitions:
  *	partition 0: the first 128K, visible from PCI ROM BAR
  *	partition 1: the rest
  */
@@ -199,7 +199,7 @@ static int erase_32kb_range(struct hfi_devdata *dd, u32 start, u32 end)
 
 	if ((start & MASK_32KB) || (end & MASK_32KB)) {
 		dd_dev_err(dd,
-			"%s: non-algined range (0x%x,0x%x) for a 32KB erase\n",
+			"%s: non-aligned range (0x%x,0x%x) for a 32KB erase\n",
 			__func__, start, end);
 		return -EINVAL;
 	}

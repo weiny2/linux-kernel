@@ -93,7 +93,7 @@
 /* Byte 146 is length for Copper. Units of 1 meter */
 #define QSFP_MOD_LEN_OFFS 146
 /*
- * Byte 147 is Device technology. D0..3 not Qlogc req'd
+ * Byte 147 is Device technology. D0..3 not Intel req'd
  * D4..7 select from 15 choices, translated by table:
  */
 #define QSFP_MOD_TECH_OFFS 147
@@ -117,7 +117,7 @@ extern const char *const hfi1_qsfp_devtech[16];
 /* Bytes 148..163 are Vendor Name, Left-justified Blank-filled */
 #define QSFP_VEND_OFFS 148
 #define QSFP_VEND_LEN 16
-/* Byte 164 is IB Extended tranceiver codes Bits D0..3 are SDR,DDR,QDR,EDR */
+/* Byte 164 is IB Extended transceiver codes Bits D0..3 are SDR,DDR,QDR,EDR */
 #define QSFP_IBXCV_OFFS 164
 /* Bytes 165..167 are Vendor OUI number */
 #define QSFP_VOUI_OFFS 165

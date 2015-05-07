@@ -147,7 +147,8 @@ struct hfi_link_info {
 	u8 port_number;
 	/*
 	 * Add padding to make this a full IB SMP payload. Note: changing the
-	 * size of this structure will make the IOCTLs creaed with _IOWR change.
+	 * size of this structure will make the IOCTLs created with _IOWR
+	 * change.
 	 * Be sure to run tests on all IOCTLs when making changes to this
 	 * structure.
 	 */
@@ -451,7 +452,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	 * The caller wants to wait until the packet is sent and to
 	 * check for errors.  The best we can do is wait until
 	 * the buffer credits are returned and check if any packet
-	 * error has occured.  If there are any late errors, this
+	 * error has occurred.  If there are any late errors, this
 	 * could miss it.  If there are other senders who generate
 	 * an error, this may find it.  However, in general, it
 	 * should catch most.
@@ -635,7 +636,7 @@ static struct hfi_devdata *hfi_dd_from_sc_inode(struct inode *in)
 
 }
 
-/* clear or restore send conext integrity checks */
+/* clear or restore send context integrity checks */
 static void adjust_integrity_checks(struct hfi_devdata *dd)
 {
 	struct send_context *sc;
@@ -671,7 +672,7 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	}
 
 	/*
-	 * File mode determines snoop or capture. Some exisitng user
+	 * File mode determines snoop or capture. Some existing user
 	 * applications expect the capture device to be able to be opened RDWR
 	 * because they expect a dedicated capture device. For this reason we
 	 * support a module param to force capture mode even if the file open
@@ -1428,7 +1429,7 @@ static int hfi_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	 * Limited members cannot accept information from other
 	 * Limited members, but communication is allowed between
 	 * every other combination of membership.
-	 * Hence we'll omitt comparing top-most bit while filtering
+	 * Hence we'll omit comparing top-most bit while filtering
 	 */
 
 	if ((*(u16 *)value & 0x7FFF) ==
@@ -1488,13 +1489,13 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
 /*
  * Instead of having snoop and capture code intermixed with the recv functions,
  * both the interrupt handler and hfi1_ib_rcv() we are going to hijack the call
- * and land in here for snoop/capture but if not enbaled the call will go
+ * and land in here for snoop/capture but if not enabled the call will go
  * through as before. This gives us a single point to constrain all of the snoop
- * snoop recv logic. There is nothign special that needs to happen for bypass
+ * snoop recv logic. There is nothing special that needs to happen for bypass
  * packets. This routine should not try to look into the packet. It just copied
- * it. There is no gurantee for filters when it comes to bypass packets as there
- * is no specific support. Bottom line is this routine does now even know what a
- * bypass packet is.
+ * it. There is no guarantee for filters when it comes to bypass packets as
+ * there is no specific support. Bottom line is this routine does now even know
+ * what a bypass packet is.
  */
 void snoop_recv_handler(struct hfi_packet *packet)
 {
@@ -1604,9 +1605,9 @@ void snoop_recv_handler(struct hfi_packet *packet)
 	/*
 	 * We do not care what type of packet came in here just pass it off to
 	 * its usual handler. See hfi1_init(). We can't just rely on calling
-	 * into the function map array becaue snoop/capture has hijacked it.
+	 * into the function map array because snoop/capture has hijacked it.
 	 * If we call the IB type specific handler we will be calling
-	 * ourself recursively.
+	 * ourselves recursively.
 	 */
 	switch (rhf_rcv_type(packet->rhf)) {
 	case RHF_RCV_TYPE_IB:
@@ -1802,7 +1803,7 @@ out:
 /*
  * Callers of this must pass a hfi1_ib_header type for the from ptr. Currently
  * this can be used anywhere, but the intention is for inline ACKs for RC and
- * CCA packets. We don't restrict this useage though.
+ * CCA packets. We don't restrict this usage though.
  */
 void snoop_inline_pio_send(struct hfi_devdata *dd, struct pio_buf *pbuf,
 			   u64 pbc, const void *from, size_t count)

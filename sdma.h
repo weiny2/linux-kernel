@@ -203,7 +203,7 @@ struct sdma_state {
 	enum sdma_states current_state;
 	unsigned             current_op;
 	unsigned             go_s99_running;
-	/* debugging/devel */
+	/* debugging/development */
 	enum sdma_states previous_state;
 	unsigned             previous_op;
 	enum sdma_events last_event;
@@ -216,8 +216,8 @@ struct sdma_state {
  * - The SDMA API for building and submitting packets
  *   to the ring
  *
- * - Intialization and teardown routines to buildup
- *   and teardown SDMA
+ * - Initialization and tear down routines to buildup
+ *   and tear down SDMA
  *
  * - ISR entrances to handle interrupts, state changes
  *   and errors
@@ -254,7 +254,7 @@ struct sdma_state {
  * The mapping specifics for each memory location are recorded
  * in the tx. Memory locations added with sdma_txadd_page()
  * and sdma_txadd_kvaddr() are automatically mapped when added
- * to the tx and nmapped as part of the progess processing in the
+ * to the tx and nmapped as part of the progress processing in the
  * SDMA interrupt handling.
  *
  * sdma_txadd_daddr() is used to add an dma_addr_t memory to the
@@ -265,7 +265,7 @@ struct sdma_state {
  * (This would usually be at an unload or job termination.)
  *
  * The routine sdma_send_txreq() is used to submit
- * a tx to the ring after the appropriate nubmer of
+ * a tx to the ring after the appropriate number of
  * sdma_txadd_* have been done.
  *
  * If it is desired to send a burst of sdma_txreqs, sdma_send_txlist()
@@ -286,7 +286,7 @@ struct sdma_state {
  * DOC: Infrastructure calls
  *
  * sdma_init() is used to initialize data structures and
- * csrs for the desired number of SDMA engines.
+ * CSRs for the desired number of SDMA engines.
  *
  * sdma_start() is used to kick the SDMA engines initialized
  * with sdma_init().   Interrupts must be enabled at this
@@ -315,7 +315,7 @@ struct hw_sdma_desc {
  * struct sdma_desc - canonical fragment descriptor
  *
  * This is the descriptor carried in the tx request
- * cooresponding to each fragment.
+ * corresponding to each fragment.
  *
  */
 struct sdma_desc {
@@ -360,7 +360,7 @@ struct sdma_txreq {
 #endif
 	/* private: - used in coalesce/pad processing */
 	u16                         packet_len;
-	/* private: - downcounted to trigger last */
+	/* private: - down-counted to trigger last */
 	u16                         tlen;
 	/* private: flags */
 	u16                         flags;
@@ -387,8 +387,8 @@ struct verbs_txreq {
 
 /**
  * struct sdma_engine - Data pertaining to each SDMA engine.
- * @dd: a backpointer to the device data
- * @ppd: per port backpointer
+ * @dd: a back-pointer to the device data
+ * @ppd: per port back-pointer
  * @imask: mask for irq manipulation
  * @idle_mask: mask for determining if an interrupt is due to sdma_idle
  *
@@ -559,7 +559,7 @@ void _sdma_txreq_ahgadd(
 
 /**
  * sdma_txinit_ahg() - initialize an sdma_txreq struct with AHG
- * @tx: tx request to init
+ * @tx: tx request to initialize
  * @flags: flags to key last descriptor additions
  * @tlen: total packet length (pbc + headers + data)
  * @ahg_entry: ahg entry to use  (0 - 31)
@@ -585,7 +585,7 @@ void _sdma_txreq_ahgadd(
  * Completions of submitted requests can be gotten on selected
  * txreqs by giving a completion routine callback to sdma_txinit() or
  * sdma_txinit_ahg().  The environment in which the callback runs
- * can be from an ISR, a tasklet, or a thread, so no sleepable
+ * can be from an ISR, a tasklet, or a thread, so no sleeping
  * kernel routines can be used.   Aspects of the sdma ring may
  * be locked so care should be taken with locking.
  *
@@ -595,14 +595,14 @@ void _sdma_txreq_ahgadd(
  * The status will be one of SDMA_TXREQ_S_OK, SDMA_TXREQ_S_SENDERROR,
  * SDMA_TXREQ_S_ABORTED, or SDMA_TXREQ_S_SHUTDOWN.
  *
- * The flag, if the is the iowait had been used, indicats the iowait
+ * The flag, if the is the iowait had been used, indicates the iowait
  * sdma_busy count has reached zero.
  *
  * user data portion of tlen should be precise.   The sdma_txadd_* entrances
  * will pad with a descriptor references 1 - 3 bytes when the number of bytes
  * specified in tlen have been supplied to the sdma_txreq.
  *
- * ahg_hlen is used to determine the number of onchip entry bytes to
+ * ahg_hlen is used to determine the number of on-chip entry bytes to
  * use as the header.   This is for cases where the stored header is
  * larger than the header to be used in a packet.  This is typical
  * for verbs where an RDMA_WRITE_FIRST is larger than the packet in
@@ -647,7 +647,7 @@ static inline int sdma_txinit_ahg(
 
 /**
  * sdma_txinit() - initialize an sdma_txreq struct (no AHG)
- * @tx: tx request to init
+ * @tx: tx request to initialize
  * @flags: flags to key last descriptor additions
  * @tlen: total packet length (pbc + headers + data)
  * @cb: callback pointer
@@ -664,7 +664,7 @@ static inline int sdma_txinit_ahg(
  * Completions of submitted requests can be gotten on selected
  * txreqs by giving a completion routine callback to sdma_txinit() or
  * sdma_txinit_ahg().  The environment in which the callback runs
- * can be from an ISR, a tasklet, or a thread, so no sleepable
+ * can be from an ISR, a tasklet, or a thread, so no sleeping
  * kernel routines can be used.   The head size of the sdma ring may
  * be locked so care should be taken with locking.
  *
@@ -790,7 +790,7 @@ static inline int _sdma_txadd_daddr(
  *
  * Return:
  * 0 - success, -ENOSPC - mapping fail, -ENOMEM - couldn't
- * extend descriptor array or couldn't allocate coalesse
+ * extend descriptor array or couldn't allocate coalesce
  * buffer.
  *
  */
@@ -923,7 +923,7 @@ static inline u32 sdma_build_ahg_descriptor(
  *
  * This is used in the appropriate spot in the sleep routine
  * to check for potential ring progress.  This routine gets the
- * seqcount before queueing the iowait structure for progress.
+ * seqcount before queuing the iowait structure for progress.
  *
  * If the seqcount indicates that progress needs to be checked,
  * re-submission is detected by checking whether the descriptor
@@ -942,7 +942,7 @@ static inline unsigned sdma_progress(struct sdma_engine *sde, unsigned seq,
 }
 
 /**
- * sdma_iowait_schedule() - init wait structure
+ * sdma_iowait_schedule() - initialize wait structure
  * @sde: sdma_engine to schedule
  * @wait: wait struct to schedule
  *

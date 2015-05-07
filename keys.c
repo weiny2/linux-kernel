@@ -352,7 +352,7 @@ bail:
 }
 
 /*
- * Initialize the memory region specified by the work reqeust.
+ * Initialize the memory region specified by the work request.
  */
 int hfi1_fast_reg_mr(struct hfi1_qp *qp, struct ib_send_wr *wr)
 {

@@ -530,7 +530,7 @@ struct hfi1_qp {
 	u8 r_flags;
 	u8 r_head_ack_queue;    /* index into s_ack_queue[] */
 
-	struct list_head rspwait;       /* link for waititing to respond */
+	struct list_head rspwait;       /* link for waiting to respond */
 
 	struct hfi1_sge_state r_sge;     /* current receive data */
 	struct hfi1_rq r_rq;             /* receive work queue */
@@ -900,7 +900,7 @@ void hfi1_free_agents(struct hfi1_ibdev *dev);
  * 2) returning the PSN with any upper bits masked
  * 3) returning the difference between to PSNs
  *
- * The number of signficant bits in the PSN must
+ * The number of significant bits in the PSN must
  * necessarily be at least one bit less than
  * the container holding the PSN.
  */

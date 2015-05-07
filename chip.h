@@ -404,7 +404,7 @@
 #define MAX_RATE_SHIFT			24
 #define MAX_RATE_MASK			0xff
 
-/* verify capibility PHY fields */
+/* verify capability PHY fields */
 #define CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT	0x4
 #define CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK	0x1
 #define POWER_MANAGEMENT_SHIFT			0x0
@@ -419,7 +419,7 @@
 #define SPICO_ROM_PROD_ID_SHIFT 16
 #define SPICO_ROM_PROD_ID_MASK 0xffff
 
-/* verify capibility fabric fields */
+/* verify capability fabric fields */
 #define VAU_SHIFT	0
 #define VAU_MASK	0x0007
 #define Z_SHIFT		3
@@ -439,7 +439,7 @@
 #define MISC_CONFIG_BITS_SHIFT 24
 #define MISC_CONFIG_BITS_MASK 0xff
 
-/* verify cpability remote link width fields */
+/* verify capability remote link width fields */
 #define REMOTE_TX_RATE_SHIFT 16
 #define REMOTE_TX_RATE_MASK 0xff
 

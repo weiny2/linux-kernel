@@ -543,7 +543,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		/*
 		 * The driver has already allocated memory for credit
 		 * returns and programmed it into the chip. Has that
-		 * memory been flaged as non-cached?
+		 * memory been flagged as non-cached?
 		 */
 		/* vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot); */
 		mapio = 1;
@@ -1019,7 +1019,7 @@ static int allocate_ctxt(struct file *fp, struct hfi_devdata *dd,
 	/*
 	 * Setup shared context resources if the user-level has requested
 	 * shared contexts and this is the 'master' process.
-	 * This has to be done here so the rest of the subcontexts find the
+	 * This has to be done here so the rest of the sub-contexts find the
 	 * proper master.
 	 */
 	if (uinfo->subctxt_cnt && !subctxt_fp(fp)) {
@@ -1451,7 +1451,7 @@ done:
 /**
  * manage_rcvq - manage a context's receive queue
  * @uctxt: the context
- * @subctxt: the subcontext
+ * @subctxt: the sub-context
  * @start_stop: action to carry out
  *
  * start_stop == 0 disables receive on the context, for use in queue
@@ -1615,7 +1615,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 		u16 grp;
 
 		/*
-		 * "Reserver" the needed group bits under lock so other
+		 * "Reserve" the needed group bits under lock so other
 		 * processes can't step in the middle of it. Once
 		 * reserved, we don't need the lock anymore since we
 		 * are guaranteed the groups.
@@ -1765,7 +1765,7 @@ static int exp_tid_setup(struct file *fp, struct hfi_tid_info *tinfo)
 			      uctxt->tidmapcnt);
 
 done:
-	/* If we've mapped anything, copy relavant info to user */
+	/* If we've mapped anything, copy relevant info to user */
 	if (mapped) {
 		if (copy_to_user((void __user *)(unsigned long)tinfo->tidlist,
 				 tidlist, sizeof(tidlist[0]) * tidcnt)) {
@@ -2016,7 +2016,7 @@ static ssize_t ui_write(struct file *filp, const char __user *buf,
 	for (total = 0; total < count; total += 8, csr_off += 8) {
 		if (get_user(data, (unsigned long __user *)(buf + total)))
 			break;
-		/* accessing LCB CSRs requires a special procuedure */
+		/* accessing LCB CSRs requires a special procedure */
 		if (is_lcb_offset(csr_off)) {
 			if (!in_lcb) {
 				int ret = acquire_lcb_access(dd, 1);

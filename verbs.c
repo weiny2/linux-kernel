@@ -712,7 +712,7 @@ static void mem_timer(unsigned long data)
 		wait = list_first_entry(list, struct iowait, list);
 		qp = container_of(wait, struct hfi1_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
-		/* refcount held until actual wakeup */
+		/* refcount held until actual wake up */
 		if (!list_empty(list))
 			mod_timer(&dev->mem_timer, jiffies + 1);
 	}
@@ -831,7 +831,7 @@ void hfi1_put_txreq(struct verbs_txreq *tx)
 		wait = list_first_entry(&dev->txwait, struct iowait, list);
 		qp = container_of(wait, struct hfi1_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
-		/* refcount held until actual wakeup */
+		/* refcount held until actual wake up */
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
 		hfi1_qp_wakeup(qp, HFI1_S_WAIT_TX);
 	} else
@@ -1189,9 +1189,9 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 			goto pio_bail;
 		} else {
 			/*
-			 * This is a normal occurance. The PIO buffs are full up
-			 * but we are still happily sending, well we could be so
-			 * lets continue to queue the request.
+			 * This is a normal occurrence. The PIO buffs are full
+			 * up but we are still happily sending, well we could be
+			 * so lets continue to queue the request.
 			 */
 			hfi_cdbg(PIO, "alloc failed. state active, queuing");
 			return no_bufs_available(qp, sc);
@@ -1262,7 +1262,7 @@ static inline int egress_pkey_matches_entry(u16 pkey, u16 ent)
 
 /*
  * egress_pkey_check - return 0 if hdr's pkey matches according to the
- * criterea in the OPAv1 spec., section 9.11.7.
+ * criteria in the OPAv1 spec., section 9.11.7.
  */
 static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
 				    struct hfi1_ib_header *hdr,
@@ -1355,8 +1355,8 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		 * The value we are returning here does not get propagated to
 		 * the verbs caller. Thus we need to complete the request with
 		 * error otherwise the caller could be sitting waiting on the
-		 * completeion event. Only do this for PIO. SDMA has its own
-		 * mechansim for handling the errors. So for SDMA we can just
+		 * completion event. Only do this for PIO. SDMA has its own
+		 * mechanism for handling the errors. So for SDMA we can just
 		 * return.
 		 */
 		if (pio) {

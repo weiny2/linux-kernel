@@ -151,7 +151,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 		ppd->linkup = 1;
 		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
 
-		/* link widths are not avaiable until the link is fully up */
+		/* link widths are not available until the link is fully up */
 		get_linkup_link_widths(ppd);
 
 	} else {

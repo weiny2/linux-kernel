@@ -365,7 +365,7 @@ err:
 }
 
 /**
- * ruc_loopback - handle UC and RC lookback requests
+ * ruc_loopback - handle UC and RC loopback requests
  * @sqp: the sending QP
  *
  * This is called from hfi1_do_send() to
@@ -409,7 +409,7 @@ again:
 		goto clr_busy;
 	wqe = get_swqe_ptr(sqp, sqp->s_last);
 
-	/* Return if it is not OK to start a new work reqeust. */
+	/* Return if it is not OK to start a new work request. */
 	if (!(ib_hfi1_state_ops[sqp->state] & HFI1_PROCESS_NEXT_SEND_OK)) {
 		if (!(ib_hfi1_state_ops[sqp->state] & HFI1_FLUSH_SEND))
 			goto clr_busy;

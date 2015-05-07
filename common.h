@@ -68,9 +68,9 @@
  * These are compile time constants that you may want to enable or disable
  * if you are trying to debug problems with code or performance.
  * HFI1_VERBOSE_TRACING define as 1 if you want additional tracing in
- * fastpath code
+ * fast path code
  * HFI1_TRACE_REGWRITES define as 1 if you want register writes to be
- * traced in faspath code
+ * traced in fast path code
  * _HFI1_TRACING define as 0 if you want to remove all tracing in a
  * compilation unit
  */
@@ -327,7 +327,7 @@ struct hfi1_message_header {
 	__be16 lrh[4];
 };
 
-/* IB - LRH header consts */
+/* IB - LRH header constants */
 #define HFI1_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
 #define HFI1_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
 
