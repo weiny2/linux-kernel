@@ -13,6 +13,7 @@
 #ifndef __ND_H__
 #define __ND_H__
 #include <linux/genhd.h>
+#include <linux/blkdev.h>
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
@@ -220,6 +221,7 @@ enum nd_async_mode {
 	ND_ASYNC,
 };
 
+int nd_integrity_init(struct gendisk *disk, unsigned long meta_size);
 void wait_nd_bus_probe_idle(struct device *dev);
 void nd_device_register(struct device *dev);
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode);

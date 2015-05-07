@@ -12,6 +12,7 @@
  */
 #include <linux/export.h>
 #include <linux/module.h>
+#include <linux/blkdev.h>
 #include <linux/device.h>
 #include <linux/ctype.h>
 #include <linux/ndctl.h>
@@ -436,6 +437,42 @@ void nd_bus_unregister(struct nd_bus *nd_bus)
 	device_unregister(&nd_bus->dev);
 }
 EXPORT_SYMBOL_GPL(nd_bus_unregister);
+
+#ifdef CONFIG_BLK_DEV_INTEGRITY
+static int nd_pi_nop_generate_verify(struct blk_integrity_iter *iter)
+{
+	return 0;
+}
+
+int nd_integrity_init(struct gendisk *disk, unsigned long meta_size)
+{
+	struct blk_integrity integrity = {
+		.name = "ND-PI-NOP",
+		.generate_fn = nd_pi_nop_generate_verify,
+		.verify_fn = nd_pi_nop_generate_verify,
+		.tuple_size = meta_size,
+		.tag_size = meta_size,
+	};
+	int ret;
+
+	ret = blk_integrity_register(disk, &integrity);
+	if (ret)
+		return ret;
+
+	blk_queue_max_integrity_segments(disk->queue, 1);
+
+	return 0;
+}
+EXPORT_SYMBOL(nd_integrity_init);
+
+#else /* CONFIG_BLK_DEV_INTEGRITY */
+int nd_integrity_init(struct gendisk *disk, unsigned long meta_size)
+{
+	return 0;
+}
+EXPORT_SYMBOL(nd_integrity_init);
+
+#endif
 
 static __init int libnd_init(void)
 {
