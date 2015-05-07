@@ -162,6 +162,7 @@ static int nd_blk_probe(struct device *dev)
 	blk_queue_make_request(blk_dev->queue, nd_blk_make_request);
 	blk_queue_max_hw_sectors(blk_dev->queue, 1024);
 	blk_queue_bounce_limit(blk_dev->queue, BLK_BOUNCE_ANY);
+	blk_queue_logical_block_size(blk_dev->queue, nsblk->lbasize);
 
 	disk = blk_dev->disk = alloc_disk(0);
 	if (!disk) {
