@@ -1,9 +1,0 @@
-#!/bin/bash
-
-# Meant to be run by cron but can be run manually.
-cd tests
-git remote update
-git pull --rebase
-# do checkpatch too
-./build.sh "" "" "" 1
-
