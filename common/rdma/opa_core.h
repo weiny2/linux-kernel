@@ -192,6 +192,32 @@ struct opa_ctx_assign {
 	u16 trig_op_count;
 };
 
+/**
+ * struct opa_pport_desc - Used for querying immutable per port
+ * opa*_hfi HW  details
+ * @devdata: underlying hfi* device structure
+ * @pguid: port GUID for this port
+ */
+struct opa_pport_desc {
+	struct hfi_devdata *devdata;
+	__be64 pguid;
+};
+
+/**
+ * struct opa_dev_desc - Used for querying immutable per node
+ * opa*_hfi HW  details
+ * @devdata: underlying hfi* device structure
+ * @oui: Organizational Unique Identifier
+ * @num_pports: Number of physical ports
+ * @nguid: node GUID, unique per node
+ */
+struct opa_dev_desc {
+	struct hfi_devdata *devdata;
+	u8 oui[3];
+	u8 num_pports;
+	__be64 nguid;
+};
+
 struct hfi_eq_assign_args;
 struct hfi_dlid_assign_args;
 
@@ -229,6 +255,8 @@ struct opa_core_ops {
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_ctx *ctx);
+	void (*get_device_desc)(struct opa_dev_desc *desc);
+	void (*get_port_desc)(struct opa_pport_desc *pdesc, u8 port_num);
 };
 
 /**
