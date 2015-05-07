@@ -183,10 +183,37 @@ static ssize_t in_progress_store(struct kobject *kobj,
 	return count;
 }
 
+static ssize_t force_load_module_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", kgr_force_load_module);
+}
+
+static ssize_t force_load_module_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val != 1 && val != 0)
+		return -EINVAL;
+
+	kgr_force_load_module = val;
+
+	return count;
+}
+
 static struct kobj_attribute kgr_attr_in_progress = __ATTR_RW(in_progress);
+static struct kobj_attribute kgr_attr_force_load_module =
+		__ATTR_RW(force_load_module);
 
 static struct attribute *kgr_sysfs_entries[] = {
 	&kgr_attr_in_progress.attr,
+	&kgr_attr_force_load_module.attr,
 	NULL
 };
 

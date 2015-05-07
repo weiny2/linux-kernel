@@ -220,7 +220,9 @@ sysc_vtime:
 	mvc	__PT_INT_CODE(4,%r11),__LC_SVC_ILC
 sysc_do_svc:
 	oi	__TI_flags+7(%r12),_TIF_SYSCALL
+#if IS_ENABLED(CONFIG_KGRAFT)
 	ni	__TI_flags+5(%r12),255 - (_TIF_KGR_IN_PROGRESS >> 16)
+#endif
 	lg	%r10,__TI_sysc_table(%r12)	# address of system call table
 	llgh	%r8,__PT_INT_CODE+2(%r11)
 	slag	%r8,%r8,2			# shift and test for svc 0
@@ -249,7 +251,9 @@ sysc_tif:
 	tm	__TI_flags+7(%r12),_TIF_WORK_SVC
 	jnz	sysc_work			# check for work
 	ni	__TI_flags+7(%r12),255-_TIF_SYSCALL
+#if IS_ENABLED(CONFIG_KGRAFT)
 	ni	__TI_flags+5(%r12),255 - (_TIF_KGR_IN_PROGRESS >> 16)
+#endif
 sysc_restore:
 	lg	%r14,__LC_VDSO_PER_CPU
 	lmg	%r0,%r10,__PT_R0(%r11)
