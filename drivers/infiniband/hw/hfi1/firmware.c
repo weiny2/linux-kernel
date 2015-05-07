@@ -72,10 +72,6 @@ static uint fw_sbus_load = 1;
 module_param_named(fw_sbus_load, fw_sbus_load, uint, S_IRUGO);
 MODULE_PARM_DESC(fw_sbus_load, "Load the SBus firmware");
 
-static uint fw_validate;
-module_param_named(fw_validate, fw_validate, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_validate, "Perform firmware validation");
-
 #define DEFAULT_FW_8051_NAME_FPGA "hfi_dc8051.bin"
 #define DEFAULT_FW_8051_NAME_ASIC "hfi1_dc8051.fw"
 #define DEFAULT_FW_FABRIC_NAME "hfi1_fabric.fw"
@@ -191,6 +187,7 @@ static struct firmware_details fw_sbus;
 /* flags for turn_off_spicos() */
 #define SPICO_SBUS   0x1
 #define SPICO_FABRIC 0x2
+#define ENABLE_SPICO_SMASK 0x1
 
 /* security block commands */
 #define RSA_CMD_INIT  0x1
@@ -412,35 +409,19 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 		fdet->fw->size - sizeof(struct firmware_file));
 
 	/*
-	 * If the file does not have a valid CSS header, assume it is
-	 * a raw binary.  Otherwise, check the CSS size field for an
-	 * expected size.  The augmented file has r2 and mu inserted
-	 * after the header was genereated, so there will be a known
-	 * difference between the CSS header size and the actual file
-	 * size.  Use this difference to identify an augmented file.
+	 * If the file does not have a valid CSS header, fail.
+	 * Otherwise, check the CSS size field for an expected size.
+	 * The augmented file has r2 and mu inserted after the header
+	 * was genereated, so there will be a known difference between
+	 * the CSS header size and the actual file size.  Use this
+	 * difference to identify an augmented file.
 	 *
 	 * Note: css->size is in DWORDs, multiply by 4 to get bytes.
 	 */
 	ret = verify_css_header(dd, css);
 	if (ret) {
 		/* assume this is a raw binary, with no CSS header */
-		dd_dev_info(dd,
-			"Invalid CSS header for \"%s\" - assuming raw binary, turning off validation",
-			name);
-		ret = 0; /* now OK */
-		fw_validate = 0;
-		/*
-		 * Assign fields from the dummy header in case we go down the
-		 * wrong path.
-		 */
-		fdet->css_header = css;
-		fdet->modulus = fdet->dummy_header.modulus;
-		fdet->exponent = fdet->dummy_header.exponent;
-		fdet->signature = fdet->dummy_header.signature;
-		fdet->r2 = fdet->dummy_header.r2;
-		fdet->mu = fdet->dummy_header.mu;
-		fdet->firmware_ptr = (u8 *)fdet->fw->data;
-		fdet->firmware_len = fdet->fw->size;
+		dd_dev_info(dd, "Invalid CSS header for \"%s\"\n", name);
 	} else if ((css->size*4) == fdet->fw->size) {
 		/* non-agumented firmware file */
 		struct firmware_file *ff = (struct firmware_file *)
@@ -463,10 +444,8 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 			 * Header does not include r2 and mu - generate here.
 			 * For now, fail if validating.
 			 */
-			if (fw_validate) {
-				dd_dev_err(dd, "driver is unable to validate firmware without r2 and mu (not in firmware file)\n");
-				ret = -EINVAL;
-			}
+			dd_dev_err(dd, "driver is unable to validate firmware without r2 and mu (not in firmware file)\n");
+			ret = -EINVAL;
 		}
 	} else if ((css->size*4) + AUGMENT_SIZE == fdet->fw->size) {
 		/* agumented firmware file */
@@ -645,9 +624,6 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 	u32 status;
 	int ret = 0;
 
-	if (!fw_validate)
-		return 0;	/* done with no error if not validating */
-
 	/* write the signature */
 	write_rsa_data(dd, MISC_CFG_RSA_SIGNATURE, signature, KEY_SIZE);
 
@@ -755,9 +731,6 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 static void load_security_variables(struct hfi_devdata *dd,
 					struct firmware_details *fdet)
 {
-	if (!fw_validate)
-		return;	/* nothing to do */
-
 	/* Security variables a.  Write the modulus */
 	write_rsa_data(dd, MISC_CFG_RSA_MODULUS, fdet->modulus, KEY_SIZE);
 	/* Security variables b.  Write the r2 */
@@ -842,9 +815,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	/*
 	 * Firmware load step 2.  Clear MISC_CFG_FW_CTRL.FW_8051_LOADED
 	 */
-	write_csr(dd, MISC_CFG_FW_CTRL,
-			(fw_validate ? 0 :
-			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
+	write_csr(dd, MISC_CFG_FW_CTRL, 0);
 
 	/* Firmware load steps 3-5 */
 	ret = write_8051(dd, 1/*code*/, 0, fdet->firmware_ptr,
@@ -859,10 +830,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
 	 * Clear or set DISABLE_VALIDATION dependig on if we are validating.
 	 */
-	write_csr(dd, MISC_CFG_FW_CTRL,
-			MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK |
-			(fw_validate ? 0 :
-			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK));
+	write_csr(dd, MISC_CFG_FW_CTRL, MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
 
 	/* Firmware load steps 7-10 */
 	ret = run_rsa(dd, "8051", fdet->signature);
@@ -923,19 +891,11 @@ static void turn_off_spicos(struct hfi_devdata *dd, int flags)
 	if (!is_a0(dd))
 		return;
 
-	/*
-	 * This step is not needed if not validating the firmware.
-	 * In addition, don't modify MISC_CFG_FW_CTRL if not validating.
-	 */
-	if (!fw_validate)
-		return;
-
 	dd_dev_info(dd, "Turning off spicos:%s%s\n",
 		flags & SPICO_SBUS ? " SBus" : "",
 		flags & SPICO_FABRIC ? " fabric" : "");
 
-	write_csr(dd, MISC_CFG_FW_CTRL,
-			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
+	write_csr(dd, MISC_CFG_FW_CTRL, ENABLE_SPICO_SMASK);
 	/* disable SBus spico */
 	if (flags & SPICO_SBUS)
 		sbus_request(dd, SBUS_MASTER_BROADCAST, 0x01,
@@ -1247,8 +1207,6 @@ clear:
 
 int firmware_init(struct hfi_devdata *dd)
 {
-	int ret;
-
 	/* we do not expect more than 2 HFIs */
 	BUG_ON(dd->hfi_id >= 2);
 
@@ -1258,6 +1216,10 @@ int firmware_init(struct hfi_devdata *dd)
 		fw_pcie_serdes_load = 0;
 		fw_sbus_load = 0;
 	}
+
+	/* no 8051 on simulator */
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
+		fw_8051_load = 0;
 
 	if (!fw_8051_name) {
 		if (dd->icode == ICODE_RTL_SILICON)
@@ -1272,20 +1234,7 @@ int firmware_init(struct hfi_devdata *dd)
 	if (!fw_pcie_serdes_name)
 		fw_pcie_serdes_name = DEFAULT_FW_PCIE_NAME;
 
-	ret = obtain_firmware(dd);
-	if (ret)
-		return ret;
-
-	/*
-	 * Expect that we enter this routine with MISC_CFG_FW_CTRL reset:
-	 *	- FW_8051_LOADED clear
-	 *	- DISABLE_VALIDATION clear
-	 */
-	if (!fw_validate)
-		write_csr(dd, MISC_CFG_FW_CTRL,
-			    MISC_CFG_FW_CTRL_DISABLE_VALIDATION_SMASK);
-
-	return 0;
+	return obtain_firmware(dd);
 }
 
 /*

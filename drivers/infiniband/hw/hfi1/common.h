@@ -168,6 +168,7 @@
 				 ((HFI_CAP_HDRSUPP |			\
 				   HFI_CAP_MULTI_PKT_EGR |		\
 				   HFI_CAP_STATIC_RATE_CTRL |		\
+				   HFI_CAP_PKEY_CHECK |			\
 				   HFI_CAP_EARLY_CREDIT_RETURN) <<	\
 				  HFI_CAP_USER_SHIFT))
 /*
@@ -203,7 +204,7 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI_DRIVER_VERSION_BASE
-#define HFI_DRIVER_VERSION_BASE "0.7-457"
+#define HFI_DRIVER_VERSION_BASE "0.7-466"
 #endif
 
 /* create the final driver version string */

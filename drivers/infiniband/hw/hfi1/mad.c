@@ -2114,19 +2114,15 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
-static void workaround_portstatus_errata(struct hfi_devdata *dd,
-					 struct opa_port_status_rsp *rsp,
-					 u32 vl_select_mask)
+static void a0_portstatus(struct hfi_devdata *dd,
+			  struct opa_port_status_rsp *rsp, u32 vl_select_mask)
 {
-	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
+	if (!is_bx(dd)) {
 		unsigned long vl;
 		int vfi = 0;
 		u64 sum_vl_xmit_wait = 0;
 		u64 rcv_data, rcv_bubble;
-		/*
-		 * Erratum 291341 - Spurious increments of DC counters for
-		 * PortRcvBubble and PortVLRcvBubble.
-		 */
+
 		rcv_data = be64_to_cpu(rsp->port_rcv_data);
 		rcv_bubble = be64_to_cpu(rsp->port_rcv_bubble);
 		/* In the measured time period, calculate the total number
@@ -2151,10 +2147,6 @@ static void workaround_portstatus_errata(struct hfi_devdata *dd,
 			vfi++;
 		}
 
-		/*
-		 * Erratum 291344: Make sure that port_xmit_wait does not
-		 * exceed the sum (over all VLs) of port_vl_xmit_wait.
-		 */
 		vfi = 0;
 		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 				 8 * sizeof(vl_select_mask)) {
@@ -2327,7 +2319,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	workaround_portstatus_errata(dd, rsp, vl_select_mask);
+	a0_portstatus(dd, rsp, vl_select_mask);
 
 	return reply((struct ib_mad_hdr *)pmp);
 }
@@ -2377,18 +2369,14 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port)
 	return error_counter_summary;
 }
 
-static void workaround_datacounters_errata(struct hfi_devdata *dd,
-					 struct _port_dctrs *rsp,
-					 u32 vl_select_mask)
+static void a0_datacounters(struct hfi_devdata *dd, struct _port_dctrs *rsp,
+			    u32 vl_select_mask)
 {
-	if (!is_bx(dd)) { /* errata that affect pre-B0 h/w */
+	if (!is_bx(dd)) {
 		unsigned long vl;
 		int vfi = 0;
 		u64 rcv_data, rcv_bubble, sum_vl_xmit_wait = 0;
-		/*
-		 * Erratum 291341 - Spurious increments of DC counters for
-		 * PortRcvBubble and PortVLRcvBubble.
-		 */
+
 		rcv_data = be64_to_cpu(rsp->port_rcv_data);
 		rcv_bubble = be64_to_cpu(rsp->port_rcv_bubble);
 		/* In the measured time period, calculate the total number
@@ -2412,10 +2400,6 @@ static void workaround_datacounters_errata(struct hfi_devdata *dd,
 			}
 			vfi++;
 		}
-		/*
-		 * Erratum 291344: Make sure that port_xmit_wait does not
-		 * exceed the sum (over all VLs) of port_vl_xmit_wait.
-		 */
 		vfi = 0;
 		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 				8 * sizeof(vl_select_mask)) {
@@ -2589,7 +2573,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	workaround_datacounters_errata(dd, rsp, vl_select_mask);
+	a0_datacounters(dd, rsp, vl_select_mask);
 	return reply((struct ib_mad_hdr *)pmp);
 }
 

@@ -89,11 +89,7 @@
 
 #include "chip_registers.h"
 
-/* not defined in chip_registers.h */
-#define RXE_PER_CONTEXT_USER_OFFSET 0x0300000
-#define RXE_PER_CONTEXT_USER   (RXE + RXE_PER_CONTEXT_USER_OFFSET)
-
-#define TXE_PIO_SEND_OFFSET 0x0800000
+#define RXE_PER_CONTEXT_USER   (RXE + RXE_PER_CONTEXT_OFFSET)
 #define TXE_PIO_SEND (TXE + TXE_PIO_SEND_OFFSET)
 
 /* PBC flags */
