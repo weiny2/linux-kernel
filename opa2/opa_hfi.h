@@ -62,11 +62,28 @@
 #define DRIVER_CLASS_NAME	DRIVER_NAME
 
 #define HFI_NUM_BARS		2
+#define HFI_NUM_PPORTS		2
+
+/* In accordance with stl vol 1 section 4.1 */
+#define PGUID_MASK		(~(0x3UL << 32))
+#define PORT_GUID(ng, pn)	(((be64_to_cpu(ng)) & PGUID_MASK) |\
+				 (((u64)pn) << 32))
+
+/* FXRTODO: Harcoded for now. Fix this once MNH reg is available */
+#define NODE_GUID		cpu_to_be64(0x11750101000000UL)
+
+#define pidx_to_pnum(id)	((id) + 1)
+#define pnum_to_pidx(pn)	((pn) - 1)
 
 struct hfi_msix_entry {
 	struct msix_entry msix;
 	void *arg;
 	cpumask_var_t mask;
+};
+
+struct hfi_pportdata {
+	/* port_guid identifying port */
+	__be64 pguid;
 };
 
 /* device data struct contains only per-HFI info. */
@@ -109,8 +126,24 @@ struct hfi_devdata {
 	/* IOMMU */
 	void *iommu_excontext_tbl;
 	void *iommu_pasid_tbl;
+
+	/* node_guid identifying node */
+	__be64 nguid;
+
+	/* Number of physical ports available */
+	u8 num_pports;
+
+	/*
+	 * hfi_pportdata, points to array of port
+	 * port-specifix data structs
+	 */
+	struct hfi_pportdata *pport;
+
+	/* OUI comes from the HW. Used everywhere as 3 separate bytes. */
+	u8 oui[3];
 };
 
+void hfi_pport_init(struct hfi_devdata *dd);
 int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent);
 void hfi_pci_cleanup(struct pci_dev *pdev);
 struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
@@ -157,6 +190,9 @@ int hfi_iommu_root_set_context(struct hfi_devdata *dd);
 void hfi_iommu_root_clear_context(struct hfi_devdata *dd);
 void hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *mm, u16 pasid);
 void hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid);
+
+#define get_ppd_pn(dd, pn)		(&(dd)->pport[pnum_to_pidx(pn)])
+#define get_ppd_pidx(dd, idx)		(&(dd)->pport[idx])
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is

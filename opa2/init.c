@@ -78,14 +78,31 @@ static struct pci_driver hfi_driver = {
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd;
+	size_t psize = sizeof(struct hfi_pportdata *) * HFI_NUM_PORTS;
 
-	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
+	dd = kzalloc(sizeof(*dd) + psize, GFP_KERNEL);
 	if (!dd)
 		return ERR_PTR(-ENOMEM);
 
 	dd->node = dev_to_node(&pdev->dev);
-
+	dd->pport = (struct hfi_pportdata *)(dd + 1);
 	return dd;
+}
+
+/*
+ * hfi_pport_init - initialize per port
+ * data structs
+ */
+void hfi_pport_init(struct hfi_devdata *dd)
+{
+	int pidx;
+	struct hfi_pportdata *ppd;
+
+	for (pidx = 0; pidx < dd->num_pports; pidx++) {
+		ppd = get_ppd_pidx(dd, pidx);
+		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid,
+				pidx_to_pnum(pidx)));
+	}
 }
 
 /*

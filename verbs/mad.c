@@ -85,24 +85,20 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 				   u32 *resp_len)
 {
 	struct opa_node_info *ni;
+	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 	struct pci_dev *pdev = container_of(ibdev->dma_device,
 				struct pci_dev, dev);
-	struct opa_ib_portdata *ibp_first = to_opa_ibportdata(ibdev, 1);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 
 	ni = (struct opa_node_info *)data;
 
-	/* FXRTODO: Implement guid check */
-#if 0
 	/* GUID 0 is illegal */
 	if (am || ibp->guid == 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply(ibh);
 	}
-#endif
 	/* FXRTODO: Implement code to get HW data from opa2_hfi */
-
 	ni->port_guid = ibp->guid;
 	ni->base_version = JUMBO_MGMT_BASE_VERSION;
 	ni->class_version = OPA_SMI_CLASS_VERSION;
@@ -110,27 +106,18 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ni->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
 	ni->system_image_guid = opa_ib_sys_guid;
-	ni->node_guid = ibp_first->guid; /* Use first-port GUID as node */
+	ni->node_guid = ibd->node_guid;
 	ni->local_port_num = port;
 	ni->device_id = cpu_to_be16(pdev->device);
 #if 0
 	ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
 	ni->revision = cpu_to_be32(dd->minrev);
-	ni->vendor_id[0] = dd->oui1;
-	ni->vendor_id[1] = dd->oui2;
-	ni->vendor_id[2] = dd->oui3;
 #else
 	/* TODO - stubs*/
 	ni->partition_cap = OPA_IB_PORT_NUM_PKEYS;
 	ni->revision = 0;
-	/* TODO -  in WFR these are obtained from base_guid
-	 * which is read from csr. Need to find the equivalent in
-	 * FXR
-	 */
-	ni->vendor_id[0] = 0;
-	ni->vendor_id[1] = 0;
-	ni->vendor_id[2] = 0;
 #endif
+	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
 
 	if (resp_len)
 		*resp_len += sizeof(*ni);

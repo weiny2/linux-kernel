@@ -386,13 +386,19 @@ static void opa_ib_unregister_device(struct opa_ib_data *ibd)
 	ib_unregister_device(&ibd->ibdev);
 }
 
-static void opa_ib_init_port(struct opa_ib_portdata *ibp)
+static void opa_ib_init_port(struct opa_ib_data *ibd,
+			struct opa_core_device *odev, u8 pidx)
 {
 	u32 default_pkey_idx = 1;
+	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
+	struct opa_pport_desc pdesc;
+	struct opa_core_ops *ops = odev->bus_ops;
 
-	/* TODO - fetch from ops->device_desc() ? */
+	pdesc.devdata = odev->dd;
+	ops->get_port_desc(&pdesc, pidx + 1);
+
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
-	ibp->guid = 0;
+	ibp->guid = pdesc.pguid;
 	ibp->ibmtu = opa_ib_default_mtu;
 	ibp->max_vls = opa_ib_num_vls;
 	ibp->lid = 0;
@@ -411,9 +417,12 @@ static int opa_ib_add(struct opa_core_device *odev)
 	u8 num_ports;
 	struct opa_ib_data *ibd;
 	struct opa_ib_portdata *ibp;
+	struct opa_dev_desc desc;
+	struct opa_core_ops *ops = odev->bus_ops;
 
-	/* TODO - fetch info from ops->device_desc() ? */
-	num_ports = 2;
+	desc.devdata = odev->dd;
+	ops->get_device_desc(&desc);
+	num_ports = desc.num_pports;
 	ibd = kzalloc(sizeof(*ibd) + sizeof(*ibp) * num_ports, GFP_KERNEL);
 	if (!ibd) {
 		ret = -ENOMEM;
@@ -421,14 +430,15 @@ static int opa_ib_add(struct opa_core_device *odev)
 	}
 
 	ibd->num_pports = num_ports;
+	ibd->node_guid = desc.nguid;
+	memcpy(ibd->oui, desc.oui, ARRAY_SIZE(ibd->oui));
 	ibd->pport = (struct opa_ib_portdata *)(ibd + 1);
-	ibd->node_guid = 0;
 	ibd->id = odev->id;
 	ibd->parent_dev = odev->dev.parent;
 
 	/* FXRTODO: Move pkey support to opa2_hfi  */
 	for (i = 0; i < num_ports; i++)
-		opa_ib_init_port(&ibd->pport[i]);
+		opa_ib_init_port(ibd, odev, i);
 
 	ret = opa_core_set_priv_data(&opa_ib_driver, odev, ibd);
 	if (ret)

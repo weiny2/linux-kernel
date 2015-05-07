@@ -132,6 +132,22 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	kfree(dd);
 }
 
+static void hfi_port_desc(struct opa_pport_desc *pdesc, u8 port_num)
+{
+	struct hfi_pportdata *ppd = get_ppd_pn(pdesc->devdata, port_num);
+
+	pdesc->pguid = ppd->pguid;
+}
+
+static void hfi_device_desc(struct opa_dev_desc *desc)
+{
+	struct hfi_devdata *dd = desc->devdata;
+
+	memcpy(desc->oui, dd->oui, ARRAY_SIZE(dd->oui));
+	desc->num_pports = dd->num_pports;
+	desc->nguid = dd->nguid;
+}
+
 static struct opa_core_ops opa_core_ops = {
 	.ctx_assign = hfi_ctxt_attach,
 	.ctx_release = hfi_ctxt_cleanup,
@@ -145,6 +161,8 @@ static struct opa_core_ops opa_core_ops = {
 	.dlid_release = hfi_dlid_release,
 	.eq_assign = hfi_eq_assign,
 	.eq_release = hfi_eq_release,
+	.get_device_desc = hfi_device_desc,
+	.get_port_desc = hfi_port_desc,
 };
 
 /**
@@ -205,6 +223,20 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = hfi_iommu_root_set_context(dd);
 	if (ret)
 		goto err_post_alloc;
+
+	/*
+	 * FXRTODO: read nodeguid from MNH Register
+	 * 8051_CFG_LOCAL_GUID. This register is
+	 * yet to be implemented in Simics.
+	 */
+	dd->nguid = NODE_GUID;
+
+	/* per port init */
+	dd->num_pports = HFI_NUM_PPORTS;
+	hfi_pport_init(dd);
+	dd->oui[0] = be64_to_cpu(dd->nguid) >> 56 & 0xFF;
+	dd->oui[1] = be64_to_cpu(dd->nguid) >> 48 & 0xFF;
+	dd->oui[2] = be64_to_cpu(dd->nguid) >> 40 & 0xFF;
 
 	/* Host Memory allocations -- */
 
