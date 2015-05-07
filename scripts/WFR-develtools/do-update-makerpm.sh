@@ -17,8 +17,6 @@ headers_to_copy="
 	include/uapi/rdma
 "
 sources_to_copy="
-	scripts/WFR-develtools/activate-wfrl-b2b.sh
-	scripts/WFR-develtools/umad-trace.stp
 	drivers/infiniband/core
 	drivers/infiniband/ulp/ipoib
 	drivers/infiniband/ulp/srpt
