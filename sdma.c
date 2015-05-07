@@ -462,20 +462,9 @@ static void sdma_start_err_halt_wait(struct sdma_engine *sde)
 static void sdma_err_progress_check_schedule(struct sdma_engine *sde)
 {
 	if (!is_bx(sde->dd) && HFI_CAP_IS_KSET(SDMA_AHG)) {
-		/*
-		* erratum 291491
-		* in a halt event schedule progress check on all other SDMA
-		* engines to avoid an erroneous hang.
-		*/
 
 		unsigned index;
 		struct hfi_devdata *dd = sde->dd;
-
-		/*
-		* The errata only lists that the halt is not due to header
-		* update descriptor.
-		* Therefore all the halt events need to be processed here.
-		*/
 
 		for (index = 0; index < dd->num_sdma; index++) {
 			struct sdma_engine *curr_sdma = &dd->per_sdma[index];
@@ -485,7 +474,7 @@ static void sdma_err_progress_check_schedule(struct sdma_engine *sde)
 							curr_sdma->descq_head;
 		}
 		dd_dev_err(sde->dd,
-			   "SDMA engine %d - erratum 291491 check scheduled\n",
+			   "SDMA engine %d - check scheduled\n",
 				sde->this_idx);
 		mod_timer(&sde->err_progress_check_timer, jiffies + 10);
 	}
@@ -1098,7 +1087,6 @@ int sdma_init(struct hfi_devdata *dd, u8 port)
 		INIT_WORK(&sde->err_halt_worker, sdma_err_halt_wait);
 		INIT_WORK(&sde->flush_worker, sdma_field_flush);
 
-		/*  erratum 291491 */
 		sde->progress_check_head = 0;
 
 		init_timer(&sde->err_progress_check_timer);
@@ -1252,7 +1240,6 @@ void sdma_exit(struct hfi_devdata *dd)
 				sde->this_idx);
 		sdma_process_event(sde, sdma_event_e00_go_hw_down);
 
-		/* erratum 291491 */
 		del_timer_sync(&sde->err_progress_check_timer);
 
 		/*
@@ -1665,14 +1652,6 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
 	sdma_update_tail(sde, 0); /* Set SendDmaTail */
 	*sde->head_dma = 0;
 
-	/*
-	* erratum 291548 -
-	* The SDmaHeaderRequestFifoUncErr error case cannot be cleared until
-	* after the SDMA engine has been cleaned up or reset.
-	* The workaround is to clear the error bit after HW cleanup is complete.
-	* Setting a single bit in ErrClear CSR won't affect other error
-	* conditions
-	*/
 	reg = SD(ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_MASK) <<
 	      SD(ENG_ERR_CLEAR_SDMA_HEADER_REQUEST_FIFO_UNC_ERR_SHIFT);
 	write_sde_csr(sde, SD(ENG_ERR_CLEAR), reg);
@@ -1682,27 +1661,16 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
  * set_sdma_integrity
  *
  * Set the SD(CHECK_ENABLE register for send DMA engine 'sde'.
- * Use hfi_pkt_base_sdma_integrity(dd) as the starting point, and adjust
- * that value based on relevant HFI_CAP* flags.
  */
 static void set_sdma_integrity(struct sdma_engine *sde)
 {
 	struct hfi_devdata *dd = sde->dd;
-	u64 reg, smask;
+	u64 reg;
 
 	if (unlikely(HFI_CAP_IS_KSET(NO_INTEGRITY)))
 		return;
 
 	reg = hfi_pkt_base_sdma_integrity(dd);
-
-	/* make adjustments based on HFI_CAP* flags */
-	smask = SD(CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK);
-	if (!HFI_CAP_IS_KSET(PKEY_CHECK))
-		reg &= ~smask;
-
-	smask = SD(CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK);
-	if (!HFI_CAP_IS_KSET(STATIC_RATE_CTRL))
-		reg |= smask;
 
 	write_sde_csr(sde, SD(CHECK_ENABLE), reg);
 }

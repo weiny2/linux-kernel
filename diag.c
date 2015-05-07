@@ -636,7 +636,7 @@ static struct hfi_devdata *hfi_dd_from_sc_inode(struct inode *in)
 }
 
 /* clear or restore send conext integrity checks */
-static void adjust_integrity_checks(struct hfi_devdata *dd, int restore)
+static void adjust_integrity_checks(struct hfi_devdata *dd)
 {
 	struct send_context *sc;
 	unsigned long sc_flags;
@@ -713,7 +713,7 @@ static int hfi_snoop_open(struct inode *in, struct file *fp)
 	 */
 	if (mode_flag == HFI_PORT_SNOOP_MODE) {
 		/* clear after snoop mode is on */
-		adjust_integrity_checks(dd, 0); /* clear */
+		adjust_integrity_checks(dd); /* clear */
 
 		/*
 		 * We also do not want to be doing the DLID LMC check for
@@ -774,7 +774,7 @@ static int hfi_snoop_release(struct inode *in, struct file *fp)
 	drain_snoop_list(&dd->hfi_snoop.queue);
 	if (mode_flag == HFI_PORT_SNOOP_MODE) {
 		/* restore after snoop mode is clear */
-		adjust_integrity_checks(dd, 1); /* restore */
+		adjust_integrity_checks(dd); /* restore */
 
 		/*
 		 * Also should probably reset the DCC_CONFIG1 register for DLID

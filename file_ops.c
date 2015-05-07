@@ -348,7 +348,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ret = user_event_ack(uctxt, subctxt_fp(fp), user_val);
 		break;
 	case HFI_CMD_SET_PKEY:
-		ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
+		if (HFI_CAP_IS_USET(PKEY_CHECK))
+			ret = set_ctxt_pkey(uctxt, subctxt_fp(fp), user_val);
+		else
+			ret = -EPERM;
 		break;
 	case HFI_CMD_CTXT_RESET: {
 		struct send_context *sc;
