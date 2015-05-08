@@ -78,14 +78,14 @@ static bool is_namespace_io(struct device *dev)
 	return dev ? dev->type == &namespace_io_device_type : false;
 }
 
-static ssize_t type_show(struct device *dev,
+static ssize_t nstype_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct nd_region *nd_region = to_nd_region(dev->parent);
 
 	return sprintf(buf, "%d\n", nd_region_to_namespace_type(nd_region));
 }
-static DEVICE_ATTR_RO(type);
+static DEVICE_ATTR_RO(nstype);
 
 static ssize_t __alt_name_store(struct device *dev, const char *buf,
 		const size_t len)
@@ -1079,7 +1079,7 @@ static ssize_t dpa_extents_show(struct device *dev,
 static DEVICE_ATTR_RO(dpa_extents);
 
 static struct attribute *nd_namespace_attributes[] = {
-	&dev_attr_type.attr,
+	&dev_attr_nstype.attr,
 	&dev_attr_size.attr,
 	&dev_attr_uuid.attr,
 	&dev_attr_resource.attr,
@@ -1109,7 +1109,7 @@ static umode_t nd_namespace_attr_visible(struct kobject *kobj, struct attribute 
 		return a->mode;
 	}
 
-	if (a == &dev_attr_type.attr || a == &dev_attr_size.attr)
+	if (a == &dev_attr_nstype.attr || a == &dev_attr_size.attr)
 		return a->mode;
 
 	return 0;
