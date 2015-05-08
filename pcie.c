@@ -1251,7 +1251,7 @@ retry:
 	/* restore PCI space registers we know were reset */
 	dd_dev_info(dd, "%s: calling restore_pci_variables\n", __func__);
 	restore_pci_variables(dd);
-	/* restore firmware control, i.e. security disable */
+	/* restore firmware control */
 	write_csr(dd, MISC_CFG_FW_CTRL, fw_ctrl);
 
 	/*

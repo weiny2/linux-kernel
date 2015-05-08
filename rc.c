@@ -1967,7 +1967,7 @@ void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	struct hfi1_other_headers *ohdr;
-	u32 opcode;
+	u32 bth0, opcode;
 	u32 hdrsize;
 	u32 psn;
 	u32 pad;
@@ -1991,8 +1991,8 @@ void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 
 	sl = qp->remote_ah_attr.sl;
 
-	opcode = be32_to_cpu(ohdr->bth[0]);
-	if (hfi1_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
+	bth0 = be32_to_cpu(ohdr->bth[0]);
+	if (hfi1_ruc_check_hdr(ibp, hdr, has_grh, qp, bth0))
 		return;
 
 	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) &
@@ -2010,7 +2010,7 @@ void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 			HFI1_FECN_MASK;
 
 	psn = be32_to_cpu(ohdr->bth[2]);
-	opcode >>= 24;
+	opcode = bth0 >> 24;
 
 	/*
 	 * Process responses (ACKs) before anything else.  Note that the
@@ -2022,6 +2022,8 @@ void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 	    opcode <= OP(ATOMIC_ACKNOWLEDGE)) {
 		rc_rcv_resp(ibp, ohdr, data, tlen, qp, opcode, psn,
 			    hdrsize, pmtu, rcd);
+		if (is_fecn)
+			goto send_ack;
 		return;
 	}
 
@@ -2134,7 +2136,7 @@ no_immediate_data:
 		wc.ex.imm_data = 0;
 send_last:
 		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		pad = (bth0 >> 20) & 3;
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
@@ -2178,8 +2180,7 @@ send_last:
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
 		hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
-			      (ohdr->bth[0] &
-			      cpu_to_be32(IB_BTH_SOLICITED)) != 0);
+			      (bth0 & IB_BTH_SOLICITED) != 0);
 		break;
 
 	case OP(RDMA_WRITE_FIRST):
@@ -2290,7 +2291,10 @@ send_last:
 		qp->s_flags |= HFI1_S_RESP_PENDING;
 		hfi1_schedule_send(qp);
 
-		goto sunlock;
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		if (is_fecn)
+			goto send_ack;
+		return;
 	}
 
 	case OP(COMPARE_SWAP):
@@ -2354,7 +2358,10 @@ send_last:
 		qp->s_flags |= HFI1_S_RESP_PENDING;
 		hfi1_schedule_send(qp);
 
-		goto sunlock;
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		if (is_fecn)
+			goto send_ack;
+		return;
 	}
 
 	default:
@@ -2415,10 +2422,6 @@ nack_acc:
 	qp->r_ack_psn = qp->r_psn;
 send_ack:
 	hfi1_send_rc_ack(rcd, qp, is_fecn);
-	return;
-
-sunlock:
-	spin_unlock_irqrestore(&qp->s_lock, flags);
 }
 
 void hfi1_rc_hdrerr(
