@@ -6,6 +6,7 @@
 #include <linux/aio_abi.h>
 #include <linux/uio.h>
 #include <linux/rcupdate.h>
+#include <linux/fs.h>
 
 #include <linux/atomic.h>
 
@@ -31,7 +32,15 @@ typedef int (kiocb_cancel_fn)(struct kiocb *);
 
 struct kiocb {
 	struct file		*ki_filp;
+	/*
+	 * KABI madness: We store value of filp->f_flags in low two bits of
+	 * ki_ctx instead of having extra flags field to avoid KABI breakage.
+	 */
+#ifdef __GENKSYMS__
 	struct kioctx		*ki_ctx;	/* NULL for sync ops */
+#else
+	unsigned long		ki_ctx;
+#endif
 	kiocb_cancel_fn		*ki_cancel;
 	void			*private;
 
@@ -54,15 +63,44 @@ struct kiocb {
 	struct eventfd_ctx	*ki_eventfd;
 };
 
+#define IOCB_APPEND (1 << 0)
+#define IOCB_DIRECT (1 << 1)
+#define IOCB_FLAGS_MASK (IOCB_APPEND | IOCB_DIRECT)
+
+static inline struct kiocb *kiocb_ctx(struct kiocb *kiocb)
+{
+	return (struct kiocb *)(kiocb->ki_ctx & ~IOCB_FLAGS_MASK);
+}
+
+static inline bool kiocb_is_direct(struct kiocb *kiocb)
+{
+	return kiocb->ki_ctx & IOCB_DIRECT;
+}
+
+static inline bool kiocb_is_append(struct kiocb *kiocb)
+{
+	return kiocb->ki_ctx & IOCB_APPEND;
+}
+
 static inline bool is_sync_kiocb(struct kiocb *kiocb)
 {
-	return kiocb->ki_ctx == NULL;
+	return kiocb_ctx(kiocb) == NULL;
+}
+
+static inline int iocb_flags(struct file *file)
+{
+	int res = 0;
+	if (file->f_flags & O_APPEND)
+		res |= IOCB_APPEND;
+	if (file->f_flags & O_DIRECT)
+		res |= IOCB_DIRECT;
+	return res;
 }
 
 static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 {
 	*kiocb = (struct kiocb) {
-			.ki_ctx = NULL,
+			.ki_ctx = filp ? iocb_flags(filp) : 0,
 			.ki_filp = filp,
 			.ki_obj.tsk = current,
 		};

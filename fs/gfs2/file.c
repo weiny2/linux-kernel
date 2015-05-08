@@ -708,7 +708,7 @@ static ssize_t gfs2_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 	gfs2_size_hint(file, pos, writesize);
 
-	if (file->f_flags & O_APPEND) {
+	if (kiocb_is_append(iocb)) {
 		struct gfs2_holder gh;
 
 		ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &gh);

@@ -1647,7 +1647,7 @@ generic_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		return retval;
 
 	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
-	if (filp->f_flags & O_DIRECT) {
+	if (kiocb_is_direct(iocb)) {
 		loff_t size;
 		struct address_space *mapping;
 		struct inode *inode;
@@ -2304,7 +2304,8 @@ EXPORT_SYMBOL(iov_iter_single_seg_count);
  * Returns appropriate error code that caller should return or
  * zero in case that write should be allowed.
  */
-inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, int isblk)
+int __generic_write_checks(struct kiocb *iocb, struct file *file,
+			   loff_t *pos, size_t *count, int isblk)
 {
 	struct inode *inode = file->f_mapping->host;
 	unsigned long limit = rlimit(RLIMIT_FSIZE);
@@ -2314,7 +2315,8 @@ inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, i
 
 	if (!isblk) {
 		/* FIXME: this is for backwards compatibility with 2.4 */
-		if (file->f_flags & O_APPEND)
+		if ((iocb && kiocb_is_append(iocb)) ||
+		    (!iocb && (file->f_flags & O_APPEND)))
                         *pos = i_size_read(inode);
 
 		if (limit != RLIM_INFINITY) {
@@ -2376,6 +2378,18 @@ inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, i
 #endif
 	}
 	return 0;
+}
+
+int generic_write_checks2(struct kiocb *iocb, loff_t *pos, size_t *count,
+			  int isblk)
+{
+	return __generic_write_checks(iocb, iocb->ki_filp, pos, count, isblk);
+}
+EXPORT_SYMBOL(generic_write_checks2);
+
+int generic_write_checks(struct file *file, loff_t *pos, size_t *count, int isblk)
+{
+	return __generic_write_checks(NULL, file, pos, count, isblk);
 }
 EXPORT_SYMBOL(generic_write_checks);
 
@@ -2644,7 +2658,7 @@ ssize_t __generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	current->backing_dev_info = mapping->backing_dev_info;
 	written = 0;
 
-	err = generic_write_checks(file, &pos, &count, S_ISBLK(inode->i_mode));
+	err = generic_write_checks2(iocb, &pos, &count, S_ISBLK(inode->i_mode));
 	if (err)
 		goto out;
 
@@ -2660,7 +2674,7 @@ ssize_t __generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		goto out;
 
 	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
-	if (unlikely(file->f_flags & O_DIRECT)) {
+	if (unlikely(kiocb_is_direct(iocb))) {
 		loff_t endbyte;
 		ssize_t written_buffered;
 

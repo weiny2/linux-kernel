@@ -2098,7 +2098,7 @@ static ssize_t ntfs_file_aio_write_nolock(struct kiocb *iocb,
 	/* We can write back this queue in page reclaim. */
 	current->backing_dev_info = mapping->backing_dev_info;
 	written = 0;
-	err = generic_write_checks(file, &pos, &count, S_ISBLK(inode->i_mode));
+	err = generic_write_checks2(iocb, &pos, &count, S_ISBLK(inode->i_mode));
 	if (err)
 		goto out;
 	if (!count)

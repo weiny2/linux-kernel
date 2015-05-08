@@ -181,7 +181,7 @@ nfs_file_read(struct kiocb *iocb, const struct iovec *iov,
 	struct inode * inode = dentry->d_inode;
 	ssize_t result;
 
-	if (iocb->ki_filp->f_flags & O_DIRECT)
+	if (kiocb_is_direct(iocb))
 		return nfs_file_direct_read(iocb, iov, nr_segs, pos, true);
 
 	dprintk("NFS: read(%s/%s, %lu@%lu)\n",
@@ -669,7 +669,7 @@ ssize_t nfs_file_write(struct kiocb *iocb, const struct iovec *iov,
 	if (result)
 		return result;
 
-	if (iocb->ki_filp->f_flags & O_DIRECT)
+	if (kiocb_is_direct(iocb))
 		return nfs_file_direct_write(iocb, iov, nr_segs, pos, true);
 
 	dprintk("NFS: write(%s/%s, %lu@%Ld)\n",
@@ -682,7 +682,7 @@ ssize_t nfs_file_write(struct kiocb *iocb, const struct iovec *iov,
 	/*
 	 * O_APPEND implies that we must revalidate the file length.
 	 */
-	if (iocb->ki_filp->f_flags & O_APPEND) {
+	if (kiocb_is_append(iocb)) {
 		result = nfs_revalidate_file_size(inode, iocb->ki_filp);
 		if (result)
 			goto out;

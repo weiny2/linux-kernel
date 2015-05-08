@@ -190,7 +190,7 @@ ext4_file_write(struct kiocb *iocb, const struct iovec *iov,
 	}
 
 	iocb->private = &overwrite;
-	if (unlikely(iocb->ki_filp->f_flags & O_DIRECT))
+	if (unlikely(kiocb_is_direct(iocb)))
 		ret = ext4_file_dio_write(iocb, iov, nr_segs, pos);
 	else
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
