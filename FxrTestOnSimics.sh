@@ -12,15 +12,10 @@ if [ -z `pidof simics-common` ]; then
 	FXR.simics >../simics.log &
     popd
     sleep 45
-    ${ssh_cmd} "service opa2_hfi start"
-    if [ ! $? ]; then
-	echo fail on starting opa2_hfi.
-	exit 11
-    fi
 fi
 
 # stop opa2_hfi daemon to release the driver
-${ssh_cmd} "service opa2_hfi stop"
+${ssh_cmd} "service --skip-redirect opa2_hfi stop"
 if [ ! $? ]; then
     echo fail on stoping opa2_hfi.
     exit 12
@@ -43,7 +38,7 @@ if [ ! $? ]; then
     exit 14
 fi
 # start opa2_hfi daemon
-${ssh_cmd} "service opa2_hfi start"
+${ssh_cmd} "service --skip-redirect opa2_hfi start"
 if [ ! $? ]; then
     echo fail on starting opa2_hfi.
     exit 15
