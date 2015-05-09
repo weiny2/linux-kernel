@@ -9,9 +9,12 @@ TAG="v[0-9]*.[0-9]*"
 rm -rf ~/rpmbuild
 git fetch # acquire newly created tag
 if [ -d .git ]; then
-	VERSION=`git describe --tags --long --match="$TAG" | cut -d'-' -f1 | tr -d 'v'`
+	FULL_TAG=`git describe --tags --long --match="$TAG"`
+	VERSION=`echo ${FULL_TAG} | cut -d'-' -f1 | tr -d 'v'`
+	RELEASE=`echo ${FULL_TAG} | cut -d'-' -f2`
+	RELEASE=${RELEASE}`echo ${FULL_TAG} | cut -d'-' -f3`
 fi
-make rpm KVER=${KERNEL_BUILT_AGAINST} NAME=${RPM_PACKAGE_NAME} VERSION=${VERSION}
+make rpm KVER=${KERNEL_BUILT_AGAINST} NAME=${RPM_PACKAGE_NAME} VERSION=${VERSION} RELEASE=${RELEASE}
 res=$?
 if [ ! ${res} ]; then
     echo fail on building driver
