@@ -353,7 +353,7 @@ static inline void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
  * - in the descq ring
  * - in the flush list
  *
- * To avoid ording issues the descq ring needs to be flushed
+ * To avoid ordering issues the descq ring needs to be flushed
  * first followed by the flush list.
  *
  * This routine is called from two places
@@ -1293,7 +1293,7 @@ static inline u8 ahg_mode(struct sdma_txreq *tx)
  * @tx: tx request to clean
  *
  * This is used in the progress routine to clean the tx or
- * by the ULP to toss an inprocess tx build.
+ * by the ULP to toss an in-process tx build.
  *
  * The code can be called multiple times without issue.
  *
@@ -1492,7 +1492,7 @@ retry:
 	 * value read might not be fully up to date. If there are pending
 	 * descriptors and the SDMA idle interrupt fired then read from the
 	 * CSR SDMA head instead to get the latest value from the hardware.
-	 * The hardware SDMA head should be read atmost once in this invocation
+	 * The hardware SDMA head should be read at most once in this invocation
 	 * of sdma_make_progress(..) which is ensured by idle_check_done flag
 	 */
 	if ((status & sde->idle_mask) && !idle_check_done) {
@@ -2022,7 +2022,7 @@ static int sdma_check_progress(
  * @wait: wait structure to use when full (may be NULL)
  * @tx: sdma_txreq to submit
  *
- * The call submits the tx into the ring.  If a iowait struture is non-NULL
+ * The call submits the tx into the ring.  If a iowait structure is non-NULL
  * the packet will be queued to the list in wait.
  *
  * Return:
@@ -2091,7 +2091,7 @@ nodesc:
  *
  * The call submits the list into the ring.
  *
- * If the iowait struture is non-NULL and not equal to the iowait list
+ * If the iowait structure is non-NULL and not equal to the iowait list
  * the unprocessed part of the list  will be appended to the list in wait.
  *
  * In all cases, the tx_list will be updated so the head of the tx_list is
@@ -2807,7 +2807,7 @@ void _sdma_txreq_ahgadd(
  * @sde: engine to allocate from
  *
  * Return:
- * 0-31 when succesfull, -EOPNOTSUPP if AHG is not enabled,
+ * 0-31 when successful, -EOPNOTSUPP if AHG is not enabled,
  * -ENOSPC if an entry is not available
  */
 int sdma_ahg_alloc(struct sdma_engine *sde)

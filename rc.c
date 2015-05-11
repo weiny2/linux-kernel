@@ -144,7 +144,7 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
 			 * If a RDMA read response is being resent and
 			 * we haven't seen the duplicate request yet,
 			 * then stop sending the remaining responses the
-			 * responder has seen until the requester resends it.
+			 * responder has seen until the requester re-sends it.
 			 */
 			len = e->rdma_sge.sge_length;
 			if (len && !e->rdma_sge.mr) {
@@ -276,7 +276,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 
 	/*
 	 * The lock is needed to synchronize between the sending tasklet,
-	 * the receive interrupt handler, and timeout resends.
+	 * the receive interrupt handler, and timeout re-sends.
 	 */
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -535,7 +535,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		 * is never set to RDMA read response.
 		 * RDMA_READ_RESPONSE_FIRST is used by the ACK processing
 		 * thread to indicate a SEND needs to be restarted from an
-		 * earlier PSN without interferring with the sending thread.
+		 * earlier PSN without interfering with the sending thread.
 		 * See restart_rc().
 		 */
 		qp->s_len = restart_sge(&qp->s_sge, wqe, qp->s_psn, pmtu);
@@ -577,7 +577,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		 * is never set to RDMA read response.
 		 * RDMA_READ_RESPONSE_LAST is used by the ACK processing
 		 * thread to indicate a RDMA write needs to be restarted from
-		 * an earlier PSN without interferring with the sending thread.
+		 * an earlier PSN without interfering with the sending thread.
 		 * See restart_rc().
 		 */
 		qp->s_len = restart_sge(&qp->s_sge, wqe, qp->s_psn, pmtu);
@@ -619,7 +619,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		 * is never set to RDMA read response.
 		 * RDMA_READ_RESPONSE_MIDDLE is used by the ACK processing
 		 * thread to indicate a RDMA read needs to be restarted from
-		 * an earlier PSN without interferring with the sending thread.
+		 * an earlier PSN without interfering with the sending thread.
 		 * See restart_rc().
 		 */
 		len = (delta_psn(qp->s_psn, wqe->psn)) * pmtu;
@@ -1046,7 +1046,7 @@ void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr)
 			qp->s_last = 0;
 	}
 	/*
-	 * If we were waiting for sends to complete before resending,
+	 * If we were waiting for sends to complete before re-sending,
 	 * and they are now complete, restart sending.
 	 */
 	trace_hfi_rc_sendcomplete(qp, psn);
@@ -1109,7 +1109,7 @@ static struct hfi1_swqe *do_rc_completion(struct hfi1_qp *qp,
 
 	/*
 	 * If we are completing a request which is in the process of
-	 * being resent, we can stop resending it since we know the
+	 * being resent, we can stop re-sending it since we know the
 	 * responder has already seen it.
 	 */
 	if (qp->s_acked == qp->s_cur) {
@@ -1251,11 +1251,11 @@ static int do_rc_ack(struct hfi1_qp *qp, u32 aeth, u32 psn, int opcode,
 		if (qp->s_acked != qp->s_tail) {
 			/*
 			 * We are expecting more ACKs so
-			 * reset the retransmit timer.
+			 * reset the re-transmit timer.
 			 */
 			start_timer(qp);
 			/*
-			 * We can stop resending the earlier packets and
+			 * We can stop re-sending the earlier packets and
 			 * continue with the next packet the receiver wants.
 			 */
 			if (cmp_psn(qp->s_psn, psn) <= 0)
@@ -2158,7 +2158,7 @@ send_last:
 		 *
 		 * However, the way the SL is chosen below is consistent
 		 * with the way that IB/qib works and is trying avoid
-		 * introducing incompatabilities.
+		 * introducing incompatibilities.
 		 *
 		 * See also OPA Vol. 1, section 9.7.6, and table 9-17.
 		 */

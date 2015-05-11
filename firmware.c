@@ -153,15 +153,15 @@ struct augmented_firmware_file {
 						sizeof(struct firmware_file))
 
 struct firmware_details {
-	/* linux core piece */
+	/* Linux core piece */
 	const struct firmware *fw;
 
 	struct css_header *css_header;
 	u8 *firmware_ptr;		/* pointer to binary data */
 	u32 firmware_len;		/* length in bytes */
-	u8 *modulus;			/* pointer to the moduls */
+	u8 *modulus;			/* pointer to the modulus */
 	u8 *exponent;			/* pointer to the exponent */
-	u8 *signature;			/* ponter to the signature */
+	u8 *signature;			/* pointer to the signature */
 	u8 *r2;				/* pointer to r2 */
 	u8 *mu;				/* pointer to mu */
 	struct augmented_firmware_file dummy_header;
@@ -205,7 +205,7 @@ static struct firmware_details fw_sbus;
 /* hardware mutex timeout, in ms */
 #define HM_TIMEOUT 4000 /* 4 s */
 
-/* 8051 memory access timout, in us */
+/* 8051 memory access timeout, in us */
 #define DC8051_ACCESS_TIMEOUT 100 /* us */
 
 /* the number of fabric SerDes on the SBus */
@@ -358,7 +358,7 @@ static int payload_check(struct hfi_devdata *dd, const char *name,
 
 /*
  * Request the firmware from the system.  Extract the pieces and fill in
- * fdet.  If succsessful, the caller will need to call dispose_one_firmware().
+ * fdet.  If successful, the caller will need to call dispose_one_firmware().
  * Returns 0 on success, -ERRNO on error.
  */
 static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
@@ -409,7 +409,7 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 	 * If the file does not have a valid CSS header, fail.
 	 * Otherwise, check the CSS size field for an expected size.
 	 * The augmented file has r2 and mu inserted after the header
-	 * was genereated, so there will be a known difference between
+	 * was generated, so there will be a known difference between
 	 * the CSS header size and the actual file size.  Use this
 	 * difference to identify an augmented file.
 	 *
@@ -420,7 +420,7 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 		/* assume this is a raw binary, with no CSS header */
 		dd_dev_info(dd, "Invalid CSS header for \"%s\"\n", name);
 	} else if ((css->size*4) == fdet->fw->size) {
-		/* non-agumented firmware file */
+		/* non-augmented firmware file */
 		struct firmware_file *ff = (struct firmware_file *)
 							fdet->fw->data;
 
@@ -445,7 +445,7 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 			ret = -EINVAL;
 		}
 	} else if ((css->size*4) + AUGMENT_SIZE == fdet->fw->size) {
-		/* agumented firmware file */
+		/* augmented firmware file */
 		struct augmented_firmware_file *aff =
 			(struct augmented_firmware_file *)fdet->fw->data;
 
@@ -550,7 +550,7 @@ done:
 /*
  * Called when the driver unloads.  The timing is asymmetric with its
  * counterpart, obtain_firmware().  If called at device remove time,
- * then it is concievable that another device could probe while the
+ * then it is conceivable that another device could probe while the
  * firmware is being disposed.  The mutexes can be moved to do that
  * safely, but then the firmware would be requested from the OS multiple
  * times.
@@ -624,7 +624,7 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 	/* write the signature */
 	write_rsa_data(dd, MISC_CFG_RSA_SIGNATURE, signature, KEY_SIZE);
 
-	/* init RSA */
+	/* initialize RSA */
 	write_csr(dd, MISC_CFG_RSA_CMD, RSA_CMD_INIT);
 
 	/*
@@ -672,7 +672,7 @@ static int run_rsa(struct hfi_devdata *dd, const char *who, const u8 *signature)
 
 		if (status == RSA_STATUS_IDLE) {
 			/* should not happen */
-			dd_dev_err(dd, "%s firmwre security bad idle state\n",
+			dd_dev_err(dd, "%s firmware security bad idle state\n",
 				who);
 			ret = -EINVAL;
 			break;
@@ -825,7 +825,7 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 */
 	/*
 	 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
-	 * Clear or set DISABLE_VALIDATION dependig on if we are validating.
+	 * Clear or set DISABLE_VALIDATION depending on if we are validating.
 	 */
 	write_csr(dd, MISC_CFG_FW_CTRL, MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
 

@@ -193,7 +193,7 @@ struct ib_mad_notice_attr {
 #define IB_NOTICE_TRAP_NODE_DESC_CHG	0x01
 
 /*
- * Generic trap/notice M_Key volation flags in dr_trunc_hop (trap 256).
+ * Generic trap/notice M_Key violation flags in dr_trunc_hop (trap 256).
  */
 #define IB_NOTICE_TRAP_DR_NOTICE	0x80
 #define IB_NOTICE_TRAP_DR_TRUNC		0x40

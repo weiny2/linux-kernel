@@ -863,7 +863,7 @@ bail:
 			      ((temp) >> 2), ((temp) & 0x3) * 25)
 
 /*
- * Dump tempsense regs. in decimal, to ease shell-scripts.
+ * Dump tempsense values, in decimal, to ease shell-scripts.
  */
 static ssize_t show_tempsense(struct device *device,
 			      struct device_attribute *attr, char *buf)

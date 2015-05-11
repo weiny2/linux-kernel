@@ -189,7 +189,7 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	}
 
 #if defined(__powerpc__)
-	/* There isn't a generic way to specify writethrough mappings */
+	/* There isn't a generic way to specify write-through mappings */
 	dd->kregbase = __ioremap(addr, TXE_PIO_SEND,
 					_PAGE_NO_CACHE | _PAGE_WRITETHRU);
 #else
@@ -211,7 +211,7 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 	dd->physaddr = addr;        /* used for io_remap, etc. */
 
 	/*
-	 * Re-map the chip's RcvArray as write-compbining to allow us
+	 * Re-map the chip's RcvArray as write-combining to allow us
 	 * to write an entire cacheline worth of entries in one shot.
 	 * If this re-map fails, just continue - the RcvArray programming
 	 * function will handle both cases.
@@ -280,7 +280,7 @@ void hfi_pcie_flr(struct hfi_devdata *dd)
 			goto clear;
 	}
 
-	dd_dev_err(dd, "Transaction Pending bit is not clearing, proceedingreset anyway\n");
+	dd_dev_err(dd, "Transaction Pending bit is not clearing, proceeding with reset anyway\n");
 
 clear:
 	pcie_capability_set_word(dd->pcidev, PCI_EXP_DEVCTL,
@@ -502,7 +502,7 @@ static int val2fld(int wd, int mask)
 
 static int hfi1_pcie_coalesce;
 module_param_named(pcie_coalesce, hfi1_pcie_coalesce, int, S_IRUGO);
-MODULE_PARM_DESC(pcie_coalesce, "tune PCIe colescing on some Intel chipsets");
+MODULE_PARM_DESC(pcie_coalesce, "tune PCIe coalescing on some Intel chipsets");
 
 /*
  * Enable PCIe completion and data coalescing, on Intel 5x00 and 7300
@@ -778,7 +778,7 @@ const struct pci_error_handlers hfi1_pci_err_handler = {
 /* gasket block secondary bus reset delay */
 #define SBR_DELAY_US 200000	/* 200ms */
 
-/* mask for PCIe capability regiser lnkctl2 target link speed */
+/* mask for PCIe capability register lnkctl2 target link speed */
 #define LNKCTL2_TARGET_LINK_SPEED_MASK 0xf
 
 static uint pcie_target = 3;
@@ -927,7 +927,7 @@ static void pcie_post_steps(struct hfi_devdata *dd)
 }
 
 /*
- * Trigger a secondary bus reset (SBR) on ourself using our parent.
+ * Trigger a secondary bus reset (SBR) on ourselves using our parent.
  *
  * Based on pci_parent_bus_reset() which is not exported by the
  * kernel core.
@@ -1081,7 +1081,7 @@ retry:
 	/*
 	 * PcieCfgSpcie1 - Link Control 3
 	 * Leave at reset value.  No need to set PerfEq - link equalization
-	 * will be performced automatically after the SBR when the target
+	 * will be performed automatically after the SBR when the target
 	 * speed is 8GT/s.
 	 */
 
@@ -1207,7 +1207,7 @@ retry:
 	/* hold DC in reset across the SBR */
 	write_csr(dd, CCE_DC_CTRL, CCE_DC_CTRL_DC_RESET_SMASK);
 	(void) read_csr(dd, CCE_DC_CTRL); /* DC reset hold */
-	/* save firwmare control across the SBR */
+	/* save firmware control across the SBR */
 	fw_ctrl = read_csr(dd, MISC_CFG_FW_CTRL);
 
 	dd_dev_info(dd, "%s: arming gasket logic\n", __func__);

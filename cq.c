@@ -60,7 +60,7 @@
  * hfi1_cq_enter - add a new entry to the completion queue
  * @cq: completion queue
  * @entry: work completion entry to add
- * @sig: true if @entry is a solicitated entry
+ * @sig: true if @entry is a solicited entry
  *
  * This may be called with qp->s_lock held.
  */

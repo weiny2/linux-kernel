@@ -385,7 +385,7 @@ static ssize_t portnames_read(struct file *file, char __user *buf,
 
 	rcu_read_lock();
 	dd = private2dd(file);
-	/* port num n/a here since names are constant */
+	/* port number n/a here since names are constant */
 	avail = hfi1_read_portcntrs(dd, *ppos, 0, &names, NULL);
 	rval = simple_read_from_buffer(buf, count, ppos, names, avail);
 	rcu_read_unlock();
