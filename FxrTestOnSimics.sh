@@ -1,18 +1,20 @@
 #!/bin/sh
 set -x
 
-fxr=~caz/fabric/fxr
+fxr=/mnt/fabric/fxr
 ssh_cmd="ssh -p4022 root@localhost"
 scp_cmd="scp -P4022"
 
 # start simics if not yet
 if [ -z `pidof simics-common` ]; then
     pushd ${fxr}/simics/workspace
-    ./simics -no-win -e '$disk_image=../FxrRhel7-201505011038.craff' \
+    ./simics -no-win -e '$disk_image=../FxrRhel7.craff' \
 	FXR.simics >../simics.log &
     popd
     sleep 45
 fi
+${fxr}/simics/workspace/bin/simics --version
+ls -l ${fxr}/simics/FxrRhel7.craff
 
 # stop opa2_hfi daemon to release the driver
 ${ssh_cmd} "service --skip-redirect opa2_hfi stop"
