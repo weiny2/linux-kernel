@@ -1657,10 +1657,15 @@ static void sdma_hw_start_up(struct sdma_engine *sde)
 	write_sde_csr(sde, SD(ENG_ERR_CLEAR), reg);
 }
 
+#define CLEAR_STATIC_RATE_CONTROL_SMASK(r) \
+(r &= ~SEND_DMA_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
+
+#define SET_STATIC_RATE_CONTROL_SMASK(r) \
+(r |= SEND_DMA_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
 /*
  * set_sdma_integrity
  *
- * Set the SD(CHECK_ENABLE register for send DMA engine 'sde'.
+ * Set the SEND_DMA_CHECK_ENABLE register for send DMA engine 'sde'.
  */
 static void set_sdma_integrity(struct sdma_engine *sde)
 {
@@ -1671,6 +1676,11 @@ static void set_sdma_integrity(struct sdma_engine *sde)
 		return;
 
 	reg = hfi_pkt_base_sdma_integrity(dd);
+
+	if (HFI_CAP_IS_KSET(STATIC_RATE_CTRL))
+		CLEAR_STATIC_RATE_CONTROL_SMASK(reg);
+	else
+		SET_STATIC_RATE_CONTROL_SMASK(reg);
 
 	write_sde_csr(sde, SD(CHECK_ENABLE), reg);
 }
