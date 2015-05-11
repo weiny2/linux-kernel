@@ -1418,8 +1418,10 @@ bail:
 	return -EINVAL;
 }
 
-static int get_platform_fw_field_metadata(struct hfi1_devdata *dd, int table,
-		int field, u32 *field_len_bits, u32 *field_start_bits)
+static int get_platform_config_field_metadata(
+		struct hfi1_devdata *dd,
+		int table, int field, u32 *field_len_bits,
+		u32 *field_start_bits)
 {
 	struct platform_config_cache *pcfgcache = &dd->pcfg_cache;
 	u32 *src_ptr = NULL;
@@ -1491,8 +1493,9 @@ int get_platform_config_field(struct hfi1_devdata *dd,
 	else
 		return -EINVAL;
 
-	ret = get_platform_fw_field_metadata(dd, table_type, field_index,
-					&field_len_bits, &field_start_bits);
+	ret = get_platform_config_field_metadata(dd, table_type, field_index,
+						 &field_len_bits,
+						 &field_start_bits);
 	if (ret)
 		return -EINVAL;
 

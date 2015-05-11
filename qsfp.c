@@ -295,6 +295,8 @@ int qsfp_read(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
  * This function caches the QSFP memory range in 128 byte chunks.
  * As an example, the next byte after address 255 is byte 128 from
  * upper page 01H (if existing) rather than byte 0 from lower page 00H.
+ * Access page n, offset m of QSFP memory as defined by SFF 8636
+ * in the cache by reading byte ((128 * n) + m)
  */
 int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 {
@@ -305,22 +307,31 @@ int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 
 	/* ensure sane contents on invalid reads, for cable swaps */
 	memset(cache, 0, (QSFP_MAX_NUM_PAGES*128));
-	dd_dev_info(ppd->dd, "%s: called\n", __func__);
+	spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
+	ppd->qsfp_info.cache_valid = 0;
+	spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
+
+	dd_dev_info(ppd->dd, "%s called\n", __func__);
 	if (!qsfp_mod_present(ppd)) {
 		ret = -ENODEV;
 		goto bail;
 	}
 
-	ret = qsfp_read(ppd, target, 0, cache, 256);
-	if (ret != 256) {
+	ret = qsfp_read(ppd, target, 0, cache, 128);
+	if (ret != 128) {
 		dd_dev_info(ppd->dd,
-			"%s: Read of pages 00H failed, expected 256, got %d\n",
+			"%s: Lower page 0 read failed, expected 128, got %d\n",
 			__func__, ret);
 		goto bail;
 	}
 
-	if (cache[0] != 0x0C && cache[0] != 0x0D)
+	ret = qsfp_read(ppd, target, 128, cache + 128, 128);
+	if (ret != 128) {
+		dd_dev_info(ppd->dd,
+			"%s: Upper page 0 read failed, expected 128, got %d\n",
+			__func__, ret);
 		goto bail;
+	}
 
 	/* Is paging enabled? */
 	if (!(cache[2] & 4)) {
@@ -330,48 +341,48 @@ int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 			/* all */
 			ret = qsfp_read(ppd, target, 384, cache + 256, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 			ret = qsfp_read(ppd, target, 640, cache + 384, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 		} else if ((cache[195] & 0x80) == 0x80) {
 			/* only page 2 and 3 */
 			ret = qsfp_read(ppd, target, 640, cache + 384, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 		} else if ((cache[195] & 0x40) == 0x40) {
 			/* only page 1 and 3 */
 			ret = qsfp_read(ppd, target, 384, cache + 256, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 		} else {
 			/* only page 3 */
 			ret = qsfp_read(ppd, target, 896, cache + 512, 128);
 			if (ret <= 0 || ret != 128) {
-				dd_dev_info(ppd->dd, "%s: failed\n", __func__);
+				dd_dev_info(ppd->dd, "%s failed\n", __func__);
 				goto bail;
 			}
 		}
@@ -383,7 +394,6 @@ int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 	spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock, flags);
 
 	return 0;
-
 bail:
 	memset(cache, 0, (QSFP_MAX_NUM_PAGES*128));
 	return ret;
