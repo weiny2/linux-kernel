@@ -412,7 +412,7 @@ static const struct nd_cmd_desc const __nd_cmd_dimm_descs[] = {
 	},
 };
 
-struct nd_cmd_desc const *nd_cmd_dimm_desc(int cmd)
+const struct nd_cmd_desc *nd_cmd_dimm_desc(int cmd)
 {
 	if (cmd < ARRAY_SIZE(__nd_cmd_dimm_descs))
 		return &__nd_cmd_dimm_descs[cmd];

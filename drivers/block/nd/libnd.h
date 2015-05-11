@@ -104,8 +104,8 @@ void *nd_dimm_provider_data(struct nd_dimm *nd_dimm);
 struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus, void *provider_data,
 		const struct attribute_group **groups, unsigned long flags,
 		unsigned long *dsm_mask);
-const struct nd_cmd_desc const *nd_cmd_dimm_desc(int cmd);
-const struct nd_cmd_desc const *nd_cmd_bus_desc(int cmd);
+const struct nd_cmd_desc *nd_cmd_dimm_desc(int cmd);
+const struct nd_cmd_desc *nd_cmd_bus_desc(int cmd);
 u32 nd_cmd_in_size(struct nd_dimm *nd_dimm, int cmd,
 		const struct nd_cmd_desc *desc, int idx, void *buf);
 u32 nd_cmd_out_size(struct nd_dimm *nd_dimm, int cmd,
