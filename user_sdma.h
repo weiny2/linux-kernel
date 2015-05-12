@@ -64,26 +64,26 @@
 
 extern uint extended_psn;
 
-struct hfi_user_sdma_pkt_q {
+struct hfi1_user_sdma_pkt_q {
 	struct list_head list;
 	unsigned ctxt;
 	unsigned subctxt;
 	u16 n_max_reqs;
 	atomic_t n_reqs;
 	u16 reqidx;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	struct kmem_cache *txreq_cache;
 	struct user_sdma_request *reqs;
 	struct iowait busy;
 	unsigned state;
 };
 
-struct hfi_user_sdma_comp_q {
+struct hfi1_user_sdma_comp_q {
 	u16 nentries;
-	struct hfi_sdma_comp_entry *comps;
+	struct hfi1_sdma_comp_entry *comps;
 };
 
-int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *, struct file *);
-int hfi_user_sdma_free_queues(struct hfi_filedata *);
-int hfi_user_sdma_process_request(struct file *, struct iovec *, unsigned long,
-				  unsigned long *);
+int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *, struct file *);
+int hfi1_user_sdma_free_queues(struct hfi1_filedata *);
+int hfi1_user_sdma_process_request(struct file *, struct iovec *, unsigned long,
+				   unsigned long *);

@@ -47,8 +47,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#if !defined(__HFI_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
-#define __HFI_TRACE_H
+#if !defined(__HFI1_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
+#define __HFI1_TRACE_H
 
 #include <linux/tracepoint.h>
 #include <linux/trace_seq.h>
@@ -72,8 +72,8 @@ __print_symbolic(etype,                         \
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_rx
 
-TRACE_EVENT(hfi_rcvhdr,
-	TP_PROTO(struct hfi_devdata *dd,
+TRACE_EVENT(hfi1_rcvhdr,
+	TP_PROTO(struct hfi1_devdata *dd,
 		 u64 eflags,
 		 u32 ctxt,
 		 u32 etype,
@@ -115,8 +115,8 @@ TRACE_EVENT(hfi_rcvhdr,
 	)
 );
 
-TRACE_EVENT(hfi_receive_interrupt,
-	TP_PROTO(struct hfi_devdata *dd, u32 ctxt),
+TRACE_EVENT(hfi1_receive_interrupt,
+	TP_PROTO(struct hfi1_devdata *dd, u32 ctxt),
 	TP_ARGS(dd, ctxt),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
@@ -135,7 +135,7 @@ TRACE_EVENT(hfi_receive_interrupt,
 
 const char *print_u64_array(struct trace_seq *, u64 *, int);
 
-TRACE_EVENT(hfi_exp_tid_map,
+TRACE_EVENT(hfi1_exp_tid_map,
 	    TP_PROTO(unsigned ctxt, u16 subctxt, int dir,
 		     unsigned long *maps, u16 count),
 	    TP_ARGS(ctxt, subctxt, dir, maps, count),
@@ -163,7 +163,7 @@ TRACE_EVENT(hfi_exp_tid_map,
 		    )
 	);
 
-TRACE_EVENT(hfi_exp_rcv_set,
+TRACE_EVENT(hfi1_exp_rcv_set,
 	    TP_PROTO(unsigned ctxt, u16 subctxt, u32 tid,
 		     unsigned long vaddr, u64 phys_addr, void *page),
 	    TP_ARGS(ctxt, subctxt, tid, vaddr, phys_addr, page),
@@ -193,7 +193,7 @@ TRACE_EVENT(hfi_exp_rcv_set,
 		    )
 	);
 
-TRACE_EVENT(hfi_exp_rcv_free,
+TRACE_EVENT(hfi1_exp_rcv_free,
 	    TP_PROTO(unsigned ctxt, u16 subctxt, u32 tid,
 		     unsigned long phys, void *page),
 	    TP_ARGS(ctxt, subctxt, tid, phys, page),
@@ -222,7 +222,7 @@ TRACE_EVENT(hfi_exp_rcv_free,
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_tx
 
-TRACE_EVENT(hfi_piofree,
+TRACE_EVENT(hfi1_piofree,
 	TP_PROTO(struct send_context *sc, int extra),
 	TP_ARGS(sc, extra),
 	TP_STRUCT__entry(
@@ -246,7 +246,7 @@ TRACE_EVENT(hfi_piofree,
 	)
 );
 
-TRACE_EVENT(hfi_wantpiointr,
+TRACE_EVENT(hfi1_wantpiointr,
 	TP_PROTO(struct send_context *sc, u32 needint, u64 credit_ctrl),
 	TP_ARGS(sc, needint, credit_ctrl),
 	TP_STRUCT__entry(
@@ -273,7 +273,7 @@ TRACE_EVENT(hfi_wantpiointr,
 	)
 );
 
-DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
+DECLARE_EVENT_CLASS(hfi1_qpsleepwakeup_template,
 	TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	TP_ARGS(qp, flags),
 	TP_STRUCT__entry(
@@ -297,13 +297,13 @@ DECLARE_EVENT_CLASS(hfi_qpsleepwakeup_template,
 	)
 );
 
-DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpwakeup,
-	TP_PROTO(struct hfi1_qp *qp, u32 flags),
-	TP_ARGS(qp, flags));
+DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpwakeup,
+	     TP_PROTO(struct hfi1_qp *qp, u32 flags),
+	     TP_ARGS(qp, flags));
 
-DEFINE_EVENT(hfi_qpsleepwakeup_template, hfi_qpsleep,
-	TP_PROTO(struct hfi1_qp *qp, u32 flags),
-	TP_ARGS(qp, flags));
+DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpsleep,
+	     TP_PROTO(struct hfi1_qp *qp, u32 flags),
+	     TP_ARGS(qp, flags));
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_ibhdrs
@@ -375,8 +375,8 @@ __print_symbolic(opcode,                                   \
 	"f %d b %d qpn 0x%.6x a %d psn 0x%.8x"
 #define EHDR_PRN "%s"
 
-DECLARE_EVENT_CLASS(hfi_ibhdr_template,
-	TP_PROTO(struct hfi_devdata *dd,
+DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
+	TP_PROTO(struct hfi1_devdata *dd,
 		 struct hfi1_ib_header *hdr),
 	TP_ARGS(dd, hdr),
 	TP_STRUCT__entry(
@@ -489,24 +489,24 @@ DECLARE_EVENT_CLASS(hfi_ibhdr_template,
 	)
 );
 
-DEFINE_EVENT(hfi_ibhdr_template, input_ibhdr,
-	TP_PROTO(struct hfi_devdata *dd, struct hfi1_ib_header *hdr),
-	TP_ARGS(dd, hdr));
+DEFINE_EVENT(hfi1_ibhdr_template, input_ibhdr,
+	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
+	     TP_ARGS(dd, hdr));
 
-DEFINE_EVENT(hfi_ibhdr_template, output_ibhdr,
-	TP_PROTO(struct hfi_devdata *dd, struct hfi1_ib_header *hdr),
-	TP_ARGS(dd, hdr));
+DEFINE_EVENT(hfi1_ibhdr_template, output_ibhdr,
+	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
+	     TP_ARGS(dd, hdr));
 
 #define SNOOP_PRN \
 	"slid %.4x dlid %.4x qpn 0x%.6x opcode 0x%.2x,%s " \
 	"svc lvl %d pkey 0x%.4x [header = %d bytes] [data = %d bytes]"
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi_snoop
+#define TRACE_SYSTEM hfi1_snoop
 
 
 TRACE_EVENT(snoop_capture,
-	TP_PROTO(struct hfi_devdata *dd,
+	TP_PROTO(struct hfi1_devdata *dd,
 		 int hdr_len,
 		 struct hfi1_ib_header *hdr,
 		 int data_len,
@@ -566,8 +566,8 @@ TRACE_EVENT(snoop_capture,
 #define UCTXT_FMT \
 	"cred:%u, credaddr:0x%llx, piobase:0x%llx, rcvhdr_cnt:%u, "	\
 	"rcvbase:0x%llx, rcvegrc:%u, rcvegrb:0x%llx"
-TRACE_EVENT(hfi_uctxtdata,
-	    TP_PROTO(struct hfi_devdata *dd, struct hfi1_ctxtdata *uctxt),
+TRACE_EVENT(hfi1_uctxtdata,
+	    TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ctxtdata *uctxt),
 	    TP_ARGS(dd, uctxt),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
@@ -607,9 +607,9 @@ TRACE_EVENT(hfi_uctxtdata,
 
 #define CINFO_FMT \
 	"egrtids:%u, egr_size:%u, hdrq_cnt:%u, hdrq_size:%u, sdma_ring_size:%u"
-TRACE_EVENT(hfi_ctxt_info,
-	    TP_PROTO(struct hfi_devdata *dd, unsigned ctxt, unsigned subctxt,
-		     struct hfi_ctxt_info cinfo),
+TRACE_EVENT(hfi1_ctxt_info,
+	    TP_PROTO(struct hfi1_devdata *dd, unsigned ctxt, unsigned subctxt,
+		     struct hfi1_ctxt_info cinfo),
 	    TP_ARGS(dd, ctxt, subctxt, cinfo),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
@@ -655,8 +655,8 @@ TRACE_EVENT(hfi_ctxt_info,
 		((struct buffer_control *)__get_dynamic_array(bct))->field \
 	)
 
-DECLARE_EVENT_CLASS(hfi_bct_template,
-	TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
+DECLARE_EVENT_CLASS(hfi1_bct_template,
+	TP_PROTO(struct hfi1_devdata *dd, struct buffer_control *bc),
 	TP_ARGS(dd, bc),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
@@ -702,18 +702,18 @@ DECLARE_EVENT_CLASS(hfi_bct_template,
 );
 
 
-DEFINE_EVENT(hfi_bct_template, bct_set,
-	TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
-	TP_ARGS(dd, bc));
+DEFINE_EVENT(hfi1_bct_template, bct_set,
+	     TP_PROTO(struct hfi1_devdata *dd, struct buffer_control *bc),
+	     TP_ARGS(dd, bc));
 
-DEFINE_EVENT(hfi_bct_template, bct_get,
-	TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
-	TP_ARGS(dd, bc));
+DEFINE_EVENT(hfi1_bct_template, bct_get,
+	     TP_PROTO(struct hfi1_devdata *dd, struct buffer_control *bc),
+	     TP_ARGS(dd, bc));
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_sdma
 
-TRACE_EVENT(hfi_sdma_descriptor,
+TRACE_EVENT(hfi1_sdma_descriptor,
 	TP_PROTO(
 		struct sdma_engine *sde,
 		u64 desc0,
@@ -755,8 +755,8 @@ TRACE_EVENT(hfi_sdma_descriptor,
 	)
 );
 
-TRACE_EVENT(hfi_sdma_engine_select,
-	TP_PROTO(struct hfi_devdata *dd, u32 sel, u8 vl, u8 idx),
+TRACE_EVENT(hfi1_sdma_engine_select,
+	TP_PROTO(struct hfi1_devdata *dd, u32 sel, u8 vl, u8 idx),
 	TP_ARGS(dd, sel, vl, idx),
 	TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
@@ -779,7 +779,7 @@ TRACE_EVENT(hfi_sdma_engine_select,
 	)
 );
 
-TRACE_EVENT(hfi_sdma_engine_interrupt,
+TRACE_EVENT(hfi1_sdma_engine_interrupt,
 	TP_PROTO(
 		struct sdma_engine *sde,
 		u64 status
@@ -803,7 +803,7 @@ TRACE_EVENT(hfi_sdma_engine_interrupt,
 	)
 );
 
-DECLARE_EVENT_CLASS(hfi_sdma_ahg_ad,
+DECLARE_EVENT_CLASS(hfi1_sdma_ahg_ad,
 	TP_PROTO(
 		struct sdma_engine *sde,
 		int aidx
@@ -827,22 +827,22 @@ DECLARE_EVENT_CLASS(hfi_sdma_ahg_ad,
 	)
 );
 
-DEFINE_EVENT(hfi_sdma_ahg_ad, hfi_ahg_allocate,
-	TP_PROTO(
+DEFINE_EVENT(hfi1_sdma_ahg_ad, hfi1_ahg_allocate,
+	     TP_PROTO(
 		struct sdma_engine *sde,
 		int aidx
-	),
-	TP_ARGS(sde, aidx));
+	     ),
+	     TP_ARGS(sde, aidx));
 
-DEFINE_EVENT(hfi_sdma_ahg_ad, hfi_ahg_deallocate,
-	TP_PROTO(
+DEFINE_EVENT(hfi1_sdma_ahg_ad, hfi1_ahg_deallocate,
+	     TP_PROTO(
 		struct sdma_engine *sde,
 		int aidx
-	),
-	TP_ARGS(sde, aidx));
+	     ),
+	     TP_ARGS(sde, aidx));
 
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
-TRACE_EVENT(hfi_sdma_progress,
+TRACE_EVENT(hfi1_sdma_progress,
 	TP_PROTO(
 		struct sdma_engine *sde,
 		u16 hwhead,
@@ -883,7 +883,7 @@ TRACE_EVENT(hfi_sdma_progress,
 	)
 );
 #else
-TRACE_EVENT(hfi_sdma_progress,
+TRACE_EVENT(hfi1_sdma_progress,
 	    TP_PROTO(
 		struct sdma_engine *sde,
 		u16 hwhead,
@@ -922,7 +922,7 @@ TRACE_EVENT(hfi_sdma_progress,
 );
 #endif
 
-DECLARE_EVENT_CLASS(hfi_sdma_sn,
+DECLARE_EVENT_CLASS(hfi1_sdma_sn,
 	TP_PROTO(
 		struct sdma_engine *sde,
 		u64 sn
@@ -946,28 +946,28 @@ DECLARE_EVENT_CLASS(hfi_sdma_sn,
 	)
 );
 
-DEFINE_EVENT(hfi_sdma_sn, hfi_sdma_out_sn,
-	TP_PROTO(
+DEFINE_EVENT(hfi1_sdma_sn, hfi1_sdma_out_sn,
+	     TP_PROTO(
 		struct sdma_engine *sde,
 		u64 sn
-	),
-	TP_ARGS(sde, sn)
+	     ),
+	     TP_ARGS(sde, sn)
 );
 
-DEFINE_EVENT(hfi_sdma_sn, hfi_sdma_in_sn,
-	TP_PROTO(
+DEFINE_EVENT(hfi1_sdma_sn, hfi1_sdma_in_sn,
+	     TP_PROTO(
 		struct sdma_engine *sde,
 		u64 sn
-	),
-	TP_ARGS(sde, sn)
+	     ),
+	     TP_ARGS(sde, sn)
 );
 
 #define USDMA_HDR_FORMAT \
 	"[%s:%u:%u:%u] PBC=(0x%x 0x%x) LRH=(0x%x 0x%x) BTH=(0x%x 0x%x 0x%x) KDETH=(0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x) TIDVal=0x%x"
 
-TRACE_EVENT(hfi_sdma_user_header,
-	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
-		     struct hfi_pkt_header *hdr, u32 tidval),
+TRACE_EVENT(hfi1_sdma_user_header,
+	    TP_PROTO(struct hfi1_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
+		     struct hfi1_pkt_header *hdr, u32 tidval),
 	    TP_ARGS(dd, ctxt, subctxt, req, hdr, tidval),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd)
@@ -1047,8 +1047,8 @@ TRACE_EVENT(hfi_sdma_user_header,
 
 #define SDMA_UREQ_FMT \
 	"[%s:%u:%u] ver/op=0x%x, iovcnt=%u, npkts=%u, frag=%u, idx=%u"
-TRACE_EVENT(hfi_sdma_user_reqinfo,
-	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 *i),
+TRACE_EVENT(hfi1_sdma_user_reqinfo,
+	    TP_PROTO(struct hfi1_devdata *dd, u16 ctxt, u8 subctxt, u16 *i),
 	    TP_ARGS(dd, ctxt, subctxt, i),
 	    TP_STRUCT__entry(
 		    DD_DEV_ENTRY(dd);
@@ -1090,8 +1090,8 @@ TRACE_EVENT(hfi_sdma_user_reqinfo,
 			 usdma_complete_name(COMPLETE), \
 			 usdma_complete_name(ERROR))
 
-TRACE_EVENT(hfi_sdma_user_completion,
-	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 idx,
+TRACE_EVENT(hfi1_sdma_user_completion,
+	    TP_PROTO(struct hfi1_devdata *dd, u16 ctxt, u8 subctxt, u16 idx,
 		     u8 state, int code),
 	    TP_ARGS(dd, ctxt, subctxt, idx, state, code),
 	    TP_STRUCT__entry(
@@ -1119,8 +1119,8 @@ TRACE_EVENT(hfi_sdma_user_completion,
 const char *print_u32_array(struct trace_seq *, u32 *, int);
 #define __print_u32_hex(arr, len) print_u32_array(p, arr, len)
 
-TRACE_EVENT(hfi_sdma_user_header_ahg,
-	    TP_PROTO(struct hfi_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
+TRACE_EVENT(hfi1_sdma_user_header_ahg,
+	    TP_PROTO(struct hfi1_devdata *dd, u16 ctxt, u8 subctxt, u16 req,
 		     u8 sde, u8 ahgidx, u32 *ahg, int len, u32 tidval),
 	    TP_ARGS(dd, ctxt, subctxt, req, sde, ahgidx, ahg, len, tidval),
 	    TP_STRUCT__entry(
@@ -1158,7 +1158,7 @@ TRACE_EVENT(hfi_sdma_user_header_ahg,
 		    )
 	);
 
-TRACE_EVENT(hfi_sdma_state,
+TRACE_EVENT(hfi1_sdma_state,
 	TP_PROTO(
 		struct sdma_engine *sde,
 		const char *cstate,
@@ -1185,7 +1185,7 @@ TRACE_EVENT(hfi_sdma_state,
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_rc
 
-DECLARE_EVENT_CLASS(hfi_sdma_rc,
+DECLARE_EVENT_CLASS(hfi1_sdma_rc,
 	TP_PROTO(struct hfi1_qp *qp, u32 psn),
 	TP_ARGS(qp, psn),
 	TP_STRUCT__entry(
@@ -1215,9 +1215,9 @@ DECLARE_EVENT_CLASS(hfi_sdma_rc,
 	)
 );
 
-DEFINE_EVENT(hfi_sdma_rc, hfi_rc_sendcomplete,
-	TP_PROTO(struct hfi1_qp *qp, u32 psn),
-	TP_ARGS(qp, psn)
+DEFINE_EVENT(hfi1_sdma_rc, hfi1_rc_sendcomplete,
+	     TP_PROTO(struct hfi1_qp *qp, u32 psn),
+	     TP_ARGS(qp, psn)
 );
 
 /*
@@ -1231,7 +1231,7 @@ DEFINE_EVENT(hfi_sdma_rc, hfi_rc_sendcomplete,
 
 #define MAX_MSG_LEN 512
 
-DECLARE_EVENT_CLASS(hfi_trace_template,
+DECLARE_EVENT_CLASS(hfi1_trace_template,
 	TP_PROTO(const char *function, struct va_format *vaf),
 	TP_ARGS(function, vaf),
 	TP_STRUCT__entry(
@@ -1250,23 +1250,23 @@ DECLARE_EVENT_CLASS(hfi_trace_template,
 );
 
 /*
- * It may be nice to macroize the __hfi_trace but the va_* stuff requires an
+ * It may be nice to macroize the __hfi1_trace but the va_* stuff requires an
  * actual function to work and can not be in a macro. Also the fmt can not be a
  * constant char * because we need to be able to manipulate the \n if it is
  * present.
  */
-#define __hfi_trace_event(lvl) \
-DEFINE_EVENT(hfi_trace_template, hfi_ ##lvl,				\
+#define __hfi1_trace_event(lvl) \
+DEFINE_EVENT(hfi1_trace_template, hfi1_ ##lvl,				\
 	TP_PROTO(const char *function, struct va_format *vaf),		\
 	TP_ARGS(function, vaf))
 
-#ifdef HFI_TRACE_DO_NOT_CREATE_INLINES
-#define __hfi_trace_fn(fn) __hfi_trace_event(fn)
+#ifdef HFI1_TRACE_DO_NOT_CREATE_INLINES
+#define __hfi1_trace_fn(fn) __hfi1_trace_event(fn)
 #else
-#define __hfi_trace_fn(fn) \
-__hfi_trace_event(fn); \
+#define __hfi1_trace_fn(fn) \
+__hfi1_trace_event(fn); \
 __printf(2, 3) \
-static inline void __hfi_trace_##fn(const char *func, char *fmt, ...)	\
+static inline void __hfi1_trace_##fn(const char *func, char *fmt, ...)	\
 {									\
 	struct va_format vaf = {					\
 		.fmt = fmt,						\
@@ -1275,7 +1275,7 @@ static inline void __hfi_trace_##fn(const char *func, char *fmt, ...)	\
 									\
 	va_start(args, fmt);						\
 	vaf.va = &args;							\
-	trace_hfi_ ##fn(func, &vaf);					\
+	trace_hfi1_ ##fn(func, &vaf);					\
 	va_end(args);							\
 	return;								\
 }
@@ -1283,48 +1283,48 @@ static inline void __hfi_trace_##fn(const char *func, char *fmt, ...)	\
 
 /*
  * To create a new trace level simply define it as below. This will create all
- * the hooks for calling hfi_cdbg(LVL, fmt, ...); as well as take care of all
+ * the hooks for calling hfi1_cdbg(LVL, fmt, ...); as well as take care of all
  * the debugfs stuff.
  */
-__hfi_trace_fn(RVPKT);
-__hfi_trace_fn(INIT);
-__hfi_trace_fn(VERB);
-__hfi_trace_fn(PKT);
-__hfi_trace_fn(PROC);
-__hfi_trace_fn(MM);
-__hfi_trace_fn(ERRPKT);
-__hfi_trace_fn(SDMA);
-__hfi_trace_fn(VPKT);
-__hfi_trace_fn(LINKVERB);
-__hfi_trace_fn(VERBOSE);
-__hfi_trace_fn(DEBUG);
-__hfi_trace_fn(SNOOP);
-__hfi_trace_fn(CNTR);
-__hfi_trace_fn(PIO);
-__hfi_trace_fn(DC8051);
-__hfi_trace_fn(FIRMWARE);
-__hfi_trace_fn(RCVCTRL);
-__hfi_trace_fn(TID);
+__hfi1_trace_fn(RVPKT);
+__hfi1_trace_fn(INIT);
+__hfi1_trace_fn(VERB);
+__hfi1_trace_fn(PKT);
+__hfi1_trace_fn(PROC);
+__hfi1_trace_fn(MM);
+__hfi1_trace_fn(ERRPKT);
+__hfi1_trace_fn(SDMA);
+__hfi1_trace_fn(VPKT);
+__hfi1_trace_fn(LINKVERB);
+__hfi1_trace_fn(VERBOSE);
+__hfi1_trace_fn(DEBUG);
+__hfi1_trace_fn(SNOOP);
+__hfi1_trace_fn(CNTR);
+__hfi1_trace_fn(PIO);
+__hfi1_trace_fn(DC8051);
+__hfi1_trace_fn(FIRMWARE);
+__hfi1_trace_fn(RCVCTRL);
+__hfi1_trace_fn(TID);
 
-#define hfi_cdbg(which, fmt, ...) \
-	__hfi_trace_##which(__func__, fmt, ##__VA_ARGS__)
+#define hfi1_cdbg(which, fmt, ...) \
+	__hfi1_trace_##which(__func__, fmt, ##__VA_ARGS__)
 
-#define hfi_dbg(fmt, ...) \
-	hfi_cdbg(DEBUG, fmt, ##__VA_ARGS__)
+#define hfi1_dbg(fmt, ...) \
+	hfi1_cdbg(DEBUG, fmt, ##__VA_ARGS__)
 
 /*
- * Define HFI_EARLY_DBG at compile time or here to enable early trace
+ * Define HFI1_EARLY_DBG at compile time or here to enable early trace
  * messages. Do not check in an enablement for this.
  */
 
-#ifdef HFI_EARLY_DBG
-#define hfi_dbg_early(fmt, ...) \
+#ifdef HFI1_EARLY_DBG
+#define hfi1_dbg_early(fmt, ...) \
 	trace_printk(fmt, ##__VA_ARGS__)
 #else
-#define hfi_dbg_early(fmt, ...)
+#define hfi1_dbg_early(fmt, ...)
 #endif
 
-#endif /* __HFI_TRACE_H */
+#endif /* __HFI1_TRACE_H */
 
 #undef TRACE_INCLUDE_PATH
 #undef TRACE_INCLUDE_FILE

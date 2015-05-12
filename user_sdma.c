@@ -68,7 +68,7 @@
 #include "user_sdma.h"
 #include "sdma.h"
 #include "verbs.h"  /* for the headers */
-#include "common.h" /* for struct hfi_tid_info */
+#include "common.h" /* for struct hfi1_tid_info */
 #include "trace.h"
 
 /*
@@ -77,10 +77,10 @@
  * improve debuggability by making the stack traces
  * a bit easier to decode).
  */
-#define _hfi_inline inline
+#define _hfi1_inline inline
 
-static uint hfi_sdma_comp_ring_size = 128;
-module_param_named(sdma_comp_size, hfi_sdma_comp_ring_size, uint, S_IRUGO);
+static uint hfi1_sdma_comp_ring_size = 128;
+module_param_named(sdma_comp_size, hfi1_sdma_comp_ring_size, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 128");
 
 /* The maximum number of Data io vectors per message/request */
@@ -94,11 +94,11 @@ MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 12
 #define num_pages(x) (1 + ((((x) - 1) & PAGE_MASK) >> PAGE_SHIFT))
 
 #define req_opcode(x) \
-	(((x) >> HFI_SDMA_REQ_OPCODE_SHIFT) & HFI_SDMA_REQ_OPCODE_MASK)
+	(((x) >> HFI1_SDMA_REQ_OPCODE_SHIFT) & HFI1_SDMA_REQ_OPCODE_MASK)
 #define req_version(x) \
-	(((x) >> HFI_SDMA_REQ_VERSION_SHIFT) & HFI_SDMA_REQ_OPCODE_MASK)
+	(((x) >> HFI1_SDMA_REQ_VERSION_SHIFT) & HFI1_SDMA_REQ_OPCODE_MASK)
 #define req_iovcnt(x) \
-	(((x) >> HFI_SDMA_REQ_IOVCNT_SHIFT) & HFI_SDMA_REQ_IOVCNT_MASK)
+	(((x) >> HFI1_SDMA_REQ_IOVCNT_SHIFT) & HFI1_SDMA_REQ_IOVCNT_MASK)
 
 /* Number of BTH.PSN bits used for sequence number in expected rcvs */
 #define BTH_SEQ_MASK 0x7ffull
@@ -188,10 +188,10 @@ struct user_sdma_iovec {
 
 struct user_sdma_request {
 	struct sdma_req_info info;
-	struct hfi_user_sdma_pkt_q *pq;
-	struct hfi_user_sdma_comp_q *cq;
+	struct hfi1_user_sdma_pkt_q *pq;
+	struct hfi1_user_sdma_comp_q *cq;
 	/* This is the original header from user space */
-	struct hfi_pkt_header hdr;
+	struct hfi1_pkt_header hdr;
 	/*
 	 * Pointer to the SDMA engine for this request.
 	 * Since different request could be on different VLs,
@@ -257,7 +257,7 @@ struct user_sdma_request {
 
 struct user_sdma_txreq {
 	/* Packet header for the txreq */
-	struct hfi_pkt_header hdr;
+	struct hfi1_pkt_header hdr;
 	struct sdma_txreq txreq;
 	struct user_sdma_request *req;
 	struct user_sdma_iovec *iovec1;
@@ -268,11 +268,11 @@ struct user_sdma_txreq {
 };
 
 #define SDMA_DBG(req, fmt, ...)				     \
-	hfi_cdbg(SDMA, "[%u:%u:%u:%u] " fmt, (req)->pq->dd->unit, \
+	hfi1_cdbg(SDMA, "[%u:%u:%u:%u] " fmt, (req)->pq->dd->unit, \
 		 (req)->pq->ctxt, (req)->pq->subctxt, (req)->info.comp_idx, \
 		 ##__VA_ARGS__)
 #define SDMA_Q_DBG(pq, fmt, ...)			 \
-	hfi_cdbg(SDMA, "[%u:%u:%u] " fmt, (pq)->dd->unit, (pq)->ctxt, \
+	hfi1_cdbg(SDMA, "[%u:%u:%u] " fmt, (pq)->dd->unit, (pq)->ctxt, \
 		 (pq)->subctxt, ##__VA_ARGS__)
 
 static int user_sdma_send_pkts(struct user_sdma_request *, unsigned);
@@ -283,15 +283,15 @@ static int pin_vector_pages(struct user_sdma_request *,
 			    struct user_sdma_iovec *);
 static void unpin_vector_pages(struct user_sdma_iovec *);
 static int check_header_template(struct user_sdma_request *,
-				 struct hfi_pkt_header *, u32, u32);
+				 struct hfi1_pkt_header *, u32, u32);
 static int set_txreq_header(struct user_sdma_request *,
 			    struct user_sdma_txreq *, u32);
 static int set_txreq_header_ahg(struct user_sdma_request *,
-			       struct user_sdma_txreq *, u32);
-static _hfi_inline void set_comp_state(struct user_sdma_request *,
-				       enum hfi_sdma_comp_state, int);
-static _hfi_inline u32 set_pkt_bth_psn(__be32, u8, u32);
-static _hfi_inline u32 get_lrh_len(struct hfi_pkt_header, u32 len);
+				struct user_sdma_txreq *, u32);
+static _hfi1_inline void set_comp_state(struct user_sdma_request *,
+					enum hfi1_sdma_comp_state, int);
+static _hfi1_inline u32 set_pkt_bth_psn(__be32, u8, u32);
+static _hfi1_inline u32 get_lrh_len(struct hfi1_pkt_header, u32 len);
 
 static int defer_packet_queue(
 	struct sdma_engine *,
@@ -300,8 +300,8 @@ static int defer_packet_queue(
 	unsigned seq);
 static void activate_packet_queue(struct iowait *, int);
 
-static _hfi_inline int iovec_may_free(struct user_sdma_iovec *iovec,
-				      void (*free)(struct user_sdma_iovec *))
+static _hfi1_inline int iovec_may_free(struct user_sdma_iovec *iovec,
+				       void (*free)(struct user_sdma_iovec *))
 {
 	if (ACCESS_ONCE(iovec->offset) == iovec->iov.iov_len) {
 		free(iovec);
@@ -321,8 +321,8 @@ static int defer_packet_queue(
 	struct sdma_txreq *txreq,
 	unsigned seq)
 {
-	struct hfi_user_sdma_pkt_q *pq =
-		container_of(wait, struct hfi_user_sdma_pkt_q, busy);
+	struct hfi1_user_sdma_pkt_q *pq =
+		container_of(wait, struct hfi1_user_sdma_pkt_q, busy);
 	struct hfi1_ibdev *dev = &pq->dd->verbs_dev;
 	struct user_sdma_txreq *tx =
 		container_of(txreq, struct user_sdma_txreq, txreq);
@@ -348,8 +348,8 @@ eagain:
 
 static void activate_packet_queue(struct iowait *wait, int reason)
 {
-	struct hfi_user_sdma_pkt_q *pq =
-		container_of(wait, struct hfi_user_sdma_pkt_q, busy);
+	struct hfi1_user_sdma_pkt_q *pq =
+		container_of(wait, struct hfi1_user_sdma_pkt_q, busy);
 	xchg(&pq->state, SDMA_PKT_Q_ACTIVE);
 	wake_up(&wait->wait_dma);
 };
@@ -361,14 +361,14 @@ static void sdma_kmem_cache_ctor(void *obj)
 	memset(tx, 0, sizeof(*tx));
 }
 
-int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
+int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 {
 	int ret = 0;
 	unsigned memsize;
 	char buf[64];
-	struct hfi_devdata *dd;
-	struct hfi_user_sdma_comp_q *cq;
-	struct hfi_user_sdma_pkt_q *pq;
+	struct hfi1_devdata *dd;
+	struct hfi1_user_sdma_comp_q *cq;
+	struct hfi1_user_sdma_pkt_q *pq;
 	unsigned long flags;
 
 	if (!uctxt || !fp) {
@@ -376,7 +376,7 @@ int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 		goto done;
 	}
 
-	if (!hfi_sdma_comp_ring_size) {
+	if (!hfi1_sdma_comp_ring_size) {
 		ret = -EINVAL;
 		goto done;
 	}
@@ -390,7 +390,7 @@ int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 			   uctxt->ctxt, subctxt_fp(fp));
 		goto pq_nomem;
 	}
-	memsize = sizeof(*pq->reqs) * hfi_sdma_comp_ring_size;
+	memsize = sizeof(*pq->reqs) * hfi1_sdma_comp_ring_size;
 	pq->reqs = kmalloc(memsize, GFP_KERNEL);
 	if (!pq->reqs) {
 		dd_dev_err(dd,
@@ -402,7 +402,7 @@ int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 	pq->dd = dd;
 	pq->ctxt = uctxt->ctxt;
 	pq->subctxt = subctxt_fp(fp);
-	pq->n_max_reqs = hfi_sdma_comp_ring_size;
+	pq->n_max_reqs = hfi1_sdma_comp_ring_size;
 	pq->state = SDMA_PKT_Q_INACTIVE;
 	atomic_set(&pq->n_reqs, 0);
 
@@ -430,7 +430,7 @@ int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 		goto cq_nomem;
 	}
 
-	memsize = ALIGN(sizeof(*cq->comps) * hfi_sdma_comp_ring_size,
+	memsize = ALIGN(sizeof(*cq->comps) * hfi1_sdma_comp_ring_size,
 			PAGE_SIZE);
 	cq->comps = vmalloc_user(memsize);
 	if (!cq->comps) {
@@ -439,7 +439,7 @@ int hfi_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 		      uctxt->ctxt, subctxt_fp(fp));
 		goto cq_comps_nomem;
 	}
-	cq->nentries = hfi_sdma_comp_ring_size;
+	cq->nentries = hfi1_sdma_comp_ring_size;
 	user_sdma_comp_fp(fp) = cq;
 
 	spin_lock_irqsave(&uctxt->sdma_qlock, flags);
@@ -462,14 +462,14 @@ done:
 	return ret;
 }
 
-int hfi_user_sdma_free_queues(struct hfi_filedata *fd)
+int hfi1_user_sdma_free_queues(struct hfi1_filedata *fd)
 {
 	struct hfi1_ctxtdata *uctxt = fd->uctxt;
-	struct hfi_user_sdma_pkt_q *pq;
+	struct hfi1_user_sdma_pkt_q *pq;
 	unsigned long flags;
 
-	hfi_cdbg(SDMA, "[%u:%u:%u] Freeing user SDMA queues", uctxt->dd->unit,
-		 uctxt->ctxt, fd->subctxt);
+	hfi1_cdbg(SDMA, "[%u:%u:%u] Freeing user SDMA queues", uctxt->dd->unit,
+		  uctxt->ctxt, fd->subctxt);
 	pq = fd->pq;
 	if (pq) {
 		u16 i, j;
@@ -506,14 +506,14 @@ int hfi_user_sdma_free_queues(struct hfi_filedata *fd)
 	return 0;
 }
 
-int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
-				  unsigned long dim, unsigned long *count)
+int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
+				   unsigned long dim, unsigned long *count)
 {
 	int ret = 0, i = 0, sent;
 	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
-	struct hfi_user_sdma_pkt_q *pq = user_sdma_pkt_fp(fp);
-	struct hfi_user_sdma_comp_q *cq = user_sdma_comp_fp(fp);
-	struct hfi_devdata *dd = pq->dd;
+	struct hfi1_user_sdma_pkt_q *pq = user_sdma_pkt_fp(fp);
+	struct hfi1_user_sdma_comp_q *cq = user_sdma_comp_fp(fp);
+	struct hfi1_devdata *dd = pq->dd;
 	unsigned long idx = 0;
 	u8 pcount = initial_pkt_count;
 	struct sdma_req_info info;
@@ -521,33 +521,34 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	u8 opcode, sc, vl;
 
 	if (iovec[idx].iov_len < sizeof(info) + sizeof(req->hdr)) {
-		hfi_cdbg(SDMA,
-			 "[%u:%u:%u] First vector not big enough for header %lu/%lu",
-			 dd->unit, uctxt->ctxt, subctxt_fp(fp),
-			 iovec[idx].iov_len, sizeof(info) + sizeof(req->hdr));
+		hfi1_cdbg(
+		   SDMA,
+		   "[%u:%u:%u] First vector not big enough for header %lu/%lu",
+		   dd->unit, uctxt->ctxt, subctxt_fp(fp),
+		   iovec[idx].iov_len, sizeof(info) + sizeof(req->hdr));
 		ret = -EINVAL;
 		goto done;
 	}
 	ret = copy_from_user(&info, iovec[idx].iov_base, sizeof(info));
 	if (ret) {
-		hfi_cdbg(SDMA, "[%u:%u:%u] Failed to copy info QW (%d)",
-			 dd->unit, uctxt->ctxt, subctxt_fp(fp), ret);
+		hfi1_cdbg(SDMA, "[%u:%u:%u] Failed to copy info QW (%d)",
+			  dd->unit, uctxt->ctxt, subctxt_fp(fp), ret);
 		ret = -EFAULT;
 		goto done;
 	}
-	trace_hfi_sdma_user_reqinfo(dd, uctxt->ctxt, subctxt_fp(fp),
-				    (u16 *)&info);
+	trace_hfi1_sdma_user_reqinfo(dd, uctxt->ctxt, subctxt_fp(fp),
+				     (u16 *)&info);
 	if (cq->comps[info.comp_idx].status == QUEUED) {
-		hfi_cdbg(SDMA, "[%u:%u:%u] Entry %u is in QUEUED state",
-			 dd->unit, uctxt->ctxt, subctxt_fp(fp),
-			 info.comp_idx);
+		hfi1_cdbg(SDMA, "[%u:%u:%u] Entry %u is in QUEUED state",
+			  dd->unit, uctxt->ctxt, subctxt_fp(fp),
+			  info.comp_idx);
 		ret = -EBADSLT;
 		goto done;
 	}
 	if (!info.fragsize) {
-		hfi_cdbg(SDMA,
-			 "[%u:%u:%u:%u] Request does not specify fragsize",
-			 dd->unit, uctxt->ctxt, subctxt_fp(fp), info.comp_idx);
+		hfi1_cdbg(SDMA,
+			  "[%u:%u:%u:%u] Request does not specify fragsize",
+			  dd->unit, uctxt->ctxt, subctxt_fp(fp), info.comp_idx);
 		ret = -EINVAL;
 		goto done;
 	}
@@ -555,8 +556,8 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	 * We've done all the safety checks that we can up to this point,
 	 * "allocate" the request entry.
 	 */
-	hfi_cdbg(SDMA, "[%u:%u:%u] Using req/comp entry %u\n", dd->unit,
-		 uctxt->ctxt, subctxt_fp(fp), info.comp_idx);
+	hfi1_cdbg(SDMA, "[%u:%u:%u] Using req/comp entry %u\n", dd->unit,
+		  uctxt->ctxt, subctxt_fp(fp), info.comp_idx);
 	req = pq->reqs + info.comp_idx;
 	memset(req, 0, sizeof(*req));
 	/* Mark the request as IN_USE before we start filling it in. */
@@ -587,7 +588,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	}
 
 	/* If Static rate control is not enabled, sanitize the header. */
-	if (!HFI_CAP_IS_USET(STATIC_RATE_CTRL))
+	if (!HFI1_CAP_IS_USET(STATIC_RATE_CTRL))
 		req->hdr.pbc[2] = 0;
 
 	/* Validate the opcode. Do not trust packets from user space blindly. */
@@ -606,7 +607,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	vl = (le16_to_cpu(req->hdr.pbc[0]) >> 12) & 0xF;
 	sc = (((be16_to_cpu(req->hdr.lrh[0]) >> 12) & 0xF) |
 	      ((le16_to_cpu(req->hdr.pbc[1] >> 14) & 0x1) << 4));
-	if (vl >= hfi_num_vls(dd->pport->vls_operational) ||
+	if (vl >= hfi1_num_vls(dd->pport->vls_operational) ||
 	    vl != sc_to_vlt(dd, sc)) {
 		SDMA_DBG(req, "Invalid SC(%u)/VL(%u)", sc, vl);
 		ret = -EINVAL;
@@ -691,7 +692,7 @@ int hfi_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	}
 
 	/* We don't need an AHG entry if the request contains only one packet */
-	if (req->info.npkts > 1 && HFI_CAP_IS_USET(SDMA_AHG)) {
+	if (req->info.npkts > 1 && HFI1_CAP_IS_USET(SDMA_AHG)) {
 		int ahg = sdma_ahg_alloc(req->sde);
 
 		if (likely(ahg >= 0)) {
@@ -749,8 +750,8 @@ done:
 	return ret;
 }
 
-static _hfi_inline u32 compute_data_length(struct user_sdma_request *req,
-					   struct user_sdma_txreq *tx)
+static _hfi1_inline u32 compute_data_length(struct user_sdma_request *req,
+					    struct user_sdma_txreq *tx)
 {
 	/*
 	 * Determine the proper size of the packet data.
@@ -788,7 +789,7 @@ static _hfi_inline u32 compute_data_length(struct user_sdma_request *req,
 	return len;
 }
 
-static _hfi_inline u32 get_lrh_len(struct hfi_pkt_header hdr, u32 len)
+static _hfi1_inline u32 get_lrh_len(struct hfi1_pkt_header hdr, u32 len)
 {
 	/* (Size of complete header - size of PBC) + 4B ICRC + data length */
 	return ((sizeof(hdr) - sizeof(hdr.pbc)) + 4 + len);
@@ -799,7 +800,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 	int ret = 0;
 	unsigned npkts = 0;
 	struct user_sdma_txreq *tx = NULL;
-	struct hfi_user_sdma_pkt_q *pq = NULL;
+	struct hfi1_user_sdma_pkt_q *pq = NULL;
 	struct user_sdma_iovec *iovec = NULL;
 
 	if (!req->pq) {
@@ -1047,7 +1048,7 @@ done:
 /*
  * How many pages in this iovec element?
  */
-static _hfi_inline int num_user_pages(const struct iovec *iov)
+static _hfi1_inline int num_user_pages(const struct iovec *iov)
 {
 	const unsigned long addr  = (unsigned long) iov->iov_base;
 	const unsigned long len   = iov->iov_len;
@@ -1097,9 +1098,9 @@ static void unpin_vector_pages(struct user_sdma_iovec *iovec)
 	unsigned i;
 
 	if (ACCESS_ONCE(iovec->offset) != iovec->iov.iov_len) {
-		hfi_cdbg(SDMA,
-			 "the complete vector has not been sent yet %llu %zu",
-			 iovec->offset, iovec->iov.iov_len);
+		hfi1_cdbg(SDMA,
+			  "the complete vector has not been sent yet %llu %zu",
+			  iovec->offset, iovec->iov.iov_len);
 		return;
 	}
 	for (i = 0; i < iovec->npages; i++)
@@ -1112,7 +1113,7 @@ static void unpin_vector_pages(struct user_sdma_iovec *iovec)
 }
 
 static int check_header_template(struct user_sdma_request *req,
-				 struct hfi_pkt_header *hdr, u32 lrhlen,
+				 struct hfi1_pkt_header *hdr, u32 lrhlen,
 				 u32 datalen)
 {
 	/*
@@ -1167,10 +1168,10 @@ static int check_header_template(struct user_sdma_request *req,
  * expected packets encode generation and sequence in the
  * BTH.PSN field so just incrementing will result in errors.
  */
-static _hfi_inline u32 set_pkt_bth_psn(__be32 bthpsn, u8 expct, u32 frags)
+static _hfi1_inline u32 set_pkt_bth_psn(__be32 bthpsn, u8 expct, u32 frags)
 {
 	u32 val = be32_to_cpu(bthpsn),
-		mask = (HFI_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffffull :
+		mask = (HFI1_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffffull :
 			0xffffffull),
 		psn = val & mask;
 	if (expct)
@@ -1183,8 +1184,8 @@ static _hfi_inline u32 set_pkt_bth_psn(__be32 bthpsn, u8 expct, u32 frags)
 static int set_txreq_header(struct user_sdma_request *req,
 			    struct user_sdma_txreq *tx, u32 datalen)
 {
-	struct hfi_user_sdma_pkt_q *pq = req->pq;
-	struct hfi_pkt_header *hdr = &tx->hdr;
+	struct hfi1_user_sdma_pkt_q *pq = req->pq;
+	struct hfi1_pkt_header *hdr = &tx->hdr;
 	u16 pbclen;
 	int ret;
 	u32 tidval = 0, lrhlen = get_lrh_len(*hdr, datalen);
@@ -1301,17 +1302,17 @@ static int set_txreq_header(struct user_sdma_request *req,
 			  ((req->omfactor - KDETH_OM_SMALL) ? 1 : 0));
 	}
 done:
-	trace_hfi_sdma_user_header(pq->dd, pq->ctxt, pq->subctxt,
-				   req->info.comp_idx, hdr, tidval);
+	trace_hfi1_sdma_user_header(pq->dd, pq->ctxt, pq->subctxt,
+				    req->info.comp_idx, hdr, tidval);
 	return sdma_txadd_kvaddr(pq->dd, &tx->txreq, hdr, sizeof(*hdr));
 }
 
 static int set_txreq_header_ahg(struct user_sdma_request *req,
-			       struct user_sdma_txreq *tx, u32 len)
+				struct user_sdma_txreq *tx, u32 len)
 {
 	int diff = 0;
-	struct hfi_user_sdma_pkt_q *pq = req->pq;
-	struct hfi_pkt_header *hdr = &req->hdr;
+	struct hfi1_user_sdma_pkt_q *pq = req->pq;
+	struct hfi1_pkt_header *hdr = &req->hdr;
 	u16 pbclen = le16_to_cpu(hdr->pbc[0]);
 	u32 val32, tidval = 0, lrhlen = get_lrh_len(*hdr, len);
 
@@ -1329,7 +1330,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	 */
 	/* BTH.PSN and BTH.A */
 	val32 = (be32_to_cpu(hdr->bth[2]) + req->seqnum) &
-		(HFI_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffff : 0xffffff);
+		(HFI1_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffff : 0xffffff);
 	if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
 		val32 |= 1UL << 31;
 	AHG_HEADER_SET(req->ahg, diff, 6, 0, 16, cpu_to_be16(val32 >> 16));
@@ -1382,9 +1383,9 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 			AHG_HEADER_SET(req->ahg, diff, 7, 16, 12, val);
 	}
 
-	trace_hfi_sdma_user_header_ahg(pq->dd, pq->ctxt, pq->subctxt,
-				       req->info.comp_idx, req->sde->this_idx,
-				       req->ahg_idx, req->ahg, diff, tidval);
+	trace_hfi1_sdma_user_header_ahg(pq->dd, pq->ctxt, pq->subctxt,
+					req->info.comp_idx, req->sde->this_idx,
+					req->ahg_idx, req->ahg, diff, tidval);
 	return diff;
 }
 
@@ -1394,7 +1395,7 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 	struct user_sdma_txreq *tx =
 		container_of(txreq, struct user_sdma_txreq, txreq);
 	struct user_sdma_request *req = tx->req;
-	struct hfi_user_sdma_pkt_q *pq = req ? req->pq : NULL;
+	struct hfi1_user_sdma_pkt_q *pq = req ? req->pq : NULL;
 	u64 tx_seqnum;
 
 	if (tx->iovec1)
@@ -1459,15 +1460,16 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 	clear_bit(SDMA_REQ_IN_USE, &req->flags);
 }
 
-static _hfi_inline void set_comp_state(struct user_sdma_request *req,
-				       enum hfi_sdma_comp_state state, int ret)
+static _hfi1_inline void set_comp_state(struct user_sdma_request *req,
+					enum hfi1_sdma_comp_state state,
+					int ret)
 {
 	SDMA_DBG(req, "Setting completion status %u %d", state, ret);
 	req->cq->comps[req->info.comp_idx].status = state;
 	if (state == ERROR)
 		req->cq->comps[req->info.comp_idx].errcode = -ret;
-	trace_hfi_sdma_user_completion(req->pq->dd, req->pq->ctxt,
-				       req->pq->subctxt, req->info.comp_idx,
-				       state, ret);
+	trace_hfi1_sdma_user_completion(req->pq->dd, req->pq->ctxt,
+					req->pq->subctxt, req->info.comp_idx,
+					state, ret);
 }
 

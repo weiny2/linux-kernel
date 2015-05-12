@@ -1,5 +1,5 @@
-#ifndef _HFI_DEBUGFS_H
-#define _HFI_DEBUGFS_H
+#ifndef _HFI1_DEBUGFS_H
+#define _HFI1_DEBUGFS_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -52,27 +52,27 @@
 
 struct hfi1_ibdev;
 #ifdef CONFIG_DEBUG_FS
-void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd);
-void hfi_dbg_ibdev_exit(struct hfi1_ibdev *ibd);
-void hfi_dbg_init(void);
-void hfi_dbg_exit(void);
+void hfi1_dbg_ibdev_init(struct hfi1_ibdev *ibd);
+void hfi1_dbg_ibdev_exit(struct hfi1_ibdev *ibd);
+void hfi1_dbg_init(void);
+void hfi1_dbg_exit(void);
 #else
-static inline void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd)
+static inline void hfi1_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 {
 }
 
-void hfi_dbg_ibdev_exit(struct hfi1_ibdev *ibd)
+void hfi1_dbg_ibdev_exit(struct hfi1_ibdev *ibd)
 {
 }
 
-void hfi_dbg_init(void)
+void hfi1_dbg_init(void)
 {
 }
 
-void hfi_dbg_exit(void)
+void hfi1_dbg_exit(void)
 {
 }
 
 #endif
 
-#endif                          /* _HFI_DEBUGFS_H */
+#endif                          /* _HFI1_DEBUGFS_H */

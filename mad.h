@@ -280,7 +280,7 @@ struct ib_pma_portcounters_cong {
  */
 #define OPA_CC_LOG_TYPE_HFI	2
 
-struct opa_hfi_cong_log_event_internal {
+struct opa_hfi1_cong_log_event_internal {
 	u32 lqpn;
 	u32 rqpn;
 	u8 sl;
@@ -289,7 +289,7 @@ struct opa_hfi_cong_log_event_internal {
 	s64 timestamp; /* wider than 32 bits to detect 32 bit rollover */
 };
 
-struct opa_hfi_cong_log_event {
+struct opa_hfi1_cong_log_event {
 	u8 local_qp_cn_entry[3];
 	u8 remote_qp_number_cn_entry[3];
 	u8 sl_svc_type_cn_entry; /* 5 bits SL, 3 bits svc type */
@@ -300,13 +300,13 @@ struct opa_hfi_cong_log_event {
 
 #define OPA_CONG_LOG_ELEMS	96
 
-struct opa_hfi_cong_log {
+struct opa_hfi1_cong_log {
 	u8 log_type;
 	u8 congestion_flags;
 	__be16 threshold_event_counter;
 	__be32 current_time_stamp;
 	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
-	struct opa_hfi_cong_log_event events[OPA_CONG_LOG_ELEMS];
+	struct opa_hfi1_cong_log_event events[OPA_CONG_LOG_ELEMS];
 } __packed;
 
 #define IB_CC_TABLE_CAP_DEFAULT 31

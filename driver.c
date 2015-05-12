@@ -69,7 +69,7 @@
  * The size has to be longer than this string, so we can append
  * board/chip information to it in the initialization code.
  */
-const char ib_hfi1_version[] = HFI_DRIVER_VERSION "\n";
+const char ib_hfi1_version[] = HFI1_DRIVER_VERSION "\n";
 
 DEFINE_SPINLOCK(hfi1_devs_lock);
 LIST_HEAD(hfi1_dev_list);
@@ -83,108 +83,109 @@ unsigned int default_mtu;
 module_param_named(default_mtu, default_mtu, uint, S_IRUGO);
 MODULE_PARM_DESC(default_mtu, "Set default MTU bytes, default is 4096");
 
-unsigned int hfi_cu = 1;
-module_param_named(cu, hfi_cu, uint, S_IRUGO);
+unsigned int hfi1_cu = 1;
+module_param_named(cu, hfi1_cu, uint, S_IRUGO);
 MODULE_PARM_DESC(cu, "Credit return units");
 
-unsigned long hfi_cap_mask = HFI_CAP_MASK_DEFAULT;
-static int hfi_caps_set(const char *, const struct kernel_param *);
-static int hfi_caps_get(char *, const struct kernel_param *);
+unsigned long hfi1_cap_mask = HFI1_CAP_MASK_DEFAULT;
+static int hfi1_caps_set(const char *, const struct kernel_param *);
+static int hfi1_caps_get(char *, const struct kernel_param *);
 static const struct kernel_param_ops cap_ops = {
-	.set = hfi_caps_set,
-	.get = hfi_caps_get
+	.set = hfi1_caps_set,
+	.get = hfi1_caps_get
 };
-module_param_cb(cap_mask, &cap_ops, &hfi_cap_mask, S_IWUSR | S_IRUGO);
+module_param_cb(cap_mask, &cap_ops, &hfi1_cap_mask, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(cap_mask, "Bit mask of enabled/disabled HW features");
 
 /*
  * Start parameter backward compatibility code (will be removed)
  *
  * The definitions below add module parameters which get converted
- * into the appropriate bits in hfi_cap_mask. These module parameters
+ * into the appropriate bits in hfi1_cap_mask. These module parameters
  * will eventually be removed once module users have become
- * familiar with the hfi_cap_mask parameter.
+ * familiar with the hfi1_cap_mask parameter.
  */
-#ifndef HFI_COMPAT_MODPARAMS
-#define HFI_COMPAT_MODPARAMS 1
+#ifndef HFI1_COMPAT_MODPARAMS
+#define HFI1_COMPAT_MODPARAMS 1
 #endif
 
-#if HFI_COMPAT_MODPARAMS
+#if HFI1_COMPAT_MODPARAMS
 #include <linux/stringify.h>
-struct hfi_comp_param_t {
+struct hfi1_comp_param_t {
 	const char *pname;
 	unsigned long equiv;
 	u8 inverted;
 	unsigned long *caps;
 };
-static int hfi_comp_param_set(const char *, const struct kernel_param *);
-static int hfi_comp_param_get(char *, const struct kernel_param *);
+
+static int hfi1_comp_param_set(const char *, const struct kernel_param *);
+static int hfi1_comp_param_get(char *, const struct kernel_param *);
 static const struct kernel_param_ops k_pops_comp = {
-	.set = hfi_comp_param_set,
-	.get = hfi_comp_param_get
+	.set = hfi1_comp_param_set,
+	.get = hfi1_comp_param_get
 };
 /**
- * HFI_DEFINE_COMP_PARAM - define a backward-compatible module parameter
+ * HFI1_DEFINE_COMP_PARAM - define a backward-compatible module parameter
  * @name - name of the module parameter
- * @bit  - the bit in the set of HFI_CAP_* bits that this module parameter
+ * @bit  - the bit in the set of HFI1_CAP_* bits that this module parameter
  *         corresponds to
  * @invrt - 1 if the value of this module parameter is the inverted value
  *          of the bit - value of 1 turns the bit off
  * @desc - the description string for this module parameter
  *
  * This macro defines a backward-compatible module parameter, which can
- * be used instead of the matching bit in the HFI_CAP_* set.
- * Modifying/using the module parameter will manipulate the hfi_cap_mask
+ * be used instead of the matching bit in the HFI1_CAP_* set.
+ * Modifying/using the module parameter will manipulate the hfi1_cap_mask
  * bitmask. Therefore, the module parameter does not hold a value - the
- * hfi_cap_mask bits should be used through-out the code.
+ * hfi1_cap_mask bits should be used through-out the code.
  */
-#define HFI_DEFINE_COMP_PARAM(name, bit, invrt, desc)			\
-	static const struct hfi_comp_param_t c_param_##name = {		\
-		.pname = __stringify(name), .equiv = HFI_CAP_##bit,	\
-		.inverted = (unsigned)invrt, .caps = &hfi_cap_mask,	\
+#define HFI1_DEFINE_COMP_PARAM(name, bit, invrt, desc)			\
+	static const struct hfi1_comp_param_t c_param_##name = {	\
+		.pname = __stringify(name), .equiv = HFI1_CAP_##bit,	\
+		.inverted = (unsigned)invrt, .caps = &hfi1_cap_mask,	\
 	};								\
 	module_param_cb(name, &k_pops_comp, (void *)&c_param_##name,	\
 			(S_IRUGO |					\
-			 (HFI_CAP_##bit & HFI_CAP_WRITABLE_MASK ?	\
+			 (HFI1_CAP_##bit & HFI1_CAP_WRITABLE_MASK ?	\
 			  S_IWUSR : 0)));				\
 	MODULE_PARM_DESC(name, desc " (DEPRECATED)")
 
 /* Define all the deprecated module parameters */
-HFI_DEFINE_COMP_PARAM(hdrsup_enable, HDRSUPP, 0,
-		      "Enable/disable header suppression");
-HFI_DEFINE_COMP_PARAM(dont_drop_rhq_full, NODROP_RHQ_FULL, 0,
-		      "Do not drop packets when the receive header is full");
-HFI_DEFINE_COMP_PARAM(dont_drop_egr_full, NODROP_EGR_FULL, 0,
-		      "Do not drop packets when all eager buffers are in use");
-HFI_DEFINE_COMP_PARAM(use_sdma_head, USE_SDMA_HEAD, 1,
-		      "Read CSR vs. DMA for hardware head");
-HFI_DEFINE_COMP_PARAM(use_sdma_ahg, SDMA_AHG, 0, "Turn on/off use of AHG");
-HFI_DEFINE_COMP_PARAM(disable_sma, ENABLE_SMA, 1, "Disable the SMA");
-HFI_DEFINE_COMP_PARAM(nodma_rtail, DMA_RTAIL, 1,
-		      "1 for no DMA of hdr tail, 0 to DMA the hdr tail");
-HFI_DEFINE_COMP_PARAM(use_sdma, SDMA, 0, "enable sdma traffic");
-HFI_DEFINE_COMP_PARAM(extended_psn, EXTENDED_PSN, 0,
-		      "Use 24 or 31 bit PSN");
-HFI_DEFINE_COMP_PARAM(print_unimplemented, PRINT_UNIMPL, 0,
-		      "Have unimplemented functions print when called");
-HFI_DEFINE_COMP_PARAM(one_pkt_per_egr, MULTI_PKT_EGR, 1,
-		      "Use one packet per eager buffer (default: 0)");
-HFI_DEFINE_COMP_PARAM(enable_pkeys, PKEY_CHECK, 0,
-		      "Enable PKey checking on receive");
-HFI_DEFINE_COMP_PARAM(disable_integrity, NO_INTEGRITY, 0,
-		      "Disable HW packet integrity checks");
-HFI_DEFINE_COMP_PARAM(sdma_head_check, SDMA_HEAD_CHECK, 0,
-		      "Enable SDMA head check");
-#endif /* HFI_COMPAT_MODPARAMS */
+HFI1_DEFINE_COMP_PARAM(hdrsup_enable, HDRSUPP, 0,
+		       "Enable/disable header suppression");
+HFI1_DEFINE_COMP_PARAM(dont_drop_rhq_full, NODROP_RHQ_FULL, 0,
+		       "Do not drop packets when the receive header is full");
+HFI1_DEFINE_COMP_PARAM(dont_drop_egr_full, NODROP_EGR_FULL, 0,
+		       "Do not drop packets when all eager buffers are in use");
+HFI1_DEFINE_COMP_PARAM(use_sdma_head, USE_SDMA_HEAD, 1,
+		       "Read CSR vs. DMA for hardware head");
+HFI1_DEFINE_COMP_PARAM(use_sdma_ahg, SDMA_AHG, 0, "Turn on/off use of AHG");
+HFI1_DEFINE_COMP_PARAM(disable_sma, ENABLE_SMA, 1, "Disable the SMA");
+HFI1_DEFINE_COMP_PARAM(nodma_rtail, DMA_RTAIL, 1,
+		       "1 for no DMA of hdr tail, 0 to DMA the hdr tail");
+HFI1_DEFINE_COMP_PARAM(use_sdma, SDMA, 0, "enable sdma traffic");
+HFI1_DEFINE_COMP_PARAM(extended_psn, EXTENDED_PSN, 0,
+		       "Use 24 or 31 bit PSN");
+HFI1_DEFINE_COMP_PARAM(print_unimplemented, PRINT_UNIMPL, 0,
+		       "Have unimplemented functions print when called");
+HFI1_DEFINE_COMP_PARAM(one_pkt_per_egr, MULTI_PKT_EGR, 1,
+		       "Use one packet per eager buffer (default: 0)");
+HFI1_DEFINE_COMP_PARAM(enable_pkeys, PKEY_CHECK, 0,
+		       "Enable PKey checking on receive");
+HFI1_DEFINE_COMP_PARAM(disable_integrity, NO_INTEGRITY, 0,
+		       "Disable HW packet integrity checks");
+HFI1_DEFINE_COMP_PARAM(sdma_head_check, SDMA_HEAD_CHECK, 0,
+		       "Enable SDMA head check");
+#endif /* HFI1_COMPAT_MODPARAMS */
 /* End parameter backward compatibility code */
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel <ibsupport@intel.com>");
 MODULE_DESCRIPTION("Intel IB driver");
-MODULE_VERSION(HFI_DRIVER_VERSION);
+MODULE_VERSION(HFI1_DRIVER_VERSION);
 
 /* See hfi1_init() */
-void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
+void (*rhf_rcv_function_map[5])(struct hfi1_packet *packet);
 
 /*
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
@@ -194,13 +195,13 @@ void (*rhf_rcv_function_map[5])(struct hfi_packet *packet);
 
 struct hfi1_ib_stats hfi1_stats;
 
-static int hfi_caps_set(const char *val, const struct kernel_param *kp)
+static int hfi1_caps_set(const char *val, const struct kernel_param *kp)
 {
 	int ret = 0;
 	unsigned long *cap_mask_ptr = (unsigned long *)kp->arg,
 		cap_mask = *cap_mask_ptr, value, diff,
-		write_mask = ((HFI_CAP_WRITABLE_MASK << HFI_CAP_USER_SHIFT) |
-			      HFI_CAP_WRITABLE_MASK);
+		write_mask = ((HFI1_CAP_WRITABLE_MASK << HFI1_CAP_USER_SHIFT) |
+			      HFI1_CAP_WRITABLE_MASK);
 
 	ret = kstrtoul(val, 0, &value);
 	if (ret) {
@@ -208,24 +209,24 @@ static int hfi_caps_set(const char *val, const struct kernel_param *kp)
 		goto done;
 	}
 	/* Get the changed bits (except the locked bit) */
-	diff = value ^ (cap_mask & ~HFI_CAP_LOCKED_SMASK);
+	diff = value ^ (cap_mask & ~HFI1_CAP_LOCKED_SMASK);
 
 	/* Remove any bits that are not allowed to change after driver load */
-	if (HFI_CAP_LOCKED() && (diff & ~write_mask)) {
+	if (HFI1_CAP_LOCKED() && (diff & ~write_mask)) {
 		pr_warn("Ignoring non-writable capability bits %#lx\n",
 			diff & ~write_mask);
 		diff &= write_mask;
 	}
 
 	/* Mask off any reserved bits */
-	diff &= ~HFI_CAP_RESERVED_MASK;
+	diff &= ~HFI1_CAP_RESERVED_MASK;
 	/* Clear any previously set and changing bits */
 	cap_mask &= ~diff;
 	/* Update the bits with the new capability */
 	cap_mask |= (value & diff);
 	/* Check for any kernel/user restrictions */
-	diff = (cap_mask & (HFI_CAP_MUST_HAVE_KERN << HFI_CAP_USER_SHIFT)) ^
-		((cap_mask & HFI_CAP_MUST_HAVE_KERN) << HFI_CAP_USER_SHIFT);
+	diff = (cap_mask & (HFI1_CAP_MUST_HAVE_KERN << HFI1_CAP_USER_SHIFT)) ^
+		((cap_mask & HFI1_CAP_MUST_HAVE_KERN) << HFI1_CAP_USER_SHIFT);
 	cap_mask &= ~diff;
 	/* Set the bitmask to the final set */
 	*cap_mask_ptr = cap_mask;
@@ -233,21 +234,21 @@ done:
 	return ret;
 }
 
-static int hfi_caps_get(char *buffer, const struct kernel_param *kp)
+static int hfi1_caps_get(char *buffer, const struct kernel_param *kp)
 {
 	unsigned long cap_mask = *(unsigned long *)kp->arg;
 
-	cap_mask &= ~HFI_CAP_LOCKED_SMASK;
-	cap_mask |= ((cap_mask & HFI_CAP_K2U) << HFI_CAP_USER_SHIFT);
+	cap_mask &= ~HFI1_CAP_LOCKED_SMASK;
+	cap_mask |= ((cap_mask & HFI1_CAP_K2U) << HFI1_CAP_USER_SHIFT);
 
 	return scnprintf(buffer, PAGE_SIZE, "0x%lx", cap_mask);
 }
 
-#if HFI_COMPAT_MODPARAMS
-static int hfi_comp_param_set(const char *val, const struct kernel_param *kp)
+#if HFI1_COMPAT_MODPARAMS
+static int hfi1_comp_param_set(const char *val, const struct kernel_param *kp)
 {
-	struct hfi_comp_param_t *param =
-		(struct hfi_comp_param_t *)kp->arg;
+	struct hfi1_comp_param_t *param =
+		(struct hfi1_comp_param_t *)kp->arg;
 	unsigned long value;
 	int ret = 0;
 
@@ -262,20 +263,20 @@ static int hfi_comp_param_set(const char *val, const struct kernel_param *kp)
 	value = (value & 0x1U) ^ param->inverted;
 	if (value)
 		*param->caps |= (param->equiv |
-				 ((param->equiv & HFI_CAP_WRITABLE_MASK) <<
-				  HFI_CAP_USER_SHIFT));
+				 ((param->equiv & HFI1_CAP_WRITABLE_MASK) <<
+				  HFI1_CAP_USER_SHIFT));
 	else
 		*param->caps &= ~(param->equiv |
-				  ((param->equiv & HFI_CAP_WRITABLE_MASK) <<
-				   HFI_CAP_USER_SHIFT));
+				  ((param->equiv & HFI1_CAP_WRITABLE_MASK) <<
+				   HFI1_CAP_USER_SHIFT));
 done:
 	return ret;
 }
 
-static int hfi_comp_param_get(char *buffer, const struct kernel_param *kp)
+static int hfi1_comp_param_get(char *buffer, const struct kernel_param *kp)
 {
-	struct hfi_comp_param_t *param =
-		(struct hfi_comp_param_t *)kp->arg;
+	struct hfi1_comp_param_t *param =
+		(struct hfi1_comp_param_t *)kp->arg;
 	unsigned long value = *param->caps & param->equiv;
 
 	return scnprintf(buffer, PAGE_SIZE, "%d",
@@ -296,14 +297,14 @@ const char *get_unit_name(int unit)
  */
 int hfi1_count_active_units(void)
 {
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	struct hfi1_pportdata *ppd;
 	unsigned long flags;
 	int pidx, nunits_active = 0;
 
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
 	list_for_each_entry(dd, &hfi1_dev_list, list) {
-		if (!(dd->flags & HFI_PRESENT) || !dd->kregbase)
+		if (!(dd->flags & HFI1_PRESENT) || !dd->kregbase)
 			continue;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
@@ -325,7 +326,7 @@ int hfi1_count_active_units(void)
 int hfi1_count_units(int *npresentp, int *nupp)
 {
 	int nunits = 0, npresent = 0, nup = 0;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	unsigned long flags;
 	int pidx;
 	struct hfi1_pportdata *ppd;
@@ -334,7 +335,7 @@ int hfi1_count_units(int *npresentp, int *nupp)
 
 	list_for_each_entry(dd, &hfi1_dev_list, list) {
 		nunits++;
-		if ((dd->flags & HFI_PRESENT) && dd->kregbase)
+		if ((dd->flags & HFI1_PRESENT) && dd->kregbase)
 			npresent++;
 		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 			ppd = dd->pport + pidx;
@@ -373,7 +374,7 @@ static inline void *get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
  * allowed size ranges for the respective type and, optionally,
  * return the proper encoding.
  */
-inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
+inline int hfi1_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 {
 	if (unlikely(!IS_ALIGNED(size, PAGE_SIZE)))
 		return 0;
@@ -388,7 +389,7 @@ inline int hfi_rcvbuf_validate(u32 size, u8 type, u16 *encoded)
 }
 
 static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
-		       struct hfi_packet *packet)
+		       struct hfi1_packet *packet)
 {
 	struct hfi1_message_header *rhdr = packet->hdr;
 	u32 rte = rhf_rcv_type_err(packet->rhf);
@@ -555,7 +556,7 @@ drop:
  */
 void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 {
-	struct hfi_devdata *dd = rcd->dd;
+	struct hfi1_devdata *dd = rcd->dd;
 	__le32 *rhf_addr;
 	u64 rhf;
 	void *ebuf;
@@ -566,13 +567,13 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 	u32 etype, hlen, tlen, i = 0, updegr = 0;
 	int last;
 	struct hfi1_qp *qp, *nqp;
-	struct hfi_packet packet;
+	struct hfi1_packet packet;
 
 	l = rcd->head;
 	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
 	rhf = rhf_to_cpu(rhf_addr);
 
-	if (!HFI_CAP_IS_KSET(DMA_RTAIL)) {
+	if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
 		u32 seq = rhf_rcv_seq(rhf);
 
 		if (seq != rcd->seq_cnt)
@@ -641,7 +642,7 @@ skip:
 		rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
 		rhf = rhf_to_cpu(rhf_addr);
 
-		if (!HFI_CAP_IS_KSET(DMA_RTAIL)) {
+		if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
 			u32 seq = rhf_rcv_seq(rhf);
 
 			if (++rcd->seq_cnt > 13)
@@ -749,11 +750,11 @@ u16 enum_to_mtu(int mtu)
  */
 int set_mtu(struct hfi1_pportdata *ppd)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int i, drain, ret = 0, is_up = 0;
 
 	ppd->ibmtu = 0;
-	for (i = 0; i < hfi_num_vls(ppd->vls_supported); i++)
+	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++)
 		if (ppd->ibmtu < dd->vld[i].mtu)
 			ppd->ibmtu = dd->vld[i].mtu;
 	ppd->ibmaxlen = ppd->ibmtu + lrh_max_header_bytes(ppd->dd);
@@ -793,7 +794,7 @@ err:
 
 int hfi1_set_lid(struct hfi1_pportdata *ppd, u32 lid, u8 lmc)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 
 	ppd->lid = lid;
 	ppd->lmc = lmc;
@@ -819,11 +820,11 @@ int hfi1_set_lid(struct hfi1_pportdata *ppd, u32 lid, u8 lmc)
 static void run_led_override(unsigned long opaque)
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)opaque;
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int timeoff;
 	int ph_idx;
 
-	if (!(dd->flags & HFI_INITTED))
+	if (!(dd->flags & HFI1_INITTED))
 		return;
 
 	ph_idx = ppd->led_override_phase++ & 1;
@@ -840,10 +841,10 @@ static void run_led_override(unsigned long opaque)
 
 void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int timeoff, freq;
 
-	if (!(dd->flags & HFI_INITTED))
+	if (!(dd->flags & HFI1_INITTED))
 		return;
 
 	/* First check if we are blinking. If not, use 1HZ polling */
@@ -892,7 +893,7 @@ void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val)
 int hfi1_reset_device(int unit)
 {
 	int ret, i;
-	struct hfi_devdata *dd = hfi1_lookup(unit);
+	struct hfi1_devdata *dd = hfi1_lookup(unit);
 	struct hfi1_pportdata *ppd;
 	unsigned long flags;
 	int pidx;
@@ -904,7 +905,7 @@ int hfi1_reset_device(int unit)
 
 	dd_dev_info(dd, "Reset on unit %u requested\n", unit);
 
-	if (!dd->kregbase || !(dd->flags & HFI_PRESENT)) {
+	if (!dd->kregbase || !(dd->flags & HFI1_PRESENT)) {
 		dd_dev_info(dd,
 			"Invalid unit number %u or not initialized or not present\n",
 			unit);
@@ -934,7 +935,7 @@ int hfi1_reset_device(int unit)
 		/* Shut off LEDs after we are sure timer is not running */
 		ppd->led_override = LED_OVER_BOTH_OFF;
 	}
-	if (dd->flags & HFI_HAS_SEND_DMA)
+	if (dd->flags & HFI1_HAS_SEND_DMA)
 		sdma_exit(dd);
 
 	hfi1_reset_cpu_counters(dd);
@@ -953,7 +954,7 @@ bail:
 	return ret;
 }
 
-void handle_eflags(struct hfi_packet *packet)
+void handle_eflags(struct hfi1_packet *packet)
 {
 	struct hfi1_ctxtdata *rcd = packet->rcd;
 	u32 rte = rhf_rcv_type_err(packet->rhf);
@@ -978,16 +979,16 @@ void handle_eflags(struct hfi_packet *packet)
  * The following functions are called by the interrupt handler. They are type
  * specific handlers for each packet type.
  */
-void process_receive_ib(struct hfi_packet *packet)
+void process_receive_ib(struct hfi1_packet *packet)
 {
-	trace_hfi_rcvhdr(packet->rcd->ppd->dd,
-			 packet->rcd->ctxt,
-			 rhf_err_flags(packet->rhf),
-			 RHF_RCV_TYPE_IB,
-			 packet->hlen,
-			 packet->tlen,
-			 packet->updegr,
-			 rhf_egr_index(packet->rhf));
+	trace_hfi1_rcvhdr(packet->rcd->ppd->dd,
+			  packet->rcd->ctxt,
+			  rhf_err_flags(packet->rhf),
+			  RHF_RCV_TYPE_IB,
+			  packet->hlen,
+			  packet->tlen,
+			  packet->updegr,
+			  rhf_egr_index(packet->rhf));
 
 	if (unlikely(rhf_err_flags(packet->rhf))) {
 		handle_eflags(packet);
@@ -997,7 +998,7 @@ void process_receive_ib(struct hfi_packet *packet)
 	hfi1_ib_rcv(packet);
 }
 
-void process_receive_bypass(struct hfi_packet *packet)
+void process_receive_bypass(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
@@ -1006,14 +1007,14 @@ void process_receive_bypass(struct hfi_packet *packet)
 	   "Bypass packets are not supported in normal operation. Dropping\n");
 }
 
-void process_receive_error(struct hfi_packet *packet)
+void process_receive_error(struct hfi1_packet *packet)
 {
 	handle_eflags(packet);
 	dd_dev_err(packet->rcd->dd,
 		   "Unhandled error packet received. Dropping.\n");
 }
 
-void process_receive_expected(struct hfi_packet *packet)
+void process_receive_expected(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
@@ -1022,7 +1023,7 @@ void process_receive_expected(struct hfi_packet *packet)
 		   "Unhandled expected packet received. Dropping.\n");
 }
 
-void process_receive_eager(struct hfi_packet *packet)
+void process_receive_eager(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
