@@ -103,7 +103,7 @@ static int eprom_available;	/* default: not available */
 /*
  * Turn on external enable line that allows writing on the flash.
  */
-static void write_enable(struct hfi_devdata *dd)
+static void write_enable(struct hfi1_devdata *dd)
 {
 	/* raise signal */
 	write_csr(dd, ASIC_GPIO_OUT,
@@ -116,7 +116,7 @@ static void write_enable(struct hfi_devdata *dd)
 /*
  * Turn off external enable line that allows writing on the flash.
  */
-static void write_disable(struct hfi_devdata *dd)
+static void write_disable(struct hfi1_devdata *dd)
 {
 	/* lower signal */
 	write_csr(dd, ASIC_GPIO_OUT,
@@ -130,7 +130,7 @@ static void write_disable(struct hfi_devdata *dd)
  * Wait for the device to become not busy.  Must be called after all
  * write or erase operations.
  */
-static int wait_for_not_busy(struct hfi_devdata *dd)
+static int wait_for_not_busy(struct hfi1_devdata *dd)
 {
 	unsigned long count = 0;
 	u64 reg;
@@ -162,7 +162,7 @@ static int wait_for_not_busy(struct hfi_devdata *dd)
 /*
  * Read the device ID from the SPI controller.
  */
-static u32 read_device_id(struct hfi_devdata *dd)
+static u32 read_device_id(struct hfi1_devdata *dd)
 {
 	/* read the Manufacture Device ID */
 	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_READ_MANUF_DEV_ID);
@@ -172,7 +172,7 @@ static u32 read_device_id(struct hfi_devdata *dd)
 /*
  * Erase the whole flash.
  */
-static int erase_chip(struct hfi_devdata *dd)
+static int erase_chip(struct hfi1_devdata *dd)
 {
 	int ret;
 
@@ -190,7 +190,7 @@ static int erase_chip(struct hfi_devdata *dd)
 /*
  * Erase a range using the 32KB erase command.
  */
-static int erase_32kb_range(struct hfi_devdata *dd, u32 start, u32 end)
+static int erase_32kb_range(struct hfi1_devdata *dd, u32 start, u32 end)
 {
 	int ret = 0;
 
@@ -225,7 +225,7 @@ done:
  * Read a 256 byte (64 dword) EPROM page.
  * All callers have verified the offset is at a page boundary.
  */
-static void read_page(struct hfi_devdata *dd, u32 offset, u32 *result)
+static void read_page(struct hfi1_devdata *dd, u32 offset, u32 *result)
 {
 	int i;
 
@@ -238,7 +238,7 @@ static void read_page(struct hfi_devdata *dd, u32 offset, u32 *result)
 /*
  * Read length bytes starting at offset.  Copy to user address addr.
  */
-static int read_length(struct hfi_devdata *dd, u32 start, u32 len, u64 addr)
+static int read_length(struct hfi1_devdata *dd, u32 start, u32 len, u64 addr)
 {
 	u32 offset;
 	u32 buffer[EP_PAGE_SIZE/sizeof(u32)];
@@ -265,7 +265,7 @@ done:
  * Write a 256 byte (64 dword) EPROM page.
  * All callers have verified the offset is at a page boundary.
  */
-static int write_page(struct hfi_devdata *dd, u32 offset, u32 *data)
+static int write_page(struct hfi1_devdata *dd, u32 offset, u32 *data)
 {
 	int i;
 
@@ -281,7 +281,7 @@ static int write_page(struct hfi_devdata *dd, u32 offset, u32 *data)
 /*
  * Write length bytes starting at offset.  Read from user address addr.
  */
-static int write_length(struct hfi_devdata *dd, u32 start, u32 len, u64 addr)
+static int write_length(struct hfi1_devdata *dd, u32 start, u32 len, u64 addr)
 {
 	u32 offset;
 	u32 buffer[EP_PAGE_SIZE/sizeof(u32)];
@@ -315,9 +315,9 @@ done:
  *
  * Return 0 on success, -ERRNO on error
  */
-int handle_eprom_command(const struct hfi_cmd *cmd)
+int handle_eprom_command(const struct hfi1_cmd *cmd)
 {
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	u32 dev_id;
 	int ret = 0;
 
@@ -353,7 +353,7 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 		__func__, cmd->type, cmd->len, cmd->addr);
 
 	switch (cmd->type) {
-	case HFI_CMD_EP_INFO:
+	case HFI1_CMD_EP_INFO:
 		if (cmd->len != sizeof(u32)) {
 			ret = -ERANGE;
 			break;
@@ -364,17 +364,17 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 								sizeof(u32)))
 			ret = -EFAULT;
 		break;
-	case HFI_CMD_EP_ERASE_CHIP:
+	case HFI1_CMD_EP_ERASE_CHIP:
 		ret = erase_chip(dd);
 		break;
-	case HFI_CMD_EP_ERASE_P0:
+	case HFI1_CMD_EP_ERASE_P0:
 		if (cmd->len != P0_SIZE) {
 			ret = -ERANGE;
 			break;
 		}
 		ret = erase_32kb_range(dd, 0, cmd->len);
 		break;
-	case HFI_CMD_EP_ERASE_P1:
+	case HFI1_CMD_EP_ERASE_P1:
 		/* check for overflow */
 		if (P1_START + cmd->len > ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
 			ret = -ERANGE;
@@ -382,14 +382,14 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 		}
 		ret = erase_32kb_range(dd, P1_START, P1_START + cmd->len);
 		break;
-	case HFI_CMD_EP_READ_P0:
+	case HFI1_CMD_EP_READ_P0:
 		if (cmd->len != P0_SIZE) {
 			ret = -ERANGE;
 			break;
 		}
 		ret = read_length(dd, 0, cmd->len, cmd->addr);
 		break;
-	case HFI_CMD_EP_READ_P1:
+	case HFI1_CMD_EP_READ_P1:
 		/* check for overflow */
 		if (P1_START + cmd->len > ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
 			ret = -ERANGE;
@@ -397,14 +397,14 @@ int handle_eprom_command(const struct hfi_cmd *cmd)
 		}
 		ret = read_length(dd, P1_START, cmd->len, cmd->addr);
 		break;
-	case HFI_CMD_EP_WRITE_P0:
+	case HFI1_CMD_EP_WRITE_P0:
 		if (cmd->len > P0_SIZE) {
 			ret = -ERANGE;
 			break;
 		}
 		ret = write_length(dd, 0, cmd->len, cmd->addr);
 		break;
-	case HFI_CMD_EP_WRITE_P1:
+	case HFI1_CMD_EP_WRITE_P1:
 		/* check for overflow */
 		if (P1_START + cmd->len > ASIC_EEP_ADDR_CMD_EP_ADDR_MASK) {
 			ret = -ERANGE;
@@ -428,7 +428,7 @@ done_asic:
 /*
  * Initialize the EPROM handler.
  */
-int eprom_init(struct hfi_devdata *dd)
+int eprom_init(struct hfi1_devdata *dd)
 {
 	int ret = 0;
 

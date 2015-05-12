@@ -57,13 +57,13 @@
 #include "device.h"
 
 static struct class *class;
-static dev_t hfi_dev;
+static dev_t hfi1_dev;
 
-int hfi_cdev_init(int minor, const char *name,
-	      const struct file_operations *fops,
-	      struct cdev *cdev, struct device **devp)
+int hfi1_cdev_init(int minor, const char *name,
+		   const struct file_operations *fops,
+		   struct cdev *cdev, struct device **devp)
 {
-	const dev_t dev = MKDEV(MAJOR(hfi_dev), minor);
+	const dev_t dev = MKDEV(MAJOR(hfi1_dev), minor);
 	struct device *device = NULL;
 	int ret;
 
@@ -91,7 +91,7 @@ done:
 	return ret;
 }
 
-void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp)
+void hfi1_cdev_cleanup(struct cdev *cdev, struct device **devp)
 {
 	struct device *device = *devp;
 
@@ -103,18 +103,18 @@ void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp)
 	}
 }
 
-static const char *hfi_class_name = "hfi1";
+static const char *hfi1_class_name = "hfi1";
 
 const char *class_name(void)
 {
-	return hfi_class_name;
+	return hfi1_class_name;
 }
 
 int __init dev_init(void)
 {
 	int ret;
 
-	ret = alloc_chrdev_region(&hfi_dev, 0, HFI_NMINORS, DRIVER_NAME);
+	ret = alloc_chrdev_region(&hfi1_dev, 0, HFI1_NMINORS, DRIVER_NAME);
 	if (ret < 0) {
 		pr_err("Could not allocate chrdev region (err %d)\n", -ret);
 		goto done;
@@ -124,7 +124,7 @@ int __init dev_init(void)
 	if (IS_ERR(class)) {
 		ret = PTR_ERR(class);
 		pr_err("Could not create device class (err %d)\n", -ret);
-		unregister_chrdev_region(hfi_dev, HFI_NMINORS);
+		unregister_chrdev_region(hfi1_dev, HFI1_NMINORS);
 	}
 
 done:
@@ -138,5 +138,5 @@ void dev_cleanup(void)
 		class = NULL;
 	}
 
-	unregister_chrdev_region(hfi_dev, HFI_NMINORS);
+	unregister_chrdev_region(hfi1_dev, HFI1_NMINORS);
 }

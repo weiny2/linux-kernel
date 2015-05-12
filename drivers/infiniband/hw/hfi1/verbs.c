@@ -324,7 +324,7 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr,
 	struct hfi1_lkey_table *rkt;
 	struct hfi1_pd *pd;
 	u8 sc5;
-	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct hfi1_pportdata *ppd;
 	struct hfi1_ibport *ibp;
 
@@ -567,7 +567,7 @@ static void qp_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_SMI:
 	case IB_QPT_GSI:
-		if (!HFI_CAP_IS_KSET(ENABLE_SMA))
+		if (!HFI1_CAP_IS_KSET(ENABLE_SMA))
 			break;
 		/* FALLTHROUGH */
 	case IB_QPT_UD:
@@ -598,7 +598,7 @@ unlock:
  *
  * Tlen is the length of the header + data + CRC in bytes.
  */
-void hfi1_ib_rcv(struct hfi_packet *packet)
+void hfi1_ib_rcv(struct hfi1_packet *packet)
 {
 	struct hfi1_ctxtdata *rcd = packet->rcd;
 	struct hfi1_ib_header *hdr = packet->hdr;
@@ -767,7 +767,7 @@ static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
 			dev->n_txwait++;
 			qp->s_flags |= HFI1_S_WAIT_TX;
 			list_add_tail(&qp->s_iowait.list, &dev->txwait);
-			trace_hfi_qpsleep(qp, HFI1_S_WAIT_TX);
+			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_TX);
 			atomic_inc(&qp->refcount);
 		}
 		qp->s_flags &= ~HFI1_S_BUSY;
@@ -891,7 +891,7 @@ static int wait_kmem(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 				mod_timer(&dev->mem_timer, jiffies + 1);
 			qp->s_flags |= HFI1_S_WAIT_KMEM;
 			list_add_tail(&qp->s_iowait.list, &dev->memwait);
-			trace_hfi_qpsleep(qp, HFI1_S_WAIT_KMEM);
+			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_KMEM);
 			atomic_inc(&qp->refcount);
 		}
 		spin_unlock(&dev->pending_lock);
@@ -1100,7 +1100,7 @@ bail_tx:
  */
 static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
 {
-	struct hfi_devdata *dd = sc->dd;
+	struct hfi1_devdata *dd = sc->dd;
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	unsigned long flags;
 	int ret = 0;
@@ -1122,7 +1122,7 @@ static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
 			qp->s_flags |= HFI1_S_WAIT_PIO;
 			was_empty = list_empty(&sc->piowait);
 			list_add_tail(&qp->s_iowait.list, &sc->piowait);
-			trace_hfi_qpsleep(qp, HFI1_S_WAIT_PIO);
+			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_PIO);
 			atomic_inc(&qp->refcount);
 			/* counting: only call wantpiobuf_intr if first user */
 			if (was_empty)
@@ -1138,12 +1138,12 @@ static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
 
 struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct hfi1_pportdata *ppd = dd->pport + (qp->port_num - 1);
 	u8 vl;
 
 	vl = sc_to_vlt(dd, sc5);
-	if (vl >= hfi_num_vls(ppd->vls_supported) && vl != 15)
+	if (vl >= hfi1_num_vls(ppd->vls_supported) && vl != 15)
 		return NULL;
 	return dd->vld[vl].sc;
 }
@@ -1183,7 +1183,8 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 			 * go out to so just complete it with an error or else a
 			 * ULP or the core may be stuck waiting.
 			 */
-			hfi_cdbg(PIO,
+			hfi1_cdbg(
+				PIO,
 				"alloc failed. state not active, completing");
 			wc_status = IB_WC_GENERAL_ERR;
 			goto pio_bail;
@@ -1193,7 +1194,7 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 			 * up but we are still happily sending, well we could be
 			 * so lets continue to queue the request.
 			 */
-			hfi_cdbg(PIO, "alloc failed. state active, queuing");
+			hfi1_cdbg(PIO, "alloc failed. state active, queuing");
 			return no_bufs_available(qp, sc);
 		}
 	}
@@ -1269,12 +1270,12 @@ static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
 				    struct hfi1_qp *qp)
 {
 	struct hfi1_other_headers *ohdr;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	int i = 0;
 	u16 pkey;
 	u8 lnh, sc5 = qp->s_sc;
 
-	if (!(ppd->part_enforce & HFI_PART_ENFORCE_OUT))
+	if (!(ppd->part_enforce & HFI1_PART_ENFORCE_OUT))
 		return 0;
 
 	/* locate the pkey within the headers */
@@ -1333,7 +1334,7 @@ bad:
 int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		    u32 hdrwords, struct hfi1_sge_state *ss, u32 len)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	u32 plen;
 	int ret;
 	int pio = 0;
@@ -1345,8 +1346,8 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 	 * can defer SDMA restart until link goes ACTIVE without
 	 * worrying about just how we got there.
 	 */
-	if (qp->ibqp.qp_type == IB_QPT_SMI
-		|| !(dd->flags & HFI_HAS_SEND_DMA))
+	if ((qp->ibqp.qp_type == IB_QPT_SMI) ||
+	    !(dd->flags & HFI1_HAS_SEND_DMA))
 		pio = 1;
 
 	ret = egress_pkey_check(dd->pport, &ahdr->ibh, qp);
@@ -1360,8 +1361,8 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		 * return.
 		 */
 		if (pio) {
-			hfi_cdbg(PIO, "%s() Failed. Completing with err",
-				 __func__);
+			hfi1_cdbg(PIO, "%s() Failed. Completing with err",
+				  __func__);
 			spin_lock_irqsave(&qp->s_lock, flags);
 			hfi1_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
 			spin_unlock_irqrestore(&qp->s_lock, flags);
@@ -1394,7 +1395,7 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 static int query_device(struct ib_device *ibdev,
 			struct ib_device_attr *props)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	struct hfi1_ibdev *dev = to_idev(ibdev);
 
 	memset(props, 0, sizeof(*props));
@@ -1474,7 +1475,7 @@ static inline u16 opa_width_to_ib(u16 in)
 static int query_port(struct ib_device *ibdev, u8 port,
 		      struct ib_port_attr *props)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	struct hfi1_ibport *ibp = to_iport(ibdev, port);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u16 lid = ppd->lid;
@@ -1496,7 +1497,7 @@ static int query_port(struct ib_device *ibdev, u8 port,
 	props->active_width = (u8)opa_width_to_ib(ppd->link_width_active);
 	/* see rate_show() in ib core/sysfs.c */
 	props->active_speed = (u8)opa_speed_to_ib(ppd->link_speed_active);
-	props->max_vl_num = hfi_num_vls(ppd->vls_supported);
+	props->max_vl_num = hfi1_num_vls(ppd->vls_supported);
 	props->init_type_reply = 0;
 
 	/* Once we are a "first class" citizen and have added the OPA MTUs to
@@ -1520,7 +1521,7 @@ static int modify_device(struct ib_device *device,
 			 int device_modify_mask,
 			 struct ib_device_modify *device_modify)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(device);
+	struct hfi1_devdata *dd = dd_from_ibdev(device);
 	unsigned i;
 	int ret;
 
@@ -1579,7 +1580,7 @@ static int modify_port(struct ib_device *ibdev, u8 port,
 static int query_gid(struct ib_device *ibdev, u8 port,
 		     int index, union ib_gid *gid)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	int ret = 0;
 
 	if (!port || port > dd->num_pports)
@@ -1669,7 +1670,7 @@ int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
 	struct hfi1_ibport *ibp;
 	struct hfi1_pportdata *ppd;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	u8 sc5;
 
 	/* A multicast address requires a GRH (see ch. 8.4.1). */
@@ -1815,7 +1816,7 @@ static int query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
  * hfi1_get_npkeys - return the size of the PKEY table for context 0
  * @dd: the hfi1_ib device
  */
-unsigned hfi1_get_npkeys(struct hfi_devdata *dd)
+unsigned hfi1_get_npkeys(struct hfi1_devdata *dd)
 {
 	return ARRAY_SIZE(dd->pport[0].pkeys);
 }
@@ -1839,7 +1840,7 @@ unsigned hfi1_get_pkey(struct hfi1_ibport *ibp, unsigned index)
 static int query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 		      u16 *pkey)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	int ret;
 
 	if (index >= hfi1_get_npkeys(dd)) {
@@ -1917,7 +1918,7 @@ static void init_ibport(struct hfi1_pportdata *ppd)
  * @dd: the device data structure
  * Return 0 if successful, errno if unsuccessful.
  */
-int hfi1_register_ib_device(struct hfi_devdata *dd)
+int hfi1_register_ib_device(struct hfi1_devdata *dd)
 {
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;
@@ -2138,7 +2139,7 @@ bail:
 	return ret;
 }
 
-void hfi1_unregister_ib_device(struct hfi_devdata *dd)
+void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 {
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;

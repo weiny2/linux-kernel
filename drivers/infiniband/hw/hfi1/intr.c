@@ -89,14 +89,14 @@ void hfi1_format_hwerrors(u64 hwerrs, const struct hfi1_hwerror_msgs *hwerrmsgs,
 static void signal_ib_event(struct hfi1_pportdata *ppd, enum ib_event_type ev)
 {
 	struct ib_event event;
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 
 	/*
 	 * Only call ib_dispatch_event() if the IB device has been
-	 * registered.  HFI_INITED is set iff the driver has successfully
+	 * registered.  HFI1_INITED is set iff the driver has successfully
 	 * registered with the IB core.
 	 */
-	if (!(dd->flags & HFI_INITTED))
+	if (!(dd->flags & HFI1_INITTED))
 		return;
 	event.device = &dd->verbs_dev.ibdev;
 	event.element.port_num = ppd->port;
@@ -108,7 +108,7 @@ static void signal_ib_event(struct hfi1_pportdata *ppd, enum ib_event_type ev)
  * Handle a linkup or link down notification.
  * This is called outside an interrupt.
  */
-void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
+void handle_linkup_change(struct hfi1_devdata *dd, u32 linkup)
 {
 	struct hfi1_pportdata *ppd = &dd->pport[0];
 	enum ib_event_type ev;
@@ -167,7 +167,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
 
 		ev = IB_EVENT_PORT_ERR;
 
-		hfi1_set_uevent_bits(ppd, _HFI_EVENT_LINKDOWN_BIT);
+		hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LINKDOWN_BIT);
 
 		/* if we are down, the neighbor is down */
 		ppd->neighbor_normal = 0;
@@ -185,7 +185,7 @@ void handle_linkup_change(struct hfi_devdata *dd, u32 linkup)
  */
 void handle_user_interrupt(struct hfi1_ctxtdata *rcd)
 {
-	struct hfi_devdata *dd = rcd->dd;
+	struct hfi1_devdata *dd = rcd->dd;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dd->uctxt_lock, flags);

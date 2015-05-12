@@ -75,7 +75,7 @@ static int iowait_sleep(
 	unsigned seq);
 static void iowait_wakeup(struct iowait *wait, int reason);
 
-static inline unsigned mk_qpn(struct hfi_qpn_table *qpt,
+static inline unsigned mk_qpn(struct hfi1_qpn_table *qpt,
 			      struct qpn_map *map, unsigned off)
 {
 	return (map - qpt->map) * BITS_PER_PAGE + off;
@@ -118,7 +118,7 @@ static u32 credit_table[31] = {
 	32768                   /* 1E */
 };
 
-static void get_map_page(struct hfi_qpn_table *qpt, struct qpn_map *map)
+static void get_map_page(struct hfi1_qpn_table *qpt, struct qpn_map *map)
 {
 	unsigned long page = get_zeroed_page(GFP_KERNEL);
 
@@ -138,7 +138,7 @@ static void get_map_page(struct hfi_qpn_table *qpt, struct qpn_map *map)
  * Allocate the next available QPN or
  * zero/one for QP type IB_QPT_SMI/IB_QPT_GSI.
  */
-static int alloc_qpn(struct hfi_devdata *dd, struct hfi_qpn_table *qpt,
+static int alloc_qpn(struct hfi1_devdata *dd, struct hfi1_qpn_table *qpt,
 		     enum ib_qp_type type, u8 port)
 {
 	u32 i, offset, max_scan, qpn;
@@ -216,7 +216,7 @@ bail:
 	return ret;
 }
 
-static void free_qpn(struct hfi_qpn_table *qpt, u32 qpn)
+static void free_qpn(struct hfi1_qpn_table *qpt, u32 qpn)
 {
 	struct qpn_map *map;
 
@@ -225,7 +225,7 @@ static void free_qpn(struct hfi_qpn_table *qpt, u32 qpn)
 		clear_bit(qpn & BITS_PER_PAGE_MASK, map->page);
 }
 
-static inline unsigned qpn_hash(struct hfi_qp_ibdev *dev, u32 qpn)
+static inline unsigned qpn_hash(struct hfi1_qp_ibdev *dev, u32 qpn)
 {
 	return jhash_1word(qpn, dev->qp_rnd) &
 		(dev->qp_table_size - 1);
@@ -310,7 +310,7 @@ static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
  * There should not be any QPs still in use.
  * Free memory for table.
  */
-static unsigned free_all_qps(struct hfi_devdata *dd)
+static unsigned free_all_qps(struct hfi1_devdata *dd)
 {
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	unsigned long flags;
@@ -658,7 +658,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	int mig = 0;
 	int ret;
 	u32 pmtu = 0; /* for gcc warning only */
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 
 	spin_lock_irq(&qp->r_lock);
 	spin_lock(&qp->s_lock);
@@ -1057,7 +1057,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	int err;
 	struct hfi1_swqe *swq = NULL;
 	struct hfi1_ibdev *dev;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	size_t sz;
 	size_t sg_list_sz;
 	struct ib_qp *ret;
@@ -1309,7 +1309,7 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
  * init_qpn_table - initialize the QP number table for a device
  * @qpt: the QPN table
  */
-static int init_qpn_table(struct hfi_devdata *dd, struct hfi_qpn_table *qpt)
+static int init_qpn_table(struct hfi1_devdata *dd, struct hfi1_qpn_table *qpt)
 {
 	u32 offset, qpn, i;
 	struct qpn_map *map;
@@ -1352,7 +1352,7 @@ static int init_qpn_table(struct hfi_devdata *dd, struct hfi_qpn_table *qpt)
  * free_qpn_table - free the QP number table for a device
  * @qpt: the QPN table
  */
-static void free_qpn_table(struct hfi_qpn_table *qpt)
+static void free_qpn_table(struct hfi1_qpn_table *qpt)
 {
 	int i;
 
@@ -1404,7 +1404,7 @@ void hfi1_qp_wakeup(struct hfi1_qp *qp, u32 flag)
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (qp->s_flags & flag) {
 		qp->s_flags &= ~flag;
-		trace_hfi_qpwakeup(qp, flag);
+		trace_hfi1_qpwakeup(qp, flag);
 		hfi1_schedule_send(qp);
 	}
 	spin_unlock_irqrestore(&qp->s_lock, flags);
@@ -1448,7 +1448,7 @@ static int iowait_sleep(
 			ibp->n_dmawait++;
 			qp->s_flags |= HFI1_S_WAIT_DMA_DESC;
 			list_add_tail(&qp->s_iowait.list, &sde->dmawait);
-			trace_hfi_qpsleep(qp, HFI1_S_WAIT_DMA_DESC);
+			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_DMA_DESC);
 			atomic_inc(&qp->refcount);
 		}
 		spin_unlock(&dev->pending_lock);
@@ -1477,7 +1477,7 @@ static void iowait_wakeup(struct iowait *wait, int reason)
 
 int hfi1_qp_init(struct hfi1_ibdev *dev)
 {
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 	int i;
 	int ret = -ENOMEM;
 
@@ -1514,7 +1514,7 @@ nomem:
 
 void hfi1_qp_exit(struct hfi1_ibdev *dev)
 {
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 	u32 qps_inuse;
 
 	qps_inuse = free_all_qps(dd);
@@ -1539,10 +1539,10 @@ void hfi1_qp_exit(struct hfi1_ibdev *dev)
  */
 struct sdma_engine *qp_to_sdma_engine(struct hfi1_qp *qp, u8 sc5)
 {
-	struct hfi_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct sdma_engine *sde;
 
-	if (!(dd->flags & HFI_HAS_SEND_DMA))
+	if (!(dd->flags & HFI1_HAS_SEND_DMA))
 		return NULL;
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_UC:

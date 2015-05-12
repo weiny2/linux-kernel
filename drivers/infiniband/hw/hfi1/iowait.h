@@ -1,5 +1,5 @@
-#ifndef _HFI_IOWAIT_H
-#define _HFI_IOWAIT_H
+#ifndef _HFI1_IOWAIT_H
+#define _HFI1_IOWAIT_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or

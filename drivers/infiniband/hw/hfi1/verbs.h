@@ -65,8 +65,8 @@
 
 struct hfi1_ctxtdata;
 struct hfi1_pportdata;
-struct hfi_devdata;
-struct hfi_packet;
+struct hfi1_devdata;
+struct hfi1_packet;
 
 #include "iowait.h"
 
@@ -148,7 +148,7 @@ enum {
 	HFI1_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
 };
 
-static inline int hfi_num_vls(int vls)
+static inline int hfi1_num_vls(int vls)
 {
 	switch (vls) {
 	default:
@@ -165,7 +165,7 @@ static inline int hfi_num_vls(int vls)
 	}
 }
 
-static inline int hfi_vls_to_ib_enum(u8 num_vls)
+static inline int hfi1_vls_to_ib_enum(u8 num_vls)
 {
 	switch (num_vls) {
 	case 1:
@@ -324,7 +324,7 @@ struct hfi1_cq_wc {
 struct hfi1_cq {
 	struct ib_cq ibcq;
 	struct kthread_work comptask;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	spinlock_t lock; /* protect changes in this struct */
 	u8 notify;
 	u8 triggered;
@@ -695,18 +695,18 @@ struct hfi1_lkey_table {
 	struct hfi1_mregion __rcu **table;
 };
 
-struct hfi_opcode_stats {
+struct hfi1_opcode_stats {
 	u64 n_packets;          /* number of packets */
 	u64 n_bytes;            /* total number of bytes */
 };
 
-struct hfi_opcode_stats_perctx {
-	struct hfi_opcode_stats stats[128];
+struct hfi1_opcode_stats_perctx {
+	struct hfi1_opcode_stats stats[128];
 };
 
 static inline void inc_opstats(
 	u32 tlen,
-	struct hfi_opcode_stats *stats)
+	struct hfi1_opcode_stats *stats)
 {
 #ifdef CONFIG_DEBUG_FS
 	stats->n_bytes += tlen;
@@ -772,7 +772,7 @@ struct hfi1_ibport {
 };
 
 
-struct hfi_qp_ibdev;
+struct hfi1_qp_ibdev;
 struct hfi1_ibdev {
 	struct ib_device ibdev;
 	struct list_head pending_mmaps;
@@ -780,7 +780,7 @@ struct hfi1_ibdev {
 	u32 mmap_offset;
 	struct hfi1_mregion __rcu *dma_mr;
 
-	struct hfi_qp_ibdev *qp_dev;
+	struct hfi1_qp_ibdev *qp_dev;
 
 	/* QP numbers are shared by all IB ports */
 	struct hfi1_lkey_table lk_table;
@@ -811,9 +811,9 @@ struct hfi1_ibdev {
 	spinlock_t n_mcast_grps_lock;
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
-	struct dentry *hfi_ibdev_dbg;
+	struct dentry *hfi1_ibdev_dbg;
 	/* per HFI symlinks to above */
-	struct dentry *hfi_ibdev_link;
+	struct dentry *hfi1_ibdev_link;
 #endif
 };
 
@@ -1019,9 +1019,9 @@ int hfi1_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr);
 
 int hfi1_destroy_srq(struct ib_srq *ibsrq);
 
-int hfi1_cq_init(struct hfi_devdata *dd);
+int hfi1_cq_init(struct hfi1_devdata *dd);
 
-void hfi1_cq_exit(struct hfi_devdata *dd);
+void hfi1_cq_exit(struct hfi1_devdata *dd);
 
 void hfi1_cq_enter(struct hfi1_cq *cq, struct ib_wc *entry, int sig);
 
@@ -1129,13 +1129,13 @@ int hfi1_make_uc_req(struct hfi1_qp *qp);
 
 int hfi1_make_ud_req(struct hfi1_qp *qp);
 
-int hfi1_register_ib_device(struct hfi_devdata *);
+int hfi1_register_ib_device(struct hfi1_devdata *);
 
-void hfi1_unregister_ib_device(struct hfi_devdata *);
+void hfi1_unregister_ib_device(struct hfi1_devdata *);
 
-void hfi1_ib_rcv(struct hfi_packet *packet);
+void hfi1_ib_rcv(struct hfi1_packet *packet);
 
-unsigned hfi1_get_npkeys(struct hfi_devdata *);
+unsigned hfi1_get_npkeys(struct hfi1_devdata *);
 
 unsigned hfi1_get_pkey(struct hfi1_ibport *, unsigned);
 

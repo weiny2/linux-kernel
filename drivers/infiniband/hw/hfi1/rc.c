@@ -197,7 +197,7 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
 		len = qp->s_ack_rdma_sge.sge.sge_length;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = HFI_CAP_IS_KSET(SDMA_AHG);
+			middle = HFI1_CAP_IS_KSET(SDMA_AHG);
 		} else {
 			ohdr->u.aeth = hfi1_compute_aeth(qp);
 			hwords++;
@@ -551,7 +551,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = HFI_CAP_IS_KSET(SDMA_AHG);
+			middle = HFI1_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_SEND)
@@ -593,7 +593,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = HFI_CAP_IS_KSET(SDMA_AHG);
+			middle = HFI1_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_RDMA_WRITE)
@@ -1049,7 +1049,7 @@ void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr)
 	 * If we were waiting for sends to complete before re-sending,
 	 * and they are now complete, restart sending.
 	 */
-	trace_hfi_rc_sendcomplete(qp, psn);
+	trace_hfi1_rc_sendcomplete(qp, psn);
 	if (qp->s_flags & HFI1_S_WAIT_PSN &&
 	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
 		qp->s_flags &= ~HFI1_S_WAIT_PSN;
@@ -1427,8 +1427,8 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	u32 aeth;
 	u64 val;
 
-	if ((ppd->dd->flags & HFI_HAS_SEND_DMA) &&
-			opcode != OP(RDMA_READ_RESPONSE_MIDDLE)) {
+	if ((ppd->dd->flags & HFI1_HAS_SEND_DMA) &&
+	    opcode != OP(RDMA_READ_RESPONSE_MIDDLE)) {
 		/*
 		 * If ACK'd PSN on SDMA busy list try to make progress to
 		 * reclaim SDMA credits.
@@ -1853,7 +1853,7 @@ static inline void update_ack_queue(struct hfi1_qp *qp, unsigned n)
 static void log_cca_event(struct hfi1_pportdata *ppd, u8 sl, u32 rlid,
 			  u32 lqpn, u32 rqpn, u8 svc_type)
 {
-	struct opa_hfi_cong_log_event_internal *cc_event;
+	struct opa_hfi1_cong_log_event_internal *cc_event;
 
 	if (sl >= OPA_MAX_SLS)
 		return;

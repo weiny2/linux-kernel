@@ -67,7 +67,7 @@
 static int __i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
 		       int offset, void *bp, int len)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int ret, cnt;
 	u8 *buff = bp;
 
@@ -102,7 +102,7 @@ static int __i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
 int i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
 	      void *bp, int len)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int ret;
 
 	ret = mutex_lock_interruptible(&dd->qsfp_i2c_mutex);
@@ -120,7 +120,7 @@ int i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
 static int __i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr,
 		      int offset, void *bp, int len)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int ret, cnt, pass = 0;
 	int stuck = 0;
 	u8 *buff = bp;
@@ -174,7 +174,7 @@ exit:
 int i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
 	     void *bp, int len)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int ret;
 
 	ret = mutex_lock_interruptible(&dd->qsfp_i2c_mutex);
@@ -298,7 +298,7 @@ int qsfp_read(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
  */
 int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 {
-	u32 target = ppd->dd->hfi_id;
+	u32 target = ppd->dd->hfi1_id;
 	int ret;
 	unsigned long flags;
 	u8 *cache = &cp->cache[0];
@@ -403,12 +403,12 @@ static const char *pwr_codes = "1.5W2.0W2.5W3.5W";
 
 int qsfp_mod_present(struct hfi1_pportdata *ppd)
 {
-	if (HFI_CAP_IS_KSET(QSFP_ENABLED)) {
-		struct hfi_devdata *dd = ppd->dd;
+	if (HFI1_CAP_IS_KSET(QSFP_ENABLED)) {
+		struct hfi1_devdata *dd = ppd->dd;
 		u64 reg;
 
 		reg = read_csr(dd,
-			dd->hfi_id ? ASIC_QSFP2_IN : ASIC_QSFP1_IN);
+			dd->hfi1_id ? ASIC_QSFP2_IN : ASIC_QSFP1_IN);
 		return !(reg & QSFP_HFI0_MODPRST_N);
 	}
 	/* always return cable present */
@@ -430,8 +430,8 @@ int qsfp_mod_present(struct hfi1_pportdata *ppd)
  * For upper pages that are optional, if they are not valid, returns the
  * particular range of bytes in the data buffer set to 0.
  */
-int get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr, u32 len,
-			u8 *data)
+int get_cable_info(struct hfi1_devdata *dd, u32 port_num, u32 addr, u32 len,
+		   u8 *data)
 {
 	struct hfi1_pportdata *ppd;
 	u32 excess_len = len;

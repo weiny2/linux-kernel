@@ -82,7 +82,7 @@
  * to the chip.  Since we are delaying anyway, the cost doesn't
  * hurt, and makes the bit twiddling more regular
  */
-static void i2c_wait_for_writes(struct hfi_devdata *dd, u32 target)
+static void i2c_wait_for_writes(struct hfi1_devdata *dd, u32 target)
 {
 	/*
 	 * implicit read of EXTStatus is as good as explicit
@@ -104,7 +104,7 @@ static void i2c_wait_for_writes(struct hfi_devdata *dd, u32 target)
  */
 #define TWSI_BUF_WAIT_USEC 60
 
-static void scl_out(struct hfi_devdata *dd, u32 target, u8 bit)
+static void scl_out(struct hfi1_devdata *dd, u32 target, u8 bit)
 {
 	u32 mask;
 
@@ -136,7 +136,7 @@ static void scl_out(struct hfi_devdata *dd, u32 target, u8 bit)
 	i2c_wait_for_writes(dd, target);
 }
 
-static void sda_out(struct hfi_devdata *dd, u32 target, u8 bit)
+static void sda_out(struct hfi1_devdata *dd, u32 target, u8 bit)
 {
 	u32 mask;
 
@@ -149,7 +149,7 @@ static void sda_out(struct hfi_devdata *dd, u32 target, u8 bit)
 	udelay(2);
 }
 
-static u8 sda_in(struct hfi_devdata *dd, u32 target, int wait)
+static u8 sda_in(struct hfi1_devdata *dd, u32 target, int wait)
 {
 	u32 read_val, mask;
 
@@ -166,7 +166,7 @@ static u8 sda_in(struct hfi_devdata *dd, u32 target, int wait)
  * i2c_ackrcv - see if ack following write is true
  * @dd: the hfi1_ib device
  */
-static int i2c_ackrcv(struct hfi_devdata *dd, u32 target)
+static int i2c_ackrcv(struct hfi1_devdata *dd, u32 target)
 {
 	u8 ack_received;
 
@@ -179,7 +179,7 @@ static int i2c_ackrcv(struct hfi_devdata *dd, u32 target)
 	return ack_received;
 }
 
-static void stop_cmd(struct hfi_devdata *dd, u32 target);
+static void stop_cmd(struct hfi1_devdata *dd, u32 target);
 
 /**
  * rd_byte - read a byte, sending STOP on last, else ACK
@@ -187,7 +187,7 @@ static void stop_cmd(struct hfi_devdata *dd, u32 target);
  *
  * Returns byte shifted out of device
  */
-static int rd_byte(struct hfi_devdata *dd, u32 target, int last)
+static int rd_byte(struct hfi1_devdata *dd, u32 target, int last)
 {
 	int bit_cntr, data;
 
@@ -218,7 +218,7 @@ static int rd_byte(struct hfi_devdata *dd, u32 target, int last)
  *
  * Returns 0 if we got the following ack, otherwise 1
  */
-static int wr_byte(struct hfi_devdata *dd, u32 target, u8 data)
+static int wr_byte(struct hfi1_devdata *dd, u32 target, u8 data)
 {
 	int bit_cntr;
 	u8 bit;
@@ -236,7 +236,7 @@ static int wr_byte(struct hfi_devdata *dd, u32 target, u8 data)
  * issue TWSI start sequence:
  * (both clock/data high, clock high, data low while clock is high)
  */
-static void start_seq(struct hfi_devdata *dd, u32 target)
+static void start_seq(struct hfi1_devdata *dd, u32 target)
 {
 	sda_out(dd, target, 1);
 	scl_out(dd, target, 1);
@@ -251,7 +251,7 @@ static void start_seq(struct hfi_devdata *dd, u32 target)
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
-static void stop_seq(struct hfi_devdata *dd, u32 target)
+static void stop_seq(struct hfi1_devdata *dd, u32 target)
 {
 	scl_out(dd, target, 0);
 	sda_out(dd, target, 0);
@@ -265,7 +265,7 @@ static void stop_seq(struct hfi_devdata *dd, u32 target)
  *
  * (both clock/data low, clock high, data high while clock is high)
  */
-static void stop_cmd(struct hfi_devdata *dd, u32 target)
+static void stop_cmd(struct hfi1_devdata *dd, u32 target)
 {
 	stop_seq(dd, target);
 	udelay(TWSI_BUF_WAIT_USEC);
@@ -276,7 +276,7 @@ static void stop_cmd(struct hfi_devdata *dd, u32 target)
  * @dd: the hfi1_ib device
  */
 
-int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target)
+int hfi1_twsi_reset(struct hfi1_devdata *dd, u32 target)
 {
 	int clock_cycles_left = 9;
 	int was_high = 0;
@@ -340,7 +340,7 @@ int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target)
  * STOP.
  * returns 0 if OK (ACK received), else != 0
  */
-static int twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
+static int twsi_wr(struct hfi1_devdata *dd, u32 target, int data, int flags)
 {
 	int ret = 1;
 
@@ -369,7 +369,7 @@ static int twsi_wr(struct hfi_devdata *dd, u32 target, int data, int flags)
  * the "register" or "offset" within the device from which data should
  * be read.
  */
-int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
+int hfi1_twsi_blk_rd(struct hfi1_devdata *dd, u32 target, int dev, int addr,
 		     void *buffer, int len)
 {
 	int ret;
@@ -446,7 +446,7 @@ bail:
  * the "register" or "offset" within the device to which data should
  * be written.
  */
-int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
+int hfi1_twsi_blk_wr(struct hfi1_devdata *dd, u32 target, int dev, int addr,
 		     const void *buffer, int len)
 {
 	int sub_len;
