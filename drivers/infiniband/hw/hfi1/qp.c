@@ -181,7 +181,7 @@ static int alloc_qpn(struct hfi_devdata *dd, struct hfi_qpn_table *qpt,
 			offset += qpt->incr;
 			/*
 			 * This qpn might be bogus if offset >= BITS_PER_PAGE.
-			 * Thats is ok.   It gets re-assigned below
+			 * That is OK.   It gets re-assigned below
 			 */
 			qpn = mk_qpn(qpt, map, offset);
 		} while (offset < BITS_PER_PAGE && qpn < QPN_MAX);
@@ -781,7 +781,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		break;
 
 	case IB_QPS_RTR:
-		/* Allow event to retrigger if QP set to RTR more than once */
+		/* Allow event to re-trigger if QP set to RTR more than once */
 		qp->r_flags &= ~HFI1_R_COMM_EST;
 		qp->state = new_state;
 		break;
@@ -1011,7 +1011,7 @@ __be32 hfi1_compute_aeth(struct hfi1_qp *qp)
 		/*
 		 * Compute the number of credits available (RWQEs).
 		 * There is a small chance that the pair of reads are
-		 * not atomic, which is ok, since the fuzziness is
+		 * not atomic, which is OK, since the fuzziness is
 		 * resolved as further ACKs go out.
 		 */
 		credits = head - tail;
@@ -1498,7 +1498,7 @@ int hfi1_qp_init(struct hfi1_ibdev *dev)
 	for (i = 0; i < dev->qp_dev->qp_table_size; i++)
 		RCU_INIT_POINTER(dev->qp_dev->qp_table[i], NULL);
 	spin_lock_init(&dev->qp_dev->qpt_lock);
-	/* init qpn map */
+	/* initialize qpn map */
 	ret = init_qpn_table(dd, &dev->qp_dev->qpn_table);
 	if (ret)
 		goto nomem;
@@ -1593,12 +1593,12 @@ int qp_iter_next(struct qp_iter *iter)
 	/*
 	 * The approach is to consider the special qps
 	 * as an additional table entries before the
-	 * real hash table.  Since the qp code null's
-	 * the qp->next hash link, this works just fine.
+	 * real hash table.  Since the qp code sets
+	 * the qp->next hash link to NULL, this works just fine.
 	 *
 	 * iter->specials is 2 * # ports
 	 *
-	 * n = 0..iter->specials is the special qp indicies
+	 * n = 0..iter->specials is the special qp indices
 	 *
 	 * n = iter->specials..dev->qp_dev->qp_table_size+iter->specials are
 	 * the potential hash bucket entries

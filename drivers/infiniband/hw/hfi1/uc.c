@@ -468,7 +468,7 @@ last_imm:
 		 *
 		 * However, the way the SL is chosen below is consistent
 		 * with the way that IB/qib works and is trying avoid
-		 * introducing incompatabilities.
+		 * introducing incompatibilities.
 		 *
 		 * See also OPA Vol. 1, section 9.7.6, and table 9-17.
 		 */

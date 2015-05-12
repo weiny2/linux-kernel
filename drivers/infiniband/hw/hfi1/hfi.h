@@ -123,7 +123,7 @@ extern struct hfi1_ib_stats hfi1_stats;
 extern const struct pci_error_handlers hfi1_pci_err_handler;
 
 /*
- * First-cut critierion for "device is active" is
+ * First-cut criterion for "device is active" is
  * two thousand dwords combined Tx, Rx traffic per
  * 5-second interval. SMA packets are 64 dwords,
  * and occur "a few per second", presumably each way.
@@ -255,7 +255,7 @@ struct hfi1_ctxtdata {
 	char comm[16];
 	/* so file ops can get at unit */
 	struct hfi_devdata *dd;
-	/* so funcs that need physical port can get it easily */
+	/* so functions that need physical port can get it easily */
 	struct hfi1_pportdata *ppd;
 	/* A page of memory for rcvhdrhead, rcvegrhead, rcvegrtail * N */
 	void *subctxt_uregbase;
@@ -275,13 +275,13 @@ struct hfi1_ctxtdata {
 	/* ctxt rcvhdrq head offset */
 	u32 head;
 	u32 pkt_count;
-	/* lookaside fields */
+	/* look-aside fields */
 	struct hfi1_qp *lookaside_qp;
 	u32 lookaside_qpn;
 	/* QPs waiting for context processing */
 	struct list_head qp_wait_list;
 	/* interrupt handling */
-	u64 imask;	/* clear interupt mask */
+	u64 imask;	/* clear interrupt mask */
 	int ireg;	/* clear interrupt register */
 	unsigned numa_id; /* numa node of this context */
 	/* verbs stats per CTX */
@@ -299,8 +299,8 @@ struct hfi1_ctxtdata {
 /*
  * Represents a single packet at a high level. Put commonly computed things in
  * here so we do not have to keep doing them over and over. The rule of thumb is
- * if something is used one time to derive some value, store that soemthing in
- * here. If it is used mutliple times, then store the result of that derivation
+ * if something is used one time to derive some value, store that something in
+ * here. If it is used multiple times, then store the result of that derivation
  * in here.
  */
 struct hfi_packet {
@@ -364,9 +364,9 @@ struct hfi1_sge_state;
 /*
  * HFI or Host Link States
  *
- * These describe the states the driver thinks the logical and physicial
+ * These describe the states the driver thinks the logical and physical
  * states are in.  Used as an argument to set_link_state().  Implemented
- * as bits for easy multi-state checking.  The actual state can ony be
+ * as bits for easy multi-state checking.  The actual state can only be
  * one.
  */
 #define __HLS_UP_INIT_BP	0
@@ -401,7 +401,7 @@ struct hfi1_sge_state;
 #define HFI_DEFAULT_ACTIVE_MTU 8192
 /* use this MTU size as the default maximum */
 #define HFI_DEFAULT_MAX_MTU 8192
-/* default parition key */
+/* default partition key */
 #define DEFAULT_PKEY 0xffff
 
 /*
@@ -530,7 +530,7 @@ struct hfi1_pportdata {
 	u32 linkup;
 
 	/*
-	 * this address is mapped readonly into user processes so they can
+	 * this address is mapped read-only into user processes so they can
 	 * get status cheaply, whenever they want.  One qword of status per port
 	 */
 	u64 *statusp;
@@ -656,7 +656,7 @@ struct hfi1_pportdata {
 
 	/* port relative counter buffer */
 	u64 *cntrs;
-	/* port relatvie synthetic counter buffer */
+	/* port relative synthetic counter buffer */
 	u64 *scntrs;
 	/* we synthesize port_xmit_discards from several egress errors */
 	u64 port_xmit_discards;
@@ -749,7 +749,7 @@ struct hfi_devdata {
 	struct send_context_info *send_contexts;
 	/* map hardware send contexts to software index */
 	u8 *hw_to_sw;
-	/* spinlock for alocating and releasing send context resources */
+	/* spinlock for allocating and releasing send context resources */
 	spinlock_t sc_lock;
 	/* Per VL data. Enough for all VLs but not all elements are set/used. */
 	struct per_vl_data vld[PER_VL_SEND_CONTEXTS];
@@ -775,7 +775,7 @@ struct hfi_devdata {
 	u32                                 num_sdma;
 	/* lock for sdma_map */
 	spinlock_t                          sde_map_lock;
-	/* array of engines dimensioned by num_sdma */
+	/* array of engines sized by num_sdma */
 	struct sdma_engine                 *per_sdma;
 	/* array of vl maps */
 	struct sdma_vl_map __rcu           *sdma_map;
@@ -842,7 +842,7 @@ struct hfi_devdata {
 	unsigned long *events;
 	/*
 	 * per unit status, see also portdata statusp
-	 * mapped readonly into user processes so they can get unit and
+	 * mapped read-only into user processes so they can get unit and
 	 * IB link status cheaply
 	 */
 	struct hfi_status *status;
@@ -943,7 +943,7 @@ struct hfi_devdata {
 	u8 psxmitwait_supported;
 	/* cycle length of PS* counters in HW (in picoseconds) */
 	u16 psxmitwait_check_rate;
-	/* high volume overflow errors defered to tasklet */
+	/* high volume overflow errors deferred to tasklet */
 	struct tasklet_struct error_tasklet;
 	/* per device cq worker */
 	struct kthread_worker *worker;
@@ -1183,7 +1183,7 @@ static void ingress_pkey_table_fail(struct hfi1_pportdata *ppd, u16 pkey,
 
 /*
  * ingress_pkey_check - Return 0 if the ingress pkey is valid, return 1
- * otherwise. Use the criterea in the OPAv1 spec, section 9.10.14. idx
+ * otherwise. Use the criteria in the OPAv1 spec, section 9.10.14. idx
  * is a hint as to the best place in the partition key table to begin
  * searching.
  */

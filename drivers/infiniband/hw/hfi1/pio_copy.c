@@ -78,7 +78,7 @@ void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
 	void __iomem *send = dest + PIO_BLOCK_SIZE;
 	void __iomem *dend;			/* 8-byte data end */
 
-	/* write thte PBC */
+	/* write the PBC */
 	writeq(pbc, dest);
 	dest += sizeof(u64);
 
@@ -99,7 +99,7 @@ void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
 		 * 0. We're not on the SOP block boundary
 		 * 1. The possible DWORD dangle will still be within
 		 *    the SOP block
-		 * 2. We cannot wrap except on a block bondary.
+		 * 2. We cannot wrap except on a block boundary.
 		 */
 	} else {
 		/* QWORD data extends _to_ or beyond the SOP block */
@@ -214,7 +214,7 @@ static inline void read_low_bytes(struct pio_buf *pbuf, const void *from,
 }
 
 /*
- * Read nbytes bytes from "from" and put them at the next signifiant bytes
+ * Read nbytes bytes from "from" and put them at the next significant bytes
  * of pbuf->carry.  Unused bytes are zeroed.  It is expected that the extra
  * read does not overfill carry.
  *
@@ -281,7 +281,7 @@ static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
 }
 
 /*
- * Write a quadword using parts of pbuf->carry and the next 8 bytes of src.
+ * Write a quad word using parts of pbuf->carry and the next 8 bytes of src.
  * Put the unused part of the next 8 bytes of src into the LSB bytes of
  * pbuf->carry with the upper bytes zeroed..
  *
@@ -303,7 +303,7 @@ static inline void merge_write8(
 }
 
 /*
- * Write a quadword using all bytes of carry.
+ * Write a quad word using all bytes of carry.
  */
 static inline void carry8_write8(union mix carry, void __iomem *dest)
 {
@@ -311,9 +311,9 @@ static inline void carry8_write8(union mix carry, void __iomem *dest)
 }
 
 /*
- * Write a quadword using all the valid bytes of carry.  If carry
+ * Write a quad word using all the valid bytes of carry.  If carry
  * has zero valid bytes, nothing is written.
- * Returns 0 on nothing written, non-zero on quadword written.
+ * Returns 0 on nothing written, non-zero on quad word written.
  */
 static inline int carry_write8(struct pio_buf *pbuf, void __iomem *dest)
 {
@@ -406,7 +406,7 @@ static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
 }
 
 /*
- * Write a quadword using parts of pbuf->carry and the next 8 bytes of src.
+ * Write a quad word using parts of pbuf->carry and the next 8 bytes of src.
  * Put the unused part of the next 8 bytes of src into the low bytes of
  * pbuf->carry.
  */
@@ -423,7 +423,7 @@ static inline void merge_write8(
 }
 
 /*
- * Write a quadword using all bytes of carry.
+ * Write a quad word using all bytes of carry.
  */
 static inline void carry8_write8(union mix carry, void *dest)
 {
@@ -431,9 +431,9 @@ static inline void carry8_write8(union mix carry, void *dest)
 }
 
 /*
- * Write a quadword using all the valid bytes of carry.  If carry
+ * Write a quad word using all the valid bytes of carry.  If carry
  * has zero valid bytes, nothing is written.
- * Returns 0 on nothing written, non-zero on quadword written.
+ * Returns 0 on nothing written, non-zero on quad word written.
  */
 static inline int carry_write8(struct pio_buf *pbuf, void *dest)
 {
@@ -487,7 +487,7 @@ void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
 		 * 0. We're not on the SOP block boundary
 		 * 1. The possible DWORD dangle will still be within
 		 *    the SOP block
-		 * 2. We cannot wrap except on a block bondary.
+		 * 2. We cannot wrap except on a block boundary.
 		 */
 	} else {
 		/* QWORD data extends _to_ or beyond the SOP block */
@@ -795,7 +795,7 @@ void seg_pio_copy_mid(struct pio_buf *pbuf, const void *from, size_t nbytes)
 			pbuf->qw_written++;
 
 			/* read any extra bytes to do final alignment */
-			/* this will overwrite anytyhing in pbuf->carry */
+			/* this will overwrite anything in pbuf->carry */
 			read_low_bytes(pbuf, from, extra);
 			from += extra;
 			nbytes -= extra;

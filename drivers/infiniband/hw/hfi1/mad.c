@@ -317,7 +317,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 {
 	struct opa_node_info *ni;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
+	unsigned pidx = port - 1; /* IB number port from 1, hw from 0 */
 
 	ni = (struct opa_node_info *)data;
 
@@ -354,7 +354,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 {
 	struct ib_node_info *nip = (struct ib_node_info *)&smp->data;
 	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
-	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
+	unsigned pidx = port - 1; /* IB number port from 1, hw from 0 */
 
 	/* GUID 0 is illegal */
 	if (smp->attr_mod || pidx >= dd->num_pports ||
@@ -551,7 +551,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	dd = dd_from_ibdev(ibdev);
-	/* IB numbers ports from 1, hdw from 0 */
+	/* IB numbers ports from 1, hw from 0 */
 	ppd = dd->pport + (port_num - 1);
 	ibp = &ppd->ibport_data;
 
@@ -933,7 +933,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 			OPA_PI_MASK_CLIENT_REREGISTER);
 
 	dd = dd_from_ibdev(ibdev);
-	/* IB numbers ports from 1, hdw from 0 */
+	/* IB numbers ports from 1, hw from 0 */
 	ppd = dd->pport + (port_num - 1);
 	ibp = &ppd->ibport_data;
 	event.device = ibdev;
@@ -1449,7 +1449,7 @@ static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 		return reply((struct ib_mad_hdr *)smp);
 	}
 
-	/* IB numbers ports from 1, hdw from 0 */
+	/* IB numbers ports from 1, hw from 0 */
 	ppd = dd->pport + (port - 1);
 	lstate = driver_lstate(ppd);
 	/* it's known that async_update is 0 by this point, but include
@@ -1505,7 +1505,7 @@ static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 		return reply((struct ib_mad_hdr *)smp);
 	}
 
-	/* IB numbers ports from 1, hdw from 0 */
+	/* IB numbers ports from 1, hw from 0 */
 	ppd = dd->pport + (port - 1);
 	lstate = driver_lstate(ppd);
 	if (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE) {

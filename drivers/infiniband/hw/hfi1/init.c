@@ -607,7 +607,7 @@ static void enable_chip(struct hfi_devdata *dd)
 
 	/*
 	 * Enable kernel ctxts' receive and receive interrupt.
-	 * Other ctxts done as user opens and inits them.
+	 * Other ctxts done as user opens and initializes them.
 	 */
 	rcvmask = HFI1_RCVCTRL_CTXT_ENB | HFI1_RCVCTRL_INTRAVAIL_ENB;
 	for (i = 0; i < dd->first_user_ctxt; ++i) {
@@ -663,7 +663,7 @@ wq_error:
 /**
  * hfi1_init - do the actual initialization sequence on the chip
  * @dd: the hfi1_ib device
- * @reinit: reinitializing, so don't allocate new memory
+ * @reinit: re-initializing, so don't allocate new memory
  *
  * Do the actual initialization sequence on the chip.  This is done
  * both from the init routine called from the PCI infrastructure, and
@@ -715,7 +715,7 @@ int hfi1_init(struct hfi_devdata *dd, int reinit)
 	if (ret)
 		goto done;
 
-	/* dd->rcd can be NULL if early init failed */
+	/* dd->rcd can be NULL if early initialization failed */
 	for (i = 0; dd->rcd && i < dd->first_user_ctxt; ++i) {
 		/*
 		 * Set up the (kernel) rcvhdr queue and egr TIDs.  If doing
@@ -737,7 +737,7 @@ int hfi1_init(struct hfi_devdata *dd, int reinit)
 	if (lastfail)
 		ret = lastfail;
 
-	/* Allocate enough memory for user event notifiction. */
+	/* Allocate enough memory for user event notification. */
 	len = ALIGN(dd->chip_rcv_contexts * HFI_MAX_SHARED_CTXTS *
 		    sizeof(*dd->events), PAGE_SIZE);
 	dd->events = vmalloc_user(len);
@@ -745,7 +745,7 @@ int hfi1_init(struct hfi_devdata *dd, int reinit)
 		dd_dev_err(dd, "Failed to allocate user events page\n");
 	/*
 	 * Allocate a page for device and port status.
-	 * Page will be shared amongst all user proceses.
+	 * Page will be shared amongst all user processes.
 	 */
 	dd->status = vmalloc_user(PAGE_SIZE);
 	if (!dd->status)
@@ -1194,7 +1194,7 @@ static int __init hfi1_mod_init(void)
 		 * The dynamic algorithm expects a non-zero timeout
 		 * and a count > 1.
 		 */
-		pr_err("Invalid mode: dynamic receive interrupt mitigation with invalid count and timeout - turning dyanmic off\n");
+		pr_err("Invalid mode: dynamic receive interrupt mitigation with invalid count and timeout - turning dynamic off\n");
 		rcv_intr_dynamic = 0;
 	}
 
@@ -1346,7 +1346,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* The receive eager buffer size must be set before the receive
 	 * contexts are created.
 	 *
-	 * Set the eager bufer size.  Validate that it falls in a range
+	 * Set the eager buffer size.  Validate that it falls in a range
 	 * allowed by the hardware - all powers of 2 between the min and
 	 * max.  The maximum valid MTU is within the eager buffer range
 	 * so we do not need to cap the max_mtu by an eager buffer size
@@ -1376,7 +1376,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto bail;
 
 	/*
-	 * Do device-specific initialiation, function table setup, dd
+	 * Do device-specific initialization, function table setup, dd
 	 * allocation, etc.
 	 */
 	switch (ent->device) {
@@ -1636,7 +1636,7 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 
 			/*
 			 * Fail the eager buffer allocation if:
-			 *   - we are already using the lowest acceptible size
+			 *   - we are already using the lowest acceptable size
 			 *   - we are using one-pkt-per-egr-buffer (this implies
 			 *     that we are accepting only one size)
 			 */
@@ -1699,7 +1699,7 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 	rcd->egrbufs.threshold =
 		rounddown_pow_of_two(rcd->egrbufs.alloced / 2);
 	/*
-	 * Compute the expecte RcvArray entry base. This is done after
+	 * Compute the expected RcvArray entry base. This is done after
 	 * allocating the eager buffers in order to maximize the
 	 * expected RcvArray entries for the context.
 	 */

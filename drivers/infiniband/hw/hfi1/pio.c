@@ -233,7 +233,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 	 *	- copy the centipercents/absolute sizes from the pool config
 	 *	- sanity check these values
 	 *	- add up centipercents, then later check for full value
-	 *	- add up absolute blocks, then later check for overcommit
+	 *	- add up absolute blocks, then later check for over-commit
 	 */
 	cp_total = 0;
 	ab_total = 0;
@@ -1076,7 +1076,7 @@ void pio_freeze(struct hfi_devdata *dd)
 }
 
 /*
- * Unfreeze PIO for kernel send contexts.  The precondtion for calling this
+ * Unfreeze PIO for kernel send contexts.  The precondition for calling this
  * is that all PIO send contexts have been disabled and the SPC freeze has
  * been cleared.  Now perform the last step and re-enable each kernel context.
  * User (PSM) processing will occur when PSM calls into the kernel to
@@ -1508,7 +1508,7 @@ static void sc_piobufavail(struct send_context *sc)
 		wait = list_first_entry(list, struct iowait, list);
 		qp = container_of(wait, struct hfi1_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
-		/* refcount held until actual wakeup */
+		/* refcount held until actual wake up */
 		qps[n++] = qp;
 	}
 	/*
