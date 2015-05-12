@@ -90,7 +90,7 @@
 #define HFI_CAP_HDRSUPP          (1UL <<  4) /* Enable Header Suppression */
 #define HFI_CAP_ENABLE_SMA       (1UL <<  5) /* Enable driver SM Agent */
 #define HFI_CAP_USE_SDMA_HEAD    (1UL <<  6) /* DMA Hdr Q tail vs. use CSR */
-#define HFI_CAP_MULTI_PKT_EGR    (1UL <<  7) /* Enable multipacket Egr buffs */
+#define HFI_CAP_MULTI_PKT_EGR    (1UL <<  7) /* Enable multi-packet Egr buffs */
 #define HFI_CAP_NODROP_RHQ_FULL  (1UL <<  8) /* Don't drop on Hdr Q full */
 #define HFI_CAP_NODROP_EGR_FULL  (1UL <<  9) /* Don't drop on EGR buffs full */
 #define HFI_CAP_TID_UNMAP        (1UL << 10) /* Enable Expected TID caching */
@@ -110,7 +110,7 @@
 /*
  * If the unit is specified via open, HCA choice is fixed.  If port is
  * specified, it's also fixed.  Otherwise we try to spread contexts
- * across ports and HCAs, using different algorithims.  WITHIN is
+ * across ports and HCAs, using different algorithms.  WITHIN is
  * the old default, prior to this mechanism.
  */
 #define HFI_ALG_ACROSS 0 /* round robin contexts across HCAs, then
@@ -158,13 +158,13 @@
 #define HFI_EVENT_SL2VL_CHANGE_BIT	(1UL << _HFI_EVENT_SL2VL_CHANGE_BIT)
 
 /*
- * These are the status bits readable (in ascii form, 64bit value)
+ * These are the status bits readable (in ASCII form, 64bit value)
  * from the "status" sysfs file.  For binary compatibility, values
  * must remain as is; removed states can be reused for different
  * purposes.
  */
 #define HFI_STATUS_INITTED       0x1    /* basic initialization done */
-/* Chip has been found and initted */
+/* Chip has been found and initialized */
 #define HFI_STATUS_CHIP_PRESENT 0x20
 /* IB link is at ACTIVE, usable for data traffic */
 #define HFI_STATUS_IB_READY     0x40
@@ -187,7 +187,7 @@
 #define HFI_POLL_TYPE_URGENT     0x1
 
 /*
- * This structure is passed to qib_userinit() to tell the driver where
+ * This structure is passed to the driver to tell it where
  * user code buffers are, sizes, etc.   The offsets and sizes of the
  * fields must remain unchanged, for binary compatibility.  It can
  * be extended, if userversion is changed so user code can tell, if needed
@@ -223,7 +223,7 @@ struct hfi_ctxt_info {
 	__u16 rcvtids;          /* number of Rcv TIDs for this context */
 	__u16 credits;          /* number of PIO credits for this context */
 	__u16 numa_node;        /* NUMA node of the assigned device */
-	__u16 rec_cpu;          /* cpu # for affinity (ffff if none) */
+	__u16 rec_cpu;          /* cpu # for affinity (0xffff if none) */
 	__u16 send_ctxt;        /* send context in use by this user context */
 	__u16 egrtids;          /* number of RcvArray entries for Eager Rcvs */
 	__u16 rcvhdrq_cnt;      /* number of RcvHdrQ entries */
@@ -278,7 +278,7 @@ struct hfi_status {
 };
 
 /*
- * This structure is returned by qib_userinit() immediately after
+ * This structure is returned by the driver immediately after
  * open to get implementation-specific info, and info specific to this
  * instance.
  *
@@ -303,12 +303,12 @@ struct hfi_base_info {
 	/* PIO credit return address, */
 	__u64 sc_credits_addr;
 	/*
-	 * Base address of writeonly pio buffers for this process.
+	 * Base address of write-only pio buffers for this process.
 	 * Each buffer has sendpio_credits*64 bytes.
 	 */
 	__u64 pio_bufbase_sop;
 	/*
-	 * Base address of writeonly pio buffers for this process.
+	 * Base address of write-only pio buffers for this process.
 	 * Each buffer has sendpio_credits*64 bytes.
 	 */
 	__u64 pio_bufbase;
@@ -330,7 +330,7 @@ struct hfi_base_info {
 	__u64 events_bufbase;
 	/* status page */
 	__u64 status_bufbase;
-	/* rcvhdrtail updata */
+	/* rcvhdrtail update */
 	__u64 rcvhdrtail_base;
 	/*
 	 * shared memory pages for subctxts if ctxt is shared; these cover
