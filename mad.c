@@ -112,7 +112,7 @@ static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 
 	send_buf = ib_create_send_mad(agent, qpn, pkey_idx, 0,
 				      IB_MGMT_MAD_HDR, IB_MGMT_MAD_DATA,
-				      GFP_ATOMIC);
+				      GFP_ATOMIC, IB_MGMT_BASE_VERSION);
 	if (IS_ERR(send_buf))
 		return;
 
@@ -328,7 +328,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	ni->port_guid = dd->pport[pidx].guid;
-	ni->base_version = JUMBO_MGMT_BASE_VERSION;
+	ni->base_version = OPA_MGMT_BASE_VERSION;
 	ni->class_version = OPA_SMI_CLASS_VERSION;
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibdev->phys_port_cnt;
@@ -363,7 +363,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	else
 		nip->port_guid = dd->pport[pidx].guid;
 
-	nip->base_version = JUMBO_MGMT_BASE_VERSION;
+	nip->base_version = OPA_MGMT_BASE_VERSION;
 	nip->class_version = OPA_SMI_CLASS_VERSION;
 	nip->node_type = 1;     /* channel adapter */
 	nip->num_ports = ibdev->phys_port_cnt;
@@ -2095,7 +2095,7 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	if (pmp->mad_hdr.attr_mod != 0)
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 
-	p->base_version = JUMBO_MGMT_BASE_VERSION;
+	p->base_version = OPA_MGMT_BASE_VERSION;
 	p->class_version = OPA_SMI_CLASS_VERSION;
 	/*
 	 * Set the most significant bit of CM2 to indicate support for
@@ -3622,7 +3622,7 @@ void clear_linkup_counters(struct hfi1_devdata *dd)
  * is_local_mad() returns 1 if 'mad' is sent from, and destined to the
  * local node, 0 otherwise.
  */
-static int is_local_mad(struct hfi1_ibport *ibp, struct jumbo_mad *mad,
+static int is_local_mad(struct hfi1_ibport *ibp, struct opa_mad *mad,
 			struct ib_wc *in_wc)
 {
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
@@ -3682,8 +3682,8 @@ static int opa_local_smp_check(struct hfi1_ibport *ibp, struct ib_wc *in_wc)
 }
 
 static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
-			    u8 port, struct jumbo_mad *in_mad,
-			    struct jumbo_mad *out_mad,
+			    u8 port, struct opa_mad *in_mad,
+			    struct opa_mad *out_mad,
 			    u32 *resp_len)
 {
 	struct opa_smp *smp = (struct opa_smp *)out_mad;
@@ -3835,8 +3835,8 @@ bail:
 }
 
 static int process_perf_opa(struct ib_device *ibdev, u8 port,
-			    struct jumbo_mad *in_mad,
-			    struct jumbo_mad *out_mad, u32 *resp_len)
+			    struct opa_mad *in_mad,
+			    struct opa_mad *out_mad, u32 *resp_len)
 {
 	struct opa_pma_mad *pmp = (struct opa_pma_mad *)out_mad;
 	int ret;
@@ -3848,7 +3848,7 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		return reply((struct ib_mad_hdr *)pmp);
 	}
 
-	*resp_len = sizeof(struct jumbo_mad);
+	*resp_len = sizeof(struct opa_mad);
 
 	switch (pmp->mad_hdr.method) {
 	case IB_MGMT_METHOD_GET:
@@ -3908,10 +3908,9 @@ bail:
 }
 
 static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
-				u8 port, struct ib_wc *in_wc,
-				struct ib_grh *in_grh,
-				struct jumbo_mad *in_mad,
-				struct jumbo_mad *out_mad)
+			       u8 port, struct ib_wc *in_wc,
+			       struct ib_grh *in_grh, struct opa_mad *in_mad,
+			       struct opa_mad *out_mad, size_t *out_mad_size)
 {
 	int ret;
 	int pkey_idx;
@@ -3948,9 +3947,9 @@ static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 
 bail:
 	if (ret & IB_MAD_RESULT_REPLY)
-		in_wc->byte_len = round_up(resp_len, 8);
+		*out_mad_size = round_up(resp_len, 8);
 	else if (ret & IB_MAD_RESULT_SUCCESS)
-		in_wc->byte_len -= sizeof(struct ib_grh);
+		*out_mad_size = in_wc->byte_len - sizeof(struct ib_grh);
 
 	return ret;
 }
@@ -3995,17 +3994,25 @@ bail:
  */
 int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     struct ib_wc *in_wc, struct ib_grh *in_grh,
-		     struct ib_mad *in_mad, struct ib_mad *out_mad)
+		     struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		     struct ib_mad_hdr *out_mad, size_t *out_mad_size)
 {
-	switch (in_mad->mad_hdr.base_version) {
-	case JUMBO_MGMT_BASE_VERSION:
+	switch (in_mad->base_version) {
+	case OPA_MGMT_BASE_VERSION:
+		if (unlikely(in_mad_size != sizeof(struct opa_mad))) {
+			dev_err(ibdev->dma_device, "invalid in_mad_size\n");
+			return IB_MAD_RESULT_FAILURE;
+		}
 		return hfi1_process_opa_mad(ibdev, mad_flags, port,
 					    in_wc, in_grh,
-					    (struct jumbo_mad *)in_mad,
-					    (struct jumbo_mad *)out_mad);
+					    (struct opa_mad *)in_mad,
+					    (struct opa_mad *)out_mad,
+					    out_mad_size);
 	case IB_MGMT_BASE_VERSION:
 		return hfi1_process_ib_mad(ibdev, mad_flags, port,
-					  in_wc, in_grh, in_mad, out_mad);
+					  in_wc, in_grh,
+					  (struct ib_mad *)in_mad,
+					  (struct ib_mad *)out_mad);
 	default:
 		break;
 	}

@@ -61,7 +61,7 @@
 #include <linux/completion.h>
 #include <rdma/ib_pack.h>
 #include <rdma/ib_user_verbs.h>
-
+#include <rdma/ib_mad.h>
 
 struct hfi1_ctxtdata;
 struct hfi1_pportdata;
@@ -888,9 +888,10 @@ void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 void hfi1_cap_mask_chg(struct hfi1_ibport *ibp);
 void hfi1_sys_guid_chg(struct hfi1_ibport *ibp);
 void hfi1_node_desc_chg(struct hfi1_ibport *ibp);
-int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
+int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     struct ib_wc *in_wc, struct ib_grh *in_grh,
-		     struct ib_mad *in_mad, struct ib_mad *out_mad);
+		     struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		     struct ib_mad_hdr *out_mad, size_t *out_mad_size);
 int hfi1_create_agents(struct hfi1_ibdev *dev);
 void hfi1_free_agents(struct hfi1_ibdev *dev);
 

@@ -1403,8 +1403,8 @@ static int query_device(struct ib_device *ibdev,
 	props->device_cap_flags = IB_DEVICE_BAD_PKEY_CNTR |
 		IB_DEVICE_BAD_QKEY_CNTR | IB_DEVICE_SHUTDOWN_PORT |
 		IB_DEVICE_SYS_IMAGE_GUID | IB_DEVICE_RC_RNR_NAK_GEN |
-		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE |
-		IB_DEVICE_JUMBO_MAD_SUPPORT;
+		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE;
+	props->device_cap_flags2 = IB_DEVICE_OPA_MAD_SUPPORT;
 
 	props->page_size_cap = PAGE_SIZE;
 	props->vendor_id =
@@ -1436,6 +1436,7 @@ static int query_device(struct ib_device *ibdev,
 	props->max_mcast_qp_attach = hfi1_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
 		props->max_mcast_grp;
+	props->max_mad_size = OPA_MGMT_MAD_SIZE;
 
 	return 0;
 }
