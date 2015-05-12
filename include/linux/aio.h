@@ -67,9 +67,9 @@ struct kiocb {
 #define IOCB_DIRECT (1 << 1)
 #define IOCB_FLAGS_MASK (IOCB_APPEND | IOCB_DIRECT)
 
-static inline struct kiocb *kiocb_ctx(struct kiocb *kiocb)
+static inline struct kioctx *kiocb_ctx(struct kiocb *kiocb)
 {
-	return (struct kiocb *)(kiocb->ki_ctx & ~IOCB_FLAGS_MASK);
+	return (struct kioctx *)(kiocb->ki_ctx & ~IOCB_FLAGS_MASK);
 }
 
 static inline bool kiocb_is_direct(struct kiocb *kiocb)
