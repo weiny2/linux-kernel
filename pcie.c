@@ -70,8 +70,8 @@
 /*
  * Code to adjust PCIe capabilities.
  */
-static void tune_pcie_caps(struct hfi_devdata *);
-static void tune_pcie_coalesce(struct hfi_devdata *);
+static void tune_pcie_caps(struct hfi1_devdata *);
+static void tune_pcie_coalesce(struct hfi1_devdata *);
 
 /*
  * Do all the common PCIe setup and initialization.
@@ -142,7 +142,7 @@ int hfi1_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	goto done;
 
 bail:
-	hfi_pcie_cleanup(pdev);
+	hfi1_pcie_cleanup(pdev);
 done:
 	return ret;
 }
@@ -150,7 +150,7 @@ done:
 /*
  * Clean what was done in hfi1_pcie_init()
  */
-void hfi_pcie_cleanup(struct pci_dev *pdev)
+void hfi1_pcie_cleanup(struct pci_dev *pdev)
 {
 	pci_disable_device(pdev);
 	/*
@@ -165,7 +165,7 @@ void hfi_pcie_cleanup(struct pci_dev *pdev)
  * fields required to re-initialize after a chip reset, or for
  * various other purposes
  */
-int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
+int hfi1_pcie_ddinit(struct hfi1_devdata *dd, struct pci_dev *pdev,
 		     const struct pci_device_id *ent)
 {
 	unsigned long len;
@@ -205,7 +205,7 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
 		return -ENOMEM;
 	}
 
-	dd->flags |= HFI_PRESENT;	/* now register routines work */
+	dd->flags |= HFI1_PRESENT;	/* now register routines work */
 
 	dd->kregend = dd->kregbase + TXE_PIO_SEND;
 	dd->physaddr = addr;        /* used for io_remap, etc. */
@@ -244,11 +244,11 @@ int hfi1_pcie_ddinit(struct hfi_devdata *dd, struct pci_dev *pdev,
  * to releasing the dd memory.
  * Void because all of the core pcie cleanup functions are void.
  */
-void hfi1_pcie_ddcleanup(struct hfi_devdata *dd)
+void hfi1_pcie_ddcleanup(struct hfi1_devdata *dd)
 {
 	u64 __iomem *base = (void __iomem *) dd->kregbase;
 
-	dd->flags &= ~HFI_PRESENT;
+	dd->flags &= ~HFI1_PRESENT;
 	dd->kregbase = NULL;
 	iounmap(base);
 	if (dd->rcvarray_wc)
@@ -263,7 +263,7 @@ void hfi1_pcie_ddcleanup(struct hfi_devdata *dd)
  * Do a Function Level Reset (FLR) on the device.
  * Based on static function drivers/pci/pci.c:pcie_flr().
  */
-void hfi_pcie_flr(struct hfi_devdata *dd)
+void hfi1_pcie_flr(struct hfi1_devdata *dd)
 {
 	int i;
 	u16 status;
@@ -289,7 +289,7 @@ clear:
 	msleep(100);
 }
 
-static void msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
+static void msix_setup(struct hfi1_devdata *dd, int pos, u32 *msixcnt,
 		       struct hfi1_msix_entry *hfi1_msix_entry)
 {
 	int ret;
@@ -362,7 +362,7 @@ static u32 extract_width(u16 linkstat)
 }
 
 /* read the link status and set dd->{lbus_width,lbus_speed,lbus_info} */
-static void update_lbus_info(struct hfi_devdata *dd)
+static void update_lbus_info(struct hfi1_devdata *dd)
 {
 	u16 linkstat;
 
@@ -377,7 +377,7 @@ static void update_lbus_info(struct hfi_devdata *dd)
  * Read in the current PCIe link width and speed.  Find if the link is
  * Gen3 capable.
  */
-int pcie_speeds(struct hfi_devdata *dd)
+int pcie_speeds(struct hfi1_devdata *dd)
 {
 	u32 linkcap;
 
@@ -421,8 +421,8 @@ int pcie_speeds(struct hfi_devdata *dd)
  *	- actual number of interrupts allocated
  *	- 0 if fell back to INTx.
  */
-void request_msix(struct hfi_devdata *dd, u32 *nent,
-			struct hfi1_msix_entry *entry)
+void request_msix(struct hfi1_devdata *dd, u32 *nent,
+		  struct hfi1_msix_entry *entry)
 {
 	int pos;
 
@@ -442,7 +442,7 @@ void request_msix(struct hfi_devdata *dd, u32 *nent,
 /*
  * Disable MSI-X.
  */
-void hfi1_nomsix(struct hfi_devdata *dd)
+void hfi1_nomsix(struct hfi1_devdata *dd)
 {
 	pci_disable_msix(dd->pcidev);
 }
@@ -456,7 +456,7 @@ void hfi1_enable_intx(struct pci_dev *pdev)
 }
 
 /* restore command and BARs after a reset has wiped them out */
-void restore_pci_variables(struct hfi_devdata *dd)
+void restore_pci_variables(struct hfi1_devdata *dd)
 {
 	pci_write_config_word(dd->pcidev, PCI_COMMAND, dd->pci_command);
 	pci_write_config_dword(dd->pcidev,
@@ -510,7 +510,7 @@ MODULE_PARM_DESC(pcie_coalesce, "tune PCIe coalescing on some Intel chipsets");
  * of these chipsets, with some BIOS settings, and enabling it on those
  * systems may result in the system crashing, and/or data corruption.
  */
-static void tune_pcie_coalesce(struct hfi_devdata *dd)
+static void tune_pcie_coalesce(struct hfi1_devdata *dd)
 {
 	int r;
 	struct pci_dev *parent;
@@ -578,7 +578,7 @@ static int hfi1_pcie_caps;
 module_param_named(pcie_caps, hfi1_pcie_caps, int, S_IRUGO);
 MODULE_PARM_DESC(pcie_caps, "Max PCIe tuning: Payload (0..3), ReadReq (4..7)");
 
-static void tune_pcie_caps(struct hfi_devdata *dd)
+static void tune_pcie_caps(struct hfi1_devdata *dd)
 {
 	struct pci_dev *parent;
 	u16 pcaps, pctl, ecaps, ectl;
@@ -660,7 +660,7 @@ static void tune_pcie_caps(struct hfi_devdata *dd)
 static pci_ers_result_t
 pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 {
-	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi1_devdata *dd = pci_get_drvdata(pdev);
 	pci_ers_result_t ret = PCI_ERS_RESULT_RECOVERED;
 
 	switch (state) {
@@ -678,7 +678,7 @@ pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 		if (dd) {
 			dd_dev_info(dd, "State Permanent Failure, disabling\n");
 			/* no more register accesses! */
-			dd->flags &= ~HFI_PRESENT;
+			dd->flags &= ~HFI1_PRESENT;
 			hfi1_disable_after_error(dd);
 		}
 		 /* else early, or other problem */
@@ -697,7 +697,7 @@ static pci_ers_result_t
 pci_mmio_enabled(struct pci_dev *pdev)
 {
 	u64 words = 0U;
-	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi1_devdata *dd = pci_get_drvdata(pdev);
 	pci_ers_result_t ret = PCI_ERS_RESULT_RECOVERED;
 
 	if (dd && dd->pport) {
@@ -714,7 +714,7 @@ pci_mmio_enabled(struct pci_dev *pdev)
 static pci_ers_result_t
 pci_slot_reset(struct pci_dev *pdev)
 {
-	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi1_devdata *dd = pci_get_drvdata(pdev);
 
 	dd_dev_info(dd, "HFI1 slot_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
@@ -723,7 +723,7 @@ pci_slot_reset(struct pci_dev *pdev)
 static pci_ers_result_t
 pci_link_reset(struct pci_dev *pdev)
 {
-	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi1_devdata *dd = pci_get_drvdata(pdev);
 
 	dd_dev_info(dd, "HFI1 link_reset function called, ignored\n");
 	return PCI_ERS_RESULT_CAN_RECOVER;
@@ -732,7 +732,7 @@ pci_link_reset(struct pci_dev *pdev)
 static void
 pci_resume(struct pci_dev *pdev)
 {
-	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+	struct hfi1_devdata *dd = pci_get_drvdata(pdev);
 
 	dd_dev_info(dd, "HFI1 resume function called\n");
 	pci_cleanup_aer_uncorrect_error_status(pdev);
@@ -855,8 +855,8 @@ static const u8 integrated_preliminary_eq[11][3] = {
 /*
  * Load the given EQ preset table into the PCIe hardware.
  */
-static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3], u8 fs,
-			u8 div)
+static int load_eq_table(struct hfi1_devdata *dd, const u8 eq[11][3], u8 fs,
+			 u8 div)
 {
 	struct pci_dev *pdev = dd->pcidev;
 	u32 hit_error = 0;
@@ -900,7 +900,7 @@ static int load_eq_table(struct hfi_devdata *dd, const u8 eq[11][3], u8 fs,
  * before the SBR for the Pcie Gen3.
  * The hardware mutex is already being held.
  */
-static void pcie_post_steps(struct hfi_devdata *dd)
+static void pcie_post_steps(struct hfi1_devdata *dd)
 {
 	int i;
 
@@ -913,16 +913,16 @@ static void pcie_post_steps(struct hfi_devdata *dd)
 	 * Use individual addresses since no broadcast is set up.
 	 */
 	for (i = 0; i < NUM_PCIE_SERDES; i++) {
-		sbus_request(dd, pcie_pcs_addrs[dd->hfi_id][i],
-			0x03, WRITE_SBUS_RECEIVER, 0x00022132);
+		sbus_request(dd, pcie_pcs_addrs[dd->hfi1_id][i],
+			     0x03, WRITE_SBUS_RECEIVER, 0x00022132);
 	}
 
 	/*
 	 * Enable iCal for PCIe Gen3 RX equalization, and set which
 	 * evaluation of RX_EQ_EVAL will launch the iCal procedure.
 	 */
-	sbus_request(dd, pcie_serdes_broadcast[dd->hfi_id], 0x03,
-		WRITE_SBUS_RECEIVER, 0x00265202);
+	sbus_request(dd, pcie_serdes_broadcast[dd->hfi1_id], 0x03,
+		     WRITE_SBUS_RECEIVER, 0x00265202);
 	clear_sbus_fast_mode(dd);
 }
 
@@ -932,7 +932,7 @@ static void pcie_post_steps(struct hfi_devdata *dd)
  * Based on pci_parent_bus_reset() which is not exported by the
  * kernel core.
  */
-static int trigger_sbr(struct hfi_devdata *dd)
+static int trigger_sbr(struct hfi1_devdata *dd)
 {
 	struct pci_dev *dev = dd->pcidev;
 	struct pci_dev *pdev;
@@ -968,8 +968,8 @@ static int trigger_sbr(struct hfi_devdata *dd)
 /*
  * Write the given gasket interrupt register.
  */
-static void write_gasket_interrupt(struct hfi_devdata *dd, int index,
-					u16 code, u16 data)
+static void write_gasket_interrupt(struct hfi1_devdata *dd, int index,
+				   u16 code, u16 data)
 {
 	write_csr(dd, ASIC_PCIE_SD_INTRPT_LIST + (index * 8),
 	    (((u64)code << ASIC_PCIE_SD_INTRPT_LIST_INTRPT_CODE_SHIFT)
@@ -979,13 +979,13 @@ static void write_gasket_interrupt(struct hfi_devdata *dd, int index,
 /*
  * Tell the gasket logic how to react to the reset.
  */
-static void arm_gasket_logic(struct hfi_devdata *dd)
+static void arm_gasket_logic(struct hfi1_devdata *dd)
 {
 	u64 reg;
 
-	reg = (((u64)1 << dd->hfi_id)
+	reg = (((u64)1 << dd->hfi1_id)
 			<< ASIC_PCIE_SD_HOST_CMD_INTRPT_CMD_SHIFT)
-		| ((u64)pcie_serdes_broadcast[dd->hfi_id]
+		| ((u64)pcie_serdes_broadcast[dd->hfi1_id]
 			<< ASIC_PCIE_SD_HOST_CMD_SBUS_RCVR_ADDR_SHIFT
 		| ASIC_PCIE_SD_HOST_CMD_SBR_MODE_SMASK
 		| ((u64)SBR_DELAY_US & ASIC_PCIE_SD_HOST_CMD_TIMER_MASK)
@@ -999,7 +999,7 @@ static void arm_gasket_logic(struct hfi_devdata *dd)
 /*
  * Do all the steps needed to transition the PCIe link to Gen3 speed.
  */
-int do_pcie_gen3_transition(struct hfi_devdata *dd)
+int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 {
 	u64 fw_ctrl;
 	u64 reg;
@@ -1284,10 +1284,10 @@ retry:
 	/* extract status, look for our HFI */
 	status = (reg >> ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_SHIFT)
 			& ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
-	if ((status & (1 << dd->hfi_id)) == 0) {
+	if ((status & (1 << dd->hfi1_id)) == 0) {
 		dd_dev_err(dd,
 			"%s: gasket status 0x%x, expecting 0x%x\n",
-			__func__, status, 1 << dd->hfi_id);
+			__func__, status, 1 << dd->hfi1_id);
 		ret = -EIO;
 		goto done;
 	}

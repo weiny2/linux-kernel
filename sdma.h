@@ -1,5 +1,5 @@
-#ifndef _HFI_SDMA_H
-#define _HFI_SDMA_H
+#ifndef _HFI1_SDMA_H
+#define _HFI1_SDMA_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -399,7 +399,7 @@ struct verbs_txreq {
  */
 struct sdma_engine {
 	/* read mostly */
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	struct hfi1_pportdata *ppd;
 	/* private: */
 	void __iomem *tail_csr;
@@ -486,15 +486,15 @@ struct sdma_engine {
 };
 
 
-int sdma_init(struct hfi_devdata *dd, u8 port);
-void sdma_start(struct hfi_devdata *dd);
-void sdma_exit(struct hfi_devdata *dd);
-void sdma_all_running(struct hfi_devdata *dd);
-void sdma_all_idle(struct hfi_devdata *dd);
-void sdma_freeze_notify(struct hfi_devdata *dd, int go_idle);
-void sdma_freeze(struct hfi_devdata *dd);
-void sdma_unfreeze(struct hfi_devdata *dd);
-void sdma_wait(struct hfi_devdata *dd);
+int sdma_init(struct hfi1_devdata *dd, u8 port);
+void sdma_start(struct hfi1_devdata *dd);
+void sdma_exit(struct hfi1_devdata *dd);
+void sdma_all_running(struct hfi1_devdata *dd);
+void sdma_all_idle(struct hfi1_devdata *dd);
+void sdma_freeze_notify(struct hfi1_devdata *dd, int go_idle);
+void sdma_freeze(struct hfi1_devdata *dd);
+void sdma_unfreeze(struct hfi1_devdata *dd);
+void sdma_wait(struct hfi1_devdata *dd);
 
 /**
  * sdma_empty() - idle engine test
@@ -728,12 +728,13 @@ static inline void make_tx_sdma_desc(
 }
 
 /* helper to extend txreq */
-int _extend_sdma_tx_descs(struct hfi_devdata *, struct sdma_txreq *);
-int _pad_sdma_tx_descs(struct hfi_devdata *, struct sdma_txreq *);
-void sdma_txclean(struct hfi_devdata *, struct sdma_txreq *);
+int _extend_sdma_tx_descs(struct hfi1_devdata *, struct sdma_txreq *);
+int _pad_sdma_tx_descs(struct hfi1_devdata *, struct sdma_txreq *);
+void sdma_txclean(struct hfi1_devdata *, struct sdma_txreq *);
 
 /* helpers used by public routines */
-static inline void _sdma_close_tx(struct hfi_devdata *dd, struct sdma_txreq *tx)
+static inline void _sdma_close_tx(struct hfi1_devdata *dd,
+				  struct sdma_txreq *tx)
 {
 	tx->descp[tx->num_desc].qw[0] |=
 		SDMA_DESC0_LAST_DESC_FLAG;
@@ -746,7 +747,7 @@ static inline void _sdma_close_tx(struct hfi_devdata *dd, struct sdma_txreq *tx)
 }
 
 static inline int _sdma_txadd_daddr(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	int type,
 	struct sdma_txreq *tx,
 	dma_addr_t addr,
@@ -795,7 +796,7 @@ static inline int _sdma_txadd_daddr(
  *
  */
 static inline int sdma_txadd_page(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	struct sdma_txreq *tx,
 	struct page *page,
 	unsigned long offset,
@@ -833,7 +834,7 @@ static inline int sdma_txadd_page(
  */
 
 static inline int sdma_txadd_daddr(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	struct sdma_txreq *tx,
 	dma_addr_t addr,
 	u16 len)
@@ -858,7 +859,7 @@ static inline int sdma_txadd_daddr(
  * descriptor array
  */
 static inline int sdma_txadd_kvaddr(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	struct sdma_txreq *tx,
 	void *kvaddr,
 	u16 len)
@@ -1058,7 +1059,7 @@ struct sdma_vl_map {
 };
 
 int sdma_map_init(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	u8 port,
 	u8 num_vls,
 	u8 *vl_engines);
@@ -1080,12 +1081,12 @@ static inline void sdma_engine_progress_schedule(
 }
 
 struct sdma_engine *sdma_select_engine_sc(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	u32 selector,
 	u8 sc5);
 
 struct sdma_engine *sdma_select_engine_vl(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	u32 selector,
 	u8 vl);
 
@@ -1108,6 +1109,6 @@ u16 sdma_get_descq_cnt(void);
 
 extern uint mod_num_sdma;
 
-extern void sdma_update_lmc(struct hfi_devdata *dd, u64 mask, u32 lid);
+void sdma_update_lmc(struct hfi1_devdata *dd, u64 mask, u32 lid);
 
 #endif

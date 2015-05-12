@@ -184,7 +184,7 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = HFI_CAP_IS_KSET(SDMA_AHG);
+			middle = HFI1_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_SEND)
@@ -209,7 +209,7 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
-			middle = HFI_CAP_IS_KSET(SDMA_AHG);
+			middle = HFI1_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
 		if (wqe->wr.opcode == IB_WR_RDMA_WRITE)

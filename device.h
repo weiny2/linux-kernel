@@ -1,5 +1,5 @@
-#ifndef _HFI_DEVICE_H
-#define _HFI_DEVICE_H
+#ifndef _HFI1_DEVICE_H
+#define _HFI1_DEVICE_H
 /*
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -50,12 +50,12 @@
  *
  */
 
-int hfi_cdev_init(int minor, const char *name,
-		  const struct file_operations *fops,
-		  struct cdev *cdev, struct device **devp);
-void hfi_cdev_cleanup(struct cdev *cdev, struct device **devp);
+int hfi1_cdev_init(int minor, const char *name,
+		   const struct file_operations *fops,
+		   struct cdev *cdev, struct device **devp);
+void hfi1_cdev_cleanup(struct cdev *cdev, struct device **devp);
 const char *class_name(void);
 int __init dev_init(void);
 void dev_cleanup(void);
 
-#endif                          /* _HFI_DEVICE_H */
+#endif                          /* _HFI1_DEVICE_H */

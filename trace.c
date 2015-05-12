@@ -48,7 +48,7 @@
  *
  */
 #define CREATE_TRACE_POINTS
-#define HFI_TRACE_DO_NOT_CREATE_INLINES
+#define HFI1_TRACE_DO_NOT_CREATE_INLINES
 #include "trace.h"
 
 u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr)
@@ -207,4 +207,5 @@ const char *print_u64_array(
 	trace_seq_putc(p, 0);
 	return ret;
 }
-#undef HFI_TRACE_DO_NOT_CREATE_INLINES
+
+#undef HFI1_TRACE_DO_NOT_CREATE_INLINES

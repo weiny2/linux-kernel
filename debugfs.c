@@ -59,7 +59,7 @@
 #include "qp.h"
 #include "sdma.h"
 
-static struct dentry *hfi_dbg_root;
+static struct dentry *hfi1_dbg_root;
 
 #define private2dd(file) (file_inode(file)->i_private)
 #define private2ppd(file) (file_inode(file)->i_private)
@@ -109,7 +109,7 @@ do { \
 static void *_opcode_stats_seq_start(struct seq_file *s, loff_t *pos)
 __acquires(RCU)
 {
-	struct hfi_opcode_stats_perctx *opstats;
+	struct hfi1_opcode_stats_perctx *opstats;
 
 	rcu_read_lock();
 	if (*pos >= ARRAY_SIZE(opstats->stats))
@@ -119,7 +119,7 @@ __acquires(RCU)
 
 static void *_opcode_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
-	struct hfi_opcode_stats_perctx *opstats;
+	struct hfi1_opcode_stats_perctx *opstats;
 
 	++*pos;
 	if (*pos >= ARRAY_SIZE(opstats->stats))
@@ -140,7 +140,7 @@ static int _opcode_stats_seq_show(struct seq_file *s, void *v)
 	loff_t i = *spos, j;
 	u64 n_packets = 0, n_bytes = 0;
 	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
-	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct hfi1_devdata *dd = dd_from_dev(ibd);
 
 	for (j = 0; j < dd->first_user_ctxt; j++) {
 		if (!dd->rcd[j])
@@ -164,7 +164,7 @@ DEBUGFS_FILE_OPS(opcode_stats);
 static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 {
 	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
-	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct hfi1_devdata *dd = dd_from_dev(ibd);
 
 	if (!*pos)
 		return SEQ_START_TOKEN;
@@ -176,7 +176,7 @@ static void *_ctx_stats_seq_start(struct seq_file *s, loff_t *pos)
 static void *_ctx_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
 	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
-	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct hfi1_devdata *dd = dd_from_dev(ibd);
 
 	if (v == SEQ_START_TOKEN)
 		return pos;
@@ -198,7 +198,7 @@ static int _ctx_stats_seq_show(struct seq_file *s, void *v)
 	loff_t i, j;
 	u64 n_packets = 0;
 	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
-	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct hfi1_devdata *dd = dd_from_dev(ibd);
 
 	if (v == SEQ_START_TOKEN) {
 		seq_puts(s, "Ctx:npkts\n");
@@ -287,7 +287,7 @@ static void *_sdes_seq_start(struct seq_file *s, loff_t *pos)
 __acquires(RCU)
 {
 	struct hfi1_ibdev *ibd;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 
 	rcu_read_lock();
 	ibd = (struct hfi1_ibdev *)s->private;
@@ -300,7 +300,7 @@ __acquires(RCU)
 static void *_sdes_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
 	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
-	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct hfi1_devdata *dd = dd_from_dev(ibd);
 
 	++*pos;
 	if (!dd->per_sdma || *pos >= dd->num_sdma)
@@ -318,7 +318,7 @@ __releases(RCU)
 static int _sdes_seq_show(struct seq_file *s, void *v)
 {
 	struct hfi1_ibdev *ibd = (struct hfi1_ibdev *)s->private;
-	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct hfi1_devdata *dd = dd_from_dev(ibd);
 	loff_t *spos = v;
 	loff_t i = *spos;
 
@@ -336,7 +336,7 @@ static ssize_t dev_counters_read(struct file *file, char __user *buf,
 {
 	u64 *counters;
 	size_t avail;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	ssize_t rval;
 
 	rcu_read_lock();
@@ -353,7 +353,7 @@ static ssize_t dev_names_read(struct file *file, char __user *buf,
 {
 	char *names;
 	size_t avail;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	ssize_t rval;
 
 	rcu_read_lock();
@@ -380,7 +380,7 @@ static ssize_t portnames_read(struct file *file, char __user *buf,
 {
 	char *names;
 	size_t avail;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	ssize_t rval;
 
 	rcu_read_lock();
@@ -398,7 +398,7 @@ static ssize_t portcntrs_debugfs_read(struct file *file, char __user *buf,
 {
 	u64 *counters;
 	size_t avail;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	struct hfi1_pportdata *ppd;
 	ssize_t rval;
 
@@ -702,38 +702,38 @@ static const struct counter_info port_cntr_ops[] = {
 	DEBUGFS_OPS("qsfp2", qsfp2_debugfs_read, qsfp2_debugfs_write),
 };
 
-void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd)
+void hfi1_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 {
 	char name[sizeof("port0counters") + 1];
 	char link[10];
-	struct hfi_devdata *dd = dd_from_dev(ibd);
+	struct hfi1_devdata *dd = dd_from_dev(ibd);
 	struct hfi1_pportdata *ppd;
 	int unit = dd->unit;
 	int i, j;
 
-	if (!hfi_dbg_root)
+	if (!hfi1_dbg_root)
 		return;
 	snprintf(name, sizeof(name), "%s_%d", class_name(), unit);
 	snprintf(link, sizeof(link), "%d", unit);
-	ibd->hfi_ibdev_dbg = debugfs_create_dir(name, hfi_dbg_root);
-	if (!ibd->hfi_ibdev_dbg) {
+	ibd->hfi1_ibdev_dbg = debugfs_create_dir(name, hfi1_dbg_root);
+	if (!ibd->hfi1_ibdev_dbg) {
 		pr_warn("create of %s failed\n", name);
 		return;
 	}
-	ibd->hfi_ibdev_link =
-		debugfs_create_symlink(link, hfi_dbg_root, name);
-	if (!ibd->hfi_ibdev_link) {
+	ibd->hfi1_ibdev_link =
+		debugfs_create_symlink(link, hfi1_dbg_root, name);
+	if (!ibd->hfi1_ibdev_link) {
 		pr_warn("create of %s symlink failed\n", name);
 		return;
 	}
-	DEBUGFS_SEQ_FILE_CREATE(opcode_stats, ibd->hfi_ibdev_dbg, ibd);
-	DEBUGFS_SEQ_FILE_CREATE(ctx_stats, ibd->hfi_ibdev_dbg, ibd);
-	DEBUGFS_SEQ_FILE_CREATE(qp_stats, ibd->hfi_ibdev_dbg, ibd);
-	DEBUGFS_SEQ_FILE_CREATE(sdes, ibd->hfi_ibdev_dbg, ibd);
+	DEBUGFS_SEQ_FILE_CREATE(opcode_stats, ibd->hfi1_ibdev_dbg, ibd);
+	DEBUGFS_SEQ_FILE_CREATE(ctx_stats, ibd->hfi1_ibdev_dbg, ibd);
+	DEBUGFS_SEQ_FILE_CREATE(qp_stats, ibd->hfi1_ibdev_dbg, ibd);
+	DEBUGFS_SEQ_FILE_CREATE(sdes, ibd->hfi1_ibdev_dbg, ibd);
 	/* dev counter files */
 	for (i = 0; i < ARRAY_SIZE(cntr_ops); i++)
 		DEBUGFS_FILE_CREATE(cntr_ops[i].name,
-				    ibd->hfi_ibdev_dbg,
+				    ibd->hfi1_ibdev_dbg,
 				    dd,
 				    &cntr_ops[i].ops, S_IRUGO);
 	/* per port files */
@@ -744,7 +744,7 @@ void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 				 port_cntr_ops[i].name,
 				 j + 1);
 			DEBUGFS_FILE_CREATE(name,
-					    ibd->hfi_ibdev_dbg,
+					    ibd->hfi1_ibdev_dbg,
 					    ppd,
 					    &port_cntr_ops[i].ops,
 					    port_cntr_ops[i].ops.write == NULL ?
@@ -752,14 +752,14 @@ void hfi_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 		}
 }
 
-void hfi_dbg_ibdev_exit(struct hfi1_ibdev *ibd)
+void hfi1_dbg_ibdev_exit(struct hfi1_ibdev *ibd)
 {
-	if (!hfi_dbg_root)
+	if (!hfi1_dbg_root)
 		goto out;
-	debugfs_remove(ibd->hfi_ibdev_link);
-	debugfs_remove_recursive(ibd->hfi_ibdev_dbg);
+	debugfs_remove(ibd->hfi1_ibdev_link);
+	debugfs_remove_recursive(ibd->hfi1_ibdev_dbg);
 out:
-	ibd->hfi_ibdev_dbg = NULL;
+	ibd->hfi1_ibdev_dbg = NULL;
 	synchronize_rcu();
 }
 
@@ -767,10 +767,10 @@ out:
  * driver stats field names, one line per stat, single string.  Used by
  * programs like hfistats to print the stats in a way which works for
  * different versions of drivers, without changing program source.
- * if hfi_ib_stats changes, this needs to change.  Names need to be
+ * if hfi1_ib_stats changes, this needs to change.  Names need to be
  * 12 chars or less (w/o newline), for proper display by hfistats utility.
  */
-static const char * const hfi_statnames[] = {
+static const char * const hfi1_statnames[] = {
 	/* must be element 0*/
 	"KernIntr",
 	"ErrorIntr",
@@ -788,7 +788,7 @@ static void *_driver_stats_names_seq_start(struct seq_file *s, loff_t *pos)
 __acquires(RCU)
 {
 	rcu_read_lock();
-	if (*pos >= ARRAY_SIZE(hfi_statnames))
+	if (*pos >= ARRAY_SIZE(hfi1_statnames))
 		return NULL;
 	return pos;
 }
@@ -799,7 +799,7 @@ static void *_driver_stats_names_seq_next(
 	loff_t *pos)
 {
 	++*pos;
-	if (*pos >= ARRAY_SIZE(hfi_statnames))
+	if (*pos >= ARRAY_SIZE(hfi1_statnames))
 		return NULL;
 	return pos;
 }
@@ -814,7 +814,7 @@ static int _driver_stats_names_seq_show(struct seq_file *s, void *v)
 {
 	loff_t *spos = v;
 
-	seq_printf(s, "%s\n", hfi_statnames[*spos]);
+	seq_printf(s, "%s\n", hfi1_statnames[*spos]);
 	return 0;
 }
 
@@ -826,7 +826,7 @@ static void *_driver_stats_seq_start(struct seq_file *s, loff_t *pos)
 __acquires(RCU)
 {
 	rcu_read_lock();
-	if (*pos >= ARRAY_SIZE(hfi_statnames))
+	if (*pos >= ARRAY_SIZE(hfi1_statnames))
 		return NULL;
 	return pos;
 }
@@ -834,7 +834,7 @@ __acquires(RCU)
 static void *_driver_stats_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
 	++*pos;
-	if (*pos >= ARRAY_SIZE(hfi_statnames))
+	if (*pos >= ARRAY_SIZE(hfi1_statnames))
 		return NULL;
 	return pos;
 }
@@ -845,10 +845,10 @@ __releases(RCU)
 	rcu_read_unlock();
 }
 
-static u64 hfi_sps_ints(void)
+static u64 hfi1_sps_ints(void)
 {
 	unsigned long flags;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	u64 sps_ints = 0;
 
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
@@ -870,7 +870,7 @@ static int _driver_stats_seq_show(struct seq_file *s, void *v)
 		return SEQ_SKIP;
 	/* special case for interrupts */
 	if (*spos == 0)
-		*(u64 *)buffer = hfi_sps_ints();
+		*(u64 *)buffer = hfi1_sps_ints();
 	else
 		*(u64 *)buffer = stats[*spos];
 	seq_commit(s,  sizeof(u64));
@@ -881,19 +881,19 @@ DEBUGFS_SEQ_FILE_OPS(driver_stats);
 DEBUGFS_SEQ_FILE_OPEN(driver_stats)
 DEBUGFS_FILE_OPS(driver_stats);
 
-void hfi_dbg_init(void)
+void hfi1_dbg_init(void)
 {
-	hfi_dbg_root  = debugfs_create_dir(DRIVER_NAME, NULL);
-	if (!hfi_dbg_root)
+	hfi1_dbg_root  = debugfs_create_dir(DRIVER_NAME, NULL);
+	if (!hfi1_dbg_root)
 		pr_warn("init of debugfs failed\n");
-	DEBUGFS_SEQ_FILE_CREATE(driver_stats_names, hfi_dbg_root, NULL);
-	DEBUGFS_SEQ_FILE_CREATE(driver_stats, hfi_dbg_root, NULL);
+	DEBUGFS_SEQ_FILE_CREATE(driver_stats_names, hfi1_dbg_root, NULL);
+	DEBUGFS_SEQ_FILE_CREATE(driver_stats, hfi1_dbg_root, NULL);
 }
 
-void hfi_dbg_exit(void)
+void hfi1_dbg_exit(void)
 {
-	debugfs_remove_recursive(hfi_dbg_root);
-	hfi_dbg_root = NULL;
+	debugfs_remove_recursive(hfi1_dbg_root);
+	hfi1_dbg_root = NULL;
 }
 
 #endif

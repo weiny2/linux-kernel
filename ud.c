@@ -852,7 +852,7 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		if (mgmt_pkey_idx < 0) {
 			if (net_ratelimit()) {
 				struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-				struct hfi_devdata *dd = ppd->dd;
+				struct hfi1_devdata *dd = ppd->dd;
 
 				dd_dev_err(dd, "QP type %d mgmt_pkey_idx < 0 and packet not dropped???\n",
 					   qp->ibqp.qp_type);

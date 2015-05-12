@@ -69,7 +69,7 @@ static ssize_t show_hrtbt_enb(struct hfi1_pportdata *ppd, char *buf)
 static ssize_t store_hrtbt_enb(struct hfi1_pportdata *ppd, const char *buf,
 			       size_t count)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int ret;
 	u16 val;
 
@@ -93,7 +93,7 @@ static ssize_t store_hrtbt_enb(struct hfi1_pportdata *ppd, const char *buf,
 static ssize_t store_led_override(struct hfi1_pportdata *ppd, const char *buf,
 				  size_t count)
 {
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 	int ret;
 	u16 val;
 
@@ -121,7 +121,7 @@ static ssize_t show_status(struct hfi1_pportdata *ppd, char *buf)
 
 /*
  * For userland compatibility, these offsets must remain fixed.
- * They are strings for HFI_STATUS_*
+ * They are strings for HFI1_STATUS_*
  */
 static const char * const hfi1_status_str[] = {
 	"Initted",
@@ -336,198 +336,198 @@ static struct kobj_type hfi1_port_ktype = {
 };
 
 /* Start sc2vl */
-#define HFI_SC2VL_ATTR(N)				    \
-	static struct hfi_sc2vl_attr hfi_sc2vl_attr_##N = { \
+#define HFI1_SC2VL_ATTR(N)				    \
+	static struct hfi1_sc2vl_attr hfi1_sc2vl_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0444 }, \
 		.sc = N \
 	}
 
-struct hfi_sc2vl_attr {
+struct hfi1_sc2vl_attr {
 	struct attribute attr;
 	int sc;
 };
 
-HFI_SC2VL_ATTR(0);
-HFI_SC2VL_ATTR(1);
-HFI_SC2VL_ATTR(2);
-HFI_SC2VL_ATTR(3);
-HFI_SC2VL_ATTR(4);
-HFI_SC2VL_ATTR(5);
-HFI_SC2VL_ATTR(6);
-HFI_SC2VL_ATTR(7);
-HFI_SC2VL_ATTR(8);
-HFI_SC2VL_ATTR(9);
-HFI_SC2VL_ATTR(10);
-HFI_SC2VL_ATTR(11);
-HFI_SC2VL_ATTR(12);
-HFI_SC2VL_ATTR(13);
-HFI_SC2VL_ATTR(14);
-HFI_SC2VL_ATTR(15);
-HFI_SC2VL_ATTR(16);
-HFI_SC2VL_ATTR(17);
-HFI_SC2VL_ATTR(18);
-HFI_SC2VL_ATTR(19);
-HFI_SC2VL_ATTR(20);
-HFI_SC2VL_ATTR(21);
-HFI_SC2VL_ATTR(22);
-HFI_SC2VL_ATTR(23);
-HFI_SC2VL_ATTR(24);
-HFI_SC2VL_ATTR(25);
-HFI_SC2VL_ATTR(26);
-HFI_SC2VL_ATTR(27);
-HFI_SC2VL_ATTR(28);
-HFI_SC2VL_ATTR(29);
-HFI_SC2VL_ATTR(30);
-HFI_SC2VL_ATTR(31);
+HFI1_SC2VL_ATTR(0);
+HFI1_SC2VL_ATTR(1);
+HFI1_SC2VL_ATTR(2);
+HFI1_SC2VL_ATTR(3);
+HFI1_SC2VL_ATTR(4);
+HFI1_SC2VL_ATTR(5);
+HFI1_SC2VL_ATTR(6);
+HFI1_SC2VL_ATTR(7);
+HFI1_SC2VL_ATTR(8);
+HFI1_SC2VL_ATTR(9);
+HFI1_SC2VL_ATTR(10);
+HFI1_SC2VL_ATTR(11);
+HFI1_SC2VL_ATTR(12);
+HFI1_SC2VL_ATTR(13);
+HFI1_SC2VL_ATTR(14);
+HFI1_SC2VL_ATTR(15);
+HFI1_SC2VL_ATTR(16);
+HFI1_SC2VL_ATTR(17);
+HFI1_SC2VL_ATTR(18);
+HFI1_SC2VL_ATTR(19);
+HFI1_SC2VL_ATTR(20);
+HFI1_SC2VL_ATTR(21);
+HFI1_SC2VL_ATTR(22);
+HFI1_SC2VL_ATTR(23);
+HFI1_SC2VL_ATTR(24);
+HFI1_SC2VL_ATTR(25);
+HFI1_SC2VL_ATTR(26);
+HFI1_SC2VL_ATTR(27);
+HFI1_SC2VL_ATTR(28);
+HFI1_SC2VL_ATTR(29);
+HFI1_SC2VL_ATTR(30);
+HFI1_SC2VL_ATTR(31);
 
 
 static struct attribute *sc2vl_default_attributes[] = {
-	&hfi_sc2vl_attr_0.attr,
-	&hfi_sc2vl_attr_1.attr,
-	&hfi_sc2vl_attr_2.attr,
-	&hfi_sc2vl_attr_3.attr,
-	&hfi_sc2vl_attr_4.attr,
-	&hfi_sc2vl_attr_5.attr,
-	&hfi_sc2vl_attr_6.attr,
-	&hfi_sc2vl_attr_7.attr,
-	&hfi_sc2vl_attr_8.attr,
-	&hfi_sc2vl_attr_9.attr,
-	&hfi_sc2vl_attr_10.attr,
-	&hfi_sc2vl_attr_11.attr,
-	&hfi_sc2vl_attr_12.attr,
-	&hfi_sc2vl_attr_13.attr,
-	&hfi_sc2vl_attr_14.attr,
-	&hfi_sc2vl_attr_15.attr,
-	&hfi_sc2vl_attr_16.attr,
-	&hfi_sc2vl_attr_17.attr,
-	&hfi_sc2vl_attr_18.attr,
-	&hfi_sc2vl_attr_19.attr,
-	&hfi_sc2vl_attr_20.attr,
-	&hfi_sc2vl_attr_21.attr,
-	&hfi_sc2vl_attr_22.attr,
-	&hfi_sc2vl_attr_23.attr,
-	&hfi_sc2vl_attr_24.attr,
-	&hfi_sc2vl_attr_25.attr,
-	&hfi_sc2vl_attr_26.attr,
-	&hfi_sc2vl_attr_27.attr,
-	&hfi_sc2vl_attr_28.attr,
-	&hfi_sc2vl_attr_29.attr,
-	&hfi_sc2vl_attr_30.attr,
-	&hfi_sc2vl_attr_31.attr,
+	&hfi1_sc2vl_attr_0.attr,
+	&hfi1_sc2vl_attr_1.attr,
+	&hfi1_sc2vl_attr_2.attr,
+	&hfi1_sc2vl_attr_3.attr,
+	&hfi1_sc2vl_attr_4.attr,
+	&hfi1_sc2vl_attr_5.attr,
+	&hfi1_sc2vl_attr_6.attr,
+	&hfi1_sc2vl_attr_7.attr,
+	&hfi1_sc2vl_attr_8.attr,
+	&hfi1_sc2vl_attr_9.attr,
+	&hfi1_sc2vl_attr_10.attr,
+	&hfi1_sc2vl_attr_11.attr,
+	&hfi1_sc2vl_attr_12.attr,
+	&hfi1_sc2vl_attr_13.attr,
+	&hfi1_sc2vl_attr_14.attr,
+	&hfi1_sc2vl_attr_15.attr,
+	&hfi1_sc2vl_attr_16.attr,
+	&hfi1_sc2vl_attr_17.attr,
+	&hfi1_sc2vl_attr_18.attr,
+	&hfi1_sc2vl_attr_19.attr,
+	&hfi1_sc2vl_attr_20.attr,
+	&hfi1_sc2vl_attr_21.attr,
+	&hfi1_sc2vl_attr_22.attr,
+	&hfi1_sc2vl_attr_23.attr,
+	&hfi1_sc2vl_attr_24.attr,
+	&hfi1_sc2vl_attr_25.attr,
+	&hfi1_sc2vl_attr_26.attr,
+	&hfi1_sc2vl_attr_27.attr,
+	&hfi1_sc2vl_attr_28.attr,
+	&hfi1_sc2vl_attr_29.attr,
+	&hfi1_sc2vl_attr_30.attr,
+	&hfi1_sc2vl_attr_31.attr,
 	NULL
 };
 
 static ssize_t sc2vl_attr_show(struct kobject *kobj, struct attribute *attr,
 			       char *buf)
 {
-	struct hfi_sc2vl_attr *sattr =
-		container_of(attr, struct hfi_sc2vl_attr, attr);
+	struct hfi1_sc2vl_attr *sattr =
+		container_of(attr, struct hfi1_sc2vl_attr, attr);
 	struct hfi1_pportdata *ppd =
 		container_of(kobj, struct hfi1_pportdata, sc2vl_kobj);
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 
 	return sprintf(buf, "%u\n", *((u8 *)dd->sc2vl + sattr->sc));
 }
 
-static const struct sysfs_ops hfi_sc2vl_ops = {
+static const struct sysfs_ops hfi1_sc2vl_ops = {
 	.show = sc2vl_attr_show,
 };
 
-static struct kobj_type hfi_sc2vl_ktype = {
+static struct kobj_type hfi1_sc2vl_ktype = {
 	.release = port_release,
-	.sysfs_ops = &hfi_sc2vl_ops,
+	.sysfs_ops = &hfi1_sc2vl_ops,
 	.default_attrs = sc2vl_default_attributes
 };
 
 /* End sc2vl */
 
 /* Start sl2sc */
-#define HFI_SL2SC_ATTR(N)				    \
-	static struct hfi_sl2sc_attr hfi_sl2sc_attr_##N = {	  \
+#define HFI1_SL2SC_ATTR(N)				    \
+	static struct hfi1_sl2sc_attr hfi1_sl2sc_attr_##N = {	  \
 		.attr = { .name = __stringify(N), .mode = 0444 }, \
 		.sl = N						  \
 	}
 
-struct hfi_sl2sc_attr {
+struct hfi1_sl2sc_attr {
 	struct attribute attr;
 	int sl;
 };
 
-HFI_SL2SC_ATTR(0);
-HFI_SL2SC_ATTR(1);
-HFI_SL2SC_ATTR(2);
-HFI_SL2SC_ATTR(3);
-HFI_SL2SC_ATTR(4);
-HFI_SL2SC_ATTR(5);
-HFI_SL2SC_ATTR(6);
-HFI_SL2SC_ATTR(7);
-HFI_SL2SC_ATTR(8);
-HFI_SL2SC_ATTR(9);
-HFI_SL2SC_ATTR(10);
-HFI_SL2SC_ATTR(11);
-HFI_SL2SC_ATTR(12);
-HFI_SL2SC_ATTR(13);
-HFI_SL2SC_ATTR(14);
-HFI_SL2SC_ATTR(15);
-HFI_SL2SC_ATTR(16);
-HFI_SL2SC_ATTR(17);
-HFI_SL2SC_ATTR(18);
-HFI_SL2SC_ATTR(19);
-HFI_SL2SC_ATTR(20);
-HFI_SL2SC_ATTR(21);
-HFI_SL2SC_ATTR(22);
-HFI_SL2SC_ATTR(23);
-HFI_SL2SC_ATTR(24);
-HFI_SL2SC_ATTR(25);
-HFI_SL2SC_ATTR(26);
-HFI_SL2SC_ATTR(27);
-HFI_SL2SC_ATTR(28);
-HFI_SL2SC_ATTR(29);
-HFI_SL2SC_ATTR(30);
-HFI_SL2SC_ATTR(31);
+HFI1_SL2SC_ATTR(0);
+HFI1_SL2SC_ATTR(1);
+HFI1_SL2SC_ATTR(2);
+HFI1_SL2SC_ATTR(3);
+HFI1_SL2SC_ATTR(4);
+HFI1_SL2SC_ATTR(5);
+HFI1_SL2SC_ATTR(6);
+HFI1_SL2SC_ATTR(7);
+HFI1_SL2SC_ATTR(8);
+HFI1_SL2SC_ATTR(9);
+HFI1_SL2SC_ATTR(10);
+HFI1_SL2SC_ATTR(11);
+HFI1_SL2SC_ATTR(12);
+HFI1_SL2SC_ATTR(13);
+HFI1_SL2SC_ATTR(14);
+HFI1_SL2SC_ATTR(15);
+HFI1_SL2SC_ATTR(16);
+HFI1_SL2SC_ATTR(17);
+HFI1_SL2SC_ATTR(18);
+HFI1_SL2SC_ATTR(19);
+HFI1_SL2SC_ATTR(20);
+HFI1_SL2SC_ATTR(21);
+HFI1_SL2SC_ATTR(22);
+HFI1_SL2SC_ATTR(23);
+HFI1_SL2SC_ATTR(24);
+HFI1_SL2SC_ATTR(25);
+HFI1_SL2SC_ATTR(26);
+HFI1_SL2SC_ATTR(27);
+HFI1_SL2SC_ATTR(28);
+HFI1_SL2SC_ATTR(29);
+HFI1_SL2SC_ATTR(30);
+HFI1_SL2SC_ATTR(31);
 
 
 static struct attribute *sl2sc_default_attributes[] = {
-	&hfi_sl2sc_attr_0.attr,
-	&hfi_sl2sc_attr_1.attr,
-	&hfi_sl2sc_attr_2.attr,
-	&hfi_sl2sc_attr_3.attr,
-	&hfi_sl2sc_attr_4.attr,
-	&hfi_sl2sc_attr_5.attr,
-	&hfi_sl2sc_attr_6.attr,
-	&hfi_sl2sc_attr_7.attr,
-	&hfi_sl2sc_attr_8.attr,
-	&hfi_sl2sc_attr_9.attr,
-	&hfi_sl2sc_attr_10.attr,
-	&hfi_sl2sc_attr_11.attr,
-	&hfi_sl2sc_attr_12.attr,
-	&hfi_sl2sc_attr_13.attr,
-	&hfi_sl2sc_attr_14.attr,
-	&hfi_sl2sc_attr_15.attr,
-	&hfi_sl2sc_attr_16.attr,
-	&hfi_sl2sc_attr_17.attr,
-	&hfi_sl2sc_attr_18.attr,
-	&hfi_sl2sc_attr_19.attr,
-	&hfi_sl2sc_attr_20.attr,
-	&hfi_sl2sc_attr_21.attr,
-	&hfi_sl2sc_attr_22.attr,
-	&hfi_sl2sc_attr_23.attr,
-	&hfi_sl2sc_attr_24.attr,
-	&hfi_sl2sc_attr_25.attr,
-	&hfi_sl2sc_attr_26.attr,
-	&hfi_sl2sc_attr_27.attr,
-	&hfi_sl2sc_attr_28.attr,
-	&hfi_sl2sc_attr_29.attr,
-	&hfi_sl2sc_attr_30.attr,
-	&hfi_sl2sc_attr_31.attr,
+	&hfi1_sl2sc_attr_0.attr,
+	&hfi1_sl2sc_attr_1.attr,
+	&hfi1_sl2sc_attr_2.attr,
+	&hfi1_sl2sc_attr_3.attr,
+	&hfi1_sl2sc_attr_4.attr,
+	&hfi1_sl2sc_attr_5.attr,
+	&hfi1_sl2sc_attr_6.attr,
+	&hfi1_sl2sc_attr_7.attr,
+	&hfi1_sl2sc_attr_8.attr,
+	&hfi1_sl2sc_attr_9.attr,
+	&hfi1_sl2sc_attr_10.attr,
+	&hfi1_sl2sc_attr_11.attr,
+	&hfi1_sl2sc_attr_12.attr,
+	&hfi1_sl2sc_attr_13.attr,
+	&hfi1_sl2sc_attr_14.attr,
+	&hfi1_sl2sc_attr_15.attr,
+	&hfi1_sl2sc_attr_16.attr,
+	&hfi1_sl2sc_attr_17.attr,
+	&hfi1_sl2sc_attr_18.attr,
+	&hfi1_sl2sc_attr_19.attr,
+	&hfi1_sl2sc_attr_20.attr,
+	&hfi1_sl2sc_attr_21.attr,
+	&hfi1_sl2sc_attr_22.attr,
+	&hfi1_sl2sc_attr_23.attr,
+	&hfi1_sl2sc_attr_24.attr,
+	&hfi1_sl2sc_attr_25.attr,
+	&hfi1_sl2sc_attr_26.attr,
+	&hfi1_sl2sc_attr_27.attr,
+	&hfi1_sl2sc_attr_28.attr,
+	&hfi1_sl2sc_attr_29.attr,
+	&hfi1_sl2sc_attr_30.attr,
+	&hfi1_sl2sc_attr_31.attr,
 	NULL
 };
 
 static ssize_t sl2sc_attr_show(struct kobject *kobj, struct attribute *attr,
 			       char *buf)
 {
-	struct hfi_sl2sc_attr *sattr =
-		container_of(attr, struct hfi_sl2sc_attr, attr);
+	struct hfi1_sl2sc_attr *sattr =
+		container_of(attr, struct hfi1_sl2sc_attr, attr);
 	struct hfi1_pportdata *ppd =
 		container_of(kobj, struct hfi1_pportdata, sl2sc_kobj);
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
@@ -535,13 +535,13 @@ static ssize_t sl2sc_attr_show(struct kobject *kobj, struct attribute *attr,
 	return sprintf(buf, "%u\n", ibp->sl_to_sc[sattr->sl]);
 }
 
-static const struct sysfs_ops hfi_sl2sc_ops = {
+static const struct sysfs_ops hfi1_sl2sc_ops = {
 	.show = sl2sc_attr_show,
 };
 
-static struct kobj_type hfi_sl2sc_ktype = {
+static struct kobj_type hfi1_sl2sc_ktype = {
 	.release = port_release,
-	.sysfs_ops = &hfi_sl2sc_ops,
+	.sysfs_ops = &hfi1_sl2sc_ops,
 	.default_attrs = sl2sc_default_attributes
 };
 
@@ -549,73 +549,73 @@ static struct kobj_type hfi_sl2sc_ktype = {
 
 /* Start vl2mtu */
 
-#define HFI_VL2MTU_ATTR(N) \
-	static struct hfi_vl2mtu_attr hfi_vl2mtu_attr_##N = { \
+#define HFI1_VL2MTU_ATTR(N) \
+	static struct hfi1_vl2mtu_attr hfi1_vl2mtu_attr_##N = { \
 		.attr = { .name = __stringify(N), .mode = 0444 }, \
 		.vl = N						  \
 	}
 
-struct hfi_vl2mtu_attr {
+struct hfi1_vl2mtu_attr {
 	struct attribute attr;
 	int vl;
 };
 
-HFI_VL2MTU_ATTR(0);
-HFI_VL2MTU_ATTR(1);
-HFI_VL2MTU_ATTR(2);
-HFI_VL2MTU_ATTR(3);
-HFI_VL2MTU_ATTR(4);
-HFI_VL2MTU_ATTR(5);
-HFI_VL2MTU_ATTR(6);
-HFI_VL2MTU_ATTR(7);
-HFI_VL2MTU_ATTR(8);
-HFI_VL2MTU_ATTR(9);
-HFI_VL2MTU_ATTR(10);
-HFI_VL2MTU_ATTR(11);
-HFI_VL2MTU_ATTR(12);
-HFI_VL2MTU_ATTR(13);
-HFI_VL2MTU_ATTR(14);
-HFI_VL2MTU_ATTR(15);
+HFI1_VL2MTU_ATTR(0);
+HFI1_VL2MTU_ATTR(1);
+HFI1_VL2MTU_ATTR(2);
+HFI1_VL2MTU_ATTR(3);
+HFI1_VL2MTU_ATTR(4);
+HFI1_VL2MTU_ATTR(5);
+HFI1_VL2MTU_ATTR(6);
+HFI1_VL2MTU_ATTR(7);
+HFI1_VL2MTU_ATTR(8);
+HFI1_VL2MTU_ATTR(9);
+HFI1_VL2MTU_ATTR(10);
+HFI1_VL2MTU_ATTR(11);
+HFI1_VL2MTU_ATTR(12);
+HFI1_VL2MTU_ATTR(13);
+HFI1_VL2MTU_ATTR(14);
+HFI1_VL2MTU_ATTR(15);
 
 static struct attribute *vl2mtu_default_attributes[] = {
-	&hfi_vl2mtu_attr_0.attr,
-	&hfi_vl2mtu_attr_1.attr,
-	&hfi_vl2mtu_attr_2.attr,
-	&hfi_vl2mtu_attr_3.attr,
-	&hfi_vl2mtu_attr_4.attr,
-	&hfi_vl2mtu_attr_5.attr,
-	&hfi_vl2mtu_attr_6.attr,
-	&hfi_vl2mtu_attr_7.attr,
-	&hfi_vl2mtu_attr_8.attr,
-	&hfi_vl2mtu_attr_9.attr,
-	&hfi_vl2mtu_attr_10.attr,
-	&hfi_vl2mtu_attr_11.attr,
-	&hfi_vl2mtu_attr_12.attr,
-	&hfi_vl2mtu_attr_13.attr,
-	&hfi_vl2mtu_attr_14.attr,
-	&hfi_vl2mtu_attr_15.attr,
+	&hfi1_vl2mtu_attr_0.attr,
+	&hfi1_vl2mtu_attr_1.attr,
+	&hfi1_vl2mtu_attr_2.attr,
+	&hfi1_vl2mtu_attr_3.attr,
+	&hfi1_vl2mtu_attr_4.attr,
+	&hfi1_vl2mtu_attr_5.attr,
+	&hfi1_vl2mtu_attr_6.attr,
+	&hfi1_vl2mtu_attr_7.attr,
+	&hfi1_vl2mtu_attr_8.attr,
+	&hfi1_vl2mtu_attr_9.attr,
+	&hfi1_vl2mtu_attr_10.attr,
+	&hfi1_vl2mtu_attr_11.attr,
+	&hfi1_vl2mtu_attr_12.attr,
+	&hfi1_vl2mtu_attr_13.attr,
+	&hfi1_vl2mtu_attr_14.attr,
+	&hfi1_vl2mtu_attr_15.attr,
 	NULL
 };
 
 static ssize_t vl2mtu_attr_show(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {
-	struct hfi_vl2mtu_attr *vlattr =
-		container_of(attr, struct hfi_vl2mtu_attr, attr);
+	struct hfi1_vl2mtu_attr *vlattr =
+		container_of(attr, struct hfi1_vl2mtu_attr, attr);
 	struct hfi1_pportdata *ppd =
 		container_of(kobj, struct hfi1_pportdata, vl2mtu_kobj);
-	struct hfi_devdata *dd = ppd->dd;
+	struct hfi1_devdata *dd = ppd->dd;
 
 	return sprintf(buf, "%u\n", dd->vld[vlattr->vl].mtu);
 }
 
-static const struct sysfs_ops hfi_vl2mtu_ops = {
+static const struct sysfs_ops hfi1_vl2mtu_ops = {
 	.show = vl2mtu_attr_show,
 };
 
-static struct kobj_type hfi_vl2mtu_ktype = {
+static struct kobj_type hfi1_vl2mtu_ktype = {
 	.release = port_release,
-	.sysfs_ops = &hfi_vl2mtu_ops,
+	.sysfs_ops = &hfi1_vl2mtu_ops,
 	.default_attrs = vl2mtu_default_attributes
 };
 
@@ -755,7 +755,7 @@ static ssize_t show_hca(struct device *device, struct device_attribute *attr,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 	int ret;
 
 	if (!dd->boardname)
@@ -777,7 +777,7 @@ static ssize_t show_boardversion(struct device *device,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 
 	/* The string printed here is already newline-terminated. */
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->boardversion);
@@ -789,7 +789,7 @@ static ssize_t show_localbus_info(struct device *device,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 
 	return scnprintf(buf, PAGE_SIZE, "%s\n", dd->lbus_info);
 }
@@ -800,7 +800,7 @@ static ssize_t show_nctxts(struct device *device,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 
 	/*
 	 * Return the smaller of send and receive contexts.
@@ -818,7 +818,7 @@ static ssize_t show_nfreectxts(struct device *device,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 
 	/* Return the number of free user ports (contexts) available. */
 	return scnprintf(buf, PAGE_SIZE, "%u\n", dd->freectxts);
@@ -829,7 +829,7 @@ static ssize_t show_serial(struct device *device,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->serial);
 
@@ -841,7 +841,7 @@ static ssize_t store_chip_reset(struct device *device,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
+	struct hfi1_devdata *dd = dd_from_dev(dev);
 	int ret;
 
 	if (count < 5 || memcmp(buf, "reset", 5) || !dd->diag_client) {
@@ -870,8 +870,8 @@ static ssize_t show_tempsense(struct device *device,
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi_devdata *dd = dd_from_dev(dev);
-	struct hfi_temp temp;
+	struct hfi1_devdata *dd = dd_from_dev(dev);
+	struct hfi1_temp temp;
 	int ret = -ENXIO;
 
 	ret = hfi1_tempsense_rd(dd, &temp);
@@ -926,7 +926,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 			   struct kobject *kobj)
 {
 	struct hfi1_pportdata *ppd;
-	struct hfi_devdata *dd = dd_from_ibdev(ibdev);
+	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	int ret;
 
 	if (!port_num || port_num > dd->num_pports) {
@@ -948,7 +948,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->pport_kobj, KOBJ_ADD);
 
-	ret = kobject_init_and_add(&ppd->sc2vl_kobj, &hfi_sc2vl_ktype, kobj,
+	ret = kobject_init_and_add(&ppd->sc2vl_kobj, &hfi1_sc2vl_ktype, kobj,
 				   "sc2vl");
 	if (ret) {
 		dd_dev_err(dd,
@@ -957,7 +957,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		goto bail_link;
 	}
 	kobject_uevent(&ppd->sc2vl_kobj, KOBJ_ADD);
-	ret = kobject_init_and_add(&ppd->sl2sc_kobj, &hfi_sl2sc_ktype, kobj,
+	ret = kobject_init_and_add(&ppd->sl2sc_kobj, &hfi1_sl2sc_ktype, kobj,
 				   "sl2sc");
 	if (ret) {
 		dd_dev_err(dd,
@@ -967,7 +967,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->sl2sc_kobj, KOBJ_ADD);
 
-	ret = kobject_init_and_add(&ppd->vl2mtu_kobj, &hfi_vl2mtu_ktype, kobj,
+	ret = kobject_init_and_add(&ppd->vl2mtu_kobj, &hfi1_vl2mtu_ktype, kobj,
 				   "vl2mtu");
 	if (ret) {
 		dd_dev_err(dd,
@@ -1041,7 +1041,7 @@ bail:
 /*
  * Register and create our files in /sys/class/infiniband.
  */
-int hfi1_verbs_register_sysfs(struct hfi_devdata *dd)
+int hfi1_verbs_register_sysfs(struct hfi1_devdata *dd)
 {
 	struct ib_device *dev = &dd->verbs_dev.ibdev;
 	int i, ret;
@@ -1062,7 +1062,7 @@ bail:
 /*
  * Unregister and remove our files in /sys/class/infiniband.
  */
-void hfi1_verbs_unregister_sysfs(struct hfi_devdata *dd)
+void hfi1_verbs_unregister_sysfs(struct hfi1_devdata *dd)
 {
 	struct hfi1_pportdata *ppd;
 	int i;

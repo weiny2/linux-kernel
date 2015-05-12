@@ -52,16 +52,16 @@
 
 #define HFI1_TWSI_NO_DEV 0xFF
 
-struct hfi_devdata;
+struct hfi1_devdata;
 
 /* Bit position of SDA pin in ASIC_QSFP* registers  */
 #define  GPIO_SDA_NUM 1
 
 /* these functions must be called with qsfp_lock held */
-int hfi1_twsi_reset(struct hfi_devdata *dd, u32 target);
-int hfi1_twsi_blk_rd(struct hfi_devdata *dd, u32 target, int dev, int addr,
+int hfi1_twsi_reset(struct hfi1_devdata *dd, u32 target);
+int hfi1_twsi_blk_rd(struct hfi1_devdata *dd, u32 target, int dev, int addr,
 		     void *buffer, int len);
-int hfi1_twsi_blk_wr(struct hfi_devdata *dd, u32 target, int dev, int addr,
+int hfi1_twsi_blk_wr(struct hfi1_devdata *dd, u32 target, int dev, int addr,
 		     const void *buffer, int len);
 
 

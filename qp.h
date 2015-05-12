@@ -64,7 +64,7 @@ struct qpn_map {
 	void *page;
 };
 
-struct hfi_qpn_table {
+struct hfi1_qpn_table {
 	spinlock_t lock; /* protect changes in this struct */
 	unsigned flags;         /* flags for QP0/1 allocated for each port */
 	u32 last;               /* last QP number allocated */
@@ -75,12 +75,12 @@ struct hfi_qpn_table {
 	struct qpn_map map[QPNMAP_ENTRIES];
 };
 
-struct hfi_qp_ibdev {
+struct hfi1_qp_ibdev {
 	u32 qp_table_size;
 	u32 qp_rnd;
 	struct hfi1_qp __rcu **qp_table;
 	spinlock_t qpt_lock;
-	struct hfi_qpn_table qpn_table;
+	struct hfi1_qpn_table qpn_table;
 };
 
 /**

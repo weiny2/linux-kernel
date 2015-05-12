@@ -103,7 +103,7 @@ union pio_shadow_ring {
 /* per-NUMA send context */
 struct send_context {
 	/* read-only after init */
-	struct hfi_devdata *dd;		/* device */
+	struct hfi1_devdata *dd;		/* device */
 	void __iomem *base_addr;	/* start of PIO memory */
 	union pio_shadow_ring *sr;	/* shadow ring */
 	volatile __le64 *hw_free;	/* HW free counter */
@@ -166,13 +166,13 @@ struct sc_config_sizes {
 };
 
 /* send context functions */
-int init_credit_return(struct hfi_devdata *dd);
-void free_credit_return(struct hfi_devdata *dd);
-int init_sc_pools_and_sizes(struct hfi_devdata *dd);
-int init_send_contexts(struct hfi_devdata *dd);
-int init_credit_return(struct hfi_devdata *dd);
-int init_pervl_scs(struct hfi_devdata *dd);
-struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
+int init_credit_return(struct hfi1_devdata *dd);
+void free_credit_return(struct hfi1_devdata *dd);
+int init_sc_pools_and_sizes(struct hfi1_devdata *dd);
+int init_send_contexts(struct hfi1_devdata *dd);
+int init_credit_return(struct hfi1_devdata *dd);
+int init_pervl_scs(struct hfi1_devdata *dd);
+struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 			      uint hdrqentsize, int numa);
 void sc_free(struct send_context *sc);
 int sc_enable(struct send_context *sc);
@@ -186,19 +186,19 @@ struct pio_buf *sc_buffer_alloc(struct send_context *sc, u32 dw_len,
 			pio_release_cb cb, void *arg);
 void sc_release_update(struct send_context *sc);
 void sc_return_credits(struct send_context *sc);
-void sc_group_release_update(struct hfi_devdata *dd, u32 hw_context);
+void sc_group_release_update(struct hfi1_devdata *dd, u32 hw_context);
 void sc_add_credit_return_intr(struct send_context *sc);
 void sc_del_credit_return_intr(struct send_context *sc);
 void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold);
 u32 sc_mtu_to_threshold(struct send_context *sc, u32 mtu, u32 hdrqentsize);
 void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint);
-void sc_wait(struct hfi_devdata *dd);
+void sc_wait(struct hfi1_devdata *dd);
 void set_pio_integrity(struct send_context *sc);
 
 /* support functions */
-void pio_reset_all(struct hfi_devdata *dd);
-void pio_freeze(struct hfi_devdata *dd);
-void pio_kernel_unfreeze(struct hfi_devdata *dd);
+void pio_reset_all(struct hfi1_devdata *dd);
+void pio_freeze(struct hfi1_devdata *dd);
+void pio_kernel_unfreeze(struct hfi1_devdata *dd);
 
 /* global PIO send control operations */
 #define PSC_GLOBAL_ENABLE 0
@@ -209,12 +209,12 @@ void pio_kernel_unfreeze(struct hfi_devdata *dd);
 #define PSC_DATA_VL_ENABLE 5
 #define PSC_DATA_VL_DISABLE 6
 
-void __cm_reset(struct hfi_devdata *dd, u64 sendctrl);
-void pio_send_control(struct hfi_devdata *dd, int op);
+void __cm_reset(struct hfi1_devdata *dd, u64 sendctrl);
+void pio_send_control(struct hfi1_devdata *dd, int op);
 
 
 /* PIO copy routines */
-void pio_copy(struct hfi_devdata *dd, struct pio_buf *pbuf, u64 pbc,
+void pio_copy(struct hfi1_devdata *dd, struct pio_buf *pbuf, u64 pbc,
 	      const void *from, size_t count);
 void seg_pio_copy_start(struct pio_buf *pbuf, u64 pbc,
 					const void *from, size_t nbytes);

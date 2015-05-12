@@ -509,7 +509,7 @@ bail:
 	return ret;
 }
 
-int hfi1_cq_init(struct hfi_devdata *dd)
+int hfi1_cq_init(struct hfi1_devdata *dd)
 {
 	int ret = 0;
 	int cpu;
@@ -540,7 +540,7 @@ task_fail:
 	goto out;
 }
 
-void hfi1_cq_exit(struct hfi_devdata *dd)
+void hfi1_cq_exit(struct hfi1_devdata *dd)
 {
 	struct kthread_worker *worker;
 

@@ -539,37 +539,37 @@ enum {
 #define LOOPBACK_CABLE	3	/* external cable */
 
 /* read and write hardware registers */
-u64 read_csr(const struct hfi_devdata *dd, u32 offset);
-void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value);
+u64 read_csr(const struct hfi1_devdata *dd, u32 offset);
+void write_csr(const struct hfi1_devdata *dd, u32 offset, u64 value);
 
 /*
  * The *_kctxt_* flavor of the CSR read/write functions are for
  * per-context or per-SDMA CSRs that are not mappable to user-space.
  * Their spacing is not a PAGE_SIZE multiple.
  */
-static inline u64 read_kctxt_csr(const struct hfi_devdata *dd, int ctxt,
-					u32 offset0)
+static inline u64 read_kctxt_csr(const struct hfi1_devdata *dd, int ctxt,
+				 u32 offset0)
 {
 	/* kernel per-context CSRs are separated by 0x100 */
 	return read_csr(dd, offset0 + (0x100 * ctxt));
 }
 
-static inline void write_kctxt_csr(struct hfi_devdata *dd, int ctxt,
-					u32 offset0, u64 value)
+static inline void write_kctxt_csr(struct hfi1_devdata *dd, int ctxt,
+				   u32 offset0, u64 value)
 {
 	/* kernel per-context CSRs are separated by 0x100 */
 	write_csr(dd, offset0 + (0x100 * ctxt), value);
 }
 
-int read_lcb_csr(struct hfi_devdata *dd, u32 offset, u64 *data);
-int write_lcb_csr(struct hfi_devdata *dd, u32 offset, u64 data);
+int read_lcb_csr(struct hfi1_devdata *dd, u32 offset, u64 *data);
+int write_lcb_csr(struct hfi1_devdata *dd, u32 offset, u64 data);
 
 void __iomem *get_csr_addr(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	u32 offset);
 
 static inline void __iomem *get_kctxt_csr_addr(
-	struct hfi_devdata *dd,
+	struct hfi1_devdata *dd,
 	int ctxt,
 	u32 offset0)
 {
@@ -582,14 +582,14 @@ static inline void __iomem *get_kctxt_csr_addr(
  * are spaced by a PAGE_SIZE multiple in order to be mappable to
  * different processes without exposing other contexts' CSRs
  */
-static inline u64 read_uctxt_csr(const struct hfi_devdata *dd, int ctxt,
+static inline u64 read_uctxt_csr(const struct hfi1_devdata *dd, int ctxt,
 				 u32 offset0)
 {
 	/* user per-context CSRs are separated by 0x1000 */
 	return read_csr(dd, offset0 + (0x1000 * ctxt));
 }
 
-static inline void write_uctxt_csr(struct hfi_devdata *dd, int ctxt,
+static inline void write_uctxt_csr(struct hfi1_devdata *dd, int ctxt,
 				   u32 offset0, u64 value)
 {
 	/* user per-context CSRs are separated by 0x1000 */
@@ -606,24 +606,24 @@ extern const u8 pcie_pcs_addrs[2][NUM_PCIE_SERDES];
 #define RESET_SBUS_RECEIVER 0x20
 #define WRITE_SBUS_RECEIVER 0x21
 #define READ_SBUS_RECEIVER  0x22
-void sbus_request(struct hfi_devdata *dd,
+void sbus_request(struct hfi1_devdata *dd,
 		  u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
-int sbus_request_slow(struct hfi_devdata *dd,
+int sbus_request_slow(struct hfi1_devdata *dd,
 		      u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
-void set_sbus_fast_mode(struct hfi_devdata *dd);
-void clear_sbus_fast_mode(struct hfi_devdata *dd);
-int hfi1_firmware_init(struct hfi_devdata *dd);
-int load_pcie_firmware(struct hfi_devdata *dd);
-int load_firmware(struct hfi_devdata *dd);
+void set_sbus_fast_mode(struct hfi1_devdata *dd);
+void clear_sbus_fast_mode(struct hfi1_devdata *dd);
+int hfi1_firmware_init(struct hfi1_devdata *dd);
+int load_pcie_firmware(struct hfi1_devdata *dd);
+int load_firmware(struct hfi1_devdata *dd);
 void dispose_firmware(void);
-int acquire_hw_mutex(struct hfi_devdata *dd);
-void release_hw_mutex(struct hfi_devdata *dd);
-void fabric_serdes_reset(struct hfi_devdata *dd);
+int acquire_hw_mutex(struct hfi1_devdata *dd);
+void release_hw_mutex(struct hfi1_devdata *dd);
+void fabric_serdes_reset(struct hfi1_devdata *dd);
 
 /* chip.c */
-void read_misc_status(struct hfi_devdata *dd, u8 *ver_a, u8 *ver_b);
-void read_guid(struct hfi_devdata *dd);
-int wait_fm_ready(struct hfi_devdata *dd, u32 mstimeout);
+void read_misc_status(struct hfi1_devdata *dd, u8 *ver_a, u8 *ver_b);
+void read_guid(struct hfi1_devdata *dd);
+int wait_fm_ready(struct hfi1_devdata *dd, u32 mstimeout);
 void set_link_down_reason(struct hfi1_pportdata *ppd, u8 lcl_reason,
 			  u8 neigh_reason, u8 rem_reason);
 int set_link_state(struct hfi1_pportdata *, u32 state);
@@ -635,29 +635,29 @@ void handle_link_down(struct work_struct *work);
 void handle_link_downgrade(struct work_struct *work);
 void handle_sma_message(struct work_struct *work);
 void start_freeze_handling(struct hfi1_pportdata *ppd, int flags);
-int send_idle_sma(struct hfi_devdata *dd, u64 message);
+int send_idle_sma(struct hfi1_devdata *dd, u64 message);
 int start_link(struct hfi1_pportdata *ppd);
 void init_qsfp(struct hfi1_pportdata *ppd);
 int bringup_serdes(struct hfi1_pportdata *ppd);
-void set_intr_state(struct hfi_devdata *dd, u32 enable);
+void set_intr_state(struct hfi1_devdata *dd, u32 enable);
 void apply_link_downgrade_policy(struct hfi1_pportdata *ppd,
 				 int refresh_widths);
 void update_usrhead(struct hfi1_ctxtdata *, u32, u32, u32, u32, u32);
-int stop_drain_data_vls(struct hfi_devdata *dd);
-int open_fill_data_vls(struct hfi_devdata *dd);
-u32 ns_to_cclock(struct hfi_devdata *dd, u32 ns);
-u32 cclock_to_ns(struct hfi_devdata *dd, u32 cclock);
+int stop_drain_data_vls(struct hfi1_devdata *dd);
+int open_fill_data_vls(struct hfi1_devdata *dd);
+u32 ns_to_cclock(struct hfi1_devdata *dd, u32 ns);
+u32 cclock_to_ns(struct hfi1_devdata *dd, u32 cclock);
 void get_linkup_link_widths(struct hfi1_pportdata *ppd);
-void read_ltp_rtt(struct hfi_devdata *dd);
-void clear_linkup_counters(struct hfi_devdata *dd);
+void read_ltp_rtt(struct hfi1_devdata *dd);
+void clear_linkup_counters(struct hfi1_devdata *dd);
 u32 hdrqempty(struct hfi1_ctxtdata *rcd);
-int is_a0(struct hfi_devdata *dd);
-int is_ax(struct hfi_devdata *dd);
-int is_bx(struct hfi_devdata *dd);
-void force_all_interrupts(struct hfi_devdata *dd);
+int is_a0(struct hfi1_devdata *dd);
+int is_ax(struct hfi1_devdata *dd);
+int is_bx(struct hfi1_devdata *dd);
+void force_all_interrupts(struct hfi1_devdata *dd);
 
-int acquire_lcb_access(struct hfi_devdata *dd, int sleep_ok);
-int release_lcb_access(struct hfi_devdata *dd, int sleep_ok);
+int acquire_lcb_access(struct hfi1_devdata *dd, int sleep_ok);
+int release_lcb_access(struct hfi1_devdata *dd, int sleep_ok);
 #define LCB_START DC_LCB_CSRS
 #define LCB_END   DC_8051_CSRS /* next block is 8051 */
 static inline int is_lcb_offset(u32 offset)
@@ -668,8 +668,8 @@ static inline int is_lcb_offset(u32 offset)
 extern uint num_vls;
 
 extern uint disable_integrity;
-u64 read_dev_cntr(struct hfi_devdata *dd, int index, int vl);
-u64 write_dev_cntr(struct hfi_devdata *dd, int index, int vl, u64 data);
+u64 read_dev_cntr(struct hfi1_devdata *dd, int index, int vl);
+u64 write_dev_cntr(struct hfi1_devdata *dd, int index, int vl, u64 data);
 u64 read_port_cntr(struct hfi1_pportdata *ppd, int index, int vl);
 u64 write_port_cntr(struct hfi1_pportdata *ppd, int index, int vl, u64 data);
 
@@ -970,30 +970,30 @@ enum {
 };
 
 u64 get_all_cpu_total(u64 __percpu *cntr);
-void hfi1_start_cleanup(struct hfi_devdata *dd);
+void hfi1_start_cleanup(struct hfi1_devdata *dd);
 void hfi1_clear_tids(struct hfi1_ctxtdata *rcd);
 struct hfi1_message_header *hfi1_get_msgheader(
-				struct hfi_devdata *dd, __le32 *rhf_addr);
+				struct hfi1_devdata *dd, __le32 *rhf_addr);
 int hfi1_get_base_kinfo(struct hfi1_ctxtdata *rcd,
-			struct hfi_ctxt_info *kinfo);
-u64 hfi1_gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
-			u32 mask);
+			struct hfi1_ctxt_info *kinfo);
+u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
+		  u32 mask);
 int hfi1_init_ctxt(struct hfi1_ctxtdata *rcd);
-void hfi1_put_tid(struct hfi_devdata *dd, u32 index,
-	     u32 type, unsigned long pa, u16 order);
+void hfi1_put_tid(struct hfi1_devdata *dd, u32 index,
+		  u32 type, unsigned long pa, u16 order);
 void hfi1_quiet_serdes(struct hfi1_pportdata *ppd);
-void hfi1_rcvctrl(struct hfi_devdata *dd, unsigned int op, int ctxt);
-u32 hfi1_read_cntrs(struct hfi_devdata *dd, loff_t pos, char **namep,
-			      u64 **cntrp);
-u32 hfi1_read_portcntrs(struct hfi_devdata *dd, loff_t pos, u32 port,
-				  char **namep, u64 **cntrp);
+void hfi1_rcvctrl(struct hfi1_devdata *dd, unsigned int op, int ctxt);
+u32 hfi1_read_cntrs(struct hfi1_devdata *dd, loff_t pos, char **namep,
+		    u64 **cntrp);
+u32 hfi1_read_portcntrs(struct hfi1_devdata *dd, loff_t pos, u32 port,
+			char **namep, u64 **cntrp);
 u8 hfi1_ibphys_portstate(struct hfi1_pportdata *ppd);
 int hfi1_get_ib_cfg(struct hfi1_pportdata *ppd, int which);
 int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val);
-int hfi1_set_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt, u16 jkey);
-int hfi1_clear_ctxt_jkey(struct hfi_devdata *dd, unsigned ctxt);
-int hfi1_set_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt, u16 pkey);
-int hfi1_clear_ctxt_pkey(struct hfi_devdata *dd, unsigned ctxt);
-void hfi1_read_link_quality(struct hfi_devdata *dd, u8 *link_quality);
+int hfi1_set_ctxt_jkey(struct hfi1_devdata *dd, unsigned ctxt, u16 jkey);
+int hfi1_clear_ctxt_jkey(struct hfi1_devdata *dd, unsigned ctxt);
+int hfi1_set_ctxt_pkey(struct hfi1_devdata *dd, unsigned ctxt, u16 pkey);
+int hfi1_clear_ctxt_pkey(struct hfi1_devdata *dd, unsigned ctxt);
+void hfi1_read_link_quality(struct hfi1_devdata *dd, u8 *link_quality);
 #endif /* _CHIP_H */
 

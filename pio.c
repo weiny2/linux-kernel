@@ -65,7 +65,7 @@ static void sc_wait_for_packet_egress(struct send_context *sc, int pause);
  * Set the CM reset bit and wait for it to clear.  Use the provided
  * sendctrl register.  This routine has no locking.
  */
-void __cm_reset(struct hfi_devdata *dd, u64 sendctrl)
+void __cm_reset(struct hfi1_devdata *dd, u64 sendctrl)
 {
 	write_csr(dd, SEND_CTRL, sendctrl | SEND_CTRL_CM_RESET_SMASK);
 	while (1) {
@@ -85,7 +85,7 @@ void __cm_reset(struct hfi_devdata *dd, u64 sendctrl)
 #endif
 
 /* global control of PIO send */
-void pio_send_control(struct hfi_devdata *dd, int op)
+void pio_send_control(struct hfi1_devdata *dd, int op)
 {
 	u64 reg;
 	unsigned long flags;
@@ -215,7 +215,7 @@ static const char *sc_type_name(int index)
  * size configuration.  Replace any wildcards and come up with final
  * counts and sizes for the send context types.
  */
-int init_sc_pools_and_sizes(struct hfi_devdata *dd)
+int init_sc_pools_and_sizes(struct hfi1_devdata *dd)
 {
 	struct mem_pool_info mem_pool_info[NUM_SC_POOLS] = { { 0 } };
 	int total_blocks = (dd->chip_pio_mem_size / PIO_BLOCK_SIZE) - 1;
@@ -417,7 +417,7 @@ int init_sc_pools_and_sizes(struct hfi_devdata *dd)
 	return total_contexts;
 }
 
-int init_send_contexts(struct hfi_devdata *dd)
+int init_send_contexts(struct hfi1_devdata *dd)
 {
 	u16 base;
 	int ret, i, j, context;
@@ -472,8 +472,8 @@ int init_send_contexts(struct hfi_devdata *dd)
  *
  * Must be called with dd->sc_lock held.
  */
-static int sc_hw_alloc(struct hfi_devdata *dd, int type, u32 *sw_index,
-			u32 *hw_context)
+static int sc_hw_alloc(struct hfi1_devdata *dd, int type, u32 *sw_index,
+		       u32 *hw_context)
 {
 	struct send_context_info *sci;
 	u32 index;
@@ -500,7 +500,7 @@ static int sc_hw_alloc(struct hfi_devdata *dd, int type, u32 *sw_index,
  *
  * Must be called with dd->sc_lock held.
  */
-static void sc_hw_free(struct hfi_devdata *dd, u32 sw_index, u32 hw_context)
+static void sc_hw_free(struct hfi1_devdata *dd, u32 sw_index, u32 hw_context)
 {
 	struct send_context_info *sci;
 
@@ -642,18 +642,18 @@ void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold)
  */
 void set_pio_integrity(struct send_context *sc)
 {
-	struct hfi_devdata *dd = sc->dd;
+	struct hfi1_devdata *dd = sc->dd;
 	u64 reg = 0;
 	u32 hw_context = sc->hw_context;
 	int type = sc->type;
 
 	/*
-	 * No integrity checks if HFI_CAP_NO_INTEGRITY is set, or if
+	 * No integrity checks if HFI1_CAP_NO_INTEGRITY is set, or if
 	 * we're snooping.
 	 */
-	if (likely(!HFI_CAP_IS_KSET(NO_INTEGRITY)) &&
-	    dd->hfi_snoop.mode_flag != HFI_PORT_SNOOP_MODE)
-		reg = hfi_pkt_default_send_ctxt_mask(dd, type);
+	if (likely(!HFI1_CAP_IS_KSET(NO_INTEGRITY)) &&
+	    dd->hfi1_snoop.mode_flag != HFI1_PORT_SNOOP_MODE)
+		reg = hfi1_pkt_default_send_ctxt_mask(dd, type);
 
 	write_kctxt_csr(dd, hw_context, SC(CHECK_ENABLE), reg);
 }
@@ -662,7 +662,7 @@ void set_pio_integrity(struct send_context *sc)
  * Allocate a NUMA relative send context structure of the given type along
  * with a HW context.
  */
-struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
+struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 			      uint hdrqentsize, int numa)
 {
 	struct send_context_info *sci;
@@ -677,7 +677,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	u8 opval, opmask;
 
 	/* do not allocate while frozen */
-	if (dd->flags & HFI_FROZEN)
+	if (dd->flags & HFI1_FROZEN)
 		return NULL;
 
 	sc = kzalloc_node(sizeof(struct send_context), GFP_KERNEL, numa);
@@ -776,9 +776,9 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 	}
 	reg = thresh << SC(CREDIT_CTRL_THRESHOLD_SHIFT);
 	/* add in early return */
-	if (type == SC_USER && HFI_CAP_IS_USET(EARLY_CREDIT_RETURN))
+	if (type == SC_USER && HFI1_CAP_IS_USET(EARLY_CREDIT_RETURN))
 		reg |= SC(CREDIT_CTRL_EARLY_RETURN_SMASK);
-	else if (HFI_CAP_IS_KSET(EARLY_CREDIT_RETURN)) /* kernel, ack */
+	else if (HFI1_CAP_IS_KSET(EARLY_CREDIT_RETURN)) /* kernel, ack */
 		reg |= SC(CREDIT_CTRL_EARLY_RETURN_SMASK);
 
 	/* set up write-through credit_ctrl */
@@ -827,7 +827,7 @@ struct send_context *sc_alloc(struct hfi_devdata *dd, int type,
 /* free a per-NUMA send context structure */
 void sc_free(struct send_context *sc)
 {
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	unsigned long flags;
 	u32 sw_index;
 	u32 hw_context;
@@ -917,7 +917,7 @@ void sc_disable(struct send_context *sc)
 /* wait for packet egress, optionally pause for credit return  */
 static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
 {
-	struct hfi_devdata *dd = sc->dd;
+	struct hfi1_devdata *dd = sc->dd;
 	u64 reg;
 	u32 loop = 0;
 
@@ -946,7 +946,7 @@ static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
 		pause_for_credit_return(dd);
 }
 
-void sc_wait(struct hfi_devdata *dd)
+void sc_wait(struct hfi1_devdata *dd)
 {
 	int i;
 
@@ -970,7 +970,7 @@ void sc_wait(struct hfi_devdata *dd)
  */
 int sc_restart(struct send_context *sc)
 {
-	struct hfi_devdata *dd = sc->dd;
+	struct hfi1_devdata *dd = sc->dd;
 	u64 reg;
 	u32 loop;
 	int count;
@@ -1055,7 +1055,7 @@ int sc_restart(struct send_context *sc)
  * Go through all frozen send contexts and disable them.  The contexts are
  * already stopped by the freeze.
  */
-void pio_freeze(struct hfi_devdata *dd)
+void pio_freeze(struct hfi1_devdata *dd)
 {
 	struct send_context *sc;
 	int i;
@@ -1082,7 +1082,7 @@ void pio_freeze(struct hfi_devdata *dd)
  * User (PSM) processing will occur when PSM calls into the kernel to
  * acknowledge the freeze.
  */
-void pio_kernel_unfreeze(struct hfi_devdata *dd)
+void pio_kernel_unfreeze(struct hfi1_devdata *dd)
 {
 	struct send_context *sc;
 	int i;
@@ -1102,7 +1102,7 @@ void pio_kernel_unfreeze(struct hfi_devdata *dd)
  *	-ETIMEDOUT - if we wait too long
  *	-EIO	   - if there was an error
  */
-static int pio_init_wait_progress(struct hfi_devdata *dd)
+static int pio_init_wait_progress(struct hfi1_devdata *dd)
 {
 	u64 reg;
 	int count = 0;
@@ -1123,7 +1123,7 @@ static int pio_init_wait_progress(struct hfi_devdata *dd)
  * Reset all of the send contexts to their power-on state.  Used
  * only during manual init - no lock against sc_enable needed.
  */
-void pio_reset_all(struct hfi_devdata *dd)
+void pio_reset_all(struct hfi1_devdata *dd)
 {
 	int ret;
 
@@ -1157,7 +1157,7 @@ void pio_reset_all(struct hfi_devdata *dd)
 int sc_enable(struct send_context *sc)
 {
 	u64 sc_ctrl, reg, pio;
-	struct hfi_devdata *dd;
+	struct hfi1_devdata *dd;
 	unsigned long flags;
 	int ret = 0;
 
@@ -1465,7 +1465,7 @@ void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
 		sc_add_credit_return_intr(sc);
 	else
 		sc_del_credit_return_intr(sc);
-	trace_hfi_wantpiointr(sc, needint, sc->credit_ctrl);
+	trace_hfi1_wantpiointr(sc, needint, sc->credit_ctrl);
 	if (needint) {
 		mmiowb();
 		sc_return_credits(sc);
@@ -1482,7 +1482,7 @@ void hfi1_sc_wantpiobuf_intr(struct send_context *sc, u32 needint)
  */
 static void sc_piobufavail(struct send_context *sc)
 {
-	struct hfi_devdata *dd = sc->dd;
+	struct hfi1_devdata *dd = sc->dd;
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	struct list_head *list;
 	struct hfi1_qp *qps[PIO_WAIT_BATCH_SIZE];
@@ -1569,7 +1569,7 @@ void sc_release_update(struct send_context *sc)
 			- (old_free & CR_COUNTER_MASK))
 				& CR_COUNTER_MASK;
 	sc->free = old_free + extra;
-	trace_hfi_piofree(sc, extra);
+	trace_hfi1_piofree(sc, extra);
 
 	/* call sent buffer callbacks */
 	code = -1;				/* code not yet set */
@@ -1607,7 +1607,7 @@ void sc_release_update(struct send_context *sc)
  * This routine takes the sc_lock without an irqsave because it is only
  * called from an interrupt handler.  Adjust if that changes.
  */
-void sc_group_release_update(struct hfi_devdata *dd, u32 hw_context)
+void sc_group_release_update(struct hfi1_devdata *dd, u32 hw_context)
 {
 	struct send_context *sc;
 	u32 sw_index;
@@ -1640,7 +1640,7 @@ done:
 	spin_unlock(&dd->sc_lock);
 }
 
-int init_pervl_scs(struct hfi_devdata *dd)
+int init_pervl_scs(struct hfi1_devdata *dd)
 {
 	int i;
 	u64 mask, all_vl_mask = (u64) 0x80ff; /* VLs 0-7, 15 */
@@ -1687,7 +1687,7 @@ nomem:
 	return -ENOMEM;
 }
 
-int init_credit_return(struct hfi_devdata *dd)
+int init_credit_return(struct hfi1_devdata *dd)
 {
 	int ret;
 	int num_numa;
@@ -1737,7 +1737,7 @@ done:
 	return ret;
 }
 
-void free_credit_return(struct hfi_devdata *dd)
+void free_credit_return(struct hfi1_devdata *dd)
 {
 	int num_numa;
 	int i;

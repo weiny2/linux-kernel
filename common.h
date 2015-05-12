@@ -83,108 +83,112 @@
 #define DEFAULT_KDETH_QP 0x80
 
 /* driver/hw feature set bitmask */
-#define HFI_CAP_USER_SHIFT      24
-#define HFI_CAP_MASK            ((1UL << HFI_CAP_USER_SHIFT) - 1)
-/* locked flag - if set, only HFI_CAP_WRITABLE_MASK bits can be set */
-#define HFI_CAP_LOCKED_SHIFT    63
-#define HFI_CAP_LOCKED_MASK     0x1ULL
-#define HFI_CAP_LOCKED_SMASK    (HFI_CAP_LOCKED_MASK << HFI_CAP_LOCKED_SHIFT)
+#define HFI1_CAP_USER_SHIFT      24
+#define HFI1_CAP_MASK            ((1UL << HFI1_CAP_USER_SHIFT) - 1)
+/* locked flag - if set, only HFI1_CAP_WRITABLE_MASK bits can be set */
+#define HFI1_CAP_LOCKED_SHIFT    63
+#define HFI1_CAP_LOCKED_MASK     0x1ULL
+#define HFI1_CAP_LOCKED_SMASK    (HFI1_CAP_LOCKED_MASK << HFI1_CAP_LOCKED_SHIFT)
 /* extra bits used between kernel and user processes */
-#define HFI_CAP_MISC_SHIFT      (HFI_CAP_USER_SHIFT * 2)
-#define HFI_CAP_MISC_MASK       ((1ULL << (HFI_CAP_LOCKED_SHIFT - \
-					   HFI_CAP_MISC_SHIFT)) - 1)
+#define HFI1_CAP_MISC_SHIFT      (HFI1_CAP_USER_SHIFT * 2)
+#define HFI1_CAP_MISC_MASK       ((1ULL << (HFI1_CAP_LOCKED_SHIFT - \
+					   HFI1_CAP_MISC_SHIFT)) - 1)
 
-#define HFI_CAP_KSET(cap) ({ hfi_cap_mask |= HFI_CAP_##cap; hfi_cap_mask; })
-#define HFI_CAP_KCLEAR(cap) ({ hfi_cap_mask &= ~HFI_CAP_##cap; hfi_cap_mask; })
-#define HFI_CAP_USET(cap)						\
+#define HFI1_CAP_KSET(cap) ({ hfi1_cap_mask |= HFI1_CAP_##cap; hfi1_cap_mask; })
+#define HFI1_CAP_KCLEAR(cap)						\
 	({								\
-		hfi_cap_mask |= (HFI_CAP_##cap << HFI_CAP_USER_SHIFT);	\
-		hfi_cap_mask;						\
+		hfi1_cap_mask &= ~HFI1_CAP_##cap;			\
+		hfi1_cap_mask;						\
+	})
+#define HFI1_CAP_USET(cap)						\
+	({								\
+		hfi1_cap_mask |= (HFI1_CAP_##cap << HFI1_CAP_USER_SHIFT); \
+		hfi1_cap_mask;						\
 		})
-#define HFI_CAP_UCLEAR(cap)						\
+#define HFI1_CAP_UCLEAR(cap)						\
 	({								\
-		hfi_cap_mask &= ~(HFI_CAP_##cap << HFI_CAP_USER_SHIFT);	\
-		hfi_cap_mask;						\
+		hfi1_cap_mask &= ~(HFI1_CAP_##cap << HFI1_CAP_USER_SHIFT); \
+		hfi1_cap_mask;						\
 	})
-#define HFI_CAP_SET(cap)						\
+#define HFI1_CAP_SET(cap)						\
 	({								\
-		hfi_cap_mask |= (HFI_CAP_##cap | (HFI_CAP_##cap <<	\
-						  HFI_CAP_USER_SHIFT));	\
-		hfi_cap_mask;						\
+		hfi1_cap_mask |= (HFI1_CAP_##cap | (HFI1_CAP_##cap <<	\
+						  HFI1_CAP_USER_SHIFT)); \
+		hfi1_cap_mask;						\
 	})
-#define HFI_CAP_CLEAR(cap)						\
+#define HFI1_CAP_CLEAR(cap)						\
 	({								\
-		hfi_cap_mask &= ~(HFI_CAP_##cap |			\
-				  (HFI_CAP_##cap << HFI_CAP_USER_SHIFT)); \
-		hfi_cap_mask;						\
+		hfi1_cap_mask &= ~(HFI1_CAP_##cap |			\
+				  (HFI1_CAP_##cap << HFI1_CAP_USER_SHIFT)); \
+		hfi1_cap_mask;						\
 	})
-#define HFI_CAP_LOCK()							\
-	({ hfi_cap_mask |= HFI_CAP_LOCKED_SMASK; hfi_cap_mask; })
-#define HFI_CAP_LOCKED() (!!(hfi_cap_mask & HFI_CAP_LOCKED_SMASK))
+#define HFI1_CAP_LOCK()							\
+	({ hfi1_cap_mask |= HFI1_CAP_LOCKED_SMASK; hfi1_cap_mask; })
+#define HFI1_CAP_LOCKED() (!!(hfi1_cap_mask & HFI1_CAP_LOCKED_SMASK))
 /*
  * The set of capability bits that can be changed after initial load
  * This set is the same for kernel and user contexts. However, for
  * user contexts, the set can be further filtered by using the
- * HFI_CAP_RESERVED_MASK bits.
+ * HFI1_CAP_RESERVED_MASK bits.
  */
-#define HFI_CAP_WRITABLE_MASK   (HFI_CAP_ENABLE_SMA |			\
-				 HFI_CAP_SDMA_AHG |			\
-				 HFI_CAP_HDRSUPP |			\
-				 HFI_CAP_MULTI_PKT_EGR |		\
-				 HFI_CAP_NODROP_RHQ_FULL |		\
-				 HFI_CAP_NODROP_EGR_FULL |		\
-				 HFI_CAP_ALLOW_PERM_JKEY |		\
-				 HFI_CAP_STATIC_RATE_CTRL |		\
-				 HFI_CAP_PRINT_UNIMPL)
+#define HFI1_CAP_WRITABLE_MASK   (HFI1_CAP_ENABLE_SMA |			\
+				 HFI1_CAP_SDMA_AHG |			\
+				 HFI1_CAP_HDRSUPP |			\
+				 HFI1_CAP_MULTI_PKT_EGR |		\
+				 HFI1_CAP_NODROP_RHQ_FULL |		\
+				 HFI1_CAP_NODROP_EGR_FULL |		\
+				 HFI1_CAP_ALLOW_PERM_JKEY |		\
+				 HFI1_CAP_STATIC_RATE_CTRL |		\
+				 HFI1_CAP_PRINT_UNIMPL)
 /*
  * A set of capability bits that are "global" and are not allowed to be
  * set in the user bitmask.
  */
-#define HFI_CAP_RESERVED_MASK   ((HFI_CAP_SDMA |			\
-				  HFI_CAP_ENABLE_SMA |			\
-				  HFI_CAP_USE_SDMA_HEAD |		\
-				  HFI_CAP_EXTENDED_PSN |		\
-				  HFI_CAP_PRINT_UNIMPL |		\
-				  HFI_CAP_QSFP_ENABLED |		\
-				  HFI_CAP_NO_INTEGRITY |		\
-				  HFI_CAP_PKEY_CHECK) <<		\
-				 HFI_CAP_USER_SHIFT)
+#define HFI1_CAP_RESERVED_MASK   ((HFI1_CAP_SDMA |			\
+				  HFI1_CAP_ENABLE_SMA |			\
+				  HFI1_CAP_USE_SDMA_HEAD |		\
+				  HFI1_CAP_EXTENDED_PSN |		\
+				  HFI1_CAP_PRINT_UNIMPL |		\
+				  HFI1_CAP_QSFP_ENABLED |		\
+				  HFI1_CAP_NO_INTEGRITY |		\
+				  HFI1_CAP_PKEY_CHECK) <<		\
+				 HFI1_CAP_USER_SHIFT)
 /*
  * Set of capabilities that need to be enabled for kernel context in
  * order to be allowed for user contexts, as well.
  */
-#define HFI_CAP_MUST_HAVE_KERN (HFI_CAP_STATIC_RATE_CTRL)
+#define HFI1_CAP_MUST_HAVE_KERN (HFI1_CAP_STATIC_RATE_CTRL)
 /* Default enabled capabilities (both kernel and user) */
-#define HFI_CAP_MASK_DEFAULT    (HFI_CAP_HDRSUPP |			\
-				 HFI_CAP_NODROP_RHQ_FULL |		\
-				 HFI_CAP_NODROP_EGR_FULL |		\
-				 HFI_CAP_SDMA |				\
-				 HFI_CAP_ENABLE_SMA |			\
-				 HFI_CAP_PRINT_UNIMPL |			\
-				 HFI_CAP_STATIC_RATE_CTRL |		\
-				 HFI_CAP_QSFP_ENABLED |			\
-				 HFI_CAP_PKEY_CHECK |			\
-				 HFI_CAP_MULTI_PKT_EGR |		\
-				 HFI_CAP_EXTENDED_PSN |			\
-				 ((HFI_CAP_HDRSUPP |			\
-				   HFI_CAP_MULTI_PKT_EGR |		\
-				   HFI_CAP_STATIC_RATE_CTRL |		\
-				   HFI_CAP_PKEY_CHECK |			\
-				   HFI_CAP_EARLY_CREDIT_RETURN) <<	\
-				  HFI_CAP_USER_SHIFT))
+#define HFI1_CAP_MASK_DEFAULT    (HFI1_CAP_HDRSUPP |			\
+				 HFI1_CAP_NODROP_RHQ_FULL |		\
+				 HFI1_CAP_NODROP_EGR_FULL |		\
+				 HFI1_CAP_SDMA |			\
+				 HFI1_CAP_ENABLE_SMA |			\
+				 HFI1_CAP_PRINT_UNIMPL |		\
+				 HFI1_CAP_STATIC_RATE_CTRL |		\
+				 HFI1_CAP_QSFP_ENABLED |		\
+				 HFI1_CAP_PKEY_CHECK |			\
+				 HFI1_CAP_MULTI_PKT_EGR |		\
+				 HFI1_CAP_EXTENDED_PSN |		\
+				 ((HFI1_CAP_HDRSUPP |			\
+				   HFI1_CAP_MULTI_PKT_EGR |		\
+				   HFI1_CAP_STATIC_RATE_CTRL |		\
+				   HFI1_CAP_PKEY_CHECK |		\
+				   HFI1_CAP_EARLY_CREDIT_RETURN) <<	\
+				  HFI1_CAP_USER_SHIFT))
 /*
  * A bitmask of kernel/global capabilities that should be communicated
  * to user level processes.
  */
-#define HFI_CAP_K2U (HFI_CAP_SDMA |			\
-		     HFI_CAP_EXTENDED_PSN |		\
-		     HFI_CAP_PKEY_CHECK |		\
-		     HFI_CAP_NO_INTEGRITY)
+#define HFI1_CAP_K2U (HFI1_CAP_SDMA |			\
+		     HFI1_CAP_EXTENDED_PSN |		\
+		     HFI1_CAP_PKEY_CHECK |		\
+		     HFI1_CAP_NO_INTEGRITY)
 
-#define HFI_USER_SWVERSION ((HFI_USER_SWMAJOR << 16) | HFI_USER_SWMINOR)
+#define HFI1_USER_SWVERSION ((HFI1_USER_SWMAJOR << 16) | HFI1_USER_SWMINOR)
 
-#ifndef HFI_KERN_TYPE
-#define HFI_KERN_TYPE 0
+#ifndef HFI1_KERN_TYPE
+#define HFI1_KERN_TYPE 0
 #endif
 
 /*
@@ -195,24 +199,24 @@
  * The high bit is 0 for non-Intel and 1 for Intel-built/supplied.
  *
  * It's returned by the driver to the user code during initialization in the
- * spi_sw_version field of hfi_base_info, so the user code can in turn
+ * spi_sw_version field of hfi1_base_info, so the user code can in turn
  * check for compatibility with the kernel.
 */
-#define HFI_KERN_SWVERSION ((HFI_KERN_TYPE << 31) | HFI_USER_SWVERSION)
+#define HFI1_KERN_SWVERSION ((HFI1_KERN_TYPE << 31) | HFI1_USER_SWVERSION)
 
 /*
  * Define the driver version number.  This is something that refers only
  * to the driver itself, not the software interfaces it supports.
  */
-#ifndef HFI_DRIVER_VERSION_BASE
-#define HFI_DRIVER_VERSION_BASE "0.9-54"
+#ifndef HFI1_DRIVER_VERSION_BASE
+#define HFI1_DRIVER_VERSION_BASE "0.9-54"
 #endif
 
 /* create the final driver version string */
-#ifdef HFI_IDSTR
-#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE " " HFI_IDSTR
+#ifdef HFI1_IDSTR
+#define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE " " HFI1_IDSTR
 #else
-#define HFI_DRIVER_VERSION HFI_DRIVER_VERSION_BASE
+#define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE
 #endif
 
 /*
