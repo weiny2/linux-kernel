@@ -26,8 +26,6 @@
 #include <linux/nd.h>
 #include "nd.h"
 
-#define PMEM_MINORS		16
-
 struct pmem_device {
 	struct request_queue	*pmem_queue;
 	struct gendisk		*pmem_disk;
@@ -177,12 +175,12 @@ static struct pmem_device *pmem_alloc(struct device *dev, struct resource *res, 
 	blk_queue_max_hw_sectors(pmem->pmem_queue, 1024);
 	blk_queue_bounce_limit(pmem->pmem_queue, BLK_BOUNCE_ANY);
 
-	disk = alloc_disk(PMEM_MINORS);
+	disk = alloc_disk(0);
 	if (!disk)
 		goto out_free_queue;
 
 	disk->major		= pmem_major;
-	disk->first_minor	= PMEM_MINORS * id;
+	disk->first_minor	= 0;
 	disk->fops		= &pmem_fops;
 	disk->private_data	= pmem;
 	disk->queue		= pmem->pmem_queue;
