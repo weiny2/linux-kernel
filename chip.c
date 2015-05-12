@@ -8366,7 +8366,6 @@ u64 hfi1_gpio_mod(struct hfi_devdata *dd, u32 target, u32 data, u32 dir,
 int hfi1_init_ctxt(struct hfi1_ctxtdata *rcd)
 {
 	struct hfi_devdata *dd = rcd->dd;
-	int ret = 0;
 
 	if (rcd->sc) {
 		u64 reg;
@@ -8382,7 +8381,7 @@ int hfi1_init_ctxt(struct hfi1_ctxtdata *rcd)
 		write_kctxt_csr(dd, rcd->sc->hw_context,
 				SEND_CTXT_CHECK_ENABLE, reg);
 	}
-	return ret;
+	return 0;
 }
 
 int hfi1_tempsense_rd(struct hfi_devdata *dd, struct hfi_temp *temp)
