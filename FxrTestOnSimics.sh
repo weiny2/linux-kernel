@@ -4,6 +4,8 @@ set -x
 fxr=/mnt/fabric/fxr
 ssh_cmd="ssh -p4022 root@localhost"
 scp_cmd="scp -P4022"
+export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
+export SNPSLMD_LICENSE_FILE="26586@irslic003.ir.intel.com:26586@synopsys03p.elic.intel.com"
 
 # start simics if not yet
 if [ -z `pidof simics-common` ]; then
@@ -15,6 +17,7 @@ if [ -z `pidof simics-common` ]; then
 fi
 ${fxr}/simics/workspace/bin/simics --version
 ls -l ${fxr}/simics/FxrRhel7.craff
+ls -l ${fxr}/simics/SynopsisInstructionSetSimulator
 
 # stop opa2_hfi daemon to release the driver
 ${ssh_cmd} "service --skip-redirect opa2_hfi stop"
