@@ -1517,6 +1517,12 @@ static int query_port(struct ib_device *ibdev, u8 port,
 	return 0;
 }
 
+static enum rdma_protocol_type
+query_protocol(struct ib_device *device, u8 port_num)
+{
+	return RDMA_PROTOCOL_IB;
+}
+
 static int modify_device(struct ib_device *device,
 			 int device_modify_mask,
 			 struct ib_device_modify *device_modify)
@@ -2050,6 +2056,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	ibdev->query_device = query_device;
 	ibdev->modify_device = modify_device;
 	ibdev->query_port = query_port;
+	ibdev->query_protocol = query_protocol;
 	ibdev->modify_port = modify_port;
 	ibdev->query_pkey = query_pkey;
 	ibdev->query_gid = query_gid;
