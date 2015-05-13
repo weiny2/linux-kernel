@@ -2833,14 +2833,14 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);*/
 
 	if (counter_select & CS_PORT_RCV_CONSTRAINT_ERRORS)
-		write_dev_cntr(dd, C_SW_RCV_CSTR_ERR, CNTR_INVALID_VL, 0);
+		write_port_cntr(ppd, C_SW_RCV_CSTR_ERR, CNTR_INVALID_VL, 0);
 
 	/* ignore cs_port_rcv_switch_relay_errors for HFIs */
 	if (counter_select & CS_PORT_XMIT_DISCARDS)
 		write_port_cntr(ppd, C_SW_XMIT_DSCD, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_XMIT_CONSTRAINT_ERRORS)
-		write_dev_cntr(dd, C_SW_XMIT_CSTR_ERR, CNTR_INVALID_VL, 0);
+		write_port_cntr(ppd, C_SW_XMIT_CSTR_ERR, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_dev_cntr(dd, C_DC_RMT_PHY_ERR, CNTR_INVALID_VL, 0);
