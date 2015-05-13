@@ -936,7 +936,6 @@ int sbus_request_slow(struct hfi1_devdata *dd,
 		      u8 receiver_addr, u8 data_addr, u8 command, u32 data_in)
 {
 	u64 reg, count = 0;
-	int ret = 0;
 
 	sbus_request(dd, receiver_addr, data_addr, command, data_in);
 	write_csr(dd, ASIC_CFG_SBUS_EXECUTE,
@@ -945,24 +944,33 @@ int sbus_request_slow(struct hfi1_devdata *dd,
 	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
 	while (!((reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) &&
 		 (reg & ASIC_STS_SBUS_RESULT_RCV_DATA_VALID_SMASK))) {
-		if (count++ >= SBUS_MAX_POLL_COUNT)
-			/* We timed out waiting but proceed anyway */
-			break;
-		udelay(1);
-		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
-	}
-	write_csr(dd, ASIC_CFG_SBUS_EXECUTE, 0);
-	/* Wait for DONE to clear after EXECUTE is cleared */
-	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
-	while (reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) {
 		if (count++ >= SBUS_MAX_POLL_COUNT) {
-			ret = -ETIME;
-			break;
+			u64 counts = read_csr(dd, ASIC_STS_SBUS_COUNTERS);
+			/*
+			 * If the loop has timed out, we are OK if DONE bit
+			 * is set and RCV_DATA_VALID and EXECUTE counters
+			 * are the same. If not, we cannot proceed.
+			 */
+			if ((reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) &&
+			    (SBUS_COUNTER(counts, RCV_DATA_VALID) ==
+			     SBUS_COUNTER(counts, EXECUTE)))
+				break;
+			return -ETIMEDOUT;
 		}
 		udelay(1);
 		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
 	}
-	return ret;
+	count = 0;
+	write_csr(dd, ASIC_CFG_SBUS_EXECUTE, 0);
+	/* Wait for DONE to clear after EXECUTE is cleared */
+	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
+	while (reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) {
+		if (count++ >= SBUS_MAX_POLL_COUNT)
+			return -ETIME;
+		udelay(1);
+		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
+	}
+	return 0;
 }
 
 static int load_fabric_serdes_firmware(struct hfi1_devdata *dd,

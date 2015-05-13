@@ -139,6 +139,9 @@ struct flag_table {
 #define MIN_KERNEL_KCTXTS         2
 #define NUM_MAP_REGS             32
 
+/* Bit offset into the GUID which carries HFI id information */
+#define GUID_HFI_INDEX_SHIFT     39
+
 /* extract the emulation revision */
 #define emulator_rev(dd) ((dd)->irev >> 8)
 /* parallel and serial emulation versions are 3 and 4 respectively */
@@ -10103,6 +10106,39 @@ void hfi1_start_cleanup(struct hfi1_devdata *dd)
 	clean_up_interrupts(dd);
 }
 
+#define HFI_BASE_GUID(dev) \
+	(be64_to_cpu((dev)->base_guid) & ~(1ULL << GUID_HFI_INDEX_SHIFT))
+
+/*
+ * Certain chip functions need to be initialized only once per asic
+ * instead of per-device. This function finds the peer device and
+ * checks whether that chip initialization needs to be done by this
+ * device.
+ */
+static void asic_should_init(struct hfi1_devdata *dd)
+{
+	unsigned long flags;
+	struct hfi1_devdata *tmp, *peer = NULL;
+
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
+	/* Find our peer device */
+	list_for_each_entry(tmp, &hfi1_dev_list, list) {
+		if ((HFI_BASE_GUID(dd) == HFI_BASE_GUID(tmp)) &&
+		    dd->unit != tmp->unit) {
+			peer = tmp;
+			break;
+		}
+	}
+
+	/*
+	 * "Claim" the ASIC for initialization if it hasn't been
+	 " "claimed" yet.
+	 */
+	if (!peer || !(peer->flags & HFI1_DO_INIT_ASIC))
+		dd->flags |= HFI1_DO_INIT_ASIC;
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
+}
+
 /**
  * Allocate an initialize the device structure for the hfi.
  * @dev: the pci_dev for hfi1_ib device
@@ -10291,6 +10327,11 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	if (ret)
 		goto bail_cleanup;
 
+	/* needs to be done before we look for the peer device */
+	read_guid(dd);
+
+	asic_should_init(dd);
+
 	/* read in firmware */
 	ret = hfi1_firmware_init(dd);
 	if (ret)
@@ -10379,7 +10420,6 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 
 	/* set up LCB access - must be after set_up_interrupts() */
 	init_lcb_access(dd);
-	read_guid(dd);
 
 	/*
 	 * GUID is now stored in big endian by the function above, swap it.
@@ -10401,6 +10441,8 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		goto bail_clear_intr;
 	check_fabric_firmware_versions(dd);
 
+	thermal_init(dd);
+
 	ret = init_cntrs(dd);
 	if (ret)
 		goto bail_clear_intr;
@@ -10413,7 +10455,6 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	if (ret)
 		goto bail_free_rcverr;
 
-	thermal_init(dd);
 	goto bail;
 
 bail_free_rcverr:
@@ -10503,6 +10544,11 @@ void force_all_interrupts(struct hfi1_devdata *dd)
 #define SBUS_THERMAL    0x4f
 #define SBUS_THERM_MONITOR_MODE 0x1
 
+#define THERM_FAILURE(dev, ret, reason) \
+	dd_dev_err((dd),						\
+		   "Thermal sensor initialization failed: %s (%d)\n",	\
+		   (reason), (ret))
+
 /*
  * Initialize the Avago Thermal sensor.
  *
@@ -10517,47 +10563,56 @@ static int thermal_init(struct hfi1_devdata *dd)
 {
 	int ret = 0;
 
-	if (dd->icode != ICODE_RTL_SILICON)
-		goto done;
+	if (dd->icode != ICODE_RTL_SILICON ||
+	    !(dd->flags & HFI1_DO_INIT_ASIC))
+		return ret;
 
+	acquire_hw_mutex(dd);
 	dd_dev_info(dd, "Initializing thermal sensor\n");
 	/* Thermal Sensor Initialization */
 	/*    Step 1: Reset the Thermal SBus Receiver */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
 				RESET_SBUS_RECEIVER, 0);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Bus Reset");
+		goto done;
+	}
 	/*    Step 2: Set Reset bit in Thermal block */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
 				WRITE_SBUS_RECEIVER, 0x1);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Therm Block Reset");
+		goto done;
+	}
 	/*    Step 3: Write clock divider value (100MHz -> 2MHz) */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x1,
 				WRITE_SBUS_RECEIVER, 0x32);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Write Clock Div");
+		goto done;
+	}
 	/*    Step 4: Select temperature mode */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x3,
 				WRITE_SBUS_RECEIVER,
 				SBUS_THERM_MONITOR_MODE);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Write Mode Sel");
+		goto done;
+	}
 	/*    Step 5: De-assert block reset and start conversion */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
 				WRITE_SBUS_RECEIVER, 0x2);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Write Reset Deassert");
+		goto done;
+	}
 	/*    Step 5.1: Wait for first conversion (21.5ms per spec) */
 	msleep(22);
 
-	dd_dev_info(dd, "Thermal sensor initialization done.\n");
 	/* Enable polling of thermal readings */
 	write_csr(dd, ASIC_CFG_THERM_POLL_EN, 0x1);
-	goto done;
-fail:
-	dd_dev_err(dd, "Thermal sensor initialization failed.\n");
 done:
+	release_hw_mutex(dd);
 	return ret;
 }
 
