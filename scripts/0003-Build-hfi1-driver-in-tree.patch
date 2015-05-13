@@ -1,0 +1,61 @@
+From 56e82bf1bbb61dcdc407651aa30a077763c58967 Mon Sep 17 00:00:00 2001
+From: Jubin John <jubin.john@intel.com>
+Date: Tue, 17 Mar 2015 16:07:48 -0700
+Subject: [PATCH 1/2] Build hfi1 driver in-tree
+
+Signed-off-by: Jubin John <jubin.john@intel.com>
+---
+ arch/x86/configs/wfr-config | 5 +++--
+ drivers/infiniband/Kconfig  | 1 +
+ drivers/infiniband/Makefile | 1 +
+ 3 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/arch/x86/configs/wfr-config b/arch/x86/configs/wfr-config
+index 5c8a71d..4d9fa55 100644
+--- a/arch/x86/configs/wfr-config
++++ b/arch/x86/configs/wfr-config
+@@ -1,6 +1,6 @@
+ #
+ # Automatically generated file; DO NOT EDIT.
+-# Linux/x86 3.12.17-wfr Kernel Configuration
++# Linux/x86 3.12.18-wfr Kernel Configuration
+ #
+ CONFIG_64BIT=y
+ CONFIG_X86_64=y
+@@ -3899,7 +3899,8 @@ CONFIG_INFINIBAND_MTHCA_DEBUG=y
+ CONFIG_INFINIBAND_IPATH=m
+ CONFIG_INFINIBAND_QIB=m
+ CONFIG_INFINIBAND_QIB_DCA=y
+-CONFIG_INFINIBAND_WFR_LITE=m
++CONFIG_INFINIBAND_HFI1=m
++# CONFIG_HFI1_DEBUG_SDMA_ORDER is not set
+ # CONFIG_INFINIBAND_AMSO1100 is not set
+ CONFIG_INFINIBAND_CXGB3=m
+ # CONFIG_INFINIBAND_CXGB3_DEBUG is not set
+diff --git a/drivers/infiniband/Kconfig b/drivers/infiniband/Kconfig
+index b84791f..6790b37 100644
+--- a/drivers/infiniband/Kconfig
++++ b/drivers/infiniband/Kconfig
+@@ -56,6 +56,7 @@ config INFINIBAND_ADDR_TRANS
+ source "drivers/infiniband/hw/mthca/Kconfig"
+ source "drivers/infiniband/hw/ipath/Kconfig"
+ source "drivers/infiniband/hw/qib/Kconfig"
++source "drivers/infiniband/hw/hfi1/Kconfig"
+ source "drivers/infiniband/hw/ehca/Kconfig"
+ source "drivers/infiniband/hw/amso1100/Kconfig"
+ source "drivers/infiniband/hw/cxgb3/Kconfig"
+diff --git a/drivers/infiniband/Makefile b/drivers/infiniband/Makefile
+index 1fe6988..d43f735 100644
+--- a/drivers/infiniband/Makefile
++++ b/drivers/infiniband/Makefile
+@@ -2,6 +2,7 @@ obj-$(CONFIG_INFINIBAND)		+= core/
+ obj-$(CONFIG_INFINIBAND_MTHCA)		+= hw/mthca/
+ obj-$(CONFIG_INFINIBAND_IPATH)		+= hw/ipath/
+ obj-$(CONFIG_INFINIBAND_QIB)		+= hw/qib/
++obj-$(CONFIG_INFINIBAND_HFI1)		+= hw/hfi1/
+ obj-$(CONFIG_INFINIBAND_EHCA)		+= hw/ehca/
+ obj-$(CONFIG_INFINIBAND_AMSO1100)	+= hw/amso1100/
+ obj-$(CONFIG_INFINIBAND_CXGB3)		+= hw/cxgb3/
+-- 
+1.8.3.1
+

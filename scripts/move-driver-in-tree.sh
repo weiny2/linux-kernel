@@ -27,8 +27,8 @@ git clone --branch ${branch} ssh://$USER@git-amr-2.devtools.intel.com:29418/wfr-
 cd wfr-linux-devel-merge
 echo -e "\n2. Add a new remote URL pointing to the wfr-driver repo."
 git remote add -f wfr-driver ssh://$USER@git-amr-2.devtools.intel.com:29418/wfr-driver.git
-echo -e "\n3. Subtree merge the for-${branch} driver into the drivers/infiniband/hw/hfi1 directory"
-git subtree add -P drivers/infiniband/hw/hfi1/ wfr-driver/for-${branch}
+echo -e "\n3. Subtree merge the ${branch} driver into the drivers/infiniband/hw/hfi1 directory"
+git subtree add -P drivers/infiniband/hw/hfi1/ wfr-driver/${branch}
 echo -e "\n4. Apply patch $1"
 patch -p1 < ../$1
 git commit -a -m"Add driver to kbuild"
