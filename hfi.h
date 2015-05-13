@@ -1465,11 +1465,7 @@ const char *get_unit_name(int unit);
  */
 static inline void flush_wc(void)
 {
-#if defined(CONFIG_X86_64)
 	asm volatile("sfence" : : : "memory");
-#else
-	wmb(); /* no reorder around wc flush */
-#endif
 }
 
 void handle_eflags(struct hfi1_packet *packet);

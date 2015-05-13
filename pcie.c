@@ -188,14 +188,7 @@ int hfi1_pcie_ddinit(struct hfi1_devdata *dd, struct pci_dev *pdev,
 		return -EINVAL;
 	}
 
-#if defined(__powerpc__)
-	/* There isn't a generic way to specify write-through mappings */
-	dd->kregbase = __ioremap(addr, TXE_PIO_SEND,
-					_PAGE_NO_CACHE | _PAGE_WRITETHRU);
-#else
 	dd->kregbase = ioremap_nocache(addr, TXE_PIO_SEND);
-#endif
-
 	if (!dd->kregbase)
 		return -ENOMEM;
 
