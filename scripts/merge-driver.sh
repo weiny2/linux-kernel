@@ -49,7 +49,7 @@ fi
 echo "Version: $mversion"
 git checkout ${branch}
 echo -e "\n3.Update driver version string to $mversion"
-sed -i "/^#define HFI_DRIVER_VERSION_BASE/s/\".*\"/\"$mversion\"/" common.h
+sed -i "/^#define .*_DRIVER_VERSION_BASE/s/\".*\"/\"$mversion\"/" common.h
 git commit -m"Update driver version string to ${mversion}" common.h
 echo -e "\n4.Merge $1 tag into ${branch}"
 if ! git merge --log -m"Merge driver from ${mversion}" branch-$1
