@@ -2026,13 +2026,13 @@ struct opa_port_error_info_msg {
 				} ei13;
 			} ei;
 			u8 reserved3[6];
-		} port_rcv_ei;
+		} __packed port_rcv_ei;
 
 		/* ExcessiveBufferOverrunInfo */
 		struct {
 			u8 status_and_sc;
 			u8 reserved4[7];
-		} excessive_buffer_overrun_ei;
+		} __packed excessive_buffer_overrun_ei;
 
 		/* PortXmitConstraintErrorInfo */
 		struct {
@@ -2040,7 +2040,7 @@ struct opa_port_error_info_msg {
 			u8 reserved5;
 			__be16 pkey;
 			__be32 slid;
-		} port_xmit_constraint_ei;
+		} __packed port_xmit_constraint_ei;
 
 		/* PortRcvConstraintErrorInfo */
 		struct {
@@ -2048,27 +2048,27 @@ struct opa_port_error_info_msg {
 			u8 reserved6;
 			__be16 pkey;
 			__be32 slid;
-		} port_rcv_constraint_ei;
+		} __packed port_rcv_constraint_ei;
 
 		/* PortRcvSwitchRelayErrorInfo */
 		struct {
 			u8 status_and_code;
 			u8 reserved7[3];
 			__u32 error_info;
-		} port_rcv_switch_relay_ei;
+		} __packed port_rcv_switch_relay_ei;
 
 		/* UncorrectableErrorInfo */
 		struct {
 			u8 status_and_code;
 			u8 reserved8;
-		} uncorrectable_ei;
+		} __packed uncorrectable_ei;
 
 		/* FMConfigErrorInfo */
 		struct {
 			u8 status_and_code;
 			u8 error_info;
 			__u32 reserved9;
-		} fm_config_ei;
+		} __packed fm_config_ei;
 	} port[1]; /* actual array size defined by #ports in attr modifier */
 };
 
