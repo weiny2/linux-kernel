@@ -2026,13 +2026,13 @@ struct opa_port_error_info_msg {
 				} ei13;
 			} ei;
 			u8 reserved3[6];
-		} port_rcv_ei;
+		} __packed port_rcv_ei;
 
 		/* ExcessiveBufferOverrunInfo */
 		struct {
 			u8 status_and_sc;
 			u8 reserved4[7];
-		} excessive_buffer_overrun_ei;
+		} __packed excessive_buffer_overrun_ei;
 
 		/* PortXmitConstraintErrorInfo */
 		struct {
@@ -2040,7 +2040,7 @@ struct opa_port_error_info_msg {
 			u8 reserved5;
 			__be16 pkey;
 			__be32 slid;
-		} port_xmit_constraint_ei;
+		} __packed port_xmit_constraint_ei;
 
 		/* PortRcvConstraintErrorInfo */
 		struct {
@@ -2048,27 +2048,27 @@ struct opa_port_error_info_msg {
 			u8 reserved6;
 			__be16 pkey;
 			__be32 slid;
-		} port_rcv_constraint_ei;
+		} __packed port_rcv_constraint_ei;
 
 		/* PortRcvSwitchRelayErrorInfo */
 		struct {
 			u8 status_and_code;
 			u8 reserved7[3];
 			__u32 error_info;
-		} port_rcv_switch_relay_ei;
+		} __packed port_rcv_switch_relay_ei;
 
 		/* UncorrectableErrorInfo */
 		struct {
 			u8 status_and_code;
 			u8 reserved8;
-		} uncorrectable_ei;
+		} __packed uncorrectable_ei;
 
 		/* FMConfigErrorInfo */
 		struct {
 			u8 status_and_code;
 			u8 error_info;
 			__u32 reserved9;
-		} fm_config_ei;
+		} __packed fm_config_ei;
 	} port[1]; /* actual array size defined by #ports in attr modifier */
 };
 
@@ -2833,14 +2833,14 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		write_csr(dd, DCC_PRF_PORT_MARK_FECN_CNT, 0);*/
 
 	if (counter_select & CS_PORT_RCV_CONSTRAINT_ERRORS)
-		write_dev_cntr(dd, C_SW_RCV_CSTR_ERR, CNTR_INVALID_VL, 0);
+		write_port_cntr(ppd, C_SW_RCV_CSTR_ERR, CNTR_INVALID_VL, 0);
 
 	/* ignore cs_port_rcv_switch_relay_errors for HFIs */
 	if (counter_select & CS_PORT_XMIT_DISCARDS)
 		write_port_cntr(ppd, C_SW_XMIT_DSCD, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_XMIT_CONSTRAINT_ERRORS)
-		write_dev_cntr(dd, C_SW_XMIT_CSTR_ERR, CNTR_INVALID_VL, 0);
+		write_port_cntr(ppd, C_SW_XMIT_CSTR_ERR, CNTR_INVALID_VL, 0);
 
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
 		write_dev_cntr(dd, C_DC_RMT_PHY_ERR, CNTR_INVALID_VL, 0);

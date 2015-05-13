@@ -2936,9 +2936,9 @@ static void dc_shutdown(struct hfi1_devdata *dd)
 	/* Shutdown the LCB */
 	lcb_shutdown(dd, 1);
 	/* Going to OFFLINE would have causes the 8051 to put the
-	 * SerDes into reset already. Just need to shutdown the 8051,
+	 * SerDes into reset already. Just need to shut down the 8051,
 	 * itself. */
-	write_csr(dd, DC_DC8051_CFG_RST, 0x1f);
+	write_csr(dd, DC_DC8051_CFG_RST, 0x1);
 }
 
 /* Calling this after the DC has been brought out of reset should not
@@ -2946,6 +2946,7 @@ static void dc_shutdown(struct hfi1_devdata *dd)
 static void dc_start(struct hfi1_devdata *dd)
 {
 	unsigned long flags;
+	int ret;
 
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
 	if (!dd->dc_shutdown)
@@ -2954,7 +2955,11 @@ static void dc_start(struct hfi1_devdata *dd)
 	/* Take the 8051 out of reset */
 	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
 	/* Wait until 8052 is ready */
-	wait_fm_ready(dd, TIMEOUT_8051_START);
+	ret = wait_fm_ready(dd, TIMEOUT_8051_START);
+	if (ret) {
+		dd_dev_err(dd, "%s: timeout starting 8051 firmware\n",
+			__func__);
+	}
 	/* Take away reset for LCB and RX FPE (set in lcb_shutdown). */
 	write_csr(dd, DCC_CFG_RESET, 0x10);
 	/* lcb_shutdown() with abort=1 does not restore these */
@@ -4014,8 +4019,11 @@ static void handle_8051_interrupt(struct hfi1_devdata *dd, u32 unused, u64 reg)
 	}
 
 	if (queue_link_down) {
-		/* if the link is going down, don't queue another */
-		if (ppd->host_link_state == HLS_GOING_OFFLINE) {
+		/* if the link is already going down or disabled, do not
+		 * queue another */
+		if ((ppd->host_link_state
+				    & (HLS_GOING_OFFLINE|HLS_LINK_COOLDOWN))
+				|| ppd->link_enabled == 0) {
 			dd_dev_info(dd, "%s: not queuing link down\n",
 				__func__);
 		} else {
@@ -6123,7 +6131,7 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	 * when that is completed.  The largest of the quiet timeouts
 	 * is 2.5s, so wait that long and then a bit more.
 	 */
-	ret = wait_fm_ready(dd, 2600);
+	ret = wait_fm_ready(dd, 3000);
 	if (ret) {
 		dd_dev_err(dd,
 			"After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
@@ -6418,6 +6426,9 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		dc_shutdown(dd);
 		break;
 	case HLS_DN_OFFLINE:
+		if (ppd->host_link_state == HLS_DN_DISABLE)
+			dc_start(dd);
+
 		/* allow any state to transition to offline */
 		ret = goto_offline(ppd, ppd->remote_link_down_reason);
 		if (!ret)

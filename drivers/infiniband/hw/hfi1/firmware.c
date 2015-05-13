@@ -1047,7 +1047,7 @@ static int load_sbus_firmware(struct hfi1_devdata *dd,
 static int load_pcie_serdes_firmware(struct hfi1_devdata *dd,
 				     struct firmware_details *fdet)
 {
-	int i, err;
+	int i;
 	const u8 ra = SBUS_MASTER_BROADCAST; /* receiver address */
 
 	dd_dev_info(dd, "Downloading PCIe firmware\n");
@@ -1070,14 +1070,9 @@ static int load_pcie_serdes_firmware(struct hfi1_devdata *dd,
 	/* step 6: allow SBus Spico to run */
 	sbus_request(dd, ra, 0x05, WRITE_SBUS_RECEIVER, 0x00000000);
 
-	/* steps 7-10: run RSA */
-	err = run_rsa(dd, "PCIe serdes", fdet->signature);
-	if (err)
-		return err;
-
-	/* step 11: firmware is available to be swapped */
-
-	return 0;
+	/* steps 7-11: run RSA, if it succeeds, firmware is available to
+	   be swapped */
+	return run_rsa(dd, "PCIe serdes", fdet->signature);
 }
 
 /*

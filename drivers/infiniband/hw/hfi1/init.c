@@ -934,6 +934,8 @@ static void shutdown_device(struct hfi1_devdata *dd)
  */
 void hfi1_free_ctxtdata(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 {
+	unsigned e;
+
 	if (!rcd)
 		return;
 
@@ -949,27 +951,19 @@ void hfi1_free_ctxtdata(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 		}
 	}
 
-	if (rcd->egrbufs.rcvtids)
-		/* all the RcvArray entries should have been cleared by now */
-		kfree(rcd->egrbufs.rcvtids);
+	/* all the RcvArray entries should have been cleared by now */
+	kfree(rcd->egrbufs.rcvtids);
 
-	if (rcd->egrbufs.buffers) {
-		unsigned e;
-
-		for (e = 0; e < rcd->egrbufs.alloced; e++) {
-			if (rcd->egrbufs.buffers[e].phys)
-				dma_free_coherent(&dd->pcidev->dev,
-						  rcd->egrbufs.buffers[e].len,
-						  rcd->egrbufs.buffers[e].addr,
-						  rcd->egrbufs.buffers[e].phys);
-		}
-		kfree(rcd->egrbufs.buffers);
+	for (e = 0; e < rcd->egrbufs.alloced; e++) {
+		if (rcd->egrbufs.buffers[e].phys)
+			dma_free_coherent(&dd->pcidev->dev,
+					  rcd->egrbufs.buffers[e].len,
+					  rcd->egrbufs.buffers[e].addr,
+					  rcd->egrbufs.buffers[e].phys);
 	}
+	kfree(rcd->egrbufs.buffers);
 
-	if (rcd->sc) {
-		sc_free(rcd->sc);
-		rcd->sc = NULL;
-	}
+	sc_free(rcd->sc);
 	vfree(rcd->physshadow);
 	vfree(rcd->tid_pg_list);
 	vfree(rcd->user_event_mask);
