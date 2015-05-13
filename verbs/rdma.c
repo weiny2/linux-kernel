@@ -50,7 +50,146 @@
  * Intel(R) OPA Gen2 IB Driver
  */
 
+#include <linux/sched.h>
 #include "verbs.h"
+#include "packet.h"
+
+/* FXRTODO - TX support */
+#define is_qp_dma_blocked(qp, sc) 0
+
+/**
+ * post_one_send - post one RC, UC, or UD send work request
+ * @qp: the QP to post on
+ * @wr: the work request to send
+ *
+ * Return: 0 on success, otherwise returns an errno.
+ */
+static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
+			 int *scheduled)
+{
+	struct opa_ib_swqe *wqe;
+	u32 next;
+	int i;
+	int j;
+	int acc;
+	int ret;
+	unsigned long flags;
+	struct opa_ib_lkey_table *rkt;
+	struct opa_ib_pd *pd;
+	u8 sc5;
+	struct opa_ib_portdata *ibp;
+
+	spin_lock_irqsave(&qp->s_lock, flags);
+	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+
+	/* Check that state is OK to post send. */
+	if (unlikely(!(ib_qp_state_ops[qp->state] & HFI1_POST_SEND_OK)))
+		goto bail_inval;
+
+	/* IB spec says that num_sge == 0 is OK. */
+	if (wr->num_sge > qp->s_max_sge)
+		goto bail_inval;
+
+	/*
+	 * Don't allow RDMA reads or atomic operations on UC or
+	 * undefined operations.
+	 * Make sure buffer is large enough to hold the result for atomics.
+	 */
+	if (wr->opcode == IB_WR_FAST_REG_MR) {
+		if (opa_ib_fast_reg_mr(qp, wr))
+			goto bail_inval;
+	} else if (qp->ibqp.qp_type == IB_QPT_UC) {
+		if ((unsigned) wr->opcode >= IB_WR_RDMA_READ)
+			goto bail_inval;
+	} else if (qp->ibqp.qp_type != IB_QPT_RC) {
+		/* Check IB_QPT_SMI, IB_QPT_GSI, IB_QPT_UD opcode */
+		if (wr->opcode != IB_WR_SEND &&
+		    wr->opcode != IB_WR_SEND_WITH_IMM)
+			goto bail_inval;
+		/* Check UD destination address PD */
+		if (qp->ibqp.pd != wr->wr.ud.ah->pd)
+			goto bail_inval;
+	} else if ((unsigned) wr->opcode > IB_WR_ATOMIC_FETCH_AND_ADD)
+		goto bail_inval;
+	else if (wr->opcode >= IB_WR_ATOMIC_CMP_AND_SWP &&
+		   (wr->num_sge == 0 ||
+		    wr->sg_list[0].length < sizeof(u64) ||
+		    wr->sg_list[0].addr & (sizeof(u64) - 1)))
+		goto bail_inval;
+	else if (wr->opcode >= IB_WR_RDMA_READ && !qp->s_max_rd_atomic)
+		goto bail_inval;
+
+	next = qp->s_head + 1;
+	if (next >= qp->s_size)
+		next = 0;
+	if (next == qp->s_last) {
+		ret = -ENOMEM;
+		goto bail;
+	}
+
+	rkt = &to_opa_ibdata(qp->ibqp.device)->lk_table;
+	pd = to_opa_ibpd(qp->ibqp.pd);
+	wqe = get_swqe_ptr(qp, qp->s_head);
+	wqe->wr = *wr;
+	wqe->length = 0;
+	j = 0;
+	if (wr->num_sge) {
+		acc = wr->opcode >= IB_WR_RDMA_READ ?
+			IB_ACCESS_LOCAL_WRITE : 0;
+		for (i = 0; i < wr->num_sge; i++) {
+			u32 length = wr->sg_list[i].length;
+			int ok;
+
+			if (length == 0)
+				continue;
+			ok = opa_ib_lkey_ok(rkt, pd, &wqe->sg_list[j],
+					    &wr->sg_list[i], acc);
+			if (!ok)
+				goto bail_inval_free;
+			wqe->length += length;
+			j++;
+		}
+		wqe->wr.num_sge = j;
+	}
+	if (qp->ibqp.qp_type == IB_QPT_UC ||
+	    qp->ibqp.qp_type == IB_QPT_RC) {
+		if (wqe->length > 0x80000000U)
+			goto bail_inval_free;
+		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+	} else {
+		struct opa_ib_ah *ah = to_opa_ibah(wr->wr.ud.ah);
+		u8 vl;
+
+		sc5 = ibp->sl_to_sc[ah->attr.sl];
+		vl = ibp->sc_to_vl[sc5];
+		if (vl < OPA_IB_NUM_DATA_VLS)
+			if (wqe->length > ibp->vl_mtu[vl])
+				goto bail_inval_free;
+
+		atomic_inc(&ah->refcount);
+	}
+	wqe->ssn = qp->s_ssn++;
+	qp->s_head = next;
+
+	ret = 0;
+	goto bail;
+
+bail_inval_free:
+	/* FXRTODO - WFR has hfi1_put_mr() loop here */
+bail_inval:
+	ret = -EINVAL;
+bail:
+	if (!ret && !wr->next) {
+		/* FXRTODO - revisit, we likely need this */
+		if (is_qp_dma_blocked(qp, sc5)) {
+			opa_ib_schedule_send(qp);
+			*scheduled = 1;
+		}
+	}
+
+	spin_unlock_irqrestore(&qp->s_lock, flags);
+	return ret;
+}
 
 /**
  * opa_ib_post_send - post a send on a QP
@@ -65,7 +204,24 @@
 int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr)
 {
-	return -ENOSYS;
+	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	int err = 0;
+	int scheduled = 0;
+
+	for (; wr; wr = wr->next) {
+		err = post_one_send(qp, wr, &scheduled);
+		if (err) {
+			*bad_wr = wr;
+			goto bail;
+		}
+	}
+
+	/* Try to do the send work in the caller's context. */
+	if (!scheduled)
+		opa_ib_do_send(&qp->s_iowait.iowork);
+
+bail:
+	return err;
 }
 
 /**
@@ -81,24 +237,210 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr)
 {
-	/*
-	 * FXRTODO: return success to enable ib_* kernel modules and libraries
-	 * depending on this to continue thinking that qp is enabled.
-	 * This way Dr Route SMPs loopback works.
-	 * This function is to be enabled as part of VPD dev task
-	 */
-	return 0;
+	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	struct opa_ib_rwq *wq = qp->r_rq.wq;
+	unsigned long flags;
+	int ret;
+
+	/* Check that state is OK to post receive. */
+	if (!(ib_qp_state_ops[qp->state] & HFI1_POST_RECV_OK) || !wq) {
+		*bad_wr = wr;
+		ret = -EINVAL;
+		goto bail;
+	}
+
+	for (; wr; wr = wr->next) {
+		struct opa_ib_rwqe *wqe;
+		u32 next;
+		int i;
+
+		if ((unsigned) wr->num_sge > qp->r_rq.max_sge) {
+			*bad_wr = wr;
+			ret = -EINVAL;
+			goto bail;
+		}
+
+		spin_lock_irqsave(&qp->r_rq.lock, flags);
+		next = wq->head + 1;
+		if (next >= qp->r_rq.size)
+			next = 0;
+		if (next == wq->tail) {
+			spin_unlock_irqrestore(&qp->r_rq.lock, flags);
+			*bad_wr = wr;
+			ret = -ENOMEM;
+			goto bail;
+		}
+
+		wqe = get_rwqe_ptr(&qp->r_rq, wq->head);
+		wqe->wr_id = wr->wr_id;
+		wqe->num_sge = wr->num_sge;
+		for (i = 0; i < wr->num_sge; i++)
+			wqe->sg_list[i] = wr->sg_list[i];
+		/* Make sure queue entry is written before the head index. */
+		smp_wmb();
+		wq->head = next;
+		spin_unlock_irqrestore(&qp->r_rq.lock, flags);
+	}
+	ret = 0;
+
+bail:
+	return ret;
 }
 
 /**
- * opa_ib_do_send - perform a send on a QP
- * @work: contains a pointer to the QP
+ * opa_ib_qp_rcv - processing an incoming packet on a QP
+ * @ctx: the context pointer
+ * @hdr: the packet header
+ * @rcv_flags: flags relevant to rcv processing
+ * @data: the packet data
+ * @tlen: the packet length
+ * @qp: the QP the packet came on
  *
- * Process entries in the send work queue until credit or queue is
- * exhausted.  Only allow one CPU to send a packet per QP (tasklet).
- * Otherwise, two threads could send packets out of order.
+ * This is called from opa_ib_rcv() to process an incoming packet
+ * for the given QP.
+ * Called at interrupt level.
  */
-void opa_ib_do_send(struct work_struct *work)
+static void opa_ib_qp_rcv(struct hfi_ctx *ctx, struct opa_ib_header *hdr,
+			  u32 rcv_flags, void *data, u32 tlen, struct opa_ib_qp *qp)
 {
-	/* FXRTODO */
+	struct opa_ib_portdata *ibp;
+
+	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+
+	spin_lock(&qp->r_lock);
+
+	/* Check for valid receive state. */
+	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
+		ibp->n_pkt_drops++;
+		goto unlock;
+	}
+
+	switch (qp->ibqp.qp_type) {
+	case IB_QPT_SMI:
+	case IB_QPT_GSI:
+	case IB_QPT_UD:
+		opa_ib_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
+		break;
+	/* FXRTODO RC/UC support */
+	case IB_QPT_RC:
+	case IB_QPT_UC:
+	default:
+		break;
+	}
+
+unlock:
+	spin_unlock(&qp->r_lock);
+}
+
+/**
+ * opa_ib_rcv - process an incoming packet
+ * @packet: data packet information
+ *
+ * This is called to process an incoming packet at interrupt level.
+ * FXRTODO: for FXR, this is called upon EQ event?
+ * Tlen is the length of the header + data + CRC in bytes.
+ */
+void opa_ib_rcv(struct opa_ib_packet *packet)
+{
+	struct hfi_ctx *rcd = packet->ctx;
+	struct opa_ib_header *hdr = packet->hdr;
+	void *data = packet->ebuf;
+	u32 tlen = packet->tlen;
+	struct opa_ib_portdata *ibp = packet->ibp;
+	struct ib_l4_headers *ohdr;
+	struct opa_ib_qp *qp;
+	u32 qp_num;
+	u32 rcv_flags = 0;
+	int lnh;
+	u8 opcode;
+	u16 lid;
+
+	/* FXRTODO: delete me when opa2_ib is stable */
+	BUG_ON(!ibp);
+
+	/* 24 == LRH+BTH+CRC */
+	if (unlikely(tlen < 24))
+		goto drop;
+
+	/* Check for a valid destination LID (see ch. 7.11.1). */
+	lid = be16_to_cpu(hdr->lrh[1]);
+
+	/* Check for GRH */
+	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
+	if (lnh == HFI1_LRH_BTH)
+		ohdr = &hdr->u.oth;
+	else if (lnh == HFI1_LRH_GRH) {
+		u32 vtf;
+
+		ohdr = &hdr->u.l.oth;
+		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
+			goto drop;
+		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
+		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
+			goto drop;
+	} else
+		goto drop;
+
+	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
+#if 0	/* TODO */
+	trace_input_ibhdr(rcd->devdata, hdr);
+	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
+#endif
+
+	/* Get the destination QP number. */
+	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
+#if 0 /* FXRTODO - mcast */
+	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
+	    (lid != HFI1_PERMISSIVE_LID)) {
+		struct qib_mcast *mcast;
+		struct qib_mcast_qp *p;
+
+		if (lnh != HFI1_LRH_GRH)
+			goto drop;
+		mcast = opa_ib_mcast_find(ibp, &hdr->u.l.grh.dgid);
+		if (mcast == NULL)
+			goto drop;
+		rcv_flags |= HFI1_HAS_GRH;
+		if (rhf_dc_info(packet->rhf))
+			rcv_flags |= HFI1_SC4_BIT;
+		list_for_each_entry_rcu(p, &mcast->qp_list, list)
+			opa_ib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, p->qp);
+		/*
+		 * Notify multicast_detach() if it is waiting for us
+		 * to finish.
+		 */
+		if (atomic_dec_return(&mcast->refcount) <= 1)
+			wake_up(&mcast->wait);
+	} else
+#endif
+	{
+		if (rcd->lookaside_qp) {
+			if (rcd->lookaside_qpn != qp_num) {
+				if (atomic_dec_and_test(
+					&rcd->lookaside_qp->refcount))
+					wake_up(&rcd->lookaside_qp->wait);
+					rcd->lookaside_qp = NULL;
+				}
+		}
+		if (!rcd->lookaside_qp) {
+			qp = opa_ib_lookup_qpn(ibp, qp_num);
+			if (!qp)
+				goto drop;
+			rcd->lookaside_qp = qp;
+			rcd->lookaside_qpn = qp_num;
+		} else
+			qp = rcd->lookaside_qp;
+
+		if (lnh == HFI1_LRH_GRH)
+			rcv_flags |= HFI1_HAS_GRH;
+#if 0
+		if (rhf_dc_info(packet->rhf))
+			rcv_flags |= HFI1_SC4_BIT;
+#endif
+		opa_ib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
+	}
+	return;
+
+drop:
+	ibp->n_pkt_drops++;
 }

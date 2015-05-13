@@ -102,6 +102,26 @@ unsigned int opa_ib_max_srq_wrs = 0x1FFFF;
 /* LKEY table size in bits (2^n, 1 <= n <= 23) */
 unsigned int opa_ib_lkey_table_size = 16;
 
+/*
+ * Note that it is OK to post send work requests in the SQE and ERR
+ * states; qib_do_send() will process them and generate error
+ * completions as per IB 1.2 C10-96.
+ */
+const int ib_qp_state_ops[IB_QPS_ERR + 1] = {
+	[IB_QPS_RESET] = 0,
+	[IB_QPS_INIT] = HFI1_POST_RECV_OK,
+	[IB_QPS_RTR] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK,
+	[IB_QPS_RTS] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK |
+	    HFI1_POST_SEND_OK | HFI1_PROCESS_SEND_OK |
+	    HFI1_PROCESS_NEXT_SEND_OK,
+	[IB_QPS_SQD] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK |
+	    HFI1_POST_SEND_OK | HFI1_PROCESS_SEND_OK,
+	[IB_QPS_SQE] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK |
+	    HFI1_POST_SEND_OK | HFI1_FLUSH_SEND,
+	[IB_QPS_ERR] = HFI1_POST_RECV_OK | HFI1_FLUSH_RECV |
+	    HFI1_POST_SEND_OK | HFI1_FLUSH_SEND,
+};
+
 static int opa_ib_query_device(struct ib_device *ibdev,
 			       struct ib_device_attr *props)
 {
@@ -391,6 +411,7 @@ static void opa_ib_init_port(struct opa_ib_data *ibd,
 
 	ops->get_port_desc(odev, &pdesc, pidx + 1);
 
+	ibp->odev = odev;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->guid = pdesc.pguid;
 	ibp->ibmtu = opa_ib_default_mtu;
@@ -404,7 +425,7 @@ static void opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
 	/* Set the default power on value */
-	ibp->pkeys[default_pkey_idx] = FXR_LIM_MGMT_P_KEY;
+	ibp->pkeys[default_pkey_idx] = OPA_LIM_MGMT_P_KEY;
 
 	RCU_INIT_POINTER(ibp->qp0, NULL);
 	RCU_INIT_POINTER(ibp->qp1, NULL);
@@ -413,7 +434,7 @@ static void opa_ib_init_port(struct opa_ib_data *ibd,
 	for (i = 0; i < ibp->max_vls; i++)
 		ibp->vl_mtu[i] = ibp->ibmtu;
 
-	/* 
+	/*
 	 * FXRTODO: quick hack at initial SL to SC to VL tables.
 	 * Likely this needs to be retrieved from opa2_hfi.
 	 */

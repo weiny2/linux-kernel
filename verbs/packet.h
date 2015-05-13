@@ -148,6 +148,30 @@ struct opa_ib_header {
 	} u;
 } __packed;
 
+/* FXRTODO - extend similar to WFR's ahg_ib_header */
+struct opa_ib_dma_header {
+	struct opa_ib_header ibh;
+};
+
+/*
+ * Represents a single packet at a high level. Put commonly computed things in
+ * here so we do not have to keep doing them over and over. The rule of thumb is
+ * if something is used one time to derive some value, store that something in
+ * here. If it is used multiple times, then store the result of that derivation
+ * in here.
+ */
+struct opa_ib_packet {
+	struct hfi_ctx *ctx;
+	struct opa_ib_portdata *ibp;
+	/* FXRTODO - verify these makes sense and are set */
+	void *ebuf;
+	void *hdr;
+	u64 rhf;
+	u16 tlen;
+	u16 hlen;
+	u32 updegr;
+};
+
 /* where best to put this opcode? */
 #define CNP_OPCODE 0x80
 
@@ -181,5 +205,36 @@ static inline int cmp_psn(u32 a, u32 b)
 static inline u32 mask_psn(u32 a)
 {
 	return a & PSN_MASK;
+}
+
+/**
+ * opa_ib_make_grh - construct a GRH header
+ * @ibp: a pointer to the IB port
+ * @hdr: a pointer to the GRH header being constructed
+ * @grh: the global route address to send to
+ * @hwords: the number of 32 bit words of header being sent
+ * @nwords: the number of 32 bit words of data being sent
+ *
+ * Return the size of the header in 32 bit words.
+ */
+static inline
+u32 opa_ib_make_grh(struct opa_ib_portdata *ibp, struct ib_grh *hdr,
+		    struct ib_global_route *grh, u32 hwords, u32 nwords)
+{
+	hdr->version_tclass_flow =
+		cpu_to_be32((IB_GRH_VERSION << IB_GRH_VERSION_SHIFT) |
+			    (grh->traffic_class << IB_GRH_TCLASS_SHIFT) |
+			    (grh->flow_label << IB_GRH_FLOW_SHIFT));
+	hdr->paylen = cpu_to_be16((hwords - 2 + nwords + SIZE_OF_CRC) << 2);
+	/* next_hdr is defined by C8-7 in ch. 8.4.1 */
+	hdr->next_hdr = IB_GRH_NEXT_HDR;
+	hdr->hop_limit = grh->hop_limit;
+	/* The SGID is 32-bit aligned. */
+	hdr->sgid.global.subnet_prefix = ibp->gid_prefix;
+	hdr->sgid.global.interface_id = ibp->guid;
+	hdr->dgid = grh->dgid;
+
+	/* GRH header size in 32-bit words. */
+	return sizeof(struct ib_grh) / sizeof(u32);
 }
 #endif

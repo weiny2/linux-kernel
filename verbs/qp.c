@@ -186,6 +186,7 @@ static void reset_qp(struct opa_ib_qp *qp, enum ib_qp_type type)
 	/* FXRTODO - iowait SDMA -> TX_CQ */
 	iowait_init(&qp->s_iowait, 1, opa_ib_do_send);
 	qp->s_flags &= HFI1_S_SIGNAL_REQ_WR;
+	qp->s_hdrwords = 0;
 	qp->s_wqe = NULL;
 	qp->s_draining = 0;
 	qp->s_next_psn = 0;
@@ -449,6 +450,7 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	if (attr_mask & IB_QP_AV) {
 		qp->remote_ah_attr = attr->ah_attr;
 		qp->s_srate = attr->ah_attr.static_rate;
+		qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
@@ -697,6 +699,11 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_swq;
 	}
+	qp->s_hdr = kzalloc(sizeof(*qp->s_hdr), GFP_KERNEL);
+	if (!qp->s_hdr) {
+		ret = ERR_PTR(-ENOMEM);
+		goto bail_qp;
+	}
 	qp->timeout_jiffies = usecs_to_jiffies((4096UL * (1UL << qp->timeout)) /
 			      1000UL);
 	if (init_attr->srq)
@@ -805,6 +812,7 @@ bail_ip:
 		vfree(qp->r_rq.wq);
 	free_qpn(ibd, qp);
 bail_qp:
+	kfree(qp->s_hdr);
 	kfree(qp);
 bail_swq:
 	vfree(swq);
@@ -858,6 +866,7 @@ int opa_ib_destroy_qp(struct ib_qp *ibqp)
 	else
 		vfree(qp->r_rq.wq);
 	vfree(qp->s_wq);
+	kfree(qp->s_hdr);
 	kfree(qp);
 	return 0;
 }

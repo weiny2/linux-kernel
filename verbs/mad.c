@@ -894,12 +894,12 @@ static int process_stl_mad(struct ib_device *ibdev, int mad_flags,
 	/* FXRTODO: Implement pkey check */
 #if 0
 	int pkey_idx;
-	struct qib_ibport *ibp = to_iport(ibdev, port);
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 
-	pkey_idx = wfr_lookup_pkey_idx(ibp, WFR_LIM_MGMT_P_KEY);
+	pkey_idx = opa_ib_lookup_pkey_idx(ibp, OPA_LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
 		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
-			qib_get_pkey(ibp, 1));
+			opa_ib_get_pkey(ibp, 1));
 		pkey_idx = 1;
 	}
 	in_wc->pkey_index = (u16)pkey_idx;

@@ -1,0 +1,339 @@
+/*
+ * Intel Omni-Path Architecture (OPA) Host Fabric Software
+ *
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
+ *
+ * GPL LICENSE SUMMARY
+ *
+ * Copyright (c) 2015 Intel Corporation.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License, version 2, as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * BSD LICENSE
+ *
+ * Copyright (c) 2015 Intel Corporation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *  * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *  * Neither the name of Intel Corporation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Intel(R) OPA Gen2 IB Driver
+ */
+
+#include "verbs.h"
+
+/*
+ * Translate ib_wr_opcode into ib_wc_opcode.
+ */
+const enum ib_wc_opcode ib_hfi1_wc_opcode[] = {
+	[IB_WR_RDMA_WRITE] = IB_WC_RDMA_WRITE,
+	[IB_WR_RDMA_WRITE_WITH_IMM] = IB_WC_RDMA_WRITE,
+	[IB_WR_SEND] = IB_WC_SEND,
+	[IB_WR_SEND_WITH_IMM] = IB_WC_SEND,
+	[IB_WR_RDMA_READ] = IB_WC_RDMA_READ,
+	[IB_WR_ATOMIC_CMP_AND_SWP] = IB_WC_COMP_SWAP,
+	[IB_WR_ATOMIC_FETCH_AND_ADD] = IB_WC_FETCH_ADD
+};
+
+/*
+ * Send if not busy or waiting for I/O and either
+ * a RC response is pending or we can process send work requests.
+ */
+static inline int send_ok(struct opa_ib_qp *qp)
+{
+	return !(qp->s_flags & (HFI1_S_BUSY | HFI1_S_ANY_WAIT_IO)) &&
+		(qp->s_hdrwords || (qp->s_flags & HFI1_S_RESP_PENDING) ||
+		 !(qp->s_flags & HFI1_S_ANY_WAIT_SEND));
+}
+
+/*
+ * Validate a RWQE and fill in the SGE state.
+ * Return 1 if OK.
+ */
+static int init_sge(struct opa_ib_qp *qp, struct opa_ib_rwqe *wqe)
+{
+	int i, j, ret;
+	struct ib_wc wc;
+	struct opa_ib_lkey_table *rkt;
+	struct opa_ib_pd *pd;
+	struct opa_ib_sge_state *ss;
+
+	rkt = &to_opa_ibdata(qp->ibqp.device)->lk_table;
+	pd = to_opa_ibpd(qp->ibqp.srq ? qp->ibqp.srq->pd : qp->ibqp.pd);
+	ss = &qp->r_sge;
+	ss->sg_list = qp->r_sg_list;
+	qp->r_len = 0;
+	for (i = j = 0; i < wqe->num_sge; i++) {
+		if (wqe->sg_list[i].length == 0)
+			continue;
+		/* Check LKEY */
+		if (!opa_ib_lkey_ok(rkt, pd, j ? &ss->sg_list[j - 1] : &ss->sge,
+				    &wqe->sg_list[i], IB_ACCESS_LOCAL_WRITE))
+			goto bad_lkey;
+		qp->r_len += wqe->sg_list[i].length;
+		j++;
+	}
+	ss->num_sge = j;
+	ss->total_len = qp->r_len;
+	ret = 1;
+	goto bail;
+
+bad_lkey:
+	/* FXRTODO - WFR has hfi1_put_mr() loop here */
+
+	ss->num_sge = 0;
+	memset(&wc, 0, sizeof(wc));
+	wc.wr_id = wqe->wr_id;
+	wc.status = IB_WC_LOC_PROT_ERR;
+	wc.opcode = IB_WC_RECV;
+	wc.qp = &qp->ibqp;
+	/* Signal solicited completion event. */
+	opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.recv_cq), &wc, 1);
+	ret = 0;
+bail:
+	return ret;
+}
+
+
+/**
+ * opa_ib_get_rwqe - copy the next RWQE into the QP's RWQE
+ * @qp: the QP
+ * @wr_id_only: update qp->r_wr_id only, not qp->r_sge
+ *
+ * Can be called from interrupt level.
+ *
+ * Return: -1 if there is a local error, 0 if no RWQE is available,
+ * otherwise return 1.
+ */
+int opa_ib_get_rwqe(struct opa_ib_qp *qp, int wr_id_only)
+{
+	unsigned long flags;
+	struct opa_ib_rq *rq;
+	struct opa_ib_rwq *wq;
+	struct opa_ib_srq *srq;
+	struct opa_ib_rwqe *wqe;
+
+	void (*handler)(struct ib_event *, void *);
+	u32 tail;
+	int ret;
+
+	if (qp->ibqp.srq) {
+		srq = to_opa_ibsrq(qp->ibqp.srq);
+		handler = srq->ibsrq.event_handler;
+		rq = &srq->rq;
+	} else {
+		srq = NULL;
+		handler = NULL;
+		rq = &qp->r_rq;
+	}
+
+	spin_lock_irqsave(&rq->lock, flags);
+	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
+		ret = 0;
+		goto unlock;
+	}
+
+	wq = rq->wq;
+	tail = wq->tail;
+	/* Validate tail before using it since it is user writable. */
+	if (tail >= rq->size)
+		tail = 0;
+	if (unlikely(tail == wq->head)) {
+		ret = 0;
+		goto unlock;
+	}
+	/* Make sure entry is read after head index is read. */
+	smp_rmb();
+	wqe = get_rwqe_ptr(rq, tail);
+	/*
+	 * Even though we update the tail index in memory, the verbs
+	 * consumer is not supposed to post more entries until a
+	 * completion is generated.
+	 */
+	if (++tail >= rq->size)
+		tail = 0;
+	wq->tail = tail;
+	if (!wr_id_only && !init_sge(qp, wqe)) {
+		ret = -1;
+		goto unlock;
+	}
+	qp->r_wr_id = wqe->wr_id;
+
+	ret = 1;
+	set_bit(HFI1_R_WRID_VALID, &qp->r_aflags);
+	if (handler) {
+		u32 n;
+
+		/*
+		 * Validate head pointer value and compute
+		 * the number of remaining WQEs.
+		 */
+		n = wq->head;
+		if (n >= rq->size)
+			n = 0;
+		if (n < tail)
+			n += rq->size - tail;
+		else
+			n -= tail;
+		if (n < srq->limit) {
+			struct ib_event ev;
+
+			srq->limit = 0;
+			spin_unlock_irqrestore(&rq->lock, flags);
+			ev.device = qp->ibqp.device;
+			ev.element.srq = qp->ibqp.srq;
+			ev.event = IB_EVENT_SRQ_LIMIT_REACHED;
+			handler(&ev, srq->ibsrq.srq_context);
+			goto bail;
+		}
+	}
+unlock:
+	spin_unlock_irqrestore(&rq->lock, flags);
+bail:
+	return ret;
+}
+
+/**
+ * opa_ib_do_send - perform a send on a QP
+ * @work: contains a pointer to the QP
+ *
+ * Process entries in the send work queue until credit or queue is
+ * exhausted.  Only allow one CPU to send a packet per QP (tasklet).
+ * Otherwise, two threads could send packets out of order.
+ */
+void opa_ib_do_send(struct work_struct *work)
+{
+	struct iowait *wait = container_of(work, struct iowait, iowork);
+	struct opa_ib_qp *qp = container_of(wait, struct opa_ib_qp, s_iowait);
+
+	int (*make_req)(struct opa_ib_qp *qp);
+	unsigned long flags;
+
+	/* FXRTODO - ignore RC/UC for now */
+	if (qp->ibqp.qp_type == IB_QPT_RC ||
+	    qp->ibqp.qp_type == IB_QPT_UC)
+		return;
+	make_req = opa_ib_make_ud_req;
+
+	spin_lock_irqsave(&qp->s_lock, flags);
+	/* Return if we are already busy processing a work request. */
+	if (!send_ok(qp)) {
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		return;
+	}
+	qp->s_flags |= HFI1_S_BUSY;
+	spin_unlock_irqrestore(&qp->s_lock, flags);
+
+	do {
+		/* Check for a constructed packet to be sent. */
+		if (qp->s_hdrwords != 0) {
+			/*
+			 * If the packet cannot be sent now, return and
+			 * the send tasklet will be woken up later.
+			 */
+#if 0
+			if (opa_ib_verbs_send(qp, qp->s_hdr, qp->s_hdrwords,
+					      qp->s_cur_sge, qp->s_cur_size))
+				break;
+#endif
+			/* Record that s_hdr is empty. */
+			qp->s_hdrwords = 0;
+		}
+	} while (make_req(qp));
+}
+
+/*
+ * This should be called with s_lock held.
+ */
+void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
+			  enum ib_wc_status status)
+{
+	u32 old_last, last;
+
+	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_OR_FLUSH_SEND))
+		return;
+
+	/* FXRTODO - WFR has hfi1_put_mr() loop here */
+
+	if (qp->ibqp.qp_type == IB_QPT_UD ||
+	    qp->ibqp.qp_type == IB_QPT_SMI ||
+	    qp->ibqp.qp_type == IB_QPT_GSI)
+		atomic_dec(&to_opa_ibah(wqe->wr.wr.ud.ah)->refcount);
+
+	/* See ch. 11.2.4.1 and 10.7.3.1 */
+	if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
+	    (wqe->wr.send_flags & IB_SEND_SIGNALED) ||
+	    status != IB_WC_SUCCESS) {
+		struct ib_wc wc;
+
+		memset(&wc, 0, sizeof(wc));
+		wc.wr_id = wqe->wr.wr_id;
+		wc.status = status;
+		wc.opcode = ib_hfi1_wc_opcode[wqe->wr.opcode];
+		wc.qp = &qp->ibqp;
+		if (status == IB_WC_SUCCESS)
+			wc.byte_len = wqe->length;
+		opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.send_cq), &wc,
+				status != IB_WC_SUCCESS);
+	}
+
+	last = qp->s_last;
+	old_last = last;
+	if (++last >= qp->s_size)
+		last = 0;
+	qp->s_last = last;
+	if (qp->s_acked == old_last)
+		qp->s_acked = last;
+	if (qp->s_cur == old_last)
+		qp->s_cur = last;
+	if (qp->s_tail == old_last)
+		qp->s_tail = last;
+	if (qp->state == IB_QPS_SQD && last == qp->s_cur)
+		qp->s_draining = 0;
+}
+
+/*
+ * This must be called with s_lock held.
+ */
+void opa_ib_schedule_send(struct opa_ib_qp *qp)
+{
+	/* FXRTODO */
+#if 0
+	if (send_ok(qp)) {
+		struct opa_ib_portdata *ibp;
+
+		ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+		iowait_schedule(&qp->s_iowait, ibp->wq);
+	}
+#endif
+}

@@ -71,6 +71,23 @@
 #define OPA_IB_MAX_MSG_SZ       0x80000000
 #define OPA_IB_PORT_NUM_PKEYS   16
 #define IB_DEFAULT_GID_PREFIX	cpu_to_be64(0xfe80000000000000ULL)
+#define OPA_LIM_MGMT_P_KEY       0x7FFF
+#define OPA_FULL_MGMT_P_KEY      0xFFFF
+
+/* Flags for checking QP state (see ib_hfi1_state_ops[]) */
+#define HFI1_POST_SEND_OK                0x01
+#define HFI1_POST_RECV_OK                0x02
+#define HFI1_PROCESS_RECV_OK             0x04
+#define HFI1_PROCESS_SEND_OK             0x08
+#define HFI1_PROCESS_NEXT_SEND_OK        0x10
+#define HFI1_FLUSH_SEND                  0x20
+#define HFI1_FLUSH_RECV                  0x40
+#define HFI1_PROCESS_OR_FLUSH_SEND \
+	(HFI1_PROCESS_SEND_OK | HFI1_FLUSH_SEND)
+
+/* flags passed by opa_ib_rcv() */
+#define HFI1_HAS_GRH                     0x1
+#define HFI1_SC4_BIT                     0x2
 
 /*
  * Return the indexed PKEY from the port PKEY table.
@@ -83,11 +100,14 @@
 #define OPA_IB_NUM_DATA_VLS	8
 extern __be64 opa_ib_sys_guid;
 
+extern const int ib_qp_state_ops[];
 extern unsigned int opa_ib_max_cqes;
 extern unsigned int opa_ib_max_cqs;
 extern unsigned int opa_ib_max_qp_wrs;
 extern unsigned int opa_ib_max_qps;
 extern unsigned int opa_ib_max_sges;
+
+struct opa_ib_header;
 
 struct opa_ucontext {
 	struct ib_ucontext ibucontext;
@@ -146,6 +166,14 @@ struct opa_ib_cq {
 
 struct opa_ib_mr {
 	struct ib_mr ibmr;
+};
+
+struct opa_ib_lkey_table {
+	spinlock_t lock;        /* protect changes in this struct */
+	u32 next;               /* next unused index (speeds search) */
+	u32 gen;                /* generation count */
+	u32 max;                /* size of the table */
+	//struct opa_ib_mregion __rcu **table;
 };
 
 /*
@@ -210,6 +238,13 @@ struct opa_ib_sge_state {
 	u8 num_sge;
 };
 
+static inline void opa_ib_put_ss(struct opa_ib_sge_state *ss)
+{
+	while (ss->num_sge)
+		if (--ss->num_sge)
+			ss->sge = *ss->sg_list++;
+}
+
 /*
  * This structure holds the information that the send tasklet needs
  * to send a RDMA read response or atomic operation.
@@ -240,9 +275,11 @@ struct opa_ib_qp {
 	struct ib_ah_attr alt_ah_attr;
 	struct opa_ib_swqe *s_wq;  /* send work queue */
 	struct opa_ib_mmap_info *ip;
+	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;
+	int srate_mbps;		/* s_srate (below) converted to Mbit/s */
 	u32 remote_qpn;
 	u32 pmtu;		/* decoded from path_mtu */
 	u32 qkey;               /* QKEY for this QP (for UD or RD) */
@@ -317,6 +354,7 @@ struct opa_ib_qp {
 	u32 s_last;             /* last completed entry */
 	u32 s_ssn;              /* SSN of tail entry */
 	u32 s_lsn;              /* limit sequence number (credit) */
+	u16 s_hdrwords;         /* size of s_hdr in 32 bit words */
 	u16 s_rdma_ack_cnt;
 	s8 s_ahgidx;
 	u8 s_state;             /* opcode of last packet sent */
@@ -438,8 +476,8 @@ static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
 
-
 struct opa_ib_portdata {
+	struct opa_core_device *odev;
 	struct opa_ib_qp __rcu *qp0;
 	struct opa_ib_qp __rcu *qp1;
 	/* non-zero when timer is set */
@@ -447,6 +485,9 @@ struct opa_ib_portdata {
 	__be64 gid_prefix;
 	__be64 mkey;
 	__be64 guid;
+	u64 n_loop_pkts;
+	u64 n_pkt_drops;
+	u64 n_vl15_dropped;
 
 	u32 lstate;
 	u32 ibmtu;
@@ -489,6 +530,7 @@ struct opa_ib_data {
 
 	struct ida qpn_table;
 	spinlock_t qpt_lock;
+	struct opa_ib_lkey_table lk_table;
 	struct list_head pending_mmaps;
 	spinlock_t pending_lock;
 	u32 mmap_offset;
@@ -560,8 +602,17 @@ struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
 int opa_ib_destroy_cq(struct ib_cq *ibcq);
 int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
 int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
+void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err);
+void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
+		   u32 rcv_flags, void *data, u32 tlen, struct opa_ib_qp *qp);
+int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey);
+int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
+		   struct ib_sge *isge, struct ib_sge *sge, int acc);
+int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct ib_sge *sge,
+		   u32 len, u64 vaddr, u32 rkey, int acc);
 struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc);
 int opa_ib_dereg_mr(struct ib_mr *ibmr);
+int opa_ib_fast_reg_mr(struct opa_ib_qp *qp, struct ib_send_wr *wr);
 void opa_ib_release_mmap_info(struct kref *ref);
 struct opa_ib_mmap_info *opa_ib_create_mmap_info(struct opa_ib_data *ibd,
 						 u32 size,
@@ -570,6 +621,12 @@ struct opa_ib_mmap_info *opa_ib_create_mmap_info(struct opa_ib_data *ibd,
 void opa_ib_update_mmap_info(struct opa_ib_data *ibd,
 			     struct opa_ib_mmap_info *ip,
 			     u32 size, void *obj);
+int opa_ib_get_rwqe(struct opa_ib_qp *qp, int wr_id_only);
+void opa_ib_do_send(struct work_struct *work);
+void opa_ib_schedule_send(struct opa_ib_qp *qp);
+void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
+			  enum ib_wc_status status);
+int opa_ib_make_ud_req(struct opa_ib_qp *qp);
 int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
@@ -577,5 +634,4 @@ int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			struct ib_wc *in_wc, struct ib_grh *in_grh,
 			struct ib_mad *in_mad, struct ib_mad *out_mad);
-void opa_ib_do_send(struct work_struct *work);
 #endif
