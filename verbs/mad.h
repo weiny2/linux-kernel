@@ -57,8 +57,6 @@
 #include <rdma/opa_port_info.h>
 #include <rdma/opa_core_ib.h>
 
-#define FXR_LIM_MGMT_P_KEY       0x7FFF
-
 #define MKEY_SHIFT		6
 
 struct ib_node_info {

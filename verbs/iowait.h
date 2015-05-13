@@ -188,4 +188,9 @@ static inline void iowait_drain_wakeup(struct iowait *wait)
 	wake_up(&wait->wait_dma);
 }
 
+/* FXRTODO */
+static inline int is_iowait_sdma_busy(struct iowait *wait)
+{
+	return atomic_read(&wait->sdma_busy);
+}
 #endif

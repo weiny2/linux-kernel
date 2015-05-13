@@ -63,6 +63,7 @@
  */
 struct hfi_devdata;
 struct opa_core_device;
+struct opa_ib_qp;
 
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
@@ -99,6 +100,8 @@ struct opa_core_device;
  * @eq_head_addr: Pointer to the event queue head pointers table
  * @eq_head_size: Size of the event queue head pointers table
  * @status_reg: Status Registers (SR) in each NI
+ * @lookaside_qp: Associated verbs QP pointer
+ * @lookaside_qpn: Associated verbs QPN
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
@@ -134,6 +137,8 @@ struct hfi_ctx {
 	void	*eq_head_addr;
 	ssize_t	eq_head_size;
 	u64	status_reg[HFI_NUM_NIS * HFI_NUM_CT_RESERVED];
+	struct opa_ib_qp *lookaside_qp;
+	u32	lookaside_qpn;
 };
 
 #define HFI_CTX_TYPE_KERNEL	1

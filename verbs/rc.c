@@ -52,93 +52,22 @@
 
 #include "verbs.h"
 
-/**
- * opa_ib_get_dma_mr - get a DMA memory region
- * @pd: protection domain for this memory region
- * @acc: access flags
- *
- * Note that all DMA addresses should be created via the
- * struct ib_dma_mapping_ops functions (see opa_ib_dma.c).
- *
- * Return: the memory region on success, otherwise returns an errno.
- */
-struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc)
+void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err)
 {
-	struct opa_ib_mr *mr = NULL;
-	struct ib_mr *ret;
+	unsigned long flags;
+	int lastwqe;
 
-	if (to_opa_ibpd(pd)->is_user)
-		return ERR_PTR(-EPERM);
+	/* FXRTODO */
+	spin_lock_irqsave(&qp->s_lock, flags);
+	lastwqe = 0; //hfi1_error_qp(qp, err);
+	spin_unlock_irqrestore(&qp->s_lock, flags);
 
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
-	if (!mr)
-		return ERR_PTR(-ENOMEM);
+	if (lastwqe) {
+		struct ib_event ev;
 
-	ret = &mr->ibmr;
-	return ret;
-}
-
-/**
- * opa_ib_dereg_mr - unregister and free a memory region
- * @ibmr: the memory region to free
- *
- * Note that this is called to free MRs created by opa_ib_get_dma_mr()
- * or opa_ib_reg_user_mr().
- *
- * Return: 0 on success, otherwise returns an errno.
- */
-int opa_ib_dereg_mr(struct ib_mr *ibmr)
-{
-	struct opa_ib_mr *mr = to_opa_ibmr(ibmr);
-
-	kfree(mr);
-	return 0;
-}
-
-/**
- * opa_ib_lkey_ok - check IB SGE for validity and initialize
- * @rkt: table containing lkey to check SGE against
- * @pd: protection domain
- * @isge: outgoing internal SGE
- * @sge: SGE to check
- * @acc: access flags
- *
- * Check the IB SGE for validity and initialize our internal version
- * of it.  Increments the reference count upon success.
- *
- * Return: 1 if valid and successful, otherwise returns 0.
- */
-int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
-		   struct ib_sge *isge, struct ib_sge *sge, int acc)
-{
-	/* TODO - copy sge to isge?? */
-
-	return 1;
-}
-
-/**
- * opa_ib_rkey_ok - check the IB virtual address, length, and RKEY
- * @qp: qp for validation
- * @sge: SGE state
- * @len: length of data
- * @vaddr: virtual address to place data
- * @rkey: rkey to check
- * @acc: access flags
- *
- * Increments the reference count upon success.
- *
- * Return: 1 if successful, otherwise 0.
- */
-int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct ib_sge *sge,
-		   u32 len, u64 vaddr, u32 rkey, int acc)
-{
-	return 1;
-}
-
-/*
- * Initialize the memory region specified by the work reqeust.
- */
-int opa_ib_fast_reg_mr(struct opa_ib_qp *qp, struct ib_send_wr *wr)
-{
-	return 0;
+		ev.device = qp->ibqp.device;
+		ev.element.qp = &qp->ibqp;
+		ev.event = IB_EVENT_QP_LAST_WQE_REACHED;
+		qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
+	}
 }
