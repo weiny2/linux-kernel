@@ -268,7 +268,7 @@ struct acpi_nfit_desc {
 	struct device *dev;
 	unsigned long dimm_dsm_force_en;
 	int (*blk_do_io)(struct nd_blk_region *ndbr, void *iobuf,
-			unsigned int len, int write, resource_size_t dpa);
+			u64 len, int write, resource_size_t dpa);
 };
 
 enum nd_blk_mmio_selector {

@@ -84,7 +84,7 @@ struct nd_blk_region;
 struct nd_blk_region_desc {
 	int (*enable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
 	void (*disable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
-	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, unsigned int len,
+	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
 			int write, resource_size_t dpa);
 	struct nd_region_desc ndr_desc;
 };

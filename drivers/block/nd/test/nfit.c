@@ -910,7 +910,7 @@ static void nfit_test1_setup(struct nfit_test *t)
 }
 
 static int nfit_test_blk_do_io(struct nd_blk_region *ndbr, void *iobuf,
-                unsigned int len, int rw, resource_size_t dpa)
+                u64 len, int rw, resource_size_t dpa)
 {
 	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
 	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];

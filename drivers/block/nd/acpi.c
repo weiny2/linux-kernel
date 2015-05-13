@@ -1002,7 +1002,7 @@ static int nd_acpi_blk_single_io(struct nfit_blk *nfit_blk,  void *iobuf,
 }
 
 static int nd_acpi_blk_region_do_io(struct nd_blk_region *ndbr, void *iobuf,
-		unsigned int len, int write, resource_size_t dpa)
+		u64 len, int write, resource_size_t dpa)
 {
 	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
 	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
@@ -1012,7 +1012,7 @@ static int nd_acpi_blk_region_do_io(struct nd_blk_region *ndbr, void *iobuf,
 
 	bw = nd_region_acquire_lane(nd_region);
 	while (len) {
-		unsigned int c = min_t(unsigned int, len, mmio->size);
+		u64 c = min(len, mmio->size);
 
 		rc = nd_acpi_blk_single_io(nfit_blk, iobuf + copied, c, write,
 				dpa + copied, bw);

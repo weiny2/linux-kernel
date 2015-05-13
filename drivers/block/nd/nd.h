@@ -118,7 +118,7 @@ struct nd_region {
 struct nd_blk_region {
 	int (*enable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
 	void (*disable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
-	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, unsigned int len,
+	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
 			int write, resource_size_t dpa);
 	void *blk_provider_data;
 	struct nd_region nd_region;
