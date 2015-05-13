@@ -202,9 +202,6 @@ static int nd_blk_probe(struct device *dev)
 
 static int nd_blk_remove(struct device *dev)
 {
-	/* FIXME: eventually need to get to nd_blk_device from struct device.
-	struct nd_namespace_io *nsio = to_nd_namespace_io(dev); */
-
 	struct nd_blk_device *blk_dev = dev_get_drvdata(dev);
 
 	nd_unregister_ndio(&blk_dev->ndio);
