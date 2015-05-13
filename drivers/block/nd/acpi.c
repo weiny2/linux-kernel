@@ -961,18 +961,15 @@ static void write_blk_ctl(struct nfit_blk *nfit_blk, unsigned int bw,
 	/* FIXME: conditionally perform read-back if mandated by firmware */
 }
 
-/* len is <= PAGE_SIZE by this point, so it can be done in a single BW I/O */
-static int nd_acpi_blk_region_do_io(struct nd_blk_region *ndbr, void *iobuf,
-		unsigned int len, int write, resource_size_t dpa)
+static int nd_acpi_blk_single_io(struct nfit_blk *nfit_blk,  void *iobuf,
+		unsigned int len, int write, resource_size_t dpa,
+		unsigned int bw)
 {
-	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
 	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
-	struct nd_region *nd_region = &ndbr->nd_region;
-	unsigned int bw, copied = 0;
+	unsigned int copied = 0;
 	u64 base_offset;
 	int rc;
 
-	bw = nd_region_acquire_lane(nd_region);
 	base_offset = nfit_blk->bdw_offset + dpa % L1_CACHE_BYTES + bw * mmio->size;
 	/* TODO: non-temporal access, flush hints, cache management etc... */
 	write_blk_ctl(nfit_blk, bw, dpa, len, write);
@@ -997,10 +994,34 @@ static int nd_acpi_blk_region_do_io(struct nd_blk_region *ndbr, void *iobuf,
 		else
 			memcpy(iobuf + copied, mmio->base + offset, c);
 
-		len -= c;
 		copied += c;
+		len -= c;
 	}
 	rc = read_blk_stat(nfit_blk, bw) ? -EIO : 0;
+	return rc;
+}
+
+static int nd_acpi_blk_region_do_io(struct nd_blk_region *ndbr, void *iobuf,
+		unsigned int len, int write, resource_size_t dpa)
+{
+	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
+	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
+	struct nd_region *nd_region = &ndbr->nd_region;
+	unsigned int bw, copied = 0;
+	int rc = 0;
+
+	bw = nd_region_acquire_lane(nd_region);
+	while (len) {
+		unsigned int c = min_t(unsigned int, len, mmio->size);
+
+		rc = nd_acpi_blk_single_io(nfit_blk, iobuf + copied, c, write,
+				dpa + copied, bw);
+		if (rc)
+			break;
+
+		copied += c;
+		len -= c;
+	}
 	nd_region_release_lane(nd_region, bw);
 
 	return rc;
