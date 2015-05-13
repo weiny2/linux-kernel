@@ -967,8 +967,6 @@ static ssize_t hfi1_snoop_read(struct file *fp, char __user *data,
 	return ret;
 }
 
-#define IB_PHYSPORTSTATE_SLEEP 1
-
 static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
 	struct hfi1_devdata *dd;
@@ -1055,9 +1053,6 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				switch (physState) {
 				case 0:
 					devState = HLS_DN_DOWNDEF;
-					break;
-				case 1:
-					devState = HLS_DN_SLEEP;
 					break;
 				case 2:
 					devState = HLS_DN_POLL;

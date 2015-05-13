@@ -6179,7 +6179,6 @@ static const char *link_state_name(u32 state)
 		[__HLS_UP_ACTIVE_BP]	 = "ACTIVE",
 		[__HLS_DN_DOWNDEF_BP]	 = "DOWNDEF",
 		[__HLS_DN_POLL_BP]	 = "POLL",
-		[__HLS_DN_SLEEP_BP]	 = "SLEEP",
 		[__HLS_DN_DISABLE_BP]	 = "DISABLE",
 		[__HLS_DN_OFFLINE_BP]	 = "OFFLINE",
 		[__HLS_VERIFY_CAP_BP]	 = "VERIFY_CAP",
@@ -6261,7 +6260,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 	 * link state is neither of (IB_PORT_ARMED, IB_PORT_ACTIVE), then
 	 * reset is_sm_config_started to 0.
 	 */
-	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE))
+	if (!(state & (HLS_UP_ARMED | HLS_UP_ACTIVE)))
 		ppd->is_sm_config_started = 0;
 
 	/*
@@ -6454,8 +6453,8 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		ppd->host_link_state = HLS_GOING_UP;
 		break;
 
-	case HLS_DN_SLEEP:	/* not supported by the HW */
 	case HLS_GOING_OFFLINE:		/* transient within goto_offline() */
+	case HLS_LINK_COOLDOWN:		/* transient within goto_offline() */
 	default:
 		dd_dev_info(dd, "%s: state 0x%x: not supported\n",
 			__func__, state);
@@ -6464,7 +6463,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 	}
 
 	is_down = !!(ppd->host_link_state & (HLS_DN_POLL |
-			HLS_DN_SLEEP | HLS_DN_DISABLE | HLS_DN_OFFLINE));
+			HLS_DN_DISABLE | HLS_DN_OFFLINE));
 
 	if (was_up && is_down && ppd->local_link_down_reason.sma == 0 &&
 	    ppd->neigh_link_down_reason.sma == 0) {
@@ -8239,14 +8238,14 @@ static const char *opa_pstate_name(u32 pstate)
 {
 	static const char * const port_physical_names[] = {
 		"PHYS_NOP",
-		"PHYS_SLEEP",
+		"reserved1",
 		"PHYS_POLL",
 		"PHYS_DISABLED",
 		"PHYS_TRAINING",
 		"PHYS_LINKUP",
 		"PHYS_LINK_ERR_RECOVER",
 		"PHYS_PHY_TEST",
-		"unknown",
+		"reserved8",
 		"PHYS_OFFLINE",
 		"PHYS_GANGED",
 		"PHYS_TEST",
