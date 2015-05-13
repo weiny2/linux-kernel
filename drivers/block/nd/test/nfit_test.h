@@ -21,6 +21,8 @@ struct nfit_test_resource {
 };
 
 typedef struct nfit_test_resource *(*nfit_test_lookup_fn)(resource_size_t);
+void __iomem *__wrap_ioremap_nocache(resource_size_t offset, unsigned long size);
+void __wrap_iounmap(volatile void __iomem *addr);
 void nfit_test_setup(nfit_test_lookup_fn lookup);
 void nfit_test_teardown(void);
 #endif

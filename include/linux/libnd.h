@@ -82,8 +82,8 @@ struct nd_region_desc {
 struct nd_bus;
 struct nd_blk_region;
 struct nd_blk_region_desc {
-	int (*enable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
-	void (*disable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
+	int (*enable)(struct nd_bus *nd_bus, struct device *dev);
+	void (*disable)(struct nd_bus *nd_bus, struct device *dev);
 	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
 			int write, resource_size_t dpa);
 	struct nd_region_desc ndr_desc;
@@ -98,6 +98,7 @@ void nd_bus_unregister(struct nd_bus *nd_bus);
 struct nd_bus *to_nd_bus(struct device *dev);
 struct nd_dimm *to_nd_dimm(struct device *dev);
 struct nd_region *to_nd_region(struct device *dev);
+struct nd_blk_region *to_nd_blk_region(struct device *dev);
 struct nd_bus_descriptor *to_nd_desc(struct nd_bus *nd_bus);
 const char *nd_dimm_name(struct nd_dimm *nd_dimm);
 void *nd_dimm_provider_data(struct nd_dimm *nd_dimm);
@@ -118,5 +119,11 @@ struct nd_region *nd_blk_region_create(struct nd_bus *nd_bus,
 		struct nd_region_desc *ndr_desc);
 struct nd_region *nd_volatile_region_create(struct nd_bus *nd_bus,
 		struct nd_region_desc *ndr_desc);
+void *nd_region_provider_data(struct nd_region *nd_region);
+void *nd_blk_region_provider_data(struct nd_blk_region *ndbr);
+void nd_blk_region_set_provider_data(struct nd_blk_region *ndbr, void *data);
+struct nd_dimm *nd_blk_region_to_dimm(struct nd_blk_region *ndbr);
+unsigned int nd_region_acquire_lane(struct nd_region *nd_region);
+void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane);
 u64 nd_fletcher64(void *addr, size_t len, bool le);
 #endif /* __LIBND_H__ */

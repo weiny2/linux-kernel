@@ -1613,7 +1613,7 @@ static int init_active_labels(struct nd_region *nd_region)
 
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 {
-	struct device **devs = NULL, *seed;
+	struct device **devs = NULL;
 	int i, rc = 0, type;
 
 	*err = 0;
@@ -1645,7 +1645,6 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 		goto err;
 	}
 
-	seed = devs[0];
 	for (i = 0; devs[i]; i++) {
 		struct device *dev = devs[i];
 		int id;
@@ -1667,6 +1666,8 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 		dev->groups = nd_namespace_attribute_groups;
 		nd_device_register(dev);
 	}
+	if (i)
+		nd_region->ns_seed = devs[0];
 
 	if (devs[i]) {
 		int j;
@@ -1697,7 +1698,6 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 		}
 		return rc;
 	}
-	nd_region->ns_seed = seed;
 
 	return i;
 }

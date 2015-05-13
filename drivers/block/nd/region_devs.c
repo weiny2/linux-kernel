@@ -35,7 +35,7 @@ static void nd_region_release(struct device *dev)
 	}
 	ida_simple_remove(&region_ida, nd_region->id);
 	if (is_nd_blk(dev))
-		kfree(to_blk_region(nd_region));
+		kfree(to_nd_blk_region(dev));
 	else
 		kfree(nd_region);
 }
@@ -73,6 +73,33 @@ struct nd_region *to_nd_region(struct device *dev)
 	return nd_region;
 }
 EXPORT_SYMBOL_GPL(to_nd_region);
+
+struct nd_blk_region *to_nd_blk_region(struct device *dev)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	WARN_ON(!is_nd_blk(dev));
+	return container_of(nd_region, struct nd_blk_region, nd_region);
+}
+EXPORT_SYMBOL_GPL(to_nd_blk_region);
+
+void *nd_region_provider_data(struct nd_region *nd_region)
+{
+	return nd_region->provider_data;
+}
+EXPORT_SYMBOL_GPL(nd_region_provider_data);
+
+void *nd_blk_region_provider_data(struct nd_blk_region *ndbr)
+{
+	return ndbr->blk_provider_data;
+}
+EXPORT_SYMBOL_GPL(nd_blk_region_provider_data);
+
+void nd_blk_region_set_provider_data(struct nd_blk_region *ndbr, void *data)
+{
+	ndbr->blk_provider_data = data;
+}
+EXPORT_SYMBOL_GPL(nd_blk_region_set_provider_data);
 
 /**
  * nd_region_to_namespace_type() - region to an integer namespace type
@@ -357,7 +384,6 @@ static void nd_region_notify_driver_action(struct nd_bus *nd_bus,
 {
 	if (is_nd_pmem(dev) || is_nd_blk(dev)) {
 		struct nd_region *nd_region = to_nd_region(dev);
-		struct nd_blk_region *nd_blk_region;
 		int i;
 
 		for (i = 0; i < nd_region->ndr_mappings; i++) {
@@ -373,8 +399,7 @@ static void nd_region_notify_driver_action(struct nd_bus *nd_bus,
 		if (is_nd_pmem(dev) || (probe && rc == 0))
 			return;
 
-		nd_blk_region = to_blk_region(nd_region);
-		nd_blk_region->disable(nd_bus, nd_blk_region);
+		to_nd_blk_region(dev)->disable(nd_bus, dev);
 	} else if (dev->parent && is_nd_blk(dev->parent) && probe && rc == 0) {
 		struct nd_region *nd_region = to_nd_region(dev->parent);
 
@@ -520,18 +545,18 @@ EXPORT_SYMBOL_GPL(nd_mapping_attribute_group);
 
 int nd_blk_region_init(struct nd_region *nd_region)
 {
-	struct nd_blk_region *ndbr = to_blk_region(nd_region);
-	struct nd_bus *nd_bus = walk_to_nd_bus(&nd_region->dev);
+	struct device *dev = &nd_region->dev;
+	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
 
-	if (!is_nd_blk(&nd_region->dev))
+	if (!is_nd_blk(dev))
 		return 0;
 
 	if (nd_region->ndr_mappings < 1) {
-		dev_err(&nd_region->dev, "invalid BLK region\n");
+		dev_err(dev, "invalid BLK region\n");
 		return -ENXIO;
 	}
 
-	return ndbr->enable(nd_bus, ndbr);
+	return to_nd_blk_region(dev)->enable(nd_bus, dev);
 }
 
 static noinline struct nd_region *nd_region_create(struct nd_bus *nd_bus,

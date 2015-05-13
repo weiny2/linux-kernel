@@ -14,12 +14,12 @@
 #include <linux/module.h>
 #include <linux/blkdev.h>
 #include <linux/device.h>
+#include <linux/libnd.h>
 #include <linux/ctype.h>
 #include <linux/ndctl.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include "nd-private.h"
-#include "libnd.h"
 #include "nd.h"
 
 LIST_HEAD(nd_bus_list);

@@ -1,6 +1,5 @@
 menuconfig ND_DEVICES
-	bool "NVDIMM Support"
-	depends on PHYS_ADDR_T_64BIT
+	bool "NVDIMM (Non-Volatile Memory Device) Support"
 	help
 	  Generic support for non-volatile memory devices including
 	  ACPI-6-NFIT defined resources.  On platforms that define an
@@ -16,44 +15,15 @@ menuconfig ND_DEVICES
 if ND_DEVICES
 
 config LIBND
-	tristate "LIBND: libnd device driver support"
-	help
-	  Platform agnostic device model for a libnd bus.  Publishes
-	  resources for a PMEM (persistent-memory) driver and/or BLK
-	  (sliding mmio window(s)) driver to attach.  Exposes a device
-	  topology under a "ndX" bus device, a "/dev/ndctlX" bus-ioctl
-	  message passing interface, and a "/dev/nmemX" dimm-ioctl
-	  message interface for each memory device registered on the
-	  bus.  instance.  A userspace library "ndctl" provides an API
-	  to enumerate/manage this subsystem.
-
-config ND_ACPI
-	tristate "ACPI: NFIT to libnd bus support"
-	select LIBND
-	depends on ACPI
-	help
-	  Infrastructure to probe ACPI 6 compliant platforms for
-	  NVDIMMs (NFIT) and register a libnd device tree.  In
-	  addition to storage devices this also enables libnd craft
-	  ACPI._DSM messages for platform/dimm configuration.
-
-config ND_ACPI_DEBUG
-	bool "ACPI: Extra nd_acpi debugging"
-	depends on ND_ACPI
-	depends on DYNAMIC_DEBUG
-	default n
-	help
-	  Enabling this option causes the nd_acpi driver to dump the
-	  input and output buffers of _DSM operations on the ACPI0012
-	  device and its children.  This can be very verbose, so leave
-	  it disabled unless you are debugging a hardware / firmware
-	  issue.
+	tristate
 
 config NFIT_TEST
 	tristate "NFIT TEST: Manufactured NFIT for interface testing"
+	default n
+	depends on EXPERT
 	depends on DMA_CMA
 	depends on LIBND=m
-	depends on ND_ACPI
+	depends on ACPI_NFIT
 	depends on m
 	help
 	  For development purposes register a manufactured
@@ -66,17 +36,7 @@ config NFIT_TEST
 	  CMA space (CONFIG_CMA_SIZE_MBYTES, cma=) or it will fail to
 	  load.
 
-	  Say N unless you are doing development of the 'nd' subsystem.
-
-config ND_E820
-	tristate "E820: Support the E820-type-12 PMEM convention"
-	depends on X86_PMEM_LEGACY
-	default m if X86_PMEM_LEGACY
-	select LIBND
-	help
-	  Prior to ACPI 6 some platforms advertised peristent memory
-	  via type-12 e820 memory ranges.  Create a libnd bus and
-	  attach an instance of the pmem driver to these ranges.
+	  Say N unless you are doing development of the 'libnd' subsystem.
 
 config BLK_DEV_PMEM
 	tristate "PMEM: Persistent memory block device support"
@@ -98,7 +58,7 @@ config BLK_DEV_PMEM
 config ND_BLK
 	tristate "BLK: Block data window (aperture) device support"
 	depends on LIBND
-	default ND_ACPI
+	default LIBND
 	help
 	  This driver performs I/O using a set of mmio windows on a
 	  dimm.  The set of apertures will all access the one DIMM.

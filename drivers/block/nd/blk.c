@@ -287,7 +287,7 @@ static int nd_blk_probe(struct device *dev)
 		goto err_alloc_disk;
 	}
 
-	blk_dev->ndbr = to_blk_region(to_nd_region(nsblk->dev.parent));
+	blk_dev->ndbr = to_nd_blk_region(nsblk->dev.parent);
 	blk_dev->nsblk = nsblk;
 
 	disk->driverfs_dev	= dev;

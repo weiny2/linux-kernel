@@ -13,10 +13,10 @@
 #ifndef __ND_PRIVATE_H__
 #define __ND_PRIVATE_H__
 #include <linux/device.h>
+#include <linux/libnd.h>
 #include <linux/sizes.h>
 #include <linux/mutex.h>
 #include <linux/nd.h>
-#include "libnd.h"
 
 extern struct list_head nd_bus_list;
 extern struct mutex nd_bus_list_mutex;

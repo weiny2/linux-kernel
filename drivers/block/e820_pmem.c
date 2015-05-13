@@ -14,20 +14,20 @@
  */
 #include <linux/platform_device.h>
 #include <linux/module.h>
-#include "libnd.h"
+#include <linux/libnd.h>
 
-static const struct attribute_group *nd_e820_attribute_groups[] = {
+static const struct attribute_group *e820_pmem_attribute_groups[] = {
 	&nd_bus_attribute_group,
 	NULL,
 };
 
-static const struct attribute_group *nd_e820_region_attribute_groups[] = {
+static const struct attribute_group *e820_pmem_region_attribute_groups[] = {
 	&nd_region_attribute_group,
 	&nd_device_attribute_group,
 	NULL,
 };
 
-static int nd_e820_probe(struct platform_device *pdev)
+static int e820_pmem_probe(struct platform_device *pdev)
 {
 	struct nd_bus_descriptor *nd_desc;
 	struct nd_region_desc ndr_desc;
@@ -45,7 +45,7 @@ static int nd_e820_probe(struct platform_device *pdev)
 	if (!nd_desc)
 		return -ENOMEM;
 
-	nd_desc->attr_groups = nd_e820_attribute_groups;
+	nd_desc->attr_groups = e820_pmem_attribute_groups;
 	nd_desc->provider_name = "e820";
 	nd_bus = nd_bus_register(&pdev->dev, nd_desc);
 	if (!nd_bus)
@@ -53,7 +53,7 @@ static int nd_e820_probe(struct platform_device *pdev)
 
 	memset(&ndr_desc, 0, sizeof(ndr_desc));
 	ndr_desc.res = res;
-	ndr_desc.attr_groups = nd_e820_region_attribute_groups;
+	ndr_desc.attr_groups = e820_pmem_region_attribute_groups;
 	if (!nd_pmem_region_create(nd_bus, &ndr_desc)) {
 		nd_bus_unregister(nd_bus);
 		return -ENXIO;
@@ -64,7 +64,7 @@ static int nd_e820_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int nd_e820_remove(struct platform_device *pdev)
+static int e820_pmem_remove(struct platform_device *pdev)
 {
 	struct nd_bus *nd_bus = platform_get_drvdata(pdev);
 
@@ -73,9 +73,9 @@ static int nd_e820_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct platform_driver nd_e820_driver = {
-	.probe		= nd_e820_probe,
-	.remove		= nd_e820_remove,
+static struct platform_driver e820_pmem_driver = {
+	.probe		= e820_pmem_probe,
+	.remove		= e820_pmem_remove,
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= "e820_pmem",
@@ -84,17 +84,17 @@ static struct platform_driver nd_e820_driver = {
 
 MODULE_ALIAS("platform:e820_pmem*");
 
-static int __init nd_e820_init(void)
+static int __init e820_pmem_init(void)
 {
-	return platform_driver_register(&nd_e820_driver);
+	return platform_driver_register(&e820_pmem_driver);
 }
-module_init(nd_e820_init);
+module_init(e820_pmem_init);
 
-static void nd_e820_exit(void)
+static void e820_pmem_exit(void)
 {
-	platform_driver_unregister(&nd_e820_driver);
+	platform_driver_unregister(&e820_pmem_driver);
 }
-module_exit(nd_e820_exit);
+module_exit(e820_pmem_exit);
 
 MODULE_AUTHOR("Intel Corporation");
 MODULE_LICENSE("GPL v2");

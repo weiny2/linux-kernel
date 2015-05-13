@@ -15,11 +15,11 @@
 #include <linux/genhd.h>
 #include <linux/blkdev.h>
 #include <linux/device.h>
+#include <linux/libnd.h>
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
 #include <linux/types.h>
 #include <linux/fs.h>
-#include "libnd.h"
 #include "label.h"
 
 enum {
@@ -116,18 +116,13 @@ struct nd_region {
 };
 
 struct nd_blk_region {
-	int (*enable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
-	void (*disable)(struct nd_bus *nd_bus, struct nd_blk_region *ndbr);
+	int (*enable)(struct nd_bus *nd_bus, struct device *dev);
+	void (*disable)(struct nd_bus *nd_bus, struct device *dev);
 	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
 			int write, resource_size_t dpa);
 	void *blk_provider_data;
 	struct nd_region nd_region;
 };
-
-static inline struct nd_blk_region *to_blk_region(struct nd_region *nd_region)
-{
-	return container_of(nd_region, struct nd_blk_region, nd_region);
-}
 
 /*
  * Lookup next in the repeating sequence of 01, 10, and 11.
@@ -249,8 +244,6 @@ struct nd_btt *to_nd_btt(struct device *dev);
 struct btt_sb;
 u64 nd_btt_sb_checksum(struct btt_sb *btt_sb);
 struct nd_region *to_nd_region(struct device *dev);
-unsigned int nd_region_acquire_lane(struct nd_region *nd_region);
-void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
