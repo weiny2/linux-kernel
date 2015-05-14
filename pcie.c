@@ -797,8 +797,10 @@ static uint pcie_retry = 5;
 module_param(pcie_retry, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_retry, "Driver will try this many times to reach requested speed");
 
-/* default to p0 as that allows preservation of Gen3 across a reboot */
-static uint pcie_pset; /* default to p0 */
+#define UNSET_PSET 255
+#define DEFAULT_DISCRETE_PSET 2	/* discrete HFI */
+#define DEFAULT_MCP_PSET 4	/* MCP HFI */
+static uint pcie_pset = UNSET_PSET;
 module_param(pcie_pset, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_pset, "PCIe Eq Pset value to use, range is 0-10");
 
@@ -917,12 +919,6 @@ static void pcie_post_steps(struct hfi_devdata *dd)
 			0x03, WRITE_SBUS_RECEIVER, 0x00022132);
 	}
 
-	/*
-	 * Enable iCal for PCIe Gen3 RX equalization, and set which
-	 * evaluation of RX_EQ_EVAL will launch the iCal procedure.
-	 */
-	sbus_request(dd, pcie_serdes_broadcast[dd->hfi_id], 0x03,
-		WRITE_SBUS_RECEIVER, 0x00265202);
 	clear_sbus_fast_mode(dd);
 }
 
@@ -1007,6 +1003,7 @@ int do_pcie_gen3_transition(struct hfi_devdata *dd)
 	u32 status, err;
 	int ret, return_error = 0;
 	int do_retry, retry_count = 0;
+	uint default_pset;
 	u16 target_vector, target_speed;
 	u16 lnkctl, lnkctl2, vendor;
 	u8 nsbr = 1;
@@ -1123,12 +1120,14 @@ retry:
 		lf = 8;
 		div = 3;
 		eq = discrete_preliminary_eq;
+		default_pset = DEFAULT_DISCRETE_PSET;
 	} else {
 		/* 400mV, FS=29, LF = 9 */
 		fs = 29;
 		lf = 9;
 		div = 1;
 		eq = integrated_preliminary_eq;
+		default_pset = DEFAULT_MCP_PSET;
 	}
 	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL101,
 		(fs << PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT)
@@ -1142,15 +1141,19 @@ retry:
 	 *
 	 * Set Gen3EqPsetReqVec, leave other fields 0.
 	 */
+	if (pcie_pset == UNSET_PSET)
+		pcie_pset = default_pset;
 	if (pcie_pset > 10) {	/* valid range is 0-10, inclusive */
-		dd_dev_err(dd, "%s: Invalid Eq Pset %u, setting to 0\n",
-			__func__, pcie_pset);
-		pcie_pset = 0;
+		dd_dev_err(dd, "%s: Invalid Eq Pset %u, setting to %d\n",
+			__func__, pcie_pset, default_pset);
+		pcie_pset = default_pset;
 	}
 	dd_dev_info(dd, "%s: using EQ Pset %u\n", __func__, pcie_pset);
 	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL106,
-		(1 << pcie_pset)
-			<< PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT);
+		((1 << pcie_pset)
+			<< PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT)
+		| PCIE_CFG_REG_PL106_GEN3_EQ_EVAL2MS_DISABLE_SMASK
+		| PCIE_CFG_REG_PL106_GEN3_EQ_PHASE23_EXIT_MODE_SMASK);
 
 	/*
 	 * step 5b: Do post firmware download steps via SBus
@@ -1165,8 +1168,13 @@ retry:
 	write_gasket_interrupt(dd, 0, 0x0006, 0x0050);
 	/* disable pCal for PCIe Gen3 RX equalization */
 	write_gasket_interrupt(dd, 1, 0x0026, 0x5b01);
+	/*
+	 * Enable iCal for PCIe Gen3 RX equalization, and set which
+	 * evaluation of RX_EQ_EVAL will launch the iCal procedure.
+	 */
+	write_gasket_interrupt(dd, 2, 0x0026, 0x5202);
 	/* terminate list */
-	write_gasket_interrupt(dd, 2, 0x0000, 0x0000);
+	write_gasket_interrupt(dd, 3, 0x0000, 0x0000);
 
 	/*
 	 * step 5d: program XMT margin
