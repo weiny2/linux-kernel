@@ -276,6 +276,7 @@ void nd_blk_queue_init(struct request_queue *q)
 	blk_queue_bounce_limit(q, BLK_BOUNCE_ANY);
 	if (IS_ENABLED(CONFIG_ND_IOSTAT))
 		queue_flag_set_unlocked(QUEUE_FLAG_IO_STAT, q);
+	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, q);
 }
 EXPORT_SYMBOL(nd_blk_queue_init);
 
