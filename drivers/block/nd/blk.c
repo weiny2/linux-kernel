@@ -171,17 +171,11 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	struct bvec_iter iter;
 	struct bio_vec bvec;
 	int err = 0, rw;
-	sector_t sector;
 
-	sector = bio->bi_iter.bi_sector;
-	if (bio_end_sector(bio) > get_capacity(disk)) {
+	if (unlikely(bio_end_sector(bio) > get_capacity(disk))) {
 		err = -EIO;
 		goto out;
 	}
-
-	BUG_ON(bio->bi_rw & REQ_DISCARD);
-
-	rw = bio_data_dir(bio);
 
 	/*
 	 * bio_integrity_enabled also checks if the bio already has an
@@ -197,20 +191,20 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	bip = bio_integrity(bio);
 	blk_dev = disk->private_data;
 
+	rw = bio_data_dir(bio);
 	bio_for_each_segment(bvec, bio, iter) {
 		unsigned int len = bvec.bv_len;
 
 		BUG_ON(len > PAGE_SIZE);
 		err = nd_blk_do_bvec(blk_dev, bip, bvec.bv_page, len,
-					bvec.bv_offset, rw, sector);
+					bvec.bv_offset, rw, iter.bi_sector);
 		if (err) {
 			dev_info(&blk_dev->nsblk->dev,
 					"io error in %s sector %lld, len %d,\n",
 					(rw == READ) ? "READ" : "WRITE",
-					(unsigned long long) sector, len);
+					(unsigned long long) iter.bi_sector, len);
 			goto out;
 		}
-		sector += len >> SECTOR_SHIFT;
 	}
 
  out:

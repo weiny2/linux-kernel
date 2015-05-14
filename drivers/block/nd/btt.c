@@ -1166,23 +1166,16 @@ static void btt_make_request(struct request_queue *q, struct bio *bio)
 	struct bio_integrity_payload *bip = bio_integrity(bio);
 	struct block_device *bdev = bio->bi_bdev;
 	struct btt *btt = q->queuedata;
-	int rw;
-	struct bio_vec bvec;
-	sector_t sector;
 	struct bvec_iter iter;
-	int err = 0;
+	struct bio_vec bvec;
+	int err = 0, rw;
 
-	sector = bio->bi_iter.bi_sector;
 	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
 		err = -EIO;
 		goto out;
 	}
 
-	BUG_ON(bio->bi_rw & REQ_DISCARD);
-
-	rw = bio_rw(bio);
-	if (rw == READA)
-		rw = READ;
+	rw = bio_data_dir(bio);
 
 	/*
 	 * bio_integrity_enabled also checks if the bio already has an
@@ -1205,15 +1198,14 @@ static void btt_make_request(struct request_queue *q, struct bio *bio)
 		BUG_ON(len % btt->sector_size);
 
 		err = btt_do_bvec(btt, bip, bvec.bv_page, len, bvec.bv_offset,
-				rw, sector);
+				rw, iter.bi_sector);
 		if (err) {
 			dev_info(&btt->nd_btt->dev,
 					"io error in %s sector %lld, len %d,\n",
 					(rw == READ) ? "READ" : "WRITE",
-					(unsigned long long) sector, len);
+					(unsigned long long) iter.bi_sector, len);
 			goto out;
 		}
-		sector += len >> SECTOR_SHIFT;
 	}
 
 out:
