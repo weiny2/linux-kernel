@@ -199,9 +199,11 @@ static const struct ethtool_ops opa_ethtool_ops = {
 
 static inline int
 __hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
-	      unsigned long threshold, unsigned long *ct_val)
+	      unsigned long threshold, unsigned long timeout_ms,
+	      unsigned long *ct_val)
 {
 	unsigned long val;
+	unsigned long exit_jiffies = jiffies + msecs_to_jiffies(timeout_ms);
 
 	while (1) {
 		if (hfi_ct_get_failure(ctx, ct_h))
@@ -209,6 +211,8 @@ __hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
 		val = hfi_ct_get_success(ctx, ct_h);
 		if (val >= threshold)
 			break;
+		if (time_after(jiffies, exit_jiffies))
+			return -ETIME;
 		schedule();
 	}
 
@@ -410,14 +414,13 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc < 0)
 		goto err3;
 
-#if 0
 	/* Wait for TX command 1 to complete */
-	rc = hfi_ct_wait(ctx, ct_tx, 1, NULL);
-	if (rc < 0)
+	rc = __hfi_ct_wait(ctx, ct_tx, 1, OPA2_TX_TIMEOUT_MS, NULL);
+	if (rc < 0) {
+		dev_info(&odev->dev, "TX CT event 1 failure, %d\n", rc);
 		goto err3;
-	else
+	} else
 		dev_info(&odev->dev, "TX CT event 1 success\n");
-#endif
 
 	/* TX data to the regular PTE */
 	rc = hfi_tx_write(tx, ctx, ni, tx_base,
@@ -432,20 +435,20 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc < 0)
 		goto err3;
 
-#if 0
 	/* Wait for TX command 2 to complete */
-	rc = hfi_ct_wait(ctx, ct_tx, 2, NULL);
-	if (rc < 0)
+	rc = __hfi_ct_wait(ctx, ct_tx, 2, OPA2_TX_TIMEOUT_MS, NULL);
+	if (rc < 0) {
+		dev_info(&odev->dev, "TX CT event 2 failure, %d\n", rc);
 		goto err3;
-	else
+	} else
 		dev_info(&odev->dev, "TX CT event 2 success\n");
-#endif
 
 	/* Wait to receive from peer */
-	rc = __hfi_ct_wait(ctx, ct_rx, 1, NULL);
-	if (rc < 0)
+	rc = __hfi_ct_wait(ctx, ct_rx, 1, OPA2_TX_TIMEOUT_MS, NULL);
+	if (rc < 0) {
+		dev_info(&odev->dev, "RX CT failure, %d\n", rc);
 		goto err3;
-	else
+	} else
 		dev_info(&odev->dev, "RX CT success\n");
 
 	/* verify the data transfer succeeded for PTE */
