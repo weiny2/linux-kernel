@@ -256,5 +256,6 @@ struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n);
 int nd_blk_region_init(struct nd_region *nd_region);
+void nd_blk_queue_init(struct request_queue *q);
 resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk);
 #endif /* __ND_H__ */

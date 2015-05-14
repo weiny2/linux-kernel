@@ -1271,9 +1271,8 @@ static int btt_blk_init(struct btt *btt)
 	btt->btt_disk->flags = GENHD_FL_EXT_DEVT;
 
 	blk_queue_make_request(btt->btt_queue, btt_make_request);
-	blk_queue_max_hw_sectors(btt->btt_queue, 1024);
-	blk_queue_bounce_limit(btt->btt_queue, BLK_BOUNCE_ANY);
 	blk_queue_logical_block_size(btt->btt_queue, btt->sector_size);
+	nd_blk_queue_init(btt->btt_queue);
 	btt->btt_queue->queuedata = btt;
 
 	set_capacity(btt->btt_disk, 0);

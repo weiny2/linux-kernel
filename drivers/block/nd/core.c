@@ -270,6 +270,13 @@ ssize_t nd_sector_size_store(struct device *dev, const char *buf,
 	}
 }
 
+void nd_blk_queue_init(struct request_queue *q)
+{
+	blk_queue_max_hw_sectors(q, UINT_MAX);
+	blk_queue_bounce_limit(q, BLK_BOUNCE_ANY);
+}
+EXPORT_SYMBOL(nd_blk_queue_init);
+
 static ssize_t commands_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
