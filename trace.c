@@ -86,7 +86,7 @@ const char *parse_everbs_hdrs(
 	void *ehdrs)
 {
 	union ib_ehdrs *eh = ehdrs;
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 
 	switch (opcode) {
 	/* imm */
@@ -163,7 +163,7 @@ const char *parse_sdma_flags(
 	struct trace_seq *p,
 	u64 desc0, u64 desc1)
 {
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 	char flags[5] = { 'x', 'x', 'x', 'x', 0 };
 
 	flags[0] = (desc1 & SDMA_DESC1_INT_REQ_FLAG) ? 'I' : '-';
@@ -187,7 +187,7 @@ const char *print_u32_array(
 	u32 *arr, int len)
 {
 	int i;
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 
 	for (i = 0; i < len ; i++)
 		trace_seq_printf(p, "%s%#x", i == 0 ? "" : " ", arr[i]);
@@ -200,7 +200,7 @@ const char *print_u64_array(
 	u64 *arr, int len)
 {
 	int i;
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 
 	for (i = 0; i < len; i++)
 		trace_seq_printf(p, "%s0x%016llx", i == 0 ? "" : " ", arr[i]);
