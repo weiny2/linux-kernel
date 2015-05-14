@@ -26,8 +26,11 @@
 
 #include "wlcore.h"
 
+#ifndef __GENKSYMS__
+__printf(4, 5)
+#endif
 int wl1271_format_buffer(char __user *userbuf, size_t count,
-			 loff_t *ppos, char *fmt, ...);
+					loff_t *ppos, char *fmt, ...);
 
 int wl1271_debugfs_init(struct wl1271 *wl);
 void wl1271_debugfs_exit(struct wl1271 *wl);
