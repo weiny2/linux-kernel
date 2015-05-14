@@ -376,8 +376,8 @@ static int btt_flog_write(struct arena_info *arena, u32 lane, u32 sub,
 }
 
 /*
- * This function initializes the BTT map to a state with all externally
- * exposed blocks having an identity mapping, and the TRIM flag set
+ * This function initializes the BTT map to the initial state, which is
+ * all-zeroes, and indicates an identity mapping
  */
 static int btt_map_init(struct arena_info *arena)
 {
