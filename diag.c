@@ -908,7 +908,6 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 	dpkt.pbc = pbc;
 	ret = diagpkt_send(&dpkt);
 	/*
-	 * Qib snoop code returns the number of bytes written but the
 	 * diagpkt_send only returns number of bytes in the diagpkt so patch
 	 * that up here before returning.
 	 */
