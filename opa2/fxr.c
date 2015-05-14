@@ -102,20 +102,22 @@ static void init_csrs(const struct hfi_devdata *dd)
 
 /*
  * Do HFI chip-specific and PCIe cleanup. Free dd memory.
+ * This is called in error cleanup from hfi_pci_dd_init().
+ * Some state may be unset, so must use caution and test if
+ * cleanup is needed.
  */
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
 	int i;
 
-	opa_core_unregister_device(dd->bus_dev);
+	if (dd->bus_dev)
+		opa_core_unregister_device(dd->bus_dev);
 
 	cleanup_interrupts(dd);
 
 	/* release any privileged CQs */
-	hfi_cq_cleanup(&dd->priv_ctx);
-
-	idr_destroy(&dd->cq_pair);
-	idr_destroy(&dd->ptl_user);
+	if (dd->priv_ctx.devdata)
+		hfi_cq_cleanup(&dd->priv_ctx);
 
 	hfi_iommu_root_clear_context(dd);
 
@@ -127,6 +129,9 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	for (i = 0; i < HFI_NUM_BARS; i++)
 		if (dd->kregbase[i])
 			iounmap((void __iomem *)dd->kregbase[i]);
+
+	idr_destroy(&dd->cq_pair);
+	idr_destroy(&dd->ptl_user);
 
 	pci_set_drvdata(dd->pcidev, NULL);
 	kfree(dd);
@@ -200,6 +205,12 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->pcidev = pdev;
 	pci_set_drvdata(pdev, dd);
 
+	/* For Portals PID and CQ assignments */
+	idr_init(&dd->ptl_user);
+	spin_lock_init(&dd->ptl_lock);
+	idr_init(&dd->cq_pair);
+	spin_lock_init(&dd->cq_lock);
+
 	for (i = 0; i < HFI_NUM_BARS; i++) {
 		addr = pci_resource_start(pdev, i);
 		len = pci_resource_len(pdev, i);
@@ -238,12 +249,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->oui[1] = be64_to_cpu(dd->nguid) >> 48 & 0xFF;
 	dd->oui[2] = be64_to_cpu(dd->nguid) >> 40 & 0xFF;
 
-	/* Host Memory allocations -- */
-
-	/* Portals PID assignments */
-	idr_init(&dd->ptl_user);
-	spin_lock_init(&dd->ptl_lock);
-
 	/* CQ head (read) indices - 16 KB */
 	dd->cq_head_size = (HFI_CQ_COUNT * HFI_CQ_HEAD_OFFSET);
 	dd->cq_head_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
@@ -259,8 +264,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* TX and RX command queues - fast path access */
 	dd->cq_tx_base = (void *)dd->physaddr + FXR_TXCQ_ENTRY;
 	dd->cq_rx_base = (void *)dd->physaddr + FXR_RXCQ_ENTRY;
-	idr_init(&dd->cq_pair);
-	spin_lock_init(&dd->cq_lock);
 
 	ctx = &dd->priv_ctx;
 	ctx->devdata = dd;

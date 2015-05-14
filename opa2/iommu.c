@@ -179,6 +179,10 @@ hfi_iommu_root_set_context(struct hfi_devdata *dd)
 void
 hfi_iommu_root_clear_context(struct hfi_devdata *dd)
 {
+	/* may be called during error cleanup without BAR mapped */
+	if (!dd->kregbase[1])
+		return;
+
 	/* disable translation */
 	write_iommu_csr32(dd, GCMD_REG_0_0_0_VTDBAR_OFFSET, 0);
 	/* clear RT pointer */
