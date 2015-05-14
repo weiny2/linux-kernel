@@ -257,5 +257,17 @@ struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 		resource_size_t n);
 int nd_blk_region_init(struct nd_region *nd_region);
 void nd_blk_queue_init(struct request_queue *q);
+void __nd_iostat_start(struct bio *bio, unsigned long *start);
+static inline bool nd_iostat_start(struct bio *bio, unsigned long *start)
+{
+	struct gendisk *disk = bio->bi_bdev->bd_disk;
+
+	if (!blk_queue_io_stat(disk->queue))
+		return false;
+
+	__nd_iostat_start(bio, start);
+	return true;
+}
+void nd_iostat_end(struct bio *bio, unsigned long start);
 resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk);
 #endif /* __ND_H__ */

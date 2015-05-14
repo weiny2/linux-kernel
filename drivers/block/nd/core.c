@@ -274,8 +274,39 @@ void nd_blk_queue_init(struct request_queue *q)
 {
 	blk_queue_max_hw_sectors(q, UINT_MAX);
 	blk_queue_bounce_limit(q, BLK_BOUNCE_ANY);
+	if (IS_ENABLED(CONFIG_ND_IOSTAT))
+		queue_flag_set_unlocked(QUEUE_FLAG_IO_STAT, q);
 }
 EXPORT_SYMBOL(nd_blk_queue_init);
+
+void __nd_iostat_start(struct bio *bio, unsigned long *start)
+{
+	struct gendisk *disk = bio->bi_bdev->bd_disk;
+	const int rw = bio_data_dir(bio);
+	int cpu = part_stat_lock();
+
+	*start = jiffies;
+	part_round_stats(cpu, &disk->part0);
+	part_stat_inc(cpu, &disk->part0, ios[rw]);
+	part_stat_add(cpu, &disk->part0, sectors[rw], bio_sectors(bio));
+	part_inc_in_flight(&disk->part0, rw);
+	part_stat_unlock();
+}
+EXPORT_SYMBOL(__nd_iostat_start);
+
+void nd_iostat_end(struct bio *bio, unsigned long start)
+{
+	struct gendisk *disk = bio->bi_bdev->bd_disk;
+	unsigned long duration = jiffies - start;
+	const int rw = bio_data_dir(bio);
+	int cpu = part_stat_lock();
+
+	part_stat_add(cpu, &disk->part0, ticks[rw], duration);
+	part_round_stats(cpu, &disk->part0);
+	part_dec_in_flight(&disk->part0, rw);
+	part_stat_unlock();
+}
+EXPORT_SYMBOL(nd_iostat_end);
 
 static ssize_t commands_show(struct device *dev,
 		struct device_attribute *attr, char *buf)

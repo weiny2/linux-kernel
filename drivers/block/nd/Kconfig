@@ -86,4 +86,18 @@ config ND_MAX_REGIONS
 
 	  Leave the default of 64 if you are unsure.
 
+config ND_IOSTAT
+	bool "LIBND: Enable iostat by default"
+	default n
+	---help---
+	  Persistent memory i/o has very low latency to the point
+	  where the overhead to measure statistics can dramatically
+	  impact the relative performance of the driver.  Say y here
+	  to trade off performance for statistics gathering that is
+	  enabled by default.  These statistics can always be
+	  enabled/disabled at run time via the 'iostat' attribute of
+	  the block device's queue in sysfs.
+
+	  If unsure, say N
+
 endif
