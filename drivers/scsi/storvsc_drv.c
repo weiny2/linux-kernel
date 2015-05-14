@@ -1128,6 +1128,8 @@ static void storvsc_command_completion(struct storvsc_cmd_request *cmd_request)
 	struct Scsi_Host *host;
 	struct storvsc_device *stor_dev;
 	struct hv_device *dev = host_dev->dev;
+	u32 payload_sz = cmd_request->payload_sz;
+	void *payload = cmd_request->payload;
 
 	stor_dev = get_in_stor_device(dev);
 	host = stor_dev->host;
@@ -1166,9 +1168,9 @@ static void storvsc_command_completion(struct storvsc_cmd_request *cmd_request)
 
 	scsi_done_fn(scmnd);
 
-	if (cmd_request->payload_sz >
+	if (payload_sz >
 		sizeof(struct vmbus_channel_packet_multipage_buffer))
-		kfree(cmd_request->payload);
+		kfree(payload);
 
 	mempool_free(cmd_request, memp->request_mempool);
 }
@@ -1638,7 +1640,6 @@ static int storvsc_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *scmnd)
 	struct scatterlist *cur_sgl;
 	struct vmbus_packet_mpb_array  *payload;
 	u32 payload_sz;
-	u32 pfn_cnt;
 	u32 length;
 
 	if (vmstor_current_major <= VMSTOR_WIN8_MAJOR) {
@@ -1742,11 +1743,10 @@ static int storvsc_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *scmnd)
 			sg_count = cmd_request->bounce_sgl_count;
 		}
 
-		pfn_cnt = DIV_ROUND_UP(sgl[0].offset + length, PAGE_SIZE);
 
-		if (pfn_cnt > MAX_PAGE_BUFFER_COUNT) {
+		if (sg_count > MAX_PAGE_BUFFER_COUNT) {
 
-			payload_sz = (pfn_cnt * sizeof(void *) +
+			payload_sz = (sg_count * sizeof(void *) +
 				      sizeof(struct vmbus_packet_mpb_array));
 			payload = kmalloc(payload_sz, GFP_ATOMIC);
 			if (!payload) {
@@ -1894,7 +1894,7 @@ static int storvsc_probe(struct hv_device *device,
 	}
 
 	scsi_driver.can_queue = (max_outstanding_req_per_channel *
-				 max_sub_channels + 1);
+				 (max_sub_channels + 1));
 
 	host = scsi_host_alloc(&scsi_driver,
 			       sizeof(struct hv_host_device));
