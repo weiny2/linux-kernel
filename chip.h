@@ -597,7 +597,6 @@ extern const u8 pcie_pcs_addrs[2][NUM_PCIE_SERDES];
 /* SBus commands */
 #define RESET_SBUS_RECEIVER 0x20
 #define WRITE_SBUS_RECEIVER 0x21
-#define READ_SBUS_RECEIVER  0x22
 void sbus_request(struct hfi_devdata *dd,
 		  u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
 int sbus_request_slow(struct hfi_devdata *dd,

@@ -442,7 +442,7 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 						sizeof(struct firmware_file);
 			/*
 			 * Header does not include r2 and mu - generate here.
-			 * For now, fail if validating.
+			 * For now, fail.
 			 */
 			dd_dev_err(dd, "driver is unable to validate firmware without r2 and mu (not in firmware file)\n");
 			ret = -EINVAL;
@@ -828,7 +828,6 @@ static int load_8051_firmware(struct hfi_devdata *dd,
 	 */
 	/*
 	 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
-	 * Clear or set DISABLE_VALIDATION dependig on if we are validating.
 	 */
 	write_csr(dd, MISC_CFG_FW_CTRL, MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
 
