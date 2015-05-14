@@ -3280,7 +3280,6 @@ void handle_freeze(struct work_struct *work)
 	wait_for_freeze_status(dd, 0);
 
 	if (is_a0(dd)) {
-		dd_dev_info(dd, "Entering SPC freeze\n");
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_FREEZE_SMASK);
 		wait_for_freeze_status(dd, 1);
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_UNFREEZE_SMASK);
