@@ -8,7 +8,7 @@ build=`git rev-parse --short HEAD`
 
 echo "Nightly regression test for build of $build" > mail.tmp
 echo "" > mail.tmp
-echo "Log dir: $(pwd)/daily_logs" >> mail.tmp
+echo "Log dir: /nfs/sc/disks/fabric_mirror/scratch/wfr_reg_test/daily_logs/RHEL7" >> mail.tmp
 echo "Logs: " >> mail.tmp
 ls *.log >> mail.tmp
 echo "" >> mail.tmp

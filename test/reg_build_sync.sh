@@ -112,11 +112,12 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
-rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-diagtools-sw-noship-$diags_drop.tar.gz | tee .diags.noship
-if [ $? -ne 0 ]; then
-	echo "Build failed see .diags.noship"
-	exit 1
-fi
+# hfidiags is broken for RHEL 6 so do not bother with the no ship RPM
+#rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-diagtools-sw-noship-$diags_drop.tar.gz | tee .diags.noship
+#if [ $? -ne 0 ]; then
+#	echo "Build failed see .diags.noship"
+#	exit 1
+#fi
 
 rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-utils-$diags_drop.tar.gz | tee .diags.utils
 if [ $? -ne 0 ]; then
@@ -132,13 +133,13 @@ for i in $(grep x86_64.rpm .diags.ship | awk '{print $2}'); do
 	scp $path $yum_repo
 done
 
-for i in $(grep x86_64.rpm .diags.noship | awk '{print $2}'); do 
-	echo Found RPM $i
-	path=`readlink -f $i`
-	echo "Actual path is $path"
-	echo "Copying to yum repo"
-	scp $path $yum_repo
-done
+#for i in $(grep x86_64.rpm .diags.noship | awk '{print $2}'); do 
+#	echo Found RPM $i
+#	path=`readlink -f $i`
+#	echo "Actual path is $path"
+#	echo "Copying to yum repo"
+#	scp $path $yum_repo
+#done
 
 for i in $(grep x86_64.rpm .diags.utils | awk '{print $2}'); do 
 	echo Found RPM $i
