@@ -233,17 +233,6 @@ Requires:	kernel >= $rpmrelease $rpmname = $rpmversion-$rpmrelease
 %description devel
 Development headers to properly build against $rpmname
 
-%package scripts
-Summary:        Scripts to help with debugging $rpmname
-Group:		System Environment/Kernel
-Summary:        Extra kernel modules for IFS
-Version:        $rpmversion
-Release:        $rpmrelease
-License:        GPL v2
-
-%description scripts
-Scripts to help with debugging $rpmname
-
 %prep
 %setup -q
 
@@ -294,7 +283,6 @@ make -j %num_cpus -C %kbuild M=\$(pwd)/drivers/infiniband/ulp/srpt
 %install
 rm -rf \$RPM_BUILD_ROOT
 mkdir -p \$RPM_BUILD_ROOT/lib/modules/%kver/updates
-mkdir -p \$RPM_BUILD_ROOT/sbin
 
 cp $wfrconfig \$RPM_BUILD_ROOT/lib/modules/%kver/updates/ifs-pkg-config
 cp /lib/modules/$DEFAULT_KERNEL_VERSION/build/.config \$RPM_BUILD_ROOT/lib/modules/%kver/updates/ifs-base-config
@@ -332,9 +320,6 @@ rm -rf \${RPM_BUILD_ROOT}
 %defattr(-, root, root)
 %dir /lib/modules/%kver/updates
 /lib/modules/%kver/updates/*
-
-%files scripts
-/sbin/*
 
 %files devel
 %defattr(-, root, root)
