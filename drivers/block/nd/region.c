@@ -10,25 +10,31 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/cpumask.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/nd.h>
 #include "nd.h"
 
-static struct {
-	struct {
-		int count[CONFIG_ND_MAX_REGIONS];
-		spinlock_t lock[CONFIG_ND_MAX_REGIONS];
-	} lane[NR_CPUS];
-} nd_percpu_lane;
+struct nd_percpu_lane {
+	int count[CONFIG_ND_MAX_REGIONS];
+	spinlock_t lock[CONFIG_ND_MAX_REGIONS];
+};
+
+static DEFINE_PER_CPU(struct nd_percpu_lane, nd_percpu_lane);
 
 static void __init nd_region_init_locks(void)
 {
-	int i, j;
+	unsigned int i, j;
 
-	for (i = 0; i < NR_CPUS; i++)
-		for (j = 0; j < CONFIG_ND_MAX_REGIONS; j++)
-			spin_lock_init(&nd_percpu_lane.lane[i].lock[j]);
+	for (i = 0; i < nr_cpu_ids; i++)
+		for (j = 0; j < CONFIG_ND_MAX_REGIONS; j++) {
+			struct nd_percpu_lane *ndl;
+
+			ndl = per_cpu_ptr(&nd_percpu_lane, i);
+			spin_lock_init(&ndl->lock[j]);
+			ndl->count[j] = 0;
+		}
 }
 
 /**
@@ -53,13 +59,15 @@ unsigned int nd_region_acquire_lane(struct nd_region *nd_region)
 	unsigned int cpu, lane;
 
 	cpu = get_cpu();
-
-	if (nd_region->num_lanes < NR_CPUS) {
+	if (nd_region->num_lanes < nr_cpu_ids) {
+		struct nd_percpu_lane *ndl_lock, *ndl_count;
 		unsigned int id = nd_region->id;
 
 		lane = cpu % nd_region->num_lanes;
-		if (nd_percpu_lane.lane[cpu].count[id]++ == 0)
-			spin_lock(&nd_percpu_lane.lane[lane].lock[id]);
+		ndl_count = per_cpu_ptr(&nd_percpu_lane, cpu);
+		ndl_lock = per_cpu_ptr(&nd_percpu_lane, lane);
+		if (ndl_count->count[id]++ == 0)
+			spin_lock(&ndl_lock->lock[id]);
 	} else
 		lane = cpu;
 
@@ -69,12 +77,15 @@ EXPORT_SYMBOL(nd_region_acquire_lane);
 
 void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane)
 {
-	if (nd_region->num_lanes < NR_CPUS) {
+	if (nd_region->num_lanes < nr_cpu_ids) {
 		unsigned int cpu = get_cpu();
 		unsigned int id = nd_region->id;
+		struct nd_percpu_lane *ndl_lock, *ndl_count;
 
-		if (--nd_percpu_lane.lane[cpu].count[id] == 0)
-			spin_unlock(&nd_percpu_lane.lane[lane].lock[id]);
+		ndl_count = per_cpu_ptr(&nd_percpu_lane, cpu);
+		ndl_lock = per_cpu_ptr(&nd_percpu_lane, lane);
+		if (--ndl_count->count[id] == 0)
+			spin_unlock(&ndl_lock->lock[id]);
 		put_cpu();
 	}
 	put_cpu();
@@ -84,8 +95,19 @@ EXPORT_SYMBOL(nd_region_release_lane);
 static int nd_region_probe(struct device *dev)
 {
 	int err, rc;
+	static unsigned long once;
 	struct nd_region_namespaces *num_ns;
 	struct nd_region *nd_region = to_nd_region(dev);
+
+	if (nd_region->num_lanes > num_online_cpus()
+			&& nd_region->num_lanes < num_possible_cpus()
+			&& !test_and_set_bit(0, &once)) {
+		dev_info(dev, "online cpus (%d) < concurrent i/o lanes (%d) < possible cpus (%d)\n",
+				num_online_cpus(), nd_region->num_lanes,
+				num_possible_cpus());
+		dev_info(dev, "setting nr_cpus=%d may yield better libnd device performance\n",
+				nd_region->num_lanes);
+	}
 
 	rc = nd_blk_region_init(nd_region);
 	if (rc)
