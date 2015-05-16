@@ -114,12 +114,13 @@ static int acpi_nfit_ctl(struct nd_bus_descriptor *nd_desc,
 	for (i = 0; i < desc->in_num; i++)
 		in_buf.buffer.length += nd_cmd_in_size(nd_dimm, cmd, desc, i, buf);
 
-	dev_dbg(dev, "%s:%s cmd: %s input length: %d\n", __func__, dimm_name,
-			cmd_name, in_buf.buffer.length);
-	if (IS_ENABLED(CONFIG_ACPI_NFIT_DEBUG))
+	if (IS_ENABLED(CONFIG_ACPI_NFIT_DEBUG)) {
+		dev_dbg(dev, "%s:%s cmd: %s input length: %d\n", __func__,
+				dimm_name, cmd_name, in_buf.buffer.length);
 		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
 				4, in_buf.buffer.pointer, min_t(u32, 128,
 					in_buf.buffer.length), true);
+	}
 
 	out_obj = acpi_evaluate_dsm(handle, uuid, 1, cmd, &in_obj);
 	if (!out_obj) {
@@ -135,12 +136,13 @@ static int acpi_nfit_ctl(struct nd_bus_descriptor *nd_desc,
 		goto out;
 	}
 
-	dev_dbg(dev, "%s:%s cmd: %s output length: %d\n", __func__, dimm_name,
-			cmd_name, out_obj->buffer.length);
-	if (IS_ENABLED(CONFIG_ACPI_NFIT_DEBUG))
+	if (IS_ENABLED(CONFIG_ACPI_NFIT_DEBUG)) {
+		dev_dbg(dev, "%s:%s cmd: %s output length: %d\n", __func__,
+				dimm_name, cmd_name, out_obj->buffer.length);
 		print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4,
 				4, out_obj->buffer.pointer, min_t(u32, 128,
 					out_obj->buffer.length), true);
+	}
 
 	for (i = 0, offset = 0; i < desc->out_num; i++) {
 		u32 out_size = nd_cmd_out_size(nd_dimm, cmd, desc, i, buf,
