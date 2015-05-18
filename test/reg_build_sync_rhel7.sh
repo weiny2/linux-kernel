@@ -79,7 +79,9 @@ done
 # Need to patch up driver version
 driver_drop=`grep Wrote .driver.build | grep hfi1-devel | awk 'BEGIN { FS="x86_64/" } ; {print $2}' | awk 'BEGIN { FS="-" } ; { print $3 "-" $4}' | awk 'BEGIN {FS="."} ; {print $1 "." $2}'`
 
-#echo "Building PSM"
+echo "Driver drop is $driver_drop"
+
+echo "Building PSM"
 echo "------------"
 cd $psm
 rm -f *.tar.gz
@@ -99,6 +101,9 @@ for i in $(grep x86_64.rpm .psm.build | awk '{print $2}'); do
 	echo "Copying to yum repo"
 	scp $path $yum_repo
 done
+
+echo "PSM drop is $psm_drop"
+
 echo "Building Diagtools"
 echo "------------"
 cd $diags
@@ -122,6 +127,8 @@ if [ $? -ne 0 ]; then
 	echo "Build failed see .diags.utils"
 	exit 1
 fi
+
+echo "Diags drop is $diags_drop"
 
 for i in $(grep x86_64.rpm .diags.ship | awk '{print $2}'); do 
 	echo Found RPM $i
