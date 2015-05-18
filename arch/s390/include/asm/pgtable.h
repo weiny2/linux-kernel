@@ -605,6 +605,17 @@ static inline int pmd_write(pmd_t pmd)
 	return (pmd_val(pmd) & _SEGMENT_ENTRY_PROTECT) == 0;
 }
 
+/*
+ * Note that this is a stub only that is never expected to be used. At the
+ * time of writing, only task_mmu.c cared for smaps accounting and it's
+ * harmless to ignore it as an alternative to backporting
+ * 152125b7a882df36a55a8eadbea6d0edf1461ee7
+ */
+static inline int pmd_dirty(pmd_t pmd)
+{
+	return 0;
+}
+
 static inline int pmd_young(pmd_t pmd)
 {
 	int young = 0;
