@@ -378,6 +378,7 @@ config ACPI_REDUCED_HARDWARE_ONLY
 config ACPI_NFIT
 	tristate "ACPI NVDIMM Firmware Interface Table (NFIT)"
 	depends on PHYS_ADDR_T_64BIT
+	depends on BLK_DEV
 	select ND_DEVICES
 	select LIBND
 	help

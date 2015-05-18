@@ -80,6 +80,7 @@ struct nd_region_desc {
 };
 
 struct nd_bus;
+struct device;
 struct nd_blk_region;
 struct nd_blk_region_desc {
 	int (*enable)(struct nd_bus *nd_bus, struct device *dev);
@@ -89,7 +90,6 @@ struct nd_blk_region_desc {
 	struct nd_region_desc ndr_desc;
 };
 
-struct nd_bus;
 struct nd_bus *__nd_bus_register(struct device *parent,
 		struct nd_bus_descriptor *nfit_desc, struct module *module);
 #define nd_bus_register(parent, desc) \

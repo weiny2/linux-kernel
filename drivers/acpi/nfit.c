@@ -953,7 +953,7 @@ static void write_blk_ctl(struct nfit_blk *nfit_blk, unsigned int bw,
 	/* FIXME: conditionally perform read-back if mandated by firmware */
 }
 
-static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk,  void *iobuf,
+static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk, void *iobuf,
 		unsigned int len, int write, resource_size_t dpa,
 		unsigned int bw)
 {
