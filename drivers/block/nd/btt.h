@@ -155,7 +155,6 @@ struct arena_info {
  * @btt_queue:		Pointer to the request queue for the BTT device
  * @arena_list:		Head of the list of arenas
  * @debugfs_dir:	Debugfs dentry
- * @backing_dev:	Backing block device for the BTT
  * @nd_btt:		Parent nd_btt struct
  * @nlba:		Number of logical blocks exposed to the	upper layers
  *			after removing the amount of space needed by metadata
@@ -173,7 +172,6 @@ struct btt {
 	struct request_queue *btt_queue;
 	struct list_head arena_list;
 	struct dentry *debugfs_dir;
-	struct block_device *backing_dev;
 	struct nd_btt *nd_btt;
 	u64 nlba;
 	unsigned long long rawsize;

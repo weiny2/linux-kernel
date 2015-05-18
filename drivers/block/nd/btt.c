@@ -1245,6 +1245,8 @@ static const struct block_device_operations btt_fops = {
 
 static int btt_blk_init(struct btt *btt)
 {
+	struct nd_btt *nd_btt = btt->nd_btt;
+	char name[BDEVNAME_SIZE];
 	int ret;
 
 	/* create a new disk and request queue for btt */
@@ -1258,7 +1260,8 @@ static int btt_blk_init(struct btt *btt)
 		goto out_free_queue;
 	}
 
-	sprintf(btt->btt_disk->disk_name, "nd%d", btt->nd_btt->id);
+	sprintf(btt->btt_disk->disk_name, "%ss",
+			bdevname(nd_btt->backing_dev, name));
 	btt->btt_disk->driverfs_dev = &btt->nd_btt->dev;
 	btt->btt_disk->major = btt_major;
 	btt->btt_disk->first_minor = 0;
@@ -1450,7 +1453,6 @@ static int nd_btt_probe(struct device *dev)
 		rc = -ENOMEM;
 		goto err_btt;
 	}
-	btt->backing_dev = bdev;
 	dev_set_drvdata(dev, btt);
 
 	return 0;
