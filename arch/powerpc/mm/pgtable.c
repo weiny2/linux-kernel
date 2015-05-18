@@ -190,7 +190,7 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
 	 * _PAGE_PRESENT, but we can be sure that it is not in hpte.
 	 * Hence we can use set_pte_at for them.
 	 */
-	VM_WARN_ON((pte_val(*ptep) & (_PAGE_PRESENT | _PAGE_USER)) ==
+	WARN_ON_ONCE((pte_val(*ptep) & (_PAGE_PRESENT | _PAGE_USER)) ==
 		(_PAGE_PRESENT | _PAGE_USER));
 
 	/* Note: mm->context.id might not yet have been assigned as
