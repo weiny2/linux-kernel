@@ -94,8 +94,7 @@ module_param_cb(cap_mask, &cap_ops, &hfi1_cap_mask, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(cap_mask, "Bit mask of enabled/disabled HW features");
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Intel <ibsupport@intel.com>");
-MODULE_DESCRIPTION("Intel IB driver");
+MODULE_DESCRIPTION("Intel Omni-Path Architecture driver");
 MODULE_VERSION(HFI1_DRIVER_VERSION);
 
 /* See hfi1_init() */
