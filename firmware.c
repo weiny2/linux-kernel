@@ -56,47 +56,26 @@
 #include "hfi.h"
 #include "trace.h"
 
-static uint fw_8051_load = 1;
-module_param_named(fw_8051_load, fw_8051_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_8051_load, "Load the 8051 firmware");
-
-static uint fw_fabric_serdes_load = 1;
-module_param_named(fw_fabric_serdes_load, fw_fabric_serdes_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_fabric_serdes_load, "Load the fabric SerDes firmware");
-
-static uint fw_pcie_serdes_load = 1;
-module_param_named(fw_pcie_serdes_load, fw_pcie_serdes_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_pcie_serdes_load, "Load the PCIe SerDes firmware");
-
-static uint fw_sbus_load = 1;
-module_param_named(fw_sbus_load, fw_sbus_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_sbus_load, "Load the SBus firmware");
-
+/*
+ * Make it easy to toggle firmware file name and if it gets loaded by
+ * editing the following. This may be something we do while in development
+ * but not necessarily something a user would ever need to use.
+ */
 #define DEFAULT_FW_8051_NAME_FPGA "hfi_dc8051.bin"
 #define DEFAULT_FW_8051_NAME_ASIC "hfi1_dc8051.fw"
 #define DEFAULT_FW_FABRIC_NAME "hfi1_fabric.fw"
 #define DEFAULT_FW_SBUS_NAME "hfi1_sbus.fw"
 #define DEFAULT_FW_PCIE_NAME "hfi1_pcie.fw"
+static uint fw_8051_load = 1;
+static uint fw_fabric_serdes_load = 1;
+static uint fw_pcie_serdes_load = 1;
+static uint fw_sbus_load = 1;
 
+/* Firmware file names get set in hfi1_firmware_init() based on the above */
 static char *fw_8051_name;
-module_param_named(fw_8051_name, fw_8051_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fw_8051_name, "8051 firmware name");
-
 static char *fw_fabric_serdes_name;
-module_param_named(
-	fw_fabric_serdes_name,
-	fw_fabric_serdes_name,
-	charp,
-	S_IRUGO);
-MODULE_PARM_DESC(fw_fabric_serdes_name, "Fabric SerDes firmware name");
-
 static char *fw_sbus_name;
-module_param_named(fw_sbus_name, fw_sbus_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fw_sbus_name, "SBus firmware name");
-
 static char *fw_pcie_serdes_name;
-module_param_named(fw_pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fw_pcie_serdes_name, "PCIe SerDes firmware name");
 
 #define SBUS_MAX_POLL_COUNT 100
 #define SBUS_COUNTER(reg, name) \

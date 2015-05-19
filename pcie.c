@@ -71,7 +71,6 @@
  * Code to adjust PCIe capabilities.
  */
 static void tune_pcie_caps(struct hfi1_devdata *);
-static void tune_pcie_coalesce(struct hfi1_devdata *);
 
 /*
  * Do all the common PCIe setup and initialization.
@@ -429,7 +428,6 @@ void request_msix(struct hfi1_devdata *dd, u32 *nent,
 	}
 
 	tune_pcie_caps(dd);
-	tune_pcie_coalesce(dd);
 }
 
 /*
@@ -491,76 +489,6 @@ static int val2fld(int wd, int mask)
 	lsbmask = mask ^ (mask & (mask - 1));
 	wd *= lsbmask;
 	return wd;
-}
-
-static int hfi1_pcie_coalesce;
-module_param_named(pcie_coalesce, hfi1_pcie_coalesce, int, S_IRUGO);
-MODULE_PARM_DESC(pcie_coalesce, "tune PCIe coalescing on some Intel chipsets");
-
-/*
- * Enable PCIe completion and data coalescing, on Intel 5x00 and 7300
- * chipsets.   This is known to be unsafe for some revisions of some
- * of these chipsets, with some BIOS settings, and enabling it on those
- * systems may result in the system crashing, and/or data corruption.
- */
-static void tune_pcie_coalesce(struct hfi1_devdata *dd)
-{
-	int r;
-	struct pci_dev *parent;
-	u16 devid;
-	u32 mask, bits, val;
-
-	if (!hfi1_pcie_coalesce)
-		return;
-
-	/* Find out supported and configured values for parent (root) */
-	parent = dd->pcidev->bus->self;
-	if (!pci_is_root_bus(parent->bus)) {
-		dd_dev_info(dd, "Parent not root\n");
-		return;
-	}
-	if (!pci_is_pcie(parent))
-		return;
-	if (parent->vendor != 0x8086)
-		return;
-
-	/*
-	 *  - bit 12: Max_rdcmp_Imt_EN: need to set to 1
-	 *  - bit 11: COALESCE_FORCE: need to set to 0
-	 *  - bit 10: COALESCE_EN: need to set to 1
-	 *  (but limitations on some on some chipsets)
-	 *
-	 *  On the Intel 5000, 5100, and 7300 chipsets, there is
-	 *  also: - bit 25:24: COALESCE_MODE, need to set to 0
-	 */
-	devid = parent->device;
-	if (devid >= 0x25e2 && devid <= 0x25fa) {
-		/* 5000 P/V/X/Z */
-		if (parent->revision <= 0xb2)
-			bits = 1U << 10;
-		else
-			bits = 7U << 10;
-		mask = (3U << 24) | (7U << 10);
-	} else if (devid >= 0x65e2 && devid <= 0x65fa) {
-		/* 5100 */
-		bits = 1U << 10;
-		mask = (3U << 24) | (7U << 10);
-	} else if (devid >= 0x4021 && devid <= 0x402e) {
-		/* 5400 */
-		bits = 7U << 10;
-		mask = 7U << 10;
-	} else if (devid >= 0x3604 && devid <= 0x360a) {
-		/* 7300 */
-		bits = 7U << 10;
-		mask = (3U << 24) | (7U << 10);
-	} else {
-		/* not one of the chipsets that we know about */
-		return;
-	}
-	pci_read_config_dword(parent, 0x48, &val);
-	val &= ~mask;
-	val |= bits;
-	r = pci_write_config_dword(parent, 0x48, val);
 }
 
 /*
@@ -778,10 +706,6 @@ static uint pcie_target = 3;
 module_param(pcie_target, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_target, "PCIe target speed (0 skip, 1-3 Gen1-3)");
 
-static uint pcie_required;
-module_param(pcie_required, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_required, "Driver will fail to load if unable to reach PCIe target speed");
-
 static uint pcie_force;
 module_param(pcie_force, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_force, "Force driver to do a PCIe firmware download even if already at target speed");
@@ -796,11 +720,6 @@ MODULE_PARM_DESC(pcie_retry, "Driver will try this many times to reach requested
 static uint pcie_pset = UNSET_PSET;
 module_param(pcie_pset, uint, S_IRUGO);
 MODULE_PARM_DESC(pcie_pset, "PCIe Eq Pset value to use, range is 0-10");
-
-/* for testing */
-static uint pcie_gen3_ignore_speed_check;
-module_param(pcie_gen3_ignore_speed_check, uint, S_IRUGO);
-MODULE_PARM_DESC(pcie_gen3_ignore_speed_check, "Ignore check whether links are gen3 capable (test only)");
 
 /* equalization columns */
 #define PREC 0
@@ -994,7 +913,7 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 	u64 reg;
 	u32 reg32, fs, lf;
 	u32 status, err;
-	int ret, return_error = 0;
+	int ret;
 	int do_retry, retry_count = 0;
 	uint default_pset;
 	u16 target_vector, target_speed;
@@ -1002,6 +921,7 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 	u8 nsbr = 1;
 	u8 div;
 	const u8 (*eq)[3];
+	int return_error = 0;
 
 	/* PCIe Gen3 is for the ASIC only */
 	if (dd->icode != ICODE_RTL_SILICON)
@@ -1045,8 +965,7 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 	/* step 1: pcie link working in gen1/gen2 */
 
 	/* step 2: if either side is not capable of Gen3, done */
-	if (pcie_target == 3 && !dd->link_gen3_capable
-					&& !pcie_gen3_ignore_speed_check) {
+	if (pcie_target == 3 && !dd->link_gen3_capable) {
 		dd_dev_err(dd, "The PCIe link is not Gen3 capable\n");
 		ret = -ENOSYS;
 		goto done_no_mutex;
@@ -1239,12 +1158,12 @@ retry:
 		dd_dev_info(dd,
 			"%s: read of VendorID failed after SBR, err %d\n",
 			__func__, ret);
-		return_error = 1;	/* override !pcie_required */
+		return_error = 1;
 		goto done;
 	}
 	if (vendor == 0xffff) {
 		dd_dev_info(dd, "%s: VendorID is all 1s after SBR\n", __func__);
-		return_error = 1;	/* override !pcie_required */
+		return_error = 1;
 		ret = -EIO;
 		goto done;
 	}
@@ -1269,7 +1188,7 @@ retry:
 	dd_dev_info(dd, "%s: gasket block status: 0x%llx\n", __func__, reg);
 	if (reg == ~0ull) {	/* PCIe read failed/timeout */
 		dd_dev_err(dd, "SBR failed - unable to read from device\n");
-		return_error = 1;	/* override !pcie_required */
+		return_error = 1;
 		ret = -ENOSYS;
 		goto done;
 	}
@@ -1323,7 +1242,7 @@ done:
 	release_hw_mutex(dd);
 done_no_mutex:
 	/* return no error if it is OK to be at current speed */
-	if (ret && !return_error && !pcie_required) {
+	if (ret && !return_error) {
 		dd_dev_err(dd, "Proceeding at current speed PCIe speed\n");
 		ret = 0;
 	}

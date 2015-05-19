@@ -1483,7 +1483,6 @@ void update_sge(struct hfi1_sge_state *ss, u32 length);
 
 /* global module parameter variables */
 extern unsigned int hfi1_max_mtu;
-extern unsigned int default_mtu;
 extern unsigned int hfi1_cu;
 extern unsigned int user_credit_return_threshold;
 extern uint num_rcv_contexts;

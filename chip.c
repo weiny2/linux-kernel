@@ -89,33 +89,20 @@ uint rcv_intr_count = 16; /* same as qib */
 module_param(rcv_intr_count, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_count, "Receive interrupt mitigation count");
 
-uint rcv_intr_dynamic = 1; /* enable dynamic mode */
-module_param(rcv_intr_dynamic, uint, S_IRUGO);
-MODULE_PARM_DESC(rcv_intr_dynamic, "Enable dynamic receive interrupt mitigation adjustments: note rcv_intr_timeout is now a max value");
-
 ushort link_crc_mask = SUPPORTED_CRCS;
 module_param(link_crc_mask, ushort, S_IRUGO);
 MODULE_PARM_DESC(link_crc_mask, "CRCs to use on the link");
-
-static ushort crc_14b_sideband = 1;
-module_param(crc_14b_sideband, ushort, S_IRUGO);
-MODULE_PARM_DESC(crc_14b_sideband, "Use sideband credit return (14b CRC only)");
-
-static uint use_flr = 1;
-module_param_named(use_flr, use_flr, uint, S_IRUGO);
-MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
 
 uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cable");
 
-static uint link_speed_mask;
-module_param(link_speed_mask, uint, S_IRUGO);
-MODULE_PARM_DESC(link_speed_mask, "Mask of enabled link speeds (1 = 12.5G, 2 = 25G)");
-
-uint quick_linkup;
-module_param(quick_linkup, uint, S_IRUGO);
-MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
+/* Other driver tunables */
+uint rcv_intr_dynamic = 1; /* enable dynamic mode for rcv int mitigation*/
+static ushort crc_14b_sideband = 1;
+static uint use_flr = 1;
+static uint link_speed_mask; /* 1 = 12.5G, 2 = 25G */
+uint quick_linkup; /* skip LNI */
 
 struct flag_table {
 	u64 flag;	/* the flag */
@@ -4374,21 +4361,6 @@ static void is_reserved_int(struct hfi1_devdata *dd, unsigned int source)
 				is_reserved_name(name, sizeof(name), source));
 }
 
-/*
- * Interrupt source table.
- *
- * Each entry is an interrupt source "type".  It is ordered by increasing
- * number.
- */
-struct is_table {
-	int start;	 /* interrupt source type start */
-	int end;	 /* interrupt source type end */
-	/* routine that returns the name of the interrupt source */
-	char *(*is_name)(char *name, size_t size, unsigned int source);
-	/* routine to call when receiving an interrupt */
-	void (*is_int)(struct hfi1_devdata *dd, unsigned int source);
-};
-
 static const struct is_table is_table[] = {
 /* start		     end
 				name func		interrupt func */
@@ -4415,24 +4387,6 @@ static const struct is_table is_table[] = {
 };
 
 /*
- * Interrupt source name - return the buffer with the text name of the
- * interrupt source.  Source is a bit index into an array of 64-bit integers.
- */
-static char *is_name(char *buf, size_t bsize, unsigned int source)
-{
-	const struct is_table *entry;
-
-	/* avoids a double compare by walking the table in-order */
-	for (entry = &is_table[0]; entry->is_name; entry++) {
-		if (source < entry->end)
-			return entry->is_name(buf, bsize, source-entry->start);
-	}
-	/* fell off the end */
-	snprintf(buf, bsize, "invalid interrupt source %u\n", source);
-	return buf;
-}
-
-/*
  * Interrupt source interrupt - called when the given source has an interrupt.
  * Source is a bit index into an array of 64-bit integers.
  */
@@ -4443,6 +4397,7 @@ static void is_interrupt(struct hfi1_devdata *dd, unsigned int source)
 	/* avoids a double compare by walking the table in-order */
 	for (entry = &is_table[0]; entry->is_name; entry++) {
 		if (source < entry->end) {
+			trace_hfi1_interrupt(dd, entry, source);
 			entry->is_int(dd, source - entry->start);
 			return;
 		}
@@ -10209,7 +10164,7 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		ppd->vls_operational = ppd->vls_supported;
 		/* Set the default MTU. */
 		for (vl = 0; vl < num_vls; vl++)
-			dd->vld[vl].mtu = default_mtu;
+			dd->vld[vl].mtu = hfi1_max_mtu;
 		dd->vld[15].mtu = MAX_MAD_PACKET;
 		/*
 		 * Set the initial values to reasonable default, will be set
@@ -10497,48 +10452,6 @@ u64 create_pbc(u64 flags, u32 srate, u32 vl, u32 dw_len)
 			<< PBC_LENGTH_DWS_SHIFT;
 
 	return pbc;
-}
-
-/* interrupt testing */
-static void force_errors(struct hfi1_devdata *dd, u32 csr, const char *what)
-{
-	int i;
-
-	for (i = 0; i < 64; i++) {
-		dd_dev_info(dd, "** Forced interrupt: %s %d\n", what, i);
-		write_csr(dd, csr, 1ull << i);
-		msleep(100);
-	}
-}
-
-void force_all_interrupts(struct hfi1_devdata *dd)
-{
-	int i, j;
-	char buf[64];
-
-	for (i = 0; i < CCE_NUM_INT_CSRS; i++) {
-		for (j = 0; j < 64; j++) {
-			dd_dev_info(
-				dd,
-				"** Forced interrupt: csr #%2d, bit %2d; \"%s\"\n",
-				i, j, is_name(buf, sizeof(buf), (i*64)+j));
-			write_csr(dd, CCE_INT_FORCE + (8*i), 1ull << j);
-			/*
-			 * We want this delay so it is long enough that
-			 * the interrupt prints match the print above
-			 * but no so long that it takes forever to run.
-			 */
-			/*ssleep(1);*/
-			msleep(100);
-		}
-	}
-
-	force_errors(dd, CCE_ERR_FORCE, "CCE Err");
-	force_errors(dd, RCV_ERR_FORCE, "Receive Err");
-	force_errors(dd, SEND_PIO_ERR_FORCE, "Send PIO Err");
-	force_errors(dd, SEND_DMA_ERR_FORCE, "Send DMA Err");
-	force_errors(dd, SEND_EGRESS_ERR_FORCE, "Send Egress Err");
-	force_errors(dd, SEND_ERR_FORCE, "Send Err");
 }
 
 #define SBUS_THERMAL    0x4f

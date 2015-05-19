@@ -49,10 +49,11 @@ def main():
     SET_FILTER_IOCTL = 7044
     CLEAR_FILTER_IOCTL = 7043
     CLEAR_QUEUE_IOCTL = 7042
+    SET_OPTS_IOCTL = 7046
     corrupt_dlid = 0
     drop_packet = 1
     filter_by = FILTER_BY_DLID
-    set_ioctl = 0
+    set_filter_ioctl = 0
     flip_lids = 0
 
     SNOOP_MODE = os.O_RDWR
@@ -66,7 +67,8 @@ def main():
      drop_packet,
      flip_lids,
      lid1,
-     lid2) = test_info.parse_extra_args()
+     lid2,
+     drop_send_flag) = test_info.parse_extra_args()
 
     print "Filter By:", filter_by
     print "Filter Val:", filter_value
@@ -75,6 +77,7 @@ def main():
     print "Flip Lids:", flip_lids
     print "lid 1:", lid1
     print "lid 2:", lid2
+    print "Drop send flag:", drop_send_flag
 
     dev = "/dev/hfi1_diagpkt0"
 
@@ -103,7 +106,7 @@ def main():
     buf = array.array('i', [filter_opcode, filter_len, filter_addr])
 
     if filter_opcode > 0:
-        set_ioctl = 1
+        set_filter_ioctl = 1
 
     # clear any filters
     RegLib.test_log(0, "Cleraing existing filters")
@@ -117,12 +120,22 @@ def main():
     if ret:
         RegLib.test_fail("Could not clear filters")
 
-
     # Now we can send the IOCTL, 7044 means set filter
-    if set_ioctl:
+    if set_filter_ioctl:
         RegLib.test_log(0, "Sending IOCTL")
         ret = fcntl.ioctl(file_obj, SET_FILTER_IOCTL, buf)
         print "IOCTL return", ret
+
+    drop_flag = int(drop_send_flag)
+    RegLib.test_log(0, "Need to set the drop flag to %d" % drop_flag)
+    value = drop_flag
+    flag_buf = array.array('i', [value])
+    (flag_addr, flag_len) = flag_buf.buffer_info()
+    flag_len = 0x4
+    buf = array.array('i', [value, flag_len, flag_addr])
+    ret = fcntl.ioctl(file_obj, SET_OPTS_IOCTL, flag_buf)
+    if ret:
+        RegLib.teset_fail("Could not set drop flag")
 
     # Before going into our infinite loop set up a trap for ctrl+c
     signal.signal(signal.SIGINT, signal_handler)

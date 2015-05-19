@@ -22,7 +22,7 @@ captured = 0
 def snoop_do_not_intercept_outgoing(host, lid1, lid2):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,%s,0,1,0,%s,%s\"" % (lid2,lid1,lid2)
+    cmd = snoop_path + " --args=\"0x1,%s,0,1,0,%s,%s,0\"" % (lid2,lid1,lid2)
 
     pid = os.fork()
     if pid == 0:
@@ -66,7 +66,7 @@ def snoop_do_not_intercept_outgoing(host, lid1, lid2):
 def snoop_intercept_outgoing(host, lid1, lid2):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,%s,0,0,0,%s,%s\"" % (lid2, lid1,lid2)
+    cmd = snoop_path + " --args=\"0x1,%s,0,0,0,%s,%s,0\"" % (lid2, lid1,lid2)
 
     pid = os.fork()
     if pid == 0:
@@ -104,11 +104,15 @@ def snoop_intercept_outgoing(host, lid1, lid2):
 
     return pid
 
-def snoop_intercept_outgoing_2(host, lid1, lid2):
+def snoop_intercept_outgoing_2(host, lid1, lid2, drop_send="0"):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,%s,0,0,1,%s,%s\"" % (lid1, lid1, lid2)
+    if drop_send == "0":
+        cmd = snoop_path + " --args=\"0x1,%s,0,0,1,%s,%s,%s\"" % (lid1, lid1, lid2, 0)
+    else:
+        cmd = snoop_path + " --args=\"0x0,%s,0,0,1,%s,%s,%s\"" % (lid1, lid1, lid2, 1)
 
+    print "Snoop cmd:", cmd
     pid = os.fork()
     if pid == 0:
         RegLib.test_log(0, "Starting SnoopLocal.py on %s" % host.get_name())
@@ -149,7 +153,7 @@ def snoop_intercept_outgoing_2(host, lid1, lid2):
 def snoop_intercept_outgoing_3(host,lid1, lid2):
     global snoop_path
 
-    cmd = snoop_path + " --args=\"0x1,%s,1,0,0,%s,%s\"" % (lid2, lid1, lid2)
+    cmd = snoop_path + " --args=\"0x1,%s,1,0,0,%s,%s,0\"" % (lid2, lid1, lid2)
 
     pid = os.fork()
     if pid == 0:
@@ -453,6 +457,9 @@ def main():
     print "XXXXXXXXXXXXXXX"
     print "Starting Test 1"
     print "XXXXXXXXXXXXXXX"
+    # Use snoop to only see INCOMING packets based on DLID. Then ignore them. Do
+    # not echo them back. Snoop pid will see 0 pings and 5 pongs.
+    # Cpature pid will see all 5 pings and all 5 pongs.
     snoop_pid = snoop_do_not_intercept_outgoing(host1, host1.get_lid(),host2.get_lid())
     capture_pid = capture_do_not_intercept_outgoing(host2, host1.get_lid(), host2.get_lid())
 
@@ -473,6 +480,10 @@ def main():
     print "XXXXXXXXXXXXXXX"
     print "Starting Test 2"
     print "XXXXXXXXXXXXXXX"
+    # Uses snoop to only see INCOMING packets based on DLID. This time use snoop
+    # device to write the response. This makes ib_send_lat not see the packets
+    # on the snooping side. The ib_send_lat on the other side knows no
+    # difference.
     snoop_pid = snoop_intercept_outgoing_2(host1, host1.get_lid(), host2.get_lid())
     capture_pid = capture_do_not_intercept_outgoing(host2, host1.get_lid(), host2.get_lid())
 
@@ -490,9 +501,33 @@ def main():
     if status:
         error("Cpature Proc Test 2 failed")
 
+    print "XXXXXXXXXXXXXXX"
+    print "Starting Test 3"
+    print "XXXXXXXXXXXXXXX"
+    # Just like above except do not use filtering. Rely on the DROPSEND
+    # capabilitiy to drop the packet. Add an argument to the end of the arg
+    # chain for setting the drop send IOCTL.
+    snoop_pid = snoop_intercept_outgoing_2(host1, host1.get_lid(),
+                                           host2.get_lid(), 1)
+    capture_pid = capture_do_not_intercept_outgoing(host2, host1.get_lid(), host2.get_lid())
+
+    run_ib_send_lat_2()
+
+    RegLib.test_log(0, "Waiting for snoop pid to stop and validate")
+    (waited, status) = os.waitpid(snoop_pid, 0)
+    RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
+    if status:
+        error("Snoop Proc Test 3 failed")
+
+    RegLib.test_log(0, "Waiting for capture pid to stop and validate")
+    (waited, status) = os.waitpid(capture_pid, 0)
+    RegLib.test_log(0, "Pid %d exited with %d status" % (waited, status))
+    if status:
+        error("Cpature Proc Test 3 failed")
+
     if unit_test:
         print "XXXXXXXXXXXXXXX"
-        print "Starting Test 3"
+        print "Starting Test 4"
         print "XXXXXXXXXXXXXXX"
         RegLib.test_log(0, "Enabling snoop for bypass");
 
