@@ -102,10 +102,10 @@ static LIST_HEAD(ghes_nmi);
 static DEFINE_MUTEX(ghes_list_mutex);
 
 /*
- * NMI may be triggered on any CPU, so ghes_nmi_lock is used for
- * mutual exclusion.
+ * NMI may be triggered on any CPU, so ghes_in_nmi is used for
+ * having only one concurrent reader.
  */
-static DEFINE_RAW_SPINLOCK(ghes_nmi_lock);
+static atomic_t ghes_in_nmi = ATOMIC_INIT(0);
 
 /*
  * Because the memory area used to transfer hardware error information
@@ -848,7 +848,9 @@ static int ghes_notify_nmi(unsigned int cmd, struct pt_regs *regs)
 	struct ghes *ghes;
 	int sev, ret = NMI_DONE;
 
-	raw_spin_lock(&ghes_nmi_lock);
+	if (!atomic_add_unless(&ghes_in_nmi, 1, 1))
+		return ret;
+
 	list_for_each_entry_rcu(ghes, &ghes_nmi, list) {
 		if (ghes_read_estatus(ghes, 1)) {
 			ghes_clear_estatus(ghes);
@@ -871,7 +873,7 @@ static int ghes_notify_nmi(unsigned int cmd, struct pt_regs *regs)
 	irq_work_queue(&ghes_proc_irq_work);
 #endif
 
-	raw_spin_unlock(&ghes_nmi_lock);
+	atomic_dec(&ghes_in_nmi);
 	return ret;
 }
 
