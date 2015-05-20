@@ -402,6 +402,15 @@ config ACPI_NFIT_DEBUG
 	  it disabled unless you are debugging a hardware / firmware
 	  issue.
 
+config ACPI_NFIT_SWIZZLE_UUID
+	bool "NFIT Swizzle System Address Table GUIDs"
+	depends on ACPI_NFIT
+	default y
+	help
+	  Temporary compatibility hack for BIOSen that get the byte
+	  ordering of GUIDs in the acpi_nfit_system_address table
+	  wrong.
+
 source "drivers/acpi/apei/Kconfig"
 
 config ACPI_EXTLOG
