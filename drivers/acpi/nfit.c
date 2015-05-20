@@ -27,17 +27,13 @@ static bool force_enable_dimms;
 module_param(force_enable_dimms, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(force_enable_dimms, "Ignore _STA (ACPI DIMM device) status");
 
-static u8 acpi_nfit_uuids[2][16]; /* initialized at acpi_nfit_init */
+static u8 nfit_uuid[NFIT_UUID_MAX][16];
 
-static u8 *acpi_nfit_bus_uuid(void)
+const u8 *to_nfit_uuid(enum nfit_uuids id)
 {
-	return acpi_nfit_uuids[0];
+	return nfit_uuid[id];
 }
-
-static u8 *acpi_nfit_dimm_uuid(void)
-{
-	return acpi_nfit_uuids[1];
-}
+EXPORT_SYMBOL(to_nfit_uuid);
 
 static struct acpi_nfit_desc *to_acpi_nfit_desc(struct nd_bus_descriptor *nd_desc)
 {
@@ -70,9 +66,9 @@ static int acpi_nfit_ctl(struct nd_bus_descriptor *nd_desc,
 	const char *cmd_name, *dimm_name;
 	unsigned long dsm_mask;
 	acpi_handle handle;
+	const u8 *uuid;
 	u32 offset;
 	int rc, i;
-	u8 *uuid;
 
 	if (nd_dimm) {
 		struct nfit_mem *nfit_mem = nd_dimm_provider_data(nd_dimm);
@@ -84,7 +80,7 @@ static int acpi_nfit_ctl(struct nd_bus_descriptor *nd_desc,
 		cmd_name = nd_dimm_cmd_name(cmd);
 		dsm_mask = nfit_mem->dsm_mask;
 		desc = nd_cmd_dimm_desc(cmd);
-		uuid = acpi_nfit_dimm_uuid();
+		uuid = to_nfit_uuid(NFIT_DEV_DIMM);
 		handle = adev->handle;
 	} else {
 		struct acpi_device *adev = to_acpi_dev(acpi_desc);
@@ -92,7 +88,7 @@ static int acpi_nfit_ctl(struct nd_bus_descriptor *nd_desc,
 		cmd_name = nd_bus_cmd_name(cmd);
 		dsm_mask = nd_desc->dsm_mask;
 		desc = nd_cmd_bus_desc(cmd);
-		uuid = acpi_nfit_bus_uuid();
+		uuid = to_nfit_uuid(NFIT_DEV_BUS);
 		handle = adev->handle;
 		dimm_name = "bus";
 	}
@@ -198,30 +194,11 @@ static const char *spa_type_name(u16 type)
 
 static int nfit_spa_type(struct acpi_nfit_system_address *spa)
 {
-	if (memcmp(&nfit_spa_uuid_volatile, spa->range_guid, 16) == 0)
-		return NFIT_SPA_VOLATILE;
+	int i;
 
-	if (memcmp(&nfit_spa_uuid_pm, spa->range_guid, 16) == 0)
-		return NFIT_SPA_PM;
-
-	if (memcmp(&nfit_spa_uuid_dcr, spa->range_guid, 16) == 0)
-		return NFIT_SPA_DCR;
-
-	if (memcmp(&nfit_spa_uuid_bdw, spa->range_guid, 16) == 0)
-		return NFIT_SPA_BDW;
-
-	if (memcmp(&nfit_spa_uuid_vdisk, spa->range_guid, 16) == 0)
-		return NFIT_SPA_VDISK;
-
-	if (memcmp(&nfit_spa_uuid_vcd, spa->range_guid, 16) == 0)
-		return NFIT_SPA_VCD;
-
-	if (memcmp(&nfit_spa_uuid_pdisk, spa->range_guid, 16) == 0)
-		return NFIT_SPA_PDISK;
-
-	if (memcmp(&nfit_spa_uuid_pcd, spa->range_guid, 16) == 0)
-		return NFIT_SPA_PCD;
-
+	for (i = 0; i < NFIT_UUID_MAX; i++)
+		if (memcmp(to_nfit_uuid(i), spa->range_guid, 16) == 0)
+			return i;
 	return -1;
 }
 
@@ -297,7 +274,7 @@ static void *add_table(struct acpi_nfit_desc *acpi_desc, void *table, const void
 	case ACPI_NFIT_TYPE_INTERLEAVE: {
 		struct nfit_idt *nfit_idt = devm_kzalloc(dev, sizeof(*nfit_idt),
 				GFP_KERNEL);
-		struct acpi_nfit_idt *idt = table;
+		struct acpi_nfit_interleave *idt = table;
 
 		if (!nfit_idt)
 			return err;
@@ -305,7 +282,7 @@ static void *add_table(struct acpi_nfit_desc *acpi_desc, void *table, const void
 		nfit_idt->idt = idt;
 		list_add_tail(&nfit_idt->list, &acpi_desc->idts);
 		dev_dbg(dev, "%s: idt index: %d num_lines: %d\n", __func__,
-				idt->base.interleave_index, idt->base.lines);
+				idt->interleave_index, idt->line_count);
 		break;
 	}
 	case ACPI_NFIT_TYPE_FLUSH_ADDRESS:
@@ -408,7 +385,7 @@ static int nfit_mem_add(struct acpi_nfit_desc *acpi_desc,
 		nfit_mem->memdev_bdw = nfit_memdev->memdev;
 		idt_index = nfit_memdev->memdev->interleave_index;
 		list_for_each_entry(nfit_idt, &acpi_desc->idts, list) {
-			if (nfit_idt->idt->base.interleave_index != idt_index)
+			if (nfit_idt->idt->interleave_index != idt_index)
 				continue;
 			nfit_mem->idt_bdw = nfit_idt->idt;
 			break;
@@ -467,7 +444,7 @@ static int nfit_mem_dcr_init(struct acpi_nfit_desc *acpi_desc,
 			nfit_mem->memdev_dcr = nfit_memdev->memdev;
 			idt_index = nfit_memdev->memdev->interleave_index;
 			list_for_each_entry(nfit_idt, &acpi_desc->idts, list) {
-				if (nfit_idt->idt->base.interleave_index != idt_index)
+				if (nfit_idt->idt->interleave_index != idt_index)
 					continue;
 				nfit_mem->idt_dcr = nfit_idt->idt;
 				break;
@@ -690,7 +667,7 @@ static int acpi_nfit_add_dimm(struct acpi_nfit_desc *acpi_desc,
 {
 	struct acpi_device *adev, *adev_dimm;
 	struct device *dev = acpi_desc->dev;
-	u8 *uuid = acpi_nfit_dimm_uuid();
+	const u8 *uuid = to_nfit_uuid(NFIT_DEV_DIMM);
 	unsigned long long sta;
 	int i, rc = -ENODEV;
 	acpi_status status;
@@ -775,7 +752,7 @@ static int acpi_nfit_register_dimms(struct acpi_nfit_desc *acpi_desc)
 static void acpi_nfit_init_dsms(struct acpi_nfit_desc *acpi_desc)
 {
 	struct nd_bus_descriptor *nd_desc = &acpi_desc->nd_desc;
-	u8 *uuid = acpi_nfit_bus_uuid();
+	const u8 *uuid = to_nfit_uuid(NFIT_DEV_BUS);
 	struct acpi_device *adev;
 	int i;
 
@@ -903,7 +880,7 @@ static int acpi_nfit_init_interleave_set(struct acpi_nfit_desc *acpi_desc,
 
 static u64 to_interleave_offset(u64 offset, struct nfit_blk_mmio *mmio)
 {
-	struct acpi_nfit_idt *idt = mmio->idt;
+	struct acpi_nfit_interleave *idt = mmio->idt;
 	u32 sub_line_offset, line_index, line_offset;
 	u64 line_no, table_skip_count, table_offset;
 
@@ -1128,11 +1105,11 @@ static void *nfit_spa_map(struct acpi_nfit_desc *acpi_desc,
 }
 
 static int nfit_blk_init_interleave(struct nfit_blk_mmio *mmio,
-		struct acpi_nfit_idt *idt, u16 interleave_ways)
+		struct acpi_nfit_interleave *idt, u16 interleave_ways)
 {
 	if (idt) {
-		mmio->num_lines = idt->base.lines;
-		mmio->line_size = idt->base.line_size;
+		mmio->num_lines = idt->line_count;
+		mmio->line_size = idt->line_size;
 		if (interleave_ways == 0)
 			return -ENXIO;
 		mmio->table_size = mmio->num_lines * interleave_ways
@@ -1312,7 +1289,7 @@ static int acpi_nfit_register_region(struct acpi_nfit_desc *acpi_desc,
 				blk_valid = 0;
 			} else {
 				nd_mapping->size = nfit_mem->bdw->capacity;
-				nd_mapping->start = nfit_mem->bdw->address;
+				nd_mapping->start = nfit_mem->bdw->start_address;
 				ndr_desc->num_lanes = nfit_mem->bdw->windows;
 			}
 
@@ -1464,27 +1441,24 @@ static struct acpi_driver acpi_nfit_driver = {
 
 static __init int nfit_init(void)
 {
-	char *uuids[] = {
-		/* bus interface */
-		"2f10e7a4-9e91-11e4-89d3-123b93f75cba",
-		/* per-dimm interface */
-		"4309ac30-0d11-11e4-9191-0800200c9a66",
-	};
-	int i;
-
 	BUILD_BUG_ON(sizeof(struct acpi_table_nfit) != 40);
 	BUILD_BUG_ON(sizeof(struct acpi_nfit_system_address) != 56);
 	BUILD_BUG_ON(sizeof(struct acpi_nfit_memory_map) != 48);
-	BUILD_BUG_ON(sizeof(struct acpi_nfit_idt) != 16);
-	BUILD_BUG_ON(sizeof(struct acpi_nfit_smbios) != 8);
+	BUILD_BUG_ON(sizeof(struct acpi_nfit_interleave) != 20);
+	BUILD_BUG_ON(sizeof(struct acpi_nfit_smbios) != 9);
 	BUILD_BUG_ON(sizeof(struct acpi_nfit_control_region) != 80);
 	BUILD_BUG_ON(sizeof(struct acpi_nfit_data_region) != 40);
 
-	for (i = 0; i < ARRAY_SIZE(uuids); i++)
-		if (acpi_str_to_uuid(uuids[i], acpi_nfit_uuids[i]) != AE_OK) {
-			WARN_ON_ONCE(1);
-			return -ENXIO;
-		}
+	acpi_str_to_uuid(UUID_VOLATILE_MEMORY, nfit_uuid[NFIT_SPA_VOLATILE]);
+	acpi_str_to_uuid(UUID_PERSISTENT_MEMORY, nfit_uuid[NFIT_SPA_PM]);
+	acpi_str_to_uuid(UUID_CONTROL_REGION, nfit_uuid[NFIT_SPA_DCR]);
+	acpi_str_to_uuid(UUID_DATA_REGION, nfit_uuid[NFIT_SPA_BDW]);
+	acpi_str_to_uuid(UUID_VOLATILE_VIRTUAL_DISK, nfit_uuid[NFIT_SPA_VDISK]);
+	acpi_str_to_uuid(UUID_VOLATILE_VIRTUAL_CD, nfit_uuid[NFIT_SPA_VCD]);
+	acpi_str_to_uuid(UUID_PERSISTENT_VIRTUAL_DISK, nfit_uuid[NFIT_SPA_PDISK]);
+	acpi_str_to_uuid(UUID_PERSISTENT_VIRTUAL_CD, nfit_uuid[NFIT_SPA_PCD]);
+	acpi_str_to_uuid(UUID_NFIT_BUS, nfit_uuid[NFIT_DEV_BUS]);
+	acpi_str_to_uuid(UUID_NFIT_DIMM, nfit_uuid[NFIT_DEV_DIMM]);
 
 	return acpi_bus_register_driver(&acpi_nfit_driver);
 }
