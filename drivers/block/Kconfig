@@ -324,7 +324,7 @@ config BLK_DEV_NVME
 source "drivers/block/nd/Kconfig"
 
 config E820_PMEM
-	tristate
+	tristate "E820 defined Persistent Memory (legacy)"
 	depends on PHYS_ADDR_T_64BIT
 	depends on X86_PMEM_LEGACY
 	default m if X86_PMEM_LEGACY

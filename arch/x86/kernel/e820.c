@@ -919,8 +919,8 @@ static inline const char *e820_type_to_string(int e820_type)
 	case E820_ACPI:	return "ACPI Tables";
 	case E820_NVS:	return "ACPI Non-volatile Storage";
 	case E820_UNUSABLE:	return "Unusable memory";
-	case E820_PRAM: return "Persistent RAM";
-	case E820_PMEM: return "Persistent I/O Memory";
+	case E820_PRAM: return "Persistent Memory (legacy)";
+	case E820_PMEM: return "Persistent Memory";
 	default:	return "reserved";
 	}
 }

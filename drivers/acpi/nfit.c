@@ -297,7 +297,7 @@ static void *add_table(struct acpi_nfit_desc *acpi_desc, void *table, const void
 		break;
 	default:
 		dev_err(dev, "unknown table '%d' parsing nfit\n", hdr->type);
-		return ERR_PTR(-ENXIO);
+		break;
 	}
 
 	return table + hdr->length;

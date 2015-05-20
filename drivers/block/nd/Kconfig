@@ -33,8 +33,9 @@ config NFIT_TEST
 	  io-memory-resource.
 
 	  Note, this test expects to be able to find at least 256MB of
-	  CMA space (CONFIG_CMA_SIZE_MBYTES, cma=) or it will fail to
-	  load.
+	  contiguous DMA space (CONFIG_CMA_SIZE_MBYTES, cma=) or it
+	  will fail to load.  This much contiguos memory is needed to
+	  properly simulate a DAX capable memory region.
 
 	  Say N unless you are doing development of the 'libnd' subsystem.
 
@@ -60,19 +61,20 @@ config ND_BLK
 	depends on LIBND
 	default LIBND
 	help
-	  This driver performs I/O using a set of mmio windows on a
-	  dimm.  The set of apertures will all access the one DIMM.
-	  Multiple windows allow multiple threads to have a different
-	  portions of the dimm open at one time.
+	  Support NVDIMMs, or other devices, that implement a BLK-mode
+	  access capability.  BLK-mode access uses memory-mapped-i/o
+	  apertures to access persistent media.
 
-	  Say Y if you want to use a NVDIMM with BLK-mode capability
+	  Say Y if your platform firmware emits an ACPI.NFIT table
+	  (CONFIG_ACPI_NFIT), or otherwise exposes BLK-mode
+	  capabilities.
 
 config ND_BTT_DEVS
 	bool
 
 config ND_BTT
 	tristate "BTT: Block Translation Table (atomic sector updates)"
-	depends on LIBND 
+	depends on LIBND
 	default LIBND
 	select ND_BTT_DEVS
 

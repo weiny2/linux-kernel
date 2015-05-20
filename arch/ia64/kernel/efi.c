@@ -1224,7 +1224,7 @@ efi_initialize_iomem_resources(struct resource *code_resource,
 				break;
 
 			case EFI_PERSISTENT_MEMORY:
-				name = "persistent";
+				name = "Persistent Memory";
 				break;
 
 			case EFI_RESERVED_TYPE:
