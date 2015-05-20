@@ -422,7 +422,6 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	/* allocate a buffer and copy the data in */
 	tmpbuf = vmalloc(dp->len);
 	if (!tmpbuf) {
-		dd_dev_info(dd, "Unable to allocate tmp buffer, failing\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
@@ -944,6 +943,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	struct hfi1_pportdata *ppd = NULL;
 	unsigned int index;
 	struct hfi1_link_info link_info;
+
 	dd = hfi1_dd_from_sc_inode(fp->f_inode);
 	if (dd == NULL)
 		return -ENODEV;
