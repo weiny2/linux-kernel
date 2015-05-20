@@ -37,16 +37,6 @@ struct anon_vma {
 	atomic_t refcount;
 
 	/*
-	 * NOTE: the LSB of the rb_root.rb_node is set by
-	 * mm_take_all_locks() _after_ taking the above lock. So the
-	 * rb_root must only be read/written after taking the above lock
-	 * to be sure to see a valid next pointer. The LSB bit itself
-	 * is serialized by a system wide lock only visible to
-	 * mm_take_all_locks() (mm_all_locks_mutex).
-	 */
-	struct rb_root rb_root;	/* Interval tree of private "related" vmas */
-
-	/*
 	 * Count of child anon_vmas and VMAs which points to this anon_vma.
 	 *
 	 * This counter is used for making decision about reusing anon_vma
@@ -55,6 +45,16 @@ struct anon_vma {
 	unsigned degree;
 
 	struct anon_vma *parent;	/* Parent of this anon_vma */
+
+	/*
+	 * NOTE: the LSB of the rb_root.rb_node is set by
+	 * mm_take_all_locks() _after_ taking the above lock. So the
+	 * rb_root must only be read/written after taking the above lock
+	 * to be sure to see a valid next pointer. The LSB bit itself
+	 * is serialized by a system wide lock only visible to
+	 * mm_take_all_locks() (mm_all_locks_mutex).
+	 */
+	struct rb_root rb_root;	/* Interval tree of private "related" vmas */
 };
 
 /*
