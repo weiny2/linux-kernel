@@ -5,5 +5,5 @@ cd tests
 git remote update
 git pull --rebase
 # do checkpatch too
-./build.sh "" "" "" 1
+./build.sh "" "" "" 1 "/usr/src/linux-4.0.4"
 

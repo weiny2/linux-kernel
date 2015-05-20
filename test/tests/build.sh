@@ -4,7 +4,8 @@
 #
 # Author: Dennis Dalessandro (dennis.dalessandro@intel.com)
 #
-# Feed in three args, the path to the kernel build dir, your WFR sourece dir and sparse flag
+# Feed in five args, the path to the kernel build dir, your WFR sourece dir, sparse flag,
+# checkpatch flag, and the path to the kernel dir for coccinelle
 
 kernel_build=$1
 if [ -z $1 ]; then
@@ -25,6 +26,8 @@ checkpatch=$4
 if [ -z $4 ]; then
 	checkpatch=0
 fi
+
+kernel_cocci=$5
 
 if [ ! -d $kernel_build ]; then
 	echo "Could not find dir: $kernel_build for kernel build"
@@ -60,6 +63,20 @@ if [ $checkpatch -eq 1 ];then
 		echo "Failed checkpatch whitelist comparison"
 	fi
 	rm -f checkpatch.current
+fi
+
+if [ ! -z $kernel_cocci ];then
+	if [ -d $kernel_cocci ]; then
+		cd $kernel_cocci
+		make coccicheck MODE=report M=$wfr_src > $wfr_src/coccinelle.current
+		cd $wfr_src
+		if ! diff -c test/tests/coccinelle.whitelist coccinelle.current; then
+			echo "Failed coccinelle whitelist comparison"
+		fi
+		rm -f coccinelle.current
+	else
+		echo "Failed to do coccicheck. Could not find dir: $kernel_cocci"
+	fi
 fi
 
 echo "Doing build in $PWD"
