@@ -55,6 +55,7 @@
 #include <linux/idr.h>
 #include <linux/gfp.h>
 #include <rdma/hfi_types.h>
+#include <rdma/opa_smi.h>
 
 /*
  * TODO: These macros are required for compiling against the OPA headers
@@ -72,6 +73,8 @@
  * with data types defined by the common provider logic.
  */
 struct hfi_devdata;
+
+struct opa_core_device;
 
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
@@ -228,20 +231,17 @@ struct hfi_dlid_assign_args;
  * @pguid: port GUID for this port
  */
 struct opa_pport_desc {
-	struct hfi_devdata *devdata;
 	__be64 pguid;
 };
 
 /**
  * struct opa_dev_desc - Used for querying immutable per node
  * opa*_hfi HW  details
- * @devdata: underlying hfi* device structure
  * @oui: Organizational Unique Identifier
  * @num_pports: Number of physical ports
  * @nguid: node GUID, unique per node
  */
 struct opa_dev_desc {
-	struct hfi_devdata *devdata;
 	u8 oui[3];
 	u8 num_pports;
 	__be64 nguid;
@@ -261,6 +261,10 @@ struct opa_dev_desc {
  * @ev_release: Release an Event Completion Queue or Event Counter
  * @dlid_assign: Assign entries from the DLID relocation table
  * @dlid_release: Release entries from the DLID relocation table
+ * @get_device_desc: get device (node) specific HW details
+ * @get_port_desc: get port specific HW details
+ * @get_sma: get method for opa sma to get HW related attributes
+ * @set_sma: set method for opa sma to set HW related attributes
  */
 struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
@@ -280,8 +284,14 @@ struct opa_core_ops {
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_ctx *ctx);
-	void (*get_device_desc)(struct opa_dev_desc *desc);
-	void (*get_port_desc)(struct opa_pport_desc *pdesc, u8 port_num);
+	void (*get_device_desc)(struct opa_core_device *odev,
+						struct opa_dev_desc *desc);
+	void (*get_port_desc)(struct opa_core_device *odev,
+				struct opa_pport_desc *pdesc, u8 port_num);
+	int (*get_sma)(struct opa_core_device *odev, u16 attr_id,
+		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len);
+	int (*set_sma)(struct opa_core_device *odev, u16 attr_id,
+		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len);
 };
 
 /**

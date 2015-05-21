@@ -85,47 +85,25 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 				   u32 *resp_len)
 {
 	struct opa_node_info *ni;
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
-	struct pci_dev *pdev = container_of(ibdev->dma_device,
-				struct pci_dev, dev);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 
 	ni = (struct opa_node_info *)data;
 
-	/* GUID 0 is illegal */
-	if (am || ibp->guid == 0) {
-		smp->status |= IB_SMP_INVALID_FIELD;
+	if (am) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
 		return reply(ibh);
 	}
-	/* FXRTODO: Implement code to get HW data from opa2_hfi */
-	ni->port_guid = ibp->guid;
-	ni->base_version = JUMBO_MGMT_BASE_VERSION;
-	ni->class_version = OPA_SMI_CLASS_VERSION;
-	ni->node_type = 1;     /* channel adapter */
-	ni->num_ports = ibdev->phys_port_cnt;
+
 	/* This is already in network order */
 	ni->system_image_guid = opa_ib_sys_guid;
-	ni->node_guid = ibd->node_guid;
-	ni->local_port_num = port;
-	ni->device_id = cpu_to_be16(pdev->device);
-#if 0
-	ni->partition_cap = cpu_to_be16(qib_get_npkeys(dd));
-	ni->revision = cpu_to_be32(dd->minrev);
-#else
-	/* TODO - stubs*/
+	/* FXRTODO: Fill this in after implmenting Pkeys */
 	ni->partition_cap = OPA_IB_PORT_NUM_PKEYS;
-	ni->revision = 0;
-#endif
-	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
-
-	if (resp_len)
-		*resp_len += sizeof(*ni);
 
 	return reply(ibh);
 }
 
-static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
+static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
 			    u32 *resp_len)
 {
@@ -212,10 +190,74 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		/* FALLTHROUGH */
 #endif
 	default:
-		smp->status |= IB_SMP_UNSUP_METH_ATTR;
+		smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
 		ret = reply(ibh);
 		break;
 	}
+	return ret;
+}
+
+
+static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
+			    u8 *data, struct ib_device *ibdev, u8 port,
+			    u32 *resp_len)
+{
+	int ret;
+	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct opa_core_device *odev = ibd->odev;
+	struct opa_core_ops *ops = odev->bus_ops;
+
+	/*
+	 * Let the opa*_hfi driver process the MAD attribute first. This way
+	 * any methods that are unsupported by the HW can be detected early.
+	 */
+	ret = ops->get_sma(odev, attr_id, smp, am, data, port, resp_len);
+
+	/* The packet cannot be consumed */
+	if (ret == IB_MAD_RESULT_FAILURE)
+		goto err;
+
+	if (!(smp->status &
+		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB)))
+		ret = __subn_get_opa_sma(attr_id, smp, am, data,
+					       ibdev, port, resp_len);
+err:
+	return ret;
+}
+
+static int __subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
+			    u8 *data, struct ib_device *ibdev, u8 port,
+			    u32 *resp_len)
+{
+	/* FXRTODO: Implment set method */
+	return 0;
+}
+
+static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
+			    u8 *data, struct ib_device *ibdev, u8 port,
+			    u32 *resp_len)
+{
+	int ret;
+	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct opa_core_device *odev = ibd->odev;
+	struct opa_core_ops *ops = odev->bus_ops;
+
+	/*
+	 * Let the opa*_hfi driver process the MAD attribute first. This way
+	 * any methods that are unsupported by the HW can be detected early.
+	 */
+	ret = ops->set_sma(odev, attr_id, smp, am, data, port, resp_len);
+
+	/* The packet cannot be consumed */
+	if (ret == IB_MAD_RESULT_FAILURE)
+		goto err;
+
+	if (!(smp->status &
+		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB)))
+		ret = __subn_set_opa_sma(attr_id, smp, am, data,
+					       ibdev, port, resp_len);
+err:
 	return ret;
 }
 
@@ -241,7 +283,7 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 	am = be32_to_cpu(smp->attr_mod);
 	attr_id = smp->attr_id;
 	if (smp->class_version != OPA_SMI_CLASS_VERSION) {
-		smp->status |= IB_SMP_UNSUP_VERSION;
+		smp->status |= cpu_to_be16(IB_MGMT_MAD_STATUS_BAD_VERSION);
 		ret = reply(ibh);
 		goto bail;
 	}
@@ -296,19 +338,19 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		}
 	case IB_MGMT_METHOD_SET:
 
-	/* FXRTODO: Implement Set() and SetResp()*/
-#if 0
 		switch (attr_id) {
 		default:
 			ret = subn_set_opa_sma(attr_id, smp, am, data,
 					       ibdev, port, resp_len);
 			goto bail;
 		case OPA_ATTRIB_ID_AGGREGATE:
+	/* FXRTODO: Implement subn_set_opa_aggregate */
+#if 0
 			ret = subn_set_opa_aggregate(smp, ibdev, port,
 						     resp_len);
+#endif
 			goto bail;
 		}
-#endif
 		goto bail;
 	case IB_MGMT_METHOD_TRAP:
 	case IB_MGMT_METHOD_REPORT:
@@ -322,7 +364,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 		ret = IB_MAD_RESULT_SUCCESS;
 		goto bail;
 	default:
-		smp->status |= IB_SMP_UNSUP_METHOD;
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD);
 		ret = reply(ibh);
 	}
 
