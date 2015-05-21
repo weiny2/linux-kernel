@@ -101,7 +101,6 @@ MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cab
 uint rcv_intr_dynamic = 1; /* enable dynamic mode for rcv int mitigation*/
 static ushort crc_14b_sideband = 1;
 static uint use_flr = 1;
-static uint link_speed_mask; /* 1 = 12.5G, 2 = 25G */
 uint quick_linkup; /* skip LNI */
 
 struct flag_table {
@@ -3329,6 +3328,18 @@ void handle_link_up(struct work_struct *work)
 	 * And (re)set link up default values.
 	 */
 	set_linkup_defaults(ppd);
+
+	/* enforce link speed enabled */
+	if ((ppd->link_speed_active & ppd->link_speed_enabled) == 0) {
+		/* oops - current speed is not enabled, bounce */
+		dd_dev_err(ppd->dd,
+			"Link speed active 0x%x is outside enabled 0x%x, downing link\n",
+			ppd->link_speed_active, ppd->link_speed_enabled);
+		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SPEED_POLICY, 0,
+			OPA_LINKDOWN_REASON_SPEED_POLICY);
+		set_link_state(ppd, HLS_DN_OFFLINE);
+		start_link(ppd);
+	}
 }
 
 /*
@@ -10218,22 +10229,12 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
 
-	/* set supported speed mask */
-	dd->pport->link_speed_supported =
-			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
-	/* apply link speed mask module parameter */
-	if (link_speed_mask) {
-		if (dd->pport->link_speed_supported & link_speed_mask)
-			dd->pport->link_speed_supported &= link_speed_mask;
-		else
-			dd_dev_err(dd, "Link speed mask invalid, ignored\n");
-	}
+	/* speeds the hardware can support */
+	dd->pport->link_speed_supported = OPA_LINK_SPEED_25G;
+	/* speeds allowed to run at */
 	dd->pport->link_speed_enabled = dd->pport->link_speed_supported;
 	/* give a reasonable active value, will be set on link up */
-	if (dd->pport->link_speed_supported & OPA_LINK_SPEED_25G)
-		dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
-	else
-		dd->pport->link_speed_active = OPA_LINK_SPEED_12_5G;
+	dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
 
 	dd->chip_rcv_contexts = read_csr(dd, RCV_CONTEXTS);
 	dd->chip_send_contexts = read_csr(dd, SEND_CONTEXTS);
