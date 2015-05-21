@@ -109,10 +109,6 @@ uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cable");
 
-static uint link_speed_mask;
-module_param(link_speed_mask, uint, S_IRUGO);
-MODULE_PARM_DESC(link_speed_mask, "Mask of enabled link speeds (1 = 12.5G, 2 = 25G)");
-
 uint quick_linkup;
 module_param(quick_linkup, uint, S_IRUGO);
 MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
@@ -3311,6 +3307,18 @@ void handle_link_up(struct work_struct *work)
 	 * And (re)set link up default values.
 	 */
 	set_linkup_defaults(ppd);
+
+	/* enforce link speed enabled */
+	if ((ppd->link_speed_active & ppd->link_speed_enabled) == 0) {
+		/* oops - current speed is not enabled, bounce */
+		dd_dev_err(ppd->dd,
+			"Link speed active 0x%x is outside enabled 0x%x, downing link\n",
+			ppd->link_speed_active, ppd->link_speed_enabled);
+		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SPEED_POLICY, 0,
+			OPA_LINKDOWN_REASON_SPEED_POLICY);
+		set_link_state(ppd, HLS_DN_OFFLINE);
+		start_link(ppd);
+	}
 }
 
 /*
@@ -3627,7 +3635,6 @@ void handle_verify_cap(struct work_struct *work)
 	 * LNI, is also be available at this point.
 	 */
 	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
-	hfi1_read_link_quality(dd, &ppd->link_quality);
 	/* print the active widths */
 	get_link_widths(dd, &active_tx, &active_rx);
 	dd_dev_info(dd,
@@ -10105,22 +10112,12 @@ struct hfi_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
 
-	/* set supportd speed mask */
-	dd->pport->link_speed_supported =
-			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
-	/* apply link speed mask module parameter */
-	if (link_speed_mask) {
-		if (dd->pport->link_speed_supported & link_speed_mask)
-			dd->pport->link_speed_supported &= link_speed_mask;
-		else
-			dd_dev_err(dd, "Link speed mask invalid, ignored\n");
-	}
+	/* speeds the hardware can support */
+	dd->pport->link_speed_supported = OPA_LINK_SPEED_25G;
+	/* speeds allowed to run at */
 	dd->pport->link_speed_enabled = dd->pport->link_speed_supported;
 	/* give a reasonable active value, will be set on link up */
-	if (dd->pport->link_speed_supported & OPA_LINK_SPEED_25G)
-		dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
-	else
-		dd->pport->link_speed_active = OPA_LINK_SPEED_12_5G;
+	dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
 
 	dd->chip_rcv_contexts = read_csr(dd, RCV_CONTEXTS);
 	dd->chip_send_contexts = read_csr(dd, SEND_CONTEXTS);
