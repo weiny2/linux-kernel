@@ -8,6 +8,8 @@
  * BIOS Enhanced Disk Drive Services (EDD)
  * conformant to T13 Committee www.t13.org
  *   projects 1572D, 1484D, 1386D, 1226DT
+ * and the original Phoenix BIOS EDD 3.0 spec from
+ * <http://mbldr.sourceforge.net/specsedd30.pdf>
  *
  * This code takes information provided by BIOS EDD calls
  * fn41 - Check Extensions Present and
@@ -545,8 +547,9 @@ edd_has_edd30(struct edd_device *edev)
 	}
 
 
-	/* We support only T13 spec */
-	if (info->params.device_path_info_length != 44)
+	/* We support T13 d1572 and the original Phoenix spec */
+	if (info->params.device_path_info_length != 44 &&
+	    info->params.device_path_info_length != 36)
 		return 0;
 
 	for (i = 30; i < info->params.device_path_info_length + 30; i++)
