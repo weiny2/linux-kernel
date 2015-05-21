@@ -997,6 +997,7 @@ static void arm_gasket_logic(struct hfi_devdata *dd)
  */
 int do_pcie_gen3_transition(struct hfi_devdata *dd)
 {
+	struct pci_dev *parent;
 	u64 fw_ctrl;
 	u64 reg;
 	u32 reg32, fs, lf;
@@ -1199,7 +1200,29 @@ retry:
 	 */
 
 	/* step 5g: Set target link speed */
-	/* set target link speed to be Gen3 */
+	/*
+	 * Set target link speed to be target on both device and parent.
+	 * On setting the parent: Some system BIOSs "helpfully" set the
+	 * parent target speed to Gen2 to match the ASIC's initial speed.
+	 * We can set the target Gen3 because we have already checked
+	 * that it is Gen3 capable earlier.
+	 */
+	dd_dev_info(dd, "%s: setting parent target link speed\n", __func__);
+	parent = dd->pcidev->bus->self;
+	pcie_capability_read_word(parent, PCI_EXP_LNKCTL2, &lnkctl2);
+	dd_dev_info(dd, "%s: ..old link control2: 0x%x\n", __func__,
+		(u32)lnkctl2);
+	/* only write to parent if target is not as high as ours */
+	if ((lnkctl2 & LNKCTL2_TARGET_LINK_SPEED_MASK) < target_vector) {
+		lnkctl2 &= ~LNKCTL2_TARGET_LINK_SPEED_MASK;
+		lnkctl2 |= target_vector;
+		dd_dev_info(dd, "%s: ..new link control2: 0x%x\n", __func__,
+			(u32)lnkctl2);
+		pcie_capability_write_word(parent, PCI_EXP_LNKCTL2, lnkctl2);
+	} else {
+		dd_dev_info(dd, "%s: ..target speed is OK\n", __func__);
+	}
+
 	dd_dev_info(dd, "%s: setting target link speed\n", __func__);
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL2, &lnkctl2);
 	dd_dev_info(dd, "%s: ..old link control2: 0x%x\n", __func__,
