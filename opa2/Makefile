@@ -15,3 +15,4 @@ opa2_hfi-y += iommu.o
 opa2_hfi-y += pcie.o
 opa2_hfi-y += portals.o
 opa2_hfi-y += privileged.o
+opa2_hfi-y += attr.o

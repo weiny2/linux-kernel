@@ -124,8 +124,8 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	props->vendor_part_id = dd->pcidev->device;
 	props->hw_ver = dd->minrev;
 #else
-	props->vendor_id = ibd->id.vendor;
-	props->vendor_part_id = ibd->id.device;
+	props->vendor_id = ibd->odev->id.vendor;
+	props->vendor_part_id = ibd->odev->id.device;
 	props->hw_ver = 0;
 #endif
 	props->sys_image_guid = opa_ib_sys_guid;
@@ -394,8 +394,7 @@ static void opa_ib_init_port(struct opa_ib_data *ibd,
 	struct opa_pport_desc pdesc;
 	struct opa_core_ops *ops = odev->bus_ops;
 
-	pdesc.devdata = odev->dd;
-	ops->get_port_desc(&pdesc, pidx + 1);
+	ops->get_port_desc(odev, &pdesc, pidx + 1);
 
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->guid = pdesc.pguid;
@@ -420,8 +419,7 @@ static int opa_ib_add(struct opa_core_device *odev)
 	struct opa_dev_desc desc;
 	struct opa_core_ops *ops = odev->bus_ops;
 
-	desc.devdata = odev->dd;
-	ops->get_device_desc(&desc);
+	ops->get_device_desc(odev, &desc);
 	num_ports = desc.num_pports;
 	ibd = kzalloc(sizeof(*ibd) + sizeof(*ibp) * num_ports, GFP_KERNEL);
 	if (!ibd) {
@@ -433,8 +431,8 @@ static int opa_ib_add(struct opa_core_device *odev)
 	ibd->node_guid = desc.nguid;
 	memcpy(ibd->oui, desc.oui, ARRAY_SIZE(ibd->oui));
 	ibd->pport = (struct opa_ib_portdata *)(ibd + 1);
-	ibd->id = odev->id;
 	ibd->parent_dev = odev->dev.parent;
+	ibd->odev = odev;
 
 	/* FXRTODO: Move pkey support to opa2_hfi  */
 	for (i = 0; i < num_ports; i++)

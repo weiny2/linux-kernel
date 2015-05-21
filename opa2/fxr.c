@@ -137,16 +137,18 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	kfree(dd);
 }
 
-static void hfi_port_desc(struct opa_pport_desc *pdesc, u8 port_num)
+static void hfi_port_desc(struct opa_core_device *odev,
+				struct opa_pport_desc *pdesc, u8 port_num)
 {
-	struct hfi_pportdata *ppd = get_ppd_pn(pdesc->devdata, port_num);
+	struct hfi_pportdata *ppd = get_ppd_pn(odev->dd, port_num);
 
 	pdesc->pguid = ppd->pguid;
 }
 
-static void hfi_device_desc(struct opa_dev_desc *desc)
+static void hfi_device_desc(struct opa_core_device *odev,
+						struct opa_dev_desc *desc)
 {
-	struct hfi_devdata *dd = desc->devdata;
+	struct hfi_devdata *dd = odev->dd;
 
 	memcpy(desc->oui, dd->oui, ARRAY_SIZE(dd->oui));
 	desc->num_pports = dd->num_pports;
@@ -168,6 +170,8 @@ static struct opa_core_ops opa_core_ops = {
 	.dlid_release = hfi_dlid_release,
 	.get_device_desc = hfi_device_desc,
 	.get_port_desc = hfi_port_desc,
+	.get_sma = hfi_get_sma,
+	.set_sma = hfi_set_sma,
 };
 
 /**

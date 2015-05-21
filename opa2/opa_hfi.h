@@ -194,6 +194,11 @@ void hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid);
 #define get_ppd_pn(dd, pn)		(&(dd)->pport[pnum_to_pidx(pn)])
 #define get_ppd_pidx(dd, idx)		(&(dd)->pport[idx])
 
+int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
+			u32 am, u8 *data, u8 port, u32 *resp_len);
+int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
+				 u32 am, u8 *data, u8 port, u32 *resp_len);
+
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of

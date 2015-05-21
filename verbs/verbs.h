@@ -98,8 +98,8 @@ struct opa_ib_portdata {
 };
 
 struct opa_ib_data {
+	struct opa_core_device *odev;
 	struct ib_device ibdev;
-	struct opa_core_device_id id;
 	__be64 node_guid;
 	u8 num_pports;
 	u8 oui[3];
