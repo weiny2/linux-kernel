@@ -93,10 +93,6 @@ MODULE_PARM_DESC(krcvqs, "Array of the number of kernel receive queues by VL");
 /* computed based on above array */
 unsigned n_krcvqs;
 
-/* interrupt testing */
-static unsigned int test_interrupts;
-module_param_named(test_interrupts, test_interrupts, uint, S_IRUGO);
-
 static unsigned hfi1_rcvarr_split = 25;
 module_param_named(rcvarr_split, hfi1_rcvarr_split, uint, S_IRUGO);
 MODULE_PARM_DESC(rcvarr_split, "Percent of context's RcvArray entries used for Eager buffers");
@@ -1153,9 +1149,7 @@ static int __init hfi1_mod_init(void)
 	if (ret)
 		goto bail;
 
-	/* validate max and default MTUs before any devices start */
-	if (!valid_opa_mtu(default_mtu))
-		default_mtu = HFI1_DEFAULT_ACTIVE_MTU;
+	/* validate max MTU before any devices start */
 	if (!valid_opa_mtu(hfi1_max_mtu))
 		hfi1_max_mtu = HFI1_DEFAULT_MAX_MTU;
 	/* valid CUs run from 1-128 in powers of 2 */
@@ -1429,14 +1423,6 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	sdma_start(dd);
-
-	/* interrupt testing */
-	if (test_interrupts) {
-		static atomic_t tested;
-
-		if (atomic_inc_return(&tested) <= test_interrupts)
-			force_all_interrupts(dd);
-	}
 
 	return 0;
 

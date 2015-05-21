@@ -1057,7 +1057,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				mtu,
 				(pi->neigh_mtu.pvlx_to_mtu[0] >> 4) & 0xF);
 			smp->status |= IB_SMP_INVALID_FIELD;
-			mtu = default_mtu; /* use a valid MTU */
+			mtu = hfi1_max_mtu; /* use a valid MTU */
 		}
 		if (dd->vld[i].mtu != mtu) {
 			dd_dev_info(dd,

@@ -1220,6 +1220,27 @@ DEFINE_EVENT(hfi1_sdma_rc, hfi1_rc_sendcomplete,
 	     TP_ARGS(qp, psn)
 );
 
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi1_misc
+
+TRACE_EVENT(hfi1_interrupt,
+	TP_PROTO(struct hfi1_devdata *dd, const struct is_table *is_entry,
+		 int src),
+	TP_ARGS(dd, is_entry, src),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(dd)
+		__array(char, buf, 64)
+		__field(int, src)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(dd)
+		is_entry->is_name(__entry->buf, 64, src - is_entry->start);
+		__entry->src = src;
+	),
+	TP_printk("[%s] source: %s [%d]", __get_str(dev), __entry->buf,
+		  __entry->src)
+);
+
 /*
  * Note:
  * This produces a REALLY ugly trace in the console output when the string is

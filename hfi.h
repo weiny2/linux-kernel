@@ -374,20 +374,18 @@ struct hfi1_sge_state;
 #define __HLS_UP_ACTIVE_BP	2
 #define __HLS_DN_DOWNDEF_BP	3	/* link down default */
 #define __HLS_DN_POLL_BP	4
-#define __HLS_DN_SLEEP_BP	5
-#define __HLS_DN_DISABLE_BP	6
-#define __HLS_DN_OFFLINE_BP	7
-#define __HLS_VERIFY_CAP_BP	8
-#define __HLS_GOING_UP_BP	9
-#define __HLS_GOING_OFFLINE_BP 10
-#define __HLS_LINK_COOLDOWN_BP 11
+#define __HLS_DN_DISABLE_BP	5
+#define __HLS_DN_OFFLINE_BP	6
+#define __HLS_VERIFY_CAP_BP	7
+#define __HLS_GOING_UP_BP	8
+#define __HLS_GOING_OFFLINE_BP  9
+#define __HLS_LINK_COOLDOWN_BP 10
 
 #define HLS_UP_INIT	  (1 << __HLS_UP_INIT_BP)
 #define HLS_UP_ARMED	  (1 << __HLS_UP_ARMED_BP)
 #define HLS_UP_ACTIVE	  (1 << __HLS_UP_ACTIVE_BP)
 #define HLS_DN_DOWNDEF	  (1 << __HLS_DN_DOWNDEF_BP) /* link down default */
 #define HLS_DN_POLL	  (1 << __HLS_DN_POLL_BP)
-#define HLS_DN_SLEEP	  (1 << __HLS_DN_SLEEP_BP)
 #define HLS_DN_DISABLE	  (1 << __HLS_DN_DISABLE_BP)
 #define HLS_DN_OFFLINE	  (1 << __HLS_DN_OFFLINE_BP)
 #define HLS_VERIFY_CAP	  (1 << __HLS_VERIFY_CAP_BP)
@@ -782,6 +780,7 @@ struct hfi1_devdata {
 	/* SPC freeze waitqueue and variable */
 	wait_queue_head_t		  sdma_unfreeze_wq;
 	atomic_t			  sdma_unfreeze_count;
+
 
 	/* hfi1_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
@@ -1321,6 +1320,7 @@ static inline struct cc_state *get_cc_state(struct hfi1_pportdata *ppd)
 #define HFI1_HAS_SDMA_TIMEOUT  0x8
 #define HFI1_HAS_SEND_DMA      0x10   /* Supports Send DMA */
 #define HFI1_FORCED_FREEZE     0x80   /* driver forced freeze mode */
+#define HFI1_DO_INIT_ASIC      0x100  /* This device will init the ASIC */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
 #define HFI1_PBC_LENGTH_MASK                     ((1 << 11) - 1)
@@ -1467,11 +1467,7 @@ const char *get_unit_name(int unit);
  */
 static inline void flush_wc(void)
 {
-#if defined(CONFIG_X86_64)
 	asm volatile("sfence" : : : "memory");
-#else
-	wmb(); /* no reorder around wc flush */
-#endif
 }
 
 void handle_eflags(struct hfi1_packet *packet);
@@ -1487,7 +1483,6 @@ void update_sge(struct hfi1_sge_state *ss, u32 length);
 
 /* global module parameter variables */
 extern unsigned int hfi1_max_mtu;
-extern unsigned int default_mtu;
 extern unsigned int hfi1_cu;
 extern unsigned int user_credit_return_threshold;
 extern uint num_rcv_contexts;
