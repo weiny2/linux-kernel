@@ -816,7 +816,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		qp->remote_qpn = attr->dest_qp_num;
 
 	if (attr_mask & IB_QP_SQ_PSN) {
-		qp->s_next_psn = mask_psn(attr->sq_psn);
+		qp->s_next_psn = attr->sq_psn & PSN_MODIFY_MASK;
 		qp->s_psn = qp->s_next_psn;
 		qp->s_sending_psn = qp->s_next_psn;
 		qp->s_last_psn = qp->s_next_psn - 1;
@@ -824,7 +824,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_RQ_PSN)
-		qp->r_psn = mask_psn(attr->rq_psn);
+		qp->r_psn = attr->rq_psn & PSN_MODIFY_MASK;
 
 	if (attr_mask & IB_QP_ACCESS_FLAGS)
 		qp->qp_access_flags = attr->qp_access_flags;
