@@ -56,47 +56,26 @@
 #include "hfi.h"
 #include "trace.h"
 
-static uint fw_8051_load = 1;
-module_param_named(fw_8051_load, fw_8051_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_8051_load, "Load the 8051 firmware");
-
-static uint fw_fabric_serdes_load = 1;
-module_param_named(fw_fabric_serdes_load, fw_fabric_serdes_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_fabric_serdes_load, "Load the fabric SerDes firmware");
-
-static uint fw_pcie_serdes_load = 1;
-module_param_named(fw_pcie_serdes_load, fw_pcie_serdes_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_pcie_serdes_load, "Load the PCIe SerDes firmware");
-
-static uint fw_sbus_load = 1;
-module_param_named(fw_sbus_load, fw_sbus_load, uint, S_IRUGO);
-MODULE_PARM_DESC(fw_sbus_load, "Load the SBus firmware");
-
+/*
+ * Make it easy to toggle firmware file name and if it gets loaded by
+ * editing the following. This may be something we do while in development
+ * but not necessarily something a user would ever need to use.
+ */
 #define DEFAULT_FW_8051_NAME_FPGA "hfi_dc8051.bin"
 #define DEFAULT_FW_8051_NAME_ASIC "hfi1_dc8051.fw"
 #define DEFAULT_FW_FABRIC_NAME "hfi1_fabric.fw"
 #define DEFAULT_FW_SBUS_NAME "hfi1_sbus.fw"
 #define DEFAULT_FW_PCIE_NAME "hfi1_pcie.fw"
+static uint fw_8051_load = 1;
+static uint fw_fabric_serdes_load = 1;
+static uint fw_pcie_serdes_load = 1;
+static uint fw_sbus_load = 1;
 
+/* Firmware file names get set in hfi1_firmware_init() based on the above */
 static char *fw_8051_name;
-module_param_named(fw_8051_name, fw_8051_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fw_8051_name, "8051 firmware name");
-
 static char *fw_fabric_serdes_name;
-module_param_named(
-	fw_fabric_serdes_name,
-	fw_fabric_serdes_name,
-	charp,
-	S_IRUGO);
-MODULE_PARM_DESC(fw_fabric_serdes_name, "Fabric SerDes firmware name");
-
 static char *fw_sbus_name;
-module_param_named(fw_sbus_name, fw_sbus_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fw_sbus_name, "SBus firmware name");
-
 static char *fw_pcie_serdes_name;
-module_param_named(fw_pcie_serdes_name, fw_pcie_serdes_name, charp, S_IRUGO);
-MODULE_PARM_DESC(fw_pcie_serdes_name, "PCIe SerDes firmware name");
 
 #define SBUS_MAX_POLL_COUNT 100
 #define SBUS_COUNTER(reg, name) \
@@ -439,7 +418,7 @@ static int obtain_one_firmware(struct hfi1_devdata *dd, const char *name,
 						sizeof(struct firmware_file);
 			/*
 			 * Header does not include r2 and mu - generate here.
-			 * For now, fail if validating.
+			 * For now, fail.
 			 */
 			dd_dev_err(dd, "driver is unable to validate firmware without r2 and mu (not in firmware file)\n");
 			ret = -EINVAL;
@@ -826,7 +805,6 @@ static int load_8051_firmware(struct hfi1_devdata *dd,
 	 */
 	/*
 	 * Firmware load step 6.  Set MISC_CFG_FW_CTRL.FW_8051_LOADED
-	 * Clear or set DISABLE_VALIDATION depending on if we are validating.
 	 */
 	write_csr(dd, MISC_CFG_FW_CTRL, MISC_CFG_FW_CTRL_FW_8051_LOADED_SMASK);
 
@@ -937,7 +915,6 @@ int sbus_request_slow(struct hfi1_devdata *dd,
 		      u8 receiver_addr, u8 data_addr, u8 command, u32 data_in)
 {
 	u64 reg, count = 0;
-	int ret = 0;
 
 	sbus_request(dd, receiver_addr, data_addr, command, data_in);
 	write_csr(dd, ASIC_CFG_SBUS_EXECUTE,
@@ -946,24 +923,33 @@ int sbus_request_slow(struct hfi1_devdata *dd,
 	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
 	while (!((reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) &&
 		 (reg & ASIC_STS_SBUS_RESULT_RCV_DATA_VALID_SMASK))) {
-		if (count++ >= SBUS_MAX_POLL_COUNT)
-			/* We timed out waiting but proceed anyway */
-			break;
-		udelay(1);
-		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
-	}
-	write_csr(dd, ASIC_CFG_SBUS_EXECUTE, 0);
-	/* Wait for DONE to clear after EXECUTE is cleared */
-	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
-	while (reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) {
 		if (count++ >= SBUS_MAX_POLL_COUNT) {
-			ret = -ETIME;
-			break;
+			u64 counts = read_csr(dd, ASIC_STS_SBUS_COUNTERS);
+			/*
+			 * If the loop has timed out, we are OK if DONE bit
+			 * is set and RCV_DATA_VALID and EXECUTE counters
+			 * are the same. If not, we cannot proceed.
+			 */
+			if ((reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) &&
+			    (SBUS_COUNTER(counts, RCV_DATA_VALID) ==
+			     SBUS_COUNTER(counts, EXECUTE)))
+				break;
+			return -ETIMEDOUT;
 		}
 		udelay(1);
 		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
 	}
-	return ret;
+	count = 0;
+	write_csr(dd, ASIC_CFG_SBUS_EXECUTE, 0);
+	/* Wait for DONE to clear after EXECUTE is cleared */
+	reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
+	while (reg & ASIC_STS_SBUS_RESULT_DONE_SMASK) {
+		if (count++ >= SBUS_MAX_POLL_COUNT)
+			return -ETIME;
+		udelay(1);
+		reg = read_csr(dd, ASIC_STS_SBUS_RESULT);
+	}
+	return 0;
 }
 
 static int load_fabric_serdes_firmware(struct hfi1_devdata *dd,

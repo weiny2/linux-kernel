@@ -89,33 +89,19 @@ uint rcv_intr_count = 16; /* same as qib */
 module_param(rcv_intr_count, uint, S_IRUGO);
 MODULE_PARM_DESC(rcv_intr_count, "Receive interrupt mitigation count");
 
-uint rcv_intr_dynamic = 1; /* enable dynamic mode */
-module_param(rcv_intr_dynamic, uint, S_IRUGO);
-MODULE_PARM_DESC(rcv_intr_dynamic, "Enable dynamic receive interrupt mitigation adjustments: note rcv_intr_timeout is now a max value");
-
 ushort link_crc_mask = SUPPORTED_CRCS;
 module_param(link_crc_mask, ushort, S_IRUGO);
 MODULE_PARM_DESC(link_crc_mask, "CRCs to use on the link");
-
-static ushort crc_14b_sideband = 1;
-module_param(crc_14b_sideband, ushort, S_IRUGO);
-MODULE_PARM_DESC(crc_14b_sideband, "Use sideband credit return (14b CRC only)");
-
-static uint use_flr = 1;
-module_param_named(use_flr, use_flr, uint, S_IRUGO);
-MODULE_PARM_DESC(use_flr, "Initialize the SPC with FLR");
 
 uint loopback;
 module_param_named(loopback, loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(loopback, "Put into loopback mode (1 = serdes, 3 = external cable");
 
-static uint link_speed_mask;
-module_param(link_speed_mask, uint, S_IRUGO);
-MODULE_PARM_DESC(link_speed_mask, "Mask of enabled link speeds (1 = 12.5G, 2 = 25G)");
-
-uint quick_linkup;
-module_param(quick_linkup, uint, S_IRUGO);
-MODULE_PARM_DESC(quick_linkup, "Skip link LNI, going directly to link up");
+/* Other driver tunables */
+uint rcv_intr_dynamic = 1; /* enable dynamic mode for rcv int mitigation*/
+static ushort crc_14b_sideband = 1;
+static uint use_flr = 1;
+uint quick_linkup; /* skip LNI */
 
 struct flag_table {
 	u64 flag;	/* the flag */
@@ -138,6 +124,9 @@ struct flag_table {
 #define VL15CTXT                  1
 #define MIN_KERNEL_KCTXTS         2
 #define NUM_MAP_REGS             32
+
+/* Bit offset into the GUID which carries HFI id information */
+#define GUID_HFI_INDEX_SHIFT     39
 
 /* extract the emulation revision */
 #define emulator_rev(dd) ((dd)->irev >> 8)
@@ -3280,7 +3269,6 @@ void handle_freeze(struct work_struct *work)
 	wait_for_freeze_status(dd, 0);
 
 	if (is_a0(dd)) {
-		dd_dev_info(dd, "Entering SPC freeze\n");
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_FREEZE_SMASK);
 		wait_for_freeze_status(dd, 1);
 		write_csr(dd, CCE_CTRL, CCE_CTRL_SPC_UNFREEZE_SMASK);
@@ -3340,6 +3328,18 @@ void handle_link_up(struct work_struct *work)
 	 * And (re)set link up default values.
 	 */
 	set_linkup_defaults(ppd);
+
+	/* enforce link speed enabled */
+	if ((ppd->link_speed_active & ppd->link_speed_enabled) == 0) {
+		/* oops - current speed is not enabled, bounce */
+		dd_dev_err(ppd->dd,
+			"Link speed active 0x%x is outside enabled 0x%x, downing link\n",
+			ppd->link_speed_active, ppd->link_speed_enabled);
+		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SPEED_POLICY, 0,
+			OPA_LINKDOWN_REASON_SPEED_POLICY);
+		set_link_state(ppd, HLS_DN_OFFLINE);
+		start_link(ppd);
+	}
 }
 
 /*
@@ -4372,21 +4372,6 @@ static void is_reserved_int(struct hfi1_devdata *dd, unsigned int source)
 				is_reserved_name(name, sizeof(name), source));
 }
 
-/*
- * Interrupt source table.
- *
- * Each entry is an interrupt source "type".  It is ordered by increasing
- * number.
- */
-struct is_table {
-	int start;	 /* interrupt source type start */
-	int end;	 /* interrupt source type end */
-	/* routine that returns the name of the interrupt source */
-	char *(*is_name)(char *name, size_t size, unsigned int source);
-	/* routine to call when receiving an interrupt */
-	void (*is_int)(struct hfi1_devdata *dd, unsigned int source);
-};
-
 static const struct is_table is_table[] = {
 /* start		     end
 				name func		interrupt func */
@@ -4413,24 +4398,6 @@ static const struct is_table is_table[] = {
 };
 
 /*
- * Interrupt source name - return the buffer with the text name of the
- * interrupt source.  Source is a bit index into an array of 64-bit integers.
- */
-static char *is_name(char *buf, size_t bsize, unsigned int source)
-{
-	const struct is_table *entry;
-
-	/* avoids a double compare by walking the table in-order */
-	for (entry = &is_table[0]; entry->is_name; entry++) {
-		if (source < entry->end)
-			return entry->is_name(buf, bsize, source-entry->start);
-	}
-	/* fell off the end */
-	snprintf(buf, bsize, "invalid interrupt source %u\n", source);
-	return buf;
-}
-
-/*
  * Interrupt source interrupt - called when the given source has an interrupt.
  * Source is a bit index into an array of 64-bit integers.
  */
@@ -4441,6 +4408,7 @@ static void is_interrupt(struct hfi1_devdata *dd, unsigned int source)
 	/* avoids a double compare by walking the table in-order */
 	for (entry = &is_table[0]; entry->is_name; entry++) {
 		if (source < entry->end) {
+			trace_hfi1_interrupt(dd, entry, source);
 			entry->is_int(dd, source - entry->start);
 			return;
 		}
@@ -6179,7 +6147,6 @@ static const char *link_state_name(u32 state)
 		[__HLS_UP_ACTIVE_BP]	 = "ACTIVE",
 		[__HLS_DN_DOWNDEF_BP]	 = "DOWNDEF",
 		[__HLS_DN_POLL_BP]	 = "POLL",
-		[__HLS_DN_SLEEP_BP]	 = "SLEEP",
 		[__HLS_DN_DISABLE_BP]	 = "DISABLE",
 		[__HLS_DN_OFFLINE_BP]	 = "OFFLINE",
 		[__HLS_VERIFY_CAP_BP]	 = "VERIFY_CAP",
@@ -6261,7 +6228,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 	 * link state is neither of (IB_PORT_ARMED, IB_PORT_ACTIVE), then
 	 * reset is_sm_config_started to 0.
 	 */
-	if ((state != HLS_UP_ARMED) && (state != HLS_UP_ACTIVE))
+	if (!(state & (HLS_UP_ARMED | HLS_UP_ACTIVE)))
 		ppd->is_sm_config_started = 0;
 
 	/*
@@ -6454,8 +6421,8 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		ppd->host_link_state = HLS_GOING_UP;
 		break;
 
-	case HLS_DN_SLEEP:	/* not supported by the HW */
 	case HLS_GOING_OFFLINE:		/* transient within goto_offline() */
+	case HLS_LINK_COOLDOWN:		/* transient within goto_offline() */
 	default:
 		dd_dev_info(dd, "%s: state 0x%x: not supported\n",
 			__func__, state);
@@ -6464,7 +6431,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 	}
 
 	is_down = !!(ppd->host_link_state & (HLS_DN_POLL |
-			HLS_DN_SLEEP | HLS_DN_DISABLE | HLS_DN_OFFLINE));
+			HLS_DN_DISABLE | HLS_DN_OFFLINE));
 
 	if (was_up && is_down && ppd->local_link_down_reason.sma == 0 &&
 	    ppd->neigh_link_down_reason.sma == 0) {
@@ -8239,14 +8206,14 @@ static const char *opa_pstate_name(u32 pstate)
 {
 	static const char * const port_physical_names[] = {
 		"PHYS_NOP",
-		"PHYS_SLEEP",
+		"reserved1",
 		"PHYS_POLL",
 		"PHYS_DISABLED",
 		"PHYS_TRAINING",
 		"PHYS_LINKUP",
 		"PHYS_LINK_ERR_RECOVER",
 		"PHYS_PHY_TEST",
-		"unknown",
+		"reserved8",
 		"PHYS_OFFLINE",
 		"PHYS_GANGED",
 		"PHYS_TEST",
@@ -10105,6 +10072,39 @@ void hfi1_start_cleanup(struct hfi1_devdata *dd)
 	clean_up_interrupts(dd);
 }
 
+#define HFI_BASE_GUID(dev) \
+	(be64_to_cpu((dev)->base_guid) & ~(1ULL << GUID_HFI_INDEX_SHIFT))
+
+/*
+ * Certain chip functions need to be initialized only once per asic
+ * instead of per-device. This function finds the peer device and
+ * checks whether that chip initialization needs to be done by this
+ * device.
+ */
+static void asic_should_init(struct hfi1_devdata *dd)
+{
+	unsigned long flags;
+	struct hfi1_devdata *tmp, *peer = NULL;
+
+	spin_lock_irqsave(&hfi1_devs_lock, flags);
+	/* Find our peer device */
+	list_for_each_entry(tmp, &hfi1_dev_list, list) {
+		if ((HFI_BASE_GUID(dd) == HFI_BASE_GUID(tmp)) &&
+		    dd->unit != tmp->unit) {
+			peer = tmp;
+			break;
+		}
+	}
+
+	/*
+	 * "Claim" the ASIC for initialization if it hasn't been
+	 " "claimed" yet.
+	 */
+	if (!peer || !(peer->flags & HFI1_DO_INIT_ASIC))
+		dd->flags |= HFI1_DO_INIT_ASIC;
+	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
+}
+
 /**
  * Allocate an initialize the device structure for the hfi.
  * @dev: the pci_dev for hfi1_ib device
@@ -10175,7 +10175,7 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		ppd->vls_operational = ppd->vls_supported;
 		/* Set the default MTU. */
 		for (vl = 0; vl < num_vls; vl++)
-			dd->vld[vl].mtu = default_mtu;
+			dd->vld[vl].mtu = hfi1_max_mtu;
 		dd->vld[15].mtu = MAX_MAD_PACKET;
 		/*
 		 * Set the initial values to reasonable default, will be set
@@ -10229,22 +10229,12 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->irev);
 
-	/* set supported speed mask */
-	dd->pport->link_speed_supported =
-			OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
-	/* apply link speed mask module parameter */
-	if (link_speed_mask) {
-		if (dd->pport->link_speed_supported & link_speed_mask)
-			dd->pport->link_speed_supported &= link_speed_mask;
-		else
-			dd_dev_err(dd, "Link speed mask invalid, ignored\n");
-	}
+	/* speeds the hardware can support */
+	dd->pport->link_speed_supported = OPA_LINK_SPEED_25G;
+	/* speeds allowed to run at */
 	dd->pport->link_speed_enabled = dd->pport->link_speed_supported;
 	/* give a reasonable active value, will be set on link up */
-	if (dd->pport->link_speed_supported & OPA_LINK_SPEED_25G)
-		dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
-	else
-		dd->pport->link_speed_active = OPA_LINK_SPEED_12_5G;
+	dd->pport->link_speed_active = OPA_LINK_SPEED_25G;
 
 	dd->chip_rcv_contexts = read_csr(dd, RCV_CONTEXTS);
 	dd->chip_send_contexts = read_csr(dd, SEND_CONTEXTS);
@@ -10292,6 +10282,11 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	ret = pcie_speeds(dd);
 	if (ret)
 		goto bail_cleanup;
+
+	/* needs to be done before we look for the peer device */
+	read_guid(dd);
+
+	asic_should_init(dd);
 
 	/* read in firmware */
 	ret = hfi1_firmware_init(dd);
@@ -10381,7 +10376,6 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 
 	/* set up LCB access - must be after set_up_interrupts() */
 	init_lcb_access(dd);
-	read_guid(dd);
 
 	/*
 	 * GUID is now stored in big endian by the function above, swap it.
@@ -10403,6 +10397,8 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		goto bail_clear_intr;
 	check_fabric_firmware_versions(dd);
 
+	thermal_init(dd);
+
 	ret = init_cntrs(dd);
 	if (ret)
 		goto bail_clear_intr;
@@ -10415,7 +10411,6 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	if (ret)
 		goto bail_free_rcverr;
 
-	thermal_init(dd);
 	goto bail;
 
 bail_free_rcverr:
@@ -10460,50 +10455,13 @@ u64 create_pbc(u64 flags, u32 srate, u32 vl, u32 dw_len)
 	return pbc;
 }
 
-/* interrupt testing */
-static void force_errors(struct hfi1_devdata *dd, u32 csr, const char *what)
-{
-	int i;
-
-	for (i = 0; i < 64; i++) {
-		dd_dev_info(dd, "** Forced interrupt: %s %d\n", what, i);
-		write_csr(dd, csr, 1ull << i);
-		msleep(100);
-	}
-}
-
-void force_all_interrupts(struct hfi1_devdata *dd)
-{
-	int i, j;
-	char buf[64];
-
-	for (i = 0; i < CCE_NUM_INT_CSRS; i++) {
-		for (j = 0; j < 64; j++) {
-			dd_dev_info(
-				dd,
-				"** Forced interrupt: csr #%2d, bit %2d; \"%s\"\n",
-				i, j, is_name(buf, sizeof(buf), (i*64)+j));
-			write_csr(dd, CCE_INT_FORCE + (8*i), 1ull << j);
-			/*
-			 * We want this delay so it is long enough that
-			 * the interrupt prints match the print above
-			 * but no so long that it takes forever to run.
-			 */
-			/*ssleep(1);*/
-			msleep(100);
-		}
-	}
-
-	force_errors(dd, CCE_ERR_FORCE, "CCE Err");
-	force_errors(dd, RCV_ERR_FORCE, "Receive Err");
-	force_errors(dd, SEND_PIO_ERR_FORCE, "Send PIO Err");
-	force_errors(dd, SEND_DMA_ERR_FORCE, "Send DMA Err");
-	force_errors(dd, SEND_EGRESS_ERR_FORCE, "Send Egress Err");
-	force_errors(dd, SEND_ERR_FORCE, "Send Err");
-}
-
 #define SBUS_THERMAL    0x4f
 #define SBUS_THERM_MONITOR_MODE 0x1
+
+#define THERM_FAILURE(dev, ret, reason) \
+	dd_dev_err((dd),						\
+		   "Thermal sensor initialization failed: %s (%d)\n",	\
+		   (reason), (ret))
 
 /*
  * Initialize the Avago Thermal sensor.
@@ -10519,47 +10477,56 @@ static int thermal_init(struct hfi1_devdata *dd)
 {
 	int ret = 0;
 
-	if (dd->icode != ICODE_RTL_SILICON)
-		goto done;
+	if (dd->icode != ICODE_RTL_SILICON ||
+	    !(dd->flags & HFI1_DO_INIT_ASIC))
+		return ret;
 
+	acquire_hw_mutex(dd);
 	dd_dev_info(dd, "Initializing thermal sensor\n");
 	/* Thermal Sensor Initialization */
 	/*    Step 1: Reset the Thermal SBus Receiver */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
 				RESET_SBUS_RECEIVER, 0);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Bus Reset");
+		goto done;
+	}
 	/*    Step 2: Set Reset bit in Thermal block */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
 				WRITE_SBUS_RECEIVER, 0x1);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Therm Block Reset");
+		goto done;
+	}
 	/*    Step 3: Write clock divider value (100MHz -> 2MHz) */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x1,
 				WRITE_SBUS_RECEIVER, 0x32);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Write Clock Div");
+		goto done;
+	}
 	/*    Step 4: Select temperature mode */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x3,
 				WRITE_SBUS_RECEIVER,
 				SBUS_THERM_MONITOR_MODE);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Write Mode Sel");
+		goto done;
+	}
 	/*    Step 5: De-assert block reset and start conversion */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,
 				WRITE_SBUS_RECEIVER, 0x2);
-	if (ret)
-		goto fail;
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Write Reset Deassert");
+		goto done;
+	}
 	/*    Step 5.1: Wait for first conversion (21.5ms per spec) */
 	msleep(22);
 
-	dd_dev_info(dd, "Thermal sensor initialization done.\n");
 	/* Enable polling of thermal readings */
 	write_csr(dd, ASIC_CFG_THERM_POLL_EN, 0x1);
-	goto done;
-fail:
-	dd_dev_err(dd, "Thermal sensor initialization failed.\n");
 done:
+	release_hw_mutex(dd);
 	return ret;
 }
 

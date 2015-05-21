@@ -79,10 +79,6 @@ unsigned int hfi1_max_mtu;
 module_param_named(max_mtu, hfi1_max_mtu, uint, S_IRUGO);
 MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 8192");
 
-unsigned int default_mtu;
-module_param_named(default_mtu, default_mtu, uint, S_IRUGO);
-MODULE_PARM_DESC(default_mtu, "Set default MTU bytes, default is 4096");
-
 unsigned int hfi1_cu = 1;
 module_param_named(cu, hfi1_cu, uint, S_IRUGO);
 MODULE_PARM_DESC(cu, "Credit return units");
@@ -97,91 +93,8 @@ static const struct kernel_param_ops cap_ops = {
 module_param_cb(cap_mask, &cap_ops, &hfi1_cap_mask, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(cap_mask, "Bit mask of enabled/disabled HW features");
 
-/*
- * Start parameter backward compatibility code (will be removed)
- *
- * The definitions below add module parameters which get converted
- * into the appropriate bits in hfi1_cap_mask. These module parameters
- * will eventually be removed once module users have become
- * familiar with the hfi1_cap_mask parameter.
- */
-#ifndef HFI1_COMPAT_MODPARAMS
-#define HFI1_COMPAT_MODPARAMS 1
-#endif
-
-#if HFI1_COMPAT_MODPARAMS
-#include <linux/stringify.h>
-struct hfi1_comp_param_t {
-	const char *pname;
-	unsigned long equiv;
-	u8 inverted;
-	unsigned long *caps;
-};
-
-static int hfi1_comp_param_set(const char *, const struct kernel_param *);
-static int hfi1_comp_param_get(char *, const struct kernel_param *);
-static const struct kernel_param_ops k_pops_comp = {
-	.set = hfi1_comp_param_set,
-	.get = hfi1_comp_param_get
-};
-/**
- * HFI1_DEFINE_COMP_PARAM - define a backward-compatible module parameter
- * @name - name of the module parameter
- * @bit  - the bit in the set of HFI1_CAP_* bits that this module parameter
- *         corresponds to
- * @invrt - 1 if the value of this module parameter is the inverted value
- *          of the bit - value of 1 turns the bit off
- * @desc - the description string for this module parameter
- *
- * This macro defines a backward-compatible module parameter, which can
- * be used instead of the matching bit in the HFI1_CAP_* set.
- * Modifying/using the module parameter will manipulate the hfi1_cap_mask
- * bitmask. Therefore, the module parameter does not hold a value - the
- * hfi1_cap_mask bits should be used through-out the code.
- */
-#define HFI1_DEFINE_COMP_PARAM(name, bit, invrt, desc)			\
-	static const struct hfi1_comp_param_t c_param_##name = {	\
-		.pname = __stringify(name), .equiv = HFI1_CAP_##bit,	\
-		.inverted = (unsigned)invrt, .caps = &hfi1_cap_mask,	\
-	};								\
-	module_param_cb(name, &k_pops_comp, (void *)&c_param_##name,	\
-			(S_IRUGO |					\
-			 (HFI1_CAP_##bit & HFI1_CAP_WRITABLE_MASK ?	\
-			  S_IWUSR : 0)));				\
-	MODULE_PARM_DESC(name, desc " (DEPRECATED)")
-
-/* Define all the deprecated module parameters */
-HFI1_DEFINE_COMP_PARAM(hdrsup_enable, HDRSUPP, 0,
-		       "Enable/disable header suppression");
-HFI1_DEFINE_COMP_PARAM(dont_drop_rhq_full, NODROP_RHQ_FULL, 0,
-		       "Do not drop packets when the receive header is full");
-HFI1_DEFINE_COMP_PARAM(dont_drop_egr_full, NODROP_EGR_FULL, 0,
-		       "Do not drop packets when all eager buffers are in use");
-HFI1_DEFINE_COMP_PARAM(use_sdma_head, USE_SDMA_HEAD, 1,
-		       "Read CSR vs. DMA for hardware head");
-HFI1_DEFINE_COMP_PARAM(use_sdma_ahg, SDMA_AHG, 0, "Turn on/off use of AHG");
-HFI1_DEFINE_COMP_PARAM(disable_sma, ENABLE_SMA, 1, "Disable the SMA");
-HFI1_DEFINE_COMP_PARAM(nodma_rtail, DMA_RTAIL, 1,
-		       "1 for no DMA of hdr tail, 0 to DMA the hdr tail");
-HFI1_DEFINE_COMP_PARAM(use_sdma, SDMA, 0, "enable sdma traffic");
-HFI1_DEFINE_COMP_PARAM(extended_psn, EXTENDED_PSN, 0,
-		       "Use 24 or 31 bit PSN");
-HFI1_DEFINE_COMP_PARAM(print_unimplemented, PRINT_UNIMPL, 0,
-		       "Have unimplemented functions print when called");
-HFI1_DEFINE_COMP_PARAM(one_pkt_per_egr, MULTI_PKT_EGR, 1,
-		       "Use one packet per eager buffer (default: 0)");
-HFI1_DEFINE_COMP_PARAM(enable_pkeys, PKEY_CHECK, 0,
-		       "Enable PKey checking on receive");
-HFI1_DEFINE_COMP_PARAM(disable_integrity, NO_INTEGRITY, 0,
-		       "Disable HW packet integrity checks");
-HFI1_DEFINE_COMP_PARAM(sdma_head_check, SDMA_HEAD_CHECK, 0,
-		       "Enable SDMA head check");
-#endif /* HFI1_COMPAT_MODPARAMS */
-/* End parameter backward compatibility code */
-
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Intel <ibsupport@intel.com>");
-MODULE_DESCRIPTION("Intel IB driver");
+MODULE_DESCRIPTION("Intel Omni-Path Architecture driver");
 MODULE_VERSION(HFI1_DRIVER_VERSION);
 
 /* See hfi1_init() */
@@ -243,46 +156,6 @@ static int hfi1_caps_get(char *buffer, const struct kernel_param *kp)
 
 	return scnprintf(buffer, PAGE_SIZE, "0x%lx", cap_mask);
 }
-
-#if HFI1_COMPAT_MODPARAMS
-static int hfi1_comp_param_set(const char *val, const struct kernel_param *kp)
-{
-	struct hfi1_comp_param_t *param =
-		(struct hfi1_comp_param_t *)kp->arg;
-	unsigned long value;
-	int ret = 0;
-
-	pr_warn("Module parameter '%s' is deprecated in favor of 'cap_mask'\n",
-		param->pname);
-	ret = kstrtoul(val, 0, &value);
-	if (ret) {
-		pr_warn("Invalid parameter value '%s'\n", val);
-		goto done;
-	}
-
-	value = (value & 0x1U) ^ param->inverted;
-	if (value)
-		*param->caps |= (param->equiv |
-				 ((param->equiv & HFI1_CAP_WRITABLE_MASK) <<
-				  HFI1_CAP_USER_SHIFT));
-	else
-		*param->caps &= ~(param->equiv |
-				  ((param->equiv & HFI1_CAP_WRITABLE_MASK) <<
-				   HFI1_CAP_USER_SHIFT));
-done:
-	return ret;
-}
-
-static int hfi1_comp_param_get(char *buffer, const struct kernel_param *kp)
-{
-	struct hfi1_comp_param_t *param =
-		(struct hfi1_comp_param_t *)kp->arg;
-	unsigned long value = *param->caps & param->equiv;
-
-	return scnprintf(buffer, PAGE_SIZE, "%d",
-			 !!(param->inverted ? !value : value));
-}
-#endif
 
 const char *get_unit_name(int unit)
 {
