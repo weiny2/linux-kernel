@@ -911,7 +911,7 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 {
 	struct pci_dev *parent;
 	u64 fw_ctrl;
-	u64 reg;
+	u64 reg, therm;
 	u32 reg32, fs, lf;
 	u32 status, err;
 	int ret;
@@ -976,6 +976,15 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 	ret = acquire_hw_mutex(dd);
 	if (ret)
 		return ret;
+
+	/* make sure thermal polling is not causing interrupts */
+	therm = read_csr(dd, ASIC_CFG_THERM_POLL_EN);
+	if (therm) {
+		write_csr(dd, ASIC_CFG_THERM_POLL_EN, 0x0);
+		msleep(100);
+		dd_dev_info(dd, "%s: Disabled therm polling\n",
+			    __func__);
+	}
 
 	/* step 3: download SBus Master firmware */
 	/* step 4: download PCIe Gen3 SerDes firmware */
@@ -1262,6 +1271,12 @@ retry:
 	}
 
 done:
+	if (therm) {
+		write_csr(dd, ASIC_CFG_THERM_POLL_EN, 0x1);
+		msleep(100);
+		dd_dev_info(dd, "%s: Re-enable therm polling\n",
+			    __func__);
+	}
 	release_hw_mutex(dd);
 done_no_mutex:
 	/* return no error if it is OK to be at current speed */

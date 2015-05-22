@@ -1242,7 +1242,6 @@ int load_pcie_firmware(struct hfi1_devdata *dd)
 		ret = load_sbus_firmware(dd, &fw_sbus);
 		if (ret)
 			goto done;
-		fw_sbus_load = 0;	/* only load it once */
 	}
 
 	if (fw_pcie_serdes_load) {
