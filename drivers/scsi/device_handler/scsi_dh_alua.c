@@ -857,13 +857,20 @@ static void alua_rtpg_work(struct work_struct *work)
 {
 	struct alua_port_group *pg =
 		container_of(work, struct alua_port_group, rtpg_work.work);
-	struct scsi_device *sdev = pg->rtpg_sdev;
+	struct scsi_device *sdev;
 	LIST_HEAD(qdata_list);
 	int err = SCSI_DH_OK;
 	struct alua_queue_data *qdata, *tmp;
 	unsigned long flags;
 
 	spin_lock_irqsave(&pg->rtpg_lock, flags);
+	sdev = pg->rtpg_sdev;
+	if (!sdev) {
+		WARN_ON(pg->flags & ALUA_PG_RUN_RTPG ||
+			pg->flags & ALUA_PG_RUN_STPG);
+		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
+		return;
+	}
 	pg->flags |= ALUA_PG_RUNNING;
 	if (pg->flags & ALUA_PG_RUN_RTPG) {
 		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
