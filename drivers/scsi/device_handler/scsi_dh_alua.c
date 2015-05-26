@@ -1033,7 +1033,7 @@ static int alua_set_params(struct scsi_device *sdev, const char *params)
 	if (optimize)
 		pg->flags |= ALUA_OPTIMIZE_STPG;
 	else
-		pg->flags |= ~ALUA_OPTIMIZE_STPG;
+		pg->flags &= ~ALUA_OPTIMIZE_STPG;
 
 	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 	return result;
