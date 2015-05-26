@@ -68,6 +68,7 @@
 /* State machine flags */
 #define ALUA_PG_RUN_RTPG		0x10
 #define ALUA_PG_RUN_STPG		0x20
+#define ALUA_PG_RUNNING			0x40
 
 
 static LIST_HEAD(port_group_list);
@@ -120,7 +121,7 @@ struct alua_queue_data {
 static char print_alua_state(int);
 static int alua_check_sense(struct scsi_device *, struct scsi_sense_hdr *);
 static void alua_rtpg_work(struct work_struct *work);
-static void alua_check(struct scsi_device *sdev);
+static void alua_check(struct scsi_device *sdev, bool force);
 
 static inline struct alua_dh_data *get_alua_data(struct scsi_device *sdev)
 {
@@ -580,7 +581,7 @@ static char print_alua_state(int state)
 }
 
 static int alua_check_sense(struct scsi_device *sdev,
-			    struct scsi_sense_hdr *sense_hdr)
+			     struct scsi_sense_hdr *sense_hdr)
 {
 	switch (sense_hdr->sense_key) {
 	case NOT_READY:
@@ -589,36 +590,34 @@ static int alua_check_sense(struct scsi_device *sdev,
 			 * LUN Not Accessible - ALUA state transition
 			 * Kickoff worker to update internal state.
 			 */
-			alua_check(sdev);
-			return ADD_TO_MLQUEUE;
+			alua_check(sdev, false);
+			return NEEDS_RETRY;
 		}
 		break;
 	case UNIT_ATTENTION:
-		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x00)
+		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x00) {
 			/*
-			 * Power On, Reset, or Bus Device Reset, just retry.
+			 * Power On, Reset, or Bus Device Reset.
+			 * Might have obscured a state transition,
+			 * so schedule a recheck.
 			 */
+			alua_check(sdev, true);
 			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x04)
-			/*
-			 * Device internal reset
-			 */
-			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x01)
-			/*
-			 * Mode parameter changed
-			 */
-			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x06)
+		}
+		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x06) {
 			/*
 			 * ALUA state changed
 			 */
+			alua_check(sdev, true);
 			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x07)
+		}
+		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x07) {
 			/*
 			 * Implicit ALUA state transition failed
 			 */
+			alua_check(sdev, true);
 			return ADD_TO_MLQUEUE;
+		}
 		break;
 	}
 
@@ -682,7 +681,6 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 			goto retry;
 		}
 
-		err = alua_check_sense(sdev, &sense_hdr);
 		if (sense_hdr.sense_key == UNIT_ATTENTION)
 			err = ADD_TO_MLQUEUE;
 		if (err == ADD_TO_MLQUEUE &&
@@ -844,7 +842,6 @@ static unsigned alua_stpg(struct scsi_device *sdev, struct alua_port_group *pg)
 			/* Retry RTPG */
 			return err;
 		}
-		err = alua_check_sense(sdev, &sense_hdr);
 		sdev_printk(KERN_INFO, sdev, "%s: stpg failed, ",
 			    ALUA_DH_NAME);
 		scsi_show_sense_hdr(&sense_hdr);
@@ -867,15 +864,18 @@ static void alua_rtpg_work(struct work_struct *work)
 	unsigned long flags;
 
 	spin_lock_irqsave(&pg->rtpg_lock, flags);
+	pg->flags |= ALUA_PG_RUNNING;
 	if (pg->flags & ALUA_PG_RUN_RTPG) {
 		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 		err = alua_rtpg(sdev, pg);
+		spin_lock_irqsave(&pg->rtpg_lock, flags);
 		if (err == SCSI_DH_RETRY) {
+			pg->flags &= ~ALUA_PG_RUNNING;
+			spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 			queue_delayed_work(kmpath_aluad, &pg->rtpg_work,
 					   pg->interval * HZ);
 			return;
 		}
-		spin_lock_irqsave(&pg->rtpg_lock, flags);
 		pg->flags &= ~ALUA_PG_RUN_RTPG;
 		if (err != SCSI_DH_OK)
 			pg->flags &= ~ALUA_PG_RUN_STPG;
@@ -888,6 +888,7 @@ static void alua_rtpg_work(struct work_struct *work)
 		if (err == SCSI_DH_RETRY) {
 			pg->flags |= ALUA_PG_RUN_RTPG;
 			pg->interval = 0;
+			pg->flags &= ~ALUA_PG_RUNNING;
 			spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 			queue_delayed_work(kmpath_aluad, &pg->rtpg_work,
 				msecs_to_jiffies(ALUA_RTPG_DELAY_MSECS));
@@ -905,13 +906,16 @@ static void alua_rtpg_work(struct work_struct *work)
 			qdata->callback_fn(qdata->callback_data, err);
 		kfree(qdata);
 	}
+	spin_lock_irqsave(&pg->rtpg_lock, flags);
+	pg->flags &= ~ALUA_PG_RUNNING;
+	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 	kref_put(&pg->kref, release_port_group);
 	scsi_device_put(sdev);
 }
 
 static void alua_rtpg_queue(struct alua_port_group *pg,
 			    struct scsi_device *sdev,
-			    struct alua_queue_data *qdata)
+			    struct alua_queue_data *qdata, bool force)
 {
 	int start_queue = 0;
 	unsigned long flags;
@@ -932,12 +936,15 @@ static void alua_rtpg_queue(struct alua_port_group *pg,
 		pg->rtpg_sdev = sdev;
 		scsi_device_get(sdev);
 		start_queue = 1;
-	}
+	} else if (!(pg->flags & ALUA_PG_RUNNING) && force)
+		start_queue = 1;
+
 	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 
 	if (start_queue)
-		queue_delayed_work(kmpath_aluad, &pg->rtpg_work,
+		mod_delayed_work(kmpath_aluad, &pg->rtpg_work,
 				   msecs_to_jiffies(ALUA_RTPG_DELAY_MSECS));
+
 	kref_put(&pg->kref, release_port_group);
 }
 
@@ -970,7 +977,7 @@ static int alua_initialize(struct scsi_device *sdev, struct alua_dh_data *h)
 	complete(&h->init_complete);
 	if (pg) {
 		pg->expiry = 0;
-		alua_rtpg_queue(pg, sdev, NULL);
+		alua_rtpg_queue(pg, sdev, NULL, true);
 		kref_put(&pg->kref, release_port_group);
 	}
 	return h->error;
@@ -1085,7 +1092,7 @@ static int alua_activate(struct scsi_device *sdev,
 		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 	}
 
-	alua_rtpg_queue(pg, sdev, qdata);
+	alua_rtpg_queue(pg, sdev, qdata, true);
 	kref_put(&pg->kref, release_port_group);
 	return 0;
 }
@@ -1096,7 +1103,7 @@ static int alua_activate(struct scsi_device *sdev,
  *
  * Check the device status
  */
-static void alua_check(struct scsi_device *sdev)
+static void alua_check(struct scsi_device *sdev, bool force)
 {
 	struct alua_dh_data *h = get_alua_data(sdev);
 	struct alua_port_group *pg;
@@ -1109,7 +1116,7 @@ static void alua_check(struct scsi_device *sdev)
 	if (pg) {
 		kref_get(&pg->kref);
 		rcu_read_unlock();
-		alua_rtpg_queue(pg, sdev, NULL);
+		alua_rtpg_queue(pg, sdev, NULL, force);
 		kref_put(&pg->kref, release_port_group);
 	} else
 		rcu_read_unlock();
