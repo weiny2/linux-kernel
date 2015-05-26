@@ -625,6 +625,8 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	unsigned err, retval;
 	unsigned int tpg_desc_tbl_off;
 	unsigned char orig_transition_tmo;
+	struct alua_port_group *tmp_pg;
+	unsigned long flags;
 
 	if (!pg->expiry) {
 		if (!pg->transition_tmo)
@@ -721,23 +723,39 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	else
 		tpg_desc_tbl_off = 4;
 
+	spin_lock_irqsave(&port_group_lock, flags);
 	for (k = tpg_desc_tbl_off, ucp = pg->buff + tpg_desc_tbl_off;
 	     k < len;
 	     k += off, ucp += off) {
 
-		if (pg->group_id == (ucp[2] << 8) + ucp[3]) {
-			pg->state = ucp[0] & 0x0f;
-			pg->pref = ucp[0] >> 7;
-			valid_states = ucp[1];
+		list_for_each_entry(tmp_pg, &port_group_list, node) {
+			u16 group_id = ((u16)ucp[2] << 8) | (u16)ucp[3];
+			if (tmp_pg->group_id != group_id)
+				continue;
+			if (tmp_pg->device_id_size != pg->device_id_size)
+				continue;
+			if (memcmp(tmp_pg->device_id, pg->device_id,
+				   tmp_pg->device_id_size))
+				continue;
+			tmp_pg->state = ucp[0] & 0x0f;
+			tmp_pg->pref = ucp[0] >> 7;
+			sdev_printk(KERN_INFO, sdev,
+				    "%s: device %s port group %02x "
+				    "state %c %s\n", ALUA_DH_NAME,
+				    tmp_pg->device_id_str, tmp_pg->group_id,
+				    print_alua_state(tmp_pg->state),
+				    tmp_pg->pref ?
+				    "preferred" : "non-preferred");
+			if (tmp_pg == pg)
+				valid_states = ucp[1];
 		}
 		off = 8 + (ucp[7] * 4);
 	}
+	spin_unlock_irqrestore(&port_group_lock, flags);
 
 	sdev_printk(KERN_INFO, sdev,
-		    "%s: target %s port group %02x state %c %s "
-		    "supports %c%c%c%c%c%c%c\n", ALUA_DH_NAME,
-		    pg->device_id_str, pg->group_id,
-		    print_alua_state(pg->state),
+		    "%s: port group %02x state %c %s supports %c%c%c%c%c%c%c\n",
+		    ALUA_DH_NAME, pg->group_id, print_alua_state(pg->state),
 		    pg->pref ? "preferred" : "non-preferred",
 		    valid_states&TPGS_SUPPORT_TRANSITION?'T':'t',
 		    valid_states&TPGS_SUPPORT_OFFLINE?'O':'o',
