@@ -767,7 +767,7 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	case TPGS_STATE_TRANSITIONING:
 		if (time_before(jiffies, pg->expiry)) {
 			/* State transition, retry */
-			pg->interval += 2;
+			pg->interval = 2;
 			err = SCSI_DH_RETRY;
 		} else {
 			/* Transitioning time exceeded, set port to standby */
