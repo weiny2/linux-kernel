@@ -27,10 +27,6 @@ static bool force_enable_dimms;
 module_param(force_enable_dimms, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(force_enable_dimms, "Ignore _STA (ACPI DIMM device) status");
 
-static bool swizzle_uuid = IS_ENABLED(CONFIG_ACPI_NFIT_SWIZZLE_UUID);
-module_param(swizzle_uuid, bool, 0);
-MODULE_PARM_DESC(swizzle_uuid, "swab() the first three fields of NFIT SPA UUIDs");
-
 static u8 nfit_uuid[NFIT_UUID_MAX][16];
 
 const u8 *to_nfit_uuid(enum nfit_uuids id)
@@ -1445,8 +1441,6 @@ static struct acpi_driver acpi_nfit_driver = {
 
 static __init int nfit_init(void)
 {
-	int i;
-
 	BUILD_BUG_ON(sizeof(struct acpi_table_nfit) != 40);
 	BUILD_BUG_ON(sizeof(struct acpi_nfit_system_address) != 56);
 	BUILD_BUG_ON(sizeof(struct acpi_nfit_memory_map) != 48);
@@ -1465,12 +1459,6 @@ static __init int nfit_init(void)
 	acpi_str_to_uuid(UUID_PERSISTENT_VIRTUAL_CD, nfit_uuid[NFIT_SPA_PCD]);
 	acpi_str_to_uuid(UUID_NFIT_BUS, nfit_uuid[NFIT_DEV_BUS]);
 	acpi_str_to_uuid(UUID_NFIT_DIMM, nfit_uuid[NFIT_DEV_DIMM]);
-
-	for (i = 0; i <= NFIT_SPA_PCD && swizzle_uuid; i++) {
-		*((u32 *) &nfit_uuid[i][0]) = swab32p((u32 *) &nfit_uuid[i][0]);
-		*((u16 *) &nfit_uuid[i][4]) = swab16p((u16 *) &nfit_uuid[i][4]);
-		*((u16 *) &nfit_uuid[i][6]) = swab16p((u16 *) &nfit_uuid[i][6]);
-	}
 
 	return acpi_bus_register_driver(&acpi_nfit_driver);
 }
