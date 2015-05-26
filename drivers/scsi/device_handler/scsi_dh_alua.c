@@ -78,12 +78,10 @@ static struct workqueue_struct *kmpath_aluad;
 struct alua_port_group {
 	struct kref		kref;
 	struct list_head	node;
-	unsigned char		target_id[256];
-	unsigned char		target_id_str[256];
-	int			target_id_size;
+	unsigned char		device_id[256];
+	unsigned char		device_id_str[256];
+	int			device_id_size;
 	int			group_id;
-	int			lun;
-	int			lugrp;
 	int			tpgs;
 	int			state;
 	int			pref;
@@ -356,10 +354,10 @@ static int alua_check_tpgs(struct scsi_device *sdev, struct alua_dh_data *h)
  */
 static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 {
-	char target_id_str[256], *target_id = NULL;
-	int target_id_size;
-	int group_id = -1, lun = sdev->lun, lugrp = 0;
 	unsigned char *d;
+	int group_id = -1;
+	char device_id_str[256], *device_id = NULL;
+	int device_id_size, device_id_type = 0;
 	struct alua_port_group *tmp_pg, *pg = NULL;
 
 	if (!sdev->vpd_pg83)
@@ -367,52 +365,71 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 
 	/*
 	 * Look for the correct descriptor.
+	 * Order of preference for lun descriptor:
+	 * - SCSI name string
+	 * - NAA IEEE Registered Extended
+	 * - EUI-64 based 16-byte
+	 * - EUI-64 based 12-byte
+	 * - NAA IEEE Registered
+	 * - NAA IEEE Extended
+	 * as longer descriptors reduce the likelyhood
+	 * of identification clashes.
 	 */
-	memset(target_id_str, 0, 256);
-	target_id_size = 0;
+	memset(device_id_str, 0, 256);
+	device_id_size = 0;
 	d = sdev->vpd_pg83 + 4;
 	while (d < sdev->vpd_pg83 + sdev->vpd_pg83_len) {
 		switch (d[1] & 0xf) {
 		case 0x2:
 			/* EUI-64 */
-			if ((d[1] & 0x30) == 0x20) {
-				target_id_size = d[3];
-				target_id = d + 4;
-				switch (target_id_size) {
+			if ((d[1] & 0x30) == 0x00) {
+				if (device_id_size > d[3])
+					break;
+				/* Prefer NAA IEEE Registered Extended */
+				if (device_id_type == 0x3 &&
+				    device_id_size == d[3])
+					break;
+				device_id_size = d[3];
+				device_id = d + 4;
+				device_id_type = d[1] & 0xf;
+				switch (device_id_size) {
 				case 8:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"eui.%8phN", d + 4);
 					break;
 				case 12:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"eui.%12phN", d + 4);
 					break;
 				case 16:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"eui.%16phN", d + 4);
 					break;
 				default:
-					target_id_size = 0;
+					device_id_size = 0;
 					break;
 				}
 			}
 			break;
 		case 0x3:
 			/* NAA */
-			if ((d[1] & 0x30) == 0x20) {
-				target_id_size = d[3];
-				target_id = d + 4;
-				switch (target_id_size) {
+			if ((d[1] & 0x30) == 0x00) {
+				if (device_id_size > d[3])
+					break;
+				device_id_size = d[3];
+				device_id = d + 4;
+				device_id_type = d[1] & 0xf;
+				switch (device_id_size) {
 				case 8:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"naa.%8phN", d + 4);
 					break;
 				case 16:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"naa.%16phN", d + 4);
 					break;
 				default:
-					target_id_size = 0;
+					device_id_size = 0;
 					break;
 				}
 			}
@@ -424,22 +441,19 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 			/* Target port group */
 			group_id = (d[6] << 8) + d[7];
 			break;
-		case 0x6:
-			/* Logical unit group */
-			lugrp = (d[2] << 8) + d[3];
-			/* -1 indicates valid LUN group */
-			lun = -1;
-			break;
 		case 0x8:
 			/* SCSI name string */
-			if ((d[1] & 0x30) == 0x20) {
+			if ((d[1] & 0x30) == 0x00) {
 				/* SCSI name */
-				target_id_size = d[3];
-				target_id = d + 4;
-				strncpy(target_id_str, d + 4, 256);
-				if (target_id_size > 255)
-					target_id_size = 255;
-				target_id_str[target_id_size] = '\0';
+				if (device_id_size > d[3])
+					break;
+				device_id_size = d[3];
+				device_id = d + 4;
+				device_id_type = d[1] & 0xf;
+				strncpy(device_id_str, d + 4, 256);
+				if (device_id_size > 255)
+					device_id_size = 255;
+				device_id_str[device_id_size] = '\0';
 			}
 			break;
 		default:
@@ -447,7 +461,6 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 		}
 		d += d[3] + 4;
 	}
-
 	if (group_id == -1) {
 		/*
 		 * Internal error; TPGS supported but required
@@ -460,47 +473,20 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 		h->tpgs = TPGS_MODE_NONE;
 		return SCSI_DH_DEV_UNSUPP;
 	}
-	if (!target_id_size) {
-		/* Check for EMC Clariion extended inquiry */
-		if (!strncmp(sdev->vendor, "DGC     ", 8) &&
-		    sdev->inquiry_len > 160) {
-			target_id_size = sdev->inquiry[160];
-			target_id = sdev->inquiry + 161;
-			strcpy(target_id_str, "emc.");
-			memcpy(target_id_str + 4, target_id, target_id_size);
-		}
-		/* Check for HP EVA extended inquiry */
-		if (!strncmp(sdev->vendor, "HP      ", 8) &&
-		    !strncmp(sdev->model, "HSV", 3) &&
-		    sdev->inquiry_len > 170) {
-			target_id_size = 16;
-			target_id = sdev->inquiry + 154;
-			strcpy(target_id_str, "naa.");
-			memcpy(target_id_str + 4, target_id, target_id_size);
-		}
-	}
 
 	spin_lock(&port_group_lock);
-	pg = NULL;
-	if (target_id_size) {
+	if (device_id_size) {
 		sdev_printk(KERN_INFO, sdev,
-			    "%s: target %s port group %02x "
+			    "%s: device %s port group %02x "
 			    "rel port %02x\n", ALUA_DH_NAME,
-			    target_id_str, group_id, h->rel_port);
+			    device_id_str, group_id, h->rel_port);
 		list_for_each_entry(tmp_pg, &port_group_list, node) {
 			if (tmp_pg->group_id != group_id)
 				continue;
-			if (tmp_pg->target_id_size != target_id_size)
+			if (tmp_pg->device_id_size != device_id_size)
 				continue;
-			if (lun != -1) {
-				if (tmp_pg->lun != lun)
-					continue;
-			} else {
-				if (tmp_pg->lugrp != lugrp)
-					continue;
-			}
-			if (memcmp(tmp_pg->target_id, target_id,
-				   target_id_size))
+			if (memcmp(tmp_pg->device_id, device_id,
+				   device_id_size))
 				continue;
 			pg = tmp_pg;
 			break;
@@ -528,17 +514,15 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 		spin_unlock(&port_group_lock);
 		return SCSI_DH_DEV_TEMP_BUSY;
 	}
-	if (target_id_size) {
-		memcpy(pg->target_id, target_id, target_id_size);
-		strncpy(pg->target_id_str, target_id_str, 256);
+	if (device_id_size) {
+		memcpy(pg->device_id, device_id, device_id_size);
+		strncpy(pg->device_id_str, device_id_str, 256);
 	} else {
-		memset(pg->target_id, 0, 256);
-		pg->target_id_str[0] = '\0';
+		memset(pg->device_id, 0, 256);
+		pg->device_id_str[0] = '\0';
 	}
-	pg->target_id_size = target_id_size;
+	pg->device_id_size = device_id_size;
 	pg->group_id = group_id;
-	pg->lun = lun;
-	pg->lugrp = lugrp;
 	pg->buff = pg->inq;
 	pg->bufflen = ALUA_INQUIRY_SIZE;
 	pg->tpgs = h->tpgs;
@@ -727,8 +711,8 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 
 	if (orig_transition_tmo != pg->transition_tmo) {
 		sdev_printk(KERN_INFO, sdev,
-		       "%s: target %s transition timeout set to %d seconds\n",
-		       ALUA_DH_NAME, pg->target_id_str, pg->transition_tmo);
+			"%s: device %s transition timeout set to %d seconds\n",
+			ALUA_DH_NAME, pg->device_id_str, pg->transition_tmo);
 		pg->expiry = jiffies + pg->transition_tmo * HZ;
 	}
 
@@ -752,7 +736,7 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	sdev_printk(KERN_INFO, sdev,
 		    "%s: target %s port group %02x state %c %s "
 		    "supports %c%c%c%c%c%c%c\n", ALUA_DH_NAME,
-		    pg->target_id_str, pg->group_id,
+		    pg->device_id_str, pg->group_id,
 		    print_alua_state(pg->state),
 		    pg->pref ? "preferred" : "non-preferred",
 		    valid_states&TPGS_SUPPORT_TRANSITION?'T':'t',
