@@ -77,6 +77,16 @@ config ND_BTT
 	depends on LIBND
 	default LIBND
 	select ND_BTT_DEVS
+	help
+	  The Block Translation Table (BTT) provides atomic sector
+	  update semantics for persistent memory devices, so that
+	  applications that rely on sector writes not being torn (a
+	  guarantee that typical disks provide) can continue to do so.
+	  The BTT manifests itself as a stacked block device, and
+	  reserves a portion of the underlying storage for its
+	  metadata.
+
+	  Select Y if unsure.
 
 config ND_MAX_REGIONS
 	int "Maximum number of regions supported by the sub-system"
