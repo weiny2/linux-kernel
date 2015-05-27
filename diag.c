@@ -80,7 +80,7 @@
 /* Snoop option mask */
 #define SNOOP_DROP_SEND 0x1
 
-u8 snoop_flags;
+static u8 snoop_flags;
 
 /*
  * Extract packet length from LRH header.
