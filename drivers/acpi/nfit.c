@@ -766,12 +766,12 @@ static void acpi_nfit_init_dsms(struct acpi_nfit_desc *acpi_desc)
 }
 
 static ssize_t range_index_show(struct device *dev,
-                struct device_attribute *attr, char *buf)
+		struct device_attribute *attr, char *buf)
 {
-        struct nd_region *nd_region = to_nd_region(dev);
-        struct nfit_spa *nfit_spa = nd_region_provider_data(nd_region);
+	struct nd_region *nd_region = to_nd_region(dev);
+	struct nfit_spa *nfit_spa = nd_region_provider_data(nd_region);
 
-        return sprintf(buf, "%d\n", nfit_spa->spa->range_index);
+	return sprintf(buf, "%d\n", nfit_spa->spa->range_index);
 }
 static DEVICE_ATTR_RO(range_index);
 
@@ -821,13 +821,13 @@ static int cmp_map(const void *m0, const void *m1)
 static struct acpi_nfit_memory_map *memdev_from_spa(
 		struct acpi_nfit_desc *acpi_desc, u16 range_index, int n)
 {
-        struct nfit_memdev *nfit_memdev;
+	struct nfit_memdev *nfit_memdev;
 
-        list_for_each_entry(nfit_memdev, &acpi_desc->memdevs, list)
-                if (nfit_memdev->memdev->range_index == range_index)
-                        if (n-- == 0)
-                                return nfit_memdev->memdev;
-        return NULL;
+	list_for_each_entry(nfit_memdev, &acpi_desc->memdevs, list)
+		if (nfit_memdev->memdev->range_index == range_index)
+			if (n-- == 0)
+				return nfit_memdev->memdev;
+	return NULL;
 }
 
 static int acpi_nfit_init_interleave_set(struct acpi_nfit_desc *acpi_desc,

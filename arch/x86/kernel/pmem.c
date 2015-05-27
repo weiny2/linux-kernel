@@ -16,8 +16,8 @@ static void e820_pmem_release(struct device *dev)
 }
 
 static struct platform_device e820_pmem = {
-        .name = "e820_pmem",
-        .id = -1,
+	.name = "e820_pmem",
+	.id = -1,
 	.dev = {
 		.release = e820_pmem_release,
 	},

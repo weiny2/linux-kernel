@@ -1410,11 +1410,12 @@ struct resource *nsblk_add_resource(struct nd_region *nd_region,
 	struct resource *res;
 
 	nd_label_gen_id(&label_id, nsblk->uuid, NSLABEL_FLAG_LOCAL);
-	nsblk->res = krealloc(nsblk->res,
+	res = krealloc(nsblk->res,
 			sizeof(void *) * (nsblk->num_resources + 1),
 			GFP_KERNEL);
-	if (!nsblk->res)
+	if (!res)
 		return NULL;
+	nsblk->res = (struct resource **) res;
 	for_each_dpa_resource(ndd, res)
 		if (strcmp(res->name, label_id.id) == 0 && res->start == start) {
 			nsblk->res[nsblk->num_resources++] = res;

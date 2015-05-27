@@ -160,7 +160,7 @@ struct arena_info {
  *			after removing the amount of space needed by metadata
  * @rawsize:		Total size in bytes of the available backing device
  * @lbasize:		LBA size as requested and presented to upper layers.
- * 			This is sector_size + size of any metadata.
+ *			This is sector_size + size of any metadata.
  * @sector_size:	The Linux sector size - 512 or 4096
  * @lanes:		Per-lane spinlocks
  * @init_lock:		Mutex used for the BTT initialization

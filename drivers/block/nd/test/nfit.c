@@ -948,16 +948,16 @@ static void nfit_test_blk_region_disable(struct nd_bus *nd_bus, struct device *d
 }
 
 static int nfit_test_blk_do_io(struct nd_blk_region *ndbr, void *iobuf,
-                u64 len, int rw, resource_size_t dpa)
+		u64 len, int rw, resource_size_t dpa)
 {
 	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
 	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
 	struct nd_region *nd_region = &ndbr->nd_region;
-        struct nfit_test_resource *nfit_res;
+	struct nfit_test_resource *nfit_res;
 	unsigned int bw;
 
-        nfit_res = nfit_test_lookup((unsigned long) mmio->base);
-        if (!nfit_res) {
+	nfit_res = nfit_test_lookup((unsigned long) mmio->base);
+	if (!nfit_res) {
 		dev_WARN_ONCE(&nd_region->dev, 1, "no test resource\n");
 		return -EIO;
 	}
@@ -970,7 +970,7 @@ static int nfit_test_blk_do_io(struct nd_blk_region *ndbr, void *iobuf,
 		memcpy(iobuf, nfit_res->buf + dpa, len);
 	nd_region_release_lane(nd_region, bw);
 
-        return 0;
+	return 0;
 }
 
 extern const struct attribute_group *acpi_nfit_attribute_groups[];

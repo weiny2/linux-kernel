@@ -747,7 +747,7 @@ finding and idle BTT and assigning it to front a PMEM or BLK namespace.
 				ndctl_namespace_get_block_device(parameters->ndns));
 		ndctl_btt_set_uuid(btt, parameters->uuid);
 		ndctl_btt_set_sector_size(btt, parameters->sector_size);
-		ndctl_btt_set_backing_dev(btt, parametes->bdevpath);
+		ndctl_btt_set_backing_dev(btt, parameters->bdevpath);
 		ndctl_btt_enable(btt);
 	}
 

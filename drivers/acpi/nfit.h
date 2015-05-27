@@ -38,8 +38,8 @@ enum nfit_uuids {
 };
 
 #define NFIT_DIMM_HANDLE(node, socket, imc, chan, dimm) \
-       (((node & 0xfff) << 16) | ((socket & 0xf) << 12) \
-        | ((imc & 0xf) << 8) | ((chan & 0xf) << 4) | (dimm & 0xf))
+	(((node & 0xfff) << 16) | ((socket & 0xf) << 12) \
+	 | ((imc & 0xf) << 8) | ((chan & 0xf) << 4) | (dimm & 0xf))
 #define NFIT_DIMM_NODE(handle) ((handle) >> 16 & 0xfff)
 #define NFIT_DIMM_SOCKET(handle) ((handle) >> 12 & 0xf)
 #define NFIT_DIMM_CHAN(handle) ((handle) >> 8 & 0xf)
