@@ -80,6 +80,14 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 	return IB_MAD_RESULT_FAILURE;
 }
 
+static int __subn_get_opa_nodedesc(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
 static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 				   struct ib_device *ibdev, u8 port,
 				   u32 *resp_len)
@@ -103,6 +111,126 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	return reply(ibh);
 }
 
+static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_cong_info(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_hfi_cong_log(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_cong_setting(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_get_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+							u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
 static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
 			    u32 *resp_len)
@@ -117,18 +245,21 @@ static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	 * Others yet to be implemented.
 	 */
 	switch (attr_id) {
-	case IB_SMP_ATTR_NODE_INFO:
-		ret = __subn_get_opa_nodeinfo(smp, am, data, ibdev, port,
-					      resp_len);
-		break;
-#if 0
 	case IB_SMP_ATTR_NODE_DESC:
 		ret = __subn_get_opa_nodedesc(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_NODE_INFO:
+		ret = __subn_get_opa_nodeinfo(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
 	case IB_SMP_ATTR_PORT_INFO:
 		ret = __subn_get_opa_portinfo(smp, am, data, ibdev, port,
 					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_PORT_STATE_INFO:
+		ret = __subn_get_opa_psi(smp, am, data, ibdev, port,
+					 resp_len);
 		break;
 	case IB_SMP_ATTR_PKEY_TABLE:
 		ret = __subn_get_opa_pkeytable(smp, am, data, ibdev, port,
@@ -150,38 +281,40 @@ static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		ret = __subn_get_opa_sc_to_vlnt(smp, am, data, ibdev, port,
 					       resp_len);
 		break;
-	case OPA_ATTRIB_ID_PORT_STATE_INFO:
-		ret = __subn_get_opa_psi(smp, am, data, ibdev, port,
-					 resp_len);
+	case IB_SMP_ATTR_VL_ARB_TABLE:
+		ret = __subn_get_opa_vl_arb(smp, am, data, ibdev, port,
+					    resp_len);
+		break;
+	case IB_SMP_ATTR_LED_INFO:
+		ret = __subn_get_opa_led_info(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_CABLE_INFO:
+		ret = __subn_get_opa_cable_info(smp, am, data, ibdev, port,
+						resp_len);
 		break;
 	case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
 		ret = __subn_get_opa_bct(smp, am, data, ibdev, port,
 					 resp_len);
 		break;
-	case IB_SMP_ATTR_VL_ARB_TABLE:
-		ret = __subn_get_opa_vl_arb(smp, am, data, ibdev, port,
-					    resp_len);
-		break;
 	case OPA_ATTRIB_ID_CONGESTION_INFO:
 		ret = __subn_get_opa_cong_info(smp, am, data, ibdev, port,
 					       resp_len);
 		break;
-	case OPA_ATTRIB_ID_HFI_CONGESTION_SETTING:
-		ret = __subn_get_opa_cong_setting(smp, am, data, ibdev,
-						  port, resp_len);
-		break;
 	case OPA_ATTRIB_ID_HFI_CONGESTION_LOG:
 		ret = __subn_get_opa_hfi_cong_log(smp, am, data, ibdev,
+						  port, resp_len);
+		break;
+	case OPA_ATTRIB_ID_HFI_CONGESTION_SETTING:
+		ret = __subn_get_opa_cong_setting(smp, am, data, ibdev,
 						  port, resp_len);
 		break;
 	case OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
 		ret = __subn_get_opa_cc_table(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
-	case IB_SMP_ATTR_LED_INFO:
-		ret = __subn_get_opa_led_info(smp, am, data, ibdev, port,
-					      resp_len);
-		break;
+#if 0
+	/* FXRTODO: figure out if this code is valid for fxr */
 	case IB_SMP_ATTR_SM_INFO:
 		if (ibp->port_cap_flags & IB_PORT_SM_DISABLED)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
@@ -226,12 +359,174 @@ err:
 	return ret;
 }
 
+static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					      u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					       u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					      u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					      u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					       u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					       u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					 u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					 u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					    u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_cong_setting(struct opa_smp *smp, u32 am, u8 *data,
+					struct ib_device *ibdev, u8 port,
+						u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					      u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
+				struct ib_device *ibdev, u8 port,
+					      u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
 static int __subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
 			    u32 *resp_len)
 {
-	/* FXRTODO: Implment set method */
-	return 0;
+	int ret;
+
+	switch (attr_id) {
+	case IB_SMP_ATTR_PORT_INFO:
+		ret = __subn_set_opa_portinfo(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_PKEY_TABLE:
+		ret = __subn_set_opa_pkeytable(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case OPA_ATTRIB_ID_SL_TO_SC_MAP:
+		ret = __subn_set_opa_sl_to_sc(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_SC_TO_SL_MAP:
+		ret = __subn_set_opa_sc_to_sl(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
+		ret = __subn_set_opa_sc_to_vlt(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case OPA_ATTRIB_ID_SC_TO_VLNT_MAP:
+		ret = __subn_set_opa_sc_to_vlnt(smp, am, data, ibdev, port,
+					       resp_len);
+		break;
+	case OPA_ATTRIB_ID_PORT_STATE_INFO:
+		ret = __subn_set_opa_psi(smp, am, data, ibdev, port,
+					 resp_len);
+		break;
+	case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
+		ret = __subn_set_opa_bct(smp, am, data, ibdev, port,
+					 resp_len);
+		break;
+	case IB_SMP_ATTR_VL_ARB_TABLE:
+		ret = __subn_set_opa_vl_arb(smp, am, data, ibdev, port,
+					    resp_len);
+		break;
+	case OPA_ATTRIB_ID_HFI_CONGESTION_SETTING:
+		ret = __subn_set_opa_cong_setting(smp, am, data, ibdev,
+						  port, resp_len);
+		break;
+	case OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
+		ret = __subn_set_opa_cc_table(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case IB_SMP_ATTR_LED_INFO:
+		ret = __subn_set_opa_led_info(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+#if 0
+	/* FXRTODO: figure out if this code is valid for fxr */
+	case IB_SMP_ATTR_SM_INFO:
+		if (ibp->port_cap_flags & IB_PORT_SM_DISABLED)
+			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		if (ibp->port_cap_flags & IB_PORT_SM)
+			return IB_MAD_RESULT_SUCCESS;
+		/* FALLTHROUGH */
+#endif
+	default:
+		smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
+		ret = reply((struct ib_mad_hdr *)smp);
+		break;
+	}
+
+	return ret;
 }
 
 static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
