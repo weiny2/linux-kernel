@@ -911,6 +911,7 @@ void hfi1_free_agents(struct hfi1_ibdev *dev);
 #define PSN_MASK 0x7FFFFFFF
 #define PSN_SHIFT 1
 #endif
+#define PSN_MODIFY_MASK 0xFFFFFF
 
 /*
  * Compare the lower 24 bits of the msn values.
