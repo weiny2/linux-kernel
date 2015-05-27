@@ -58,6 +58,18 @@
 #include <rdma/opa_smi.h>
 
 /*
+ * FXRTODO: OPA-specific definitions which are
+ * required by opa_ib and opa2_hfi, and which aren't yet in the linux
+ * IB core. Need to find the appropriate header file these.
+ */
+
+/* OPA SMA attribute IDs */
+#define OPA_ATTRIB_ID_CONGESTION_INFO		cpu_to_be16(0x008b)
+#define OPA_ATTRIB_ID_HFI_CONGESTION_LOG	cpu_to_be16(0x008f)
+#define OPA_ATTRIB_ID_HFI_CONGESTION_SETTING	cpu_to_be16(0x0090)
+#define OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE	cpu_to_be16(0x0091)
+
+/*
  * TODO: These macros are required for compiling against the OPA headers
  * shared with user space. Delete from this file eventually
  */
