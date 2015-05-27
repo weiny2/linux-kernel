@@ -3318,20 +3318,13 @@ static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 	struct opa_led_info *p = (struct opa_led_info *) data;
 	u32 nport = OPA_AM_NPORT(am);
 	int on = !!(be32_to_cpu(p->rsvd_led_mask) & OPA_LED_MASK);
-	u64 reg, rate = 0;
 
 	if (port != 1 || nport != 1 || OPA_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
 
-	if (on)
-		rate = 0xf;
-
-	reg = DCC_CFG_LED_CNTRL_LED_CNTRL_SMASK |
-		rate << DCC_CFG_LED_CNTRL_LED_SW_BLINK_RATE_SHIFT;
-
-	write_csr(dd, DCC_CFG_LED_CNTRL, reg);
+	setextled(dd, on);
 
 	return __subn_get_opa_led_info(smp, am, data, ibdev, port, resp_len);
 }

@@ -2943,7 +2943,7 @@ static void dc_start(struct hfi1_devdata *dd)
 	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
 	/* Take the 8051 out of reset */
 	write_csr(dd, DC_DC8051_CFG_RST, 0ull);
-	/* Wait until 8052 is ready */
+	/* Wait until 8051 is ready */
 	ret = wait_fm_ready(dd, TIMEOUT_8051_START);
 	if (ret) {
 		dd_dev_err(dd, "%s: timeout starting 8051 firmware\n",
@@ -6330,6 +6330,8 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 		     ppd->host_link_state == HLS_DN_OFFLINE) &&
 		    dd->dc_shutdown)
 			dc_start(dd);
+		/* Hand LED control to the DC */
+		write_csr(dd, DCC_CFG_LED_CNTRL, 0);
 
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			u8 tmp = ppd->link_enabled;
@@ -9648,7 +9650,9 @@ static void init_chip(struct hfi1_devdata *dd)
 	}
 	/* clear the DC reset */
 	write_csr(dd, CCE_DC_CTRL, 0);
-
+	/* Set the LED off */
+	if (is_a0(dd))
+		setextled(dd, 0);
 	/*
 	 * Clear the QSFP reset.
 	 * A0 leaves the out lines floating on power on, then on an FLR
