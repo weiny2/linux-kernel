@@ -78,7 +78,8 @@
 	hfi1_cdbg(SNOOP, fmt, ##__VA_ARGS__)
 
 /* Snoop option mask */
-#define SNOOP_DROP_SEND 0x1
+#define SNOOP_DROP_SEND	(1 << 0)
+#define SNOOP_USE_METADATA	(1 << 1)
 
 static u8 snoop_flags;
 
@@ -816,56 +817,74 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 	memset(&dpkt, 0, sizeof(struct diag_pkt));
 	dpkt.version = _DIAG_PKT_VERS;
 	dpkt.unit = dd->unit;
-	dpkt.len = count;
-	dpkt.data = (unsigned long)data;
 	dpkt.port = 1;
 
-	/*
-	 * We need to generate the PBC and not let diagpkt_send do it,
-	 * to do this we need the VL and the length in dwords. The VL can be
-	 * determined by using the SL and looking up the SC. Then the SC can be
-	 * converted into VL. The exception to this is those packets which are
-	 * from an SMI queue pair. Since we can't detect anything about the QP
-	 * here we have to rely on the SC. If its 0xF then we assume its SMI and
-	 * do not look at the SL.
-	 */
-	if (copy_from_user(&byte_one, data, 1))
-		return -EINVAL;
+	if (likely(!(snoop_flags & SNOOP_USE_METADATA))) {
+		/*
+		* We need to generate the PBC and not let diagpkt_send do it,
+		* to do this we need the VL and the length in dwords.
+		* The VL can be determined by using the SL and looking up the
+		* SC. Then the SC can be converted into VL. The exception to
+		* this is those packets which are from an SMI queue pair.
+		* Since we can't detect anything about the QP here we have to
+		* rely on the SC. If its 0xF then we assume its SMI and
+		* do not look at the SL.
+		*/
+		if (copy_from_user(&byte_one, data, 1))
+			return -EINVAL;
 
-	if (copy_from_user(&byte_two, data+1, 1))
-		return -EINVAL;
+		if (copy_from_user(&byte_two, data+1, 1))
+			return -EINVAL;
 
-	sc4 = (byte_one >> 4) & 0xf;
-	if (sc4 == 0xF) {
-		snoop_dbg("Detected VL15 packet ignoring SL in packet");
-		vl = sc4;
-	} else {
-		sl = (byte_two >> 4) & 0xf;
-		ibp = to_iport(&(dd->verbs_dev.ibdev), 1);
-		sc5 = ibp->sl_to_sc[sl];
-		vl = sc_to_vlt(dd, sc5);
-		if (vl != sc4) {
-			snoop_dbg("VL %d does not match SC %d of packet",
-				  vl, sc4);
+		sc4 = (byte_one >> 4) & 0xf;
+		if (sc4 == 0xF) {
+			snoop_dbg("Detected VL15 packet ignoring SL in packet");
+			vl = sc4;
+		} else {
+			sl = (byte_two >> 4) & 0xf;
+			ibp = to_iport(&dd->verbs_dev.ibdev, 1);
+			sc5 = ibp->sl_to_sc[sl];
+			vl = sc_to_vlt(dd, sc5);
+			if (vl != sc4) {
+				snoop_dbg("VL %d does not match SC %d of packet",
+					  vl, sc4);
+				return -EINVAL;
+			}
+		}
+
+		sc = dd->vld[vl].sc; /* Look up the context based on VL */
+		if (sc) {
+			dpkt.sw_index = sc->sw_index;
+			snoop_dbg("Sending on context %u(%u)", sc->sw_index,
+				  sc->hw_context);
+		} else {
+			snoop_dbg("Could not find context for vl %d", vl);
 			return -EINVAL;
 		}
-	}
 
-	sc = dd->vld[vl].sc; /* Look up the context based on VL */
-	if (sc != NULL) {
-		dpkt.sw_index = sc->sw_index;
-		snoop_dbg("Sending on context %u(%u)", sc->sw_index,
-			sc->hw_context);
+		len = (count >> 2) + 2; /* Add in PBC */
+		pbc = create_pbc(0, 0, vl, len);
 	} else {
-		snoop_dbg("Could not find context for vl %d", vl);
-		return -EINVAL;
+		if (copy_from_user(&pbc, data, sizeof(pbc)))
+			return -EINVAL;
+		vl = (pbc >> PBC_VL_SHIFT) & PBC_VL_MASK;
+		sc = dd->vld[vl].sc; /* Look up the context based on VL */
+		if (sc) {
+			dpkt.sw_index = sc->sw_index;
+		} else {
+			snoop_dbg("Could not find context for vl %d", vl);
+			return -EINVAL;
+		}
+		data += sizeof(pbc);
+		count -= sizeof(pbc);
 	}
+	dpkt.len = count;
+	dpkt.data = (unsigned long)data;
 
-	len = (count >> 2) + 2; /* Add in PBC */
-	pbc = create_pbc(0, 0, vl, len);
 	snoop_dbg("PBC: vl=0x%llx Length=0x%llx",
-		 (pbc >> 12) & 0xf,
-		 (pbc & 0xfff));
+		  (pbc >> 12) & 0xf,
+		  (pbc & 0xfff));
+
 	dpkt.pbc = pbc;
 	ret = diagpkt_send(&dpkt);
 	/*
@@ -1164,8 +1183,10 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				break;
 
 			snoop_dbg("Setting snoop option %d", value);
-			if (value == SNOOP_DROP_SEND)
+			if (value & SNOOP_DROP_SEND)
 				snoop_flags |= SNOOP_DROP_SEND;
+			if (value & SNOOP_USE_METADATA)
+				snoop_flags |= SNOOP_USE_METADATA;
 			break;
 		default:
 			ret = -ENOTTY;
@@ -1505,7 +1526,8 @@ void snoop_recv_handler(struct hfi1_packet *packet)
 
 		if (ppd->dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
 			snoop_mode = 1;
-		else
+		if ((snoop_mode == 0) ||
+		    unlikely(snoop_flags & SNOOP_USE_METADATA))
 			md_len = sizeof(struct capture_md);
 
 
@@ -1518,7 +1540,7 @@ void snoop_recv_handler(struct hfi1_packet *packet)
 			break;
 		}
 
-		if (!snoop_mode) {
+		if (md_len > 0) {
 			memset(&md, 0, sizeof(struct capture_md));
 			md.port = 1;
 			md.dir = PKT_DIR_INGRESS;
@@ -1644,7 +1666,8 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		  hdrwords, len, plen, dwords, tlen);
 	if (ppd->dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
 		snoop_mode = 1;
-	else
+	if ((snoop_mode == 0) ||
+	    unlikely(snoop_flags & SNOOP_USE_METADATA))
 		md_len = sizeof(struct capture_md);
 
 	/* not using ss->total_len as arg 2 b/c that does not count CRC */
@@ -1656,7 +1679,7 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		goto out;
 	}
 
-	if (!snoop_mode) {
+	if (md_len > 0) {
 		memset(&md, 0, sizeof(struct capture_md));
 		md.port = 1;
 		md.dir = PKT_DIR_EGRESS;
@@ -1813,7 +1836,8 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 		snoop_dbg("Capturing packet");
 		if (dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
 			snoop_mode = 1;
-		else
+		if ((snoop_mode == 0) ||
+		    unlikely(snoop_flags & SNOOP_USE_METADATA))
 			md_len = sizeof(struct capture_md);
 
 		s_packet = allocate_snoop_packet(packet_len, 0, md_len);
@@ -1825,7 +1849,7 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 		}
 
 		/* Fill in the metadata for the packet */
-		if (!snoop_mode) {
+		if (md_len > 0) {
 			memset(&md, 0, sizeof(struct capture_md));
 			md.port = 1;
 			md.dir = PKT_DIR_EGRESS;
