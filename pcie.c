@@ -988,12 +988,12 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 
 	/* step 3: download SBus Master firmware */
 	/* step 4: download PCIe Gen3 SerDes firmware */
+retry:
 	dd_dev_info(dd, "%s: downloading firmware\n", __func__);
 	ret = load_pcie_firmware(dd);
 	if (ret)
 		goto done;
 
-retry:
 	/* step 5: set up device parameter settings */
 	dd_dev_info(dd, "%s: setting PCIe registers\n", __func__);
 
