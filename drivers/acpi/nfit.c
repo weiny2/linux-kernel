@@ -60,7 +60,7 @@ static int acpi_nfit_ctl(struct nd_bus_descriptor *nd_desc,
 		unsigned int buf_len)
 {
 	struct acpi_nfit_desc *acpi_desc = to_acpi_nfit_desc(nd_desc);
-	const struct nd_cmd_desc const *desc = NULL;
+	const struct nd_cmd_desc *desc = NULL;
 	union acpi_object in_obj, in_buf, *out_obj;
 	struct device *dev = acpi_desc->dev;
 	const char *cmd_name, *dimm_name;
@@ -895,7 +895,7 @@ static u64 to_interleave_offset(u64 offset, struct nfit_blk_mmio *mmio)
 
 static u64 read_blk_stat(struct nfit_blk *nfit_blk, unsigned int bw)
 {
-	struct nfit_blk_mmio __iomem *mmio = &nfit_blk->mmio[DCR];
+	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[DCR];
 	u64 offset = nfit_blk->stat_offset + mmio->size * bw;
 
 	if (mmio->num_lines)
@@ -908,7 +908,7 @@ static void write_blk_ctl(struct nfit_blk *nfit_blk, unsigned int bw,
 		resource_size_t dpa, unsigned int len, unsigned int write)
 {
 	u64 cmd, offset;
-	struct nfit_blk_mmio __iomem *mmio = &nfit_blk->mmio[DCR];
+	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[DCR];
 
 	enum {
 		BCW_OFFSET_MASK = (1ULL << 48)-1,
@@ -959,9 +959,9 @@ static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk, void *iobuf,
 		}
 
 		if (write)
-			memcpy_fromio(mmio->base + offset, iobuf + copied, c);
+			memcpy(mmio->aperture + offset, iobuf + copied, c);
 		else
-			memcpy_toio(iobuf + copied, mmio->base + offset, c);
+			memcpy(iobuf + copied, mmio->aperture + offset, c);
 
 		copied += c;
 		len -= c;

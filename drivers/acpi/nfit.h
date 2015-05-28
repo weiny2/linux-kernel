@@ -115,7 +115,10 @@ enum nd_blk_mmio_selector {
 
 struct nfit_blk {
 	struct nfit_blk_mmio {
-		void __iomem *base;
+		union {
+			void __iomem *base;
+			void *aperture;
+		};
 		u64 size;
 		u64 base_offset;
 		u32 line_size;
