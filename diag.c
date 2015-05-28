@@ -137,9 +137,9 @@ struct hfi1_link_info {
 	 __be64 node_guid;
 	u8 port_mode;
 	u8 port_state;
-	__be16 link_speed_active;
-	__be16 link_width_active;
-	__be16 vl15_init;
+	u16 link_speed_active;
+	u16 link_width_active;
+	u16 vl15_init;
 	u8 port_number;
 	/*
 	 * Add padding to make this a full IB SMP payload. Note: changing the
