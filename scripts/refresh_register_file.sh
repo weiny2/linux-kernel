@@ -1,8 +1,9 @@
 #!/bin/bash
 
+gitdir=`git rev-parse --show-toplevel`
 echo "Building list of all possible registers and their value"
 rm -f register_val_list.txt
-awk '/#define/ {if (NF > 2) { $1=""; print $0}}' ../include/wfr/* > register_val_list.txt
+awk '/#define/ {if (NF > 2) { $1=""; print $0}}' ${gitdir}/include/wfr/* > register_val_list.txt
 
 echo "Generating header file"
 echo "#ifndef DEF_CHIP_REG" > chip_registers.h
@@ -63,11 +64,11 @@ cat >> chip_registers.h << 'COPYRIGHT'
 
 COPYRIGHT
 
-egrep "#define\s+\S+\s+" ../include/wfr/wfr_core_defs.h >> chip_registers.h
+egrep "#define\s+\S+\s+" ${gitdir}/include/wfr/wfr_core_defs.h >> chip_registers.h
 echo "" >> chip_registers.h
 
 # Look up the register values for the registers we want.
-for reg in `cat register_minimal_set.txt`; do
+for reg in `cat ${gitdir}/scripts/register_minimal_set.txt`; do
 	val=`egrep "^ $reg\s+" register_val_list.txt`
 	if [[ $? -ne 0 ]]; then
 		echo "ERROR: $reg not defined!"
@@ -95,7 +96,5 @@ sed -i 's/WFR_DEBUG/CHIP_DEBUG/' chip_registers.h
 sed -i 's/WFR_//g' chip_registers.h
 
 echo "Moving chip_register.h to build dir"
-mv chip_registers.h ../
-
-
+mv chip_registers.h ${gitdir}
 
