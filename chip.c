@@ -1254,7 +1254,7 @@ u64 read_csr(const struct hfi1_devdata *dd, u32 offset)
 
 	if (dd->flags & HFI1_PRESENT) {
 		val = readq((void __iomem *)dd->kregbase + offset);
-		return le64_to_cpu(val);
+		return val;
 	}
 	return -1;
 }
@@ -1262,8 +1262,7 @@ u64 read_csr(const struct hfi1_devdata *dd, u32 offset)
 void write_csr(const struct hfi1_devdata *dd, u32 offset, u64 value)
 {
 	if (dd->flags & HFI1_PRESENT)
-		writeq(cpu_to_le64(value),
-		       (void __iomem *)dd->kregbase + offset);
+		writeq(value, (void __iomem *)dd->kregbase + offset);
 }
 
 void __iomem *get_csr_addr(
@@ -5748,7 +5747,7 @@ void hfi1_put_tid(struct hfi1_devdata *dd, u32 index,
 		| (u64)order << RCV_ARRAY_RT_BUF_SIZE_SHIFT
 		| ((pa >> RT_ADDR_SHIFT) & RCV_ARRAY_RT_ADDR_MASK)
 					<< RCV_ARRAY_RT_ADDR_SHIFT;
-	writeq(cpu_to_le64(reg), base + (index * 8));
+	writeq(reg, base + (index * 8));
 
 	if (type == PT_EAGER)
 		/*
