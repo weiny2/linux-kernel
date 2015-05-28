@@ -206,7 +206,7 @@ static inline void read_low_bytes(struct pio_buf *pbuf, const void *from,
 		off = (unsigned long)from & 0x7;
 		BUG_ON(nbytes+off > 8);
 		from = (void *)((unsigned long)from & ~0x7l);
-		pbuf->carry.val64 = (le64_to_cpu(*(u64 *)from)
+		pbuf->carry.val64 = ((*(u64 *)from)
 				<< zshift(nbytes + off))/* zero upper bytes */
 				>> zshift(nbytes);	/* place at bottom */
 	}
@@ -243,7 +243,7 @@ static inline void read_extra_bytes(struct pio_buf *pbuf,
 		 * shift down to zero lower bytes, shift up to zero upper
 		 * bytes, shift back down to move into place
 		 */
-		pbuf->carry.val64 |= ((le64_to_cpu(*(u64 *)from)
+		pbuf->carry.val64 |= (((*(u64 *)from)
 					>> mshift(off))
 					<< zshift(xbytes))
 					>> zshift(xbytes+pbuf->carry_bytes);
@@ -296,9 +296,9 @@ static inline void merge_write8(
 {
 	u64 new, temp;
 
-	new = le64_to_cpu(*(u64 *)src);
+	new = *(u64 *)src;
 	temp = pbuf->carry.val64 | (new << mshift(pbuf->carry_bytes));
-	writeq(cpu_to_le64(temp), dest);
+	writeq(temp, dest);
 	pbuf->carry.val64 = new >> zshift(pbuf->carry_bytes);
 }
 
@@ -307,7 +307,7 @@ static inline void merge_write8(
  */
 static inline void carry8_write8(union mix carry, void __iomem *dest)
 {
-	writeq(cpu_to_le64(carry.val64), dest);
+	writeq(carry.val64, dest);
 }
 
 /*
@@ -319,7 +319,7 @@ static inline int carry_write8(struct pio_buf *pbuf, void __iomem *dest)
 {
 	if (pbuf->carry_bytes) {
 		/* unused bytes are always kept zeroed, so just write */
-		writeq(cpu_to_le64(pbuf->carry.val64), dest);
+		writeq(pbuf->carry.val64, dest);
 		return 1;
 	}
 

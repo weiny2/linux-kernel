@@ -1074,10 +1074,10 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 
 		if (idle_cnt)
 			dd->default_desc1 =
-				cpu_to_le64(SDMA_DESC1_HEAD_TO_HOST_FLAG);
+				SDMA_DESC1_HEAD_TO_HOST_FLAG;
 		else
 			dd->default_desc1 =
-				cpu_to_le64(SDMA_DESC1_INT_REQ_FLAG);
+				SDMA_DESC1_INT_REQ_FLAG;
 
 		tasklet_init(&sde->sdma_hw_clean_up_task, sdma_hw_clean_up_task,
 			(unsigned long)sde);
@@ -1870,7 +1870,7 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 		tail,
 		(unsigned long long)read_sde_csr(sde, SD(HEAD)),
 		head,
-		(unsigned long long)*sde->head_dma,
+		(unsigned long long)le64_to_cpu(*sde->head_dma),
 		(unsigned long long)read_sde_csr(sde, SD(MEMORY)),
 		(unsigned long long)read_sde_csr(sde, SD(LEN_GEN)),
 		(unsigned long long)read_sde_csr(sde, SD(RELOAD_CNT)),
@@ -2796,8 +2796,8 @@ void _sdma_txreq_ahgadd(
 		if (!shift && !(i & 2))
 			desc++;
 		tx->descs[desc].qw[!!(i & 2)] |=
-			cpu_to_le64((((u64)ahg[i + 1])
-				<< shift));
+			(((u64)ahg[i + 1])
+				<< shift);
 		shift = (shift + 32) & 63;
 	}
 }

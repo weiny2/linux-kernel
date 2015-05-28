@@ -760,7 +760,7 @@ struct hfi1_devdata {
 	/* fields common to all SDMA engines */
 
 	/* default flags to last descriptor */
-	__le64 default_desc1;
+	u64 default_desc1;
 	volatile __le64                    *sdma_heads_dma; /* DMA'ed by chip */
 	dma_addr_t                          sdma_heads_phys;
 	void                               *sdma_pad_dma; /* DMA'ed by chip */

@@ -1563,7 +1563,7 @@ void sc_release_update(struct send_context *sc)
 
 	spin_lock_irqsave(&sc->release_lock, flags);
 	/* update free */
-	hw_free = *sc->hw_free;				/* volatile read */
+	hw_free = le64_to_cpu(*sc->hw_free);		/* volatile read */
 	old_free = sc->free;
 	extra = (((hw_free & CR_COUNTER_SMASK) >> CR_COUNTER_SHIFT)
 			- (old_free & CR_COUNTER_MASK))
