@@ -379,7 +379,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			u16 rlid;
 			u8 svc_type, sl, sc5;
 
-			sc5  = be16_to_cpu(rhdr->lrh[0] >> 4) & 0xf;
+			sc5  = (be16_to_cpu(rhdr->lrh[0]) >> 4) & 0xf;
 			if (rhf_dc_info(packet->rhf))
 				sc5 |= 0x10;
 			sl = ibp->sc_to_sl[sc5];
