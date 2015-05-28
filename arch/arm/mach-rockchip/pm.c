@@ -44,9 +44,11 @@ static void __iomem *rk3288_bootram_base;
 static phys_addr_t rk3288_bootram_phy;
 
 static struct regmap *pmu_regmap;
+static struct regmap *grf_regmap;
 static struct regmap *sgrf_regmap;
 
 static u32 rk3288_pmu_pwr_mode_con;
+static u32 rk3288_grf_soc_con0;
 static u32 rk3288_sgrf_soc_con0;
 
 static inline u32 rk3288_l2_config(void)
@@ -70,14 +72,39 @@ static void rk3288_slp_mode_set(int level)
 {
 	u32 mode_set, mode_set1;
 
+	regmap_read(grf_regmap, RK3288_GRF_SOC_CON0, &rk3288_grf_soc_con0);
+
 	regmap_read(sgrf_regmap, RK3288_SGRF_SOC_CON0, &rk3288_sgrf_soc_con0);
 
 	regmap_read(pmu_regmap, RK3288_PMU_PWRMODE_CON,
 		    &rk3288_pmu_pwr_mode_con);
 
-	/* set bit 8 so that system will resume to FAST_BOOT_ADDR */
+	/*
+	 * We need set this bit GRF_FORCE_JTAG here, for the debug module,
+	 * otherwise, it may become inaccessible after resume.
+	 * This creates a potential security issue, as the sdmmc pins may
+	 * accept jtag data for a short time during resume if no card is
+	 * inserted.
+	 * But this is of course also true for the regular boot, before we
+	 * turn of the jtag/sdmmc autodetect.
+	 */
+	regmap_write(grf_regmap, RK3288_GRF_SOC_CON0, GRF_FORCE_JTAG |
+		     GRF_FORCE_JTAG_WRITE);
+
+	/*
+	 * SGRF_FAST_BOOT_EN - system to boot from FAST_BOOT_ADDR
+	 * PCLK_WDT_GATE - disable WDT during suspend.
+	 */
 	regmap_write(sgrf_regmap, RK3288_SGRF_SOC_CON0,
-		     SGRF_FAST_BOOT_EN | SGRF_FAST_BOOT_EN_WRITE);
+		     SGRF_PCLK_WDT_GATE | SGRF_FAST_BOOT_EN
+		     | SGRF_PCLK_WDT_GATE_WRITE | SGRF_FAST_BOOT_EN_WRITE);
+
+	/*
+	 * The dapswjdp can not auto reset before resume, that cause it may
+	 * access some illegal address during resume. Let's disable it before
+	 * suspend, and the MASKROM will enable it back.
+	 */
+	regmap_write(sgrf_regmap, RK3288_SGRF_CPU_CON0, SGRF_DAPDEVICEEN_WRITE);
 
 	/* booting address of resuming system is from this register value */
 	regmap_write(sgrf_regmap, RK3288_SGRF_FAST_BOOT_ADDR,
@@ -122,7 +149,11 @@ static void rk3288_slp_mode_set_resume(void)
 		     rk3288_pmu_pwr_mode_con);
 
 	regmap_write(sgrf_regmap, RK3288_SGRF_SOC_CON0,
-		     rk3288_sgrf_soc_con0 | SGRF_FAST_BOOT_EN_WRITE);
+		     rk3288_sgrf_soc_con0 | SGRF_PCLK_WDT_GATE_WRITE
+		     | SGRF_FAST_BOOT_EN_WRITE);
+
+	regmap_write(grf_regmap, RK3288_GRF_SOC_CON0, rk3288_grf_soc_con0 |
+		     GRF_FORCE_JTAG_WRITE);
 }
 
 static int rockchip_lpmode_enter(unsigned long arg)
@@ -181,6 +212,13 @@ static int rk3288_suspend_init(struct device_node *np)
 		return PTR_ERR(pmu_regmap);
 	}
 
+	grf_regmap = syscon_regmap_lookup_by_compatible(
+				"rockchip,rk3288-grf");
+	if (IS_ERR(grf_regmap)) {
+		pr_err("%s: could not find grf regmap\n", __func__);
+		return PTR_ERR(pmu_regmap);
+	}
+
 	sram_np = of_find_compatible_node(NULL, NULL,
 					  "rockchip,rk3288-pmu-sram");
 	if (!sram_np) {
@@ -208,6 +246,9 @@ static int rk3288_suspend_init(struct device_node *np)
 	/* copy resume code and data to bootsram */
 	memcpy(rk3288_bootram_base, rockchip_slp_cpu_resume,
 	       rk3288_bootram_sz);
+
+	regmap_write(pmu_regmap, RK3288_PMU_OSC_CNT, OSC_STABL_CNT_THRESH);
+	regmap_write(pmu_regmap, RK3288_PMU_STABL_CNT, PMU_STABL_CNT_THRESH);
 
 	return 0;
 }

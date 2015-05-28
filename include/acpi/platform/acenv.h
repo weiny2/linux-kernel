@@ -76,6 +76,7 @@
 #define ACPI_LARGE_NAMESPACE_NODE
 #define ACPI_DATA_TABLE_DISASSEMBLY
 #define ACPI_SINGLE_THREADED
+#define ACPI_32BIT_PHYSICAL_ADDRESS
 #endif
 
 /* acpi_exec configuration. Multithreaded with full AML debugger */
@@ -173,6 +174,9 @@
 
 #elif defined(_APPLE) || defined(__APPLE__)
 #include "acmacosx.h"
+
+#elif defined(__DragonFly__)
+#include "acdragonfly.h"
 
 #elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 #include "acfreebsd.h"
