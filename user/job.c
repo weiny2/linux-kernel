@@ -187,7 +187,8 @@ void hfi_job_free(struct hfi_userdata *ud)
 		ops->ctx_unreserve(&ud->ctx);
 
 		/* clear DLID entries */
-		ops->dlid_release(&ud->ctx);
+		ops->dlid_release(&ud->ctx, ud->ctx.dlid_base,
+				  ud->ctx.lid_count);
 
 		pr_info("release PID group [%u - %u] tag (%u,%u)\n",
 			ud->ctx.pid_base, ud->ctx.pid_base + ud->ctx.pid_count - 1,

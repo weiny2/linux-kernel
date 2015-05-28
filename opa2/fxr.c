@@ -67,6 +67,8 @@
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
 
+#define DLID_TABLE_SIZE (64 * 1024) /* 64k */
+
 /* TODO - for now, start FXR in loopback */
 static uint force_loopback = 1;
 module_param(force_loopback, uint, S_IRUGO);
@@ -440,6 +442,57 @@ void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 		write_csr(dd, offset, cq_auth.val);
 		offset += 8;
 	}
+}
+
+/*
+  update DLID relocation table
+  assume granularity = 1 for now
+*/
+int
+hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
+				 struct hfi_dlid_assign_args *dlid_assign)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	TXCI_CFG_DLID_RT_t *p =
+		(TXCI_CFG_DLID_RT_t *)dlid_assign->dlid_entries_ptr;
+	u32 offset;
+
+	if (dlid_assign->dlid_base + dlid_assign->count > DLID_TABLE_SIZE)
+		return -EINVAL;
+
+	for (offset = FXR_TXCI_CFG_DLID_RT + dlid_assign->dlid_base;
+		offset < FXR_TXCI_CFG_DLID_RT + dlid_assign->count * sizeof(*p);
+		p++, offset += sizeof(*p)) {
+		/* They must be 0 when granularity = 1 */
+		if (p->field.RPLC_BLK_SIZE != 0)
+			return -EINVAL;
+		if (p->field.RPLC_MATCH != 0)
+			return -EINVAL;
+
+		write_csr(dd, offset, p->val);
+	}
+	return 0;
+}
+
+/*
+  reset DLID relocation table
+  assume granularity = 1 for now
+*/
+int
+hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	u32 offset;
+
+	if (dlid_base + count > DLID_TABLE_SIZE)
+		return -EINVAL;
+
+	for (offset = FXR_TXCI_CFG_DLID_RT + dlid_base;
+		offset < FXR_TXCI_CFG_DLID_RT + count *
+			sizeof(TXCI_CFG_DLID_RT_t);
+		offset += sizeof(TXCI_CFG_DLID_RT_t))
+		write_csr(dd, offset, 0);
+	return 0;
 }
 
 /*

@@ -53,10 +53,10 @@
 #include <linux/sched.h>
 #include "opa_hfi.h"
 
-int hfi_dlid_assign(struct hfi_ctx *ctx, struct hfi_dlid_assign_args *dlid_assign)
+int hfi_dlid_assign(struct hfi_ctx *ctx,
+		    struct hfi_dlid_assign_args *dlid_assign)
 {
-	struct hfi_devdata *dd = ctx->devdata;
-	void *cq_base;
+	int ret = 0;
 
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
@@ -64,18 +64,27 @@ int hfi_dlid_assign(struct hfi_ctx *ctx, struct hfi_dlid_assign_args *dlid_assig
 	if (ctx->dlid_base != HFI_LID_ANY)
 		return -EPERM;
 
-	/* TODO - write DLID table via TX CQ */
-	cq_base = dd->cq_tx_base;
+	/* write DLID relocation table */
+	ret = hfi_update_dlid_relocation_table(ctx, dlid_assign);
+	if (ret < 0)
+		return ret;
 
 	ctx->dlid_base = dlid_assign->dlid_base;
+
 	return 0;
 }
 
-int hfi_dlid_release(struct hfi_ctx *ctx)
+int hfi_dlid_release(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 {
+	int ret = 0;
+
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
+	ret = hfi_reset_dlid_relocation_table(ctx, dlid_base, count);
+	if (ret < 0)
+		return ret;
+
 	ctx->dlid_base = HFI_LID_ANY;
-	/* TODO - write DLID table via TX CQ */
+
 	return 0;
 }
