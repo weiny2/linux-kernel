@@ -1103,7 +1103,7 @@ static umode_t nd_namespace_attr_visible(struct kobject *kobj, struct attribute 
 
 	if (is_namespace_pmem(dev) || is_namespace_blk(dev)) {
 		if (a == &dev_attr_size.attr)
-			return S_IWUSR;
+			return S_IWUSR | S_IRUGO;
 
 		if (is_namespace_pmem(dev) && a == &dev_attr_sector_size.attr)
 			return 0;
