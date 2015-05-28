@@ -895,7 +895,7 @@ static u64 to_interleave_offset(u64 offset, struct nfit_blk_mmio *mmio)
 
 static u64 read_blk_stat(struct nfit_blk *nfit_blk, unsigned int bw)
 {
-	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[DCR];
+	struct nfit_blk_mmio __iomem *mmio = &nfit_blk->mmio[DCR];
 	u64 offset = nfit_blk->stat_offset + mmio->size * bw;
 
 	if (mmio->num_lines)
@@ -908,7 +908,7 @@ static void write_blk_ctl(struct nfit_blk *nfit_blk, unsigned int bw,
 		resource_size_t dpa, unsigned int len, unsigned int write)
 {
 	u64 cmd, offset;
-	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[DCR];
+	struct nfit_blk_mmio __iomem *mmio = &nfit_blk->mmio[DCR];
 
 	enum {
 		BCW_OFFSET_MASK = (1ULL << 48)-1,
@@ -959,9 +959,9 @@ static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk, void *iobuf,
 		}
 
 		if (write)
-			memcpy(mmio->base + offset, iobuf + copied, c);
+			memcpy_fromio(mmio->base + offset, iobuf + copied, c);
 		else
-			memcpy(iobuf + copied, mmio->base + offset, c);
+			memcpy_toio(iobuf + copied, mmio->base + offset, c);
 
 		copied += c;
 		len -= c;
@@ -1036,7 +1036,7 @@ static void nfit_spa_unmap(struct acpi_nfit_desc *acpi_desc,
 	mutex_unlock(&acpi_desc->spa_map_mutex);
 }
 
-static void *__nfit_spa_map(struct acpi_nfit_desc *acpi_desc,
+static void __iomem *__nfit_spa_map(struct acpi_nfit_desc *acpi_desc,
 		struct acpi_nfit_system_address *spa)
 {
 	resource_size_t start = spa->address;
@@ -1092,16 +1092,16 @@ static void *__nfit_spa_map(struct acpi_nfit_desc *acpi_desc,
  * when all region devices referencing the same mapping are disabled /
  * unbound.
  */
-static void *nfit_spa_map(struct acpi_nfit_desc *acpi_desc,
+static void __iomem *nfit_spa_map(struct acpi_nfit_desc *acpi_desc,
 		struct acpi_nfit_system_address *spa)
 {
-	struct nfit_spa_mapping *spa_map;
+	void __iomem *iomem;
 
 	mutex_lock(&acpi_desc->spa_map_mutex);
-	spa_map = __nfit_spa_map(acpi_desc, spa);
+	iomem = __nfit_spa_map(acpi_desc, spa);
 	mutex_unlock(&acpi_desc->spa_map_mutex);
 
-	return spa_map;
+	return iomem;
 }
 
 static int nfit_blk_init_interleave(struct nfit_blk_mmio *mmio,

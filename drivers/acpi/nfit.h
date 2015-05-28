@@ -115,7 +115,7 @@ enum nd_blk_mmio_selector {
 
 struct nfit_blk {
 	struct nfit_blk_mmio {
-		void *base;
+		void __iomem *base;
 		u64 size;
 		u64 base_offset;
 		u32 line_size;
@@ -135,7 +135,7 @@ struct nfit_spa_mapping {
 	struct acpi_nfit_system_address *spa;
 	struct list_head list;
 	struct kref kref;
-	void *iomem;
+	void __iomem *iomem;
 };
 
 static inline struct nfit_spa_mapping *to_spa_map(struct kref *kref)
