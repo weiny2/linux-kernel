@@ -283,7 +283,7 @@ struct opa_core_ops {
 	int (*ev_release)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx);
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
-	int (*dlid_release)(struct hfi_ctx *ctx);
+	int (*dlid_release)(struct hfi_ctx *ctx, u32 dlid_base, u32 count);
 	void (*get_device_desc)(struct opa_core_device *odev,
 						struct opa_dev_desc *desc);
 	void (*get_port_desc)(struct opa_core_device *odev,

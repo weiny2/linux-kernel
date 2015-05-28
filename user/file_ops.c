@@ -199,12 +199,9 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy_in = 0;
 		break;
 	case HFI_CMD_DLID_ASSIGN:
+	case HFI_CMD_DLID_RELEASE:
 		copy_in = sizeof(dlid_assign);
 		copy_ptr = &dlid_assign;
-		need_admin = 1;
-		break;
-	case HFI_CMD_DLID_RELEASE:
-		copy_in = 0;
 		need_admin = 1;
 		break;
 	case HFI_CMD_CT_ASSIGN:
@@ -327,7 +324,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ret = ops->dlid_assign(&ud->ctx, &dlid_assign);
 		break;
 	case HFI_CMD_DLID_RELEASE:
-		ret = ops->dlid_release(&ud->ctx);
+		if (dlid_assign.count != ud->ctx.lid_count) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = ops->dlid_release(&ud->ctx, dlid_assign.dlid_base,
+					dlid_assign.count);
 		break;
 	case HFI_CMD_CTXT_ATTACH:
 		ctx_assign.pid = ctxt_attach.pid;
