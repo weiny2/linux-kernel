@@ -58,4 +58,19 @@
 
 #define FXR_LIM_MGMT_P_KEY       0x7FFF
 
+struct ib_node_info {
+	u8 base_version;
+	u8 class_version;
+	u8 node_type;
+	u8 num_ports;
+	__be64 sys_guid;
+	__be64 node_guid;
+	__be64 port_guid;
+	__be16 partition_cap;
+	__be16 device_id;
+	__be32 revision;
+	u8 local_port_num;
+	u8 vendor_id[3];
+} __packed;
+
 #endif				/* _OPA_MAD_H */
