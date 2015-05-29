@@ -337,7 +337,7 @@ static ssize_t devtype_show(struct device *dev, struct device_attribute *attr,
 {
 	return sprintf(buf, "%s\n", dev->type->name);
 }
-DEVICE_ATTR_RO(devtype);
+static DEVICE_ATTR_RO(devtype);
 
 static struct attribute *nd_device_attributes[] = {
 	&dev_attr_modalias.attr,
@@ -374,7 +374,7 @@ void nd_bus_destroy_ndctl(struct nd_bus *nd_bus)
 	device_destroy(nd_class, MKDEV(nd_bus_major, nd_bus->id));
 }
 
-static const struct nd_cmd_desc const __nd_cmd_dimm_descs[] = {
+static const struct nd_cmd_desc __nd_cmd_dimm_descs[] = {
 	[ND_CMD_IMPLEMENTED] = { },
 	[ND_CMD_SMART] = {
 		.out_num = 2,
@@ -420,7 +420,7 @@ const struct nd_cmd_desc *nd_cmd_dimm_desc(int cmd)
 }
 EXPORT_SYMBOL_GPL(nd_cmd_dimm_desc);
 
-static const struct nd_cmd_desc const __nd_cmd_bus_descs[] = {
+static const struct nd_cmd_desc __nd_cmd_bus_descs[] = {
 	[ND_CMD_IMPLEMENTED] = { },
 	[ND_CMD_ARS_CAP] = {
 		.in_num = 2,

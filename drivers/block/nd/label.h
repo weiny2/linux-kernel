@@ -124,8 +124,8 @@ static inline int nd_label_next_nsindex(int index)
 struct nd_dimm_drvdata;
 int nd_label_validate(struct nd_dimm_drvdata *ndd);
 void nd_label_copy(struct nd_dimm_drvdata *ndd,
-		struct nd_namespace_index *dst,
-		struct nd_namespace_index *src);
+		struct nd_namespace_index __iomem *dst,
+		struct nd_namespace_index __iomem *src);
 size_t sizeof_namespace_index(struct nd_dimm_drvdata *ndd);
 int nd_label_active_count(struct nd_dimm_drvdata *ndd);
 struct nd_namespace_label __iomem *nd_label_active(

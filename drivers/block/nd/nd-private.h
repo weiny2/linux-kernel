@@ -73,11 +73,6 @@ static inline void nd_btt_notify_ndio(struct nd_bus *nd_bus, struct nd_io *ndio)
 struct nd_bus *walk_to_nd_bus(struct device *nd_dev);
 int __init nd_bus_init(void);
 void nd_bus_exit(void);
-int __init nd_dimm_init(void);
-int __init nd_region_init(void);
-void __init nd_region_init_locks(void);
-void nd_dimm_exit(void);
-int nd_region_exit(void);
 void nd_region_probe_start(struct nd_bus *nd_bus, struct device *dev);
 void nd_region_probe_end(struct nd_bus *nd_bus, struct device *dev, int rc);
 struct nd_region;

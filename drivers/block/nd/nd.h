@@ -234,6 +234,10 @@ void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
 void ndio_del_claim(struct nd_io_claim *ndio_claim);
 struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove);
+int __init nd_dimm_init(void);
+int __init nd_region_init(void);
+void nd_dimm_exit(void);
+void nd_region_exit(void);
 struct nd_dimm;
 struct nd_dimm_drvdata *to_ndd(struct nd_mapping *nd_mapping);
 int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd);

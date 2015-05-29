@@ -21,6 +21,10 @@
 
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 
+#ifndef __io_virt
+#define __io_virt(x) ((void __force *) (x))
+#endif
+
 static u32 best_seq(u32 a, u32 b)
 {
 	a &= NSINDEX_SEQ_MASK;
@@ -114,7 +118,7 @@ int nd_label_validate(struct nd_dimm_drvdata *ndd)
 		}
 		sum_save = readq(&nsindex[i]->checksum);
 		writeq(0, &nsindex[i]->checksum);
-		sum = nd_fletcher64((void * __force) nsindex[i],
+		sum = nd_fletcher64(__io_virt(nsindex[i]),
 				sizeof_namespace_index(ndd), 1);
 		writeq(sum_save, &nsindex[i]->checksum);
 		if (sum != sum_save) {
@@ -190,21 +194,17 @@ void nd_label_copy(struct nd_dimm_drvdata *ndd,
 		struct nd_namespace_index __iomem *dst,
 		struct nd_namespace_index __iomem *src)
 {
-	void *s, *d;
-
 	if (dst && src)
 		/* pass */;
 	else
 		return;
 
-	d = (void * __force) dst;
-	s = (void * __force) src;
-	memcpy(d, s, sizeof_namespace_index(ndd));
+	memcpy(__io_virt(dst), __io_virt(src), sizeof_namespace_index(ndd));
 }
 
 static struct nd_namespace_label __iomem *nd_label_base(struct nd_dimm_drvdata *ndd)
 {
-	void *base = to_namespace_index(ndd, 0);
+	void __iomem *base = to_namespace_index(ndd, 0);
 
 	return base + 2 * sizeof_namespace_index(ndd);
 }
@@ -224,20 +224,23 @@ static int to_slot(struct nd_dimm_drvdata *ndd,
  * preamble_index - common variable initialization for nd_label_* routines
  * @nd_dimm: dimm container for the relevant label set
  * @idx: namespace_index index
- * @nsindex: on return set to the currently active namespace index
+ * @nsindex_out: on return set to the currently active namespace index
  * @free: on return set to the free label bitmap in the index
  * @nslot: on return set to the number of slots in the label space
  */
 static bool preamble_index(struct nd_dimm_drvdata *ndd, int idx,
-		struct nd_namespace_index **nsindex,
+		struct nd_namespace_index __iomem **nsindex_out,
 		unsigned long **free, u32 *nslot)
 {
-	*nsindex = to_namespace_index(ndd, idx);
-	if (*nsindex == NULL)
+	struct nd_namespace_index __iomem *nsindex;
+
+	nsindex = to_namespace_index(ndd, idx);
+	if (nsindex == NULL)
 		return false;
 
-	*free = (unsigned long __force *) (*nsindex)->free;
-	*nslot = readl(&(*nsindex)->nslot);
+	*free = __io_virt(nsindex->free);
+	*nslot = readl(&nsindex->nslot);
+	*nsindex_out = nsindex;
 
 	return true;
 }
@@ -252,7 +255,7 @@ char *nd_label_gen_id(struct nd_label_id *label_id, u8 *uuid, u32 flags)
 }
 
 static bool preamble_current(struct nd_dimm_drvdata *ndd,
-		struct nd_namespace_index **nsindex,
+		struct nd_namespace_index __iomem **nsindex,
 		unsigned long **free, u32 *nslot)
 {
 	return preamble_index(ndd, ndd->ns_current, nsindex,
@@ -260,7 +263,7 @@ static bool preamble_current(struct nd_dimm_drvdata *ndd,
 }
 
 static bool preamble_next(struct nd_dimm_drvdata *ndd,
-		struct nd_namespace_index **nsindex,
+		struct nd_namespace_index __iomem **nsindex,
 		unsigned long **free, u32 *nslot)
 {
 	return preamble_index(ndd, ndd->ns_next, nsindex,
@@ -420,12 +423,13 @@ u32 nd_label_nfree(struct nd_dimm_drvdata *ndd)
 static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
 		unsigned long flags)
 {
-	struct nd_namespace_index *nsindex = to_namespace_index(ndd, index);
+	struct nd_namespace_index __iomem *nsindex;
 	unsigned long offset;
 	u64 checksum;
 	u32 nslot;
 	int rc;
 
+	nsindex = to_namespace_index(ndd, index);
 	if (flags & ND_NSINDEX_INIT)
 		nslot = nd_dimm_num_label_slots(ndd);
 	else
@@ -450,7 +454,7 @@ static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
 	writew(1, &nsindex->minor);
 	writeq(0, &nsindex->checksum);
 	if (flags & ND_NSINDEX_INIT) {
-		unsigned long *free = (unsigned long __force *) nsindex->free;
+		unsigned long *free = __io_virt(nsindex->free);
 		u32 nfree = ALIGN(nslot, BITS_PER_LONG);
 		int last_bits, i;
 
@@ -458,11 +462,11 @@ static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
 		for (i = 0, last_bits = nfree - nslot; i < last_bits; i++)
 			clear_bit_le(nslot + i, free);
 	}
-	checksum = nd_fletcher64((void * __force) nsindex,
+	checksum = nd_fletcher64(__io_virt(nsindex),
 			sizeof_namespace_index(ndd), 1);
 	writeq(checksum, &nsindex->checksum);
 	rc = nd_dimm_set_config_data(ndd, readq(&nsindex->myoff),
-			nsindex, sizeof_namespace_index(ndd));
+			__io_virt(nsindex), sizeof_namespace_index(ndd));
 	if (rc < 0)
 		return rc;
 
@@ -526,7 +530,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 
 	/* update label */
 	offset = nd_label_offset(ndd, nd_label);
-	rc = nd_dimm_set_config_data(ndd, offset, nd_label,
+	rc = nd_dimm_set_config_data(ndd, offset, __io_virt(nd_label),
 			sizeof(struct nd_namespace_label));
 	if (rc < 0)
 		return rc;
@@ -552,7 +556,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 
 static void del_label(struct nd_mapping *nd_mapping, int l)
 {
-	struct nd_namespace_label __iomem *next_label, __iomem *nd_label;
+	struct nd_namespace_label __iomem *next_label, *nd_label;
 	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
 	unsigned int slot;
 	int j;
@@ -709,7 +713,7 @@ static int __blk_label_update(struct nd_region *nd_region,
 
 		/* update label */
 		offset = nd_label_offset(ndd, nd_label);
-		rc = nd_dimm_set_config_data(ndd, offset, nd_label,
+		rc = nd_dimm_set_config_data(ndd, offset, __io_virt(nd_label),
 				sizeof(struct nd_namespace_label));
 		if (rc < 0)
 			goto abort;
