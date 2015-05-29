@@ -1398,6 +1398,9 @@ static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
 	struct hfi1_user_sdma_pkt_q *pq = req ? req->pq : NULL;
 	u64 tx_seqnum;
 
+	if (unlikely(!req || !pq))
+		return;
+
 	if (tx->iovec1)
 		iovec_may_free(tx->iovec1, unpin_vector_pages);
 	if (tx->iovec2)

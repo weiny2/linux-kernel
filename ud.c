@@ -384,7 +384,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
 	qp->s_hdr->ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	if (ah_attr->dlid == IB_LID_PERMISSIVE)
+	if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE))
 		qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
 	else {
 		lid = ppd->lid;

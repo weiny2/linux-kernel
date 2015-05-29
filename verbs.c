@@ -1906,7 +1906,7 @@ static void init_ibport(struct hfi1_pportdata *ppd)
 	spin_lock_init(&ibp->lock);
 	/* Set the prefix to the default value (see ch. 4.1.1) */
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
-	ibp->sm_lid = be16_to_cpu(0);
+	ibp->sm_lid = 0;
 	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;

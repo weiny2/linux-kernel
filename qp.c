@@ -816,7 +816,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		qp->remote_qpn = attr->dest_qp_num;
 
 	if (attr_mask & IB_QP_SQ_PSN) {
-		qp->s_next_psn = mask_psn(attr->sq_psn);
+		qp->s_next_psn = attr->sq_psn & PSN_MODIFY_MASK;
 		qp->s_psn = qp->s_next_psn;
 		qp->s_sending_psn = qp->s_next_psn;
 		qp->s_last_psn = qp->s_next_psn - 1;
@@ -824,7 +824,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_RQ_PSN)
-		qp->r_psn = mask_psn(attr->rq_psn);
+		qp->r_psn = attr->rq_psn & PSN_MODIFY_MASK;
 
 	if (attr_mask & IB_QP_ACCESS_FLAGS)
 		qp->qp_access_flags = attr->qp_access_flags;
@@ -1659,7 +1659,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	sde = qp_to_sdma_engine(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x SL %u MTU %d SDE %p,%u\n",
+		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x SL %u MTU %d %u %u %u SDE %p,%u\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1683,6 +1683,9 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->remote_ah_attr.dlid,
 		   qp->remote_ah_attr.sl,
 		   qp->pmtu,
+		   qp->s_retry_cnt,
+		   qp->timeout,
+		   qp->s_rnr_retry_cnt,
 		   sde,
 		   sde ? sde->this_idx : 0);
 }

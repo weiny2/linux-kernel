@@ -605,7 +605,6 @@ extern const u8 pcie_pcs_addrs[2][NUM_PCIE_SERDES];
 /* SBus commands */
 #define RESET_SBUS_RECEIVER 0x20
 #define WRITE_SBUS_RECEIVER 0x21
-#define READ_SBUS_RECEIVER  0x22
 void sbus_request(struct hfi1_devdata *dd,
 		  u8 receiver_addr, u8 data_addr, u8 command, u32 data_in);
 int sbus_request_slow(struct hfi1_devdata *dd,
@@ -654,7 +653,6 @@ u32 hdrqempty(struct hfi1_ctxtdata *rcd);
 int is_a0(struct hfi1_devdata *dd);
 int is_ax(struct hfi1_devdata *dd);
 int is_bx(struct hfi1_devdata *dd);
-void force_all_interrupts(struct hfi1_devdata *dd);
 
 int acquire_lcb_access(struct hfi1_devdata *dd, int sleep_ok);
 int release_lcb_access(struct hfi1_devdata *dd, int sleep_ok);
@@ -995,5 +993,21 @@ int hfi1_clear_ctxt_jkey(struct hfi1_devdata *dd, unsigned ctxt);
 int hfi1_set_ctxt_pkey(struct hfi1_devdata *dd, unsigned ctxt, u16 pkey);
 int hfi1_clear_ctxt_pkey(struct hfi1_devdata *dd, unsigned ctxt);
 void hfi1_read_link_quality(struct hfi1_devdata *dd, u8 *link_quality);
+
+/*
+ * Interrupt source table.
+ *
+ * Each entry is an interrupt source "type".  It is ordered by increasing
+ * number.
+ */
+struct is_table {
+	int start;	 /* interrupt source type start */
+	int end;	 /* interrupt source type end */
+	/* routine that returns the name of the interrupt source */
+	char *(*is_name)(char *name, size_t size, unsigned int source);
+	/* routine to call when receiving an interrupt */
+	void (*is_int)(struct hfi1_devdata *dd, unsigned int source);
+};
+
 #endif /* _CHIP_H */
 

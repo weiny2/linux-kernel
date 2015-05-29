@@ -772,7 +772,7 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 		thresh = sc_percent_to_threshold(sc,
 				user_credit_return_threshold);
 	} else { /* kernel */
-		thresh = sc_mtu_to_threshold(sc, default_mtu, hdrqentsize);
+		thresh = sc_mtu_to_threshold(sc, hfi1_max_mtu, hdrqentsize);
 	}
 	reg = thresh << SC(CREDIT_CTRL_THRESHOLD_SHIFT);
 	/* add in early return */
@@ -1563,7 +1563,7 @@ void sc_release_update(struct send_context *sc)
 
 	spin_lock_irqsave(&sc->release_lock, flags);
 	/* update free */
-	hw_free = *sc->hw_free;				/* volatile read */
+	hw_free = le64_to_cpu(*sc->hw_free);		/* volatile read */
 	old_free = sc->free;
 	extra = (((hw_free & CR_COUNTER_SMASK) >> CR_COUNTER_SHIFT)
 			- (old_free & CR_COUNTER_MASK))
@@ -1663,8 +1663,8 @@ int init_pervl_scs(struct hfi1_devdata *dd)
 					 dd->rcd[0]->rcvhdrqentsize, dd->node);
 		if (!dd->vld[i].sc)
 			goto nomem;
-		/* non VL15 start with the default MTU */
-		dd->vld[i].mtu = default_mtu;
+		/* non VL15 start with the max MTU */
+		dd->vld[i].mtu = hfi1_max_mtu;
 	}
 	sc_enable(dd->vld[15].sc);
 	ctxt = dd->vld[15].sc->hw_context;
