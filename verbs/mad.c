@@ -84,8 +84,22 @@ static int __subn_get_opa_nodedesc(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_node_description *nd;
+
+	if (am) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return reply((struct ib_mad_hdr *)smp);
+	}
+
+	nd = (struct opa_node_description *)data;
+
+	memcpy(nd->data, ibdev->node_desc, sizeof(nd->data));
+
+	if (resp_len)
+		*resp_len += sizeof(*nd);
+
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
