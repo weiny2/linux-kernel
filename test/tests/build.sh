@@ -81,7 +81,7 @@ fi
 
 echo "Doing build in $PWD"
 if [ $sparse -eq 1 ]; then
-	make C=2
+	make C=2 CF="-D__CHECK_ENDIAN__"
 else
 	make
 fi
