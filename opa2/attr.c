@@ -65,41 +65,6 @@ static int hfi_reply(struct ib_mad_hdr *ibh)
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
 }
 
-static int __subn_get_hfi_nodeinfo(struct hfi_devdata *dd, struct opa_smp *smp,
-				u32 am, u8 *data, u8 port, u32 *resp_len)
-{
-	struct opa_node_info *ni;
-	struct hfi_pportdata *ppd = get_ppd_pn(dd, port);
-	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-
-	ni = (struct opa_node_info *)data;
-
-	/* GUID 0 is illegal */
-	if (am || dd->nguid == 0) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
-		return hfi_reply(ibh);
-	}
-
-	ni->port_guid = ppd->pguid;
-	ni->base_version = JUMBO_MGMT_BASE_VERSION;
-	ni->class_version = OPA_SMI_CLASS_VERSION;
-	ni->node_type = 1;     /* channel adapter */
-	ni->num_ports = dd->num_pports;
-	ni->node_guid = dd->nguid;
-	ni->local_port_num = port;
-	ni->device_id = cpu_to_be16(dd->pcidev->device);
-	/* system_image_guid set in opa_ib */
-	/* partition_cap set in opa_ib */
-	ni->revision = 0;
-	memcpy(ni->vendor_id, dd->oui, ARRAY_SIZE(ni->vendor_id));
-
-	if (resp_len)
-		*resp_len += sizeof(*ni);
-
-	return hfi_reply(ibh);
-}
-
 static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len)
 {
@@ -217,12 +182,9 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 	 */
 	switch (attr_id) {
 	case IB_SMP_ATTR_NODE_DESC:
+	case IB_SMP_ATTR_NODE_INFO:
 		/* Implemented in opa_ib */
 		ret = hfi_reply(ibh);
-		break;
-	case IB_SMP_ATTR_NODE_INFO:
-		ret = __subn_get_hfi_nodeinfo(odev->dd, smp, am, data, port,
-					      resp_len);
 		break;
 	case IB_SMP_ATTR_PORT_INFO:
 		ret = __subn_get_hfi_portinfo(odev->dd, smp, am, data, port,

@@ -358,6 +358,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	bus_id.vendor = ent->vendor;
 	bus_id.device = ent->device;
+	bus_id.revision = (u32)pdev->revision;
 	/* bus agent can be probed immediately, no writing dd->bus_dev after this */
 	dd->bus_dev = opa_core_register_device(&pdev->dev, &bus_id, dd, &opa_core_ops);
 	/* All the unit management is handled by opa_core */

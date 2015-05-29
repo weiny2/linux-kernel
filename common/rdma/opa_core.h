@@ -315,13 +315,15 @@ struct opa_core_ops {
 };
 
 /**
- * struct opa_core_device - device and vendor ID for an OPA core device
+ * struct opa_core_device - device, vendor and revision ID for an OPA core device
  * @vendor: OPA HFI PCIe vendor ID
  * @device: OPA HFI PCIe device ID
+ * @revision: OPA HFI PCIe revision ID
  */
 struct opa_core_device_id {
 	__u32 vendor;
 	__u32 device;
+	__u32 revision;
 };
 
 /**

@@ -73,11 +73,103 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 	memset(data, 0, size);
 }
 
+/* This attribute is implemented only here (sma-ib) */
+static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	struct ib_node_info *ni;
+	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct opa_core_device *odev = ibd->odev;
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	ni = (struct ib_node_info *)smp->data;
+
+	/* GUID 0 is illegal */
+	if (smp->attr_mod || ibd->node_guid == 0
+				|| !ibp) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return reply(ibh);
+	}
+
+	ni->base_version = JUMBO_MGMT_BASE_VERSION;
+	ni->class_version = OPA_SMI_CLASS_VERSION;
+	ni->node_type = 1;     /* channel adapter */
+	ni->num_ports = ibd->num_pports;
+	/* This is already in network order */
+	ni->sys_guid = opa_ib_sys_guid;
+	ni->node_guid = ibd->node_guid;
+	ni->port_guid = ibp->guid;
+	/* FXRTODO: Fill this in after implmenting Pkeys */
+	ni->partition_cap = OPA_IB_PORT_NUM_PKEYS;
+	ni->local_port_num = port;
+	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
+	ni->device_id = cpu_to_be16(odev->id.device);
+	ni->revision = cpu_to_be32(odev->id.revision);
+
+	return reply(ibh);
+}
+
 static int process_subn(struct ib_device *ibdev, int mad_flags,
 			u8 port, struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
 {
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_smp *smp = (struct ib_smp *)out_mad;
+	int ret = 0;
+
+	*out_mad = *in_mad;
+	if (smp->class_version != 1) {
+		smp->status |= cpu_to_be16(IB_MGMT_MAD_STATUS_BAD_VERSION);
+		ret = reply((struct ib_mad_hdr *)smp);
+		goto bail;
+	}
+
+	/* FXRTODO: Implement mkey for FXR */
+#if 0
+	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags,
+			 smp->mkey, smp->dr_slid, smp->return_path,
+			 smp->hop_cnt);
+	if (ret) {
+		u32 port_num = be32_to_cpu(smp->attr_mod);
+
+		/*
+		 * If this is a get/set portinfo, we already check the
+		 * M_Key if the MAD is for another port and the M_Key
+		 * is OK on the receiving port. This check is needed
+		 * to increment the error counters when the M_Key
+		 * fails to match on *both* ports.
+		 */
+		if (in_mad->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO &&
+		    (smp->method == IB_MGMT_METHOD_GET ||
+		     smp->method == IB_MGMT_METHOD_SET) &&
+		    port_num && port_num <= ibdev->phys_port_cnt &&
+		    port != port_num)
+			(void) check_mkey(to_iport(ibdev, port_num),
+					  (struct ib_mad_hdr *)smp, 0,
+					  smp->mkey, smp->dr_slid,
+					  smp->return_path, smp->hop_cnt);
+		ret = IB_MAD_RESULT_FAILURE;
+		goto bail;
+	}
+#endif
+
+	switch (smp->method) {
+	case IB_MGMT_METHOD_GET:
+		switch (smp->attr_id) {
+		case IB_SMP_ATTR_NODE_INFO:
+			ret = __subn_get_ib_nodeinfo(smp, ibdev, port);
+			goto bail;
+		default:
+			smp->status |= cpu_to_be16(
+			IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
+			ret = reply((struct ib_mad_hdr *)smp);
+			goto bail;
+		}
+	}
+
+bail:
+	return ret;
 }
 
 static int __subn_get_opa_nodedesc(struct opa_smp *smp, u32 am, u8 *data,
@@ -102,25 +194,43 @@ static int __subn_get_opa_nodedesc(struct opa_smp *smp, u32 am, u8 *data,
 	return reply((struct ib_mad_hdr *)smp);
 }
 
+ /* This attribute is only implemented here (sma-ib)*/
 static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 				   struct ib_device *ibdev, u8 port,
 				   u32 *resp_len)
 {
 	struct opa_node_info *ni;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct opa_core_device *odev = ibd->odev;
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 
 	ni = (struct opa_node_info *)data;
 
-	if (am) {
+	/* GUID 0 is illegal */
+	if (am || ibd->node_guid == 0 || !ibp) {
 		smp->status |=
 			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
 		return reply(ibh);
 	}
 
+	ni->base_version = JUMBO_MGMT_BASE_VERSION;
+	ni->class_version = OPA_SMI_CLASS_VERSION;
+	ni->node_type = 1;     /* channel adapter */
+	ni->num_ports = ibd->num_pports;
 	/* This is already in network order */
 	ni->system_image_guid = opa_ib_sys_guid;
+	ni->node_guid = ibd->node_guid;
+	ni->port_guid = ibp->guid;
 	/* FXRTODO: Fill this in after implmenting Pkeys */
 	ni->partition_cap = OPA_IB_PORT_NUM_PKEYS;
+	ni->local_port_num = port;
+	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
+	ni->device_id = cpu_to_be16(odev->id.device);
+	ni->revision = cpu_to_be16(odev->id.revision);
+
+	if (resp_len)
+		*resp_len += sizeof(*ni);
 
 	return reply(ibh);
 }
@@ -771,4 +881,3 @@ int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 
 	return IB_MAD_RESULT_FAILURE;
 }
-
