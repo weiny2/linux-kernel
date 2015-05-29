@@ -65,13 +65,6 @@ static int hfi_reply(struct ib_mad_hdr *ibh)
 	return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY;
 }
 
-static int __subn_get_hfi_nodedesc(struct hfi_devdata *dd, struct opa_smp *smp,
-				u32 am, u8 *data, u8 port, u32 *resp_len)
-{
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
-}
-
 static int __subn_get_hfi_nodeinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len)
 {
@@ -217,14 +210,15 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 {
 	int ret;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
 	/*
 	 * FXRTODO: Only get node info supported in MAD methods.
 	 * Others yet to be implemented.
 	 */
 	switch (attr_id) {
 	case IB_SMP_ATTR_NODE_DESC:
-		ret = __subn_get_hfi_nodedesc(odev->dd, smp, am, data, port,
-					      resp_len);
+		/* Implemented in opa_ib */
+		ret = hfi_reply(ibh);
 		break;
 	case IB_SMP_ATTR_NODE_INFO:
 		ret = __subn_get_hfi_nodeinfo(odev->dd, smp, am, data, port,
